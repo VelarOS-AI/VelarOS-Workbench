@@ -32,6 +32,12 @@ const root = await mkdtemp(join(tmpdir(), 'velaros-workbench-watch-'))
 const service = new WorkbenchFileWatcher({ debounceMs: 30, now: () => 123 })
 
 try {
+  // Real workspaces already contain these directories when a subscription starts. Linux
+  // recursive fs.watch does not guarantee that a write immediately following a new directory
+  // creation is observed before the native watcher has attached to that directory.
+  await mkdir(join(root, '.git'))
+  await mkdir(join(root, 'node_modules'))
+
   const firstEvents: SystemWorkspaceFilesChangedEvent[] = []
   const secondEvents: SystemWorkspaceFilesChangedEvent[] = []
   const first = await service.subscribe(root, (event) => firstEvents.push(event))
@@ -67,13 +73,11 @@ try {
   await new Promise((resolve) => setTimeout(resolve, 80))
   assert(firstEvents.length === firstCount, 'released subscriber must receive no changes')
 
-  await mkdir(join(root, '.git'))
   const beforeGitWrite = secondEvents.length
   await writeFile(join(root, '.git', 'HEAD'), 'ref: refs/heads/main\n')
   const gitEvent = await waitForPath(secondEvents, '.git/HEAD', beforeGitWrite)
   assert(gitEvent.paths.includes('.git/HEAD'), 'Git state changes must refresh Git surfaces')
 
-  await mkdir(join(root, 'node_modules'))
   const beforeIgnoredWrite = secondEvents.length
   await writeFile(join(root, 'node_modules', 'ignored.js'), 'ignored')
   await new Promise((resolve) => setTimeout(resolve, 80))
