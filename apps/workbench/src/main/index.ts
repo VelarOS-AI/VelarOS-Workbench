@@ -2,6 +2,8 @@ import { join } from 'node:path'
 
 import { app, BrowserWindow } from 'electron'
 
+import { WorkbenchKernelClientRuntime } from './kernel/WorkbenchKernelClientRuntime'
+import { registerWorkbenchKernelIpc } from './kernel/WorkbenchKernelIpc'
 import { WorkbenchProjectHub } from './projects/ProjectHub'
 import { registerProjectHubIpc } from './projects/ProjectHubIpc'
 import { installProjectHubMenu } from './projects/ProjectHubMenu'
@@ -26,8 +28,8 @@ import { WorkbenchProjectFileSystem } from './workspace/WorkbenchProjectFileSyst
  * 独立 VelarOS Workbench 应用的主进程。
  *
  * 负责窗口生命周期 + 项目枢纽（起手页三主动作 / 最近项目持久化 / 窗口标题与菜单跟随项目状态）。
- * IDE 本地能力由应用私有 IPC 语义端口承载；需要 Agent/模型的能力保留在 Workbench Host
- * 契约上，等待共享 Kernel RPC 装配，不反向依赖 Desktop。
+ * IDE 本地能力由应用私有 IPC 语义端口承载；共享能力通过经过认证的 Kernel daemon
+ * 客户端组合根接入，不反向依赖 Desktop，也不在 daemon 缺席时创建第二套 Kernel。
  *
  * 数据根对齐 Desktop 惯例（prod=userData，dev=cwd/.data 隔离目录），但完全独立于 Desktop 的
  * chat 存储：应用名固定 `VelarOS Workbench`，prod userData 因此拥有自己的平台目录。
@@ -110,6 +112,9 @@ void app.whenReady().then(() => {
   const dataRootDir = resolveWorkbenchDataRootDir()
   const hub = new WorkbenchProjectHub(dataRootDir)
   registerProjectHubIpc(hub)
+  const kernelRuntime = new WorkbenchKernelClientRuntime()
+  const disposeKernelIpc = registerWorkbenchKernelIpc(kernelRuntime)
+  void kernelRuntime.start()
   const parts = createWorkbenchAppParts(dataRootDir)
   const languageGrammarInstaller = new LanguageGrammarInstaller({
     installRoot: () => parts.storagePaths.getLanguageGrammarsDir(),
@@ -134,9 +139,12 @@ void app.whenReady().then(() => {
     // 真正收口后再触发第二次 quit；shutdownStarted 让第二次事件直接放行。
     disposeWatchIpc()
     disposeLanguageGrammarIpc()
-    void Promise.all([parts.terminal.closeAllSessions(), languageServiceClient.dispose()]).finally(
-      () => app.quit()
-    )
+    disposeKernelIpc()
+    void Promise.all([
+      parts.terminal.closeAllSessions(),
+      languageServiceClient.dispose(),
+      kernelRuntime.dispose(),
+    ]).finally(() => app.quit())
   })
 
   installProjectHubMenu(hub)
