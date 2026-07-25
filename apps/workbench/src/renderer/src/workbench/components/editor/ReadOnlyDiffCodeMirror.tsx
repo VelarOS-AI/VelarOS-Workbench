@@ -2,12 +2,12 @@ import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
 import { EditorState, type Extension, type Range, StateField } from '@codemirror/state'
 import { Decoration, type DecorationSet, EditorView, gutter, GutterMarker } from '@codemirror/view'
 
-import { isEmpty, isNotNull } from '@velaros/core'
-import { resolveWorkbenchCodeMirrorLanguage } from '@velaros/workbench/models/editor/workbenchCodeMirrorLanguage'
-import { getWorkbenchCodeMirrorTheme } from '@velaros/workbench/models/editor/workbenchCodeMirrorTheme'
-import { readDownloadedWorkbenchLanguagePluginIds } from '@velaros/workbench/models/editor/workbenchLanguagePluginInstallState'
-import type { WorkbenchUnifiedDiffRow } from '@velaros/workbench/models/git/workbenchGitDiffModel'
-import type { WorkbenchThemeId } from '@velaros/workbench/models/settings/workbenchPreferences'
+import { isEmpty, isNotNull } from '@velaros-ai/core'
+import { resolveWorkbenchCodeMirrorLanguage } from '@velaros-ai/workbench/models/editor/workbenchCodeMirrorLanguage'
+import { getWorkbenchCodeMirrorTheme } from '@velaros-ai/workbench/models/editor/workbenchCodeMirrorTheme'
+import { readDownloadedWorkbenchLanguagePluginIds } from '@velaros-ai/workbench/models/editor/workbenchLanguagePluginInstallState'
+import type { WorkbenchUnifiedDiffRow } from '@velaros-ai/workbench/models/git/workbenchGitDiffModel'
+import type { WorkbenchThemeId } from '@velaros-ai/workbench/models/settings/workbenchPreferences'
 
 import styles from '../../styles/workbenchPageStyles'
 

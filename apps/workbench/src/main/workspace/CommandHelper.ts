@@ -7,10 +7,10 @@
  */
 import { execFileSync } from 'node:child_process'
 
-import { Log } from '@velaros/core'
-import { AppError } from '@velaros/core/error'
-import { analyzeCommandExecution } from '@velaros/core/utils/CommandExecutionPolicy'
-import { platformCompatibility } from '@velaros/core/utils/PlatformCompatibilityHelper'
+import { Log } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
+import { analyzeCommandExecution } from '@velaros-ai/core/utils/CommandExecutionPolicy'
+import { platformCompatibility } from '@velaros-ai/core/utils/PlatformCompatibilityHelper'
 
 const DEFAULT_COMMAND_TIMEOUT_MS = 60_000
 const DEFAULT_COMMAND_OUTPUT_CHARS = 20_000

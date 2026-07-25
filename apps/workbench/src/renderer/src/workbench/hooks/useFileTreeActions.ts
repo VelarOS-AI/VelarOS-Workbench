@@ -1,14 +1,14 @@
 import { type MouseEvent,type MutableRefObject, useCallback, useEffect, useState,  } from 'react'
 import type { NodeApi, TreeApi } from 'react-arborist'
 
-import { toNullable } from '@velaros/core'
-import type { WorkbenchDirectoryEntry } from '@velaros/core/types'
+import { toNullable } from '@velaros-ai/core'
+import type { WorkbenchDirectoryEntry } from '@velaros-ai/core/types'
 import {
   DEFAULT_TREE_WIDTH,
   type FileTreeNodeData,
   getDefaultCreateName,
-} from '@velaros/workbench/models/files/fileTree.model'
-import { isWorkbenchTreeRoot,ROOT_PATH } from '@velaros/workbench/models/shared/workbenchUtils'
+} from '@velaros-ai/workbench/models/files/fileTree.model'
+import { isWorkbenchTreeRoot,ROOT_PATH } from '@velaros-ai/workbench/models/shared/workbenchUtils'
 
 import { useLatest, useMemoizedFn } from '../support/genericHooks'
 

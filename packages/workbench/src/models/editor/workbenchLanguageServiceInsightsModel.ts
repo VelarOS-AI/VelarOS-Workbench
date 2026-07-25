@@ -1,4 +1,4 @@
-import type { WorkbenchLanguageServiceDiagnostic } from '@velaros/core/types'
+import type { WorkbenchLanguageServiceDiagnostic } from '@velaros-ai/core/types'
 
 export interface WorkbenchFileDiagnosticView {
   diagnostics: readonly WorkbenchLanguageServiceDiagnostic[]

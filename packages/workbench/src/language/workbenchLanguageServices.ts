@@ -3,7 +3,7 @@
  * 供产物内的转发桩取用（保证 facet 实例身份一致）。必须与 scripts/build/packageLanguageGrammars.mjs
  * 里 RUNTIME_GLOBAL 的字面量保持一致。
  */
-import { toNullable } from '@velaros/core'
+import { toNullable } from '@velaros-ai/core'
 export const WORKBENCH_GRAMMAR_RUNTIME_GLOBAL = '__VELAROS_CM__'
 
 /**
@@ -77,7 +77,7 @@ const PluginLanguageServices: WorkbenchLanguageServiceDescriptor[] = [
     label: 'Java',
     installKind: 'plugin',
     runtime: 'lsp-server',
-    packageName: '@velaros/workbench-language-java',
+    packageName: '@velaros-ai/workbench-language-java',
     command: 'java-language-server',
     extensions: ['java'],
     languages: ['java'],
@@ -87,7 +87,7 @@ const PluginLanguageServices: WorkbenchLanguageServiceDescriptor[] = [
     label: 'C/C++',
     installKind: 'plugin',
     runtime: 'lsp-server',
-    packageName: '@velaros/workbench-language-cpp',
+    packageName: '@velaros-ai/workbench-language-cpp',
     command: 'clangd',
     extensions: ['c', 'cc', 'cpp', 'cxx', 'h', 'hh', 'hpp', 'hxx'],
     languages: ['c', 'cpp'],
@@ -97,7 +97,7 @@ const PluginLanguageServices: WorkbenchLanguageServiceDescriptor[] = [
     label: 'Go',
     installKind: 'plugin',
     runtime: 'lsp-server',
-    packageName: '@velaros/workbench-language-go',
+    packageName: '@velaros-ai/workbench-language-go',
     command: 'gopls',
     extensions: ['go'],
     languages: ['go'],
@@ -107,7 +107,7 @@ const PluginLanguageServices: WorkbenchLanguageServiceDescriptor[] = [
     label: 'Rust',
     installKind: 'plugin',
     runtime: 'lsp-server',
-    packageName: '@velaros/workbench-language-rust',
+    packageName: '@velaros-ai/workbench-language-rust',
     command: 'rust-analyzer',
     extensions: ['rs'],
     languages: ['rust'],

@@ -12,13 +12,13 @@ import { createHash, randomBytes } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-import { isNumber, isObject, isString, Log } from '@velaros/core'
-import { AppError } from '@velaros/core/error'
+import { isNumber, isObject, isString, Log } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 import type {
   WorkbenchListLocalHistoryResult,
   WorkbenchLocalHistoryEntry,
   WorkbenchReadLocalHistorySnapshotResult,
-} from '@velaros/core/types'
+} from '@velaros-ai/core/types'
 
 import type { WorkbenchAppStoragePaths } from './StoragePaths'
 

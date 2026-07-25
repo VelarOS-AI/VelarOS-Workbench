@@ -9,7 +9,7 @@
 import { type ReactElement } from 'react'
 import { XIcon } from '@phosphor-icons/react'
 
-import { Button, Text, Title } from '@velaros/ui'
+import { Button, Text, Title } from '@velaros-ai/ui'
 
 import type { WorkbenchOpenedProject } from '../../../shared/projectHub'
 import { useStandaloneWorkbenchPageModel } from '../workbench/hooks/useStandaloneWorkbenchPageModel'

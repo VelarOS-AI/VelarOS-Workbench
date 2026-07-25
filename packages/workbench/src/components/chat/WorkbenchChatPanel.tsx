@@ -9,10 +9,10 @@ import {
 } from 'react'
 import { ArchiveIcon, ChatCircleTextIcon, PlusIcon, SpinnerGapIcon } from '@phosphor-icons/react'
 
-import { isEmpty, toNullable } from '@velaros/core'
-import { Button } from '@velaros/ui/primitives/buttons/Button'
-import { IconButton } from '@velaros/ui/primitives/buttons/IconButton'
-import { Text } from '@velaros/ui/primitives/display/Text'
+import { isEmpty, toNullable } from '@velaros-ai/core'
+import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
+import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
+import { Text } from '@velaros-ai/ui/primitives/display/Text'
 import {
   Dialog,
   DialogContent,
@@ -20,12 +20,12 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@velaros/ui/primitives/overlays/Dialog'
+} from '@velaros-ai/ui/primitives/overlays/Dialog'
 import {
   BusinessCascadingMenu,
   type BusinessCascadingMenuRenderProps,
   BusinessCascadingMenuSelectedIndicator,
-} from '@velaros/ui/product/menus/BusinessCascadingMenu'
+} from '@velaros-ai/ui/product/menus/BusinessCascadingMenu'
 
 import {
   useWorkbenchChatProjectRuntime,

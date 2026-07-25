@@ -1,6 +1,6 @@
-import { AppError } from '@velaros/core/error'
-import { Result } from '@velaros/core/result'
-import type { SystemLocalAttachmentFileResult } from '@velaros/core/types'
+import { AppError } from '@velaros-ai/core/error'
+import { Result } from '@velaros-ai/core/result'
+import type { SystemLocalAttachmentFileResult } from '@velaros-ai/core/types'
 
 import type {
   WorkbenchLightEditorTab,

@@ -1,6 +1,6 @@
 import { applyPatch, parsePatch, reversePatch, structuredPatch } from 'diff'
 
-import { isEmpty,isString, Log } from '@velaros/core'
+import { isEmpty,isString, Log } from '@velaros-ai/core'
 
 const log = Log.tag('workbench-git-diff-model')
 

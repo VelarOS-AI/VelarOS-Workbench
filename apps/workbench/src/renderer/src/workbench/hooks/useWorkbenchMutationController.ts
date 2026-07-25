@@ -1,23 +1,23 @@
 import { useRef, useState } from 'react'
 
-import { isEmpty, toNullable } from '@velaros/core'
-import { AppError } from '@velaros/core/error'
-import { Result } from '@velaros/core/result'
+import { isEmpty, toNullable } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
+import { Result } from '@velaros-ai/core/result'
 import type {
-  WorkbenchDeleteEntryResult, WorkbenchDirectoryEntry, WorkbenchMoveEntryResult, WorkbenchRestoreDeletedEntryResult, } from '@velaros/core/types'
-import { workbenchHost } from '@velaros/workbench/host'
+  WorkbenchDeleteEntryResult, WorkbenchDirectoryEntry, WorkbenchMoveEntryResult, WorkbenchRestoreDeletedEntryResult, } from '@velaros-ai/core/types'
+import { workbenchHost } from '@velaros-ai/workbench/host'
 import {
   removeWorkbenchCommentsUnderPath,
   renameWorkbenchCommentsPath,
-} from '@velaros/workbench/models/comments/workbenchCommentStore'
+} from '@velaros-ai/workbench/models/comments/workbenchCommentStore'
 import {
   resolveTreeActionBasePath,
   resolveTreeActionBasePathForEntry,
   selectMovableTreeEntries,
-} from '@velaros/workbench/models/files/workbenchTreeMutation'
-import type { WorkbenchProject } from '@velaros/workbench/models/project/workbenchProjects'
-import { getParentPath, ROOT_PATH } from '@velaros/workbench/models/shared/workbenchUtils'
-import type { PendingTreeAction } from '@velaros/workbench/types/workbenchTypes'
+} from '@velaros-ai/workbench/models/files/workbenchTreeMutation'
+import type { WorkbenchProject } from '@velaros-ai/workbench/models/project/workbenchProjects'
+import { getParentPath, ROOT_PATH } from '@velaros-ai/workbench/models/shared/workbenchUtils'
+import type { PendingTreeAction } from '@velaros-ai/workbench/types/workbenchTypes'
 
 import { useStableWorkbenchMessageTranslate } from '../runtime/useStableWorkbenchMessaging'
 import { useLatest } from '../support/genericHooks'

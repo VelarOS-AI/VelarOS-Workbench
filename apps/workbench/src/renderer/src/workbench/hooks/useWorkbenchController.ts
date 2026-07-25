@@ -1,14 +1,14 @@
 import { useMemo, useRef, useState } from 'react'
 
-import { isEmpty,toNullable } from '@velaros/core'
-import { AppError } from '@velaros/core/error'
-import type { WorkbenchDirectoryEntry } from '@velaros/core/types'
-import { buildWorkbenchProjectContextIndex } from '@velaros/workbench/models/project/workbenchProjectContextIndex'
-import type { WorkbenchProject } from '@velaros/workbench/models/project/workbenchProjects'
+import { isEmpty,toNullable } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
+import type { WorkbenchDirectoryEntry } from '@velaros-ai/core/types'
+import { buildWorkbenchProjectContextIndex } from '@velaros-ai/workbench/models/project/workbenchProjectContextIndex'
+import type { WorkbenchProject } from '@velaros-ai/workbench/models/project/workbenchProjects'
 import {
   readWorkbenchProjectSession,
   saveWorkbenchProjectSessionSnapshot,
-} from '@velaros/workbench/models/project/workbenchProjectSessionModel'
+} from '@velaros-ai/workbench/models/project/workbenchProjectSessionModel'
 
 import type { EditorNavigationRequest } from '../components/editor/CodeInsightPanel'
 import { useStableWorkbenchMessageTranslate } from '../runtime/useStableWorkbenchMessaging'

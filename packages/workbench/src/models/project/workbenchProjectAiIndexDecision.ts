@@ -1,4 +1,4 @@
-import { isPlainObject, Log, toNullable } from '@velaros/core'
+import { isPlainObject, Log, toNullable } from '@velaros-ai/core'
 
 import {
   createLocalStorageJsonStore,

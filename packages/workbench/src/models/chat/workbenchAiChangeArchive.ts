@@ -1,10 +1,10 @@
-import { isEmpty, isPresent, toNullable } from '@velaros/core'
+import { isEmpty, isPresent, toNullable } from '@velaros-ai/core'
 import type {
   ChatMessage,
   SystemFileChangePreviewResult,
   WorkspaceCheckpointFileDiff,
-} from '@velaros/core/types'
-import { extractMessageFileChangeDescriptors } from '@velaros/core/utils/messageFileChanges'
+} from '@velaros-ai/core/types'
+import { extractMessageFileChangeDescriptors } from '@velaros-ai/core/utils/messageFileChanges'
 
 /** Workbench 归档只消费宿主会话的最小只读投影，不拥有 Desktop 的聊天状态模型。 */
 export interface WorkbenchAiChangeArchiveFolderSource {

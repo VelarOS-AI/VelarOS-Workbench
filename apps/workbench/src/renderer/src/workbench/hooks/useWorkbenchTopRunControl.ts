@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from 'react'
 
-import { type SelectOption } from '@velaros/ui/primitives/forms/Select'
-import { useWorkbenchI18n } from '@velaros/workbench/i18n'
+import { type SelectOption } from '@velaros-ai/ui/primitives/forms/Select'
+import { useWorkbenchI18n } from '@velaros-ai/workbench/i18n'
 
 import { useLatest } from '../support/genericHooks'
 

@@ -1,5 +1,5 @@
-import { isNumber,isObject, isPresent, isString, toNullable } from '@velaros/core'
-import type { AgentDeveloperContext, AgentSurfaceId } from '@velaros/core/types'
+import { isNumber,isObject, isPresent, isString, toNullable } from '@velaros-ai/core'
+import type { AgentDeveloperContext, AgentSurfaceId } from '@velaros-ai/core/types'
 
 import {
   createLocalStorageJsonStore,

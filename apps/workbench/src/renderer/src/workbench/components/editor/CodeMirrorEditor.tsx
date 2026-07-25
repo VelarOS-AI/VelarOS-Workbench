@@ -64,18 +64,18 @@ import {
 } from '@codemirror/view'
 import { HammerIcon, PlayIcon } from '@phosphor-icons/react'
 
-import { isEmpty, isPresent, Log, toNullable, toOptional } from '@velaros/core'
-import type { WorkbenchLanguageServiceFileEdit } from '@velaros/core/types'
+import { isEmpty, isPresent, Log, toNullable, toOptional } from '@velaros-ai/core'
+import type { WorkbenchLanguageServiceFileEdit } from '@velaros-ai/core/types'
 import {
   addWorkbenchCommentAnchorEffect,
   anchorFromLineRange,
   createWorkbenchCommentExtension,
   retainWorkbenchCommentAnchorsEffect,
   setWorkbenchCommentAnchorsEffect,
-} from '@velaros/workbench/components/editor/workbenchCommentExtension'
-import { useWorkbenchAiCompletionEnabled } from '@velaros/workbench/hooks/useWorkbenchPreferences'
-import { useWorkbenchI18n } from '@velaros/workbench/i18n'
-import type { PackageManagerCommand } from '@velaros/workbench/models/commands/workbenchPackageScriptCommand'
+} from '@velaros-ai/workbench/components/editor/workbenchCommentExtension'
+import { useWorkbenchAiCompletionEnabled } from '@velaros-ai/workbench/hooks/useWorkbenchPreferences'
+import { useWorkbenchI18n } from '@velaros-ai/workbench/i18n'
+import type { PackageManagerCommand } from '@velaros-ai/workbench/models/commands/workbenchPackageScriptCommand'
 import {
   addWorkbenchComment,
   listWorkbenchCommentsForPath,
@@ -83,41 +83,41 @@ import {
   updateWorkbenchCommentAnchor,
   updateWorkbenchCommentBody,
   useWorkbenchComments,
-} from '@velaros/workbench/models/comments/workbenchCommentStore'
-import { getWorkbenchCodeMirrorAutocompleteTheme } from '@velaros/workbench/models/editor/workbenchCodeMirrorAutocompleteTheme'
-import { createWorkbenchBasicSyntaxExtension } from '@velaros/workbench/models/editor/workbenchCodeMirrorBasicSyntax'
+} from '@velaros-ai/workbench/models/comments/workbenchCommentStore'
+import { getWorkbenchCodeMirrorAutocompleteTheme } from '@velaros-ai/workbench/models/editor/workbenchCodeMirrorAutocompleteTheme'
+import { createWorkbenchBasicSyntaxExtension } from '@velaros-ai/workbench/models/editor/workbenchCodeMirrorBasicSyntax'
 import {
   workbenchCompletionAddToOptions,
   workbenchCompletionOptionClass,
-} from '@velaros/workbench/models/editor/workbenchCodeMirrorCompletionPresentation'
-import { buildWorkbenchCodeMirrorCompletionResult } from '@velaros/workbench/models/editor/workbenchCodeMirrorCompletions'
+} from '@velaros-ai/workbench/models/editor/workbenchCodeMirrorCompletionPresentation'
+import { buildWorkbenchCodeMirrorCompletionResult } from '@velaros-ai/workbench/models/editor/workbenchCodeMirrorCompletions'
 import {
   setWorkbenchDefinitionHoverRange,
   workbenchDefinitionHoverExtension,
   type WorkbenchDefinitionHoverRange,
-} from '@velaros/workbench/models/editor/workbenchCodeMirrorDefinitionHover'
+} from '@velaros-ai/workbench/models/editor/workbenchCodeMirrorDefinitionHover'
 import {
   createWorkbenchDiagnosticForegroundExtension,
   mapWorkbenchDiagnosticToCodeMirror,
-} from '@velaros/workbench/models/editor/workbenchCodeMirrorDiagnostics'
-import { buildWorkbenchExternalValueSyncTransaction } from '@velaros/workbench/models/editor/workbenchCodeMirrorExternalSync'
-import { createWorkbenchInlayHintExtension } from '@velaros/workbench/models/editor/workbenchCodeMirrorInlayHints'
+} from '@velaros-ai/workbench/models/editor/workbenchCodeMirrorDiagnostics'
+import { buildWorkbenchExternalValueSyncTransaction } from '@velaros-ai/workbench/models/editor/workbenchCodeMirrorExternalSync'
+import { createWorkbenchInlayHintExtension } from '@velaros-ai/workbench/models/editor/workbenchCodeMirrorInlayHints'
 import {
   workbenchInlineCompletionExtension,
   type WorkbenchInlineCompletionRuntime,
-} from '@velaros/workbench/models/editor/workbenchCodeMirrorInlineCompletion'
+} from '@velaros-ai/workbench/models/editor/workbenchCodeMirrorInlineCompletion'
 import {
   getLoadedWorkbenchLanguagePluginExtension,
   loadWorkbenchLanguagePluginExtension,
   resolveWorkbenchCodeMirrorLanguage,
-} from '@velaros/workbench/models/editor/workbenchCodeMirrorLanguage'
+} from '@velaros-ai/workbench/models/editor/workbenchCodeMirrorLanguage'
 import {
   buildWorkbenchEditorHoverDom,
   collectDiagnosticsAtPosition,
   createWorkbenchLanguageServiceHoverTooltip,
   createWorkbenchSignatureHelpExtension,
   findWorkbenchLanguageServiceReferences,
-} from '@velaros/workbench/models/editor/workbenchCodeMirrorLanguageFeatures'
+} from '@velaros-ai/workbench/models/editor/workbenchCodeMirrorLanguageFeatures'
 import {
   applyWorkbenchLanguageServiceEditsToContent,
   buildWorkbenchLanguageServiceRequestBase,
@@ -125,18 +125,18 @@ import {
   mergeWorkbenchLanguageServiceCompletions,
   usesWorkbenchBuiltinLanguageService,
   usesWorkbenchHtmlLanguageService,
-} from '@velaros/workbench/models/editor/workbenchCodeMirrorLanguageService'
-import { workbenchLineNumbersExtension } from '@velaros/workbench/models/editor/workbenchCodeMirrorLineNumberSelection'
+} from '@velaros-ai/workbench/models/editor/workbenchCodeMirrorLanguageService'
+import { workbenchLineNumbersExtension } from '@velaros-ai/workbench/models/editor/workbenchCodeMirrorLineNumberSelection'
 import {
   getWorkbenchCodeMirrorTheme,
   workbenchCodeMirrorLintTheme,
-} from '@velaros/workbench/models/editor/workbenchCodeMirrorTheme'
-import { createWorkbenchTokenOccurrenceHighlightExtension } from '@velaros/workbench/models/editor/workbenchCodeMirrorTokenOccurrenceHighlight'
-import { buildWorkbenchIdeaIndentGuideColumnsForLineRange } from '@velaros/workbench/models/editor/workbenchIndentGuides'
+} from '@velaros-ai/workbench/models/editor/workbenchCodeMirrorTheme'
+import { createWorkbenchTokenOccurrenceHighlightExtension } from '@velaros-ai/workbench/models/editor/workbenchCodeMirrorTokenOccurrenceHighlight'
+import { buildWorkbenchIdeaIndentGuideColumnsForLineRange } from '@velaros-ai/workbench/models/editor/workbenchIndentGuides'
 import {
   readDownloadedWorkbenchLanguagePluginIds,
   WORKBENCH_LANGUAGE_PLUGIN_INSTALL_STATE_CHANGED_EVENT,
-} from '@velaros/workbench/models/editor/workbenchLanguagePluginInstallState'
+} from '@velaros-ai/workbench/models/editor/workbenchLanguagePluginInstallState'
 import {
   getWorkbenchInlineCompletion,
   getWorkbenchLanguageServiceCompletions,
@@ -145,14 +145,14 @@ import {
   getWorkbenchLanguageServiceFormat,
   getWorkbenchLanguageServiceInlayHints,
   getWorkbenchLanguageServiceRename,
-} from '@velaros/workbench/models/editor/workbenchLanguageServiceIpc'
+} from '@velaros-ai/workbench/models/editor/workbenchLanguageServiceIpc'
 import {
   createWorkbenchPackageScriptRunGutterExtension,
   shouldShowWorkbenchPackageScriptRunGutter,
-} from '@velaros/workbench/models/editor/workbenchPackageScriptRunGutter'
-import type { WorkbenchProjectContextIndex } from '@velaros/workbench/models/project/workbenchProjectContextIndex'
-import type { WorkbenchThemeId } from '@velaros/workbench/models/settings/workbenchPreferences'
-import type { WorkbenchOpenEditorTab } from '@velaros/workbench/types/workbenchTypes'
+} from '@velaros-ai/workbench/models/editor/workbenchPackageScriptRunGutter'
+import type { WorkbenchProjectContextIndex } from '@velaros-ai/workbench/models/project/workbenchProjectContextIndex'
+import type { WorkbenchThemeId } from '@velaros-ai/workbench/models/settings/workbenchPreferences'
+import type { WorkbenchOpenEditorTab } from '@velaros-ai/workbench/types/workbenchTypes'
 
 import styles from '../../styles/workbenchPageStyles'
 import { useLatest, useTimerScope } from '../../support/genericHooks'

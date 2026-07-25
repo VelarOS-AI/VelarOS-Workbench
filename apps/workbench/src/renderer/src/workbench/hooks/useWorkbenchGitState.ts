@@ -4,13 +4,13 @@ import {
   buildWorkbenchGitChangeItems,
   buildWorkbenchGitDecorationMap,
   EMPTY_WORKBENCH_GIT_DECORATIONS,
-} from '@velaros/workbench/models/git/workbenchGitModel'
+} from '@velaros-ai/workbench/models/git/workbenchGitModel'
 import {
   buildWorkbenchGitTopBarSummary,
   resolveWorkbenchCanShowGitBranchControl,
   resolveWorkbenchHasGitRepository,
-} from '@velaros/workbench/models/git/workbenchGitTopBarModel'
-import type { WorkbenchProject } from '@velaros/workbench/models/project/workbenchProjects'
+} from '@velaros-ai/workbench/models/git/workbenchGitTopBarModel'
+import type { WorkbenchProject } from '@velaros-ai/workbench/models/project/workbenchProjects'
 
 import { useLatest } from '../support/genericHooks'
 import { useWorkspaceGitLineStats } from '../support/useWorkspaceGitLineStats'

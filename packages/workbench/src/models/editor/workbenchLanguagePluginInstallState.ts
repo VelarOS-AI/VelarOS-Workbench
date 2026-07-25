@@ -1,8 +1,8 @@
-import { Log, toNullable } from '@velaros/core'
+import { Log, toNullable } from '@velaros-ai/core'
 import type {
   WorkbenchLanguageGrammarCatalog,
   WorkbenchLanguageGrammarInstallState,
-} from '@velaros/core/types'
+} from '@velaros-ai/core/types'
 
 import { workbenchHost } from '../../host'
 

@@ -1,7 +1,7 @@
-import { isBlank, isEmpty, isNonBlankString, isPresent, Log, toNullable } from '@velaros/core'
-import { hasToolActivityKind } from '@velaros/core/constants/toolMetadataCatalog'
-import type { ChatMessage, ContentBlock, ToolCallBlock } from '@velaros/core/types'
-import { extractMessageFileChangeDescriptors } from '@velaros/core/utils/messageFileChanges'
+import { isBlank, isEmpty, isNonBlankString, isPresent, Log, toNullable } from '@velaros-ai/core'
+import { hasToolActivityKind } from '@velaros-ai/core/constants/toolMetadataCatalog'
+import type { ChatMessage, ContentBlock, ToolCallBlock } from '@velaros-ai/core/types'
+import { extractMessageFileChangeDescriptors } from '@velaros-ai/core/utils/messageFileChanges'
 import {
   asRecord,
   readBoolean,
@@ -9,7 +9,7 @@ import {
   readNumber,
   readRecordsArray,
   readString,
-} from '@velaros/core/utils/unknownJsonRecord'
+} from '@velaros-ai/core/utils/unknownJsonRecord'
 
 const LEGACY_COMMAND_TOOL_NAMES = new Set(['run_command'])
 const RESULT_SUMMARY_LIMIT = 180

@@ -1,4 +1,4 @@
-import type { SystemWorkspaceFilesChangedEvent, WorkbenchReadFileResult } from '@velaros/core/types'
+import type { SystemWorkspaceFilesChangedEvent, WorkbenchReadFileResult } from '@velaros-ai/core/types'
 
 import type {
   WorkbenchOpenEditorExternalChange,

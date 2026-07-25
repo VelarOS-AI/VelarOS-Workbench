@@ -3,8 +3,8 @@ import { useEffect, useMemo, useRef } from 'react'
 import {
   type PersistedWorkbenchEditorCursor,
   saveWorkbenchProjectSessionSnapshot,
-} from '@velaros/workbench/models/project/workbenchProjectSessionModel'
-import type { WorkbenchOpenEditorTab } from '@velaros/workbench/types/workbenchTypes'
+} from '@velaros-ai/workbench/models/project/workbenchProjectSessionModel'
+import type { WorkbenchOpenEditorTab } from '@velaros-ai/workbench/types/workbenchTypes'
 
 import { useLatest, useTimerScope } from '../support/genericHooks'
 

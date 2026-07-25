@@ -5,7 +5,7 @@
  * 类型；任何异常在此降为错误信封（保留 AppError 语义码），renderer 侧再升回 Result。
  * 文件系统面（WorkbenchFsIpc）与语言智能面（WorkbenchLanguageServiceIpc）共用同一套边界纪律。
  */
-import { AppError, type ErrorCode } from '@velaros/core/error'
+import { AppError, type ErrorCode } from '@velaros-ai/core/error'
 
 import type { WorkbenchFsCallResult } from '../../shared/workbenchFs'
 

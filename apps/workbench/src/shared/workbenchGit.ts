@@ -17,7 +17,7 @@ import type {
   WorkspaceGitLogOptions,
   WorkspaceGitRemoteAction,
   WorkspaceGitRemoteActionOptions,
-} from '@velaros/core/types'
+} from '@velaros-ai/core/types'
 
 import type { WorkbenchFsCallResult } from './workbenchFs'
 

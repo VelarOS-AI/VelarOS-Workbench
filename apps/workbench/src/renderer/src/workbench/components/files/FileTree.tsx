@@ -10,9 +10,9 @@ import {
 import type { NodeApi, NodeRendererProps, TreeApi } from 'react-arborist'
 import { Tree } from 'react-arborist'
 
-import { isBlank, isEmpty } from '@velaros/core'
-import type { WorkbenchDirectoryEntry } from '@velaros/core/types'
-import { useWorkbenchI18n } from '@velaros/workbench/i18n'
+import { isBlank, isEmpty } from '@velaros-ai/core'
+import type { WorkbenchDirectoryEntry } from '@velaros-ai/core/types'
+import { useWorkbenchI18n } from '@velaros-ai/workbench/i18n'
 import {
   buildTreeNodes,
   createOpenState,
@@ -20,9 +20,9 @@ import {
   ROW_HEIGHT,
   TREE_INDENT,
   TREE_OVERSCAN_COUNT,
-} from '@velaros/workbench/models/files/fileTree.model'
-import type { WorkbenchGitDecorationMap } from '@velaros/workbench/models/git/workbenchGitModel'
-import { ROOT_PATH } from '@velaros/workbench/models/shared/workbenchUtils'
+} from '@velaros-ai/workbench/models/files/fileTree.model'
+import type { WorkbenchGitDecorationMap } from '@velaros-ai/workbench/models/git/workbenchGitModel'
+import { ROOT_PATH } from '@velaros-ai/workbench/models/shared/workbenchUtils'
 
 import { useFileTreeActions } from '../../hooks/useFileTreeActions'
 import styles from '../../styles/workbenchPageStyles'

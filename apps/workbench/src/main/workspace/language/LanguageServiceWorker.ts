@@ -1,6 +1,6 @@
 import { parentPort } from 'node:worker_threads'
 
-import { AppError } from '@velaros/core/error'
+import { AppError } from '@velaros-ai/core/error'
 
 import { PathResolver } from '../PathResolver'
 

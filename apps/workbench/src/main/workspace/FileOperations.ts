@@ -27,8 +27,8 @@ import {
 } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
 
-import { isObject, isPresent } from '@velaros/core'
-import { AppError } from '@velaros/core/error'
+import { isObject, isPresent } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 import type {
   WorkbenchCreateEntryRequest,
   WorkbenchDeleteEntryRequest,
@@ -47,7 +47,7 @@ import type {
   WorkbenchRestoreDeletedEntryResult,
   WorkbenchSaveFileRequest,
   WorkbenchSaveFileResult,
-} from '@velaros/core/types'
+} from '@velaros-ai/core/types'
 
 import type { DirectoryEntries } from './FileEntries'
 import type { GitNewFileTracker } from './GitNewFileTracker'

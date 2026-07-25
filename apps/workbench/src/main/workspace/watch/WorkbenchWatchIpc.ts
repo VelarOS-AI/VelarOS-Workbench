@@ -1,6 +1,6 @@
 import { ipcMain, type WebContents } from 'electron'
 
-import { AppError } from '@velaros/core/error'
+import { AppError } from '@velaros-ai/core/error'
 
 import {
   type WorkbenchWatchChangedPayload,

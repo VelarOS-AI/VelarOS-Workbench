@@ -1,4 +1,4 @@
-import type { SystemWorkspaceGitDiffResult, WorkspaceGitLogEntry } from '@velaros/core/types'
+import type { SystemWorkspaceGitDiffResult, WorkspaceGitLogEntry } from '@velaros-ai/core/types'
 
 import type { WorkbenchI18nContextValue } from '../../i18n'
 

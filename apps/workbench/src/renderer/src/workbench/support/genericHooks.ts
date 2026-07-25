@@ -8,8 +8,8 @@
 import { type MutableRefObject, useEffect, useRef } from 'react'
 import { useMemoizedFn } from 'ahooks'
 
-import type { TimerScope as TimerScopeType } from '@velaros/core/utils/TimerScope'
-import { TimerScope } from '@velaros/core/utils/TimerScope'
+import type { TimerScope as TimerScopeType } from '@velaros-ai/core/utils/TimerScope'
+import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 export {
   useBoolean,

@@ -2,11 +2,11 @@ import { type ReactElement, useEffect, useRef } from 'react'
 import { EditorState } from '@codemirror/state'
 import { EditorView, lineNumbers } from '@codemirror/view'
 
-import { buildReadOnlyCodeSearchHighlight } from '@velaros/workbench/models/editor/readOnlyCodeSearchHighlight'
-import { resolveWorkbenchCodeMirrorLanguage } from '@velaros/workbench/models/editor/workbenchCodeMirrorLanguage'
-import { getWorkbenchCodeMirrorTheme } from '@velaros/workbench/models/editor/workbenchCodeMirrorTheme'
-import { readDownloadedWorkbenchLanguagePluginIds } from '@velaros/workbench/models/editor/workbenchLanguagePluginInstallState'
-import type { WorkbenchThemeId } from '@velaros/workbench/models/settings/workbenchPreferences'
+import { buildReadOnlyCodeSearchHighlight } from '@velaros-ai/workbench/models/editor/readOnlyCodeSearchHighlight'
+import { resolveWorkbenchCodeMirrorLanguage } from '@velaros-ai/workbench/models/editor/workbenchCodeMirrorLanguage'
+import { getWorkbenchCodeMirrorTheme } from '@velaros-ai/workbench/models/editor/workbenchCodeMirrorTheme'
+import { readDownloadedWorkbenchLanguagePluginIds } from '@velaros-ai/workbench/models/editor/workbenchLanguagePluginInstallState'
+import type { WorkbenchThemeId } from '@velaros-ai/workbench/models/settings/workbenchPreferences'
 
 import styles from '../../styles/workbenchPageStyles'
 

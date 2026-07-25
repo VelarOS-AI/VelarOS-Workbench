@@ -1,12 +1,12 @@
-/** 独立 Workbench 应用渲染进程入口：装配 @velaros/ui 令牌与组件样式，安装占位宿主，挂载产品壳。 */
+/** 独立 Workbench 应用渲染进程入口：装配 @velaros-ai/ui 令牌与组件样式，安装占位宿主，挂载产品壳。 */
 import ReactDOM from 'react-dom/client'
 
 import { installStandaloneWorkbenchHost } from './host/standaloneWorkbenchHost'
 import { StandaloneWorkbenchApp } from './StandaloneWorkbenchApp'
 
-import '@velaros/ui/styles/tokens/design-tokens.css'
-import '@velaros/ui/styles/components/index.css'
-import '@velaros/ui/styles/components/product.css'
+import '@velaros-ai/ui/styles/tokens/design-tokens.css'
+import '@velaros-ai/ui/styles/components/index.css'
+import '@velaros-ai/ui/styles/components/product.css'
 import './index.css'
 
 installStandaloneWorkbenchHost()

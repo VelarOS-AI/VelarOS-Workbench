@@ -1,4 +1,4 @@
-import { isNumber, optionalWhenLazy } from '@velaros/core'
+import { isNumber, optionalWhenLazy } from '@velaros-ai/core'
 
 import type { WorkbenchProjectContextIndex } from '../project/workbenchProjectContextIndex'
 

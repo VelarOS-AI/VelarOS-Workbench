@@ -1,5 +1,5 @@
-import { isArray, isEmpty,isPresent, isTrue, Log, numberOrNull, trimmedStringOrEmpty } from '@velaros/core'
-import { isRecord, readNumberScalar as readNumber } from '@velaros/core/utils/unknownJsonRecord'
+import { isArray, isEmpty,isPresent, isTrue, Log, numberOrNull, trimmedStringOrEmpty } from '@velaros-ai/core'
+import { isRecord, readNumberScalar as readNumber } from '@velaros-ai/core/utils/unknownJsonRecord'
 
 import {
   createLocalStorageJsonStore,

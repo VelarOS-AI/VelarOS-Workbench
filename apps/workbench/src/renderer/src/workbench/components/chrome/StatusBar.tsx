@@ -1,10 +1,10 @@
 import { CaretRightIcon } from '@phosphor-icons/react'
 import type { ReactElement } from 'react'
 
-import type { WorkbenchProjectAiIndexStatus } from '@velaros/core/types'
-import { FileTypeIcon } from '@velaros/ui/primitives/display/FileTypeIcon'
-import { Text } from '@velaros/ui/primitives/display/Text'
-import { useWorkbenchI18n } from '@velaros/workbench/i18n'
+import type { WorkbenchProjectAiIndexStatus } from '@velaros-ai/core/types'
+import { FileTypeIcon } from '@velaros-ai/ui/primitives/display/FileTypeIcon'
+import { Text } from '@velaros-ai/ui/primitives/display/Text'
+import { useWorkbenchI18n } from '@velaros-ai/workbench/i18n'
 
 import styles from '../../styles/workbenchPageStyles'
 

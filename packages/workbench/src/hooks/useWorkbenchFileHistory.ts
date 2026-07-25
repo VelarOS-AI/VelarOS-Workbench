@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { AppError } from '@velaros/core'
-import { Result } from '@velaros/core/result'
-import type { AppLocale } from '@velaros/core/types'
+import { AppError } from '@velaros-ai/core'
+import { Result } from '@velaros-ai/core/result'
+import type { AppLocale } from '@velaros-ai/core/types'
 
 import { workbenchHost } from '../host'
 import { formatWorkbenchGitCommitDate } from '../models/git/changesPanel.model'

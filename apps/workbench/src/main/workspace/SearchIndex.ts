@@ -10,8 +10,8 @@
 import { readdir, readFile, realpath, stat } from 'node:fs/promises'
 import { resolve } from 'node:path'
 
-import { isPresent } from '@velaros/core'
-import { AppError } from '@velaros/core/error'
+import { isPresent } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 import type {
   WorkbenchContentSearchMatchResult,
   WorkbenchDirectoryEntry,
@@ -20,7 +20,7 @@ import type {
   WorkbenchSearchContentResult,
   WorkbenchSearchEntriesRequest,
   WorkbenchSearchEntriesResult,
-} from '@velaros/core/types'
+} from '@velaros-ai/core/types'
 
 import type { DirectoryEntries } from './FileEntries'
 import type { PathResolver } from './PathResolver'

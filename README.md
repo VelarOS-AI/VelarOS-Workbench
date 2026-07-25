@@ -2,7 +2,7 @@
 
 VelarOS Workbench is the independently releasable IDE product in the VelarOS ecosystem. It owns
 project navigation, editing, language intelligence, Git, terminals, run surfaces and local project
-history while consuming the shared VelarOS Kernel contracts and `@velaros/ui`.
+history while consuming the shared VelarOS Kernel contracts and `@velaros-ai/ui`.
 
 This repository contains two workspace units:
 
@@ -10,7 +10,7 @@ This repository contains two workspace units:
 - `packages/workbench`: renderer-neutral product contracts, models, hooks and composition ports.
 
 The repository intentionally has no dependency on VelarOS Desktop internals. During sibling-repo
-development, `@velaros/core` and `@velaros/ui` resolve from `../VelarOS-Kernel` and
+development, `@velaros-ai/core` and `@velaros-ai/ui` resolve from `../VelarOS-Kernel` and
 `../VelarOS-UI`; the app owns the Electron implementation behind the semantic Workbench host.
 
 ## Development

@@ -1,4 +1,4 @@
-import { toNullable } from '@velaros/core'
+import { toNullable } from '@velaros-ai/core'
 export interface WorkbenchProjectChatGroupCandidate {
   kind: string
   surfaceScope?: LooseOptional<{

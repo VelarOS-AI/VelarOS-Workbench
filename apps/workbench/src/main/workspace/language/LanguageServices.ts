@@ -11,7 +11,7 @@ import { getLanguageService as getHtmlLanguageService } from 'vscode-html-langua
 import { TextDocument } from 'vscode-languageserver-textdocument'
 import { URI } from 'vscode-uri'
 
-import { isNumber,isPresent, toNullable, toOptional } from '@velaros/core'
+import { isNumber,isPresent, toNullable, toOptional } from '@velaros-ai/core'
 import type {
   WorkbenchLanguageServiceCapability,
   WorkbenchLanguageServiceCompletionResult,
@@ -36,14 +36,14 @@ import type {
   WorkbenchLanguageServiceRequest,
   WorkbenchLanguageServiceResolveResult,
   WorkbenchLanguageServiceSignatureHelpResult,
-} from '@velaros/core/types'
+} from '@velaros-ai/core/types'
 import {
   getWorkbenchPathExtension,
   normalizeWorkbenchLanguage,
   resolveBuiltinWorkbenchLanguageService,
   resolvePluginWorkbenchLanguageService,
   type WorkbenchLanguageServiceDescriptor,
-} from '@velaros/workbench/language/workbenchLanguageServices'
+} from '@velaros-ai/workbench/language/workbenchLanguageServices'
 
 import type { PathResolver } from '../PathResolver'
 

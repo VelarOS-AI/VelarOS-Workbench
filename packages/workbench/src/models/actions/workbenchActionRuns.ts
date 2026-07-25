@@ -1,4 +1,4 @@
-import { isArray, isBoolean, isNumber, isObject, isPlainObject, isPresent, isString, Log, toNullable } from '@velaros/core'
+import { isArray, isBoolean, isNumber, isObject, isPlainObject, isPresent, isString, Log, toNullable } from '@velaros-ai/core'
 
 import { createLocalStorageJsonStore, type StorageLike } from '../../persistence/localStorageJsonStore'
 

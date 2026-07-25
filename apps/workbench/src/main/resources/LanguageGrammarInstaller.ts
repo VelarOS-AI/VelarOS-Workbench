@@ -7,16 +7,16 @@ import { pipeline } from 'node:stream/promises'
 import type { ReadableStream as NodeReadableStream } from 'node:stream/web'
 import { fileURLToPath } from 'node:url'
 
-import { AppError } from '@velaros/core/error'
+import { AppError } from '@velaros-ai/core/error'
 import type {
   WorkbenchLanguageGrammarCatalog,
   WorkbenchLanguageGrammarInstallState,
   WorkbenchLanguageGrammarRecord,
-} from '@velaros/core/types'
+} from '@velaros-ai/core/types'
 import {
   getPluginWorkbenchLanguageServices,
   WORKBENCH_GRAMMAR_RUNTIME_GLOBAL,
-} from '@velaros/workbench/language/workbenchLanguageServices'
+} from '@velaros-ai/workbench/language/workbenchLanguageServices'
 
 const GrammarManifestFile = 'grammars-manifest.json'
 const GrammarEntryFile = 'index.js'

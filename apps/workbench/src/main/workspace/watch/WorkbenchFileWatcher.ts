@@ -3,9 +3,9 @@ import { type FSWatcher, watch } from 'node:fs'
 import { realpath, stat } from 'node:fs/promises'
 import { relative, resolve } from 'node:path'
 
-import { shouldSkipWorkspaceToolDirectory } from '@velaros/core/constants/workspaceVisibility'
-import { AppError } from '@velaros/core/error'
-import type { SystemWorkspaceFilesChangedEvent } from '@velaros/core/types'
+import { shouldSkipWorkspaceToolDirectory } from '@velaros-ai/core/constants/workspaceVisibility'
+import { AppError } from '@velaros-ai/core/error'
+import type { SystemWorkspaceFilesChangedEvent } from '@velaros-ai/core/types'
 
 const WorkbenchWatchDebounceMs = 120
 

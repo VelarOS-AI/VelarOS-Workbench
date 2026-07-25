@@ -1,22 +1,22 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-import { isEmpty } from '@velaros/core'
+import { isEmpty } from '@velaros-ai/core'
 import type {
   WorkbenchLanguageServiceDiagnostic,
   WorkbenchLanguageServiceDocumentSymbol,
-} from '@velaros/core/types'
+} from '@velaros-ai/core/types'
 import {
   buildWorkbenchLanguageServiceRequestBase,
   usesWorkbenchBuiltinLanguageService,
   usesWorkbenchTypeScriptLanguageService,
-} from '@velaros/workbench/models/editor/workbenchCodeMirrorLanguageService'
-import { omitWorkbenchPendingDiagnostics } from '@velaros/workbench/models/editor/workbenchLanguageServiceInsightsModel'
+} from '@velaros-ai/workbench/models/editor/workbenchCodeMirrorLanguageService'
+import { omitWorkbenchPendingDiagnostics } from '@velaros-ai/workbench/models/editor/workbenchLanguageServiceInsightsModel'
 import {
   getWorkbenchLanguageServiceDiagnostics,
   getWorkbenchLanguageServiceDocumentSymbols,
-} from '@velaros/workbench/models/editor/workbenchLanguageServiceIpc'
-import { fileLanguage } from '@velaros/workbench/models/shared/workbenchUtils'
-import type { WorkbenchOpenEditorTab } from '@velaros/workbench/types/workbenchTypes'
+} from '@velaros-ai/workbench/models/editor/workbenchLanguageServiceIpc'
+import { fileLanguage } from '@velaros-ai/workbench/models/shared/workbenchUtils'
+import type { WorkbenchOpenEditorTab } from '@velaros-ai/workbench/types/workbenchTypes'
 
 import { useLatest } from '../support/genericHooks'
 

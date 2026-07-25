@@ -11,7 +11,7 @@
 
 import { type KeyBindingPress, matchKeyBindingPress, parseKeybinding } from 'tinykeys'
 
-import { isFunction,isString, Log, toNullable } from '@velaros/core'
+import { isFunction,isString, Log, toNullable } from '@velaros-ai/core'
 
 import {
   createLocalStorageJsonStore,

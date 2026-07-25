@@ -6,7 +6,7 @@ import { protocol } from 'electron'
 import {
   getPluginWorkbenchLanguageServices,
   WORKBENCH_GRAMMAR_URL_SCHEME,
-} from '@velaros/workbench/language/workbenchLanguageServices'
+} from '@velaros-ai/workbench/language/workbenchLanguageServices'
 
 import type { LanguageGrammarInstaller } from './LanguageGrammarInstaller'
 

@@ -17,12 +17,12 @@ function pkg(...segments: string[]): string {
   return resolve(repoRoot, 'packages', ...segments)
 }
 
-// kernel 簇(2026-07-24 K2)拆至 sibling 仓 VelarOS-Kernel;@velaros/core 走 sibling src。
+// kernel 簇(2026-07-24 K2)拆至 sibling 仓 VelarOS-Kernel;@velaros-ai/core 走 sibling src。
 function kernelPkg(...segments: string[]): string {
   return resolve(repoRoot, '../VelarOS-Kernel/packages', ...segments)
 }
 
-// ui 簇(2026-07-24 U2)拆至 sibling 仓 VelarOS-UI;@velaros/ui 走 sibling src。
+// ui 簇(2026-07-24 U2)拆至 sibling 仓 VelarOS-UI;@velaros-ai/ui 走 sibling src。
 function uiPkg(...segments: string[]): string {
   return resolve(repoRoot, '../VelarOS-UI/packages', ...segments)
 }
@@ -45,8 +45,8 @@ export default defineConfig({
       },
     },
     resolve: {
-      // @velaros/workbench 走本仓源码（避免命中 stale dist），与 renderer 同判；
-      // @velaros/core 仍经 node_modules dist 解析并打进 bundle（与 main 既有行为一致）。
+      // @velaros-ai/workbench 走本仓源码（避免命中 stale dist），与 renderer 同判；
+      // @velaros-ai/core 仍经 node_modules dist 解析并打进 bundle（与 main 既有行为一致）。
       extensions: ['.ts', '.tsx', '.mts', '.js', '.mjs', '.json'],
       alias: [
         { find: /^@velaros\/workbench$/, replacement: pkg('workbench/src/index.ts') },

@@ -1,16 +1,16 @@
 import { useEffect, useMemo, useState } from 'react'
 
-import { AppError } from '@velaros/core/error'
-import { Result } from '@velaros/core/result'
-import { workbenchHost } from '@velaros/workbench/host'
+import { AppError } from '@velaros-ai/core/error'
+import { Result } from '@velaros-ai/core/result'
+import { workbenchHost } from '@velaros-ai/workbench/host'
 import {
   buildWorkbenchContentSearchMatches,
   mapWorkbenchContentSearchMatchResult,
   mergeWorkbenchContentSearchMatches,
   type WorkbenchContentSearchMatch,
-} from '@velaros/workbench/models/files/workbenchContentSearchModel'
-import type { WorkbenchProject } from '@velaros/workbench/models/project/workbenchProjects'
-import type { WorkbenchOpenEditorTab } from '@velaros/workbench/types/workbenchTypes'
+} from '@velaros-ai/workbench/models/files/workbenchContentSearchModel'
+import type { WorkbenchProject } from '@velaros-ai/workbench/models/project/workbenchProjects'
+import type { WorkbenchOpenEditorTab } from '@velaros-ai/workbench/types/workbenchTypes'
 
 import { useStableWorkbenchMessageTranslate } from '../runtime/useStableWorkbenchMessaging'
 import { useDebounceFn, useLatest, useMemoizedFn, useMonotonicAsyncRequest } from '../support/genericHooks'

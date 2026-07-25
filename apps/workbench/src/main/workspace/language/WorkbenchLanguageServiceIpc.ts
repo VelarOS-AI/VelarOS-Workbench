@@ -15,7 +15,7 @@ import type {
   WorkbenchLanguageServicePositionRequest,
   WorkbenchLanguageServiceRenameRequest,
   WorkbenchLanguageServiceRequest,
-} from '@velaros/core/types'
+} from '@velaros-ai/core/types'
 
 import { WorkbenchLanguageChannels } from '../../../shared/workbenchLanguage'
 import {

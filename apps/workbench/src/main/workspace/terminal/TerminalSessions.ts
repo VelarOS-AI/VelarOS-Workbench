@@ -1,7 +1,7 @@
 /**
  * 工作台持久终端会话服务（照搬 desktop `workspace/workbench/TerminalSessions.ts`，语义保形；
  * 依赖从 desktop 的 storage/commands Helpers 改为本目录裁剪版 CommandHelper + PathResolver，
- * 契约类型走 `@velaros/core/types` 单源）。
+ * 契约类型走 `@velaros-ai/core/types` 单源）。
  *
  * 键控轴对齐独立应用惯例：service 单例（Parts 装配），会话按请求 `projectRoot` 解析根、按自增
  * 随机 `sessionId` 登记进程内 Map——不引入 desktop 时代的 chat-session 轴（desktop 曾按 chat
@@ -16,17 +16,17 @@ import type { ChildProcessWithoutNullStreams } from 'node:child_process'
 import { spawn } from 'node:child_process'
 import { stat } from 'node:fs/promises'
 
-import { isEmpty, isNotNull, isNull } from '@velaros/core'
-import { AppError } from '@velaros/core/error'
+import { isEmpty, isNotNull, isNull } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 import type {
   WorkbenchTerminalInputRequest,
   WorkbenchTerminalOutputEvent,
   WorkbenchTerminalStartRequest,
   WorkbenchTerminalStartResult,
   WorkbenchTerminalStopRequest,
-} from '@velaros/core/types'
-import { platformCompatibility } from '@velaros/core/utils/PlatformCompatibilityHelper'
-import { type TimerLease, TimerScope } from '@velaros/core/utils/TimerScope'
+} from '@velaros-ai/core/types'
+import { platformCompatibility } from '@velaros-ai/core/utils/PlatformCompatibilityHelper'
+import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import type { CommandHelper } from '../CommandHelper'
 import type { PathResolver } from '../PathResolver'

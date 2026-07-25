@@ -1,6 +1,6 @@
-import { AppError, Result } from '@velaros/core'
-import type { Result as ResultType } from '@velaros/core/result'
-import { installWorkbenchHost, type WorkbenchHost } from '@velaros/workbench/host'
+import { AppError, Result } from '@velaros-ai/core'
+import type { Result as ResultType } from '@velaros-ai/core/result'
+import { installWorkbenchHost, type WorkbenchHost } from '@velaros-ai/workbench/host'
 
 import type { WorkbenchFsCallResult } from '../../../shared/workbenchFs'
 

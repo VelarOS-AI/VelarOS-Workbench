@@ -17,7 +17,7 @@ import {
   Label,
   Stack,
   Text,
-} from '@velaros/ui'
+} from '@velaros-ai/ui'
 
 import type { WorkbenchProjectCreateFailureReason } from '../../../shared/projectHub'
 

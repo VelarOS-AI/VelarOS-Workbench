@@ -1,18 +1,18 @@
 import { type ReactElement, useMemo, useRef } from 'react'
 import { ArrowLeftIcon, ArrowRightIcon } from '@phosphor-icons/react'
 
-import { isEmpty } from '@velaros/core'
-import { IconButton } from '@velaros/ui/primitives/buttons/IconButton'
-import { FileTypeIcon } from '@velaros/ui/primitives/display/FileTypeIcon'
-import { Paragraph } from '@velaros/ui/primitives/display/Paragraph'
-import { Text } from '@velaros/ui/primitives/display/Text'
-import { useWorkbenchI18n } from '@velaros/workbench/i18n'
-import { buildWorkbenchContentDiffRows } from '@velaros/workbench/models/git/workbenchGitDiffModel'
+import { isEmpty } from '@velaros-ai/core'
+import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
+import { FileTypeIcon } from '@velaros-ai/ui/primitives/display/FileTypeIcon'
+import { Paragraph } from '@velaros-ai/ui/primitives/display/Paragraph'
+import { Text } from '@velaros-ai/ui/primitives/display/Text'
+import { useWorkbenchI18n } from '@velaros-ai/workbench/i18n'
+import { buildWorkbenchContentDiffRows } from '@velaros-ai/workbench/models/git/workbenchGitDiffModel'
 import {
   getWorkbenchGitChangeDisplayPath,
   type WorkbenchGitChangeItem,
-} from '@velaros/workbench/models/git/workbenchGitModel'
-import type { WorkbenchThemeId } from '@velaros/workbench/models/settings/workbenchPreferences'
+} from '@velaros-ai/workbench/models/git/workbenchGitModel'
+import type { WorkbenchThemeId } from '@velaros-ai/workbench/models/settings/workbenchPreferences'
 
 import {
   useWorkbenchGitDiffPreview,

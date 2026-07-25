@@ -7,12 +7,12 @@
  */
 import type { ReactElement } from 'react'
 
-import { WorkspaceSpaceKind } from '@velaros/core/constants/workspaceSpaces'
+import { WorkspaceSpaceKind } from '@velaros-ai/core/constants/workspaceSpaces'
 import type {
   WorkbenchChatCompositionAdapter,
   WorkbenchChatProjectRuntime,
   WorkbenchChatSessionSnapshot,
-} from '@velaros/workbench/composition'
+} from '@velaros-ai/workbench/composition'
 
 const StandaloneInertChatSession: WorkbenchChatSessionSnapshot = {
   id: 'standalone-workbench:no-chat-session',

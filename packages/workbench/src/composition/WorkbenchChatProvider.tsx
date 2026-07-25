@@ -6,13 +6,13 @@ import {
   useContext,
 } from 'react'
 
-import type { WorkspaceSpaceKind } from '@velaros/core/constants/workspaceSpaces'
+import type { WorkspaceSpaceKind } from '@velaros-ai/core/constants/workspaceSpaces'
 import type {
   BrowserElementSelection,
   ChatMessage,
   SystemFileChangePreviewResult,
   WorkspaceCheckpointFileDiff,
-} from '@velaros/core/types'
+} from '@velaros-ai/core/types'
 
 import type { WorkbenchChatSurfaceScope } from './workbenchChatComposition'
 

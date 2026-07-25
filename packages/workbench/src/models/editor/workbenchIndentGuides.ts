@@ -1,6 +1,6 @@
 import { Text } from '@codemirror/state'
 
-import { isBlank,isEmpty } from '@velaros/core'
+import { isBlank,isEmpty } from '@velaros-ai/core'
 
 export interface WorkbenchIndentGuideDescriptor {
   /** 零基、结束行不包含，匹配缩进引导描述模型。 */

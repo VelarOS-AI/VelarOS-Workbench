@@ -2,7 +2,7 @@ import type { Extension, Range, Transaction } from '@codemirror/state'
 import { StateEffect, StateField } from '@codemirror/state'
 import { Decoration, type DecorationSet, EditorView, WidgetType } from '@codemirror/view'
 
-import { isEmpty } from '@velaros/core'
+import { isEmpty } from '@velaros-ai/core'
 
 import { getWorkbenchComment } from '../../models/comments/workbenchCommentStore'
 

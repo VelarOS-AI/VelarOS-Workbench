@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 
-import type { WorkbenchTerminalOutputEvent } from '@velaros/core/types'
+import type { WorkbenchTerminalOutputEvent } from '@velaros-ai/core/types'
 
 import { workbenchHost } from '../../host'
 import {
