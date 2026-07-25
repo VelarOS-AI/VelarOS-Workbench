@@ -17,14 +17,14 @@ function pkg(...segments: string[]): string {
   return resolve(repoRoot, 'packages', ...segments)
 }
 
-// kernel 簇(2026-07-24 K2)拆至 sibling 仓 velaros-kernel;@velaros/core 走 sibling src。
+// kernel 簇(2026-07-24 K2)拆至 sibling 仓 VelarOS-Kernel;@velaros/core 走 sibling src。
 function kernelPkg(...segments: string[]): string {
-  return resolve(repoRoot, '../velaros-kernel/packages', ...segments)
+  return resolve(repoRoot, '../VelarOS-Kernel/packages', ...segments)
 }
 
-// ui 簇(2026-07-24 U2)拆至 sibling 仓 velaros-ui;@velaros/ui 走 sibling src。
+// ui 簇(2026-07-24 U2)拆至 sibling 仓 VelarOS-UI;@velaros/ui 走 sibling src。
 function uiPkg(...segments: string[]): string {
-  return resolve(repoRoot, '../velaros-ui/packages', ...segments)
+  return resolve(repoRoot, '../VelarOS-UI/packages', ...segments)
 }
 
 export default defineConfig({
@@ -73,8 +73,8 @@ export default defineConfig({
       fs: {
         allow: [
           repoRoot,
-          resolve(repoRoot, '../velaros-kernel'),
-          resolve(repoRoot, '../velaros-ui'),
+          resolve(repoRoot, '../VelarOS-Kernel'),
+          resolve(repoRoot, '../VelarOS-UI'),
         ],
       },
     },

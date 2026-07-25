@@ -23,7 +23,7 @@ const GrammarEntryFile = 'index.js'
 const GrammarMetaFile = 'meta.json'
 const MaximumGrammarArtifactBytes = 25 * 1024 * 1024
 const DefaultArtifactBase =
-  'https://github.com/Error-Zhang/velaros-workbench/releases/latest/download'
+  'https://github.com/Error-Zhang/VelarOS-Workbench/releases/latest/download'
 const KnownGrammarIds = new Set(
   getPluginWorkbenchLanguageServices().map((service) => service.id)
 )

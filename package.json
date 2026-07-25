@@ -57,8 +57,8 @@
     "vite": "^7.3.2"
   },
   "overrides": {
-    "@velaros/core": "file:../velaros-kernel/packages/core",
-    "@velaros/ui": "file:../velaros-ui/packages/ui"
+    "@velaros/core": "file:../VelarOS-Kernel/packages/core",
+    "@velaros/ui": "file:../VelarOS-UI/packages/ui"
   },
   "workspaces": [
     "apps/*",

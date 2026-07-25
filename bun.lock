@@ -103,8 +103,8 @@
     },
   },
   "overrides": {
-    "@velaros/core": "file:../velaros-kernel/packages/core",
-    "@velaros/ui": "file:../velaros-ui/packages/ui",
+    "@velaros/core": "file:../VelarOS-Kernel/packages/core",
+    "@velaros/ui": "file:../VelarOS-UI/packages/ui",
   },
   "packages": {
     "@babel/code-frame": ["@babel/code-frame@7.29.7", "", { "dependencies": { "@babel/helper-validator-identifier": "^7.29.7", "js-tokens": "^4.0.0", "picocolors": "^1.1.1" } }, "sha512-Aup7aUOfpbAUg2ROOJN6Iw5f9DMBlzu0mIkm/malLQFN/YQgO48wCj0Kxa3sEHJvPVFg7siR+qRInwXd2qhQKw=="],
@@ -1299,13 +1299,13 @@
 
     "@typescript-eslint/visitor-keys/eslint-visitor-keys": ["eslint-visitor-keys@5.0.1", "", {}, "sha512-tD40eHxA35h0PEIZNeIjkHoDR4YjjJp34biM0mDvplBe//mB+IHCqHDGV7pxF+7MklTvighcCPPZC7ynWyjdTA=="],
 
-    "@velaros/workbench/@velaros/core": ["@velaros/core@file:../velaros-kernel/packages/core", { "dependencies": { "gpt-tokenizer": "^3.0.1", "zod": "^4.3.6" }, "devDependencies": { "@types/node": "^22.19.17", "typescript": "^5.7.0" } }],
+    "@velaros/workbench/@velaros/core": ["@velaros/core@file:../VelarOS-Kernel/packages/core", { "dependencies": { "gpt-tokenizer": "^3.0.1", "zod": "^4.3.6" }, "devDependencies": { "@types/node": "^22.19.17", "typescript": "^5.7.0" } }],
 
-    "@velaros/workbench/@velaros/ui": ["@velaros/ui@file:../velaros-ui/packages/ui", { "dependencies": { "@phosphor-icons/react": "^2.1.10", "@radix-ui/react-dialog": "^1.1.15", "@radix-ui/react-label": "^2.1.8", "@radix-ui/react-select": "^2.2.6", "@radix-ui/react-separator": "^1.1.8", "@radix-ui/react-slot": "^1.2.4", "@radix-ui/react-switch": "^1.2.6", "@radix-ui/react-tabs": "^1.1.13", "@radix-ui/react-tooltip": "^1.2.8", "@velaros/core": "file:../../../velaros-kernel/packages/core", "ahooks": "^3.9.7", "class-variance-authority": "^0.7.1", "clsx": "^2.1.1", "react-day-picker": "^9.14.0", "tailwind-merge": "^3.5.0" }, "devDependencies": { "@types/react": "^19.0.0", "typescript": "^5.7.0" }, "peerDependencies": { "react": "^19.0.0", "react-dom": "^19.0.0" } }],
+    "@velaros/workbench/@velaros/ui": ["@velaros/ui@file:../VelarOS-UI/packages/ui", { "dependencies": { "@phosphor-icons/react": "^2.1.10", "@radix-ui/react-dialog": "^1.1.15", "@radix-ui/react-label": "^2.1.8", "@radix-ui/react-select": "^2.2.6", "@radix-ui/react-separator": "^1.1.8", "@radix-ui/react-slot": "^1.2.4", "@radix-ui/react-switch": "^1.2.6", "@radix-ui/react-tabs": "^1.1.13", "@radix-ui/react-tooltip": "^1.2.8", "@velaros/core": "file:../../../VelarOS-Kernel/packages/core", "ahooks": "^3.9.7", "class-variance-authority": "^0.7.1", "clsx": "^2.1.1", "react-day-picker": "^9.14.0", "tailwind-merge": "^3.5.0" }, "devDependencies": { "@types/react": "^19.0.0", "typescript": "^5.7.0" }, "peerDependencies": { "react": "^19.0.0", "react-dom": "^19.0.0" } }],
 
-    "@velaros/workbench-app/@velaros/core": ["@velaros/core@file:../velaros-kernel/packages/core", { "dependencies": { "gpt-tokenizer": "^3.0.1", "zod": "^4.3.6" }, "devDependencies": { "@types/node": "^22.19.17", "typescript": "^5.7.0" } }],
+    "@velaros/workbench-app/@velaros/core": ["@velaros/core@file:../VelarOS-Kernel/packages/core", { "dependencies": { "gpt-tokenizer": "^3.0.1", "zod": "^4.3.6" }, "devDependencies": { "@types/node": "^22.19.17", "typescript": "^5.7.0" } }],
 
-    "@velaros/workbench-app/@velaros/ui": ["@velaros/ui@file:../velaros-ui/packages/ui", { "dependencies": { "@phosphor-icons/react": "^2.1.10", "@radix-ui/react-dialog": "^1.1.15", "@radix-ui/react-label": "^2.1.8", "@radix-ui/react-select": "^2.2.6", "@radix-ui/react-separator": "^1.1.8", "@radix-ui/react-slot": "^1.2.4", "@radix-ui/react-switch": "^1.2.6", "@radix-ui/react-tabs": "^1.1.13", "@radix-ui/react-tooltip": "^1.2.8", "@velaros/core": "file:../../../velaros-kernel/packages/core", "ahooks": "^3.9.7", "class-variance-authority": "^0.7.1", "clsx": "^2.1.1", "react-day-picker": "^9.14.0", "tailwind-merge": "^3.5.0" }, "devDependencies": { "@types/react": "^19.0.0", "typescript": "^5.7.0" }, "peerDependencies": { "react": "^19.0.0", "react-dom": "^19.0.0" } }],
+    "@velaros/workbench-app/@velaros/ui": ["@velaros/ui@file:../VelarOS-UI/packages/ui", { "dependencies": { "@phosphor-icons/react": "^2.1.10", "@radix-ui/react-dialog": "^1.1.15", "@radix-ui/react-label": "^2.1.8", "@radix-ui/react-select": "^2.2.6", "@radix-ui/react-separator": "^1.1.8", "@radix-ui/react-slot": "^1.2.4", "@radix-ui/react-switch": "^1.2.6", "@radix-ui/react-tabs": "^1.1.13", "@radix-ui/react-tooltip": "^1.2.8", "@velaros/core": "file:../../../VelarOS-Kernel/packages/core", "ahooks": "^3.9.7", "class-variance-authority": "^0.7.1", "clsx": "^2.1.1", "react-day-picker": "^9.14.0", "tailwind-merge": "^3.5.0" }, "devDependencies": { "@types/react": "^19.0.0", "typescript": "^5.7.0" }, "peerDependencies": { "react": "^19.0.0", "react-dom": "^19.0.0" } }],
 
     "app-builder-lib/@electron/get": ["@electron/get@3.1.0", "", { "dependencies": { "debug": "^4.1.1", "env-paths": "^2.2.0", "fs-extra": "^8.1.0", "got": "^11.8.5", "progress": "^2.0.3", "semver": "^6.2.0", "sumchecker": "^3.0.1" }, "optionalDependencies": { "global-agent": "^3.0.0" } }, "sha512-F+nKc0xW+kVbBRhFzaMgPy3KwmuNTYX1fx6+FxxoSnNgwYX6LD7AKBTWkU0MQ6IBoe7dz069CNkR673sPAgkCQ=="],
 
@@ -1373,9 +1373,9 @@
 
     "@typescript-eslint/typescript-estree/minimatch/brace-expansion": ["brace-expansion@5.0.8", "", { "dependencies": { "balanced-match": "^4.0.2" } }, "sha512-JZyDyq3D4AUifKTPOB7DELf6XsB3WdPuNxCtob1vFXPsSXhdAiHBWJ/tJ8HAc9aH84BK+5JFZLNkJKx3G9kzQg=="],
 
-    "@velaros/workbench-app/@velaros/ui/@velaros/core": ["@velaros/core@file:../velaros-kernel/packages/core", {}],
+    "@velaros/workbench-app/@velaros/ui/@velaros/core": ["@velaros/core@file:../VelarOS-Kernel/packages/core", {}],
 
-    "@velaros/workbench/@velaros/ui/@velaros/core": ["@velaros/core@file:../velaros-kernel/packages/core", {}],
+    "@velaros/workbench/@velaros/ui/@velaros/core": ["@velaros/core@file:../VelarOS-Kernel/packages/core", {}],
 
     "app-builder-lib/@electron/get/fs-extra": ["fs-extra@8.1.0", "", { "dependencies": { "graceful-fs": "^4.2.0", "jsonfile": "^4.0.0", "universalify": "^0.1.0" } }, "sha512-yhlQgA6mnOJUKOsRUFsgJdQCvkKhcz8tlZG5HBQfReYZy46OwLcY+Zia0mtdHsOo9y/hP+CxMN0TU9QxoOtG4g=="],
 

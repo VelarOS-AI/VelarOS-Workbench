@@ -1,4 +1,4 @@
-// velaros-ui eslint 配置——自 VelarOS-Desktop monorepo eslint.config.mjs 裁剪(R-ui-K1 拆仓):
+// VelarOS-Workbench eslint 配置——自 VelarOS-Desktop monorepo eslint.config.mjs 裁剪:
 // 去掉 desktop 主进程/extension 面,保留 react/web 面(react-hooks),规则本体与 monorepo 逐字一致,
 // 保证同一份源码两仓 lint 语义不漂移。§12.9 组件形态封闭(uiComponentFormClosure/uiColorLiteralClosure)
 // 属 arch-guard-velaros 检查,非 eslint 规则,本批暂留 monorepo(见 README 偏离项)。
