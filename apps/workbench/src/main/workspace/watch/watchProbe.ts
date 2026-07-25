@@ -40,14 +40,15 @@ try {
   assert(first.subscriptionId !== second.subscriptionId, 'subscriptions must be isolated')
   assert(first.workspaceRoot === (await realpath(root)), 'root must be canonical')
 
-  await Promise.all([
-    writeFile(join(root, 'one.ts'), 'one'),
-    writeFile(join(root, 'two.ts'), 'two'),
-  ])
+  await writeFile(join(root, 'one.ts'), 'one')
   const event = await waitForPath(firstEvents, 'one.ts')
-  const secondPathEvent = await waitForPath(firstEvents, 'two.ts')
   await waitForPath(secondEvents, 'one.ts')
-  await waitForPath(secondEvents, 'two.ts')
+
+  const firstTwoStart = firstEvents.length
+  const secondTwoStart = secondEvents.length
+  await writeFile(join(root, 'two.ts'), 'two')
+  const secondPathEvent = await waitForPath(firstEvents, 'two.ts', firstTwoStart)
+  await waitForPath(secondEvents, 'two.ts', secondTwoStart)
 
   assert(event.kind === 'velaros.systemWorkspaceFilesChanged', 'event kind must be stable')
   assert(event.source === 'filesystem-watch', 'event source must identify watcher')
