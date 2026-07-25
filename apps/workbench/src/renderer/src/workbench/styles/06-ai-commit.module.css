@@ -1,0 +1,443 @@
+.aiChangesRound {
+  @apply min-w-0;
+}
+
+.aiChangesRoundButton {
+  min-height: 28px;
+  padding: 3px 6px 3px 3px;
+  gap: 5px;
+}
+
+.aiChangesRoundTitle {
+  @apply min-w-0 flex-1 truncate;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.aiChangesRoundTime,
+.aiChangesRoundCount {
+  @apply shrink-0;
+}
+
+.aiChangesRoundCount {
+  @apply inline-flex items-center justify-center;
+  min-width: 17px;
+  height: 17px;
+  border-radius: 999px;
+  background: var(--workbench-active);
+  color: var(--workbench-text-muted);
+  font-size: 10px;
+}
+
+.aiChangesFileList {
+  padding-block-end: 3px;
+  padding-inline-start: 12px;
+  gap: 1px;
+}
+
+.aiChangesFileRow {
+  @apply flex min-w-0 items-center gap-1.5;
+  min-height: 34px;
+  padding: 3px 3px 3px 6px;
+  border-radius: var(--workbench-radius);
+  color: var(--workbench-text);
+  cursor: pointer;
+}
+
+.aiChangesFileRow[data-active='true'] {
+  background: var(--workbench-active);
+}
+
+.aiChangesFileStatus {
+  @apply shrink-0 text-center font-semibold;
+  width: 12px;
+  color: var(--workbench-text-muted);
+  font-size: 9px;
+}
+
+.aiChangesFileRow[data-change-status='added'] .aiChangesFileStatus {
+  color: var(--status-green);
+}
+
+.aiChangesFileRow[data-change-status='deleted'] .aiChangesFileStatus {
+  color: var(--status-red);
+}
+
+.aiChangesFileRow[data-change-status='modified'] .aiChangesFileStatus {
+  color: var(--status-teal);
+}
+
+.aiChangesFileName {
+  font-size: 11px;
+  line-height: 15px;
+}
+
+.aiChangesFilePath {
+  line-height: 13px;
+}
+
+.aiChangesFileActions {
+  @apply flex shrink-0 items-center gap-0.5;
+  opacity: 0;
+  transition: opacity 100ms ease;
+}
+
+.aiChangesFileRow:hover .aiChangesFileActions,
+.aiChangesFileRow:focus-within .aiChangesFileActions,
+.aiChangesFileRow[data-active='true'] .aiChangesFileActions {
+  opacity: 1;
+}
+
+.aiChangesFileAction {
+  width: 22px;
+  height: 22px;
+  color: var(--workbench-text-muted);
+}
+
+.aiChangesDiffToolbarActions {
+  @apply flex shrink-0 items-center gap-1;
+}
+
+.aiChangesDiffToolbarActions [data-slot='button'] {
+  color: var(--workbench-text-muted);
+}
+
+.aiChangesDiffToolbarActions [data-slot='button']:hover:not(:disabled) {
+  color: var(--workbench-text);
+}
+
+.aiChangesDiffFallbackNotice {
+  @apply shrink-0 border-b px-3 py-1.5;
+  border-color: var(--workbench-border);
+  background: var(--status-amber-soft);
+  color: var(--status-amber);
+  font-size: 11px;
+}
+
+.commitListPane {
+  @apply flex min-h-0 min-w-0 flex-1 flex-col;
+  background: var(--workbench-bg);
+}
+
+.commitListPane:focus {
+  outline: none;
+}
+
+.commitDisclosureButton,
+.commitFileCheckbox,
+.commitFileRollbackButton,
+.commitFileLocateButton {
+  @apply flex shrink-0 items-center justify-center border bg-transparent text-muted-foreground;
+  border-color: transparent;
+}
+
+.commitDisclosureButton:hover,
+.commitFileCheckbox:hover,
+.commitFileRollbackButton:hover:not(:disabled),
+.commitFileLocateButton:hover:not(:disabled) {
+  color: var(--workbench-text);
+  background: var(--workbench-hover);
+}
+
+.commitDisclosureButton:disabled,
+.commitGroupCheckbox:disabled,
+.commitFileRollbackButton:disabled,
+.commitFileLocateButton:disabled {
+  opacity: 0.45;
+}
+
+.commitChangeScroll {
+  @apply min-h-0 flex-1;
+}
+
+.commitChangeContent {
+  @apply flex min-h-full min-w-0 flex-col;
+  padding: 8px 10px 10px;
+}
+
+.commitGroupList {
+  @apply flex min-w-0 flex-col;
+  gap: 1px;
+}
+
+.commitGroup {
+  @apply min-w-0;
+}
+
+.commitGroupRow {
+  @apply grid min-w-0 items-center;
+  grid-template-columns: 16px 18px minmax(0, 1fr);
+  min-height: 26px;
+  padding-inline: 3px 7px;
+  border-radius: var(--workbench-radius);
+  color: var(--workbench-text);
+}
+
+.commitGroupRow:hover,
+.commitGroupRow[data-active='true'] {
+  background: var(--workbench-active);
+}
+
+.commitListPane:not(:focus-within) .commitGroupRow[data-active='true'] {
+  background: var(--workbench-selection-inactive);
+  color: var(--workbench-text);
+}
+
+.commitDisclosureButton {
+  width: 14px;
+  height: 20px;
+  border-radius: var(--workbench-radius-xs);
+}
+
+.commitGroupCheckbox {
+  @apply flex shrink-0 items-center justify-center border bg-card text-primary;
+  width: 14px;
+  height: 14px;
+  border-color: var(--border-strong);
+  border-radius: var(--workbench-radius-xs);
+}
+
+.commitGroupCheckbox[data-checked='true'] {
+  border-color: var(--control-checked-border);
+  background: var(--control-checked-surface);
+}
+
+.commitGroupCheckbox[data-partial='true']::after {
+  content: '';
+  width: 7px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--control-checked);
+}
+
+.commitGroupMain {
+  @apply flex min-w-0 items-baseline gap-1.5 overflow-hidden border-0 bg-transparent p-0 text-left;
+  color: inherit;
+}
+
+.commitGroupTitle {
+  @apply shrink-0 truncate font-semibold;
+  max-width: 62%;
+  font-size: 12px;
+  line-height: var(--ui-line-compact);
+}
+
+.commitGroupCount {
+  @apply min-w-0 flex-1 truncate text-muted-foreground;
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: var(--ui-line-compact);
+}
+
+.commitGroupSpacer {
+  display: block;
+  height: 4px;
+}
+
+.commitFileList {
+  @apply flex min-w-0 flex-col;
+  margin-left: 35px;
+  padding-block: 2px 5px;
+}
+
+.commitFileRow {
+  @apply grid min-w-0 items-center;
+  grid-template-columns: 18px minmax(0, 1fr) 24px 22px 22px;
+  min-height: 24px;
+  padding-inline: 4px;
+  border-radius: var(--workbench-radius);
+  color: var(--status-blue-strong);
+}
+
+.commitFileRow:hover,
+.commitFileRow[data-active='true'] {
+  background: var(--workbench-active);
+}
+
+.commitFileRow[data-selected='true']:not([data-active='true']) {
+  background: var(--workbench-selection-inactive);
+}
+
+.commitListPane:not(:focus-within) .commitFileRow[data-active='true'] {
+  background: var(--workbench-selection-inactive);
+}
+
+.commitFileRow[data-git-tone='added'] .commitFileName {
+  color: var(--status-green);
+}
+
+.commitFileRow[data-git-tone='added'] .commitFileIcon,
+.commitFileRow[data-git-tone='added'] .commitFileIcon[data-kind] {
+  color: var(--status-green);
+}
+
+.commitFileRow[data-git-tone='added'] .commitFileStatus {
+  color: var(--status-green);
+}
+
+.commitFileRow[data-git-tone='modified'] .commitFileName {
+  color: var(--status-teal);
+}
+
+.commitFileRow[data-git-tone='modified'] .commitFileIcon,
+.commitFileRow[data-git-tone='modified'] .commitFileIcon[data-kind] {
+  color: var(--status-teal);
+}
+
+.commitFileRow[data-git-tone='modified'] .commitFileStatus {
+  color: var(--status-teal);
+}
+
+.commitFileRow[data-git-tone='untracked'] .commitFileName {
+  color: var(--workbench-git-untracked-fg);
+}
+
+.commitFileRow[data-git-tone='untracked'] .commitFileIcon,
+.commitFileRow[data-git-tone='untracked'] .commitFileIcon[data-kind] {
+  color: var(--workbench-git-untracked-fg);
+}
+
+.commitFileRow[data-git-tone='untracked'] .commitFileStatus {
+  color: var(--workbench-git-untracked-fg);
+}
+
+.commitFileMain {
+  @apply flex min-w-0 items-center justify-start gap-1.5 overflow-hidden border-0 bg-transparent p-0 text-left;
+  color: inherit;
+}
+
+.commitFileCheckbox {
+  width: 14px;
+  height: 14px;
+  border-color: var(--border-strong);
+  border-radius: var(--workbench-radius-xs);
+  background: var(--card);
+  color: var(--control-checked);
+}
+
+.commitFileCheckbox[data-checked='true'] {
+  border-color: var(--control-checked-border);
+  background: var(--control-checked-surface);
+}
+
+.commitFileIcon {
+  @apply flex shrink-0 items-center justify-center;
+  width: 16px;
+  color: var(--foreground-tertiary);
+}
+
+.commitFileName {
+  @apply min-w-0 truncate font-medium text-primary;
+  flex: 0 1 auto;
+  max-width: min(58%, 220px);
+  font-size: 11.5px;
+}
+
+.commitFilePath {
+  @apply min-w-0 flex-1 truncate text-muted-foreground;
+  font-size: 10.5px;
+}
+
+.commitFileStatus {
+  @apply justify-self-center text-muted-foreground;
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.commitFileRollbackButton,
+.commitFileLocateButton {
+  width: 20px;
+  height: 20px;
+  border-radius: var(--workbench-radius);
+}
+
+.commitForm {
+  @apply flex min-w-0 shrink-0 flex-col overflow-hidden border-t;
+  flex-basis: clamp(136px, 23%, 198px);
+  border-color: var(--workbench-border);
+  background: var(--workbench-toolbar);
+}
+
+.commitButtonRow {
+  @apply flex min-w-0 items-center gap-1.5;
+}
+
+.commitFooterLeft {
+  @apply flex min-w-0 items-center gap-1;
+}
+
+.commitButtonRow button {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.commitTooltipTrigger {
+  @apply inline-flex shrink-0;
+}
+
+.commitIconButton {
+  @apply flex shrink-0 items-center justify-center border bg-transparent text-muted-foreground;
+  width: 28px;
+  height: 28px;
+  border-color: transparent;
+  border-radius: var(--workbench-radius);
+}
+
+.commitIconButton:hover:not(:disabled) {
+  color: var(--workbench-text);
+  background: var(--workbench-hover);
+}
+
+.commitIconButton:disabled {
+  opacity: 0.45;
+}
+
+.commitSettingsGlyph {
+  @apply flex shrink-0 items-center justify-center text-muted-foreground;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--workbench-radius);
+}
+
+.gitDiffPreview {
+  @apply flex min-w-0 flex-col overflow-hidden border;
+  border-color: var(--workbench-border);
+  border-radius: var(--workbench-radius);
+  background: var(--workbench-surface);
+}
+
+.gitDiffHeader {
+  @apply flex shrink-0 items-center justify-between gap-2 border-b;
+  min-height: 31px;
+  padding-inline: 8px;
+  border-color: var(--workbench-border);
+  background: var(--workbench-toolbar);
+}
+
+.gitDiffTitle {
+  @apply m-0 truncate font-medium text-foreground;
+  font-size: 12px;
+}
+
+.gitDiffMeta {
+  @apply shrink-0 text-muted-foreground;
+  font-size: 10.5px;
+}
+
+.gitDiffEmpty,
+.gitDiffTruncated {
+  @apply m-0 text-muted-foreground;
+  padding: 9px;
+  font-size: 11px;
+}
+
+.gitDiffTruncated {
+  border-top: 1px solid var(--input);
+}
+
+.gitDiffLines {
+  @apply flex min-h-0 min-w-0 flex-col overflow-hidden;
+  height: min(340px, 45vh);
+  max-height: 340px;
+}

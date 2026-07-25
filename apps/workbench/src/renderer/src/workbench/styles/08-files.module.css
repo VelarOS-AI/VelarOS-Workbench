@@ -1,0 +1,795 @@
+.filePanel,
+.editorPanel {
+  @apply min-h-0;
+}
+
+.filePanel {
+  @apply flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden;
+  height: 100%;
+  background: var(--workbench-surface-muted);
+}
+
+.workbenchShell .filePanel {
+  background: var(--workbench-editor-bg);
+}
+
+.filePanel > .panelHeader {
+  justify-content: flex-start;
+  gap: 6px;
+  min-height: 34px;
+  padding-inline: 2px 4px;
+}
+
+.workbenchShell .filePanel > .panelHeader {
+  border-color: var(--workbench-editor-gutter-border);
+  background: var(--workbench-surface-muted);
+}
+
+.filePanelHeaderActions {
+  @apply ml-auto flex shrink-0 items-center gap-0.5;
+}
+
+.filePanelHeaderActions button,
+.filePanelHeaderActions [data-slot='button'] {
+  width: 26px;
+  height: 26px;
+}
+
+.filePanelHeaderActions [data-active='true'] {
+  color: var(--workbench-text);
+  background: var(--chrome-rail-selected-bg);
+}
+
+.filePanelBody {
+  @apply flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden;
+}
+
+.filePanel > .searchBar {
+  padding-inline: 5px;
+}
+
+.panelHeader {
+  @apply relative flex shrink-0 items-center gap-1;
+  min-height: 40px;
+  padding-inline: 10px;
+  border-bottom: 1px solid var(--workbench-border);
+  background: var(--workbench-toolbar);
+}
+
+.panelTitleGroup {
+  @apply flex min-w-0 flex-1 flex-col;
+  gap: 1px;
+}
+
+.panelTitle,
+.editorTitle {
+  @apply truncate font-medium text-foreground;
+  font-size: var(--ui-font-body-sm);
+}
+
+.panelSubtitle {
+  @apply truncate text-muted-foreground;
+  font-size: 10.5px;
+  line-height: 1.2;
+}
+
+.panelActions {
+  @apply flex shrink-0 items-center gap-1;
+}
+
+.filePanelGitControl {
+  display: flex;
+  min-width: 0;
+  max-width: min(420px, calc(100% - 40px));
+  flex: 0 1 auto;
+  align-items: center;
+  overflow: hidden;
+}
+
+.workbenchShell .filePanelGitControl [class*='gitBranchControlPill'] [class*='gitBranchButton'] {
+  height: 26px;
+  min-height: 26px;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+.workbenchShell
+  .filePanelGitControl
+  [class*='gitBranchControlPill']
+  [class*='gitBranchButton']:hover:not(:disabled),
+.workbenchShell
+  .filePanelGitControl
+  [class*='gitBranchControlPill']
+  [class*='gitBranchButton']:focus-visible {
+  border-color: transparent;
+  background: var(--chrome-rail-hover-bg);
+  box-shadow: none;
+}
+
+.filePanelGitControl > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.filePanelGitPlaceholder {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  height: 26px;
+  align-items: center;
+  overflow: hidden;
+  color: var(--workbench-text-muted);
+  font-size: 11px;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.filePanelGitInitializeButton {
+  min-width: 0;
+  max-width: 100%;
+  height: 26px;
+  padding-inline: 7px;
+  gap: 5px;
+  color: var(--workbench-text);
+  border: 1px solid transparent;
+  border-radius: var(--workbench-radius);
+  background: transparent;
+  box-shadow: none;
+}
+
+.filePanelGitInitializeButton:hover:not(:disabled),
+.filePanelGitInitializeButton:focus-visible {
+  color: var(--workbench-text);
+  border-color: transparent;
+  background: var(--chrome-rail-hover-bg);
+  box-shadow: none;
+}
+
+.panelActions button {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--workbench-radius);
+}
+
+.panelActions [data-active='true'] {
+  color: var(--workbench-text);
+  background: var(--chrome-rail-selected-bg);
+  font-weight: 600;
+}
+
+.panelTitleButton {
+  @apply flex min-w-0 items-center gap-1 border-0 bg-transparent p-0 text-left font-medium text-foreground;
+  max-width: 100%;
+  font-size: var(--ui-font-body-sm);
+}
+
+.panelTitleButton span,
+.panelTitleButton [data-slot='text'] {
+  @apply min-w-0 truncate;
+}
+
+.panelTitleButton:hover {
+  color: var(--workbench-text);
+}
+
+.treeActionForm {
+  @apply flex shrink-0 items-center gap-2;
+  padding: 8px;
+  border-bottom: 1px solid var(--workbench-border);
+  background: var(--workbench-toolbar);
+}
+
+.searchBar {
+  @apply flex shrink-0 items-center gap-1.5 text-muted-foreground;
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--workbench-border);
+  background: var(--workbench-toolbar);
+}
+
+.searchInputShell {
+  @apply flex min-w-0 flex-1 items-center gap-1.5 border bg-card text-muted-foreground;
+  height: 30px;
+  padding-inline: 8px;
+  border-color: var(--workbench-border);
+  border-radius: var(--workbench-radius);
+}
+
+.searchInputShell [data-slot='input'] {
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.searchInputShell [data-slot='input']:focus-visible {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.searchInputClearButton {
+  @apply shrink-0 text-muted-foreground;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--workbench-radius);
+}
+
+.searchInputClearButton:hover {
+  color: var(--workbench-text);
+  background: var(--chrome-rail-hover-bg);
+}
+
+.treeScroll {
+  @apply min-h-0 flex-1;
+  height: 100%;
+}
+
+.treeScroll:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1px var(--workbench-focus-inset-ring);
+}
+
+.arboristTreeShell {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  contain: layout paint style;
+}
+
+.arboristTreeList {
+  outline: none;
+  scrollbar-width: thin;
+}
+
+.arboristTreeVirtualRow {
+  outline: none;
+  contain: layout paint style;
+}
+
+.treeRoot,
+.treeChildren {
+  @apply m-0 list-none p-0;
+}
+
+.treeRoot {
+  padding-block: 4px;
+}
+
+.searchResultList {
+  @apply m-0 list-none p-0;
+  padding-block: 6px;
+}
+
+.searchSection {
+  @apply min-w-0;
+}
+
+.searchSectionTitle {
+  @apply m-0 flex items-center justify-between gap-2 text-muted-foreground;
+  padding: 7px 10px 2px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.searchSectionTitle span,
+.searchSectionTitle [data-slot='text'] {
+  @apply shrink-0;
+}
+
+.treeRow {
+  @apply flex w-full items-center gap-1.5 border-0 bg-transparent text-left text-foreground;
+  height: 100%;
+  min-height: 23px;
+  border-radius: 0;
+  box-shadow: none;
+  outline: none;
+  cursor: default;
+  font-size: 11.5px;
+}
+
+.arboristTreeRowDragging {
+  opacity: 0.55;
+}
+
+.arboristTreeRowDropTarget {
+  background: var(--chrome-rail-hover-bg);
+}
+
+.searchResultRow {
+  @apply flex w-full items-center gap-2 border-0 bg-transparent text-left text-foreground;
+  min-height: 34px;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.treeRow:hover,
+.searchResultRow:hover {
+  background: var(--chrome-rail-hover-bg);
+}
+
+.treeRowSelected,
+.searchResultRowSelected {
+  background: var(--workbench-selection-bg);
+  color: var(--foreground);
+  outline: none;
+}
+
+.treeRowSelected:hover,
+.searchResultRowSelected:hover {
+  background: var(--workbench-selection-bg);
+}
+
+.searchResultRowActive:not(.searchResultRowSelected) {
+  background: var(--chrome-rail-hover-bg);
+  color: var(--foreground);
+}
+
+.treeScroll:not(:focus-within) .treeRowSelected,
+.treeScroll:not(:focus-within) .searchResultRowSelected {
+  background: var(--workbench-selection-inactive);
+  color: var(--workbench-text);
+}
+
+.treeRowIgnored:not(.treeRowSelected) {
+  color: var(--workbench-tree-ignored-fg);
+  opacity: 0.55;
+}
+
+.treeRowIgnored:not(.treeRowSelected):hover {
+  background: var(--chrome-rail-hover-bg);
+}
+
+.treeRowIgnored:not(.treeRowSelected) .treeFolderIcon {
+  color: var(--workbench-tree-ignored-fg);
+}
+
+.treeRowIgnored:not(.treeRowSelected) .treeFileIcon,
+.treeRowIgnored:not(.treeRowSelected) .treeFileIcon[data-kind] {
+  color: var(--workbench-tree-ignored-fg);
+}
+
+.treeSpacer {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+}
+
+.treeDisclosureButton {
+  @apply flex shrink-0 items-center justify-center border-0 bg-transparent text-muted-foreground;
+  width: 13px;
+  height: 18px;
+  padding: 0;
+  border-radius: var(--workbench-radius-xs);
+}
+
+.treeDisclosureButton:hover {
+  color: var(--workbench-text);
+  background: var(--workbench-hover);
+}
+
+.treeFolderIcon,
+.treeFileIcon {
+  @apply flex shrink-0 items-center justify-center text-muted-foreground;
+  width: 16px;
+}
+
+.treeFileIcon[data-kind='archive'],
+.commitFileIcon[data-kind='archive'] {
+  color: var(--status-violet);
+}
+
+.treeFileIcon[data-kind='audio'],
+.treeFileIcon[data-kind='video'],
+.commitFileIcon[data-kind='audio'],
+.commitFileIcon[data-kind='video'] {
+  color: var(--destructive);
+}
+
+.treeFileIcon[data-kind='typescript'],
+.commitFileIcon[data-kind='typescript'] {
+  color: var(--workbench-file-typescript);
+}
+
+.treeFileIcon[data-kind='tsx'],
+.commitFileIcon[data-kind='tsx'] {
+  color: var(--workbench-file-tsx);
+}
+
+.treeFileIcon[data-kind='javascript'],
+.commitFileIcon[data-kind='javascript'] {
+  color: var(--workbench-file-javascript);
+}
+
+.treeFileIcon[data-kind='jsx'],
+.commitFileIcon[data-kind='jsx'] {
+  color: var(--workbench-file-jsx);
+}
+
+.treeFileIcon[data-kind='json'],
+.commitFileIcon[data-kind='json'] {
+  color: var(--workbench-file-json);
+}
+
+.treeFileIcon[data-kind='css'],
+.treeFileIcon[data-kind='scss'],
+.commitFileIcon[data-kind='css'],
+.commitFileIcon[data-kind='scss'] {
+  color: var(--workbench-file-css);
+}
+
+.treeFileIcon[data-kind='code'],
+.commitFileIcon[data-kind='code'] {
+  color: var(--workbench-file-code);
+}
+
+.treeFileIcon[data-kind='csv'],
+.treeFileIcon[data-kind='spreadsheet'],
+.commitFileIcon[data-kind='csv'],
+.commitFileIcon[data-kind='spreadsheet'] {
+  color: var(--status-teal);
+}
+
+.treeFileIcon[data-kind='document'],
+.commitFileIcon[data-kind='document'] {
+  color: var(--workbench-file-document);
+}
+
+.treeFileIcon[data-kind='text'],
+.commitFileIcon[data-kind='text'] {
+  color: var(--workbench-file-text);
+}
+
+.treeFileIcon[data-kind='html'],
+.commitFileIcon[data-kind='html'] {
+  color: var(--workbench-file-html);
+}
+
+.treeFileIcon[data-kind='image'],
+.commitFileIcon[data-kind='image'] {
+  color: var(--status-green);
+}
+
+.treeFileIcon[data-kind='markdown'],
+.commitFileIcon[data-kind='markdown'] {
+  color: var(--workbench-file-markdown);
+}
+
+.treeFileIcon[data-kind='yaml'],
+.commitFileIcon[data-kind='yaml'] {
+  color: var(--workbench-file-yaml);
+}
+
+.treeFileIcon[data-kind='toml'],
+.commitFileIcon[data-kind='toml'] {
+  color: var(--workbench-file-toml);
+}
+
+.treeFileIcon[data-kind='xml'],
+.commitFileIcon[data-kind='xml'] {
+  color: var(--workbench-file-xml);
+}
+
+.treeFileIcon[data-kind='python'],
+.commitFileIcon[data-kind='python'] {
+  color: var(--workbench-file-python);
+}
+
+.treeFileIcon[data-kind='rust'],
+.commitFileIcon[data-kind='rust'] {
+  color: var(--workbench-file-rust);
+}
+
+.treeFileIcon[data-kind='go'],
+.commitFileIcon[data-kind='go'] {
+  color: var(--workbench-file-go);
+}
+
+.treeFileIcon[data-kind='java'],
+.commitFileIcon[data-kind='java'] {
+  color: var(--workbench-file-java);
+}
+
+.treeFileIcon[data-kind='csharp'],
+.commitFileIcon[data-kind='csharp'] {
+  color: var(--workbench-file-csharp);
+}
+
+.treeFileIcon[data-kind='cpp'],
+.commitFileIcon[data-kind='cpp'] {
+  color: var(--workbench-file-cpp);
+}
+
+.treeFileIcon[data-kind='c'],
+.commitFileIcon[data-kind='c'] {
+  color: var(--workbench-file-c);
+}
+
+.treeFileIcon[data-kind='php'],
+.commitFileIcon[data-kind='php'] {
+  color: var(--workbench-file-php);
+}
+
+.treeFileIcon[data-kind='lua'],
+.commitFileIcon[data-kind='lua'] {
+  color: var(--workbench-file-lua);
+}
+
+.treeFileIcon[data-kind='shell'],
+.commitFileIcon[data-kind='shell'] {
+  color: var(--workbench-file-shell);
+}
+
+.treeFileIcon[data-kind='swift'],
+.commitFileIcon[data-kind='swift'] {
+  color: var(--workbench-file-swift);
+}
+
+.treeFileIcon[data-kind='vue'],
+.commitFileIcon[data-kind='vue'] {
+  color: var(--workbench-file-vue);
+}
+
+.treeFileIcon[data-kind='sql'],
+.commitFileIcon[data-kind='sql'] {
+  color: var(--workbench-file-sql);
+}
+
+.treeFileIcon[data-kind='pdf'],
+.commitFileIcon[data-kind='pdf'] {
+  color: var(--status-red);
+}
+
+.treeFileIcon[data-kind='presentation'],
+.commitFileIcon[data-kind='presentation'] {
+  color: color-mix(in oklab, var(--status-amber) 92%, black);
+}
+
+.treeFileIcon[data-kind='generic'],
+.commitFileIcon[data-kind='generic'] {
+  color: var(--workbench-file-generic);
+}
+
+.treeName {
+  @apply min-w-0 truncate;
+  color: inherit;
+}
+
+.treeRow[data-git-tone='added'] .treeName,
+.treeRow[data-git-tone='added'] .treeName [data-slot='text'],
+.searchResultRow[data-git-tone='added'] .searchResultName,
+.searchResultRow[data-git-tone='added'] .searchResultName [data-slot='text'],
+.editorTabName[data-git-tone='added'] {
+  color: var(--status-green);
+}
+
+.treeRow[data-git-tone='modified'] .treeName,
+.treeRow[data-git-tone='modified'] .treeName [data-slot='text'],
+.searchResultRow[data-git-tone='modified'] .searchResultName,
+.searchResultRow[data-git-tone='modified'] .searchResultName [data-slot='text'],
+.editorTabName[data-git-tone='modified'] {
+  color: var(--status-teal);
+}
+
+.treeRow[data-git-tone='untracked'] .treeName,
+.treeRow[data-git-tone='untracked'] .treeName [data-slot='text'],
+.searchResultRow[data-git-tone='untracked'] .searchResultName,
+.searchResultRow[data-git-tone='untracked'] .searchResultName [data-slot='text'],
+.editorTabName[data-git-tone='untracked'] {
+  color: var(--workbench-git-untracked-fg);
+}
+
+/* Ignored subtree: fade label + Git tone colors; no selection-like background */
+.treeRowIgnored .treeName,
+.treeRowIgnored[data-git-tone='added'] .treeName,
+.treeRowIgnored[data-git-tone='added'] .treeName [data-slot='text'],
+.treeRowIgnored[data-git-tone='modified'] .treeName,
+.treeRowIgnored[data-git-tone='modified'] .treeName [data-slot='text'],
+.treeRowIgnored[data-git-tone='untracked'] .treeName,
+.treeRowIgnored[data-git-tone='untracked'] .treeName [data-slot='text'] {
+  color: var(--workbench-tree-ignored-fg);
+}
+
+.treeRowIgnored .treeName [data-slot='text'] {
+  color: inherit;
+}
+
+.treeRowIgnored.treeRowSelected {
+  color: var(--foreground);
+  opacity: 1;
+}
+
+.treeScroll:not(:focus-within) .treeRowIgnored.treeRowSelected {
+  color: var(--workbench-text);
+}
+
+.treeRowIgnored.treeRowSelected .treeName,
+.treeRowIgnored.treeRowSelected[data-git-tone='added'] .treeName,
+.treeRowIgnored.treeRowSelected[data-git-tone='added'] .treeName [data-slot='text'],
+.treeRowIgnored.treeRowSelected[data-git-tone='modified'] .treeName,
+.treeRowIgnored.treeRowSelected[data-git-tone='modified'] .treeName [data-slot='text'],
+.treeRowIgnored.treeRowSelected[data-git-tone='untracked'] .treeName,
+.treeRowIgnored.treeRowSelected[data-git-tone='untracked'] .treeName [data-slot='text'] {
+  color: inherit;
+}
+
+.treeRowIgnored.treeRowSelected .treeName [data-slot='text'] {
+  color: inherit;
+}
+
+.treeInlineInput {
+  @apply min-w-0 flex-1 border bg-card text-foreground;
+  height: 19px;
+  padding-inline: 4px;
+  border-color: var(--border-strong);
+  border-radius: var(--workbench-radius-xs);
+  font-size: 11.5px;
+  outline: none;
+}
+
+.searchResultCopy {
+  @apply flex min-w-0 flex-1 flex-col;
+  gap: 1px;
+}
+
+.searchResultName {
+  @apply truncate font-medium;
+}
+
+.searchResultPath {
+  @apply truncate text-muted-foreground;
+  font-size: 11px;
+}
+
+.searchContentExcerpt {
+  @apply truncate font-mono;
+  color: var(--status-blue-contrast);
+  font-size: 10.5px;
+  line-height: 1.35;
+}
+
+.searchContentBadge {
+  @apply shrink-0 text-muted-foreground;
+  font-size: 10.5px;
+}
+
+.panelEmpty,
+.panelHint {
+  padding: 14px;
+}
+
+.panelHint {
+  @apply text-muted-foreground;
+  font-size: 12px;
+}
+
+.workbenchContextMenu {
+  @apply fixed z-50 flex flex-col border bg-card shadow-lg;
+  width: 208px;
+  padding: 5px;
+  border-color: var(--workbench-border);
+  border-radius: var(--workbench-radius-lg);
+}
+
+.workbenchContextMenu[data-compact='true'] {
+  width: 184px;
+  padding: 4px;
+}
+
+.workbenchContextMenu[data-compact='true'] .workbenchContextMenuItem {
+  min-height: 28px;
+  padding-inline: 7px;
+}
+
+.workbenchContextMenuItemShell {
+  @apply flex flex-col;
+}
+
+.workbenchContextMenuSeparator {
+  height: 1px;
+  margin: 4px 3px;
+  background: var(--workbench-border);
+}
+
+.workbenchContextMenuItem {
+  @apply flex w-full items-center gap-2 border-0 bg-transparent text-left text-foreground;
+  min-height: 30px;
+  padding-inline: 8px;
+  border-radius: var(--workbench-radius);
+  font-size: 12px;
+}
+
+.workbenchContextMenuItem:hover,
+.workbenchContextMenuItem:focus-visible {
+  outline: none;
+  background: var(--workbench-hover);
+}
+
+.workbenchContextMenuItem:disabled {
+  opacity: 0.55;
+}
+
+.workbenchContextMenuIcon {
+  @apply flex shrink-0 items-center justify-center text-muted-foreground;
+  width: 16px;
+  height: 16px;
+}
+
+.workbenchContextMenuLabel {
+  @apply min-w-0 flex-1 truncate;
+}
+
+.treeOptionsMenu {
+  @apply absolute right-2 top-9 z-30 flex flex-col border bg-card shadow-lg;
+  width: 204px;
+  padding: 5px;
+  border-color: var(--workbench-border);
+  border-radius: var(--workbench-radius-lg);
+}
+
+.treeOptionsMenu button {
+  @apply flex w-full items-center gap-2 border-0 bg-transparent text-left text-foreground;
+  min-height: 30px;
+  padding-inline: 8px;
+  border-radius: var(--workbench-radius);
+  font-size: 12px;
+}
+
+.treeOptionsMenu button:hover {
+  background: var(--workbench-hover);
+}
+
+.treeOptionsMenu button:disabled {
+  opacity: 0.5;
+}
+
+.treeOptionsSeparator {
+  @apply shrink-0;
+  height: 1px;
+  margin-block: 4px;
+  background: var(--input);
+}
+
+.editorPanel {
+  @apply flex min-h-0 flex-1 flex-col overflow-hidden;
+  position: relative;
+  background: var(--workbench-surface);
+}
+
+.editorPanel :global(.velar-button-variant-default),
+.lightWindowRoot :global(.velar-button-variant-default) {
+  color: var(--color-white);
+  --velar-button-base-background: linear-gradient(180deg, #232323 0%, #111111 100%);
+  background: var(--velar-button-base-background);
+}
+
+.editorPanel :global(.velar-button-variant-default:hover),
+.lightWindowRoot :global(.velar-button-variant-default:hover) {
+  color: var(--color-white);
+  --velar-button-base-background: linear-gradient(180deg, #232323 0%, #111111 100%);
+  background: var(--velar-button-base-background);
+}
+
+.editorDefaultActionButton:global(.velar-button-variant-default) {
+  color: var(--color-white);
+  --velar-button-base-background: linear-gradient(180deg, #232323 0%, #111111 100%);
+  background: var(--velar-button-base-background);
+}
+
+.editorDefaultActionButton:global(.velar-button-variant-default:hover) {
+  color: var(--color-white);
+  --velar-button-base-background: linear-gradient(180deg, #232323 0%, #111111 100%);
+  background: var(--velar-button-base-background);
+}
+
+.editorMain {
+  @apply flex min-h-0 flex-1 flex-col overflow-hidden;
+  background: var(--workbench-surface);
+}
+
+.editorViewport {
+  @apply relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden;
+  background: var(--workbench-surface);
+}

@@ -1,0 +1,27 @@
+:root {
+  color-scheme: light;
+
+  /* Desktop 由 Tailwind v4 主题暴露这批基础令牌；独立应用不装 Tailwind，
+     workbench 复活样式消费到的四枚在此补挂（值与 Tailwind 默认主题一致）。 */
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --font-mono:
+    ui-monospace, 'SFMono-Regular', 'SF Mono', Menlo, Monaco, Consolas, 'Liberation Mono',
+    'Courier New', monospace;
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --color-white: #fff;
+}
+
+body {
+  margin: 0;
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  font-size: var(--ui-font-body-md);
+  background: var(--background);
+  color: var(--foreground);
+}

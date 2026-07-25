@@ -1,0 +1,368 @@
+.workbenchChatPanel {
+  @apply flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden;
+  background: var(--workbench-surface);
+}
+
+.workbenchChatTopBar {
+  @apply flex flex-none items-center gap-2 border-b;
+  min-height: 34px;
+  padding: 3px 10px;
+  border-color: var(--workbench-border);
+  background: var(--workbench-surface-muted);
+}
+
+.workbenchChatSessionMenuAnchor {
+  @apply flex min-w-0 flex-1;
+}
+
+.workbenchChatSessionMenuButton {
+  @apply flex min-w-0 flex-1 items-center justify-start;
+  height: 28px;
+  gap: 7px;
+  padding-inline: 7px 9px;
+  border-radius: var(--workbench-radius);
+  color: var(--workbench-text);
+  cursor: pointer;
+}
+
+.workbenchChatSessionMenuButton:is(:hover, :focus-visible, [data-open='true']) {
+  color: var(--workbench-text);
+  background: var(--workbench-hover);
+  transform: none;
+}
+
+.workbenchChatSessionMenuButton:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.workbenchChatSessionMenuIcon {
+  @apply flex-none;
+  color: var(--workbench-text-muted);
+}
+
+.workbenchChatIconButton {
+  @apply flex-none;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--workbench-radius);
+  color: var(--workbench-text-muted);
+}
+
+.workbenchChatIconButton:is(:hover, :focus-visible, [data-active='true']) {
+  color: var(--workbench-text);
+  background: var(--workbench-hover);
+  transform: none;
+}
+
+.workbenchChatSessionCurrentTitle {
+  @apply min-w-0 flex-1 overflow-hidden text-left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--workbench-text);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.workbenchChatSessionMenuPanel {
+  width: min(260px, calc(100vw - 32px));
+  max-height: min(420px, 58vh);
+  overflow: auto;
+  padding: 4px;
+  border: 1px solid var(--workbench-border);
+  border-radius: var(--workbench-radius);
+  background: var(--workbench-surface);
+  color: var(--workbench-text);
+  box-shadow: 0 12px 36px color-mix(in srgb, var(--workbench-text) 16%, transparent);
+}
+
+.workbenchChatSessionMenuList {
+  @apply flex w-full min-w-0 flex-col gap-1;
+}
+
+.workbenchChatSessionMenuItem {
+  @apply flex w-full min-w-0 items-center gap-2 text-left;
+  min-height: 32px;
+  justify-content: flex-start;
+  padding: 5px 8px;
+  border-radius: var(--workbench-radius);
+}
+
+.workbenchChatSessionMenuItem[data-active='true'] {
+  color: var(--workbench-text);
+}
+
+.workbenchChatSessionMenuText {
+  @apply flex min-w-0 flex-1;
+}
+
+.workbenchChatSessionMenuTitle {
+  @apply min-w-0 overflow-hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workbenchChatSessionMenuTitle {
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 16px;
+}
+
+.workbenchChatSessionMenuCheck {
+  @apply flex-none;
+  color: var(--workbench-active-fg);
+}
+
+.workbenchChatBody {
+  @apply flex min-h-0 min-w-0 flex-1 overflow-hidden;
+  background: var(--workbench-surface);
+}
+
+.workbenchChatBody :global(.chatPane) {
+  background: var(--workbench-surface);
+}
+
+.workbenchChatBody :global([data-chat-input-root='true']) {
+  --chat-input-comment-accent: var(--workbench-editor-comment-marker-fg, #b45309);
+  --chat-input-comment-accent-soft: rgba(245, 158, 11, 0.1);
+  --chat-input-comment-accent-strong: rgba(245, 158, 11, 0.18);
+  --chat-input-comment-mention-bg: transparent;
+  --chat-input-comment-mention-hover-bg: var(--chat-input-comment-accent-soft);
+  --chat-input-comment-mention-selected-bg: var(--chat-input-comment-accent-strong);
+  --chat-input-comment-mention-selected-fg: var(--chat-input-comment-accent);
+}
+
+.workbenchChatBody :global([data-chat-input-root='true']) :global(.velar-textarea:focus-visible) {
+  box-shadow: none;
+}
+
+.workbenchChatLoading {
+  @apply flex min-h-0 flex-1 items-center justify-center gap-2 text-muted-foreground;
+  font-size: 12px;
+}
+
+.insightList {
+  @apply flex min-w-0 flex-col gap-1;
+  padding: 8px;
+}
+
+.insightItem {
+  @apply flex min-w-0 items-center gap-2 border bg-card text-left text-foreground;
+  min-height: 32px;
+  padding: 5px 7px;
+  border-color: var(--workbench-border);
+  border-radius: var(--workbench-radius);
+  font-size: 12px;
+}
+
+.insightItem:hover {
+  border-color: var(--border-strong);
+  background: var(--chrome-rail-hover-bg);
+}
+
+.insightItemMain {
+  @apply flex min-w-0 flex-1 flex-col;
+  gap: 1px;
+}
+
+.insightItemLabel {
+  @apply truncate font-medium;
+}
+
+.insightItemDetail {
+  @apply truncate text-muted-foreground;
+  font-size: 10.5px;
+}
+
+.insightLine {
+  @apply shrink-0 text-muted-foreground;
+  font-size: 11px;
+}
+
+.insightEmpty {
+  @apply m-0 text-muted-foreground;
+  padding: 12px;
+  font-size: 12px;
+}
+
+.problemList {
+  @apply flex min-w-0 flex-col;
+  padding: 2px 0;
+}
+
+.problemTree {
+  @apply flex min-w-0 flex-col;
+  padding: 2px 0;
+}
+
+.problemFileGroup {
+  @apply flex min-w-0 flex-col;
+}
+
+.problemFileHeader {
+  @apply flex min-w-0 items-center gap-1 border-0 bg-transparent text-left text-foreground;
+  min-height: 24px;
+  padding: 2px 8px 2px 4px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.problemFileHeader:hover {
+  background: var(--chrome-rail-hover-bg);
+}
+
+.problemFileDisclosure {
+  @apply flex shrink-0 items-center justify-center text-muted-foreground;
+  width: 14px;
+}
+
+.problemFileIcon {
+  @apply flex shrink-0 items-center justify-center;
+  width: 16px;
+  color: var(--status-blue);
+}
+
+.problemFileName {
+  @apply shrink-0 font-medium;
+}
+
+.problemFilePath {
+  @apply min-w-0 truncate text-muted-foreground;
+  font-size: 11px;
+}
+
+.problemFileCount {
+  @apply ml-auto shrink-0 text-muted-foreground;
+  font-size: 11px;
+}
+
+.problemFileRows {
+  @apply flex min-w-0 flex-col;
+}
+
+.problemItem {
+  @apply flex min-w-0 items-center gap-1.5 border-0 bg-transparent text-left shadow-none;
+  min-height: 22px;
+  padding: 1px 8px 1px 28px;
+  border-radius: 0;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--workbench-text);
+}
+
+.problemItem:hover,
+.problemItem:focus-visible {
+  @apply shadow-none;
+  background: color-mix(in oklab, var(--workbench-selection-bg) 42%, transparent);
+}
+
+.problemItem[data-selected='true'] {
+  background: var(--workbench-selection-bg);
+}
+
+.problemItemIcon {
+  @apply shrink-0;
+  width: 12px;
+  height: 12px;
+}
+
+.problemItemMessage {
+  @apply min-w-0 flex-1 truncate;
+}
+
+.problemItemLine {
+  @apply shrink-0 tabular-nums;
+  font-size: 11px;
+  opacity: 0.72;
+}
+
+.problemItem[data-severity='warning'] .problemItemIcon {
+  color: var(--status-amber);
+}
+
+.problemItem[data-severity='hint'] .problemItemIcon {
+  color: var(--workbench-text-muted);
+}
+
+.problemItem[data-muted='true'] .problemItemMessage,
+.problemItem[data-muted='true'] .problemItemLine {
+  color: var(--workbench-text-muted);
+}
+
+.problemItem[data-muted='true'] .problemItemIcon {
+  opacity: 0.72;
+}
+
+.gitSummaryPanel,
+.gitChangePanel {
+  @apply flex min-w-0 flex-col;
+  padding: 8px;
+}
+
+.gitSummaryPanel {
+  gap: 8px;
+}
+
+.gitChangePanel {
+  gap: 10px;
+}
+
+.gitToolbarActions {
+  @apply flex shrink-0 items-center gap-1;
+}
+
+.gitIdeShell {
+  @apply flex min-h-0 flex-1 border-t;
+  border-color: var(--workbench-border);
+  background: var(--workbench-surface);
+}
+
+.gitIdeRail {
+  @apply flex shrink-0 flex-col gap-1 border-r;
+  width: 92px;
+  padding: 7px 6px;
+  border-color: var(--workbench-border);
+  background: var(--workbench-toolbar);
+}
+
+.gitIdeRail button {
+  @apply flex items-center gap-2 border bg-transparent text-left text-muted-foreground;
+  min-height: 28px;
+  padding-inline: 7px;
+  border-color: transparent;
+  border-radius: var(--workbench-radius);
+  font-size: 12px;
+}
+
+.gitIdeRail button:hover:not([data-active='true']) {
+  color: var(--workbench-text);
+  background: var(--chrome-rail-hover-bg);
+}
+
+.gitIdeRail button[data-active='true'] {
+  color: var(--workbench-text);
+  background: var(--chrome-rail-selected-bg);
+  font-weight: 600;
+}
+
+.gitIdeContent {
+  @apply min-h-0 min-w-0 flex-1;
+}
+
+.gitLogView {
+  @apply grid h-full min-h-0 min-w-0;
+  grid-template-columns: minmax(180px, 240px) minmax(360px, 1fr) minmax(220px, 320px);
+}
+
+.gitLogBranchPane,
+.gitCommitDetailPane {
+  @apply min-h-0 min-w-0 overflow-hidden border-r;
+  border-color: var(--workbench-border);
+  background: var(--workbench-surface);
+}
+
+.gitCommitDetailPane {
+  border-right: 0;
+  border-left: 1px solid var(--workbench-border);
+  overflow: auto;
+}

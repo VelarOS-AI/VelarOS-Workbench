@@ -1,0 +1,679 @@
+.gitLogListPane {
+  @apply flex min-h-0 min-w-0 flex-col;
+  background: var(--workbench-surface);
+}
+
+.gitLogSearchBar {
+  @apply flex shrink-0 items-center border-b;
+  min-height: 38px;
+  padding: 6px 8px;
+  border-color: var(--workbench-border);
+  background: var(--workbench-toolbar);
+}
+
+.gitLogScroll {
+  @apply min-h-0 flex-1;
+}
+
+.gitCommitDetail {
+  @apply flex min-w-0 flex-col gap-3;
+  padding: 12px;
+}
+
+.gitCommitDetailTitle {
+  @apply m-0 font-medium text-foreground;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.gitCommitDetail dl {
+  @apply m-0 flex min-w-0 flex-col gap-2;
+}
+
+.gitCommitDetail dl > div {
+  @apply grid min-w-0 gap-1;
+}
+
+.gitCommitDetail dt {
+  @apply text-muted-foreground;
+  font-size: 10.5px;
+}
+
+.gitCommitDetail dd {
+  @apply m-0 min-w-0 truncate text-foreground;
+  font-size: 12px;
+}
+
+.gitCommitDiffPreview {
+  @apply flex min-h-0 min-w-0 flex-col overflow-hidden border;
+  border-color: var(--workbench-border);
+  border-radius: var(--workbench-radius);
+}
+
+.gitCommitDiffPreview .gitDiffLines {
+  height: 260px;
+  max-height: 260px;
+}
+
+.gitWorkingTreeView {
+  @apply grid h-full min-h-0 min-w-0;
+  grid-template-columns: minmax(260px, 360px) minmax(0, 1fr);
+}
+
+.gitWorkingTreeList {
+  @apply min-h-0 border-r;
+  border-color: var(--workbench-border);
+  background: var(--workbench-bg);
+}
+
+.gitWorkingTreeView .gitDiffPreview {
+  height: 100%;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+.gitWorkingTreeView .gitDiffLines {
+  flex: 1;
+  height: auto;
+  max-height: none;
+}
+
+.gitBranchesView {
+  @apply h-full min-h-0 overflow-auto;
+  background: var(--workbench-bg);
+}
+
+.gitBranchesMain {
+  @apply flex min-w-0 flex-col gap-2;
+  max-width: 620px;
+  padding: 10px;
+}
+
+.gitBranchList {
+  @apply flex min-w-0 flex-col gap-1;
+  padding: 8px;
+}
+
+.gitPaneSectionTitle {
+  @apply m-0 text-muted-foreground;
+  padding: 2px 4px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.gitBranchRow {
+  @apply flex min-w-0 items-center gap-2 border bg-transparent text-left text-foreground;
+  min-height: 30px;
+  padding: 5px 6px;
+  border-color: transparent;
+  border-radius: var(--workbench-radius);
+  font-size: 12px;
+}
+
+.gitBranchRow:hover,
+.gitBranchRow[data-active='true'] {
+  background: var(--workbench-selection-bg);
+}
+
+.gitLogView:not(:focus-within) .gitBranchRow[data-active='true'] {
+  background: var(--workbench-selection-inactive);
+  color: var(--workbench-text);
+}
+
+.gitBranchRow:disabled {
+  opacity: 0.72;
+}
+
+.gitBranchName {
+  @apply min-w-0 flex-1 truncate;
+}
+
+.gitBranchMark {
+  @apply shrink-0;
+  color: var(--status-green);
+  font-size: 10.5px;
+}
+
+.gitBranchRow small {
+  @apply shrink-0 truncate text-muted-foreground;
+  max-width: 120px;
+  font-size: 10.5px;
+}
+
+.gitBranchSummary {
+  @apply flex min-w-0 items-center gap-2 border text-foreground;
+  min-height: 32px;
+  padding: 6px 8px;
+  border-color: var(--workbench-border);
+  border-radius: var(--workbench-radius);
+  background: var(--workbench-surface);
+  font-size: 12px;
+}
+
+.gitBranchSummary > span:first-of-type {
+  @apply min-w-0 flex-1 truncate;
+}
+
+.gitLineStats {
+  @apply ml-auto flex shrink-0 items-center gap-1.5 font-mono;
+  font-size: 11px;
+}
+
+.gitLineStats span:first-child {
+  color: var(--status-green);
+}
+
+.gitLineStats span:last-child {
+  color: var(--status-red);
+}
+
+.gitCleanState {
+  @apply m-0 text-muted-foreground;
+  padding-block: 4px;
+  font-size: 13px;
+  line-height: var(--ui-line-relaxed);
+}
+
+.gitBranchBox {
+  @apply flex min-w-0 flex-col gap-2 border;
+  padding: 7px;
+  border-color: var(--workbench-border);
+  border-radius: var(--workbench-radius);
+  background: var(--workbench-surface);
+}
+
+.gitBranchCreateRow {
+  @apply flex min-w-0 items-center gap-2;
+}
+
+.gitBranchCreateRow > :first-child {
+  @apply min-w-0 flex-1;
+}
+
+.gitBranchHint {
+  @apply m-0 text-muted-foreground;
+  font-size: 10.5px;
+  line-height: 1.35;
+}
+
+.gitCommitBox {
+  @apply flex min-w-0 flex-col overflow-hidden border;
+  border-color: var(--workbench-border);
+  border-radius: var(--workbench-radius);
+  background: var(--workbench-surface);
+}
+
+.gitCommitInput {
+  width: calc(100% - 20px);
+  min-height: 0;
+  flex: 1;
+  margin: 6px 10px 4px;
+  padding-block: 8px;
+  padding-inline: 10px;
+  border: 1px solid var(--workbench-border);
+  border-radius: var(--workbench-radius);
+  box-shadow: none;
+  resize: none;
+  background: transparent;
+  color: var(--workbench-text);
+  font-size: var(--ui-font-body-sm);
+  line-height: var(--ui-line-relaxed);
+}
+
+.commitForm .gitCommitInput,
+.commitForm .gitCommitInput:focus-visible {
+  background: transparent;
+}
+
+.gitCommitWarning {
+  @apply m-0 border-t text-muted-foreground;
+  padding: 4px 10px;
+  border-color: color-mix(in oklab, var(--status-amber) 16%, transparent);
+  background: var(--status-amber-soft);
+  color: var(--status-amber);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.gitCommitFooter {
+  @apply flex items-center justify-between gap-2 border-t;
+  min-height: 32px;
+  padding: 4px 6px;
+  border-color: var(--workbench-border);
+  background: var(--workbench-toolbar);
+}
+
+.gitCommitMeta {
+  @apply min-w-0 truncate text-muted-foreground;
+  font-size: 11px;
+}
+
+.gitChangeGroup {
+  @apply flex min-w-0 flex-col;
+  gap: 4px;
+}
+
+.gitChangeGroupTitle {
+  @apply m-0 flex items-center justify-between gap-2 text-muted-foreground;
+  padding-inline: 2px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.gitChangeList {
+  @apply flex min-w-0 flex-col gap-1;
+}
+
+.gitChangeItem {
+  @apply flex min-w-0 items-center gap-1 border text-left;
+  min-height: 34px;
+  padding: 3px;
+  border-color: var(--workbench-border);
+  border-radius: var(--workbench-radius);
+  background: var(--workbench-surface);
+  color: var(--status-blue-strong);
+  font-size: 12px;
+}
+
+.gitChangeItem:hover,
+.gitChangeItem[data-active='true'] {
+  border-color: var(--border-strong);
+  background: var(--workbench-selection-bg);
+}
+
+.gitChangeMain {
+  @apply flex min-w-0 flex-1 items-center gap-2 border-0 bg-transparent text-left;
+  min-height: 28px;
+  padding: 2px 4px;
+  color: inherit;
+}
+
+.gitChangeCopy {
+  @apply flex min-w-0 flex-1 flex-col;
+  gap: 1px;
+}
+
+.gitChangeName {
+  @apply truncate font-medium text-foreground;
+}
+
+.gitChangePath {
+  @apply truncate text-muted-foreground;
+  font-size: 10.5px;
+}
+
+.gitChangeStatus {
+  @apply shrink-0 text-muted-foreground;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.gitChangeItem[data-git-tone='added'] .gitChangeName,
+.gitChangeItem[data-git-tone='added'] .gitChangeName [data-slot='text'] {
+  color: var(--status-green);
+}
+
+.gitChangeItem[data-git-tone='added'] .gitChangeMain svg {
+  color: var(--status-green);
+}
+
+.gitChangeItem[data-git-tone='added'] .gitChangeStatus,
+.gitChangeItem[data-git-tone='added'] .gitChangeStatus [data-slot='text'] {
+  color: var(--status-green);
+}
+
+.gitChangeItem[data-git-tone='modified'] .gitChangeName,
+.gitChangeItem[data-git-tone='modified'] .gitChangeName [data-slot='text'] {
+  color: var(--status-teal);
+}
+
+.gitChangeItem[data-git-tone='modified'] .gitChangeMain svg {
+  color: var(--status-teal);
+}
+
+.gitChangeItem[data-git-tone='modified'] .gitChangeStatus,
+.gitChangeItem[data-git-tone='modified'] .gitChangeStatus [data-slot='text'] {
+  color: var(--status-teal);
+}
+
+.gitChangeItem[data-git-tone='untracked'] .gitChangeName,
+.gitChangeItem[data-git-tone='untracked'] .gitChangeName [data-slot='text'] {
+  color: var(--workbench-git-untracked-fg);
+}
+
+.gitChangeItem[data-git-tone='untracked'] .gitChangeMain svg {
+  color: var(--workbench-git-untracked-fg);
+}
+
+.gitChangeItem[data-git-tone='untracked'] .gitChangeStatus,
+.gitChangeItem[data-git-tone='untracked'] .gitChangeStatus [data-slot='text'] {
+  color: var(--workbench-git-untracked-fg);
+}
+
+.gitChangeActions {
+  @apply flex shrink-0 items-center gap-1;
+}
+
+.gitChangeActions button {
+  @apply flex items-center justify-center border bg-transparent text-muted-foreground;
+  width: 22px;
+  height: 22px;
+  border-color: transparent;
+  border-radius: var(--workbench-radius);
+}
+
+.gitChangeActions button:hover {
+  color: var(--workbench-text);
+  background: var(--workbench-hover);
+}
+
+.gitChangeActions button:disabled {
+  opacity: 0.5;
+}
+
+.commitToolPanel {
+  @apply flex min-h-0 min-w-0 flex-1 flex-col;
+  overflow: hidden;
+  background: var(--workbench-bg);
+}
+
+.commitToolPanel > .panelHeader {
+  min-height: 34px;
+  padding-block: 0;
+  padding-inline: 10px;
+}
+
+.commitToolPanel .panelTitle {
+  font-size: var(--ui-font-body-sm);
+  font-weight: 600;
+}
+
+.commitPanelTitleRow {
+  @apply flex min-w-0 items-center gap-2;
+}
+
+.commitPanelCountBadge {
+  @apply inline-flex shrink-0 items-center justify-center;
+  min-width: 24px;
+  height: 18px;
+  padding-inline: 7px;
+  border-radius: 999px;
+  background: var(--status-amber-soft);
+  color: var(--status-amber);
+  font-size: 11px;
+  line-height: 18px;
+}
+
+.gitToolRoot {
+  @apply flex min-h-0 flex-1 flex-col;
+  color: var(--workbench-text);
+  background: var(--workbench-bg);
+}
+
+.gitToolEmpty {
+  @apply flex min-h-0 flex-1 flex-col items-center justify-center gap-3;
+  color: var(--workbench-text-muted);
+  font-size: 12px;
+}
+
+.gitToolToolbar {
+  @apply flex shrink-0 items-center gap-1 border-b;
+  min-height: 36px;
+  padding: 4px 8px;
+  border-color: var(--workbench-border);
+  background: var(--workbench-toolbar);
+}
+
+.gitToolBranchSelect {
+  @apply flex min-w-0 items-center gap-1.5;
+}
+
+.gitToolBranchSelect select {
+  max-width: 180px;
+  height: 26px;
+  border: 1px solid var(--workbench-border);
+  border-radius: var(--workbench-radius);
+  padding-inline: 7px;
+  color: var(--workbench-text);
+  background: var(--workbench-surface);
+  font-size: 12px;
+}
+
+.gitToolCreateBranch {
+  @apply flex items-center gap-1;
+  width: 220px;
+}
+
+.gitToolToolbarSpacer {
+  @apply flex-1;
+}
+
+.gitToolError {
+  @apply shrink-0 border-b;
+  padding: 5px 10px;
+  border-color: var(--status-red-soft);
+  color: var(--status-red);
+  background: var(--status-red-soft);
+  font-size: 11px;
+}
+
+.gitToolColumns {
+  @apply grid min-h-0 flex-1;
+  grid-template-columns: minmax(320px, 42%) minmax(0, 1fr);
+}
+
+.gitToolChanges,
+.gitToolLog {
+  @apply flex min-h-0 min-w-0 flex-col;
+}
+
+.gitToolChanges {
+  border-right: 1px solid var(--workbench-border);
+}
+
+.gitToolSectionTitle {
+  @apply flex shrink-0 items-center justify-between border-b;
+  min-height: 28px;
+  padding-inline: 9px;
+  border-color: var(--workbench-border);
+  color: var(--workbench-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.gitToolChangeList {
+  @apply min-h-0 flex-1 overflow-auto;
+  padding: 4px;
+}
+
+.gitToolChangeRow {
+  @apply flex min-w-0 items-center gap-1;
+  min-height: 34px;
+  padding: 2px 4px;
+  border-radius: var(--workbench-radius);
+}
+
+.gitToolChangeRow:hover {
+  background: var(--workbench-hover);
+}
+
+.gitToolPathButton {
+  @apply flex min-w-0 flex-1 flex-col border-0 bg-transparent text-left;
+  color: var(--workbench-text);
+}
+
+.gitToolPathButton span,
+.gitToolPathButton small {
+  @apply truncate;
+  max-width: 100%;
+}
+
+.gitToolPathButton span {
+  font-size: 12px;
+}
+
+.gitToolPathButton small,
+.gitToolMuted {
+  color: var(--workbench-text-muted);
+  font-size: 10px;
+}
+
+.gitToolStatus {
+  @apply shrink-0 font-mono;
+  color: var(--status-amber);
+  font-size: 10px;
+}
+
+.gitToolCommitComposer {
+  @apply flex shrink-0 items-center gap-1 border-t;
+  padding: 6px;
+  border-color: var(--workbench-border);
+}
+
+.gitToolCommitComposer > :first-child {
+  @apply min-w-0 flex-1;
+}
+
+.gitToolLogBody {
+  @apply grid min-h-0 flex-1;
+  grid-template-columns: minmax(190px, 34%) minmax(0, 1fr);
+}
+
+.gitToolCommitList {
+  @apply min-h-0 overflow-auto border-r;
+  padding: 4px;
+  border-color: var(--workbench-border);
+}
+
+.gitToolCommitList > button {
+  @apply flex w-full min-w-0 flex-col border-0 bg-transparent text-left;
+  padding: 5px 7px;
+  border-radius: var(--workbench-radius);
+  color: var(--workbench-text);
+}
+
+.gitToolCommitList > button:hover,
+.gitToolCommitList > button[data-active='true'] {
+  background: var(--workbench-hover);
+}
+
+.gitToolCommitList strong,
+.gitToolCommitList small {
+  @apply truncate;
+  max-width: 100%;
+}
+
+.gitToolCommitList strong {
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.gitToolCommitList small {
+  color: var(--workbench-text-muted);
+  font-size: 10px;
+}
+
+.gitToolCommitDiff {
+  @apply min-h-0 overflow-auto whitespace-pre font-mono;
+  margin: 0;
+  padding: 8px 10px;
+  color: var(--workbench-text);
+  background: var(--workbench-surface);
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+
+.aiChangesToolPanel {
+  @apply flex min-h-0 min-w-0 flex-1 flex-col;
+  overflow: hidden;
+  background: var(--workbench-bg);
+}
+
+.aiChangesPanelHeader {
+  @apply flex shrink-0 items-center border-b;
+  height: 34px;
+  min-height: 34px;
+  padding: 0 10px;
+  border-color: var(--workbench-border);
+  background: var(--workbench-toolbar);
+}
+
+.aiChangesPanelTitleRow,
+.aiChangesPanelTitle {
+  @apply flex min-w-0 items-center gap-1.5;
+}
+
+.aiChangesPanelTitleRow {
+  @apply w-full justify-between;
+}
+
+.aiChangesPanelTitle {
+  color: var(--workbench-text);
+  font-size: var(--ui-font-body-sm);
+  font-weight: 600;
+}
+
+.aiChangesScroll {
+  @apply min-h-0 flex-1;
+}
+
+.aiChangesEmptyState {
+  @apply flex min-h-28 items-center justify-center gap-2 px-5 text-center;
+  color: var(--workbench-text-muted);
+  font-size: 12px;
+}
+
+.aiChangesRoundList,
+.aiChangesFileList {
+  @apply flex min-w-0 flex-col;
+}
+
+.aiChangesRoundButton {
+  @apply flex w-full min-w-0 items-center border-0 bg-transparent text-left;
+  border-radius: var(--workbench-radius);
+  color: var(--workbench-text);
+}
+
+.aiChangesRoundButton:hover,
+.aiChangesFileRow:hover,
+.aiChangesFileRow:focus-visible {
+  background: var(--workbench-hover);
+}
+
+.aiChangesRoundButton:focus-visible,
+.aiChangesFileRow:focus-visible {
+  outline: 1px solid var(--ring);
+  outline-offset: -1px;
+}
+
+.aiChangesDisclosureIcon {
+  @apply shrink-0;
+  color: var(--workbench-text-muted);
+  transition: transform 120ms ease;
+}
+
+.aiChangesDisclosureIcon[data-open='true'] {
+  transform: rotate(90deg);
+}
+
+.aiChangesFileCopy {
+  @apply flex min-w-0 flex-1 flex-col;
+}
+
+.aiChangesFileName,
+.aiChangesFilePath {
+  @apply truncate;
+}
+
+.aiChangesFilePath,
+.aiChangesRoundTime {
+  color: var(--workbench-text-muted);
+  font-size: 10px;
+}
+
+.aiChangesRoundList {
+  padding: 6px;
+  gap: 3px;
+}

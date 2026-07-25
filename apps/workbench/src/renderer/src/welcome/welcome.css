@@ -1,0 +1,146 @@
+/**
+ * 起手页外貌层（应用私有）：布局 + hover 细节。
+ * 颜色 / 圆角 / 过渡一律引 @velaros/ui 语义令牌，不写裸色值。
+ */
+
+.workbench-welcome {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 48px;
+  box-sizing: border-box;
+  background: var(--background);
+  color: var(--foreground);
+}
+
+.workbench-welcome__panel {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(320px, 1.25fr);
+  gap: 56px;
+  width: 100%;
+  max-width: 920px;
+}
+
+@media (max-width: 760px) {
+  .workbench-welcome__panel {
+    grid-template-columns: 1fr;
+    gap: 40px;
+  }
+}
+
+.workbench-welcome__hero {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.workbench-welcome__actions {
+  max-width: 280px;
+}
+
+.workbench-welcome__actions .velar-button {
+  justify-content: flex-start;
+  gap: 8px;
+}
+
+.workbench-welcome__kernel-status {
+  color: var(--foreground-tertiary);
+}
+
+.workbench-welcome__recents {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.workbench-welcome__recent-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.workbench-welcome__recent-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: var(--ui-radius-control);
+  transition: background var(--ui-transition-fast);
+}
+
+.workbench-welcome__recent-row:hover {
+  background: var(--background-muted);
+}
+
+.workbench-welcome__recent-open {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+
+.workbench-welcome__recent-open:disabled {
+  cursor: default;
+}
+
+.workbench-welcome__recent-row[data-missing='true'] .workbench-welcome__recent-open {
+  opacity: 0.55;
+}
+
+.workbench-welcome__recent-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.workbench-welcome__recent-path {
+  color: var(--foreground-tertiary);
+}
+
+.workbench-welcome__recent-meta {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 4px;
+  color: var(--foreground-tertiary);
+}
+
+.workbench-welcome__recent-remove {
+  opacity: 0;
+  transition: opacity var(--ui-transition-fast);
+}
+
+.workbench-welcome__recent-row:hover .workbench-welcome__recent-remove,
+.workbench-welcome__recent-remove:focus-visible {
+  opacity: 1;
+}
+
+/* 新建项目对话框：位置行 = 只读输入 + 浏览按钮。 */
+.workbench-new-project-dialog__location {
+  display: flex;
+  gap: 8px;
+}
+
+.workbench-new-project-dialog__location .velar-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.workbench-new-project-dialog__error {
+  color: var(--destructive);
+}

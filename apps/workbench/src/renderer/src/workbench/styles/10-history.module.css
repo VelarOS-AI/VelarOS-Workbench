@@ -1,0 +1,301 @@
+.editorGitHistoryList {
+  @apply min-h-0 flex-1;
+}
+
+.editorGitHistoryDiff {
+  @apply min-h-0;
+  padding: 8px 10px;
+}
+
+.editorLocalHistoryActions {
+  @apply flex items-center gap-1;
+}
+
+.editorLocalHistoryContent {
+  margin: 0;
+  padding: 0;
+  color: var(--workbench-text);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre;
+}
+
+.editorHistoryHeaderMain {
+  @apply flex min-w-0 items-center gap-3;
+}
+
+/* ── 右侧内容区（代码高亮 / diff）── */
+.editorHistoryRight {
+  @apply flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden;
+  background: var(--workbench-editor-bg, var(--card));
+}
+
+.editorHistoryDiffScroll {
+  @apply min-h-0 flex-1;
+  padding: 8px 10px;
+}
+
+.editorHistoryDiffLines {
+  @apply min-w-0;
+}
+
+/* 差异视图工具条：旧版本→当前 标签 + 差异计数 + 上/下一处导航。 */
+.editorHistoryDiffPane {
+  @apply flex min-h-0 min-w-0 flex-1 flex-col;
+}
+
+.editorHistoryDiffToolbar {
+  @apply flex shrink-0 items-center gap-2 border-b;
+  padding: 3px 6px 3px 10px;
+  border-color: var(--workbench-border);
+  background: var(--workbench-editor-bg, var(--card));
+}
+
+.editorHistoryDiffLabel {
+  @apply truncate text-muted-foreground;
+  max-width: 240px;
+  font-size: 11px;
+}
+
+.editorHistoryDiffArrow {
+  @apply shrink-0 text-muted-foreground;
+  font-size: 11px;
+}
+
+.editorHistoryDiffSpacer {
+  @apply flex-1;
+}
+
+.editorHistoryDiffCount {
+  @apply shrink-0 whitespace-nowrap text-muted-foreground;
+  font-size: 11px;
+}
+
+/* 独立文件历史窗口：铺满整窗的竖向布局（头部 + 主体）。 */
+.fileHistoryWindowRoot {
+  @apply flex h-full min-h-0 w-full flex-col;
+  background: var(--workbench-editor-bg, var(--card));
+  color: var(--workbench-text, var(--foreground));
+}
+
+/* 头部整条作为窗口拖拽区（hiddenInset 标题栏下内容默认不可拖），为 mac 红绿灯留出左侧空位。 */
+.fileHistoryWindowHeader {
+  -webkit-app-region: drag;
+  padding-left: 78px;
+}
+
+.fileHistoryWindowHeader button,
+.fileHistoryWindowHeader input,
+.fileHistoryWindowHeader [role='tablist'] {
+  -webkit-app-region: no-drag;
+}
+
+.editorHistoryCodeViewer {
+  @apply min-h-0 flex-1 overflow-hidden;
+  background: var(--workbench-editor-bg, var(--card));
+}
+
+.editorHistoryCodeViewer :global(.cm-editor) {
+  height: 100%;
+  background: var(--workbench-editor-bg, var(--card));
+  color: var(--workbench-editor-fg, var(--foreground));
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
+    monospace;
+  font-size: var(--workbench-editor-font-size);
+  line-height: var(--workbench-editor-line-height);
+}
+
+.editorHistoryCodeViewer :global(.cm-focused) {
+  outline: none;
+}
+
+.editorHistoryCodeViewer :global(.cm-scroller) {
+  font-family: inherit;
+  line-height: inherit;
+  overflow: auto;
+}
+
+.editorHistoryCodeViewer :global(.cm-gutters) {
+  background: var(--workbench-editor-bg, var(--card));
+  border-right: 1px solid var(--workbench-border);
+  color: var(--muted-foreground);
+}
+
+.editorHistoryCodeViewer :global(.cm-workbenchHistorySearchMatch) {
+  border-radius: 2px;
+  background: color-mix(in oklab, var(--status-amber, #e3a008) 42%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--status-amber, #e3a008) 55%, transparent);
+}
+
+/* ── 语法高亮 diff：左侧 gutter 只有 旧/新 两列行号，增删靠底色、变更词强高亮 ── */
+.workbenchUnifiedDiffCode :global(.cm-diffGutter) {
+  background: var(--workbench-editor-bg, var(--card));
+  border-right: 1px solid var(--workbench-border);
+}
+
+.workbenchUnifiedDiffCode :global(.cm-diffGutterCell) {
+  display: flex;
+  align-items: center;
+}
+
+.workbenchUnifiedDiffCode :global(.cm-diffGutterOld),
+.workbenchUnifiedDiffCode :global(.cm-diffGutterNew) {
+  display: inline-block;
+  min-width: 26px;
+  padding-inline: 3px;
+  color: var(--muted-foreground);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.workbenchUnifiedDiffCode :global(.cm-diffGutterOld) {
+  padding-inline-start: 6px;
+}
+
+.workbenchUnifiedDiffCode :global(.cm-diffGutterNew) {
+  padding-inline-end: 6px;
+}
+
+/* 让增删底色一直延伸到左侧 gutter 行号区（与代码行同色）。 */
+.workbenchUnifiedDiffCode :global(.cm-diffGutterAdd) {
+  background: var(--status-green-soft);
+}
+
+.workbenchUnifiedDiffCode :global(.cm-diffGutterDel) {
+  background: var(--status-red-soft);
+}
+
+.workbenchUnifiedDiffCode :global(.cm-diffLineAdd) {
+  background: var(--status-green-soft);
+}
+
+.workbenchUnifiedDiffCode :global(.cm-diffLineDel) {
+  background: var(--status-red-soft);
+}
+
+/* ── 左侧时间线组件 ── */
+.historyTimeline {
+  @apply m-0 flex list-none flex-col p-0;
+  padding-block: 4px;
+}
+
+.historyTimelineItem {
+  @apply min-w-0;
+}
+
+.historyTimelineRow {
+  @apply flex w-full min-w-0 cursor-pointer items-stretch gap-2 border-0 bg-transparent text-left;
+  padding: 2px 10px 2px 4px;
+}
+
+.historyTimelineRow:hover,
+.historyTimelineRow[data-active='true'] {
+  background: var(--workbench-selection-bg);
+}
+
+.historyTimelineRail {
+  @apply relative flex flex-none justify-center;
+  width: 18px;
+}
+
+/* 连接线取当前节点颜色的淡化版，形成按时间段渐变的 git-graph 轨道。 */
+.historyTimelineRail::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+  background: color-mix(
+    in oklab,
+    var(--timeline-node-color, var(--workbench-border)) 45%,
+    transparent
+  );
+}
+
+.historyTimelineItem:first-child .historyTimelineRail::before {
+  top: 10px;
+}
+
+.historyTimelineItem:last-child .historyTimelineRail::before {
+  bottom: calc(100% - 10px);
+}
+
+.historyTimelineDot {
+  position: relative;
+  z-index: 1;
+  align-self: flex-start;
+  margin-top: 6px;
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--timeline-node-color, var(--status-violet));
+  box-shadow: 0 0 0 3px var(--workbench-editor-bg, var(--card));
+}
+
+.historyTimelineRow[data-active='true'] .historyTimelineDot {
+  box-shadow:
+    0 0 0 3px var(--workbench-editor-bg, var(--card)),
+    0 0 0 6px color-mix(in oklab, var(--timeline-node-color, var(--status-violet)) 26%, transparent);
+}
+
+/* 定点特殊节点（当前/HEAD）：靶心——外圈描边 + 中心实点。 */
+.historyTimelineDot[data-special='true'] {
+  margin-top: 5px;
+  width: 12px;
+  height: 12px;
+  background: var(--workbench-editor-bg, var(--card));
+  border: 2px solid var(--timeline-node-color, var(--status-violet));
+}
+
+.historyTimelineDot[data-special='true']::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--timeline-node-color, var(--status-violet));
+}
+
+.historyTimelineBody {
+  @apply flex min-w-0 flex-col gap-0.5;
+  padding-block: 4px;
+}
+
+.historyTimelinePrimaryRow {
+  @apply flex min-w-0 items-center gap-1.5;
+}
+
+.historyTimelinePrimary {
+  @apply truncate font-medium;
+  font-size: 12px;
+}
+
+.historyTimelineBadge {
+  @apply flex-none truncate;
+  max-width: 140px;
+  padding: 1px 5px;
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--status-green);
+  background: color-mix(in oklab, var(--status-green) 12%, transparent);
+}
+
+.historyTimelineMetaRow {
+  @apply flex min-w-0 items-center gap-2;
+}
+
+.historyTimelineSecondary,
+.historyTimelineMeta {
+  @apply truncate text-muted-foreground;
+  font-size: 11px;
+}
+
+.historyTimelineMeta {
+  @apply flex-none;
+}

@@ -1,0 +1,30 @@
+appId: com.velaros.workbench
+productName: VelarOS Workbench
+copyright: Copyright © VelarOS
+
+directories:
+  app: apps/workbench
+  output: release
+
+files:
+  - out/**/*
+  - package.json
+
+asar: true
+artifactName: VelarOS-Workbench-${version}-${os}-${arch}.${ext}
+
+mac:
+  category: public.app-category.developer-tools
+  target:
+    - dmg
+    - zip
+
+win:
+  target:
+    - nsis
+
+linux:
+  category: Development
+  target:
+    - AppImage
+    - deb

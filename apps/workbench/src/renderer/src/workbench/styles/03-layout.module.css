@@ -1,0 +1,514 @@
+.ideBody {
+  @apply grid min-h-0 flex-1;
+  position: relative;
+  grid-template-columns:
+    var(--workbench-file-pane-width, 260px)
+    0
+    minmax(0, 1fr)
+    0
+    minmax(0, var(--workbench-right-pane-width, 420px))
+    36px;
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.ideBody[data-right-tool-open='false'] {
+  grid-template-columns: var(--workbench-file-pane-width, 260px) 0 minmax(0, 1fr) 0 0 36px;
+}
+
+.workbenchShell[data-standalone='true'] .ideBody {
+  grid-template-columns:
+    38px
+    minmax(0, 1fr)
+    0
+    minmax(0, var(--workbench-right-pane-width, 420px))
+    36px;
+}
+
+.workbenchShell[data-standalone='true'] .ideBody[data-right-tool-open='false'] {
+  grid-template-columns: 38px minmax(0, 1fr) 0 0 36px;
+}
+
+.workbenchShell[data-standalone='true'] .leftToolPane {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.workbenchShell[data-standalone='true'] .embeddedKernelRoot {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.workbenchShell[data-standalone='true'] .rightResizeHandle {
+  grid-column: 3;
+  grid-row: 1;
+}
+
+.workbenchShell[data-standalone='true'] .rightToolPanel {
+  grid-column: 4;
+  grid-row: 1;
+}
+
+.workbenchShell[data-standalone='true'] .rightToolRail {
+  grid-column: 5;
+  grid-row: 1;
+}
+
+.ideMainPane,
+.ideRightPane,
+.rightToolPanel,
+.rightToolRail {
+  @apply flex min-h-0 min-w-0 flex-col;
+}
+
+.leftToolPane {
+  @apply grid min-h-0 min-w-0 border-r;
+  grid-template-columns: 38px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  height: 100%;
+  border-color: var(--workbench-border);
+  background: var(--workbench-bg);
+}
+
+.leftToolRailColumn {
+  @apply box-border min-h-0 min-w-0;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  align-self: stretch;
+  min-height: 0;
+  padding: 6px 4px;
+  border-right: 1px solid var(--workbench-border);
+  background: var(--workbench-toolbar);
+}
+
+.leftToolRailTop,
+.leftToolRailBottom {
+  @apply flex shrink-0 flex-col items-center gap-1;
+}
+
+.leftToolButton {
+  @apply relative flex shrink-0 items-center justify-center border bg-transparent text-muted-foreground;
+  width: 30px;
+  height: 30px;
+  border-color: transparent;
+  border-radius: var(--workbench-radius);
+}
+
+.leftToolButton:hover:not([data-active='true']) {
+  color: var(--workbench-text);
+  border-color: transparent;
+  background: var(--chrome-rail-hover-bg);
+}
+
+.leftToolButton[data-active='true'] {
+  color: var(--workbench-text);
+  border-color: transparent;
+  background: var(--chrome-rail-selected-bg);
+  font-weight: 600;
+}
+
+.leftToolContent {
+  @apply flex min-h-0 min-w-0 flex-col overflow-hidden;
+  height: 100%;
+}
+
+.embeddedKernelRoot {
+  @apply relative flex min-h-0 min-w-0 flex-1 overflow-hidden;
+  container-type: inline-size;
+  flex-direction: row;
+  --workbench-editor-font-size: 11.5px;
+  --workbench-editor-line-height: 18px;
+}
+
+.embeddedFilePane {
+  @apply absolute bottom-0 left-0 top-0 z-20 flex min-h-0 min-w-0 flex-col overflow-hidden shadow-xl;
+  width: var(--workbench-embedded-file-pane-width, 300px);
+  background: var(--workbench-surface-muted);
+}
+
+.embeddedKernelRoot[data-file-panel-open='false'] .embeddedFilePane,
+.embeddedKernelRoot[data-file-panel-open='false'] .embeddedFileResizeHandle {
+  display: none;
+}
+
+.embeddedFileResizeHandle {
+  @apply absolute bottom-0 top-0 z-30 w-2 cursor-col-resize;
+  left: var(--workbench-embedded-file-pane-width, 300px);
+  transform: translateX(-50%);
+  -webkit-app-region: no-drag;
+}
+
+.embeddedFileResizeHandle::before {
+  @apply absolute bottom-0 left-1/2 top-0 w-px -translate-x-1/2;
+  content: '';
+  background: color-mix(in srgb, var(--border) 72%, transparent);
+}
+
+.embeddedFileResizeHandle::after {
+  @apply absolute bottom-0 left-1/2 top-0 w-px -translate-x-1/2 opacity-0 transition-[background,opacity,width];
+  content: '';
+  background: rgba(var(--status-blue-rgb), 0.55);
+}
+
+.embeddedFileResizeHandle:hover::after,
+.embeddedFileResizeHandle:active::after {
+  @apply opacity-100;
+}
+
+.embeddedKernelRoot[data-file-panel-inline='true'] .embeddedFilePane {
+  @apply relative bottom-auto left-auto top-auto z-auto shadow-none;
+  flex: 0 0 var(--workbench-embedded-file-pane-width, 300px);
+  max-width: var(--workbench-embedded-file-pane-width, 300px);
+}
+
+.embeddedKernelRoot[data-file-panel-inline='true'] .embeddedFileResizeHandle {
+  @apply absolute bottom-0 top-0 z-30;
+  left: var(--workbench-embedded-file-pane-width, 300px);
+  transform: translateX(-50%);
+  width: 8px;
+}
+
+.ideMainPane {
+  @apply relative min-h-0 min-w-0;
+  z-index: 1;
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  isolation: isolate;
+  background: var(--workbench-surface);
+}
+
+.bottomToolWindowSlot {
+  @apply flex min-h-0 flex-col overflow-hidden;
+  box-sizing: border-box;
+  position: absolute;
+  z-index: 30;
+  left: 38px;
+  right: 36px;
+  bottom: 26px;
+  height: var(--workbench-command-panel-height, 210px);
+  border: 0;
+  border-top: 1px solid color-mix(in oklab, var(--workbench-border) 65%, var(--workbench-text) 18%);
+  background-color: var(--workbench-surface, #ffffff);
+  box-shadow: 0 -10px 24px color-mix(in oklab, var(--foreground) 8%, transparent);
+  pointer-events: auto;
+}
+
+.workbenchShell[data-standalone='true'] .bottomToolWindowSlot {
+  border-top: 0;
+  background-color: var(--workbench-surface, #ffffff);
+  box-shadow: 0 -8px 20px color-mix(in oklab, var(--foreground) 6%, transparent);
+}
+
+.workbenchShell[data-standalone='true'] .terminalToolHeader {
+  border-bottom: none;
+  background: var(--workbench-toolbar);
+  -webkit-app-region: no-drag;
+}
+
+.workbenchShell[data-standalone='true'] .terminalInputForm {
+  border-top-color: var(--workbench-seam);
+}
+
+.workbenchShell[data-standalone='true'] .terminalPromptRow {
+  -webkit-app-region: no-drag;
+}
+
+.bottomToolWindowSlot > .horizontalResizeHandle {
+  position: relative;
+  z-index: 25;
+  height: 0;
+  min-height: 0;
+  flex-shrink: 0;
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+  cursor: row-resize;
+  border-top: 0;
+  background: transparent;
+}
+
+.bottomToolWindowSlot > .horizontalResizeHandle::before {
+  content: '';
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 14px;
+  transform: translateY(-7px);
+}
+
+.bottomToolWindowSlot > .horizontalResizeHandle::after {
+  display: none;
+}
+
+.bottomToolWindowSlot > .horizontalResizeHandle:hover::after {
+  display: none;
+}
+
+.workbenchShell[data-workbench-viewport='narrow'] .ideUnifiedTopTrailing {
+  gap: 4px;
+}
+
+.workbenchShell[data-workbench-viewport='narrow'] .editorEmptyCard {
+  max-width: min(360px, calc(100% - 24px));
+  padding: 20px 22px;
+}
+
+.workbenchShell[data-workbench-viewport='narrow'] .editorEmpty {
+  padding: 16px;
+}
+
+.workbenchShell[data-workbench-viewport='compact'] .editorEmptyCard,
+.workbenchShell[data-workbench-viewport='narrow'] .editorEmptyCard {
+  gap: 10px;
+}
+
+.verticalResizeHandle,
+.horizontalResizeHandle {
+  position: relative;
+  z-index: 5;
+  background: transparent;
+}
+
+/* Named modifiers must exist as top-level selectors so CSS Modules always export them (no stray `undefined` in className). */
+.fileResizeHandle {
+  pointer-events: inherit;
+}
+
+.rightResizeHandle {
+  pointer-events: inherit;
+}
+
+.verticalResizeHandle {
+  cursor: col-resize;
+  /* Grid column is 0px — no layout gap between panes; hit-testing uses ::before. */
+  justify-self: stretch;
+  align-self: stretch;
+  box-sizing: border-box;
+  width: 0;
+  min-width: 0;
+  max-width: 0;
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+}
+
+.verticalResizeHandle::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  z-index: 0;
+  width: 12px;
+  transform: translateX(-50%);
+}
+
+.verticalResizeHandle::before {
+  background: linear-gradient(
+    to right,
+    transparent calc(50% - 0.5px),
+    color-mix(in srgb, var(--border) 72%, transparent) calc(50% - 0.5px),
+    color-mix(in srgb, var(--border) 72%, transparent) calc(50% + 0.5px),
+    transparent calc(50% + 0.5px)
+  );
+}
+
+.horizontalResizeHandle {
+  height: 4px;
+  flex-shrink: 0;
+  margin-top: -4px;
+  cursor: row-resize;
+  border-top: 0;
+  background: transparent;
+}
+
+.verticalResizeHandle::after,
+.horizontalResizeHandle::after {
+  content: '';
+  position: absolute;
+  opacity: 0;
+  transition:
+    background 140ms ease,
+    opacity 140ms ease;
+}
+
+.verticalResizeHandle::after {
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  z-index: 1;
+  width: 2px;
+  transform: translateX(-50%);
+}
+
+.horizontalResizeHandle::after {
+  inset: 0;
+  top: 1px;
+  bottom: 1px;
+}
+
+.verticalResizeHandle:hover::after,
+.verticalResizeHandle:active::after,
+.horizontalResizeHandle:hover::after,
+.horizontalResizeHandle:active::after {
+  opacity: 1;
+  background: rgba(var(--status-blue-rgb), 0.55);
+}
+
+.ideBody[data-right-tool-open='false'] .rightResizeHandle {
+  display: none;
+}
+
+.rightToolPanel {
+  @apply min-h-0 min-w-0 overflow-hidden;
+  border-left: 1px solid var(--workbench-border);
+  background: var(--workbench-surface);
+  isolation: isolate;
+}
+
+.rightToolPanel[data-open='false'] {
+  display: none;
+}
+
+.rightToolRail {
+  @apply min-h-0 shrink-0;
+  width: 36px;
+  min-width: 36px;
+  overflow: visible;
+  border-left: 1px solid var(--workbench-border);
+  background: var(--workbench-surface);
+}
+
+.rightToolContent {
+  @apply flex min-h-0 min-w-0 flex-1 flex-col;
+  height: 100%;
+  overflow: hidden;
+  background: var(--workbench-surface);
+  isolation: isolate;
+}
+
+.rightToolStrip {
+  @apply flex min-h-0 shrink-0 flex-col items-center border-l;
+  position: relative;
+  z-index: 2;
+  height: 100%;
+  padding: 5px 4px;
+  border-color: var(--workbench-border);
+  background: var(--workbench-toolbar);
+}
+
+.rightToolActionGroup,
+.rightToolWindowGroup {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+
+.rightToolActionGroup {
+  padding-bottom: 6px;
+  margin-bottom: 5px;
+  border-bottom: 1px solid color-mix(in srgb, var(--workbench-border) 72%, transparent);
+}
+
+.rightToolRunButton {
+  color: var(--status-green);
+}
+
+.rightToolRunButton:hover:not(.rightToolButtonActive) {
+  color: color-mix(in oklab, var(--status-green) 94%, black);
+  background: var(--status-green-soft);
+}
+
+.rightToolButton {
+  @apply flex shrink-0 items-center justify-center border bg-transparent text-muted-foreground;
+  position: relative;
+  width: 28px;
+  height: 28px;
+  overflow: visible;
+  border-color: transparent;
+  border-radius: var(--workbench-radius);
+}
+
+.rightToolButton:hover:not(.rightToolButtonActive) {
+  color: var(--workbench-text);
+  border-color: transparent;
+  background: var(--chrome-rail-hover-bg);
+}
+
+.rightToolButtonActive {
+  color: var(--workbench-text);
+  border-color: transparent;
+  background: var(--chrome-rail-selected-bg);
+  font-weight: 600;
+}
+
+.rightToolButtonTooltip {
+  @apply pointer-events-none absolute top-1/2 z-50 whitespace-nowrap rounded-md px-2 py-1 text-[11px] leading-4 opacity-0;
+  right: calc(100% + 8px);
+  transform: translateY(-50%) translateX(2px);
+  border: 1px solid var(--workbench-border);
+  background: var(--workbench-surface);
+  color: var(--workbench-text);
+  box-shadow: 0 12px 32px color-mix(in srgb, var(--foreground) 12%, transparent);
+  transition:
+    opacity 0.12s ease,
+    transform 0.12s ease;
+}
+
+.rightToolButtonTooltip::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: -4px;
+  width: 7px;
+  height: 7px;
+  transform: translateY(-50%) rotate(45deg);
+  border-top: 1px solid var(--workbench-border);
+  border-right: 1px solid var(--workbench-border);
+  background: inherit;
+}
+
+.rightToolButton:hover .rightToolButtonTooltip,
+.rightToolButton:focus-visible .rightToolButtonTooltip {
+  opacity: 1;
+  transform: translateY(-50%) translateX(0);
+}
+
+.toolWindowPanel {
+  @apply flex min-h-0 flex-1 flex-col;
+  background: var(--workbench-surface);
+}
+
+.toolWindowHeader {
+  @apply flex shrink-0 items-center justify-between gap-2 border-b;
+  min-height: 36px;
+  padding-inline: 10px;
+  border-color: var(--workbench-border);
+  background: var(--workbench-toolbar);
+}
+
+.toolWindowTitleGroup {
+  @apply flex min-w-0 flex-1 items-center gap-2 text-foreground;
+}
+
+.toolWindowTitle {
+  @apply truncate font-medium;
+  font-size: var(--ui-font-body-sm);
+}
+
+.toolWindowMeta {
+  @apply shrink-0 text-muted-foreground;
+  font-size: 11px;
+}
+
+.toolWindowBody {
+  @apply min-h-0 flex-1;
+  background: var(--workbench-bg);
+}

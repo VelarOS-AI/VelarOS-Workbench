@@ -1,0 +1,241 @@
+import { jsonLanguage } from '@codemirror/lang-json'
+import { type Extension, RangeSetBuilder } from '@codemirror/state'
+import { gutter, GutterMarker } from '@codemirror/view'
+
+import { isEmpty,isString, toNullable } from '@velaros/core'
+
+import {
+  buildWorkbenchPackageScriptRunCommand,
+  type PackageManagerCommand,
+} from '../commands/workbenchPackageScriptCommand'
+
+export interface WorkbenchPackageScriptRunAction {
+  command: string
+  label: string
+  line: number
+}
+
+interface JsonNodeSnapshot {
+  name: string
+  from: number
+  to: number
+  children: JsonNodeSnapshot[]
+}
+
+interface WorkbenchPackageScriptRunGutterOptions {
+  content: string
+  packageManager: PackageManagerCommand
+  path: Nullable<string>
+}
+
+interface WorkbenchPackageScriptRunExtensionOptions extends WorkbenchPackageScriptRunGutterOptions {
+  disabled?: boolean
+  onRunScript: (command: string) => void
+}
+
+function snapshotJsonTree(content: string): JsonNodeSnapshot {
+  const tree = jsonLanguage.parser.parse(content)
+  const cursor = tree.cursor()
+
+  function snapshotCurrent(): JsonNodeSnapshot {
+    const node: JsonNodeSnapshot = {
+      name: cursor.name,
+      from: cursor.from,
+      to: cursor.to,
+      children: [],
+    }
+
+    if (cursor.firstChild()) {
+      do {
+        node.children.push(snapshotCurrent())
+      } while (cursor.nextSibling())
+      cursor.parent()
+    }
+
+    return node
+  }
+
+  return snapshotCurrent()
+}
+
+function parseJsonStringLiteral(content: string, node: JsonNodeSnapshot): Nullable<string> {
+  try {
+    const value = JSON.parse(content.slice(node.from, node.to)) as unknown
+    return isString(value) ? value : null
+    // @arch-guard:suspend velaros/code-style/require-error-logging 理由：编辑中的 JSON 属性名可能临时不完整，此处返回 null 让上层自然忽略，避免输入时刷日志。
+  } catch {
+    return null
+  }
+}
+
+function getJsonPropertyName(content: string, property: JsonNodeSnapshot): Nullable<string> {
+  const nameNode = property.children.find((child) => child.name === 'PropertyName')
+  return nameNode ? parseJsonStringLiteral(content, nameNode) : null
+}
+
+function getJsonPropertyValue(property: JsonNodeSnapshot): Nullable<JsonNodeSnapshot> {
+  return toNullable(
+    property.children.find((child) => child.name !== 'PropertyName' && child.name !== ':')
+  )
+}
+
+function findRootObject(root: JsonNodeSnapshot): Nullable<JsonNodeSnapshot> {
+  if (root.name === 'Object') return root
+  return toNullable(root.children.find((child) => child.name === 'Object'))
+}
+
+function findScriptsObject(root: JsonNodeSnapshot, content: string): Nullable<JsonNodeSnapshot> {
+  const rootObject = findRootObject(root)
+  if (!rootObject) return null
+
+  for (const property of rootObject.children) {
+    if (property.name !== 'Property') continue
+    if (getJsonPropertyName(content, property) !== 'scripts') continue
+
+    const value = getJsonPropertyValue(property)
+    return value?.name === 'Object' ? value : null
+  }
+
+  return null
+}
+
+function buildLineResolver(content: string): (offset: number) => number {
+  const lineStarts = [0]
+  for (let index = 0; index < content.length; index += 1) {
+    if (content[index] === '\n') {
+      lineStarts.push(index + 1)
+    }
+  }
+
+  return (offset: number) => {
+    let low = 0
+    let high = lineStarts.length - 1
+    while (low <= high) {
+      const middle = Math.floor((low + high) / 2)
+      const start = lineStarts[middle] ?? 0
+      const nextStart = lineStarts[middle + 1] ?? Number.POSITIVE_INFINITY
+      if (offset < start) {
+        high = middle - 1
+      } else if (offset >= nextStart) {
+        low = middle + 1
+      } else {
+        return middle + 1
+      }
+    }
+    return lineStarts.length
+  }
+}
+
+export function shouldShowWorkbenchPackageScriptRunGutter(path: Nullable<string>): boolean {
+  const normalized = path?.replace(/\\/g, '/').replace(/^\.\/+/, '')
+  return normalized === 'package.json' || !!normalized?.endsWith('/package.json')
+}
+
+export function buildWorkbenchPackageScriptRunActions({
+  content,
+  packageManager,
+  path,
+}: WorkbenchPackageScriptRunGutterOptions): WorkbenchPackageScriptRunAction[] {
+  if (!shouldShowWorkbenchPackageScriptRunGutter(path)) return []
+
+  const packageJsonPath = path ?? 'package.json'
+  const root = snapshotJsonTree(content)
+  const scriptsObject = findScriptsObject(root, content)
+  if (!scriptsObject) return []
+
+  const lineForOffset = buildLineResolver(content)
+  const actions: WorkbenchPackageScriptRunAction[] = []
+  for (const property of scriptsObject.children) {
+    if (property.name !== 'Property') continue
+
+    const name = getJsonPropertyName(content, property)
+    const value = getJsonPropertyValue(property)
+    if (!name || value?.name !== 'String') continue
+
+    actions.push({
+      command: buildWorkbenchPackageScriptRunCommand({
+        packageJsonPath,
+        packageManager,
+        scriptName: name,
+      }),
+      label: name,
+      line: lineForOffset(property.from),
+    })
+  }
+
+  return actions
+}
+
+class WorkbenchPackageScriptRunMarker extends GutterMarker {
+  public constructor(
+    private readonly action: WorkbenchPackageScriptRunAction,
+    private readonly disabled: boolean,
+    private readonly onRunScript: (command: string) => void
+  ) {
+    super()
+  }
+
+  public override eq(other: GutterMarker): boolean {
+    return (
+      other instanceof WorkbenchPackageScriptRunMarker &&
+      other.action.command === this.action.command &&
+      other.action.label === this.action.label &&
+      other.disabled === this.disabled
+    )
+  }
+
+  public override toDOM(): Node {
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.className = 'cm-workbenchPackageScriptRunButton'
+    button.title = this.action.command
+    button.setAttribute('aria-label', this.action.command)
+    button.disabled = this.disabled
+    button.addEventListener('mousedown', (event) => {
+      event.preventDefault()
+      event.stopPropagation()
+    })
+    button.addEventListener('click', (event) => {
+      event.preventDefault()
+      event.stopPropagation()
+      if (!this.disabled) {
+        this.onRunScript(this.action.command)
+      }
+    })
+
+    const icon = document.createElement('span')
+    icon.className = 'cm-workbenchPackageScriptRunIcon'
+    icon.setAttribute('aria-hidden', 'true')
+    button.append(icon)
+    return button
+  }
+}
+
+export function createWorkbenchPackageScriptRunGutterExtension({
+  content,
+  disabled = false,
+  onRunScript,
+  packageManager,
+  path,
+}: WorkbenchPackageScriptRunExtensionOptions): Extension {
+  const actions = buildWorkbenchPackageScriptRunActions({ content, packageManager, path })
+  if (isEmpty(actions)) return []
+
+  return gutter({
+    class: 'cm-workbenchPackageScriptRunGutter',
+    markers(view) {
+      const builder = new RangeSetBuilder<GutterMarker>()
+      for (const action of actions) {
+        if (action.line > view.state.doc.lines) continue
+
+        const line = view.state.doc.line(action.line)
+        builder.add(
+          line.from,
+          line.from,
+          new WorkbenchPackageScriptRunMarker(action, disabled, onRunScript)
+        )
+      }
+      return builder.finish()
+    },
+  })
+}

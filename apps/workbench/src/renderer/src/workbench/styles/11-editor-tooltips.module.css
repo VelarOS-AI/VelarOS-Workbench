@@ -1,0 +1,434 @@
+.editorSymbolTooltip {
+  max-width: 420px;
+  max-height: min(420px, 50vh);
+  padding: 8px 10px;
+  border: 1px solid var(--workbench-border);
+  border-radius: var(--workbench-radius-lg);
+  background-color: var(--workbench-editor-tooltip-bg, #ffffff);
+  box-shadow: 0 12px 28px color-mix(in oklab, var(--foreground) 14%, transparent);
+  overflow-x: auto;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.editorSymbolTooltipTitle {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.editorSymbolTooltipPartKeyword {
+  color: var(--workbench-editor-hover-keyword, #0033b3);
+}
+
+.editorSymbolTooltipPartType {
+  color: var(--workbench-editor-hover-type, #007070);
+}
+
+.editorSymbolTooltipPartName {
+  color: var(--workbench-editor-hover-name, #871094);
+}
+
+.editorSymbolTooltipPartFunction {
+  color: var(--workbench-editor-hover-function, #795e26);
+}
+
+.editorSymbolTooltipPartNumber {
+  color: var(--workbench-editor-hover-number, #1750eb);
+}
+
+.editorSymbolTooltipPartString {
+  color: var(--workbench-editor-hover-string, #067d17);
+}
+
+.editorSymbolTooltipPartOperator,
+.editorSymbolTooltipPartPunctuation {
+  color: var(--workbench-editor-hover-plain, var(--workbench-editor-fg, #1f2328));
+}
+
+.editorSymbolTooltipPartPlain {
+  color: var(--workbench-editor-hover-plain, var(--workbench-editor-fg, #1f2328));
+}
+
+.editorSymbolTooltipPartLink {
+  color: var(--workbench-editor-hover-link, #2456b3);
+  text-decoration: underline;
+}
+
+.editorSymbolTooltipPartLocation {
+  color: var(--workbench-editor-hover-location, #5c6b82);
+}
+
+.codeMirrorEditor :global(.cm-tooltip) .editorSymbolTooltipPartKeyword,
+:global(.cm-tooltip) .editorSymbolTooltipPartKeyword {
+  color: var(--workbench-editor-hover-keyword, #0033b3) !important;
+}
+
+.codeMirrorEditor :global(.cm-tooltip) .editorSymbolTooltipPartType,
+:global(.cm-tooltip) .editorSymbolTooltipPartType {
+  color: var(--workbench-editor-hover-type, #007070) !important;
+}
+
+.codeMirrorEditor :global(.cm-tooltip) .editorSymbolTooltipPartName,
+:global(.cm-tooltip) .editorSymbolTooltipPartName {
+  color: var(--workbench-editor-hover-name, #871094) !important;
+}
+
+.codeMirrorEditor :global(.cm-tooltip) .editorSymbolTooltipPartFunction,
+:global(.cm-tooltip) .editorSymbolTooltipPartFunction {
+  color: var(--workbench-editor-hover-function, #795e26) !important;
+}
+
+.codeMirrorEditor :global(.cm-tooltip) .editorSymbolTooltipPartNumber,
+:global(.cm-tooltip) .editorSymbolTooltipPartNumber {
+  color: var(--workbench-editor-hover-number, #1750eb) !important;
+}
+
+.codeMirrorEditor :global(.cm-tooltip) .editorSymbolTooltipPartString,
+:global(.cm-tooltip) .editorSymbolTooltipPartString {
+  color: var(--workbench-editor-hover-string, #067d17) !important;
+}
+
+.codeMirrorEditor :global(.cm-tooltip) .editorSymbolTooltipPartOperator,
+.codeMirrorEditor :global(.cm-tooltip) .editorSymbolTooltipPartPunctuation,
+:global(.cm-tooltip) .editorSymbolTooltipPartOperator,
+:global(.cm-tooltip) .editorSymbolTooltipPartPunctuation {
+  color: var(--workbench-editor-hover-plain, var(--workbench-editor-fg, #1f2328)) !important;
+}
+
+.codeMirrorEditor :global(.cm-tooltip) .editorSymbolTooltipPartPlain,
+:global(.cm-tooltip) .editorSymbolTooltipPartPlain {
+  color: var(--workbench-editor-hover-plain, var(--workbench-editor-fg, #1f2328)) !important;
+}
+
+.codeMirrorEditor :global(.cm-tooltip) .editorSymbolTooltipPartLink,
+:global(.cm-tooltip) .editorSymbolTooltipPartLink {
+  color: var(--workbench-editor-hover-link, #2456b3) !important;
+}
+
+.codeMirrorEditor :global(.cm-tooltip) .editorSymbolTooltipPartLocation,
+:global(.cm-tooltip) .editorSymbolTooltipPartLocation {
+  color: var(--workbench-editor-hover-location, #5c6b82) !important;
+}
+
+.editorSymbolTooltip [data-hover-part='keyword'] {
+  color: var(--workbench-editor-hover-keyword, #0033b3) !important;
+}
+
+.editorSymbolTooltip [data-hover-part='type'] {
+  color: var(--workbench-editor-hover-type, #007070) !important;
+}
+
+.editorSymbolTooltip [data-hover-part='name'] {
+  color: var(--workbench-editor-hover-name, #871094) !important;
+}
+
+.editorSymbolTooltip [data-hover-part='function'] {
+  color: var(--workbench-editor-hover-function, #795e26) !important;
+}
+
+.editorSymbolTooltip [data-hover-part='number'] {
+  color: var(--workbench-editor-hover-number, #1750eb) !important;
+}
+
+.editorSymbolTooltip [data-hover-part='string'] {
+  color: var(--workbench-editor-hover-string, #067d17) !important;
+}
+
+.editorSymbolTooltip [data-hover-part='operator'],
+.editorSymbolTooltip [data-hover-part='punctuation'] {
+  color: var(--workbench-editor-hover-plain, var(--workbench-editor-fg, #1f2328)) !important;
+}
+
+.editorSymbolTooltip [data-hover-part='plain'] {
+  color: var(--workbench-editor-hover-plain, var(--workbench-editor-fg, #1f2328)) !important;
+}
+
+.editorSymbolTooltip [data-hover-part='link'] {
+  color: var(--workbench-editor-hover-link, #2456b3) !important;
+}
+
+.editorSymbolTooltip [data-hover-part='location'] {
+  color: var(--workbench-editor-hover-location, #5c6b82) !important;
+}
+
+.codeMirrorEditor :global(.cm-tooltip) .editorSymbolTooltip [data-hover-part='keyword'],
+:global(.cm-tooltip) .editorSymbolTooltip [data-hover-part='keyword'] {
+  color: var(--workbench-editor-hover-keyword, #0033b3) !important;
+}
+
+.codeMirrorEditor :global(.cm-tooltip) .editorSymbolTooltip [data-hover-part='type'],
+:global(.cm-tooltip) .editorSymbolTooltip [data-hover-part='type'] {
+  color: var(--workbench-editor-hover-type, #007070) !important;
+}
+
+.codeMirrorEditor :global(.cm-tooltip) .editorSymbolTooltip [data-hover-part='name'],
+:global(.cm-tooltip) .editorSymbolTooltip [data-hover-part='name'] {
+  color: var(--workbench-editor-hover-name, #871094) !important;
+}
+
+.codeMirrorEditor :global(.cm-tooltip) .editorSymbolTooltip [data-hover-part='function'],
+:global(.cm-tooltip) .editorSymbolTooltip [data-hover-part='function'] {
+  color: var(--workbench-editor-hover-function, #795e26) !important;
+}
+
+.codeMirrorEditor :global(.cm-tooltip) .editorSymbolTooltip [data-hover-part='number'],
+:global(.cm-tooltip) .editorSymbolTooltip [data-hover-part='number'] {
+  color: var(--workbench-editor-hover-number, #1750eb) !important;
+}
+
+.codeMirrorEditor :global(.cm-tooltip) .editorSymbolTooltip [data-hover-part='string'],
+:global(.cm-tooltip) .editorSymbolTooltip [data-hover-part='string'] {
+  color: var(--workbench-editor-hover-string, #067d17) !important;
+}
+
+.codeMirrorEditor :global(.cm-tooltip) .editorSymbolTooltip [data-hover-part='operator'],
+.codeMirrorEditor :global(.cm-tooltip) .editorSymbolTooltip [data-hover-part='punctuation'],
+:global(.cm-tooltip) .editorSymbolTooltip [data-hover-part='operator'],
+:global(.cm-tooltip) .editorSymbolTooltip [data-hover-part='punctuation'] {
+  color: var(--workbench-editor-hover-plain, var(--workbench-editor-fg, #1f2328)) !important;
+}
+
+.codeMirrorEditor :global(.cm-tooltip) .editorSymbolTooltip [data-hover-part='plain'],
+:global(.cm-tooltip) .editorSymbolTooltip [data-hover-part='plain'] {
+  color: var(--workbench-editor-hover-plain, var(--workbench-editor-fg, #1f2328)) !important;
+}
+
+.codeMirrorEditor :global(.cm-tooltip) .editorSymbolTooltip [data-hover-part='link'],
+:global(.cm-tooltip) .editorSymbolTooltip [data-hover-part='link'] {
+  color: var(--workbench-editor-hover-link, #2456b3) !important;
+}
+
+.codeMirrorEditor :global(.cm-tooltip) .editorSymbolTooltip [data-hover-part='location'],
+:global(.cm-tooltip) .editorSymbolTooltip [data-hover-part='location'] {
+  color: var(--workbench-editor-hover-location, #5c6b82) !important;
+}
+
+.editorSymbolTooltipDiagnostics {
+  @apply flex flex-col;
+  gap: 4px;
+}
+
+.editorSymbolTooltipDiagnostic {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.editorSymbolTooltipDiagnostic[data-severity='error'] {
+  border-inline-start: 2px solid var(--workbench-editor-diagnostic-error-fg);
+  padding-inline-start: 6px;
+}
+
+.editorSymbolTooltipDiagnostic[data-severity='warning'] {
+  border-inline-start: 2px solid var(--workbench-editor-diagnostic-warning-underline);
+  padding-inline-start: 6px;
+}
+
+.editorSymbolTooltipDiagnostic[data-severity='info'],
+.editorSymbolTooltipDiagnostic[data-severity='hint'] {
+  border-inline-start: 2px solid var(--workbench-editor-diagnostic-hint-underline);
+  padding-inline-start: 6px;
+}
+
+.editorSymbolTooltipDivider {
+  height: 1px;
+  margin: 6px 0;
+  background: var(--workbench-border);
+}
+
+.editorSymbolTooltipLocation {
+  margin-top: 3px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.editorSymbolTooltipDocs {
+  margin-top: 6px;
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.editorSignatureTooltipHost {
+  position: absolute;
+  z-index: 40;
+  pointer-events: none;
+}
+
+.editorSignatureTooltip {
+  max-width: 520px;
+  padding: 8px 10px;
+  border: 1px solid var(--workbench-border);
+  border-radius: 8px;
+  background-color: var(--workbench-editor-tooltip-bg, #ffffff);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
+}
+
+.editorSignatureTooltipSignature {
+  color: var(--workbench-text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.editorSignatureTooltipParameter {
+  margin-top: 4px;
+  color: var(--workbench-text-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.codeMirrorEditor :global(.cm-lintRange.cm-workbenchErrorIdentifier) {
+  text-decoration: underline wavy var(--workbench-editor-diagnostic-error-underline) !important;
+  background-image: none !important;
+}
+
+.codeMirrorEditor :global(.cm-lintRange.cm-workbenchUnusedVariable) {
+  text-decoration: none !important;
+  background-image: none !important;
+}
+
+.codeMirrorEditor :global(.cm-editor .cm-line span.cm-workbenchErrorIdentifier),
+.codeMirrorEditor :global(.cm-editor .cm-line span.cm-workbenchErrorIdentifier *),
+.codeMirrorEditor :global(.cm-lintRange.cm-workbenchErrorIdentifier),
+.codeMirrorEditor :global(.cm-lintRange.cm-workbenchErrorIdentifier *),
+.codeMirrorEditor :global(.cm-workbenchErrorIdentifier .cm-variableName),
+.codeMirrorEditor :global(.cm-workbenchErrorIdentifier .cm-propertyName),
+.codeMirrorEditor :global(.cm-workbenchErrorIdentifier .cm-typeName) {
+  color: var(--workbench-editor-diagnostic-error-fg) !important;
+  text-decoration: underline wavy var(--workbench-editor-diagnostic-error-underline);
+}
+
+.codeMirrorEditor :global(.cm-editor .cm-line span.cm-workbenchUnusedVariable),
+.codeMirrorEditor :global(.cm-editor .cm-line span.cm-workbenchUnusedVariable *),
+.codeMirrorEditor :global(.cm-lintRange.cm-workbenchUnusedVariable),
+.codeMirrorEditor :global(.cm-lintRange.cm-workbenchUnusedVariable *) {
+  color: var(--workbench-editor-unused-fg) !important;
+  text-decoration: none !important;
+}
+
+.codeMirrorEditor :global(.cm-workbenchTokenOccurrence) {
+  /* 浅色包裹：背景色取自光标所在标识符的语法着色（见 token-occurrence 扩展），
+     无法解析时回退到中性浅灰。 */
+  background: var(--workbench-token-occurrence-bg, rgba(120, 128, 145, 0.14));
+  border-radius: 3px;
+}
+
+.codeMirrorEditor :global(.cm-workbenchDeprecated),
+.codeMirrorEditor :global(.cm-workbenchDeprecated *) {
+  text-decoration-line: line-through !important;
+  text-decoration-thickness: 1px !important;
+}
+
+.codeMirrorEditor :global(.cm-workbenchInlayTypeHint) {
+  display: inline-block;
+  padding-inline: 3px;
+  color: color-mix(in srgb, var(--workbench-editor-muted) 88%, transparent);
+  background: color-mix(in srgb, var(--workbench-editor-muted) 10%, transparent);
+  border-radius: 4px;
+  font-size: 0.92em;
+  font-style: normal;
+  line-height: 1.35;
+  cursor: default;
+  user-select: none;
+}
+
+.editorPlaceholder {
+  @apply flex h-full w-full min-w-0 items-center justify-center text-muted-foreground;
+  min-height: 220px;
+  font-size: var(--ui-font-body-sm);
+}
+
+.editorEmpty {
+  @apply absolute inset-0 flex min-w-0 flex-col items-center justify-center overflow-hidden text-muted-foreground;
+  padding: 24px;
+  font-size: var(--ui-font-body-sm);
+  background: var(--workbench-surface);
+}
+
+.editorEmptyCard {
+  @apply flex min-w-0 max-w-[360px] flex-col items-start;
+  width: fit-content;
+  gap: 22px;
+  padding: 28px 24px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.editorEmpty[data-embedded='true'] .editorEmptyCard {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.workbenchShell[data-standalone='true'] .editorEmptyCard {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.editorEmptyShortcuts {
+  @apply grid max-w-full;
+  grid-template-columns: max-content max-content;
+  gap: 18px 14px;
+}
+
+.editorEmptyShortcutRow {
+  display: contents;
+}
+
+.editorEmptyShortcutRow span,
+.editorEmptyShortcutRow [data-slot='text'] {
+  @apply min-w-0;
+  color: var(--workbench-text-muted);
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+.quickOpenHeader kbd {
+  @apply shrink-0 border text-muted-foreground;
+  min-width: 0;
+  padding: 1px 6px;
+  border-color: var(--workbench-border);
+  border-radius: var(--workbench-radius-xs);
+  background: var(--workbench-control-bg);
+  font-family: inherit;
+  font-size: 10.5px;
+}
+
+.editorEmptyShortcuts kbd {
+  @apply shrink-0;
+  align-self: center;
+  min-width: 0;
+  padding: 0;
+  color: var(--workbench-text);
+  background: transparent;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.5;
+  letter-spacing: 0.01em;
+}
+
+.editorEmptyHint {
+  color: var(--workbench-text-muted);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.actionPanel {
+  @apply flex min-h-0 flex-1 flex-col;
+  height: auto;
+  border-color: var(--workbench-border);
+  background: var(--workbench-surface);
+}

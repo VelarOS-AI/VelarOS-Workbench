@@ -1,0 +1,1012 @@
+.actionBody {
+  @apply grid min-h-0 flex-1;
+  grid-template-columns: 1fr;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.actionTabs {
+  @apply flex min-h-0 flex-col gap-1 overflow-auto border-b;
+  padding: 8px;
+  border-color: var(--workbench-border);
+  background: var(--workbench-toolbar);
+  max-height: 150px;
+}
+
+.actionTab {
+  @apply flex w-full min-w-0 items-center gap-1.5 border bg-transparent text-left text-foreground;
+  min-height: 28px;
+  padding-inline: 8px;
+  border-color: transparent;
+  border-radius: var(--workbench-radius);
+  font-size: 12px;
+}
+
+.actionTab:hover:not(.actionTabActive) {
+  border-color: transparent;
+  background: var(--chrome-rail-hover-bg);
+}
+
+.actionTabActive {
+  border-color: transparent;
+  background: var(--workbench-selection-bg);
+}
+
+.actionTab:disabled {
+  color: var(--status-blue-muted);
+  cursor: not-allowed;
+}
+
+.actionTab span,
+.actionTab [data-slot='text'] {
+  @apply min-w-0 truncate;
+}
+
+.actionSelectionSummary {
+  @apply flex min-w-0 flex-col gap-1 border-b;
+  position: relative;
+  padding: 9px 10px;
+  border-color: var(--workbench-border);
+  background: var(--workbench-surface);
+}
+
+.actionSelectionActions {
+  @apply flex min-w-0 items-center gap-1;
+  margin-top: 4px;
+}
+
+.actionCommandButton {
+  @apply flex min-w-0 items-center gap-1.5 border bg-transparent text-left;
+  height: 24px;
+  max-width: 160px;
+  padding-inline: 7px;
+  border-color: var(--border-strong);
+  border-radius: var(--workbench-radius);
+  color: var(--foreground-secondary);
+  font-size: 11px;
+}
+
+.actionCommandButton:hover {
+  background: var(--chrome-rail-hover-bg);
+}
+
+.actionCommandButton:disabled {
+  opacity: 0.55;
+}
+
+.actionCommandButton span,
+.actionCommandButton [data-slot='text'] {
+  @apply truncate;
+}
+
+.actionCopyButton {
+  flex-shrink: 0;
+}
+
+.actionSelectionTitle {
+  @apply truncate font-medium text-foreground;
+  font-size: 12px;
+}
+
+.actionSelectionMeta {
+  @apply truncate text-muted-foreground;
+  font-size: 11px;
+}
+
+.languagePluginSection {
+  @apply flex min-h-0 flex-col gap-1 border-b;
+  padding: 8px;
+  border-color: var(--workbench-border);
+  background: var(--workbench-surface);
+}
+
+.languagePluginHeader {
+  @apply flex items-center justify-between text-muted-foreground;
+  font-size: 11px;
+}
+
+.languagePluginList {
+  @apply flex min-h-0 flex-col gap-1;
+}
+
+.languagePluginItem {
+  @apply flex min-w-0 items-center gap-2 rounded-md;
+  min-height: 34px;
+  padding: 4px 6px;
+  background: var(--workbench-bg);
+}
+
+.languagePluginIcon {
+  @apply flex shrink-0 items-center justify-center text-muted-foreground;
+  width: 18px;
+}
+
+.languagePluginCopy {
+  @apply flex min-w-0 flex-1 flex-col;
+}
+
+.languagePluginName {
+  @apply truncate font-medium text-foreground;
+  font-size: 11.5px;
+}
+
+.languagePluginMeta {
+  @apply truncate text-muted-foreground;
+  font-size: 10.5px;
+  line-height: 1.2;
+}
+
+.languagePluginItem button {
+  @apply shrink-0;
+  height: 24px;
+  padding-inline: 7px;
+  font-size: 11px;
+}
+
+.actionRunList {
+  @apply flex min-h-0 flex-col gap-1 overflow-auto;
+  padding: 8px;
+  background: var(--workbench-bg);
+}
+
+.actionRunLabel,
+.actionRunEmpty {
+  @apply shrink-0 text-muted-foreground;
+  font-size: 11px;
+}
+
+.actionRunItem {
+  @apply flex min-w-0 flex-col items-stretch gap-0.5 rounded-md;
+  min-height: 32px;
+  padding: 4px 6px;
+  background: var(--workbench-surface);
+  font-size: 11px;
+}
+
+.actionRunMain {
+  @apply flex min-w-0 items-center gap-1.5;
+}
+
+.actionRunStatus {
+  @apply shrink-0 font-medium;
+  color: var(--status-green);
+}
+
+.actionRunItem[data-status='failed'] .actionRunStatus {
+  color: var(--status-red);
+}
+
+.actionRunItem[data-status='dispatched'] .actionRunStatus {
+  color: var(--status-blue);
+}
+
+.actionRunText {
+  @apply min-w-0 truncate text-muted-foreground;
+}
+
+.actionRunMeta {
+  @apply min-w-0 truncate text-muted-foreground;
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.commandPanel {
+  @apply flex shrink-0 flex-col border-t;
+  height: var(--workbench-command-panel-height, 210px);
+  border-color: var(--workbench-border);
+  background: var(--workbench-surface);
+}
+
+.bottomToolWindowSlot .commandPanel {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 100%;
+  height: auto;
+  flex: 1;
+  border-top: 0;
+  background-color: var(--workbench-surface, #ffffff);
+}
+
+.commandPanel[data-collapsed='true'] {
+  height: 36px;
+}
+
+.commandPanel[data-collapsed='true'] .bottomToolShell {
+  align-items: stretch;
+}
+
+.bottomToolShell {
+  @apply grid min-h-0 flex-1;
+  grid-template-columns: 38px minmax(0, 1fr);
+}
+
+.bottomToolRail {
+  @apply flex min-h-0 flex-col items-center gap-1 border-r;
+  padding: 5px 4px;
+  border-color: var(--workbench-border);
+  background: var(--workbench-toolbar);
+}
+
+.bottomToolRailButton {
+  @apply flex shrink-0 items-center justify-center border bg-transparent text-muted-foreground;
+  width: 30px;
+  height: 30px;
+  border-color: transparent;
+  border-radius: var(--workbench-radius);
+}
+
+.bottomToolRailButton:hover:not([data-active='true']) {
+  color: var(--foreground);
+  background: var(--chrome-rail-hover-bg);
+}
+
+.bottomToolRailButton[data-active='true'] {
+  color: var(--foreground);
+  background: var(--chrome-rail-selected-bg);
+  font-weight: 600;
+}
+
+.bottomToolMain {
+  @apply flex min-h-0 min-w-0 flex-1 flex-col;
+  background: var(--workbench-surface);
+}
+
+.bottomToolHeader {
+  @apply flex shrink-0 items-center justify-between gap-2;
+  min-height: 36px;
+  padding-inline: 8px;
+  border-bottom: 0;
+  background: var(--workbench-toolbar);
+}
+
+.bottomToolTitleGroup {
+  @apply flex min-w-0 flex-1 items-center gap-3;
+}
+
+.bottomToolTitle {
+  @apply shrink-0 font-semibold text-foreground;
+  font-size: 12px;
+}
+
+.bottomToolTitleIconButton {
+  @apply flex shrink-0 items-center justify-center border-0 bg-transparent text-muted-foreground;
+  width: 20px;
+  height: 20px;
+  margin-left: -7px;
+  border-radius: var(--workbench-radius);
+}
+
+.bottomToolTitleIconButton:hover {
+  color: var(--workbench-text);
+  background: var(--workbench-hover);
+}
+
+.bottomToolSessionTabs {
+  @apply flex min-w-0 flex-1 items-end gap-1 overflow-x-auto overflow-y-hidden;
+  align-self: stretch;
+  scrollbar-width: thin;
+}
+
+.bottomToolSessionTab {
+  @apply flex min-w-0 shrink-0 items-center gap-1.5 border bg-transparent text-muted-foreground;
+  max-width: min(34vw, 260px);
+  height: 30px;
+  margin-top: 5px;
+  padding-inline: 8px 6px;
+  border-color: transparent;
+  border-bottom-color: transparent;
+  border-radius: var(--workbench-radius) var(--workbench-radius) 0 0;
+  font-size: 12px;
+}
+
+.bottomToolSessionTab:hover,
+.bottomToolSessionTab[data-active='true'] {
+  color: var(--workbench-text);
+  background: var(--workbench-surface-muted);
+}
+
+.bottomToolSessionTab[data-active='true'] {
+  border-color: var(--workbench-border);
+  border-bottom-color: var(--workbench-surface-muted);
+  /* Active accent uses the same blue as the run-console links (a clean
+   * --workbench-editor-hover-link) rather than the washed-out --active-fg. */
+  box-shadow: inset 0 2px 0 var(--workbench-editor-hover-link);
+}
+
+.bottomToolSessionTab span,
+.bottomToolSessionTab [data-slot='text'] {
+  @apply min-w-0 truncate;
+}
+
+.bottomToolSessionTab small {
+  @apply shrink-0 text-muted-foreground;
+  font-size: 10px;
+}
+
+.bottomToolActions {
+  @apply flex shrink-0 items-center gap-1;
+}
+
+.bottomToolBody {
+  @apply flex min-h-0 flex-1 flex-col;
+  background: var(--workbench-surface);
+}
+
+.runToolPane,
+.terminalToolPane,
+.gitBottomPane,
+.problemsBottomPane {
+  @apply flex min-h-0 flex-1 flex-col;
+  background: var(--workbench-surface);
+}
+
+.gitBottomPane .toolWindowPanel,
+.problemsBottomPane .toolWindowPanel {
+  border: 0;
+  border-radius: 0;
+}
+
+.commandHeader {
+  @apply flex shrink-0 items-center justify-between gap-3;
+  min-height: 34px;
+  padding-inline: 10px;
+  border-bottom: 1px solid var(--workbench-border);
+}
+
+.commandHeader > :last-child {
+  @apply shrink-0;
+}
+
+.commandTitleGroup {
+  @apply flex min-w-0 shrink-0 items-center gap-2 text-foreground;
+}
+
+.commandTitle {
+  @apply font-medium;
+  font-size: var(--ui-font-body-sm);
+}
+
+.commandStatus {
+  @apply text-muted-foreground;
+  font-size: 12px;
+}
+
+.commandStatusStale {
+  color: var(--status-amber);
+}
+
+.commandMeta {
+  @apply shrink-0 text-muted-foreground;
+  font-size: 12px;
+}
+
+.commandPromptMark {
+  @apply shrink-0 font-mono text-muted-foreground;
+  font-size: 11.5px;
+}
+
+.commandProblemButton {
+  @apply flex shrink-0 items-center gap-1 border bg-transparent text-left;
+  height: 24px;
+  padding-inline: 7px;
+  border-color: var(--status-red-soft);
+  border-radius: var(--workbench-radius);
+  color: var(--status-red);
+  font-size: 12px;
+}
+
+.commandProblemButton:hover {
+  background: var(--status-red-soft);
+}
+
+.commandHistoryItem {
+  @apply flex min-w-0 max-w-48 items-center gap-1.5 border bg-transparent text-left text-foreground;
+  height: 24px;
+  padding-inline: 7px;
+  border-color: var(--workbench-border);
+  border-radius: var(--workbench-radius);
+  font-size: 12px;
+}
+
+.commandHistoryItem:hover {
+  background: var(--workbench-hover);
+}
+
+.commandHistoryItem:disabled {
+  opacity: 0.55;
+}
+
+.commandConfigItem {
+  @apply flex min-w-0 max-w-40 items-center gap-1.5 border bg-transparent text-left;
+  height: 23px;
+  padding-inline: 7px;
+  border-color: var(--border-strong);
+  border-radius: var(--workbench-radius);
+  color: var(--foreground-secondary);
+  font-size: 12px;
+}
+
+.commandConfigItem:hover {
+  background: var(--chrome-rail-hover-bg);
+}
+
+.commandConfigItem:disabled {
+  opacity: 0.55;
+}
+
+.commandHistoryItem span {
+  @apply truncate;
+}
+
+.commandConfigItem span {
+  @apply truncate;
+}
+
+.commandQuickActions {
+  @apply flex shrink-0 items-center gap-1 overflow-x-auto border-b;
+  min-height: 32px;
+  padding: 4px 8px;
+  border-color: var(--workbench-border);
+  background: var(--workbench-toolbar);
+  scrollbar-width: thin;
+}
+
+.commandOutputScroll {
+  @apply min-h-0 flex-1;
+  background: transparent;
+}
+
+.commandOutput {
+  @apply min-h-full;
+  padding: 9px 12px;
+  --workbench-console-timestamp: var(--foreground);
+  --workbench-console-level-dbg: var(--status-blue-muted);
+  --workbench-console-level-info: var(--status-blue);
+  --workbench-console-level-warn: var(--status-amber);
+  --workbench-console-level-error: var(--status-red);
+  --workbench-console-json-key: color-mix(in srgb, var(--status-amber) 72%, var(--foreground));
+  --workbench-console-string: var(--status-green);
+  --workbench-console-number: var(--ui-metric-hot);
+  --workbench-console-boolean: var(--ui-metric-hot);
+  --workbench-console-stack-fn: color-mix(in srgb, var(--status-blue-muted) 78%, var(--foreground));
+  --workbench-console-stack-path: var(--status-teal);
+}
+
+.commandMetaLine {
+  @apply m-0 truncate text-muted-foreground;
+  padding-bottom: 7px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.commandStdout,
+.commandStderr,
+.commandSystem {
+  @apply m-0 whitespace-pre-wrap break-words font-mono;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.commandStdout {
+  color: var(--foreground);
+}
+
+.commandStderr {
+  color: var(--status-red);
+}
+
+.commandSystem {
+  color: var(--muted-foreground);
+}
+
+.consoleTokenTimestamp {
+  color: var(--workbench-console-timestamp);
+}
+
+.consoleTokenLevelDbg {
+  color: var(--workbench-console-level-dbg);
+}
+
+.consoleTokenLevelInfo {
+  color: var(--workbench-console-level-info);
+}
+
+.consoleTokenLevelWarn {
+  color: var(--workbench-console-level-warn);
+}
+
+.consoleTokenLevelError {
+  color: var(--workbench-console-level-error);
+}
+
+.consoleTokenJsonKey {
+  color: var(--workbench-console-json-key);
+}
+
+.consoleTokenString {
+  color: var(--workbench-console-string);
+}
+
+.consoleTokenNumber {
+  color: var(--workbench-console-number);
+}
+
+.consoleTokenBoolean {
+  color: var(--workbench-console-boolean);
+}
+
+.consoleTokenStackFunction {
+  color: var(--workbench-console-stack-fn);
+}
+
+.consoleTokenStackPath {
+  color: var(--workbench-console-stack-path);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.consoleAnsiBlack {
+  color: color-mix(in srgb, var(--foreground) 55%, var(--background));
+}
+
+.consoleAnsiRed {
+  color: var(--status-red);
+}
+
+.consoleAnsiGreen {
+  color: var(--status-green);
+}
+
+.consoleAnsiYellow {
+  color: var(--status-amber);
+}
+
+.consoleAnsiBlue {
+  color: var(--status-blue);
+}
+
+.consoleAnsiMagenta {
+  color: var(--status-violet);
+}
+
+.consoleAnsiCyan {
+  color: var(--status-teal);
+}
+
+.consoleAnsiWhite {
+  color: var(--foreground);
+}
+
+.consoleAnsiBrightBlack {
+  color: var(--foreground-secondary);
+}
+
+.consoleAnsiBrightRed {
+  color: color-mix(in srgb, var(--status-red) 82%, white);
+}
+
+.consoleAnsiBrightGreen {
+  color: color-mix(in srgb, var(--status-green) 82%, white);
+}
+
+.consoleAnsiBrightYellow {
+  color: color-mix(in srgb, var(--status-amber) 82%, white);
+}
+
+.consoleAnsiBrightBlue {
+  color: color-mix(in srgb, var(--status-blue) 82%, white);
+}
+
+.consoleAnsiBrightMagenta {
+  color: color-mix(in srgb, var(--status-violet) 82%, white);
+}
+
+.consoleAnsiBrightCyan {
+  color: color-mix(in srgb, var(--status-teal) 82%, white);
+}
+
+.consoleAnsiBrightWhite {
+  color: var(--foreground);
+}
+
+.commandEmpty {
+  color: color-mix(in srgb, var(--workbench-text-muted) 78%, transparent);
+  padding: 12px 14px;
+  font-size: 12px;
+}
+
+.commandEmptyInline {
+  @apply px-1 text-muted-foreground;
+  font-size: 12px;
+}
+
+.terminalToolHeader {
+  @apply flex shrink-0 items-center justify-between gap-3;
+  min-height: 32px;
+  padding-inline: 12px 8px;
+  border-bottom: 0;
+  background: var(--workbench-toolbar);
+}
+
+.terminalToolHeaderLeading,
+.terminalToolHeaderTrailing {
+  @apply flex min-w-0 items-center;
+}
+
+.terminalToolHeaderLeading {
+  flex: 1 1 auto;
+  gap: 10px;
+}
+
+.terminalToolHeaderTrailing {
+  flex: 0 0 auto;
+  gap: 2px;
+}
+
+.terminalToolHeaderLabel {
+  @apply shrink-0 text-foreground;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.terminalSessionTabStrip {
+  @apply flex min-w-0 flex-1 items-stretch gap-0 overflow-x-auto overflow-y-hidden;
+  align-self: stretch;
+  scrollbar-width: thin;
+}
+
+.terminalSessionTab {
+  @apply relative flex min-w-0 shrink-0 items-center gap-1 border-0 bg-transparent text-muted-foreground;
+  max-width: min(34vw, 220px);
+  height: 100%;
+  padding-inline: 10px 8px;
+  font-size: 12px;
+}
+
+.terminalSessionTab::after {
+  content: '';
+  position: absolute;
+  right: 10px;
+  bottom: 0;
+  left: 10px;
+  height: 2px;
+  border-radius: 999px 999px 0 0;
+  background: transparent;
+}
+
+.terminalSessionTab:hover {
+  color: var(--workbench-text);
+}
+
+.terminalSessionTab[data-active='true'] {
+  color: var(--workbench-text);
+}
+
+.terminalSessionTab[data-active='true']::after {
+  background: var(--workbench-tab-accent-line);
+}
+
+.terminalSessionTabLabel {
+  @apply min-w-0 truncate;
+}
+
+.terminalSessionTabMeta {
+  @apply shrink-0 text-muted-foreground;
+  font-size: 10px;
+}
+
+.terminalSessionTabClose {
+  @apply flex shrink-0 items-center justify-center rounded-sm text-muted-foreground;
+  width: 16px;
+  height: 16px;
+}
+
+.terminalSessionTabClose:hover {
+  color: var(--workbench-text);
+  background: var(--workbench-hover);
+}
+
+.terminalSessionTab[data-kind='run'] {
+  height: 32px;
+  align-items: center;
+  gap: 6px;
+  padding-inline: 9px 7px;
+  border-radius: var(--workbench-radius) var(--workbench-radius) 0 0;
+  line-height: 1;
+}
+
+.terminalSessionTab[data-kind='run'][data-active='true'] {
+  box-shadow: none;
+}
+
+.terminalSessionTab[data-kind='run'] .terminalSessionTabLabel {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+}
+
+.terminalSessionTab[data-kind='run'] .terminalSessionTabClose {
+  width: 16px;
+  height: 18px;
+  align-items: center;
+  margin-left: 1px;
+}
+
+.runSessionTabIcon {
+  position: relative;
+  display: inline-flex;
+  width: 16px;
+  height: 18px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  color: var(--status-red);
+}
+
+.runSessionTabRunningDot {
+  position: absolute;
+  top: 1px;
+  right: 0;
+  width: 6px;
+  height: 6px;
+  border: 1px solid var(--workbench-toolbar);
+  border-radius: 999px;
+  background: var(--status-green);
+}
+
+.terminalToolHeaderTabActions {
+  @apply flex shrink-0 items-center gap-0.5;
+}
+
+.terminalToolHeaderIconButton {
+  color: var(--workbench-text-muted);
+}
+
+.terminalToolHeaderIconButton:hover {
+  color: var(--workbench-text);
+  background: var(--workbench-hover);
+}
+
+/* 运行卡工具条：重启 / 终止，紧邻折叠按钮左侧，用竖线分隔。 */
+.runToolbar {
+  @apply flex shrink-0 items-center gap-0.5;
+  margin-right: 4px;
+  padding-right: 4px;
+  border-right: 1px solid var(--workbench-border);
+}
+
+.rightToolRunStopIcon {
+  color: currentColor;
+}
+
+.terminalOutputScroll {
+  @apply min-h-0 flex-1;
+  background: var(--workbench-surface);
+}
+
+.terminalOutput {
+  @apply min-h-full;
+  padding: 8px 12px;
+  --workbench-console-timestamp: var(--foreground);
+  --workbench-console-level-dbg: var(--status-blue-muted);
+  --workbench-console-level-info: var(--status-blue);
+  --workbench-console-level-warn: var(--status-amber);
+  --workbench-console-level-error: var(--status-red);
+  --workbench-console-json-key: color-mix(in srgb, var(--status-amber) 72%, var(--foreground));
+  --workbench-console-string: var(--status-green);
+  --workbench-console-number: var(--ui-metric-hot);
+  --workbench-console-boolean: var(--ui-metric-hot);
+  --workbench-console-stack-fn: color-mix(in srgb, var(--status-blue-muted) 78%, var(--foreground));
+  --workbench-console-stack-path: var(--status-teal);
+}
+
+.terminalPromptRow {
+  @apply flex min-w-0 items-center;
+  margin-top: 2px;
+}
+
+.terminalPromptLabel {
+  @apply shrink-0 whitespace-pre font-mono text-foreground;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.terminalPromptField {
+  @apply relative flex min-w-0 flex-1 items-center;
+  overflow: hidden;
+}
+
+.terminalPromptInput {
+  @apply relative z-10 w-full min-w-0 border-0 bg-transparent p-0 font-mono text-foreground outline-none;
+  font-size: 12px;
+  line-height: 1.5;
+  /* Native caret is a thin I-beam and can't be widened; hide it and draw a
+   * block caret below. Monospace makes `1ch` the exact cell width, so the caret
+   * sits precisely on the character index. */
+  caret-color: transparent;
+}
+
+.terminalPromptCaret {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  z-index: 20;
+  width: 4px;
+  height: 1.05em;
+  translate: 0 -50%;
+  border-radius: 1px;
+  background: var(--foreground);
+  pointer-events: none;
+  opacity: 0;
+  /*
+   * Horizontal position is transform: translateX(<index>ch). `ch` is the "0"
+   * advance in THIS element's font, so it must match the input exactly (mono,
+   * 12px) — otherwise the block drifts away from the typed text by a fraction of
+   * a cell per character, reading as an off-by-a-space gap.
+   */
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.terminalPromptField:focus-within .terminalPromptCaret {
+  animation: terminalPromptCaretBlink 1.06s steps(1, start) infinite;
+}
+
+@keyframes terminalPromptCaretBlink {
+  0%,
+  50% {
+    opacity: 1;
+  }
+  50.01%,
+  100% {
+    opacity: 0;
+  }
+}
+
+.terminalOutput pre,
+.terminalOutputLine {
+  @apply m-0 whitespace-pre-wrap break-words font-mono text-foreground;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.terminalOutput pre[data-stream='stderr'],
+.terminalOutputLine[data-stream='stderr'] {
+  color: var(--status-red);
+}
+
+.terminalOutput pre[data-stream='system'],
+.terminalOutputLine[data-stream='system'] {
+  color: var(--muted-foreground);
+}
+
+.terminalOutput pre[data-stream='input'],
+.terminalOutputLine[data-stream='input'] {
+  color: var(--foreground);
+}
+
+/* 控制台可点击链接：下划线 + 末尾外链图标。 */
+.consoleLink {
+  color: var(--status-blue);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.consoleLink:hover {
+  color: color-mix(in srgb, var(--status-blue) 78%, var(--foreground));
+}
+
+.consoleLinkExternal {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 3px;
+  color: var(--status-blue);
+  vertical-align: middle;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.consoleLinkExternal:hover {
+  opacity: 1;
+}
+
+/*
+ * 运行控制台专属配色：不要红/橙，改蓝/绿（终端面板不加 .runConsole，保留真彩）。
+ * 选择器带 .runConsole + 类 + attr，特异性高于 .terminalOutput pre[data-stream]。
+ */
+.runConsole .terminalOutputLine[data-stream='stderr'],
+.runConsole .consoleTokenLevelError,
+.runConsole .consoleAnsiRed,
+.runConsole .consoleAnsiBrightRed {
+  color: var(--status-blue);
+}
+
+.runConsole .consoleTokenLevelWarn,
+.runConsole .consoleAnsiYellow,
+.runConsole .consoleAnsiBrightYellow {
+  color: var(--status-green);
+}
+
+/*
+ * 只有可点击链接用真蓝，其余 token 保持原色。--status-blue 在单色设计里别名到
+ * --primary，暗色下会退成灰、不是蓝，所以链接单独指到编辑器语法配色的 link 真蓝
+ * （随主题明暗自适应）。
+ */
+.runConsole .consoleLink,
+.runConsole .consoleLinkExternal {
+  color: var(--workbench-editor-hover-link);
+}
+
+.runConsole .consoleLink:hover {
+  color: color-mix(in srgb, var(--workbench-editor-hover-link) 78%, var(--foreground));
+}
+
+.terminalInputForm {
+  @apply relative flex shrink-0 items-center gap-2 border-t;
+  min-height: 34px;
+  padding-inline: 10px;
+  border-color: var(--workbench-border);
+  background: var(--workbench-surface-muted);
+}
+
+.terminalInputForm [data-slot='input'] {
+  @apply min-w-0 flex-1 border-0 bg-transparent font-mono text-foreground outline-none;
+  height: 28px;
+  font-size: 12px;
+}
+
+.terminalInputForm [data-slot='button'] {
+  @apply flex shrink-0 items-center justify-center border-0 bg-transparent text-muted-foreground;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--workbench-radius);
+}
+
+.terminalInputForm [data-slot='button']:hover {
+  color: var(--workbench-text);
+  background: var(--workbench-hover);
+}
+
+.terminalInputForm [data-slot='button']:disabled {
+  opacity: 0.45;
+}
+
+.terminalSuggestionMenu {
+  @apply absolute left-8 z-20 flex min-w-80 flex-col border bg-card shadow-lg;
+  bottom: 32px;
+  max-width: min(620px, calc(100% - 48px));
+  max-height: 220px;
+  overflow: auto;
+  border-color: var(--workbench-border);
+  border-radius: var(--workbench-radius-lg);
+  padding: 4px;
+}
+
+.terminalSuggestionMenu button {
+  @apply flex w-full min-w-0 items-center justify-between gap-4 border-0 bg-transparent text-left;
+  min-height: 28px;
+  padding-inline: 8px;
+  border-radius: var(--workbench-radius);
+  color: var(--workbench-text);
+  font-size: 12px;
+}
+
+.terminalSuggestionMenu button:hover,
+.terminalSuggestionMenu button[data-active='true'] {
+  background: var(--workbench-selection-bg);
+}
+
+.terminalSuggestionMenu span {
+  @apply min-w-0 truncate font-mono;
+}
+
+.terminalSuggestionMenu small {
+  @apply shrink-0 text-muted-foreground;
+  font-size: 10.5px;
+}
+
+.spinIcon {
+  @apply animate-spin;
+}

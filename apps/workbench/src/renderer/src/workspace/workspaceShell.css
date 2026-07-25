@@ -1,0 +1,132 @@
+/** 工作台外框外貌层（过渡形态）：顶栏项目标识 + 待装配舞台。语义令牌，无裸色值。 */
+
+.workbench-workspace-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--background);
+  color: var(--foreground);
+}
+
+.workbench-workspace-shell__top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 16px;
+  border-bottom: var(--ui-border-width-default) var(--ui-border-style) var(--border);
+}
+
+.workbench-workspace-shell__identity {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+.workbench-workspace-shell__path {
+  color: var(--foreground-tertiary);
+}
+
+.workbench-workspace-shell__stage {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+/* 薄垂直切片：文件树 + 只读查看双栏。 */
+
+.workbench-files-pane {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.workbench-files-pane__tree {
+  width: 280px;
+  flex-shrink: 0;
+  overflow: auto;
+  padding: 8px 4px;
+  border-right: var(--ui-border-width-default) var(--ui-border-style) var(--border);
+}
+
+.workbench-files-pane__error {
+  display: block;
+  padding: 8px;
+  color: var(--destructive);
+}
+
+.workbench-files-pane__level {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.workbench-files-pane__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 3px 8px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--foreground);
+  font-size: 13px;
+  line-height: 17px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.workbench-files-pane__row:hover {
+  background: var(--background-muted);
+}
+
+.workbench-files-pane__row--selected {
+  background: var(--background-muted-strong);
+}
+
+.workbench-files-pane__row-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workbench-files-pane__caret-placeholder {
+  width: 12px;
+  flex-shrink: 0;
+}
+
+.workbench-files-pane__viewer {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.workbench-files-pane__viewer-header {
+  padding: 8px 16px;
+  border-bottom: var(--ui-border-width-default) var(--ui-border-style) var(--border);
+}
+
+.workbench-files-pane__viewer-empty {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+}
+
+.workbench-files-pane__code {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 12px 16px;
+  overflow: auto;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 12px;
+  line-height: 18px;
+  white-space: pre;
+  color: var(--foreground);
+  background: var(--background);
+}

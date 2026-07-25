@@ -1,0 +1,285 @@
+.workbenchTopToolbar {
+  @apply flex shrink-0 items-center justify-between gap-3 border-b;
+  min-height: 36px;
+  padding-inline: 10px 12px;
+  border-color: var(--workbench-border);
+  background: var(--workbench-toolbar);
+  -webkit-app-region: no-drag;
+}
+
+.ideUnifiedTopBar {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding-inline: 2px 12px;
+  border-bottom: 1px solid var(--workbench-border);
+  background: var(--workbench-toolbar);
+}
+
+.workbenchShell[data-standalone='true'] .ideUnifiedTopBar,
+.workbenchShell[data-standalone='true'] .panelHeader,
+.workbenchShell[data-standalone='true'] .leftToolRailColumn {
+  -webkit-app-region: drag;
+}
+
+.workbenchShell[data-standalone='true'] .ideUnifiedTopLeading,
+.workbenchShell[data-standalone='true'] .ideUnifiedTopTrailing,
+.workbenchShell[data-standalone='true'] .editorTabBar,
+.workbenchShell[data-standalone='true'] .bottomToolWindowSlot,
+.workbenchShell[data-standalone='true'] .panelHeader button,
+.workbenchShell[data-standalone='true'] .panelHeader [data-slot='button'],
+.workbenchShell[data-standalone='true'] .panelTitleButton,
+.workbenchShell[data-standalone='true'] .leftToolButton,
+.workbenchShell[data-standalone='true'] .searchBar,
+.workbenchShell[data-standalone='true'] .treeActionForm {
+  -webkit-app-region: no-drag;
+}
+
+.ideUnifiedTopLeading {
+  flex: 0 1 auto;
+  display: flex;
+  min-width: 0;
+  max-width: min(420px, 38vw);
+  align-items: center;
+}
+
+.ideUnifiedTopSpacer {
+  flex: 1 1 0%;
+  min-width: 0;
+}
+
+.ideUnifiedTopTrailing {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.topToolbarLeft,
+.topToolbarRight,
+.topGitControl {
+  @apply flex min-w-0 items-center gap-1.5;
+}
+
+.topToolbarLeft {
+  @apply flex-1 justify-start;
+}
+
+.topToolbarRight {
+  @apply shrink-0 justify-end;
+}
+
+.topGitControl {
+  @apply text-muted-foreground;
+}
+
+.topGitPlaceholder {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  height: 26px;
+  align-items: center;
+  overflow: hidden;
+  border-radius: var(--workbench-radius);
+  color: var(--workbench-text-muted);
+  font-size: 11px;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.topRunButton {
+  color: var(--status-green);
+  border-radius: var(--workbench-radius);
+  width: 28px;
+  height: 28px;
+}
+
+.topToolbarIconButton {
+  color: var(--workbench-text-muted);
+  border-radius: var(--workbench-radius);
+}
+
+.topToolbarIconButton:hover {
+  color: var(--workbench-text);
+  background: var(--workbench-hover);
+}
+
+.topRunButton:hover {
+  color: color-mix(in oklab, var(--status-green) 94%, black);
+  background: var(--status-green-soft);
+}
+
+.topRunButton:disabled {
+  color: var(--workbench-text-muted);
+}
+
+.runActionPopover {
+  /* z above the chat empty-state watermark so the panel never shows through. */
+  z-index: 60;
+  width: min(280px, calc(100vw - 24px));
+  padding: 5px;
+  border: 1px solid var(--workbench-border);
+  border-radius: 8px;
+  /* --workbench-surface-elevated was never defined → the panel rendered with no
+   * background (transparent) and the watermark bled through. Use the real,
+   * theme-aware surface token so the panel is opaque in light and dark. */
+  background: var(--workbench-surface);
+  box-shadow: var(--shadow-lg);
+}
+
+.runActionPanel {
+  display: flex;
+  max-height: min(320px, calc(100vh - 48px));
+  flex-direction: column;
+  gap: 2px;
+  overflow: auto;
+}
+
+.runActionOption {
+  display: grid;
+  width: 100%;
+  min-height: 38px;
+  grid-template-columns: minmax(0, 1fr) 14px;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 7px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--workbench-text);
+  text-align: left;
+}
+
+.runActionOption:hover,
+.runActionOption:focus-visible {
+  outline: none;
+  background: var(--workbench-hover);
+}
+
+.runActionOptionActive {
+  background: var(--status-green-soft);
+  color: color-mix(in oklab, var(--status-green) 88%, black);
+}
+
+.runActionOptionMeta,
+.runActionTooltip {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.runActionOptionLabel,
+.runActionTooltipTitle {
+  overflow: hidden;
+  color: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.runActionOptionDescription,
+.runActionTooltipDescription {
+  overflow: hidden;
+  color: var(--workbench-text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.runActionOptionCheck {
+  color: var(--status-green);
+}
+
+.runActionConfig {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 4px 5px 7px;
+  border-bottom: 1px solid var(--workbench-border);
+}
+
+.runActionConfigLabel {
+  color: var(--workbench-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.runActionConfigRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.runActionConfigInput {
+  min-width: 0;
+  flex: 1 1 auto;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  /*
+   * The default Input variant tints its fill with --control-themed-*, which in
+   * the workbench derives from --workbench-active-soft (the accent = blue). Pin
+   * this field to the neutral control surface so focusing it doesn't paint the
+   * background blue — it keeps its own neutral color.
+   */
+  --control-themed-bg: var(--workbench-control-bg);
+  --control-themed-hover-bg: var(--workbench-control-bg);
+  --control-themed-open-bg: var(--workbench-control-bg);
+}
+
+.runActionConfigSave {
+  flex: 0 0 auto;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--status-green-soft);
+  color: color-mix(in oklab, var(--status-green) 88%, black);
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 26px;
+}
+
+.runActionConfigSave:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--status-green-soft) 78%, var(--status-green));
+}
+
+.runActionConfigSave:disabled {
+  opacity: 0.45;
+}
+
+.runActionSectionLabel {
+  padding: 5px 7px 2px;
+  color: var(--workbench-text-muted);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.runActionReset {
+  width: 100%;
+  margin-top: 2px;
+  padding: 6px 7px;
+  border: 0;
+  border-top: 1px solid var(--workbench-border);
+  border-radius: 0 0 6px 6px;
+  background: transparent;
+  color: var(--workbench-text-muted);
+  font-size: 11.5px;
+  text-align: left;
+}
+
+.runActionReset:hover,
+.runActionReset:focus-visible {
+  outline: none;
+  background: var(--workbench-hover);
+  color: var(--workbench-text);
+}

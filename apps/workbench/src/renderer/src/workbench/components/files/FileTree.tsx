@@ -1,0 +1,310 @@
+import {
+  type MouseEvent,
+  type ReactElement,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
+import type { NodeApi, NodeRendererProps, TreeApi } from 'react-arborist'
+import { Tree } from 'react-arborist'
+
+import { isBlank, isEmpty } from '@velaros/core'
+import type { WorkbenchDirectoryEntry } from '@velaros/core/types'
+import { useWorkbenchI18n } from '@velaros/workbench/i18n'
+import {
+  buildTreeNodes,
+  createOpenState,
+  type FileTreeNodeData,
+  ROW_HEIGHT,
+  TREE_INDENT,
+  TREE_OVERSCAN_COUNT,
+} from '@velaros/workbench/models/files/fileTree.model'
+import type { WorkbenchGitDecorationMap } from '@velaros/workbench/models/git/workbenchGitModel'
+import { ROOT_PATH } from '@velaros/workbench/models/shared/workbenchUtils'
+
+import { useFileTreeActions } from '../../hooks/useFileTreeActions'
+import styles from '../../styles/workbenchPageStyles'
+
+import {
+  FileTreeRow,
+  FileTreeRowRuntimeContext,
+} from './FileTreeRow'
+
+export type { FileTreeNodeData }
+
+export type FileTreeApi = TreeApi<FileTreeNodeData>
+
+interface FileTreeProps {
+  entries: WorkbenchDirectoryEntry[]
+  selectedPath: Nullable<string>
+  expandedPaths: Set<string>
+  childrenByPath: Map<string, WorkbenchDirectoryEntry[]>
+  gitDecorations: WorkbenchGitDecorationMap
+  searchTerm?: string
+  isMutatingTree: boolean
+  onTreeApiChange?: (api: Nullable<FileTreeApi>) => void
+  onSetDirectoryOpen: (path: string, open: boolean) => void
+  onSelectEntryPath: (path: Nullable<string>) => void
+  onSelectFile: (path: string) => void
+  onContextMenuEntry: (entry: WorkbenchDirectoryEntry, event: MouseEvent) => void
+  onCreateEntry: (
+    type: WorkbenchDirectoryEntry['type'],
+    parentEntry: Nullable<WorkbenchDirectoryEntry>,
+    name: string
+  ) => Promise<Nullable<WorkbenchDirectoryEntry>>
+  onRenameEntry: (
+    entry: WorkbenchDirectoryEntry,
+    name: string
+  ) => Promise<Nullable<WorkbenchDirectoryEntry>>
+  onDeleteEntries: (entries: WorkbenchDirectoryEntry[]) => Promise<void>
+  onMoveEntries: (
+    entries: WorkbenchDirectoryEntry[],
+    parentEntry: Nullable<WorkbenchDirectoryEntry>,
+    index: number
+  ) => Promise<void>
+}
+
+function renderFileTreeNode(props: NodeRendererProps<FileTreeNodeData>): ReactElement {
+  return <FileTreeRow {...props} />
+}
+
+function matchFileTreeSearch(node: NodeApi<FileTreeNodeData>, normalizedTerm: string): boolean {
+  if (isBlank(normalizedTerm)) return true
+
+  return (
+    node.data.name.toLowerCase().includes(normalizedTerm) ||
+    node.data.entry.path.toLowerCase().includes(normalizedTerm)
+  )
+}
+
+export function FileTree({
+  entries,
+  selectedPath,
+  expandedPaths,
+  childrenByPath,
+  gitDecorations,
+  searchTerm = '',
+  isMutatingTree,
+  onTreeApiChange,
+  onSetDirectoryOpen,
+  onSelectEntryPath,
+  onSelectFile,
+  onContextMenuEntry,
+  onCreateEntry,
+  onRenameEntry,
+  onDeleteEntries,
+  onMoveEntries,
+}: FileTreeProps): ReactElement {
+  const { t } = useWorkbenchI18n()
+  const treeRef = useRef<FileTreeApi>(null)
+  const selectionOriginRef = useRef<'tree'>(null)
+  const syncingOpenStateRef = useRef(false)
+  const openStateChangedInTreeRef = useRef(false)
+
+  const {
+    setTreeShell,
+    treeSize,
+    setTreeRef,
+    handleTreeContextMenuEntry,
+    handleTreeActivate,
+    handleTreeSelect,
+    handleTreeToggle,
+    handleTreeCreate,
+    handleTreeRename,
+    handleTreeDelete,
+    handleTreeMove,
+  } = useFileTreeActions({
+    childrenByPath,
+    treeRef,
+    selectionOriginRef,
+    syncingOpenStateRef,
+    onTreeApiChange,
+    onSetDirectoryOpen,
+    onSelectEntryPath,
+    onSelectFile,
+    onContextMenuEntry,
+    onCreateEntry,
+    onRenameEntry,
+    onDeleteEntries,
+    onMoveEntries,
+  })
+
+  const treeData = useMemo(
+    () => buildTreeNodes(entries, childrenByPath, expandedPaths),
+    [childrenByPath, entries, expandedPaths]
+  )
+  const [initialOpenState] = useState(() => createOpenState(expandedPaths))
+  const normalizedSearchTerm = useMemo(() => searchTerm.trim().toLowerCase(), [searchTerm])
+  // @arch-guard:suspend velaros/code-style/prefer-meaningful-use-memo 理由：Context value 的引用稳定性用于阻止文件选择时刷新全部可见树行。
+  const rowRuntime = useMemo(
+    () => ({
+      collapseDirectoryLabel: t('workbench.treeCollapseFolder'),
+      expandDirectoryLabel: t('workbench.treeExpandFolder'),
+      gitDecorations,
+      isMutatingTree,
+      onContextMenuEntry: handleTreeContextMenuEntry,
+    }),
+    [gitDecorations, handleTreeContextMenuEntry, isMutatingTree, t]
+  )
+  const disableTreeEntryMutation = useCallback(
+    (data: FileTreeNodeData) => isMutatingTree || data.entry.path === ROOT_PATH,
+    [isMutatingTree]
+  )
+  const disableTreeDrop = useCallback(
+    ({
+      parentNode,
+      dragNodes,
+    }: {
+      parentNode: NodeApi<FileTreeNodeData>
+      dragNodes: Array<NodeApi<FileTreeNodeData>>
+    }): boolean => {
+      if (isMutatingTree || !parentNode || parentNode.data.entry.type !== 'directory') return true
+
+      return dragNodes.some(
+        (dragNode) => parentNode.id === dragNode.id || parentNode.id.startsWith(`${dragNode.id}/`)
+      )
+    },
+    [isMutatingTree]
+  )
+  const handleTreeToggleFromTree = useCallback(
+    (id: string): void => {
+      if (!syncingOpenStateRef.current) openStateChangedInTreeRef.current = true
+      handleTreeToggle(id)
+    },
+    [handleTreeToggle]
+  )
+
+  useEffect(() => {
+    const tree = treeRef.current
+    if (!tree) return
+    if (openStateChangedInTreeRef.current) {
+      openStateChangedInTreeRef.current = false
+      return
+    }
+
+    syncingOpenStateRef.current = true
+    try {
+      tree.visibleNodes.forEach((node) => {
+        if (node.data.entry.type === 'directory' && node.isOpen && !expandedPaths.has(node.id)) {
+          tree.close(node.id)
+        }
+      })
+      expandedPaths.forEach((path) => {
+        const node = tree.get(path)
+        if (node && node.data.entry.type === 'directory' && !node.isOpen) tree.open(path)
+      })
+    } finally {
+      syncingOpenStateRef.current = false
+    }
+  }, [expandedPaths, treeData])
+
+  useEffect(() => {
+    const tree = treeRef.current
+    if (!tree) return
+
+    if (selectionOriginRef.current === 'tree') {
+      selectionOriginRef.current = null
+      return
+    }
+
+    if (selectedPath) {
+      if (tree.get(selectedPath)) {
+        tree.select(selectedPath, { focus: false })
+      }
+      return
+    }
+
+    tree.deselectAll()
+  }, [selectedPath])
+
+  return (
+    <div ref={setTreeShell} className={styles.arboristTreeShell}>
+      <FileTreeRowRuntimeContext.Provider value={rowRuntime}>
+        <Tree<FileTreeNodeData>
+          ref={setTreeRef}
+          data={treeData}
+          idAccessor="id"
+          childrenAccessor="children"
+          rowHeight={ROW_HEIGHT}
+          overscanCount={TREE_OVERSCAN_COUNT}
+          indent={TREE_INDENT}
+          width={treeSize.width}
+          height={treeSize.height}
+          initialOpenState={initialOpenState}
+          disableEdit={disableTreeEntryMutation}
+          disableDrag={disableTreeEntryMutation}
+          disableDrop={disableTreeDrop}
+          searchTerm={normalizedSearchTerm}
+          searchMatch={matchFileTreeSearch}
+          onActivate={handleTreeActivate}
+          onSelect={handleTreeSelect}
+          onToggle={handleTreeToggleFromTree}
+          onCreate={handleTreeCreate}
+          onRename={handleTreeRename}
+          onDelete={handleTreeDelete}
+          onMove={handleTreeMove}
+          className={styles.arboristTreeList}
+          rowClassName={styles.arboristTreeVirtualRow}
+        >
+          {renderFileTreeNode}
+        </Tree>
+      </FileTreeRowRuntimeContext.Provider>
+    </div>
+  )
+}
+
+export function createTreeEntry(
+  tree: Nullable<FileTreeApi>,
+  type: WorkbenchDirectoryEntry['type']
+): void {
+  if (type === 'directory') {
+    void tree?.create({ type: 'internal' })
+    return
+  }
+
+  void tree?.create({ type: 'leaf' })
+}
+
+export function renameSelectedTreeEntry(tree: Nullable<FileTreeApi>): void {
+  const node = tree?.mostRecentNode
+  if (!node || node.data.entry.path === ROOT_PATH) return
+
+  void tree?.edit(node)
+}
+
+export function deleteSelectedTreeEntries(tree: Nullable<FileTreeApi>): void {
+  if (!tree) return
+
+  const selectedIds = [...tree.selectedIds].filter((id) => id !== ROOT_PATH)
+  if (isEmpty(selectedIds)) return
+
+  void tree.delete(selectedIds)
+}
+
+export function openAllTreeEntries(
+  tree: Nullable<FileTreeApi>,
+  onSetDirectoryOpen: (path: string, open: boolean) => void
+): void {
+  if (!tree) return
+
+  tree.openAll()
+  tree.visibleNodes
+    .filter((node) => node.data.entry.type === 'directory')
+    .forEach((node) => onSetDirectoryOpen(node.id, true))
+}
+
+export function closeAllTreeEntries(
+  tree: Nullable<FileTreeApi>,
+  expandedPaths: Set<string>,
+  onSetDirectoryOpen: (path: string, open: boolean) => void
+): void {
+  tree?.closeAll()
+  void tree?.open(ROOT_PATH)
+  expandedPaths.forEach((path) => {
+    if (path !== ROOT_PATH) {
+      onSetDirectoryOpen(path, false)
+    }
+  })
+}

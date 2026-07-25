@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@velaros/workbench": ["./packages/workbench/src/index.ts"],
+      "@velaros/workbench/*": ["./packages/workbench/src/*"]
+    }
+  },
+  "files": []
+}

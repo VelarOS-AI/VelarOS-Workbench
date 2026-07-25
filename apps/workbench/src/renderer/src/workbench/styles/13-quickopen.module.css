@@ -1,0 +1,107 @@
+.quickOpenOverlay {
+  @apply fixed inset-0 z-50 flex justify-center;
+  padding: 12vh 16px 16px;
+  background: color-mix(in oklab, var(--foreground) 16%, transparent);
+}
+
+.quickOpenDialog {
+  @apply flex w-full max-w-2xl flex-col overflow-hidden border bg-card shadow-xl;
+  height: min(476px, 72vh);
+  border-color: var(--workbench-border);
+  border-radius: var(--workbench-radius-lg);
+}
+
+.quickOpenHeader {
+  @apply flex shrink-0 items-center justify-between gap-3 border-b;
+  min-height: 44px;
+  padding: 8px 12px;
+  border-color: var(--workbench-border);
+  background: var(--workbench-toolbar);
+}
+
+.quickOpenHeader div {
+  @apply min-w-0;
+}
+
+.quickOpenHeader [data-slot='title'] {
+  @apply m-0 truncate font-semibold text-foreground;
+  font-size: 12.5px;
+}
+
+.quickOpenHeader [data-slot='text'] {
+  @apply truncate text-muted-foreground;
+  font-size: 11px;
+}
+
+.quickOpenInputRow {
+  @apply flex shrink-0 items-center gap-2 border-b text-muted-foreground;
+  min-height: 46px;
+  padding-inline: 12px;
+  border-color: var(--workbench-border);
+}
+
+.quickOpenInput {
+  @apply min-w-0 flex-1 bg-transparent text-foreground outline-none;
+  font-size: 14px;
+}
+
+.quickOpenList {
+  @apply flex min-h-0 flex-1 flex-col overflow-auto;
+  padding: 6px;
+}
+
+.quickOpenItem {
+  @apply flex min-w-0 items-center gap-2 border-0 bg-transparent text-left;
+  min-height: 54px;
+  padding: 6px 8px;
+  border-radius: var(--workbench-radius);
+  color: var(--foreground-secondary);
+}
+
+.quickOpenItem[data-active='true'] {
+  background: var(--workbench-selection-bg);
+  color: var(--foreground);
+}
+
+.quickOpenItemCopy {
+  @apply flex min-w-0 flex-1 flex-col;
+  gap: 2px;
+}
+
+.quickOpenItemName {
+  @apply truncate font-medium text-foreground;
+  font-size: 12px;
+}
+
+.quickOpenItemPath {
+  @apply truncate text-muted-foreground;
+  font-size: 11px;
+}
+
+.quickOpenItemMeta {
+  @apply shrink-0 text-muted-foreground;
+  font-size: 11px;
+}
+
+.quickOpenItem[data-open='true'] .quickOpenItemMeta {
+  color: var(--status-green);
+}
+
+.quickOpenEmpty {
+  @apply text-muted-foreground;
+  padding: 14px;
+  font-size: 12px;
+}
+
+.workbenchSettingsOverlay {
+  position: absolute;
+  inset: 0;
+  /* Sits above all inline workbench chrome (max z-index 40) but below the
+     body-portaled overlay layer (dialogs/popovers/select menus at z-index 50),
+     so the settings dropdowns render on top of this fullscreen page instead of
+     behind it. */
+  z-index: 45;
+  display: flex;
+  background: var(--workbench-bg);
+  -webkit-app-region: no-drag;
+}
