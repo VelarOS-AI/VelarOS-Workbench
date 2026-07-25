@@ -14,15 +14,12 @@ import {
   registerLanguageGrammarScheme,
 } from './resources/languageGrammarProtocol'
 import { registerWorkbenchGitIpc } from './workspace/git/WorkbenchGitIpc'
-import { WorkbenchGitService } from './workspace/git/WorkbenchGitService'
-import { WorkbenchLanguageServiceWorkerClient } from './workspace/language/LanguageServiceWorkerClient'
 import { registerWorkbenchLanguageServiceIpc } from './workspace/language/WorkbenchLanguageServiceIpc'
-import { createWorkbenchAppParts } from './workspace/Parts'
 import { registerWorkbenchTerminalIpc } from './workspace/terminal/WorkbenchTerminalIpc'
-import { WorkbenchFileWatcher } from './workspace/watch/WorkbenchFileWatcher'
 import { registerWorkbenchWatchIpc } from './workspace/watch/WorkbenchWatchIpc'
 import { registerWorkbenchFsIpc } from './workspace/WorkbenchFsIpc'
-import { WorkbenchProjectFileSystem } from './workspace/WorkbenchProjectFileSystem'
+import { registerWorkbenchWorkspaceIpc } from './workspace/WorkbenchWorkspaceIpc'
+import { createDefaultWorkbenchMainCapabilityProviders } from './WorkbenchMainCapabilityProviders'
 
 /**
  * 独立 VelarOS Workbench 应用的主进程。
@@ -95,7 +92,7 @@ function createWorkbenchWindow(hub: WorkbenchProjectHub): void {
  */
 function installLanguageServiceProjectLifecycle(
   hub: WorkbenchProjectHub,
-  client: WorkbenchLanguageServiceWorkerClient
+  client: ReturnType<typeof createDefaultWorkbenchMainCapabilityProviders>['language']
 ): void {
   let activeProjectRoot = hub.getState().currentProject?.path ?? null
 
@@ -112,23 +109,26 @@ void app.whenReady().then(() => {
   const dataRootDir = resolveWorkbenchDataRootDir()
   const hub = new WorkbenchProjectHub(dataRootDir)
   registerProjectHubIpc(hub)
+  const providers = createDefaultWorkbenchMainCapabilityProviders(dataRootDir)
   const kernelRuntime = new WorkbenchKernelClientRuntime()
-  const disposeKernelIpc = registerWorkbenchKernelIpc(kernelRuntime)
+  const disposeKernelIpc = registerWorkbenchKernelIpc(
+    kernelRuntime,
+    providers.kernelRoutes
+  )
   void kernelRuntime.start()
-  const parts = createWorkbenchAppParts(dataRootDir)
   const languageGrammarInstaller = new LanguageGrammarInstaller({
-    installRoot: () => parts.storagePaths.getLanguageGrammarsDir(),
+    installRoot: () => providers.parts.storagePaths.getLanguageGrammarsDir(),
   })
   registerLanguageGrammarProtocol(languageGrammarInstaller)
   const disposeLanguageGrammarIpc = registerLanguageGrammarIpc(languageGrammarInstaller)
-  registerWorkbenchFsIpc(new WorkbenchProjectFileSystem(), parts)
-  registerWorkbenchTerminalIpc(parts.terminal)
-  registerWorkbenchGitIpc(new WorkbenchGitService())
-  const disposeWatchIpc = registerWorkbenchWatchIpc(new WorkbenchFileWatcher())
+  registerWorkbenchFsIpc(providers.fileSystem, providers.parts)
+  registerWorkbenchTerminalIpc(providers.parts.terminal)
+  registerWorkbenchGitIpc(providers.git)
+  const disposeWatchIpc = registerWorkbenchWatchIpc(providers.watch)
+  const disposeWorkspaceIpc = registerWorkbenchWorkspaceIpc(providers.workspace)
 
-  const languageServiceClient = new WorkbenchLanguageServiceWorkerClient()
-  registerWorkbenchLanguageServiceIpc(languageServiceClient)
-  installLanguageServiceProjectLifecycle(hub, languageServiceClient)
+  registerWorkbenchLanguageServiceIpc(providers.language)
+  installLanguageServiceProjectLifecycle(hub, providers.language)
   let shutdownStarted = false
   app.on('before-quit', (event) => {
     if (shutdownStarted) return
@@ -140,9 +140,11 @@ void app.whenReady().then(() => {
     disposeWatchIpc()
     disposeLanguageGrammarIpc()
     disposeKernelIpc()
+    disposeWorkspaceIpc()
     void Promise.all([
-      parts.terminal.closeAllSessions(),
-      languageServiceClient.dispose(),
+      providers.parts.terminal.closeAllSessions(),
+      providers.language.dispose(),
+      providers.workspace.dispose(),
       kernelRuntime.dispose(),
     ]).finally(() => app.quit())
   })

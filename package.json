@@ -1,6 +1,6 @@
 {
   "name": "velaros-workbench",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "VelarOS Workbench independent IDE product and reusable product boundary.",
   "packageManager": "bun@1.3.13",
@@ -18,6 +18,8 @@
     "check": "bun run check:boundaries && bun run build:package && bun run typecheck && bun run lint && bun run test && bun run probe:app && bun run build:app",
     "package:grammars": "node scripts/build/packageLanguageGrammars.mjs",
     "package:mac": "bun run build && electron-builder --config apps/workbench/electron-builder.yml --mac",
+    "package:app:dir": "bun run build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --config apps/workbench/electron-builder.yml --mac --dir -c.mac.identity=null -c.mac.notarize=false",
+    "verify:app:dir": "node scripts/release/verifyPackagedApp.mjs",
     "package:win": "bun run build && electron-builder --config apps/workbench/electron-builder.yml --win",
     "package:linux": "bun run build && electron-builder --config apps/workbench/electron-builder.yml --linux",
     "link:local": "node scripts/dev/link-local-packages.mjs",

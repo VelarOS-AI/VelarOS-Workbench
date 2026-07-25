@@ -1,7 +1,11 @@
+import { randomUUID } from 'node:crypto'
+
 import {
   type ConnectedKernelDaemon,
   connectToKernelDaemon,
+  type KernelClientEventHandler,
   KernelDaemonError,
+  type KernelEventSubscription,
   KernelRpcClientError,
 } from '@velaros-ai/kernel-service'
 
@@ -9,15 +13,31 @@ import type {
   WorkbenchKernelCapabilityStatus,
   WorkbenchKernelConnectionError,
   WorkbenchKernelHealthSnapshot,
+  WorkbenchKernelInvocationError,
+  WorkbenchKernelScopeRef,
   WorkbenchKernelStatus,
 } from '../../shared/workbenchKernel'
 
 export interface WorkbenchKernelClientRuntimeOptions {
   connect?: () => Promise<ConnectedKernelDaemon>
   now?: () => number
+  nextCallId?: () => string
 }
 
 type WorkbenchKernelStatusListener = (status: WorkbenchKernelStatus) => void
+type WorkbenchKernelEventListener = (event: Parameters<KernelClientEventHandler>[0]) => void
+
+export interface WorkbenchKernelCapabilityAddress {
+  capabilityId: string
+  operation: string
+}
+
+export class WorkbenchKernelInvocationFailure extends Error {
+  public constructor(public readonly invocationError: WorkbenchKernelInvocationError) {
+    super(invocationError.message)
+    this.name = 'WorkbenchKernelInvocationFailure'
+  }
+}
 
 const initialStatus: WorkbenchKernelStatus = {
   state: 'connecting',
@@ -40,7 +60,10 @@ const initialStatus: WorkbenchKernelStatus = {
 export class WorkbenchKernelClientRuntime {
   private readonly connect: () => Promise<ConnectedKernelDaemon>
   private readonly now: () => number
+  private readonly nextCallId: () => string
   private readonly listeners = new Set<WorkbenchKernelStatusListener>()
+  private readonly eventListeners = new Map<string, Set<WorkbenchKernelEventListener>>()
+  private readonly eventSubscriptions = new Map<string, KernelEventSubscription>()
   private status: WorkbenchKernelStatus = initialStatus
   private connected?: ConnectedKernelDaemon
   private inFlight?: Promise<WorkbenchKernelStatus>
@@ -49,6 +72,8 @@ export class WorkbenchKernelClientRuntime {
   public constructor(options: WorkbenchKernelClientRuntimeOptions = {}) {
     this.connect = options.connect ?? connectToKernelDaemon
     this.now = options.now ?? Date.now
+    this.nextCallId = options.nextCallId ?? (() =>
+      `workbench-${Date.now().toString(36)}-${randomUUID()}`)
   }
 
   public getStatus(): WorkbenchKernelStatus {
@@ -82,12 +107,80 @@ export class WorkbenchKernelClientRuntime {
     }
   }
 
+  public subscribeEvent(eventType: string, listener: WorkbenchKernelEventListener): () => void {
+    const listeners = this.eventListeners.get(eventType) ?? new Set()
+    listeners.add(listener)
+    this.eventListeners.set(eventType, listeners)
+    void this.installEventSubscription(eventType).catch(() => undefined)
+    return () => {
+      const current = this.eventListeners.get(eventType)
+      current?.delete(listener)
+      if (current?.size === 0) {
+        this.eventListeners.delete(eventType)
+        const subscription = this.eventSubscriptions.get(eventType)
+        this.eventSubscriptions.delete(eventType)
+        void subscription?.dispose()
+      }
+    }
+  }
+
+  /**
+   * Calls an injected capability address without learning any domain schema.
+   *
+   * Domain ids and operations are owned by the product composition root. This
+   * runtime only validates availability and transports the generic Kernel
+   * envelope.
+   */
+  public async invoke(
+    address: WorkbenchKernelCapabilityAddress,
+    input: unknown,
+    scope: WorkbenchKernelScopeRef | null = null,
+    signal?: AbortSignal
+  ): Promise<unknown> {
+    const connected = this.connected
+    if (!connected || !this.status.connected) {
+      throw new WorkbenchKernelInvocationFailure({
+        code: 'KERNEL_UNAVAILABLE',
+        message: 'VelarOS Kernel is not connected. Start Kernel and retry.',
+        retryable: true,
+        details: null,
+      })
+    }
+    if (!this.status.capabilities.some((capability) => capability.id === address.capabilityId)) {
+      throw new WorkbenchKernelInvocationFailure({
+        code: 'KERNEL_CAPABILITY_UNAVAILABLE',
+        message: `Kernel capability "${address.capabilityId}" is not available.`,
+        retryable: true,
+        details: { capabilityId: address.capabilityId },
+      })
+    }
+
+    const response = await connected.client.call({
+      protocolVersion: 2,
+      callId: this.nextCallId(),
+      capabilityId: address.capabilityId,
+      operation: address.operation,
+      scope,
+      input,
+    }, signal)
+    if (response.status === 'error') {
+      throw new WorkbenchKernelInvocationFailure({
+        code: response.error.code,
+        message: response.error.message,
+        retryable: response.error.retryable,
+        details: response.error.details,
+      })
+    }
+    return response.output
+  }
+
   public async dispose(): Promise<void> {
     if (this.disposed) return
     this.disposed = true
     await this.inFlight?.catch(() => undefined)
     const connected = this.connected
     this.connected = undefined
+    await this.disposeEventSubscriptions()
     await connected?.client.dispose()
     this.updateStatus({
       ...this.status,
@@ -114,7 +207,10 @@ export class WorkbenchKernelClientRuntime {
       }
 
       const previous = this.connected
+      await this.disposeEventSubscriptions()
       this.connected = nextConnection
+      await Promise.all([...this.eventListeners.keys()].map((eventType) =>
+        this.installEventSubscription(eventType).catch(() => undefined)))
       if (previous && previous !== nextConnection) {
         await previous.client.dispose()
       }
@@ -160,6 +256,7 @@ export class WorkbenchKernelClientRuntime {
       }
       const previous = this.connected
       this.connected = undefined
+      await this.disposeEventSubscriptions()
       if (previous) {
         await Promise.resolve(previous.client.dispose()).catch(() => undefined)
       }
@@ -188,6 +285,38 @@ export class WorkbenchKernelClientRuntime {
         // One renderer observer must not corrupt the daemon connection state.
       }
     }
+  }
+
+  private async installEventSubscription(eventType: string): Promise<void> {
+    if (
+      this.disposed
+      || this.eventSubscriptions.has(eventType)
+      || !this.eventListeners.has(eventType)
+      || !this.connected
+    ) return
+
+    const connection = this.connected
+    const subscription = await connection.client.subscribe(eventType, (event) => {
+      for (const listener of this.eventListeners.get(eventType) ?? []) {
+        try {
+          listener(event)
+        } catch {
+          // Event consumers are isolated from the authenticated transport.
+        }
+      }
+    })
+    if (this.connected !== connection || this.disposed) {
+      await subscription.dispose()
+      return
+    }
+    this.eventSubscriptions.set(eventType, subscription)
+  }
+
+  private async disposeEventSubscriptions(): Promise<void> {
+    const subscriptions = [...this.eventSubscriptions.values()]
+    this.eventSubscriptions.clear()
+    await Promise.all(subscriptions.map((subscription) =>
+      Promise.resolve(subscription.dispose()).catch(() => undefined)))
   }
 }
 

@@ -7,6 +7,7 @@ const projectsRoot = path.dirname(root)
 const scope = '@velaros-ai/'
 const readJson = async (file) => JSON.parse(await readFile(file, 'utf8'))
 const exists = async (file) => access(file).then(() => true, () => false)
+const entryExists = async (file) => lstat(file).then(() => true, () => false)
 const packageManifests = []
 for (const entry of await readdir(path.join(root, 'packages'), { withFileTypes: true })) {
   const manifestPath = path.join(root, 'packages', entry.name, 'package.json')
@@ -26,6 +27,11 @@ for (const manifest of manifests) for (const field of ['dependencies', 'devDepen
 const available = new Map()
 for (const repo of await readdir(projectsRoot, { withFileTypes: true })) {
   if (!repo.isDirectory() || !repo.name.startsWith('VelarOS-')) continue
+  const siblingRootManifest = path.join(projectsRoot, repo.name, 'package.json')
+  if (await exists(siblingRootManifest)) {
+    const manifest = await readJson(siblingRootManifest)
+    if (manifest.name?.startsWith(scope)) available.set(manifest.name, path.dirname(siblingRootManifest))
+  }
   const siblingPackages = path.join(projectsRoot, repo.name, 'packages')
   if (!await exists(siblingPackages)) continue
   for (const entry of await readdir(siblingPackages, { withFileTypes: true })) {
@@ -42,7 +48,7 @@ const run = (args, cwd) => {
 const linkIntoProject = async (base, name, directory) => {
   const target = path.join(base, 'node_modules', ...name.split('/'))
   await mkdir(path.dirname(target), { recursive: true })
-  if (await exists(target)) {
+  if (await entryExists(target)) {
     const stat = await lstat(target)
     if (stat.isSymbolicLink()) {
       const current = path.resolve(path.dirname(target), await readlink(target))

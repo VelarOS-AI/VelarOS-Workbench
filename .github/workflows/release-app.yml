@@ -2,6 +2,11 @@ name: Release Workbench
 
 on:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Exact app version tag, for example v0.3.0
+        required: true
+        type: string
   push:
     tags:
       - 'v*'
@@ -11,8 +16,11 @@ permissions:
   packages: read
 
 concurrency:
-  group: release-workbench-${{ github.ref }}
+  group: release-workbench-${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
   cancel-in-progress: false
+
+env:
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
 
 jobs:
   package:
@@ -38,6 +46,8 @@ jobs:
       - run: bun install --frozen-lockfile
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Verify tag matches Workbench app version
+        run: node scripts/release/appReleaseArtifacts.mjs validate-tag
       - name: Verify release signing credentials
         if: runner.os != 'Linux'
         shell: bash
@@ -58,15 +68,12 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-      - name: Write SHA-256 checksums
-        shell: bash
-        run: |
-          cd release
-          find . -maxdepth 1 -type f ! -name 'SHA256SUMS.txt' -print0 | sort -z | xargs -0 shasum -a 256 > SHA256SUMS.txt
+      - name: Stage release files and SHA-256 checksums
+        run: node scripts/release/appReleaseArtifacts.mjs stage "${{ matrix.artifact }}"
       - uses: actions/upload-artifact@v4
         with:
           name: workbench-${{ matrix.artifact }}
-          path: release/*
+          path: release-stage/${{ matrix.artifact }}/*
           if-no-files-found: error
 
   release:
@@ -77,10 +84,11 @@ jobs:
         with:
           pattern: workbench-*
           path: release
-          merge-multiple: true
       - name: Create or update GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1 || gh release create "${GITHUB_REF_NAME}" --title "VelarOS Workbench ${GITHUB_REF_NAME}" --generate-notes
-          gh release upload "${GITHUB_REF_NAME}" release/* --clobber
+          mapfile -d '' files < <(find release -type f -print0 | sort -z)
+          test "${#files[@]}" -gt 0
+          gh release view "$RELEASE_TAG" >/dev/null 2>&1 || gh release create "$RELEASE_TAG" --target "$GITHUB_SHA" --title "VelarOS Workbench $RELEASE_TAG" --generate-notes
+          gh release upload "$RELEASE_TAG" "${files[@]}" --clobber

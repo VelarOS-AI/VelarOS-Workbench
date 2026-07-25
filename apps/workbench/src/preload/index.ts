@@ -23,6 +23,10 @@ import {
   WorkbenchTerminalChannels,
 } from '../shared/workbenchTerminal'
 import { type WorkbenchWatchBridge, WorkbenchWatchChannels } from '../shared/workbenchWatch'
+import {
+  type WorkbenchWorkspaceBridge,
+  WorkbenchWorkspaceChannels,
+} from '../shared/workbenchWorkspace'
 
 const projectHubBridge: WorkbenchProjectHubBridge = {
   getState: () => ipcRenderer.invoke(WorkbenchProjectHubChannels.getState),
@@ -119,8 +123,15 @@ const gitBridge: WorkbenchGitBridge = {
 const kernelBridge: WorkbenchKernelBridge = {
   getStatus: () => ipcRenderer.invoke(WorkbenchKernelChannels.getStatus),
   retry: () => ipcRenderer.invoke(WorkbenchKernelChannels.retry),
+  invoke: (request) => ipcRenderer.invoke(WorkbenchKernelChannels.invoke, request),
   onStatusChanged: (listener) =>
     subscribe(WorkbenchKernelChannels.statusChanged, listener),
+  onAgentExecution: (listener) =>
+    subscribe(WorkbenchKernelChannels.agentExecution, listener),
+}
+
+const workspaceBridge: WorkbenchWorkspaceBridge = {
+  invoke: (request) => ipcRenderer.invoke(WorkbenchWorkspaceChannels.invoke, request),
 }
 
 contextBridge.exposeInMainWorld('velarosWorkbenchProjectHub', projectHubBridge)
@@ -130,6 +141,7 @@ contextBridge.exposeInMainWorld('velarosWorkbenchTerminal', terminalBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchWatch', watchBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchGit', gitBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchKernel', kernelBridge)
+contextBridge.exposeInMainWorld('velarosWorkbenchWorkspace', workspaceBridge)
 
 function subscribe<TPayload>(
   channel: string,

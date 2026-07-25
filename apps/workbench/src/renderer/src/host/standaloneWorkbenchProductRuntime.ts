@@ -5,6 +5,8 @@ import type {
 } from '@velaros-ai/core/types'
 import type { WorkbenchProductRuntimeValue } from '@velaros-ai/workbench/composition'
 
+import chatStyles from './standaloneWorkbenchChat.module.css'
+
 /**
  * 独立 Workbench 应用的产品运行时投影（占位实现）。
  *
@@ -26,26 +28,6 @@ const standaloneAuxiliaryModels: AuxiliaryModelConfigs = {
   editorTabCompletion: StandaloneAuxiliaryModel,
 }
 
-const StandaloneEmptyChatPanelStyles: WorkbenchProductRuntimeValue['ui']['chatPanel'] = {
-  spinIcon: '',
-  toolWindowPanel: '',
-  workbenchChatBody: '',
-  workbenchChatIconButton: '',
-  workbenchChatLoading: '',
-  workbenchChatPanel: '',
-  workbenchChatSessionCurrentTitle: '',
-  workbenchChatSessionMenuAnchor: '',
-  workbenchChatSessionMenuButton: '',
-  workbenchChatSessionMenuCheck: '',
-  workbenchChatSessionMenuIcon: '',
-  workbenchChatSessionMenuItem: '',
-  workbenchChatSessionMenuList: '',
-  workbenchChatSessionMenuPanel: '',
-  workbenchChatSessionMenuText: '',
-  workbenchChatSessionMenuTitle: '',
-  workbenchChatTopBar: '',
-}
-
 export const standaloneWorkbenchProductRuntimeValue: WorkbenchProductRuntimeValue = {
   config: {
     defaultEditor: 'velaros-light',
@@ -61,6 +43,6 @@ export const standaloneWorkbenchProductRuntimeValue: WorkbenchProductRuntimeValu
     },
   },
   ui: {
-    chatPanel: StandaloneEmptyChatPanelStyles,
+    chatPanel: chatStyles as WorkbenchProductRuntimeValue['ui']['chatPanel'],
   },
 }

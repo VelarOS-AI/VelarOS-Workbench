@@ -42,7 +42,7 @@
     },
     "apps/workbench": {
       "name": "@velaros-ai/workbench-app",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "dependencies": {
         "@codemirror/autocomplete": "^6.20.1",
         "@codemirror/commands": "^6.10.3",
@@ -56,6 +56,7 @@
         "@velaros-ai/kernel-service": "^0.2.1",
         "@velaros-ai/ui": "^0.1.3",
         "@velaros-ai/workbench": "workspace:*",
+        "@velaros-ai/workspace": "^1.2.0",
         "ahooks": "^3.9.7",
         "execa": "^9.6.1",
         "react": "^19.2.5",
@@ -67,6 +68,9 @@
         "vscode-html-languageservice": "^5.6.2",
         "vscode-languageserver-textdocument": "^1.0.12",
         "vscode-uri": "^3.1.0",
+      },
+      "devDependencies": {
+        "@velaros-ai/browser-composition": "^0.2.0",
       },
     },
     "packages/workbench": {
@@ -534,6 +538,8 @@
 
     "@typescript-eslint/visitor-keys": ["@typescript-eslint/visitor-keys@8.65.0", "", { "dependencies": { "@typescript-eslint/types": "8.65.0", "eslint-visitor-keys": "^5.0.0" } }, "sha512-8C71BQkGjiMmXtop7pHVJu1l2NNShFdkCyD6a2ezzs5vU/L3LRtb69EtcteFwz0mYMPzIgOw0n6OV4VBUWZd7A=="],
 
+    "@velaros-ai/browser-composition": ["@velaros-ai/browser-composition@0.2.0", "https://npm.pkg.github.com/download/@velaros-ai/browser-composition/0.2.0/c67f71511810fc550413ef03a7fb0042a816afa0", { "dependencies": { "@velaros-ai/core": "^0.2.1" }, "peerDependencies": { "react": "^19.0.0" } }, "sha512-oKiCfA0wCKMVt6Ytb9Pu9YGvTZpBKzFL5I9ZaozqVlVMwRQ5EOmLvqWc0TVyCaBJRMBfk4dtGSjenhBfgeLsHg=="],
+
     "@velaros-ai/core": ["@velaros-ai/core@0.2.1", "https://npm.pkg.github.com/download/@velaros-ai/core/0.2.1/1786db010fef190f06bb030362453e54efa71be3", { "dependencies": { "gpt-tokenizer": "^3.0.1", "zod": "^4.3.6" } }, "sha512-lxZ247OlRxLbH1aPCDnfv49EoR0C7QWkKVd0d9WDEMDjyLI1vF1Va7k4YOE3CbNnM66Q0e/HZ6P2TpWJchBjSA=="],
 
     "@velaros-ai/kernel-host": ["@velaros-ai/kernel-host@0.2.1", "https://npm.pkg.github.com/download/@velaros-ai/kernel-host/0.2.1/ff49cc60e04b0fecd4eeed635db462a88ef6b606", { "dependencies": { "@velaros-ai/kernel-sdk": "0.2.1" } }, "sha512-742d6leyBNSu7c6xb+90PWpFccpWVRGmPBWfIAuLuMcdGqOLCsnuUow+hPqI76TxYQQQKNlvB8oKBWgc6FBerQ=="],
@@ -547,6 +553,8 @@
     "@velaros-ai/ui": ["@velaros-ai/ui@0.1.3", "https://npm.pkg.github.com/download/@velaros-ai/ui/0.1.3/58cdc6204945ae14667c588d5927b219f27833a0", { "dependencies": { "@phosphor-icons/react": "^2.1.10", "@radix-ui/react-dialog": "^1.1.15", "@radix-ui/react-label": "^2.1.8", "@radix-ui/react-select": "^2.2.6", "@radix-ui/react-separator": "^1.1.8", "@radix-ui/react-slot": "^1.2.4", "@radix-ui/react-switch": "^1.2.6", "@radix-ui/react-tabs": "^1.1.13", "@radix-ui/react-tooltip": "^1.2.8", "ahooks": "^3.9.7", "class-variance-authority": "^0.7.1", "clsx": "^2.1.1", "react-day-picker": "^9.14.0", "tailwind-merge": "^3.5.0" }, "peerDependencies": { "react": "^19.0.0", "react-dom": "^19.0.0" } }, "sha512-WsPt6IRNJFnv3fZN/F8MJTIrXLjWuvOe2aqJnwuix38ZfEr6C8CnB58OINu5nJgV6ITrEMw2Nh6ITP1IEWodqQ=="],
 
     "@velaros-ai/workbench": ["@velaros-ai/workbench@workspace:packages/workbench"],
+
+    "@velaros-ai/workspace": ["@velaros-ai/workspace@1.2.0", "https://npm.pkg.github.com/download/@velaros-ai/workspace/1.2.0/188d68b9fa646b6ebffe828f728513f28beebb33", { "dependencies": { "@velaros-ai/core": "^0.2.1", "@velaros-ai/kernel-sdk": "^0.2.1", "diff": "^8.0.4", "execa": "^9.6.1", "iconv-lite": "^0.7.2", "picomatch": "^4.0.3", "typescript": "^5.0.0", "zod": "^4.3.6" }, "peerDependencies": { "@velaros-ai/agent-runtime": "^0.3.2" }, "optionalPeers": ["@velaros-ai/agent-runtime"], "bin": { "velaros-workspace": "dist/cli.js" } }, "sha512-TKDoOqQho+8ke2sEo4/s0x3ADYx9cu7hxHK93VHoA9rSYrXoglIyz0TjC/9aa8vuUth3hC3k/E/IcFi0PZ8knw=="],
 
     "@velaros-ai/workbench-app": ["@velaros-ai/workbench-app@workspace:apps/workbench"],
 
@@ -876,6 +884,8 @@
 
     "human-signals": ["human-signals@8.0.1", "", {}, "sha512-eKCa6bwnJhvxj14kZk5NCPc6Hb6BdsU9DZcOnmQKSnO1VKrfV0zCvtttPZUsBvjmNDn8rpcJfpwSYnHBjc95MQ=="],
 
+    "iconv-lite": ["iconv-lite@0.7.3", "", { "dependencies": { "safer-buffer": ">= 2.1.2 < 3.0.0" } }, "sha512-IKXpvIzjnC9XTAUbVBcMfGS0EPaIXtW6v+zr+RRp+hqULEpo0owZax6wyRwPOJbWbzjYspQwusTsfVr0ifh4uQ=="],
+
     "ignore": ["ignore@7.0.6", "", {}, "sha512-BAg6QkE8W+TuQLrrw0Ugr7HegXduRuuj8/ti2kSOc+jz1dmx8/WNcjr6XGnq5YpDWxFwwaavqD0+jIUOKelTsw=="],
 
     "import-fresh": ["import-fresh@3.3.1", "", { "dependencies": { "parent-module": "^1.0.0", "resolve-from": "^4.0.0" } }, "sha512-TR3KfrTZTYLPB6jUjfx6MF9WcWrHL9su5TObK4ZkYgBdWKPOFoSoQIdEuTuR82pmtxH2spWG9h6etwfr1pLBqQ=="],
@@ -1119,6 +1129,8 @@
     "rollup": ["rollup@4.62.2", "", { "dependencies": { "@types/estree": "1.0.9" }, "optionalDependencies": { "@rollup/rollup-android-arm-eabi": "4.62.2", "@rollup/rollup-android-arm64": "4.62.2", "@rollup/rollup-darwin-arm64": "4.62.2", "@rollup/rollup-darwin-x64": "4.62.2", "@rollup/rollup-freebsd-arm64": "4.62.2", "@rollup/rollup-freebsd-x64": "4.62.2", "@rollup/rollup-linux-arm-gnueabihf": "4.62.2", "@rollup/rollup-linux-arm-musleabihf": "4.62.2", "@rollup/rollup-linux-arm64-gnu": "4.62.2", "@rollup/rollup-linux-arm64-musl": "4.62.2", "@rollup/rollup-linux-loong64-gnu": "4.62.2", "@rollup/rollup-linux-loong64-musl": "4.62.2", "@rollup/rollup-linux-ppc64-gnu": "4.62.2", "@rollup/rollup-linux-ppc64-musl": "4.62.2", "@rollup/rollup-linux-riscv64-gnu": "4.62.2", "@rollup/rollup-linux-riscv64-musl": "4.62.2", "@rollup/rollup-linux-s390x-gnu": "4.62.2", "@rollup/rollup-linux-x64-gnu": "4.62.2", "@rollup/rollup-linux-x64-musl": "4.62.2", "@rollup/rollup-openbsd-x64": "4.62.2", "@rollup/rollup-openharmony-arm64": "4.62.2", "@rollup/rollup-win32-arm64-msvc": "4.62.2", "@rollup/rollup-win32-ia32-msvc": "4.62.2", "@rollup/rollup-win32-x64-gnu": "4.62.2", "@rollup/rollup-win32-x64-msvc": "4.62.2", "fsevents": "~2.3.2" }, "bin": { "rollup": "dist/bin/rollup" } }, "sha512-RFnrW4lhXA3s3eqHDZvN654g8OTjzRfqpIRJYczCGB6HzphckVAi/Qh4tbPUbRuDi7s1Llv8g/NspLkttY3gTA=="],
 
     "safe-buffer": ["safe-buffer@5.1.2", "", {}, "sha512-Gd2UZBJDkXlY7GbJxfsE8/nvKkUEU1G38c1siN6QP6a9PT9MmHB8GnpscSmMJSoF8LOIrt8ud/wPtojys4G6+g=="],
+
+    "safer-buffer": ["safer-buffer@2.1.2", "", {}, "sha512-YZo3K82SD7Riyi0E1EQPojLz7kpepnSQI9IyPbHHg1XXXevb5dJI7tpyN2ADxGcQbHG7vcyRHk0cbwqcQriUtg=="],
 
     "sanitize-filename": ["sanitize-filename@1.6.4", "", { "dependencies": { "truncate-utf8-bytes": "^1.0.0" } }, "sha512-9ZyI08PsvdQl2r/bBIGubpVdR3RR9sY6RDiWFPreA21C/EFlQhmgo20UZlNjZMMZNubusLhAQozkA0Od5J21Eg=="],
 
