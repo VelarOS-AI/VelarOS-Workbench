@@ -1,4 +1,4 @@
-import { toNullable } from '@velaros/core'
+import { toNullable } from '@velaros-ai/core'
 
 import {
   getPluginWorkbenchLanguageServices,
@@ -33,7 +33,7 @@ const DownloadableLanguagePlugins: WorkbenchLanguagePluginDescriptor[] =
   getPluginWorkbenchLanguageServices().map((service) => ({
     id: service.id,
     label: service.label,
-    packageName: service.packageName ?? `@velaros/workbench-language-${service.id}`,
+    packageName: service.packageName ?? `@velaros-ai/workbench-language-${service.id}`,
     extensions: service.extensions,
     languages: service.languages,
     service,

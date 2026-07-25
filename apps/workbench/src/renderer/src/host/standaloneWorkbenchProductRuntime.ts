@@ -1,9 +1,9 @@
-import { Result } from '@velaros/core'
+import { Result } from '@velaros-ai/core'
 import type {
   AuxiliaryModelConfig,
   AuxiliaryModelConfigs,
-} from '@velaros/core/types'
-import type { WorkbenchProductRuntimeValue } from '@velaros/workbench/composition'
+} from '@velaros-ai/core/types'
+import type { WorkbenchProductRuntimeValue } from '@velaros-ai/workbench/composition'
 
 /**
  * 独立 Workbench 应用的产品运行时投影（占位实现）。

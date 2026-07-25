@@ -1,6 +1,6 @@
 import { createContext, type ReactElement, type ReactNode, useContext } from 'react'
 
-import { isObject,isPresent } from '@velaros/core'
+import { isObject,isPresent } from '@velaros-ai/core'
 
 import type { StandaloneWorkbenchPageModel } from './hooks/useStandaloneWorkbenchPageModel'
 

@@ -1,6 +1,6 @@
 import { useMemo, useSyncExternalStore } from 'react'
 
-import { isEmpty } from '@velaros/core'
+import { isEmpty } from '@velaros-ai/core'
 
 /**
  * 工作台行内评论存储（**仅会话内存，不落盘**）。

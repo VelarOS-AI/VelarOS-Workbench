@@ -6,7 +6,7 @@ import { markdown } from '@codemirror/lang-markdown'
 import { python } from '@codemirror/lang-python'
 import type { Extension } from '@codemirror/state'
 
-import { isFunction, Log, toNullable } from '@velaros/core'
+import { isFunction, Log, toNullable } from '@velaros-ai/core'
 
 import {
   getWorkbenchPathExtension,

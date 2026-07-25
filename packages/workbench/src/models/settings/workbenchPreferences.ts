@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react'
 
-import { isFiniteNumber, isObject,isString, Log } from '@velaros/core'
+import { isFiniteNumber, isObject,isString, Log } from '@velaros-ai/core'
 
 import {
   createLocalStorageJsonStore,

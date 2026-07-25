@@ -2,7 +2,7 @@ import type {
   AppResourcePluginCatalog,
   WorkbenchCodeGraphEdge,
   WorkbenchGetCodeGraphResult,
-} from '@velaros/core/types'
+} from '@velaros-ai/core/types'
 
 const CODE_GRAPH_FULL_MAX_NODES = 400
 const CODE_GRAPH_INITIAL_MAX_NODES = 120

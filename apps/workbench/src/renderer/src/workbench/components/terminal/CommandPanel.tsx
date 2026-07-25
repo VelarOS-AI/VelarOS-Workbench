@@ -1,9 +1,9 @@
 import { type ReactElement, useEffect, useRef } from 'react'
 import { CaretDownIcon, CaretUpIcon, GitBranchIcon } from '@phosphor-icons/react'
 
-import { Button } from '@velaros/ui/primitives/buttons/Button'
-import { useWorkbenchI18n } from '@velaros/workbench/i18n'
-import type { WorkbenchBottomTool } from '@velaros/workbench/models/layout/workbenchSurfaceModel'
+import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
+import { useWorkbenchI18n } from '@velaros-ai/workbench/i18n'
+import type { WorkbenchBottomTool } from '@velaros-ai/workbench/models/layout/workbenchSurfaceModel'
 
 import styles from '../../styles/workbenchPageStyles'
 import { useTimerScope } from '../../support/genericHooks'

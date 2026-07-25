@@ -8,8 +8,8 @@
     "moduleResolution": "Bundler",
     "noEmit": true,
     "paths": {
-      "@velaros/workbench": ["./packages/workbench/src/index.ts"],
-      "@velaros/workbench/*": ["./packages/workbench/src/*"]
+      "@velaros-ai/workbench": ["./packages/workbench/src/index.ts"],
+      "@velaros-ai/workbench/*": ["./packages/workbench/src/*"]
     },
     "resolveJsonModule": true,
     "skipLibCheck": true,

@@ -7,18 +7,18 @@ import {
   XIcon,
 } from '@phosphor-icons/react'
 
-import { IconButton } from '@velaros/ui/primitives/buttons/IconButton'
-import { FileTypeIcon } from '@velaros/ui/primitives/display/FileTypeIcon'
-import { Text } from '@velaros/ui/primitives/display/Text'
-import { ScrollArea } from '@velaros/ui/primitives/layout/ScrollArea'
-import { useWorkbenchI18n } from '@velaros/workbench/i18n'
+import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
+import { FileTypeIcon } from '@velaros-ai/ui/primitives/display/FileTypeIcon'
+import { Text } from '@velaros-ai/ui/primitives/display/Text'
+import { ScrollArea } from '@velaros-ai/ui/primitives/layout/ScrollArea'
+import { useWorkbenchI18n } from '@velaros-ai/workbench/i18n'
 import {
   getWorkbenchGitChangeDisplayPath,
   getWorkbenchGitChangeItemKey,
   isSameWorkbenchGitChangeItem,
   type WorkbenchGitChangeItem,
-} from '@velaros/workbench/models/git/workbenchGitModel'
-import type { WorkbenchThemeId } from '@velaros/workbench/models/settings/workbenchPreferences'
+} from '@velaros-ai/workbench/models/git/workbenchGitModel'
+import type { WorkbenchThemeId } from '@velaros-ai/workbench/models/settings/workbenchPreferences'
 
 import styles from '../../styles/workbenchPageStyles'
 import { GitDiffEditorPanel } from '../git/GitDiffEditorPanel'

@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { AppError } from '@velaros/core'
-import { Result } from '@velaros/core/result'
-import type { SystemWorkspaceGitSummary } from '@velaros/core/types'
-import { workbenchHost } from '@velaros/workbench/host'
+import { AppError } from '@velaros-ai/core'
+import { Result } from '@velaros-ai/core/result'
+import type { SystemWorkspaceGitSummary } from '@velaros-ai/core/types'
+import { workbenchHost } from '@velaros-ai/workbench/host'
 
 export type WorkspaceGitSummariesRefreshReason =
   | 'mount'

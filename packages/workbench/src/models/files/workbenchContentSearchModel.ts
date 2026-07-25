@@ -1,4 +1,4 @@
-import type { WorkbenchIndexedTextFile } from '@velaros/core/types'
+import type { WorkbenchIndexedTextFile } from '@velaros-ai/core/types'
 
 import type { WorkbenchOpenEditorTab } from '../../types/workbenchTypes'
 

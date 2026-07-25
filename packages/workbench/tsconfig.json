@@ -10,7 +10,7 @@
     "noEmit": true,
     "baseUrl": "../..",
     "paths": {
-      // @velaros/core(kernel 簇,K2)与 @velaros/ui(ui 簇,U2)已拆至 sibling 仓,
+      // @velaros-ai/core(kernel 簇,K2)与 @velaros-ai/ui(ui 簇,U2)已拆至 sibling 仓,
       // 经 file: 安装走 node_modules dist+types 解析,不再映射 src。
       "react": ["./node_modules/@types/react"],
       "react/*": ["./node_modules/@types/react/*"]

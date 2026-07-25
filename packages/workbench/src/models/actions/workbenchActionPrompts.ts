@@ -1,5 +1,5 @@
-import { isEmpty } from '@velaros/core'
-import type { AppLocale, WorkbenchDirectoryEntry, WorkbenchRunCommandResult } from '@velaros/core/types'
+import { isEmpty } from '@velaros-ai/core'
+import type { AppLocale, WorkbenchDirectoryEntry, WorkbenchRunCommandResult } from '@velaros-ai/core/types'
 
 import type { WorkbenchRunConfiguration } from '../commands/workbenchRunConfigurations'
 import type { WorkbenchEditorOutlineItem, WorkbenchEditorProblemItem } from '../editor/workbenchEditorModel'

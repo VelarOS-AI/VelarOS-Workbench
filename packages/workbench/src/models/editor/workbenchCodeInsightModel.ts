@@ -1,8 +1,8 @@
-import { isPresent } from '@velaros/core'
+import { isPresent } from '@velaros-ai/core'
 import type {
   WorkbenchLanguageServiceDiagnostic,
   WorkbenchRunCommandResult,
-} from '@velaros/core/types'
+} from '@velaros-ai/core/types'
 
 import type { WorkbenchOpenEditorTab } from '../../types/workbenchTypes'
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// 用途：从 packages/*/package.json 的 @velaros/* 依赖派生真实依赖图，拓扑排序后依序构建各包（支持 --for 依赖闭包与全量两种模式）。
+// 用途：从 packages/*/package.json 的 @velaros-ai/* 依赖派生真实依赖图，拓扑排序后依序构建各包（支持 --for 依赖闭包与全量两种模式）。
 
 import { spawnSync } from 'node:child_process'
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url'
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url))
 const ROOT_DIR = resolve(SCRIPT_DIR, '../..')
 const PACKAGES_DIR = resolve(ROOT_DIR, 'packages')
-const VELAROS_SCOPE = '@velaros/'
+const VELAROS_SCOPE = '@velaros-ai/'
 
 function readJson(filePath) {
   return JSON.parse(readFileSync(filePath, 'utf8'))
@@ -126,14 +126,14 @@ function buildPackage(node) {
 function printHelp() {
   console.log(`VelarOS 包拓扑构建 runner
 
-从 packages/*/package.json 的 @velaros/* 依赖派生真实依赖图，拓扑排序后依序构建。
+从 packages/*/package.json 的 @velaros-ai/* 依赖派生真实依赖图，拓扑排序后依序构建。
 
 用法：
   node scripts/build/buildPackageTopology.mjs                 # 全量：拓扑序构建所有包
   node scripts/build/buildPackageTopology.mjs --for <pkg>     # 只建某包的依赖闭包 + 自身
   node scripts/build/buildPackageTopology.mjs --list          # 打印拓扑序，不构建
 
-<pkg> 可用 @velaros 全名（@velaros/cli）、后缀（cli）或目录名。
+<pkg> 可用 @velaros 全名（@velaros-ai/cli）、后缀（cli）或目录名。
 `)
 }
 

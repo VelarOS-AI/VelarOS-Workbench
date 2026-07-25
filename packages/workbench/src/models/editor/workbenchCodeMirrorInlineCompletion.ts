@@ -10,7 +10,7 @@ import {
   WidgetType,
 } from '@codemirror/view'
 
-import { isBlank } from '@velaros/core'
+import { isBlank } from '@velaros-ai/core'
 
 /**
  * 编辑器 Tab 内联补全（Cursor 式 ghost text）。

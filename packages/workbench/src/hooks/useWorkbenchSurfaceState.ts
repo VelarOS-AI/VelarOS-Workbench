@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-import { isPresent } from '@velaros/core'
+import { isPresent } from '@velaros-ai/core'
 
 import type {
   WorkbenchBottomTool,

@@ -1,6 +1,6 @@
 /**
  * 起手页外貌层（应用私有）：布局 + hover 细节。
- * 颜色 / 圆角 / 过渡一律引 @velaros/ui 语义令牌，不写裸色值。
+ * 颜色 / 圆角 / 过渡一律引 @velaros-ai/ui 语义令牌，不写裸色值。
  */
 
 .workbench-welcome {

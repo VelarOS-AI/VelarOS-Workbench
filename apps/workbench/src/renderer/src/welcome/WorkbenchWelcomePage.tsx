@@ -2,13 +2,13 @@
  * 起手页（VS Code / IDEA 式欢迎页）：新建项目 / 打开项目 / 最近项目三主动作。
  *
  * 应用私有组件——起手页是独立入口的产品形态，没有第二个消费者，按「独立消费者才提包」
- * 判据住在 apps/workbench，不进 `@velaros/workbench`。视觉零件全部来自 `@velaros/ui`
+ * 判据住在 apps/workbench，不进 `@velaros-ai/workbench`。视觉零件全部来自 `@velaros-ai/ui`
  * （§12.9 封闭形态），外貌层类名走 welcome.css + 语义令牌，不写裸色值。
  */
 import { type ReactElement } from 'react'
 import { FolderOpenIcon, FolderPlusIcon, XIcon } from '@phosphor-icons/react'
 
-import { Button, Empty, IconButton, Stack, Tag, Text, Title } from '@velaros/ui'
+import { Button, Empty, IconButton, Stack, Tag, Text, Title } from '@velaros-ai/ui'
 
 import type { WorkbenchProjectHubState, WorkbenchRecentProject } from '../../../shared/projectHub'
 

@@ -3,8 +3,8 @@ import { type ReactElement, useEffect, useState } from 'react'
 import {
   WorkbenchChatProvider,
   WorkbenchProductRuntimeProvider,
-} from '@velaros/workbench/composition'
-import { WorkbenchLocalizationProvider } from '@velaros/workbench/i18n'
+} from '@velaros-ai/workbench/composition'
+import { WorkbenchLocalizationProvider } from '@velaros-ai/workbench/i18n'
 
 import { standaloneWorkbenchProductRuntimeValue } from './host/standaloneWorkbenchProductRuntime'
 import { useStandaloneWorkbenchLocalization } from './i18n/useStandaloneWorkbenchLocalization'

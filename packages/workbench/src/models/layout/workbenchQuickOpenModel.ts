@@ -1,4 +1,4 @@
-import { isEmpty } from '@velaros/core'
+import { isEmpty } from '@velaros-ai/core'
 
 import type { WorkbenchOpenEditorTab } from '../../types/workbenchTypes'
 import type { WorkbenchProjectContextFile } from '../project/workbenchProjectContextIndex'

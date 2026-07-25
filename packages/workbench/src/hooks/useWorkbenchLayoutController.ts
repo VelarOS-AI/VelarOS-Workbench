@@ -6,8 +6,8 @@ import {
   resolveWorkbenchLayoutSizesForViewport,
   WORKBENCH_DESKTOP_VIEWPORT,
   type WorkbenchViewportProfile,
-} from '@velaros/core/constants/workbenchViewport'
-import { type PointerResizeStarter, usePointerResize } from '@velaros/ui/hooks/usePointerResize'
+} from '@velaros-ai/core/constants/workbenchViewport'
+import { type PointerResizeStarter, usePointerResize } from '@velaros-ai/ui/hooks/usePointerResize'
 
 import {
   DEFAULT_WORKBENCH_LAYOUT_SIZES,

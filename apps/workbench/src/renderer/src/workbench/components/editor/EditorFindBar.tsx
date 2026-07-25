@@ -1,11 +1,11 @@
 import { CaretDownIcon, CaretUpIcon, MagnifyingGlassIcon, XIcon } from '@phosphor-icons/react'
 import type { ReactElement } from 'react'
 
-import { IconButton } from '@velaros/ui/primitives/buttons/IconButton'
-import { Text } from '@velaros/ui/primitives/display/Text'
-import { Input } from '@velaros/ui/primitives/forms/Input'
-import { useWorkbenchI18n } from '@velaros/workbench/i18n'
-import type { WorkbenchEditorFindMatch } from '@velaros/workbench/models/editor/workbenchEditorModel'
+import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
+import { Text } from '@velaros-ai/ui/primitives/display/Text'
+import { Input } from '@velaros-ai/ui/primitives/forms/Input'
+import { useWorkbenchI18n } from '@velaros-ai/workbench/i18n'
+import type { WorkbenchEditorFindMatch } from '@velaros-ai/workbench/models/editor/workbenchEditorModel'
 
 import styles from '../../styles/workbenchPageStyles'
 

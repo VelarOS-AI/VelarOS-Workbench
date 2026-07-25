@@ -1,11 +1,11 @@
 import type {
   BrowserElementSelection,
   WorkbenchLanguageServiceDiagnostic,
-} from '@velaros/core/types'
-import type { WorkbenchAiChangeArchiveState } from '@velaros/workbench/hooks/useWorkbenchAiChangeArchive'
-import type { WorkbenchGitDecorationMap } from '@velaros/workbench/models/git/workbenchGitModel'
-import type { WorkbenchProject } from '@velaros/workbench/models/project/workbenchProjects'
-import type { WorkbenchThemeId } from '@velaros/workbench/models/settings/workbenchPreferences'
+} from '@velaros-ai/core/types'
+import type { WorkbenchAiChangeArchiveState } from '@velaros-ai/workbench/hooks/useWorkbenchAiChangeArchive'
+import type { WorkbenchGitDecorationMap } from '@velaros-ai/workbench/models/git/workbenchGitModel'
+import type { WorkbenchProject } from '@velaros-ai/workbench/models/project/workbenchProjects'
+import type { WorkbenchThemeId } from '@velaros-ai/workbench/models/settings/workbenchPreferences'
 
 import type { WorkbenchDebugTab } from '../../hooks/useWorkbenchEditorNavigationState'
 import type { ControlledBrowserSurface } from '../../support/controlledBrowserSurfaceStub'

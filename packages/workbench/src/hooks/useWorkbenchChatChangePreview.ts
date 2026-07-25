@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-import { isEmpty,toNullable } from '@velaros/core'
-import type { ChatMessage } from '@velaros/core/types'
-import { extractMessageFileChangeDescriptors } from '@velaros/core/utils/messageFileChanges'
+import { isEmpty,toNullable } from '@velaros-ai/core'
+import type { ChatMessage } from '@velaros-ai/core/types'
+import { extractMessageFileChangeDescriptors } from '@velaros-ai/core/utils/messageFileChanges'
 
 import type { WorkbenchChatSessionSnapshot } from '../composition'
 import {

@@ -9,12 +9,12 @@ import {
   WidgetType,
 } from '@codemirror/view'
 
-import { isBlank,isNumber, Log } from '@velaros/core'
+import { isBlank,isNumber, Log } from '@velaros-ai/core'
 import type {
   WorkbenchLanguageServiceInlayHint,
   WorkbenchLanguageServiceOffsetRange,
-} from '@velaros/core/types'
-import { type TimerLease, TimerScope } from '@velaros/core/utils/TimerScope'
+} from '@velaros-ai/core/types'
+import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 const InitialInlayHintDelayMs = 180
 const ChangedDocumentInlayHintDelayMs = 320

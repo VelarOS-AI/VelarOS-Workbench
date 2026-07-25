@@ -145,12 +145,12 @@ const commonRules = {
       groups: [
         // Side-effect imports 在插件内以 \\u0000 为前缀参与匹配（见 eslint-plugin-simple-import-sort）。
         // 扩展入口须全局最先；勿删此组以免 autofix 把 @shared/extensions 排到 ./ 相对 import 之后。
-        ['^\\u0000@shared/extensions$', '^\\u0000@velaros/core/extensions$'],
+        ['^\\u0000@shared/extensions$', '^\\u0000@velaros-ai/core/extensions$'],
         ['^\\u0000dotenv/'],
         ['^\\u0000'],
         ['^node:'],
         ['^react$', '^react-dom', '^@?\\w'],
-        ['^@velaros/'],
+        ['^@velaros-ai/'],
         ['^@shared/', '^@components/', '^@features/', '^@hooks/', '^@pages/', '^@styles/', '^@utils/', '^@/'],
         ['^\\.\\.(?!/?$)', '^\\.\\./?$'],
         ['^\\./(?=.*/)(?!/?$)', '^\\.(?!/?$)', '^\\./?$'],
@@ -320,7 +320,7 @@ export default [
         {
           paths: [
             {
-              name: '@velaros/core/extensions',
+              name: '@velaros-ai/core/extensions',
               message:
                 '原型扩展由各进程入口统一装载（src/main/index.ts、src/renderer/src/main.tsx）；业务与库包勿 side-effect 导入。',
             },

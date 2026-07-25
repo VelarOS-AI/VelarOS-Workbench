@@ -5,13 +5,13 @@
 import { spawn } from 'node:child_process'
 import { stat } from 'node:fs/promises'
 
-import { AppError } from '@velaros/core/error'
+import { AppError } from '@velaros-ai/core/error'
 import type {
   WorkbenchRunCommandOutputEvent,
   WorkbenchRunCommandRequest,
   WorkbenchRunCommandResult,
-} from '@velaros/core/types'
-import { TimerScope } from '@velaros/core/utils/TimerScope'
+} from '@velaros-ai/core/types'
+import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import type { CommandHelper } from './CommandHelper'
 import type { PathResolver } from './PathResolver'

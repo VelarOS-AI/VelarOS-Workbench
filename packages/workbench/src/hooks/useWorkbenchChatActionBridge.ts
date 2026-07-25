@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import type { AgentDeveloperContext, AgentSurfaceId, ChatMessage } from '@velaros/core/types'
+import type { AgentDeveloperContext, AgentSurfaceId, ChatMessage } from '@velaros-ai/core/types'
 
 import { buildWorkbenchActionRunResultEvidence } from '../models/actions/workbenchActionResultEvidence'
 import {

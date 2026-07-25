@@ -1,9 +1,9 @@
 import { useEffect, useRef } from 'react'
 
-import { Log } from '@velaros/core'
-import { workbenchHost } from '@velaros/workbench/host'
-import type { WorkbenchProject } from '@velaros/workbench/models/project/workbenchProjects'
-import type { WorkbenchOpenEditorTab } from '@velaros/workbench/types/workbenchTypes'
+import { Log } from '@velaros-ai/core'
+import { workbenchHost } from '@velaros-ai/workbench/host'
+import type { WorkbenchProject } from '@velaros-ai/workbench/models/project/workbenchProjects'
+import type { WorkbenchOpenEditorTab } from '@velaros-ai/workbench/types/workbenchTypes'
 
 import { useDebounceFn, useLatest, useMemoizedFn } from '../support/genericHooks'
 

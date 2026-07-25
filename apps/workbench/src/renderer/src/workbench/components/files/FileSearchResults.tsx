@@ -4,15 +4,15 @@ import type { MouseEvent, ReactElement } from 'react'
 import {
   type WorkbenchDirectoryEntry,
   type WorkbenchSearchEntriesResult,
-} from '@velaros/core/types'
-import { StyleUtils } from '@velaros/ui'
-import { Button } from '@velaros/ui/primitives/buttons/Button'
-import { FileTypeIcon } from '@velaros/ui/primitives/display/FileTypeIcon'
-import { Paragraph } from '@velaros/ui/primitives/display/Paragraph'
-import { Text } from '@velaros/ui/primitives/display/Text'
-import { useWorkbenchI18n } from '@velaros/workbench/i18n'
-import type { WorkbenchContentSearchMatch } from '@velaros/workbench/models/files/workbenchContentSearchModel'
-import type { WorkbenchGitDecorationMap } from '@velaros/workbench/models/git/workbenchGitModel'
+} from '@velaros-ai/core/types'
+import { StyleUtils } from '@velaros-ai/ui'
+import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
+import { FileTypeIcon } from '@velaros-ai/ui/primitives/display/FileTypeIcon'
+import { Paragraph } from '@velaros-ai/ui/primitives/display/Paragraph'
+import { Text } from '@velaros-ai/ui/primitives/display/Text'
+import { useWorkbenchI18n } from '@velaros-ai/workbench/i18n'
+import type { WorkbenchContentSearchMatch } from '@velaros-ai/workbench/models/files/workbenchContentSearchModel'
+import type { WorkbenchGitDecorationMap } from '@velaros-ai/workbench/models/git/workbenchGitModel'
 
 import styles from '../../styles/workbenchPageStyles'
 

@@ -14,7 +14,7 @@ import {
   WarningCircleIcon,
 } from '@phosphor-icons/react'
 
-import { IconButton } from '@velaros/ui/primitives/buttons/IconButton'
+import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 
 import { StatusBar } from './components/chrome/StatusBar'
 import { WorkbenchTopTrailing } from './components/chrome/TopToolbar'

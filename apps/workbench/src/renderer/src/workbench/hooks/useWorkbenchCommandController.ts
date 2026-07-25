@@ -1,31 +1,31 @@
 import { useMemo,useState } from 'react'
 
-import { isPresent,toNullable } from '@velaros/core'
-import { AppError } from '@velaros/core/error'
-import { Result } from '@velaros/core/result'
-import type { WorkbenchDirectoryEntry, WorkbenchRunCommandResult } from '@velaros/core/types'
-import { useWorkbenchCommandIpcSubscriptions } from '@velaros/workbench/hooks/workbenchCommand/useWorkbenchCommandIpcSubscriptions'
-import { useWorkbenchCommandPackageSuggestions } from '@velaros/workbench/hooks/workbenchCommand/useWorkbenchCommandPackageSuggestions'
-import { useWorkbenchCommandProjectBootstrap } from '@velaros/workbench/hooks/workbenchCommand/useWorkbenchCommandProjectBootstrap'
-import { workbenchHost } from '@velaros/workbench/host'
+import { isPresent,toNullable } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
+import { Result } from '@velaros-ai/core/result'
+import type { WorkbenchDirectoryEntry, WorkbenchRunCommandResult } from '@velaros-ai/core/types'
+import { useWorkbenchCommandIpcSubscriptions } from '@velaros-ai/workbench/hooks/workbenchCommand/useWorkbenchCommandIpcSubscriptions'
+import { useWorkbenchCommandPackageSuggestions } from '@velaros-ai/workbench/hooks/workbenchCommand/useWorkbenchCommandPackageSuggestions'
+import { useWorkbenchCommandProjectBootstrap } from '@velaros-ai/workbench/hooks/workbenchCommand/useWorkbenchCommandProjectBootstrap'
+import { workbenchHost } from '@velaros-ai/workbench/host'
 import {
   upsertWorkbenchCommandHistory,
   type WorkbenchCommandHistoryItem,
-} from '@velaros/workbench/models/commands/workbenchCommandHistory'
+} from '@velaros-ai/workbench/models/commands/workbenchCommandHistory'
 import {
   createRunOutputLine,
   createTerminalLine,
   formatRunDuration,
   type WorkbenchRunOutputLine,
   type WorkbenchTerminalSessionView,
-} from '@velaros/workbench/models/commands/workbenchCommandLines'
-import type { WorkbenchCommandSuggestion } from '@velaros/workbench/models/commands/workbenchCommandSuggestions'
-import { buildWorkbenchRunConfigurations } from '@velaros/workbench/models/commands/workbenchRunConfigurations'
+} from '@velaros-ai/workbench/models/commands/workbenchCommandLines'
+import type { WorkbenchCommandSuggestion } from '@velaros-ai/workbench/models/commands/workbenchCommandSuggestions'
+import { buildWorkbenchRunConfigurations } from '@velaros-ai/workbench/models/commands/workbenchRunConfigurations'
 import {
   buildWorkbenchTerminalSessionTitle,
   formatWorkbenchTerminalPrompt,
-} from '@velaros/workbench/models/commands/workbenchTerminalPresentation'
-import type { WorkbenchProject } from '@velaros/workbench/models/project/workbenchProjects'
+} from '@velaros-ai/workbench/models/commands/workbenchTerminalPresentation'
+import type { WorkbenchProject } from '@velaros-ai/workbench/models/project/workbenchProjects'
 
 import { useStableWorkbenchMessageTranslate } from '../runtime/useStableWorkbenchMessaging'
 import {
@@ -35,7 +35,7 @@ export type {
   WorkbenchRunOutputLine,
   WorkbenchTerminalLine,
   WorkbenchTerminalSessionView,
-} from '@velaros/workbench/models/commands/workbenchCommandLines'
+} from '@velaros-ai/workbench/models/commands/workbenchCommandLines'
 
 interface UseWorkbenchCommandControllerOptions {
   activeProject: Nullable<WorkbenchProject>

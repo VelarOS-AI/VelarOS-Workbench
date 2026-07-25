@@ -14,14 +14,14 @@ import {
   UploadSimpleIcon,
 } from '@phosphor-icons/react'
 
-import { AppError } from '@velaros/core'
-import { Result } from '@velaros/core/result'
-import type { SystemWorkspaceGitSummary, WorkspaceGitLogEntry } from '@velaros/core/types'
-import { Button } from '@velaros/ui/primitives/buttons/Button'
-import { Input } from '@velaros/ui/primitives/forms/Input'
-import { workbenchHost } from '@velaros/workbench/host'
-import { useWorkbenchI18n } from '@velaros/workbench/i18n'
-import type { WorkbenchGitChangeItem } from '@velaros/workbench/models/git/workbenchGitModel'
+import { AppError } from '@velaros-ai/core'
+import { Result } from '@velaros-ai/core/result'
+import type { SystemWorkspaceGitSummary, WorkspaceGitLogEntry } from '@velaros-ai/core/types'
+import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
+import { Input } from '@velaros-ai/ui/primitives/forms/Input'
+import { workbenchHost } from '@velaros-ai/workbench/host'
+import { useWorkbenchI18n } from '@velaros-ai/workbench/i18n'
+import type { WorkbenchGitChangeItem } from '@velaros-ai/workbench/models/git/workbenchGitModel'
 
 import styles from '../../styles/workbenchPageStyles'
 

@@ -1,5 +1,5 @@
-import { isEmpty } from '@velaros/core'
-import type { WorkbenchDirectoryEntry } from '@velaros/core/types'
+import { isEmpty } from '@velaros-ai/core'
+import type { WorkbenchDirectoryEntry } from '@velaros-ai/core/types'
 
 import type { WorkbenchProject } from '../project/workbenchProjects'
 

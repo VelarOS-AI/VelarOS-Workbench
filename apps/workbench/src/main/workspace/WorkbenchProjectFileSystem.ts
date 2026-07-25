@@ -2,7 +2,7 @@
  * 独立 Workbench 应用 main 侧项目文件系统服务（host 实装第一段：纯读两动词）。
  *
  * 行为蒸馏自 desktop 被摘除前的 workbench main 面（DirectoryListing / FileOperations /
- * PathResolver，可考古 `cf62413e4^`），契约形状单源于 `@velaros/core/types`：
+ * PathResolver，可考古 `cf62413e4^`），契约形状单源于 `@velaros-ai/core/types`：
  * - 目录列表：projectRoot 越界防护（realpath 收束）、`.git` 恒隐藏、点号项默认隐藏、
  *   目录优先 + localeCompare 排序、hasChildren 可见子项探针、limit 钳制 + truncated。
  * - 读文件：文本似然门（NUL + 控制字节占比）、maxChars 钳制截断、totalLines 全文行数。
@@ -20,7 +20,7 @@ import type {
   WorkbenchListDirectoryResult,
   WorkbenchReadFileRequest,
   WorkbenchReadFileResult,
-} from '@velaros/core/types'
+} from '@velaros-ai/core/types'
 
 const DefaultDirectoryLimit = 1000
 const MaxDirectoryLimit = 5000

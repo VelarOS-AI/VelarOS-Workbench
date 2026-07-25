@@ -19,33 +19,33 @@ import {
   XIcon,
 } from '@phosphor-icons/react'
 
-import { isPresent } from '@velaros/core'
-import { Result } from '@velaros/core/result'
+import { isPresent } from '@velaros-ai/core'
+import { Result } from '@velaros-ai/core/result'
 import type {
   AppLocale,
   WorkbenchProjectAiRuleFile,
   WorkbenchProjectAiRulesResult,
-} from '@velaros/core/types'
-import { IconButton } from '@velaros/ui/primitives/buttons/IconButton'
-import { Text } from '@velaros/ui/primitives/display/Text'
-import { Title } from '@velaros/ui/primitives/display/Title'
-import { Input } from '@velaros/ui/primitives/forms/Input'
-import { Select } from '@velaros/ui/primitives/forms/Select'
-import { Switch } from '@velaros/ui/primitives/forms/Switch'
-import { workbenchHost } from '@velaros/workbench/host'
-import type { WorkbenchMessageKey } from '@velaros/workbench/i18n'
-import { useWorkbenchI18n } from '@velaros/workbench/i18n'
+} from '@velaros-ai/core/types'
+import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
+import { Text } from '@velaros-ai/ui/primitives/display/Text'
+import { Title } from '@velaros-ai/ui/primitives/display/Title'
+import { Input } from '@velaros-ai/ui/primitives/forms/Input'
+import { Select } from '@velaros-ai/ui/primitives/forms/Select'
+import { Switch } from '@velaros-ai/ui/primitives/forms/Switch'
+import { workbenchHost } from '@velaros-ai/workbench/host'
+import type { WorkbenchMessageKey } from '@velaros-ai/workbench/i18n'
+import { useWorkbenchI18n } from '@velaros-ai/workbench/i18n'
 import {
   getWorkbenchLanguagePluginInstallState,
   markWorkbenchLanguagePluginDownloaded,
   readDownloadedWorkbenchLanguagePluginIds,
   WORKBENCH_LANGUAGE_PLUGIN_INSTALL_STATE_CHANGED_EVENT,
-} from '@velaros/workbench/models/editor/workbenchLanguagePluginInstallState'
+} from '@velaros-ai/workbench/models/editor/workbenchLanguagePluginInstallState'
 import {
   getDownloadableWorkbenchLanguagePlugins,
   type WorkbenchLanguagePluginDescriptor,
-} from '@velaros/workbench/models/editor/workbenchLanguagePluginModel'
-import type { WorkbenchKeymapConflict } from '@velaros/workbench/models/layout/workbenchKeyboardShortcuts'
+} from '@velaros-ai/workbench/models/editor/workbenchLanguagePluginModel'
+import type { WorkbenchKeymapConflict } from '@velaros-ai/workbench/models/layout/workbenchKeyboardShortcuts'
 import {
   DEFAULT_WORKBENCH_KEYBOARD_SHORTCUT_MAP,
   formatWorkbenchShortcutForPlatform,
@@ -53,13 +53,13 @@ import {
   WORKBENCH_KEYBOARD_SHORTCUT_DEFINITIONS,
   type WorkbenchKeyboardShortcutAction,
   type WorkbenchKeyboardShortcutMap,
-} from '@velaros/workbench/models/layout/workbenchKeyboardShortcuts'
+} from '@velaros-ai/workbench/models/layout/workbenchKeyboardShortcuts'
 import type {
   WorkbenchAccent,
   WorkbenchDensity,
   WorkbenchPreferences,
   WorkbenchThemeId,
-} from '@velaros/workbench/models/settings/workbenchPreferences'
+} from '@velaros-ai/workbench/models/settings/workbenchPreferences'
 
 import styles from '../../styles/workbenchPageStyles'
 import { useTimerScope } from '../../support/genericHooks'

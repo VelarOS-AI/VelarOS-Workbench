@@ -1,5 +1,5 @@
-import { isEmpty } from '@velaros/core'
-import type { WorkbenchEditorCommand } from '@velaros/core/types'
+import { isEmpty } from '@velaros-ai/core'
+import type { WorkbenchEditorCommand } from '@velaros-ai/core/types'
 
 export type WorkbenchEditorAutomationPhase =
   | 'preparing'

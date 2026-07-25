@@ -21,7 +21,7 @@ import type {
   WorkbenchSaveFileRequest,
   WorkbenchSearchContentRequest,
   WorkbenchSearchEntriesRequest,
-} from '@velaros/core/types'
+} from '@velaros-ai/core/types'
 
 import { WorkbenchFsChannels } from '../../shared/workbenchFs'
 

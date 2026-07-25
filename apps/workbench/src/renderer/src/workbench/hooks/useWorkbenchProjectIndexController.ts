@@ -1,18 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import { Log, toOptional } from '@velaros/core'
-import { AppError } from '@velaros/core/error'
-import { Result } from '@velaros/core/result'
+import { Log, toOptional } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
+import { Result } from '@velaros-ai/core/result'
 import type {
   WorkbenchIndexProjectResult,
   WorkbenchProjectAiIndexStatus,
-} from '@velaros/core/types'
-import { workbenchHost } from '@velaros/workbench/host'
-import type { WorkbenchMessageKey } from '@velaros/workbench/i18n'
-import type { WorkbenchOpenFileSnapshot } from '@velaros/workbench/models/project/workbenchProjectContextIndex'
-import { getWorkbenchProjectAiIndexNotice } from '@velaros/workbench/models/project/workbenchProjectIndexNotice'
-import type { WorkbenchProject } from '@velaros/workbench/models/project/workbenchProjects'
-import { fileLanguage } from '@velaros/workbench/models/shared/workbenchUtils'
+} from '@velaros-ai/core/types'
+import { workbenchHost } from '@velaros-ai/workbench/host'
+import type { WorkbenchMessageKey } from '@velaros-ai/workbench/i18n'
+import type { WorkbenchOpenFileSnapshot } from '@velaros-ai/workbench/models/project/workbenchProjectContextIndex'
+import { getWorkbenchProjectAiIndexNotice } from '@velaros-ai/workbench/models/project/workbenchProjectIndexNotice'
+import type { WorkbenchProject } from '@velaros-ai/workbench/models/project/workbenchProjects'
+import { fileLanguage } from '@velaros-ai/workbench/models/shared/workbenchUtils'
 
 import { useStableWorkbenchMessageTranslate } from '../runtime/useStableWorkbenchMessaging'
 import { useLatest, useMonotonicAsyncRequest } from '../support/genericHooks'

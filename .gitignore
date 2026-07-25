@@ -2,6 +2,8 @@ node_modules/
 out/
 dist/
 release/
+!scripts/release/
+!scripts/release/publish-packages.mjs
 dist-plugins/
 .data/
 
@@ -14,6 +16,7 @@ packages/*/src/**/*.js.map
 packages/*/src/**/*.d.ts.map
 packages/*/src/**/*.d.ts
 !packages/*/src/**/velaros-globals.d.ts
+!packages/workbench/src/types/tinykeys.d.ts
 
 # 根目录 types/ 下的手写全局类型单源
 !types/velaros-globals.d.ts

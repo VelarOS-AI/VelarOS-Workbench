@@ -6,7 +6,7 @@
  *
  * 仅保留**纯类型别名**（编译期，无运行时）。原先挂在此处的运行时全局函数 / 变量（`AppError`、
  * `isString` 等守卫、`toNullable` / `optionalWhen` / `mapDefined`）与原型扩展（`JSON.stringifyPretty`）
- * 已改为 `@velaros/core` 具名导出，调用点显式 `import`，不再污染宿主全局。
+ * 已改为 `@velaros-ai/core` 具名导出，调用点显式 `import`，不再污染宿主全局。
  *
  * 全局空占位：`undefined` 与 `null`。
  * 新代码优先用 `undefined`；仅在 JSON／IPC、DOM/React ref、序列化必须用 `null` 时写 `null`。

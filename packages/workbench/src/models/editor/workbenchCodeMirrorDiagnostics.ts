@@ -8,8 +8,8 @@ import {
   type ViewUpdate,
 } from '@codemirror/view'
 
-import { isPresent } from '@velaros/core'
-import type { WorkbenchLanguageServiceDiagnostic } from '@velaros/core/types'
+import { isPresent } from '@velaros-ai/core'
+import type { WorkbenchLanguageServiceDiagnostic } from '@velaros-ai/core/types'
 
 import { diagnosticToCodeMirrorLintRange } from './workbenchCodeMirrorLanguageService'
 

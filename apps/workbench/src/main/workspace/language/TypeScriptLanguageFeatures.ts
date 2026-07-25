@@ -1,6 +1,6 @@
 import * as ts from 'typescript'
 
-import { isPresent } from '@velaros/core'
+import { isPresent } from '@velaros-ai/core'
 import type {
   WorkbenchLanguageServiceDisplayPart,
   WorkbenchLanguageServiceDisplayPartKind,
@@ -14,7 +14,7 @@ import type {
   WorkbenchLanguageServiceRange,
   WorkbenchLanguageServiceSignatureHelpResult,
   WorkbenchLanguageServiceTextEdit,
-} from '@velaros/core/types'
+} from '@velaros-ai/core/types'
 
 const DISPLAY_PART_KINDS: readonly WorkbenchLanguageServiceDisplayPartKind[] = [
   'aliasName',

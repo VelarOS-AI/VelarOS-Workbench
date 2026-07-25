@@ -1,6 +1,6 @@
 import { type KeyboardEvent, useEffect, useMemo, useState } from 'react'
 
-import { isEmpty } from '@velaros/core'
+import { isEmpty } from '@velaros-ai/core'
 
 import type { WorkbenchCommandHistoryItem } from '../../models/commands/workbenchCommandHistory'
 import type { WorkbenchRunConfiguration } from '../../models/commands/workbenchRunConfigurations'

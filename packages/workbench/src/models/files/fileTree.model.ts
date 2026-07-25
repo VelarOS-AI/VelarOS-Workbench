@@ -1,9 +1,9 @@
-import { optionalWhenLazy } from '@velaros/core'
-import type { WorkbenchDirectoryEntry } from '@velaros/core/types'
+import { optionalWhenLazy } from '@velaros-ai/core'
+import type { WorkbenchDirectoryEntry } from '@velaros-ai/core/types'
 import {
   type FilePresentationVariant,
   getFilePresentationVariant,
-} from '@velaros/ui/utils/filePresentation'
+} from '@velaros-ai/ui/utils/filePresentation'
 
 import { ROOT_PATH } from '../shared/workbenchUtils'
 

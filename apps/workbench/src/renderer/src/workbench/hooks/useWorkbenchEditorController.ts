@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-import { isEmpty, Log, optionalWhenLazy, toNullable } from '@velaros/core'
-import { AppError } from '@velaros/core/error'
-import { Result } from '@velaros/core/result'
+import { isEmpty, Log, optionalWhenLazy, toNullable } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
+import { Result } from '@velaros-ai/core/result'
 import type {
   SystemWorkspaceFilesChangedEvent,
   WorkbenchLanguageServiceFileEdit,
   WorkbenchReadFileResult,
-} from '@velaros/core/types'
-import { workbenchHost } from '@velaros/workbench/host'
-import { applyWorkbenchLanguageServiceEditsToContent } from '@velaros/workbench/models/editor/workbenchCodeMirrorLanguageService'
+} from '@velaros-ai/core/types'
+import { workbenchHost } from '@velaros-ai/workbench/host'
+import { applyWorkbenchLanguageServiceEditsToContent } from '@velaros-ai/workbench/models/editor/workbenchCodeMirrorLanguageService'
 import {
   buildExternalChangeNoticeKey,
   getWorkbenchEditorFilesChangedRefreshDelayMs,
@@ -19,15 +19,15 @@ import {
   movePath,
   reuseWorkbenchOpenFileSnapshots,
   WORKBENCH_EDITOR_FILES_CHANGED_DEBOUNCE_MS,
-} from '@velaros/workbench/models/editor/workbenchEditorTabs'
-import type { WorkbenchOpenFileSnapshot } from '@velaros/workbench/models/project/workbenchProjectContextIndex'
-import type { WorkbenchProject } from '@velaros/workbench/models/project/workbenchProjects'
-import { readWorkbenchLocalHistoryThrottleMs } from '@velaros/workbench/models/settings/workbenchPreferences'
-import { isSameOrChildPath } from '@velaros/workbench/models/shared/workbenchUtils'
+} from '@velaros-ai/workbench/models/editor/workbenchEditorTabs'
+import type { WorkbenchOpenFileSnapshot } from '@velaros-ai/workbench/models/project/workbenchProjectContextIndex'
+import type { WorkbenchProject } from '@velaros-ai/workbench/models/project/workbenchProjects'
+import { readWorkbenchLocalHistoryThrottleMs } from '@velaros-ai/workbench/models/settings/workbenchPreferences'
+import { isSameOrChildPath } from '@velaros-ai/workbench/models/shared/workbenchUtils'
 import type {
   WorkbenchOpenEditorExternalChange,
   WorkbenchOpenEditorTab,
-} from '@velaros/workbench/types/workbenchTypes'
+} from '@velaros-ai/workbench/types/workbenchTypes'
 
 import { useStableWorkbenchMessageTranslate } from '../runtime/useStableWorkbenchMessaging'
 import { useLatest, useMemoizedFn, useMonotonicAsyncRequest, useTimerScope } from '../support/genericHooks'

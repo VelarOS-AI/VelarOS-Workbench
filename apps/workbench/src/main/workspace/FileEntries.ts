@@ -7,8 +7,8 @@
 import { opendir, realpath, stat } from 'node:fs/promises'
 import { basename } from 'node:path'
 
-import { shouldSkipWorkspaceToolDirectory } from '@velaros/core/constants/workspaceVisibility'
-import type { WorkbenchDirectoryEntry } from '@velaros/core/types'
+import { shouldSkipWorkspaceToolDirectory } from '@velaros-ai/core/constants/workspaceVisibility'
+import type { WorkbenchDirectoryEntry } from '@velaros-ai/core/types'
 
 import type { PathResolver } from './PathResolver'
 

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 
-import { AppError } from '@velaros/core/error'
+import { AppError } from '@velaros-ai/core/error'
 
 export interface WorkbenchHistoryRecordContent {
   content: Nullable<string>

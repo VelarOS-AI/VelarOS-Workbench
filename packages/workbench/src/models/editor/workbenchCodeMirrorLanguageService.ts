@@ -3,7 +3,7 @@ import { pickedCompletion } from '@codemirror/autocomplete'
 import type { ChangeSpec, EditorState } from '@codemirror/state'
 import type { EditorView } from '@codemirror/view'
 
-import { isPresent } from '@velaros/core'
+import { isPresent } from '@velaros-ai/core'
 import type {
   WorkbenchLanguageServiceCompletionItem,
   WorkbenchLanguageServiceCompletionTextEdit,
@@ -12,7 +12,7 @@ import type {
   WorkbenchLanguageServicePositionRequest,
   WorkbenchLanguageServiceRange,
   WorkbenchLanguageServiceTextEdit,
-} from '@velaros/core/types'
+} from '@velaros-ai/core/types'
 
 import {
   getWorkbenchPathExtension,

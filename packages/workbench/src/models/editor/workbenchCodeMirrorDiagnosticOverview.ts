@@ -2,7 +2,7 @@ import { type Diagnostic,forEachDiagnostic, setDiagnosticsEffect } from '@codemi
 import type { Extension } from '@codemirror/state'
 import { type EditorView, ViewPlugin, type ViewUpdate } from '@codemirror/view'
 
-import { isEmpty } from '@velaros/core'
+import { isEmpty } from '@velaros-ai/core'
 
 export interface WorkbenchDiagnosticOverviewLineMarker {
   line: number

@@ -5,7 +5,7 @@ import { join } from 'node:path'
 
 import { execa } from 'execa'
 
-import { AppError } from '@velaros/core/error'
+import { AppError } from '@velaros-ai/core/error'
 
 import { WorkbenchGitService } from './WorkbenchGitService'
 

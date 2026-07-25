@@ -9,13 +9,13 @@ import {
   type ViewUpdate,
 } from '@codemirror/view'
 
-import { isEmpty } from '@velaros/core'
+import { isEmpty } from '@velaros-ai/core'
 import type {
   WorkbenchLanguageServiceDisplayPartKind,
   WorkbenchLanguageServiceHoverResult,
   WorkbenchLanguageServiceLocation,
   WorkbenchLanguageServiceSignatureHelpResult,
-} from '@velaros/core/types'
+} from '@velaros-ai/core/types'
 
 import type { WorkbenchOpenEditorTab } from '../../types/workbenchTypes'
 

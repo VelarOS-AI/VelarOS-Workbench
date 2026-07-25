@@ -7,23 +7,23 @@ import {
   XIcon,
 } from '@phosphor-icons/react'
 
-import { isEmpty, isNotNull, toNullable } from '@velaros/core'
-import { Button } from '@velaros/ui/primitives/buttons/Button'
-import { IconButton } from '@velaros/ui/primitives/buttons/IconButton'
-import { Paragraph } from '@velaros/ui/primitives/display/Paragraph'
-import { Text } from '@velaros/ui/primitives/display/Text'
-import { Input } from '@velaros/ui/primitives/forms/Input'
-import { SegmentedControl } from '@velaros/ui/primitives/forms/SegmentedControl'
-import { ScrollArea } from '@velaros/ui/primitives/layout/ScrollArea'
+import { isEmpty, isNotNull, toNullable } from '@velaros-ai/core'
+import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
+import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
+import { Paragraph } from '@velaros-ai/ui/primitives/display/Paragraph'
+import { Text } from '@velaros-ai/ui/primitives/display/Text'
+import { Input } from '@velaros-ai/ui/primitives/forms/Input'
+import { SegmentedControl } from '@velaros-ai/ui/primitives/forms/SegmentedControl'
+import { ScrollArea } from '@velaros-ai/ui/primitives/layout/ScrollArea'
 import {
   useWorkbenchFileHistory,
   type WorkbenchFileHistoryMode,
-} from '@velaros/workbench/hooks/useWorkbenchFileHistory'
-import { useWorkbenchHistoryRecordContent } from '@velaros/workbench/hooks/useWorkbenchHistoryRecordContent'
-import { useWorkbenchHistorySearchIndex } from '@velaros/workbench/hooks/useWorkbenchHistorySearchIndex'
-import { useWorkbenchI18n } from '@velaros/workbench/i18n'
-import { buildWorkbenchContentDiffRows } from '@velaros/workbench/models/git/workbenchGitDiffModel'
-import type { WorkbenchThemeId } from '@velaros/workbench/models/settings/workbenchPreferences'
+} from '@velaros-ai/workbench/hooks/useWorkbenchFileHistory'
+import { useWorkbenchHistoryRecordContent } from '@velaros-ai/workbench/hooks/useWorkbenchHistoryRecordContent'
+import { useWorkbenchHistorySearchIndex } from '@velaros-ai/workbench/hooks/useWorkbenchHistorySearchIndex'
+import { useWorkbenchI18n } from '@velaros-ai/workbench/i18n'
+import { buildWorkbenchContentDiffRows } from '@velaros-ai/workbench/models/git/workbenchGitDiffModel'
+import type { WorkbenchThemeId } from '@velaros-ai/workbench/models/settings/workbenchPreferences'
 
 import styles from '../../styles/workbenchPageStyles'
 import type { WorkbenchUnifiedDiffRowsHandle } from '../git/WorkbenchUnifiedDiffRows'

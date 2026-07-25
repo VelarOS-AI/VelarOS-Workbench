@@ -1,7 +1,7 @@
 import { forwardRef, type ReactElement } from 'react'
 
-import type { WorkbenchUnifiedDiffRow } from '@velaros/workbench/models/git/workbenchGitDiffModel'
-import type { WorkbenchThemeId } from '@velaros/workbench/models/settings/workbenchPreferences'
+import type { WorkbenchUnifiedDiffRow } from '@velaros-ai/workbench/models/git/workbenchGitDiffModel'
+import type { WorkbenchThemeId } from '@velaros-ai/workbench/models/settings/workbenchPreferences'
 
 import styles from '../../styles/workbenchPageStyles'
 import {

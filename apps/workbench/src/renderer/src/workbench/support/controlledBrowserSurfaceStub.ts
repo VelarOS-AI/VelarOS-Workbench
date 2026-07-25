@@ -1,5 +1,5 @@
 /**
- * 独立 Workbench 应用的受控浏览器面空实现（对位 `@velaros/browser-composition` 的
+ * 独立 Workbench 应用的受控浏览器面空实现（对位 `@velaros-ai/browser-composition` 的
  * `useControlledBrowserSurface`，契约形状同源）。
  *
  * Desktop 由 browser 簇提供 agent 浏览器调试面；独立应用没有内嵌浏览器宿主，
@@ -8,7 +8,7 @@
  */
 import type { ReactNode } from 'react'
 
-import type { BrowserElementSelection } from '@velaros/core/types'
+import type { BrowserElementSelection } from '@velaros-ai/core/types'
 
 export interface ControlledBrowserSurfaceInput {
   sessionId: string

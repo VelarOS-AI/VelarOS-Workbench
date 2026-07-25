@@ -2,16 +2,16 @@ import type {
   WorkbenchDirectoryEntry,
   WorkbenchReadFileResult,
   WorkbenchRunCommandResult,
-} from '@velaros/core/types'
-import type { WorkbenchCommandHistoryItem } from '@velaros/workbench/models/commands/workbenchCommandHistory'
-import type { WorkbenchCommandSuggestion } from '@velaros/workbench/models/commands/workbenchCommandSuggestions'
-import type { WorkbenchRunConfiguration } from '@velaros/workbench/models/commands/workbenchRunConfigurations'
+} from '@velaros-ai/core/types'
+import type { WorkbenchCommandHistoryItem } from '@velaros-ai/workbench/models/commands/workbenchCommandHistory'
+import type { WorkbenchCommandSuggestion } from '@velaros-ai/workbench/models/commands/workbenchCommandSuggestions'
+import type { WorkbenchRunConfiguration } from '@velaros-ai/workbench/models/commands/workbenchRunConfigurations'
 import type {
   WorkbenchProjectContextFile,
   WorkbenchProjectContextIndex,
-} from '@velaros/workbench/models/project/workbenchProjectContextIndex'
-import type { WorkbenchProject } from '@velaros/workbench/models/project/workbenchProjects'
-import type { WorkbenchOpenEditorTab } from '@velaros/workbench/types/workbenchTypes'
+} from '@velaros-ai/workbench/models/project/workbenchProjectContextIndex'
+import type { WorkbenchProject } from '@velaros-ai/workbench/models/project/workbenchProjects'
+import type { WorkbenchOpenEditorTab } from '@velaros-ai/workbench/types/workbenchTypes'
 
 import type { WorkbenchTerminalSessionView } from '../hooks/useWorkbenchCommandController'
 

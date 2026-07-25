@@ -1,5 +1,5 @@
-import { AppError } from '@velaros/core/error'
-import type { Result } from '@velaros/core/result'
+import { AppError } from '@velaros-ai/core/error'
+import type { Result } from '@velaros-ai/core/result'
 import type {
   AppLocale,
   ChatHookSendTaskEvent,
@@ -102,7 +102,7 @@ import type {
   WorkbenchTerminalStopRequest,
   WorkspaceGitDiffOptions,
   WorkspaceGitLogOptions,
-} from '@velaros/core/types'
+} from '@velaros-ai/core/types'
 
 /** Workbench 所需的项目、编辑器、终端与代码智能 Kernel 能力。 */
 export interface WorkbenchProjectKernelPort {

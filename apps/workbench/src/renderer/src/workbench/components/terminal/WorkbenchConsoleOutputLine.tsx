@@ -1,11 +1,11 @@
 import { type ReactElement, type ReactNode, useMemo } from 'react'
 import { ArrowSquareOutIcon } from '@phosphor-icons/react'
 
-import { useWorkbenchI18n } from '@velaros/workbench/i18n'
+import { useWorkbenchI18n } from '@velaros-ai/workbench/i18n'
 import {
   highlightWorkbenchConsoleOutput,
   type WorkbenchConsoleOutputTokenKind,
-} from '@velaros/workbench/models/commands/workbenchConsoleOutputHighlight'
+} from '@velaros-ai/workbench/models/commands/workbenchConsoleOutputHighlight'
 
 import styles from '../../styles/workbenchPageStyles'
 

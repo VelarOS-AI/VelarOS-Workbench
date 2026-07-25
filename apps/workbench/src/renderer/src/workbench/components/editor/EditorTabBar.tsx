@@ -18,23 +18,23 @@ import {
   XIcon,
 } from '@phosphor-icons/react'
 
-import { isPresent } from '@velaros/core'
-import type { WorkbenchReadFileResult } from '@velaros/core/types'
-import { Button } from '@velaros/ui/primitives/buttons/Button'
-import { IconButton } from '@velaros/ui/primitives/buttons/IconButton'
-import { FileTypeIcon } from '@velaros/ui/primitives/display/FileTypeIcon'
-import { Text } from '@velaros/ui/primitives/display/Text'
-import { useWorkbenchEditorTabOverflow } from '@velaros/workbench/hooks/useWorkbenchEditorTabOverflow'
-import { useWorkbenchI18n } from '@velaros/workbench/i18n'
+import { isPresent } from '@velaros-ai/core'
+import type { WorkbenchReadFileResult } from '@velaros-ai/core/types'
+import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
+import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
+import { FileTypeIcon } from '@velaros-ai/ui/primitives/display/FileTypeIcon'
+import { Text } from '@velaros-ai/ui/primitives/display/Text'
+import { useWorkbenchEditorTabOverflow } from '@velaros-ai/workbench/hooks/useWorkbenchEditorTabOverflow'
+import { useWorkbenchI18n } from '@velaros-ai/workbench/i18n'
 import {
   getWorkbenchGitChangeDisplayPath,
   type WorkbenchGitChangeItem,
   type WorkbenchGitDecorationMap,
-} from '@velaros/workbench/models/git/workbenchGitModel'
+} from '@velaros-ai/workbench/models/git/workbenchGitModel'
 import type {
   WorkbenchLightEditorTab,
   WorkbenchOpenEditorTab,
-} from '@velaros/workbench/types/workbenchTypes'
+} from '@velaros-ai/workbench/types/workbenchTypes'
 
 import styles from '../../styles/workbenchPageStyles'
 import { useBlockWheelScroll } from '../../support/useBlockWheelScroll'

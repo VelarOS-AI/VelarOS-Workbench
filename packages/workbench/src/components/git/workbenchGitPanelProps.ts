@@ -1,4 +1,4 @@
-import type { SystemWorkspaceGitSummary } from '@velaros/core/types'
+import type { SystemWorkspaceGitSummary } from '@velaros-ai/core/types'
 
 import type { WorkbenchGitChangeItem } from '../../models/git/workbenchGitModel'
 

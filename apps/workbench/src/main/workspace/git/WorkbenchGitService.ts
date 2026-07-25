@@ -4,7 +4,7 @@ import { isAbsolute, join, resolve } from 'node:path'
 
 import { execa } from 'execa'
 
-import { AppError } from '@velaros/core/error'
+import { AppError } from '@velaros-ai/core/error'
 import type {
   AppLocale,
   SystemWorkspaceGitActionResult,
@@ -31,11 +31,11 @@ import type {
   WorkspaceGitRemoteActionOptions,
   WorkspaceGitRemoteActionResult,
   WorkspaceGitStatusResult,
-} from '@velaros/core/types'
+} from '@velaros-ai/core/types'
 import {
   getRelativePathInsideRoot,
   toPortableRelativePath,
-} from '@velaros/core/utils/PathContainmentHelper'
+} from '@velaros-ai/core/utils/PathContainmentHelper'
 
 const DefaultDiffMaxChars = 20_000
 const MaxDiffChars = 1_000_000

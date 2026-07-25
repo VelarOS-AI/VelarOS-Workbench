@@ -2,7 +2,7 @@ import { jsonLanguage } from '@codemirror/lang-json'
 import { type Extension, RangeSetBuilder } from '@codemirror/state'
 import { gutter, GutterMarker } from '@codemirror/view'
 
-import { isEmpty,isString, toNullable } from '@velaros/core'
+import { isEmpty,isString, toNullable } from '@velaros-ai/core'
 
 import {
   buildWorkbenchPackageScriptRunCommand,

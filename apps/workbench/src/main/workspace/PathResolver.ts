@@ -8,13 +8,13 @@ import { realpathSync, statSync } from 'node:fs'
 import { realpath, stat } from 'node:fs/promises'
 import { basename, resolve } from 'node:path'
 
-import { shouldSkipWorkspaceToolDirectory } from '@velaros/core/constants/workspaceVisibility'
-import { AppError } from '@velaros/core/error'
-import { LoggerFactory } from '@velaros/core/logger'
+import { shouldSkipWorkspaceToolDirectory } from '@velaros-ai/core/constants/workspaceVisibility'
+import { AppError } from '@velaros-ai/core/error'
+import { LoggerFactory } from '@velaros-ai/core/logger'
 import {
   getRelativePathInsideRoot,
   toPortableRelativePath,
-} from '@velaros/core/utils/PathContainmentHelper'
+} from '@velaros-ai/core/utils/PathContainmentHelper'
 
 interface ResolvedPath {
   requestedPath: string

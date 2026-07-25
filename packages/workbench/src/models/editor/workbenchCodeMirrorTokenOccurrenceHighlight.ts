@@ -7,7 +7,7 @@ import {
   type ViewUpdate,
 } from '@codemirror/view'
 
-import { isPresent } from '@velaros/core'
+import { isPresent } from '@velaros-ai/core'
 
 /**
  * 语言无关的「同词高亮」：光标停在某个标识符上时，给可视区里所有相同单词
