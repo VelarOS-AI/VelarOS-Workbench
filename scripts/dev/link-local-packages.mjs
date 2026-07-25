@@ -12,8 +12,13 @@ for (const entry of await readdir(path.join(root, 'packages'), { withFileTypes: 
   const manifestPath = path.join(root, 'packages', entry.name, 'package.json')
   if (entry.isDirectory() && await exists(manifestPath)) packageManifests.push({ directory: path.dirname(manifestPath), manifest: await readJson(manifestPath) })
 }
+const appManifests = []
+for (const entry of await readdir(path.join(root, 'apps'), { withFileTypes: true })) {
+  const manifestPath = path.join(root, 'apps', entry.name, 'package.json')
+  if (entry.isDirectory() && await exists(manifestPath)) appManifests.push({ directory: path.dirname(manifestPath), manifest: await readJson(manifestPath) })
+}
 const ownNames = new Set(packageManifests.map(({ manifest }) => manifest.name))
-const manifests = [await readJson(path.join(root, 'package.json')), ...packageManifests.map(({ manifest }) => manifest)]
+const manifests = [await readJson(path.join(root, 'package.json')), ...packageManifests.map(({ manifest }) => manifest), ...appManifests.map(({ manifest }) => manifest)]
 const externalNames = new Set()
 for (const manifest of manifests) for (const field of ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies']) {
   for (const [name, spec] of Object.entries(manifest[field] ?? {})) if (name.startsWith(scope) && !ownNames.has(name) && spec !== 'workspace:*') externalNames.add(name)
@@ -58,6 +63,13 @@ for (const name of externalNames) {
   await linkIntoProject(root, name, directory)
 }
 for (const item of packageManifests) {
+  const dependencies = { ...item.manifest.dependencies, ...item.manifest.optionalDependencies }
+  for (const name of Object.keys(dependencies)) {
+    const directory = available.get(name)
+    if (directory) await linkIntoProject(item.directory, name, directory)
+  }
+}
+for (const item of appManifests) {
   const dependencies = { ...item.manifest.dependencies, ...item.manifest.optionalDependencies }
   for (const name of Object.keys(dependencies)) {
     const directory = available.get(name)

@@ -2,11 +2,18 @@ import { readdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
+import ts from 'typescript'
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const dryRun = process.argv.includes('--dry-run')
 const registry = 'https://npm.pkg.github.com'
 const readJson = async (file) => JSON.parse(await readFile(file, 'utf8'))
+const readJsonc = async (file) => {
+  const parsed = ts.parseConfigFileTextToJson(file, await readFile(file, 'utf8'))
+  if (parsed.error) throw new Error(`Unable to parse ${file}: TypeScript diagnostic ${parsed.error.code}`)
+  return parsed.config
+}
 const rootManifest = await readJson(path.join(root, 'package.json'))
+const lockfile = await readJsonc(path.join(root, 'bun.lock'))
 const directories = (await readdir(path.join(root, 'packages'), { withFileTypes: true })).filter((entry) => entry.isDirectory()).map((entry) => path.join(root, 'packages', entry.name))
 const packages = []
 for (const directory of directories) {
@@ -17,6 +24,13 @@ for (const directory of directories) {
   packages.push({ directory, manifest })
 }
 const byName = new Map(packages.map((item) => [item.manifest.name, item]))
+for (const item of packages) {
+  const workspacePath = path.relative(root, item.directory).split(path.sep).join('/')
+  const lockedWorkspace = lockfile.workspaces?.[workspacePath]
+  if (!lockedWorkspace || lockedWorkspace.version !== item.manifest.version) {
+    throw new Error(`${item.manifest.name} manifest version ${item.manifest.version} does not match bun.lock; regenerate bun.lock before publishing`)
+  }
+}
 const ordered = []
 const visiting = new Set()
 const visited = new Set()

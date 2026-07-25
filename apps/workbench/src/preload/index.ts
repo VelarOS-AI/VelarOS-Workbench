@@ -13,6 +13,7 @@ import {
 } from '../shared/projectHub'
 import { type WorkbenchFsBridge, WorkbenchFsChannels } from '../shared/workbenchFs'
 import { type WorkbenchGitBridge, WorkbenchGitChannels } from '../shared/workbenchGit'
+import { type WorkbenchKernelBridge, WorkbenchKernelChannels } from '../shared/workbenchKernel'
 import {
   type WorkbenchLanguageBridge,
   WorkbenchLanguageChannels,
@@ -115,12 +116,20 @@ const gitBridge: WorkbenchGitBridge = {
     ipcRenderer.invoke(WorkbenchGitChannels.remoteAction, request),
 }
 
+const kernelBridge: WorkbenchKernelBridge = {
+  getStatus: () => ipcRenderer.invoke(WorkbenchKernelChannels.getStatus),
+  retry: () => ipcRenderer.invoke(WorkbenchKernelChannels.retry),
+  onStatusChanged: (listener) =>
+    subscribe(WorkbenchKernelChannels.statusChanged, listener),
+}
+
 contextBridge.exposeInMainWorld('velarosWorkbenchProjectHub', projectHubBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchFs', fsBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchLanguage', languageBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchTerminal', terminalBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchWatch', watchBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchGit', gitBridge)
+contextBridge.exposeInMainWorld('velarosWorkbenchKernel', kernelBridge)
 
 function subscribe<TPayload>(
   channel: string,

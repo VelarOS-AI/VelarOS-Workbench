@@ -13,6 +13,11 @@ The repository intentionally has no dependency on VelarOS Desktop internals. Dur
 development, `@velaros-ai/core` and `@velaros-ai/ui` resolve from `../VelarOS-Kernel` and
 `../VelarOS-UI`; the app owns the Electron implementation behind the semantic Workbench host.
 
+The standalone app discovers the authenticated local `@velaros-ai/kernel-service` daemon and
+projects handshake, health and capability-catalog state through a typed preload bridge. If the
+daemon is unavailable, Workbench stays usable in an explicit retryable degraded state; it never
+starts a hidden fallback Kernel or embeds Desktop.
+
 ## Development
 
 ```bash
