@@ -13,18 +13,19 @@ function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
 }
 
-async function waitForEvent(
+async function waitForPath(
   events: SystemWorkspaceFilesChangedEvent[],
-  index = 0,
+  path: string,
+  fromIndex = 0,
   timeoutMs = 2_000
 ): Promise<SystemWorkspaceFilesChangedEvent> {
   const startedAt = Date.now()
-  while (events.length <= index && Date.now() - startedAt < timeoutMs) {
+  while (Date.now() - startedAt < timeoutMs) {
+    const event = events.slice(fromIndex).find((candidate) => candidate.paths.includes(path))
+    if (event) return event
     await new Promise((resolve) => setTimeout(resolve, 20))
   }
-  const event = events[index]
-  if (!event) throw new Error('watch event timeout')
-  return event
+  throw new Error(`watch event timeout for ${path}`)
 }
 
 const root = await mkdtemp(join(tmpdir(), 'velaros-workbench-watch-'))
@@ -43,28 +44,32 @@ try {
     writeFile(join(root, 'one.ts'), 'one'),
     writeFile(join(root, 'two.ts'), 'two'),
   ])
-  const event = await waitForEvent(firstEvents)
-  await waitForEvent(secondEvents)
+  const event = await waitForPath(firstEvents, 'one.ts')
+  const secondPathEvent = await waitForPath(firstEvents, 'two.ts')
+  await waitForPath(secondEvents, 'one.ts')
+  await waitForPath(secondEvents, 'two.ts')
 
   assert(event.kind === 'velaros.systemWorkspaceFilesChanged', 'event kind must be stable')
   assert(event.source === 'filesystem-watch', 'event source must identify watcher')
   assert(event.rootPath === first.workspaceRoot, 'event root must be canonical')
   assert(event.changedAt === 123, 'event timestamp must use dependency clock')
   assert(event.paths.includes('one.ts'), 'first path must be reported')
-  assert(event.paths.includes('two.ts'), 'second path must be reported')
+  assert(secondPathEvent.paths.includes('two.ts'), 'second path must be reported')
   assert(event.sessionIds.length === 0, 'standalone watcher must not invent sessions')
 
   service.unsubscribe(first.subscriptionId)
   const firstCount = firstEvents.length
+  const secondCount = secondEvents.length
   await writeFile(join(root, 'three.ts'), 'three')
-  const secondEvent = await waitForEvent(secondEvents, 1)
+  const secondEvent = await waitForPath(secondEvents, 'three.ts', secondCount)
   assert(secondEvent.paths.includes('three.ts'), 'remaining subscriber must receive changes')
   await new Promise((resolve) => setTimeout(resolve, 80))
   assert(firstEvents.length === firstCount, 'released subscriber must receive no changes')
 
   await mkdir(join(root, '.git'))
+  const beforeGitWrite = secondEvents.length
   await writeFile(join(root, '.git', 'HEAD'), 'ref: refs/heads/main\n')
-  const gitEvent = await waitForEvent(secondEvents, 2)
+  const gitEvent = await waitForPath(secondEvents, '.git/HEAD', beforeGitWrite)
   assert(gitEvent.paths.includes('.git/HEAD'), 'Git state changes must refresh Git surfaces')
 
   await mkdir(join(root, 'node_modules'))
