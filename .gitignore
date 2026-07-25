@@ -2,6 +2,8 @@ node_modules/
 out/
 dist/
 release/
+!scripts/release/
+!scripts/release/publish-packages.mjs
 dist-plugins/
 .data/
 
