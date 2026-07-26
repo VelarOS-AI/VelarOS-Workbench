@@ -26,12 +26,13 @@ interface StandaloneChatState {
 }
 
 interface AgentExecutionEnvelope {
+  protocolVersion?: unknown
   executionId?: unknown
+  sourceProductId?: unknown
   sourceSessionId?: unknown
   sessionCorrelationId?: unknown
-  type?: unknown
-  text?: unknown
-  message?: unknown
+  channel?: unknown
+  payload?: unknown
 }
 
 const states = new Map<string, StandaloneChatState>()
@@ -198,7 +199,6 @@ function StandaloneWorkbenchChatSessionSurface({
   const [baseURL, setBaseURL] = useState('https://api.openai.com/v1')
   const [apiKey, setApiKey] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [activeExecutionId, setActiveExecutionId] = useState<string | null>(null)
   const activeExecutionRef = useRef<{
     executionId: string
     sessionCorrelationId: string
@@ -207,7 +207,11 @@ function StandaloneWorkbenchChatSessionSurface({
   useEffect(() =>
     window.velarosWorkbenchKernel.onAgentExecution((rawEnvelope) => {
       const envelope = rawEnvelope as AgentExecutionEnvelope
-      if (envelope.sourceSessionId !== chat.sessionId) return
+      if (
+        envelope.protocolVersion !== 1
+        || envelope.sourceProductId !== 'velaros.workbench'
+        || envelope.sourceSessionId !== chat.sessionId
+      ) return
       const activeExecution = activeExecutionRef.current
       if (
         !activeExecution
@@ -216,21 +220,19 @@ function StandaloneWorkbenchChatSessionSurface({
       ) return
       const text = readAgentTextDelta(envelope)
       if (text) appendAssistantText(projectRoot, text)
-      if (envelope.type === 'done') {
+      const terminal = readAgentTerminalEvent(envelope)
+      if (terminal?.status === 'completed') {
         finishRun(projectRoot, 'completed')
         activeExecutionRef.current = null
-        setActiveExecutionId(null)
-      } else if (envelope.type === 'aborted') {
+      } else if (terminal?.status === 'aborted') {
         finishRun(projectRoot, 'aborted')
         activeExecutionRef.current = null
-        setActiveExecutionId(null)
-      } else if (envelope.type === 'error') {
+      } else if (terminal?.status === 'failed') {
         finishWithError(
           projectRoot,
-          typeof envelope.message === 'string' ? envelope.message : 'Agent execution failed.'
+          terminal.message ?? 'Agent execution failed.'
         )
         activeExecutionRef.current = null
-        setActiveExecutionId(null)
       }
     }), [chat.sessionId, projectRoot])
 
@@ -267,39 +269,23 @@ function StandaloneWorkbenchChatSessionSurface({
     const latest = getState(projectRoot)
     const executionId = nextId('workbench-execution')
     const sessionCorrelationId = nextId('workbench-correlation')
-    const modelProfileId = `${latest.sessionId}:model`
-    const browserSessionId = `${latest.sessionId}:browser`
-    const configured = await window.velarosWorkbenchKernel.invoke({
-      route: 'model.configure-profile',
-      input: {
-        profileId: modelProfileId,
-        provider: provider.trim(),
-        model: model.trim(),
-        apiKey,
-        baseURL: baseURL.trim(),
-      },
-    })
-    if (!configured.ok) {
-      finishWithError(projectRoot, configured.error.message)
-      return
-    }
     activeExecutionRef.current = { executionId, sessionCorrelationId }
-    setActiveExecutionId(executionId)
     const result = await window.velarosWorkbenchKernel.invoke({
       route: 'agent.execute',
-      scope: {
-        id: projectRoot,
-        ownerModuleId: 'velaros.workbench.workspace-scope',
-        kind: 'project',
-      },
       input: {
         protocolVersion: 1,
-        executionId,
-        sourceSessionId: latest.sessionId,
-        sessionCorrelationId,
-        projectRoot,
-        modelProfileId,
-        browserSessionId,
+        execution: {
+          id: executionId,
+          source: {
+            productId: 'velaros.workbench',
+            sessionId: latest.sessionId,
+            correlationId: sessionCorrelationId,
+          },
+          scopeMetadata: {
+            resourceId: projectRoot,
+            surface: 'project',
+          },
+        },
         messages: latest.messages.map((message) => ({
           role: message.role,
           content: message.blocks
@@ -307,13 +293,20 @@ function StandaloneWorkbenchChatSessionSurface({
             .map((block) => block.text)
             .join('\n'),
         })),
+        config: {
+          modelSelection: {
+            provider: provider.trim(),
+            model: model.trim(),
+            apiKey,
+            baseURL: baseURL.trim(),
+          },
+        },
       },
     })
     if (!result.ok) {
       const executionStillActive =
         activeExecutionRef.current?.executionId === executionId
       activeExecutionRef.current = null
-      setActiveExecutionId(null)
       if (executionStillActive) finishWithError(projectRoot, result.error.message)
       return
     }
@@ -321,7 +314,6 @@ function StandaloneWorkbenchChatSessionSurface({
     const executionStillActive =
       activeExecutionRef.current?.executionId === executionId
     activeExecutionRef.current = null
-    setActiveExecutionId(null)
     if (!executionStillActive) return
     if (readFinalAgentStatus(result.output) === 'aborted') {
       finishRun(projectRoot, 'aborted')
@@ -393,19 +385,6 @@ function StandaloneWorkbenchChatSessionSurface({
         <button type="submit" disabled={chat.status === 'running' || !prompt.trim()}>
           {chat.status === 'running' ? 'Running…' : 'Send'}
         </button>
-        {chat.status === 'running' && activeExecutionId && (
-          <button
-            type="button"
-            onClick={() => {
-              void window.velarosWorkbenchKernel.invoke({
-                route: 'agent.abort',
-                input: { executionId: activeExecutionId },
-              })
-            }}
-          >
-            Stop
-          </button>
-        )}
       </form>
     </div>
   )
@@ -459,11 +438,40 @@ function createTextMessage(role: ChatMessage['role'], text: string): ChatMessage
 }
 
 function readAgentTextDelta(record: AgentExecutionEnvelope): string | null {
+  if (record.channel !== 'agent') return null
+  const payload = readAgentEventPayload(record)
   if (
-    record.type === 'text-delta'
-    && typeof record.text === 'string'
-  ) return record.text
+    payload?.type === 'text-delta'
+    && typeof payload.text === 'string'
+  ) return payload.text
   return null
+}
+
+function readAgentTerminalEvent(
+  record: AgentExecutionEnvelope
+): { status: 'completed' | 'aborted' | 'failed'; message?: string } | null {
+  const payload = readAgentEventPayload(record)
+  const kind = payload?.kind ?? payload?.type
+  if (kind === 'done') return { status: 'completed' }
+  if (kind === 'aborted') return { status: 'aborted' }
+  return kind === 'error'
+    ? {
+        status: 'failed',
+        ...(typeof payload?.message === 'string'
+          ? { message: payload.message }
+          : {}),
+      }
+    : null
+}
+
+function readAgentEventPayload(
+  record: AgentExecutionEnvelope
+): Record<string, unknown> | null {
+  return typeof record.payload === 'object'
+    && record.payload !== null
+    && !Array.isArray(record.payload)
+    ? record.payload as Record<string, unknown>
+    : null
 }
 
 function finishRun(

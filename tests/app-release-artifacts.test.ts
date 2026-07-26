@@ -11,7 +11,7 @@ import {
   validateStagedRelease,
 } from '../scripts/release/appReleaseArtifacts.mjs'
 
-const version = '0.3.0'
+const version = '0.3.1'
 const releaseTag = `v${version}`
 const sourceSha = 'a'.repeat(40)
 
@@ -60,7 +60,7 @@ void describe('Workbench app release artifacts', () => {
     await validateReleaseTag(process.cwd(), releaseTag)
     await assert.rejects(
       validateReleaseTag(process.cwd(), 'main'),
-      /must equal app version tag v0.3.0/
+      /must equal app version tag v0.3.1/
     )
   })
 
@@ -80,8 +80,8 @@ void describe('Workbench app release artifacts', () => {
     })
 
     assert.deepEqual(staged, [
-      'VelarOS-Workbench-0.3.0-mac-arm64.dmg',
-      'VelarOS-Workbench-0.3.0-mac-arm64.zip',
+      'VelarOS-Workbench-0.3.1-mac-arm64.dmg',
+      'VelarOS-Workbench-0.3.1-mac-arm64.zip',
       'latest-mac.yml',
       'SHA256SUMS-macos.txt',
       'workbench-macos-release.json',
@@ -104,7 +104,7 @@ void describe('Workbench app release artifacts', () => {
       path.join(stageDir, 'SHA256SUMS-macos.txt'),
       'utf8'
     )
-    assert.match(checksums, /VelarOS-Workbench-0\.3\.0-mac-arm64\.dmg/)
+    assert.match(checksums, /VelarOS-Workbench-0\.3\.1-mac-arm64\.dmg/)
     assert.doesNotMatch(checksums, /builder-debug/)
   })
 
@@ -204,7 +204,7 @@ void describe('Workbench app release artifacts', () => {
       releaseTag,
     })
     await writeFile(
-      path.join(releaseDir, 'VelarOS-Workbench-0.3.0-mac-arm64.dmg'),
+      path.join(releaseDir, 'VelarOS-Workbench-0.3.1-mac-arm64.dmg'),
       'different-dmg'
     )
 
@@ -221,7 +221,7 @@ void describe('Workbench app release artifacts', () => {
     )
     assert.equal(
       await readFile(
-        path.join(stageDir, 'VelarOS-Workbench-0.3.0-mac-arm64.dmg'),
+        path.join(stageDir, 'VelarOS-Workbench-0.3.1-mac-arm64.dmg'),
         'utf8'
       ),
       'dmg'
@@ -248,7 +248,7 @@ void describe('Workbench app release artifacts', () => {
     const incompleteDir = path.join(root, 'incomplete')
     await mkdir(incompleteDir)
     await writeFile(
-      path.join(incompleteDir, 'VelarOS-Workbench-0.3.0-mac-arm64.dmg'),
+      path.join(incompleteDir, 'VelarOS-Workbench-0.3.1-mac-arm64.dmg'),
       'signed-dmg'
     )
     await assert.rejects(

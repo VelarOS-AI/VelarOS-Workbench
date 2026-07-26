@@ -20,9 +20,6 @@ import {
 import { AppError } from '@velaros-ai/core/error'
 import { KernelModuleHost } from '@velaros-ai/kernel-host'
 import {
-  createCapabilityToken,
-  createKernelCallableCapability,
-  defineKernelModule,
   type KernelPermissionBroker,
   type KernelPermissionRequest,
   type ScopeRef,
@@ -48,26 +45,15 @@ import type { WorkbenchWorkspaceCapabilityProvider } from '../workspace/Publishe
 
 import { WorkbenchBrowserController } from './WorkbenchBrowserController'
 
-const WorkbenchKernelVersion = '0.3.0'
+const WorkbenchKernelVersion = '0.3.1'
 const WorkbenchWorkspaceScopeOwner = 'velaros.workbench.workspace-scope'
 const AgentExecutionEventType = 'velaros.agent.execution'
-
-const ModelProfilesCapability = createCapabilityToken(
-  'velaros.workbench.model-profiles'
-)
-const BrowserControlCapability = createCapabilityToken(
-  'velaros.workbench.browser-control'
-)
-const AgentControlCapability = createCapabilityToken(
-  'velaros.workbench.agent-control'
-)
 
 const grantedPermissions = new Set([
   'agent:execute',
   'browser:control',
   'fs:read',
   'fs:write',
-  'model:configure',
   'process:exec',
 ])
 
@@ -83,58 +69,26 @@ class WorkbenchKernelPermissionBroker implements KernelPermissionBroker {
   }
 }
 
-interface WorkbenchModelProfile {
-  id: string
+interface WorkbenchAgentExecutionSource {
+  productId: string
+  sessionId: string
+  correlationId: string
+}
+
+interface WorkbenchAgentModelSelection {
   provider: string
   model: string
   apiKey: string
   baseURL: string
 }
 
-class WorkbenchModelProfileStore {
-  private readonly profiles = new Map<string, WorkbenchModelProfile>()
-
-  public configure(input: unknown): Omit<WorkbenchModelProfile, 'apiKey'> {
-    const record = requireRecord(input, 'Model profile must be an object.')
-    const profile: WorkbenchModelProfile = {
-      id: requireNonBlankString(record.profileId, 'profileId is required.'),
-      provider: requireNonBlankString(record.provider, 'provider is required.'),
-      model: requireNonBlankString(record.model, 'model is required.'),
-      apiKey: requireString(record.apiKey, 'apiKey must be a string.'),
-      baseURL: requireString(record.baseURL, 'baseURL must be a string.').trim(),
-    }
-    this.profiles.set(profile.id, profile)
-    return {
-      id: profile.id,
-      provider: profile.provider,
-      model: profile.model,
-      baseURL: profile.baseURL,
-    }
-  }
-
-  public require(profileId: string): WorkbenchModelProfile {
-    const profile = this.profiles.get(profileId)
-    if (!profile) {
-      throw new AppError(
-        'NOT_FOUND',
-        `Workbench model profile "${profileId}" is not configured.`
-      )
-    }
-    return profile
-  }
-
-  public clear(): void {
-    this.profiles.clear()
-  }
-}
-
 interface WorkbenchAgentExecuteInput {
   protocolVersion: 1
   executionId: string
-  sourceSessionId: string
-  sessionCorrelationId: string
+  source: WorkbenchAgentExecutionSource
+  scopeMetadata: Record<string, unknown>
   projectRoot: string
-  modelProfileId: string
+  modelSelection: WorkbenchAgentModelSelection
   browserSessionId: string
   messages: ModelMessage[]
 }
@@ -143,50 +97,89 @@ function parseAgentExecuteInput(
   input: unknown,
   scope: ScopeRef | undefined
 ): WorkbenchAgentExecuteInput {
-  const record = requireRecord(input, 'Workbench Agent input must be an object.')
-  const allowedKeys = new Set([
-    'protocolVersion',
-    'executionId',
-    'sourceSessionId',
-    'sessionCorrelationId',
-    'projectRoot',
-    'modelProfileId',
-    'browserSessionId',
-    'messages',
-  ])
-  if (Object.keys(record).some((key) => !allowedKeys.has(key)) || 'config' in record) {
-    throw new AppError(
-      'VALIDATION',
-      'Workbench Agent input contains an unsupported legacy or unknown field.'
-    )
-  }
-  const projectRoot = requireNonBlankString(record.projectRoot, 'projectRoot is required.')
+  const record = requireRecord(input, 'Agent execution input must be an object.')
+  const allowedKeys = new Set(['protocolVersion', 'execution', 'messages', 'config'])
   if (
     record.protocolVersion !== 1
-    || scope?.ownerModuleId !== WorkbenchWorkspaceScopeOwner
-    || scope.kind !== 'project'
-    || scope.id !== projectRoot
+    || Object.keys(record).some((key) => !allowedKeys.has(key))
+    || scope !== undefined
     || !Array.isArray(record.messages)
   ) {
-    throw new AppError('VALIDATION', 'Workbench Agent execution scope or input is invalid.')
+    throw new AppError('VALIDATION', 'Agent execution input is invalid.')
+  }
+
+  const execution = requireRecord(
+    record.execution,
+    'Agent execution descriptor must be an object.'
+  )
+  const allowedExecutionKeys = new Set(['id', 'source', 'scopeMetadata'])
+  if (Object.keys(execution).some((key) => !allowedExecutionKeys.has(key))) {
+    throw new AppError('VALIDATION', 'Agent execution descriptor is invalid.')
+  }
+  const source = requireRecord(
+    execution.source,
+    'Agent execution source must be an object.'
+  )
+  const allowedSourceKeys = new Set(['productId', 'sessionId', 'correlationId'])
+  if (Object.keys(source).some((key) => !allowedSourceKeys.has(key))) {
+    throw new AppError('VALIDATION', 'Agent execution source is invalid.')
+  }
+  const scopeMetadata = requireRecord(
+    execution.scopeMetadata,
+    'Agent execution scope metadata must be an object.'
+  )
+  if (Object.keys(scopeMetadata).length > 128) {
+    throw new AppError('VALIDATION', 'Agent execution scope metadata is invalid.')
+  }
+  const projectRoot = requireBoundedIdentifier(
+    scopeMetadata.resourceId,
+    'Agent execution resourceId'
+  )
+  const config = requireRecord(record.config, 'Agent execution config must be an object.')
+  const modelSelection = requireRecord(
+    config.modelSelection,
+    'Agent model selection must be an object.'
+  )
+  const allowedModelSelectionKeys = new Set(['provider', 'model', 'apiKey', 'baseURL'])
+  if (Object.keys(modelSelection).some((key) => !allowedModelSelectionKeys.has(key))) {
+    throw new AppError(
+      'VALIDATION',
+      'Agent model selection is invalid.'
+    )
+  }
+
+  const executionSource: WorkbenchAgentExecutionSource = {
+    productId: requireBoundedIdentifier(
+      source.productId,
+      'Agent source productId',
+      128
+    ),
+    sessionId: requireBoundedIdentifier(source.sessionId, 'Agent source sessionId'),
+    correlationId: requireBoundedIdentifier(
+      source.correlationId,
+      'Agent source correlationId'
+    ),
   }
   return {
     protocolVersion: 1,
-    executionId: requireNonBlankString(record.executionId, 'executionId is required.'),
-    sourceSessionId: requireNonBlankString(record.sourceSessionId, 'sourceSessionId is required.'),
-    sessionCorrelationId: requireNonBlankString(
-      record.sessionCorrelationId,
-      'sessionCorrelationId is required.'
-    ),
+    executionId: requireBoundedIdentifier(execution.id, 'Agent execution id'),
+    source: executionSource,
+    scopeMetadata,
     projectRoot,
-    modelProfileId: requireNonBlankString(
-      record.modelProfileId,
-      'modelProfileId is required.'
-    ),
-    browserSessionId: requireNonBlankString(
-      record.browserSessionId,
-      'browserSessionId is required.'
-    ),
+    modelSelection: {
+      provider: requireBoundedIdentifier(
+        modelSelection.provider,
+        'Agent model provider',
+        128
+      ),
+      model: requireBoundedIdentifier(modelSelection.model, 'Agent model id'),
+      apiKey: requireString(modelSelection.apiKey, 'Agent model apiKey must be a string.'),
+      baseURL: requireString(
+        modelSelection.baseURL,
+        'Agent model baseURL must be a string.'
+      ).trim(),
+    },
+    browserSessionId: `${executionSource.sessionId}:browser`,
     messages: record.messages as ModelMessage[],
   }
 }
@@ -196,7 +189,6 @@ class WorkbenchAgentCapabilityRuntime implements AgentCapabilityRuntime {
   private readonly executions = new Map<string, AbortController>()
 
   public constructor(
-    private readonly profiles: WorkbenchModelProfileStore,
     private readonly models: ModelRuntimeComposition,
     private readonly workspace: WorkbenchWorkspaceCapabilityProvider,
     private readonly browser: WorkbenchBrowserController,
@@ -221,35 +213,41 @@ class WorkbenchAgentCapabilityRuntime implements AgentCapabilityRuntime {
     const controller = new AbortController()
     this.executions.set(input.executionId, controller)
     const signal = AbortSignal.any([context.signal, controller.signal])
-    const publish = (type: string, payload: Record<string, unknown> = {}) =>
+    const publish = (
+      channel: 'agent' | 'state',
+      payload: Record<string, unknown>
+    ) =>
       context.publish(AgentExecutionEventType, {
+        protocolVersion: 1,
         executionId: input.executionId,
-        sourceSessionId: input.sourceSessionId,
-        sessionCorrelationId: input.sessionCorrelationId,
-        type,
-        ...payload,
+        sourceProductId: input.source.productId,
+        sourceSessionId: input.source.sessionId,
+        sessionCorrelationId: input.source.correlationId,
+        channel,
+        payload,
       })
 
     try {
-      await publish('start', {
-        projectRoot: input.projectRoot,
+      await publish('state', {
+        kind: 'start',
+        scopeMetadata: input.scopeMetadata,
         browserSessionId: input.browserSessionId,
       })
-      const profile = this.profiles.require(input.modelProfileId)
+      const selection = input.modelSelection
       const resolved = await this.models.agentModelRuntime.resolveRoleRuntime(
         {
-          provider: profile.provider,
-          model: profile.model,
+          provider: selection.provider,
+          model: selection.model,
           apiKey: '',
           baseURL: '',
         },
         {
           providerRuntimeConfigs: [{
-            provider: profile.provider,
+            provider: selection.provider,
             enabled: true,
-            apiKey: profile.apiKey,
-            baseURL: profile.baseURL,
-            defaultModel: profile.model,
+            apiKey: selection.apiKey,
+            baseURL: selection.baseURL,
+            defaultModel: selection.model,
           }],
           openRouter: { useFreeModelsForDebug: false },
         }
@@ -261,7 +259,7 @@ class WorkbenchAgentCapabilityRuntime implements AgentCapabilityRuntime {
           ...(resolved.modelRequestOptions ?? {}),
           runtimeContext: {
             ...(resolved.modelRequestOptions?.runtimeContext ?? {}),
-            sessionId: input.sourceSessionId,
+            sessionId: input.source.sessionId,
           },
         }),
         system: [
@@ -281,29 +279,28 @@ class WorkbenchAgentCapabilityRuntime implements AgentCapabilityRuntime {
       for await (const delta of stream.textStream) {
         signal.throwIfAborted()
         text += delta
-        await publish('text-delta', { text: delta })
+        await publish('agent', { type: 'text-delta', text: delta })
       }
       const outcome = {
         status: 'completed',
         executionId: input.executionId,
-        sourceSessionId: input.sourceSessionId,
-        sessionCorrelationId: input.sessionCorrelationId,
+        sourceSessionId: input.source.sessionId,
         text,
       } as const
-      await publish('done', outcome)
+      await publish('state', { kind: 'done', status: 'completed' })
       return outcome
     } catch (error) {
       if (signal.aborted) {
         const outcome = {
           status: 'aborted',
           executionId: input.executionId,
-          sourceSessionId: input.sourceSessionId,
-          sessionCorrelationId: input.sessionCorrelationId,
+          sourceSessionId: input.source.sessionId,
         } as const
-        await publish('aborted', outcome)
+        await publish('state', { kind: 'aborted', status: 'aborted' })
         return outcome
       }
-      await publish('error', {
+      await publish('state', {
+        kind: 'error',
         message: error instanceof Error ? error.message : String(error),
       })
       throw error
@@ -341,14 +338,14 @@ class WorkbenchAgentCapabilityRuntime implements AgentCapabilityRuntime {
       value: T
     ): T & { agentSessionId: string; browserSessionId: string } => ({
       ...value,
-      agentSessionId: input.sourceSessionId,
+      agentSessionId: input.source.sessionId,
       browserSessionId: input.browserSessionId,
     })
     tools.browser_open = tool({
       description: 'Create or open the Agent-linked browser session at a URL.',
       inputSchema: z.object({ url: z.string().min(1) }),
       execute: ({ url }) => this.browser.open({
-        agentSessionId: input.sourceSessionId,
+        agentSessionId: input.source.sessionId,
         browserSessionId: input.browserSessionId,
         projectRoot: input.projectRoot,
         url,
@@ -381,110 +378,6 @@ class WorkbenchAgentCapabilityRuntime implements AgentCapabilityRuntime {
   }
 }
 
-function createModelProfilesModule(profiles: WorkbenchModelProfileStore) {
-  return defineKernelModule({
-    manifest: {
-      id: 'velaros.workbench.model-profiles',
-      version: '0.3.0',
-      apiVersion: 1,
-      provides: [ModelProfilesCapability],
-      requires: [],
-      optionalRequires: [],
-      permissions: ['model:configure'],
-      isolation: 'in-process',
-    },
-    activate(context) {
-      context.registerService(
-        ModelProfilesCapability,
-        createKernelCallableCapability({
-          configure: {
-            metadata: {
-              permissions: ['model:configure'],
-              reason: 'Configure a Workbench-owned Model Runtime profile.',
-            },
-            invoke: (_scope, input) => profiles.configure(input),
-          },
-        })
-      )
-    },
-  })
-}
-
-function createBrowserControlModule(browser: WorkbenchBrowserController) {
-  const operation = (
-    reason: string,
-    invoke: (input: unknown, signal: AbortSignal) => unknown | Promise<unknown>
-  ) => ({
-    metadata: { permissions: ['browser:control'], reason },
-    invoke: (_scope: ScopeRef | undefined, input: unknown, signal: AbortSignal) =>
-      invoke(input, signal),
-  })
-  return defineKernelModule({
-    manifest: {
-      id: 'velaros.workbench.browser-control',
-      version: '0.3.0',
-      apiVersion: 1,
-      provides: [BrowserControlCapability],
-      requires: [],
-      optionalRequires: [],
-      permissions: ['browser:control'],
-      isolation: 'in-process',
-    },
-    activate(context) {
-      context.registerService(
-        BrowserControlCapability,
-        createKernelCallableCapability({
-          create: operation('Create an Agent-linked browser session.', (input, signal) =>
-            browser.create(input, signal)),
-          open: operation('Open a URL in an Agent-linked browser session.', (input, signal) =>
-            browser.open(input, signal)),
-          navigate: operation('Navigate an Agent-linked browser session.', (input, signal) =>
-            browser.navigate(input, signal)),
-          inspect: operation('Inspect an Agent-linked browser session.', (input, signal) =>
-            browser.inspect(input, signal)),
-          input: operation('Type in an Agent-linked browser session.', (input, signal) =>
-            browser.input(input, signal)),
-          selection: operation('Capture a Browser element selection.', (input, signal) =>
-            browser.selection(input, signal)),
-          close: operation('Close an Agent-linked browser session.', (input) =>
-            browser.close(input)),
-          close_all: operation('Close every Agent-linked browser session.', () =>
-            browser.closeAll()),
-        })
-      )
-    },
-  })
-}
-
-function createAgentControlModule(agent: WorkbenchAgentCapabilityRuntime) {
-  return defineKernelModule({
-    manifest: {
-      id: 'velaros.workbench.agent-control',
-      version: '0.3.0',
-      apiVersion: 1,
-      provides: [AgentControlCapability],
-      requires: [],
-      optionalRequires: [],
-      permissions: ['agent:execute'],
-      isolation: 'in-process',
-    },
-    activate(context) {
-      context.registerService(
-        AgentControlCapability,
-        createKernelCallableCapability({
-          abort: {
-            metadata: {
-              permissions: ['agent:execute'],
-              reason: 'Abort one Workbench Agent execution.',
-            },
-            invoke: (_scope, input) => agent.abort(input),
-          },
-        })
-      )
-    },
-  })
-}
-
 export interface WorkbenchStandaloneKernelRuntimeOptions {
   workspace: WorkbenchWorkspaceCapabilityProvider
   isWorkspaceRootAllowed: (projectRoot: string) => boolean
@@ -496,7 +389,6 @@ export class WorkbenchStandaloneKernelRuntime {
   private readonly host: KernelModuleHost
   private readonly service: KernelService
   private readonly daemon: KernelLocalDaemon
-  private readonly profiles = new WorkbenchModelProfileStore()
   private readonly modelRuntime: ModelRuntimeComposition
   private readonly browser: WorkbenchBrowserController
   private readonly agent: WorkbenchAgentCapabilityRuntime
@@ -510,7 +402,6 @@ export class WorkbenchStandaloneKernelRuntime {
       options.isWorkspaceRootAllowed
     )
     this.agent = new WorkbenchAgentCapabilityRuntime(
-      this.profiles,
       this.modelRuntime,
       options.workspace,
       this.browser,
@@ -538,9 +429,6 @@ export class WorkbenchStandaloneKernelRuntime {
       createModelKernelModule({ registry: this.modelRuntime.modelAdapterRegistry }),
       createWorkspaceKernelModule({ resolver: workspaceResolver }),
       createBrowserKernelModule({ runtime: this.browser.runtime }),
-      createModelProfilesModule(this.profiles),
-      createBrowserControlModule(this.browser),
-      createAgentControlModule(this.agent),
       createAgentKernelModule({ runtime: this.agent }),
     ])
     this.service = new KernelService({
@@ -570,7 +458,6 @@ export class WorkbenchStandaloneKernelRuntime {
     this.disposed = true
     this.descriptor = undefined
     this.agent.dispose()
-    this.profiles.clear()
     this.browser.closeAll()
     await this.daemon.dispose()
     await this.service.dispose()
@@ -592,6 +479,18 @@ function requireString(value: unknown, message: string): string {
 function requireNonBlankString(value: unknown, message: string): string {
   const result = requireString(value, message).trim()
   if (!result) throw new AppError('VALIDATION', message)
+  return result
+}
+
+function requireBoundedIdentifier(
+  value: unknown,
+  label: string,
+  maxLength = 512
+): string {
+  const result = requireNonBlankString(value, `${label} is required.`)
+  if (result !== value || result.length > maxLength) {
+    throw new AppError('VALIDATION', `${label} is invalid.`)
+  }
   return result
 }
 

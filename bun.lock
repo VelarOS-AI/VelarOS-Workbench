@@ -43,7 +43,7 @@
     },
     "apps/workbench": {
       "name": "@velaros-ai/workbench-app",
-      "version": "0.3.0",
+      "version": "0.3.1",
       "dependencies": {
         "@codemirror/autocomplete": "^6.20.1",
         "@codemirror/commands": "^6.10.3",
@@ -83,7 +83,7 @@
     },
     "packages/workbench": {
       "name": "@velaros-ai/workbench",
-      "version": "0.3.0",
+      "version": "0.3.1",
       "dependencies": {
         "@codemirror/autocomplete": "^6.20.1",
         "@codemirror/lang-css": "^6.3.1",

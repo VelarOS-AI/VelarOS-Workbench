@@ -146,7 +146,7 @@ void describe('Workbench Kernel client composition root', () => {
   void test('does not report an incompatible shared daemon as Workbench-ready', async () => {
     const runtime = new WorkbenchKernelClientRuntime({
       connect: async () => createConnection(),
-      requiredCapabilityIds: ['velaros.workspace', 'velaros.workbench.browser-control'],
+      requiredCapabilityIds: ['velaros.workspace', 'velaros.browser'],
     })
 
     const status = await runtime.start()
@@ -154,7 +154,7 @@ void describe('Workbench Kernel client composition root', () => {
     assert.equal(status.connected, true)
     assert.equal(status.state, 'degraded')
     assert.equal(status.error?.code, 'KERNEL_CAPABILITY_UNAVAILABLE')
-    assert.match(status.error?.message ?? '', /velaros\.workbench\.browser-control/u)
+    assert.match(status.error?.message ?? '', /velaros\.browser/u)
     await runtime.dispose()
   })
 

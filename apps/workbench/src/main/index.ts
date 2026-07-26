@@ -20,7 +20,10 @@ import { registerWorkbenchTerminalIpc } from './workspace/terminal/WorkbenchTerm
 import { registerWorkbenchWatchIpc } from './workspace/watch/WorkbenchWatchIpc'
 import { registerWorkbenchFsIpc } from './workspace/WorkbenchFsIpc'
 import { registerWorkbenchWorkspaceIpc } from './workspace/WorkbenchWorkspaceIpc'
-import { createDefaultWorkbenchMainCapabilityProviders } from './WorkbenchMainCapabilityProviders'
+import {
+  createDefaultWorkbenchMainCapabilityProviders,
+  RequiredWorkbenchKernelCapabilityIds,
+} from './WorkbenchMainCapabilityProviders'
 
 /**
  * 独立 VelarOS Workbench 应用的主进程。
@@ -113,9 +116,7 @@ void app.whenReady().then(() => {
   registerProjectHubIpc(hub)
   const providers = createDefaultWorkbenchMainCapabilityProviders(dataRootDir)
   const kernelRuntime = new WorkbenchKernelClientRuntime({
-    requiredCapabilityIds: [...new Set(
-      Object.values(providers.kernelRoutes).map((route) => route.capabilityId)
-    )],
+    requiredCapabilityIds: RequiredWorkbenchKernelCapabilityIds,
     startLocal: async () => {
       const standaloneKernel = new WorkbenchStandaloneKernelRuntime({
         workspace: providers.workspace,

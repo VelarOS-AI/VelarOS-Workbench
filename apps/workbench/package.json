@@ -1,6 +1,6 @@
 {
   "name": "@velaros-ai/workbench-app",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "VelarOS Workbench standalone Electron IDE application.",
   "author": "VelarOS",
   "private": true,
