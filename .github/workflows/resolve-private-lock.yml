@@ -26,7 +26,9 @@ jobs:
             'always-auth=true' \
             > ~/.npmrc
       - name: Resolve published package identities
-        run: bun install --lockfile-only --ignore-scripts
+        run: |
+          bun update @velaros-ai/ui --lockfile-only --ignore-scripts
+          bun install --lockfile-only --ignore-scripts
         env:
           ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
