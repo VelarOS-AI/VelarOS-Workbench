@@ -1,5 +1,11 @@
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -141,12 +147,23 @@ async function runGitProbe(): Promise<void> {
       '服务不得缓存串根'
     )
   } finally {
-    rmSync(tempRoot, {
-      force: true,
-      recursive: true,
-      maxRetries: 10,
-      retryDelay: 100,
-    })
+    await removeProbeDirectory(tempRoot)
+  }
+}
+
+async function removeProbeDirectory(rootPath: string): Promise<void> {
+  const retryableCodes = new Set(['EBUSY', 'ENOTEMPTY', 'EPERM'])
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      rmSync(rootPath, { force: true, recursive: true })
+      return
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code
+      if (!code || !retryableCodes.has(code) || attempt >= 10) throw error
+      await new Promise((resolve) =>
+        setTimeout(resolve, Math.min((attempt + 1) * 100, 500))
+      )
+    }
   }
 }
 
