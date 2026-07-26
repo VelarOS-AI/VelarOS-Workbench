@@ -5,6 +5,7 @@ import type {
   WorkbenchLanguageServiceDiagnostic,
   WorkbenchLanguageServiceDocumentSymbol,
 } from '@velaros-ai/workbench/contracts'
+import { useWorkbenchHostRuntime } from '@velaros-ai/workbench/host'
 import {
   buildWorkbenchLanguageServiceRequestBase,
   usesWorkbenchBuiltinLanguageService,
@@ -40,6 +41,7 @@ export function useWorkbenchLanguageServiceInsights({
   selectedFilePath: Nullable<string>
   editorContent: string
 }): WorkbenchLanguageServiceInsights {
+  const hostRuntime = useWorkbenchHostRuntime()
   const [diagnosticsByPath, setDiagnosticsByPath] = useState<
     ReadonlyMap<string, readonly WorkbenchLanguageServiceDiagnostic[]>
   >(() => new Map())
@@ -110,7 +112,7 @@ export function useWorkbenchLanguageServiceInsights({
                 content,
                 openTabs: openTabsWithLiveContent,
               }),
-            })
+            }, hostRuntime)
 
             if (!result.ok) return
             nextDiagnostics.set(
@@ -127,7 +129,7 @@ export function useWorkbenchLanguageServiceInsights({
     }, DIAGNOSTIC_DEBOUNCE_MS)
 
     return () => clearTimeout(timer)
-  }, [contextRef, diagnosticScheduleKey, diagnosticTargets])
+  }, [contextRef, diagnosticScheduleKey, diagnosticTargets, hostRuntime])
 
   useEffect(() => {
     const root = contextRef.current.projectRoot
@@ -148,7 +150,7 @@ export function useWorkbenchLanguageServiceInsights({
             content: contextRef.current.editorContent,
             openTabs: contextRef.current.openTabs,
           }),
-        })
+        }, hostRuntime)
 
         if (generation !== symbolGenerationRef.current) return
         setDocumentSymbols(result.ok ? result.data.symbols : [])
@@ -156,7 +158,7 @@ export function useWorkbenchLanguageServiceInsights({
     }, 240)
 
     return () => clearTimeout(timer)
-  }, [contextRef, editorContent, selectedFilePath])
+  }, [contextRef, editorContent, hostRuntime, selectedFilePath])
 
   return { diagnosticsByPath, diagnosticsPendingPaths, documentSymbols }
 }

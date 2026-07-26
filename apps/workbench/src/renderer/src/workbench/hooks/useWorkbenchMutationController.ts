@@ -6,10 +6,7 @@ import { Result } from '@velaros-ai/core/result'
 import type {
   WorkbenchDeleteEntryResult, WorkbenchDirectoryEntry, WorkbenchMoveEntryResult, WorkbenchRestoreDeletedEntryResult, } from '@velaros-ai/workbench/contracts'
 import { workbenchHost } from '@velaros-ai/workbench/host'
-import {
-  removeWorkbenchCommentsUnderPath,
-  renameWorkbenchCommentsPath,
-} from '@velaros-ai/workbench/models/comments/workbenchCommentStore'
+import { useWorkbenchCommentStore } from '@velaros-ai/workbench/models/comments/workbenchCommentStore'
 import {
   resolveTreeActionBasePath,
   resolveTreeActionBasePathForEntry,
@@ -57,6 +54,7 @@ export function useWorkbenchMutationController({
   resetSearch,
   onTreeChanged,
 }: UseWorkbenchMutationControllerOptions) {
+  const commentStore = useWorkbenchCommentStore()
   const { messageLatest, tLatest } = useStableWorkbenchMessageTranslate()
   const activeProjectRef = useLatest(activeProject)
   const closeOpenEntryPathLatest = useLatest(closeOpenEntryPath)
@@ -242,7 +240,7 @@ export function useWorkbenchMutationController({
       }
 
       moveOpenEntryPathLatest.current(entry.path, result.entry.path, result.entry.modifiedAt)
-      renameWorkbenchCommentsPath(owningProject.rootPath, entry.path, result.entry.path)
+      commentStore.renamePath(owningProject.rootPath, entry.path, result.entry.path)
       messageLatest.current.success({
         title: tLatest.current('workbench.renameSucceeded'),
       })
@@ -302,7 +300,7 @@ export function useWorkbenchMutationController({
           pruneTreeCacheLatest.current(result.previousPath)
         }
         moveOpenEntryPathLatest.current(result.previousPath, result.entry.path, result.entry.modifiedAt)
-        renameWorkbenchCommentsPath(owningProject.rootPath, result.previousPath, result.entry.path)
+        commentStore.renamePath(owningProject.rootPath, result.previousPath, result.entry.path)
       }
 
       await Promise.all(
@@ -358,7 +356,7 @@ export function useWorkbenchMutationController({
         parentsToRefresh.add(result.parentPath)
         pruneTreeCacheLatest.current(result.deletedPath)
         closeOpenEntryPathLatest.current(result.deletedPath)
-        removeWorkbenchCommentsUnderPath(owningProject.rootPath, result.deletedPath)
+        commentStore.removeUnderPath(owningProject.rootPath, result.deletedPath)
       }
 
       await Promise.all(
@@ -436,7 +434,7 @@ export function useWorkbenchMutationController({
 
         if (previousPath) {
           moveOpenEntryPathLatest.current(previousPath, result.entry.path, result.entry.modifiedAt)
-          renameWorkbenchCommentsPath(owningProject.rootPath, previousPath, result.entry.path)
+          commentStore.renamePath(owningProject.rootPath, previousPath, result.entry.path)
         }
       }
 
@@ -571,7 +569,7 @@ export function useWorkbenchMutationController({
       onTreeChangedLatest.current()
       pruneTreeCacheLatest.current(result.previousPath)
       moveOpenEntryPathLatest.current(result.previousPath, result.entry.path, result.entry.modifiedAt)
-      renameWorkbenchCommentsPath(owningProject.rootPath, result.previousPath, result.entry.path)
+      commentStore.renamePath(owningProject.rootPath, result.previousPath, result.entry.path)
       await Promise.all(
         [...new Set([result.previousParentPath, result.parentPath])].map((parentPath) =>
           refreshMutationParentLatest.current(parentPath)
@@ -610,7 +608,7 @@ export function useWorkbenchMutationController({
       onTreeChangedLatest.current()
       pruneTreeCacheLatest.current(result.deletedPath)
       closeOpenEntryPathLatest.current(result.deletedPath)
-      removeWorkbenchCommentsUnderPath(owningProject.rootPath, result.deletedPath)
+      commentStore.removeUnderPath(owningProject.rootPath, result.deletedPath)
       await refreshMutationParentLatest.current(result.parentPath)
       setSelectedEntryPathLatest.current(null)
       resetSearchLatest.current()

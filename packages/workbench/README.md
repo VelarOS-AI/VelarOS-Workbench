@@ -3,6 +3,9 @@
 VelarOS Workbench 的独立产品边界。领域模型、产品控制器、组合端口与可复用产品 UI 归本包；
 Desktop 和独立 Workbench App 只负责各自的宿主适配与入口组合。
 
+完整的公共入口、能力端口、宿主生命周期和第三方接入方式见
+[中文 API 文档](./docs/api.zh-CN.md)。
+
 ## Responsibility
 
 - 定义 Workbench 需要的 Kernel 能力端口、宿主 Shell 端口和本地化组合端口。
@@ -18,23 +21,29 @@ Desktop 和独立 Workbench App 只负责各自的宿主适配与入口组合。
 ## Public Imports
 
 - `@velaros-ai/workbench` — 公开产品 contracts 与领域模型。
-- `@velaros-ai/workbench/host` / `@velaros-ai/workbench/host/*` — Kernel 与宿主端口。
-- `@velaros-ai/workbench/composition` / `@velaros-ai/workbench/composition/*` — chat scope 与响应式产品运行时组合 contracts。
-- `@velaros-ai/workbench/components/*` — 可由 Desktop 与独立入口组合的 Workbench 产品 UI。
-- `@velaros-ai/workbench/components/chat/*` — Workbench Chat 产品 UI；样式和运行时 Surface 由宿主注入。
-- `@velaros-ai/workbench/hooks/*` — 可由 Desktop 和独立入口共同消费的产品控制器。
-- `@velaros-ai/workbench/i18n` / `@velaros-ai/workbench/i18n/*` — 产品本地化 Provider 与 hook；
+- `@velaros-ai/workbench/runtime` — 推荐的实例化 composition root 与 React Provider。
+- `@velaros-ai/workbench/host` — Kernel 与宿主端口。
+- `@velaros-ai/workbench/composition` — chat scope 与响应式产品运行时组合 contracts。
+- `@velaros-ai/workbench/comments` — 评论仓库、Provider 与编辑器扩展。
+- `@velaros-ai/workbench/language` — 语言插件运行时与语言服务。
+- `@velaros-ai/workbench/persistence` — 可注入存储对象。
+- `@velaros-ai/workbench/i18n` — 产品本地化 Provider 与 hook；
   具体文案实现由宿主注入。
-- `@velaros-ai/workbench/language/*` — main 与 renderer 共用的语言服务、语法插件能力目录。
-- `@velaros-ai/workbench/models/*` — 可独立测试的 Workbench 领域模型。
-- `@velaros-ai/workbench/types/*` — Workbench 产品视图与编辑器共享类型。
 
-```ts
-import { installWorkbenchHost, workbenchHost } from '@velaros-ai/workbench/host'
+```tsx
+import { WorkbenchRuntime, WorkbenchRuntimeProvider } from '@velaros-ai/workbench/runtime'
 import { useWorkbenchI18n } from '@velaros-ai/workbench/i18n'
-import { buildWorkbenchGitChangeItems } from '@velaros-ai/workbench/models/git/workbenchGitModel'
-import { WorkbenchChatPanel } from '@velaros-ai/workbench/components/chat/WorkbenchChatPanel'
+
+const runtime = new WorkbenchRuntime({ host })
+root.render(
+  <WorkbenchRuntimeProvider runtime={runtime}>
+    <WorkbenchApp />
+  </WorkbenchRuntimeProvider>
+)
 ```
+
+历史通配入口（如 `host/*`、`components/*`、`hooks/*`、`models/*`）仅为兼容保留并已弃用；新应用
+不要继续扩散这些源码形态的深层导入。
 
 ## Boundary
 

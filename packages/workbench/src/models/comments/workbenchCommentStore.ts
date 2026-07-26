@@ -1,16 +1,16 @@
-import { useMemo, useSyncExternalStore } from 'react'
+import {
+  createContext,
+  createElement,
+  type ReactNode,
+  useContext,
+  useMemo,
+  useSyncExternalStore,
+} from 'react'
 
-import { isEmpty } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core'
 
 /**
- * 工作台行内评论存储（**仅会话内存，不落盘**）。
- *
- * 编辑器与聊天面板是兄弟组件，靠这个模块级单例互通：
- * - 编辑器负责在打开文件时用行号把评论重新锚定成实时块，并在块被整体删掉时移除评论；
- * - 聊天面板用 `@` 菜单列出所有评论、选中成 chip，发送后消费。
- *
- * `snippet` 是评论创建那一刻的块内容快照（语义上「评论当时看到的代码」，不随后续编辑变化）；
- * `startLine`/`endLine` 会随编辑实时更新，供 location 展示与重开文件时的再锚定。
+ * 工作台行内评论。评论默认仅存在于当前 `WorkbenchCommentStore` 实例中，不负责持久化。
  */
 export interface WorkbenchComment {
   id: string
@@ -39,15 +39,171 @@ export interface AddWorkbenchCommentInput {
   language: string
 }
 
-let comments: readonly WorkbenchComment[] = []
-const listeners = new Set<() => void>()
-
-function emit(): void {
-  listeners.forEach((listener) => listener())
+export interface WorkbenchCommentStoreOptions {
+  createId?: () => string
+  now?: () => number
 }
 
-function createCommentId(): string {
+function defaultCommentId(): string {
   return `wb-comment-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+function isPathOrUnder(candidate: string, base: string): boolean {
+  return candidate === base || candidate.startsWith(`${base}/`)
+}
+
+/**
+ * 一个可独立创建、订阅和销毁的会话评论仓库。
+ *
+ * 所有公开方法都已绑定实例，可直接作为 React 外部存储回调或事件处理器传递。
+ */
+export class WorkbenchCommentStore {
+  private comments: readonly WorkbenchComment[] = []
+  private readonly listeners = new Set<() => void>()
+  private readonly createId: () => string
+  private readonly now: () => number
+  private disposed = false
+
+  public constructor(options: WorkbenchCommentStoreOptions = {}) {
+    this.createId = options.createId ?? defaultCommentId
+    this.now = options.now ?? Date.now
+  }
+
+  public readonly subscribe = (listener: () => void): (() => void) => {
+    this.assertActive()
+    this.listeners.add(listener)
+    return () => this.listeners.delete(listener)
+  }
+
+  public readonly getSnapshot = (): readonly WorkbenchComment[] => this.comments
+
+  public readonly get = (id: string): Nullable<WorkbenchComment> =>
+    this.comments.find((comment) => comment.id === id) ?? null
+
+  public readonly add = (input: AddWorkbenchCommentInput): WorkbenchComment => {
+    this.assertActive()
+    const comment: WorkbenchComment = {
+      ...input,
+      id: this.createId(),
+      createdAt: this.now(),
+    }
+    this.comments = [...this.comments, comment]
+    this.emit()
+    return comment
+  }
+
+  public readonly remove = (id: string): void => {
+    this.replace(this.comments.filter((comment) => comment.id !== id))
+  }
+
+  public readonly updateBody = (id: string, rawBody: string): void => {
+    this.assertActive()
+    const body = rawBody.trim()
+    if (!body) return
+    this.replace(
+      this.comments.map((comment) =>
+        comment.id === id && comment.body !== body ? { ...comment, body } : comment
+      )
+    )
+  }
+
+  public readonly removeMany = (ids: readonly string[]): void => {
+    this.assertActive()
+    if (ids.length === 0) return
+    const removed = new Set(ids)
+    this.replace(this.comments.filter((comment) => !removed.has(comment.id)))
+  }
+
+  public readonly removeUnderPath = (projectRoot: string, path: string): void => {
+    this.replace(
+      this.comments.filter(
+        (comment) => !(comment.projectRoot === projectRoot && isPathOrUnder(comment.path, path))
+      )
+    )
+  }
+
+  public readonly renamePath = (
+    projectRoot: string,
+    fromPath: string,
+    toPath: string
+  ): void => {
+    this.assertActive()
+    this.replace(
+      this.comments.map((comment) =>
+        comment.projectRoot === projectRoot && isPathOrUnder(comment.path, fromPath)
+          ? { ...comment, path: `${toPath}${comment.path.slice(fromPath.length)}` }
+          : comment
+      )
+    )
+  }
+
+  public readonly updateAnchor = (
+    id: string,
+    anchor: { startLine: number; endLine: number }
+  ): void => {
+    this.assertActive()
+    this.replace(
+      this.comments.map((comment) =>
+        comment.id === id &&
+        (comment.startLine !== anchor.startLine || comment.endLine !== anchor.endLine)
+          ? { ...comment, ...anchor }
+          : comment
+      )
+    )
+  }
+
+  public readonly listForPath = (projectRoot: string, path: string): WorkbenchComment[] =>
+    this.comments.filter(
+      (comment) => comment.projectRoot === projectRoot && comment.path === path
+    )
+
+  /** 清理订阅与内存数据；销毁后的写入会显式报错。 */
+  public dispose(): void {
+    if (this.disposed) return
+    this.disposed = true
+    this.comments = []
+    this.listeners.clear()
+  }
+
+  private replace(next: readonly WorkbenchComment[]): void {
+    this.assertActive()
+    if (
+      next.length === this.comments.length &&
+      next.every((comment, index) => comment === this.comments[index])
+    ) return
+    this.comments = next
+    this.emit()
+  }
+
+  private emit(): void {
+    this.listeners.forEach((listener) => listener())
+  }
+
+  private assertActive(): void {
+    if (this.disposed) {
+      throw new AppError('INVARIANT', 'Workbench comment store has been disposed')
+    }
+  }
+}
+
+/** 旧入口使用的默认实例。新应用应在 composition root 注入自己的实例。 */
+export const workbenchCommentStore = new WorkbenchCommentStore()
+
+const WorkbenchCommentStoreContext = createContext<Nullable<WorkbenchCommentStore>>(null)
+
+export function WorkbenchCommentStoreProvider({
+  children,
+  store,
+}: {
+  children: ReactNode
+  store: WorkbenchCommentStore
+}): React.JSX.Element {
+  return createElement(WorkbenchCommentStoreContext.Provider, { value: store }, children)
+}
+
+/** 未安装 Provider 时回退默认实例，仅用于兼容旧应用。 */
+export function useWorkbenchCommentStore(): WorkbenchCommentStore {
+  return useContext(WorkbenchCommentStoreContext) ?? workbenchCommentStore
 }
 
 /** 形如 `src/foo.ts:12` 或 `src/foo.ts:12-20` 的展示定位。 */
@@ -57,143 +213,42 @@ export function formatWorkbenchCommentLocation(comment: WorkbenchComment): strin
     : `${comment.path}:${comment.startLine}-${comment.endLine}`
 }
 
-export function subscribeWorkbenchComments(listener: () => void): () => void {
-  listeners.add(listener)
-  return () => {
-    listeners.delete(listener)
-  }
-}
-
-export function getWorkbenchCommentsSnapshot(): readonly WorkbenchComment[] {
-  return comments
-}
-
-export function getWorkbenchComment(id: string): Nullable<WorkbenchComment> {
-  return comments.find((comment) => comment.id === id) ?? null
-}
-
-export function addWorkbenchComment(input: AddWorkbenchCommentInput): WorkbenchComment {
-  const comment: WorkbenchComment = {
-    ...input,
-    id: createCommentId(),
-    createdAt: Date.now(),
-  }
-  comments = [...comments, comment]
-  emit()
-  return comment
-}
-
-export function removeWorkbenchComment(id: string): void {
-  const next = comments.filter((comment) => comment.id !== id)
-  if (next.length === comments.length) return
-
-  comments = next
-  emit()
-}
-
-/** 修改评论正文；空正文不覆盖原评论。 */
-export function updateWorkbenchCommentBody(id: string, rawBody: string): void {
-  const body = rawBody.trim()
-  if (!body) return
-
-  let changed = false
-  const next = comments.map((comment) => {
-    if (comment.id !== id || comment.body === body) return comment
-    changed = true
-    return { ...comment, body }
-  })
-  if (!changed) return
-
-  comments = next
-  emit()
-}
-
-export function removeWorkbenchComments(ids: readonly string[]): void {
-  if (isEmpty(ids)) return
-  const removed = new Set(ids)
-  const next = comments.filter((comment) => !removed.has(comment.id))
-  if (next.length === comments.length) return
-
-  comments = next
-  emit()
-}
-
-function isPathOrUnder(candidate: string, base: string): boolean {
-  return candidate === base || candidate.startsWith(`${base}/`)
-}
-
-/** 删除文件或文件夹时清掉该路径（含其子路径）下的所有评论。 */
-export function removeWorkbenchCommentsUnderPath(projectRoot: string, path: string): void {
-  const next = comments.filter(
-    (comment) => !(comment.projectRoot === projectRoot && isPathOrUnder(comment.path, path))
-  )
-  if (next.length === comments.length) return
-
-  comments = next
-  emit()
-}
-
-/** 重命名/移动文件或文件夹时把该路径（含子路径）下的评论迁到新路径。 */
-export function renameWorkbenchCommentsPath(
-  projectRoot: string,
-  fromPath: string,
-  toPath: string
-): void {
-  let changed = false
-  const next = comments.map((comment) => {
-    if (comment.projectRoot !== projectRoot || !isPathOrUnder(comment.path, fromPath))
-      return comment
-    changed = true
-    return { ...comment, path: `${toPath}${comment.path.slice(fromPath.length)}` }
-  })
-  if (!changed) return
-
-  comments = next
-  emit()
-}
-
-/** 块随编辑移动时更新起止行（仅在行号真的变化时才 emit，避免逐字符抖动）。 */
-export function updateWorkbenchCommentAnchor(
-  id: string,
-  anchor: { startLine: number; endLine: number }
-): void {
-  let changed = false
-  const next = comments.map((comment) => {
-    if (comment.id !== id) return comment
-    if (comment.startLine === anchor.startLine && comment.endLine === anchor.endLine) return comment
-    changed = true
-    return { ...comment, startLine: anchor.startLine, endLine: anchor.endLine }
-  })
-  if (!changed) return
-
-  comments = next
-  emit()
-}
+/** @deprecated 使用 `WorkbenchCommentStore.subscribe`。 */
+export const subscribeWorkbenchComments = workbenchCommentStore.subscribe
+/** @deprecated 使用 `WorkbenchCommentStore.getSnapshot`。 */
+export const getWorkbenchCommentsSnapshot = workbenchCommentStore.getSnapshot
+/** @deprecated 使用 `WorkbenchCommentStore.get`。 */
+export const getWorkbenchComment = workbenchCommentStore.get
+/** @deprecated 使用 `WorkbenchCommentStore.add`。 */
+export const addWorkbenchComment = workbenchCommentStore.add
+/** @deprecated 使用 `WorkbenchCommentStore.remove`。 */
+export const removeWorkbenchComment = workbenchCommentStore.remove
+/** @deprecated 使用 `WorkbenchCommentStore.updateBody`。 */
+export const updateWorkbenchCommentBody = workbenchCommentStore.updateBody
+/** @deprecated 使用 `WorkbenchCommentStore.removeMany`。 */
+export const removeWorkbenchComments = workbenchCommentStore.removeMany
+/** @deprecated 使用 `WorkbenchCommentStore.removeUnderPath`。 */
+export const removeWorkbenchCommentsUnderPath = workbenchCommentStore.removeUnderPath
+/** @deprecated 使用 `WorkbenchCommentStore.renamePath`。 */
+export const renameWorkbenchCommentsPath = workbenchCommentStore.renamePath
+/** @deprecated 使用 `WorkbenchCommentStore.updateAnchor`。 */
+export const updateWorkbenchCommentAnchor = workbenchCommentStore.updateAnchor
+/** @deprecated 使用 `WorkbenchCommentStore.listForPath`。 */
+export const listWorkbenchCommentsForPath = workbenchCommentStore.listForPath
 
 const EmptyComments: readonly WorkbenchComment[] = []
 
-/** 订阅评论列表；传 `projectRoot` 则只取该项目的。 */
+/** 订阅当前 Provider 的评论列表；传 `projectRoot` 则只取该项目的。 */
 export function useWorkbenchComments(
   projectRoot?: LooseOptional<string>
 ): readonly WorkbenchComment[] {
-  const snapshot = useSyncExternalStore(
-    subscribeWorkbenchComments,
-    getWorkbenchCommentsSnapshot,
-    getWorkbenchCommentsSnapshot
-  )
+  const store = useWorkbenchCommentStore()
+  const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot)
   return useMemo(() => {
     if (!projectRoot) return snapshot
     const scoped = snapshot.filter((comment) => comment.projectRoot === projectRoot)
     return scoped.length === snapshot.length ? snapshot : scoped
   }, [snapshot, projectRoot])
-}
-
-/** 只取某文件的评论（编辑器再锚定用）。 */
-export function listWorkbenchCommentsForPath(
-  projectRoot: string,
-  path: string
-): WorkbenchComment[] {
-  return comments.filter((comment) => comment.projectRoot === projectRoot && comment.path === path)
 }
 
 export { EmptyComments as EmptyWorkbenchComments }

@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 
 import type { WorkbenchRunCommandResult } from '../../contracts/index'
-import { workbenchHost } from '../../host'
+import { useWorkbenchHostRuntime } from '../../host'
 import {
   readWorkbenchCommandHistory,
   type WorkbenchCommandHistoryItem,
@@ -47,9 +47,10 @@ export function useWorkbenchCommandProjectBootstrap({
   setIsValidationStale,
   createTerminalSession,
 }: UseWorkbenchCommandProjectBootstrapOptions): void {
+  const hostRuntime = useWorkbenchHostRuntime()
   useEffect(() => {
     terminalSessionsRef.current.forEach((session) => {
-      void workbenchHost.kernel.project.stopWorkbenchTerminalSession({ sessionId: session.id })
+      void hostRuntime.kernel.project.stopWorkbenchTerminalSession({ sessionId: session.id })
     })
     setTerminalSessions([])
     setActiveTerminalSessionId(null)
@@ -71,6 +72,7 @@ export function useWorkbenchCommandProjectBootstrap({
     activeProjectId,
     activeProjectRef,
     createTerminalSession,
+    hostRuntime,
     setActiveTerminalSessionId,
     setCommandHistory,
     setCommandInput,

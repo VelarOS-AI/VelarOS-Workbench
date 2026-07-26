@@ -1,7 +1,14 @@
 {
   "name": "@velaros-ai/workbench",
-  "version": "0.3.1",
-  "description": "VelarOS Workbench product boundary and Kernel host contracts.",
+  "version": "0.3.2",
+  "description": "An embeddable AI development workbench with host-injected runtime, workspace, model, and browser capabilities.",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=20"
+  },
+  "sideEffects": [
+    "**/*.css"
+  ],
   "publishConfig": {
     "access": "restricted",
     "registry": "https://npm.pkg.github.com"
@@ -17,6 +24,22 @@
     "./host": {
       "types": "./dist/host/index.d.ts",
       "import": "./dist/host/index.js"
+    },
+    "./runtime": {
+      "types": "./dist/runtime.d.ts",
+      "import": "./dist/runtime.js"
+    },
+    "./comments": {
+      "types": "./dist/comments.d.ts",
+      "import": "./dist/comments.js"
+    },
+    "./language": {
+      "types": "./dist/language.d.ts",
+      "import": "./dist/language.js"
+    },
+    "./persistence": {
+      "types": "./dist/persistence.d.ts",
+      "import": "./dist/persistence.js"
     },
     "./host/*": {
       "types": "./dist/host/*.d.ts",
@@ -62,6 +85,10 @@
       "types": "./dist/models/*.d.ts",
       "import": "./dist/models/*.js"
     },
+    "./persistence/*": {
+      "types": "./dist/persistence/*.d.ts",
+      "import": "./dist/persistence/*.js"
+    },
     "./types/*": {
       "types": "./dist/types/*.d.ts",
       "import": "./dist/types/*.js"
@@ -69,7 +96,8 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "docs"
   ],
   "scripts": {
     "clean": "rm -rf dist",
@@ -94,12 +122,12 @@
     "@lezer/highlight": "^1.2.3",
     "@lezer/lr": "^1.4.10",
     "@phosphor-icons/react": "^2.1.10",
-    "@velaros-ai/browser-core": "^0.2.3",
-    "@velaros-ai/core": "^0.3.0",
-    "@velaros-ai/model-runtime": "^0.4.0",
-    "@velaros-ai/system-tools": "^0.2.4",
-    "@velaros-ai/ui": "^0.2.1",
-    "@velaros-ai/workspace": "^1.2.2",
+    "@velaros-ai/browser-core": "^0.2.4",
+    "@velaros-ai/core": "^0.3.1",
+    "@velaros-ai/model-runtime": "^0.4.2",
+    "@velaros-ai/system-tools": "^0.2.5",
+    "@velaros-ai/ui": "^0.2.2",
+    "@velaros-ai/workspace": "^1.2.3",
     "diff": "^8.0.4",
     "tinykeys": "3.0.0"
   },

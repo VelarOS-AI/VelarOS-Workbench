@@ -32,19 +32,14 @@ import type {
   WorkbenchProjectAiRuleFile,
   WorkbenchProjectAiRulesResult,
 } from '@velaros-ai/workbench/contracts'
-import { workbenchHost } from '@velaros-ai/workbench/host'
+import { useWorkbenchHostRuntime } from '@velaros-ai/workbench/host'
 import type { WorkbenchMessageKey } from '@velaros-ai/workbench/i18n'
 import { useWorkbenchI18n } from '@velaros-ai/workbench/i18n'
-import {
-  getWorkbenchLanguagePluginInstallState,
-  markWorkbenchLanguagePluginDownloaded,
-  readDownloadedWorkbenchLanguagePluginIds,
-  WORKBENCH_LANGUAGE_PLUGIN_INSTALL_STATE_CHANGED_EVENT,
-} from '@velaros-ai/workbench/models/editor/workbenchLanguagePluginInstallState'
 import {
   getDownloadableWorkbenchLanguagePlugins,
   type WorkbenchLanguagePluginDescriptor,
 } from '@velaros-ai/workbench/models/editor/workbenchLanguagePluginModel'
+import { useWorkbenchLanguagePluginRuntime } from '@velaros-ai/workbench/models/editor/WorkbenchLanguagePluginRuntimeProvider'
 import type { WorkbenchKeymapConflict } from '@velaros-ai/workbench/models/layout/workbenchKeyboardShortcuts'
 import {
   DEFAULT_WORKBENCH_KEYBOARD_SHORTCUT_MAP,
@@ -175,6 +170,8 @@ export function WorkbenchSettingsDialog({
   onSetShortcut,
 }: WorkbenchSettingsDialogProps): Nullable<ReactElement> {
   const { t } = useWorkbenchI18n()
+  const hostRuntime = useWorkbenchHostRuntime()
+  const languagePluginRuntime = useWorkbenchLanguagePluginRuntime()
   const timers = useTimerScope('WorkbenchSettingsDialog')
   const [activeSection, setActiveSection] = useState<WorkbenchSettingsSectionId>('appearance')
   const [capturingAction, setCapturingAction] =
@@ -185,7 +182,7 @@ export function WorkbenchSettingsDialog({
   const [expandedProjectAiRulePath, setExpandedProjectAiRulePath] = useState<Nullable<string>>(null)
   const [isLoadingProjectAiRules, setIsLoadingProjectAiRules] = useState(false)
   const [downloadedPluginIds, setDownloadedPluginIds] = useState<Set<string>>(() =>
-    readDownloadedWorkbenchLanguagePluginIds()
+    languagePluginRuntime.readDownloadedPluginIds()
   )
   const dialogRef = useRef<HTMLDivElement>(null)
 
@@ -239,7 +236,7 @@ export function WorkbenchSettingsDialog({
     setIsLoadingProjectAiRules(true)
     try {
       const result = Result.unwrap(
-        await workbenchHost.kernel.project.getWorkbenchProjectAiRules({
+        await hostRuntime.kernel.project.getWorkbenchProjectAiRules({
           projectRoot: project.rootPath,
         })
       )
@@ -249,7 +246,7 @@ export function WorkbenchSettingsDialog({
     } finally {
       setIsLoadingProjectAiRules(false)
     }
-  }, [project?.rootPath])
+  }, [hostRuntime, project?.rootPath])
 
   const conflictedActions = useMemo(
     () => new Set(conflicts.flatMap((conflict) => conflict.actions)),
@@ -293,15 +290,11 @@ export function WorkbenchSettingsDialog({
 
   useEffect(() => {
     const refresh = (): void => {
-      setDownloadedPluginIds(readDownloadedWorkbenchLanguagePluginIds())
+      setDownloadedPluginIds(languagePluginRuntime.readDownloadedPluginIds())
     }
 
-    window.addEventListener(WORKBENCH_LANGUAGE_PLUGIN_INSTALL_STATE_CHANGED_EVENT, refresh)
-
-    return () => {
-      window.removeEventListener(WORKBENCH_LANGUAGE_PLUGIN_INSTALL_STATE_CHANGED_EVENT, refresh)
-    }
-  }, [])
+    return languagePluginRuntime.subscribe(refresh)
+  }, [languagePluginRuntime])
 
   if (!open) return null
 
@@ -339,7 +332,7 @@ export function WorkbenchSettingsDialog({
   function installLanguagePlugin(plugin: WorkbenchLanguagePluginDescriptor): void {
     if (downloadedPluginIds.has(plugin.id)) return
 
-    setDownloadedPluginIds(markWorkbenchLanguagePluginDownloaded(plugin.id))
+    setDownloadedPluginIds(languagePluginRuntime.install(plugin.id))
   }
 
   function renderProjectAiRuleRow(file: WorkbenchProjectAiRuleFile): ReactElement {
@@ -686,7 +679,7 @@ export function WorkbenchSettingsDialog({
         <div className={styles.workbenchSettingsPluginList}>
           {filteredPluginDescriptors.map((plugin) => {
             const installed = downloadedPluginIds.has(plugin.id)
-            const installState = getWorkbenchLanguagePluginInstallState(plugin.id)
+            const installState = languagePluginRuntime.getInstallState(plugin.id)
             const installing = isPresent(installState) && installState.phase !== 'failed'
             const installingLabel =
               installing && isPresent(installState.percent)

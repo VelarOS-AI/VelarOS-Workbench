@@ -338,30 +338,75 @@ export interface WorkbenchHost {
   shell: WorkbenchShellPort
 }
 
-let installedWorkbenchHost: Nullable<WorkbenchHost> = null
+/**
+ * Owns the host adapter installed at one Workbench composition root.
+ *
+ * A dedicated runtime can be instantiated by tests or multi-surface hosts. Package components use
+ * the exported default instance for backward compatibility.
+ */
+export class WorkbenchHostRuntime {
+  private installedHost: Nullable<WorkbenchHost> = null
 
-function requireWorkbenchHost(): WorkbenchHost {
-  if (!installedWorkbenchHost) {
-    throw new AppError('INVARIANT', 'Workbench host is not installed')
+  public constructor(host?: WorkbenchHost) {
+    if (host) this.install(host)
   }
 
-  return installedWorkbenchHost
-}
+  public get isInstalled(): boolean {
+    return this.installedHost !== null
+  }
 
-/** 由产品入口安装具体适配器。Desktop、未来的独立 Workbench 应用可以提供不同实现。 */
-export function installWorkbenchHost(host: WorkbenchHost): void {
-  installedWorkbenchHost = host
+  public get kernel(): WorkbenchKernelPort {
+    return this.requireHost().kernel
+  }
+
+  public get shell(): WorkbenchShellPort {
+    return this.requireHost().shell
+  }
+
+  public install(host: WorkbenchHost): void {
+    if (!host?.kernel || !host.shell) {
+      throw new AppError('INVALID_ARGUMENT', 'Workbench host must provide kernel and shell ports')
+    }
+    this.installedHost = host
+  }
+
+  /**
+   * Removes the current adapter. Supplying `expectedHost` avoids an older composition root
+   * uninstalling a newer adapter during asynchronous teardown.
+   */
+  public uninstall(expectedHost?: WorkbenchHost): boolean {
+    if (!this.installedHost) return false
+    if (expectedHost && this.installedHost !== expectedHost) return false
+    this.installedHost = null
+    return true
+  }
+
+  /** Composition-root 生命周期的统一别名。 */
+  public dispose(): void {
+    this.uninstall()
+  }
+
+  private requireHost(): WorkbenchHost {
+    if (!this.installedHost) {
+      throw new AppError('INVARIANT', 'Workbench host is not installed')
+    }
+    return this.installedHost
+  }
 }
 
 /**
- * Workbench 内部唯一允许访问的宿主入口。
- * getter 保证模块加载阶段不读取宿主，测试与独立入口可在实际调用前完成安装。
+ * Default application-level host runtime used by Workbench components and controllers.
  */
-export const workbenchHost = {
-  get kernel(): WorkbenchKernelPort {
-    return requireWorkbenchHost().kernel
-  },
-  get shell(): WorkbenchShellPort {
-    return requireWorkbenchHost().shell
-  },
+export const workbenchHost = new WorkbenchHostRuntime()
+
+/** 由产品入口安装具体适配器。Desktop、未来的独立 Workbench 应用可以提供不同实现。 */
+export function installWorkbenchHost(host: WorkbenchHost): void {
+  workbenchHost.install(host)
+}
+
+/**
+ * 卸载宿主适配器。`expectedHost` 可防止旧入口销毁时误卸载较新的安装。
+ */
+export function uninstallWorkbenchHost(expectedHost?: WorkbenchHost): boolean {
+  return workbenchHost.uninstall(expectedHost)
 }

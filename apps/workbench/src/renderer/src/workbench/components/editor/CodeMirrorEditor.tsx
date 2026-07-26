@@ -74,15 +74,15 @@ import {
 } from '@velaros-ai/workbench/components/editor/workbenchCommentExtension'
 import type { WorkbenchLanguageServiceFileEdit } from '@velaros-ai/workbench/contracts'
 import { useWorkbenchAiCompletionEnabled } from '@velaros-ai/workbench/hooks/useWorkbenchPreferences'
+import {
+  useWorkbenchHostRuntime,
+  type WorkbenchHostRuntime,
+} from '@velaros-ai/workbench/host'
 import { useWorkbenchI18n } from '@velaros-ai/workbench/i18n'
 import type { PackageManagerCommand } from '@velaros-ai/workbench/models/commands/workbenchPackageScriptCommand'
 import {
-  addWorkbenchComment,
-  listWorkbenchCommentsForPath,
-  removeWorkbenchComment,
-  updateWorkbenchCommentAnchor,
-  updateWorkbenchCommentBody,
   useWorkbenchComments,
+  useWorkbenchCommentStore,
 } from '@velaros-ai/workbench/models/comments/workbenchCommentStore'
 import { getWorkbenchCodeMirrorAutocompleteTheme } from '@velaros-ai/workbench/models/editor/workbenchCodeMirrorAutocompleteTheme'
 import { createWorkbenchBasicSyntaxExtension } from '@velaros-ai/workbench/models/editor/workbenchCodeMirrorBasicSyntax'
@@ -134,9 +134,8 @@ import {
 import { createWorkbenchTokenOccurrenceHighlightExtension } from '@velaros-ai/workbench/models/editor/workbenchCodeMirrorTokenOccurrenceHighlight'
 import { buildWorkbenchIdeaIndentGuideColumnsForLineRange } from '@velaros-ai/workbench/models/editor/workbenchIndentGuides'
 import {
-  readDownloadedWorkbenchLanguagePluginIds,
-  WORKBENCH_LANGUAGE_PLUGIN_INSTALL_STATE_CHANGED_EVENT,
-} from '@velaros-ai/workbench/models/editor/workbenchLanguagePluginInstallState'
+  useWorkbenchLanguagePluginRuntime,
+} from '@velaros-ai/workbench/models/editor/WorkbenchLanguagePluginRuntimeProvider'
 import {
   getWorkbenchInlineCompletion,
   getWorkbenchLanguageServiceCompletions,
@@ -569,12 +568,14 @@ function createWorkbenchCompletionSource({
   language,
   getOpenTabs,
   getProjectContextIndex,
+  hostRuntime,
 }: {
   projectRoot: string
   path: Nullable<string>
   language: string
   getOpenTabs: GetWorkbenchOpenTabs
   getProjectContextIndex: GetWorkbenchProjectContextIndex
+  hostRuntime: WorkbenchHostRuntime
 }): CompletionSource {
   let requestGeneration = 0
 
@@ -614,7 +615,7 @@ function createWorkbenchCompletionSource({
         openTabs: getOpenTabs(),
       }),
       position: positionLineColumnFromState(context.state, selection.head),
-    })
+    }, hostRuntime)
     if (generation !== requestGeneration) return null
     if (!lspResult.ok || isEmpty(lspResult.data.items)) return localResult || null
 
@@ -652,12 +653,14 @@ function createWorkbenchLanguageServiceLinter({
   language,
   getOpenTabs,
   getActivePath,
+  hostRuntime,
 }: {
   projectRoot: string
   path: Nullable<string>
   language: string
   getOpenTabs: GetWorkbenchOpenTabs
   getActivePath: () => Nullable<string>
+  hostRuntime: WorkbenchHostRuntime
 }) {
   let requestGeneration = 0
 
@@ -677,7 +680,7 @@ function createWorkbenchLanguageServiceLinter({
           content: view.state.doc.toString(),
           openTabs: getOpenTabs(),
         }),
-      })
+      }, hostRuntime)
       // 请求返回时若已切走当前文件，同样丢弃结果。
       if (generation !== requestGeneration || !result.ok || getActivePath() !== path) return []
 
@@ -1018,6 +1021,9 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
     ref
   ): ReactElement {
     const { t } = useWorkbenchI18n()
+    const hostRuntime = useWorkbenchHostRuntime()
+    const commentStore = useWorkbenchCommentStore()
+    const languagePluginRuntime = useWorkbenchLanguagePluginRuntime()
     const containerRef = useRef<HTMLDivElement>(null)
     const contextMenuRef = useRef<HTMLDivElement>(null)
     const viewRef = useRef<EditorView>(null)
@@ -1046,7 +1052,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
     const syntaxThemeCompartment = useMemo(() => new Compartment(), [])
     const progressiveLoadTimers = useTimerScope('WorkbenchEditorProgressiveLoad')
     const [downloadedLanguagePluginIds, setDownloadedLanguagePluginIds] = useState<Set<string>>(
-      () => readDownloadedWorkbenchLanguagePluginIds()
+      () => languagePluginRuntime.readDownloadedPluginIds()
     )
     // 语法 chunk 异步加载完成后自增，驱动 languageSupport 重算拿到已缓存的扩展。
     const [languagePluginLoadNonce, setLanguagePluginLoadNonce] = useState(0)
@@ -1076,11 +1082,11 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
             language: languageSupportRef.current.languageId || 'plaintext',
             prefix,
             suffix,
-          })
+          }, hostRuntime)
           return result.ok ? result.data.completion || null : null
         },
       }),
-      [inlineCompletionEnabledRef, languageSupportRef, pathRef, projectRootRef]
+      [hostRuntime, inlineCompletionEnabledRef, languageSupportRef, pathRef, projectRootRef]
     )
     const completionSource = useMemo(
       () =>
@@ -1090,8 +1096,9 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
           language,
           getOpenTabs: () => openTabsLatest.current,
           getProjectContextIndex: () => projectContextIndexRef.current,
+          hostRuntime,
         }),
-      [language, openTabsLatest, path, projectContextIndexRef, projectRoot]
+      [hostRuntime, language, openTabsLatest, path, projectContextIndexRef, projectRoot]
     )
     const languageServiceLinter = useMemo(
       () =>
@@ -1101,8 +1108,9 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
           language,
           getOpenTabs: () => openTabsLatest.current,
           getActivePath: () => pathRef.current,
+          hostRuntime,
         }),
-      [language, openTabsLatest, path, pathRef, projectRoot]
+      [hostRuntime, language, openTabsLatest, path, pathRef, projectRoot]
     )
     const packageScriptRunContent = shouldShowWorkbenchPackageScriptRunGutter(path) ? value : ''
     const packageScriptRunExtension = useMemo(
@@ -1147,23 +1155,30 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
     const workbenchCommentExtension = useMemo(
       () =>
         createWorkbenchCommentExtension({
-          onAnchorsRemoved: (ids) => ids.forEach((id) => removeWorkbenchComment(id)),
+          getComment: commentStore.get,
+          onAnchorsRemoved: (ids) => ids.forEach(commentStore.remove),
           onAnchorLinesChanged: (updates) =>
             updates.forEach((update) =>
-              updateWorkbenchCommentAnchor(update.id, {
+              commentStore.updateAnchor(update.id, {
                 startLine: update.startLine,
                 endLine: update.endLine,
               })
             ),
-          onUpdateComment: (id, body) => updateWorkbenchCommentBody(id, body),
-          onDeleteComment: (id) => removeWorkbenchComment(id),
+          onUpdateComment: commentStore.updateBody,
+          onDeleteComment: commentStore.remove,
           resolveEditLabel: () => commentEditLabelRef.current,
           resolveSaveLabel: () => commentSaveLabelRef.current,
           resolveCancelLabel: () => commentCancelLabelRef.current,
           resolveDeleteLabel: () => commentDeleteLabelRef.current,
           isExternalDocReplace: (tr) => tr.annotation(externalValueSync) === true,
         }),
-      [commentCancelLabelRef, commentDeleteLabelRef, commentEditLabelRef, commentSaveLabelRef]
+      [
+        commentCancelLabelRef,
+        commentDeleteLabelRef,
+        commentEditLabelRef,
+        commentSaveLabelRef,
+        commentStore,
+      ]
     )
 
     const openFileHistory = (mode: 'local' | 'git'): void => {
@@ -1176,7 +1191,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       const currentPath = pathRef.current
       const anchors = !currentPath
         ? []
-        : listWorkbenchCommentsForPath(projectRootRef.current, currentPath)
+        : commentStore.listForPath(projectRootRef.current, currentPath)
             .map((comment) =>
               anchorFromLineRange(view.state.doc, comment.id, comment.startLine, comment.endLine)
             )
@@ -1209,6 +1224,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         path,
         language,
         getOpenTabs: () => openTabsLatest.current,
+        hostRuntime,
       }
 
       let syncedInlayHintOpenFiles: Nullable<Map<string, string>> = null
@@ -1280,13 +1296,13 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
               ...request,
               ranges: [...ranges],
               syncOpenFiles,
-            })
+            }, hostRuntime)
 
             return result.ok && result.data.path === path ? result.data.hints : []
           },
         }),
       ]
-    }, [language, openTabsLatest, path, projectRoot])
+    }, [hostRuntime, language, openTabsLatest, path, projectRoot])
 
     const runCurrentFile = (): void => {
       const currentPath = pathRef.current
@@ -1340,7 +1356,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       const body = rawBody.trim()
       if (!draft || !view || !currentPath || !body) return
 
-      const comment = addWorkbenchComment({
+      const comment = commentStore.add({
         projectRoot,
         path: currentPath,
         startLine: draft.startLine,
@@ -1376,7 +1392,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
               openTabs: openTabsLatest.current,
             }),
             position: positionLineColumnFromState(view.state, identifier.from),
-          })
+          }, hostRuntime)
           const location = result.ok ? result.data.locations[0] : null
           if (location) {
             setContextMenu(null)
@@ -1445,7 +1461,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
             }),
             position: positionLineColumnFromState(view.state, identifier.from),
             newName: nextName,
-          })
+          }, hostRuntime)
           if (result.ok && !isEmpty(result.data.changes)) {
             const currentFileChange = pathRef.current
               ? result.data.changes.find((change) => change.path === pathRef.current)
@@ -1534,6 +1550,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
           path,
           language,
           getOpenTabs: () => openTabsLatest.current,
+          hostRuntime,
         },
         position: identifier.from,
       })
@@ -1581,7 +1598,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
             content,
             openTabs: openTabsLatest.current,
           }),
-        })
+        }, hostRuntime)
         const currentFileChange =
           result.ok && pathRef.current
             ? result.data.changes.find((change) => change.path === pathRef.current)
@@ -1639,21 +1656,11 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
 
     useEffect(() => {
       const handleInstallStateChanged = (): void => {
-        setDownloadedLanguagePluginIds(readDownloadedWorkbenchLanguagePluginIds())
+        setDownloadedLanguagePluginIds(languagePluginRuntime.readDownloadedPluginIds())
       }
 
-      window.addEventListener(
-        WORKBENCH_LANGUAGE_PLUGIN_INSTALL_STATE_CHANGED_EVENT,
-        handleInstallStateChanged
-      )
-
-      return () => {
-        window.removeEventListener(
-          WORKBENCH_LANGUAGE_PLUGIN_INSTALL_STATE_CHANGED_EVENT,
-          handleInstallStateChanged
-        )
-      }
-    }, [])
+      return languagePluginRuntime.subscribe(handleInstallStateChanged)
+    }, [languagePluginRuntime])
 
     useImperativeHandle(ref, () => ({
       focus: () => {

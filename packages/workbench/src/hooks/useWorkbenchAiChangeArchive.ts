@@ -5,7 +5,7 @@ import { Result } from '@velaros-ai/core/result'
 
 import type { WorkbenchChatSessionGroup, WorkbenchChatSessionSnapshot } from '../composition'
 import type { ChatMessage, SystemFileChangePreviewResult } from '../contracts/index'
-import { workbenchHost } from '../host'
+import { useWorkbenchHostRuntime,type WorkbenchHostRuntime } from '../host'
 import { useWorkbenchI18n } from '../i18n'
 import {
   buildWorkbenchAiChangeArchive,
@@ -79,6 +79,7 @@ function useLatestValue<T>(value: T): { current: T } {
 }
 
 async function loadOlderSessionMessages(
+  hostRuntime: WorkbenchHostRuntime,
   session: WorkbenchChatSessionSnapshot
 ): Promise<ChatMessage[]> {
   let beforeIndex = session.messagePaging?.loadedFromIndex ?? 0
@@ -86,7 +87,7 @@ async function loadOlderSessionMessages(
 
   while (beforeIndex > 0) {
     const page = Result.unwrap(
-      await workbenchHost.kernel.sessions.loadOlderMessages({
+      await hostRuntime.kernel.sessions.loadOlderMessages({
         sessionId: session.id,
         branchId: session.activeBranchId,
         beforeIndex,
@@ -102,11 +103,12 @@ async function loadOlderSessionMessages(
 }
 
 async function loadSnapshotRefPreview(
+  hostRuntime: WorkbenchHostRuntime,
   ref: WorkbenchAiChangeArchiveEntry['snapshotRefs'][number]
 ): Promise<SystemFileChangePreviewResult> {
   if (ref.preview) return ref.preview
   return Result.unwrap(
-    await workbenchHost.kernel.workspace.getFileChangePreview(ref.sessionId, ref.changeId, ref.path)
+    await hostRuntime.kernel.workspace.getFileChangePreview(ref.sessionId, ref.changeId, ref.path)
   )
 }
 
@@ -133,6 +135,7 @@ export function useWorkbenchAiChangeArchive({
   onFilesChanged,
   notify,
 }: UseWorkbenchAiChangeArchiveOptions): WorkbenchAiChangeArchiveState {
+  const hostRuntime = useWorkbenchHostRuntime()
   const { t } = useWorkbenchI18n()
   const tLatest = useLatestValue(t)
   const notifyLatest = useLatestValue(notify)
@@ -210,7 +213,7 @@ export function useWorkbenchAiChangeArchive({
     setHistoryLoading(true)
     void Promise.all(
       pagedSessions.map(
-        async (session) => [session.id, await loadOlderSessionMessages(session)] as const
+        async (session) => [session.id, await loadOlderSessionMessages(hostRuntime, session)] as const
       )
     )
       .then((entries) => {
@@ -236,7 +239,7 @@ export function useWorkbenchAiChangeArchive({
     return () => {
       historyGenerationRef.current += 1
     }
-  }, [active, normalizedProjectRoot, pagingKey])
+  }, [active, hostRuntime, normalizedProjectRoot, pagingKey])
 
   const archive = useMemo(
     () =>
@@ -309,10 +312,12 @@ export function useWorkbenchAiChangeArchive({
       return
     }
 
-    const firstPreviewPromise = loadSnapshotRefPreview(firstRef)
+    const firstPreviewPromise = loadSnapshotRefPreview(hostRuntime, firstRef)
     void Promise.all([
       firstPreviewPromise,
-      firstRef.id === lastRef.id ? firstPreviewPromise : loadSnapshotRefPreview(lastRef),
+      firstRef.id === lastRef.id
+        ? firstPreviewPromise
+        : loadSnapshotRefPreview(hostRuntime, lastRef),
     ])
       .then(([beforePreview, afterPreview]) => {
         if (snapshotGenerationRef.current !== generation) return
@@ -342,7 +347,7 @@ export function useWorkbenchAiChangeArchive({
     return () => {
       snapshotGenerationRef.current += 1
     }
-  }, [normalizedProjectRoot, selectedSnapshotRequestKey])
+  }, [hostRuntime, normalizedProjectRoot, selectedSnapshotRequestKey])
 
   const applySnapshot = useCallback(
     async (
@@ -375,7 +380,7 @@ export function useWorkbenchAiChangeArchive({
         for (const ref of orderedRefs) {
           if (mode === 'before') {
             Result.unwrap(
-              await workbenchHost.kernel.workspace.rollbackFileChange(
+              await hostRuntime.kernel.workspace.rollbackFileChange(
                 ref.sessionId,
                 ref.changeId,
                 ref.path
@@ -383,7 +388,7 @@ export function useWorkbenchAiChangeArchive({
             )
           } else {
             Result.unwrap(
-              await workbenchHost.kernel.workspace.restoreFileChange(
+              await hostRuntime.kernel.workspace.restoreFileChange(
                 ref.sessionId,
                 ref.changeId,
                 ref.path
@@ -411,7 +416,7 @@ export function useWorkbenchAiChangeArchive({
         setPendingApply(null)
       }
     },
-    [isPathDirty, onFilesChanged]
+    [hostRuntime, isPathDirty, onFilesChanged]
   )
 
   const applyNext = useCallback(

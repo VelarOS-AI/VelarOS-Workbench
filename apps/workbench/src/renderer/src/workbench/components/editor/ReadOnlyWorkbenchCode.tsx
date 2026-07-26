@@ -5,7 +5,7 @@ import { EditorView, lineNumbers } from '@codemirror/view'
 import { buildReadOnlyCodeSearchHighlight } from '@velaros-ai/workbench/models/editor/readOnlyCodeSearchHighlight'
 import { resolveWorkbenchCodeMirrorLanguage } from '@velaros-ai/workbench/models/editor/workbenchCodeMirrorLanguage'
 import { getWorkbenchCodeMirrorTheme } from '@velaros-ai/workbench/models/editor/workbenchCodeMirrorTheme'
-import { readDownloadedWorkbenchLanguagePluginIds } from '@velaros-ai/workbench/models/editor/workbenchLanguagePluginInstallState'
+import { useWorkbenchLanguagePluginRuntime } from '@velaros-ai/workbench/models/editor/WorkbenchLanguagePluginRuntimeProvider'
 import type { WorkbenchThemeId } from '@velaros-ai/workbench/models/settings/workbenchPreferences'
 
 import styles from '../../styles/workbenchPageStyles'
@@ -22,6 +22,7 @@ export function ReadOnlyWorkbenchCode({
   highlightQuery?: string
 }): ReactElement {
   const hostRef = useRef<HTMLDivElement>(null)
+  const languagePluginRuntime = useWorkbenchLanguagePluginRuntime()
 
   useEffect(() => {
     const host = hostRef.current
@@ -30,7 +31,7 @@ export function ReadOnlyWorkbenchCode({
     const language = resolveWorkbenchCodeMirrorLanguage(
       path,
       '',
-      readDownloadedWorkbenchLanguagePluginIds()
+      languagePluginRuntime.readDownloadedPluginIds()
     )
     const view = new EditorView({
       parent: host,
@@ -47,7 +48,7 @@ export function ReadOnlyWorkbenchCode({
       }),
     })
     return () => view.destroy()
-  }, [content, highlightQuery, path, workbenchTheme])
+  }, [content, highlightQuery, languagePluginRuntime, path, workbenchTheme])
 
   return <div ref={hostRef} className={styles.editorHistoryCodeViewer} />
 }

@@ -4,7 +4,10 @@ import { Decoration, type DecorationSet, EditorView, WidgetType } from '@codemir
 
 import { isEmpty } from '@velaros-ai/core'
 
-import { getWorkbenchComment } from '../../models/comments/workbenchCommentStore'
+import {
+  getWorkbenchComment,
+  type WorkbenchComment,
+} from '../../models/comments/workbenchCommentStore'
 
 /**
  * 工作台行内评论装饰扩展。
@@ -28,7 +31,9 @@ export const addWorkbenchCommentAnchorEffect = StateEffect.define<WorkbenchComme
 /** 只保留给定 id 的锚点（存储侧删除/消费评论后回收装饰用）。 */
 export const retainWorkbenchCommentAnchorsEffect = StateEffect.define<Set<string>>()
 
-interface WorkbenchCommentExtensionOptions {
+export interface WorkbenchCommentExtensionOptions {
+  /** 当前 composition root 的评论读取器；省略时仅为兼容而读取默认仓库。 */
+  getComment?: (id: string) => Nullable<WorkbenchComment>
   /** 锚点因文档编辑塌陷被自动丢弃时回调（把评论从存储移除）。 */
   onAnchorsRemoved: (ids: string[]) => void
   /** 锚点起止行随编辑变化时回调（回写存储行号，供展示与再锚定）。 */
@@ -70,7 +75,8 @@ class WorkbenchCommentMarkerWidget extends WidgetType {
     private readonly resolveEditLabel: () => string,
     private readonly resolveSaveLabel: () => string,
     private readonly resolveCancelLabel: () => string,
-    private readonly resolveDeleteLabel: () => string
+    private readonly resolveDeleteLabel: () => string,
+    private readonly readComment: (id: string) => Nullable<WorkbenchComment>
   ) {
     super()
   }
@@ -80,7 +86,7 @@ class WorkbenchCommentMarkerWidget extends WidgetType {
   }
 
   public toDOM(): HTMLElement {
-    const comment = getWorkbenchComment(this.id)
+    const comment = this.readComment(this.id)
     const root = document.createElement('span')
     root.className = 'cm-workbenchCommentMarker'
     root.setAttribute('data-comment-id', this.id)
@@ -231,7 +237,8 @@ function buildCommentDecorations(
           options.resolveEditLabel,
           options.resolveSaveLabel,
           options.resolveCancelLabel,
-          options.resolveDeleteLabel
+          options.resolveDeleteLabel,
+          options.getComment ?? getWorkbenchComment
         ),
         side: 1,
       }).range(anchor.to)

@@ -5,7 +5,7 @@ import { Log } from '@velaros-ai/core'
 import { Result } from '@velaros-ai/core/result'
 
 import type { WorkbenchDirectoryEntry } from '../../contracts/index'
-import { workbenchHost } from '../../host'
+import { useWorkbenchHostRuntime } from '../../host'
 import {
   buildPackageScriptCommandSuggestions,
   inferPackageManagerCommand,
@@ -32,6 +32,7 @@ export function useWorkbenchCommandPackageSuggestions({
   setCommandSuggestions,
   setCommandInput,
 }: UseWorkbenchCommandPackageSuggestionsOptions): void {
+  const hostRuntime = useWorkbenchHostRuntime()
   useEffect(() => {
     async function loadCommandSuggestions(): Promise<void> {
       if (
@@ -46,7 +47,7 @@ export function useWorkbenchCommandPackageSuggestions({
 
       try {
         const packageJson = Result.unwrap(
-          await workbenchHost.kernel.project.readWorkbenchFile({
+          await hostRuntime.kernel.project.readWorkbenchFile({
             projectRoot: activeProject.rootPath,
             path: 'package.json',
             maxChars: 80_000,
@@ -79,6 +80,7 @@ export function useWorkbenchCommandPackageSuggestions({
     activeProject?.id,
     activeProject?.rootPath,
     activeProjectRef,
+    hostRuntime,
     rootEntrySignature,
     setCommandInput,
     setCommandSuggestions,

@@ -5,7 +5,7 @@ import { Decoration, type DecorationSet, EditorView, gutter, GutterMarker } from
 import { isEmpty, isNotNull } from '@velaros-ai/core'
 import { resolveWorkbenchCodeMirrorLanguage } from '@velaros-ai/workbench/models/editor/workbenchCodeMirrorLanguage'
 import { getWorkbenchCodeMirrorTheme } from '@velaros-ai/workbench/models/editor/workbenchCodeMirrorTheme'
-import { readDownloadedWorkbenchLanguagePluginIds } from '@velaros-ai/workbench/models/editor/workbenchLanguagePluginInstallState'
+import { useWorkbenchLanguagePluginRuntime } from '@velaros-ai/workbench/models/editor/WorkbenchLanguagePluginRuntimeProvider'
 import type { WorkbenchUnifiedDiffRow } from '@velaros-ai/workbench/models/git/workbenchGitDiffModel'
 import type { WorkbenchThemeId } from '@velaros-ai/workbench/models/settings/workbenchPreferences'
 
@@ -97,6 +97,7 @@ export const ReadOnlyDiffCodeMirror = forwardRef<
   ReadOnlyDiffCodeMirrorHandle,
   ReadOnlyDiffCodeMirrorProps
 >(function ReadOnlyDiffCodeMirror({ rows, path, workbenchTheme }, ref): React.ReactElement {
+  const languagePluginRuntime = useWorkbenchLanguagePluginRuntime()
   const hostRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<Nullable<EditorView>>(null)
   const anchorsRef = useRef<number[]>([])
@@ -131,7 +132,7 @@ export const ReadOnlyDiffCodeMirror = forwardRef<
     const language = resolveWorkbenchCodeMirrorLanguage(
       path,
       '',
-      readDownloadedWorkbenchLanguagePluginIds()
+      languagePluginRuntime.readDownloadedPluginIds()
     )
     const doc = rows.map((row) => row.text).join('\n')
     anchorsRef.current = collectChangeAnchors(rows)
@@ -177,7 +178,7 @@ export const ReadOnlyDiffCodeMirror = forwardRef<
       view.destroy()
       viewRef.current = null
     }
-  }, [rows, path, workbenchTheme])
+  }, [languagePluginRuntime, rows, path, workbenchTheme])
 
   return (
     <div
