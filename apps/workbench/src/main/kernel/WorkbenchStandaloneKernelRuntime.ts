@@ -32,9 +32,11 @@ import {
 } from '@velaros-ai/kernel-service'
 import {
   createModelKernelModule,
+} from '@velaros-ai/model-runtime'
+import {
   createModelRuntimeComposition,
   type ModelRuntimeComposition,
-} from '@velaros-ai/model-runtime'
+} from '@velaros-ai/model-runtime/node'
 import {
   createWorkspaceKernelModule,
   type VelarosWorkspaceBridge,
@@ -45,7 +47,6 @@ import type { WorkbenchWorkspaceCapabilityProvider } from '../workspace/Publishe
 
 import { WorkbenchBrowserController } from './WorkbenchBrowserController'
 
-const WorkbenchKernelVersion = '0.3.1'
 const WorkbenchWorkspaceScopeOwner = 'velaros.workbench.workspace-scope'
 const AgentExecutionEventType = 'velaros.agent.execution'
 
@@ -379,6 +380,7 @@ class WorkbenchAgentCapabilityRuntime implements AgentCapabilityRuntime {
 }
 
 export interface WorkbenchStandaloneKernelRuntimeOptions {
+  kernelVersion: string
   workspace: WorkbenchWorkspaceCapabilityProvider
   isWorkspaceRootAllowed: (projectRoot: string) => boolean
   browserRuntime?: ElectronBrowserRuntime
@@ -433,7 +435,7 @@ export class WorkbenchStandaloneKernelRuntime {
     ])
     this.service = new KernelService({
       host: this.host,
-      kernelVersion: WorkbenchKernelVersion,
+      kernelVersion: options.kernelVersion,
     })
     this.daemon = new KernelLocalDaemon({ service: this.service })
   }

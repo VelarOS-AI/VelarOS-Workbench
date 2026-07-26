@@ -119,6 +119,7 @@ void app.whenReady().then(() => {
     requiredCapabilityIds: RequiredWorkbenchKernelCapabilityIds,
     startLocal: async () => {
       const standaloneKernel = new WorkbenchStandaloneKernelRuntime({
+        kernelVersion: app.getVersion(),
         workspace: providers.workspace,
         isWorkspaceRootAllowed: (projectRoot) =>
           hub.getState().currentProject?.path === projectRoot,

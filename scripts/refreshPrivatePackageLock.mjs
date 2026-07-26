@@ -1,7 +1,8 @@
 import { spawnSync } from 'node:child_process'
-import { readFile, readdir } from 'node:fs/promises'
+import { readFile, readdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { isDeepStrictEqual } from 'node:util'
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const dependencyFields = [
@@ -137,38 +138,69 @@ async function updatePrivatePackages(packageRequirements, packageManifests) {
   )
   for (const [manifestPath, packageNameSet] of manifestUpdates) {
     const exactPackageNames = [...packageNameSet].sort()
-    const result = spawnSync(
-      'bun',
-      [
-        'update',
-        ...exactPackageNames,
-        '--lockfile-only',
-        '--ignore-scripts',
-      ],
-      {
-        cwd: path.dirname(manifestPath),
-        env: process.env,
-        stdio: 'inherit',
-      }
-    )
-    if (result.status !== 0) {
-      const manifest = path.relative(repositoryRoot, manifestPath)
-      throw new Error(
-        `bun update failed for ${manifest}${result.signal ? ` with signal ${result.signal}` : ` with exit code ${result.status}`}`
+    let updateError
+    try {
+      const result = spawnSync(
+        'bun',
+        [
+          'update',
+          ...exactPackageNames,
+          '--lockfile-only',
+          '--ignore-scripts',
+        ],
+        {
+          cwd: path.dirname(manifestPath),
+          env: process.env,
+          stdio: 'inherit',
+        }
       )
+      if (result.error) {
+        throw result.error
+      }
+      if (result.status !== 0) {
+        const manifest = path.relative(repositoryRoot, manifestPath)
+        throw new Error(
+          `bun update failed for ${manifest}${result.signal ? ` with signal ${result.signal}` : ` with exit code ${result.status}`}`
+        )
+      }
+    } catch (error) {
+      updateError = error
     }
-    await assertManifestSourcesUnchanged(packageManifests)
+    await restoreAndValidateManifestSources(packageManifests, updateError)
+    if (updateError) throw updateError
   }
 }
 
-async function assertManifestSourcesUnchanged(packageManifests) {
-  for (const { manifestPath, source } of packageManifests) {
+async function restoreAndValidateManifestSources(packageManifests, updateError) {
+  const formattingOnlyChanges = []
+  const semanticChanges = []
+  for (const { manifest, manifestPath, source } of packageManifests) {
     const currentSource = await readFile(manifestPath, 'utf8')
-    if (currentSource !== source) {
-      throw new Error(
-        `bun update changed ${path.relative(repositoryRoot, manifestPath)}; only bun.lock may change.`
-      )
+    if (currentSource === source) continue
+
+    const relativePath = path.relative(repositoryRoot, manifestPath)
+    try {
+      const currentManifest = JSON.parse(currentSource)
+      if (isDeepStrictEqual(currentManifest, manifest)) {
+        formattingOnlyChanges.push(relativePath)
+      } else {
+        semanticChanges.push(relativePath)
+      }
+    } catch {
+      semanticChanges.push(relativePath)
     }
+    await writeFile(manifestPath, source, 'utf8')
+  }
+  if (formattingOnlyChanges.length > 0) {
+    console.info(
+      `Restored formatting-only manifest changes: ${formattingOnlyChanges.join(', ')}`
+    )
+  }
+  if (semanticChanges.length > 0) {
+    throw new Error(
+      `bun update changed package manifest semantics; original bytes restored: ${semanticChanges.join(', ')}`,
+      updateError ? { cause: updateError } : undefined
+    )
   }
 }
 
