@@ -22,15 +22,7 @@ export interface WorkbenchKernelScopeRef {
 export type WorkbenchKernelCapabilityRoute =
   | 'agent.execute'
   | 'agent.health'
-  | 'agent.abort'
-  | 'model.configure-profile'
   | 'model.supports-provider'
-  | 'browser.create'
-  | 'browser.open'
-  | 'browser.navigate'
-  | 'browser.inspect'
-  | 'browser.input'
-  | 'browser.selection'
   | 'browser.close-session'
   | 'browser.close-all-sessions'
 

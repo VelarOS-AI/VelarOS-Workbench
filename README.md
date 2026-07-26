@@ -14,9 +14,11 @@ development, `@velaros-ai/core` and `@velaros-ai/ui` resolve from `../VelarOS-Ke
 `../VelarOS-UI`; the app owns the Electron implementation behind the semantic Workbench host.
 
 The standalone app discovers the authenticated local `@velaros-ai/kernel-service` daemon and
-projects handshake, health and capability-catalog state through a typed preload bridge. If the
-daemon is unavailable, Workbench stays usable in an explicit retryable degraded state; it never
-starts a hidden fallback Kernel or embeds Desktop.
+projects handshake, health and capability-catalog state through a typed preload bridge. It requires
+only the standard `velaros.agent`, `velaros.model`, `velaros.workspace`, and `velaros.browser`
+capabilities. If no daemon is running, Workbench starts its own product composition implementing
+that same standard contract and reconnects through local RPC; it never embeds Desktop or adds
+Workbench-specific capabilities to Kernel.
 
 ## Development
 

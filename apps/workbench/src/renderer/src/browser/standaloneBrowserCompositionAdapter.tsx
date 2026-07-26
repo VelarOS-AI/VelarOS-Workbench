@@ -21,7 +21,7 @@ function useKernelBrowserSurface(
         setAvailable(
           status.connected &&
           status.capabilities.some(
-            (capability) => capability.id === 'velaros.workbench.browser-control'
+            (capability) => capability.id === 'velaros.browser'
           )
         )
       }
@@ -46,7 +46,7 @@ function useKernelBrowserSurface(
           onClick={() => {
             void window.velarosWorkbenchKernel.invoke({
               route: 'browser.close-session',
-              input: { browserSessionId: input.sessionId },
+              input: { sessionId: input.sessionId },
             }).finally(options.onRequestClose)
           }}
         >
