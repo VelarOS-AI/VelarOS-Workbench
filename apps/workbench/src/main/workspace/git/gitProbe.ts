@@ -2,10 +2,10 @@ import assert from 'node:assert/strict'
 import {
   mkdirSync,
   mkdtempSync,
-  realpathSync,
   rmSync,
   writeFileSync,
 } from 'node:fs'
+import { realpath } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -48,7 +48,7 @@ async function runGitProbe(): Promise<void> {
   const secondRoot = join(tempRoot, 'second')
   mkdirSync(projectRoot)
   mkdirSync(secondRoot)
-  const canonicalProjectRoot = realpathSync(projectRoot)
+  const canonicalProjectRoot = await realpath(projectRoot)
   const service = new WorkbenchGitService()
   try {
     const empty = await service.getSummary(projectRoot)
