@@ -124,7 +124,7 @@
     "@phosphor-icons/react": "^2.1.10",
     "@velaros-ai/browser-core": "^0.2.5",
     "@velaros-ai/core": "^0.3.2",
-    "@velaros-ai/model-runtime": "^0.4.3",
+    "@velaros-ai/model-runtime": "^0.4.4",
     "@velaros-ai/system-tools": "^0.2.6",
     "@velaros-ai/ui": "^0.2.2",
     "@velaros-ai/workspace": "^1.2.4",

@@ -32,9 +32,11 @@ import {
 } from '@velaros-ai/kernel-service'
 import {
   createModelKernelModule,
+} from '@velaros-ai/model-runtime'
+import {
   createModelRuntimeComposition,
   type ModelRuntimeComposition,
-} from '@velaros-ai/model-runtime'
+} from '@velaros-ai/model-runtime/node'
 import {
   createWorkspaceKernelModule,
   type VelarosWorkspaceBridge,
