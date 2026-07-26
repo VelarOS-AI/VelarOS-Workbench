@@ -51,7 +51,7 @@ if (packageNames.length === 0) {
 }
 
 if (!process.argv.includes('--validate-only')) {
-  await updatePrivatePackages(packageNames, manifests)
+  await updatePrivatePackages(requirements, manifests)
 }
 await validateLockfile(requirements)
 
@@ -124,28 +124,44 @@ function collectExternalVelarPackageRequirements(packageManifests, ownPackageNam
   )
 }
 
-async function updatePrivatePackages(exactPackageNames, packageManifests) {
-  const result = spawnSync(
-    'bun',
-    [
-      'update',
-      ...exactPackageNames,
-      '--recursive',
-      '--lockfile-only',
-      '--ignore-scripts',
-    ],
-    {
-      cwd: repositoryRoot,
-      env: process.env,
-      stdio: 'inherit',
-    }
-  )
-  if (result.status !== 0) {
-    throw new Error(
-      `bun update failed${result.signal ? ` with signal ${result.signal}` : ` with exit code ${result.status}`}`
-    )
+async function updatePrivatePackages(packageRequirements, packageManifests) {
+  const packageNamesByManifest = new Map()
+  for (const { manifestPath, packageName } of packageRequirements) {
+    const packageNames = packageNamesByManifest.get(manifestPath) ?? new Set()
+    packageNames.add(packageName)
+    packageNamesByManifest.set(manifestPath, packageNames)
   }
 
+  const manifestUpdates = [...packageNamesByManifest.entries()].sort(
+    ([leftManifest], [rightManifest]) => leftManifest.localeCompare(rightManifest)
+  )
+  for (const [manifestPath, packageNameSet] of manifestUpdates) {
+    const exactPackageNames = [...packageNameSet].sort()
+    const result = spawnSync(
+      'bun',
+      [
+        'update',
+        ...exactPackageNames,
+        '--lockfile-only',
+        '--ignore-scripts',
+      ],
+      {
+        cwd: path.dirname(manifestPath),
+        env: process.env,
+        stdio: 'inherit',
+      }
+    )
+    if (result.status !== 0) {
+      const manifest = path.relative(repositoryRoot, manifestPath)
+      throw new Error(
+        `bun update failed for ${manifest}${result.signal ? ` with signal ${result.signal}` : ` with exit code ${result.status}`}`
+      )
+    }
+    await assertManifestSourcesUnchanged(packageManifests)
+  }
+}
+
+async function assertManifestSourcesUnchanged(packageManifests) {
   for (const { manifestPath, source } of packageManifests) {
     const currentSource = await readFile(manifestPath, 'utf8')
     if (currentSource !== source) {
