@@ -5,14 +5,14 @@ import { describe, test } from 'node:test'
 
 void describe('release workflows', () => {
   void test('both dispatch modes gate the exact root tag and never clobber release assets', async () => {
-    const appWorkflow = await readFile(
+    const appWorkflow = (await readFile(
       path.resolve('.github/workflows/release-app.yml'),
       'utf8'
-    )
-    const packageWorkflow = await readFile(
+    )).replaceAll('\r\n', '\n')
+    const packageWorkflow = (await readFile(
       path.resolve('.github/workflows/release-packages.yml'),
       'utf8'
-    )
+    )).replaceAll('\r\n', '\n')
 
     for (const workflow of [appWorkflow, packageWorkflow]) {
       assert.match(workflow, /workflow_dispatch:\n\s+inputs:\n\s+release_tag:/)

@@ -154,25 +154,43 @@ async function main() {
 }
 
 function run(command, args, cwd) {
-  const result = spawnSync(command, args, { cwd, env: process.env, stdio: 'inherit' })
+  const executable = platformExecutable(command)
+  const result = spawnSync(executable, args, {
+    cwd,
+    env: process.env,
+    shell: needsCommandShell(command),
+    stdio: 'inherit',
+  })
   if (result.status !== 0) {
-    throw new Error(`${command} ${args.join(' ')} failed with exit code ${result.status}.`)
+    const reason = result.error?.message || `exit code ${result.status}`
+    throw new Error(`${command} ${args.join(' ')} failed with ${reason}.`)
   }
 }
 
 function runCapture(command, args, cwd) {
-  const result = spawnSync(command, args, {
+  const executable = platformExecutable(command)
+  const result = spawnSync(executable, args, {
     cwd,
     encoding: 'utf8',
     env: process.env,
+    shell: needsCommandShell(command),
     stdio: ['ignore', 'pipe', 'pipe'],
   })
   if (result.status !== 0) {
+    const details = result.error?.message || result.stderr || result.stdout || 'unknown error'
     throw new Error(
-      `${command} ${args.join(' ')} failed: ${(result.stderr || result.stdout).trim()}`
+      `${command} ${args.join(' ')} failed: ${details.trim()}`
     )
   }
   return result.stdout.trim()
+}
+
+function platformExecutable(command) {
+  return process.platform === 'win32' && command === 'npm' ? 'npm.cmd' : command
+}
+
+function needsCommandShell(command) {
+  return process.platform === 'win32' && command === 'npm'
 }
 
 function gitHead(repoRoot) {
