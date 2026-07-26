@@ -141,7 +141,12 @@ async function runGitProbe(): Promise<void> {
       '服务不得缓存串根'
     )
   } finally {
-    rmSync(tempRoot, { force: true, recursive: true })
+    rmSync(tempRoot, {
+      force: true,
+      recursive: true,
+      maxRetries: 10,
+      retryDelay: 100,
+    })
   }
 }
 
