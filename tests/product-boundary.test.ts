@@ -3,11 +3,15 @@ import { describe, test } from 'node:test'
 
 import type { SystemLocalAttachmentFileResult } from '@velaros-ai/workbench/contracts'
 
+import { WorkbenchRuntime } from '../packages/workbench/src/composition/WorkbenchRuntime'
 import {
   installWorkbenchHost,
   type WorkbenchHost,
   workbenchHost,
+  WorkbenchHostRuntime,
 } from '../packages/workbench/src/host/WorkbenchHost'
+import { WorkbenchCommentStore } from '../packages/workbench/src/models/comments/workbenchCommentStore'
+import { WorkbenchLanguagePluginInstallRuntime } from '../packages/workbench/src/models/editor/workbenchLanguagePluginInstallState'
 import {
   buildWorkbenchGitChangeItems,
   buildWorkbenchGitCommitDraft,
@@ -27,7 +31,12 @@ import {
   readWorkbenchProjects,
   saveWorkbenchProjects,
 } from '../packages/workbench/src/models/project/workbenchProjects'
-import type { StorageLike } from '../packages/workbench/src/persistence/localStorageJsonStore'
+import {
+  createLocalStorageJsonStore,
+  JsonStorageStore,
+  type LocalStorageJsonStore,
+  type StorageLike,
+} from '../packages/workbench/src/persistence/localStorageJsonStore'
 
 function createHost(marker: string): WorkbenchHost {
   return {
@@ -78,6 +87,183 @@ void describe('Workbench product boundary', () => {
 
     assert.equal(workbenchHost.kernel, second.kernel)
     assert.equal(workbenchHost.shell, second.shell)
+  })
+
+  void test('isolated host runtimes guard install and teardown ownership', () => {
+    const runtime = new WorkbenchHostRuntime()
+    const first = createHost('first')
+    const second = createHost('second')
+
+    assert.throws(() => runtime.kernel, /not installed/)
+    runtime.install(first)
+    runtime.install(second)
+    assert.equal(runtime.kernel, second.kernel)
+    assert.equal(runtime.uninstall(first), false)
+    assert.equal(runtime.uninstall(second), true)
+    assert.equal(runtime.isInstalled, false)
+  })
+
+  void test('composition runtimes own isolated host and comment state', () => {
+    const first = new WorkbenchRuntime({
+      host: createHost('first'),
+      comments: { createId: () => 'first-comment', now: () => 1 },
+    })
+    const second = new WorkbenchRuntime({
+      host: createHost('second'),
+      comments: { createId: () => 'second-comment', now: () => 2 },
+    })
+
+    first.comments.add({
+      projectRoot: '/first',
+      path: 'src/a.ts',
+      startLine: 1,
+      endLine: 1,
+      snippet: 'a',
+      body: 'first',
+      language: 'ts',
+    })
+
+    assert.equal((first.host.kernel.project as { marker: string }).marker, 'first')
+    assert.equal((second.host.kernel.project as { marker: string }).marker, 'second')
+    assert.equal(first.comments.getSnapshot().length, 1)
+    assert.equal(second.comments.getSnapshot().length, 0)
+
+    first.dispose()
+    assert.equal(first.host.isInstalled, false)
+    assert.throws(
+      () =>
+        first.comments.add({
+          projectRoot: '/first',
+          path: 'src/b.ts',
+          startLine: 1,
+          endLine: 1,
+          snippet: 'b',
+          body: 'disposed',
+          language: 'ts',
+        }),
+      /disposed/
+    )
+    second.dispose()
+  })
+
+  void test('comment stores isolate listeners and bind methods', () => {
+    const first = new WorkbenchCommentStore({ createId: () => 'one', now: () => 10 })
+    const second = new WorkbenchCommentStore({ createId: () => 'two', now: () => 20 })
+    let firstChanges = 0
+    const unsubscribe = first.subscribe(() => {
+      firstChanges += 1
+    })
+    const add = first.add
+
+    add({
+      projectRoot: '/project',
+      path: 'index.ts',
+      startLine: 1,
+      endLine: 2,
+      snippet: 'const value = 1',
+      body: 'rename this',
+      language: 'ts',
+    })
+
+    assert.equal(firstChanges, 1)
+    assert.equal(first.get('one')?.createdAt, 10)
+    assert.equal(second.getSnapshot().length, 0)
+    unsubscribe()
+    first.dispose()
+    second.dispose()
+  })
+
+  void test('language plugin runtimes release their host subscriptions', async () => {
+    let firstListener: ((catalog: {
+      generatedAt: number
+      runtimeGlobal: string
+      grammars: Array<{ id: string; installed: boolean }>
+    }) => void) | undefined
+    let unsubscribed = 0
+    const firstHost = createHost('first')
+    firstHost.kernel.project.listWorkbenchLanguageGrammars = async () =>
+      ({
+        ok: true,
+        data: { generatedAt: 1, runtimeGlobal: 'one', grammars: [] },
+      }) as never
+    firstHost.kernel.project.onWorkbenchLanguageGrammarsChanged = (listener) => {
+      firstListener = listener
+      return () => {
+        unsubscribed += 1
+      }
+    }
+    firstHost.kernel.project.installWorkbenchLanguageGrammar = async () =>
+      ({
+        ok: true,
+        data: { generatedAt: 2, runtimeGlobal: 'one', grammars: [] },
+      }) as never
+    const secondHost = createHost('second')
+    secondHost.kernel.project.listWorkbenchLanguageGrammars = async () =>
+      ({
+        ok: true,
+        data: { generatedAt: 1, runtimeGlobal: 'two', grammars: [] },
+      }) as never
+    secondHost.kernel.project.onWorkbenchLanguageGrammarsChanged = () => () => undefined
+    secondHost.kernel.project.installWorkbenchLanguageGrammar = async () =>
+      ({
+        ok: true,
+        data: { generatedAt: 2, runtimeGlobal: 'two', grammars: [] },
+      }) as never
+
+    const first = new WorkbenchLanguagePluginInstallRuntime({
+      hostRuntime: new WorkbenchHostRuntime(firstHost),
+    })
+    const second = new WorkbenchLanguagePluginInstallRuntime({
+      hostRuntime: new WorkbenchHostRuntime(secondHost),
+    })
+
+    first.readDownloadedPluginIds()
+    firstListener?.({
+      generatedAt: 3,
+      runtimeGlobal: 'one',
+      grammars: [{ id: 'typescript', installed: true }],
+    })
+
+    assert.deepEqual([...first.readDownloadedPluginIds()], ['typescript'])
+    assert.deepEqual([...second.readDownloadedPluginIds()], [])
+    first.dispose()
+    assert.equal(unsubscribed, 1)
+    second.dispose()
+  })
+
+  void test('JSON stores own normalization and injected storage lifecycle', () => {
+    const storage = createMemoryStorage()
+    const store = new JsonStorageStore<number>({
+      key: 'count',
+      fallback: 0,
+      normalize: (value) => Number(value) || 0,
+      storage,
+    })
+
+    assert.equal(store.read(), 0)
+    assert.equal(store.update((value) => value + 2), 2)
+    assert.equal(store.read(), 2)
+    store.remove()
+    assert.equal(store.read(), 0)
+  })
+
+  void test('legacy storage contract remains structural and factory methods stay bound', () => {
+    const storage = createMemoryStorage()
+    const custom: LocalStorageJsonStore<number> = {
+      read: () => 1,
+      write: () => undefined,
+      update: (updater) => updater(1),
+      remove: () => undefined,
+    }
+    assert.equal(custom.read(), 1)
+
+    const { read, write } = createLocalStorageJsonStore({
+      key: 'bound-count',
+      fallback: 0,
+      storage,
+    })
+    write(3)
+    assert.equal(read(), 3)
   })
 
   void test('project persistence is owned by the product model', () => {

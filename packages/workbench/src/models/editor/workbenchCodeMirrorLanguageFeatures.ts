@@ -17,6 +17,7 @@ import type {
   WorkbenchLanguageServiceLocation,
   WorkbenchLanguageServiceSignatureHelpResult,
 } from '../../contracts/index'
+import type { WorkbenchHostRuntime } from '../../host'
 import type { WorkbenchOpenEditorTab } from '../../types/workbenchTypes'
 
 import {
@@ -33,11 +34,12 @@ import {
   getWorkbenchLanguageServiceSignatureHelp,
 } from './workbenchLanguageServiceIpc'
 
-interface WorkbenchLanguageServiceEditorContext {
+export interface WorkbenchLanguageServiceEditorContext {
   projectRoot: string
   path: Nullable<string>
   language: string
   getOpenTabs: () => readonly WorkbenchOpenEditorTab[]
+  hostRuntime?: WorkbenchHostRuntime
 }
 
 /** 由产品 UI 注入的语言服务浮层样式；模型不依赖任何宿主 CSS Module。 */
@@ -342,7 +344,7 @@ export function createWorkbenchLanguageServiceHoverTooltip(
         const request = buildLanguageServiceRequest(view, context, position)
         if (request) {
           const generation = ++requestGeneration
-          const result = await getWorkbenchLanguageServiceHover(request)
+          const result = await getWorkbenchLanguageServiceHover(request, context.hostRuntime)
           if (generation !== requestGeneration) return null
           hover = result.ok ? result.data.hover : null
         }
@@ -415,7 +417,7 @@ export function createWorkbenchSignatureHelpExtension(
         }
 
         const generation = ++requestGeneration
-        const result = await getWorkbenchLanguageServiceSignatureHelp(request)
+        const result = await getWorkbenchLanguageServiceSignatureHelp(request, context.hostRuntime)
         if (generation !== requestGeneration) return
 
         const signatureHelp = result.ok ? result.data.signatureHelp : null
@@ -468,6 +470,6 @@ export async function findWorkbenchLanguageServiceReferences({
   const request = buildLanguageServiceRequest(view, context, position)
   if (!request) return []
 
-  const result = await getWorkbenchLanguageServiceReferences(request)
+  const result = await getWorkbenchLanguageServiceReferences(request, context.hostRuntime)
   return result.ok ? result.data.locations : []
 }

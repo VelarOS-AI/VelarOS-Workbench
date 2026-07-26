@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 
 import type { WorkbenchTerminalOutputEvent } from '../../contracts/index'
-import { workbenchHost } from '../../host'
+import { useWorkbenchHostRuntime } from '../../host'
 import {
   createRunOutputLine,
   createTerminalLine,
@@ -37,8 +37,9 @@ export function useWorkbenchCommandIpcSubscriptions(
   setRunSessions: Dispatch<SetStateAction<WorkbenchTerminalSessionView[]>>,
   setIsRunningCommand: Dispatch<SetStateAction<boolean>>
 ): void {
+  const hostRuntime = useWorkbenchHostRuntime()
   useEffect(() => {
-    const unsubscribeRunOutput = workbenchHost.kernel.project.onWorkbenchRunCommandOutput((event) => {
+    const unsubscribeRunOutput = hostRuntime.kernel.project.onWorkbenchRunCommandOutput((event) => {
       if (event.runId !== activeRunIdRef.current) return
 
       if (event.closed) {
@@ -54,7 +55,7 @@ export function useWorkbenchCommandIpcSubscriptions(
       )
     })
 
-    const unsubscribe = workbenchHost.kernel.project.onWorkbenchTerminalOutput((event) => {
+    const unsubscribe = hostRuntime.kernel.project.onWorkbenchTerminalOutput((event) => {
       // 一个 sessionId 只会命中终端会话或运行卡其中一处；两处都按 sessionId 更新即可。
       setTerminalSessions((current) => applyTerminalOutputEvent(current, event))
       setRunSessions((current) => applyTerminalOutputEvent(current, event))
@@ -64,5 +65,12 @@ export function useWorkbenchCommandIpcSubscriptions(
       unsubscribeRunOutput()
       unsubscribe()
     }
-  }, [activeRunIdRef, setIsRunningCommand, setRunOutputLines, setRunSessions, setTerminalSessions])
+  }, [
+    activeRunIdRef,
+    hostRuntime,
+    setIsRunningCommand,
+    setRunOutputLines,
+    setRunSessions,
+    setTerminalSessions,
+  ])
 }

@@ -10,6 +10,7 @@ import type {
   WorkbenchProjectAiRulesResult,
 } from '@velaros-ai/workbench/contracts'
 import { installWorkbenchHost, type WorkbenchHost } from '@velaros-ai/workbench/host'
+import { WorkbenchRuntime } from '@velaros-ai/workbench/runtime'
 
 import type { WorkbenchFsCallResult } from '../../../shared/workbenchFs'
 import type {
@@ -644,8 +645,12 @@ const standaloneWorkbenchHost: WorkbenchHost = {
 }
 
 /** 独立 Workbench 应用入口在渲染前调用，安装语义宿主适配器。 */
-export function installStandaloneWorkbenchHost(): void {
+export function installStandaloneWorkbenchHost(): WorkbenchRuntime {
   installWorkbenchHost(standaloneWorkbenchHost)
+  return new WorkbenchRuntime({
+    host: standaloneWorkbenchHost,
+    legacyLanguagePluginEventTarget: window,
+  })
 }
 
 export { standaloneWorkbenchHost }

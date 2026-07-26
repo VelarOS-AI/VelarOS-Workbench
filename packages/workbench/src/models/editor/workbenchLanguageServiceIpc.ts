@@ -1,111 +1,124 @@
-import { workbenchHost } from '../../host'
+import type { WorkbenchProjectKernelPort } from '../../host'
+import { workbenchHost,type WorkbenchHostRuntime } from '../../host'
 
 type WorkbenchLanguageServiceCompletionsPayload = Parameters<
-  typeof workbenchHost.kernel.project.getWorkbenchLanguageServiceCompletions
+  WorkbenchProjectKernelPort['getWorkbenchLanguageServiceCompletions']
 >[0]
 type WorkbenchLanguageServiceDefinitionPayload = Parameters<
-  typeof workbenchHost.kernel.project.getWorkbenchLanguageServiceDefinition
+  WorkbenchProjectKernelPort['getWorkbenchLanguageServiceDefinition']
 >[0]
 type WorkbenchLanguageServiceDiagnosticsPayload = Parameters<
-  typeof workbenchHost.kernel.project.getWorkbenchLanguageServiceDiagnostics
+  WorkbenchProjectKernelPort['getWorkbenchLanguageServiceDiagnostics']
 >[0]
 type WorkbenchLanguageServiceRenamePayload = Parameters<
-  typeof workbenchHost.kernel.project.getWorkbenchLanguageServiceRename
+  WorkbenchProjectKernelPort['getWorkbenchLanguageServiceRename']
 >[0]
 type WorkbenchLanguageServiceHoverPayload = Parameters<
-  typeof workbenchHost.kernel.project.getWorkbenchLanguageServiceHover
+  WorkbenchProjectKernelPort['getWorkbenchLanguageServiceHover']
 >[0]
 type WorkbenchLanguageServiceReferencesPayload = Parameters<
-  typeof workbenchHost.kernel.project.getWorkbenchLanguageServiceReferences
+  WorkbenchProjectKernelPort['getWorkbenchLanguageServiceReferences']
 >[0]
 type WorkbenchLanguageServiceSignatureHelpPayload = Parameters<
-  typeof workbenchHost.kernel.project.getWorkbenchLanguageServiceSignatureHelp
+  WorkbenchProjectKernelPort['getWorkbenchLanguageServiceSignatureHelp']
 >[0]
 type WorkbenchLanguageServiceFormatPayload = Parameters<
-  typeof workbenchHost.kernel.project.getWorkbenchLanguageServiceFormat
+  WorkbenchProjectKernelPort['getWorkbenchLanguageServiceFormat']
 >[0]
 type WorkbenchLanguageServiceDocumentSymbolsPayload = Parameters<
-  typeof workbenchHost.kernel.project.getWorkbenchLanguageServiceDocumentSymbols
+  WorkbenchProjectKernelPort['getWorkbenchLanguageServiceDocumentSymbols']
 >[0]
 type WorkbenchLanguageServiceDocumentHighlightsPayload = Parameters<
-  typeof workbenchHost.kernel.project.getWorkbenchLanguageServiceDocumentHighlights
+  WorkbenchProjectKernelPort['getWorkbenchLanguageServiceDocumentHighlights']
 >[0]
 type WorkbenchLanguageServiceInlayHintsPayload = Parameters<
-  typeof workbenchHost.kernel.project.getWorkbenchLanguageServiceInlayHints
+  WorkbenchProjectKernelPort['getWorkbenchLanguageServiceInlayHints']
 >[0]
 
 type WorkbenchInlineCompletionPayload = Parameters<
-  typeof workbenchHost.kernel.project.getWorkbenchInlineCompletion
+  WorkbenchProjectKernelPort['getWorkbenchInlineCompletion']
 >[0]
 
 export function getWorkbenchLanguageServiceCompletions(
-  payload: WorkbenchLanguageServiceCompletionsPayload
-): ReturnType<typeof workbenchHost.kernel.project.getWorkbenchLanguageServiceCompletions> {
-  return workbenchHost.kernel.project.getWorkbenchLanguageServiceCompletions(payload)
+  payload: WorkbenchLanguageServiceCompletionsPayload,
+  runtime: WorkbenchHostRuntime = workbenchHost
+): ReturnType<WorkbenchProjectKernelPort['getWorkbenchLanguageServiceCompletions']> {
+  return runtime.kernel.project.getWorkbenchLanguageServiceCompletions(payload)
 }
 
 export function getWorkbenchInlineCompletion(
-  payload: WorkbenchInlineCompletionPayload
-): ReturnType<typeof workbenchHost.kernel.project.getWorkbenchInlineCompletion> {
-  return workbenchHost.kernel.project.getWorkbenchInlineCompletion(payload)
+  payload: WorkbenchInlineCompletionPayload,
+  runtime: WorkbenchHostRuntime = workbenchHost
+): ReturnType<WorkbenchProjectKernelPort['getWorkbenchInlineCompletion']> {
+  return runtime.kernel.project.getWorkbenchInlineCompletion(payload)
 }
 
 export function getWorkbenchLanguageServiceDefinition(
-  payload: WorkbenchLanguageServiceDefinitionPayload
-): ReturnType<typeof workbenchHost.kernel.project.getWorkbenchLanguageServiceDefinition> {
-  return workbenchHost.kernel.project.getWorkbenchLanguageServiceDefinition(payload)
+  payload: WorkbenchLanguageServiceDefinitionPayload,
+  runtime: WorkbenchHostRuntime = workbenchHost
+): ReturnType<WorkbenchProjectKernelPort['getWorkbenchLanguageServiceDefinition']> {
+  return runtime.kernel.project.getWorkbenchLanguageServiceDefinition(payload)
 }
 
 export function getWorkbenchLanguageServiceDiagnostics(
-  payload: WorkbenchLanguageServiceDiagnosticsPayload
-): ReturnType<typeof workbenchHost.kernel.project.getWorkbenchLanguageServiceDiagnostics> {
-  return workbenchHost.kernel.project.getWorkbenchLanguageServiceDiagnostics(payload)
+  payload: WorkbenchLanguageServiceDiagnosticsPayload,
+  runtime: WorkbenchHostRuntime = workbenchHost
+): ReturnType<WorkbenchProjectKernelPort['getWorkbenchLanguageServiceDiagnostics']> {
+  return runtime.kernel.project.getWorkbenchLanguageServiceDiagnostics(payload)
 }
 
 export function getWorkbenchLanguageServiceRename(
-  payload: WorkbenchLanguageServiceRenamePayload
-): ReturnType<typeof workbenchHost.kernel.project.getWorkbenchLanguageServiceRename> {
-  return workbenchHost.kernel.project.getWorkbenchLanguageServiceRename(payload)
+  payload: WorkbenchLanguageServiceRenamePayload,
+  runtime: WorkbenchHostRuntime = workbenchHost
+): ReturnType<WorkbenchProjectKernelPort['getWorkbenchLanguageServiceRename']> {
+  return runtime.kernel.project.getWorkbenchLanguageServiceRename(payload)
 }
 
 export function getWorkbenchLanguageServiceHover(
-  payload: WorkbenchLanguageServiceHoverPayload
-): ReturnType<typeof workbenchHost.kernel.project.getWorkbenchLanguageServiceHover> {
-  return workbenchHost.kernel.project.getWorkbenchLanguageServiceHover(payload)
+  payload: WorkbenchLanguageServiceHoverPayload,
+  runtime: WorkbenchHostRuntime = workbenchHost
+): ReturnType<WorkbenchProjectKernelPort['getWorkbenchLanguageServiceHover']> {
+  return runtime.kernel.project.getWorkbenchLanguageServiceHover(payload)
 }
 
 export function getWorkbenchLanguageServiceReferences(
-  payload: WorkbenchLanguageServiceReferencesPayload
-): ReturnType<typeof workbenchHost.kernel.project.getWorkbenchLanguageServiceReferences> {
-  return workbenchHost.kernel.project.getWorkbenchLanguageServiceReferences(payload)
+  payload: WorkbenchLanguageServiceReferencesPayload,
+  runtime: WorkbenchHostRuntime = workbenchHost
+): ReturnType<WorkbenchProjectKernelPort['getWorkbenchLanguageServiceReferences']> {
+  return runtime.kernel.project.getWorkbenchLanguageServiceReferences(payload)
 }
 
 export function getWorkbenchLanguageServiceSignatureHelp(
-  payload: WorkbenchLanguageServiceSignatureHelpPayload
-): ReturnType<typeof workbenchHost.kernel.project.getWorkbenchLanguageServiceSignatureHelp> {
-  return workbenchHost.kernel.project.getWorkbenchLanguageServiceSignatureHelp(payload)
+  payload: WorkbenchLanguageServiceSignatureHelpPayload,
+  runtime: WorkbenchHostRuntime = workbenchHost
+): ReturnType<WorkbenchProjectKernelPort['getWorkbenchLanguageServiceSignatureHelp']> {
+  return runtime.kernel.project.getWorkbenchLanguageServiceSignatureHelp(payload)
 }
 
 export function getWorkbenchLanguageServiceFormat(
-  payload: WorkbenchLanguageServiceFormatPayload
-): ReturnType<typeof workbenchHost.kernel.project.getWorkbenchLanguageServiceFormat> {
-  return workbenchHost.kernel.project.getWorkbenchLanguageServiceFormat(payload)
+  payload: WorkbenchLanguageServiceFormatPayload,
+  runtime: WorkbenchHostRuntime = workbenchHost
+): ReturnType<WorkbenchProjectKernelPort['getWorkbenchLanguageServiceFormat']> {
+  return runtime.kernel.project.getWorkbenchLanguageServiceFormat(payload)
 }
 
 export function getWorkbenchLanguageServiceDocumentSymbols(
-  payload: WorkbenchLanguageServiceDocumentSymbolsPayload
-): ReturnType<typeof workbenchHost.kernel.project.getWorkbenchLanguageServiceDocumentSymbols> {
-  return workbenchHost.kernel.project.getWorkbenchLanguageServiceDocumentSymbols(payload)
+  payload: WorkbenchLanguageServiceDocumentSymbolsPayload,
+  runtime: WorkbenchHostRuntime = workbenchHost
+): ReturnType<WorkbenchProjectKernelPort['getWorkbenchLanguageServiceDocumentSymbols']> {
+  return runtime.kernel.project.getWorkbenchLanguageServiceDocumentSymbols(payload)
 }
 
 export function getWorkbenchLanguageServiceDocumentHighlights(
-  payload: WorkbenchLanguageServiceDocumentHighlightsPayload
-): ReturnType<typeof workbenchHost.kernel.project.getWorkbenchLanguageServiceDocumentHighlights> {
-  return workbenchHost.kernel.project.getWorkbenchLanguageServiceDocumentHighlights(payload)
+  payload: WorkbenchLanguageServiceDocumentHighlightsPayload,
+  runtime: WorkbenchHostRuntime = workbenchHost
+): ReturnType<WorkbenchProjectKernelPort['getWorkbenchLanguageServiceDocumentHighlights']> {
+  return runtime.kernel.project.getWorkbenchLanguageServiceDocumentHighlights(payload)
 }
 
 export function getWorkbenchLanguageServiceInlayHints(
-  payload: WorkbenchLanguageServiceInlayHintsPayload
-): ReturnType<typeof workbenchHost.kernel.project.getWorkbenchLanguageServiceInlayHints> {
-  return workbenchHost.kernel.project.getWorkbenchLanguageServiceInlayHints(payload)
+  payload: WorkbenchLanguageServiceInlayHintsPayload,
+  runtime: WorkbenchHostRuntime = workbenchHost
+): ReturnType<WorkbenchProjectKernelPort['getWorkbenchLanguageServiceInlayHints']> {
+  return runtime.kernel.project.getWorkbenchLanguageServiceInlayHints(payload)
 }

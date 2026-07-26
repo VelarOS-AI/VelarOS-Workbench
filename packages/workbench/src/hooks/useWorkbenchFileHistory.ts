@@ -4,7 +4,7 @@ import { AppError } from '@velaros-ai/core'
 import { Result } from '@velaros-ai/core/result'
 
 import type { AppLocale } from '../contracts/index'
-import { workbenchHost } from '../host'
+import { useWorkbenchHostRuntime,type WorkbenchHostRuntime } from '../host'
 import { formatWorkbenchGitCommitDate } from '../models/git/changesPanel.model'
 
 export type WorkbenchFileHistoryMode = 'local' | 'git'
@@ -50,6 +50,7 @@ export function useWorkbenchFileHistory({
   locale: AppLocale
   enabled: boolean
 }): WorkbenchFileHistorySource {
+  const hostRuntime = useWorkbenchHostRuntime()
   const [records, setRecords] = useState<WorkbenchFileHistoryRecord[]>([])
   const [isLoadingList, setIsLoadingList] = useState(false)
   const [listError, setListError] = useState<Nullable<string>>(null)
@@ -70,8 +71,8 @@ export function useWorkbenchFileHistory({
       try {
         const nextRecords =
           mode === 'local'
-            ? await loadLocalRecords(projectRoot, path, locale)
-            : await loadGitRecords(projectRoot, path, locale)
+            ? await loadLocalRecords(hostRuntime, projectRoot, path, locale)
+            : await loadGitRecords(hostRuntime, projectRoot, path, locale)
         if (generation !== generationRef.current) return
         setRecords(nextRecords)
       } catch (error) {
@@ -82,38 +83,39 @@ export function useWorkbenchFileHistory({
         if (generation === generationRef.current) setIsLoadingList(false)
       }
     })()
-  }, [enabled, locale, mode, path, projectRoot])
+  }, [enabled, hostRuntime, locale, mode, path, projectRoot])
 
   const loadContent = useCallback(
     async (id: string): Promise<string> => {
       if (!path) return ''
       if (mode === 'local') {
         const result = Result.unwrap(
-          await workbenchHost.kernel.project.readWorkbenchLocalHistorySnapshot({ projectRoot, path, id })
+          await hostRuntime.kernel.project.readWorkbenchLocalHistorySnapshot({ projectRoot, path, id })
         )
         return result.content
       }
       const result = Result.unwrap(
-        await workbenchHost.kernel.workspace.getWorkspaceGitFileAtCommit(projectRoot, {
+        await hostRuntime.kernel.workspace.getWorkspaceGitFileAtCommit(projectRoot, {
           commitSha: id,
           path,
         })
       )
       return result.content
     },
-    [mode, path, projectRoot]
+    [hostRuntime, mode, path, projectRoot]
   )
 
   return { records, isLoadingList, listError, loadContent }
 }
 
 async function loadLocalRecords(
+  hostRuntime: WorkbenchHostRuntime,
   projectRoot: string,
   path: string,
   locale: AppLocale
 ): Promise<WorkbenchFileHistoryRecord[]> {
   const result = Result.unwrap(
-    await workbenchHost.kernel.project.listWorkbenchLocalHistory({ projectRoot, path })
+    await hostRuntime.kernel.project.listWorkbenchLocalHistory({ projectRoot, path })
   )
   return result.entries.map((entry, index) => ({
     id: entry.id,
@@ -124,12 +126,13 @@ async function loadLocalRecords(
 }
 
 async function loadGitRecords(
+  hostRuntime: WorkbenchHostRuntime,
   projectRoot: string,
   path: string,
   locale: AppLocale
 ): Promise<WorkbenchFileHistoryRecord[]> {
   const result = Result.unwrap(
-    await workbenchHost.kernel.workspace.getWorkspaceGitLog(projectRoot, {
+    await hostRuntime.kernel.workspace.getWorkspaceGitLog(projectRoot, {
       path,
       limit: GIT_HISTORY_COMMIT_LIMIT,
     })
