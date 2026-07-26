@@ -4,6 +4,7 @@ import { app, BrowserWindow } from 'electron'
 
 import { WorkbenchKernelClientRuntime } from './kernel/WorkbenchKernelClientRuntime'
 import { registerWorkbenchKernelIpc } from './kernel/WorkbenchKernelIpc'
+import { WorkbenchStandaloneKernelRuntime } from './kernel/WorkbenchStandaloneKernelRuntime'
 import { WorkbenchProjectHub } from './projects/ProjectHub'
 import { registerProjectHubIpc } from './projects/ProjectHubIpc'
 import { installProjectHubMenu } from './projects/ProjectHubMenu'
@@ -14,22 +15,20 @@ import {
   registerLanguageGrammarScheme,
 } from './resources/languageGrammarProtocol'
 import { registerWorkbenchGitIpc } from './workspace/git/WorkbenchGitIpc'
-import { WorkbenchGitService } from './workspace/git/WorkbenchGitService'
-import { WorkbenchLanguageServiceWorkerClient } from './workspace/language/LanguageServiceWorkerClient'
 import { registerWorkbenchLanguageServiceIpc } from './workspace/language/WorkbenchLanguageServiceIpc'
-import { createWorkbenchAppParts } from './workspace/Parts'
 import { registerWorkbenchTerminalIpc } from './workspace/terminal/WorkbenchTerminalIpc'
-import { WorkbenchFileWatcher } from './workspace/watch/WorkbenchFileWatcher'
 import { registerWorkbenchWatchIpc } from './workspace/watch/WorkbenchWatchIpc'
 import { registerWorkbenchFsIpc } from './workspace/WorkbenchFsIpc'
-import { WorkbenchProjectFileSystem } from './workspace/WorkbenchProjectFileSystem'
+import { registerWorkbenchWorkspaceIpc } from './workspace/WorkbenchWorkspaceIpc'
+import { createDefaultWorkbenchMainCapabilityProviders } from './WorkbenchMainCapabilityProviders'
 
 /**
  * 独立 VelarOS Workbench 应用的主进程。
  *
  * 负责窗口生命周期 + 项目枢纽（起手页三主动作 / 最近项目持久化 / 窗口标题与菜单跟随项目状态）。
  * IDE 本地能力由应用私有 IPC 语义端口承载；共享能力通过经过认证的 Kernel daemon
- * 客户端组合根接入，不反向依赖 Desktop，也不在 daemon 缺席时创建第二套 Kernel。
+ * 客户端组合根接入，不反向依赖 Desktop。优先连接现有 daemon；daemon 缺席时由 Workbench
+ * 启动同一套 Kernel 模块组合，并继续通过本地 RPC 使用它，避免产生第二套运行时语义。
  *
  * 数据根对齐 Desktop 惯例（prod=userData，dev=cwd/.data 隔离目录），但完全独立于 Desktop 的
  * chat 存储：应用名固定 `VelarOS Workbench`，prod userData 因此拥有自己的平台目录。
@@ -95,7 +94,7 @@ function createWorkbenchWindow(hub: WorkbenchProjectHub): void {
  */
 function installLanguageServiceProjectLifecycle(
   hub: WorkbenchProjectHub,
-  client: WorkbenchLanguageServiceWorkerClient
+  client: ReturnType<typeof createDefaultWorkbenchMainCapabilityProviders>['language']
 ): void {
   let activeProjectRoot = hub.getState().currentProject?.path ?? null
 
@@ -112,23 +111,39 @@ void app.whenReady().then(() => {
   const dataRootDir = resolveWorkbenchDataRootDir()
   const hub = new WorkbenchProjectHub(dataRootDir)
   registerProjectHubIpc(hub)
-  const kernelRuntime = new WorkbenchKernelClientRuntime()
-  const disposeKernelIpc = registerWorkbenchKernelIpc(kernelRuntime)
+  const providers = createDefaultWorkbenchMainCapabilityProviders(dataRootDir)
+  const kernelRuntime = new WorkbenchKernelClientRuntime({
+    requiredCapabilityIds: [...new Set(
+      Object.values(providers.kernelRoutes).map((route) => route.capabilityId)
+    )],
+    startLocal: async () => {
+      const standaloneKernel = new WorkbenchStandaloneKernelRuntime({
+        workspace: providers.workspace,
+        isWorkspaceRootAllowed: (projectRoot) =>
+          hub.getState().currentProject?.path === projectRoot,
+      })
+      await standaloneKernel.start()
+      return standaloneKernel
+    },
+  })
+  const disposeKernelIpc = registerWorkbenchKernelIpc(
+    kernelRuntime,
+    providers.kernelRoutes
+  )
   void kernelRuntime.start()
-  const parts = createWorkbenchAppParts(dataRootDir)
   const languageGrammarInstaller = new LanguageGrammarInstaller({
-    installRoot: () => parts.storagePaths.getLanguageGrammarsDir(),
+    installRoot: () => providers.parts.storagePaths.getLanguageGrammarsDir(),
   })
   registerLanguageGrammarProtocol(languageGrammarInstaller)
   const disposeLanguageGrammarIpc = registerLanguageGrammarIpc(languageGrammarInstaller)
-  registerWorkbenchFsIpc(new WorkbenchProjectFileSystem(), parts)
-  registerWorkbenchTerminalIpc(parts.terminal)
-  registerWorkbenchGitIpc(new WorkbenchGitService())
-  const disposeWatchIpc = registerWorkbenchWatchIpc(new WorkbenchFileWatcher())
+  registerWorkbenchFsIpc(providers.fileSystem, providers.parts)
+  registerWorkbenchTerminalIpc(providers.parts.terminal)
+  registerWorkbenchGitIpc(providers.git)
+  const disposeWatchIpc = registerWorkbenchWatchIpc(providers.watch)
+  const disposeWorkspaceIpc = registerWorkbenchWorkspaceIpc(providers.workspace)
 
-  const languageServiceClient = new WorkbenchLanguageServiceWorkerClient()
-  registerWorkbenchLanguageServiceIpc(languageServiceClient)
-  installLanguageServiceProjectLifecycle(hub, languageServiceClient)
+  registerWorkbenchLanguageServiceIpc(providers.language)
+  installLanguageServiceProjectLifecycle(hub, providers.language)
   let shutdownStarted = false
   app.on('before-quit', (event) => {
     if (shutdownStarted) return
@@ -140,9 +155,11 @@ void app.whenReady().then(() => {
     disposeWatchIpc()
     disposeLanguageGrammarIpc()
     disposeKernelIpc()
+    disposeWorkspaceIpc()
     void Promise.all([
-      parts.terminal.closeAllSessions(),
-      languageServiceClient.dispose(),
+      providers.parts.terminal.closeAllSessions(),
+      providers.language.dispose(),
+      providers.workspace.dispose(),
       kernelRuntime.dispose(),
     ]).finally(() => app.quit())
   })

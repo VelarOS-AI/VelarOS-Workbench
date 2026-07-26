@@ -2,9 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { isEmpty, isFalse,Log, toNullable } from '@velaros-ai/core'
 import { Result } from '@velaros-ai/core/result'
-import type { ChatMessage, SystemFileChangePreviewResult } from '@velaros-ai/core/types'
 
 import type { WorkbenchChatSessionGroup, WorkbenchChatSessionSnapshot } from '../composition'
+import type { ChatMessage, SystemFileChangePreviewResult } from '../contracts/index'
 import { workbenchHost } from '../host'
 import { useWorkbenchI18n } from '../i18n'
 import {

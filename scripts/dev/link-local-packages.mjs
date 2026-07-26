@@ -7,6 +7,7 @@ const projectsRoot = path.dirname(root)
 const scope = '@velaros-ai/'
 const readJson = async (file) => JSON.parse(await readFile(file, 'utf8'))
 const exists = async (file) => access(file).then(() => true, () => false)
+const entryExists = async (file) => lstat(file).then(() => true, () => false)
 const packageManifests = []
 for (const entry of await readdir(path.join(root, 'packages'), { withFileTypes: true })) {
   const manifestPath = path.join(root, 'packages', entry.name, 'package.json')
@@ -24,15 +25,35 @@ for (const manifest of manifests) for (const field of ['dependencies', 'devDepen
   for (const [name, spec] of Object.entries(manifest[field] ?? {})) if (name.startsWith(scope) && !ownNames.has(name) && spec !== 'workspace:*') externalNames.add(name)
 }
 const available = new Map()
+const canonicalOwners = new Map([
+  ['@velaros-ai/browser-composition', 'VelarOS-Capabilities'],
+  ['@velaros-ai/browser-core', 'VelarOS-Capabilities'],
+  ['@velaros-ai/browser-runtime', 'VelarOS-Capabilities'],
+  ['@velaros-ai/system-tools', 'VelarOS-Capabilities'],
+  ['@velaros-ai/workspace', 'VelarOS-Capabilities'],
+])
+const rememberAvailable = (name, directory, repositoryName) => {
+  if (!name?.startsWith(scope)) return
+  const canonicalOwner = canonicalOwners.get(name)
+  if (
+    !available.has(name)
+    || canonicalOwner === repositoryName
+  ) available.set(name, directory)
+}
 for (const repo of await readdir(projectsRoot, { withFileTypes: true })) {
   if (!repo.isDirectory() || !repo.name.startsWith('VelarOS-')) continue
+  const siblingRootManifest = path.join(projectsRoot, repo.name, 'package.json')
+  if (await exists(siblingRootManifest)) {
+    const manifest = await readJson(siblingRootManifest)
+    rememberAvailable(manifest.name, path.dirname(siblingRootManifest), repo.name)
+  }
   const siblingPackages = path.join(projectsRoot, repo.name, 'packages')
   if (!await exists(siblingPackages)) continue
   for (const entry of await readdir(siblingPackages, { withFileTypes: true })) {
     const manifestPath = path.join(siblingPackages, entry.name, 'package.json')
     if (!entry.isDirectory() || !await exists(manifestPath)) continue
     const manifest = await readJson(manifestPath)
-    if (manifest.name?.startsWith(scope)) available.set(manifest.name, path.dirname(manifestPath))
+    rememberAvailable(manifest.name, path.dirname(manifestPath), repo.name)
   }
 }
 const run = (args, cwd) => {
@@ -42,7 +63,7 @@ const run = (args, cwd) => {
 const linkIntoProject = async (base, name, directory) => {
   const target = path.join(base, 'node_modules', ...name.split('/'))
   await mkdir(path.dirname(target), { recursive: true })
-  if (await exists(target)) {
+  if (await entryExists(target)) {
     const stat = await lstat(target)
     if (stat.isSymbolicLink()) {
       const current = path.resolve(path.dirname(target), await readlink(target))

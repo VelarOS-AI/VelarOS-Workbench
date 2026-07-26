@@ -1,5 +1,5 @@
-import type { WorkbenchDirectoryEntry } from '@velaros-ai/core/types'
-import type { WorkbenchReadFileResult } from '@velaros-ai/core/types'
+import type { WorkbenchDirectoryEntry } from '../contracts/index'
+import type { WorkbenchReadFileResult } from '../contracts/index'
 
 export type TreeActionKind = 'create-file' | 'create-directory' | 'rename'
 

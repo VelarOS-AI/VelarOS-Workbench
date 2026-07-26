@@ -6,13 +6,12 @@ import {
   useContext,
 } from 'react'
 
-import type { WorkspaceSpaceKind } from '@velaros-ai/core/constants/workspaceSpaces'
 import type {
   BrowserElementSelection,
   ChatMessage,
   SystemFileChangePreviewResult,
   WorkspaceCheckpointFileDiff,
-} from '@velaros-ai/core/types'
+} from '../contracts/index'
 
 import type { WorkbenchChatSurfaceScope } from './workbenchChatComposition'
 
@@ -35,7 +34,7 @@ export interface WorkbenchChatSessionSnapshot {
   readonly folderId: string
   readonly kind: 'chat'
   readonly rootPath: Nullable<string>
-  readonly space: WorkspaceSpaceKind
+  readonly space: 'project'
   readonly workspaceVersion: number
   readonly messages: readonly ChatMessage[]
   readonly runtime: {

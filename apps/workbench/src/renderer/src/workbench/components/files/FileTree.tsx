@@ -11,7 +11,7 @@ import type { NodeApi, NodeRendererProps, TreeApi } from 'react-arborist'
 import { Tree } from 'react-arborist'
 
 import { isBlank, isEmpty } from '@velaros-ai/core'
-import type { WorkbenchDirectoryEntry } from '@velaros-ai/core/types'
+import type { WorkbenchDirectoryEntry } from '@velaros-ai/workbench/contracts'
 import { useWorkbenchI18n } from '@velaros-ai/workbench/i18n'
 import {
   buildTreeNodes,

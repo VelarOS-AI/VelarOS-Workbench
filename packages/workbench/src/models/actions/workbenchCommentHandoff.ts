@@ -1,5 +1,4 @@
-import type { AppLocale } from '@velaros-ai/core/types'
-
+import type { AppLocale } from '../../contracts/index'
 import {
   formatWorkbenchCommentLocation,
   type WorkbenchComment,

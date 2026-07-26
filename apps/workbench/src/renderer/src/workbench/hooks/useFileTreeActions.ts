@@ -2,7 +2,7 @@ import { type MouseEvent,type MutableRefObject, useCallback, useEffect, useState
 import type { NodeApi, TreeApi } from 'react-arborist'
 
 import { toNullable } from '@velaros-ai/core'
-import type { WorkbenchDirectoryEntry } from '@velaros-ai/core/types'
+import type { WorkbenchDirectoryEntry } from '@velaros-ai/workbench/contracts'
 import {
   DEFAULT_TREE_WIDTH,
   type FileTreeNodeData,

@@ -1,4 +1,5 @@
 export * from './composition'
+export type * from './contracts'
 export * from './hooks/useWorkbenchAiChangeArchive'
 export * from './hooks/useWorkbenchChatActionBridge'
 export * from './hooks/useWorkbenchChatChangePreview'

@@ -1,7 +1,7 @@
 import type {
   SystemWorkspaceGitLineStatsSnapshot,
   SystemWorkspaceGitSummary,
-} from '@velaros-ai/core/types'
+} from '../../contracts/index'
 
 function buildPartialTopBarStatus(
   snapshot: SystemWorkspaceGitLineStatsSnapshot

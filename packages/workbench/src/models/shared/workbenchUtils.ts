@@ -1,6 +1,6 @@
 import { isEmpty } from '@velaros-ai/core'
-import type { WorkbenchDirectoryEntry } from '@velaros-ai/core/types'
 
+import type { WorkbenchDirectoryEntry } from '../../contracts/index'
 import type { WorkbenchProject } from '../project/workbenchProjects'
 
 export const ROOT_PATH = '.'

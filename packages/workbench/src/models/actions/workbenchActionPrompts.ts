@@ -1,6 +1,6 @@
 import { isEmpty } from '@velaros-ai/core'
-import type { AppLocale, WorkbenchDirectoryEntry, WorkbenchRunCommandResult } from '@velaros-ai/core/types'
 
+import type { AppLocale, WorkbenchDirectoryEntry, WorkbenchRunCommandResult } from '../../contracts/index'
 import type { WorkbenchRunConfiguration } from '../commands/workbenchRunConfigurations'
 import type { WorkbenchEditorOutlineItem, WorkbenchEditorProblemItem } from '../editor/workbenchEditorModel'
 import type { WorkbenchProjectContextIndex } from '../project/workbenchProjectContextIndex'

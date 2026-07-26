@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 
-import type { SystemLocalAttachmentFileResult } from '@velaros-ai/core/types'
+import type { SystemLocalAttachmentFileResult } from '@velaros-ai/workbench/contracts'
 
 import {
   installWorkbenchHost,

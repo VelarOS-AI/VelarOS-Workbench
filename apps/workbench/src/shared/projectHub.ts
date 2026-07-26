@@ -11,6 +11,7 @@ export const WorkbenchProjectHubChannels = {
   getState: 'workbench-app:project-hub:get-state',
   openProjectDialog: 'workbench-app:project-hub:open-project-dialog',
   openProjectPath: 'workbench-app:project-hub:open-project-path',
+  openSystemPath: 'workbench-app:project-hub:open-system-path',
   pickNewProjectLocation: 'workbench-app:project-hub:pick-new-project-location',
   createProject: 'workbench-app:project-hub:create-project',
   removeRecentProject: 'workbench-app:project-hub:remove-recent-project',
@@ -67,6 +68,7 @@ export interface WorkbenchProjectHubBridge {
   getState: () => Promise<WorkbenchProjectHubState>
   openProjectDialog: () => Promise<WorkbenchProjectOpenResult>
   openProjectPath: (path: string) => Promise<WorkbenchProjectOpenResult>
+  openSystemPath: (path: string) => Promise<{ opened: boolean; error?: string }>
   pickNewProjectLocation: () => Promise<WorkbenchPickLocationResult>
   createProject: (locationPath: string, name: string) => Promise<WorkbenchProjectCreateResult>
   removeRecentProject: (path: string) => Promise<WorkbenchProjectHubState>

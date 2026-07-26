@@ -1,7 +1,4 @@
 import { Log } from '@velaros-ai/core'
-import {
-  clampWorkbenchPaneSize,
-} from '@velaros-ai/core/constants/workbenchViewport'
 import { readNumberScalar as readNumber } from '@velaros-ai/core/utils/unknownJsonRecord'
 
 import {
@@ -9,8 +6,12 @@ import {
   type StorageLike,
 } from '../../persistence/localStorageJsonStore'
 
-export type { WorkbenchResizablePane } from '@velaros-ai/core/constants/workbenchViewport'
-export { clampWorkbenchPaneSize } from '@velaros-ai/core/constants/workbenchViewport'
+import {
+  clampWorkbenchPaneSize,
+} from './workbenchViewport'
+
+export type { WorkbenchResizablePane } from './workbenchViewport'
+export { clampWorkbenchPaneSize } from './workbenchViewport'
 
 export interface WorkbenchLayoutSizes {
   commandPanelHeight: number

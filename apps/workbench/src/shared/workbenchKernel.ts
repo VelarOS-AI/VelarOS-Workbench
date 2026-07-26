@@ -1,8 +1,55 @@
 export const WorkbenchKernelChannels = {
   getStatus: 'workbench-app:kernel:get-status',
   retry: 'workbench-app:kernel:retry',
+  invoke: 'workbench-app:kernel:invoke',
   statusChanged: 'workbench-app:kernel:status-changed',
+  agentExecution: 'workbench-app:kernel:agent-execution',
 } as const
+
+export interface WorkbenchKernelScopeRef {
+  id: string
+  ownerModuleId: string
+  kind: string | null
+}
+
+/**
+ * Renderer-visible semantic route names.
+ *
+ * The renderer never supplies raw capability ids or operation names. The main
+ * composition root maps these stable product intentions to independently
+ * injected Kernel capabilities.
+ */
+export type WorkbenchKernelCapabilityRoute =
+  | 'agent.execute'
+  | 'agent.health'
+  | 'agent.abort'
+  | 'model.configure-profile'
+  | 'model.supports-provider'
+  | 'browser.create'
+  | 'browser.open'
+  | 'browser.navigate'
+  | 'browser.inspect'
+  | 'browser.input'
+  | 'browser.selection'
+  | 'browser.close-session'
+  | 'browser.close-all-sessions'
+
+export interface WorkbenchKernelInvokeRequest {
+  route: WorkbenchKernelCapabilityRoute
+  scope?: WorkbenchKernelScopeRef | null
+  input: unknown
+}
+
+export interface WorkbenchKernelInvocationError {
+  code: string
+  message: string
+  retryable: boolean
+  details: Readonly<Record<string, unknown>> | null
+}
+
+export type WorkbenchKernelInvokeResult =
+  | { ok: true; output: unknown }
+  | { ok: false; error: WorkbenchKernelInvocationError }
 
 export type WorkbenchKernelConnectionState =
   | 'connecting'
@@ -71,7 +118,9 @@ export interface WorkbenchKernelStatus {
 export interface WorkbenchKernelBridge {
   getStatus: () => Promise<WorkbenchKernelStatus>
   retry: () => Promise<WorkbenchKernelStatus>
+  invoke: (request: WorkbenchKernelInvokeRequest) => Promise<WorkbenchKernelInvokeResult>
   onStatusChanged: (
     listener: (status: WorkbenchKernelStatus) => void
   ) => () => void
+  onAgentExecution: (listener: (payload: unknown) => void) => () => void
 }

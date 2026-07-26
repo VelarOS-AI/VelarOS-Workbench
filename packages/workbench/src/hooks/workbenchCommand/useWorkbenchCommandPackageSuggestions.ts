@@ -3,8 +3,8 @@ import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 
 import { Log } from '@velaros-ai/core'
 import { Result } from '@velaros-ai/core/result'
-import type { WorkbenchDirectoryEntry } from '@velaros-ai/core/types'
 
+import type { WorkbenchDirectoryEntry } from '../../contracts/index'
 import { workbenchHost } from '../../host'
 import {
   buildPackageScriptCommandSuggestions,

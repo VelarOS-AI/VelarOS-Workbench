@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 
 import { AppError } from '@velaros-ai/core/error'
 import { Result } from '@velaros-ai/core/result'
-import type { WorkbenchSearchEntriesResult } from '@velaros-ai/core/types'
+import type { WorkbenchSearchEntriesResult } from '@velaros-ai/workbench/contracts'
 import { workbenchHost } from '@velaros-ai/workbench/host'
 import type { WorkbenchProject } from '@velaros-ai/workbench/models/project/workbenchProjects'
 

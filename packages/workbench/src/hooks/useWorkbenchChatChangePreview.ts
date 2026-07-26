@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { isEmpty,toNullable } from '@velaros-ai/core'
-import type { ChatMessage } from '@velaros-ai/core/types'
-import { extractMessageFileChangeDescriptors } from '@velaros-ai/core/utils/messageFileChanges'
 
 import type { WorkbenchChatSessionSnapshot } from '../composition'
+import type { ChatMessage } from '../contracts/index'
+import { extractMessageFileChangeDescriptors } from '../models/actions/messageFileChanges'
 import {
   getWorkbenchGitChangeItemKey,
   isSameWorkbenchGitChangeItem,

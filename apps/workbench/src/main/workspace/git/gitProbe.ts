@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
+import { realpath, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { isAbsolute, join } from 'node:path'
 
 import { execa } from 'execa'
 
@@ -42,12 +48,16 @@ async function runGitProbe(): Promise<void> {
   const secondRoot = join(tempRoot, 'second')
   mkdirSync(projectRoot)
   mkdirSync(secondRoot)
-  const canonicalProjectRoot = realpathSync(projectRoot)
+  const canonicalProjectRoot = await realpath(projectRoot)
   const service = new WorkbenchGitService()
   try {
     const empty = await service.getSummary(projectRoot)
     check(!empty.repository, '非 Git 目录应返回 repository=false')
-    equal(empty.rootPath, canonicalProjectRoot, '摘要 rootPath 应 canonical')
+    await equalRootIdentity(
+      empty.rootPath,
+      canonicalProjectRoot,
+      '摘要 rootPath 应 canonical'
+    )
 
     const initialized = await service.initialize(projectRoot)
     check(initialized.summary.repository, '初始化后应识别 Git 仓库')
@@ -135,13 +145,50 @@ async function runGitProbe(): Promise<void> {
     const second = await service.initialize(secondRoot)
     check(second.summary.repository, '第二个 root 应独立初始化')
     equal(second.summary.status?.changedFiles, 0, '新 root 不得继承前一仓库状态')
-    equal(
+    await equalRootIdentity(
       (await service.getSummary(projectRoot)).rootPath,
       canonicalProjectRoot,
       '服务不得缓存串根'
     )
   } finally {
-    rmSync(tempRoot, { force: true, recursive: true })
+    await removeProbeDirectory(tempRoot)
+  }
+}
+
+async function equalRootIdentity(
+  actual: string | null,
+  expected: string,
+  message: string
+): Promise<void> {
+  check(
+    typeof actual === 'string' && actual.length > 0 && isAbsolute(actual),
+    `${message}: rootPath 应为非空绝对路径`
+  )
+  if (process.platform !== 'win32') {
+    equal(actual, expected, message)
+    return
+  }
+  const [actualStat, expectedStat] = await Promise.all([stat(actual), stat(expected)])
+  equal(
+    `${actualStat.dev}:${actualStat.ino}`,
+    `${expectedStat.dev}:${expectedStat.ino}`,
+    `${message}: Windows 路径应指向同一目录`
+  )
+}
+
+async function removeProbeDirectory(rootPath: string): Promise<void> {
+  const retryableCodes = new Set(['EBUSY', 'ENOTEMPTY', 'EPERM'])
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      rmSync(rootPath, { force: true, recursive: true })
+      return
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code
+      if (!code || !retryableCodes.has(code) || attempt >= 10) throw error
+      await new Promise((resolve) =>
+        setTimeout(resolve, Math.min((attempt + 1) * 100, 500))
+      )
+    }
   }
 }
 
@@ -155,5 +202,5 @@ async function configureIdentity(rootPath: string): Promise<void> {
 }
 
 await runGitProbe()
-assert.equal(assertionCount, 38, 'Git 探针断言数变化必须显式复核')
-console.info(`workbench git probe: ${assertionCount}/38 assertions passed`)
+assert.equal(assertionCount, 40, 'Git 探针断言数变化必须显式复核')
+console.info(`workbench git probe: ${assertionCount}/40 assertions passed`)

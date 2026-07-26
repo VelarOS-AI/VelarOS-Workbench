@@ -1,4 +1,4 @@
-import { platformCompatibility } from '@velaros-ai/core/utils/PlatformCompatibilityHelper'
+import { systemPlatformCompatibility } from '@velaros-ai/system-tools/platform-compatibility'
 
 export function resolveWorkbenchChatWorkspacePath(
   path: string,
@@ -7,13 +7,13 @@ export function resolveWorkbenchChatWorkspacePath(
   const trimmedPath = path.trim()
   if (!trimmedPath) return null
 
-  if (!platformCompatibility.isAbsolutePathText(trimmedPath))
-    return platformCompatibility.stripLeadingPathTextSeparators(
+  if (!systemPlatformCompatibility.isAbsolutePathText(trimmedPath))
+    return systemPlatformCompatibility.stripLeadingPathTextSeparators(
       trimmedPath.replace(/^\.\//, '')
     )
 
-  const normalizedPath = platformCompatibility.normalizePathTextForComparison(trimmedPath)
-  const normalizedRoot = platformCompatibility.normalizePathTextForComparison(projectRoot)
+  const normalizedPath = systemPlatformCompatibility.normalizePathTextForComparison(trimmedPath)
+  const normalizedRoot = systemPlatformCompatibility.normalizePathTextForComparison(projectRoot)
 
   if (normalizedPath === normalizedRoot) return '.'
   if (!normalizedPath.startsWith(`${normalizedRoot}/`)) return null

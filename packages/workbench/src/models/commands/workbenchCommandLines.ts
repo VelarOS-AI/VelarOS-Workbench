@@ -1,7 +1,7 @@
 import type {
   WorkbenchRunCommandOutputEvent,
   WorkbenchTerminalOutputEvent,
-} from '@velaros-ai/core/types'
+} from '../../contracts/index'
 
 export interface WorkbenchTerminalLine {
   id: string

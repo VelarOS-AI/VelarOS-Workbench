@@ -14,10 +14,11 @@ import { isAbsolute, resolve } from 'node:path'
 import { execa } from 'execa'
 
 import { isEmpty, isObject, isPresent, Log } from '@velaros-ai/core'
+
 import {
   getRelativePathInsideRoot,
   toPortableRelativePath,
-} from '@velaros-ai/core/utils/PathContainmentHelper'
+} from './PathContainmentHelper'
 
 interface GitNewFileTrackResult {
   rootPath: string

@@ -7,7 +7,7 @@ import type {
   WorkbenchLanguageServicePositionRequest,
   WorkbenchLanguageServiceRenameRequest,
   WorkbenchLanguageServiceRequest,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/workbench/contracts'
 
 import type {
   WorkbenchLanguageServiceProjectFileRequest,

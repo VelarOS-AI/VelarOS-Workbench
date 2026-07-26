@@ -3,7 +3,7 @@ import { useMemo, useRef, useState } from 'react'
 import { Log, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { Result } from '@velaros-ai/core/result'
-import type { SystemOverview } from '@velaros-ai/core/types'
+import type { SystemOverview } from '@velaros-ai/workbench/contracts'
 import { workbenchHost } from '@velaros-ai/workbench/host'
 import {
   createWorkbenchProject,
@@ -70,9 +70,7 @@ export async function bindWorkbenchProjectWorkspace(
   // 每个 Workbench 会话都登记项目列表中的其他根，但只把当前项目设为 active。
   // 这样 dispatch_agent 可以为其他 project 建独立 lane，又不会把编辑器绑定切走。
   //
-  // 独立宿主宽容化（desktop 原文是 Result.unwrap 硬失败）：workspace 绑定动词属 kernel
-  // 会话面，Phase 3 kernel-protocol 接入前恒 notConnected；编辑器纵切不依赖会话 lane，
-  // 绑定失败降级为 debug 日志、不阻断打开项目。动词接通后本分支自然停用。
+  // 独立宿主宽容化：ProjectHub 拒绝失效路径时只记录诊断，不阻断当前编辑器状态。
   for (const registeredProject of registeredProjects) {
     const added = await api.addWorkspaceRoot(sessionId, registeredProject.rootPath, {
       activate: false,

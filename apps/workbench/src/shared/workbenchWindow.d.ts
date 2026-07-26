@@ -5,6 +5,7 @@ import type { WorkbenchKernelBridge } from './workbenchKernel'
 import type { WorkbenchLanguageBridge } from './workbenchLanguage'
 import type { WorkbenchTerminalBridge } from './workbenchTerminal'
 import type { WorkbenchWatchBridge } from './workbenchWatch'
+import type { WorkbenchWorkspaceBridge } from './workbenchWorkspace'
 
 declare global {
   interface Window {
@@ -15,6 +16,7 @@ declare global {
     velarosWorkbenchLanguage: WorkbenchLanguageBridge
     velarosWorkbenchTerminal: WorkbenchTerminalBridge
     velarosWorkbenchWatch: WorkbenchWatchBridge
+    velarosWorkbenchWorkspace: WorkbenchWorkspaceBridge
   }
 }
 

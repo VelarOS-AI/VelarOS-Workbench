@@ -4,7 +4,7 @@ import { isEmpty, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { Result } from '@velaros-ai/core/result'
 import type {
-  WorkbenchDeleteEntryResult, WorkbenchDirectoryEntry, WorkbenchMoveEntryResult, WorkbenchRestoreDeletedEntryResult, } from '@velaros-ai/core/types'
+  WorkbenchDeleteEntryResult, WorkbenchDirectoryEntry, WorkbenchMoveEntryResult, WorkbenchRestoreDeletedEntryResult, } from '@velaros-ai/workbench/contracts'
 import { workbenchHost } from '@velaros-ai/workbench/host'
 import {
   removeWorkbenchCommentsUnderPath,

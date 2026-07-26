@@ -100,8 +100,7 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
         isSearchingEntries: workbench.isSearchingEntries,
         isIndexingProject: workbench.isIndexingProject,
       },
-      // 片2 过渡：文件面顶部 git 控件区（git config）随片4 git 服务接线时恢复——
-      // 现在传会诱导出「初始化仓库」死按钮（workspace git 动词尚 notConnected）。
+      // 缺少真实摘要时不伪造仓库状态，等待 Git 端口刷新。
       handlers: {
         onSelectEntryPath: workbench.selectEntryPath,
         onCreateEntry: (type, parentEntry, name) =>

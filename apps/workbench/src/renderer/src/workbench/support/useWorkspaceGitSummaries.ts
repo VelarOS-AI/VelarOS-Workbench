@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { AppError } from '@velaros-ai/core'
 import { Result } from '@velaros-ai/core/result'
-import type { SystemWorkspaceGitSummary } from '@velaros-ai/core/types'
+import type { SystemWorkspaceGitSummary } from '@velaros-ai/workbench/contracts'
 import { workbenchHost } from '@velaros-ai/workbench/host'
 
 export type WorkspaceGitSummariesRefreshReason =

@@ -21,17 +21,17 @@ import {
 
 import { isPresent } from '@velaros-ai/core'
 import { Result } from '@velaros-ai/core/result'
-import type {
-  AppLocale,
-  WorkbenchProjectAiRuleFile,
-  WorkbenchProjectAiRulesResult,
-} from '@velaros-ai/core/types'
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 import { Text } from '@velaros-ai/ui/primitives/display/Text'
 import { Title } from '@velaros-ai/ui/primitives/display/Title'
 import { Input } from '@velaros-ai/ui/primitives/forms/Input'
 import { Select } from '@velaros-ai/ui/primitives/forms/Select'
 import { Switch } from '@velaros-ai/ui/primitives/forms/Switch'
+import type {
+  AppLocale,
+  WorkbenchProjectAiRuleFile,
+  WorkbenchProjectAiRulesResult,
+} from '@velaros-ai/workbench/contracts'
 import { workbenchHost } from '@velaros-ai/workbench/host'
 import type { WorkbenchMessageKey } from '@velaros-ai/workbench/i18n'
 import { useWorkbenchI18n } from '@velaros-ai/workbench/i18n'

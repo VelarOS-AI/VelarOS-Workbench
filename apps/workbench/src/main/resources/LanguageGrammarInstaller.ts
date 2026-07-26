@@ -12,7 +12,7 @@ import type {
   WorkbenchLanguageGrammarCatalog,
   WorkbenchLanguageGrammarInstallState,
   WorkbenchLanguageGrammarRecord,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/workbench/contracts'
 import {
   getPluginWorkbenchLanguageServices,
   WORKBENCH_GRAMMAR_RUNTIME_GLOBAL,

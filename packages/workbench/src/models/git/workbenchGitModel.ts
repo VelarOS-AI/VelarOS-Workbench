@@ -1,4 +1,4 @@
-import type { AppLocale, WorkspaceGitFileStatusEntry } from '@velaros-ai/core/types'
+import type { AppLocale, WorkspaceGitFileStatusEntry } from '../../contracts/index'
 
 export type WorkbenchGitChangeGroupId = 'staged' | 'unstaged' | 'untracked'
 export type WorkbenchGitDecorationTone = 'added' | 'modified' | 'untracked'

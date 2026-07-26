@@ -2,11 +2,12 @@
  * 独立工作台主界面拼装：左侧项目与底部工具 rail、文件/编辑器中央装配、右侧产品动作、
  * 运行/终端/问题工具窗、设置、状态栏与 QuickOpen。
  *
- * 文件、Git、终端、运行与语言洞察由独立应用自持；chat、AI changes、CodeGraph 与
- * 接管护盾等待 Kernel RPC 产品面接入，未连接时不暴露死按钮。
+ * 文件、Git、终端、运行与语言洞察由独立应用自持；chat/model 走 Kernel 语义路由，
+ * 项目索引与事务变更走发布版 Workspace 模块，Browser 走发布版 composition 端口。
  */
 import { type ReactElement } from 'react'
 import {
+  ChatCircleTextIcon,
   FolderIcon,
   GitBranchIcon,
   PlayIcon,
@@ -15,6 +16,7 @@ import {
 } from '@phosphor-icons/react'
 
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
+import { WorkbenchChatPanel } from '@velaros-ai/workbench/components/chat/WorkbenchChatPanel'
 
 import { StatusBar } from './components/chrome/StatusBar'
 import { WorkbenchTopTrailing } from './components/chrome/TopToolbar'
@@ -154,10 +156,50 @@ export function StandaloneWorkbenchPagePresentation(): ReactElement {
               onFilePanelResizePointerDown: (event) => layout.beginResizePane('file', event),
             }}
           />
+          <div
+            className={styles.rightResizeHandle}
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize chat panel"
+            onPointerDown={(event) => layout.beginResizePane('right', event)}
+            onDoubleClick={() => layout.resetPaneSize('right')}
+          />
+          <aside
+            className={styles.rightToolPanel}
+            data-open={surface.activeRightTool === 'chat'}
+            aria-label="Workbench Agent"
+          >
+            <div className={styles.rightToolContent}>
+              <WorkbenchChatPanel
+                projectRoot={workbench.activeProject.rootPath}
+                currentFilePath={workbench.selectedFilePath}
+                pendingBrowserElementSelections={model.pendingBrowserElementSelections}
+                onBrowserElementSelectionsConsumed={
+                  model.actions.consumeWorkbenchBrowserElementSelections
+                }
+                onOpenFileChange={model.actions.handleWorkbenchChatFileChangeOpen}
+                onOpenWorkspacePath={model.actions.handleWorkbenchChatWorkspacePathOpen}
+                onReviewFileChanges={model.actions.handleWorkbenchChatFileChangesReview}
+              />
+            </div>
+          </aside>
           <aside className={styles.rightToolRail} aria-label={t('workbench.rightToolWindows')}>
             <div className={styles.rightToolStrip}>
               <div className={styles.rightToolActionGroup}>
                 <WorkbenchTopTrailing {...editorChrome} placement="rail" />
+              </div>
+              <div className={styles.rightToolWindowGroup}>
+                <IconButton
+                  variant="ghost"
+                  size="icon-sm"
+                  className={styles.rightToolButton}
+                  title="Workbench Agent"
+                  label="Workbench Agent"
+                  data-active={surface.activeRightTool === 'chat'}
+                  onClick={() => surface.toggleRightTool('chat')}
+                >
+                  <ChatCircleTextIcon size={18} weight="duotone" />
+                </IconButton>
               </div>
             </div>
           </aside>

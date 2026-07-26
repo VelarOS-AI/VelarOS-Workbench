@@ -7,24 +7,14 @@ import { defineConfig } from 'electron-vite'
 /**
  * 独立 VelarOS Workbench 应用的 electron-vite 构建入口。
  *
- * 开发时把本仓 Workbench 包与 sibling Kernel/UI 包解析到源码，保证三仓修改即时生效；
- * 生产构建由 electron-builder.yml 收集此配置产出的 main/preload/renderer。
+ * 本仓 Workbench 包在开发时解析到源码；跨仓依赖始终经已发布包入口解析，
+ * 避免独立应用偷偷依赖 sibling 仓目录。需要联调时先运行显式 `link:local`。
  */
 const appDir = dirname(fileURLToPath(import.meta.url))
 const repoRoot = resolve(appDir, '../..')
 
 function pkg(...segments: string[]): string {
   return resolve(repoRoot, 'packages', ...segments)
-}
-
-// kernel 簇(2026-07-24 K2)拆至 sibling 仓 VelarOS-Kernel;@velaros-ai/core 走 sibling src。
-function kernelPkg(...segments: string[]): string {
-  return resolve(repoRoot, '../VelarOS-Kernel/packages', ...segments)
-}
-
-// ui 簇(2026-07-24 U2)拆至 sibling 仓 VelarOS-UI;@velaros-ai/ui 走 sibling src。
-function uiPkg(...segments: string[]): string {
-  return resolve(repoRoot, '../VelarOS-UI/packages', ...segments)
 }
 
 export default defineConfig({
@@ -49,8 +39,8 @@ export default defineConfig({
       // @velaros-ai/core 仍经 node_modules dist 解析并打进 bundle（与 main 既有行为一致）。
       extensions: ['.ts', '.tsx', '.mts', '.js', '.mjs', '.json'],
       alias: [
-        { find: /^@velaros\/workbench$/, replacement: pkg('workbench/src/index.ts') },
-        { find: /^@velaros\/workbench\/(.+)$/, replacement: pkg('workbench/src/$1') },
+        { find: /^@velaros-ai\/workbench$/, replacement: pkg('workbench/src/index.ts') },
+        { find: /^@velaros-ai\/workbench\/(.+)$/, replacement: pkg('workbench/src/$1') },
       ],
     },
   },
@@ -69,14 +59,7 @@ export default defineConfig({
       },
     },
     server: {
-      // sibling 仓源码在 vite root 外,显式 allow 时默认工作区根推断被替换,须一并列入本仓根。
-      fs: {
-        allow: [
-          repoRoot,
-          resolve(repoRoot, '../VelarOS-Kernel'),
-          resolve(repoRoot, '../VelarOS-UI'),
-        ],
-      },
+      fs: { allow: [repoRoot] },
     },
     css: {
       modules: {
@@ -89,13 +72,8 @@ export default defineConfig({
     resolve: {
       extensions: ['.ts', '.tsx', '.mts', '.js', '.mjs', '.json'],
       alias: [
-        { find: /^@velaros\/core\/types$/, replacement: kernelPkg('core/src/types/index.ts') },
-        { find: /^@velaros\/core$/, replacement: kernelPkg('core/src/index.ts') },
-        { find: /^@velaros\/core\/(.+)$/, replacement: kernelPkg('core/src/$1') },
-        { find: /^@velaros\/ui$/, replacement: uiPkg('ui/src/index.ts') },
-        { find: /^@velaros\/ui\/(.+)$/, replacement: uiPkg('ui/src/$1') },
-        { find: /^@velaros\/workbench$/, replacement: pkg('workbench/src/index.ts') },
-        { find: /^@velaros\/workbench\/(.+)$/, replacement: pkg('workbench/src/$1') },
+        { find: /^@velaros-ai\/workbench$/, replacement: pkg('workbench/src/index.ts') },
+        { find: /^@velaros-ai\/workbench\/(.+)$/, replacement: pkg('workbench/src/$1') },
       ],
     },
     plugins: [react()],

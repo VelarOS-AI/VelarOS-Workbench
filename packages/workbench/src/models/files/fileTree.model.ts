@@ -1,10 +1,10 @@
 import { optionalWhenLazy } from '@velaros-ai/core'
-import type { WorkbenchDirectoryEntry } from '@velaros-ai/core/types'
 import {
   type FilePresentationVariant,
   getFilePresentationVariant,
 } from '@velaros-ai/ui/utils/filePresentation'
 
+import type { WorkbenchDirectoryEntry } from '../../contracts/index'
 import { ROOT_PATH } from '../shared/workbenchUtils'
 
 export interface FileTreeNodeData {

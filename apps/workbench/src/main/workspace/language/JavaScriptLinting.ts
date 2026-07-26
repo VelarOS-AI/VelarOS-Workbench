@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, isAbsolute, join, relative, sep } from 'node:path'
 
-import type { WorkbenchLanguageServiceDiagnostic } from '@velaros-ai/core/types'
+import type { WorkbenchLanguageServiceDiagnostic } from '@velaros-ai/workbench/contracts'
 
 interface EslintMessageLike {
   ruleId?: Nullable<string>

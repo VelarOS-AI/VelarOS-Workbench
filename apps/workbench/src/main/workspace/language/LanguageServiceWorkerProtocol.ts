@@ -16,7 +16,7 @@ import type {
   WorkbenchLanguageServiceRequest,
   WorkbenchLanguageServiceResolveResult,
   WorkbenchLanguageServiceSignatureHelpQueryResult,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/workbench/contracts'
 
 export interface WorkbenchLanguageServiceProjectRequest {
   projectRoot: string

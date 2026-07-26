@@ -1,5 +1,4 @@
-import type { WorkbenchDirectoryEntry } from '@velaros-ai/core/types'
-
+import type { WorkbenchDirectoryEntry } from '../../contracts/index'
 import { fileLanguage } from '../shared/workbenchUtils'
 
 export interface WorkbenchOpenFileSnapshot {

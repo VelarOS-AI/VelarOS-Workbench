@@ -1,10 +1,10 @@
 /**
  * 独立 Workbench 应用的 codegraph 资源可用性投影（对位 desktop 同名 hook）。
  *
- * Desktop 依赖插件目录探测 codegraph 插件是否物理安装；独立应用的 AI 索引 / 代码图谱
- * 属 kernel 域（Phase 3 kernel-protocol 接入批），在此之前恒不可用——索引 UI 全体灰显、
- * AI 索引控制器被 `enabled: false` 关断。
+ * 独立应用的基础项目索引由已发布 @velaros-ai/workspace 模块提供，因此始终可用。
+ * 更丰富的 CodeGraph 诊断仍通过 status.codeIndex 精确表达，而不是用物理插件目录
+ * 猜测能力是否存在。
  */
 export function useCodeGraphResourceAvailability(): boolean {
-  return false
+  return true
 }

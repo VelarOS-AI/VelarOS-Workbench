@@ -1,4 +1,4 @@
-import type { SystemWorkspaceFilesChangedEvent } from '@velaros-ai/core/types'
+import type { SystemWorkspaceFilesChangedEvent } from '@velaros-ai/workbench/contracts'
 
 import type { WorkbenchFsCallResult } from './workbenchFs'
 

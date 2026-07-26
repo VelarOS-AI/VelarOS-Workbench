@@ -1,7 +1,7 @@
 import { AppError } from '@velaros-ai/core/error'
 import { Result } from '@velaros-ai/core/result'
-import type { SystemLocalAttachmentFileResult } from '@velaros-ai/core/types'
 
+import type { SystemLocalAttachmentFileResult } from '../contracts/index'
 import type {
   WorkbenchLightEditorTab,
   WorkbenchOfficePreviewKind,

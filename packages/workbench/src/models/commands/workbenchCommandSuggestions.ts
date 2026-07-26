@@ -1,5 +1,6 @@
 import { isNonBlankString,isObject, isPlainObject, Log } from '@velaros-ai/core'
-import type { WorkbenchDirectoryEntry } from '@velaros-ai/core/types'
+
+import type { WorkbenchDirectoryEntry } from '../../contracts/index'
 
 import {
   formatWorkbenchPackageScriptName,

@@ -6,12 +6,12 @@ import { spawn } from 'node:child_process'
 import { stat } from 'node:fs/promises'
 
 import { AppError } from '@velaros-ai/core/error'
+import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
 import type {
   WorkbenchRunCommandOutputEvent,
   WorkbenchRunCommandRequest,
   WorkbenchRunCommandResult,
-} from '@velaros-ai/core/types'
-import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
+} from '@velaros-ai/workbench/contracts'
 
 import type { CommandHelper } from './CommandHelper'
 import type { PathResolver } from './PathResolver'

@@ -4,23 +4,26 @@
  */
 import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
+// 独立宿主改判：受控浏览器面走应用内空实现（无内嵌浏览器宿主），契约形状与
+// @velaros-ai/browser-composition 同源；desktop 的 onboarding 派发已剥除（独立应用无引导层）。
+import { useControlledBrowserSurface } from '@velaros-ai/browser-composition'
 import { isEmpty,isObject, isString, isTrue, Log, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { Result } from '@velaros-ai/core/result'
-import type {
-  BrowserElementSelection,
-  SystemFileChangePreviewResult,
-  WorkbenchEditorCommand,
-  WorkbenchEditorCommandEvent,
-  WorkbenchReadFileResult,
-} from '@velaros-ai/core/types'
-import { platformCompatibility } from '@velaros-ai/core/utils/PlatformCompatibilityHelper'
+import { systemPlatformCompatibility } from '@velaros-ai/system-tools/platform-compatibility'
 import {
   useWorkbenchChatProjectRuntime,
   useWorkbenchProductRuntime,
   type WorkbenchBrowserElementSelectionDelivery,
   type WorkbenchChatFileChangeEntry,
 } from '@velaros-ai/workbench/composition'
+import type {
+  BrowserElementSelection,
+  SystemFileChangePreviewResult,
+  WorkbenchEditorCommand,
+  WorkbenchEditorCommandEvent,
+  WorkbenchReadFileResult,
+} from '@velaros-ai/workbench/contracts'
 import { useWorkbenchAiChangeArchive } from '@velaros-ai/workbench/hooks/useWorkbenchAiChangeArchive'
 import { useWorkbenchChatChangePreview } from '@velaros-ai/workbench/hooks/useWorkbenchChatChangePreview'
 import { useWorkbenchKeyboardShortcuts } from '@velaros-ai/workbench/hooks/useWorkbenchKeyboardShortcuts'
@@ -60,9 +63,6 @@ import type { PersistedWorkbenchEditorCursor } from '@velaros-ai/workbench/model
 import type { WorkbenchLightEditorTab } from '@velaros-ai/workbench/types/workbenchTypes'
 
 import { useStableWorkbenchMessageTranslate } from '../runtime/useStableWorkbenchMessaging'
-// 独立宿主改判：受控浏览器面走应用内空实现（无内嵌浏览器宿主），契约形状与
-// @velaros-ai/browser-composition 同源；desktop 的 onboarding 派发已剥除（独立应用无引导层）。
-import { useControlledBrowserSurface } from '../support/controlledBrowserSurfaceStub'
 import { SystemDefaultEditorLightId } from '../support/defaultEditor'
 import { useLatest, useMemoizedFn, useTimerScope } from '../support/genericHooks'
 import { useWorkspaceFilesChangedRefresh } from '../support/useWorkspaceFilesChangedRefresh'
@@ -200,9 +200,10 @@ function findFileChangeReviewEntry({
 }
 
 function getFileChangeOpenPath(entry: WorkbenchChatFileChangeEntry): string {
-  if (!entry.rootPath || platformCompatibility.isAbsolutePathText(entry.path)) return entry.path
+  if (!entry.rootPath || systemPlatformCompatibility.isAbsolutePathText(entry.path))
+    return entry.path
 
-  return platformCompatibility.joinPathText(entry.rootPath, entry.path)
+  return systemPlatformCompatibility.joinPathText(entry.rootPath, entry.path)
 }
 
 export function useStandaloneWorkbenchPageModel(
@@ -997,28 +998,6 @@ export function useStandaloneWorkbenchPageModel(
       )
     },
     []
-  )
-
-  // hook 发起的 workbench 任务命中当前项目时，右侧聊天面板自动展开——
-  // 会话切换由 hook 链路的 activateHookTargetFolder 完成，这里只负责让面板可见。
-  const surfaceLatest = useLatest(surface)
-  const activeProjectRootPathLatest = useLatest(workbench.activeProject?.rootPath)
-  useEffect(
-    () =>
-      workbenchHost.kernel.sessions.onHookSendTask((event) => {
-        // 端口面演进对齐：ChatHookSendTaskEvent 的项目根字段已统一为 workspaceRoot
-        //（旧 workbenchProjectRoot 已在 desktop A3 清理中退役）。
-        const projectRoot = event.workspaceRoot?.trim()
-        const activeRootPath = activeProjectRootPathLatest.current
-        if (!projectRoot || !activeRootPath) return
-        if (normalizeWorkspaceRoot(projectRoot) !== normalizeWorkspaceRoot(activeRootPath)) return
-
-        const currentSurface = surfaceLatest.current
-        if (currentSurface.activeRightTool !== 'chat') {
-          currentSurface.toggleRightTool('chat')
-        }
-      }),
-    [activeProjectRootPathLatest, surfaceLatest]
   )
 
   function toggleBottomTool(tool: Parameters<typeof surface.openBottomTool>[0]): void {

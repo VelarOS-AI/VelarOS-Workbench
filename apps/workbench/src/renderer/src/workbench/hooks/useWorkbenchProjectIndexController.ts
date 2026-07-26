@@ -6,7 +6,7 @@ import { Result } from '@velaros-ai/core/result'
 import type {
   WorkbenchIndexProjectResult,
   WorkbenchProjectAiIndexStatus,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/workbench/contracts'
 import { workbenchHost } from '@velaros-ai/workbench/host'
 import type { WorkbenchMessageKey } from '@velaros-ai/workbench/i18n'
 import type { WorkbenchOpenFileSnapshot } from '@velaros-ai/workbench/models/project/workbenchProjectContextIndex'
