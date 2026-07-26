@@ -1,12 +1,5 @@
 import { type CSSProperties, useCallback, useEffect, useMemo, useState } from 'react'
 
-import {
-  clampWorkbenchPaneSize,
-  getWorkbenchViewportProfile,
-  resolveWorkbenchLayoutSizesForViewport,
-  WORKBENCH_DESKTOP_VIEWPORT,
-  type WorkbenchViewportProfile,
-} from '@velaros-ai/core/constants/workbenchViewport'
 import { type PointerResizeStarter, usePointerResize } from '@velaros-ai/ui/hooks/usePointerResize'
 
 import {
@@ -16,6 +9,13 @@ import {
   type WorkbenchLayoutSizes,
   type WorkbenchResizablePane,
 } from '../models/layout/workbenchLayoutModel'
+import {
+  clampWorkbenchPaneSize,
+  getWorkbenchViewportProfile,
+  resolveWorkbenchLayoutSizesForViewport,
+  WORKBENCH_DESKTOP_VIEWPORT,
+  type WorkbenchViewportProfile,
+} from '../models/layout/workbenchViewport'
 
 interface UseWorkbenchLayoutControllerOptions {
   commandPanelOpen?: boolean

@@ -1,5 +1,4 @@
-import type { WorkbenchIndexedTextFile } from '@velaros-ai/core/types'
-
+import type { WorkbenchIndexedTextFile } from '../../contracts/index'
 import type { WorkbenchOpenEditorTab } from '../../types/workbenchTypes'
 
 export interface WorkbenchContentSearchMatch {

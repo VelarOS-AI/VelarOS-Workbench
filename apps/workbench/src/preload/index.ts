@@ -32,6 +32,7 @@ const projectHubBridge: WorkbenchProjectHubBridge = {
   getState: () => ipcRenderer.invoke(WorkbenchProjectHubChannels.getState),
   openProjectDialog: () => ipcRenderer.invoke(WorkbenchProjectHubChannels.openProjectDialog),
   openProjectPath: (path) => ipcRenderer.invoke(WorkbenchProjectHubChannels.openProjectPath, path),
+  openSystemPath: (path) => ipcRenderer.invoke(WorkbenchProjectHubChannels.openSystemPath, path),
   pickNewProjectLocation: () =>
     ipcRenderer.invoke(WorkbenchProjectHubChannels.pickNewProjectLocation),
   createProject: (locationPath, name) =>

@@ -16,9 +16,9 @@ import {
 
 import { AppError } from '@velaros-ai/core'
 import { Result } from '@velaros-ai/core/result'
-import type { SystemWorkspaceGitSummary, WorkspaceGitLogEntry } from '@velaros-ai/core/types'
 import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
 import { Input } from '@velaros-ai/ui/primitives/forms/Input'
+import type { SystemWorkspaceGitSummary, WorkspaceGitLogEntry } from '@velaros-ai/workbench/contracts'
 import { workbenchHost } from '@velaros-ai/workbench/host'
 import { useWorkbenchI18n } from '@velaros-ai/workbench/i18n'
 import type { WorkbenchGitChangeItem } from '@velaros-ai/workbench/models/git/workbenchGitModel'

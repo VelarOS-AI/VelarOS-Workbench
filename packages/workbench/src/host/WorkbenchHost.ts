@@ -1,13 +1,10 @@
 import { AppError } from '@velaros-ai/core/error'
 import type { Result } from '@velaros-ai/core/result'
+
 import type {
   AppLocale,
-  ChatHookSendTaskEvent,
   ChatLoadOlderMessagesRequest,
   ChatLoadOlderMessagesResponse,
-  FlaggedTaskChangedEvent,
-  FlaggedTaskDetail,
-  FlaggedTaskRecord,
   ListProviderModelsRequest,
   ProviderModelCatalog,
   SystemFileChangePreviewResult,
@@ -102,7 +99,7 @@ import type {
   WorkbenchTerminalStopRequest,
   WorkspaceGitDiffOptions,
   WorkspaceGitLogOptions,
-} from '@velaros-ai/core/types'
+} from '../contracts/index'
 
 /** Workbench 所需的项目、编辑器、终端与代码智能 Kernel 能力。 */
 export interface WorkbenchProjectKernelPort {
@@ -217,15 +214,9 @@ export interface WorkbenchProjectKernelPort {
 
 /** Workbench 使用的 Kernel 会话与附件能力。 */
 export interface WorkbenchSessionKernelPort {
-  listFlaggedTasksByRoot(workspaceRoot: Nullable<string>): Promise<Result<FlaggedTaskRecord[]>>
-  getFlaggedTaskDetail(taskId: string): Promise<Result<FlaggedTaskDetail>>
-  acceptFlaggedTasks(taskIds: string[]): Promise<Result<FlaggedTaskRecord[]>>
-  dismissFlaggedTask(taskId: string): Promise<Result<FlaggedTaskRecord>>
-  onFlaggedTaskChanged(listener: (event: FlaggedTaskChangedEvent) => void): () => void
   loadOlderMessages(
     request: ChatLoadOlderMessagesRequest
   ): Promise<Result<ChatLoadOlderMessagesResponse>>
-  onHookSendTask(listener: (event: ChatHookSendTaskEvent) => void): () => void
   readLocalAttachmentFile(
     request: SystemLocalAttachmentFileRequest
   ): Promise<Result<SystemLocalAttachmentFileResult>>

@@ -4,6 +4,7 @@ import type { ChangeSpec, EditorState } from '@codemirror/state'
 import type { EditorView } from '@codemirror/view'
 
 import { isPresent } from '@velaros-ai/core'
+
 import type {
   WorkbenchLanguageServiceCompletionItem,
   WorkbenchLanguageServiceCompletionTextEdit,
@@ -12,8 +13,7 @@ import type {
   WorkbenchLanguageServicePositionRequest,
   WorkbenchLanguageServiceRange,
   WorkbenchLanguageServiceTextEdit,
-} from '@velaros-ai/core/types'
-
+} from '../../contracts/index'
 import {
   getWorkbenchPathExtension,
   resolveBuiltinWorkbenchLanguageService,

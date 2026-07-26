@@ -2,8 +2,12 @@ node_modules/
 out/
 dist/
 release/
+release-stage/
+release-existing/
 !scripts/release/
 !scripts/release/publish-packages.mjs
+!scripts/release/appReleaseArtifacts.mjs
+!scripts/release/releaseIdentity.mjs
 dist-plugins/
 .data/
 

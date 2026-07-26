@@ -13,9 +13,16 @@ const forbiddenSpecifiers = [
   /^@(?:components|hooks|runtime|shared)\//,
   /^@\//,
   /VelarOS-Desktop/,
+  /^@velaros-ai\/core\/constants\/(?:storage|toolMetadataCatalog|workbenchViewport|workspaceSpaces|workspaceVisibility)$/,
+  /^@velaros-ai\/core\/utils\/(?:CommandExecutionPolicy|PathContainmentHelper|PlatformCompatibilityHelper|messageFileChanges)$/,
+  /^@velaros-ai\/system-tools$/,
 ]
 const importSpecifierPattern =
   /(?:from\s+|import\s*\(|require\s*\()\s*['"]([^'"]+)['"]/gu
+const coreNamedImportPattern =
+  /import\s+(?:type\s+)?\{([\s\S]*?)\}\s+from\s+['"]@velaros-ai\/core(?:\/types)?['"]/gu
+const forbiddenCoreContractPattern =
+  /\b(?:Workbench\w+|SystemWorkspace\w+|BrowserElementSelection|AgentProviderRuntimeConfig|AuxiliaryModel\w+|ListProviderModelsRequest|ProviderModelCatalog)\b/u
 
 async function collectSourceFiles(directory) {
   const entries = await readdir(directory, { withFileTypes: true })
@@ -38,6 +45,14 @@ for (const sourceRoot of sourceRoots) {
       const specifier = match[1]
       if (forbiddenSpecifiers.some((pattern) => pattern.test(specifier))) {
         failures.push(`${relative(rootDir, path)} imports Desktop-private "${specifier}"`)
+      }
+    }
+    for (const match of source.matchAll(coreNamedImportPattern)) {
+      const concrete = match[1].match(forbiddenCoreContractPattern)?.[0]
+      if (concrete) {
+        failures.push(
+          `${relative(rootDir, path)} imports product contract "${concrete}" from Core`
+        )
       }
     }
   }

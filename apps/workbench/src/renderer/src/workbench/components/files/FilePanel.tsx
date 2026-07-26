@@ -22,18 +22,18 @@ import {
 } from '@phosphor-icons/react'
 
 import { toNullable } from '@velaros-ai/core'
-import type {
-  SystemWorkspaceGitSummary,
-  WorkbenchDirectoryEntry,
-  WorkbenchSearchEntriesResult,
-} from '@velaros-ai/core/types'
-import { platformCompatibility } from '@velaros-ai/core/utils/PlatformCompatibilityHelper'
+import { systemPlatformCompatibility } from '@velaros-ai/system-tools/platform-compatibility'
 import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 import { Paragraph } from '@velaros-ai/ui/primitives/display/Paragraph'
 import { Text } from '@velaros-ai/ui/primitives/display/Text'
 import { Input } from '@velaros-ai/ui/primitives/forms/Input'
 import { ScrollArea } from '@velaros-ai/ui/primitives/layout/ScrollArea'
+import type {
+  SystemWorkspaceGitSummary,
+  WorkbenchDirectoryEntry,
+  WorkbenchSearchEntriesResult,
+} from '@velaros-ai/workbench/contracts'
 import { useWorkbenchI18n } from '@velaros-ai/workbench/i18n'
 import type { WorkbenchContentSearchMatch } from '@velaros-ai/workbench/models/files/workbenchContentSearchModel'
 import {
@@ -130,7 +130,7 @@ export interface WorkbenchFilePanelGitControlProps {
 export function resolveWorkbenchEntryAbsolutePath(projectRoot: string, entryPath: string): string {
   return entryPath === ROOT_PATH
     ? projectRoot
-    : platformCompatibility.joinPathText(projectRoot, entryPath)
+    : systemPlatformCompatibility.joinPathText(projectRoot, entryPath)
 }
 
 interface FilePanelProps {

@@ -9,8 +9,9 @@ import { execFileSync } from 'node:child_process'
 
 import { Log } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import { analyzeCommandExecution } from '@velaros-ai/core/utils/CommandExecutionPolicy'
-import { platformCompatibility } from '@velaros-ai/core/utils/PlatformCompatibilityHelper'
+import { systemPlatformCompatibility } from '@velaros-ai/system-tools/platform-compatibility'
+
+import { analyzeCommandExecution } from './CommandExecutionPolicy'
 
 const DEFAULT_COMMAND_TIMEOUT_MS = 60_000
 const DEFAULT_COMMAND_OUTPUT_CHARS = 20_000
@@ -99,12 +100,15 @@ class CommandHelper {
 
   /** 获取当前平台应该如何调用 shell 执行这条命令。 */
   public getShellSpec(command: string, shellPath?: string): WorkspaceShellSpec {
-    return platformCompatibility.getShellCommandSpec(command, { shellPath, env: process.env })
+    return systemPlatformCompatibility.getShellCommandSpec(command, {
+      shellPath,
+      env: process.env,
+    })
   }
 
   /** 前台命令是否应以独立进程组启动，方便超时时整体终止。 */
   public shouldDetachForegroundProcess(): boolean {
-    return platformCompatibility.shouldUseDetachedProcessGroup()
+    return systemPlatformCompatibility.shouldUseDetachedProcessGroup()
   }
 
   /**
@@ -118,7 +122,7 @@ class CommandHelper {
   ): void {
     if (!pid) return
 
-    const treeKillSpec = platformCompatibility.getProcessTreeKillCommandSpec(pid, signal)
+    const treeKillSpec = systemPlatformCompatibility.getProcessTreeKillCommandSpec(pid, signal)
     if (treeKillSpec) {
       try {
         execFileSync(treeKillSpec.file, treeKillSpec.args, { stdio: 'ignore' })
@@ -132,7 +136,7 @@ class CommandHelper {
       }
     }
 
-    const killPid = platformCompatibility.getProcessKillPid(pid)
+    const killPid = systemPlatformCompatibility.getProcessKillPid(pid)
     try {
       process.kill(killPid, signal)
       return

@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, test } from 'node:test'
 
 import type { VelarosWorkspaceBridge } from '@velaros-ai/workspace'
@@ -57,5 +60,38 @@ void describe('published Workspace capability provider', () => {
       }),
       /absolute path/
     )
+  })
+
+  void test('reads a real project file through the published Workspace owner', async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), 'velaros-workbench-workspace-'))
+    const provider = new PublishedWorkspaceCapabilityProvider()
+    try {
+      await writeFile(
+        join(projectRoot, 'kernel-contract.txt'),
+        'workspace-owner-read',
+        'utf8'
+      )
+
+      const result = await provider.invoke({
+        projectRoot,
+        operation: 'ws_read',
+        input: { path: 'kernel-contract.txt', maxChars: 1_024 },
+      }) as {
+        rootPath: string
+        count: number
+        files: Array<{
+          snapshot: { path: string }
+          content: string
+        }>
+      }
+
+      assert.equal(result.rootPath, projectRoot)
+      assert.equal(result.count, 1)
+      assert.equal(result.files[0]?.snapshot.path, 'kernel-contract.txt')
+      assert.equal(result.files[0]?.content, 'workspace-owner-read')
+    } finally {
+      await provider.dispose()
+      await rm(projectRoot, { recursive: true, force: true })
+    }
   })
 })

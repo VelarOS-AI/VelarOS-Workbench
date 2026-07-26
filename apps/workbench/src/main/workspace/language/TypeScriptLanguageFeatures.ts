@@ -14,7 +14,7 @@ import type {
   WorkbenchLanguageServiceRange,
   WorkbenchLanguageServiceSignatureHelpResult,
   WorkbenchLanguageServiceTextEdit,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/workbench/contracts'
 
 const DISPLAY_PART_KINDS: readonly WorkbenchLanguageServiceDisplayPartKind[] = [
   'aliasName',

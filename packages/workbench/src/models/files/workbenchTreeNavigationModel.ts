@@ -1,4 +1,4 @@
-import type { WorkbenchDirectoryEntry } from '@velaros-ai/core/types'
+import type { WorkbenchDirectoryEntry } from '../../contracts/index'
 
 export interface WorkbenchVisibleTreeNode {
   depth: number

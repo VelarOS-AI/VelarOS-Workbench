@@ -19,11 +19,11 @@ import {
 } from '@phosphor-icons/react'
 
 import { isPresent } from '@velaros-ai/core'
-import type { WorkbenchReadFileResult } from '@velaros-ai/core/types'
 import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 import { FileTypeIcon } from '@velaros-ai/ui/primitives/display/FileTypeIcon'
 import { Text } from '@velaros-ai/ui/primitives/display/Text'
+import type { WorkbenchReadFileResult } from '@velaros-ai/workbench/contracts'
 import { useWorkbenchEditorTabOverflow } from '@velaros-ai/workbench/hooks/useWorkbenchEditorTabOverflow'
 import { useWorkbenchI18n } from '@velaros-ai/workbench/i18n'
 import {

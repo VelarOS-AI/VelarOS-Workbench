@@ -16,11 +16,11 @@ import {
 } from '@phosphor-icons/react'
 
 import { isEmpty,toNullable } from '@velaros-ai/core'
-import type { SystemWorkspaceGitSummary, WorkbenchProjectAiIndexStatus } from '@velaros-ai/core/types'
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 import { Input } from '@velaros-ai/ui/primitives/forms/Input'
 import { AnchoredPopover } from '@velaros-ai/ui/primitives/overlays/AnchoredPopover'
 import { BubbleTooltip } from '@velaros-ai/ui/primitives/overlays/Tooltip'
+import type { SystemWorkspaceGitSummary, WorkbenchProjectAiIndexStatus } from '@velaros-ai/workbench/contracts'
 import { useWorkbenchI18n } from '@velaros-ai/workbench/i18n'
 
 import { type WorkbenchTopRunControl } from '../../hooks/useWorkbenchTopRunControl'

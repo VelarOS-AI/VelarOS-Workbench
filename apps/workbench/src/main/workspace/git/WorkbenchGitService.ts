@@ -31,11 +31,12 @@ import type {
   WorkspaceGitRemoteActionOptions,
   WorkspaceGitRemoteActionResult,
   WorkspaceGitStatusResult,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/workbench/contracts'
+
 import {
   getRelativePathInsideRoot,
   toPortableRelativePath,
-} from '@velaros-ai/core/utils/PathContainmentHelper'
+} from '../PathContainmentHelper'
 
 const DefaultDiffMaxChars = 20_000
 const MaxDiffChars = 1_000_000

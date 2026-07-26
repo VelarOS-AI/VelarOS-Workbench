@@ -4,7 +4,7 @@ import { isEmpty, isPresent } from '@velaros-ai/core'
 import type {
   WorkbenchLanguageServiceCompletionItem,
   WorkbenchLanguageServiceRange,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/workbench/contracts'
 
 const MaxCompletionItems = 120
 const MaxCompletionDetailResolutions = 16

@@ -1,4 +1,4 @@
-import type { WorkbenchCodeGraphEdge, WorkbenchCodeGraphNode } from '@velaros-ai/core/types'
+import type { WorkbenchCodeGraphEdge, WorkbenchCodeGraphNode } from '../../contracts/index'
 
 export interface WorkbenchCodeGraphPosition {
   x: number

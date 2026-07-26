@@ -2,7 +2,7 @@
  * 独立 Workbench 应用「语言智能」的 main ↔ renderer IPC 契约（应用私有）。
  *
  * 这是 `WorkbenchHost.kernel.project` 端口 11 个语言服务动词在独立应用侧的实装传输面：
- * 请求/结果形状直接复用 `@velaros-ai/core/types` 的 Workbench Kernel contracts（单源，不另造
+ * 请求/结果形状直接复用 `@velaros-ai/workbench/contracts` 的 Workbench Kernel contracts（单源，不另造
  * 镜像），本文件只补通道名与桥面。错误信封复用 `WorkbenchFsCallResult`（main 侧异常降为
  * 数据，renderer 侧再升回 Result）。主进程把这些请求转发给串行执行的语言服务 worker
  * 线程（tsserver 建图/诊断/符号可能耗时数秒，必须离开主线程）。
@@ -28,7 +28,7 @@ import type {
   WorkbenchLanguageServiceRenameResult,
   WorkbenchLanguageServiceRequest,
   WorkbenchLanguageServiceSignatureHelpQueryResult,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/workbench/contracts'
 
 import type { WorkbenchFsCallResult } from './workbenchFs'
 

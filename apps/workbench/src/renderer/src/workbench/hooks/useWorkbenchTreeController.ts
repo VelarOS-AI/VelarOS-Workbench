@@ -7,7 +7,7 @@ import type {
   WorkbenchDirectoryEntry,
   WorkbenchListDirectoryResult,
   WorkbenchReadFileResult,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/workbench/contracts'
 import { workbenchHost } from '@velaros-ai/workbench/host'
 import {
   getWorkbenchPathAncestorDirectories,

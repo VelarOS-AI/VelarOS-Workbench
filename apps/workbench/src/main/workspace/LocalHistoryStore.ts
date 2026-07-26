@@ -18,7 +18,7 @@ import type {
   WorkbenchListLocalHistoryResult,
   WorkbenchLocalHistoryEntry,
   WorkbenchReadLocalHistorySnapshotResult,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/workbench/contracts'
 
 import type { WorkbenchAppStoragePaths } from './StoragePaths'
 

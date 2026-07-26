@@ -4,7 +4,7 @@ import { isEmpty } from '@velaros-ai/core'
 import type {
   WorkbenchLanguageServiceDiagnostic,
   WorkbenchLanguageServiceDocumentSymbol,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/workbench/contracts'
 import {
   buildWorkbenchLanguageServiceRequestBase,
   usesWorkbenchBuiltinLanguageService,

@@ -1,13 +1,14 @@
 import { AppError, Result } from '@velaros-ai/core'
 import type { Result as ResultType } from '@velaros-ai/core/result'
 import type {
+  SystemOverview,
   WorkbenchIndexProjectRequest,
   WorkbenchIndexProjectResult,
   WorkbenchProjectAiIndexStatus,
   WorkbenchProjectAiRuleFile,
   WorkbenchProjectAiRuleSource,
   WorkbenchProjectAiRulesResult,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/workbench/contracts'
 import { installWorkbenchHost, type WorkbenchHost } from '@velaros-ai/workbench/host'
 
 import type { WorkbenchFsCallResult } from '../../../shared/workbenchFs'
@@ -26,16 +27,14 @@ import type {
  * 重命名 / hover / 引用 / 签名帮助 / 格式化 / 文档符号 / 文档高亮 / inlay，由 main 的语言服务
  * worker 托管 tsserver）+ Git + 持久终端会话 + 文件监听 + 按需语法。
  *
- * 仍为「尚未连接」/ no-op 的动词按依赖归档：
- * - AI 补全与 flagged tasks 尚无独立公共协议；chat/model 已走 Kernel，索引/变更已走 Workspace。
- * - 编辑器命令桥（onWorkbenchEditorCommand / acknowledge…）— 死件：独立应用无内嵌 agent，
- *   没有命令源，不复活。
+ * 可选能力也必须返回稳定结果：没有 CodeGraph/补全建议时返回空结果；会话附件走受项目根
+ * 约束的文件 IPC；项目选择和系统打开走 ProjectHub main 端口。
  */
-const StandaloneKernelNotConnectedMessage =
-  'This Workbench capability requires a connected VelarOS Kernel.'
-
-function notConnected<T>(): Promise<ResultType<T>> {
-  return Promise.resolve(Result.fail(new AppError('UNKNOWN', StandaloneKernelNotConnectedMessage)))
+function invalidSession<T>(): ResultType<T> {
+  return Result.fail(new AppError(
+    'VALIDATION',
+    'The Workbench session is not linked to an active project root.'
+  ))
 }
 
 /** main 侧错误信封 → 产品端口 Result：跨进程边界的一次性升格点（保留 AppError 语义码）。 */
@@ -186,7 +185,7 @@ function createAiIndexStatus(
     codeIndex: {
       providerId: '@velaros-ai/workspace',
       providerLabel: 'VelarOS Workspace',
-      version: '1.2.0',
+      version: '1.2.2',
       initialized: false,
       indexing: false,
       watching: false,
@@ -221,6 +220,26 @@ function stableRootId(value: string): string {
     hash = Math.imul(hash, 16777619)
   }
   return `workspace-${Math.abs(hash).toString(36)}`
+}
+
+function createSystemOverview(activeWorkspaceRoot: string): SystemOverview {
+  return {
+    providers: [{
+      id: 'workbench-project-hub',
+      label: 'Workbench Project Hub',
+      description: 'Standalone Workbench project root provider.',
+      capabilities: ['workspace-roots', 'open-path'],
+    }],
+    workspaceRoots: [{
+      path: activeWorkspaceRoot,
+      active: true,
+      exists: true,
+      removable: false,
+      source: 'project',
+    }],
+    activeWorkspaceRoot,
+    browserSiteContext: null,
+  }
 }
 
 function inferPackageManager(projectIndex: WorkbenchIndexProjectResult): string | null {
@@ -365,7 +384,13 @@ const standaloneWorkbenchHost: WorkbenchHost = {
       },
       getWorkbenchProjectAiRules: (request) =>
         readProjectAiRules(request.projectRoot),
-      getWorkbenchCodeGraph: () => notConnected(),
+      getWorkbenchCodeGraph: (request) => Promise.resolve(Result.ok({
+        projectRoot: request.projectRoot,
+        mode: request.mode,
+        nodes: [],
+        edges: [],
+        truncated: false,
+      })),
       saveWorkbenchFile: async (request) =>
         toHostResult(await window.velarosWorkbenchFs.saveFile(request)),
       saveWorkbenchFileSync: (request) =>
@@ -420,13 +445,13 @@ const standaloneWorkbenchHost: WorkbenchHost = {
         toHostResult(await window.velarosWorkbenchTerminal.writeInput(request)),
       stopWorkbenchTerminalSession: async (request) =>
         toHostResult(await window.velarosWorkbenchTerminal.stopSession(request)),
-      reportWorkbenchAgentWorkspaceSignals: () => notConnected(),
-      getWorkbenchInlineCompletion: () => notConnected(),
+      reportWorkbenchAgentWorkspaceSignals: () => Promise.resolve(Result.ok(undefined)),
+      getWorkbenchInlineCompletion: () => Promise.resolve(Result.ok({ completion: '' })),
       onWorkbenchTerminalOutput: (listener) =>
         window.velarosWorkbenchTerminal.onOutput(listener),
       onWorkbenchProjectAiIndexStatusChanged: () => noopUnsubscribe,
       onWorkbenchEditorCommand: () => noopUnsubscribe,
-      acknowledgeWorkbenchEditorCommand: () => notConnected(),
+      acknowledgeWorkbenchEditorCommand: () => Promise.resolve(Result.ok(undefined)),
       listWorkbenchLanguageGrammars: async () =>
         toHostResult(await window.velarosWorkbenchLanguage.listGrammars()),
       installWorkbenchLanguageGrammar: async (request) =>
@@ -435,24 +460,69 @@ const standaloneWorkbenchHost: WorkbenchHost = {
         window.velarosWorkbenchLanguage.onGrammarsChanged(listener),
     },
     sessions: {
-      listFlaggedTasksByRoot: () => notConnected(),
-      getFlaggedTaskDetail: () => notConnected(),
-      acceptFlaggedTasks: () => notConnected(),
-      dismissFlaggedTask: () => notConnected(),
-      onFlaggedTaskChanged: () => noopUnsubscribe,
-      loadOlderMessages: () => notConnected(),
-      onHookSendTask: () => noopUnsubscribe,
-      readLocalAttachmentFile: () => notConnected(),
-      writeLocalAttachmentFile: () => notConnected(),
+      loadOlderMessages: (request) => Promise.resolve(Result.ok({
+        messages: [],
+        loadedFromIndex: Math.max(0, request.beforeIndex),
+        hasMore: false,
+      })),
+      readLocalAttachmentFile: async (request) => {
+        const projectRoot = projectRootFromSessionId(request.sessionId)
+        if (!projectRoot) return invalidSession()
+        const result = toHostResult(await window.velarosWorkbenchFs.readFile({
+          projectRoot,
+          path: request.path,
+        }))
+        if (!result.ok) return result
+        return Result.ok({
+          path: result.data.path,
+          name: request.name ?? result.data.path.split(/[\\/]/).at(-1) ?? result.data.path,
+          mediaType: request.mediaType ?? 'text/plain',
+          size: result.data.size,
+          lastModified: result.data.modifiedAt,
+          data: new TextEncoder().encode(result.data.content),
+        })
+      },
+      writeLocalAttachmentFile: async (request) => {
+        const projectRoot = projectRootFromSessionId(request.sessionId)
+        if (!projectRoot) return invalidSession()
+        const result = toHostResult(await window.velarosWorkbenchFs.saveFile({
+          projectRoot,
+          path: request.path,
+          content: request.content,
+          expectedModifiedAt: request.expectedLastModified,
+          expectedSize: request.expectedSize,
+        }))
+        if (!result.ok) return result
+        return Result.ok({
+          path: result.data.path,
+          size: result.data.size,
+          lastModified: result.data.modifiedAt,
+        })
+      },
     },
     settings: {
-      listProviderModels: () => notConnected(),
+      listProviderModels: (request) => Promise.resolve(Result.ok({
+        provider: request.provider,
+        source: 'preset',
+        models: request.defaultModel
+          ? [{ id: request.defaultModel, label: request.defaultModel }]
+          : [],
+        fetchedAt: Date.now(),
+      })),
     },
     workspace: {
-      openPath: () => notConnected(),
+      openPath: async (_sessionId, path, options) => {
+        const opened = await window.velarosWorkbenchProjectHub.openSystemPath(path)
+        return Result.ok({
+          path,
+          opened: opened.opened,
+          editor: options?.editor,
+          application: opened.error,
+        })
+      },
       getFileChangePreview: async (sessionId, changeId, path) => {
         const projectRoot = projectRootFromSessionId(sessionId)
-        if (!projectRoot) return notConnected()
+        if (!projectRoot) return invalidSession()
         const diff = await invokeWorkspace<{
           diff: string
           changedFiles: string[]
@@ -471,7 +541,7 @@ const standaloneWorkbenchHost: WorkbenchHost = {
       },
       rollbackFileChange: async (sessionId, changeId, path) => {
         const projectRoot = projectRootFromSessionId(sessionId)
-        if (!projectRoot) return notConnected()
+        if (!projectRoot) return invalidSession()
         const rollback = await invokeWorkspace<{
           changedFiles: string[]
         }>(projectRoot, 'ws_rollback', { transactionId: changeId })
@@ -487,9 +557,20 @@ const standaloneWorkbenchHost: WorkbenchHost = {
         'UNKNOWN',
         'The published Workspace capability does not expose transaction restore.'
       ))),
-      pickDirectory: () => notConnected(),
-      addWorkspaceRoot: () => notConnected(),
-      setActiveWorkspaceRoot: () => notConnected(),
+      pickDirectory: async () => {
+        const picked = await window.velarosWorkbenchProjectHub.pickNewProjectLocation()
+        return Result.ok(picked.ok ? picked.path : null)
+      },
+      addWorkspaceRoot: async (_sessionId, path) => {
+        const opened = await window.velarosWorkbenchProjectHub.openProjectPath(path)
+        if (!opened.ok) return Result.fail(new AppError('VALIDATION', `Cannot open project root: ${path}`))
+        return Result.ok(createSystemOverview(opened.project.path))
+      },
+      setActiveWorkspaceRoot: async (_sessionId, path) => {
+        const opened = await window.velarosWorkbenchProjectHub.openProjectPath(path)
+        if (!opened.ok) return Result.fail(new AppError('VALIDATION', `Cannot activate project root: ${path}`))
+        return Result.ok(createSystemOverview(opened.project.path))
+      },
       getWorkspaceGitSummary: async (workspaceRoot) =>
         toHostResult(await window.velarosWorkbenchGit.getSummary({ workspaceRoot })),
       getWorkspaceGitLineStats: async (workspaceRoot) =>

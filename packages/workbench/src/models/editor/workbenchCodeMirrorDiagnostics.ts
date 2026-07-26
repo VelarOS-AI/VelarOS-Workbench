@@ -9,7 +9,8 @@ import {
 } from '@codemirror/view'
 
 import { isPresent } from '@velaros-ai/core'
-import type { WorkbenchLanguageServiceDiagnostic } from '@velaros-ai/core/types'
+
+import type { WorkbenchLanguageServiceDiagnostic } from '../../contracts/index'
 
 import { diagnosticToCodeMirrorLintRange } from './workbenchCodeMirrorLanguageService'
 

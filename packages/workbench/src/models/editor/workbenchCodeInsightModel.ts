@@ -1,9 +1,9 @@
 import { isPresent } from '@velaros-ai/core'
+
 import type {
   WorkbenchLanguageServiceDiagnostic,
   WorkbenchRunCommandResult,
-} from '@velaros-ai/core/types'
-
+} from '../../contracts/index'
 import type { WorkbenchOpenEditorTab } from '../../types/workbenchTypes'
 
 import { isWorkbenchUnusedVariableDiagnosticCode } from './workbenchCodeMirrorDiagnostics'

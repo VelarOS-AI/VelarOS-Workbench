@@ -12,6 +12,7 @@ import type {
 
 export interface WorkbenchWorkspaceCapabilityProvider {
   invoke(request: WorkbenchWorkspaceInvokeRequest): Promise<unknown>
+  resolveBridge(projectRoot: string): Promise<VelarosWorkspaceBridge>
   dispose(): Promise<void>
 }
 
@@ -39,12 +40,16 @@ implements WorkbenchWorkspaceCapabilityProvider {
 
   public async invoke(request: WorkbenchWorkspaceInvokeRequest): Promise<unknown> {
     const root = normalizeProjectRoot(request.projectRoot)
-    const bridge = await this.getBridge(root)
+    const bridge = await this.resolveBridge(root)
     const tool = bridge.tools.find((candidate) => candidate.name === request.operation)
     if (!tool) {
       throw new Error(`Workspace operation "${request.operation}" is unavailable.`)
     }
     return tool.execute(request.input)
+  }
+
+  public resolveBridge(projectRoot: string): Promise<VelarosWorkspaceBridge> {
+    return this.getBridge(normalizeProjectRoot(projectRoot))
   }
 
   public async dispose(): Promise<void> {

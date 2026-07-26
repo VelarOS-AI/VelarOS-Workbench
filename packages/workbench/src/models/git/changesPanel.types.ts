@@ -1,4 +1,4 @@
-import type { SystemWorkspaceGitDiffResult } from '@velaros-ai/core/types'
+import type { SystemWorkspaceGitDiffResult } from '../../contracts/index'
 
 export interface WorkbenchGitDiffPreview {
   path: string

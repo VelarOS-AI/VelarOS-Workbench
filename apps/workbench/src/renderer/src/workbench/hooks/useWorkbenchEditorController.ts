@@ -7,7 +7,7 @@ import type {
   SystemWorkspaceFilesChangedEvent,
   WorkbenchLanguageServiceFileEdit,
   WorkbenchReadFileResult,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/workbench/contracts'
 import { workbenchHost } from '@velaros-ai/workbench/host'
 import { applyWorkbenchLanguageServiceEditsToContent } from '@velaros-ai/workbench/models/editor/workbenchCodeMirrorLanguageService'
 import {

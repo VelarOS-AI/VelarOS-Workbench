@@ -2,7 +2,7 @@ import type {
   WorkbenchDirectoryEntry,
   WorkbenchReadFileResult,
   WorkbenchRunCommandResult,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/workbench/contracts'
 import type { WorkbenchCommandHistoryItem } from '@velaros-ai/workbench/models/commands/workbenchCommandHistory'
 import type { WorkbenchCommandSuggestion } from '@velaros-ai/workbench/models/commands/workbenchCommandSuggestions'
 import type { WorkbenchRunConfiguration } from '@velaros-ai/workbench/models/commands/workbenchRunConfigurations'

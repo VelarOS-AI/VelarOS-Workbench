@@ -1,6 +1,6 @@
 import { isNumber,isObject, isPresent, isString, toNullable } from '@velaros-ai/core'
-import type { AgentDeveloperContext, AgentSurfaceId } from '@velaros-ai/core/types'
 
+import type { AgentDeveloperContext, AgentSurfaceId } from '../../contracts/index'
 import {
   createLocalStorageJsonStore,
   type StorageLike,

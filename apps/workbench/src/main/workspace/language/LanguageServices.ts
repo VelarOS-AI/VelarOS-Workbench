@@ -36,7 +36,7 @@ import type {
   WorkbenchLanguageServiceRequest,
   WorkbenchLanguageServiceResolveResult,
   WorkbenchLanguageServiceSignatureHelpResult,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/workbench/contracts'
 import {
   getWorkbenchPathExtension,
   normalizeWorkbenchLanguage,

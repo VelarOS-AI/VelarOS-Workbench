@@ -1,4 +1,4 @@
-import type { WorkbenchLanguageServiceDisplayPartKind } from '@velaros-ai/core/types'
+import type { WorkbenchLanguageServiceDisplayPartKind } from '../../contracts/index'
 
 export type WorkbenchEditorHoverPartStyle =
   | 'keyword'

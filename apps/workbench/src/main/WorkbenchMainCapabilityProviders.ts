@@ -49,16 +49,48 @@ export const DefaultWorkbenchKernelCapabilityRoutes: WorkbenchKernelCapabilityRo
   Object.freeze({
     'agent.execute': { capabilityId: 'velaros.agent', operation: 'execute' },
     'agent.health': { capabilityId: 'velaros.agent', operation: 'health' },
+    'agent.abort': {
+      capabilityId: 'velaros.workbench.agent-control',
+      operation: 'abort',
+    },
+    'model.configure-profile': {
+      capabilityId: 'velaros.workbench.model-profiles',
+      operation: 'configure',
+    },
     'model.supports-provider': {
       capabilityId: 'velaros.model',
       operation: 'supports_provider',
     },
+    'browser.create': {
+      capabilityId: 'velaros.workbench.browser-control',
+      operation: 'create',
+    },
+    'browser.open': {
+      capabilityId: 'velaros.workbench.browser-control',
+      operation: 'open',
+    },
+    'browser.navigate': {
+      capabilityId: 'velaros.workbench.browser-control',
+      operation: 'navigate',
+    },
+    'browser.inspect': {
+      capabilityId: 'velaros.workbench.browser-control',
+      operation: 'inspect',
+    },
+    'browser.input': {
+      capabilityId: 'velaros.workbench.browser-control',
+      operation: 'input',
+    },
+    'browser.selection': {
+      capabilityId: 'velaros.workbench.browser-control',
+      operation: 'selection',
+    },
     'browser.close-session': {
-      capabilityId: 'velaros.browser',
-      operation: 'close_session',
+      capabilityId: 'velaros.workbench.browser-control',
+      operation: 'close',
     },
     'browser.close-all-sessions': {
-      capabilityId: 'velaros.browser',
-      operation: 'close_all_sessions',
+      capabilityId: 'velaros.workbench.browser-control',
+      operation: 'close_all',
     },
   })

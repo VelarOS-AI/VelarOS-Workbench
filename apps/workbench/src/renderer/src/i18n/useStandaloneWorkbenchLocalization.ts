@@ -8,7 +8,7 @@
 import { useMemo, useState } from 'react'
 
 import { isObject, isString } from '@velaros-ai/core'
-import type { AppLocale } from '@velaros-ai/core/types'
+import type { AppLocale } from '@velaros-ai/workbench/contracts'
 import type {
   WorkbenchI18nContextValue,
   WorkbenchTranslateParams,

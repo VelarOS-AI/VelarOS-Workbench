@@ -1,9 +1,9 @@
 import { type ReactElement } from 'react'
 import { CaretDownIcon, CaretUpIcon } from '@phosphor-icons/react'
 
-import type { WorkbenchLanguageServiceDiagnostic } from '@velaros-ai/core/types'
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 import { WorkbenchProblemSeverityIcon } from '@velaros-ai/workbench/components/editor/WorkbenchProblemSeverityIcon'
+import type { WorkbenchLanguageServiceDiagnostic } from '@velaros-ai/workbench/contracts'
 import { useWorkbenchI18n } from '@velaros-ai/workbench/i18n'
 import {
   countWorkbenchFileDiagnostics,

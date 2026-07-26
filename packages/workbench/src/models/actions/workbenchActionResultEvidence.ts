@@ -1,7 +1,4 @@
 import { isBlank, isEmpty, isNonBlankString, isPresent, Log, toNullable } from '@velaros-ai/core'
-import { hasToolActivityKind } from '@velaros-ai/core/constants/toolMetadataCatalog'
-import type { ChatMessage, ContentBlock, ToolCallBlock } from '@velaros-ai/core/types'
-import { extractMessageFileChangeDescriptors } from '@velaros-ai/core/utils/messageFileChanges'
 import {
   asRecord,
   readBoolean,
@@ -11,6 +8,10 @@ import {
   readString,
 } from '@velaros-ai/core/utils/unknownJsonRecord'
 
+import type { ChatMessage, ContentBlock, ToolCallBlock } from '../../contracts/index'
+
+import { extractMessageFileChangeDescriptors } from './messageFileChanges'
+
 const LEGACY_COMMAND_TOOL_NAMES = new Set(['run_command'])
 const RESULT_SUMMARY_LIMIT = 180
 const RESULT_DETAILS_LIMIT = 1200
@@ -19,7 +20,10 @@ const MAX_CHANGED_FILES = 8
 const log = Log.tag('workbench-action-result-evidence')
 
 function isWorkbenchCommandToolName(toolName: string): boolean {
-  return hasToolActivityKind(toolName, 'command') || LEGACY_COMMAND_TOOL_NAMES.has(toolName)
+  return (
+    LEGACY_COMMAND_TOOL_NAMES.has(toolName)
+    || /(?:^|[._-])(?:command|exec|terminal|run_batch|validate)(?:$|[._-])/u.test(toolName)
+  )
 }
 
 export interface WorkbenchActionRunVerificationEvidence {

@@ -1,5 +1,4 @@
-import type { SystemWorkspaceGitSummary } from '@velaros-ai/core/types'
-
+import type { SystemWorkspaceGitSummary } from '../../contracts/index'
 import type { WorkbenchGitChangeItem } from '../../models/git/workbenchGitModel'
 
 /** 提交与变更工具窗口共享的版本控制会话快照和刷新接线。 */

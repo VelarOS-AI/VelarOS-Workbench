@@ -1,58 +1,184 @@
-import { readdir, readFile } from 'node:fs/promises'
-import path from 'node:path'
 import { spawnSync } from 'node:child_process'
-import { fileURLToPath } from 'node:url'
-import ts from 'typescript'
+import { cp, mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+
+import {
+  assertSameFileIdentity,
+  fileIdentity,
+  readReleaseVersions,
+  validateReleaseSource,
+} from './releaseIdentity.mjs'
+
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
-const dryRun = process.argv.includes('--dry-run')
 const registry = 'https://npm.pkg.github.com'
-const readJson = async (file) => JSON.parse(await readFile(file, 'utf8'))
-const readJsonc = async (file) => {
-  const parsed = ts.parseConfigFileTextToJson(file, await readFile(file, 'utf8'))
-  if (parsed.error) throw new Error(`Unable to parse ${file}: TypeScript diagnostic ${parsed.error.code}`)
-  return parsed.config
-}
-const rootManifest = await readJson(path.join(root, 'package.json'))
-const lockfile = await readJsonc(path.join(root, 'bun.lock'))
-const directories = (await readdir(path.join(root, 'packages'), { withFileTypes: true })).filter((entry) => entry.isDirectory()).map((entry) => path.join(root, 'packages', entry.name))
-const packages = []
-for (const directory of directories) {
-  const manifest = await readJson(path.join(directory, 'package.json'))
-  if (manifest.private === true) continue
-  if (!manifest.name?.startsWith('@velaros-ai/')) throw new Error(`Invalid package name: ${manifest.name}`)
-  if (manifest.publishConfig?.registry !== registry) throw new Error(`${manifest.name} must publish to ${registry}`)
-  packages.push({ directory, manifest })
-}
-const byName = new Map(packages.map((item) => [item.manifest.name, item]))
-for (const item of packages) {
-  const workspacePath = path.relative(root, item.directory).split(path.sep).join('/')
-  const lockedWorkspace = lockfile.workspaces?.[workspacePath]
-  if (!lockedWorkspace || lockedWorkspace.version !== item.manifest.version) {
-    throw new Error(`${item.manifest.name} manifest version ${item.manifest.version} does not match bun.lock; regenerate bun.lock before publishing`)
+
+export async function createPackageReleaseManifest({
+  tarball,
+  packageManifest,
+  sourceSha,
+  releaseTag,
+}) {
+  const identity = await fileIdentity(tarball)
+  return {
+    schemaVersion: 1,
+    name: packageManifest.name,
+    version: packageManifest.version,
+    sourceSha,
+    releaseTag,
+    ...identity,
   }
 }
-const ordered = []
-const visiting = new Set()
-const visited = new Set()
-const visit = (item) => {
-  if (visited.has(item.manifest.name)) return
-  if (visiting.has(item.manifest.name)) throw new Error(`Dependency cycle at ${item.manifest.name}`)
-  visiting.add(item.manifest.name)
-  const dependencies = { ...item.manifest.dependencies, ...item.manifest.optionalDependencies, ...item.manifest.peerDependencies }
-  for (const name of Object.keys(dependencies)) if (byName.has(name)) visit(byName.get(name))
-  visiting.delete(item.manifest.name)
-  visited.add(item.manifest.name)
-  ordered.push(item)
+
+export async function validatePackageReleaseManifest({
+  tarball,
+  manifest,
+  packageManifest,
+  sourceSha,
+  releaseTag,
+}) {
+  if (manifest.schemaVersion !== 1) throw new Error('Unknown package release manifest schema.')
+  for (const [field, expected] of Object.entries({
+    name: packageManifest.name,
+    version: packageManifest.version,
+    sourceSha,
+    releaseTag,
+  })) {
+    if (manifest[field] !== expected) {
+      throw new Error(
+        `Package release manifest ${field} ${manifest[field] ?? '<missing>'} must equal ${expected}.`
+      )
+    }
+  }
+  const identity = await fileIdentity(tarball)
+  assertSameFileIdentity(identity, manifest, 'Package tarball')
+  return manifest
 }
-for (const item of packages) visit(item)
-if (!dryRun && !process.env.NODE_AUTH_TOKEN) throw new Error('NODE_AUTH_TOKEN is required to publish packages')
-const run = (command, args, cwd) => {
+
+export async function packUniqueTarball({ packageDirectory, outputDirectory }) {
+  await rm(outputDirectory, { force: true, recursive: true })
+  await mkdir(outputDirectory, { recursive: true })
+  const result = runCapture(
+    'npm',
+    ['pack', '--json', '--ignore-scripts', '--pack-destination', outputDirectory],
+    packageDirectory
+  )
+  let packed
+  try {
+    packed = JSON.parse(result)
+  } catch {
+    throw new Error(`npm pack did not return JSON: ${result}`)
+  }
+  const declared = packed.map((entry) => entry.filename)
+  const actual = (await readdir(outputDirectory))
+    .filter((name) => name.endsWith('.tgz'))
+    .sort()
+  if (declared.length !== 1 || actual.length !== 1 || declared[0] !== actual[0]) {
+    throw new Error(
+      `Expected one unique package tarball, npm declared [${declared.join(', ')}] `
+      + `and produced [${actual.join(', ')}].`
+    )
+  }
+  return path.join(outputDirectory, actual[0])
+}
+
+async function main() {
+  const dryRun = process.argv.includes('--dry-run')
+  const requireClean = process.argv.includes('--require-clean') || !dryRun
+  const requireTagRef = process.argv.includes('--require-tag-ref') || !dryRun
+  const versions = await readReleaseVersions(root)
+  const sourceSha = process.env.GITHUB_SHA || gitHead(root)
+  const releaseTag = process.env.RELEASE_TAG || versions.releaseTag
+  const release = await validateReleaseSource({
+    repoRoot: root,
+    releaseTag,
+    sourceSha,
+    requireClean,
+    requireTagRef,
+  })
+  if (!dryRun && !process.env.NODE_AUTH_TOKEN) {
+    throw new Error('NODE_AUTH_TOKEN is required to publish packages.')
+  }
+
+  run('bun', ['run', 'build:package'], root)
+  await validateReleaseSource({
+    repoRoot: root,
+    releaseTag,
+    sourceSha,
+    requireClean,
+    requireTagRef,
+  })
+  const packageDirectory = path.join(root, 'packages/workbench')
+  const temporary = await mkdtemp(path.join(tmpdir(), 'velaros-workbench-package-'))
+  const packedTarball = await packUniqueTarball({
+    packageDirectory,
+    outputDirectory: path.join(temporary, 'pack'),
+  })
+  const stageDirectory = path.join(root, 'release-stage/package')
+  await rm(stageDirectory, { force: true, recursive: true })
+  await mkdir(stageDirectory, { recursive: true })
+  const tarball = path.join(stageDirectory, path.basename(packedTarball))
+  await cp(packedTarball, tarball, { errorOnExist: true, force: false })
+  const manifest = await createPackageReleaseManifest({
+    tarball,
+    packageManifest: release.packageManifest,
+    sourceSha,
+    releaseTag,
+  })
+  const manifestFile = path.join(stageDirectory, 'package-release.json')
+  await writeFile(manifestFile, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8')
+  await validatePackageReleaseManifest({
+    tarball,
+    manifest,
+    packageManifest: release.packageManifest,
+    sourceSha,
+    releaseTag,
+  })
+
+  const publishArgs = [
+    'publish',
+    tarball,
+    '--registry',
+    registry,
+    '--access',
+    'restricted',
+    '--ignore-scripts',
+  ]
+  if (dryRun) publishArgs.push('--dry-run')
+  run('npm', publishArgs, root)
+  console.info(
+    `${dryRun ? 'Verified' : 'Published'} ${manifest.name}@${manifest.version} `
+    + `from ${manifest.fileName} (${manifest.sha256}).`
+  )
+}
+
+function run(command, args, cwd) {
   const result = spawnSync(command, args, { cwd, env: process.env, stdio: 'inherit' })
-  if (result.status !== 0) throw new Error(`${command} ${args.join(' ')} failed with exit code ${result.status}`)
+  if (result.status !== 0) {
+    throw new Error(`${command} ${args.join(' ')} failed with exit code ${result.status}.`)
+  }
 }
-run('bun', ['run', rootManifest.scripts?.['build:package'] ? 'build:package' : 'build'], root)
-for (const item of ordered) {
-  const args = ['publish', '--cwd', item.directory, '--registry', registry, '--access', 'restricted', '--tolerate-republish', '--ignore-scripts']
-  if (dryRun) args.push('--dry-run')
-  run('bun', args, root)
+
+function runCapture(command, args, cwd) {
+  const result = spawnSync(command, args, {
+    cwd,
+    encoding: 'utf8',
+    env: process.env,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+  if (result.status !== 0) {
+    throw new Error(
+      `${command} ${args.join(' ')} failed: ${(result.stderr || result.stdout).trim()}`
+    )
+  }
+  return result.stdout.trim()
+}
+
+function gitHead(repoRoot) {
+  return runCapture('git', ['rev-parse', 'HEAD'], repoRoot)
+}
+
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
+  await main()
 }

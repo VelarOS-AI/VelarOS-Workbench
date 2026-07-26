@@ -1,6 +1,6 @@
 import { BrowserWindow, ipcMain } from 'electron'
 
-import type { WorkbenchInstallLanguageGrammarRequest } from '@velaros-ai/core/types'
+import type { WorkbenchInstallLanguageGrammarRequest } from '@velaros-ai/workbench/contracts'
 
 import { WorkbenchLanguageChannels } from '../../shared/workbenchLanguage'
 import { callWithEnvelope, hasStringFields, invalidRequest } from '../workspace/ipcBoundary'

@@ -12,7 +12,7 @@ import type {
   WorkbenchTerminalInputRequest,
   WorkbenchTerminalStartRequest,
   WorkbenchTerminalStopRequest,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/workbench/contracts'
 
 import { WorkbenchTerminalChannels } from '../../../shared/workbenchTerminal'
 import {

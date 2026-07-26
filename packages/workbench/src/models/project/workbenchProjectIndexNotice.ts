@@ -1,4 +1,4 @@
-import type { WorkbenchProjectAiIndexStatus } from '@velaros-ai/core/types'
+import type { WorkbenchProjectAiIndexStatus } from '../../contracts/index'
 
 export type WorkbenchProjectAiIndexNoticeSeverity = 'warning' | 'error'
 

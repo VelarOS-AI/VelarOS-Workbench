@@ -65,7 +65,6 @@ import {
 import { HammerIcon, PlayIcon } from '@phosphor-icons/react'
 
 import { isEmpty, isPresent, Log, toNullable, toOptional } from '@velaros-ai/core'
-import type { WorkbenchLanguageServiceFileEdit } from '@velaros-ai/core/types'
 import {
   addWorkbenchCommentAnchorEffect,
   anchorFromLineRange,
@@ -73,6 +72,7 @@ import {
   retainWorkbenchCommentAnchorsEffect,
   setWorkbenchCommentAnchorsEffect,
 } from '@velaros-ai/workbench/components/editor/workbenchCommentExtension'
+import type { WorkbenchLanguageServiceFileEdit } from '@velaros-ai/workbench/contracts'
 import { useWorkbenchAiCompletionEnabled } from '@velaros-ai/workbench/hooks/useWorkbenchPreferences'
 import { useWorkbenchI18n } from '@velaros-ai/workbench/i18n'
 import type { PackageManagerCommand } from '@velaros-ai/workbench/models/commands/workbenchPackageScriptCommand'

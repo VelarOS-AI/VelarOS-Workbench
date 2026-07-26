@@ -1,9 +1,9 @@
 import { Log, toNullable } from '@velaros-ai/core'
+
 import type {
   WorkbenchLanguageGrammarCatalog,
   WorkbenchLanguageGrammarInstallState,
-} from '@velaros-ai/core/types'
-
+} from '../../contracts/index'
 import { workbenchHost } from '../../host'
 
 export const WORKBENCH_LANGUAGE_PLUGIN_INSTALL_STATE_CHANGED_EVENT =

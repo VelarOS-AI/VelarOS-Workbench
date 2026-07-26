@@ -1,8 +1,7 @@
 import { useEffect } from 'react'
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 
-import type { WorkbenchRunCommandResult } from '@velaros-ai/core/types'
-
+import type { WorkbenchRunCommandResult } from '../../contracts/index'
 import { workbenchHost } from '../../host'
 import {
   readWorkbenchCommandHistory,

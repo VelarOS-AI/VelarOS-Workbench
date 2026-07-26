@@ -1,5 +1,6 @@
 import { isEmpty } from '@velaros-ai/core'
-import type { WorkbenchEditorCommand } from '@velaros-ai/core/types'
+
+import type { WorkbenchEditorCommand } from '../../contracts/index'
 
 export type WorkbenchEditorAutomationPhase =
   | 'preparing'

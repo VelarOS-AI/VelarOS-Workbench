@@ -6,6 +6,7 @@ import type {
   KernelClient,
   KernelClientEventHandler,
 } from '@velaros-ai/kernel-service'
+import { KernelDaemonError } from '@velaros-ai/kernel-service'
 
 import { WorkbenchKernelClientRuntime } from '../apps/workbench/src/main/kernel/WorkbenchKernelClientRuntime'
 
@@ -139,6 +140,90 @@ void describe('Workbench Kernel client composition root', () => {
     assert.equal(recovered.daemon?.instanceId, 'recovered-instance')
     assert.equal(attempts, 2)
 
+    await runtime.dispose()
+  })
+
+  void test('does not report an incompatible shared daemon as Workbench-ready', async () => {
+    const runtime = new WorkbenchKernelClientRuntime({
+      connect: async () => createConnection(),
+      requiredCapabilityIds: ['velaros.workspace', 'velaros.workbench.browser-control'],
+    })
+
+    const status = await runtime.start()
+
+    assert.equal(status.connected, true)
+    assert.equal(status.state, 'degraded')
+    assert.equal(status.error?.code, 'KERNEL_CAPABILITY_UNAVAILABLE')
+    assert.match(status.error?.message ?? '', /velaros\.workbench\.browser-control/u)
+    await runtime.dispose()
+  })
+
+  void test('starts one local Kernel when daemon discovery reports not running', async () => {
+    let connectAttempts = 0
+    let localStarts = 0
+    let localDisposals = 0
+    const runtime = new WorkbenchKernelClientRuntime({
+      connect: async () => {
+        connectAttempts += 1
+        if (connectAttempts === 1) {
+          throw new KernelDaemonError(
+            'DAEMON_NOT_RUNNING',
+            'Kernel daemon endpoint is not available'
+          )
+        }
+        return createConnection({ instanceId: 'workbench-local-kernel' })
+      },
+      startLocal: async () => {
+        localStarts += 1
+        return {
+          dispose: async () => {
+            localDisposals += 1
+          },
+        }
+      },
+    })
+
+    const [first, concurrent] = await Promise.all([runtime.start(), runtime.start()])
+
+    assert.equal(first.state, 'ready')
+    assert.equal(concurrent.state, 'ready')
+    assert.equal(first.daemon?.instanceId, 'workbench-local-kernel')
+    assert.equal(connectAttempts, 2)
+    assert.equal(localStarts, 1)
+
+    await runtime.dispose()
+    assert.equal(localDisposals, 1)
+  })
+
+  void test('connects to the race winner when local Kernel start loses the daemon lock', async () => {
+    let connectAttempts = 0
+    let localStarts = 0
+    const runtime = new WorkbenchKernelClientRuntime({
+      connect: async () => {
+        connectAttempts += 1
+        if (connectAttempts === 1) {
+          throw new KernelDaemonError(
+            'DAEMON_NOT_RUNNING',
+            'Kernel daemon endpoint is not available'
+          )
+        }
+        return createConnection({ instanceId: 'race-winner' })
+      },
+      startLocal: async () => {
+        localStarts += 1
+        throw new KernelDaemonError(
+          'DAEMON_ALREADY_RUNNING',
+          'A Kernel daemon already owns the local endpoint'
+        )
+      },
+    })
+
+    const status = await runtime.start()
+
+    assert.equal(status.state, 'ready')
+    assert.equal(status.daemon?.instanceId, 'race-winner')
+    assert.equal(connectAttempts, 2)
+    assert.equal(localStarts, 1)
     await runtime.dispose()
   })
 

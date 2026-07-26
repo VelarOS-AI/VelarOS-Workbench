@@ -1,17 +1,17 @@
 import { Result } from '@velaros-ai/core'
+import type { WorkbenchProductRuntimeValue } from '@velaros-ai/workbench/composition'
 import type {
   AuxiliaryModelConfig,
   AuxiliaryModelConfigs,
-} from '@velaros-ai/core/types'
-import type { WorkbenchProductRuntimeValue } from '@velaros-ai/workbench/composition'
+} from '@velaros-ai/workbench/contracts'
 
 import chatStyles from './standaloneWorkbenchChat.module.css'
 
 /**
- * 独立 Workbench 应用的产品运行时投影（占位实现）。
+ * 独立 Workbench 应用的产品运行时投影。
  *
- * Desktop 从自身 AppConfig / CSS Module 投影出这份 value；独立应用在接上 kernel 配置面之前，用中性
- * 默认值满足契约。样式类名留空（未样式化壳），后续独立宿主接自己的样式来源即可。
+ * Desktop 从自身 AppConfig / CSS Module 投影出这份 value；独立应用通过 Kernel 配置模型能力，
+ * 这里只保留不含密钥的辅助模型默认值。样式由独立宿主自己的 CSS Module 提供。
  */
 const StandaloneAuxiliaryModel: AuxiliaryModelConfig = {
   provider: 'chat-config',

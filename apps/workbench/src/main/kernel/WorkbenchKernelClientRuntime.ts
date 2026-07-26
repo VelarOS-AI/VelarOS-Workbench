@@ -20,8 +20,14 @@ import type {
 
 export interface WorkbenchKernelClientRuntimeOptions {
   connect?: () => Promise<ConnectedKernelDaemon>
+  startLocal?: () => Promise<WorkbenchOwnedKernelRuntime | null>
+  requiredCapabilityIds?: readonly string[]
   now?: () => number
   nextCallId?: () => string
+}
+
+export interface WorkbenchOwnedKernelRuntime {
+  dispose(): Promise<void>
 }
 
 type WorkbenchKernelStatusListener = (status: WorkbenchKernelStatus) => void
@@ -53,12 +59,15 @@ const initialStatus: WorkbenchKernelStatus = {
 /**
  * Workbench's composition root for the shared Kernel daemon.
  *
- * It only discovers and connects to the authenticated local endpoint. It never
- * starts a daemon or constructs a fallback Kernel host, so Desktop, Workbench,
- * and future products cannot silently diverge into multiple sources of truth.
+ * It first discovers and connects to the authenticated local endpoint. When no
+ * daemon exists, the injected product-owned starter boots the same Kernel
+ * module composition and the client reconnects through local RPC. Concurrent
+ * starters converge on the daemon lock instead of creating divergent hosts.
  */
 export class WorkbenchKernelClientRuntime {
   private readonly connect: () => Promise<ConnectedKernelDaemon>
+  private readonly startLocal?: () => Promise<WorkbenchOwnedKernelRuntime | null>
+  private readonly requiredCapabilityIds: readonly string[]
   private readonly now: () => number
   private readonly nextCallId: () => string
   private readonly listeners = new Set<WorkbenchKernelStatusListener>()
@@ -66,11 +75,14 @@ export class WorkbenchKernelClientRuntime {
   private readonly eventSubscriptions = new Map<string, KernelEventSubscription>()
   private status: WorkbenchKernelStatus = initialStatus
   private connected?: ConnectedKernelDaemon
+  private ownedKernel?: WorkbenchOwnedKernelRuntime
   private inFlight?: Promise<WorkbenchKernelStatus>
   private disposed = false
 
   public constructor(options: WorkbenchKernelClientRuntimeOptions = {}) {
     this.connect = options.connect ?? connectToKernelDaemon
+    this.startLocal = options.startLocal
+    this.requiredCapabilityIds = [...new Set(options.requiredCapabilityIds ?? [])]
     this.now = options.now ?? Date.now
     this.nextCallId = options.nextCallId ?? (() =>
       `workbench-${Date.now().toString(36)}-${randomUUID()}`)
@@ -182,6 +194,9 @@ export class WorkbenchKernelClientRuntime {
     this.connected = undefined
     await this.disposeEventSubscriptions()
     await connected?.client.dispose()
+    const ownedKernel = this.ownedKernel
+    this.ownedKernel = undefined
+    await ownedKernel?.dispose()
     this.updateStatus({
       ...this.status,
       state: 'disposed',
@@ -194,7 +209,7 @@ export class WorkbenchKernelClientRuntime {
   private async connectOnce(): Promise<WorkbenchKernelStatus> {
     let nextConnection: ConnectedKernelDaemon | undefined
     try {
-      nextConnection = await this.connect()
+      nextConnection = await this.connectOrStart()
       if (this.disposed) {
         await nextConnection.client.dispose()
         return this.status
@@ -226,8 +241,14 @@ export class WorkbenchKernelClientRuntime {
           ...(module.error ? { error: module.error } : {}),
         })),
       }
+      const capabilities = toCapabilityCatalog(nextConnection)
+      const availableCapabilityIds = new Set(capabilities.map((capability) => capability.id))
+      const missingCapabilityIds = this.requiredCapabilityIds.filter(
+        (capabilityId) => !availableCapabilityIds.has(capabilityId)
+      )
+      const ready = health.status === 'healthy' && missingCapabilityIds.length === 0
       this.updateStatus({
-        state: health.status === 'healthy' ? 'ready' : 'degraded',
+        state: ready ? 'ready' : 'degraded',
         connected: true,
         checkedAt: this.now(),
         daemon: {
@@ -241,10 +262,19 @@ export class WorkbenchKernelClientRuntime {
           moduleCount: nextConnection.handshake.modules.length,
         },
         health: healthSnapshot,
-        capabilities: toCapabilityCatalog(nextConnection),
-        error: health.status === 'healthy'
-          ? null
-          : {
+        capabilities,
+        error: missingCapabilityIds.length > 0
+          ? {
+              code: 'KERNEL_CAPABILITY_UNAVAILABLE',
+              message:
+                `Kernel daemon is missing required Workbench capabilities: ${
+                  missingCapabilityIds.join(', ')
+                }`,
+              retryable: true,
+            }
+          : health.status === 'healthy'
+            ? null
+            : {
               code: 'KERNEL_HEALTH_DEGRADED',
               message: 'Kernel daemon is connected but not fully healthy',
               retryable: true,
@@ -274,6 +304,33 @@ export class WorkbenchKernelClientRuntime {
       }
     }
     return this.status
+  }
+
+  private async connectOrStart(): Promise<ConnectedKernelDaemon> {
+    try {
+      return await this.connect()
+    } catch (error) {
+      if (
+        !(error instanceof KernelDaemonError)
+        || error.code !== 'DAEMON_NOT_RUNNING'
+        || !this.startLocal
+      ) throw error
+    }
+
+    try {
+      const ownedKernel = await this.startLocal()
+      if (this.disposed) {
+        await ownedKernel?.dispose()
+      } else {
+        this.ownedKernel = ownedKernel ?? undefined
+      }
+    } catch (error) {
+      if (
+        !(error instanceof KernelDaemonError)
+        || error.code !== 'DAEMON_ALREADY_RUNNING'
+      ) throw error
+    }
+    return this.connect()
   }
 
   private updateStatus(status: WorkbenchKernelStatus): void {

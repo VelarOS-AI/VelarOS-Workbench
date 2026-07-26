@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 
 import { AppError } from '@velaros-ai/core'
 import { Result } from '@velaros-ai/core/result'
-import type { SystemWorkspaceGitDiffResult } from '@velaros-ai/core/types'
+import type { SystemWorkspaceGitDiffResult } from '@velaros-ai/workbench/contracts'
 import { workbenchHost } from '@velaros-ai/workbench/host'
 import { resolveWorkbenchFullFileDiffContents } from '@velaros-ai/workbench/models/git/workbenchGitDiffModel'
 import type { WorkbenchGitChangeItem } from '@velaros-ai/workbench/models/git/workbenchGitModel'

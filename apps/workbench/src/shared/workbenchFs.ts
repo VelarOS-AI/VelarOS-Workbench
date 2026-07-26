@@ -2,7 +2,7 @@
  * 独立 Workbench 应用「项目工作区」的 main ↔ renderer IPC 契约（应用私有）。
  *
  * 这是 `WorkbenchHost.kernel.project` 端口在独立应用侧的实装传输面：请求/结果形状
- * 直接复用 `@velaros-ai/core/types` 的 Workbench Kernel contracts（单源，不另造镜像），本文件
+ * 直接复用 `@velaros-ai/workbench/contracts` 的 Workbench Kernel contracts（单源，不另造镜像），本文件
  * 只补通道名与跨进程错误信封。镜像 projectHub 契约的模式：main 侧服务是唯一权威，
  * renderer 经 preload 桥调用；kernel-protocol 客户端接入后本传输面整体替换，端口面不动。
  *
@@ -37,7 +37,7 @@ import type {
   WorkbenchSearchContentResult,
   WorkbenchSearchEntriesRequest,
   WorkbenchSearchEntriesResult,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/workbench/contracts'
 
 export const WorkbenchFsChannels = {
   listDirectory: 'workbench-app:fs:list-directory',

@@ -25,12 +25,27 @@ for (const manifest of manifests) for (const field of ['dependencies', 'devDepen
   for (const [name, spec] of Object.entries(manifest[field] ?? {})) if (name.startsWith(scope) && !ownNames.has(name) && spec !== 'workspace:*') externalNames.add(name)
 }
 const available = new Map()
+const canonicalOwners = new Map([
+  ['@velaros-ai/browser-composition', 'VelarOS-Capabilities'],
+  ['@velaros-ai/browser-core', 'VelarOS-Capabilities'],
+  ['@velaros-ai/browser-runtime', 'VelarOS-Capabilities'],
+  ['@velaros-ai/system-tools', 'VelarOS-Capabilities'],
+  ['@velaros-ai/workspace', 'VelarOS-Capabilities'],
+])
+const rememberAvailable = (name, directory, repositoryName) => {
+  if (!name?.startsWith(scope)) return
+  const canonicalOwner = canonicalOwners.get(name)
+  if (
+    !available.has(name)
+    || canonicalOwner === repositoryName
+  ) available.set(name, directory)
+}
 for (const repo of await readdir(projectsRoot, { withFileTypes: true })) {
   if (!repo.isDirectory() || !repo.name.startsWith('VelarOS-')) continue
   const siblingRootManifest = path.join(projectsRoot, repo.name, 'package.json')
   if (await exists(siblingRootManifest)) {
     const manifest = await readJson(siblingRootManifest)
-    if (manifest.name?.startsWith(scope)) available.set(manifest.name, path.dirname(siblingRootManifest))
+    rememberAvailable(manifest.name, path.dirname(siblingRootManifest), repo.name)
   }
   const siblingPackages = path.join(projectsRoot, repo.name, 'packages')
   if (!await exists(siblingPackages)) continue
@@ -38,7 +53,7 @@ for (const repo of await readdir(projectsRoot, { withFileTypes: true })) {
     const manifestPath = path.join(siblingPackages, entry.name, 'package.json')
     if (!entry.isDirectory() || !await exists(manifestPath)) continue
     const manifest = await readJson(manifestPath)
-    if (manifest.name?.startsWith(scope)) available.set(manifest.name, path.dirname(manifestPath))
+    rememberAvailable(manifest.name, path.dirname(manifestPath), repo.name)
   }
 }
 const run = (args, cwd) => {

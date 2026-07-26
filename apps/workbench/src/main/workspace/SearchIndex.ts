@@ -20,7 +20,7 @@ import type {
   WorkbenchSearchContentResult,
   WorkbenchSearchEntriesRequest,
   WorkbenchSearchEntriesResult,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/workbench/contracts'
 
 import type { DirectoryEntries } from './FileEntries'
 import type { PathResolver } from './PathResolver'

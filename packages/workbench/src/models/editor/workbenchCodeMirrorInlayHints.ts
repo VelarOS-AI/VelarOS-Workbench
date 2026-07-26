@@ -10,11 +10,12 @@ import {
 } from '@codemirror/view'
 
 import { isBlank,isNumber, Log } from '@velaros-ai/core'
+import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
+
 import type {
   WorkbenchLanguageServiceInlayHint,
   WorkbenchLanguageServiceOffsetRange,
-} from '@velaros-ai/core/types'
-import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
+} from '../../contracts/index'
 
 const InitialInlayHintDelayMs = 180
 const ChangedDocumentInlayHintDelayMs = 320

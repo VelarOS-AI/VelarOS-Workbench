@@ -13,10 +13,6 @@ import {
 import { WarningCircleIcon } from '@phosphor-icons/react'
 
 import { isPresent,Log, toNullable } from '@velaros-ai/core'
-import type {
-  WorkbenchLanguageServiceDiagnostic,
-  WorkbenchLanguageServiceFileEdit,
-} from '@velaros-ai/core/types'
 import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
 import { Paragraph } from '@velaros-ai/ui/primitives/display/Paragraph'
 import { Text } from '@velaros-ai/ui/primitives/display/Text'
@@ -28,6 +24,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@velaros-ai/ui/primitives/overlays/Dialog'
+import type {
+  WorkbenchLanguageServiceDiagnostic,
+  WorkbenchLanguageServiceFileEdit,
+} from '@velaros-ai/workbench/contracts'
 import { useWorkbenchI18n } from '@velaros-ai/workbench/i18n'
 import type { PackageManagerCommand } from '@velaros-ai/workbench/models/commands/workbenchPackageScriptCommand'
 import { inferWorkbenchPackageManagerForPackageJsonPath } from '@velaros-ai/workbench/models/commands/workbenchPackageScriptCommand'
