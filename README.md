@@ -9,9 +9,9 @@ This repository contains two workspace units:
 - `apps/workbench`: the Electron application and its main/preload/renderer adapters.
 - `packages/workbench`: renderer-neutral product contracts, models, hooks and composition ports.
 
-The repository intentionally has no dependency on VelarOS Desktop internals. During sibling-repo
-development, `@velaros-ai/core` and `@velaros-ai/ui` resolve from `../VelarOS-Kernel` and
-`../VelarOS-UI`; the app owns the Electron implementation behind the semantic Workbench host.
+The repository intentionally has no dependency on VelarOS Desktop internals or adjacent source
+checkouts. Shared VelarOS packages resolve through their published package contracts; the app owns
+the Electron implementation behind the semantic Workbench host.
 
 The standalone app discovers the authenticated local `@velaros-ai/kernel-service` daemon and
 projects handshake, health and capability-catalog state through a typed preload bridge. It requires
