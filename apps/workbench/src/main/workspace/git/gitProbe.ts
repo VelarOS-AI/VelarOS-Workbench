@@ -156,11 +156,14 @@ async function runGitProbe(): Promise<void> {
 }
 
 async function equalRootIdentity(
-  actual: string,
+  actual: string | null,
   expected: string,
   message: string
 ): Promise<void> {
-  check(isAbsolute(actual), `${message}: rootPath 应为绝对路径`)
+  check(
+    typeof actual === 'string' && actual.length > 0 && isAbsolute(actual),
+    `${message}: rootPath 应为非空绝对路径`
+  )
   if (process.platform !== 'win32') {
     equal(actual, expected, message)
     return
