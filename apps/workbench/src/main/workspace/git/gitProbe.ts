@@ -5,9 +5,9 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs'
-import { realpath } from 'node:fs/promises'
+import { realpath, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { isAbsolute, join } from 'node:path'
 
 import { execa } from 'execa'
 
@@ -53,7 +53,11 @@ async function runGitProbe(): Promise<void> {
   try {
     const empty = await service.getSummary(projectRoot)
     check(!empty.repository, '非 Git 目录应返回 repository=false')
-    equal(empty.rootPath, canonicalProjectRoot, '摘要 rootPath 应 canonical')
+    await equalRootIdentity(
+      empty.rootPath,
+      canonicalProjectRoot,
+      '摘要 rootPath 应 canonical'
+    )
 
     const initialized = await service.initialize(projectRoot)
     check(initialized.summary.repository, '初始化后应识别 Git 仓库')
@@ -141,7 +145,7 @@ async function runGitProbe(): Promise<void> {
     const second = await service.initialize(secondRoot)
     check(second.summary.repository, '第二个 root 应独立初始化')
     equal(second.summary.status?.changedFiles, 0, '新 root 不得继承前一仓库状态')
-    equal(
+    await equalRootIdentity(
       (await service.getSummary(projectRoot)).rootPath,
       canonicalProjectRoot,
       '服务不得缓存串根'
@@ -149,6 +153,24 @@ async function runGitProbe(): Promise<void> {
   } finally {
     await removeProbeDirectory(tempRoot)
   }
+}
+
+async function equalRootIdentity(
+  actual: string,
+  expected: string,
+  message: string
+): Promise<void> {
+  check(isAbsolute(actual), `${message}: rootPath 应为绝对路径`)
+  if (process.platform !== 'win32') {
+    equal(actual, expected, message)
+    return
+  }
+  const [actualStat, expectedStat] = await Promise.all([stat(actual), stat(expected)])
+  equal(
+    `${actualStat.dev}:${actualStat.ino}`,
+    `${expectedStat.dev}:${expectedStat.ino}`,
+    `${message}: Windows 路径应指向同一目录`
+  )
 }
 
 async function removeProbeDirectory(rootPath: string): Promise<void> {
@@ -177,5 +199,5 @@ async function configureIdentity(rootPath: string): Promise<void> {
 }
 
 await runGitProbe()
-assert.equal(assertionCount, 38, 'Git 探针断言数变化必须显式复核')
-console.info(`workbench git probe: ${assertionCount}/38 assertions passed`)
+assert.equal(assertionCount, 40, 'Git 探针断言数变化必须显式复核')
+console.info(`workbench git probe: ${assertionCount}/40 assertions passed`)
