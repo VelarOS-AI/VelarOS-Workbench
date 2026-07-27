@@ -46,7 +46,6 @@
     "@types/react-dom": "^19.0.0",
     "@typescript-eslint/eslint-plugin": "^8.59.3",
     "@typescript-eslint/parser": "^8.59.3",
-    "@velaros-ai/kernel-service": "^0.2.2",
     "@vitejs/plugin-react": "^4.3.0",
     "electron": "^41.10.2",
     "electron-builder": "^26.15.3",
@@ -72,11 +71,6 @@
     "url": "git+https://github.com/VelarOS-AI/VelarOS-Workbench.git"
   },
   "dependencies": {
-    "@velaros-ai/kernel-client": "file:./vendor/kernel/velaros-ai-kernel-client-0.3.0.tgz"
-  },
-  "overrides": {
-    "@velaros-ai/kernel-client": "file:./vendor/kernel/velaros-ai-kernel-client-0.3.0.tgz",
-    "@velaros-ai/kernel-sdk": "file:./vendor/kernel/velaros-ai-kernel-sdk-0.2.2.tgz",
-    "@velaros-ai/kernel-updater": "file:./vendor/kernel/velaros-ai-kernel-updater-0.1.0.tgz"
+    "@velaros-ai/kernel-client": "^0.3.0"
   }
 }

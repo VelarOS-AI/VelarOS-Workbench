@@ -4,7 +4,6 @@ import { app, BrowserWindow } from 'electron'
 
 import { WorkbenchKernelClientRuntime } from './kernel/WorkbenchKernelClientRuntime'
 import { registerWorkbenchKernelIpc } from './kernel/WorkbenchKernelIpc'
-import { WorkbenchStandaloneKernelRuntime } from './kernel/WorkbenchStandaloneKernelRuntime'
 import { WorkbenchProjectHub } from './projects/ProjectHub'
 import { registerProjectHubIpc } from './projects/ProjectHubIpc'
 import { installProjectHubMenu } from './projects/ProjectHubMenu'
@@ -117,16 +116,6 @@ void app.whenReady().then(() => {
   const providers = createDefaultWorkbenchMainCapabilityProviders(dataRootDir)
   const kernelRuntime = new WorkbenchKernelClientRuntime({
     requiredCapabilityIds: RequiredWorkbenchKernelCapabilityIds,
-    startLocal: async () => {
-      const standaloneKernel = new WorkbenchStandaloneKernelRuntime({
-        kernelVersion: app.getVersion(),
-        workspace: providers.workspace,
-        isWorkspaceRootAllowed: (projectRoot) =>
-          hub.getState().currentProject?.path === projectRoot,
-      })
-      await standaloneKernel.start()
-      return standaloneKernel
-    },
   })
   const disposeKernelIpc = registerWorkbenchKernelIpc(
     kernelRuntime,

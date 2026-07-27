@@ -30,7 +30,7 @@
     "@velaros-ai/browser-core": "^0.2.5",
     "@velaros-ai/browser-runtime": "^0.2.4",
     "@velaros-ai/core": "^0.3.2",
-    "@velaros-ai/kernel-sdk": "file:../../vendor/kernel/velaros-ai-kernel-sdk-0.2.2.tgz",
+    "@velaros-ai/kernel-sdk": "^0.2.2",
     "@velaros-ai/model-runtime": "^0.4.4",
     "@velaros-ai/system-tools": "^0.2.7",
     "@velaros-ai/ui": "^0.2.2",
@@ -49,7 +49,6 @@
     "vscode-languageserver-textdocument": "^1.0.12",
     "vscode-uri": "^3.1.0",
     "zod": "^4.3.6",
-    "@velaros-ai/kernel-client": "file:../../vendor/kernel/velaros-ai-kernel-client-0.3.0.tgz",
-    "velaros-kernel": "file:../../vendor/kernel/velaros-kernel-0.3.2.tgz"
+    "@velaros-ai/kernel-client": "^0.3.0"
   }
 }

@@ -83,7 +83,7 @@ void describe('standalone Workbench Kernel contract', () => {
     const runtimeSource = await readFile(
       resolve(
         repositoryRoot,
-        'apps/workbench/src/main/kernel/WorkbenchStandaloneKernelRuntime.ts'
+        'apps/workbench/src/main/kernel/WorkbenchKernelClientRuntime.ts'
       ),
       'utf8'
     )
@@ -145,7 +145,7 @@ void describe('standalone Workbench Kernel contract', () => {
     const source = await readFile(
       resolve(
         repositoryRoot,
-        'apps/workbench/src/main/kernel/WorkbenchStandaloneKernelRuntime.ts'
+        'apps/workbench/src/main/kernel/WorkbenchKernelClientRuntime.ts'
       ),
       'utf8'
     )
