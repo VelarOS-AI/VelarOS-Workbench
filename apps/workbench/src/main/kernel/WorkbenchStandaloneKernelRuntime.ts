@@ -18,7 +18,7 @@ import {
   ElectronBrowserRuntime,
 } from '@velaros-ai/browser-runtime'
 import { AppError } from '@velaros-ai/core/error'
-import { KernelModuleHost } from '@velaros-ai/kernel-host'
+import { KernelModuleHost } from 'velaros-kernel/host'
 import {
   type KernelPermissionBroker,
   type KernelPermissionRequest,
@@ -26,10 +26,9 @@ import {
 } from '@velaros-ai/kernel-sdk'
 import {
   type KernelDaemonEndpointDescriptor,
-  KernelDaemonError,
-  KernelLocalDaemon,
-  KernelService,
-} from '@velaros-ai/kernel-service'
+} from '@velaros-ai/kernel-client'
+import { KernelDaemonError, KernelLocalDaemon } from 'velaros-kernel/daemon'
+import { KernelService } from 'velaros-kernel/runtime'
 import {
   createModelKernelModule,
 } from '@velaros-ai/model-runtime'

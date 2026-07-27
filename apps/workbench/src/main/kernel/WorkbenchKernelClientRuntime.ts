@@ -4,10 +4,10 @@ import {
   type ConnectedKernelDaemon,
   connectToKernelDaemon,
   type KernelClientEventHandler,
-  KernelDaemonError,
+  KernelClientError,
   type KernelEventSubscription,
   KernelRpcClientError,
-} from '@velaros-ai/kernel-service'
+} from '@velaros-ai/kernel-client'
 
 import type {
   WorkbenchKernelCapabilityStatus,
@@ -311,7 +311,7 @@ export class WorkbenchKernelClientRuntime {
       return await this.connect()
     } catch (error) {
       if (
-        !(error instanceof KernelDaemonError)
+        !(error instanceof KernelClientError)
         || error.code !== 'DAEMON_NOT_RUNNING'
         || !this.startLocal
       ) throw error
@@ -325,10 +325,7 @@ export class WorkbenchKernelClientRuntime {
         this.ownedKernel = ownedKernel ?? undefined
       }
     } catch (error) {
-      if (
-        !(error instanceof KernelDaemonError)
-        || error.code !== 'DAEMON_ALREADY_RUNNING'
-      ) throw error
+      if (!isDaemonAlreadyRunning(error)) throw error
     }
     return this.connect()
   }
@@ -392,7 +389,7 @@ function toCapabilityCatalog(
 }
 
 function toConnectionError(error: unknown): WorkbenchKernelConnectionError {
-  if (error instanceof KernelDaemonError) return {
+  if (error instanceof KernelClientError) return {
       code: error.code,
       message: error.message,
       retryable: error.code !== 'PROTOCOL_VERSION_MISMATCH',
@@ -409,4 +406,11 @@ function toConnectionError(error: unknown): WorkbenchKernelConnectionError {
       : 'Kernel daemon connection failed',
     retryable: true,
   }
+}
+
+/** startLocal may throw the daemon-side lock error, which is not a KernelClientError. */
+function isDaemonAlreadyRunning(error: unknown): boolean {
+  return typeof error === 'object'
+    && error !== null
+    && Reflect.get(error, 'code') === 'DAEMON_ALREADY_RUNNING'
 }

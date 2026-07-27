@@ -5,8 +5,8 @@ import type {
   ConnectedKernelDaemon,
   KernelClient,
   KernelClientEventHandler,
-} from '@velaros-ai/kernel-service'
-import { KernelDaemonError } from '@velaros-ai/kernel-service'
+} from '@velaros-ai/kernel-client'
+import { KernelClientError } from '@velaros-ai/kernel-client'
 
 import { WorkbenchKernelClientRuntime } from '../apps/workbench/src/main/kernel/WorkbenchKernelClientRuntime'
 
@@ -166,7 +166,7 @@ void describe('Workbench Kernel client composition root', () => {
       connect: async () => {
         connectAttempts += 1
         if (connectAttempts === 1) {
-          throw new KernelDaemonError(
+          throw new KernelClientError(
             'DAEMON_NOT_RUNNING',
             'Kernel daemon endpoint is not available'
           )
@@ -202,7 +202,7 @@ void describe('Workbench Kernel client composition root', () => {
       connect: async () => {
         connectAttempts += 1
         if (connectAttempts === 1) {
-          throw new KernelDaemonError(
+          throw new KernelClientError(
             'DAEMON_NOT_RUNNING',
             'Kernel daemon endpoint is not available'
           )
@@ -211,7 +211,7 @@ void describe('Workbench Kernel client composition root', () => {
       },
       startLocal: async () => {
         localStarts += 1
-        throw new KernelDaemonError(
+        throw new KernelClientError(
           'DAEMON_ALREADY_RUNNING',
           'A Kernel daemon already owns the local endpoint'
         )
