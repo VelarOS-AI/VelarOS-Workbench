@@ -24,28 +24,40 @@ const externalNames = new Set()
 for (const manifest of manifests) for (const field of ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies']) {
   for (const [name, spec] of Object.entries(manifest[field] ?? {})) if (name.startsWith(scope) && !ownNames.has(name) && spec !== 'workspace:*') externalNames.add(name)
 }
+// 理想架构迁移 P6（2026-07-29）：VelarOS-Platform 是 host 无关包的唯一权威单仓。
+// 同名包同时存在于 Platform 与旧独立仓（Core/Agent/Kernel/Model/UI/Capabilities/…）时一律优先
+// Platform；旧仓仅作过渡回落，归档批完成后连同本常量一并删除。
+const canonicalRepositoryName = 'VelarOS-Platform'
 const available = new Map()
-const canonicalOwners = new Map([
-  ['@velaros-ai/browser-composition', 'VelarOS-Capabilities'],
-  ['@velaros-ai/browser-core', 'VelarOS-Capabilities'],
-  ['@velaros-ai/browser-runtime', 'VelarOS-Capabilities'],
-  ['@velaros-ai/system-tools', 'VelarOS-Capabilities'],
-  ['@velaros-ai/workspace', 'VelarOS-Capabilities'],
-])
-const rememberAvailable = (name, directory, repositoryName) => {
+const rememberAvailable = (manifest, directory, repositoryName) => {
+  const name = manifest.name
   if (!name?.startsWith(scope)) return
-  const canonicalOwner = canonicalOwners.get(name)
-  if (
-    !available.has(name)
-    || canonicalOwner === repositoryName
-  ) available.set(name, directory)
+  const candidate = {
+    directory,
+    canonical: repositoryName === canonicalRepositoryName,
+    version: manifest.version ?? '0.0.0',
+  }
+  const current = available.get(name)
+  if (!current) {
+    available.set(name, candidate)
+    return
+  }
+  // Platform 一票压过旧仓；旧仓之间才比版本号。
+  if (current.canonical !== candidate.canonical) {
+    if (candidate.canonical) available.set(name, candidate)
+    return
+  }
+  if (current.version.localeCompare(candidate.version, undefined, { numeric: true }) < 0) {
+    available.set(name, candidate)
+  }
 }
+const resolveAvailableDirectory = (name) => available.get(name)?.directory
 for (const repo of await readdir(projectsRoot, { withFileTypes: true })) {
   if (!repo.isDirectory() || !repo.name.startsWith('VelarOS-')) continue
   const siblingRootManifest = path.join(projectsRoot, repo.name, 'package.json')
   if (await exists(siblingRootManifest)) {
     const manifest = await readJson(siblingRootManifest)
-    rememberAvailable(manifest.name, path.dirname(siblingRootManifest), repo.name)
+    rememberAvailable(manifest, path.dirname(siblingRootManifest), repo.name)
   }
   const siblingPackages = path.join(projectsRoot, repo.name, 'packages')
   if (!await exists(siblingPackages)) continue
@@ -53,7 +65,7 @@ for (const repo of await readdir(projectsRoot, { withFileTypes: true })) {
     const manifestPath = path.join(siblingPackages, entry.name, 'package.json')
     if (!entry.isDirectory() || !await exists(manifestPath)) continue
     const manifest = await readJson(manifestPath)
-    rememberAvailable(manifest.name, path.dirname(manifestPath), repo.name)
+    rememberAvailable(manifest, path.dirname(manifestPath), repo.name)
   }
 }
 const run = (args, cwd) => {
@@ -78,7 +90,7 @@ for (const item of packageManifests) {
   await linkIntoProject(root, item.manifest.name, item.directory)
 }
 for (const name of externalNames) {
-  const directory = available.get(name)
+  const directory = resolveAvailableDirectory(name)
   if (!directory) throw new Error(`No sibling checkout provides ${name}`)
   run(['link'], directory)
   await linkIntoProject(root, name, directory)
@@ -86,14 +98,14 @@ for (const name of externalNames) {
 for (const item of packageManifests) {
   const dependencies = { ...item.manifest.dependencies, ...item.manifest.optionalDependencies }
   for (const name of Object.keys(dependencies)) {
-    const directory = available.get(name)
+    const directory = resolveAvailableDirectory(name)
     if (directory) await linkIntoProject(item.directory, name, directory)
   }
 }
 for (const item of appManifests) {
   const dependencies = { ...item.manifest.dependencies, ...item.manifest.optionalDependencies }
   for (const name of Object.keys(dependencies)) {
-    const directory = available.get(name)
+    const directory = resolveAvailableDirectory(name)
     if (directory) await linkIntoProject(item.directory, name, directory)
   }
 }
