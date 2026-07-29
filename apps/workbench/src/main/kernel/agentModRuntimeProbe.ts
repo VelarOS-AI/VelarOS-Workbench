@@ -5,6 +5,7 @@ import { BuiltinAgentModId } from '@velaros-ai/agent-runtime'
 
 import {
   WorkbenchAgentModPackProvidesId,
+  WorkbenchAgentModRoutedAxes,
   WorkbenchAgentModRuntime,
 } from './WorkbenchAgentModRuntime'
 
@@ -31,40 +32,64 @@ function createManifest(overrides: Partial<AgentModManifest> = {}): AgentModMani
   } as AgentModManifest
 }
 
-// ── ① 无 Kernel 时只装 builtin：内置行为零变化，且未接住的九轴全部留诊断 ──
+/**
+ * velaros.mod.json 分节信封（Platform P4 73c4247 起 loader 只认信封，裸 manifest 拒载）：
+ * module 节 = 窄 kernel descriptor，agent 节 = 九轴 manifest 原样。
+ */
+function envelope(manifest: AgentModManifest): unknown {
+  return {
+    module: {
+      id: manifest.id,
+      version: manifest.version,
+      apiVersion: 1,
+      provides: [WorkbenchAgentModPackProvidesId],
+    },
+    agent: manifest,
+  }
+}
+
+// ── ① 清单读不动时只装 builtin：内置行为零变化，且未接住的轴留诊断 ──
 {
   const runtime = new WorkbenchAgentModRuntime({
     versions: baseVersions(),
     reader: { readManifest: () => Promise.reject(new Error('reader must not be called')) },
   })
-  const overview = await runtime.assembleWithoutKernel('kernel unreachable in probe')
+  const overview = await runtime.assembleDegraded('mod registry unreadable in probe')
 
-  assert(overview.assembled, 'assembleWithoutKernel 后 assembled 必须为 true')
-  assert(overview.degradedReason === 'kernel unreachable in probe', '降级原因必须透传')
+  assert(overview.assembled, 'assembleDegraded 后 assembled 必须为 true')
+  assert(overview.degradedReason === 'mod registry unreadable in probe', '降级原因必须透传')
   assert(overview.mods.length === 1, '零 pack 时只应装载内置 mod')
   const builtin = overview.mods[0]
   assert(builtin?.modId === BuiltinAgentModId, '内置 mod id 必须匹配')
   assert(builtin?.status === 'active', '声明全九轴支持后内置 mod 必须是 active 而非 partial')
+  // P6：hooks 轴已接到本进程执行栈（seam 派发器注入 ContextBuilder / SoloStreamLoop），
+  // 因此它必须**不**在 unroutedAxes 里；其余轴仍无落点，如实登记。
   assert(
-    builtin?.activeAxes.length === builtin?.unroutedAxes.length
-      && builtin?.activeAxes.every((axis) => builtin.unroutedAxes.includes(axis)),
-    'Workbench 无本地消费面：内置 mod 的活跃轴必须逐项等于 unroutedAxes'
+    WorkbenchAgentModRoutedAxes.every((axis) => !builtin!.unroutedAxes.includes(axis)),
+    '已接线的轴不得出现在 unroutedAxes'
+  )
+  const expectedUnrouted = builtin!.activeAxes.filter(
+    (axis) => !WorkbenchAgentModRoutedAxes.includes(axis)
+  )
+  assert(
+    builtin!.unroutedAxes.length === expectedUnrouted.length,
+    'unroutedAxes 必须恰好是活跃轴减去已接线轴'
   )
   const unroutedDiagnostics = overview.diagnostics.filter(
     (diagnostic) => diagnostic.code === 'workbench.mod.axis-unrouted'
   )
   assert(
-    unroutedDiagnostics.length === builtin!.activeAxes.length,
-    '每条活跃轴都必须有一条 workbench.mod.axis-unrouted 诊断'
+    unroutedDiagnostics.length === expectedUnrouted.length,
+    '每条未接线的活跃轴都必须有一条 workbench.mod.axis-unrouted 诊断'
   )
 }
 
-// ── ② Kernel 报上来的 pack：过滤 provides、读取 manifest、装载并合流进报告 ──
+// ── ② 本地清单里的 pack：过滤 provides、读分节信封、装载并合流进报告 ──
 {
   const manifests = new Map<string, unknown>([
     [
       '/mods/probe-prompt-pack',
-      createManifest({
+      envelope(createManifest({
         id: 'probe.prompt-pack',
         contributes: {
           promptSegments: [
@@ -76,7 +101,7 @@ function createManifest(overrides: Partial<AgentModManifest> = {}): AgentModMani
             },
           ],
         },
-      }),
+      })),
     ],
   ])
   const reader: AgentModPackReader = {
@@ -133,7 +158,10 @@ function createManifest(overrides: Partial<AgentModManifest> = {}): AgentModMani
 // ── ③ 不受支持的信任级：拒载并带可读诊断，不做残废激活 ──
 {
   const manifests = new Map<string, unknown>([
-    ['/mods/probe-untrusted-pack', createManifest({ id: 'probe.untrusted-pack', trust: 'local-dev' })],
+    [
+      '/mods/probe-untrusted-pack',
+      envelope(createManifest({ id: 'probe.untrusted-pack', trust: 'local-dev' })),
+    ],
   ])
   const reader: AgentModPackReader = {
     readManifest: ({ packDirectory }) => {

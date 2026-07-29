@@ -5,11 +5,11 @@ export const WorkbenchAgentModsChannels = {
 /**
  * Renderer-safe projection of `AgentModLoadReport` activation status.
  *
- * `'rejected'` is a Workbench-side addition (not part of the Agent runtime's own
- * `AgentModActivationStatus` union) folding manifest-validation rejections into the
- * same list the settings view renders.
+ * `'rejected'` 与 `'inactive'` 是 Workbench 侧的补充（不属 Agent runtime 自己的
+ * `AgentModActivationStatus` 联合）：前者折入 manifest 校验拒载，后者是本地清单里
+ * 登记但被停用 / 未装载的 pack——P6 起 mod 单 owner 在本进程，这两态才有意义。
  */
-export type WorkbenchAgentModStatus = 'active' | 'partial' | 'rejected'
+export type WorkbenchAgentModStatus = 'active' | 'partial' | 'rejected' | 'inactive'
 
 export interface WorkbenchAgentModDiagnostic {
   code: string
@@ -25,6 +25,8 @@ export interface WorkbenchAgentModSummary {
   /** pack 目录或 bundled 标识。 */
   origin: string
   source: 'bundled' | 'pack'
+  /** 本地注册表里的启用位；bundled mod 恒 true。 */
+  enabled: boolean
   trust: string
   status: WorkbenchAgentModStatus
   /** 已落地的贡献轴。 */
@@ -40,9 +42,9 @@ export interface WorkbenchAgentModSummary {
 
 export interface WorkbenchAgentModsOverview {
   generation: number
-  /** Kernel 可达且已完成一次装载。 */
+  /** 本地 pack 清单可读且已完成一次装载。 */
   assembled: boolean
-  /** 装载被跳过的原因（Kernel 不可用等）；为空表示装载正常。 */
+  /** 装载被跳过或降级的原因（清单不可读等）；为空表示装载正常。 */
   degradedReason: string | null
   mods: readonly WorkbenchAgentModSummary[]
   diagnostics: readonly WorkbenchAgentModDiagnostic[]

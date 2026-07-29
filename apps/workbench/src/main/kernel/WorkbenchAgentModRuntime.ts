@@ -12,18 +12,17 @@ import { AgentModLoader, assembleAgentMods } from '@velaros-ai/agent-runtime'
 /**
  * 两级注册机的宿主侧接缝（Workbench）。
  *
- * 与 Desktop 的关键差异——Workbench 没有 Solo 回退的进程内执行 runtime：聊天的 Agent
- * 执行 100% 委托给共享 Kernel daemon 的 `velaros.agent` 能力（远端如何在 Kernel 侧装载
- * Agent mod 是 Kernel 仓职责，不在本文件范围）。因此本 Loader **目前没有任何本地消费
- * 面**：它只做 pack 发现 + manifest 校验 + 装载报告，为未来的设置页视图打底。
+ * P6 起 Workbench 是完整宿主：Agent 执行在本进程跑（见 `WorkbenchAgentExecutionStack`），
+ * 因此 Loader 的**拦截 seam 轴（hooks）已经接到本地消费面**——`loader.seams` 直接注入
+ * ContextBuilder 与 SoloStreamLoop，mod 注册的 `tool-call:before` / `tool-result:after` /
+ * `session:*` 钩子在主链上真派发。
  *
- * 声明全九轴是为了让随包内置 mod（`velaros.agent.builtin`）保持 `active` 而非
- * `partial`（纯报表美观，沿用 Desktop 的先例）。但与 Desktop 不同，Workbench**没有把
- * 任何一根轴接到本地消费面**，因此每个已激活 mod 的全部活跃轴都会被记
- * `workbench.mod.axis-unrouted` 诊断——这是当前架构的如实反映，不是遗漏。
+ * 其余八根贡献轴（tools / toolCategories / promptSegments / skills / spaces /
+ * subAgentTypes / turnContextSources / executionModes）**仍无本地落点**：Workbench v1 的
+ * 工具面固定来自 `@velaros-ai/workspace` bridge，提示词段只有内置注册表，没有技能库。
+ * 这些轴照旧记 `workbench.mod.axis-unrouted` 诊断——如实反映，不静默吞掉。
  *
- * 欠账：一旦 Workbench 有了自己的进程内执行路径（或需要在本地渲染 mod 贡献的工具/
- * 提示词/技能列表），把对应轴的落点接进来即可——Loader、报告、诊断管线已经就位。
+ * 声明全九轴是为了让随包内置 mod 保持 `active` 而非 `partial`（沿用 Desktop 先例）。
  */
 const WorkbenchAgentModSupportedAxes: readonly AgentModContributionAxisName[] = [
   'tools',
@@ -93,13 +92,8 @@ interface WorkbenchAgentModOverview {
   diagnostics: readonly AgentModDiagnostic[]
 }
 
-/** `WorkbenchKernelClientRuntime.listMods` 的最小结构化契约——避免本文件反向依赖它。 */
-interface WorkbenchAgentModPackLister {
-  listMods(): Promise<{
-    packs: readonly AgentModPackDescriptorLike[]
-    error: Nullable<string>
-  }>
-}
+/** 已接到本地消费面的贡献轴；其余轴装载但不生效（见类头注释）。 */
+const WorkbenchAgentModRoutedAxes: readonly AgentModContributionAxisName[] = ['hooks']
 
 /**
  * Workbench 的 Agent mod 运行时。
@@ -135,9 +129,9 @@ class WorkbenchAgentModRuntime {
   }
 
   /**
-   * 装载一批 Kernel pack（内置 mod 恒加载）。
+   * 装载一批本地 pack（内置 mod 恒加载）。
    *
-   * `packs` 缺省或为空即只装 builtin：Kernel 不可达时行为与「从未接线」逐项一致。
+   * `packs` 缺省或为空即只装 builtin：清单为空时行为与「从未接线」逐项一致。
    */
   public async assemble(
     input: { packs?: readonly AgentModPackDescriptorLike[] } = {}
@@ -154,19 +148,31 @@ class WorkbenchAgentModRuntime {
     return this.getOverview()
   }
 
-  /** Kernel 不可达时的降级留痕：只装 builtin，装配链照常起。 */
-  public async assembleWithoutKernel(reason: string): Promise<WorkbenchAgentModOverview> {
+  /** 本地清单读不动时的降级留痕：只装 builtin，装配链照常起。 */
+  public async assembleDegraded(reason: string): Promise<WorkbenchAgentModOverview> {
     this.degradedReason = reason
     return this.assemble()
   }
 
-  /** Kernel 启动后的一次性装载：pack 清单 → Agent 领域 Loader。 */
-  public async assembleFromKernel(
-    kernel: WorkbenchAgentModPackLister
-  ): Promise<WorkbenchAgentModOverview> {
-    const { packs, error } = await kernel.listMods()
-    if (error !== null) return this.assembleWithoutKernel(error)
-    return this.assemble({ packs })
+  /**
+   * 增量装载一个 pack（启用 / 安装的当场生效路径）。
+   *
+   * Loader 的 `load()` 在既有注册表之上追加，因此这里只喂这一个 pack、显式关掉 bundled，
+   * 已激活的 mod 不会被重复注册。返回是否真的进了激活表——没进（拒载 / 不含 Agent 轴）
+   * 由调用方回落「重启后生效」提示。
+   */
+  public async activatePack(pack: AgentModPackDescriptorLike): Promise<boolean> {
+    if (!pack.provides.includes(WorkbenchAgentModPackProvidesId)) return false
+
+    await assembleAgentMods({
+      host: this.host,
+      loader: this.loader,
+      bundled: [],
+      packs: [pack],
+      reader: this.reader,
+    })
+    this.assembled = true
+    return this.loader.getReport().activated.some((state) => state.origin === pack.specifier)
   }
 
   /** 停用一个 mod：贡献摘除，持久化数据按孤儿保全语义保留。 */
@@ -185,7 +191,7 @@ class WorkbenchAgentModRuntime {
       status: state.status,
       activeAxes: state.activeAxes,
       absentAxes: state.absentAxes,
-      unroutedAxes: state.activeAxes,
+      unroutedAxes: listUnroutedAxes(state.activeAxes),
       contributionCount: state.contributionCount,
       reasons: [],
     }))
@@ -215,16 +221,23 @@ class WorkbenchAgentModRuntime {
   }
 }
 
-/** 每个已激活 mod 的全部活跃轴都零本地消费面——如实登记，绝不静默吞掉。 */
+/** 装载了但没有本地落点的轴；已接线的轴（{@link WorkbenchAgentModRoutedAxes}）不计。 */
+function listUnroutedAxes(
+  activeAxes: readonly AgentModContributionAxisName[]
+): readonly AgentModContributionAxisName[] {
+  return activeAxes.filter((axis) => !WorkbenchAgentModRoutedAxes.includes(axis))
+}
+
+/** 无本地消费面的轴如实登记，绝不静默吞掉。 */
 function buildUnroutedDiagnostics(report: AgentModLoadReport): AgentModDiagnostic[] {
   const diagnostics: AgentModDiagnostic[] = []
   for (const state of report.activated) {
-    for (const axis of state.activeAxes) {
+    for (const axis of listUnroutedAxes(state.activeAxes)) {
       diagnostics.push({
         code: 'workbench.mod.axis-unrouted',
         message:
-          `mod「${state.modId}」的 ${axis} 轴已装载，但 Workbench 目前没有本地消费面`
-          + `（Agent 执行委托远端 Kernel daemon），本次不生效。`,
+          `mod「${state.modId}」的 ${axis} 轴已装载，但 Workbench 目前没有本地消费面，`
+          + '本次不生效。',
         path: `contributes.${axis}`,
         modId: state.modId,
         origin: state.origin,
@@ -237,6 +250,7 @@ function buildUnroutedDiagnostics(report: AgentModLoadReport): AgentModDiagnosti
 export {
   createWorkbenchAgentModHostProfile,
   WorkbenchAgentModPackProvidesId,
+  WorkbenchAgentModRoutedAxes,
   WorkbenchAgentModRuntime,
   WorkbenchAgentModSupportedAxes,
 }

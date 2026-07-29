@@ -776,6 +776,9 @@ export function WorkbenchSettingsDialog({
       case 'partial': {
         return t('workbench.settingsModsStatusPartial')
       }
+      case 'inactive': {
+        return t('workbench.settingsModsStatusInactive')
+      }
       default: {
         return t('workbench.settingsModsStatusRejected')
       }
@@ -784,7 +787,7 @@ export function WorkbenchSettingsDialog({
 
   function modStatusTone(status: WorkbenchAgentModStatus): 'default' | 'success' | 'warning' {
     if (status === 'active') return 'success'
-    if (status === 'partial') return 'warning'
+    if (status === 'inactive') return 'default'
     return 'warning'
   }
 
