@@ -1,7 +1,7 @@
-import type { AgentModManifest } from '@velaros-ai/agent-protocol'
-import { AgentModManifestSchemaVersion } from '@velaros-ai/agent-protocol'
-import type { AgentModPackDescriptorLike, AgentModPackReader } from '@velaros-ai/agent-runtime'
-import { BuiltinAgentModId } from '@velaros-ai/agent-runtime'
+import type { AgentModPackDescriptorLike, AgentModPackReader } from '@velaros-ai/agent'
+import { BuiltinAgentModId } from '@velaros-ai/agent'
+import type { AgentModManifest } from '@velaros-ai/agent/protocol'
+import { AgentModManifestSchemaVersion } from '@velaros-ai/agent/protocol'
 
 import {
   WorkbenchAgentModPackProvidesId,

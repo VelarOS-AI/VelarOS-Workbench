@@ -1,8 +1,8 @@
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
 import { isAbsolute, join, resolve } from 'node:path'
 
-import { AgentModPackProvidesId, VelarosModManifestFileName } from '@velaros-ai/agent-protocol'
-import type { AgentModPackDescriptorLike, AgentModPackReader } from '@velaros-ai/agent-runtime'
+import type { AgentModPackDescriptorLike, AgentModPackReader } from '@velaros-ai/agent'
+import { AgentModPackProvidesId, VelarosModManifestFileName } from '@velaros-ai/agent/protocol'
 import { Log } from '@velaros-ai/core'
 
 /**

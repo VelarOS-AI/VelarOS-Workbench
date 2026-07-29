@@ -99,11 +99,11 @@ void describe('Core 0.3 owner boundary', () => {
 
     assert.match(
       contracts,
-      /BrowserElementSelection[\s\S]*from '@velaros-ai\/browser-core'/u
+      /BrowserElementSelection[\s\S]*from '@velaros-ai\/browser\/core'/u
     )
     assert.match(
       contracts,
-      /AgentProviderRuntimeConfig[\s\S]*ProviderModelCatalog[\s\S]*from '@velaros-ai\/model-runtime'/u
+      /AgentProviderRuntimeConfig[\s\S]*ProviderModelCatalog[\s\S]*from '@velaros-ai\/model'/u
     )
     assert.match(
       contracts,

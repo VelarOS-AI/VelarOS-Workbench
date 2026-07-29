@@ -5,7 +5,7 @@ import type {
   ControlledBrowserSurface,
   ControlledBrowserSurfaceInput,
   ControlledBrowserSurfaceRenderOptions,
-} from '@velaros-ai/browser-composition'
+} from '@velaros-ai/browser/composition'
 
 function useKernelBrowserSurface(
   input: ControlledBrowserSurfaceInput
@@ -68,7 +68,7 @@ function useKernelBrowserSurface(
 
 /**
  * Published browser-composition contract with a Workbench-specific Kernel
- * adapter. Browser lifecycle remains in @velaros-ai/browser-runtime; this
+ * adapter. Browser lifecycle remains in @velaros-ai/browser/runtime; this
  * renderer only projects the semantic controlled surface.
  */
 export const standaloneBrowserCompositionAdapter: BrowserCompositionAdapter = {

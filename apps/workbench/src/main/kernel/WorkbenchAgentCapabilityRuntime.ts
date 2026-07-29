@@ -5,7 +5,7 @@ import {
   type AgentCapabilityRuntime,
   type AgentExecutionConfig,
   ExecutionEventBus,
-} from '@velaros-ai/agent-runtime'
+} from '@velaros-ai/agent'
 import { Log } from '@velaros-ai/core'
 
 import type { WorkbenchAgentExecutionStack } from '../agent/WorkbenchAgentExecutionStack'

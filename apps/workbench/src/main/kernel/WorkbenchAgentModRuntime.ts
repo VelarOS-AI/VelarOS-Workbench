@@ -1,4 +1,3 @@
-import type { AgentModContributionAxisName, AgentModDiagnostic } from '@velaros-ai/agent-protocol'
 import type {
   AgentModActivationStatus,
   AgentModHostProfile,
@@ -6,8 +5,9 @@ import type {
   AgentModPackDescriptorLike,
   AgentModPackReader,
   AgentModSeamDispatcher,
-} from '@velaros-ai/agent-runtime'
-import { AgentModLoader, assembleAgentMods } from '@velaros-ai/agent-runtime'
+} from '@velaros-ai/agent'
+import { AgentModLoader, assembleAgentMods } from '@velaros-ai/agent'
+import type { AgentModContributionAxisName, AgentModDiagnostic } from '@velaros-ai/agent/protocol'
 
 /**
  * 两级注册机的宿主侧接缝（Workbench）。

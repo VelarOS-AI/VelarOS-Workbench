@@ -15,11 +15,11 @@ import {
   RunContext,
   SoloStreamLoop,
   TurnRunner,
-} from '@velaros-ai/agent-runtime'
+} from '@velaros-ai/agent'
 import { Log, toNullable } from '@velaros-ai/core'
 import { logRuntime } from '@velaros-ai/core/logger'
 import { asRecord } from '@velaros-ai/core/utils/unknownJsonRecord'
-import { createModelRuntimeComposition } from '@velaros-ai/model-runtime/node'
+import { createModelRuntimeComposition } from '@velaros-ai/model/node'
 
 import type { WorkbenchWorkspaceCapabilityProvider } from '../workspace/PublishedWorkspaceCapabilityProvider'
 
@@ -32,14 +32,14 @@ import {
  * Workbench 的**进程内** Agent 执行栈。
  *
  * kernel-contract §15：完整宿主自持执行栈——聊天不再委托远端 `velaros.agent`，而是在本进程
- * 直接跑 `@velaros-ai/agent-runtime` 的 {@link SoloStreamLoop}。
+ * 直接跑 `@velaros-ai/agent` 的 {@link SoloStreamLoop}。
  *
  * ## 组装链
  * ```
  * WorkbenchAgentCapabilityRuntime.execute        （Kernel 能力入口，解析 v1 信封）
  *   → WorkbenchAgentExecutionStack.run           （本类：按 projectRoot 取会话装配）
  *     → SoloStreamLoop.execute                   （agent-runtime 主 Agent 面）
- *       ├ ModelRuntime      ← @velaros-ai/model-runtime 的 agentModelRuntime（BYOK 选择走 config）
+ *       ├ ModelRuntime      ← @velaros-ai/model 的 agentModelRuntime（BYOK 选择走 config）
  *       ├ TurnRunner        ← 单轮流式 + 工具执行
  *       ├ RunContext        ← ContextBuilder 的内置提示词段注册表
  *       └ ToolRegistry      ← @velaros-ai/workspace bridge 工具族（每 projectRoot 一份）

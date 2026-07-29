@@ -3,8 +3,8 @@ import { randomUUID } from 'node:crypto'
 import type {
   BrowserElementSelection,
   BrowserSiteContext,
-} from '@velaros-ai/browser-core'
-import type { ElectronBrowserRuntime } from '@velaros-ai/browser-runtime'
+} from '@velaros-ai/browser/core'
+import type { ElectronBrowserRuntime } from '@velaros-ai/browser/runtime'
 import { AppError } from '@velaros-ai/core/error'
 
 interface BrowserSessionBinding {

@@ -62,10 +62,19 @@ for (const repo of await readdir(projectsRoot, { withFileTypes: true })) {
   const siblingPackages = path.join(projectsRoot, repo.name, 'packages')
   if (!await exists(siblingPackages)) continue
   for (const entry of await readdir(siblingPackages, { withFileTypes: true })) {
-    const manifestPath = path.join(siblingPackages, entry.name, 'package.json')
-    if (!entry.isDirectory() || !await exists(manifestPath)) continue
-    const manifest = await readJson(manifestPath)
-    rememberAvailable(manifest, path.dirname(manifestPath), repo.name)
+    if (!entry.isDirectory()) continue
+    const packageDir = path.join(siblingPackages, entry.name)
+    const manifestPath = path.join(packageDir, 'package.json')
+    if (await exists(manifestPath)) {
+      rememberAvailable(await readJson(manifestPath), packageDir, repo.name)
+      continue
+    }
+    // packages/<分组>/<包> 二级布局（Platform 的 packages/capabilities/* 即此形态）。
+    for (const nested of await readdir(packageDir, { withFileTypes: true })) {
+      const nestedManifest = path.join(packageDir, nested.name, 'package.json')
+      if (!nested.isDirectory() || !await exists(nestedManifest)) continue
+      rememberAvailable(await readJson(nestedManifest), path.dirname(nestedManifest), repo.name)
+    }
   }
 }
 const run = (args, cwd) => {

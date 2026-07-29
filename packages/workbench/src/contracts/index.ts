@@ -1,7 +1,7 @@
 export type * from './product'
 export type * from './system'
 export type * from './workbench'
-export type { BrowserElementSelection } from '@velaros-ai/browser-core'
+export type { BrowserElementSelection } from '@velaros-ai/browser/core'
 export type {
   AgentDeveloperContext,
   AgentSurfaceId,
@@ -16,7 +16,7 @@ export type {
   AgentProviderRuntimeConfig,
   ListProviderModelsRequest,
   ProviderModelCatalog,
-} from '@velaros-ai/model-runtime'
+} from '@velaros-ai/model'
 export type {
   WorkspaceGitBranch,
   WorkspaceGitCommitResult,

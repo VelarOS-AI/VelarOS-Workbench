@@ -2,7 +2,7 @@ import { join } from 'node:path'
 
 import { app, BrowserWindow } from 'electron'
 
-import { createAgentKernelModule } from '@velaros-ai/agent-runtime'
+import { createAgentKernelModule } from '@velaros-ai/agent'
 
 import { WorkbenchAgentExecutionStack } from './agent/WorkbenchAgentExecutionStack'
 import { WorkbenchAgentCapabilityRuntime } from './kernel/WorkbenchAgentCapabilityRuntime'

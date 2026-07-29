@@ -1,4 +1,4 @@
-import type { ControlledBrowserSurface } from '@velaros-ai/browser-composition'
+import type { ControlledBrowserSurface } from '@velaros-ai/browser/composition'
 import type {
   BrowserElementSelection,
   WorkbenchLanguageServiceDiagnostic,

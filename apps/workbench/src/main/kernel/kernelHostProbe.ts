@@ -9,7 +9,7 @@
  */
 import { z } from 'zod'
 
-import { createAgentKernelModule } from '@velaros-ai/agent-runtime'
+import { createAgentKernelModule } from '@velaros-ai/agent'
 import type { AgentToolDefinition } from '@velaros-ai/workspace'
 
 import { WorkbenchAgentExecutionStack } from '../agent/WorkbenchAgentExecutionStack'

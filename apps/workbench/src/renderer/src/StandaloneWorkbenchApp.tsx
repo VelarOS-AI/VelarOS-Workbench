@@ -1,6 +1,6 @@
 import { type ReactElement, useEffect, useState } from 'react'
 
-import { BrowserCompositionProvider } from '@velaros-ai/browser-composition'
+import { BrowserCompositionProvider } from '@velaros-ai/browser/composition'
 import {
   WorkbenchChatProvider,
   WorkbenchProductRuntimeProvider,

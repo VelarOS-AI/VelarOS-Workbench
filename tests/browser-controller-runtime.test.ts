@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import type { ElectronBrowserRuntime } from '@velaros-ai/browser-runtime'
+import type { ElectronBrowserRuntime } from '@velaros-ai/browser/runtime'
 
 import { WorkbenchBrowserController } from '../apps/workbench/src/main/kernel/WorkbenchBrowserController'
 

@@ -5,8 +5,8 @@
 import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 // 独立宿主改判：受控浏览器面走应用内空实现（无内嵌浏览器宿主），契约形状与
-// @velaros-ai/browser-composition 同源；desktop 的 onboarding 派发已剥除（独立应用无引导层）。
-import { useControlledBrowserSurface } from '@velaros-ai/browser-composition'
+// @velaros-ai/browser/composition 同源；desktop 的 onboarding 派发已剥除（独立应用无引导层）。
+import { useControlledBrowserSurface } from '@velaros-ai/browser/composition'
 import { isEmpty,isObject, isString, isTrue, Log, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { Result } from '@velaros-ai/core/result'
