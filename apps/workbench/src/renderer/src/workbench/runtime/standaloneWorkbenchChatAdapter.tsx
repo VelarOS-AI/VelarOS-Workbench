@@ -252,20 +252,8 @@ function StandaloneWorkbenchChatSessionSurface({
       revision: state.revision + 1,
     }))
 
-    const supported = await window.velarosWorkbenchKernel.invoke({
-      route: 'model.supports-provider',
-      input: { provider: provider.trim() },
-    })
-    if (!supported.ok || supported.output !== true) {
-      finishWithError(
-        projectRoot,
-        supported.ok
-          ? `Model provider "${provider}" is not installed in Kernel.`
-          : supported.error.message
-      )
-      return
-    }
-
+    // P6：模型运行时已在本进程（BYOK 选择直接进 Agent 执行栈），不再有
+    // `model.supports-provider` 这种远端预检——provider 不认识时由执行本身报错。
     const latest = getState(projectRoot)
     const executionId = nextId('workbench-execution')
     const sessionCorrelationId = nextId('workbench-correlation')

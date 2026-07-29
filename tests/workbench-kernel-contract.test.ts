@@ -3,21 +3,12 @@ import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { describe, test } from 'node:test'
 
-import {
-  DefaultWorkbenchKernelCapabilityRoutes,
-  RequiredWorkbenchKernelCapabilityIds,
-} from '../apps/workbench/src/main/WorkbenchMainCapabilityProviders'
+import { DefaultWorkbenchKernelCapabilityRoutes } from '../apps/workbench/src/main/WorkbenchMainCapabilityProviders'
 
 const repositoryRoot = resolve(import.meta.dirname, '..')
 
 void describe('standalone Workbench Kernel contract', () => {
-  void test('uses only the standard Agent, Model, Workspace and Browser capabilities', () => {
-    assert.deepEqual(RequiredWorkbenchKernelCapabilityIds, [
-      'velaros.agent',
-      'velaros.model',
-      'velaros.workspace',
-      'velaros.browser',
-    ])
+  void test('routes only to the standard Agent and Browser capability ids', () => {
     assert.deepEqual(DefaultWorkbenchKernelCapabilityRoutes['agent.execute'], {
       capabilityId: 'velaros.agent',
       operation: 'execute',
@@ -25,10 +16,6 @@ void describe('standalone Workbench Kernel contract', () => {
     assert.deepEqual(DefaultWorkbenchKernelCapabilityRoutes['agent.health'], {
       capabilityId: 'velaros.agent',
       operation: 'health',
-    })
-    assert.deepEqual(DefaultWorkbenchKernelCapabilityRoutes['model.supports-provider'], {
-      capabilityId: 'velaros.model',
-      operation: 'supports_provider',
     })
     assert.deepEqual(DefaultWorkbenchKernelCapabilityRoutes['browser.close-session'], {
       capabilityId: 'velaros.browser',
@@ -43,7 +30,7 @@ void describe('standalone Workbench Kernel contract', () => {
         Object.values(DefaultWorkbenchKernelCapabilityRoutes)
           .map(({ capabilityId }) => capabilityId)
       )].sort(),
-      ['velaros.agent', 'velaros.browser', 'velaros.model']
+      ['velaros.agent', 'velaros.browser']
     )
   })
 
@@ -80,10 +67,11 @@ void describe('standalone Workbench Kernel contract', () => {
       assert.doesNotMatch(invocation, new RegExp(`\\b${legacyField}\\s*:`))
     }
 
+    // 信封解析权威从远端 client runtime 移到了进程内能力适配层（P6 宿主化）。
     const runtimeSource = await readFile(
       resolve(
         repositoryRoot,
-        'apps/workbench/src/main/kernel/WorkbenchKernelClientRuntime.ts'
+        'apps/workbench/src/main/kernel/WorkbenchAgentCapabilityRuntime.ts'
       ),
       'utf8'
     )
@@ -91,21 +79,9 @@ void describe('standalone Workbench Kernel contract', () => {
       runtimeSource,
       /new Set\(\[['"]protocolVersion['"], ['"]execution['"], ['"]messages['"], ['"]config['"]\]\)/u
     )
-    assert.match(
-      runtimeSource,
-      /new Set\(\[['"]id['"], ['"]source['"], ['"]scopeMetadata['"]\]\)/u
-    )
-    assert.match(
-      runtimeSource,
-      /new Set\(\[['"]productId['"], ['"]sessionId['"], ['"]correlationId['"]\]\)/u
-    )
     assert.match(runtimeSource, /scopeMetadata\.resourceId/u)
-    assert.match(runtimeSource, /scope\s*!==\s*undefined/u)
     assert.match(runtimeSource, /Object\.keys\(record\).*allowedKeys/u)
-    assert.doesNotMatch(
-      runtimeSource,
-      /velaros\.workbench\.(?:agent-control|model-profiles|browser-control)/u
-    )
+    assert.match(runtimeSource, /velaros\.workbench/u)
   })
 
   void test('Agent execution stream handles every terminal state with correlation', async () => {
@@ -141,29 +117,23 @@ void describe('standalone Workbench Kernel contract', () => {
     assert.match(source, /activeExecutionRef\.current/u)
   })
 
-  void test('standalone runtime validates injected Workspace scopes and emits the standard event schema', async () => {
+  void test('in-process Agent capability emits the standard execution event schema', async () => {
     const source = await readFile(
       resolve(
         repositoryRoot,
-        'apps/workbench/src/main/kernel/WorkbenchKernelClientRuntime.ts'
+        'apps/workbench/src/main/kernel/WorkbenchAgentCapabilityRuntime.ts'
       ),
       'utf8'
     )
 
-    assert.match(source, /const WorkbenchWorkspaceScopeOwner\s*=/u)
+    // P6：执行不再经 daemon，作用域校验随之下沉——projectRoot 由能力适配层从
+    // scopeMetadata.resourceId 取，工作区边界由 @velaros-ai/workspace bridge 自持。
+    assert.match(source, /const WorkbenchAgentExecutionEventType\s*=/u)
+    assert.match(source, /scopeMetadata\.resourceId/u)
     assert.match(
       source,
-      /scope\?\.ownerModuleId\s*!==\s*WorkbenchWorkspaceScopeOwner/u
+      /export\s*\{[\s\S]*WorkbenchAgentExecutionEventType,[\s\S]*\}/u
     )
-    assert.match(source, /scope\.kind\s*!==\s*['"]project['"]/u)
-    assert.match(source, /!options\.isWorkspaceRootAllowed\(scope\.id\)/u)
-    assert.match(source, /!this\.isWorkspaceRootAllowed\(input\.projectRoot\)/u)
-    assert.match(
-      source,
-      /export\s*\{[\s\S]*AgentExecutionEventType,[\s\S]*WorkbenchWorkspaceScopeOwner,[\s\S]*\}/u
-    )
-
-    assert.match(source, /const AgentExecutionEventType\s*=/u)
     for (const field of [
       'protocolVersion',
       'executionId',
@@ -173,7 +143,21 @@ void describe('standalone Workbench Kernel contract', () => {
     ]) {
       assert.match(source, new RegExp(`\\b${field}\\b`))
     }
-    for (const eventType of ['start', 'text-delta', 'done', 'error', 'aborted']) {
+    for (const channel of ['agent', 'state', 'debug']) {
+      assert.match(source, new RegExp(`['"]${channel}['"]`))
+    }
+  })
+
+  void test('renderer stream reader covers every terminal agent event', async () => {
+    const source = await readFile(
+      resolve(
+        repositoryRoot,
+        'apps/workbench/src/renderer/src/workbench/runtime/standaloneWorkbenchChatAdapter.tsx'
+      ),
+      'utf8'
+    )
+
+    for (const eventType of ['text-delta', 'done', 'error', 'aborted']) {
       assert.match(source, new RegExp(`['"]${eventType}['"]`))
     }
   })

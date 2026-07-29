@@ -41,18 +41,17 @@ export function createDefaultWorkbenchMainCapabilityProviders(
 }
 
 /**
- * Domain addresses are injected here—not embedded in the generic client.
+ * Domain addresses are injected here—not embedded in the generic IPC face.
  * Replacing a capability implementation or version does not change renderer
  * IPC and does not create a Desktop dependency.
+ *
+ * `browser.*` 保留路由但 Workbench 没有浏览器能力本体（进程内只注册 `velaros.agent`）：
+ * 调用一律回 `KERNEL_CAPABILITY_UNAVAILABLE`，消费面按既有降级路径处理。
  */
 export const DefaultWorkbenchKernelCapabilityRoutes: WorkbenchKernelCapabilityRoutes =
   Object.freeze({
     'agent.execute': { capabilityId: 'velaros.agent', operation: 'execute' },
     'agent.health': { capabilityId: 'velaros.agent', operation: 'health' },
-    'model.supports-provider': {
-      capabilityId: 'velaros.model',
-      operation: 'supports_provider',
-    },
     'browser.close-session': {
       capabilityId: 'velaros.browser',
       operation: 'close_session',
@@ -62,10 +61,3 @@ export const DefaultWorkbenchKernelCapabilityRoutes: WorkbenchKernelCapabilityRo
       operation: 'close_all_sessions',
     },
   })
-
-export const RequiredWorkbenchKernelCapabilityIds = Object.freeze([
-  'velaros.agent',
-  'velaros.model',
-  'velaros.workspace',
-  'velaros.browser',
-])

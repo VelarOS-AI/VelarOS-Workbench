@@ -127,7 +127,6 @@ const gitBridge: WorkbenchGitBridge = {
 
 const kernelBridge: WorkbenchKernelBridge = {
   getStatus: () => ipcRenderer.invoke(WorkbenchKernelChannels.getStatus),
-  retry: () => ipcRenderer.invoke(WorkbenchKernelChannels.retry),
   invoke: (request) => ipcRenderer.invoke(WorkbenchKernelChannels.invoke, request),
   onStatusChanged: (listener) =>
     subscribe(WorkbenchKernelChannels.statusChanged, listener),
