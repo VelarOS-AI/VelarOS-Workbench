@@ -2,11 +2,26 @@ import { join } from 'node:path'
 
 import { app, BrowserWindow } from 'electron'
 
+import { createAgentKernelModule } from '@velaros-ai/agent-runtime'
+
+import { WorkbenchAgentExecutionStack } from './agent/WorkbenchAgentExecutionStack'
+import { WorkbenchAgentCapabilityRuntime } from './kernel/WorkbenchAgentCapabilityRuntime'
 import { registerWorkbenchAgentModIpc } from './kernel/WorkbenchAgentModIpc'
-import { createWorkbenchAgentModPackReader } from './kernel/WorkbenchAgentModPackReader'
+import {
+  createWorkbenchAgentModPackReader,
+  WorkbenchAgentModPackStore,
+} from './kernel/WorkbenchAgentModPackStore'
 import { WorkbenchAgentModRuntime } from './kernel/WorkbenchAgentModRuntime'
-import { WorkbenchKernelClientRuntime } from './kernel/WorkbenchKernelClientRuntime'
-import { registerWorkbenchKernelIpc } from './kernel/WorkbenchKernelIpc'
+import {
+  broadcastWorkbenchKernelStatus,
+  registerWorkbenchKernelIpc,
+} from './kernel/WorkbenchKernelIpc'
+import {
+  WorkbenchAgentCapabilityApiVersion,
+  WorkbenchKernelRuntime,
+  WorkbenchKernelVersion,
+} from './kernel/WorkbenchKernelRuntime'
+import { WorkbenchModService } from './kernel/WorkbenchModService'
 import { WorkbenchProjectHub } from './projects/ProjectHub'
 import { registerProjectHubIpc } from './projects/ProjectHubIpc'
 import { installProjectHubMenu } from './projects/ProjectHubMenu'
@@ -22,18 +37,16 @@ import { registerWorkbenchTerminalIpc } from './workspace/terminal/WorkbenchTerm
 import { registerWorkbenchWatchIpc } from './workspace/watch/WorkbenchWatchIpc'
 import { registerWorkbenchFsIpc } from './workspace/WorkbenchFsIpc'
 import { registerWorkbenchWorkspaceIpc } from './workspace/WorkbenchWorkspaceIpc'
-import {
-  createDefaultWorkbenchMainCapabilityProviders,
-  RequiredWorkbenchKernelCapabilityIds,
-} from './WorkbenchMainCapabilityProviders'
+import { createDefaultWorkbenchMainCapabilityProviders } from './WorkbenchMainCapabilityProviders'
 
 /**
  * 独立 VelarOS Workbench 应用的主进程。
  *
  * 负责窗口生命周期 + 项目枢纽（起手页三主动作 / 最近项目持久化 / 窗口标题与菜单跟随项目状态）。
- * IDE 本地能力由应用私有 IPC 语义端口承载；共享能力通过经过认证的 Kernel daemon
- * 客户端组合根接入，不反向依赖 Desktop。优先连接现有 daemon；daemon 缺席时由 Workbench
- * 启动同一套 Kernel 模块组合，并继续通过本地 RPC 使用它，避免产生第二套运行时语义。
+ * IDE 本地能力由应用私有 IPC 语义端口承载；共享能力走**进程内 Kernel**
+ * （kernel-contract §15：完整宿主进程内装栈，不经 kernel-client、不拉 daemon），
+ * 不反向依赖 Desktop。Workbench 只自持 Agent 能力，model / browser 没有本体因此不注册，
+ * 消费面按能力缺席降级。
  *
  * 数据根对齐 Desktop 惯例（prod=userData，dev=cwd/.data 隔离目录），但完全独立于 Desktop 的
  * chat 存储：应用名固定 `VelarOS Workbench`，prod userData 因此拥有自己的平台目录。
@@ -117,28 +130,42 @@ void app.whenReady().then(() => {
   const hub = new WorkbenchProjectHub(dataRootDir)
   registerProjectHubIpc(hub)
   const providers = createDefaultWorkbenchMainCapabilityProviders(dataRootDir)
-  const kernelRuntime = new WorkbenchKernelClientRuntime({
-    requiredCapabilityIds: RequiredWorkbenchKernelCapabilityIds,
-  })
-  const disposeKernelIpc = registerWorkbenchKernelIpc(
-    kernelRuntime,
-    providers.kernelRoutes
-  )
-  // 两级注册机的宿主侧接缝：Loader 在 Kernel 起来后立即用一份 pack 清单装载一次。
-  // Workbench 目前没有进程内的 Agent 执行 runtime（聊天 100% 走 Kernel `velaros.agent`
-  // 能力），装载报告只喂设置页「模组」只读视图，不接本地消费面（见
-  // `WorkbenchAgentModRuntime` 类头注释）。
+  // 两级注册机的宿主侧接缝：Loader 构造期就位（seam 派发器必须早于执行栈装配），
+  // 启动后由 mod 门面用一份**本地** pack 清单装载一次。
   const agentModRuntime = new WorkbenchAgentModRuntime({
     versions: {
-      // 对齐 Kernel module API 版本轴。
-      velarosVersion: '0.3.0',
-      agentApiVersion: '1.0.0',
+      velarosVersion: WorkbenchKernelVersion,
+      agentApiVersion: WorkbenchAgentCapabilityApiVersion,
       shellVersion: app.getVersion(),
     },
     reader: createWorkbenchAgentModPackReader(),
   })
-  const disposeAgentModIpc = registerWorkbenchAgentModIpc(agentModRuntime)
-  void kernelRuntime.start().then(() => agentModRuntime.assembleFromKernel(kernelRuntime))
+  const modService = new WorkbenchModService(
+    new WorkbenchAgentModPackStore(
+      providers.parts.storagePaths.getModPacksDir(),
+      providers.parts.storagePaths.getModRegistryPath()
+    ),
+    agentModRuntime
+  )
+  const disposeAgentModIpc = registerWorkbenchAgentModIpc(modService)
+  // 进程内 Kernel：只注册 Workbench 自持的 Agent 能力，执行栈也在本进程。
+  const agentExecutionStack = new WorkbenchAgentExecutionStack(
+    providers.workspace,
+    agentModRuntime.seams
+  )
+  const kernelRuntime = new WorkbenchKernelRuntime()
+  kernelRuntime.registerModule(
+    createAgentKernelModule({
+      runtime: new WorkbenchAgentCapabilityRuntime(agentExecutionStack),
+    })
+  )
+  const disposeKernelIpc = registerWorkbenchKernelIpc(kernelRuntime, providers.kernelRoutes)
+  void kernelRuntime
+    .start()
+    .then(() => modService.assembleAgentAxis())
+    .finally(() => {
+      broadcastWorkbenchKernelStatus(kernelRuntime)
+    })
   const languageGrammarInstaller = new LanguageGrammarInstaller({
     installRoot: () => providers.parts.storagePaths.getLanguageGrammarsDir(),
   })

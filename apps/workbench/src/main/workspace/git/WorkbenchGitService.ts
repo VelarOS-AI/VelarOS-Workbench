@@ -769,7 +769,15 @@ export class WorkbenchGitService {
   }
 
   private buildGitEnvironment(options: WorkspaceGitRemoteActionOptions): NodeJS.ProcessEnv {
-    const env: NodeJS.ProcessEnv = { ...process.env, GIT_TERMINAL_PROMPT: '0' }
+    // git 的 porcelain 输出与错误正文都吃 locale：宿主装了中文 gettext 目录时
+    // "not a git repository" 会变成「不是 Git 仓库」，把 VALIDATION 误判成 PLATFORM。
+    // 解析 git 输出必须钉死 C locale，这是解析方的责任，不是用户环境的责任。
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      GIT_TERMINAL_PROMPT: '0',
+      LC_ALL: 'C',
+      LANG: 'C',
+    }
     const token = options.githubToken?.trim()
     if (token) {
       const index = Number.isFinite(Number(env.GIT_CONFIG_COUNT))

@@ -15,7 +15,8 @@
     "probe:grammar": "bun --conditions=source src/main/resources/languageGrammarProbe.ts",
     "probe:terminal": "bun --conditions=source src/main/workspace/terminal/terminalProbe.ts",
     "probe:git": "bun --conditions=source src/main/workspace/git/gitProbe.ts",
-    "probe:agent-mods": "bun --conditions=source src/main/kernel/agentModRuntimeProbe.ts"
+    "probe:agent-mods": "bun --conditions=source src/main/kernel/agentModRuntimeProbe.ts",
+    "probe:kernel-host": "bun --conditions=source src/main/kernel/kernelHostProbe.ts"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.1",
@@ -49,7 +50,6 @@
     "vscode-html-languageservice": "^5.6.2",
     "vscode-languageserver-textdocument": "^1.0.12",
     "vscode-uri": "^3.1.0",
-    "zod": "^4.3.6",
-    "@velaros-ai/kernel-client": "^0.3.0"
+    "zod": "^4.3.6"
   }
 }
