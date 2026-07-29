@@ -56,6 +56,11 @@ import type {
   WorkbenchThemeId,
 } from '@velaros-ai/workbench/models/settings/workbenchPreferences'
 
+import type {
+  WorkbenchAgentModsOverview,
+  WorkbenchAgentModStatus,
+  WorkbenchAgentModSummary,
+} from '../../../../../shared/workbenchAgentMods'
 import styles from '../../styles/workbenchPageStyles'
 import { useTimerScope } from '../../support/genericHooks'
 
@@ -66,6 +71,7 @@ type WorkbenchSettingsSectionId =
   | 'keymap'
   | 'language'
   | 'plugins'
+  | 'mods'
   | 'advanced'
 
 interface WorkbenchSettingsDialogProps {
@@ -181,6 +187,8 @@ export function WorkbenchSettingsDialog({
     useState<Nullable<WorkbenchProjectAiRulesResult>>(null)
   const [expandedProjectAiRulePath, setExpandedProjectAiRulePath] = useState<Nullable<string>>(null)
   const [isLoadingProjectAiRules, setIsLoadingProjectAiRules] = useState(false)
+  const [modsOverview, setModsOverview] = useState<Nullable<WorkbenchAgentModsOverview>>(null)
+  const [isLoadingModsOverview, setIsLoadingModsOverview] = useState(false)
   const [downloadedPluginIds, setDownloadedPluginIds] = useState<Set<string>>(() =>
     languagePluginRuntime.readDownloadedPluginIds()
   )
@@ -219,6 +227,11 @@ export function WorkbenchSettingsDialog({
         description: t('workbench.settingsPluginsDescription'),
       },
       {
+        id: 'mods' as const,
+        label: t('workbench.settingsMods'),
+        description: t('workbench.settingsModsDescription'),
+      },
+      {
         id: 'advanced' as const,
         label: t('workbench.settingsAdvanced'),
         description: t('workbench.settingsAdvancedDescription'),
@@ -247,6 +260,17 @@ export function WorkbenchSettingsDialog({
       setIsLoadingProjectAiRules(false)
     }
   }, [hostRuntime, project?.rootPath])
+
+  const refreshModsOverview = useCallback(async (): Promise<void> => {
+    setIsLoadingModsOverview(true)
+    try {
+      setModsOverview(await window.velarosWorkbenchAgentMods.getOverview())
+    } catch {
+      setModsOverview(null)
+    } finally {
+      setIsLoadingModsOverview(false)
+    }
+  }, [])
 
   const conflictedActions = useMemo(
     () => new Set(conflicts.flatMap((conflict) => conflict.actions)),
@@ -287,6 +311,12 @@ export function WorkbenchSettingsDialog({
 
     void refreshProjectAiRules()
   }, [activeSection, open, refreshProjectAiRules])
+
+  useEffect(() => {
+    if (!open || activeSection !== 'mods') return
+
+    void refreshModsOverview()
+  }, [activeSection, open, refreshModsOverview])
 
   useEffect(() => {
     const refresh = (): void => {
@@ -738,6 +768,136 @@ export function WorkbenchSettingsDialog({
     )
   }
 
+  function modStatusLabel(status: WorkbenchAgentModStatus): string {
+    switch (status) {
+      case 'active': {
+        return t('workbench.settingsModsStatusActive')
+      }
+      case 'partial': {
+        return t('workbench.settingsModsStatusPartial')
+      }
+      default: {
+        return t('workbench.settingsModsStatusRejected')
+      }
+    }
+  }
+
+  function modStatusTone(status: WorkbenchAgentModStatus): 'default' | 'success' | 'warning' {
+    if (status === 'active') return 'success'
+    if (status === 'partial') return 'warning'
+    return 'warning'
+  }
+
+  function renderModRow(mod: WorkbenchAgentModSummary): ReactElement {
+    return (
+      <div key={`${mod.origin}:${mod.modId}`} className={styles.workbenchSettingsAiRuleItem}>
+        <div className={styles.workbenchSettingsAiRuleRow}>
+          <span className={styles.workbenchSettingsAiRuleIcon}>
+            <PlugsConnectedIcon size={15} />
+          </span>
+          <span className={styles.workbenchSettingsAiRuleMain}>
+            <span className={styles.workbenchSettingsAiRuleHeader}>
+              <Text className={styles.workbenchSettingsAiRulePath}>
+                {mod.modId}
+                {mod.version ? ` · ${mod.version}` : ''}
+              </Text>
+              <span className={styles.workbenchSettingsAiRuleBadges}>
+                <WorkbenchSettingsPill tone={modStatusTone(mod.status)}>
+                  {modStatusLabel(mod.status)}
+                </WorkbenchSettingsPill>
+                {!!mod.absentAxes.length && (
+                  <WorkbenchSettingsPill tone="warning">
+                    {t('workbench.settingsModsAbsentAxes', { count: mod.absentAxes.length })}
+                  </WorkbenchSettingsPill>
+                )}
+                {!!mod.unroutedAxes.length && (
+                  <WorkbenchSettingsPill>
+                    {t('workbench.settingsModsUnroutedAxes', { count: mod.unroutedAxes.length })}
+                  </WorkbenchSettingsPill>
+                )}
+              </span>
+            </span>
+            {!!mod.reasons.length && (
+              <Text tone="caption" className={styles.workbenchSettingsRowDescription}>
+                {mod.reasons.join('; ')}
+              </Text>
+            )}
+          </span>
+        </div>
+      </div>
+    )
+  }
+
+  function renderModsSection(): ReactElement {
+    const mods = modsOverview?.mods ?? []
+    const diagnostics = modsOverview?.diagnostics ?? []
+
+    return (
+      <div className={styles.workbenchSettingsSectionPanel}>
+        {!!modsOverview?.degradedReason && (
+          <div className={styles.workbenchSettingsWarning}>
+            <WarningCircleIcon size={15} />
+            <Text>
+              {t('workbench.settingsModsDegraded', { reason: modsOverview.degradedReason })}
+            </Text>
+          </div>
+        )}
+        <SettingRow
+          title={t('workbench.settingsAiRulesRefresh')}
+          description={t('workbench.settingsModsReadOnlyHint')}
+        >
+          <IconButton
+            size="icon-sm"
+            variant="outline"
+            className={styles.workbenchSettingsSmallIconButton}
+            label={t('workbench.settingsAiRulesRefresh')}
+            title={t('workbench.settingsAiRulesRefresh')}
+            onClick={() => void refreshModsOverview()}
+          >
+            <ArrowCounterClockwiseIcon size={14} />
+          </IconButton>
+        </SettingRow>
+        {isLoadingModsOverview && !modsOverview ? (
+          <div className={styles.workbenchSettingsAiRulesEmpty}>
+            <Text>{t('workbench.settingsModsLoading')}</Text>
+          </div>
+        ) : mods.length ? (
+          <div className={styles.workbenchSettingsAiRuleList}>
+            {mods.map((mod) => renderModRow(mod))}
+          </div>
+        ) : (
+          <div className={styles.workbenchSettingsAiRulesEmpty}>
+            <Text className={styles.workbenchSettingsAiRulesEmptyTitle}>
+              {t('workbench.settingsModsEmpty')}
+            </Text>
+            <Text tone="caption" className={styles.workbenchSettingsAiRulesEmptyDescription}>
+              {t('workbench.settingsModsEmptyDescription')}
+            </Text>
+          </div>
+        )}
+        {!!diagnostics.length && (
+          <div className={styles.workbenchSettingsStackedField}>
+            <Text tone="caption" className={styles.workbenchSettingsRowTitle}>
+              {t('workbench.settingsModsDiagnosticsTitle')}
+            </Text>
+            <div className={styles.workbenchSettingsAiRuleList}>
+              {diagnostics.map((diagnostic, index) => (
+                <div
+                  key={`${diagnostic.code}:${diagnostic.modId ?? index}:${index}`}
+                  className={styles.workbenchSettingsAiRuleItem}
+                >
+                  <Text tone="caption" className={styles.workbenchSettingsRowDescription}>
+                    {diagnostic.message}
+                  </Text>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
   function renderAdvancedSection(): ReactElement {
     return (
       <div className={styles.workbenchSettingsSectionPanel}>
@@ -781,6 +941,9 @@ export function WorkbenchSettingsDialog({
       }
       case 'plugins': {
         return renderPluginsSection()
+      }
+      case 'mods': {
+        return renderModsSection()
       }
       default: {
         return renderAdvancedSection()

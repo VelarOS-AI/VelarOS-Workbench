@@ -1,4 +1,5 @@
 import type { WorkbenchProjectHubBridge } from './projectHub'
+import type { WorkbenchAgentModsBridge } from './workbenchAgentMods'
 import type { WorkbenchFsBridge } from './workbenchFs'
 import type { WorkbenchGitBridge } from './workbenchGit'
 import type { WorkbenchKernelBridge } from './workbenchKernel'
@@ -17,6 +18,7 @@ declare global {
     velarosWorkbenchTerminal: WorkbenchTerminalBridge
     velarosWorkbenchWatch: WorkbenchWatchBridge
     velarosWorkbenchWorkspace: WorkbenchWorkspaceBridge
+    velarosWorkbenchAgentMods: WorkbenchAgentModsBridge
   }
 }
 

@@ -11,6 +11,10 @@ import {
   type WorkbenchProjectHubBridge,
   WorkbenchProjectHubChannels,
 } from '../shared/projectHub'
+import {
+  type WorkbenchAgentModsBridge,
+  WorkbenchAgentModsChannels,
+} from '../shared/workbenchAgentMods'
 import { type WorkbenchFsBridge, WorkbenchFsChannels } from '../shared/workbenchFs'
 import { type WorkbenchGitBridge, WorkbenchGitChannels } from '../shared/workbenchGit'
 import { type WorkbenchKernelBridge, WorkbenchKernelChannels } from '../shared/workbenchKernel'
@@ -135,6 +139,10 @@ const workspaceBridge: WorkbenchWorkspaceBridge = {
   invoke: (request) => ipcRenderer.invoke(WorkbenchWorkspaceChannels.invoke, request),
 }
 
+const agentModsBridge: WorkbenchAgentModsBridge = {
+  getOverview: () => ipcRenderer.invoke(WorkbenchAgentModsChannels.getOverview),
+}
+
 contextBridge.exposeInMainWorld('velarosWorkbenchProjectHub', projectHubBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchFs', fsBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchLanguage', languageBridge)
@@ -143,6 +151,7 @@ contextBridge.exposeInMainWorld('velarosWorkbenchWatch', watchBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchGit', gitBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchKernel', kernelBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchWorkspace', workspaceBridge)
+contextBridge.exposeInMainWorld('velarosWorkbenchAgentMods', agentModsBridge)
 
 function subscribe<TPayload>(
   channel: string,
