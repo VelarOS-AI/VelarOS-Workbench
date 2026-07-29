@@ -2,6 +2,8 @@ import { join } from 'node:path'
 
 import { app, BrowserWindow } from 'electron'
 
+import { createWorkbenchAgentModPackReader } from './kernel/WorkbenchAgentModPackReader'
+import { WorkbenchAgentModRuntime } from './kernel/WorkbenchAgentModRuntime'
 import { WorkbenchKernelClientRuntime } from './kernel/WorkbenchKernelClientRuntime'
 import { registerWorkbenchKernelIpc } from './kernel/WorkbenchKernelIpc'
 import { WorkbenchProjectHub } from './projects/ProjectHub'
@@ -121,7 +123,21 @@ void app.whenReady().then(() => {
     kernelRuntime,
     providers.kernelRoutes
   )
-  void kernelRuntime.start()
+  // 两级注册机的宿主侧接缝：Loader 在 Kernel 起来后立即用一份 pack 清单装载一次。
+  // Workbench 目前没有进程内的 Agent 执行 runtime（聊天 100% 走 Kernel `velaros.agent`
+  // 能力），因此这份装载报告当前只服务未来设置页视图，不接任何本地消费面（见
+  // `WorkbenchAgentModRuntime` 类头注释）。
+  const agentModRuntime = new WorkbenchAgentModRuntime({
+    versions: {
+      // 对齐 Kernel module API 版本轴；与 `startOwnedKernel.ts` 里本地启动器用的版本号
+      // 是同一个常量的两处字面量，本文件不反向依赖那个启动器模块。
+      velarosVersion: '0.3.0',
+      agentApiVersion: '1.0.0',
+      shellVersion: app.getVersion(),
+    },
+    reader: createWorkbenchAgentModPackReader(),
+  })
+  void kernelRuntime.start().then(() => agentModRuntime.assembleFromKernel(kernelRuntime))
   const languageGrammarInstaller = new LanguageGrammarInstaller({
     installRoot: () => providers.parts.storagePaths.getLanguageGrammarsDir(),
   })

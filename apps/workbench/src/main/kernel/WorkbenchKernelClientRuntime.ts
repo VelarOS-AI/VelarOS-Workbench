@@ -3,9 +3,10 @@ import { randomUUID } from 'node:crypto'
 import {
   type ConnectedKernelDaemon,
   connectToKernelDaemon,
-  type KernelClientEventHandler,
   KernelClientError,
+  type KernelClientEventHandler,
   type KernelEventSubscription,
+  type KernelModPackDescriptor,
   KernelRpcClientError,
 } from '@velaros-ai/kernel-client'
 
@@ -184,6 +185,29 @@ export class WorkbenchKernelClientRuntime {
       })
     }
     return response.output
+  }
+
+  /**
+   * Kernel 报上来的 mod pack 清单；Kernel 不可达时返回空清单并留降级原因。
+   *
+   * 与 {@link invoke} 不同——这是 Kernel 自身的窄 RPC（第一级 Module Host 的 pack
+   * 目录），不是产品面绑定的领域 capability，因此不经域 capability 网关。
+   */
+  public async listMods(): Promise<{
+    packs: readonly KernelModPackDescriptor[]
+    error: Nullable<string>
+  }> {
+    const connected = this.connected
+    if (!connected) return { packs: [], error: 'VelarOS Kernel is not connected.' }
+    try {
+      const response = await connected.client.listMods()
+      return { packs: response.packs, error: null }
+    } catch (error) {
+      return {
+        packs: [],
+        error: error instanceof Error ? error.message : String(error),
+      }
+    }
   }
 
   public async dispose(): Promise<void> {
