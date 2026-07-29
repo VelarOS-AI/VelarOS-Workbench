@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 
 import {
+  type CapabilitySession,
   type ConnectedKernelDaemon,
   connectToKernelDaemon,
   KernelClientError,
@@ -74,6 +75,7 @@ export class WorkbenchKernelClientRuntime {
   private readonly listeners = new Set<WorkbenchKernelStatusListener>()
   private readonly eventListeners = new Map<string, Set<WorkbenchKernelEventListener>>()
   private readonly eventSubscriptions = new Map<string, KernelEventSubscription>()
+  private capabilitySession?: CapabilitySession
   private status: WorkbenchKernelStatus = initialStatus
   private connected?: ConnectedKernelDaemon
   private ownedKernel?: WorkbenchOwnedKernelRuntime
@@ -138,11 +140,11 @@ export class WorkbenchKernelClientRuntime {
   }
 
   /**
-   * Calls an injected capability address without learning any domain schema.
+   * Calls a Kernel capability address through the bound capability session.
    *
    * Domain ids and operations are owned by the product composition root. This
-   * runtime only validates availability and transports the generic Kernel
-   * envelope.
+   * runtime opens a session for available capabilities and transports the
+   * generic Kernel envelope.
    */
   public async invoke(
     address: WorkbenchKernelCapabilityAddress,
@@ -168,7 +170,8 @@ export class WorkbenchKernelClientRuntime {
       })
     }
 
-    const response = await connected.client.call({
+    const session = await this.ensureCapabilitySession(connected)
+    const response = await session.call({
       protocolVersion: 2,
       callId: this.nextCallId(),
       capabilityId: address.capabilityId,
@@ -188,10 +191,10 @@ export class WorkbenchKernelClientRuntime {
   }
 
   /**
-   * Kernel 报上来的 mod pack 清单；Kernel 不可达时返回空清单并留降级原因。
+   * Kernel 报上来的 mod pack 清单; Kernel 不可达时返回空清单并留降级原因.
    *
    * 与 {@link invoke} 不同——这是 Kernel 自身的窄 RPC（第一级 Module Host 的 pack
-   * 目录），不是产品面绑定的领域 capability，因此不经域 capability 网关。
+   * 目录），不是产品面绑定的领域 capability，因此不经 capability session 网关。
    */
   public async listMods(): Promise<{
     packs: readonly KernelModPackDescriptor[]
@@ -216,6 +219,7 @@ export class WorkbenchKernelClientRuntime {
     await this.inFlight?.catch(() => undefined)
     const connected = this.connected
     this.connected = undefined
+    await this.disposeCapabilitySession()
     await this.disposeEventSubscriptions()
     await connected?.client.dispose()
     const ownedKernel = this.ownedKernel
@@ -247,6 +251,7 @@ export class WorkbenchKernelClientRuntime {
 
       const previous = this.connected
       await this.disposeEventSubscriptions()
+      await this.disposeCapabilitySession()
       this.connected = nextConnection
       await Promise.all([...this.eventListeners.keys()].map((eventType) =>
         this.installEventSubscription(eventType).catch(() => undefined)))
@@ -310,6 +315,7 @@ export class WorkbenchKernelClientRuntime {
       }
       const previous = this.connected
       this.connected = undefined
+      await this.disposeCapabilitySession()
       await this.disposeEventSubscriptions()
       if (previous) {
         await Promise.resolve(previous.client.dispose()).catch(() => undefined)
@@ -395,6 +401,51 @@ export class WorkbenchKernelClientRuntime {
     this.eventSubscriptions.clear()
     await Promise.all(subscriptions.map((subscription) =>
       Promise.resolve(subscription.dispose()).catch(() => undefined)))
+  }
+
+  private async ensureCapabilitySession(
+    connected: ConnectedKernelDaemon,
+  ): Promise<CapabilitySession> {
+    if (this.capabilitySession !== undefined) return this.capabilitySession
+    const requires = this.status.capabilities.map((capability) => ({
+      capabilityId: capability.id,
+      operations: null as string[] | null,
+      scope: null,
+    }))
+    if (requires.length === 0) {
+      throw new WorkbenchKernelInvocationFailure({
+        code: 'KERNEL_CAPABILITY_UNAVAILABLE',
+        message: 'Kernel daemon has no capabilities to bind.',
+        retryable: true,
+        details: null,
+      })
+    }
+    try {
+      this.capabilitySession = await connected.client.openCapabilitySession({
+        requires,
+      })
+      return this.capabilitySession
+    } catch (error) {
+      const code = typeof error === 'object' && error !== null
+        && typeof Reflect.get(error, 'code') === 'string'
+        ? Reflect.get(error, 'code') as string
+        : 'CAPABILITY_BIND_DENIED'
+      const message = error instanceof Error
+        ? error.message
+        : 'Capability session could not be opened'
+      throw new WorkbenchKernelInvocationFailure({
+        code,
+        message,
+        retryable: true,
+        details: null,
+      })
+    }
+  }
+
+  private async disposeCapabilitySession(): Promise<void> {
+    const session = this.capabilitySession
+    this.capabilitySession = undefined
+    await session?.dispose().catch(() => undefined)
   }
 }
 
