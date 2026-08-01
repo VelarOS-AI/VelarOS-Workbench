@@ -36,7 +36,3 @@ Thumbs.db
 .velaros-workspace
 .tmp
 tmp/
-dist-plugins
-release
-release-stage
-out
