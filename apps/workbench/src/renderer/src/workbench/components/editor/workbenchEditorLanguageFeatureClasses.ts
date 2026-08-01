@@ -1,4 +1,4 @@
-import type { WorkbenchEditorLanguageFeatureClasses } from '@velaros-ai/workbench/models/editor/workbenchCodeMirrorLanguageFeatures'
+import type { WorkbenchEditorLanguageFeatureClasses } from '@workbench/models/editor/workbenchCodeMirrorLanguageFeatures'
 
 import styles from '../../styles/workbenchPageStyles'
 

@@ -1,6 +1,5 @@
 import { type MutableRefObject, useEffect } from 'react'
-
-import type { SystemWorkspaceFilesChangedEvent } from '@velaros-ai/workbench/contracts'
+import type { SystemWorkspaceFilesChangedEvent } from '@workbench/contracts'
 
 import { useMemoizedFn } from './genericHooks'
 

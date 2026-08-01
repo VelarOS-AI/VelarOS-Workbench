@@ -16,7 +16,21 @@ const appRoot = path.join(
   'Resources',
   'app.asar'
 )
-await access(appRoot)
+
+async function waitForPackagedApp(filePath, timeoutMs = 5_000) {
+  const deadline = Date.now() + timeoutMs
+  while (true) {
+    try {
+      await access(filePath)
+      return
+    } catch (error) {
+      if (error?.code !== 'ENOENT' || Date.now() >= deadline) throw error
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    }
+  }
+}
+
+await waitForPackagedApp(appRoot)
 const appPackage = JSON.parse(
   await readFile(path.resolve('apps/workbench/package.json'), 'utf8')
 )
@@ -31,6 +45,19 @@ if (packagedApp.version !== appPackage.version) {
     + `does not match expected ${appPackage.version}.`
   )
 }
+for (const bundledRuntimeFile of [
+  'node_modules/pyright/package.json',
+  'node_modules/pyright/langserver.index.js',
+  'out/main/workbench-language-worker.js',
+]) {
+  const contents = extractFile(appRoot, bundledRuntimeFile)
+  if (contents.length === 0)
+    throw new Error(`Packaged app runtime file is empty: ${bundledRuntimeFile}`)
+}
+const languageWorker = extractFile(appRoot, 'out/main/workbench-language-worker.js').toString('utf8')
+if (!languageWorker.includes('velarscript')) {
+  throw new Error('Packaged Workbench language worker is missing the built-in Velar contribution.')
+}
 console.log(
-  `Verified unsigned packaged app ${appPackage.version}: ${appRoot}`
+  `Verified unsigned packaged app ${appPackage.version} with bundled Pyright and built-in Velar support: ${appRoot}`
 )

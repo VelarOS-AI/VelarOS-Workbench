@@ -7,14 +7,14 @@ import { defineConfig } from 'electron-vite'
 /**
  * 独立 VelarOS Workbench 应用的 electron-vite 构建入口。
  *
- * 本仓 Workbench 包在开发时解析到源码；跨仓依赖始终经已发布包入口解析，
- * 避免独立应用偷偷依赖 sibling 仓目录。需要联调时先运行显式 `link:local`。
+ * Workbench 产品内核已拆包并收归应用源码；跨仓 Platform 依赖仍经正式包入口解析，
+ * 需要联调时先运行显式 `link:local`。
  */
 const appDir = dirname(fileURLToPath(import.meta.url))
 const repoRoot = resolve(appDir, '../..')
 
-function pkg(...segments: string[]): string {
-  return resolve(repoRoot, 'packages', ...segments)
+function workbenchSource(...segments: string[]): string {
+  return resolve(appDir, 'src/workbench', ...segments)
 }
 
 export default defineConfig({
@@ -35,12 +35,12 @@ export default defineConfig({
       },
     },
     resolve: {
-      // @velaros-ai/workbench 走本仓源码（避免命中 stale dist），与 renderer 同判；
+      // @workbench 是应用内产品源码别名，与 renderer 同判；
       // @velaros-ai/core 仍经 node_modules dist 解析并打进 bundle（与 main 既有行为一致）。
       extensions: ['.ts', '.tsx', '.mts', '.js', '.mjs', '.json'],
       alias: [
-        { find: /^@velaros-ai\/workbench$/, replacement: pkg('workbench/src/index.ts') },
-        { find: /^@velaros-ai\/workbench\/(.+)$/, replacement: pkg('workbench/src/$1') },
+        { find: /^@workbench$/, replacement: workbenchSource('index.ts') },
+        { find: /^@workbench\/(.+)$/, replacement: workbenchSource('$1') },
       ],
     },
   },
@@ -72,8 +72,8 @@ export default defineConfig({
     resolve: {
       extensions: ['.ts', '.tsx', '.mts', '.js', '.mjs', '.json'],
       alias: [
-        { find: /^@velaros-ai\/workbench$/, replacement: pkg('workbench/src/index.ts') },
-        { find: /^@velaros-ai\/workbench\/(.+)$/, replacement: pkg('workbench/src/$1') },
+        { find: /^@workbench$/, replacement: workbenchSource('index.ts') },
+        { find: /^@workbench\/(.+)$/, replacement: workbenchSource('$1') },
       ],
     },
     plugins: [react()],

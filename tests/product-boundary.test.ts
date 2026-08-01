@@ -1,42 +1,41 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 
-import type { SystemLocalAttachmentFileResult } from '@velaros-ai/workbench/contracts'
+import type { SystemLocalAttachmentFileResult } from '@workbench/contracts'
 
-import { WorkbenchRuntime } from '../packages/workbench/src/composition/WorkbenchRuntime'
+import { WorkbenchRuntime } from '../apps/workbench/src/workbench/composition/WorkbenchRuntime'
 import {
   installWorkbenchHost,
   type WorkbenchHost,
   workbenchHost,
   WorkbenchHostRuntime,
-} from '../packages/workbench/src/host/WorkbenchHost'
-import { WorkbenchCommentStore } from '../packages/workbench/src/models/comments/workbenchCommentStore'
-import { WorkbenchLanguagePluginInstallRuntime } from '../packages/workbench/src/models/editor/workbenchLanguagePluginInstallState'
+} from '../apps/workbench/src/workbench/host/WorkbenchHost'
+import { WorkbenchCommentStore } from '../apps/workbench/src/workbench/models/comments/workbenchCommentStore'
 import {
   buildWorkbenchGitChangeItems,
   buildWorkbenchGitCommitDraft,
   buildWorkbenchGitDecorationMap,
-} from '../packages/workbench/src/models/git/workbenchGitModel'
+} from '../apps/workbench/src/workbench/models/git/workbenchGitModel'
 import {
   buildWorkbenchKeymapConflicts,
   DEFAULT_WORKBENCH_KEYBOARD_SHORTCUT_MAP,
-} from '../packages/workbench/src/models/layout/workbenchKeyboardShortcuts'
+} from '../apps/workbench/src/workbench/models/layout/workbenchKeyboardShortcuts'
 import {
   buildLightEditorTab,
   resolveOfficePreviewKind,
   saveLightEditorTab,
-} from '../packages/workbench/src/models/lightEditorModel'
+} from '../apps/workbench/src/workbench/models/lightEditorModel'
 import {
   createWorkbenchProject,
   readWorkbenchProjects,
   saveWorkbenchProjects,
-} from '../packages/workbench/src/models/project/workbenchProjects'
+} from '../apps/workbench/src/workbench/models/project/workbenchProjects'
 import {
   createLocalStorageJsonStore,
   JsonStorageStore,
   type LocalStorageJsonStore,
   type StorageLike,
-} from '../packages/workbench/src/persistence/localStorageJsonStore'
+} from '../apps/workbench/src/workbench/persistence/localStorageJsonStore'
 
 function createHost(marker: string): WorkbenchHost {
   return {
@@ -170,64 +169,6 @@ void describe('Workbench product boundary', () => {
     assert.equal(second.getSnapshot().length, 0)
     unsubscribe()
     first.dispose()
-    second.dispose()
-  })
-
-  void test('language plugin runtimes release their host subscriptions', async () => {
-    let firstListener: ((catalog: {
-      generatedAt: number
-      runtimeGlobal: string
-      grammars: Array<{ id: string; installed: boolean }>
-    }) => void) | undefined
-    let unsubscribed = 0
-    const firstHost = createHost('first')
-    firstHost.kernel.project.listWorkbenchLanguageGrammars = async () =>
-      ({
-        ok: true,
-        data: { generatedAt: 1, runtimeGlobal: 'one', grammars: [] },
-      }) as never
-    firstHost.kernel.project.onWorkbenchLanguageGrammarsChanged = (listener) => {
-      firstListener = listener
-      return () => {
-        unsubscribed += 1
-      }
-    }
-    firstHost.kernel.project.installWorkbenchLanguageGrammar = async () =>
-      ({
-        ok: true,
-        data: { generatedAt: 2, runtimeGlobal: 'one', grammars: [] },
-      }) as never
-    const secondHost = createHost('second')
-    secondHost.kernel.project.listWorkbenchLanguageGrammars = async () =>
-      ({
-        ok: true,
-        data: { generatedAt: 1, runtimeGlobal: 'two', grammars: [] },
-      }) as never
-    secondHost.kernel.project.onWorkbenchLanguageGrammarsChanged = () => () => undefined
-    secondHost.kernel.project.installWorkbenchLanguageGrammar = async () =>
-      ({
-        ok: true,
-        data: { generatedAt: 2, runtimeGlobal: 'two', grammars: [] },
-      }) as never
-
-    const first = new WorkbenchLanguagePluginInstallRuntime({
-      hostRuntime: new WorkbenchHostRuntime(firstHost),
-    })
-    const second = new WorkbenchLanguagePluginInstallRuntime({
-      hostRuntime: new WorkbenchHostRuntime(secondHost),
-    })
-
-    first.readDownloadedPluginIds()
-    firstListener?.({
-      generatedAt: 3,
-      runtimeGlobal: 'one',
-      grammars: [{ id: 'typescript', installed: true }],
-    })
-
-    assert.deepEqual([...first.readDownloadedPluginIds()], ['typescript'])
-    assert.deepEqual([...second.readDownloadedPluginIds()], [])
-    first.dispose()
-    assert.equal(unsubscribed, 1)
     second.dispose()
   })
 

@@ -14,9 +14,9 @@ import {
   TerminalWindowIcon,
   WarningCircleIcon,
 } from '@phosphor-icons/react'
+import { WorkbenchChatPanel } from '@workbench/components/chat/WorkbenchChatPanel'
 
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
-import { WorkbenchChatPanel } from '@velaros-ai/workbench/components/chat/WorkbenchChatPanel'
 
 import { StatusBar } from './components/chrome/StatusBar'
 import { WorkbenchTopTrailing } from './components/chrome/TopToolbar'

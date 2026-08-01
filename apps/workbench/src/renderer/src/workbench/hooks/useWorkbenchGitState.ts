@@ -1,16 +1,15 @@
 import { useEffect, useMemo } from 'react'
-
 import {
   buildWorkbenchGitChangeItems,
   buildWorkbenchGitDecorationMap,
   EMPTY_WORKBENCH_GIT_DECORATIONS,
-} from '@velaros-ai/workbench/models/git/workbenchGitModel'
+} from '@workbench/models/git/workbenchGitModel'
 import {
   buildWorkbenchGitTopBarSummary,
   resolveWorkbenchCanShowGitBranchControl,
   resolveWorkbenchHasGitRepository,
-} from '@velaros-ai/workbench/models/git/workbenchGitTopBarModel'
-import type { WorkbenchProject } from '@velaros-ai/workbench/models/project/workbenchProjects'
+} from '@workbench/models/git/workbenchGitTopBarModel'
+import type { WorkbenchProject } from '@workbench/models/project/workbenchProjects'
 
 import { useLatest } from '../support/genericHooks'
 import { useWorkspaceGitLineStats } from '../support/useWorkspaceGitLineStats'

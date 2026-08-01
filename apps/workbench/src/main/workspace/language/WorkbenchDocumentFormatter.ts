@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, isAbsolute, join, relative, sep } from 'node:path'
 
-import type { WorkbenchLanguageServiceTextEdit } from '@velaros-ai/workbench/contracts'
+import type { WorkbenchLanguageServiceTextEdit } from '@workbench/contracts'
 
 /**
  * 文档格式化：**项目 Prettier 优先，内置规则回退**。

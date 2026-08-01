@@ -25,12 +25,6 @@ import { WorkbenchModService } from './kernel/WorkbenchModService'
 import { WorkbenchProjectHub } from './projects/ProjectHub'
 import { registerProjectHubIpc } from './projects/ProjectHubIpc'
 import { installProjectHubMenu } from './projects/ProjectHubMenu'
-import { LanguageGrammarInstaller } from './resources/LanguageGrammarInstaller'
-import { registerLanguageGrammarIpc } from './resources/LanguageGrammarIpc'
-import {
-  registerLanguageGrammarProtocol,
-  registerLanguageGrammarScheme,
-} from './resources/languageGrammarProtocol'
 import { registerWorkbenchGitIpc } from './workspace/git/WorkbenchGitIpc'
 import { registerWorkbenchLanguageServiceIpc } from './workspace/language/WorkbenchLanguageServiceIpc'
 import { registerWorkbenchTerminalIpc } from './workspace/terminal/WorkbenchTerminalIpc'
@@ -56,7 +50,6 @@ const WorkbenchWindowWidth = 1280
 const WorkbenchWindowHeight = 800
 
 app.setName(WorkbenchProductName)
-registerLanguageGrammarScheme()
 
 function resolveWorkbenchDataRootDir(): string {
   const isDevelopment = process.env['NODE_ENV'] === 'development' || !app.isPackaged
@@ -166,11 +159,6 @@ void app.whenReady().then(() => {
     .finally(() => {
       broadcastWorkbenchKernelStatus(kernelRuntime)
     })
-  const languageGrammarInstaller = new LanguageGrammarInstaller({
-    installRoot: () => providers.parts.storagePaths.getLanguageGrammarsDir(),
-  })
-  registerLanguageGrammarProtocol(languageGrammarInstaller)
-  const disposeLanguageGrammarIpc = registerLanguageGrammarIpc(languageGrammarInstaller)
   registerWorkbenchFsIpc(providers.fileSystem, providers.parts)
   registerWorkbenchTerminalIpc(providers.parts.terminal)
   registerWorkbenchGitIpc(providers.git)
@@ -188,7 +176,6 @@ void app.whenReady().then(() => {
     // Electron 不等待 async listener：第一次 before-quit 必须拦住退出，待子进程与 worker
     // 真正收口后再触发第二次 quit；shutdownStarted 让第二次事件直接放行。
     disposeWatchIpc()
-    disposeLanguageGrammarIpc()
     disposeAgentModIpc()
     disposeKernelIpc()
     disposeWorkspaceIpc()

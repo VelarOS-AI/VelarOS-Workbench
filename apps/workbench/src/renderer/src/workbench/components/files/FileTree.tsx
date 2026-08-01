@@ -7,12 +7,8 @@ import {
   useRef,
   useState,
 } from 'react'
-import type { NodeApi, NodeRendererProps, TreeApi } from 'react-arborist'
-import { Tree } from 'react-arborist'
-
-import { isBlank, isEmpty } from '@velaros-ai/core'
-import type { WorkbenchDirectoryEntry } from '@velaros-ai/workbench/contracts'
-import { useWorkbenchI18n } from '@velaros-ai/workbench/i18n'
+import type { WorkbenchDirectoryEntry } from '@workbench/contracts'
+import { useWorkbenchI18n } from '@workbench/i18n'
 import {
   buildTreeNodes,
   createOpenState,
@@ -20,9 +16,13 @@ import {
   ROW_HEIGHT,
   TREE_INDENT,
   TREE_OVERSCAN_COUNT,
-} from '@velaros-ai/workbench/models/files/fileTree.model'
-import type { WorkbenchGitDecorationMap } from '@velaros-ai/workbench/models/git/workbenchGitModel'
-import { ROOT_PATH } from '@velaros-ai/workbench/models/shared/workbenchUtils'
+} from '@workbench/models/files/fileTree.model'
+import type { WorkbenchGitDecorationMap } from '@workbench/models/git/workbenchGitModel'
+import { ROOT_PATH } from '@workbench/models/shared/workbenchUtils'
+import type { NodeApi, NodeRendererProps, TreeApi } from 'react-arborist'
+import { Tree } from 'react-arborist'
+
+import { isBlank, isEmpty } from '@velaros-ai/core'
 
 import { useFileTreeActions } from '../../hooks/useFileTreeActions'
 import styles from '../../styles/workbenchPageStyles'

@@ -1,10 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
-
-import { Log, toNullable } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
-import { Result } from '@velaros-ai/core/result'
-import type { SystemOverview } from '@velaros-ai/workbench/contracts'
-import { workbenchHost } from '@velaros-ai/workbench/host'
+import type { SystemOverview } from '@workbench/contracts'
+import { workbenchHost } from '@workbench/host'
 import {
   createWorkbenchProject,
   getWorkbenchSessionId,
@@ -13,8 +9,12 @@ import {
   readWorkbenchProjects,
   saveWorkbenchProjects,
   type WorkbenchProject,
-} from '@velaros-ai/workbench/models/project/workbenchProjects'
-import { sortProjects } from '@velaros-ai/workbench/models/shared/workbenchUtils'
+} from '@workbench/models/project/workbenchProjects'
+import { sortProjects } from '@workbench/models/shared/workbenchUtils'
+
+import { Log, toNullable } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
+import { Result } from '@velaros-ai/core/result'
 
 import { useStableWorkbenchMessageTranslate } from '../runtime/useStableWorkbenchMessaging'
 import { useLatest, useMemoizedFn } from '../support/genericHooks'

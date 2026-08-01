@@ -1,5 +1,3 @@
-import { AppError, Result } from '@velaros-ai/core'
-import type { Result as ResultType } from '@velaros-ai/core/result'
 import type {
   SystemOverview,
   WorkbenchIndexProjectRequest,
@@ -8,9 +6,12 @@ import type {
   WorkbenchProjectAiRuleFile,
   WorkbenchProjectAiRuleSource,
   WorkbenchProjectAiRulesResult,
-} from '@velaros-ai/workbench/contracts'
-import { installWorkbenchHost, type WorkbenchHost } from '@velaros-ai/workbench/host'
-import { WorkbenchRuntime } from '@velaros-ai/workbench/runtime'
+} from '@workbench/contracts'
+import { installWorkbenchHost, type WorkbenchHost } from '@workbench/host'
+import { WorkbenchRuntime } from '@workbench/runtime'
+
+import { AppError, Result } from '@velaros-ai/core'
+import type { Result as ResultType } from '@velaros-ai/core/result'
 
 import type { WorkbenchFsCallResult } from '../../../shared/workbenchFs'
 import type {
@@ -453,12 +454,6 @@ const standaloneWorkbenchHost: WorkbenchHost = {
       onWorkbenchProjectAiIndexStatusChanged: () => noopUnsubscribe,
       onWorkbenchEditorCommand: () => noopUnsubscribe,
       acknowledgeWorkbenchEditorCommand: () => Promise.resolve(Result.ok(undefined)),
-      listWorkbenchLanguageGrammars: async () =>
-        toHostResult(await window.velarosWorkbenchLanguage.listGrammars()),
-      installWorkbenchLanguageGrammar: async (request) =>
-        toHostResult(await window.velarosWorkbenchLanguage.installGrammar(request)),
-      onWorkbenchLanguageGrammarsChanged: (listener) =>
-        window.velarosWorkbenchLanguage.onGrammarsChanged(listener),
     },
     sessions: {
       loadOlderMessages: (request) => Promise.resolve(Result.ok({
@@ -649,7 +644,6 @@ export function installStandaloneWorkbenchHost(): WorkbenchRuntime {
   installWorkbenchHost(standaloneWorkbenchHost)
   return new WorkbenchRuntime({
     host: standaloneWorkbenchHost,
-    legacyLanguagePluginEventTarget: window,
   })
 }
 

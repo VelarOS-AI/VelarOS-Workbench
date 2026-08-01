@@ -1,4 +1,3 @@
-import type { SerializedError } from '@velaros-ai/core/error'
 import type {
   WorkbenchLanguageServiceCompletionResult,
   WorkbenchLanguageServiceDefinitionResult,
@@ -16,7 +15,9 @@ import type {
   WorkbenchLanguageServiceRequest,
   WorkbenchLanguageServiceResolveResult,
   WorkbenchLanguageServiceSignatureHelpQueryResult,
-} from '@velaros-ai/workbench/contracts'
+} from '@workbench/contracts'
+
+import type { SerializedError } from '@velaros-ai/core/error'
 
 export interface WorkbenchLanguageServiceProjectRequest {
   projectRoot: string

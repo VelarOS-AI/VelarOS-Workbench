@@ -2,7 +2,7 @@
  * 独立 Workbench 应用的通知 + 本地化组合适配器
  * （对位 desktop `@/runtime/workbench/useStableWorkbenchMessaging`，返回面形状逐字一致）。
  */
-import { useWorkbenchI18n } from '@velaros-ai/workbench/i18n'
+import { useWorkbenchI18n } from '@workbench/i18n'
 
 import { useLatest } from '../support/genericHooks'
 

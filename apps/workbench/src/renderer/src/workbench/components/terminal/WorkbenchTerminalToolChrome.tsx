@@ -15,17 +15,17 @@ import {
   StopIcon,
   XIcon,
 } from '@phosphor-icons/react'
+import { useWorkbenchTerminalCompletionInteractions } from '@workbench/components/terminal/useWorkbenchTerminalCompletionInteractions'
+import { useWorkbenchI18n } from '@workbench/i18n'
+import type { WorkbenchCommandHistoryItem } from '@workbench/models/commands/workbenchCommandHistory'
+import type { WorkbenchTerminalSessionView } from '@workbench/models/commands/workbenchCommandLines'
+import type { WorkbenchRunConfiguration } from '@workbench/models/commands/workbenchRunConfigurations'
+import { formatWorkbenchTerminalPrompt } from '@workbench/models/commands/workbenchTerminalPresentation'
+import type { WorkbenchProjectContextFile } from '@workbench/models/project/workbenchProjectContextIndex'
 
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 import { Paragraph } from '@velaros-ai/ui/primitives/display/Paragraph'
 import { ScrollArea } from '@velaros-ai/ui/primitives/layout/ScrollArea'
-import { useWorkbenchTerminalCompletionInteractions } from '@velaros-ai/workbench/components/terminal/useWorkbenchTerminalCompletionInteractions'
-import { useWorkbenchI18n } from '@velaros-ai/workbench/i18n'
-import type { WorkbenchCommandHistoryItem } from '@velaros-ai/workbench/models/commands/workbenchCommandHistory'
-import type { WorkbenchTerminalSessionView } from '@velaros-ai/workbench/models/commands/workbenchCommandLines'
-import type { WorkbenchRunConfiguration } from '@velaros-ai/workbench/models/commands/workbenchRunConfigurations'
-import { formatWorkbenchTerminalPrompt } from '@velaros-ai/workbench/models/commands/workbenchTerminalPresentation'
-import type { WorkbenchProjectContextFile } from '@velaros-ai/workbench/models/project/workbenchProjectContextIndex'
 
 import styles from '../../styles/workbenchPageStyles'
 

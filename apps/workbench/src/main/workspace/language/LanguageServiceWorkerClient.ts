@@ -1,13 +1,14 @@
 import { resolve } from 'node:path'
 import { Worker } from 'node:worker_threads'
 
-import { AppError } from '@velaros-ai/core/error'
 import type {
   WorkbenchLanguageServiceInlayHintsRequest,
   WorkbenchLanguageServicePositionRequest,
   WorkbenchLanguageServiceRenameRequest,
   WorkbenchLanguageServiceRequest,
-} from '@velaros-ai/workbench/contracts'
+} from '@workbench/contracts'
+
+import { AppError } from '@velaros-ai/core/error'
 
 import type {
   WorkbenchLanguageServiceProjectFileRequest,

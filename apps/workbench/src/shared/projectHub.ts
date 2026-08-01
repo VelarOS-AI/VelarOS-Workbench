@@ -3,7 +3,7 @@
  *
  * 起手页（欢迎页）与应用菜单共用这一面：最近项目持久化、目录校验与项目创建都在 main 侧
  * 服务完成，renderer 只投影 `WorkbenchProjectHubState` 并发起动作。本契约刻意不进
- * `@velaros-ai/workbench` 产品包——它是独立应用的宿主入口形态，没有第二个消费者；
+ * `@workbench` 产品包——它是独立应用的宿主入口形态，没有第二个消费者；
  * kernel-protocol 客户端接入后，项目打开链路若上移到 kernel 会话面，本契约随之重审。
  */
 

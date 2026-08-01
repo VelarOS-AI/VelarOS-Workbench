@@ -10,7 +10,6 @@ import { join } from 'node:path'
 
 const WorkbenchStorageDirectory = {
   localHistory: 'workbench-local-history',
-  languageGrammars: 'language-grammars',
   /** mod pack 安装根 + 注册表（P6：Workbench 自持 mod 单 owner）。 */
   modPacks: 'mods',
 } as const
@@ -24,10 +23,6 @@ class WorkbenchAppStoragePaths {
 
   public getWorkbenchLocalHistoryDir(): string {
     return this.ensureDir(join(this.dataRootDir, WorkbenchStorageDirectory.localHistory))
-  }
-
-  public getLanguageGrammarsDir(): string {
-    return this.ensureDir(join(this.dataRootDir, WorkbenchStorageDirectory.languageGrammars))
   }
 
   /** mod pack 安装根；扫描此目录的每个子目录取 velaros.mod.json。 */

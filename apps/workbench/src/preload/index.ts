@@ -84,11 +84,6 @@ const languageBridge: WorkbenchLanguageBridge = {
   getDocumentHighlights: (request) =>
     ipcRenderer.invoke(WorkbenchLanguageChannels.documentHighlights, request),
   getInlayHints: (request) => ipcRenderer.invoke(WorkbenchLanguageChannels.inlayHints, request),
-  listGrammars: () => ipcRenderer.invoke(WorkbenchLanguageChannels.listGrammars),
-  installGrammar: (request) =>
-    ipcRenderer.invoke(WorkbenchLanguageChannels.installGrammar, request),
-  onGrammarsChanged: (listener) =>
-    subscribe(WorkbenchLanguageChannels.grammarsChanged, listener),
 }
 
 const watchBridge: WorkbenchWatchBridge = {

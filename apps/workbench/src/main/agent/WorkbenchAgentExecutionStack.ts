@@ -2,11 +2,10 @@ import type { ModelMessage } from 'ai'
 
 import {
   type AgentExecutionConfig,
-  AgentHistoryHelper,
   type AgentModSeamDispatcher,
   CodingSessionTracker,
-  ContextAttentionSessionRegistry,
   ContextBuilder,
+  ContextGovernanceSessionRegistry,
   createBuiltInPromptRegistry,
   defaultRuntimePromptFeaturePolicy,
   type ExecutionEventBus,
@@ -77,10 +76,9 @@ class WorkbenchAgentExecutionStack {
   private readonly log = Log.tag('WorkbenchAgentExecutionStack')
   private readonly modelComposition = createModelRuntimeComposition()
   private readonly runtimeHelper: ModelRuntime
-  private readonly historyHelper = new AgentHistoryHelper()
   private readonly runContextHelper: RunContext
   private readonly primaryAgentProfile: PrimaryAgentProfile
-  private readonly contextAttentionSessions = new ContextAttentionSessionRegistry()
+  private readonly contextGovernanceSessions = new ContextGovernanceSessionRegistry()
   private readonly sessions = new Map<string, WorkbenchAgentSession>()
   private readonly loops = new Map<string, SoloStreamLoop<never, never>>()
 
@@ -174,8 +172,8 @@ class WorkbenchAgentExecutionStack {
 
     const created = new SoloStreamLoop(
       this.runtimeHelper as never,
-      new TurnRunner(registry as never, this.contextAttentionSessions) as never,
-      this.historyHelper,
+      new TurnRunner(registry as never, this.contextGovernanceSessions) as never,
+      this.contextGovernanceSessions,
       this.runContextHelper as never,
       registry as never,
       null,

@@ -98,7 +98,7 @@ provider 生命周期。所有工具全程可见、全程可调。
 ## 5. 门与探针
 
 ```bash
-bun run check                          # boundaries → package-contracts → typecheck → lint → test → probes → build:app
+bun run check                          # boundaries → typecheck → lint → test → probes → build:app
 bun run --cwd apps/workbench probe:kernel-host   # 进程内 Kernel + 执行栈构造级冒烟
 bun run --cwd apps/workbench probe:agent-mods    # 两级注册机装载报告
 ```

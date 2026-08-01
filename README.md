@@ -1,13 +1,14 @@
 # VelarOS-Workbench
 
-VelarOS Workbench is the independently releasable IDE product in the VelarOS ecosystem. It owns
+VelarOS Workbench is the independently releasable IDE application in the VelarOS ecosystem. It owns
 project navigation, editing, language intelligence, Git, terminals, run surfaces and local project
 history while consuming the shared VelarOS Kernel contracts and `@velaros-ai/ui`.
 
-This repository contains two workspace units:
+The repository has one workspace unit: `apps/workbench`. All product code lives below its `src/`:
 
-- `apps/workbench`: the Electron application and its main/preload/renderer adapters.
-- `packages/workbench`: renderer-neutral product contracts, models, hooks and composition ports.
+- `src/main`, `src/preload`, and `src/renderer` contain the Electron host and UI entry points.
+- `src/workbench` contains the product contracts, models, controllers and composition code.
+- `src/contributions/velar` contains the built-in Velar editor contribution.
 
 The repository intentionally has no dependency on VelarOS Desktop internals. Shared VelarOS packages
 come from the `VelarOS-Platform` single repository (`bun run link:local` for local checkouts); the app
@@ -25,15 +26,25 @@ capabilities this host deliberately does not have yet.
 
 ## Development
 
+Workbench 的 VelarOS 包发布在 GitHub Packages。在 VelarOS 多仓源码环境中，先把
+同级 `VelarOS-Platform` 包登记为本地链接，再按锁文件安装其余依赖；`bootstrap:local`
+会按这个顺序完成初始化，不需要 GitHub Packages 凭据。
+
 ```bash
-bun install --frozen-lockfile
+bun run bootstrap:local
 bun run check
 bun run dev
 ```
 
-Downloadable CodeMirror grammar artifacts are produced with `bun run package:grammars`. Set
-`VELAROS_WORKBENCH_ARTIFACT_BASE=file:///absolute/path/to/dist-plugins/` to exercise installation
-without a remote release.
+独立安装仍需要对 `@velaros-ai` 作用域有读取权限，并且必须使用 Platform 合包发布后由
+`refresh-private-lock-self-hosted` 生成的 registry 锁文件；本地源码锁不能冒充发布锁。
+
+Workbench deliberately ships a focused language surface: VelarScript, JavaScript / TypeScript,
+Python, and related Web formats. Its generic editor core has no Velar-specific branches. The app
+injects its built-in Velar contribution for syntax and project-local `velar lsp` connectivity,
+while Python uses the bundled Pyright server through the same generic LSP transport.
+See [docs/language-support.md](docs/language-support.md) for the supported surface and the
+Velar compiler/editor joint-delivery contract.
 
 ## Packaging
 

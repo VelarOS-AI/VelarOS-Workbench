@@ -1,10 +1,10 @@
-import * as ts from 'typescript'
-
-import { isEmpty, isPresent } from '@velaros-ai/core'
 import type {
   WorkbenchLanguageServiceCompletionItem,
   WorkbenchLanguageServiceRange,
-} from '@velaros-ai/workbench/contracts'
+} from '@workbench/contracts'
+import * as ts from 'typescript'
+
+import { isEmpty, isPresent } from '@velaros-ai/core'
 
 const MaxCompletionItems = 120
 const MaxCompletionDetailResolutions = 16

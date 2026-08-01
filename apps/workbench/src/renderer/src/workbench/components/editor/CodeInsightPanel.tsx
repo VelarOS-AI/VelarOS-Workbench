@@ -1,13 +1,7 @@
 import { type ReactElement, useEffect, useMemo, useState } from 'react'
 import { CaretDownIcon, CaretRightIcon, WarningCircleIcon } from '@phosphor-icons/react'
-
-import { FileTypeIcon } from '@velaros-ai/ui/primitives/display/FileTypeIcon'
-import { Paragraph } from '@velaros-ai/ui/primitives/display/Paragraph'
-import { Text } from '@velaros-ai/ui/primitives/display/Text'
-import { Title } from '@velaros-ai/ui/primitives/display/Title'
-import { ScrollArea } from '@velaros-ai/ui/primitives/layout/ScrollArea'
-import { WorkbenchProblemSeverityIcon } from '@velaros-ai/workbench/components/editor/WorkbenchProblemSeverityIcon'
-import { useWorkbenchI18n } from '@velaros-ai/workbench/i18n'
+import { WorkbenchProblemSeverityIcon } from '@workbench/components/editor/WorkbenchProblemSeverityIcon'
+import { useWorkbenchI18n } from '@workbench/i18n'
 import {
   buildWorkbenchProblemLocations,
   formatWorkbenchProblemDisplayMessage,
@@ -15,7 +9,13 @@ import {
   type WorkbenchProblemLocation,
   type WorkbenchProblemLocationKind,
   type WorkbenchProblemLocationSeverity,
-} from '@velaros-ai/workbench/models/editor/workbenchCodeInsightModel'
+} from '@workbench/models/editor/workbenchCodeInsightModel'
+
+import { FileTypeIcon } from '@velaros-ai/ui/primitives/display/FileTypeIcon'
+import { Paragraph } from '@velaros-ai/ui/primitives/display/Paragraph'
+import { Text } from '@velaros-ai/ui/primitives/display/Text'
+import { Title } from '@velaros-ai/ui/primitives/display/Title'
+import { ScrollArea } from '@velaros-ai/ui/primitives/layout/ScrollArea'
 
 import type { WorkbenchLanguageServiceInsights } from '../../hooks/useWorkbenchLanguageServiceInsights'
 import styles from '../../styles/workbenchPageStyles'

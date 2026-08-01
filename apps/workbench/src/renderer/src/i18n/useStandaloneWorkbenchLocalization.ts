@@ -3,16 +3,16 @@
  *
  * 语义对齐 desktop i18n 核心：点路径查目录 + `{param}` 插值 + miss 回落 key；
  * locale 状态由应用自持（localStorage 持久化，初始跟随系统语言），经
- * `WorkbenchI18nContextValue` 契约喂给 @velaros-ai/workbench 的 LocalizationProvider。
+ * `WorkbenchI18nContextValue` 契约喂给 @workbench 的 LocalizationProvider。
  */
 import { useMemo, useState } from 'react'
-
-import { isObject, isString } from '@velaros-ai/core'
-import type { AppLocale } from '@velaros-ai/workbench/contracts'
+import type { AppLocale } from '@workbench/contracts'
 import type {
   WorkbenchI18nContextValue,
   WorkbenchTranslateParams,
-} from '@velaros-ai/workbench/i18n'
+} from '@workbench/i18n'
+
+import { isObject, isString } from '@velaros-ai/core'
 
 import { workbenchAppEnUSMessages } from './messages/en-US'
 import { workbenchAppZhCNMessages } from './messages/zh-CN'

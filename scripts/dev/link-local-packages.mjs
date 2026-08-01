@@ -9,9 +9,12 @@ const readJson = async (file) => JSON.parse(await readFile(file, 'utf8'))
 const exists = async (file) => access(file).then(() => true, () => false)
 const entryExists = async (file) => lstat(file).then(() => true, () => false)
 const packageManifests = []
-for (const entry of await readdir(path.join(root, 'packages'), { withFileTypes: true })) {
-  const manifestPath = path.join(root, 'packages', entry.name, 'package.json')
-  if (entry.isDirectory() && await exists(manifestPath)) packageManifests.push({ directory: path.dirname(manifestPath), manifest: await readJson(manifestPath) })
+const localPackagesDirectory = path.join(root, 'packages')
+if (await exists(localPackagesDirectory)) {
+  for (const entry of await readdir(localPackagesDirectory, { withFileTypes: true })) {
+    const manifestPath = path.join(localPackagesDirectory, entry.name, 'package.json')
+    if (entry.isDirectory() && await exists(manifestPath)) packageManifests.push({ directory: path.dirname(manifestPath), manifest: await readJson(manifestPath) })
+  }
 }
 const appManifests = []
 for (const entry of await readdir(path.join(root, 'apps'), { withFileTypes: true })) {

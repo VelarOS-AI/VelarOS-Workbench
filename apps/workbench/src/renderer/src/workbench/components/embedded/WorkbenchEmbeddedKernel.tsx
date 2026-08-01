@@ -12,8 +12,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactElement,
 } from 'react'
-
-import { useWorkbenchI18n } from '@velaros-ai/workbench/i18n'
+import { useWorkbenchI18n } from '@workbench/i18n'
 
 import styles from '../../styles/workbenchPageStyles'
 import { EditorPanel } from '../editor/EditorPanel'

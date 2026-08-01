@@ -1,6 +1,7 @@
+import { inferPackageManagerCommand } from '@workbench/models/commands/workbenchCommandSuggestions'
+import { getWorkbenchFileDiagnosticView } from '@workbench/models/editor/workbenchLanguageServiceInsightsModel'
+
 import { AppError } from '@velaros-ai/core/error'
-import { inferPackageManagerCommand } from '@velaros-ai/workbench/models/commands/workbenchCommandSuggestions'
-import { getWorkbenchFileDiagnosticView } from '@velaros-ai/workbench/models/editor/workbenchLanguageServiceInsightsModel'
 
 import type { StandaloneWorkbenchPageModel } from '../../hooks/useStandaloneWorkbenchPageModel'
 import type { TopToolbarProps } from '../chrome/TopToolbar'

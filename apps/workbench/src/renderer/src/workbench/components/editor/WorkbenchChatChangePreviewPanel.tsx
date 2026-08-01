@@ -6,19 +6,19 @@ import {
   SpinnerGapIcon,
   XIcon,
 } from '@phosphor-icons/react'
-
-import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
-import { FileTypeIcon } from '@velaros-ai/ui/primitives/display/FileTypeIcon'
-import { Text } from '@velaros-ai/ui/primitives/display/Text'
-import { ScrollArea } from '@velaros-ai/ui/primitives/layout/ScrollArea'
-import { useWorkbenchI18n } from '@velaros-ai/workbench/i18n'
+import { useWorkbenchI18n } from '@workbench/i18n'
 import {
   getWorkbenchGitChangeDisplayPath,
   getWorkbenchGitChangeItemKey,
   isSameWorkbenchGitChangeItem,
   type WorkbenchGitChangeItem,
-} from '@velaros-ai/workbench/models/git/workbenchGitModel'
-import type { WorkbenchThemeId } from '@velaros-ai/workbench/models/settings/workbenchPreferences'
+} from '@workbench/models/git/workbenchGitModel'
+import type { WorkbenchThemeId } from '@workbench/models/settings/workbenchPreferences'
+
+import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
+import { FileTypeIcon } from '@velaros-ai/ui/primitives/display/FileTypeIcon'
+import { Text } from '@velaros-ai/ui/primitives/display/Text'
+import { ScrollArea } from '@velaros-ai/ui/primitives/layout/ScrollArea'
 
 import styles from '../../styles/workbenchPageStyles'
 import { GitDiffEditorPanel } from '../git/GitDiffEditorPanel'

@@ -20,6 +20,22 @@ import {
   TrashIcon,
   XIcon,
 } from '@phosphor-icons/react'
+import type {
+  SystemWorkspaceGitSummary,
+  WorkbenchDirectoryEntry,
+  WorkbenchSearchEntriesResult,
+} from '@workbench/contracts'
+import { useWorkbenchI18n } from '@workbench/i18n'
+import type { WorkbenchContentSearchMatch } from '@workbench/models/files/workbenchContentSearchModel'
+import {
+  buildWorkbenchFileSearchNavigationItems,
+  getWorkbenchFileSearchKeyboardAction,
+  type WorkbenchFileSearchNavigationItem,
+} from '@workbench/models/files/workbenchFileSearchNavigationModel'
+import { getWorkbenchFileTreeShortcutAction } from '@workbench/models/files/workbenchTreeMutation'
+import type { WorkbenchGitDecorationMap } from '@workbench/models/git/workbenchGitModel'
+import type { WorkbenchProject } from '@workbench/models/project/workbenchProjects'
+import { ROOT_PATH } from '@workbench/models/shared/workbenchUtils'
 
 import { toNullable } from '@velaros-ai/core'
 import { systemPlatformCompatibility } from '@velaros-ai/system-tools/platform-compatibility'
@@ -29,22 +45,6 @@ import { Paragraph } from '@velaros-ai/ui/primitives/display/Paragraph'
 import { Text } from '@velaros-ai/ui/primitives/display/Text'
 import { Input } from '@velaros-ai/ui/primitives/forms/Input'
 import { ScrollArea } from '@velaros-ai/ui/primitives/layout/ScrollArea'
-import type {
-  SystemWorkspaceGitSummary,
-  WorkbenchDirectoryEntry,
-  WorkbenchSearchEntriesResult,
-} from '@velaros-ai/workbench/contracts'
-import { useWorkbenchI18n } from '@velaros-ai/workbench/i18n'
-import type { WorkbenchContentSearchMatch } from '@velaros-ai/workbench/models/files/workbenchContentSearchModel'
-import {
-  buildWorkbenchFileSearchNavigationItems,
-  getWorkbenchFileSearchKeyboardAction,
-  type WorkbenchFileSearchNavigationItem,
-} from '@velaros-ai/workbench/models/files/workbenchFileSearchNavigationModel'
-import { getWorkbenchFileTreeShortcutAction } from '@velaros-ai/workbench/models/files/workbenchTreeMutation'
-import type { WorkbenchGitDecorationMap } from '@velaros-ai/workbench/models/git/workbenchGitModel'
-import type { WorkbenchProject } from '@velaros-ai/workbench/models/project/workbenchProjects'
-import { ROOT_PATH } from '@velaros-ai/workbench/models/shared/workbenchUtils'
 
 import styles from '../../styles/workbenchPageStyles'
 import { requestScrollIntoView } from '../../support/scrollUtils'

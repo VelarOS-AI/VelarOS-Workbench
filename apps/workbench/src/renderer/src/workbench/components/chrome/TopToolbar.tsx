@@ -14,14 +14,14 @@ import {
   SpinnerGapIcon,
   StopIcon,
 } from '@phosphor-icons/react'
+import type { SystemWorkspaceGitSummary, WorkbenchProjectAiIndexStatus } from '@workbench/contracts'
+import { useWorkbenchI18n } from '@workbench/i18n'
 
 import { isEmpty,toNullable } from '@velaros-ai/core'
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 import { Input } from '@velaros-ai/ui/primitives/forms/Input'
 import { AnchoredPopover } from '@velaros-ai/ui/primitives/overlays/AnchoredPopover'
 import { BubbleTooltip } from '@velaros-ai/ui/primitives/overlays/Tooltip'
-import type { SystemWorkspaceGitSummary, WorkbenchProjectAiIndexStatus } from '@velaros-ai/workbench/contracts'
-import { useWorkbenchI18n } from '@velaros-ai/workbench/i18n'
 
 import { type WorkbenchTopRunControl } from '../../hooks/useWorkbenchTopRunControl'
 import styles from '../../styles/workbenchPageStyles'

@@ -1,14 +1,14 @@
 import { type ReactElement } from 'react'
 import { CaretDownIcon, CaretUpIcon } from '@phosphor-icons/react'
-
-import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
-import { WorkbenchProblemSeverityIcon } from '@velaros-ai/workbench/components/editor/WorkbenchProblemSeverityIcon'
-import type { WorkbenchLanguageServiceDiagnostic } from '@velaros-ai/workbench/contracts'
-import { useWorkbenchI18n } from '@velaros-ai/workbench/i18n'
+import { WorkbenchProblemSeverityIcon } from '@workbench/components/editor/WorkbenchProblemSeverityIcon'
+import type { WorkbenchLanguageServiceDiagnostic } from '@workbench/contracts'
+import { useWorkbenchI18n } from '@workbench/i18n'
 import {
   countWorkbenchFileDiagnostics,
   sortWorkbenchFileDiagnostics,
-} from '@velaros-ai/workbench/models/editor/workbenchCodeInsightModel'
+} from '@workbench/models/editor/workbenchCodeInsightModel'
+
+import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 
 import styles from '../../styles/workbenchPageStyles'
 

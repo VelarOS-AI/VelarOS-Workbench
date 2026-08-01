@@ -4,10 +4,7 @@ import { extname, join, relative, resolve } from 'node:path'
 import { describe, test } from 'node:test'
 
 const repositoryRoot = resolve(import.meta.dirname, '..')
-const sourceRoots = [
-  resolve(repositoryRoot, 'apps/workbench/src'),
-  resolve(repositoryRoot, 'packages/workbench/src'),
-]
+const sourceRoots = [resolve(repositoryRoot, 'apps/workbench/src')]
 const sourceExtensions = new Set(['.ts', '.tsx'])
 
 const removedCoreModules = new Set([
@@ -77,7 +74,7 @@ void describe('Core 0.3 owner boundary', () => {
         }
 
         for (const match of source.matchAll(
-          /(?:import|export)\s+(?:type\s+)?\{([\s\S]*?)\}\s+from\s+['"]@velaros-ai\/core(?:\/types)?['"]/gu
+          /(?:import|export)\s+(?:type\s+)?\{([^}]*)\}\s+from\s+['"]@velaros-ai\/core(?:\/types)?['"]/gu
         )) {
           for (const name of importedNames(match[1] ?? '')) {
             if (isConcreteOwnerName(name)) {
@@ -93,7 +90,7 @@ void describe('Core 0.3 owner boundary', () => {
 
   void test('re-exports Browser, Model and Workspace contracts from their owners', async () => {
     const contracts = await readFile(
-      resolve(repositoryRoot, 'packages/workbench/src/contracts/index.ts'),
+      resolve(repositoryRoot, 'apps/workbench/src/workbench/contracts/index.ts'),
       'utf8'
     )
 
@@ -115,7 +112,6 @@ void describe('Core 0.3 owner boundary', () => {
     const sources = (
       await Promise.all(
         (await collectSourceFiles(resolve(repositoryRoot, 'apps/workbench/src')))
-          .concat(await collectSourceFiles(resolve(repositoryRoot, 'packages/workbench/src')))
           .map((path) => readFile(path, 'utf8'))
       )
     ).join('\n')
@@ -129,7 +125,7 @@ void describe('Core 0.3 owner boundary', () => {
       readFile(
         resolve(
           repositoryRoot,
-          'packages/workbench/src/utils/PlatformCompatibilityHelper.ts'
+          'apps/workbench/src/workbench/utils/PlatformCompatibilityHelper.ts'
         ),
         'utf8'
       ),

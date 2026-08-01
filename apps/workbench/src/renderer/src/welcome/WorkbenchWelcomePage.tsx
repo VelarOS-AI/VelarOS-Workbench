@@ -2,7 +2,7 @@
  * 起手页（VS Code / IDEA 式欢迎页）：新建项目 / 打开项目 / 最近项目三主动作。
  *
  * 应用私有组件——起手页是独立入口的产品形态，没有第二个消费者，按「独立消费者才提包」
- * 判据住在 apps/workbench，不进 `@velaros-ai/workbench`。视觉零件全部来自 `@velaros-ai/ui`
+ * 判据住在 apps/workbench，不进 `@workbench`。视觉零件全部来自 `@velaros-ai/ui`
  * （§12.9 封闭形态），外貌层类名走 welcome.css + 语义令牌，不写裸色值。
  */
 import { type ReactElement } from 'react'
@@ -48,7 +48,7 @@ export function WorkbenchWelcomePage({
             </Button>
           </Stack>
           <Text tone="caption" className="workbench-welcome__kernel-status">
-            Kernel：未连接（kernel-protocol 客户端待接入）
+            Kernel：内置宿主（随 Workbench 运行）
           </Text>
         </section>
         <section className="workbench-welcome__recents">

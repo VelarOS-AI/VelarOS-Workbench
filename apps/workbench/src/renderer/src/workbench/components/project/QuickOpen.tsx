@@ -1,5 +1,8 @@
 import { type ReactElement, useEffect, useRef, useState } from 'react'
 import { MagnifyingGlassIcon } from '@phosphor-icons/react'
+import { useWorkbenchI18n } from '@workbench/i18n'
+import type { WorkbenchProject } from '@workbench/models/project/workbenchProjects'
+import type { WorkbenchOpenEditorTab } from '@workbench/types/workbenchTypes'
 
 import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
 import { FileTypeIcon } from '@velaros-ai/ui/primitives/display/FileTypeIcon'
@@ -7,9 +10,6 @@ import { Paragraph } from '@velaros-ai/ui/primitives/display/Paragraph'
 import { Text } from '@velaros-ai/ui/primitives/display/Text'
 import { Title } from '@velaros-ai/ui/primitives/display/Title'
 import { Input } from '@velaros-ai/ui/primitives/forms/Input'
-import { useWorkbenchI18n } from '@velaros-ai/workbench/i18n'
-import type { WorkbenchProject } from '@velaros-ai/workbench/models/project/workbenchProjects'
-import type { WorkbenchOpenEditorTab } from '@velaros-ai/workbench/types/workbenchTypes'
 
 import { useWorkbenchContentSearchController } from '../../hooks/useWorkbenchContentSearchController'
 import styles from '../../styles/workbenchPageStyles'

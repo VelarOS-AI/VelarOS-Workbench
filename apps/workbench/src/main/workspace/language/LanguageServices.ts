@@ -1,17 +1,5 @@
 import { basename, resolve } from 'node:path'
 
-import * as ts from 'typescript'
-import {
-  getCSSLanguageService,
-  getLESSLanguageService,
-  getSCSSLanguageService,
-  type LanguageService as CssLanguageService,
-} from 'vscode-css-languageservice'
-import { getLanguageService as getHtmlLanguageService } from 'vscode-html-languageservice'
-import { TextDocument } from 'vscode-languageserver-textdocument'
-import { URI } from 'vscode-uri'
-
-import { isNumber,isPresent, toNullable, toOptional } from '@velaros-ai/core'
 import type {
   WorkbenchLanguageServiceCapability,
   WorkbenchLanguageServiceCompletionResult,
@@ -20,6 +8,7 @@ import type {
   WorkbenchLanguageServiceDiagnostic,
   WorkbenchLanguageServiceDiagnosticsResult,
   WorkbenchLanguageServiceDocumentHighlightsResult,
+  WorkbenchLanguageServiceDocumentSymbol,
   WorkbenchLanguageServiceDocumentSymbolsResult,
   WorkbenchLanguageServiceFileEdit,
   WorkbenchLanguageServiceFormatResult,
@@ -36,17 +25,38 @@ import type {
   WorkbenchLanguageServiceRequest,
   WorkbenchLanguageServiceResolveResult,
   WorkbenchLanguageServiceSignatureHelpResult,
-} from '@velaros-ai/workbench/contracts'
+} from '@workbench/contracts'
 import {
   getWorkbenchPathExtension,
   normalizeWorkbenchLanguage,
   resolveBuiltinWorkbenchLanguageService,
-  resolvePluginWorkbenchLanguageService,
   type WorkbenchLanguageServiceDescriptor,
-} from '@velaros-ai/workbench/language/workbenchLanguageServices'
+} from '@workbench/language/workbenchLanguageServices'
+import * as ts from 'typescript'
+import {
+  getCSSLanguageService,
+  getLESSLanguageService,
+  getSCSSLanguageService,
+  type LanguageService as CssLanguageService,
+} from 'vscode-css-languageservice'
+import { getLanguageService as getHtmlLanguageService } from 'vscode-html-languageservice'
+import { TextDocument } from 'vscode-languageserver-textdocument'
+import { URI } from 'vscode-uri'
+
+import { isNumber,isPresent, toNullable, toOptional } from '@velaros-ai/core'
 
 import type { PathResolver } from '../PathResolver'
 
+import {
+  type ExternalLspCompletionItem,
+  type ExternalLspDiagnostic,
+  type ExternalLspDocumentSymbol,
+  type ExternalLspLocation,
+  ExternalLspManager,
+  type ExternalLspSignatureHelp,
+  type ExternalLspSymbolInformation,
+  type ExternalLspWorkspaceEdit,
+} from './ExternalLspClient'
 import {
   clearWorkbenchProjectEslintCache,
   getWorkbenchJavaScriptLintDiagnostics,
@@ -79,6 +89,49 @@ import {
   formatWorkbenchDocumentBuiltin,
   formatWorkbenchDocumentWithProjectPrettier,
 } from './WorkbenchDocumentFormatter'
+
+function textFromLspContent(value: unknown): string {
+  if (typeof value === 'string') return value
+  if (Array.isArray(value)) return value.map(textFromLspContent).filter(Boolean).join('\n\n')
+  if (typeof value !== 'object' || value === null) return ''
+  const content = value as Record<string, unknown>
+  if (typeof content['value'] === 'string') return content['value']
+  if (typeof content['language'] === 'string' && typeof content['value'] === 'string')
+    return `\`\`\`${content['language']}\n${content['value']}\n\`\`\``
+  return ''
+}
+
+function mapExternalCompletionKind(kind: number | undefined): string | undefined {
+  switch (kind) {
+    case 2: return 'method'
+    case 3: return 'function'
+    case 6: return 'variable'
+    case 7: return 'class'
+    case 8: return 'interface'
+    case 9: return 'namespace'
+    case 10: return 'property'
+    case 12: return 'constant'
+    case 13: return 'enum'
+    case 14: return 'keyword'
+    case 17: return 'file'
+    case 21: return 'constant'
+    default: return undefined
+  }
+}
+
+function mapExternalDocumentSymbolKind(kind: number): WorkbenchLanguageServiceDocumentSymbol['kind'] {
+  switch (kind) {
+    case 5: return 'class'
+    case 6: return 'method'
+    case 10: return 'enum'
+    case 11: return 'interface'
+    case 12: return 'function'
+    case 13: return 'variable'
+    case 14: return 'constant'
+    case 26: return 'type'
+    default: return 'symbol'
+  }
+}
 
 function mapHtmlCompletionKind(kind: number | undefined): string {
   switch (kind) {
@@ -117,6 +170,8 @@ interface TypeScriptProjectSnapshot {
 }
 
 class WorkbenchLanguageServices {
+  private readonly externalLsp = new ExternalLspManager()
+
   constructor(private readonly pathResolver: PathResolver) {}
 
   public async synchronizeProjectFile(
@@ -125,6 +180,8 @@ class WorkbenchLanguageServices {
     const projectRoot = await this.pathResolver.resolveProjectRoot(request.projectRoot)
     const absolutePath = this.resolveAbsoluteProjectPath(projectRoot, request.path)
     synchronizeTypeScriptProjectFile(projectRoot, absolutePath, request.content)
+    if (isPresent(request.content))
+      await this.externalLsp.save(projectRoot, absolutePath, request.content)
     if (basename(absolutePath) === 'package.json') {
       clearWorkbenchProjectEslintCache(projectRoot)
       clearWorkbenchProjectPrettierCache(projectRoot)
@@ -136,6 +193,11 @@ class WorkbenchLanguageServices {
     clearTypeScriptProjectCache(projectRoot)
     clearWorkbenchProjectEslintCache(projectRoot)
     clearWorkbenchProjectPrettierCache(projectRoot)
+    await this.externalLsp.invalidate(projectRoot)
+  }
+
+  public async dispose(): Promise<void> {
+    await this.externalLsp.dispose()
   }
 
   public async resolveLanguageService(
@@ -144,15 +206,13 @@ class WorkbenchLanguageServices {
     const projectRoot = await this.pathResolver.resolveProjectRoot(request.projectRoot)
     const token = this.resolveToken(request)
     const builtin = resolveBuiltinWorkbenchLanguageService(token)
-    const plugin = builtin ? null : resolvePluginWorkbenchLanguageService(token)
-    const service = builtin ?? plugin
 
     return {
       projectRoot,
       path: request.path,
       languageId: token || 'text',
-      status: builtin ? 'ready' : plugin ? 'plugin-required' : 'unsupported',
-      service: service ? this.toServiceSnapshot(service) : null,
+      status: builtin ? 'ready' : 'unsupported',
+      service: builtin ? this.toServiceSnapshot(builtin) : null,
       capabilities: builtin ? this.capabilitiesForBuiltinService(builtin) : [],
     }
   }
@@ -161,6 +221,21 @@ class WorkbenchLanguageServices {
     request: WorkbenchLanguageServicePositionRequest
   ): Promise<WorkbenchLanguageServiceDefinitionResult> {
     const resolved = await this.resolveLanguageService(request)
+    if (this.isExternalRuntime(resolved.service?.runtime)) {
+      const external = await this.prepareExternal(request, resolved.projectRoot)
+      const definitions = await external.client.definition(
+        external.absolutePath,
+        external.content,
+        this.languageServicePosition(request.position)
+      )
+      return {
+        projectRoot: resolved.projectRoot,
+        path: request.path,
+        locations: definitions
+          .map((location) => this.mapExternalLocation(resolved.projectRoot, location))
+          .filter((location): location is WorkbenchLanguageServiceLocation => isPresent(location)),
+      }
+    }
     // Standalone Workbench has no CodeGraph AI index (kernel territory); definitions come
     // straight from the TypeScript language service, and non-TS runtimes return nothing.
     if (resolved.service?.runtime !== 'typescript-language-service')
@@ -191,6 +266,19 @@ class WorkbenchLanguageServices {
     request: WorkbenchLanguageServicePositionRequest
   ): Promise<WorkbenchLanguageServiceCompletionResult> {
     const resolved = await this.resolveLanguageService(request)
+    if (this.isExternalRuntime(resolved.service?.runtime)) {
+      const external = await this.prepareExternal(request, resolved.projectRoot)
+      const items = await external.client.completion(
+        external.absolutePath,
+        external.content,
+        this.languageServicePosition(request.position)
+      )
+      return {
+        projectRoot: resolved.projectRoot,
+        path: request.path,
+        items: items.slice(0, 160).map((item) => this.mapExternalCompletion(request.path, item)),
+      }
+    }
     if (resolved.service?.runtime !== 'typescript-language-service')
       return {
         projectRoot: resolved.projectRoot,
@@ -225,6 +313,15 @@ class WorkbenchLanguageServices {
     request: WorkbenchLanguageServiceRequest
   ): Promise<WorkbenchLanguageServiceDiagnosticsResult> {
     const resolved = await this.resolveLanguageService(request)
+    if (this.isExternalRuntime(resolved.service?.runtime)) {
+      const external = await this.prepareExternal(request, resolved.projectRoot)
+      const diagnostics = await external.client.getDiagnostics(external.absolutePath, external.content)
+      return {
+        projectRoot: resolved.projectRoot,
+        path: request.path,
+        diagnostics: diagnostics.map((diagnostic) => this.mapExternalDiagnostic(request.path, diagnostic)),
+      }
+    }
     if (resolved.service?.runtime !== 'typescript-language-service')
       return {
         projectRoot: resolved.projectRoot,
@@ -267,6 +364,20 @@ class WorkbenchLanguageServices {
     request: WorkbenchLanguageServiceRenameRequest
   ): Promise<WorkbenchLanguageServiceRenameResult> {
     const resolved = await this.resolveLanguageService(request)
+    if (this.isExternalRuntime(resolved.service?.runtime)) {
+      const external = await this.prepareExternal(request, resolved.projectRoot)
+      const edit = await external.client.rename(
+        external.absolutePath,
+        external.content,
+        this.languageServicePosition(request.position),
+        request.newName
+      )
+      return {
+        projectRoot: resolved.projectRoot,
+        path: request.path,
+        changes: this.mapExternalWorkspaceEdit(resolved.projectRoot, edit),
+      }
+    }
     if (resolved.service?.runtime !== 'typescript-language-service')
       return { projectRoot: resolved.projectRoot, path: request.path, changes: [] }
 
@@ -311,6 +422,19 @@ class WorkbenchLanguageServices {
     hover: Nullable<WorkbenchLanguageServiceHoverResult>
   }> {
     const resolved = await this.resolveLanguageService(request)
+    if (this.isExternalRuntime(resolved.service?.runtime)) {
+      const external = await this.prepareExternal(request, resolved.projectRoot)
+      const hover = await external.client.hover(
+        external.absolutePath,
+        external.content,
+        this.languageServicePosition(request.position)
+      )
+      return {
+        projectRoot: resolved.projectRoot,
+        path: request.path,
+        hover: hover ? { displayText: textFromLspContent(hover.contents) } : null,
+      }
+    }
     if (resolved.service?.runtime !== 'typescript-language-service')
       return { projectRoot: resolved.projectRoot, path: request.path, hover: null }
 
@@ -332,6 +456,21 @@ class WorkbenchLanguageServices {
     request: WorkbenchLanguageServicePositionRequest
   ): Promise<WorkbenchLanguageServiceReferencesResult> {
     const resolved = await this.resolveLanguageService(request)
+    if (this.isExternalRuntime(resolved.service?.runtime)) {
+      const external = await this.prepareExternal(request, resolved.projectRoot)
+      const references = await external.client.references(
+        external.absolutePath,
+        external.content,
+        this.languageServicePosition(request.position)
+      )
+      return {
+        projectRoot: resolved.projectRoot,
+        path: request.path,
+        locations: references
+          .map((location) => this.mapExternalLocation(resolved.projectRoot, location))
+          .filter((location): location is WorkbenchLanguageServiceLocation => isPresent(location)),
+      }
+    }
     if (resolved.service?.runtime !== 'typescript-language-service')
       return { projectRoot: resolved.projectRoot, path: request.path, locations: [] }
 
@@ -359,6 +498,19 @@ class WorkbenchLanguageServices {
     signatureHelp: Nullable<WorkbenchLanguageServiceSignatureHelpResult>
   }> {
     const resolved = await this.resolveLanguageService(request)
+    if (this.isExternalRuntime(resolved.service?.runtime)) {
+      const external = await this.prepareExternal(request, resolved.projectRoot)
+      const signatureHelp = await external.client.signatureHelp(
+        external.absolutePath,
+        external.content,
+        this.languageServicePosition(request.position)
+      )
+      return {
+        projectRoot: resolved.projectRoot,
+        path: request.path,
+        signatureHelp: signatureHelp ? this.mapExternalSignatureHelp(signatureHelp) : null,
+      }
+    }
     if (resolved.service?.runtime !== 'typescript-language-service')
       return { projectRoot: resolved.projectRoot, path: request.path, signatureHelp: null }
 
@@ -400,6 +552,22 @@ class WorkbenchLanguageServices {
             ],
           }
 
+    if (resolved.service?.runtime === 'lsp-server') {
+      const external = await this.prepareExternal(request, projectRoot)
+      const edits = await external.client.format(external.absolutePath, external.content)
+      return {
+        projectRoot,
+        path: request.path,
+        changes: edits.length ? [{
+          path: request.path,
+          edits: edits.map((edit) => ({
+            range: this.rangeFromLanguageServiceRange(edit.range),
+            newText: edit.newText,
+          })),
+        }] : [],
+      }
+    }
+
     // 1) 项目 Prettier 优先：命中即为权威结果，不再回退内置。
     const prettierFormatted = await formatWorkbenchDocumentWithProjectPrettier({
       projectRoot,
@@ -436,6 +604,19 @@ class WorkbenchLanguageServices {
     request: WorkbenchLanguageServiceRequest
   ): Promise<WorkbenchLanguageServiceDocumentSymbolsResult> {
     const resolved = await this.resolveLanguageService(request)
+    if (this.isExternalRuntime(resolved.service?.runtime)) {
+      const external = await this.prepareExternal(request, resolved.projectRoot)
+      const symbols = await external.client.documentSymbols(external.absolutePath, external.content)
+      return {
+        projectRoot: resolved.projectRoot,
+        path: request.path,
+        symbols: this.mapExternalDocumentSymbols(
+          resolved.projectRoot,
+          external.absolutePath,
+          symbols
+        ),
+      }
+    }
     if (resolved.service?.runtime !== 'typescript-language-service')
       return { projectRoot: resolved.projectRoot, path: request.path, symbols: [] }
 
@@ -511,6 +692,8 @@ class WorkbenchLanguageServices {
       packageName: toOptional(service.packageName),
       command: toOptional(service.command),
       args: toOptional(service.args),
+      documentLanguageId: toOptional(service.documentLanguageId),
+      protocol: toOptional(service.protocol),
     }
   }
 
@@ -532,7 +715,204 @@ class WorkbenchLanguageServices {
         'inlay-hints',
       ]
 
+    if (service.runtime === 'lsp-server')
+      return [
+        'completion',
+        'definition',
+        'diagnostics',
+        'rename',
+        'hover',
+        'references',
+        'signature-help',
+        'format',
+        'document-symbols',
+      ]
+    if (service.runtime === 'python-language-server')
+      return [
+        'completion',
+        'definition',
+        'diagnostics',
+        'rename',
+        'hover',
+        'references',
+        'signature-help',
+        'document-symbols',
+      ]
     return ['completion', 'diagnostics']
+  }
+
+  private isExternalRuntime(
+    runtime: WorkbenchLanguageServiceDescriptor['runtime'] | undefined
+  ): boolean {
+    return runtime === 'lsp-server' || runtime === 'python-language-server'
+  }
+
+  private async prepareExternal(
+    request: WorkbenchLanguageServiceRequest,
+    projectRoot: string
+  ): Promise<{
+    client: ReturnType<ExternalLspManager['client']>
+    absolutePath: string
+    content: string
+  }> {
+    const descriptor = resolveBuiltinWorkbenchLanguageService(this.resolveToken(request))
+    if (!descriptor || !this.isExternalRuntime(descriptor.runtime))
+      throw new Error(`Unsupported external language service for ${request.path}`)
+    const client = this.externalLsp.client(projectRoot, descriptor)
+    for (const openFile of request.openFiles ?? []) {
+      const absoluteOpenPath = this.resolveAbsoluteProjectPath(projectRoot, openFile.path)
+      if (!client.accepts(absoluteOpenPath)) continue
+      await client.synchronize(absoluteOpenPath, openFile.content)
+    }
+    const absolutePath = this.resolveAbsoluteProjectPath(projectRoot, request.path)
+    return {
+      client,
+      absolutePath,
+      content: request.content ?? safeReadFile(absolutePath) ?? '',
+    }
+  }
+
+  private mapExternalCompletion(
+    path: string,
+    item: ExternalLspCompletionItem
+  ): WorkbenchLanguageServiceCompletionResult['items'][number] {
+    return {
+      label: item.label,
+      kind: mapExternalCompletionKind(item.kind),
+      detail: item.detail,
+      documentation: textFromLspContent(item.documentation) || undefined,
+      insertText: item.textEdit?.newText ?? item.insertText,
+      sortText: item.sortText,
+      filterText: item.filterText,
+      isSnippet: item.insertTextFormat === 2,
+      additionalTextEdits: item.additionalTextEdits?.map((edit) => ({
+        path,
+        range: this.rangeFromLanguageServiceRange(edit.range),
+        newText: edit.newText,
+      })),
+    }
+  }
+
+  private mapExternalDiagnostic(
+    path: string,
+    diagnostic: ExternalLspDiagnostic
+  ): WorkbenchLanguageServiceDiagnostic {
+    return {
+      path,
+      severity: diagnostic.severity === 1 ? 'error' : diagnostic.severity === 2 ? 'warning' : 'info',
+      message: diagnostic.message,
+      source: diagnostic.source,
+      code: diagnostic.code,
+      range: this.rangeFromLanguageServiceRange(diagnostic.range),
+    }
+  }
+
+  private mapExternalLocation(
+    projectRoot: string,
+    location: ExternalLspLocation
+  ): Nullable<WorkbenchLanguageServiceLocation> {
+    let absolutePath: string
+    try {
+      absolutePath = URI.parse(location.uri).fsPath
+    } catch {
+      return null
+    }
+    const path = this.relativePathFor(projectRoot, absolutePath)
+    if (!path) return null
+    const range = this.rangeFromLanguageServiceRange(location.range)
+    return { path, line: range.startLine, column: range.startColumn, range }
+  }
+
+  private mapExternalWorkspaceEdit(
+    projectRoot: string,
+    workspaceEdit: ExternalLspWorkspaceEdit
+  ): WorkbenchLanguageServiceFileEdit[] {
+    const editsByPath = new Map<string, WorkbenchLanguageServiceFileEdit>()
+    const append = (
+      uri: string,
+      edits: ReadonlyArray<{
+        range: {
+          start: { line: number; character: number }
+          end: { line: number; character: number }
+        }
+        newText: string
+      }>
+    ): void => {
+      let absolutePath: string
+      try {
+        absolutePath = URI.parse(uri).fsPath
+      } catch {
+        return
+      }
+      const path = this.relativePathFor(projectRoot, absolutePath)
+      if (!path) return
+      const file = editsByPath.get(path) ?? { path, edits: [] }
+      file.edits.push(...edits.map((edit) => ({
+        range: this.rangeFromLanguageServiceRange(edit.range),
+        newText: edit.newText,
+      })))
+      editsByPath.set(path, file)
+    }
+    for (const [uri, edits] of Object.entries(workspaceEdit.changes ?? {})) append(uri, edits)
+    for (const change of workspaceEdit.documentChanges ?? []) {
+      const uri = change.textDocument?.uri
+      if (uri && change.edits) append(uri, change.edits)
+    }
+    return [...editsByPath.values()]
+  }
+
+  private mapExternalSignatureHelp(
+    value: ExternalLspSignatureHelp
+  ): WorkbenchLanguageServiceSignatureHelpResult {
+    return {
+      activeSignature: value.activeSignature ?? 0,
+      activeParameter: value.activeParameter ?? 0,
+      signatures: value.signatures.map((signature) => ({
+        label: signature.label,
+        documentation: textFromLspContent(signature.documentation) || undefined,
+        parameters: (signature.parameters ?? []).map((parameter) => ({
+          label: Array.isArray(parameter.label)
+            ? signature.label.slice(parameter.label[0], parameter.label[1])
+            : parameter.label,
+          documentation: textFromLspContent(parameter.documentation) || undefined,
+        })),
+      })),
+    }
+  }
+
+  private mapExternalDocumentSymbols(
+    projectRoot: string,
+    requestAbsolutePath: string,
+    values: ReadonlyArray<ExternalLspDocumentSymbol | ExternalLspSymbolInformation>
+  ): WorkbenchLanguageServiceDocumentSymbol[] {
+    const output: WorkbenchLanguageServiceDocumentSymbol[] = []
+    const append = (
+      value: ExternalLspDocumentSymbol | ExternalLspSymbolInformation,
+      depth: number
+    ): void => {
+      const hierarchical = 'range' in value
+      const location: ExternalLspLocation = hierarchical
+        ? { uri: URI.file(requestAbsolutePath).toString(), range: value.selectionRange ?? value.range }
+        : value.location
+      const mapped = this.mapExternalLocation(projectRoot, location)
+      const range = hierarchical
+        ? this.rangeFromLanguageServiceRange(value.range)
+        : mapped?.range
+      if (mapped && range) {
+        output.push({
+          name: value.name,
+          kind: mapExternalDocumentSymbolKind(value.kind),
+          depth,
+          line: mapped.line,
+          column: mapped.column,
+          range,
+        })
+      }
+      if (hierarchical)
+        for (const child of value.children ?? []) append(child, depth + 1)
+    }
+    for (const value of values) append(value, 0)
+    return output
   }
 
   private getBuiltinLanguageServiceCompletions(

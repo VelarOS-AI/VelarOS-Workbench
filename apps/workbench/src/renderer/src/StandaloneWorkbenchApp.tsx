@@ -1,11 +1,11 @@
 import { type ReactElement, useEffect, useState } from 'react'
-
-import { BrowserCompositionProvider } from '@velaros-ai/browser/composition'
 import {
   WorkbenchChatProvider,
   WorkbenchProductRuntimeProvider,
-} from '@velaros-ai/workbench/composition'
-import { WorkbenchLocalizationProvider } from '@velaros-ai/workbench/i18n'
+} from '@workbench/composition'
+import { WorkbenchLocalizationProvider } from '@workbench/i18n'
+
+import { BrowserCompositionProvider } from '@velaros-ai/browser/composition'
 
 import { standaloneBrowserCompositionAdapter } from './browser/standaloneBrowserCompositionAdapter'
 import { standaloneWorkbenchProductRuntimeValue } from './host/standaloneWorkbenchProductRuntime'

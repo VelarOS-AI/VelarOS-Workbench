@@ -1,4 +1,11 @@
 import { FolderIcon } from '@phosphor-icons/react'
+import {
+  type WorkbenchDirectoryEntry,
+  type WorkbenchSearchEntriesResult,
+} from '@workbench/contracts'
+import { useWorkbenchI18n } from '@workbench/i18n'
+import type { WorkbenchContentSearchMatch } from '@workbench/models/files/workbenchContentSearchModel'
+import type { WorkbenchGitDecorationMap } from '@workbench/models/git/workbenchGitModel'
 import type { MouseEvent, ReactElement } from 'react'
 
 import { StyleUtils } from '@velaros-ai/ui'
@@ -6,13 +13,6 @@ import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
 import { FileTypeIcon } from '@velaros-ai/ui/primitives/display/FileTypeIcon'
 import { Paragraph } from '@velaros-ai/ui/primitives/display/Paragraph'
 import { Text } from '@velaros-ai/ui/primitives/display/Text'
-import {
-  type WorkbenchDirectoryEntry,
-  type WorkbenchSearchEntriesResult,
-} from '@velaros-ai/workbench/contracts'
-import { useWorkbenchI18n } from '@velaros-ai/workbench/i18n'
-import type { WorkbenchContentSearchMatch } from '@velaros-ai/workbench/models/files/workbenchContentSearchModel'
-import type { WorkbenchGitDecorationMap } from '@velaros-ai/workbench/models/git/workbenchGitModel'
 
 import styles from '../../styles/workbenchPageStyles'
 

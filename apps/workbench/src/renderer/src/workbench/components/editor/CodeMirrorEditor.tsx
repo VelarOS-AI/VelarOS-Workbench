@@ -63,61 +63,57 @@ import {
   type ViewUpdate,
 } from '@codemirror/view'
 import { HammerIcon, PlayIcon } from '@phosphor-icons/react'
-
-import { isEmpty, isPresent, Log, toNullable, toOptional } from '@velaros-ai/core'
 import {
   addWorkbenchCommentAnchorEffect,
   anchorFromLineRange,
   createWorkbenchCommentExtension,
   retainWorkbenchCommentAnchorsEffect,
   setWorkbenchCommentAnchorsEffect,
-} from '@velaros-ai/workbench/components/editor/workbenchCommentExtension'
-import type { WorkbenchLanguageServiceFileEdit } from '@velaros-ai/workbench/contracts'
-import { useWorkbenchAiCompletionEnabled } from '@velaros-ai/workbench/hooks/useWorkbenchPreferences'
+} from '@workbench/components/editor/workbenchCommentExtension'
+import type { WorkbenchLanguageServiceFileEdit } from '@workbench/contracts'
+import { useWorkbenchAiCompletionEnabled } from '@workbench/hooks/useWorkbenchPreferences'
 import {
   useWorkbenchHostRuntime,
   type WorkbenchHostRuntime,
-} from '@velaros-ai/workbench/host'
-import { useWorkbenchI18n } from '@velaros-ai/workbench/i18n'
-import type { PackageManagerCommand } from '@velaros-ai/workbench/models/commands/workbenchPackageScriptCommand'
+} from '@workbench/host'
+import { useWorkbenchI18n } from '@workbench/i18n'
+import type { PackageManagerCommand } from '@workbench/models/commands/workbenchPackageScriptCommand'
 import {
   useWorkbenchComments,
   useWorkbenchCommentStore,
-} from '@velaros-ai/workbench/models/comments/workbenchCommentStore'
-import { getWorkbenchCodeMirrorAutocompleteTheme } from '@velaros-ai/workbench/models/editor/workbenchCodeMirrorAutocompleteTheme'
-import { createWorkbenchBasicSyntaxExtension } from '@velaros-ai/workbench/models/editor/workbenchCodeMirrorBasicSyntax'
+} from '@workbench/models/comments/workbenchCommentStore'
+import { getWorkbenchCodeMirrorAutocompleteTheme } from '@workbench/models/editor/workbenchCodeMirrorAutocompleteTheme'
+import { createWorkbenchBasicSyntaxExtension } from '@workbench/models/editor/workbenchCodeMirrorBasicSyntax'
 import {
   workbenchCompletionAddToOptions,
   workbenchCompletionOptionClass,
-} from '@velaros-ai/workbench/models/editor/workbenchCodeMirrorCompletionPresentation'
-import { buildWorkbenchCodeMirrorCompletionResult } from '@velaros-ai/workbench/models/editor/workbenchCodeMirrorCompletions'
+} from '@workbench/models/editor/workbenchCodeMirrorCompletionPresentation'
+import { buildWorkbenchCodeMirrorCompletionResult } from '@workbench/models/editor/workbenchCodeMirrorCompletions'
 import {
   setWorkbenchDefinitionHoverRange,
   workbenchDefinitionHoverExtension,
   type WorkbenchDefinitionHoverRange,
-} from '@velaros-ai/workbench/models/editor/workbenchCodeMirrorDefinitionHover'
+} from '@workbench/models/editor/workbenchCodeMirrorDefinitionHover'
 import {
   createWorkbenchDiagnosticForegroundExtension,
   mapWorkbenchDiagnosticToCodeMirror,
-} from '@velaros-ai/workbench/models/editor/workbenchCodeMirrorDiagnostics'
-import { buildWorkbenchExternalValueSyncTransaction } from '@velaros-ai/workbench/models/editor/workbenchCodeMirrorExternalSync'
-import { createWorkbenchInlayHintExtension } from '@velaros-ai/workbench/models/editor/workbenchCodeMirrorInlayHints'
+} from '@workbench/models/editor/workbenchCodeMirrorDiagnostics'
+import { buildWorkbenchExternalValueSyncTransaction } from '@workbench/models/editor/workbenchCodeMirrorExternalSync'
+import { createWorkbenchInlayHintExtension } from '@workbench/models/editor/workbenchCodeMirrorInlayHints'
 import {
   workbenchInlineCompletionExtension,
   type WorkbenchInlineCompletionRuntime,
-} from '@velaros-ai/workbench/models/editor/workbenchCodeMirrorInlineCompletion'
+} from '@workbench/models/editor/workbenchCodeMirrorInlineCompletion'
 import {
-  getLoadedWorkbenchLanguagePluginExtension,
-  loadWorkbenchLanguagePluginExtension,
   resolveWorkbenchCodeMirrorLanguage,
-} from '@velaros-ai/workbench/models/editor/workbenchCodeMirrorLanguage'
+} from '@workbench/models/editor/workbenchCodeMirrorLanguage'
 import {
   buildWorkbenchEditorHoverDom,
   collectDiagnosticsAtPosition,
   createWorkbenchLanguageServiceHoverTooltip,
   createWorkbenchSignatureHelpExtension,
   findWorkbenchLanguageServiceReferences,
-} from '@velaros-ai/workbench/models/editor/workbenchCodeMirrorLanguageFeatures'
+} from '@workbench/models/editor/workbenchCodeMirrorLanguageFeatures'
 import {
   applyWorkbenchLanguageServiceEditsToContent,
   buildWorkbenchLanguageServiceRequestBase,
@@ -125,17 +121,15 @@ import {
   mergeWorkbenchLanguageServiceCompletions,
   usesWorkbenchBuiltinLanguageService,
   usesWorkbenchHtmlLanguageService,
-} from '@velaros-ai/workbench/models/editor/workbenchCodeMirrorLanguageService'
-import { workbenchLineNumbersExtension } from '@velaros-ai/workbench/models/editor/workbenchCodeMirrorLineNumberSelection'
+  usesWorkbenchSemanticLanguageService,
+} from '@workbench/models/editor/workbenchCodeMirrorLanguageService'
+import { workbenchLineNumbersExtension } from '@workbench/models/editor/workbenchCodeMirrorLineNumberSelection'
 import {
   getWorkbenchCodeMirrorTheme,
   workbenchCodeMirrorLintTheme,
-} from '@velaros-ai/workbench/models/editor/workbenchCodeMirrorTheme'
-import { createWorkbenchTokenOccurrenceHighlightExtension } from '@velaros-ai/workbench/models/editor/workbenchCodeMirrorTokenOccurrenceHighlight'
-import { buildWorkbenchIdeaIndentGuideColumnsForLineRange } from '@velaros-ai/workbench/models/editor/workbenchIndentGuides'
-import {
-  useWorkbenchLanguagePluginRuntime,
-} from '@velaros-ai/workbench/models/editor/WorkbenchLanguagePluginRuntimeProvider'
+} from '@workbench/models/editor/workbenchCodeMirrorTheme'
+import { createWorkbenchTokenOccurrenceHighlightExtension } from '@workbench/models/editor/workbenchCodeMirrorTokenOccurrenceHighlight'
+import { buildWorkbenchIdeaIndentGuideColumnsForLineRange } from '@workbench/models/editor/workbenchIndentGuides'
 import {
   getWorkbenchInlineCompletion,
   getWorkbenchLanguageServiceCompletions,
@@ -144,14 +138,16 @@ import {
   getWorkbenchLanguageServiceFormat,
   getWorkbenchLanguageServiceInlayHints,
   getWorkbenchLanguageServiceRename,
-} from '@velaros-ai/workbench/models/editor/workbenchLanguageServiceIpc'
+} from '@workbench/models/editor/workbenchLanguageServiceIpc'
 import {
   createWorkbenchPackageScriptRunGutterExtension,
   shouldShowWorkbenchPackageScriptRunGutter,
-} from '@velaros-ai/workbench/models/editor/workbenchPackageScriptRunGutter'
-import type { WorkbenchProjectContextIndex } from '@velaros-ai/workbench/models/project/workbenchProjectContextIndex'
-import type { WorkbenchThemeId } from '@velaros-ai/workbench/models/settings/workbenchPreferences'
-import type { WorkbenchOpenEditorTab } from '@velaros-ai/workbench/types/workbenchTypes'
+} from '@workbench/models/editor/workbenchPackageScriptRunGutter'
+import type { WorkbenchProjectContextIndex } from '@workbench/models/project/workbenchProjectContextIndex'
+import type { WorkbenchThemeId } from '@workbench/models/settings/workbenchPreferences'
+import type { WorkbenchOpenEditorTab } from '@workbench/types/workbenchTypes'
+
+import { isEmpty, isPresent, Log, toNullable, toOptional } from '@velaros-ai/core'
 
 import styles from '../../styles/workbenchPageStyles'
 import { useLatest, useTimerScope } from '../../support/genericHooks'
@@ -1023,7 +1019,6 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
     const { t } = useWorkbenchI18n()
     const hostRuntime = useWorkbenchHostRuntime()
     const commentStore = useWorkbenchCommentStore()
-    const languagePluginRuntime = useWorkbenchLanguagePluginRuntime()
     const containerRef = useRef<HTMLDivElement>(null)
     const contextMenuRef = useRef<HTMLDivElement>(null)
     const viewRef = useRef<EditorView>(null)
@@ -1051,15 +1046,9 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
     const languageServiceCompartment = useMemo(() => new Compartment(), [])
     const syntaxThemeCompartment = useMemo(() => new Compartment(), [])
     const progressiveLoadTimers = useTimerScope('WorkbenchEditorProgressiveLoad')
-    const [downloadedLanguagePluginIds, setDownloadedLanguagePluginIds] = useState<Set<string>>(
-      () => languagePluginRuntime.readDownloadedPluginIds()
-    )
-    // 语法 chunk 异步加载完成后自增，驱动 languageSupport 重算拿到已缓存的扩展。
-    const [languagePluginLoadNonce, setLanguagePluginLoadNonce] = useState(0)
     const languageSupport = useMemo(
-      () => resolveWorkbenchCodeMirrorLanguage(path, language, downloadedLanguagePluginIds),
-      // languagePluginLoadNonce 参与依赖：语法懒加载完成后重算以命中缓存扩展。
-      [downloadedLanguagePluginIds, language, path, languagePluginLoadNonce]
+      () => resolveWorkbenchCodeMirrorLanguage(path, language),
+      [language, path]
     )
     const languageSupportRef = useLatest(languageSupport)
     const languageExtension = languageSupport.extension
@@ -1441,6 +1430,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       if (!view || view.state.facet(EditorState.readOnly)) return
 
       const nextName = rawName.trim()
+      const semanticRename = usesWorkbenchSemanticLanguageService(pathRef.current)
       // 允许 Unicode 标识符（JS/TS 合法，含中文），仅排除以数字开头/含空白等非法名。
       if (
         !nextName ||
@@ -1494,6 +1484,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
               return
             }
           }
+          if (semanticRename) return
         } catch (error) {
           log.debug('查询语言服务重命名失败，回退到本地重命名', {
             projectRoot,
@@ -1501,7 +1492,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
             language,
             error,
           })
-          // Fall back to current-file text rename below.
+          if (semanticRename) return
         }
       }
 
@@ -1578,7 +1569,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         }
       }
 
-      selectAllOccurrences(word)
+      if (!usesWorkbenchSemanticLanguageService(pathRef.current)) selectAllOccurrences(word)
     }
 
     const formatDocument = async (): Promise<void> => {
@@ -1653,14 +1644,6 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         event.target instanceof Node && !!contextMenuRef.current?.contains(event.target),
     })
     useBlockWheelScroll(contextMenuRef, isPresent(contextMenu))
-
-    useEffect(() => {
-      const handleInstallStateChanged = (): void => {
-        setDownloadedLanguagePluginIds(languagePluginRuntime.readDownloadedPluginIds())
-      }
-
-      return languagePluginRuntime.subscribe(handleInstallStateChanged)
-    }, [languagePluginRuntime])
 
     useImperativeHandle(ref, () => ({
       focus: () => {
@@ -2003,22 +1986,6 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       view.dispatch({ effects: retainWorkbenchCommentAnchorsEffect.of(desired) })
     }, [workbenchComments, pathRef])
 
-    // 已下载但语法 chunk 尚未加载时，按需拉取对应语法并在完成后触发重算。
-    useEffect(() => {
-      const plugin = languageSupport.plugin
-      if (languageSupport.mode !== 'plugin-installed' || !plugin) return
-      if (getLoadedWorkbenchLanguagePluginExtension(plugin.id)) return
-
-      let cancelled = false
-      void loadWorkbenchLanguagePluginExtension(plugin.id).then((extension) => {
-        if (cancelled || !extension) return
-        setLanguagePluginLoadNonce((nonce) => nonce + 1)
-      })
-      return () => {
-        cancelled = true
-      }
-    }, [languageSupport])
-
     useEffect(() => {
       viewRef.current?.dispatch({
         effects: readOnlyCompartment.reconfigure(buildReadOnlyExtensions(readOnly, disabled)),
@@ -2130,7 +2097,6 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
           ref={containerRef}
           className={styles.codeMirrorEditor}
           data-language-support={languageSupport.mode}
-          data-language-plugin={languageSupport.plugin?.id}
           onContextMenu={openEditorContextMenu}
         />
         {!!contextMenu && (

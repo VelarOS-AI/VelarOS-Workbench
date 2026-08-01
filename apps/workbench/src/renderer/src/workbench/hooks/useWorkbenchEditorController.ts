@@ -1,15 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-
-import { isEmpty, Log, optionalWhenLazy, toNullable } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
-import { Result } from '@velaros-ai/core/result'
 import type {
   SystemWorkspaceFilesChangedEvent,
   WorkbenchLanguageServiceFileEdit,
   WorkbenchReadFileResult,
-} from '@velaros-ai/workbench/contracts'
-import { workbenchHost } from '@velaros-ai/workbench/host'
-import { applyWorkbenchLanguageServiceEditsToContent } from '@velaros-ai/workbench/models/editor/workbenchCodeMirrorLanguageService'
+} from '@workbench/contracts'
+import { workbenchHost } from '@workbench/host'
+import { applyWorkbenchLanguageServiceEditsToContent } from '@workbench/models/editor/workbenchCodeMirrorLanguageService'
 import {
   buildExternalChangeNoticeKey,
   getWorkbenchEditorFilesChangedRefreshDelayMs,
@@ -19,15 +15,19 @@ import {
   movePath,
   reuseWorkbenchOpenFileSnapshots,
   WORKBENCH_EDITOR_FILES_CHANGED_DEBOUNCE_MS,
-} from '@velaros-ai/workbench/models/editor/workbenchEditorTabs'
-import type { WorkbenchOpenFileSnapshot } from '@velaros-ai/workbench/models/project/workbenchProjectContextIndex'
-import type { WorkbenchProject } from '@velaros-ai/workbench/models/project/workbenchProjects'
-import { readWorkbenchLocalHistoryThrottleMs } from '@velaros-ai/workbench/models/settings/workbenchPreferences'
-import { isSameOrChildPath } from '@velaros-ai/workbench/models/shared/workbenchUtils'
+} from '@workbench/models/editor/workbenchEditorTabs'
+import type { WorkbenchOpenFileSnapshot } from '@workbench/models/project/workbenchProjectContextIndex'
+import type { WorkbenchProject } from '@workbench/models/project/workbenchProjects'
+import { readWorkbenchLocalHistoryThrottleMs } from '@workbench/models/settings/workbenchPreferences'
+import { isSameOrChildPath } from '@workbench/models/shared/workbenchUtils'
 import type {
   WorkbenchOpenEditorExternalChange,
   WorkbenchOpenEditorTab,
-} from '@velaros-ai/workbench/types/workbenchTypes'
+} from '@workbench/types/workbenchTypes'
+
+import { isEmpty, Log, optionalWhenLazy, toNullable } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
+import { Result } from '@velaros-ai/core/result'
 
 import { useStableWorkbenchMessageTranslate } from '../runtime/useStableWorkbenchMessaging'
 import { useLatest, useMemoizedFn, useMonotonicAsyncRequest, useTimerScope } from '../support/genericHooks'

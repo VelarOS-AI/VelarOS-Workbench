@@ -13,15 +13,15 @@ import {
   PlusIcon,
   UploadSimpleIcon,
 } from '@phosphor-icons/react'
+import type { SystemWorkspaceGitSummary, WorkspaceGitLogEntry } from '@workbench/contracts'
+import { workbenchHost } from '@workbench/host'
+import { useWorkbenchI18n } from '@workbench/i18n'
+import type { WorkbenchGitChangeItem } from '@workbench/models/git/workbenchGitModel'
 
 import { AppError } from '@velaros-ai/core'
 import { Result } from '@velaros-ai/core/result'
 import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
 import { Input } from '@velaros-ai/ui/primitives/forms/Input'
-import type { SystemWorkspaceGitSummary, WorkspaceGitLogEntry } from '@velaros-ai/workbench/contracts'
-import { workbenchHost } from '@velaros-ai/workbench/host'
-import { useWorkbenchI18n } from '@velaros-ai/workbench/i18n'
-import type { WorkbenchGitChangeItem } from '@velaros-ai/workbench/models/git/workbenchGitModel'
 
 import styles from '../../styles/workbenchPageStyles'
 

@@ -13,7 +13,6 @@ import {
 async function createReleaseRepository() {
   const root = await mkdtemp(path.join(tmpdir(), 'workbench-source-'))
   await mkdir(path.join(root, 'apps/workbench'), { recursive: true })
-  await mkdir(path.join(root, 'packages/workbench'), { recursive: true })
   await writeFile(
     path.join(root, 'package.json'),
     '{"name":"root","version":"0.3.0"}\n'
@@ -23,15 +22,10 @@ async function createReleaseRepository() {
     '{"name":"app","version":"0.3.0"}\n'
   )
   await writeFile(
-    path.join(root, 'packages/workbench/package.json'),
-    '{"name":"@velaros-ai/workbench","version":"0.3.0","publishConfig":{"registry":"https://npm.pkg.github.com"}}\n'
-  )
-  await writeFile(
     path.join(root, 'bun.lock'),
     `{
       "workspaces": {
         "apps/workbench": { "version": "0.3.0" },
-        "packages/workbench": { "version": "0.3.0" },
       },
     }\n`
   )
@@ -53,7 +47,6 @@ void describe('release source identity', () => {
       sourceSha,
     })
     assert.equal(identity.appVersion, '0.3.0')
-    assert.equal(identity.packageVersion, '0.3.0')
 
     await assert.rejects(
       validateReleaseSource({
@@ -82,15 +75,15 @@ void describe('release source identity', () => {
     )
   })
 
-  void test('rejects package and lock versions that drift from root', async () => {
+  void test('rejects app versions that drift from root', async () => {
     const { root } = await createReleaseRepository()
     await writeFile(
-      path.join(root, 'packages/workbench/package.json'),
-      '{"name":"@velaros-ai/workbench","version":"0.2.0","publishConfig":{"registry":"https://npm.pkg.github.com"}}\n'
+      path.join(root, 'apps/workbench/package.json'),
+      '{"name":"app","version":"0.2.0"}\n'
     )
     await assert.rejects(
       readReleaseVersions(root),
-      /package version 0.2.0 must equal root version 0.3.0/
+      /app version 0.2.0 must equal root version 0.3.0/
     )
   })
 

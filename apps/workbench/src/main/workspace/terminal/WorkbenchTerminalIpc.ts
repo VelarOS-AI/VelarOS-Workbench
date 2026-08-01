@@ -6,13 +6,12 @@
  * （与 WorkbenchFsIpc 的 runCommand 同模式）：每条事件带 sessionId，renderer 单一监听按 sessionId
  * 路由到对应终端/运行卡。
  */
-import { ipcMain } from 'electron'
-
 import type {
   WorkbenchTerminalInputRequest,
   WorkbenchTerminalStartRequest,
   WorkbenchTerminalStopRequest,
-} from '@velaros-ai/workbench/contracts'
+} from '@workbench/contracts'
+import { ipcMain } from 'electron'
 
 import { WorkbenchTerminalChannels } from '../../../shared/workbenchTerminal'
 import {

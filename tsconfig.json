@@ -2,8 +2,8 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@velaros-ai/workbench": ["./packages/workbench/src/index.ts"],
-      "@velaros-ai/workbench/*": ["./packages/workbench/src/*"]
+      "@workbench": ["./apps/workbench/src/workbench/index.ts"],
+      "@workbench/*": ["./apps/workbench/src/workbench/*"]
     }
   },
   "files": []

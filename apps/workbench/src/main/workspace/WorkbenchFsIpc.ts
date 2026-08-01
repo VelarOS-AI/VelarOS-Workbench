@@ -5,8 +5,6 @@
  * `saveFileSync` 走 `ipcMain.on` + `event.returnValue`（renderer sendSync 的 beforeunload
  * 兜底路径）；`runCommand` 的流式输出只回发给发起请求的 webContents。
  */
-import { ipcMain } from 'electron'
-
 import type {
   WorkbenchCreateEntryRequest,
   WorkbenchDeleteEntryRequest,
@@ -21,7 +19,8 @@ import type {
   WorkbenchSaveFileRequest,
   WorkbenchSearchContentRequest,
   WorkbenchSearchEntriesRequest,
-} from '@velaros-ai/workbench/contracts'
+} from '@workbench/contracts'
+import { ipcMain } from 'electron'
 
 import { WorkbenchFsChannels } from '../../shared/workbenchFs'
 

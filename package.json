@@ -6,33 +6,26 @@
   "packageManager": "bun@1.3.13",
   "scripts": {
     "dev": "bun run --cwd apps/workbench dev",
-    "build:package": "bun run --cwd packages/workbench build",
     "build:app": "bun run --cwd apps/workbench build",
-    "build": "bun run build:package && bun run build:app",
-    "typecheck": "node scripts/run-workspace-script.mjs typecheck && bun run --cwd apps/workbench typecheck",
+    "build": "bun run build:app",
+    "typecheck": "bun run --cwd apps/workbench typecheck",
     "lint": "eslint . --max-warnings=0",
     "check:boundaries": "node scripts/checkProductBoundaries.mjs",
-    "check:package-contracts": "node scripts/checkPackageContracts.mjs",
     "test": "bun test tests",
-    "probe:app": "bun run --cwd apps/workbench probe:watch && bun run --cwd apps/workbench probe:grammar && bun run --cwd apps/workbench probe:git && bun run --cwd apps/workbench probe:terminal && bun run --cwd apps/workbench probe:agent-mods && bun run --cwd apps/workbench probe:kernel-host",
-    "probe": "bun run build:package && bun run probe:app",
-    "check": "bun run check:boundaries && bun run build:package && bun run check:package-contracts && bun run typecheck && bun run lint && bun run test && bun run probe:app && bun run build:app",
-    "package:grammars": "node scripts/build/packageLanguageGrammars.mjs",
+    "test:velar:installed": "bun --conditions=source scripts/test/verifyInstalledVelarToolchain.ts",
+    "probe:app": "bun run --cwd apps/workbench probe:watch && bun run --cwd apps/workbench probe:git && bun run --cwd apps/workbench probe:terminal && bun run --cwd apps/workbench probe:agent-mods && bun run --cwd apps/workbench probe:kernel-host",
+    "probe": "bun run probe:app",
+    "check": "bun run check:boundaries && bun run typecheck && bun run lint && bun run test && bun run probe:app && bun run build:app",
     "package:mac": "bun run build && electron-builder --config apps/workbench/electron-builder.yml --mac",
     "package:app:dir": "bun run build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --config apps/workbench/electron-builder.yml --mac --dir -c.mac.identity=null -c.mac.notarize=false",
     "verify:app:dir": "node scripts/release/verifyPackagedApp.mjs",
     "package:win": "bun run build && electron-builder --config apps/workbench/electron-builder.yml --win",
     "package:linux": "bun run build && electron-builder --config apps/workbench/electron-builder.yml --linux",
-    "link:local": "node scripts/dev/link-local-packages.mjs",
-    "release:dry-run": "node scripts/release/publish-packages.mjs --dry-run",
-    "release:packages": "node scripts/release/publish-packages.mjs"
+    "bootstrap:local": "bun run link:local && bun install --frozen-lockfile",
+    "link:local": "node scripts/dev/link-local-packages.mjs"
   },
   "devDependencies": {
     "@codemirror/autocomplete": "^6.20.1",
-    "@codemirror/lang-cpp": "^6.0.3",
-    "@codemirror/lang-go": "^6.0.1",
-    "@codemirror/lang-java": "^6.0.2",
-    "@codemirror/lang-rust": "^6.0.2",
     "@codemirror/language": "^6.12.3",
     "@codemirror/state": "^6.6.0",
     "@codemirror/view": "^6.43.0",
@@ -63,8 +56,7 @@
     "vite": "^7.3.2"
   },
   "workspaces": [
-    "apps/*",
-    "packages/*"
+    "apps/*"
   ],
   "repository": {
     "type": "git",

@@ -7,7 +7,8 @@
 import { opendir, realpath, stat } from 'node:fs/promises'
 import { basename } from 'node:path'
 
-import type { WorkbenchDirectoryEntry } from '@velaros-ai/workbench/contracts'
+import type { WorkbenchDirectoryEntry } from '@workbench/contracts'
+
 import { shouldSkipWorkspaceToolDirectory } from '@velaros-ai/workspace'
 
 import type { PathResolver } from './PathResolver'

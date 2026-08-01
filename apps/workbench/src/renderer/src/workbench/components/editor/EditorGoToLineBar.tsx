@@ -1,12 +1,12 @@
 import { HashIcon, XIcon } from '@phosphor-icons/react'
+import { useWorkbenchI18n } from '@workbench/i18n'
+import type { WorkbenchEditorGoToLineTarget } from '@workbench/models/editor/workbenchEditorModel'
 import type { ReactElement } from 'react'
 
 import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 import { Text } from '@velaros-ai/ui/primitives/display/Text'
 import { Input } from '@velaros-ai/ui/primitives/forms/Input'
-import { useWorkbenchI18n } from '@velaros-ai/workbench/i18n'
-import type { WorkbenchEditorGoToLineTarget } from '@velaros-ai/workbench/models/editor/workbenchEditorModel'
 
 import styles from '../../styles/workbenchPageStyles'
 

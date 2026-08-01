@@ -5,22 +5,10 @@ release/
 release-stage/
 release-existing/
 !scripts/release/
-!scripts/release/publish-packages.mjs
 !scripts/release/appReleaseArtifacts.mjs
 !scripts/release/releaseIdentity.mjs
 dist-plugins/
 .data/
-
-# 编译产物只能 emit 到 dist/,禁止提交进 packages/*/src(承袭 monorepo 债务普查 2026-07 §5 波#12)。
-# .js/.js.map/.d.ts.map/编译型 .d.ts 一律忽略;手写 ambient .d.ts(每包的
-# velaros-globals.d.ts + 少量类型 shim)是源码,用 ! 负向豁免。
-# 新增手写 .d.ts shim 时必须在下方补一条 ! 规则,否则会被静默忽略。
-packages/*/src/**/*.js
-packages/*/src/**/*.js.map
-packages/*/src/**/*.d.ts.map
-packages/*/src/**/*.d.ts
-!packages/*/src/**/velaros-globals.d.ts
-!packages/workbench/src/types/tinykeys.d.ts
 
 # 根目录 types/ 下的手写全局类型单源
 !types/velaros-globals.d.ts

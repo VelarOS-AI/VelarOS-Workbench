@@ -1,12 +1,12 @@
 import { Fragment, type ReactElement } from 'react'
 import { CaretRightIcon, FolderIcon, FolderOpenIcon } from '@phosphor-icons/react'
+import { useWorkbenchI18n } from '@workbench/i18n'
+import type { WorkbenchPathBreadcrumbItem } from '@workbench/models/files/workbenchPathModel'
 
 import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 import { FileTypeIcon } from '@velaros-ai/ui/primitives/display/FileTypeIcon'
 import { Text } from '@velaros-ai/ui/primitives/display/Text'
-import { useWorkbenchI18n } from '@velaros-ai/workbench/i18n'
-import type { WorkbenchPathBreadcrumbItem } from '@velaros-ai/workbench/models/files/workbenchPathModel'
 
 import styles from '../../styles/workbenchPageStyles'
 

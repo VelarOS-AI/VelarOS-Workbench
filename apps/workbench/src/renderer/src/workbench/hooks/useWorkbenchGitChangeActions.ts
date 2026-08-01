@@ -1,11 +1,11 @@
 import { type FormEvent,useState } from 'react'
+import type { AppLocale, SystemWorkspaceGitSummary, WorkspaceGitFileAction } from '@workbench/contracts'
+import { workbenchHost } from '@workbench/host'
+import type { WorkbenchGitChangeItem } from '@workbench/models/git/workbenchGitModel'
 
 import { isPresent } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { Result } from '@velaros-ai/core/result'
-import type { AppLocale, SystemWorkspaceGitSummary, WorkspaceGitFileAction } from '@velaros-ai/workbench/contracts'
-import { workbenchHost } from '@velaros-ai/workbench/host'
-import type { WorkbenchGitChangeItem } from '@velaros-ai/workbench/models/git/workbenchGitModel'
 
 import { type useStableWorkbenchMessageTranslate } from '../runtime/useStableWorkbenchMessaging'
 import { useLatest } from '../support/genericHooks'

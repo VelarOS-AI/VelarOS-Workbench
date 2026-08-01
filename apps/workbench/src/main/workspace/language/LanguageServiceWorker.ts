@@ -1,7 +1,10 @@
 import { parentPort } from 'node:worker_threads'
 
+import { registerWorkbenchLanguageService } from '@workbench/language'
+
 import { AppError } from '@velaros-ai/core/error'
 
+import { VelarWorkbenchLanguageService } from '../../../contributions/velar/service'
 import { PathResolver } from '../PathResolver'
 
 import { WorkbenchLanguageServices } from './LanguageServices'
@@ -15,6 +18,7 @@ const port = (() => {
   return parentPort
 })()
 
+registerWorkbenchLanguageService(VelarWorkbenchLanguageService)
 const languageServices = new WorkbenchLanguageServices(new PathResolver())
 
 async function dispatch(request: WorkbenchLanguageServiceWorkerRequest): Promise<unknown> {
@@ -68,4 +72,8 @@ port.on('message', (request: WorkbenchLanguageServiceWorkerRequest) => {
     () => handleRequest(request),
     () => handleRequest(request)
   )
+})
+
+port.on('close', () => {
+  void languageServices.dispose()
 })

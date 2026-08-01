@@ -56,7 +56,7 @@ async function writeLinuxRelease(releaseDir: string) {
 }
 
 void describe('Workbench app release artifacts', () => {
-  void test('requires the release tag to equal the root/app/package version', async () => {
+  void test('requires the release tag to equal the root and app version', async () => {
     await validateReleaseTag(process.cwd(), releaseTag)
     await assert.rejects(
       validateReleaseTag(process.cwd(), 'main'),

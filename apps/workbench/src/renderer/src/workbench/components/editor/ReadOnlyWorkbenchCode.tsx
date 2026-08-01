@@ -1,12 +1,10 @@
 import { type ReactElement, useEffect, useRef } from 'react'
 import { EditorState } from '@codemirror/state'
 import { EditorView, lineNumbers } from '@codemirror/view'
-
-import { buildReadOnlyCodeSearchHighlight } from '@velaros-ai/workbench/models/editor/readOnlyCodeSearchHighlight'
-import { resolveWorkbenchCodeMirrorLanguage } from '@velaros-ai/workbench/models/editor/workbenchCodeMirrorLanguage'
-import { getWorkbenchCodeMirrorTheme } from '@velaros-ai/workbench/models/editor/workbenchCodeMirrorTheme'
-import { useWorkbenchLanguagePluginRuntime } from '@velaros-ai/workbench/models/editor/WorkbenchLanguagePluginRuntimeProvider'
-import type { WorkbenchThemeId } from '@velaros-ai/workbench/models/settings/workbenchPreferences'
+import { buildReadOnlyCodeSearchHighlight } from '@workbench/models/editor/readOnlyCodeSearchHighlight'
+import { resolveWorkbenchCodeMirrorLanguage } from '@workbench/models/editor/workbenchCodeMirrorLanguage'
+import { getWorkbenchCodeMirrorTheme } from '@workbench/models/editor/workbenchCodeMirrorTheme'
+import type { WorkbenchThemeId } from '@workbench/models/settings/workbenchPreferences'
 
 import styles from '../../styles/workbenchPageStyles'
 
@@ -22,17 +20,12 @@ export function ReadOnlyWorkbenchCode({
   highlightQuery?: string
 }): ReactElement {
   const hostRef = useRef<HTMLDivElement>(null)
-  const languagePluginRuntime = useWorkbenchLanguagePluginRuntime()
 
   useEffect(() => {
     const host = hostRef.current
     if (!host) return
 
-    const language = resolveWorkbenchCodeMirrorLanguage(
-      path,
-      '',
-      languagePluginRuntime.readDownloadedPluginIds()
-    )
+    const language = resolveWorkbenchCodeMirrorLanguage(path, '')
     const view = new EditorView({
       parent: host,
       state: EditorState.create({
@@ -48,7 +41,7 @@ export function ReadOnlyWorkbenchCode({
       }),
     })
     return () => view.destroy()
-  }, [content, highlightQuery, languagePluginRuntime, path, workbenchTheme])
+  }, [content, highlightQuery, path, workbenchTheme])
 
   return <div ref={hostRef} className={styles.editorHistoryCodeViewer} />
 }

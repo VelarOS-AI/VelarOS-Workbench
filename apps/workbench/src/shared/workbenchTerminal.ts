@@ -2,7 +2,7 @@
  * 独立 Workbench 应用「持久终端会话」的 main ↔ renderer IPC 契约（应用私有）。
  *
  * 这是 `WorkbenchHost.kernel.project` 端口三个终端动词（start / write / stop）+ 输出事件在独立
- * 应用侧的实装传输面：请求/结果形状直接复用 `@velaros-ai/workbench/contracts` 的 Workbench Kernel contracts
+ * 应用侧的实装传输面：请求/结果形状直接复用 `@workbench/contracts` 的 Workbench Kernel contracts
  * （单源，不另造镜像），本文件只补通道名与桥面。错误信封复用 `WorkbenchFsCallResult`（main 侧
  * 异常降为数据，renderer 侧再升回 Result）。
  *
@@ -16,7 +16,7 @@ import type {
   WorkbenchTerminalStartRequest,
   WorkbenchTerminalStartResult,
   WorkbenchTerminalStopRequest,
-} from '@velaros-ai/workbench/contracts'
+} from '@workbench/contracts'
 
 import type { WorkbenchFsCallResult } from './workbenchFs'
 

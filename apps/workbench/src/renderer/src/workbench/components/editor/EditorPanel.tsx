@@ -11,6 +11,32 @@ import {
   useState,
 } from 'react'
 import { WarningCircleIcon } from '@phosphor-icons/react'
+import type {
+  WorkbenchLanguageServiceDiagnostic,
+  WorkbenchLanguageServiceFileEdit,
+} from '@workbench/contracts'
+import { useWorkbenchI18n } from '@workbench/i18n'
+import type { PackageManagerCommand } from '@workbench/models/commands/workbenchPackageScriptCommand'
+import { inferWorkbenchPackageManagerForPackageJsonPath } from '@workbench/models/commands/workbenchPackageScriptCommand'
+import {
+  buildWorkbenchDiagnosticProblemId,
+  findWorkbenchDiagnosticIndexAtPosition,
+  resolveWorkbenchDiagnosticNavigationIndex,
+  sortWorkbenchFileDiagnostics,
+} from '@workbench/models/editor/workbenchCodeInsightModel'
+import {
+  buildWorkbenchEditorFindMatches,
+  getWorkbenchEditorLineCount,
+  parseWorkbenchGoToLineInput,
+} from '@workbench/models/editor/workbenchEditorModel'
+import {
+  isSameWorkbenchGitChangeItem,
+  type WorkbenchGitChangeItem,
+  type WorkbenchGitDecorationMap,
+} from '@workbench/models/git/workbenchGitModel'
+import type { WorkbenchThemeId } from '@workbench/models/settings/workbenchPreferences'
+import { fileLanguage } from '@workbench/models/shared/workbenchUtils'
+import type { WorkbenchLightEditorTab } from '@workbench/types/workbenchTypes'
 
 import { isPresent,Log, toNullable } from '@velaros-ai/core'
 import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
@@ -24,32 +50,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@velaros-ai/ui/primitives/overlays/Dialog'
-import type {
-  WorkbenchLanguageServiceDiagnostic,
-  WorkbenchLanguageServiceFileEdit,
-} from '@velaros-ai/workbench/contracts'
-import { useWorkbenchI18n } from '@velaros-ai/workbench/i18n'
-import type { PackageManagerCommand } from '@velaros-ai/workbench/models/commands/workbenchPackageScriptCommand'
-import { inferWorkbenchPackageManagerForPackageJsonPath } from '@velaros-ai/workbench/models/commands/workbenchPackageScriptCommand'
-import {
-  buildWorkbenchDiagnosticProblemId,
-  findWorkbenchDiagnosticIndexAtPosition,
-  resolveWorkbenchDiagnosticNavigationIndex,
-  sortWorkbenchFileDiagnostics,
-} from '@velaros-ai/workbench/models/editor/workbenchCodeInsightModel'
-import {
-  buildWorkbenchEditorFindMatches,
-  getWorkbenchEditorLineCount,
-  parseWorkbenchGoToLineInput,
-} from '@velaros-ai/workbench/models/editor/workbenchEditorModel'
-import {
-  isSameWorkbenchGitChangeItem,
-  type WorkbenchGitChangeItem,
-  type WorkbenchGitDecorationMap,
-} from '@velaros-ai/workbench/models/git/workbenchGitModel'
-import type { WorkbenchThemeId } from '@velaros-ai/workbench/models/settings/workbenchPreferences'
-import { fileLanguage } from '@velaros-ai/workbench/models/shared/workbenchUtils'
-import type { WorkbenchLightEditorTab } from '@velaros-ai/workbench/types/workbenchTypes'
 
 import styles from '../../styles/workbenchPageStyles'
 import { useLatest, useTimerScope } from '../../support/genericHooks'

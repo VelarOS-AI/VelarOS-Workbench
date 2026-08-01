@@ -6,13 +6,12 @@ import {
   useState,
   useSyncExternalStore,
 } from 'react'
-
 import type {
   WorkbenchChatCompositionAdapter,
   WorkbenchChatProjectRuntime,
   WorkbenchChatSessionSnapshot,
-} from '@velaros-ai/workbench/composition'
-import type { ChatMessage } from '@velaros-ai/workbench/contracts'
+} from '@workbench/composition'
+import type { ChatMessage } from '@workbench/contracts'
 
 interface StandaloneChatState {
   readonly projectRoot: string

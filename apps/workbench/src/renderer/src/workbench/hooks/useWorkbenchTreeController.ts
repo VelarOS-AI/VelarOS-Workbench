@@ -1,25 +1,25 @@
 import { useMemo, useState } from 'react'
-
-import { isEmpty } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
-import { Result } from '@velaros-ai/core/result'
 import type {
   WorkbenchDirectoryEntry,
   WorkbenchListDirectoryResult,
   WorkbenchReadFileResult,
-} from '@velaros-ai/workbench/contracts'
-import { workbenchHost } from '@velaros-ai/workbench/host'
+} from '@workbench/contracts'
+import { workbenchHost } from '@workbench/host'
 import {
   getWorkbenchPathAncestorDirectories,
   getWorkbenchPathParentDirectory,
-} from '@velaros-ai/workbench/models/files/workbenchPathModel'
-import type { WorkbenchProject } from '@velaros-ai/workbench/models/project/workbenchProjects'
+} from '@workbench/models/files/workbenchPathModel'
+import type { WorkbenchProject } from '@workbench/models/project/workbenchProjects'
 import {
   findEntryByPath,
   isSameOrChildPath,
   isWorkbenchTreeRoot,
   ROOT_PATH,
-} from '@velaros-ai/workbench/models/shared/workbenchUtils'
+} from '@workbench/models/shared/workbenchUtils'
+
+import { isEmpty } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
+import { Result } from '@velaros-ai/core/result'
 
 import { useStableWorkbenchMessageTranslate } from '../runtime/useStableWorkbenchMessaging'
 import { useLatest, useMemoizedFn } from '../support/genericHooks'

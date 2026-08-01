@@ -10,37 +10,20 @@ import {
 } from 'react'
 import {
   ArrowCounterClockwiseIcon,
-  CheckCircleIcon,
-  DownloadSimpleIcon,
   FileTextIcon,
-  MagnifyingGlassIcon,
   PlugsConnectedIcon,
   WarningCircleIcon,
   XIcon,
 } from '@phosphor-icons/react'
-
-import { isPresent } from '@velaros-ai/core'
-import { Result } from '@velaros-ai/core/result'
-import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
-import { Text } from '@velaros-ai/ui/primitives/display/Text'
-import { Title } from '@velaros-ai/ui/primitives/display/Title'
-import { Input } from '@velaros-ai/ui/primitives/forms/Input'
-import { Select } from '@velaros-ai/ui/primitives/forms/Select'
-import { Switch } from '@velaros-ai/ui/primitives/forms/Switch'
 import type {
   AppLocale,
   WorkbenchProjectAiRuleFile,
   WorkbenchProjectAiRulesResult,
-} from '@velaros-ai/workbench/contracts'
-import { useWorkbenchHostRuntime } from '@velaros-ai/workbench/host'
-import type { WorkbenchMessageKey } from '@velaros-ai/workbench/i18n'
-import { useWorkbenchI18n } from '@velaros-ai/workbench/i18n'
-import {
-  getDownloadableWorkbenchLanguagePlugins,
-  type WorkbenchLanguagePluginDescriptor,
-} from '@velaros-ai/workbench/models/editor/workbenchLanguagePluginModel'
-import { useWorkbenchLanguagePluginRuntime } from '@velaros-ai/workbench/models/editor/WorkbenchLanguagePluginRuntimeProvider'
-import type { WorkbenchKeymapConflict } from '@velaros-ai/workbench/models/layout/workbenchKeyboardShortcuts'
+} from '@workbench/contracts'
+import { useWorkbenchHostRuntime } from '@workbench/host'
+import type { WorkbenchMessageKey } from '@workbench/i18n'
+import { useWorkbenchI18n } from '@workbench/i18n'
+import type { WorkbenchKeymapConflict } from '@workbench/models/layout/workbenchKeyboardShortcuts'
 import {
   DEFAULT_WORKBENCH_KEYBOARD_SHORTCUT_MAP,
   formatWorkbenchShortcutForPlatform,
@@ -48,13 +31,21 @@ import {
   WORKBENCH_KEYBOARD_SHORTCUT_DEFINITIONS,
   type WorkbenchKeyboardShortcutAction,
   type WorkbenchKeyboardShortcutMap,
-} from '@velaros-ai/workbench/models/layout/workbenchKeyboardShortcuts'
+} from '@workbench/models/layout/workbenchKeyboardShortcuts'
 import type {
   WorkbenchAccent,
   WorkbenchDensity,
   WorkbenchPreferences,
   WorkbenchThemeId,
-} from '@velaros-ai/workbench/models/settings/workbenchPreferences'
+} from '@workbench/models/settings/workbenchPreferences'
+
+import { Result } from '@velaros-ai/core/result'
+import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
+import { Text } from '@velaros-ai/ui/primitives/display/Text'
+import { Title } from '@velaros-ai/ui/primitives/display/Title'
+import { Input } from '@velaros-ai/ui/primitives/forms/Input'
+import { Select } from '@velaros-ai/ui/primitives/forms/Select'
+import { Switch } from '@velaros-ai/ui/primitives/forms/Switch'
 
 import type {
   WorkbenchAgentModsOverview,
@@ -70,7 +61,6 @@ type WorkbenchSettingsSectionId =
   | 'ai-rules'
   | 'keymap'
   | 'language'
-  | 'plugins'
   | 'mods'
   | 'advanced'
 
@@ -177,21 +167,16 @@ export function WorkbenchSettingsDialog({
 }: WorkbenchSettingsDialogProps): Nullable<ReactElement> {
   const { t } = useWorkbenchI18n()
   const hostRuntime = useWorkbenchHostRuntime()
-  const languagePluginRuntime = useWorkbenchLanguagePluginRuntime()
   const timers = useTimerScope('WorkbenchSettingsDialog')
   const [activeSection, setActiveSection] = useState<WorkbenchSettingsSectionId>('appearance')
   const [capturingAction, setCapturingAction] =
     useState<Nullable<WorkbenchKeyboardShortcutAction>>(null)
-  const [pluginQuery, setPluginQuery] = useState('')
   const [projectAiRules, setProjectAiRules] =
     useState<Nullable<WorkbenchProjectAiRulesResult>>(null)
   const [expandedProjectAiRulePath, setExpandedProjectAiRulePath] = useState<Nullable<string>>(null)
   const [isLoadingProjectAiRules, setIsLoadingProjectAiRules] = useState(false)
   const [modsOverview, setModsOverview] = useState<Nullable<WorkbenchAgentModsOverview>>(null)
   const [isLoadingModsOverview, setIsLoadingModsOverview] = useState(false)
-  const [downloadedPluginIds, setDownloadedPluginIds] = useState<Set<string>>(() =>
-    languagePluginRuntime.readDownloadedPluginIds()
-  )
   const dialogRef = useRef<HTMLDivElement>(null)
 
   const sections = useMemo(
@@ -220,11 +205,6 @@ export function WorkbenchSettingsDialog({
         id: 'language' as const,
         label: t('workbench.settingsLanguage'),
         description: t('workbench.settingsLanguageDescription'),
-      },
-      {
-        id: 'plugins' as const,
-        label: t('workbench.settingsPlugins'),
-        description: t('workbench.settingsPluginsDescription'),
       },
       {
         id: 'mods' as const,
@@ -277,19 +257,6 @@ export function WorkbenchSettingsDialog({
     [conflicts]
   )
 
-  const pluginDescriptors = useMemo(() => getDownloadableWorkbenchLanguagePlugins(), [])
-  const filteredPluginDescriptors = useMemo(() => {
-    const query = pluginQuery.trim().toLowerCase()
-    if (!query) return pluginDescriptors
-
-    return pluginDescriptors.filter((plugin) =>
-      [plugin.id, plugin.label, plugin.packageName, ...plugin.extensions, ...plugin.languages]
-        .join(' ')
-        .toLowerCase()
-        .includes(query)
-    )
-  }, [pluginDescriptors, pluginQuery])
-
   useEffect(() => {
     if (!open) {
       setCapturingAction(null)
@@ -317,14 +284,6 @@ export function WorkbenchSettingsDialog({
 
     void refreshModsOverview()
   }, [activeSection, open, refreshModsOverview])
-
-  useEffect(() => {
-    const refresh = (): void => {
-      setDownloadedPluginIds(languagePluginRuntime.readDownloadedPluginIds())
-    }
-
-    return languagePluginRuntime.subscribe(refresh)
-  }, [languagePluginRuntime])
 
   if (!open) return null
 
@@ -357,12 +316,6 @@ export function WorkbenchSettingsDialog({
 
     onSetShortcut(action, shortcut)
     setCapturingAction(null)
-  }
-
-  function installLanguagePlugin(plugin: WorkbenchLanguagePluginDescriptor): void {
-    if (downloadedPluginIds.has(plugin.id)) return
-
-    setDownloadedPluginIds(languagePluginRuntime.install(plugin.id))
   }
 
   function renderProjectAiRuleRow(file: WorkbenchProjectAiRuleFile): ReactElement {
@@ -690,80 +643,17 @@ export function WorkbenchSettingsDialog({
             onChange={(nextLocale) => void onLocaleChange(nextLocale)}
           />
         </SettingRow>
-      </div>
-    )
-  }
-
-  function renderPluginsSection(): ReactElement {
-    return (
-      <div className={styles.workbenchSettingsSectionPanel}>
-        <div className={styles.workbenchSettingsPluginSearch}>
-          <MagnifyingGlassIcon size={14} />
-          <Input
-            size="sm"
-            value={pluginQuery}
-            placeholder={t('workbench.settingsPluginsSearchPlaceholder')}
-            onChange={(event) => setPluginQuery(event.currentTarget.value)}
-          />
-        </div>
-        <div className={styles.workbenchSettingsPluginList}>
-          {filteredPluginDescriptors.map((plugin) => {
-            const installed = downloadedPluginIds.has(plugin.id)
-            const installState = languagePluginRuntime.getInstallState(plugin.id)
-            const installing = isPresent(installState) && installState.phase !== 'failed'
-            const installingLabel =
-              installing && isPresent(installState.percent)
-                ? `${t('workbench.settingsPluginInstall')} · ${installState.percent}%`
-                : `${t('workbench.settingsPluginInstall')} · ${plugin.label}`
-            const actionLabel = installed
-              ? `${t('workbench.settingsPluginInstalled')} · ${plugin.label}`
-              : installing
-                ? installingLabel
-                : `${t('workbench.settingsPluginInstall')} · ${plugin.label}`
-
-            return (
-              <div key={plugin.id} className={styles.workbenchSettingsPluginRow}>
-                <div className={styles.workbenchSettingsPluginIcon}>
-                  <PlugsConnectedIcon size={15} />
-                </div>
-                <div className={styles.workbenchSettingsPluginMeta}>
-                  <Text className={styles.workbenchSettingsPluginName}>{plugin.label}</Text>
-                  <Text tone="caption" className={styles.workbenchSettingsPluginDescription}>
-                    {plugin.extensions.join(', ')} · {plugin.packageName}
-                  </Text>
-                </div>
-                <div className={styles.workbenchSettingsPluginActions}>
-                  {installed ? (
-                    <IconButton
-                      label={actionLabel}
-                      title={actionLabel}
-                      variant="ghost"
-                      size="icon-sm"
-                      disabled
-                      className={styles.workbenchSettingsPluginActionButton}
-                      data-installed="true"
-                    >
-                      <CheckCircleIcon size={16} weight="fill" />
-                    </IconButton>
-                  ) : (
-                    <IconButton
-                      label={actionLabel}
-                      title={actionLabel}
-                      variant="ghost"
-                      size="icon-sm"
-                      disabled={installing}
-                      data-installing={installing || undefined}
-                      className={styles.workbenchSettingsPluginActionButton}
-                      onClick={() => installLanguagePlugin(plugin)}
-                    >
-                      <DownloadSimpleIcon size={16} />
-                    </IconButton>
-                  )}
-                </div>
-              </div>
-            )
-          })}
-        </div>
+        <SettingRow
+          title={t('workbench.settingsPrimaryLanguages')}
+          description={t('workbench.settingsPrimaryLanguagesDescription')}
+        >
+          <div className={styles.workbenchSettingsShortcutControls}>
+            <WorkbenchSettingsPill tone="success">VelarScript</WorkbenchSettingsPill>
+            <WorkbenchSettingsPill>JS / TS / JSX</WorkbenchSettingsPill>
+            <WorkbenchSettingsPill>Python</WorkbenchSettingsPill>
+            <WorkbenchSettingsPill>Web</WorkbenchSettingsPill>
+          </div>
+        </SettingRow>
       </div>
     )
   }
@@ -941,9 +831,6 @@ export function WorkbenchSettingsDialog({
       }
       case 'language': {
         return renderLanguageSection()
-      }
-      case 'plugins': {
-        return renderPluginsSection()
       }
       case 'mods': {
         return renderModsSection()

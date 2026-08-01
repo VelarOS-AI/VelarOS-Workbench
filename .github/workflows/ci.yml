@@ -31,6 +31,3 @@ jobs:
           ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - run: bun run check
-      - run: bun run release:dry-run
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

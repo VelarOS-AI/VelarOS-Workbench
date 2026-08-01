@@ -1,14 +1,14 @@
 import { lazy, type ReactElement, Suspense } from 'react'
-
-import { Text } from '@velaros-ai/ui/primitives/display/Text'
-import { useWorkbenchI18n } from '@velaros-ai/workbench/i18n'
+import { useWorkbenchI18n } from '@workbench/i18n'
 import {
   EMPTY_LIGHT_EDITOR_PROJECT_CONTEXT_INDEX,
   resolveLightEditorLanguagePath,
-} from '@velaros-ai/workbench/models/lightEditorModel'
-import type { WorkbenchThemeId } from '@velaros-ai/workbench/models/settings/workbenchPreferences'
-import { fileLanguage } from '@velaros-ai/workbench/models/shared/workbenchUtils'
-import type { WorkbenchLightEditorTab } from '@velaros-ai/workbench/types/workbenchTypes'
+} from '@workbench/models/lightEditorModel'
+import type { WorkbenchThemeId } from '@workbench/models/settings/workbenchPreferences'
+import { fileLanguage } from '@workbench/models/shared/workbenchUtils'
+import type { WorkbenchLightEditorTab } from '@workbench/types/workbenchTypes'
+
+import { Text } from '@velaros-ai/ui/primitives/display/Text'
 
 import styles from '../../styles/workbenchPageStyles'
 

@@ -1,9 +1,10 @@
-import { Result } from '@velaros-ai/core'
-import type { WorkbenchProductRuntimeValue } from '@velaros-ai/workbench/composition'
+import type { WorkbenchProductRuntimeValue } from '@workbench/composition'
 import type {
   AuxiliaryModelConfig,
   AuxiliaryModelConfigs,
-} from '@velaros-ai/workbench/contracts'
+} from '@workbench/contracts'
+
+import { Result } from '@velaros-ai/core'
 
 import chatStyles from './standaloneWorkbenchChat.module.css'
 

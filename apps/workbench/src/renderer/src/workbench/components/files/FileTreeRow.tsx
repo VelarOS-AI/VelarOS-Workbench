@@ -10,6 +10,10 @@ import {
   useRef,
 } from 'react'
 import { CaretDownIcon, CaretRightIcon, FolderIcon, FolderOpenIcon } from '@phosphor-icons/react'
+import type { WorkbenchDirectoryEntry } from '@workbench/contracts'
+import { type FileTreeNodeData } from '@workbench/models/files/fileTree.model'
+import type { WorkbenchGitDecorationMap } from '@workbench/models/git/workbenchGitModel'
+import { isWorkbenchTreeRoot } from '@workbench/models/shared/workbenchUtils'
 import type { NodeRendererProps } from 'react-arborist'
 
 import { isNumber } from '@velaros-ai/core'
@@ -17,10 +21,6 @@ import { AppError } from '@velaros-ai/core/error'
 import { StyleUtils } from '@velaros-ai/ui'
 import { FileTypeIcon } from '@velaros-ai/ui/primitives/display/FileTypeIcon'
 import { Input } from '@velaros-ai/ui/primitives/forms/Input'
-import type { WorkbenchDirectoryEntry } from '@velaros-ai/workbench/contracts'
-import { type FileTreeNodeData } from '@velaros-ai/workbench/models/files/fileTree.model'
-import type { WorkbenchGitDecorationMap } from '@velaros-ai/workbench/models/git/workbenchGitModel'
-import { isWorkbenchTreeRoot } from '@velaros-ai/workbench/models/shared/workbenchUtils'
 
 import styles from '../../styles/workbenchPageStyles'
 

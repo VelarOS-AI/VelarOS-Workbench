@@ -5,35 +5,20 @@ import path from 'node:path'
 
 import ts from 'typescript'
 
-const registry = 'https://npm.pkg.github.com'
-
 export async function readReleaseVersions(repoRoot) {
   const rootManifest = await readJson(path.join(repoRoot, 'package.json'))
   const appManifest = await readJson(path.join(repoRoot, 'apps/workbench/package.json'))
-  const packageManifest = await readJson(path.join(repoRoot, 'packages/workbench/package.json'))
   const lockfile = await readJsonc(path.join(repoRoot, 'bun.lock'))
   const rootVersion = requireVersion(rootManifest, 'root package')
   const appVersion = requireVersion(appManifest, 'Workbench app')
-  const packageVersion = requireVersion(packageManifest, 'Workbench package')
   const lockedAppVersion = lockfile.workspaces?.['apps/workbench']?.version
-  const lockedPackageVersion = lockfile.workspaces?.['packages/workbench']?.version
 
   if (appVersion !== rootVersion) {
     throw new Error(`Workbench app version ${appVersion} must equal root version ${rootVersion}.`)
   }
-  if (packageVersion !== rootVersion) {
-    throw new Error(
-      `Workbench package version ${packageVersion} must equal root version ${rootVersion}.`
-    )
-  }
   if (lockedAppVersion !== appVersion) {
     throw new Error(
       `bun.lock app version ${lockedAppVersion ?? '<missing>'} must equal ${appVersion}.`
-    )
-  }
-  if (lockedPackageVersion !== packageVersion) {
-    throw new Error(
-      `bun.lock package version ${lockedPackageVersion ?? '<missing>'} must equal ${packageVersion}.`
     )
   }
   assertWorkspaceLockMatchesManifest(
@@ -41,21 +26,10 @@ export async function readReleaseVersions(repoRoot) {
     lockfile.workspaces?.['apps/workbench'],
     'Workbench app'
   )
-  assertWorkspaceLockMatchesManifest(
-    packageManifest,
-    lockfile.workspaces?.['packages/workbench'],
-    'Workbench package'
-  )
-  if (packageManifest.publishConfig?.registry !== registry) {
-    throw new Error(`${packageManifest.name} must publish to ${registry}.`)
-  }
-
   return {
     rootVersion,
     appManifest,
     appVersion,
-    packageManifest,
-    packageVersion,
     releaseTag: `v${rootVersion}`,
   }
 }

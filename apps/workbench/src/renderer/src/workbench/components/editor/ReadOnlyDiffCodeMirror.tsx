@@ -1,13 +1,12 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
 import { EditorState, type Extension, type Range, StateField } from '@codemirror/state'
 import { Decoration, type DecorationSet, EditorView, gutter, GutterMarker } from '@codemirror/view'
+import { resolveWorkbenchCodeMirrorLanguage } from '@workbench/models/editor/workbenchCodeMirrorLanguage'
+import { getWorkbenchCodeMirrorTheme } from '@workbench/models/editor/workbenchCodeMirrorTheme'
+import type { WorkbenchUnifiedDiffRow } from '@workbench/models/git/workbenchGitDiffModel'
+import type { WorkbenchThemeId } from '@workbench/models/settings/workbenchPreferences'
 
 import { isEmpty, isNotNull } from '@velaros-ai/core'
-import { resolveWorkbenchCodeMirrorLanguage } from '@velaros-ai/workbench/models/editor/workbenchCodeMirrorLanguage'
-import { getWorkbenchCodeMirrorTheme } from '@velaros-ai/workbench/models/editor/workbenchCodeMirrorTheme'
-import { useWorkbenchLanguagePluginRuntime } from '@velaros-ai/workbench/models/editor/WorkbenchLanguagePluginRuntimeProvider'
-import type { WorkbenchUnifiedDiffRow } from '@velaros-ai/workbench/models/git/workbenchGitDiffModel'
-import type { WorkbenchThemeId } from '@velaros-ai/workbench/models/settings/workbenchPreferences'
 
 import styles from '../../styles/workbenchPageStyles'
 
@@ -97,7 +96,6 @@ export const ReadOnlyDiffCodeMirror = forwardRef<
   ReadOnlyDiffCodeMirrorHandle,
   ReadOnlyDiffCodeMirrorProps
 >(function ReadOnlyDiffCodeMirror({ rows, path, workbenchTheme }, ref): React.ReactElement {
-  const languagePluginRuntime = useWorkbenchLanguagePluginRuntime()
   const hostRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<Nullable<EditorView>>(null)
   const anchorsRef = useRef<number[]>([])
@@ -129,11 +127,7 @@ export const ReadOnlyDiffCodeMirror = forwardRef<
     const host = hostRef.current
     if (!host) return
 
-    const language = resolveWorkbenchCodeMirrorLanguage(
-      path,
-      '',
-      languagePluginRuntime.readDownloadedPluginIds()
-    )
+    const language = resolveWorkbenchCodeMirrorLanguage(path, '')
     const doc = rows.map((row) => row.text).join('\n')
     anchorsRef.current = collectChangeAnchors(rows)
     cursorRef.current = -1
@@ -178,7 +172,7 @@ export const ReadOnlyDiffCodeMirror = forwardRef<
       view.destroy()
       viewRef.current = null
     }
-  }, [languagePluginRuntime, rows, path, workbenchTheme])
+  }, [rows, path, workbenchTheme])
 
   return (
     <div

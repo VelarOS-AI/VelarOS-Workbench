@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { SystemWorkspaceGitLineStatsSnapshot } from '@workbench/contracts'
+import { workbenchHost } from '@workbench/host'
 
 import { AppError } from '@velaros-ai/core'
 import { Result } from '@velaros-ai/core/result'
-import type { SystemWorkspaceGitLineStatsSnapshot } from '@velaros-ai/workbench/contracts'
-import { workbenchHost } from '@velaros-ai/workbench/host'
 
 export type WorkspaceGitLineStatsRefreshReason =
   | 'mount'

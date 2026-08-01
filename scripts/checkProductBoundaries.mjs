@@ -1,17 +1,16 @@
-import { readdir, readFile } from 'node:fs/promises'
+import { access, readdir, readFile } from 'node:fs/promises'
 import { extname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const rootDir = resolve(fileURLToPath(new URL('..', import.meta.url)))
-const sourceRoots = [
-  resolve(rootDir, 'apps/workbench/src'),
-  resolve(rootDir, 'packages/workbench/src'),
-]
+const sourceRoots = [resolve(rootDir, 'apps/workbench/src')]
 const sourceExtensions = new Set(['.ts', '.tsx'])
 const forbiddenSpecifiers = [
   /^apps\/desktop(?:\/|$)/,
   /^@(?:components|hooks|runtime|shared)\//,
   /^@\//,
+  /^@velaros-ai\/workbench(?:\/|$)/,
+  /^@workbench-velar(?:\/|$)/,
   /VelarOS-Desktop/,
   /^@velaros-ai\/core\/constants\/(?:storage|toolMetadataCatalog|workbenchViewport|workspaceSpaces|workspaceVisibility)$/,
   /^@velaros-ai\/core\/utils\/(?:CommandExecutionPolicy|PathContainmentHelper|PlatformCompatibilityHelper|messageFileChanges)$/,
@@ -58,14 +57,11 @@ for (const sourceRoot of sourceRoots) {
   }
 }
 
-const packageManifestPath = resolve(rootDir, 'packages/workbench/package.json')
-const packageManifest = JSON.parse(await readFile(packageManifestPath, 'utf8'))
-for (const field of ['dependencies', 'peerDependencies', 'optionalDependencies']) {
-  for (const [name, version] of Object.entries(packageManifest[field] ?? {})) {
-    if (/^(?:file:|link:|workspace:)/u.test(version)) {
-      failures.push(`packages/workbench/package.json ${field}.${name} is not publishable: ${version}`)
-    }
-  }
+try {
+  await access(resolve(rootDir, 'packages'))
+  failures.push('packages/: Workbench 已拆包，仓内不得恢复 package workspace。')
+} catch (error) {
+  if (error?.code !== 'ENOENT') throw error
 }
 
 if (failures.length > 0) {

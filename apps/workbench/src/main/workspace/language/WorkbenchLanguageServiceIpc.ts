@@ -5,8 +5,6 @@
  * 所有请求最终落在 tsserver 项目托管上（projectRoot 键控，无 session 轴）；worker 首个请求
  * 时惰性拉起。异常经 `callWithEnvelope` 降为错误信封，renderer 侧灰跑分支据此静默回落。
  */
-import { ipcMain } from 'electron'
-
 import type {
   WorkbenchLanguageServiceInlayHintsRequest,
   WorkbenchLanguageServiceOffsetRange,
@@ -15,7 +13,8 @@ import type {
   WorkbenchLanguageServicePositionRequest,
   WorkbenchLanguageServiceRenameRequest,
   WorkbenchLanguageServiceRequest,
-} from '@velaros-ai/workbench/contracts'
+} from '@workbench/contracts'
+import { ipcMain } from 'electron'
 
 import { WorkbenchLanguageChannels } from '../../../shared/workbenchLanguage'
 import {

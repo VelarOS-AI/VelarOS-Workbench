@@ -3,6 +3,56 @@
  * 供 `StandaloneWorkbenchPagePresentation` 通过 context 消费。从 WorkbenchPage 抽出，逻辑逐字保留。
  */
 import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  useWorkbenchChatProjectRuntime,
+  useWorkbenchProductRuntime,
+  type WorkbenchBrowserElementSelectionDelivery,
+  type WorkbenchChatFileChangeEntry,
+} from '@workbench/composition'
+import type {
+  BrowserElementSelection,
+  SystemFileChangePreviewResult,
+  WorkbenchEditorCommand,
+  WorkbenchEditorCommandEvent,
+  WorkbenchReadFileResult,
+} from '@workbench/contracts'
+import { useWorkbenchAiChangeArchive } from '@workbench/hooks/useWorkbenchAiChangeArchive'
+import { useWorkbenchChatChangePreview } from '@workbench/hooks/useWorkbenchChatChangePreview'
+import { useWorkbenchKeyboardShortcuts } from '@workbench/hooks/useWorkbenchKeyboardShortcuts'
+import { useWorkbenchKeymapController } from '@workbench/hooks/useWorkbenchKeymapController'
+import { useWorkbenchLayoutController } from '@workbench/hooks/useWorkbenchLayoutController'
+import { useWorkbenchPreferences } from '@workbench/hooks/useWorkbenchPreferences'
+import { useWorkbenchProjectGitSettings } from '@workbench/hooks/useWorkbenchProjectGitSettings'
+import { useWorkbenchProjectRunSettings } from '@workbench/hooks/useWorkbenchProjectRunSettings'
+import { useWorkbenchStandaloneProjectSync } from '@workbench/hooks/useWorkbenchStandaloneProjectSync'
+import { useWorkbenchSurfaceState } from '@workbench/hooks/useWorkbenchSurfaceState'
+import { workbenchHost } from '@workbench/host'
+import { resolveWorkbenchChatWorkspacePath } from '@workbench/models/chat/workbenchChatWorkspacePath'
+import { getWorkbenchCommandStatusLabel } from '@workbench/models/commands/workbenchCommandStatusModel'
+import { inferPackageManagerCommand } from '@workbench/models/commands/workbenchCommandSuggestions'
+import { inferWorkbenchPackageManagerForPackageJsonPath } from '@workbench/models/commands/workbenchPackageScriptCommand'
+import {
+  buildWorkbenchEditorAnimationPlan,
+  buildWorkbenchEditorDeleteFrame,
+  buildWorkbenchEditorTypeFrame,
+  type WorkbenchEditorAutomationState,
+} from '@workbench/models/editor/workbenchEditorAutomation'
+import { buildWorkbenchPackageScriptRunActions } from '@workbench/models/editor/workbenchPackageScriptRunGutter'
+import { resolveWorkbenchGitSurfacesActive } from '@workbench/models/git/workbenchGitSurfaceActivation'
+import { saveLightEditorTab } from '@workbench/models/lightEditorModel'
+import {
+  clearWorkbenchProjectAiIndexDecision,
+  getWorkbenchProjectAiIndexDecision,
+  setWorkbenchProjectAiIndexDecision,
+} from '@workbench/models/project/workbenchProjectAiIndexDecision'
+import {
+  createTransientWorkbenchProject,
+  ensureWorkbenchProjectRegistered,
+  normalizeWorkbenchProjectList,
+  type WorkbenchProject,
+} from '@workbench/models/project/workbenchProjects'
+import type { PersistedWorkbenchEditorCursor } from '@workbench/models/project/workbenchProjectSessionModel'
+import type { WorkbenchLightEditorTab } from '@workbench/types/workbenchTypes'
 
 // 独立宿主改判：受控浏览器面走应用内空实现（无内嵌浏览器宿主），契约形状与
 // @velaros-ai/browser/composition 同源；desktop 的 onboarding 派发已剥除（独立应用无引导层）。
@@ -11,56 +61,6 @@ import { isEmpty,isObject, isString, isTrue, Log, toNullable } from '@velaros-ai
 import { AppError } from '@velaros-ai/core/error'
 import { Result } from '@velaros-ai/core/result'
 import { systemPlatformCompatibility } from '@velaros-ai/system-tools/platform-compatibility'
-import {
-  useWorkbenchChatProjectRuntime,
-  useWorkbenchProductRuntime,
-  type WorkbenchBrowserElementSelectionDelivery,
-  type WorkbenchChatFileChangeEntry,
-} from '@velaros-ai/workbench/composition'
-import type {
-  BrowserElementSelection,
-  SystemFileChangePreviewResult,
-  WorkbenchEditorCommand,
-  WorkbenchEditorCommandEvent,
-  WorkbenchReadFileResult,
-} from '@velaros-ai/workbench/contracts'
-import { useWorkbenchAiChangeArchive } from '@velaros-ai/workbench/hooks/useWorkbenchAiChangeArchive'
-import { useWorkbenchChatChangePreview } from '@velaros-ai/workbench/hooks/useWorkbenchChatChangePreview'
-import { useWorkbenchKeyboardShortcuts } from '@velaros-ai/workbench/hooks/useWorkbenchKeyboardShortcuts'
-import { useWorkbenchKeymapController } from '@velaros-ai/workbench/hooks/useWorkbenchKeymapController'
-import { useWorkbenchLayoutController } from '@velaros-ai/workbench/hooks/useWorkbenchLayoutController'
-import { useWorkbenchPreferences } from '@velaros-ai/workbench/hooks/useWorkbenchPreferences'
-import { useWorkbenchProjectGitSettings } from '@velaros-ai/workbench/hooks/useWorkbenchProjectGitSettings'
-import { useWorkbenchProjectRunSettings } from '@velaros-ai/workbench/hooks/useWorkbenchProjectRunSettings'
-import { useWorkbenchStandaloneProjectSync } from '@velaros-ai/workbench/hooks/useWorkbenchStandaloneProjectSync'
-import { useWorkbenchSurfaceState } from '@velaros-ai/workbench/hooks/useWorkbenchSurfaceState'
-import { workbenchHost } from '@velaros-ai/workbench/host'
-import { resolveWorkbenchChatWorkspacePath } from '@velaros-ai/workbench/models/chat/workbenchChatWorkspacePath'
-import { getWorkbenchCommandStatusLabel } from '@velaros-ai/workbench/models/commands/workbenchCommandStatusModel'
-import { inferPackageManagerCommand } from '@velaros-ai/workbench/models/commands/workbenchCommandSuggestions'
-import { inferWorkbenchPackageManagerForPackageJsonPath } from '@velaros-ai/workbench/models/commands/workbenchPackageScriptCommand'
-import {
-  buildWorkbenchEditorAnimationPlan,
-  buildWorkbenchEditorDeleteFrame,
-  buildWorkbenchEditorTypeFrame,
-  type WorkbenchEditorAutomationState,
-} from '@velaros-ai/workbench/models/editor/workbenchEditorAutomation'
-import { buildWorkbenchPackageScriptRunActions } from '@velaros-ai/workbench/models/editor/workbenchPackageScriptRunGutter'
-import { resolveWorkbenchGitSurfacesActive } from '@velaros-ai/workbench/models/git/workbenchGitSurfaceActivation'
-import { saveLightEditorTab } from '@velaros-ai/workbench/models/lightEditorModel'
-import {
-  clearWorkbenchProjectAiIndexDecision,
-  getWorkbenchProjectAiIndexDecision,
-  setWorkbenchProjectAiIndexDecision,
-} from '@velaros-ai/workbench/models/project/workbenchProjectAiIndexDecision'
-import {
-  createTransientWorkbenchProject,
-  ensureWorkbenchProjectRegistered,
-  normalizeWorkbenchProjectList,
-  type WorkbenchProject,
-} from '@velaros-ai/workbench/models/project/workbenchProjects'
-import type { PersistedWorkbenchEditorCursor } from '@velaros-ai/workbench/models/project/workbenchProjectSessionModel'
-import type { WorkbenchLightEditorTab } from '@velaros-ai/workbench/types/workbenchTypes'
 
 import { useStableWorkbenchMessageTranslate } from '../runtime/useStableWorkbenchMessaging'
 import { SystemDefaultEditorLightId } from '../support/defaultEditor'

@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
+import type { SystemWorkspaceGitDiffResult } from '@workbench/contracts'
+import { workbenchHost } from '@workbench/host'
+import { resolveWorkbenchFullFileDiffContents } from '@workbench/models/git/workbenchGitDiffModel'
+import type { WorkbenchGitChangeItem } from '@workbench/models/git/workbenchGitModel'
 
 import { AppError } from '@velaros-ai/core'
 import { Result } from '@velaros-ai/core/result'
-import type { SystemWorkspaceGitDiffResult } from '@velaros-ai/workbench/contracts'
-import { workbenchHost } from '@velaros-ai/workbench/host'
-import { resolveWorkbenchFullFileDiffContents } from '@velaros-ai/workbench/models/git/workbenchGitDiffModel'
-import type { WorkbenchGitChangeItem } from '@velaros-ai/workbench/models/git/workbenchGitModel'
 
 import { useMonotonicAsyncRequest } from '../support/genericHooks'
 

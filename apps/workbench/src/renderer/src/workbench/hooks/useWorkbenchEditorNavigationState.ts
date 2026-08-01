@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
+import type { WorkbenchGitChangeItem } from '@workbench/models/git/workbenchGitModel'
+import type { WorkbenchLightEditorTab } from '@workbench/types/workbenchTypes'
 
 import { toNullable } from '@velaros-ai/core'
-import type { WorkbenchGitChangeItem } from '@velaros-ai/workbench/models/git/workbenchGitModel'
-import type { WorkbenchLightEditorTab } from '@velaros-ai/workbench/types/workbenchTypes'
 
 import type { EditorNavigationRequest } from '../components/editor/CodeInsightPanel'
 import { useLatest } from '../support/genericHooks'

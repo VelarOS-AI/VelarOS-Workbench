@@ -1,6 +1,5 @@
 import { useEffect } from 'react'
-
-import { workbenchHost } from '@velaros-ai/workbench/host'
+import { workbenchHost } from '@workbench/host'
 
 import { useDebounceFn, useMemoizedFn } from '../support/genericHooks'
 import { WorkbenchAgentSignalsReportDebounceMs } from '../support/workspaceAgentSignals'

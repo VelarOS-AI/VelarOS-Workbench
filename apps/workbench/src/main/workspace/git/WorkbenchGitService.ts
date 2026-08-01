@@ -2,9 +2,6 @@ import { readFile, realpath, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { isAbsolute, join, resolve } from 'node:path'
 
-import { execa } from 'execa'
-
-import { AppError } from '@velaros-ai/core/error'
 import type {
   AppLocale,
   SystemWorkspaceGitActionResult,
@@ -31,7 +28,10 @@ import type {
   WorkspaceGitRemoteActionOptions,
   WorkspaceGitRemoteActionResult,
   WorkspaceGitStatusResult,
-} from '@velaros-ai/workbench/contracts'
+} from '@workbench/contracts'
+import { execa } from 'execa'
+
+import { AppError } from '@velaros-ai/core/error'
 
 import {
   getRelativePathInsideRoot,
