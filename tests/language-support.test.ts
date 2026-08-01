@@ -7,30 +7,32 @@ import { fileURLToPath } from 'node:url'
 
 import { EditorState } from '@codemirror/state'
 
+import { ExternalLspClient } from '../src/main/workspace/language/ExternalLspClient'
+import { WorkbenchLanguageServices } from '../src/main/workspace/language/LanguageServices'
+import { PathResolver } from '../src/main/workspace/PathResolver'
 import {
   VELAR_EDITOR_KEYWORDS,
-  VELAR_LANGUAGE_SERVER_PROTOCOL_VERSION,
   VelarWorkbenchEditorLanguage,
-  VelarWorkbenchLanguageService,
-} from '../apps/workbench/src/contributions/velar/index'
-import { ExternalLspClient } from '../apps/workbench/src/main/workspace/language/ExternalLspClient'
-import { WorkbenchLanguageServices } from '../apps/workbench/src/main/workspace/language/LanguageServices'
-import { PathResolver } from '../apps/workbench/src/main/workspace/PathResolver'
+} from '../src/renderer/src/contributions/velar/editor'
 import {
   registerWorkbenchEditorLanguage,
   resolveInjectedWorkbenchProjectLanguages,
-} from '../apps/workbench/src/workbench/language/workbenchEditorLanguageContributions'
+} from '../src/renderer/src/language/workbenchEditorLanguageContributions'
+import { buildWorkbenchBasicKeywordDecorations } from '../src/renderer/src/models/editor/workbenchCodeMirrorBasicSyntax'
+import { resolveWorkbenchCodeMirrorLanguage } from '../src/renderer/src/models/editor/workbenchCodeMirrorLanguage'
+import {
+  usesWorkbenchBuiltinLanguageService,
+  usesWorkbenchSemanticLanguageService,
+} from '../src/renderer/src/models/editor/workbenchCodeMirrorLanguageService'
+import {
+  VELAR_LANGUAGE_SERVER_PROTOCOL_VERSION,
+  VelarWorkbenchLanguageService,
+} from '../src/shared/contributions/velar/service'
 import {
   getBuiltinWorkbenchLanguageServices,
   registerWorkbenchLanguageService,
   resolveBuiltinWorkbenchLanguageService,
-} from '../apps/workbench/src/workbench/language/workbenchLanguageServices'
-import { buildWorkbenchBasicKeywordDecorations } from '../apps/workbench/src/workbench/models/editor/workbenchCodeMirrorBasicSyntax'
-import { resolveWorkbenchCodeMirrorLanguage } from '../apps/workbench/src/workbench/models/editor/workbenchCodeMirrorLanguage'
-import {
-  usesWorkbenchBuiltinLanguageService,
-  usesWorkbenchSemanticLanguageService,
-} from '../apps/workbench/src/workbench/models/editor/workbenchCodeMirrorLanguageService'
+} from '../src/shared/language/workbenchLanguageServices'
 
 function installVelarWorkbenchContribution(): () => void {
   const removeEditor = registerWorkbenchEditorLanguage(VelarWorkbenchEditorLanguage)
@@ -45,9 +47,9 @@ void describe('focused Workbench language surface', () => {
   void test('keeps the generic editor host free of Velar-specific branches', async () => {
     const root = fileURLToPath(new URL('..', import.meta.url))
     const genericFiles = [
-      'apps/workbench/src/workbench/language/workbenchLanguageServices.ts',
-      'apps/workbench/src/workbench/models/editor/workbenchCodeMirrorLanguage.ts',
-      'apps/workbench/src/main/workspace/language/ExternalLspClient.ts',
+      'src/shared/language/workbenchLanguageServices.ts',
+      'src/renderer/src/models/editor/workbenchCodeMirrorLanguage.ts',
+      'src/main/workspace/language/ExternalLspClient.ts',
     ]
     for (const relativePath of genericFiles) {
       const source = await readFile(join(root, relativePath), 'utf8')
@@ -55,7 +57,7 @@ void describe('focused Workbench language surface', () => {
     }
 
     const manifest = JSON.parse(
-      await readFile(join(root, 'apps/workbench/package.json'), 'utf8')
+      await readFile(join(root, 'package.json'), 'utf8')
     ) as { dependencies?: Record<string, string> }
     assert.equal(
       Object.keys(manifest.dependencies ?? {}).some((name) => name.startsWith('@velarscript/')),
@@ -105,6 +107,7 @@ void describe('focused Workbench language surface', () => {
       'match',
       'override',
       'pass',
+      'resource',
       'static',
       'super',
       'throw',

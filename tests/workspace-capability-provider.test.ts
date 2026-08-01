@@ -6,7 +6,7 @@ import { describe, test } from 'node:test'
 
 import type { VelarosWorkspaceBridge } from '@velaros-ai/workspace'
 
-import { PublishedWorkspaceCapabilityProvider } from '../apps/workbench/src/main/workspace/PublishedWorkspaceCapabilityProvider'
+import { PublishedWorkspaceCapabilityProvider } from '../src/main/workspace/PublishedWorkspaceCapabilityProvider'
 
 void describe('published Workspace capability provider', () => {
   void test('creates one injected module bridge per project and invokes its tool', async () => {

@@ -18,10 +18,10 @@ artifacts for them; unknown files remain plain text.
 
 ## Velar built-in contribution contract
 
-Workbench is a general editor host. Its core under `apps/workbench/src/workbench`
-contains no `.vel` association, Velar tokenizer, Velar command, or Velar protocol
-branch. The app-local `apps/workbench/src/contributions/velar` module contributes
-those capabilities at the composition roots and is bundled by default. This is
+Workbench is a general editor host. Its renderer and shared core modules
+contain no `.vel` association, Velar tokenizer, Velar command, or Velar protocol
+branch. The built-in renderer contribution and shared service descriptor contribute
+those capabilities at their composition roots and are bundled by default. This is
 an injected built-in contribution, not a package or downloadable grammar system.
 
 The contribution understands Velar keywords, lightweight types including

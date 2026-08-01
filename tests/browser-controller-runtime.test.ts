@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 
 import type { ElectronBrowserRuntime } from '@velaros-ai/browser/runtime'
 
-import { WorkbenchBrowserController } from '../apps/workbench/src/main/kernel/WorkbenchBrowserController'
+import { WorkbenchBrowserController } from '../src/main/kernel/WorkbenchBrowserController'
 
 describe('Workbench Browser controller', () => {
   test('runs create, open, navigate, inspect, input, selection and close through the injected runtime', async () => {

@@ -1,41 +1,41 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 
-import type { SystemLocalAttachmentFileResult } from '@workbench/contracts'
+import type { SystemLocalAttachmentFileResult } from '@shared/contracts'
 
-import { WorkbenchRuntime } from '../apps/workbench/src/workbench/composition/WorkbenchRuntime'
+import { WorkbenchRuntime } from '../src/renderer/src/composition/WorkbenchRuntime'
 import {
   installWorkbenchHost,
   type WorkbenchHost,
   workbenchHost,
   WorkbenchHostRuntime,
-} from '../apps/workbench/src/workbench/host/WorkbenchHost'
-import { WorkbenchCommentStore } from '../apps/workbench/src/workbench/models/comments/workbenchCommentStore'
+} from '../src/renderer/src/host/WorkbenchHost'
+import { WorkbenchCommentStore } from '../src/renderer/src/models/comments/workbenchCommentStore'
 import {
   buildWorkbenchGitChangeItems,
   buildWorkbenchGitCommitDraft,
   buildWorkbenchGitDecorationMap,
-} from '../apps/workbench/src/workbench/models/git/workbenchGitModel'
+} from '../src/renderer/src/models/git/workbenchGitModel'
 import {
   buildWorkbenchKeymapConflicts,
   DEFAULT_WORKBENCH_KEYBOARD_SHORTCUT_MAP,
-} from '../apps/workbench/src/workbench/models/layout/workbenchKeyboardShortcuts'
+} from '../src/renderer/src/models/layout/workbenchKeyboardShortcuts'
 import {
   buildLightEditorTab,
   resolveOfficePreviewKind,
   saveLightEditorTab,
-} from '../apps/workbench/src/workbench/models/lightEditorModel'
+} from '../src/renderer/src/models/lightEditorModel'
 import {
   createWorkbenchProject,
   readWorkbenchProjects,
   saveWorkbenchProjects,
-} from '../apps/workbench/src/workbench/models/project/workbenchProjects'
+} from '../src/renderer/src/models/project/workbenchProjects'
 import {
   createLocalStorageJsonStore,
   JsonStorageStore,
   type LocalStorageJsonStore,
   type StorageLike,
-} from '../apps/workbench/src/workbench/persistence/localStorageJsonStore'
+} from '../src/renderer/src/persistence/localStorageJsonStore'
 
 function createHost(marker: string): WorkbenchHost {
   return {

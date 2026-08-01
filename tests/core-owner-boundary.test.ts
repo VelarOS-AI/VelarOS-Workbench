@@ -4,7 +4,7 @@ import { extname, join, relative, resolve } from 'node:path'
 import { describe, test } from 'node:test'
 
 const repositoryRoot = resolve(import.meta.dirname, '..')
-const sourceRoots = [resolve(repositoryRoot, 'apps/workbench/src')]
+const sourceRoots = [resolve(repositoryRoot, 'src')]
 const sourceExtensions = new Set(['.ts', '.tsx'])
 
 const removedCoreModules = new Set([
@@ -90,7 +90,7 @@ void describe('Core 0.3 owner boundary', () => {
 
   void test('re-exports Browser, Model and Workspace contracts from their owners', async () => {
     const contracts = await readFile(
-      resolve(repositoryRoot, 'apps/workbench/src/workbench/contracts/index.ts'),
+      resolve(repositoryRoot, 'src/shared/contracts/index.ts'),
       'utf8'
     )
 
@@ -111,7 +111,7 @@ void describe('Core 0.3 owner boundary', () => {
   void test('consumes cross-platform OS behavior through the browser-safe System owner', async () => {
     const sources = (
       await Promise.all(
-        (await collectSourceFiles(resolve(repositoryRoot, 'apps/workbench/src')))
+        (await collectSourceFiles(resolve(repositoryRoot, 'src')))
           .map((path) => readFile(path, 'utf8'))
       )
     ).join('\n')
@@ -125,7 +125,7 @@ void describe('Core 0.3 owner boundary', () => {
       readFile(
         resolve(
           repositoryRoot,
-          'apps/workbench/src/workbench/utils/PlatformCompatibilityHelper.ts'
+          'src/utils/PlatformCompatibilityHelper.ts'
         ),
         'utf8'
       ),

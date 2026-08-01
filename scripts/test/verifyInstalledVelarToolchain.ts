@@ -4,10 +4,10 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { isAbsolute, join, resolve } from 'node:path'
 
-import { WorkbenchLanguageServices } from '../../apps/workbench/src/main/workspace/language/LanguageServices'
-import { PathResolver } from '../../apps/workbench/src/main/workspace/PathResolver'
-import { VelarWorkbenchLanguageService } from '../../apps/workbench/src/contributions/velar/service'
-import { registerWorkbenchLanguageService } from '../../apps/workbench/src/workbench/language/workbenchLanguageServices'
+import { WorkbenchLanguageServices } from '../../src/main/workspace/language/LanguageServices'
+import { PathResolver } from '../../src/main/workspace/PathResolver'
+import { VelarWorkbenchLanguageService } from '../../src/shared/contributions/velar/service'
+import { registerWorkbenchLanguageService } from '../../src/shared/language/workbenchLanguageServices'
 
 const releaseInput = process.argv[2]
 if (!releaseInput) throw new Error('Usage: bun run test:velar:installed -- /absolute/path/to/release')
@@ -77,8 +77,12 @@ try {
     '',
     'const status: TaskStatus = TaskStatus.todo',
     '',
+    'async def loadTicketLabel() -> string:',
+    '    return "ready"',
+    '',
     'component TicketPage(route: RouteContext):',
     '    let dialog: DialogElement? = none',
+    '    resource ticketLabel = loadTicketLabel()',
     '    def inspect():',
     '        if dialog:',
     '            showDialog(dialog)',
@@ -113,6 +117,7 @@ try {
   assert.ok(completions.items.some((item) => item.label === 'match'))
   assert.ok(completions.items.some((item) => item.label === 'case'))
   assert.ok(completions.items.some((item) => item.label === 'enum'))
+  assert.ok(completions.items.some((item) => item.label === 'resource'))
   assert.ok(completions.items.some((item) => item.label === 'velar/collections'))
   assert.ok(completions.items.some((item) => item.label === 'velar/async'))
   assert.ok(completions.items.some((item) => item.label === 'velar/time'))
@@ -187,6 +192,16 @@ try {
     position: { line: dialogTypeLine + 1, column: dialogTypeColumn + 1 },
   })
   assert.match(dialogTypeHover.hover?.displayText ?? '', /DialogElement/u)
+  const resourceLine = source.split('\n').findIndex((line) => line.includes('resource ticketLabel'))
+  const resourceColumn = source.split('\n')[resourceLine]!.indexOf('ticketLabel')
+  const resourceHover = await services.getHover({
+    projectRoot,
+    path: 'src/main.vel',
+    content: source,
+    position: { line: resourceLine + 1, column: resourceColumn + 1 },
+  })
+  assert.match(resourceHover.hover?.displayText ?? '', /resource ticketLabel/u)
+  assert.match(resourceHover.hover?.displayText ?? '', /Promise<none>/u)
   const enumReferences = await services.getReferences({
     projectRoot,
     path: 'src/main.vel',

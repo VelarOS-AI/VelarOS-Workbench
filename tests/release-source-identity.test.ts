@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
+import { mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { describe, test } from 'node:test'
@@ -12,20 +12,15 @@ import {
 
 async function createReleaseRepository() {
   const root = await mkdtemp(path.join(tmpdir(), 'workbench-source-'))
-  await mkdir(path.join(root, 'apps/workbench'), { recursive: true })
   await writeFile(
     path.join(root, 'package.json'),
     '{"name":"root","version":"0.3.0"}\n'
   )
   await writeFile(
-    path.join(root, 'apps/workbench/package.json'),
-    '{"name":"app","version":"0.3.0"}\n'
-  )
-  await writeFile(
     path.join(root, 'bun.lock'),
     `{
       "workspaces": {
-        "apps/workbench": { "version": "0.3.0" },
+        "": { "name": "root" },
       },
     }\n`
   )
@@ -39,14 +34,14 @@ async function createReleaseRepository() {
 }
 
 void describe('release source identity', () => {
-  void test('requires exact tag, HEAD, clean tree, and aligned manifest/lock versions', async () => {
+  void test('requires exact tag, HEAD, clean tree, and an aligned root lock', async () => {
     const { root, sourceSha } = await createReleaseRepository()
     const identity = await validateReleaseSource({
       repoRoot: root,
       releaseTag: 'v0.3.0',
       sourceSha,
     })
-    assert.equal(identity.appVersion, '0.3.0')
+    assert.equal(identity.version, '0.3.0')
 
     await assert.rejects(
       validateReleaseSource({
@@ -54,7 +49,7 @@ void describe('release source identity', () => {
         releaseTag: 'packages-v0.3.0',
         sourceSha,
       }),
-      /must equal root version tag v0.3.0/
+      /must equal Workbench version tag v0.3.0/
     )
     await assert.rejects(
       validateReleaseSource({
@@ -75,23 +70,23 @@ void describe('release source identity', () => {
     )
   })
 
-  void test('rejects app versions that drift from root', async () => {
+  void test('rejects a root manifest without the Workbench version', async () => {
     const { root } = await createReleaseRepository()
     await writeFile(
-      path.join(root, 'apps/workbench/package.json'),
-      '{"name":"app","version":"0.2.0"}\n'
+      path.join(root, 'package.json'),
+      '{"name":"root"}\n'
     )
     await assert.rejects(
       readReleaseVersions(root),
-      /app version 0.2.0 must equal root version 0.3.0/
+      /Workbench version is missing/
     )
   })
 
   void test('rejects dependency maps that drift from the immutable lock', async () => {
     const { root } = await createReleaseRepository()
     await writeFile(
-      path.join(root, 'apps/workbench/package.json'),
-      '{"name":"app","version":"0.3.0","dependencies":{"@velaros-ai/core":"^0.3.0"}}\n'
+      path.join(root, 'package.json'),
+      '{"name":"root","version":"0.3.0","dependencies":{"@velaros-ai/core":"^0.3.0"}}\n'
     )
 
     await assert.rejects(

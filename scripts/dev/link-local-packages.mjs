@@ -8,24 +8,12 @@ const scope = '@velaros-ai/'
 const readJson = async (file) => JSON.parse(await readFile(file, 'utf8'))
 const exists = async (file) => access(file).then(() => true, () => false)
 const entryExists = async (file) => lstat(file).then(() => true, () => false)
-const packageManifests = []
-const localPackagesDirectory = path.join(root, 'packages')
-if (await exists(localPackagesDirectory)) {
-  for (const entry of await readdir(localPackagesDirectory, { withFileTypes: true })) {
-    const manifestPath = path.join(localPackagesDirectory, entry.name, 'package.json')
-    if (entry.isDirectory() && await exists(manifestPath)) packageManifests.push({ directory: path.dirname(manifestPath), manifest: await readJson(manifestPath) })
-  }
-}
-const appManifests = []
-for (const entry of await readdir(path.join(root, 'apps'), { withFileTypes: true })) {
-  const manifestPath = path.join(root, 'apps', entry.name, 'package.json')
-  if (entry.isDirectory() && await exists(manifestPath)) appManifests.push({ directory: path.dirname(manifestPath), manifest: await readJson(manifestPath) })
-}
-const ownNames = new Set(packageManifests.map(({ manifest }) => manifest.name))
-const manifests = [await readJson(path.join(root, 'package.json')), ...packageManifests.map(({ manifest }) => manifest), ...appManifests.map(({ manifest }) => manifest)]
+const manifest = await readJson(path.join(root, 'package.json'))
 const externalNames = new Set()
-for (const manifest of manifests) for (const field of ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies']) {
-  for (const [name, spec] of Object.entries(manifest[field] ?? {})) if (name.startsWith(scope) && !ownNames.has(name) && spec !== 'workspace:*') externalNames.add(name)
+for (const field of ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies']) {
+  for (const [name, spec] of Object.entries(manifest[field] ?? {})) {
+    if (name.startsWith(scope) && spec !== 'workspace:*') externalNames.add(name)
+  }
 }
 // 理想架构迁移 P6（2026-07-29）：VelarOS-Platform 是 host 无关包的唯一权威单仓。
 // 同名包同时存在于 Platform 与旧独立仓（Core/Agent/Kernel/Model/UI/Capabilities/…）时一律优先
@@ -97,28 +85,10 @@ const linkIntoProject = async (base, name, directory) => {
   }
   await symlink(directory, target, 'dir')
 }
-for (const item of packageManifests) {
-  run(['link'], item.directory)
-  await linkIntoProject(root, item.manifest.name, item.directory)
-}
 for (const name of externalNames) {
   const directory = resolveAvailableDirectory(name)
   if (!directory) throw new Error(`No sibling checkout provides ${name}`)
   run(['link'], directory)
   await linkIntoProject(root, name, directory)
 }
-for (const item of packageManifests) {
-  const dependencies = { ...item.manifest.dependencies, ...item.manifest.optionalDependencies }
-  for (const name of Object.keys(dependencies)) {
-    const directory = resolveAvailableDirectory(name)
-    if (directory) await linkIntoProject(item.directory, name, directory)
-  }
-}
-for (const item of appManifests) {
-  const dependencies = { ...item.manifest.dependencies, ...item.manifest.optionalDependencies }
-  for (const name of Object.keys(dependencies)) {
-    const directory = resolveAvailableDirectory(name)
-    if (directory) await linkIntoProject(item.directory, name, directory)
-  }
-}
-console.log(`Registered ${ownNames.size} local package(s); linked ${externalNames.size} external package(s).`)
+console.log(`Linked ${externalNames.size} external package(s) into the Workbench monolith.`)

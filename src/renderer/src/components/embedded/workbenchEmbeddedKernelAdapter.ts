@@ -1,0 +1,244 @@
+import { inferPackageManagerCommand } from '@renderer/models/commands/workbenchCommandSuggestions'
+import { getWorkbenchFileDiagnosticView } from '@renderer/models/editor/workbenchLanguageServiceInsightsModel'
+
+import { AppError } from '@velaros-ai/core/error'
+
+import type { StandaloneWorkbenchPageModel } from '../../hooks/useStandaloneWorkbenchPageModel'
+import type { TopToolbarProps } from '../chrome/TopToolbar'
+
+import type { WorkbenchEmbeddedKernelModel } from './workbenchEmbeddedKernelModel'
+
+export interface BuildStandaloneWorkbenchEmbeddedKernelModelOptions {
+  showEditorTopBar?: boolean
+}
+
+export function buildStandaloneWorkbenchEditorChrome(
+  model: StandaloneWorkbenchPageModel
+): TopToolbarProps {
+  const workbench = model.workbench
+  const gitState = model.gitState
+  const chrome = model.chrome
+
+  const editorChromeGit = {
+    gitWorkspaceRoot: workbench.activeProject?.rootPath ?? '',
+    gitSummary: gitState.topBarSummary,
+    gitSshKeyPath: chrome.effectiveGitSshKeyPath,
+    hasGitRepository: gitState.hasGitRepository,
+    hasUnsavedOpenTabs: workbench.hasUnsavedOpenTabs,
+  }
+  const editorChromeProject = {
+    isRunningCommand: workbench.isRunningCommand,
+    hasActiveRunCommand: workbench.hasActiveRunCommand,
+    projectAiIndexStatus: workbench.projectAiIndexStatus,
+    projectAiIndexSkipped: chrome.projectAiIndexSkipped,
+    isStartingProjectAiIndex: workbench.isStartingProjectAiIndex,
+    codeGraphAvailable: chrome.codeGraphAvailable,
+    canOpenCodeGraph: chrome.canOpenCodeGraph,
+  }
+  const editorChromeActions = {
+    onGitRefresh: model.actions.refreshGitPanel,
+    onRepositoryChanged: model.actions.handleRepositoryChanged,
+    onOpenGitBottomTool: () => model.surface.openBottomTool('git'),
+    onOpenQuickOpen: model.surface.openQuickOpen,
+    onOpenSettings: () => model.dialogs.setSettingsOpen(true),
+    onStartProjectAiIndex: model.actions.startProjectAiIndex,
+    onOpenCodeGraph: () => model.dialogs.setCodeGraphOpen(true),
+  }
+
+  return {
+    ...editorChromeGit,
+    ...editorChromeProject,
+    ...editorChromeActions,
+    topRun: model.topRunControl,
+  }
+}
+
+export function buildStandaloneWorkbenchEmbeddedKernelModel(
+  model: StandaloneWorkbenchPageModel,
+  editorChrome: TopToolbarProps = buildStandaloneWorkbenchEditorChrome(model),
+  options: BuildStandaloneWorkbenchEmbeddedKernelModelOptions = {}
+): WorkbenchEmbeddedKernelModel {
+  const workbench = model.workbench
+  const gitState = model.gitState
+  const editorNavigation = model.editorNavigation
+  const chatChangePreview = model.chatChangePreview
+  const gitChangeActions = model.gitChangeActions
+  const activeProject = workbench.activeProject
+
+  if (!activeProject) {
+    throw new AppError(
+      'INVARIANT',
+      'Cannot build WorkbenchEmbeddedKernelModel without an active project'
+    )
+  }
+
+  const selectedFileDiagnosticView = getWorkbenchFileDiagnosticView({
+    path: workbench.selectedFilePath,
+    diagnosticsByPath: workbench.languageServiceInsights.diagnosticsByPath,
+    diagnosticsPendingPaths: workbench.languageServiceInsights.diagnosticsPendingPaths,
+  })
+
+  return {
+    activeProject,
+    aiChanges: model.aiChangeArchive,
+    files: {
+      tree: {
+        project: activeProject,
+        rootEntries: workbench.rootEntries,
+        selectedEntryPath: workbench.selectedEntryPath,
+        expandedPaths: workbench.expandedPaths,
+        childrenByPath: workbench.childrenByPath,
+        isLoadingTree: workbench.isLoadingTree,
+        isMutatingTree: workbench.isMutatingTree,
+        gitDecorations: gitState.decorations,
+      },
+      search: {
+        searchQuery: workbench.searchQuery,
+        normalizedSearchQuery: workbench.normalizedSearchQuery,
+        searchResult: workbench.searchResult,
+        contentSearchMatches: model.chrome.contentSearchMatches,
+        searchActive: workbench.searchActive,
+        isSearchingEntries: workbench.isSearchingEntries,
+        isIndexingProject: workbench.isIndexingProject,
+      },
+      // 缺少真实摘要时不伪造仓库状态，等待 Git 端口刷新。
+      handlers: {
+        onSelectEntryPath: workbench.selectEntryPath,
+        onCreateEntry: (type, parentEntry, name) =>
+          model.actions.runTreeMutation(() => workbench.createTreeEntry(type, parentEntry, name)),
+        onRenameEntry: (entry, name) =>
+          model.actions.runTreeMutation(() => workbench.renameTreeEntry(entry, name)),
+        onDeleteEntries: (entries) =>
+          model.actions.runTreeMutation(() => workbench.deleteTreeEntries(entries)),
+        onUndoDeleteEntries: () =>
+          model.actions.runTreeMutation(() => workbench.undoLastDeletedEntries()),
+        onMoveEntries: (entries, parentEntry, _index) =>
+          model.actions.runTreeMutation(() => workbench.moveTreeEntries(entries, parentEntry)),
+        onSearchQueryChange: workbench.setSearchQuery,
+        onResetSearch: workbench.resetSearch,
+        onRefreshProject: () => void model.actions.refreshProjectAndGit(),
+        onCloseProject: undefined,
+        onOpenSearchEntry: (entry) => void workbench.openSearchEntry(entry),
+        onOpenContentSearchMatch: (match) =>
+          void editorNavigation.goToLocation(match.path, match.line, match.column),
+        onSetDirectoryOpen: (path, open) => void workbench.setDirectoryOpen(path, open),
+        onSelectFile: (path) => {
+          model.aiChangeArchive.closeSelection()
+          void editorNavigation.selectFile(path)
+        },
+      },
+    },
+    // 片2 过渡：`changes` 左面模型随片4 CommitPanel 族复活时恢复（见 kernel model 注）。
+    editor: {
+      chrome: editorChrome,
+      showTopBar: options.showEditorTopBar ?? true,
+      workbenchTheme: model.workbenchPreferences.preferences.theme,
+      workbenchProject: {
+        name: activeProject.name,
+        rootPath: activeProject.rootPath,
+      },
+      workbenchEditor: {
+        editorContent: workbench.editorContent,
+        openTabs: workbench.openTabs,
+        hasUnsavedChanges: workbench.hasUnsavedChanges,
+        selectedFilePath: workbench.selectedFilePath,
+        selectedFile: workbench.selectedFile,
+        canEditSelectedFile: workbench.canEditSelectedFile,
+        projectContextIndex: workbench.projectContextIndex,
+        isSavingFile: workbench.isSavingFile,
+      },
+      gitDecorations: gitState.decorations,
+      selectedFileDiagnostics: selectedFileDiagnosticView.diagnostics,
+      isSelectedFileDiagnosticsPending: selectedFileDiagnosticView.isPending,
+      tabs: {
+        onSelectOpenFile: (path) => {
+          model.aiChangeArchive.closeSelection()
+          void editorNavigation.selectFile(path)
+        },
+        onCloseOpenFile: workbench.closeOpenFile,
+        onCloseOtherOpenFiles: workbench.closeOtherOpenFiles,
+        onCloseAllOpenFiles: workbench.closeAllOpenFiles,
+        onCloseUnmodifiedOpenFiles: workbench.closeUnmodifiedOpenFiles,
+        onReorderOpenTabs: workbench.reorderOpenTabs,
+      },
+      diff: {
+        diffWorkspaceRoot: activeProject.rootPath,
+        activeDiffItem: editorNavigation.diffItem,
+        chatChangePreview: chatChangePreview.active
+          ? {
+              items: chatChangePreview.items,
+              pendingFileAction: gitChangeActions.pendingFileAction,
+              onClose: editorNavigation.closeDiff,
+              onDiscardItem: (item) => void gitChangeActions.runFileAction(item, 'discard'),
+              onOpenFile: (path) => void editorNavigation.selectFile(path),
+              onSelectItem: editorNavigation.openDiff,
+            }
+          : null,
+        lightTab: editorNavigation.lightTab
+          ? {
+              item: editorNavigation.lightTab,
+              onClose: editorNavigation.closeLightTab,
+              onSelect: () => undefined,
+              onContentChange: editorNavigation.updateLightTabContent,
+              onSave: () => void model.actions.saveEmbeddedLightTab(),
+            }
+          : null,
+        onCloseDiffTab: editorNavigation.closeDiff,
+      },
+      debug: {
+        tabs: editorNavigation.debug.tabs,
+        activeTabId: editorNavigation.debug.activeTabId,
+        onSelect: editorNavigation.debug.selectTab,
+        onClose: editorNavigation.debug.closeTab,
+        onNavigate: editorNavigation.debug.navigateTab,
+        agentBrowser: model.agentBrowser.active
+          ? {
+              id:
+                editorNavigation.debug.agentBrowser.tabId ??
+                `agent-browser:${model.agentBrowser.sessionId}`,
+              sessionId: model.agentBrowser.sessionId,
+              title: model.agentBrowser.page.title,
+              visible: !!editorNavigation.debug.agentBrowser.tabId,
+              active:
+                editorNavigation.debug.activeTabId === editorNavigation.debug.agentBrowser.tabId,
+              surface: model.agentBrowser,
+              onSelect: () =>
+                editorNavigation.debug.agentBrowser.open(model.agentBrowser.sessionId),
+              onClose: editorNavigation.debug.agentBrowser.close,
+              onPicked: model.actions.handleWorkbenchBrowserElementPicked,
+            }
+          : null,
+      },
+      workspace: {
+        onRevertSelectedFile: workbench.revertSelectedFile,
+        onSaveSelectedFile: () => void workbench.saveSelectedFile(),
+        onSaveAllOpenFiles: () => void workbench.saveAllOpenFiles(),
+        onResolveExternalFileConflict: (resolution) =>
+          void workbench.resolveSelectedExternalFileConflict(resolution),
+        onEditorContentChange: workbench.setEditorContent,
+        onOpenDirectory: (path) => void workbench.openDirectory(path),
+        onRevealSelectedFile: () => {
+          if (workbench.selectedFilePath) {
+            void workbench.revealEntryPath(workbench.selectedFilePath)
+          }
+        },
+        onGoToDefinition: (path, line, column) =>
+          void editorNavigation.goToLocation(path, line, column),
+        onApplyLanguageServiceFileChanges: workbench.applyLanguageServiceFileChanges,
+        packageManager: inferPackageManagerCommand(workbench.rootEntries),
+        onRunPackageScript: (command) => {
+          model.surface.openBottomTool('run')
+          // 走可交互的运行卡（PTY），而不是只读一次性 runner；顺带记为「上次运行」，
+          // 让侧边栏 ▶ 记住并可右键切换。
+          void workbench.launchRunSession(command)
+        },
+        onOpenQuickOpen: model.surface.openQuickOpen,
+        onToggleGitTool: () => model.surface.openBottomTool('git'),
+        onToggleProblems: () => model.surface.openBottomTool('problems'),
+        onCursorPositionChange: editorNavigation.setCursorPosition,
+        onActiveProblemIdChange: editorNavigation.setActiveProblemId,
+        navigationRequest: editorNavigation.navigationRequest,
+      },
+    },
+  }
+}

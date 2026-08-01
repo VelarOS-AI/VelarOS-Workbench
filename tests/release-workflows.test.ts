@@ -4,20 +4,20 @@ import path from 'node:path'
 import { describe, test } from 'node:test'
 
 void describe('release workflows', () => {
-  void test('app dispatch modes gate the exact root tag and never clobber release assets', async () => {
-    const appWorkflow = (await readFile(
-      path.resolve('.github/workflows/release-app.yml'),
+  void test('dispatch modes gate the exact root tag and never clobber release assets', async () => {
+    const workflow = (await readFile(
+      path.resolve('.github/workflows/release.yml'),
       'utf8'
     )).replaceAll('\r\n', '\n')
-    assert.match(appWorkflow, /workflow_dispatch:\n\s+inputs:\n\s+release_tag:/)
-    assert.match(appWorkflow, /tags:\n\s+- 'v\*'/)
-    assert.match(appWorkflow, /ref: \$\{\{ env\.RELEASE_TAG \}\}/)
+    assert.match(workflow, /workflow_dispatch:\n\s+inputs:\n\s+release_tag:/)
+    assert.match(workflow, /tags:\n\s+- 'v\*'/)
+    assert.match(workflow, /ref: \$\{\{ env\.RELEASE_TAG \}\}/)
     assert.match(
-      appWorkflow,
-      /node scripts\/release\/appReleaseArtifacts\.mjs validate-source/
+      workflow,
+      /node scripts\/release\/releaseArtifacts\.mjs validate-source/
     )
-    assert.match(appWorkflow, /Reuse prior immutable platform checkpoint/)
-    assert.match(appWorkflow, /if: steps\.reuse\.outputs\.reuse != 'true'/)
-    assert.doesNotMatch(appWorkflow, /--clobber/)
+    assert.match(workflow, /Reuse prior immutable platform checkpoint/)
+    assert.match(workflow, /if: steps\.reuse\.outputs\.reuse != 'true'/)
+    assert.doesNotMatch(workflow, /--clobber/)
   })
 })

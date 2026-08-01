@@ -3,12 +3,11 @@ import { extname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const rootDir = resolve(fileURLToPath(new URL('..', import.meta.url)))
-const sourceRoots = [resolve(rootDir, 'apps/workbench/src')]
+const sourceRoots = [resolve(rootDir, 'src')]
 const sourceExtensions = new Set(['.ts', '.tsx'])
 const forbiddenSpecifiers = [
   /^apps\/desktop(?:\/|$)/,
-  /^@(?:components|hooks|runtime|shared)\//,
-  /^@\//,
+  /^@(?:components|hooks|runtime)\//,
   /^@velaros-ai\/workbench(?:\/|$)/,
   /^@workbench-velar(?:\/|$)/,
   /VelarOS-Desktop/,
@@ -19,9 +18,27 @@ const forbiddenSpecifiers = [
 const importSpecifierPattern =
   /(?:from\s+|import\s*\(|require\s*\()\s*['"]([^'"]+)['"]/gu
 const coreNamedImportPattern =
-  /import\s+(?:type\s+)?\{([\s\S]*?)\}\s+from\s+['"]@velaros-ai\/core(?:\/types)?['"]/gu
+  /import\s+(?:type\s+)?\{([^}]*)\}\s+from\s+['"]@velaros-ai\/core(?:\/types)?['"]/gu
 const forbiddenCoreContractPattern =
   /\b(?:Workbench\w+|SystemWorkspace\w+|BrowserElementSelection|AgentProviderRuntimeConfig|AuxiliaryModel\w+|ListProviderModelsRequest|ProviderModelCatalog)\b/u
+const layerRules = [
+  {
+    prefix: 'src/main/',
+    forbidden: [/^@renderer\//, /(?:^|\/)renderer(?:\/|$)/],
+  },
+  {
+    prefix: 'src/preload/',
+    forbidden: [/^@main\//, /^@renderer\//, /(?:^|\/)(?:main|renderer)(?:\/|$)/],
+  },
+  {
+    prefix: 'src/renderer/',
+    forbidden: [/^@main\//, /(?:^|\/)main(?:\/|$)/],
+  },
+  {
+    prefix: 'src/shared/',
+    forbidden: [/^@main\//, /^@renderer\//, /(?:^|\/)(?:main|renderer)(?:\/|$)/],
+  },
+]
 
 async function collectSourceFiles(directory) {
   const entries = await readdir(directory, { withFileTypes: true })
@@ -40,10 +57,15 @@ const failures = []
 for (const sourceRoot of sourceRoots) {
   for (const path of await collectSourceFiles(sourceRoot)) {
     const source = await readFile(path, 'utf8')
+    const label = relative(rootDir, path)
+    const layerRule = layerRules.find(({ prefix }) => label.startsWith(prefix))
     for (const match of source.matchAll(importSpecifierPattern)) {
       const specifier = match[1]
       if (forbiddenSpecifiers.some((pattern) => pattern.test(specifier))) {
-        failures.push(`${relative(rootDir, path)} imports Desktop-private "${specifier}"`)
+        failures.push(`${label} imports forbidden dependency "${specifier}"`)
+      }
+      if (layerRule?.forbidden.some((pattern) => pattern.test(specifier))) {
+        failures.push(`${label} crosses its process boundary through "${specifier}"`)
       }
     }
     for (const match of source.matchAll(coreNamedImportPattern)) {
@@ -57,9 +79,23 @@ for (const sourceRoot of sourceRoots) {
   }
 }
 
+const allowedSourceDirectories = new Set(['main', 'preload', 'renderer', 'shared'])
+for (const entry of await readdir(resolve(rootDir, 'src'), { withFileTypes: true })) {
+  if (!entry.isDirectory() || !allowedSourceDirectories.has(entry.name)) {
+    failures.push(`src/${entry.name}: 单体源码根只允许 main、preload、renderer、shared 四层。`)
+  }
+}
+
 try {
   await access(resolve(rootDir, 'packages'))
-  failures.push('packages/: Workbench 已拆包，仓内不得恢复 package workspace。')
+  failures.push('packages/: 单体 Workbench 不得恢复 package workspace。')
+} catch (error) {
+  if (error?.code !== 'ENOENT') throw error
+}
+
+try {
+  await access(resolve(rootDir, 'apps'))
+  failures.push('apps/: 仓库本身就是 Workbench，不得再增加应用套层。')
 } catch (error) {
   if (error?.code !== 'ENOENT') throw error
 }

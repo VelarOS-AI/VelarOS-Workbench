@@ -1,14 +1,18 @@
 node_modules/
+.bun/
+.vite/
 out/
 dist/
+coverage/
 release/
 release-stage/
 release-existing/
 !scripts/release/
-!scripts/release/appReleaseArtifacts.mjs
+!scripts/release/releaseArtifacts.mjs
 !scripts/release/releaseIdentity.mjs
 dist-plugins/
 .data/
+.cache/
 
 # 根目录 types/ 下的手写全局类型单源
 !types/velaros-globals.d.ts
@@ -31,3 +35,8 @@ Thumbs.db
 .velaros
 .velaros-workspace
 .tmp
+tmp/
+dist-plugins
+release
+release-stage
+out

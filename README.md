@@ -4,11 +4,13 @@ VelarOS Workbench is the independently releasable IDE application in the VelarOS
 project navigation, editing, language intelligence, Git, terminals, run surfaces and local project
 history while consuming the shared VelarOS Kernel contracts and `@velaros-ai/ui`.
 
-The repository has one workspace unit: `apps/workbench`. All product code lives below its `src/`:
+The repository itself is the Workbench application. It is a single package and all product code
+lives directly below the root `src/`:
 
-- `src/main`, `src/preload`, and `src/renderer` contain the Electron host and UI entry points.
-- `src/workbench` contains the product contracts, models, controllers and composition code.
-- `src/contributions/velar` contains the built-in Velar editor contribution.
+- `src/main`: Electron main process, Kernel host and privileged capability implementations.
+- `src/preload`: the narrow bridge exposed to the renderer.
+- `src/renderer`: UI entry point, components, models, hooks and renderer composition.
+- `src/shared`: cross-process contracts, IPC envelopes and language-service descriptors.
 
 The repository intentionally has no dependency on VelarOS Desktop internals. Shared VelarOS packages
 come from the `VelarOS-Platform` single repository (`bun run link:local` for local checkouts); the app

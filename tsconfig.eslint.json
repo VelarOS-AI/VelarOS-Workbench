@@ -17,12 +17,10 @@
   },
   "include": [
     "types/velaros-globals.d.ts",
-    "apps/**/*.ts",
-    "apps/**/*.tsx",
-    "apps/**/*.d.ts",
-    "packages/**/*.ts",
-    "packages/**/*.tsx",
-    "packages/**/*.d.ts",
+    "electron.vite.config.ts",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "src/**/*.d.ts",
     "tests/**/*.ts"
   ],
   "exclude": ["node_modules", "**/node_modules", "**/dist", "**/out"]

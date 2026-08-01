@@ -6,31 +6,18 @@ import path from 'node:path'
 import ts from 'typescript'
 
 export async function readReleaseVersions(repoRoot) {
-  const rootManifest = await readJson(path.join(repoRoot, 'package.json'))
-  const appManifest = await readJson(path.join(repoRoot, 'apps/workbench/package.json'))
+  const manifest = await readJson(path.join(repoRoot, 'package.json'))
   const lockfile = await readJsonc(path.join(repoRoot, 'bun.lock'))
-  const rootVersion = requireVersion(rootManifest, 'root package')
-  const appVersion = requireVersion(appManifest, 'Workbench app')
-  const lockedAppVersion = lockfile.workspaces?.['apps/workbench']?.version
-
-  if (appVersion !== rootVersion) {
-    throw new Error(`Workbench app version ${appVersion} must equal root version ${rootVersion}.`)
-  }
-  if (lockedAppVersion !== appVersion) {
-    throw new Error(
-      `bun.lock app version ${lockedAppVersion ?? '<missing>'} must equal ${appVersion}.`
-    )
-  }
+  const version = requireVersion(manifest, 'Workbench')
   assertWorkspaceLockMatchesManifest(
-    appManifest,
-    lockfile.workspaces?.['apps/workbench'],
-    'Workbench app'
+    manifest,
+    lockfile.workspaces?.[''],
+    'Workbench'
   )
   return {
-    rootVersion,
-    appManifest,
-    appVersion,
-    releaseTag: `v${rootVersion}`,
+    manifest,
+    version,
+    releaseTag: `v${version}`,
   }
 }
 
@@ -44,7 +31,7 @@ export async function validateReleaseSource({
   const versions = await readReleaseVersions(repoRoot)
   if (releaseTag !== versions.releaseTag) {
     throw new Error(
-      `Release tag ${releaseTag || '<empty>'} must equal root version tag ${versions.releaseTag}.`
+      `Release tag ${releaseTag || '<empty>'} must equal Workbench version tag ${versions.releaseTag}.`
     )
   }
 

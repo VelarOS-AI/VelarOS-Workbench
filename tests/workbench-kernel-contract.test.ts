@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { describe, test } from 'node:test'
 
-import { DefaultWorkbenchKernelCapabilityRoutes } from '../apps/workbench/src/main/WorkbenchMainCapabilityProviders'
+import { DefaultWorkbenchKernelCapabilityRoutes } from '../src/main/WorkbenchMainCapabilityProviders'
 
 const repositoryRoot = resolve(import.meta.dirname, '..')
 
@@ -38,7 +38,7 @@ void describe('standalone Workbench Kernel contract', () => {
     const source = await readFile(
       resolve(
         repositoryRoot,
-        'apps/workbench/src/renderer/src/workbench/runtime/standaloneWorkbenchChatAdapter.tsx'
+        'src/renderer/src/runtime/standaloneWorkbenchChatAdapter.tsx'
       ),
       'utf8'
     )
@@ -71,7 +71,7 @@ void describe('standalone Workbench Kernel contract', () => {
     const runtimeSource = await readFile(
       resolve(
         repositoryRoot,
-        'apps/workbench/src/main/kernel/WorkbenchAgentCapabilityRuntime.ts'
+        'src/main/kernel/WorkbenchAgentCapabilityRuntime.ts'
       ),
       'utf8'
     )
@@ -88,7 +88,7 @@ void describe('standalone Workbench Kernel contract', () => {
     const source = await readFile(
       resolve(
         repositoryRoot,
-        'apps/workbench/src/renderer/src/workbench/runtime/standaloneWorkbenchChatAdapter.tsx'
+        'src/renderer/src/runtime/standaloneWorkbenchChatAdapter.tsx'
       ),
       'utf8'
     )
@@ -121,7 +121,7 @@ void describe('standalone Workbench Kernel contract', () => {
     const source = await readFile(
       resolve(
         repositoryRoot,
-        'apps/workbench/src/main/kernel/WorkbenchAgentCapabilityRuntime.ts'
+        'src/main/kernel/WorkbenchAgentCapabilityRuntime.ts'
       ),
       'utf8'
     )
@@ -152,7 +152,7 @@ void describe('standalone Workbench Kernel contract', () => {
     const source = await readFile(
       resolve(
         repositoryRoot,
-        'apps/workbench/src/renderer/src/workbench/runtime/standaloneWorkbenchChatAdapter.tsx'
+        'src/renderer/src/runtime/standaloneWorkbenchChatAdapter.tsx'
       ),
       'utf8'
     )
@@ -166,7 +166,7 @@ void describe('standalone Workbench Kernel contract', () => {
     const source = await readFile(
       resolve(
         repositoryRoot,
-        'apps/workbench/src/renderer/src/browser/standaloneBrowserCompositionAdapter.tsx'
+        'src/renderer/src/browser/standaloneBrowserCompositionAdapter.tsx'
       ),
       'utf8'
     )

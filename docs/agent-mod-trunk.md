@@ -12,7 +12,7 @@ P6（2026-07-29）之前 Workbench 的聊天 100% 委托远端 Kernel daemon 的
 现在 Workbench 是**第二个完整宿主**：
 
 ```
-apps/workbench/src/main/index.ts                （组合根）
+src/main/index.ts                （组合根）
   ├ WorkbenchKernelRuntime                      进程内 KernelModuleHost 门面
   │   └ createAgentKernelModule({ runtime })    唯一注册的能力：velaros.agent
   │        └ WorkbenchAgentCapabilityRuntime    v1 信封解析 + Kernel 事件桥
@@ -98,9 +98,9 @@ provider 生命周期。所有工具全程可见、全程可调。
 ## 5. 门与探针
 
 ```bash
-bun run check                          # boundaries → typecheck → lint → test → probes → build:app
-bun run --cwd apps/workbench probe:kernel-host   # 进程内 Kernel + 执行栈构造级冒烟
-bun run --cwd apps/workbench probe:agent-mods    # 两级注册机装载报告
+bun run check                          # boundaries → typecheck → lint → test → probes → build
+bun run probe:kernel-host              # 进程内 Kernel + 执行栈构造级冒烟
+bun run probe:agent-mods               # 两级注册机装载报告
 ```
 
 `probe:kernel-host` 覆盖四段：host 起来且 `velaros.agent` 可直取（model/browser 为假）；v1
