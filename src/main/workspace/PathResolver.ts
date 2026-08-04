@@ -10,7 +10,7 @@ import { basename, resolve } from 'node:path'
 
 import { AppError } from '@velaros-ai/core/error'
 import { LoggerFactory } from '@velaros-ai/core/logger'
-import { shouldSkipWorkspaceToolDirectory } from '@velaros-ai/workspace'
+import { shouldSkipProjectDirectory } from '@velaros-ai/project/files'
 
 import {
   getRelativePathInsideRoot,
@@ -135,7 +135,7 @@ class PathResolver {
       throw new AppError('VALIDATION', '当前工作台暂不直接管理隐藏项。')
     }
 
-    if (shouldSkipWorkspaceToolDirectory(trimmedName)) {
+    if (shouldSkipProjectDirectory(trimmedName)) {
       throw new AppError('VALIDATION', '当前名称属于内部或重型目录，不能在工作台中直接管理。')
     }
 

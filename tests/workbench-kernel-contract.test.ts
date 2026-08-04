@@ -3,6 +3,8 @@ import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { describe, test } from 'node:test'
 
+import { WorkbenchKernelPermissionPolicy } from '../src/main/kernel/WorkbenchKernelPermissionPolicy'
+import { parseWorkbenchKernelInvokeRequest } from '../src/main/kernel/WorkbenchKernelProtocol'
 import { DefaultWorkbenchKernelCapabilityRoutes } from '../src/main/WorkbenchMainCapabilityProviders'
 
 const repositoryRoot = resolve(import.meta.dirname, '..')
@@ -34,6 +36,77 @@ void describe('standalone Workbench Kernel contract', () => {
     )
   })
 
+  void test('rejects renderer privilege fields and malformed scopes at the IPC boundary', () => {
+    const valid = {
+      route: 'agent.execute',
+      input: { protocolVersion: 1 },
+      scope: {
+        id: '/probe',
+        ownerModuleId: 'velaros.project',
+        kind: 'project',
+      },
+    }
+    assert.deepEqual(
+      parseWorkbenchKernelInvokeRequest(valid, DefaultWorkbenchKernelCapabilityRoutes),
+      valid
+    )
+    for (const invalid of [
+      { ...valid, capabilityId: 'velaros.browser' },
+      { ...valid, operation: 'close_all_sessions' },
+      { ...valid, permission: 'agent:execute' },
+      { ...valid, scope: { ...valid.scope, ownerModuleId: '' } },
+      { ...valid, scope: { ...valid.scope, injected: true } },
+      { route: 'unknown.route', input: {} },
+      { route: 'agent.execute' },
+    ]) {
+      assert.equal(
+        parseWorkbenchKernelInvokeRequest(
+          invalid,
+          DefaultWorkbenchKernelCapabilityRoutes
+        ),
+        null
+      )
+    }
+  })
+
+  void test('grants only the main-bound Workbench Agent execution route', async () => {
+    const policy = new WorkbenchKernelPermissionPolicy()
+    assert.deepEqual(
+      await policy.request({
+        moduleId: 'velaros.agent.runtime',
+        generation: 1,
+        permission: 'agent:execute',
+        details: {
+          productId: 'velaros.workbench',
+          route: 'agent.execute',
+        },
+      }),
+      { status: 'granted', grantId: 'workbench:agent.execute' }
+    )
+    for (const request of [
+      {
+        moduleId: 'velaros.agent.runtime',
+        generation: 1,
+        permission: 'agent:execute',
+        details: { productId: 'velaros.workbench', route: 'agent.health' },
+      },
+      {
+        moduleId: 'velaros.browser.electron',
+        generation: 1,
+        permission: 'browser:control',
+        details: { productId: 'velaros.workbench', route: 'agent.execute' },
+      },
+      {
+        moduleId: 'velaros.agent.runtime',
+        generation: 1,
+        permission: 'agent:execute',
+        details: { productId: 'forged.product', route: 'agent.execute' },
+      },
+    ]) {
+      assert.equal((await policy.request(request)).status, 'denied')
+    }
+  })
+
   void test('Agent execute uses the product-neutral v1 execution envelope', async () => {
     const source = await readFile(
       resolve(
@@ -44,7 +117,7 @@ void describe('standalone Workbench Kernel contract', () => {
     )
     const invocation = extractInvocation(source, 'agent.execute')
 
-    assert.match(invocation, /\bprotocolVersion\s*:\s*1\b/u)
+    assert.match(invocation, /\bprotocolVersion\s*:\s*AgentCapabilityProtocolVersion\b/u)
     assert.match(invocation, /\bexecution\s*:\s*\{/u)
     assert.match(invocation, /\bid\s*:\s*executionId\b/u)
     assert.match(invocation, /\bsource\s*:\s*\{/u)
@@ -67,7 +140,7 @@ void describe('standalone Workbench Kernel contract', () => {
       assert.doesNotMatch(invocation, new RegExp(`\\b${legacyField}\\s*:`))
     }
 
-    // 信封解析权威从远端 client runtime 移到了进程内能力适配层（P6 宿主化）。
+    // 版本化信封由 Agent domain 唯一拥有；Workbench 只做产品身份与 scope 解释。
     const runtimeSource = await readFile(
       resolve(
         repositoryRoot,
@@ -75,13 +148,12 @@ void describe('standalone Workbench Kernel contract', () => {
       ),
       'utf8'
     )
-    assert.match(
-      runtimeSource,
-      /new Set\(\[['"]protocolVersion['"], ['"]execution['"], ['"]messages['"], ['"]config['"]\]\)/u
-    )
+    assert.match(runtimeSource, /parseAgentCapabilityExecuteEnvelopeV1/u)
+    assert.match(runtimeSource, /@velaros-ai\/agent\/protocol\/agent-capability/u)
     assert.match(runtimeSource, /scopeMetadata\.resourceId/u)
-    assert.match(runtimeSource, /Object\.keys\(record\).*allowedKeys/u)
     assert.match(runtimeSource, /velaros\.workbench/u)
+    assert.doesNotMatch(runtimeSource, /allowedKeys/u)
+    assert.doesNotMatch(runtimeSource, /protocolVersion\s*!==\s*1/u)
   })
 
   void test('Agent execution stream handles every terminal state with correlation', async () => {
@@ -106,7 +178,10 @@ void describe('standalone Workbench Kernel contract', () => {
       assert.match(source, new RegExp(`['"]${eventType}['"]`))
     }
 
-    assert.match(source, /envelope\.protocolVersion\s*!==\s*1/u)
+    assert.match(
+      source,
+      /envelope\.protocolVersion\s*!==\s*AgentCapabilityProtocolVersion/u
+    )
     assert.match(
       source,
       /envelope\.sourceProductId\s*!==\s*['"]velaros\.workbench['"]/u
@@ -126,26 +201,21 @@ void describe('standalone Workbench Kernel contract', () => {
       'utf8'
     )
 
-    // P6：执行不再经 daemon，作用域校验随之下沉——projectRoot 由能力适配层从
-    // scopeMetadata.resourceId 取，工作区边界由 @velaros-ai/workspace bridge 自持。
-    assert.match(source, /const WorkbenchAgentExecutionEventType\s*=/u)
+    // Host 只把三通道接入 Agent 的公共 publisher；事件类型、信封和有序排空不再复制。
+    assert.match(source, /AgentCapabilityEventPublisher/u)
     assert.match(source, /scopeMetadata\.resourceId/u)
-    assert.match(
-      source,
-      /export\s*\{[\s\S]*WorkbenchAgentExecutionEventType,[\s\S]*\}/u
-    )
-    for (const field of [
-      'protocolVersion',
-      'executionId',
-      'sourceProductId',
-      'sourceSessionId',
-      'sessionCorrelationId',
-    ]) {
-      assert.match(source, new RegExp(`\\b${field}\\b`))
-    }
+    assert.doesNotMatch(source, /OrderedKernelEventPublisher/u)
+    assert.doesNotMatch(source, /WorkbenchAgentExecutionEventType/u)
     for (const channel of ['agent', 'state', 'debug']) {
       assert.match(source, new RegExp(`['"]${channel}['"]`))
     }
+
+    const ipcSource = await readFile(
+      resolve(repositoryRoot, 'src/main/kernel/WorkbenchKernelIpc.ts'),
+      'utf8'
+    )
+    assert.match(ipcSource, /AgentCapabilityExecutionEventType/u)
+    assert.match(ipcSource, /@velaros-ai\/agent\/protocol\/agent-capability/u)
   })
 
   void test('renderer stream reader covers every terminal agent event', async () => {

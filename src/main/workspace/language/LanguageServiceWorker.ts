@@ -51,6 +51,10 @@ async function dispatch(request: WorkbenchLanguageServiceWorkerRequest): Promise
       return languageServices.getDocumentHighlights(request.request)
     case 'getInlayHints':
       return languageServices.getInlayHints(request.request)
+    case 'getSemanticTokens':
+      return languageServices.getSemanticTokens(request.request)
+    case 'getCodeActions':
+      return languageServices.getCodeActions(request.request)
   }
 }
 

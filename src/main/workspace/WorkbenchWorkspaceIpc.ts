@@ -7,10 +7,10 @@ import {
   type WorkbenchWorkspaceOperation,
 } from '../../shared/workbenchWorkspace'
 
-import type { WorkbenchWorkspaceCapabilityProvider } from './PublishedWorkspaceCapabilityProvider'
+import type { WorkbenchProjectCapabilityProvider } from './ProjectCapabilityProvider'
 
 export function registerWorkbenchWorkspaceIpc(
-  provider: WorkbenchWorkspaceCapabilityProvider
+  provider: WorkbenchProjectCapabilityProvider
 ): () => void {
   ipcMain.handle(
     WorkbenchWorkspaceChannels.invoke,
@@ -45,22 +45,21 @@ export function registerWorkbenchWorkspaceIpc(
 }
 
 const WorkspaceOperations = new Set<WorkbenchWorkspaceOperation>([
-  'ws_status',
-  'ws_read',
-  'ws_file_stat',
-  'ws_list_files',
-  'ws_search',
-  'ws_symbols',
-  'ws_resolve_target',
-  'ws_build_evidence',
-  'ws_diff',
-  'ws_prepare_edit',
-  'ws_amend_edit',
-  'ws_commit_edit',
-  'ws_apply_edit',
-  'ws_validate',
-  'ws_rollback',
-  'ws_run_batch',
+  'project:status',
+  'project:read',
+  'project:stat',
+  'project:list',
+  'project:search',
+  'project:symbols',
+  'project:resolve-target',
+  'project:build-evidence',
+  'project:diff',
+  'project:prepare-edit',
+  'project:amend-edit',
+  'project:apply-edit',
+  'project:validate',
+  'project:rollback',
+  'project:run-batch',
 ])
 
 function isWorkspaceInvokeRequest(value: unknown): value is WorkbenchWorkspaceInvokeRequest {

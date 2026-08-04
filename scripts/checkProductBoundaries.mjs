@@ -58,6 +58,14 @@ for (const sourceRoot of sourceRoots) {
   for (const path of await collectSourceFiles(sourceRoot)) {
     const source = await readFile(path, 'utf8')
     const label = relative(rootDir, path)
+    if (label.startsWith('src/main/')) {
+      if (/new\s+KernelModuleHost\s*\(/u.test(source)) {
+        failures.push(`${label} constructs KernelModuleHost; complete hosts must compose the public Kernel.`)
+      }
+      if (/class\s+\w*KernelRuntime\b/u.test(source)) {
+        failures.push(`${label} recreates a product Kernel runtime facade.`)
+      }
+    }
     const layerRule = layerRules.find(({ prefix }) => label.startsWith(prefix))
     for (const match of source.matchAll(importSpecifierPattern)) {
       const specifier = match[1]

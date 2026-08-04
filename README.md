@@ -18,7 +18,7 @@ owns the Electron implementation behind the semantic Workbench host.
 
 Workbench is a **complete host**: it composes the Kernel module host *in its own process*
 (kernel-contract §15) instead of connecting to a daemon. It registers exactly one capability,
-`velaros.agent`, backed by an in-process `@velaros-ai/agent-runtime` execution stack. `velaros.model`
+`velaros.agent`, backed by an in-process `@velaros-ai/agent` execution stack. `velaros.model`
 and `velaros.browser` have no implementation here, so those capabilities are simply absent and the
 consumers degrade. Agent mod packs are discovered, enabled and installed by Workbench itself from
 its own data root — a single owner, no cross-process mod registry.

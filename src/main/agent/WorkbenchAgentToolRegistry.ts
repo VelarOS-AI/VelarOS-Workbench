@@ -1,40 +1,46 @@
 import { jsonSchema, tool as defineAiTool,type ToolSet } from 'ai'
 import { z } from 'zod'
 
-import type { ToolCategoryId, ToolDescriptor } from '@velaros-ai/core/types'
-import type { AgentToolDefinition } from '@velaros-ai/workspace'
+import type { ToolCategoryId, ToolDescriptor } from '@velaros-ai/agent/protocol'
+
+import type { WorkbenchProjectToolDefinition } from '../workspace/ProjectCapabilityProvider'
 
 /**
  * Workbench 的 Agent 工具注册表。
  *
- * 单一工具来源 = `@velaros-ai/workspace` 的 bridge 工具族（IDE 语境的读写/搜索/编辑一族）。
- * 每个项目根一份 bridge，因此注册表也是**每根一实例**：由
- * {@link WorkbenchAgentToolRegistryFactory} 按 projectRoot 缓存。
+ * 单一工具来源 = `@velaros-ai/project/agent` 的项目工具族。
+ * 每个项目根一份 Project capability，因此注册表也是**每根一实例**。
  *
  * 与 Desktop 的 ToolRegistry 相比这里刻意极窄：没有 provider 生命周期、没有 MCP 注入、
  * 没有类别启停租约——Workbench v1 的工具面是一根固定分类下的定长工具集，全程可见。
  * 类别启停与分页（tool_map / 换入换出）留欠账，见 docs/agent-mod-trunk.md。
  */
-const WorkbenchToolCategoryId: ToolCategoryId = 'workspace'
-
 interface WorkbenchRegisteredTool {
   name: string
+  categoryId: ToolCategoryId
+  role: string
   description: string
+  permissions: readonly string[]
   schema: { safeParse(input: unknown): { success: boolean; data?: unknown; error?: unknown } }
-  execute(input: unknown): Promise<unknown>
+  isConcurrencySafe?: (input: never) => boolean
+  execute(input: unknown, toolContext: unknown): Promise<unknown>
 }
 
 /** SoloStreamLoop 侧要求的注册表切面（listAvailable / getDescriptor / toAiTools / get）。 */
 class WorkbenchAgentToolRegistry {
   private readonly tools = new Map<string, WorkbenchRegisteredTool>()
 
-  public constructor(definitions: readonly AgentToolDefinition[]) {
+  public constructor(definitions: readonly WorkbenchProjectToolDefinition[]) {
     for (const definition of definitions) {
       this.tools.set(definition.name, {
         name: definition.name,
+        categoryId: definition.category,
+        role: definition.role,
         description: definition.description,
+        permissions: definition.permissions,
         schema: definition.schema,
-        execute: (input) => definition.execute(input as never),
+        isConcurrencySafe: definition.isConcurrencySafe,
+        execute: definition.execute,
       })
     }
   }
@@ -43,15 +49,29 @@ class WorkbenchAgentToolRegistry {
     return [...this.tools.keys()]
   }
 
+  public get categoryIds(): ToolCategoryId[] {
+    return [...new Set([...this.tools.values()].map((tool) => tool.categoryId))]
+  }
+
+  public get toolCategoryToolNames(): Record<ToolCategoryId, string[]> {
+    return Object.fromEntries(this.categoryIds.map((categoryId) => [
+      categoryId,
+      [...this.tools.values()]
+        .filter((tool) => tool.categoryId === categoryId)
+        .map((tool) => tool.name),
+    ]))
+  }
+
   public get(toolName: string): WorkbenchRegisteredTool | undefined {
     return this.tools.get(toolName)
   }
 
   public getDescriptor(
     toolName: string
-  ): { categoryId: ToolCategoryId; role: 'act' } | undefined {
-    return this.tools.has(toolName)
-      ? { categoryId: WorkbenchToolCategoryId, role: 'act' }
+  ): { categoryId: ToolCategoryId; role: 'inspect' | 'act' } | undefined {
+    const tool = this.tools.get(toolName)
+    return tool
+      ? { categoryId: tool.categoryId, role: tool.role === 'inspect' ? 'inspect' : 'act' }
       : undefined
   }
 
@@ -62,7 +82,7 @@ class WorkbenchAgentToolRegistry {
     return this.listNames(allowList).map((name) => ({
       name,
       description: this.tools.get(name)?.description ?? '',
-      categoryId: WorkbenchToolCategoryId,
+      categoryId: this.tools.get(name)?.categoryId ?? 'project-files',
     }))
   }
 
@@ -70,17 +90,17 @@ class WorkbenchAgentToolRegistry {
     _toolContext: unknown,
     allowList?: string[]
   ): Array<{ category: { id: ToolCategoryId }; tools: ToolDescriptor[] }> {
-    const tools = this.listNames(allowList).map(
-      (name) =>
-        ({
+    const names = this.listNames(allowList)
+    return this.categoryIds.flatMap((categoryId) => {
+      const tools = names
+        .filter((name) => this.tools.get(name)?.categoryId === categoryId)
+        .map((name) => ({
           name,
           description: this.tools.get(name)?.description ?? '',
-          categoryId: WorkbenchToolCategoryId,
-        }) as unknown as ToolDescriptor
-    )
-    return tools.length > 0
-      ? [{ category: { id: WorkbenchToolCategoryId }, tools }]
-      : []
+          categoryId,
+        }) as unknown as ToolDescriptor)
+      return tools.length > 0 ? [{ category: { id: categoryId }, tools }] : []
+    })
   }
 
   /** AI SDK tool set：schema 走 zod → JSON Schema，执行仍回本注册表。 */
@@ -116,7 +136,7 @@ class WorkbenchAgentToolRegistry {
 /**
  * zod schema → AI SDK inputSchema。
  *
- * workspace bridge 的 schema 是 zod v4 实例，AI SDK 直接吃；非 zod（未来的鸭子类型 schema）
+ * Project 工具的 schema 是 zod v4 实例，AI SDK 直接吃；非 zod（未来的鸭子类型 schema）
  * 回落到「任意对象」JSON Schema，让模型仍能调用而不是整族工具消失。
  */
 function toAiInputSchema(schema: WorkbenchRegisteredTool['schema']): never {
@@ -124,5 +144,5 @@ function toAiInputSchema(schema: WorkbenchRegisteredTool['schema']): never {
   return jsonSchema({ type: 'object', properties: {}, additionalProperties: true }) as never
 }
 
-export { WorkbenchAgentToolRegistry, WorkbenchToolCategoryId }
+export { WorkbenchAgentToolRegistry }
 export type { WorkbenchRegisteredTool }

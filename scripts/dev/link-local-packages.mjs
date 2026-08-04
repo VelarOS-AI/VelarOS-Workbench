@@ -4,6 +4,7 @@ import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const projectsRoot = path.dirname(root)
+const platformPackagesRoot = path.join(projectsRoot, 'VelarOS-Platform', 'packages')
 const scope = '@velaros-ai/'
 const readJson = async (file) => JSON.parse(await readFile(file, 'utf8'))
 const exists = async (file) => access(file).then(() => true, () => false)
@@ -15,58 +16,24 @@ for (const field of ['dependencies', 'devDependencies', 'peerDependencies', 'opt
     if (name.startsWith(scope) && spec !== 'workspace:*') externalNames.add(name)
   }
 }
-// 理想架构迁移 P6（2026-07-29）：VelarOS-Platform 是 host 无关包的唯一权威单仓。
-// 同名包同时存在于 Platform 与旧独立仓（Core/Agent/Kernel/Model/UI/Capabilities/…）时一律优先
-// Platform；旧仓仅作过渡回落，归档批完成后连同本常量一并删除。
-const canonicalRepositoryName = 'VelarOS-Platform'
 const available = new Map()
-const rememberAvailable = (manifest, directory, repositoryName) => {
+const rememberAvailable = (manifest, directory) => {
   const name = manifest.name
   if (!name?.startsWith(scope)) return
-  const candidate = {
-    directory,
-    canonical: repositoryName === canonicalRepositoryName,
-    version: manifest.version ?? '0.0.0',
+  if (available.has(name)) {
+    throw new Error(`Package ${name} is declared more than once in VelarOS-Platform`)
   }
-  const current = available.get(name)
-  if (!current) {
-    available.set(name, candidate)
-    return
-  }
-  // Platform 一票压过旧仓；旧仓之间才比版本号。
-  if (current.canonical !== candidate.canonical) {
-    if (candidate.canonical) available.set(name, candidate)
-    return
-  }
-  if (current.version.localeCompare(candidate.version, undefined, { numeric: true }) < 0) {
-    available.set(name, candidate)
-  }
+  available.set(name, directory)
 }
-const resolveAvailableDirectory = (name) => available.get(name)?.directory
-for (const repo of await readdir(projectsRoot, { withFileTypes: true })) {
-  if (!repo.isDirectory() || !repo.name.startsWith('VelarOS-')) continue
-  const siblingRootManifest = path.join(projectsRoot, repo.name, 'package.json')
-  if (await exists(siblingRootManifest)) {
-    const manifest = await readJson(siblingRootManifest)
-    rememberAvailable(manifest, path.dirname(siblingRootManifest), repo.name)
-  }
-  const siblingPackages = path.join(projectsRoot, repo.name, 'packages')
-  if (!await exists(siblingPackages)) continue
-  for (const entry of await readdir(siblingPackages, { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue
-    const packageDir = path.join(siblingPackages, entry.name)
-    const manifestPath = path.join(packageDir, 'package.json')
-    if (await exists(manifestPath)) {
-      rememberAvailable(await readJson(manifestPath), packageDir, repo.name)
-      continue
-    }
-    // packages/<分组>/<包> 二级布局（Platform 的 packages/capabilities/* 即此形态）。
-    for (const nested of await readdir(packageDir, { withFileTypes: true })) {
-      const nestedManifest = path.join(packageDir, nested.name, 'package.json')
-      if (!nested.isDirectory() || !await exists(nestedManifest)) continue
-      rememberAvailable(await readJson(nestedManifest), path.dirname(nestedManifest), repo.name)
-    }
-  }
+if (!await exists(platformPackagesRoot)) {
+  throw new Error('VelarOS-Platform/packages is required for local linking')
+}
+for (const entry of await readdir(platformPackagesRoot, { withFileTypes: true })) {
+  if (!entry.isDirectory()) continue
+  const packageDir = path.join(platformPackagesRoot, entry.name)
+  const manifestPath = path.join(packageDir, 'package.json')
+  if (!await exists(manifestPath)) continue
+  rememberAvailable(await readJson(manifestPath), packageDir)
 }
 const run = (args, cwd) => {
   const result = spawnSync('bun', args, { cwd, stdio: 'inherit' })
@@ -86,7 +53,7 @@ const linkIntoProject = async (base, name, directory) => {
   await symlink(directory, target, 'dir')
 }
 for (const name of externalNames) {
-  const directory = resolveAvailableDirectory(name)
+  const directory = available.get(name)
   if (!directory) throw new Error(`No sibling checkout provides ${name}`)
   run(['link'], directory)
   await linkIntoProject(root, name, directory)

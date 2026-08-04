@@ -48,6 +48,19 @@ export function usesWorkbenchSemanticLanguageService(path: Nullable<string>): bo
   )
 }
 
+export function usesWorkbenchInlayHintLanguageService(path: Nullable<string>): boolean {
+  return usesWorkbenchSemanticLanguageService(path)
+}
+
+export function usesWorkbenchExternalLspLanguageService(path: Nullable<string>): boolean {
+  return resolveWorkbenchBuiltinLanguageServiceRuntime(path) === 'lsp-server'
+}
+
+export function usesWorkbenchExternalSemanticLanguageService(path: Nullable<string>): boolean {
+  const runtime = resolveWorkbenchBuiltinLanguageServiceRuntime(path)
+  return runtime === 'lsp-server' || runtime === 'python-language-server'
+}
+
 export function usesWorkbenchBuiltinLanguageService(path: Nullable<string>): boolean {
   const runtime = resolveWorkbenchBuiltinLanguageServiceRuntime(path)
   return (

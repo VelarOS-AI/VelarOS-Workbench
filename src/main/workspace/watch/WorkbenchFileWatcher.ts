@@ -4,7 +4,7 @@ import { realpath, stat } from 'node:fs/promises'
 import { relative, resolve } from 'node:path'
 
 import { AppError } from '@velaros-ai/core/error'
-import { shouldSkipWorkspaceToolDirectory } from '@velaros-ai/workspace'
+import { shouldSkipProjectDirectory } from '@velaros-ai/project/files'
 
 import type { SystemWorkspaceFilesChangedEvent } from '@shared/contracts'
 
@@ -40,7 +40,7 @@ function normalizeRelativePath(rootPath: string, filename: string): Nullable<str
       segments[1] === 'packed-refs' ||
       segments[1] === 'refs')
   if (isGitState) return path
-  if (segments.some((segment) => shouldSkipWorkspaceToolDirectory(segment))) return null
+  if (segments.some((segment) => shouldSkipProjectDirectory(segment))) return null
 
   return path
 }

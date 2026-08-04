@@ -119,10 +119,17 @@ import {
   languageServiceRangeToOffsets,
   mergeWorkbenchLanguageServiceCompletions,
   usesWorkbenchBuiltinLanguageService,
+  usesWorkbenchExternalLspLanguageService,
+  usesWorkbenchExternalSemanticLanguageService,
   usesWorkbenchHtmlLanguageService,
+  usesWorkbenchInlayHintLanguageService,
   usesWorkbenchSemanticLanguageService,
 } from '@renderer/models/editor/workbenchCodeMirrorLanguageService'
 import { workbenchLineNumbersExtension } from '@renderer/models/editor/workbenchCodeMirrorLineNumberSelection'
+import {
+  createWorkbenchSemanticTokensExtension,
+  getWorkbenchSemanticTokenTheme,
+} from '@renderer/models/editor/workbenchCodeMirrorSemanticTokens'
 import {
   getWorkbenchCodeMirrorTheme,
   workbenchCodeMirrorLintTheme,
@@ -131,12 +138,15 @@ import { createWorkbenchTokenOccurrenceHighlightExtension } from '@renderer/mode
 import { buildWorkbenchIdeaIndentGuideColumnsForLineRange } from '@renderer/models/editor/workbenchIndentGuides'
 import {
   getWorkbenchInlineCompletion,
+  getWorkbenchLanguageServiceCodeActions,
   getWorkbenchLanguageServiceCompletions,
   getWorkbenchLanguageServiceDefinition,
   getWorkbenchLanguageServiceDiagnostics,
+  getWorkbenchLanguageServiceDocumentHighlights,
   getWorkbenchLanguageServiceFormat,
   getWorkbenchLanguageServiceInlayHints,
   getWorkbenchLanguageServiceRename,
+  getWorkbenchLanguageServiceSemanticTokens,
 } from '@renderer/models/editor/workbenchLanguageServiceIpc'
 import {
   createWorkbenchPackageScriptRunGutterExtension,
@@ -148,7 +158,11 @@ import type { WorkbenchOpenEditorTab } from '@renderer/types/workbenchTypes'
 
 import { isEmpty, isPresent, Log, toNullable, toOptional } from '@velaros-ai/core'
 
-import type { WorkbenchLanguageServiceFileEdit } from '@shared/contracts'
+import type {
+  WorkbenchLanguageServiceCodeAction,
+  WorkbenchLanguageServiceDiagnostic,
+  WorkbenchLanguageServiceFileEdit,
+} from '@shared/contracts'
 
 import styles from '../../styles/workbenchPageStyles'
 import { useLatest, useTimerScope } from '../../support/genericHooks'
@@ -597,8 +611,13 @@ function createWorkbenchCompletionSource({
     const prefix = before?.text ?? ''
     const triggerIndex = (before?.from ?? selection.head) - 1
     const triggerChar = triggerIndex >= 0 ? content[triggerIndex] : ''
+    const externalLspStructuralTrigger =
+      usesWorkbenchExternalLspLanguageService(path) && [' ', '{', ',', ':'].includes(triggerChar)
     const shouldQueryLanguageService =
-      context.explicit || ['.', '@', '/', '<'].includes(triggerChar) || prefix.length >= 1
+      context.explicit ||
+      ['.', '@', '/', '<'].includes(triggerChar) ||
+      externalLspStructuralTrigger ||
+      prefix.length >= 1
 
     if (!shouldQueryLanguageService || context.aborted) return localResult || null
 
@@ -685,12 +704,83 @@ function createWorkbenchLanguageServiceLinter({
         (diagnostic) => diagnostic.path === path
       )
 
+      const codeActions = usesWorkbenchExternalSemanticLanguageService(path)
+        && languageServiceDiagnostics.length > 0
+        ? await getWorkbenchLanguageServiceCodeActions({
+            ...buildWorkbenchLanguageServiceRequestBase({
+              projectRoot,
+              path,
+              language,
+              content: view.state.doc.toString(),
+              openTabs: getOpenTabs(),
+            }),
+            range: enclosingDiagnosticRange(languageServiceDiagnostics),
+            diagnostics: languageServiceDiagnostics,
+          }, hostRuntime)
+        : null
+      if (generation !== requestGeneration || getActivePath() !== path) return []
+      const availableActions = codeActions?.ok ? codeActions.data.actions : []
+      const actionContent = view.state.doc.toString()
+
       return languageServiceDiagnostics
-        .map((diagnostic) => mapWorkbenchDiagnosticToCodeMirror(view.state, diagnostic))
+        .map((diagnostic) => {
+          const mapped = mapWorkbenchDiagnosticToCodeMirror(view.state, diagnostic)
+          if (!mapped) return null
+          const actions = codeMirrorActionsForDiagnostic(
+            actionContent,
+            path,
+            diagnostic,
+            availableActions
+          )
+          return actions.length > 0 ? { ...mapped, actions } : mapped
+        })
         .filter((diagnostic): diagnostic is Diagnostic => isPresent(diagnostic))
     },
     { delay: 500 }
   )
+}
+
+function enclosingDiagnosticRange(
+  diagnostics: readonly WorkbenchLanguageServiceDiagnostic[]
+): WorkbenchLanguageServiceDiagnostic['range'] {
+  const starts = diagnostics.map((item) => [item.range.startLine, item.range.startColumn] as const)
+  const ends = diagnostics.map((item) => [item.range.endLine, item.range.endColumn] as const)
+  starts.sort((left, right) => left[0] - right[0] || left[1] - right[1])
+  ends.sort((left, right) => right[0] - left[0] || right[1] - left[1])
+  return {
+    startLine: starts[0]![0],
+    startColumn: starts[0]![1],
+    endLine: ends[0]![0],
+    endColumn: ends[0]![1],
+  }
+}
+
+function codeMirrorActionsForDiagnostic(
+  content: string,
+  path: string,
+  diagnostic: WorkbenchLanguageServiceDiagnostic,
+  actions: readonly WorkbenchLanguageServiceCodeAction[]
+): NonNullable<Diagnostic['actions']> {
+  const diagnosticOffsets = languageServiceRangeToOffsets(content, diagnostic.range)
+  if (!diagnosticOffsets) return []
+  return actions.flatMap((action) => {
+    if (action.changes.length !== 1 || action.changes[0]?.path !== path) return []
+    const edits = action.changes[0].edits.flatMap((edit) => {
+      const range = languageServiceRangeToOffsets(content, edit.range)
+      return range ? [{ ...range, insert: edit.newText }] : []
+    }).sort((left, right) => left.from - right.from || left.to - right.to)
+    if (edits.length === 0 || edits.some((edit, index) => index > 0 && edit.from < edits[index - 1]!.to))
+      return []
+    if (!edits.some((edit) => edit.from <= diagnosticOffsets.to && edit.to >= diagnosticOffsets.from))
+      return []
+    return [{
+      name: action.title,
+      apply: (targetView: EditorView) => {
+        if (targetView.state.doc.toString() !== content) return
+        targetView.dispatch({ changes: edits.map((edit) => ({ from: edit.from, to: edit.to, insert: edit.insert })) })
+      },
+    }]
+  })
 }
 
 function buildReadOnlyExtensions(readOnly: boolean, disabled: boolean): Extension {
@@ -1253,7 +1343,45 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
             }
           }
         ),
-        createWorkbenchTokenOccurrenceHighlightExtension(),
+        path && usesWorkbenchExternalSemanticLanguageService(path)
+          ? [
+              createWorkbenchSemanticTokensExtension({
+                request: async (content) => {
+                  const result = await getWorkbenchLanguageServiceSemanticTokens(
+                    buildWorkbenchLanguageServiceRequestBase({
+                      projectRoot,
+                      path,
+                      language,
+                      content,
+                      openTabs: openTabsLatest.current,
+                    }),
+                    hostRuntime
+                  )
+                  return result.ok && result.data.path === path ? result.data.tokens : null
+                },
+              }),
+              getWorkbenchSemanticTokenTheme(workbenchTheme),
+            ]
+          : [],
+        createWorkbenchTokenOccurrenceHighlightExtension(
+          path && usesWorkbenchSemanticLanguageService(path)
+            ? {
+                request: async (content, position) => {
+                  const result = await getWorkbenchLanguageServiceDocumentHighlights({
+                    ...buildWorkbenchLanguageServiceRequestBase({
+                      projectRoot,
+                      path,
+                      language,
+                      content,
+                      openTabs: openTabsLatest.current,
+                    }),
+                    position,
+                  }, hostRuntime)
+                  return result.ok && result.data.path === path ? result.data.highlights : null
+                },
+              }
+            : null
+        ),
         createWorkbenchSignatureHelpExtension(
           languageServiceContext,
           workbenchEditorLanguageFeatureClasses
@@ -1261,7 +1389,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         createWorkbenchInlayHintExtension({
           cacheKey: `${projectRoot}\u0000${path ?? ''}`,
           request: async (content, ranges) => {
-            if (!path || !isTypeScriptEditorPath(path)) return []
+            if (!path || !usesWorkbenchInlayHintLanguageService(path)) return []
 
             const currentOpenTabs = openTabsLatest.current
             const syncOpenFiles =
@@ -1292,7 +1420,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
           },
         }),
       ]
-    }, [hostRuntime, language, openTabsLatest, path, projectRoot])
+    }, [hostRuntime, language, openTabsLatest, path, projectRoot, workbenchTheme])
 
     const runCurrentFile = (): void => {
       const currentPath = pathRef.current

@@ -1,5 +1,6 @@
 let buffer = Buffer.alloc(0)
 let initialized = false
+const mode = process.argv[2]
 
 function send(message) {
   const json = JSON.stringify(message)
@@ -9,6 +10,10 @@ function send(message) {
 function handle(message) {
   switch (message.method) {
     case 'initialize':
+      if (mode === 'oversized') {
+        process.stdout.write(`Content-Length: ${16 * 1024 * 1024 + 1}\r\n\r\n`)
+        break
+      }
       send({
         jsonrpc: '2.0',
         id: message.id,
@@ -17,11 +22,18 @@ function handle(message) {
             completionProvider: {},
             definitionProvider: true,
             referencesProvider: true,
+            documentHighlightProvider: true,
             renameProvider: true,
             hoverProvider: true,
             documentSymbolProvider: true,
             signatureHelpProvider: { triggerCharacters: ['(', ','] },
             documentFormattingProvider: true,
+            inlayHintProvider: true,
+            semanticTokensProvider: {
+              legend: { tokenTypes: ['class', 'variable'], tokenModifiers: ['declaration'] },
+              full: true,
+            },
+            codeActionProvider: { codeActionKinds: ['quickfix'] },
             experimental: { velar: { protocolVersion: 1 } },
           },
           serverInfo: { name: 'Fake Velar Language Server', version: '1.0.0' },
@@ -52,6 +64,7 @@ function handle(message) {
       break
     }
     case 'textDocument/completion':
+      if (mode === 'hang') break
       send({ jsonrpc: '2.0', id: message.id, result: { items: [{ label: 'component', kind: 14 }] } })
       break
     case 'textDocument/hover':
@@ -74,6 +87,16 @@ function handle(message) {
         result: [{
           uri: message.params.textDocument.uri,
           range: { start: { line: 1, character: 4 }, end: { line: 1, character: 7 } },
+        }],
+      })
+      break
+    case 'textDocument/documentHighlight':
+      send({
+        jsonrpc: '2.0',
+        id: message.id,
+        result: [{
+          range: { start: { line: 0, character: 10 }, end: { line: 0, character: 13 } },
+          kind: 1,
         }],
       })
       break
@@ -121,6 +144,35 @@ function handle(message) {
         result: [{
           range: { start: { line: 0, character: 0 }, end: { line: 1, character: 0 } },
           newText: 'component App:\n',
+        }],
+      })
+      break
+    case 'textDocument/inlayHint':
+      send({
+        jsonrpc: '2.0',
+        id: message.id,
+        result: [{ position: { line: 0, character: 13 }, label: ': string', kind: 1, paddingRight: true }],
+      })
+      break
+    case 'textDocument/semanticTokens/full':
+      send({ jsonrpc: '2.0', id: message.id, result: { data: [0, 10, 3, 0, 1] } })
+      break
+    case 'textDocument/codeAction':
+      send({
+        jsonrpc: '2.0',
+        id: message.id,
+        result: [{
+          title: 'Apply fake quick fix',
+          kind: 'quickfix',
+          isPreferred: true,
+          edit: {
+            changes: {
+              [message.params.textDocument.uri]: [{
+                range: { start: { line: 0, character: 0 }, end: { line: 0, character: 3 } },
+                newText: 'let',
+              }],
+            },
+          },
         }],
       })
       break

@@ -1,20 +1,20 @@
 import type {
-  WorkspaceGitBranch,
-  WorkspaceGitCommitResult,
-  WorkspaceGitDiffOptions,
-  WorkspaceGitDiffResult,
-  WorkspaceGitFileAction,
-  WorkspaceGitFileActionResult,
-  WorkspaceGitFileStatusEntry,
-  WorkspaceGitLineStats,
-  WorkspaceGitLogEntry,
-  WorkspaceGitLogOptions,
-  WorkspaceGitRemoteAction,
-  WorkspaceGitRemoteActionOptions,
-  WorkspaceGitRemoteActionResult,
-  WorkspaceGitRestoreResult,
-  WorkspaceGitStatusResult,
-} from '@velaros-ai/workspace'
+  ProjectGitBranch as WorkspaceGitBranch,
+  ProjectGitCommitResult as WorkspaceGitCommitResult,
+  ProjectGitDiffOptions as WorkspaceGitDiffOptions,
+  ProjectGitDiffResult as WorkspaceGitDiffResult,
+  ProjectGitFileAction as WorkspaceGitFileAction,
+  ProjectGitFileActionResult as WorkspaceGitFileActionResult,
+  ProjectGitFileStatusEntry as WorkspaceGitFileStatusEntry,
+  ProjectGitLineStats as WorkspaceGitLineStats,
+  ProjectGitLogEntry as WorkspaceGitLogEntry,
+  ProjectGitLogOptions as WorkspaceGitLogOptions,
+  ProjectGitRemoteAction as WorkspaceGitRemoteAction,
+  ProjectGitRemoteActionOptions as WorkspaceGitRemoteActionOptions,
+  ProjectGitRemoteActionResult as WorkspaceGitRemoteActionResult,
+  ProjectGitRestoreResult as WorkspaceGitRestoreResult,
+  ProjectGitStatusResult as WorkspaceGitStatusResult,
+} from '@velaros-ai/project/contracts'
 
 export type SystemDefaultEditorId =
   | 'velaros-light'

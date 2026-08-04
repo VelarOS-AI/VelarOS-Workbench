@@ -10,17 +10,24 @@
 import { z } from 'zod'
 
 import { createAgentKernelModule } from '@velaros-ai/agent'
-import type { AgentToolDefinition } from '@velaros-ai/workspace'
+import {
+  AgentCapabilityExecutionEventType,
+  AgentCapabilityProtocolVersion,
+} from '@velaros-ai/agent/protocol/agent-capability'
+import { Kernel } from '@velaros-ai/kernel/runtime'
+import type { ProjectKernel } from '@velaros-ai/project/runtime'
 
 import { WorkbenchAgentExecutionStack } from '../agent/WorkbenchAgentExecutionStack'
-import type { WorkbenchWorkspaceCapabilityProvider } from '../workspace/PublishedWorkspaceCapabilityProvider'
+import type {
+  WorkbenchProjectCapabilityProvider,
+  WorkbenchProjectToolDefinition,
+} from '../workspace/ProjectCapabilityProvider'
 
 import {
   parseWorkbenchAgentExecuteInput,
   WorkbenchAgentCapabilityRuntime,
-  WorkbenchAgentExecutionEventType,
 } from './WorkbenchAgentCapabilityRuntime'
-import { WorkbenchKernelRuntime } from './WorkbenchKernelRuntime'
+import { WorkbenchKernelPermissionPolicy } from './WorkbenchKernelPermissionPolicy'
 
 let assertions = 0
 
@@ -42,27 +49,29 @@ async function assertRejects(action: () => Promise<unknown>, message: string): P
 const ProbeProjectRoot = '/probe/project'
 const ProbeSessionId = 'probe-session'
 
-function createProbeWorkspaceProvider(): WorkbenchWorkspaceCapabilityProvider {
-  const tool: AgentToolDefinition = {
-    name: 'ws_read',
-    descriptionSpec: {} as AgentToolDefinition['descriptionSpec'],
+function createProbeProjectProvider(): WorkbenchProjectCapabilityProvider {
+  const tool: WorkbenchProjectToolDefinition = {
+    name: 'project:read',
+    category: 'project-files',
+    role: 'inspect',
     description: 'Read a file in the probe workspace.',
+    permissions: ['fs:read'],
     schema: z.object({ path: z.string() }),
     execute: (input) => Promise.resolve({ ok: true, input }),
   }
   return {
     invoke: () => Promise.resolve(null),
-    resolveBridge: () =>
-      Promise.resolve({ tools: [tool] } as unknown as Awaited<
-        ReturnType<WorkbenchWorkspaceCapabilityProvider['resolveBridge']>
-      >),
+    resolveProject: () => Promise.resolve({
+      kernel: {} as ProjectKernel,
+      tools: [tool],
+    }),
     dispose: () => Promise.resolve(),
   }
 }
 
 function buildEnvelope(overrides: Record<string, unknown> = {}): unknown {
   return {
-    protocolVersion: 1,
+    protocolVersion: AgentCapabilityProtocolVersion,
     execution: {
       id: 'probe-execution',
       source: {
@@ -82,8 +91,10 @@ function buildEnvelope(overrides: Record<string, unknown> = {}): unknown {
 
 // ── ① 进程内 host 起来 → velaros.agent 注册 → 能力直取 ──
 {
-  const stack = new WorkbenchAgentExecutionStack(createProbeWorkspaceProvider())
-  const kernel = new WorkbenchKernelRuntime()
+  const stack = new WorkbenchAgentExecutionStack(createProbeProjectProvider())
+  const kernel = new Kernel({
+    permissionBroker: new WorkbenchKernelPermissionPolicy(),
+  })
   kernel.registerModule(
     createAgentKernelModule({ runtime: new WorkbenchAgentCapabilityRuntime(stack) })
   )
@@ -98,19 +109,24 @@ function buildEnvelope(overrides: Record<string, unknown> = {}): unknown {
   assert(modules.length === 1, '只应注册一个能力模块')
   assert(modules[0]?.status === 'ready', 'Agent 模块必须进入 ready 态')
 
-  const health = await kernel.invoke(
-    'velaros.agent',
-    'health',
-    {},
-    new AbortController().signal
-  )
+  const health = await kernel.invokeCapability({
+    capabilityId: 'velaros.agent',
+    operation: 'health',
+    input: {},
+    signal: new AbortController().signal,
+  })
   assert(
     (health as { status?: string }).status === 'healthy',
     'ready 后 health 必须报 healthy'
   )
   await assertRejects(
-    () => kernel.invoke('velaros.model', 'supports_provider', {}, new AbortController().signal),
-    '未注册能力必须抛 WorkbenchKernelCapabilityUnavailableError'
+    () => kernel.invokeCapability({
+      capabilityId: 'velaros.model',
+      operation: 'supports_provider',
+      input: {},
+      signal: new AbortController().signal,
+    }),
+    '未注册能力必须抛 KernelCapabilityUnavailableError'
   )
   await kernel.dispose()
 }
@@ -126,7 +142,18 @@ function buildEnvelope(overrides: Record<string, unknown> = {}): unknown {
   for (const bad of [
     buildEnvelope({ protocolVersion: 2 }),
     buildEnvelope({ extraneous: true }),
-    { protocolVersion: 1, execution: {}, messages: [], config: {} },
+    buildEnvelope({
+      config: {
+        modelSelection: { provider: 'probe', model: 'probe-model' },
+        grantedPermissions: ['fs:write'],
+      },
+    }),
+    {
+      protocolVersion: AgentCapabilityProtocolVersion,
+      execution: {},
+      messages: [],
+      config: {},
+    },
     null,
   ]) {
     assertions += 1
@@ -142,7 +169,7 @@ function buildEnvelope(overrides: Record<string, unknown> = {}): unknown {
 
 // ── ③ 聊天链构造级：能力入口 → 执行栈 → loop，跑到模型接口边界为止 ──
 {
-  const stack = new WorkbenchAgentExecutionStack(createProbeWorkspaceProvider())
+  const stack = new WorkbenchAgentExecutionStack(createProbeProjectProvider())
   const runtime = new WorkbenchAgentCapabilityRuntime(stack)
   const published: Array<{ type: string; payload: unknown }> = []
   const abortController = new AbortController()
@@ -200,7 +227,7 @@ function buildEnvelope(overrides: Record<string, unknown> = {}): unknown {
     `失败必须来自模型 provider 解析，而不是更早的装配环节：${String(modelBoundaryError)}`
   )
   assert(
-    published.every((event) => event.type === WorkbenchAgentExecutionEventType),
+    published.every((event) => event.type === AgentCapabilityExecutionEventType),
     '所有事件必须走统一的 velaros.agent.execution 类型'
   )
   await stack.dispose()
@@ -239,8 +266,8 @@ function buildEnvelope(overrides: Record<string, unknown> = {}): unknown {
     const { type, payload } = event as { type: string; payload: Record<string, unknown> }
     assertions += 1
     if (
-      type !== WorkbenchAgentExecutionEventType
-      || payload.protocolVersion !== 1
+      type !== AgentCapabilityExecutionEventType
+      || payload.protocolVersion !== AgentCapabilityProtocolVersion
       || payload.executionId !== 'probe-execution'
       || payload.sourceProductId !== 'velaros.workbench'
       || payload.sourceSessionId !== ProbeSessionId

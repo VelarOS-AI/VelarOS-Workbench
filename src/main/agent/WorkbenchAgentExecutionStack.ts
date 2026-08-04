@@ -17,15 +17,11 @@ import {
 } from '@velaros-ai/agent'
 import { Log, toNullable } from '@velaros-ai/core'
 import { logRuntime } from '@velaros-ai/core/logger'
-import { asRecord } from '@velaros-ai/core/utils/unknownJsonRecord'
 import { createModelRuntimeComposition } from '@velaros-ai/model/node'
 
-import type { WorkbenchWorkspaceCapabilityProvider } from '../workspace/PublishedWorkspaceCapabilityProvider'
+import type { WorkbenchProjectCapabilityProvider } from '../workspace/ProjectCapabilityProvider'
 
-import {
-  WorkbenchAgentToolRegistry,
-  WorkbenchToolCategoryId,
-} from './WorkbenchAgentToolRegistry'
+import { WorkbenchAgentToolRegistry } from './WorkbenchAgentToolRegistry'
 
 /**
  * Workbench 的**进程内** Agent 执行栈。
@@ -37,11 +33,11 @@ import {
  * ```
  * WorkbenchAgentCapabilityRuntime.execute        （Kernel 能力入口，解析 v1 信封）
  *   → WorkbenchAgentExecutionStack.run           （本类：按 projectRoot 取会话装配）
- *     → SoloStreamLoop.execute                   （agent-runtime 主 Agent 面）
+ *     → SoloStreamLoop.execute                   （Agent 主循环）
  *       ├ ModelRuntime      ← @velaros-ai/model 的 agentModelRuntime（BYOK 选择走 config）
  *       ├ TurnRunner        ← 单轮流式 + 工具执行
  *       ├ RunContext        ← ContextBuilder 的内置提示词段注册表
- *       └ ToolRegistry      ← @velaros-ai/workspace bridge 工具族（每 projectRoot 一份）
+ *       └ ToolRegistry      ← @velaros-ai/project/agent 工具族（每 projectRoot 一份）
  * ```
  *
  * ## 与 Desktop 的差异（有意为之的裁剪，非遗漏）
@@ -56,7 +52,7 @@ const WorkbenchDefaultThinkingDepth = 'balanced'
 
 interface WorkbenchAgentRunInput {
   sessionId: string
-  /** 项目根：工具面的 workspace bridge 与会话装配都按它分桶。 */
+  /** 项目根：Project capability 与会话装配都按它分桶。 */
   projectRoot: Nullable<string>
   messages: ModelMessage[]
   config: AgentExecutionConfig
@@ -83,18 +79,24 @@ class WorkbenchAgentExecutionStack {
   private readonly loops = new Map<string, SoloStreamLoop<never, never>>()
 
   public constructor(
-    private readonly workspaceProvider: WorkbenchWorkspaceCapabilityProvider,
+    private readonly projectProvider: WorkbenchProjectCapabilityProvider,
     private readonly seams?: AgentModSeamDispatcher
   ) {
-    // Model 是宿主注入的能力：agent-runtime 不再自己发现 provider registry。
+    // Model 是宿主注入的能力：Agent 不自己发现 provider registry。
     // config.modelSelection 是不透明选择，Workbench 原样转交 Model 包解析（BYOK）。
-    this.runtimeHelper = new WorkbenchModelRuntime(this.modelComposition.agentModelRuntime)
+    this.runtimeHelper = new ModelRuntime(this.modelComposition.agentModelRuntime)
     this.runContextHelper = new RunContext(
       new ContextBuilder(createBuiltInPromptRegistry(), undefined, toNullable(this.seams)),
       defaultRuntimePromptFeaturePolicy
     )
     this.primaryAgentProfile = new PrimaryAgentProfile(EmptySkillRepository, {
-      getToolCategoryId: () => WorkbenchToolCategoryId,
+      getToolCategoryId: (toolName) => {
+        for (const session of this.sessions.values()) {
+          const descriptor = session.registry.getDescriptor(toolName)
+          if (descriptor) return descriptor.categoryId
+        }
+        return 'project-files'
+      },
     })
   }
 
@@ -155,8 +157,8 @@ class WorkbenchAgentExecutionStack {
   public async dispose(): Promise<void> {
     this.sessions.clear()
     this.loops.clear()
-    await this.workspaceProvider.dispose().catch((error: unknown) => {
-      this.log.warn('agent.workspace_provider_dispose_failed', {
+    await this.projectProvider.dispose().catch((error: unknown) => {
+      this.log.warn('agent.project_provider_dispose_failed', {
         error: error instanceof Error ? error.message : String(error),
       })
     })
@@ -191,50 +193,21 @@ class WorkbenchAgentExecutionStack {
     const existing = this.sessions.get(sessionId)
     if (existing) return existing
 
-    const bridge = await this.workspaceProvider.resolveBridge(projectRoot)
-    const registry = new WorkbenchAgentToolRegistry(bridge.tools)
+    const project = await this.projectProvider.resolveProject(projectRoot)
+    const registry = new WorkbenchAgentToolRegistry(project.tools)
     const tracker = new CodingSessionTracker(
-      [WorkbenchToolCategoryId],
+      registry.categoryIds,
       undefined,
-      [WorkbenchToolCategoryId],
+      registry.categoryIds,
       [],
       {
-        toolCategoryToolNames: { [WorkbenchToolCategoryId]: registry.names },
-        residentToolCategories: [WorkbenchToolCategoryId],
+        toolCategoryToolNames: registry.toolCategoryToolNames,
+        residentToolCategories: registry.categoryIds,
       }
     )
     const created: WorkbenchAgentSession = { tracker, registry }
     this.sessions.set(sessionId, created)
     return created
-  }
-}
-
-/**
- * Model 包返回的角色运行时不带 Kernel 运行档语义。
- *
- * 宿主在这里把 `config.modelSelection` 从执行配置里剥出来喂 Model 端口——与 Desktop 的
- * `DesktopModelRuntime` 逐字一致，保持两宿主对 BYOK 选择的解释完全相同。
- */
-class WorkbenchModelRuntime extends ModelRuntime {
-  public constructor(
-    private readonly agentModelCapability: ReturnType<
-      typeof createModelRuntimeComposition
-    >['agentModelRuntime']
-  ) {
-    super(agentModelCapability)
-  }
-
-  public override createAgentProvider(selection: unknown) {
-    return this.agentModelCapability.createAgentProvider(
-      (asRecord(selection)?.modelSelection ?? selection) as never
-    )
-  }
-
-  public override resolveRoleRuntime(selection: unknown, runtimeContext?: unknown) {
-    return this.agentModelCapability.resolveRoleRuntime(
-      (asRecord(selection)?.modelSelection ?? selection) as never,
-      (asRecord(runtimeContext)?.modelRuntimeContext ?? runtimeContext) as never
-    )
   }
 }
 

@@ -1,5 +1,5 @@
 /**
- * 语言智能 IPC 装配：handle 11 个语言服务动词通道，转发给串行执行的语言服务 worker。
+ * 语言智能 IPC 装配：handle 13 个语言服务动词通道，转发给串行执行的语言服务 worker。
  *
  * IPC 入参是边界外来数据，在此解析一次（形状不符按无效请求处理），worker 内部只见类型。
  * 所有请求最终落在 tsserver 项目托管上（projectRoot 键控，无 session 轴）；worker 首个请求
@@ -8,11 +8,14 @@
 import { ipcMain } from 'electron'
 
 import type {
+  WorkbenchLanguageServiceCodeActionsRequest,
+  WorkbenchLanguageServiceDiagnostic,
   WorkbenchLanguageServiceInlayHintsRequest,
   WorkbenchLanguageServiceOffsetRange,
   WorkbenchLanguageServiceOpenFile,
   WorkbenchLanguageServicePosition,
   WorkbenchLanguageServicePositionRequest,
+  WorkbenchLanguageServiceRange,
   WorkbenchLanguageServiceRenameRequest,
   WorkbenchLanguageServiceRequest,
 } from '@shared/contracts'
@@ -130,6 +133,24 @@ export function registerWorkbenchLanguageServiceIpc(
       return client.getInlayHints(parsed)
     })
   )
+
+  ipcMain.handle(WorkbenchLanguageChannels.semanticTokens, (_event, request: unknown) =>
+    callWithEnvelope(() => {
+      const parsed = parseRequest(request)
+      if (!parsed) return invalidRequest()
+
+      return client.getSemanticTokens(parsed)
+    })
+  )
+
+  ipcMain.handle(WorkbenchLanguageChannels.codeActions, (_event, request: unknown) =>
+    callWithEnvelope(() => {
+      const parsed = parseCodeActionsRequest(request)
+      if (!parsed) return invalidRequest()
+
+      return client.getCodeActions(parsed)
+    })
+  )
 }
 
 function parseRequest(input: unknown): Nullable<WorkbenchLanguageServiceRequest> {
@@ -176,6 +197,45 @@ function parseInlayHintsRequest(input: unknown): Nullable<WorkbenchLanguageServi
   }
 
   return { ...base, ranges, syncOpenFiles: input['syncOpenFiles'] }
+}
+
+function parseCodeActionsRequest(input: unknown): Nullable<WorkbenchLanguageServiceCodeActionsRequest> {
+  const base = parseRequest(input)
+  if (!base || !isRecord(input)) return null
+  const range = parseRange(input['range'])
+  if (!range || !Array.isArray(input['diagnostics']) || input['diagnostics'].length > 10_000)
+    return null
+  const diagnostics: WorkbenchLanguageServiceDiagnostic[] = []
+  for (const value of input['diagnostics']) {
+    if (!isRecord(value) || typeof value['path'] !== 'string'
+      || typeof value['message'] !== 'string' || !['error', 'warning', 'info'].includes(String(value['severity'])))
+      return null
+    const diagnosticRange = parseRange(value['range'])
+    if (!diagnosticRange) return null
+    const code = value['code']
+    if (code !== undefined && typeof code !== 'string' && typeof code !== 'number') return null
+    diagnostics.push({
+      path: value['path'],
+      severity: value['severity'] as WorkbenchLanguageServiceDiagnostic['severity'],
+      message: value['message'],
+      ...optionalString(value, 'source'),
+      ...(code === undefined ? {} : { code }),
+      range: diagnosticRange,
+    })
+  }
+  return { ...base, range, diagnostics }
+}
+
+function parseRange(input: unknown): Nullable<WorkbenchLanguageServiceRange> {
+  if (!isRecord(input)) return null
+  const keys = ['startLine', 'startColumn', 'endLine', 'endColumn'] as const
+  if (keys.some((key) => typeof input[key] !== 'number')) return null
+  return {
+    startLine: input['startLine'] as number,
+    startColumn: input['startColumn'] as number,
+    endLine: input['endLine'] as number,
+    endColumn: input['endColumn'] as number,
+  }
 }
 
 function parsePosition(input: unknown): Nullable<WorkbenchLanguageServicePosition> {

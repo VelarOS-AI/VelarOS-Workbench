@@ -4,38 +4,34 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, test } from 'node:test'
 
-import type { VelarosWorkspaceBridge } from '@velaros-ai/workspace'
+import type { ProjectKernel } from '@velaros-ai/project/runtime'
 
-import { PublishedWorkspaceCapabilityProvider } from '../src/main/workspace/PublishedWorkspaceCapabilityProvider'
+import { ProjectCapabilityProvider } from '../src/main/workspace/ProjectCapabilityProvider'
 
-void describe('published Workspace capability provider', () => {
-  void test('creates one injected module bridge per project and invokes its tool', async () => {
+void describe('Project capability provider', () => {
+  void test('creates one injected Project kernel per root and invokes it', async () => {
     let created = 0
     const calls: unknown[] = []
-    const provider = new PublishedWorkspaceCapabilityProvider({
-      createBridge: async () => {
+    const provider = new ProjectCapabilityProvider({
+      createKernel: async () => {
         created += 1
         return {
-          tools: [{
-            name: 'ws_list_files',
-            execute: async (input: unknown) => {
+          listFiles: async (input: unknown) => {
               calls.push(input)
               return [{ path: 'src/index.ts', type: 'file' }]
-            },
-          }],
-          asModule: () => ({ name: 'workspace', version: '1.2.0' }),
-        } as unknown as VelarosWorkspaceBridge
+          },
+        } as unknown as ProjectKernel
       },
     })
 
     const first = await provider.invoke({
       projectRoot: '/tmp/workbench-project',
-      operation: 'ws_list_files',
+      operation: 'project:list',
       input: { recursive: true },
     })
     const second = await provider.invoke({
       projectRoot: '/tmp/workbench-project',
-      operation: 'ws_list_files',
+      operation: 'project:list',
       input: { recursive: false },
     })
 
@@ -47,24 +43,24 @@ void describe('published Workspace capability provider', () => {
   })
 
   void test('rejects relative roots before constructing a module', async () => {
-    const provider = new PublishedWorkspaceCapabilityProvider({
-      createBridge: async () => {
+    const provider = new ProjectCapabilityProvider({
+      createKernel: async () => {
         throw new Error('must not construct')
       },
     })
     await assert.rejects(
       provider.invoke({
         projectRoot: 'relative/project',
-        operation: 'ws_status',
+        operation: 'project:status',
         input: {},
       }),
       /absolute path/
     )
   })
 
-  void test('reads a real project file through the published Workspace owner', async () => {
+  void test('reads a real project file through the Project owner', async () => {
     const projectRoot = await mkdtemp(join(tmpdir(), 'velaros-workbench-workspace-'))
-    const provider = new PublishedWorkspaceCapabilityProvider()
+    const provider = new ProjectCapabilityProvider()
     try {
       await writeFile(
         join(projectRoot, 'kernel-contract.txt'),
@@ -74,7 +70,7 @@ void describe('published Workspace capability provider', () => {
 
       const result = await provider.invoke({
         projectRoot,
-        operation: 'ws_read',
+        operation: 'project:read',
         input: { path: 'kernel-contract.txt', maxChars: 1_024 },
       }) as {
         rootPath: string

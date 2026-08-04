@@ -19,7 +19,7 @@ import { stat } from 'node:fs/promises'
 import { isEmpty, isNotNull, isNull } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
-import { systemPlatformCompatibility } from '@velaros-ai/system-tools/platform-compatibility'
+import { currentSystemPlatform as systemPlatformCompatibility } from '@velaros-ai/system/platform-compatibility'
 
 import type {
   WorkbenchTerminalInputRequest,

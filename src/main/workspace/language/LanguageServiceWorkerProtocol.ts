@@ -1,6 +1,8 @@
 import type { SerializedError } from '@velaros-ai/core/error'
 
 import type {
+  WorkbenchLanguageServiceCodeActionsRequest,
+  WorkbenchLanguageServiceCodeActionsResult,
   WorkbenchLanguageServiceCompletionResult,
   WorkbenchLanguageServiceDefinitionResult,
   WorkbenchLanguageServiceDiagnosticsResult,
@@ -16,6 +18,7 @@ import type {
   WorkbenchLanguageServiceRenameResult,
   WorkbenchLanguageServiceRequest,
   WorkbenchLanguageServiceResolveResult,
+  WorkbenchLanguageServiceSemanticTokensResult,
   WorkbenchLanguageServiceSignatureHelpQueryResult,
 } from '@shared/contracts'
 
@@ -84,6 +87,14 @@ export interface WorkbenchLanguageServiceWorkerOperationMap {
   getInlayHints: {
     request: WorkbenchLanguageServiceInlayHintsRequest
     result: WorkbenchLanguageServiceInlayHintsResult
+  }
+  getSemanticTokens: {
+    request: WorkbenchLanguageServiceRequest
+    result: WorkbenchLanguageServiceSemanticTokensResult
+  }
+  getCodeActions: {
+    request: WorkbenchLanguageServiceCodeActionsRequest
+    result: WorkbenchLanguageServiceCodeActionsResult
   }
 }
 

@@ -15,6 +15,8 @@ import { isNumber,isPresent, toNullable, toOptional } from '@velaros-ai/core'
 
 import type {
   WorkbenchLanguageServiceCapability,
+  WorkbenchLanguageServiceCodeActionsRequest,
+  WorkbenchLanguageServiceCodeActionsResult,
   WorkbenchLanguageServiceCompletionResult,
   WorkbenchLanguageServiceDefinitionResult,
   WorkbenchLanguageServiceDescriptorSnapshot,
@@ -37,6 +39,7 @@ import type {
   WorkbenchLanguageServiceRenameResult,
   WorkbenchLanguageServiceRequest,
   WorkbenchLanguageServiceResolveResult,
+  WorkbenchLanguageServiceSemanticTokensResult,
   WorkbenchLanguageServiceSignatureHelpResult,
 } from '@shared/contracts'
 import {
@@ -46,14 +49,16 @@ import {
   type WorkbenchLanguageServiceDescriptor,
 } from '@shared/language/workbenchLanguageServices'
 
-import type { PathResolver } from '../PathResolver'
-
 import {
+  type ExternalLspCodeAction,
   type ExternalLspCompletionItem,
   type ExternalLspDiagnostic,
+  type ExternalLspDocumentHighlight,
   type ExternalLspDocumentSymbol,
+  type ExternalLspInlayHint,
   type ExternalLspLocation,
   ExternalLspManager,
+  type ExternalLspSemanticTokens,
   type ExternalLspSignatureHelp,
   type ExternalLspSymbolInformation,
   type ExternalLspWorkspaceEdit,
@@ -90,6 +95,13 @@ import {
   formatWorkbenchDocumentBuiltin,
   formatWorkbenchDocumentWithProjectPrettier,
 } from './WorkbenchDocumentFormatter'
+
+export interface WorkbenchLanguagePathResolver {
+  resolveProjectRoot(input: string): Promise<string>
+  assertAllowedProjectPath(projectRoot: string, absolutePath: string, inputPath: string): void
+  isAllowedProjectPath(projectRoot: string, absolutePath: string): boolean
+  toProjectRelativePath(projectRoot: string, absolutePath: string): string
+}
 
 function textFromLspContent(value: unknown): string {
   if (typeof value === 'string') return value
@@ -173,7 +185,7 @@ interface TypeScriptProjectSnapshot {
 class WorkbenchLanguageServices {
   private readonly externalLsp = new ExternalLspManager()
 
-  constructor(private readonly pathResolver: PathResolver) {}
+  constructor(private readonly pathResolver: WorkbenchLanguagePathResolver) {}
 
   public async synchronizeProjectFile(
     request: WorkbenchLanguageServiceProjectFileRequest
@@ -638,6 +650,19 @@ class WorkbenchLanguageServices {
     request: WorkbenchLanguageServicePositionRequest
   ): Promise<WorkbenchLanguageServiceDocumentHighlightsResult> {
     const resolved = await this.resolveLanguageService(request)
+    if (this.isExternalRuntime(resolved.service?.runtime)) {
+      const external = await this.prepareExternal(request, resolved.projectRoot)
+      const highlights = await external.client.documentHighlights(
+        external.absolutePath,
+        external.content,
+        this.languageServicePosition(request.position)
+      )
+      return {
+        projectRoot: resolved.projectRoot,
+        path: request.path,
+        highlights: this.mapExternalDocumentHighlights(highlights),
+      }
+    }
     if (resolved.service?.runtime !== 'typescript-language-service')
       return { projectRoot: resolved.projectRoot, path: request.path, highlights: [] }
 
@@ -659,6 +684,30 @@ class WorkbenchLanguageServices {
     request: WorkbenchLanguageServiceInlayHintsRequest
   ): Promise<WorkbenchLanguageServiceInlayHintsResult> {
     const resolved = await this.resolveLanguageService(request)
+    if (this.isExternalRuntime(resolved.service?.runtime)) {
+      if (request.ranges.length > 10_000 || request.ranges.some((range) =>
+        !Number.isSafeInteger(range.from) || !Number.isSafeInteger(range.to)
+      ))
+        return { projectRoot: resolved.projectRoot, path: request.path, hints: [] }
+      const external = await this.prepareExternal(request, resolved.projectRoot)
+      let start = request.ranges.length > 0 ? external.content.length : 0
+      let end = request.ranges.length > 0 ? 0 : external.content.length
+      for (const range of request.ranges) {
+        const from = Math.min(Math.max(0, range.from), external.content.length)
+        const to = Math.min(Math.max(0, range.to), external.content.length)
+        start = Math.min(start, from, to)
+        end = Math.max(end, from, to)
+      }
+      const hints = await external.client.inlayHints(external.absolutePath, external.content, {
+        start: this.lspPositionFromOffset(external.content, start),
+        end: this.lspPositionFromOffset(external.content, end),
+      })
+      return {
+        projectRoot: resolved.projectRoot,
+        path: request.path,
+        hints: this.mapExternalInlayHints(hints),
+      }
+    }
     if (resolved.service?.runtime !== 'typescript-language-service')
       return { projectRoot: resolved.projectRoot, path: request.path, hints: [] }
 
@@ -673,6 +722,47 @@ class WorkbenchLanguageServices {
         content,
         ranges: request.ranges,
       }),
+    }
+  }
+
+  public async getSemanticTokens(
+    request: WorkbenchLanguageServiceRequest
+  ): Promise<WorkbenchLanguageServiceSemanticTokensResult> {
+    const resolved = await this.resolveLanguageService(request)
+    if (!this.isExternalRuntime(resolved.service?.runtime))
+      return { projectRoot: resolved.projectRoot, path: request.path, tokens: [] }
+    const external = await this.prepareExternal(request, resolved.projectRoot)
+    const tokens = await external.client.semanticTokens(external.absolutePath, external.content)
+    return {
+      projectRoot: resolved.projectRoot,
+      path: request.path,
+      tokens: this.mapExternalSemanticTokens(external.content, tokens),
+    }
+  }
+
+  public async getCodeActions(
+    request: WorkbenchLanguageServiceCodeActionsRequest
+  ): Promise<WorkbenchLanguageServiceCodeActionsResult> {
+    const resolved = await this.resolveLanguageService(request)
+    if (!this.isExternalRuntime(resolved.service?.runtime))
+      return { projectRoot: resolved.projectRoot, path: request.path, actions: [] }
+    const external = await this.prepareExternal(request, resolved.projectRoot)
+    const actions = await external.client.codeActions(
+      external.absolutePath,
+      external.content,
+      this.rangeToLanguageServiceRange(request.range),
+      request.diagnostics.slice(0, 10_000).map((diagnostic) => ({
+        range: this.rangeToLanguageServiceRange(diagnostic.range),
+        severity: diagnostic.severity === 'error' ? 1 : diagnostic.severity === 'warning' ? 2 : 3,
+        code: diagnostic.code,
+        source: diagnostic.source,
+        message: diagnostic.message,
+      }))
+    )
+    return {
+      projectRoot: resolved.projectRoot,
+      path: request.path,
+      actions: this.mapExternalCodeActions(resolved.projectRoot, actions),
     }
   }
 
@@ -727,6 +817,10 @@ class WorkbenchLanguageServices {
         'signature-help',
         'format',
         'document-symbols',
+        'document-highlights',
+        'inlay-hints',
+        'semantic-tokens',
+        'code-actions',
       ]
     if (service.runtime === 'python-language-server')
       return [
@@ -737,7 +831,12 @@ class WorkbenchLanguageServices {
         'hover',
         'references',
         'signature-help',
+        'format',
         'document-symbols',
+        'document-highlights',
+        'inlay-hints',
+        'semantic-tokens',
+        'code-actions',
       ]
     return ['completion', 'diagnostics']
   }
@@ -916,6 +1015,95 @@ class WorkbenchLanguageServices {
     return output
   }
 
+  private mapExternalInlayHints(
+    values: readonly ExternalLspInlayHint[]
+  ): WorkbenchLanguageServiceInlayHintsResult['hints'] {
+    return values.slice(0, 10_000).flatMap((value) => {
+      if (value.kind !== undefined && value.kind !== 1) return []
+      const text = typeof value.label === 'string'
+        ? value.label
+        : Array.isArray(value.label)
+          ? value.label.map((part) => part?.value ?? '').join('')
+          : ''
+      if (!text || text.length > 1024 || !Number.isSafeInteger(value.position?.line)
+        || !Number.isSafeInteger(value.position?.character) || value.position.line < 0
+        || value.position.character < 0)
+        return []
+      return [{
+        position: { line: value.position.line + 1, column: value.position.character + 1 },
+        text,
+        kind: 'type' as const,
+        whitespaceBefore: value.paddingLeft,
+        whitespaceAfter: value.paddingRight,
+      }]
+    })
+  }
+
+  private mapExternalDocumentHighlights(
+    values: readonly ExternalLspDocumentHighlight[]
+  ): WorkbenchLanguageServiceDocumentHighlightsResult['highlights'] {
+    return values.slice(0, 10_000).flatMap((value) => {
+      const range = value?.range
+      if (!range || !Number.isSafeInteger(range.start?.line)
+        || !Number.isSafeInteger(range.start?.character)
+        || !Number.isSafeInteger(range.end?.line)
+        || !Number.isSafeInteger(range.end?.character)
+        || range.start.line < 0 || range.start.character < 0
+        || range.end.line < 0 || range.end.character < 0)
+        return []
+      return [{
+        range: this.rangeFromLanguageServiceRange(range),
+        kind: value.kind === 3 ? 'write' as const : 'read' as const,
+      }]
+    })
+  }
+
+  private mapExternalSemanticTokens(
+    content: string,
+    value: ExternalLspSemanticTokens
+  ): WorkbenchLanguageServiceSemanticTokensResult['tokens'] {
+    if (value.data.length % 5 !== 0) return []
+    const lines = content.split('\n')
+    const output: WorkbenchLanguageServiceSemanticTokensResult['tokens'] = []
+    let line = 0
+    let character = 0
+    for (let index = 0; index < value.data.length && output.length < 10_000; index += 5) {
+      const deltaLine = value.data[index]!
+      const deltaCharacter = value.data[index + 1]!
+      const length = value.data[index + 2]!
+      const typeIndex = value.data[index + 3]!
+      const modifierBits = value.data[index + 4]!
+      line += deltaLine
+      character = deltaLine === 0 ? character + deltaCharacter : deltaCharacter
+      const type = value.tokenTypes[typeIndex]
+      const text = lines[line]
+      if (!type || !text || length <= 0 || character < 0 || character + length > text.length) continue
+      output.push({
+        range: {
+          startLine: line + 1,
+          startColumn: character + 1,
+          endLine: line + 1,
+          endColumn: character + length + 1,
+        },
+        type,
+        modifiers: value.tokenModifiers.filter((_modifier, modifierIndex) => (modifierBits & (1 << modifierIndex)) !== 0),
+      })
+    }
+    return output
+  }
+
+  private mapExternalCodeActions(
+    projectRoot: string,
+    values: readonly ExternalLspCodeAction[]
+  ): WorkbenchLanguageServiceCodeActionsResult['actions'] {
+    return values.slice(0, 1_000).flatMap((value) => {
+      if (!value || typeof value.title !== 'string' || !value.title || !value.edit) return []
+      const changes = this.mapExternalWorkspaceEdit(projectRoot, value.edit)
+      if (changes.length === 0) return []
+      return [{ title: value.title, kind: value.kind, preferred: value.isPreferred, changes }]
+    })
+  }
+
   private getBuiltinLanguageServiceCompletions(
     request: WorkbenchLanguageServicePositionRequest,
     projectRoot: string,
@@ -1006,6 +1194,17 @@ class WorkbenchLanguageServices {
     }
   }
 
+  private lspPositionFromOffset(content: string, requestedOffset: number): {
+    line: number
+    character: number
+  } {
+    const offset = Math.min(Math.max(0, requestedOffset), content.length)
+    const before = content.slice(0, offset)
+    const line = before.split('\n').length - 1
+    const newline = before.lastIndexOf('\n')
+    return { line, character: newline === -1 ? offset : offset - newline - 1 }
+  }
+
   private rangeFromLanguageServiceRange(range: {
     start: { line: number; character: number }
     end: { line: number; character: number }
@@ -1015,6 +1214,16 @@ class WorkbenchLanguageServices {
       startColumn: range.start.character + 1,
       endLine: range.end.line + 1,
       endColumn: range.end.character + 1,
+    }
+  }
+
+  private rangeToLanguageServiceRange(range: WorkbenchLanguageServiceRange): {
+    start: { line: number; character: number }
+    end: { line: number; character: number }
+  } {
+    return {
+      start: { line: Math.max(0, range.startLine - 1), character: Math.max(0, range.startColumn - 1) },
+      end: { line: Math.max(0, range.endLine - 1), character: Math.max(0, range.endColumn - 1) },
     }
   }
 

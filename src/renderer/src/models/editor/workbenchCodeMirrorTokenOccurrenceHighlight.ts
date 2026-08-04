@@ -1,4 +1,4 @@
-import { type EditorState, type Extension, RangeSetBuilder } from '@codemirror/state'
+import { type EditorState, type Extension, RangeSetBuilder, StateEffect } from '@codemirror/state'
 import {
   Decoration,
   type DecorationSet,
@@ -8,6 +8,13 @@ import {
 } from '@codemirror/view'
 
 import { isPresent } from '@velaros-ai/core'
+
+import type {
+  WorkbenchLanguageServiceDocumentHighlight,
+  WorkbenchLanguageServicePosition,
+} from '@shared/contracts'
+
+import { languageServiceRangeToOffsets } from './workbenchCodeMirrorLanguageService'
 
 /**
  * 语言无关的「同词高亮」：光标停在某个标识符上时，给可视区里所有相同单词
@@ -30,6 +37,14 @@ interface WorkbenchCaretToken {
 }
 
 const TOKEN_OCCURRENCE_MARK = Decoration.mark({ class: TOKEN_OCCURRENCE_CLASS })
+const semanticOccurrenceRefreshEffect = StateEffect.define<void>()
+
+export interface WorkbenchTokenOccurrenceRuntime {
+  request: (
+    content: string,
+    position: WorkbenchLanguageServicePosition
+  ) => Promise<Nullable<readonly WorkbenchLanguageServiceDocumentHighlight[]>>
+}
 
 function isWordChar(char: LooseOptional<string>): boolean {
   return isPresent(char) && WORD_PART_PATTERN.test(char)
@@ -86,6 +101,23 @@ function buildTokenOccurrenceDecorations(view: EditorView, token: WorkbenchCaret
   return builder.finish()
 }
 
+export function buildWorkbenchSemanticOccurrenceDecorations(
+  content: string,
+  highlights: readonly WorkbenchLanguageServiceDocumentHighlight[]
+): DecorationSet {
+  const ranges = new Map<string, { from: number; to: number }>()
+  for (const highlight of highlights) {
+    const range = languageServiceRangeToOffsets(content, highlight.range)
+    if (!range || range.from >= range.to) continue
+    ranges.set(`${range.from}:${range.to}`, range)
+  }
+  const builder = new RangeSetBuilder<Decoration>()
+  for (const range of [...ranges.values()].sort((left, right) => left.from - right.from || left.to - right.to)) {
+    builder.add(range.from, range.to, TOKEN_OCCURRENCE_MARK)
+  }
+  return builder.finish()
+}
+
 /** 读取标识符所在 DOM 节点的前景色，转成低透明度背景色。 */
 function resolveTokenBackground(view: EditorView, token: WorkbenchCaretToken): Nullable<string> {
   const dom = view.domAtPos(token.from)
@@ -103,11 +135,14 @@ function resolveTokenBackground(view: EditorView, token: WorkbenchCaretToken): N
   return `rgba(${red}, ${green}, ${blue}, ${TOKEN_OCCURRENCE_BG_ALPHA})`
 }
 
-export function createWorkbenchTokenOccurrenceHighlightExtension(): Extension {
+export function createWorkbenchTokenOccurrenceHighlightExtension(
+  runtime: Nullable<WorkbenchTokenOccurrenceRuntime> = null
+): Extension {
   return ViewPlugin.fromClass(
     class {
       decorations: DecorationSet = Decoration.none
       private tokenText: Nullable<string> = null
+      private requestGeneration = 0
 
       constructor(view: EditorView) {
         this.sync(view)
@@ -139,12 +174,14 @@ export function createWorkbenchTokenOccurrenceHighlightExtension(): Extension {
           token,
           tokenChanged || update.selectionSet || update.docChanged || update.focusChanged
         )
+        void this.loadSemantic(update.view, token)
       }
 
       private sync(view: EditorView): void {
         const token = view.hasFocus ? resolveCaretToken(view.state) : null
         this.tokenText = token?.text ?? null
         this.applyToken(view, token)
+        void this.loadSemantic(view, token)
       }
 
       private applyToken(
@@ -167,6 +204,35 @@ export function createWorkbenchTokenOccurrenceHighlightExtension(): Extension {
             view.dom.style.setProperty(TOKEN_OCCURRENCE_BG_VAR, background ?? '')
           },
         })
+      }
+
+      private async loadSemantic(
+        view: EditorView,
+        token: Nullable<WorkbenchCaretToken>
+      ): Promise<void> {
+        const generation = ++this.requestGeneration
+        if (!runtime || !token) return
+        const doc = view.state.doc
+        const line = doc.lineAt(token.from)
+        let highlights: Nullable<readonly WorkbenchLanguageServiceDocumentHighlight[]>
+        try {
+          highlights = await runtime.request(doc.toString(), {
+            line: line.number,
+            column: token.from - line.from + 1,
+            offset: token.from,
+          })
+        } catch {
+          return
+        }
+        if (
+          generation !== this.requestGeneration ||
+          view.state.doc !== doc ||
+          this.tokenText !== token.text ||
+          !highlights
+        )
+          return
+        this.decorations = buildWorkbenchSemanticOccurrenceDecorations(doc.toString(), highlights)
+        view.dispatch({ effects: semanticOccurrenceRefreshEffect.of() })
       }
     },
     { decorations: (plugin) => plugin.decorations }

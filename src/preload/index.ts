@@ -84,6 +84,9 @@ const languageBridge: WorkbenchLanguageBridge = {
   getDocumentHighlights: (request) =>
     ipcRenderer.invoke(WorkbenchLanguageChannels.documentHighlights, request),
   getInlayHints: (request) => ipcRenderer.invoke(WorkbenchLanguageChannels.inlayHints, request),
+  getSemanticTokens: (request) =>
+    ipcRenderer.invoke(WorkbenchLanguageChannels.semanticTokens, request),
+  getCodeActions: (request) => ipcRenderer.invoke(WorkbenchLanguageChannels.codeActions, request),
 }
 
 const watchBridge: WorkbenchWatchBridge = {

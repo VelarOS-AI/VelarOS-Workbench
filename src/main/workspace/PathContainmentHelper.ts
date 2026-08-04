@@ -2,7 +2,7 @@ import { isAbsolute, relative, resolve, sep } from 'node:path'
 
 import { isPresent } from '@velaros-ai/core'
 import { isEmpty } from '@velaros-ai/core'
-import { systemPlatformCompatibility } from '@velaros-ai/system-tools/platform-compatibility'
+import { currentSystemPlatform as systemPlatformCompatibility } from '@velaros-ai/system/platform-compatibility'
 
 export interface PathContainmentPlatform {
   isAbsolute(path: string): boolean

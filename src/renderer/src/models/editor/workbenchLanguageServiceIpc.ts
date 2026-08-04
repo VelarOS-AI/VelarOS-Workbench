@@ -34,6 +34,12 @@ type WorkbenchLanguageServiceDocumentHighlightsPayload = Parameters<
 type WorkbenchLanguageServiceInlayHintsPayload = Parameters<
   WorkbenchProjectKernelPort['getWorkbenchLanguageServiceInlayHints']
 >[0]
+type WorkbenchLanguageServiceSemanticTokensPayload = Parameters<
+  WorkbenchProjectKernelPort['getWorkbenchLanguageServiceSemanticTokens']
+>[0]
+type WorkbenchLanguageServiceCodeActionsPayload = Parameters<
+  WorkbenchProjectKernelPort['getWorkbenchLanguageServiceCodeActions']
+>[0]
 
 type WorkbenchInlineCompletionPayload = Parameters<
   WorkbenchProjectKernelPort['getWorkbenchInlineCompletion']
@@ -121,4 +127,18 @@ export function getWorkbenchLanguageServiceInlayHints(
   runtime: WorkbenchHostRuntime = workbenchHost
 ): ReturnType<WorkbenchProjectKernelPort['getWorkbenchLanguageServiceInlayHints']> {
   return runtime.kernel.project.getWorkbenchLanguageServiceInlayHints(payload)
+}
+
+export function getWorkbenchLanguageServiceSemanticTokens(
+  payload: WorkbenchLanguageServiceSemanticTokensPayload,
+  runtime: WorkbenchHostRuntime = workbenchHost
+): ReturnType<WorkbenchProjectKernelPort['getWorkbenchLanguageServiceSemanticTokens']> {
+  return runtime.kernel.project.getWorkbenchLanguageServiceSemanticTokens(payload)
+}
+
+export function getWorkbenchLanguageServiceCodeActions(
+  payload: WorkbenchLanguageServiceCodeActionsPayload,
+  runtime: WorkbenchHostRuntime = workbenchHost
+): ReturnType<WorkbenchProjectKernelPort['getWorkbenchLanguageServiceCodeActions']> {
+  return runtime.kernel.project.getWorkbenchLanguageServiceCodeActions(payload)
 }

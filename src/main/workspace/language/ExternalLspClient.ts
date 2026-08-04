@@ -104,6 +104,32 @@ export interface ExternalLspSignatureHelp {
   }>
 }
 
+export interface ExternalLspInlayHint {
+  position: LspPosition
+  label: string | Array<{ value: string }>
+  kind?: number
+  paddingLeft?: boolean
+  paddingRight?: boolean
+}
+
+export interface ExternalLspDocumentHighlight {
+  range: LspRange
+  kind?: number
+}
+
+export interface ExternalLspSemanticTokens {
+  data: number[]
+  tokenTypes: string[]
+  tokenModifiers: string[]
+}
+
+export interface ExternalLspCodeAction {
+  title: string
+  kind?: string
+  isPreferred?: boolean
+  edit?: ExternalLspWorkspaceEdit
+}
+
 interface OpenDocument {
   content: string
   languageId: string
@@ -118,6 +144,7 @@ interface DiagnosticSnapshot {
 interface PendingRequest {
   resolve: (value: unknown) => void
   reject: (error: Error) => void
+  timeout: ReturnType<typeof setTimeout>
 }
 
 interface DiagnosticWaiter {
@@ -131,6 +158,18 @@ interface InitializeResult {
 }
 
 const DiagnosticWaitTimeoutMs = 4_000
+const DefaultRequestTimeoutMs = 15_000
+const MaxLspHeaderBytes = 8 * 1024
+const MaxLspMessageBytes = 16 * 1024 * 1024
+const SupportedSemanticTokenTypes = [
+  'namespace', 'type', 'class', 'enum', 'interface', 'struct', 'typeParameter', 'parameter',
+  'variable', 'property', 'enumMember', 'event', 'function', 'method', 'macro', 'keyword',
+  'modifier', 'comment', 'string', 'number', 'regexp', 'operator', 'decorator',
+]
+const SupportedSemanticTokenModifiers = [
+  'declaration', 'definition', 'readonly', 'static', 'deprecated', 'abstract', 'async',
+  'modification', 'documentation', 'defaultLibrary',
+]
 const require = createRequire(import.meta.url)
 
 function objectValue(value: unknown): Record<string, unknown> | null {
@@ -215,13 +254,15 @@ export class ExternalLspClient {
   private readonly documents = new Map<string, OpenDocument>()
   private readonly diagnostics = new Map<string, DiagnosticSnapshot>()
   private readonly diagnosticWaiters = new Map<string, DiagnosticWaiter[]>()
+  private serverCapabilities: Record<string, unknown> = {}
   private initializePromise: Nullable<Promise<void>> = null
   private stderr = ''
   private disposed = false
 
   public constructor(
     private readonly projectRoot: string,
-    private readonly descriptor: WorkbenchLanguageServiceDescriptor
+    private readonly descriptor: WorkbenchLanguageServiceDescriptor,
+    private readonly requestTimeoutMs = DefaultRequestTimeoutMs
   ) {}
 
   public accepts(path: string): boolean {
@@ -301,6 +342,21 @@ export class ExternalLspClient {
     return normalizeLocations(result)
   }
 
+  public async documentHighlights(
+    path: string,
+    content: string,
+    position: LspPosition
+  ): Promise<ExternalLspDocumentHighlight[]> {
+    const document = await this.synchronize(path, content)
+    const provider = this.serverCapabilities['documentHighlightProvider']
+    if (provider !== true && !objectValue(provider)) return []
+    const result = await this.request('textDocument/documentHighlight', {
+      textDocument: { uri: document.uri },
+      position,
+    })
+    return Array.isArray(result) ? result as ExternalLspDocumentHighlight[] : []
+  }
+
   public async rename(
     path: string,
     content: string,
@@ -340,6 +396,60 @@ export class ExternalLspClient {
       position,
     })
     return objectValue(result) as Nullable<ExternalLspSignatureHelp>
+  }
+
+  public async inlayHints(
+    path: string,
+    content: string,
+    range: LspRange
+  ): Promise<ExternalLspInlayHint[]> {
+    const document = await this.synchronize(path, content)
+    const provider = this.serverCapabilities['inlayHintProvider']
+    if (provider !== true && !objectValue(provider)) return []
+    const result = await this.request('textDocument/inlayHint', {
+      textDocument: { uri: document.uri },
+      range,
+    })
+    return Array.isArray(result) ? result as ExternalLspInlayHint[] : []
+  }
+
+  public async semanticTokens(path: string, content: string): Promise<ExternalLspSemanticTokens> {
+    const document = await this.synchronize(path, content)
+    const provider = objectValue(this.serverCapabilities['semanticTokensProvider'])
+    const legend = objectValue(provider?.['legend'])
+    const tokenTypes = Array.isArray(legend?.['tokenTypes'])
+      ? legend['tokenTypes'].filter((item): item is string => typeof item === 'string')
+      : []
+    const tokenModifiers = Array.isArray(legend?.['tokenModifiers'])
+      ? legend['tokenModifiers'].filter((item): item is string => typeof item === 'string')
+      : []
+    if (!provider || tokenTypes.length === 0) return { data: [], tokenTypes, tokenModifiers }
+    const result = objectValue(await this.request('textDocument/semanticTokens/full', {
+      textDocument: { uri: document.uri },
+    }))
+    const rawData = result?.['data']
+    const data = Array.isArray(rawData)
+      && rawData.every((item) => Number.isSafeInteger(item) && (item as number) >= 0)
+      ? rawData as number[]
+      : []
+    return { data, tokenTypes, tokenModifiers }
+  }
+
+  public async codeActions(
+    path: string,
+    content: string,
+    range: LspRange,
+    diagnostics: readonly ExternalLspDiagnostic[]
+  ): Promise<ExternalLspCodeAction[]> {
+    const document = await this.synchronize(path, content)
+    const provider = this.serverCapabilities['codeActionProvider']
+    if (provider !== true && !objectValue(provider)) return []
+    const result = await this.request('textDocument/codeAction', {
+      textDocument: { uri: document.uri },
+      range,
+      context: { diagnostics, only: ['quickfix'] },
+    })
+    return Array.isArray(result) ? result as ExternalLspCodeAction[] : []
   }
 
   public async format(path: string, content: string): Promise<ExternalLspTextEdit[]> {
@@ -440,12 +550,22 @@ export class ExternalLspClient {
           completion: { completionItem: { snippetSupport: true, documentationFormat: ['markdown', 'plaintext'] } },
           hover: { contentFormat: ['markdown', 'plaintext'] },
           definition: { linkSupport: true },
+          documentHighlight: { dynamicRegistration: false },
           documentSymbol: { hierarchicalDocumentSymbolSupport: true },
+          inlayHint: { dynamicRegistration: false },
+          semanticTokens: {
+            requests: { full: true },
+            tokenTypes: SupportedSemanticTokenTypes,
+            tokenModifiers: SupportedSemanticTokenModifiers,
+            formats: ['relative'],
+          },
+          codeAction: { codeActionLiteralSupport: { codeActionKind: { valueSet: ['quickfix'] } } },
           signatureHelp: { signatureInformation: { documentationFormat: ['markdown', 'plaintext'] } },
           publishDiagnostics: { versionSupport: true },
         },
       },
     }) as InitializeResult
+    this.serverCapabilities = result.capabilities ?? {}
 
     if (this.descriptor.protocol) {
       const actual = protocolVersionFromInitialize(
@@ -464,8 +584,23 @@ export class ExternalLspClient {
   private request(method: string, params: unknown): Promise<unknown> {
     const id = this.nextRequestId++
     return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject })
-      this.send({ jsonrpc: '2.0', id, method, params })
+      const timeout = setTimeout(() => {
+        if (!this.pending.delete(id)) return
+        try { this.notify('$/cancelRequest', { id }) } catch { /* the request still rejects */ }
+        reject(new AppError(
+          'INTERNAL',
+          `${this.descriptor.label} 语言服务器请求超时：${method}。`
+        ))
+      }, Math.max(1, this.requestTimeoutMs))
+      this.pending.set(id, { resolve, reject, timeout })
+      try {
+        this.send({ jsonrpc: '2.0', id, method, params })
+      } catch (error) {
+        const pending = this.pending.get(id)
+        if (pending) clearTimeout(pending.timeout)
+        this.pending.delete(id)
+        reject(error instanceof Error ? error : new Error(String(error)))
+      }
     })
   }
 
@@ -478,26 +613,46 @@ export class ExternalLspClient {
     if (!child || child.stdin.destroyed)
       throw new AppError('INTERNAL', `${this.descriptor.label} 语言服务器尚未运行。`)
     const json = JSON.stringify(message)
-    child.stdin.write(`Content-Length: ${Buffer.byteLength(json, 'utf8')}\r\n\r\n${json}`)
+    const size = Buffer.byteLength(json, 'utf8')
+    if (size > MaxLspMessageBytes)
+      throw new AppError('INVARIANT', `${this.descriptor.label} LSP 消息超过 16 MiB 上限。`)
+    child.stdin.write(`Content-Length: ${size}\r\n\r\n${json}`)
   }
 
   private accept(chunk: Buffer): void {
     this.buffer = Buffer.concat([this.buffer, chunk])
     while (true) {
       const boundary = this.buffer.indexOf('\r\n\r\n')
-      if (boundary < 0) return
+      if (boundary < 0) {
+        if (this.buffer.length > MaxLspHeaderBytes)
+          this.fail(new AppError('INTERNAL', `${this.descriptor.label} LSP 响应头超过 8 KiB 上限。`))
+        return
+      }
+      if (boundary > MaxLspHeaderBytes) {
+        this.fail(new AppError('INTERNAL', `${this.descriptor.label} LSP 响应头超过 8 KiB 上限。`))
+        return
+      }
       const header = this.buffer.subarray(0, boundary).toString('ascii')
       const match = /(?:^|\r\n)Content-Length:\s*(\d+)/iu.exec(header)
       if (!match) {
-        this.buffer = this.buffer.subarray(boundary + 4)
-        continue
+        this.fail(new AppError('INTERNAL', `${this.descriptor.label} LSP 响应缺少有效的 Content-Length。`))
+        return
       }
       const size = Number(match[1])
+      if (!Number.isSafeInteger(size) || size > MaxLspMessageBytes) {
+        this.fail(new AppError('INTERNAL', `${this.descriptor.label} LSP 响应超过 16 MiB 上限。`))
+        return
+      }
       const end = boundary + 4 + size
       if (this.buffer.length < end) return
       const body = this.buffer.subarray(boundary + 4, end).toString('utf8')
       this.buffer = this.buffer.subarray(end)
-      this.handle(JSON.parse(body) as JsonRpcMessage)
+      try {
+        this.handle(JSON.parse(body) as JsonRpcMessage)
+      } catch {
+        this.fail(new AppError('INTERNAL', `${this.descriptor.label} LSP 返回了无效 JSON。`))
+        return
+      }
     }
   }
 
@@ -506,6 +661,7 @@ export class ExternalLspClient {
       const pending = this.pending.get(message.id)
       if (!pending) return
       this.pending.delete(message.id)
+      clearTimeout(pending.timeout)
       if (message.error)
         pending.reject(new AppError('INTERNAL', `${this.descriptor.label}: ${message.error.message ?? '语言服务器请求失败。'}`))
       else pending.resolve(message.result)
@@ -529,8 +685,13 @@ export class ExternalLspClient {
   }
 
   private fail(error: Error): void {
+    const child = this.process
     this.process = null
-    for (const pending of this.pending.values()) pending.reject(error)
+    if (child && !child.killed) child.kill()
+    for (const pending of this.pending.values()) {
+      clearTimeout(pending.timeout)
+      pending.reject(error)
+    }
     this.pending.clear()
     for (const waiters of this.diagnosticWaiters.values())
       for (const waiter of waiters) waiter.resolve([])

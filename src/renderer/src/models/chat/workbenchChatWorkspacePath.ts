@@ -1,4 +1,4 @@
-import { systemPlatformCompatibility } from '@velaros-ai/system-tools/platform-compatibility'
+import { currentSystemPlatform as systemPlatformCompatibility } from '@velaros-ai/system/platform-compatibility'
 
 export function resolveWorkbenchChatWorkspacePath(
   path: string,

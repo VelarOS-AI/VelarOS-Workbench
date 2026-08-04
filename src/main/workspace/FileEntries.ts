@@ -7,7 +7,7 @@
 import { opendir, realpath, stat } from 'node:fs/promises'
 import { basename } from 'node:path'
 
-import { shouldSkipWorkspaceToolDirectory } from '@velaros-ai/workspace'
+import { shouldSkipProjectDirectory } from '@velaros-ai/project/files'
 
 import type { WorkbenchDirectoryEntry } from '@shared/contracts'
 
@@ -39,7 +39,7 @@ class DirectoryEntries {
   }
 
   public shouldIncludeEntry(name: string, isDirectory: boolean, includeHidden: boolean): boolean {
-    if (isDirectory && shouldSkipWorkspaceToolDirectory(name)) return false
+    if (isDirectory && shouldSkipProjectDirectory(name)) return false
 
     if (!includeHidden && name.startsWith('.')) return false
 

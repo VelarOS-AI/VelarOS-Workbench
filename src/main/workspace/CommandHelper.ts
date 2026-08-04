@@ -9,7 +9,7 @@ import { execFileSync } from 'node:child_process'
 
 import { Log } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import { systemPlatformCompatibility } from '@velaros-ai/system-tools/platform-compatibility'
+import { currentSystemPlatform as systemPlatformCompatibility } from '@velaros-ai/system/platform-compatibility'
 
 import { analyzeCommandExecution } from './CommandExecutionPolicy'
 

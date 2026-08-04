@@ -5,31 +5,29 @@
 
 ## 1. 形态：完整宿主，进程内装栈
 
-P6（2026-07-29）之前 Workbench 的聊天 100% 委托远端 Kernel daemon 的 `velaros.agent` 能力
-（`WorkbenchKernelClientRuntime` 连 daemon）。daemon 在 Desktop 侧退役后这条路成了死胡同，
-聊天面事实不可用。
-
-现在 Workbench 是**第二个完整宿主**：
+Workbench 是独立完整宿主：
 
 ```
 src/main/index.ts                （组合根）
-  ├ WorkbenchKernelRuntime                      进程内 KernelModuleHost 门面
+  ├ @velaros-ai/kernel/runtime Kernel           唯一进程内 Kernel
+  │   └ WorkbenchKernelPermissionPolicy         产品显式授权：仅 agent.execute
   │   └ createAgentKernelModule({ runtime })    唯一注册的能力：velaros.agent
   │        └ WorkbenchAgentCapabilityRuntime    v1 信封解析 + Kernel 事件桥
-  │             └ WorkbenchAgentExecutionStack  进程内 agent-runtime 装配
-  │                  ├ ModelRuntime             @velaros-ai/model-runtime（纯 BYOK）
+  │             └ WorkbenchAgentExecutionStack  进程内 Agent 装配
+  │                  ├ ModelRuntime             @velaros-ai/model（纯 BYOK）
   │                  ├ TurnRunner / AgentHistoryHelper / RunContext
   │                  ├ SoloStreamLoop           主 Agent 面
   │                  └ WorkbenchAgentToolRegistry
-  │                       └ @velaros-ai/workspace bridge 工具族
+  │                       └ @velaros-ai/project/agent 工具族
   ├ WorkbenchModService                         mod 单 owner 门面
   │   ├ WorkbenchAgentModPackStore              本地目录扫描 + 注册表（停用位/外部登记）
   │   └ WorkbenchAgentModRuntime                Agent 领域 Loader（两级注册机第二级）
   └ registerWorkbenchKernelIpc                  renderer 面（语义路由表 + 状态投影 + 事件广播）
 ```
 
-不经 `@velaros-ai/kernel-client`、不拉 daemon 进程、不架 HostBridge。仓内对 kernel-client
-的依赖已清零。
+Workbench 直接进程内装配 `@velaros-ai/kernel/runtime` 的公共 `Kernel`，不再复制一份产品
+runtime 门面，也不启动独立 daemon。模块生命周期、活跃版本解析、事件订阅和能力调用权限门均由
+Platform Kernel 唯一拥有；Workbench 只声明模块清单与产品授权策略。
 
 ## 2. 能力面：只有 Agent
 
@@ -42,15 +40,15 @@ src/main/index.ts                （组合根）
 渲染层的浏览器面本来就按 `status.capabilities` 里有没有 `velaros.browser` 决定是否激活，
 因此能力缺席等于既有降级路径，不需要额外分支。
 
-原来的 `model.supports-provider` 远端预检随之退役：模型运行时已在本进程，BYOK 选择
-（provider / model / baseURL / apiKey）直接进执行配置，provider 不认识时由执行本身报错。
+模型运行时位于本进程，BYOK 选择（provider / model / baseURL / apiKey）直接进入执行配置，
+provider 不认识时由执行本身报错。
 
 ## 3. Agent 执行栈：裁到「聊天全链跑通」
 
 **装了**：SoloStreamLoop 主循环、单轮流式 + 工具执行（TurnRunner）、历史准备与压缩
 （AgentHistoryHelper）、系统提示词与轮次上下文（RunContext + 内置提示词段注册表）、角色解析
 （PrimaryAgentProfile）、会话工具租约与提醒（CodingSessionTracker）、模型接入
-（`@velaros-ai/model-runtime` 的 `agentModelRuntime`）。
+（`@velaros-ai/model` 的 `AgentModelRuntime`）。
 
 **没装**（相对 Desktop `createExecutionRuntime` 的显式裁剪，不是遗漏）：
 
@@ -62,10 +60,9 @@ src/main/index.ts                （组合根）
 
 ### 工具面
 
-来源单一：`createVelarosWorkspaceBridge({ root })` 产出的 `AgentToolDefinition[]`
-（`ws_status` / `ws_read` / `ws_list_files` / `ws_search` / `ws_symbols` / `ws_diff` /
-`ws_prepare_edit` / `ws_commit_edit` / `ws_validate` / `ws_run_batch` 等一族）。每个项目根一份
-bridge，因此注册表也是每根一实例。
+来源单一：`@velaros-ai/project/agent` 导出的 `project:read`、`project:list`、`project:search`、
+`project:edit`、`project:rollback` 与 `project:run`。每个项目根一份 Project capability，
+注册表也按项目根隔离。
 
 工具面的欠账：没有类别启停租约、没有分页换入换出（`tool_map`）、没有 MCP 注入、没有
 provider 生命周期。所有工具全程可见、全程可调。
@@ -103,9 +100,10 @@ bun run probe:kernel-host              # 进程内 Kernel + 执行栈构造级�
 bun run probe:agent-mods               # 两级注册机装载报告
 ```
 
-`probe:kernel-host` 覆盖四段：host 起来且 `velaros.agent` 可直取（model/browser 为假）；v1
+`probe:kernel-host` 覆盖四段：Kernel 起来且 `velaros.agent` 可直取（model/browser 为假）；v1
 信封解析的通过与拒收；聊天链从 Kernel 能力入口一路走到**模型接口边界**才停（provider 用桩
-id，零网络出口）；Kernel 事件桥的三通道信封形状。
+id，零网络出口）；Kernel 事件桥的三通道信封形状。契约测试另锁住 renderer 请求的严格字段集，
+以及只有主进程绑定的 `agent.execute` 路由能获得 `agent:execute` 权限。
 
 零真机：真机验收押后批。
 

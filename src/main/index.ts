@@ -3,6 +3,10 @@ import { join } from 'node:path'
 import { app, BrowserWindow } from 'electron'
 
 import { createAgentKernelModule } from '@velaros-ai/agent'
+import { AgentCapabilityApiVersion } from '@velaros-ai/agent/protocol/agent-capability'
+import { Log } from '@velaros-ai/core'
+import { KernelVersion } from '@velaros-ai/kernel/contracts/abi'
+import { Kernel } from '@velaros-ai/kernel/runtime'
 
 import { WorkbenchAgentExecutionStack } from './agent/WorkbenchAgentExecutionStack'
 import { WorkbenchAgentCapabilityRuntime } from './kernel/WorkbenchAgentCapabilityRuntime'
@@ -16,11 +20,7 @@ import {
   broadcastWorkbenchKernelStatus,
   registerWorkbenchKernelIpc,
 } from './kernel/WorkbenchKernelIpc'
-import {
-  WorkbenchAgentCapabilityApiVersion,
-  WorkbenchKernelRuntime,
-  WorkbenchKernelVersion,
-} from './kernel/WorkbenchKernelRuntime'
+import { WorkbenchKernelPermissionPolicy } from './kernel/WorkbenchKernelPermissionPolicy'
 import { WorkbenchModService } from './kernel/WorkbenchModService'
 import { WorkbenchProjectHub } from './projects/ProjectHub'
 import { registerProjectHubIpc } from './projects/ProjectHubIpc'
@@ -38,7 +38,7 @@ import { createDefaultWorkbenchMainCapabilityProviders } from './WorkbenchMainCa
  *
  * 负责窗口生命周期 + 项目枢纽（起手页三主动作 / 最近项目持久化 / 窗口标题与菜单跟随项目状态）。
  * IDE 本地能力由应用私有 IPC 语义端口承载；共享能力走**进程内 Kernel**
- * （kernel-contract §15：完整宿主进程内装栈，不经 kernel-client、不拉 daemon），
+ * （kernel-contract §15：完整宿主进程内装栈，不经 client 子路径、不拉 daemon），
  * 不反向依赖 Desktop。Workbench 只自持 Agent 能力，model / browser 没有本体因此不注册，
  * 消费面按能力缺席降级。
  *
@@ -127,8 +127,8 @@ void app.whenReady().then(() => {
   // 启动后由 mod 门面用一份**本地** pack 清单装载一次。
   const agentModRuntime = new WorkbenchAgentModRuntime({
     versions: {
-      velarosVersion: WorkbenchKernelVersion,
-      agentApiVersion: WorkbenchAgentCapabilityApiVersion,
+      velarosVersion: KernelVersion,
+      agentApiVersion: AgentCapabilityApiVersion,
       shellVersion: app.getVersion(),
     },
     reader: createWorkbenchAgentModPackReader(),
@@ -146,7 +146,18 @@ void app.whenReady().then(() => {
     providers.workspace,
     agentModRuntime.seams
   )
-  const kernelRuntime = new WorkbenchKernelRuntime()
+  const kernelRuntime = new Kernel({
+    lifecycleFailureMode: 'degrade',
+    permissionBroker: new WorkbenchKernelPermissionPolicy(),
+    onLifecycleFailure: ({ phase, error }) => {
+      Log.tag('WorkbenchKernel').warn(`kernel.${phase}_failed`, {
+        error: error.message,
+        hint: phase === 'start'
+          ? 'Workbench continues without in-process Kernel capabilities; dependent surfaces stay inactive.'
+          : 'Workbench shutdown continues after Kernel capability cleanup failure.',
+      })
+    },
+  })
   kernelRuntime.registerModule(
     createAgentKernelModule({
       runtime: new WorkbenchAgentCapabilityRuntime(agentExecutionStack),

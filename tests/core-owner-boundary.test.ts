@@ -8,11 +8,11 @@ const sourceRoots = [resolve(repositoryRoot, 'src')]
 const sourceExtensions = new Set(['.ts', '.tsx'])
 
 const removedCoreModules = new Set([
-  '@velaros-ai/core/constants/storage',
-  '@velaros-ai/core/constants/toolMetadataCatalog',
-  '@velaros-ai/core/constants/workbenchViewport',
-  '@velaros-ai/core/constants/workspaceSpaces',
-  '@velaros-ai/core/constants/workspaceVisibility',
+  '@velaros-ai/agent/protocol',
+  '@velaros-ai/agent/protocol',
+  '@velaros-ai/agent/protocol',
+  '@velaros-ai/agent/protocol',
+  '@velaros-ai/agent/protocol',
   '@velaros-ai/core/utils/CommandExecutionPolicy',
   '@velaros-ai/core/utils/PathContainmentHelper',
   '@velaros-ai/core/utils/PlatformCompatibilityHelper',
@@ -55,7 +55,7 @@ function importedNames(clause: string): string[] {
     .filter((entry): entry is string => Boolean(entry))
 }
 
-void describe('Core 0.3 owner boundary', () => {
+void describe('Core 0.4 owner boundary', () => {
   void test('never restores deleted product modules or concrete owner DTOs to Core', async () => {
     const failures: string[] = []
 
@@ -88,7 +88,7 @@ void describe('Core 0.3 owner boundary', () => {
     assert.deepEqual(failures, [])
   })
 
-  void test('re-exports Browser, Model and Workspace contracts from their owners', async () => {
+  void test('re-exports Browser, Model and Project contracts from their owners', async () => {
     const contracts = await readFile(
       resolve(repositoryRoot, 'src/shared/contracts/index.ts'),
       'utf8'
@@ -104,7 +104,7 @@ void describe('Core 0.3 owner boundary', () => {
     )
     assert.match(
       contracts,
-      /WorkspaceGitBranch[\s\S]*WorkspaceGitStatusResult[\s\S]*from '@velaros-ai\/workspace'/u
+      /ProjectGitBranch as WorkspaceGitBranch[\s\S]*ProjectGitStatusResult as WorkspaceGitStatusResult[\s\S]*from '@velaros-ai\/project\/contracts'/u
     )
   })
 
@@ -118,9 +118,9 @@ void describe('Core 0.3 owner boundary', () => {
 
     assert.match(
       sources,
-      /from '@velaros-ai\/system-tools\/platform-compatibility'/u
+      /from '@velaros-ai\/system\/platform-compatibility'/u
     )
-    assert.doesNotMatch(sources, /from '@velaros-ai\/system-tools'/u)
+    assert.doesNotMatch(sources, /from '@velaros-ai\/system-tools/u)
     await assert.rejects(
       readFile(
         resolve(

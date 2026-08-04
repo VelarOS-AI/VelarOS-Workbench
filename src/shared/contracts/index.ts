@@ -1,7 +1,6 @@
 export type * from './product'
 export type * from './system'
 export type * from './workbench'
-export type { BrowserElementSelection } from '@velaros-ai/browser/core'
 export type {
   AgentDeveloperContext,
   AgentSurfaceId,
@@ -11,26 +10,27 @@ export type {
   ChatMessage,
   ContentBlock,
   ToolCallBlock,
-} from '@velaros-ai/core/types'
+} from '@velaros-ai/agent/protocol'
+export type { BrowserElementSelection } from '@velaros-ai/browser/core'
 export type {
   AgentProviderRuntimeConfig,
   ListProviderModelsRequest,
   ProviderModelCatalog,
 } from '@velaros-ai/model'
 export type {
-  WorkspaceGitBranch,
-  WorkspaceGitCommitResult,
-  WorkspaceGitDiffOptions,
-  WorkspaceGitDiffResult,
-  WorkspaceGitFileAction,
-  WorkspaceGitFileActionResult,
-  WorkspaceGitFileStatusEntry,
-  WorkspaceGitLineStats,
-  WorkspaceGitLogEntry,
-  WorkspaceGitLogOptions,
-  WorkspaceGitRemoteAction,
-  WorkspaceGitRemoteActionOptions,
-  WorkspaceGitRemoteActionResult,
-  WorkspaceGitRestoreResult,
-  WorkspaceGitStatusResult,
-} from '@velaros-ai/workspace'
+  ProjectGitBranch as WorkspaceGitBranch,
+  ProjectGitCommitResult as WorkspaceGitCommitResult,
+  ProjectGitDiffOptions as WorkspaceGitDiffOptions,
+  ProjectGitDiffResult as WorkspaceGitDiffResult,
+  ProjectGitFileAction as WorkspaceGitFileAction,
+  ProjectGitFileActionResult as WorkspaceGitFileActionResult,
+  ProjectGitFileStatusEntry as WorkspaceGitFileStatusEntry,
+  ProjectGitLineStats as WorkspaceGitLineStats,
+  ProjectGitLogEntry as WorkspaceGitLogEntry,
+  ProjectGitLogOptions as WorkspaceGitLogOptions,
+  ProjectGitRemoteAction as WorkspaceGitRemoteAction,
+  ProjectGitRemoteActionOptions as WorkspaceGitRemoteActionOptions,
+  ProjectGitRemoteActionResult as WorkspaceGitRemoteActionResult,
+  ProjectGitRestoreResult as WorkspaceGitRestoreResult,
+  ProjectGitStatusResult as WorkspaceGitStatusResult,
+} from '@velaros-ai/project/contracts'

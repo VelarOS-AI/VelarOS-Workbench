@@ -228,6 +228,8 @@ export type WorkbenchLanguageServiceCapability =
   | 'document-symbols'
   | 'document-highlights'
   | 'inlay-hints'
+  | 'semantic-tokens'
+  | 'code-actions'
 
 export interface WorkbenchLanguageServicePosition {
   line: number
@@ -508,6 +510,36 @@ export interface WorkbenchLanguageServiceInlayHintsResult {
   projectRoot: string
   path: string
   hints: WorkbenchLanguageServiceInlayHint[]
+}
+
+export interface WorkbenchLanguageServiceSemanticToken {
+  range: WorkbenchLanguageServiceRange
+  type: string
+  modifiers: string[]
+}
+
+export interface WorkbenchLanguageServiceSemanticTokensResult {
+  projectRoot: string
+  path: string
+  tokens: WorkbenchLanguageServiceSemanticToken[]
+}
+
+export interface WorkbenchLanguageServiceCodeActionsRequest extends WorkbenchLanguageServiceRequest {
+  range: WorkbenchLanguageServiceRange
+  diagnostics: WorkbenchLanguageServiceDiagnostic[]
+}
+
+export interface WorkbenchLanguageServiceCodeAction {
+  title: string
+  kind?: string
+  preferred?: boolean
+  changes: WorkbenchLanguageServiceFileEdit[]
+}
+
+export interface WorkbenchLanguageServiceCodeActionsResult {
+  projectRoot: string
+  path: string
+  actions: WorkbenchLanguageServiceCodeAction[]
 }
 
 export interface WorkbenchSaveFileRequest {

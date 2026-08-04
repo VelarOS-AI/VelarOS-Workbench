@@ -2,7 +2,11 @@ import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
 import { isAbsolute, join, resolve } from 'node:path'
 
 import type { AgentModPackDescriptorLike, AgentModPackReader } from '@velaros-ai/agent'
-import { AgentModPackProvidesId, VelarosModManifestFileName } from '@velaros-ai/agent/protocol'
+import {
+  AgentModPackProvidesId,
+  parseVelarosModEnvelope,
+  VelarosModManifestFileName,
+} from '@velaros-ai/agent/protocol'
 import { Log } from '@velaros-ai/core'
 
 /**
@@ -50,21 +54,17 @@ function readManifestIdentity(
   raw: unknown,
   packDirectory: string
 ): WorkbenchAgentModPackIdentity {
-  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-    throw new Error(`${packDirectory} 的 ${VelarosModManifestFileName} 不是对象`)
-  }
-  const moduleSection = (raw as Record<string, unknown>).module
-  if (typeof moduleSection !== 'object' || moduleSection === null || Array.isArray(moduleSection)) {
-    throw new Error(`${packDirectory} 的 ${VelarosModManifestFileName} 缺少 module 节`)
-  }
-  const manifest = moduleSection as Record<string, unknown>
-  const id = manifest.id
-  if (typeof id !== 'string' || id.trim().length === 0) {
-    throw new Error(`${packDirectory} 的 module 节缺少 id`)
+  const parsed = parseVelarosModEnvelope(raw, { origin: packDirectory })
+  if (!parsed.ok) {
+    throw new Error(
+      parsed.diagnostics
+        .map((diagnostic) => `${diagnostic.path ?? '<root>'}: ${diagnostic.message}`)
+        .join('; ')
+    )
   }
   return {
-    id,
-    ...(typeof manifest.version === 'string' ? { version: manifest.version } : {}),
+    id: parsed.envelope.module.id,
+    version: parsed.envelope.module.version,
   }
 }
 

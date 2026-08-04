@@ -53,7 +53,7 @@ import { useControlledBrowserSurface } from '@velaros-ai/browser/composition'
 import { isEmpty,isObject, isString, isTrue, Log, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { Result } from '@velaros-ai/core/result'
-import { systemPlatformCompatibility } from '@velaros-ai/system-tools/platform-compatibility'
+import { currentSystemPlatform as systemPlatformCompatibility } from '@velaros-ai/system/platform-compatibility'
 
 import type {
   BrowserElementSelection,

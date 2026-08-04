@@ -14,15 +14,13 @@ export const VELAR_EDITOR_KEYWORDS = [
   'abstract',
   'and',
   'as',
+  'assert',
   'async',
   'await',
   'break',
   'catch',
   'case',
   'class',
-  'cleanup',
-  'component',
-  'computed',
   'const',
   'continue',
   'def',
@@ -35,33 +33,30 @@ export const VELAR_EDITOR_KEYWORDS = [
   'finally',
   'for',
   'from',
-  'global',
+  'get',
   'if',
   'import',
   'in',
+  'init',
   'is',
   'js',
   'let',
   'match',
-  'mounted',
   'module',
   'none',
   'not',
   'or',
   'override',
   'pass',
+  'private',
   'return',
-  'resource',
-  'state',
   'static',
-  'style',
   'super',
   'throw',
   'true',
   'try',
   'type',
   'unsafe',
-  'watch',
   'while',
 ] as const
 
@@ -69,12 +64,7 @@ const Keywords = new Set<string>(VELAR_EDITOR_KEYWORDS)
 
 const BuiltinTypes = new Set([
   'bool',
-  'CanvasElement',
-  'DialogElement',
-  'Element',
-  'Event',
   'Error',
-  'InputElement',
   'List',
   'Map',
   'number',
@@ -82,7 +72,6 @@ const BuiltinTypes = new Set([
   'Set',
   'string',
   'unknown',
-  'WebNode',
 ])
 
 function readString(stream: StringStream, state: VelarStreamState): string {
@@ -146,7 +135,6 @@ const VelarParser: StreamParser<VelarStreamState> = {
     }
 
     if (stream.match(/^(?:\d+(?:\.\d+)?|\.\d+)/u)) return 'number'
-    if (stream.match(/^(?:bind|class|style|on):[\w-]+(?:\.[\w-]+)*/u)) return 'attributeName'
     if (stream.match(/^[A-Za-z_$][\w$]*/u)) {
       const word = stream.current()
       if (Keywords.has(word)) return 'keyword'
@@ -155,7 +143,6 @@ const VelarParser: StreamParser<VelarStreamState> = {
       return 'variableName'
     }
 
-    if (stream.match(/^<\/?[A-Za-z][\w.-]*/u)) return 'tagName'
     if (stream.eat(':')) {
       if (/^\s*(?:\/\/.*)?$/u.test(stream.string.slice(stream.pos)))
         state.nextIndent = state.lineIndent + state.indentUnit
@@ -194,7 +181,11 @@ export const VelarWorkbenchEditorLanguage = {
   project: {
     markers: ['velar.json'],
     commands: [
+      { id: 'install', label: 'Install Dependencies', command: 'velar', args: ['install'] },
+      { id: 'update', label: 'Update Dependencies', command: 'velar', args: ['update'] },
       { id: 'check', label: 'Check', command: 'velar', args: ['check'] },
+      { id: 'format', label: 'Format Project', command: 'velar', args: ['format'] },
+      { id: 'format-check', label: 'Check Formatting', command: 'velar', args: ['format', '--check'] },
       { id: 'dev', label: 'Dev Server', command: 'velar', args: ['dev'] },
       { id: 'test', label: 'Test', command: 'velar', args: ['test'] },
       { id: 'test-browser', label: 'Browser Test', command: 'velar', args: ['test', '--browser'] },
@@ -207,7 +198,6 @@ export const VelarWorkbenchEditorLanguage = {
         command: 'velar',
         args: ['verify-deployment'],
       },
-      { id: 'upgrade-check', label: 'Project Upgrade Check', command: 'velar', args: ['upgrade', '--check'] },
     ],
   },
 } satisfies WorkbenchEditorLanguageContribution

@@ -1,11 +1,11 @@
-import type { WorkbenchKernelCapabilityRoutes } from './kernel/WorkbenchKernelIpc'
+import type { WorkbenchKernelCapabilityRoutes } from './kernel/WorkbenchKernelProtocol'
 import { WorkbenchGitService } from './workspace/git/WorkbenchGitService'
 import { WorkbenchLanguageServiceWorkerClient } from './workspace/language/LanguageServiceWorkerClient'
 import { createWorkbenchAppParts, type WorkbenchAppParts } from './workspace/Parts'
 import {
-  PublishedWorkspaceCapabilityProvider,
-  type WorkbenchWorkspaceCapabilityProvider,
-} from './workspace/PublishedWorkspaceCapabilityProvider'
+  ProjectCapabilityProvider,
+  type WorkbenchProjectCapabilityProvider,
+} from './workspace/ProjectCapabilityProvider'
 import { WorkbenchFileWatcher } from './workspace/watch/WorkbenchFileWatcher'
 import { WorkbenchProjectFileSystem } from './workspace/WorkbenchProjectFileSystem'
 
@@ -15,7 +15,7 @@ export interface WorkbenchMainCapabilityProviders {
   readonly git: WorkbenchGitService
   readonly language: WorkbenchLanguageServiceWorkerClient
   readonly watch: WorkbenchFileWatcher
-  readonly workspace: WorkbenchWorkspaceCapabilityProvider
+  readonly workspace: WorkbenchProjectCapabilityProvider
   readonly kernelRoutes: WorkbenchKernelCapabilityRoutes
 }
 
@@ -35,7 +35,7 @@ export function createDefaultWorkbenchMainCapabilityProviders(
     git: new WorkbenchGitService(),
     language: new WorkbenchLanguageServiceWorkerClient(),
     watch: new WorkbenchFileWatcher(),
-    workspace: new PublishedWorkspaceCapabilityProvider(),
+    workspace: new ProjectCapabilityProvider(),
     kernelRoutes: DefaultWorkbenchKernelCapabilityRoutes,
   }
 }

@@ -19,7 +19,7 @@ import type { AgentModContributionAxisName, AgentModDiagnostic } from '@velaros-
  *
  * 其余八根贡献轴（tools / toolCategories / promptSegments / skills / spaces /
  * subAgentTypes / turnContextSources / executionModes）**仍无本地落点**：Workbench v1 的
- * 工具面固定来自 `@velaros-ai/workspace` bridge，提示词段只有内置注册表，没有技能库。
+ * 工具面固定来自 `@velaros-ai/project/agent`，提示词段只有内置注册表，没有技能库。
  * 这些轴照旧记 `workbench.mod.axis-unrouted` 诊断——如实反映，不静默吞掉。
  *
  * 声明全九轴是为了让随包内置 mod 保持 `active` 而非 `partial`（沿用 Desktop 先例）。

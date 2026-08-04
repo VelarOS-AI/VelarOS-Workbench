@@ -12,6 +12,8 @@ import type {
   WorkbenchChatSessionSnapshot,
 } from '@renderer/composition'
 
+import { AgentCapabilityProtocolVersion } from '@velaros-ai/agent/protocol/agent-capability'
+
 import type { ChatMessage } from '@shared/contracts'
 
 interface StandaloneChatState {
@@ -208,7 +210,7 @@ function StandaloneWorkbenchChatSessionSurface({
     window.velarosWorkbenchKernel.onAgentExecution((rawEnvelope) => {
       const envelope = rawEnvelope as AgentExecutionEnvelope
       if (
-        envelope.protocolVersion !== 1
+        envelope.protocolVersion !== AgentCapabilityProtocolVersion
         || envelope.sourceProductId !== 'velaros.workbench'
         || envelope.sourceSessionId !== chat.sessionId
       ) return
@@ -261,7 +263,7 @@ function StandaloneWorkbenchChatSessionSurface({
     const result = await window.velarosWorkbenchKernel.invoke({
       route: 'agent.execute',
       input: {
-        protocolVersion: 1,
+        protocolVersion: AgentCapabilityProtocolVersion,
         execution: {
           id: executionId,
           source: {

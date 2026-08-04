@@ -45,6 +45,8 @@ import type {
   WorkbenchIndexProjectResult,
   WorkbenchInlineCompletionRequest,
   WorkbenchInlineCompletionResult,
+  WorkbenchLanguageServiceCodeActionsRequest,
+  WorkbenchLanguageServiceCodeActionsResult,
   WorkbenchLanguageServiceCompletionResult,
   WorkbenchLanguageServiceDefinitionResult,
   WorkbenchLanguageServiceDiagnosticsResult,
@@ -59,6 +61,7 @@ import type {
   WorkbenchLanguageServiceRenameRequest,
   WorkbenchLanguageServiceRenameResult,
   WorkbenchLanguageServiceRequest,
+  WorkbenchLanguageServiceSemanticTokensResult,
   WorkbenchLanguageServiceSignatureHelpQueryResult,
   WorkbenchListDirectoryRequest,
   WorkbenchListDirectoryResult,
@@ -180,6 +183,12 @@ export interface WorkbenchProjectKernelPort {
   getWorkbenchLanguageServiceInlayHints(
     request: WorkbenchLanguageServiceInlayHintsRequest
   ): Promise<Result<WorkbenchLanguageServiceInlayHintsResult>>
+  getWorkbenchLanguageServiceSemanticTokens(
+    request: WorkbenchLanguageServiceRequest
+  ): Promise<Result<WorkbenchLanguageServiceSemanticTokensResult>>
+  getWorkbenchLanguageServiceCodeActions(
+    request: WorkbenchLanguageServiceCodeActionsRequest
+  ): Promise<Result<WorkbenchLanguageServiceCodeActionsResult>>
   runWorkbenchCommand(
     request: WorkbenchRunCommandRequest
   ): Promise<Result<WorkbenchRunCommandResult>>

@@ -4,6 +4,7 @@ import { Worker } from 'node:worker_threads'
 import { AppError } from '@velaros-ai/core/error'
 
 import type {
+  WorkbenchLanguageServiceCodeActionsRequest,
   WorkbenchLanguageServiceInlayHintsRequest,
   WorkbenchLanguageServicePositionRequest,
   WorkbenchLanguageServiceRenameRequest,
@@ -146,6 +147,14 @@ export class WorkbenchLanguageServiceWorkerClient {
 
   public getInlayHints(request: WorkbenchLanguageServiceInlayHintsRequest) {
     return this.call('getInlayHints', request)
+  }
+
+  public getSemanticTokens(request: WorkbenchLanguageServiceRequest) {
+    return this.call('getSemanticTokens', request)
+  }
+
+  public getCodeActions(request: WorkbenchLanguageServiceCodeActionsRequest) {
+    return this.call('getCodeActions', request)
   }
 
   public async dispose(): Promise<void> {

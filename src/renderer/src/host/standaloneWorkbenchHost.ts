@@ -95,7 +95,7 @@ async function indexProjectWithWorkspace(
 ): Promise<ResultType<WorkbenchIndexProjectResult>> {
   const listed = await invokeWorkspace<unknown[]>(
     request.projectRoot,
-    'ws_list_files',
+    'project:list',
     {
       path: request.path ?? '.',
       recursive: true,
@@ -120,7 +120,7 @@ async function indexProjectWithWorkspace(
 
   const read = await invokeWorkspace<WorkspaceReadManyResult>(
     request.projectRoot,
-    'ws_read',
+    'project:read',
     {
       path: paths,
       maxChars: request.maxCharsPerFile ?? 24_000,
@@ -186,7 +186,7 @@ function createAiIndexStatus(
     sourceRootCount: new Set(projectIndex.files.map((file) => file.path.split('/')[0])).size,
     languages,
     codeIndex: {
-      providerId: '@velaros-ai/workspace',
+      providerId: '@velaros-ai/project',
       providerLabel: 'VelarOS Workspace',
       version: '1.2.2',
       initialized: false,
@@ -289,7 +289,7 @@ function splitWorkspaceDiff(diff: string): { beforeContent: string; afterContent
 async function readProjectAiRules(
   projectRoot: string
 ): Promise<ResultType<WorkbenchProjectAiRulesResult>> {
-  const listed = await invokeWorkspace<unknown[]>(projectRoot, 'ws_list_files', {
+  const listed = await invokeWorkspace<unknown[]>(projectRoot, 'project:list', {
     path: '.',
     recursive: true,
     maxDepth: 4,
@@ -316,7 +316,7 @@ async function readProjectAiRules(
   })
   const read = await invokeWorkspace<WorkspaceReadManyResult>(
     projectRoot,
-    'ws_read',
+    'project:read',
     { path: paths, maxChars: 64_000 }
   )
   if (!read.ok) return read as ResultType<WorkbenchProjectAiRulesResult>
@@ -438,6 +438,10 @@ const standaloneWorkbenchHost: WorkbenchHost = {
         toHostResult(await window.velarosWorkbenchLanguage.getDocumentHighlights(request)),
       getWorkbenchLanguageServiceInlayHints: async (request) =>
         toHostResult(await window.velarosWorkbenchLanguage.getInlayHints(request)),
+      getWorkbenchLanguageServiceSemanticTokens: async (request) =>
+        toHostResult(await window.velarosWorkbenchLanguage.getSemanticTokens(request)),
+      getWorkbenchLanguageServiceCodeActions: async (request) =>
+        toHostResult(await window.velarosWorkbenchLanguage.getCodeActions(request)),
       runWorkbenchCommand: async (request) =>
         toHostResult(await window.velarosWorkbenchFs.runCommand(request)),
       onWorkbenchRunCommandOutput: (listener) =>
@@ -523,7 +527,7 @@ const standaloneWorkbenchHost: WorkbenchHost = {
         const diff = await invokeWorkspace<{
           diff: string
           changedFiles: string[]
-        }>(projectRoot, 'ws_diff', { transactionId: changeId })
+        }>(projectRoot, 'project:diff', { transactionId: changeId })
         if (!diff.ok) return diff
         const contents = splitWorkspaceDiff(diff.data.diff)
         return Result.ok({
@@ -541,7 +545,7 @@ const standaloneWorkbenchHost: WorkbenchHost = {
         if (!projectRoot) return invalidSession()
         const rollback = await invokeWorkspace<{
           changedFiles: string[]
-        }>(projectRoot, 'ws_rollback', { transactionId: changeId })
+        }>(projectRoot, 'project:rollback', { transactionId: changeId })
         if (!rollback.ok) return rollback
         return Result.ok({
           changeId,
@@ -552,7 +556,7 @@ const standaloneWorkbenchHost: WorkbenchHost = {
       },
       restoreFileChange: () => Promise.resolve(Result.fail(new AppError(
         'UNKNOWN',
-        'The published Workspace capability does not expose transaction restore.'
+        'The Project capability does not expose transaction restore.'
       ))),
       pickDirectory: async () => {
         const picked = await window.velarosWorkbenchProjectHub.pickNewProjectLocation()

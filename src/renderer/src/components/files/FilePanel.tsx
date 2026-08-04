@@ -33,7 +33,7 @@ import type { WorkbenchProject } from '@renderer/models/project/workbenchProject
 import { ROOT_PATH } from '@renderer/models/shared/workbenchUtils'
 
 import { toNullable } from '@velaros-ai/core'
-import { systemPlatformCompatibility } from '@velaros-ai/system-tools/platform-compatibility'
+import { currentSystemPlatform as systemPlatformCompatibility } from '@velaros-ai/system/platform-compatibility'
 import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 import { Paragraph } from '@velaros-ai/ui/primitives/display/Paragraph'
