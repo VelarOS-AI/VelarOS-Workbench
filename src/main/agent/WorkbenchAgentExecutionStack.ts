@@ -86,7 +86,7 @@ class WorkbenchAgentExecutionStack {
     // config.modelSelection 是不透明选择，Workbench 原样转交 Model 包解析（BYOK）。
     this.runtimeHelper = new ModelRuntime(this.modelComposition.agentModelRuntime)
     this.runContextHelper = new RunContext(
-      new ContextBuilder(createBuiltInPromptRegistry(), undefined, toNullable(this.seams)),
+      new ContextBuilder(createBuiltInPromptRegistry(), toNullable(this.seams)),
       defaultRuntimePromptFeaturePolicy
     )
     this.primaryAgentProfile = new PrimaryAgentProfile(EmptySkillRepository, {
