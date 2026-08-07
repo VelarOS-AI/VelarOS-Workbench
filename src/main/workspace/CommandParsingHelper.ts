@@ -1,4 +1,3 @@
-import { isPresent } from '@velaros-ai/core'
 import { isEmpty } from '@velaros-ai/core'
 
 function tokenizeShellCommand(command: string): string[] {
@@ -140,51 +139,6 @@ function containsTokenSequence(tokens: string[], sequence: string[]): boolean {
   return false
 }
 
-function hasStandaloneBackgroundOperator(tokens: string[]): boolean {
-  // Stop scanning at the first heredoc operator; body content is not shell syntax.
-  const heredocIndex = tokens.indexOf('<<')
-  const effectiveTokens = heredocIndex >= 0 ? tokens.slice(0, heredocIndex) : tokens
-
-  return effectiveTokens.some((token, index) => {
-    if (token !== '&') return false
-
-    const previousToken = effectiveTokens[index - 1]
-    const nextToken = effectiveTokens[index + 1]
-    if (previousToken === '>' || previousToken === '<') return false
-    if (nextToken === '>' || nextToken === '>>') return false
-    if (previousToken === '&' || nextToken === '&') return false
-
-    return true
-  })
-}
-
-function isDigits(value: string): boolean {
-  if (!value) return false
-
-  for (let index = 0; index < value.length; index += 1) {
-    const code = value.charCodeAt(index)
-    if (code < 48 || code > 57) return false
-  }
-
-  return true
-}
-
-function parsePortValue(value: string): Nullable<number> {
-  if (!isDigits(value)) return null
-
-  const parsed = Number(value)
-  return Number.isInteger(parsed) && parsed >= 1 && parsed <= 65535 ? parsed : null
-}
-
-function parsePortMappingToken(token: string): number[] {
-  const separatorIndex = token.indexOf(':')
-  if (separatorIndex <= 0 || separatorIndex >= token.length - 1) return []
-
-  const left = parsePortValue(token.slice(0, separatorIndex))
-  const right = parsePortValue(token.slice(separatorIndex + 1))
-  return [left, right].filter((value): value is number => isPresent(value))
-}
-
 function isWhitespace(char: string): boolean {
   return char === ' ' || char === '\n' || char === '\r' || char === '\t'
 }
@@ -201,10 +155,4 @@ function isOperatorStart(char: string): boolean {
   )
 }
 
-export {
-  containsTokenSequence,
-  hasStandaloneBackgroundOperator,
-  parsePortMappingToken,
-  parsePortValue,
-  tokenizeShellCommand,
-}
+export { containsTokenSequence, tokenizeShellCommand }

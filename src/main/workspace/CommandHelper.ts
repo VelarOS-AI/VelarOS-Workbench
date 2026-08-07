@@ -11,7 +11,7 @@ import { Log } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { currentSystemPlatform as systemPlatformCompatibility } from '@velaros-ai/system/platform-compatibility'
 
-import { analyzeCommandExecution } from './CommandExecutionPolicy'
+import { analyzeWorkbenchCommandExecution } from './CommandExecutionPolicy'
 
 const DEFAULT_COMMAND_TIMEOUT_MS = 60_000
 const DEFAULT_COMMAND_OUTPUT_CHARS = 20_000
@@ -63,7 +63,7 @@ class CommandHelper {
       throw new AppError('VALIDATION', '命令不能为空')
     }
 
-    if (!allowDangerous && analyzeCommandExecution(trimmed).isDangerous) {
+    if (!allowDangerous && analyzeWorkbenchCommandExecution(trimmed).isDangerous) {
       throw new AppError('PERMISSION', `命令被安全策略拒绝：${trimmed}`)
     }
 
