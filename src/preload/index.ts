@@ -130,6 +130,8 @@ const kernelBridge: WorkbenchKernelBridge = {
     subscribe(WorkbenchKernelChannels.statusChanged, listener),
   onAgentExecution: (listener) =>
     subscribe(WorkbenchKernelChannels.agentExecution, listener),
+  backupChatHistory: (request) =>
+    ipcRenderer.invoke(WorkbenchKernelChannels.backupChatHistory, request),
 }
 
 const workspaceBridge: WorkbenchWorkspaceBridge = {

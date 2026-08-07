@@ -1,3 +1,7 @@
+import { createHash } from 'node:crypto'
+import { rename, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
+
 import { BrowserWindow, ipcMain } from 'electron'
 
 import { AgentCapabilityExecutionEventType } from '@velaros-ai/agent/protocol/agent-capability'
@@ -12,6 +16,7 @@ import {
 } from '@velaros-ai/kernel/runtime'
 
 import type {
+  WorkbenchChatHistoryBackupResult,
   WorkbenchKernelCapabilityStatus,
   WorkbenchKernelInvocationError,
   WorkbenchKernelInvokeRequest,
@@ -20,6 +25,7 @@ import type {
   WorkbenchKernelStatus,
 } from '../../shared/workbenchKernel'
 import { WorkbenchKernelChannels } from '../../shared/workbenchKernel'
+import { type WorkbenchAppStoragePaths } from '../workspace/StoragePaths'
 
 import {
   parseWorkbenchKernelInvokeRequest,
@@ -40,9 +46,15 @@ export type {
  */
 export function registerWorkbenchKernelIpc(
   runtime: Kernel,
-  routes: WorkbenchKernelCapabilityRoutes
+  routes: WorkbenchKernelCapabilityRoutes,
+  storagePaths: WorkbenchAppStoragePaths
 ): () => void {
   ipcMain.handle(WorkbenchKernelChannels.getStatus, () => projectStatus(runtime))
+  ipcMain.handle(
+    WorkbenchKernelChannels.backupChatHistory,
+    async (_event, request: unknown): Promise<WorkbenchChatHistoryBackupResult> =>
+      writeChatHistoryBackup(storagePaths, request)
+  )
   ipcMain.handle(
     WorkbenchKernelChannels.invoke,
     async (_event, request: unknown): Promise<WorkbenchKernelInvokeResult> => {
@@ -91,6 +103,7 @@ export function registerWorkbenchKernelIpc(
     unsubscribeAgentExecution()
     ipcMain.removeHandler(WorkbenchKernelChannels.getStatus)
     ipcMain.removeHandler(WorkbenchKernelChannels.invoke)
+    ipcMain.removeHandler(WorkbenchKernelChannels.backupChatHistory)
   }
 }
 
@@ -212,5 +225,40 @@ function toInvocationError(error: unknown): WorkbenchKernelInvocationError {
     message: error instanceof Error ? error.message : 'Kernel capability invocation failed',
     retryable: true,
     details: null,
+  }
+}
+
+/**
+ * 把 renderer 送来的聊天历史原样落盘。
+ *
+ * 主进程**不解释 payload 的形状**——它是不透明字符串。这样做是刻意的：会话权威目前仍在
+ * renderer（已知欠账），本函数只是防「localStorage 被清空或撞配额即全丢」的兜底出口；
+ * 一旦会话权威上收到主进程，这条通道整条删掉即可，不留需要迁移的 schema。
+ *
+ * 先写 `.tmp` 再 rename，避免写到一半崩溃留下半截 JSON 覆盖掉上一份完好备份。
+ */
+async function writeChatHistoryBackup(
+  storagePaths: WorkbenchAppStoragePaths,
+  request: unknown
+): Promise<WorkbenchChatHistoryBackupResult> {
+  if (typeof request !== 'object' || request === null) return { ok: false, message: 'Chat history backup request is invalid.' }
+
+  const { projectRoot, payload } = request as Record<string, unknown>
+  if (typeof projectRoot !== 'string' || !projectRoot.trim() || typeof payload !== 'string') return { ok: false, message: 'Chat history backup request is invalid.' }
+
+  // 项目根不能直接当文件名（含分隔符且可能超长）；取稳定摘要做分片键。
+  const shard = createHash('sha256').update(projectRoot).digest('hex').slice(0, 32)
+  const targetPath = join(storagePaths.getChatHistoryBackupsDir(), `${shard}.json`)
+  const temporaryPath = `${targetPath}.tmp`
+
+  try {
+    await writeFile(temporaryPath, payload, 'utf8')
+    await rename(temporaryPath, targetPath)
+    return { ok: true, path: targetPath }
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : 'Chat history backup failed.',
+    }
   }
 }

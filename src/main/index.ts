@@ -163,7 +163,11 @@ void app.whenReady().then(() => {
       runtime: new WorkbenchAgentCapabilityRuntime(agentExecutionStack),
     })
   )
-  const disposeKernelIpc = registerWorkbenchKernelIpc(kernelRuntime, providers.kernelRoutes)
+  const disposeKernelIpc = registerWorkbenchKernelIpc(
+    kernelRuntime,
+    providers.kernelRoutes,
+    providers.parts.storagePaths
+  )
   void kernelRuntime
     .start()
     .then(() => modService.assembleAgentAxis())

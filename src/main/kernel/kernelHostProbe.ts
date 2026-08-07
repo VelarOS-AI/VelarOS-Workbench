@@ -11,6 +11,11 @@ import { z } from 'zod'
 
 import { createAgentKernelModule } from '@velaros-ai/agent'
 import {
+  type AgentModSeamDispatcher,
+  ContextBuilder,
+  createBuiltInPromptRegistry,
+} from '@velaros-ai/agent'
+import {
   AgentCapabilityExecutionEventType,
   AgentCapabilityProtocolVersion,
 } from '@velaros-ai/agent/protocol/agent-capability'
@@ -213,8 +218,12 @@ function buildEnvelope(overrides: Record<string, unknown> = {}): unknown {
   )
 
   // 走到**模型接口边界**为止：provider 用不存在的桩 id，解析必然停在 Model 包的
-  // provider 目录查询上——能走到这一步说明前面整条装配链（工具注册表、工具上下文、
-  // 角色解析、提示词构建、历史准备、loop 启动）都真跑过了，且零网络出口。
+  // provider 目录查询上——能走到这一步说明前面的装配链（工具注册表、工具上下文、
+  // 角色解析、loop 启动）都真跑过了，且零网络出口。
+  //
+  // **覆盖边界(别再过度声明)**：模型 provider 解析发生在提示词组装**之前**,因此本段
+  // 走不到 ContextBuilder——段⑤ 实测过(seam 桩一次都没被问到)。提示词构建的端到端
+  // 覆盖要等探针能跨过模型边界(桩 provider),当前是欠账。
   let modelBoundaryError: unknown
   try {
     await runtime.execute(undefined, buildEnvelope(), context)
@@ -277,6 +286,38 @@ function buildEnvelope(overrides: Record<string, unknown> = {}): unknown {
       throw new Error(`事件信封形状不合契约：${JSON.stringify(event)}`)
     }
   }
+}
+
+
+// ── ⑤ mod seam 接线形状回归门（曾经在这里被静默丢掉） ──
+{
+  // 历史事故：执行栈按旧的三参签名调 `new ContextBuilder(registry, undefined, seams)`,
+  // 平台收成两参后那个 `undefined` 正落在 seams 位、真 seams 进了不存在的第三参——
+  // `turn-context:assemble` 接缝在生产中从未触发。当时本探针构造执行栈**不传 seams**,
+  // 系统性绕开了这条路径,所以事故期间探针仍是全绿的。这一段补上那一格。
+  //
+  // 可观测点:ContextBuilder 组装动态段前先问 `seams.has('turn-context:assemble')`。
+  // seams 落在构造函数第 2 位时会被问到;位置一错就一次都不会。
+  const consultedKinds: string[] = []
+  const probeSeams = {
+    has: (kind: string) => {
+      consultedKinds.push(kind)
+      return false
+    },
+  } as unknown as AgentModSeamDispatcher
+
+  new ContextBuilder(createBuiltInPromptRegistry(), probeSeams).build()
+  assert(
+    consultedKinds.includes('turn-context:assemble'),
+    'seams 必须落在 ContextBuilder 构造函数第 2 位：一次都没问过 turn-context:assemble 说明接线错位'
+  )
+
+  // 执行栈必须能接住 seams 并完成装配（构造级,不跑模型）。
+  const stack = new WorkbenchAgentExecutionStack(createProbeProjectProvider(), probeSeams)
+  await stack.dispose()
+
+  // 本段**不**证明「执行一轮真会触发 seam」——段③ 的执行在模型 provider 解析处就停了,
+  // 提示词组装根本没跑到。端到端覆盖要等探针能跨过模型边界(桩 provider),记为欠账。
 }
 
 console.info(`workbench kernel host probe passed (${assertions} assertions)`)

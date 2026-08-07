@@ -3,7 +3,27 @@ export const WorkbenchKernelChannels = {
   invoke: 'workbench-app:kernel:invoke',
   statusChanged: 'workbench-app:kernel:status-changed',
   agentExecution: 'workbench-app:kernel:agent-execution',
+  backupChatHistory: 'workbench-app:kernel:backup-chat-history',
 } as const
+
+/**
+ * 聊天历史的落盘备份请求。
+ *
+ * **这不是会话权威**——权威仍在 renderer（见 `standaloneWorkbenchChatAdapter`），本通道只是
+ * 防「localStorage 被清空或撞配额即全丢」的兜底出口。主进程把 `payload` 当**不透明字符串**
+ * 原样落盘，不解释也不校验内容形状；将来会话权威上收到主进程时，这条通道可以整条删掉，
+ * 不会留下需要迁移的 schema。
+ */
+export interface WorkbenchChatHistoryBackupRequest {
+  /** 备份分片键：一个项目根一份。 */
+  projectRoot: string
+  /** 已序列化的会话 JSON。 */
+  payload: string
+}
+
+export type WorkbenchChatHistoryBackupResult =
+  | { ok: true; path: string }
+  | { ok: false; message: string }
 
 export interface WorkbenchKernelScopeRef {
   id: string
@@ -93,4 +113,7 @@ export interface WorkbenchKernelBridge {
     listener: (status: WorkbenchKernelStatus) => void
   ) => () => void
   onAgentExecution: (listener: (payload: unknown) => void) => () => void
+  backupChatHistory: (
+    request: WorkbenchChatHistoryBackupRequest
+  ) => Promise<WorkbenchChatHistoryBackupResult>
 }

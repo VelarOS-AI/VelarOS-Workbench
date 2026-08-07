@@ -12,6 +12,7 @@ import {
   ModelRuntime,
   PrimaryAgentProfile,
   RunContext,
+  type SoloLoopToolContext,
   SoloStreamLoop,
   TurnRunner,
 } from '@velaros-ai/agent'
@@ -76,7 +77,7 @@ class WorkbenchAgentExecutionStack {
   private readonly primaryAgentProfile: PrimaryAgentProfile
   private readonly contextGovernanceSessions = new ContextGovernanceSessionRegistry()
   private readonly sessions = new Map<string, WorkbenchAgentSession>()
-  private readonly loops = new Map<string, SoloStreamLoop<never, never>>()
+  private readonly loops = new Map<string, SoloStreamLoop>()
 
   public constructor(
     private readonly projectProvider: WorkbenchProjectCapabilityProvider,
@@ -168,20 +169,27 @@ class WorkbenchAgentExecutionStack {
   private resolveLoop(
     projectRoot: string,
     registry: WorkbenchAgentToolRegistry
-  ): SoloStreamLoop<never, never> {
+  ): SoloStreamLoop {
     const existing = this.loops.get(projectRoot)
     if (existing) return existing
 
     const created = new SoloStreamLoop(
-      this.runtimeHelper as never,
-      new TurnRunner(registry as never, this.contextGovernanceSessions) as never,
+      this.runtimeHelper,
+      // 显式给出 loop 的上下文类型：TurnRunner 的默认泛型比 SoloStreamLoop 要求的窄
+      // （缺 AutoVerification 那一面），不指名就会推成不兼容的默认值。
+      new TurnRunner<SoloLoopToolContext>(registry, this.contextGovernanceSessions),
       this.contextGovernanceSessions,
-      this.runContextHelper as never,
-      registry as never,
+      // 唯一保留的断言,且只包这一个参数。
+      // 上游不一致:平台的 `RunContext` 要求 `RunContextToolContext.sessionId: string`,
+      // 而 `SoloLoopToolContext.sessionId` 是可选的——于是平台自己的 RunContext 不满足
+      // 平台自己的 `SoloLoopRunContext<SoloLoopToolContext>`。RunContext 又不是泛型类,
+      // 宿主侧无法指名收窄。上游对齐 sessionId 可选性后删掉本断言。
+      this.runContextHelper as unknown as ConstructorParameters<typeof SoloStreamLoop>[3],
+      registry,
       null,
       {},
       toNullable(this.seams)
-    ) as SoloStreamLoop<never, never>
+    )
     this.loops.set(projectRoot, created)
     return created
   }

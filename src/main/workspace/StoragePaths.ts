@@ -12,6 +12,11 @@ const WorkbenchStorageDirectory = {
   localHistory: 'workbench-local-history',
   /** mod pack 安装根 + 注册表（P6：Workbench 自持 mod 单 owner）。 */
   modPacks: 'mods',
+  /**
+   * 聊天历史的落盘备份区。**不是会话权威**——权威仍在 renderer 的 localStorage，
+   * 这里只兜住「localStorage 被清空或撞配额」的数据丢失。会话权威上收后整个目录可弃。
+   */
+  chatHistoryBackups: 'chat-history-backups',
 } as const
 
 class WorkbenchAppStoragePaths {
@@ -33,6 +38,11 @@ class WorkbenchAppStoragePaths {
   /** mod 注册表（停用位 + 外部原地安装目录）。 */
   public getModRegistryPath(): string {
     return join(this.getModPacksDir(), 'mod-registry.json')
+  }
+
+  /** 聊天历史备份区（见 {@link WorkbenchStorageDirectory.chatHistoryBackups}）。 */
+  public getChatHistoryBackupsDir(): string {
+    return this.ensureDir(join(this.dataRootDir, WorkbenchStorageDirectory.chatHistoryBackups))
   }
 
   private ensureDir(path: string): string {

@@ -13,8 +13,13 @@ import type {
 } from '@renderer/composition'
 
 import { AgentCapabilityProtocolVersion } from '@velaros-ai/agent/protocol/agent-capability'
+import { Log } from '@velaros-ai/core'
 
 import type { ChatMessage } from '@shared/contracts'
+
+import { workbenchMessage } from './workbenchMessageHost'
+
+const log = Log.tag('workbench-chat-adapter')
 
 interface StandaloneChatState {
   readonly projectRoot: string
@@ -500,18 +505,72 @@ function chatStorageKey(projectRoot: string): string {
   return `velaros.workbench.chat:${encodeURIComponent(projectRoot)}`
 }
 
+/** 已就「历史存不下」提示过的项目根；同一次运行只打扰用户一次。 */
+const persistFailureNotified = new Set<string>()
+
+/**
+ * 落盘会话状态。
+ *
+ * ## 为什么不能再吞异常
+ *
+ * 这里是**会话权威本身**，不是缓存——localStorage 撞配额或被清理时，写失败等于用户的聊天
+ * 历史永久丢失。旧实现把异常整个吞掉、只留一句「不能打断 Kernel run」的注释，结果是静默丢
+ * 数据：用户不知道没保存，也没有日志可查。现在改成**不中断执行、但必须让人知道**，
+ * 同时把同一份镜像到主进程磁盘兜底。
+ *
+ * > 会话权威搬进主进程、renderer 退回投影才是正解，但那是结构改动（见 Desktop 仓
+ * > `docs/workbench-alignment-audit-2026-08.md`）。本函数是那之前的遏制层。
+ */
 function persistState(state: StandaloneChatState): void {
   if (!state.projectRoot || typeof window === 'undefined') return
+
+  const payload = JSON.stringify({
+    messages: state.messages,
+    lastRunStartedAt: state.lastRunStartedAt,
+    lastRunFinishedAt: state.lastRunFinishedAt,
+    revision: state.revision,
+  })
+
   try {
-    window.localStorage.setItem(chatStorageKey(state.projectRoot), JSON.stringify({
-      messages: state.messages,
-      lastRunStartedAt: state.lastRunStartedAt,
-      lastRunFinishedAt: state.lastRunFinishedAt,
-      revision: state.revision,
-    }))
-  } catch {
-    // Storage quota/corruption must not interrupt an active Kernel run.
+    window.localStorage.setItem(chatStorageKey(state.projectRoot), payload)
+    persistFailureNotified.delete(state.projectRoot)
+  } catch (error) {
+    // 不中断正在跑的 Kernel run,但绝不静默:日志 + 用户可见提示(每个项目根只提示一次)。
+    log.error('聊天历史写入 localStorage 失败', {
+      projectRoot: state.projectRoot,
+      messageCount: state.messages.length,
+      error,
+    })
+    if (!persistFailureNotified.has(state.projectRoot)) {
+      persistFailureNotified.add(state.projectRoot)
+      workbenchMessage.error({
+        title: '聊天历史未能保存',
+        description:
+          '浏览器存储写入失败(可能已满)。当前对话仍可继续,但重启后可能丢失;已尝试写入本地备份。',
+      })
+    }
   }
+
+  backupChatHistoryToDisk(state.projectRoot, payload)
+}
+
+/**
+ * 把同一份历史镜像到主进程数据区。
+ *
+ * localStorage 会被「清除浏览数据」或配额回收整片抹掉,那时这份磁盘副本是唯一残存物。
+ * 刻意 fire-and-forget:备份失败只记日志,不弹提示、不影响聊天——它是兜底,不是主路径。
+ */
+function backupChatHistoryToDisk(projectRoot: string, payload: string): void {
+  void window.velarosWorkbenchKernel
+    .backupChatHistory({ projectRoot, payload })
+    .then((result) => {
+      if (!result.ok) {
+        log.error('聊天历史备份落盘失败', { projectRoot, message: result.message })
+      }
+    })
+    .catch((error: unknown) => {
+      log.error('聊天历史备份通道不可用', { projectRoot, error })
+    })
 }
 
 function isStoredChatMessage(value: unknown): value is ChatMessage {
