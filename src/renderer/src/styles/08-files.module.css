@@ -393,6 +393,11 @@
   color: var(--workbench-file-typescript);
 }
 
+.treeFileIcon[data-kind='velarscript'],
+.commitFileIcon[data-kind='velarscript'] {
+  color: var(--workbench-file-velarscript);
+}
+
 .treeFileIcon[data-kind='tsx'],
 .commitFileIcon[data-kind='tsx'] {
   color: var(--workbench-file-tsx);

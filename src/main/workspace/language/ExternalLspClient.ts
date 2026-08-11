@@ -1,7 +1,7 @@
 import { type ChildProcessWithoutNullStreams,spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { createRequire } from 'node:module'
-import { delimiter, isAbsolute, join } from 'node:path'
+import { delimiter, dirname, isAbsolute, join } from 'node:path'
 
 import { URI } from 'vscode-uri'
 
@@ -194,16 +194,31 @@ function protocolVersionFromInitialize(
   return typeof version === 'number' ? version : null
 }
 
+function nodeBinDirectories(projectRoot: string): string[] {
+  const directories: string[] = []
+  let current = projectRoot
+  while (true) {
+    directories.push(join(current, 'node_modules', '.bin'))
+    const parent = dirname(current)
+    if (parent === current) return directories
+    current = parent
+  }
+}
+
 function executablePath(projectRoot: string, command: string): string {
+  if (isAbsolute(command) || command.includes('/') || command.includes('\\')) return command
   const executable = process.platform === 'win32' ? `${command}.cmd` : command
-  const local = join(projectRoot, 'node_modules', '.bin', executable)
-  return existsSync(local) ? local : command
+  const local = nodeBinDirectories(projectRoot)
+    .map((directory) => join(directory, executable))
+    .find((candidate) => existsSync(candidate))
+  return local ?? command
 }
 
 function extendPath(projectRoot: string): string {
-  const localBin = join(projectRoot, 'node_modules', '.bin')
   const current = process.env['PATH'] ?? ''
-  return current ? `${localBin}${delimiter}${current}` : localBin
+  return [...nodeBinDirectories(projectRoot), ...(current ? current.split(delimiter) : [])]
+    .filter((directory, index, directories) => directory && directories.indexOf(directory) === index)
+    .join(delimiter)
 }
 
 function executableExists(command: string, pathValue: string): boolean {

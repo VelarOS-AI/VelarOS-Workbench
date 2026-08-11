@@ -1,16 +1,18 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, readFile, realpath, stat } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import { describe, test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
+import { syntaxTree } from '@codemirror/language'
 import { EditorState } from '@codemirror/state'
 
 import { ExternalLspClient } from '../src/main/workspace/language/ExternalLspClient'
 import { WorkbenchLanguageServices } from '../src/main/workspace/language/LanguageServices'
 import {
   VELAR_EDITOR_KEYWORDS,
+  velarScript,
   VelarWorkbenchEditorLanguage,
 } from '../src/renderer/src/contributions/velar/editor'
 import {
@@ -155,12 +157,11 @@ void describe('focused Workbench language surface', () => {
       'enum',
       'extends',
       'extern',
-      'get',
-      'init',
       'is',
       'js',
       'module',
       'match',
+      'null',
       'override',
       'pass',
       'private',
@@ -184,6 +185,25 @@ void describe('focused Workbench language surface', () => {
       'watch',
     ])
       assert.ok(!VELAR_EDITOR_KEYWORDS.includes(webKeyword as typeof VELAR_EDITOR_KEYWORDS[number]))
+    for (const removedKeyword of ['get', 'init', 'none'])
+      assert.ok(!VELAR_EDITOR_KEYWORDS.includes(removedKeyword as typeof VELAR_EDITOR_KEYWORDS[number]))
+
+    const fallbackTree = (doc: string): string => syntaxTree(EditorState.create({
+      doc,
+      extensions: [velarScript()],
+    })).toString()
+    assert.equal(
+      fallbackTree('const path = r"C:\\\\Users\\foo"\n'),
+      'Document(keyword,variableName,operator,string)'
+    )
+    assert.equal(
+      fallbackTree('const text = "\n    ordinary "quotes" stay content\n"\nconst ready = true\n'),
+      'Document(keyword,variableName,operator,string,string,string,keyword,variableName,operator,keyword)'
+    )
+    assert.equal(
+      fallbackTree('const broken = "unterminated\nconst recovered = true\n'),
+      'Document(keyword,variableName,operator,string,keyword,variableName,operator,keyword)'
+    )
 
     const decorations = buildWorkbenchBasicKeywordDecorations(
       EditorState.create({ doc: '# unsafe\n// extern\nmodule value\n' }).doc,
@@ -225,6 +245,7 @@ void describe('focused Workbench language surface', () => {
       'install',
       'update',
       'check',
+      'run',
       'format',
       'format-check',
       'dev',
@@ -240,6 +261,42 @@ void describe('focused Workbench language surface', () => {
 })
 
 void describe('shared external LSP client', () => {
+  void test('resolves the nearest ancestor Node toolchain for nested projects', async () => {
+    const fixture = fileURLToPath(new URL('./fixtures/fake-lsp.cjs', import.meta.url))
+    const workspaceRoot = await mkdtemp(join(tmpdir(), 'workbench-ancestor-lsp-'))
+    const projectRoot = join(workspaceRoot, 'packages', 'server')
+    const binRoot = join(workspaceRoot, 'node_modules', '.bin')
+    const commandName = 'ancestor-fixture-lsp'
+    const command = join(binRoot, process.platform === 'win32' ? `${commandName}.cmd` : commandName)
+    await mkdir(projectRoot, { recursive: true })
+    await mkdir(binRoot, { recursive: true })
+    await writeFile(command, process.platform === 'win32'
+      ? `@"${process.execPath}" "${fixture}" %*\r\n`
+      : `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(fixture)} "$@"\n`, 'utf8')
+    if (process.platform !== 'win32') await chmod(command, 0o755)
+
+    const client = new ExternalLspClient(projectRoot, {
+      id: 'ancestor-fixture-language',
+      label: 'Ancestor Fixture Language',
+      installKind: 'builtin',
+      runtime: 'lsp-server',
+      extensions: ['ancestor'],
+      languages: ['ancestor-fixture-language'],
+      command: commandName,
+      documentLanguageId: 'ancestor-fixture-language',
+    })
+    try {
+      const diagnostics = await client.getDiagnostics(
+        join(projectRoot, 'main.ancestor'),
+        'component App:\n'
+      )
+      assert.deepEqual(diagnostics.map((item) => item.code), ['VEL5001'])
+    } finally {
+      await client.dispose()
+      await rm(workspaceRoot, { recursive: true, force: true })
+    }
+  })
+
   void test('maps the shared semantic LSP surface over stdio', async () => {
     const fixture = fileURLToPath(new URL('./fixtures/fake-lsp.cjs', import.meta.url))
     const projectRoot = fileURLToPath(new URL('..', import.meta.url))

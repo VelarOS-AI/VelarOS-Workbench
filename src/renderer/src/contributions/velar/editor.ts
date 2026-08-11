@@ -4,7 +4,9 @@ import type { WorkbenchEditorLanguageContribution } from '@renderer/language/wor
 
 interface VelarStreamState {
   stringQuote: string | null
-  tripleQuoted: boolean
+  rawString: boolean
+  layoutString: boolean
+  layoutIndent: number
   indentUnit: number
   lineIndent: number
   nextIndent: number
@@ -33,18 +35,16 @@ export const VELAR_EDITOR_KEYWORDS = [
   'finally',
   'for',
   'from',
-  'get',
   'if',
   'import',
   'in',
-  'init',
   'is',
   'js',
   'let',
   'match',
   'module',
-  'none',
   'not',
+  'null',
   'or',
   'override',
   'pass',
@@ -80,27 +80,49 @@ function readString(stream: StringStream, state: VelarStreamState): string {
 
   let escaped = false
   while (!stream.eol()) {
-    if (state.tripleQuoted && stream.match(quote.repeat(3))) {
-      state.stringQuote = null
-      state.tripleQuoted = false
-      break
-    }
-
     const char = stream.next()
-    if (!state.tripleQuoted && !escaped && char === quote) {
+    if (char === quote && state.rawString && stream.peek() === quote) {
+      stream.next()
+      continue
+    }
+    if (char === quote && (state.rawString || !escaped)) {
       state.stringQuote = null
+      state.rawString = false
       break
     }
-    escaped = !escaped && char === '\\'
-    if (char !== '\\') escaped = false
+    if (!state.rawString) {
+      escaped = !escaped && char === '\\'
+      if (char !== '\\') escaped = false
+    }
+  }
+  // Inline strings are recovery-bounded by their physical line. Only a quote
+  // followed immediately by a newline enters the layout-string state below.
+  if (stream.eol()) {
+    state.stringQuote = null
+    state.rawString = false
   }
   return 'string'
+}
+
+function beginString(stream: StringStream, state: VelarStreamState, raw: boolean): string {
+  const quote = stream.next()
+  if (!quote) return 'string'
+  state.stringQuote = quote
+  state.rawString = raw
+  if (stream.eol()) {
+    state.layoutString = true
+    state.layoutIndent = state.lineIndent
+    return 'string'
+  }
+  return readString(stream, state)
 }
 
 const VelarParser: StreamParser<VelarStreamState> = {
   startState: (indentUnit) => ({
     stringQuote: null,
-    tripleQuoted: false,
+    rawString: false,
+    layoutString: false,
+    layoutIndent: 0,
     indentUnit,
     lineIndent: 0,
     nextIndent: 0,
@@ -110,29 +132,38 @@ const VelarParser: StreamParser<VelarStreamState> = {
     if (stream.sol()) {
       state.lineIndent = stream.indentation()
       state.nextIndent = state.lineIndent
+      if (state.layoutString) {
+        const blank = stream.string.trim().length === 0
+        const closing = state.lineIndent === state.layoutIndent
+          && stream.string.slice(state.lineIndent).startsWith(state.stringQuote ?? '\0')
+        if (closing) {
+          if (state.lineIndent > 0) stream.match(/^\s+/u)
+          stream.next()
+          state.stringQuote = null
+          state.rawString = false
+          state.layoutString = false
+          return 'string'
+        }
+        if (blank || state.lineIndent > state.layoutIndent) {
+          stream.skipToEnd()
+          return 'string'
+        }
+        state.stringQuote = null
+        state.rawString = false
+        state.layoutString = false
+      }
     }
-    if (state.stringQuote) return readString(stream, state)
     if (stream.eatSpace()) return null
     if (stream.match('//')) {
       stream.skipToEnd()
       return 'comment'
     }
 
-    if (stream.match(/^f(?=["'])/u)) {
-      const quote = stream.next()
-      if (!quote) return 'string'
-      state.stringQuote = quote
-      state.tripleQuoted = !!stream.match(quote.repeat(2))
-      return readString(stream, state)
-    }
+    if (stream.match(/^(?:rf|f|r)(?=["'])/u))
+      return beginString(stream, state, stream.current().includes('r'))
 
     const quote = stream.peek()
-    if (quote === '"' || quote === "'") {
-      stream.next()
-      state.stringQuote = quote
-      state.tripleQuoted = !!stream.match(quote.repeat(2))
-      return readString(stream, state)
-    }
+    if (quote === '"' || quote === "'") return beginString(stream, state, false)
 
     if (stream.match(/^(?:\d+(?:\.\d+)?|\.\d+)/u)) return 'number'
     if (stream.match(/^[A-Za-z_$][\w$]*/u)) {
@@ -184,6 +215,7 @@ export const VelarWorkbenchEditorLanguage = {
       { id: 'install', label: 'Install Dependencies', command: 'velar', args: ['install'] },
       { id: 'update', label: 'Update Dependencies', command: 'velar', args: ['update'] },
       { id: 'check', label: 'Check', command: 'velar', args: ['check'] },
+      { id: 'run', label: 'Run Core Project', command: 'velar', args: ['run'] },
       { id: 'format', label: 'Format Project', command: 'velar', args: ['format'] },
       { id: 'format-check', label: 'Check Formatting', command: 'velar', args: ['format', '--check'] },
       { id: 'dev', label: 'Dev Server', command: 'velar', args: ['dev'] },

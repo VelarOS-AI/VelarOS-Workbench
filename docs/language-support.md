@@ -93,7 +93,7 @@ examples, compiler, LSP, Workbench adapter, contract tests, then real editor and
 browser validation.
 
 The pre-release cross-repository gate accepts a Velar release-rehearsal
-directory, installs its compiler, Web, creator, and CLI tarballs into a temporary project, and
+directory, installs its compiler, Node, Web, Desktop, creator, and CLI tarballs into a temporary project, and
 drives diagnostics, completion, inferred-type hints, and same-document symbol
 highlights through the real generic Workbench host:
 
@@ -101,7 +101,7 @@ highlights through the real generic Workbench host:
 bun run test:velar:installed -- /absolute/path/to/VelarScript/release/rehearsal
 ```
 
-The gate validates the release format, exact compiler/Web/creator/CLI package set,
+The gate validates the release format, exact six-package toolchain set,
 canonical tarball names, byte sizes, and SHA-256 values before npm installation.
 This validation is Workbench-owned and does not import Velar compiler source.
 It verifies that an inferred `List<number>` hint reaches the editor and that an
@@ -111,7 +111,7 @@ not presented as a source annotation and that all uses of one local record
 binding are highlighted without a Workbench-side symbol search.
 The same packed-toolchain run completes a narrowed local and component-owned
 resource/action/prop names, then completes checked List members such as
-`length`, `slice`, and `map` through the generic host. It also verifies the
+`size`, `slice`, and `map` through the generic host. It also verifies the
 second active parameter of `[1, 2, 3].slice(...)`, and both Map member
 completion and `get(string) -> string?` signature help for
 `route.params.get(...)`. It hovers the nested `params` member and navigates
@@ -160,6 +160,14 @@ and the preferred `===`-to-`==` edit without a Velar-specific host branch.
 This command is intentionally separate from the normal Workbench test suite so
 the editor repository never acquires a source or package dependency on the
 compiler repository.
+
+The same installed run creates a one-source-project Desktop application and
+resolves `velar/desktop`, permission-scoped `velar/fs`, and the Desktop
+environment snapshot through the ordinary project-local LSP. On macOS it also
+builds the installed thin WKWebView package, checks its external Node >=24 and
+size-budget metadata, and runs the native bundle smoke. Workbench does not
+embed a Desktop adapter or reinterpret Desktop as Electron; it consumes the
+language extension contract exactly like any other Vel project.
 
 ## Runtime ownership
 

@@ -55,15 +55,21 @@ assert.equal(manifest.publish.performed, false)
 assert.deepEqual(manifest.packages.map((item) => item.name), [
   '@velarscript/cli',
   '@velarscript/compiler',
+  '@velarscript/desktop',
+  '@velarscript/node',
   '@velarscript/web',
   'create-velar',
 ])
 const compiler = manifest.packages.find((item) => item.name === '@velarscript/compiler')
+const desktop = manifest.packages.find((item) => item.name === '@velarscript/desktop')
+const node = manifest.packages.find((item) => item.name === '@velarscript/node')
 const web = manifest.packages.find((item) => item.name === '@velarscript/web')
 const creator = manifest.packages.find((item) => item.name === 'create-velar')
 const cli = manifest.packages.find((item) => item.name === '@velarscript/cli')
-assert.ok(compiler && web && creator && cli)
+assert.ok(compiler && desktop && node && web && creator && cli)
 assert.equal(compiler.version, manifest.version)
+assert.equal(desktop.version, manifest.version)
+assert.equal(node.version, manifest.version)
 assert.equal(web.version, manifest.version)
 assert.equal(creator.version, manifest.version)
 assert.equal(cli.version, manifest.version)
@@ -89,6 +95,8 @@ try {
     '--prefix',
     temporary,
     join(releaseDirectory, compiler.fileName),
+    join(releaseDirectory, desktop.fileName),
+    join(releaseDirectory, node.fileName),
     join(releaseDirectory, web.fileName),
     join(releaseDirectory, creator.fileName),
     join(releaseDirectory, cli.fileName),
@@ -101,6 +109,8 @@ try {
     '--no-audit',
     '--no-fund',
     join(releaseDirectory, compiler.fileName),
+    join(releaseDirectory, desktop.fileName),
+    join(releaseDirectory, node.fileName),
     join(releaseDirectory, web.fileName),
     join(releaseDirectory, creator.fileName),
     join(releaseDirectory, cli.fileName),
@@ -120,7 +130,7 @@ try {
     'import js {Client as PackageClient} from "typed-sdk/client"',
     '',
     'def total(first: number, ...values: number) -> number:',
-    '    return first + values.length',
+    '    return first + values.size',
     '',
     'const tags = Set()',
     'tags.add("velar")',
@@ -133,9 +143,9 @@ try {
     'comp',
     'import {deepEqual} from "velar/json"',
     'const pageValues = [1, 2, 3].slice(0, 2)',
-    'print(pageValues.length)',
+    'print(pageValues.size)',
     'const patternReady = matches("Velar 42", "^velar [0-9]+$", {ignoreCase: true})',
-    'const firstPatternGroup = findMatch("ticket-42", "([0-9]+)")?.groups[0]',
+    'const firstPatternGroup = findMatch("ticket-42", "([0-9]+)")?.groups?.[0]',
     'const parsedPage = number("2")',
     'const sdkClient: PackageClient = PackageClient.connect("velar")',
     'const sdkLabel: string = sdkClient.request("/status", 1000)',
@@ -149,8 +159,8 @@ try {
     'const firstTreeLabel = tree.children[0].label',
     'const sameTree = deepEqual(tree, tree)',
     '',
-    'const stopTimer = after(100, () => none)',
-    'const stopPulse = every(100, () => none)',
+    'const stopTimer = after(100, () => null)',
+    'const stopPulse = every(100, () => null)',
     'const dialogTitleId = domId("dialog-title")',
     'print(dialogTitleId)',
     'stopTimer()',
@@ -167,14 +177,14 @@ try {
     '    static const category: string = "score"',
     '    private const history: List<number> = []',
     '    let total: number = 0',
-    '    init:',
-    '        assert self.total == 0, "ScoreCard starts empty"',
-    '    def add(value: number):',
+    '    constructor():',
+    '        assert self.total == 0 else "ScoreCard starts empty"',
+    '    def add(value: number) -> null:',
     '        self.history.append(value)',
     '        self.total += value',
     '    /// Summarizes the public score without exposing its history.',
     '    get summary() -> string:',
-    '        return f"{self.total}:{self.history.length}"',
+    '        return f"{self.total}:{self.history.size}"',
     '',
     'const scoreCard = ScoreCard()',
     'scoreCard.add(5)',
@@ -195,7 +205,7 @@ try {
     ')',
     'print(loadedTicket)',
     '',
-    'type ChooseHandler = (string) -> none',
+    'type ChooseHandler = (string) -> null',
     '',
     'type FormDraft:',
     '    label: string',
@@ -205,7 +215,7 @@ try {
     '',
     'def displayValue(value: DisplayValue) -> string:',
     '    if value is string:',
-    '        return f"text:{value.length}"',
+    '        return f"text:{value.size}"',
     '    else if value is number:',
     '        return f"number:{value + 1}"',
     '    else:',
@@ -215,22 +225,22 @@ try {
     'const shorthandDraft: FormDraft = {label, count: 0}',
     '',
     'component Choice(show: bool, onChoose: ChooseHandler):',
-    '    return <div><button if={show} type="button" on:click={() => onChoose("ready")}>Choose</button><p else>Hidden</p></div>',
+    '    return <div>{show ? <button type="button" on:click={() => onChoose("ready")}>Choose</button> : <p>Hidden</p>}</div>',
     '',
     'component InlineChart:',
     '    return <svg aria-label="Traffic" viewBox="0 0 100 40"><rect x="4" y="4" width="20" height="30" /><foreignObject x="30" y="4" width="60" height="30"><div>Summary</div></foreignObject></svg>',
     '',
     'component TicketPage(route: RouteContext):',
-    '    let dialog: DialogElement? = none',
-    '    let form: Element? = none',
+    '    let dialog: DialogElement? = null',
+    '    let form: Element? = null',
     '    resource ticketLabel = loadTicketLabel()',
-    '    action refresh():',
+    '    action refresh() -> null:',
     '        await loadTicketLabel()',
-    '    def inspect():',
+    '    def inspect() -> null:',
     '        if form:',
     '            const draft = read(form, FormDraft)',
     '            print(draft.label)',
-    '            assert draft.count != none, "Count is required"',
+    '            assert draft.count != null else "Count is required"',
     '            const narrowedCount = draft.count',
     '            print(narrowedCount)',
     '            focus(form, true)',
@@ -238,7 +248,7 @@ try {
     '        if dialog:',
     '            showDialog(dialog)',
     '            closeDialog(dialog, dialogResult(dialog))',
-    '    return <><NavLink to="/tickets" exact={true}>Tickets</NavLink><Choice show={true} onChoose={value => none} /><form ref={form}><input name="label" aria-label="Label" /><input name="count" type="number" aria-label="Count" /></form><input aria-label="Shortcut" on:keydown={event => print(event.key)} /><p>{route.params.get("id") ?? "missing"}</p><dialog ref={dialog}>Confirm</dialog></>',
+    '    return <><NavLink to="/tickets" exact={true}>Tickets</NavLink><Choice show={true} onChoose={value => null} /><form ref={form}><input name="label" aria-label="Label" /><input name="count" type="number" aria-label="Count" /></form><input aria-label="Shortcut" on:keydown={event => print(event.key)} /><p>{route.params.get("id") ?? "missing"}</p><dialog ref={dialog}>Confirm</dialog></>',
     '',
     'const ticketRoute = route("/tickets/:id", TicketPage)',
     '',
@@ -301,7 +311,7 @@ try {
   assert.ok(completions.items.some((item) => item.label === 'match'))
   assert.ok(completions.items.some((item) => item.label === 'case'))
   assert.ok(completions.items.some((item) => item.label === 'enum'))
-  assert.ok(completions.items.some((item) => item.label === 'init'))
+  assert.ok(completions.items.some((item) => item.label === 'constructor'))
   assert.ok(completions.items.some((item) => item.label === 'get'))
   assert.ok(completions.items.some((item) => item.label === 'type'))
   assert.ok(completions.items.some((item) => item.label === 'resource'))
@@ -333,7 +343,7 @@ try {
   assert.ok(semanticCompletions.items.some((item) => item.label === 'ticketLabel'))
   assert.ok(semanticCompletions.items.some((item) => item.label === 'refresh'))
   assert.ok(semanticCompletions.items.some((item) => item.label === 'route'))
-  const pageValuesMemberLine = source.split('\n').findIndex((line) => line.includes('print(pageValues.length)'))
+  const pageValuesMemberLine = source.split('\n').findIndex((line) => line.includes('print(pageValues.size)'))
   const pageValuesMemberColumn = source.split('\n')[pageValuesMemberLine]!.indexOf('pageValues.') + 'pageValues.'.length
   const memberCompletions = await services.getCompletions({
     projectRoot,
@@ -341,7 +351,7 @@ try {
     content: source,
     position: { line: pageValuesMemberLine + 1, column: pageValuesMemberColumn + 1 },
   })
-  assert.ok(memberCompletions.items.some((item) => item.label === 'length'))
+  assert.ok(memberCompletions.items.some((item) => item.label === 'size'))
   assert.ok(memberCompletions.items.some((item) => item.label === 'slice'))
   assert.ok(memberCompletions.items.some((item) => item.label === 'append'))
   assert.ok(memberCompletions.items.some((item) => item.label === 'extend'))
@@ -367,7 +377,7 @@ try {
     content: source,
     position: { line: sdkCallLine + 1, column: sdkCallColumn + 1 },
   })
-  assert.equal(sdkSignature.signatureHelp?.signatures[0]?.label, 'request(string, number? = default) -> string')
+  assert.equal(sdkSignature.signatureHelp?.signatures[0]?.label, 'request(string, number = default) -> string')
   const sdkClientColumn = sdkCallSource.indexOf('sdkClient')
   const sdkHover = await services.getHover({
     projectRoot,
@@ -386,7 +396,7 @@ try {
     position: { line: pageValuesLine + 1, column: sliceSecondArgumentColumn + 1 },
   })
   assert.equal(memberSignature.signatureHelp?.signatures[0]?.label,
-    'slice(number = default, number = default) -> List<number>')
+    'slice(start: number = default, end: number = default) -> List<number>')
   assert.equal(memberSignature.signatureHelp?.activeParameter, 1)
   const routeParamsLine = source.split('\n').findIndex((line) => line.includes('route.params.get("id")'))
   const routeParamsSource = source.split('\n')[routeParamsLine]!
@@ -397,9 +407,10 @@ try {
     content: source,
     position: { line: routeParamsLine + 1, column: routeParamsMemberColumn + 1 },
   })
-  for (const label of ['size', 'get', 'set', 'keys']) {
+  for (const label of ['size', 'get', 'keys']) {
     assert.ok(routeParamsCompletions.items.some((item) => item.label === label), `missing route.params.${label} completion`)
   }
+  assert.ok(!routeParamsCompletions.items.some((item) => item.label === 'set'), 'readonly route.params must not expose set completion')
   const routeParamsCallColumn = routeParamsSource.indexOf('route.params.get("') + 'route.params.get('.length
   const routeParamsSignature = await services.getSignatureHelp({
     projectRoot,
@@ -407,7 +418,7 @@ try {
     content: source,
     position: { line: routeParamsLine + 1, column: routeParamsCallColumn + 1 },
   })
-  assert.equal(routeParamsSignature.signatureHelp?.signatures[0]?.label, 'get(string) -> string?')
+  assert.equal(routeParamsSignature.signatureHelp?.signatures[0]?.label, 'get(key: string) -> string?')
   assert.equal(routeParamsSignature.signatureHelp?.activeParameter, 0)
   const domIdLine = source.split('\n').findIndex((line) => line.includes('domId("dialog-title")'))
   const domIdSource = source.split('\n')[domIdLine]!
@@ -418,7 +429,7 @@ try {
     content: source,
     position: { line: domIdLine + 1, column: domIdArgumentColumn + 1 },
   })
-  assert.equal(domIdSignature.signatureHelp?.signatures[0]?.label, 'domId(string = default) -> string')
+  assert.equal(domIdSignature.signatureHelp?.signatures[0]?.label, 'domId(prefix: string = default) -> string')
   assert.equal(domIdSignature.signatureHelp?.activeParameter, 0)
   const domIdHover = await services.getHover({
     projectRoot,
@@ -434,7 +445,7 @@ try {
     content: source,
     position: { line: routeParamsLine + 1, column: routeParamsHoverColumn + 1 },
   })
-  assert.match(routeParamsHover.hover?.displayText ?? '', /field params: Map<string, string>/u)
+  assert.match(routeParamsHover.hover?.displayText ?? '', /field params: readonly Map<string, string>/u)
   const scoreCardUseLine = source.split('\n').findIndex((line) => line.includes('print(scoreCard.total)'))
   const scoreCardUseSource = source.split('\n')[scoreCardUseLine]!
   const scoreCardMemberColumn = scoreCardUseSource.indexOf('scoreCard.total') + 'scoreCard.'.length
@@ -574,7 +585,7 @@ try {
   assert.ok(choiceTagCompletions.items.some((item) => item.label === 'Choice'))
   assert.deepEqual(choiceTagCompletions.items.map((item) => item.label), ['Choice'])
   assert.ok(!choiceTagCompletions.items.some((item) => item.label === 'while'))
-  const choiceBodyLine = source.split('\n').findIndex((line) => line.includes('return <div><button'))
+  const choiceBodyLine = source.split('\n').findIndex((line) => line.includes('return <div>{show ? <button'))
   const choiceBodySource = source.split('\n')[choiceBodyLine]!
   const nativeClosingColumn = choiceBodySource.indexOf('</button>') + '</bu'.length
   const nativeClosingCompletions = await services.getCompletions({
@@ -668,7 +679,7 @@ try {
     content: source,
     position: { line: source.split('\n').findIndex((line) => line.includes('total(1, 2, 3)')) + 1, column: 28 },
   })
-  assert.equal(signature.signatureHelp?.signatures[0]?.label, 'total(number, ...number) -> number')
+  assert.equal(signature.signatureHelp?.signatures[0]?.label, 'total(first: number, ...number) -> number')
   assert.equal(signature.signatureHelp?.activeParameter, 2)
   const hover = await services.getHover({
     projectRoot,
@@ -780,7 +791,7 @@ try {
     content: source,
     position: { line: stopTimerLine + 1, column: stopTimerColumn + 1 },
   })
-  assert.match(stopTimerHover.hover?.displayText ?? '', /\(\) -> none/u)
+  assert.match(stopTimerHover.hover?.displayText ?? '', /\(\) -> null/u)
   const enumLine = source.split('\n').findIndex((line) => line.includes('TaskStatus.todo'))
   const memberColumn = source.split('\n')[enumLine]!.indexOf('todo')
   const enumCompletions = await services.getCompletions({
@@ -831,7 +842,7 @@ try {
     position: { line: resourceLine + 1, column: resourceColumn + 1 },
   })
   assert.match(resourceHover.hover?.displayText ?? '', /resource ticketLabel/u)
-  assert.match(resourceHover.hover?.displayText ?? '', /Promise<none>/u)
+  assert.match(resourceHover.hover?.displayText ?? '', /Promise<null>/u)
   const actionLine = source.split('\n').findIndex((line) => line.includes('action refresh'))
   const actionColumn = source.split('\n')[actionLine]!.indexOf('refresh')
   const actionHover = await services.getHover({
@@ -841,7 +852,7 @@ try {
     position: { line: actionLine + 1, column: actionColumn + 1 },
   })
   assert.match(actionHover.hover?.displayText ?? '', /action refresh/u)
-  assert.match(actionHover.hover?.displayText ?? '', /Promise<none>/u)
+  assert.match(actionHover.hover?.displayText ?? '', /Promise<null>/u)
   const draftLine = source.split('\n').findIndex((line) => line.includes('const draft = read'))
   const draftColumn = source.split('\n')[draftLine]!.indexOf('draft')
   const draftHover = await services.getHover({
@@ -879,7 +890,7 @@ try {
     position: { line: aliasLine + 1, column: aliasColumn + 1 },
   })
   assert.match(aliasHover.hover?.displayText ?? '', /type ChooseHandler/u)
-  assert.match(aliasHover.hover?.displayText ?? '', /\(string\) -> none/u)
+  assert.match(aliasHover.hover?.displayText ?? '', /\(string\) -> null/u)
   const callbackLine = source.split('\n').findIndex((line) => line.includes('onChoose: ChooseHandler'))
   const callbackColumn = source.split('\n')[callbackLine]!.indexOf('onChoose')
   const callbackHover = await services.getHover({
@@ -888,7 +899,7 @@ try {
     content: source,
     position: { line: callbackLine + 1, column: callbackColumn + 1 },
   })
-  assert.match(callbackHover.hover?.displayText ?? '', /\(string\) -> none/u)
+  assert.match(callbackHover.hover?.displayText ?? '', /\(string\) -> null/u)
   const aliasReferenceColumn = source.split('\n')[callbackLine]!.indexOf('ChooseHandler')
   const aliasDefinition = await services.getDefinition({
     projectRoot,
@@ -930,6 +941,165 @@ try {
   assert.equal(enumRename.changes.length, 1)
   assert.equal(enumRename.changes[0]?.edits.length, 2)
   assert.ok(enumRename.changes[0]?.edits.every((edit) => edit.newText === 'pending'))
+
+  // The same installed toolchain must serve a framework-free Core/Node
+  // project. This prevents Workbench's Vel contribution from accidentally
+  // treating the Web template as the whole language surface.
+  const coreProjectRoot = join(projectRoot, 'core-server')
+  await mkdir(join(coreProjectRoot, 'src'), { recursive: true })
+  await writeFile(join(coreProjectRoot, 'velar.json'), JSON.stringify({
+    formatVersion: 2,
+    entry: 'src/main.vel',
+    outDir: 'dist',
+    extensions: [],
+  }), 'utf8')
+  const coreSource = [
+    'import {RequestBodyTooLargeError, ServeRequest, ServeResponse} from "velar/serve"',
+    '',
+    'async def handle(request: ServeRequest) -> ServeResponse:',
+    '    if request.path == "/message":',
+    '        try:',
+    '            const body = await request.text(maxBytes=65536)',
+    '            return {status: 200, text: body}',
+    '        catch error:',
+    '            if error is RequestBodyTooLargeError:',
+    '                const acceptedLimit = error.maxBytes',
+    '                return {status: 413, json: {maxBytes: acceptedLimit}}',
+    '            throw error',
+    '    return {status: 404, text: "Not found"}',
+    '',
+  ].join('\n')
+  await writeFile(join(coreProjectRoot, 'src', 'main.vel'), coreSource, 'utf8')
+  await run(process.execPath, [installedCli, 'check', coreProjectRoot], projectRoot)
+  const coreResolved = await services.resolveLanguageService({
+    projectRoot: coreProjectRoot,
+    path: 'src/main.vel',
+    content: coreSource,
+  })
+  assert.equal(coreResolved.service?.id, 'velarscript')
+  assert.equal(coreResolved.service?.runtime, 'lsp-server')
+  const coreDiagnostics = await services.getDiagnostics({
+    projectRoot: coreProjectRoot,
+    path: 'src/main.vel',
+    content: coreSource,
+  })
+  assert.deepEqual(coreDiagnostics.diagnostics, [])
+  const bodyLine = coreSource.split('\n').findIndex((line) => line.includes('request.text(maxBytes='))
+  const bodySource = coreSource.split('\n')[bodyLine]!
+  const requestMemberColumn = bodySource.indexOf('request.text') + 'request.'.length
+  const requestMembers = await services.getCompletions({
+    projectRoot: coreProjectRoot,
+    path: 'src/main.vel',
+    content: coreSource,
+    position: { line: bodyLine + 1, column: requestMemberColumn + 1 },
+  })
+  for (const label of ['method', 'path', 'query', 'headers', 'text', 'json']) {
+    assert.ok(requestMembers.items.some((item) => item.label === label), `missing ServeRequest.${label} completion`)
+  }
+  const textCallColumn = bodySource.indexOf('request.text(') + 'request.text('.length
+  const textSignature = await services.getSignatureHelp({
+    projectRoot: coreProjectRoot,
+    path: 'src/main.vel',
+    content: coreSource,
+    position: { line: bodyLine + 1, column: textCallColumn + 1 },
+  })
+  assert.equal(textSignature.signatureHelp?.signatures[0]?.label,
+    'text(maxBytes: number = default) -> Promise<string>')
+  assert.equal(textSignature.signatureHelp?.activeParameter, 0)
+  const limitLine = coreSource.split('\n').findIndex((line) => line.includes('const acceptedLimit'))
+  const limitColumn = coreSource.split('\n')[limitLine]!.indexOf('acceptedLimit')
+  const limitHover = await services.getHover({
+    projectRoot: coreProjectRoot,
+    path: 'src/main.vel',
+    content: coreSource,
+    position: { line: limitLine + 1, column: limitColumn + 1 },
+  })
+  assert.match(limitHover.hover?.displayText ?? '', /number/u)
+
+  // Desktop remains one VelarScript source
+  // graph. Workbench must resolve its compiler/host extension through the same
+  // project-local LSP path instead of treating it as an Electron integration.
+  const desktopProjectRoot = join(projectRoot, 'desktop-app')
+  await mkdir(join(desktopProjectRoot, 'src'), { recursive: true })
+  await writeFile(join(desktopProjectRoot, 'package.json'), JSON.stringify({
+    name: 'workbench-desktop-probe',
+    version: '0.1.0',
+    private: true,
+    type: 'module',
+  }), 'utf8')
+  await writeFile(join(desktopProjectRoot, 'velar.json'), JSON.stringify({
+    formatVersion: 2,
+    entry: 'src/main.vel',
+    extensions: ['@velarscript/desktop'],
+    desktop: {
+      productName: 'Workbench Desktop Probe',
+      identifier: 'ai.velaros.workbench.desktop-probe',
+      permissions: {
+        files: ['project'],
+        processes: [],
+        network: [],
+        environment: ['LANG'],
+      },
+    },
+  }), 'utf8')
+  const desktopSource = [
+    'import {platform, projectDirectory} from "velar/desktop"',
+    'import {exists} from "velar/fs"',
+    'import {get} from "velar/env"',
+    '',
+    'component App:',
+    '    state status = platform()',
+    '    action inspect() -> null:',
+    '        const root = await projectDirectory()',
+    '        status = f"{await exists(root)}:{get(\"LANG\") ?? \"\"}"',
+    '    return <main><button type="button" on:click={inspect}>Inspect</button><p>{status}</p></main>',
+    '',
+    'mount(<App />, "#app")',
+  ].join('\n')
+  await writeFile(join(desktopProjectRoot, 'src', 'main.vel'), desktopSource, 'utf8')
+  await run(process.execPath, [installedCli, 'check', desktopProjectRoot], projectRoot)
+  const desktopDiagnostics = await services.getDiagnostics({
+    projectRoot: desktopProjectRoot,
+    path: 'src/main.vel',
+    content: desktopSource,
+  })
+  assert.deepEqual(desktopDiagnostics.diagnostics, [])
+  if (process.platform === 'darwin') {
+    const installedDesktopCli = join(temporary, 'node_modules', '@velarscript', 'desktop', 'dist', 'cli.js')
+    await run(process.execPath, [installedDesktopCli, 'build', desktopProjectRoot], projectRoot)
+    const desktopBuild = JSON.parse(await readFile(join(desktopProjectRoot, 'dist', 'desktop', 'velar-desktop-build.json'), 'utf8')) as {
+      applicationBundle: string
+      runtime: {
+        kind: string
+        minimumMajor: number
+        discovery: string
+        embedded: boolean
+        version?: unknown
+        executableHint?: unknown
+      }
+      sizes: { totalBytes: number }
+      sizeBudgetBytes: number
+    }
+    assert.deepEqual(desktopBuild.runtime, {
+      kind: 'external-node',
+      minimumMajor: 24,
+      discovery: 'environment-and-system-paths',
+      embedded: false,
+    })
+    assert.equal(desktopBuild.runtime.version, undefined)
+    assert.equal(desktopBuild.runtime.executableHint, undefined)
+    assert.ok(desktopBuild.sizes.totalBytes < desktopBuild.sizeBudgetBytes)
+    const application = join(desktopProjectRoot, 'dist', 'desktop', desktopBuild.applicationBundle)
+    const hostConfigurationText = await readFile(join(application, 'Contents', 'Resources', 'desktop.json'), 'utf8')
+    const hostConfiguration = JSON.parse(hostConfigurationText) as Record<string, unknown>
+    assert.equal(hostConfiguration.nodeExecutableHint, undefined)
+    assert.equal(hostConfigurationText.includes(process.execPath), false)
+    await run(join(application, 'Contents', 'MacOS', 'VelarDesktopHost'), ['--smoke'], projectRoot, {
+      ...process.env,
+      VELAR_DESKTOP_NODE: process.execPath,
+      VELAR_DESKTOP_PROJECT_ROOT: desktopProjectRoot,
+    })
+  }
   process.stdout.write('Workbench installed Velar toolchain acceptance passed\n')
 } finally {
   await services?.dispose()
@@ -941,8 +1111,8 @@ async function runNpm(arguments_: readonly string[], cwd: string): Promise<void>
   await run(process.platform === 'win32' ? 'npm.cmd' : 'npm', arguments_, cwd)
 }
 
-async function run(command: string, arguments_: readonly string[], cwd: string): Promise<void> {
-  const child = spawn(command, arguments_, { cwd, stdio: ['ignore', 'pipe', 'pipe'] })
+async function run(command: string, arguments_: readonly string[], cwd: string, env: NodeJS.ProcessEnv = process.env): Promise<void> {
+  const child = spawn(command, arguments_, { cwd, env, stdio: ['ignore', 'pipe', 'pipe'] })
   let stdout = ''
   let stderr = ''
   child.stdout.on('data', (chunk: Buffer) => { stdout += chunk.toString('utf8') })
