@@ -1065,8 +1065,7 @@ try {
   })
   assert.deepEqual(desktopDiagnostics.diagnostics, [])
   if (process.platform === 'darwin') {
-    const installedDesktopCli = join(temporary, 'node_modules', '@velarscript', 'desktop', 'dist', 'cli.js')
-    await run(process.execPath, [installedDesktopCli, 'build', desktopProjectRoot], projectRoot)
+    await run(process.execPath, [installedCli, 'package', desktopProjectRoot], projectRoot)
     const desktopBuild = JSON.parse(await readFile(join(desktopProjectRoot, 'dist', 'desktop', 'velar-desktop-build.json'), 'utf8')) as {
       applicationBundle: string
       runtime: {
