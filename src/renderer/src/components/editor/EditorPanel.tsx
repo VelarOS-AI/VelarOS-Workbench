@@ -36,7 +36,6 @@ import type { WorkbenchLightEditorTab } from '@renderer/types/workbenchTypes'
 
 import { isPresent,Log, toNullable } from '@velaros-ai/core'
 import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
-import { Paragraph } from '@velaros-ai/ui/primitives/display/Paragraph'
 import { Text } from '@velaros-ai/ui/primitives/display/Text'
 import {
   Dialog,
@@ -811,25 +810,20 @@ export function EditorPanel({
                   <div className={styles.editorEmpty} data-embedded={!showTopBar}>
                     <div className={styles.editorEmptyCard}>
                       {showTopBar && (
-                        <>
-                          <div className={styles.editorEmptyShortcuts}>
-                            <div className={styles.editorEmptyShortcutRow}>
-                              <Text>{t('workbench.globalSearchFiles')}</Text>
-                              <kbd>{quickOpenShortcut}</kbd>
-                            </div>
-                            <div className={styles.editorEmptyShortcutRow}>
-                              <Text>{t('workbench.editorEmptyProblems')}</Text>
-                              <kbd>{problemsShortcut}</kbd>
-                            </div>
-                            <div className={styles.editorEmptyShortcutRow}>
-                              <Text>{t('workbench.editorEmptyGit')}</Text>
-                              <kbd>{gitShortcut}</kbd>
-                            </div>
+                        <div className={styles.editorEmptyShortcuts}>
+                          <div className={styles.editorEmptyShortcutRow}>
+                            <Text>{t('workbench.globalSearchFiles')}</Text>
+                            <kbd>{quickOpenShortcut}</kbd>
                           </div>
-                          <Paragraph spacing="none" className={styles.editorEmptyHint}>
-                            {t('workbench.editorEmptyTitle')}
-                          </Paragraph>
-                        </>
+                          <div className={styles.editorEmptyShortcutRow}>
+                            <Text>{t('workbench.editorEmptyProblems')}</Text>
+                            <kbd>{problemsShortcut}</kbd>
+                          </div>
+                          <div className={styles.editorEmptyShortcutRow}>
+                            <Text>{t('workbench.editorEmptyGit')}</Text>
+                            <kbd>{gitShortcut}</kbd>
+                          </div>
+                        </div>
                       )}
                     </div>
                   </div>

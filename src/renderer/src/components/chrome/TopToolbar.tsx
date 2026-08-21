@@ -12,14 +12,22 @@ import {
   GraphIcon,
   PlayIcon,
   SpinnerGapIcon,
-  StopIcon,
 } from '@phosphor-icons/react'
 import { useWorkbenchI18n } from '@renderer/i18n'
 
 import { isEmpty,toNullable } from '@velaros-ai/core'
+import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 import { Input } from '@velaros-ai/ui/primitives/forms/Input'
 import { AnchoredPopover } from '@velaros-ai/ui/primitives/overlays/AnchoredPopover'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@velaros-ai/ui/primitives/overlays/Dialog'
 import { BubbleTooltip } from '@velaros-ai/ui/primitives/overlays/Tooltip'
 
 import type { SystemWorkspaceGitSummary, WorkbenchProjectAiIndexStatus } from '@shared/contracts'
@@ -211,23 +219,29 @@ function WorkbenchRunAction({
 }): ReactElement {
   const { t } = useWorkbenchI18n()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [duplicateRunDialogOpen, setDuplicateRunDialogOpen] = useState(false)
   const [draftCommand, setDraftCommand] = useState('')
   const activeOption = useMemo(
     () => toNullable(topRun.options.find((option) => option.value === topRun.activeCommand)),
     [topRun.activeCommand, topRun.options]
   )
-  // 一次性 runner（程序化/agent）占用只影响转圈图标，不再禁用侧边栏按钮——
-  // 用户的运行/终止走 PTY 运行卡，按钮任何时候都可点。
+  // 一次性 runner（程序化/agent）占用只影响转圈图标，不禁用侧边栏按钮；
+  // 用户命令走可并行的 PTY 运行卡，相同命令由确认框裁决重新运行还是新开。
   const oneShotBusy = isRunningCommand || hasActiveRunCommand
-  const running = topRun.isActiveRunning
   const activeLabel = topRun.isConfigured
     ? topRun.configuredCommand
     : (activeOption?.label ?? topRun.activeCommand)
   const activeDescription = topRun.isConfigured
     ? t('workbench.runConfiguredCommand')
     : activeOption?.description?.trim()
-  const tooltipTitle = running ? t('workbench.runStopActive') : activeLabel || placeholder
-  const actionLabel = [running ? t('workbench.runStop') : label, tooltipTitle, activeDescription]
+  const configureHint = t('workbench.runRightClickToConfigure')
+  const tooltipTitle = activeLabel || placeholder
+  const actionLabel = [
+    label,
+    tooltipTitle,
+    activeDescription,
+    configureHint,
+  ]
     .filter((value) => !!value)
     .join(' · ')
 
@@ -243,13 +257,27 @@ function WorkbenchRunAction({
   }
 
   function handleRunClick(): void {
-    // 运行中 → 终止；有生效命令 → 新开运行卡；否则打开配置面板引导用户配置。
-    if (running || topRun.activeCommand) {
-      setMenuOpen(false)
-      topRun.run()
+    if (!topRun.activeCommand) {
+      openConfig()
       return
     }
-    openConfig()
+
+    setMenuOpen(false)
+    if (topRun.isActiveCommandRunning) {
+      setDuplicateRunDialogOpen(true)
+      return
+    }
+    topRun.run()
+  }
+
+  function handleRestartActiveCommand(): void {
+    setDuplicateRunDialogOpen(false)
+    topRun.restartActiveCommand()
+  }
+
+  function handleStartNewRun(): void {
+    setDuplicateRunDialogOpen(false)
+    topRun.run()
   }
 
   function handleConfigSubmit(event: FormEvent<HTMLFormElement>): void {
@@ -270,22 +298,24 @@ function WorkbenchRunAction({
   }
 
   return (
-    <AnchoredPopover
-      open={menuOpen}
-      onOpenChange={setMenuOpen}
-      className={styles.runActionPopover}
-      side="left"
-      align="start"
-      sideOffset={8}
-      widthStrategy="content"
-      anchor={({ getAnchorProps }) => (
-        <BubbleTooltip
+    <>
+      <AnchoredPopover
+        open={menuOpen}
+        onOpenChange={setMenuOpen}
+        className={styles.runActionPopover}
+        side="left"
+        align="start"
+        sideOffset={8}
+        widthStrategy="content"
+        anchor={({ getAnchorProps }) => (
+          <BubbleTooltip
           content={
             <span className={styles.runActionTooltip}>
               <span className={styles.runActionTooltipTitle}>{tooltipTitle}</span>
               {!!activeDescription && (
                 <span className={styles.runActionTooltipDescription}>{activeDescription}</span>
               )}
+              <span className={styles.runActionTooltipDescription}>{configureHint}</span>
             </span>
           }
           ariaLabel={actionLabel}
@@ -302,18 +332,16 @@ function WorkbenchRunAction({
             disabled={false}
             onContextMenu={handleRunContextMenu}
           >
-            {running ? (
-              <StopIcon size={16} weight="fill" className={styles.rightToolRunStopIcon} />
-            ) : oneShotBusy ? (
+            {oneShotBusy ? (
               <SpinnerGapIcon size={17} className={styles.spinIcon} />
             ) : (
               <PlayIcon size={17} weight="regular" />
             )}
           </IconButton>
-        </BubbleTooltip>
-      )}
-    >
-      <div className={styles.runActionPanel} role="menu" aria-label={placeholder}>
+          </BubbleTooltip>
+        )}
+      >
+        <div className={styles.runActionPanel} role="menu" aria-label={placeholder}>
         <form className={styles.runActionConfig} onSubmit={handleConfigSubmit}>
           <span className={styles.runActionConfigLabel}>{t('workbench.runConfigureCommand')}</span>
           <div className={styles.runActionConfigRow}>
@@ -368,8 +396,30 @@ function WorkbenchRunAction({
             {t('workbench.runResetToAuto')}
           </button>
         )}
-      </div>
-    </AnchoredPopover>
+        </div>
+      </AnchoredPopover>
+      <Dialog open={duplicateRunDialogOpen} onOpenChange={setDuplicateRunDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('workbench.runDuplicateTitle')}</DialogTitle>
+            <DialogDescription>
+              {t('workbench.runDuplicateDescription', { command: topRun.activeCommand })}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setDuplicateRunDialogOpen(false)}>
+              {t('common.cancel')}
+            </Button>
+            <Button variant="outline" onClick={handleStartNewRun}>
+              {t('workbench.runStartNew')}
+            </Button>
+            <Button onClick={handleRestartActiveCommand}>
+              {t('workbench.runRestart')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }
 

@@ -45,6 +45,10 @@ import {
   type WorkbenchProject,
 } from '@renderer/models/project/workbenchProjects'
 import type { PersistedWorkbenchEditorCursor } from '@renderer/models/project/workbenchProjectSessionModel'
+import {
+  getZoomedWorkbenchEditorFontSize,
+  type WorkbenchEditorZoomAction,
+} from '@renderer/models/settings/workbenchPreferences'
 import type { WorkbenchLightEditorTab } from '@renderer/types/workbenchTypes'
 
 // 独立宿主改判：受控浏览器面走应用内空实现（无内嵌浏览器宿主），契约形状与
@@ -288,6 +292,14 @@ export function useStandaloneWorkbenchPageModel(
   const workbenchEditorAutomationRollbackRef = useRef<Nullable<() => void>>(null)
   const automationTimers = useTimerScope('WorkbenchEditorAutomation')
 
+  const exitCurrentProject = useMemoizedFn(async (): Promise<boolean> => {
+    if (!workbench.closeProject()) return false
+
+    setSettingsOpen(false)
+    await window.velarosWorkbenchProjectHub.closeProject()
+    return true
+  })
+
   useEffect(() => {
     if (codeGraphResourceAvailable) return
     setAiIndexPromptOpen(false)
@@ -332,22 +344,48 @@ export function useStandaloneWorkbenchPageModel(
     workbench.rootEntries,
     workbench.selectedFilePath,
   ])
-  const activeRunSession =
-    workbench.runSessions.find((session) => session.id === workbench.activeRunSessionId) ??
-    workbench.runSessions.at(-1)
   const topRunControl = useWorkbenchTopRunControl({
     commandHistory: workbench.commandHistory,
     runConfigurations: [...activePackageScriptRunConfigurations, ...workbench.runConfigurations],
+    runningSessions: workbench.runSessions,
     configuredCommand: projectRunSettings.settings.command,
     lastLaunchedCommand: workbench.lastLaunchedCommand,
-    isActiveRunning: !!activeRunSession?.isRunning,
-    onOpenRunTool: () => surface.openBottomTool('run'),
     onLaunchCommand: (command, label) => void workbench.launchRunSession(command, label),
-    onStopActiveRun: () => {
-      if (activeRunSession) void workbench.stopRunSession(activeRunSession.id)
-    },
+    onRestartRunSession: (sessionId) => void workbench.restartRunSession(sessionId),
     onConfigureCommand: projectRunSettings.setCommand,
   })
+  const runSessionIds = workbench.runSessions.map((session) => session.id).join('\0')
+  const knownRunSessionIdsRef = useRef(new Set<string>())
+
+  useEffect(() => {
+    const currentRunSessionIds = new Set(workbench.runSessions.map((session) => session.id))
+    const createdRunSession = workbench.runSessions.some(
+      (session) => !knownRunSessionIdsRef.current.has(session.id)
+    )
+    const closedLastRunSession =
+      currentRunSessionIds.size === 0 && knownRunSessionIdsRef.current.size > 0
+
+    knownRunSessionIdsRef.current = currentRunSessionIds
+
+    if (createdRunSession) {
+      surface.openBottomTool('run')
+      return
+    }
+    if (
+      closedLastRunSession &&
+      surface.activeBottomTool === 'run' &&
+      !surface.isCommandPanelCollapsed
+    ) {
+      surface.collapseCommandPanel()
+    }
+  }, [
+    runSessionIds,
+    surface.activeBottomTool,
+    surface.collapseCommandPanel,
+    surface.isCommandPanelCollapsed,
+    surface.openBottomTool,
+    workbench.runSessions,
+  ])
   const editorNavigation = useWorkbenchEditorNavigationState({
     gitChangeItems: gitState.changeItems,
     selectedFilePath: workbench.selectedFilePath,
@@ -689,6 +727,39 @@ export function useStandaloneWorkbenchPageModel(
     updateDocumentTitle: surfaceMode === 'standalone',
     onOpenProject: workbench.openProject,
   })
+
+  const zoomEditor = useMemoizedFn((action: WorkbenchEditorZoomAction): void => {
+    workbenchPreferences.updatePreferences({
+      editorFontSize: getZoomedWorkbenchEditorFontSize(
+        workbenchPreferences.preferences.editorFontSize,
+        action
+      ),
+    })
+  })
+
+  useEffect(() => {
+    if (surfaceMode !== 'standalone') return
+
+    return window.velarosWorkbenchProjectHub.onMenuCommand((command) => {
+      switch (command) {
+        case 'close-project': {
+          void exitCurrentProject()
+          return
+        }
+        case 'zoom-editor-in': {
+          zoomEditor('increase')
+          return
+        }
+        case 'zoom-editor-out': {
+          zoomEditor('decrease')
+          return
+        }
+        case 'zoom-editor-reset': {
+          zoomEditor('reset')
+        }
+      }
+    })
+  }, [exitCurrentProject, surfaceMode, zoomEditor])
   const workspaceFileRefreshInFlightRef = useRef(false)
 
   useEffect(() => {
@@ -1168,6 +1239,7 @@ export function useStandaloneWorkbenchPageModel(
       skipProjectAiIndex,
       startProjectAiIndex,
       createProjectAiRulesFile,
+      exitCurrentProject,
     },
   }
 }

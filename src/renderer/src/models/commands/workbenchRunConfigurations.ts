@@ -50,7 +50,7 @@ function compareRunConfigurations(
 export function buildWorkbenchRunConfigurations({
   suggestions,
   history,
-  limit = 6,
+  limit,
 }: {
   suggestions: WorkbenchCommandSuggestion[]
   history: WorkbenchCommandHistoryItem[]
@@ -88,5 +88,6 @@ export function buildWorkbenchRunConfigurations({
     })
   }
 
-  return [...byCommand.values()].sort(compareRunConfigurations).slice(0, limit)
+  const configurations = [...byCommand.values()].sort(compareRunConfigurations)
+  return limit === undefined ? configurations : configurations.slice(0, limit)
 }

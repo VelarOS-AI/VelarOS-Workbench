@@ -5,7 +5,7 @@
  * 只做通道转发，不含业务逻辑；桥面形状的单一权威是 shared/projectHub.ts 的
  * `WorkbenchProjectHubBridge` 与 shared/workbenchFs.ts 的 `WorkbenchFsBridge` 契约。
  */
-import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
+import { contextBridge, ipcRenderer, type IpcRendererEvent, webUtils } from 'electron'
 
 import {
   type WorkbenchProjectHubBridge,
@@ -36,6 +36,11 @@ const projectHubBridge: WorkbenchProjectHubBridge = {
   getState: () => ipcRenderer.invoke(WorkbenchProjectHubChannels.getState),
   openProjectDialog: () => ipcRenderer.invoke(WorkbenchProjectHubChannels.openProjectDialog),
   openProjectPath: (path) => ipcRenderer.invoke(WorkbenchProjectHubChannels.openProjectPath, path),
+  validateProjectPath: (path) =>
+    ipcRenderer.invoke(WorkbenchProjectHubChannels.validateProjectPath, path),
+  openDroppedProjectPaths: (paths) =>
+    ipcRenderer.invoke(WorkbenchProjectHubChannels.openDroppedProjectPaths, paths),
+  getPathForFile: (file) => webUtils.getPathForFile(file),
   openSystemPath: (path) => ipcRenderer.invoke(WorkbenchProjectHubChannels.openSystemPath, path),
   pickNewProjectLocation: () =>
     ipcRenderer.invoke(WorkbenchProjectHubChannels.pickNewProjectLocation),

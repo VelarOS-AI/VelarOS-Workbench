@@ -37,25 +37,25 @@ export function registerWorkbenchTerminalIpc(terminal: TerminalSessions): void {
         if (!sender.isDestroyed()) {
           sender.send(WorkbenchTerminalChannels.output, outputEvent)
         }
-      })
+      }, sender.id)
     })
   )
 
-  ipcMain.handle(WorkbenchTerminalChannels.write, (_event, request: unknown) =>
+  ipcMain.handle(WorkbenchTerminalChannels.write, (event, request: unknown) =>
     callWithEnvelope(async () => {
       const parsed = parseInputRequest(request)
       if (!parsed) return invalidRequest()
 
-      terminal.writeTerminalInput(parsed)
+      terminal.writeTerminalInput(parsed, event.sender.id)
     })
   )
 
-  ipcMain.handle(WorkbenchTerminalChannels.stop, (_event, request: unknown) =>
+  ipcMain.handle(WorkbenchTerminalChannels.stop, (event, request: unknown) =>
     callWithEnvelope(async () => {
       const parsed = parseStopRequest(request)
       if (!parsed) return invalidRequest()
 
-      terminal.stopTerminalSession(parsed)
+      terminal.stopTerminalSession(parsed, event.sender.id)
     })
   )
 }

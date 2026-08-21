@@ -1,4 +1,5 @@
-import { join } from 'node:path'
+import { statSync } from 'node:fs'
+import { join, resolve } from 'node:path'
 
 import { app, BrowserWindow } from 'electron'
 
@@ -22,9 +23,11 @@ import {
 } from './kernel/WorkbenchKernelIpc'
 import { WorkbenchKernelPermissionPolicy } from './kernel/WorkbenchKernelPermissionPolicy'
 import { WorkbenchModService } from './kernel/WorkbenchModService'
-import { WorkbenchProjectHub } from './projects/ProjectHub'
+import type { WorkbenchProjectHub } from './projects/ProjectHub'
 import { registerProjectHubIpc } from './projects/ProjectHubIpc'
 import { installProjectHubMenu } from './projects/ProjectHubMenu'
+import { installWorkbenchEditorZoom } from './projects/WorkbenchEditorZoom'
+import { WorkbenchWindowManager } from './projects/WorkbenchWindowManager'
 import { registerWorkbenchGitIpc } from './workspace/git/WorkbenchGitIpc'
 import { registerWorkbenchLanguageServiceIpc } from './workspace/language/WorkbenchLanguageServiceIpc'
 import { registerWorkbenchTerminalIpc } from './workspace/terminal/WorkbenchTerminalIpc'
@@ -36,7 +39,8 @@ import { createDefaultWorkbenchMainCapabilityProviders } from './WorkbenchMainCa
 /**
  * 独立 VelarOS Workbench 应用的主进程。
  *
- * 负责窗口生命周期 + 项目枢纽（起手页三主动作 / 最近项目持久化 / 窗口标题与菜单跟随项目状态）。
+ * 负责多窗口生命周期 + 项目枢纽（一个项目一个窗口、起手页三主动作、最近项目持久化、
+ * Finder / 第二实例目录投递、窗口标题与菜单跟随焦点项目状态）。
  * IDE 本地能力由应用私有 IPC 语义端口承载；共享能力走**进程内 Kernel**
  * （kernel-contract §15：完整宿主进程内装栈，不经 client 子路径、不拉 daemon），
  * 不反向依赖 Desktop。Workbench 只自持 Agent 能力，model / browser 没有本体因此不注册，
@@ -51,6 +55,29 @@ const WorkbenchWindowHeight = 800
 
 app.setName(WorkbenchProductName)
 
+let windowManager: Nullable<WorkbenchWindowManager> = null
+const pendingExternalProjectPaths = collectProjectDirectoryArguments(process.argv)
+
+app.on('open-file', (event, path) => {
+  event.preventDefault()
+  dispatchExternalProjectPaths([path])
+})
+
+const hasSingleInstanceLock = app.requestSingleInstanceLock()
+if (!hasSingleInstanceLock) {
+  app.quit()
+} else {
+  app.on('second-instance', (_event, argv, workingDirectory) => {
+    const paths = collectProjectDirectoryArguments(argv, workingDirectory)
+    if (paths.length > 0) {
+      dispatchExternalProjectPaths(paths)
+      return
+    }
+
+    windowManager?.activateOrCreateWindow()
+  })
+}
+
 function resolveWorkbenchDataRootDir(): string {
   const isDevelopment = process.env['NODE_ENV'] === 'development' || !app.isPackaged
   return isDevelopment
@@ -62,7 +89,7 @@ function getWorkbenchWindowTitle(projectName: Nullable<string>): string {
   return projectName ?? WorkbenchProductName
 }
 
-function createWorkbenchWindow(hub: WorkbenchProjectHub): void {
+function createWorkbenchWindow(hub: WorkbenchProjectHub): BrowserWindow {
   const window = new BrowserWindow({
     width: WorkbenchWindowWidth,
     height: WorkbenchWindowHeight,
@@ -74,6 +101,8 @@ function createWorkbenchWindow(hub: WorkbenchProjectHub): void {
       preload: join(__dirname, '../preload/index.mjs'),
     },
   })
+
+  installWorkbenchEditorZoom(window)
 
   // 窗口标题唯一权威在 main（跟随项目状态）；拦掉页面 <title> 的默认回写，避免双权威打架。
   window.on('page-title-updated', (event) => {
@@ -97,31 +126,12 @@ function createWorkbenchWindow(hub: WorkbenchProjectHub): void {
   } else {
     void window.loadFile(join(__dirname, '../renderer/index.html'))
   }
+
+  return window
 }
 
-/**
- * 语言服务 worker 的生命周期跟项目根：项目切换/关闭时释放上一根的 tsserver 建图缓存。
- * worker 惰性拉起（首个语言请求时），未起时 `invalidateProject` 为 no-op。
- */
-function installLanguageServiceProjectLifecycle(
-  hub: WorkbenchProjectHub,
-  client: ReturnType<typeof createDefaultWorkbenchMainCapabilityProviders>['language']
-): void {
-  let activeProjectRoot = hub.getState().currentProject?.path ?? null
-
-  hub.onStateChanged((state) => {
-    const nextProjectRoot = state.currentProject?.path ?? null
-    if (nextProjectRoot === activeProjectRoot) return
-
-    if (activeProjectRoot) void client.invalidateProject({ projectRoot: activeProjectRoot })
-    activeProjectRoot = nextProjectRoot
-  })
-}
-
-void app.whenReady().then(() => {
+if (hasSingleInstanceLock) void app.whenReady().then(() => {
   const dataRootDir = resolveWorkbenchDataRootDir()
-  const hub = new WorkbenchProjectHub(dataRootDir)
-  registerProjectHubIpc(hub)
   const providers = createDefaultWorkbenchMainCapabilityProviders(dataRootDir)
   // 两级注册机的宿主侧接缝：Loader 构造期就位（seam 派发器必须早于执行栈装配），
   // 启动后由 mod 门面用一份**本地** pack 清单装载一次。
@@ -177,11 +187,21 @@ void app.whenReady().then(() => {
   registerWorkbenchFsIpc(providers.fileSystem, providers.parts)
   registerWorkbenchTerminalIpc(providers.parts.terminal)
   registerWorkbenchGitIpc(providers.git)
-  const disposeWatchIpc = registerWorkbenchWatchIpc(providers.watch)
+  const watchIpc = registerWorkbenchWatchIpc(providers.watch)
   const disposeWorkspaceIpc = registerWorkbenchWorkspaceIpc(providers.workspace)
 
   registerWorkbenchLanguageServiceIpc(providers.language)
-  installLanguageServiceProjectLifecycle(hub, providers.language)
+  windowManager = new WorkbenchWindowManager(dataRootDir, {
+    createBrowserWindow: createWorkbenchWindow,
+    releaseProjectResources: async (ownerId, projectRoot) => {
+      watchIpc.closeSubscriptionsForSender(ownerId)
+      await Promise.all([
+        providers.parts.terminal.closeSessionsForOwner(ownerId),
+        providers.language.invalidateProject({ projectRoot }),
+      ])
+    },
+  })
+  registerProjectHubIpc(windowManager)
   let shutdownStarted = false
   app.on('before-quit', (event) => {
     if (shutdownStarted) return
@@ -190,7 +210,7 @@ void app.whenReady().then(() => {
     event.preventDefault()
     // Electron 不等待 async listener：第一次 before-quit 必须拦住退出，待子进程与 worker
     // 真正收口后再触发第二次 quit；shutdownStarted 让第二次事件直接放行。
-    disposeWatchIpc()
+    watchIpc.dispose()
     disposeAgentModIpc()
     disposeKernelIpc()
     disposeWorkspaceIpc()
@@ -202,12 +222,17 @@ void app.whenReady().then(() => {
     ]).finally(() => app.quit())
   })
 
-  installProjectHubMenu(hub)
-  createWorkbenchWindow(hub)
+  installProjectHubMenu(windowManager)
+  if (pendingExternalProjectPaths.length > 0) {
+    const paths = pendingExternalProjectPaths.splice(0)
+    void windowManager.openExternalProjectPaths(paths)
+  } else {
+    windowManager.createWindow()
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      createWorkbenchWindow(hub)
+      windowManager?.createWindow()
     }
   })
 })
@@ -219,3 +244,41 @@ app.on('window-all-closed', () => {
 })
 
 export { createWorkbenchWindow }
+
+function dispatchExternalProjectPaths(paths: readonly string[]): void {
+  const projectPaths = paths.filter((path) => validateProjectDirectoryArgument(path))
+  if (projectPaths.length === 0) return
+
+  if (!windowManager) {
+    pendingExternalProjectPaths.push(...projectPaths)
+    return
+  }
+
+  void windowManager.openExternalProjectPaths(projectPaths)
+}
+
+function collectProjectDirectoryArguments(
+  argv: readonly string[],
+  workingDirectory = process.cwd()
+): string[] {
+  const userArguments = argv.slice(app.isPackaged ? 1 : 2)
+  const paths: string[] = []
+  const seen = new Set<string>()
+
+  for (const argument of userArguments) {
+    if (!argument || argument.startsWith('-')) continue
+    const path = resolve(workingDirectory, argument)
+    if (seen.has(path) || !validateProjectDirectoryArgument(path)) continue
+    seen.add(path)
+    paths.push(path)
+  }
+  return paths
+}
+
+function validateProjectDirectoryArgument(path: string): boolean {
+  try {
+    return statSync(path).isDirectory()
+  } catch {
+    return false
+  }
+}

@@ -12,6 +12,7 @@ import {
   ArrowCounterClockwiseIcon,
   FileTextIcon,
   PlugsConnectedIcon,
+  SignOutIcon,
   WarningCircleIcon,
   XIcon,
 } from '@phosphor-icons/react'
@@ -27,14 +28,18 @@ import {
   type WorkbenchKeyboardShortcutAction,
   type WorkbenchKeyboardShortcutMap,
 } from '@renderer/models/layout/workbenchKeyboardShortcuts'
-import type {
-  WorkbenchAccent,
-  WorkbenchDensity,
-  WorkbenchPreferences,
-  WorkbenchThemeId,
+import {
+  WORKBENCH_EDITOR_FONT_SIZE_MAX,
+  WORKBENCH_EDITOR_FONT_SIZE_MIN,
+  WORKBENCH_EDITOR_FONT_SIZE_STEP,
+  type WorkbenchAccent,
+  type WorkbenchDensity,
+  type WorkbenchPreferences,
+  type WorkbenchThemeId,
 } from '@renderer/models/settings/workbenchPreferences'
 
 import { Result } from '@velaros-ai/core/result'
+import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 import { Text } from '@velaros-ai/ui/primitives/display/Text'
 import { Title } from '@velaros-ai/ui/primitives/display/Title'
@@ -57,6 +62,7 @@ import styles from '../../styles/workbenchPageStyles'
 import { useTimerScope } from '../../support/genericHooks'
 
 type WorkbenchSettingsSectionId =
+  | 'project'
   | 'appearance'
   | 'editor'
   | 'ai-rules'
@@ -78,6 +84,7 @@ interface WorkbenchSettingsDialogProps {
     rootPath: string
   }>
   onCreateProjectAiRulesFile?: () => Promise<void>
+  onExitProject?: () => Promise<boolean>
   onLocaleChange: (locale: AppLocale) => void | Promise<void>
   onOpenProjectFile?: (path: string) => void | Promise<void>
   onOpenChange: (open: boolean) => void
@@ -157,6 +164,7 @@ export function WorkbenchSettingsDialog({
   preferences,
   projectGitSshKeyPath,
   project = null,
+  onExitProject,
   onLocaleChange,
   onOpenChange,
   onPreferencesChange,
@@ -169,7 +177,7 @@ export function WorkbenchSettingsDialog({
   const { t } = useWorkbenchI18n()
   const hostRuntime = useWorkbenchHostRuntime()
   const timers = useTimerScope('WorkbenchSettingsDialog')
-  const [activeSection, setActiveSection] = useState<WorkbenchSettingsSectionId>('appearance')
+  const [activeSection, setActiveSection] = useState<WorkbenchSettingsSectionId>('project')
   const [capturingAction, setCapturingAction] =
     useState<Nullable<WorkbenchKeyboardShortcutAction>>(null)
   const [projectAiRules, setProjectAiRules] =
@@ -182,6 +190,11 @@ export function WorkbenchSettingsDialog({
 
   const sections = useMemo(
     () => [
+      {
+        id: 'project' as const,
+        label: t('workbench.settingsProject'),
+        description: t('workbench.settingsProjectDescription'),
+      },
       {
         id: 'appearance' as const,
         label: t('workbench.settingsAppearance'),
@@ -453,6 +466,37 @@ export function WorkbenchSettingsDialog({
     )
   }
 
+  function renderProjectSection(): ReactElement {
+    return (
+      <div className={styles.workbenchSettingsSectionPanel}>
+        {project && (
+          <div className={styles.workbenchSettingsStackedField}>
+            <div className={styles.workbenchSettingsRowMeta}>
+              <Text className={styles.workbenchSettingsRowTitle}>{project.name}</Text>
+              <Text tone="caption" className={styles.workbenchSettingsRowDescription}>
+                {project.rootPath}
+              </Text>
+            </div>
+          </div>
+        )}
+        <SettingRow
+          title={t('workbench.settingsExitProject')}
+          description={t('workbench.settingsExitProjectDescription')}
+        >
+          <Button
+            size="sm"
+            variant="destructiveOutline"
+            disabled={!project || !onExitProject}
+            onClick={() => void onExitProject?.()}
+          >
+            <SignOutIcon size={14} />
+            {t('workbench.settingsExitProjectAction')}
+          </Button>
+        </SettingRow>
+      </div>
+    )
+  }
+
   function renderEditorSection(): ReactElement {
     return (
       <div className={styles.workbenchSettingsSectionPanel}>
@@ -460,9 +504,9 @@ export function WorkbenchSettingsDialog({
           <div className={styles.workbenchSettingsRangeControl}>
             <input
               type="range"
-              min={11}
-              max={18}
-              step={0.5}
+              min={WORKBENCH_EDITOR_FONT_SIZE_MIN}
+              max={WORKBENCH_EDITOR_FONT_SIZE_MAX}
+              step={WORKBENCH_EDITOR_FONT_SIZE_STEP}
               value={preferences.editorFontSize}
               onChange={(event) =>
                 onPreferencesChange({ editorFontSize: +event.currentTarget.value })
@@ -818,6 +862,9 @@ export function WorkbenchSettingsDialog({
 
   function renderActiveSection(): ReactElement {
     switch (activeSection) {
+      case 'project': {
+        return renderProjectSection()
+      }
       case 'appearance': {
         return renderAppearanceSection()
       }

@@ -14,20 +14,24 @@ interface WorkbenchCommandHistoryLike {
   command: string
 }
 
+export interface WorkbenchRunSessionLike {
+  command?: string
+  id: string
+  isRunning: boolean
+}
+
 interface UseWorkbenchTopRunControlOptions {
   commandHistory: WorkbenchCommandHistoryLike[]
   runConfigurations: WorkbenchRunConfigurationLike[]
+  runningSessions: WorkbenchRunSessionLike[]
   /** 用户为当前项目手动配置的启动命令；为空则回退到自动探测。 */
   configuredCommand: string
   /** 最近一次运行过的命令（含从编辑器 gutter ▶ 触发的）；进入列表并作为默认项。 */
   lastLaunchedCommand: string
-  /** 当前激活的运行卡是否正在运行；决定按钮是「运行」还是「终止」。 */
-  isActiveRunning: boolean
-  onOpenRunTool: () => void
   /** 启动一张新运行卡（WebStorm 式，每次新开）。 */
   onLaunchCommand: (command: string, label?: string) => void
-  /** 终止当前激活的运行卡。 */
-  onStopActiveRun: () => void
+  /** 就地停止并重启一张已运行的卡。 */
+  onRestartRunSession: (sessionId: string) => void
   /** 持久化启动命令；传入空串即清除配置，回退到自动探测。 */
   onConfigureCommand: (command: string) => void
 }
@@ -38,10 +42,12 @@ export interface WorkbenchTopRunControl {
   /** 当前生效的命令是否来自用户手动配置（而非自动探测）。 */
   isConfigured: boolean
   configuredCommand: string
-  /** 当前激活运行卡是否运行中（按钮据此在「运行/终止」间切换）。 */
-  isActiveRunning: boolean
-  /** 运行中 → 终止激活卡；否则 → 新开一张运行卡。 */
+  /** 当前生效命令是否已有一张正在执行的运行卡。 */
+  isActiveCommandRunning: boolean
+  /** 始终新开一张运行卡。 */
   run: () => void
+  /** 停止并重新运行当前生效命令最近的一张运行卡。 */
+  restartActiveCommand: () => void
   /** 保存/覆盖手动配置的启动命令；空串清除回退自动探测。 */
   configureCommand: (command: string) => void
 }
@@ -51,21 +57,30 @@ function isLaunchCommand(text: string): boolean {
   return /\b(dev|serve|start)\b/i.test(text)
 }
 
+export function findLastRunningWorkbenchRunSession(
+  activeCommand: string,
+  sessions: readonly WorkbenchRunSessionLike[]
+): WorkbenchRunSessionLike | undefined {
+  for (let index = sessions.length - 1; index >= 0; index -= 1) {
+    const session = sessions[index]
+    if (session?.isRunning && session.command === activeCommand) return session
+  }
+  return undefined
+}
+
 export function useWorkbenchTopRunControl({
   commandHistory,
   runConfigurations,
+  runningSessions,
   configuredCommand,
   lastLaunchedCommand,
-  isActiveRunning,
-  onOpenRunTool,
   onLaunchCommand,
-  onStopActiveRun,
+  onRestartRunSession,
   onConfigureCommand,
 }: UseWorkbenchTopRunControlOptions): WorkbenchTopRunControl {
   const { t } = useWorkbenchI18n()
-  const onOpenRunToolLatest = useLatest(onOpenRunTool)
   const onLaunchCommandLatest = useLatest(onLaunchCommand)
-  const onStopActiveRunLatest = useLatest(onStopActiveRun)
+  const onRestartRunSessionLatest = useLatest(onRestartRunSession)
   const onConfigureCommandLatest = useLatest(onConfigureCommand)
   const normalizedConfiguredCommand = configuredCommand.trim()
   const normalizedLastLaunched = lastLaunchedCommand.trim()
@@ -87,7 +102,7 @@ export function useWorkbenchTopRunControl({
         description: t('workbench.recentCommands'),
       })
     }
-    runConfigurations.slice(0, 10).forEach((configuration) => {
+    runConfigurations.forEach((configuration) => {
       if (nextOptions.has(configuration.command)) return
       nextOptions.set(configuration.command, {
         value: configuration.command,
@@ -118,19 +133,22 @@ export function useWorkbenchTopRunControl({
     () => options.find((option) => option.value === activeCommand)?.label,
     [activeCommand, options]
   )
+  const activeCommandRunningSession = useMemo(
+    () => findLastRunningWorkbenchRunSession(activeCommand, runningSessions),
+    [activeCommand, runningSessions]
+  )
 
   const run = useCallback((): void => {
-    // 运行中 → 终止当前激活运行卡；否则 → 新开一张运行卡。
-    if (isActiveRunning) {
-      onStopActiveRunLatest.current()
-      return
-    }
-
     if (!activeCommand) return
 
-    onOpenRunToolLatest.current()
     onLaunchCommandLatest.current(activeCommand, activeLabel)
-  }, [activeCommand, activeLabel, isActiveRunning])
+  }, [activeCommand, activeLabel])
+
+  const restartActiveCommand = useCallback((): void => {
+    if (activeCommandRunningSession) {
+      onRestartRunSessionLatest.current(activeCommandRunningSession.id)
+    }
+  }, [activeCommandRunningSession])
 
   const configureCommand = useCallback((command: string): void => {
     onConfigureCommandLatest.current(command.trim())
@@ -141,8 +159,9 @@ export function useWorkbenchTopRunControl({
     options,
     isConfigured: !!normalizedConfiguredCommand,
     configuredCommand: normalizedConfiguredCommand,
-    isActiveRunning,
+    isActiveCommandRunning: !!activeCommandRunningSession,
     run,
+    restartActiveCommand,
     configureCommand,
   }
 }

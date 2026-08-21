@@ -89,6 +89,44 @@ try {
     '终端真实会话必须把 stdout 回传给 renderer 订阅面'
   )
 
+  const firstOwnedSession = await terminal.startTerminalSession(
+    { projectRoot },
+    () => undefined,
+    101
+  )
+  const secondOwnedSession = await terminal.startTerminalSession(
+    { projectRoot },
+    () => undefined,
+    202
+  )
+  assert.throws(
+    () =>
+      terminal.writeTerminalInput(
+        { sessionId: firstOwnedSession.sessionId, input: 'echo denied\n' },
+        202
+      ),
+    /不属于当前项目窗口/,
+    '其他项目窗口不得写入不属于它的终端'
+  )
+  assertionCount += 1
+
+  await terminal.closeSessionsForOwner(101)
+  assert.throws(
+    () =>
+      terminal.writeTerminalInput(
+        { sessionId: firstOwnedSession.sessionId, input: 'echo closed\n' },
+        101
+      ),
+    /已结束/,
+    '退出项目必须关闭该窗口拥有的终端'
+  )
+  assertionCount += 1
+  terminal.writeTerminalInput(
+    { sessionId: secondOwnedSession.sessionId, input: 'exit\n' },
+    202
+  )
+  assertionCount += 1
+
   await terminal.closeAllSessions()
   assertionCount += 1
 } finally {

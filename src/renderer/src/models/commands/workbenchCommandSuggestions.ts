@@ -46,7 +46,7 @@ function compareScriptNames(left: string, right: string): number {
 export function buildPackageScriptCommandSuggestions(
   packageJsonContent: string,
   packageManager: PackageManagerCommand,
-  limit = 8
+  limit?: number
 ): WorkbenchCommandSuggestion[] {
   let manifest: unknown
   try {
@@ -63,14 +63,14 @@ export function buildPackageScriptCommandSuggestions(
   const scripts = (manifest as Record<string, unknown>).scripts
   if (!isPlainObject(scripts)) return []
 
-  return Object.entries(scripts)
+  const scriptNames = Object.entries(scripts)
     .filter(([, value]) => isNonBlankString(value))
     .map(([name]) => name)
     .sort(compareScriptNames)
-    .slice(0, limit)
-    .map((name) => ({
-      command: `${packageManager} run ${formatWorkbenchPackageScriptName(name)}`,
-      label: name,
-      source: 'package.json',
-    }))
+
+  return (limit === undefined ? scriptNames : scriptNames.slice(0, limit)).map((name) => ({
+    command: `${packageManager} run ${formatWorkbenchPackageScriptName(name)}`,
+    label: name,
+    source: 'package.json',
+  }))
 }

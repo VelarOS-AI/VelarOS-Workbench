@@ -7,18 +7,15 @@
 import { existsSync, mkdirSync, statSync } from 'node:fs'
 import { basename, join, resolve } from 'node:path'
 
-import { type BrowserWindow, dialog } from 'electron'
-
 import type {
   WorkbenchOpenedProject,
-  WorkbenchPickLocationResult,
   WorkbenchProjectCreateResult,
   WorkbenchProjectHubState,
   WorkbenchProjectOpenFailureReason,
   WorkbenchProjectOpenResult,
 } from '../../shared/projectHub'
 
-import { RecentProjectsStore } from './RecentProjectsStore'
+import type { RecentProjectsStore } from './RecentProjectsStore'
 
 type ProjectHubListener = (state: WorkbenchProjectHubState) => void
 
@@ -27,13 +24,10 @@ const InvalidProjectNamePattern = /[\\/:*?"<>|]/
 const MaxProjectNameLength = 80
 
 export class WorkbenchProjectHub {
-  private readonly store: RecentProjectsStore
   private readonly listeners = new Set<ProjectHubListener>()
   private currentProject: Nullable<WorkbenchOpenedProject> = null
 
-  constructor(dataRootDir: string) {
-    this.store = new RecentProjectsStore(dataRootDir)
-  }
+  constructor(private readonly store: RecentProjectsStore) {}
 
   public getState(): WorkbenchProjectHubState {
     return {
@@ -68,25 +62,7 @@ export class WorkbenchProjectHub {
     return { ok: true, project }
   }
 
-  public async openProjectViaDialog(
-    parent: Nullable<BrowserWindow>
-  ): Promise<WorkbenchProjectOpenResult> {
-    const picked = await pickDirectory(parent, '打开项目')
-    if (!picked) return { ok: false, reason: 'canceled' }
-
-    return this.openProjectPath(picked)
-  }
-
-  public async pickNewProjectLocation(
-    parent: Nullable<BrowserWindow>
-  ): Promise<WorkbenchPickLocationResult> {
-    const picked = await pickDirectory(parent, '选择项目位置')
-    if (!picked) return { ok: false, reason: 'canceled' }
-
-    return { ok: true, path: picked }
-  }
-
-  /** 新建项目（最小形态）：位置 + 名称 → 创建空目录并直接打开。 */
+  /** 新建项目（最小形态）：位置 + 名称 → 创建空目录；由窗口管理器决定在哪个窗口打开。 */
   public createProject(locationPath: string, name: string): WorkbenchProjectCreateResult {
     const projectName = name.trim()
     if (
@@ -109,10 +85,13 @@ export class WorkbenchProjectHub {
       return { ok: false, reason: 'io-error' }
     }
 
-    const opened = this.openProjectPath(projectPath)
-    if (!opened.ok) return { ok: false, reason: 'io-error' }
-
-    return { ok: true, project: opened.project }
+    return {
+      ok: true,
+      project: {
+        path: projectPath,
+        name: projectName,
+      },
+    }
   }
 
   public removeRecentProject(path: string): WorkbenchProjectHubState {
@@ -127,33 +106,21 @@ export class WorkbenchProjectHub {
     return this.getState()
   }
 
+  /** 共享最近项目变化后刷新当前窗口投影，不改变它的活跃项目。 */
+  public refreshState(): void {
+    this.emitState()
+  }
+
   private emitState(): void {
     const state = this.getState()
     for (const listener of this.listeners) listener(state)
   }
 }
 
-function validateProjectDirectory(path: string): Nullable<WorkbenchProjectOpenFailureReason> {
+export function validateProjectDirectory(path: string): Nullable<WorkbenchProjectOpenFailureReason> {
   try {
     return statSync(path).isDirectory() ? null : 'not-a-directory'
   } catch {
     return 'missing'
   }
-}
-
-async function pickDirectory(
-  parent: Nullable<BrowserWindow>,
-  title: string
-): Promise<Nullable<string>> {
-  const options = {
-    title,
-    properties: ['openDirectory', 'createDirectory'],
-  } satisfies Electron.OpenDialogOptions
-
-  const result = parent
-    ? await dialog.showOpenDialog(parent, options)
-    : await dialog.showOpenDialog(options)
-
-  const picked = result.filePaths[0]
-  return result.canceled || !picked ? null : picked
 }

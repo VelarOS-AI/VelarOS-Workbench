@@ -563,12 +563,12 @@ const standaloneWorkbenchHost: WorkbenchHost = {
         return Result.ok(picked.ok ? picked.path : null)
       },
       addWorkspaceRoot: async (_sessionId, path) => {
-        const opened = await window.velarosWorkbenchProjectHub.openProjectPath(path)
+        const opened = await window.velarosWorkbenchProjectHub.validateProjectPath(path)
         if (!opened.ok) return Result.fail(new AppError('VALIDATION', `Cannot open project root: ${path}`))
         return Result.ok(createSystemOverview(opened.project.path))
       },
       setActiveWorkspaceRoot: async (_sessionId, path) => {
-        const opened = await window.velarosWorkbenchProjectHub.openProjectPath(path)
+        const opened = await window.velarosWorkbenchProjectHub.validateProjectPath(path)
         if (!opened.ok) return Result.fail(new AppError('VALIDATION', `Cannot activate project root: ${path}`))
         return Result.ok(createSystemOverview(opened.project.path))
       },

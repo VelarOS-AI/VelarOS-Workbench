@@ -240,8 +240,8 @@ export function useWorkbenchController(options: UseWorkbenchControllerOptions = 
     }
   }
 
-  function closeProject(): void {
-    if (!editor.ensureNoUnsavedChanges()) return
+  function closeProject(): boolean {
+    if (!editor.ensureNoUnsavedChanges()) return false
 
     persistActiveProjectSession()
     project.clearActiveProject()
@@ -253,6 +253,7 @@ export function useWorkbenchController(options: UseWorkbenchControllerOptions = 
     setPendingSessionNavigation(null)
     sessionCursorByPathRef.current = {}
     openedProjectIdRef.current = null
+    return true
   }
 
   const refreshRootDirectory = useMemoizedFn(async (): Promise<void> => {

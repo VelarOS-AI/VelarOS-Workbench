@@ -1,5 +1,5 @@
 /**
- * 项目枢纽 IPC 装配：handle 起手页动作通道，状态变更广播到所有窗口。
+ * 项目枢纽 IPC 装配：根据 event.sender 路由到对应窗口的项目状态。
  *
  * IPC 入参是边界外来数据，在此解析一次（非字符串一律按无效路径处理），枢纽服务内部只见类型。
  */
@@ -7,19 +7,35 @@ import { BrowserWindow, ipcMain, shell } from 'electron'
 
 import { WorkbenchProjectHubChannels } from '../../shared/projectHub'
 
-import type { WorkbenchProjectHub } from './ProjectHub'
+import { pickDirectory } from './ProjectPicker'
+import type { WorkbenchWindowManager } from './WorkbenchWindowManager'
 
-export function registerProjectHubIpc(hub: WorkbenchProjectHub): void {
-  ipcMain.handle(WorkbenchProjectHubChannels.getState, () => hub.getState())
-
-  ipcMain.handle(WorkbenchProjectHubChannels.openProjectDialog, (event) =>
-    hub.openProjectViaDialog(BrowserWindow.fromWebContents(event.sender))
+export function registerProjectHubIpc(windows: WorkbenchWindowManager): void {
+  ipcMain.handle(
+    WorkbenchProjectHubChannels.getState,
+    (event) => windows.getHubForWebContents(event.sender)?.getState() ?? emptyState()
   )
 
-  ipcMain.handle(WorkbenchProjectHubChannels.openProjectPath, (_event, path: unknown) =>
+  ipcMain.handle(WorkbenchProjectHubChannels.openProjectDialog, (event) =>
+    windows.openProjectViaDialog(BrowserWindow.fromWebContents(event.sender))
+  )
+
+  ipcMain.handle(WorkbenchProjectHubChannels.openProjectPath, (event, path: unknown) =>
     typeof path === 'string' && path.length > 0
-      ? hub.openProjectPath(path)
+      ? windows.openProjectPath(event.sender, path)
       : { ok: false as const, reason: 'missing' as const }
+  )
+
+  ipcMain.handle(WorkbenchProjectHubChannels.validateProjectPath, (_event, path: unknown) =>
+    typeof path === 'string' && path.length > 0
+      ? windows.validateProjectPath(path)
+      : { ok: false as const, reason: 'missing' as const }
+  )
+
+  ipcMain.handle(WorkbenchProjectHubChannels.openDroppedProjectPaths, (event, paths: unknown) =>
+    Array.isArray(paths) && paths.length <= 32 && paths.every((path) => typeof path === 'string')
+      ? windows.openDroppedProjectPaths(event.sender, paths)
+      : { opened: [], rejected: [] }
   )
 
   ipcMain.handle(WorkbenchProjectHubChannels.openSystemPath, async (_event, path: unknown) => {
@@ -28,27 +44,35 @@ export function registerProjectHubIpc(hub: WorkbenchProjectHub): void {
     return error ? { opened: false, error } : { opened: true }
   })
 
-  ipcMain.handle(WorkbenchProjectHubChannels.pickNewProjectLocation, (event) =>
-    hub.pickNewProjectLocation(BrowserWindow.fromWebContents(event.sender))
-  )
+  ipcMain.handle(WorkbenchProjectHubChannels.pickNewProjectLocation, async (event) => {
+    const picked = await pickDirectory(
+      BrowserWindow.fromWebContents(event.sender),
+      '选择项目位置'
+    )
+    return picked
+      ? { ok: true as const, path: picked }
+      : { ok: false as const, reason: 'canceled' as const }
+  })
 
   ipcMain.handle(
     WorkbenchProjectHubChannels.createProject,
-    (_event, locationPath: unknown, name: unknown) =>
+    (event, locationPath: unknown, name: unknown) =>
       typeof locationPath === 'string' && typeof name === 'string'
-        ? hub.createProject(locationPath, name)
+        ? windows.createProject(event.sender, locationPath, name)
         : { ok: false as const, reason: 'invalid-name' as const }
   )
 
-  ipcMain.handle(WorkbenchProjectHubChannels.removeRecentProject, (_event, path: unknown) =>
-    typeof path === 'string' ? hub.removeRecentProject(path) : hub.getState()
+  ipcMain.handle(WorkbenchProjectHubChannels.removeRecentProject, (event, path: unknown) =>
+    typeof path === 'string'
+      ? windows.removeRecentProject(event.sender, path)
+      : (windows.getHubForWebContents(event.sender)?.getState() ?? emptyState())
   )
 
-  ipcMain.handle(WorkbenchProjectHubChannels.closeProject, () => hub.closeProject())
+  ipcMain.handle(WorkbenchProjectHubChannels.closeProject, (event) =>
+    windows.closeProject(event.sender)
+  )
+}
 
-  hub.onStateChanged((state) => {
-    for (const window of BrowserWindow.getAllWindows()) {
-      window.webContents.send(WorkbenchProjectHubChannels.stateChanged, state)
-    }
-  })
+function emptyState() {
+  return { currentProject: null, recentProjects: [] }
 }

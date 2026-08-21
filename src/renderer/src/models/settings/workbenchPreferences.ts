@@ -49,6 +49,12 @@ export const DEFAULT_WORKBENCH_PREFERENCES: WorkbenchPreferences = {
   localHistoryThrottleSeconds: 60,
 }
 
+export const WORKBENCH_EDITOR_FONT_SIZE_MIN = 11
+export const WORKBENCH_EDITOR_FONT_SIZE_MAX = 18
+export const WORKBENCH_EDITOR_FONT_SIZE_STEP = 0.5
+
+export type WorkbenchEditorZoomAction = 'increase' | 'decrease' | 'reset'
+
 /** 本地历史节流窗口上限（秒）：1 小时足够，避免误配成永不记录。 */
 export const MAX_LOCAL_HISTORY_THROTTLE_SECONDS = 3600
 
@@ -108,6 +114,29 @@ function clampNumber(value: any, min: number, max: number, fallback: number): nu
   return Math.min(max, Math.max(min, value))
 }
 
+/** 返回落在设置面板同一 0.5px 网格上的下一档编辑器字号。 */
+export function getZoomedWorkbenchEditorFontSize(
+  currentFontSize: number,
+  action: WorkbenchEditorZoomAction
+): number {
+  if (action === 'reset') return DEFAULT_WORKBENCH_PREFERENCES.editorFontSize
+
+  const normalizedCurrent = clampNumber(
+    currentFontSize,
+    WORKBENCH_EDITOR_FONT_SIZE_MIN,
+    WORKBENCH_EDITOR_FONT_SIZE_MAX,
+    DEFAULT_WORKBENCH_PREFERENCES.editorFontSize
+  )
+  const currentStep = Math.round(normalizedCurrent / WORKBENCH_EDITOR_FONT_SIZE_STEP)
+  const stepDelta = action === 'increase' ? 1 : -1
+  return clampNumber(
+    (currentStep + stepDelta) * WORKBENCH_EDITOR_FONT_SIZE_STEP,
+    WORKBENCH_EDITOR_FONT_SIZE_MIN,
+    WORKBENCH_EDITOR_FONT_SIZE_MAX,
+    DEFAULT_WORKBENCH_PREFERENCES.editorFontSize
+  )
+}
+
 function normalizeChoice<T extends string>(value: any, allowed: ReadonlySet<T>, fallback: T): T {
   return isString(value) && allowed.has(value as T) ? (value as T) : fallback
 }
@@ -146,8 +175,8 @@ export function normalizeWorkbenchPreferences(
     ),
     editorFontSize: clampNumber(
       preferences?.editorFontSize,
-      11,
-      18,
+      WORKBENCH_EDITOR_FONT_SIZE_MIN,
+      WORKBENCH_EDITOR_FONT_SIZE_MAX,
       DEFAULT_WORKBENCH_PREFERENCES.editorFontSize
     ),
     editorLineHeight: clampNumber(

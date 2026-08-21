@@ -41,6 +41,8 @@ interface WorkbenchTerminalSession {
   onOutput: (event: WorkbenchTerminalOutputEvent) => void
   /** 该终端会话的延迟强杀和兜底收口任务作用域。 */
   timers: TimerScope
+  /** 发起该会话的 renderer webContents.id；用于多项目窗口的资源与权限隔离。 */
+  ownerId: Nullable<number>
   /**
    * 标记该会话是否已经走过停止/关闭流程；用于防止延迟强杀回调
    * 在 PID 复用场景下误伤新进程。一旦子进程关闭事件触发，整个会话从映射删除，
@@ -67,7 +69,8 @@ class TerminalSessions {
 
   public async startTerminalSession(
     request: WorkbenchTerminalStartRequest,
-    onOutput: (event: WorkbenchTerminalOutputEvent) => void
+    onOutput: (event: WorkbenchTerminalOutputEvent) => void,
+    ownerId: Nullable<number> = null
   ): Promise<WorkbenchTerminalStartResult> {
     const projectRoot = await this.pathResolver.resolveProjectRoot(request.projectRoot)
     const cwdPath = await this.pathResolver.resolveInsideProject(projectRoot, request.cwd ?? '.')
@@ -144,6 +147,7 @@ class TerminalSessions {
       child,
       onOutput,
       timers,
+      ownerId,
       disposed: false,
     })
 
@@ -163,11 +167,15 @@ class TerminalSessions {
     }
   }
 
-  public writeTerminalInput(request: WorkbenchTerminalInputRequest): void {
+  public writeTerminalInput(
+    request: WorkbenchTerminalInputRequest,
+    ownerId: Nullable<number> = null
+  ): void {
     const session = this.terminalSessions.get(request.sessionId)
     if (!session || session.child.killed || !session.child.stdin.writable) {
       throw new AppError('VALIDATION', '终端会话已结束。')
     }
+    assertSessionOwner(session, ownerId)
 
     session.child.stdin.write(request.input)
 
@@ -188,9 +196,13 @@ class TerminalSessions {
    * sessionId 单调随机生成不会复用，因此不存在 PID 复用误杀新会话的风险；
    * disposed + exitCode + killed 三重判断保护延迟强杀不误伤已退出进程。
    */
-  public stopTerminalSession(request: WorkbenchTerminalStopRequest): void {
+  public stopTerminalSession(
+    request: WorkbenchTerminalStopRequest,
+    ownerId: Nullable<number> = null
+  ): void {
     const session = this.terminalSessions.get(request.sessionId)
     if (!session) return
+    assertSessionOwner(session, ownerId)
 
     // Ctrl+C 走 SIGINT（作用于前台进程组，等价终端中断），默认硬停走 SIGTERM。
     const signal = request.signal ?? 'SIGTERM'
@@ -222,7 +234,19 @@ class TerminalSessions {
    * 用 SIGTERM → SIGKILL 二步策略给 shell 留下处理 trap 的窗口。
    */
   public async closeAllSessions(): Promise<void> {
-    const sessions = [...this.terminalSessions.entries()]
+    await this.closeSessions([...this.terminalSessions.entries()])
+  }
+
+  /** 关闭一个项目窗口拥有的全部终端/运行卡，其他项目窗口不受影响。 */
+  public async closeSessionsForOwner(ownerId: number): Promise<void> {
+    await this.closeSessions(
+      [...this.terminalSessions.entries()].filter(([, session]) => session.ownerId === ownerId)
+    )
+  }
+
+  private async closeSessions(
+    sessions: Array<[string, WorkbenchTerminalSession]>
+  ): Promise<void> {
     if (isEmpty(sessions)) return
 
     const forceKillDelayMs = this.commandHelper.getForceKillDelayMs()
@@ -269,6 +293,12 @@ class TerminalSessions {
       )
     )
   }
+}
+
+function assertSessionOwner(session: WorkbenchTerminalSession, ownerId: Nullable<number>): void {
+  if (ownerId === null || session.ownerId === null || ownerId === session.ownerId) return
+
+  throw new AppError('PERMISSION', '终端会话不属于当前项目窗口。')
 }
 
 export { TerminalSessions, TerminalSessions as WorkbenchTerminalService }

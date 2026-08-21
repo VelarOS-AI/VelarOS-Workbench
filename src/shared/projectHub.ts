@@ -11,6 +11,8 @@ export const WorkbenchProjectHubChannels = {
   getState: 'workbench-app:project-hub:get-state',
   openProjectDialog: 'workbench-app:project-hub:open-project-dialog',
   openProjectPath: 'workbench-app:project-hub:open-project-path',
+  validateProjectPath: 'workbench-app:project-hub:validate-project-path',
+  openDroppedProjectPaths: 'workbench-app:project-hub:open-dropped-project-paths',
   openSystemPath: 'workbench-app:project-hub:open-system-path',
   pickNewProjectLocation: 'workbench-app:project-hub:pick-new-project-location',
   createProject: 'workbench-app:project-hub:create-project',
@@ -47,6 +49,14 @@ export type WorkbenchProjectOpenResult =
   | { ok: true; project: WorkbenchOpenedProject }
   | { ok: false; reason: WorkbenchProjectOpenFailureReason }
 
+export interface WorkbenchProjectDropResult {
+  opened: WorkbenchOpenedProject[]
+  rejected: Array<{
+    path: string
+    reason: WorkbenchProjectOpenFailureReason
+  }>
+}
+
 export type WorkbenchProjectCreateFailureReason =
   | 'invalid-name'
   | 'location-missing'
@@ -61,13 +71,22 @@ export type WorkbenchPickLocationResult =
   | { ok: true; path: string }
   | { ok: false; reason: 'canceled' }
 
-export type WorkbenchProjectHubMenuCommand = 'new-project'
+export type WorkbenchProjectHubMenuCommand =
+  | 'close-project'
+  | 'new-project'
+  | 'zoom-editor-in'
+  | 'zoom-editor-out'
+  | 'zoom-editor-reset'
 
 /** preload 通过 contextBridge 暴露给 renderer 的项目枢纽桥面。 */
 export interface WorkbenchProjectHubBridge {
   getState: () => Promise<WorkbenchProjectHubState>
   openProjectDialog: () => Promise<WorkbenchProjectOpenResult>
   openProjectPath: (path: string) => Promise<WorkbenchProjectOpenResult>
+  validateProjectPath: (path: string) => Promise<WorkbenchProjectOpenResult>
+  openDroppedProjectPaths: (paths: string[]) => Promise<WorkbenchProjectDropResult>
+  /** Electron 41 不再暴露 File.path；preload 用 webUtils 恢复可信的原生拖拽路径。 */
+  getPathForFile: (file: File) => string
   openSystemPath: (path: string) => Promise<{ opened: boolean; error?: string }>
   pickNewProjectLocation: () => Promise<WorkbenchPickLocationResult>
   createProject: (locationPath: string, name: string) => Promise<WorkbenchProjectCreateResult>

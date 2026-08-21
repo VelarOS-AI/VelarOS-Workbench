@@ -17,8 +17,22 @@ interface OwnedSubscription {
   unsubscribe: () => void
 }
 
-export function registerWorkbenchWatchIpc(service: WorkbenchFileWatcher): () => void {
+export interface WorkbenchWatchIpcRegistration {
+  closeSubscriptionsForSender: (senderId: number) => void
+  dispose: () => void
+}
+
+export function registerWorkbenchWatchIpc(
+  service: WorkbenchFileWatcher
+): WorkbenchWatchIpcRegistration {
   const owned = new Map<string, OwnedSubscription>()
+  const closeSubscriptionsForSender = (senderId: number): void => {
+    for (const [subscriptionId, subscription] of owned) {
+      if (subscription.senderId !== senderId) continue
+      subscription.unsubscribe()
+      owned.delete(subscriptionId)
+    }
+  }
 
   ipcMain.handle(WorkbenchWatchChannels.start, (event, request: unknown) =>
     callWithEnvelope(async () => {
@@ -38,7 +52,7 @@ export function registerWorkbenchWatchIpc(service: WorkbenchFileWatcher): () => 
         senderId: sender.id,
         unsubscribe: () => service.unsubscribe(result.subscriptionId),
       })
-      installSenderCleanup(sender, owned)
+      installSenderCleanup(sender, closeSubscriptionsForSender)
       return result
     })
   )
@@ -58,12 +72,15 @@ export function registerWorkbenchWatchIpc(service: WorkbenchFileWatcher): () => 
     })
   )
 
-  return () => {
-    ipcMain.removeHandler(WorkbenchWatchChannels.start)
-    ipcMain.removeHandler(WorkbenchWatchChannels.stop)
-    for (const subscription of owned.values()) subscription.unsubscribe()
-    owned.clear()
-    service.dispose()
+  return {
+    closeSubscriptionsForSender,
+    dispose: () => {
+      ipcMain.removeHandler(WorkbenchWatchChannels.start)
+      ipcMain.removeHandler(WorkbenchWatchChannels.stop)
+      for (const subscription of owned.values()) subscription.unsubscribe()
+      owned.clear()
+      service.dispose()
+    },
   }
 }
 
@@ -71,16 +88,13 @@ const cleanupInstalled = new WeakSet<WebContents>()
 
 function installSenderCleanup(
   sender: WebContents,
-  owned: Map<string, OwnedSubscription>
+  closeSubscriptionsForSender: (senderId: number) => void
 ): void {
   if (cleanupInstalled.has(sender)) return
   cleanupInstalled.add(sender)
+  const senderId = sender.id
   sender.once('destroyed', () => {
-    for (const [subscriptionId, subscription] of owned) {
-      if (subscription.senderId !== sender.id) continue
-      subscription.unsubscribe()
-      owned.delete(subscriptionId)
-    }
+    closeSubscriptionsForSender(senderId)
   })
 }
 

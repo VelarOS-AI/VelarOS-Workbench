@@ -66,11 +66,15 @@ export function StandaloneWorkbenchPagePresentation(): ReactElement {
     label: string
     icon: ReactElement
   }> = [
-    {
-      id: 'run',
-      label: t('workbench.commandTabRuns'),
-      icon: <PlayIcon size={18} weight="regular" />,
-    },
+    ...(workbench.runSessions.length > 0
+      ? [
+          {
+            id: 'run' as const,
+            label: t('workbench.commandTabRuns'),
+            icon: <PlayIcon size={18} weight="regular" />,
+          },
+        ]
+      : []),
     {
       id: 'git',
       label: t('workbench.gitToolWindow'),
@@ -315,6 +319,7 @@ export function StandaloneWorkbenchPagePresentation(): ReactElement {
             name: workbench.activeProject.name,
             rootPath: workbench.activeProject.rootPath,
           }}
+          onExitProject={model.actions.exitCurrentProject}
           onOpenChange={dialogs.setSettingsOpen}
           onPreferencesChange={workbenchPreferences.updatePreferences}
           onProjectGitSshKeyPathChange={(gitSshKeyPath) =>

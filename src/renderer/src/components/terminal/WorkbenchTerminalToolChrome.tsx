@@ -328,7 +328,7 @@ export function WorkbenchRunToolHeader({
             type="button"
             variant="ghost"
             size="icon-sm"
-            className={styles.terminalToolHeaderIconButton}
+            className={`${styles.terminalToolHeaderIconButton} ${styles.runStopButton}`}
             title={t('workbench.runStop')}
             label={t('workbench.runStop')}
             disabled={!canStop}
