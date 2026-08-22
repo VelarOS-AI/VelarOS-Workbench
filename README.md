@@ -13,8 +13,8 @@ lives directly below the root `src/`:
 - `src/shared`: cross-process contracts, IPC envelopes and language-service descriptors.
 
 The repository intentionally has no dependency on VelarOS Desktop internals. Shared VelarOS packages
-come from the `VelarOS-Platform` single repository (`bun run link:local` for local checkouts); the app
-owns the Electron implementation behind the semantic Workbench host.
+are installed from the `VelarOS-Platform` releases on GitHub Packages; the app owns the Electron
+implementation behind the semantic Workbench host.
 
 Workbench is a **complete host**: it composes the Kernel module host *in its own process*
 (kernel-contract §15) instead of connecting to a daemon. It registers exactly one capability,
@@ -28,18 +28,17 @@ capabilities this host deliberately does not have yet.
 
 ## Development
 
-Workbench 的 VelarOS 包发布在 GitHub Packages。在 VelarOS 多仓源码环境中，先把
-同级 `VelarOS-Platform` 包登记为本地链接，再按锁文件安装其余依赖；`bootstrap:local`
-会按这个顺序完成初始化，不需要 GitHub Packages 凭据。
+Workbench 的 VelarOS 包统一从 GitHub Packages 安装，本地多仓环境也不切换 sibling 软链。
+配置具有 Packages 读取权限的 `NODE_AUTH_TOKEN` 后，严格按已提交锁文件安装：
 
 ```bash
-bun run bootstrap:local
+bun install --frozen-lockfile
 bun run check
 bun run dev
 ```
 
-独立安装仍需要对 `@velaros-ai` 作用域有读取权限，并且必须使用 Platform 合包发布后由
-`refresh-private-lock-self-hosted` 生成的 registry 锁文件；本地源码锁不能冒充发布锁。
+Platform 发布成功后会自动为 Workbench 创建依赖升级 PR；`check:platform-packages` 会拒绝
+任何 `file:`、`link:`、`workspace:` 或非 GitHub Packages 的锁文件解析。
 
 Workbench deliberately ships a focused language surface: VelarScript, JavaScript / TypeScript,
 Python, and related Web formats. Its generic editor core has no Velar-specific branches. The app

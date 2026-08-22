@@ -114,5 +114,3 @@ id，零网络出口）；Kernel 事件桥的三通道信封形状。契约测�
 2. 工具面窄（见 §3）。
 3. mod 启停 / 安装的 IPC 与 UI 控件。
 4. 八根未接线的贡献轴（见 §4）。
-5. `bun.lock` 的 `packages` 解析区对 `@velaros-ai/*` 仍指向旧发布版：Platform 尚未发包，
-   本地开发全靠 `bun run link:local` 软链。发包后需重新生成锁文件。

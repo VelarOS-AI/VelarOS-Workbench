@@ -20,6 +20,8 @@ const ignoredDirectories = new Set([
   'out',
   'release',
 ])
+const localPackageSpecification = /^(?:file|link|portal|workspace):/u
+const cloudDownloadPrefix = 'https://npm.pkg.github.com/download/'
 const supportedArguments = new Set(['--validate-only'])
 const unexpectedArguments = process.argv.slice(2).filter(
   (argument) => !supportedArguments.has(argument)
@@ -101,12 +103,13 @@ function collectExternalVelarPackageRequirements(packageManifests, ownPackageNam
   for (const { manifest, manifestPath, workspaceKey } of packageManifests) {
     for (const field of dependencyFields) {
       for (const [packageName, range] of Object.entries(manifest[field] ?? {})) {
-        if (
-          !packageName.startsWith('@velaros-ai/') ||
-          ownPackageNames.has(packageName) ||
-          range.startsWith('workspace:')
-        ) {
+        if (!packageName.startsWith('@velaros-ai/') || ownPackageNames.has(packageName)) {
           continue
+        }
+        if (localPackageSpecification.test(range)) {
+          throw new Error(
+            `${path.relative(repositoryRoot, manifestPath)}#${field}.${packageName} must use a published cloud version, not ${range}`
+          )
         }
         packageRequirements.push({
           field,
@@ -227,7 +230,8 @@ function validateWorkspaceRequirement(lockfile, requirement) {
 }
 
 function validateResolvedVersion(lockfile, requirement) {
-  const resolution = lockfile.packages?.[requirement.packageName]?.[0]
+  const entry = lockfile.packages?.[requirement.packageName]
+  const resolution = entry?.[0]
   const prefix = `${requirement.packageName}@`
   if (typeof resolution !== 'string' || !resolution.startsWith(prefix)) {
     throw new Error(
@@ -240,6 +244,9 @@ function validateResolvedVersion(lockfile, requirement) {
     throw new Error(
       `${formatRequirement(requirement)} resolves to ${resolvedVersion}, which does not satisfy ${requirement.range}.`
     )
+  }
+  if (typeof entry?.[1] !== 'string' || !entry[1].startsWith(cloudDownloadPrefix)) {
+    throw new Error(`${formatRequirement(requirement)} must resolve from ${cloudDownloadPrefix}.`)
   }
 }
 
