@@ -1,4 +1,4 @@
-import { type ChildProcessWithoutNullStreams,spawn } from 'node:child_process'
+import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process'
 import { existsSync, realpathSync, statSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { delimiter, dirname, isAbsolute, join } from 'node:path'
@@ -10,6 +10,11 @@ import { AppError } from '@velaros-ai/core/error'
 import type {
   WorkbenchLanguageServiceDescriptor,
 } from '@shared/language/workbenchLanguageServices'
+
+import {
+  shouldDetachExternalLspProcess,
+  terminateExternalLspProcessTree,
+} from './ExternalLspProcessLifecycle'
 
 interface JsonRpcMessage {
   jsonrpc?: string
@@ -574,7 +579,7 @@ export class ExternalLspClient {
       await this.request('shutdown', null)
       this.notify('exit', null)
     } catch {
-      child.kill()
+      terminateExternalLspProcessTree(child.pid)
     }
     this.process = null
   }
@@ -612,6 +617,7 @@ export class ExternalLspClient {
     }
     const child = spawn(launch.command, launch.args, {
       cwd: this.projectRoot,
+      detached: shouldDetachExternalLspProcess(),
       env: {
         ...process.env,
         PATH: pathValue,
@@ -787,7 +793,7 @@ export class ExternalLspClient {
     this.documents.clear()
     this.diagnostics.clear()
     this.buffer = Buffer.alloc(0)
-    if (child && !child.killed) child.kill()
+    if (child) terminateExternalLspProcessTree(child.pid)
     for (const pending of this.pending.values()) {
       clearTimeout(pending.timeout)
       pending.reject(error)

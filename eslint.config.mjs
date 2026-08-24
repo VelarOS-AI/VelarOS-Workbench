@@ -196,6 +196,7 @@ export default [
       '**/node_modules/**',
       '**/out/**',
       '**/release/**',
+      '**/release-stage/**',
       'scripts/**',
       '**/*.config.cjs',
       'bun.lock',

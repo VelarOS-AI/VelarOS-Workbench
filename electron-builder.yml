@@ -11,6 +11,13 @@ files:
 
 asar: true
 artifactName: VelarOS-Workbench-${version}-${os}-${arch}.${ext}
+afterPack: ./scripts/release/verifyPackagedWorkbench.mjs
+
+extraResources:
+  - from: node_modules/typescript/lib
+    to: typescript/lib
+    filter:
+      - lib*.d.ts
 
 mac:
   category: public.app-category.developer-tools

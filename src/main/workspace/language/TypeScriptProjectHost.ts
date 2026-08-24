@@ -52,6 +52,19 @@ interface PooledTypeScriptProject {
 const projectCache = new Map<string, TypeScriptProjectCacheEntry>()
 const pooledProjects = new Map<string, PooledTypeScriptProject>()
 
+function resolveTypeScriptDefaultLibFilePath(
+  options: ts.CompilerOptions,
+  resourcesPath: Nullable<string> = process.resourcesPath
+): string {
+  if (resourcesPath) {
+    const bundledLibDirectory = resolve(resourcesPath, 'typescript', 'lib')
+    const bundledDefaultLib = resolve(bundledLibDirectory, ts.getDefaultLibFileName(options))
+    if (existsSync(bundledDefaultLib)) return bundledDefaultLib
+  }
+
+  return ts.getDefaultLibFilePath(options)
+}
+
 function extensionWithDot(path: string): string {
   const index = path.lastIndexOf('.')
   return index === -1 ? '' : path.slice(index).toLowerCase()
@@ -464,7 +477,11 @@ function createLanguageServiceHost(project: PooledTypeScriptProject): ts.Languag
       return content == null ? undefined : ts.ScriptSnapshot.fromString(content)
     },
     getCurrentDirectory: () => project.projectDirectory,
-    getDefaultLibFileName: (options) => ts.getDefaultLibFilePath(options),
+    // TypeScript itself is bundled into Workbench's main process, so its own
+    // __dirname no longer points at node_modules/typescript/lib after packaging.
+    // The release therefore ships the standard library declarations as an
+    // app resource and the language host explicitly anchors lib resolution there.
+    getDefaultLibFileName: (options) => resolveTypeScriptDefaultLibFilePath(options),
     fileExists: (fileName) => project.liveFiles.has(fileName) || ts.sys.fileExists(fileName),
     readFile: (fileName) => project.liveFiles.get(fileName) ?? ts.sys.readFile(fileName),
     readDirectory: ts.sys.readDirectory,
@@ -611,4 +628,9 @@ export function acquireTypeScriptLanguageService(
   }
 }
 
-export { extensionWithDot, safeReadFile, TypeScriptExtensions }
+export {
+  extensionWithDot,
+  resolveTypeScriptDefaultLibFilePath,
+  safeReadFile,
+  TypeScriptExtensions,
+}

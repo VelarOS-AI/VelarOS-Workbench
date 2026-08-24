@@ -19,5 +19,8 @@ void describe('release workflows', () => {
     assert.match(workflow, /Reuse prior immutable platform checkpoint/)
     assert.match(workflow, /if: steps\.reuse\.outputs\.reuse != 'true'/)
     assert.doesNotMatch(workflow, /--clobber/)
+
+    const builder = await readFile(path.resolve('electron-builder.yml'), 'utf8')
+    assert.match(builder, /afterPack: \.\/scripts\/release\/verifyPackagedWorkbench\.mjs/u)
   })
 })
