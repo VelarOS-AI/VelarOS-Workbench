@@ -1,6 +1,7 @@
 import { type ReactElement, useEffect, useRef, useState } from 'react'
 import { MagnifyingGlassIcon } from '@phosphor-icons/react'
 import { useWorkbenchI18n } from '@renderer/i18n'
+import { getWorkbenchFilePresentationVariant } from '@renderer/models/files/workbenchFilePresentation'
 import type { WorkbenchProject } from '@renderer/models/project/workbenchProjects'
 import type { WorkbenchOpenEditorTab } from '@renderer/types/workbenchTypes'
 
@@ -184,7 +185,10 @@ export function QuickOpen({
                 onMouseEnter={() => setActiveIndex(index)}
                 onClick={() => selectMatch(match.path, match.line, match.column)}
               >
-                <span className={styles.treeFileIcon}>
+                <span
+                  className={styles.treeFileIcon}
+                  data-kind={getWorkbenchFilePresentationVariant({ fileName: match.fileName })}
+                >
                   <WorkbenchFileTypeIcon fileName={match.fileName} size={15} />
                 </span>
                 <span className={styles.quickOpenItemCopy}>

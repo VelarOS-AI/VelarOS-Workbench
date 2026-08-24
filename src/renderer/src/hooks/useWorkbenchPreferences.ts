@@ -2,11 +2,13 @@ import { type CSSProperties, useEffect, useMemo, useState } from 'react'
 
 import {
   DEFAULT_WORKBENCH_PREFERENCES,
+  getWorkbenchEditorMetrics,
   getWorkbenchPreferencesStyle,
   normalizeWorkbenchPreferences,
   readWorkbenchPreferences,
   saveWorkbenchPreferences,
   WORKBENCH_PREFERENCES_CHANGED_EVENT,
+  type WorkbenchEditorMetrics,
   type WorkbenchPreferences,
 } from '../models/settings/workbenchPreferences'
 
@@ -100,4 +102,35 @@ export function useWorkbenchAiCompletionEnabled(): boolean {
   }, [])
 
   return enabled
+}
+
+/**
+ * 只订阅会改变 CodeMirror 几何尺寸的偏好。
+ * 外层 CSS 变量负责视觉样式，这个值负责显式触发编辑器的测量缓存刷新。
+ */
+export function useWorkbenchEditorMetrics(): WorkbenchEditorMetrics {
+  const [metrics, setMetrics] = useState<WorkbenchEditorMetrics>(() =>
+    getWorkbenchEditorMetrics(readWorkbenchPreferences())
+  )
+
+  useEffect(() => {
+    const refresh = (): void => {
+      const next = getWorkbenchEditorMetrics(readWorkbenchPreferences())
+      setMetrics((current) => (current.key === next.key ? current : next))
+    }
+
+    const handleStorageChanged = (event: StorageEvent): void => {
+      if (event.key === 'velaros.workbench.preferences.v1') refresh()
+    }
+
+    window.addEventListener(WORKBENCH_PREFERENCES_CHANGED_EVENT, refresh)
+    window.addEventListener('storage', handleStorageChanged)
+
+    return () => {
+      window.removeEventListener(WORKBENCH_PREFERENCES_CHANGED_EVENT, refresh)
+      window.removeEventListener('storage', handleStorageChanged)
+    }
+  }, [])
+
+  return metrics
 }

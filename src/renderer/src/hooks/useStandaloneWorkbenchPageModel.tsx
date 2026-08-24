@@ -46,7 +46,7 @@ import {
 } from '@renderer/models/project/workbenchProjects'
 import type { PersistedWorkbenchEditorCursor } from '@renderer/models/project/workbenchProjectSessionModel'
 import {
-  getZoomedWorkbenchEditorFontSize,
+  getZoomedWorkbenchEditorZoomLevel,
   type WorkbenchEditorZoomAction,
 } from '@renderer/models/settings/workbenchPreferences'
 import type { WorkbenchLightEditorTab } from '@renderer/types/workbenchTypes'
@@ -259,7 +259,8 @@ export function useStandaloneWorkbenchPageModel(
     persistProjectList: shouldPersistProjectList,
     persistProjectSession: shouldUseProjectSession,
     restoreProjectSession: shouldUseProjectSession,
-    projectIndexEnabled: codeGraphResourceAvailable,
+    // Project 基础索引是内置能力；CodeGraph 只决定增强图谱入口是否点亮。
+    projectIndexEnabled: true,
     sessionCursorByPathRef,
   })
   const chat = useWorkbenchChatProjectRuntime(toNullable(workbench.activeProject?.rootPath))
@@ -730,8 +731,8 @@ export function useStandaloneWorkbenchPageModel(
 
   const zoomEditor = useMemoizedFn((action: WorkbenchEditorZoomAction): void => {
     workbenchPreferences.updatePreferences({
-      editorFontSize: getZoomedWorkbenchEditorFontSize(
-        workbenchPreferences.preferences.editorFontSize,
+      editorZoomLevel: getZoomedWorkbenchEditorZoomLevel(
+        workbenchPreferences.preferences.editorZoomLevel,
         action
       ),
     })

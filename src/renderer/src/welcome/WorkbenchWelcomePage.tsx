@@ -31,7 +31,7 @@ export function WorkbenchWelcomePage({
         <section className="workbench-welcome__hero">
           <Stack gap="xs">
             <Title level={1}>VelarOS Workbench</Title>
-            <Text tone="secondary">打开一个项目，开始开发。</Text>
+            <Text tone="secondary">构建你的下一个项目。</Text>
           </Stack>
           <Stack gap="sm" className="workbench-welcome__actions">
             <Button size="lg" onClick={onNewProject}>
@@ -47,9 +47,6 @@ export function WorkbenchWelcomePage({
               打开项目…
             </Button>
           </Stack>
-          <Text tone="caption" className="workbench-welcome__kernel-status">
-            Kernel：内置宿主（随 Workbench 运行）
-          </Text>
         </section>
         <section className="workbench-welcome__recents">
           <Title level={5}>最近项目</Title>

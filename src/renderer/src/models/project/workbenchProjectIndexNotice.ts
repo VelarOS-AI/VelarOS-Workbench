@@ -40,6 +40,9 @@ export function getWorkbenchProjectAiIndexNotice(
   const codeIndex = status.codeIndex
   if (!codeIndex || codeIndex.initialized) return null
 
+  // 未安装共享 CodeGraph 时相关功能整体隐藏，不用“跳过构建”通知反向暴露一个不存在的功能。
+  if (codeIndex.providerId === 'codegraph' && codeIndex.version === null && codeIndex.skipped) return null
+
   if (codeIndex.lastError) {
     const description = normalizeNoticeDescription(codeIndex.lastError)
     return {

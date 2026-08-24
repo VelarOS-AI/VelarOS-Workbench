@@ -6,6 +6,7 @@ export type WorkbenchLanguageServiceRuntime =
   | 'typescript-language-service'
   | 'html-language-service'
   | 'css-language-service'
+  | 'markdown-language-service'
   | 'python-language-server'
   | 'lsp-server'
 
@@ -72,6 +73,14 @@ const BuiltinLanguageServices: WorkbenchLanguageServiceDescriptor[] = [
     runtime: 'css-language-service',
     extensions: ['css', 'less', 'sass', 'scss'],
     languages: ['css', 'less', 'sass', 'scss'],
+  },
+  {
+    id: 'markdown',
+    label: 'Markdown',
+    installKind: 'builtin',
+    runtime: 'markdown-language-service',
+    extensions: ['md', 'markdown', 'mdown'],
+    languages: ['markdown'],
   },
 ]
 

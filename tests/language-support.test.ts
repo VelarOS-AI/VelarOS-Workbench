@@ -17,6 +17,9 @@ import {
   WorkbenchLanguageServices,
 } from '../src/main/workspace/language/LanguageServices'
 import {
+  resolveTypeScriptDefaultLibFilePath,
+} from '../src/main/workspace/language/TypeScriptProjectHost'
+import {
   VELAR_EDITOR_KEYWORDS,
   velarScript,
   VelarWorkbenchEditorLanguage,
@@ -111,7 +114,7 @@ void describe('focused Workbench language surface', () => {
   void test('keeps Velar outside the generic host until its built-in contribution is injected', () => {
     assert.deepEqual(
       getBuiltinWorkbenchLanguageServices().map((service) => service.id),
-      ['typescript-javascript', 'python', 'web-html', 'web-css']
+      ['typescript-javascript', 'python', 'web-html', 'web-css', 'markdown']
     )
     assert.equal(resolveBuiltinWorkbenchLanguageService('vel'), null)
     assert.equal(resolveWorkbenchCodeMirrorLanguage('src/main.vel', '').mode, 'plain-text')
@@ -119,7 +122,7 @@ void describe('focused Workbench language surface', () => {
     const remove = installVelarWorkbenchContribution()
     assert.deepEqual(
       getBuiltinWorkbenchLanguageServices().map((service) => service.id),
-      ['typescript-javascript', 'python', 'web-html', 'web-css', 'velarscript']
+      ['typescript-javascript', 'python', 'web-html', 'web-css', 'markdown', 'velarscript']
     )
     remove()
     for (const language of ['java', 'cpp', 'go', 'rust'])
@@ -258,7 +261,9 @@ void describe('focused Workbench language surface', () => {
       'velar'
     )
     const ranges: Array<{ from: number; to: number }> = []
-    decorations.between(0, 32, (from, to) => ranges.push({ from, to }))
+    decorations.between(0, 32, (from, to) => {
+      ranges.push({ from, to })
+    })
     assert.deepEqual(ranges, [{ from: 2, to: 8 }, { from: 19, to: 25 }])
 
     const pythonDoc = EditorState.create({ doc: 'value = 1 # if\nif True:\n' }).doc
@@ -268,9 +273,9 @@ void describe('focused Workbench language surface', () => {
       'python'
     )
     const pythonRanges: Array<{ from: number; to: number }> = []
-    pythonDecorations.between(0, pythonDoc.length, (from, to) =>
+    pythonDecorations.between(0, pythonDoc.length, (from, to) => {
       pythonRanges.push({ from, to })
-    )
+    })
     assert.deepEqual(pythonRanges, [{ from: 15, to: 17 }, { from: 18, to: 22 }])
     remove()
   })
@@ -285,6 +290,8 @@ void describe('focused Workbench language surface', () => {
       ['Dockerfile', 'FROM node:24\nRUN bun install\n', 'dockerfile', 'Dockerfile'],
       ['settings.ini', '[editor]\ntheme=light\n', 'properties', 'Properties'],
       ['.env.local', 'WORKBENCH_PORT=3000\n', 'properties', 'Environment'],
+      ['.gitignore', '# generated\nnode_modules/\n*.log\n', 'gitignore', 'Git Ignore'],
+      ['README.md', '# Workbench\n\n```ts\nconst ready = true\n```\n', 'markdown', 'Markdown'],
     ] as const
 
     for (const [path, content, languageId, label] of cases) {
@@ -379,6 +386,25 @@ void describe('focused Workbench language surface', () => {
     } finally {
       await services.dispose()
       await rm(projectRoot, { recursive: true, force: true })
+    }
+  })
+
+  void test('resolves TypeScript standard libraries from packaged Workbench resources', async () => {
+    const resourcesPath = await mkdtemp(join(tmpdir(), 'workbench-typescript-libs-'))
+    const bundledLibDirectory = join(resourcesPath, 'typescript', 'lib')
+    await mkdir(bundledLibDirectory, { recursive: true })
+    await writeFile(join(bundledLibDirectory, 'lib.esnext.full.d.ts'), '', 'utf8')
+
+    try {
+      assert.equal(
+        resolveTypeScriptDefaultLibFilePath(
+          { target: (await import('typescript')).ScriptTarget.ESNext },
+          resourcesPath
+        ),
+        join(bundledLibDirectory, 'lib.esnext.full.d.ts')
+      )
+    } finally {
+      await rm(resourcesPath, { recursive: true, force: true })
     }
   })
 

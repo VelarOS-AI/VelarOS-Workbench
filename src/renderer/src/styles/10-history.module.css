@@ -123,6 +123,15 @@
   background: var(--workbench-editor-bg, var(--card));
   border-right: 1px solid var(--workbench-border);
   color: var(--muted-foreground);
+  font-size: var(--workbench-editor-font-size);
+  line-height: var(--workbench-editor-line-height);
+}
+
+.editorHistoryCodeViewer
+  :global(.cm-editor.cm-workbenchMetricsRefreshing .cm-selectionLayer),
+.editorHistoryCodeViewer
+  :global(.cm-editor.cm-workbenchMetricsRefreshing .cm-cursorLayer) {
+  visibility: hidden;
 }
 
 .editorHistoryCodeViewer :global(.cm-workbenchHistorySearchMatch) {

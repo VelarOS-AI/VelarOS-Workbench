@@ -45,6 +45,7 @@ export function registerWorkbenchWorkspaceIpc(
 }
 
 const WorkspaceOperations = new Set<WorkbenchWorkspaceOperation>([
+  'resource:codegraph-status',
   'project:status',
   'project:read',
   'project:stat',
@@ -60,6 +61,8 @@ const WorkspaceOperations = new Set<WorkbenchWorkspaceOperation>([
   'project:validate',
   'project:rollback',
   'project:run-batch',
+  'project:codegraph-index',
+  'project:codegraph-graph',
 ])
 
 function isWorkspaceInvokeRequest(value: unknown): value is WorkbenchWorkspaceInvokeRequest {

@@ -1,7 +1,12 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
-import { EditorState, type Extension, type Range, StateField } from '@codemirror/state'
+import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef } from 'react'
+import { Compartment, EditorState, type Extension, type Range, StateField } from '@codemirror/state'
 import { Decoration, type DecorationSet, EditorView, gutter, GutterMarker } from '@codemirror/view'
+import { useWorkbenchEditorMetrics } from '@renderer/hooks/useWorkbenchPreferences'
 import { resolveWorkbenchCodeMirrorLanguage } from '@renderer/models/editor/workbenchCodeMirrorLanguage'
+import {
+  createWorkbenchCodeMirrorMetricsExtension,
+  refreshWorkbenchCodeMirrorMetrics,
+} from '@renderer/models/editor/workbenchCodeMirrorMetrics'
 import { getWorkbenchCodeMirrorTheme } from '@renderer/models/editor/workbenchCodeMirrorTheme'
 import type { WorkbenchUnifiedDiffRow } from '@renderer/models/git/workbenchGitDiffModel'
 import type { WorkbenchThemeId } from '@renderer/models/settings/workbenchPreferences'
@@ -100,6 +105,14 @@ export const ReadOnlyDiffCodeMirror = forwardRef<
   const viewRef = useRef<Nullable<EditorView>>(null)
   const anchorsRef = useRef<number[]>([])
   const cursorRef = useRef(-1)
+  const editorMetricsCompartment = useMemo(() => new Compartment(), [])
+  const editorMetrics = useWorkbenchEditorMetrics()
+
+  useLayoutEffect(() => {
+    const view = viewRef.current
+    if (!view) return
+    refreshWorkbenchCodeMirrorMetrics(view, editorMetricsCompartment, editorMetrics)
+  }, [editorMetrics, editorMetricsCompartment])
 
   useImperativeHandle(
     ref,
@@ -159,6 +172,7 @@ export const ReadOnlyDiffCodeMirror = forwardRef<
       diffGutter,
       decorationField,
       language.extension,
+      editorMetricsCompartment.of(createWorkbenchCodeMirrorMetricsExtension(editorMetrics)),
       getWorkbenchCodeMirrorTheme(workbenchTheme),
     ]
 
@@ -172,7 +186,7 @@ export const ReadOnlyDiffCodeMirror = forwardRef<
       view.destroy()
       viewRef.current = null
     }
-  }, [rows, path, workbenchTheme])
+  }, [editorMetricsCompartment, path, rows, workbenchTheme])
 
   return (
     <div

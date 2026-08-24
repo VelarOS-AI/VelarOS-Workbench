@@ -472,6 +472,10 @@
   --workbench-editor-active-line: rgba(var(--status-blue-rgb), 0.055);
   --workbench-editor-active-gutter: rgba(var(--status-blue-rgb), 0.09);
   --workbench-editor-selection: rgba(var(--status-blue-rgb), 0.16);
+  --workbench-editor-comment-block-bg: rgba(var(--workbench-theme-color-rgb), 0.12);
+  --workbench-editor-comment-block-accent: var(--workbench-theme-color);
+  --workbench-editor-comment-marker-fg: var(--workbench-theme-color);
+  --workbench-editor-comment-marker-bg: rgba(var(--workbench-theme-color-rgb), 0.14);
   --workbench-editor-occurrence-match: rgba(56, 139, 253, 0.14);
   --workbench-editor-occurrence-match-active: rgba(56, 139, 253, 0.28);
   --workbench-editor-caret: #111111;

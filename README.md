@@ -28,6 +28,11 @@ and `velaros.browser` have no implementation here, so those capabilities are sim
 consumers degrade. Agent mod packs are discovered, enabled and installed by Workbench itself from
 its own data root — a single owner, no cross-process mod registry.
 
+Downloadable runtimes follow a different boundary from mods and application state. Workbench reads
+CodeGraph from the VelarOS user-level shared resource store, the same installation consumed by
+Desktop. When that shared resource is absent, CodeGraph graph, build, status, and prompt surfaces are
+hidden; the built-in Project file and language capabilities remain available.
+
 See [docs/agent-mod-trunk.md](docs/agent-mod-trunk.md) for the mod registration trunk and the list of
 capabilities this host deliberately does not have yet.
 

@@ -27,6 +27,7 @@ export function fileLanguage(path: Nullable<string>): string {
   if (fileName === 'cargo.lock') return 'TOML'
   if (fileName === '.bashrc' || fileName === '.profile' || fileName === '.zshrc') return 'Shell'
   if (fileName === '.env' || fileName.startsWith('.env.')) return 'Environment'
+  if (fileName === '.gitignore') return 'Git Ignore'
 
   const extension = path.split('.').at(-1)?.toLowerCase()
   switch (extension) {
@@ -42,6 +43,8 @@ export function fileLanguage(path: Nullable<string>): string {
     case 'css':
       return 'CSS'
     case 'md':
+    case 'markdown':
+    case 'mdown':
     case 'mdx':
       return 'Markdown'
     case 'yaml':

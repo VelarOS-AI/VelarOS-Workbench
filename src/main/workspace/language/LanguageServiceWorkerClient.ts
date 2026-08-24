@@ -30,6 +30,8 @@ export interface WorkbenchLanguageServiceWorkerPort {
 
 type WorkbenchLanguageServiceWorkerFactory = () => WorkbenchLanguageServiceWorkerPort
 
+const GracefulWorkerShutdownTimeoutMs = 8_000
+
 interface PendingLanguageServiceRequest {
   resolve: (result: unknown) => void
   reject: (error: AppError) => void
@@ -81,6 +83,7 @@ function createDefaultLanguageServiceWorker(): WorkbenchLanguageServiceWorkerPor
  */
 export class WorkbenchLanguageServiceWorkerClient {
   private worker: Nullable<WorkbenchLanguageServiceWorkerPort> = null
+  private disposed = false
   private nextRequestId = 1
   private readonly pending = new Map<number, PendingLanguageServiceRequest>()
   private readonly inFlightDiagnostics: InFlightDiagnosticsRequest[] = []
@@ -158,10 +161,33 @@ export class WorkbenchLanguageServiceWorkerClient {
   }
 
   public async dispose(): Promise<void> {
+    if (this.disposed) return
+    this.disposed = true
     const worker = this.worker
-    this.worker = null
-    this.rejectPending(new AppError('IPC', 'Workbench 语言服务已关闭。'))
-    if (worker) await worker.terminate()
+    if (!worker) {
+      this.rejectPending(new AppError('IPC', 'Workbench 语言服务已关闭。'))
+      return
+    }
+
+    let timeout: Nullable<ReturnType<typeof setTimeout>> = null
+    try {
+      const gracefulShutdown = this.sendToWorker(worker, 'shutdown', {})
+      await Promise.race([
+        gracefulShutdown,
+        new Promise<void>((_resolve, reject) => {
+          timeout = setTimeout(() => {
+            reject(new AppError('IPC', 'Workbench 语言服务关闭超时。'))
+          }, GracefulWorkerShutdownTimeoutMs)
+        }),
+      ])
+    } catch {
+      // worker 已异常或服务端无响应时仍需继续退出；terminate 是最终兜底。
+    } finally {
+      if (timeout) clearTimeout(timeout)
+      if (this.worker === worker) this.worker = null
+      this.rejectPending(new AppError('IPC', 'Workbench 语言服务已关闭。'))
+      await worker.terminate().catch(() => 0)
+    }
   }
 
   private call<TOperation extends WorkbenchLanguageServiceWorkerOperation>(
@@ -200,6 +226,14 @@ export class WorkbenchLanguageServiceWorkerClient {
     request: WorkbenchLanguageServiceWorkerOperationMap[TOperation]['request']
   ): Promise<WorkbenchLanguageServiceWorkerOperationMap[TOperation]['result']> {
     const worker = this.ensureWorker()
+    return this.sendToWorker(worker, operation, request)
+  }
+
+  private sendToWorker<TOperation extends WorkbenchLanguageServiceWorkerOperation>(
+    worker: WorkbenchLanguageServiceWorkerPort,
+    operation: TOperation,
+    request: WorkbenchLanguageServiceWorkerOperationMap[TOperation]['request']
+  ): Promise<WorkbenchLanguageServiceWorkerOperationMap[TOperation]['result']> {
     const id = this.nextRequestId++
 
     return new Promise((resolvePromise, reject) => {
@@ -221,6 +255,7 @@ export class WorkbenchLanguageServiceWorkerClient {
   }
 
   private ensureWorker(): WorkbenchLanguageServiceWorkerPort {
+    if (this.disposed) throw new AppError('IPC', 'Workbench 语言服务已关闭。')
     if (this.worker) return this.worker
 
     const worker = this.createWorker()

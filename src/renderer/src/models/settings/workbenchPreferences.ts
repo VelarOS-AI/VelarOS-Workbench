@@ -26,6 +26,8 @@ export interface WorkbenchPreferences {
   density: WorkbenchDensity
   editorFontSize: number
   editorLineHeight: number
+  /** 快捷键控制的代码区缩放级别；基础字号和行高仍由设置面板独立维护。 */
+  editorZoomLevel: number
   theme: WorkbenchThemeId
   /**
    * 是否启用 AI Tab 内联补全（Cursor 式 ghost text）。服务商/模型在设置的 AI 补全区配置。
@@ -39,11 +41,21 @@ export interface WorkbenchPreferences {
   localHistoryThrottleSeconds: number
 }
 
+export interface WorkbenchEditorMetrics {
+  /** CodeMirror 直接消费的最终字号，已包含快捷键缩放。 */
+  fontSize: string
+  /** CodeMirror 直接消费的最终行高，已包含快捷键缩放。 */
+  lineHeight: string
+  /** 仅在影响编辑器几何尺寸的偏好变化时改变。 */
+  key: string
+}
+
 export const DEFAULT_WORKBENCH_PREFERENCES: WorkbenchPreferences = {
   accent: 'blue',
   density: 'balanced',
   editorFontSize: 12.5,
   editorLineHeight: 20.25,
+  editorZoomLevel: 0,
   theme: 'light-modern',
   aiCompletionEnabled: false,
   localHistoryThrottleSeconds: 60,
@@ -52,6 +64,9 @@ export const DEFAULT_WORKBENCH_PREFERENCES: WorkbenchPreferences = {
 export const WORKBENCH_EDITOR_FONT_SIZE_MIN = 11
 export const WORKBENCH_EDITOR_FONT_SIZE_MAX = 18
 export const WORKBENCH_EDITOR_FONT_SIZE_STEP = 0.5
+export const WORKBENCH_EDITOR_ZOOM_LEVEL_MIN = -4
+export const WORKBENCH_EDITOR_ZOOM_LEVEL_MAX = 8
+export const WORKBENCH_EDITOR_ZOOM_SCALE_STEP = 1.05
 
 export type WorkbenchEditorZoomAction = 'increase' | 'decrease' | 'reset'
 
@@ -114,27 +129,51 @@ function clampNumber(value: any, min: number, max: number, fallback: number): nu
   return Math.min(max, Math.max(min, value))
 }
 
-/** 返回落在设置面板同一 0.5px 网格上的下一档编辑器字号。 */
-export function getZoomedWorkbenchEditorFontSize(
-  currentFontSize: number,
+/** 快捷键只改变代码区缩放级别，不改写用户配置的基础字号或行高。 */
+export function getZoomedWorkbenchEditorZoomLevel(
+  currentLevel: number,
   action: WorkbenchEditorZoomAction
 ): number {
-  if (action === 'reset') return DEFAULT_WORKBENCH_PREFERENCES.editorFontSize
+  if (action === 'reset') return 0
 
-  const normalizedCurrent = clampNumber(
-    currentFontSize,
-    WORKBENCH_EDITOR_FONT_SIZE_MIN,
-    WORKBENCH_EDITOR_FONT_SIZE_MAX,
-    DEFAULT_WORKBENCH_PREFERENCES.editorFontSize
+  const normalizedLevel = Math.round(
+    clampNumber(currentLevel, WORKBENCH_EDITOR_ZOOM_LEVEL_MIN, WORKBENCH_EDITOR_ZOOM_LEVEL_MAX, 0)
   )
-  const currentStep = Math.round(normalizedCurrent / WORKBENCH_EDITOR_FONT_SIZE_STEP)
-  const stepDelta = action === 'increase' ? 1 : -1
   return clampNumber(
-    (currentStep + stepDelta) * WORKBENCH_EDITOR_FONT_SIZE_STEP,
-    WORKBENCH_EDITOR_FONT_SIZE_MIN,
-    WORKBENCH_EDITOR_FONT_SIZE_MAX,
-    DEFAULT_WORKBENCH_PREFERENCES.editorFontSize
+    normalizedLevel + (action === 'increase' ? 1 : -1),
+    WORKBENCH_EDITOR_ZOOM_LEVEL_MIN,
+    WORKBENCH_EDITOR_ZOOM_LEVEL_MAX,
+    0
   )
+}
+
+export function getWorkbenchEditorZoomScale(level: number): number {
+  const normalizedLevel = Math.round(
+    clampNumber(level, WORKBENCH_EDITOR_ZOOM_LEVEL_MIN, WORKBENCH_EDITOR_ZOOM_LEVEL_MAX, 0)
+  )
+  return WORKBENCH_EDITOR_ZOOM_SCALE_STEP ** normalizedLevel
+}
+
+function roundWorkbenchEditorMetric(value: number): number {
+  return Math.round(value * 100) / 100
+}
+
+/**
+ * 把设置面板的基础尺寸和快捷键缩放收敛成 CodeMirror 唯一的几何输入。
+ * 光标、选区、行号和挂载浮层都用同一个 key 刷新，避免各自监听 CSS 变化。
+ */
+export function getWorkbenchEditorMetrics(
+  preferences: WorkbenchPreferences
+): WorkbenchEditorMetrics {
+  const scale = getWorkbenchEditorZoomScale(preferences.editorZoomLevel)
+  const fontSize = `${roundWorkbenchEditorMetric(preferences.editorFontSize * scale)}px`
+  const lineHeight = `${roundWorkbenchEditorMetric(preferences.editorLineHeight * scale)}px`
+
+  return {
+    fontSize,
+    lineHeight,
+    key: `${fontSize}:${lineHeight}`,
+  }
 }
 
 function normalizeChoice<T extends string>(value: any, allowed: ReadonlySet<T>, fallback: T): T {
@@ -185,6 +224,14 @@ export function normalizeWorkbenchPreferences(
       28,
       DEFAULT_WORKBENCH_PREFERENCES.editorLineHeight
     ),
+    editorZoomLevel: Math.round(
+      clampNumber(
+        preferences?.editorZoomLevel,
+        WORKBENCH_EDITOR_ZOOM_LEVEL_MIN,
+        WORKBENCH_EDITOR_ZOOM_LEVEL_MAX,
+        DEFAULT_WORKBENCH_PREFERENCES.editorZoomLevel
+      )
+    ),
     theme: normalizeWorkbenchThemeChoice(preferences?.theme),
     aiCompletionEnabled:
       typeof preferences?.aiCompletionEnabled === 'boolean'
@@ -233,9 +280,10 @@ export function saveWorkbenchPreferences(
 }
 
 export function getWorkbenchPreferencesStyle(preferences: WorkbenchPreferences): CSSProperties {
+  const editorMetrics = getWorkbenchEditorMetrics(preferences)
   return {
-    '--workbench-editor-font-size': `${preferences.editorFontSize}px`,
-    '--workbench-editor-line-height': `${preferences.editorLineHeight}px`,
+    '--workbench-editor-font-size': editorMetrics.fontSize,
+    '--workbench-editor-line-height': editorMetrics.lineHeight,
   } as CSSProperties
 }
 

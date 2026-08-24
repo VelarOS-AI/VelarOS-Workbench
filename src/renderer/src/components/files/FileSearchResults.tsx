@@ -1,6 +1,8 @@
-import { FolderIcon } from '@phosphor-icons/react'
+import { FolderIcon, PlayCircleIcon } from '@phosphor-icons/react'
 import { useWorkbenchI18n } from '@renderer/i18n'
 import type { WorkbenchContentSearchMatch } from '@renderer/models/files/workbenchContentSearchModel'
+import { getWorkbenchFilePresentationVariant } from '@renderer/models/files/workbenchFilePresentation'
+import { isWorkbenchTestFilePath } from '@renderer/models/files/workbenchTestFile'
 import type { WorkbenchGitDecorationMap } from '@renderer/models/git/workbenchGitModel'
 import type { MouseEvent, ReactElement } from 'react'
 
@@ -85,8 +87,20 @@ export function FileSearchResults({
                         <FolderIcon size={15} weight="duotone" />
                       </span>
                     ) : (
-                      <span className={styles.treeFileIcon}>
+                      <span
+                        className={styles.treeFileIcon}
+                        data-kind={getWorkbenchFilePresentationVariant({ fileName: entry.name })}
+                        data-test-file={isWorkbenchTestFilePath(entry.path) || undefined}
+                      >
                         <WorkbenchFileTypeIcon fileName={entry.name} size={15} />
+                        {isWorkbenchTestFilePath(entry.path) && (
+                          <PlayCircleIcon
+                            size={8}
+                            weight="fill"
+                            className={styles.treeTestFileBadge}
+                            aria-hidden="true"
+                          />
+                        )}
                       </span>
                     )}
                     <span className={styles.searchResultCopy}>
@@ -129,8 +143,20 @@ export function FileSearchResults({
                     onClick={() => onOpenContentSearchMatch(match)}
                     onMouseEnter={() => onActivateSearchResult(searchEntries.length + index)}
                   >
-                    <span className={styles.treeFileIcon}>
+                    <span
+                      className={styles.treeFileIcon}
+                      data-kind={getWorkbenchFilePresentationVariant({ fileName: match.fileName })}
+                      data-test-file={isWorkbenchTestFilePath(match.path) || undefined}
+                    >
                       <WorkbenchFileTypeIcon fileName={match.fileName} size={15} />
+                      {isWorkbenchTestFilePath(match.path) && (
+                        <PlayCircleIcon
+                          size={8}
+                          weight="fill"
+                          className={styles.treeTestFileBadge}
+                          aria-hidden="true"
+                        />
+                      )}
                     </span>
                     <span className={styles.searchResultCopy}>
                       <Text truncate className={styles.searchResultName}>

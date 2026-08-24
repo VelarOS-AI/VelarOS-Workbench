@@ -175,6 +175,7 @@ export function StandaloneWorkbenchPagePresentation(): ReactElement {
             model={embeddedKernelModel}
             leftMode={surface.activeLeftTool === 'commit' ? 'changes' : 'files'}
             embeddedChrome={{
+              editorStyle: workbenchPreferences.style,
               filePanelWidth: layout.filePaneWidth,
               isFilePanelOpen: surface.isFilePanelOpen,
               isFilePanelInline: true,

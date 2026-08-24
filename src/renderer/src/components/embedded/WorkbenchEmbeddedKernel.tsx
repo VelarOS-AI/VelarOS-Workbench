@@ -34,6 +34,8 @@ interface WorkbenchEmbeddedKernelChrome {
   filePanelWidth: number
   isFilePanelOpen: boolean
   isFilePanelInline: boolean
+  /** 编辑器字号等仅作用于代码面的偏好，显式穿过嵌套 shell，避免默认值覆盖。 */
+  editorStyle?: CSSProperties
   onFilePanelResizePointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void
 }
 
@@ -91,6 +93,7 @@ export function WorkbenchEmbeddedKernel({
         data-workbench-density="compact"
         style={
           {
+            ...embeddedChrome.editorStyle,
             '--workbench-embedded-file-pane-width': `${embeddedChrome.filePanelWidth}px`,
           } as CSSProperties
         }

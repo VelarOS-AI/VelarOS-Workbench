@@ -10,6 +10,7 @@ import { ipcMain } from 'electron'
 import type {
   WorkbenchCreateEntryRequest,
   WorkbenchDeleteEntryRequest,
+  WorkbenchInspectDeleteEntryRequest,
   WorkbenchListDirectoryRequest,
   WorkbenchListLocalHistoryRequest,
   WorkbenchMoveEntryRequest,
@@ -102,6 +103,15 @@ export function registerWorkbenchFsIpc(
       if (!parsed) return invalidRequest()
 
       return parts.files.moveEntry(parsed)
+    })
+  )
+
+  ipcMain.handle(WorkbenchFsChannels.inspectDeleteEntry, (_event, request: unknown) =>
+    callWithEnvelope(() => {
+      const parsed = parseInspectDeleteEntryRequest(request)
+      if (!parsed) return invalidRequest()
+
+      return parts.files.inspectDeleteEntry(parsed)
     })
   )
 
@@ -253,6 +263,18 @@ function parseMoveEntryRequest(input: unknown): Nullable<WorkbenchMoveEntryReque
 }
 
 function parseDeleteEntryRequest(input: unknown): Nullable<WorkbenchDeleteEntryRequest> {
+  if (!hasStringFields(input, ['projectRoot', 'path'])) return null
+
+  return {
+    projectRoot: input['projectRoot'] as string,
+    path: input['path'] as string,
+    ...optionalBoolean(input, 'recursive'),
+  }
+}
+
+function parseInspectDeleteEntryRequest(
+  input: unknown
+): Nullable<WorkbenchInspectDeleteEntryRequest> {
   if (!hasStringFields(input, ['projectRoot', 'path'])) return null
 
   return {

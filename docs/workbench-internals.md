@@ -21,3 +21,6 @@ Workbench 是单体仓库：根 `package.json` 是唯一清单，全部产品源
 - 跨产品共享的无状态组件继续归属 `@velaros-ai/ui`，不复制进 Workbench。
 - 通用语言宿主不包含 VelarScript 特判；editor 贡献归 renderer，服务描述归 shared。
 - Workbench 不依赖 VelarOS Desktop 内部源码，仍作为独立应用构建和发布。
+- 可重复下载的外部 runtime 使用 VelarOS 组织级共享资源磁盘 ABI；Workbench 只消费共享
+  CodeGraph 安装，不在自身 `userData` 建第二份。配置、启停、项目索引和缓存仍由 Workbench
+  独立持有；未安装时相关 CodeGraph UI 整体隐藏。

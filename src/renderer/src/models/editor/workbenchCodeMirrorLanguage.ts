@@ -7,7 +7,7 @@ import { python } from '@codemirror/lang-python'
 import { sql } from '@codemirror/lang-sql'
 import { xml } from '@codemirror/lang-xml'
 import { yaml } from '@codemirror/lang-yaml'
-import { StreamLanguage } from '@codemirror/language'
+import { LanguageDescription, StreamLanguage } from '@codemirror/language'
 import { dockerFile } from '@codemirror/legacy-modes/mode/dockerfile'
 import { properties } from '@codemirror/legacy-modes/mode/properties'
 import { shell } from '@codemirror/legacy-modes/mode/shell'
@@ -17,6 +17,8 @@ import type { Extension } from '@codemirror/state'
 import { getWorkbenchPathExtension, normalizeWorkbenchLanguage } from '@shared/language/workbenchLanguageServices'
 
 import { resolveWorkbenchEditorLanguage } from '../../language/workbenchEditorLanguageContributions'
+
+import { workbenchGitIgnoreLanguage } from './workbenchGitIgnoreLanguage'
 
 export type WorkbenchCodeMirrorLanguageSupportMode = 'builtin' | 'plain-text'
 
@@ -37,12 +39,35 @@ const XmlTokens = new Set(['atom', 'plist', 'rss', 'svg', 'xml', 'xsd', 'xsl', '
 const ShellTokens = new Set(['bash', 'sh', 'shell', 'zsh'])
 const PropertiesTokens = new Set(['cfg', 'env', 'ini', 'properties'])
 
+const MarkdownCodeLanguages = [
+  LanguageDescription.of({
+    name: 'JavaScript',
+    alias: ['js', 'jsx', 'mjs', 'cjs'],
+    extensions: ['js', 'jsx', 'mjs', 'cjs'],
+    support: javascript({ jsx: true }),
+  }),
+  LanguageDescription.of({
+    name: 'TypeScript',
+    alias: ['ts', 'tsx', 'mts', 'cts'],
+    extensions: ['ts', 'tsx', 'mts', 'cts'],
+    support: javascript({ jsx: true, typescript: true }),
+  }),
+  LanguageDescription.of({ name: 'CSS', extensions: ['css'], support: css() }),
+  LanguageDescription.of({ name: 'HTML', alias: ['html'], extensions: ['html'], support: html() }),
+  LanguageDescription.of({ name: 'JSON', extensions: ['json', 'jsonc'], support: json() }),
+  LanguageDescription.of({ name: 'Python', alias: ['py'], extensions: ['py'], support: python() }),
+  LanguageDescription.of({ name: 'SQL', extensions: ['sql'], support: sql() }),
+  LanguageDescription.of({ name: 'XML', extensions: ['xml'], support: xml() }),
+  LanguageDescription.of({ name: 'YAML', alias: ['yml'], extensions: ['yaml', 'yml'], support: yaml() }),
+]
+
 function getSpecialFileLanguageToken(path: Nullable<string>): string {
   const fileName = path?.split(/[\\/]/).at(-1)?.toLowerCase() ?? ''
   if (fileName === 'dockerfile' || fileName === 'containerfile') return 'dockerfile'
   if (fileName === 'cargo.lock') return 'toml'
   if (fileName === '.bashrc' || fileName === '.profile' || fileName === '.zshrc') return 'shell'
   if (fileName === '.env' || fileName.startsWith('.env.')) return 'properties'
+  if (fileName === '.gitignore') return 'gitignore'
   return ''
 }
 
@@ -84,8 +109,15 @@ export function resolveWorkbenchCodeMirrorLanguage(
   if (token === 'json' || token === 'jsonc')
     return { extension: json(), languageId: 'json', mode: 'builtin' }
 
-  if (token === 'markdown' || token === 'md' || token === 'mdx')
-    return { extension: markdown(), languageId: 'markdown', mode: 'builtin' }
+  if (token === 'markdown' || token === 'md' || token === 'mdown' || token === 'mdx')
+    return {
+      extension: markdown({ codeLanguages: MarkdownCodeLanguages }),
+      languageId: 'markdown',
+      mode: 'builtin',
+    }
+
+  if (token === 'gitignore')
+    return { extension: workbenchGitIgnoreLanguage, languageId: 'gitignore', mode: 'builtin' }
 
   if (YamlTokens.has(token))
     return { extension: yaml(), languageId: 'yaml', mode: 'builtin' }

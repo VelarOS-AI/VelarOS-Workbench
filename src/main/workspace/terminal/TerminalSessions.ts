@@ -79,11 +79,16 @@ class TerminalSessions {
       throw new AppError('VALIDATION', '工作台终端启动目录必须是目录。')
     }
 
-    const shell = systemPlatformCompatibility.getPreferredShellPath(process.env)
-    const shellArgs = systemPlatformCompatibility.getInteractiveShellArgs()
+    const initialCommand = request.initialCommand?.trim()
+    const shellSpec = initialCommand
+      ? this.commandHelper.getShellSpec(initialCommand)
+      : {
+          file: systemPlatformCompatibility.getPreferredShellPath(process.env),
+          args: systemPlatformCompatibility.getInteractiveShellArgs(),
+        }
     const sessionId = `terminal-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
     const timers = new TimerScope({ name: 'WorkbenchTerminalSession' })
-    const child = spawn(shell, shellArgs, {
+    const child = spawn(shellSpec.file, shellSpec.args, {
       cwd: cwdPath.realPath,
       detached: this.commandHelper.shouldDetachForegroundProcess(),
       env: {
@@ -151,18 +156,11 @@ class TerminalSessions {
       disposed: false,
     })
 
-    // 运行卡：起会话后立即执行配置命令。命令作为前台进程运行，其 stdin 直连该子进程，
-    // 因此不追加 cwd 探针（探针会被前台进程误读）。
-    const initialCommand = request.initialCommand?.trim()
-    if (initialCommand && child.stdin.writable) {
-      child.stdin.write(`${initialCommand}\n`)
-    }
-
     return {
       sessionId,
       projectRoot,
       cwd: cwdPath.realPath,
-      shell,
+      shell: shellSpec.file,
       startedAt: Date.now(),
     }
   }

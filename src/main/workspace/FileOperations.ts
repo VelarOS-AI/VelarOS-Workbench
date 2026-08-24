@@ -35,6 +35,8 @@ import type {
   WorkbenchDeleteEntryRequest,
   WorkbenchDeleteEntryResult,
   WorkbenchEntryMutationResult,
+  WorkbenchInspectDeleteEntryRequest,
+  WorkbenchInspectDeleteEntryResult,
   WorkbenchListLocalHistoryRequest,
   WorkbenchListLocalHistoryResult,
   WorkbenchMoveEntryRequest,
@@ -365,8 +367,8 @@ class FileOperations {
       const targetStats = await stat(targetPath.realPath)
       if (targetStats.isDirectory()) {
         const entries = await readdir(targetPath.realPath)
-        if (entries.length > 0) {
-          throw new AppError('VALIDATION', '目录不为空，暂不支持递归删除。')
+        if (entries.length > 0 && !request.recursive) {
+          throw new AppError('VALIDATION', '目录包含内容，需要确认后才能删除。')
         }
       }
 
@@ -400,6 +402,38 @@ class FileOperations {
         restoreId,
       }
     })
+  }
+
+  public async inspectDeleteEntry(
+    request: WorkbenchInspectDeleteEntryRequest
+  ): Promise<WorkbenchInspectDeleteEntryResult> {
+    const projectRoot = await this.pathResolver.resolveProjectRoot(request.projectRoot)
+    const targetPath = await this.pathResolver.resolveInsideProject(projectRoot, request.path)
+    const relativePath = this.pathResolver.toProjectRelativePath(
+      projectRoot,
+      targetPath.requestedPath
+    )
+
+    if (relativePath === '.') {
+      throw new AppError('VALIDATION', '不能删除工程根目录。')
+    }
+
+    const targetLinkStats = await lstat(targetPath.requestedPath)
+    if (targetLinkStats.isSymbolicLink()) {
+      throw new AppError('VALIDATION', '工作台暂不直接删除符号链接。')
+    }
+
+    const targetStats = await stat(targetPath.realPath)
+    const type = targetStats.isDirectory() ? 'directory' : 'file'
+    const requiresConfirmation =
+      type === 'file' || (await readdir(targetPath.realPath)).length > 0
+
+    return {
+      projectRoot,
+      path: relativePath,
+      type,
+      requiresConfirmation,
+    }
   }
 
   public async restoreDeletedEntry(

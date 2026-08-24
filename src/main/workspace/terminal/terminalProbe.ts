@@ -68,7 +68,7 @@ try {
   const session = await terminal.startTerminalSession(
     {
       projectRoot,
-      initialCommand: "printf 'VELAROS_TERMINAL_PROBE_OK\\n'; exit",
+      initialCommand: "printf 'VELAROS_TERMINAL_PROBE_OK\\n'",
     },
     (event) => {
       output.push(event.chunk)

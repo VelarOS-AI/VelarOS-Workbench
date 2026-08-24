@@ -6,8 +6,10 @@ import type { Result as ResultType } from '@velaros-ai/core/result'
 
 import type {
   SystemOverview,
+  WorkbenchGetCodeGraphResult,
   WorkbenchIndexProjectRequest,
   WorkbenchIndexProjectResult,
+  WorkbenchProjectAiCodeIndexDiagnostics,
   WorkbenchProjectAiIndexStatus,
   WorkbenchProjectAiRuleFile,
   WorkbenchProjectAiRuleSource,
@@ -152,7 +154,8 @@ async function indexProjectWithWorkspace(
 function createAiIndexStatus(
   projectRoot: string,
   projectIndex: WorkbenchIndexProjectResult,
-  startedAt: number
+  startedAt: number,
+  codeIndex: WorkbenchProjectAiCodeIndexDiagnostics
 ): WorkbenchProjectAiIndexStatus {
   const packageFile = projectIndex.files.find((file) => file.path === 'package.json')
   let packageName: string | null = null
@@ -185,23 +188,7 @@ function createAiIndexStatus(
     likelyCommandCount: 0,
     sourceRootCount: new Set(projectIndex.files.map((file) => file.path.split('/')[0])).size,
     languages,
-    codeIndex: {
-      providerId: '@velaros-ai/project',
-      providerLabel: 'VelarOS Workspace',
-      version: '1.2.2',
-      initialized: false,
-      indexing: false,
-      watching: false,
-      fileCount: projectIndex.files.length,
-      nodeCount: 0,
-      edgeCount: 0,
-      frameworks: [],
-      backend: 'workspace',
-      journalMode: null,
-      pendingFileCount: 0,
-      lastError: null,
-      skipped: true,
-    },
+    codeIndex,
   }
   aiIndexStatusByRoot.set(projectRoot, status)
   return status
@@ -351,12 +338,37 @@ const standaloneWorkbenchHost: WorkbenchHost = {
         const startedAt = Date.now()
         const projectIndex = await indexProjectWithWorkspace(request)
         if (!projectIndex.ok) return projectIndex
+        const codeGraphIndex = await invokeWorkspace<WorkbenchProjectAiCodeIndexDiagnostics>(
+          request.projectRoot,
+          'project:codegraph-index',
+          { force: request.forceCodeGraph || request.force }
+        )
+        const codeIndex = codeGraphIndex.ok
+          ? codeGraphIndex.data
+          : {
+              providerId: 'codegraph',
+              providerLabel: 'CodeGraph',
+              version: null,
+              initialized: false,
+              indexing: false,
+              watching: false,
+              fileCount: 0,
+              nodeCount: 0,
+              edgeCount: 0,
+              frameworks: [],
+              backend: null,
+              journalMode: null,
+              pendingFileCount: 0,
+              lastError: codeGraphIndex.error.message,
+              skipped: false,
+            } satisfies WorkbenchProjectAiCodeIndexDiagnostics
         return Result.ok({
           projectIndex: projectIndex.data,
           status: createAiIndexStatus(
             request.projectRoot,
             projectIndex.data,
-            startedAt
+            startedAt,
+            codeIndex
           ),
           scheduled: false,
         })
@@ -387,13 +399,12 @@ const standaloneWorkbenchHost: WorkbenchHost = {
       },
       getWorkbenchProjectAiRules: (request) =>
         readProjectAiRules(request.projectRoot),
-      getWorkbenchCodeGraph: (request) => Promise.resolve(Result.ok({
-        projectRoot: request.projectRoot,
-        mode: request.mode,
-        nodes: [],
-        edges: [],
-        truncated: false,
-      })),
+      getWorkbenchCodeGraph: (request) =>
+        invokeWorkspace<WorkbenchGetCodeGraphResult>(
+          request.projectRoot,
+          'project:codegraph-graph',
+          request
+        ),
       saveWorkbenchFile: async (request) =>
         toHostResult(await window.velarosWorkbenchFs.saveFile(request)),
       saveWorkbenchFileSync: (request) =>
@@ -408,6 +419,8 @@ const standaloneWorkbenchHost: WorkbenchHost = {
         toHostResult(await window.velarosWorkbenchFs.renameEntry(request)),
       moveWorkbenchEntry: async (request) =>
         toHostResult(await window.velarosWorkbenchFs.moveEntry(request)),
+      inspectWorkbenchDeleteEntry: async (request) =>
+        toHostResult(await window.velarosWorkbenchFs.inspectDeleteEntry(request)),
       deleteWorkbenchEntry: async (request) =>
         toHostResult(await window.velarosWorkbenchFs.deleteEntry(request)),
       restoreDeletedWorkbenchEntry: async (request) =>

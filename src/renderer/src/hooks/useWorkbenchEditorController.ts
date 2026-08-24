@@ -42,7 +42,6 @@ const log = Log.tag('workbench-editor-controller')
 
 interface UseWorkbenchEditorControllerOptions {
   activeProject: Nullable<WorkbenchProject>
-  onSelectEntryPath: (path: string) => void
   onFileMetadataSaved: (file: WorkbenchReadFileResult) => void
   onFileSaved: () => void
   onExternalFilesChanged: () => void
@@ -59,7 +58,6 @@ interface WorkbenchSaveEditorTabOptions {
 
 export function useWorkbenchEditorController({
   activeProject,
-  onSelectEntryPath,
   onFileMetadataSaved,
   onFileSaved,
   onExternalFilesChanged,
@@ -83,7 +81,6 @@ export function useWorkbenchEditorController({
   const selectedFilePathRef = useLatest(selectedFilePath)
   const openTabsByPathLatest = useLatest(openTabsByPath)
   const activeProjectRef = useLatest(activeProject)
-  const onSelectEntryPathLatest = useLatest(onSelectEntryPath)
   const onFileMetadataSavedLatest = useLatest(onFileMetadataSaved)
   const onFileSavedLatest = useLatest(onFileSaved)
   const onExternalFilesChangedLatest = useLatest(onExternalFilesChanged)
@@ -262,7 +259,6 @@ export function useWorkbenchEditorController({
       if (existingTab) {
         abandonInFlightRequests()
         pendingFilePathRef.current = null
-        onSelectEntryPathLatest.current(path)
         setSelectedFilePath(path)
         setSelectedFile(existingTab.file)
         setEditorContent(existingTab.content)
@@ -283,9 +279,8 @@ export function useWorkbenchEditorController({
         )
         if (!isActive(generation) || activeProjectRef.current?.id !== owningProjectId) return
 
-        // JetBrains 式提交：读取完成前保留当前编辑器；就绪后同一批次提交树选中、
+        // JetBrains 式提交：读取完成前保留当前编辑器；就绪后同一批次提交
         // 选项卡和正文，避免半成品 tab 与“正在读取文件”占位来回闪烁。
-        onSelectEntryPathLatest.current(path)
         setSelectedFilePath(path)
         setSelectedFile(result)
         setEditorContent(result.content)
@@ -432,7 +427,6 @@ export function useWorkbenchEditorController({
       return
     }
 
-    onSelectEntryPathLatest.current(nextSelectedTab.path)
     setSelectedFilePath(nextSelectedTab.path)
     setSelectedFile(nextSelectedTab.file)
     setEditorContent(nextSelectedTab.content)
@@ -468,7 +462,6 @@ export function useWorkbenchEditorController({
       return
     }
 
-    onSelectEntryPathLatest.current(nextSelectedTab.path)
     setSelectedFilePath(nextSelectedTab.path)
     setSelectedFile(nextSelectedTab.file)
     setEditorContent(nextSelectedTab.content)
@@ -502,7 +495,6 @@ export function useWorkbenchEditorController({
       return
     }
 
-    onSelectEntryPathLatest.current(nextSelectedTab.path)
     setSelectedFilePath(nextSelectedTab.path)
     setSelectedFile(nextSelectedTab.file)
     setEditorContent(nextSelectedTab.content)
@@ -521,7 +513,6 @@ export function useWorkbenchEditorController({
     }
 
     setOpenTabsByPath(new Map([[path, targetTab]]))
-    onSelectEntryPathLatest.current(path)
     setSelectedFilePath(path)
     setSelectedFile(targetTab.file)
     setEditorContent(targetTab.content)

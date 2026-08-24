@@ -17,6 +17,7 @@ import {
   SpinnerGapIcon,
 } from '@phosphor-icons/react'
 import { workbenchHost } from '@renderer/host'
+import { getWorkbenchFilePresentationVariant } from '@renderer/models/files/workbenchFilePresentation'
 import {
   buildCommitPanelGroups,
   type CommitPanelGroupId,
@@ -34,7 +35,6 @@ import { Result } from '@velaros-ai/core/result'
 import { Textarea } from '@velaros-ai/ui/primitives/forms/Textarea'
 import { ScrollArea } from '@velaros-ai/ui/primitives/layout/ScrollArea'
 import { BubbleTooltip } from '@velaros-ai/ui/primitives/overlays/Tooltip'
-import { getFilePresentationVariant } from '@velaros-ai/ui/utils/filePresentation'
 
 import styles from '../../styles/workbenchPageStyles'
 import { WorkbenchFileTypeIcon } from '../files/WorkbenchFileTypeIcon'
@@ -404,7 +404,9 @@ export function WorkbenchCommitPanel({
                                     >
                                       <span
                                         className={styles.commitFileIcon}
-                                        data-kind={getFilePresentationVariant({ fileName: item.fileName })}
+                                        data-kind={getWorkbenchFilePresentationVariant({
+                                          fileName: item.fileName,
+                                        })}
                                       >
                                         <WorkbenchFileTypeIcon fileName={item.fileName} size={14} />
                                       </span>

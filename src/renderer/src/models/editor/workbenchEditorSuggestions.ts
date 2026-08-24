@@ -80,8 +80,22 @@ const LANGUAGE_KEYWORDS: Record<
   Markdown: [
     { label: '# ', kind: 'keyword' },
     { label: '## ', kind: 'keyword' },
+    { label: '### ', kind: 'keyword' },
+    { label: '> ', kind: 'keyword' },
     { label: '- ', kind: 'keyword' },
+    { label: '- [ ] ', kind: 'keyword' },
+    { label: '[text](path)', kind: 'keyword' },
+    { label: '![alt](path)', kind: 'keyword' },
+    { label: '**bold**', kind: 'keyword' },
+    { label: '`code`', kind: 'keyword' },
     { label: '```', kind: 'keyword' },
+  ],
+  'Git Ignore': [
+    { label: 'node_modules/', kind: 'file' },
+    { label: 'dist/', kind: 'file' },
+    { label: '*.log', kind: 'keyword' },
+    { label: '!.gitkeep', kind: 'keyword' },
+    { label: '# ', kind: 'keyword' },
   ],
   Text: [],
   TypeScript: [

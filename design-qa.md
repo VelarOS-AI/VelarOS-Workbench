@@ -67,6 +67,33 @@
 - state: macOS 浅色主题，项目已打开，聊天侧栏为空会话，当前文件 chip 可见
 - intent normalization: 上方红框要求移除气泡图标和标题、改用现有动态小帆船；下方红框要求移除常驻的模型配置错误行。红框本身不属于产品视觉。
 
+### Markdown 控件与文件图标补充基准
+
+- Markdown action source visual truth: `/var/folders/qp/3d1vmxms7jqcm8353whb8h_80000gn/T/codex-clipboard-5dd3c0a0-b1fe-49b8-befe-4dc76924d9b6.png`
+- `.gitignore` icon source visual truth: `/var/folders/qp/3d1vmxms7jqcm8353whb8h_80000gn/T/codex-clipboard-060fb43f-2ab3-499f-884a-333b0f2a399f.png`
+- packaged implementation screenshot: `/tmp/workbench-qa-final-markdown-icons.png`
+- Markdown action comparison: `/tmp/workbench-design-qa-border-comparison.png`
+- file icon comparison: `/tmp/workbench-design-qa-icon-comparison.png`
+- viewport: 999 × 624 CSS px
+- implementation pixels: 1998 × 1248
+- density normalization: 实现与源图均来自同一台 macOS 2× 显示环境；聚焦对照只比较被标注控件与图标，不把源图红框作为产品元素
+- state: macOS 浅色主题，最终打包应用打开 Workbench 源码项目，README 处于渲染预览态，文件树展开到项目根文件
+- intent normalization: Markdown 代码块保留下载与复制两个独立图标按钮，但移除包围两者的外层边框；`.gitignore` 使用真实 Phosphor circle-slash 图标。核心只为 JS / TS / JSX / TSX / VelarScript 提供语言专属图标，其他通用文件使用类型图标，框架与额外语言留给插件贡献。
+
+### 欢迎页文案与 Kernel 信息补充基准
+
+- Kernel row source visual truth: `/var/folders/qp/3d1vmxms7jqcm8353whb8h_80000gn/T/codex-clipboard-452af355-49a3-4567-808c-7221a1c2d1e9.png`
+- subtitle source visual truth: `/var/folders/qp/3d1vmxms7jqcm8353whb8h_80000gn/T/codex-clipboard-a6d1d02e-a700-424f-9318-ca55750653ba.png`
+- packaged implementation screenshot: `/tmp/workbench-welcome-final.png`
+- full-view comparison: `/tmp/workbench-welcome-comparison.png`
+- focused comparison: `/tmp/workbench-welcome-focused-comparison.png`
+- viewport: 1280 × 800 CSS px
+- source pixels: 2560 × 1600
+- implementation pixels: 2560 × 1600
+- density normalization: 两侧均为 devicePixelRatio 2、相同视口与像素尺寸；focused comparison 使用相同坐标裁切，不缩放目标区域
+- state: macOS 浅色主题、欢迎页；实现使用隔离用户数据，因此最近项目为空，左右项目数据差异不参与本轮欢迎区判断
+- intent normalization: 源图红框只标出应删除的 Kernel 状态行和应替换的副标题，不作为产品元素；其余标题、按钮、间距和位置应保持原状
+
 ## Findings
 
 最终对照没有遗留 P0/P1/P2 问题。
@@ -95,6 +122,12 @@
 - 视口边界：验证视口内 `documentElement.scrollWidth === innerWidth`，聊天补充控件没有制造页面级横向滚动；产品现有桌面最小宽度策略不在本轮改动范围内。
 - 运行状态：完整交互路径没有捕获 renderer exception 或 console warning/error。
 - 模型配置提示：输入卡片上方不再渲染常驻红色错误行；缺少模型配置时保留用户输入，不增加会挤压输入区域的提示节点。
+- Markdown 代码块操作区：最终打包应用中 `data-streamdown='code-block-actions'` 的计算样式为 `border-width: 0px`、`box-shadow: none`；下载与复制按钮仍可见，外层不再形成第三个嵌套边框。
+- Markdown 项目链接：复用 `@velaros-ai/ui` 的 Streamdown 渲染与安全插件，同时由 Workbench 自己校验项目内相对路径；最终包中相对链接正常显示为链接，不再出现聊天场景的 `[blocked]` 文案。
+- 文件图标：`.gitignore` 使用 Phosphor `Prohibit` 的圆圈斜杠；`.npmrc`、锁文件、补丁、JSON、Markdown、图片、音频、压缩包等常用文件均使用真实图标库资源，不再统一回退为默认文件图标。
+- 生态边界：内建语言专属图标限定为 JS / TS / JSX / TSX / VelarScript；Vue、Python 等未内建框架或语言不会伪装成已支持，统一走通用 code 图标。文件展示解析器提供注册入口，后续插件可贡献新的文件匹配规则和图标种类。
+- 欢迎页信息层级：底部 `Kernel：内置宿主（随 Workbench 运行）` 已从渲染树和样式表同时移除；副标题改为“构建你的下一个项目。”，不再重复“打开项目”按钮的动作。
+- 欢迎页布局稳定性：删除 Kernel 行后以 211px 的 hero 最小高度保留原有垂直构图。旧包 title top 为 `294.5547px`，最终包为 `294.5px`；actions top 由 `373.9453px` 到 `373.8906px`，偏差小于 0.06px，属于子像素取整而非视觉漂移。
 
 ## Comparison history
 
@@ -109,6 +142,8 @@
 - Pass 8: 将聊天空态、当前文件 chip、输入区加号、会话标题和 Git 标题的源图与 `/tmp/velaros-workbench-source-chat-empty.png`、`/tmp/velaros-workbench-source-chat-chip-hover.png`、`/tmp/velaros-workbench-source-git-header.png` 放入同一视觉对照输入。恢复缺失内容与控件，关闭 [P1] 空白聊天不可引导、[P2] chip 无法移除、[P2] 会话标题居中和 [P2] Git 标题重复问题；点击、悬浮、删除与缺少模型配置时的失败反馈均已实机验证，无新增 P0/P1/P2 差异。
 - Pass 9: 将最新源图与 `/tmp/velaros-workbench-source-chat-sail.png` 放入同一视觉对照输入，并在打包后使用 `/tmp/velaros-workbench-packaged-chat-sail.png` 复核最终产物。关闭 [P2] 空态品牌图形错误和 [P2] 输入区错误提示占位问题：气泡与标题替换为共享 `VelarSailMark` 的 small/steady 状态，帆、桅杆、船体均检测到持续动画；输入卡片中 `role=alert` 节点数量为 0。打包产物与源码预览的字体、卡片间距、灰阶令牌和起手建议文案一致，无新增 P0/P1/P2 差异。
 - Pass 10: 将 chip 源图、最新顶栏高度标注图与 `/tmp/velaros-workbench-source-chat-chip-hover.png`、`/tmp/velaros-workbench-source-chat-plus-menu-final.png`、`/tmp/velaros-workbench-source-chat-header-aligned.png` 放入同一视觉对照输入。当前文件 chip 继续使用共享 Desktop 位置和样式，仅补齐悬浮删除；加号菜单收口为文件图片、计划、目标三个入口；聊天标题栏由 39px 调整为 35px，与编辑器标签栏的上下边界完全一致。交互与实测尺寸均通过，无新增 P0/P1/P2 差异。
+- Pass 11: 将 Markdown 控件源图与最终打包截图放入 `/tmp/workbench-design-qa-border-comparison.png`，并将 `.gitignore` 图标源图与实现放入 `/tmp/workbench-design-qa-icon-comparison.png`。实测外层操作组边框为 0，两个功能按钮仍保留自身交互轮廓；`.gitignore` 的圆圈斜杠轮廓、灰阶与尺寸匹配参考，旁边 `.npmrc` 和锁文件也已使用不同的真实类型图标。无新增 P0/P1/P2 差异。
+- Pass 12: 首次删除 Kernel 行后，实测欢迎区因父级垂直居中向下移动 21.75px，记录为 [P2] 构图漂移。给 hero 保留原始 211px 高度后重新打包，并把两张源图与 `/tmp/workbench-welcome-final.png` 合并到 `/tmp/workbench-welcome-focused-comparison.png`。最终标题与按钮位置相对旧包差异均小于 0.06px；Kernel 文案节点为 0，新副标题清晰且没有换行，P2 已关闭。
 
 ## Open Questions
 
@@ -139,6 +174,15 @@
 - [x] 聊天会话标题左对齐
 - [x] 聊天标题栏与编辑器标签栏上下边界精确对齐
 - [x] Git 底部标题移除重复“日志”按钮
+- [x] Markdown 代码块操作组移除外层根边框
+- [x] Markdown 项目内相对链接正常渲染
+- [x] `.gitignore` 使用圆圈斜杠图标
+- [x] 常用配置、锁文件、补丁、文档、媒体和数据文件使用对应类型图标
+- [x] 内建语言专属图标收口为 JS / TS / JSX / TSX / VelarScript
+- [x] 文件图标解析保留插件贡献入口
+- [x] 欢迎页移除面向实现细节的 Kernel 状态行
+- [x] 欢迎页副标题改为“构建你的下一个项目。”
+- [x] 删除状态行后保持标题和按钮的原始垂直位置
 
 ## Follow-up Polish
 

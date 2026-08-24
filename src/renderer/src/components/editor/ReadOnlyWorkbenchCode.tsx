@@ -1,8 +1,13 @@
-import { type ReactElement, useEffect, useRef } from 'react'
-import { EditorState } from '@codemirror/state'
+import { type ReactElement, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
+import { Compartment, EditorState } from '@codemirror/state'
 import { EditorView, lineNumbers } from '@codemirror/view'
+import { useWorkbenchEditorMetrics } from '@renderer/hooks/useWorkbenchPreferences'
 import { buildReadOnlyCodeSearchHighlight } from '@renderer/models/editor/readOnlyCodeSearchHighlight'
 import { resolveWorkbenchCodeMirrorLanguage } from '@renderer/models/editor/workbenchCodeMirrorLanguage'
+import {
+  createWorkbenchCodeMirrorMetricsExtension,
+  refreshWorkbenchCodeMirrorMetrics,
+} from '@renderer/models/editor/workbenchCodeMirrorMetrics'
 import { getWorkbenchCodeMirrorTheme } from '@renderer/models/editor/workbenchCodeMirrorTheme'
 import type { WorkbenchThemeId } from '@renderer/models/settings/workbenchPreferences'
 
@@ -20,6 +25,15 @@ export function ReadOnlyWorkbenchCode({
   highlightQuery?: string
 }): ReactElement {
   const hostRef = useRef<HTMLDivElement>(null)
+  const viewRef = useRef<Nullable<EditorView>>(null)
+  const editorMetricsCompartment = useMemo(() => new Compartment(), [])
+  const editorMetrics = useWorkbenchEditorMetrics()
+
+  useLayoutEffect(() => {
+    const view = viewRef.current
+    if (!view) return
+    refreshWorkbenchCodeMirrorMetrics(view, editorMetricsCompartment, editorMetrics)
+  }, [editorMetrics, editorMetricsCompartment])
 
   useEffect(() => {
     const host = hostRef.current
@@ -35,13 +49,18 @@ export function ReadOnlyWorkbenchCode({
           EditorView.editable.of(false),
           EditorState.readOnly.of(true),
           language.extension,
+          editorMetricsCompartment.of(createWorkbenchCodeMirrorMetricsExtension(editorMetrics)),
           getWorkbenchCodeMirrorTheme(workbenchTheme),
           buildReadOnlyCodeSearchHighlight(highlightQuery),
         ],
       }),
     })
-    return () => view.destroy()
-  }, [content, highlightQuery, path, workbenchTheme])
+    viewRef.current = view
+    return () => {
+      view.destroy()
+      viewRef.current = null
+    }
+  }, [content, editorMetricsCompartment, highlightQuery, path, workbenchTheme])
 
   return <div ref={hostRef} className={styles.editorHistoryCodeViewer} />
 }

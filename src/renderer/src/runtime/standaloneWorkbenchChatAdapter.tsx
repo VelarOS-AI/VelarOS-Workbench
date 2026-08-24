@@ -23,8 +23,8 @@ import {
   VelarSailMark,
 } from '@velaros-ai/ui/conversation'
 import {
-  ChatComposer,
   type ChatComposerControl,
+  ChatSurfaceComposer,
 } from '@velaros-ai/ui/conversation/composer'
 
 import type { ChatMessage } from '@shared/contracts'
@@ -533,7 +533,7 @@ function StandaloneWorkbenchChatSessionSurface({
       <ChatConversationPane
         conversation={conversation}
         conversationRefreshKey={chat.revision}
-        composer={<ChatComposer control={composerControl} density="compact" />}
+        composer={<ChatSurfaceComposer control={composerControl} variant="side" />}
         followLocked={followLocked}
         scrollRef={scrollRef}
         streamSlot={chat.messages.length === 0 ? (

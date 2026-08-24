@@ -25,6 +25,7 @@ import {
   getWorkbenchEditorLineCount,
   parseWorkbenchGoToLineInput,
 } from '@renderer/models/editor/workbenchEditorModel'
+import { isWorkbenchMarkdownPreviewPath } from '@renderer/models/editor/workbenchMarkdownPreview'
 import {
   isSameWorkbenchGitChangeItem,
   type WorkbenchGitChangeItem,
@@ -82,6 +83,10 @@ interface CodeMirrorEditorModule {
   CodeMirrorEditor: typeof CodeMirrorEditorComponent
 }
 
+interface WorkbenchMarkdownPreviewModule {
+  WorkbenchMarkdownPreview: typeof import('./WorkbenchMarkdownPreview').WorkbenchMarkdownPreview
+}
+
 let codeMirrorEditorModulePromise: Nullable<Promise<CodeMirrorEditorModule>> = null
 
 function loadCodeMirrorEditorModule(): Promise<CodeMirrorEditorModule> {
@@ -97,6 +102,11 @@ const LazyCodeMirrorEditor = lazy(async () => {
   const module = await loadCodeMirrorEditorModule()
 
   return { default: module.CodeMirrorEditor }
+})
+
+const LazyWorkbenchMarkdownPreview = lazy(async () => {
+  const module: WorkbenchMarkdownPreviewModule = await import('./WorkbenchMarkdownPreview')
+  return { default: module.WorkbenchMarkdownPreview }
 })
 
 export interface WorkbenchEditorPanelTabsProps {
@@ -242,6 +252,9 @@ export function EditorPanel({
   const [activeFindIndex, setActiveFindIndex] = useState(0)
   const [hasActiveFindSelection, setHasActiveFindSelection] = useState(false)
   const [isGoToLineOpen, setIsGoToLineOpen] = useState(false)
+  const [markdownPreviewPaths, setMarkdownPreviewPaths] = useState<ReadonlySet<string>>(
+    () => new Set()
+  )
   const timers = useTimerScope('EditorPanel')
   const [goToLineInput, setGoToLineInput] = useState('')
   const [externalConflictDialogOpen, setExternalConflictDialogOpen] = useState(false)
@@ -407,6 +420,10 @@ export function EditorPanel({
     [auxiliaryTabs]
   )
   const hasEditorOverlayTab = !!(activeDiffItem || lightTab || activeAuxiliaryTab)
+  const markdownPreviewAvailable =
+    !hasEditorOverlayTab && isWorkbenchMarkdownPreviewPath(selectedFilePath)
+  const markdownPreviewActive =
+    markdownPreviewAvailable && !!selectedFilePath && markdownPreviewPaths.has(selectedFilePath)
   const selectedExternalConflictKey = useMemo(() => {
     if (!selectedExternalChange) return null
 
@@ -497,6 +514,18 @@ export function EditorPanel({
   function runTabContextAction(action: () => void): void {
     setTabContextMenu(null)
     action()
+  }
+
+  function toggleMarkdownPreview(): void {
+    if (!markdownPreviewAvailable || !selectedFilePath) return
+    setIsFindOpen(false)
+    setIsGoToLineOpen(false)
+    setMarkdownPreviewPaths((current) => {
+      const next = new Set(current)
+      if (next.has(selectedFilePath)) next.delete(selectedFilePath)
+      else next.add(selectedFilePath)
+      return next
+    })
   }
 
   useEffect(() => {
@@ -598,6 +627,9 @@ export function EditorPanel({
           onSelectLightTab={lightTab?.onSelect}
           onCloseLightTab={lightTab?.onClose}
           onSaveAllOpenFiles={onSaveAllOpenFiles}
+          markdownPreviewAvailable={markdownPreviewAvailable}
+          markdownPreviewActive={markdownPreviewActive}
+          onToggleMarkdownPreview={toggleMarkdownPreview}
         />
         <Dialog
           open={!!shouldShowExternalConflictDialog && externalConflictDialogOpen}
@@ -799,30 +831,40 @@ export function EditorPanel({
               )}
               <div className={styles.editorScroll}>
                 {selectedFile ? (
-                  <Suspense fallback={null}>
-                    <LazyCodeMirrorEditor
-                      ref={editorRef}
-                      projectRoot={projectRoot}
-                      path={selectedFile.path}
-                      language={selectedLanguage}
-                      value={editorContent}
-                      readOnly={!canEditSelectedFile || selectedFile.truncated}
-                      disabled={false}
-                      projectContextIndex={projectContextIndex}
-                      openTabs={openTabs}
-                      packageManager={selectedPackageManager}
-                      workbenchTheme={workbenchTheme}
-                      onChange={onEditorContentChange}
-                      onCursorPositionChange={handleCursorPositionChange}
-                      onOpenFind={openFindBar}
-                      onOpenGoToLine={openGoToLineBar}
-                      onGoToDefinition={onGoToDefinition}
-                      onApplyLanguageServiceFileChanges={onApplyLanguageServiceFileChanges}
-                      onRunPackageScript={onRunPackageScript}
-                      onOpenFileHistory={setFileHistoryMode}
-                      onSave={onSaveSelectedFile}
-                    />
-                  </Suspense>
+                  markdownPreviewActive ? (
+                    <Suspense fallback={null}>
+                      <LazyWorkbenchMarkdownPreview
+                        path={selectedFile.path}
+                        content={editorContent}
+                        onOpenProjectPath={(path) => onGoToDefinition(path, 1, 1)}
+                      />
+                    </Suspense>
+                  ) : (
+                    <Suspense fallback={null}>
+                      <LazyCodeMirrorEditor
+                        ref={editorRef}
+                        projectRoot={projectRoot}
+                        path={selectedFile.path}
+                        language={selectedLanguage}
+                        value={editorContent}
+                        readOnly={!canEditSelectedFile || selectedFile.truncated}
+                        disabled={false}
+                        projectContextIndex={projectContextIndex}
+                        openTabs={openTabs}
+                        packageManager={selectedPackageManager}
+                        workbenchTheme={workbenchTheme}
+                        onChange={onEditorContentChange}
+                        onCursorPositionChange={handleCursorPositionChange}
+                        onOpenFind={openFindBar}
+                        onOpenGoToLine={openGoToLineBar}
+                        onGoToDefinition={onGoToDefinition}
+                        onApplyLanguageServiceFileChanges={onApplyLanguageServiceFileChanges}
+                        onRunPackageScript={onRunPackageScript}
+                        onOpenFileHistory={setFileHistoryMode}
+                        onSave={onSaveSelectedFile}
+                      />
+                    </Suspense>
+                  )
                 ) : (
                   <div className={styles.editorEmpty} data-embedded={!showTopBar}>
                     <div className={styles.editorEmptyCard}>

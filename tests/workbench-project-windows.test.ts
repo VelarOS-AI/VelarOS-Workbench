@@ -18,9 +18,11 @@ void describe('Workbench project window ownership', () => {
       readFile('src/renderer/src/host/standaloneWorkbenchHost.ts', 'utf8'),
     ])
 
-    assert.match(main, /requestSingleInstanceLock\(\)/u)
+    assert.match(main, /requestSingleInstanceLock\(instanceLaunchData\)/u)
     assert.match(main, /app\.on\('open-file'/u)
     assert.match(main, /app\.on\('second-instance'/u)
+    assert.match(main, /app\.relaunch\(\{ execPath: requestedExecutablePath, args: paths \}\)/u)
+    assert.match(manager, /getOpenProjectPaths\(\)/u)
     assert.match(manager, /findProjectRecord\(projectPath\)/u)
     assert.match(manager, /this\.focusWindow\(existing\.window\)/u)
     assert.match(manager, /this\.createWindow\(projectPath\)/u)

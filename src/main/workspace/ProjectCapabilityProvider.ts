@@ -17,7 +17,9 @@ import {
   type ProjectKernel,
 } from '@velaros-ai/project/runtime'
 
+import type { WorkbenchGetCodeGraphRequest } from '../../shared/contracts'
 import type { WorkbenchWorkspaceInvokeRequest } from '../../shared/workbenchWorkspace'
+import { WorkbenchCodeGraphResource } from '../resources/WorkbenchCodeGraphResource'
 
 import { CommandHelper } from './CommandHelper'
 import { CommandRunner } from './CommandRunner'
@@ -49,6 +51,7 @@ interface WorkbenchProjectCapabilityProvider {
 
 interface ProjectCapabilityProviderOptions {
   createKernel?: (projectRoot: string) => Promise<ProjectKernel>
+  codeGraphResource?: WorkbenchCodeGraphResource
 }
 
 /**
@@ -61,13 +64,17 @@ class ProjectCapabilityProvider implements WorkbenchProjectCapabilityProvider {
   private readonly projects = new Map<string, Promise<WorkbenchProjectCapability>>()
   private readonly createKernel: (projectRoot: string) => Promise<ProjectKernel>
   private readonly commandRunner = new CommandRunner(new PathResolver(), new CommandHelper())
+  private readonly codeGraphResource: WorkbenchCodeGraphResource
 
   public constructor(options: ProjectCapabilityProviderOptions = {}) {
     this.createKernel = options.createKernel ?? (async (projectRoot) =>
       createProjectKernel({ root: projectRoot }))
+    this.codeGraphResource = options.codeGraphResource ?? new WorkbenchCodeGraphResource()
   }
 
   public async invoke(request: WorkbenchWorkspaceInvokeRequest): Promise<unknown> {
+    if (request.operation === 'resource:codegraph-status') return this.codeGraphResource.describe()
+
     const project = await this.resolveProject(request.projectRoot)
     const input = request.input as never
 
@@ -104,6 +111,12 @@ class ProjectCapabilityProvider implements WorkbenchProjectCapabilityProvider {
         return project.kernel.rollback(input)
       case 'project:run-batch':
         return project.kernel.runBatch(input)
+      case 'project:codegraph-index':
+        return this.codeGraphResource.indexProject(project.kernel.root)
+      case 'project:codegraph-graph':
+        return this.codeGraphResource.getGraph(
+          readCodeGraphRequest(project.kernel.root, request.input)
+        )
     }
   }
 
@@ -288,6 +301,33 @@ function readRequiredPath(input: unknown): string {
   return path
 }
 
+function readCodeGraphRequest(
+  projectRoot: string,
+  input: unknown
+): WorkbenchGetCodeGraphRequest {
+  const record = input && typeof input === 'object' && !Array.isArray(input)
+    ? input as Record<string, unknown>
+    : {}
+  const mode = record['mode'] === 'local' ? 'local' : 'full'
+  const centerPath = typeof record['centerPath'] === 'string'
+    ? record['centerPath']
+    : undefined
+  const depth = typeof record['depth'] === 'number' && Number.isFinite(record['depth'])
+    ? record['depth']
+    : undefined
+  const maxNodes = typeof record['maxNodes'] === 'number' && Number.isFinite(record['maxNodes'])
+    ? record['maxNodes']
+    : undefined
+
+  return {
+    projectRoot,
+    mode,
+    ...(centerPath === undefined ? {} : { centerPath }),
+    ...(depth === undefined ? {} : { depth }),
+    ...(maxNodes === undefined ? {} : { maxNodes }),
+  }
+}
+
 const WorkbenchProjectOperations = Object.freeze({
   status: 'project:status',
   read: 'project:read',
@@ -304,6 +344,8 @@ const WorkbenchProjectOperations = Object.freeze({
   validate: 'project:validate',
   rollback: 'project:rollback',
   runBatch: 'project:run-batch',
+  codeGraphIndex: 'project:codegraph-index',
+  codeGraphGraph: 'project:codegraph-graph',
 } as const)
 
 export { ProjectCapabilityProvider, WorkbenchProjectOperations }

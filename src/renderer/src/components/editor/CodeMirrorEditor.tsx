@@ -52,8 +52,6 @@ import {
   drawSelection,
   dropCursor,
   EditorView,
-  highlightActiveLine,
-  highlightActiveLineGutter,
   highlightSpecialChars,
   keymap,
   type MouseSelectionStyle,
@@ -70,7 +68,10 @@ import {
   retainWorkbenchCommentAnchorsEffect,
   setWorkbenchCommentAnchorsEffect,
 } from '@renderer/components/editor/workbenchCommentExtension'
-import { useWorkbenchAiCompletionEnabled } from '@renderer/hooks/useWorkbenchPreferences'
+import {
+  useWorkbenchAiCompletionEnabled,
+  useWorkbenchEditorMetrics,
+} from '@renderer/hooks/useWorkbenchPreferences'
 import {
   useWorkbenchHostRuntime,
   type WorkbenchHostRuntime,
@@ -81,6 +82,7 @@ import {
   useWorkbenchComments,
   useWorkbenchCommentStore,
 } from '@renderer/models/comments/workbenchCommentStore'
+import { workbenchActiveLineExtension } from '@renderer/models/editor/workbenchCodeMirrorActiveLine'
 import { getWorkbenchCodeMirrorAutocompleteTheme } from '@renderer/models/editor/workbenchCodeMirrorAutocompleteTheme'
 import { createWorkbenchBasicSyntaxExtension } from '@renderer/models/editor/workbenchCodeMirrorBasicSyntax'
 import {
@@ -126,6 +128,7 @@ import {
   usesWorkbenchSemanticLanguageService,
 } from '@renderer/models/editor/workbenchCodeMirrorLanguageService'
 import { workbenchLineNumbersExtension } from '@renderer/models/editor/workbenchCodeMirrorLineNumberSelection'
+import { createWorkbenchCodeMirrorMetricsExtension } from '@renderer/models/editor/workbenchCodeMirrorMetrics'
 import {
   createWorkbenchSemanticTokensExtension,
   getWorkbenchSemanticTokenTheme,
@@ -152,6 +155,10 @@ import {
   createWorkbenchPackageScriptRunGutterExtension,
   shouldShowWorkbenchPackageScriptRunGutter,
 } from '@renderer/models/editor/workbenchPackageScriptRunGutter'
+import {
+  createWorkbenchVelarTestRunGutterExtension,
+  shouldShowWorkbenchVelarTestRunGutter,
+} from '@renderer/models/editor/workbenchVelarTestRunGutter'
 import type { WorkbenchProjectContextIndex } from '@renderer/models/project/workbenchProjectContextIndex'
 import type { WorkbenchThemeId } from '@renderer/models/settings/workbenchPreferences'
 import type { WorkbenchOpenEditorTab } from '@renderer/types/workbenchTypes'
@@ -217,7 +224,6 @@ const log = Log.tag('codemirror-editor')
 const INDENT_GUIDE_STROKE_PX = 0.75
 const INDENT_GUIDE_COLOR = 'rgba(105, 118, 142, 0.26)'
 const IDENTIFIER_PATTERN = /[A-Za-z_$][\w$]*/g
-const WorkbenchHasMultilineTextSelectionClass = 'cm-workbenchHasMultilineTextSelection'
 const FullSyntaxActivationDelayMs = 90
 const SemanticFeaturesActivationDelayMs = 220
 const EditorIdleActivationTimeoutMs = 800
@@ -252,9 +258,8 @@ interface EditorContextMenuState {
 const workbenchFoldGutter = foldGutter({
   markerDOM(open) {
     const span = document.createElement('span')
+    span.className = 'cm-workbenchFoldMarker'
     span.textContent = open ? '▾' : '▸'
-    span.style.cssText =
-      'display:inline-flex;align-items:center;justify-content:center;width:100%;font-weight:800;font-size:13px;line-height:18px;color:#64748b'
     return span
   },
 })
@@ -283,7 +288,7 @@ const workbenchTripleClickLineSelectionExtension = EditorView.mouseSelectionStyl
 /** 对齐基础编辑器配置，同时替换折叠栏并保持扩展顺序稳定。 */
 const workbenchCodeMirrorBaseExtensions: Extension[] = [
   workbenchLineNumbersExtension,
-  highlightActiveLineGutter(),
+  workbenchActiveLineExtension,
   highlightSpecialChars(),
   history(),
   workbenchFoldGutter,
@@ -306,7 +311,6 @@ const workbenchCodeMirrorBaseExtensions: Extension[] = [
   }),
   rectangularSelection(),
   crosshairCursor(),
-  highlightActiveLine(),
   workbenchDefinitionHoverExtension,
   keymap.of([
     ...closeBracketsKeymap,
@@ -318,17 +322,12 @@ const workbenchCodeMirrorBaseExtensions: Extension[] = [
   ]),
 ]
 
-/** 覆盖光标和折叠栏尺寸。 */
+/** 覆盖编辑器挂载组件的视觉样式；几何尺寸由 metrics compartment 统一管理。 */
 const workbenchEditorChromeTheme = EditorView.theme(
   {
     '.cm-cursor': {
-      borderLeftWidth: '3px',
       borderLeftStyle: 'solid',
       borderLeftColor: 'var(--workbench-editor-caret)',
-    },
-    '.cm-foldGutter .cm-gutterElement': {
-      width: '14px',
-      minWidth: '14px',
     },
     '.cm-tooltip': {
       backgroundColor: 'var(--workbench-editor-tooltip-bg, #ffffff)',
@@ -522,23 +521,6 @@ function buildIdentifierSelectionRanges(
   }
 
   return ranges
-}
-
-function isWorkbenchMultilineTextSelection(view: EditorView): boolean {
-  return view.state.selection.ranges.some((range) => {
-    if (range.empty) return false
-
-    const fromLine = view.state.doc.lineAt(range.from)
-    const toLine = view.state.doc.lineAt(range.to)
-    return fromLine.number !== toLine.number
-  })
-}
-
-function syncWorkbenchSelectionState(view: EditorView): void {
-  view.dom.classList.toggle(
-    WorkbenchHasMultilineTextSelectionClass,
-    isWorkbenchMultilineTextSelection(view)
-  )
 }
 
 function emitCursorPosition(
@@ -1133,10 +1115,13 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
     const completionCompartment = useMemo(() => new Compartment(), [])
     const lintCompartment = useMemo(() => new Compartment(), [])
     const packageScriptRunCompartment = useMemo(() => new Compartment(), [])
+    const velarTestRunCompartment = useMemo(() => new Compartment(), [])
     const autocompleteThemeCompartment = useMemo(() => new Compartment(), [])
     const languageHoverCompartment = useMemo(() => new Compartment(), [])
     const languageServiceCompartment = useMemo(() => new Compartment(), [])
     const syntaxThemeCompartment = useMemo(() => new Compartment(), [])
+    const editorMetricsCompartment = useMemo(() => new Compartment(), [])
+    const editorMetrics = useWorkbenchEditorMetrics()
     const progressiveLoadTimers = useTimerScope('WorkbenchEditorProgressiveLoad')
     const languageSupport = useMemo(
       () => resolveWorkbenchCodeMirrorLanguage(path, language),
@@ -1205,6 +1190,18 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         }),
       [disabled, onRunPackageScript, packageManager, packageScriptRunContent, path]
     )
+    const velarTestRunContent = shouldShowWorkbenchVelarTestRunGutter(path) ? value : ''
+    const velarTestRunExtension = useMemo(
+      () =>
+        createWorkbenchVelarTestRunGutterExtension({
+          content: velarTestRunContent,
+          disabled: disabled || !callbacksRef.current.onRunPackageScript,
+          onRunTest: (command) => callbacksRef.current.onRunPackageScript?.(command),
+          packageManager,
+          path: onRunPackageScript ? path : null,
+        }),
+      [disabled, onRunPackageScript, packageManager, path, velarTestRunContent]
+    )
     const diagnosticForegroundExtension = useMemo(
       () => createWorkbenchDiagnosticForegroundExtension(),
       []
@@ -1228,6 +1225,76 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         anchorBottom: number
       }>
     >(null)
+    const renamePopupRef = useLatest(renamePopup)
+    const commentDraftRef = useLatest(commentDraft)
+
+    useLayoutEffect(() => {
+      const view = viewRef.current
+      if (!view) return
+
+      view.dom.classList.add('cm-workbenchMetricsRefreshing')
+      view.dispatch({
+        effects: editorMetricsCompartment.reconfigure(
+          createWorkbenchCodeMirrorMetricsExtension(editorMetrics)
+        ),
+      })
+
+      // 右键菜单没有稳定的文档锚点，缩放时直接收起；评论草稿和重命名框则保留
+      // 用户输入，并在 CodeMirror 完成新字号的内部测量后重新读取其文档坐标。
+      setContextMenu(null)
+      view.requestMeasure({
+        key: 'workbench-editor-metrics-and-overlays',
+        read: (measuredView) => {
+          const draft = commentDraftRef.current
+          const rename = renamePopupRef.current
+          const draftFrom = draft
+            ? Math.min(Math.max(0, draft.from), measuredView.state.doc.length)
+            : null
+          const draftTo = draft
+            ? Math.min(Math.max(0, draft.to), measuredView.state.doc.length)
+            : null
+          const draftStartCoords = draftFrom === null ? null : measuredView.coordsAtPos(draftFrom)
+          const draftEndCoords = draftTo === null ? null : measuredView.coordsAtPos(draftTo)
+          const renamePosition = rename
+            ? Math.min(Math.max(0, rename.identifier.from), measuredView.state.doc.length)
+            : null
+          const renameCoords =
+            renamePosition === null ? null : measuredView.coordsAtPos(renamePosition)
+
+          return {
+            comment:
+              draft && (draftStartCoords || draftEndCoords)
+                ? {
+                    left: draftStartCoords?.left ?? draftEndCoords!.left,
+                    anchorTop: draftStartCoords?.top ?? draftEndCoords!.top,
+                    anchorBottom: draftEndCoords?.bottom ?? draftStartCoords!.bottom,
+                  }
+                : null,
+            rename:
+              rename && renameCoords
+                ? { left: renameCoords.left, top: renameCoords.bottom + 4 }
+                : null,
+          }
+        },
+        write: (measure) => {
+          if (viewRef.current !== view) return
+          view.dom.classList.remove('cm-workbenchMetricsRefreshing')
+          if (measure.comment) {
+            setCommentDraft((current) =>
+              current ? { ...current, ...measure.comment } : current
+            )
+          }
+          if (measure.rename) {
+            setRenamePopup((current) => (current ? { ...current, ...measure.rename } : current))
+          }
+        },
+      })
+    }, [
+      commentDraftRef,
+      editorMetrics,
+      editorMetricsCompartment,
+      renamePopupRef,
+    ])
 
     const commentEditLabelRef = useLatest(t('workbench.editorCommentEdit'))
     const commentSaveLabelRef = useLatest(t('workbench.editorCommentSave'))
@@ -1858,7 +1925,6 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         }
 
         if (update.selectionSet || update.docChanged) {
-          syncWorkbenchSelectionState(update.view)
           emitCursorPosition(update.view, callbacksRef.current.onCursorPositionChange)
         }
       })
@@ -2060,6 +2126,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
               }
             },
           }),
+          editorMetricsCompartment.of(createWorkbenchCodeMirrorMetricsExtension(editorMetrics)),
           syntaxThemeCompartment.of(getWorkbenchCodeMirrorTheme(workbenchTheme)),
           autocompleteThemeCompartment.of(autocompleteTheme),
           indentUnit.of('  '),
@@ -2070,6 +2137,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
           languageHoverCompartment.of(languageServiceHoverExtension),
           languageServiceCompartment.of([]),
           packageScriptRunCompartment.of(packageScriptRunExtension),
+          velarTestRunCompartment.of(velarTestRunExtension),
           updateListener,
           languageCompartment.of(basicLanguageExtension),
           readOnlyCompartment.of(buildReadOnlyExtensions(readOnly, disabled)),
@@ -2093,7 +2161,6 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       })
 
       viewRef.current = view
-      syncWorkbenchSelectionState(view)
       reanchorWorkbenchComments(view)
       emitCursorPosition(view, callbacksRef.current.onCursorPositionChange)
       if (path) {
@@ -2232,6 +2299,12 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         effects: packageScriptRunCompartment.reconfigure(packageScriptRunExtension),
       })
     }, [packageScriptRunCompartment, packageScriptRunExtension])
+
+    useEffect(() => {
+      viewRef.current?.dispatch({
+        effects: velarTestRunCompartment.reconfigure(velarTestRunExtension),
+      })
+    }, [velarTestRunCompartment, velarTestRunExtension])
 
     useEffect(() => {
       viewRef.current?.dispatch({

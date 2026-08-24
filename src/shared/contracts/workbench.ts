@@ -285,6 +285,7 @@ export interface WorkbenchLanguageServiceDescriptorSnapshot {
     | 'typescript-language-service'
     | 'html-language-service'
     | 'css-language-service'
+    | 'markdown-language-service'
     | 'python-language-server'
     | 'lsp-server'
   packageName?: string
@@ -613,6 +614,19 @@ export interface WorkbenchMoveEntryRequest {
 export interface WorkbenchDeleteEntryRequest {
   projectRoot: string
   path: string
+  recursive?: boolean
+}
+
+export interface WorkbenchInspectDeleteEntryRequest {
+  projectRoot: string
+  path: string
+}
+
+export interface WorkbenchInspectDeleteEntryResult {
+  projectRoot: string
+  path: string
+  type: WorkbenchDirectoryEntry['type']
+  requiresConfirmation: boolean
 }
 
 export interface WorkbenchRestoreDeletedEntryRequest {
@@ -719,7 +733,7 @@ export interface WorkbenchRunCommandOutputEvent {
 export interface WorkbenchTerminalStartRequest {
   projectRoot: string
   cwd?: string
-  /** 起会话后立即在 shell 内执行的命令（运行卡用，例如 `bun run dev`）。 */
+  /** 以一次性 shell 进程执行的命令（运行卡用，例如 `bun run dev`）；命令退出即关闭会话。 */
   initialCommand?: string
 }
 

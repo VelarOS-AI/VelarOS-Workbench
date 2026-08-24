@@ -44,7 +44,6 @@ function useElementSize(): [
 export interface UseFileTreeActionsParams {
   childrenByPath: Map<string, WorkbenchDirectoryEntry[]>
   treeRef: MutableRefObject<Nullable<TreeApi<FileTreeNodeData>>>
-  selectionOriginRef: MutableRefObject<Nullable<'tree'>>
   syncingOpenStateRef: MutableRefObject<boolean>
   onTreeApiChange?: (api: Nullable<TreeApi<FileTreeNodeData>>) => void
   onSetDirectoryOpen: (path: string, open: boolean) => void
@@ -71,7 +70,6 @@ export interface UseFileTreeActionsParams {
 export function useFileTreeActions({
   childrenByPath,
   treeRef,
-  selectionOriginRef,
   syncingOpenStateRef,
   onTreeApiChange,
   onSetDirectoryOpen,
@@ -143,7 +141,6 @@ export function useFileTreeActions({
   })
 
   const handleTreeSelect = useMemoizedFn((nodes: Array<NodeApi<FileTreeNodeData>>): void => {
-    selectionOriginRef.current = 'tree'
     onSelectEntryPathLatest.current(toNullable(nodes.at(-1)?.data.entry.path))
   })
 

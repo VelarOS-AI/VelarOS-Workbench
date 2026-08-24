@@ -138,4 +138,29 @@ void describe('pre-split Workbench shell parity', () => {
     assert.match(shellStyles, /--scrollbar-thumb:[^;]*16%/)
     assert.match(shellStyles, /--scrollbar-thumb-hover:[^;]*28%/)
   })
+
+  void test('keeps the welcome page product-focused without exposing Kernel plumbing', () => {
+    const welcome = readSource('src/renderer/src/welcome/WorkbenchWelcomePage.tsx')
+    const styles = readSource('src/renderer/src/welcome/welcome.css')
+
+    assert.match(welcome, /构建你的下一个项目。/)
+    assert.doesNotMatch(welcome, /打开一个项目，开始开发。/)
+    assert.doesNotMatch(welcome, /Kernel：内置宿主/)
+    assert.doesNotMatch(styles, /workbench-welcome__kernel-status/)
+    assert.match(styles, /\.workbench-welcome__hero[\s\S]*min-height:\s*211px/)
+  })
+
+  void test('projects every active editor file into the tree without alternating sync state', () => {
+    const controller = readSource('src/renderer/src/hooks/useWorkbenchController.ts')
+    const editor = readSource('src/renderer/src/hooks/useWorkbenchEditorController.ts')
+    const tree = readSource('src/renderer/src/components/files/FileTree.tsx')
+    const treeActions = readSource('src/renderer/src/hooks/useFileTreeActions.ts')
+
+    assert.match(controller, /editor\.selectedFilePath[\s\S]*tree\.revealEntryPath/)
+    assert.doesNotMatch(editor, /onSelectEntryPath/)
+    assert.doesNotMatch(tree, /selectionOriginRef/)
+    assert.doesNotMatch(treeActions, /selectionOriginRef/)
+    assert.match(tree, /\[selectedPath, treeData\]/)
+    assert.match(tree, /selectionAlreadyMatches/)
+  })
 })

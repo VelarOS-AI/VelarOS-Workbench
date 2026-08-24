@@ -63,16 +63,19 @@
     "ai": "^6.0.168",
     "diff": "^8.0.4",
     "execa": "^9.6.1",
+    "markdown-it": "^15.0.0",
     "pyright": "^1.1.411",
     "react": "^19.2.5",
     "react-arborist": "^3.5.0",
     "react-dom": "^19.2.5",
     "sonner": "^2.0.7",
+    "streamdown": "^2.5.0",
     "tinykeys": "3.0.0",
     "typescript": "^5.9.3",
     "vscode-css-languageservice": "^6.3.10",
     "vscode-html-languageservice": "^5.6.2",
     "vscode-languageserver-textdocument": "^1.0.12",
+    "vscode-markdown-languageservice": "^0.5.0",
     "vscode-uri": "^3.1.0",
     "zod": "^4.3.6"
   },
@@ -104,5 +107,8 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/VelarOS-AI/VelarOS-Workbench.git"
+  },
+  "patchedDependencies": {
+    "vscode-markdown-languageservice@0.5.0": "patches/vscode-markdown-languageservice@0.5.0.patch"
   }
 }

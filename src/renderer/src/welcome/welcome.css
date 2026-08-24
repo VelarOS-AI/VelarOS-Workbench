@@ -33,6 +33,7 @@
   display: flex;
   flex-direction: column;
   gap: 28px;
+  min-height: 211px;
 }
 
 .workbench-welcome__actions {
@@ -42,10 +43,6 @@
 .workbench-welcome__actions .velar-button {
   justify-content: flex-start;
   gap: 8px;
-}
-
-.workbench-welcome__kernel-status {
-  color: var(--foreground-tertiary);
 }
 
 .workbench-welcome__recents {

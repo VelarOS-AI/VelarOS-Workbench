@@ -32,6 +32,10 @@ export interface WorkbenchLanguageServiceProjectFileRequest extends WorkbenchLan
 }
 
 export interface WorkbenchLanguageServiceWorkerOperationMap {
+  shutdown: {
+    request: Record<string, never>
+    result: void
+  }
   synchronizeProjectFile: {
     request: WorkbenchLanguageServiceProjectFileRequest
     result: void
@@ -100,6 +104,26 @@ export interface WorkbenchLanguageServiceWorkerOperationMap {
 
 export type WorkbenchLanguageServiceWorkerOperation =
   keyof WorkbenchLanguageServiceWorkerOperationMap
+
+export type WorkbenchLanguageServiceWorkerPriority =
+  | 'lifecycle'
+  | 'interactive'
+  | 'background'
+
+const BackgroundLanguageServiceOperations = new Set<WorkbenchLanguageServiceWorkerOperation>([
+  'getDiagnostics',
+  'getDocumentSymbols',
+  'getDocumentHighlights',
+  'getInlayHints',
+  'getSemanticTokens',
+])
+
+export function getWorkbenchLanguageServiceWorkerPriority(
+  operation: WorkbenchLanguageServiceWorkerOperation
+): WorkbenchLanguageServiceWorkerPriority {
+  if (operation === 'shutdown') return 'lifecycle'
+  return BackgroundLanguageServiceOperations.has(operation) ? 'background' : 'interactive'
+}
 
 export type WorkbenchLanguageServiceWorkerRequest = {
   [TOperation in WorkbenchLanguageServiceWorkerOperation]: {

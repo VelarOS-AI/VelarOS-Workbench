@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 
-import { resolveEditorTabWheelScroll } from '../src/renderer/src/hooks/useWorkbenchEditorTabOverflow'
+import {
+  resolveActiveEditorTabScroll,
+  resolveEditorTabWheelScroll,
+} from '../src/renderer/src/hooks/useWorkbenchEditorTabOverflow'
 
 void describe('editor tab horizontal scrolling', () => {
   void test('uses the dominant horizontal trackpad axis instead of a conflicting vertical delta', () => {
@@ -55,5 +58,42 @@ void describe('editor tab horizontal scrolling', () => {
       }),
       null
     )
+  })
+
+  void test('reveals a newly selected tab on either side of the visible tab range', () => {
+    const viewport = { scrollWidth: 1200, clientWidth: 500 }
+
+    assert.equal(resolveActiveEditorTabScroll({
+      ...viewport,
+      scrollLeft: 400,
+      tabStart: 180,
+      tabWidth: 120,
+    }), 180)
+    assert.equal(resolveActiveEditorTabScroll({
+      ...viewport,
+      scrollLeft: 200,
+      tabStart: 760,
+      tabWidth: 140,
+    }), 400)
+  })
+
+  void test('preserves the current tab scroll when the selected tab is already visible', () => {
+    assert.equal(resolveActiveEditorTabScroll({
+      scrollLeft: 240,
+      scrollWidth: 1200,
+      clientWidth: 500,
+      tabStart: 360,
+      tabWidth: 140,
+    }), null)
+  })
+
+  void test('clamps active-tab following to the real tab row edges', () => {
+    assert.equal(resolveActiveEditorTabScroll({
+      scrollLeft: 500,
+      scrollWidth: 1000,
+      clientWidth: 400,
+      tabStart: 950,
+      tabWidth: 120,
+    }), 600)
   })
 })

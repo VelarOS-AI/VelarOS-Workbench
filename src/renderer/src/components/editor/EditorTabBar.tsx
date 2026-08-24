@@ -9,7 +9,9 @@ import {
 } from 'react'
 import {
   CaretDownIcon,
+  CodeIcon,
   DotsThreeVerticalIcon,
+  EyeIcon,
   FileIcon,
   FloppyDiskIcon,
   GitDiffIcon,
@@ -83,6 +85,9 @@ interface EditorTabBarProps {
   onSelectLightTab?: () => void
   onCloseLightTab?: () => void
   onSaveAllOpenFiles: () => void
+  markdownPreviewAvailable?: boolean
+  markdownPreviewActive?: boolean
+  onToggleMarkdownPreview?: () => void
 }
 
 function fileNameFromPath(path: string): string {
@@ -112,6 +117,9 @@ export function EditorTabBar({
   onSelectLightTab,
   onCloseLightTab,
   onSaveAllOpenFiles,
+  markdownPreviewAvailable = false,
+  markdownPreviewActive = false,
+  onToggleMarkdownPreview,
 }: EditorTabBarProps): Nullable<ReactElement> {
   const { t } = useWorkbenchI18n()
   const [openMenu, setOpenMenu] = useState<Nullable<'tabs' | 'actions'>>(null)
@@ -134,7 +142,18 @@ export function EditorTabBar({
     lightTabItem?.id ?? '',
     auxiliaryTabItems.map((tab) => `${tab.id}:${tab.title}:${tab.active}`).join('\u001f'),
   ].join('\u001e')
-  const { tabScrollerOverflow, tabScrollerRef } = useWorkbenchEditorTabOverflow(tabOverflowKey)
+  const activeAuxiliaryTab = auxiliaryTabItems.find((tab) => tab.active)
+  const activeTabKey = activeAuxiliaryTab
+    ? `auxiliary:${activeAuxiliaryTab.id}`
+    : diffTabItem
+      ? `diff:${getWorkbenchGitChangeDisplayPath(diffTabItem)}`
+      : lightTabItem
+        ? `light:${lightTabItem.id}`
+        : selectedFilePath
+  const { tabScrollerOverflow, tabScrollerRef } = useWorkbenchEditorTabOverflow(
+    tabOverflowKey,
+    activeTabKey
+  )
 
   function getMenuStyle(kind: 'tabs' | 'actions'): { right: number; top: number } {
     const anchor = kind === 'tabs' ? tabListButtonRef.current : actionsButtonRef.current
@@ -359,6 +378,26 @@ export function EditorTabBar({
           ))}
         </div>
         <div className={styles.editorTabActions}>
+          {markdownPreviewAvailable && (
+            <IconButton
+              size="icon-sm"
+              className={styles.editorTabActionButton}
+              title={
+                markdownPreviewActive
+                  ? t('workbench.markdownShowSource')
+                  : t('workbench.markdownShowPreview')
+              }
+              label={
+                markdownPreviewActive
+                  ? t('workbench.markdownShowSource')
+                  : t('workbench.markdownShowPreview')
+              }
+              aria-pressed={markdownPreviewActive}
+              onClick={onToggleMarkdownPreview}
+            >
+              {markdownPreviewActive ? <CodeIcon size={15} /> : <EyeIcon size={15} />}
+            </IconButton>
+          )}
           {!!tabScrollerOverflow && (
             <IconButton
               ref={tabListButtonRef}

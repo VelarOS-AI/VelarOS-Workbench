@@ -14,8 +14,10 @@ import {
   CaretRightIcon,
   FolderIcon,
   FolderOpenIcon,
+  PlayCircleIcon,
 } from '@phosphor-icons/react'
 import { type FileTreeNodeData } from '@renderer/models/files/fileTree.model'
+import { isWorkbenchTestFilePath } from '@renderer/models/files/workbenchTestFile'
 import type { WorkbenchGitDecorationMap } from '@renderer/models/git/workbenchGitModel'
 import { isWorkbenchTreeRoot } from '@renderer/models/shared/workbenchUtils'
 import type { NodeRendererProps } from 'react-arborist'
@@ -92,6 +94,7 @@ export const FileTreeRow = memo(function FileTreeRow({
   const isGitIgnored = !!entry.gitIgnored
   const fileKind = node.data.fileKind
   const isTreeRoot = isWorkbenchTreeRoot(entry)
+  const isTestFile = entry.type === 'file' && isWorkbenchTestFilePath(entry.path)
 
   useEffect(() => {
     if (!node.isEditing) return
@@ -164,13 +167,25 @@ export const FileTreeRow = memo(function FileTreeRow({
       ) : (
         <>
           <span className={styles.treeSpacer} />
-          <span className={styles.treeFileIcon} data-kind={fileKind}>
+          <span
+            className={styles.treeFileIcon}
+            data-kind={fileKind}
+            data-test-file={isTestFile || undefined}
+          >
             <WorkbenchFileTypeIcon
               fileName={entry.name}
               size={15}
               weight="regular"
               color="currentColor"
             />
+            {isTestFile && (
+              <PlayCircleIcon
+                size={8}
+                weight="fill"
+                className={styles.treeTestFileBadge}
+                aria-hidden="true"
+              />
+            )}
           </span>
         </>
       )}

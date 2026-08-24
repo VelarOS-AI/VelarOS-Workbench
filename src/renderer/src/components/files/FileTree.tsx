@@ -100,7 +100,6 @@ export function FileTree({
 }: FileTreeProps): ReactElement {
   const { t } = useWorkbenchI18n()
   const treeRef = useRef<FileTreeApi>(null)
-  const selectionOriginRef = useRef<'tree'>(null)
   const syncingOpenStateRef = useRef(false)
   const openStateChangedInTreeRef = useRef(false)
 
@@ -119,7 +118,6 @@ export function FileTree({
   } = useFileTreeActions({
     childrenByPath,
     treeRef,
-    selectionOriginRef,
     syncingOpenStateRef,
     onTreeApiChange,
     onSetDirectoryOpen,
@@ -205,20 +203,17 @@ export function FileTree({
     const tree = treeRef.current
     if (!tree) return
 
-    if (selectionOriginRef.current === 'tree') {
-      selectionOriginRef.current = null
-      return
-    }
-
     if (selectedPath) {
-      if (tree.get(selectedPath)) {
+      const selectionAlreadyMatches =
+        tree.selectedIds.size === 1 && tree.selectedIds.has(selectedPath)
+      if (!selectionAlreadyMatches && tree.get(selectedPath)) {
         tree.select(selectedPath, { focus: false })
       }
       return
     }
 
-    tree.deselectAll()
-  }, [selectedPath])
+    if (tree.selectedIds.size > 0) tree.deselectAll()
+  }, [selectedPath, treeData])
 
   return (
     <div ref={setTreeShell} className={styles.arboristTreeShell}>

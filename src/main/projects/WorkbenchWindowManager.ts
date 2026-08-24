@@ -106,6 +106,13 @@ export class WorkbenchWindowManager {
       : emptyProjectHubState()
   }
 
+  public getOpenProjectPaths(): string[] {
+    return [...this.records.values()].flatMap((record) => {
+      const path = record.hub.getState().currentProject?.path
+      return path ? [path] : []
+    })
+  }
+
   public activateOrCreateWindow(): BrowserWindow {
     const window = this.getFocusedWindow() ?? this.createWindow()
     this.focusWindow(window)

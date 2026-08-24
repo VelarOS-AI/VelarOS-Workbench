@@ -69,7 +69,7 @@ export function getWorkbenchFileTreeShortcutAction(
   event: WorkbenchFileTreeShortcutEventLike
 ): Nullable<WorkbenchFileTreeShortcutAction> {
   if (
-    event.key === 'Delete' &&
+    (event.key === 'Delete' || event.key === 'Backspace') &&
     !event.altKey &&
     !event.ctrlKey &&
     !event.metaKey &&

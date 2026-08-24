@@ -11,6 +11,7 @@ import { AppError } from '@velaros-ai/core/error'
 import { createWorkbenchAppParts } from '../src/main/workspace/Parts'
 import { WorkbenchProjectFileSystem } from '../src/main/workspace/WorkbenchProjectFileSystem'
 import { resolveExternalFileUnavailableStatus } from '../src/renderer/src/models/editor/workbenchEditorTabs'
+import { getWorkbenchFileTreeShortcutAction } from '../src/renderer/src/models/files/workbenchTreeMutation'
 
 const execFileAsync = promisify(execFile)
 
@@ -91,5 +92,92 @@ void describe('Workbench project file tree', () => {
       await rm(projectRoot, { recursive: true, force: true })
       await rm(dataRoot, { recursive: true, force: true })
     }
+  })
+
+  void test('deletes empty directories immediately and confirms content before recursive deletion', async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), 'workbench-delete-project-'))
+    const dataRoot = await mkdtemp(join(tmpdir(), 'workbench-delete-data-'))
+    const parts = createWorkbenchAppParts(dataRoot)
+
+    try {
+      await mkdir(join(projectRoot, 'empty'))
+      const emptyPreview = await parts.files.inspectDeleteEntry({
+        projectRoot,
+        path: 'empty',
+      })
+      assert.equal(emptyPreview.type, 'directory')
+      assert.equal(emptyPreview.requiresConfirmation, false)
+
+      const emptyDelete = await parts.files.deleteEntry({ projectRoot, path: 'empty' })
+      await assert.rejects(() => readFile(join(projectRoot, 'empty')), /ENOENT/u)
+      await parts.files.restoreDeletedEntry({
+        projectRoot,
+        restoreId: emptyDelete.restoreId,
+      })
+
+      await mkdir(join(projectRoot, 'filled', 'nested'), { recursive: true })
+      await writeFile(join(projectRoot, 'filled', 'nested', '.hidden'), 'preserved', 'utf8')
+      const filledPreview = await parts.files.inspectDeleteEntry({
+        projectRoot,
+        path: 'filled',
+      })
+      assert.equal(filledPreview.type, 'directory')
+      assert.equal(filledPreview.requiresConfirmation, true)
+
+      await assert.rejects(
+        () => parts.files.deleteEntry({ projectRoot, path: 'filled' }),
+        (error: unknown) =>
+          error instanceof AppError &&
+          error.code === 'VALIDATION' &&
+          /需要确认/u.test(error.message)
+      )
+      assert.equal(await readFile(join(projectRoot, 'filled', 'nested', '.hidden'), 'utf8'), 'preserved')
+
+      const filledDelete = await parts.files.deleteEntry({
+        projectRoot,
+        path: 'filled',
+        recursive: true,
+      })
+      await assert.rejects(
+        () => readFile(join(projectRoot, 'filled', 'nested', '.hidden')),
+        /ENOENT/u
+      )
+      await parts.files.restoreDeletedEntry({
+        projectRoot,
+        restoreId: filledDelete.restoreId,
+      })
+      assert.equal(await readFile(join(projectRoot, 'filled', 'nested', '.hidden'), 'utf8'), 'preserved')
+
+      const filePreview = await parts.files.inspectDeleteEntry({
+        projectRoot,
+        path: 'filled/nested/.hidden',
+      })
+      assert.equal(filePreview.type, 'file')
+      assert.equal(filePreview.requiresConfirmation, true)
+    } finally {
+      await rm(projectRoot, { recursive: true, force: true })
+      await rm(dataRoot, { recursive: true, force: true })
+    }
+  })
+
+  void test('maps platform delete and undo shortcuts for the focused file tree', () => {
+    const plain = { altKey: false, ctrlKey: false, metaKey: false, shiftKey: false }
+    assert.equal(getWorkbenchFileTreeShortcutAction({ ...plain, key: 'Delete' }), 'delete-selected')
+    assert.equal(
+      getWorkbenchFileTreeShortcutAction({ ...plain, key: 'Backspace' }),
+      'delete-selected'
+    )
+    assert.equal(
+      getWorkbenchFileTreeShortcutAction({ ...plain, key: 'z', metaKey: true }),
+      'undo-delete'
+    )
+    assert.equal(
+      getWorkbenchFileTreeShortcutAction({ ...plain, key: 'z', ctrlKey: true }),
+      'undo-delete'
+    )
+    assert.equal(
+      getWorkbenchFileTreeShortcutAction({ ...plain, key: 'Backspace', metaKey: true }),
+      null
+    )
   })
 })

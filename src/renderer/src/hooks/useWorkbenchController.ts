@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { buildWorkbenchProjectContextIndex } from '@renderer/models/project/workbenchProjectContextIndex'
 import type { WorkbenchProject } from '@renderer/models/project/workbenchProjects'
 import {
@@ -70,7 +70,6 @@ export function useWorkbenchController(options: UseWorkbenchControllerOptions = 
   })
   const editor = useWorkbenchEditorController({
     activeProject: project.activeProject,
-    onSelectEntryPath: tree.setSelectedEntryPath,
     onFileMetadataSaved: tree.refreshTreeFileMetadata,
     onFileSaved: () => {
       commandActions.command.markValidationStale()
@@ -86,9 +85,15 @@ export function useWorkbenchController(options: UseWorkbenchControllerOptions = 
   const selectFile = useMemoizedFn(
     async (path: string, options: WorkbenchSelectFileOptions = {}): Promise<void> => {
       await editor.selectFile(path, options)
-      await tree.revealEntryPath(path, options)
     }
   )
+
+  // 文件视图只有一个当前态：编辑器 selectedFilePath 是文件选择的 owner，文件树只做投影。
+  // 因此标签、搜索、面包屑等任意入口切换文件时，左侧树都会在同一轮状态提交后跟随。
+  useEffect(() => {
+    if (!editor.selectedFilePath) return
+    void tree.revealEntryPath(editor.selectedFilePath, { quiet: true })
+  }, [editor.selectedFilePath, tree.revealEntryPath])
 
   const mutation = useWorkbenchMutationController({
     activeProject: project.activeProject,

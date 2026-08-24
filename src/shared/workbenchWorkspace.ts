@@ -4,6 +4,7 @@ export const WorkbenchWorkspaceChannels = {
 
 /** Workbench IPC operations backed by the Project domain. */
 export type WorkbenchWorkspaceOperation =
+  | 'resource:codegraph-status'
   | 'project:status'
   | 'project:read'
   | 'project:stat'
@@ -19,6 +20,15 @@ export type WorkbenchWorkspaceOperation =
   | 'project:validate'
   | 'project:rollback'
   | 'project:run-batch'
+  | 'project:codegraph-index'
+  | 'project:codegraph-graph'
+
+export interface WorkbenchCodeGraphResourceStatus {
+  available: boolean
+  version: string | null
+  packageRoot: string | null
+  sharedResourcesRoot: string
+}
 
 export interface WorkbenchWorkspaceInvokeRequest {
   projectRoot: string

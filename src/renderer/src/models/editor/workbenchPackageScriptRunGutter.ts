@@ -1,19 +1,19 @@
 import { jsonLanguage } from '@codemirror/lang-json'
-import { type Extension, RangeSetBuilder } from '@codemirror/state'
-import { gutter, GutterMarker } from '@codemirror/view'
+import type { Extension } from '@codemirror/state'
 
-import { isEmpty,isString, toNullable } from '@velaros-ai/core'
+import { isString, toNullable } from '@velaros-ai/core'
 
 import {
   buildWorkbenchPackageScriptRunCommand,
   type PackageManagerCommand,
 } from '../commands/workbenchPackageScriptCommand'
 
-export interface WorkbenchPackageScriptRunAction {
-  command: string
-  label: string
-  line: number
-}
+import {
+  createWorkbenchRunGutterExtension,
+  type WorkbenchRunGutterAction,
+} from './workbenchRunGutter'
+
+export type WorkbenchPackageScriptRunAction = WorkbenchRunGutterAction
 
 interface JsonNodeSnapshot {
   name: string
@@ -166,51 +166,6 @@ export function buildWorkbenchPackageScriptRunActions({
   return actions
 }
 
-class WorkbenchPackageScriptRunMarker extends GutterMarker {
-  public constructor(
-    private readonly action: WorkbenchPackageScriptRunAction,
-    private readonly disabled: boolean,
-    private readonly onRunScript: (command: string) => void
-  ) {
-    super()
-  }
-
-  public override eq(other: GutterMarker): boolean {
-    return (
-      other instanceof WorkbenchPackageScriptRunMarker &&
-      other.action.command === this.action.command &&
-      other.action.label === this.action.label &&
-      other.disabled === this.disabled
-    )
-  }
-
-  public override toDOM(): Node {
-    const button = document.createElement('button')
-    button.type = 'button'
-    button.className = 'cm-workbenchPackageScriptRunButton'
-    button.title = this.action.command
-    button.setAttribute('aria-label', this.action.command)
-    button.disabled = this.disabled
-    button.addEventListener('mousedown', (event) => {
-      event.preventDefault()
-      event.stopPropagation()
-    })
-    button.addEventListener('click', (event) => {
-      event.preventDefault()
-      event.stopPropagation()
-      if (!this.disabled) {
-        this.onRunScript(this.action.command)
-      }
-    })
-
-    const icon = document.createElement('span')
-    icon.className = 'cm-workbenchPackageScriptRunIcon'
-    icon.setAttribute('aria-hidden', 'true')
-    button.append(icon)
-    return button
-  }
-}
-
 export function createWorkbenchPackageScriptRunGutterExtension({
   content,
   disabled = false,
@@ -219,23 +174,9 @@ export function createWorkbenchPackageScriptRunGutterExtension({
   path,
 }: WorkbenchPackageScriptRunExtensionOptions): Extension {
   const actions = buildWorkbenchPackageScriptRunActions({ content, packageManager, path })
-  if (isEmpty(actions)) return []
-
-  return gutter({
-    class: 'cm-workbenchPackageScriptRunGutter',
-    markers(view) {
-      const builder = new RangeSetBuilder<GutterMarker>()
-      for (const action of actions) {
-        if (action.line > view.state.doc.lines) continue
-
-        const line = view.state.doc.line(action.line)
-        builder.add(
-          line.from,
-          line.from,
-          new WorkbenchPackageScriptRunMarker(action, disabled, onRunScript)
-        )
-      }
-      return builder.finish()
-    },
+  return createWorkbenchRunGutterExtension({
+    actions,
+    disabled,
+    onRun: onRunScript,
   })
 }

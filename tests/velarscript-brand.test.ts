@@ -4,13 +4,12 @@ import { describe, test } from 'node:test'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 
-import { getFilePresentationVariant } from '@velaros-ai/ui/utils/filePresentation'
-
 import { WorkbenchFileTypeIcon } from '../src/renderer/src/components/files/WorkbenchFileTypeIcon'
+import { getWorkbenchFilePresentationVariant } from '../src/renderer/src/models/files/workbenchFilePresentation'
 
 void describe('VelarScript brand identity', () => {
   void test('uses a black VS file icon matching the JS and TS icon family for .vel files', () => {
-    assert.equal(getFilePresentationVariant({ fileName: 'src/main.vel' }), 'velarscript')
+    assert.equal(getWorkbenchFilePresentationVariant({ fileName: 'src/main.vel' }), 'velarscript')
 
     const markup = renderToStaticMarkup(createElement(WorkbenchFileTypeIcon, {
       fileName: 'src/main.vel',

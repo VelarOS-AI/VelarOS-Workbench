@@ -43,13 +43,19 @@ export function usesWorkbenchSemanticLanguageService(path: Nullable<string>): bo
   const runtime = resolveWorkbenchBuiltinLanguageServiceRuntime(path)
   return (
     runtime === 'typescript-language-service' ||
+    runtime === 'markdown-language-service' ||
     runtime === 'python-language-server' ||
     runtime === 'lsp-server'
   )
 }
 
 export function usesWorkbenchInlayHintLanguageService(path: Nullable<string>): boolean {
-  return usesWorkbenchSemanticLanguageService(path)
+  const runtime = resolveWorkbenchBuiltinLanguageServiceRuntime(path)
+  return (
+    runtime === 'typescript-language-service' ||
+    runtime === 'python-language-server' ||
+    runtime === 'lsp-server'
+  )
 }
 
 export function usesWorkbenchExternalLspLanguageService(path: Nullable<string>): boolean {
@@ -67,6 +73,7 @@ export function usesWorkbenchBuiltinLanguageService(path: Nullable<string>): boo
     runtime === 'typescript-language-service' ||
     runtime === 'html-language-service' ||
     runtime === 'css-language-service' ||
+    runtime === 'markdown-language-service' ||
     runtime === 'python-language-server' ||
     runtime === 'lsp-server'
   )

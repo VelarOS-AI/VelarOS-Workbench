@@ -329,7 +329,7 @@ export function useWorkbenchMutationController({
     const owningProject = activeProject
     const owningProjectId = owningProject.id
 
-    const deletableEntries = entries.filter((entry) => entry.path !== ROOT_PATH)
+    const deletableEntries = selectMovableTreeEntries(entries)
     if (isEmpty(deletableEntries)) return
 
     for (const entry of deletableEntries) {
@@ -338,12 +338,44 @@ export function useWorkbenchMutationController({
 
     try {
       setIsMutatingTree(true)
+      const deletePreviews = await Promise.all(
+        deletableEntries.map(async (entry) => ({
+          entry,
+          preview: Result.unwrap(
+            await workbenchHost.kernel.project.inspectWorkbenchDeleteEntry({
+              projectRoot: owningProject.rootPath,
+              path: entry.path,
+            })
+          ),
+        }))
+      )
+      const confirmationEntries = deletePreviews.filter(
+        ({ preview }) => preview.requiresConfirmation
+      )
+      if (!isEmpty(confirmationEntries)) {
+        const confirmationMessage =
+          deletableEntries.length === 1
+            ? tLatest.current(
+                confirmationEntries[0]!.preview.type === 'directory'
+                  ? 'workbench.deleteDirectoryConfirm'
+                  : 'workbench.deleteConfirm',
+                { name: confirmationEntries[0]!.entry.name }
+              )
+            : tLatest.current('workbench.deleteManyConfirm', {
+                count: deletableEntries.length,
+              })
+        if (!window.confirm(confirmationMessage)) return
+      }
+
+      if (activeProjectRef.current?.id !== owningProjectId) return
+
       const deletedResults: WorkbenchDeleteEntryResult[] = []
-      for (const entry of deletableEntries) {
+      for (const { entry, preview } of deletePreviews) {
         const result = Result.unwrap(
           await workbenchHost.kernel.project.deleteWorkbenchEntry({
             projectRoot: owningProject.rootPath,
             path: entry.path,
+            recursive: preview.type === 'directory' && preview.requiresConfirmation,
           })
         )
         deletedResults.push(result)
@@ -457,40 +489,9 @@ export function useWorkbenchMutationController({
   async function deleteSelectedEntry(
     entry: Nullable<WorkbenchDirectoryEntry> = selectedEntry
   ): Promise<void> {
-    if (!activeProject || !entry || isMutatingTree) return
+    if (!entry) return
 
-    if (!ensureNoUnsavedFilesInPath(entry.path)) return
-
-    const owningProject = activeProject
-    const owningProjectId = owningProject.id
-
-    try {
-      setIsMutatingTree(true)
-      const result = Result.unwrap(
-        await workbenchHost.kernel.project.deleteWorkbenchEntry({
-          projectRoot: owningProject.rootPath,
-          path: entry.path,
-        })
-      )
-
-      if (activeProjectRef.current?.id !== owningProjectId) return
-
-      onTreeChangedLatest.current()
-      pruneTreeCacheLatest.current(result.deletedPath)
-      await refreshMutationParentLatest.current(result.parentPath)
-      setSelectedEntryPathLatest.current(null)
-      resetTreeAction()
-      resetSearchLatest.current()
-
-      closeOpenEntryPathLatest.current(result.deletedPath)
-      rememberDeletedEntries(owningProject, [result])
-    } catch (error) {
-      if (activeProjectRef.current?.id !== owningProjectId) return
-
-      notifyTreeMutationError(error)
-    } finally {
-      setIsMutatingTree(false)
-    }
+    await deleteTreeEntries([entry])
   }
 
   async function undoLastDeletedEntries(): Promise<void> {

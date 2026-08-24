@@ -332,6 +332,19 @@
   width: 16px;
 }
 
+.treeFileIcon[data-test-file='true'] {
+  position: relative;
+  overflow: visible;
+}
+
+.treeTestFileBadge {
+  position: absolute;
+  right: -3px;
+  bottom: -2px;
+  color: var(--status-green);
+  filter: drop-shadow(0 0 1px var(--workbench-bg));
+}
+
 .treeFileIcon[data-kind='archive'],
 .commitFileIcon[data-kind='archive'] {
   color: var(--status-violet);
@@ -374,16 +387,29 @@
   color: var(--workbench-file-json);
 }
 
-.treeFileIcon[data-kind='css'],
-.treeFileIcon[data-kind='scss'],
-.commitFileIcon[data-kind='css'],
-.commitFileIcon[data-kind='scss'] {
-  color: var(--workbench-file-css);
-}
-
 .treeFileIcon[data-kind='code'],
 .commitFileIcon[data-kind='code'] {
   color: var(--workbench-file-code);
+}
+
+.treeFileIcon[data-kind='config'],
+.commitFileIcon[data-kind='config'] {
+  color: var(--workbench-file-toml);
+}
+
+.treeFileIcon[data-kind='gitignore'],
+.commitFileIcon[data-kind='gitignore'] {
+  color: var(--workbench-file-generic);
+}
+
+.treeFileIcon[data-kind='lock'],
+.commitFileIcon[data-kind='lock'] {
+  color: var(--status-violet);
+}
+
+.treeFileIcon[data-kind='patch'],
+.commitFileIcon[data-kind='patch'] {
+  color: var(--status-teal);
 }
 
 .treeFileIcon[data-kind='csv'],
@@ -416,86 +442,6 @@
 .treeFileIcon[data-kind='markdown'],
 .commitFileIcon[data-kind='markdown'] {
   color: var(--workbench-file-markdown);
-}
-
-.treeFileIcon[data-kind='yaml'],
-.commitFileIcon[data-kind='yaml'] {
-  color: var(--workbench-file-yaml);
-}
-
-.treeFileIcon[data-kind='toml'],
-.commitFileIcon[data-kind='toml'] {
-  color: var(--workbench-file-toml);
-}
-
-.treeFileIcon[data-kind='xml'],
-.commitFileIcon[data-kind='xml'] {
-  color: var(--workbench-file-xml);
-}
-
-.treeFileIcon[data-kind='python'],
-.commitFileIcon[data-kind='python'] {
-  color: var(--workbench-file-python);
-}
-
-.treeFileIcon[data-kind='rust'],
-.commitFileIcon[data-kind='rust'] {
-  color: var(--workbench-file-rust);
-}
-
-.treeFileIcon[data-kind='go'],
-.commitFileIcon[data-kind='go'] {
-  color: var(--workbench-file-go);
-}
-
-.treeFileIcon[data-kind='java'],
-.commitFileIcon[data-kind='java'] {
-  color: var(--workbench-file-java);
-}
-
-.treeFileIcon[data-kind='csharp'],
-.commitFileIcon[data-kind='csharp'] {
-  color: var(--workbench-file-csharp);
-}
-
-.treeFileIcon[data-kind='cpp'],
-.commitFileIcon[data-kind='cpp'] {
-  color: var(--workbench-file-cpp);
-}
-
-.treeFileIcon[data-kind='c'],
-.commitFileIcon[data-kind='c'] {
-  color: var(--workbench-file-c);
-}
-
-.treeFileIcon[data-kind='php'],
-.commitFileIcon[data-kind='php'] {
-  color: var(--workbench-file-php);
-}
-
-.treeFileIcon[data-kind='lua'],
-.commitFileIcon[data-kind='lua'] {
-  color: var(--workbench-file-lua);
-}
-
-.treeFileIcon[data-kind='shell'],
-.commitFileIcon[data-kind='shell'] {
-  color: var(--workbench-file-shell);
-}
-
-.treeFileIcon[data-kind='swift'],
-.commitFileIcon[data-kind='swift'] {
-  color: var(--workbench-file-swift);
-}
-
-.treeFileIcon[data-kind='vue'],
-.commitFileIcon[data-kind='vue'] {
-  color: var(--workbench-file-vue);
-}
-
-.treeFileIcon[data-kind='sql'],
-.commitFileIcon[data-kind='sql'] {
-  color: var(--workbench-file-sql);
 }
 
 .treeFileIcon[data-kind='pdf'],

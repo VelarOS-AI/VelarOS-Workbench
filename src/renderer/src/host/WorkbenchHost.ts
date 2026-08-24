@@ -45,6 +45,8 @@ import type {
   WorkbenchIndexProjectResult,
   WorkbenchInlineCompletionRequest,
   WorkbenchInlineCompletionResult,
+  WorkbenchInspectDeleteEntryRequest,
+  WorkbenchInspectDeleteEntryResult,
   WorkbenchLanguageServiceCodeActionsRequest,
   WorkbenchLanguageServiceCodeActionsResult,
   WorkbenchLanguageServiceCompletionResult,
@@ -139,6 +141,9 @@ export interface WorkbenchProjectKernelPort {
     request: WorkbenchRenameEntryRequest
   ): Promise<Result<WorkbenchEntryMutationResult>>
   moveWorkbenchEntry(request: WorkbenchMoveEntryRequest): Promise<Result<WorkbenchMoveEntryResult>>
+  inspectWorkbenchDeleteEntry(
+    request: WorkbenchInspectDeleteEntryRequest
+  ): Promise<Result<WorkbenchInspectDeleteEntryResult>>
   deleteWorkbenchEntry(
     request: WorkbenchDeleteEntryRequest
   ): Promise<Result<WorkbenchDeleteEntryResult>>

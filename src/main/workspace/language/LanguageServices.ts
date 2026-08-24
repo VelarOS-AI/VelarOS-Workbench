@@ -9,6 +9,10 @@ import {
 } from 'vscode-css-languageservice'
 import { getLanguageService as getHtmlLanguageService } from 'vscode-html-languageservice'
 import { TextDocument } from 'vscode-languageserver-textdocument'
+import {
+  DiagnosticLevel,
+  IncludeWorkspaceHeaderCompletions,
+} from 'vscode-markdown-languageservice'
 import { URI } from 'vscode-uri'
 
 import { isNumber,isPresent, toNullable, toOptional } from '@velaros-ai/core'
@@ -71,6 +75,10 @@ import type {
   WorkbenchLanguageServiceProjectFileRequest,
   WorkbenchLanguageServiceProjectRequest,
 } from './LanguageServiceWorkerProtocol'
+import {
+  withWorkbenchMarkdownLanguageService,
+  type WorkbenchMarkdownLanguageServiceContext,
+} from './MarkdownLanguageService'
 import { buildTypeScriptCompletionItems } from './TypeScriptCompletions'
 import {
   buildTypeScriptDocumentHighlights,
@@ -279,6 +287,18 @@ class WorkbenchLanguageServices {
           .filter((location): location is WorkbenchLanguageServiceLocation => isPresent(location)),
       }
     }
+    if (resolved.service?.runtime === 'markdown-language-service') return this.withMarkdownLanguageService(request, resolved.projectRoot, async (markdown) => {
+        const definition = await markdown.service.getDefinition(
+          markdown.document,
+          this.languageServicePosition(request.position),
+          markdown.token
+        )
+        const locations = (Array.isArray(definition) ? definition : definition ? [definition] : [])
+          .flatMap((location) => ('uri' in location ? [location] : []))
+          .map((location) => this.mapMarkdownLocation(markdown, location))
+          .filter((location): location is WorkbenchLanguageServiceLocation => isPresent(location))
+        return { projectRoot: resolved.projectRoot, path: request.path, locations }
+      })
     // Standalone Workbench has no CodeGraph AI index (kernel territory); definitions come
     // straight from the TypeScript language service, and non-TS runtimes return nothing.
     if (resolved.service?.runtime !== 'typescript-language-service')
@@ -322,6 +342,31 @@ class WorkbenchLanguageServices {
         items: items.slice(0, 160).map((item) => this.mapExternalCompletion(request.path, item)),
       }
     }
+    if (resolved.service?.runtime === 'markdown-language-service') return this.withMarkdownLanguageService(request, resolved.projectRoot, async (markdown) => {
+        const items = await markdown.service.getCompletionItems(
+          markdown.document,
+          this.languageServicePosition(request.position),
+          { includeWorkspaceHeaderCompletions: IncludeWorkspaceHeaderCompletions.onSingleOrDoubleHash },
+          markdown.token
+        )
+        return {
+          projectRoot: resolved.projectRoot,
+          path: request.path,
+          items: items.slice(0, 160).map((item) => ({
+            label: item.label,
+            kind: isNumber(item.kind) ? String(item.kind) : undefined,
+            detail: item.detail,
+            documentation: textFromLspContent(item.documentation) || undefined,
+            insertText:
+              item.textEdit && 'newText' in item.textEdit
+                ? item.textEdit.newText
+                : item.insertText,
+            sortText: item.sortText,
+            filterText: item.filterText,
+            isSnippet: item.insertTextFormat === 2,
+          })),
+        }
+      })
     if (resolved.service?.runtime !== 'typescript-language-service')
       return {
         projectRoot: resolved.projectRoot,
@@ -365,6 +410,40 @@ class WorkbenchLanguageServices {
         diagnostics: diagnostics.map((diagnostic) => this.mapExternalDiagnostic(request.path, diagnostic)),
       }
     }
+    if (resolved.service?.runtime === 'markdown-language-service') return this.withMarkdownLanguageService(request, resolved.projectRoot, async (markdown) => {
+        const diagnostics = await markdown.service.computeDiagnostics(
+          markdown.document,
+          {
+            validateReferences: DiagnosticLevel.warning,
+            validateFragmentLinks: DiagnosticLevel.warning,
+            validateFileLinks: DiagnosticLevel.warning,
+            validateMarkdownFileLinkFragments: DiagnosticLevel.warning,
+            validateUnusedLinkDefinitions: DiagnosticLevel.ignore,
+            validateDuplicateLinkDefinitions: DiagnosticLevel.warning,
+            ignoreLinks: [],
+          },
+          markdown.token
+        )
+        return {
+          projectRoot: resolved.projectRoot,
+          path: request.path,
+          diagnostics: diagnostics.map((diagnostic) => ({
+            path: request.path,
+            severity:
+              diagnostic.severity === 1
+                ? 'error' as const
+                : diagnostic.severity === 2
+                  ? 'warning' as const
+                  : 'info' as const,
+            message: textFromLspContent(diagnostic.message),
+            source: diagnostic.source ?? 'markdown',
+            code: typeof diagnostic.code === 'string' || typeof diagnostic.code === 'number'
+              ? diagnostic.code
+              : undefined,
+            range: this.rangeFromLanguageServiceRange(diagnostic.range),
+          })),
+        }
+      })
     if (resolved.service?.runtime !== 'typescript-language-service')
       return {
         projectRoot: resolved.projectRoot,
@@ -421,6 +500,33 @@ class WorkbenchLanguageServices {
         changes: this.mapExternalWorkspaceEdit(resolved.projectRoot, edit),
       }
     }
+    if (resolved.service?.runtime === 'markdown-language-service') return this.withMarkdownLanguageService(request, resolved.projectRoot, async (markdown) => {
+        const edit = await markdown.service.getRenameEdit(
+          markdown.document,
+          this.languageServicePosition(request.position),
+          request.newName,
+          markdown.token
+        )
+        return {
+          projectRoot: resolved.projectRoot,
+          path: request.path,
+          changes: edit
+            ? this.mapExternalWorkspaceEdit(resolved.projectRoot, {
+                changes: edit.changes,
+                documentChanges: edit.documentChanges?.flatMap((change) =>
+                  'textDocument' in change
+                    ? [{
+                        textDocument: change.textDocument,
+                        edits: change.edits.flatMap((item) =>
+                          'newText' in item ? [item] : []
+                        ),
+                      }]
+                    : []
+                ),
+              })
+            : [],
+        }
+      })
     if (resolved.service?.runtime !== 'typescript-language-service')
       return { projectRoot: resolved.projectRoot, path: request.path, changes: [] }
 
@@ -485,6 +591,18 @@ class WorkbenchLanguageServices {
         hover: hover ? buildExternalHoverResult(hover.contents) : null,
       }
     }
+    if (resolved.service?.runtime === 'markdown-language-service') return this.withMarkdownLanguageService(request, resolved.projectRoot, async (markdown) => {
+        const hover = await markdown.service.getHover(
+          markdown.document,
+          this.languageServicePosition(request.position),
+          markdown.token
+        )
+        return {
+          projectRoot: resolved.projectRoot,
+          path: request.path,
+          hover: hover ? buildExternalHoverResult(hover.contents) : null,
+        }
+      })
     if (resolved.service?.runtime !== 'typescript-language-service')
       return { projectRoot: resolved.projectRoot, path: request.path, hover: null }
 
@@ -521,6 +639,21 @@ class WorkbenchLanguageServices {
           .filter((location): location is WorkbenchLanguageServiceLocation => isPresent(location)),
       }
     }
+    if (resolved.service?.runtime === 'markdown-language-service') return this.withMarkdownLanguageService(request, resolved.projectRoot, async (markdown) => {
+        const references = await markdown.service.getReferences(
+          markdown.document,
+          this.languageServicePosition(request.position),
+          { includeDeclaration: true },
+          markdown.token
+        )
+        return {
+          projectRoot: resolved.projectRoot,
+          path: request.path,
+          locations: references
+            .map((location) => this.mapMarkdownLocation(markdown, location))
+            .filter((location): location is WorkbenchLanguageServiceLocation => isPresent(location)),
+        }
+      })
     if (resolved.service?.runtime !== 'typescript-language-service')
       return { projectRoot: resolved.projectRoot, path: request.path, locations: [] }
 
@@ -667,6 +800,29 @@ class WorkbenchLanguageServices {
         ),
       }
     }
+    if (resolved.service?.runtime === 'markdown-language-service') return this.withMarkdownLanguageService(request, resolved.projectRoot, async (markdown) => {
+        const symbols = await markdown.service.getDocumentSymbols(
+          markdown.document,
+          { includeLinkDefinitions: true },
+          markdown.token
+        )
+        const output: WorkbenchLanguageServiceDocumentSymbol[] = []
+        const append = (symbol: (typeof symbols)[number], depth: number): void => {
+          const range = this.rangeFromLanguageServiceRange(symbol.range)
+          const selection = this.rangeFromLanguageServiceRange(symbol.selectionRange)
+          output.push({
+            name: symbol.name.replace(/^#{1,6}\s+/u, ''),
+            kind: 'symbol',
+            depth,
+            line: selection.startLine,
+            column: selection.startColumn,
+            range,
+          })
+          for (const child of symbol.children ?? []) append(child, depth + 1)
+        }
+        for (const symbol of symbols) append(symbol, 0)
+        return { projectRoot: resolved.projectRoot, path: request.path, symbols: output }
+      })
     if (resolved.service?.runtime !== 'typescript-language-service')
       return { projectRoot: resolved.projectRoot, path: request.path, symbols: [] }
 
@@ -700,6 +856,21 @@ class WorkbenchLanguageServices {
         highlights: this.mapExternalDocumentHighlights(highlights),
       }
     }
+    if (resolved.service?.runtime === 'markdown-language-service') return this.withMarkdownLanguageService(request, resolved.projectRoot, async (markdown) => {
+        const highlights = await markdown.service.getDocumentHighlights(
+          markdown.document,
+          this.languageServicePosition(request.position),
+          markdown.token
+        )
+        return {
+          projectRoot: resolved.projectRoot,
+          path: request.path,
+          highlights: highlights.map((highlight) => ({
+            range: this.rangeFromLanguageServiceRange(highlight.range),
+            kind: highlight.kind === 3 ? 'write' as const : 'read' as const,
+          })),
+        }
+      })
     if (resolved.service?.runtime !== 'typescript-language-service')
       return { projectRoot: resolved.projectRoot, path: request.path, highlights: [] }
 
@@ -857,6 +1028,19 @@ class WorkbenchLanguageServices {
         'semantic-tokens',
       ]
 
+    if (service.runtime === 'markdown-language-service')
+      return [
+        'completion',
+        'definition',
+        'diagnostics',
+        'rename',
+        'hover',
+        'references',
+        'format',
+        'document-symbols',
+        'document-highlights',
+      ]
+
     if (service.runtime === 'lsp-server')
       return [
         'completion',
@@ -890,6 +1074,49 @@ class WorkbenchLanguageServices {
         'code-actions',
       ]
     return ['completion', 'diagnostics']
+  }
+
+  private async withMarkdownLanguageService<T>(
+    request: WorkbenchLanguageServiceRequest,
+    projectRoot: string,
+    run: (context: WorkbenchMarkdownLanguageServiceContext) => Promise<T>
+  ): Promise<T> {
+    const absolutePath = this.resolveAbsoluteProjectPath(projectRoot, request.path)
+    const openFiles = (request.openFiles ?? []).map((file) => ({
+      absolutePath: this.resolveAbsoluteProjectPath(projectRoot, file.path),
+      content: file.content,
+    }))
+    return withWorkbenchMarkdownLanguageService(
+      {
+        projectRoot,
+        absolutePath,
+        content: request.content ?? safeReadFile(absolutePath) ?? '',
+        openFiles,
+      },
+      run
+    )
+  }
+
+  private mapMarkdownLocation(
+    markdown: WorkbenchMarkdownLanguageServiceContext,
+    location: {
+      uri: string
+      range: {
+        start: { line: number; character: number }
+        end: { line: number; character: number }
+      }
+    }
+  ): Nullable<WorkbenchLanguageServiceLocation> {
+    let resource: URI
+    try {
+      resource = URI.parse(location.uri)
+    } catch {
+      return null
+    }
+    const path = markdown.toProjectRelativePath(resource)
+    if (!path) return null
+    const range = this.rangeFromLanguageServiceRange(location.range)
+    return { path, line: range.startLine, column: range.startColumn, range }
   }
 
   private isExternalRuntime(

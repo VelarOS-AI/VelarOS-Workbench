@@ -1,5 +1,5 @@
 import { statSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { basename, join, resolve } from 'node:path'
 
 import { app, BrowserWindow } from 'electron'
 
@@ -53,6 +53,13 @@ const WorkbenchProductName = 'VelarOS Workbench'
 const WorkbenchWindowWidth = 1280
 const WorkbenchWindowHeight = 800
 
+interface WorkbenchInstanceLaunchData {
+  productName: typeof WorkbenchProductName
+  executablePath: string
+  version: string
+  projectPaths: string[]
+}
+
 app.setName(WorkbenchProductName)
 
 let windowManager: Nullable<WorkbenchWindowManager> = null
@@ -63,11 +70,19 @@ app.on('open-file', (event, path) => {
   dispatchExternalProjectPaths([path])
 })
 
-const hasSingleInstanceLock = app.requestSingleInstanceLock()
+const instanceLaunchData: WorkbenchInstanceLaunchData = {
+  productName: WorkbenchProductName,
+  executablePath: process.execPath,
+  version: app.getVersion(),
+  projectPaths: pendingExternalProjectPaths,
+}
+const hasSingleInstanceLock = app.requestSingleInstanceLock(instanceLaunchData)
 if (!hasSingleInstanceLock) {
   app.quit()
 } else {
-  app.on('second-instance', (_event, argv, workingDirectory) => {
+  app.on('second-instance', (_event, argv, workingDirectory, additionalData) => {
+    if (relaunchFromRequestedWorkbenchPackage(additionalData)) return
+
     const paths = collectProjectDirectoryArguments(argv, workingDirectory)
     if (paths.length > 0) {
       dispatchExternalProjectPaths(paths)
@@ -256,6 +271,48 @@ function dispatchExternalProjectPaths(paths: readonly string[]): void {
   }
 
   void windowManager.openExternalProjectPaths(projectPaths)
+}
+
+function relaunchFromRequestedWorkbenchPackage(additionalData: unknown): boolean {
+  const requested = parseWorkbenchInstanceLaunchData(additionalData)
+  if (!requested) return false
+
+  const currentExecutablePath = resolve(process.execPath)
+  const requestedExecutablePath = resolve(requested.executablePath)
+  if (requestedExecutablePath === currentExecutablePath) return false
+  if (basename(requestedExecutablePath) !== basename(currentExecutablePath)) return false
+  try {
+    if (!statSync(requestedExecutablePath).isFile()) return false
+  } catch {
+    return false
+  }
+
+  const paths = [
+    ...requested.projectPaths,
+    ...(windowManager?.getOpenProjectPaths() ?? []),
+  ].filter((path, index, values) => values.indexOf(path) === index)
+  app.relaunch({ execPath: requestedExecutablePath, args: paths })
+  app.quit()
+  return true
+}
+
+function parseWorkbenchInstanceLaunchData(value: unknown): Nullable<WorkbenchInstanceLaunchData> {
+  if (typeof value !== 'object' || value === null) return null
+  const data = value as Partial<WorkbenchInstanceLaunchData>
+  if (
+    data.productName !== WorkbenchProductName ||
+    typeof data.executablePath !== 'string' ||
+    typeof data.version !== 'string' ||
+    !Array.isArray(data.projectPaths) ||
+    !data.projectPaths.every((path) => typeof path === 'string')
+  ) return null
+
+  return {
+    productName: WorkbenchProductName,
+    executablePath: data.executablePath,
+    version: data.version,
+    projectPaths: data.projectPaths.filter((path) => validateProjectDirectoryArgument(path)),
+  }
 }
 
 function collectProjectDirectoryArguments(

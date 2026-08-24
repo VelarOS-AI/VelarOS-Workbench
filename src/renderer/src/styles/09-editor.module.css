@@ -594,7 +594,8 @@
 }
 
 .editorTabActionButton:hover,
-.editorTabActionButton[aria-expanded='true'] {
+.editorTabActionButton[aria-expanded='true'],
+.editorTabActionButton[aria-pressed='true'] {
   color: var(--workbench-text);
   background: var(--workbench-hover);
 }
@@ -927,6 +928,157 @@
   background: var(--workbench-surface);
 }
 
+.markdownPreview {
+  height: 100%;
+  overflow: auto;
+  background: var(--workbench-editor-bg);
+  color: var(--workbench-editor-fg);
+}
+
+.markdownPreviewContent {
+  width: min(100%, 1040px);
+  min-height: 100%;
+  margin: 0 auto;
+  padding: 32px clamp(24px, 4vw, 64px) 72px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.markdownPreviewContent :global(h1),
+.markdownPreviewContent :global(h2),
+.markdownPreviewContent :global(h3),
+.markdownPreviewContent :global(h4),
+.markdownPreviewContent :global(h5),
+.markdownPreviewContent :global(h6) {
+  margin: 1.55em 0 0.65em;
+  color: var(--workbench-text);
+  font-weight: 650;
+  line-height: 1.25;
+  text-wrap: balance;
+}
+
+.markdownPreviewContent :global(h1) {
+  margin-top: 0;
+  padding-bottom: 0.35em;
+  border-bottom: 1px solid var(--workbench-border);
+  font-size: 2em;
+}
+
+.markdownPreviewContent :global(h2) {
+  padding-bottom: 0.25em;
+  border-bottom: 1px solid var(--workbench-border-soft);
+  font-size: 1.55em;
+}
+
+.markdownPreviewContent :global(h3) {
+  font-size: 1.25em;
+}
+
+.markdownPreviewContent :global(p),
+.markdownPreviewContent :global(ul),
+.markdownPreviewContent :global(ol),
+.markdownPreviewContent :global(blockquote),
+.markdownPreviewContent :global(pre),
+.markdownPreviewContent :global(table) {
+  margin: 0 0 1em;
+}
+
+.markdownPreviewContent :global(ul),
+.markdownPreviewContent :global(ol) {
+  padding-inline-start: 1.6em;
+}
+
+.markdownPreviewContent :global(a) {
+  color: var(--status-blue);
+  text-decoration: none;
+}
+
+.markdownPreviewContent :global(a:hover) {
+  text-decoration: underline;
+}
+
+.markdownPreviewContent :global(blockquote) {
+  padding: 0.15em 1em;
+  border-left: 3px solid var(--workbench-border-strong, var(--workbench-border));
+  color: var(--workbench-text-muted);
+}
+
+.markdownPreviewContent :global(code) {
+  padding: 0.15em 0.35em;
+  border-radius: 4px;
+  background: var(--workbench-surface-muted);
+  color: var(--workbench-text);
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+
+.markdownPreviewContent :global(pre) {
+  overflow: auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.markdownPreviewContent :global(pre code) {
+  padding: 0;
+  background: transparent;
+}
+
+.markdownPreviewContent :global([data-streamdown='code-block']) {
+  margin: 1em 0;
+  border-color: var(--workbench-border-soft);
+  border-radius: var(--workbench-radius);
+  background: var(--workbench-surface-muted);
+}
+
+.markdownPreviewContent :global([data-streamdown='code-block-header']) {
+  min-height: 28px;
+  color: var(--workbench-text-muted);
+}
+
+.markdownPreviewContent :global([data-streamdown='code-block-actions']) {
+  border: 0 !important;
+  box-shadow: none;
+}
+
+.markdownPreviewContent :global([data-streamdown='code-block-body']) {
+  border-color: var(--workbench-border-soft);
+  background: var(--workbench-editor-bg);
+}
+
+.markdownPreviewContent :global([data-streamdown='code-block-body'] pre code > span) {
+  display: block;
+  min-height: 1.7em;
+}
+
+.markdownPreviewContent :global(table) {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+
+.markdownPreviewContent :global(th),
+.markdownPreviewContent :global(td) {
+  padding: 6px 10px;
+  border: 1px solid var(--workbench-border);
+  text-align: left;
+}
+
+.markdownPreviewContent :global(img) {
+  max-width: 100%;
+  height: auto;
+}
+
+.markdownPreviewContent :global(hr) {
+  margin: 2em 0;
+  border: 0;
+  border-top: 1px solid var(--workbench-border);
+}
+
 .codeMirrorEditor {
   @apply min-h-0 min-w-0 flex-1;
   height: 100%;
@@ -960,13 +1112,18 @@
   position: relative;
   z-index: 0;
   min-height: 100%;
-  padding: 0;
+  /*
+   * Keep a small real scroll tail after the final line. Native overlay
+   * scrollbars otherwise cover the last row when both axes are present.
+   */
+  padding: 0 0 calc(var(--workbench-editor-line-height) + 8px);
   caret-color: var(--workbench-editor-caret);
   tab-size: 2;
 }
 
 .codeMirrorEditor :global(.cm-line) {
-  padding: 0;
+  /* Leave the final character clear of the vertical overlay scrollbar. */
+  padding: 0 calc(var(--workbench-editor-font-size) * 2 + 8px) 0 0;
 }
 
 .codeMirrorEditor :global(.cm-line.cm-workbenchIndentGuide) {
@@ -977,7 +1134,10 @@
 .codeMirrorEditor :global(.cm-gutters) {
   position: sticky;
   left: 0;
-  z-index: 2;
+  /* CodeMirror draws its synthetic caret at z-index 150. Keep the sticky
+   * gutter above it so horizontal scrolling cannot expose the caret or text
+   * inside the line-number / run-button rail. */
+  z-index: 200;
   /*
    * CodeMirror derives its fixed-gutter scroll margin from integer offsetWidth,
    * while the rendered gutter can be fractionally narrower. Keep the first text
@@ -988,24 +1148,26 @@
   border-right: 1px solid var(--workbench-border);
   background: var(--workbench-editor-gutter-bg);
   color: var(--workbench-editor-muted);
+  font-size: var(--workbench-editor-font-size);
+  line-height: var(--workbench-editor-line-height);
 }
 
-.codeMirrorEditor :global(.cm-workbenchPackageScriptRunGutter) {
-  min-width: 20px;
+.codeMirrorEditor :global(.cm-workbenchRunGutter) {
+  min-width: calc(var(--workbench-editor-font-size) * 1.6);
 }
 
-.codeMirrorEditor :global(.cm-workbenchPackageScriptRunGutter .cm-gutterElement) {
+.codeMirrorEditor :global(.cm-workbenchRunGutter .cm-gutterElement) {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-width: 20px;
+  min-width: calc(var(--workbench-editor-font-size) * 1.6);
   padding: 0;
 }
 
-.codeMirrorEditor :global(.cm-workbenchPackageScriptRunButton) {
+.codeMirrorEditor :global(.cm-workbenchRunButton) {
   display: inline-flex;
-  width: 16px;
-  height: 16px;
+  width: calc(var(--workbench-editor-font-size) * 1.28);
+  height: calc(var(--workbench-editor-font-size) * 1.28);
   align-items: center;
   justify-content: center;
   padding: 0;
@@ -1016,31 +1178,33 @@
   cursor: pointer;
 }
 
-.codeMirrorEditor :global(.cm-workbenchPackageScriptRunButton:hover),
-.codeMirrorEditor :global(.cm-workbenchPackageScriptRunButton:focus-visible) {
+.codeMirrorEditor :global(.cm-workbenchRunButton:hover),
+.codeMirrorEditor :global(.cm-workbenchRunButton:focus-visible) {
   outline: none;
   background: var(--status-green-soft);
   color: color-mix(in oklab, var(--status-green) 88%, black);
 }
 
-.codeMirrorEditor :global(.cm-workbenchPackageScriptRunButton:disabled) {
+.codeMirrorEditor :global(.cm-workbenchRunButton:disabled) {
   cursor: not-allowed;
   opacity: 0.45;
 }
 
-.codeMirrorEditor :global(.cm-workbenchPackageScriptRunIcon) {
+.codeMirrorEditor :global(.cm-workbenchRunIcon) {
   width: 0;
   height: 0;
-  margin-left: 2px;
-  border-block: 5px solid transparent;
-  border-left: 8px solid currentColor;
+  margin-left: calc(var(--workbench-editor-font-size) * 0.16);
+  border-block: calc(var(--workbench-editor-font-size) * 0.4) solid transparent;
+  border-left: calc(var(--workbench-editor-font-size) * 0.64) solid currentColor;
 }
 
 .codeMirrorEditor :global(.cm-lineNumbers .cm-gutterElement) {
   position: relative;
-  min-width: 36px;
-  padding-inline: 18px 5px;
-  font-size: 11.5px;
+  min-width: calc(var(--workbench-editor-font-size) * 2.88);
+  padding-inline:
+    calc(var(--workbench-editor-font-size) * 1.44)
+    calc(var(--workbench-editor-font-size) * 0.4);
+  font-size: calc(var(--workbench-editor-font-size) * 0.92);
   text-align: right;
   cursor: default;
   user-select: none;
@@ -1051,9 +1215,9 @@
   content: '';
   position: absolute;
   top: 50%;
-  left: 3px;
-  width: 14px;
-  height: 14px;
+  left: calc(var(--workbench-editor-font-size) * 0.24);
+  width: calc(var(--workbench-editor-font-size) * 1.12);
+  height: calc(var(--workbench-editor-font-size) * 1.12);
   border-radius: 999px;
   background: var(--status-red);
   box-shadow:
@@ -1063,19 +1227,30 @@
 }
 
 .codeMirrorEditor :global(.cm-foldGutter) {
-  min-width: 18px;
+  min-width: calc(var(--workbench-editor-font-size) * 1.44);
 }
 
 .codeMirrorEditor :global(.cm-foldGutter .cm-gutterElement) {
-  width: 18px;
-  min-width: 18px;
+  width: calc(var(--workbench-editor-font-size) * 1.44);
+  min-width: calc(var(--workbench-editor-font-size) * 1.44);
   padding: 0;
-  font-size: 13px;
+  font-size: calc(var(--workbench-editor-font-size) * 1.04);
   font-weight: 600;
   color: var(--workbench-editor-muted);
   opacity: 0;
   text-align: center;
   transition: opacity 120ms ease;
+}
+
+.codeMirrorEditor :global(.cm-workbenchFoldMarker) {
+  display: inline-flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  color: var(--workbench-editor-muted);
+  font-size: calc(var(--workbench-editor-font-size) * 1.04);
+  font-weight: 800;
+  line-height: var(--workbench-editor-line-height);
 }
 
 .codeMirrorEditor :global(.cm-gutters:hover .cm-foldGutter .cm-gutterElement),
@@ -1086,11 +1261,6 @@
 
 .codeMirrorEditor :global(.cm-focused .cm-activeLine) {
   background: var(--workbench-editor-active-line);
-}
-
-.codeMirrorEditor :global(.cm-workbenchHasMultilineTextSelection .cm-activeLine),
-.codeMirrorEditor :global(.cm-workbenchHasMultilineTextSelection .cm-activeLineGutter) {
-  background: transparent;
 }
 
 .codeMirrorEditor :global(.cm-line.cm-workbenchLineNumberMarkerLine) {
@@ -1120,8 +1290,19 @@
 
 .codeMirrorEditor :global(.cm-cursor) {
   border-left-style: solid;
-  border-left-width: 3px;
+  border-left-width: max(1px, calc(var(--workbench-editor-font-size) * 0.24));
   border-left-color: var(--workbench-editor-caret);
+}
+
+/*
+ * CodeMirror 的光标和选区是独立合成层。字号切换到内部高度缓存重测完成之间
+ * 暂时隐藏这两个层，避免单行选区或光标以旧坐标闪现一帧。
+ */
+.codeMirrorEditor
+  :global(.cm-editor.cm-workbenchMetricsRefreshing .cm-selectionLayer),
+.codeMirrorEditor
+  :global(.cm-editor.cm-workbenchMetricsRefreshing .cm-cursorLayer) {
+  visibility: hidden;
 }
 
 .codeMirrorEditor :global(.cm-foldPlaceholder) {

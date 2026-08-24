@@ -16,6 +16,8 @@ import type {
   WorkbenchDeleteEntryRequest,
   WorkbenchDeleteEntryResult,
   WorkbenchEntryMutationResult,
+  WorkbenchInspectDeleteEntryRequest,
+  WorkbenchInspectDeleteEntryResult,
   WorkbenchListDirectoryRequest,
   WorkbenchListDirectoryResult,
   WorkbenchListLocalHistoryRequest,
@@ -49,6 +51,7 @@ export const WorkbenchFsChannels = {
   createEntry: 'workbench-app:fs:create-entry',
   renameEntry: 'workbench-app:fs:rename-entry',
   moveEntry: 'workbench-app:fs:move-entry',
+  inspectDeleteEntry: 'workbench-app:fs:inspect-delete-entry',
   deleteEntry: 'workbench-app:fs:delete-entry',
   restoreDeletedEntry: 'workbench-app:fs:restore-deleted-entry',
   restoreMissingFile: 'workbench-app:fs:restore-missing-file',
@@ -92,6 +95,9 @@ export interface WorkbenchFsBridge {
   moveEntry: (
     request: WorkbenchMoveEntryRequest
   ) => Promise<WorkbenchFsCallResult<WorkbenchMoveEntryResult>>
+  inspectDeleteEntry: (
+    request: WorkbenchInspectDeleteEntryRequest
+  ) => Promise<WorkbenchFsCallResult<WorkbenchInspectDeleteEntryResult>>
   deleteEntry: (
     request: WorkbenchDeleteEntryRequest
   ) => Promise<WorkbenchFsCallResult<WorkbenchDeleteEntryResult>>

@@ -1,4 +1,4 @@
-import { type RefObject, useEffect, useRef, useState } from 'react'
+import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 interface HorizontalWheelScrollInput {
   scrollLeft: number
@@ -7,6 +7,14 @@ interface HorizontalWheelScrollInput {
   deltaX: number
   deltaY: number
   deltaMode: number
+}
+
+interface ActiveTabRevealInput {
+  scrollLeft: number
+  scrollWidth: number
+  clientWidth: number
+  tabStart: number
+  tabWidth: number
 }
 
 /**
@@ -33,6 +41,28 @@ export function resolveEditorTabWheelScroll({
   return Math.min(maxScrollLeft, Math.max(0, scrollLeft + dominantDelta * deltaMultiplier))
 }
 
+/** 仅在当前标签离开可视区时移动标签栏，已经可见时保持用户的滚动位置。 */
+export function resolveActiveEditorTabScroll({
+  scrollLeft,
+  scrollWidth,
+  clientWidth,
+  tabStart,
+  tabWidth,
+}: ActiveTabRevealInput): Nullable<number> {
+  const maxScrollLeft = Math.max(0, scrollWidth - clientWidth)
+  if (maxScrollLeft === 0) return null
+
+  const tabEnd = tabStart + tabWidth
+  const viewportEnd = scrollLeft + clientWidth
+  const nextScrollLeft = tabStart < scrollLeft
+    ? tabStart
+    : tabEnd > viewportEnd
+      ? tabEnd - clientWidth
+      : scrollLeft
+  const clampedScrollLeft = Math.min(maxScrollLeft, Math.max(0, nextScrollLeft))
+  return clampedScrollLeft === scrollLeft ? null : clampedScrollLeft
+}
+
 /** 编辑器标签溢出状态由 Workbench 产品控制，宿主只提供真实 DOM 容器。 */
 export interface WorkbenchEditorTabOverflowController {
   tabScrollerOverflow: boolean
@@ -40,7 +70,8 @@ export interface WorkbenchEditorTabOverflowController {
 }
 
 export function useWorkbenchEditorTabOverflow(
-  overflowKey: string
+  overflowKey: string,
+  activeTabKey: Nullable<string>
 ): WorkbenchEditorTabOverflowController {
   const [tabScrollerOverflow, setTabScrollerOverflow] = useState(false)
   const tabScrollerRef = useRef<HTMLDivElement>(null)
@@ -81,6 +112,28 @@ export function useWorkbenchEditorTabOverflow(
       scroller.removeEventListener('wheel', handleWheel)
     }
   }, [overflowKey])
+
+  useLayoutEffect(() => {
+    if (!activeTabKey) return
+    const scroller = tabScrollerRef.current
+    const activeTab = scroller?.querySelector<HTMLElement>(
+      ':scope > [data-active="true"]'
+    )
+    if (!scroller || !activeTab) return
+
+    const scrollerRect = scroller.getBoundingClientRect()
+    const activeTabRect = activeTab.getBoundingClientRect()
+    const nextScrollLeft = resolveActiveEditorTabScroll({
+      scrollLeft: scroller.scrollLeft,
+      scrollWidth: scroller.scrollWidth,
+      clientWidth: scroller.clientWidth,
+      tabStart: scroller.scrollLeft + activeTabRect.left - scrollerRect.left,
+      tabWidth: activeTabRect.width,
+    })
+    if (nextScrollLeft === null) return
+
+    scroller.scrollTo({ left: nextScrollLeft, behavior: 'smooth' })
+  }, [activeTabKey, overflowKey])
 
   return {
     tabScrollerOverflow,

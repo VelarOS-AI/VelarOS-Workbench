@@ -62,6 +62,8 @@ const fsBridge: WorkbenchFsBridge = {
   createEntry: (request) => ipcRenderer.invoke(WorkbenchFsChannels.createEntry, request),
   renameEntry: (request) => ipcRenderer.invoke(WorkbenchFsChannels.renameEntry, request),
   moveEntry: (request) => ipcRenderer.invoke(WorkbenchFsChannels.moveEntry, request),
+  inspectDeleteEntry: (request) =>
+    ipcRenderer.invoke(WorkbenchFsChannels.inspectDeleteEntry, request),
   deleteEntry: (request) => ipcRenderer.invoke(WorkbenchFsChannels.deleteEntry, request),
   restoreDeletedEntry: (request) =>
     ipcRenderer.invoke(WorkbenchFsChannels.restoreDeletedEntry, request),

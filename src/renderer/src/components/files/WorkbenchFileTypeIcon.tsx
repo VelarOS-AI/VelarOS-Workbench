@@ -1,16 +1,82 @@
-import type { IconProps } from '@phosphor-icons/react'
+import {
+  BracketsCurlyIcon,
+  FileArchiveIcon,
+  FileAudioIcon,
+  FileCodeIcon,
+  FileCsvIcon,
+  FileDocIcon,
+  FileIcon,
+  FileImageIcon,
+  FileIniIcon,
+  FileJsIcon,
+  FileJsxIcon,
+  FileLockIcon,
+  FileMdIcon,
+  FilePdfIcon,
+  FilePptIcon,
+  FileTextIcon,
+  FileTsIcon,
+  FileTsxIcon,
+  FileVideoIcon,
+  FileXlsIcon,
+  GitDiffIcon,
+  type Icon,
+  type IconProps,
+  ProhibitIcon,
+} from '@phosphor-icons/react'
+import {
+  resolveWorkbenchFilePresentation,
+  type WorkbenchBuiltinFilePresentationVariant,
+} from '@renderer/models/files/workbenchFilePresentation'
 import type { ReactElement } from 'react'
 
-import { FileTypeIcon } from '@velaros-ai/ui/primitives/display/FileTypeIcon'
 import type { LooseOptional } from '@velaros-ai/ui/utility-types'
-import { getFilePresentationVariant } from '@velaros-ai/ui/utils/filePresentation'
 
 interface WorkbenchFileTypeIconProps extends Omit<IconProps, 'children'> {
   fileName?: LooseOptional<string>
   mediaType?: LooseOptional<string>
 }
 
-/** Workbench 内的紧凑文件图标；VelarScript 与 Phosphor 的 JS / TS 文件图标保持同一造型。 */
+const BuiltinFileIcons: Partial<Record<WorkbenchBuiltinFilePresentationVariant, Icon>> = {
+  archive: FileArchiveIcon,
+  audio: FileAudioIcon,
+  code: FileCodeIcon,
+  config: FileIniIcon,
+  csv: FileCsvIcon,
+  document: FileDocIcon,
+  generic: FileIcon,
+  gitignore: ProhibitIcon,
+  image: FileImageIcon,
+  javascript: FileJsIcon,
+  json: BracketsCurlyIcon,
+  jsx: FileJsxIcon,
+  lock: FileLockIcon,
+  markdown: FileMdIcon,
+  patch: GitDiffIcon,
+  pdf: FilePdfIcon,
+  presentation: FilePptIcon,
+  spreadsheet: FileXlsIcon,
+  text: FileTextIcon,
+  tsx: FileTsxIcon,
+  typescript: FileTsIcon,
+  video: FileVideoIcon,
+}
+
+const BuiltinFileIconColors: Partial<Record<WorkbenchBuiltinFilePresentationVariant, string>> = {
+  config: '#9c6b30',
+  gitignore: '#737373',
+  javascript: '#c9b134',
+  json: '#b5931a',
+  jsx: '#3a9ec2',
+  lock: '#8b5cf6',
+  markdown: '#519aba',
+  patch: '#0f766e',
+  tsx: '#3178c6',
+  typescript: '#3178c6',
+  velarscript: '#171717',
+}
+
+/** Workbench 核心只内置当前产品语言与通用文件类型；框架图标由贡献注册。 */
 export function WorkbenchFileTypeIcon(props: WorkbenchFileTypeIconProps): ReactElement {
   const {
     fileName,
@@ -18,13 +84,31 @@ export function WorkbenchFileTypeIcon(props: WorkbenchFileTypeIconProps): ReactE
     size = 14,
     color,
     mirrored = false,
-    weight: _weight,
+    weight = 'regular',
     alt,
     style,
     ...iconProps
   } = props
-  if (getFilePresentationVariant({ fileName, mediaType }) !== 'velarscript')
-    return <FileTypeIcon {...props} />
+  const presentation = resolveWorkbenchFilePresentation({ fileName, mediaType })
+  const builtinVariant = presentation.variant as WorkbenchBuiltinFilePresentationVariant
+  const iconColor = color ?? presentation.color ?? BuiltinFileIconColors[builtinVariant]
+
+  if (presentation.variant !== 'velarscript') {
+    const IconComponent = presentation.icon
+      ?? BuiltinFileIcons[builtinVariant]
+      ?? FileCodeIcon
+    return (
+      <IconComponent
+        {...iconProps}
+        data-file-icon-kind={presentation.variant}
+        size={size}
+        color={iconColor ?? 'currentColor'}
+        mirrored={mirrored}
+        weight={weight}
+        style={style}
+      />
+    )
+  }
 
   const transform = mirrored
     ? [style?.transform, 'scaleX(-1)'].filter(Boolean).join(' ')
@@ -35,10 +119,11 @@ export function WorkbenchFileTypeIcon(props: WorkbenchFileTypeIconProps): ReactE
       {...iconProps}
       xmlns="http://www.w3.org/2000/svg"
       data-velarscript-mark="vs"
+      data-file-icon-kind="velarscript"
       width={size}
       height={size}
       viewBox="0 0 256 256"
-      fill={color ?? '#171717'}
+      fill={iconColor ?? '#171717'}
       aria-hidden={iconProps['aria-label'] ? undefined : true}
       style={transform ? { ...style, transform, transformOrigin: 'center' } : style}
     >
@@ -53,7 +138,7 @@ export function WorkbenchFileTypeIcon(props: WorkbenchFileTypeIconProps): ReactE
         strokeWidth="16"
         strokeLinecap="round"
         strokeLinejoin="round"
-        style={{ color: color ?? '#171717' }}
+        style={{ color: iconColor ?? '#171717' }}
       />
     </svg>
   )

@@ -1,0 +1,13 @@
+diff --git a/out/util/vscodeUri.js b/out/util/vscodeUri.js
+index fbd93d3d88fbb93eb93966d27abc4bb2e21d329b..58ce21351c112b8273a2d6b1e80dc486003746cd 100644
+--- a/out/util/vscodeUri.js
++++ b/out/util/vscodeUri.js
+@@ -2,7 +2,7 @@
+  *  Copyright (c) Microsoft Corporation. All rights reserved.
+  *  Licensed under the MIT License. See License.txt in the project root for license information.
+  *--------------------------------------------------------------------------------------------*/
+-import uri from 'vscode-uri';
++import * as uri from 'vscode-uri';
+ export const URI = uri.URI;
+ export const Utils = uri.Utils;
+ //# sourceMappingURL=vscodeUri.js.map
