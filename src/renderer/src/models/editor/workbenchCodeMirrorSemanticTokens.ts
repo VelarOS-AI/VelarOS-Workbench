@@ -24,7 +24,7 @@ function semanticTokenTheme(dark: boolean): Extension {
       color: `${dark ? '#4fc1ff' : '#0070c1'} !important`,
     },
     '& .cm-workbenchSemantic-keyword, & .cm-workbenchSemantic-keyword *': {
-      color: `${dark ? '#c586c0' : '#af00db'} !important`,
+      color: `${dark ? '#569cd6' : '#0033b3'} !important`,
     },
     '& .cm-workbenchSemantic-function, & .cm-workbenchSemantic-method': {
       color: `${dark ? '#ffd580' : '#a04b00'} !important`,
@@ -38,7 +38,7 @@ function semanticTokenTheme(dark: boolean): Extension {
     '& .cm-workbenchSemantic-variable': {
       color: `${dark ? '#d8dee9' : '#202124'} !important`,
     },
-    '& .cm-workbenchSemantic-macro, & .cm-workbenchSemantic-decorator': {
+    '& .cm-workbenchSemantic-macro, & .cm-workbenchSemantic-macro *, & .cm-workbenchSemantic-decorator, & .cm-workbenchSemantic-decorator *': {
       color: `${dark ? '#c8a56c' : '#808000'} !important`,
     },
     '& .cm-workbenchSemanticModifier-deprecated': {

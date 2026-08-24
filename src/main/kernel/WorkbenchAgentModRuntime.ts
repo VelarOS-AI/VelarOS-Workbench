@@ -36,9 +36,6 @@ const WorkbenchAgentModSupportedAxes: readonly AgentModContributionAxisName[] = 
   'hooks',
 ]
 
-/** Agent 轴 pack 的 provides 令牌（与 `AgentCapability` 同值）。 */
-const WorkbenchAgentModPackProvidesId = 'velaros.agent'
-
 interface WorkbenchAgentModHostVersions {
   /** 对 `engines.velaros`：Kernel module API 兼容轴。 */
   velarosVersion: string
@@ -136,9 +133,7 @@ class WorkbenchAgentModRuntime {
   public async assemble(
     input: { packs?: readonly AgentModPackDescriptorLike[] } = {}
   ): Promise<WorkbenchAgentModOverview> {
-    const packs = (input.packs ?? []).filter((pack) =>
-      pack.provides.includes(WorkbenchAgentModPackProvidesId)
-    )
+    const packs = input.packs ?? []
     await assembleAgentMods({
       host: this.host,
       loader: this.loader,
@@ -162,8 +157,6 @@ class WorkbenchAgentModRuntime {
    * 由调用方回落「重启后生效」提示。
    */
   public async activatePack(pack: AgentModPackDescriptorLike): Promise<boolean> {
-    if (!pack.provides.includes(WorkbenchAgentModPackProvidesId)) return false
-
     await assembleAgentMods({
       host: this.host,
       loader: this.loader,
@@ -249,7 +242,6 @@ function buildUnroutedDiagnostics(report: AgentModLoadReport): AgentModDiagnosti
 
 export {
   createWorkbenchAgentModHostProfile,
-  WorkbenchAgentModPackProvidesId,
   WorkbenchAgentModRoutedAxes,
   WorkbenchAgentModRuntime,
   WorkbenchAgentModSupportedAxes,

@@ -2,6 +2,10 @@ import { isAbsolute, resolve } from 'node:path'
 
 import { defaultDenyApprovalPort } from '@velaros-ai/agent/tool-contract'
 import {
+  createProjectCodeQuery,
+  type ProjectCodeIndexApi,
+} from '@velaros-ai/development/runtime'
+import {
   executeAgentProjectRead,
   type ProjectToolContext,
   projectTools,
@@ -53,6 +57,13 @@ interface ProjectCapabilityProviderOptions {
   createKernel?: (projectRoot: string) => Promise<ProjectKernel>
   codeGraphResource?: WorkbenchCodeGraphResource
 }
+
+const unavailableWorkbenchCodeIndex: ProjectCodeIndexApi = {
+  isAvailable: () => false,
+  query: () => Promise.reject(new Error('Workbench CodeGraph agent query adapter is unavailable.')),
+}
+
+const workbenchProjectCodeQuery = createProjectCodeQuery(unavailableWorkbenchCodeIndex)
 
 /**
  * Workbench 的 Project 领域适配器。
@@ -187,6 +198,7 @@ class ProjectCapabilityProvider implements WorkbenchProjectCapabilityProvider {
         runWithApproval: (action) => action(),
         prepareMutation: async (input) =>
           buildApprovedMutation(projectRoot, activeDirectory, input),
+        queryCode: workbenchProjectCodeQuery,
         runCommand: (command, options, allowDangerous, signal) =>
           this.runProjectCommand(
             projectRoot,

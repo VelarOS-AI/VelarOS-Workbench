@@ -2,12 +2,11 @@ import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
 import { isAbsolute, join, resolve } from 'node:path'
 
 import type { AgentModPackDescriptorLike, AgentModPackReader } from '@velaros-ai/agent'
+import { Log } from '@velaros-ai/core'
 import {
-  AgentModPackProvidesId,
   parseVelarosModEnvelope,
   VelarosModManifestFileName,
-} from '@velaros-ai/agent/protocol'
-import { Log } from '@velaros-ai/core'
+} from '@velaros-ai/kernel/contracts/protocol'
 
 /**
  * Workbench 本地的 mod pack 存储。
@@ -42,6 +41,7 @@ interface WorkbenchAgentModRegistryFile {
 interface WorkbenchAgentModPackIdentity {
   id: string
   version?: string
+  provides: readonly string[]
 }
 
 /**
@@ -65,6 +65,7 @@ function readManifestIdentity(
   return {
     id: parsed.envelope.module.id,
     version: parsed.envelope.module.version,
+    provides: parsed.envelope.module.provides.map((capability) => capability.id),
   }
 }
 
@@ -142,7 +143,7 @@ class WorkbenchAgentModPackStore {
       kind: alreadyScanned ? 'user' : 'contrib',
       version: identity.version ?? '0.0.0',
       enabled: !disabled.has(identity.id),
-      provides: [AgentModPackProvidesId],
+      provides: identity.provides,
       specifier: packDirectory,
     }
   }
@@ -159,7 +160,7 @@ class WorkbenchAgentModPackStore {
         kind,
         version: identity.version ?? '0.0.0',
         enabled: !disabled.has(identity.id),
-        provides: [AgentModPackProvidesId],
+        provides: identity.provides,
         specifier: packDirectory,
       }
     } catch (error) {

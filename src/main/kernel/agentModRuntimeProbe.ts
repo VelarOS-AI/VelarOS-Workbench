@@ -4,7 +4,6 @@ import type { AgentModManifest } from '@velaros-ai/agent/protocol'
 import { AgentModManifestSchemaVersion } from '@velaros-ai/agent/protocol'
 
 import {
-  WorkbenchAgentModPackProvidesId,
   WorkbenchAgentModRoutedAxes,
   WorkbenchAgentModRuntime,
 } from './WorkbenchAgentModRuntime'
@@ -42,7 +41,7 @@ function envelope(manifest: AgentModManifest): unknown {
       id: manifest.id,
       version: manifest.version,
       apiVersion: 1,
-      provides: [WorkbenchAgentModPackProvidesId],
+      provides: [],
     },
     agent: manifest,
   }
@@ -84,7 +83,7 @@ function envelope(manifest: AgentModManifest): unknown {
   )
 }
 
-// ── ② 本地清单里的 pack：过滤 provides、读分节信封、装载并合流进报告 ──
+// ── ② 本地清单里的 pack：按 agent 分节路由、装载并合流进报告 ──
 {
   const manifests = new Map<string, unknown>([
     [
@@ -118,7 +117,7 @@ function envelope(manifest: AgentModManifest): unknown {
       id: 'probe.prompt-pack',
       version: '0.1.0',
       enabled: true,
-      provides: [WorkbenchAgentModPackProvidesId],
+      provides: [],
       specifier: '/mods/probe-prompt-pack',
       kind: 'contrib',
     },
@@ -126,7 +125,7 @@ function envelope(manifest: AgentModManifest): unknown {
       id: 'probe.other-axis-pack',
       version: '0.1.0',
       enabled: true,
-      // 不含 Agent 轴令牌：必须被跳过而不是拒载。
+      // 路由不再读取 provides；缺少清单时必须留下不可读诊断。
       provides: ['velaros.some-other-domain'],
       specifier: '/mods/probe-other-axis-pack',
       kind: 'contrib',
@@ -135,7 +134,7 @@ function envelope(manifest: AgentModManifest): unknown {
       id: 'probe.disabled-pack',
       version: '0.1.0',
       enabled: false,
-      provides: [WorkbenchAgentModPackProvidesId],
+      provides: [],
       specifier: '/mods/probe-disabled-pack',
       kind: 'contrib',
     },
@@ -177,7 +176,7 @@ function envelope(manifest: AgentModManifest): unknown {
         id: 'probe.untrusted-pack',
         version: '0.1.0',
         enabled: true,
-        provides: [WorkbenchAgentModPackProvidesId],
+        provides: [],
         specifier: '/mods/probe-untrusted-pack',
         kind: 'contrib',
       },
