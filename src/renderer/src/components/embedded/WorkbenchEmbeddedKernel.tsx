@@ -17,6 +17,7 @@ import { useWorkbenchI18n } from '@renderer/i18n'
 import styles from '../../styles/workbenchPageStyles'
 import { EditorPanel } from '../editor/EditorPanel'
 import { FilePanel } from '../files/FilePanel'
+import { WorkbenchCommitPanel } from '../git/WorkbenchCommitPanel'
 
 import type {
   WorkbenchEmbeddedKernelLeftMode,
@@ -39,17 +40,26 @@ interface WorkbenchEmbeddedKernelChrome {
 export function WorkbenchEmbeddedKernel({
   embeddedChrome,
   model,
+  leftMode,
 }: WorkbenchEmbeddedKernelProps): ReactElement {
   const { t } = useWorkbenchI18n()
   const { files, editor } = model
   const leftPanel = (
     <div className={styles.leftToolContent}>
-      <FilePanel
-        tree={files.tree}
-        search={files.search}
-        git={files.git}
-        handlers={files.handlers}
-      />
+      {leftMode === 'changes' ? (
+        <WorkbenchCommitPanel
+          git={model.changes.git}
+          onOpenDiff={model.changes.onOpenDiff}
+          onOpenFile={model.changes.onOpenFile}
+        />
+      ) : (
+        <FilePanel
+          tree={files.tree}
+          search={files.search}
+          git={files.git}
+          handlers={files.handlers}
+        />
+      )}
     </div>
   )
   const editorPanel = (

@@ -7,12 +7,17 @@
  *   目录优先 + localeCompare 排序、hasChildren 可见子项探针、limit 钳制 + truncated。
  * - 读文件：文本似然门（NUL + 控制字节占比）、maxChars 钳制截断、totalLines 全文行数。
  *
- * 与 desktop 版的差异（本切片刻意收窄，后续批次补齐）：不做 git check-ignore 装饰
- * （`gitIgnored` 字段缺省）、不做符号链接实体解析（越界符号链接直接剔除）。
+ * Git 排除装饰沿用 Desktop 语义：每次目录读取批量调用一次 `git check-ignore`，
+ * 已排除目录的子树继承弱化状态；非 Git 工程或 Git 不可用时安全退化为普通目录。
+ * 符号链接实体仍只允许留在项目边界内。
  * 错误一律抛 Error，由 IPC 装配层降为 `WorkbenchFsCallResult` 信封。
  */
 import { opendir, readdir, readFile, realpath, stat } from 'node:fs/promises'
 import { isAbsolute, relative, resolve, sep } from 'node:path'
+
+import { execa } from 'execa'
+
+import { AppError } from '@velaros-ai/core/error'
 
 import type {
   WorkbenchDirectoryEntry,
@@ -47,9 +52,18 @@ export class WorkbenchProjectFileSystem {
       this.shouldIncludeEntry(entry.name, entry.isDirectory(), includeHidden)
     )
     const limitedDirents = visibleDirents.slice(0, limit)
+    const directoryRelativePath = this.toProjectRelativePath(projectRoot, directoryPath)
+    const entryRelativePaths = limitedDirents.map((entry) =>
+      this.toProjectRelativePath(projectRoot, resolve(directoryPath, entry.name))
+    )
+    const gitIgnoredPaths = await this.getGitIgnoredPaths(projectRoot, [
+      ...(directoryRelativePath === '.' ? [] : [directoryRelativePath]),
+      ...entryRelativePaths,
+    ])
+    const isDirectoryGitIgnored = gitIgnoredPaths.has(directoryRelativePath)
 
     const entries: WorkbenchDirectoryEntry[] = []
-    for (const dirent of limitedDirents) {
+    for (const [index, dirent] of limitedDirents.entries()) {
       const entryAbsolutePath = resolve(directoryPath, dirent.name)
       if (!this.isInsideProject(projectRoot, entryAbsolutePath)) continue
 
@@ -74,10 +88,11 @@ export class WorkbenchProjectFileSystem {
 
       entries.push({
         name: dirent.name,
-        path: this.toProjectRelativePath(projectRoot, entryAbsolutePath),
+        path: entryRelativePaths[index]!,
         type: isDirectory ? 'directory' : 'file',
         size,
         modifiedAt,
+        gitIgnored: isDirectoryGitIgnored || gitIgnoredPaths.has(entryRelativePaths[index]!),
         hasChildren: isDirectory
           ? await this.hasVisibleChildren(entryAbsolutePath, includeHidden)
           : false,
@@ -99,31 +114,46 @@ export class WorkbenchProjectFileSystem {
   }
 
   public async readTextFile(request: WorkbenchReadFileRequest): Promise<WorkbenchReadFileResult> {
-    const projectRoot = await this.resolveProjectRoot(request.projectRoot)
-    const filePath = await this.resolveInsideProject(projectRoot, request.path)
-    const fileStats = await stat(filePath)
-    if (!fileStats.isFile()) {
-      throw new Error('工作台文件读取目标必须是文件。')
-    }
+    try {
+      const projectRoot = await this.resolveProjectRoot(request.projectRoot)
+      const filePath = await this.resolveInsideProject(projectRoot, request.path)
+      const fileStats = await stat(filePath)
+      if (!fileStats.isFile()) {
+        throw new AppError('VALIDATION', '工作台文件读取目标必须是文件。')
+      }
 
-    const buffer = await readFile(filePath)
-    if (!this.isLikelyTextFile(buffer)) {
-      throw new Error('当前文件不是可预览的文本文件。')
-    }
+      const buffer = await readFile(filePath)
+      if (!this.isLikelyTextFile(buffer)) {
+        throw new AppError('VALIDATION', '当前文件不是可预览的文本文件。')
+      }
 
-    const maxChars = this.clampReadMaxChars(request.maxChars)
-    const fullContent = buffer.toString('utf8')
-    const truncated = fullContent.length > maxChars
+      const maxChars = this.clampReadMaxChars(request.maxChars)
+      const fullContent = buffer.toString('utf8')
+      const truncated = fullContent.length > maxChars
 
-    return {
-      projectRoot,
-      path: this.toProjectRelativePath(projectRoot, filePath),
-      content: truncated ? fullContent.slice(0, maxChars) : fullContent,
-      size: fileStats.size,
-      modifiedAt: fileStats.mtimeMs,
-      totalLines: fullContent.split(/\r?\n/).length,
-      truncated,
+      return {
+        projectRoot,
+        path: this.toProjectRelativePath(projectRoot, filePath),
+        content: truncated ? fullContent.slice(0, maxChars) : fullContent,
+        size: fileStats.size,
+        modifiedAt: fileStats.mtimeMs,
+        totalLines: fullContent.split(/\r?\n/).length,
+        truncated,
+      }
+    } catch (error) {
+      throw this.normalizeReadError(error, request.path)
     }
+  }
+
+  private normalizeReadError(error: unknown, path: string): Error {
+    if (error instanceof AppError) return error
+
+    const code = (error as NodeJS.ErrnoException | undefined)?.code
+    if (code === 'ENOENT') return new AppError('NOT_FOUND', `文件已被删除或移动：${path}`)
+    if (code === 'EACCES' || code === 'EPERM')
+      return new AppError('PERMISSION', `没有权限读取文件：${path}`)
+
+    return AppError.from(error)
   }
 
   private async resolveProjectRoot(input: string): Promise<string> {
@@ -187,6 +217,28 @@ export class WorkbenchProjectFileSystem {
       return false
     }
     return false
+  }
+
+  private async getGitIgnoredPaths(projectRoot: string, paths: readonly string[]): Promise<Set<string>> {
+    const normalizedPaths = paths.filter((path) => path && path !== '.')
+    if (normalizedPaths.length === 0) return new Set()
+
+    try {
+      const result = await execa('git', ['-C', projectRoot, 'check-ignore', '-z', '--stdin'], {
+        input: `${normalizedPaths.join('\0')}\0`,
+        stderr: 'ignore',
+        reject: false,
+      })
+      if (result.exitCode !== 0) return new Set()
+      return new Set(
+        result.stdout
+          .split('\0')
+          .filter(Boolean)
+          .map((path) => path.split(sep).join('/'))
+      )
+    } catch {
+      return new Set()
+    }
   }
 
   private isLikelyTextFile(buffer: Buffer): boolean {

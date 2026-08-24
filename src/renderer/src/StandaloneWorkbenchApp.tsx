@@ -7,6 +7,15 @@ import {
 import { WorkbenchLocalizationProvider } from '@renderer/i18n'
 
 import { BrowserCompositionProvider } from '@velaros-ai/browser/composition'
+import {
+  type ConversationActionPort,
+  ConversationActionPortProvider,
+  ConversationLocalizationProvider,
+} from '@velaros-ai/ui/conversation'
+import {
+  ConversationComposerPortProvider,
+  emptyConversationComposerPort,
+} from '@velaros-ai/ui/conversation/composer'
 
 import { standaloneBrowserCompositionAdapter } from './browser/standaloneBrowserCompositionAdapter'
 import { standaloneWorkbenchProductRuntimeValue } from './host/standaloneWorkbenchProductRuntime'
@@ -19,6 +28,13 @@ import { WorkbenchWelcomePage } from './welcome/WorkbenchWelcomePage'
 import { WorkbenchWorkspaceShell } from './workspace/WorkbenchWorkspaceShell'
 
 import './workspace/projectDrop.css'
+
+const standaloneConversationActionPort: ConversationActionPort = {
+  getGoalLifecycle: async () => ({ ok: true, goal: null }),
+  updateGoalLifecycle: async () => ({ ok: true, goal: null }),
+  provideExecutionGuidance: async () => undefined,
+  resolveHandoffSuggestion: () => undefined,
+}
 
 /**
  * 独立 Workbench 应用的产品壳：起手页 ↔ 工作台按项目状态切换。
@@ -110,36 +126,42 @@ export function StandaloneWorkbenchApp(): ReactElement {
 
   return (
     <WorkbenchLocalizationProvider value={localization}>
-      <WorkbenchProductRuntimeProvider value={standaloneWorkbenchProductRuntimeValue}>
-        <BrowserCompositionProvider adapter={standaloneBrowserCompositionAdapter}>
-          <WorkbenchChatProvider adapter={standaloneWorkbenchChatAdapter}>
-            <div className="workbench-external-project-drop-root">
-              {state.currentProject ? (
-                <WorkbenchWorkspaceShell project={state.currentProject} />
-              ) : (
-                <WorkbenchWelcomePage
-                  state={state}
-                  onNewProject={() => setNewProjectDialogOpen(true)}
-                />
-              )}
-              <NewProjectDialog
-                open={newProjectDialogOpen}
-                onOpenChange={setNewProjectDialogOpen}
-              />
-              <WorkbenchMessageHost />
-              {externalProjectDropActive && (
-                <div className="workbench-external-project-drop-overlay" role="status">
-                  <div className="workbench-external-project-drop-card">
-                    <FolderOpenIcon size={30} weight="duotone" />
-                    <span>{localization.t('workbench.dropProjectFolder')}</span>
-                    <small>{localization.t('workbench.dropProjectFolderHint')}</small>
+      <ConversationLocalizationProvider value={localization}>
+        <ConversationActionPortProvider value={standaloneConversationActionPort}>
+          <ConversationComposerPortProvider value={emptyConversationComposerPort}>
+            <WorkbenchProductRuntimeProvider value={standaloneWorkbenchProductRuntimeValue}>
+              <BrowserCompositionProvider adapter={standaloneBrowserCompositionAdapter}>
+                <WorkbenchChatProvider adapter={standaloneWorkbenchChatAdapter}>
+                  <div className="workbench-external-project-drop-root">
+                    {state.currentProject ? (
+                      <WorkbenchWorkspaceShell project={state.currentProject} />
+                    ) : (
+                      <WorkbenchWelcomePage
+                        state={state}
+                        onNewProject={() => setNewProjectDialogOpen(true)}
+                      />
+                    )}
+                    <NewProjectDialog
+                      open={newProjectDialogOpen}
+                      onOpenChange={setNewProjectDialogOpen}
+                    />
+                    <WorkbenchMessageHost />
+                    {externalProjectDropActive && (
+                      <div className="workbench-external-project-drop-overlay" role="status">
+                        <div className="workbench-external-project-drop-card">
+                          <FolderOpenIcon size={30} weight="duotone" />
+                          <span>{localization.t('workbench.dropProjectFolder')}</span>
+                          <small>{localization.t('workbench.dropProjectFolderHint')}</small>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
-              )}
-            </div>
-          </WorkbenchChatProvider>
-        </BrowserCompositionProvider>
-      </WorkbenchProductRuntimeProvider>
+                </WorkbenchChatProvider>
+              </BrowserCompositionProvider>
+            </WorkbenchProductRuntimeProvider>
+          </ConversationComposerPortProvider>
+        </ConversationActionPortProvider>
+      </ConversationLocalizationProvider>
     </WorkbenchLocalizationProvider>
   )
 }

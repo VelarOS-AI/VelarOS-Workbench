@@ -6,6 +6,7 @@ import {
   type AgentCapabilityRuntime,
   type AgentExecutionConfig,
   ExecutionEventBus,
+  normalizeExecutionModes,
 } from '@velaros-ai/agent'
 import {
   parseAgentCapabilityExecuteEnvelopeV1,
@@ -26,17 +27,28 @@ interface WorkbenchAgentExecuteInput {
   config: AgentExecutionConfig
 }
 
-/** Workbench v1 只接受 BYOK 模型选择；权限、工具面和运行状态均由 Host 装配。 */
+/** Workbench v1 只接受 BYOK 模型选择与封闭的目标/计划执行模式轴。 */
 function parseWorkbenchAgentConfig(
   config: Readonly<Record<string, unknown>>,
 ): AgentExecutionConfig {
+  const rawExecutionModes = config.executionModes
+  const executionModes = normalizeExecutionModes(
+    Array.isArray(rawExecutionModes) ? rawExecutionModes : []
+  )
   if (
     config.modelSelection === undefined
-    || Object.keys(config).some((key) => key !== 'modelSelection')
+    || Object.keys(config).some(
+      (key) => key !== 'modelSelection' && key !== 'executionModes'
+    )
+    || (rawExecutionModes !== undefined && !Array.isArray(rawExecutionModes))
+    || (Array.isArray(rawExecutionModes) && (
+      executionModes.length !== rawExecutionModes.length
+      || executionModes.some((mode, index) => mode !== rawExecutionModes[index])
+    ))
   ) {
     throw new AppError('VALIDATION', 'Workbench Agent config is invalid')
   }
-  return { modelSelection: config.modelSelection }
+  return { modelSelection: config.modelSelection, executionModes }
 }
 
 /**

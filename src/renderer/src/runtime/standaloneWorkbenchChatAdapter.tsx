@@ -1,22 +1,40 @@
 import {
-  type FormEvent,
   type ReactElement,
   useEffect,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
 } from 'react'
+import { ArrowRightIcon } from '@phosphor-icons/react'
 import type {
   WorkbenchChatCompositionAdapter,
   WorkbenchChatProjectRuntime,
   WorkbenchChatSessionSnapshot,
 } from '@renderer/composition'
+import { useWorkbenchI18n } from '@renderer/i18n'
 
 import { AgentCapabilityProtocolVersion } from '@velaros-ai/agent/protocol/agent-capability'
 import { Log } from '@velaros-ai/core'
+import {
+  ChatConversationPane,
+  ChatThinkingVisibilityProvider,
+  type ConversationView,
+  VelarSailMark,
+} from '@velaros-ai/ui/conversation'
+import {
+  ChatComposer,
+  type ChatComposerControl,
+} from '@velaros-ai/ui/conversation/composer'
 
 import type { ChatMessage } from '@shared/contracts'
 
+import styles from '../styles/workbenchPageStyles'
+
+import {
+  updateStandaloneWorkbenchModelConfig,
+  useStandaloneWorkbenchModelConfig,
+} from './standaloneWorkbenchModelConfig'
 import { workbenchMessage } from './workbenchMessageHost'
 
 const log = Log.tag('workbench-chat-adapter')
@@ -49,6 +67,11 @@ let idSequence = 0
 function nextId(prefix: string): string {
   idSequence += 1
   return `${prefix}-${Date.now().toString(36)}-${idSequence.toString(36)}`
+}
+
+function resolveCurrentFileLabel(path: string): string {
+  const segments = path.replace(/\\/gu, '/').split('/').filter(Boolean)
+  return segments.at(-1) ?? path
 }
 
 function createState(projectRoot: string): StandaloneChatState {
@@ -142,8 +165,8 @@ function useStandaloneProjectRuntime(projectRoot: Nullable<string>): WorkbenchCh
   const member = {
     itemId: state.sessionId,
     memberSessionId: state.sessionId,
-    title: 'Workbench Agent',
-    workspaceTitle: state.projectRoot.split('/').at(-1) ?? 'Project',
+    title: readStandaloneChatTitle(state),
+    workspaceTitle: '',
     workspaceRoot: state.projectRoot,
     updatedAt: state.lastRunFinishedAt ?? state.lastRunStartedAt ?? 0,
     isEmpty: state.messages.length === 0,
@@ -151,7 +174,7 @@ function useStandaloneProjectRuntime(projectRoot: Nullable<string>): WorkbenchCh
   }
   const group = {
     folderId: state.folderId,
-    title: 'Workbench Agent',
+    title: readStandaloneChatTitle(state),
     kind: 'chat' as const,
     surfaceScope: {
       surface: 'workbench' as const,
@@ -200,16 +223,25 @@ function StandaloneWorkbenchChatSessionSurface({
   currentFilePath: Nullable<string>
 }): ReactElement {
   const chat = useStandaloneChatState(projectRoot)
+  const { t } = useWorkbenchI18n()
+  const modelConfig = useStandaloneWorkbenchModelConfig()
   const [prompt, setPrompt] = useState('')
-  const [provider, setProvider] = useState('openai')
-  const [model, setModel] = useState('gpt-4.1')
-  const [baseURL, setBaseURL] = useState('https://api.openai.com/v1')
-  const [apiKey, setApiKey] = useState('')
-  const [error, setError] = useState<string | null>(null)
+  const [files, setFiles] = useState<File[]>([])
+  const [includedCurrentFilePath, setIncludedCurrentFilePath] =
+    useState<Nullable<string>>(currentFilePath)
+  const [goalMode, setGoalMode] = useState(false)
+  const [planMode, setPlanMode] = useState(false)
+  const [followLocked, setFollowLocked] = useState(true)
+  const [showThinkingProcess, setShowThinkingProcess] = useState(true)
+  const scrollRef = useRef<HTMLDivElement>(null)
   const activeExecutionRef = useRef<{
     executionId: string
     sessionCorrelationId: string
   } | null>(null)
+
+  useEffect(() => {
+    setIncludedCurrentFilePath(currentFilePath)
+  }, [currentFilePath])
 
   useEffect(() =>
     window.velarosWorkbenchKernel.onAgentExecution((rawEnvelope) => {
@@ -243,16 +275,27 @@ function StandaloneWorkbenchChatSessionSurface({
       }
     }), [chat.sessionId, projectRoot])
 
-  async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
-    event.preventDefault()
-    const text = prompt.trim()
-    if (!text || chat.status === 'running') return
-    setError(null)
+  async function submit(draftValue = prompt, draftFiles = files): Promise<void> {
+    const text = draftValue.trim()
+    if ((!text && draftFiles.length === 0) || chat.status === 'running') return
+    if (!modelConfig.provider.trim() || !modelConfig.model.trim() || !modelConfig.apiKey.trim()) return
     setPrompt('')
-    const userMessage = createTextMessage('user', text)
+    setFiles([])
+    const userMessage = createTextMessage('user', text || draftFiles.map((file) => file.name).join(', '))
+    const attachmentMetadata = draftFiles.map((file, index) => ({
+      id: `${userMessage.id}-attachment-${index}`,
+      kind: file.type.startsWith('image/') ? 'image' as const : 'file' as const,
+      name: file.name,
+      mediaType: file.type || 'application/octet-stream',
+      size: file.size,
+      lastModified: file.lastModified,
+    }))
+    const submittedMessage = attachmentMetadata.length > 0
+      ? { ...userMessage, attachments: attachmentMetadata }
+      : userMessage
     updateState(projectRoot, (state) => ({
       ...state,
-      messages: [...state.messages, userMessage],
+      messages: [...state.messages, submittedMessage],
       status: 'running',
       lastRunStartedAt: Date.now(),
       lastRunFinishedAt: null,
@@ -283,18 +326,29 @@ function StandaloneWorkbenchChatSessionSurface({
         },
         messages: latest.messages.map((message) => ({
           role: message.role,
-          content: message.blocks
+          content: [
+            message.blocks
             .filter((block) => block.type === 'text')
             .map((block) => block.text)
             .join('\n'),
+            ...(message.attachments?.length
+              ? [message.attachments
+                  .map((attachment) => `Attachment: ${attachment.name} (${attachment.mediaType})`)
+                  .join('\n')]
+              : []),
+          ].filter(Boolean).join('\n\n'),
         })),
         config: {
           modelSelection: {
-            provider: provider.trim(),
-            model: model.trim(),
-            apiKey,
-            baseURL: baseURL.trim(),
+            provider: modelConfig.provider.trim(),
+            model: modelConfig.model.trim(),
+            apiKey: modelConfig.apiKey,
+            baseURL: modelConfig.baseURL.trim(),
           },
+          executionModes: [
+            ...(goalMode ? ['goal' as const] : []),
+            ...(planMode ? ['plan' as const] : []),
+          ],
         },
       },
     })
@@ -328,61 +382,211 @@ function StandaloneWorkbenchChatSessionSurface({
     }))
   }
 
-  return (
-    <div className="wb_standaloneChatSurface">
-      <div className="wb_standaloneChatMessages" aria-live="polite">
-        {chat.messages.length === 0 ? (
-          <p>Ask the injected VelarOS Agent about this project.</p>
-        ) : chat.messages.map((message) => (
-          <article key={message.id} data-role={message.role}>
-            <strong>{message.role === 'user' ? 'You' : 'Agent'}</strong>
-            {message.blocks.filter((block) => block.type === 'text').map((block, index) => (
-              <p key={`${message.id}-${index}`}>{block.text}</p>
-            ))}
-          </article>
-        ))}
-      </div>
-      <form className="wb_standaloneChatComposer" onSubmit={(event) => void submit(event)}>
-        <div className="wb_standaloneChatModel">
-          <input
-            aria-label="Provider"
-            value={provider}
-            onChange={(event) => setProvider(event.target.value)}
-          />
-          <input
-            aria-label="Model"
-            value={model}
-            onChange={(event) => setModel(event.target.value)}
-          />
-          <input
-            aria-label="Base URL"
-            value={baseURL}
-            onChange={(event) => setBaseURL(event.target.value)}
-          />
-          <input
-            aria-label="API key"
-            type="password"
-            autoComplete="off"
-            placeholder="API key (memory only)"
-            value={apiKey}
-            onChange={(event) => setApiKey(event.target.value)}
-          />
-        </div>
-        <textarea
-          aria-label="Message"
-          placeholder={currentFilePath
-            ? `Ask about ${currentFilePath}`
-            : 'Ask the Workbench Agent'}
-          value={prompt}
-          onChange={(event) => setPrompt(event.target.value)}
-        />
-        {error && <p role="alert">{error}</p>}
-        <button type="submit" disabled={chat.status === 'running' || !prompt.trim()}>
-          {chat.status === 'running' ? 'Running…' : 'Send'}
-        </button>
-      </form>
-    </div>
+  const lastMessage = chat.messages.at(-1)
+  const lastError = chat.status === 'failed' && lastMessage?.role === 'assistant'
+    ? lastMessage.blocks
+        .filter((block) => block.type === 'text')
+        .map((block) => block.text)
+        .join('\n')
+    : null
+  const activeAssistantMessage = chat.status === 'running' && lastMessage?.role === 'assistant'
+    ? lastMessage
+    : null
+  const completedTurns = chat.messages.filter((message) => message.role === 'user').length
+  const starterSuggestions = useMemo(
+    () => [
+      {
+        id: 'overview-project',
+        title: t('workbench.chatStarterOverviewTitle'),
+        prompt: t('workbench.chatStarterOverviewPrompt'),
+      },
+      {
+        id: 'explain-current-file',
+        title: t('workbench.chatStarterExplainTitle'),
+        prompt: currentFilePath
+          ? t('workbench.chatStarterExplainFilePrompt', { path: resolveCurrentFileLabel(currentFilePath) })
+          : t('workbench.chatStarterExplainProjectPrompt'),
+      },
+      {
+        id: 'review-project',
+        title: t('workbench.chatStarterReviewTitle'),
+        prompt: t('workbench.chatStarterReviewPrompt'),
+      },
+    ],
+    [currentFilePath, t]
   )
+  const conversation = useMemo<ConversationView>(
+    () => ({
+      sessionId: chat.sessionId,
+      activeMemberSessionId: chat.sessionId,
+      supportsProjectFiles: true,
+      messages: [...chat.messages] as ConversationView['messages'],
+      messageRunMarkers: [],
+      workerThreads: [],
+      runtime: {
+        status: chat.status,
+        teamPhase: null,
+        activeTurn: chat.status === 'running' ? completedTurns : null,
+        completedTurns,
+        lastError,
+        connectionRetryAttempt: null,
+        connectionRetryMaxAttempts: null,
+        lastRunStartedAt: chat.lastRunStartedAt,
+        awaitingConfirmationMessage: null,
+        awaitingInputQuestion: null,
+        stickyDockItems: [],
+        awaitingConfirmationUserActionCards: [],
+        awaitingConfirmationExecutionId: null,
+        awaitingConfirmationDetail: null,
+        lastRunFinishedAt: chat.lastRunFinishedAt,
+        usageTelemetry: [],
+      },
+      isStreaming: chat.status === 'running',
+      streamingAssistantMessageId: activeAssistantMessage?.id,
+      hasStreamingThinkingBlock: false,
+      runningLabel: t('chat.running'),
+      activeProjectRoot: projectRoot,
+      workspaceSourceRoot: projectRoot,
+    }),
+    [
+      activeAssistantMessage?.id,
+      chat.lastRunFinishedAt,
+      chat.lastRunStartedAt,
+      chat.messages,
+      chat.sessionId,
+      chat.status,
+      completedTurns,
+      lastError,
+      projectRoot,
+      t,
+    ]
+  )
+  const composerControl = useMemo<ChatComposerControl>(
+    () => ({
+      scopeKey: chat.sessionId,
+      input: {
+        input: {
+          value: prompt,
+          placeholder: currentFilePath
+            ? t('workbench.chatAskAboutFile', { path: currentFilePath })
+            : t('workbench.chatPlaceholder'),
+          disabled: chat.status === 'running',
+          onValueChange: setPrompt,
+          onSend: (draft) => submit(draft?.value ?? prompt, draft?.files ?? files),
+        },
+        attachments: {
+          files,
+          onFilesChange: setFiles,
+        },
+        execution: {
+          goalMode,
+          onGoalModeChange: setGoalMode,
+          planMode,
+          onPlanModeChange: setPlanMode,
+        },
+        thinkingVisibility: {
+          value: showThinkingProcess,
+          onChange: setShowThinkingProcess,
+        },
+        features: {
+          workbenchCurrentFilePath: includedCurrentFilePath ?? undefined,
+          onDismissWorkbenchCurrentFile: () => setIncludedCurrentFilePath(null),
+        },
+        streaming: {
+          isStreaming: chat.status === 'running',
+          canStop: false,
+        },
+      },
+      modelSelector: {
+        label: t('chat.composerModelSection'),
+        provider: modelConfig.provider,
+        model: modelConfig.model,
+        providers: [
+          {
+            value: modelConfig.provider,
+            label: modelConfig.provider,
+            defaultModel: modelConfig.model,
+            models: [{ value: modelConfig.model, label: modelConfig.model }],
+          },
+        ],
+        onChange: (provider, model) =>
+          updateStandaloneWorkbenchModelConfig({ provider, model }),
+      },
+    }),
+    [
+      chat.sessionId,
+      chat.status,
+      files,
+      goalMode,
+      includedCurrentFilePath,
+      modelConfig.model,
+      modelConfig.provider,
+      planMode,
+      prompt,
+      showThinkingProcess,
+      t,
+    ]
+  )
+
+  return (
+    <ChatThinkingVisibilityProvider visible={showThinkingProcess}>
+      <ChatConversationPane
+        conversation={conversation}
+        conversationRefreshKey={chat.revision}
+        composer={<ChatComposer control={composerControl} density="compact" />}
+        followLocked={followLocked}
+        scrollRef={scrollRef}
+        streamSlot={chat.messages.length === 0 ? (
+          <div className={styles.workbenchChatEmptyState} data-workbench-chat-empty="true">
+            <div className={styles.workbenchChatEmptyContent}>
+              <VelarSailMark
+                className={styles.workbenchChatEmptySail}
+                decorative
+                motion="steady"
+                showWindLines={false}
+                size="small"
+              />
+              <div
+                className={styles.workbenchChatStarterList}
+                aria-label={t('workbench.chatStarterSuggestions')}
+              >
+                {starterSuggestions.map((suggestion) => (
+                  <button
+                    key={suggestion.id}
+                    type="button"
+                    className={styles.workbenchChatStarterButton}
+                    onClick={() => {
+                      setPrompt(suggestion.prompt)
+                      void submit(suggestion.prompt)
+                    }}
+                  >
+                    <span className={styles.workbenchChatStarterCopy}>
+                      <span className={styles.workbenchChatStarterTitle}>{suggestion.title}</span>
+                      <span className={styles.workbenchChatStarterPrompt}>{suggestion.prompt}</span>
+                    </span>
+                    <ArrowRightIcon className={styles.workbenchChatStarterArrow} size={13} />
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : undefined}
+        variant="side"
+        onFollowLockedChange={setFollowLocked}
+      />
+    </ChatThinkingVisibilityProvider>
+  )
+}
+
+function readStandaloneChatTitle(state: StandaloneChatState): string {
+  const firstUserMessage = state.messages.find((message) => message.role === 'user')
+  const title = firstUserMessage?.blocks
+    .filter((block) => block.type === 'text')
+    .map((block) => block.text)
+    .join(' ')
+    .trim()
+  if (!title) return ''
+  return title.length > 36 ? `${title.slice(0, 36)}…` : title
 }
 
 function appendAssistantText(projectRoot: string, text: string): void {

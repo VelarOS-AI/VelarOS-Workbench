@@ -552,6 +552,13 @@ export interface WorkbenchSaveFileRequest {
   localHistoryMinIntervalMs?: number
 }
 
+/** Recreate an externally deleted text file from the editor's preserved buffer. */
+export interface WorkbenchRestoreMissingFileRequest {
+  projectRoot: string
+  path: string
+  content: string
+}
+
 export type WorkbenchSaveFileResult = WorkbenchReadFileResult
 
 /** 工作台本地历史里一条文件快照的元数据。 */

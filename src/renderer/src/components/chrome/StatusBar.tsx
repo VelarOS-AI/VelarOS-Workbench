@@ -2,12 +2,12 @@ import { CaretRightIcon } from '@phosphor-icons/react'
 import { useWorkbenchI18n } from '@renderer/i18n'
 import type { ReactElement } from 'react'
 
-import { FileTypeIcon } from '@velaros-ai/ui/primitives/display/FileTypeIcon'
 import { Text } from '@velaros-ai/ui/primitives/display/Text'
 
 import type { WorkbenchProjectAiIndexStatus } from '@shared/contracts'
 
 import styles from '../../styles/workbenchPageStyles'
+import { WorkbenchFileTypeIcon } from '../files/WorkbenchFileTypeIcon'
 
 interface StatusBarProps {
   projectName: string
@@ -64,7 +64,7 @@ export function StatusBar({
                   tone="caption"
                   className={isFile ? styles.statusPathFile : styles.statusPathSegment}
                 >
-                  {isFile && <FileTypeIcon fileName={fileName} size={13} />}
+                  {isFile && <WorkbenchFileTypeIcon fileName={fileName} size={13} />}
                   <span>{segment}</span>
                 </Text>
               </span>

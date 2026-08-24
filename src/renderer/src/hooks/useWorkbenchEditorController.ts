@@ -8,6 +8,7 @@ import {
   hasFileSnapshotChanged,
   isDirtyTab,
   movePath,
+  resolveExternalFileUnavailableStatus,
   reuseWorkbenchOpenFileSnapshots,
   WORKBENCH_EDITOR_FILES_CHANGED_DEBOUNCE_MS,
 } from '@renderer/models/editor/workbenchEditorTabs'
@@ -174,12 +175,15 @@ export function useWorkbenchEditorController({
       title:
         change.status === 'modified'
           ? tLatest.current('workbench.externalFileChangedTitle')
-          : tLatest.current('workbench.externalFileUnavailableTitle'),
+          : change.status === 'deleted'
+            ? tLatest.current('workbench.externalFileDeletedTitle')
+            : tLatest.current('workbench.externalFileUnavailableTitle'),
       description:
         change.status === 'modified'
           ? tLatest.current('workbench.externalFileChangedDescription', { path: tab.path })
-          : (change.message ??
-            tLatest.current('workbench.externalFileUnavailableDescription', { path: tab.path })),
+          : change.status === 'deleted'
+            ? tLatest.current('workbench.externalFileDeletedDescription', { path: tab.path })
+            : tLatest.current('workbench.externalFileUnavailableDescription', { path: tab.path }),
     })
   }
 
@@ -195,12 +199,15 @@ export function useWorkbenchEditorController({
       title:
         change.status === 'modified'
           ? tLatest.current('workbench.externalFileChangedTitle')
-          : tLatest.current('workbench.externalFileUnavailableTitle'),
+          : change.status === 'deleted'
+            ? tLatest.current('workbench.externalFileDeletedTitle')
+            : tLatest.current('workbench.externalFileUnavailableTitle'),
       description:
         change.status === 'modified'
           ? tLatest.current('workbench.externalFileChangedDescription', { path })
-          : (change.message ??
-            tLatest.current('workbench.externalFileUnavailableDescription', { path })),
+          : change.status === 'deleted'
+            ? tLatest.current('workbench.externalFileDeletedDescription', { path })
+            : tLatest.current('workbench.externalFileUnavailableDescription', { path }),
     })
   }
 
@@ -682,9 +689,8 @@ export function useWorkbenchEditorController({
       }
 
       const externalChange: WorkbenchOpenEditorExternalChange = {
-        status: 'unavailable',
+        status: resolveExternalFileUnavailableStatus(outcome.error?.code),
         detectedAt: Date.now(),
-        message: outcome.error?.message,
       }
       const currentKey = tab.externalChange
         ? buildExternalChangeNoticeKey(tab.path, tab.externalChange)
@@ -790,6 +796,41 @@ export function useWorkbenchEditorController({
     await reloadOpenFileFromDisk(path)
   })
 
+  const restoreDeletedOpenFile = useMemoizedFn(async (path: string): Promise<void> => {
+    const project = activeProjectRef.current
+    const tab = openTabsByPathLatest.current.get(path)
+    if (!project || !tab || tab.externalChange?.status !== 'deleted') return
+
+    const owningProjectId = project.id
+    setIsSavingFile(true)
+    try {
+      const restoredFile = Result.unwrap(
+        await workbenchHost.kernel.project.restoreMissingWorkbenchFile({
+          projectRoot: project.rootPath,
+          path,
+          content: tab.content,
+        })
+      )
+      if (activeProjectRef.current?.id !== owningProjectId) return
+
+      applySavedFile(restoredFile, tab.content)
+      onExternalFilesChangedLatest.current()
+      messageLatest.current.success({
+        title: tLatest.current('workbench.restoreDeletedFileSucceeded'),
+      })
+    } catch (error) {
+      if (activeProjectRef.current?.id !== owningProjectId) return
+
+      const appError = AppError.from(error)
+      messageLatest.current.error({
+        title: tLatest.current('workbench.restoreDeletedFileFailed'),
+        description: appError.message,
+      })
+    } finally {
+      setIsSavingFile(false)
+    }
+  })
+
   const keepLocalVersionForExternalConflict = useMemoizedFn((path: string): void => {
     const tab = openTabsByPathLatest.current.get(path)
     const diskFile = tab?.externalChange?.diskFile
@@ -822,6 +863,10 @@ export function useWorkbenchEditorController({
       if (!path) return
 
       if (resolution === 'external') {
+        if (openTabsByPathLatest.current.get(path)?.externalChange?.status === 'deleted') {
+          await restoreDeletedOpenFile(path)
+          return
+        }
         await reloadOpenFileFromDisk(path)
         return
       }

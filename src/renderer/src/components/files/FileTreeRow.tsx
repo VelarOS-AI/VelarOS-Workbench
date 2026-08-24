@@ -9,7 +9,12 @@ import {
   useEffect,
   useRef,
 } from 'react'
-import { CaretDownIcon, CaretRightIcon, FolderIcon, FolderOpenIcon } from '@phosphor-icons/react'
+import {
+  CaretDownIcon,
+  CaretRightIcon,
+  FolderIcon,
+  FolderOpenIcon,
+} from '@phosphor-icons/react'
 import { type FileTreeNodeData } from '@renderer/models/files/fileTree.model'
 import type { WorkbenchGitDecorationMap } from '@renderer/models/git/workbenchGitModel'
 import { isWorkbenchTreeRoot } from '@renderer/models/shared/workbenchUtils'
@@ -18,12 +23,13 @@ import type { NodeRendererProps } from 'react-arborist'
 import { isNumber } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { StyleUtils } from '@velaros-ai/ui'
-import { FileTypeIcon } from '@velaros-ai/ui/primitives/display/FileTypeIcon'
 import { Input } from '@velaros-ai/ui/primitives/forms/Input'
 
 import type { WorkbenchDirectoryEntry } from '@shared/contracts'
 
 import styles from '../../styles/workbenchPageStyles'
+
+import { WorkbenchFileTypeIcon } from './WorkbenchFileTypeIcon'
 
 const cx = StyleUtils.bindCx(styles)
 
@@ -85,6 +91,7 @@ export const FileTreeRow = memo(function FileTreeRow({
   const gitDecoration = gitDecorations.get(entry.path)
   const isGitIgnored = !!entry.gitIgnored
   const fileKind = node.data.fileKind
+  const isTreeRoot = isWorkbenchTreeRoot(entry)
 
   useEffect(() => {
     if (!node.isEditing) return
@@ -125,6 +132,7 @@ export const FileTreeRow = memo(function FileTreeRow({
       )}
       data-tree-path={entry.path}
       data-tree-kind={entry.type}
+      data-tree-root={isTreeRoot || undefined}
       data-git-tone={entry.type === 'file' ? gitDecoration?.tone : undefined}
       data-excluded={isGitIgnored || undefined}
       style={arboristTreeRowOuterStyle(style, entry)}
@@ -157,7 +165,12 @@ export const FileTreeRow = memo(function FileTreeRow({
         <>
           <span className={styles.treeSpacer} />
           <span className={styles.treeFileIcon} data-kind={fileKind}>
-            <FileTypeIcon fileName={entry.name} size={15} weight="regular" color="currentColor" />
+            <WorkbenchFileTypeIcon
+              fileName={entry.name}
+              size={15}
+              weight="regular"
+              color="currentColor"
+            />
           </span>
         </>
       )}

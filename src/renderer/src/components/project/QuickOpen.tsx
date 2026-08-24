@@ -5,7 +5,6 @@ import type { WorkbenchProject } from '@renderer/models/project/workbenchProject
 import type { WorkbenchOpenEditorTab } from '@renderer/types/workbenchTypes'
 
 import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
-import { FileTypeIcon } from '@velaros-ai/ui/primitives/display/FileTypeIcon'
 import { Paragraph } from '@velaros-ai/ui/primitives/display/Paragraph'
 import { Text } from '@velaros-ai/ui/primitives/display/Text'
 import { Title } from '@velaros-ai/ui/primitives/display/Title'
@@ -14,6 +13,7 @@ import { Input } from '@velaros-ai/ui/primitives/forms/Input'
 import { useWorkbenchContentSearchController } from '../../hooks/useWorkbenchContentSearchController'
 import styles from '../../styles/workbenchPageStyles'
 import { useTimerScope } from '../../support/genericHooks'
+import { WorkbenchFileTypeIcon } from '../files/WorkbenchFileTypeIcon'
 
 const QUICK_OPEN_CONTENT_SEARCH_LIMIT = 60
 
@@ -185,7 +185,7 @@ export function QuickOpen({
                 onClick={() => selectMatch(match.path, match.line, match.column)}
               >
                 <span className={styles.treeFileIcon}>
-                  <FileTypeIcon fileName={match.fileName} size={15} />
+                  <WorkbenchFileTypeIcon fileName={match.fileName} size={15} />
                 </span>
                 <span className={styles.quickOpenItemCopy}>
                   <Text truncate className={styles.quickOpenItemName}>

@@ -1,19 +1,42 @@
+import { createHash } from 'node:crypto'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'electron-vite'
 
 /**
  * VelarOS Workbench 单体仓库的 electron-vite 构建入口。
  *
- * 全部产品源码直接归根 src；跨仓 Platform 依赖仍经正式包入口解析，
- * 需要联调时先运行显式 `link:local`。
+ * 全部产品源码直接归根 src；跨仓 Platform 依赖只经 GitHub Packages 的正式包入口解析。
  */
 const repoRoot = dirname(fileURLToPath(import.meta.url))
+const workbenchRendererRoot = resolve(repoRoot, 'src/renderer/src')
+const sharedWorkbenchStyleRoot = resolve(workbenchRendererRoot, 'styles')
+const standaloneWorkbenchChatStyle = resolve(
+  workbenchRendererRoot,
+  'host/standaloneWorkbenchChat.module.css'
+)
 
 function source(...segments: string[]): string {
   return resolve(repoRoot, 'src', ...segments)
+}
+
+function workbenchCssModuleName(name: string, filename: string): string {
+  const normalizedFilename = resolve(filename.split('?')[0] ?? filename)
+  if (
+    normalizedFilename.startsWith(`${sharedWorkbenchStyleRoot}/`)
+    || normalizedFilename === standaloneWorkbenchChatStyle
+  ) return `wb_${name}`
+
+  // Workbench 的拆段样式有意共享 local class；npm UI 包必须按文件隔离，否则几十个
+  // `.root` / `.icon` 会被压成同一条 `.wb_root` / `.wb_icon` 并污染整个 IDE。
+  const fileHash = createHash('sha256')
+    .update(normalizedFilename)
+    .digest('hex')
+    .slice(0, 8)
+  return `velar_${fileHash}_${name}`
 }
 
 const mainAliases = [
@@ -74,14 +97,15 @@ export default defineConfig({
       modules: {
         // Workbench 页样式按 surface 拆成多个 module.css 段（styles/workbenchPageStyles.ts），
         // 跨段选择器（主题块引用编辑器/文件树类）要求所有段产出同一类名——固定 local 名,
-        // 不用默认哈希（哈希按文件隔离,会打断跨段级联）。
-        generateScopedName: 'wb_[local]',
+        // 不用默认哈希（哈希按文件隔离,会打断跨段级联）。该例外只属于 Workbench 自己；
+        // 发布版 UI 包仍按文件哈希，避免第三方 CSS Module 的常见 local 名互相串样式。
+        generateScopedName: workbenchCssModuleName,
       },
     },
     resolve: {
       extensions: ['.ts', '.tsx', '.mts', '.js', '.mjs', '.json'],
       alias: rendererAliases,
     },
-    plugins: [react()],
+    plugins: [react(), tailwindcss()],
   },
 })

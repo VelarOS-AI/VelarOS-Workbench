@@ -11,7 +11,6 @@ import {
   type WorkbenchProblemLocationSeverity,
 } from '@renderer/models/editor/workbenchCodeInsightModel'
 
-import { FileTypeIcon } from '@velaros-ai/ui/primitives/display/FileTypeIcon'
 import { Paragraph } from '@velaros-ai/ui/primitives/display/Paragraph'
 import { Text } from '@velaros-ai/ui/primitives/display/Text'
 import { Title } from '@velaros-ai/ui/primitives/display/Title'
@@ -24,6 +23,7 @@ import type {
   WorkbenchEditorDocumentBundle,
   WorkbenchSelectionBundle,
 } from '../../types/workbenchSurfaceBundles'
+import { WorkbenchFileTypeIcon } from '../files/WorkbenchFileTypeIcon'
 
 interface CodeInsightPanelProps {
   workbenchSelection: WorkbenchSelectionBundle
@@ -180,7 +180,7 @@ export function CodeInsightPanel({
                       {isCollapsed ? <CaretRightIcon size={12} /> : <CaretDownIcon size={12} />}
                     </span>
                     <span className={styles.problemFileIcon}>
-                      <FileTypeIcon fileName={group.fileName} size={14} />
+                      <WorkbenchFileTypeIcon fileName={group.fileName} size={14} />
                     </span>
                     <span className={styles.problemFileName}>{group.fileName}</span>
                     {!!group.directoryPath && (

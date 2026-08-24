@@ -65,6 +65,8 @@ const fsBridge: WorkbenchFsBridge = {
   deleteEntry: (request) => ipcRenderer.invoke(WorkbenchFsChannels.deleteEntry, request),
   restoreDeletedEntry: (request) =>
     ipcRenderer.invoke(WorkbenchFsChannels.restoreDeletedEntry, request),
+  restoreMissingFile: (request) =>
+    ipcRenderer.invoke(WorkbenchFsChannels.restoreMissingFile, request),
   listLocalHistory: (request) => ipcRenderer.invoke(WorkbenchFsChannels.listLocalHistory, request),
   readLocalHistorySnapshot: (request) =>
     ipcRenderer.invoke(WorkbenchFsChannels.readLocalHistorySnapshot, request),

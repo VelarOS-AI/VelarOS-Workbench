@@ -17,6 +17,7 @@ import type {
   WorkbenchReadLocalHistorySnapshotRequest,
   WorkbenchRenameEntryRequest,
   WorkbenchRestoreDeletedEntryRequest,
+  WorkbenchRestoreMissingFileRequest,
   WorkbenchRunCommandRequest,
   WorkbenchSaveFileRequest,
   WorkbenchSearchContentRequest,
@@ -119,6 +120,15 @@ export function registerWorkbenchFsIpc(
       if (!parsed) return invalidRequest()
 
       return parts.files.restoreDeletedEntry(parsed)
+    })
+  )
+
+  ipcMain.handle(WorkbenchFsChannels.restoreMissingFile, (_event, request: unknown) =>
+    callWithEnvelope(() => {
+      const parsed = parseRestoreMissingFileRequest(request)
+      if (!parsed) return invalidRequest()
+
+      return parts.files.restoreMissingFile(parsed)
     })
   )
 
@@ -259,6 +269,18 @@ function parseRestoreDeletedEntryRequest(
   return {
     projectRoot: input['projectRoot'] as string,
     restoreId: input['restoreId'] as string,
+  }
+}
+
+function parseRestoreMissingFileRequest(
+  input: unknown
+): Nullable<WorkbenchRestoreMissingFileRequest> {
+  if (!hasStringFields(input, ['projectRoot', 'path', 'content'])) return null
+
+  return {
+    projectRoot: input['projectRoot'] as string,
+    path: input['path'] as string,
+    content: input['content'] as string,
   }
 }
 

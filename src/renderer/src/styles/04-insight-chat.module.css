@@ -1,3 +1,5 @@
+@reference "../index.css";
+
 .workbenchChatPanel {
   @apply flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden;
   background: var(--workbench-surface);
@@ -5,8 +7,9 @@
 
 .workbenchChatTopBar {
   @apply flex flex-none items-center gap-2 border-b;
-  min-height: 34px;
-  padding: 3px 10px;
+  height: 35px;
+  min-height: 35px;
+  padding: 0 10px;
   border-color: var(--workbench-border);
   background: var(--workbench-surface-muted);
 }
@@ -23,6 +26,12 @@
   border-radius: var(--workbench-radius);
   color: var(--workbench-text);
   cursor: pointer;
+}
+
+.workbenchChatTopBar .workbenchChatSessionMenuButton {
+  justify-content: flex-start;
+  padding-inline: 7px 9px;
+  text-align: left;
 }
 
 .workbenchChatSessionMenuButton:is(:hover, :focus-visible, [data-open='true']) {
@@ -120,6 +129,104 @@
 
 .workbenchChatBody :global(.chatPane) {
   background: var(--workbench-surface);
+}
+
+.workbenchChatBody :global([data-tour-id='chat-output']) {
+  position: relative;
+}
+
+.workbenchChatEmptyState {
+  position: absolute;
+  inset: 0 0 var(--chat-input-dock-height, 148px);
+  z-index: 1;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  pointer-events: none;
+}
+
+.workbenchChatEmptyContent {
+  display: flex;
+  width: min(100%, 360px);
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  pointer-events: auto;
+}
+
+.workbenchChatEmptySail {
+  flex: none;
+}
+
+.workbenchChatStarterList {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.workbenchChatStarterButton {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 38px;
+  padding: 8px 11px;
+  border: 1px solid var(--workbench-border);
+  border-radius: var(--workbench-radius);
+  background: var(--workbench-surface);
+  color: var(--workbench-text);
+  text-align: left;
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease;
+}
+
+.workbenchChatStarterButton:is(:hover, :focus-visible) {
+  border-color: color-mix(in srgb, var(--workbench-text) 22%, var(--workbench-border));
+  background: var(--workbench-hover);
+  outline: none;
+}
+
+.workbenchChatStarterButton:focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--workbench-active-fg) 32%, transparent);
+}
+
+.workbenchChatStarterCopy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.workbenchChatStarterTitle {
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 620;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workbenchChatStarterPrompt {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--workbench-text-muted);
+  font-size: 10px;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.workbenchChatStarterArrow {
+  flex: none;
+  color: var(--workbench-text-muted);
 }
 
 .workbenchChatBody :global([data-chat-input-root='true']) {

@@ -412,6 +412,8 @@ const standaloneWorkbenchHost: WorkbenchHost = {
         toHostResult(await window.velarosWorkbenchFs.deleteEntry(request)),
       restoreDeletedWorkbenchEntry: async (request) =>
         toHostResult(await window.velarosWorkbenchFs.restoreDeletedEntry(request)),
+      restoreMissingWorkbenchFile: async (request) =>
+        toHostResult(await window.velarosWorkbenchFs.restoreMissingFile(request)),
       searchWorkbenchEntries: async (request) =>
         toHostResult(await window.velarosWorkbenchFs.searchEntries(request)),
       searchWorkbenchContent: async (request) =>

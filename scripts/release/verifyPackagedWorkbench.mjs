@@ -43,6 +43,28 @@ if (packagedApp.version !== workbenchPackage.version) {
     + `does not match expected ${workbenchPackage.version}.`
   )
 }
+const rendererHtml = extractFile(appRoot, 'out/renderer/index.html').toString('utf8')
+const rendererCssHref = rendererHtml.match(/<link[^>]+href="\.\/([^"]+\.css)"[^>]*>/u)?.[1]
+if (!rendererCssHref) throw new Error('Packaged Workbench renderer CSS asset is missing.')
+const rendererCss = extractFile(appRoot, `out/renderer/${rendererCssHref}`).toString('utf8')
+const rendererCssWithoutComments = rendererCss.replace(/\/\*[\s\S]*?\*\//gu, '')
+if (rendererCssWithoutComments.includes('@apply')) {
+  throw new Error('Packaged Workbench renderer CSS still contains uncompiled Tailwind @apply rules.')
+}
+for (const requiredLayoutRule of [
+  /\.wb_filePanel\s*\{[^}]*display:\s*flex/u,
+  /\.wb_filePanelBody\s*\{[^}]*display:\s*flex/u,
+]) {
+  if (!requiredLayoutRule.test(rendererCss)) {
+    throw new Error(`Packaged Workbench renderer CSS is missing ${requiredLayoutRule}.`)
+  }
+}
+const workbenchRootRules = rendererCss.match(/\.wb_root\s*\{[^}]*\}/gu) ?? []
+if (workbenchRootRules.length !== 1 || /max-width\s*:/u.test(workbenchRootRules[0])) {
+  throw new Error(
+    'Packaged Workbench root is polluted by CSS Module class-name collisions from shared UI.'
+  )
+}
 for (const bundledRuntimeFile of [
   'node_modules/pyright/package.json',
   'node_modules/pyright/langserver.index.js',

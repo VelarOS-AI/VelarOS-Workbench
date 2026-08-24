@@ -11,6 +11,11 @@ VelarOS Workbench intentionally supports a small, polished language surface.
   runtime dependency through the shared stdio LSP client. A project-local
   `pyright-langserver` remains a development fallback.
 - Related Web formats: HTML, CSS, SCSS, Less, JSON, and Markdown.
+- Common project formats: YAML, XML/SVG, SQL, TOML, shell scripts,
+  Dockerfile/Containerfile, INI/Properties, and `.env` variants. These use
+  bundled editor parsers for syntax, indentation, and bracket structure; they
+  do not pretend to provide a schema-aware language server when none is
+  configured by the project.
 
 Java, C/C++, Go, and Rust are deliberately outside the product scope. Workbench
 does not offer downloads, recommendations, settings, protocols, or build
@@ -24,13 +29,15 @@ branch. The built-in renderer contribution and shared service descriptor contrib
 those capabilities at their composition roots and are bundled by default. This is
 an injected built-in contribution, not a package or downloadable grammar system.
 
-The built-in contribution understands only Velar Core keywords, lightweight
-Core types, f-strings, and indentation. It does not carry Web keywords, Web
+The built-in contribution understands only Velar Core hard and contextual
+keywords, lightweight Core types, double-quoted/backtick strings, radix and
+decimal numbers, bitwise operators, and indentation. It does not carry Web keywords, Web
 types, JSX tags, directives, lifecycle rules, or a Web module catalog.
-This includes injected highlighting for the contextual class `init` word,
-while its recognition, ordering, synchronous boundary, diagnostics, and member
-behavior remain wholly owned by the project-local compiler/LSP. The editor's
-lightweight token list does not make `init` a globally reserved source name.
+This includes lightweight highlighting for current contextual forms such as
+`constructor`, `get`, `readonly`, `test`, and `using`, while their recognition,
+ordering, diagnostics, and behavior remain wholly owned by the project-local
+compiler/LSP. The editor's lightweight token list does not make those words
+globally reserved source names.
 It detects `velar.json` and contributes install/update plus generic
 check/format/dev/test/build command metadata to the host. Dependency commands
 remain Velar contribution data and do not add npm or Velar branches to the
@@ -83,25 +90,35 @@ requests have a 15-second deadline; a stalled request is removed, receives the
 standard `$/cancelRequest` notification, and fails without permanently blocking
 the editor action or language-server shutdown.
 
-Workbench expects Velar language-server protocol version `1`, checks it during
-LSP initialization, and reports mismatches rather than silently using an
-incompatible compiler. The matching language-side contract lives in
-`VelarScript/docs/workbench-integration.md`.
+Workbench negotiates the standard LSP capabilities advertised by the
+project-local Velar language server instead of pinning a Velar-specific
+protocol number. A normal compiler, language-server, or companion-library
+update therefore does not require a Workbench rebuild. Workbench restarts the
+owned server automatically when its resolved executable, `velar.json`, package
+manifest, or dependency lock changes. The language-side integration contract
+lives in `VelarScript/docs/contributing/workbench-integration.md`.
 
 Language/compiler/editor changes are shipped together: specification and
 examples, compiler, LSP, Workbench adapter, contract tests, then real editor and
 browser validation.
 
 The pre-release cross-repository gate accepts a Velar release-rehearsal
-directory, installs its compiler, Node, Web, Desktop, creator, and CLI tarballs into a temporary project, and
+directory, installs every declared tarball into a temporary project, and
 drives diagnostics, completion, inferred-type hints, and same-document symbol
 highlights through the real generic Workbench host:
 
 ```bash
 bun run test:velar:installed -- /absolute/path/to/VelarScript/release/rehearsal
+
+# Also prove project-local companion packages without linking their source
+# into Workbench.
+bun run test:velar:installed -- \
+  /absolute/path/to/VelarScript/release/rehearsal \
+  /absolute/path/to/VelarScript-Libraries
 ```
 
-The gate validates the release format, exact six-package toolchain set,
+The gate validates the release format, exact seven-package toolchain set (CLI,
+compiler, Core, Desktop, Node, Web, and creator),
 canonical tarball names, byte sizes, and SHA-256 values before npm installation.
 This validation is Workbench-owned and does not import Velar compiler source.
 It verifies that an inferred `List<number>` hint reaches the editor and that an
@@ -125,10 +142,9 @@ typed `FormDraft` object with its missing fields, without ordinary keyword
 noise. Component-prop identity remains compiler-owned;
 native attributes and the protected implicit `children` contract do not create
 a Workbench JSX model.
-The installed `ScoreCard` sample also uses a real `init:` block. The gate proves
-that the packed parser accepts it, compiler completion returns `init`, and a
-field referenced from initialization resolves through the generic definition
-path; Workbench adds no constructor or class-initialization rule.
+The installed `ScoreCard` sample also uses a real `constructor()` member. The
+gate proves that the packed parser accepts it and compiler completion returns
+`constructor`; Workbench adds no constructor or class-initialization rule.
 Its ordered history is now `private`: outside instance completion omits it,
 while completion on `self` inside `ScoreCard` includes the checked
 `List<number>` field. Workbench only injects `private` highlighting and maps the
@@ -149,6 +165,11 @@ The gate supplies only the generic language host's project-root/containment/
 relative-path contract; it does not instantiate the wider Workbench workspace
 runtime, so compiler-editor compatibility remains independently testable during
 unrelated Platform package migrations.
+
+The packed-toolchain run also checks a Core/Node binary sample using `Bytes`, a
+fixed numeric buffer, radix literals, shifts, and bitwise operators through the
+same project-local language server. Application-specific analysis and text
+storage remain owned by the application instead of the VelarScript toolchain.
 
 The installed Velar LSP now also advertises standard full semantic tokens and
 narrow semantics-preserving quick fixes. The generic host maps both methods:
@@ -176,9 +197,13 @@ language extension contract exactly like any other Vel project.
   language-server entry point. Users do not install a Python plugin.
 - The Velar compiler remains the project's toolchain so its compiler and
   language server stay on the same version. Workbench resolves
-  `node_modules/.bin/velar` before `PATH` and rejects protocol mismatches.
-- The Workbench app and compiler are independently releasable. Joint delivery
-  means their versioned protocol and acceptance tests advance together, not
-  that either product links the other in-process.
-- Missing or incompatible servers fail with an actionable language-service
-  error; Workbench never falls back to editor-only Velar semantics.
+  `node_modules/.bin/velar` before `PATH` and consumes the capabilities that
+  server advertises.
+- VelarScript companion packages remain ordinary project dependencies. They
+  are discovered by the project-local compiler/LSP and are never bundled into
+  Workbench.
+- The Workbench app, compiler, and companion packages are independently
+  releasable. The installed acceptance gate checks their public boundary; none
+  is linked into another product in-process.
+- Missing or invalid servers fail with an actionable language-service error;
+  syntax color remains available while semantic features recover.

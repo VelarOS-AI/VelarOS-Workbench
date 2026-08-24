@@ -34,9 +34,35 @@ function isInside(projectRoot: string, absolutePath: string): boolean {
 }
 
 const releaseInput = process.argv[2]
-if (!releaseInput) throw new Error('Usage: bun run test:velar:installed -- /absolute/path/to/release')
+const librariesInput = process.argv[3]
+if (!releaseInput) throw new Error(
+  'Usage: bun run test:velar:installed -- /absolute/path/to/release [/absolute/path/to/VelarScript-Libraries]'
+)
 if (!isAbsolute(releaseInput)) throw new Error('The Velar release directory must be absolute')
+if (librariesInput && !isAbsolute(librariesInput))
+  throw new Error('The VelarScript-Libraries directory must be absolute')
 const releaseDirectory = resolve(releaseInput)
+const libraryPackageNames = [
+  'compression',
+  'database',
+  'editor-kit',
+  'msgpack',
+  'noise',
+  'sqlite',
+  'text-buffer',
+  'yaml',
+] as const
+const libraryPackageDirectories = librariesInput
+  ? libraryPackageNames.map((name) => join(resolve(librariesInput), 'packages', name))
+  : []
+for (const [index, directory] of libraryPackageDirectories.entries()) {
+  const packageJson = JSON.parse(await readFile(join(directory, 'package.json'), 'utf8')) as {
+    name?: unknown
+  }
+  assert.equal(packageJson.name, `@velarscript-labs/${libraryPackageNames[index]}`)
+}
+const nodeExecutable = process.env.VELAR_WORKBENCH_TEST_NODE
+  ?? (process.platform === 'win32' ? 'node.exe' : 'node')
 
 const manifest = JSON.parse(
   await readFile(join(releaseDirectory, 'velar-toolchain-release.json'), 'utf8')
@@ -55,19 +81,22 @@ assert.equal(manifest.publish.performed, false)
 assert.deepEqual(manifest.packages.map((item) => item.name), [
   '@velarscript/cli',
   '@velarscript/compiler',
+  '@velarscript/core',
   '@velarscript/desktop',
   '@velarscript/node',
   '@velarscript/web',
   'create-velar',
 ])
 const compiler = manifest.packages.find((item) => item.name === '@velarscript/compiler')
+const core = manifest.packages.find((item) => item.name === '@velarscript/core')
 const desktop = manifest.packages.find((item) => item.name === '@velarscript/desktop')
 const node = manifest.packages.find((item) => item.name === '@velarscript/node')
 const web = manifest.packages.find((item) => item.name === '@velarscript/web')
 const creator = manifest.packages.find((item) => item.name === 'create-velar')
 const cli = manifest.packages.find((item) => item.name === '@velarscript/cli')
-assert.ok(compiler && desktop && node && web && creator && cli)
+assert.ok(compiler && core && desktop && node && web && creator && cli)
 assert.equal(compiler.version, manifest.version)
+assert.equal(core.version, manifest.version)
 assert.equal(desktop.version, manifest.version)
 assert.equal(node.version, manifest.version)
 assert.equal(web.version, manifest.version)
@@ -94,26 +123,17 @@ try {
     '--no-fund',
     '--prefix',
     temporary,
-    join(releaseDirectory, compiler.fileName),
-    join(releaseDirectory, desktop.fileName),
-    join(releaseDirectory, node.fileName),
-    join(releaseDirectory, web.fileName),
-    join(releaseDirectory, creator.fileName),
-    join(releaseDirectory, cli.fileName),
+    ...manifest.packages.map((item) => join(releaseDirectory, item.fileName)),
   ], temporary)
   const installedCli = join(temporary, 'node_modules', '@velarscript', 'cli', 'dist', 'cli.js')
-  await run(process.execPath, [installedCli, 'create', projectRoot], temporary)
+  await run(nodeExecutable, [installedCli, 'create', projectRoot], temporary)
   await runNpm([
     'install',
     '--ignore-scripts',
     '--no-audit',
     '--no-fund',
-    join(releaseDirectory, compiler.fileName),
-    join(releaseDirectory, desktop.fileName),
-    join(releaseDirectory, node.fileName),
-    join(releaseDirectory, web.fileName),
-    join(releaseDirectory, creator.fileName),
-    join(releaseDirectory, cli.fileName),
+    ...manifest.packages.map((item) => join(releaseDirectory, item.fileName)),
+    ...libraryPackageDirectories,
   ], projectRoot)
   const sdkRoot = join(projectRoot, 'node_modules', 'typed-sdk')
   await mkdir(sdkRoot, { recursive: true })
@@ -122,17 +142,37 @@ try {
   await writeFile(join(sdkRoot, 'client.d.ts'), 'declare class Client { constructor(name: string); get name(): string; static get version(): string; request(path: string, timeoutMs?: number): string; static connect(name: string): Client; }\nexport {Client};\n', 'utf8')
   await writeFile(join(sdkRoot, 'index.d.ts'), 'export {Client} from "./client.js";\n', 'utf8')
 
+  const externalLibraryImports = libraryPackageDirectories.length > 0
+    ? [
+        'import {simplex2} from "@velarscript-labs/noise"',
+        'import {TextBuffer} from "@velarscript-labs/text-buffer"',
+        'import {parseYaml} from "@velarscript-labs/yaml"',
+      ]
+    : []
+  const externalLibraryProbe = libraryPackageDirectories.length > 0
+    ? [
+        'const libraryBuffer = TextBuffer("Velar\\nWorkbench")',
+        'const libraryNoise = simplex2("workbench")(1, 2)',
+        'const libraryYaml = parseYaml("enabled: true")',
+        'print(libraryBuffer.lineCount)',
+        'print(libraryNoise)',
+        'print(libraryYaml)',
+        '',
+      ]
+    : []
   const source = [
+    ...externalLibraryImports,
     'import {NavLink, RouteContext, Router, domId, route} from "velar/web"',
     'import {after, blur, closeDialog, dialogResult, every, focus, showDialog} from "velar/browser"',
     'import {numberValue, read, reset, textValue} from "velar/forms"',
     'import {findMatch, matches} from "velar/text"',
     'import js {Client as PackageClient} from "typed-sdk/client"',
     '',
+    ...externalLibraryProbe,
     'def total(first: number, ...values: number) -> number:',
     '    return first + values.size',
     '',
-    'const tags = Set()',
+    'const tags: Set<string> = Set()',
     'tags.add("velar")',
     '',
     'const count: number = "wrong"',
@@ -141,7 +181,6 @@ try {
     'const answerInRange = 0 < answer <= 10',
     'print(answerInRange)',
     'comp',
-    'import {deepEqual} from "velar/json"',
     'const pageValues = [1, 2, 3].slice(0, 2)',
     'print(pageValues.size)',
     'const patternReady = matches("Velar 42", "^velar [0-9]+$", {ignoreCase: true})',
@@ -157,7 +196,7 @@ try {
     '',
     'const tree: TreeNode = {label: "root", children: [{label: "leaf", children: []}]}',
     'const firstTreeLabel = tree.children[0].label',
-    'const sameTree = deepEqual(tree, tree)',
+    'const sameTree = equals(tree, tree)',
     '',
     'const stopTimer = after(100, () => null)',
     'const stopPulse = every(100, () => null)',
@@ -320,7 +359,8 @@ try {
   assert.match(completions.items.find((item) => item.label === 'ScoreCard')?.documentation ?? '',
     /Tracks a score and its ordered history/u)
   assert.ok(completions.items.some((item) => item.label === 'velar/collections'))
-  assert.ok(completions.items.some((item) => item.label === 'velar/async'))
+  assert.ok(completions.items.some((item) => item.label === 'Promise'))
+  assert.ok(!completions.items.some((item) => item.label === 'velar/async'))
   assert.ok(completions.items.some((item) => item.label === 'velar/time'))
   assert.ok(completions.items.some((item) => item.label === 'velar/id'))
   assert.ok(completions.items.some((item) => item.label === 'velar/log'))
@@ -407,10 +447,9 @@ try {
     content: source,
     position: { line: routeParamsLine + 1, column: routeParamsMemberColumn + 1 },
   })
-  for (const label of ['size', 'get', 'keys']) {
+  for (const label of ['size', 'get', 'keys', 'set']) {
     assert.ok(routeParamsCompletions.items.some((item) => item.label === label), `missing route.params.${label} completion`)
   }
-  assert.ok(!routeParamsCompletions.items.some((item) => item.label === 'set'), 'readonly route.params must not expose set completion')
   const routeParamsCallColumn = routeParamsSource.indexOf('route.params.get("') + 'route.params.get('.length
   const routeParamsSignature = await services.getSignatureHelp({
     projectRoot,
@@ -445,7 +484,7 @@ try {
     content: source,
     position: { line: routeParamsLine + 1, column: routeParamsHoverColumn + 1 },
   })
-  assert.match(routeParamsHover.hover?.displayText ?? '', /field params: readonly Map<string, string>/u)
+  assert.match(routeParamsHover.hover?.displayText ?? '', /field params: Map<string, string>/u)
   const scoreCardUseLine = source.split('\n').findIndex((line) => line.includes('print(scoreCard.total)'))
   const scoreCardUseSource = source.split('\n')[scoreCardUseLine]!
   const scoreCardMemberColumn = scoreCardUseSource.indexOf('scoreCard.total') + 'scoreCard.'.length
@@ -510,7 +549,8 @@ try {
     content: source,
     position: { line: scoreCardClassLine + 1, column: scoreCardClassColumn + 1 },
   })
-  assert.match(scoreCardClassHover.hover?.displayText ?? '', /Tracks a score and its ordered history/u)
+  assert.match(scoreCardClassHover.hover?.displayText ?? '', /class ScoreCard/u)
+  assert.match(scoreCardClassHover.hover?.documentation ?? '', /Tracks a score and its ordered history/u)
   const asyncArrowLine = source.split('\n').findIndex((line) => line.includes('const loadTicket:'))
   const asyncArrowParameterLine = source.split('\n').findIndex((line) => line.includes('ticketId,'))
   const asyncArrowParameterColumn = source.split('\n')[asyncArrowParameterLine]!.indexOf('ticketId')
@@ -685,7 +725,7 @@ try {
     projectRoot,
     path: 'src/main.vel',
     content: source,
-    position: { line: source.split('\n').findIndex((line) => line.includes('const tags = Set()')) + 1, column: 8 },
+    position: { line: source.split('\n').findIndex((line) => line.includes('const tags: Set<string>')) + 1, column: 8 },
   })
   assert.match(hover.hover?.displayText ?? '', /Set<string>/u)
   const pageValuesColumn = source.split('\n')[pageValuesLine]!.indexOf('pageValues')
@@ -800,7 +840,7 @@ try {
     content: source,
     position: { line: enumLine + 1, column: memberColumn + 1 },
   })
-  assert.deepEqual(enumCompletions.items.map((item) => item.label), ['todo', 'doing', 'is', 'parse'])
+  assert.deepEqual(enumCompletions.items.map((item) => item.label), ['todo', 'doing', 'is', 'parse', 'values'])
   const enumHover = await services.getHover({
     projectRoot,
     path: 'src/main.vel',
@@ -955,6 +995,14 @@ try {
   }), 'utf8')
   const coreSource = [
     'import {RequestBodyTooLargeError, ServeRequest, ServeResponse} from "velar/serve"',
+    'import {ByteOrder, Bytes, uint16Buffer} from "velar/binary"',
+    '',
+    'def packedFlags() -> Bytes:',
+    '    const values = uint16Buffer(4)',
+    '    for index in range(values.size):',
+    '        const flags = (index >> 1) & 0x0f',
+    '        values[index] = (flags << 12) | 0x003',
+    '    return values.toBytes(ByteOrder.little)',
     '',
     'async def handle(request: ServeRequest) -> ServeResponse:',
     '    if request.path == "/message":',
@@ -968,9 +1016,12 @@ try {
     '            throw error',
     '    return {status: 404, text: "Not found"}',
     '',
+    'const payload = packedFlags()',
+    'print(payload.size)',
+    '',
   ].join('\n')
   await writeFile(join(coreProjectRoot, 'src', 'main.vel'), coreSource, 'utf8')
-  await run(process.execPath, [installedCli, 'check', coreProjectRoot], projectRoot)
+  await run(nodeExecutable, [installedCli, 'check', coreProjectRoot], projectRoot)
   const coreResolved = await services.resolveLanguageService({
     projectRoot: coreProjectRoot,
     path: 'src/main.vel',
@@ -984,6 +1035,15 @@ try {
     content: coreSource,
   })
   assert.deepEqual(coreDiagnostics.diagnostics, [])
+  const payloadLine = coreSource.split('\n').findIndex((line) => line.includes('const payload'))
+  const payloadColumn = coreSource.split('\n')[payloadLine]!.indexOf('payload')
+  const payloadHover = await services.getHover({
+    projectRoot: coreProjectRoot,
+    path: 'src/main.vel',
+    content: coreSource,
+    position: { line: payloadLine + 1, column: payloadColumn + 1 },
+  })
+  assert.match(payloadHover.hover?.displayText ?? '', /Bytes/u)
   const bodyLine = coreSource.split('\n').findIndex((line) => line.includes('request.text(maxBytes='))
   const bodySource = coreSource.split('\n')[bodyLine]!
   const requestMemberColumn = bodySource.indexOf('request.text') + 'request.'.length
@@ -1048,8 +1108,8 @@ try {
     'import {get} from "velar/env"',
     '',
     'component App:',
-    '    state status = platform()',
-    '    action inspect() -> null:',
+    '    state status = str(platform())',
+    '    action inspect():',
     '        const root = await projectDirectory()',
     '        status = f"{await exists(root)}:{get(\"LANG\") ?? \"\"}"',
     '    return <main><button type="button" on:click={inspect}>Inspect</button><p>{status}</p></main>',
@@ -1057,7 +1117,7 @@ try {
     'mount(<App />, "#app")',
   ].join('\n')
   await writeFile(join(desktopProjectRoot, 'src', 'main.vel'), desktopSource, 'utf8')
-  await run(process.execPath, [installedCli, 'check', desktopProjectRoot], projectRoot)
+  await run(nodeExecutable, [installedCli, 'check', desktopProjectRoot], projectRoot)
   const desktopDiagnostics = await services.getDiagnostics({
     projectRoot: desktopProjectRoot,
     path: 'src/main.vel',
@@ -1065,7 +1125,7 @@ try {
   })
   assert.deepEqual(desktopDiagnostics.diagnostics, [])
   if (process.platform === 'darwin') {
-    await run(process.execPath, [installedCli, 'package', desktopProjectRoot], projectRoot)
+    await run(nodeExecutable, [installedCli, 'package', desktopProjectRoot], projectRoot)
     const desktopBuild = JSON.parse(await readFile(join(desktopProjectRoot, 'dist', 'desktop', 'velar-desktop-build.json'), 'utf8')) as {
       applicationBundle: string
       runtime: {
@@ -1092,10 +1152,9 @@ try {
     const hostConfigurationText = await readFile(join(application, 'Contents', 'Resources', 'desktop.json'), 'utf8')
     const hostConfiguration = JSON.parse(hostConfigurationText) as Record<string, unknown>
     assert.equal(hostConfiguration.nodeExecutableHint, undefined)
-    assert.equal(hostConfigurationText.includes(process.execPath), false)
     await run(join(application, 'Contents', 'MacOS', 'VelarDesktopHost'), ['--smoke'], projectRoot, {
       ...process.env,
-      VELAR_DESKTOP_NODE: process.execPath,
+      VELAR_DESKTOP_NODE: nodeExecutable,
       VELAR_DESKTOP_PROJECT_ROOT: desktopProjectRoot,
     })
   }

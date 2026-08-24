@@ -19,6 +19,7 @@ export interface WorkbenchSurfaceState {
   activeLeftTool: WorkbenchLeftTool
   activeRightTool: Nullable<WorkbenchRightToolWindow>
   isCommandPanelCollapsed: boolean
+  isFilePanelOpen: boolean
   isQuickOpenOpen: boolean
   isRightToolOpen: boolean
   collapseCommandPanel: () => void
@@ -30,6 +31,7 @@ export interface WorkbenchSurfaceState {
   setActiveLeftTool: (tool: WorkbenchLeftTool) => void
   setActiveBottomTool: (tool: WorkbenchBottomTool) => void
   toggleCommandPanelCollapsed: () => void
+  toggleFilePanel: () => void
   toggleRightTool: (tool: WorkbenchRightToolWindow) => void
 }
 
@@ -40,6 +42,7 @@ export function useWorkbenchSurfaceState(): WorkbenchSurfaceState {
     useState<Nullable<WorkbenchRightToolWindow>>(null)
   const [activeBottomTool, setActiveBottomToolState] = useState<WorkbenchBottomTool>('run')
   const [isCommandPanelCollapsed, setIsCommandPanelCollapsed] = useState(true)
+  const [isFilePanelOpen, setIsFilePanelOpen] = useState(true)
 
   function openQuickOpen(): void {
     setIsQuickOpenOpen(true)
@@ -75,6 +78,10 @@ export function useWorkbenchSurfaceState(): WorkbenchSurfaceState {
     setIsCommandPanelCollapsed((collapsed) => !collapsed)
   }
 
+  function toggleFilePanel(): void {
+    setIsFilePanelOpen((open) => !open)
+  }
+
   function collapseCommandPanel(): void {
     setIsCommandPanelCollapsed(true)
   }
@@ -84,6 +91,7 @@ export function useWorkbenchSurfaceState(): WorkbenchSurfaceState {
     activeLeftTool,
     activeRightTool,
     isCommandPanelCollapsed,
+    isFilePanelOpen,
     isQuickOpenOpen,
     isRightToolOpen: isPresent(activeRightTool),
     collapseCommandPanel,
@@ -95,6 +103,7 @@ export function useWorkbenchSurfaceState(): WorkbenchSurfaceState {
     setActiveLeftTool,
     setActiveBottomTool,
     toggleCommandPanelCollapsed,
+    toggleFilePanel,
     toggleRightTool,
   }
 }

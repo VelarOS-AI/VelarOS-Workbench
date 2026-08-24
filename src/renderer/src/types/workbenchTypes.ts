@@ -38,7 +38,7 @@ export interface WorkbenchLightEditorTab {
 }
 
 export interface WorkbenchOpenEditorExternalChange {
-  status: 'modified' | 'unavailable'
+  status: 'deleted' | 'modified' | 'unavailable'
   detectedAt: number
   diskFile?: WorkbenchReadFileResult
   message?: string

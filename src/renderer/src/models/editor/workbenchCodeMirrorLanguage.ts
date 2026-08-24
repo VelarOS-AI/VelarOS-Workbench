@@ -4,6 +4,14 @@ import { javascript } from '@codemirror/lang-javascript'
 import { json } from '@codemirror/lang-json'
 import { markdown } from '@codemirror/lang-markdown'
 import { python } from '@codemirror/lang-python'
+import { sql } from '@codemirror/lang-sql'
+import { xml } from '@codemirror/lang-xml'
+import { yaml } from '@codemirror/lang-yaml'
+import { StreamLanguage } from '@codemirror/language'
+import { dockerFile } from '@codemirror/legacy-modes/mode/dockerfile'
+import { properties } from '@codemirror/legacy-modes/mode/properties'
+import { shell } from '@codemirror/legacy-modes/mode/shell'
+import { toml } from '@codemirror/legacy-modes/mode/toml'
 import type { Extension } from '@codemirror/state'
 
 import { getWorkbenchPathExtension, normalizeWorkbenchLanguage } from '@shared/language/workbenchLanguageServices'
@@ -24,6 +32,19 @@ const JsxTokens = new Set(['jsx', 'tsx'])
 const CssTokens = new Set(['css', 'less', 'sass', 'scss'])
 const HtmlTokens = new Set(['htm', 'html'])
 const PythonTokens = new Set(['py', 'pyi', 'python'])
+const YamlTokens = new Set(['yaml', 'yml'])
+const XmlTokens = new Set(['atom', 'plist', 'rss', 'svg', 'xml', 'xsd', 'xsl', 'xslt'])
+const ShellTokens = new Set(['bash', 'sh', 'shell', 'zsh'])
+const PropertiesTokens = new Set(['cfg', 'env', 'ini', 'properties'])
+
+function getSpecialFileLanguageToken(path: Nullable<string>): string {
+  const fileName = path?.split(/[\\/]/).at(-1)?.toLowerCase() ?? ''
+  if (fileName === 'dockerfile' || fileName === 'containerfile') return 'dockerfile'
+  if (fileName === 'cargo.lock') return 'toml'
+  if (fileName === '.bashrc' || fileName === '.profile' || fileName === '.zshrc') return 'shell'
+  if (fileName === '.env' || fileName.startsWith('.env.')) return 'properties'
+  return ''
+}
 
 export function resolveWorkbenchCodeMirrorLanguage(
   path: Nullable<string>,
@@ -31,7 +52,7 @@ export function resolveWorkbenchCodeMirrorLanguage(
 ): WorkbenchCodeMirrorLanguageSupport {
   const extension = getWorkbenchPathExtension(path)
   const normalizedLanguage = normalizeWorkbenchLanguage(language)
-  const token = extension || normalizedLanguage
+  const token = getSpecialFileLanguageToken(path) || extension || normalizedLanguage
   const injected = resolveWorkbenchEditorLanguage(token)
 
   if (injected)
@@ -65,6 +86,43 @@ export function resolveWorkbenchCodeMirrorLanguage(
 
   if (token === 'markdown' || token === 'md' || token === 'mdx')
     return { extension: markdown(), languageId: 'markdown', mode: 'builtin' }
+
+  if (YamlTokens.has(token))
+    return { extension: yaml(), languageId: 'yaml', mode: 'builtin' }
+
+  if (XmlTokens.has(token))
+    return { extension: xml(), languageId: 'xml', mode: 'builtin' }
+
+  if (token === 'sql')
+    return { extension: sql(), languageId: 'sql', mode: 'builtin' }
+
+  if (token === 'toml')
+    return {
+      extension: StreamLanguage.define(toml),
+      languageId: 'toml',
+      mode: 'builtin',
+    }
+
+  if (ShellTokens.has(token))
+    return {
+      extension: StreamLanguage.define(shell),
+      languageId: 'shell',
+      mode: 'builtin',
+    }
+
+  if (token === 'dockerfile')
+    return {
+      extension: StreamLanguage.define(dockerFile),
+      languageId: 'dockerfile',
+      mode: 'builtin',
+    }
+
+  if (PropertiesTokens.has(token))
+    return {
+      extension: StreamLanguage.define(properties),
+      languageId: 'properties',
+      mode: 'builtin',
+    }
 
   return { extension: [], languageId: token || 'text', mode: 'plain-text' }
 }

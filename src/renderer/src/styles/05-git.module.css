@@ -1,3 +1,5 @@
+@reference "../index.css";
+
 .gitLogListPane {
   @apply flex min-h-0 min-w-0 flex-col;
   background: var(--workbench-surface);
@@ -206,7 +208,9 @@
 
 .gitCommitInput {
   width: calc(100% - 20px);
+  max-width: calc(100% - 20px);
   min-height: 0;
+  min-width: 0;
   flex: 1;
   margin: 6px 10px 4px;
   padding-block: 8px;
@@ -391,18 +395,6 @@
 
 .commitPanelTitleRow {
   @apply flex min-w-0 items-center gap-2;
-}
-
-.commitPanelCountBadge {
-  @apply inline-flex shrink-0 items-center justify-center;
-  min-width: 24px;
-  height: 18px;
-  padding-inline: 7px;
-  border-radius: 999px;
-  background: var(--status-amber-soft);
-  color: var(--status-amber);
-  font-size: 11px;
-  line-height: 18px;
 }
 
 .gitToolRoot {

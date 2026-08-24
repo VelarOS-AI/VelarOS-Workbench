@@ -1,3 +1,5 @@
+@reference "../index.css";
+
 .editorSymbolTooltip {
   max-width: 420px;
   max-height: min(420px, 50vh);
@@ -418,12 +420,6 @@
   font-weight: 500;
   line-height: 1.5;
   letter-spacing: 0.01em;
-}
-
-.editorEmptyHint {
-  color: var(--workbench-text-muted);
-  font-size: 15px;
-  line-height: 1.5;
 }
 
 .actionPanel {

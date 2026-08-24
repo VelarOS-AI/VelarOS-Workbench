@@ -22,6 +22,12 @@ export function sortProjects(projects: WorkbenchProject[]): WorkbenchProject[] {
 export function fileLanguage(path: Nullable<string>): string {
   if (!path) return ''
 
+  const fileName = path.split(/[\\/]/).at(-1)?.toLowerCase() ?? ''
+  if (fileName === 'dockerfile' || fileName === 'containerfile') return 'Dockerfile'
+  if (fileName === 'cargo.lock') return 'TOML'
+  if (fileName === '.bashrc' || fileName === '.profile' || fileName === '.zshrc') return 'Shell'
+  if (fileName === '.env' || fileName.startsWith('.env.')) return 'Environment'
+
   const extension = path.split('.').at(-1)?.toLowerCase()
   switch (extension) {
     case 'ts':
@@ -31,12 +37,37 @@ export function fileLanguage(path: Nullable<string>): string {
     case 'jsx':
       return 'JavaScript'
     case 'json':
+    case 'jsonc':
       return 'JSON'
     case 'css':
       return 'CSS'
     case 'md':
     case 'mdx':
       return 'Markdown'
+    case 'yaml':
+    case 'yml':
+      return 'YAML'
+    case 'atom':
+    case 'plist':
+    case 'rss':
+    case 'svg':
+    case 'xml':
+    case 'xsd':
+    case 'xsl':
+    case 'xslt':
+      return 'XML'
+    case 'sql':
+      return 'SQL'
+    case 'toml':
+      return 'TOML'
+    case 'bash':
+    case 'sh':
+    case 'zsh':
+      return 'Shell'
+    case 'cfg':
+    case 'ini':
+    case 'properties':
+      return 'Properties'
     default:
       return extension ? extension.toUpperCase() : 'Text'
   }

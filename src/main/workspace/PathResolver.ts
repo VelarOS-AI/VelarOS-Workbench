@@ -58,7 +58,9 @@ class PathResolver {
     const resolvedPath = resolve(projectRoot, requestedPath)
     this.assertAllowedProjectPath(projectRoot, resolvedPath, inputPath)
 
-    const realPath = await realpath(resolvedPath)
+    const realPath = await realpath(resolvedPath).catch((error: unknown) => {
+      throw this.normalizeResolveError(error, inputPath)
+    })
     this.assertAllowedProjectPath(projectRoot, realPath, inputPath)
 
     return {
@@ -72,7 +74,12 @@ class PathResolver {
     const resolvedPath = resolve(projectRoot, requestedPath)
     this.assertAllowedProjectPath(projectRoot, resolvedPath, inputPath)
 
-    const realPath = realpathSync(resolvedPath)
+    let realPath: string
+    try {
+      realPath = realpathSync(resolvedPath)
+    } catch (error) {
+      throw this.normalizeResolveError(error, inputPath)
+    }
     this.assertAllowedProjectPath(projectRoot, realPath, inputPath)
 
     return {
@@ -146,6 +153,15 @@ class PathResolver {
     const targetPath = resolve(parentPath, name)
     this.assertAllowedProjectPath(projectRoot, targetPath, name)
     return targetPath
+  }
+
+  private normalizeResolveError(error: unknown, path: string): AppError {
+    const code = (error as NodeJS.ErrnoException | undefined)?.code
+    if (code === 'ENOENT') return new AppError('NOT_FOUND', `文件或目录已被删除或移动：${path}`)
+    if (code === 'EACCES' || code === 'EPERM')
+      return new AppError('PERMISSION', `没有权限访问文件或目录：${path}`)
+
+    return AppError.from(error)
   }
 }
 

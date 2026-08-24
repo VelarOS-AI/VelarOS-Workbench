@@ -128,7 +128,24 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
         },
       },
     },
-    // 片2 过渡：`changes` 左面模型随片4 CommitPanel 族复活时恢复（见 kernel model 注）。
+    changes: {
+      git: {
+        workspaceRoot: activeProject.rootPath,
+        gitSshKeyPath: model.chrome.effectiveGitSshKeyPath,
+        summary: gitState.summary,
+        changeItems: gitState.changeItems,
+        hasUnsavedOpenTabs: workbench.hasUnsavedOpenTabs,
+        isLoading: gitState.isLoading,
+        error: gitState.error,
+        selectedFilePath: workbench.selectedFilePath,
+        onRefresh: model.actions.refreshGitPanel,
+      },
+      onOpenDiff: (item) => {
+        model.aiChangeArchive.closeSelection()
+        editorNavigation.openDiff(item)
+      },
+      onOpenFile: (path) => void editorNavigation.selectFile(path),
+    },
     editor: {
       chrome: editorChrome,
       showTopBar: options.showEditorTopBar ?? true,
@@ -227,9 +244,8 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
         onApplyLanguageServiceFileChanges: workbench.applyLanguageServiceFileChanges,
         packageManager: inferPackageManagerCommand(workbench.rootEntries),
         onRunPackageScript: (command) => {
-          model.surface.openBottomTool('run')
           // 走可交互的运行卡（PTY），而不是只读一次性 runner；顺带记为「上次运行」，
-          // 让侧边栏 ▶ 记住并可右键切换。
+          // 让右侧 ▶ 记住并可右键切换；会话创建后由页面 model 自动打开运行面板。
           void workbench.launchRunSession(command)
         },
         onOpenQuickOpen: model.surface.openQuickOpen,

@@ -6,7 +6,6 @@ import type { MouseEvent, ReactElement } from 'react'
 
 import { StyleUtils } from '@velaros-ai/ui'
 import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
-import { FileTypeIcon } from '@velaros-ai/ui/primitives/display/FileTypeIcon'
 import { Paragraph } from '@velaros-ai/ui/primitives/display/Paragraph'
 import { Text } from '@velaros-ai/ui/primitives/display/Text'
 
@@ -16,6 +15,8 @@ import {
 } from '@shared/contracts'
 
 import styles from '../../styles/workbenchPageStyles'
+
+import { WorkbenchFileTypeIcon } from './WorkbenchFileTypeIcon'
 
 const cx = StyleUtils.bindCx(styles)
 
@@ -85,7 +86,7 @@ export function FileSearchResults({
                       </span>
                     ) : (
                       <span className={styles.treeFileIcon}>
-                        <FileTypeIcon fileName={entry.name} size={15} />
+                        <WorkbenchFileTypeIcon fileName={entry.name} size={15} />
                       </span>
                     )}
                     <span className={styles.searchResultCopy}>
@@ -129,7 +130,7 @@ export function FileSearchResults({
                     onMouseEnter={() => onActivateSearchResult(searchEntries.length + index)}
                   >
                     <span className={styles.treeFileIcon}>
-                      <FileTypeIcon fileName={match.fileName} size={15} />
+                      <WorkbenchFileTypeIcon fileName={match.fileName} size={15} />
                     </span>
                     <span className={styles.searchResultCopy}>
                       <Text truncate className={styles.searchResultName}>

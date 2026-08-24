@@ -27,18 +27,22 @@ import type {
   WorkbenchFilePanelSearchProps,
   WorkbenchFilePanelTreeProps,
 } from '../files/FilePanel'
+import type { WorkbenchCommitPanelProps } from '../git/WorkbenchCommitPanel'
+import type { WorkbenchGitPanelSessionProps } from '../git/workbenchGitPanelProps'
 
-/**
- * 片2 过渡形态：独立宿主只装配 files 左面（编辑器纵切）；'ai-changes' / 'changes' /
- * 'issues' 三个左面随片4（git）/ Phase 3（AI 面）复活时恢复进联合。
- */
-export type WorkbenchEmbeddedKernelLeftMode = 'files'
+export type WorkbenchEmbeddedKernelLeftMode = 'changes' | 'files'
 
 export interface WorkbenchEmbeddedFilePanelModel {
   tree: WorkbenchFilePanelTreeProps
   search: WorkbenchFilePanelSearchProps
   git?: WorkbenchFilePanelGitControlProps
   handlers: WorkbenchFilePanelHandlersProps
+}
+
+export interface WorkbenchEmbeddedCommitPanelModel {
+  git: WorkbenchGitPanelSessionProps
+  onOpenDiff: WorkbenchCommitPanelProps['onOpenDiff']
+  onOpenFile: WorkbenchCommitPanelProps['onOpenFile']
 }
 
 /** 编辑区内置 webview 调试选项卡的原始数据，JSX 由 kernel 组件构建。 */
@@ -84,5 +88,6 @@ export interface WorkbenchEmbeddedKernelModel {
   activeProject: WorkbenchProject
   aiChanges: WorkbenchAiChangeArchiveState
   files: WorkbenchEmbeddedFilePanelModel
+  changes: WorkbenchEmbeddedCommitPanelModel
   editor: WorkbenchEmbeddedEditorPanelModel
 }

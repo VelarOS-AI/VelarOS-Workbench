@@ -357,8 +357,15 @@ export class WorkbenchGitService {
   }
 
   private async getStatus(rootPath: string): Promise<WorkspaceGitStatusResult> {
-    const output = (await this.runGit(rootPath, ['status', '--porcelain=v1', '--branch', '-z']))
-      .stdout
+    const output = (
+      await this.runGit(rootPath, [
+        'status',
+        '--porcelain=v1',
+        '--branch',
+        '--untracked-files=all',
+        '-z',
+      ])
+    ).stdout
     return this.parseStatus(output)
   }
 

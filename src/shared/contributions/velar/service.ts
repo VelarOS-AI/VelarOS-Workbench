@@ -1,10 +1,13 @@
 import type { WorkbenchLanguageServiceDescriptor } from '@shared/language/workbenchLanguageServices'
 
-export const VELAR_LANGUAGE_SERVER_PROTOCOL_VERSION = 1
+import { VELAR_LANGUAGE_KEYWORDS } from './language'
 
 /**
- * Editor-side connection metadata only. Compiler semantics remain in the
- * independently installed Velar toolchain reached through stdio LSP.
+ * Editor-side connection metadata only. Compiler semantics and compatibility
+ * remain in the independently installed project toolchain reached through
+ * standard stdio LSP capabilities. Workbench intentionally does not pin the
+ * Velar-specific experimental protocol so a language update does not require
+ * repackaging the editor.
  */
 export const VelarWorkbenchLanguageService = {
   id: 'velarscript',
@@ -15,9 +18,8 @@ export const VelarWorkbenchLanguageService = {
   command: 'velar',
   args: ['lsp'],
   documentLanguageId: 'velar',
-  protocol: {
-    capabilityPath: ['capabilities', 'experimental', 'velar', 'protocolVersion'],
-    version: VELAR_LANGUAGE_SERVER_PROTOCOL_VERSION,
+  hover: {
+    suppressWords: VELAR_LANGUAGE_KEYWORDS,
   },
   extensions: ['vel'],
   languages: ['velar', 'velarscript'],

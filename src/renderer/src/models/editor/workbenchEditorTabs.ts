@@ -60,6 +60,13 @@ export function buildExternalChangeNoticeKey(
   return `${path}:${change.status}:${change.diskFile?.modifiedAt ?? ''}:${change.message ?? ''}`
 }
 
+/** 将主进程语义错误映射成编辑器可操作的外部文件状态。 */
+export function resolveExternalFileUnavailableStatus(
+  errorCode: Nullable<string>
+): WorkbenchOpenEditorExternalChange['status'] {
+  return errorCode === 'NOT_FOUND' ? 'deleted' : 'unavailable'
+}
+
 /** 把打开的标签集合投影为「打开文件快照」列表（供语言服务 / 上下文索引使用）。 */
 export function toOpenedFileSnapshots(
   openTabs: readonly WorkbenchOpenEditorTab[]

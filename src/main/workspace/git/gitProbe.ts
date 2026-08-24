@@ -68,6 +68,17 @@ async function runGitProbe(): Promise<void> {
 
     const filePath = join(projectRoot, 'alpha file.txt')
     writeFileSync(filePath, 'alpha\nbeta\n')
+    const nestedPath = join(projectRoot, 'nested')
+    mkdirSync(nestedPath)
+    writeFileSync(join(nestedPath, 'one.txt'), 'one\n')
+    writeFileSync(join(nestedPath, 'two.txt'), 'two\n')
+    const expandedUntracked = await service.getSummary(projectRoot)
+    equal(expandedUntracked.status?.changedFiles, 3, '未跟踪目录应展开为真实文件计数')
+    check(
+      expandedUntracked.status?.entries.every((entry) => !entry.path.endsWith('/')),
+      '未跟踪目录本身不得作为变更项'
+    )
+    rmSync(nestedPath, { force: true, recursive: true })
     const untracked = await service.getSummary(projectRoot)
     equal(untracked.status?.untrackedFiles, 1, '含空格路径应解析为一个未跟踪文件')
     equal(untracked.status?.entries[0]?.path, 'alpha file.txt', '状态路径不应保留 Git 引号')
@@ -202,5 +213,5 @@ async function configureIdentity(rootPath: string): Promise<void> {
 }
 
 await runGitProbe()
-assert.equal(assertionCount, 40, 'Git 探针断言数变化必须显式复核')
-console.info(`workbench git probe: ${assertionCount}/40 assertions passed`)
+assert.equal(assertionCount, 42, 'Git 探针断言数变化必须显式复核')
+console.info(`workbench git probe: ${assertionCount}/42 assertions passed`)

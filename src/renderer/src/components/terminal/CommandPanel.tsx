@@ -1,5 +1,5 @@
 import { type ReactElement, useEffect, useRef } from 'react'
-import { CaretDownIcon, CaretUpIcon, GitBranchIcon } from '@phosphor-icons/react'
+import { CaretDownIcon, CaretUpIcon } from '@phosphor-icons/react'
 import { useWorkbenchI18n } from '@renderer/i18n'
 import type { WorkbenchBottomTool } from '@renderer/models/layout/workbenchSurfaceModel'
 
@@ -140,22 +140,6 @@ export function CommandPanel({
           <div className={styles.bottomToolHeader}>
             <div className={styles.bottomToolTitleGroup}>
               <span className={styles.bottomToolTitle}>{activeToolTitle}</span>
-              {activeTool === 'git' && (
-                <div className={styles.bottomToolSessionTabs} role="tablist">
-                  <Button
-                    variant="ghost"
-                    size="block"
-                    className={styles.bottomToolSessionTab}
-                    data-active="true"
-                    title={t('workbench.gitLog')}
-                    role="tab"
-                    aria-selected
-                  >
-                    <GitBranchIcon size={13} />
-                    <span>{t('workbench.gitLog')}</span>
-                  </Button>
-                </div>
-              )}
             </div>
             <div className={styles.bottomToolActions}>
               <Button

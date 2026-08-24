@@ -1,70 +1,82 @@
-import {
-  type FormEvent,
-  type ReactElement,
-  useEffect,
-  useMemo,
-  useState,
-} from 'react'
-import {
-  ArrowClockwiseIcon,
-  ArrowCounterClockwiseIcon,
-  GitBranchIcon,
-  MagicWandIcon,
-  PlusIcon,
-  UploadSimpleIcon,
-} from '@phosphor-icons/react'
+import { type ReactElement, useEffect, useMemo, useState } from 'react'
+import { GitBranchIcon } from '@phosphor-icons/react'
 import { workbenchHost } from '@renderer/host'
 import { useWorkbenchI18n } from '@renderer/i18n'
-import type { WorkbenchGitChangeItem } from '@renderer/models/git/workbenchGitModel'
+import {
+  filterWorkbenchGitLogCommits,
+  formatWorkbenchGitCommitDate,
+} from '@renderer/models/git/changesPanel.model'
 
 import { AppError } from '@velaros-ai/core'
 import { Result } from '@velaros-ai/core/result'
 import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
+import { Paragraph } from '@velaros-ai/ui/primitives/display/Paragraph'
 import { Input } from '@velaros-ai/ui/primitives/forms/Input'
+import { ScrollArea } from '@velaros-ai/ui/primitives/layout/ScrollArea'
 
 import type { SystemWorkspaceGitSummary, WorkspaceGitLogEntry } from '@shared/contracts'
 
 import styles from '../../styles/workbenchPageStyles'
+import { HistoryTimeline, type HistoryTimelineItem } from '../editor/HistoryTimeline'
 
 interface WorkbenchGitToolPanelProps {
   workspaceRoot: string
   summary: Nullable<SystemWorkspaceGitSummary>
-  changeItems: WorkbenchGitChangeItem[]
   isLoading: boolean
   error: Nullable<string>
-  hasUnsavedOpenTabs: boolean
-  onRefresh: () => Promise<void>
   onInitialize: () => Promise<void>
-  onOpenDiff: (item: WorkbenchGitChangeItem) => void
-  onRepositoryChanged: () => Promise<void>
 }
 
+/** 拆分前 Workbench 底部 Git 工具：查看分支与提交历史，不承担提交操作。 */
 export function WorkbenchGitToolPanel({
   workspaceRoot,
   summary,
-  changeItems,
   isLoading,
   error,
-  hasUnsavedOpenTabs,
-  onRefresh,
   onInitialize,
-  onOpenDiff,
-  onRepositoryChanged,
 }: WorkbenchGitToolPanelProps): ReactElement {
   const { locale, t } = useWorkbenchI18n()
-  const [commitMessage, setCommitMessage] = useState('')
-  const [newBranchName, setNewBranchName] = useState('')
-  const [busyAction, setBusyAction] = useState<Nullable<string>>(null)
-  const [actionError, setActionError] = useState<Nullable<string>>(null)
+  const [logBranch, setLogBranch] = useState('')
+  const [logSearch, setLogSearch] = useState('')
   const [commits, setCommits] = useState<WorkspaceGitLogEntry[]>([])
   const [selectedCommitSha, setSelectedCommitSha] = useState<Nullable<string>>(null)
   const [commitDiff, setCommitDiff] = useState('')
   const [logLoading, setLogLoading] = useState(false)
+  const [logError, setLogError] = useState<Nullable<string>>(null)
 
-  const localBranches = useMemo(
+  const branches = useMemo(
     () => summary?.branches.filter((branch) => branch.kind !== 'remote') ?? [],
     [summary?.branches]
   )
+  const filteredCommits = useMemo(
+    () => filterWorkbenchGitLogCommits(commits, logSearch),
+    [commits, logSearch]
+  )
+  const selectedCommit = useMemo(
+    () => commits.find((commit) => commit.sha === selectedCommitSha) ?? null,
+    [commits, selectedCommitSha]
+  )
+  const timelineItems = useMemo<HistoryTimelineItem[]>(
+    () =>
+      filteredCommits.map((commit) => ({
+        id: commit.sha,
+        title: commit.subject,
+        subtitle: commit.authorName,
+        meta: formatWorkbenchGitCommitDate(locale, commit),
+        timestamp: commit.authoredAt,
+        special: commit.refs.some((ref) => ref.includes('HEAD')),
+        badges: commit.refs.slice(0, 2),
+      })),
+    [filteredCommits, locale]
+  )
+
+  useEffect(() => {
+    if (!summary?.repository) {
+      setLogBranch('')
+      return
+    }
+    setLogBranch((current) => current || summary.status?.branch || '')
+  }, [summary?.repository, summary?.status?.branch])
 
   useEffect(() => {
     if (!summary?.repository) {
@@ -75,9 +87,13 @@ export function WorkbenchGitToolPanel({
     }
     let active = true
     setLogLoading(true)
-    void workbenchHostCall(async () => {
+    setLogError(null)
+    void runBackground(async () => {
       const result = Result.unwrap(
-        await workbenchHost.kernel.workspace.getWorkspaceGitLog(workspaceRoot, { limit: 80 })
+        await workbenchHost.kernel.workspace.getWorkspaceGitLog(workspaceRoot, {
+          branch: logBranch || undefined,
+          limit: 80,
+        })
       )
       if (!active) return
       setCommits(result.commits)
@@ -86,13 +102,15 @@ export function WorkbenchGitToolPanel({
           ? current
           : (result.commits[0]?.sha ?? null)
       )
+    }).catch((loadError) => {
+      if (active) setLogError(AppError.getMessage(loadError))
     }).finally(() => {
       if (active) setLogLoading(false)
     })
     return () => {
       active = false
     }
-  }, [summary?.checkedAt, summary?.repository, workspaceRoot])
+  }, [logBranch, summary?.checkedAt, summary?.repository, workspaceRoot])
 
   useEffect(() => {
     if (!selectedCommitSha) {
@@ -100,7 +118,7 @@ export function WorkbenchGitToolPanel({
       return
     }
     let active = true
-    void workbenchHostCall(async () => {
+    void runBackground(async () => {
       const result = Result.unwrap(
         await workbenchHost.kernel.workspace.getWorkspaceGitDiff(workspaceRoot, {
           commitSha: selectedCommitSha,
@@ -108,118 +126,13 @@ export function WorkbenchGitToolPanel({
         })
       )
       if (active) setCommitDiff(result.diff)
+    }).catch(() => {
+      if (active) setCommitDiff('')
     })
     return () => {
       active = false
     }
   }, [selectedCommitSha, workspaceRoot])
-
-  async function runAction(id: string, action: () => Promise<void>): Promise<void> {
-    if (busyAction) return
-    setBusyAction(id)
-    setActionError(null)
-    try {
-      await action()
-    } catch (runError) {
-      setActionError(AppError.getMessage(runError))
-    } finally {
-      setBusyAction(null)
-    }
-  }
-
-  async function runFileAction(
-    item: WorkbenchGitChangeItem,
-    action: 'discard' | 'stage' | 'unstage'
-  ): Promise<void> {
-    if (hasUnsavedOpenTabs) {
-      setActionError(t('workbench.gitUnsavedBlockedDescription'))
-      return
-    }
-    if (
-      action === 'discard' &&
-      !window.confirm(t('workbench.gitDiscardConfirm', { path: item.path }))
-    ) return
-    await runAction(`${action}:${item.path}`, async () => {
-      Result.unwrap(
-        await workbenchHost.kernel.workspace.performWorkspaceGitFileAction(
-          workspaceRoot,
-          item.path,
-          action
-        )
-      )
-      await onRefresh()
-    })
-  }
-
-  async function generateCommitMessage(): Promise<void> {
-    await runAction('generate-message', async () => {
-      const result = Result.unwrap(
-        await workbenchHost.kernel.workspace.generateWorkspaceGitCommitMessage(
-          workspaceRoot,
-          locale
-        )
-      )
-      setCommitMessage(result.message ?? '')
-    })
-  }
-
-  async function commitAll(): Promise<void> {
-    if (hasUnsavedOpenTabs) {
-      setActionError(t('workbench.gitUnsavedBlockedDescription'))
-      return
-    }
-    await runAction('commit', async () => {
-      Result.unwrap(
-        await workbenchHost.kernel.workspace.commitWorkspaceGitChanges(
-          workspaceRoot,
-          locale,
-          commitMessage
-        )
-      )
-      setCommitMessage('')
-      await onRefresh()
-    })
-  }
-
-  async function switchBranch(branch: string): Promise<void> {
-    if (!branch || branch === summary?.status?.branch) return
-    await runAction('switch-branch', async () => {
-      Result.unwrap(
-        await workbenchHost.kernel.workspace.switchWorkspaceGitBranch(
-          workspaceRoot,
-          branch,
-          locale
-        )
-      )
-      await onRepositoryChanged()
-    })
-  }
-
-  async function createBranch(event: FormEvent): Promise<void> {
-    event.preventDefault()
-    const branch = newBranchName.trim()
-    if (!branch) return
-    await runAction('create-branch', async () => {
-      Result.unwrap(
-        await workbenchHost.kernel.workspace.createWorkspaceGitBranch(workspaceRoot, branch)
-      )
-      setNewBranchName('')
-      await onRefresh()
-    })
-  }
-
-  async function remoteAction(action: 'update' | 'upload'): Promise<void> {
-    if (action === 'upload' && !window.confirm(t('workbench.gitPushConfirm'))) return
-    await runAction(action, async () => {
-      Result.unwrap(
-        await workbenchHost.kernel.workspace.performWorkspaceGitAction(
-          workspaceRoot,
-          action
-        )
-      )
-      await onRefresh()
-    })
-  }
 
   if (!summary?.repository)
     return (
@@ -232,191 +145,100 @@ export function WorkbenchGitToolPanel({
     )
 
   return (
-    <section className={styles.gitToolRoot}>
-      <header className={styles.gitToolToolbar}>
-        <label className={styles.gitToolBranchSelect}>
-          <GitBranchIcon size={14} />
-          <select
-            value={summary.status?.branch ?? ''}
-            disabled={!!busyAction || hasUnsavedOpenTabs || !!summary.status?.changedFiles}
-            onChange={(event) => void switchBranch(event.target.value)}
-          >
-            {localBranches.map((branch) => (
-              <option key={branch.name} value={branch.name}>
-                {branch.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <form className={styles.gitToolCreateBranch} onSubmit={createBranch}>
-          <Input
-            size="sm"
-            value={newBranchName}
-            placeholder={t('workbench.gitBranchCreatePlaceholder')}
-            onChange={(event) => setNewBranchName(event.target.value)}
-          />
-          <Button
-            type="submit"
-            variant="ghost"
-            size="icon-sm"
-            disabled={!newBranchName.trim() || !!busyAction}
-            title={t('workbench.gitBranchCreate')}
-          >
-            <PlusIcon size={14} />
-          </Button>
-        </form>
-        <span className={styles.gitToolToolbarSpacer} />
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          title={t('workbench.gitUpdate')}
-          disabled={!!busyAction}
-          onClick={() => void remoteAction('update')}
-        >
-          <ArrowCounterClockwiseIcon size={14} />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          title={t('workbench.gitUpload')}
-          disabled={!!busyAction}
-          onClick={() => void remoteAction('upload')}
-        >
-          <UploadSimpleIcon size={14} />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          title={t('common.refresh')}
-          disabled={!!busyAction}
-          onClick={() => void onRefresh()}
-        >
-          <ArrowClockwiseIcon size={14} />
-        </Button>
-      </header>
-      {!!(actionError || error) && (
-        <div className={styles.gitToolError}>{actionError || error}</div>
-      )}
-      <div className={styles.gitToolColumns}>
-        <section className={styles.gitToolChanges}>
-          <div className={styles.gitToolSectionTitle}>
-            <span>{t('workbench.gitChanges')}</span>
-            <span>{changeItems.length}</span>
-          </div>
-          <div className={styles.gitToolChangeList}>
-            {changeItems.length === 0 ? (
-              <span className={styles.gitToolMuted}>{t('workbench.gitClean')}</span>
-            ) : (
-              changeItems.map((item) => (
-                <div key={`${item.group}:${item.path}`} className={styles.gitToolChangeRow}>
+    <section className={styles.toolWindowPanel}>
+      <div className={styles.gitIdeShell}>
+        <div className={styles.gitIdeContent}>
+          <div className={styles.gitLogView}>
+            <aside className={styles.gitLogBranchPane}>
+              <div className={styles.gitBranchList}>
+                <p className={styles.gitPaneSectionTitle}>{t('workbench.gitBranches')}</p>
+                {branches.map((branch) => (
                   <button
+                    key={branch.name}
                     type="button"
-                    className={styles.gitToolPathButton}
-                    title={item.path}
-                    onClick={() => onOpenDiff(item)}
+                    className={styles.gitBranchRow}
+                    data-active={logBranch === branch.name}
+                    onClick={() => setLogBranch(branch.name)}
                   >
-                    <span>{item.fileName}</span>
-                    <small>{item.path}</small>
+                    <GitBranchIcon size={13} />
+                    <span className={styles.gitBranchName}>{branch.name}</span>
+                    {branch.current && (
+                      <span className={styles.gitBranchMark}>{t('workbench.gitBranchCurrent')}</span>
+                    )}
                   </button>
-                  <span className={styles.gitToolStatus}>
-                    {item.indexStatus}
-                    {item.workTreeStatus}
-                  </span>
-                  <Button
-                    variant="ghost"
-                    size="block"
-                    disabled={!!busyAction}
-                    onClick={() =>
-                      void runFileAction(
-                        item,
-                        item.group === 'staged' ? 'unstage' : 'stage'
-                      )
-                    }
-                  >
-                    {item.group === 'staged'
-                      ? t('workbench.gitUnstageFile')
-                      : t('workbench.gitStageFile')}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="block"
-                    disabled={!!busyAction}
-                    onClick={() => void runFileAction(item, 'discard')}
-                  >
-                    {t('workbench.gitRollback')}
-                  </Button>
+                ))}
+              </div>
+            </aside>
+            <section className={styles.gitLogListPane}>
+              <div className={styles.gitLogSearchBar}>
+                <Input
+                  size="sm"
+                  variant="ghost"
+                  value={logSearch}
+                  placeholder={t('workbench.gitLogSearchPlaceholder')}
+                  onChange={(event) => setLogSearch(event.target.value)}
+                />
+              </div>
+              <ScrollArea className={styles.gitLogScroll}>
+                {logLoading ? (
+                  <Paragraph spacing="none" tone="muted" className={styles.gitDiffEmpty}>
+                    {t('workbench.gitLogLoading')}
+                  </Paragraph>
+                ) : logError ? (
+                  <Paragraph spacing="none" tone="muted" className={styles.gitDiffEmpty}>
+                    {logError}
+                  </Paragraph>
+                ) : timelineItems.length ? (
+                  <HistoryTimeline
+                    items={timelineItems}
+                    selectedId={selectedCommitSha}
+                    onSelect={setSelectedCommitSha}
+                  />
+                ) : (
+                  <Paragraph spacing="none" tone="muted" className={styles.gitDiffEmpty}>
+                    {t('workbench.gitLogEmpty')}
+                  </Paragraph>
+                )}
+              </ScrollArea>
+            </section>
+            <aside className={styles.gitCommitDetailPane}>
+              {selectedCommit ? (
+                <div className={styles.gitCommitDetail}>
+                  <h5 className={styles.gitCommitDetailTitle}>{selectedCommit.subject}</h5>
+                  <dl>
+                    <div>
+                      <dt>{t('workbench.gitCommitSha')}</dt>
+                      <dd>{selectedCommit.shortSha}</dd>
+                    </div>
+                    <div>
+                      <dt>{t('workbench.gitCommitAuthor')}</dt>
+                      <dd>{selectedCommit.authorName}</dd>
+                    </div>
+                    <div>
+                      <dt>{t('workbench.gitCommitDate')}</dt>
+                      <dd>{formatWorkbenchGitCommitDate(locale, selectedCommit)}</dd>
+                    </div>
+                  </dl>
+                  <section className={styles.gitCommitDiffPreview}>
+                    <p className={styles.gitPaneSectionTitle}>{t('workbench.gitDiffPreview')}</p>
+                    <pre className={styles.gitToolCommitDiff}>
+                      {commitDiff || t('workbench.gitDiffEmpty')}
+                    </pre>
+                  </section>
                 </div>
-              ))
-            )}
-          </div>
-          <div className={styles.gitToolCommitComposer}>
-            <Input
-              value={commitMessage}
-              placeholder={t('workbench.gitCommitPlaceholder')}
-              disabled={!!busyAction}
-              onChange={(event) => setCommitMessage(event.target.value)}
-            />
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              title={t('workbench.gitGenerateCommitMessage')}
-              disabled={!!busyAction || changeItems.length === 0}
-              onClick={() => void generateCommitMessage()}
-            >
-              <MagicWandIcon size={15} />
-            </Button>
-            <Button
-              size="sm"
-              disabled={!!busyAction || changeItems.length === 0}
-              onClick={() => void commitAll()}
-            >
-              {busyAction === 'commit'
-                ? t('workbench.gitCommitPending')
-                : t('workbench.gitCommitButton')}
-            </Button>
-          </div>
-        </section>
-        <section className={styles.gitToolLog}>
-          <div className={styles.gitToolSectionTitle}>
-            <span>{t('workbench.gitLog')}</span>
-            <span>{commits.length}</span>
-          </div>
-          <div className={styles.gitToolLogBody}>
-            <div className={styles.gitToolCommitList}>
-              {logLoading ? (
-                <span className={styles.gitToolMuted}>{t('workbench.gitLogLoading')}</span>
-              ) : commits.length === 0 ? (
-                <span className={styles.gitToolMuted}>{t('workbench.gitLogEmpty')}</span>
               ) : (
-                commits.map((commit) => (
-                  <button
-                    type="button"
-                    key={commit.sha}
-                    data-active={selectedCommitSha === commit.sha}
-                    onClick={() => setSelectedCommitSha(commit.sha)}
-                  >
-                    <strong>{commit.subject}</strong>
-                    <small>
-                      {commit.shortSha} · {commit.authorName}
-                    </small>
-                  </button>
-                ))
+                <Paragraph spacing="none" tone="muted" className={styles.gitDiffEmpty}>
+                  {t('workbench.gitCommitSelect')}
+                </Paragraph>
               )}
-            </div>
-            <pre className={styles.gitToolCommitDiff}>
-              {commitDiff || t('workbench.gitCommitSelect')}
-            </pre>
+            </aside>
           </div>
-        </section>
+        </div>
       </div>
     </section>
   )
 }
 
-async function workbenchHostCall(action: () => Promise<void>): Promise<void> {
-  try {
-    await action()
-  } catch {
-    // 背景日志/提交 diff 失败由空状态降级；显式用户动作走 runAction 展示错误。
-  }
+async function runBackground(action: () => Promise<void>): Promise<void> {
+  await action()
 }

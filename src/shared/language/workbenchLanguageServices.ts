@@ -21,6 +21,10 @@ export interface WorkbenchLanguageServiceDescriptor {
   args?: string[]
   documentLanguageId?: string
   protocol?: WorkbenchLanguageServerProtocolContract
+  hover?: {
+    /** Words whose language-server documentation is intentionally not shown as editor hover. */
+    suppressWords: readonly string[]
+  }
 }
 
 /**

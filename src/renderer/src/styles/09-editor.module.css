@@ -1,3 +1,5 @@
+@reference "../index.css";
+
 /*
  * 调试 webview 常驻层：所有打开的调试选项卡的 webview 始终挂载（保状态），
  * 仅激活项 display:flex 覆盖编辑区；未激活时全部 display:none，容器不拦事件。
@@ -569,6 +571,7 @@
 .editorTabScroller {
   @apply flex min-w-0 flex-1 items-stretch gap-0 overflow-x-auto overflow-y-hidden;
   -ms-overflow-style: none;
+  overscroll-behavior-x: none;
   scrollbar-width: none;
 }
 
@@ -712,17 +715,18 @@
 
 .editorTabListMenu {
   @apply fixed z-50 flex flex-col border bg-card shadow-lg;
-  width: 168px;
-  max-height: min(52vh, 360px);
+  width: min(288px, calc(100vw - 16px));
+  max-height: min(64vh, 520px);
   overflow-y: auto;
   border-color: var(--workbench-border);
   border-radius: var(--workbench-radius-lg);
-  padding: 2px;
+  padding: 4px;
+  gap: 2px;
 }
 
 .editorTabListItem {
   @apply flex min-w-0 items-center;
-  min-height: 22px;
+  min-height: 32px;
   border-radius: var(--workbench-radius);
 }
 
@@ -743,13 +747,17 @@
 
 .editorTabListMain {
   @apply flex min-w-0 flex-1 items-center gap-1.5 border-0 bg-transparent text-left;
-  height: 22px;
-  padding-inline: 4px 2px;
+  height: 32px;
+  padding-inline: 8px 4px;
   font-size: 12px;
 }
 
+.editorTabListMain > svg {
+  @apply shrink-0;
+}
+
 .editorTabListMain .editorTabName {
-  @apply min-w-0 overflow-hidden;
+  @apply min-w-0 flex-1 overflow-hidden whitespace-nowrap;
   text-overflow: ellipsis;
 }
 
@@ -761,9 +769,9 @@
 
 .editorTabListClose {
   @apply flex shrink-0 items-center justify-center border-0 bg-transparent text-muted-foreground;
-  width: 17px;
-  height: 17px;
-  margin-right: 2px;
+  width: 26px;
+  height: 26px;
+  margin-right: 3px;
   border-radius: var(--workbench-radius);
 }
 

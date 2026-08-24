@@ -16,11 +16,11 @@ import {
 import type { WorkbenchThemeId } from '@renderer/models/settings/workbenchPreferences'
 
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
-import { FileTypeIcon } from '@velaros-ai/ui/primitives/display/FileTypeIcon'
 import { Text } from '@velaros-ai/ui/primitives/display/Text'
 import { ScrollArea } from '@velaros-ai/ui/primitives/layout/ScrollArea'
 
 import styles from '../../styles/workbenchPageStyles'
+import { WorkbenchFileTypeIcon } from '../files/WorkbenchFileTypeIcon'
 import { GitDiffEditorPanel } from '../git/GitDiffEditorPanel'
 
 type WorkbenchChatChangeAction = 'added' | 'deleted' | 'modified' | 'renamed' | 'copied'
@@ -175,7 +175,7 @@ export function WorkbenchChatChangePreviewPanel({
                   }}
                   onKeyDown={(event) => handleRowKeyDown(event, item)}
                 >
-                  <FileTypeIcon
+                  <WorkbenchFileTypeIcon
                     className={styles.aiChangePreviewFileIcon}
                     fileName={item.fileName}
                     size={15}

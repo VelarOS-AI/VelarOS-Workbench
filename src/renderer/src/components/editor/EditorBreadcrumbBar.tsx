@@ -5,10 +5,10 @@ import type { WorkbenchPathBreadcrumbItem } from '@renderer/models/files/workben
 
 import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
-import { FileTypeIcon } from '@velaros-ai/ui/primitives/display/FileTypeIcon'
 import { Text } from '@velaros-ai/ui/primitives/display/Text'
 
 import styles from '../../styles/workbenchPageStyles'
+import { WorkbenchFileTypeIcon } from '../files/WorkbenchFileTypeIcon'
 
 interface EditorBreadcrumbBarProps {
   selectedFilePath: Nullable<string>
@@ -53,7 +53,7 @@ export function EditorBreadcrumbBar({
               }}
             >
               {item.kind === 'file' ? (
-                <FileTypeIcon fileName={item.label} size={13} />
+                <WorkbenchFileTypeIcon fileName={item.label} size={13} />
               ) : item.kind === 'root' ? (
                 <FolderOpenIcon size={13} weight="duotone" />
               ) : (

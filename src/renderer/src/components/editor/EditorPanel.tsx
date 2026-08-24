@@ -739,18 +739,23 @@ export function EditorPanel({
                     <Text className={styles.editorExternalChangeTitle}>
                       {selectedExternalChange.status === 'modified'
                         ? t('workbench.externalFileChangedTitle')
-                        : t('workbench.externalFileUnavailableTitle')}
+                        : selectedExternalChange.status === 'deleted'
+                          ? t('workbench.externalFileDeletedTitle')
+                          : t('workbench.externalFileUnavailableTitle')}
                     </Text>
                     <Text tone="secondary" truncate>
                       {selectedExternalChange.status === 'modified'
                         ? t('workbench.externalFileChangedDescription', {
                             path: selectedFilePath ?? '',
                           })
-                        : (selectedExternalChange.message ??
-                          t('workbench.externalFileUnavailableDescription', {
-                            path: selectedFilePath ?? '',
-                          }))}
-                    </Text>
+                        : selectedExternalChange.status === 'deleted'
+                          ? t('workbench.externalFileDeletedDescription', {
+                              path: selectedFilePath ?? '',
+                            })
+                          : t('workbench.externalFileUnavailableDescription', {
+                              path: selectedFilePath ?? '',
+                            })}
+                  </Text>
                   </div>
                   {canKeepLocalExternalConflict && (
                     <Button
@@ -761,14 +766,26 @@ export function EditorPanel({
                       {t('workbench.keepLocalDraft')}
                     </Button>
                   )}
+                  {selectedExternalChange.status === 'deleted' && !hasUnsavedChanges && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => selectedFilePath && onCloseOpenFile(selectedFilePath)}
+                    >
+                      {t('workbench.closeDeletedFileTab')}
+                    </Button>
+                  )}
                   <Button
                     size="sm"
                     variant="outline"
+                    disabled={isSavingFile}
                     onClick={() => resolveExternalFileConflict('external')}
                   >
                     {selectedExternalChange.status === 'modified'
                       ? t('workbench.useExternalVersion')
-                      : t('workbench.reloadFromDisk')}
+                      : selectedExternalChange.status === 'deleted'
+                        ? t('workbench.restoreDeletedFile')
+                        : t('workbench.reloadFromDisk')}
                   </Button>
                 </div>
               )}

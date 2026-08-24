@@ -1,3 +1,5 @@
+@reference "../index.css";
+
 .root [data-slot='button']:hover,
 .root [data-slot='button']:active {
   transform: none;
@@ -75,9 +77,9 @@
 }
 
 .workbenchShell .editorTabListMain {
-  height: 30px;
+  height: 32px;
   justify-content: flex-start;
-  padding: 0 4px 0 7px;
+  padding: 0 4px 0 8px;
   background: transparent;
 }
 
@@ -87,8 +89,8 @@
 }
 
 .workbenchShell .editorTabListClose {
-  width: 24px;
-  height: 24px;
+  width: 26px;
+  height: 26px;
   margin-right: 3px;
   padding: 0;
   background: transparent;

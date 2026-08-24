@@ -1,3 +1,5 @@
+@reference "../index.css";
+
 .filePanel,
 .editorPanel {
   @apply min-h-0;
@@ -13,39 +15,64 @@
   background: var(--workbench-editor-bg);
 }
 
-.filePanel > .panelHeader {
-  justify-content: flex-start;
-  gap: 6px;
-  min-height: 34px;
-  padding-inline: 2px 4px;
-}
-
-.workbenchShell .filePanel > .panelHeader {
-  border-color: var(--workbench-editor-gutter-border);
-  background: var(--workbench-surface-muted);
-}
-
-.filePanelHeaderActions {
-  @apply ml-auto flex shrink-0 items-center gap-0.5;
-}
-
-.filePanelHeaderActions button,
-.filePanelHeaderActions [data-slot='button'] {
-  width: 26px;
-  height: 26px;
-}
-
-.filePanelHeaderActions [data-active='true'] {
-  color: var(--workbench-text);
-  background: var(--chrome-rail-selected-bg);
-}
-
 .filePanelBody {
   @apply flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden;
 }
 
+.filePanelProjectHeader {
+  display: flex;
+  flex: 0 0 35px;
+  min-width: 0;
+  height: 35px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 5px 0 9px;
+  border-bottom: 1px solid var(--workbench-border);
+  background: var(--background-panel);
+  -webkit-app-region: drag;
+}
+
+.filePanelProjectIdentity {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+  color: var(--workbench-text);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.filePanelProjectIdentity > svg {
+  flex: 0 0 auto;
+  color: var(--workbench-text-muted);
+}
+
+.filePanelProjectIdentity > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.filePanelProjectAction {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  color: var(--workbench-text-muted);
+  border-radius: var(--workbench-radius);
+  -webkit-app-region: no-drag;
+}
+
+.filePanelProjectAction:hover,
+.filePanelProjectAction[data-active='true'] {
+  color: var(--workbench-text);
+  background: var(--chrome-rail-hover-bg);
+}
+
 .filePanel > .searchBar {
-  padding-inline: 5px;
+  padding: 4px;
 }
 
 .panelHeader {
@@ -75,76 +102,6 @@
 
 .panelActions {
   @apply flex shrink-0 items-center gap-1;
-}
-
-.filePanelGitControl {
-  display: flex;
-  min-width: 0;
-  max-width: min(420px, calc(100% - 40px));
-  flex: 0 1 auto;
-  align-items: center;
-  overflow: hidden;
-}
-
-.workbenchShell .filePanelGitControl [class*='gitBranchControlPill'] [class*='gitBranchButton'] {
-  height: 26px;
-  min-height: 26px;
-  border-color: transparent;
-  background: transparent;
-  box-shadow: none;
-}
-
-.workbenchShell
-  .filePanelGitControl
-  [class*='gitBranchControlPill']
-  [class*='gitBranchButton']:hover:not(:disabled),
-.workbenchShell
-  .filePanelGitControl
-  [class*='gitBranchControlPill']
-  [class*='gitBranchButton']:focus-visible {
-  border-color: transparent;
-  background: var(--chrome-rail-hover-bg);
-  box-shadow: none;
-}
-
-.filePanelGitControl > * {
-  min-width: 0;
-  max-width: 100%;
-}
-
-.filePanelGitPlaceholder {
-  display: inline-flex;
-  min-width: 0;
-  max-width: 100%;
-  height: 26px;
-  align-items: center;
-  overflow: hidden;
-  color: var(--workbench-text-muted);
-  font-size: 11px;
-  line-height: 1;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.filePanelGitInitializeButton {
-  min-width: 0;
-  max-width: 100%;
-  height: 26px;
-  padding-inline: 7px;
-  gap: 5px;
-  color: var(--workbench-text);
-  border: 1px solid transparent;
-  border-radius: var(--workbench-radius);
-  background: transparent;
-  box-shadow: none;
-}
-
-.filePanelGitInitializeButton:hover:not(:disabled),
-.filePanelGitInitializeButton:focus-visible {
-  color: var(--workbench-text);
-  border-color: transparent;
-  background: var(--chrome-rail-hover-bg);
-  box-shadow: none;
 }
 
 .panelActions button {
@@ -183,17 +140,26 @@
 
 .searchBar {
   @apply flex shrink-0 items-center gap-1.5 text-muted-foreground;
-  padding: 7px 8px;
+  padding: 4px;
   border-bottom: 1px solid var(--workbench-border);
-  background: var(--workbench-toolbar);
+  background: var(--workbench-editor-bg);
 }
 
 .searchInputShell {
   @apply flex min-w-0 flex-1 items-center gap-1.5 border bg-card text-muted-foreground;
   height: 30px;
   padding-inline: 8px;
-  border-color: var(--workbench-border);
+  border-color: transparent;
   border-radius: var(--workbench-radius);
+  background: transparent;
+  outline: none;
+  box-shadow: none;
+}
+
+.searchInputShell:focus-within {
+  border-color: transparent;
+  outline: none;
+  box-shadow: none;
 }
 
 .searchInputShell [data-slot='input'] {
@@ -204,22 +170,12 @@
   box-shadow: none;
 }
 
+.searchInputShell [data-slot='input']:focus,
 .searchInputShell [data-slot='input']:focus-visible {
   border: 0;
+  outline: none !important;
   background: transparent;
-  box-shadow: none;
-}
-
-.searchInputClearButton {
-  @apply shrink-0 text-muted-foreground;
-  width: 20px;
-  height: 20px;
-  border-radius: var(--workbench-radius);
-}
-
-.searchInputClearButton:hover {
-  color: var(--workbench-text);
-  background: var(--chrome-rail-hover-bg);
+  box-shadow: none !important;
 }
 
 .treeScroll {

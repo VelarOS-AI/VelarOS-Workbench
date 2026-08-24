@@ -1,4 +1,4 @@
-@reference "../../../index.css";
+@reference "../index.css";
 
 .root {
   @apply h-full min-h-0 overflow-hidden;
@@ -548,8 +548,8 @@
   --dt-row-hover: var(--workbench-hover);
   --dt-row-selected: var(--workbench-selection-bg);
   --dt-row-selected-hover: var(--workbench-selection-bg);
-  --scrollbar-thumb: color-mix(in oklab, var(--workbench-text) 22%, transparent);
-  --scrollbar-thumb-hover: color-mix(in oklab, var(--workbench-text) 38%, transparent);
+  --scrollbar-thumb: color-mix(in oklab, var(--workbench-text) 16%, transparent);
+  --scrollbar-thumb-hover: color-mix(in oklab, var(--workbench-text) 28%, transparent);
 }
 
 /*
@@ -758,7 +758,7 @@
 
 .workbenchShell[data-standalone='true'] {
   /* Space was wasted with a drag-only stripe; draggable regions live on top chrome rows instead. */
-  padding-top: 2px;
+  padding-top: 0;
   box-sizing: border-box;
   /*
    * Default --workbench-border is ~9% alpha on light chrome and reads as invisible.
@@ -779,6 +779,10 @@
 /* macOS hiddenInset: avoid the traffic lights only in the top-left chrome zone. */
 .workbenchShell[data-standalone='true'][data-mac-title-inset='true'] .leftToolRailColumn {
   padding-top: 36px;
+}
+
+.workbenchShell[data-standalone='true'][data-mac-title-inset='true'] .filePanelProjectHeader {
+  padding-left: 48px;
 }
 
 .workbenchShell[data-standalone='true'][data-mac-title-inset='true'] .filePanel .panelHeader,

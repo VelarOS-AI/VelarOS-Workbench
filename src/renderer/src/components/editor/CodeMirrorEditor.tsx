@@ -1134,6 +1134,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
     const lintCompartment = useMemo(() => new Compartment(), [])
     const packageScriptRunCompartment = useMemo(() => new Compartment(), [])
     const autocompleteThemeCompartment = useMemo(() => new Compartment(), [])
+    const languageHoverCompartment = useMemo(() => new Compartment(), [])
     const languageServiceCompartment = useMemo(() => new Compartment(), [])
     const syntaxThemeCompartment = useMemo(() => new Compartment(), [])
     const progressiveLoadTimers = useTimerScope('WorkbenchEditorProgressiveLoad')
@@ -1298,52 +1299,68 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       return getIdentifierAt(view.state, view.state.selection.main.head)
     }
 
-    const languageServiceExtensions = useMemo(() => {
-      const languageServiceContext = {
+    const languageServiceContext = useMemo(
+      () => ({
         projectRoot,
         path,
         language,
         getOpenTabs: () => openTabsLatest.current,
         hostRuntime,
-      }
+      }),
+      [hostRuntime, language, openTabsLatest, path, projectRoot]
+    )
+
+    const semanticLanguageService = path && usesWorkbenchSemanticLanguageService(path)
+
+    const languageServiceHoverExtension = useMemo(
+      () => createWorkbenchLanguageServiceHoverTooltip(
+        languageServiceContext,
+        workbenchEditorLanguageFeatureClasses,
+        semanticLanguageService ? undefined : (view, position) => {
+          const diagnosticRange = collectDiagnosticsAtPosition(view, position)
+          const word = getIdentifierAt(view.state, position)
+          const target = !word
+            ? null
+            : findWorkbenchDefinitionTarget({
+                word: word.text,
+                path: pathRef.current,
+                projectContextIndex: projectContextIndexRef.current,
+              })
+          if (!diagnosticRange && (!word || !target)) return null
+
+          return {
+            pos: diagnosticRange?.from ?? word!.from,
+            end: diagnosticRange?.to ?? word!.to,
+            above: true,
+            create: () => ({
+              dom: buildWorkbenchEditorHoverDom(
+                {
+                  diagnostics: diagnosticRange?.diagnostics,
+                  symbolFallback:
+                    word && target
+                      ? {
+                          word: word.text,
+                          path: target.path,
+                          line: target.line,
+                          column: target.column,
+                        }
+                      : null,
+                },
+                workbenchEditorLanguageFeatureClasses
+              ),
+            }),
+          }
+        }
+      ),
+      [languageServiceContext, pathRef, projectContextIndexRef, semanticLanguageService]
+    )
+
+    const languageServiceExtensions = useMemo(() => {
 
       let syncedInlayHintOpenFiles: Nullable<Map<string, string>> = null
 
       return [
-        createWorkbenchLanguageServiceHoverTooltip(
-          languageServiceContext,
-          workbenchEditorLanguageFeatureClasses,
-          (view, position) => {
-            const diagnosticRange = collectDiagnosticsAtPosition(view, position)
-            const word = getIdentifierAt(view.state, position)
-            const target = getDefinitionTarget(word)
-            if (!diagnosticRange && (!word || !target)) return null
-
-            return {
-              pos: diagnosticRange?.from ?? word!.from,
-              end: diagnosticRange?.to ?? word!.to,
-              above: true,
-              create: () => ({
-                dom: buildWorkbenchEditorHoverDom(
-                  {
-                    diagnostics: diagnosticRange?.diagnostics,
-                    symbolFallback:
-                      word && target
-                        ? {
-                            word: word.text,
-                            path: target.path,
-                            line: target.line,
-                            column: target.column,
-                          }
-                        : null,
-                  },
-                  workbenchEditorLanguageFeatureClasses
-                ),
-              }),
-            }
-          }
-        ),
-        path && usesWorkbenchExternalSemanticLanguageService(path)
+        semanticLanguageService
           ? [
               createWorkbenchSemanticTokensExtension({
                 request: async (content) => {
@@ -1420,7 +1437,16 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
           },
         }),
       ]
-    }, [hostRuntime, language, openTabsLatest, path, projectRoot, workbenchTheme])
+    }, [
+      hostRuntime,
+      language,
+      languageServiceContext,
+      openTabsLatest,
+      path,
+      projectRoot,
+      semanticLanguageService,
+      workbenchTheme,
+    ])
 
     const runCurrentFile = (): void => {
       const currentPath = pathRef.current
@@ -2041,6 +2067,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
           workbenchIndentGuideExtension,
           workbenchCommentExtension,
           mouseHandlers,
+          languageHoverCompartment.of(languageServiceHoverExtension),
           languageServiceCompartment.of([]),
           packageScriptRunCompartment.of(packageScriptRunExtension),
           updateListener,
@@ -2079,6 +2106,12 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         viewRef.current = null
       }
     }, [])
+
+    useEffect(() => {
+      viewRef.current?.dispatch({
+        effects: languageHoverCompartment.reconfigure(languageServiceHoverExtension),
+      })
+    }, [languageHoverCompartment, languageServiceHoverExtension])
 
     useEffect(() => {
       const view = viewRef.current

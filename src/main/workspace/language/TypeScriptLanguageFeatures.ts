@@ -13,6 +13,7 @@ import type {
   WorkbenchLanguageServiceOffsetRange,
   WorkbenchLanguageServicePosition,
   WorkbenchLanguageServiceRange,
+  WorkbenchLanguageServiceSemanticToken,
   WorkbenchLanguageServiceSignatureHelpResult,
   WorkbenchLanguageServiceTextEdit,
 } from '@shared/contracts'
@@ -47,6 +48,30 @@ const DISPLAY_PART_KINDS: readonly WorkbenchLanguageServiceDisplayPartKind[] = [
 const DISPLAY_PART_KIND_SET = new Set<string>(DISPLAY_PART_KINDS)
 const MAX_WORKBENCH_INFERRED_TYPE_HINT_LENGTH = 56
 const MAX_WORKBENCH_INFERRED_TYPE_GENERIC_DEPTH = 2
+
+const TYPESCRIPT_SEMANTIC_TOKEN_TYPES = [
+  'class',
+  'enum',
+  'interface',
+  'namespace',
+  'typeParameter',
+  'type',
+  'parameter',
+  'variable',
+  'enumMember',
+  'property',
+  'function',
+  'method',
+] as const
+
+const TYPESCRIPT_SEMANTIC_TOKEN_MODIFIERS = [
+  'declaration',
+  'static',
+  'async',
+  'readonly',
+  'defaultLibrary',
+  'local',
+] as const
 
 export function shouldDisplayWorkbenchInferredTypeHint(text: string): boolean {
   const inferredType = text.replace(/^:\s*/u, '').trim()
@@ -252,6 +277,48 @@ export function buildTypeScriptHoverResult({
     documentationParts: documentationParts.length > 0 ? documentationParts : undefined,
     tags: quickInfo.tags?.map((tag) => displayPartsToText(tag.text)) ?? [],
   }
+}
+
+/**
+ * Decodes TypeScript's 2020 semantic-classification format into the same
+ * language-neutral token contract used by LSP-backed languages.
+ */
+export function buildTypeScriptSemanticTokens({
+  service,
+  fileName,
+  content,
+}: {
+  service: ts.LanguageService
+  fileName: string
+  content: string
+}): WorkbenchLanguageServiceSemanticToken[] {
+  const encoded = service.getEncodedSemanticClassifications(
+    fileName,
+    { start: 0, length: content.length },
+    ts.SemanticClassificationFormat.TwentyTwenty
+  ).spans
+  if (encoded.length % 3 !== 0) return []
+
+  const tokens: WorkbenchLanguageServiceSemanticToken[] = []
+  for (let index = 0; index < encoded.length && tokens.length < 10_000; index += 3) {
+    const start = encoded[index]!
+    const length = encoded[index + 1]!
+    const classification = encoded[index + 2]!
+    const typeIndex = (classification >> 8) - 1
+    const type = TYPESCRIPT_SEMANTIC_TOKEN_TYPES[typeIndex]
+    if (!type || start < 0 || length <= 0 || start + length > content.length) continue
+    const range = rangeFromTextSpan(content, fileName, { start, length })
+    if (!range) continue
+    const modifierBits = classification & 0xff
+    tokens.push({
+      range,
+      type,
+      modifiers: TYPESCRIPT_SEMANTIC_TOKEN_MODIFIERS.filter(
+        (_modifier, modifierIndex) => (modifierBits & (1 << modifierIndex)) !== 0
+      ),
+    })
+  }
+  return tokens
 }
 
 export function buildTypeScriptReferences({

@@ -79,6 +79,7 @@ import {
   buildTypeScriptHoverResult,
   buildTypeScriptInlayHints,
   buildTypeScriptReferences,
+  buildTypeScriptSemanticTokens,
   buildTypeScriptSignatureHelp,
   isTypeScriptDeprecatedDiagnostic,
 } from './TypeScriptLanguageFeatures'
@@ -108,10 +109,39 @@ function textFromLspContent(value: unknown): string {
   if (Array.isArray(value)) return value.map(textFromLspContent).filter(Boolean).join('\n\n')
   if (typeof value !== 'object' || value === null) return ''
   const content = value as Record<string, unknown>
-  if (typeof content['value'] === 'string') return content['value']
   if (typeof content['language'] === 'string' && typeof content['value'] === 'string')
     return `\`\`\`${content['language']}\n${content['value']}\n\`\`\``
+  if (typeof content['value'] === 'string') return content['value']
   return ''
+}
+
+function cleanHoverMarkdown(value: string): string {
+  return value
+    .replace(/\x5b([^\x5d]+)\x5d\([^\s)]+\)/gu, '$1')
+    .replace(/\*\*([^*]+)\*\*/gu, '$1')
+    .replace(/`([^`]+)`/gu, '$1')
+    .trim()
+}
+
+export function buildExternalHoverResult(contents: unknown): Nullable<WorkbenchLanguageServiceHoverResult> {
+  const text = textFromLspContent(contents).trim()
+  if (!text) return null
+
+  const codeAndDocumentation = text.match(
+    /^(?:```[^\n]*\n([\s\S]*?)\n```|``([\s\S]*?)``|`([^`\n]+)`)(?:\s*\n\s*\n([\s\S]*))?$/u
+  )
+  if (!codeAndDocumentation) return { displayText: cleanHoverMarkdown(text) }
+
+  const displayText = (codeAndDocumentation[1]
+    ?? codeAndDocumentation[2]
+    ?? codeAndDocumentation[3]
+    ?? '').trim()
+  const documentation = cleanHoverMarkdown(codeAndDocumentation[4] ?? '')
+  if (!displayText && !documentation) return null
+  return {
+    displayText: displayText || documentation,
+    documentation: displayText && documentation ? documentation : undefined,
+  }
 }
 
 function mapExternalCompletionKind(kind: number | undefined): string | undefined {
@@ -435,8 +465,15 @@ class WorkbenchLanguageServices {
     hover: Nullable<WorkbenchLanguageServiceHoverResult>
   }> {
     const resolved = await this.resolveLanguageService(request)
+    const descriptor = resolveBuiltinWorkbenchLanguageService(this.resolveToken(request))
     if (this.isExternalRuntime(resolved.service?.runtime)) {
       const external = await this.prepareExternal(request, resolved.projectRoot)
+      if (this.isSuppressedHoverWord(
+        external.content,
+        request.position,
+        descriptor?.hover?.suppressWords
+      ))
+        return { projectRoot: resolved.projectRoot, path: request.path, hover: null }
       const hover = await external.client.hover(
         external.absolutePath,
         external.content,
@@ -445,7 +482,7 @@ class WorkbenchLanguageServices {
       return {
         projectRoot: resolved.projectRoot,
         path: request.path,
-        hover: hover ? { displayText: textFromLspContent(hover.contents) } : null,
+        hover: hover ? buildExternalHoverResult(hover.contents) : null,
       }
     }
     if (resolved.service?.runtime !== 'typescript-language-service')
@@ -729,6 +766,19 @@ class WorkbenchLanguageServices {
     request: WorkbenchLanguageServiceRequest
   ): Promise<WorkbenchLanguageServiceSemanticTokensResult> {
     const resolved = await this.resolveLanguageService(request)
+    if (resolved.service?.runtime === 'typescript-language-service') {
+      const snapshot = await this.createTypeScriptProjectSnapshot(request)
+      const content = snapshot.files.get(snapshot.requestAbsolutePath) ?? ''
+      return {
+        projectRoot: snapshot.projectRoot,
+        path: snapshot.requestPath,
+        tokens: buildTypeScriptSemanticTokens({
+          service: snapshot.service,
+          fileName: snapshot.requestAbsolutePath,
+          content,
+        }),
+      }
+    }
     if (!this.isExternalRuntime(resolved.service?.runtime))
       return { projectRoot: resolved.projectRoot, path: request.path, tokens: [] }
     const external = await this.prepareExternal(request, resolved.projectRoot)
@@ -804,6 +854,7 @@ class WorkbenchLanguageServices {
         'document-symbols',
         'document-highlights',
         'inlay-hints',
+        'semantic-tokens',
       ]
 
     if (service.runtime === 'lsp-server')
@@ -851,14 +902,14 @@ class WorkbenchLanguageServices {
     request: WorkbenchLanguageServiceRequest,
     projectRoot: string
   ): Promise<{
-    client: ReturnType<ExternalLspManager['client']>
+    client: Awaited<ReturnType<ExternalLspManager['client']>>
     absolutePath: string
     content: string
   }> {
     const descriptor = resolveBuiltinWorkbenchLanguageService(this.resolveToken(request))
     if (!descriptor || !this.isExternalRuntime(descriptor.runtime))
       throw new Error(`Unsupported external language service for ${request.path}`)
-    const client = this.externalLsp.client(projectRoot, descriptor)
+    const client = await this.externalLsp.client(projectRoot, descriptor)
     for (const openFile of request.openFiles ?? []) {
       const absoluteOpenPath = this.resolveAbsoluteProjectPath(projectRoot, openFile.path)
       if (!client.accepts(absoluteOpenPath)) continue
@@ -1078,6 +1129,15 @@ class WorkbenchLanguageServices {
       const type = value.tokenTypes[typeIndex]
       const text = lines[line]
       if (!type || !text || length <= 0 || character < 0 || character + length > text.length) continue
+      const tokenText = text.slice(character, character + length)
+      const afterToken = text.slice(character + length)
+      const correctedType = type === 'variable' && /^\s*\(/u.test(afterToken)
+        ? 'function'
+        : type === 'property' && /^\s*\(/u.test(afterToken)
+          ? 'method'
+          : type === 'variable' && /^[A-Z]/u.test(tokenText)
+            ? 'type'
+            : type
       output.push({
         range: {
           startLine: line + 1,
@@ -1085,7 +1145,7 @@ class WorkbenchLanguageServices {
           endLine: line + 1,
           endColumn: character + length + 1,
         },
-        type,
+        type: correctedType,
         modifiers: value.tokenModifiers.filter((_modifier, modifierIndex) => (modifierBits & (1 << modifierIndex)) !== 0),
       })
     }
@@ -1304,6 +1364,20 @@ class WorkbenchLanguageServices {
     const lineIndex = Math.min(Math.max(0, position.line - 1), Math.max(0, lines.length - 1))
     const lineOffset = lines.slice(0, lineIndex).reduce((sum, line) => sum + line.length + 1, 0)
     return Math.min(lineOffset + Math.max(0, position.column - 1), content.length)
+  }
+
+  private isSuppressedHoverWord(
+    content: string,
+    position: WorkbenchLanguageServicePosition,
+    suppressedWords: readonly string[] | undefined
+  ): boolean {
+    if (!suppressedWords?.length) return false
+    const offset = this.offsetFromPosition(content, position)
+    let start = offset
+    let end = offset
+    while (start > 0 && /[\w$]/u.test(content[start - 1]!)) start -= 1
+    while (end < content.length && /[\w$]/u.test(content[end]!)) end += 1
+    return start < end && suppressedWords.includes(content.slice(start, end))
   }
 
   private rangeFromTextSpan(

@@ -12,13 +12,11 @@ import {
   ArrowClockwiseIcon,
   CopyIcon,
   FilePlusIcon,
+  FolderOpenIcon,
   FolderPlusIcon,
-  GitBranchIcon,
   MagnifyingGlassIcon,
   PencilSimpleIcon,
-  SpinnerGapIcon,
   TrashIcon,
-  XIcon,
 } from '@phosphor-icons/react'
 import { useWorkbenchI18n } from '@renderer/i18n'
 import type { WorkbenchContentSearchMatch } from '@renderer/models/files/workbenchContentSearchModel'
@@ -30,14 +28,12 @@ import {
 import { getWorkbenchFileTreeShortcutAction } from '@renderer/models/files/workbenchTreeMutation'
 import type { WorkbenchGitDecorationMap } from '@renderer/models/git/workbenchGitModel'
 import type { WorkbenchProject } from '@renderer/models/project/workbenchProjects'
-import { ROOT_PATH } from '@renderer/models/shared/workbenchUtils'
+import { getParentPath, ROOT_PATH } from '@renderer/models/shared/workbenchUtils'
 
 import { toNullable } from '@velaros-ai/core'
 import { currentSystemPlatform as systemPlatformCompatibility } from '@velaros-ai/system/platform-compatibility'
-import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 import { Paragraph } from '@velaros-ai/ui/primitives/display/Paragraph'
-import { Text } from '@velaros-ai/ui/primitives/display/Text'
 import { Input } from '@velaros-ai/ui/primitives/forms/Input'
 import { ScrollArea } from '@velaros-ai/ui/primitives/layout/ScrollArea'
 
@@ -52,11 +48,7 @@ import { requestScrollIntoView } from '../../support/scrollUtils'
 import { WorkbenchContextMenu } from '../chrome/WorkbenchContextMenu'
 
 import { FileSearchResults } from './FileSearchResults'
-import {
-  deleteSelectedTreeEntries,
-  FileTree,
-  type FileTreeApi,
-} from './FileTree'
+import { createTreeEntry, deleteSelectedTreeEntries, FileTree, type FileTreeApi } from './FileTree'
 
 export interface WorkbenchFilePanelTreeProps {
   project: WorkbenchProject
@@ -171,13 +163,11 @@ export function FilePanel({
     onSearchQueryChange,
     onResetSearch,
     onRefreshProject,
-    onCloseProject,
     onOpenSearchEntry,
     onOpenContentSearchMatch,
     onSetDirectoryOpen,
     onSelectFile,
   },
-  git,
 }: FilePanelProps): ReactElement {
   const { t } = useWorkbenchI18n()
   const filePanelRef = useRef<HTMLElement>(null)
@@ -192,7 +182,6 @@ export function FilePanel({
     }>
   >(null)
   const [activeSearchResultIndex, setActiveSearchResultIndex] = useState(0)
-  const [initializingRepository, setInitializingRepository] = useState(false)
   const searchEntries = searchResult?.entries ?? []
   const rootTreeEntry = useMemo(
     () =>
@@ -206,19 +195,11 @@ export function FilePanel({
       }) satisfies WorkbenchDirectoryEntry,
     [project.name]
   )
-  const treeRootEntries = useMemo(() => [rootTreeEntry], [rootTreeEntry])
-  const treeChildrenByPath = useMemo(() => {
-    const next = new Map(childrenByPath)
-    next.set(ROOT_PATH, rootEntries)
-    return next
-  }, [childrenByPath, rootEntries])
   const searchNavigationItems = useMemo(
     () => buildWorkbenchFileSearchNavigationItems(searchEntries, contentSearchMatches),
     [contentSearchMatches, searchEntries]
   )
   const activeSearchResultId = toNullable(searchNavigationItems[activeSearchResultIndex]?.id)
-  const gitControlReady =
-    !!git?.hasRepository && !!git.summary?.repository && !!git.summary.status?.branch
 
   const handleTreeApiChange = useCallback((api: Nullable<FileTreeApi>): void => {
     treeApiRef.current = api || null
@@ -306,9 +287,24 @@ export function FilePanel({
     })
   }
 
-  function clearSearchInput(): void {
-    setActiveSearchResultIndex(0)
-    onResetSearch()
+  function createEntryFromContext(type: WorkbenchDirectoryEntry['type']): void {
+    const treeApi = treeApiRef.current
+    if (!treeApi || !contextMenu) return
+
+    const parentPath =
+      contextMenu.entry.type === 'directory'
+        ? contextMenu.entry.path
+        : getParentPath(contextMenu.entry.path)
+
+    if (parentPath === ROOT_PATH) {
+      createTreeEntry(treeApi, type)
+      return
+    }
+
+    void treeApi.create({
+      type: type === 'directory' ? 'internal' : 'leaf',
+      parentId: parentPath,
+    })
   }
 
   function scrollSearchResultIntoView(id: string): void {
@@ -364,73 +360,28 @@ export function FilePanel({
     }
   }
 
-  async function handleInitializeRepository(): Promise<void> {
-    if (!git || initializingRepository) return
-
-    setInitializingRepository(true)
-    try {
-      await git.onInitializeRepository()
-    } finally {
-      setInitializingRepository(false)
-    }
-  }
-
   return (
     <aside ref={filePanelRef} className={styles.filePanel}>
-      <div className={styles.panelHeader}>
-        {git ? (
-          <div className={styles.filePanelGitControl}>
-            {gitControlReady ? (
-              /* 片4 复活 WorkspaceGitCommitControl 前的降级投影：只读分支名。 */
-              <span className={styles.filePanelGitPlaceholder}>
-                <GitBranchIcon size={13} />
-                <Text truncate>{git.summary?.status?.branch}</Text>
-              </span>
-            ) : git.hasRepository ? (
-              <span className={styles.filePanelGitPlaceholder}>{t('workbench.gitLoading')}</span>
-            ) : (
-              <Button
-                variant="ghost"
-                size="sm"
-                className={styles.filePanelGitInitializeButton}
-                disabled={initializingRepository}
-                onClick={() => void handleInitializeRepository()}
-              >
-                {initializingRepository ? (
-                  <SpinnerGapIcon size={13} className={styles.spinIcon} />
-                ) : (
-                  <GitBranchIcon size={13} />
-                )}
-                <Text truncate>{t('workbench.gitInitializeRepository')}</Text>
-              </Button>
-            )}
-          </div>
-        ) : (
-          <div className={styles.panelTitleGroup} />
-        )}
-        <div className={styles.filePanelHeaderActions}>
-          <IconButton
-            variant="ghost"
-            size="icon-sm"
-            label={t('workbench.searchFiles')}
-            title={`${t('workbench.searchFiles')} · ${t('workbench.searchFilesHint')}`}
-            data-active={isSearchVisible}
-            onClick={toggleSearch}
-          >
-            <MagnifyingGlassIcon size={15} />
-          </IconButton>
-          {!!onCloseProject && (
-            <IconButton
-              variant="ghost"
-              size="icon-sm"
-              label={t('workbench.closeProject')}
-              title={t('workbench.closeProject')}
-              onClick={onCloseProject}
-            >
-              <XIcon size={15} />
-            </IconButton>
-          )}
+      <div
+        className={styles.filePanelProjectHeader}
+        title={project.rootPath}
+        onContextMenu={openRootContextMenu}
+      >
+        <div className={styles.filePanelProjectIdentity}>
+          <FolderOpenIcon size={15} weight="duotone" />
+          <span>{project.name}</span>
         </div>
+        <IconButton
+          variant="ghost"
+          size="icon-sm"
+          className={styles.filePanelProjectAction}
+          title={t('workbench.searchFiles')}
+          label={t('workbench.searchFiles')}
+          data-active={isSearchVisible || undefined}
+          onClick={toggleSearch}
+        >
+          <MagnifyingGlassIcon size={14} />
+        </IconButton>
       </div>
       {isSearchVisible && (
         <div className={styles.searchBar}>
@@ -448,19 +399,6 @@ export function FilePanel({
               }}
               onKeyDown={handleSearchInputKeyDown}
             />
-            {!!searchQuery && (
-              <IconButton
-                variant="ghost"
-                size="icon-xs"
-                className={styles.searchInputClearButton}
-                label={t('workbench.clearSearch')}
-                title={t('workbench.clearSearch')}
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={clearSearchInput}
-              >
-                <XIcon size={12} />
-              </IconButton>
-            )}
           </div>
         </div>
       )}
@@ -489,10 +427,10 @@ export function FilePanel({
           ) : (
             <>
               <FileTree
-                entries={treeRootEntries}
+                entries={rootEntries}
                 selectedPath={selectedEntryPath}
                 expandedPaths={expandedPaths}
-                childrenByPath={treeChildrenByPath}
+                childrenByPath={childrenByPath}
                 gitDecorations={gitDecorations}
                 searchTerm={!searchActive && isSearchVisible ? normalizedSearchQuery : ''}
                 isMutatingTree={isMutatingTree}
@@ -528,32 +466,14 @@ export function FilePanel({
               label: t('workbench.createFile'),
               icon: <FilePlusIcon size={14} />,
               disabled: isMutatingTree,
-              onSelect: () => {
-                const treeApi = treeApiRef.current
-                void treeApi?.create({
-                  type: 'leaf',
-                  parentId:
-                    contextMenu.entry.type === 'directory'
-                      ? contextMenu.entry.path
-                      : (treeApi?.get(contextMenu.entry.path)?.parent?.id ?? ROOT_PATH),
-                })
-              },
+              onSelect: () => createEntryFromContext('file'),
             },
             {
               id: 'create-directory',
               label: t('workbench.createDirectory'),
               icon: <FolderPlusIcon size={14} />,
               disabled: isMutatingTree,
-              onSelect: () => {
-                const treeApi = treeApiRef.current
-                void treeApi?.create({
-                  type: 'internal',
-                  parentId:
-                    contextMenu.entry.type === 'directory'
-                      ? contextMenu.entry.path
-                      : (treeApi?.get(contextMenu.entry.path)?.parent?.id ?? ROOT_PATH),
-                })
-              },
+              onSelect: () => createEntryFromContext('directory'),
             },
             {
               id: 'search-project',

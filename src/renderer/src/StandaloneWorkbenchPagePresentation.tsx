@@ -10,6 +10,7 @@ import {
   ChatCircleTextIcon,
   FolderIcon,
   GitBranchIcon,
+  GitCommitIcon,
   PlayIcon,
   TerminalWindowIcon,
   WarningCircleIcon,
@@ -94,6 +95,15 @@ export function StandaloneWorkbenchPagePresentation(): ReactElement {
   const editorChrome = buildStandaloneWorkbenchEditorChrome(model)
   const embeddedKernelModel = buildStandaloneWorkbenchEmbeddedKernelModel(model, editorChrome)
 
+  function toggleLeftTool(tool: 'commit' | 'project'): void {
+    if (surface.activeLeftTool === tool) {
+      surface.toggleFilePanel()
+      return
+    }
+    surface.setActiveLeftTool(tool)
+    if (!surface.isFilePanelOpen) surface.toggleFilePanel()
+  }
+
   return (
     <main className={styles.root}>
       <div
@@ -124,10 +134,21 @@ export function StandaloneWorkbenchPagePresentation(): ReactElement {
                   className={styles.leftToolButton}
                   title={t('workbench.projectView')}
                   label={t('workbench.projectView')}
-                  data-active={surface.activeLeftTool === 'project'}
-                  onClick={() => surface.setActiveLeftTool('project')}
+                  data-active={surface.isFilePanelOpen && surface.activeLeftTool === 'project'}
+                  onClick={() => toggleLeftTool('project')}
                 >
                   <FolderIcon size={18} weight="duotone" />
+                </IconButton>
+                <IconButton
+                  variant="ghost"
+                  size="icon-sm"
+                  className={styles.leftToolButton}
+                  title={t('workbench.commitToolWindow')}
+                  label={t('workbench.commitToolWindow')}
+                  data-active={surface.isFilePanelOpen && surface.activeLeftTool === 'commit'}
+                  onClick={() => toggleLeftTool('commit')}
+                >
+                  <GitCommitIcon size={18} />
                 </IconButton>
               </div>
               <div className={styles.leftToolRailBottom}>
@@ -152,10 +173,10 @@ export function StandaloneWorkbenchPagePresentation(): ReactElement {
           </aside>
           <WorkbenchEmbeddedKernel
             model={embeddedKernelModel}
-            leftMode="files"
+            leftMode={surface.activeLeftTool === 'commit' ? 'changes' : 'files'}
             embeddedChrome={{
               filePanelWidth: layout.filePaneWidth,
-              isFilePanelOpen: true,
+              isFilePanelOpen: surface.isFilePanelOpen,
               isFilePanelInline: true,
               onFilePanelResizePointerDown: (event) => layout.beginResizePane('file', event),
             }}
@@ -236,14 +257,9 @@ export function StandaloneWorkbenchPagePresentation(): ReactElement {
                 <WorkbenchGitToolPanel
                   workspaceRoot={workbench.activeProject.rootPath}
                   summary={model.gitState.summary}
-                  changeItems={model.gitState.changeItems}
                   isLoading={model.gitState.isLoading}
                   error={model.gitState.error}
-                  hasUnsavedOpenTabs={workbench.hasUnsavedOpenTabs}
-                  onRefresh={model.actions.refreshGitPanel}
                   onInitialize={model.actions.initializeRepository}
-                  onOpenDiff={editorNavigation.openDiff}
-                  onRepositoryChanged={model.actions.handleRepositoryChanged}
                 />
               }
               problemsPanel={

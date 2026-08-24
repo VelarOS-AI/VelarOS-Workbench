@@ -1,3 +1,5 @@
+@reference "../index.css";
+
 .workbenchTopToolbar {
   @apply flex shrink-0 items-center justify-between gap-3 border-b;
   min-height: 36px;

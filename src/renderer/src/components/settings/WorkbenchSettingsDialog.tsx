@@ -37,6 +37,10 @@ import {
   type WorkbenchPreferences,
   type WorkbenchThemeId,
 } from '@renderer/models/settings/workbenchPreferences'
+import {
+  updateStandaloneWorkbenchModelConfig,
+  useStandaloneWorkbenchModelConfig,
+} from '@renderer/runtime/standaloneWorkbenchModelConfig'
 
 import { Result } from '@velaros-ai/core/result'
 import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
@@ -65,6 +69,7 @@ type WorkbenchSettingsSectionId =
   | 'project'
   | 'appearance'
   | 'editor'
+  | 'model'
   | 'ai-rules'
   | 'keymap'
   | 'language'
@@ -176,6 +181,7 @@ export function WorkbenchSettingsDialog({
 }: WorkbenchSettingsDialogProps): Nullable<ReactElement> {
   const { t } = useWorkbenchI18n()
   const hostRuntime = useWorkbenchHostRuntime()
+  const modelConfig = useStandaloneWorkbenchModelConfig()
   const timers = useTimerScope('WorkbenchSettingsDialog')
   const [activeSection, setActiveSection] = useState<WorkbenchSettingsSectionId>('project')
   const [capturingAction, setCapturingAction] =
@@ -204,6 +210,11 @@ export function WorkbenchSettingsDialog({
         id: 'editor' as const,
         label: t('workbench.settingsEditor'),
         description: t('workbench.settingsEditorDescription'),
+      },
+      {
+        id: 'model' as const,
+        label: t('workbench.settingsModel'),
+        description: t('workbench.settingsModelDescription'),
       },
       {
         id: 'ai-rules' as const,
@@ -595,6 +606,61 @@ export function WorkbenchSettingsDialog({
     )
   }
 
+  function renderModelSection(): ReactElement {
+    return (
+      <div className={styles.workbenchSettingsSectionPanel}>
+        <SettingRow
+          title={t('workbench.settingsModelProvider')}
+          description={t('workbench.settingsModelProviderDescription')}
+        >
+          <Input
+            size="sm"
+            value={modelConfig.provider}
+            placeholder="openai"
+            onChange={(event) =>
+              updateStandaloneWorkbenchModelConfig({ provider: event.currentTarget.value })
+            }
+          />
+        </SettingRow>
+        <SettingRow title={t('workbench.settingsModelName')}>
+          <Input
+            size="sm"
+            value={modelConfig.model}
+            placeholder="gpt-4.1"
+            onChange={(event) =>
+              updateStandaloneWorkbenchModelConfig({ model: event.currentTarget.value })
+            }
+          />
+        </SettingRow>
+        <SettingRow title={t('workbench.settingsModelBaseUrl')}>
+          <Input
+            size="sm"
+            value={modelConfig.baseURL}
+            placeholder="https://api.openai.com/v1"
+            onChange={(event) =>
+              updateStandaloneWorkbenchModelConfig({ baseURL: event.currentTarget.value })
+            }
+          />
+        </SettingRow>
+        <SettingRow
+          title={t('workbench.settingsModelApiKey')}
+          description={t('workbench.settingsModelApiKeyDescription')}
+        >
+          <Input
+            size="sm"
+            type="password"
+            autoComplete="off"
+            value={modelConfig.apiKey}
+            placeholder={t('workbench.settingsModelApiKeyPlaceholder')}
+            onChange={(event) =>
+              updateStandaloneWorkbenchModelConfig({ apiKey: event.currentTarget.value })
+            }
+          />
+        </SettingRow>
+      </div>
+    )
+  }
+
   function renderKeymapSection(): ReactElement {
     return (
       <div className={styles.workbenchSettingsSectionPanel}>
@@ -870,6 +936,9 @@ export function WorkbenchSettingsDialog({
       }
       case 'editor': {
         return renderEditorSection()
+      }
+      case 'model': {
+        return renderModelSection()
       }
       case 'ai-rules': {
         return renderAiRulesSection()

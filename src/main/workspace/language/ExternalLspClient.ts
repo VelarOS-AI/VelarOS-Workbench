@@ -1,5 +1,5 @@
 import { type ChildProcessWithoutNullStreams,spawn } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { existsSync, realpathSync, statSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { delimiter, dirname, isAbsolute, join } from 'node:path'
 
@@ -170,6 +170,16 @@ const SupportedSemanticTokenModifiers = [
   'declaration', 'definition', 'readonly', 'static', 'deprecated', 'abstract', 'async',
   'modification', 'documentation', 'defaultLibrary',
 ]
+const ExternalLspDependencyFileNames = [
+  'velar.json',
+  'package.json',
+  'bun.lock',
+  'bun.lockb',
+  'package-lock.json',
+  'pnpm-lock.yaml',
+  'yarn.lock',
+  join('node_modules', '.package-lock.json'),
+] as const
 const require = createRequire(import.meta.url)
 
 function objectValue(value: unknown): Record<string, unknown> | null {
@@ -232,6 +242,65 @@ function executableExists(command: string, pathValue: string): boolean {
   return pathValue.split(delimiter).some((directory) =>
     extensions.some((extension) => existsSync(join(directory, `${command}${extension}`)))
   )
+}
+
+function resolvedExecutablePath(command: string, pathValue: string): string {
+  if (isAbsolute(command) || command.includes('/') || command.includes('\\')) return command
+  const extensions = process.platform === 'win32'
+    ? (process.env['PATHEXT'] ?? '.COM;.EXE;.BAT;.CMD').split(';')
+    : ['']
+  for (const directory of pathValue.split(delimiter)) {
+    for (const extension of extensions) {
+      const candidate = join(directory, `${command}${extension}`)
+      if (existsSync(candidate)) return candidate
+    }
+  }
+  return command
+}
+
+function fileIdentity(path: string): string {
+  try {
+    const canonical = realpathSync(path)
+    const value = statSync(canonical)
+    return `${path}:${canonical}:${value.dev}:${value.ino}:${value.size}:${value.mtimeMs}`
+  } catch {
+    return `${path}:missing`
+  }
+}
+
+/**
+ * A bounded identity for the executable plus project dependency metadata that
+ * can change which compiler/extensions an external language server loads.
+ * This intentionally fingerprints metadata, not dependency source trees.
+ */
+export function externalLspRuntimeFingerprint(
+  projectRoot: string,
+  descriptor: WorkbenchLanguageServiceDescriptor
+): string {
+  const launch = launchFor(projectRoot, descriptor)
+  const pathValue = extendPath(projectRoot)
+  const executable = resolvedExecutablePath(launch.command, pathValue)
+  const identities = [fileIdentity(executable)]
+  for (const argument of launch.args) {
+    if (isAbsolute(argument) || argument.includes('/') || argument.includes('\\'))
+      identities.push(fileIdentity(isAbsolute(argument) ? argument : join(projectRoot, argument)))
+  }
+
+  let current = projectRoot
+  while (true) {
+    for (const name of ExternalLspDependencyFileNames)
+      identities.push(fileIdentity(join(current, name)))
+    const parent = dirname(current)
+    if (parent === current) break
+    current = parent
+  }
+
+  return JSON.stringify({
+    command: launch.command,
+    args: launch.args,
+    electronRunAsNode: launch.electronRunAsNode,
+    identities,
+  })
 }
 
 function languageIdFor(descriptor: WorkbenchLanguageServiceDescriptor): string {
@@ -512,8 +581,17 @@ export class ExternalLspClient {
 
   private async initialize(): Promise<void> {
     if (this.initializePromise) return this.initializePromise
-    this.initializePromise = this.startAndInitialize()
-    return this.initializePromise
+    const attempt = this.startAndInitialize()
+    this.initializePromise = attempt
+    try {
+      await attempt
+    } catch (error) {
+      if (this.initializePromise === attempt) {
+        this.initializePromise = null
+        this.fail(error instanceof Error ? error : new Error(String(error)))
+      }
+      throw error
+    }
   }
 
   private async startAndInitialize(): Promise<void> {
@@ -547,9 +625,11 @@ export class ExternalLspClient {
     child.stderr.on('data', (chunk: Buffer) => {
       this.stderr = `${this.stderr}${chunk.toString('utf8')}`.slice(-4_000)
     })
-    child.on('error', (error) => this.fail(error))
+    child.on('error', (error) => {
+      if (this.process === child) this.fail(error)
+    })
     child.on('exit', (code, signal) => {
-      if (this.disposed) return
+      if (this.disposed || this.process !== child) return
       this.fail(new AppError(
         'INTERNAL',
         `${this.descriptor.label} 语言服务器已退出（${signal ?? code ?? 'unknown'}）。${this.stderr ? ` ${this.stderr.trim()}` : ''}`
@@ -702,6 +782,11 @@ export class ExternalLspClient {
   private fail(error: Error): void {
     const child = this.process
     this.process = null
+    this.initializePromise = null
+    this.serverCapabilities = {}
+    this.documents.clear()
+    this.diagnostics.clear()
+    this.buffer = Buffer.alloc(0)
     if (child && !child.killed) child.kill()
     for (const pending of this.pending.values()) {
       clearTimeout(pending.timeout)
@@ -730,32 +815,66 @@ function normalizeLocations(value: unknown): ExternalLspLocation[] {
 }
 
 export class ExternalLspManager {
-  private readonly clients = new Map<string, ExternalLspClient>()
+  private readonly clients = new Map<string, {
+    client: ExternalLspClient
+    fingerprint: string
+  }>()
+  private readonly refreshes = new Map<string, Promise<ExternalLspClient>>()
 
-  public client(projectRoot: string, descriptor: WorkbenchLanguageServiceDescriptor): ExternalLspClient {
+  public async client(
+    projectRoot: string,
+    descriptor: WorkbenchLanguageServiceDescriptor
+  ): Promise<ExternalLspClient> {
     const key = `${projectRoot}\0${descriptor.id}`
+    const fingerprint = externalLspRuntimeFingerprint(projectRoot, descriptor)
     const current = this.clients.get(key)
-    if (current) return current
-    const client = new ExternalLspClient(projectRoot, descriptor)
-    this.clients.set(key, client)
-    return client
+    if (current?.fingerprint === fingerprint) return current.client
+
+    const activeRefresh = this.refreshes.get(key)
+    if (activeRefresh) return activeRefresh
+
+    const refresh = (async (): Promise<ExternalLspClient> => {
+      if (current) {
+        this.clients.delete(key)
+        await current.client.dispose()
+      }
+      const client = new ExternalLspClient(projectRoot, descriptor)
+      this.clients.set(key, {
+        client,
+        fingerprint: externalLspRuntimeFingerprint(projectRoot, descriptor),
+      })
+      return client
+    })()
+    this.refreshes.set(key, refresh)
+    try {
+      return await refresh
+    } finally {
+      if (this.refreshes.get(key) === refresh) this.refreshes.delete(key)
+    }
   }
 
   public async save(projectRoot: string, path: string, content: string): Promise<void> {
     const clients = [...this.clients.entries()]
       .filter(([key]) => key.startsWith(`${projectRoot}\0`))
-      .map(([, client]) => client)
+      .map(([, managed]) => managed.client)
     await Promise.all(clients.filter((client) => client.accepts(path)).map((client) => client.save(path, content)))
   }
 
   public async invalidate(projectRoot: string): Promise<void> {
-    const entries = [...this.clients.entries()].filter(([key]) => key.startsWith(`${projectRoot}\0`))
+    const prefix = `${projectRoot}\0`
+    const activeRefreshes = [...this.refreshes.entries()]
+      .filter(([key]) => key.startsWith(prefix))
+      .map(([, refresh]) => refresh)
+    await Promise.allSettled(activeRefreshes)
+
+    const entries = [...this.clients.entries()].filter(([key]) => key.startsWith(prefix))
     for (const [key] of entries) this.clients.delete(key)
-    await Promise.all(entries.map(([, client]) => client.dispose()))
+    await Promise.all(entries.map(([, managed]) => managed.client.dispose()))
   }
 
   public async dispose(): Promise<void> {
-    const clients = [...this.clients.values()]
+    await Promise.allSettled(this.refreshes.values())
+    const clients = [...this.clients.values()].map((managed) => managed.client)
     this.clients.clear()
     await Promise.all(clients.map((client) => client.dispose()))
   }

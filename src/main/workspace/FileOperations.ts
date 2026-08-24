@@ -46,6 +46,7 @@ import type {
   WorkbenchRenameEntryRequest,
   WorkbenchRestoreDeletedEntryRequest,
   WorkbenchRestoreDeletedEntryResult,
+  WorkbenchRestoreMissingFileRequest,
   WorkbenchSaveFileRequest,
   WorkbenchSaveFileResult,
 } from '@shared/contracts'
@@ -93,6 +94,36 @@ class FileOperations {
 
   public async saveFile(request: WorkbenchSaveFileRequest): Promise<WorkbenchSaveFileResult> {
     return this.saveFileSync(request)
+  }
+
+  public async restoreMissingFile(
+    request: WorkbenchRestoreMissingFileRequest
+  ): Promise<WorkbenchSaveFileResult> {
+    const projectRoot = await this.pathResolver.resolveProjectRoot(request.projectRoot)
+    const relativePath = request.path.trim()
+    const name = basename(relativePath)
+    if (!relativePath || name === '.' || name === '..') {
+      throw new AppError('VALIDATION', '恢复文件路径无效。')
+    }
+
+    const parent = await this.pathResolver.resolveInsideProject(projectRoot, dirname(relativePath))
+    const parentStats = await stat(parent.realPath)
+    const parentLinkStats = await lstat(parent.requestedPath)
+    if (!parentStats.isDirectory() || parentLinkStats.isSymbolicLink()) {
+      throw new AppError('VALIDATION', '恢复文件目标必须位于普通目录内。')
+    }
+
+    this.assertContentIsWritable(request.content)
+    const targetPath = this.pathResolver.resolveChildPath(projectRoot, parent.requestedPath, name)
+    return this.runWorkbenchMutation(async () => {
+      const existing = await lstat(targetPath).catch(() => null)
+      if (existing) throw new AppError('CONFLICT', '文件已经重新出现，请改用磁盘版本。')
+
+      await writeFile(targetPath, request.content, { flag: 'wx' })
+      await this.gitNewFileTracker.trackNewFiles(projectRoot, [targetPath])
+      const realPath = await this.pathResolver.resolveInsideProject(projectRoot, relativePath)
+      return this.readResolvedTextFile(projectRoot, realPath, MAX_READ_CHARS)
+    })
   }
 
   public saveFileSync(request: WorkbenchSaveFileRequest): WorkbenchSaveFileResult {

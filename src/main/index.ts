@@ -95,6 +95,7 @@ function createWorkbenchWindow(hub: WorkbenchProjectHub): BrowserWindow {
     height: WorkbenchWindowHeight,
     show: false,
     title: getWorkbenchWindowTitle(hub.getState().currentProject?.name ?? null),
+    ...(process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset' as const } : {}),
     webPreferences: {
       sandbox: false,
       // electron-vite 对 type:module 应用输出 ESM preload（.mjs）。

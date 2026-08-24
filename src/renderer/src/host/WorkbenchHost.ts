@@ -82,6 +82,7 @@ import type {
   WorkbenchReportAgentWorkspaceSignalsRequest,
   WorkbenchRestoreDeletedEntryRequest,
   WorkbenchRestoreDeletedEntryResult,
+  WorkbenchRestoreMissingFileRequest,
   WorkbenchRunCommandOutputEvent,
   WorkbenchRunCommandRequest,
   WorkbenchRunCommandResult,
@@ -144,6 +145,9 @@ export interface WorkbenchProjectKernelPort {
   restoreDeletedWorkbenchEntry(
     request: WorkbenchRestoreDeletedEntryRequest
   ): Promise<Result<WorkbenchRestoreDeletedEntryResult>>
+  restoreMissingWorkbenchFile(
+    request: WorkbenchRestoreMissingFileRequest
+  ): Promise<Result<WorkbenchSaveFileResult>>
   searchWorkbenchEntries(
     request: WorkbenchSearchEntriesRequest
   ): Promise<Result<WorkbenchSearchEntriesResult>>

@@ -6,7 +6,6 @@ import {
   useEffect,
   useRef,
   useState,
-  type WheelEvent,
 } from 'react'
 import {
   CaretDownIcon,
@@ -32,7 +31,6 @@ import type {
 import { isPresent } from '@velaros-ai/core'
 import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
-import { FileTypeIcon } from '@velaros-ai/ui/primitives/display/FileTypeIcon'
 import { Text } from '@velaros-ai/ui/primitives/display/Text'
 
 import type { WorkbenchReadFileResult } from '@shared/contracts'
@@ -40,6 +38,7 @@ import type { WorkbenchReadFileResult } from '@shared/contracts'
 import styles from '../../styles/workbenchPageStyles'
 import { useBlockWheelScroll } from '../../support/useBlockWheelScroll'
 import { useDismissOnWindowInteract } from '../../support/useDismissOnWindowInteract'
+import { WorkbenchFileTypeIcon } from '../files/WorkbenchFileTypeIcon'
 
 interface WorkbenchEditorTabContextMenuState {
   path: string
@@ -153,13 +152,6 @@ export function EditorTabBar({
     action()
   }
 
-  function handleTabScrollerWheel(event: WheelEvent<HTMLDivElement>): void {
-    const scroller = tabScrollerRef.current
-    if (!scroller || event.deltaY === 0 || event.shiftKey) return
-    if (scroller.scrollWidth <= scroller.clientWidth) return
-    scroller.scrollLeft += event.deltaY
-  }
-
   function handleTabDragStart(path: string, event: DragEvent<HTMLDivElement>): void {
     setDraggingTabPath(path)
     event.dataTransfer.effectAllowed = 'move'
@@ -219,11 +211,7 @@ export function EditorTabBar({
   return (
     <>
       <div className={styles.editorTabBar} role="tablist" aria-label={t('workbench.openFiles')}>
-        <div
-          ref={tabScrollerRef}
-          className={styles.editorTabScroller}
-          onWheel={handleTabScrollerWheel}
-        >
+        <div ref={tabScrollerRef} className={styles.editorTabScroller}>
           {openTabs.map((tab) => {
             const isDirty = tab.content !== tab.file.content
             const isActive =
@@ -263,7 +251,7 @@ export function EditorTabBar({
                   }
                   onClick={() => onSelectOpenFile(tab.path)}
                 >
-                  <FileTypeIcon fileName={tab.path} size={13} />
+                  <WorkbenchFileTypeIcon fileName={tab.path} size={13} />
                   <span className={styles.editorTabName} data-git-tone={gitDecoration?.tone}>
                     {fileNameFromPath(tab.path)}
                   </span>
@@ -323,7 +311,7 @@ export function EditorTabBar({
                 title={`${lightTabItem.projectRoot}/${lightTabItem.path}`}
                 onClick={onSelectLightTab}
               >
-                <FileTypeIcon fileName={lightTabItem.path} size={13} />
+                <WorkbenchFileTypeIcon fileName={lightTabItem.path} size={13} />
                 <span className={styles.editorTabName}>
                   {t('workbench.lightPreviewTabTitle', { file: lightTabFileName })}
                 </span>
@@ -427,7 +415,7 @@ export function EditorTabBar({
                   title={tab.path}
                   onClick={() => runToolbarAction(() => onSelectOpenFile(tab.path))}
                 >
-                  <FileTypeIcon fileName={tab.path} size={14} />
+                  <WorkbenchFileTypeIcon fileName={tab.path} size={14} />
                   <span className={styles.editorTabName} data-git-tone={gitDecoration?.tone}>
                     {fileNameFromPath(tab.path)}
                   </span>
@@ -479,7 +467,7 @@ export function EditorTabBar({
                 title={`${lightTabItem.projectRoot}/${lightTabItem.path}`}
                 onClick={() => runToolbarAction(() => onSelectLightTab?.())}
               >
-                <FileTypeIcon fileName={lightTabItem.path} size={14} />
+                <WorkbenchFileTypeIcon fileName={lightTabItem.path} size={14} />
                 <span className={styles.editorTabName}>
                   {t('workbench.lightPreviewTabTitle', { file: lightTabFileName })}
                 </span>

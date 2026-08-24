@@ -129,6 +129,7 @@ void describe('standalone Workbench Kernel contract', () => {
     assert.match(invocation, /\bmessages\s*:/u)
     assert.match(invocation, /\bconfig\s*:\s*\{/u)
     assert.match(invocation, /\bmodelSelection\s*:\s*\{/u)
+    assert.match(invocation, /\bexecutionModes\s*:\s*\[/u)
     assert.doesNotMatch(invocation, /\bscope\s*:\s*\{/u)
     for (const legacyField of [
       'sourceSessionId',
@@ -152,6 +153,8 @@ void describe('standalone Workbench Kernel contract', () => {
     assert.match(runtimeSource, /@velaros-ai\/agent\/protocol\/agent-capability/u)
     assert.match(runtimeSource, /scopeMetadata\.resourceId/u)
     assert.match(runtimeSource, /velaros\.workbench/u)
+    assert.match(runtimeSource, /normalizeExecutionModes/u)
+    assert.match(runtimeSource, /config\.executionModes/u)
     assert.doesNotMatch(runtimeSource, /allowedKeys/u)
     assert.doesNotMatch(runtimeSource, /protocolVersion\s*!==\s*1/u)
   })

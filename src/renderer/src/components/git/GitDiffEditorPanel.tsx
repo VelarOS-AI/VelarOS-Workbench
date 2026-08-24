@@ -10,7 +10,6 @@ import type { WorkbenchThemeId } from '@renderer/models/settings/workbenchPrefer
 
 import { isEmpty } from '@velaros-ai/core'
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
-import { FileTypeIcon } from '@velaros-ai/ui/primitives/display/FileTypeIcon'
 import { Paragraph } from '@velaros-ai/ui/primitives/display/Paragraph'
 import { Text } from '@velaros-ai/ui/primitives/display/Text'
 
@@ -19,6 +18,7 @@ import {
   type WorkbenchEditorDiffPreview,
 } from '../../hooks/useWorkbenchGitDiffPreview'
 import styles from '../../styles/workbenchPageStyles'
+import { WorkbenchFileTypeIcon } from '../files/WorkbenchFileTypeIcon'
 
 import {
   WorkbenchUnifiedDiffRows,
@@ -73,7 +73,7 @@ export function GitDiffEditorPanel({
     <section className={styles.diffViewerPanel}>
       <div className={styles.diffViewerToolbar}>
         <div className={styles.diffViewerFile}>
-          <FileTypeIcon fileName={item.fileName} size={14} />
+          <WorkbenchFileTypeIcon fileName={item.fileName} size={14} />
           <Text truncate>
             {preview ? diffScopeLabel(preview.scope, t) : t('workbench.gitDiffPreview')}
           </Text>
