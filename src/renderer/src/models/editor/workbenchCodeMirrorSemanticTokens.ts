@@ -23,6 +23,9 @@ function semanticTokenTheme(dark: boolean): Extension {
     '& .cm-workbenchSemantic-enumMember': {
       color: `${dark ? '#4fc1ff' : '#0070c1'} !important`,
     },
+    '& .cm-workbenchSemantic-keyword': {
+      color: `${dark ? '#c586c0' : '#af00db'} !important`,
+    },
     '& .cm-workbenchSemantic-function, & .cm-workbenchSemantic-method': {
       color: `${dark ? '#ffd580' : '#a04b00'} !important`,
     },
