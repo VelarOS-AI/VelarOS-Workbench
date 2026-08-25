@@ -137,8 +137,8 @@
   color: var(--workbench-editor-hover-type, #007070) !important;
 }
 
-.editorSymbolTooltip[data-has-definition-preview='true'][data-modifier-active='true']
-  [data-hover-part='type'] {
+.editorSymbolTooltip[data-has-definition-preview='true']
+  [data-hover-part='type'][data-hover-modifier-target='true'] {
   cursor: pointer;
   text-decoration-line: underline;
   text-decoration-thickness: 1px;

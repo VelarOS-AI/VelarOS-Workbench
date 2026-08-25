@@ -37,6 +37,14 @@ void describe('Workbench project file tree', () => {
 
       const ignoredChild = await service.listDirectory({ projectRoot, path: 'dist' })
       assert.equal(ignoredChild.entries.find((entry) => entry.name === 'nested')?.gitIgnored, true)
+
+      const ignoredFile = await service.readTextFile({
+        projectRoot,
+        path: 'dist/nested/bundle.js',
+      })
+      const editableFile = await service.readTextFile({ projectRoot, path: 'src/main.ts' })
+      assert.equal(ignoredFile.gitIgnored, true)
+      assert.equal(editableFile.gitIgnored, false)
     } finally {
       await rm(projectRoot, { recursive: true, force: true })
     }

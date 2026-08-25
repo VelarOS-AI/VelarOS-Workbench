@@ -3,6 +3,9 @@ import { basename, join, resolve } from 'node:path'
 
 import { app, BrowserWindow } from 'electron'
 
+import developmentAppIconPath from '../../build/icon-dev.png?asset'
+import productionAppIconPath from '../../build/icon.png?asset'
+
 import { createAgentKernelModule } from '@velaros-ai/agent'
 import { AgentCapabilityApiVersion } from '@velaros-ai/agent/protocol/agent-capability'
 import { Log } from '@velaros-ai/core'
@@ -53,14 +56,29 @@ const WorkbenchProductName = 'VelarOS Workbench'
 const WorkbenchWindowWidth = 1280
 const WorkbenchWindowHeight = 800
 
+function isWorkbenchDevelopmentRuntime(): boolean {
+  return process.env['NODE_ENV'] === 'development' || !app.isPackaged
+}
+
+const WorkbenchIsDevelopmentRuntime = isWorkbenchDevelopmentRuntime()
+const WorkbenchApplicationName = WorkbenchIsDevelopmentRuntime
+  ? `${WorkbenchProductName} Dev`
+  : WorkbenchProductName
+const WorkbenchApplicationIconPath = WorkbenchIsDevelopmentRuntime
+  ? developmentAppIconPath
+  : productionAppIconPath
+
 interface WorkbenchInstanceLaunchData {
-  productName: typeof WorkbenchProductName
+  productName: string
   executablePath: string
   version: string
   projectPaths: string[]
 }
 
-app.setName(WorkbenchProductName)
+app.setName(WorkbenchApplicationName)
+if (WorkbenchIsDevelopmentRuntime) {
+  app.setPath('userData', join(process.cwd(), '.data', 'workbench-app'))
+}
 
 let windowManager: Nullable<WorkbenchWindowManager> = null
 const pendingExternalProjectPaths = collectProjectDirectoryArguments(process.argv)
@@ -71,7 +89,7 @@ app.on('open-file', (event, path) => {
 })
 
 const instanceLaunchData: WorkbenchInstanceLaunchData = {
-  productName: WorkbenchProductName,
+  productName: WorkbenchApplicationName,
   executablePath: process.execPath,
   version: app.getVersion(),
   projectPaths: pendingExternalProjectPaths,
@@ -94,20 +112,18 @@ if (!hasSingleInstanceLock) {
 }
 
 function resolveWorkbenchDataRootDir(): string {
-  const isDevelopment = process.env['NODE_ENV'] === 'development' || !app.isPackaged
-  return isDevelopment
-    ? join(process.cwd(), '.data', 'workbench-app')
-    : app.getPath('userData')
+  return app.getPath('userData')
 }
 
 function getWorkbenchWindowTitle(projectName: Nullable<string>): string {
-  return projectName ?? WorkbenchProductName
+  return projectName ?? WorkbenchApplicationName
 }
 
 function createWorkbenchWindow(hub: WorkbenchProjectHub): BrowserWindow {
   const window = new BrowserWindow({
     width: WorkbenchWindowWidth,
     height: WorkbenchWindowHeight,
+    icon: WorkbenchApplicationIconPath,
     show: false,
     title: getWorkbenchWindowTitle(hub.getState().currentProject?.name ?? null),
     ...(process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset' as const } : {}),
@@ -147,6 +163,7 @@ function createWorkbenchWindow(hub: WorkbenchProjectHub): BrowserWindow {
 }
 
 if (hasSingleInstanceLock) void app.whenReady().then(() => {
+  if (WorkbenchIsDevelopmentRuntime) app.dock?.setIcon(WorkbenchApplicationIconPath)
   const dataRootDir = resolveWorkbenchDataRootDir()
   const providers = createDefaultWorkbenchMainCapabilityProviders(dataRootDir)
   // 两级注册机的宿主侧接缝：Loader 构造期就位（seam 派发器必须早于执行栈装配），
@@ -300,7 +317,7 @@ function parseWorkbenchInstanceLaunchData(value: unknown): Nullable<WorkbenchIns
   if (typeof value !== 'object' || value === null) return null
   const data = value as Partial<WorkbenchInstanceLaunchData>
   if (
-    data.productName !== WorkbenchProductName ||
+    data.productName !== WorkbenchApplicationName ||
     typeof data.executablePath !== 'string' ||
     typeof data.version !== 'string' ||
     !Array.isArray(data.projectPaths) ||
@@ -308,7 +325,7 @@ function parseWorkbenchInstanceLaunchData(value: unknown): Nullable<WorkbenchIns
   ) return null
 
   return {
-    productName: WorkbenchProductName,
+    productName: WorkbenchApplicationName,
     executablePath: data.executablePath,
     version: data.version,
     projectPaths: data.projectPaths.filter((path) => validateProjectDirectoryArgument(path)),

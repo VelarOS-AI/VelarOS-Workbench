@@ -4,6 +4,10 @@
  */
 
 .workbench-welcome {
+  --primary: var(--workbench-theme-color);
+  --primary-rgb: var(--workbench-theme-color-rgb);
+  --primary-foreground: var(--color-white);
+
   display: flex;
   align-items: center;
   justify-content: center;

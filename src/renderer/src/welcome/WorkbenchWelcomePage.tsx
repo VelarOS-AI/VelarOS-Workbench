@@ -12,6 +12,7 @@ import { Button, Empty, IconButton, Stack, Tag, Text, Title } from '@velaros-ai/
 
 import type { WorkbenchProjectHubState, WorkbenchRecentProject } from '../../../shared/projectHub'
 
+import { useWorkbenchPreferences } from '../hooks/useWorkbenchPreferences'
 import { lastOpenedLabel } from './lastOpenedLabel'
 
 import './welcome.css'
@@ -25,8 +26,10 @@ export function WorkbenchWelcomePage({
   state,
   onNewProject,
 }: WorkbenchWelcomePageProps): ReactElement {
+  const { preferences } = useWorkbenchPreferences()
+
   return (
-    <div className="workbench-welcome">
+    <div className="workbench-welcome" data-workbench-accent={preferences.accent}>
       <div className="workbench-welcome__panel">
         <section className="workbench-welcome__hero">
           <Stack gap="xs">

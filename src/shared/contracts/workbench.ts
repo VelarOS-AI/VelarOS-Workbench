@@ -36,6 +36,8 @@ export interface WorkbenchReadFileResult {
   modifiedAt: number
   totalLines: number
   truncated: boolean
+  /** Git 排除内容只用于查看，避免生成物与依赖目录被编辑器写回。 */
+  gitIgnored?: boolean
 }
 
 export interface WorkbenchIndexProjectRequest {

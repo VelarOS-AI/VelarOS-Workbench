@@ -1,4 +1,5 @@
 import { StreamLanguage, type StreamParser, type StringStream } from '@codemirror/language'
+import { javascript as JavaScriptParser } from '@codemirror/legacy-modes/mode/javascript'
 import type { Extension } from '@codemirror/state'
 import type { WorkbenchEditorLanguageContribution } from '@renderer/language/workbenchEditorLanguageContributions'
 
@@ -7,6 +8,7 @@ import { VELAR_LANGUAGE_KEYWORDS } from '@shared/contributions/velar/language'
 interface VelarStreamState {
   stringQuote: string | null
   rawString: boolean
+  regexpString: boolean
   interpolatedString: boolean
   interpolationDepth: number
   layoutString: boolean
@@ -18,6 +20,11 @@ interface VelarStreamState {
   memberAccess: boolean
   objectDepth: number
   objectKeyExpected: boolean
+  embeddedJavaScript: boolean
+  embeddedJavaScriptChecked: boolean
+  embeddedJavaScriptClosing: boolean
+  embeddedJavaScriptIndent: number
+  embeddedJavaScriptState: unknown | null
 }
 
 export const VELAR_EDITOR_KEYWORDS = VELAR_LANGUAGE_KEYWORDS
@@ -39,13 +46,52 @@ const BuiltinTypes = new Set([
 function resetString(state: VelarStreamState): void {
   state.stringQuote = null
   state.rawString = false
+  state.regexpString = false
   state.interpolatedString = false
   state.interpolationDepth = 0
 }
 
+function inlineRawStringBody(source: string): string | null {
+  const quote = source[0]
+  if (quote !== '"' && quote !== "'" && quote !== '`') return null
+
+  let body = ''
+  for (let index = 1; index < source.length; index += 1) {
+    const character = source[index]
+    if (character !== quote) {
+      body += character
+      continue
+    }
+    if (source[index + 1] === quote) {
+      body += quote
+      index += 1
+      continue
+    }
+    return body
+  }
+  return null
+}
+
+/**
+ * `r"..."` remains a raw string in the language. The editor only assigns the
+ * regexp presentation when the complete inline body contains unambiguous
+ * pattern grammar, so ordinary raw paths such as `r"C:\\Users\\foo"` stay text.
+ */
+export function isLikelyVelarRawRegularExpressionLiteral(source: string): boolean {
+  const body = inlineRawStringBody(source)
+  if (!body) return false
+
+  if (body.startsWith('^') || /(?<!\\)\$$/u.test(body)) return true
+  if (/(^|[^\\])\[(?:\\.|[^\]])+\]/u.test(body)) return true
+  if (/\\[bBdDsSwWAZzG]/u.test(body)) return true
+  if (/(^|[^\\])(?:\.\*|\.\+|\([^)]*\)|\||\{\d+(?:,\d*)?\})/u.test(body)) return true
+  return false
+}
+
 function readString(stream: StringStream, state: VelarStreamState, layout = false): string {
   const quote = state.stringQuote
-  if (!quote) return 'string'
+  const style = state.regexpString ? 'regexp' : 'string'
+  if (!quote) return style
 
   let escaped = false
   while (!stream.eol()) {
@@ -65,7 +111,7 @@ function readString(stream: StringStream, state: VelarStreamState, layout = fals
       }
       if (stream.pos - 1 > stream.start) {
         stream.backUp(1)
-        return 'string'
+        return style
       }
       state.interpolationDepth = 1
       return 'punctuation'
@@ -87,7 +133,7 @@ function readString(stream: StringStream, state: VelarStreamState, layout = fals
   // Inline strings are recovery-bounded by their physical line. Only a quote
   // followed immediately by a newline enters the layout-string state below.
   if (stream.eol() && !layout) resetString(state)
-  return 'string'
+  return style
 }
 
 function beginString(
@@ -96,10 +142,13 @@ function beginString(
   raw: boolean,
   interpolated: boolean
 ): string {
+  const regexp = raw
+    && isLikelyVelarRawRegularExpressionLiteral(stream.string.slice(stream.pos))
   const quote = stream.next()
   if (!quote) return 'string'
   state.stringQuote = quote
   state.rawString = raw
+  state.regexpString = regexp
   state.interpolatedString = interpolated
   state.interpolationDepth = 0
   if (quote === '"' && stream.eol()) {
@@ -133,10 +182,38 @@ function readNestedInterpolationString(stream: StringStream, raw: boolean): stri
   return 'string'
 }
 
+function embeddedJavaScriptKind(stream: StringStream): 'checked' | 'unsafe' | null {
+  if (stream.peek() !== '`') return null
+  const header = stream.string.slice(0, stream.pos)
+  if (/^\s*unsafe\s+js\s*$/u.test(header)) return 'unsafe'
+  if (/^\s*extern\s+js(?:\s*\(.*\))?\s*$/u.test(header)) return 'checked'
+  return null
+}
+
+function beginEmbeddedJavaScript(
+  stream: StringStream,
+  state: VelarStreamState,
+  kind: 'checked' | 'unsafe'
+): string {
+  stream.next()
+  state.embeddedJavaScript = true
+  state.embeddedJavaScriptChecked = kind === 'checked'
+  state.embeddedJavaScriptClosing = false
+  state.embeddedJavaScriptIndent = state.lineIndent
+  state.embeddedJavaScriptState = JavaScriptParser.startState?.(state.indentUnit) ?? {}
+  return 'string'
+}
+
+function copyEmbeddedJavaScriptState(state: unknown | null): unknown | null {
+  if (state === null) return null
+  return JavaScriptParser.copyState?.(state) ?? state
+}
+
 const VelarParser: StreamParser<VelarStreamState> = {
   startState: (indentUnit) => ({
     stringQuote: null,
     rawString: false,
+    regexpString: false,
     interpolatedString: false,
     interpolationDepth: 0,
     layoutString: false,
@@ -148,13 +225,28 @@ const VelarParser: StreamParser<VelarStreamState> = {
     memberAccess: false,
     objectDepth: 0,
     objectKeyExpected: false,
+    embeddedJavaScript: false,
+    embeddedJavaScriptChecked: false,
+    embeddedJavaScriptClosing: false,
+    embeddedJavaScriptIndent: 0,
+    embeddedJavaScriptState: null,
   }),
-  copyState: (state) => ({ ...state }),
+  copyState: (state) => ({
+    ...state,
+    embeddedJavaScriptState: copyEmbeddedJavaScriptState(state.embeddedJavaScriptState),
+  }),
   token(stream, state) {
     if (stream.sol()) {
-      if (state.stringQuote && !state.layoutString) resetString(state)
       state.lineIndent = stream.indentation()
       state.nextIndent = state.lineIndent
+      if (state.embeddedJavaScript) {
+        const tail = stream.string.slice(state.lineIndent)
+        state.embeddedJavaScriptClosing = state.lineIndent === state.embeddedJavaScriptIndent
+          && (state.embeddedJavaScriptChecked
+            ? /^`:\s*(?:\/\/.*)?$/u.test(tail)
+            : /^`\s*(?:\/\/.*)?$/u.test(tail))
+      }
+      if (state.stringQuote && !state.layoutString) resetString(state)
       if (state.layoutString && state.interpolationDepth === 0) {
         const blank = stream.string.trim().length === 0
         const closing = state.lineIndent === state.layoutIndent
@@ -177,6 +269,17 @@ const VelarParser: StreamParser<VelarStreamState> = {
           resetString(state)
         }
       }
+    }
+    if (state.embeddedJavaScript) {
+      if (state.embeddedJavaScriptClosing) {
+        if (stream.eatSpace()) return null
+        stream.next()
+        state.embeddedJavaScript = false
+        state.embeddedJavaScriptClosing = false
+        state.embeddedJavaScriptState = null
+        return 'string'
+      }
+      return JavaScriptParser.token(stream, state.embeddedJavaScriptState ?? {})
     }
     if (state.stringQuote && state.interpolationDepth === 0)
       return readString(stream, state, state.layoutString)
@@ -208,6 +311,8 @@ const VelarParser: StreamParser<VelarStreamState> = {
     }
 
     const quote = stream.peek()
+    const embeddedKind = quote === '`' ? embeddedJavaScriptKind(stream) : null
+    if (embeddedKind) return beginEmbeddedJavaScript(stream, state, embeddedKind)
     if (quote === '"' || quote === "'" || quote === '`')
       return beginString(stream, state, false, quote === '`')
 

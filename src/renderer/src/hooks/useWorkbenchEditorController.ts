@@ -91,7 +91,8 @@ export function useWorkbenchEditorController({
     () => [...openTabsByPath.values()].some((tab) => tab.content !== tab.file.content),
     [openTabsByPath]
   )
-  const canEditSelectedFile = !!selectedFile && !selectedFile.truncated
+  const canEditSelectedFile =
+    !!selectedFile && !selectedFile.truncated && !selectedFile.gitIgnored
   const openTabs = useMemo(() => [...openTabsByPath.values()], [openTabsByPath])
   const openedFileSnapshots = useMemo(() => {
     const snapshots = reuseWorkbenchOpenFileSnapshots(openedFileSnapshotsRef.current, openTabs)
@@ -118,10 +119,10 @@ export function useWorkbenchEditorController({
   }
 
   const updateEditorContent = useMemoizedFn((content: string): void => {
+    if (!selectedFile || selectedFile.truncated || selectedFile.gitIgnored) return
+
     setEditorContent(content)
-    if (selectedFile) {
-      rememberOpenFile(selectedFile, content)
-    }
+    rememberOpenFile(selectedFile, content)
   })
 
   const applyLanguageServiceFileChanges = useMemoizedFn(
@@ -130,7 +131,7 @@ export function useWorkbenchEditorController({
 
       for (const change of changes) {
         const tab = openTabsByPathLatest.current.get(change.path)
-        if (!tab || isEmpty(change.edits)) continue
+        if (!tab || tab.file.truncated || tab.file.gitIgnored || isEmpty(change.edits)) continue
 
         const nextContent = applyWorkbenchLanguageServiceEditsToContent(tab.content, change.edits)
         rememberOpenFile(tab.file, nextContent)
@@ -912,7 +913,13 @@ export function useWorkbenchEditorController({
       tab: WorkbenchOpenEditorTab,
       options: WorkbenchSaveEditorTabOptions = {}
     ): Promise<void> => {
-      if (!activeProject || tab.file.truncated || tab.content === tab.file.content || isSavingFile)
+      if (
+        !activeProject
+        || tab.file.truncated
+        || tab.file.gitIgnored
+        || tab.content === tab.file.content
+        || isSavingFile
+      )
         return
       if (options.silent && silentSaveInFlightPathsRef.current.has(tab.path)) return
 
@@ -998,7 +1005,9 @@ export function useWorkbenchEditorController({
 
     const owningProject = activeProject
     const owningProjectId = owningProject.id
-    const dirtyTabs = [...openTabsByPath.values()].filter((tab) => tab.content !== tab.file.content)
+    const dirtyTabs = [...openTabsByPath.values()].filter(
+      (tab) => !tab.file.truncated && !tab.file.gitIgnored && tab.content !== tab.file.content
+    )
     if (isEmpty(dirtyTabs)) return
 
     const conflictedTab = dirtyTabs.find(hasExternalChange)

@@ -1,3 +1,11 @@
+import {
+  type CSSProperties,
+  type RefObject,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react'
 import { ArrowLeftIcon, CodeIcon, XIcon } from '@phosphor-icons/react'
 import { useWorkbenchI18n } from '@renderer/i18n'
 import {
@@ -11,6 +19,8 @@ import type { WorkbenchLanguageServiceLocation } from '@shared/contracts'
 import styles from '../../styles/workbenchPageStyles'
 
 interface EditorSymbolLocationsPanelProps {
+  anchor: { left: number; top: number; bottom: number }
+  boundaryRef: RefObject<HTMLElement | null>
   projectRoot: string
   state: WorkbenchSymbolLocationsState
   onClose: () => void
@@ -22,16 +32,86 @@ function locationLabel(projectRoot: string, location: WorkbenchLanguageServiceLo
 }
 
 export function EditorSymbolLocationsPanel({
+  anchor,
+  boundaryRef,
   projectRoot,
   state,
   onClose,
   onNavigate,
 }: EditorSymbolLocationsPanelProps) {
   const { t } = useWorkbenchI18n()
+  const popupRef = useRef<HTMLElement>(null)
+  const [position, setPosition] = useState<CSSProperties>({
+    left: anchor.left,
+    top: anchor.bottom + 6,
+    visibility: 'hidden',
+  })
   const referenceCount = state.items.filter((item) => item.kind === 'reference').length
 
+  useLayoutEffect(() => {
+    const popup = popupRef.current
+    const boundary = boundaryRef.current
+    if (!popup || !boundary) return undefined
+
+    const updatePosition = (): void => {
+      const margin = 8
+      const gap = 6
+      const boundaryWidth = boundary.clientWidth
+      const boundaryHeight = boundary.clientHeight
+      const maxWidth = Math.max(280, boundaryWidth - margin * 2)
+      const popupWidth = Math.min(popup.offsetWidth, maxWidth)
+      const left = Math.min(
+        Math.max(anchor.left, margin),
+        Math.max(margin, boundaryWidth - popupWidth - margin)
+      )
+      const belowSpace = boundaryHeight - anchor.bottom - gap - margin
+      const aboveSpace = anchor.top - gap - margin
+      const placeAbove = belowSpace < Math.min(popup.offsetHeight, 180) && aboveSpace > belowSpace
+      const maxHeight = Math.max(120, placeAbove ? aboveSpace : belowSpace)
+      const top = placeAbove
+        ? Math.max(margin, anchor.top - gap - Math.min(popup.offsetHeight, maxHeight))
+        : Math.min(anchor.bottom + gap, Math.max(margin, boundaryHeight - margin - 120))
+
+      setPosition({ left, top, maxWidth, maxHeight, visibility: 'visible' })
+    }
+
+    updatePosition()
+    const resizeObserver = new ResizeObserver(updatePosition)
+    resizeObserver.observe(popup)
+    resizeObserver.observe(boundary)
+    window.addEventListener('resize', updatePosition)
+    return () => {
+      resizeObserver.disconnect()
+      window.removeEventListener('resize', updatePosition)
+    }
+  }, [anchor.bottom, anchor.left, anchor.top, boundaryRef, state])
+
+  useEffect(() => {
+    const handleMouseDown = (event: globalThis.MouseEvent): void => {
+      if (event.target instanceof Node && popupRef.current?.contains(event.target)) return
+      onClose()
+    }
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      onClose()
+    }
+    window.addEventListener('mousedown', handleMouseDown, true)
+    window.addEventListener('keydown', handleKeyDown, true)
+    return () => {
+      window.removeEventListener('mousedown', handleMouseDown, true)
+      window.removeEventListener('keydown', handleKeyDown, true)
+    }
+  }, [onClose])
+
   return (
-    <section className={styles.editorSymbolLocationsPanel} aria-label={t('workbench.symbolLocationsTitle')}>
+    <section
+      ref={popupRef}
+      className={styles.editorSymbolLocationsPanel}
+      style={position}
+      aria-label={t('workbench.symbolLocationsTitle')}
+      onMouseDown={(event) => event.stopPropagation()}
+    >
       <header className={styles.editorSymbolLocationsHeader}>
         <div className={styles.editorSymbolLocationsTitle}>
           <CodeIcon size={14} />

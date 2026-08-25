@@ -79,7 +79,6 @@ import type {
 import { EditorFileDiagnosticSummary } from './EditorFileDiagnosticSummary'
 import { EditorFindBar } from './EditorFindBar'
 import { EditorGoToLineBar } from './EditorGoToLineBar'
-import { EditorSymbolLocationsPanel } from './EditorSymbolLocationsPanel'
 import {
   EditorTabBar,
   type WorkbenchEditorAuxiliaryTabItem,
@@ -282,6 +281,7 @@ export function EditorPanel({
   const [cursorPosition, setCursorPosition] = useState({ line: 1, column: 1 })
   const [symbolLocations, setSymbolLocations] =
     useState<Nullable<WorkbenchSymbolLocationsState>>(null)
+  const [symbolLocationsVisible, setSymbolLocationsVisible] = useState(false)
   const [activeDiagnosticIndex, setActiveDiagnosticIndex] = useState(-1)
   const onActiveProblemIdChangeLatest = useLatest(onActiveProblemIdChange)
   const lastSyncedProblemIdRef = useRef<Nullable<string>>(null)
@@ -374,8 +374,19 @@ export function EditorPanel({
     },
     [onCursorPositionChange]
   )
-  const openSymbolLocations = useCallback((request: WorkbenchSymbolLocationsRequest) => {
-    setSymbolLocations(openWorkbenchSymbolLocations(request))
+  const openSymbolLocations = useCallback((
+    request: WorkbenchSymbolLocationsRequest,
+    visible: boolean
+  ) => {
+    setSymbolLocations((current) => {
+      const opened = openWorkbenchSymbolLocations(request)
+      if (
+        current?.returnLocation
+        && sameWorkbenchSymbolLocation(current.activeLocation, opened.activeLocation)
+      ) return { ...opened, returnLocation: current.returnLocation }
+      return opened
+    })
+    setSymbolLocationsVisible(visible)
   }, [])
   const navigateSymbolLocation = useCallback(
     (location: WorkbenchLanguageServiceLocation) => {
@@ -853,14 +864,6 @@ export function EditorPanel({
                   </Button>
                 </div>
               )}
-              {!!symbolLocations && !!selectedFile && (
-                <EditorSymbolLocationsPanel
-                  projectRoot={projectRoot}
-                  state={symbolLocations}
-                  onClose={() => setSymbolLocations(null)}
-                  onNavigate={navigateSymbolLocation}
-                />
-              )}
               {!!selectedFile && (
                 <EditorFileDiagnosticSummary
                   diagnostics={selectedFileDiagnostics}
@@ -898,7 +901,10 @@ export function EditorPanel({
                         onOpenFind={openFindBar}
                         onOpenGoToLine={openGoToLineBar}
                         onGoToDefinition={onGoToDefinition}
+                        symbolLocations={symbolLocationsVisible ? symbolLocations : null}
                         onOpenSymbolLocations={openSymbolLocations}
+                        onCloseSymbolLocations={() => setSymbolLocationsVisible(false)}
+                        onNavigateSymbolLocation={navigateSymbolLocation}
                         onApplyLanguageServiceFileChanges={onApplyLanguageServiceFileChanges}
                         onRunPackageScript={onRunPackageScript}
                         onOpenFileHistory={setFileHistoryMode}

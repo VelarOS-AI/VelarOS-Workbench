@@ -130,15 +130,20 @@ export class WorkbenchProjectFileSystem {
       const maxChars = this.clampReadMaxChars(request.maxChars)
       const fullContent = buffer.toString('utf8')
       const truncated = fullContent.length > maxChars
+      const relativePath = this.toProjectRelativePath(projectRoot, filePath)
+      const gitIgnored = (await this.getGitIgnoredPaths(projectRoot, [relativePath])).has(
+        relativePath
+      )
 
       return {
         projectRoot,
-        path: this.toProjectRelativePath(projectRoot, filePath),
+        path: relativePath,
         content: truncated ? fullContent.slice(0, maxChars) : fullContent,
         size: fileStats.size,
         modifiedAt: fileStats.mtimeMs,
         totalLines: fullContent.split(/\r?\n/).length,
         truncated,
+        gitIgnored,
       }
     } catch (error) {
       throw this.normalizeReadError(error, request.path)

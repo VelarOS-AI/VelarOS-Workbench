@@ -10,6 +10,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { createPortal } from 'react-dom'
 import {
   autocompletion,
   closeBrackets,
@@ -46,6 +47,7 @@ import {
   RangeSetBuilder,
 } from '@codemirror/state'
 import {
+  closeHoverTooltips,
   crosshairCursor,
   Decoration,
   type DecorationSet,
@@ -155,8 +157,8 @@ import {
   getWorkbenchLanguageServiceDocumentHighlights,
   getWorkbenchLanguageServiceFormat,
   getWorkbenchLanguageServiceInlayHints,
-  getWorkbenchLanguageServiceRename,
   getWorkbenchLanguageServiceReferences,
+  getWorkbenchLanguageServiceRename,
   getWorkbenchLanguageServiceSemanticTokens,
 } from '@renderer/models/editor/workbenchLanguageServiceIpc'
 import {
@@ -165,7 +167,9 @@ import {
 } from '@renderer/models/editor/workbenchPackageScriptRunGutter'
 import {
   buildWorkbenchSymbolLocationsRequest,
+  sameWorkbenchSymbolLocation,
   type WorkbenchSymbolLocationsRequest,
+  type WorkbenchSymbolLocationsState,
 } from '@renderer/models/editor/workbenchSymbolLocations'
 import {
   createWorkbenchVelarTestRunGutterExtension,
@@ -181,6 +185,7 @@ import type {
   WorkbenchLanguageServiceCodeAction,
   WorkbenchLanguageServiceDiagnostic,
   WorkbenchLanguageServiceFileEdit,
+  WorkbenchLanguageServiceLocation,
 } from '@shared/contracts'
 
 import styles from '../../styles/workbenchPageStyles'
@@ -188,6 +193,7 @@ import { useLatest, useTimerScope } from '../../support/genericHooks'
 import { useBlockWheelScroll } from '../../support/useBlockWheelScroll'
 import { useDismissOnWindowInteract } from '../../support/useDismissOnWindowInteract'
 
+import { EditorSymbolLocationsPanel } from './EditorSymbolLocationsPanel'
 import { workbenchEditorLanguageFeatureClasses } from './workbenchEditorLanguageFeatureClasses'
 
 export interface CodeMirrorEditorHandle {
@@ -222,7 +228,10 @@ interface CodeMirrorEditorProps {
   onOpenFind: () => void
   onOpenGoToLine: () => void
   onGoToDefinition: (path: string, line: number, column?: number) => void
-  onOpenSymbolLocations?: (request: WorkbenchSymbolLocationsRequest) => void
+  symbolLocations?: Nullable<WorkbenchSymbolLocationsState>
+  onOpenSymbolLocations?: (request: WorkbenchSymbolLocationsRequest, visible: boolean) => void
+  onCloseSymbolLocations?: () => void
+  onNavigateSymbolLocation?: (location: WorkbenchLanguageServiceLocation) => void
   onApplyLanguageServiceFileChanges?: (changes: WorkbenchLanguageServiceFileEdit[]) => void
   onRunPackageScript?: (command: string) => void
   onOpenFileHistory?: (mode: 'local' | 'git') => void
@@ -257,6 +266,12 @@ interface WorkbenchIdentifierRange {
   text: string
   from: number
   to: number
+}
+
+interface WorkbenchSymbolLocationsAnchor {
+  left: number
+  top: number
+  bottom: number
 }
 
 interface EditorContextMenuState {
@@ -1081,7 +1096,10 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       onOpenFind,
       onOpenGoToLine,
       onGoToDefinition,
+      symbolLocations = null,
       onOpenSymbolLocations,
+      onCloseSymbolLocations,
+      onNavigateSymbolLocation,
       onApplyLanguageServiceFileChanges,
       onRunPackageScript,
       onOpenFileHistory,
@@ -1107,6 +1125,8 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       onOpenGoToLine,
       onGoToDefinition,
       onOpenSymbolLocations,
+      onCloseSymbolLocations,
+      onNavigateSymbolLocation,
       onApplyLanguageServiceFileChanges,
       onRunPackageScript,
       onOpenFileHistory,
@@ -1217,6 +1237,8 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       [workbenchTheme]
     )
     const [contextMenu, setContextMenu] = useState<Nullable<EditorContextMenuState>>(null)
+    const [symbolLocationsAnchor, setSymbolLocationsAnchor] =
+      useState<Nullable<WorkbenchSymbolLocationsAnchor>>(null)
     const [renamePopup, setRenamePopup] =
       useState<Nullable<{ identifier: WorkbenchIdentifierRange; left: number; top: number }>>(null)
     const [commentDraft, setCommentDraft] = useState<
@@ -1604,11 +1626,17 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
 
       if (view && pathRef.current && identifier) {
         try {
+          const currentPath = pathRef.current
           const position = positionLineColumnFromState(view.state, identifier.from)
+          const origin = {
+            path: currentPath,
+            line: position.line,
+            column: position.column,
+          }
           const request = {
             ...buildWorkbenchLanguageServiceRequestBase({
               projectRoot,
-              path: pathRef.current,
+              path: currentPath,
               language,
               content: view.state.doc.toString(),
               openTabs: openTabsLatest.current,
@@ -1624,19 +1652,19 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
           const location = definitions[0]
           if (location) {
             setContextMenu(null)
-            callbacksRef.current.onOpenSymbolLocations?.(
-              buildWorkbenchSymbolLocationsRequest({
-                symbol: identifier.text,
-                origin: {
-                  path: pathRef.current,
-                  line: position.line,
-                  column: position.column,
-                },
-                destination: location,
-                definitions,
-                references,
-              })
+            view.dispatch({ effects: closeHoverTooltips })
+            const isDefinition = definitions.some((definition) =>
+              sameWorkbenchSymbolLocation(origin, definition)
             )
+            callbacksRef.current.onOpenSymbolLocations?.(buildWorkbenchSymbolLocationsRequest({
+              symbol: identifier.text,
+              origin,
+              ...(isDefinition ? {} : { destination: location }),
+              definitions,
+              references,
+            }), isDefinition)
+            if (isDefinition) return
+
             callbacksRef.current.onGoToDefinition(location.path, location.line, location.column)
             return
           }
@@ -2205,6 +2233,66 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       }
     }, [])
 
+    useLayoutEffect(() => {
+      const view = viewRef.current
+      const container = containerRef.current
+      const location = symbolLocations?.activeLocation
+      const currentPath = path?.replaceAll('\\', '/').replace(/^\.\//u, '')
+      const locationPath = location?.path.replaceAll('\\', '/').replace(/^\.\//u, '')
+      const pathMatches = !!currentPath && !!locationPath && (
+        currentPath === locationPath
+        || currentPath.endsWith(`/${locationPath}`)
+        || locationPath.endsWith(`/${currentPath}`)
+      )
+      if (!view || !container || !location || !pathMatches) {
+        setSymbolLocationsAnchor(null)
+        return undefined
+      }
+
+      const updateAnchor = (): void => {
+        const currentView = viewRef.current
+        const currentContainer = containerRef.current
+        if (!currentView || !currentContainer) return
+        const line = currentView.state.doc.line(
+          Math.min(Math.max(1, location.line), currentView.state.doc.lines)
+        )
+        const position = clampPosition(line.from + Math.max(0, location.column - 1), line.to)
+        const coords = currentView.coordsAtPos(position)
+        if (!coords) {
+          setSymbolLocationsAnchor(null)
+          return
+        }
+
+        const boundary = currentContainer.getBoundingClientRect()
+        const nextAnchor = {
+          left: coords.left - boundary.left,
+          top: coords.top - boundary.top,
+          bottom: coords.bottom - boundary.top,
+        }
+        setSymbolLocationsAnchor((current) =>
+          current
+          && current.left === nextAnchor.left
+          && current.top === nextAnchor.top
+          && current.bottom === nextAnchor.bottom
+            ? current
+            : nextAnchor
+        )
+      }
+
+      updateAnchor()
+      const animationFrame = window.requestAnimationFrame(updateAnchor)
+      const resizeObserver = new ResizeObserver(updateAnchor)
+      resizeObserver.observe(container)
+      view.scrollDOM.addEventListener('scroll', updateAnchor, { passive: true })
+      window.addEventListener('resize', updateAnchor)
+      return () => {
+        window.cancelAnimationFrame(animationFrame)
+        resizeObserver.disconnect()
+        view.scrollDOM.removeEventListener('scroll', updateAnchor)
+        window.removeEventListener('resize', updateAnchor)
+      }
+    }, [path, symbolLocations, value])
+
     useEffect(() => {
       viewRef.current?.dispatch({
         effects: languageHoverCompartment.reconfigure(languageServiceHoverExtension),
@@ -2378,6 +2466,23 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
           data-language-support={languageSupport.mode}
           onContextMenu={openEditorContextMenu}
         />
+        {!!(
+          containerRef.current
+          && symbolLocations
+          && symbolLocationsAnchor
+          && onCloseSymbolLocations
+          && onNavigateSymbolLocation
+        ) && createPortal(
+          <EditorSymbolLocationsPanel
+            anchor={symbolLocationsAnchor}
+            boundaryRef={containerRef}
+            projectRoot={projectRoot}
+            state={symbolLocations}
+            onClose={onCloseSymbolLocations}
+            onNavigate={onNavigateSymbolLocation}
+          />,
+          containerRef.current
+        )}
         {!!contextMenu && (
           <div
             ref={contextMenuRef}

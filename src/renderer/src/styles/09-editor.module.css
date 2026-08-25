@@ -902,10 +902,16 @@
 }
 
 .editorSymbolLocationsPanel {
-  @apply flex shrink-0 flex-col overflow-hidden border-b;
-  max-height: min(240px, 34vh);
+  @apply flex flex-col overflow-hidden border;
+  position: absolute;
+  z-index: 40;
+  width: min(620px, calc(100% - 16px));
   border-color: var(--workbench-border);
-  background: var(--workbench-toolbar);
+  border-radius: 10px;
+  background: var(--workbench-editor-tooltip-bg, var(--workbench-toolbar));
+  box-shadow:
+    0 18px 46px color-mix(in oklab, var(--foreground) 18%, transparent),
+    0 3px 10px color-mix(in oklab, var(--foreground) 10%, transparent);
 }
 
 .editorSymbolLocationsHeader {
@@ -1192,6 +1198,7 @@
 
 .codeMirrorEditor {
   @apply min-h-0 min-w-0 flex-1;
+  position: relative;
   height: 100%;
   overflow: hidden;
   background: var(--workbench-editor-bg);
@@ -1391,6 +1398,18 @@
   :global(.cm-focused:not(.cm-workbenchActiveLineSuppressed) .cm-activeLineGutter) {
   background: var(--workbench-editor-active-gutter);
   color: var(--workbench-editor-fg);
+}
+
+/*
+ * A newly switched file owns no user selection yet. Hide CodeMirror's
+ * synthetic cursor and selection layers with the active-line treatment so a
+ * scrollbar/trackpad gesture cannot expose a range anchored at document 0.
+ */
+.codeMirrorEditor
+  :global(.cm-editor.cm-workbenchActiveLineSuppressed .cm-selectionLayer),
+.codeMirrorEditor
+  :global(.cm-editor.cm-workbenchActiveLineSuppressed .cm-cursorLayer) {
+  visibility: hidden;
 }
 
 .codeMirrorEditor :global(.cm-workbenchDefinitionHoverLink) {

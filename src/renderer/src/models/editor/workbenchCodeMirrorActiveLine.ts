@@ -21,6 +21,10 @@ export function revealWorkbenchActiveLine(view: EditorView): void {
   view.dom.classList.remove(workbenchActiveLineSuppressedClass)
 }
 
+export function isWorkbenchActiveLineSuppressed(view: EditorView): boolean {
+  return view.dom.classList.contains(workbenchActiveLineSuppressedClass)
+}
+
 /** 跨行文本选区已经提供了足够清晰的视觉范围，不再叠加单独的当前行。 */
 export function hasWorkbenchMultilineTextSelection(state: EditorState): boolean {
   return state.selection.ranges.some((range) => {
@@ -85,11 +89,13 @@ const activeLineGutterExtension = gutterLineClass.compute(['selection'], (state)
 })
 
 const activeLineInteractionExtension = EditorView.domEventHandlers({
-  mousedown: (_event, view) => {
+  mousedown: (event, view) => {
+    if (!(event.target instanceof Node) || !view.contentDOM.contains(event.target)) return false
     revealWorkbenchActiveLine(view)
     return false
   },
-  touchstart: (_event, view) => {
+  touchstart: (event, view) => {
+    if (!(event.target instanceof Node) || !view.contentDOM.contains(event.target)) return false
     revealWorkbenchActiveLine(view)
     return false
   },

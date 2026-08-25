@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 512 512">
+  <rect x="44" y="44" width="424" height="424" rx="92" fill="#f8f8f7" />
+  <rect
+    x="62"
+    y="62"
+    width="388"
+    height="388"
+    rx="78"
+    fill="none"
+    stroke="#e4e4df"
+    stroke-width="8"
+  />
+
+  <path
+    d="M132 150 H192 L222 300 L256 226 L290 300 L320 150 H380 L336 370 H284 L256 306 L228 370 H176 Z"
+    fill="#181818"
+  />
+
+  <rect x="270" y="46" width="170" height="85" rx="26" fill="#f97316" />
+  <rect
+    x="270"
+    y="46"
+    width="170"
+    height="85"
+    rx="26"
+    fill="none"
+    stroke="#ffffff"
+    stroke-width="5"
+  />
+  <text
+    x="355"
+    y="108"
+    fill="#ffffff"
+    font-family="Arial, Helvetica, sans-serif"
+    font-size="52"
+    font-weight="800"
+    text-anchor="middle"
+  >DEV</text>
+</svg>

@@ -6,6 +6,7 @@ import type { EditorView } from '@codemirror/view'
 
 import {
   hasWorkbenchMultilineTextSelection,
+  isWorkbenchActiveLineSuppressed,
   revealWorkbenchActiveLine,
   suppressWorkbenchActiveLine,
 } from '../src/renderer/src/models/editor/workbenchCodeMirrorActiveLine'
@@ -61,15 +62,16 @@ void describe('Workbench active-line visibility', () => {
       dom: {
         classList: {
           add: (className: string) => classNames.add(className),
+          contains: (className: string) => classNames.has(className),
           remove: (className: string) => classNames.delete(className),
         },
       },
     } as unknown as EditorView
 
     suppressWorkbenchActiveLine(view)
-    assert.equal(classNames.has('cm-workbenchActiveLineSuppressed'), true)
+    assert.equal(isWorkbenchActiveLineSuppressed(view), true)
 
     revealWorkbenchActiveLine(view)
-    assert.equal(classNames.has('cm-workbenchActiveLineSuppressed'), false)
+    assert.equal(isWorkbenchActiveLineSuppressed(view), false)
   })
 })

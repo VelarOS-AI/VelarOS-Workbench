@@ -561,9 +561,24 @@ export function createWorkbenchLanguageServiceHoverTooltip(
             message: context.hoverLoadingLabel ?? 'Loading language information…',
             tone: 'loading',
           }, classes)
+          let hoveredTypeTarget: Nullable<HTMLElement> = null
+          let modifierActive = false
+          const syncModifierTarget = (): void => {
+            for (const target of dom.querySelectorAll('[data-hover-modifier-target]')) {
+              target.removeAttribute('data-hover-modifier-target')
+            }
+            if (
+              modifierActive
+              && hoveredTypeTarget
+              && dom.contains(hoveredTypeTarget)
+              && resolvedHover?.definitionPreview
+            ) {
+              hoveredTypeTarget.dataset.hoverModifierTarget = 'true'
+            }
+          }
           const updateModifierState = (active: boolean): void => {
-            if (active) dom.dataset.modifierActive = 'true'
-            else delete dom.dataset.modifierActive
+            modifierActive = active
+            syncModifierTarget()
           }
           const handleWindowKeyDown = (event: KeyboardEvent): void => {
             updateModifierState(event.metaKey || event.ctrlKey)
@@ -582,6 +597,8 @@ export function createWorkbenchLanguageServiceHoverTooltip(
             }, classes))
             if (resolvedHover?.definitionPreview) dom.dataset.hasDefinitionPreview = 'true'
             else delete dom.dataset.hasDefinitionPreview
+            hoveredTypeTarget = null
+            syncModifierTarget()
           }
           const handleTypeDefinitionPointerDown = (event: PointerEvent): void => {
             if (event.button !== 0 || (!event.metaKey && !event.ctrlKey)) return
@@ -598,7 +615,14 @@ export function createWorkbenchLanguageServiceHoverTooltip(
             view.requestMeasure()
           }
           dom.addEventListener('mousemove', (event) => {
+            hoveredTypeTarget = event.target instanceof Element
+              ? event.target.closest<HTMLElement>('[data-hover-part="type"]')
+              : null
             updateModifierState(event.metaKey || event.ctrlKey)
+          })
+          dom.addEventListener('mouseleave', () => {
+            hoveredTypeTarget = null
+            syncModifierTarget()
           })
           dom.addEventListener('pointerdown', handleTypeDefinitionPointerDown, true)
           window.addEventListener('keydown', handleWindowKeyDown, true)

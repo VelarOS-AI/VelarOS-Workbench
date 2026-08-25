@@ -224,6 +224,10 @@ void describe('focused Workbench language surface', () => {
       'Document(keyword,"variableName.definition",operator,string)'
     )
     assert.equal(
+      fallbackTree('const identity = r"^[a-z][a-z0-9\\_.-]\\*$"\n'),
+      'Document(keyword,"variableName.definition",operator,regexp)'
+    )
+    assert.equal(
       fallbackTree('const mask = (0x0f << 2) | 0b0011\nconst label = `binary`\n'),
       'Document(keyword,"variableName.definition",operator,punctuation,number,operator,number,punctuation,operator,number,keyword,"variableName.definition",operator,string)'
     )
@@ -251,6 +255,21 @@ void describe('focused Workbench language surface', () => {
       fallbackTree('const delta = {position: local, revision: nextRevision, changed}\n'),
       'Document(keyword,"variableName.definition",operator,punctuation,propertyName,punctuation,variableName,punctuation,propertyName,punctuation,variableName,punctuation,propertyName,punctuation)'
     )
+    for (const header of ['extern js', 'extern js()']) {
+      const embeddedJavaScriptTree = fallbackTree([
+        `${header}\``,
+        '  const referencePattern = /^[a-z][A-Za-z0-9]*(?:\\.[a-z][A-Za-z0-9]*)+$/',
+        '  export function resolve(value) {',
+        '    return Object.entries(value).map(([key]) => `${key}`)',
+        '  }',
+        '`:',
+        '  export def resolved(value: string) -> string',
+        '',
+      ].join('\n'))
+      assert.match(embeddedJavaScriptTree, /"string\.special"/u)
+      assert.match(embeddedJavaScriptTree, /propertyName/u)
+      assert.match(embeddedJavaScriptTree, /"variableName\.definition\.function"/u)
+    }
     const typeScriptLanguage = resolveWorkbenchCodeMirrorLanguage('src/main.ts', '')
     const typeScriptTemplateTree = syntaxTree(EditorState.create({
       doc: 'const label = `hello ${user.name}`',
