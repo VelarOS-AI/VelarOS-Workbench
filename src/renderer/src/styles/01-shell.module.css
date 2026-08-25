@@ -433,7 +433,7 @@
   --workbench-git-untracked-fg: var(--status-amber);
   --workbench-tree-ignored-fg: var(--workbench-text-muted);
   --workbench-file-typescript: #3178c6;
-  --workbench-file-velarscript: #181818;
+  --workbench-file-velarscript: #9b3eb3;
   --workbench-file-tsx: #3178c6;
   --workbench-file-javascript: #b8920a;
   --workbench-file-jsx: #42a5d6;
@@ -640,7 +640,7 @@
   --workbench-editor-unused-fg: #848d98;
   --workbench-tree-ignored-fg: var(--workbench-editor-muted);
   --workbench-file-typescript: #4da6ff;
-  --workbench-file-velarscript: #f2f2ef;
+  --workbench-file-velarscript: #d879e8;
   --workbench-file-tsx: #4da6ff;
   --workbench-file-javascript: #d4bc3a;
   --workbench-file-jsx: #61dafb;

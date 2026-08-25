@@ -553,12 +553,57 @@ export function createWorkbenchLanguageServiceHoverTooltip(
         above: false,
         create: () => {
           let destroyed = false
+          let resolvedHover: Nullable<WorkbenchLanguageServiceHoverResult> = null
+          let definitionPreviewExpanded = false
           const diagnostics = diagnosticRange?.diagnostics ?? []
           const dom = buildWorkbenchEditorHoverStatusDom({
             diagnostics,
             message: context.hoverLoadingLabel ?? 'Loading language information…',
             tone: 'loading',
           }, classes)
+          const updateModifierState = (active: boolean): void => {
+            if (active) dom.dataset.modifierActive = 'true'
+            else delete dom.dataset.modifierActive
+          }
+          const handleWindowKeyDown = (event: KeyboardEvent): void => {
+            updateModifierState(event.metaKey || event.ctrlKey)
+          }
+          const handleWindowKeyUp = (event: KeyboardEvent): void => {
+            updateModifierState(event.metaKey || event.ctrlKey)
+          }
+          const handleWindowBlur = (): void => updateModifierState(false)
+          const renderResolvedHover = (): void => {
+            replaceHoverTooltipDom(dom, buildWorkbenchEditorHoverDom({
+              hover: resolvedHover,
+              diagnostics,
+              definitionLabel: context.hoverDefinitionLabel,
+              definitionPreviewLabel: context.hoverDefinitionPreviewLabel,
+              showDefinitionPreview: definitionPreviewExpanded,
+            }, classes))
+            if (resolvedHover?.definitionPreview) dom.dataset.hasDefinitionPreview = 'true'
+            else delete dom.dataset.hasDefinitionPreview
+          }
+          const handleTypeDefinitionPointerDown = (event: PointerEvent): void => {
+            if (event.button !== 0 || (!event.metaKey && !event.ctrlKey)) return
+            const target = event.target instanceof Element
+              ? event.target.closest('[data-hover-part="type"]')
+              : null
+            if (!target || !dom.contains(target) || !resolvedHover?.definitionPreview) return
+
+            event.preventDefault()
+            event.stopPropagation()
+            event.stopImmediatePropagation()
+            definitionPreviewExpanded = true
+            renderResolvedHover()
+            view.requestMeasure()
+          }
+          dom.addEventListener('mousemove', (event) => {
+            updateModifierState(event.metaKey || event.ctrlKey)
+          })
+          dom.addEventListener('pointerdown', handleTypeDefinitionPointerDown, true)
+          window.addEventListener('keydown', handleWindowKeyDown, true)
+          window.addEventListener('keyup', handleWindowKeyUp, true)
+          window.addEventListener('blur', handleWindowBlur)
 
           void getWorkbenchLanguageServiceHover(request, context.hostRuntime).then(
             (result) => {
@@ -574,17 +619,13 @@ export function createWorkbenchLanguageServiceHoverTooltip(
               }
 
               const hover = result.data.hover
+              resolvedHover = hover
               if (!diagnosticRange && !hover) {
                 view.dispatch({ effects: closeHoverTooltips })
                 return
               }
 
-              replaceHoverTooltipDom(dom, buildWorkbenchEditorHoverDom({
-                hover,
-                diagnostics,
-                definitionLabel: context.hoverDefinitionLabel,
-                definitionPreviewLabel: context.hoverDefinitionPreviewLabel,
-              }, classes))
+              renderResolvedHover()
               view.requestMeasure()
             },
             () => {
@@ -602,6 +643,9 @@ export function createWorkbenchLanguageServiceHoverTooltip(
             dom,
             destroy: () => {
               destroyed = true
+              window.removeEventListener('keydown', handleWindowKeyDown, true)
+              window.removeEventListener('keyup', handleWindowKeyUp, true)
+              window.removeEventListener('blur', handleWindowBlur)
             },
           }
         },

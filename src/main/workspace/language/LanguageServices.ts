@@ -678,8 +678,7 @@ class WorkbenchLanguageServices {
         if (definition) {
           result.definition = definition
           if (
-            !result.documentation
-            && /^(?:export\s+)?(?:type|interface|class|enum|record|struct|protocol)\b/u.test(
+            /^(?:export\s+)?(?:type|interface|class|enum|record|struct|protocol)\b/u.test(
               result.displayText.trim()
             )
           ) {

@@ -50,6 +50,20 @@ void test('every jump promotes the previous call site to the highlighted return 
   assert.equal(sameWorkbenchSymbolLocation(returned.activeLocation, firstCall), true)
 })
 
+void test('opening a definition jump immediately preserves and highlights its call site', () => {
+  const request = buildWorkbenchSymbolLocationsRequest({
+    symbol: 'openVoxelApplicationProvider',
+    origin: firstCall,
+    destination: definition,
+    definitions: [definition],
+    references: [firstCall, secondCall],
+  })
+  const opened = openWorkbenchSymbolLocations(request)
+
+  assert.equal(opened.activeLocation, definition)
+  assert.equal(opened.returnLocation, firstCall)
+})
+
 void test('panel paths stay project-relative for display', () => {
   assert.equal(
     workbenchSymbolLocationDisplayPath(

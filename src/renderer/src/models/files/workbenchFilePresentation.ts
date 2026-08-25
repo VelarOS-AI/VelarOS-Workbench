@@ -19,6 +19,7 @@ export type WorkbenchBuiltinFilePresentationVariant =
   | 'tsx'
   | 'typescript'
   | 'velarscript'
+  | 'yaml'
 
 export type WorkbenchFilePresentationVariant =
   | WorkbenchBuiltinFilePresentationVariant
@@ -78,6 +79,7 @@ function resolveBuiltinFilePresentation(
 
   if (name === '.gitignore') return { variant: 'gitignore' }
   if (LockFileNames.has(name)) return { variant: 'lock' }
+  if (extension === 'yaml' || extension === 'yml') return { variant: 'yaml' }
   if (
     ConfigFileNames.has(name)
     || name.startsWith('.env')
@@ -111,8 +113,6 @@ function resolveBuiltinFilePresentation(
     case 'ini':
     case 'toml':
     case 'xml':
-    case 'yaml':
-    case 'yml':
       return { variant: 'config' }
     default:
       return { variant: getFilePresentationKind(input) }

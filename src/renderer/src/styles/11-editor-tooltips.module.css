@@ -137,6 +137,14 @@
   color: var(--workbench-editor-hover-type, #007070) !important;
 }
 
+.editorSymbolTooltip[data-has-definition-preview='true'][data-modifier-active='true']
+  [data-hover-part='type'] {
+  cursor: pointer;
+  text-decoration-line: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
 .editorSymbolTooltip [data-hover-part='name'] {
   color: var(--workbench-editor-hover-name, #871094) !important;
 }
@@ -391,11 +399,6 @@
   line-height: 1.4;
 }
 
-.codeMirrorEditor :global(.cm-lintRange.cm-workbenchErrorIdentifier) {
-  text-decoration: underline wavy var(--workbench-editor-diagnostic-error-underline) !important;
-  background-image: none !important;
-}
-
 .codeMirrorEditor :global(.cm-lintRange.cm-workbenchUnusedVariable) {
   text-decoration: none !important;
   background-image: none !important;
@@ -409,7 +412,6 @@
 .codeMirrorEditor :global(.cm-workbenchErrorIdentifier .cm-propertyName),
 .codeMirrorEditor :global(.cm-workbenchErrorIdentifier .cm-typeName) {
   color: var(--workbench-editor-diagnostic-error-fg) !important;
-  text-decoration: underline wavy var(--workbench-editor-diagnostic-error-underline);
 }
 
 .codeMirrorEditor :global(.cm-editor .cm-line span.cm-workbenchUnusedVariable),

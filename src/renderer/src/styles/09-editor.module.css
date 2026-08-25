@@ -1370,7 +1370,8 @@
   opacity: 1;
 }
 
-.codeMirrorEditor :global(.cm-focused .cm-activeLine) {
+.codeMirrorEditor
+  :global(.cm-focused:not(.cm-workbenchActiveLineSuppressed) .cm-activeLine) {
   background: var(--workbench-editor-active-line);
 }
 
@@ -1378,11 +1379,16 @@
   background: color-mix(in srgb, var(--status-red) 10%, transparent);
 }
 
-.codeMirrorEditor :global(.cm-line.cm-workbenchLineNumberMarkerLine.cm-activeLine) {
+.codeMirrorEditor
+  :global(
+    .cm-editor:not(.cm-workbenchActiveLineSuppressed)
+      .cm-line.cm-workbenchLineNumberMarkerLine.cm-activeLine
+  ) {
   background: color-mix(in srgb, var(--status-red) 12%, var(--workbench-editor-active-line));
 }
 
-.codeMirrorEditor :global(.cm-focused .cm-activeLineGutter) {
+.codeMirrorEditor
+  :global(.cm-focused:not(.cm-workbenchActiveLineSuppressed) .cm-activeLineGutter) {
   background: var(--workbench-editor-active-gutter);
   color: var(--workbench-editor-fg);
 }

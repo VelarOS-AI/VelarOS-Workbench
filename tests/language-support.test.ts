@@ -182,6 +182,7 @@ void describe('focused Workbench language surface', () => {
       'get',
       'is',
       'js',
+      'json',
       'module',
       'match',
       'null',

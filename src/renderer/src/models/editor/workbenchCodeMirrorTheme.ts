@@ -150,51 +150,61 @@ const riderDarkHighlightStyle = HighlightStyle.define([
 
 const workbenchCodeMirrorDarculaTheme: Extension = syntaxHighlighting(riderDarkHighlightStyle)
 
-export const workbenchCodeMirrorLintTheme: Extension = EditorView.theme(
-  {
-    '.cm-lintRange': {
-      backgroundImage: 'none',
-      paddingBottom: '0',
-      textUnderlineOffset: '2px',
+function diagnosticUnderlineBackground(color: string): string {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="6" height="3"><path d="m0 2.5 l2 -1.5 l1 0 l2 1.5 l1 0" stroke="${color}" fill="none" stroke-width=".7"/></svg>`
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`
+}
+
+export function getWorkbenchCodeMirrorLintTheme(theme: WorkbenchThemeId): Extension {
+  const dark = isWorkbenchDarkTheme(theme)
+  const errorUnderline = diagnosticUnderlineBackground(dark ? '#f14c4c' : '#e51400')
+  const warningUnderline = diagnosticUnderlineBackground(dark ? '#cca700' : '#bf8803')
+  const hintUnderline = diagnosticUnderlineBackground(dark ? '#848484' : '#949494')
+
+  return EditorView.theme(
+    {
+      '.cm-lintRange': {
+        backgroundPosition: 'left bottom',
+        backgroundRepeat: 'repeat-x',
+        paddingBottom: '0.7px',
+        textDecoration: 'none',
+      },
+      '.cm-lintRange-error': {
+        backgroundImage: errorUnderline,
+      },
+      '.cm-lintRange-warning': {
+        backgroundImage: warningUnderline,
+      },
+      '.cm-lintRange-info': {
+        backgroundImage: hintUnderline,
+      },
+      '.cm-lintRange-hint': {
+        backgroundImage: hintUnderline,
+      },
+      '.cm-lintRange.cm-workbenchUnusedVariable': {
+        backgroundImage: 'none',
+      },
+      '.cm-lintRange.cm-workbenchErrorIdentifier': {
+        backgroundImage: errorUnderline,
+      },
+      '.cm-lintRange.cm-workbenchErrorIdentifier, .cm-lintRange.cm-workbenchErrorIdentifier *': {
+        color: 'var(--workbench-editor-diagnostic-error-fg, #8b0000) !important',
+      },
+      '.cm-line .cm-workbenchErrorIdentifier, .cm-line .cm-workbenchErrorIdentifier *': {
+        color: 'var(--workbench-editor-diagnostic-error-fg, #8b0000) !important',
+      },
+      '.cm-lintRange.cm-workbenchUnusedVariable, .cm-lintRange.cm-workbenchUnusedVariable *': {
+        color: 'var(--workbench-editor-unused-fg, #6e7681) !important',
+        textDecoration: 'none !important',
+      },
+      '.cm-line .cm-workbenchUnusedVariable, .cm-line .cm-workbenchUnusedVariable *': {
+        color: 'var(--workbench-editor-unused-fg, #6e7681) !important',
+        textDecoration: 'none !important',
+      },
     },
-    '.cm-lintRange-error': {
-      textDecoration: 'underline wavy var(--workbench-editor-diagnostic-error-underline)',
-    },
-    '.cm-lintRange-warning': {
-      textDecoration: 'underline wavy var(--workbench-editor-diagnostic-warning-underline)',
-    },
-    '.cm-lintRange-info': {
-      textDecoration: 'underline wavy var(--workbench-editor-diagnostic-hint-underline)',
-    },
-    '.cm-lintRange-hint': {
-      textDecoration: 'underline wavy var(--workbench-editor-diagnostic-hint-underline)',
-    },
-    '.cm-lintRange.cm-workbenchUnusedVariable': {
-      textDecoration: 'none',
-      backgroundImage: 'none',
-    },
-    '.cm-lintRange.cm-workbenchErrorIdentifier': {
-      textDecoration: 'underline wavy var(--workbench-editor-diagnostic-error-underline)',
-      backgroundImage: 'none',
-    },
-    '.cm-lintRange.cm-workbenchErrorIdentifier, .cm-lintRange.cm-workbenchErrorIdentifier *': {
-      color: 'var(--workbench-editor-diagnostic-error-fg, #8b0000) !important',
-    },
-    '.cm-line .cm-workbenchErrorIdentifier, .cm-line .cm-workbenchErrorIdentifier *': {
-      color: 'var(--workbench-editor-diagnostic-error-fg, #8b0000) !important',
-      textDecoration: 'underline wavy var(--workbench-editor-diagnostic-error-underline)',
-    },
-    '.cm-lintRange.cm-workbenchUnusedVariable, .cm-lintRange.cm-workbenchUnusedVariable *': {
-      color: 'var(--workbench-editor-unused-fg, #6e7681) !important',
-      textDecoration: 'none !important',
-    },
-    '.cm-line .cm-workbenchUnusedVariable, .cm-line .cm-workbenchUnusedVariable *': {
-      color: 'var(--workbench-editor-unused-fg, #6e7681) !important',
-      textDecoration: 'none !important',
-    },
-  },
-  { dark: false }
-)
+    { dark }
+  )
+}
 
 export function getWorkbenchCodeMirrorTheme(theme: WorkbenchThemeId): Extension {
   return isWorkbenchDarkTheme(theme) ? workbenchCodeMirrorDarculaTheme : workbenchCodeMirrorRiderTheme

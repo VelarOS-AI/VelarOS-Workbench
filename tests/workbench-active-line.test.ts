@@ -2,8 +2,13 @@ import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 
 import { EditorSelection, EditorState } from '@codemirror/state'
+import type { EditorView } from '@codemirror/view'
 
-import { hasWorkbenchMultilineTextSelection } from '../src/renderer/src/models/editor/workbenchCodeMirrorActiveLine'
+import {
+  hasWorkbenchMultilineTextSelection,
+  revealWorkbenchActiveLine,
+  suppressWorkbenchActiveLine,
+} from '../src/renderer/src/models/editor/workbenchCodeMirrorActiveLine'
 import { resolveWorkbenchExternalValueSyncSelection } from '../src/renderer/src/models/editor/workbenchCodeMirrorExternalSync'
 
 function stateWithSelection(anchor: number, head: number): EditorState {
@@ -48,5 +53,23 @@ void describe('Workbench active-line visibility', () => {
       resolveWorkbenchExternalValueSyncSelection(state, 16, false).main,
       EditorSelection.range(14, 16)
     )
+  })
+
+  void test('keeps a newly switched file visually idle until the editor is used', () => {
+    const classNames = new Set<string>()
+    const view = {
+      dom: {
+        classList: {
+          add: (className: string) => classNames.add(className),
+          remove: (className: string) => classNames.delete(className),
+        },
+      },
+    } as unknown as EditorView
+
+    suppressWorkbenchActiveLine(view)
+    assert.equal(classNames.has('cm-workbenchActiveLineSuppressed'), true)
+
+    revealWorkbenchActiveLine(view)
+    assert.equal(classNames.has('cm-workbenchActiveLineSuppressed'), false)
   })
 })

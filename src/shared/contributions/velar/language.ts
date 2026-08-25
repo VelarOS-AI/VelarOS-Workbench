@@ -28,6 +28,7 @@ export const VELAR_LANGUAGE_KEYWORDS = [
   'in',
   'is',
   'js',
+  'json',
   'let',
   'match',
   'module',

@@ -397,6 +397,11 @@
   color: var(--workbench-file-toml);
 }
 
+.treeFileIcon[data-kind='yaml'],
+.commitFileIcon[data-kind='yaml'] {
+  color: var(--workbench-file-yaml);
+}
+
 .treeFileIcon[data-kind='gitignore'],
 .commitFileIcon[data-kind='gitignore'] {
   color: var(--workbench-file-generic);

@@ -11,6 +11,7 @@ export interface WorkbenchSymbolLocationItem {
 export interface WorkbenchSymbolLocationsRequest {
   symbol: string
   origin: WorkbenchLanguageServiceLocation
+  destination?: WorkbenchLanguageServiceLocation
   items: readonly WorkbenchSymbolLocationItem[]
   truncated: boolean
 }
@@ -36,11 +37,13 @@ export function sameWorkbenchSymbolLocation(
 export function buildWorkbenchSymbolLocationsRequest({
   symbol,
   origin,
+  destination,
   definitions,
   references,
 }: {
   symbol: string
   origin: WorkbenchLanguageServiceLocation
+  destination?: WorkbenchLanguageServiceLocation
   definitions: readonly WorkbenchLanguageServiceLocation[]
   references: readonly WorkbenchLanguageServiceLocation[]
 }): WorkbenchSymbolLocationsRequest {
@@ -72,6 +75,7 @@ export function buildWorkbenchSymbolLocationsRequest({
   return {
     symbol,
     origin,
+    ...(destination ? { destination } : {}),
     items: items.slice(0, MaximumSymbolLocations),
     truncated: items.length > MaximumSymbolLocations,
   }
@@ -80,7 +84,10 @@ export function buildWorkbenchSymbolLocationsRequest({
 export function openWorkbenchSymbolLocations(
   request: WorkbenchSymbolLocationsRequest
 ): WorkbenchSymbolLocationsState {
-  return { ...request, activeLocation: request.origin, returnLocation: null }
+  const opened = { ...request, activeLocation: request.origin, returnLocation: null }
+  return request.destination
+    ? navigateWorkbenchSymbolLocations(opened, request.destination)
+    : opened
 }
 
 export function navigateWorkbenchSymbolLocations(

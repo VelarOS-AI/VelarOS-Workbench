@@ -3,12 +3,23 @@ import { RangeSet } from '@codemirror/state'
 import {
   Decoration,
   type DecorationSet,
-  type EditorView,
+  EditorView,
   gutterLineClass,
   GutterMarker,
   ViewPlugin,
   type ViewUpdate,
 } from '@codemirror/view'
+
+const workbenchActiveLineSuppressedClass = 'cm-workbenchActiveLineSuppressed'
+
+/** 文件刚切换时暂隐合成光标产生的当前行，首次真实编辑交互后恢复。 */
+export function suppressWorkbenchActiveLine(view: EditorView): void {
+  view.dom.classList.add(workbenchActiveLineSuppressedClass)
+}
+
+export function revealWorkbenchActiveLine(view: EditorView): void {
+  view.dom.classList.remove(workbenchActiveLineSuppressedClass)
+}
 
 /** 跨行文本选区已经提供了足够清晰的视觉范围，不再叠加单独的当前行。 */
 export function hasWorkbenchMultilineTextSelection(state: EditorState): boolean {
@@ -73,8 +84,26 @@ const activeLineGutterExtension = gutterLineClass.compute(['selection'], (state)
   )
 })
 
+const activeLineInteractionExtension = EditorView.domEventHandlers({
+  mousedown: (_event, view) => {
+    revealWorkbenchActiveLine(view)
+    return false
+  },
+  touchstart: (_event, view) => {
+    revealWorkbenchActiveLine(view)
+    return false
+  },
+  keydown: (event, view) => {
+    if (!['Alt', 'Control', 'Meta', 'Shift'].includes(event.key)) {
+      revealWorkbenchActiveLine(view)
+    }
+    return false
+  },
+})
+
 /** 当前行和当前行号使用同一个选区策略，避免两处视觉状态分叉。 */
 export const workbenchActiveLineExtension: Extension = [
   activeLineContentExtension,
   activeLineGutterExtension,
+  activeLineInteractionExtension,
 ]

@@ -82,7 +82,11 @@ import {
   useWorkbenchComments,
   useWorkbenchCommentStore,
 } from '@renderer/models/comments/workbenchCommentStore'
-import { workbenchActiveLineExtension } from '@renderer/models/editor/workbenchCodeMirrorActiveLine'
+import {
+  revealWorkbenchActiveLine,
+  suppressWorkbenchActiveLine,
+  workbenchActiveLineExtension,
+} from '@renderer/models/editor/workbenchCodeMirrorActiveLine'
 import { getWorkbenchCodeMirrorAutocompleteTheme } from '@renderer/models/editor/workbenchCodeMirrorAutocompleteTheme'
 import { createWorkbenchBasicSyntaxExtension } from '@renderer/models/editor/workbenchCodeMirrorBasicSyntax'
 import {
@@ -117,7 +121,6 @@ import {
   createWorkbenchLanguageServiceHoverTooltip,
   createWorkbenchSignatureHelpExtension,
   findWorkbenchLanguageServiceReferences,
-  isWorkbenchTypeHover,
 } from '@renderer/models/editor/workbenchCodeMirrorLanguageFeatures'
 import {
   applyWorkbenchLanguageServiceEditsToContent,
@@ -138,8 +141,8 @@ import {
   getWorkbenchSemanticTokenTheme,
 } from '@renderer/models/editor/workbenchCodeMirrorSemanticTokens'
 import {
+  getWorkbenchCodeMirrorLintTheme,
   getWorkbenchCodeMirrorTheme,
-  workbenchCodeMirrorLintTheme,
 } from '@renderer/models/editor/workbenchCodeMirrorTheme'
 import { createWorkbenchTokenOccurrenceHighlightExtension } from '@renderer/models/editor/workbenchCodeMirrorTokenOccurrenceHighlight'
 import { buildWorkbenchIdeaIndentGuideColumnsForLineRange } from '@renderer/models/editor/workbenchIndentGuides'
@@ -151,9 +154,9 @@ import {
   getWorkbenchLanguageServiceDiagnostics,
   getWorkbenchLanguageServiceDocumentHighlights,
   getWorkbenchLanguageServiceFormat,
-  getWorkbenchLanguageServiceHover,
   getWorkbenchLanguageServiceInlayHints,
   getWorkbenchLanguageServiceRename,
+  getWorkbenchLanguageServiceReferences,
   getWorkbenchLanguageServiceSemanticTokens,
 } from '@renderer/models/editor/workbenchLanguageServiceIpc'
 import {
@@ -161,6 +164,7 @@ import {
   shouldShowWorkbenchPackageScriptRunGutter,
 } from '@renderer/models/editor/workbenchPackageScriptRunGutter'
 import {
+  buildWorkbenchSymbolLocationsRequest,
   type WorkbenchSymbolLocationsRequest,
 } from '@renderer/models/editor/workbenchSymbolLocations'
 import {
@@ -177,7 +181,6 @@ import type {
   WorkbenchLanguageServiceCodeAction,
   WorkbenchLanguageServiceDiagnostic,
   WorkbenchLanguageServiceFileEdit,
-  WorkbenchLanguageServiceHoverResult,
 } from '@shared/contracts'
 
 import styles from '../../styles/workbenchPageStyles'
@@ -262,12 +265,6 @@ interface EditorContextMenuState {
   word: Nullable<WorkbenchIdentifierRange>
   canGoToDefinition: boolean
   hasSelection: boolean
-}
-
-interface EditorTypeInformationPopupState {
-  left: number
-  top: number
-  hover: Nullable<WorkbenchLanguageServiceHoverResult>
 }
 
 /** 折叠栏标记使用 DOM 节点，避免默认细字形被主题覆盖后难以辨认。 */
@@ -938,44 +935,6 @@ function RenameInputPopup({
   )
 }
 
-function TypeInformationPopupContent({
-  hover,
-  loadingLabel,
-  definitionLabel,
-  definitionPreviewLabel,
-}: {
-  hover: Nullable<WorkbenchLanguageServiceHoverResult>
-  loadingLabel: string
-  definitionLabel: string
-  definitionPreviewLabel: string
-}): ReactElement {
-  const contentRef = useRef<HTMLDivElement>(null)
-
-  useLayoutEffect(() => {
-    const host = contentRef.current
-    if (!host || !hover) return
-    const content = buildWorkbenchEditorHoverDom({
-      hover,
-      definitionLabel,
-      definitionPreviewLabel,
-      showDefinitionPreview: true,
-    }, workbenchEditorLanguageFeatureClasses)
-    host.replaceChildren(content)
-    return () => {
-      content.remove()
-    }
-  }, [definitionLabel, definitionPreviewLabel, hover])
-
-  if (!hover)
-    return (
-      <div className={styles.editorTypeInfoLoading} role="status" aria-live="polite">
-        <span className={styles.editorTypeInfoLoadingDot} aria-hidden="true" />
-        <span>{loadingLabel}</span>
-      </div>
-    )
-  return <div ref={contentRef} />
-}
-
 const COMMENT_POPUP_BOUNDARY_INSET = 8
 const COMMENT_POPUP_ANCHOR_GAP = 4
 
@@ -1135,7 +1094,6 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
     const commentStore = useWorkbenchCommentStore()
     const containerRef = useRef<HTMLDivElement>(null)
     const contextMenuRef = useRef<HTMLDivElement>(null)
-    const typeInfoPopupRef = useRef<HTMLDivElement>(null)
     const viewRef = useRef<EditorView>(null)
     const autoFoldedPathRef = useRef<string>(null)
     const synchronizedPathRef = useRef(path)
@@ -1250,6 +1208,10 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       () => createWorkbenchDiagnosticForegroundExtension(),
       []
     )
+    const lintTheme = useMemo(
+      () => getWorkbenchCodeMirrorLintTheme(workbenchTheme),
+      [workbenchTheme]
+    )
     const autocompleteTheme = useMemo(
       () => getWorkbenchCodeMirrorAutocompleteTheme(workbenchTheme),
       [workbenchTheme]
@@ -1257,9 +1219,6 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
     const [contextMenu, setContextMenu] = useState<Nullable<EditorContextMenuState>>(null)
     const [renamePopup, setRenamePopup] =
       useState<Nullable<{ identifier: WorkbenchIdentifierRange; left: number; top: number }>>(null)
-    const [typeInfoPopup, setTypeInfoPopup] =
-      useState<Nullable<EditorTypeInformationPopupState>>(null)
-    const typeInfoRequestGenerationRef = useRef(0)
     const [commentDraft, setCommentDraft] = useState<
       Nullable<{
         from: number
@@ -1645,7 +1604,8 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
 
       if (view && pathRef.current && identifier) {
         try {
-          const result = await getWorkbenchLanguageServiceDefinition({
+          const position = positionLineColumnFromState(view.state, identifier.from)
+          const request = {
             ...buildWorkbenchLanguageServiceRequestBase({
               projectRoot,
               path: pathRef.current,
@@ -1653,11 +1613,30 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
               content: view.state.doc.toString(),
               openTabs: openTabsLatest.current,
             }),
-            position: positionLineColumnFromState(view.state, identifier.from),
-          }, hostRuntime)
-          const location = result.ok ? result.data.locations[0] : null
+            position,
+          }
+          const [definitionResult, referencesResult] = await Promise.all([
+            getWorkbenchLanguageServiceDefinition(request, hostRuntime),
+            getWorkbenchLanguageServiceReferences(request, hostRuntime).catch(() => null),
+          ])
+          const definitions = definitionResult.ok ? definitionResult.data.locations : []
+          const references = referencesResult?.ok ? referencesResult.data.locations : []
+          const location = definitions[0]
           if (location) {
             setContextMenu(null)
+            callbacksRef.current.onOpenSymbolLocations?.(
+              buildWorkbenchSymbolLocationsRequest({
+                symbol: identifier.text,
+                origin: {
+                  path: pathRef.current,
+                  line: position.line,
+                  column: position.column,
+                },
+                destination: location,
+                definitions,
+                references,
+              })
+            )
             callbacksRef.current.onGoToDefinition(location.path, location.line, location.column)
             return
           }
@@ -1677,56 +1656,6 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
 
       setContextMenu(null)
       callbacksRef.current.onGoToDefinition(target.path, target.line, target.column)
-    }
-
-    const showTypeInformationOrDefinition = async (
-      word: WorkbenchIdentifierRange,
-      coords: { x: number; y: number }
-    ): Promise<void> => {
-      const view = viewRef.current
-      const currentPath = pathRef.current
-      if (!view || !currentPath) return
-
-      const generation = ++typeInfoRequestGenerationRef.current
-      const left = Math.min(
-        Math.max(8, coords.x),
-        Math.max(8, window.innerWidth - 488)
-      )
-      const top = Math.min(
-        Math.max(8, coords.y + 8),
-        Math.max(8, window.innerHeight - 360)
-      )
-      setTypeInfoPopup({ left, top, hover: null })
-
-      try {
-        const result = await getWorkbenchLanguageServiceHover({
-          ...buildWorkbenchLanguageServiceRequestBase({
-            projectRoot,
-            path: currentPath,
-            language,
-            content: view.state.doc.toString(),
-            openTabs: openTabsLatest.current,
-          }),
-          position: positionLineColumnFromState(view.state, word.from),
-        }, hostRuntime)
-        if (generation !== typeInfoRequestGenerationRef.current) return
-
-        const hover = result.ok ? result.data.hover : null
-        if (isWorkbenchTypeHover(hover)) {
-          setTypeInfoPopup({ left, top, hover })
-          return
-        }
-      } catch (error) {
-        log.debug('查询类型信息失败，回退到定义跳转', {
-          projectRoot,
-          path: currentPath,
-          language,
-          error,
-        })
-      }
-
-      setTypeInfoPopup(null)
-      await goToDefinitionForWord(word)
     }
 
     const renameIdentifier = (word: Nullable<WorkbenchIdentifierRange>): void => {
@@ -1967,18 +1896,6 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         event.target instanceof Node && !!contextMenuRef.current?.contains(event.target),
     })
     useBlockWheelScroll(contextMenuRef, isPresent(contextMenu))
-    useDismissOnWindowInteract({
-      enabled: isPresent(typeInfoPopup),
-      onDismiss: () => {
-        typeInfoRequestGenerationRef.current += 1
-        setTypeInfoPopup(null)
-      },
-      ignoreMouseDown: (event) =>
-        event.target instanceof Node && !!typeInfoPopupRef.current?.contains(event.target),
-      scroll: false,
-    })
-    useBlockWheelScroll(typeInfoPopupRef, isPresent(typeInfoPopup))
-
     useImperativeHandle(ref, () => ({
       focus: () => {
         viewRef.current?.focus()
@@ -1997,6 +1914,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
           selection: { anchor: targetPosition },
           effects: EditorView.scrollIntoView(targetPosition, { y: 'center', x: 'nearest' }),
         })
+        revealWorkbenchActiveLine(view)
         view.focus()
         emitCursorPosition(view, callbacksRef.current.onCursorPositionChange)
       },
@@ -2017,6 +1935,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
           selection: { anchor: start, head: end },
           effects: EditorView.scrollIntoView(start, { y: 'center', x: 'nearest' }),
         })
+        revealWorkbenchActiveLine(view)
         view.focus()
         emitCursorPosition(view, callbacksRef.current.onCursorPositionChange)
       },
@@ -2211,7 +2130,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
           if (!word) return false
 
           event.preventDefault()
-          void showTypeInformationOrDefinition(word, { x: event.clientX, y: event.clientY })
+          void goToDefinitionForWord(word)
           return true
         },
       })
@@ -2260,7 +2179,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
           // 否则繁忙项目拿不到 idle 时隙时，错误下划线和悬浮提示会永久缺席。
           lintCompartment.of([
             languageServiceLinter,
-            workbenchCodeMirrorLintTheme,
+            lintTheme,
             diagnosticForegroundExtension,
           ]),
           workbenchInlineCompletionExtension(inlineCompletionRuntime),
@@ -2314,10 +2233,9 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         })
       )
       if (fileChanged) {
-        typeInfoRequestGenerationRef.current += 1
+        suppressWorkbenchActiveLine(view)
         setContextMenu(null)
         setRenamePopup(null)
-        setTypeInfoPopup(null)
         setCommentDraft(null)
         view.scrollDOM.scrollTo({ left: 0, top: 0 })
       }
@@ -2359,11 +2277,11 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       viewRef.current?.dispatch({
         effects: lintCompartment.reconfigure([
           languageServiceLinter,
-          workbenchCodeMirrorLintTheme,
+          lintTheme,
           diagnosticForegroundExtension,
         ]),
       })
-    }, [diagnosticForegroundExtension, languageServiceLinter, lintCompartment])
+    }, [diagnosticForegroundExtension, languageServiceLinter, lintCompartment, lintTheme])
 
     useEffect(() => {
       const view = viewRef.current
@@ -2559,22 +2477,6 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
             onSubmit={(value) => void commitRename(renamePopup.identifier, value)}
             onCancel={() => setRenamePopup(null)}
           />
-        )}
-        {!!typeInfoPopup && (
-          <div
-            ref={typeInfoPopupRef}
-            className={styles.editorTypeInfoPopup}
-            style={{ left: typeInfoPopup.left, top: typeInfoPopup.top }}
-            role="dialog"
-            aria-label={t('workbench.editorHoverDefinitionPreview')}
-          >
-            <TypeInformationPopupContent
-              hover={typeInfoPopup.hover}
-              loadingLabel={t('workbench.editorTypeInfoLoading')}
-              definitionLabel={t('workbench.editorHoverDefinition')}
-              definitionPreviewLabel={t('workbench.editorHoverDefinitionPreview')}
-            />
-          </div>
         )}
         {!!commentDraft && (
           <CommentInputPopup

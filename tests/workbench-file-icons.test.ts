@@ -21,6 +21,10 @@ void describe('Workbench file icon surface', () => {
     assert.equal(getWorkbenchFilePresentationVariant({ fileName: 'main.ts' }), 'typescript')
     assert.equal(getWorkbenchFilePresentationVariant({ fileName: 'view.tsx' }), 'tsx')
     assert.equal(getWorkbenchFilePresentationVariant({ fileName: 'main.vel' }), 'velarscript')
+    assert.equal(getWorkbenchFilePresentationVariant({ fileName: 'catalog.yml' }), 'yaml')
+    assert.equal(getWorkbenchFilePresentationVariant({ fileName: 'schema.yaml' }), 'yaml')
+    assert.equal(getWorkbenchFilePresentationVariant({ fileName: 'electron-builder.yml' }), 'yaml')
+    assert.equal(getWorkbenchFilePresentationVariant({ fileName: 'settings.ini' }), 'config')
   })
 
   void test('keeps framework-specific icons outside core and exposes a contribution seam', () => {

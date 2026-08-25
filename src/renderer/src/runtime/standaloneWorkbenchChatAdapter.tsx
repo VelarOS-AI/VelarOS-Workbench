@@ -434,6 +434,7 @@ function StandaloneWorkbenchChatSessionSurface({
         lastRunStartedAt: chat.lastRunStartedAt,
         awaitingConfirmationMessage: null,
         awaitingInputQuestion: null,
+        conversationCards: [],
         stickyDockItems: [],
         awaitingConfirmationUserActionCards: [],
         awaitingConfirmationExecutionId: null,
