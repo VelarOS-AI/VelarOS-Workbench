@@ -26,7 +26,7 @@ function semanticTokenTheme(dark: boolean): Extension {
     '& .cm-workbenchSemantic-keyword, & .cm-workbenchSemantic-keyword *': {
       color: `${dark ? '#569cd6' : '#0033b3'} !important`,
     },
-    '& .cm-workbenchSemantic-function, & .cm-workbenchSemantic-method': {
+    '& .cm-workbenchSemantic-function, & .cm-workbenchSemantic-function *, & .cm-workbenchSemantic-method, & .cm-workbenchSemantic-method *': {
       color: `${dark ? '#ffd580' : '#a04b00'} !important`,
     },
     '& .cm-workbenchSemantic-property, & .cm-workbenchSemantic-event': {
@@ -77,13 +77,49 @@ function markFor(token: WorkbenchLanguageServiceSemanticToken): Decoration {
   return mark
 }
 
+function adjacentNonWhitespace(
+  content: string,
+  offset: number,
+  direction: -1 | 1
+): string {
+  let index = direction < 0 ? offset - 1 : offset
+  while (index >= 0 && index < content.length) {
+    const character = content[index] ?? ''
+    if (!/\s/u.test(character)) return character
+    index += direction
+  }
+  return ''
+}
+
+function isObjectShorthandRange(content: string, from: number, to: number): boolean {
+  const before = adjacentNonWhitespace(content, from, -1)
+  const after = adjacentNonWhitespace(content, to, 1)
+  return (before === '{' || before === ',') && (after === ',' || after === '}')
+}
+
 export function buildWorkbenchSemanticTokenDecorations(
   content: string,
   tokens: readonly WorkbenchLanguageServiceSemanticToken[]
 ): DecorationSet {
+  const callableNames = new Set(
+    tokens.flatMap((token) => {
+      if (token.type !== 'function' && token.type !== 'method') return []
+      const range = languageServiceRangeToOffsets(content, token.range)
+      return range ? [content.slice(range.from, range.to)] : []
+    })
+  )
   const ranges = tokens.slice(0, 10_000).flatMap((token) => {
     const range = languageServiceRangeToOffsets(content, token.range)
-    return range && range.from < range.to ? [{ ...range, mark: markFor(token) }] : []
+    if (!range || range.from >= range.to) return []
+
+    const tokenText = content.slice(range.from, range.to)
+    const effectiveToken =
+      token.type === 'property'
+      && callableNames.has(tokenText)
+      && isObjectShorthandRange(content, range.from, range.to)
+        ? { ...token, type: 'function' as const }
+        : token
+    return [{ ...range, mark: markFor(effectiveToken) }]
   }).sort((left, right) => left.from - right.from || left.to - right.to)
   return Decoration.set(ranges.map((range) => range.mark.range(range.from, range.to)), true)
 }

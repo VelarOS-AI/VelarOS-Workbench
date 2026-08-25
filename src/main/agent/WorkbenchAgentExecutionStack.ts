@@ -2,7 +2,6 @@ import type { ModelMessage } from 'ai'
 
 import {
   type AgentExecutionConfig,
-  type AgentModSeamDispatcher,
   CodingSessionTracker,
   ContextBuilder,
   ContextGovernanceSessionRegistry,
@@ -16,7 +15,7 @@ import {
   SoloStreamLoop,
   TurnRunner,
 } from '@velaros-ai/agent'
-import { Log, toNullable } from '@velaros-ai/core'
+import { Log } from '@velaros-ai/core'
 import { logRuntime } from '@velaros-ai/core/logger'
 import { createModelRuntimeComposition } from '@velaros-ai/model/node'
 
@@ -46,7 +45,7 @@ import { WorkbenchAgentToolRegistry } from './WorkbenchAgentToolRegistry'
  * 持久化、会话互斥、pending input、审批往返）、SubAgentDispatcher + QueryLoop（子 Agent 派发）、
  * 技能库、记忆/知识域、执行观测账本。Workbench v1 **一个都不装**：一次 execute 就是一轮
  * 前台 solo 运行，abort 靠 Kernel 能力信号，历史由调用方（renderer）持有。
- * 这些缺口是显式欠账，见 docs/agent-mod-trunk.md 的「残余」一节。
+ * 当前实现保留 Workbench 的单项目、前台执行边界；提示词、工具和执行模式由产品内置。
  */
 const WorkbenchAgentRunId = 'workbench-solo'
 const WorkbenchDefaultThinkingDepth = 'balanced'
@@ -79,15 +78,12 @@ class WorkbenchAgentExecutionStack {
   private readonly sessions = new Map<string, WorkbenchAgentSession>()
   private readonly loops = new Map<string, SoloStreamLoop>()
 
-  public constructor(
-    private readonly projectProvider: WorkbenchProjectCapabilityProvider,
-    private readonly seams?: AgentModSeamDispatcher
-  ) {
+  public constructor(private readonly projectProvider: WorkbenchProjectCapabilityProvider) {
     // Model 是宿主注入的能力：Agent 不自己发现 provider registry。
     // config.modelSelection 是不透明选择，Workbench 原样转交 Model 包解析（BYOK）。
     this.runtimeHelper = new ModelRuntime(this.modelComposition.agentModelRuntime)
     this.runContextHelper = new RunContext(
-      new ContextBuilder(createBuiltInPromptRegistry(), toNullable(this.seams)),
+      new ContextBuilder(createBuiltInPromptRegistry(), null),
       defaultRuntimePromptFeaturePolicy
     )
     this.primaryAgentProfile = new PrimaryAgentProfile(EmptySkillRepository, {
@@ -188,7 +184,7 @@ class WorkbenchAgentExecutionStack {
       registry,
       null,
       {},
-      toNullable(this.seams)
+      null
     )
     this.loops.set(projectRoot, created)
     return created

@@ -189,3 +189,24 @@
 - 无阻塞项。
 
 final result: passed
+
+## Git 日志重设计与统一搜索框补充基准
+
+- Search-field reference: `/var/folders/qp/3d1vmxms7jqcm8353whb8h_80000gn/T/codex-clipboard-b6a4c3d6-bef4-490a-92cb-6553fcfda4f5.png`
+- Commit-metadata reference: `/var/folders/qp/3d1vmxms7jqcm8353whb8h_80000gn/T/codex-clipboard-d202de05-7d71-4f6e-8132-e942a86ba8ae.png`
+- Metadata-alignment reference: `/var/folders/qp/3d1vmxms7jqcm8353whb8h_80000gn/T/codex-clipboard-bdf25d58-18d2-4396-88c1-b5286864d417.png`
+- Inline-metadata reference: `/var/folders/qp/3d1vmxms7jqcm8353whb8h_80000gn/T/codex-clipboard-a960faae-7150-47c2-ab3b-3ff992baee08.png`
+- Verified Electron capture: `.codex/design-qa/workbench-git-log-meta-inline.png`
+- state: macOS 浅色主题，`openvoxel` 项目已打开，底部 Git 工具窗展开，分支搜索框聚焦
+
+### Findings
+
+- 搜索框只有一层透明输入背景，边框和聚焦环由整个搜索组件统一持有。
+- 分支、提交、项目文件、快速打开、文件内查找和文件历史搜索统一使用组件库 `SearchField`。
+- 提交元信息中的图标、标题和值在同一行排列。
+- Git 图谱、提交列表、变更文件列表和单文件 diff 在验证窗口尺寸下没有裁切或错位。
+- 提交选择仍会同步更新详情、变更文件和当前文件 diff。
+
+### Comparison history
+
+- Pass 13: 将搜索框和提交元信息源图与 `.codex/design-qa/workbench-git-log-meta-inline.png` 放入同一视觉对照输入；聚焦态包围完整搜索框，内部无重复背景，三项提交元信息全部收为单行。无新增 P0/P1/P2 差异。

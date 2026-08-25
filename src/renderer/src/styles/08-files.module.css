@@ -146,36 +146,7 @@
 }
 
 .searchInputShell {
-  @apply flex min-w-0 flex-1 items-center gap-1.5 border bg-card text-muted-foreground;
-  height: 30px;
-  padding-inline: 8px;
-  border-color: transparent;
-  border-radius: var(--workbench-radius);
-  background: transparent;
-  outline: none;
-  box-shadow: none;
-}
-
-.searchInputShell:focus-within {
-  border-color: transparent;
-  outline: none;
-  box-shadow: none;
-}
-
-.searchInputShell [data-slot='input'] {
-  height: 100%;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  box-shadow: none;
-}
-
-.searchInputShell [data-slot='input']:focus,
-.searchInputShell [data-slot='input']:focus-visible {
-  border: 0;
-  outline: none !important;
-  background: transparent;
-  box-shadow: none !important;
+  @apply min-w-0 flex-1;
 }
 
 .treeScroll {
@@ -330,6 +301,11 @@
 .treeFileIcon {
   @apply flex shrink-0 items-center justify-center text-muted-foreground;
   width: 16px;
+}
+
+.treeRow[data-test-directory='true'] .treeFolderIcon,
+.treeRow[data-test-directory='true'] .treeName {
+  color: var(--status-amber);
 }
 
 .treeFileIcon[data-test-file='true'] {

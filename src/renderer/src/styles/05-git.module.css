@@ -6,55 +6,232 @@
 }
 
 .gitLogSearchBar {
-  @apply flex shrink-0 items-center border-b;
-  min-height: 38px;
-  padding: 6px 8px;
+  @apply flex shrink-0 items-center gap-2 border-b;
+  min-height: 42px;
+  padding: 6px 10px;
   border-color: var(--workbench-border);
   background: var(--workbench-toolbar);
+}
+
+.gitLogSearchField,
+.gitBranchSearch {
+  @apply min-w-0;
+}
+
+.gitLogSearchField {
+  @apply flex-1;
+}
+
+.gitLogScope,
+.gitLogCount {
+  @apply flex shrink-0 items-center gap-1 truncate text-muted-foreground;
+  font-size: 10.5px;
+}
+
+.gitLogScope {
+  max-width: 150px;
+  padding: 4px 7px;
+  border-radius: var(--workbench-radius);
+  color: var(--workbench-active-fg);
+  background: var(--workbench-active-soft);
 }
 
 .gitLogScroll {
   @apply min-h-0 flex-1;
 }
 
+.gitLogScroll .historyTimeline {
+  padding-block: 2px;
+}
+
+.gitLogScroll .historyTimelineRow {
+  min-height: 44px;
+  padding: 2px 10px 2px 6px;
+}
+
+.gitLogScroll .historyTimelineRail {
+  width: 24px;
+}
+
+.gitLogScroll .historyTimelineRail::before {
+  width: 2px;
+  background: color-mix(in oklab, var(--workbench-theme-color) 52%, transparent);
+}
+
+.gitLogScroll .historyTimelineDot {
+  box-shadow: 0 0 0 3px var(--workbench-surface);
+}
+
+.gitLogScroll .historyTimelineRow[data-active='true'] .historyTimelineDot {
+  box-shadow:
+    0 0 0 3px var(--workbench-surface),
+    0 0 0 5px color-mix(in oklab, var(--workbench-theme-color) 20%, transparent);
+}
+
+.gitLogScroll .historyTimelineBody {
+  @apply flex-1;
+  padding-block: 5px;
+}
+
 .gitCommitDetail {
-  @apply flex min-w-0 flex-col gap-3;
-  padding: 12px;
+  @apply flex h-full min-h-0 min-w-0 flex-col;
 }
 
 .gitCommitDetailTitle {
-  @apply m-0 font-medium text-foreground;
+  @apply m-0 font-semibold text-foreground;
   font-size: 13px;
   line-height: 1.4;
 }
 
-.gitCommitDetail dl {
-  @apply m-0 flex min-w-0 flex-col gap-2;
+.gitCommitHeader {
+  @apply flex shrink-0 flex-col gap-2 border-b;
+  padding: 12px;
+  border-color: var(--workbench-border);
 }
 
-.gitCommitDetail dl > div {
-  @apply grid min-w-0 gap-1;
+.gitCommitRefs {
+  @apply flex min-w-0 flex-wrap gap-1;
+}
+
+.gitCommitRefs > span {
+  @apply max-w-full truncate;
+  padding: 2px 6px;
+  border-radius: var(--workbench-radius);
+  color: var(--status-green);
+  background: color-mix(in oklab, var(--status-green) 11%, transparent);
+  font-size: 10px;
+}
+
+.gitCommitMetaGrid {
+  @apply m-0 grid shrink-0 min-w-0 gap-1.5 border-b;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding: 9px 12px;
+  border-color: var(--workbench-border);
+}
+
+.gitCommitMetaGrid > div {
+  @apply flex min-w-0 items-center gap-1.5;
+  color: var(--workbench-text-muted);
+}
+
+.gitCommitMetaLabel {
+  @apply flex min-w-0 items-center gap-1.5;
 }
 
 .gitCommitDetail dt {
   @apply text-muted-foreground;
-  font-size: 10.5px;
+  font-size: 9.5px;
 }
 
 .gitCommitDetail dd {
   @apply m-0 min-w-0 truncate text-foreground;
-  font-size: 12px;
+  font-size: 10.5px;
 }
 
-.gitCommitDiffPreview {
-  @apply flex min-h-0 min-w-0 flex-col overflow-hidden border;
+.gitCommitChanges {
+  @apply flex min-h-0 min-w-0 flex-1 flex-col;
+}
+
+.gitCommitChangesHeader {
+  @apply flex shrink-0 items-center justify-between gap-2 border-b;
+  min-height: 34px;
+  padding: 6px 10px;
   border-color: var(--workbench-border);
-  border-radius: var(--workbench-radius);
+  background: var(--workbench-toolbar);
+  font-size: 11px;
+  font-weight: 600;
 }
 
-.gitCommitDiffPreview .gitDiffLines {
-  height: 260px;
-  max-height: 260px;
+.gitCommitChangesHeader > span:first-child {
+  @apply flex min-w-0 items-center gap-1.5 truncate;
+}
+
+.gitCommitStats,
+.gitCommitFileList small {
+  @apply flex shrink-0 items-center gap-1.5 font-mono not-italic;
+  font-size: 10px;
+}
+
+.gitCommitStats strong,
+.gitCommitFileList strong {
+  color: var(--status-green);
+  font-weight: 500;
+}
+
+.gitCommitStats em,
+.gitCommitFileList em {
+  color: var(--status-red);
+  font-style: normal;
+}
+
+.gitCommitFileList {
+  @apply flex shrink-0 flex-col overflow-auto border-b;
+  max-height: 124px;
+  padding: 3px 4px;
+  border-color: var(--workbench-border);
+}
+
+.gitCommitFileList > button {
+  @apply flex min-w-0 items-center gap-1.5 border-0 bg-transparent text-left;
+  min-height: 25px;
+  padding: 3px 6px;
+  border-radius: var(--workbench-radius);
+  color: var(--workbench-text-muted);
+}
+
+.gitCommitFileList > button:hover,
+.gitCommitFileList > button[data-active='true'] {
+  background: var(--workbench-selection-bg);
+  color: var(--workbench-text);
+}
+
+.gitCommitFileList > button > span {
+  @apply min-w-0 flex-1 truncate;
+  font-size: 10.5px;
+}
+
+.gitCommitPatch {
+  @apply flex min-h-0 min-w-0 flex-1 flex-col;
+}
+
+.gitCommitPatch > .gitPaneSectionTitle {
+  @apply shrink-0 truncate border-b;
+  min-height: 28px;
+  padding: 6px 9px;
+  border-color: var(--workbench-border);
+  color: var(--workbench-text);
+  background: var(--workbench-surface);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.gitCommitPatch .gitToolCommitDiff {
+  @apply flex-1;
+}
+
+.gitCommitPatchLine {
+  @apply block;
+  min-width: max-content;
+  padding-inline: 9px;
+}
+
+.gitCommitPatchLine[data-kind='addition'] {
+  color: var(--status-green);
+  background: var(--status-green-soft);
+}
+
+.gitCommitPatchLine[data-kind='deletion'] {
+  color: var(--status-red);
+  background: var(--status-red-soft);
+}
+
+.gitCommitPatchLine[data-kind='hunk'] {
+  color: var(--status-blue-strong);
+  background: color-mix(in oklab, var(--status-blue-strong) 8%, transparent);
+}
+
+.gitCommitPatchLine[data-kind='meta'] {
+  color: var(--workbench-text-muted);
 }
 
 .gitWorkingTreeView {
@@ -93,8 +270,42 @@
 }
 
 .gitBranchList {
-  @apply flex min-w-0 flex-col gap-1;
-  padding: 8px;
+  @apply flex min-w-0 flex-col gap-3;
+  padding: 4px 8px 10px;
+}
+
+.gitBranchPaneHeader {
+  @apply flex shrink-0 items-center justify-between border-b;
+  min-height: 34px;
+  padding: 5px 8px;
+  border-color: var(--workbench-border);
+  background: var(--workbench-toolbar);
+}
+
+.gitBranchPaneHeader > span {
+  color: var(--workbench-text-muted);
+  font-size: 10px;
+}
+
+.gitBranchSearch {
+  margin: 7px 8px 3px;
+}
+
+.gitBranchScroll {
+  @apply min-h-0 flex-1;
+}
+
+.gitBranchGroup {
+  @apply flex min-w-0 flex-col gap-0.5;
+}
+
+.gitBranchGroup > p {
+  @apply m-0 text-muted-foreground;
+  padding: 3px 5px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
 .gitPaneSectionTitle {
@@ -106,8 +317,8 @@
 
 .gitBranchRow {
   @apply flex min-w-0 items-center gap-2 border bg-transparent text-left text-foreground;
-  min-height: 30px;
-  padding: 5px 6px;
+  min-height: 28px;
+  padding: 4px 6px;
   border-color: transparent;
   border-radius: var(--workbench-radius);
   font-size: 12px;
@@ -570,7 +781,7 @@
 .gitToolCommitDiff {
   @apply min-h-0 overflow-auto whitespace-pre font-mono;
   margin: 0;
-  padding: 8px 10px;
+  padding-block: 6px;
   color: var(--workbench-text);
   background: var(--workbench-surface);
   font-size: 10.5px;

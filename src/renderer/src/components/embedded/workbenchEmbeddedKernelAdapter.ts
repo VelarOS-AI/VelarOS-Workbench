@@ -1,4 +1,8 @@
 import { inferPackageManagerCommand } from '@renderer/models/commands/workbenchCommandSuggestions'
+import {
+  buildWorkbenchVelarBuildCommand,
+  buildWorkbenchVelarRunCommand,
+} from '@renderer/models/commands/workbenchVelarFileCommand'
 import { getWorkbenchFileDiagnosticView } from '@renderer/models/editor/workbenchLanguageServiceInsightsModel'
 
 import { AppError } from '@velaros-ai/core/error'
@@ -77,6 +81,7 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
     diagnosticsByPath: workbench.languageServiceInsights.diagnosticsByPath,
     diagnosticsPendingPaths: workbench.languageServiceInsights.diagnosticsPendingPaths,
   })
+  const packageManager = inferPackageManagerCommand(workbench.rootEntries)
 
   return {
     activeProject,
@@ -125,6 +130,12 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
         onSelectFile: (path) => {
           model.aiChangeArchive.closeSelection()
           void editorNavigation.selectFile(path)
+        },
+        onRunFile: (path) => {
+          void workbench.launchRunSession(buildWorkbenchVelarRunCommand(path, packageManager))
+        },
+        onBuildFile: (path) => {
+          void workbench.launchRunSession(buildWorkbenchVelarBuildCommand(path, packageManager))
         },
       },
     },
@@ -243,7 +254,7 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
         onGoToDefinition: (path, line, column) =>
           void editorNavigation.goToLocation(path, line, column),
         onApplyLanguageServiceFileChanges: workbench.applyLanguageServiceFileChanges,
-        packageManager: inferPackageManagerCommand(workbench.rootEntries),
+        packageManager,
         onRunPackageScript: (command) => {
           // 走可交互的运行卡（PTY），而不是只读一次性 runner；顺带记为「上次运行」，
           // 让右侧 ▶ 记住并可右键切换；会话创建后由页面 model 自动打开运行面板。

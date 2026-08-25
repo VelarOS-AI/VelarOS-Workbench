@@ -25,6 +25,7 @@ interface WorkbenchWindowRecord {
 interface WorkbenchWindowManagerOptions {
   createBrowserWindow: (hub: WorkbenchProjectHub) => BrowserWindow
   releaseProjectResources?: (ownerId: number, projectRoot: string) => Promise<void>
+  onLastProjectClosed?: () => void
 }
 
 type WorkbenchWindowManagerListener = () => void
@@ -74,6 +75,7 @@ export class WorkbenchWindowManager {
       const projectRoot = record.hub.getState().currentProject?.path
       if (projectRoot) {
         void this.releaseProjectResources(ownerId, projectRoot)
+        this.quitAfterLastProjectClosed()
       }
       this.emitChanged()
     })
@@ -218,6 +220,7 @@ export class WorkbenchWindowManager {
     const state = record.hub.closeProject()
     if (projectRoot) {
       await this.releaseProjectResources(sender.id, projectRoot)
+      this.quitAfterLastProjectClosed()
     }
     return state
   }
@@ -308,6 +311,12 @@ export class WorkbenchWindowManager {
         ownerId,
         projectRoot,
       })
+    }
+  }
+
+  private quitAfterLastProjectClosed(): void {
+    if (this.getOpenProjectPaths().length === 0) {
+      this.options.onLastProjectClosed?.()
     }
   }
 

@@ -1,4 +1,4 @@
-import { jsonSchema, tool as defineAiTool,type ToolSet } from 'ai'
+import { jsonSchema, tool as defineAiTool, type ToolSet } from 'ai'
 import { z } from 'zod'
 
 import type {
@@ -16,9 +16,7 @@ import type { WorkbenchProjectToolDefinition } from '../workspace/ProjectCapabil
  * 单一工具来源 = `@velaros-ai/project/agent` 的项目工具族。
  * 每个项目根一份 Project capability，因此注册表也是**每根一实例**。
  *
- * 与 Desktop 的 ToolRegistry 相比这里刻意极窄：没有 provider 生命周期、没有 MCP 注入、
- * 没有类别启停租约——Workbench v1 的工具面是一根固定分类下的定长工具集，全程可见。
- * 类别启停与分页（tool_map / 换入换出）留欠账，见 docs/agent-mod-trunk.md。
+ * Workbench 把这组产品工具直接内置并全程保持可见，不经过可安装模组或设置页开关。
  */
 interface WorkbenchRegisteredTool {
   name: string

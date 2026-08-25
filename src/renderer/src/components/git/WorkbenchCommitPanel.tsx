@@ -12,7 +12,6 @@ import {
   CheckIcon,
   ClockCounterClockwiseIcon,
   CrosshairIcon,
-  GearSixIcon,
   SparkleIcon,
   SpinnerGapIcon,
 } from '@phosphor-icons/react'
@@ -33,8 +32,17 @@ import { useStableWorkbenchMessageTranslate } from '@renderer/runtime/useStableW
 
 import { AppError } from '@velaros-ai/core/error'
 import { Result } from '@velaros-ai/core/result'
+import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
 import { Textarea } from '@velaros-ai/ui/primitives/forms/Textarea'
 import { ScrollArea } from '@velaros-ai/ui/primitives/layout/ScrollArea'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@velaros-ai/ui/primitives/overlays/Dialog'
 import { BubbleTooltip } from '@velaros-ai/ui/primitives/overlays/Tooltip'
 
 import styles from '../../styles/workbenchPageStyles'
@@ -68,6 +76,8 @@ export function WorkbenchCommitPanel({
   const [commitMessage, setCommitMessage] = useState('')
   const [busyAction, setBusyAction] = useState<Nullable<'commit' | 'generate' | 'push'>>(null)
   const [pendingFileAction, setPendingFileAction] = useState<Nullable<string>>(null)
+  const [rollbackRequest, setRollbackRequest] =
+    useState<Nullable<WorkbenchGitChangeItem[]>>(null)
   const [selectedChangePath, setSelectedChangePath] = useState<Nullable<string>>(null)
   const [selectedCommitPaths, setSelectedCommitPaths] = useState<ReadonlySet<string>>(
     () => new Set()
@@ -165,15 +175,8 @@ export function WorkbenchCommitPanel({
 
   async function rollbackItems(items: WorkbenchGitChangeItem[]): Promise<void> {
     if (!items.length || pendingFileAction || warnUnsavedOpenTabs()) return
-    const confirmed =
-      items.length === 1
-        ? window.confirm(tLatest.current('workbench.gitDiscardConfirm', { path: items[0].path }))
-        : window.confirm(
-            tLatest.current('workbench.gitDiscardSelectedConfirm', { count: items.length })
-          )
-    if (!confirmed) return
-
     try {
+      setRollbackRequest(null)
       setPendingFileAction(items.length === 1 ? `discard:${items[0].path}` : 'discard:selected')
       for (const item of items) {
         Result.unwrap(
@@ -206,6 +209,11 @@ export function WorkbenchCommitPanel({
     } finally {
       setPendingFileAction(null)
     }
+  }
+
+  function requestRollback(items: WorkbenchGitChangeItem[]): void {
+    if (!items.length || pendingFileAction || warnUnsavedOpenTabs()) return
+    setRollbackRequest([...items])
   }
 
   async function generateCommitMessage(): Promise<void> {
@@ -318,15 +326,16 @@ export function WorkbenchCommitPanel({
   }
 
   return (
-    <section className={styles.commitToolPanel} onKeyDown={handleKeyDown}>
-      <div className={styles.panelHeader}>
+    <>
+      <section className={styles.commitToolPanel} onKeyDown={handleKeyDown}>
+        <div className={styles.panelHeader}>
         <div className={styles.panelTitleGroup}>
           <div className={styles.commitPanelTitleRow}>
             <span className={styles.panelTitle}>{t('workbench.commitToolWindow')}</span>
           </div>
         </div>
-      </div>
-      {!summary?.repository ? (
+        </div>
+        {!summary?.repository ? (
         <p className={styles.panelEmpty}>
           {isLoading ? t('workbench.gitLoading') : error || t('workbench.gitNoRepository')}
         </p>
@@ -422,7 +431,7 @@ export function WorkbenchCommitPanel({
                                       className={styles.commitFileRollbackButton}
                                       title={t('workbench.gitRollback')}
                                       disabled={!!pendingFileAction || hasUnsavedOpenTabs}
-                                      onClick={() => void rollbackItems([item])}
+                                      onClick={() => requestRollback([item])}
                                     >
                                       {pendingFileAction === `discard:${item.path}` ? (
                                         <SpinnerGapIcon size={12} className={styles.spinIcon} />
@@ -472,9 +481,6 @@ export function WorkbenchCommitPanel({
             )}
             <div className={styles.gitCommitFooter}>
               <div className={styles.commitFooterLeft}>
-                <span className={styles.commitSettingsGlyph} aria-hidden="true">
-                  <GearSixIcon size={16} />
-                </span>
                 <CommitIconButton
                   label={t('workbench.gitGenerateCommitMessage')}
                   disabled={!!busyAction || !changeItems.length}
@@ -491,7 +497,7 @@ export function WorkbenchCommitPanel({
                 <CommitIconButton
                   label={t('workbench.gitRollback')}
                   disabled={!actionItems.length || !!pendingFileAction || hasUnsavedOpenTabs}
-                  onClick={() => void rollbackItems(actionItems)}
+                  onClick={() => requestRollback(actionItems)}
                 >
                   {pendingFileAction === 'discard:selected' ? (
                     <SpinnerGapIcon size={14} className={styles.spinIcon} />
@@ -525,8 +531,38 @@ export function WorkbenchCommitPanel({
             </div>
           </form>
         </>
-      )}
-    </section>
+        )}
+      </section>
+      <Dialog
+        open={!!rollbackRequest}
+        onOpenChange={(open) => !open && setRollbackRequest(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('workbench.gitRollbackConfirmTitle')}</DialogTitle>
+            <DialogDescription>
+              {rollbackRequest?.length === 1
+                ? t('workbench.gitDiscardConfirm', { path: rollbackRequest[0].path })
+                : t('workbench.gitDiscardSelectedConfirm', {
+                    count: rollbackRequest?.length ?? 0,
+                  })}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setRollbackRequest(null)}>
+              {t('common.cancel')}
+            </Button>
+            <Button
+              variant="destructiveOutline"
+              disabled={!rollbackRequest?.length || !!pendingFileAction}
+              onClick={() => rollbackRequest && void rollbackItems(rollbackRequest)}
+            >
+              {t('workbench.gitRollbackConfirmAction')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }
 

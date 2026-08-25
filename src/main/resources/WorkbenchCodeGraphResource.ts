@@ -4,6 +4,8 @@ import { basename, dirname, extname, join, relative, resolve } from 'node:path'
 
 import { execa } from 'execa'
 
+import type { ProjectCodeIndexQuery } from '@velaros-ai/project/contracts'
+
 import type {
   WorkbenchGetCodeGraphRequest,
   WorkbenchGetCodeGraphResult,
@@ -66,6 +68,7 @@ class WorkbenchCodeGraphResource {
   private readonly platform: NodeJS.Platform
   private readonly arch: string
   private readonly runProcess: CodeGraphProcessRunner
+  private enabled = true
 
   public constructor(options: WorkbenchCodeGraphResourceOptions = {}) {
     this.sharedResourcesRoot =
@@ -76,6 +79,14 @@ class WorkbenchCodeGraphResource {
   }
 
   public describe(): WorkbenchCodeGraphResourceStatus {
+    if (!this.enabled) {
+      const physical = this.describePhysical()
+      return { ...physical, available: false }
+    }
+    return this.describePhysical()
+  }
+
+  public describePhysical(): WorkbenchCodeGraphResourceStatus {
     const launch = this.resolveLaunch()
     return {
       available: !!launch,
@@ -85,11 +96,20 @@ class WorkbenchCodeGraphResource {
     }
   }
 
+  public setEnabled(enabled: boolean): void {
+    this.enabled = enabled
+  }
+
+  public resolvePackageRoot(): string {
+    const packageName = `@colbymchenry/codegraph-${this.platform}-${this.arch}`
+    return join(this.sharedResourcesRoot, 'codegraph', packageName)
+  }
+
   public async indexProject(
     projectRoot: string
   ): Promise<WorkbenchProjectAiCodeIndexDiagnostics> {
     const root = resolve(projectRoot)
-    const launch = this.resolveLaunch()
+    const launch = this.enabled ? this.resolveLaunch() : null
     if (!launch) return this.unavailableDiagnostics()
 
     const indexed = await this.runProcess(launch, ['index', '--quiet'], root)
@@ -105,7 +125,7 @@ class WorkbenchCodeGraphResource {
 
   public async getGraph(input: WorkbenchGetCodeGraphRequest): Promise<WorkbenchGetCodeGraphResult> {
     const root = resolve(input.projectRoot)
-    const launch = this.resolveLaunch()
+    const launch = this.enabled ? this.resolveLaunch() : null
     if (!launch) return emptyGraph(input)
 
     const filesResult = await this.runProcess(launch, ['files', '-p', root, '--json'], root)
@@ -142,9 +162,99 @@ class WorkbenchCodeGraphResource {
     }
   }
 
+  /** Connect the shared CodeGraph installation to the built-in Project Agent tool. */
+  public async queryProjectCode(
+    projectRoot: string,
+    input: ProjectCodeIndexQuery
+  ): Promise<unknown> {
+    const root = resolve(projectRoot)
+    const launch = this.enabled ? this.resolveLaunch() : null
+    if (!launch) throw new Error('CodeGraph is not installed or enabled.')
+
+    switch (input.action) {
+      case 'search_symbols':
+        return this.runQueryCommand(launch, root, [
+          'query',
+          input.query,
+          '--path',
+          root,
+          '--limit',
+          String(input.limit),
+          '--json',
+          ...(input.kind ? ['--kind', input.kind] : []),
+        ], true)
+      case 'build_context':
+        return this.runQueryCommand(launch, root, [
+          'explore',
+          input.task,
+          '--path',
+          root,
+          '--max-files',
+          String(input.maxNodes),
+        ])
+      case 'explore':
+        return Promise.all(
+          input.nodeIds.map((nodeId) =>
+            this.runQueryCommand(launch, root, ['node', nodeId, '--path', root])
+          )
+        )
+      case 'read_node':
+      case 'type_hierarchy':
+        return this.runQueryCommand(launch, root, ['node', input.nodeId, '--path', root])
+      case 'callers':
+      case 'callees':
+      case 'impact':
+        return this.runQueryCommand(launch, root, [
+          input.action,
+          input.nodeId,
+          '--path',
+          root,
+          '--limit',
+          String(Math.min(100, Math.max(20, input.depth * 20))),
+          '--json',
+        ], true)
+      case 'file_dependencies': {
+        const graph = await this.getGraph({
+          projectRoot: root,
+          mode: 'local',
+          centerPath: input.path,
+          depth: 1,
+          maxNodes: 120,
+        })
+        return {
+          path: input.path,
+          dependencies: graph.edges.filter((edge) => edge.from === input.path),
+          dependents: graph.edges.filter((edge) => edge.to === input.path),
+          nodes: graph.nodes,
+        }
+      }
+      case 'find_cycles': {
+        const graph = await this.getGraph({
+          projectRoot: root,
+          mode: 'full',
+          maxNodes: input.maxFiles ?? 120,
+        })
+        return { cycles: findFileDependencyCycles(graph) }
+      }
+      case 'build_index':
+        return this.indexProject(root)
+      case 'index_status':
+        return this.readDiagnostics(root, launch)
+      case 'routing_manifest': {
+        const graph = await this.getGraph({ projectRoot: root, mode: 'full', maxNodes: 500 })
+        const routePattern = /(?:^|\/)(?:routes?|pages?|app)(?:\/|\.|$)/iu
+        return {
+          framework: input.framework ?? null,
+          files: graph.nodes.filter((node) => routePattern.test(node.path ?? '')),
+        }
+      }
+      default:
+        throw new Error(`CodeGraph action ${input.action} is not supported by this runtime.`)
+    }
+  }
+
   private resolveLaunch(): CodeGraphLaunchSpec | null {
-    const packageName = `@colbymchenry/codegraph-${this.platform}-${this.arch}`
-    const packageRoot = join(this.sharedResourcesRoot, 'codegraph', packageName)
+    const packageRoot = this.resolvePackageRoot()
     if (!existsSync(join(packageRoot, 'package.json'))) return null
 
     const version = readPackageVersion(packageRoot)
@@ -192,6 +302,22 @@ class WorkbenchCodeGraphResource {
       pendingFileCount:
         readNumber(pending, 'modified') + readNumber(pending, 'added') + readNumber(pending, 'deleted'),
       lastError: null,
+    }
+  }
+
+  private async runQueryCommand(
+    launch: CodeGraphLaunchSpec,
+    projectRoot: string,
+    args: readonly string[],
+    json = false
+  ): Promise<unknown> {
+    const result = await this.runProcess(launch, args, projectRoot)
+    if (result.exitCode !== 0) throw new Error(processErrorMessage(result))
+    if (!json) return { output: result.stdout.trim() }
+    try {
+      return JSON.parse(result.stdout) as unknown
+    } catch {
+      return { output: result.stdout.trim() }
     }
   }
 
@@ -409,6 +535,37 @@ function selectLocalPaths(
     frontier = next
   }
   return { paths: [...selected], truncated: selected.size >= maxNodes }
+}
+
+function findFileDependencyCycles(graph: WorkbenchGetCodeGraphResult): string[][] {
+  const adjacency = new Map<string, string[]>()
+  for (const edge of graph.edges) {
+    adjacency.set(edge.from, [...(adjacency.get(edge.from) ?? []), edge.to])
+  }
+
+  const cycles = new Map<string, string[]>()
+  const visiting = new Set<string>()
+  const visited = new Set<string>()
+  const stack: string[] = []
+  const visit = (path: string): void => {
+    if (visiting.has(path)) {
+      const start = stack.indexOf(path)
+      const cycle = [...stack.slice(start), path]
+      const key = [...new Set(cycle)].sort().join('\0')
+      if (key) cycles.set(key, cycle)
+      return
+    }
+    if (visited.has(path)) return
+    visiting.add(path)
+    stack.push(path)
+    for (const target of adjacency.get(path) ?? []) visit(target)
+    stack.pop()
+    visiting.delete(path)
+    visited.add(path)
+  }
+
+  for (const node of graph.nodes) visit(node.path)
+  return [...cycles.values()]
 }
 
 function emptyGraph(input: WorkbenchGetCodeGraphRequest): WorkbenchGetCodeGraphResult {

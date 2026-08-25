@@ -1,11 +1,11 @@
-import { CaretDownIcon, CaretUpIcon, MagnifyingGlassIcon, XIcon } from '@phosphor-icons/react'
+import { CaretDownIcon, CaretUpIcon, XIcon } from '@phosphor-icons/react'
 import { useWorkbenchI18n } from '@renderer/i18n'
 import type { WorkbenchEditorFindMatch } from '@renderer/models/editor/workbenchEditorModel'
 import type { ReactElement } from 'react'
 
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 import { Text } from '@velaros-ai/ui/primitives/display/Text'
-import { Input } from '@velaros-ai/ui/primitives/forms/Input'
+import { SearchField } from '@velaros-ai/ui/primitives/forms/SearchField'
 
 import styles from '../../styles/workbenchPageStyles'
 
@@ -38,21 +38,21 @@ export function EditorFindBar({
         onSelectMatch(activeFindIndex)
       }}
     >
-      <MagnifyingGlassIcon size={14} />
-      <Input
-        size="sm"
-        variant="ghost"
-        value={findQuery}
-        autoFocus
-        placeholder={t('workbench.findInFile')}
-        onChange={(event) => onFindQueryChange(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === 'Escape') {
-            event.preventDefault()
-            onClose()
-          }
-        }}
-      />
+      <div className={styles.editorFindSearchField}>
+        <SearchField
+          size="sm"
+          value={findQuery}
+          autoFocus
+          placeholder={t('workbench.findInFile')}
+          onChange={(event) => onFindQueryChange(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') {
+              event.preventDefault()
+              onClose()
+            }
+          }}
+        />
+      </div>
       <Text className={styles.editorFindMeta} tone="caption">
         {findQuery
           ? findMatches.length

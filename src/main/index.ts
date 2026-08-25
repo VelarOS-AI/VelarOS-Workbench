@@ -3,34 +3,26 @@ import { basename, join, resolve } from 'node:path'
 
 import { app, BrowserWindow } from 'electron'
 
-import developmentAppIconPath from '../../build/icon-dev.png?asset'
-import productionAppIconPath from '../../build/icon.png?asset'
-
 import { createAgentKernelModule } from '@velaros-ai/agent'
-import { AgentCapabilityApiVersion } from '@velaros-ai/agent/protocol/agent-capability'
 import { Log } from '@velaros-ai/core'
-import { KernelVersion } from '@velaros-ai/kernel/contracts/abi'
 import { Kernel } from '@velaros-ai/kernel/runtime'
+
+import productionAppIconPath from '../../build/icon.png?asset'
+import developmentAppIconPath from '../../build/icon-dev.png?asset'
 
 import { WorkbenchAgentExecutionStack } from './agent/WorkbenchAgentExecutionStack'
 import { WorkbenchAgentCapabilityRuntime } from './kernel/WorkbenchAgentCapabilityRuntime'
-import { registerWorkbenchAgentModIpc } from './kernel/WorkbenchAgentModIpc'
-import {
-  createWorkbenchAgentModPackReader,
-  WorkbenchAgentModPackStore,
-} from './kernel/WorkbenchAgentModPackStore'
-import { WorkbenchAgentModRuntime } from './kernel/WorkbenchAgentModRuntime'
 import {
   broadcastWorkbenchKernelStatus,
   registerWorkbenchKernelIpc,
 } from './kernel/WorkbenchKernelIpc'
 import { WorkbenchKernelPermissionPolicy } from './kernel/WorkbenchKernelPermissionPolicy'
-import { WorkbenchModService } from './kernel/WorkbenchModService'
 import type { WorkbenchProjectHub } from './projects/ProjectHub'
 import { registerProjectHubIpc } from './projects/ProjectHubIpc'
 import { installProjectHubMenu } from './projects/ProjectHubMenu'
 import { installWorkbenchEditorZoom } from './projects/WorkbenchEditorZoom'
 import { WorkbenchWindowManager } from './projects/WorkbenchWindowManager'
+import { registerWorkbenchResourcePluginIpc } from './resources/WorkbenchResourcePluginIpc'
 import { registerWorkbenchGitIpc } from './workspace/git/WorkbenchGitIpc'
 import { registerWorkbenchLanguageServiceIpc } from './workspace/language/WorkbenchLanguageServiceIpc'
 import { registerWorkbenchTerminalIpc } from './workspace/terminal/WorkbenchTerminalIpc'
@@ -166,29 +158,8 @@ if (hasSingleInstanceLock) void app.whenReady().then(() => {
   if (WorkbenchIsDevelopmentRuntime) app.dock?.setIcon(WorkbenchApplicationIconPath)
   const dataRootDir = resolveWorkbenchDataRootDir()
   const providers = createDefaultWorkbenchMainCapabilityProviders(dataRootDir)
-  // 两级注册机的宿主侧接缝：Loader 构造期就位（seam 派发器必须早于执行栈装配），
-  // 启动后由 mod 门面用一份**本地** pack 清单装载一次。
-  const agentModRuntime = new WorkbenchAgentModRuntime({
-    versions: {
-      velarosVersion: KernelVersion,
-      agentApiVersion: AgentCapabilityApiVersion,
-      shellVersion: app.getVersion(),
-    },
-    reader: createWorkbenchAgentModPackReader(),
-  })
-  const modService = new WorkbenchModService(
-    new WorkbenchAgentModPackStore(
-      providers.parts.storagePaths.getModPacksDir(),
-      providers.parts.storagePaths.getModRegistryPath()
-    ),
-    agentModRuntime
-  )
-  const disposeAgentModIpc = registerWorkbenchAgentModIpc(modService)
   // 进程内 Kernel：只注册 Workbench 自持的 Agent 能力，执行栈也在本进程。
-  const agentExecutionStack = new WorkbenchAgentExecutionStack(
-    providers.workspace,
-    agentModRuntime.seams
-  )
+  const agentExecutionStack = new WorkbenchAgentExecutionStack(providers.workspace)
   const kernelRuntime = new Kernel({
     lifecycleFailureMode: 'degrade',
     permissionBroker: new WorkbenchKernelPermissionPolicy(),
@@ -211,12 +182,12 @@ if (hasSingleInstanceLock) void app.whenReady().then(() => {
     providers.kernelRoutes,
     providers.parts.storagePaths
   )
-  void kernelRuntime
-    .start()
-    .then(() => modService.assembleAgentAxis())
-    .finally(() => {
-      broadcastWorkbenchKernelStatus(kernelRuntime)
-    })
+  void kernelRuntime.start().finally(() => {
+    broadcastWorkbenchKernelStatus(kernelRuntime)
+  })
+  const disposeResourcePluginIpc = registerWorkbenchResourcePluginIpc(
+    providers.resourcePlugins
+  )
   registerWorkbenchFsIpc(providers.fileSystem, providers.parts)
   registerWorkbenchTerminalIpc(providers.parts.terminal)
   registerWorkbenchGitIpc(providers.git)
@@ -226,6 +197,7 @@ if (hasSingleInstanceLock) void app.whenReady().then(() => {
   registerWorkbenchLanguageServiceIpc(providers.language)
   windowManager = new WorkbenchWindowManager(dataRootDir, {
     createBrowserWindow: createWorkbenchWindow,
+    onLastProjectClosed: () => app.quit(),
     releaseProjectResources: async (ownerId, projectRoot) => {
       watchIpc.closeSubscriptionsForSender(ownerId)
       await Promise.all([
@@ -244,7 +216,7 @@ if (hasSingleInstanceLock) void app.whenReady().then(() => {
     // Electron 不等待 async listener：第一次 before-quit 必须拦住退出，待子进程与 worker
     // 真正收口后再触发第二次 quit；shutdownStarted 让第二次事件直接放行。
     watchIpc.dispose()
-    disposeAgentModIpc()
+    disposeResourcePluginIpc()
     disposeKernelIpc()
     disposeWorkspaceIpc()
     void Promise.all([

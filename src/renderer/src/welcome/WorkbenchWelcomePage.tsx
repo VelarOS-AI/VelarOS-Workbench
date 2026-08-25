@@ -11,8 +11,8 @@ import { FolderOpenIcon, FolderPlusIcon, XIcon } from '@phosphor-icons/react'
 import { Button, Empty, IconButton, Stack, Tag, Text, Title } from '@velaros-ai/ui'
 
 import type { WorkbenchProjectHubState, WorkbenchRecentProject } from '../../../shared/projectHub'
-
 import { useWorkbenchPreferences } from '../hooks/useWorkbenchPreferences'
+
 import { lastOpenedLabel } from './lastOpenedLabel'
 
 import './welcome.css'

@@ -11,10 +11,6 @@ import {
   type WorkbenchProjectHubBridge,
   WorkbenchProjectHubChannels,
 } from '../shared/projectHub'
-import {
-  type WorkbenchAgentModsBridge,
-  WorkbenchAgentModsChannels,
-} from '../shared/workbenchAgentMods'
 import { type WorkbenchFsBridge, WorkbenchFsChannels } from '../shared/workbenchFs'
 import { type WorkbenchGitBridge, WorkbenchGitChannels } from '../shared/workbenchGit'
 import { type WorkbenchKernelBridge, WorkbenchKernelChannels } from '../shared/workbenchKernel'
@@ -22,6 +18,10 @@ import {
   type WorkbenchLanguageBridge,
   WorkbenchLanguageChannels,
 } from '../shared/workbenchLanguage'
+import {
+  type WorkbenchResourcePluginBridge,
+  WorkbenchResourcePluginChannels,
+} from '../shared/workbenchResourcePlugins'
 import {
   type WorkbenchTerminalBridge,
   WorkbenchTerminalChannels,
@@ -135,6 +135,8 @@ const gitBridge: WorkbenchGitBridge = {
 const kernelBridge: WorkbenchKernelBridge = {
   getStatus: () => ipcRenderer.invoke(WorkbenchKernelChannels.getStatus),
   invoke: (request) => ipcRenderer.invoke(WorkbenchKernelChannels.invoke, request),
+  abortAgentExecution: (request) =>
+    ipcRenderer.invoke(WorkbenchKernelChannels.abortAgentExecution, request),
   onStatusChanged: (listener) =>
     subscribe(WorkbenchKernelChannels.statusChanged, listener),
   onAgentExecution: (listener) =>
@@ -147,8 +149,12 @@ const workspaceBridge: WorkbenchWorkspaceBridge = {
   invoke: (request) => ipcRenderer.invoke(WorkbenchWorkspaceChannels.invoke, request),
 }
 
-const agentModsBridge: WorkbenchAgentModsBridge = {
-  getOverview: () => ipcRenderer.invoke(WorkbenchAgentModsChannels.getOverview),
+const resourcePluginBridge: WorkbenchResourcePluginBridge = {
+  list: () => ipcRenderer.invoke(WorkbenchResourcePluginChannels.list),
+  install: (request) => ipcRenderer.invoke(WorkbenchResourcePluginChannels.install, request),
+  setEnabled: (request) =>
+    ipcRenderer.invoke(WorkbenchResourcePluginChannels.setEnabled, request),
+  onChanged: (listener) => subscribe(WorkbenchResourcePluginChannels.changed, listener),
 }
 
 contextBridge.exposeInMainWorld('velarosWorkbenchProjectHub', projectHubBridge)
@@ -159,7 +165,7 @@ contextBridge.exposeInMainWorld('velarosWorkbenchWatch', watchBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchGit', gitBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchKernel', kernelBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchWorkspace', workspaceBridge)
-contextBridge.exposeInMainWorld('velarosWorkbenchAgentMods', agentModsBridge)
+contextBridge.exposeInMainWorld('velarosWorkbenchResourcePlugins', resourcePluginBridge)
 
 function subscribe<TPayload>(
   channel: string,

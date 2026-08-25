@@ -450,29 +450,24 @@
 }
 
 .workbenchSettingsPluginSearch {
+  flex: 1;
+  min-width: 0;
+}
+
+.workbenchSettingsPluginToolbar {
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-bottom: 8px;
+}
+
+.workbenchSettingsPluginSharedHint {
+  display: block;
   margin-bottom: 10px;
-  padding: 7px 10px;
-  border: 1px solid var(--workbench-border);
-  border-radius: var(--workbench-radius);
-  color: var(--workbench-text-muted);
-  background: var(--workbench-toolbar);
 }
 
-.workbenchSettingsPluginSearch input:global(.velar-input) {
-  min-width: 0;
-  flex: 1;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-}
-
-.workbenchSettingsPluginSearch input:global(.velar-input:focus-visible) {
-  background: transparent;
-  box-shadow: none;
+.workbenchSettingsPluginSearch > * {
+  width: 100%;
 }
 
 .workbenchSettingsPluginRow {
@@ -494,6 +489,13 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  gap: 8px;
+}
+
+.workbenchSettingsPluginError {
+  display: block;
+  margin-top: 3px;
+  color: var(--status-red);
 }
 
 .workbenchSettingsPluginActionButton {

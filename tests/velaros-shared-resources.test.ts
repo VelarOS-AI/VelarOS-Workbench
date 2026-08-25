@@ -12,6 +12,7 @@ import {
   type CodeGraphProcessRunner,
   WorkbenchCodeGraphResource,
 } from '../src/main/resources/WorkbenchCodeGraphResource'
+import { WorkbenchResourcePluginService } from '../src/main/resources/WorkbenchResourcePluginService'
 
 const temporaryRoots: string[] = []
 
@@ -85,6 +86,60 @@ describe('VelarOS shared resources', () => {
     expect(graph.edges).toEqual([
       { from: 'src/main.ts', to: 'src/helper.ts', kind: 'imports' },
     ])
+
+    const queryResult = await resource.queryProjectCode(fixture.projectRoot, {
+      action: 'search_symbols',
+      query: 'helper',
+      limit: 12,
+    })
+    expect(queryResult).toEqual({ output: '' })
+    expect(calls.at(-1)).toEqual([
+      'query',
+      'helper',
+      '--path',
+      fixture.projectRoot,
+      '--limit',
+      '12',
+      '--json',
+    ])
+  })
+
+  test('shares physical plugin files while retaining a Workbench enable preference', async () => {
+    const fixture = createCodeGraphFixture()
+    const dataRoot = join(fixture.projectRoot, '.workbench-data')
+    const resource = new WorkbenchCodeGraphResource({
+      sharedResourcesRoot: fixture.sharedResourcesRoot,
+      platform: 'darwin',
+      arch: 'arm64',
+    })
+    const service = new WorkbenchResourcePluginService(
+      dataRoot,
+      resource,
+      fixture.sharedResourcesRoot
+    )
+
+    expect(service.listCatalog().plugins[0]).toMatchObject({
+      id: 'codegraph',
+      installed: true,
+      enabled: true,
+      status: 'available',
+      version: '0.9.7',
+    })
+
+    await service.setEnabled('codegraph', false)
+    expect(resource.describe()).toMatchObject({ available: false, version: '0.9.7' })
+    expect(resource.describePhysical()).toMatchObject({ available: true, version: '0.9.7' })
+
+    const restored = new WorkbenchResourcePluginService(
+      dataRoot,
+      resource,
+      fixture.sharedResourcesRoot
+    )
+    expect(restored.listCatalog().plugins[0]).toMatchObject({
+      installed: true,
+      enabled: false,
+      status: 'disabled',
+    })
   })
 })
 

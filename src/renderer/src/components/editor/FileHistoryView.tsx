@@ -3,7 +3,6 @@ import {
   CaretDownIcon,
   CaretUpIcon,
   ClockCounterClockwiseIcon,
-  MagnifyingGlassIcon,
   XIcon,
 } from '@phosphor-icons/react'
 import {
@@ -21,7 +20,7 @@ import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 import { Paragraph } from '@velaros-ai/ui/primitives/display/Paragraph'
 import { Text } from '@velaros-ai/ui/primitives/display/Text'
-import { Input } from '@velaros-ai/ui/primitives/forms/Input'
+import { SearchField } from '@velaros-ai/ui/primitives/forms/SearchField'
 import { SegmentedControl } from '@velaros-ai/ui/primitives/forms/SegmentedControl'
 import { ScrollArea } from '@velaros-ai/ui/primitives/layout/ScrollArea'
 
@@ -178,8 +177,7 @@ export function FileHistoryView({
       <div className={styles.editorGitHistoryBody}>
         <div className={styles.editorHistoryLeft}>
           <div className={styles.editorHistorySearch}>
-            <MagnifyingGlassIcon size={14} className={styles.editorHistorySearchIcon} />
-            <Input
+            <SearchField
               size="sm"
               value={query}
               placeholder={t('workbench.fileHistorySearchPlaceholder')}

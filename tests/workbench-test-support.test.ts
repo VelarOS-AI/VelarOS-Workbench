@@ -6,7 +6,10 @@ import {
   buildWorkbenchVelarTestRunCommand,
   shouldShowWorkbenchVelarTestRunGutter,
 } from '../src/renderer/src/models/editor/workbenchVelarTestRunGutter'
-import { isWorkbenchTestFilePath } from '../src/renderer/src/models/files/workbenchTestFile'
+import {
+  isWorkbenchTestDirectoryPath,
+  isWorkbenchTestFilePath,
+} from '../src/renderer/src/models/files/workbenchTestFile'
 
 void describe('Workbench test affordances', () => {
   void test('recognizes conventional test files without coloring unrelated files in tests folders', () => {
@@ -15,6 +18,14 @@ void describe('Workbench test affordances', () => {
     assert.equal(isWorkbenchTestFilePath('tests/world.browser.test.vel'), true)
     assert.equal(isWorkbenchTestFilePath('tests/browser.acceptance.ts'), false)
     assert.equal(isWorkbenchTestFilePath('src/contest.vel'), false)
+  })
+
+  void test('recognizes conventional test directories for the orange tree marker', () => {
+    assert.equal(isWorkbenchTestDirectoryPath('tests'), true)
+    assert.equal(isWorkbenchTestDirectoryPath('packages/core/test'), true)
+    assert.equal(isWorkbenchTestDirectoryPath('src/__tests__'), true)
+    assert.equal(isWorkbenchTestDirectoryPath('src/contest'), false)
+    assert.equal(isWorkbenchTestDirectoryPath('src/test-data'), false)
   })
 
   void test('finds top-level Velar test declarations and maps every marker to the current file', () => {

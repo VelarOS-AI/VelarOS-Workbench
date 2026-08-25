@@ -11,6 +11,7 @@ import {
   projectTools,
 } from '@velaros-ai/project/agent'
 import type {
+  ProjectCodeQuery,
   ProjectCommandResult,
   ProjectMutationAuthorizationInput,
   ProjectRunCommandOptions,
@@ -58,13 +59,6 @@ interface ProjectCapabilityProviderOptions {
   codeGraphResource?: WorkbenchCodeGraphResource
 }
 
-const unavailableWorkbenchCodeIndex: ProjectCodeIndexApi = {
-  isAvailable: () => false,
-  query: () => Promise.reject(new Error('Workbench CodeGraph agent query adapter is unavailable.')),
-}
-
-const workbenchProjectCodeQuery = createProjectCodeQuery(unavailableWorkbenchCodeIndex)
-
 /**
  * Workbench 的 Project 领域适配器。
  *
@@ -76,11 +70,21 @@ class ProjectCapabilityProvider implements WorkbenchProjectCapabilityProvider {
   private readonly createKernel: (projectRoot: string) => Promise<ProjectKernel>
   private readonly commandRunner = new CommandRunner(new PathResolver(), new CommandHelper())
   private readonly codeGraphResource: WorkbenchCodeGraphResource
+  private readonly projectCodeQuery: (
+    input: ProjectCodeQuery,
+    context: ProjectToolContext
+  ) => Promise<unknown>
 
   public constructor(options: ProjectCapabilityProviderOptions = {}) {
     this.createKernel = options.createKernel ?? (async (projectRoot) =>
       createProjectKernel({ root: projectRoot }))
     this.codeGraphResource = options.codeGraphResource ?? new WorkbenchCodeGraphResource()
+    const codeIndex: ProjectCodeIndexApi = {
+      isAvailable: () => this.codeGraphResource.describe().available,
+      query: (input, context) =>
+        this.codeGraphResource.queryProjectCode(context.project.getRootPath(), input),
+    }
+    this.projectCodeQuery = createProjectCodeQuery(codeIndex)
   }
 
   public async invoke(request: WorkbenchWorkspaceInvokeRequest): Promise<unknown> {
@@ -198,7 +202,7 @@ class ProjectCapabilityProvider implements WorkbenchProjectCapabilityProvider {
         runWithApproval: (action) => action(),
         prepareMutation: async (input) =>
           buildApprovedMutation(projectRoot, activeDirectory, input),
-        queryCode: workbenchProjectCodeQuery,
+        queryCode: this.projectCodeQuery,
         runCommand: (command, options, allowDangerous, signal) =>
           this.runProjectCommand(
             projectRoot,

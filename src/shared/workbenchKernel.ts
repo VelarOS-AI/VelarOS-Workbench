@@ -1,6 +1,7 @@
 export const WorkbenchKernelChannels = {
   getStatus: 'workbench-app:kernel:get-status',
   invoke: 'workbench-app:kernel:invoke',
+  abortAgentExecution: 'workbench-app:kernel:abort-agent-execution',
   statusChanged: 'workbench-app:kernel:status-changed',
   agentExecution: 'workbench-app:kernel:agent-execution',
   backupChatHistory: 'workbench-app:kernel:backup-chat-history',
@@ -52,6 +53,10 @@ export interface WorkbenchKernelInvokeRequest {
   route: WorkbenchKernelCapabilityRoute
   scope?: WorkbenchKernelScopeRef | null
   input: unknown
+}
+
+export interface WorkbenchAbortAgentExecutionRequest {
+  executionId: string
 }
 
 export interface WorkbenchKernelInvocationError {
@@ -109,6 +114,7 @@ export interface WorkbenchKernelStatus {
 export interface WorkbenchKernelBridge {
   getStatus: () => Promise<WorkbenchKernelStatus>
   invoke: (request: WorkbenchKernelInvokeRequest) => Promise<WorkbenchKernelInvokeResult>
+  abortAgentExecution: (request: WorkbenchAbortAgentExecutionRequest) => Promise<boolean>
   onStatusChanged: (
     listener: (status: WorkbenchKernelStatus) => void
   ) => () => void

@@ -2,6 +2,7 @@ import type { Extension } from '@codemirror/state'
 
 import type { PackageManagerCommand } from '../commands/workbenchPackageScriptCommand'
 import { quoteWorkbenchShellPath } from '../commands/workbenchPackageScriptCommand'
+import { getWorkbenchVelarExecutable } from '../commands/workbenchVelarFileCommand'
 import { isWorkbenchTestFilePath } from '../files/workbenchTestFile'
 
 import {
@@ -26,25 +27,12 @@ export function shouldShowWorkbenchVelarTestRunGutter(path: Nullable<string>): b
   return !!path?.toLowerCase().endsWith('.test.vel')
 }
 
-function getVelarExecutable(packageManager: PackageManagerCommand): string {
-  switch (packageManager) {
-    case 'bun':
-      return 'bunx --no-install velar'
-    case 'pnpm':
-      return 'pnpm exec velar'
-    case 'yarn':
-      return 'yarn exec velar'
-    case 'npm':
-      return 'npx --no-install velar'
-  }
-}
-
 export function buildWorkbenchVelarTestRunCommand(
   path: string,
   packageManager: PackageManagerCommand
 ): string {
   const browserFlag = path.toLowerCase().endsWith('.browser.test.vel') ? ' --browser' : ''
-  return `${getVelarExecutable(packageManager)} test ${quoteWorkbenchShellPath(path)}${browserFlag}`
+  return `${getWorkbenchVelarExecutable(packageManager)} test ${quoteWorkbenchShellPath(path)}${browserFlag}`
 }
 
 export function buildWorkbenchVelarTestRunActions({

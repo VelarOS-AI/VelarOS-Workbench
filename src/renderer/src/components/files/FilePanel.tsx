@@ -14,11 +14,14 @@ import {
   FilePlusIcon,
   FolderOpenIcon,
   FolderPlusIcon,
+  HammerIcon,
   MagnifyingGlassIcon,
   PencilSimpleIcon,
+  PlayIcon,
   TrashIcon,
 } from '@phosphor-icons/react'
 import { useWorkbenchI18n } from '@renderer/i18n'
+import { isWorkbenchVelarFilePath } from '@renderer/models/commands/workbenchVelarFileCommand'
 import type { WorkbenchContentSearchMatch } from '@renderer/models/files/workbenchContentSearchModel'
 import {
   buildWorkbenchFileSearchNavigationItems,
@@ -34,7 +37,7 @@ import { toNullable } from '@velaros-ai/core'
 import { currentSystemPlatform as systemPlatformCompatibility } from '@velaros-ai/system/platform-compatibility'
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 import { Paragraph } from '@velaros-ai/ui/primitives/display/Paragraph'
-import { Input } from '@velaros-ai/ui/primitives/forms/Input'
+import { SearchField } from '@velaros-ai/ui/primitives/forms/SearchField'
 import { ScrollArea } from '@velaros-ai/ui/primitives/layout/ScrollArea'
 
 import type {
@@ -97,6 +100,8 @@ export interface WorkbenchFilePanelHandlersProps {
   onOpenContentSearchMatch: (match: WorkbenchContentSearchMatch) => void
   onSetDirectoryOpen: (path: string, open: boolean) => void
   onSelectFile: (path: string) => void
+  onRunFile?: (path: string) => void
+  onBuildFile?: (path: string) => void
 }
 
 /**
@@ -167,6 +172,8 @@ export function FilePanel({
     onOpenContentSearchMatch,
     onSetDirectoryOpen,
     onSelectFile,
+    onRunFile,
+    onBuildFile,
   },
 }: FilePanelProps): ReactElement {
   const { t } = useWorkbenchI18n()
@@ -386,10 +393,8 @@ export function FilePanel({
       {isSearchVisible && (
         <div className={styles.searchBar}>
           <div className={styles.searchInputShell}>
-            <MagnifyingGlassIcon size={13} />
-            <Input
+            <SearchField
               size="sm"
-              variant="ghost"
               value={searchQuery}
               autoFocus
               placeholder={t('workbench.projectSearchPlaceholder')}
@@ -461,10 +466,32 @@ export function FilePanel({
           compact
           onDismiss={() => setContextMenu(null)}
           items={[
+            ...(contextMenu.entry.type === 'file'
+              && isWorkbenchVelarFilePath(contextMenu.entry.path)
+              ? [
+                  {
+                    id: 'run-file',
+                    label: t('workbench.editorContextRun'),
+                    icon: <PlayIcon size={14} />,
+                    disabled: !onRunFile,
+                    onSelect: () => onRunFile?.(contextMenu.entry.path),
+                  },
+                  {
+                    id: 'build-file',
+                    label: t('workbench.editorContextBuild'),
+                    icon: <HammerIcon size={14} />,
+                    disabled: !onBuildFile,
+                    onSelect: () => onBuildFile?.(contextMenu.entry.path),
+                  },
+                ]
+              : []),
             {
               id: 'create-file',
               label: t('workbench.createFile'),
               icon: <FilePlusIcon size={14} />,
+              separatorBefore:
+                contextMenu.entry.type === 'file'
+                && isWorkbenchVelarFilePath(contextMenu.entry.path),
               disabled: isMutatingTree,
               onSelect: () => createEntryFromContext('file'),
             },

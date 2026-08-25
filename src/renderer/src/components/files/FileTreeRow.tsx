@@ -17,7 +17,10 @@ import {
   PlayCircleIcon,
 } from '@phosphor-icons/react'
 import { type FileTreeNodeData } from '@renderer/models/files/fileTree.model'
-import { isWorkbenchTestFilePath } from '@renderer/models/files/workbenchTestFile'
+import {
+  isWorkbenchTestDirectoryPath,
+  isWorkbenchTestFilePath,
+} from '@renderer/models/files/workbenchTestFile'
 import type { WorkbenchGitDecorationMap } from '@renderer/models/git/workbenchGitModel'
 import { isWorkbenchTreeRoot } from '@renderer/models/shared/workbenchUtils'
 import type { NodeRendererProps } from 'react-arborist'
@@ -95,6 +98,8 @@ export const FileTreeRow = memo(function FileTreeRow({
   const fileKind = node.data.fileKind
   const isTreeRoot = isWorkbenchTreeRoot(entry)
   const isTestFile = entry.type === 'file' && isWorkbenchTestFilePath(entry.path)
+  const isTestDirectory =
+    entry.type === 'directory' && isWorkbenchTestDirectoryPath(entry.path)
 
   useEffect(() => {
     if (!node.isEditing) return
@@ -136,6 +141,7 @@ export const FileTreeRow = memo(function FileTreeRow({
       data-tree-path={entry.path}
       data-tree-kind={entry.type}
       data-tree-root={isTreeRoot || undefined}
+      data-test-directory={isTestDirectory || undefined}
       data-git-tone={entry.type === 'file' ? gitDecoration?.tone : undefined}
       data-excluded={isGitIgnored || undefined}
       style={arboristTreeRowOuterStyle(style, entry)}

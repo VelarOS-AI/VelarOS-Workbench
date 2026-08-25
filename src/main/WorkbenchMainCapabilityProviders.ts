@@ -1,4 +1,6 @@
 import type { WorkbenchKernelCapabilityRoutes } from './kernel/WorkbenchKernelProtocol'
+import { WorkbenchCodeGraphResource } from './resources/WorkbenchCodeGraphResource'
+import { WorkbenchResourcePluginService } from './resources/WorkbenchResourcePluginService'
 import { WorkbenchGitService } from './workspace/git/WorkbenchGitService'
 import { WorkbenchLanguageServiceWorkerClient } from './workspace/language/LanguageServiceWorkerClient'
 import { createWorkbenchAppParts, type WorkbenchAppParts } from './workspace/Parts'
@@ -16,6 +18,7 @@ export interface WorkbenchMainCapabilityProviders {
   readonly language: WorkbenchLanguageServiceWorkerClient
   readonly watch: WorkbenchFileWatcher
   readonly workspace: WorkbenchProjectCapabilityProvider
+  readonly resourcePlugins: WorkbenchResourcePluginService
   readonly kernelRoutes: WorkbenchKernelCapabilityRoutes
 }
 
@@ -29,13 +32,16 @@ export interface WorkbenchMainCapabilityProviders {
 export function createDefaultWorkbenchMainCapabilityProviders(
   dataRootDir: string
 ): WorkbenchMainCapabilityProviders {
+  const codeGraphResource = new WorkbenchCodeGraphResource()
+  const resourcePlugins = new WorkbenchResourcePluginService(dataRootDir, codeGraphResource)
   return {
     parts: createWorkbenchAppParts(dataRootDir),
     fileSystem: new WorkbenchProjectFileSystem(),
     git: new WorkbenchGitService(),
     language: new WorkbenchLanguageServiceWorkerClient(),
     watch: new WorkbenchFileWatcher(),
-    workspace: new ProjectCapabilityProvider(),
+    workspace: new ProjectCapabilityProvider({ codeGraphResource }),
+    resourcePlugins,
     kernelRoutes: DefaultWorkbenchKernelCapabilityRoutes,
   }
 }

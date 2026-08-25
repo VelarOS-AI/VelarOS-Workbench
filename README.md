@@ -25,16 +25,14 @@ Workbench is a **complete host**: it composes the Kernel module host *in its own
 (kernel-contract §15) instead of connecting to a daemon. It registers exactly one capability,
 `velaros.agent`, backed by an in-process `@velaros-ai/agent` execution stack. `velaros.model`
 and `velaros.browser` have no implementation here, so those capabilities are simply absent and the
-consumers degrade. Agent mod packs are discovered, enabled and installed by Workbench itself from
-its own data root — a single owner, no cross-process mod registry.
+consumers degrade. Agent prompts, tools, and execution modes are product-owned built-ins rather than
+installable or user-configurable modules.
 
-Downloadable runtimes follow a different boundary from mods and application state. Workbench reads
-CodeGraph from the VelarOS user-level shared resource store, the same installation consumed by
-Desktop. When that shared resource is absent, CodeGraph graph, build, status, and prompt surfaces are
-hidden; the built-in Project file and language capabilities remain available.
-
-See [docs/agent-mod-trunk.md](docs/agent-mod-trunk.md) for the mod registration trunk and the list of
-capabilities this host deliberately does not have yet.
+Optional resource plugins follow a separate boundary from Agent behavior and application state.
+Workbench reads and installs CodeGraph in the VelarOS user-level shared resource store, so Desktop
+and Workbench discover the same physical installation. Each product keeps only its own enablement
+preference. When CodeGraph is absent, the built-in Project file and language capabilities remain
+available.
 
 ## Development
 

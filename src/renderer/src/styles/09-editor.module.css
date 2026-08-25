@@ -858,8 +858,11 @@
   background: var(--workbench-toolbar);
 }
 
-.editorFindBar [data-slot='input'] {
+.editorFindSearchField {
   @apply min-w-0 flex-1;
+}
+
+.editorFindSearchField [data-slot='input'] {
   height: 26px;
   font-size: 12px;
 }
@@ -1685,18 +1688,9 @@
 }
 
 .editorHistorySearch {
-  @apply relative flex items-center border-b;
+  @apply flex items-center border-b;
   padding: 6px 8px;
   border-color: var(--workbench-border);
-}
-
-.editorHistorySearch :global(input) {
-  padding-left: 26px;
-}
-
-.editorHistorySearchIcon {
-  @apply pointer-events-none absolute text-muted-foreground;
-  left: 16px;
 }
 
 /*

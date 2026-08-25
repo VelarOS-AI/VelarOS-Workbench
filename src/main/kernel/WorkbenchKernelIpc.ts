@@ -49,6 +49,7 @@ export function registerWorkbenchKernelIpc(
   routes: WorkbenchKernelCapabilityRoutes,
   storagePaths: WorkbenchAppStoragePaths
 ): () => void {
+  const activeAgentExecutions = new Map<string, AbortController>()
   ipcMain.handle(WorkbenchKernelChannels.getStatus, () => projectStatus(runtime))
   ipcMain.handle(
     WorkbenchKernelChannels.backupChatHistory,
@@ -69,6 +70,11 @@ export function registerWorkbenchKernelIpc(
         },
       }
       const route = routes[parsed.route]
+      const executionId = parsed.route === 'agent.execute'
+        ? readAgentExecutionId(parsed.input)
+        : null
+      const controller = new AbortController()
+      if (executionId) activeAgentExecutions.set(executionId, controller)
       try {
         return {
           ok: true,
@@ -77,7 +83,7 @@ export function registerWorkbenchKernelIpc(
             operation: route.operation,
             scope: toKernelScope(parsed.scope),
             input: parsed.input,
-            signal: new AbortController().signal,
+            signal: controller.signal,
             permissionContext: {
               details: {
                 productId: 'velaros.workbench',
@@ -88,9 +94,21 @@ export function registerWorkbenchKernelIpc(
         }
       } catch (error) {
         return { ok: false, error: toInvocationError(error) }
+      } finally {
+        if (executionId && activeAgentExecutions.get(executionId) === controller) {
+          activeAgentExecutions.delete(executionId)
+        }
       }
     }
   )
+  ipcMain.handle(WorkbenchKernelChannels.abortAgentExecution, (_event, request: unknown) => {
+    const executionId = readAbortExecutionId(request)
+    if (!executionId) return false
+    const controller = activeAgentExecutions.get(executionId)
+    if (!controller) return false
+    controller.abort('Stopped by the user.')
+    return true
+  })
 
   const unsubscribeAgentExecution = runtime.subscribeEvent(
     AgentCapabilityExecutionEventType,
@@ -103,8 +121,23 @@ export function registerWorkbenchKernelIpc(
     unsubscribeAgentExecution()
     ipcMain.removeHandler(WorkbenchKernelChannels.getStatus)
     ipcMain.removeHandler(WorkbenchKernelChannels.invoke)
+    ipcMain.removeHandler(WorkbenchKernelChannels.abortAgentExecution)
     ipcMain.removeHandler(WorkbenchKernelChannels.backupChatHistory)
   }
+}
+
+function readAgentExecutionId(input: unknown): string | null {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return null
+  const execution = (input as { execution?: unknown }).execution
+  if (!execution || typeof execution !== 'object' || Array.isArray(execution)) return null
+  const id = (execution as { id?: unknown }).id
+  return typeof id === 'string' && id.trim() ? id : null
+}
+
+function readAbortExecutionId(request: unknown): string | null {
+  if (!request || typeof request !== 'object' || Array.isArray(request)) return null
+  const id = (request as { executionId?: unknown }).executionId
+  return typeof id === 'string' && id.trim() ? id : null
 }
 
 /** host 起完后广播一次状态：renderer 的可用性门（浏览器面等）据此翻牌。 */

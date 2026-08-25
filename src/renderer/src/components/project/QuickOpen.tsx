@@ -1,5 +1,4 @@
 import { type ReactElement, useEffect, useRef, useState } from 'react'
-import { MagnifyingGlassIcon } from '@phosphor-icons/react'
 import { useWorkbenchI18n } from '@renderer/i18n'
 import { getWorkbenchFilePresentationVariant } from '@renderer/models/files/workbenchFilePresentation'
 import type { WorkbenchProject } from '@renderer/models/project/workbenchProjects'
@@ -9,7 +8,7 @@ import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
 import { Paragraph } from '@velaros-ai/ui/primitives/display/Paragraph'
 import { Text } from '@velaros-ai/ui/primitives/display/Text'
 import { Title } from '@velaros-ai/ui/primitives/display/Title'
-import { Input } from '@velaros-ai/ui/primitives/forms/Input'
+import { SearchField } from '@velaros-ai/ui/primitives/forms/SearchField'
 
 import { useWorkbenchContentSearchController } from '../../hooks/useWorkbenchContentSearchController'
 import styles from '../../styles/workbenchPageStyles'
@@ -109,19 +108,17 @@ export function QuickOpen({
           <kbd>{shortcutModifier} P</kbd>
         </header>
         <div className={styles.quickOpenInputRow}>
-          <MagnifyingGlassIcon size={16} />
-          <Input
-            ref={inputRef}
-            variant="ghost"
-            size="sm"
-            className={styles.quickOpenInput}
-            value={query}
-            placeholder={t('workbench.quickOpenPlaceholder')}
-            onChange={(event) => {
-              setQuery(event.target.value)
-              setActiveIndex(0)
-            }}
-            onKeyDown={(event) => {
+          <div className={styles.quickOpenInput}>
+            <SearchField
+              ref={inputRef}
+              size="sm"
+              value={query}
+              placeholder={t('workbench.quickOpenPlaceholder')}
+              onChange={(event) => {
+                setQuery(event.target.value)
+                setActiveIndex(0)
+              }}
+              onKeyDown={(event) => {
               if (event.key === 'Escape') {
                 event.preventDefault()
                 onClose()
@@ -165,8 +162,9 @@ export function QuickOpen({
                   selectMatch(match.path, match.line, match.column)
                 }
               }
-            }}
-          />
+              }}
+            />
+          </div>
         </div>
 
         <div ref={listRef} className={styles.quickOpenList} role="listbox">

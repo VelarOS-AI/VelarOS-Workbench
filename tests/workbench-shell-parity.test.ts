@@ -43,8 +43,8 @@ void describe('pre-split Workbench shell parity', () => {
     assert.doesNotMatch(panel, /treeRootEntries/)
     assert.doesNotMatch(row, /treeRootActionButton/)
     assert.match(styles, /\.filePanelProjectHeader[\s\S]*height:\s*35px/)
-    assert.match(styles, /\.searchInputShell:focus-within[\s\S]*box-shadow:\s*none/)
-    assert.match(styles, /\.searchInputShell:focus-within[\s\S]*border-color:\s*transparent/)
+    assert.match(panel, /<SearchField/)
+    assert.match(panel, /className=\{styles\.searchInputShell\}[\s\S]*<SearchField/)
     assert.doesNotMatch(panel, /searchInputClearButton/)
   })
 
@@ -106,9 +106,53 @@ void describe('pre-split Workbench shell parity', () => {
     assert.match(adapter, /setIncludedCurrentFilePath\(null\)/)
     assert.match(adapter, /onGoalModeChange:\s*setGoalMode/)
     assert.match(adapter, /onPlanModeChange:\s*setPlanMode/)
+    assert.match(adapter, /reasoning-delta/)
+    assert.match(adapter, /tool-start/)
+    assert.match(adapter, /tool-progress/)
+    assert.match(adapter, /tool-done/)
+    assert.match(adapter, /canStop:\s*true/)
+    assert.match(adapter, /abortAgentExecution/)
     assert.doesNotMatch(adapter, /workbenchEditorControlAvailable/)
     assert.match(styles, /\.workbenchChatTopBar \.workbenchChatSessionMenuButton[\s\S]*justify-content:\s*flex-start/)
     assert.doesNotMatch(styles, /workbenchChatCurrentFileChip/)
+  })
+
+  void test('keeps Agent abilities built in and exposes shared resource plugins', () => {
+    const settings = readSource(
+      'src/renderer/src/components/settings/WorkbenchSettingsDialog.tsx'
+    )
+    const preload = readSource('src/preload/index.ts')
+    const main = readSource('src/main/index.ts')
+    const readme = readSource('README.md')
+
+    assert.match(settings, /id: 'plugins'/)
+    assert.match(settings, /velarosWorkbenchResourcePlugins/)
+    assert.match(settings, /settingsPluginSharedHint/)
+    assert.doesNotMatch(settings, /id: 'mods'/)
+    assert.doesNotMatch(preload, /velarosWorkbenchAgentMods/)
+    assert.doesNotMatch(main, /WorkbenchAgentMod/)
+    assert.match(readme, /product-owned built-ins/)
+    assert.match(readme, /Desktop\s+and Workbench discover the same physical installation/)
+  })
+
+  void test('localizes language options and confirms rollback in the product dialog', () => {
+    const zh = readSource('src/renderer/src/i18n/messages/zh-CN.ts')
+    const en = readSource('src/renderer/src/i18n/messages/en-US.ts')
+    const commitPanel = readSource(
+      'src/renderer/src/components/git/WorkbenchCommitPanel.tsx'
+    )
+    const rollbackImplementation = commitPanel.slice(
+      commitPanel.indexOf('async function rollbackItems'),
+      commitPanel.indexOf('async function generateCommitMessage')
+    )
+
+    assert.match(zh, /chinese:\s*'简体中文'/)
+    assert.match(zh, /english:\s*'English'/)
+    assert.match(en, /chinese:\s*'Simplified Chinese'/)
+    assert.match(commitPanel, /<Dialog[\s\S]*open=\{!!rollbackRequest\}/)
+    assert.match(commitPanel, /gitRollbackConfirmAction/)
+    assert.doesNotMatch(rollbackImplementation, /window\.confirm/)
+    assert.doesNotMatch(commitPanel, /GearSixIcon/)
   })
 
   void test('keeps the commit input inside its panel and expands untracked directories', () => {

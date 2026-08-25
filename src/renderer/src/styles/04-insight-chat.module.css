@@ -458,7 +458,7 @@
 
 .gitLogView {
   @apply grid h-full min-h-0 min-w-0;
-  grid-template-columns: minmax(180px, 240px) minmax(360px, 1fr) minmax(220px, 320px);
+  grid-template-columns: minmax(190px, 230px) minmax(420px, 1fr) minmax(320px, 390px);
 }
 
 .gitLogBranchPane,
@@ -468,8 +468,12 @@
   background: var(--workbench-surface);
 }
 
+.gitLogBranchPane {
+  @apply flex flex-col;
+}
+
 .gitCommitDetailPane {
   border-right: 0;
   border-left: 1px solid var(--workbench-border);
-  overflow: auto;
+  overflow: hidden;
 }

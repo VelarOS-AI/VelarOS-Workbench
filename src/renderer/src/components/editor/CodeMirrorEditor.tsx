@@ -81,6 +81,11 @@ import {
 import { useWorkbenchI18n } from '@renderer/i18n'
 import type { PackageManagerCommand } from '@renderer/models/commands/workbenchPackageScriptCommand'
 import {
+  buildWorkbenchVelarBuildCommand,
+  buildWorkbenchVelarRunCommand,
+  isWorkbenchVelarFilePath,
+} from '@renderer/models/commands/workbenchVelarFileCommand'
+import {
   useWorkbenchComments,
   useWorkbenchCommentStore,
 } from '@renderer/models/comments/workbenchCommentStore'
@@ -175,6 +180,10 @@ import {
   createWorkbenchVelarTestRunGutterExtension,
   shouldShowWorkbenchVelarTestRunGutter,
 } from '@renderer/models/editor/workbenchVelarTestRunGutter'
+import {
+  createWorkbenchVelarMainRunGutterExtension,
+  shouldShowWorkbenchVelarMainRunGutter,
+} from '@renderer/models/editor/workbenchVelarMainRunGutter'
 import type { WorkbenchProjectContextIndex } from '@renderer/models/project/workbenchProjectContextIndex'
 import type { WorkbenchThemeId } from '@renderer/models/settings/workbenchPreferences'
 import type { WorkbenchOpenEditorTab } from '@renderer/types/workbenchTypes'
@@ -888,11 +897,18 @@ function isTypeScriptEditorPath(path: Nullable<string>): boolean {
 }
 
 function isRunnableEditorPath(path: Nullable<string>): boolean {
-  return WorkbenchRunnableEditorExtensions.has(editorPathExtension(path))
+  return (
+    WorkbenchRunnableEditorExtensions.has(editorPathExtension(path))
+    || isWorkbenchVelarFilePath(path)
+  )
 }
 
 /** 「运行」：TypeScript 走 tsx，Python 走 python3，JS 按 Node 直接执行。 */
-function buildWorkbenchRunFileCommand(path: string): string {
+function buildWorkbenchRunFileCommand(
+  path: string,
+  packageManager: PackageManagerCommand
+): string {
+  if (isWorkbenchVelarFilePath(path)) return buildWorkbenchVelarRunCommand(path, packageManager)
   if (isTypeScriptEditorPath(path)) return `npx tsx "${path}"`
   if (['py', 'pyw'].includes(editorPathExtension(path))) return `python3 "${path}"`
   return `node "${path}"`
@@ -1137,6 +1153,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
     const completionCompartment = useMemo(() => new Compartment(), [])
     const lintCompartment = useMemo(() => new Compartment(), [])
     const packageScriptRunCompartment = useMemo(() => new Compartment(), [])
+    const velarMainRunCompartment = useMemo(() => new Compartment(), [])
     const velarTestRunCompartment = useMemo(() => new Compartment(), [])
     const autocompleteThemeCompartment = useMemo(() => new Compartment(), [])
     const languageHoverCompartment = useMemo(() => new Compartment(), [])
@@ -1213,6 +1230,18 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       [disabled, onRunPackageScript, packageManager, packageScriptRunContent, path]
     )
     const velarTestRunContent = shouldShowWorkbenchVelarTestRunGutter(path) ? value : ''
+    const velarMainRunContent = shouldShowWorkbenchVelarMainRunGutter(path) ? value : ''
+    const velarMainRunExtension = useMemo(
+      () =>
+        createWorkbenchVelarMainRunGutterExtension({
+          content: velarMainRunContent,
+          disabled: disabled || !callbacksRef.current.onRunPackageScript,
+          onRunMain: (command) => callbacksRef.current.onRunPackageScript?.(command),
+          packageManager,
+          path: onRunPackageScript ? path : null,
+        }),
+      [disabled, onRunPackageScript, packageManager, path, velarMainRunContent]
+    )
     const velarTestRunExtension = useMemo(
       () =>
         createWorkbenchVelarTestRunGutterExtension({
@@ -1553,16 +1582,20 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       if (!currentPath || !runScript) return
 
       setContextMenu(null)
-      runScript(buildWorkbenchRunFileCommand(currentPath))
+      runScript(buildWorkbenchRunFileCommand(currentPath, packageManager))
     }
 
-    const compileCurrentFile = (): void => {
+    const buildCurrentFile = (): void => {
       const currentPath = pathRef.current
       const runScript = callbacksRef.current.onRunPackageScript
-      if (!currentPath || !runScript || !isTypeScriptEditorPath(currentPath)) return
+      if (!currentPath || !runScript) return
 
       setContextMenu(null)
-      runScript(buildWorkbenchCompileFileCommand(currentPath))
+      if (isWorkbenchVelarFilePath(currentPath)) {
+        runScript(buildWorkbenchVelarBuildCommand(currentPath, packageManager))
+      } else if (isTypeScriptEditorPath(currentPath)) {
+        runScript(buildWorkbenchCompileFileCommand(currentPath))
+      }
     }
 
     // 评论只对选中的块生效：打开输入浮层收集正文，确认后落成锚定评论。
@@ -2196,6 +2229,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
           languageHoverCompartment.of(languageServiceHoverExtension),
           languageServiceCompartment.of([]),
           packageScriptRunCompartment.of(packageScriptRunExtension),
+          velarMainRunCompartment.of(velarMainRunExtension),
           velarTestRunCompartment.of(velarTestRunExtension),
           updateListener,
           languageCompartment.of(basicLanguageExtension),
@@ -2434,6 +2468,12 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
 
     useEffect(() => {
       viewRef.current?.dispatch({
+        effects: velarMainRunCompartment.reconfigure(velarMainRunExtension),
+      })
+    }, [velarMainRunCompartment, velarMainRunExtension])
+
+    useEffect(() => {
+      viewRef.current?.dispatch({
         effects: velarTestRunCompartment.reconfigure(velarTestRunExtension),
       })
     }, [velarTestRunCompartment, velarTestRunExtension])
@@ -2547,12 +2587,12 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
                 {t('workbench.editorContextRun')}
               </button>
             )}
-            {isTypeScriptEditorPath(path) && (
+            {(isTypeScriptEditorPath(path) || isWorkbenchVelarFilePath(path)) && (
               <button
                 type="button"
                 role="menuitem"
                 disabled={!path || !onRunPackageScript}
-                onClick={compileCurrentFile}
+                onClick={buildCurrentFile}
               >
                 <HammerIcon
                   size={14}
@@ -2560,7 +2600,9 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
                   className={styles.editorContextActionIcon}
                   aria-hidden="true"
                 />
-                {t('workbench.editorContextCompile')}
+                {isWorkbenchVelarFilePath(path)
+                  ? t('workbench.editorContextBuild')
+                  : t('workbench.editorContextCompile')}
               </button>
             )}
             <div className={styles.editorContextMenuDivider} />

@@ -46,6 +46,7 @@
         "react-dom": "^19.2.5",
         "sonner": "^2.0.7",
         "streamdown": "^2.5.0",
+        "tar": "^7.5.2",
         "tinykeys": "3.0.0",
         "typescript": "^5.9.3",
         "vscode-css-languageservice": "^6.3.10",

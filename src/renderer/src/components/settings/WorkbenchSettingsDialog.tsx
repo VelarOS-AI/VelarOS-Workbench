@@ -10,6 +10,7 @@ import {
 } from 'react'
 import {
   ArrowCounterClockwiseIcon,
+  DownloadSimpleIcon,
   FileTextIcon,
   PlugsConnectedIcon,
   SignOutIcon,
@@ -48,6 +49,7 @@ import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 import { Text } from '@velaros-ai/ui/primitives/display/Text'
 import { Title } from '@velaros-ai/ui/primitives/display/Title'
 import { Input } from '@velaros-ai/ui/primitives/forms/Input'
+import { SearchField } from '@velaros-ai/ui/primitives/forms/SearchField'
 import { Select } from '@velaros-ai/ui/primitives/forms/Select'
 import { Switch } from '@velaros-ai/ui/primitives/forms/Switch'
 
@@ -58,10 +60,9 @@ import type {
 } from '@shared/contracts'
 
 import type {
-  WorkbenchAgentModsOverview,
-  WorkbenchAgentModStatus,
-  WorkbenchAgentModSummary,
-} from '../../../../shared/workbenchAgentMods'
+  WorkbenchResourcePluginCatalog,
+  WorkbenchResourcePluginRecord,
+} from '../../../../shared/workbenchResourcePlugins'
 import styles from '../../styles/workbenchPageStyles'
 import { useTimerScope } from '../../support/genericHooks'
 
@@ -73,7 +74,7 @@ type WorkbenchSettingsSectionId =
   | 'ai-rules'
   | 'keymap'
   | 'language'
-  | 'mods'
+  | 'plugins'
   | 'advanced'
 
 interface WorkbenchSettingsDialogProps {
@@ -190,8 +191,10 @@ export function WorkbenchSettingsDialog({
     useState<Nullable<WorkbenchProjectAiRulesResult>>(null)
   const [expandedProjectAiRulePath, setExpandedProjectAiRulePath] = useState<Nullable<string>>(null)
   const [isLoadingProjectAiRules, setIsLoadingProjectAiRules] = useState(false)
-  const [modsOverview, setModsOverview] = useState<Nullable<WorkbenchAgentModsOverview>>(null)
-  const [isLoadingModsOverview, setIsLoadingModsOverview] = useState(false)
+  const [pluginCatalog, setPluginCatalog] =
+    useState<Nullable<WorkbenchResourcePluginCatalog>>(null)
+  const [isLoadingPlugins, setIsLoadingPlugins] = useState(false)
+  const [pluginQuery, setPluginQuery] = useState('')
   const dialogRef = useRef<HTMLDivElement>(null)
 
   const sections = useMemo(
@@ -232,9 +235,9 @@ export function WorkbenchSettingsDialog({
         description: t('workbench.settingsLanguageDescription'),
       },
       {
-        id: 'mods' as const,
-        label: t('workbench.settingsMods'),
-        description: t('workbench.settingsModsDescription'),
+        id: 'plugins' as const,
+        label: t('workbench.settingsPlugins'),
+        description: t('workbench.settingsPluginsDescription'),
       },
       {
         id: 'advanced' as const,
@@ -266,14 +269,14 @@ export function WorkbenchSettingsDialog({
     }
   }, [hostRuntime, project?.rootPath])
 
-  const refreshModsOverview = useCallback(async (): Promise<void> => {
-    setIsLoadingModsOverview(true)
+  const refreshPlugins = useCallback(async (): Promise<void> => {
+    setIsLoadingPlugins(true)
     try {
-      setModsOverview(await window.velarosWorkbenchAgentMods.getOverview())
+      setPluginCatalog(await window.velarosWorkbenchResourcePlugins.list())
     } catch {
-      setModsOverview(null)
+      setPluginCatalog(null)
     } finally {
-      setIsLoadingModsOverview(false)
+      setIsLoadingPlugins(false)
     }
   }, [])
 
@@ -305,10 +308,11 @@ export function WorkbenchSettingsDialog({
   }, [activeSection, open, refreshProjectAiRules])
 
   useEffect(() => {
-    if (!open || activeSection !== 'mods') return
+    if (!open || activeSection !== 'plugins') return
 
-    void refreshModsOverview()
-  }, [activeSection, open, refreshModsOverview])
+    void refreshPlugins()
+    return window.velarosWorkbenchResourcePlugins.onChanged(setPluginCatalog)
+  }, [activeSection, open, refreshPlugins])
 
   if (!open) return null
 
@@ -769,133 +773,121 @@ export function WorkbenchSettingsDialog({
     )
   }
 
-  function modStatusLabel(status: WorkbenchAgentModStatus): string {
-    switch (status) {
-      case 'active': {
-        return t('workbench.settingsModsStatusActive')
-      }
-      case 'partial': {
-        return t('workbench.settingsModsStatusPartial')
-      }
-      case 'inactive': {
-        return t('workbench.settingsModsStatusInactive')
-      }
-      default: {
-        return t('workbench.settingsModsStatusRejected')
-      }
+  function pluginStatusLabel(plugin: WorkbenchResourcePluginRecord): string {
+    switch (plugin.status) {
+      case 'available': return t('workbench.settingsPluginStatusAvailable')
+      case 'disabled': return t('workbench.settingsPluginStatusDisabled')
+      case 'installing': return t('workbench.settingsPluginStatusInstalling', {
+        progress: plugin.progress ?? 0,
+      })
+      case 'failed': return t('workbench.settingsPluginStatusFailed')
+      default: return t('workbench.settingsPluginStatusMissing')
     }
   }
 
-  function modStatusTone(status: WorkbenchAgentModStatus): 'default' | 'success' | 'warning' {
-    if (status === 'active') return 'success'
-    if (status === 'inactive') return 'default'
-    return 'warning'
+  async function installPlugin(plugin: WorkbenchResourcePluginRecord): Promise<void> {
+    setPluginCatalog(await window.velarosWorkbenchResourcePlugins.install({ id: plugin.id }))
   }
 
-  function renderModRow(mod: WorkbenchAgentModSummary): ReactElement {
+  async function setPluginEnabled(
+    plugin: WorkbenchResourcePluginRecord,
+    enabled: boolean
+  ): Promise<void> {
+    setPluginCatalog(
+      await window.velarosWorkbenchResourcePlugins.setEnabled({ id: plugin.id, enabled })
+    )
+  }
+
+  function renderPluginRow(plugin: WorkbenchResourcePluginRecord): ReactElement {
     return (
-      <div key={`${mod.origin}:${mod.modId}`} className={styles.workbenchSettingsAiRuleItem}>
-        <div className={styles.workbenchSettingsAiRuleRow}>
-          <span className={styles.workbenchSettingsAiRuleIcon}>
-            <PlugsConnectedIcon size={15} />
-          </span>
-          <span className={styles.workbenchSettingsAiRuleMain}>
-            <span className={styles.workbenchSettingsAiRuleHeader}>
-              <Text className={styles.workbenchSettingsAiRulePath}>
-                {mod.modId}
-                {mod.version ? ` · ${mod.version}` : ''}
-              </Text>
-              <span className={styles.workbenchSettingsAiRuleBadges}>
-                <WorkbenchSettingsPill tone={modStatusTone(mod.status)}>
-                  {modStatusLabel(mod.status)}
-                </WorkbenchSettingsPill>
-                {!!mod.absentAxes.length && (
-                  <WorkbenchSettingsPill tone="warning">
-                    {t('workbench.settingsModsAbsentAxes', { count: mod.absentAxes.length })}
-                  </WorkbenchSettingsPill>
-                )}
-                {!!mod.unroutedAxes.length && (
-                  <WorkbenchSettingsPill>
-                    {t('workbench.settingsModsUnroutedAxes', { count: mod.unroutedAxes.length })}
-                  </WorkbenchSettingsPill>
-                )}
-              </span>
-            </span>
-            {!!mod.reasons.length && (
-              <Text tone="caption" className={styles.workbenchSettingsRowDescription}>
-                {mod.reasons.join('; ')}
-              </Text>
-            )}
-          </span>
+      <div key={plugin.id} className={styles.workbenchSettingsPluginRow}>
+        <span className={styles.workbenchSettingsPluginIcon}>
+          <PlugsConnectedIcon size={16} />
+        </span>
+        <div className={styles.workbenchSettingsPluginMeta}>
+          <Text className={styles.workbenchSettingsPluginName}>
+            CodeGraph{plugin.version ? ` · ${plugin.version}` : ''}
+          </Text>
+          <Text tone="caption" className={styles.workbenchSettingsRowDescription}>
+            {t('workbench.settingsPluginCodeGraphDescription')}
+          </Text>
+          {!!plugin.error && (
+            <Text tone="caption" className={styles.workbenchSettingsPluginError}>
+              {plugin.error}
+            </Text>
+          )}
+        </div>
+        <div className={styles.workbenchSettingsPluginActions}>
+          <WorkbenchSettingsPill
+            tone={plugin.status === 'available' ? 'success' : plugin.status === 'failed' ? 'warning' : 'default'}
+          >
+            {pluginStatusLabel(plugin)}
+          </WorkbenchSettingsPill>
+          {plugin.installed ? (
+            <Switch
+              size="sm"
+              checked={plugin.enabled}
+              disabled={plugin.status === 'installing'}
+              onCheckedChange={(enabled) => void setPluginEnabled(plugin, enabled)}
+            />
+          ) : (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!plugin.canInstall || plugin.status === 'installing'}
+              onClick={() => void installPlugin(plugin)}
+            >
+              <DownloadSimpleIcon size={14} />
+              {plugin.status === 'failed'
+                ? t('workbench.settingsPluginRetry')
+                : t('workbench.settingsPluginInstall')}
+            </Button>
+          )}
         </div>
       </div>
     )
   }
 
-  function renderModsSection(): ReactElement {
-    const mods = modsOverview?.mods ?? []
-    const diagnostics = modsOverview?.diagnostics ?? []
-
+  function renderPluginsSection(): ReactElement {
+    const plugins = (pluginCatalog?.plugins ?? []).filter((plugin) =>
+      `${plugin.id} CodeGraph`.toLowerCase().includes(pluginQuery.trim().toLowerCase())
+    )
     return (
       <div className={styles.workbenchSettingsSectionPanel}>
-        {!!modsOverview?.degradedReason && (
-          <div className={styles.workbenchSettingsWarning}>
-            <WarningCircleIcon size={15} />
-            <Text>
-              {t('workbench.settingsModsDegraded', { reason: modsOverview.degradedReason })}
-            </Text>
+        <div className={styles.workbenchSettingsPluginToolbar}>
+          <div className={styles.workbenchSettingsPluginSearch}>
+            <SearchField
+              size="sm"
+              value={pluginQuery}
+              placeholder={t('workbench.settingsPluginSearch')}
+              onChange={(event) => setPluginQuery(event.currentTarget.value)}
+            />
           </div>
-        )}
-        <SettingRow
-          title={t('workbench.settingsAiRulesRefresh')}
-          description={t('workbench.settingsModsReadOnlyHint')}
-        >
           <IconButton
             size="icon-sm"
             variant="outline"
             className={styles.workbenchSettingsSmallIconButton}
             label={t('workbench.settingsAiRulesRefresh')}
             title={t('workbench.settingsAiRulesRefresh')}
-            onClick={() => void refreshModsOverview()}
+            onClick={() => void refreshPlugins()}
           >
             <ArrowCounterClockwiseIcon size={14} />
           </IconButton>
-        </SettingRow>
-        {isLoadingModsOverview && !modsOverview ? (
+        </div>
+        <Text tone="caption" className={styles.workbenchSettingsPluginSharedHint}>
+          {t('workbench.settingsPluginSharedHint')}
+        </Text>
+        {isLoadingPlugins && !pluginCatalog ? (
           <div className={styles.workbenchSettingsAiRulesEmpty}>
-            <Text>{t('workbench.settingsModsLoading')}</Text>
+            <Text>{t('workbench.settingsPluginsLoading')}</Text>
           </div>
-        ) : mods.length ? (
-          <div className={styles.workbenchSettingsAiRuleList}>
-            {mods.map((mod) => renderModRow(mod))}
+        ) : plugins.length ? (
+          <div className={styles.workbenchSettingsPluginList}>
+            {plugins.map((plugin) => renderPluginRow(plugin))}
           </div>
         ) : (
           <div className={styles.workbenchSettingsAiRulesEmpty}>
-            <Text className={styles.workbenchSettingsAiRulesEmptyTitle}>
-              {t('workbench.settingsModsEmpty')}
-            </Text>
-            <Text tone="caption" className={styles.workbenchSettingsAiRulesEmptyDescription}>
-              {t('workbench.settingsModsEmptyDescription')}
-            </Text>
-          </div>
-        )}
-        {!!diagnostics.length && (
-          <div className={styles.workbenchSettingsStackedField}>
-            <Text tone="caption" className={styles.workbenchSettingsRowTitle}>
-              {t('workbench.settingsModsDiagnosticsTitle')}
-            </Text>
-            <div className={styles.workbenchSettingsAiRuleList}>
-              {diagnostics.map((diagnostic, index) => (
-                <div
-                  key={`${diagnostic.code}:${diagnostic.modId ?? index}:${index}`}
-                  className={styles.workbenchSettingsAiRuleItem}
-                >
-                  <Text tone="caption" className={styles.workbenchSettingsRowDescription}>
-                    {diagnostic.message}
-                  </Text>
-                </div>
-              ))}
-            </div>
+            <Text>{t('workbench.settingsPluginsEmpty')}</Text>
           </div>
         )}
       </div>
@@ -949,8 +941,8 @@ export function WorkbenchSettingsDialog({
       case 'language': {
         return renderLanguageSection()
       }
-      case 'mods': {
-        return renderModsSection()
+      case 'plugins': {
+        return renderPluginsSection()
       }
       default: {
         return renderAdvancedSection()

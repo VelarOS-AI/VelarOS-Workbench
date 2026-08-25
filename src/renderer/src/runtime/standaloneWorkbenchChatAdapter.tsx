@@ -27,7 +27,7 @@ import {
   ChatSurfaceComposer,
 } from '@velaros-ai/ui/conversation/composer'
 
-import type { ChatMessage } from '@shared/contracts'
+import type { ChatMessage, ContentBlock, ToolCallBlock } from '@shared/contracts'
 
 import styles from '../styles/workbenchPageStyles'
 
@@ -257,8 +257,7 @@ function StandaloneWorkbenchChatSessionSurface({
         || envelope.executionId !== activeExecution.executionId
         || envelope.sessionCorrelationId !== activeExecution.sessionCorrelationId
       ) return
-      const text = readAgentTextDelta(envelope)
-      if (text) appendAssistantText(projectRoot, text)
+      applyAgentStreamEvent(projectRoot, envelope)
       const terminal = readAgentTerminalEvent(envelope)
       if (terminal?.status === 'completed') {
         finishRun(projectRoot, 'completed')
@@ -275,10 +274,24 @@ function StandaloneWorkbenchChatSessionSurface({
       }
     }), [chat.sessionId, projectRoot])
 
+  async function stop(): Promise<void> {
+    const activeExecution = activeExecutionRef.current
+    if (!activeExecution) return
+    await window.velarosWorkbenchKernel.abortAgentExecution({
+      executionId: activeExecution.executionId,
+    })
+  }
+
   async function submit(draftValue = prompt, draftFiles = files): Promise<void> {
     const text = draftValue.trim()
     if ((!text && draftFiles.length === 0) || chat.status === 'running') return
-    if (!modelConfig.provider.trim() || !modelConfig.model.trim() || !modelConfig.apiKey.trim()) return
+    if (!modelConfig.provider.trim() || !modelConfig.model.trim() || !modelConfig.apiKey.trim()) {
+      workbenchMessage.warning({
+        title: t('workbench.chatModelMissingTitle'),
+        description: t('workbench.chatModelMissingDescription'),
+      })
+      return
+    }
     setPrompt('')
     setFiles([])
     const userMessage = createTextMessage('user', text || draftFiles.map((file) => file.name).join(', '))
@@ -495,7 +508,8 @@ function StandaloneWorkbenchChatSessionSurface({
         },
         streaming: {
           isStreaming: chat.status === 'running',
-          canStop: false,
+          canStop: true,
+          onStop: stop,
         },
       },
       modelSelector: {
@@ -591,25 +605,113 @@ function readStandaloneChatTitle(state: StandaloneChatState): string {
 }
 
 function appendAssistantText(projectRoot: string, text: string): void {
+  updateAssistantBlocks(projectRoot, (blocks) => {
+    const last = blocks.at(-1)
+    if (last?.type !== 'text') return [...blocks, { type: 'text', text }]
+    return [...blocks.slice(0, -1), { ...last, text: last.text + text }]
+  })
+}
+
+function applyAgentStreamEvent(projectRoot: string, record: AgentExecutionEnvelope): void {
+  if (record.channel !== 'agent') return
+  const event = readAgentEventPayload(record)
+  if (!event) return
+  if (event.type === 'text-delta' && typeof event.text === 'string') {
+    appendAssistantText(projectRoot, event.text)
+    return
+  }
+  if (event.type === 'reasoning-delta' && typeof event.text === 'string') {
+    const streamId = typeof event.id === 'string' ? event.id : 'reasoning'
+    updateAssistantBlocks(projectRoot, (blocks) => {
+      const index = blocks.findLastIndex(
+        (block) => block.type === 'thinking' && block.streamId === streamId
+      )
+      if (index < 0) return [...blocks, { type: 'thinking', streamId, text: event.text as string }]
+      return blocks.map((block, blockIndex) =>
+        blockIndex === index && block.type === 'thinking'
+          ? { ...block, text: block.text + event.text }
+          : block
+      )
+    })
+    return
+  }
+  if (
+    event.type === 'tool-start'
+    && typeof event.toolCallId === 'string'
+    && typeof event.toolName === 'string'
+  ) {
+    const toolCallId = event.toolCallId
+    const toolName = event.toolName
+    updateAssistantBlocks(projectRoot, (blocks) => [
+      ...blocks.filter(
+        (block) => block.type !== 'tool-call' || block.toolCallId !== toolCallId
+      ),
+      {
+        type: 'tool-call',
+        toolCallId,
+        toolName,
+        args: asRecord(event.args),
+        categoryId: typeof event.categoryId === 'string' ? event.categoryId : undefined,
+        isRunning: true,
+        startedAt: Date.now(),
+      },
+    ])
+    return
+  }
+  if (event.type === 'tool-progress' && typeof event.toolCallId === 'string') {
+    updateToolCallBlock(projectRoot, event.toolCallId, (block) => ({
+      ...block,
+      progress: `${block.progress ?? ''}${typeof event.chunk === 'string' ? event.chunk : ''}`,
+    }))
+    return
+  }
+  if (event.type === 'tool-metadata' && typeof event.toolCallId === 'string') {
+    updateToolCallBlock(projectRoot, event.toolCallId, (block) => ({
+      ...block,
+      ...(typeof event.title === 'string' ? { title: event.title } : {}),
+      metadata: { ...block.metadata, ...asRecord(event.metadata) },
+    }))
+    return
+  }
+  if (event.type === 'tool-done' && typeof event.toolCallId === 'string') {
+    updateToolCallBlock(projectRoot, event.toolCallId, (block) => ({
+      ...block,
+      result: event.result,
+      ...(typeof event.error === 'string' ? { error: event.error } : {}),
+      isRunning: false,
+      finishedAt: Date.now(),
+      effects: asRecord(event.effects) as ToolCallBlock['effects'],
+    }))
+  }
+}
+
+function updateToolCallBlock(
+  projectRoot: string,
+  toolCallId: string,
+  updater: (block: ToolCallBlock) => ToolCallBlock
+): void {
+  updateAssistantBlocks(projectRoot, (blocks) =>
+    blocks.map((block) =>
+      block.type === 'tool-call' && block.toolCallId === toolCallId ? updater(block) : block
+    )
+  )
+}
+
+function updateAssistantBlocks(
+  projectRoot: string,
+  updater: (blocks: ContentBlock[]) => ContentBlock[]
+): void {
   updateState(projectRoot, (state) => {
     const last = state.messages.at(-1)
-    if (last?.role === 'assistant') {
-      const previous = last.blocks
-        .filter((block) => block.type === 'text')
-        .map((block) => block.text)
-        .join('')
-      return {
-        ...state,
-        messages: [
-          ...state.messages.slice(0, -1),
-          { ...last, blocks: [{ type: 'text', text: previous + text }] },
-        ],
-        revision: state.revision + 1,
-      }
-    }
+    const assistant = last?.role === 'assistant'
+      ? last
+      : { ...createTextMessage('assistant', ''), blocks: [] }
+    const nextAssistant = { ...assistant, blocks: updater([...assistant.blocks]) }
     return {
       ...state,
-      messages: [...state.messages, createTextMessage('assistant', text)],
+      messages: last?.role === 'assistant'
+        ? [...state.messages.slice(0, -1), nextAssistant]
+        : [...state.messages, nextAssistant],
       revision: state.revision + 1,
     }
   })
@@ -637,31 +739,28 @@ function createTextMessage(role: ChatMessage['role'], text: string): ChatMessage
   }
 }
 
-function readAgentTextDelta(record: AgentExecutionEnvelope): string | null {
-  if (record.channel !== 'agent') return null
-  const payload = readAgentEventPayload(record)
-  if (
-    payload?.type === 'text-delta'
-    && typeof payload.text === 'string'
-  ) return payload.text
-  return null
-}
-
 function readAgentTerminalEvent(
   record: AgentExecutionEnvelope
 ): { status: 'completed' | 'aborted' | 'failed'; message?: string } | null {
-  const payload = readAgentEventPayload(record)
-  const kind = payload?.kind ?? payload?.type
+  const event = readAgentEventPayload(record)
+  const runtimePayload = event?.type === 'runtime' ? asRecord(event.payload) : (event ?? {})
+  const kind = runtimePayload.kind ?? runtimePayload.type
   if (kind === 'done') return { status: 'completed' }
   if (kind === 'aborted') return { status: 'aborted' }
   return kind === 'error'
     ? {
         status: 'failed',
-        ...(typeof payload?.message === 'string'
-          ? { message: payload.message }
+        ...(typeof runtimePayload.message === 'string'
+          ? { message: runtimePayload.message }
           : {}),
       }
     : null
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {}
 }
 
 function readAgentEventPayload(
