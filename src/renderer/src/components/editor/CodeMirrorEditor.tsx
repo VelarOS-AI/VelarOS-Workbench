@@ -156,6 +156,10 @@ import {
   shouldShowWorkbenchPackageScriptRunGutter,
 } from '@renderer/models/editor/workbenchPackageScriptRunGutter'
 import {
+  buildWorkbenchSymbolLocationsRequest,
+  type WorkbenchSymbolLocationsRequest,
+} from '@renderer/models/editor/workbenchSymbolLocations'
+import {
   createWorkbenchVelarTestRunGutterExtension,
   shouldShowWorkbenchVelarTestRunGutter,
 } from '@renderer/models/editor/workbenchVelarTestRunGutter'
@@ -169,6 +173,7 @@ import type {
   WorkbenchLanguageServiceCodeAction,
   WorkbenchLanguageServiceDiagnostic,
   WorkbenchLanguageServiceFileEdit,
+  WorkbenchLanguageServiceLocation,
 } from '@shared/contracts'
 
 import styles from '../../styles/workbenchPageStyles'
@@ -210,6 +215,7 @@ interface CodeMirrorEditorProps {
   onOpenFind: () => void
   onOpenGoToLine: () => void
   onGoToDefinition: (path: string, line: number, column?: number) => void
+  onOpenSymbolLocations?: (request: WorkbenchSymbolLocationsRequest) => void
   onApplyLanguageServiceFileChanges?: (changes: WorkbenchLanguageServiceFileEdit[]) => void
   onRunPackageScript?: (command: string) => void
   onOpenFileHistory?: (mode: 'local' | 'git') => void
@@ -1082,6 +1088,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       onOpenFind,
       onOpenGoToLine,
       onGoToDefinition,
+      onOpenSymbolLocations,
       onApplyLanguageServiceFileChanges,
       onRunPackageScript,
       onOpenFileHistory,
@@ -1105,6 +1112,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       onOpenFind,
       onOpenGoToLine,
       onGoToDefinition,
+      onOpenSymbolLocations,
       onApplyLanguageServiceFileChanges,
       onRunPackageScript,
       onOpenFileHistory,
@@ -1628,6 +1636,87 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       callbacksRef.current.onGoToDefinition(target.path, target.line, target.column)
     }
 
+    const openSymbolLocationsForWord = async (
+      word: Nullable<WorkbenchIdentifierRange>
+    ): Promise<void> => {
+      const view = viewRef.current
+      const currentPath = pathRef.current
+      const identifier = word ?? getCurrentIdentifier()
+      if (!view || !currentPath || !identifier) return
+      if (!callbacksRef.current.onOpenSymbolLocations) {
+        await goToDefinitionForWord(identifier)
+        return
+      }
+
+      const position = positionLineColumnFromState(view.state, identifier.from)
+      const origin: WorkbenchLanguageServiceLocation = {
+        path: currentPath,
+        line: position.line,
+        column: position.column,
+        range: {
+          startLine: position.line,
+          startColumn: position.column,
+          endLine: position.line,
+          endColumn: position.column + identifier.text.length,
+        },
+      }
+      const requestBase = buildWorkbenchLanguageServiceRequestBase({
+        projectRoot,
+        path: currentPath,
+        language,
+        content: view.state.doc.toString(),
+        openTabs: openTabsLatest.current,
+      })
+      const [definitionResult, references] = await Promise.all([
+        getWorkbenchLanguageServiceDefinition(
+          { ...requestBase, position },
+          hostRuntime
+        ).catch((error) => {
+          log.debug('查询语言服务定义失败，调用点面板将使用索引回退', {
+            projectRoot,
+            path: currentPath,
+            language,
+            error,
+          })
+          return null
+        }),
+        findWorkbenchLanguageServiceReferences({
+          view,
+          context: {
+            projectRoot,
+            path: currentPath,
+            language,
+            getOpenTabs: () => openTabsLatest.current,
+            hostRuntime,
+          },
+          position: identifier.from,
+        }).catch((error) => {
+          log.debug('查询语言服务引用失败，调用点面板仍显示定义', {
+            projectRoot,
+            path: currentPath,
+            language,
+            error,
+          })
+          return []
+        }),
+      ])
+
+      const definitions = definitionResult?.ok ? [...definitionResult.data.locations] : []
+      if (isEmpty(definitions)) {
+        const fallback = getDefinitionTarget(identifier)
+        if (fallback) definitions.push(fallback)
+      }
+      setContextMenu(null)
+      callbacksRef.current.onOpenSymbolLocations(
+        buildWorkbenchSymbolLocationsRequest({
+          symbol: identifier.text,
+          origin,
+          definitions,
+          references,
+        })
+      )
+    }
+
     const renameIdentifier = (word: Nullable<WorkbenchIdentifierRange>): void => {
       const view = viewRef.current
       const identifier = word ?? getCurrentIdentifier()
@@ -2099,7 +2188,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
           if (!word && !getDefinitionTarget(word)) return false
 
           event.preventDefault()
-          void goToDefinitionForWord(word)
+          void openSymbolLocationsForWord(word)
           return true
         },
       })

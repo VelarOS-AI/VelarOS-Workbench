@@ -901,6 +901,117 @@
   font-size: 12px;
 }
 
+.editorSymbolLocationsPanel {
+  @apply flex shrink-0 flex-col overflow-hidden border-b;
+  max-height: min(240px, 34vh);
+  border-color: var(--workbench-border);
+  background: var(--workbench-toolbar);
+}
+
+.editorSymbolLocationsHeader {
+  @apply flex shrink-0 items-center justify-between gap-2 border-b;
+  min-height: 34px;
+  padding: 4px 8px 4px 10px;
+  border-color: var(--workbench-border);
+}
+
+.editorSymbolLocationsTitle {
+  @apply flex min-w-0 items-center gap-2;
+  color: var(--workbench-text);
+  font-size: 12px;
+}
+
+.editorSymbolLocationsTitle strong {
+  @apply truncate;
+  max-width: min(320px, 42vw);
+  font-weight: 650;
+}
+
+.editorSymbolLocationsTitle span {
+  @apply shrink-0 text-muted-foreground;
+  font-size: 11px;
+}
+
+.editorSymbolLocationsClose {
+  @apply grid shrink-0 place-items-center rounded;
+  width: 24px;
+  height: 24px;
+  color: var(--workbench-muted);
+}
+
+.editorSymbolLocationsClose:hover {
+  background: var(--workbench-hover);
+  color: var(--workbench-text);
+}
+
+.editorSymbolLocationsReturn {
+  @apply flex shrink-0 items-center gap-2 border-b text-left;
+  min-height: 32px;
+  padding: 4px 10px;
+  border-color: color-mix(in srgb, var(--status-blue) 22%, var(--workbench-border));
+  background: var(--status-blue-soft);
+  color: var(--status-blue-strong);
+  font-size: 11px;
+}
+
+.editorSymbolLocationsReturn strong {
+  @apply min-w-0 truncate;
+  color: var(--workbench-text);
+  font-weight: 600;
+}
+
+.editorSymbolLocationsReturn:hover {
+  background: color-mix(in srgb, var(--status-blue-soft) 72%, var(--workbench-hover));
+}
+
+.editorSymbolLocationsBody {
+  @apply min-h-0 overflow-auto;
+  padding: 4px;
+}
+
+.editorSymbolLocationRow {
+  @apply grid w-full items-center gap-2 rounded text-left;
+  grid-template-columns: 56px minmax(0, 1fr) auto;
+  min-height: 28px;
+  padding: 3px 8px;
+  color: var(--workbench-text);
+  font-size: 11.5px;
+}
+
+.editorSymbolLocationRow:hover,
+.editorSymbolLocationRow[data-active='true'] {
+  background: var(--workbench-hover);
+}
+
+.editorSymbolLocationRow[data-active='true'] {
+  box-shadow: inset 2px 0 0 var(--status-blue);
+}
+
+.editorSymbolLocationKind {
+  @apply truncate font-semibold;
+  color: var(--workbench-muted);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+}
+
+.editorSymbolLocationKind[data-kind='definition'] {
+  color: var(--status-blue-strong);
+}
+
+.editorSymbolLocationPath {
+  @apply min-w-0 truncate;
+}
+
+.editorSymbolLocationPosition {
+  @apply shrink-0 text-muted-foreground;
+  font-variant-numeric: tabular-nums;
+}
+
+.editorSymbolLocationsEmpty {
+  @apply px-2 py-3 text-muted-foreground;
+  font-size: 11.5px;
+}
+
 .editorExternalConflictDialog {
   width: min(520px, calc(100vw - 32px));
 }

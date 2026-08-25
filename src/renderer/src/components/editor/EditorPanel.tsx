@@ -27,6 +27,13 @@ import {
 } from '@renderer/models/editor/workbenchEditorModel'
 import { isWorkbenchMarkdownPreviewPath } from '@renderer/models/editor/workbenchMarkdownPreview'
 import {
+  navigateWorkbenchSymbolLocations,
+  openWorkbenchSymbolLocations,
+  sameWorkbenchSymbolLocation,
+  type WorkbenchSymbolLocationsRequest,
+  type WorkbenchSymbolLocationsState,
+} from '@renderer/models/editor/workbenchSymbolLocations'
+import {
   isSameWorkbenchGitChangeItem,
   type WorkbenchGitChangeItem,
   type WorkbenchGitDecorationMap,
@@ -50,6 +57,7 @@ import {
 import type {
   WorkbenchLanguageServiceDiagnostic,
   WorkbenchLanguageServiceFileEdit,
+  WorkbenchLanguageServiceLocation,
 } from '@shared/contracts'
 
 import styles from '../../styles/workbenchPageStyles'
@@ -71,6 +79,7 @@ import type {
 import { EditorFileDiagnosticSummary } from './EditorFileDiagnosticSummary'
 import { EditorFindBar } from './EditorFindBar'
 import { EditorGoToLineBar } from './EditorGoToLineBar'
+import { EditorSymbolLocationsPanel } from './EditorSymbolLocationsPanel'
 import {
   EditorTabBar,
   type WorkbenchEditorAuxiliaryTabItem,
@@ -269,6 +278,8 @@ export function EditorPanel({
     }>
   >(null)
   const [cursorPosition, setCursorPosition] = useState({ line: 1, column: 1 })
+  const [symbolLocations, setSymbolLocations] =
+    useState<Nullable<WorkbenchSymbolLocationsState>>(null)
   const [activeDiagnosticIndex, setActiveDiagnosticIndex] = useState(-1)
   const onActiveProblemIdChangeLatest = useLatest(onActiveProblemIdChange)
   const lastSyncedProblemIdRef = useRef<Nullable<string>>(null)
@@ -360,6 +371,24 @@ export function EditorPanel({
       onCursorPositionChange?.(position)
     },
     [onCursorPositionChange]
+  )
+  const openSymbolLocations = useCallback((request: WorkbenchSymbolLocationsRequest) => {
+    setSymbolLocations(openWorkbenchSymbolLocations(request))
+  }, [])
+  const navigateSymbolLocation = useCallback(
+    (location: WorkbenchLanguageServiceLocation) => {
+      if (
+        symbolLocations &&
+        sameWorkbenchSymbolLocation(symbolLocations.activeLocation, location)
+      )
+        return
+
+      setSymbolLocations((current) =>
+        current ? navigateWorkbenchSymbolLocations(current, location) : current
+      )
+      onGoToDefinition(location.path, location.line, location.column)
+    },
+    [onGoToDefinition, symbolLocations]
   )
   useEffect(() => {
     syncDiagnosticSelectionFromCursor(cursorPosition.line, cursorPosition.column)
@@ -821,6 +850,14 @@ export function EditorPanel({
                   </Button>
                 </div>
               )}
+              {!!symbolLocations && !!selectedFile && (
+                <EditorSymbolLocationsPanel
+                  projectRoot={projectRoot}
+                  state={symbolLocations}
+                  onClose={() => setSymbolLocations(null)}
+                  onNavigate={navigateSymbolLocation}
+                />
+              )}
               {!!selectedFile && (
                 <EditorFileDiagnosticSummary
                   diagnostics={selectedFileDiagnostics}
@@ -858,6 +895,7 @@ export function EditorPanel({
                         onOpenFind={openFindBar}
                         onOpenGoToLine={openGoToLineBar}
                         onGoToDefinition={onGoToDefinition}
+                        onOpenSymbolLocations={openSymbolLocations}
                         onApplyLanguageServiceFileChanges={onApplyLanguageServiceFileChanges}
                         onRunPackageScript={onRunPackageScript}
                         onOpenFileHistory={setFileHistoryMode}
