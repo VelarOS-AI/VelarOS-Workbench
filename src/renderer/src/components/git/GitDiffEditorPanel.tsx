@@ -1,4 +1,4 @@
-import { type ReactElement, useMemo, useRef } from 'react'
+import { type ReactElement, useEffect, useMemo, useRef } from 'react'
 import { ArrowLeftIcon, ArrowRightIcon } from '@phosphor-icons/react'
 import { useWorkbenchI18n } from '@renderer/i18n'
 import { buildWorkbenchContentDiffRows } from '@renderer/models/git/workbenchGitDiffModel'
@@ -29,6 +29,7 @@ interface GitDiffEditorPanelProps {
   projectRoot: string
   item: WorkbenchGitChangeItem
   workbenchTheme: WorkbenchThemeId
+  focusFirstChangeRequestId?: number
 }
 
 function diffScopeLabel(
@@ -51,6 +52,7 @@ export function GitDiffEditorPanel({
   projectRoot,
   item,
   workbenchTheme,
+  focusFirstChangeRequestId = 0,
 }: GitDiffEditorPanelProps): ReactElement {
   const { t } = useWorkbenchI18n()
   const diffViewRef = useRef<WorkbenchUnifiedDiffRowsHandle>(null)
@@ -69,6 +71,21 @@ export function GitDiffEditorPanel({
     () => diffRows.filter((row) => row.kind === 'addition' || row.kind === 'deletion').length,
     [diffRows]
   )
+  const appliedFocusRequestRef = useRef(0)
+  useEffect(() => {
+    if (
+      !focusFirstChangeRequestId
+      || !changedLineCount
+      || appliedFocusRequestRef.current === focusFirstChangeRequestId
+    )
+      return
+
+    const frame = window.requestAnimationFrame(() => {
+      diffViewRef.current?.goToChange(1)
+      appliedFocusRequestRef.current = focusFirstChangeRequestId
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [changedLineCount, focusFirstChangeRequestId])
   return (
     <section className={styles.diffViewerPanel}>
       <div className={styles.diffViewerToolbar}>

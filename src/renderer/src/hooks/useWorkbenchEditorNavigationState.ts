@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { WorkbenchGitChangeItem } from '@renderer/models/git/workbenchGitModel'
+import type {
+  WorkbenchGitChangeItem,
+  WorkbenchOpenDiffOptions,
+} from '@renderer/models/git/workbenchGitModel'
 import type { WorkbenchLightEditorTab } from '@renderer/types/workbenchTypes'
 
 import { toNullable } from '@velaros-ai/core'
@@ -53,6 +56,7 @@ export function useWorkbenchEditorNavigationState({
     column: 1,
   })
   const [diffItem, setDiffItem] = useState<Nullable<WorkbenchGitChangeItem>>(null)
+  const [diffFocusFirstChangeRequestId, setDiffFocusFirstChangeRequestId] = useState(0)
   const [lightTab, setLightTab] = useState<Nullable<WorkbenchLightEditorTab>>(null)
   const [debugTabs, setDebugTabs] = useState<WorkbenchDebugTab[]>([])
   const [activeDebugTabId, setActiveDebugTabId] = useState<Nullable<string>>(null)
@@ -71,6 +75,7 @@ export function useWorkbenchEditorNavigationState({
 
   async function selectFile(path: string): Promise<void> {
     setDiffItem(null)
+    setDiffFocusFirstChangeRequestId(0)
     setLightTab(null)
     setActiveDebugTabId(null)
     await onSelectFileLatest.current(path)
@@ -78,6 +83,7 @@ export function useWorkbenchEditorNavigationState({
 
   async function goToLocation(path: string, line: number, column?: number): Promise<void> {
     setDiffItem(null)
+    setDiffFocusFirstChangeRequestId(0)
     setLightTab(null)
     setActiveDebugTabId(null)
     if (path !== selectedFilePath) {
@@ -112,9 +118,12 @@ export function useWorkbenchEditorNavigationState({
     }
   }, [diffItem, gitChangeItems])
 
-  function openDiff(item: WorkbenchGitChangeItem): void {
+  function openDiff(item: WorkbenchGitChangeItem, options?: WorkbenchOpenDiffOptions): void {
     setLightTab(null)
     setActiveDebugTabId(null)
+    setDiffFocusFirstChangeRequestId((requestId) =>
+      options?.focusFirstChange ? requestId + 1 : 0
+    )
     setDiffItem(item)
   }
 
@@ -227,6 +236,7 @@ export function useWorkbenchEditorNavigationState({
     activeProblemId,
     cursorPosition,
     diffItem,
+    diffFocusFirstChangeRequestId,
     goToLocation,
     lightTab,
     navigationRequest,
@@ -238,7 +248,10 @@ export function useWorkbenchEditorNavigationState({
     setActiveProblemId,
     setCursorPosition,
     debug,
-    closeDiff: () => setDiffItem(null),
+    closeDiff: () => {
+      setDiffItem(null)
+      setDiffFocusFirstChangeRequestId(0)
+    },
     closeLightTab: () => setLightTab(null),
   }
 }

@@ -3,7 +3,7 @@
  *
  * IPC 入参是边界外来数据，在此解析一次（形状不符按无效请求处理），worker 内部只见类型。
  * 所有请求最终落在 tsserver 项目托管上（projectRoot 键控，无 session 轴）；worker 首个请求
- * 时惰性拉起。异常经 `callWithEnvelope` 降为错误信封，renderer 侧灰跑分支据此静默回落。
+ * 时惰性拉起。异常经 `callWithEnvelope` 降为错误信封，renderer 据此展示启动错误并回落。
  */
 import { ipcMain } from 'electron'
 

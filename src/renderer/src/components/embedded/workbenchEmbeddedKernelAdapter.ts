@@ -140,9 +140,9 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
         selectedFilePath: workbench.selectedFilePath,
         onRefresh: model.actions.refreshGitPanel,
       },
-      onOpenDiff: (item) => {
+      onOpenDiff: (item, options) => {
         model.aiChangeArchive.closeSelection()
-        editorNavigation.openDiff(item)
+        editorNavigation.openDiff(item, options)
       },
       onOpenFile: (path) => void editorNavigation.selectFile(path),
     },
@@ -181,6 +181,7 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
       diff: {
         diffWorkspaceRoot: activeProject.rootPath,
         activeDiffItem: editorNavigation.diffItem,
+        focusFirstChangeRequestId: editorNavigation.diffFocusFirstChangeRequestId,
         chatChangePreview: chatChangePreview.active
           ? {
               items: chatChangePreview.items,

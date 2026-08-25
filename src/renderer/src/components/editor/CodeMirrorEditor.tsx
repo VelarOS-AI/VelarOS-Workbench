@@ -99,7 +99,10 @@ import {
   createWorkbenchDiagnosticForegroundExtension,
   mapWorkbenchDiagnosticToCodeMirror,
 } from '@renderer/models/editor/workbenchCodeMirrorDiagnostics'
-import { buildWorkbenchExternalValueSyncTransaction } from '@renderer/models/editor/workbenchCodeMirrorExternalSync'
+import {
+  buildWorkbenchExternalValueSyncTransaction,
+  resolveWorkbenchExternalValueSyncSelection,
+} from '@renderer/models/editor/workbenchCodeMirrorExternalSync'
 import { createWorkbenchInlayHintExtension } from '@renderer/models/editor/workbenchCodeMirrorInlayHints'
 import {
   workbenchInlineCompletionExtension,
@@ -114,6 +117,7 @@ import {
   createWorkbenchLanguageServiceHoverTooltip,
   createWorkbenchSignatureHelpExtension,
   findWorkbenchLanguageServiceReferences,
+  isWorkbenchTypeHover,
 } from '@renderer/models/editor/workbenchCodeMirrorLanguageFeatures'
 import {
   applyWorkbenchLanguageServiceEditsToContent,
@@ -147,6 +151,7 @@ import {
   getWorkbenchLanguageServiceDiagnostics,
   getWorkbenchLanguageServiceDocumentHighlights,
   getWorkbenchLanguageServiceFormat,
+  getWorkbenchLanguageServiceHover,
   getWorkbenchLanguageServiceInlayHints,
   getWorkbenchLanguageServiceRename,
   getWorkbenchLanguageServiceSemanticTokens,
@@ -156,7 +161,6 @@ import {
   shouldShowWorkbenchPackageScriptRunGutter,
 } from '@renderer/models/editor/workbenchPackageScriptRunGutter'
 import {
-  buildWorkbenchSymbolLocationsRequest,
   type WorkbenchSymbolLocationsRequest,
 } from '@renderer/models/editor/workbenchSymbolLocations'
 import {
@@ -173,7 +177,7 @@ import type {
   WorkbenchLanguageServiceCodeAction,
   WorkbenchLanguageServiceDiagnostic,
   WorkbenchLanguageServiceFileEdit,
-  WorkbenchLanguageServiceLocation,
+  WorkbenchLanguageServiceHoverResult,
 } from '@shared/contracts'
 
 import styles from '../../styles/workbenchPageStyles'
@@ -258,6 +262,12 @@ interface EditorContextMenuState {
   word: Nullable<WorkbenchIdentifierRange>
   canGoToDefinition: boolean
   hasSelection: boolean
+}
+
+interface EditorTypeInformationPopupState {
+  left: number
+  top: number
+  hover: Nullable<WorkbenchLanguageServiceHoverResult>
 }
 
 /** 折叠栏标记使用 DOM 节点，避免默认细字形被主题覆盖后难以辨认。 */
@@ -365,20 +375,6 @@ function positionLineColumnFromState(
 
 function positionLineColumn(view: EditorView, pos: number): { line: number; column: number } {
   return positionLineColumnFromState(view.state, pos)
-}
-
-function preserveExternalValueSyncSelection(
-  view: EditorView,
-  nextDocLength: number
-): EditorSelection {
-  const selection = view.state.selection.main
-
-  return EditorSelection.create([
-    EditorSelection.range(
-      clampPosition(selection.anchor, nextDocLength),
-      clampPosition(selection.head, nextDocLength)
-    ),
-  ])
 }
 
 function offsetFromLineColumnState(state: EditorState, lineNumber: number, column: number): number {
@@ -942,6 +938,44 @@ function RenameInputPopup({
   )
 }
 
+function TypeInformationPopupContent({
+  hover,
+  loadingLabel,
+  definitionLabel,
+  definitionPreviewLabel,
+}: {
+  hover: Nullable<WorkbenchLanguageServiceHoverResult>
+  loadingLabel: string
+  definitionLabel: string
+  definitionPreviewLabel: string
+}): ReactElement {
+  const contentRef = useRef<HTMLDivElement>(null)
+
+  useLayoutEffect(() => {
+    const host = contentRef.current
+    if (!host || !hover) return
+    const content = buildWorkbenchEditorHoverDom({
+      hover,
+      definitionLabel,
+      definitionPreviewLabel,
+      showDefinitionPreview: true,
+    }, workbenchEditorLanguageFeatureClasses)
+    host.replaceChildren(content)
+    return () => {
+      content.remove()
+    }
+  }, [definitionLabel, definitionPreviewLabel, hover])
+
+  if (!hover)
+    return (
+      <div className={styles.editorTypeInfoLoading} role="status" aria-live="polite">
+        <span className={styles.editorTypeInfoLoadingDot} aria-hidden="true" />
+        <span>{loadingLabel}</span>
+      </div>
+    )
+  return <div ref={contentRef} />
+}
+
 const COMMENT_POPUP_BOUNDARY_INSET = 8
 const COMMENT_POPUP_ANCHOR_GAP = 4
 
@@ -1101,8 +1135,10 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
     const commentStore = useWorkbenchCommentStore()
     const containerRef = useRef<HTMLDivElement>(null)
     const contextMenuRef = useRef<HTMLDivElement>(null)
+    const typeInfoPopupRef = useRef<HTMLDivElement>(null)
     const viewRef = useRef<EditorView>(null)
     const autoFoldedPathRef = useRef<string>(null)
+    const synchronizedPathRef = useRef(path)
     const pathRef = useLatest(path)
     const openTabsLatest = useLatest(openTabs)
     const projectContextIndexRef = useLatest(projectContextIndex)
@@ -1221,6 +1257,9 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
     const [contextMenu, setContextMenu] = useState<Nullable<EditorContextMenuState>>(null)
     const [renamePopup, setRenamePopup] =
       useState<Nullable<{ identifier: WorkbenchIdentifierRange; left: number; top: number }>>(null)
+    const [typeInfoPopup, setTypeInfoPopup] =
+      useState<Nullable<EditorTypeInformationPopupState>>(null)
+    const typeInfoRequestGenerationRef = useRef(0)
     const [commentDraft, setCommentDraft] = useState<
       Nullable<{
         from: number
@@ -1381,8 +1420,12 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         language,
         getOpenTabs: () => openTabsLatest.current,
         hostRuntime,
+        hoverLoadingLabel: t('workbench.editorHoverLoading'),
+        hoverUnavailableLabel: t('workbench.editorHoverUnavailable'),
+        hoverDefinitionLabel: t('workbench.editorHoverDefinition'),
+        hoverDefinitionPreviewLabel: t('workbench.editorHoverDefinitionPreview'),
       }),
-      [hostRuntime, language, openTabsLatest, path, projectRoot]
+      [hostRuntime, language, openTabsLatest, path, projectRoot, t]
     )
 
     const semanticLanguageService = path && usesWorkbenchSemanticLanguageService(path)
@@ -1636,85 +1679,54 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       callbacksRef.current.onGoToDefinition(target.path, target.line, target.column)
     }
 
-    const openSymbolLocationsForWord = async (
-      word: Nullable<WorkbenchIdentifierRange>
+    const showTypeInformationOrDefinition = async (
+      word: WorkbenchIdentifierRange,
+      coords: { x: number; y: number }
     ): Promise<void> => {
       const view = viewRef.current
       const currentPath = pathRef.current
-      const identifier = word ?? getCurrentIdentifier()
-      if (!view || !currentPath || !identifier) return
-      if (!callbacksRef.current.onOpenSymbolLocations) {
-        await goToDefinitionForWord(identifier)
-        return
-      }
+      if (!view || !currentPath) return
 
-      const position = positionLineColumnFromState(view.state, identifier.from)
-      const origin: WorkbenchLanguageServiceLocation = {
-        path: currentPath,
-        line: position.line,
-        column: position.column,
-        range: {
-          startLine: position.line,
-          startColumn: position.column,
-          endLine: position.line,
-          endColumn: position.column + identifier.text.length,
-        },
-      }
-      const requestBase = buildWorkbenchLanguageServiceRequestBase({
-        projectRoot,
-        path: currentPath,
-        language,
-        content: view.state.doc.toString(),
-        openTabs: openTabsLatest.current,
-      })
-      const [definitionResult, references] = await Promise.all([
-        getWorkbenchLanguageServiceDefinition(
-          { ...requestBase, position },
-          hostRuntime
-        ).catch((error) => {
-          log.debug('查询语言服务定义失败，调用点面板将使用索引回退', {
-            projectRoot,
-            path: currentPath,
-            language,
-            error,
-          })
-          return null
-        }),
-        findWorkbenchLanguageServiceReferences({
-          view,
-          context: {
-            projectRoot,
-            path: currentPath,
-            language,
-            getOpenTabs: () => openTabsLatest.current,
-            hostRuntime,
-          },
-          position: identifier.from,
-        }).catch((error) => {
-          log.debug('查询语言服务引用失败，调用点面板仍显示定义', {
-            projectRoot,
-            path: currentPath,
-            language,
-            error,
-          })
-          return []
-        }),
-      ])
-
-      const definitions = definitionResult?.ok ? [...definitionResult.data.locations] : []
-      if (isEmpty(definitions)) {
-        const fallback = getDefinitionTarget(identifier)
-        if (fallback) definitions.push(fallback)
-      }
-      setContextMenu(null)
-      callbacksRef.current.onOpenSymbolLocations(
-        buildWorkbenchSymbolLocationsRequest({
-          symbol: identifier.text,
-          origin,
-          definitions,
-          references,
-        })
+      const generation = ++typeInfoRequestGenerationRef.current
+      const left = Math.min(
+        Math.max(8, coords.x),
+        Math.max(8, window.innerWidth - 488)
       )
+      const top = Math.min(
+        Math.max(8, coords.y + 8),
+        Math.max(8, window.innerHeight - 360)
+      )
+      setTypeInfoPopup({ left, top, hover: null })
+
+      try {
+        const result = await getWorkbenchLanguageServiceHover({
+          ...buildWorkbenchLanguageServiceRequestBase({
+            projectRoot,
+            path: currentPath,
+            language,
+            content: view.state.doc.toString(),
+            openTabs: openTabsLatest.current,
+          }),
+          position: positionLineColumnFromState(view.state, word.from),
+        }, hostRuntime)
+        if (generation !== typeInfoRequestGenerationRef.current) return
+
+        const hover = result.ok ? result.data.hover : null
+        if (isWorkbenchTypeHover(hover)) {
+          setTypeInfoPopup({ left, top, hover })
+          return
+        }
+      } catch (error) {
+        log.debug('查询类型信息失败，回退到定义跳转', {
+          projectRoot,
+          path: currentPath,
+          language,
+          error,
+        })
+      }
+
+      setTypeInfoPopup(null)
+      await goToDefinitionForWord(word)
     }
 
     const renameIdentifier = (word: Nullable<WorkbenchIdentifierRange>): void => {
@@ -1955,6 +1967,17 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         event.target instanceof Node && !!contextMenuRef.current?.contains(event.target),
     })
     useBlockWheelScroll(contextMenuRef, isPresent(contextMenu))
+    useDismissOnWindowInteract({
+      enabled: isPresent(typeInfoPopup),
+      onDismiss: () => {
+        typeInfoRequestGenerationRef.current += 1
+        setTypeInfoPopup(null)
+      },
+      ignoreMouseDown: (event) =>
+        event.target instanceof Node && !!typeInfoPopupRef.current?.contains(event.target),
+      scroll: false,
+    })
+    useBlockWheelScroll(typeInfoPopupRef, isPresent(typeInfoPopup))
 
     useImperativeHandle(ref, () => ({
       focus: () => {
@@ -2185,10 +2208,10 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
 
           const position = view.posAtCoords({ x: event.clientX, y: event.clientY })
           const word = !isPresent(position) ? null : getIdentifierAt(view.state, position)
-          if (!word && !getDefinitionTarget(word)) return false
+          if (!word) return false
 
           event.preventDefault()
-          void openSymbolLocationsForWord(word)
+          void showTypeInformationOrDefinition(word, { x: event.clientX, y: event.clientY })
           return true
         },
       })
@@ -2273,21 +2296,35 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       const view = viewRef.current
       if (!view) return
 
+      const fileChanged = synchronizedPathRef.current !== path
+      synchronizedPathRef.current = path
       const currentValue = view.state.doc.toString()
-      if (currentValue === value) return
+      if (currentValue === value && !fileChanged) return
 
       view.dispatch(
         buildWorkbenchExternalValueSyncTransaction({
           state: view.state,
           value,
-          selection: preserveExternalValueSyncSelection(view, value.length),
+          selection: resolveWorkbenchExternalValueSyncSelection(
+            view.state,
+            value.length,
+            fileChanged
+          ),
           annotations: externalValueSync.of(true),
         })
       )
+      if (fileChanged) {
+        typeInfoRequestGenerationRef.current += 1
+        setContextMenu(null)
+        setRenamePopup(null)
+        setTypeInfoPopup(null)
+        setCommentDraft(null)
+        view.scrollDOM.scrollTo({ left: 0, top: 0 })
+      }
       // 外部整篇替换会清空评论锚点，按存储行号重新锚定当前文件的评论。
       reanchorWorkbenchComments(view)
       emitCursorPosition(view, callbacksRef.current.onCursorPositionChange)
-    }, [value])
+    }, [path, value])
 
     // 存储侧评论被删除/消费时，回收对应的编辑器锚点装饰。
     const workbenchComments = useWorkbenchComments(projectRoot)
@@ -2522,6 +2559,22 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
             onSubmit={(value) => void commitRename(renamePopup.identifier, value)}
             onCancel={() => setRenamePopup(null)}
           />
+        )}
+        {!!typeInfoPopup && (
+          <div
+            ref={typeInfoPopupRef}
+            className={styles.editorTypeInfoPopup}
+            style={{ left: typeInfoPopup.left, top: typeInfoPopup.top }}
+            role="dialog"
+            aria-label={t('workbench.editorHoverDefinitionPreview')}
+          >
+            <TypeInformationPopupContent
+              hover={typeInfoPopup.hover}
+              loadingLabel={t('workbench.editorTypeInfoLoading')}
+              definitionLabel={t('workbench.editorHoverDefinition')}
+              definitionPreviewLabel={t('workbench.editorHoverDefinitionPreview')}
+            />
+          </div>
         )}
         {!!commentDraft && (
           <CommentInputPopup

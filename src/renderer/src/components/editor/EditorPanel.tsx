@@ -134,6 +134,7 @@ export interface WorkbenchEditorPanelAuxiliaryTab extends WorkbenchEditorAuxilia
 export interface WorkbenchEditorPanelDiffProps {
   diffWorkspaceRoot: string
   activeDiffItem?: LooseOptional<WorkbenchGitChangeItem>
+  focusFirstChangeRequestId?: number
   chatChangePreview?: LooseOptional<{
     items: WorkbenchGitChangeItem[]
     pendingFileAction: Nullable<string>
@@ -220,6 +221,7 @@ export function EditorPanel({
   },
   diff: {
     activeDiffItem = null,
+    focusFirstChangeRequestId = 0,
     chatChangePreview = null,
     auxiliaryTabs = [],
     debugTabsLayer = null,
@@ -757,6 +759,7 @@ export function EditorPanel({
                 projectRoot={projectRoot}
                 item={activeDiffItem}
                 workbenchTheme={workbenchTheme}
+                focusFirstChangeRequestId={focusFirstChangeRequestId}
               />
             )
           ) : lightTab ? (

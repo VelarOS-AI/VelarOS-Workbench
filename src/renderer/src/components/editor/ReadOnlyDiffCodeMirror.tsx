@@ -8,7 +8,10 @@ import {
   refreshWorkbenchCodeMirrorMetrics,
 } from '@renderer/models/editor/workbenchCodeMirrorMetrics'
 import { getWorkbenchCodeMirrorTheme } from '@renderer/models/editor/workbenchCodeMirrorTheme'
-import type { WorkbenchUnifiedDiffRow } from '@renderer/models/git/workbenchGitDiffModel'
+import {
+  collectWorkbenchDiffChangeAnchors,
+  type WorkbenchUnifiedDiffRow,
+} from '@renderer/models/git/workbenchGitDiffModel'
 import type { WorkbenchThemeId } from '@renderer/models/settings/workbenchPreferences'
 
 import { isEmpty, isNotNull } from '@velaros-ai/core'
@@ -80,18 +83,6 @@ function buildDiffDecorations(state: EditorState, rows: WorkbenchUnifiedDiffRow[
   return Decoration.set(ranges, true)
 }
 
-/** 变更块起始行号（1-indexed doc 行），供上一处/下一处导航定位。 */
-function collectChangeAnchors(rows: WorkbenchUnifiedDiffRow[]): number[] {
-  const anchors: number[] = []
-  rows.forEach((row, index) => {
-    const isChange = row.kind === 'addition' || row.kind === 'deletion'
-    const prev = rows[index - 1]
-    const prevChange = !!prev && (prev.kind === 'addition' || prev.kind === 'deletion')
-    if (isChange && !prevChange) anchors.push(index + 1)
-  })
-  return anchors
-}
-
 /**
  * 只读的语法高亮 diff：把统一 diff 渲染进 CodeMirror，语法高亮（前景色）与
  * 增删底色由 CodeMirror 行装饰提供；左侧 gutter 只保留
@@ -142,7 +133,7 @@ export const ReadOnlyDiffCodeMirror = forwardRef<
 
     const language = resolveWorkbenchCodeMirrorLanguage(path, '')
     const doc = rows.map((row) => row.text).join('\n')
-    anchorsRef.current = collectChangeAnchors(rows)
+    anchorsRef.current = collectWorkbenchDiffChangeAnchors(rows)
     cursorRef.current = -1
 
     const decorationField = StateField.define<DecorationSet>({

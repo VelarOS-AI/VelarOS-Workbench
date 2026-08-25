@@ -9,6 +9,10 @@ export interface WorkbenchGitChangeItem extends WorkspaceGitFileStatusEntry {
   statusCode: string
 }
 
+export interface WorkbenchOpenDiffOptions {
+  focusFirstChange?: boolean
+}
+
 export interface WorkbenchGitPathDecoration {
   group: WorkbenchGitChangeGroupId
   statusCode: string

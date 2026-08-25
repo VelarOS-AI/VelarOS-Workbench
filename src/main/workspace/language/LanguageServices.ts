@@ -31,6 +31,7 @@ import type {
   WorkbenchLanguageServiceDocumentSymbolsResult,
   WorkbenchLanguageServiceFileEdit,
   WorkbenchLanguageServiceFormatResult,
+  WorkbenchLanguageServiceHoverDocumentationBlock,
   WorkbenchLanguageServiceHoverResult,
   WorkbenchLanguageServiceInlayHintsRequest,
   WorkbenchLanguageServiceInlayHintsResult,
@@ -123,12 +124,87 @@ function textFromLspContent(value: unknown): string {
   return ''
 }
 
-function cleanHoverMarkdown(value: string): string {
-  return value
+function cleanHoverInlineMarkdown(value: string, stripInlineCode = true): string {
+  const cleaned = value
     .replace(/\x5b([^\x5d]+)\x5d\([^\s)]+\)/gu, '$1')
     .replace(/\*\*([^*]+)\*\*/gu, '$1')
-    .replace(/`([^`]+)`/gu, '$1')
-    .trim()
+  return (stripInlineCode ? cleaned.replace(/`([^`]+)`/gu, '$1') : cleaned).trim()
+}
+
+function appendHoverParagraphBlocks(
+  value: string,
+  blocks: WorkbenchLanguageServiceHoverDocumentationBlock[]
+): void {
+  const normalized = value.trim()
+  if (!normalized) return
+
+  for (const paragraph of normalized.split(/\n\s*\n/gu)) {
+    const text = cleanHoverInlineMarkdown(paragraph.replace(/[ \t]*\n[ \t]*/gu, ' '), false)
+    if (text) blocks.push({ kind: 'paragraph', text })
+  }
+}
+
+function parseHoverDocumentationBlocks(
+  value: string
+): WorkbenchLanguageServiceHoverDocumentationBlock[] {
+  const blocks: WorkbenchLanguageServiceHoverDocumentationBlock[] = []
+  const codeBlockPattern = /```([^\n`]*)\n([\s\S]*?)\n```/gu
+  let cursor = 0
+
+  for (const match of value.matchAll(codeBlockPattern)) {
+    const start = match.index ?? 0
+    appendHoverParagraphBlocks(value.slice(cursor, start), blocks)
+    const text = (match[2] ?? '').trim()
+    if (text) {
+      const language = (match[1] ?? '').trim()
+      blocks.push({ kind: 'code', text, ...(language ? { language } : {}) })
+    }
+    cursor = start + match[0].length
+  }
+
+  appendHoverParagraphBlocks(value.slice(cursor), blocks)
+  return blocks
+}
+
+function sourceIndentWidth(line: string): number {
+  return line.match(/^[ \t]*/u)?.[0].replace(/\t/gu, '    ').length ?? 0
+}
+
+function sourceDeclarationBlock(lines: readonly string[], lineIndex: number): string {
+  const declaration = lines[lineIndex]?.trimEnd() ?? ''
+  if (!declaration.trim()) return ''
+
+  const block = [declaration]
+  const declarationIndent = sourceIndentWidth(declaration)
+  for (let index = lineIndex + 1; index < lines.length && block.length < 10; index += 1) {
+    const line = lines[index]?.trimEnd() ?? ''
+    if (!line.trim() || sourceIndentWidth(line) <= declarationIndent) break
+    block.push(line)
+  }
+  return block.join('\n').trim()
+}
+
+/** Builds a bounded source excerpt and expands a nearby simple type alias once. */
+export function buildExternalDefinitionPreview(content: string, line: number): string {
+  const lines = content.split(/\r?\n/u)
+  const lineIndex = Math.min(Math.max(0, line - 1), Math.max(0, lines.length - 1))
+  const declaration = sourceDeclarationBlock(lines, lineIndex)
+  if (!declaration) return ''
+
+  const aliasTarget = declaration
+    .split('\n', 1)[0]
+    ?.match(/\btype\s+[\p{L}\p{Nl}_$][\p{L}\p{Nl}\p{Mn}\p{Mc}\p{Nd}\p{Pc}$]*\s*=\s*([\p{L}\p{Nl}_$][\p{L}\p{Nl}\p{Mn}\p{Mc}\p{Nd}\p{Pc}$]*)\s*$/u)?.[1]
+  if (!aliasTarget) return declaration
+
+  const targetIndex = lines.findIndex((candidate, index) =>
+    index !== lineIndex
+    && candidate.match(/\btype\s+([\p{L}\p{Nl}_$][\p{L}\p{Nl}\p{Mn}\p{Mc}\p{Nd}\p{Pc}$]*)\b/u)?.[1]
+      === aliasTarget
+  )
+  if (targetIndex < 0) return declaration
+
+  const target = sourceDeclarationBlock(lines, targetIndex)
+  return target ? `${declaration}\n\n${target}` : declaration
 }
 
 export function buildExternalHoverResult(contents: unknown): Nullable<WorkbenchLanguageServiceHoverResult> {
@@ -138,17 +214,21 @@ export function buildExternalHoverResult(contents: unknown): Nullable<WorkbenchL
   const codeAndDocumentation = text.match(
     /^(?:```[^\n]*\n([\s\S]*?)\n```|``([\s\S]*?)``|`([^`\n]+)`)(?:\s*\n\s*\n([\s\S]*))?$/u
   )
-  if (!codeAndDocumentation) return { displayText: cleanHoverMarkdown(text) }
+  if (!codeAndDocumentation) return { displayText: cleanHoverInlineMarkdown(text) }
 
   const displayText = (codeAndDocumentation[1]
     ?? codeAndDocumentation[2]
     ?? codeAndDocumentation[3]
     ?? '').trim()
-  const documentation = cleanHoverMarkdown(codeAndDocumentation[4] ?? '')
+  const documentationBlocks = parseHoverDocumentationBlocks(codeAndDocumentation[4] ?? '')
+  const documentation = documentationBlocks
+    .map((block) => cleanHoverInlineMarkdown(block.text))
+    .join('\n\n')
   if (!displayText && !documentation) return null
   return {
     displayText: displayText || documentation,
-    documentation: displayText && documentation ? documentation : undefined,
+    ...(displayText && documentation ? { documentation } : {}),
+    ...(displayText && documentationBlocks.length > 0 ? { documentationBlocks } : {}),
   }
 }
 
@@ -585,10 +665,44 @@ class WorkbenchLanguageServices {
         external.content,
         this.languageServicePosition(request.position)
       )
+      const result = hover ? buildExternalHoverResult(hover.contents) : null
+      if (result) {
+        const definitions = await external.client.definition(
+          external.absolutePath,
+          external.content,
+          this.languageServicePosition(request.position)
+        )
+        const definition = definitions
+          .map((location) => this.mapExternalLocation(resolved.projectRoot, location))
+          .find(isPresent)
+        if (definition) {
+          result.definition = definition
+          if (
+            !result.documentation
+            && /^(?:export\s+)?(?:type|interface|class|enum|record|struct|protocol)\b/u.test(
+              result.displayText.trim()
+            )
+          ) {
+            const definitionContent = safeReadFile(
+              this.resolveAbsoluteProjectPath(resolved.projectRoot, definition.path)
+            ) ?? ''
+            const text = buildExternalDefinitionPreview(definitionContent, definition.line)
+            if (text) {
+              result.definitionPreview = {
+                kind: 'code',
+                text,
+                ...(descriptor?.documentLanguageId
+                  ? { language: descriptor.documentLanguageId }
+                  : {}),
+              }
+            }
+          }
+        }
+      }
       return {
         projectRoot: resolved.projectRoot,
         path: request.path,
-        hover: hover ? buildExternalHoverResult(hover.contents) : null,
+        hover: result,
       }
     }
     if (resolved.service?.runtime === 'markdown-language-service') return this.withMarkdownLanguageService(request, resolved.projectRoot, async (markdown) => {
@@ -1604,6 +1718,7 @@ class WorkbenchLanguageServices {
     let end = offset
     while (start > 0 && /[\w$]/u.test(content[start - 1]!)) start -= 1
     while (end < content.length && /[\w$]/u.test(content[end]!)) end += 1
+    if (start > 0 && content[start - 1] === '@') return false
     return start < end && suppressedWords.includes(content.slice(start, end))
   }
 

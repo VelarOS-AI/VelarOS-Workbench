@@ -27,6 +27,7 @@ import {
   getWorkbenchGitChangeDisplayPath,
   getWorkbenchGitChangeItemTone,
   type WorkbenchGitChangeItem,
+  type WorkbenchOpenDiffOptions,
 } from '@renderer/models/git/workbenchGitModel'
 import { useStableWorkbenchMessageTranslate } from '@renderer/runtime/useStableWorkbenchMessaging'
 
@@ -43,7 +44,7 @@ import type { WorkbenchGitPanelSessionProps } from './workbenchGitPanelProps'
 
 export interface WorkbenchCommitPanelProps {
   git: WorkbenchGitPanelSessionProps
-  onOpenDiff: (item: WorkbenchGitChangeItem) => void
+  onOpenDiff: (item: WorkbenchGitChangeItem, options?: WorkbenchOpenDiffOptions) => void
   onOpenFile: (path: string) => Promise<void> | void
 }
 
@@ -400,7 +401,9 @@ export function WorkbenchCommitPanel({
                                       type="button"
                                       className={styles.commitFileMain}
                                       onClick={() => setSelectedChangePath(item.path)}
-                                      onDoubleClick={() => onOpenDiff(item)}
+                                      onDoubleClick={() =>
+                                        onOpenDiff(item, { focusFirstChange: true })
+                                      }
                                     >
                                       <span
                                         className={styles.commitFileIcon}

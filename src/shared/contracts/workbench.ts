@@ -418,7 +418,16 @@ export interface WorkbenchLanguageServiceHoverResult {
   displayParts?: readonly WorkbenchLanguageServiceDisplayPart[]
   documentation?: string
   documentationParts?: readonly WorkbenchLanguageServiceDisplayPart[]
+  documentationBlocks?: readonly WorkbenchLanguageServiceHoverDocumentationBlock[]
+  definitionPreview?: WorkbenchLanguageServiceHoverDocumentationBlock
+  definition?: WorkbenchLanguageServiceLocation
   tags?: string[]
+}
+
+export interface WorkbenchLanguageServiceHoverDocumentationBlock {
+  kind: 'paragraph' | 'code'
+  text: string
+  language?: string
 }
 
 export interface WorkbenchLanguageServiceHoverQueryResult {

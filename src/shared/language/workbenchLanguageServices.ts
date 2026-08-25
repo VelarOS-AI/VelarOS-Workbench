@@ -19,6 +19,8 @@ export interface WorkbenchLanguageServiceDescriptor {
   languages: string[]
   packageName?: string
   command?: string
+  /** Project-local package bin executed with Workbench's own Node-compatible runtime. */
+  projectNodePackageBin?: string
   args?: string[]
   documentLanguageId?: string
   protocol?: WorkbenchLanguageServerProtocolContract

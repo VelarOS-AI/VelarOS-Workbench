@@ -26,6 +26,19 @@ export interface WorkbenchFullFileDiffContents {
   afterContent: string
 }
 
+/** Change-block start rows (1-indexed document lines) used by initial and arrow navigation. */
+export function collectWorkbenchDiffChangeAnchors(rows: WorkbenchUnifiedDiffRow[]): number[] {
+  const anchors: number[] = []
+  rows.forEach((row, index) => {
+    const isChange = row.kind === 'addition' || row.kind === 'deletion'
+    const previous = rows[index - 1]
+    const previousIsChange =
+      !!previous && (previous.kind === 'addition' || previous.kind === 'deletion')
+    if (isChange && !previousIsChange) anchors.push(index + 1)
+  })
+  return anchors
+}
+
 const DefaultMaxDiffLines = 220
 
 function getDiffLineKind(line: string): WorkbenchGitDiffLineKind {

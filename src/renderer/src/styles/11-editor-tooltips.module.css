@@ -1,23 +1,37 @@
 @reference "../index.css";
 
 .editorSymbolTooltip {
-  max-width: 420px;
+  max-width: 460px;
   max-height: min(420px, 50vh);
-  padding: 8px 10px;
-  border: 1px solid var(--workbench-border);
-  border-radius: var(--workbench-radius-lg);
+  padding: 10px 12px;
+  border: 1px solid var(--workbench-border-soft, var(--workbench-border));
+  border-radius: 10px;
   background-color: var(--workbench-editor-tooltip-bg, #ffffff);
-  box-shadow: 0 12px 28px color-mix(in oklab, var(--foreground) 14%, transparent);
+  box-shadow:
+    0 16px 40px color-mix(in oklab, var(--foreground) 12%, transparent),
+    0 2px 8px color-mix(in oklab, var(--foreground) 8%, transparent);
   overflow-x: auto;
   overflow-y: auto;
   scrollbar-width: thin;
 }
 
+.editorSymbolTooltip[data-state='loading'] {
+  box-sizing: border-box;
+  min-width: min(360px, calc(100vw - 32px));
+  min-height: 78px;
+}
+
 .editorSymbolTooltipTitle {
+  width: fit-content;
+  max-width: 100%;
+  padding: 4px 7px;
+  border: 1px solid var(--workbench-border-soft, var(--workbench-border));
+  border-radius: 6px;
+  background: var(--workbench-surface-muted);
   font-family: var(--font-mono);
   font-size: 12px;
-  font-weight: 400;
-  line-height: 1.45;
+  font-weight: 600;
+  line-height: 1.5;
   white-space: pre-wrap;
 }
 
@@ -243,7 +257,10 @@
 }
 
 .editorSymbolTooltipLocation {
+  @apply flex items-center;
   margin-top: 3px;
+  gap: 7px;
+  color: var(--workbench-text-muted);
   font-family: var(--font-mono);
   font-size: 11px;
   line-height: 1.45;
@@ -251,11 +268,97 @@
   word-break: break-all;
 }
 
+.editorSymbolTooltipLocationLabel {
+  flex: 0 0 auto;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--workbench-surface-muted);
+  color: var(--workbench-text-muted);
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 600;
+}
+
 .editorSymbolTooltipDocs {
-  margin-top: 6px;
+  @apply flex flex-col;
+  gap: 9px;
+  margin-top: 10px;
+}
+
+.editorSymbolTooltipSectionLabel {
+  color: var(--workbench-text-muted);
+  font-family: var(--font-sans);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.editorSymbolTooltipDocsParagraph {
+  margin: 0;
+  color: var(--workbench-text);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: normal;
+}
+
+.editorSymbolTooltipCode {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--workbench-border-soft, var(--workbench-border));
+  border-radius: 7px;
+  background: var(--workbench-surface-muted);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.editorSymbolTooltipInlineCode {
+  padding: 1px 4px;
+  border: 1px solid var(--workbench-border-soft, var(--workbench-border));
+  border-radius: 4px;
+  background: var(--workbench-surface-muted);
+  color: var(--workbench-text);
+  font-family: var(--font-mono);
+  font-size: 0.94em;
+}
+
+.editorSymbolTooltipStatus {
+  @apply flex items-center;
+  min-height: 18px;
+  gap: 7px;
+  color: var(--workbench-text-muted);
   font-size: 11px;
   line-height: 1.45;
-  white-space: pre-wrap;
+}
+
+.editorSymbolTooltipStatusDot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--workbench-editor-hover-link);
+  animation: editorHoverPulse 1s ease-in-out infinite;
+}
+
+.editorSymbolTooltipStatus[data-tone='error'] .editorSymbolTooltipStatusDot {
+  background: var(--workbench-editor-diagnostic-error-fg);
+  animation: none;
+}
+
+@keyframes editorHoverPulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.82);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .editorSignatureTooltipHost {

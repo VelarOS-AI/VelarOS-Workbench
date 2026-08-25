@@ -1521,6 +1521,50 @@
   border-color: var(--workbench-accent, #3b82f6);
 }
 
+.editorTypeInfoPopup {
+  position: fixed;
+  z-index: 60;
+  max-width: min(460px, calc(100vw - 16px));
+  max-height: min(420px, calc(100vh - 16px));
+  overflow: auto;
+  border-radius: 10px;
+  box-shadow: 0 16px 40px color-mix(in oklab, var(--foreground) 16%, transparent);
+}
+
+.editorTypeInfoLoading {
+  @apply flex items-center border bg-card text-muted-foreground;
+  box-sizing: border-box;
+  min-width: min(360px, calc(100vw - 16px));
+  min-height: 78px;
+  gap: 7px;
+  padding: 10px 12px;
+  border-color: var(--workbench-border);
+  border-radius: 10px;
+  font-size: 11px;
+}
+
+.editorTypeInfoLoadingDot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--workbench-editor-hover-link);
+  animation: editorTypeInfoPulse 1s ease-in-out infinite;
+}
+
+@keyframes editorTypeInfoPulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.82);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 .editorCommentPopup {
   @apply fixed z-50 flex flex-col border bg-card;
   box-sizing: border-box;

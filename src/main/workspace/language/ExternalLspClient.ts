@@ -1,5 +1,5 @@
 import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process'
-import { existsSync, realpathSync, statSync } from 'node:fs'
+import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { delimiter, dirname, isAbsolute, join } from 'node:path'
 
@@ -162,6 +162,13 @@ interface InitializeResult {
   serverInfo?: { name?: string; version?: string }
 }
 
+interface ExternalLspLaunch {
+  command: string
+  args: string[]
+  electronRunAsNode: boolean
+  unavailableMessage?: string
+}
+
 const DiagnosticWaitTimeoutMs = 4_000
 const DefaultRequestTimeoutMs = 15_000
 const MaxLspHeaderBytes = 8 * 1024
@@ -227,6 +234,35 @@ function executablePath(projectRoot: string, command: string): string {
     .map((directory) => join(directory, executable))
     .find((candidate) => existsSync(candidate))
   return local ?? command
+}
+
+function projectNodePackageBinPath(
+  projectRoot: string,
+  packageName: string,
+  binName: string
+): string | null {
+  let current = projectRoot
+  while (true) {
+    const manifestPath = join(current, 'node_modules', packageName, 'package.json')
+    if (existsSync(manifestPath)) {
+      try {
+        const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as {
+          bin?: string | Record<string, string>
+        }
+        const relativeBin = typeof manifest.bin === 'string' ? manifest.bin : manifest.bin?.[binName]
+        if (!relativeBin) return null
+
+        const entry = join(dirname(manifestPath), relativeBin)
+        return existsSync(entry) ? realpathSync(entry) : null
+      } catch {
+        return null
+      }
+    }
+
+    const parent = dirname(current)
+    if (parent === current) return null
+    current = parent
+  }
 }
 
 function extendPath(projectRoot: string): string {
@@ -315,7 +351,7 @@ function languageIdFor(descriptor: WorkbenchLanguageServiceDescriptor): string {
 function launchFor(
   projectRoot: string,
   descriptor: WorkbenchLanguageServiceDescriptor
-): { command: string; args: string[]; electronRunAsNode: boolean } {
+): ExternalLspLaunch {
   if (descriptor.id === 'python') {
     try {
       return {
@@ -325,6 +361,28 @@ function launchFor(
       }
     } catch {
       // 开发期依赖尚未安装时，继续尝试项目本地或 PATH 中的 pyright-langserver。
+    }
+  }
+
+  if (descriptor.projectNodePackageBin) {
+    const packageName = descriptor.packageName
+    const entry = packageName
+      ? projectNodePackageBinPath(projectRoot, packageName, descriptor.projectNodePackageBin)
+      : null
+    if (entry)
+      return {
+        command: process.execPath,
+        args: [entry, ...(descriptor.args ?? [])],
+        electronRunAsNode: !!process.versions['electron'],
+      }
+
+    return {
+      command: process.execPath,
+      args: descriptor.args ?? [],
+      electronRunAsNode: !!process.versions['electron'],
+      unavailableMessage: packageName
+        ? `${descriptor.label} 语言服务器不可用：项目内 ${packageName} 未提供 '${descriptor.projectNodePackageBin}'。请安装或更新项目工具链。`
+        : `${descriptor.label} 语言服务器配置缺少项目工具链包名。`,
     }
   }
 
@@ -606,6 +664,8 @@ export class ExternalLspClient {
 
     const launch = launchFor(this.projectRoot, this.descriptor)
     const pathValue = extendPath(this.projectRoot)
+    if (launch.unavailableMessage)
+      throw new AppError('INVARIANT', launch.unavailableMessage)
     if (!launch.electronRunAsNode && !executableExists(launch.command, pathValue)) {
       const installHint = this.descriptor.packageName
         ? `请在项目中安装 ${this.descriptor.packageName}，或将命令加入 PATH。`

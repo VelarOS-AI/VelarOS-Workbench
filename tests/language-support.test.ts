@@ -13,6 +13,7 @@ import {
   ExternalLspManager,
 } from '../src/main/workspace/language/ExternalLspClient'
 import {
+  buildExternalDefinitionPreview,
   buildExternalHoverResult,
   WorkbenchLanguageServices,
 } from '../src/main/workspace/language/LanguageServices'
@@ -30,6 +31,10 @@ import {
 } from '../src/renderer/src/language/workbenchEditorLanguageContributions'
 import { buildWorkbenchBasicKeywordDecorations } from '../src/renderer/src/models/editor/workbenchCodeMirrorBasicSyntax'
 import { resolveWorkbenchCodeMirrorLanguage } from '../src/renderer/src/models/editor/workbenchCodeMirrorLanguage'
+import {
+  getWorkbenchHoverTokenRange,
+  isWorkbenchTypeHover,
+} from '../src/renderer/src/models/editor/workbenchCodeMirrorLanguageFeatures'
 import {
   usesWorkbenchBuiltinLanguageService,
   usesWorkbenchExternalLspLanguageService,
@@ -417,8 +422,91 @@ void describe('focused Workbench language surface', () => {
       {
         displayText: 'method render(template: string): string',
         documentation: 'Renders the selected template.',
+        documentationBlocks: [{
+          kind: 'paragraph',
+          text: 'Renders the selected `template`.',
+        }],
       }
     )
+  })
+
+  void test('keeps Velar hover prose plain and isolates fenced examples as code', () => {
+    assert.deepEqual(
+      buildExternalHoverResult({
+        kind: 'markdown',
+        value: [
+          '``@get``',
+          '',
+          'Declares a GET route in the current `server`.',
+          '',
+          '```velar',
+          '@get(p"/articles/{id:number}") => {id}',
+          '```',
+          '',
+          'Path captures come from the URL.',
+        ].join('\n'),
+      }),
+      {
+        displayText: '@get',
+        documentation:
+          'Declares a GET route in the current server.\n\n'
+          + '@get(p"/articles/{id:number}") => {id}\n\n'
+          + 'Path captures come from the URL.',
+        documentationBlocks: [
+          { kind: 'paragraph', text: 'Declares a GET route in the current `server`.' },
+          {
+            kind: 'code',
+            language: 'velar',
+            text: '@get(p"/articles/{id:number}") => {id}',
+          },
+          { kind: 'paragraph', text: 'Path captures come from the URL.' },
+        ],
+      }
+    )
+  })
+
+  void test('does not leak a markdown replacement placeholder for signature-only hover', () => {
+    assert.deepEqual(
+      buildExternalHoverResult({
+        kind: 'markdown',
+        value: '``function catalogHeaders: () -> Map<string, string>``',
+      }),
+      {
+        displayText: 'function catalogHeaders: () -> Map<string, string>',
+      }
+    )
+  })
+
+  void test('expands a nearby type alias target into the definition preview', () => {
+    assert.equal(
+      buildExternalDefinitionPreview([
+        'export type BlockMutation extends WorldScoped:',
+        '    position: BlockPosition',
+        '    blockId: number',
+        '',
+        'export type SetBlockRequest = BlockMutation',
+      ].join('\n'), 5),
+      [
+        'export type SetBlockRequest = BlockMutation',
+        '',
+        'export type BlockMutation extends WorldScoped:',
+        '    position: BlockPosition',
+        '    blockId: number',
+      ].join('\n')
+    )
+  })
+
+  void test('recognizes type hovers for modifier-click information', () => {
+    assert.equal(isWorkbenchTypeHover({ displayText: 'type SetBlockRequest: BlockMutation' }), true)
+    assert.equal(isWorkbenchTypeHover({ displayText: 'interface Request' }), true)
+    assert.equal(isWorkbenchTypeHover({ displayText: 'function parse(request: Request)' }), false)
+  })
+
+  void test('anchors decorator hover to the complete role name', () => {
+    const state = EditorState.create({ doc: '    @get(p"/api/health"):' })
+    for (const position of [4, 5, 6, 7, 8]) {
+      assert.deepEqual(getWorkbenchHoverTokenRange(state, position), { from: 4, to: 8 })
+    }
   })
 
   void test('keeps Velar updates independent from the Workbench release', () => {
@@ -482,6 +570,50 @@ void describe('shared external LSP client', () => {
     try {
       const diagnostics = await client.getDiagnostics(
         join(projectRoot, 'main.ancestor'),
+        'component App:\n'
+      )
+      assert.deepEqual(diagnostics.map((item) => item.code), ['VEL5001'])
+    } finally {
+      await client.dispose()
+      await rm(workspaceRoot, { recursive: true, force: true })
+    }
+  })
+
+  void test('runs a project package bin with the Workbench runtime instead of its shebang', async () => {
+    const fixture = fileURLToPath(new URL('./fixtures/fake-lsp.cjs', import.meta.url))
+    const workspaceRoot = await mkdtemp(join(tmpdir(), 'workbench-owned-node-lsp-'))
+    const projectRoot = join(workspaceRoot, 'packages', 'server')
+    const packageRoot = join(workspaceRoot, 'node_modules', '@fixture', 'language-server')
+    const binRoot = join(workspaceRoot, 'node_modules', '.bin')
+    const command = join(binRoot, process.platform === 'win32' ? 'fixture-lsp.cmd' : 'fixture-lsp')
+    await mkdir(projectRoot, { recursive: true })
+    await mkdir(packageRoot, { recursive: true })
+    await mkdir(binRoot, { recursive: true })
+    await writeFile(join(packageRoot, 'package.json'), JSON.stringify({
+      name: '@fixture/language-server',
+      bin: { 'fixture-lsp': './server.cjs' },
+    }), 'utf8')
+    await writeFile(join(packageRoot, 'server.cjs'), await readFile(fixture), 'utf8')
+    await writeFile(command, process.platform === 'win32'
+      ? '@echo off\r\nexit /b 77\r\n'
+      : '#!/usr/bin/env __workbench_missing_node__\n', 'utf8')
+    if (process.platform !== 'win32') await chmod(command, 0o755)
+
+    const client = new ExternalLspClient(projectRoot, {
+      id: 'workbench-owned-node-fixture',
+      label: 'Workbench-owned Node Fixture',
+      installKind: 'builtin',
+      runtime: 'lsp-server',
+      extensions: ['owned-node'],
+      languages: ['owned-node'],
+      packageName: '@fixture/language-server',
+      command: 'fixture-lsp',
+      projectNodePackageBin: 'fixture-lsp',
+      documentLanguageId: 'owned-node',
+    })
+    try {
+      const diagnostics = await client.getDiagnostics(
+        join(projectRoot, 'main.owned-node'),
         'component App:\n'
       )
       assert.deepEqual(diagnostics.map((item) => item.code), ['VEL5001'])
@@ -605,6 +737,11 @@ void describe('shared external LSP client', () => {
 
     const resolved = await services.resolveLanguageService(request)
     const suppressedHover = await services.getHover({ ...request, position: { line: 1, column: 2 } })
+    const decoratorHover = await services.getHover({
+      ...request,
+      content: '@component App:\n',
+      position: { line: 1, column: 3 },
+    })
     const definition = await services.getDefinition(request)
     const references = await services.getReferences(request)
     const documentHighlights = await services.getDocumentHighlights(request)
@@ -643,6 +780,8 @@ void describe('shared external LSP client', () => {
     assert.ok(resolved.capabilities.includes('semantic-tokens'))
     assert.ok(resolved.capabilities.includes('code-actions'))
     assert.equal(suppressedHover.hover, null)
+    assert.equal(decoratorHover.hover?.displayText, 'Velar hover')
+    assert.equal(decoratorHover.hover?.definition?.path, 'main.fakevel')
     assert.equal(definition.locations[0]?.path, 'main.fakevel')
     assert.equal(references.locations[0]?.line, 2)
     assert.deepEqual(documentHighlights.highlights[0], {

@@ -11,6 +11,7 @@ import {
   getWorkbenchLanguageServiceDocumentSymbols,
 } from '@renderer/models/editor/workbenchLanguageServiceIpc'
 import { fileLanguage } from '@renderer/models/shared/workbenchUtils'
+import { useStableWorkbenchMessageTranslate } from '@renderer/runtime/useStableWorkbenchMessaging'
 import type { WorkbenchOpenEditorTab } from '@renderer/types/workbenchTypes'
 
 import { isEmpty } from '@velaros-ai/core'
@@ -43,6 +44,7 @@ export function useWorkbenchLanguageServiceInsights({
   editorContent: string
 }): WorkbenchLanguageServiceInsights {
   const hostRuntime = useWorkbenchHostRuntime()
+  const { messageLatest, tLatest } = useStableWorkbenchMessageTranslate()
   const [diagnosticsByPath, setDiagnosticsByPath] = useState<
     ReadonlyMap<string, readonly WorkbenchLanguageServiceDiagnostic[]>
   >(() => new Map())
@@ -54,6 +56,7 @@ export function useWorkbenchLanguageServiceInsights({
   >([])
   const diagnosticGenerationRef = useRef(0)
   const symbolGenerationRef = useRef(0)
+  const announcedErrorRef = useRef<Nullable<string>>(null)
   const contextRef = useLatest({ projectRoot, openTabs, selectedFilePath, editorContent })
 
   const diagnosticTargets = useMemo(
@@ -78,6 +81,7 @@ export function useWorkbenchLanguageServiceInsights({
   useEffect(() => {
     const root = contextRef.current.projectRoot
     if (!root || isEmpty(diagnosticTargets)) {
+      announcedErrorRef.current = null
       setDiagnosticsByPath(new Map())
       setDiagnosticsPendingPaths(new Set())
       return undefined
@@ -91,6 +95,7 @@ export function useWorkbenchLanguageServiceInsights({
     const timer = setTimeout(() => {
       void (async () => {
         const nextDiagnostics = new Map<string, readonly WorkbenchLanguageServiceDiagnostic[]>()
+        let failureMessage: Nullable<string> = null
 
         // Inject the active file's live buffer into the shared open-files overlay so that
         // other tabs see the just-edited dependency instead of a stale tab snapshot — this
@@ -115,7 +120,10 @@ export function useWorkbenchLanguageServiceInsights({
               }),
             }, hostRuntime)
 
-            if (!result.ok) return
+            if (!result.ok) {
+              failureMessage ??= result.error.message
+              return
+            }
             nextDiagnostics.set(
               tab.path,
               result.data.diagnostics.filter((diagnostic) => diagnostic.path === tab.path)
@@ -124,13 +132,21 @@ export function useWorkbenchLanguageServiceInsights({
         )
 
         if (generation !== diagnosticGenerationRef.current) return
+        const errorKey = failureMessage ? `${root}\0${failureMessage}` : null
+        if (failureMessage && announcedErrorRef.current !== errorKey) {
+          messageLatest.current.error({
+            title: tLatest.current('workbench.languageServiceStartFailed'),
+            description: failureMessage,
+          })
+        }
+        announcedErrorRef.current = errorKey
         setDiagnosticsByPath(nextDiagnostics)
         setDiagnosticsPendingPaths(new Set())
       })()
     }, DIAGNOSTIC_DEBOUNCE_MS)
 
     return () => clearTimeout(timer)
-  }, [contextRef, diagnosticScheduleKey, diagnosticTargets, hostRuntime])
+  }, [contextRef, diagnosticScheduleKey, diagnosticTargets, hostRuntime, messageLatest, tLatest])
 
   useEffect(() => {
     const root = contextRef.current.projectRoot

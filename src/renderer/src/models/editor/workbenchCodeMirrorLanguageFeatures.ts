@@ -2,6 +2,7 @@ import type { Diagnostic } from '@codemirror/lint'
 import { forEachDiagnostic } from '@codemirror/lint'
 import type { EditorState, Extension, Transaction } from '@codemirror/state'
 import {
+  closeHoverTooltips,
   type EditorView,
   hoverTooltip,
   type Tooltip,
@@ -13,6 +14,7 @@ import { isEmpty } from '@velaros-ai/core'
 
 import type {
   WorkbenchLanguageServiceDisplayPartKind,
+  WorkbenchLanguageServiceHoverDocumentationBlock,
   WorkbenchLanguageServiceHoverResult,
   WorkbenchLanguageServiceLocation,
   WorkbenchLanguageServiceSignatureHelpResult,
@@ -41,6 +43,10 @@ export interface WorkbenchLanguageServiceEditorContext {
   language: string
   getOpenTabs: () => readonly WorkbenchOpenEditorTab[]
   hostRuntime?: WorkbenchHostRuntime
+  hoverLoadingLabel?: string
+  hoverUnavailableLabel?: string
+  hoverDefinitionLabel?: string
+  hoverDefinitionPreviewLabel?: string
 }
 
 /** 由产品 UI 注入的语言服务浮层样式；模型不依赖任何宿主 CSS Module。 */
@@ -52,9 +58,14 @@ export interface WorkbenchEditorLanguageFeatureClasses {
   editorSymbolTooltip: string
   editorSymbolTooltipDiagnostic: string
   editorSymbolTooltipDiagnostics: string
+  editorSymbolTooltipCode: string
   editorSymbolTooltipDivider: string
   editorSymbolTooltipDocs: string
+  editorSymbolTooltipDocsParagraph: string
+  editorSymbolTooltipInlineCode: string
   editorSymbolTooltipLocation: string
+  editorSymbolTooltipLocationLabel: string
+  editorSymbolTooltipSectionLabel: string
   editorSymbolTooltipPartFunction: string
   editorSymbolTooltipPartKeyword: string
   editorSymbolTooltipPartLink: string
@@ -66,6 +77,8 @@ export interface WorkbenchEditorLanguageFeatureClasses {
   editorSymbolTooltipPartPunctuation: string
   editorSymbolTooltipPartString: string
   editorSymbolTooltipPartType: string
+  editorSymbolTooltipStatus: string
+  editorSymbolTooltipStatusDot: string
   editorSymbolTooltipTitle: string
 }
 
@@ -161,6 +174,21 @@ function appendEditorSymbolTooltipSection(
   wrapper.append(divider)
 }
 
+function createEditorSymbolTooltipWrapper(
+  classes: WorkbenchEditorLanguageFeatureClasses
+): HTMLDivElement {
+  const wrapper = document.createElement('div')
+  wrapper.className = classes.editorSymbolTooltip
+  wrapper.addEventListener(
+    'wheel',
+    (event) => {
+      event.stopPropagation()
+    },
+    { passive: true }
+  )
+  return wrapper
+}
+
 function createHoverPartClassName(classes: WorkbenchEditorLanguageFeatureClasses) {
   const classByStyle: Readonly<Record<WorkbenchEditorHoverPartStyle, string>> = {
     keyword: classes.editorSymbolTooltipPartKeyword,
@@ -199,25 +227,134 @@ function createHighlightedHoverSection(
   return section
 }
 
+function appendHoverDocumentationText(
+  container: HTMLElement,
+  text: string,
+  classes: WorkbenchEditorLanguageFeatureClasses
+): void {
+  const inlineCodePattern = /`([^`\n]+)`/gu
+  let cursor = 0
+  for (const match of text.matchAll(inlineCodePattern)) {
+    const start = match.index ?? 0
+    container.append(document.createTextNode(text.slice(cursor, start)))
+    const code = document.createElement('code')
+    code.className = classes.editorSymbolTooltipInlineCode
+    code.textContent = match[1] ?? ''
+    container.append(code)
+    cursor = start + match[0].length
+  }
+  container.append(document.createTextNode(text.slice(cursor)))
+}
+
+function hoverDocumentationBlocks(
+  hover: WorkbenchLanguageServiceHoverResult
+): readonly WorkbenchLanguageServiceHoverDocumentationBlock[] {
+  if (hover.documentationBlocks?.length) return hover.documentationBlocks
+  const text = hover.documentation
+    ?? hover.documentationParts?.map((part) => part.text).join('')
+    ?? ''
+  return text ? [{ kind: 'paragraph', text }] : []
+}
+
+function createHoverDocumentationSection(
+  hover: WorkbenchLanguageServiceHoverResult,
+  classes: WorkbenchEditorLanguageFeatureClasses,
+  hoverPartClassName: (style: WorkbenchEditorHoverPartStyle) => string
+): Nullable<HTMLElement> {
+  const blocks = hoverDocumentationBlocks(hover)
+  if (blocks.length === 0) return null
+
+  const section = document.createElement('div')
+  section.className = classes.editorSymbolTooltipDocs
+  for (const block of blocks) {
+    if (block.kind === 'code') {
+      const code = document.createElement('pre')
+      code.className = classes.editorSymbolTooltipCode
+      if (block.language) code.dataset.language = block.language
+      appendWorkbenchEditorHoverText(code, {
+        fallbackText: block.text,
+        partClassName: hoverPartClassName,
+      })
+      section.append(code)
+      continue
+    }
+
+    const paragraph = document.createElement('p')
+    paragraph.className = classes.editorSymbolTooltipDocsParagraph
+    appendHoverDocumentationText(paragraph, block.text, classes)
+    section.append(paragraph)
+  }
+  return section
+}
+
+function createHoverDefinitionPreviewSection(
+  hover: WorkbenchLanguageServiceHoverResult,
+  labelText: string,
+  classes: WorkbenchEditorLanguageFeatureClasses,
+  hoverPartClassName: (style: WorkbenchEditorHoverPartStyle) => string
+): Nullable<HTMLElement> {
+  const preview = hover.definitionPreview
+  if (!preview?.text) return null
+
+  const section = document.createElement('div')
+  section.className = classes.editorSymbolTooltipDocs
+  const label = document.createElement('div')
+  label.className = classes.editorSymbolTooltipSectionLabel
+  label.textContent = labelText
+  const code = document.createElement('pre')
+  code.className = classes.editorSymbolTooltipCode
+  if (preview.language) code.dataset.language = preview.language
+  appendWorkbenchEditorHoverText(code, {
+    fallbackText: preview.text,
+    partClassName: hoverPartClassName,
+  })
+  section.append(label, code)
+  return section
+}
+
+function appendHoverStatus(
+  wrapper: HTMLElement,
+  message: string,
+  tone: 'loading' | 'error',
+  classes: WorkbenchEditorLanguageFeatureClasses
+): void {
+  if (wrapper.childElementCount > 0) appendEditorSymbolTooltipSection(wrapper, classes)
+  const status = document.createElement('div')
+  status.className = classes.editorSymbolTooltipStatus
+  status.dataset.tone = tone
+  status.setAttribute('role', 'status')
+  status.setAttribute('aria-live', 'polite')
+  const dot = document.createElement('span')
+  dot.className = classes.editorSymbolTooltipStatusDot
+  dot.setAttribute('aria-hidden', 'true')
+  const label = document.createElement('span')
+  label.textContent = message
+  status.append(dot, label)
+  wrapper.append(status)
+}
+
+function replaceHoverTooltipDom(target: HTMLElement, source: HTMLElement): void {
+  target.className = source.className
+  target.replaceChildren(...source.childNodes)
+}
+
 export function buildWorkbenchEditorHoverDom({
   hover = null,
   diagnostics = [],
   symbolFallback = null,
+  definitionLabel = 'Definition',
+  definitionPreviewLabel = 'Definition',
+  showDefinitionPreview = false,
 }: {
   hover?: Nullable<WorkbenchLanguageServiceHoverResult>
   diagnostics?: readonly Diagnostic[]
   symbolFallback?: Nullable<WorkbenchEditorHoverSymbolFallback>
+  definitionLabel?: string
+  definitionPreviewLabel?: string
+  showDefinitionPreview?: boolean
 }, classes: WorkbenchEditorLanguageFeatureClasses): HTMLElement {
   const hoverPartClassName = createHoverPartClassName(classes)
-  const wrapper = document.createElement('div')
-  wrapper.className = classes.editorSymbolTooltip
-  wrapper.addEventListener(
-    'wheel',
-    (event) => {
-      event.stopPropagation()
-    },
-    { passive: true }
-  )
+  const wrapper = createEditorSymbolTooltipWrapper(classes)
 
   if (diagnostics.length > 0) {
     const diagnosticSection = document.createElement('div')
@@ -227,10 +364,7 @@ export function buildWorkbenchEditorHoverDom({
       const item = document.createElement('div')
       item.className = classes.editorSymbolTooltipDiagnostic
       item.dataset.severity = diagnostic.severity
-      appendWorkbenchEditorHoverText(item, {
-        fallbackText: diagnostic.message,
-        partClassName: hoverPartClassName,
-      })
+      item.textContent = diagnostic.message
       diagnosticSection.append(item)
     }
 
@@ -249,21 +383,36 @@ export function buildWorkbenchEditorHoverDom({
       })
     )
 
-    if (hover.documentation || hover.documentationParts?.length) {
-      wrapper.append(
-        createHighlightedHoverSection(classes.editorSymbolTooltipDocs, hoverPartClassName, {
-          parts: hover.documentationParts,
-          fallbackText: hover.documentation ?? '',
-        })
+    const documentation = createHoverDocumentationSection(hover, classes, hoverPartClassName)
+    if (documentation) wrapper.append(documentation)
+
+    if (showDefinitionPreview) {
+      const definitionPreview = createHoverDefinitionPreviewSection(
+        hover,
+        definitionPreviewLabel,
+        classes,
+        hoverPartClassName
       )
+      if (definitionPreview) wrapper.append(definitionPreview)
+    }
+
+    if (hover.definition) {
+      const location = document.createElement('div')
+      location.className = classes.editorSymbolTooltipLocation
+      const label = document.createElement('span')
+      label.className = classes.editorSymbolTooltipLocationLabel
+      label.textContent = definitionLabel
+      const target = document.createElement('span')
+      target.textContent = `${hover.definition.path}:${hover.definition.line}:${hover.definition.column}`
+      location.append(label, target)
+      wrapper.append(location)
     }
 
     if (hover.tags?.length) {
-      wrapper.append(
-        createHighlightedHoverSection(classes.editorSymbolTooltipLocation, hoverPartClassName, {
-          fallbackText: hover.tags.join(' · '),
-        })
-      )
+      const location = document.createElement('div')
+      location.className = classes.editorSymbolTooltipLocation
+      location.textContent = hover.tags.join(' · ')
+      wrapper.append(location)
     }
   } else if (symbolFallback) {
     if (diagnostics.length > 0) {
@@ -284,6 +433,46 @@ export function buildWorkbenchEditorHoverDom({
   }
 
   return wrapper
+}
+
+function buildWorkbenchEditorHoverStatusDom({
+  diagnostics = [],
+  message,
+  tone,
+}: {
+  diagnostics?: readonly Diagnostic[]
+  message: string
+  tone: 'loading' | 'error'
+}, classes: WorkbenchEditorLanguageFeatureClasses): HTMLElement {
+  const wrapper = buildWorkbenchEditorHoverDom({ diagnostics }, classes)
+  wrapper.dataset.state = tone
+  appendHoverStatus(wrapper, message, tone, classes)
+  return wrapper
+}
+
+export function isWorkbenchTypeHover(
+  hover: Nullable<WorkbenchLanguageServiceHoverResult>
+): boolean {
+  return !!hover && /^(?:export\s+)?(?:type|interface|class|enum|record|struct|protocol)\b/u.test(
+    hover.displayText.trim()
+  )
+}
+
+const HOVER_TOKEN_CHARACTER = /[\p{L}\p{N}_$@]/u
+
+export function getWorkbenchHoverTokenRange(
+  state: EditorState,
+  position: number
+): { from: number; to: number } {
+  const offset = Math.min(Math.max(0, position), state.doc.length)
+  const line = state.doc.lineAt(offset)
+  let from = offset
+  let to = offset
+  while (from > line.from && HOVER_TOKEN_CHARACTER.test(state.sliceDoc(from - 1, from))) from--
+  while (to < line.to && HOVER_TOKEN_CHARACTER.test(state.sliceDoc(to, to + 1))) to++
+  return from < to
+    ? { from, to }
+    : { from: offset, to: Math.min(offset + 1, state.doc.length) }
 }
 
 function buildSignatureHelpDom(
@@ -337,35 +526,88 @@ export function createWorkbenchLanguageServiceHoverTooltip(
   let requestGeneration = 0
 
   return hoverTooltip(
-    async (view, position): Promise<Tooltip | null> => {
+    (view, position): Tooltip | null => {
       const diagnosticRange = collectDiagnosticsAtPosition(view, position)
-      let hover: Nullable<WorkbenchLanguageServiceHoverResult> = null
-
-      if (context.path && usesWorkbenchSemanticLanguageService(context.path)) {
-        const request = buildLanguageServiceRequest(view, context, position)
-        if (request) {
-          const generation = ++requestGeneration
-          const result = await getWorkbenchLanguageServiceHover(request, context.hostRuntime)
-          if (generation !== requestGeneration) return null
-          hover = result.ok ? result.data.hover : null
+      const request = context.path && usesWorkbenchSemanticLanguageService(context.path)
+        ? buildLanguageServiceRequest(view, context, position)
+        : null
+      if (!request) {
+        const fallback = fallbackHover?.(view, position) ?? null
+        if (fallback || !diagnosticRange) return fallback
+        return {
+          pos: diagnosticRange.from,
+          end: diagnosticRange.to,
+            above: false,
+          create: () => ({
+            dom: buildWorkbenchEditorHoverDom({ diagnostics: diagnosticRange.diagnostics }, classes),
+          }),
         }
       }
 
-      if (!diagnosticRange && !hover) return fallbackHover?.(view, position) ?? null
+      const generation = ++requestGeneration
+      const tokenRange = getWorkbenchHoverTokenRange(view.state, position)
 
       return {
-        pos: diagnosticRange?.from ?? position,
-        end: diagnosticRange?.to ?? Math.min(position + 1, view.state.doc.length),
-        above: true,
-        create: () => ({
-          dom: buildWorkbenchEditorHoverDom({
-            hover,
-            diagnostics: diagnosticRange?.diagnostics,
-          }, classes),
-        }),
+        pos: diagnosticRange?.from ?? tokenRange.from,
+        end: diagnosticRange?.to ?? tokenRange.to,
+        above: false,
+        create: () => {
+          let destroyed = false
+          const diagnostics = diagnosticRange?.diagnostics ?? []
+          const dom = buildWorkbenchEditorHoverStatusDom({
+            diagnostics,
+            message: context.hoverLoadingLabel ?? 'Loading language information…',
+            tone: 'loading',
+          }, classes)
+
+          void getWorkbenchLanguageServiceHover(request, context.hostRuntime).then(
+            (result) => {
+              if (destroyed || generation !== requestGeneration) return
+              if (!result.ok) {
+                replaceHoverTooltipDom(dom, buildWorkbenchEditorHoverStatusDom({
+                  diagnostics,
+                  message: context.hoverUnavailableLabel ?? result.error.message,
+                  tone: 'error',
+                }, classes))
+                view.requestMeasure()
+                return
+              }
+
+              const hover = result.data.hover
+              if (!diagnosticRange && !hover) {
+                view.dispatch({ effects: closeHoverTooltips })
+                return
+              }
+
+              replaceHoverTooltipDom(dom, buildWorkbenchEditorHoverDom({
+                hover,
+                diagnostics,
+                definitionLabel: context.hoverDefinitionLabel,
+                definitionPreviewLabel: context.hoverDefinitionPreviewLabel,
+              }, classes))
+              view.requestMeasure()
+            },
+            () => {
+              if (destroyed || generation !== requestGeneration) return
+              replaceHoverTooltipDom(dom, buildWorkbenchEditorHoverStatusDom({
+                diagnostics,
+                message: context.hoverUnavailableLabel ?? 'Language information is unavailable.',
+                tone: 'error',
+              }, classes))
+              view.requestMeasure()
+            }
+          )
+
+          return {
+            dom,
+            destroy: () => {
+              destroyed = true
+            },
+          }
+        },
       }
     },
-    { hoverTime: 420 }
+    { hoverTime: 240 }
   )
 }
 
