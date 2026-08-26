@@ -1,5 +1,6 @@
 import { installWorkbenchHost, type WorkbenchHost } from '@renderer/host'
 import { WorkbenchRuntime } from '@renderer/runtime'
+import { getStandaloneWorkbenchModelConfig } from '@renderer/runtime/standaloneWorkbenchModelConfig'
 
 import { AppError, Result } from '@velaros-ai/core'
 import type { Result as ResultType } from '@velaros-ai/core/result'
@@ -468,7 +469,18 @@ const standaloneWorkbenchHost: WorkbenchHost = {
       stopWorkbenchTerminalSession: async (request) =>
         toHostResult(await window.velarosWorkbenchTerminal.stopSession(request)),
       reportWorkbenchAgentWorkspaceSignals: () => Promise.resolve(Result.ok(undefined)),
-      getWorkbenchInlineCompletion: () => Promise.resolve(Result.ok({ completion: '' })),
+      getWorkbenchInlineCompletion: async (request) => {
+        const modelConfig = getStandaloneWorkbenchModelConfig()
+        return toHostResult(await window.velarosWorkbenchLanguage.getInlineCompletion({
+          ...request,
+          modelSelection: {
+            provider: modelConfig.provider,
+            model: modelConfig.completionModel,
+            apiKey: modelConfig.apiKey,
+            baseURL: modelConfig.baseURL,
+          },
+        }))
+      },
       onWorkbenchTerminalOutput: (listener) =>
         window.velarosWorkbenchTerminal.onOutput(listener),
       onWorkbenchProjectAiIndexStatusChanged: () => noopUnsubscribe,

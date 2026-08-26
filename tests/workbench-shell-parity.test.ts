@@ -30,14 +30,15 @@ void describe('pre-split Workbench shell parity', () => {
     assert.match(styles, /width:\s*100%/)
   })
 
-  void test('uses an aligned project chrome row without duplicating the project in the tree', () => {
+  void test('keeps the project view header compact and leaves search in place', () => {
     const panel = readSource('src/renderer/src/components/files/FilePanel.tsx')
     const row = readSource('src/renderer/src/components/files/FileTreeRow.tsx')
     const styles = readSource('src/renderer/src/styles/08-files.module.css')
 
     assert.doesNotMatch(panel, /<div className=\{styles\.panelHeader\}>/)
     assert.match(panel, /className=\{styles\.filePanelProjectHeader\}/)
-    assert.match(panel, /<span>\{project\.name\}<\/span>/)
+    assert.match(panel, /className=\{styles\.filePanelViewTitle\}/)
+    assert.match(panel, /workbench\.projectView/)
     assert.match(panel, /entries=\{rootEntries\}/)
     assert.match(panel, /childrenByPath=\{childrenByPath\}/)
     assert.doesNotMatch(panel, /treeRootEntries/)
@@ -46,6 +47,66 @@ void describe('pre-split Workbench shell parity', () => {
     assert.match(panel, /<SearchField/)
     assert.match(panel, /className=\{styles\.searchInputShell\}[\s\S]*<SearchField/)
     assert.doesNotMatch(panel, /searchInputClearButton/)
+  })
+
+  void test('places the project and compact Git controls together in the title row', () => {
+    const presentation = readSource('src/renderer/src/StandaloneWorkbenchPagePresentation.tsx')
+    const toolbar = readSource('src/renderer/src/components/chrome/TopToolbar.tsx')
+    const adapter = readSource(
+      'src/renderer/src/components/embedded/workbenchEmbeddedKernelAdapter.ts'
+    )
+    const control = readSource(
+      'src/renderer/src/components/git/WorkbenchGitCommitControl.tsx'
+    )
+    const sharedControl = readSource(
+      'node_modules/@velaros-ai/ui/src/product/git/WorkspaceGitCommitControl.tsx'
+    )
+    const sharedGitStyles = readSource(
+      'node_modules/@velaros-ai/ui/src/product/git/WorkspaceGitCommitControl.module.css'
+    )
+    const shortcuts = readSource(
+      'src/renderer/src/models/layout/workbenchKeyboardShortcuts.ts'
+    )
+
+    assert.match(presentation, /<WorkbenchProjectControl/)
+    assert.match(presentation, /<WorkbenchTopLeading \{\.\.\.editorChrome\} \/>/)
+    assert.match(
+      presentation,
+      /<WorkbenchTopTrailing \{\.\.\.editorChrome\} placement="top" controls="primary" \/>/
+    )
+    assert.match(
+      presentation,
+      /placement="rail"[\s\S]*controls="code-graph"/
+    )
+    assert.match(toolbar, /<WorkbenchGitCommitControl/)
+    assert.match(toolbar, /showPrimaryControls = controls !== 'code-graph'/)
+    assert.match(toolbar, /showCodeGraph = controls !== 'primary' && codeGraphAvailable/)
+    assert.match(adapter, /gitWorkspaceRoot:\s*workbench\.activeProject\?\.rootPath/)
+    assert.match(adapter, /onOpenGitCommitTool:[\s\S]*setActiveLeftTool\('commit'\)/)
+    assert.match(adapter, /onOpenGitBottomTool:[\s\S]*openBottomTool\('git'\)/)
+    assert.match(control, /switchWorkspaceGitBranch/)
+    assert.match(control, /createWorkspaceGitBranch/)
+    assert.match(control, /performWorkspaceGitAction/)
+    assert.match(control, /workbench\.gitCommitAction/)
+    assert.match(control, /<WorkspaceGitCommitControl/)
+    assert.doesNotMatch(control, /<Dialog|<FolderIcon/)
+    assert.match(sharedGitStyles, /\.gitCompactMenu[\s\S]*background-color:[^;]+!important/)
+    assert.match(sharedGitStyles, /\.gitCompactMenuHeader[\s\S]*padding:\s*3\.5px 4px/)
+    assert.match(sharedGitStyles, /\.gitCompactInput:focus-visible[\s\S]*background-color:\s*transparent/)
+    assert.match(sharedGitStyles, /\.gitCreateBranchInput:focus-visible[\s\S]*git-create-branch-input-bg/)
+    assert.doesNotMatch(sharedGitStyles, /\.gitCompactMenu :global\(\.velar-input/)
+    assert.match(sharedControl, /<FolderIcon[\s\S]*gitCompactBranchTreeFolder/)
+    assert.match(sharedControl, /buildBranchTrie\(branches, namespace\)/)
+    assert.match(sharedGitStyles, /\.gitCreateBranchDialog[\s\S]*max-width:\s*min\(320px/)
+    assert.match(sharedControl, /<Dialog[\s\S]*createDialogTitle/)
+    assert.match(sharedControl, /<DialogFooter className=\{styles\.gitCreateBranchDialogFooter\}>/)
+    assert.match(sharedControl, /checked=\{checkoutCreatedBranch\}/)
+    assert.match(sharedControl, /gitCompactSearchField[\s\S]*gitCompactFetchButton/)
+    assert.match(sharedControl, /gitCompactBranchList[\s\S]*gitCompactFooter[\s\S]*openCreateBranchDialog/)
+    assert.match(sharedControl, /gitCompactBranchHoverActions[\s\S]*checkoutAction[\s\S]*uploadAction/)
+    assert.match(control, /themeColor="var\(--workbench-theme-color\)"/)
+    assert.match(control, /switchWorkspaceGitBranch\([\s\S]*\{ create: true \}/)
+    assert.match(shortcuts, /toggle-changes', defaultShortcut: 'Mod\+Shift\+G'/)
   })
 
   void test('extends macOS content into the title bar and lets the folder button toggle files', () => {

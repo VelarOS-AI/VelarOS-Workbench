@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
 import { describe, test } from 'node:test'
 
 import {
@@ -20,12 +22,34 @@ void describe('Workbench test affordances', () => {
     assert.equal(isWorkbenchTestFilePath('src/contest.vel'), false)
   })
 
-  void test('recognizes conventional test directories for the orange tree marker', () => {
+  void test('recognizes conventional test directories for the test tree marker', () => {
     assert.equal(isWorkbenchTestDirectoryPath('tests'), true)
     assert.equal(isWorkbenchTestDirectoryPath('packages/core/test'), true)
     assert.equal(isWorkbenchTestDirectoryPath('src/__tests__'), true)
     assert.equal(isWorkbenchTestDirectoryPath('src/contest'), false)
     assert.equal(isWorkbenchTestDirectoryPath('src/test-data'), false)
+  })
+
+  void test('keeps test affordances visually distinct from untracked Git files', () => {
+    const shellStyles = readFileSync(
+      path.resolve('src/renderer/src/styles/01-shell.module.css'),
+      'utf8'
+    )
+    const fileStyles = readFileSync(
+      path.resolve('src/renderer/src/styles/08-files.module.css'),
+      'utf8'
+    )
+
+    assert.match(shellStyles, /--workbench-git-untracked-fg:\s*var\(--status-amber\)/)
+    assert.match(shellStyles, /--workbench-test-fg:\s*var\(--status-violet\)/)
+    assert.match(
+      fileStyles,
+      /data-test-directory='true'[\s\S]*color:\s*var\(--workbench-test-fg\)/
+    )
+    assert.match(
+      fileStyles,
+      /\.treeTestFileBadge[\s\S]*color:\s*var\(--workbench-test-fg\)/
+    )
   })
 
   void test('finds top-level Velar test declarations and maps every marker to the current file', () => {

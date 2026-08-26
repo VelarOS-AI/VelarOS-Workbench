@@ -11,6 +11,11 @@ export const WorkbenchProjectHubChannels = {
   getState: 'workbench-app:project-hub:get-state',
   openProjectDialog: 'workbench-app:project-hub:open-project-dialog',
   openProjectPath: 'workbench-app:project-hub:open-project-path',
+  switchProjectDialog: 'workbench-app:project-hub:switch-project-dialog',
+  switchProjectPath: 'workbench-app:project-hub:switch-project-path',
+  openProjectDialogInNewWindow: 'workbench-app:project-hub:open-project-dialog-in-new-window',
+  openProjectPathInNewWindow: 'workbench-app:project-hub:open-project-path-in-new-window',
+  cloneProjectInNewWindow: 'workbench-app:project-hub:clone-project-in-new-window',
   validateProjectPath: 'workbench-app:project-hub:validate-project-path',
   openDroppedProjectPaths: 'workbench-app:project-hub:open-dropped-project-paths',
   openSystemPath: 'workbench-app:project-hub:open-system-path',
@@ -67,6 +72,16 @@ export type WorkbenchProjectCreateResult =
   | { ok: true; project: WorkbenchOpenedProject }
   | { ok: false; reason: WorkbenchProjectCreateFailureReason }
 
+export type WorkbenchProjectCloneFailureReason =
+  | 'canceled'
+  | 'invalid-remote'
+  | 'already-exists'
+  | 'clone-failed'
+
+export type WorkbenchProjectCloneResult =
+  | { ok: true; project: WorkbenchOpenedProject }
+  | { ok: false; reason: WorkbenchProjectCloneFailureReason }
+
 export type WorkbenchPickLocationResult =
   | { ok: true; path: string }
   | { ok: false; reason: 'canceled' }
@@ -83,6 +98,11 @@ export interface WorkbenchProjectHubBridge {
   getState: () => Promise<WorkbenchProjectHubState>
   openProjectDialog: () => Promise<WorkbenchProjectOpenResult>
   openProjectPath: (path: string) => Promise<WorkbenchProjectOpenResult>
+  switchProjectDialog: () => Promise<WorkbenchProjectOpenResult>
+  switchProjectPath: (path: string) => Promise<WorkbenchProjectOpenResult>
+  openProjectDialogInNewWindow: () => Promise<WorkbenchProjectOpenResult>
+  openProjectPathInNewWindow: (path: string) => Promise<WorkbenchProjectOpenResult>
+  cloneProjectInNewWindow: (remoteUrl: string) => Promise<WorkbenchProjectCloneResult>
   validateProjectPath: (path: string) => Promise<WorkbenchProjectOpenResult>
   openDroppedProjectPaths: (paths: string[]) => Promise<WorkbenchProjectDropResult>
   /** Electron 41 不再暴露 File.path；preload 用 webUtils 恢复可信的原生拖拽路径。 */

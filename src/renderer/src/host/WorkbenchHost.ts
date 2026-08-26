@@ -319,7 +319,10 @@ export interface WorkbenchWorkspaceKernelPort {
   performWorkspaceGitAction(
     workspaceRoot: string,
     action: SystemWorkspaceGitActionRequest['action'],
-    options?: Pick<SystemWorkspaceGitActionRequest, 'githubToken' | 'privateKeyPath' | 'sshKeyPath'>
+    options?: Pick<
+      SystemWorkspaceGitActionRequest,
+      'branch' | 'githubToken' | 'privateKeyPath' | 'sshKeyPath'
+    >
   ): Promise<Result<SystemWorkspaceGitActionResult>>
 }
 

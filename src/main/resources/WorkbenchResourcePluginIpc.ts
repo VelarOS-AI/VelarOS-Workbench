@@ -36,7 +36,6 @@ export function registerWorkbenchResourcePluginIpc(
       return service.listCatalog()
     }
   )
-
   return () => {
     unsubscribe()
     ipcMain.removeHandler(WorkbenchResourcePluginChannels.list)
@@ -49,10 +48,11 @@ function readPluginId(request: unknown): WorkbenchResourcePluginId {
   if (!request || typeof request !== 'object' || Array.isArray(request)) {
     throw new Error('Resource plugin request must be an object.')
   }
-  if ((request as Record<string, unknown>)['id'] !== 'codegraph') {
+  const id = (request as Record<string, unknown>)['id']
+  if (id !== 'codegraph') {
     throw new Error('Unsupported Workbench resource plugin.')
   }
-  return 'codegraph'
+  return id
 }
 
 function readSetEnabledRequest(

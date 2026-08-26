@@ -1,0 +1,83 @@
+import { describe, expect, test } from 'bun:test'
+
+import type { ModelRequestService } from '@velaros-ai/model'
+
+import { WorkbenchInlineCompletionGenerator } from '../src/main/workspace/language/WorkbenchInlineCompletion'
+import {
+  getStandaloneWorkbenchModelProviderPreset,
+  resolveStandaloneWorkbenchProviderModel,
+  StandaloneWorkbenchModelProviderPresets,
+} from '../src/renderer/src/runtime/standaloneWorkbenchModelCatalog'
+
+describe('Workbench inline completion', () => {
+  test('offers the Desktop model catalog without raw custom-provider setup', () => {
+    expect(StandaloneWorkbenchModelProviderPresets.some((provider) => provider.id === 'openai'))
+      .toBe(true)
+    expect(StandaloneWorkbenchModelProviderPresets.some((provider) => provider.id === 'anthropic'))
+      .toBe(true)
+    expect(StandaloneWorkbenchModelProviderPresets.some((provider) => provider.id === 'custom'))
+      .toBe(false)
+
+    const openAI = getStandaloneWorkbenchModelProviderPreset('openai')
+    expect(openAI.defaultBaseURL).toBe('https://api.openai.com/v1')
+    expect(openAI.models).toContain(openAI.defaultModel)
+    expect(openAI.models).toContain(openAI.completionModel)
+    expect(resolveStandaloneWorkbenchProviderModel('openai', 'not-a-catalog-model', 'agent'))
+      .toBe(openAI.defaultModel)
+  })
+
+  test('uses the independent completion model path and cleans fenced output', async () => {
+    let prompt = ''
+    const requestPort: Pick<ModelRequestService, 'generateInlineCompletion'> = {
+      generateInlineCompletion: async (request) => {
+        prompt = request.prompt
+        return '```ts\nreturn total + 1\n```\n'
+      },
+    }
+    const generator = new WorkbenchInlineCompletionGenerator(requestPort)
+    const result = await generator.generate({
+      projectRoot: '/tmp/project',
+      path: 'src/value.ts',
+      language: 'typescript',
+      prefix: 'function next(total: number) {\n  ',
+      suffix: '\n}',
+      modelSelection: {
+        provider: 'ollama',
+        model: 'gpt-oss:20b',
+        apiKey: '',
+        baseURL: 'http://localhost:11434/v1',
+      },
+    })
+
+    expect(result).toEqual({ completion: 'return total + 1' })
+    expect(prompt).toContain('Language: typescript')
+    expect(prompt).toContain('File: value.ts')
+    expect(prompt).toContain('<|cursor|>')
+  })
+
+  test('does not request a model for an empty prefix', async () => {
+    let calls = 0
+    const requestPort: Pick<ModelRequestService, 'generateInlineCompletion'> = {
+      generateInlineCompletion: async () => {
+        calls += 1
+        return 'unused'
+      },
+    }
+    const generator = new WorkbenchInlineCompletionGenerator(requestPort)
+    const result = await generator.generate({
+      projectRoot: '/tmp/project',
+      language: 'typescript',
+      prefix: '   ',
+      suffix: '',
+      modelSelection: {
+        provider: 'ollama',
+        model: 'gpt-oss:20b',
+        apiKey: '',
+        baseURL: 'http://localhost:11434/v1',
+      },
+    })
+
+    expect(result).toEqual({ completion: '' })
+    expect(calls).toBe(0)
+  })
+})

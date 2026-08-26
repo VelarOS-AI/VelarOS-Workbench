@@ -1,4 +1,13 @@
 .workbenchSettingsDialog {
+  --primary: var(--workbench-theme-color);
+  --primary-rgb: var(--workbench-theme-color-rgb);
+  --primary-foreground: #ffffff;
+  --control-switch-checked: var(--workbench-theme-color);
+  --control-switch-checked-hover: color-mix(
+    in oklab,
+    var(--workbench-theme-color) 86%,
+    var(--workbench-text)
+  );
   display: grid;
   grid-template-rows: 40px minmax(0, 1fr);
   width: 100%;

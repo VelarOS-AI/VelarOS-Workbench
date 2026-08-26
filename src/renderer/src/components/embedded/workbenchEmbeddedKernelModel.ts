@@ -22,7 +22,6 @@ import type {
   WorkbenchEditorPanelWorkspaceProps,
 } from '../editor/EditorPanel'
 import type {
-  WorkbenchFilePanelGitControlProps,
   WorkbenchFilePanelHandlersProps,
   WorkbenchFilePanelSearchProps,
   WorkbenchFilePanelTreeProps,
@@ -35,7 +34,6 @@ export type WorkbenchEmbeddedKernelLeftMode = 'changes' | 'files'
 export interface WorkbenchEmbeddedFilePanelModel {
   tree: WorkbenchFilePanelTreeProps
   search: WorkbenchFilePanelSearchProps
-  git?: WorkbenchFilePanelGitControlProps
   handlers: WorkbenchFilePanelHandlersProps
 }
 

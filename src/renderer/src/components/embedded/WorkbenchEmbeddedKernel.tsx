@@ -58,7 +58,6 @@ export function WorkbenchEmbeddedKernel({
         <FilePanel
           tree={files.tree}
           search={files.search}
-          git={files.git}
           handlers={files.handlers}
         />
       )}

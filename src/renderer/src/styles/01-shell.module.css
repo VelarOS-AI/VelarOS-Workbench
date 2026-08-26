@@ -431,6 +431,7 @@
   --workbench-text: oklch(0.18 0 0);
   --workbench-text-muted: oklch(0.56 0 0);
   --workbench-git-untracked-fg: var(--status-amber);
+  --workbench-test-fg: var(--status-violet);
   --workbench-tree-ignored-fg: var(--workbench-text-muted);
   --workbench-file-typescript: #3178c6;
   --workbench-file-velarscript: #1d4ed8;
@@ -788,21 +789,9 @@
   --workbench-card-border: rgba(255, 255, 255, 0.18);
 }
 
-/* macOS hiddenInset: avoid the traffic lights only in the top-left chrome zone. */
-.workbenchShell[data-standalone='true'][data-mac-title-inset='true'] .leftToolRailColumn {
-  padding-top: 36px;
-}
-
-.workbenchShell[data-standalone='true'][data-mac-title-inset='true'] .filePanelProjectHeader {
-  padding-left: 48px;
-}
-
-.workbenchShell[data-standalone='true'][data-mac-title-inset='true'] .filePanel .panelHeader,
-.workbenchShell[data-standalone='true'][data-mac-title-inset='true']
-  .commitToolPanel
-  > .panelHeader,
-.workbenchShell[data-standalone='true'][data-mac-title-inset='true'] .aiChangesPanelHeader {
-  padding-left: 54px;
+/* macOS hiddenInset: the unified title row owns the traffic-light inset. */
+.workbenchShell[data-standalone='true'][data-mac-title-inset='true'] .ideUnifiedTopBar {
+  padding-left: 76px;
 }
 
 /* Flush outer seams at pane corners (no divider strokes along sidebar/editor/status joints). */

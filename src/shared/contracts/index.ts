@@ -29,7 +29,6 @@ export type {
   ProjectGitLogEntry as WorkspaceGitLogEntry,
   ProjectGitLogOptions as WorkspaceGitLogOptions,
   ProjectGitRemoteAction as WorkspaceGitRemoteAction,
-  ProjectGitRemoteActionOptions as WorkspaceGitRemoteActionOptions,
   ProjectGitRemoteActionResult as WorkspaceGitRemoteActionResult,
   ProjectGitRestoreResult as WorkspaceGitRestoreResult,
   ProjectGitStatusResult as WorkspaceGitStatusResult,

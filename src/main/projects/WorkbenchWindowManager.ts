@@ -1,9 +1,13 @@
-import { basename, resolve } from 'node:path'
+import { existsSync } from 'node:fs'
+import { rm } from 'node:fs/promises'
+import { basename, join, resolve } from 'node:path'
 
 import { BrowserWindow, type WebContents } from 'electron'
+import { execa } from 'execa'
 
 import {
   type WorkbenchOpenedProject,
+  type WorkbenchProjectCloneResult,
   type WorkbenchProjectCreateResult,
   type WorkbenchProjectDropResult,
   WorkbenchProjectHubChannels,
@@ -137,6 +141,24 @@ export class WorkbenchWindowManager {
     return this.openProjectPath(targetWindow?.webContents ?? null, picked)
   }
 
+  public async switchProjectViaDialog(
+    sender: WebContents
+  ): Promise<WorkbenchProjectOpenResult> {
+    const picked = await pickDirectory(this.getWindowForWebContents(sender), '切换项目')
+    if (!picked) return { ok: false, reason: 'canceled' }
+
+    return this.switchProjectPath(sender, picked)
+  }
+
+  public async openProjectInNewWindowViaDialog(
+    targetWindow: Nullable<BrowserWindow>
+  ): Promise<WorkbenchProjectOpenResult> {
+    const picked = await pickDirectory(targetWindow, '在新窗口打开项目')
+    if (!picked) return { ok: false, reason: 'canceled' }
+
+    return this.openProjectPathInNewWindow(picked)
+  }
+
   public openProjectPath(
     sender: Nullable<WebContents>,
     path: string
@@ -170,6 +192,89 @@ export class WorkbenchWindowManager {
       this.refreshRecentProjectsExcept(target.hub)
     }
     return opened
+  }
+
+  /** 在原窗口重绑项目；释放旧项目资源后才广播新根。 */
+  public async switchProjectPath(
+    sender: WebContents,
+    path: string
+  ): Promise<WorkbenchProjectOpenResult> {
+    const projectPath = resolve(path)
+    const failure = validateProjectDirectory(projectPath)
+    const target = this.getRecord(sender)
+    if (failure || !target) {
+      target?.hub.refreshState()
+      return { ok: false, reason: failure ?? 'missing' }
+    }
+
+    const currentProjectPath = target.hub.getState().currentProject?.path
+    if (currentProjectPath === projectPath) {
+      this.focusWindow(target.window)
+      return target.hub.openProjectPath(projectPath)
+    }
+
+    const existing = this.findProjectRecord(projectPath)
+    if (existing) {
+      this.focusWindow(existing.window)
+      return existing.hub.openProjectPath(projectPath)
+    }
+
+    if (currentProjectPath) {
+      await this.releaseProjectResources(sender.id, currentProjectPath)
+    }
+    const opened = target.hub.openProjectPath(projectPath)
+    if (opened.ok) {
+      this.focusWindow(target.window)
+      this.refreshRecentProjectsExcept(target.hub)
+    }
+    return opened
+  }
+
+  public openProjectPathInNewWindow(path: string): WorkbenchProjectOpenResult {
+    return this.openProjectPath(null, path)
+  }
+
+  public async cloneProjectInNewWindow(
+    sender: WebContents,
+    remoteUrl: string
+  ): Promise<WorkbenchProjectCloneResult> {
+    const normalizedRemote = normalizeGitRemote(remoteUrl)
+    if (!normalizedRemote) return { ok: false, reason: 'invalid-remote' }
+
+    const parent = await pickDirectory(
+      this.getWindowForWebContents(sender),
+      '选择 Git 项目的保存位置'
+    )
+    if (!parent) return { ok: false, reason: 'canceled' }
+
+    const projectPath = join(parent, normalizedRemote.projectName)
+    if (existsSync(projectPath)) return { ok: false, reason: 'already-exists' }
+
+    const result = await execa(
+      'git',
+      ['clone', '--', normalizedRemote.remoteUrl, projectPath],
+      {
+        env: {
+          ...process.env,
+          GIT_TERMINAL_PROMPT: '0',
+        },
+        reject: false,
+        timeout: 120_000,
+      }
+    )
+    if (result.failed) {
+      await rm(projectPath, { recursive: true, force: true }).catch(() => undefined)
+      console.error('[workbench-app] failed to clone project', {
+        exitCode: result.exitCode,
+        timedOut: result.timedOut,
+      })
+      return { ok: false, reason: 'clone-failed' }
+    }
+
+    const opened = this.openProjectPathInNewWindow(projectPath)
+    return opened.ok
+      ? { ok: true, project: opened.project }
+      : { ok: false, reason: 'clone-failed' }
   }
 
   public validateProjectPath(path: string): WorkbenchProjectOpenResult {
@@ -323,6 +428,42 @@ export class WorkbenchWindowManager {
   private emitChanged(): void {
     for (const listener of this.listeners) listener()
   }
+}
+
+const GitRemoteMaxLength = 2_048
+const GitRemoteProtocols = new Set(['git:', 'http:', 'https:', 'ssh:'])
+const ScpLikeGitRemotePattern = /^[\w.-]+@[\w.-]+:[^\s]+$/u
+const InvalidClonedProjectNamePattern = /[\\/:*?"<>|]/u
+
+function normalizeGitRemote(
+  remoteUrl: string
+): Nullable<{ projectName: string; remoteUrl: string }> {
+  const normalized = remoteUrl.trim()
+  if (!normalized || normalized.length > GitRemoteMaxLength || /\s/u.test(normalized)) return null
+
+  let pathPart = normalized
+  if (!ScpLikeGitRemotePattern.test(normalized)) {
+    try {
+      const parsed = new URL(normalized)
+      if (!GitRemoteProtocols.has(parsed.protocol) || !parsed.hostname) return null
+      pathPart = parsed.pathname
+    } catch {
+      return null
+    }
+  } else {
+    pathPart = normalized.slice(normalized.indexOf(':') + 1)
+  }
+
+  const rawName = pathPart.replace(/\/+$/u, '').split('/').at(-1) ?? ''
+  const projectName = rawName.endsWith('.git') ? rawName.slice(0, -4) : rawName
+  if (
+    !projectName ||
+    projectName.length > 80 ||
+    projectName.startsWith('.') ||
+    InvalidClonedProjectNamePattern.test(projectName)
+  ) return null
+
+  return { projectName, remoteUrl: normalized }
 }
 
 function emptyProjectHubState(): WorkbenchProjectHubState {

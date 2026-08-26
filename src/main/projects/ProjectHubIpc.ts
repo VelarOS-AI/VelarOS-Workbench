@@ -26,6 +26,32 @@ export function registerProjectHubIpc(windows: WorkbenchWindowManager): void {
       : { ok: false as const, reason: 'missing' as const }
   )
 
+  ipcMain.handle(WorkbenchProjectHubChannels.switchProjectDialog, (event) =>
+    windows.switchProjectViaDialog(event.sender)
+  )
+
+  ipcMain.handle(WorkbenchProjectHubChannels.switchProjectPath, (event, path: unknown) =>
+    typeof path === 'string' && path.length > 0
+      ? windows.switchProjectPath(event.sender, path)
+      : { ok: false as const, reason: 'missing' as const }
+  )
+
+  ipcMain.handle(WorkbenchProjectHubChannels.openProjectDialogInNewWindow, (event) =>
+    windows.openProjectInNewWindowViaDialog(BrowserWindow.fromWebContents(event.sender))
+  )
+
+  ipcMain.handle(WorkbenchProjectHubChannels.openProjectPathInNewWindow, (_event, path: unknown) =>
+    typeof path === 'string' && path.length > 0
+      ? windows.openProjectPathInNewWindow(path)
+      : { ok: false as const, reason: 'missing' as const }
+  )
+
+  ipcMain.handle(WorkbenchProjectHubChannels.cloneProjectInNewWindow, (event, remoteUrl: unknown) =>
+    typeof remoteUrl === 'string'
+      ? windows.cloneProjectInNewWindow(event.sender, remoteUrl)
+      : { ok: false as const, reason: 'invalid-remote' as const }
+  )
+
   ipcMain.handle(WorkbenchProjectHubChannels.validateProjectPath, (_event, path: unknown) =>
     typeof path === 'string' && path.length > 0
       ? windows.validateProjectPath(path)

@@ -304,6 +304,7 @@ export function useWorkbenchController(options: UseWorkbenchControllerOptions = 
     searchActive: search.searchActive,
     hasUnsavedChanges: editor.hasUnsavedChanges,
     hasUnsavedOpenTabs: editor.hasUnsavedOpenTabs,
+    ensureNoUnsavedChanges: editor.ensureNoUnsavedChanges,
     canEditSelectedFile: editor.canEditSelectedFile,
     isPicking: project.isPicking,
     isLoadingTree: tree.isLoadingTree,

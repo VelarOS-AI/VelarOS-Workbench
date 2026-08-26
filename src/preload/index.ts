@@ -47,6 +47,8 @@ const projectHubBridge: WorkbenchProjectHubBridge = {
     ipcRenderer.invoke(WorkbenchProjectHubChannels.openProjectDialogInNewWindow),
   openProjectPathInNewWindow: (path) =>
     ipcRenderer.invoke(WorkbenchProjectHubChannels.openProjectPathInNewWindow, path),
+  cloneProjectInNewWindow: (remoteUrl) =>
+    ipcRenderer.invoke(WorkbenchProjectHubChannels.cloneProjectInNewWindow, remoteUrl),
   validateProjectPath: (path) =>
     ipcRenderer.invoke(WorkbenchProjectHubChannels.validateProjectPath, path),
   openDroppedProjectPaths: (paths) =>
@@ -107,6 +109,8 @@ const languageBridge: WorkbenchLanguageBridge = {
   getSemanticTokens: (request) =>
     ipcRenderer.invoke(WorkbenchLanguageChannels.semanticTokens, request),
   getCodeActions: (request) => ipcRenderer.invoke(WorkbenchLanguageChannels.codeActions, request),
+  getInlineCompletion: (request) =>
+    ipcRenderer.invoke(WorkbenchLanguageChannels.inlineCompletion, request),
 }
 
 const watchBridge: WorkbenchWatchBridge = {

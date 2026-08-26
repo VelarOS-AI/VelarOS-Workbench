@@ -39,6 +39,12 @@ import {
   type WorkbenchThemeId,
 } from '@renderer/models/settings/workbenchPreferences'
 import {
+  getStandaloneWorkbenchModelProviderPreset,
+  StandaloneWorkbenchModelProviderPresets,
+} from '@renderer/runtime/standaloneWorkbenchModelCatalog'
+import {
+  selectStandaloneWorkbenchModel,
+  selectStandaloneWorkbenchModelProvider,
   updateStandaloneWorkbenchModelConfig,
   useStandaloneWorkbenchModelConfig,
 } from '@renderer/runtime/standaloneWorkbenchModelConfig'
@@ -59,7 +65,6 @@ import type {
   WorkbenchProjectAiRulesResult,
 } from '@shared/contracts'
 
-import { WorkbenchAgentEngineBrandIcon } from '../../../../plugins/agent-engines/renderer/WorkbenchAgentEngineBrandIcon'
 import type {
   WorkbenchModCatalog,
   WorkbenchModRecord,
@@ -189,6 +194,13 @@ export function WorkbenchSettingsDialog({
   const { t } = useWorkbenchI18n()
   const hostRuntime = useWorkbenchHostRuntime()
   const modelConfig = useStandaloneWorkbenchModelConfig()
+  const modelProviderPreset = getStandaloneWorkbenchModelProviderPreset(modelConfig.provider)
+  const modelProviderOptions = StandaloneWorkbenchModelProviderPresets.map((provider) => ({
+    value: provider.id,
+    label: provider.label,
+    description: provider.description,
+  }))
+  const modelOptions = modelProviderPreset.models.map((model) => ({ value: model, label: model }))
   const timers = useTimerScope('WorkbenchSettingsDialog')
   const [activeSection, setActiveSection] = useState<WorkbenchSettingsSectionId>('project')
   const [capturingAction, setCapturingAction] =
@@ -648,50 +660,59 @@ export function WorkbenchSettingsDialog({
           title={t('workbench.settingsModelProvider')}
           description={t('workbench.settingsModelProviderDescription')}
         >
-          <Input
+          <Select
             size="sm"
+            className={styles.workbenchSettingsSelectTrigger}
             value={modelConfig.provider}
-            placeholder="openai"
-            onChange={(event) =>
-              updateStandaloneWorkbenchModelConfig({ provider: event.currentTarget.value })
-            }
+            options={modelProviderOptions}
+            onChange={selectStandaloneWorkbenchModelProvider}
           />
         </SettingRow>
-        <SettingRow title={t('workbench.settingsModelName')}>
-          <Input
+        <SettingRow
+          title={t('workbench.settingsModelName')}
+          description={t('workbench.settingsModelNameDescription')}
+        >
+          <Select
             size="sm"
+            className={styles.workbenchSettingsSelectTrigger}
             value={modelConfig.model}
-            placeholder="gpt-4.1"
-            onChange={(event) =>
-              updateStandaloneWorkbenchModelConfig({ model: event.currentTarget.value })
-            }
-          />
-        </SettingRow>
-        <SettingRow title={t('workbench.settingsModelBaseUrl')}>
-          <Input
-            size="sm"
-            value={modelConfig.baseURL}
-            placeholder="https://api.openai.com/v1"
-            onChange={(event) =>
-              updateStandaloneWorkbenchModelConfig({ baseURL: event.currentTarget.value })
+            options={modelOptions}
+            onChange={(model) =>
+              selectStandaloneWorkbenchModel(modelConfig.provider, model, 'agent')
             }
           />
         </SettingRow>
         <SettingRow
-          title={t('workbench.settingsModelApiKey')}
-          description={t('workbench.settingsModelApiKeyDescription')}
+          title={t('workbench.settingsAiCompletionModel')}
+          description={t('workbench.settingsAiCompletionModelHint')}
         >
-          <Input
+          <Select
             size="sm"
-            type="password"
-            autoComplete="off"
-            value={modelConfig.apiKey}
-            placeholder={t('workbench.settingsModelApiKeyPlaceholder')}
-            onChange={(event) =>
-              updateStandaloneWorkbenchModelConfig({ apiKey: event.currentTarget.value })
+            className={styles.workbenchSettingsSelectTrigger}
+            value={modelConfig.completionModel}
+            options={modelOptions}
+            onChange={(model) =>
+              selectStandaloneWorkbenchModel(modelConfig.provider, model, 'completion')
             }
           />
         </SettingRow>
+        {!modelProviderPreset.apiKeyOptional && (
+          <SettingRow
+            title={t('workbench.settingsModelApiKey')}
+            description={t('workbench.settingsModelApiKeyDescription')}
+          >
+            <Input
+              size="sm"
+              type="password"
+              autoComplete="off"
+              value={modelConfig.apiKey}
+              placeholder={t('workbench.settingsModelApiKeyPlaceholder')}
+              onChange={(event) =>
+                updateStandaloneWorkbenchModelConfig({ apiKey: event.currentTarget.value })
+              }
+            />
+          </SettingRow>
+        )}
       </div>
     )
   }
@@ -898,8 +919,7 @@ export function WorkbenchSettingsDialog({
           <div className={styles.workbenchSettingsPluginList}>
             <div className={styles.workbenchSettingsPluginRow}>
               <span className={styles.workbenchSettingsPluginIcon}>
-                <WorkbenchAgentEngineBrandIcon engineId="claude-code" size={14} />
-                <WorkbenchAgentEngineBrandIcon engineId="codex" size={14} />
+                <PlugsConnectedIcon size={16} />
               </span>
               <div className={styles.workbenchSettingsPluginMeta}>
                 <Text className={styles.workbenchSettingsPluginName}>
@@ -910,11 +930,6 @@ export function WorkbenchSettingsDialog({
                 </Text>
               </div>
               <div className={styles.workbenchSettingsPluginActions}>
-                <WorkbenchSettingsPill tone={mod.enabled ? 'success' : 'default'}>
-                  {mod.enabled
-                    ? t('workbench.settingsModEnabled')
-                    : t('workbench.settingsModDisabled')}
-                </WorkbenchSettingsPill>
                 <Switch
                   size="sm"
                   checked={mod.enabled}

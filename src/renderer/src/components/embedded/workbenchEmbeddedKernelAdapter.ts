@@ -42,6 +42,10 @@ export function buildStandaloneWorkbenchEditorChrome(
   const editorChromeActions = {
     onGitRefresh: model.actions.refreshGitPanel,
     onRepositoryChanged: model.actions.handleRepositoryChanged,
+    onOpenGitCommitTool: () => {
+      model.surface.setActiveLeftTool('commit')
+      if (!model.surface.isFilePanelOpen) model.surface.toggleFilePanel()
+    },
     onOpenGitBottomTool: () => model.surface.openBottomTool('git'),
     onOpenQuickOpen: model.surface.openQuickOpen,
     onOpenSettings: () => model.dialogs.setSettingsOpen(true),
@@ -106,7 +110,6 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
         isSearchingEntries: workbench.isSearchingEntries,
         isIndexingProject: workbench.isIndexingProject,
       },
-      // 缺少真实摘要时不伪造仓库状态，等待 Git 端口刷新。
       handlers: {
         onSelectEntryPath: workbench.selectEntryPath,
         onCreateEntry: (type, parentEntry, name) =>

@@ -336,24 +336,64 @@ export class WorkbenchGitService {
     const status = await this.getStatus(rootPath)
     if (!status.branch)
       throw new AppError('VALIDATION', '当前 Git 工作区没有可识别的本地分支。')
+    const actionBranch =
+      action === 'upload' && options.branch
+        ? this.assertBranch(options.branch)
+        : status.branch
+    if (action === 'upload' && actionBranch !== status.branch) {
+      await this.runGit(rootPath, ['rev-parse', '--verify', `refs/heads/${actionBranch}`])
+    }
+    const actionUpstream =
+      action === 'upload' && actionBranch !== status.branch
+        ? await this.getLocalBranchUpstream(rootPath, actionBranch)
+        : status.upstream
     const args =
       action === 'fetch'
         ? ['fetch', '--prune']
         : action === 'update'
           ? ['pull', '--ff-only', '--autostash']
-          : status.upstream
-            ? ['push']
-            : ['push', '--set-upstream', 'origin', status.branch]
+          : actionUpstream
+            ? this.buildBranchPushArgs(actionBranch, actionUpstream)
+            : [
+                'push',
+                '--set-upstream',
+                'origin',
+                `refs/heads/${actionBranch}:refs/heads/${actionBranch}`,
+              ]
     if (action === 'update' && !status.upstream)
       throw new AppError('VALIDATION', `当前分支 ${status.branch} 没有关联的远程跟踪分支。`)
     const output = (await this.runGit(rootPath, args, options)).stdout.trim()
     const remoteAction: WorkspaceGitRemoteActionResult = {
       action,
-      branch: status.branch,
-      upstream: status.upstream ?? (action === 'upload' ? `origin/${status.branch}` : null),
+      branch: actionBranch,
+      upstream: actionUpstream ?? (action === 'upload' ? `origin/${actionBranch}` : null),
       output,
     }
     return { rootPath, action: remoteAction, summary: await this.getSummary(rootPath) }
+  }
+
+  private buildBranchPushArgs(branch: string, upstream: string): string[] {
+    const separatorIndex = upstream.indexOf('/')
+    if (separatorIndex <= 0 || separatorIndex === upstream.length - 1)
+      return ['push', '--set-upstream', 'origin', `refs/heads/${branch}:refs/heads/${branch}`]
+
+    const remote = upstream.slice(0, separatorIndex)
+    const remoteBranch = upstream.slice(separatorIndex + 1)
+    return ['push', remote, `refs/heads/${branch}:refs/heads/${remoteBranch}`]
+  }
+
+  private async getLocalBranchUpstream(
+    rootPath: string,
+    branch: string
+  ): Promise<Nullable<string>> {
+    const output = (
+      await this.runGit(rootPath, [
+        'for-each-ref',
+        '--format=%(upstream:short)',
+        `refs/heads/${branch}`,
+      ])
+    ).stdout.trim()
+    return output || null
   }
 
   private async getStatus(rootPath: string): Promise<WorkspaceGitStatusResult> {

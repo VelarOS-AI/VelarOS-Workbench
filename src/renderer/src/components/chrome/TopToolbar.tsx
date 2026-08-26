@@ -34,7 +34,10 @@ import type { SystemWorkspaceGitSummary, WorkbenchProjectAiIndexStatus } from '@
 
 import { type WorkbenchTopRunControl } from '../../hooks/useWorkbenchTopRunControl'
 import styles from '../../styles/workbenchPageStyles'
-import { type WorkspaceGitCommitControlVariant } from '../files/FilePanel'
+import {
+  WorkbenchGitCommitControl,
+  type WorkbenchGitCommitControlVariant,
+} from '../git/WorkbenchGitCommitControl'
 
 export interface TopToolbarProps {
   gitWorkspaceRoot: string
@@ -43,8 +46,9 @@ export interface TopToolbarProps {
   gitSshKeyPath?: string
   hasGitRepository: boolean
   hasUnsavedOpenTabs: boolean
-  gitControlVariant?: WorkspaceGitCommitControlVariant
+  gitControlVariant?: WorkbenchGitCommitControlVariant
   onRepositoryChanged: () => void | Promise<void>
+  onOpenGitCommitTool: () => void
   onOpenGitBottomTool: () => void
   onOpenQuickOpen: () => void
   onOpenSettings: () => void
@@ -61,10 +65,18 @@ export interface TopToolbarProps {
 }
 
 type WorkbenchTopTrailingPlacement = 'rail' | 'top'
+type WorkbenchTopTrailingControls = 'all' | 'primary' | 'code-graph'
 
 export function WorkbenchTopLeading({
+  gitWorkspaceRoot,
   gitSummary,
+  onGitRefresh,
+  gitSshKeyPath,
   hasGitRepository,
+  hasUnsavedOpenTabs,
+  gitControlVariant,
+  onRepositoryChanged,
+  onOpenGitCommitTool,
 }: Pick<
   TopToolbarProps,
   | 'gitWorkspaceRoot'
@@ -75,6 +87,7 @@ export function WorkbenchTopLeading({
   | 'hasUnsavedOpenTabs'
   | 'gitControlVariant'
   | 'onRepositoryChanged'
+  | 'onOpenGitCommitTool'
 >): Nullable<ReactElement> {
   const { t } = useWorkbenchI18n()
   const gitControlReady = !!gitSummary?.repository && !!gitSummary.status?.branch
@@ -82,8 +95,17 @@ export function WorkbenchTopLeading({
   return (
     <div className={styles.topGitControl}>
       {gitControlReady ? (
-        /* 片4 复活 WorkspaceGitCommitControl 前的降级投影：只读分支名。 */
-        <span className={styles.topGitPlaceholder}>{gitSummary?.status?.branch}</span>
+        <WorkbenchGitCommitControl
+          workspaceRoot={gitWorkspaceRoot}
+          summary={gitSummary}
+          onRefresh={onGitRefresh}
+          gitSshKeyPath={gitSshKeyPath}
+          hasUnsavedOpenTabs={hasUnsavedOpenTabs}
+          variant={gitControlVariant ?? 'branch-menu-actions'}
+          layout="pill"
+          onRepositoryChanged={onRepositoryChanged}
+          onOpenCommitTool={onOpenGitCommitTool}
+        />
       ) : (
         <span className={styles.topGitPlaceholder}>
           {hasGitRepository ? t('workbench.gitLoading') : t('workbench.gitNoRepository')}
@@ -95,6 +117,7 @@ export function WorkbenchTopLeading({
 
 export function WorkbenchTopTrailing({
   placement = 'top',
+  controls = 'all',
   onOpenSettings,
   topRun,
   isRunningCommand,
@@ -121,6 +144,7 @@ export function WorkbenchTopTrailing({
   | 'onOpenCodeGraph'
 > & {
   placement?: WorkbenchTopTrailingPlacement
+  controls?: WorkbenchTopTrailingControls
 }): ReactElement {
   const { t } = useWorkbenchI18n()
   const isRailPlacement = placement === 'rail'
@@ -150,6 +174,8 @@ export function WorkbenchTopTrailing({
   const codeGraphTooltip = aiIndexRunning || !canOpenCodeGraph ? aiIndexTooltip : codeGraphLabel
   const runCommandLabel = t('workbench.runCommand')
   const settingsLabel = t('workbench.settingsTitle')
+  const showPrimaryControls = controls !== 'code-graph'
+  const showCodeGraph = controls !== 'primary' && codeGraphAvailable
 
   function handleCodeGraphAction(): void {
     if (canOpenCodeGraph) {
@@ -162,25 +188,29 @@ export function WorkbenchTopTrailing({
 
   return (
     <>
-      <WorkbenchTopIconAction
-        tooltip={settingsLabel}
-        label={settingsLabel}
-        className={actionButtonClassName}
-        tooltipSide={tooltipSide}
-        onClick={onOpenSettings}
-      >
-        <GearSixIcon size={17} />
-      </WorkbenchTopIconAction>
-      <WorkbenchRunAction
-        topRun={topRun}
-        label={runCommandLabel}
-        placeholder={t('workbench.runConfigurationPlaceholder')}
-        className={runButtonClassName}
-        tooltipSide={tooltipSide}
-        isRunningCommand={isRunningCommand}
-        hasActiveRunCommand={hasActiveRunCommand}
-      />
-      {codeGraphAvailable && (
+      {showPrimaryControls && (
+        <>
+          <WorkbenchRunAction
+            topRun={topRun}
+            label={runCommandLabel}
+            placeholder={t('workbench.runConfigurationPlaceholder')}
+            className={runButtonClassName}
+            tooltipSide={tooltipSide}
+            isRunningCommand={isRunningCommand}
+            hasActiveRunCommand={hasActiveRunCommand}
+          />
+          <WorkbenchTopIconAction
+            tooltip={settingsLabel}
+            label={settingsLabel}
+            className={actionButtonClassName}
+            tooltipSide={tooltipSide}
+            onClick={onOpenSettings}
+          >
+            <GearSixIcon size={17} />
+          </WorkbenchTopIconAction>
+        </>
+      )}
+      {showCodeGraph && (
         <WorkbenchTopIconAction
           tooltip={codeGraphTooltip}
           label={codeGraphLabel}

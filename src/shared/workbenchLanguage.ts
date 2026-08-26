@@ -10,7 +10,11 @@
  * 与文件系统面（workbenchFs.ts）拆成两个桥：文件系统面是同步落盘/目录读写，语言智能面
  * 是 worker 转发的代码分析——两者生命周期、错误面与调用节奏都不同。
  */
+import type { ModelSelection } from '@velaros-ai/model/contracts'
+
 import type {
+  WorkbenchInlineCompletionRequest,
+  WorkbenchInlineCompletionResult,
   WorkbenchLanguageServiceCodeActionsRequest,
   WorkbenchLanguageServiceCodeActionsResult,
   WorkbenchLanguageServiceCompletionResult,
@@ -47,9 +51,14 @@ export const WorkbenchLanguageChannels = {
   inlayHints: 'workbench-app:ls:inlay-hints',
   semanticTokens: 'workbench-app:ls:semantic-tokens',
   codeActions: 'workbench-app:ls:code-actions',
+  inlineCompletion: 'workbench-app:ls:inline-completion',
 } as const
 
-/** preload 通过 contextBridge 暴露给 renderer 的语言智能桥面（13 个语言服务动词）。 */
+export interface WorkbenchInlineCompletionBridgeRequest extends WorkbenchInlineCompletionRequest {
+  modelSelection: ModelSelection
+}
+
+/** preload 通过 contextBridge 暴露给 renderer 的语言智能与 AI 内联补全桥面。 */
 export interface WorkbenchLanguageBridge {
   getDefinition: (
     request: WorkbenchLanguageServicePositionRequest
@@ -90,4 +99,7 @@ export interface WorkbenchLanguageBridge {
   getCodeActions: (
     request: WorkbenchLanguageServiceCodeActionsRequest
   ) => Promise<WorkbenchFsCallResult<WorkbenchLanguageServiceCodeActionsResult>>
+  getInlineCompletion: (
+    request: WorkbenchInlineCompletionBridgeRequest
+  ) => Promise<WorkbenchFsCallResult<WorkbenchInlineCompletionResult>>
 }

@@ -19,6 +19,8 @@ import { WorkbenchChatPanel } from '@renderer/components/chat/WorkbenchChatPanel
 
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 
+import type { WorkbenchProjectHubState } from '@shared/projectHub'
+
 import { resolveWorkbenchChatProviderId } from '../../plugins/agent-engines/identity'
 import {
   useWorkbenchAgentEnginesContributionEnabled,
@@ -26,7 +28,8 @@ import {
 } from '../../plugins/agent-engines/renderer/contribution'
 
 import { StatusBar } from './components/chrome/StatusBar'
-import { WorkbenchTopTrailing } from './components/chrome/TopToolbar'
+import { WorkbenchTopLeading, WorkbenchTopTrailing } from './components/chrome/TopToolbar'
+import { WorkbenchProjectControl } from './components/chrome/WorkbenchProjectControl'
 import { CodeInsightPanel } from './components/editor/CodeInsightPanel'
 import { WorkbenchEmbeddedKernel } from './components/embedded/WorkbenchEmbeddedKernel'
 import {
@@ -40,7 +43,13 @@ import { type BottomTool, CommandPanel } from './components/terminal/CommandPane
 import styles from './styles/workbenchPageStyles'
 import { useWorkbenchPageContext } from './WorkbenchPageModelContext'
 
-export function StandaloneWorkbenchPagePresentation(): ReactElement {
+interface StandaloneWorkbenchPagePresentationProps {
+  projectHubState: WorkbenchProjectHubState
+}
+
+export function StandaloneWorkbenchPagePresentation({
+  projectHubState,
+}: StandaloneWorkbenchPagePresentationProps): ReactElement {
   const model = useWorkbenchPageContext()
   const agentEnginesEnabled = useWorkbenchAgentEnginesContributionEnabled()
   const {
@@ -107,6 +116,22 @@ export function StandaloneWorkbenchPagePresentation(): ReactElement {
   ]
   const editorChrome = buildStandaloneWorkbenchEditorChrome(model)
   const embeddedKernelModel = buildStandaloneWorkbenchEmbeddedKernelModel(model, editorChrome)
+
+  async function switchProject(path: string): Promise<boolean> {
+    if (!workbench.ensureNoUnsavedChanges()) return false
+    const result = await window.velarosWorkbenchProjectHub.switchProjectPath(path)
+    return result.ok
+  }
+
+  async function openProjectInNewWindow(path: string): Promise<boolean> {
+    const result = await window.velarosWorkbenchProjectHub.openProjectPathInNewWindow(path)
+    return result.ok
+  }
+
+  async function addLocalProject(): Promise<boolean> {
+    const result = await window.velarosWorkbenchProjectHub.openProjectDialogInNewWindow()
+    return result.ok
+  }
   function toggleLeftTool(tool: 'commit' | 'project'): void {
     if (surface.activeLeftTool === tool) {
       surface.toggleFilePanel()
@@ -132,6 +157,24 @@ export function StandaloneWorkbenchPagePresentation(): ReactElement {
         data-ai-automation-active={!!automation.state}
         style={shellStyle}
       >
+        <header className={styles.ideUnifiedTopBar}>
+          <div className={styles.ideUnifiedTopLeading}>
+            <WorkbenchProjectControl
+              state={projectHubState}
+              onSwitchProject={switchProject}
+              onOpenProjectInNewWindow={openProjectInNewWindow}
+              onAddLocalProject={addLocalProject}
+              onCloneProjectInNewWindow={(remoteUrl) =>
+                window.velarosWorkbenchProjectHub.cloneProjectInNewWindow(remoteUrl)
+              }
+            />
+            <WorkbenchTopLeading {...editorChrome} />
+          </div>
+          <div className={styles.ideUnifiedTopSpacer} />
+          <div className={styles.ideUnifiedTopTrailing}>
+            <WorkbenchTopTrailing {...editorChrome} placement="top" controls="primary" />
+          </div>
+        </header>
         <section className={styles.ideBody} data-right-tool-open={surface.isRightToolOpen}>
           <aside className={styles.leftToolPane}>
             <div
@@ -229,9 +272,15 @@ export function StandaloneWorkbenchPagePresentation(): ReactElement {
           </aside>
           <aside className={styles.rightToolRail} aria-label={t('workbench.rightToolWindows')}>
             <div className={styles.rightToolStrip}>
-              <div className={styles.rightToolActionGroup}>
-                <WorkbenchTopTrailing {...editorChrome} placement="rail" />
-              </div>
+              {codeGraphAvailable && (
+                <div className={styles.rightToolActionGroup}>
+                  <WorkbenchTopTrailing
+                    {...editorChrome}
+                    placement="rail"
+                    controls="code-graph"
+                  />
+                </div>
+              )}
               <div className={styles.rightToolWindowGroup}>
                 <IconButton
                   variant="ghost"

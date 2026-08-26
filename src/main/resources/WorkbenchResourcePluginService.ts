@@ -207,7 +207,9 @@ class WorkbenchResourcePluginService {
   }
 
   private assertSupported(id: WorkbenchResourcePluginId): void {
-    if (id !== 'codegraph') throw new Error(`Unsupported Workbench resource plugin: ${id}`)
+    if (id !== 'codegraph') {
+      throw new Error(`Unsupported Workbench resource plugin: ${id}`)
+    }
   }
 
   private notify(): void {

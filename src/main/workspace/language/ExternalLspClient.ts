@@ -173,6 +173,11 @@ const DiagnosticWaitTimeoutMs = 4_000
 const DefaultRequestTimeoutMs = 15_000
 const MaxLspHeaderBytes = 8 * 1024
 const MaxLspMessageBytes = 16 * 1024 * 1024
+/** 语言服务器停止读取 stdin 时允许在本进程内排队的字节数上限。 */
+const MaxLspPendingWriteBytes = 32 * 1024 * 1024
+const LspHeaderSeparator = '\r\n\r\n'
+const LspHeaderSeparatorBytes = 4
+const JsonRpcMethodNotFound = -32_601
 const SupportedSemanticTokenTypes = [
   'namespace', 'type', 'class', 'enum', 'interface', 'struct', 'typeParameter', 'parameter',
   'variable', 'property', 'enumMember', 'event', 'function', 'method', 'macro', 'keyword',
@@ -395,7 +400,14 @@ function launchFor(
 
 export class ExternalLspClient {
   private process: Nullable<ChildProcessWithoutNullStreams> = null
-  private buffer = Buffer.alloc(0)
+  /** 已到达但尚未成帧的分段缓冲；只在跨段读取时才 concat，避免每个 chunk 全量复制。 */
+  private readonly inbound: Buffer[] = []
+  private inboundLength = 0
+  /** 头部已解析、正在等待 body 收满时的 body 字节数；null 表示当前处于头部阶段。 */
+  private pendingBodySize: Nullable<number> = null
+  private readonly outbound: Buffer[] = []
+  private outboundLength = 0
+  private outboundPaused = false
   private nextRequestId = 1
   private readonly pending = new Map<number, PendingRequest>()
   private readonly documents = new Map<string, OpenDocument>()
@@ -637,7 +649,7 @@ export class ExternalLspClient {
       await this.request('shutdown', null)
       this.notify('exit', null)
     } catch {
-      terminateExternalLspProcessTree(child.pid)
+      await terminateExternalLspProcessTree(child.pid)
     }
     this.process = null
   }
@@ -691,6 +703,10 @@ export class ExternalLspClient {
     child.stderr.on('data', (chunk: Buffer) => {
       this.stderr = `${this.stderr}${chunk.toString('utf8')}`.slice(-4_000)
     })
+    // 服务器已死时写入会得到 EPIPE；没有监听者的话它是一个未捕获异常。
+    child.stdin.on('error', (error) => {
+      if (!this.disposed && this.process === child) this.fail(error)
+    })
     child.on('error', (error) => {
       if (this.process === child) this.fail(error)
     })
@@ -705,8 +721,11 @@ export class ExternalLspClient {
     const result = await this.request('initialize', {
       processId: process.pid,
       rootUri: URI.file(this.projectRoot).toString(),
-      workspaceFolders: [{ uri: URI.file(this.projectRoot).toString(), name: this.projectRoot.split(/[\\/]/u).at(-1) ?? 'project' }],
+      workspaceFolders: [this.workspaceFolder()],
       capabilities: {
+        // 声明什么就实现什么：既然 params 里传了 workspaceFolders，能力节就必须对齐，
+        // 对应的 workspace/workspaceFolders 请求由 handleServerRequest 回复。
+        workspace: { workspaceFolders: true },
         textDocument: {
           completion: { completionItem: { snippetSupport: true, documentationFormat: ['markdown', 'plaintext'] } },
           hover: { contentFormat: ['markdown', 'plaintext'] },
@@ -740,6 +759,13 @@ export class ExternalLspClient {
         )
     }
     this.notify('initialized', {})
+  }
+
+  private workspaceFolder(): { uri: string; name: string } {
+    return {
+      uri: URI.file(this.projectRoot).toString(),
+      name: this.projectRoot.split(/[\\/]/u).at(-1) ?? 'project',
+    }
   }
 
   private request(method: string, params: unknown): Promise<unknown> {
@@ -777,60 +803,208 @@ export class ExternalLspClient {
     const size = Buffer.byteLength(json, 'utf8')
     if (size > MaxLspMessageBytes)
       throw new AppError('INVARIANT', `${this.descriptor.label} LSP 消息超过 16 MiB 上限。`)
-    child.stdin.write(`Content-Length: ${size}\r\n\r\n${json}`)
+    this.write(child, Buffer.from(`Content-Length: ${size}\r\n\r\n${json}`, 'utf8'))
   }
 
+  /**
+   * 写入侧背压：`stdin.write()` 返回 false 表示内核缓冲已满、数据只能堆在 Node 内存里。
+   * 忽略返回值意味着语言服务器一卡住，主进程内存就无上限增长。这里改成排队等 'drain'，
+   * 并给队列封顶——服务器停止读取时要的是一条明确的失败，而不是无声的内存膨胀。
+   */
+  private write(child: ChildProcessWithoutNullStreams, payload: Buffer): void {
+    if (!this.outboundPaused && this.outbound.length === 0) {
+      if (child.stdin.write(payload)) return
+      this.outboundPaused = true
+      child.stdin.once('drain', () => this.resumeWrites(child))
+      return
+    }
+
+    if (this.outboundLength + payload.length > MaxLspPendingWriteBytes) {
+      this.fail(new AppError(
+        'INTERNAL',
+        `${this.descriptor.label} 语言服务器停止读取输入，待写入数据超过 32 MiB 上限。`
+      ))
+      return
+    }
+    this.outbound.push(payload)
+    this.outboundLength += payload.length
+  }
+
+  private resumeWrites(child: ChildProcessWithoutNullStreams): void {
+    this.outboundPaused = false
+    if (this.process !== child || child.stdin.destroyed) return
+    while (this.outbound.length > 0) {
+      const payload = this.outbound.shift()
+      if (!payload) return
+      this.outboundLength -= payload.length
+      if (child.stdin.write(payload)) continue
+      this.outboundPaused = true
+      child.stdin.once('drain', () => this.resumeWrites(child))
+      return
+    }
+  }
+
+  /**
+   * 增量帧解析：分段保存到达的 chunk，只在跨段读取时才 concat，头部扫描也限制在
+   * 8 KiB 的头部窗口内。原来"每个 chunk 全量 concat + 从偏移 0 重扫分隔符"的写法，
+   * 在一条 16 MiB 的消息上是 O(n²)，会在 Electron 主进程里搬运 GB 级内存。
+   */
   private accept(chunk: Buffer): void {
-    this.buffer = Buffer.concat([this.buffer, chunk])
+    if (chunk.length === 0) return
+    this.inbound.push(chunk)
+    this.inboundLength += chunk.length
+
     while (true) {
-      const boundary = this.buffer.indexOf('\r\n\r\n')
-      if (boundary < 0) {
-        if (this.buffer.length > MaxLspHeaderBytes)
-          this.fail(new AppError('INTERNAL', `${this.descriptor.label} LSP 响应头超过 8 KiB 上限。`))
-        return
-      }
-      if (boundary > MaxLspHeaderBytes) {
-        this.fail(new AppError('INTERNAL', `${this.descriptor.label} LSP 响应头超过 8 KiB 上限。`))
-        return
-      }
-      const header = this.buffer.subarray(0, boundary).toString('ascii')
-      const match = /(?:^|\r\n)Content-Length:\s*(\d+)/iu.exec(header)
-      if (!match) {
-        this.fail(new AppError('INTERNAL', `${this.descriptor.label} LSP 响应缺少有效的 Content-Length。`))
-        return
-      }
-      const size = Number(match[1])
-      if (!Number.isSafeInteger(size) || size > MaxLspMessageBytes) {
-        this.fail(new AppError('INTERNAL', `${this.descriptor.label} LSP 响应超过 16 MiB 上限。`))
-        return
-      }
-      const end = boundary + 4 + size
-      if (this.buffer.length < end) return
-      const body = this.buffer.subarray(boundary + 4, end).toString('utf8')
-      this.buffer = this.buffer.subarray(end)
+      if (this.pendingBodySize === null && !this.readFrameHeader()) return
+      const size = this.pendingBodySize
+      if (size === null || this.inboundLength < size) return
+      const body = this.readInbound(size).toString('utf8')
+      this.consumeInbound(size)
+      this.pendingBodySize = null
+
+      let message: JsonRpcMessage
       try {
-        this.handle(JSON.parse(body) as JsonRpcMessage)
+        message = JSON.parse(body) as JsonRpcMessage
       } catch {
         this.fail(new AppError('INTERNAL', `${this.descriptor.label} LSP 返回了无效 JSON。`))
         return
       }
+      this.handle(message)
     }
   }
 
-  private handle(message: JsonRpcMessage): void {
-    if (typeof message.id === 'number') {
-      const pending = this.pending.get(message.id)
-      if (!pending) return
-      this.pending.delete(message.id)
-      clearTimeout(pending.timeout)
-      if (message.error)
-        pending.reject(new AppError('INTERNAL', `${this.descriptor.label}: ${message.error.message ?? '语言服务器请求失败。'}`))
-      else pending.resolve(message.result)
-      return
+  /** 解析一帧头部；返回 false 表示数据不足或已失败。 */
+  private readFrameHeader(): boolean {
+    if (this.inboundLength === 0) return false
+    const window = this.readInbound(
+      Math.min(this.inboundLength, MaxLspHeaderBytes + LspHeaderSeparatorBytes)
+    )
+    const boundary = window.indexOf(LspHeaderSeparator)
+    if (boundary < 0) {
+      if (this.inboundLength > MaxLspHeaderBytes)
+        this.fail(new AppError('INTERNAL', `${this.descriptor.label} LSP 响应头超过 8 KiB 上限。`))
+      return false
     }
 
-    if (message.method !== 'textDocument/publishDiagnostics') return
-    const params = objectValue(message.params)
+    const header = window.subarray(0, boundary).toString('ascii')
+    const match = /(?:^|\r\n)Content-Length:\s*(\d+)/iu.exec(header)
+    if (!match) {
+      this.fail(new AppError('INTERNAL', `${this.descriptor.label} LSP 响应缺少有效的 Content-Length。`))
+      return false
+    }
+    const size = Number(match[1])
+    if (!Number.isSafeInteger(size) || size > MaxLspMessageBytes) {
+      this.fail(new AppError('INTERNAL', `${this.descriptor.label} LSP 响应超过 16 MiB 上限。`))
+      return false
+    }
+    this.consumeInbound(boundary + LspHeaderSeparatorBytes)
+    this.pendingBodySize = size
+    return true
+  }
+
+  /** 读取分段缓冲前 size 个字节；调用方保证 `inboundLength >= size`。 */
+  private readInbound(size: number): Buffer {
+    const first = this.inbound[0]
+    if (first && first.length >= size) return first.subarray(0, size)
+
+    const parts: Buffer[] = []
+    let remaining = size
+    for (const chunk of this.inbound) {
+      if (remaining === 0) break
+      const take = Math.min(chunk.length, remaining)
+      parts.push(take === chunk.length ? chunk : chunk.subarray(0, take))
+      remaining -= take
+    }
+    return Buffer.concat(parts, size)
+  }
+
+  private consumeInbound(size: number): void {
+    let remaining = size
+    while (remaining > 0) {
+      const first = this.inbound[0]
+      if (!first) break
+      if (first.length > remaining) {
+        this.inbound[0] = first.subarray(remaining)
+        break
+      }
+      this.inbound.shift()
+      remaining -= first.length
+    }
+    this.inboundLength -= size
+  }
+
+  /**
+   * JSON-RPC 的分派判据是**有没有 method 字段**，不是有没有 id：服务端主动发来的请求
+   * （workspace/configuration、client/registerCapability 等）同样带 id。按 id 优先分派会把
+   * 服务端请求当成对客户端请求的回复——撞上 id 就用错误的值 resolve 掉自己的 Promise，
+   * 撞不上就静默丢弃、让对端一直等。
+   */
+  private handle(message: JsonRpcMessage): void {
+    if (typeof message.method !== 'string') {
+      this.handleResponse(message)
+      return
+    }
+    if (message.id === undefined || message.id === null) {
+      this.handleNotification(message.method, message.params)
+      return
+    }
+    this.handleServerRequest(message.id, message.method, message.params)
+  }
+
+  private handleResponse(message: JsonRpcMessage): void {
+    if (typeof message.id !== 'number') return
+    const pending = this.pending.get(message.id)
+    if (!pending) return
+    this.pending.delete(message.id)
+    clearTimeout(pending.timeout)
+    if (message.error)
+      pending.reject(new AppError('INTERNAL', `${this.descriptor.label}: ${message.error.message ?? '语言服务器请求失败。'}`))
+    else pending.resolve(message.result)
+  }
+
+  /**
+   * 服务端请求必须回复，哪怕是拒绝：沉默会让对端一直等（阻塞式的 workspace/configuration
+   * 会直接挂住初始化），而 MethodNotFound 是规格允许、对端知道怎么处理的答案。
+   */
+  private handleServerRequest(id: number | string, method: string, params: unknown): void {
+    const handled = this.serverRequestResult(method, params)
+    try {
+      this.send(handled
+        ? { jsonrpc: '2.0', id, result: handled.result }
+        : {
+            jsonrpc: '2.0',
+            id,
+            error: { code: JsonRpcMethodNotFound, message: `Unhandled request: ${method}` },
+          })
+    } catch {
+      // 服务器已经退出时回不了信；退出本身会由 exit 处理器报出来。
+    }
+  }
+
+  private serverRequestResult(method: string, params: unknown): Nullable<{ result: unknown }> {
+    switch (method) {
+      case 'workspace/configuration': {
+        // 宿主没有按 scope 的配置可给，逐项回 null 表示"用服务器默认值"。
+        const items = objectValue(params)?.['items']
+        return { result: (Array.isArray(items) ? items : []).map(() => null) }
+      }
+      case 'workspace/workspaceFolders':
+        return { result: [this.workspaceFolder()] }
+      case 'client/registerCapability':
+      case 'client/unregisterCapability':
+      case 'window/workDoneProgress/create':
+        return { result: null }
+      case 'window/showMessageRequest':
+        // 宿主没有承接该请求的弹窗，回 null 表示用户没有选择任何一项。
+        return { result: null }
+      default:
+        return null
+    }
+  }
+
+  private handleNotification(method: string, rawParams: unknown): void {
+    if (method !== 'textDocument/publishDiagnostics') return
+    const params = objectValue(rawParams)
     const uri = typeof params?.['uri'] === 'string' ? params['uri'] : null
     if (!uri) return
     const openVersion = this.documents.get(uri)?.version ?? 0
@@ -852,8 +1026,13 @@ export class ExternalLspClient {
     this.serverCapabilities = {}
     this.documents.clear()
     this.diagnostics.clear()
-    this.buffer = Buffer.alloc(0)
-    if (child) terminateExternalLspProcessTree(child.pid)
+    this.inbound.length = 0
+    this.inboundLength = 0
+    this.pendingBodySize = null
+    this.outbound.length = 0
+    this.outboundLength = 0
+    this.outboundPaused = false
+    if (child) void terminateExternalLspProcessTree(child.pid)
     for (const pending of this.pending.values()) {
       clearTimeout(pending.timeout)
       pending.reject(error)

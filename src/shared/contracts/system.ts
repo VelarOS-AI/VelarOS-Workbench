@@ -10,11 +10,16 @@ import type {
   ProjectGitLogEntry as WorkspaceGitLogEntry,
   ProjectGitLogOptions as WorkspaceGitLogOptions,
   ProjectGitRemoteAction as WorkspaceGitRemoteAction,
-  ProjectGitRemoteActionOptions as WorkspaceGitRemoteActionOptions,
+  ProjectGitRemoteActionOptions as ProjectWorkspaceGitRemoteActionOptions,
   ProjectGitRemoteActionResult as WorkspaceGitRemoteActionResult,
   ProjectGitRestoreResult as WorkspaceGitRestoreResult,
   ProjectGitStatusResult as WorkspaceGitStatusResult,
 } from '@velaros-ai/project/contracts'
+
+export interface WorkspaceGitRemoteActionOptions
+  extends ProjectWorkspaceGitRemoteActionOptions {
+  branch?: string
+}
 
 export type SystemDefaultEditorId =
   | 'velaros-light'
@@ -150,6 +155,7 @@ export interface SystemWorkspaceGitFileActionResult {
 export interface SystemWorkspaceGitActionRequest {
   sessionId: string
   action: WorkspaceGitRemoteAction
+  branch?: string
   githubToken?: string
   privateKeyPath?: string
   sshKeyPath?: string
@@ -240,7 +246,6 @@ export type {
   WorkspaceGitLogEntry,
   WorkspaceGitLogOptions,
   WorkspaceGitRemoteAction,
-  WorkspaceGitRemoteActionOptions,
   WorkspaceGitRemoteActionResult,
   WorkspaceGitStatusResult,
 }

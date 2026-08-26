@@ -33,13 +33,23 @@ import type { WorkbenchAgentEngineModelCatalog } from '@shared/workbenchAgentMod
 import type { WorkbenchChatProviderId } from '../../../plugins/agent-engines/identity'
 import styles from '../styles/workbenchPageStyles'
 
+import { StandaloneWorkbenchModelProviderPresets } from './standaloneWorkbenchModelCatalog'
 import {
-  updateStandaloneWorkbenchModelConfig,
+  selectStandaloneWorkbenchAgentModel,
   useStandaloneWorkbenchModelConfig,
 } from './standaloneWorkbenchModelConfig'
 import { workbenchMessage } from './workbenchMessageHost'
 
 const log = Log.tag('workbench-chat-adapter')
+
+const StandaloneModelSelectorProviders = StandaloneWorkbenchModelProviderPresets.map(
+  (provider) => ({
+    value: provider.id,
+    label: provider.label,
+    defaultModel: provider.defaultModel,
+    models: provider.models.map((model) => ({ value: model, label: model })),
+  })
+)
 
 interface StandaloneChatState {
   readonly providerId: WorkbenchChatProviderId
@@ -526,7 +536,7 @@ function StandaloneWorkbenchChatSessionSurface({
     if ((!text && draftFiles.length === 0) || isActiveChatRun(chat.status)) return
     if (
       providerId === 'workbench'
-      && (!modelConfig.provider.trim() || !modelConfig.model.trim() || !modelConfig.apiKey.trim())
+      && (!modelConfig.provider.trim() || !modelConfig.model.trim())
     ) {
       workbenchMessage.warning({
         title: t('workbench.chatModelMissingTitle'),
@@ -813,16 +823,9 @@ function StandaloneWorkbenchChatSessionSurface({
             label: t('chat.composerModelSection'),
             provider: modelConfig.provider,
             model: modelConfig.model,
-            providers: [
-              {
-                value: modelConfig.provider,
-                label: modelConfig.provider,
-                defaultModel: modelConfig.model,
-                models: [{ value: modelConfig.model, label: modelConfig.model }],
-              },
-            ],
+            providers: StandaloneModelSelectorProviders,
             onChange: (provider, model) =>
-              updateStandaloneWorkbenchModelConfig({ provider, model }),
+              selectStandaloneWorkbenchAgentModel(provider, model),
           }
         : engineCatalog?.available && engineCatalog.models.length > 0
           ? {

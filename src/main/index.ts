@@ -25,6 +25,7 @@ import { installWorkbenchEditorZoom } from './projects/WorkbenchEditorZoom'
 import { WorkbenchWindowManager } from './projects/WorkbenchWindowManager'
 import { registerWorkbenchResourcePluginIpc } from './resources/WorkbenchResourcePluginIpc'
 import { registerWorkbenchGitIpc } from './workspace/git/WorkbenchGitIpc'
+import { WorkbenchInlineCompletionGenerator } from './workspace/language/WorkbenchInlineCompletion'
 import { registerWorkbenchLanguageServiceIpc } from './workspace/language/WorkbenchLanguageServiceIpc'
 import { registerWorkbenchTerminalIpc } from './workspace/terminal/WorkbenchTerminalIpc'
 import { registerWorkbenchWatchIpc } from './workspace/watch/WorkbenchWatchIpc'
@@ -202,7 +203,10 @@ if (hasSingleInstanceLock) void app.whenReady().then(() => {
   const watchIpc = registerWorkbenchWatchIpc(providers.watch)
   const disposeWorkspaceIpc = registerWorkbenchWorkspaceIpc(providers.workspace)
 
-  registerWorkbenchLanguageServiceIpc(providers.language)
+  registerWorkbenchLanguageServiceIpc(
+    providers.language,
+    new WorkbenchInlineCompletionGenerator()
+  )
   windowManager = new WorkbenchWindowManager(dataRootDir, {
     createBrowserWindow: createWorkbenchWindow,
     onLastProjectClosed: () => app.quit(),

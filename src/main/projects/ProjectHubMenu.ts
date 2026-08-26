@@ -1,10 +1,11 @@
 /**
- * 应用菜单跟随项目状态：文件菜单提供新建 / 打开 / 最近项目 / 关闭项目，与起手页同一套动作面。
+ * 应用菜单与 macOS Dock 菜单跟随项目状态：文件菜单提供新建 / 打开 /
+ * 最近项目 / 关闭项目，Dock 从同一份最近项目投影打开或聚焦项目窗口。
  *
  * 「新建项目…」需要 renderer 收集项目名，走 menuCommand 发送到焦点窗口；关闭项目同样先让
  * renderer 完成未保存检查。其余动作直接驱动窗口管理器。状态变化与窗口聚焦都会重建菜单。
  */
-import { Menu, type MenuItemConstructorOptions } from 'electron'
+import { app, Menu, type MenuItemConstructorOptions } from 'electron'
 
 import { type WorkbenchRecentProject } from '../../shared/projectHub'
 
@@ -13,10 +14,30 @@ import type { WorkbenchWindowManager } from './WorkbenchWindowManager'
 export function installProjectHubMenu(windows: WorkbenchWindowManager): void {
   const rebuild = (): void => {
     Menu.setApplicationMenu(buildApplicationMenu(windows))
+    if (process.platform === 'darwin') {
+      app.dock?.setMenu(buildDockMenu(windows))
+    }
   }
 
   windows.onChanged(rebuild)
   rebuild()
+}
+
+function buildDockMenu(windows: WorkbenchWindowManager): Menu {
+  const recentProjects = windows.getFocusedState().recentProjects
+  return Menu.buildFromTemplate([
+    {
+      label: '最近项目',
+      submenu: buildRecentProjectItems(windows, recentProjects, 'new-window'),
+    },
+    { type: 'separator' },
+    {
+      label: '在新窗口打开项目…',
+      click: () => {
+        void windows.openProjectInNewWindowViaDialog(windows.getFocusedWindow())
+      },
+    },
+  ])
 }
 
 function buildApplicationMenu(windows: WorkbenchWindowManager): Menu {
@@ -101,7 +122,8 @@ function buildApplicationMenu(windows: WorkbenchWindowManager): Menu {
 
 function buildRecentProjectItems(
   windows: WorkbenchWindowManager,
-  recentProjects: WorkbenchRecentProject[]
+  recentProjects: WorkbenchRecentProject[],
+  disposition: 'focused-window' | 'new-window' = 'focused-window'
 ): MenuItemConstructorOptions[] {
   if (recentProjects.length === 0) return [{ label: '暂无最近项目', enabled: false }]
 
@@ -110,7 +132,9 @@ function buildRecentProjectItems(
     sublabel: project.path,
     enabled: !project.missing,
     click: () => {
-      void windows.openProjectPath(windows.getFocusedWindow()?.webContents ?? null, project.path)
+      void (disposition === 'new-window'
+        ? windows.openProjectPathInNewWindow(project.path)
+        : windows.openProjectPath(windows.getFocusedWindow()?.webContents ?? null, project.path))
     },
   }))
 }

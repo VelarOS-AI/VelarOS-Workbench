@@ -134,7 +134,7 @@ export function StandaloneWorkbenchApp(): ReactElement {
                 <WorkbenchChatProvider adapter={standaloneWorkbenchChatAdapter}>
                   <div className="workbench-external-project-drop-root">
                     {state.currentProject ? (
-                      <WorkbenchWorkspaceShell project={state.currentProject} />
+                      <WorkbenchWorkspaceShell project={state.currentProject} projectHubState={state} />
                     ) : (
                       <WorkbenchWelcomePage
                         state={state}

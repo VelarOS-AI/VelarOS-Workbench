@@ -7,6 +7,8 @@
  */
 import { ipcMain } from 'electron'
 
+import type { ModelSelection } from '@velaros-ai/model/contracts'
+
 import type {
   WorkbenchLanguageServiceCodeActionsRequest,
   WorkbenchLanguageServiceDiagnostic,
@@ -20,7 +22,10 @@ import type {
   WorkbenchLanguageServiceRequest,
 } from '@shared/contracts'
 
-import { WorkbenchLanguageChannels } from '../../../shared/workbenchLanguage'
+import {
+  type WorkbenchInlineCompletionBridgeRequest,
+  WorkbenchLanguageChannels,
+} from '../../../shared/workbenchLanguage'
 import {
   callWithEnvelope,
   hasStringFields,
@@ -31,9 +36,11 @@ import {
 } from '../ipcBoundary'
 
 import type { WorkbenchLanguageServiceWorkerClient } from './LanguageServiceWorkerClient'
+import type { WorkbenchInlineCompletionGenerator } from './WorkbenchInlineCompletion'
 
 export function registerWorkbenchLanguageServiceIpc(
-  client: WorkbenchLanguageServiceWorkerClient
+  client: WorkbenchLanguageServiceWorkerClient,
+  inlineCompletion: WorkbenchInlineCompletionGenerator
 ): void {
   ipcMain.handle(WorkbenchLanguageChannels.definition, (_event, request: unknown) =>
     callWithEnvelope(() => {
@@ -151,6 +158,37 @@ export function registerWorkbenchLanguageServiceIpc(
       return client.getCodeActions(parsed)
     })
   )
+
+  ipcMain.handle(WorkbenchLanguageChannels.inlineCompletion, (_event, request: unknown) =>
+    callWithEnvelope(() => {
+      const parsed = parseInlineCompletionRequest(request)
+      if (!parsed) return invalidRequest()
+
+      return inlineCompletion.generate(parsed)
+    })
+  )
+}
+
+function parseInlineCompletionRequest(
+  input: unknown
+): Nullable<WorkbenchInlineCompletionBridgeRequest> {
+  if (!hasStringFields(input, ['projectRoot', 'language', 'prefix', 'suffix'])) return null
+  const modelSelection = input['modelSelection']
+  if (!hasStringFields(modelSelection, ['provider', 'model', 'apiKey', 'baseURL'])) return null
+
+  return {
+    projectRoot: input['projectRoot'] as string,
+    language: input['language'] as string,
+    prefix: input['prefix'] as string,
+    suffix: input['suffix'] as string,
+    ...optionalString(input, 'path'),
+    modelSelection: {
+      provider: modelSelection['provider'] as ModelSelection['provider'],
+      model: modelSelection['model'] as string,
+      apiKey: modelSelection['apiKey'] as string,
+      baseURL: modelSelection['baseURL'] as string,
+    },
+  }
 }
 
 function parseRequest(input: unknown): Nullable<WorkbenchLanguageServiceRequest> {

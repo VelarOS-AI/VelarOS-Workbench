@@ -12,7 +12,6 @@ import {
   ArrowClockwiseIcon,
   CopyIcon,
   FilePlusIcon,
-  FolderOpenIcon,
   FolderPlusIcon,
   HammerIcon,
   MagnifyingGlassIcon,
@@ -40,11 +39,7 @@ import { Paragraph } from '@velaros-ai/ui/primitives/display/Paragraph'
 import { SearchField } from '@velaros-ai/ui/primitives/forms/SearchField'
 import { ScrollArea } from '@velaros-ai/ui/primitives/layout/ScrollArea'
 
-import type {
-  SystemWorkspaceGitSummary,
-  WorkbenchDirectoryEntry,
-  WorkbenchSearchEntriesResult,
-} from '@shared/contracts'
+import type { WorkbenchDirectoryEntry, WorkbenchSearchEntriesResult } from '@shared/contracts'
 
 import styles from '../../styles/workbenchPageStyles'
 import { requestScrollIntoView } from '../../support/scrollUtils'
@@ -104,27 +99,6 @@ export interface WorkbenchFilePanelHandlersProps {
   onBuildFile?: (path: string) => void
 }
 
-/**
- * 片4 前的过渡形态：desktop 的分支/提交控件（WorkspaceGitCommitControl）属 git 面，
- * 独立宿主在 git 服务落地前不随迁——variant/layout 先以字面量联合占位（值域同源），
- * 片4 复活控件时替换回组件导出的类型。
- */
-export type WorkspaceGitCommitControlVariant = 'branch-menu-actions' | 'inline-actions'
-export type WorkspaceGitCommitControlLayout = 'segmented' | 'pill'
-
-export interface WorkbenchFilePanelGitControlProps {
-  sessionId: string
-  summary: Nullable<SystemWorkspaceGitSummary>
-  onRefresh: () => Promise<void>
-  gitSshKeyPath?: string
-  hasRepository: boolean
-  hasUnsavedOpenTabs: boolean
-  variant?: WorkspaceGitCommitControlVariant
-  layout?: WorkspaceGitCommitControlLayout
-  onRepositoryChanged: () => void | Promise<void>
-  onInitializeRepository: () => Promise<void> | void
-}
-
 export function resolveWorkbenchEntryAbsolutePath(projectRoot: string, entryPath: string): string {
   return entryPath === ROOT_PATH
     ? projectRoot
@@ -135,7 +109,6 @@ interface FilePanelProps {
   tree: WorkbenchFilePanelTreeProps
   search: WorkbenchFilePanelSearchProps
   handlers: WorkbenchFilePanelHandlersProps
-  git?: WorkbenchFilePanelGitControlProps
 }
 
 export function FilePanel({
@@ -374,10 +347,7 @@ export function FilePanel({
         title={project.rootPath}
         onContextMenu={openRootContextMenu}
       >
-        <div className={styles.filePanelProjectIdentity}>
-          <FolderOpenIcon size={15} weight="duotone" />
-          <span>{project.name}</span>
-        </div>
+        <span className={styles.filePanelViewTitle}>{t('workbench.projectView')}</span>
         <IconButton
           variant="ghost"
           size="icon-sm"
