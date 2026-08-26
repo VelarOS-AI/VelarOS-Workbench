@@ -3,4 +3,4 @@ export type WorkbenchBottomTool = 'git' | 'problems' | 'run' | 'terminal'
 
 export type WorkbenchLeftTool = 'ai-changes' | 'commit' | 'issues' | 'project'
 
-export type WorkbenchRightToolWindow = 'chat'
+export type WorkbenchRightToolWindow = 'chat' | 'claude' | 'chatgpt'

@@ -2,6 +2,8 @@ export const WorkbenchKernelChannels = {
   getStatus: 'workbench-app:kernel:get-status',
   invoke: 'workbench-app:kernel:invoke',
   abortAgentExecution: 'workbench-app:kernel:abort-agent-execution',
+  resolveAgentInput: 'workbench-app:kernel:resolve-agent-input',
+  resolveAgentConfirmation: 'workbench-app:kernel:resolve-agent-confirmation',
   statusChanged: 'workbench-app:kernel:status-changed',
   agentExecution: 'workbench-app:kernel:agent-execution',
   backupChatHistory: 'workbench-app:kernel:backup-chat-history',
@@ -57,6 +59,17 @@ export interface WorkbenchKernelInvokeRequest {
 
 export interface WorkbenchAbortAgentExecutionRequest {
   executionId: string
+}
+
+export interface WorkbenchResolveAgentInputRequest {
+  sessionId: string
+  answer: string
+}
+
+export interface WorkbenchResolveAgentConfirmationRequest {
+  sessionId: string
+  approved: boolean
+  rejectionMessage?: string
 }
 
 export interface WorkbenchKernelInvocationError {
@@ -115,6 +128,10 @@ export interface WorkbenchKernelBridge {
   getStatus: () => Promise<WorkbenchKernelStatus>
   invoke: (request: WorkbenchKernelInvokeRequest) => Promise<WorkbenchKernelInvokeResult>
   abortAgentExecution: (request: WorkbenchAbortAgentExecutionRequest) => Promise<boolean>
+  resolveAgentInput: (request: WorkbenchResolveAgentInputRequest) => Promise<boolean>
+  resolveAgentConfirmation: (
+    request: WorkbenchResolveAgentConfirmationRequest
+  ) => Promise<boolean>
   onStatusChanged: (
     listener: (status: WorkbenchKernelStatus) => void
   ) => () => void

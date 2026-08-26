@@ -28,7 +28,9 @@ import {
 } from '@velaros-ai/ui/conversation/composer'
 
 import type { ChatMessage, ContentBlock, ToolCallBlock } from '@shared/contracts'
+import type { WorkbenchAgentEngineModelCatalog } from '@shared/workbenchAgentMods'
 
+import type { WorkbenchChatProviderId } from '../../../plugins/agent-engines/identity'
 import styles from '../styles/workbenchPageStyles'
 
 import {
@@ -40,11 +42,15 @@ import { workbenchMessage } from './workbenchMessageHost'
 const log = Log.tag('workbench-chat-adapter')
 
 interface StandaloneChatState {
+  readonly providerId: WorkbenchChatProviderId
   readonly projectRoot: string
   readonly sessionId: string
   readonly folderId: string
   readonly messages: readonly ChatMessage[]
   readonly status: WorkbenchChatSessionSnapshot['runtime']['status']
+  readonly awaitingInputQuestion: string | null
+  readonly awaitingConfirmationMessage: string | null
+  readonly awaitingConfirmationDetail: ConversationView['runtime']['awaitingConfirmationDetail']
   readonly lastRunStartedAt: number | null
   readonly lastRunFinishedAt: number | null
   readonly revision: number
@@ -60,8 +66,21 @@ interface AgentExecutionEnvelope {
   payload?: unknown
 }
 
+interface ActiveAgentExecution {
+  readonly executionId: string
+  readonly sessionCorrelationId: string
+  readonly sessionId: string
+  readonly projectRoot: string
+  readonly providerId: WorkbenchChatProviderId
+}
+
 const states = new Map<string, StandaloneChatState>()
+const inactiveStates = new Map<string, StandaloneChatState[]>()
+const stateUpdateTargets = new Map<string, string>()
 const listeners = new Set<() => void>()
+const activeAgentExecutions = new Map<string, ActiveAgentExecution>()
+const engineCatalogCache = new Map<string, WorkbenchAgentEngineModelCatalog>()
+const engineCatalogRequests = new Map<string, Promise<WorkbenchAgentEngineModelCatalog>>()
 let idSequence = 0
 
 function nextId(prefix: string): string {
@@ -74,66 +93,221 @@ function resolveCurrentFileLabel(path: string): string {
   return segments.at(-1) ?? path
 }
 
-function createState(projectRoot: string): StandaloneChatState {
+function stateKey(projectRoot: string, providerId: WorkbenchChatProviderId): string {
+  return `${providerId}\0${projectRoot.trim()}`
+}
+
+function createState(
+  projectRoot: string,
+  providerId: WorkbenchChatProviderId,
+  restoreStored = true
+): StandaloneChatState {
+  const id = nextId(`workbench-${providerId}`)
   const empty: StandaloneChatState = {
+    providerId,
     projectRoot,
-    sessionId: `workbench-chat:${encodeURIComponent(projectRoot)}`,
-    folderId: `workbench-folder:${encodeURIComponent(projectRoot)}`,
+    sessionId: id,
+    folderId: `folder-${id}`,
     messages: [],
     status: 'idle',
+    awaitingInputQuestion: null,
+    awaitingConfirmationMessage: null,
+    awaitingConfirmationDetail: null,
     lastRunStartedAt: null,
     lastRunFinishedAt: null,
     revision: 0,
   }
-  if (!projectRoot || typeof window === 'undefined') return empty
+  if (!restoreStored || !projectRoot || typeof window === 'undefined') return empty
   try {
-    const raw = window.localStorage.getItem(chatStorageKey(projectRoot))
+    const raw = window.localStorage.getItem(chatStorageKey(projectRoot, providerId))
+      ?? (providerId === 'workbench'
+        ? window.localStorage.getItem(legacyChatStorageKey(projectRoot))
+        : null)
     if (!raw) return empty
-    const stored = JSON.parse(raw) as Partial<StandaloneChatState>
-    if (!Array.isArray(stored.messages)) return empty
-    return {
-      ...empty,
-      messages: stored.messages.filter(isStoredChatMessage),
-      revision: typeof stored.revision === 'number' ? stored.revision : 0,
-      lastRunStartedAt: typeof stored.lastRunStartedAt === 'number'
-        ? stored.lastRunStartedAt
-        : null,
-      lastRunFinishedAt: typeof stored.lastRunFinishedAt === 'number'
-        ? stored.lastRunFinishedAt
-        : null,
-    }
+    const stored = JSON.parse(raw) as Record<string, unknown>
+    const storedSessions = stored.version === 2 && Array.isArray(stored.sessions)
+      ? stored.sessions
+      : [stored]
+    const restored = storedSessions
+      .map((candidate) => restoreStoredState(candidate, empty))
+      .filter((candidate): candidate is StandaloneChatState => candidate !== null)
+    if (restored.length === 0) return empty
+    const activeSessionId = typeof stored.activeSessionId === 'string'
+      ? stored.activeSessionId
+      : restored[0]!.sessionId
+    const active = restored.find((candidate) => candidate.sessionId === activeSessionId)
+      ?? restored[0]!
+    inactiveStates.set(
+      stateKey(projectRoot, providerId),
+      restored.filter((candidate) => candidate.sessionId !== active.sessionId)
+    )
+    return active
   } catch {
     return empty
   }
 }
 
-function getState(projectRoot: string): StandaloneChatState {
+function restoreStoredState(
+  value: unknown,
+  empty: StandaloneChatState
+): StandaloneChatState | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
+  const stored = value as Partial<StandaloneChatState>
+  if (!Array.isArray(stored.messages)) return null
+  return {
+    ...empty,
+    sessionId: typeof stored.sessionId === 'string' ? stored.sessionId : empty.sessionId,
+    folderId: typeof stored.folderId === 'string' ? stored.folderId : empty.folderId,
+    messages: stored.messages.filter(isStoredChatMessage),
+    revision: typeof stored.revision === 'number' ? stored.revision : 0,
+    lastRunStartedAt: typeof stored.lastRunStartedAt === 'number'
+      ? stored.lastRunStartedAt
+      : null,
+    lastRunFinishedAt: typeof stored.lastRunFinishedAt === 'number'
+      ? stored.lastRunFinishedAt
+      : null,
+  }
+}
+
+function useAgentEngineCatalog(
+  providerId: WorkbenchChatProviderId
+): WorkbenchAgentEngineModelCatalog | null {
+  const [catalogRevision, setCatalogRevision] = useState(0)
+  const [catalog, setCatalog] = useState<WorkbenchAgentEngineModelCatalog | null>(() =>
+    providerId === 'workbench' ? null : engineCatalogCache.get(providerId) ?? null
+  )
+  useEffect(() => window.velarosWorkbenchAgentMods.onChanged(() => {
+    engineCatalogCache.delete('claude-code')
+    engineCatalogCache.delete('codex')
+    engineCatalogRequests.delete('claude-code')
+    engineCatalogRequests.delete('codex')
+    setCatalog(null)
+    setCatalogRevision((revision) => revision + 1)
+  }), [])
+  useEffect(() => {
+    if (providerId === 'workbench') {
+      setCatalog(null)
+      return
+    }
+    const cached = engineCatalogCache.get(providerId)
+    if (cached) {
+      setCatalog(cached)
+      return
+    }
+    const request = engineCatalogRequests.get(providerId)
+      ?? window.velarosWorkbenchAgentMods.listAgentEngineModels(providerId).catch((error) => ({
+        engineId: providerId,
+        available: false,
+        reason: error instanceof Error ? error.message : String(error),
+        models: [],
+      }))
+    engineCatalogRequests.set(providerId, request)
+    let cancelled = false
+    void request.then((next) => {
+      engineCatalogCache.set(providerId, next)
+      engineCatalogRequests.delete(providerId)
+      if (!cancelled) setCatalog(next)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [catalogRevision, providerId])
+  return catalog
+}
+
+function getState(
+  projectRoot: string,
+  providerId: WorkbenchChatProviderId
+): StandaloneChatState {
   const normalized = projectRoot.trim()
-  const existing = states.get(normalized)
+  const key = stateKey(normalized, providerId)
+  const existing = states.get(key)
   if (existing) return existing
-  const created = createState(normalized)
-  states.set(normalized, created)
+  const created = createState(normalized, providerId)
+  states.set(key, created)
   return created
 }
 
 function updateState(
   projectRoot: string,
+  providerId: WorkbenchChatProviderId,
   updater: (state: StandaloneChatState) => StandaloneChatState
 ): void {
-  const next = updater(getState(projectRoot))
-  states.set(projectRoot, next)
+  const key = stateKey(projectRoot, providerId)
+  const active = getState(projectRoot, providerId)
+  const targetSessionId = stateUpdateTargets.get(key) ?? active.sessionId
+  if (targetSessionId !== active.sessionId) {
+    const inactive = inactiveStates.get(key) ?? []
+    const targetIndex = inactive.findIndex((candidate) => candidate.sessionId === targetSessionId)
+    if (targetIndex < 0) return
+    const nextInactive = [...inactive]
+    const next = updater(inactive[targetIndex]!)
+    nextInactive[targetIndex] = next
+    inactiveStates.set(key, nextInactive)
+    persistState(active)
+    for (const listener of listeners) listener()
+    return
+  }
+  const next = updater(active)
+  states.set(key, next)
   persistState(next)
   for (const listener of listeners) listener()
 }
 
-function useStandaloneChatState(projectRoot: string): StandaloneChatState {
+function withStateUpdateTarget(
+  projectRoot: string,
+  providerId: WorkbenchChatProviderId,
+  sessionId: string,
+  action: () => void
+): void {
+  const key = stateKey(projectRoot, providerId)
+  const previous = stateUpdateTargets.get(key)
+  stateUpdateTargets.set(key, sessionId)
+  try {
+    action()
+  } finally {
+    if (previous) stateUpdateTargets.set(key, previous)
+    else stateUpdateTargets.delete(key)
+  }
+}
+
+function readAllStates(
+  projectRoot: string,
+  providerId: WorkbenchChatProviderId
+): readonly StandaloneChatState[] {
+  const active = getState(projectRoot, providerId)
+  return [active, ...(inactiveStates.get(stateKey(projectRoot, providerId)) ?? [])]
+}
+
+function activateState(
+  projectRoot: string,
+  providerId: WorkbenchChatProviderId,
+  sessionId: string
+): boolean {
+  const key = stateKey(projectRoot, providerId)
+  const active = getState(projectRoot, providerId)
+  if (active.sessionId === sessionId) return true
+  const inactive = inactiveStates.get(key) ?? []
+  const next = inactive.find((candidate) => candidate.sessionId === sessionId)
+  if (!next) return false
+  states.set(key, next)
+  inactiveStates.set(key, [active, ...inactive.filter((candidate) => candidate !== next)])
+  persistState(next)
+  for (const listener of listeners) listener()
+  return true
+}
+
+function useStandaloneChatState(
+  projectRoot: string,
+  providerId: WorkbenchChatProviderId
+): StandaloneChatState {
   return useSyncExternalStore(
     (listener) => {
       listeners.add(listener)
       return () => listeners.delete(listener)
     },
-    () => getState(projectRoot),
-    () => getState(projectRoot)
+    () => getState(projectRoot, providerId),
+    () => getState(projectRoot, providerId)
   )
 }
 
@@ -158,39 +332,45 @@ function toSnapshot(state: StandaloneChatState): WorkbenchChatSessionSnapshot {
   }
 }
 
-function useStandaloneProjectRuntime(projectRoot: Nullable<string>): WorkbenchChatProjectRuntime {
+function useStandaloneProjectRuntime(
+  projectRoot: Nullable<string>,
+  providerId: WorkbenchChatProviderId = 'workbench'
+): WorkbenchChatProjectRuntime {
   const normalizedRoot = projectRoot?.trim() ?? ''
-  const state = useStandaloneChatState(normalizedRoot)
-  const snapshot = toSnapshot(state)
-  const member = {
-    itemId: state.sessionId,
-    memberSessionId: state.sessionId,
-    title: readStandaloneChatTitle(state),
-    workspaceTitle: '',
-    workspaceRoot: state.projectRoot,
-    updatedAt: state.lastRunFinishedAt ?? state.lastRunStartedAt ?? 0,
-    isEmpty: state.messages.length === 0,
-    isStreaming: state.status === 'running',
-  }
-  const group = {
-    folderId: state.folderId,
-    title: readStandaloneChatTitle(state),
-    kind: 'chat' as const,
-    surfaceScope: {
-      surface: 'workbench' as const,
-      projectRoot: state.projectRoot,
-    },
-    archivedAt: null,
-    updatedAt: member.updatedAt,
-    memberSessionIds: [state.sessionId],
-    activeMemberItemId: state.sessionId,
-    members: [member],
-  }
+  const state = useStandaloneChatState(normalizedRoot, providerId)
+  const allStates = readAllStates(normalizedRoot, providerId)
+  const snapshots = allStates.map(toSnapshot)
+  const groups = allStates.map((candidate) => {
+    const member = {
+      itemId: candidate.sessionId,
+      memberSessionId: candidate.sessionId,
+      title: readStandaloneChatTitle(candidate),
+      workspaceTitle: '',
+      workspaceRoot: candidate.projectRoot,
+      updatedAt: candidate.lastRunFinishedAt ?? candidate.lastRunStartedAt ?? 0,
+      isEmpty: candidate.messages.length === 0,
+      isStreaming: isActiveChatRun(candidate.status),
+    }
+    return {
+      folderId: candidate.folderId,
+      title: readStandaloneChatTitle(candidate),
+      kind: 'chat' as const,
+      surfaceScope: {
+        surface: 'workbench' as const,
+        projectRoot: candidate.projectRoot,
+      },
+      archivedAt: null,
+      updatedAt: member.updatedAt,
+      memberSessionIds: [candidate.sessionId],
+      activeMemberItemId: candidate.sessionId,
+      members: [member],
+    }
+  })
 
   return {
     projectRoot,
-    currentSession: snapshot,
-    sessions: [snapshot],
+    currentSession: toSnapshot(state),
+    sessions: snapshots,
     conversationVersion: state.revision,
     browserActivationToken: null,
     sessionList: {
@@ -198,33 +378,63 @@ function useStandaloneProjectRuntime(projectRoot: Nullable<string>): WorkbenchCh
       activeSessionId: state.folderId,
       deletingSessionId: null,
       diskSessionHydrated: true,
-      groups: normalizedRoot ? [group] : [],
+      groups: normalizedRoot ? groups : [],
       archiveGroups: [],
     },
     actions: {
       addProjectSession: async () => {
-        updateState(normalizedRoot, () => createState(normalizedRoot))
+        const key = stateKey(normalizedRoot, providerId)
+        const active = getState(normalizedRoot, providerId)
+        const next = createState(normalizedRoot, providerId, false)
+        inactiveStates.set(key, [active, ...(inactiveStates.get(key) ?? [])])
+        states.set(key, next)
+        persistState(next)
+        for (const listener of listeners) listener()
         return true
       },
-      archiveSession: async () => {
-        updateState(normalizedRoot, () => createState(normalizedRoot))
+      archiveSession: async (folderId) => {
+        const key = stateKey(normalizedRoot, providerId)
+        const active = getState(normalizedRoot, providerId)
+        const inactive = inactiveStates.get(key) ?? []
+        const target = [active, ...inactive].find((candidate) => candidate.folderId === folderId)
+        if (!target || isActiveChatRun(target.status)) return
+        if (target.sessionId === active.sessionId) {
+          const [replacement, ...remaining] = inactive
+          const next = replacement ?? createState(normalizedRoot, providerId, false)
+          states.set(key, next)
+          inactiveStates.set(key, remaining)
+          persistState(next)
+        } else {
+          inactiveStates.set(
+            key,
+            inactive.filter((candidate) => candidate.sessionId !== target.sessionId)
+          )
+          persistState(active)
+        }
+        for (const listener of listeners) listener()
       },
-      selectSession: () => undefined,
-      startProjectChat: () => state.folderId,
+      selectSession: (_folderId, memberSessionId) => {
+        activateState(normalizedRoot, providerId, memberSessionId)
+      },
+      startProjectChat: () => getState(normalizedRoot, providerId).folderId,
     },
   }
 }
 
 function StandaloneWorkbenchChatSessionSurface({
+  providerId,
   projectRoot,
   currentFilePath,
 }: {
+  providerId: WorkbenchChatProviderId
   projectRoot: string
   currentFilePath: Nullable<string>
 }): ReactElement {
-  const chat = useStandaloneChatState(projectRoot)
+  const chat = useStandaloneChatState(projectRoot, providerId)
   const { t } = useWorkbenchI18n()
   const modelConfig = useStandaloneWorkbenchModelConfig()
+  const engineCatalog = useAgentEngineCatalog(providerId)
+  const [engineModel, setEngineModel] = useState(() => readStoredEngineModel(providerId))
   const [prompt, setPrompt] = useState('')
   const [files, setFiles] = useState<File[]>([])
   const [includedCurrentFilePath, setIncludedCurrentFilePath] =
@@ -234,14 +444,22 @@ function StandaloneWorkbenchChatSessionSurface({
   const [followLocked, setFollowLocked] = useState(true)
   const [showThinkingProcess, setShowThinkingProcess] = useState(true)
   const scrollRef = useRef<HTMLDivElement>(null)
-  const activeExecutionRef = useRef<{
-    executionId: string
-    sessionCorrelationId: string
-  } | null>(null)
 
   useEffect(() => {
     setIncludedCurrentFilePath(currentFilePath)
   }, [currentFilePath])
+
+  useEffect(() => {
+    if (!engineCatalog?.available || engineCatalog.models.length === 0) return
+    const selected = engineCatalog.models.some((model) => model.value === engineModel)
+      ? engineModel
+      : engineCatalog.models.find((model) => model.isDefault)?.value
+        ?? engineCatalog.models[0]?.value
+        ?? ''
+    if (!selected || selected === engineModel) return
+    setEngineModel(selected)
+    storeEngineModel(providerId, selected)
+  }, [engineCatalog, engineModel, providerId])
 
   useEffect(() =>
     window.velarosWorkbenchKernel.onAgentExecution((rawEnvelope) => {
@@ -249,33 +467,54 @@ function StandaloneWorkbenchChatSessionSurface({
       if (
         envelope.protocolVersion !== AgentCapabilityProtocolVersion
         || envelope.sourceProductId !== 'velaros.workbench'
-        || envelope.sourceSessionId !== chat.sessionId
       ) return
-      const activeExecution = activeExecutionRef.current
+      const executionId = typeof envelope.executionId === 'string'
+        ? envelope.executionId
+        : null
+      const activeExecution = executionId
+        ? activeAgentExecutions.get(executionId)
+        : null
       if (
         !activeExecution
-        || envelope.executionId !== activeExecution.executionId
+        || envelope.sourceSessionId !== activeExecution.sessionId
         || envelope.sessionCorrelationId !== activeExecution.sessionCorrelationId
       ) return
-      applyAgentStreamEvent(projectRoot, envelope)
-      const terminal = readAgentTerminalEvent(envelope)
-      if (terminal?.status === 'completed') {
-        finishRun(projectRoot, 'completed')
-        activeExecutionRef.current = null
-      } else if (terminal?.status === 'aborted') {
-        finishRun(projectRoot, 'aborted')
-        activeExecutionRef.current = null
-      } else if (terminal?.status === 'failed') {
-        finishWithError(
-          projectRoot,
-          terminal.message ?? 'Agent execution failed.'
-        )
-        activeExecutionRef.current = null
-      }
-    }), [chat.sessionId, projectRoot])
+      withStateUpdateTarget(
+        activeExecution.projectRoot,
+        activeExecution.providerId,
+        activeExecution.sessionId,
+        () => {
+          applyAgentStreamEvent(
+            activeExecution.projectRoot,
+            activeExecution.providerId,
+            envelope
+          )
+          applyAgentRuntimeEvent(
+            activeExecution.projectRoot,
+            activeExecution.providerId,
+            envelope
+          )
+          const terminal = readAgentTerminalEvent(envelope)
+          if (terminal?.status === 'completed') {
+            finishRun(activeExecution.projectRoot, activeExecution.providerId, 'completed')
+            activeAgentExecutions.delete(activeExecution.executionId)
+          } else if (terminal?.status === 'aborted') {
+            finishRun(activeExecution.projectRoot, activeExecution.providerId, 'aborted')
+            activeAgentExecutions.delete(activeExecution.executionId)
+          } else if (terminal?.status === 'failed') {
+            finishWithError(
+              activeExecution.projectRoot,
+              activeExecution.providerId,
+              terminal.message ?? 'Agent execution failed.'
+            )
+            activeAgentExecutions.delete(activeExecution.executionId)
+          }
+        }
+      )
+    }), [])
 
   async function stop(): Promise<void> {
-    const activeExecution = activeExecutionRef.current
+    const activeExecution = findActiveExecution(projectRoot, providerId, chat.sessionId)
     if (!activeExecution) return
     await window.velarosWorkbenchKernel.abortAgentExecution({
       executionId: activeExecution.executionId,
@@ -284,14 +523,39 @@ function StandaloneWorkbenchChatSessionSurface({
 
   async function submit(draftValue = prompt, draftFiles = files): Promise<void> {
     const text = draftValue.trim()
-    if ((!text && draftFiles.length === 0) || chat.status === 'running') return
-    if (!modelConfig.provider.trim() || !modelConfig.model.trim() || !modelConfig.apiKey.trim()) {
+    if ((!text && draftFiles.length === 0) || isActiveChatRun(chat.status)) return
+    if (
+      providerId === 'workbench'
+      && (!modelConfig.provider.trim() || !modelConfig.model.trim() || !modelConfig.apiKey.trim())
+    ) {
       workbenchMessage.warning({
         title: t('workbench.chatModelMissingTitle'),
         description: t('workbench.chatModelMissingDescription'),
       })
       return
     }
+    if (providerId !== 'workbench' && !engineCatalog) {
+      workbenchMessage.warning({
+        title: t('workbench.chatEngineLoadingTitle', {
+          engine: providerId === 'claude-code' ? 'Claude Code' : 'ChatGPT / Codex',
+        }),
+        description: t('workbench.chatEngineLoadingDescription'),
+      })
+      return
+    }
+    if (providerId !== 'workbench' && engineCatalog && !engineCatalog.available) {
+      workbenchMessage.warning({
+        title: t('workbench.chatEngineUnavailableTitle', {
+          engine: providerId === 'claude-code' ? 'Claude Code' : 'ChatGPT / Codex',
+        }),
+        description: engineCatalog.reason ?? t('workbench.chatEngineUnavailableDescription'),
+      })
+      return
+    }
+    const attachmentContext = await buildAttachmentContext(draftFiles)
+    const currentFileContext = includedCurrentFilePath
+      ? `Current Workbench file: ${includedCurrentFilePath}`
+      : ''
     setPrompt('')
     setFiles([])
     const userMessage = createTextMessage('user', text || draftFiles.map((file) => file.name).join(', '))
@@ -306,10 +570,13 @@ function StandaloneWorkbenchChatSessionSurface({
     const submittedMessage = attachmentMetadata.length > 0
       ? { ...userMessage, attachments: attachmentMetadata }
       : userMessage
-    updateState(projectRoot, (state) => ({
+    updateState(projectRoot, providerId, (state) => ({
       ...state,
       messages: [...state.messages, submittedMessage],
       status: 'running',
+      awaitingInputQuestion: null,
+      awaitingConfirmationMessage: null,
+      awaitingConfirmationDetail: null,
       lastRunStartedAt: Date.now(),
       lastRunFinishedAt: null,
       revision: state.revision + 1,
@@ -317,10 +584,17 @@ function StandaloneWorkbenchChatSessionSurface({
 
     // P6：模型运行时已在本进程（BYOK 选择直接进 Agent 执行栈），不再有
     // `model.supports-provider` 这种远端预检——provider 不认识时由执行本身报错。
-    const latest = getState(projectRoot)
+    const latest = getState(projectRoot, providerId)
     const executionId = nextId('workbench-execution')
     const sessionCorrelationId = nextId('workbench-correlation')
-    activeExecutionRef.current = { executionId, sessionCorrelationId }
+    const activeExecution: ActiveAgentExecution = {
+      executionId,
+      sessionCorrelationId,
+      sessionId: latest.sessionId,
+      projectRoot,
+      providerId,
+    }
+    activeAgentExecutions.set(executionId, activeExecution)
     const result = await window.velarosWorkbenchKernel.invoke({
       route: 'agent.execute',
       input: {
@@ -349,15 +623,25 @@ function StandaloneWorkbenchChatSessionSurface({
                   .map((attachment) => `Attachment: ${attachment.name} (${attachment.mediaType})`)
                   .join('\n')]
               : []),
+            ...(message.id === submittedMessage.id
+              ? [currentFileContext, attachmentContext].filter(Boolean)
+              : []),
           ].filter(Boolean).join('\n\n'),
         })),
         config: {
-          modelSelection: {
-            provider: modelConfig.provider.trim(),
-            model: modelConfig.model.trim(),
-            apiKey: modelConfig.apiKey,
-            baseURL: modelConfig.baseURL.trim(),
-          },
+          ...(providerId === 'workbench'
+            ? {
+              modelSelection: {
+                provider: modelConfig.provider.trim(),
+                model: modelConfig.model.trim(),
+                apiKey: modelConfig.apiKey,
+                baseURL: modelConfig.baseURL.trim(),
+              },
+            }
+            : {
+                engineId: providerId,
+                ...(engineModel ? { model: engineModel } : {}),
+              }),
           executionModes: [
             ...(goalMode ? ['goal' as const] : []),
             ...(planMode ? ['plan' as const] : []),
@@ -366,33 +650,40 @@ function StandaloneWorkbenchChatSessionSurface({
       },
     })
     if (!result.ok) {
-      const executionStillActive =
-        activeExecutionRef.current?.executionId === executionId
-      activeExecutionRef.current = null
-      if (executionStillActive) finishWithError(projectRoot, result.error.message)
+      const executionStillActive = activeAgentExecutions.delete(executionId)
+      if (executionStillActive) {
+        withStateUpdateTarget(projectRoot, providerId, activeExecution.sessionId, () => {
+          finishWithError(projectRoot, providerId, result.error.message)
+        })
+      }
       return
     }
 
-    const executionStillActive =
-      activeExecutionRef.current?.executionId === executionId
-    activeExecutionRef.current = null
+    const executionStillActive = activeAgentExecutions.delete(executionId)
     if (!executionStillActive) return
     if (readFinalAgentStatus(result.output) === 'aborted') {
-      finishRun(projectRoot, 'aborted')
+      withStateUpdateTarget(projectRoot, providerId, activeExecution.sessionId, () => {
+        finishRun(projectRoot, providerId, 'aborted')
+      })
       return
     }
-    updateState(projectRoot, (state) => ({
-      ...state,
-      messages: hasAssistantReply(state.messages)
-        ? state.messages
-        : [...state.messages, createTextMessage(
-            'assistant',
-            readFinalAgentText(result.output) ?? 'Run completed without a text response.'
-          )],
-      status: 'completed',
-      lastRunFinishedAt: Date.now(),
-      revision: state.revision + 1,
-    }))
+    withStateUpdateTarget(projectRoot, providerId, activeExecution.sessionId, () => {
+      updateState(projectRoot, providerId, (state) => ({
+        ...state,
+        messages: hasAssistantReply(state.messages)
+          ? state.messages
+          : [...state.messages, createTextMessage(
+              'assistant',
+              readFinalAgentText(result.output) ?? 'Run completed without a text response.'
+            )],
+        status: 'completed',
+        awaitingInputQuestion: null,
+        awaitingConfirmationMessage: null,
+        awaitingConfirmationDetail: null,
+        lastRunFinishedAt: Date.now(),
+        revision: state.revision + 1,
+      }))
+    })
   }
 
   const lastMessage = chat.messages.at(-1)
@@ -402,7 +693,7 @@ function StandaloneWorkbenchChatSessionSurface({
         .map((block) => block.text)
         .join('\n')
     : null
-  const activeAssistantMessage = chat.status === 'running' && lastMessage?.role === 'assistant'
+  const activeAssistantMessage = isActiveChatRun(chat.status) && lastMessage?.role === 'assistant'
     ? lastMessage
     : null
   const completedTurns = chat.messages.filter((message) => message.role === 'user').length
@@ -439,23 +730,25 @@ function StandaloneWorkbenchChatSessionSurface({
       runtime: {
         status: chat.status,
         teamPhase: null,
-        activeTurn: chat.status === 'running' ? completedTurns : null,
+        activeTurn: isActiveChatRun(chat.status) ? completedTurns : null,
         completedTurns,
         lastError,
         connectionRetryAttempt: null,
         connectionRetryMaxAttempts: null,
         lastRunStartedAt: chat.lastRunStartedAt,
-        awaitingConfirmationMessage: null,
-        awaitingInputQuestion: null,
+        awaitingConfirmationMessage: chat.awaitingConfirmationMessage,
+        awaitingInputQuestion: chat.awaitingInputQuestion,
         conversationCards: [],
         stickyDockItems: [],
         awaitingConfirmationUserActionCards: [],
-        awaitingConfirmationExecutionId: null,
-        awaitingConfirmationDetail: null,
+        awaitingConfirmationExecutionId: chat.awaitingConfirmationMessage
+          ? findActiveExecution(projectRoot, providerId, chat.sessionId)?.executionId ?? null
+          : null,
+        awaitingConfirmationDetail: chat.awaitingConfirmationDetail,
         lastRunFinishedAt: chat.lastRunFinishedAt,
         usageTelemetry: [],
       },
-      isStreaming: chat.status === 'running',
+      isStreaming: isActiveChatRun(chat.status),
       streamingAssistantMessageId: activeAssistantMessage?.id,
       hasStreamingThinkingBlock: false,
       runningLabel: t('chat.running'),
@@ -466,6 +759,9 @@ function StandaloneWorkbenchChatSessionSurface({
       activeAssistantMessage?.id,
       chat.lastRunFinishedAt,
       chat.lastRunStartedAt,
+      chat.awaitingInputQuestion,
+      chat.awaitingConfirmationDetail,
+      chat.awaitingConfirmationMessage,
       chat.messages,
       chat.sessionId,
       chat.status,
@@ -484,7 +780,7 @@ function StandaloneWorkbenchChatSessionSurface({
           placeholder: currentFilePath
             ? t('workbench.chatAskAboutFile', { path: currentFilePath })
             : t('workbench.chatPlaceholder'),
-          disabled: chat.status === 'running',
+          disabled: isActiveChatRun(chat.status),
           onValueChange: setPrompt,
           onSend: (draft) => submit(draft?.value ?? prompt, draft?.files ?? files),
         },
@@ -507,26 +803,60 @@ function StandaloneWorkbenchChatSessionSurface({
           onDismissWorkbenchCurrentFile: () => setIncludedCurrentFilePath(null),
         },
         streaming: {
-          isStreaming: chat.status === 'running',
+          isStreaming: isActiveChatRun(chat.status),
           canStop: true,
           onStop: stop,
         },
       },
-      modelSelector: {
-        label: t('chat.composerModelSection'),
-        provider: modelConfig.provider,
-        model: modelConfig.model,
-        providers: [
-          {
-            value: modelConfig.provider,
-            label: modelConfig.provider,
-            defaultModel: modelConfig.model,
-            models: [{ value: modelConfig.model, label: modelConfig.model }],
-          },
-        ],
-        onChange: (provider, model) =>
-          updateStandaloneWorkbenchModelConfig({ provider, model }),
-      },
+      modelSelector: providerId === 'workbench'
+        ? {
+            label: t('chat.composerModelSection'),
+            provider: modelConfig.provider,
+            model: modelConfig.model,
+            providers: [
+              {
+                value: modelConfig.provider,
+                label: modelConfig.provider,
+                defaultModel: modelConfig.model,
+                models: [{ value: modelConfig.model, label: modelConfig.model }],
+              },
+            ],
+            onChange: (provider, model) =>
+              updateStandaloneWorkbenchModelConfig({ provider, model }),
+          }
+        : engineCatalog?.available && engineCatalog.models.length > 0
+          ? {
+              label: t('chat.composerModelSection'),
+              hint: providerId === 'claude-code'
+                ? t('workbench.chatEngineCatalogClaude')
+                : t('workbench.chatEngineCatalogCodex'),
+              provider: providerId,
+              model: engineModel,
+              providers: [{
+                value: providerId,
+                label: providerId === 'claude-code' ? 'Claude Code' : 'ChatGPT / Codex',
+                defaultModel: engineCatalog.models.find((model) => model.isDefault)?.value
+                  ?? engineCatalog.models[0]!.value,
+                models: engineCatalog.models.map((model) => ({
+                  value: model.value,
+                  label: model.label,
+                  ...(model.description ? { description: model.description } : {}),
+                })),
+              }],
+              onChange: (_provider, model) => {
+                setEngineModel(model)
+                storeEngineModel(providerId, model)
+              },
+            }
+          : undefined,
+      ...(providerId !== 'workbench' && (!engineCatalog || !engineCatalog.available)
+        ? {
+            modelRunSummary: {
+              primaryLabel: providerId === 'claude-code' ? 'Claude Code' : 'ChatGPT / Codex',
+              secondaryLabel: engineCatalog?.reason ?? t('workbench.chatEngineLoadingModels'),
+            },
+          }
+        : {}),
     }),
     [
       chat.sessionId,
@@ -534,10 +864,13 @@ function StandaloneWorkbenchChatSessionSurface({
       files,
       goalMode,
       includedCurrentFilePath,
+      engineCatalog,
+      engineModel,
       modelConfig.model,
       modelConfig.provider,
       planMode,
       prompt,
+      providerId,
       showThinkingProcess,
       t,
     ]
@@ -587,10 +920,55 @@ function StandaloneWorkbenchChatSessionSurface({
           </div>
         ) : undefined}
         variant="side"
+        onSubmitInput={async (answer) => {
+          const accepted = await window.velarosWorkbenchKernel.resolveAgentInput({
+            sessionId: chat.sessionId,
+            answer,
+          })
+          if (!accepted) return
+          updateState(projectRoot, providerId, (state) => ({
+            ...state,
+            status: 'running',
+            awaitingInputQuestion: null,
+            awaitingConfirmationMessage: null,
+            awaitingConfirmationDetail: null,
+            revision: state.revision + 1,
+          }))
+        }}
+        onResolveConfirmation={async (approved, rejectionMessage) => {
+          const accepted = await window.velarosWorkbenchKernel.resolveAgentConfirmation({
+            sessionId: chat.sessionId,
+            approved,
+            ...(rejectionMessage?.trim() ? { rejectionMessage } : {}),
+          })
+          if (!accepted) return
+          updateState(projectRoot, providerId, (state) => ({
+            ...state,
+            status: 'running',
+            awaitingConfirmationMessage: null,
+            awaitingConfirmationDetail: null,
+            revision: state.revision + 1,
+          }))
+        }}
         onFollowLockedChange={setFollowLocked}
       />
     </ChatThinkingVisibilityProvider>
   )
+}
+
+function findActiveExecution(
+  projectRoot: string,
+  providerId: WorkbenchChatProviderId,
+  sessionId?: string
+): ActiveAgentExecution | null {
+  for (const execution of activeAgentExecutions.values()) {
+    if (
+      execution.projectRoot === projectRoot
+      && execution.providerId === providerId
+      && (!sessionId || execution.sessionId === sessionId)
+    ) return execution
+  }
+  return null
 }
 
 function readStandaloneChatTitle(state: StandaloneChatState): string {
@@ -604,25 +982,33 @@ function readStandaloneChatTitle(state: StandaloneChatState): string {
   return title.length > 36 ? `${title.slice(0, 36)}…` : title
 }
 
-function appendAssistantText(projectRoot: string, text: string): void {
-  updateAssistantBlocks(projectRoot, (blocks) => {
+function appendAssistantText(
+  projectRoot: string,
+  providerId: WorkbenchChatProviderId,
+  text: string
+): void {
+  updateAssistantBlocks(projectRoot, providerId, (blocks) => {
     const last = blocks.at(-1)
     if (last?.type !== 'text') return [...blocks, { type: 'text', text }]
     return [...blocks.slice(0, -1), { ...last, text: last.text + text }]
   })
 }
 
-function applyAgentStreamEvent(projectRoot: string, record: AgentExecutionEnvelope): void {
+function applyAgentStreamEvent(
+  projectRoot: string,
+  providerId: WorkbenchChatProviderId,
+  record: AgentExecutionEnvelope
+): void {
   if (record.channel !== 'agent') return
   const event = readAgentEventPayload(record)
   if (!event) return
   if (event.type === 'text-delta' && typeof event.text === 'string') {
-    appendAssistantText(projectRoot, event.text)
+    appendAssistantText(projectRoot, providerId, event.text)
     return
   }
   if (event.type === 'reasoning-delta' && typeof event.text === 'string') {
     const streamId = typeof event.id === 'string' ? event.id : 'reasoning'
-    updateAssistantBlocks(projectRoot, (blocks) => {
+    updateAssistantBlocks(projectRoot, providerId, (blocks) => {
       const index = blocks.findLastIndex(
         (block) => block.type === 'thinking' && block.streamId === streamId
       )
@@ -642,7 +1028,7 @@ function applyAgentStreamEvent(projectRoot: string, record: AgentExecutionEnvelo
   ) {
     const toolCallId = event.toolCallId
     const toolName = event.toolName
-    updateAssistantBlocks(projectRoot, (blocks) => [
+    updateAssistantBlocks(projectRoot, providerId, (blocks) => [
       ...blocks.filter(
         (block) => block.type !== 'tool-call' || block.toolCallId !== toolCallId
       ),
@@ -659,14 +1045,14 @@ function applyAgentStreamEvent(projectRoot: string, record: AgentExecutionEnvelo
     return
   }
   if (event.type === 'tool-progress' && typeof event.toolCallId === 'string') {
-    updateToolCallBlock(projectRoot, event.toolCallId, (block) => ({
+    updateToolCallBlock(projectRoot, providerId, event.toolCallId, (block) => ({
       ...block,
       progress: `${block.progress ?? ''}${typeof event.chunk === 'string' ? event.chunk : ''}`,
     }))
     return
   }
   if (event.type === 'tool-metadata' && typeof event.toolCallId === 'string') {
-    updateToolCallBlock(projectRoot, event.toolCallId, (block) => ({
+    updateToolCallBlock(projectRoot, providerId, event.toolCallId, (block) => ({
       ...block,
       ...(typeof event.title === 'string' ? { title: event.title } : {}),
       metadata: { ...block.metadata, ...asRecord(event.metadata) },
@@ -674,7 +1060,7 @@ function applyAgentStreamEvent(projectRoot: string, record: AgentExecutionEnvelo
     return
   }
   if (event.type === 'tool-done' && typeof event.toolCallId === 'string') {
-    updateToolCallBlock(projectRoot, event.toolCallId, (block) => ({
+    updateToolCallBlock(projectRoot, providerId, event.toolCallId, (block) => ({
       ...block,
       result: event.result,
       ...(typeof event.error === 'string' ? { error: event.error } : {}),
@@ -685,12 +1071,47 @@ function applyAgentStreamEvent(projectRoot: string, record: AgentExecutionEnvelo
   }
 }
 
+function applyAgentRuntimeEvent(
+  projectRoot: string,
+  providerId: WorkbenchChatProviderId,
+  record: AgentExecutionEnvelope
+): void {
+  const runtime = readAgentRuntimePayload(record)
+  if (!runtime) return
+  if (runtime.kind === 'awaiting-input' && typeof runtime.question === 'string') {
+    const question = runtime.question
+    updateState(projectRoot, providerId, (state) => ({
+      ...state,
+      status: 'awaiting-input',
+      awaitingInputQuestion: question,
+      awaitingConfirmationMessage: null,
+      awaitingConfirmationDetail: null,
+      revision: state.revision + 1,
+    }))
+    return
+  }
+  if (
+    runtime.kind === 'awaiting-confirmation'
+    && typeof runtime.confirmationMessage === 'string'
+  ) {
+    updateState(projectRoot, providerId, (state) => ({
+      ...state,
+      status: 'awaiting-confirmation',
+      awaitingInputQuestion: null,
+      awaitingConfirmationMessage: runtime.confirmationMessage as string,
+      awaitingConfirmationDetail: readConfirmationDetail(runtime.confirmationDetail),
+      revision: state.revision + 1,
+    }))
+  }
+}
+
 function updateToolCallBlock(
   projectRoot: string,
+  providerId: WorkbenchChatProviderId,
   toolCallId: string,
   updater: (block: ToolCallBlock) => ToolCallBlock
 ): void {
-  updateAssistantBlocks(projectRoot, (blocks) =>
+  updateAssistantBlocks(projectRoot, providerId, (blocks) =>
     blocks.map((block) =>
       block.type === 'tool-call' && block.toolCallId === toolCallId ? updater(block) : block
     )
@@ -699,9 +1120,10 @@ function updateToolCallBlock(
 
 function updateAssistantBlocks(
   projectRoot: string,
+  providerId: WorkbenchChatProviderId,
   updater: (blocks: ContentBlock[]) => ContentBlock[]
 ): void {
-  updateState(projectRoot, (state) => {
+  updateState(projectRoot, providerId, (state) => {
     const last = state.messages.at(-1)
     const assistant = last?.role === 'assistant'
       ? last
@@ -717,14 +1139,21 @@ function updateAssistantBlocks(
   })
 }
 
-function finishWithError(projectRoot: string, message: string): void {
-  updateState(projectRoot, (state) => ({
+function finishWithError(
+  projectRoot: string,
+  providerId: WorkbenchChatProviderId,
+  message: string
+): void {
+  updateState(projectRoot, providerId, (state) => ({
     ...state,
     messages: [...state.messages, {
       ...createTextMessage('assistant', message),
       blocks: [{ type: 'text', text: message, tone: 'error' }],
     }],
     status: 'failed',
+    awaitingInputQuestion: null,
+    awaitingConfirmationMessage: null,
+    awaitingConfirmationDetail: null,
     lastRunFinishedAt: Date.now(),
     revision: state.revision + 1,
   }))
@@ -742,8 +1171,7 @@ function createTextMessage(role: ChatMessage['role'], text: string): ChatMessage
 function readAgentTerminalEvent(
   record: AgentExecutionEnvelope
 ): { status: 'completed' | 'aborted' | 'failed'; message?: string } | null {
-  const event = readAgentEventPayload(record)
-  const runtimePayload = event?.type === 'runtime' ? asRecord(event.payload) : (event ?? {})
+  const runtimePayload = readAgentRuntimePayload(record) ?? {}
   const kind = runtimePayload.kind ?? runtimePayload.type
   if (kind === 'done') return { status: 'completed' }
   if (kind === 'aborted') return { status: 'aborted' }
@@ -755,6 +1183,14 @@ function readAgentTerminalEvent(
           : {}),
       }
     : null
+}
+
+function readAgentRuntimePayload(
+  record: AgentExecutionEnvelope
+): Record<string, unknown> | null {
+  const event = readAgentEventPayload(record)
+  if (!event) return null
+  return event.type === 'runtime' ? asRecord(event.payload) : event
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -775,14 +1211,24 @@ function readAgentEventPayload(
 
 function finishRun(
   projectRoot: string,
+  providerId: WorkbenchChatProviderId,
   status: Extract<StandaloneChatState['status'], 'completed' | 'aborted'>
 ): void {
-  updateState(projectRoot, (state) => ({
+  updateState(projectRoot, providerId, (state) => ({
     ...state,
     status,
+    awaitingInputQuestion: null,
+    awaitingConfirmationMessage: null,
+    awaitingConfirmationDetail: null,
     lastRunFinishedAt: Date.now(),
     revision: state.revision + 1,
   }))
+}
+
+function isActiveChatRun(status: StandaloneChatState['status']): boolean {
+  return status === 'running'
+    || status === 'awaiting-input'
+    || status === 'awaiting-confirmation'
 }
 
 function readFinalAgentText(output: unknown): string | null {
@@ -801,11 +1247,67 @@ function readFinalAgentStatus(output: unknown): 'completed' | 'aborted' | null {
   return status === 'completed' || status === 'aborted' ? status : null
 }
 
+function readConfirmationDetail(
+  value: unknown
+): ConversationView['runtime']['awaitingConfirmationDetail'] {
+  const detail = asRecord(value)
+  if (
+    detail.kind === 'tool-category-authorization'
+    && typeof detail.categoryId === 'string'
+    && typeof detail.categoryLabel === 'string'
+    && typeof detail.toolName === 'string'
+  ) return {
+    kind: 'tool-category-authorization',
+    categoryId: detail.categoryId,
+    categoryLabel: detail.categoryLabel,
+    toolName: detail.toolName,
+  }
+  if (
+    detail.kind === 'mcp-tool-call'
+    && typeof detail.serverName === 'string'
+    && typeof detail.toolName === 'string'
+  ) return {
+    kind: 'mcp-tool-call',
+    serverName: detail.serverName,
+    toolName: detail.toolName,
+  }
+  return null
+}
+
+async function buildAttachmentContext(files: readonly File[]): Promise<string> {
+  const descriptions = await Promise.all(files.map(async (file) => {
+    const path = window.velarosWorkbenchProjectHub.getPathForFile(file)
+    if (path) return `Attached file: ${path}`
+    if (file.size <= 64 * 1_024 && isTextAttachment(file)) return `Attached file ${file.name}:\n\`\`\`\n${await file.text()}\n\`\`\``
+    return `Attached file: ${file.name} (${file.type || 'application/octet-stream'}, ${file.size} bytes)`
+  }))
+  return descriptions.join('\n\n')
+}
+
+function isTextAttachment(file: File): boolean {
+  return file.type.startsWith('text/')
+    || /\.(?:c|cc|cpp|css|csv|go|h|html|java|js|json|jsx|md|py|rs|sql|toml|ts|tsx|txt|vel|xml|ya?ml)$/iu.test(file.name)
+}
+
+function readStoredEngineModel(providerId: WorkbenchChatProviderId): string {
+  if (providerId === 'workbench' || typeof window === 'undefined') return ''
+  return window.localStorage.getItem(`velaros.workbench.engine-model:${providerId}`) ?? ''
+}
+
+function storeEngineModel(providerId: WorkbenchChatProviderId, model: string): void {
+  if (providerId === 'workbench' || typeof window === 'undefined') return
+  window.localStorage.setItem(`velaros.workbench.engine-model:${providerId}`, model)
+}
+
 function hasAssistantReply(messages: readonly ChatMessage[]): boolean {
   return messages.at(-1)?.role === 'assistant'
 }
 
-function chatStorageKey(projectRoot: string): string {
+function chatStorageKey(projectRoot: string, providerId: WorkbenchChatProviderId): string {
+  return `velaros.workbench.chat:${providerId}:${encodeURIComponent(projectRoot)}`
+}
+
+function legacyChatStorageKey(projectRoot: string): string {
   return `velaros.workbench.chat:${encodeURIComponent(projectRoot)}`
 }
 
@@ -829,15 +1331,14 @@ function persistState(state: StandaloneChatState): void {
   if (!state.projectRoot || typeof window === 'undefined') return
 
   const payload = JSON.stringify({
-    messages: state.messages,
-    lastRunStartedAt: state.lastRunStartedAt,
-    lastRunFinishedAt: state.lastRunFinishedAt,
-    revision: state.revision,
+    version: 2,
+    activeSessionId: getState(state.projectRoot, state.providerId).sessionId,
+    sessions: readAllStates(state.projectRoot, state.providerId).map(serializeStoredState),
   })
 
   try {
-    window.localStorage.setItem(chatStorageKey(state.projectRoot), payload)
-    persistFailureNotified.delete(state.projectRoot)
+    window.localStorage.setItem(chatStorageKey(state.projectRoot, state.providerId), payload)
+    persistFailureNotified.delete(stateKey(state.projectRoot, state.providerId))
   } catch (error) {
     // 不中断正在跑的 Kernel run,但绝不静默:日志 + 用户可见提示(每个项目根只提示一次)。
     log.error('聊天历史写入 localStorage 失败', {
@@ -845,8 +1346,9 @@ function persistState(state: StandaloneChatState): void {
       messageCount: state.messages.length,
       error,
     })
-    if (!persistFailureNotified.has(state.projectRoot)) {
-      persistFailureNotified.add(state.projectRoot)
+    const key = stateKey(state.projectRoot, state.providerId)
+    if (!persistFailureNotified.has(key)) {
+      persistFailureNotified.add(key)
       workbenchMessage.error({
         title: '聊天历史未能保存',
         description:
@@ -855,7 +1357,19 @@ function persistState(state: StandaloneChatState): void {
     }
   }
 
-  backupChatHistoryToDisk(state.projectRoot, payload)
+  backupChatHistoryToDisk(stateKey(state.projectRoot, state.providerId), payload)
+}
+
+function serializeStoredState(state: StandaloneChatState): Record<string, unknown> {
+  return {
+    providerId: state.providerId,
+    sessionId: state.sessionId,
+    folderId: state.folderId,
+    messages: state.messages,
+    lastRunStartedAt: state.lastRunStartedAt,
+    lastRunFinishedAt: state.lastRunFinishedAt,
+    revision: state.revision,
+  }
 }
 
 /**

@@ -47,7 +47,13 @@ export type {
 export function registerWorkbenchKernelIpc(
   runtime: Kernel,
   routes: WorkbenchKernelCapabilityRoutes,
-  storagePaths: WorkbenchAppStoragePaths
+  storagePaths: WorkbenchAppStoragePaths,
+  resolveAgentInput: (sessionId: string, answer: string) => boolean,
+  resolveAgentConfirmation: (
+    sessionId: string,
+    approved: boolean,
+    rejectionMessage?: string
+  ) => boolean
 ): () => void {
   const activeAgentExecutions = new Map<string, AbortController>()
   ipcMain.handle(WorkbenchKernelChannels.getStatus, () => projectStatus(runtime))
@@ -109,6 +115,16 @@ export function registerWorkbenchKernelIpc(
     controller.abort('Stopped by the user.')
     return true
   })
+  ipcMain.handle(WorkbenchKernelChannels.resolveAgentInput, (_event, request: unknown) => {
+    const parsed = readResolveAgentInput(request)
+    return parsed ? resolveAgentInput(parsed.sessionId, parsed.answer) : false
+  })
+  ipcMain.handle(WorkbenchKernelChannels.resolveAgentConfirmation, (_event, request: unknown) => {
+    const parsed = readResolveAgentConfirmation(request)
+    return parsed
+      ? resolveAgentConfirmation(parsed.sessionId, parsed.approved, parsed.rejectionMessage)
+      : false
+  })
 
   const unsubscribeAgentExecution = runtime.subscribeEvent(
     AgentCapabilityExecutionEventType,
@@ -122,6 +138,8 @@ export function registerWorkbenchKernelIpc(
     ipcMain.removeHandler(WorkbenchKernelChannels.getStatus)
     ipcMain.removeHandler(WorkbenchKernelChannels.invoke)
     ipcMain.removeHandler(WorkbenchKernelChannels.abortAgentExecution)
+    ipcMain.removeHandler(WorkbenchKernelChannels.resolveAgentInput)
+    ipcMain.removeHandler(WorkbenchKernelChannels.resolveAgentConfirmation)
     ipcMain.removeHandler(WorkbenchKernelChannels.backupChatHistory)
   }
 }
@@ -138,6 +156,36 @@ function readAbortExecutionId(request: unknown): string | null {
   if (!request || typeof request !== 'object' || Array.isArray(request)) return null
   const id = (request as { executionId?: unknown }).executionId
   return typeof id === 'string' && id.trim() ? id : null
+}
+
+function readResolveAgentInput(
+  request: unknown
+): { sessionId: string; answer: string } | null {
+  if (!request || typeof request !== 'object' || Array.isArray(request)) return null
+  const record = request as Record<string, unknown>
+  const sessionId = record.sessionId
+  const answer = record.answer
+  return typeof sessionId === 'string' && sessionId.trim() && typeof answer === 'string'
+    ? { sessionId, answer }
+    : null
+}
+
+function readResolveAgentConfirmation(
+  request: unknown
+): { sessionId: string; approved: boolean; rejectionMessage?: string } | null {
+  if (!request || typeof request !== 'object' || Array.isArray(request)) return null
+  const record = request as Record<string, unknown>
+  const sessionId = record.sessionId
+  const approved = record.approved
+  const rejectionMessage = record.rejectionMessage
+  if (typeof sessionId !== 'string' || !sessionId.trim() || typeof approved !== 'boolean') return null
+  return {
+    sessionId,
+    approved,
+    ...(typeof rejectionMessage === 'string' && rejectionMessage.trim()
+      ? { rejectionMessage }
+      : {}),
+  }
 }
 
 /** host 起完后广播一次状态：renderer 的可用性门（浏览器面等）据此翻牌。 */

@@ -117,7 +117,7 @@ void describe('pre-split Workbench shell parity', () => {
     assert.doesNotMatch(styles, /workbenchChatCurrentFileChip/)
   })
 
-  void test('keeps Agent abilities built in and exposes shared resource plugins', () => {
+  void test('keeps external Agent engines opt-in and exposes shared resource plugins', () => {
     const settings = readSource(
       'src/renderer/src/components/settings/WorkbenchSettingsDialog.tsx'
     )
@@ -128,9 +128,9 @@ void describe('pre-split Workbench shell parity', () => {
     assert.match(settings, /id: 'plugins'/)
     assert.match(settings, /velarosWorkbenchResourcePlugins/)
     assert.match(settings, /settingsPluginSharedHint/)
-    assert.doesNotMatch(settings, /id: 'mods'/)
-    assert.doesNotMatch(preload, /velarosWorkbenchAgentMods/)
-    assert.doesNotMatch(main, /WorkbenchAgentMod/)
+    assert.match(settings, /id: 'mods'/)
+    assert.match(preload, /velarosWorkbenchAgentMods/)
+    assert.match(main, /WorkbenchModIpc/)
     assert.match(readme, /product-owned built-ins/)
     assert.match(readme, /Desktop\s+and Workbench discover the same physical installation/)
   })

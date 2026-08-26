@@ -1,4 +1,9 @@
+import { WorkbenchAgentEngineSessionStore } from '../plugins/agent-engines/main/WorkbenchAgentEngineSessionStore'
+import { WorkbenchAgentEnginesModRuntime } from '../plugins/agent-engines/main/WorkbenchAgentEnginesModRuntime'
+import { WorkbenchAgentExtensionTools } from '../plugins/agent-engines/main/WorkbenchAgentExtensionTools'
+
 import type { WorkbenchKernelCapabilityRoutes } from './kernel/WorkbenchKernelProtocol'
+import { WorkbenchModService } from './mods/WorkbenchModService'
 import { WorkbenchCodeGraphResource } from './resources/WorkbenchCodeGraphResource'
 import { WorkbenchResourcePluginService } from './resources/WorkbenchResourcePluginService'
 import { WorkbenchGitService } from './workspace/git/WorkbenchGitService'
@@ -19,6 +24,8 @@ export interface WorkbenchMainCapabilityProviders {
   readonly watch: WorkbenchFileWatcher
   readonly workspace: WorkbenchProjectCapabilityProvider
   readonly resourcePlugins: WorkbenchResourcePluginService
+  readonly mods: WorkbenchModService
+  readonly agentEngines: WorkbenchAgentEnginesModRuntime
   readonly kernelRoutes: WorkbenchKernelCapabilityRoutes
 }
 
@@ -30,10 +37,19 @@ export interface WorkbenchMainCapabilityProviders {
  * while the default Workspace implementation stays the published package.
  */
 export function createDefaultWorkbenchMainCapabilityProviders(
-  dataRootDir: string
+  dataRootDir: string,
+  openExternal: (url: string) => Promise<void> = async () => {
+    throw new Error('当前 Workbench 宿主没有提供外部链接能力。')
+  }
 ): WorkbenchMainCapabilityProviders {
   const codeGraphResource = new WorkbenchCodeGraphResource()
+  const agentEngines = new WorkbenchAgentEnginesModRuntime(
+    new WorkbenchAgentEngineSessionStore(dataRootDir),
+    new WorkbenchAgentExtensionTools(codeGraphResource),
+    openExternal
+  )
   const resourcePlugins = new WorkbenchResourcePluginService(dataRootDir, codeGraphResource)
+  const mods = new WorkbenchModService(dataRootDir, agentEngines)
   return {
     parts: createWorkbenchAppParts(dataRootDir),
     fileSystem: new WorkbenchProjectFileSystem(),
@@ -42,6 +58,8 @@ export function createDefaultWorkbenchMainCapabilityProviders(
     watch: new WorkbenchFileWatcher(),
     workspace: new ProjectCapabilityProvider({ codeGraphResource }),
     resourcePlugins,
+    mods,
+    agentEngines,
     kernelRoutes: DefaultWorkbenchKernelCapabilityRoutes,
   }
 }

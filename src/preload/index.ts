@@ -11,6 +11,10 @@ import {
   type WorkbenchProjectHubBridge,
   WorkbenchProjectHubChannels,
 } from '../shared/projectHub'
+import {
+  type WorkbenchAgentModBridge,
+  WorkbenchAgentModChannels,
+} from '../shared/workbenchAgentMods'
 import { type WorkbenchFsBridge, WorkbenchFsChannels } from '../shared/workbenchFs'
 import { type WorkbenchGitBridge, WorkbenchGitChannels } from '../shared/workbenchGit'
 import { type WorkbenchKernelBridge, WorkbenchKernelChannels } from '../shared/workbenchKernel'
@@ -36,6 +40,13 @@ const projectHubBridge: WorkbenchProjectHubBridge = {
   getState: () => ipcRenderer.invoke(WorkbenchProjectHubChannels.getState),
   openProjectDialog: () => ipcRenderer.invoke(WorkbenchProjectHubChannels.openProjectDialog),
   openProjectPath: (path) => ipcRenderer.invoke(WorkbenchProjectHubChannels.openProjectPath, path),
+  switchProjectDialog: () => ipcRenderer.invoke(WorkbenchProjectHubChannels.switchProjectDialog),
+  switchProjectPath: (path) =>
+    ipcRenderer.invoke(WorkbenchProjectHubChannels.switchProjectPath, path),
+  openProjectDialogInNewWindow: () =>
+    ipcRenderer.invoke(WorkbenchProjectHubChannels.openProjectDialogInNewWindow),
+  openProjectPathInNewWindow: (path) =>
+    ipcRenderer.invoke(WorkbenchProjectHubChannels.openProjectPathInNewWindow, path),
   validateProjectPath: (path) =>
     ipcRenderer.invoke(WorkbenchProjectHubChannels.validateProjectPath, path),
   openDroppedProjectPaths: (paths) =>
@@ -137,6 +148,10 @@ const kernelBridge: WorkbenchKernelBridge = {
   invoke: (request) => ipcRenderer.invoke(WorkbenchKernelChannels.invoke, request),
   abortAgentExecution: (request) =>
     ipcRenderer.invoke(WorkbenchKernelChannels.abortAgentExecution, request),
+  resolveAgentInput: (request) =>
+    ipcRenderer.invoke(WorkbenchKernelChannels.resolveAgentInput, request),
+  resolveAgentConfirmation: (request) =>
+    ipcRenderer.invoke(WorkbenchKernelChannels.resolveAgentConfirmation, request),
   onStatusChanged: (listener) =>
     subscribe(WorkbenchKernelChannels.statusChanged, listener),
   onAgentExecution: (listener) =>
@@ -157,6 +172,14 @@ const resourcePluginBridge: WorkbenchResourcePluginBridge = {
   onChanged: (listener) => subscribe(WorkbenchResourcePluginChannels.changed, listener),
 }
 
+const agentModBridge: WorkbenchAgentModBridge = {
+  list: () => ipcRenderer.invoke(WorkbenchAgentModChannels.list),
+  setEnabled: (request) => ipcRenderer.invoke(WorkbenchAgentModChannels.setEnabled, request),
+  listAgentEngineModels: (engineId) =>
+    ipcRenderer.invoke(WorkbenchAgentModChannels.listAgentEngineModels, engineId),
+  onChanged: (listener) => subscribe(WorkbenchAgentModChannels.changed, listener),
+}
+
 contextBridge.exposeInMainWorld('velarosWorkbenchProjectHub', projectHubBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchFs', fsBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchLanguage', languageBridge)
@@ -166,6 +189,7 @@ contextBridge.exposeInMainWorld('velarosWorkbenchGit', gitBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchKernel', kernelBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchWorkspace', workspaceBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchResourcePlugins', resourcePluginBridge)
+contextBridge.exposeInMainWorld('velarosWorkbenchAgentMods', agentModBridge)
 
 function subscribe<TPayload>(
   channel: string,

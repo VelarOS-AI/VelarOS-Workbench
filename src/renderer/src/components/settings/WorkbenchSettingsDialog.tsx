@@ -59,6 +59,11 @@ import type {
   WorkbenchProjectAiRulesResult,
 } from '@shared/contracts'
 
+import { WorkbenchAgentEngineBrandIcon } from '../../../../plugins/agent-engines/renderer/WorkbenchAgentEngineBrandIcon'
+import type {
+  WorkbenchModCatalog,
+  WorkbenchModRecord,
+} from '../../../../shared/workbenchAgentMods'
 import type {
   WorkbenchResourcePluginCatalog,
   WorkbenchResourcePluginRecord,
@@ -74,6 +79,7 @@ type WorkbenchSettingsSectionId =
   | 'ai-rules'
   | 'keymap'
   | 'language'
+  | 'mods'
   | 'plugins'
   | 'advanced'
 
@@ -193,6 +199,8 @@ export function WorkbenchSettingsDialog({
   const [isLoadingProjectAiRules, setIsLoadingProjectAiRules] = useState(false)
   const [pluginCatalog, setPluginCatalog] =
     useState<Nullable<WorkbenchResourcePluginCatalog>>(null)
+  const [modCatalog, setModCatalog] = useState<Nullable<WorkbenchModCatalog>>(null)
+  const [isLoadingMods, setIsLoadingMods] = useState(false)
   const [isLoadingPlugins, setIsLoadingPlugins] = useState(false)
   const [pluginQuery, setPluginQuery] = useState('')
   const dialogRef = useRef<HTMLDivElement>(null)
@@ -233,6 +241,11 @@ export function WorkbenchSettingsDialog({
         id: 'language' as const,
         label: t('workbench.settingsLanguage'),
         description: t('workbench.settingsLanguageDescription'),
+      },
+      {
+        id: 'mods' as const,
+        label: t('workbench.settingsMods'),
+        description: t('workbench.settingsModsDescription'),
       },
       {
         id: 'plugins' as const,
@@ -280,6 +293,17 @@ export function WorkbenchSettingsDialog({
     }
   }, [])
 
+  const refreshMods = useCallback(async (): Promise<void> => {
+    setIsLoadingMods(true)
+    try {
+      setModCatalog(await window.velarosWorkbenchAgentMods.list())
+    } catch {
+      setModCatalog(null)
+    } finally {
+      setIsLoadingMods(false)
+    }
+  }, [])
+
   const conflictedActions = useMemo(
     () => new Set(conflicts.flatMap((conflict) => conflict.actions)),
     [conflicts]
@@ -306,6 +330,13 @@ export function WorkbenchSettingsDialog({
 
     void refreshProjectAiRules()
   }, [activeSection, open, refreshProjectAiRules])
+
+  useEffect(() => {
+    if (!open || activeSection !== 'mods') return
+
+    void refreshMods()
+    return window.velarosWorkbenchAgentMods.onChanged(setModCatalog)
+  }, [activeSection, open, refreshMods])
 
   useEffect(() => {
     if (!open || activeSection !== 'plugins') return
@@ -848,6 +879,59 @@ export function WorkbenchSettingsDialog({
     )
   }
 
+  async function setModEnabled(mod: WorkbenchModRecord, enabled: boolean): Promise<void> {
+    setModCatalog(await window.velarosWorkbenchAgentMods.setEnabled({ id: mod.id, enabled }))
+  }
+
+  function renderModsSection(): ReactElement {
+    const mod = modCatalog?.mods.find((candidate) => candidate.id === 'velaros.agent-engines')
+    return (
+      <div className={styles.workbenchSettingsSectionPanel}>
+        <Text tone="caption" className={styles.workbenchSettingsPluginSharedHint}>
+          {t('workbench.settingsModsHint')}
+        </Text>
+        {isLoadingMods && !modCatalog ? (
+          <div className={styles.workbenchSettingsAiRulesEmpty}>
+            <Text>{t('workbench.settingsModsLoading')}</Text>
+          </div>
+        ) : mod ? (
+          <div className={styles.workbenchSettingsPluginList}>
+            <div className={styles.workbenchSettingsPluginRow}>
+              <span className={styles.workbenchSettingsPluginIcon}>
+                <WorkbenchAgentEngineBrandIcon engineId="claude-code" size={14} />
+                <WorkbenchAgentEngineBrandIcon engineId="codex" size={14} />
+              </span>
+              <div className={styles.workbenchSettingsPluginMeta}>
+                <Text className={styles.workbenchSettingsPluginName}>
+                  {t('workbench.settingsAgentEnginesModTitle')} · {mod.version}
+                </Text>
+                <Text tone="caption" className={styles.workbenchSettingsRowDescription}>
+                  {t('workbench.settingsAgentEnginesModDescription')}
+                </Text>
+              </div>
+              <div className={styles.workbenchSettingsPluginActions}>
+                <WorkbenchSettingsPill tone={mod.enabled ? 'success' : 'default'}>
+                  {mod.enabled
+                    ? t('workbench.settingsModEnabled')
+                    : t('workbench.settingsModDisabled')}
+                </WorkbenchSettingsPill>
+                <Switch
+                  size="sm"
+                  checked={mod.enabled}
+                  onCheckedChange={(enabled) => void setModEnabled(mod, enabled)}
+                />
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className={styles.workbenchSettingsAiRulesEmpty}>
+            <Text>{t('workbench.settingsModsEmpty')}</Text>
+          </div>
+        )}
+      </div>
+    )
+  }
+
   function renderPluginsSection(): ReactElement {
     const plugins = (pluginCatalog?.plugins ?? []).filter((plugin) =>
       `${plugin.id} CodeGraph`.toLowerCase().includes(pluginQuery.trim().toLowerCase())
@@ -943,6 +1027,9 @@ export function WorkbenchSettingsDialog({
       }
       case 'plugins': {
         return renderPluginsSection()
+      }
+      case 'mods': {
+        return renderModsSection()
       }
       default: {
         return renderAdvancedSection()

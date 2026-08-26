@@ -189,10 +189,13 @@ void describe('standalone Workbench Kernel contract', () => {
       source,
       /envelope\.sourceProductId\s*!==\s*['"]velaros\.workbench['"]/u
     )
-    assert.match(source, /envelope\.sourceSessionId\s*!==\s*chat\.sessionId/u)
+    assert.match(
+      source,
+      /envelope\.sourceSessionId\s*!==\s*activeExecution\.sessionId/u
+    )
     assert.match(source, /envelope\.executionId/u)
     assert.match(source, /envelope\.sessionCorrelationId/u)
-    assert.match(source, /activeExecutionRef\.current/u)
+    assert.match(source, /activeAgentExecutions\.get\(executionId\)/u)
   })
 
   void test('in-process Agent capability emits the standard execution event schema', async () => {

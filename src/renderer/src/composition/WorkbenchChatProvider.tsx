@@ -13,6 +13,8 @@ import type {
   WorkspaceCheckpointFileDiff,
 } from '@shared/contracts'
 
+import type { WorkbenchChatProviderId } from '../../../plugins/agent-engines/identity'
+
 import type { WorkbenchChatSurfaceScope } from './workbenchChatComposition'
 
 export type WorkbenchChatRunStatus =
@@ -117,6 +119,7 @@ export interface WorkbenchBrowserElementSelectionDelivery {
 }
 
 export interface WorkbenchChatSessionSurfaceProps {
+  providerId: WorkbenchChatProviderId
   projectRoot: string
   currentFilePath: Nullable<string>
   conversationRefreshKey: number
@@ -131,7 +134,10 @@ export interface WorkbenchChatCompositionAdapter {
   /**
    * Provider 安装后保持引用稳定；实现可以调用宿主自己的 hooks，但返回值只能是 Workbench 投影。
    */
-  useProjectRuntime: (projectRoot: Nullable<string>) => WorkbenchChatProjectRuntime
+  useProjectRuntime: (
+    projectRoot: Nullable<string>,
+    providerId?: WorkbenchChatProviderId
+  ) => WorkbenchChatProjectRuntime
   SessionSurface: ComponentType<WorkbenchChatSessionSurfaceProps>
 }
 
@@ -159,11 +165,12 @@ function useWorkbenchChatComposition(): WorkbenchChatCompositionAdapter {
 }
 
 export function useWorkbenchChatProjectRuntime(
-  projectRoot: Nullable<string>
+  projectRoot: Nullable<string>,
+  providerId: WorkbenchChatProviderId = 'workbench'
 ): WorkbenchChatProjectRuntime {
   const adapter = useWorkbenchChatComposition()
   // Adapter 在应用生命周期内固定，因此这里的宿主 hook 拓扑不会变化。
-  return adapter.useProjectRuntime(projectRoot)
+  return adapter.useProjectRuntime(projectRoot, providerId)
 }
 
 export function WorkbenchChatSessionSurface(props: WorkbenchChatSessionSurfaceProps): ReactElement {

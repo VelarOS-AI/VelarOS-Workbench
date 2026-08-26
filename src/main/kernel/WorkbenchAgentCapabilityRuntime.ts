@@ -14,6 +14,11 @@ import {
 import { Log } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
+import {
+  isWorkbenchAgentEngineId,
+  type WorkbenchAgentEngineId,
+} from '../../plugins/agent-engines/identity'
+import type { WorkbenchAgentEnginesModRuntime } from '../../plugins/agent-engines/main/WorkbenchAgentEnginesModRuntime'
 import type { WorkbenchAgentExecutionStack } from '../agent/WorkbenchAgentExecutionStack'
 
 /** 只认自家产品身份的执行请求。 */
@@ -24,29 +29,48 @@ interface WorkbenchAgentExecuteInput {
   source: { productId: string; sessionId: string; correlationId?: string }
   scopeMetadata: Record<string, unknown>
   messages: ModelMessage[]
-  config: AgentExecutionConfig
+  config: WorkbenchAgentConfig
+}
+
+type WorkbenchAgentConfig = AgentExecutionConfig | {
+  engineId: WorkbenchAgentEngineId
+  executionModes: ReturnType<typeof normalizeExecutionModes>
+  model?: string
 }
 
 /** Workbench v1 只接受 BYOK 模型选择与封闭的目标/计划执行模式轴。 */
 function parseWorkbenchAgentConfig(
   config: Readonly<Record<string, unknown>>,
-): AgentExecutionConfig {
+): WorkbenchAgentConfig {
   const rawExecutionModes = config.executionModes
   const executionModes = normalizeExecutionModes(
     Array.isArray(rawExecutionModes) ? rawExecutionModes : []
   )
+  const engineId = config.engineId
+  const externalEngine = isWorkbenchAgentEngineId(engineId)
   if (
-    config.modelSelection === undefined
-    || Object.keys(config).some(
-      (key) => key !== 'modelSelection' && key !== 'executionModes'
+    (!externalEngine && config.modelSelection === undefined)
+    || (engineId !== undefined && !externalEngine)
+    || Object.keys(config).some((key) =>
+      externalEngine
+        ? key !== 'engineId' && key !== 'executionModes' && key !== 'model'
+        : key !== 'modelSelection' && key !== 'executionModes'
     )
     || (rawExecutionModes !== undefined && !Array.isArray(rawExecutionModes))
+    || (externalEngine && config.model !== undefined && (
+      typeof config.model !== 'string' || !config.model.trim()
+    ))
     || (Array.isArray(rawExecutionModes) && (
       executionModes.length !== rawExecutionModes.length
       || executionModes.some((mode, index) => mode !== rawExecutionModes[index])
     ))
   ) {
     throw new AppError('VALIDATION', 'Workbench Agent config is invalid')
+  }
+  if (externalEngine) return {
+    engineId,
+    executionModes,
+    ...(typeof config.model === 'string' ? { model: config.model.trim() } : {}),
   }
   return { modelSelection: config.modelSelection, executionModes }
 }
@@ -79,7 +103,10 @@ function parseWorkbenchAgentExecuteInput(input: unknown): WorkbenchAgentExecuteI
 class WorkbenchAgentCapabilityRuntime implements AgentCapabilityRuntime {
   private readonly log = Log.tag('WorkbenchAgentCapabilityRuntime')
 
-  public constructor(private readonly stack: WorkbenchAgentExecutionStack) {}
+  public constructor(
+    private readonly stack: WorkbenchAgentExecutionStack,
+    private readonly agentEngines?: WorkbenchAgentEnginesModRuntime
+  ) {}
 
   public async execute(
     _scope: unknown,
@@ -111,12 +138,28 @@ class WorkbenchAgentCapabilityRuntime implements AgentCapabilityRuntime {
     })
 
     try {
+      const projectRoot =
+        typeof input.scopeMetadata.resourceId === 'string'
+          ? input.scopeMetadata.resourceId
+          : null
+      if ('engineId' in input.config) {
+        if (!this.agentEngines) throw new Error('Workbench Agent Engines Mod 未装配。')
+        if (!projectRoot?.trim()) throw new Error('外部 Agent 执行需要一个项目根。')
+        return await this.agentEngines.run({
+          executionId: input.executionId,
+          engineId: input.config.engineId,
+          sessionId: input.source.sessionId,
+          projectRoot,
+          messages: input.messages,
+          executionModes: input.config.executionModes,
+          model: input.config.model,
+          events,
+          abortSignal: context.signal,
+        })
+      }
       return await this.stack.run({
         sessionId: input.source.sessionId,
-        projectRoot:
-          typeof input.scopeMetadata.resourceId === 'string'
-            ? input.scopeMetadata.resourceId
-            : null,
+        projectRoot,
         messages: input.messages,
         config: input.config,
         events,
@@ -128,7 +171,10 @@ class WorkbenchAgentCapabilityRuntime implements AgentCapabilityRuntime {
   }
 
   public dispose(): Promise<void> {
-    return this.stack.dispose()
+    return Promise.all([
+      this.stack.dispose(),
+      this.agentEngines?.dispose() ?? Promise.resolve(),
+    ]).then(() => undefined)
   }
 }
 

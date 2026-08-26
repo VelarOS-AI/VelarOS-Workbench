@@ -1,7 +1,7 @@
 import { statSync } from 'node:fs'
 import { basename, join, resolve } from 'node:path'
 
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, shell } from 'electron'
 
 import { createAgentKernelModule } from '@velaros-ai/agent'
 import { Log } from '@velaros-ai/core'
@@ -17,6 +17,7 @@ import {
   registerWorkbenchKernelIpc,
 } from './kernel/WorkbenchKernelIpc'
 import { WorkbenchKernelPermissionPolicy } from './kernel/WorkbenchKernelPermissionPolicy'
+import { registerWorkbenchModIpc } from './mods/WorkbenchModIpc'
 import type { WorkbenchProjectHub } from './projects/ProjectHub'
 import { registerProjectHubIpc } from './projects/ProjectHubIpc'
 import { installProjectHubMenu } from './projects/ProjectHubMenu'
@@ -157,7 +158,10 @@ function createWorkbenchWindow(hub: WorkbenchProjectHub): BrowserWindow {
 if (hasSingleInstanceLock) void app.whenReady().then(() => {
   if (WorkbenchIsDevelopmentRuntime) app.dock?.setIcon(WorkbenchApplicationIconPath)
   const dataRootDir = resolveWorkbenchDataRootDir()
-  const providers = createDefaultWorkbenchMainCapabilityProviders(dataRootDir)
+  const providers = createDefaultWorkbenchMainCapabilityProviders(
+    dataRootDir,
+    (url) => shell.openExternal(url)
+  )
   // 进程内 Kernel：只注册 Workbench 自持的 Agent 能力，执行栈也在本进程。
   const agentExecutionStack = new WorkbenchAgentExecutionStack(providers.workspace)
   const kernelRuntime = new Kernel({
@@ -174,13 +178,16 @@ if (hasSingleInstanceLock) void app.whenReady().then(() => {
   })
   kernelRuntime.registerModule(
     createAgentKernelModule({
-      runtime: new WorkbenchAgentCapabilityRuntime(agentExecutionStack),
+      runtime: new WorkbenchAgentCapabilityRuntime(agentExecutionStack, providers.agentEngines),
     })
   )
   const disposeKernelIpc = registerWorkbenchKernelIpc(
     kernelRuntime,
     providers.kernelRoutes,
-    providers.parts.storagePaths
+    providers.parts.storagePaths,
+    (sessionId, answer) => providers.agentEngines.resolveInput(sessionId, answer),
+    (sessionId, approved, rejectionMessage) =>
+      providers.agentEngines.resolveConfirmation(sessionId, approved, rejectionMessage)
   )
   void kernelRuntime.start().finally(() => {
     broadcastWorkbenchKernelStatus(kernelRuntime)
@@ -188,6 +195,7 @@ if (hasSingleInstanceLock) void app.whenReady().then(() => {
   const disposeResourcePluginIpc = registerWorkbenchResourcePluginIpc(
     providers.resourcePlugins
   )
+  const disposeModIpc = registerWorkbenchModIpc(providers.mods)
   registerWorkbenchFsIpc(providers.fileSystem, providers.parts)
   registerWorkbenchTerminalIpc(providers.parts.terminal)
   registerWorkbenchGitIpc(providers.git)
@@ -217,6 +225,7 @@ if (hasSingleInstanceLock) void app.whenReady().then(() => {
     // 真正收口后再触发第二次 quit；shutdownStarted 让第二次事件直接放行。
     watchIpc.dispose()
     disposeResourcePluginIpc()
+    disposeModIpc()
     disposeKernelIpc()
     disposeWorkspaceIpc()
     void Promise.all([

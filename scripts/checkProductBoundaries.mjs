@@ -40,6 +40,25 @@ const layerRules = [
   },
 ]
 
+function resolveLayerRule(label) {
+  const fixedRule = layerRules.find(({ prefix }) => label.startsWith(prefix))
+  if (fixedRule) return fixedRule
+
+  const pluginLayer = label.match(/^src\/plugins\/[^/]+\/(main|renderer)(?:\/|$)/u)?.[1]
+  if (pluginLayer === 'main') {
+    return { forbidden: [/^@renderer\//, /(?:^|\/)renderer(?:\/|$)/] }
+  }
+  if (pluginLayer === 'renderer') {
+    return { forbidden: [/^@main\//, /(?:^|\/)main(?:\/|$)/] }
+  }
+  if (label.startsWith('src/plugins/')) {
+    return {
+      forbidden: [/^@main\//, /^@renderer\//, /(?:^|\/)(?:main|renderer)(?:\/|$)/],
+    }
+  }
+  return undefined
+}
+
 async function collectSourceFiles(directory) {
   const entries = await readdir(directory, { withFileTypes: true })
   const files = []
@@ -66,7 +85,7 @@ for (const sourceRoot of sourceRoots) {
         failures.push(`${label} recreates a product Kernel runtime facade.`)
       }
     }
-    const layerRule = layerRules.find(({ prefix }) => label.startsWith(prefix))
+    const layerRule = resolveLayerRule(label)
     for (const match of source.matchAll(importSpecifierPattern)) {
       const specifier = match[1]
       if (forbiddenSpecifiers.some((pattern) => pattern.test(specifier))) {
@@ -87,10 +106,12 @@ for (const sourceRoot of sourceRoots) {
   }
 }
 
-const allowedSourceDirectories = new Set(['main', 'preload', 'renderer', 'shared'])
+const allowedSourceDirectories = new Set(['main', 'plugins', 'preload', 'renderer', 'shared'])
 for (const entry of await readdir(resolve(rootDir, 'src'), { withFileTypes: true })) {
   if (!entry.isDirectory() || !allowedSourceDirectories.has(entry.name)) {
-    failures.push(`src/${entry.name}: 单体源码根只允许 main、preload、renderer、shared 四层。`)
+    failures.push(
+      `src/${entry.name}: 单体源码根只允许 main、plugins、preload、renderer、shared 五层。`
+    )
   }
 }
 

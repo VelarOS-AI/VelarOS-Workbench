@@ -5,7 +5,7 @@
  * 文件、Git、终端、运行与语言洞察由独立应用自持；chat/model 走 Kernel 语义路由，
  * 项目索引与事务变更走发布版 Workspace 模块，Browser 走发布版 composition 端口。
  */
-import { type ReactElement } from 'react'
+import { type ReactElement, useEffect } from 'react'
 import {
   ChatCircleTextIcon,
   FolderIcon,
@@ -18,6 +18,12 @@ import {
 import { WorkbenchChatPanel } from '@renderer/components/chat/WorkbenchChatPanel'
 
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
+
+import { resolveWorkbenchChatProviderId } from '../../plugins/agent-engines/identity'
+import {
+  useWorkbenchAgentEnginesContributionEnabled,
+  WorkbenchAgentEnginesRendererContribution,
+} from '../../plugins/agent-engines/renderer/contribution'
 
 import { StatusBar } from './components/chrome/StatusBar'
 import { WorkbenchTopTrailing } from './components/chrome/TopToolbar'
@@ -36,6 +42,7 @@ import { useWorkbenchPageContext } from './WorkbenchPageModelContext'
 
 export function StandaloneWorkbenchPagePresentation(): ReactElement {
   const model = useWorkbenchPageContext()
+  const agentEnginesEnabled = useWorkbenchAgentEnginesContributionEnabled()
   const {
     workbench,
     surface,
@@ -59,6 +66,12 @@ export function StandaloneWorkbenchPagePresentation(): ReactElement {
     macTitleInset,
     commandStatusLabel,
   } = chrome
+
+  const activeRightTool = surface.activeRightTool ?? 'chat'
+  const activeChatProviderId = resolveWorkbenchChatProviderId(activeRightTool)
+  useEffect(() => {
+    if (!agentEnginesEnabled && surface.activeRightTool !== 'chat') surface.closeRightTool()
+  }, [agentEnginesEnabled, surface.activeRightTool])
 
   if (!workbench.activeProject) return <main className={styles.root} />
 
@@ -94,7 +107,6 @@ export function StandaloneWorkbenchPagePresentation(): ReactElement {
   ]
   const editorChrome = buildStandaloneWorkbenchEditorChrome(model)
   const embeddedKernelModel = buildStandaloneWorkbenchEmbeddedKernelModel(model, editorChrome)
-
   function toggleLeftTool(tool: 'commit' | 'project'): void {
     if (surface.activeLeftTool === tool) {
       surface.toggleFilePanel()
@@ -192,11 +204,17 @@ export function StandaloneWorkbenchPagePresentation(): ReactElement {
           />
           <aside
             className={styles.rightToolPanel}
-            data-open={surface.activeRightTool === 'chat'}
-            aria-label="Workbench Agent"
+            data-open={surface.isRightToolOpen}
+            aria-label={activeRightTool === 'claude'
+              ? 'Claude'
+              : activeRightTool === 'chatgpt'
+                ? 'ChatGPT'
+                : 'Workbench Agent'}
           >
             <div className={styles.rightToolContent}>
               <WorkbenchChatPanel
+                key={activeChatProviderId}
+                providerId={activeChatProviderId}
                 projectRoot={workbench.activeProject.rootPath}
                 currentFilePath={workbench.selectedFilePath}
                 pendingBrowserElementSelections={model.pendingBrowserElementSelections}
@@ -226,6 +244,20 @@ export function StandaloneWorkbenchPagePresentation(): ReactElement {
                 >
                   <ChatCircleTextIcon size={18} weight="duotone" />
                 </IconButton>
+                {(agentEnginesEnabled ? WorkbenchAgentEnginesRendererContribution : []).map((item) => (
+                  <IconButton
+                    key={item.id}
+                    variant="ghost"
+                    size="icon-sm"
+                    className={styles.rightToolButton}
+                    title={item.label}
+                    label={item.label}
+                    data-active={surface.activeRightTool === item.id}
+                    onClick={() => surface.toggleRightTool(item.id)}
+                  >
+                    {item.icon}
+                  </IconButton>
+                ))}
               </div>
             </div>
           </aside>

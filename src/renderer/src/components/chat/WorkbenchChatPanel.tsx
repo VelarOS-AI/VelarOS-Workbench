@@ -27,6 +27,7 @@ import {
   BusinessCascadingMenuSelectedIndicator,
 } from '@velaros-ai/ui/product/menus/BusinessCascadingMenu'
 
+import type { WorkbenchChatProviderId } from '../../../../plugins/agent-engines/identity'
 import {
   useWorkbenchChatProjectRuntime,
   useWorkbenchProductRuntime,
@@ -49,6 +50,7 @@ const EmptyWorkbenchBrowserElementSelections: readonly WorkbenchBrowserElementSe
   []
 
 export interface WorkbenchChatPanelProps {
+  providerId?: WorkbenchChatProviderId
   projectRoot: string
   currentFilePath: Nullable<string>
   pendingBrowserElementSelections?: readonly WorkbenchBrowserElementSelectionDelivery[]
@@ -234,6 +236,7 @@ function WorkbenchChatSessionMenu({
 }
 
 export function WorkbenchChatPanel({
+  providerId = 'workbench',
   projectRoot,
   currentFilePath,
   pendingBrowserElementSelections = EmptyWorkbenchBrowserElementSelections,
@@ -246,7 +249,7 @@ export function WorkbenchChatPanel({
   const styles = useWorkbenchProductRuntime().ui.chatPanel
   const normalizedProjectRoot = normalizeWorkbenchProjectRoot(projectRoot)
   const { t } = useWorkbenchI18n()
-  const chat = useWorkbenchChatProjectRuntime(normalizedProjectRoot)
+  const chat = useWorkbenchChatProjectRuntime(normalizedProjectRoot, providerId)
   const { currentSession, conversationVersion } = chat
   const { activeMemberSessionId, activeSessionId, deletingSessionId, diskSessionHydrated, groups } =
     chat.sessionList
@@ -450,6 +453,7 @@ export function WorkbenchChatPanel({
       <div className={styles.workbenchChatBody}>
         {ready ? (
           <WorkbenchChatSessionSurface
+            providerId={providerId}
             conversationRefreshKey={conversationVersion}
             projectRoot={normalizedProjectRoot}
             currentFilePath={currentFilePath}
