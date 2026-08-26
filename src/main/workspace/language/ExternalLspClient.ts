@@ -876,17 +876,17 @@ export class ExternalLspClient {
   /** 解析一帧头部；返回 false 表示数据不足或已失败。 */
   private readFrameHeader(): boolean {
     if (this.inboundLength === 0) return false
-    const window = this.readInbound(
+    const headerWindow = this.readInbound(
       Math.min(this.inboundLength, MaxLspHeaderBytes + LspHeaderSeparatorBytes)
     )
-    const boundary = window.indexOf(LspHeaderSeparator)
+    const boundary = headerWindow.indexOf(LspHeaderSeparator)
     if (boundary < 0) {
       if (this.inboundLength > MaxLspHeaderBytes)
         this.fail(new AppError('INTERNAL', `${this.descriptor.label} LSP 响应头超过 8 KiB 上限。`))
       return false
     }
 
-    const header = window.subarray(0, boundary).toString('ascii')
+    const header = headerWindow.subarray(0, boundary).toString('ascii')
     const match = /(?:^|\r\n)Content-Length:\s*(\d+)/iu.exec(header)
     if (!match) {
       this.fail(new AppError('INTERNAL', `${this.descriptor.label} LSP 响应缺少有效的 Content-Length。`))
