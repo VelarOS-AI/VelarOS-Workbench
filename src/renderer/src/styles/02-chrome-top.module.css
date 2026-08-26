@@ -304,8 +304,20 @@
 }
 
 .projectCloneDialog {
+  --primary: var(--project-control-theme-color);
+  --primary-rgb: var(--project-control-theme-color-rgb);
+  --primary-foreground: #ffffff;
+  --foreground: var(--workbench-text);
+  --muted-foreground: var(--workbench-text-muted);
+  --control-themed-bg: var(--workbench-control-bg);
+  --control-themed-hover-bg: var(--workbench-control-bg);
+  --control-themed-open-bg: var(--workbench-control-bg);
+
   width: min(360px, calc(100vw - 24px));
   max-width: min(360px, calc(100vw - 24px));
+  border-color: var(--workbench-border);
+  background: var(--workbench-surface);
+  color: var(--workbench-text);
 }
 
 .projectCloneForm {
@@ -328,8 +340,8 @@
 
 .projectCloneSubmit,
 .projectCloneSubmit:hover:not(:disabled) {
-  border-color: var(--project-control-theme-color, var(--primary));
-  background: var(--project-control-theme-color, var(--primary));
+  border-color: var(--project-control-theme-color);
+  background: var(--project-control-theme-color);
   color: var(--primary-foreground);
 }
 

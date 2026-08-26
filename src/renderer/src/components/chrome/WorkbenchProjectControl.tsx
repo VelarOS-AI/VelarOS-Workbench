@@ -47,16 +47,38 @@ interface WorkbenchProjectControlProps {
 
 type PendingProjectAction = 'add-local' | 'clone' | `switch:${string}` | `new:${string}`
 
-function resolveProjectThemeColor(anchor: Nullable<HTMLElement>): Nullable<string> {
+interface ProjectControlThemeTokens {
+  color: string
+  colorRgb: string
+  scope: Nullable<string>
+}
+
+function resolveProjectThemeTokens(
+  anchor: Nullable<HTMLElement>
+): Nullable<ProjectControlThemeTokens> {
   if (!anchor) return null
   const probe = anchor.ownerDocument.createElement('span')
   probe.style.position = 'absolute'
   probe.style.visibility = 'hidden'
   probe.style.color = 'var(--workbench-theme-color)'
   anchor.append(probe)
-  const color = anchor.ownerDocument.defaultView?.getComputedStyle(probe).color.trim() ?? ''
+  const view = anchor.ownerDocument.defaultView
+  const color = view?.getComputedStyle(probe).color.trim() ?? ''
+  const colorRgb = view
+    ?.getComputedStyle(anchor)
+    .getPropertyValue('--workbench-theme-color-rgb')
+    .trim()
   probe.remove()
-  return color || null
+  if (!color || !colorRgb) return null
+
+  return {
+    color,
+    colorRgb,
+    scope:
+      anchor
+        .closest<HTMLElement>('[data-velar-theme-scope]')
+        ?.getAttribute('data-velar-theme-scope') ?? null,
+  }
 }
 
 export function WorkbenchProjectControl({
@@ -72,7 +94,7 @@ export function WorkbenchProjectControl({
   const [cloneDialogOpen, setCloneDialogOpen] = useState(false)
   const [cloneRemoteUrl, setCloneRemoteUrl] = useState('')
   const [cloneError, setCloneError] = useState<Nullable<string>>(null)
-  const [resolvedThemeColor, setResolvedThemeColor] = useState<Nullable<string>>(null)
+  const [themeTokens, setThemeTokens] = useState<Nullable<ProjectControlThemeTokens>>(null)
   const anchorRef = useRef<HTMLButtonElement>(null)
   const currentProject = state.currentProject
   const initials = useMemo(
@@ -95,10 +117,11 @@ export function WorkbenchProjectControl({
 
   function handleOpenChange(nextOpen: boolean): void {
     setOpen(nextOpen)
-    if (nextOpen) setResolvedThemeColor(resolveProjectThemeColor(anchorRef.current))
+    if (nextOpen) setThemeTokens(resolveProjectThemeTokens(anchorRef.current))
   }
 
   function openCloneDialog(): void {
+    setThemeTokens(resolveProjectThemeTokens(anchorRef.current))
     setOpen(false)
     setCloneRemoteUrl('')
     setCloneError(null)
@@ -141,7 +164,9 @@ export function WorkbenchProjectControl({
   }
 
   const themeStyle = {
-    '--project-control-theme-color': resolvedThemeColor ?? 'var(--primary)',
+    '--project-control-theme-color': themeTokens?.color ?? 'var(--workbench-theme-color)',
+    '--project-control-theme-color-rgb':
+      themeTokens?.colorRgb ?? 'var(--workbench-theme-color-rgb)',
   } as CSSProperties
 
   return (
@@ -260,7 +285,11 @@ export function WorkbenchProjectControl({
       </AnchoredPopover>
 
       <Dialog open={cloneDialogOpen} onOpenChange={handleCloneDialogOpenChange}>
-        <DialogContent className={styles.projectCloneDialog} style={themeStyle}>
+        <DialogContent
+          className={styles.projectCloneDialog}
+          data-velar-theme-scope={themeTokens?.scope ?? undefined}
+          style={themeStyle}
+        >
           <DialogHeader>
             <DialogTitle>{t('workbench.projectCloneTitle')}</DialogTitle>
             <DialogDescription>{t('workbench.projectCloneDescription')}</DialogDescription>

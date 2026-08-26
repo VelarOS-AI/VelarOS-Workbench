@@ -50,8 +50,14 @@ void describe('Workbench project window ownership', () => {
     assert.match(control, /projectControlNewWindowButton[\s\S]*onOpenProjectInNewWindow/u)
     assert.match(control, /projectAddLocal[\s\S]*projectCloneRemote/u)
     assert.doesNotMatch(control, /projectSwitch|projectOpenNewWindow/u)
+    assert.match(control, /data-velar-theme-scope=\{themeTokens\?\.scope/u)
     assert.match(styles, /\.projectControlRecentRow:hover,[\s\S]*\.projectControlRecentRow:focus-within/u)
     assert.match(styles, /\.projectControlActions[\s\S]*flex-direction:\s*column/u)
+    assert.match(
+      styles,
+      /\.projectCloneDialog[\s\S]*--primary:\s*var\(--project-control-theme-color\)/u
+    )
+    assert.match(styles, /\.projectCloneDialog[\s\S]*background:\s*var\(--workbench-surface\)/u)
   })
 
   void test('keeps active projects isolated while sharing recent projects', async () => {
