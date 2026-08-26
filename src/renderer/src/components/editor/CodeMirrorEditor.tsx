@@ -177,13 +177,13 @@ import {
   type WorkbenchSymbolLocationsState,
 } from '@renderer/models/editor/workbenchSymbolLocations'
 import {
-  createWorkbenchVelarTestRunGutterExtension,
-  shouldShowWorkbenchVelarTestRunGutter,
-} from '@renderer/models/editor/workbenchVelarTestRunGutter'
-import {
   createWorkbenchVelarMainRunGutterExtension,
   shouldShowWorkbenchVelarMainRunGutter,
 } from '@renderer/models/editor/workbenchVelarMainRunGutter'
+import {
+  createWorkbenchVelarTestRunGutterExtension,
+  shouldShowWorkbenchVelarTestRunGutter,
+} from '@renderer/models/editor/workbenchVelarTestRunGutter'
 import type { WorkbenchProjectContextIndex } from '@renderer/models/project/workbenchProjectContextIndex'
 import type { WorkbenchThemeId } from '@renderer/models/settings/workbenchPreferences'
 import type { WorkbenchOpenEditorTab } from '@renderer/types/workbenchTypes'
