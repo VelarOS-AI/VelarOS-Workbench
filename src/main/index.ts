@@ -11,6 +11,7 @@ import productionAppIconPath from '../../build/icon.png?asset'
 import developmentAppIconPath from '../../build/icon-dev.png?asset'
 
 import { WorkbenchAgentExecutionStack } from './agent/WorkbenchAgentExecutionStack'
+import { WorkbenchProductAnalyticsReporter } from './analytics/WorkbenchProductAnalyticsReporter'
 import { WorkbenchAgentCapabilityRuntime } from './kernel/WorkbenchAgentCapabilityRuntime'
 import {
   broadcastWorkbenchKernelStatus,
@@ -76,6 +77,7 @@ if (WorkbenchIsDevelopmentRuntime) {
 }
 
 let windowManager: Nullable<WorkbenchWindowManager> = null
+let productAnalytics: WorkbenchProductAnalyticsReporter | undefined
 const pendingExternalPaths = collectExternalPathArguments(process.argv)
 
 app.on('open-file', (event, path) => {
@@ -157,9 +159,22 @@ function createWorkbenchWindow(hub: WorkbenchProjectHub): BrowserWindow {
   return window
 }
 
-if (hasSingleInstanceLock) void app.whenReady().then(() => {
+if (hasSingleInstanceLock) void app.whenReady().then(async () => {
   if (WorkbenchIsDevelopmentRuntime) app.dock?.setIcon(WorkbenchApplicationIconPath)
   const dataRootDir = resolveWorkbenchDataRootDir()
+  productAnalytics = await WorkbenchProductAnalyticsReporter.create({
+    dataRoot: dataRootDir,
+    appVersion: app.getVersion(),
+    isActive: () =>
+      BrowserWindow.getAllWindows().some(
+        (window) =>
+          !window.isDestroyed() &&
+          window.isVisible() &&
+          !window.isMinimized() &&
+          window.isFocused()
+      ),
+  }).catch(() => undefined)
+  productAnalytics?.start()
   const providers = createDefaultWorkbenchMainCapabilityProviders(
     dataRootDir,
     (url) => shell.openExternal(url)
@@ -238,6 +253,7 @@ if (hasSingleInstanceLock) void app.whenReady().then(() => {
       providers.language.dispose(),
       providers.workspace.dispose(),
       kernelRuntime.dispose(),
+      productAnalytics?.dispose(),
     ]).finally(() => app.quit())
   })
 

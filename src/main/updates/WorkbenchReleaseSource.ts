@@ -1,4 +1,4 @@
-const VelarOSCloudBaseUrl = 'https://global.velaros.cn'
+export const VelarOSCloudBaseUrl = 'https://global.velaros.cn'
 
 export type WorkbenchReleaseSignatureStatus =
   | 'unsigned'
