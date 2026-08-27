@@ -8,9 +8,7 @@ import {
   ExecutionEventBus,
   normalizeExecutionModes,
 } from '@velaros-ai/agent'
-import {
-  parseAgentCapabilityExecuteEnvelopeV1,
-} from '@velaros-ai/agent/protocol/agent-capability'
+import { parseAgentCapabilityExecuteEnvelopeV1 } from '@velaros-ai/agent/protocol/agent-capability'
 import { Log } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
@@ -20,6 +18,7 @@ import {
 } from '../../plugins/agent-engines/identity'
 import type { WorkbenchAgentEnginesModRuntime } from '../../plugins/agent-engines/main/WorkbenchAgentEnginesModRuntime'
 import type { WorkbenchAgentExecutionStack } from '../agent/WorkbenchAgentExecutionStack'
+import type { WorkbenchProductAnalyticsReporter } from '../analytics/WorkbenchProductAnalyticsReporter'
 
 /** 只认自家产品身份的执行请求。 */
 const WorkbenchAgentProductId = 'velaros.workbench'
@@ -32,15 +31,17 @@ interface WorkbenchAgentExecuteInput {
   config: WorkbenchAgentConfig
 }
 
-type WorkbenchAgentConfig = AgentExecutionConfig | {
-  engineId: WorkbenchAgentEngineId
-  executionModes: ReturnType<typeof normalizeExecutionModes>
-  model?: string
-}
+type WorkbenchAgentConfig =
+  | AgentExecutionConfig
+  | {
+      engineId: WorkbenchAgentEngineId
+      executionModes: ReturnType<typeof normalizeExecutionModes>
+      model?: string
+    }
 
 /** Workbench v1 只接受 BYOK 模型选择与封闭的目标/计划执行模式轴。 */
 function parseWorkbenchAgentConfig(
-  config: Readonly<Record<string, unknown>>,
+  config: Readonly<Record<string, unknown>>
 ): WorkbenchAgentConfig {
   const rawExecutionModes = config.executionModes
   const executionModes = normalizeExecutionModes(
@@ -49,29 +50,29 @@ function parseWorkbenchAgentConfig(
   const engineId = config.engineId
   const externalEngine = isWorkbenchAgentEngineId(engineId)
   if (
-    (!externalEngine && config.modelSelection === undefined)
-    || (engineId !== undefined && !externalEngine)
-    || Object.keys(config).some((key) =>
+    (!externalEngine && config.modelSelection === undefined) ||
+    (engineId !== undefined && !externalEngine) ||
+    Object.keys(config).some((key) =>
       externalEngine
         ? key !== 'engineId' && key !== 'executionModes' && key !== 'model'
         : key !== 'modelSelection' && key !== 'executionModes'
-    )
-    || (rawExecutionModes !== undefined && !Array.isArray(rawExecutionModes))
-    || (externalEngine && config.model !== undefined && (
-      typeof config.model !== 'string' || !config.model.trim()
-    ))
-    || (Array.isArray(rawExecutionModes) && (
-      executionModes.length !== rawExecutionModes.length
-      || executionModes.some((mode, index) => mode !== rawExecutionModes[index])
-    ))
+    ) ||
+    (rawExecutionModes !== undefined && !Array.isArray(rawExecutionModes)) ||
+    (externalEngine &&
+      config.model !== undefined &&
+      (typeof config.model !== 'string' || !config.model.trim())) ||
+    (Array.isArray(rawExecutionModes) &&
+      (executionModes.length !== rawExecutionModes.length ||
+        executionModes.some((mode, index) => mode !== rawExecutionModes[index])))
   ) {
     throw new AppError('VALIDATION', 'Workbench Agent config is invalid')
   }
-  if (externalEngine) return {
-    engineId,
-    executionModes,
-    ...(typeof config.model === 'string' ? { model: config.model.trim() } : {}),
-  }
+  if (externalEngine)
+    return {
+      engineId,
+      executionModes,
+      ...(typeof config.model === 'string' ? { model: config.model.trim() } : {}),
+    }
   return { modelSelection: config.modelSelection, executionModes }
 }
 
@@ -105,7 +106,8 @@ class WorkbenchAgentCapabilityRuntime implements AgentCapabilityRuntime {
 
   public constructor(
     private readonly stack: WorkbenchAgentExecutionStack,
-    private readonly agentEngines?: WorkbenchAgentEnginesModRuntime
+    private readonly agentEngines?: WorkbenchAgentEnginesModRuntime,
+    private readonly productAnalytics?: WorkbenchProductAnalyticsReporter
   ) {}
 
   public async execute(
@@ -117,6 +119,8 @@ class WorkbenchAgentCapabilityRuntime implements AgentCapabilityRuntime {
     if (input.source.productId !== WorkbenchAgentProductId) {
       throw new Error(`Workbench Agent 不接受来源产品「${input.source.productId}」的执行请求。`)
     }
+    const projectRoot =
+      typeof input.scopeMetadata.resourceId === 'string' ? input.scopeMetadata.resourceId : null
     const publisher = new AgentCapabilityEventPublisher(
       (type, payload) => context.publish(type, payload),
       {
@@ -129,6 +133,7 @@ class WorkbenchAgentCapabilityRuntime implements AgentCapabilityRuntime {
       }
     )
     const publish = (channel: 'agent' | 'state' | 'debug', payload: unknown): void => {
+      if (channel === 'agent') this.productAnalytics?.recordAgentEvent(payload, projectRoot)
       publisher.enqueue(channel, payload)
     }
     const events = new ExecutionEventBus({
@@ -137,15 +142,24 @@ class WorkbenchAgentCapabilityRuntime implements AgentCapabilityRuntime {
       debug: (payload) => publish('debug', payload),
     })
 
+    this.productAnalytics?.recordRunStarted({
+      executionId: input.executionId,
+      sessionId: input.source.sessionId,
+      projectRoot,
+      modelSelection:
+        'engineId' in input.config
+          ? {
+              provider: input.config.engineId,
+              model: input.config.model ?? input.config.engineId,
+            }
+          : input.config.modelSelection,
+    })
+    let outcome: 'completed' | 'aborted' | 'error' = 'error'
     try {
-      const projectRoot =
-        typeof input.scopeMetadata.resourceId === 'string'
-          ? input.scopeMetadata.resourceId
-          : null
       if ('engineId' in input.config) {
         if (!this.agentEngines) throw new Error('Workbench Agent Engines Mod 未装配。')
         if (!projectRoot?.trim()) throw new Error('外部 Agent 执行需要一个项目根。')
-        return await this.agentEngines.run({
+        const result = await this.agentEngines.run({
           executionId: input.executionId,
           engineId: input.config.engineId,
           sessionId: input.source.sessionId,
@@ -156,8 +170,10 @@ class WorkbenchAgentCapabilityRuntime implements AgentCapabilityRuntime {
           events,
           abortSignal: context.signal,
         })
+        outcome = readRunOutcome(result, context.signal)
+        return result
       }
-      return await this.stack.run({
+      const result = await this.stack.run({
         sessionId: input.source.sessionId,
         projectRoot,
         messages: input.messages,
@@ -165,7 +181,10 @@ class WorkbenchAgentCapabilityRuntime implements AgentCapabilityRuntime {
         events,
         abortSignal: context.signal,
       })
+      outcome = result.status
+      return result
     } finally {
+      this.productAnalytics?.recordRunFinished(input.executionId, outcome)
       await publisher.closeAndDrain()
     }
   }
@@ -178,8 +197,11 @@ class WorkbenchAgentCapabilityRuntime implements AgentCapabilityRuntime {
   }
 }
 
-export {
-  parseWorkbenchAgentExecuteInput,
-  WorkbenchAgentCapabilityRuntime,
-  WorkbenchAgentProductId,
+function readRunOutcome(value: unknown, signal: AbortSignal): 'completed' | 'aborted' | 'error' {
+  if (signal.aborted) return 'aborted'
+  if (typeof value !== 'object' || value === null) return 'completed'
+  const status = (value as { readonly status?: unknown }).status
+  return status === 'aborted' ? 'aborted' : status === 'error' ? 'error' : 'completed'
 }
+
+export { parseWorkbenchAgentExecuteInput, WorkbenchAgentCapabilityRuntime, WorkbenchAgentProductId }

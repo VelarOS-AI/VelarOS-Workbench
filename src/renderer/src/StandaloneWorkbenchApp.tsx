@@ -1,9 +1,6 @@
 import { type ReactElement, useEffect, useRef, useState } from 'react'
 import { FolderOpenIcon } from '@phosphor-icons/react'
-import {
-  WorkbenchChatProvider,
-  WorkbenchProductRuntimeProvider,
-} from '@renderer/composition'
+import { WorkbenchChatProvider, WorkbenchProductRuntimeProvider } from '@renderer/composition'
 import { WorkbenchLocalizationProvider } from '@renderer/i18n'
 
 import { BrowserCompositionProvider } from '@velaros-ai/browser/composition'
@@ -18,6 +15,7 @@ import {
 } from '@velaros-ai/ui/conversation/composer'
 
 import { standaloneBrowserCompositionAdapter } from './browser/standaloneBrowserCompositionAdapter'
+import { WorkbenchProductAnalyticsNoticeDialog } from './components/settings/WorkbenchProductAnalyticsNoticeDialog'
 import { standaloneWorkbenchProductRuntimeValue } from './host/standaloneWorkbenchProductRuntime'
 import { useStandaloneWorkbenchLocalization } from './i18n/useStandaloneWorkbenchLocalization'
 import { useProjectHubState } from './projectHub/useProjectHubState'
@@ -138,7 +136,10 @@ export function StandaloneWorkbenchApp(): ReactElement {
                 <WorkbenchChatProvider adapter={standaloneWorkbenchChatAdapter}>
                   <div className="workbench-external-project-drop-root">
                     {state.currentProject ? (
-                      <WorkbenchWorkspaceShell project={state.currentProject} projectHubState={state} />
+                      <WorkbenchWorkspaceShell
+                        project={state.currentProject}
+                        projectHubState={state}
+                      />
                     ) : (
                       <WorkbenchWelcomePage
                         state={state}
@@ -150,6 +151,7 @@ export function StandaloneWorkbenchApp(): ReactElement {
                       onOpenChange={setNewProjectDialogOpen}
                     />
                     <WorkbenchMessageHost />
+                    <WorkbenchProductAnalyticsNoticeDialog />
                     {externalProjectDropActive && (
                       <div className="workbench-external-project-drop-overlay" role="status">
                         <div className="workbench-external-project-drop-card">

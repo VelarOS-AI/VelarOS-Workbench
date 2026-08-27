@@ -569,8 +569,10 @@ export const workbenchAppZhCNMessages = {
     deleteSucceeded: '已删除',
     treeMutationFailed: '文件树操作失败',
     deleteConfirm: '确定删除“{name}”吗？删除后可使用 ⌘Z / Ctrl+Z 撤销。',
-    deleteDirectoryConfirm: '确定删除目录“{name}”及其中的全部内容吗？删除后可使用 ⌘Z / Ctrl+Z 撤销。',
-    deleteManyConfirm: '确定删除选中的 {count} 项吗？目录中的内容也会被删除，之后可使用 ⌘Z / Ctrl+Z 撤销。',
+    deleteDirectoryConfirm:
+      '确定删除目录“{name}”及其中的全部内容吗？删除后可使用 ⌘Z / Ctrl+Z 撤销。',
+    deleteManyConfirm:
+      '确定删除选中的 {count} 项吗？目录中的内容也会被删除，之后可使用 ⌘Z / Ctrl+Z 撤销。',
     treeExpandAll: '展开已加载目录',
     treeCollapseAll: '收起目录',
     treeExpandFolder: '展开文件夹',
@@ -754,8 +756,7 @@ export const workbenchAppZhCNMessages = {
     settingsModsDescription: '管理 Workbench 的可选产品能力。',
     settingsUpdatesDescription: '管理更新检测与自动下载。',
     settingsAutomaticUpdates: '自动下载更新',
-    settingsAutomaticUpdatesDescription:
-      '在后台检测并自动下载新的 Workbench 版本，默认开启。',
+    settingsAutomaticUpdatesDescription: '在后台检测并自动下载新的 Workbench 版本，默认开启。',
     settingsCheckForUpdates: '检测更新',
     settingsCheckingForUpdates: '正在检测…',
     settingsCurrentVersion: '当前版本',
@@ -810,6 +811,13 @@ export const workbenchAppZhCNMessages = {
     settingsAiCompletionModelHint: '复用当前提供方连接，单独选择用于编辑器 Tab 补全的模型。',
     settingsAiCompletionModelPlaceholder: 'Auto',
     settingsGitSshKeyPath: 'Git SSH 密钥',
+    settingsProductAnalytics: '帮助改进 VelarOS',
+    settingsProductAnalyticsDescription: '分享软件使用过程中的非隐私数据。',
+    settingsProductAnalyticsDetails: '查看产品改进数据说明',
+    productAnalyticsNoticeDescription:
+      '分享软件使用过程中的非隐私数据，可在“设置 > 高级”关闭。',
+    productAnalyticsNoticeDecline: '拒绝',
+    productAnalyticsNoticeAllow: '允许',
     settingsGitSshKeyPathDescription:
       '仅当前项目的 Workbench Git 拉取和上传使用；留空时使用主设置里的全局密钥。',
     settingsGitSshKeyPathPlaceholder: '留空使用全局设置',
@@ -851,7 +859,8 @@ export const workbenchAppZhCNMessages = {
     settingsShortcutCloseRightTool: '关闭右侧工具',
     settingsShortcutCloseRightToolDescription: '关闭当前激活的右侧工具窗口。',
     settingsPluginSearch: '搜索插件',
-    settingsPluginSharedHint: '插件安装到 VelarOS 共享资源目录，Workbench 与 Desktop 会识别同一份安装结果。',
+    settingsPluginSharedHint:
+      '插件安装到 VelarOS 共享资源目录，Workbench 与 Desktop 会识别同一份安装结果。',
     settingsPluginsLoading: '正在读取插件…',
     settingsPluginsEmpty: '没有匹配的插件',
     settingsPluginCodeGraphDescription: '为项目提供代码图谱、结构检索与 Agent 代码查询能力。',
@@ -862,7 +871,8 @@ export const workbenchAppZhCNMessages = {
     settingsModsLoading: '正在读取模组…',
     settingsModsEmpty: '没有可用模组',
     settingsAgentEnginesModTitle: 'Agent Engines',
-    settingsAgentEnginesModDescription: '使用本机 Claude Code 与 Codex 登录会话，并接入 Workbench 的目标、计划、提问和授权界面。',
+    settingsAgentEnginesModDescription:
+      '使用本机 Claude Code 与 Codex 登录会话，并接入 Workbench 的目标、计划、提问和授权界面。',
     settingsModEnabled: '已启用',
     settingsModDisabled: '未启用',
     settingsPluginStatusInstalling: '安装中 {progress}%',

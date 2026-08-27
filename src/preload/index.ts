@@ -7,10 +7,7 @@
  */
 import { contextBridge, ipcRenderer, type IpcRendererEvent, webUtils } from 'electron'
 
-import {
-  type WorkbenchProjectHubBridge,
-  WorkbenchProjectHubChannels,
-} from '../shared/projectHub'
+import { type WorkbenchProjectHubBridge, WorkbenchProjectHubChannels } from '../shared/projectHub'
 import {
   type WorkbenchAgentModBridge,
   WorkbenchAgentModChannels,
@@ -22,6 +19,10 @@ import {
   type WorkbenchLanguageBridge,
   WorkbenchLanguageChannels,
 } from '../shared/workbenchLanguage'
+import {
+  type WorkbenchProductAnalyticsBridge,
+  WorkbenchProductAnalyticsChannels,
+} from '../shared/workbenchProductAnalytics'
 import {
   type WorkbenchResourcePluginBridge,
   WorkbenchResourcePluginChannels,
@@ -133,21 +134,16 @@ const gitBridge: WorkbenchGitBridge = {
   getSummary: (request) => ipcRenderer.invoke(WorkbenchGitChannels.summary, request),
   getLineStats: (request) => ipcRenderer.invoke(WorkbenchGitChannels.lineStats, request),
   getDiff: (request) => ipcRenderer.invoke(WorkbenchGitChannels.diff, request),
-  getFileAtCommit: (request) =>
-    ipcRenderer.invoke(WorkbenchGitChannels.fileAtCommit, request),
+  getFileAtCommit: (request) => ipcRenderer.invoke(WorkbenchGitChannels.fileAtCommit, request),
   getLog: (request) => ipcRenderer.invoke(WorkbenchGitChannels.log, request),
   generateCommitMessage: (request) =>
     ipcRenderer.invoke(WorkbenchGitChannels.generateCommitMessage, request),
   commit: (request) => ipcRenderer.invoke(WorkbenchGitChannels.commit, request),
-  performFileAction: (request) =>
-    ipcRenderer.invoke(WorkbenchGitChannels.fileAction, request),
+  performFileAction: (request) => ipcRenderer.invoke(WorkbenchGitChannels.fileAction, request),
   initialize: (request) => ipcRenderer.invoke(WorkbenchGitChannels.initialize, request),
-  switchBranch: (request) =>
-    ipcRenderer.invoke(WorkbenchGitChannels.switchBranch, request),
-  createBranch: (request) =>
-    ipcRenderer.invoke(WorkbenchGitChannels.createBranch, request),
-  performRemoteAction: (request) =>
-    ipcRenderer.invoke(WorkbenchGitChannels.remoteAction, request),
+  switchBranch: (request) => ipcRenderer.invoke(WorkbenchGitChannels.switchBranch, request),
+  createBranch: (request) => ipcRenderer.invoke(WorkbenchGitChannels.createBranch, request),
+  performRemoteAction: (request) => ipcRenderer.invoke(WorkbenchGitChannels.remoteAction, request),
 }
 
 const kernelBridge: WorkbenchKernelBridge = {
@@ -159,10 +155,8 @@ const kernelBridge: WorkbenchKernelBridge = {
     ipcRenderer.invoke(WorkbenchKernelChannels.resolveAgentInput, request),
   resolveAgentConfirmation: (request) =>
     ipcRenderer.invoke(WorkbenchKernelChannels.resolveAgentConfirmation, request),
-  onStatusChanged: (listener) =>
-    subscribe(WorkbenchKernelChannels.statusChanged, listener),
-  onAgentExecution: (listener) =>
-    subscribe(WorkbenchKernelChannels.agentExecution, listener),
+  onStatusChanged: (listener) => subscribe(WorkbenchKernelChannels.statusChanged, listener),
+  onAgentExecution: (listener) => subscribe(WorkbenchKernelChannels.agentExecution, listener),
   backupChatHistory: (request) =>
     ipcRenderer.invoke(WorkbenchKernelChannels.backupChatHistory, request),
 }
@@ -174,8 +168,7 @@ const workspaceBridge: WorkbenchWorkspaceBridge = {
 const resourcePluginBridge: WorkbenchResourcePluginBridge = {
   list: () => ipcRenderer.invoke(WorkbenchResourcePluginChannels.list),
   install: (request) => ipcRenderer.invoke(WorkbenchResourcePluginChannels.install, request),
-  setEnabled: (request) =>
-    ipcRenderer.invoke(WorkbenchResourcePluginChannels.setEnabled, request),
+  setEnabled: (request) => ipcRenderer.invoke(WorkbenchResourcePluginChannels.setEnabled, request),
   onChanged: (listener) => subscribe(WorkbenchResourcePluginChannels.changed, listener),
 }
 
@@ -200,6 +193,16 @@ const updateBridge: WorkbenchUpdateBridge = {
   onChanged: (listener) => subscribe(WorkbenchUpdateChannels.changed, listener),
 }
 
+const productAnalyticsBridge: WorkbenchProductAnalyticsBridge = {
+  getState: () => ipcRenderer.invoke(WorkbenchProductAnalyticsChannels.getState),
+  setEnabled: (enabled) =>
+    ipcRenderer.invoke(WorkbenchProductAnalyticsChannels.setEnabled, enabled),
+  resolveNotice: (decision) =>
+    ipcRenderer.invoke(WorkbenchProductAnalyticsChannels.resolveNotice, decision),
+  openDetails: () => ipcRenderer.invoke(WorkbenchProductAnalyticsChannels.openDetails),
+  onChanged: (listener) => subscribe(WorkbenchProductAnalyticsChannels.changed, listener),
+}
+
 contextBridge.exposeInMainWorld('velarosWorkbenchProjectHub', projectHubBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchFs', fsBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchLanguage', languageBridge)
@@ -211,11 +214,9 @@ contextBridge.exposeInMainWorld('velarosWorkbenchWorkspace', workspaceBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchResourcePlugins', resourcePluginBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchAgentMods', agentModBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchUpdate', updateBridge)
+contextBridge.exposeInMainWorld('velarosWorkbenchProductAnalytics', productAnalyticsBridge)
 
-function subscribe<TPayload>(
-  channel: string,
-  listener: (payload: TPayload) => void
-): () => void {
+function subscribe<TPayload>(channel: string, listener: (payload: TPayload) => void): () => void {
   const handler = (_event: IpcRendererEvent, payload: TPayload): void => {
     listener(payload)
   }

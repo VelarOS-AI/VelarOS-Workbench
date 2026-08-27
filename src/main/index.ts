@@ -12,6 +12,7 @@ import developmentAppIconPath from '../../build/icon-dev.png?asset'
 
 import { WorkbenchAgentExecutionStack } from './agent/WorkbenchAgentExecutionStack'
 import { WorkbenchProductAnalyticsReporter } from './analytics/WorkbenchProductAnalyticsReporter'
+import { installWorkbenchProductAnalyticsRuntime } from './analytics/WorkbenchProductAnalyticsRuntime'
 import { WorkbenchAgentCapabilityRuntime } from './kernel/WorkbenchAgentCapabilityRuntime'
 import {
   broadcastWorkbenchKernelStatus,
@@ -174,6 +175,10 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
           window.isFocused()
       ),
   }).catch(() => undefined)
+  const disposeProductAnalyticsRuntime = installWorkbenchProductAnalyticsRuntime({
+    dataRootDir,
+    ...(productAnalytics ? { reporter: productAnalytics } : {}),
+  })
   productAnalytics?.start()
   const providers = createDefaultWorkbenchMainCapabilityProviders(
     dataRootDir,
@@ -195,7 +200,11 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
   })
   kernelRuntime.registerModule(
     createAgentKernelModule({
-      runtime: new WorkbenchAgentCapabilityRuntime(agentExecutionStack, providers.agentEngines),
+      runtime: new WorkbenchAgentCapabilityRuntime(
+        agentExecutionStack,
+        providers.agentEngines,
+        productAnalytics
+      ),
     })
   )
   const disposeKernelIpc = registerWorkbenchKernelIpc(
@@ -248,6 +257,7 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
     disposeModIpc()
     disposeKernelIpc()
     disposeWorkspaceIpc()
+    disposeProductAnalyticsRuntime()
     void Promise.all([
       providers.parts.terminal.closeAllSessions(),
       providers.language.dispose(),

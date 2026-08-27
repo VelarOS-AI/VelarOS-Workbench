@@ -137,7 +137,8 @@ export const workbenchAppEnUSMessages = {
     projectAddLocal: 'Add from local',
     projectCloneRemote: 'Clone from Git',
     projectCloneTitle: 'Clone a Git project',
-    projectCloneDescription: 'Enter a remote repository, choose where to save it, then open it in a new window.',
+    projectCloneDescription:
+      'Enter a remote repository, choose where to save it, then open it in a new window.',
     projectCloneUrlPlaceholder: 'https://github.com/owner/repository.git',
     projectCloneSubmit: 'Clone and open',
     projectCloneInvalidRemote: 'Enter a valid HTTP, HTTPS, SSH, or Git repository URL.',
@@ -578,8 +579,10 @@ export const workbenchAppEnUSMessages = {
     deleteSucceeded: 'Deleted',
     treeMutationFailed: 'File tree operation failed',
     deleteConfirm: 'Delete “{name}”? You can undo with Cmd+Z / Ctrl+Z.',
-    deleteDirectoryConfirm: 'Delete “{name}” and all of its contents? You can undo with Cmd+Z / Ctrl+Z.',
-    deleteManyConfirm: 'Delete {count} selected entries and any contents? You can undo with Cmd+Z / Ctrl+Z.',
+    deleteDirectoryConfirm:
+      'Delete “{name}” and all of its contents? You can undo with Cmd+Z / Ctrl+Z.',
+    deleteManyConfirm:
+      'Delete {count} selected entries and any contents? You can undo with Cmd+Z / Ctrl+Z.',
     treeExpandAll: 'Expand loaded folders',
     treeCollapseAll: 'Collapse folders',
     treeExpandFolder: 'Expand folder',
@@ -692,12 +695,14 @@ export const workbenchAppEnUSMessages = {
     settingsModel: 'Model',
     settingsModelDescription: 'Choose catalog models for Workbench Agent and code completion.',
     settingsModelProvider: 'Provider',
-    settingsModelProviderDescription: 'Uses the same built-in provider catalog as Desktop; the endpoint is selected automatically.',
+    settingsModelProviderDescription:
+      'Uses the same built-in provider catalog as Desktop; the endpoint is selected automatically.',
     settingsModelName: 'Agent model',
     settingsModelNameDescription: 'The primary model used for chat and coding tasks.',
     settingsModelBaseUrl: 'API URL',
     settingsModelApiKey: 'API key',
-    settingsModelApiKeyDescription: 'Leave empty when an environment credential is already available. Entered keys remain in this run only.',
+    settingsModelApiKeyDescription:
+      'Leave empty when an environment credential is already available. Entered keys remain in this run only.',
     settingsModelApiKeyPlaceholder: 'Enter API key',
     chatAskAboutFile: 'Ask about {path}…',
     chatPlaceholder: 'Ask Workbench Agent…',
@@ -712,12 +717,16 @@ export const workbenchAppEnUSMessages = {
     chatEngineLoadingModels: 'Loading models…',
     chatStarterSuggestions: 'Starter suggestions',
     chatStarterOverviewTitle: 'Understand the project',
-    chatStarterOverviewPrompt: 'Summarize this project’s structure, key entry points, and main modules.',
+    chatStarterOverviewPrompt:
+      'Summarize this project’s structure, key entry points, and main modules.',
     chatStarterExplainTitle: 'Explain the code',
-    chatStarterExplainFilePrompt: 'Explain what {path} does, its key logic, and where it fits in the project.',
-    chatStarterExplainProjectPrompt: 'Find a good file to start with and explain its role and key logic.',
+    chatStarterExplainFilePrompt:
+      'Explain what {path} does, its key logic, and where it fits in the project.',
+    chatStarterExplainProjectPrompt:
+      'Find a good file to start with and explain its role and key logic.',
     chatStarterReviewTitle: 'Check for issues',
-    chatStarterReviewPrompt: 'Review the project for high-priority issues and suggest concrete fixes.',
+    chatStarterReviewPrompt:
+      'Review the project for high-priority issues and suggest concrete fixes.',
     settingsProject: 'Project',
     settingsProjectDescription: 'Current project window and exit actions.',
     settingsExitProject: 'Exit current project',
@@ -819,9 +828,17 @@ export const workbenchAppEnUSMessages = {
       'Which model provider to use for inline completion. Auto follows the main window model settings.',
     settingsAiCompletionProviderFollowChat: 'Auto',
     settingsAiCompletionModel: 'Completion model',
-    settingsAiCompletionModelHint: 'Reuses the current provider connection with a separate model for editor Tab completion.',
+    settingsAiCompletionModelHint:
+      'Reuses the current provider connection with a separate model for editor Tab completion.',
     settingsAiCompletionModelPlaceholder: 'Auto',
     settingsGitSshKeyPath: 'Git SSH key',
+    settingsProductAnalytics: 'Help improve VelarOS',
+    settingsProductAnalyticsDescription: 'Share non-private data from normal software use.',
+    settingsProductAnalyticsDetails: 'View product improvement data details',
+    productAnalyticsNoticeDescription:
+      'Share non-private data from normal software use. You can turn this off in Settings > Advanced.',
+    productAnalyticsNoticeDecline: 'Decline',
+    productAnalyticsNoticeAllow: 'Allow',
     settingsGitSshKeyPathDescription:
       'Used only for Workbench Git pull and push in this project. Leave empty to use the global key from main settings.',
     settingsGitSshKeyPathPlaceholder: 'Leave empty to use global settings',
@@ -872,11 +889,13 @@ export const workbenchAppEnUSMessages = {
     settingsPluginStatusAvailable: 'Enabled',
     settingsPluginStatusDisabled: 'Disabled',
     settingsPluginStatusMissing: 'Not installed',
-    settingsModsHint: 'Mods start disabled. Enable this Mod to show Claude and ChatGPT in the right chat rail.',
+    settingsModsHint:
+      'Mods start disabled. Enable this Mod to show Claude and ChatGPT in the right chat rail.',
     settingsModsLoading: 'Loading Mods…',
     settingsModsEmpty: 'No Mods available',
     settingsAgentEnginesModTitle: 'Agent Engines',
-    settingsAgentEnginesModDescription: 'Use local Claude Code and Codex login sessions with Workbench goal, plan, input, and approval surfaces.',
+    settingsAgentEnginesModDescription:
+      'Use local Claude Code and Codex login sessions with Workbench goal, plan, input, and approval surfaces.',
     settingsModEnabled: 'Enabled',
     settingsModDisabled: 'Disabled',
     settingsPluginStatusInstalling: 'Installing {progress}%',

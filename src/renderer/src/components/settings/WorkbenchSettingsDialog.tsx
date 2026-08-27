@@ -10,6 +10,7 @@ import {
 } from 'react'
 import {
   ArrowCounterClockwiseIcon,
+  ArrowSquareOutIcon,
   DownloadSimpleIcon,
   FileTextIcon,
   PlugsConnectedIcon,
@@ -17,6 +18,7 @@ import {
   WarningCircleIcon,
   XIcon,
 } from '@phosphor-icons/react'
+import { useWorkbenchProductAnalytics } from '@renderer/hooks/useWorkbenchProductAnalytics'
 import { useWorkbenchUpdate } from '@renderer/hooks/useWorkbenchUpdate'
 import { useWorkbenchHostRuntime } from '@renderer/host'
 import type { WorkbenchMessageKey } from '@renderer/i18n'
@@ -66,10 +68,7 @@ import type {
   WorkbenchProjectAiRulesResult,
 } from '@shared/contracts'
 
-import type {
-  WorkbenchModCatalog,
-  WorkbenchModRecord,
-} from '../../../../shared/workbenchAgentMods'
+import type { WorkbenchModCatalog, WorkbenchModRecord } from '../../../../shared/workbenchAgentMods'
 import type {
   WorkbenchResourcePluginCatalog,
   WorkbenchResourcePluginRecord,
@@ -196,6 +195,7 @@ export function WorkbenchSettingsDialog({
   const { t } = useWorkbenchI18n()
   const hostRuntime = useWorkbenchHostRuntime()
   const updateState = useWorkbenchUpdate()
+  const productAnalytics = useWorkbenchProductAnalytics()
   const modelConfig = useStandaloneWorkbenchModelConfig()
   const modelProviderPreset = getStandaloneWorkbenchModelProviderPreset(modelConfig.provider)
   const modelProviderOptions = StandaloneWorkbenchModelProviderPresets.map((provider) => ({
@@ -203,7 +203,10 @@ export function WorkbenchSettingsDialog({
     label: provider.label,
     description: provider.description,
   }))
-  const modelOptions = modelProviderPreset.models.map((model) => ({ value: model, label: model }))
+  const modelOptions = modelProviderPreset.models.map((model) => ({
+    value: model,
+    label: model,
+  }))
   const timers = useTimerScope('WorkbenchSettingsDialog')
   const [activeSection, setActiveSection] = useState<WorkbenchSettingsSectionId>('project')
   const [capturingAction, setCapturingAction] =
@@ -212,8 +215,7 @@ export function WorkbenchSettingsDialog({
     useState<Nullable<WorkbenchProjectAiRulesResult>>(null)
   const [expandedProjectAiRulePath, setExpandedProjectAiRulePath] = useState<Nullable<string>>(null)
   const [isLoadingProjectAiRules, setIsLoadingProjectAiRules] = useState(false)
-  const [pluginCatalog, setPluginCatalog] =
-    useState<Nullable<WorkbenchResourcePluginCatalog>>(null)
+  const [pluginCatalog, setPluginCatalog] = useState<Nullable<WorkbenchResourcePluginCatalog>>(null)
   const [modCatalog, setModCatalog] = useState<Nullable<WorkbenchModCatalog>>(null)
   const [isLoadingMods, setIsLoadingMods] = useState(false)
   const [isLoadingPlugins, setIsLoadingPlugins] = useState(false)
@@ -432,7 +434,11 @@ export function WorkbenchSettingsDialog({
   }
 
   function renderAppearanceSection(): ReactElement {
-    const themeOptions: Array<{ label: string; value: WorkbenchThemeId; description: string }> = [
+    const themeOptions: Array<{
+      label: string
+      value: WorkbenchThemeId
+      description: string
+    }> = [
       {
         value: 'light-modern',
         label: t('workbench.settingsThemeLightModern'),
@@ -491,9 +497,18 @@ export function WorkbenchSettingsDialog({
             className={styles.workbenchSettingsSelectTrigger}
             value={preferences.density}
             options={[
-              { value: 'compact', label: t('workbench.settingsDensityCompact') },
-              { value: 'balanced', label: t('workbench.settingsDensityBalanced') },
-              { value: 'comfortable', label: t('workbench.settingsDensityComfortable') },
+              {
+                value: 'compact',
+                label: t('workbench.settingsDensityCompact'),
+              },
+              {
+                value: 'balanced',
+                label: t('workbench.settingsDensityBalanced'),
+              },
+              {
+                value: 'comfortable',
+                label: t('workbench.settingsDensityComfortable'),
+              },
             ]}
             onChange={(density) => onPreferencesChange({ density })}
           />
@@ -575,7 +590,9 @@ export function WorkbenchSettingsDialog({
               step={WORKBENCH_EDITOR_FONT_SIZE_STEP}
               value={preferences.editorFontSize}
               onChange={(event) =>
-                onPreferencesChange({ editorFontSize: +event.currentTarget.value })
+                onPreferencesChange({
+                  editorFontSize: +event.currentTarget.value,
+                })
               }
             />
             <span>{preferences.editorFontSize}px</span>
@@ -590,7 +607,9 @@ export function WorkbenchSettingsDialog({
               step={0.25}
               value={preferences.editorLineHeight}
               onChange={(event) =>
-                onPreferencesChange({ editorLineHeight: +event.currentTarget.value })
+                onPreferencesChange({
+                  editorLineHeight: +event.currentTarget.value,
+                })
               }
             />
             <span>{preferences.editorLineHeight}px</span>
@@ -608,7 +627,9 @@ export function WorkbenchSettingsDialog({
               step={15}
               value={preferences.localHistoryThrottleSeconds}
               onChange={(event) =>
-                onPreferencesChange({ localHistoryThrottleSeconds: +event.currentTarget.value })
+                onPreferencesChange({
+                  localHistoryThrottleSeconds: +event.currentTarget.value,
+                })
               }
             />
             <span>
@@ -716,7 +737,9 @@ export function WorkbenchSettingsDialog({
               value={modelConfig.apiKey}
               placeholder={t('workbench.settingsModelApiKeyPlaceholder')}
               onChange={(event) =>
-                updateStandaloneWorkbenchModelConfig({ apiKey: event.currentTarget.value })
+                updateStandaloneWorkbenchModelConfig({
+                  apiKey: event.currentTarget.value,
+                })
               }
             />
           </SettingRow>
@@ -835,13 +858,18 @@ export function WorkbenchSettingsDialog({
 
   function pluginStatusLabel(plugin: WorkbenchResourcePluginRecord): string {
     switch (plugin.status) {
-      case 'available': return t('workbench.settingsPluginStatusAvailable')
-      case 'disabled': return t('workbench.settingsPluginStatusDisabled')
-      case 'installing': return t('workbench.settingsPluginStatusInstalling', {
-        progress: plugin.progress ?? 0,
-      })
-      case 'failed': return t('workbench.settingsPluginStatusFailed')
-      default: return t('workbench.settingsPluginStatusMissing')
+      case 'available':
+        return t('workbench.settingsPluginStatusAvailable')
+      case 'disabled':
+        return t('workbench.settingsPluginStatusDisabled')
+      case 'installing':
+        return t('workbench.settingsPluginStatusInstalling', {
+          progress: plugin.progress ?? 0,
+        })
+      case 'failed':
+        return t('workbench.settingsPluginStatusFailed')
+      default:
+        return t('workbench.settingsPluginStatusMissing')
     }
   }
 
@@ -854,7 +882,10 @@ export function WorkbenchSettingsDialog({
     enabled: boolean
   ): Promise<void> {
     setPluginCatalog(
-      await window.velarosWorkbenchResourcePlugins.setEnabled({ id: plugin.id, enabled })
+      await window.velarosWorkbenchResourcePlugins.setEnabled({
+        id: plugin.id,
+        enabled,
+      })
     )
   }
 
@@ -879,7 +910,13 @@ export function WorkbenchSettingsDialog({
         </div>
         <div className={styles.workbenchSettingsPluginActions}>
           <WorkbenchSettingsPill
-            tone={plugin.status === 'available' ? 'success' : plugin.status === 'failed' ? 'warning' : 'default'}
+            tone={
+              plugin.status === 'available'
+                ? 'success'
+                : plugin.status === 'failed'
+                  ? 'warning'
+                  : 'default'
+            }
           >
             {pluginStatusLabel(plugin)}
           </WorkbenchSettingsPill>
@@ -909,7 +946,12 @@ export function WorkbenchSettingsDialog({
   }
 
   async function setModEnabled(mod: WorkbenchModRecord, enabled: boolean): Promise<void> {
-    setModCatalog(await window.velarosWorkbenchAgentMods.setEnabled({ id: mod.id, enabled }))
+    setModCatalog(
+      await window.velarosWorkbenchAgentMods.setEnabled({
+        id: mod.id,
+        enabled,
+      })
+    )
   }
 
   function renderModsSection(): ReactElement {
@@ -1005,6 +1047,25 @@ export function WorkbenchSettingsDialog({
     return (
       <div className={styles.workbenchSettingsSectionPanel}>
         <SettingRow
+          title={t('workbench.settingsProductAnalytics')}
+          description={t('workbench.settingsProductAnalyticsDescription')}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <IconButton
+              label={t('workbench.settingsProductAnalyticsDetails')}
+              size="icon-sm"
+              variant="ghost"
+              onClick={productAnalytics.openDetails}
+            >
+              <ArrowSquareOutIcon size={16} />
+            </IconButton>
+            <Switch
+              checked={productAnalytics.enabled}
+              onCheckedChange={productAnalytics.setEnabled}
+            />
+          </div>
+        </SettingRow>
+        <SettingRow
           title={t('workbench.settingsGitSshKeyPath')}
           description={t('workbench.settingsGitSshKeyPathDescription')}
         >
@@ -1030,7 +1091,9 @@ export function WorkbenchSettingsDialog({
     let status = t('workbench.settingsUpdateIdle')
     if (updateState.phase === 'checking') status = t('workbench.settingsCheckingForUpdates')
     else if (updateState.phase === 'available') {
-      status = t('workbench.settingsUpdateAvailable', { version: targetVersion })
+      status = t('workbench.settingsUpdateAvailable', {
+        version: targetVersion,
+      })
     } else if (updateState.phase === 'downloading') {
       status = t('workbench.updateDownloading', {
         percent: Math.round(updateState.percent ?? 0),
@@ -1042,9 +1105,13 @@ export function WorkbenchSettingsDialog({
         version: targetVersion,
       })
     } else if (updateState.phase === 'downloaded') {
-      status = t('workbench.settingsUpdateDownloaded', { version: targetVersion })
+      status = t('workbench.settingsUpdateDownloaded', {
+        version: targetVersion,
+      })
     } else if (updateState.phase === 'error') {
-      status = t('workbench.settingsUpdateError', { error: updateState.error ?? '' })
+      status = t('workbench.settingsUpdateError', {
+        error: updateState.error ?? '',
+      })
     }
     const checkDisabled =
       updateState.phase === 'checking' ||
