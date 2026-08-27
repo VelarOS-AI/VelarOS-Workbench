@@ -6,6 +6,7 @@ import type { WorkbenchKernelBridge } from './workbenchKernel'
 import type { WorkbenchLanguageBridge } from './workbenchLanguage'
 import type { WorkbenchResourcePluginBridge } from './workbenchResourcePlugins'
 import type { WorkbenchTerminalBridge } from './workbenchTerminal'
+import type { WorkbenchUpdateBridge } from './workbenchUpdate'
 import type { WorkbenchWatchBridge } from './workbenchWatch'
 import type { WorkbenchWorkspaceBridge } from './workbenchWorkspace'
 
@@ -21,6 +22,7 @@ declare global {
     velarosWorkbenchWorkspace: WorkbenchWorkspaceBridge
     velarosWorkbenchResourcePlugins: WorkbenchResourcePluginBridge
     velarosWorkbenchAgentMods: WorkbenchAgentModBridge
+    velarosWorkbenchUpdate: WorkbenchUpdateBridge
   }
 }
 

@@ -8,6 +8,8 @@
 import type { ReactElement } from 'react'
 import { toast, Toaster } from 'sonner'
 
+import { WorkbenchUpdateProgress } from '../components/updates/WorkbenchUpdateProgress'
+
 import 'sonner/dist/styles.css'
 
 export type WorkbenchMessageTone = 'error' | 'warning' | 'success' | 'info'
@@ -63,5 +65,10 @@ export const workbenchMessage: WorkbenchMessageApi = {
 }
 
 export function WorkbenchMessageHost(): ReactElement {
-  return <Toaster position="bottom-right" closeButton />
+  return (
+    <>
+      <WorkbenchUpdateProgress />
+      <Toaster position="bottom-right" closeButton />
+    </>
+  )
 }
