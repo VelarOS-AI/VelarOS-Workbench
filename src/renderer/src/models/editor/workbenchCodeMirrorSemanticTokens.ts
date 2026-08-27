@@ -11,6 +11,35 @@ const semanticTokensRefreshEffect = StateEffect.define<void>()
 const SemanticTokenDelayMs = 120
 const SemanticTokenRetryDelaysMs = [250, 500, 1_000, 2_000, 4_000] as const
 const markCache = new Map<string, Decoration>()
+const SemanticBuiltinTypeNames = new Set([
+  'any',
+  'bigint',
+  'bool',
+  'boolean',
+  'Error',
+  'List',
+  'Map',
+  'never',
+  'null',
+  'number',
+  'object',
+  'Promise',
+  'Set',
+  'string',
+  'symbol',
+  'undefined',
+  'unknown',
+  'void',
+])
+const SemanticTypeTokenKinds = new Set([
+  'class',
+  'enum',
+  'interface',
+  'namespace',
+  'struct',
+  'type',
+  'typeParameter',
+])
 
 function semanticTokenTheme(dark: boolean): Extension {
   return EditorView.theme({
@@ -19,6 +48,9 @@ function semanticTokenTheme(dark: boolean): Extension {
     },
     '& .cm-workbenchSemantic-enum': {
       color: `${dark ? '#4ec9b0' : '#007f73'} !important`,
+    },
+    '& .cm-workbenchSemantic-builtinType': {
+      color: `${dark ? '#4da6ff' : '#0067c0'} !important`,
     },
     '& .cm-workbenchSemantic-enumMember': {
       color: `${dark ? '#4fc1ff' : '#0070c1'} !important`,
@@ -113,8 +145,10 @@ export function buildWorkbenchSemanticTokenDecorations(
     if (!range || range.from >= range.to) return []
 
     const tokenText = content.slice(range.from, range.to)
-    const effectiveToken =
-      token.type === 'property'
+    const effectiveToken = SemanticTypeTokenKinds.has(token.type)
+      && SemanticBuiltinTypeNames.has(tokenText)
+      ? { ...token, type: 'builtinType' }
+      : token.type === 'property'
       && callableNames.has(tokenText)
       && isObjectShorthandRange(content, range.from, range.to)
         ? { ...token, type: 'function' as const }

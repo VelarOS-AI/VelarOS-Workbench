@@ -482,6 +482,7 @@
   --workbench-editor-caret: #111111;
   --workbench-editor-tooltip-bg: #ffffff;
   --workbench-editor-hover-keyword: #0033b3;
+  --workbench-editor-hover-builtin-type: #0067c0;
   --workbench-editor-hover-type: #007070;
   --workbench-editor-hover-name: #871094;
   --workbench-editor-hover-function: #795e26;
@@ -630,6 +631,7 @@
   --workbench-editor-caret: #aeafad;
   --workbench-editor-tooltip-bg: #252526;
   --workbench-editor-hover-keyword: #cf8efa;
+  --workbench-editor-hover-builtin-type: #4da6ff;
   --workbench-editor-hover-type: #56c3d6;
   --workbench-editor-hover-name: #bababa;
   --workbench-editor-hover-function: #dcdcaa;

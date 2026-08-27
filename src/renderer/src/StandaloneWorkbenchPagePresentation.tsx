@@ -78,9 +78,26 @@ export function StandaloneWorkbenchPagePresentation({
 
   const activeRightTool = surface.activeRightTool ?? 'chat'
   const activeChatProviderId = resolveWorkbenchChatProviderId(activeRightTool)
+  const pendingFileOpenId = projectHubState.pendingFileOpen?.id
+  const pendingFileOpenPath = projectHubState.pendingFileOpen?.path
+  const activeProjectId = workbench.activeProject?.id
   useEffect(() => {
     if (!agentEnginesEnabled && surface.activeRightTool !== 'chat') surface.closeRightTool()
   }, [agentEnginesEnabled, surface.activeRightTool])
+
+  useEffect(() => {
+    if (!pendingFileOpenId || !pendingFileOpenPath || !activeProjectId) return
+
+    let active = true
+    void workbench.selectFile(pendingFileOpenPath).finally(() => {
+      if (active) {
+        void window.velarosWorkbenchProjectHub.acknowledgeFileOpen(pendingFileOpenId)
+      }
+    })
+    return () => {
+      active = false
+    }
+  }, [activeProjectId, pendingFileOpenId, pendingFileOpenPath, workbench.selectFile])
 
   if (!workbench.activeProject) return <main className={styles.root} />
 

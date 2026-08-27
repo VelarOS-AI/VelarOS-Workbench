@@ -39,6 +39,10 @@
   color: var(--workbench-editor-hover-keyword, #0033b3);
 }
 
+.editorSymbolTooltipPartBuiltinType {
+  color: var(--workbench-editor-hover-builtin-type, #0067c0);
+}
+
 .editorSymbolTooltipPartType {
   color: var(--workbench-editor-hover-type, #007070);
 }
@@ -80,6 +84,11 @@
 .codeMirrorEditor :global(.cm-tooltip) .editorSymbolTooltipPartKeyword,
 :global(.cm-tooltip) .editorSymbolTooltipPartKeyword {
   color: var(--workbench-editor-hover-keyword, #0033b3) !important;
+}
+
+.codeMirrorEditor :global(.cm-tooltip) .editorSymbolTooltipPartBuiltinType,
+:global(.cm-tooltip) .editorSymbolTooltipPartBuiltinType {
+  color: var(--workbench-editor-hover-builtin-type, #0067c0) !important;
 }
 
 .codeMirrorEditor :global(.cm-tooltip) .editorSymbolTooltipPartType,
@@ -133,6 +142,10 @@
   color: var(--workbench-editor-hover-keyword, #0033b3) !important;
 }
 
+.editorSymbolTooltip [data-hover-part='builtinType'] {
+  color: var(--workbench-editor-hover-builtin-type, #0067c0) !important;
+}
+
 .editorSymbolTooltip [data-hover-part='type'] {
   color: var(--workbench-editor-hover-type, #007070) !important;
 }
@@ -181,6 +194,11 @@
 .codeMirrorEditor :global(.cm-tooltip) .editorSymbolTooltip [data-hover-part='keyword'],
 :global(.cm-tooltip) .editorSymbolTooltip [data-hover-part='keyword'] {
   color: var(--workbench-editor-hover-keyword, #0033b3) !important;
+}
+
+.codeMirrorEditor :global(.cm-tooltip) .editorSymbolTooltip [data-hover-part='builtinType'],
+:global(.cm-tooltip) .editorSymbolTooltip [data-hover-part='builtinType'] {
+  color: var(--workbench-editor-hover-builtin-type, #0067c0) !important;
 }
 
 .codeMirrorEditor :global(.cm-tooltip) .editorSymbolTooltip [data-hover-part='type'],

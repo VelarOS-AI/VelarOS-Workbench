@@ -19,4 +19,6 @@ void test('semantic keywords are blue and decorators retain annotation yellow th
   assert.match(light, /cm-workbenchSemantic-keyword, .*cm-workbenchSemantic-keyword \* \{color: #0033b3 !important;\}/u)
   assert.match(dark, /cm-workbenchSemantic-decorator, .*cm-workbenchSemantic-decorator \* \{color: #c8a56c !important;\}/u)
   assert.match(light, /cm-workbenchSemantic-decorator, .*cm-workbenchSemantic-decorator \* \{color: #808000 !important;\}/u)
+  assert.match(dark, /cm-workbenchSemantic-builtinType \{color: #4da6ff !important;\}/u)
+  assert.match(light, /cm-workbenchSemantic-builtinType \{color: #0067c0 !important;\}/u)
 })

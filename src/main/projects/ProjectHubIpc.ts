@@ -58,10 +58,16 @@ export function registerProjectHubIpc(windows: WorkbenchWindowManager): void {
       : { ok: false as const, reason: 'missing' as const }
   )
 
-  ipcMain.handle(WorkbenchProjectHubChannels.openDroppedProjectPaths, (event, paths: unknown) =>
+  ipcMain.handle(WorkbenchProjectHubChannels.openDroppedPaths, (event, paths: unknown) =>
     Array.isArray(paths) && paths.length <= 32 && paths.every((path) => typeof path === 'string')
-      ? windows.openDroppedProjectPaths(event.sender, paths)
-      : { opened: [], rejected: [] }
+      ? windows.openDroppedPaths(event.sender, paths)
+      : { opened: [], openedFiles: [], rejected: [] }
+  )
+
+  ipcMain.handle(WorkbenchProjectHubChannels.acknowledgeFileOpen, (event, id: unknown) =>
+    typeof id === 'number' && Number.isSafeInteger(id) && id > 0
+      ? windows.acknowledgeFileOpen(event.sender, id)
+      : (windows.getHubForWebContents(event.sender)?.getState() ?? emptyState())
   )
 
   ipcMain.handle(WorkbenchProjectHubChannels.openSystemPath, async (_event, path: unknown) => {
@@ -100,5 +106,5 @@ export function registerProjectHubIpc(windows: WorkbenchWindowManager): void {
 }
 
 function emptyState() {
-  return { currentProject: null, recentProjects: [] }
+  return { currentProject: null, recentProjects: [], pendingFileOpen: null }
 }

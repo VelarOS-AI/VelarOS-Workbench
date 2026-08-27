@@ -2,6 +2,7 @@ import type { WorkbenchLanguageServiceDisplayPartKind } from '@shared/contracts'
 
 export type WorkbenchEditorHoverPartStyle =
   | 'keyword'
+  | 'builtinType'
   | 'type'
   | 'name'
   | 'function'
@@ -128,7 +129,7 @@ function tokenizePlainHoverText(text: string): WorkbenchEditorHoverTextToken[] {
   collectPlainTextMatches(text, STRING_PATTERN, 'string', matches)
   collectPlainTextMatches(text, NUMBER_PATTERN, 'number', matches)
   collectPlainTextMatches(text, TS_STATEMENT_KEYWORD_PATTERN, 'keyword', matches)
-  collectPlainTextMatches(text, TS_TYPE_KEYWORD_PATTERN, 'type', matches)
+  collectPlainTextMatches(text, TS_TYPE_KEYWORD_PATTERN, 'builtinType', matches)
   collectPlainTextMatches(text, PATH_PATTERN, 'location', matches)
 
   const typeMatches: PlainTextMatch[] = []
@@ -161,7 +162,7 @@ function tokenizePlainHoverText(text: string): WorkbenchEditorHoverTextToken[] {
 
 function resolvePrimitiveTypeStyle(text: string): WorkbenchEditorHoverPartStyle | null {
   const trimmed = text.trim()
-  return HOVER_PRIMITIVE_TYPE_NAMES.has(trimmed) ? 'type' : null
+  return HOVER_PRIMITIVE_TYPE_NAMES.has(trimmed) ? 'builtinType' : null
 }
 
 export function resolveWorkbenchHoverDisplayPartStyle(

@@ -66,6 +66,7 @@ export interface WorkbenchEditorLanguageFeatureClasses {
   editorSymbolTooltipLocation: string
   editorSymbolTooltipLocationLabel: string
   editorSymbolTooltipSectionLabel: string
+  editorSymbolTooltipPartBuiltinType: string
   editorSymbolTooltipPartFunction: string
   editorSymbolTooltipPartKeyword: string
   editorSymbolTooltipPartLink: string
@@ -192,6 +193,7 @@ function createEditorSymbolTooltipWrapper(
 function createHoverPartClassName(classes: WorkbenchEditorLanguageFeatureClasses) {
   const classByStyle: Readonly<Record<WorkbenchEditorHoverPartStyle, string>> = {
     keyword: classes.editorSymbolTooltipPartKeyword,
+    builtinType: classes.editorSymbolTooltipPartBuiltinType,
     type: classes.editorSymbolTooltipPartType,
     name: classes.editorSymbolTooltipPartName,
     function: classes.editorSymbolTooltipPartFunction,

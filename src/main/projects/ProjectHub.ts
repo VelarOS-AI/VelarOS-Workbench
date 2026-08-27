@@ -9,6 +9,7 @@ import { basename, join, resolve } from 'node:path'
 
 import type {
   WorkbenchOpenedProject,
+  WorkbenchPendingFileOpen,
   WorkbenchProjectCreateResult,
   WorkbenchProjectHubState,
   WorkbenchProjectOpenFailureReason,
@@ -26,12 +27,16 @@ const MaxProjectNameLength = 80
 export class WorkbenchProjectHub {
   private readonly listeners = new Set<ProjectHubListener>()
   private currentProject: Nullable<WorkbenchOpenedProject> = null
+  private pendingFileOpen: Nullable<WorkbenchPendingFileOpen> = null
+  private readonly queuedFileOpenPaths: string[] = []
+  private nextFileOpenId = 1
 
   constructor(private readonly store: RecentProjectsStore) {}
 
   public getState(): WorkbenchProjectHubState {
     return {
       currentProject: this.currentProject,
+      pendingFileOpen: this.pendingFileOpen,
       recentProjects: this.store.list().map((entry) => ({
         ...entry,
         missing: validateProjectDirectory(entry.path) !== null,
@@ -102,6 +107,50 @@ export class WorkbenchProjectHub {
 
   public closeProject(): WorkbenchProjectHubState {
     this.currentProject = null
+    this.pendingFileOpen = null
+    this.queuedFileOpenPaths.length = 0
+    this.emitState()
+    return this.getState()
+  }
+
+  /**
+   * 把外部文件打开请求放进项目窗口自己的顺序队列。renderer 每确认一个请求后才投递下一个，
+   * 避免一次拖入多个文件时并发读取互相取消。
+   */
+  public requestFileOpen(path: string): WorkbenchProjectHubState {
+    if (!this.currentProject) return this.getState()
+
+    const normalizedPath = path.replaceAll('\\', '/').replace(/^\.\//u, '')
+    if (
+      normalizedPath.length === 0 ||
+      normalizedPath.startsWith('/') ||
+      normalizedPath === '..' ||
+      normalizedPath.startsWith('../')
+    ) return this.getState()
+
+    if (
+      this.pendingFileOpen?.path === normalizedPath ||
+      this.queuedFileOpenPaths.includes(normalizedPath)
+    ) return this.getState()
+
+    if (this.pendingFileOpen) {
+      this.queuedFileOpenPaths.push(normalizedPath)
+    } else {
+      this.pendingFileOpen = { id: this.nextFileOpenId, path: normalizedPath }
+      this.nextFileOpenId += 1
+    }
+    this.emitState()
+    return this.getState()
+  }
+
+  public acknowledgeFileOpen(id: number): WorkbenchProjectHubState {
+    if (this.pendingFileOpen?.id !== id) return this.getState()
+
+    const nextPath = this.queuedFileOpenPaths.shift()
+    this.pendingFileOpen = nextPath
+      ? { id: this.nextFileOpenId, path: nextPath }
+      : null
+    if (nextPath) this.nextFileOpenId += 1
     this.emitState()
     return this.getState()
   }

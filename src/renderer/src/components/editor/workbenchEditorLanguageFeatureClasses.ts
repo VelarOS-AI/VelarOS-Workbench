@@ -19,6 +19,7 @@ export const workbenchEditorLanguageFeatureClasses: WorkbenchEditorLanguageFeatu
   editorSymbolTooltipLocation: styles.editorSymbolTooltipLocation,
   editorSymbolTooltipLocationLabel: styles.editorSymbolTooltipLocationLabel,
   editorSymbolTooltipSectionLabel: styles.editorSymbolTooltipSectionLabel,
+  editorSymbolTooltipPartBuiltinType: styles.editorSymbolTooltipPartBuiltinType,
   editorSymbolTooltipPartFunction: styles.editorSymbolTooltipPartFunction,
   editorSymbolTooltipPartKeyword: styles.editorSymbolTooltipPartKeyword,
   editorSymbolTooltipPartLink: styles.editorSymbolTooltipPartLink,

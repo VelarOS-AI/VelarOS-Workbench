@@ -98,8 +98,8 @@ export const workbenchAppZhCNMessages = {
     addProjectFailed: '添加工程失败',
     openingProject: '正在打开工程…',
     openingProjectDescription: '工作台窗口正在绑定选中的工程。',
-    dropProjectFolder: '松开以打开项目',
-    dropProjectFolderHint: '可同时拖入多个文件夹，每个项目使用独立窗口',
+    dropProjectFolder: '松开以打开文件或项目',
+    dropProjectFolderHint: '文件会在编辑器中打开，文件夹会作为项目打开',
     projectUnavailableTitle: '工程不可用',
     projectUnavailableDescription:
       '这个工作台窗口绑定的工程不存在或已被移除，请回到主窗口重新打开。',

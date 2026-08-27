@@ -1,6 +1,6 @@
-import { existsSync } from 'node:fs'
+import { existsSync, statSync } from 'node:fs'
 import { rm } from 'node:fs/promises'
-import { basename, join, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 
 import { BrowserWindow, type WebContents } from 'electron'
 import { execa } from 'execa'
@@ -330,42 +330,83 @@ export class WorkbenchWindowManager {
     return state
   }
 
-  public async openDroppedProjectPaths(
+  public async openDroppedPaths(
     sender: WebContents,
     paths: readonly string[]
   ): Promise<WorkbenchProjectDropResult> {
-    return this.openProjectPaths(sender, paths)
+    return this.openResolvedExternalPaths(sender, paths)
   }
 
-  public async openExternalProjectPaths(
+  public async openExternalPaths(
     paths: readonly string[],
     targetWindow: Nullable<BrowserWindow> = this.getFocusedWindow()
   ): Promise<WorkbenchProjectDropResult> {
-    return this.openProjectPaths(targetWindow?.webContents ?? null, paths)
+    return this.openResolvedExternalPaths(targetWindow?.webContents ?? null, paths)
   }
 
-  private async openProjectPaths(
+  public acknowledgeFileOpen(sender: WebContents, id: number): WorkbenchProjectHubState {
+    return this.getHubForWebContents(sender)?.acknowledgeFileOpen(id) ?? emptyProjectHubState()
+  }
+
+  private async openResolvedExternalPaths(
     sender: Nullable<WebContents>,
     paths: readonly string[]
   ): Promise<WorkbenchProjectDropResult> {
     const opened: WorkbenchOpenedProject[] = []
+    const openedFiles: WorkbenchProjectDropResult['openedFiles'] = []
     const rejected: WorkbenchProjectDropResult['rejected'] = []
     const seen = new Set<string>()
+    const openedProjectPaths = new Set<string>()
 
     for (const path of paths) {
-      const projectPath = resolve(path)
-      if (seen.has(projectPath)) continue
-      seen.add(projectPath)
+      const externalPath = resolve(path)
+      if (seen.has(externalPath)) continue
+      seen.add(externalPath)
+
+      let isDirectory = false
+      let isFile = false
+      try {
+        const stat = statSync(externalPath)
+        isDirectory = stat.isDirectory()
+        isFile = stat.isFile()
+      } catch {
+        rejected.push({ path: externalPath, reason: 'missing' })
+        continue
+      }
+
+      if (!isDirectory && !isFile) {
+        rejected.push({ path: externalPath, reason: 'not-a-directory' })
+        continue
+      }
+
+      const existingFileProject = isFile ? this.findContainingProjectRecord(externalPath) : null
+      const projectPath = isDirectory
+        ? externalPath
+        : (existingFileProject?.hub.getState().currentProject?.path ??
+          findNearestProjectRoot(externalPath))
 
       const result = this.openProjectPath(sender, projectPath)
       if (result.ok) {
-        opened.push(result.project)
+        if (!openedProjectPaths.has(result.project.path)) {
+          openedProjectPaths.add(result.project.path)
+          opened.push(result.project)
+        }
+        if (isFile) {
+          const record = this.findProjectRecord(result.project.path)
+          const filePath = toProjectRelativePath(result.project.path, externalPath)
+          if (record && filePath) {
+            record.hub.requestFileOpen(filePath)
+            openedFiles.push({ projectPath: result.project.path, path: filePath })
+          } else {
+            rejected.push({ path: externalPath, reason: 'missing' })
+          }
+        }
       } else {
-        rejected.push({ path: projectPath, reason: result.reason })
+        rejected.push({ path: externalPath, reason: result.reason })
       }
     }
 
-    return { opened, rejected }
+    return { opened, openedFiles, rejected }
   }
 
   public sendMenuCommand(command: WorkbenchProjectHubMenuCommand): void {
@@ -393,6 +434,19 @@ export class WorkbenchWindowManager {
       if (record.hub.getState().currentProject?.path === projectPath) return record
     }
     return null
+  }
+
+  private findContainingProjectRecord(filePath: string): Nullable<WorkbenchWindowRecord> {
+    const candidates = [...this.records.values()].filter((record) => {
+      const projectPath = record.hub.getState().currentProject?.path
+      return projectPath ? isPathInside(projectPath, filePath) : false
+    })
+    candidates.sort((left, right) => {
+      const leftPath = left.hub.getState().currentProject?.path ?? ''
+      const rightPath = right.hub.getState().currentProject?.path ?? ''
+      return rightPath.length - leftPath.length
+    })
+    return candidates[0] ?? null
   }
 
   private focusWindow(window: BrowserWindow): void {
@@ -467,5 +521,42 @@ function normalizeGitRemote(
 }
 
 function emptyProjectHubState(): WorkbenchProjectHubState {
-  return { currentProject: null, recentProjects: [] }
+  return { currentProject: null, recentProjects: [], pendingFileOpen: null }
+}
+
+const WorkbenchProjectRootMarkers = [
+  '.git',
+  '.hg',
+  '.svn',
+  '.idea',
+  'package.json',
+  'velar.json',
+  'Cargo.toml',
+  'go.mod',
+  'pyproject.toml',
+] as const
+
+function findNearestProjectRoot(filePath: string): string {
+  let candidate = dirname(filePath)
+  while (true) {
+    if (WorkbenchProjectRootMarkers.some((marker) => existsSync(join(candidate, marker)))) return candidate
+    const parent = dirname(candidate)
+    if (parent === candidate) return dirname(filePath)
+    candidate = parent
+  }
+}
+
+function isPathInside(projectPath: string, candidatePath: string): boolean {
+  const projectRelativePath = relative(projectPath, candidatePath)
+  return (
+    projectRelativePath.length > 0 &&
+    projectRelativePath !== '..' &&
+    !projectRelativePath.startsWith(`..${sep}`) &&
+    !isAbsolute(projectRelativePath)
+  )
+}
+
+function toProjectRelativePath(projectPath: string, filePath: string): Nullable<string> {
+  if (!isPathInside(projectPath, filePath)) return null
+  return relative(projectPath, filePath).split(sep).join('/')
 }

@@ -9,7 +9,7 @@ import { RecentProjectsStore } from '../src/main/projects/RecentProjectsStore'
 
 void describe('Workbench project window ownership', () => {
   void test('routes OS and renderer folder opens through the multi-window owner', async () => {
-    const [main, manager, menu, preload, app, presentation, settings, host, control, styles] = await Promise.all([
+    const [main, manager, menu, preload, app, presentation, settings, host, control, styles, builder] = await Promise.all([
       readFile('src/main/index.ts', 'utf8'),
       readFile('src/main/projects/WorkbenchWindowManager.ts', 'utf8'),
       readFile('src/main/projects/ProjectHubMenu.ts', 'utf8'),
@@ -20,11 +20,13 @@ void describe('Workbench project window ownership', () => {
       readFile('src/renderer/src/host/standaloneWorkbenchHost.ts', 'utf8'),
       readFile('src/renderer/src/components/chrome/WorkbenchProjectControl.tsx', 'utf8'),
       readFile('src/renderer/src/styles/02-chrome-top.module.css', 'utf8'),
+      readFile('electron-builder.yml', 'utf8'),
     ])
 
     assert.match(main, /requestSingleInstanceLock\(instanceLaunchData\)/u)
     assert.match(main, /app\.on\('open-file'/u)
     assert.match(main, /app\.on\('second-instance'/u)
+    assert.match(main, /collectExternalPathArguments/u)
     assert.match(main, /app\.relaunch\(\{ execPath: requestedExecutablePath, args: paths \}\)/u)
     assert.match(manager, /getOpenProjectPaths\(\)/u)
     assert.match(manager, /findProjectRecord\(projectPath\)/u)
@@ -39,7 +41,12 @@ void describe('Workbench project window ownership', () => {
     assert.match(preload, /WorkbenchProjectHubChannels\.switchProjectPath/u)
     assert.match(preload, /WorkbenchProjectHubChannels\.openProjectPathInNewWindow/u)
     assert.match(preload, /WorkbenchProjectHubChannels\.cloneProjectInNewWindow/u)
-    assert.match(app, /openDroppedProjectPaths\(paths\)/u)
+    assert.match(preload, /WorkbenchProjectHubChannels\.acknowledgeFileOpen/u)
+    assert.match(app, /openDroppedPaths\(paths\)/u)
+    assert.match(app, /item\.kind === 'file'/u)
+    assert.match(builder, /public\.folder/u)
+    assert.match(builder, /public\.source-code/u)
+    assert.match(builder, /executableArgs:[\s\S]*'%F'/u)
     assert.match(presentation, /ensureNoUnsavedChanges\(\)[\s\S]*switchProjectPath\(path\)/u)
     assert.match(presentation, /openProjectPathInNewWindow\(path\)/u)
     assert.match(presentation, /cloneProjectInNewWindow\(remoteUrl\)/u)
@@ -107,6 +114,33 @@ void describe('Workbench project window ownership', () => {
 
       const recentFile = await readFile(join(dataRoot, 'storage', 'recent-projects.json'), 'utf8')
       assert.doesNotMatch(recentFile, /next-project/u)
+    } finally {
+      await rm(dataRoot, { recursive: true, force: true })
+    }
+  })
+
+  void test('queues external files until the renderer acknowledges each open', async () => {
+    const dataRoot = await mkdtemp(join(tmpdir(), 'workbench-file-open-'))
+    const projectRoot = join(dataRoot, 'project')
+    await mkdir(projectRoot)
+
+    try {
+      const hub = new WorkbenchProjectHub(new RecentProjectsStore(dataRoot))
+      assert.equal(hub.openProjectPath(projectRoot).ok, true)
+
+      hub.requestFileOpen('src/first.vel')
+      const first = hub.getState().pendingFileOpen
+      assert.equal(first?.path, 'src/first.vel')
+
+      hub.requestFileOpen('src/second.vel')
+      assert.equal(hub.getState().pendingFileOpen?.path, 'src/first.vel')
+
+      hub.acknowledgeFileOpen(first?.id ?? 0)
+      const second = hub.getState().pendingFileOpen
+      assert.equal(second?.path, 'src/second.vel')
+
+      hub.acknowledgeFileOpen(second?.id ?? 0)
+      assert.equal(hub.getState().pendingFileOpen, null)
     } finally {
       await rm(dataRoot, { recursive: true, force: true })
     }

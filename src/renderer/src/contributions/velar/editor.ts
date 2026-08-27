@@ -305,9 +305,14 @@ const VelarParser: StreamParser<VelarStreamState> = {
       }
     }
 
-    if (stream.match(/^(?:rf|f|r)(?=["'`])/u)) {
+    if (stream.match(/^(?:rf|f|r|p)(?=["'`])/u)) {
       const prefix = stream.current()
-      return beginString(stream, state, prefix.includes('r'), prefix.includes('f'))
+      return beginString(
+        stream,
+        state,
+        prefix.includes('r'),
+        prefix.includes('f') || prefix === 'p'
+      )
     }
 
     const quote = stream.peek()
@@ -349,7 +354,7 @@ const VelarParser: StreamParser<VelarStreamState> = {
           state.nextIdentifierStyle = 'variableName.definition'
         return 'keyword'
       }
-      if (BuiltinTypes.has(word)) return 'typeName'
+      if (BuiltinTypes.has(word)) return 'atom'
       if (/^[A-Z]/u.test(word)) return 'className'
       if (/^\s*\(/u.test(stream.string.slice(stream.pos))) return 'variableName.function'
       return 'variableName'

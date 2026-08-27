@@ -17,7 +17,8 @@ export const WorkbenchProjectHubChannels = {
   openProjectPathInNewWindow: 'workbench-app:project-hub:open-project-path-in-new-window',
   cloneProjectInNewWindow: 'workbench-app:project-hub:clone-project-in-new-window',
   validateProjectPath: 'workbench-app:project-hub:validate-project-path',
-  openDroppedProjectPaths: 'workbench-app:project-hub:open-dropped-project-paths',
+  openDroppedPaths: 'workbench-app:project-hub:open-dropped-paths',
+  acknowledgeFileOpen: 'workbench-app:project-hub:acknowledge-file-open',
   openSystemPath: 'workbench-app:project-hub:open-system-path',
   pickNewProjectLocation: 'workbench-app:project-hub:pick-new-project-location',
   createProject: 'workbench-app:project-hub:create-project',
@@ -46,6 +47,13 @@ export interface WorkbenchRecentProject {
 export interface WorkbenchProjectHubState {
   currentProject: Nullable<WorkbenchOpenedProject>
   recentProjects: WorkbenchRecentProject[]
+  pendingFileOpen: Nullable<WorkbenchPendingFileOpen>
+}
+
+export interface WorkbenchPendingFileOpen {
+  id: number
+  /** 相对项目根的文件路径；renderer 直接交给编辑器文件端口。 */
+  path: string
 }
 
 export type WorkbenchProjectOpenFailureReason = 'canceled' | 'missing' | 'not-a-directory'
@@ -56,6 +64,10 @@ export type WorkbenchProjectOpenResult =
 
 export interface WorkbenchProjectDropResult {
   opened: WorkbenchOpenedProject[]
+  openedFiles: Array<{
+    projectPath: string
+    path: string
+  }>
   rejected: Array<{
     path: string
     reason: WorkbenchProjectOpenFailureReason
@@ -104,7 +116,8 @@ export interface WorkbenchProjectHubBridge {
   openProjectPathInNewWindow: (path: string) => Promise<WorkbenchProjectOpenResult>
   cloneProjectInNewWindow: (remoteUrl: string) => Promise<WorkbenchProjectCloneResult>
   validateProjectPath: (path: string) => Promise<WorkbenchProjectOpenResult>
-  openDroppedProjectPaths: (paths: string[]) => Promise<WorkbenchProjectDropResult>
+  openDroppedPaths: (paths: string[]) => Promise<WorkbenchProjectDropResult>
+  acknowledgeFileOpen: (id: number) => Promise<WorkbenchProjectHubState>
   /** Electron 41 不再暴露 File.path；preload 用 webUtils 恢复可信的原生拖拽路径。 */
   getPathForFile: (file: File) => string
   openSystemPath: (path: string) => Promise<{ opened: boolean; error?: string }>

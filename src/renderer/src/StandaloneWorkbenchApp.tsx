@@ -60,17 +60,21 @@ export function StandaloneWorkbenchApp(): ReactElement {
   )
 
   useEffect(() => {
-    function getDroppedDirectories(event: DragEvent): File[] {
+    function hasExternalPaths(event: DragEvent): boolean {
+      return Array.from(event.dataTransfer?.types ?? []).includes('Files')
+    }
+
+    function getDroppedFiles(event: DragEvent): File[] {
       const items = Array.from(event.dataTransfer?.items ?? [])
-      return items.flatMap((item) => {
-        const entry = item.webkitGetAsEntry?.()
-        const file = entry?.isDirectory ? item.getAsFile() : null
+      const itemFiles = items.flatMap((item) => {
+        const file = item.kind === 'file' ? item.getAsFile() : null
         return file ? [file] : []
       })
+      return itemFiles.length > 0 ? itemFiles : Array.from(event.dataTransfer?.files ?? [])
     }
 
     function handleDragEnter(event: DragEvent): void {
-      if (getDroppedDirectories(event).length === 0) return
+      if (!hasExternalPaths(event)) return
       event.preventDefault()
       externalDragDepthRef.current += 1
       setExternalProjectDropActive(true)
@@ -90,13 +94,13 @@ export function StandaloneWorkbenchApp(): ReactElement {
     }
 
     function handleDrop(event: DragEvent): void {
-      const directories = getDroppedDirectories(event)
-      if (directories.length === 0 && externalDragDepthRef.current === 0) return
+      const files = getDroppedFiles(event)
+      if (files.length === 0 && externalDragDepthRef.current === 0) return
       event.preventDefault()
       externalDragDepthRef.current = 0
       setExternalProjectDropActive(false)
 
-      const paths = directories
+      const paths = files
         .map((file) => {
           try {
             return window.velarosWorkbenchProjectHub.getPathForFile(file)
@@ -106,7 +110,7 @@ export function StandaloneWorkbenchApp(): ReactElement {
         })
         .filter((path) => path.length > 0)
       if (paths.length > 0) {
-        void window.velarosWorkbenchProjectHub.openDroppedProjectPaths(paths)
+        void window.velarosWorkbenchProjectHub.openDroppedPaths(paths)
       }
     }
 

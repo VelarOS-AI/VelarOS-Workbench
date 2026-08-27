@@ -8,7 +8,6 @@ import {
 
 import {
   prepareStreamdownMarkdownText,
-  STREAMDOWN_MARKDOWN_CONTROLS,
   STREAMDOWN_MARKDOWN_LINK_SAFETY,
   STREAMDOWN_MARKDOWN_PLUGINS,
 } from '@velaros-ai/ui/conversation/markdown'
@@ -72,7 +71,7 @@ export function WorkbenchMarkdownPreview({
         className={styles.markdownPreviewContent}
         mode="static"
         animated={false}
-        controls={STREAMDOWN_MARKDOWN_CONTROLS}
+        controls={false}
         linkSafety={STREAMDOWN_MARKDOWN_LINK_SAFETY}
         plugins={STREAMDOWN_MARKDOWN_PLUGINS}
         rehypePlugins={WORKBENCH_MARKDOWN_REHYPE_PLUGINS}

@@ -1482,7 +1482,6 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       ),
       [languageServiceContext, pathRef, projectContextIndexRef, semanticLanguageService]
     )
-
     const languageServiceExtensions = useMemo(() => {
 
       let syncedInlayHintOpenFiles: Nullable<Map<string, string>> = null

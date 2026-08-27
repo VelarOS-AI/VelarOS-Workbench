@@ -69,7 +69,7 @@ void describe('Workbench Markdown support', () => {
     })
   })
 
-  void test('keeps project links clickable and removes the code action group border', async () => {
+  void test('keeps project links clickable and renders document blocks without chat chrome', async () => {
     const root = resolve(import.meta.dir, '..')
     const [previewSource, editorStyles] = await Promise.all([
       readFile(join(root, 'src/renderer/src/components/editor/WorkbenchMarkdownPreview.tsx'), 'utf8'),
@@ -78,10 +78,12 @@ void describe('Workbench Markdown support', () => {
 
     assert.match(previewSource, /name !== 'harden'/u)
     assert.match(previewSource, /rehypePlugins=\{WORKBENCH_MARKDOWN_REHYPE_PLUGINS\}/u)
+    assert.match(previewSource, /controls=\{false\}/u)
     assert.match(
       editorStyles,
-      /\[data-streamdown='code-block-actions'\][\s\S]*?border:\s*0\s*!important/u
+      /\[data-streamdown='table-wrapper'\][\s\S]*?display:\s*contents/u
     )
+    assert.match(editorStyles, /\[data-streamdown='code-block-header'\][\s\S]*?display:\s*none/u)
   })
 
   void test('provides Markdown symbols, definitions, and broken-link diagnostics', async () => {

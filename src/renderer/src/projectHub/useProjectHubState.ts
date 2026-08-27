@@ -15,6 +15,7 @@ interface ProjectHubStateProjection {
 const EmptyProjectHubState: WorkbenchProjectHubState = {
   currentProject: null,
   recentProjects: [],
+  pendingFileOpen: null,
 }
 
 export function useProjectHubState(): ProjectHubStateProjection {

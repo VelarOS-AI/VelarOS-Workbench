@@ -100,8 +100,8 @@ export const workbenchAppEnUSMessages = {
     addProjectFailed: 'Failed to add project',
     openingProject: 'Opening project…',
     openingProjectDescription: 'The workbench window is binding to the selected project.',
-    dropProjectFolder: 'Drop to open project',
-    dropProjectFolderHint: 'Drop multiple folders to open each project in its own window',
+    dropProjectFolder: 'Drop to open files or projects',
+    dropProjectFolderHint: 'Files open in the editor; folders open as projects',
     projectUnavailableTitle: 'Project unavailable',
     projectUnavailableDescription:
       'The project bound to this workbench window does not exist or was removed. Open it again from the main window.',

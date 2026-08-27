@@ -4,6 +4,7 @@ import {
   type ReactElement,
   type RefObject,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react'
@@ -19,6 +20,7 @@ import { useWorkbenchTerminalCompletionInteractions } from '@renderer/components
 import { useWorkbenchI18n } from '@renderer/i18n'
 import type { WorkbenchCommandHistoryItem } from '@renderer/models/commands/workbenchCommandHistory'
 import type { WorkbenchTerminalSessionView } from '@renderer/models/commands/workbenchCommandLines'
+import { highlightWorkbenchConsoleOutputSequence } from '@renderer/models/commands/workbenchConsoleOutputHighlight'
 import type { WorkbenchRunConfiguration } from '@renderer/models/commands/workbenchRunConfigurations'
 import { formatWorkbenchTerminalPrompt } from '@renderer/models/commands/workbenchTerminalPresentation'
 import type { WorkbenchProjectContextFile } from '@renderer/models/project/workbenchProjectContextIndex'
@@ -171,6 +173,14 @@ export function WorkbenchTerminalToolPane({
     if (inputRef.current) syncCaret(inputRef.current)
   }, [activeTerminalSession?.input])
 
+  const highlightedLines = useMemo(
+    () =>
+      highlightWorkbenchConsoleOutputSequence(
+        activeTerminalSession?.lines.map((line) => line.text) ?? []
+      ),
+    [activeTerminalSession?.lines]
+  )
+
   function submitTerminalInput(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault()
     if (!activeTerminalSession) return
@@ -195,10 +205,11 @@ export function WorkbenchTerminalToolPane({
     <div className={styles.terminalToolPane}>
       <ScrollArea ref={outputRef} className={styles.terminalOutputScroll}>
         <div className={styles.terminalOutput}>
-          {activeTerminalSession.lines.map((line) => (
+          {activeTerminalSession.lines.map((line, index) => (
             <WorkbenchConsoleOutputLine
               key={line.id}
               text={line.text}
+              tokens={highlightedLines[index]}
               stream={line.stream}
               className={styles.terminalOutputLine}
               onOpenLink={onOpenLink}
@@ -381,6 +392,12 @@ export function WorkbenchRunToolPane({
     inputRef.current?.focus()
   }, [activeRunSession?.id])
 
+  const highlightedLines = useMemo(
+    () =>
+      highlightWorkbenchConsoleOutputSequence(activeRunSession?.lines.map((line) => line.text) ?? []),
+    [activeRunSession?.lines]
+  )
+
   if (!activeRunSession)
     return (
       <Paragraph spacing="none" className={styles.commandEmpty}>
@@ -407,10 +424,11 @@ export function WorkbenchRunToolPane({
     <div className={styles.terminalToolPane}>
       <ScrollArea ref={outputRef} className={styles.terminalOutputScroll}>
         <div className={`${styles.terminalOutput} ${styles.runConsole}`}>
-          {activeRunSession.lines.map((line) => (
+          {activeRunSession.lines.map((line, index) => (
             <WorkbenchConsoleOutputLine
               key={line.id}
               text={line.text}
+              tokens={highlightedLines[index]}
               stream={line.stream}
               className={styles.terminalOutputLine}
               onOpenLink={onOpenLink}

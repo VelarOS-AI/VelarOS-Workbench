@@ -244,6 +244,10 @@ void describe('focused Workbench language surface', () => {
       'Document(keyword,"variableName.definition",operator,string,punctuation,variableName,operator,propertyName,punctuation,string)'
     )
     assert.equal(
+      fallbackTree('const route = p"/api/worlds/{worldId:string}/blocks/{blockY:number}"\n'),
+      'Document(keyword,"variableName.definition",operator,string,punctuation,variableName,punctuation,atom,punctuation,string,punctuation,variableName,punctuation,atom,punctuation,string)'
+    )
+    assert.equal(
       fallbackTree('const label = `hello ${user.name}`\n'),
       'Document(keyword,"variableName.definition",operator,string,punctuation,variableName,operator,propertyName,punctuation,string)'
     )
@@ -520,6 +524,23 @@ void describe('focused Workbench language surface', () => {
     assert.equal(isWorkbenchTypeHover({ displayText: 'type SetBlockRequest: BlockMutation' }), true)
     assert.equal(isWorkbenchTypeHover({ displayText: 'interface Request' }), true)
     assert.equal(isWorkbenchTypeHover({ displayText: 'function parse(request: Request)' }), false)
+  })
+
+  void test('keeps the hover interactive until a modifier-click navigation actually opens', async () => {
+    const editor = await readFile(
+      'src/renderer/src/components/editor/CodeMirrorEditor.tsx',
+      'utf8'
+    )
+
+    assert.match(
+      editor,
+      /languageHoverCompartment\.reconfigure\(languageServiceHoverExtension\)/u
+    )
+    assert.doesNotMatch(editor, /languageHoverCompartment\.reconfigure\(\s*active\s*\?\s*\[\]/u)
+    assert.match(
+      editor,
+      /if \(location\)[\s\S]{0,240}closeHoverTooltips[\s\S]{0,360}onOpenSymbolLocations/u
+    )
   })
 
   void test('anchors decorator hover to the complete role name', () => {

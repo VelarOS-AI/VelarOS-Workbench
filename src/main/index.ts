@@ -66,7 +66,7 @@ interface WorkbenchInstanceLaunchData {
   productName: string
   executablePath: string
   version: string
-  projectPaths: string[]
+  externalPaths: string[]
 }
 
 app.setName(WorkbenchApplicationName)
@@ -75,18 +75,18 @@ if (WorkbenchIsDevelopmentRuntime) {
 }
 
 let windowManager: Nullable<WorkbenchWindowManager> = null
-const pendingExternalProjectPaths = collectProjectDirectoryArguments(process.argv)
+const pendingExternalPaths = collectExternalPathArguments(process.argv)
 
 app.on('open-file', (event, path) => {
   event.preventDefault()
-  dispatchExternalProjectPaths([path])
+  dispatchExternalPaths([path])
 })
 
 const instanceLaunchData: WorkbenchInstanceLaunchData = {
   productName: WorkbenchApplicationName,
   executablePath: process.execPath,
   version: app.getVersion(),
-  projectPaths: pendingExternalProjectPaths,
+  externalPaths: pendingExternalPaths,
 }
 const hasSingleInstanceLock = app.requestSingleInstanceLock(instanceLaunchData)
 if (!hasSingleInstanceLock) {
@@ -95,9 +95,9 @@ if (!hasSingleInstanceLock) {
   app.on('second-instance', (_event, argv, workingDirectory, additionalData) => {
     if (relaunchFromRequestedWorkbenchPackage(additionalData)) return
 
-    const paths = collectProjectDirectoryArguments(argv, workingDirectory)
+    const paths = collectExternalPathArguments(argv, workingDirectory)
     if (paths.length > 0) {
-      dispatchExternalProjectPaths(paths)
+      dispatchExternalPaths(paths)
       return
     }
 
@@ -241,9 +241,9 @@ if (hasSingleInstanceLock) void app.whenReady().then(() => {
   })
 
   installProjectHubMenu(windowManager)
-  if (pendingExternalProjectPaths.length > 0) {
-    const paths = pendingExternalProjectPaths.splice(0)
-    void windowManager.openExternalProjectPaths(paths)
+  if (pendingExternalPaths.length > 0) {
+    const paths = pendingExternalPaths.splice(0)
+    void windowManager.openExternalPaths(paths)
   } else {
     windowManager.createWindow()
   }
@@ -263,16 +263,16 @@ app.on('window-all-closed', () => {
 
 export { createWorkbenchWindow }
 
-function dispatchExternalProjectPaths(paths: readonly string[]): void {
-  const projectPaths = paths.filter((path) => validateProjectDirectoryArgument(path))
-  if (projectPaths.length === 0) return
+function dispatchExternalPaths(paths: readonly string[]): void {
+  const externalPaths = paths.filter((path) => validateExternalPathArgument(path))
+  if (externalPaths.length === 0) return
 
   if (!windowManager) {
-    pendingExternalProjectPaths.push(...projectPaths)
+    pendingExternalPaths.push(...externalPaths)
     return
   }
 
-  void windowManager.openExternalProjectPaths(projectPaths)
+  void windowManager.openExternalPaths(externalPaths)
 }
 
 function relaunchFromRequestedWorkbenchPackage(additionalData: unknown): boolean {
@@ -290,7 +290,7 @@ function relaunchFromRequestedWorkbenchPackage(additionalData: unknown): boolean
   }
 
   const paths = [
-    ...requested.projectPaths,
+    ...requested.externalPaths,
     ...(windowManager?.getOpenProjectPaths() ?? []),
   ].filter((path, index, values) => values.indexOf(path) === index)
   app.relaunch({ execPath: requestedExecutablePath, args: paths })
@@ -305,19 +305,19 @@ function parseWorkbenchInstanceLaunchData(value: unknown): Nullable<WorkbenchIns
     data.productName !== WorkbenchApplicationName ||
     typeof data.executablePath !== 'string' ||
     typeof data.version !== 'string' ||
-    !Array.isArray(data.projectPaths) ||
-    !data.projectPaths.every((path) => typeof path === 'string')
+    !Array.isArray(data.externalPaths) ||
+    !data.externalPaths.every((path) => typeof path === 'string')
   ) return null
 
   return {
     productName: WorkbenchApplicationName,
     executablePath: data.executablePath,
     version: data.version,
-    projectPaths: data.projectPaths.filter((path) => validateProjectDirectoryArgument(path)),
+    externalPaths: data.externalPaths.filter((path) => validateExternalPathArgument(path)),
   }
 }
 
-function collectProjectDirectoryArguments(
+function collectExternalPathArguments(
   argv: readonly string[],
   workingDirectory = process.cwd()
 ): string[] {
@@ -328,16 +328,17 @@ function collectProjectDirectoryArguments(
   for (const argument of userArguments) {
     if (!argument || argument.startsWith('-')) continue
     const path = resolve(workingDirectory, argument)
-    if (seen.has(path) || !validateProjectDirectoryArgument(path)) continue
+    if (seen.has(path) || !validateExternalPathArgument(path)) continue
     seen.add(path)
     paths.push(path)
   }
   return paths
 }
 
-function validateProjectDirectoryArgument(path: string): boolean {
+function validateExternalPathArgument(path: string): boolean {
   try {
-    return statSync(path).isDirectory()
+    const stat = statSync(path)
+    return stat.isDirectory() || stat.isFile()
   } catch {
     return false
   }

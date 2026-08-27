@@ -3,6 +3,7 @@ import { ArrowSquareOutIcon } from '@phosphor-icons/react'
 import { useWorkbenchI18n } from '@renderer/i18n'
 import {
   highlightWorkbenchConsoleOutput,
+  type WorkbenchConsoleOutputToken,
   type WorkbenchConsoleOutputTokenKind,
 } from '@renderer/models/commands/workbenchConsoleOutputHighlight'
 
@@ -45,6 +46,7 @@ interface WorkbenchConsoleOutputLineProps {
   text: string
   className?: string
   stream?: string
+  tokens?: readonly WorkbenchConsoleOutputToken[]
   /** 点击链接文字时的处理（默认走内置浏览器调试选项卡）；未提供则回退到系统外部浏览器。 */
   onOpenLink?: (url: string) => void
 }
@@ -53,10 +55,14 @@ export function WorkbenchConsoleOutputLine({
   text,
   className,
   stream,
+  tokens: providedTokens,
   onOpenLink,
 }: WorkbenchConsoleOutputLineProps): ReactElement {
   const { t } = useWorkbenchI18n()
-  const tokens = useMemo(() => highlightWorkbenchConsoleOutput(text), [text])
+  const tokens = useMemo(
+    () => providedTokens ?? highlightWorkbenchConsoleOutput(text),
+    [providedTokens, text]
+  )
 
   return (
     <pre className={className} data-stream={stream}>
@@ -101,10 +107,14 @@ export function WorkbenchConsoleOutputLine({
         }
 
         const tokenClass = TOKEN_CLASS[token.kind]
-        if (!tokenClass) return token.text
+        if (!tokenClass && !token.color) return token.text
 
         return (
-          <span key={`${index}-${token.kind}`} className={tokenClass}>
+          <span
+            key={`${index}-${token.kind}`}
+            className={tokenClass}
+            style={token.color ? { color: token.color } : undefined}
+          >
             {token.text}
           </span>
         )

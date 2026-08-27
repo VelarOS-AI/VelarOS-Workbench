@@ -921,23 +921,6 @@
 }
 
 /*
- * 运行控制台专属配色：不要红/橙，改蓝/绿（终端面板不加 .runConsole，保留真彩）。
- * 选择器带 .runConsole + 类 + attr，特异性高于 .terminalOutput pre[data-stream]。
- */
-.runConsole .terminalOutputLine[data-stream='stderr'],
-.runConsole .consoleTokenLevelError,
-.runConsole .consoleAnsiRed,
-.runConsole .consoleAnsiBrightRed {
-  color: var(--status-blue);
-}
-
-.runConsole .consoleTokenLevelWarn,
-.runConsole .consoleAnsiYellow,
-.runConsole .consoleAnsiBrightYellow {
-  color: var(--status-green);
-}
-
-/*
  * 只有可点击链接用真蓝，其余 token 保持原色。--status-blue 在单色设计里别名到
  * --primary，暗色下会退成灰、不是蓝，所以链接单独指到编辑器语法配色的 link 真蓝
  * （随主题明暗自适应）。

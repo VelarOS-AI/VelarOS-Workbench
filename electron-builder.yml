@@ -23,6 +23,20 @@ mac:
   category: public.app-category.developer-tools
   hardenedRuntime: true
   notarize: true
+  extendInfo:
+    CFBundleDocumentTypes:
+      - CFBundleTypeName: Workbench Project Folder
+        CFBundleTypeRole: Editor
+        LSHandlerRank: Alternate
+        LSItemContentTypes:
+          - public.folder
+      - CFBundleTypeName: Workbench File
+        CFBundleTypeRole: Editor
+        LSHandlerRank: Alternate
+        LSItemContentTypes:
+          - public.data
+          - public.content
+          - public.source-code
   target:
     - dmg
     - zip
@@ -33,6 +47,8 @@ win:
 
 linux:
   category: Development
+  executableArgs:
+    - '%F'
   target:
     - AppImage
     - deb
