@@ -24,6 +24,7 @@ import { installProjectHubMenu } from './projects/ProjectHubMenu'
 import { installWorkbenchEditorZoom } from './projects/WorkbenchEditorZoom'
 import { WorkbenchWindowManager } from './projects/WorkbenchWindowManager'
 import { registerWorkbenchResourcePluginIpc } from './resources/WorkbenchResourcePluginIpc'
+import { installWorkbenchUpdateRuntime } from './updates/WorkbenchUpdateRuntime'
 import { registerWorkbenchGitIpc } from './workspace/git/WorkbenchGitIpc'
 import { WorkbenchInlineCompletionGenerator } from './workspace/language/WorkbenchInlineCompletion'
 import { registerWorkbenchLanguageServiceIpc } from './workspace/language/WorkbenchLanguageServiceIpc'
@@ -240,6 +241,7 @@ if (hasSingleInstanceLock) void app.whenReady().then(() => {
     ]).finally(() => app.quit())
   })
 
+  installWorkbenchUpdateRuntime()
   installProjectHubMenu(windowManager)
   if (pendingExternalProjectPaths.length > 0) {
     const paths = pendingExternalProjectPaths.splice(0)

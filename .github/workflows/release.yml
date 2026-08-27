@@ -160,6 +160,7 @@ jobs:
   release:
     needs: package
     runs-on: ubuntu-latest
+    environment: release-candidates
     steps:
       - uses: actions/checkout@v4
         with:
@@ -184,6 +185,15 @@ jobs:
           node scripts/release/releaseArtifacts.mjs verify macos release-stage/final
           node scripts/release/releaseArtifacts.mjs verify windows release-stage/final
           node scripts/release/releaseArtifacts.mjs verify linux release-stage/final
+      - name: Publish signed Workbench update candidate
+        env:
+          VELAROS_RELEASE_REPOSITORY: ${{ vars.VELAROS_RELEASE_REPOSITORY }}
+          VELAROS_RELEASE_REPO_TOKEN: ${{ secrets.VELAROS_RELEASE_REPO_TOKEN }}
+          VELAROS_RELEASE_CATALOG_URL: ${{ vars.VELAROS_RELEASE_CATALOG_URL }}
+          VELAROS_RELEASE_INGEST_TOKEN: ${{ secrets.VELAROS_RELEASE_INGEST_TOKEN }}
+          VELAROS_RELEASE_ATTESTATION_PRIVATE_KEY: ${{ secrets.VELAROS_RELEASE_ATTESTATION_PRIVATE_KEY }}
+          VELAROS_RELEASE_ATTESTATION_KEY_ID: ${{ vars.VELAROS_RELEASE_ATTESTATION_KEY_ID }}
+        run: node scripts/release/publishUpdateCatalog.mjs release-stage/final
       - name: Publish the completed draft without replacing assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

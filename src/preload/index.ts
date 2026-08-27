@@ -30,6 +30,7 @@ import {
   type WorkbenchTerminalBridge,
   WorkbenchTerminalChannels,
 } from '../shared/workbenchTerminal'
+import { type WorkbenchUpdateBridge, WorkbenchUpdateChannels } from '../shared/workbenchUpdate'
 import { type WorkbenchWatchBridge, WorkbenchWatchChannels } from '../shared/workbenchWatch'
 import {
   type WorkbenchWorkspaceBridge,
@@ -184,6 +185,19 @@ const agentModBridge: WorkbenchAgentModBridge = {
   onChanged: (listener) => subscribe(WorkbenchAgentModChannels.changed, listener),
 }
 
+const updateBridge: WorkbenchUpdateBridge = {
+  getState: () => ipcRenderer.invoke(WorkbenchUpdateChannels.getState),
+  check: () => ipcRenderer.invoke(WorkbenchUpdateChannels.check),
+  download: () => ipcRenderer.invoke(WorkbenchUpdateChannels.download),
+  pause: () => ipcRenderer.invoke(WorkbenchUpdateChannels.pause),
+  resume: () => ipcRenderer.invoke(WorkbenchUpdateChannels.resume),
+  cancel: () => ipcRenderer.invoke(WorkbenchUpdateChannels.cancel),
+  restart: () => ipcRenderer.invoke(WorkbenchUpdateChannels.restart),
+  setAutomaticDownloads: (enabled) =>
+    ipcRenderer.invoke(WorkbenchUpdateChannels.setAutomaticDownloads, enabled),
+  onChanged: (listener) => subscribe(WorkbenchUpdateChannels.changed, listener),
+}
+
 contextBridge.exposeInMainWorld('velarosWorkbenchProjectHub', projectHubBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchFs', fsBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchLanguage', languageBridge)
@@ -194,6 +208,7 @@ contextBridge.exposeInMainWorld('velarosWorkbenchKernel', kernelBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchWorkspace', workspaceBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchResourcePlugins', resourcePluginBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchAgentMods', agentModBridge)
+contextBridge.exposeInMainWorld('velarosWorkbenchUpdate', updateBridge)
 
 function subscribe<TPayload>(
   channel: string,
