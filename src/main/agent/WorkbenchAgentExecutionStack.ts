@@ -17,7 +17,10 @@ import {
 } from '@velaros-ai/agent'
 import { Log } from '@velaros-ai/core'
 import { logRuntime } from '@velaros-ai/core/logger'
-import { createModelRuntimeComposition } from '@velaros-ai/model/node'
+import {
+  createModelRuntimeComposition,
+  type ModelRuntimeComposition,
+} from '@velaros-ai/model/node'
 
 import type { WorkbenchProjectCapabilityProvider } from '../workspace/ProjectCapabilityProvider'
 
@@ -70,7 +73,6 @@ interface WorkbenchAgentSession {
 
 class WorkbenchAgentExecutionStack {
   private readonly log = Log.tag('WorkbenchAgentExecutionStack')
-  private readonly modelComposition = createModelRuntimeComposition()
   private readonly runtimeHelper: ModelRuntime
   private readonly runContextHelper: RunContext
   private readonly primaryAgentProfile: PrimaryAgentProfile
@@ -78,10 +80,13 @@ class WorkbenchAgentExecutionStack {
   private readonly sessions = new Map<string, WorkbenchAgentSession>()
   private readonly loops = new Map<string, SoloStreamLoop>()
 
-  public constructor(private readonly projectProvider: WorkbenchProjectCapabilityProvider) {
+  public constructor(
+    private readonly projectProvider: WorkbenchProjectCapabilityProvider,
+    modelComposition: ModelRuntimeComposition = createModelRuntimeComposition()
+  ) {
     // Model 是宿主注入的能力：Agent 不自己发现 provider registry。
     // config.modelSelection 是不透明选择，Workbench 原样转交 Model 包解析（BYOK）。
-    this.runtimeHelper = new ModelRuntime(this.modelComposition.agentModelRuntime)
+    this.runtimeHelper = new ModelRuntime(modelComposition.agentModelRuntime)
     this.runContextHelper = new RunContext(
       new ContextBuilder(createBuiltInPromptRegistry(), null),
       defaultRuntimePromptFeaturePolicy

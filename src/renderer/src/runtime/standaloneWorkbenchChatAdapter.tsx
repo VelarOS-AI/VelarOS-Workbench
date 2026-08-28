@@ -33,7 +33,7 @@ import type { WorkbenchAgentEngineModelCatalog } from '@shared/workbenchAgentMod
 import type { WorkbenchChatProviderId } from '../../../plugins/agent-engines/identity'
 import styles from '../styles/workbenchPageStyles'
 
-import { StandaloneWorkbenchModelProviderPresets } from './standaloneWorkbenchModelCatalog'
+import { createStandaloneWorkbenchConfiguredModelSelectorProviders } from './standaloneWorkbenchModelCatalog'
 import {
   selectStandaloneWorkbenchAgentModel,
   useStandaloneWorkbenchModelConfig,
@@ -41,15 +41,6 @@ import {
 import { workbenchMessage } from './workbenchMessageHost'
 
 const log = Log.tag('workbench-chat-adapter')
-
-const StandaloneModelSelectorProviders = StandaloneWorkbenchModelProviderPresets.map(
-  (provider) => ({
-    value: provider.id,
-    label: provider.label,
-    defaultModel: provider.defaultModel,
-    models: provider.models.map((model) => ({ value: model, label: model })),
-  })
-)
 
 interface StandaloneChatState {
   readonly providerId: WorkbenchChatProviderId
@@ -823,7 +814,10 @@ function StandaloneWorkbenchChatSessionSurface({
             label: t('chat.composerModelSection'),
             provider: modelConfig.provider,
             model: modelConfig.model,
-            providers: StandaloneModelSelectorProviders,
+            providers: createStandaloneWorkbenchConfiguredModelSelectorProviders(
+              modelConfig.provider,
+              modelConfig.model
+            ),
             onChange: (provider, model) =>
               selectStandaloneWorkbenchAgentModel(provider, model),
           }

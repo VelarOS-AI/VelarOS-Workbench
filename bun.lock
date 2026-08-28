@@ -32,7 +32,7 @@
         "@velaros-ai/core": "^0.4.0",
         "@velaros-ai/development": "^1.0.2",
         "@velaros-ai/kernel": "^0.2.1",
-        "@velaros-ai/model": "^0.4.8",
+        "@velaros-ai/model": "^0.4.9",
         "@velaros-ai/project": "^2.0.3",
         "@velaros-ai/system": "^1.1.0",
         "@velaros-ai/ui": "^0.2.14",
@@ -714,7 +714,7 @@
 
     "@velaros-ai/kernel": ["@velaros-ai/kernel@0.2.1", "https://npm.pkg.github.com/download/@velaros-ai/kernel/0.2.1/baa0fcacf200bec183ed87441025c7c0ba192766", { "dependencies": { "@velaros-ai/core": "0.4.0", "ws": "^8.18.3", "zod": "^4.3.6" }, "bin": { "velaros-kernel-daemon": "dist/serve/main.js" } }, "sha512-y3dkEb/twu5+9OjcVxC0PKH84GIiCVr4snXskWH08jJyl2hVcf+BvuuBF4QdmZN5jRrYCL0NNauYfTC1kWhkiQ=="],
 
-    "@velaros-ai/model": ["@velaros-ai/model@0.4.8", "https://npm.pkg.github.com/download/@velaros-ai/model/0.4.8/cad80c63ea91985e1df2638272dc644dcc5cdfba", { "dependencies": { "@ai-sdk/anthropic": "^3.0.71", "@ai-sdk/google": "^3.0.64", "@ai-sdk/openai": "^3.0.53", "@ai-sdk/provider": "3.0.8", "@velaros-ai/core": "0.4.0", "@velaros-ai/kernel": "0.2.1", "ai": "^6.0.168" } }, "sha512-y4gAZ9nT36A0MvxNkMe1Ygb/gSg20WWqk9kAJ1XV5QGFVyHeQn6GyZFa0HDI1qdY1OS/FXhiD1YK6tOgUdyoiQ=="],
+    "@velaros-ai/model": ["@velaros-ai/model@0.4.9", "https://npm.pkg.github.com/download/@velaros-ai/model/0.4.9/d709f2296e49b110e14f29af0481351377a72cda", { "dependencies": { "@ai-sdk/anthropic": "^3.0.71", "@ai-sdk/google": "^3.0.64", "@ai-sdk/openai": "^3.0.53", "@ai-sdk/provider": "3.0.8", "@velaros-ai/core": "0.4.0", "@velaros-ai/kernel": "0.2.1", "ai": "^6.0.168" } }, "sha512-LC+ZgM7rEGdc96nkB9i45D9J5ZqLFTMoG25BnMJykOZh5/Vn0LsuOX3HvZstNYXsKvLOlZOHWtW+UfGAUQmb0g=="],
 
     "@velaros-ai/project": ["@velaros-ai/project@2.0.3", "https://npm.pkg.github.com/download/@velaros-ai/project/2.0.3/daf3bd74f7087f83cad2db2db8bf2edf1d8511c1", { "dependencies": { "@velaros-ai/agent": "0.6.1", "@velaros-ai/core": "0.4.0", "@velaros-ai/kernel": "0.2.1", "diff": "^8.0.4", "execa": "^9.6.1", "iconv-lite": "^0.7.2", "picomatch": "^4.0.3", "typescript": "^5.0.0", "zod": "^4.3.6" } }, "sha512-cq7husSvna8TWJizeBaz6JQ6iylL86zjXpsZDpWyepZNUKorU96Rb96NPrPGi4libRVUanjX0qEZRe4H3xTs7Q=="],
 

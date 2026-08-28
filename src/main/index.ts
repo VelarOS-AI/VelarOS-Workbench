@@ -6,6 +6,8 @@ import { app, BrowserWindow, shell } from 'electron'
 import { createAgentKernelModule } from '@velaros-ai/agent'
 import { Log } from '@velaros-ai/core'
 import { Kernel } from '@velaros-ai/kernel/runtime'
+import { ProviderModelCatalogService } from '@velaros-ai/model'
+import { createModelRuntimeComposition } from '@velaros-ai/model/node'
 
 import productionAppIconPath from '../../build/icon.png?asset'
 import developmentAppIconPath from '../../build/icon-dev.png?asset'
@@ -19,6 +21,7 @@ import {
   registerWorkbenchKernelIpc,
 } from './kernel/WorkbenchKernelIpc'
 import { WorkbenchKernelPermissionPolicy } from './kernel/WorkbenchKernelPermissionPolicy'
+import { registerWorkbenchModelIpc } from './model/WorkbenchModelIpc'
 import { registerWorkbenchModIpc } from './mods/WorkbenchModIpc'
 import type { WorkbenchProjectHub } from './projects/ProjectHub'
 import { registerProjectHubIpc } from './projects/ProjectHubIpc'
@@ -184,8 +187,20 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
     dataRootDir,
     (url) => shell.openExternal(url)
   )
+  const modelComposition = createModelRuntimeComposition()
   // 进程内 Kernel：只注册 Workbench 自持的 Agent 能力，执行栈也在本进程。
-  const agentExecutionStack = new WorkbenchAgentExecutionStack(providers.workspace)
+  const agentExecutionStack = new WorkbenchAgentExecutionStack(
+    providers.workspace,
+    modelComposition
+  )
+  const disposeModelIpc = registerWorkbenchModelIpc(new ProviderModelCatalogService({
+    providerCollection: modelComposition.providerCollection,
+    providerScriptRegistry: modelComposition.providerScriptRegistry,
+    attribution: {
+      referer: 'https://velaros.ai',
+      title: WorkbenchProductName,
+    },
+  }))
   const kernelRuntime = new Kernel({
     lifecycleFailureMode: 'degrade',
     permissionBroker: new WorkbenchKernelPermissionPolicy(),
@@ -255,6 +270,7 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
     watchIpc.dispose()
     disposeResourcePluginIpc()
     disposeModIpc()
+    disposeModelIpc()
     disposeKernelIpc()
     disposeWorkspaceIpc()
     disposeProductAnalyticsRuntime()

@@ -19,6 +19,7 @@ import {
   type WorkbenchLanguageBridge,
   WorkbenchLanguageChannels,
 } from '../shared/workbenchLanguage'
+import { type WorkbenchModelBridge, WorkbenchModelChannels } from '../shared/workbenchModel'
 import {
   type WorkbenchProductAnalyticsBridge,
   WorkbenchProductAnalyticsChannels,
@@ -162,6 +163,11 @@ const kernelBridge: WorkbenchKernelBridge = {
     ipcRenderer.invoke(WorkbenchKernelChannels.backupChatHistory, request),
 }
 
+const modelBridge: WorkbenchModelBridge = {
+  listProviderModels: (request) =>
+    ipcRenderer.invoke(WorkbenchModelChannels.listProviderModels, request),
+}
+
 const workspaceBridge: WorkbenchWorkspaceBridge = {
   invoke: (request) => ipcRenderer.invoke(WorkbenchWorkspaceChannels.invoke, request),
 }
@@ -211,6 +217,7 @@ contextBridge.exposeInMainWorld('velarosWorkbenchTerminal', terminalBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchWatch', watchBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchGit', gitBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchKernel', kernelBridge)
+contextBridge.exposeInMainWorld('velarosWorkbenchModel', modelBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchWorkspace', workspaceBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchResourcePlugins', resourcePluginBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchAgentMods', agentModBridge)

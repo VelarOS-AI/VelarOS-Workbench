@@ -42,6 +42,7 @@ import {
   type WorkbenchThemeId,
 } from '@renderer/models/settings/workbenchPreferences'
 import {
+  createStandaloneWorkbenchProviderModelOptions,
   getStandaloneWorkbenchModelProviderPreset,
   StandaloneWorkbenchModelProviderPresets,
 } from '@renderer/runtime/standaloneWorkbenchModelCatalog'
@@ -53,6 +54,7 @@ import {
 } from '@renderer/runtime/standaloneWorkbenchModelConfig'
 
 import { Result } from '@velaros-ai/core/result'
+import type { ProviderModelCatalog } from '@velaros-ai/model/contracts'
 import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 import { Text } from '@velaros-ai/ui/primitives/display/Text'
@@ -203,10 +205,6 @@ export function WorkbenchSettingsDialog({
     label: provider.label,
     description: provider.description,
   }))
-  const modelOptions = modelProviderPreset.models.map((model) => ({
-    value: model,
-    label: model,
-  }))
   const timers = useTimerScope('WorkbenchSettingsDialog')
   const [activeSection, setActiveSection] = useState<WorkbenchSettingsSectionId>('project')
   const [capturingAction, setCapturingAction] =
@@ -220,7 +218,38 @@ export function WorkbenchSettingsDialog({
   const [isLoadingMods, setIsLoadingMods] = useState(false)
   const [isLoadingPlugins, setIsLoadingPlugins] = useState(false)
   const [pluginQuery, setPluginQuery] = useState('')
+  const [providerModelCatalog, setProviderModelCatalog] =
+    useState<Nullable<ProviderModelCatalog>>(null)
+  const [isLoadingProviderModels, setIsLoadingProviderModels] = useState(false)
+  const [providerModelCatalogError, setProviderModelCatalogError] =
+    useState<Nullable<string>>(null)
   const dialogRef = useRef<HTMLDivElement>(null)
+  const activeProviderModelCatalog = providerModelCatalog?.provider === modelConfig.provider
+    ? providerModelCatalog
+    : null
+  const modelOptions = createStandaloneWorkbenchProviderModelOptions(
+    activeProviderModelCatalog?.models ?? [],
+    [modelConfig.model, modelConfig.completionModel]
+  )
+  const modelCatalogDescription = isLoadingProviderModels
+    ? t('workbench.settingsModelCatalogLoading', { provider: modelProviderPreset.label })
+    : activeProviderModelCatalog?.models.length
+      ? t('workbench.settingsModelCatalogLoaded', {
+          provider: modelProviderPreset.label,
+          count: activeProviderModelCatalog.models.length,
+        })
+      : providerModelCatalogError
+        ? !modelConfig.apiKey.trim()
+          && !modelProviderPreset.apiKeyOptional
+          && modelProviderPreset.validationKind !== 'openrouter-key'
+          ? t('workbench.settingsModelCatalogNeedsKey', {
+              provider: modelProviderPreset.label,
+            })
+          : t('workbench.settingsModelCatalogError', {
+              provider: modelProviderPreset.label,
+              error: providerModelCatalogError,
+            })
+        : t('workbench.settingsModelCatalogEmpty', { provider: modelProviderPreset.label })
 
   const sections = useMemo(
     () => [
@@ -341,6 +370,48 @@ export function WorkbenchSettingsDialog({
       label: 'workbench.settings.focus',
     })
   }, [open, timers])
+
+  useEffect(() => {
+    if (!open || activeSection !== 'model') {
+      setIsLoadingProviderModels(false)
+      return
+    }
+
+    let active = true
+    setIsLoadingProviderModels(true)
+    setProviderModelCatalogError(null)
+    const lease = timers.after(300, () => {
+      void window.velarosWorkbenchModel.listProviderModels({
+        provider: modelConfig.provider,
+        apiKey: modelConfig.apiKey,
+        baseURL: modelConfig.baseURL,
+        purpose: 'chat',
+      }).then((catalog) => {
+        if (!active) return
+        setProviderModelCatalog(catalog)
+        setProviderModelCatalogError(catalog.error ?? null)
+      }).catch((error: unknown) => {
+        if (!active) return
+        setProviderModelCatalogError(
+          error instanceof Error ? error.message : String(error)
+        )
+      }).finally(() => {
+        if (active) setIsLoadingProviderModels(false)
+      })
+    }, { label: 'workbench.settings.model-catalog' })
+
+    return () => {
+      active = false
+      lease.cancel()
+    }
+  }, [
+    activeSection,
+    modelConfig.apiKey,
+    modelConfig.baseURL,
+    modelConfig.provider,
+    open,
+    timers,
+  ])
 
   useEffect(() => {
     setProjectAiRules(null)
@@ -699,7 +770,7 @@ export function WorkbenchSettingsDialog({
         </SettingRow>
         <SettingRow
           title={t('workbench.settingsModelName')}
-          description={t('workbench.settingsModelNameDescription')}
+          description={modelCatalogDescription}
         >
           <Select
             size="sm"

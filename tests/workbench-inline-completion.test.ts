@@ -4,13 +4,15 @@ import type { ModelRequestService } from '@velaros-ai/model'
 
 import { WorkbenchInlineCompletionGenerator } from '../src/main/workspace/language/WorkbenchInlineCompletion'
 import {
+  createStandaloneWorkbenchConfiguredModelSelectorProviders,
+  createStandaloneWorkbenchProviderModelOptions,
   getStandaloneWorkbenchModelProviderPreset,
   resolveStandaloneWorkbenchProviderModel,
   StandaloneWorkbenchModelProviderPresets,
 } from '../src/renderer/src/runtime/standaloneWorkbenchModelCatalog'
 
 describe('Workbench inline completion', () => {
-  test('offers the Desktop model catalog without raw custom-provider setup', () => {
+  test('offers supported providers without raw custom-provider setup', () => {
     expect(StandaloneWorkbenchModelProviderPresets.some((provider) => provider.id === 'openai'))
       .toBe(true)
     expect(StandaloneWorkbenchModelProviderPresets.some((provider) => provider.id === 'anthropic'))
@@ -22,8 +24,36 @@ describe('Workbench inline completion', () => {
     expect(openAI.defaultBaseURL).toBe('https://api.openai.com/v1')
     expect(openAI.models).toContain(openAI.defaultModel)
     expect(openAI.models).toContain(openAI.completionModel)
-    expect(resolveStandaloneWorkbenchProviderModel('openai', 'not-a-catalog-model', 'agent'))
-      .toBe(openAI.defaultModel)
+    expect(resolveStandaloneWorkbenchProviderModel('openai', 'remote-model-next', 'agent'))
+      .toBe('remote-model-next')
+  })
+
+  test('projects only the configured chat model into the composer selector', () => {
+    const providers = createStandaloneWorkbenchConfiguredModelSelectorProviders(
+      'openai',
+      'gpt-configured'
+    )
+
+    expect(providers).toHaveLength(1)
+    expect(providers[0]?.value).toBe('openai')
+    expect(providers[0]?.models).toEqual([{
+      value: 'gpt-configured',
+      label: 'gpt-configured',
+    }])
+  })
+
+  test('uses the remote provider catalog while retaining configured selections', () => {
+    expect(createStandaloneWorkbenchProviderModelOptions(
+      [
+        { id: 'remote-a', label: 'Remote A' },
+        { id: 'remote-b', label: 'Remote B' },
+      ],
+      ['remote-a', 'configured-legacy']
+    )).toEqual([
+      { value: 'remote-a', label: 'Remote A' },
+      { value: 'remote-b', label: 'Remote B' },
+      { value: 'configured-legacy', label: 'configured-legacy' },
+    ])
   })
 
   test('uses the independent completion model path and cleans fenced output', async () => {
