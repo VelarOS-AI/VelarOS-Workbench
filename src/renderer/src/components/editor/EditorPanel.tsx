@@ -461,6 +461,12 @@ export function EditorPanel({
     () => toNullable(auxiliaryTabs.find((tab) => tab.active)),
     [auxiliaryTabs]
   )
+  const structureTabGroupActive = activeAuxiliaryTab?.group === 'structure'
+  const visibleAuxiliaryTabs = useMemo(
+    () => auxiliaryTabs.filter((tab) =>
+      structureTabGroupActive ? tab.group === 'structure' : tab.group !== 'structure'),
+    [auxiliaryTabs, structureTabGroupActive]
+  )
   const hasEditorOverlayTab = !!(activeDiffItem || lightTab || activeAuxiliaryTab)
   const markdownPreviewAvailable =
     !hasEditorOverlayTab && isWorkbenchMarkdownPreviewPath(selectedFilePath)
@@ -644,17 +650,17 @@ export function EditorPanel({
       {showTopBar && <WorkbenchTopBar {...chrome} />}
       <div className={styles.editorMain}>
         <EditorTabBar
-          openTabs={openTabs}
-          selectedFilePath={selectedFilePath}
+          openTabs={structureTabGroupActive ? [] : openTabs}
+          selectedFilePath={structureTabGroupActive ? null : selectedFilePath}
           selectedFile={hasEditorOverlayTab ? null : selectedFile}
           hasUnsavedChanges={hasEditorOverlayTab ? false : hasUnsavedChanges}
           canEditSelectedFile={hasEditorOverlayTab ? false : canEditSelectedFile}
           isSavingFile={isSavingFile}
           dirtyTabCount={dirtyTabCount}
           gitDecorations={gitDecorations}
-          diffTabItem={activeDiffItem}
-          lightTabItem={lightTab?.item || null}
-          auxiliaryTabItems={auxiliaryTabs}
+          diffTabItem={structureTabGroupActive ? null : activeDiffItem}
+          lightTabItem={structureTabGroupActive ? null : lightTab?.item || null}
+          auxiliaryTabItems={visibleAuxiliaryTabs}
           tabContextMenu={tabContextMenu}
           onOpenTabContextMenu={openTabContextMenu}
           onRunTabContextAction={runTabContextAction}
@@ -672,6 +678,8 @@ export function EditorPanel({
           markdownPreviewAvailable={markdownPreviewAvailable}
           markdownPreviewActive={markdownPreviewActive}
           onToggleMarkdownPreview={toggleMarkdownPreview}
+          ariaLabel={structureTabGroupActive ? t('workbench.logicGraphStructureView') : undefined}
+          showWorkspaceActions={!structureTabGroupActive}
         />
         <Dialog
           open={!!shouldShowExternalConflictDialog && externalConflictDialogOpen}

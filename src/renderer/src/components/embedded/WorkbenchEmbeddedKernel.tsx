@@ -15,6 +15,7 @@ import {
 import { useWorkbenchI18n } from '@renderer/i18n'
 
 import styles from '../../styles/workbenchPageStyles'
+import { WorkbenchLogicGraphSidebar } from '../codeGraph/WorkbenchLogicGraphSidebar'
 import { EditorPanel } from '../editor/EditorPanel'
 import { FilePanel } from '../files/FilePanel'
 import { WorkbenchCommitPanel } from '../git/WorkbenchCommitPanel'
@@ -54,6 +55,8 @@ export function WorkbenchEmbeddedKernel({
           onOpenDiff={model.changes.onOpenDiff}
           onOpenFile={model.changes.onOpenFile}
         />
+      ) : leftMode === 'velar-structure' && model.velarStructure ? (
+        <WorkbenchLogicGraphSidebar {...model.velarStructure} />
       ) : (
         <FilePanel
           tree={files.tree}

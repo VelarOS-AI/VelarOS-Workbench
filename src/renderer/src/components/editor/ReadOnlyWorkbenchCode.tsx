@@ -18,11 +18,17 @@ export function ReadOnlyWorkbenchCode({
   path,
   workbenchTheme,
   highlightQuery = '',
+  initialLine,
+  showLineNumbers = true,
+  compact = false,
 }: {
   content: string
   path: Nullable<string>
   workbenchTheme: WorkbenchThemeId
   highlightQuery?: string
+  initialLine?: number
+  showLineNumbers?: boolean
+  compact?: boolean
 }): ReactElement {
   const hostRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<Nullable<EditorView>>(null)
@@ -45,7 +51,7 @@ export function ReadOnlyWorkbenchCode({
       state: EditorState.create({
         doc: content,
         extensions: [
-          lineNumbers(),
+          ...(showLineNumbers ? [lineNumbers()] : []),
           EditorView.editable.of(false),
           EditorState.readOnly.of(true),
           language.extension,
@@ -55,12 +61,32 @@ export function ReadOnlyWorkbenchCode({
         ],
       }),
     })
+    if (initialLine) {
+      const line = view.state.doc.line(Math.max(1, Math.min(initialLine, view.state.doc.lines)))
+      view.dispatch({
+        selection: { anchor: line.from },
+        effects: EditorView.scrollIntoView(line.from, { y: 'center' }),
+      })
+    }
     viewRef.current = view
     return () => {
       view.destroy()
       viewRef.current = null
     }
-  }, [content, editorMetricsCompartment, highlightQuery, path, workbenchTheme])
+  }, [
+    content,
+    editorMetricsCompartment,
+    highlightQuery,
+    initialLine,
+    path,
+    showLineNumbers,
+    workbenchTheme,
+  ])
 
-  return <div ref={hostRef} className={styles.editorHistoryCodeViewer} />
+  return (
+    <div
+      ref={hostRef}
+      className={`${styles.editorHistoryCodeViewer}${compact ? ` ${styles.editorHistoryCodeViewerCompact}` : ''}`}
+    />
+  )
 }

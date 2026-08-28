@@ -16,6 +16,7 @@ import type {
   WorkbenchEditorSurfaceBundle,
 } from '../../types/workbenchSurfaceBundles'
 import type { TopToolbarProps } from '../chrome/TopToolbar'
+import type { WorkbenchLogicGraphSidebarProps } from '../codeGraph/WorkbenchLogicGraphSidebar'
 import type {
   WorkbenchEditorPanelDiffProps,
   WorkbenchEditorPanelTabsProps,
@@ -29,7 +30,7 @@ import type {
 import type { WorkbenchCommitPanelProps } from '../git/WorkbenchCommitPanel'
 import type { WorkbenchGitPanelSessionProps } from '../git/workbenchGitPanelProps'
 
-export type WorkbenchEmbeddedKernelLeftMode = 'changes' | 'files'
+export type WorkbenchEmbeddedKernelLeftMode = 'changes' | 'files' | 'velar-structure'
 
 export interface WorkbenchEmbeddedFilePanelModel {
   tree: WorkbenchFilePanelTreeProps
@@ -87,5 +88,6 @@ export interface WorkbenchEmbeddedKernelModel {
   aiChanges: WorkbenchAiChangeArchiveState
   files: WorkbenchEmbeddedFilePanelModel
   changes: WorkbenchEmbeddedCommitPanelModel
+  velarStructure?: WorkbenchLogicGraphSidebarProps
   editor: WorkbenchEmbeddedEditorPanelModel
 }

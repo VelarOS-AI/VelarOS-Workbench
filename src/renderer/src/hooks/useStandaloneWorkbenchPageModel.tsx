@@ -284,6 +284,7 @@ export function useStandaloneWorkbenchPageModel(
   const [aiIndexDetailsOpen, setAiIndexDetailsOpen] = useState(false)
   const [codeGraphOpen, setCodeGraphOpen] = useState(false)
   const [velarLogicGraphOpen, setVelarLogicGraphOpen] = useState(false)
+  const [velarLogicGraphActive, setVelarLogicGraphActive] = useState(false)
   const [pendingBrowserElementSelections, setPendingBrowserElementSelections] = useState<
     PendingWorkbenchBrowserElementSelection[]
   >([])
@@ -322,7 +323,13 @@ export function useStandaloneWorkbenchPageModel(
   useEffect(() => {
     if (velarLogicGraphAvailable) return
     setVelarLogicGraphOpen(false)
+    setVelarLogicGraphActive(false)
   }, [velarLogicGraphAvailable])
+
+  useEffect(() => {
+    if (velarLogicGraphOpen) return
+    setVelarLogicGraphActive(false)
+  }, [velarLogicGraphOpen])
 
   const activeWorkbenchChatSessionId =
     surface.activeRightTool === 'chat' && currentSession.kind === 'chat' ? currentSession.id : null
@@ -1241,6 +1248,8 @@ export function useStandaloneWorkbenchPageModel(
       setCodeGraphOpen,
       velarLogicGraphOpen,
       setVelarLogicGraphOpen,
+      velarLogicGraphActive,
+      setVelarLogicGraphActive,
     },
     /** 交互动作。 */
     actions: {

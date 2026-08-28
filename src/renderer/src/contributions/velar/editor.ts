@@ -3,7 +3,10 @@ import { javascript as JavaScriptParser } from '@codemirror/legacy-modes/mode/ja
 import type { Extension } from '@codemirror/state'
 import type { WorkbenchEditorLanguageContribution } from '@renderer/language/workbenchEditorLanguageContributions'
 
-import { VELAR_LANGUAGE_KEYWORDS } from '@shared/contributions/velar/language'
+import {
+  VELAR_LANGUAGE_KEYWORDS,
+  VELAR_WEB_CONTEXTUAL_KEYWORDS,
+} from '@shared/contributions/velar/language'
 
 interface VelarStreamState {
   stringQuote: string | null
@@ -25,11 +28,21 @@ interface VelarStreamState {
   embeddedJavaScriptClosing: boolean
   embeddedJavaScriptIndent: number
   embeddedJavaScriptState: unknown | null
+  jsxDepth: number
+  jsxTag: boolean
+  jsxTagClosing: boolean
+  jsxTagNameExpected: boolean
+  jsxTagExpressionDepth: number
+  jsxExpressionDepth: number
+  jsxElementExpressionDepths: number[]
+  lookBlockIndent: number | null
+  pendingLookBlock: boolean
 }
 
 export const VELAR_EDITOR_KEYWORDS = VELAR_LANGUAGE_KEYWORDS
 
 const Keywords = new Set<string>(VELAR_EDITOR_KEYWORDS)
+const WebContextualKeywords = new Set<string>(VELAR_WEB_CONTEXTUAL_KEYWORDS)
 
 const BuiltinTypes = new Set([
   'bool',
@@ -42,6 +55,36 @@ const BuiltinTypes = new Set([
   'string',
   'unknown',
 ])
+
+function isWebContextualKeyword(stream: StringStream, word: string): boolean {
+  if (!WebContextualKeywords.has(word)) return false
+  const before = stream.string.slice(0, stream.start).trim()
+  const after = stream.string.slice(stream.pos).trimStart()
+  const declarationStart = before.length === 0 || before === 'export'
+
+  if (word === 'component')
+    return declarationStart
+      && /^[A-Za-z_$][\w$]*(?:\s*(?:\(|<|:)|\s*$)/u.test(after)
+  if (word === 'state' || word === 'computed' || word === 'resource' || word === 'action') return declarationStart && /^[A-Za-z_$][\w$]*\s*(?::|\(|=)/u.test(after)
+  if (word === 'watch') return before.length === 0 && !after.startsWith('(') && /:\s*(?:\/\/.*)?$/u.test(after)
+  if (word === 'expose') return before.length === 0 && after.startsWith('{')
+  if (word === 'exposes') return /\bcomponent\b/u.test(before) && /^[A-Za-z_$]/u.test(after)
+  if (word === 'look' || word === 'keyframes') return after.startsWith(':')
+  if (word === 'css') return before === 'unsafe' || after.startsWith('`')
+  return false
+}
+
+function canStartJsxTag(stream: StringStream, state: VelarStreamState): boolean {
+  const contentDepth = state.jsxElementExpressionDepths.at(-1)
+  if (contentDepth !== undefined && state.jsxExpressionDepth === contentDepth) return true
+  const before = stream.string.slice(0, stream.start).trimEnd()
+  return before.length === 0 || /(?:\breturn|=>|[=([{,:?])$/u.test(before)
+}
+
+function isInJsxContent(state: VelarStreamState): boolean {
+  const contentDepth = state.jsxElementExpressionDepths.at(-1)
+  return contentDepth !== undefined && state.jsxExpressionDepth === contentDepth
+}
 
 function resetString(state: VelarStreamState): void {
   state.stringQuote = null
@@ -230,15 +273,32 @@ const VelarParser: StreamParser<VelarStreamState> = {
     embeddedJavaScriptClosing: false,
     embeddedJavaScriptIndent: 0,
     embeddedJavaScriptState: null,
+    jsxDepth: 0,
+    jsxTag: false,
+    jsxTagClosing: false,
+    jsxTagNameExpected: false,
+    jsxTagExpressionDepth: 0,
+    jsxExpressionDepth: 0,
+    jsxElementExpressionDepths: [],
+    lookBlockIndent: null,
+    pendingLookBlock: false,
   }),
   copyState: (state) => ({
     ...state,
     embeddedJavaScriptState: copyEmbeddedJavaScriptState(state.embeddedJavaScriptState),
+    jsxElementExpressionDepths: [...state.jsxElementExpressionDepths],
   }),
   token(stream, state) {
     if (stream.sol()) {
       state.lineIndent = stream.indentation()
       state.nextIndent = state.lineIndent
+      if (
+        state.lookBlockIndent !== null
+        && stream.string.trim().length > 0
+        && state.lineIndent <= state.lookBlockIndent
+      ) {
+        state.lookBlockIndent = null
+      }
       if (state.embeddedJavaScript) {
         const tail = stream.string.slice(state.lineIndent)
         state.embeddedJavaScriptClosing = state.lineIndent === state.embeddedJavaScriptIndent
@@ -288,6 +348,84 @@ const VelarParser: StreamParser<VelarStreamState> = {
       stream.skipToEnd()
       return 'comment'
     }
+
+    if (state.jsxTag && state.jsxExpressionDepth === state.jsxTagExpressionDepth) {
+      if (stream.match('/>')) {
+        state.jsxTag = false
+        state.jsxTagClosing = false
+        state.jsxTagNameExpected = false
+        return 'punctuation'
+      }
+      if (stream.eat('>')) {
+        state.jsxTag = false
+        if (state.jsxTagClosing) {
+          state.jsxDepth = Math.max(0, state.jsxDepth - 1)
+          state.jsxElementExpressionDepths.pop()
+        } else {
+          state.jsxDepth += 1
+          state.jsxElementExpressionDepths.push(state.jsxTagExpressionDepth)
+        }
+        state.jsxTagClosing = false
+        state.jsxTagNameExpected = false
+        return 'punctuation'
+      }
+      if (stream.eat('{')) {
+        state.jsxExpressionDepth = state.jsxTagExpressionDepth + 1
+        return 'punctuation'
+      }
+      if (
+        state.jsxTagNameExpected
+        && stream.match(/^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*/u)
+      ) {
+        state.jsxTagNameExpected = false
+        return 'tag'
+      }
+      if (stream.match(/^[A-Za-z_$][\w$:-]*/u)) return 'attribute'
+      if (stream.eat('=')) return 'operator'
+      stream.next()
+      return 'punctuation'
+    }
+
+    if (state.jsxExpressionDepth > 0 && state.interpolationDepth === 0) {
+      if (stream.eat('{')) {
+        state.jsxExpressionDepth += 1
+        return 'punctuation'
+      }
+      if (stream.eat('}')) {
+        state.jsxExpressionDepth -= 1
+        return 'punctuation'
+      }
+    }
+
+    if (stream.match(/^<>/u)) {
+      state.jsxDepth += 1
+      state.jsxElementExpressionDepths.push(state.jsxExpressionDepth)
+      return 'punctuation'
+    }
+    if (stream.match(/^<\/>/u)) {
+      state.jsxDepth = Math.max(0, state.jsxDepth - 1)
+      state.jsxElementExpressionDepths.pop()
+      return 'punctuation'
+    }
+    if (isInJsxContent(state) && stream.eat('{')) {
+      const contentDepth = state.jsxElementExpressionDepths.at(-1) ?? 0
+      state.jsxExpressionDepth = contentDepth + 1
+      return 'punctuation'
+    }
+    if (canStartJsxTag(stream, state) && stream.match(/^<\/?(?=[A-Za-z_$])/u)) {
+      state.jsxTag = true
+      state.jsxTagClosing = stream.current() === '</'
+      state.jsxTagNameExpected = true
+      state.jsxTagExpressionDepth = state.jsxExpressionDepth
+      return 'punctuation'
+    }
+    if (isInJsxContent(state)) {
+      if (stream.match(/^[^<{]+/u)) return null
+      stream.next()
+      return null
+    }
+
+    if (stream.match(/^@[A-Za-z_$][\w$]*/u)) return 'meta'
 
     if (state.interpolationDepth > 0) {
       if (stream.match(/^(?:rf|f|r)(?=["'`])/u))
@@ -345,13 +483,29 @@ const VelarParser: StreamParser<VelarStreamState> = {
       }
       if (state.objectDepth > 0 && state.objectKeyExpected) state.objectKeyExpected = false
       if (nextIdentifierStyle) return nextIdentifierStyle
-      if (Keywords.has(word)) {
+      if (
+        state.lookBlockIndent !== null
+        && state.lineIndent > state.lookBlockIndent
+        && stream.string.slice(state.lineIndent, stream.start).trim().length === 0
+        && /^\s*=/u.test(stream.string.slice(stream.pos))
+      ) return 'propertyName'
+      if (Keywords.has(word) || isWebContextualKeyword(stream, word)) {
         if (word === 'def') state.nextIdentifierStyle = 'variableName.definition.function'
         else if (word === 'class') state.nextIdentifierStyle = 'className.definition'
+        else if (word === 'component' || word === 'action')
+          state.nextIdentifierStyle = 'variableName.definition.function'
         else if (word === 'type' || word === 'enum' || word === 'interface')
           state.nextIdentifierStyle = 'typeName.definition'
-        else if (word === 'const' || word === 'let' || word === 'var')
+        else if (
+          word === 'const'
+          || word === 'let'
+          || word === 'var'
+          || word === 'state'
+          || word === 'computed'
+          || word === 'resource'
+        )
           state.nextIdentifierStyle = 'variableName.definition'
+        if (word === 'look') state.pendingLookBlock = true
         return 'keyword'
       }
       if (BuiltinTypes.has(word)) return 'atom'
@@ -362,8 +516,11 @@ const VelarParser: StreamParser<VelarStreamState> = {
 
     if (stream.eat(':')) {
       if (state.objectDepth > 0) state.objectKeyExpected = false
-      if (/^\s*(?:\/\/.*)?$/u.test(stream.string.slice(stream.pos)))
+      if (/^\s*(?:\/\/.*)?$/u.test(stream.string.slice(stream.pos))) {
         state.nextIndent = state.lineIndent + state.indentUnit
+        if (state.pendingLookBlock) state.lookBlockIndent = state.lineIndent
+      }
+      state.pendingLookBlock = false
       return 'punctuation'
     }
     if (stream.eat('.')) {

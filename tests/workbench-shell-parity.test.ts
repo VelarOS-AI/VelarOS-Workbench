@@ -9,9 +9,7 @@ function readSource(relativePath: string): string {
 
 void describe('pre-split Workbench shell parity', () => {
   void test('uses the shared conversation surface instead of the temporary form', () => {
-    const adapter = readSource(
-      'src/renderer/src/runtime/standaloneWorkbenchChatAdapter.tsx'
-    )
+    const adapter = readSource('src/renderer/src/runtime/standaloneWorkbenchChatAdapter.tsx')
 
     assert.match(adapter, /@velaros-ai\/ui\/conversation/)
     assert.match(adapter, /<ChatConversationPane/)
@@ -55,25 +53,18 @@ void describe('pre-split Workbench shell parity', () => {
     const adapter = readSource(
       'src/renderer/src/components/embedded/workbenchEmbeddedKernelAdapter.ts'
     )
-    const control = readSource(
-      'src/renderer/src/components/git/WorkbenchGitCommitControl.tsx'
-    )
+    const control = readSource('src/renderer/src/components/git/WorkbenchGitCommitControl.tsx')
     const sharedControl = readSource(
       'node_modules/@velaros-ai/ui/dist/product/git/WorkspaceGitCommitControl.js'
     )
     const sharedGitStyles = readSource(
       'node_modules/@velaros-ai/ui/dist/product/git/WorkspaceGitCommitControl.module.css'
     )
-    const shortcuts = readSource(
-      'src/renderer/src/models/layout/workbenchKeyboardShortcuts.ts'
-    )
+    const shortcuts = readSource('src/renderer/src/models/layout/workbenchKeyboardShortcuts.ts')
 
     assert.match(presentation, /<WorkbenchProjectControl/)
     assert.match(presentation, /<WorkbenchTopLeading \{\.\.\.editorChrome\} \/>/)
-    assert.match(
-      presentation,
-      /<WorkbenchTopTrailing \{\.\.\.editorChrome\} \/>/
-    )
+    assert.match(presentation, /<WorkbenchTopTrailing \{\.\.\.editorChrome\} \/>/)
     assert.doesNotMatch(presentation, /placement="rail"|rightToolActionGroup/)
     assert.match(toolbar, /<WorkbenchGitCommitControl/)
     const runButton = toolbar.indexOf('<WorkbenchRunAction')
@@ -93,8 +84,14 @@ void describe('pre-split Workbench shell parity', () => {
     assert.doesNotMatch(control, /<Dialog|<FolderIcon/)
     assert.match(sharedGitStyles, /\.gitCompactMenu[\s\S]*background-color:[^;]+!important/)
     assert.match(sharedGitStyles, /\.gitCompactMenuHeader[\s\S]*padding:\s*3\.5px 4px/)
-    assert.match(sharedGitStyles, /\.gitCompactInput:focus-visible[\s\S]*background-color:\s*transparent/)
-    assert.match(sharedGitStyles, /\.gitCreateBranchInput:focus-visible[\s\S]*git-create-branch-input-bg/)
+    assert.match(
+      sharedGitStyles,
+      /\.gitCompactInput:focus-visible[\s\S]*background-color:\s*transparent/
+    )
+    assert.match(
+      sharedGitStyles,
+      /\.gitCreateBranchInput:focus-visible[\s\S]*git-create-branch-input-bg/
+    )
     assert.doesNotMatch(sharedGitStyles, /\.gitCompactMenu :global\(\.velar-input/)
     assert.match(sharedControl, /FolderIcon[\s\S]*gitCompactBranchTreeFolder/)
     assert.match(sharedControl, /buildBranchTrie\(branches, namespace\)/)
@@ -103,8 +100,14 @@ void describe('pre-split Workbench shell parity', () => {
     assert.match(sharedControl, /DialogFooter[\s\S]*gitCreateBranchDialogFooter/)
     assert.match(sharedControl, /checked(?:=\{|:\s*)checkoutCreatedBranch/)
     assert.match(sharedControl, /gitCompactSearchField[\s\S]*gitCompactFetchButton/)
-    assert.match(sharedControl, /gitCompactBranchList[\s\S]*gitCompactFooter[\s\S]*openCreateBranchDialog/)
-    assert.match(sharedControl, /gitCompactBranchHoverActions[\s\S]*checkoutAction[\s\S]*uploadAction/)
+    assert.match(
+      sharedControl,
+      /gitCompactBranchList[\s\S]*gitCompactFooter[\s\S]*openCreateBranchDialog/
+    )
+    assert.match(
+      sharedControl,
+      /gitCompactBranchHoverActions[\s\S]*checkoutAction[\s\S]*uploadAction/
+    )
     assert.match(control, /themeColor="var\(--workbench-theme-color\)"/)
     assert.match(control, /switchWorkspaceGitBranch\([\s\S]*\{ create: true \}/)
     assert.match(shortcuts, /toggle-changes', defaultShortcut: 'Mod\+Shift\+G'/)
@@ -121,7 +124,7 @@ void describe('pre-split Workbench shell parity', () => {
     assert.match(surface, /const \[isFilePanelOpen, setIsFilePanelOpen\] = useState\(true\)/)
   })
 
-  void test('gives the built-in Velar structure its own left-rail entry and local-first view', () => {
+  void test('gives the built-in Velar structure its own read-only tree view', () => {
     const presentation = readSource('src/renderer/src/StandaloneWorkbenchPagePresentation.tsx')
     const model = readSource('src/renderer/src/hooks/useStandaloneWorkbenchPageModel.tsx')
     const velarGraph = readSource(
@@ -130,29 +133,82 @@ void describe('pre-split Workbench shell parity', () => {
     const codeGraph = readSource(
       'src/renderer/src/components/codeGraph/WorkbenchCodeGraphDialog.tsx'
     )
+    const scopeTree = readSource(
+      'src/renderer/src/components/codeGraph/WorkbenchLogicGraphScopeTree.tsx'
+    )
 
     const folderButton = presentation.indexOf('<FolderIcon')
-    const velarStructureButton = presentation.indexOf('<TreeViewIcon')
+    const velarStructureButton = presentation.indexOf('<TreeViewIcon size={20}')
     const commitButton = presentation.indexOf('<GitCommitIcon')
     assert.ok(folderButton >= 0)
     assert.ok(folderButton < velarStructureButton)
     assert.ok(velarStructureButton < commitButton)
-    assert.match(presentation, /chrome\.velarLogicGraphAvailable[\s\S]*velarLogicGraphOpen/)
+    assert.match(presentation, /chrome\.velarLogicGraphAvailable[\s\S]*openVelarStructure/)
     assert.match(presentation, /<WorkbenchCodeGraphDialog[\s\S]*open=\{dialogs\.codeGraphOpen\}/)
-    assert.match(presentation, /<WorkbenchLogicGraphDialog[\s\S]*open=\{dialogs\.velarLogicGraphOpen\}/)
+    assert.match(presentation, /auxiliaryTabs:[\s\S]*<WorkbenchLogicGraphEditor/)
+    assert.doesNotMatch(presentation, /velar-structure:overview|VelarStructureOverviewTab/)
+    assert.match(presentation, /defaultVelarStructureRoot/)
+    assert.match(presentation, /if \(roots\.has\('src'\)\) return 'src'/)
+    assert.match(presentation, /velarStructureTabs\.map/)
+    assert.match(presentation, /openVelarStructureScope/)
+    assert.match(presentation, /scopePaths=\{structureTab\.scopePaths\}/)
+    assert.match(presentation, /group: 'structure'/)
+    assert.match(presentation, /id: `velar-source:\$\{velarSourcePreview\.path\}`/)
+    assert.match(presentation, /<ReadOnlyWorkbenchCode/)
+    assert.match(
+      presentation,
+      /leftMode=\{\s*surface\.activeLeftTool === 'commit'[\s\S]*'velar-structure'[\s\S]*'files'[\s\S]*\}/
+    )
     assert.match(
       model,
       /const codeGraphAvailable = codeGraphResourceAvailable && !velarLogicGraphAvailable/
     )
     assert.match(model, /const \[velarLogicGraphOpen, setVelarLogicGraphOpen\] = useState\(false\)/)
+    assert.match(
+      model,
+      /const \[velarLogicGraphActive, setVelarLogicGraphActive\] = useState\(false\)/
+    )
     assert.doesNotMatch(velarGraph, /getWorkbenchCodeGraph|codeGraphAvailable/)
-    assert.match(velarGraph, /const \[depth, setDepth\] = useState\(1\)/)
-    assert.match(velarGraph, /LogicGraphLayers[\s\S]*'business'[\s\S]*'modules'[\s\S]*'execution'[\s\S]*'state'[\s\S]*'detail'/)
-    assert.match(velarGraph, /node\.context\?\.trim\(\) \|\| inferredContextLabel/)
-    assert.match(velarGraph, /direction, relationKinds: LayerRelationKinds\[layer\]/)
-    assert.match(velarGraph, /focus\.trim\(\) \|\| velarPath/)
+    assert.doesNotMatch(velarGraph, /<Dialog|DialogContent|DialogHeader/)
+    assert.match(velarGraph, /function WorkbenchLogicGraphEditor/)
+    assert.match(velarGraph, /WorkbenchVelarStructureView = 'overview' \| 'selection'/)
+    assert.doesNotMatch(presentation, /logicGraphLayerBusiness|logicGraphLayerModules/)
+    assert.match(velarGraph, /selectScopeNeighborhood/)
+    assert.match(velarGraph, /selectModuleScope/)
+    assert.match(velarGraph, /const useModuleProjection = !useSymbolProjection/)
+    assert.match(velarGraph, /scopePaths\.length > 0/)
+    assert.match(velarGraph, /projectOverviewSelection/)
+    assert.match(velarGraph, /deduplicateEdges/)
+    assert.match(velarGraph, /analyzeLogicGraphTopology/)
+    assert.match(velarGraph, /positionDependencyTree/)
+    assert.match(velarGraph, /setLayoutDirection] = useState<LogicGraphDirection>\('vertical'\)/)
+    assert.match(velarGraph, /LogicGraphRelationFilter/)
+    assert.match(velarGraph, /size="xs"/)
+    assert.match(velarGraph, /<ReadOnlyWorkbenchCode[\s\S]*showLineNumbers=\{false\}[\s\S]*compact/)
+    assert.match(velarGraph, /onPointerDown=\{handleGraphPointerDown\}/)
+    assert.match(velarGraph, /onPointerDown=\{\(event\) => handleNodePointerDown\(event, node\)\}/)
+    assert.match(velarGraph, /markerEnd="url\(#logic-graph-arrow\)"/)
+    assert.match(velarGraph, /data-cycle=\{topology\.cycleEdgeKeys/)
+    assert.match(velarGraph, /data-cycle=\{topology\.cycleNodeIds/)
+    assert.match(velarGraph, /logicGraphCircularDependencyCount/)
+    assert.doesNotMatch(velarGraph, /logicGraphEditorHeader/)
+    assert.doesNotMatch(scopeTree, /logicGraphScopeProject/)
+    assert.match(scopeTree, /\(\?:test\|tests\|__tests__\)/)
+    assert.match(scopeTree, /\(\?:\\\.test\|\\\.spec\|_test\|-test\)\\\.vel/)
+    assert.doesNotMatch(
+      scopeTree.match(/const StructuralKinds = new Set\(\[[\s\S]*?\]\)/)?.[0] ?? '',
+      /'member'|'variable'/
+    )
+    assert.match(
+      readSource('src/renderer/src/components/codeGraph/WorkbenchLogicGraphSidebar.tsx'),
+      /<WorkbenchLogicGraphScopeTree/
+    )
     assert.match(codeGraph, /getWorkbenchCodeGraph/)
     assert.doesNotMatch(codeGraph, /VelarOwnershipGraphRequestId/)
+    assert.match(
+      readSource('src/renderer/src/components/editor/CodeInsightPanel.tsx'),
+      /diagnosticsByPath:\s*languageServiceInsights\?\.diagnosticsByPath/
+    )
   })
 
   void test('keeps the pre-split commit tool above and Git history tool below', () => {
@@ -164,7 +220,7 @@ void describe('pre-split Workbench shell parity', () => {
     assert.match(presentation, /<GitCommitIcon size=\{18\} \/>/)
     assert.match(presentation, /onClick=\{\(\) => toggleLeftTool\('commit'\)\}/)
     assert.match(presentation, /<GitBranchIcon size=\{18\}/)
-    assert.match(presentation, /leftMode=\{surface\.activeLeftTool === 'commit' \? 'changes' : 'files'\}/)
+    assert.match(presentation, /surface\.activeLeftTool === 'commit'[\s\S]*\? 'changes'/)
     assert.match(kernel, /<WorkbenchCommitPanel/)
     assert.match(commitPanel, /commitWorkspaceGitChanges/)
     assert.doesNotMatch(commitPanel, /commitPanelCountBadge/)
@@ -173,9 +229,7 @@ void describe('pre-split Workbench shell parity', () => {
   })
 
   void test('keeps the Git tool header free of a duplicate log tab', () => {
-    const commandPanel = readSource(
-      'src/renderer/src/components/terminal/CommandPanel.tsx'
-    )
+    const commandPanel = readSource('src/renderer/src/components/terminal/CommandPanel.tsx')
 
     assert.doesNotMatch(commandPanel, /GitBranchIcon/)
     assert.doesNotMatch(commandPanel, /bottomToolSessionTabs/)
@@ -183,9 +237,7 @@ void describe('pre-split Workbench shell parity', () => {
   })
 
   void test('restores the Workbench chat landing and composer controls', () => {
-    const adapter = readSource(
-      'src/renderer/src/runtime/standaloneWorkbenchChatAdapter.tsx'
-    )
+    const adapter = readSource('src/renderer/src/runtime/standaloneWorkbenchChatAdapter.tsx')
     const styles = readSource('src/renderer/src/styles/04-insight-chat.module.css')
 
     assert.match(adapter, /data-workbench-chat-empty="true"/)
@@ -209,14 +261,15 @@ void describe('pre-split Workbench shell parity', () => {
     assert.match(adapter, /canStop:\s*true/)
     assert.match(adapter, /abortAgentExecution/)
     assert.doesNotMatch(adapter, /workbenchEditorControlAvailable/)
-    assert.match(styles, /\.workbenchChatTopBar \.workbenchChatSessionMenuButton[\s\S]*justify-content:\s*flex-start/)
+    assert.match(
+      styles,
+      /\.workbenchChatTopBar \.workbenchChatSessionMenuButton[\s\S]*justify-content:\s*flex-start/
+    )
     assert.doesNotMatch(styles, /workbenchChatCurrentFileChip/)
   })
 
   void test('keeps external Agent engines opt-in and exposes shared resource plugins', () => {
-    const settings = readSource(
-      'src/renderer/src/components/settings/WorkbenchSettingsDialog.tsx'
-    )
+    const settings = readSource('src/renderer/src/components/settings/WorkbenchSettingsDialog.tsx')
     const preload = readSource('src/preload/index.ts')
     const main = readSource('src/main/index.ts')
     const readme = readSource('README.md')
@@ -234,9 +287,7 @@ void describe('pre-split Workbench shell parity', () => {
   void test('localizes language options and confirms rollback in the product dialog', () => {
     const zh = readSource('src/renderer/src/i18n/messages/zh-CN.ts')
     const en = readSource('src/renderer/src/i18n/messages/en-US.ts')
-    const commitPanel = readSource(
-      'src/renderer/src/components/git/WorkbenchCommitPanel.tsx'
-    )
+    const commitPanel = readSource('src/renderer/src/components/git/WorkbenchCommitPanel.tsx')
     const rollbackImplementation = commitPanel.slice(
       commitPanel.indexOf('async function rollbackItems'),
       commitPanel.indexOf('async function generateCommitMessage')

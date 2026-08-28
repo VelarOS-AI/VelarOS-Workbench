@@ -51,3 +51,17 @@ export const VELAR_LANGUAGE_KEYWORDS = [
   'using',
   'while',
 ] as const
+
+export const VELAR_WEB_CONTEXTUAL_KEYWORDS = [
+  'action',
+  'component',
+  'computed',
+  'css',
+  'expose',
+  'exposes',
+  'keyframes',
+  'look',
+  'resource',
+  'state',
+  'watch',
+] as const

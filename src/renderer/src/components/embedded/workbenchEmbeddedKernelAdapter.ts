@@ -132,6 +132,7 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
         onSetDirectoryOpen: (path, open) => void workbench.setDirectoryOpen(path, open),
         onSelectFile: (path) => {
           model.aiChangeArchive.closeSelection()
+          model.dialogs.setVelarLogicGraphActive(false)
           void editorNavigation.selectFile(path)
         },
         onRunFile: (path) => {
@@ -184,6 +185,7 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
       tabs: {
         onSelectOpenFile: (path) => {
           model.aiChangeArchive.closeSelection()
+          model.dialogs.setVelarLogicGraphActive(false)
           void editorNavigation.selectFile(path)
         },
         onCloseOpenFile: workbench.closeOpenFile,

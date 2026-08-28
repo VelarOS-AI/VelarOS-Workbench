@@ -54,6 +54,7 @@ export interface WorkbenchEditorAuxiliaryTabItem {
   label: ReactNode
   icon?: ReactNode
   active: boolean
+  group?: 'primary' | 'structure'
   kind?: string
   onSelect: () => void
   onClose: () => void
@@ -88,6 +89,8 @@ interface EditorTabBarProps {
   markdownPreviewAvailable?: boolean
   markdownPreviewActive?: boolean
   onToggleMarkdownPreview?: () => void
+  ariaLabel?: string
+  showWorkspaceActions?: boolean
 }
 
 function fileNameFromPath(path: string): string {
@@ -120,6 +123,8 @@ export function EditorTabBar({
   markdownPreviewAvailable = false,
   markdownPreviewActive = false,
   onToggleMarkdownPreview,
+  ariaLabel,
+  showWorkspaceActions = true,
 }: EditorTabBarProps): Nullable<ReactElement> {
   const { t } = useWorkbenchI18n()
   const [openMenu, setOpenMenu] = useState<Nullable<'tabs' | 'actions'>>(null)
@@ -229,7 +234,11 @@ export function EditorTabBar({
 
   return (
     <>
-      <div className={styles.editorTabBar} role="tablist" aria-label={t('workbench.openFiles')}>
+      <div
+        className={styles.editorTabBar}
+        role="tablist"
+        aria-label={ariaLabel ?? t('workbench.openFiles')}
+      >
         <div ref={tabScrollerRef} className={styles.editorTabScroller}>
           {openTabs.map((tab) => {
             const isDirty = tab.content !== tab.file.content
@@ -411,17 +420,19 @@ export function EditorTabBar({
               <CaretDownIcon size={15} />
             </IconButton>
           )}
-          <IconButton
-            ref={actionsButtonRef}
-            size="icon-sm"
-            className={styles.editorTabActionButton}
-            title={t('workbench.editorTabActions')}
-            label={t('workbench.editorTabActions')}
-            aria-expanded={openMenu === 'actions'}
-            onClick={() => setOpenMenu((menu) => (menu === 'actions' ? null : 'actions'))}
-          >
-            <DotsThreeVerticalIcon size={16} />
-          </IconButton>
+          {showWorkspaceActions && (
+            <IconButton
+              ref={actionsButtonRef}
+              size="icon-sm"
+              className={styles.editorTabActionButton}
+              title={t('workbench.editorTabActions')}
+              label={t('workbench.editorTabActions')}
+              aria-expanded={openMenu === 'actions'}
+              onClick={() => setOpenMenu((menu) => (menu === 'actions' ? null : 'actions'))}
+            >
+              <DotsThreeVerticalIcon size={16} />
+            </IconButton>
+          )}
         </div>
       </div>
       {openMenu === 'tabs' && (

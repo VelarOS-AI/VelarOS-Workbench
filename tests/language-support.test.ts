@@ -219,6 +219,17 @@ void describe('focused Workbench language surface', () => {
       doc,
       extensions: [velarScript()],
     })).toString()
+    const fallbackTokens = (doc: string): Array<{ name: string; text: string }> => {
+      const state = EditorState.create({ doc, extensions: [velarScript()] })
+      const tokens: Array<{ name: string; text: string }> = []
+      syntaxTree(state).iterate({
+        enter(node) {
+          if (node.name !== 'Document')
+            tokens.push({ name: node.name, text: state.sliceDoc(node.from, node.to) })
+        },
+      })
+      return tokens
+    }
     assert.equal(
       fallbackTree('const path = r"C:\\\\Users\\foo"\n'),
       'Document(keyword,"variableName.definition",operator,string)'
@@ -258,6 +269,100 @@ void describe('focused Workbench language surface', () => {
     assert.equal(
       fallbackTree('const delta = {position: local, revision: nextRevision, changed}\n'),
       'Document(keyword,"variableName.definition",operator,punctuation,propertyName,punctuation,variableName,punctuation,propertyName,punctuation,variableName,punctuation,propertyName,punctuation)'
+    )
+    assert.equal(
+      fallbackTree([
+        'def seed() -> List<Release>:',
+        '  return [',
+        '    {',
+        '      id: "compiler-0-11",',
+        '      name: "VelarScript Compiler",',
+        '      checks: [{title: "Parser fuzz run clean", done: true}],',
+        '    },',
+        '  ]',
+        '',
+      ].join('\n')),
+      'Document(keyword,"variableName.definition.function",punctuation,operator,atom,operator,className,operator,keyword,punctuation,punctuation,propertyName,punctuation,string,punctuation,propertyName,punctuation,string,punctuation,propertyName,punctuation,punctuation,propertyName,punctuation,string,punctuation,propertyName,punctuation,keyword,punctuation,punctuation,punctuation)'
+    )
+    assert.equal(
+      fallbackTree([
+        'const shell: Look = look:',
+        '  minHeight = 100vh',
+        '  color = ink',
+        '  background = paper',
+        '  fontFamily = bodyFont',
+        '',
+        'const ordinary = color',
+        '',
+      ].join('\n')),
+      'Document(keyword,"variableName.definition",punctuation,className,operator,keyword,punctuation,propertyName,operator,number,variableName,propertyName,operator,variableName,propertyName,operator,variableName,propertyName,operator,variableName,keyword,"variableName.definition",operator,variableName)'
+    )
+    assert.equal(
+      fallbackTree([
+        'component App(title: string):',
+        '  state ready = true',
+        '  return <main look={pageLook}><h1>{title}</h1></main>',
+        '',
+      ].join('\n')),
+      'Document(keyword,"variableName.definition.function",punctuation,variableName,punctuation,atom,punctuation,keyword,"variableName.definition",operator,keyword,keyword,punctuation,tagName,attributeName,operator,punctuation,variableName,punctuation,tagName,punctuation,variableName,punctuation,tagName,punctuation,tagName,punctuation)'
+    )
+    assert.equal(
+      fallbackTree([
+        'component AddCheckForm:',
+        '  return <form><p>Add release check</p><label>Title</label></form>',
+        '',
+      ].join('\n')),
+      'Document(keyword,"variableName.definition.function",punctuation,keyword,punctuation,tagName,punctuation,tagName,punctuation,punctuation,tagName,punctuation,tagName,punctuation,punctuation,tagName,punctuation,tagName,punctuation)'
+    )
+    const nestedJsx = [
+      'component ReleaseList(releases: readonly List<Release>):',
+      '  return <ul look={listLook} data-release-list>',
+      '    {releases.map(release => <li key={release.id} look={rowLook}>',
+      '      <Link to={f"/releases/{release.id}"} look={titleLook}>{f"{release.name}"}</Link>',
+      '      <StagePill stage={release.stage} />',
+      '      <p look={mutedLook} data-release-note>',
+      '        {f"Target {release.target}"}',
+      '      </p>',
+      '      <div look={spanLook}>',
+      '        <ReadinessBar percent={readiness(release)} label={f"{release.name} readiness"} />',
+      '      </div>',
+      '    </li>)}',
+      '  </ul>',
+      '',
+    ].join('\n')
+    const nestedJsxTokens = fallbackTokens(nestedJsx)
+    assert.deepEqual(
+      nestedJsxTokens.filter(({ name }) => name === 'tagName').map(({ text }) => text),
+      ['ul', 'li', 'Link', 'Link', 'StagePill', 'p', 'p', 'div', 'ReadinessBar', 'div', 'li', 'ul']
+    )
+    assert.deepEqual(
+      nestedJsxTokens.filter(({ name }) => name === 'attributeName').map(({ text }) => text),
+      [
+        'look',
+        'data-release-list',
+        'key',
+        'look',
+        'to',
+        'look',
+        'stage',
+        'look',
+        'data-release-note',
+        'look',
+        'percent',
+        'label',
+      ]
+    )
+    assert.equal(
+      fallbackTree('export computed openTasks = tasks.filter(task => not task.done).size\n'),
+      'Document(keyword,keyword,"variableName.definition",operator,variableName,operator,"propertyName.function",punctuation,variableName,operator,keyword,variableName,operator,propertyName,punctuation,operator,propertyName)'
+    )
+    assert.equal(
+      fallbackTree('const component = render\n'),
+      'Document(keyword,"variableName.definition",operator,variableName)'
+    )
+    assert.equal(
+      fallbackTree('component RouteNotFound\n'),
+      'Document(keyword,"variableName.definition.function")'
     )
     for (const header of ['extern js', 'extern js()']) {
       const embeddedJavaScriptTree = fallbackTree([

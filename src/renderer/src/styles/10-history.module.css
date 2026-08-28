@@ -98,6 +98,10 @@
   background: var(--workbench-editor-bg, var(--card));
 }
 
+.editorHistoryCodeViewerCompact {
+  height: 100%;
+}
+
 .editorHistoryCodeViewer :global(.cm-editor) {
   height: 100%;
   background: var(--workbench-editor-bg, var(--card));
@@ -127,10 +131,8 @@
   line-height: var(--workbench-editor-line-height);
 }
 
-.editorHistoryCodeViewer
-  :global(.cm-editor.cm-workbenchMetricsRefreshing .cm-selectionLayer),
-.editorHistoryCodeViewer
-  :global(.cm-editor.cm-workbenchMetricsRefreshing .cm-cursorLayer) {
+.editorHistoryCodeViewer :global(.cm-editor.cm-workbenchMetricsRefreshing .cm-selectionLayer),
+.editorHistoryCodeViewer :global(.cm-editor.cm-workbenchMetricsRefreshing .cm-cursorLayer) {
   visibility: hidden;
 }
 

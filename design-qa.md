@@ -210,3 +210,31 @@ final result: passed
 ### Comparison history
 
 - Pass 13: 将搜索框和提交元信息源图与 `.codex/design-qa/workbench-git-log-meta-inline.png` 放入同一视觉对照输入；聚焦态包围完整搜索框，内部无重复背景，三项提交元信息全部收为单行。无新增 P0/P1/P2 差异。
+
+## VelarScript 结构视图与语法颜色补充基准
+
+- structure source visual truth: `/var/folders/qp/3d1vmxms7jqcm8353whb8h_80000gn/T/codex-clipboard-3db00984-c9e7-439a-a4e3-85a3c93ca8e4.png`
+- nested JSX source visual truth: `/var/folders/qp/3d1vmxms7jqcm8353whb8h_80000gn/T/codex-clipboard-65eb45c8-d0c2-4192-9707-989d5069eb2f.png`
+- packaged structure root: `/tmp/velaros-structure-root-final.png`
+- packaged structure detail: `/tmp/velaros-structure-detail-final.png`
+- packaged nested JSX: `/tmp/velaros-syntax-nested-jsx-final.png`
+- side-by-side nested JSX comparison: `/tmp/velaros-nested-jsx-final-comparison.png`
+- viewport: 1280 × 800 CSS px
+- pixels: 2560 × 1600 at devicePixelRatio 2
+- state: macOS 浅色主题，`examples/app` 已打开；结构入口与项目文件入口分别核对
+
+### Findings
+
+- 结构入口默认选择 `src` 根目录，只打开一个 `src` 标签；左侧树不显示测试文件，右侧按文件依赖拓扑显示 17 个节点和 44 条关系。
+- 文件与结构使用独立分组视图；从结构树打开 `src/app.vel` 和 `RouteNotFound` 时分别增加标签，未覆盖已有标签。
+- 文件结构树只保留组件、操作、类型和有关系的状态信息，普通孤立字段与变量不生成单节点图。
+- Look 属性、对象字段、JSX 标签和 JSX 属性使用各自的语义颜色；普通 JSX 文本保持正文颜色。
+- 嵌套 JSX、回调表达式、属性表达式和插值字符串共享完整的栈式状态。最终包中 `li`、`Link`、`StagePill`、`p`、`div`、`ReadinessBar` 及对应闭合标签颜色连续一致。
+- 图节点、箭头、标签、侧栏、标签栏和状态栏未出现裁切；结构交互与语法颜色核对期间 renderer exception 和 console error 均为 0。
+
+### Comparison history
+
+- Pass 14: 将结构参考与 `/tmp/velaros-structure-root-final.png` 放入同一视觉检查，确认固定“项目结构”标签已消失、默认根目录为 `src`、测试文件过滤生效，未发现新的 P0/P1/P2 问题。
+- Pass 15: 将嵌套 JSX 参考和最终打包截图物理合并到 `/tmp/velaros-nested-jsx-final-comparison.png`。首次实现会在回调表达式中的嵌套标签后丢失 JSX 状态；改为按元素记录表达式基线并隔离插值花括号后，所有开闭标签、属性和插值字符串连续着色，P1 已关闭。
+
+final result: passed
