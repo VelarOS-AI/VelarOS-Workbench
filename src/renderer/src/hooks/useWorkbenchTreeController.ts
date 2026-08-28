@@ -56,6 +56,37 @@ export function useWorkbenchTreeController({ activeProject }: UseWorkbenchTreeCo
     [childrenByPath, selectedEntryPath]
   )
 
+  const discardUnavailableDirectory = useMemoizedFn((path: string): void => {
+    if (isWorkbenchTreeRoot({ path })) return
+
+    setExpandedPaths((current) => {
+      const next = new Set(current)
+      for (const expandedPath of current) {
+        if (isSameOrChildPath(expandedPath, path)) next.delete(expandedPath)
+      }
+      return next
+    })
+    setChildrenByPath((current) => {
+      const next = new Map(current)
+      for (const cachedPath of current.keys()) {
+        if (isSameOrChildPath(cachedPath, path)) next.delete(cachedPath)
+      }
+
+      const parentPath = getWorkbenchPathParentDirectory(path)
+      const parentEntries = next.get(parentPath)
+      if (parentEntries) {
+        next.set(
+          parentPath,
+          parentEntries.filter((entry) => entry.path !== path)
+        )
+      }
+      return next
+    })
+    setSelectedEntryPath((current) =>
+      current && isSameOrChildPath(current, path) ? null : current
+    )
+  })
+
   const requestDirectory = useMemoizedFn(
     async (
       project: WorkbenchProject,
@@ -81,6 +112,7 @@ export function useWorkbenchTreeController({ activeProject }: UseWorkbenchTreeCo
         if (activeProjectRef.current?.id !== owningProjectId) return null
 
         const appError = AppError.from(error)
+        if (appError.code === 'NOT_FOUND') discardUnavailableDirectory(path)
         if (!options.quiet) {
           messageLatest.current.error({
             title: tLatest.current('workbench.loadDirectoryFailed'),
@@ -195,7 +227,7 @@ export function useWorkbenchTreeController({ activeProject }: UseWorkbenchTreeCo
       return
     }
 
-    await loadDirectoryBatch(activeProject, loadedPaths)
+    await loadDirectoryBatch(activeProject, loadedPaths, { quiet: true })
   })
 
   const restoreExpandedPaths = useMemoizedFn(

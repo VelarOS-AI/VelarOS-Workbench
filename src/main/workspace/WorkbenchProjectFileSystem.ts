@@ -38,16 +38,30 @@ export class WorkbenchProjectFileSystem {
   public async listDirectory(
     request: WorkbenchListDirectoryRequest
   ): Promise<WorkbenchListDirectoryResult> {
-    const projectRoot = await this.resolveProjectRoot(request.projectRoot)
-    const directoryPath = await this.resolveInsideProject(projectRoot, request.path ?? '.')
-    const directoryStats = await stat(directoryPath)
+    const requestedPath = request.path ?? '.'
+    let projectRoot: string
+    let directoryPath: string
+    try {
+      projectRoot = await this.resolveProjectRoot(request.projectRoot)
+      directoryPath = await this.resolveInsideProject(projectRoot, requestedPath)
+    } catch (error) {
+      throw this.normalizeDirectoryReadError(error, requestedPath)
+    }
+
+    const directoryStats = await stat(directoryPath).catch((error: unknown) => {
+      throw this.normalizeDirectoryReadError(error, requestedPath)
+    })
     if (!directoryStats.isDirectory()) {
       throw new Error('工作台目录读取目标必须是目录。')
     }
 
     const includeHidden = !!request.includeHidden
     const limit = this.clampLimit(request.limit)
-    const dirents = await readdir(directoryPath, { withFileTypes: true })
+    const dirents = await readdir(directoryPath, { withFileTypes: true }).catch(
+      (error: unknown) => {
+        throw this.normalizeDirectoryReadError(error, requestedPath)
+      }
+    )
     const visibleDirents = dirents.filter((entry) =>
       this.shouldIncludeEntry(entry.name, entry.isDirectory(), includeHidden)
     )
@@ -157,6 +171,17 @@ export class WorkbenchProjectFileSystem {
     if (code === 'ENOENT') return new AppError('NOT_FOUND', `文件已被删除或移动：${path}`)
     if (code === 'EACCES' || code === 'EPERM')
       return new AppError('PERMISSION', `没有权限读取文件：${path}`)
+
+    return AppError.from(error)
+  }
+
+  private normalizeDirectoryReadError(error: unknown, path: string): Error {
+    if (error instanceof AppError) return error
+
+    const code = (error as NodeJS.ErrnoException | undefined)?.code
+    if (code === 'ENOENT') return new AppError('NOT_FOUND', `目录已被删除或移动：${path}`)
+    if (code === 'EACCES' || code === 'EPERM')
+      return new AppError('PERMISSION', `没有权限读取目录：${path}`)
 
     return AppError.from(error)
   }

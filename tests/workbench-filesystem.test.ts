@@ -72,6 +72,26 @@ void describe('Workbench project file tree', () => {
     }
   })
 
+  void test('reports a deleted directory as NOT_FOUND without leaking the realpath ENOENT', async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), 'workbench-deleted-directory-'))
+    const service = new WorkbenchProjectFileSystem()
+
+    try {
+      await assert.rejects(
+        () => service.listDirectory({ projectRoot, path: 'packages/hash/src' }),
+        (error: unknown) => {
+          assert.ok(error instanceof AppError)
+          assert.equal(error.code, 'NOT_FOUND')
+          assert.match(error.message, /目录已被删除或移动/u)
+          assert.doesNotMatch(error.message, /ENOENT|realpath/u)
+          return true
+        }
+      )
+    } finally {
+      await rm(projectRoot, { recursive: true, force: true })
+    }
+  })
+
   void test('restores a missing file from the preserved editor buffer, including dotfiles', async () => {
     const projectRoot = await mkdtemp(join(tmpdir(), 'workbench-restore-file-'))
     const dataRoot = await mkdtemp(join(tmpdir(), 'workbench-restore-data-'))

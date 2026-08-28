@@ -2,13 +2,18 @@
  * 独立 Workbench 应用的轻量通知宿主（对位 desktop GlobalMessageContext 的 Workbench 消费面）。
  *
  * 复活的 surface 只消费 `open/success/info/warning/error/clear` 六个动词；这里用 sonner
- * 直接实现同形 API（desktop 同为 sonner 内核），不搬 desktop 的去重/布局层——独立应用
- * 的通知量级用不上。`<WorkbenchMessageHost/>` 挂在应用壳顶层渲染 Toaster。
+ * 直接实现同形 API（desktop 同为 sonner 内核）。相同内容在短窗口内只展示一次，并复用
+ * 稳定 toast id，避免文件监听等重复事件把同一错误堆成多张卡片。
  */
 import type { ReactElement } from 'react'
 import { toast, Toaster } from 'sonner'
 
 import { WorkbenchUpdateProgress } from '../components/updates/WorkbenchUpdateProgress'
+
+import {
+  makeWorkbenchMessageFingerprint,
+  WorkbenchMessageDedupe,
+} from './workbenchMessageDedupe'
 
 import 'sonner/dist/styles.css'
 
@@ -32,11 +37,18 @@ export interface WorkbenchMessageApi {
   clear: () => void
 }
 
+const messageDedupe = new WorkbenchMessageDedupe()
+
 function show(options: WorkbenchMessageOptions): void {
   const tone: WorkbenchMessageTone = options.tone ?? 'info'
+  const normalizedOptions = { ...options, tone }
+  if (messageDedupe.shouldSkip(normalizedOptions)) return
+
   const payload = {
+    id: makeWorkbenchMessageFingerprint(normalizedOptions),
     description: options.description,
     duration: options.duration,
+    closeButton: options.showClose ?? true,
     onDismiss: options.onClose,
   }
 
@@ -61,7 +73,10 @@ export const workbenchMessage: WorkbenchMessageApi = {
   info: (options) => show({ ...options, tone: 'info' }),
   warning: (options) => show({ ...options, tone: 'warning' }),
   error: (options) => show({ ...options, tone: 'error' }),
-  clear: () => toast.dismiss(),
+  clear: () => {
+    messageDedupe.clear()
+    toast.dismiss()
+  },
 }
 
 export function WorkbenchMessageHost(): ReactElement {
