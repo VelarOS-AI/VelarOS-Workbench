@@ -86,7 +86,8 @@ export class WorkbenchVelarLogicGraphService {
         const matches = snapshot.nodes
           .filter((node) => (!input.kind || node.kind === input.kind)
             && (node.name.toLocaleLowerCase('en-US').includes(query)
-              || node.path?.toLocaleLowerCase('en-US').includes(query)))
+              || node.path?.toLocaleLowerCase('en-US').includes(query)
+              || node.context?.toLocaleLowerCase('en-US').includes(query)))
           .slice(0, input.limit)
         return this.present(snapshot, new Set(matches.flatMap((node) => [
           node.id,

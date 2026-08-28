@@ -121,8 +121,14 @@ class ProjectCapabilityProvider implements WorkbenchProjectCapabilityProvider {
       case 'project:run-batch':
         return project.kernel.runBatch(input)
       case 'project:codegraph-index':
+        if (this.velarLogicGraph?.isProject(project.kernel.root)) {
+          throw new Error('VelarScript projects use the compiler-owned structure graph, not CodeGraph.')
+        }
         return this.codeGraphResource.indexProject(project.kernel.root)
       case 'project:codegraph-graph':
+        if (this.velarLogicGraph?.isProject(project.kernel.root)) {
+          throw new Error('VelarScript projects use the compiler-owned structure graph, not CodeGraph.')
+        }
         return this.codeGraphResource.getGraph(
           readCodeGraphRequest(project.kernel.root, request.input)
         )

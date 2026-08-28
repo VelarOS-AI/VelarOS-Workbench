@@ -13,6 +13,7 @@ import {
   GitCommitIcon,
   PlayIcon,
   TerminalWindowIcon,
+  TreeStructureIcon,
   WarningCircleIcon,
 } from '@phosphor-icons/react'
 import { WorkbenchChatPanel } from '@renderer/components/chat/WorkbenchChatPanel'
@@ -30,6 +31,7 @@ import {
 import { StatusBar } from './components/chrome/StatusBar'
 import { WorkbenchTopLeading, WorkbenchTopTrailing } from './components/chrome/TopToolbar'
 import { WorkbenchProjectControl } from './components/chrome/WorkbenchProjectControl'
+import { WorkbenchCodeGraphDialog } from './components/codeGraph/WorkbenchCodeGraphDialog'
 import { WorkbenchLogicGraphDialog } from './components/codeGraph/WorkbenchLogicGraphDialog'
 import { CodeInsightPanel } from './components/editor/CodeInsightPanel'
 import { WorkbenchEmbeddedKernel } from './components/embedded/WorkbenchEmbeddedKernel'
@@ -190,7 +192,7 @@ export function StandaloneWorkbenchPagePresentation({
           </div>
           <div className={styles.ideUnifiedTopSpacer} />
           <div className={styles.ideUnifiedTopTrailing}>
-            <WorkbenchTopTrailing {...editorChrome} placement="top" controls="primary" />
+            <WorkbenchTopTrailing {...editorChrome} />
           </div>
         </header>
         <section className={styles.ideBody} data-right-tool-open={surface.isRightToolOpen}>
@@ -212,6 +214,19 @@ export function StandaloneWorkbenchPagePresentation({
                 >
                   <FolderIcon size={18} weight="duotone" />
                 </IconButton>
+                {chrome.velarLogicGraphAvailable && (
+                  <IconButton
+                    variant="ghost"
+                    size="icon-sm"
+                    className={styles.leftToolButton}
+                    title={t('workbench.velarLogicGraphOpenTitle')}
+                    label={t('workbench.velarLogicGraphOpenTitle')}
+                    data-active={dialogs.velarLogicGraphOpen}
+                    onClick={() => dialogs.setVelarLogicGraphOpen(!dialogs.velarLogicGraphOpen)}
+                  >
+                    <TreeStructureIcon size={18} weight="duotone" />
+                  </IconButton>
+                )}
                 <IconButton
                   variant="ghost"
                   size="icon-sm"
@@ -290,15 +305,6 @@ export function StandaloneWorkbenchPagePresentation({
           </aside>
           <aside className={styles.rightToolRail} aria-label={t('workbench.rightToolWindows')}>
             <div className={styles.rightToolStrip}>
-              {codeGraphAvailable && (
-                <div className={styles.rightToolActionGroup}>
-                  <WorkbenchTopTrailing
-                    {...editorChrome}
-                    placement="rail"
-                    controls="code-graph"
-                  />
-                </div>
-              )}
               <div className={styles.rightToolWindowGroup}>
                 <IconButton
                   variant="ghost"
@@ -447,16 +453,22 @@ export function StandaloneWorkbenchPagePresentation({
           onResetAllShortcuts={workbenchKeymap.resetAllShortcuts}
           onLocaleChange={(nextLocale) => void translate.setLocale(nextLocale)}
         />
-        <WorkbenchLogicGraphDialog
+        <WorkbenchCodeGraphDialog
           open={dialogs.codeGraphOpen}
           onOpenChange={dialogs.setCodeGraphOpen}
+          projectRoot={workbench.activeProject.rootPath}
+          onOpenLocation={(path, line, column) =>
+            void editorNavigation.goToLocation(path, line ?? 1, column ?? 1)
+          }
+        />
+        <WorkbenchLogicGraphDialog
+          open={dialogs.velarLogicGraphOpen}
+          onOpenChange={dialogs.setVelarLogicGraphOpen}
           projectRoot={workbench.activeProject.rootPath}
           selectedFilePath={workbench.selectedFilePath}
           selectedContent={workbench.editorContent}
           openTabs={workbench.openTabs}
           projectFiles={workbench.projectContextIndex.files}
-          codeGraphAvailable={chrome.codeGraphResourceAvailable}
-          velarLogicGraphAvailable={chrome.velarLogicGraphAvailable}
           refreshVersion={workbench.saveRevision + workbench.workspaceBindingVersion}
           onOpenLocation={(path, line, column) =>
             void editorNavigation.goToLocation(path, line ?? 1, column ?? 1)

@@ -188,6 +188,89 @@ button.statusBarItem:hover {
   gap: 8px;
 }
 
+.logicGraphLayerBar {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--workbench-border);
+  background: var(--workbench-toolbar);
+}
+
+.logicGraphLayerTabs {
+  display: flex;
+  min-width: 0;
+  align-items: stretch;
+  gap: 4px;
+  overflow-x: auto;
+}
+
+.logicGraphLayerTabs button {
+  display: flex;
+  min-width: 112px;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px 9px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  text-align: left;
+  color: var(--muted-foreground);
+  background: transparent;
+  cursor: pointer;
+}
+
+.logicGraphLayerTabs button:hover {
+  color: var(--workbench-text);
+  background: var(--workbench-hover);
+}
+
+.logicGraphLayerTabs button[data-active='true'] {
+  border-color: color-mix(in oklab, var(--primary) 32%, var(--workbench-border));
+  color: var(--workbench-text);
+  background: color-mix(in oklab, var(--primary) 10%, var(--workbench-toolbar));
+}
+
+.logicGraphLayerTabs strong {
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.logicGraphLayerTabs span {
+  max-width: 148px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.logicGraphDirection {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--workbench-border);
+  border-radius: 7px;
+  background: var(--workbench-editor);
+}
+
+.logicGraphDirection button {
+  padding: 4px 7px;
+  border: 0;
+  border-radius: 5px;
+  color: var(--muted-foreground);
+  background: transparent;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.logicGraphDirection button[data-active='true'] {
+  color: var(--workbench-text);
+  background: var(--chrome-rail-selected-bg);
+}
+
 .logicGraphSearch {
   display: flex;
   width: min(30vw, 320px);
@@ -286,11 +369,49 @@ button.statusBarItem:hover {
   fill: color-mix(in oklab, var(--workbench-text) 35%, transparent);
 }
 
+.logicGraphContextLanes rect {
+  fill: color-mix(in oklab, var(--workbench-toolbar) 74%, transparent);
+  stroke: color-mix(in oklab, var(--workbench-border) 84%, var(--primary) 16%);
+  stroke-width: 1;
+}
+
+.logicGraphContextLanes text {
+  fill: var(--muted-foreground);
+  font-size: 10px;
+  font-weight: 650;
+}
+
 .logicGraphEdges path {
   fill: none;
   stroke: color-mix(in oklab, var(--workbench-text) 28%, transparent);
   stroke-width: 1.25;
   marker-end: url('#logic-graph-arrow');
+}
+
+.logicGraphEdges path[data-kind='calls'] {
+  stroke: color-mix(in oklab, #2eaa72 68%, var(--workbench-text));
+}
+
+.logicGraphEdges path[data-kind='writes'] {
+  stroke: color-mix(in oklab, #e05252 68%, var(--workbench-text));
+}
+
+.logicGraphEdges path[data-kind='reads'],
+.logicGraphEdges path[data-kind='derives'] {
+  stroke: color-mix(in oklab, #9867d8 64%, var(--workbench-text));
+}
+
+.logicGraphEdges path[data-kind='imports'] {
+  stroke: color-mix(in oklab, #4f8cff 68%, var(--workbench-text));
+}
+
+.logicGraphEdges path[data-kind='crossesCapability'] {
+  stroke: color-mix(in oklab, #d99122 72%, var(--workbench-text));
+  stroke-dasharray: 5 3;
+}
+
+.logicGraphEdges path[data-active='true'] {
+  stroke-width: 2.25;
 }
 
 .logicGraphNodes g {
@@ -398,6 +519,21 @@ button.statusBarItem:hover {
   font-size: 11px;
 }
 
+.logicGraphDetailContext {
+  padding: 7px 8px;
+  border: 1px solid color-mix(in oklab, var(--primary) 26%, var(--workbench-border));
+  border-radius: 6px;
+  color: var(--workbench-text);
+  background: color-mix(in oklab, var(--primary) 8%, var(--workbench-sidebar));
+  font-size: 11px;
+}
+
+.logicGraphDetailActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .logicGraphRelationList {
   display: flex;
   min-height: 0;
@@ -454,6 +590,15 @@ button.statusBarItem:hover {
   .logicGraphActions,
   .logicGraphSearch {
     width: 100%;
+  }
+
+  .logicGraphLayerBar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .logicGraphDirection {
+    align-self: flex-end;
   }
 
   .logicGraphBody {

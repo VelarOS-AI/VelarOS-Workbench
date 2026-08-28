@@ -158,6 +158,8 @@ export interface WorkbenchCodeGraphNode {
   language: string
   kind: string
   documentation?: string
+  /** Optional compiler-owned business context for language-native structure views. */
+  context?: string
   type?: string
   exported?: boolean
   mutable?: boolean

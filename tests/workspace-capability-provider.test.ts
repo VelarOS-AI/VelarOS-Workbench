@@ -120,6 +120,14 @@ void describe('Project capability provider', () => {
       assert.deepEqual(calls, [{ action: 'search_symbols', query: 'App', limit: 20 }])
       assert.equal(result.source, 'velar-compiler')
       assert.equal(result.provider, 'velar-compiler')
+      await assert.rejects(
+        provider.invoke({
+          projectRoot,
+          operation: 'project:codegraph-index',
+          input: { force: true },
+        }),
+        /compiler-owned structure graph, not CodeGraph/
+      )
     } finally {
       await provider.dispose()
       await rm(projectRoot, { recursive: true, force: true })

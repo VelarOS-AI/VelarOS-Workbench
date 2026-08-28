@@ -47,6 +47,7 @@ function graphResponse(
         kind: 'function',
         name: 'run',
         documentation: 'Runs the project.',
+        context: 'Order checkout',
         type: '() -> void',
         path: 'main.vel',
         selectionRange: {
@@ -100,14 +101,32 @@ void describe('Workbench Velar compiler graph consumer', () => {
     ])
 
     const focused = selectVelarLogicGraphNeighborhood(updated, 'run', 1, 10)
-    assert.deepEqual([...focused], ['function:run', 'module:main', 'state:ready'])
+    assert.deepEqual([...focused], ['function:run', 'state:ready', 'module:main'])
     const view = velarLogicGraphForWorkbench('/project', updated, focused)
     const run = view.nodes.find((node) => node.id === 'function:run')
     assert.deepEqual(
       { path: run?.path, line: run?.line, column: run?.column, type: run?.type },
       { path: 'main.vel', line: 3, column: 5, type: '() -> void' }
     )
+    assert.equal(run?.context, 'Order checkout')
     assert.equal(view.edges.length, 2)
+
+    const readsFromRun = selectVelarLogicGraphNeighborhood(
+      updated,
+      'run',
+      1,
+      10,
+      { direction: 'outgoing', relationKinds: new Set(['reads']) }
+    )
+    assert.deepEqual([...readsFromRun], ['function:run', 'state:ready'])
+    const ownerOfRun = selectVelarLogicGraphNeighborhood(
+      updated,
+      'run',
+      1,
+      10,
+      { direction: 'incoming', relationKinds: new Set(['contains']) }
+    )
+    assert.deepEqual([...ownerOfRun], ['function:run', 'module:main'])
   })
 
   void test('rejects unsafe, duplicate, or unbounded protocol data', () => {
@@ -190,6 +209,12 @@ void describe('Workbench Velar compiler graph consumer', () => {
       assert.equal(query.revision, RevisionB)
       assert.deepEqual(query.nodes.map((node) => node.id).sort(), ['function:helper', 'function:run'])
       assert.deepEqual(query.relations.map((edge) => edge.kind), ['calls'])
+      const businessContext = await service.queryProjectCode(projectRoot, {
+        action: 'search_symbols',
+        query: 'order checkout',
+        limit: 10,
+      } as ProjectCodeIndexQuery) as { nodes: Array<{ id: string; context?: string }> }
+      assert.equal(businessContext.nodes.find((node) => node.id === 'function:run')?.context, 'Order checkout')
       const trace = await service.queryProjectCode(projectRoot, {
         action: 'trace',
         fromSymbol: 'run',
@@ -200,6 +225,7 @@ void describe('Workbench Velar compiler graph consumer', () => {
       assert.deepEqual(requests.map((request) => request?.['previousRevision']), [
         undefined,
         RevisionA,
+        RevisionB,
         RevisionB,
         RevisionB,
       ])

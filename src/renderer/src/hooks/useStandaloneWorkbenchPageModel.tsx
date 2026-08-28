@@ -283,6 +283,7 @@ export function useStandaloneWorkbenchPageModel(
   const [aiIndexPromptOpen, setAiIndexPromptOpen] = useState(false)
   const [aiIndexDetailsOpen, setAiIndexDetailsOpen] = useState(false)
   const [codeGraphOpen, setCodeGraphOpen] = useState(false)
+  const [velarLogicGraphOpen, setVelarLogicGraphOpen] = useState(false)
   const [pendingBrowserElementSelections, setPendingBrowserElementSelections] = useState<
     PendingWorkbenchBrowserElementSelection[]
   >([])
@@ -307,18 +308,23 @@ export function useStandaloneWorkbenchPageModel(
     workbench.selectedFilePath?.endsWith('.vel') === true
     || workbench.projectContextIndex.files.some((file) => file.path.endsWith('.vel'))
   )
-  const codeGraphAvailable = codeGraphResourceAvailable || velarLogicGraphAvailable
+  const codeGraphAvailable = codeGraphResourceAvailable && !velarLogicGraphAvailable
 
   useEffect(() => {
-    if (codeGraphResourceAvailable) return
+    if (codeGraphAvailable) return
     setAiIndexPromptOpen(false)
     setAiIndexDetailsOpen(false)
-  }, [codeGraphResourceAvailable])
+  }, [codeGraphAvailable])
 
   useEffect(() => {
     if (codeGraphAvailable) return
     setCodeGraphOpen(false)
   }, [codeGraphAvailable])
+
+  useEffect(() => {
+    if (velarLogicGraphAvailable) return
+    setVelarLogicGraphOpen(false)
+  }, [velarLogicGraphAvailable])
 
   const activeWorkbenchChatSessionId =
     surface.activeRightTool === 'chat' && currentSession.kind === 'chat' ? currentSession.id : null
@@ -707,11 +713,9 @@ export function useStandaloneWorkbenchPageModel(
   )
   const projectAiIndexSkipped = aiIndexDecision === 'skipped'
   const canOpenCodeGraph =
-    velarLogicGraphAvailable || (
-      codeGraphResourceAvailable &&
-      workbench.projectAiIndexStatus?.status === 'ready' &&
-      !!workbench.projectAiIndexStatus?.codeIndex?.initialized
-    )
+    codeGraphAvailable &&
+    workbench.projectAiIndexStatus?.status === 'ready' &&
+    !!workbench.projectAiIndexStatus?.codeIndex?.initialized
 
   /** `titleBarStyle: hiddenInset`: reserve horizontal inset for macOS traffic lights on the standalone window */
   const macTitleInset =
@@ -779,7 +783,7 @@ export function useStandaloneWorkbenchPageModel(
 
   useEffect(() => {
     if (
-      !codeGraphResourceAvailable ||
+      !codeGraphAvailable ||
       !workbench.activeProject ||
       !workbench.projectAiIndexStatus ||
       workbench.projectAiIndexStatus.status !== 'not-indexed' ||
@@ -791,7 +795,7 @@ export function useStandaloneWorkbenchPageModel(
     setAiIndexPromptOpen(true)
   }, [
     projectAiIndexSkipped,
-    codeGraphResourceAvailable,
+    codeGraphAvailable,
     workbench.activeProject,
     workbench.isStartingProjectAiIndex,
     workbench.projectAiIndexStatus,
@@ -1237,6 +1241,8 @@ export function useStandaloneWorkbenchPageModel(
       setAiIndexDetailsOpen,
       codeGraphOpen,
       setCodeGraphOpen,
+      velarLogicGraphOpen,
+      setVelarLogicGraphOpen,
     },
     /** 交互动作。 */
     actions: {

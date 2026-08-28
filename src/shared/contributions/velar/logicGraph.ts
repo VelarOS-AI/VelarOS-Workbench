@@ -21,6 +21,7 @@ export interface VelarLogicGraphNode {
   kind: string
   name: string
   documentation?: string
+  context?: string
   type?: string
   exported?: boolean
   mutable?: boolean
@@ -132,10 +133,11 @@ function graphNode(value: unknown): VelarLogicGraphNode | null {
   const kind = boundedText(item, 'kind', 128, true)
   const name = boundedText(item, 'name', 4_096, true)
   const documentation = boundedText(item, 'documentation', 32_768)
+  const context = boundedText(item, 'context', 256)
   const type = boundedText(item, 'type', 16_384)
   const path = relativeGraphPath(item)
   const uri = boundedText(item, 'uri', 16_384)
-  if (!id || !kind || !name || documentation === null || type === null
+  if (!id || !kind || !name || documentation === null || context === null || type === null
     || path === null || uri === null) return null
   const declarationRange = range(item['range'])
   const selectionRange = range(item['selectionRange'])
@@ -144,6 +146,7 @@ function graphNode(value: unknown): VelarLogicGraphNode | null {
     kind,
     name,
     ...optionalField('documentation', documentation),
+    ...optionalField('context', context),
     ...optionalField('type', type),
     ...optionalField('path', path),
     ...optionalField('uri', uri),
@@ -307,6 +310,7 @@ export function velarLogicGraphForWorkbench(
       language: 'velar',
       kind: node.kind,
       ...optionalField('documentation', node.documentation),
+      ...optionalField('context', node.context),
       ...optionalField('type', node.type),
       ...(node.exported === undefined ? {} : { exported: node.exported }),
       ...(node.mutable === undefined ? {} : { mutable: node.mutable }),
@@ -331,25 +335,33 @@ export function selectVelarLogicGraphNeighborhood(
   snapshot: VelarLogicGraphSnapshot,
   focus: string,
   depth = 2,
-  maximumNodes = 240
+  maximumNodes = 240,
+  options: {
+    direction?: 'incoming' | 'outgoing' | 'both'
+    relationKinds?: ReadonlySet<string>
+  } = {}
 ): Set<string> {
   const boundedDepth = Math.min(8, Math.max(0, Math.floor(depth)))
   const boundedMaximumNodes = Math.min(MaximumGraphNodes, Math.max(0, Math.floor(maximumNodes)))
   const query = focus.trim().toLocaleLowerCase('en-US')
   const starts = snapshot.nodes.filter((node) => node.id.toLocaleLowerCase('en-US') === query
     || node.name.toLocaleLowerCase('en-US') === query
-    || node.path?.toLocaleLowerCase('en-US') === query)
+    || node.path?.toLocaleLowerCase('en-US') === query
+    || node.context?.toLocaleLowerCase('en-US') === query)
   const candidates = starts.length > 0 ? starts : snapshot.nodes.filter((node) =>
     node.name.toLocaleLowerCase('en-US').includes(query)
-    || node.path?.toLocaleLowerCase('en-US').includes(query))
-  const adjacent = new Map<string, string[]>()
+    || node.path?.toLocaleLowerCase('en-US').includes(query)
+    || node.context?.toLocaleLowerCase('en-US').includes(query))
+  const incoming = new Map<string, string[]>()
+  const outgoing = new Map<string, string[]>()
   for (const edge of snapshot.edges) {
-    const from = adjacent.get(edge.from) ?? []
+    if (options.relationKinds && !options.relationKinds.has(edge.kind)) continue
+    const from = outgoing.get(edge.from) ?? []
     from.push(edge.to)
-    adjacent.set(edge.from, from)
-    const to = adjacent.get(edge.to) ?? []
+    outgoing.set(edge.from, from)
+    const to = incoming.get(edge.to) ?? []
     to.push(edge.from)
-    adjacent.set(edge.to, to)
+    incoming.set(edge.to, to)
   }
   const selected = new Set<string>()
   const pending = candidates.map((node) => ({ id: node.id, depth: 0 }))
@@ -358,7 +370,12 @@ export function selectVelarLogicGraphNeighborhood(
     if (selected.has(current.id)) continue
     selected.add(current.id)
     if (current.depth >= boundedDepth) continue
-    for (const id of adjacent.get(current.id) ?? []) {
+    const neighbors = options.direction === 'incoming'
+      ? incoming.get(current.id) ?? []
+      : options.direction === 'outgoing'
+        ? outgoing.get(current.id) ?? []
+        : [...(outgoing.get(current.id) ?? []), ...(incoming.get(current.id) ?? [])]
+    for (const id of neighbors) {
       if (!selected.has(id)) pending.push({ id, depth: current.depth + 1 })
     }
   }

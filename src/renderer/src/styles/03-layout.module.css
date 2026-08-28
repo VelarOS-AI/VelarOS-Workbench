@@ -405,27 +405,11 @@
   background: var(--workbench-toolbar);
 }
 
-.rightToolActionGroup,
 .rightToolWindowGroup {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1px;
-}
-
-.rightToolActionGroup {
-  padding-bottom: 6px;
-  margin-bottom: 5px;
-  border-bottom: 1px solid color-mix(in srgb, var(--workbench-border) 72%, transparent);
-}
-
-.rightToolRunButton {
-  color: var(--status-green);
-}
-
-.rightToolRunButton:hover:not(.rightToolButtonActive) {
-  color: color-mix(in oklab, var(--status-green) 94%, black);
-  background: var(--status-green-soft);
+  gap: 4px;
 }
 
 .rightToolButton {

@@ -64,9 +64,6 @@ export interface TopToolbarProps {
   onOpenCodeGraph: () => void
 }
 
-type WorkbenchTopTrailingPlacement = 'rail' | 'top'
-type WorkbenchTopTrailingControls = 'all' | 'primary' | 'code-graph'
-
 export function WorkbenchTopLeading({
   gitWorkspaceRoot,
   gitSummary,
@@ -116,8 +113,6 @@ export function WorkbenchTopLeading({
 }
 
 export function WorkbenchTopTrailing({
-  placement = 'top',
-  controls = 'all',
   onOpenSettings,
   topRun,
   isRunningCommand,
@@ -142,19 +137,8 @@ export function WorkbenchTopTrailing({
   | 'codeGraphAvailable'
   | 'canOpenCodeGraph'
   | 'onOpenCodeGraph'
-> & {
-  placement?: WorkbenchTopTrailingPlacement
-  controls?: WorkbenchTopTrailingControls
-}): ReactElement {
+>): ReactElement {
   const { t } = useWorkbenchI18n()
-  const isRailPlacement = placement === 'rail'
-  const actionButtonClassName = isRailPlacement
-    ? styles.rightToolButton
-    : styles.topToolbarIconButton
-  const runButtonClassName = isRailPlacement
-    ? `${styles.rightToolButton} ${styles.rightToolRunButton}`
-    : styles.topRunButton
-  const tooltipSide = isRailPlacement ? 'left' : 'top'
   const aiIndexRunning = isStartingProjectAiIndex || projectAiIndexStatus?.status === 'indexing'
   const aiIndexTooltip = aiIndexRunning
     ? getProjectAiIndexActionLabel({
@@ -174,8 +158,6 @@ export function WorkbenchTopTrailing({
   const codeGraphTooltip = aiIndexRunning || !canOpenCodeGraph ? aiIndexTooltip : codeGraphLabel
   const runCommandLabel = t('workbench.runCommand')
   const settingsLabel = t('workbench.settingsTitle')
-  const showPrimaryControls = controls !== 'code-graph'
-  const showCodeGraph = controls !== 'primary' && codeGraphAvailable
 
   function handleCodeGraphAction(): void {
     if (canOpenCodeGraph) {
@@ -188,34 +170,21 @@ export function WorkbenchTopTrailing({
 
   return (
     <>
-      {showPrimaryControls && (
-        <>
-          <WorkbenchRunAction
-            topRun={topRun}
-            label={runCommandLabel}
-            placeholder={t('workbench.runConfigurationPlaceholder')}
-            className={runButtonClassName}
-            tooltipSide={tooltipSide}
-            isRunningCommand={isRunningCommand}
-            hasActiveRunCommand={hasActiveRunCommand}
-          />
-          <WorkbenchTopIconAction
-            tooltip={settingsLabel}
-            label={settingsLabel}
-            className={actionButtonClassName}
-            tooltipSide={tooltipSide}
-            onClick={onOpenSettings}
-          >
-            <GearSixIcon size={17} />
-          </WorkbenchTopIconAction>
-        </>
-      )}
-      {showCodeGraph && (
+      <WorkbenchRunAction
+        topRun={topRun}
+        label={runCommandLabel}
+        placeholder={t('workbench.runConfigurationPlaceholder')}
+        className={styles.topRunButton}
+        tooltipSide="top"
+        isRunningCommand={isRunningCommand}
+        hasActiveRunCommand={hasActiveRunCommand}
+      />
+      {codeGraphAvailable && (
         <WorkbenchTopIconAction
           tooltip={codeGraphTooltip}
           label={codeGraphLabel}
-          className={actionButtonClassName}
-          tooltipSide={tooltipSide}
+          className={styles.topToolbarIconButton}
+          tooltipSide="top"
           disabled={aiIndexRunning}
           onClick={handleCodeGraphAction}
         >
@@ -226,6 +195,15 @@ export function WorkbenchTopTrailing({
           )}
         </WorkbenchTopIconAction>
       )}
+      <WorkbenchTopIconAction
+        tooltip={settingsLabel}
+        label={settingsLabel}
+        className={styles.topToolbarIconButton}
+        tooltipSide="top"
+        onClick={onOpenSettings}
+      >
+        <GearSixIcon size={17} />
+      </WorkbenchTopIconAction>
     </>
   )
 }

@@ -59,7 +59,7 @@
   flex: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 
 .topToolbarLeft,
@@ -353,6 +353,8 @@
 }
 
 .topToolbarIconButton {
+  width: 28px;
+  height: 28px;
   color: var(--workbench-text-muted);
   border-radius: var(--workbench-radius);
 }

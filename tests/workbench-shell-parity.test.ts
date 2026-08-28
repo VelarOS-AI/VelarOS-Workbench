@@ -72,15 +72,16 @@ void describe('pre-split Workbench shell parity', () => {
     assert.match(presentation, /<WorkbenchTopLeading \{\.\.\.editorChrome\} \/>/)
     assert.match(
       presentation,
-      /<WorkbenchTopTrailing \{\.\.\.editorChrome\} placement="top" controls="primary" \/>/
+      /<WorkbenchTopTrailing \{\.\.\.editorChrome\} \/>/
     )
-    assert.match(
-      presentation,
-      /placement="rail"[\s\S]*controls="code-graph"/
-    )
+    assert.doesNotMatch(presentation, /placement="rail"|rightToolActionGroup/)
     assert.match(toolbar, /<WorkbenchGitCommitControl/)
-    assert.match(toolbar, /showPrimaryControls = controls !== 'code-graph'/)
-    assert.match(toolbar, /showCodeGraph = controls !== 'primary' && codeGraphAvailable/)
+    const runButton = toolbar.indexOf('<WorkbenchRunAction')
+    const codeGraphButton = toolbar.indexOf('{codeGraphAvailable && (')
+    const settingsButton = toolbar.indexOf('tooltip={settingsLabel}')
+    assert.ok(runButton >= 0)
+    assert.ok(runButton < codeGraphButton)
+    assert.ok(codeGraphButton < settingsButton)
     assert.match(adapter, /gitWorkspaceRoot:\s*workbench\.activeProject\?\.rootPath/)
     assert.match(adapter, /onOpenGitCommitTool:[\s\S]*setActiveLeftTool\('commit'\)/)
     assert.match(adapter, /onOpenGitBottomTool:[\s\S]*openBottomTool\('git'\)/)
@@ -118,6 +119,40 @@ void describe('pre-split Workbench shell parity', () => {
     assert.match(presentation, /onClick=\{\(\) => toggleLeftTool\('project'\)\}/)
     assert.match(presentation, /isFilePanelOpen:\s*surface\.isFilePanelOpen/)
     assert.match(surface, /const \[isFilePanelOpen, setIsFilePanelOpen\] = useState\(true\)/)
+  })
+
+  void test('gives the built-in Velar structure its own left-rail entry and local-first view', () => {
+    const presentation = readSource('src/renderer/src/StandaloneWorkbenchPagePresentation.tsx')
+    const model = readSource('src/renderer/src/hooks/useStandaloneWorkbenchPageModel.tsx')
+    const velarGraph = readSource(
+      'src/renderer/src/components/codeGraph/WorkbenchLogicGraphDialog.tsx'
+    )
+    const codeGraph = readSource(
+      'src/renderer/src/components/codeGraph/WorkbenchCodeGraphDialog.tsx'
+    )
+
+    const folderButton = presentation.indexOf('<FolderIcon')
+    const velarStructureButton = presentation.indexOf('<TreeStructureIcon')
+    const commitButton = presentation.indexOf('<GitCommitIcon')
+    assert.ok(folderButton >= 0)
+    assert.ok(folderButton < velarStructureButton)
+    assert.ok(velarStructureButton < commitButton)
+    assert.match(presentation, /chrome\.velarLogicGraphAvailable[\s\S]*velarLogicGraphOpen/)
+    assert.match(presentation, /<WorkbenchCodeGraphDialog[\s\S]*open=\{dialogs\.codeGraphOpen\}/)
+    assert.match(presentation, /<WorkbenchLogicGraphDialog[\s\S]*open=\{dialogs\.velarLogicGraphOpen\}/)
+    assert.match(
+      model,
+      /const codeGraphAvailable = codeGraphResourceAvailable && !velarLogicGraphAvailable/
+    )
+    assert.match(model, /const \[velarLogicGraphOpen, setVelarLogicGraphOpen\] = useState\(false\)/)
+    assert.doesNotMatch(velarGraph, /getWorkbenchCodeGraph|codeGraphAvailable/)
+    assert.match(velarGraph, /const \[depth, setDepth\] = useState\(1\)/)
+    assert.match(velarGraph, /LogicGraphLayers[\s\S]*'business'[\s\S]*'modules'[\s\S]*'execution'[\s\S]*'state'[\s\S]*'detail'/)
+    assert.match(velarGraph, /node\.context\?\.trim\(\) \|\| inferredContextLabel/)
+    assert.match(velarGraph, /direction, relationKinds: LayerRelationKinds\[layer\]/)
+    assert.match(velarGraph, /focus\.trim\(\) \|\| velarPath/)
+    assert.match(codeGraph, /getWorkbenchCodeGraph/)
+    assert.doesNotMatch(codeGraph, /VelarOwnershipGraphRequestId/)
   })
 
   void test('keeps the pre-split commit tool above and Git history tool below', () => {
