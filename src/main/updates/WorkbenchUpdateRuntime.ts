@@ -1,11 +1,13 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
-import { autoUpdater } from 'electron-updater'
+import electronUpdater from 'electron-updater'
 
 import { WorkbenchUpdateChannels } from '../../shared/workbenchUpdate'
 
 import { CloudWorkbenchReleaseSource } from './WorkbenchReleaseSource'
 import { WorkbenchUpdatePreferencesStore } from './WorkbenchUpdatePreferencesStore'
 import { WorkbenchUpdateService } from './WorkbenchUpdateService'
+
+const { autoUpdater } = electronUpdater
 
 export function installWorkbenchUpdateRuntime(): void {
   const service = new WorkbenchUpdateService(
