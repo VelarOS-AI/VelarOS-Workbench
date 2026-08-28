@@ -18,6 +18,11 @@ import {
 } from '@phosphor-icons/react'
 import { useWorkbenchHostRuntime } from '@renderer/host'
 import { useWorkbenchI18n } from '@renderer/i18n'
+import {
+  mergeWorkbenchVelarProjectSnapshots,
+  selectWorkbenchVelarProjectRoots,
+  workbenchVelarProjectRootForPath,
+} from '@renderer/models/codeGraph/workbenchVelarProjectGraph'
 import type { WorkbenchThemeId } from '@renderer/models/settings/workbenchPreferences'
 
 import { Result } from '@velaros-ai/core/result'
@@ -74,6 +79,7 @@ const SelectionNodeKinds = new Set([
 interface WorkbenchLogicGraphEditorProps {
   active: boolean
   projectRoot: string
+  projectRoots: readonly string[]
   scopePaths: readonly string[]
   selectedFilePath: Nullable<string>
   selectedContent: string
@@ -605,6 +611,19 @@ function manifestEntryPath(content: string): Nullable<string> {
   }
 }
 
+function joinProjectPath(projectRoot: string, path: string): string {
+  return projectRoot ? `${projectRoot}/${path}` : path
+}
+
+function pathMatchesScope(path: string, scopePaths: readonly string[]): boolean {
+  if (scopePaths.length === 0) return true
+  const normalized = path.trim().replace(/\\/g, '/').replace(/^\.\//, '')
+  return scopePaths.some((scope) => {
+    const query = scope.trim().replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/$/, '')
+    return normalized === query || normalized.startsWith(`${query}/`)
+  })
+}
+
 function selectScopeNeighborhood(
   snapshot: VelarLogicGraphSnapshot,
   queries: readonly string[],
@@ -693,6 +712,7 @@ function selectModuleScope(
 export function WorkbenchLogicGraphEditor({
   active,
   projectRoot,
+  projectRoots,
   scopePaths,
   selectedFilePath,
   selectedContent,
@@ -707,13 +727,13 @@ export function WorkbenchLogicGraphEditor({
   const runtime = useWorkbenchHostRuntime()
   const [snapshot, setSnapshot] = useState<VelarLogicGraphSnapshot | null>(null)
   const snapshotRef = useRef<VelarLogicGraphSnapshot | null>(null)
+  const projectSnapshotsRef = useRef(new Map<string, VelarLogicGraphSnapshot>())
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [zoom, setZoom] = useState(1)
   const [layoutDirection, setLayoutDirection] = useState<LogicGraphDirection>('vertical')
   const [relationFilter, setRelationFilter] = useState<LogicGraphRelationFilter>('all')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [entryPath, setEntryPath] = useState<Nullable<string>>(null)
   const [manualNodePositions, setManualNodePositions] = useState<
     Record<string, { x: number; y: number }>
   >({})
@@ -725,33 +745,10 @@ export function WorkbenchLogicGraphEditor({
   const graphPanRef = useRef<Nullable<GraphPanState>>(null)
   const viewportRef = useRef<HTMLDivElement>(null)
   const view: WorkbenchVelarStructureView = scopePaths.length > 0 ? 'selection' : 'overview'
-  const velarPath =
-    (selectedFilePath?.endsWith('.vel') ? selectedFilePath : null) ??
-    openTabs.find((tab) => tab.path.endsWith('.vel'))?.path ??
-    projectFiles.find((file) => file.path.endsWith('.vel'))?.path ??
-    entryPath ??
-    null
-
-  useEffect(() => {
-    let cancelled = false
-    setEntryPath(null)
-    void runtime.kernel.project
-      .readWorkbenchFile({
-        projectRoot,
-        path: 'velar.json',
-        maxChars: 256_000,
-      })
-      .then((result) => {
-        const path = manifestEntryPath(Result.unwrap(result).content)
-        if (!cancelled) setEntryPath(path)
-      })
-      .catch(() => {
-        if (!cancelled) setEntryPath(null)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [projectRoot, runtime])
+  const targetProjectRoots = useMemo(
+    () => selectWorkbenchVelarProjectRoots(projectRoots, scopePaths, null),
+    [projectRoots, scopePaths]
+  )
 
   const load = useCallback(
     async (forceSnapshot = false): Promise<void> => {
@@ -760,33 +757,78 @@ export function WorkbenchLogicGraphEditor({
       setLoading(true)
       setError(null)
       try {
-        if (!velarPath) throw new Error(t('workbench.codeGraphEmpty'))
-        const activeTab = openTabs.find((tab) => tab.path === velarPath)
-        const previous = forceSnapshot ? null : snapshotRef.current
-        const response = await runtime.kernel.project.requestWorkbenchLanguageServiceExtension({
-          projectRoot,
-          path: velarPath,
-          language: 'velar',
-          content:
-            activeTab?.content ?? (selectedFilePath === velarPath ? selectedContent : undefined),
-          openFiles: dirtyOpenFiles(openTabs),
-          requestId: VelarOwnershipGraphRequestId,
-          parameters: {
-            maximumNodes: 10_000,
-            maximumEdges: 20_000,
-            ...(previous ? { previousRevision: previous.revision } : {}),
-          },
-        })
-        if (!response.ok) throw response.error
-        const parsed = parseVelarLogicGraphResponse(response.data.result)
-        if (!parsed) throw new Error(t('workbench.codeGraphError'))
-        const next = applyVelarLogicGraphResponse(previous, parsed)
-        if (!next && previous) {
-          if (sequence === requestSequence.current) void load(true)
-          return
+        const candidatePaths = [
+          ...(selectedFilePath?.endsWith('.vel') ? [selectedFilePath] : []),
+          ...openTabs.filter((tab) => tab.path.endsWith('.vel')).map((tab) => tab.path),
+          ...projectFiles.filter((file) => file.path.endsWith('.vel')).map((file) => file.path),
+        ]
+        const roots = targetProjectRoots.length > 0
+          ? targetProjectRoots
+          : [...new Set(candidatePaths
+              .filter((path) => pathMatchesScope(path, scopePaths))
+              .map((path) => workbenchVelarProjectRootForPath(path, projectRoots) ?? ''))]
+        if (roots.length === 0) throw new Error(t('workbench.codeGraphEmpty'))
+
+        const resolveEntry = async (root: string): Promise<string> => {
+          const ownedPaths = candidatePaths.filter(
+            (path) => {
+              const owner = workbenchVelarProjectRootForPath(path, projectRoots)
+              return owner === root || (owner === null && root === '')
+            }
+          )
+          const candidate = ownedPaths.find((path) => pathMatchesScope(path, scopePaths))
+            ?? ownedPaths[0]
+          if (candidate) return candidate
+          const manifestPath = joinProjectPath(root, 'velar.json')
+          const manifest = Result.unwrap(await runtime.kernel.project.readWorkbenchFile({
+            projectRoot,
+            path: manifestPath,
+            maxChars: 256_000,
+          }))
+          const entry = manifestEntryPath(manifest.content)
+          if (!entry) throw new Error(t('workbench.codeGraphEmpty'))
+          return joinProjectPath(root, entry)
         }
-        if (!next) throw new Error(t('workbench.codeGraphError'))
+
+        const requestSnapshot = async (
+          root: string,
+          path: string,
+          previous: VelarLogicGraphSnapshot | null
+        ): Promise<VelarLogicGraphSnapshot> => {
+          const activeTab = openTabs.find((tab) => tab.path === path)
+          const response = await runtime.kernel.project.requestWorkbenchLanguageServiceExtension({
+            projectRoot,
+            path,
+            language: 'velar',
+            content:
+              activeTab?.content ?? (selectedFilePath === path ? selectedContent : undefined),
+            openFiles: dirtyOpenFiles(openTabs),
+            requestId: VelarOwnershipGraphRequestId,
+            parameters: {
+              maximumNodes: 10_000,
+              maximumEdges: 20_000,
+              ...(previous ? { previousRevision: previous.revision } : {}),
+            },
+          })
+          if (!response.ok) throw response.error
+          const parsed = parseVelarLogicGraphResponse(response.data.result)
+          if (!parsed) throw new Error(t('workbench.codeGraphError'))
+          const next = applyVelarLogicGraphResponse(previous, parsed)
+          if (next) return next
+          if (previous) return requestSnapshot(root, path, null)
+          throw new Error(t('workbench.codeGraphError'))
+        }
+
+        const projects = await Promise.all(roots.map(async (root) => {
+          const path = await resolveEntry(root)
+          const previous = forceSnapshot ? null : projectSnapshotsRef.current.get(root) ?? null
+          return { projectRoot: root, snapshot: await requestSnapshot(root, path, previous) }
+        }))
         if (sequence !== requestSequence.current) return
+        for (const project of projects)
+          projectSnapshotsRef.current.set(project.projectRoot, project.snapshot)
+        const next = mergeWorkbenchVelarProjectSnapshots(projects)
+        if (!next) throw new Error(t('workbench.codeGraphEmpty'))
         snapshotRef.current = next
         setSnapshot(next)
         onSnapshotChange(next)
@@ -803,11 +845,14 @@ export function WorkbenchLogicGraphEditor({
       openTabs,
       onSnapshotChange,
       projectRoot,
+      projectRoots,
+      projectFiles,
       runtime,
+      scopePaths,
       selectedContent,
       selectedFilePath,
       t,
-      velarPath,
+      targetProjectRoots,
     ]
   )
 

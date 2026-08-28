@@ -17,6 +17,7 @@ import {
   WarningCircleIcon,
 } from '@phosphor-icons/react'
 import { WorkbenchChatPanel } from '@renderer/components/chat/WorkbenchChatPanel'
+import { useWorkbenchHostRuntime } from '@renderer/host'
 
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 
@@ -46,6 +47,7 @@ import { WorkbenchGitToolPanel } from './components/git/WorkbenchGitToolPanel'
 import { QuickOpen } from './components/project/QuickOpen'
 import { WorkbenchSettingsDialog } from './components/settings/WorkbenchSettingsDialog'
 import { type BottomTool, CommandPanel } from './components/terminal/CommandPanel'
+import { discoverWorkbenchVelarProjectRoots } from './models/codeGraph/workbenchVelarProjectGraph'
 import styles from './styles/workbenchPageStyles'
 import { useWorkbenchPageContext } from './WorkbenchPageModelContext'
 
@@ -64,8 +66,11 @@ function velarStructureTabId(scopePaths: readonly string[]): string {
 
 function defaultVelarStructureRoot(
   files: ReadonlyArray<{ path: string }>,
-  rootEntries: ReadonlyArray<{ path: string; type: string }>
+  rootEntries: ReadonlyArray<{ path: string; type: string }>,
+  projectRoots: readonly string[]
 ): Nullable<string> {
+  const nestedProjectRoot = projectRoots.find((root) => root !== '')
+  if (!projectRoots.includes('') && nestedProjectRoot) return nestedProjectRoot
   const roots = new Set<string>()
   for (const file of files) {
     const normalized = file.path.trim().replace(/\\/g, '/').replace(/^\.\//, '')
@@ -86,6 +91,7 @@ export function StandaloneWorkbenchPagePresentation({
   projectHubState,
 }: StandaloneWorkbenchPagePresentationProps): ReactElement {
   const model = useWorkbenchPageContext()
+  const runtime = useWorkbenchHostRuntime()
   const agentEnginesEnabled = useWorkbenchAgentEnginesContributionEnabled()
   const {
     workbench,
@@ -116,6 +122,9 @@ export function StandaloneWorkbenchPagePresentation({
   const pendingFileOpenId = projectHubState.pendingFileOpen?.id
   const pendingFileOpenPath = projectHubState.pendingFileOpen?.path
   const activeProjectId = workbench.activeProject?.id
+  const activeProjectRoot = workbench.activeProject?.rootPath
+  const [velarManifestPaths, setVelarManifestPaths] = useState<readonly string[]>([])
+  const [velarManifestDiscoveryComplete, setVelarManifestDiscoveryComplete] = useState(false)
   const [velarStructureTabs, setVelarStructureTabs] =
     useState<readonly VelarStructureViewTab[]>([])
   const [activeVelarStructureTabId, setActiveVelarStructureTabId] = useState('')
@@ -132,22 +141,73 @@ export function StandaloneWorkbenchPagePresentation({
       column?: number
     }>
   >(null)
-  const velarStructureProjectFiles = useMemo(() => {
+  useEffect(() => {
+    let cancelled = false
+    setVelarManifestPaths([])
+    setVelarManifestDiscoveryComplete(false)
+    if (!activeProjectRoot) {
+      setVelarManifestDiscoveryComplete(true)
+      return
+    }
+    void runtime.kernel.project
+      .searchWorkbenchEntries({
+        projectRoot: activeProjectRoot,
+        query: 'velar.json',
+        limit: 200,
+        maxDepth: 12,
+      })
+      .then((result) => {
+        if (cancelled || !result.ok) return
+        setVelarManifestPaths(
+          result.data.entries
+            .filter((entry) => entry.type === 'file' && entry.name === 'velar.json')
+            .map((entry) => entry.path)
+        )
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (!cancelled) setVelarManifestDiscoveryComplete(true)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [activeProjectRoot, runtime, workbench.workspaceBindingVersion])
+  const velarStructureProjectPaths = useMemo(() => {
     const files = new Map<string, { path: string }>()
     for (const file of [
       ...(workbench.projectIndexResult?.files ?? []),
       ...workbench.projectContextIndex.files,
       ...workbench.openTabs,
+      ...workbench.rootEntries,
+      ...velarManifestPaths.map((path) => ({ path })),
     ]) {
       const path = file.path.trim().replace(/\\/g, '/').replace(/^\.\//, '')
-      if (!path.endsWith('.vel')) continue
       files.set(path, { path })
     }
     return [...files.values()]
-  }, [workbench.openTabs, workbench.projectContextIndex.files, workbench.projectIndexResult])
+  }, [
+    workbench.openTabs,
+    workbench.projectContextIndex.files,
+    workbench.projectIndexResult,
+    workbench.rootEntries,
+    velarManifestPaths,
+  ])
+  const velarStructureProjectFiles = useMemo(
+    () => velarStructureProjectPaths.filter((file) => file.path.endsWith('.vel')),
+    [velarStructureProjectPaths]
+  )
+  const velarStructureProjectRoots = useMemo(
+    () => discoverWorkbenchVelarProjectRoots(velarStructureProjectPaths.map((file) => file.path)),
+    [velarStructureProjectPaths]
+  )
   const velarStructureDefaultRoot = useMemo(
-    () => defaultVelarStructureRoot(velarStructureProjectFiles, workbench.rootEntries),
-    [velarStructureProjectFiles, workbench.rootEntries]
+    () =>
+      defaultVelarStructureRoot(
+        velarStructureProjectFiles,
+        workbench.rootEntries,
+        velarStructureProjectRoots
+      ),
+    [velarStructureProjectFiles, velarStructureProjectRoots, workbench.rootEntries]
   )
   const handleVelarStructureSnapshotChange = useCallback(
     (snapshot: VelarLogicGraphSnapshot): void => setVelarStructureSnapshot(snapshot),
@@ -204,6 +264,7 @@ export function StandaloneWorkbenchPagePresentation({
       !dialogs.velarLogicGraphOpen
       || velarStructureTabs.length > 0
       || !velarStructureDefaultRoot
+      || (!velarManifestDiscoveryComplete && velarStructureProjectRoots.length === 0)
     ) return
     const scopePaths = [velarStructureDefaultRoot]
     const id = velarStructureTabId(scopePaths)
@@ -211,7 +272,9 @@ export function StandaloneWorkbenchPagePresentation({
     setActiveVelarStructureTabId(id)
   }, [
     dialogs.velarLogicGraphOpen,
+    velarManifestDiscoveryComplete,
     velarStructureDefaultRoot,
+    velarStructureProjectRoots.length,
     velarStructureTabs.length,
   ])
 
@@ -301,6 +364,7 @@ export function StandaloneWorkbenchPagePresentation({
                         activeVelarStructureTabId === structureTab.id
                       }
                       projectRoot={projectRoot}
+                      projectRoots={velarStructureProjectRoots}
                       scopePaths={structureTab.scopePaths}
                       selectedFilePath={workbench.selectedFilePath}
                       selectedContent={workbench.editorContent}

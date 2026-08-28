@@ -13,6 +13,11 @@ import {
 } from '../src/main/workspace/language/WorkbenchVelarLogicGraphService'
 import { WorkbenchAgentExtensionTools } from '../src/plugins/agent-engines/main/WorkbenchAgentExtensionTools'
 import {
+  discoverWorkbenchVelarProjectRoots,
+  mergeWorkbenchVelarProjectSnapshots,
+  selectWorkbenchVelarProjectRoots,
+} from '../src/renderer/src/models/codeGraph/workbenchVelarProjectGraph'
+import {
   applyVelarLogicGraphResponse,
   parseVelarLogicGraphResponse,
   selectVelarLogicGraphNeighborhood,
@@ -146,6 +151,54 @@ void describe('Workbench Velar compiler graph consumer', () => {
         name: `node${index}`,
       })),
     })), null)
+  })
+
+  void test('composes nested Velar projects in workspace-relative coordinates', () => {
+    const projectRoots = discoverWorkbenchVelarProjectRoots([
+      'README.md',
+      'apps/server/velar.json',
+      'apps/server/src/main.vel',
+      'apps/web/velar.json',
+      'apps/web/src/main.vel',
+      'packages/blocks/velar.json',
+      'packages/blocks/src/index.vel',
+    ])
+    assert.deepEqual(projectRoots, ['apps/server', 'apps/web', 'packages/blocks'])
+    assert.deepEqual(
+      selectWorkbenchVelarProjectRoots(projectRoots, ['apps'], null),
+      ['apps/server', 'apps/web']
+    )
+    assert.deepEqual(
+      selectWorkbenchVelarProjectRoots(projectRoots, ['packages/blocks/tools'], null),
+      ['packages/blocks']
+    )
+
+    const server = applyVelarLogicGraphResponse(null, graphResponse({
+      rootUri: 'file:///workspace/apps/server',
+      nodes: graphResponse().nodes.map((node) => ({ ...node, path: 'src/main.vel' })),
+    }))
+    const web = applyVelarLogicGraphResponse(null, graphResponse({
+      rootUri: 'file:///workspace/apps/web',
+      revision: RevisionB,
+      nodes: graphResponse().nodes.map((node) => ({ ...node, path: 'src/main.vel' })),
+    }))
+    assert.ok(server)
+    assert.ok(web)
+    const merged = mergeWorkbenchVelarProjectSnapshots([
+      { projectRoot: 'apps/server', snapshot: server },
+      { projectRoot: 'apps/web', snapshot: web },
+    ])
+    assert.ok(merged)
+    assert.deepEqual(
+      merged.nodes.filter((node) => node.kind === 'module').map((node) => node.path),
+      ['apps/server/src/main.vel', 'apps/web/src/main.vel']
+    )
+    assert.equal(new Set(merged.nodes.map((node) => node.id)).size, merged.nodes.length)
+    assert.equal(new Set(merged.edges.map((edge) => edge.id)).size, merged.edges.length)
+    assert.deepEqual(
+      selectWorkbenchVelarProjectRoots(projectRoots, [merged.nodes[0]!.id], merged),
+      ['apps/server']
+    )
   })
 
   void test('materializes incremental responses once and serves AI from the same snapshot', async () => {
