@@ -8,6 +8,7 @@ import { WorkbenchCodeGraphResource } from './resources/WorkbenchCodeGraphResour
 import { WorkbenchResourcePluginService } from './resources/WorkbenchResourcePluginService'
 import { WorkbenchGitService } from './workspace/git/WorkbenchGitService'
 import { WorkbenchLanguageServiceWorkerClient } from './workspace/language/LanguageServiceWorkerClient'
+import { WorkbenchVelarLogicGraphService } from './workspace/language/WorkbenchVelarLogicGraphService'
 import { createWorkbenchAppParts, type WorkbenchAppParts } from './workspace/Parts'
 import {
   ProjectCapabilityProvider,
@@ -42,10 +43,12 @@ export function createDefaultWorkbenchMainCapabilityProviders(
     throw new Error('当前 Workbench 宿主没有提供外部链接能力。')
   }
 ): WorkbenchMainCapabilityProviders {
+  const language = new WorkbenchLanguageServiceWorkerClient()
+  const velarLogicGraph = new WorkbenchVelarLogicGraphService(language)
   const codeGraphResource = new WorkbenchCodeGraphResource()
   const agentEngines = new WorkbenchAgentEnginesModRuntime(
     new WorkbenchAgentEngineSessionStore(dataRootDir),
-    new WorkbenchAgentExtensionTools(codeGraphResource),
+    new WorkbenchAgentExtensionTools(codeGraphResource, velarLogicGraph),
     openExternal
   )
   const resourcePlugins = new WorkbenchResourcePluginService(dataRootDir, codeGraphResource)
@@ -54,9 +57,18 @@ export function createDefaultWorkbenchMainCapabilityProviders(
     parts: createWorkbenchAppParts(dataRootDir),
     fileSystem: new WorkbenchProjectFileSystem(),
     git: new WorkbenchGitService(),
-    language: new WorkbenchLanguageServiceWorkerClient(),
-    watch: new WorkbenchFileWatcher(),
-    workspace: new ProjectCapabilityProvider({ codeGraphResource }),
+    language,
+    watch: new WorkbenchFileWatcher({
+      onFilesChanged: (event) => {
+        void language.projectFilesChanged({
+          projectRoot: event.rootPath,
+          paths: event.paths,
+        }).catch(() => {
+          // 文件监听不能因语言服务器退出或项目切换制造未处理的 Promise 拒绝。
+        })
+      },
+    }),
+    workspace: new ProjectCapabilityProvider({ codeGraphResource, velarLogicGraph }),
     resourcePlugins,
     mods,
     agentEngines,

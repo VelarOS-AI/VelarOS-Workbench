@@ -30,6 +30,7 @@ import {
 import { StatusBar } from './components/chrome/StatusBar'
 import { WorkbenchTopLeading, WorkbenchTopTrailing } from './components/chrome/TopToolbar'
 import { WorkbenchProjectControl } from './components/chrome/WorkbenchProjectControl'
+import { WorkbenchLogicGraphDialog } from './components/codeGraph/WorkbenchLogicGraphDialog'
 import { CodeInsightPanel } from './components/editor/CodeInsightPanel'
 import { WorkbenchEmbeddedKernel } from './components/embedded/WorkbenchEmbeddedKernel'
 import {
@@ -445,6 +446,21 @@ export function StandaloneWorkbenchPagePresentation({
           onResetShortcut={workbenchKeymap.resetShortcut}
           onResetAllShortcuts={workbenchKeymap.resetAllShortcuts}
           onLocaleChange={(nextLocale) => void translate.setLocale(nextLocale)}
+        />
+        <WorkbenchLogicGraphDialog
+          open={dialogs.codeGraphOpen}
+          onOpenChange={dialogs.setCodeGraphOpen}
+          projectRoot={workbench.activeProject.rootPath}
+          selectedFilePath={workbench.selectedFilePath}
+          selectedContent={workbench.editorContent}
+          openTabs={workbench.openTabs}
+          projectFiles={workbench.projectContextIndex.files}
+          codeGraphAvailable={chrome.codeGraphResourceAvailable}
+          velarLogicGraphAvailable={chrome.velarLogicGraphAvailable}
+          refreshVersion={workbench.saveRevision + workbench.workspaceBindingVersion}
+          onOpenLocation={(path, line, column) =>
+            void editorNavigation.goToLocation(path, line ?? 1, column ?? 1)
+          }
         />
       </div>
       <QuickOpen

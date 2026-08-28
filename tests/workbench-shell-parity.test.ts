@@ -59,10 +59,10 @@ void describe('pre-split Workbench shell parity', () => {
       'src/renderer/src/components/git/WorkbenchGitCommitControl.tsx'
     )
     const sharedControl = readSource(
-      'node_modules/@velaros-ai/ui/src/product/git/WorkspaceGitCommitControl.tsx'
+      'node_modules/@velaros-ai/ui/dist/product/git/WorkspaceGitCommitControl.js'
     )
     const sharedGitStyles = readSource(
-      'node_modules/@velaros-ai/ui/src/product/git/WorkspaceGitCommitControl.module.css'
+      'node_modules/@velaros-ai/ui/dist/product/git/WorkspaceGitCommitControl.module.css'
     )
     const shortcuts = readSource(
       'src/renderer/src/models/layout/workbenchKeyboardShortcuts.ts'
@@ -95,12 +95,12 @@ void describe('pre-split Workbench shell parity', () => {
     assert.match(sharedGitStyles, /\.gitCompactInput:focus-visible[\s\S]*background-color:\s*transparent/)
     assert.match(sharedGitStyles, /\.gitCreateBranchInput:focus-visible[\s\S]*git-create-branch-input-bg/)
     assert.doesNotMatch(sharedGitStyles, /\.gitCompactMenu :global\(\.velar-input/)
-    assert.match(sharedControl, /<FolderIcon[\s\S]*gitCompactBranchTreeFolder/)
+    assert.match(sharedControl, /FolderIcon[\s\S]*gitCompactBranchTreeFolder/)
     assert.match(sharedControl, /buildBranchTrie\(branches, namespace\)/)
     assert.match(sharedGitStyles, /\.gitCreateBranchDialog[\s\S]*max-width:\s*min\(320px/)
-    assert.match(sharedControl, /<Dialog[\s\S]*createDialogTitle/)
-    assert.match(sharedControl, /<DialogFooter className=\{styles\.gitCreateBranchDialogFooter\}>/)
-    assert.match(sharedControl, /checked=\{checkoutCreatedBranch\}/)
+    assert.match(sharedControl, /Dialog[\s\S]*createDialogTitle/)
+    assert.match(sharedControl, /DialogFooter[\s\S]*gitCreateBranchDialogFooter/)
+    assert.match(sharedControl, /checked(?:=\{|:\s*)checkoutCreatedBranch/)
     assert.match(sharedControl, /gitCompactSearchField[\s\S]*gitCompactFetchButton/)
     assert.match(sharedControl, /gitCompactBranchList[\s\S]*gitCompactFooter[\s\S]*openCreateBranchDialog/)
     assert.match(sharedControl, /gitCompactBranchHoverActions[\s\S]*checkoutAction[\s\S]*uploadAction/)

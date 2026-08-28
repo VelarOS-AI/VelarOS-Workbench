@@ -22,6 +22,8 @@ import type {
   WorkbenchLanguageServiceDiagnosticsResult,
   WorkbenchLanguageServiceDocumentHighlightsResult,
   WorkbenchLanguageServiceDocumentSymbolsResult,
+  WorkbenchLanguageServiceExtensionRequest,
+  WorkbenchLanguageServiceExtensionResult,
   WorkbenchLanguageServiceFormatResult,
   WorkbenchLanguageServiceHoverQueryResult,
   WorkbenchLanguageServiceInlayHintsRequest,
@@ -51,6 +53,7 @@ export const WorkbenchLanguageChannels = {
   inlayHints: 'workbench-app:ls:inlay-hints',
   semanticTokens: 'workbench-app:ls:semantic-tokens',
   codeActions: 'workbench-app:ls:code-actions',
+  extension: 'workbench-app:ls:extension',
   inlineCompletion: 'workbench-app:ls:inline-completion',
 } as const
 
@@ -99,6 +102,9 @@ export interface WorkbenchLanguageBridge {
   getCodeActions: (
     request: WorkbenchLanguageServiceCodeActionsRequest
   ) => Promise<WorkbenchFsCallResult<WorkbenchLanguageServiceCodeActionsResult>>
+  requestExtension: (
+    request: WorkbenchLanguageServiceExtensionRequest
+  ) => Promise<WorkbenchFsCallResult<WorkbenchLanguageServiceExtensionResult>>
   getInlineCompletion: (
     request: WorkbenchInlineCompletionBridgeRequest
   ) => Promise<WorkbenchFsCallResult<WorkbenchInlineCompletionResult>>

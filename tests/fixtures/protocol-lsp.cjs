@@ -13,6 +13,7 @@ const observed = {
   configuration: 'none',
   workspaceFolders: 'none',
 }
+let observedFileChanges = []
 
 function send(message) {
   const json = JSON.stringify(message)
@@ -42,6 +43,9 @@ function initializeResult(id) {
       capabilities: {
         completionProvider: {},
         hoverProvider: true,
+        ...(mode === 'extension' ? {
+          experimental: { velar: { ownershipGraph: { protocolVersion: 1 } } },
+        } : {}),
       },
       serverInfo: { name: 'Protocol Fixture Language Server', version: '1.0.0' },
     },
@@ -74,6 +78,16 @@ function handleClientRequest(message) {
         jsonrpc: '2.0',
         id: message.id,
         result: { items: [{ label: JSON.stringify(observed), kind: 14 }] },
+      })
+      break
+    case 'workspace/didChangeWatchedFiles':
+      observedFileChanges = message.params?.changes ?? []
+      break
+    case 'velar/ownershipGraph':
+      send({
+        jsonrpc: '2.0',
+        id: message.id,
+        result: { params: message.params, fileChanges: observedFileChanges },
       })
       break
     case 'shutdown':

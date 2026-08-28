@@ -25,6 +25,7 @@ interface Subscription {
 interface WorkbenchFileWatcherDependencies {
   debounceMs?: number
   now?: () => number
+  onFilesChanged?: (event: SystemWorkspaceFilesChangedEvent) => void
 }
 
 function normalizeRelativePath(rootPath: string, filename: string): Nullable<string> {
@@ -56,10 +57,12 @@ export class WorkbenchFileWatcher {
   private readonly subscriptions = new Map<string, Subscription>()
   private readonly debounceMs: number
   private readonly now: () => number
+  private readonly onFilesChanged: (event: SystemWorkspaceFilesChangedEvent) => void
 
   constructor(dependencies: WorkbenchFileWatcherDependencies = {}) {
     this.debounceMs = dependencies.debounceMs ?? WorkbenchWatchDebounceMs
     this.now = dependencies.now ?? Date.now
+    this.onFilesChanged = dependencies.onFilesChanged ?? (() => undefined)
   }
 
   public async subscribe(
@@ -156,6 +159,7 @@ export class WorkbenchFileWatcher {
       sessionIds: [],
       changedAt: this.now(),
     }
+    this.onFilesChanged(event)
     for (const subscriptionId of rootWatch.subscriptions) {
       this.subscriptions.get(subscriptionId)?.listener(event)
     }

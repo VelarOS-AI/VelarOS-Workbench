@@ -26,6 +26,7 @@ import type { WorkbenchGetCodeGraphRequest } from '../../shared/contracts'
 import type { WorkbenchWorkspaceInvokeRequest } from '../../shared/workbenchWorkspace'
 import { WorkbenchCodeGraphResource } from '../resources/WorkbenchCodeGraphResource'
 
+import { type WorkbenchVelarLogicGraphService } from './language/WorkbenchVelarLogicGraphService'
 import { CommandHelper } from './CommandHelper'
 import { CommandRunner } from './CommandRunner'
 import { PathResolver } from './PathResolver'
@@ -57,6 +58,7 @@ interface WorkbenchProjectCapabilityProvider {
 interface ProjectCapabilityProviderOptions {
   createKernel?: (projectRoot: string) => Promise<ProjectKernel>
   codeGraphResource?: WorkbenchCodeGraphResource
+  velarLogicGraph?: WorkbenchVelarLogicGraphService
 }
 
 /**
@@ -70,21 +72,13 @@ class ProjectCapabilityProvider implements WorkbenchProjectCapabilityProvider {
   private readonly createKernel: (projectRoot: string) => Promise<ProjectKernel>
   private readonly commandRunner = new CommandRunner(new PathResolver(), new CommandHelper())
   private readonly codeGraphResource: WorkbenchCodeGraphResource
-  private readonly projectCodeQuery: (
-    input: ProjectCodeQuery,
-    context: ProjectToolContext
-  ) => Promise<unknown>
+  private readonly velarLogicGraph?: WorkbenchVelarLogicGraphService
 
   public constructor(options: ProjectCapabilityProviderOptions = {}) {
     this.createKernel = options.createKernel ?? (async (projectRoot) =>
       createProjectKernel({ root: projectRoot }))
     this.codeGraphResource = options.codeGraphResource ?? new WorkbenchCodeGraphResource()
-    const codeIndex: ProjectCodeIndexApi = {
-      isAvailable: () => this.codeGraphResource.describe().available,
-      query: (input, context) =>
-        this.codeGraphResource.queryProjectCode(context.project.getRootPath(), input),
-    }
-    this.projectCodeQuery = createProjectCodeQuery(codeIndex)
+    this.velarLogicGraph = options.velarLogicGraph
   }
 
   public async invoke(request: WorkbenchWorkspaceInvokeRequest): Promise<unknown> {
@@ -154,6 +148,7 @@ class ProjectCapabilityProvider implements WorkbenchProjectCapabilityProvider {
   }
 
   public async dispose(): Promise<void> {
+    for (const root of this.projects.keys()) this.velarLogicGraph?.clear(root)
     this.projects.clear()
   }
 
@@ -202,7 +197,7 @@ class ProjectCapabilityProvider implements WorkbenchProjectCapabilityProvider {
         runWithApproval: (action) => action(),
         prepareMutation: async (input) =>
           buildApprovedMutation(projectRoot, activeDirectory, input),
-        queryCode: this.projectCodeQuery,
+        queryCode: this.projectCodeQuery(projectRoot),
         runCommand: (command, options, allowDangerous, signal) =>
           this.runProjectCommand(
             projectRoot,
@@ -218,6 +213,20 @@ class ProjectCapabilityProvider implements WorkbenchProjectCapabilityProvider {
       },
       approval: defaultDenyApprovalPort,
     }
+  }
+
+  private projectCodeQuery(projectRoot: string): (
+    input: ProjectCodeQuery,
+    context: ProjectToolContext
+  ) => Promise<unknown> {
+    const velarProject = this.velarLogicGraph?.isProject(projectRoot) === true
+    const codeIndex: ProjectCodeIndexApi = {
+      isAvailable: () => velarProject || this.codeGraphResource.describe().available,
+      query: (input, context) => velarProject
+        ? this.velarLogicGraph!.queryProjectCode(context.project.getRootPath(), input)
+        : this.codeGraphResource.queryProjectCode(context.project.getRootPath(), input),
+    }
+    return createProjectCodeQuery(codeIndex)
   }
 
   private async runProjectCommand(

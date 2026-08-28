@@ -29,6 +29,27 @@ function protocolClient(projectRoot: string, mode: string): ExternalLspClient {
   })
 }
 
+function extensionClient(projectRoot: string, declared = true): ExternalLspClient {
+  return new ExternalLspClient(projectRoot, {
+    id: 'protocol-fixture-extension',
+    label: 'Protocol Fixture Language',
+    installKind: 'builtin',
+    runtime: 'lsp-server',
+    extensions: ['protocol'],
+    languages: ['protocol-fixture'],
+    command: process.execPath,
+    args: [fixture, 'extension'],
+    documentLanguageId: 'protocol-fixture',
+    ...(declared ? {
+      extensionRequests: [{
+        id: 'ownership-graph',
+        method: 'velar/ownershipGraph',
+        capabilityPath: ['experimental', 'velar', 'ownershipGraph'],
+      }],
+    } : {}),
+  })
+}
+
 void describe('external LSP protocol boundaries', () => {
   void test('answers server-initiated requests instead of treating them as responses', async () => {
     const projectRoot = await mkdtemp(join(tmpdir(), 'workbench-lsp-protocol-'))
@@ -71,6 +92,66 @@ void describe('external LSP protocol boundaries', () => {
       assert.equal(label.startsWith('组件组件'), true)
       assert.equal(label.endsWith('组件组件'), true)
       assert.equal(label.replaceAll('组件', ''), '')
+    } finally {
+      await client.dispose()
+      await rm(projectRoot, { recursive: true, force: true })
+    }
+  })
+
+  void test('transports only declared, capability-gated extension requests', async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), 'workbench-lsp-extension-'))
+    const client = extensionClient(projectRoot)
+    try {
+      const path = join(projectRoot, 'main.protocol')
+      const first = await client.requestExtension(path, 'first', 'ownership-graph', {
+        maximumNodes: 120,
+        textDocument: { uri: 'file:///spoofed' },
+        version: 999,
+      }) as {
+        params: { maximumNodes: number; textDocument: { uri: string }; version: number }
+      }
+      assert.equal(first.params.maximumNodes, 120)
+      assert.equal(first.params.textDocument.uri.startsWith('file://'), true)
+      assert.equal(first.params.textDocument.uri.includes('spoofed'), false)
+      assert.equal(first.params.version, 1)
+
+      const changedPath = join(projectRoot, 'changed.protocol')
+      await client.filesChanged([changedPath])
+      const second = await client.requestExtension(path, 'second', 'ownership-graph') as {
+        params: { version: number }
+        fileChanges: Array<{ uri: string; type: number }>
+      }
+      assert.equal(second.params.version, 2)
+      assert.equal(second.fileChanges.length, 1)
+      assert.equal(second.fileChanges[0]?.uri.includes('changed.protocol'), true)
+      assert.equal(second.fileChanges[0]?.type, 2)
+
+      const preserved = await client.requestExtension(
+        path,
+        'stale disk content',
+        'ownership-graph',
+        {},
+        true
+      ) as { params: { version: number } }
+      assert.equal(preserved.params.version, 2)
+    } finally {
+      await client.dispose()
+      await rm(projectRoot, { recursive: true, force: true })
+    }
+  })
+
+  void test('rejects an undeclared extension request before starting the language server', async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), 'workbench-lsp-extension-deny-'))
+    const client = extensionClient(projectRoot, false)
+    try {
+      await assert.rejects(
+        client.requestExtension(
+          join(projectRoot, 'main.protocol'),
+          '',
+          'ownership-graph'
+        ),
+        /没有声明语言扩展请求/u
+      )
     } finally {
       await client.dispose()
       await rm(projectRoot, { recursive: true, force: true })

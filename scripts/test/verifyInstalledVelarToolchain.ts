@@ -84,6 +84,7 @@ assert.deepEqual(manifest.packages.map((item) => item.name), [
   '@velarscript/core',
   '@velarscript/desktop',
   '@velarscript/node',
+  '@velarscript/server',
   '@velarscript/web',
   'create-velar',
 ])
@@ -91,14 +92,16 @@ const compiler = manifest.packages.find((item) => item.name === '@velarscript/co
 const core = manifest.packages.find((item) => item.name === '@velarscript/core')
 const desktop = manifest.packages.find((item) => item.name === '@velarscript/desktop')
 const node = manifest.packages.find((item) => item.name === '@velarscript/node')
+const server = manifest.packages.find((item) => item.name === '@velarscript/server')
 const web = manifest.packages.find((item) => item.name === '@velarscript/web')
 const creator = manifest.packages.find((item) => item.name === 'create-velar')
 const cli = manifest.packages.find((item) => item.name === '@velarscript/cli')
-assert.ok(compiler && core && desktop && node && web && creator && cli)
+assert.ok(compiler && core && desktop && node && server && web && creator && cli)
 assert.equal(compiler.version, manifest.version)
 assert.equal(core.version, manifest.version)
 assert.equal(desktop.version, manifest.version)
 assert.equal(node.version, manifest.version)
+assert.equal(server.version, manifest.version)
 assert.equal(web.version, manifest.version)
 assert.equal(creator.version, manifest.version)
 assert.equal(cli.version, manifest.version)
@@ -300,7 +303,21 @@ try {
   ].join('\n')
   await writeFile(join(projectRoot, 'src', 'page.vel'), 'export component Page:\n    return <h1>Page</h1>\n', 'utf8')
   await writeFile(join(projectRoot, 'src', 'main.vel'), source, 'utf8')
-  removeService = registerWorkbenchLanguageService(VelarWorkbenchLanguageService)
+  const installedProjectCli = join(
+    projectRoot,
+    'node_modules',
+    '@velarscript',
+    'cli',
+    'dist',
+    'cli.js'
+  )
+  removeService = registerWorkbenchLanguageService({
+    ...VelarWorkbenchLanguageService,
+    packageName: undefined,
+    projectNodePackageBin: undefined,
+    command: nodeExecutable,
+    args: [installedProjectCli, 'lsp'],
+  })
   services = new WorkbenchLanguageServices(languagePathResolver)
   const resolved = await services.resolveLanguageService({
     projectRoot,
@@ -1114,7 +1131,8 @@ try {
     '        status = f"{await exists(root)}:{get(\"LANG\") ?? \"\"}"',
     '    return <main><button type="button" on:click={inspect}>Inspect</button><p>{status}</p></main>',
     '',
-    'mount(<App />, "#app")',
+    '@main:',
+    '    mount(<App />, "#app")',
   ].join('\n')
   await writeFile(join(desktopProjectRoot, 'src', 'main.vel'), desktopSource, 'utf8')
   await run(nodeExecutable, [installedCli, 'check', desktopProjectRoot], projectRoot)
@@ -1130,33 +1148,50 @@ try {
       applicationBundle: string
       runtime: {
         kind: string
-        minimumMajor: number
-        discovery: string
         embedded: boolean
-        version?: unknown
-        executableHint?: unknown
+        version: string
+        bytes: number
+        sha256: string
+        minimumMajor?: unknown
+        discovery?: unknown
       }
-      sizes: { totalBytes: number }
+      sizes: { applicationBytes: number; runtimeBytes: number; totalBytes: number }
       sizeBudgetBytes: number
     }
-    assert.deepEqual(desktopBuild.runtime, {
-      kind: 'external-node',
-      minimumMajor: 24,
-      discovery: 'environment-and-system-paths',
-      embedded: false,
-    })
-    assert.equal(desktopBuild.runtime.version, undefined)
-    assert.equal(desktopBuild.runtime.executableHint, undefined)
-    assert.ok(desktopBuild.sizes.totalBytes < desktopBuild.sizeBudgetBytes)
+    assert.equal(desktopBuild.runtime.kind, 'embedded-node')
+    assert.equal(desktopBuild.runtime.embedded, true)
+    assert.match(desktopBuild.runtime.version, /^\d+\.\d+\.\d+$/u)
+    assert.equal(desktopBuild.runtime.bytes, desktopBuild.sizes.runtimeBytes)
+    assert.match(desktopBuild.runtime.sha256, /^[0-9a-f]{64}$/u)
+    assert.equal(desktopBuild.runtime.minimumMajor, undefined)
+    assert.equal(desktopBuild.runtime.discovery, undefined)
+    assert.equal(
+      desktopBuild.sizes.applicationBytes + desktopBuild.sizes.runtimeBytes,
+      desktopBuild.sizes.totalBytes
+    )
+    assert.ok(desktopBuild.sizes.applicationBytes < desktopBuild.sizeBudgetBytes)
     const application = join(desktopProjectRoot, 'dist', 'desktop', desktopBuild.applicationBundle)
     const hostConfigurationText = await readFile(join(application, 'Contents', 'Resources', 'desktop.json'), 'utf8')
     const hostConfiguration = JSON.parse(hostConfigurationText) as Record<string, unknown>
     assert.equal(hostConfiguration.nodeExecutableHint, undefined)
-    await run(join(application, 'Contents', 'MacOS', 'VelarDesktopHost'), ['--smoke'], projectRoot, {
+    const smoke = await run(
+      join(application, 'Contents', 'MacOS', 'VelarDesktopHost'),
+      ['--headless-smoke'],
+      projectRoot,
+      {
       ...process.env,
-      VELAR_DESKTOP_NODE: nodeExecutable,
       VELAR_DESKTOP_PROJECT_ROOT: desktopProjectRoot,
-    })
+      }
+    )
+    const smokeReport = JSON.parse(smoke.stdout) as {
+      kind?: unknown
+      runtime?: unknown
+      runtimeSource?: unknown
+    }
+    assert.equal(smokeReport.kind, 'velar-desktop-headless-smoke')
+    assert.equal(smokeReport.runtimeSource, 'bundled')
+    assert.equal(typeof smokeReport.runtime, 'string')
+    assert.equal((smokeReport.runtime as string).endsWith('/Contents/MacOS/node'), true)
   }
   process.stdout.write('Workbench installed Velar toolchain acceptance passed\n')
 } finally {
@@ -1169,7 +1204,12 @@ async function runNpm(arguments_: readonly string[], cwd: string): Promise<void>
   await run(process.platform === 'win32' ? 'npm.cmd' : 'npm', arguments_, cwd)
 }
 
-async function run(command: string, arguments_: readonly string[], cwd: string, env: NodeJS.ProcessEnv = process.env): Promise<void> {
+async function run(
+  command: string,
+  arguments_: readonly string[],
+  cwd: string,
+  env: NodeJS.ProcessEnv = process.env
+): Promise<{ stdout: string; stderr: string }> {
   const child = spawn(command, arguments_, { cwd, env, stdio: ['ignore', 'pipe', 'pipe'] })
   let stdout = ''
   let stderr = ''
@@ -1180,4 +1220,5 @@ async function run(command: string, arguments_: readonly string[], cwd: string, 
     child.once('exit', resolvePromise)
   })
   if (code !== 0) throw new Error(`${command} ${arguments_.join(' ')} failed (${code})\n${stdout}\n${stderr}`)
+  return { stdout, stderr }
 }

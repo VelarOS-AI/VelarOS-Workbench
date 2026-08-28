@@ -113,6 +113,7 @@ const languageBridge: WorkbenchLanguageBridge = {
   getSemanticTokens: (request) =>
     ipcRenderer.invoke(WorkbenchLanguageChannels.semanticTokens, request),
   getCodeActions: (request) => ipcRenderer.invoke(WorkbenchLanguageChannels.codeActions, request),
+  requestExtension: (request) => ipcRenderer.invoke(WorkbenchLanguageChannels.extension, request),
   getInlineCompletion: (request) =>
     ipcRenderer.invoke(WorkbenchLanguageChannels.inlineCompletion, request),
 }

@@ -301,12 +301,24 @@ export function useStandaloneWorkbenchPageModel(
     return true
   })
 
+  const velarLogicGraphAvailable = workbench.projectContextIndex.files.some(
+    (file) => file.path === 'velar.json'
+  ) && (
+    workbench.selectedFilePath?.endsWith('.vel') === true
+    || workbench.projectContextIndex.files.some((file) => file.path.endsWith('.vel'))
+  )
+  const codeGraphAvailable = codeGraphResourceAvailable || velarLogicGraphAvailable
+
   useEffect(() => {
     if (codeGraphResourceAvailable) return
     setAiIndexPromptOpen(false)
     setAiIndexDetailsOpen(false)
-    setCodeGraphOpen(false)
   }, [codeGraphResourceAvailable])
+
+  useEffect(() => {
+    if (codeGraphAvailable) return
+    setCodeGraphOpen(false)
+  }, [codeGraphAvailable])
 
   const activeWorkbenchChatSessionId =
     surface.activeRightTool === 'chat' && currentSession.kind === 'chat' ? currentSession.id : null
@@ -695,9 +707,11 @@ export function useStandaloneWorkbenchPageModel(
   )
   const projectAiIndexSkipped = aiIndexDecision === 'skipped'
   const canOpenCodeGraph =
-    codeGraphResourceAvailable &&
-    workbench.projectAiIndexStatus?.status === 'ready' &&
-    !!workbench.projectAiIndexStatus?.codeIndex?.initialized
+    velarLogicGraphAvailable || (
+      codeGraphResourceAvailable &&
+      workbench.projectAiIndexStatus?.status === 'ready' &&
+      !!workbench.projectAiIndexStatus?.codeIndex?.initialized
+    )
 
   /** `titleBarStyle: hiddenInset`: reserve horizontal inset for macOS traffic lights on the standalone window */
   const macTitleInset =
@@ -1206,7 +1220,9 @@ export function useStandaloneWorkbenchPageModel(
       effectiveGitSshKeyPath,
       shellStyle,
       projectAiIndexSkipped,
-      codeGraphAvailable: codeGraphResourceAvailable,
+      codeGraphAvailable,
+      codeGraphResourceAvailable,
+      velarLogicGraphAvailable,
       canOpenCodeGraph,
       macTitleInset,
       commandStatusLabel,

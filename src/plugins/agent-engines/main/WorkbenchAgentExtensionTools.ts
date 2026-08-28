@@ -4,13 +4,14 @@ import { z } from 'zod'
 import { ProjectCodeQuerySchema, ProjectToolNames } from '@velaros-ai/project'
 
 import type { WorkbenchCodeGraphResource } from '../../../main/resources/WorkbenchCodeGraphResource'
+import type { WorkbenchVelarLogicGraphService } from '../../../main/workspace/language/WorkbenchVelarLogicGraphService'
 
 // Provider function names cannot all carry `:`, so the wire alias stays portable while the
 // presented/tool-ledger identity is Platform's canonical `project:query-code`.
 const ProjectCodeSearchToolName = 'project_query_code'
 const ProjectCodeToolIdentity = ProjectToolNames.queryCode
 const ProjectCodeSearchDescription =
-  'Search project symbols through the shared Workbench CodeGraph index. Use this for structural symbol lookup; use native file tools for ordinary text search and editing.'
+  'Search the current project semantic graph. VelarScript projects use the compiler-owned live logic graph; other languages use the installed structural index.'
 
 const ProjectCodeSearchShape = {
   query: z.string().min(1).describe('Symbol name or structural search query.'),
@@ -20,7 +21,10 @@ const ProjectCodeSearchShape = {
 
 /** Workbench 特有的只读扩展工具；两家引擎共享同一个执行器，不复制原生编辑/命令工具。 */
 export class WorkbenchAgentExtensionTools {
-  public constructor(private readonly codeGraph: WorkbenchCodeGraphResource) {}
+  public constructor(
+    private readonly codeGraph: WorkbenchCodeGraphResource,
+    private readonly velarLogicGraph?: WorkbenchVelarLogicGraphService
+  ) {}
 
   public codexSpecs(): ReadonlyArray<Record<string, unknown>> {
     return [{
@@ -73,11 +77,13 @@ export class WorkbenchAgentExtensionTools {
     const query = ProjectCodeQuerySchema.parse({
       action: 'search_symbols',
       query: input.query,
-      kind: input.kind,
+      ...(input.kind ? { kind: input.kind } : {}),
       limit: input.limit ?? 30,
     })
     if (query.action !== 'search_symbols') throw new Error('Unsupported project code query.')
-    return this.codeGraph.queryProjectCode(projectRoot, query)
+    return this.velarLogicGraph?.isProject(projectRoot)
+      ? this.velarLogicGraph.queryProjectCode(projectRoot, query)
+      : this.codeGraph.queryProjectCode(projectRoot, query)
   }
 
   public isBundledReadOnlyTool(toolName: string): boolean {

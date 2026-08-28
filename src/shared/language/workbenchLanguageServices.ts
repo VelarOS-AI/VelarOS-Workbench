@@ -24,6 +24,7 @@ export interface WorkbenchLanguageServiceDescriptor {
   args?: string[]
   documentLanguageId?: string
   protocol?: WorkbenchLanguageServerProtocolContract
+  extensionRequests?: readonly WorkbenchLanguageServiceExtensionRequestDescriptor[]
   hover?: {
     /** Words whose language-server documentation is intentionally not shown as editor hover. */
     suppressWords: readonly string[]
@@ -38,6 +39,15 @@ export interface WorkbenchLanguageServiceDescriptor {
 export interface WorkbenchLanguageServerProtocolContract {
   capabilityPath: string[]
   version: number
+}
+
+export interface WorkbenchLanguageServiceExtensionRequestDescriptor {
+  /** Stable contribution-owned request id exposed to Workbench clients. */
+  id: string
+  /** LSP method sent only after the declared capability is present. */
+  method: string
+  /** Path below initializeResult.capabilities that enables the request. */
+  capabilityPath: string[]
 }
 
 const BuiltinLanguageServices: WorkbenchLanguageServiceDescriptor[] = [

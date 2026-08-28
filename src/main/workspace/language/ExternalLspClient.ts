@@ -462,6 +462,51 @@ export class ExternalLspClient {
     this.notify('textDocument/didSave', { textDocument: { uri: document.uri }, text: content })
   }
 
+  public async requestExtension(
+    path: string,
+    content: string,
+    requestId: string,
+    parameters: Readonly<Record<string, unknown>> = {},
+    preserveExistingDocument = false
+  ): Promise<unknown> {
+    const declaration = this.descriptor.extensionRequests?.find(
+      (candidate) => candidate.id === requestId
+    )
+    if (!declaration) {
+      throw new AppError(
+        'INVARIANT',
+        `${this.descriptor.label} 没有声明语言扩展请求 '${requestId}'。`
+      )
+    }
+    await this.initialize()
+    const uri = URI.file(path).toString()
+    const current = preserveExistingDocument ? this.documents.get(uri) : undefined
+    const document = current
+      ? { uri, version: current.version }
+      : await this.synchronize(path, content)
+    const capability = valueAtPath(this.serverCapabilities, declaration.capabilityPath)
+    if (capability !== true && !objectValue(capability)) {
+      throw new AppError(
+        'INVARIANT',
+        `${this.descriptor.label} 语言服务器不支持 '${requestId}'。`
+      )
+    }
+    return this.request(declaration.method, {
+      ...parameters,
+      textDocument: { uri: document.uri },
+      version: document.version,
+    })
+  }
+
+  /** Forwards the Workbench project watcher into the already-running LSP session. */
+  public async filesChanged(paths: readonly string[]): Promise<void> {
+    if (!this.initializePromise || paths.length === 0) return
+    await this.initialize()
+    this.notify('workspace/didChangeWatchedFiles', {
+      changes: paths.map((path) => ({ uri: URI.file(path).toString(), type: 2 })),
+    })
+  }
+
   public async completion(path: string, content: string, position: LspPosition): Promise<ExternalLspCompletionItem[]> {
     const document = await this.synchronize(path, content)
     const result = await this.request('textDocument/completion', {
@@ -1103,6 +1148,13 @@ export class ExternalLspManager {
       .filter(([key]) => key.startsWith(`${projectRoot}\0`))
       .map(([, managed]) => managed.client)
     await Promise.all(clients.filter((client) => client.accepts(path)).map((client) => client.save(path, content)))
+  }
+
+  public async filesChanged(projectRoot: string, paths: readonly string[]): Promise<void> {
+    const clients = [...this.clients.entries()]
+      .filter(([key]) => key.startsWith(`${projectRoot}\0`))
+      .map(([, managed]) => managed.client)
+    await Promise.all(clients.map((client) => client.filesChanged(paths)))
   }
 
   public async invalidate(projectRoot: string): Promise<void> {

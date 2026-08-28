@@ -154,6 +154,317 @@ button.statusBarItem:hover {
   font-size: var(--ui-font-body-sm);
 }
 
+.logicGraphDialog {
+  display: flex;
+  width: min(94vw, 1420px);
+  max-width: min(94vw, 1420px);
+  height: min(88vh, 920px);
+  max-height: min(88vh, 920px);
+  flex-direction: column;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.logicGraphHeader {
+  display: flex;
+  min-width: 0;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px 12px;
+  border-bottom: 1px solid var(--workbench-border);
+}
+
+.logicGraphHeader > div:first-child {
+  min-width: 0;
+}
+
+.logicGraphActions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.logicGraphSearch {
+  display: flex;
+  width: min(30vw, 320px);
+  align-items: center;
+  gap: 7px;
+  padding: 6px 9px;
+  border: 1px solid var(--workbench-border);
+  border-radius: 7px;
+  color: var(--muted-foreground);
+  background: var(--workbench-editor);
+}
+
+.logicGraphSearch:focus-within {
+  border-color: color-mix(in oklab, var(--primary) 70%, var(--workbench-border));
+}
+
+.logicGraphSearch input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: 0;
+  color: var(--workbench-text);
+  background: transparent;
+  font-size: var(--ui-font-body-sm);
+}
+
+.logicGraphDepth {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted-foreground);
+  font-size: var(--ui-font-caption);
+}
+
+.logicGraphDepth select {
+  height: 30px;
+  border: 1px solid var(--workbench-border);
+  border-radius: 6px;
+  color: var(--workbench-text);
+  background: var(--workbench-editor);
+}
+
+.logicGraphStatus {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 14px;
+  padding: 0 14px 0 18px;
+  border-bottom: 1px solid var(--workbench-border);
+  color: var(--muted-foreground);
+  background: var(--workbench-toolbar);
+  font-size: var(--ui-font-caption);
+}
+
+.logicGraphStatus span[data-active='true'] {
+  color: var(--status-green, #38a169);
+}
+
+.logicGraphZoom {
+  display: flex;
+  margin-left: auto;
+  align-items: center;
+  gap: 4px;
+}
+
+.logicGraphZoom > span {
+  min-width: 38px;
+  text-align: center;
+}
+
+.logicGraphBody {
+  display: grid;
+  min-height: 0;
+  flex: 1;
+  grid-template-columns: minmax(0, 1fr) 290px;
+}
+
+.logicGraphViewport {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  background:
+    radial-gradient(circle, color-mix(in oklab, var(--workbench-text) 9%, transparent) 1px, transparent 1px),
+    var(--workbench-editor);
+  background-size: 22px 22px;
+}
+
+.logicGraphCanvas {
+  display: block;
+  min-width: 100%;
+  min-height: 100%;
+}
+
+.logicGraphCanvas marker path {
+  fill: color-mix(in oklab, var(--workbench-text) 35%, transparent);
+}
+
+.logicGraphEdges path {
+  fill: none;
+  stroke: color-mix(in oklab, var(--workbench-text) 28%, transparent);
+  stroke-width: 1.25;
+  marker-end: url('#logic-graph-arrow');
+}
+
+.logicGraphNodes g {
+  cursor: pointer;
+  outline: none;
+}
+
+.logicGraphNodes rect {
+  fill: color-mix(in oklab, var(--workbench-toolbar) 92%, var(--primary) 8%);
+  stroke: color-mix(in oklab, var(--workbench-border) 78%, var(--primary) 22%);
+  stroke-width: 1;
+}
+
+.logicGraphNodes g[data-kind='module'] rect {
+  fill: color-mix(in oklab, var(--workbench-toolbar) 82%, #4f8cff 18%);
+}
+
+.logicGraphNodes g[data-kind='state'] rect,
+.logicGraphNodes g[data-kind='computed'] rect {
+  fill: color-mix(in oklab, var(--workbench-toolbar) 82%, #b26cff 18%);
+}
+
+.logicGraphNodes g[data-kind='action'] rect,
+.logicGraphNodes g[data-kind='function'] rect {
+  fill: color-mix(in oklab, var(--workbench-toolbar) 84%, #4fbf8f 16%);
+}
+
+.logicGraphNodes g[data-kind='capability'] rect {
+  fill: color-mix(in oklab, var(--workbench-toolbar) 84%, #e7a23b 16%);
+}
+
+.logicGraphNodes g[data-selected='true'] rect,
+.logicGraphNodes g:focus rect {
+  stroke: var(--primary);
+  stroke-width: 2;
+}
+
+.logicGraphNodeTitle,
+.logicGraphNodeMeta {
+  max-width: 152px;
+  pointer-events: none;
+}
+
+.logicGraphNodeTitle {
+  fill: var(--workbench-text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.logicGraphNodeMeta {
+  fill: var(--muted-foreground);
+  font-size: 10px;
+}
+
+.logicGraphDetails {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  gap: 12px;
+  overflow: auto;
+  padding: 16px;
+  border-left: 1px solid var(--workbench-border);
+  background: var(--workbench-sidebar);
+}
+
+.logicGraphDetails > code {
+  overflow-wrap: anywhere;
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
+
+.logicGraphDetails > p {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: var(--ui-font-body-sm);
+  line-height: var(--ui-line-relaxed);
+}
+
+.logicGraphDetailHeading {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.logicGraphDetailHeading span {
+  color: var(--muted-foreground);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.logicGraphDetailHeading strong {
+  overflow-wrap: anywhere;
+  color: var(--workbench-text);
+  font-size: 15px;
+}
+
+.logicGraphDetailType {
+  overflow-wrap: anywhere;
+  padding: 8px;
+  border-radius: 6px;
+  color: var(--workbench-text);
+  background: color-mix(in oklab, var(--workbench-editor) 88%, var(--primary) 12%);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.logicGraphRelationList {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.logicGraphRelationList button {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  text-align: left;
+  color: var(--workbench-text);
+  background: transparent;
+  cursor: pointer;
+}
+
+.logicGraphRelationList button:hover {
+  border-color: var(--workbench-border);
+  background: var(--workbench-hover);
+}
+
+.logicGraphRelationList span {
+  color: var(--muted-foreground);
+  font-size: 10px;
+}
+
+.logicGraphRelationList strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.logicGraphMessage {
+  display: grid;
+  min-height: 100%;
+  place-items: center;
+  padding: 24px;
+  color: var(--muted-foreground);
+  text-align: center;
+}
+
+@media (max-width: 900px) {
+  .logicGraphHeader {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .logicGraphActions,
+  .logicGraphSearch {
+    width: 100%;
+  }
+
+  .logicGraphBody {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .logicGraphDetails {
+    display: none;
+  }
+}
+
 .statusPathFile {
   @apply flex min-w-0 items-center gap-1 truncate;
   max-width: 220px;

@@ -157,9 +157,16 @@ export interface WorkbenchCodeGraphNode {
   path: string
   language: string
   kind: string
+  documentation?: string
+  type?: string
+  exported?: boolean
+  mutable?: boolean
+  line?: number
+  column?: number
 }
 
 export interface WorkbenchCodeGraphEdge {
+  id?: string
   from: string
   to: string
   kind: string
@@ -260,6 +267,21 @@ export interface WorkbenchLanguageServiceRequest {
   openFiles?: WorkbenchLanguageServiceOpenFile[]
 }
 
+export interface WorkbenchLanguageServiceExtensionRequest
+  extends WorkbenchLanguageServiceRequest {
+  /** Contribution-owned id declared by the selected language service. */
+  requestId: string
+  /** JSON-compatible request fields; textDocument/version remain host-owned. */
+  parameters?: Record<string, unknown>
+}
+
+export interface WorkbenchLanguageServiceExtensionResult {
+  projectRoot: string
+  path: string
+  requestId: string
+  result: unknown
+}
+
 export interface WorkbenchLanguageServiceOffsetRange {
   from: number
   to: number
@@ -298,6 +320,11 @@ export interface WorkbenchLanguageServiceDescriptorSnapshot {
     capabilityPath: string[]
     version: number
   }
+  extensionRequests?: Array<{
+    id: string
+    method: string
+    capabilityPath: string[]
+  }>
 }
 
 export interface WorkbenchLanguageServiceResolveResult {

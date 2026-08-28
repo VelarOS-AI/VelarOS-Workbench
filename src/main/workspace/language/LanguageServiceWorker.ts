@@ -30,6 +30,10 @@ async function dispatch(request: WorkbenchLanguageServiceWorkerRequest): Promise
       return languageServices.synchronizeProjectFile(request.request)
     case 'invalidateProject':
       return languageServices.invalidateProject(request.request)
+    case 'projectFilesChanged':
+      return languageServices.projectFilesChanged(request.request)
+    case 'requestExtension':
+      return languageServices.requestExtension(request.request)
     case 'resolveLanguageService':
       return languageServices.resolveLanguageService(request.request)
     case 'getDefinition':

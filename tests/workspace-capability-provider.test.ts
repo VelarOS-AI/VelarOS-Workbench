@@ -6,6 +6,7 @@ import { describe, test } from 'node:test'
 
 import type { ProjectKernel } from '@velaros-ai/project/runtime'
 
+import type { WorkbenchVelarLogicGraphService } from '../src/main/workspace/language/WorkbenchVelarLogicGraphService'
 import { ProjectCapabilityProvider } from '../src/main/workspace/ProjectCapabilityProvider'
 
 void describe('Project capability provider', () => {
@@ -85,6 +86,40 @@ void describe('Project capability provider', () => {
       assert.equal(result.count, 1)
       assert.equal(result.files[0]?.snapshot.path, 'kernel-contract.txt')
       assert.equal(result.files[0]?.content, 'workspace-owner-read')
+    } finally {
+      await provider.dispose()
+      await rm(projectRoot, { recursive: true, force: true })
+    }
+  })
+
+  void test('routes the canonical AI code query to the Velar compiler graph without a CodeGraph index', async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), 'velaros-workbench-velar-ai-'))
+    const calls: unknown[] = []
+    const velarLogicGraph = {
+      isProject: () => true,
+      queryProjectCode: async (_root: string, input: unknown) => {
+        calls.push(input)
+        return { source: 'velar-compiler', provider: 'velar-compiler', nodes: [] }
+      },
+      clear: () => undefined,
+    } as unknown as WorkbenchVelarLogicGraphService
+    const provider = new ProjectCapabilityProvider({
+      velarLogicGraph,
+      createKernel: async () => ({ root: projectRoot }) as ProjectKernel,
+    })
+    try {
+      const project = await provider.resolveProject(projectRoot)
+      const queryCode = project.tools.find((tool) => tool.name === 'project:query-code')
+      assert.ok(queryCode)
+      const result = await queryCode.execute({
+        action: 'search_symbols',
+        query: 'App',
+        limit: 20,
+      }, {}) as { source: string; provider: string }
+
+      assert.deepEqual(calls, [{ action: 'search_symbols', query: 'App', limit: 20 }])
+      assert.equal(result.source, 'velar-compiler')
+      assert.equal(result.provider, 'velar-compiler')
     } finally {
       await provider.dispose()
       await rm(projectRoot, { recursive: true, force: true })

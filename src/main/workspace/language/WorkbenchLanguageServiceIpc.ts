@@ -12,6 +12,7 @@ import type { ModelSelection } from '@velaros-ai/model/contracts'
 import type {
   WorkbenchLanguageServiceCodeActionsRequest,
   WorkbenchLanguageServiceDiagnostic,
+  WorkbenchLanguageServiceExtensionRequest,
   WorkbenchLanguageServiceInlayHintsRequest,
   WorkbenchLanguageServiceOffsetRange,
   WorkbenchLanguageServiceOpenFile,
@@ -159,6 +160,15 @@ export function registerWorkbenchLanguageServiceIpc(
     })
   )
 
+  ipcMain.handle(WorkbenchLanguageChannels.extension, (_event, request: unknown) =>
+    callWithEnvelope(() => {
+      const parsed = parseExtensionRequest(request)
+      if (!parsed) return invalidRequest()
+
+      return client.requestExtension(parsed)
+    })
+  )
+
   ipcMain.handle(WorkbenchLanguageChannels.inlineCompletion, (_event, request: unknown) =>
     callWithEnvelope(() => {
       const parsed = parseInlineCompletionRequest(request)
@@ -218,6 +228,29 @@ function parseRenameRequest(input: unknown): Nullable<WorkbenchLanguageServiceRe
   if (!base || !isRecord(input) || typeof input['newName'] !== 'string') return null
 
   return { ...base, newName: input['newName'] }
+}
+
+function parseExtensionRequest(
+  input: unknown
+): Nullable<WorkbenchLanguageServiceExtensionRequest> {
+  const base = parseRequest(input)
+  if (!base || !isRecord(input) || typeof input['requestId'] !== 'string') return null
+  const requestId = input['requestId'].trim()
+  if (!requestId || requestId.length > 128) return null
+  const rawParameters = input['parameters']
+  if (rawParameters !== undefined && !isRecord(rawParameters)) return null
+  if (rawParameters !== undefined) {
+    try {
+      if (JSON.stringify(rawParameters).length > 256 * 1024) return null
+    } catch {
+      return null
+    }
+  }
+  return {
+    ...base,
+    requestId,
+    ...(rawParameters === undefined ? {} : { parameters: rawParameters }),
+  }
 }
 
 function parseInlayHintsRequest(input: unknown): Nullable<WorkbenchLanguageServiceInlayHintsRequest> {

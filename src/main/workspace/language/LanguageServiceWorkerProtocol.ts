@@ -8,6 +8,8 @@ import type {
   WorkbenchLanguageServiceDiagnosticsResult,
   WorkbenchLanguageServiceDocumentHighlightsResult,
   WorkbenchLanguageServiceDocumentSymbolsResult,
+  WorkbenchLanguageServiceExtensionRequest,
+  WorkbenchLanguageServiceExtensionResult,
   WorkbenchLanguageServiceFormatResult,
   WorkbenchLanguageServiceHoverQueryResult,
   WorkbenchLanguageServiceInlayHintsRequest,
@@ -31,6 +33,11 @@ export interface WorkbenchLanguageServiceProjectFileRequest extends WorkbenchLan
   content: Nullable<string>
 }
 
+export interface WorkbenchLanguageServiceProjectFilesChangedRequest
+  extends WorkbenchLanguageServiceProjectRequest {
+  paths: string[]
+}
+
 export interface WorkbenchLanguageServiceWorkerOperationMap {
   shutdown: {
     request: Record<string, never>
@@ -43,6 +50,14 @@ export interface WorkbenchLanguageServiceWorkerOperationMap {
   invalidateProject: {
     request: WorkbenchLanguageServiceProjectRequest
     result: void
+  }
+  projectFilesChanged: {
+    request: WorkbenchLanguageServiceProjectFilesChangedRequest
+    result: void
+  }
+  requestExtension: {
+    request: WorkbenchLanguageServiceExtensionRequest
+    result: WorkbenchLanguageServiceExtensionResult
   }
   resolveLanguageService: {
     request: WorkbenchLanguageServiceRequest
@@ -121,7 +136,7 @@ const BackgroundLanguageServiceOperations = new Set<WorkbenchLanguageServiceWork
 export function getWorkbenchLanguageServiceWorkerPriority(
   operation: WorkbenchLanguageServiceWorkerOperation
 ): WorkbenchLanguageServiceWorkerPriority {
-  if (operation === 'shutdown') return 'lifecycle'
+  if (operation === 'shutdown' || operation === 'projectFilesChanged') return 'lifecycle'
   return BackgroundLanguageServiceOperations.has(operation) ? 'background' : 'interactive'
 }
 

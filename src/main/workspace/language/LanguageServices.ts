@@ -29,6 +29,8 @@ import type {
   WorkbenchLanguageServiceDocumentHighlightsResult,
   WorkbenchLanguageServiceDocumentSymbol,
   WorkbenchLanguageServiceDocumentSymbolsResult,
+  WorkbenchLanguageServiceExtensionRequest,
+  WorkbenchLanguageServiceExtensionResult,
   WorkbenchLanguageServiceFileEdit,
   WorkbenchLanguageServiceFormatResult,
   WorkbenchLanguageServiceHoverDocumentationBlock,
@@ -327,6 +329,15 @@ class WorkbenchLanguageServices {
     await this.externalLsp.invalidate(projectRoot)
   }
 
+  public async projectFilesChanged(request: {
+    projectRoot: string
+    paths: readonly string[]
+  }): Promise<void> {
+    const projectRoot = await this.pathResolver.resolveProjectRoot(request.projectRoot)
+    const paths = request.paths.map((path) => this.resolveAbsoluteProjectPath(projectRoot, path))
+    await this.externalLsp.filesChanged(projectRoot, paths)
+  }
+
   public async dispose(): Promise<void> {
     await this.externalLsp.dispose()
   }
@@ -345,6 +356,28 @@ class WorkbenchLanguageServices {
       status: builtin ? 'ready' : 'unsupported',
       service: builtin ? this.toServiceSnapshot(builtin) : null,
       capabilities: builtin ? this.capabilitiesForBuiltinService(builtin) : [],
+    }
+  }
+
+  public async requestExtension(
+    request: WorkbenchLanguageServiceExtensionRequest
+  ): Promise<WorkbenchLanguageServiceExtensionResult> {
+    const resolved = await this.resolveLanguageService(request)
+    if (!this.isExternalRuntime(resolved.service?.runtime)) {
+      throw new Error(`Unsupported external language service for ${request.path}`)
+    }
+    const external = await this.prepareExternal(request, resolved.projectRoot)
+    return {
+      projectRoot: resolved.projectRoot,
+      path: request.path,
+      requestId: request.requestId,
+      result: await external.client.requestExtension(
+        external.absolutePath,
+        external.content,
+        request.requestId,
+        request.parameters,
+        request.content === undefined
+      ),
     }
   }
 
@@ -1119,6 +1152,11 @@ class WorkbenchLanguageServices {
       args: toOptional(service.args),
       documentLanguageId: toOptional(service.documentLanguageId),
       protocol: toOptional(service.protocol),
+      extensionRequests: toOptional(service.extensionRequests?.map((request) => ({
+        id: request.id,
+        method: request.method,
+        capabilityPath: [...request.capabilityPath],
+      }))),
     }
   }
 

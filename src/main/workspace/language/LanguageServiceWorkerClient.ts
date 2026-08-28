@@ -5,6 +5,7 @@ import { AppError } from '@velaros-ai/core/error'
 
 import type {
   WorkbenchLanguageServiceCodeActionsRequest,
+  WorkbenchLanguageServiceExtensionRequest,
   WorkbenchLanguageServiceInlayHintsRequest,
   WorkbenchLanguageServicePositionRequest,
   WorkbenchLanguageServiceRenameRequest,
@@ -13,6 +14,7 @@ import type {
 
 import type {
   WorkbenchLanguageServiceProjectFileRequest,
+  WorkbenchLanguageServiceProjectFilesChangedRequest,
   WorkbenchLanguageServiceProjectRequest,
   WorkbenchLanguageServiceWorkerOperation,
   WorkbenchLanguageServiceWorkerOperationMap,
@@ -102,6 +104,17 @@ export class WorkbenchLanguageServiceWorkerClient {
   public invalidateProject(request: WorkbenchLanguageServiceProjectRequest): Promise<void> {
     if (!this.worker) return Promise.resolve()
     return this.call('invalidateProject', request)
+  }
+
+  public projectFilesChanged(
+    request: WorkbenchLanguageServiceProjectFilesChangedRequest
+  ): Promise<void> {
+    if (!this.worker) return Promise.resolve()
+    return this.call('projectFilesChanged', request)
+  }
+
+  public requestExtension(request: WorkbenchLanguageServiceExtensionRequest) {
+    return this.call('requestExtension', request)
   }
 
   public resolveLanguageService(request: WorkbenchLanguageServiceRequest) {
