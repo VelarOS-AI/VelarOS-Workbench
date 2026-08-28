@@ -13,7 +13,7 @@ import {
   GitCommitIcon,
   PlayIcon,
   TerminalWindowIcon,
-  TreeStructureIcon,
+  TreeViewIcon,
   WarningCircleIcon,
 } from '@phosphor-icons/react'
 import { WorkbenchChatPanel } from '@renderer/components/chat/WorkbenchChatPanel'
@@ -224,7 +224,7 @@ export function StandaloneWorkbenchPagePresentation({
                     data-active={dialogs.velarLogicGraphOpen}
                     onClick={() => dialogs.setVelarLogicGraphOpen(!dialogs.velarLogicGraphOpen)}
                   >
-                    <TreeStructureIcon size={18} weight="duotone" />
+                    <TreeViewIcon size={20} weight="bold" />
                   </IconButton>
                 )}
                 <IconButton

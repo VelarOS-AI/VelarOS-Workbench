@@ -302,12 +302,10 @@ export function useStandaloneWorkbenchPageModel(
     return true
   })
 
-  const velarLogicGraphAvailable = workbench.projectContextIndex.files.some(
-    (file) => file.path === 'velar.json'
-  ) && (
-    workbench.selectedFilePath?.endsWith('.vel') === true
-    || workbench.projectContextIndex.files.some((file) => file.path.endsWith('.vel'))
-  )
+  const velarLogicGraphAvailable = workbench.selectedFilePath?.endsWith('.vel') === true
+    || workbench.projectContextIndex.files.some(
+      (file) => file.path === 'velar.json' || file.path.endsWith('.vel')
+    )
   const codeGraphAvailable = codeGraphResourceAvailable && !velarLogicGraphAvailable
 
   useEffect(() => {

@@ -132,7 +132,7 @@ void describe('pre-split Workbench shell parity', () => {
     )
 
     const folderButton = presentation.indexOf('<FolderIcon')
-    const velarStructureButton = presentation.indexOf('<TreeStructureIcon')
+    const velarStructureButton = presentation.indexOf('<TreeViewIcon')
     const commitButton = presentation.indexOf('<GitCommitIcon')
     assert.ok(folderButton >= 0)
     assert.ok(folderButton < velarStructureButton)
