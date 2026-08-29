@@ -36,7 +36,7 @@ describe('Workbench inline completion', () => {
     expect(resolveStandaloneWorkbenchProviderModel('openai', 'remote-model-next', 'agent'))
       .toBe('remote-model-next')
 
-    const gateway = getStandaloneWorkbenchModelProviderPreset('freellmapi')
+    const gateway = getStandaloneWorkbenchModelProviderPreset('openai-compatible-gateway')
     expect(gateway.baseURLConfigurable).toBe(true)
     expect(gateway.validationKind).toBe('openai-compatible-models')
   })
@@ -72,14 +72,14 @@ describe('Workbench inline completion', () => {
   test('keeps a custom gateway address when the configured model changes', () => {
     const originalConfig = getStandaloneWorkbenchModelConfig()
     try {
-      selectStandaloneWorkbenchModelProvider('freellmapi')
+      selectStandaloneWorkbenchModelProvider('openai-compatible-gateway')
       updateStandaloneWorkbenchModelConfig({
         baseURL: 'https://gateway.example.com/v1',
       })
-      selectStandaloneWorkbenchAgentModel('freellmapi', 'relay-model')
+      selectStandaloneWorkbenchAgentModel('openai-compatible-gateway', 'relay-model')
 
       expect(getStandaloneWorkbenchModelConfig()).toMatchObject({
-        provider: 'freellmapi',
+        provider: 'openai-compatible-gateway',
         model: 'relay-model',
         baseURL: 'https://gateway.example.com/v1',
       })
