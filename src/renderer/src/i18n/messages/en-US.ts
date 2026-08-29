@@ -756,13 +756,15 @@ export const workbenchAppEnUSMessages = {
     settingsModelCatalogNeedsKey: 'Enter an API key to load available models from {provider}.',
     settingsModelCatalogError: 'Could not load models from {provider}: {error}',
     settingsModelCatalogEmpty: '{provider} did not return any available models.',
+    settingsModelSearchPlaceholder: 'Search models',
+    settingsModelSearchEmpty: 'No matching models',
     settingsModelBaseUrl: 'API URL',
     settingsModelBaseUrlDescription:
-      'Enter the OpenAI-compatible API root for the gateway. Workbench loads /models automatically.',
+      'Enter the OpenAI-compatible API root for the gateway. Workbench loads /models after Enter or blur.',
     settingsModelBaseUrlPlaceholder: 'For example, https://gateway.example.com/v1',
     settingsModelApiKey: 'API key',
     settingsModelApiKeyDescription:
-      'Leave empty when an environment credential is already available. Entered keys remain in this run only.',
+      'Leave empty when an environment credential is already available. Entered keys are stored with system encryption.',
     settingsModelApiKeyPlaceholder: 'Enter API key',
     chatAskAboutFile: 'Ask about {path}…',
     chatPlaceholder: 'Ask Workbench Agent…',

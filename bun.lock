@@ -35,7 +35,7 @@
         "@velaros-ai/model": "^0.4.9",
         "@velaros-ai/project": "^2.0.3",
         "@velaros-ai/system": "^1.1.0",
-        "@velaros-ai/ui": "^0.2.14",
+        "@velaros-ai/ui": "^0.2.17",
         "ahooks": "^3.9.7",
         "ai": "^6.0.168",
         "builder-util-runtime": "^9.7.0",
@@ -720,7 +720,7 @@
 
     "@velaros-ai/system": ["@velaros-ai/system@1.1.0", "https://npm.pkg.github.com/download/@velaros-ai/system/1.1.0/bfe0bae287548a885dcba6879883d45799770336", { "dependencies": { "@velaros-ai/agent": "0.6.0", "@velaros-ai/core": "0.4.0", "@velaros-ai/kernel": "0.2.0", "zod": "^4.3.6" } }, "sha512-MI5tCjTiTBWt13KRQKOo+XErYmBiAUIk45jOMHr8QzLs7JfvCyG4jMN2vN6bE41e1/aQEchBx0cyDL5dGq6izg=="],
 
-    "@velaros-ai/ui": ["@velaros-ai/ui@0.2.14", "https://npm.pkg.github.com/download/@velaros-ai/ui/0.2.14/39dc368bb858f385157e614dc62b1254c01be055", { "dependencies": { "@phosphor-icons/react": "^2.1.10", "@radix-ui/react-dialog": "^1.1.15", "@radix-ui/react-label": "^2.1.8", "@radix-ui/react-select": "^2.2.6", "@radix-ui/react-separator": "^1.1.8", "@radix-ui/react-slot": "^1.2.4", "@radix-ui/react-switch": "^1.2.6", "@radix-ui/react-tabs": "^1.1.13", "@radix-ui/react-tooltip": "^1.2.8", "@streamdown/cjk": "^1.0.3", "@streamdown/code": "^1.1.1", "@streamdown/math": "^1.0.2", "@streamdown/mermaid": "^1.0.2", "@velaros-ai/html-artifacts": "0.1.4", "ahooks": "^3.9.7", "class-variance-authority": "^0.7.1", "clsx": "^2.1.1", "react-day-picker": "^9.14.0", "streamdown": "^2.5.0", "tailwind-merge": "^3.5.0", "type-fest": "^4.41.0" }, "peerDependencies": { "react": "^19.0.0", "react-dom": "^19.0.0" } }, "sha512-WcZyqLEYrlmL442nDEspZFz7DwFbiEx01QyWYUkKcs9wdiu/suiVUUQ3ubSESZXl2zSAp2JV4C6Hy2m0KRXhbw=="],
+    "@velaros-ai/ui": ["@velaros-ai/ui@0.2.17", "https://npm.pkg.github.com/download/@velaros-ai/ui/0.2.17/73b4f5f4d2c143d265cfb43b328991e6ed1ed0f3", { "dependencies": { "@phosphor-icons/react": "^2.1.10", "@radix-ui/react-dialog": "^1.1.15", "@radix-ui/react-label": "^2.1.8", "@radix-ui/react-select": "^2.2.6", "@radix-ui/react-separator": "^1.1.8", "@radix-ui/react-slot": "^1.2.4", "@radix-ui/react-switch": "^1.2.6", "@radix-ui/react-tabs": "^1.1.13", "@radix-ui/react-tooltip": "^1.2.8", "@streamdown/cjk": "^1.0.3", "@streamdown/code": "^1.1.1", "@streamdown/math": "^1.0.2", "@streamdown/mermaid": "^1.0.2", "@velaros-ai/html-artifacts": "0.1.4", "ahooks": "^3.9.7", "class-variance-authority": "^0.7.1", "clsx": "^2.1.1", "react-day-picker": "^9.14.0", "streamdown": "^2.5.0", "tailwind-merge": "^3.5.0", "type-fest": "^4.41.0" }, "peerDependencies": { "react": "^19.0.0", "react-dom": "^19.0.0" } }, "sha512-nHvOFfLZCDl300rQ3xJlsztAMYhbdzMpevsgwF4G0BmbR/Qh/o39AwMau7RxNmrQZ0CYUHIwhBMdxgG0DC/xCQ=="],
 
     "@vercel/oidc": ["@vercel/oidc@3.2.0", "", {}, "sha512-UycprH3T6n3jH0k44NHMa7pnFHGu/N05MjojYr+Mc6I7obkoLIJujSWwin1pCvdy/eOxrI/l3uDLQsmcrOb4ug=="],
 

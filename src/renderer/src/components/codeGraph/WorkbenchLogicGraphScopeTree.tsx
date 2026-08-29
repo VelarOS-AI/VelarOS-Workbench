@@ -2,10 +2,7 @@ import {
   type MouseEvent,
   type ReactElement,
   type ReactNode,
-  useEffect,
   useMemo,
-  useRef,
-  useState,
 } from 'react'
 import {
   CaretDownIcon,
@@ -30,7 +27,9 @@ interface WorkbenchLogicGraphScopeTreeProps {
   files: ReadonlyArray<{ path: string }>
   snapshot: Nullable<VelarLogicGraphSnapshot>
   selectedPaths: readonly string[]
+  expansionOverrides: ReadonlyMap<string, boolean>
   onSelectionChange: (paths: readonly string[]) => void
+  onExpansionOverridesChange: (paths: ReadonlyMap<string, boolean>) => void
 }
 
 type ScopeTreeNodeKind = 'directory' | 'file' | 'symbol'
@@ -210,14 +209,6 @@ function buildScopeTree(
   return sortNodes(roots)
 }
 
-function collectDirectoryKeys(nodes: readonly ScopeTreeNode[], target: Set<string>): void {
-  for (const node of nodes) {
-    if (node.kind !== 'directory') continue
-    target.add(node.key)
-    collectDirectoryKeys(node.children, target)
-  }
-}
-
 function symbolIcon(kind: string | undefined): ReactNode {
   if (kind === 'component' || kind === 'class') return <CubeIcon size={13} />
   if (kind === 'function' || kind === 'method' || kind === 'action')
@@ -230,16 +221,16 @@ function symbolIcon(kind: string | undefined): ReactNode {
 interface ScopeTreeBranchProps {
   nodes: readonly ScopeTreeNode[]
   depth: number
-  expandedPaths: ReadonlySet<string>
+  expansionOverrides: ReadonlyMap<string, boolean>
   selectedPaths: ReadonlySet<string>
   onSelectNode: (node: ScopeTreeNode, additive: boolean) => void
-  onTogglePath: (path: string) => void
+  onTogglePath: (path: string, expanded: boolean) => void
 }
 
 function ScopeTreeBranch({
   nodes,
   depth,
-  expandedPaths,
+  expansionOverrides,
   selectedPaths,
   onSelectNode,
   onTogglePath,
@@ -248,23 +239,22 @@ function ScopeTreeBranch({
     <>
       {nodes.map((node) => {
         const expandable = node.children.length > 0
-        const expanded = expandable && expandedPaths.has(node.key)
+        const expanded = expandable && (
+          expansionOverrides.get(node.key) ?? node.kind === 'directory'
+        )
         return (
           <div key={node.key}>
             <button
               type="button"
               className={styles.logicGraphScopeTreeRow}
-              data-active={
-                selectedPaths.has(node.selection) ||
-                (depth === 0 && node.kind === 'directory' && selectedPaths.size === 0)
-              }
+              data-active={selectedPaths.has(node.selection)}
               data-kind={node.kind}
               aria-expanded={expandable ? expanded : undefined}
               title={node.kind === 'symbol' ? `${node.name} · ${node.path}` : node.path}
               style={{ paddingLeft: 7 + depth * 14 }}
               onClick={(event: MouseEvent<HTMLButtonElement>) => {
                 onSelectNode(node, event.metaKey || event.ctrlKey)
-                if (expandable) onTogglePath(node.key)
+                if (expandable) onTogglePath(node.key, expanded)
               }}
             >
               {expandable ? (
@@ -296,7 +286,7 @@ function ScopeTreeBranch({
               <ScopeTreeBranch
                 nodes={node.children}
                 depth={depth + 1}
-                expandedPaths={expandedPaths}
+                expansionOverrides={expansionOverrides}
                 selectedPaths={selectedPaths}
                 onSelectNode={onSelectNode}
                 onTogglePath={onTogglePath}
@@ -313,28 +303,17 @@ export function WorkbenchLogicGraphScopeTree({
   files,
   snapshot,
   selectedPaths,
+  expansionOverrides,
   onSelectionChange,
+  onExpansionOverridesChange,
 }: WorkbenchLogicGraphScopeTreeProps): ReactElement {
   const tree = useMemo(() => buildScopeTree(files, snapshot), [files, snapshot])
   const selectedPathSet = useMemo(() => new Set(selectedPaths), [selectedPaths])
-  const [expandedPaths, setExpandedPaths] = useState<ReadonlySet<string>>(() => new Set())
-  const initializedExpansionRef = useRef(false)
 
-  useEffect(() => {
-    if (initializedExpansionRef.current || tree.length === 0) return
-    const directoryKeys = new Set<string>()
-    collectDirectoryKeys(tree, directoryKeys)
-    initializedExpansionRef.current = true
-    setExpandedPaths(directoryKeys)
-  }, [tree])
-
-  function togglePath(path: string): void {
-    setExpandedPaths((current) => {
-      const next = new Set(current)
-      if (next.has(path)) next.delete(path)
-      else next.add(path)
-      return next
-    })
+  function togglePath(path: string, expanded: boolean): void {
+    const next = new Map(expansionOverrides)
+    next.set(path, !expanded)
+    onExpansionOverridesChange(next)
   }
 
   function selectNode(node: ScopeTreeNode, additive: boolean): void {
@@ -353,7 +332,7 @@ export function WorkbenchLogicGraphScopeTree({
       <ScopeTreeBranch
         nodes={tree}
         depth={0}
-        expandedPaths={expandedPaths}
+        expansionOverrides={expansionOverrides}
         selectedPaths={selectedPathSet}
         onSelectNode={selectNode}
         onTogglePath={togglePath}

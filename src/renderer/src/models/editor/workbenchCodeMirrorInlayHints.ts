@@ -1,4 +1,4 @@
-import type { Extension } from '@codemirror/state'
+import type { ChangeDesc, Extension } from '@codemirror/state'
 import { StateEffect, StateField } from '@codemirror/state'
 import {
   Decoration,
@@ -18,7 +18,7 @@ import type {
 } from '@shared/contracts'
 
 const InitialInlayHintDelayMs = 180
-const ChangedDocumentInlayHintDelayMs = 320
+const ChangedDocumentInlayHintDelayMs = 450
 const ScrolledViewportInlayHintDelayMs = 80
 const InlayHintViewportBufferLines = 30
 const MaxCachedInlayHintDocuments = 50
@@ -173,6 +173,13 @@ export function buildWorkbenchInlayHintDecorations(
 const setWorkbenchInlayHintsEffect =
   StateEffect.define<readonly WorkbenchLanguageServiceInlayHint[]>()
 
+export function mapWorkbenchInlayHintDecorationsThroughChanges(
+  decorations: DecorationSet,
+  changes: ChangeDesc
+): DecorationSet {
+  return decorations.map(changes)
+}
+
 const workbenchInlayHintsField = StateField.define<DecorationSet>({
   create: () => Decoration.none,
   update(decorations, transaction) {
@@ -181,7 +188,9 @@ const workbenchInlayHintsField = StateField.define<DecorationSet>({
         return buildWorkbenchInlayHintDecorations(transaction.state.doc.length, effect.value)
     }
 
-    return transaction.docChanged ? Decoration.none : decorations
+    return transaction.docChanged
+      ? mapWorkbenchInlayHintDecorationsThroughChanges(decorations, transaction.changes)
+      : decorations
   },
   provide: (field) => EditorView.decorations.from(field),
 })

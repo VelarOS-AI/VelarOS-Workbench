@@ -5,6 +5,8 @@ export interface WorkbenchVelarProjectSnapshot {
   snapshot: VelarLogicGraphSnapshot
 }
 
+export type WorkbenchVelarProjectSnapshotIndex = ReadonlyMap<string, VelarLogicGraphSnapshot>
+
 function normalizePath(path: string): string {
   return path.trim().replace(/\\/g, '/').replace(/^\.\//, '').replace(/^\/+|\/+$/g, '')
 }
@@ -152,4 +154,26 @@ export function mergeWorkbenchVelarProjectSnapshots(
       ),
     },
   }
+}
+
+export function updateWorkbenchVelarProjectSnapshotIndex(
+  current: WorkbenchVelarProjectSnapshotIndex,
+  projects: readonly WorkbenchVelarProjectSnapshot[]
+): WorkbenchVelarProjectSnapshotIndex {
+  const next = new Map(current)
+  for (const project of projects) next.set(normalizePath(project.projectRoot), project.snapshot)
+  return next
+}
+
+export function mergeWorkbenchVelarProjectSnapshotIndex(
+  index: WorkbenchVelarProjectSnapshotIndex,
+  projectRoots: readonly string[] = [...index.keys()]
+): Nullable<VelarLogicGraphSnapshot> {
+  return mergeWorkbenchVelarProjectSnapshots(
+    projectRoots.flatMap((projectRoot) => {
+      const normalizedRoot = normalizePath(projectRoot)
+      const snapshot = index.get(normalizedRoot)
+      return snapshot ? [{ projectRoot: normalizedRoot, snapshot }] : []
+    })
+  )
 }

@@ -21,7 +21,6 @@ import { useWorkbenchHostRuntime } from '@renderer/host'
 
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 
-import type { VelarLogicGraphSnapshot } from '@shared/contributions/velar/logicGraph'
 import type { WorkbenchProjectHubState } from '@shared/projectHub'
 
 import { resolveWorkbenchChatProviderId } from '../../plugins/agent-engines/identity'
@@ -49,7 +48,10 @@ import { WorkbenchSettingsDialog } from './components/settings/WorkbenchSettings
 import { type BottomTool, CommandPanel } from './components/terminal/CommandPanel'
 import {
   discoverWorkbenchVelarProjectRoots,
-  getWorkbenchVelarDefaultScopePaths,
+  mergeWorkbenchVelarProjectSnapshotIndex,
+  updateWorkbenchVelarProjectSnapshotIndex,
+  type WorkbenchVelarProjectSnapshot,
+  type WorkbenchVelarProjectSnapshotIndex,
 } from './models/codeGraph/workbenchVelarProjectGraph'
 import styles from './styles/workbenchPageStyles'
 import { useWorkbenchPageContext } from './WorkbenchPageModelContext'
@@ -63,31 +65,13 @@ interface VelarStructureViewTab {
   scopePaths: readonly string[]
 }
 
-function velarStructureTabId(scopePaths: readonly string[]): string {
-  return `velar-structure:${[...scopePaths].sort().map(encodeURIComponent).join('|')}`
+const VelarStructureOverviewTab: VelarStructureViewTab = {
+  id: 'velar-structure:overview',
+  scopePaths: [],
 }
 
-function defaultVelarStructureRoot(
-  files: ReadonlyArray<{ path: string }>,
-  rootEntries: ReadonlyArray<{ path: string; type: string }>,
-  projectRoots: readonly string[]
-): Nullable<string> {
-  const nestedProjectRoot = projectRoots.find((root) => root !== '')
-  if (!projectRoots.includes('') && nestedProjectRoot) return nestedProjectRoot
-  const roots = new Set<string>()
-  for (const file of files) {
-    const normalized = file.path.trim().replace(/\\/g, '/').replace(/^\.\//, '')
-    const separator = normalized.indexOf('/')
-    if (separator > 0) roots.add(normalized.slice(0, separator))
-  }
-  if (roots.has('src')) return 'src'
-  const fileRoot = [...roots].sort((left, right) => left.localeCompare(right))[0]
-  if (fileRoot) return fileRoot
-  const directories = rootEntries
-    .filter((entry) => entry.type === 'directory')
-    .map((entry) => entry.path.trim().replace(/\\/g, '/').replace(/^\.\//, ''))
-  if (directories.includes('src')) return 'src'
-  return directories.sort((left, right) => left.localeCompare(right))[0] ?? null
+function velarStructureTabId(scopePaths: readonly string[]): string {
+  return `velar-structure:${[...scopePaths].sort().map(encodeURIComponent).join('|')}`
 }
 
 export function StandaloneWorkbenchPagePresentation({
@@ -125,12 +109,17 @@ export function StandaloneWorkbenchPagePresentation({
   const activeProjectId = workbench.activeProject?.id
   const activeProjectRoot = workbench.activeProject?.rootPath
   const [velarManifestPaths, setVelarManifestPaths] = useState<readonly string[]>([])
-  const [velarManifestDiscoveryComplete, setVelarManifestDiscoveryComplete] = useState(false)
-  const [velarStructureTabs, setVelarStructureTabs] =
+  const [velarStructureScopeTabs, setVelarStructureScopeTabs] =
     useState<readonly VelarStructureViewTab[]>([])
-  const [activeVelarStructureTabId, setActiveVelarStructureTabId] = useState('')
-  const [velarStructureSnapshot, setVelarStructureSnapshot] =
-    useState<Nullable<VelarLogicGraphSnapshot>>(null)
+  const [activeVelarStructureTabId, setActiveVelarStructureTabId] = useState(
+    VelarStructureOverviewTab.id
+  )
+  // 工作区状态只保存每个 Velar 项目的完整快照和用户展开覆盖；标签页 scope 只投影右侧图，
+  // 不能反向替换这两份状态，否则切换局部范围会让侧栏目录随局部快照一起消失。
+  const [velarStructureProjectSnapshots, setVelarStructureProjectSnapshots] =
+    useState<WorkbenchVelarProjectSnapshotIndex>(() => new Map())
+  const [velarStructureExpansionOverrides, setVelarStructureExpansionOverrides] =
+    useState<ReadonlyMap<string, boolean>>(() => new Map())
   const [velarStructureActiveTab, setVelarStructureActiveTab] = useState<'structure' | 'source'>(
     'structure'
   )
@@ -145,11 +134,7 @@ export function StandaloneWorkbenchPagePresentation({
   useEffect(() => {
     let cancelled = false
     setVelarManifestPaths([])
-    setVelarManifestDiscoveryComplete(false)
-    if (!activeProjectRoot) {
-      setVelarManifestDiscoveryComplete(true)
-      return
-    }
+    if (!activeProjectRoot) return
     void runtime.kernel.project
       .searchWorkbenchEntries({
         projectRoot: activeProjectRoot,
@@ -166,9 +151,6 @@ export function StandaloneWorkbenchPagePresentation({
         )
       })
       .catch(() => undefined)
-      .finally(() => {
-        if (!cancelled) setVelarManifestDiscoveryComplete(true)
-      })
     return () => {
       cancelled = true
     }
@@ -201,28 +183,22 @@ export function StandaloneWorkbenchPagePresentation({
     () => discoverWorkbenchVelarProjectRoots(velarStructureProjectPaths.map((file) => file.path)),
     [velarStructureProjectPaths]
   )
-  const velarStructureDefaultRoot = useMemo(
-    () =>
-      defaultVelarStructureRoot(
-        velarStructureProjectFiles,
-        workbench.rootEntries,
-        velarStructureProjectRoots
-      ),
-    [velarStructureProjectFiles, velarStructureProjectRoots, workbench.rootEntries]
-  )
-  const velarStructureDefaultScopePaths = useMemo(
-    () =>
-      getWorkbenchVelarDefaultScopePaths(
-        velarStructureProjectRoots,
-        velarStructureDefaultRoot
-      ),
-    [velarStructureDefaultRoot, velarStructureProjectRoots]
-  )
   const velarStructureAvailable =
-    velarStructureProjectRoots.length > 0 || velarStructureDefaultRoot !== null
-  const handleVelarStructureSnapshotChange = useCallback(
-    (snapshot: VelarLogicGraphSnapshot): void => setVelarStructureSnapshot(snapshot),
+    velarStructureProjectRoots.length > 0 || velarStructureProjectFiles.length > 0
+  const velarStructureSnapshot = useMemo(
+    () => mergeWorkbenchVelarProjectSnapshotIndex(velarStructureProjectSnapshots),
+    [velarStructureProjectSnapshots]
+  )
+  const handleVelarStructureProjectSnapshotsChange = useCallback(
+    (projects: readonly WorkbenchVelarProjectSnapshot[]): void =>
+      setVelarStructureProjectSnapshots((current) =>
+        updateWorkbenchVelarProjectSnapshotIndex(current, projects)
+      ),
     []
+  )
+  const velarStructureTabs = useMemo(
+    () => [VelarStructureOverviewTab, ...velarStructureScopeTabs],
+    [velarStructureScopeTabs]
   )
   const velarStructureScopePaths = useMemo(
     () => velarStructureTabs.find((tab) => tab.id === activeVelarStructureTabId)?.scopePaths ?? [],
@@ -267,32 +243,13 @@ export function StandaloneWorkbenchPagePresentation({
   }, [chrome.velarLogicGraphAvailable, dialogs])
 
   useEffect(() => {
-    setVelarStructureTabs([])
-    setActiveVelarStructureTabId('')
-    setVelarStructureSnapshot(null)
+    setVelarStructureScopeTabs([])
+    setActiveVelarStructureTabId(VelarStructureOverviewTab.id)
+    setVelarStructureProjectSnapshots(new Map())
+    setVelarStructureExpansionOverrides(new Map())
     setVelarStructureActiveTab('structure')
     setVelarSourcePreview(null)
   }, [activeProjectId])
-
-  useEffect(() => {
-    if (
-      !dialogs.velarLogicGraphOpen
-      || velarStructureTabs.length > 0
-      || !velarStructureAvailable
-      || (!velarManifestDiscoveryComplete && velarStructureProjectRoots.length === 0)
-    ) return
-    const scopePaths = velarStructureDefaultScopePaths
-    const id = velarStructureTabId(scopePaths)
-    setVelarStructureTabs([{ id, scopePaths }])
-    setActiveVelarStructureTabId(id)
-  }, [
-    dialogs.velarLogicGraphOpen,
-    velarManifestDiscoveryComplete,
-    velarStructureAvailable,
-    velarStructureDefaultScopePaths,
-    velarStructureProjectRoots.length,
-    velarStructureTabs.length,
-  ])
 
   useEffect(() => {
     if (!pendingFileOpenId || !pendingFileOpenPath || !activeProjectId) return
@@ -349,7 +306,9 @@ export function StandaloneWorkbenchPagePresentation({
       projectFiles: velarStructureProjectFiles,
       snapshot: velarStructureSnapshot,
       scopePaths: velarStructureScopePaths,
+      expansionOverrides: velarStructureExpansionOverrides,
       onScopePathsChange: openVelarStructureScope,
+      onExpansionOverridesChange: setVelarStructureExpansionOverrides,
     },
     editor: {
       ...baseEmbeddedKernelModel.editor,
@@ -371,7 +330,9 @@ export function StandaloneWorkbenchPagePresentation({
                   group: 'structure' as const,
                   kind: 'velar-structure',
                   onSelect: () => selectVelarStructureTab(structureTab.id),
-                  onClose: () => closeVelarStructureTab(structureTab.id),
+                  ...(structureTab.id === VelarStructureOverviewTab.id
+                    ? {}
+                    : { onClose: () => closeVelarStructureTab(structureTab.id) }),
                   content: (
                     <WorkbenchLogicGraphEditor
                       active={
@@ -386,9 +347,10 @@ export function StandaloneWorkbenchPagePresentation({
                       selectedContent={workbench.editorContent}
                       openTabs={workbench.openTabs}
                       projectFiles={velarStructureProjectFiles}
+                      projectSnapshots={velarStructureProjectSnapshots}
                       refreshVersion={workbench.saveRevision + workbench.workspaceBindingVersion}
                       workbenchTheme={workbenchPreferences.preferences.theme}
-                      onSnapshotChange={handleVelarStructureSnapshotChange}
+                      onProjectSnapshotsChange={handleVelarStructureProjectSnapshotsChange}
                       onOpenSource={(source) => {
                         setVelarSourcePreview(source)
                         setVelarStructureActiveTab('source')
@@ -413,12 +375,8 @@ export function StandaloneWorkbenchPagePresentation({
                       },
                       onClose: () => {
                         setVelarSourcePreview(null)
-                        if (velarStructureTabs.length > 0) {
-                          setVelarStructureActiveTab('structure')
-                        } else {
-                          dialogs.setVelarLogicGraphOpen(false)
-                          dialogs.setVelarLogicGraphActive(false)
-                        }
+                        setVelarStructureActiveTab('structure')
+                        setActiveVelarStructureTabId(VelarStructureOverviewTab.id)
                       },
                       content: (
                         <ReadOnlyWorkbenchCode
@@ -472,23 +430,18 @@ export function StandaloneWorkbenchPagePresentation({
     dialogs.setVelarLogicGraphOpen(true)
     dialogs.setVelarLogicGraphActive(true)
     setVelarStructureActiveTab('structure')
-    if (velarStructureAvailable) {
-      const scopePaths = velarStructureDefaultScopePaths
-      const id = velarStructureTabId(scopePaths)
-      setVelarStructureTabs((current) =>
-        current.some((tab) => tab.id === id) ? current : [...current, { id, scopePaths }]
-      )
-      setActiveVelarStructureTabId(id)
-    }
+    setActiveVelarStructureTabId(VelarStructureOverviewTab.id)
   }
 
   function openVelarStructureScope(scopePaths: readonly string[]): void {
-    const normalizedPaths = scopePaths.length === 0
-      ? [...velarStructureDefaultScopePaths]
-      : [...new Set(scopePaths)]
-    if (normalizedPaths.length === 0 && !velarStructureAvailable) return
+    const normalizedPaths = [...new Set(scopePaths)]
+    if (normalizedPaths.length === 0) {
+      selectVelarStructureTab(VelarStructureOverviewTab.id)
+      return
+    }
+    if (!velarStructureAvailable) return
     const id = velarStructureTabId(normalizedPaths)
-    setVelarStructureTabs((current) =>
+    setVelarStructureScopeTabs((current) =>
       current.some((tab) => tab.id === id)
         ? current
         : [...current, { id, scopePaths: normalizedPaths }]
@@ -506,22 +459,19 @@ export function StandaloneWorkbenchPagePresentation({
   }
 
   function closeVelarStructureTab(id: string): void {
-    const closedIndex = velarStructureTabs.findIndex((tab) => tab.id === id)
-    const nextTabs = velarStructureTabs.filter((tab) => tab.id !== id)
-    setVelarStructureTabs(nextTabs)
+    if (id === VelarStructureOverviewTab.id) return
+    const closedIndex = velarStructureScopeTabs.findIndex((tab) => tab.id === id)
+    const nextTabs = velarStructureScopeTabs.filter((tab) => tab.id !== id)
+    setVelarStructureScopeTabs(nextTabs)
     if (activeVelarStructureTabId !== id) return
-    const nextActive = nextTabs[Math.min(Math.max(closedIndex, 0), nextTabs.length - 1)]
+    const nextActive = nextTabs[Math.min(Math.max(closedIndex - 1, 0), nextTabs.length - 1)]
     if (nextActive) {
       setActiveVelarStructureTabId(nextActive.id)
       setVelarStructureActiveTab('structure')
       return
     }
-    if (velarSourcePreview) {
-      setVelarStructureActiveTab('source')
-      return
-    }
-    dialogs.setVelarLogicGraphOpen(false)
-    dialogs.setVelarLogicGraphActive(false)
+    setActiveVelarStructureTabId(VelarStructureOverviewTab.id)
+    setVelarStructureActiveTab('structure')
   }
 
   return (

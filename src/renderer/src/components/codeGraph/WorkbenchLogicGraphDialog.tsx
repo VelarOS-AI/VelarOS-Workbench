@@ -19,9 +19,11 @@ import {
 import { useWorkbenchHostRuntime } from '@renderer/host'
 import { useWorkbenchI18n } from '@renderer/i18n'
 import {
-  mergeWorkbenchVelarProjectSnapshots,
+  mergeWorkbenchVelarProjectSnapshotIndex,
   selectWorkbenchVelarProjectRoots,
   workbenchVelarProjectRootForPath,
+  type WorkbenchVelarProjectSnapshot,
+  type WorkbenchVelarProjectSnapshotIndex,
 } from '@renderer/models/codeGraph/workbenchVelarProjectGraph'
 import type { WorkbenchThemeId } from '@renderer/models/settings/workbenchPreferences'
 
@@ -85,9 +87,10 @@ interface WorkbenchLogicGraphEditorProps {
   selectedContent: string
   openTabs: readonly WorkbenchOpenEditorTab[]
   projectFiles: ReadonlyArray<{ path: string }>
+  projectSnapshots: WorkbenchVelarProjectSnapshotIndex
   refreshVersion: number
   workbenchTheme: WorkbenchThemeId
-  onSnapshotChange: (snapshot: VelarLogicGraphSnapshot) => void
+  onProjectSnapshotsChange: (projects: readonly WorkbenchVelarProjectSnapshot[]) => void
   onOpenSource: (source: { path: string; content: string; line?: number; column?: number }) => void
 }
 
@@ -718,16 +721,15 @@ export function WorkbenchLogicGraphEditor({
   selectedContent,
   openTabs,
   projectFiles,
+  projectSnapshots,
   refreshVersion,
   workbenchTheme,
-  onSnapshotChange,
+  onProjectSnapshotsChange,
   onOpenSource,
 }: WorkbenchLogicGraphEditorProps): ReactElement {
   const { t } = useWorkbenchI18n()
   const runtime = useWorkbenchHostRuntime()
-  const [snapshot, setSnapshot] = useState<VelarLogicGraphSnapshot | null>(null)
-  const snapshotRef = useRef<VelarLogicGraphSnapshot | null>(null)
-  const projectSnapshotsRef = useRef(new Map<string, VelarLogicGraphSnapshot>())
+  const projectSnapshotsRef = useRef(projectSnapshots)
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [zoom, setZoom] = useState(1)
   const [layoutDirection, setLayoutDirection] = useState<LogicGraphDirection>('vertical')
@@ -749,6 +751,23 @@ export function WorkbenchLogicGraphEditor({
     () => selectWorkbenchVelarProjectRoots(projectRoots, scopePaths, null),
     [projectRoots, scopePaths]
   )
+  const snapshotRoots = useMemo(
+    () =>
+      targetProjectRoots.length > 0
+        ? targetProjectRoots
+        : projectSnapshots.has('')
+          ? ['']
+          : [],
+    [projectSnapshots, targetProjectRoots]
+  )
+  const snapshot = useMemo(
+    () => mergeWorkbenchVelarProjectSnapshotIndex(projectSnapshots, snapshotRoots),
+    [projectSnapshots, snapshotRoots]
+  )
+
+  useEffect(() => {
+    projectSnapshotsRef.current = projectSnapshots
+  }, [projectSnapshots])
 
   const load = useCallback(
     async (forceSnapshot = false): Promise<void> => {
@@ -825,13 +844,11 @@ export function WorkbenchLogicGraphEditor({
           return { projectRoot: root, snapshot: await requestSnapshot(root, path, previous) }
         }))
         if (sequence !== requestSequence.current) return
-        for (const project of projects)
-          projectSnapshotsRef.current.set(project.projectRoot, project.snapshot)
-        const next = mergeWorkbenchVelarProjectSnapshots(projects)
-        if (!next) throw new Error(t('workbench.codeGraphEmpty'))
-        snapshotRef.current = next
-        setSnapshot(next)
-        onSnapshotChange(next)
+        projectSnapshotsRef.current = new Map([
+          ...projectSnapshotsRef.current,
+          ...projects.map((project) => [project.projectRoot, project.snapshot] as const),
+        ])
+        onProjectSnapshotsChange(projects)
       } catch (reason) {
         if (sequence === requestSequence.current) {
           setError(reason instanceof Error ? reason.message : t('workbench.codeGraphError'))
@@ -843,7 +860,7 @@ export function WorkbenchLogicGraphEditor({
     [
       active,
       openTabs,
-      onSnapshotChange,
+      onProjectSnapshotsChange,
       projectRoot,
       projectRoots,
       projectFiles,
@@ -858,7 +875,7 @@ export function WorkbenchLogicGraphEditor({
 
   useEffect(() => {
     if (!active) return
-    const timer = setTimeout(() => void load(), snapshotRef.current ? 120 : 0)
+    const timer = setTimeout(() => void load(), snapshot ? 120 : 0)
     return () => clearTimeout(timer)
   }, [active, load, refreshVersion])
 

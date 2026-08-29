@@ -10,15 +10,167 @@ import {
 
 import { resolveWorkbenchEditorLanguage } from '../../language/workbenchEditorLanguageContributions'
 
-const JavaScriptKeywordPattern =
-  /\b(?:as|async|await|break|case|catch|class|const|continue|debugger|declare|default|delete|do|else|enum|export|extends|false|finally|for|from|function|get|if|implements|import|in|infer|instanceof|interface|keyof|let|namespace|never|new|null|of|private|protected|public|readonly|return|satisfies|set|static|string|super|switch|symbol|this|throw|true|try|type|typeof|undefined|unknown|var|void|while|with|yield)\b/g
+const WORKBENCH_JAVASCRIPT_KEYWORDS = [
+  'as',
+  'async',
+  'await',
+  'break',
+  'case',
+  'catch',
+  'class',
+  'const',
+  'continue',
+  'debugger',
+  'default',
+  'delete',
+  'do',
+  'else',
+  'export',
+  'extends',
+  'false',
+  'finally',
+  'for',
+  'from',
+  'function',
+  'get',
+  'if',
+  'import',
+  'in',
+  'instanceof',
+  'let',
+  'new',
+  'null',
+  'of',
+  'return',
+  'set',
+  'static',
+  'super',
+  'switch',
+  'this',
+  'throw',
+  'true',
+  'try',
+  'typeof',
+  'undefined',
+  'var',
+  'void',
+  'while',
+  'with',
+  'yield',
+] as const
+
+export const WORKBENCH_TYPESCRIPT_KEYWORDS = [
+  'break',
+  'case',
+  'catch',
+  'class',
+  'const',
+  'continue',
+  'debugger',
+  'default',
+  'delete',
+  'do',
+  'else',
+  'enum',
+  'export',
+  'extends',
+  'false',
+  'finally',
+  'for',
+  'function',
+  'if',
+  'import',
+  'in',
+  'instanceof',
+  'new',
+  'null',
+  'return',
+  'super',
+  'switch',
+  'this',
+  'throw',
+  'true',
+  'try',
+  'typeof',
+  'var',
+  'void',
+  'while',
+  'with',
+  'implements',
+  'interface',
+  'let',
+  'package',
+  'private',
+  'protected',
+  'public',
+  'static',
+  'yield',
+  'abstract',
+  'accessor',
+  'as',
+  'asserts',
+  'assert',
+  'any',
+  'async',
+  'await',
+  'boolean',
+  'constructor',
+  'declare',
+  'get',
+  'infer',
+  'intrinsic',
+  'is',
+  'keyof',
+  'module',
+  'namespace',
+  'never',
+  'out',
+  'readonly',
+  'require',
+  'number',
+  'object',
+  'satisfies',
+  'set',
+  'string',
+  'symbol',
+  'type',
+  'undefined',
+  'unique',
+  'unknown',
+  'using',
+  'from',
+  'global',
+  'bigint',
+  'override',
+  'of',
+  'defer',
+] as const
+
+function keywordPattern(keywords: readonly string[]): RegExp {
+  return new RegExp(`\\b(?:${keywords.join('|')})\\b`, 'g')
+}
+
+const JavaScriptKeywordPattern = keywordPattern(WORKBENCH_JAVASCRIPT_KEYWORDS)
+const TypeScriptKeywordPattern = keywordPattern(WORKBENCH_TYPESCRIPT_KEYWORDS)
 const PythonKeywordPattern =
   /\b(?:False|None|True|and|as|assert|async|await|break|class|continue|def|del|elif|else|except|finally|for|from|global|if|import|in|is|lambda|nonlocal|not|or|pass|raise|return|try|while|with|yield)\b/g
 const JsonKeywordPattern = /\b(?:false|null|true)\b/g
+const JavaScriptLanguageIds = new Set(['javascript', 'js', 'jsx', 'mjs', 'cjs'])
+const TypeScriptLanguageIds = new Set([
+  'typescript',
+  'ts',
+  'tsx',
+  'mts',
+  'cts',
+])
+const JavaScriptFamilyLanguageIds = new Set([
+  ...JavaScriptLanguageIds,
+  ...TypeScriptLanguageIds,
+])
 
 const basicKeywordTheme = EditorView.baseTheme({
   '.cm-workbenchBasicKeyword': {
-    color: 'var(--workbench-editor-hover-keyword, #0033b3)',
+    color: 'var(--workbench-editor-hover-keyword, #0033b3) !important',
   },
 })
 
@@ -29,12 +181,8 @@ function keywordPatternFor(languageId: string): Nullable<RegExp> {
     const keywords = injected.keywords.map((keyword) => keyword.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&'))
     return new RegExp(`\\b(?:${keywords.join('|')})\\b`, 'g')
   }
-  if (
-    ['javascript', 'js', 'jsx', 'typescript', 'ts', 'tsx', 'mts', 'cts', 'mjs', 'cjs'].includes(
-      normalized
-    )
-  )
-    return JavaScriptKeywordPattern
+  if (JavaScriptLanguageIds.has(normalized)) return JavaScriptKeywordPattern
+  if (TypeScriptLanguageIds.has(normalized)) return TypeScriptKeywordPattern
   if (['python', 'py', 'pyi'].includes(normalized)) return PythonKeywordPattern
   if (['json', 'jsonc'].includes(normalized)) return JsonKeywordPattern
   return null
@@ -66,6 +214,31 @@ function isCodePosition(lineText: string, position: number, languageId: string):
   }
 
   return !quote
+}
+
+export function getWorkbenchJavaScriptKeywordRangeAtPosition(
+  doc: Text,
+  position: number,
+  languageId: string
+): Nullable<{ from: number; to: number }> {
+  const normalizedLanguage = languageId.trim().toLowerCase()
+  if (!JavaScriptFamilyLanguageIds.has(normalizedLanguage)) return null
+
+  const offset = Math.min(Math.max(0, position), doc.length)
+  const line = doc.lineAt(offset)
+  const sourcePattern = keywordPatternFor(normalizedLanguage)
+  if (!sourcePattern) return null
+  const pattern = new RegExp(sourcePattern.source, sourcePattern.flags)
+  for (const match of line.text.matchAll(pattern)) {
+    const index = match.index ?? 0
+    const from = line.from + index
+    const to = from + match[0].length
+    if (offset < from || offset > to) continue
+    if (!isCodePosition(line.text, index, normalizedLanguage)) return null
+    return { from, to }
+  }
+
+  return null
 }
 
 export function buildWorkbenchBasicKeywordDecorations(

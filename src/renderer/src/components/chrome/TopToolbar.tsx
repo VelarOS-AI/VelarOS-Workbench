@@ -69,7 +69,6 @@ export function WorkbenchTopLeading({
   gitSummary,
   onGitRefresh,
   gitSshKeyPath,
-  hasGitRepository,
   hasUnsavedOpenTabs,
   gitControlVariant,
   onRepositoryChanged,
@@ -86,28 +85,22 @@ export function WorkbenchTopLeading({
   | 'onRepositoryChanged'
   | 'onOpenGitCommitTool'
 >): Nullable<ReactElement> {
-  const { t } = useWorkbenchI18n()
   const gitControlReady = !!gitSummary?.repository && !!gitSummary.status?.branch
+  if (!gitControlReady) return null
 
   return (
     <div className={styles.topGitControl}>
-      {gitControlReady ? (
-        <WorkbenchGitCommitControl
-          workspaceRoot={gitWorkspaceRoot}
-          summary={gitSummary}
-          onRefresh={onGitRefresh}
-          gitSshKeyPath={gitSshKeyPath}
-          hasUnsavedOpenTabs={hasUnsavedOpenTabs}
-          variant={gitControlVariant ?? 'branch-menu-actions'}
-          layout="pill"
-          onRepositoryChanged={onRepositoryChanged}
-          onOpenCommitTool={onOpenGitCommitTool}
-        />
-      ) : (
-        <span className={styles.topGitPlaceholder}>
-          {hasGitRepository ? t('workbench.gitLoading') : t('workbench.gitNoRepository')}
-        </span>
-      )}
+      <WorkbenchGitCommitControl
+        workspaceRoot={gitWorkspaceRoot}
+        summary={gitSummary}
+        onRefresh={onGitRefresh}
+        gitSshKeyPath={gitSshKeyPath}
+        hasUnsavedOpenTabs={hasUnsavedOpenTabs}
+        variant={gitControlVariant ?? 'branch-menu-actions'}
+        layout="pill"
+        onRepositoryChanged={onRepositoryChanged}
+        onOpenCommitTool={onOpenGitCommitTool}
+      />
     </div>
   )
 }

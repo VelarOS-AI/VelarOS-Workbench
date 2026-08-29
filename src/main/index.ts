@@ -193,14 +193,17 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
     providers.workspace,
     modelComposition
   )
-  const disposeModelIpc = registerWorkbenchModelIpc(new ProviderModelCatalogService({
-    providerCollection: modelComposition.providerCollection,
-    providerScriptRegistry: modelComposition.providerScriptRegistry,
-    attribution: {
-      referer: 'https://velaros.ai',
-      title: WorkbenchProductName,
-    },
-  }))
+  const disposeModelIpc = registerWorkbenchModelIpc(
+    new ProviderModelCatalogService({
+      providerCollection: modelComposition.providerCollection,
+      providerScriptRegistry: modelComposition.providerScriptRegistry,
+      attribution: {
+        referer: 'https://velaros.ai',
+        title: WorkbenchProductName,
+      },
+    }),
+    dataRootDir
+  )
   const kernelRuntime = new Kernel({
     lifecycleFailureMode: 'degrade',
     permissionBroker: new WorkbenchKernelPermissionPolicy(),

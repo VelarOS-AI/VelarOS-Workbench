@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url'
 
 import { syntaxTree } from '@codemirror/language'
 import { EditorState } from '@codemirror/state'
+import * as ts from 'typescript'
 
 import {
   ExternalLspClient,
@@ -29,11 +30,20 @@ import {
   registerWorkbenchEditorLanguage,
   resolveInjectedWorkbenchProjectLanguages,
 } from '../src/renderer/src/language/workbenchEditorLanguageContributions'
-import { buildWorkbenchBasicKeywordDecorations } from '../src/renderer/src/models/editor/workbenchCodeMirrorBasicSyntax'
+import {
+  buildWorkbenchBasicKeywordDecorations,
+  getWorkbenchJavaScriptKeywordRangeAtPosition,
+  WORKBENCH_TYPESCRIPT_KEYWORDS,
+} from '../src/renderer/src/models/editor/workbenchCodeMirrorBasicSyntax'
+import {
+  buildWorkbenchInlayHintDecorations,
+  mapWorkbenchInlayHintDecorationsThroughChanges,
+} from '../src/renderer/src/models/editor/workbenchCodeMirrorInlayHints'
 import { resolveWorkbenchCodeMirrorLanguage } from '../src/renderer/src/models/editor/workbenchCodeMirrorLanguage'
 import {
   getWorkbenchHoverTokenRange,
   isWorkbenchTypeHover,
+  shouldUseWorkbenchSingleCodeHoverLayout,
 } from '../src/renderer/src/models/editor/workbenchCodeMirrorLanguageFeatures'
 import {
   usesWorkbenchBuiltinLanguageService,
@@ -411,6 +421,52 @@ void describe('focused Workbench language surface', () => {
       pythonRanges.push({ from, to })
     })
     assert.deepEqual(pythonRanges, [{ from: 15, to: 17 }, { from: 18, to: 22 }])
+
+    const typeScriptDoc = EditorState.create({
+      doc: 'await this.load(undefined) // await\n"this undefined"\n',
+    }).doc
+    const typeScriptDecorations = buildWorkbenchBasicKeywordDecorations(
+      typeScriptDoc,
+      [{ from: 0, to: typeScriptDoc.length }],
+      'typescript'
+    )
+    const typeScriptRanges: Array<{ from: number; to: number }> = []
+    typeScriptDecorations.between(0, typeScriptDoc.length, (from, to) => {
+      typeScriptRanges.push({ from, to })
+    })
+    assert.deepEqual(typeScriptRanges, [
+      { from: 0, to: 5 },
+      { from: 6, to: 10 },
+      { from: 16, to: 25 },
+    ])
+    assert.deepEqual(
+      getWorkbenchJavaScriptKeywordRangeAtPosition(typeScriptDoc, 2, 'typescript'),
+      { from: 0, to: 5 }
+    )
+    assert.equal(getWorkbenchJavaScriptKeywordRangeAtPosition(typeScriptDoc, 31, 'typescript'), null)
+    assert.equal(getWorkbenchJavaScriptKeywordRangeAtPosition(typeScriptDoc, 40, 'typescript'), null)
+
+    const compilerKeywords: string[] = []
+    for (
+      let kind = ts.SyntaxKind.FirstKeyword;
+      kind <= ts.SyntaxKind.LastKeyword;
+      kind += 1
+    ) {
+      const keyword = ts.tokenToString(kind)
+      if (keyword) compilerKeywords.push(keyword)
+    }
+    assert.deepEqual([...WORKBENCH_TYPESCRIPT_KEYWORDS], compilerKeywords)
+
+    const allTypeScriptKeywords = WORKBENCH_TYPESCRIPT_KEYWORDS.join(' ')
+    const allTypeScriptKeywordsDoc = EditorState.create({ doc: allTypeScriptKeywords }).doc
+    assert.equal(
+      buildWorkbenchBasicKeywordDecorations(
+        allTypeScriptKeywordsDoc,
+        [{ from: 0, to: allTypeScriptKeywordsDoc.length }],
+        'typescript'
+      ).size,
+      WORKBENCH_TYPESCRIPT_KEYWORDS.length
+    )
     remove()
   })
 
@@ -452,6 +508,7 @@ void describe('focused Workbench language surface', () => {
       '}',
       'const greeter = new Greeter()',
       'const label = greeter.format("Hi")',
+      'const builtins = [Date.now(), Math.min(1, 2), Number.NaN, undefined]',
       '',
     ].join('\n')
     const javaScript = [
@@ -461,12 +518,13 @@ void describe('focused Workbench language surface', () => {
       '}',
       'const box = new Box()',
       'box.read("value")',
+      'const values = Array.isArray(box) ? Object.keys(box) : []',
       '',
     ].join('\n')
 
     try {
       await writeFile(join(projectRoot, 'main.ts'), typeScript, 'utf8')
-      await writeFile(join(projectRoot, 'main.js'), javaScript, 'utf8')
+      await writeFile(join(projectRoot, 'main.mjs'), javaScript, 'utf8')
       const resolved = await services.resolveLanguageService({ projectRoot, path: 'main.ts', content: typeScript })
       assert.ok(resolved.capabilities.includes('semantic-tokens'))
 
@@ -488,6 +546,14 @@ void describe('focused Workbench language surface', () => {
       assert.ok(typeScriptTokenKinds.some((token) =>
         token.text === 'greeter' && token.type === 'variable' && token.modifiers.includes('readonly')
       ))
+      for (const builtin of ['Date', 'Math', 'Number']) {
+        assert.ok(
+          typeScriptTokenKinds.some((token) =>
+            token.text === builtin && token.modifiers.includes('defaultLibrary')
+          ),
+          `${builtin} should inherit its TypeScript default-library classification`
+        )
+      }
 
       const keywordHover = await services.getHover({
         projectRoot,
@@ -505,9 +571,32 @@ void describe('focused Workbench language surface', () => {
       })
       assert.match(methodHover.hover?.displayText ?? '', /format/u)
 
+      const builtinHoverCases = [
+        { path: 'main.ts', content: typeScript, line: 8, symbol: 'now' },
+        { path: 'main.mjs', content: javaScript, line: 7, symbol: 'isArray' },
+        { path: 'main.mjs', content: javaScript, line: 7, symbol: 'keys' },
+      ] as const
+      for (const hoverCase of builtinHoverCases) {
+        const sourceLine = hoverCase.content.split('\n')[hoverCase.line - 1] ?? ''
+        const hover = await services.getHover({
+          projectRoot,
+          path: hoverCase.path,
+          content: hoverCase.content,
+          position: {
+            line: hoverCase.line,
+            column: sourceLine.indexOf(hoverCase.symbol) + 2,
+          },
+        })
+        assert.match(hover.hover?.displayText ?? '', new RegExp(hoverCase.symbol, 'u'))
+        assert.ok(
+          (hover.hover?.documentation?.trim().length ?? 0) > 12,
+          `${hoverCase.symbol} should include the standard-library usage documentation`
+        )
+      }
+
       const javaScriptTokens = await services.getSemanticTokens({
         projectRoot,
-        path: 'main.js',
+        path: 'main.mjs',
         content: javaScript,
       })
       const javaScriptTokenKinds = javaScriptTokens.tokens.map((token) => ({
@@ -645,6 +734,121 @@ void describe('focused Workbench language surface', () => {
     assert.match(
       editor,
       /if \(location\)[\s\S]{0,240}closeHoverTooltips[\s\S]{0,360}onOpenSymbolLocations/u
+    )
+    assert.match(
+      editor,
+      /const definitionResult = await getWorkbenchLanguageServiceDefinition/u
+    )
+    assert.doesNotMatch(
+      editor,
+      /Promise\.all\([\s\S]{0,320}getWorkbenchLanguageServiceDefinition[\s\S]{0,320}getWorkbenchLanguageServiceReferences/u
+    )
+
+    const hoverFeatures = await readFile(
+      'src/renderer/src/models/editor/workbenchCodeMirrorLanguageFeatures.ts',
+      'utf8'
+    )
+    assert.match(
+      hoverFeatures,
+      /getWorkbenchJavaScriptKeywordRangeAtPosition\([\s\S]{0,180}if \(keywordRange && !diagnosticRange\) return null/u
+    )
+    assert.match(
+      hoverFeatures,
+      /hoverTooltip\(\s*async[\s\S]{0,1400}await getWorkbenchLanguageServiceHover[\s\S]{0,420}if \(!diagnosticRange && !resolvedHover\) return null/u
+    )
+    assert.doesNotMatch(hoverFeatures, /buildWorkbenchEditorHoverStatusDom/u)
+    assert.match(
+      hoverFeatures,
+      /scheduleResolvedHoverRender[\s\S]{0,220}requestAnimationFrame/u
+    )
+    assert.match(
+      hoverFeatures,
+      /definitionPreviewExpanded = true\s+scheduleResolvedHoverRender\(\)/u
+    )
+  })
+
+  void test('keeps long hover and signature content inside the tooltip boundary', async () => {
+    const styles = await readFile(
+      'src/renderer/src/styles/11-editor-tooltips.module.css',
+      'utf8'
+    )
+
+    assert.match(
+      styles,
+      /\.editorSymbolTooltip\s*\{[\s\S]*?box-sizing:\s*border-box;[\s\S]*?max-width:\s*min\(460px, calc\(100vw - 32px\)\);[\s\S]*?overflow-wrap:\s*anywhere;[\s\S]*?overflow-x:\s*hidden;/u
+    )
+    assert.match(
+      styles,
+      /\.editorSymbolTooltipTitle\s*\{[\s\S]*?max-width:\s*100%;[\s\S]*?overflow-wrap:\s*anywhere;[\s\S]*?word-break:\s*break-word;/u
+    )
+    assert.match(
+      styles,
+      /\.editorSignatureTooltip\s*\{[\s\S]*?max-width:\s*min\(520px, calc\(100vw - 32px\)\);[\s\S]*?overflow-wrap:\s*anywhere;/u
+    )
+  })
+
+  void test('renders a lone hover code block as the scrollable tooltip surface', async () => {
+    const signatureOnly = {
+      displayText: 'const values: readonly ["system", "project", "browser"]',
+    }
+    assert.equal(shouldUseWorkbenchSingleCodeHoverLayout(signatureOnly), true)
+    assert.equal(shouldUseWorkbenchSingleCodeHoverLayout({
+      ...signatureOnly,
+      documentation: 'Capability scopes.',
+    }), false)
+    assert.equal(shouldUseWorkbenchSingleCodeHoverLayout({
+      displayText: '',
+      documentationBlocks: [{ kind: 'code', text: 'type Value = string' }],
+    }), true)
+    assert.equal(shouldUseWorkbenchSingleCodeHoverLayout(signatureOnly, {
+      hasDiagnostics: true,
+    }), false)
+
+    const styles = await readFile(
+      'src/renderer/src/styles/11-editor-tooltips.module.css',
+      'utf8'
+    )
+    assert.match(
+      styles,
+      /\.editorSymbolTooltip\[data-layout='single-code'\]\s*\{[\s\S]*?padding:\s*0;[\s\S]*?overflow:\s*hidden;/u
+    )
+    assert.match(
+      styles,
+      /data-layout='single-code'[\s\S]{0,180}\.editorSymbolTooltipCode\s*\{[\s\S]*?max-height:\s*min\(420px, 50vh\);[\s\S]*?overflow-y:\s*auto;/u
+    )
+  })
+
+  void test('keeps inferred type hints stable while a fresh document analysis is pending', () => {
+    const state = EditorState.create({ doc: 'const value = createValue()' })
+    const decorations = buildWorkbenchInlayHintDecorations(state.doc.length, [{
+      position: { line: 1, column: 12, offset: 11 },
+      text: ': Value',
+      kind: 'type',
+    }])
+    const transaction = state.update({ changes: { from: 0, insert: '//' } })
+    const mapped = mapWorkbenchInlayHintDecorationsThroughChanges(
+      decorations,
+      transaction.changes
+    )
+    const positions: number[] = []
+    mapped.between(0, transaction.state.doc.length, (from) => positions.push(from))
+
+    assert.deepEqual(positions, [13])
+  })
+
+  void test('does not duplicate the active buffer in background semantic requests', async () => {
+    const editor = await readFile(
+      'src/renderer/src/components/editor/CodeMirrorEditor.tsx',
+      'utf8'
+    )
+
+    assert.match(
+      editor,
+      /createWorkbenchSemanticTokensExtension\([\s\S]{0,520}openTabs:\s*openTabsLatest\.current\.filter\(\(tab\) => tab\.path !== path\)/u
+    )
+    assert.match(
+      editor,
+      /const siblingOpenTabs = currentOpenTabs\.filter\(\(tab\) => tab\.path !== path\)[\s\S]{0,820}openTabs: syncOpenFiles \? siblingOpenTabs : \[\]/u
     )
   })
 

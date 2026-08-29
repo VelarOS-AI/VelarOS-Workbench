@@ -57,7 +57,7 @@ export interface WorkbenchEditorAuxiliaryTabItem {
   group?: 'primary' | 'structure'
   kind?: string
   onSelect: () => void
-  onClose: () => void
+  onClose?: () => void
 }
 
 interface EditorTabBarProps {
@@ -374,15 +374,17 @@ export function EditorTabBar({
                 {tab.icon}
                 <span className={styles.editorTabName}>{tab.label}</span>
               </Button>
-              <IconButton
-                size="icon-sm"
-                className={styles.editorTabClose}
-                title={t('workbench.closeEditorTab')}
-                label={t('workbench.closeEditorTab')}
-                onClick={tab.onClose}
-              >
-                <XIcon size={12} />
-              </IconButton>
+              {tab.onClose && (
+                <IconButton
+                  size="icon-sm"
+                  className={styles.editorTabClose}
+                  title={t('workbench.closeEditorTab')}
+                  label={t('workbench.closeEditorTab')}
+                  onClick={tab.onClose}
+                >
+                  <XIcon size={12} />
+                </IconButton>
+              )}
             </div>
           ))}
         </div>
@@ -545,15 +547,17 @@ export function EditorTabBar({
                 {tab.icon}
                 <span className={styles.editorTabName}>{tab.label}</span>
               </Button>
-              <IconButton
-                size="icon-sm"
-                className={styles.editorTabListClose}
-                title={t('workbench.closeEditorTab')}
-                label={t('workbench.closeEditorTab')}
-                onClick={() => runToolbarAction(tab.onClose)}
-              >
-                <XIcon size={13} />
-              </IconButton>
+              {tab.onClose && (
+                <IconButton
+                  size="icon-sm"
+                  className={styles.editorTabListClose}
+                  title={t('workbench.closeEditorTab')}
+                  label={t('workbench.closeEditorTab')}
+                  onClick={() => runToolbarAction(() => tab.onClose?.())}
+                >
+                  <XIcon size={13} />
+                </IconButton>
+              )}
             </div>
           ))}
         </div>

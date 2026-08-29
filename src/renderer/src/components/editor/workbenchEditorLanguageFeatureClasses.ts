@@ -31,7 +31,5 @@ export const workbenchEditorLanguageFeatureClasses: WorkbenchEditorLanguageFeatu
   editorSymbolTooltipPartPunctuation: styles.editorSymbolTooltipPartPunctuation,
   editorSymbolTooltipPartString: styles.editorSymbolTooltipPartString,
   editorSymbolTooltipPartType: styles.editorSymbolTooltipPartType,
-  editorSymbolTooltipStatus: styles.editorSymbolTooltipStatus,
-  editorSymbolTooltipStatusDot: styles.editorSymbolTooltipStatusDot,
   editorSymbolTooltipTitle: styles.editorSymbolTooltipTitle,
 }

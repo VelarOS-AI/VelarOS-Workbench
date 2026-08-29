@@ -12,14 +12,15 @@ import type {
   WorkbenchLanguageServiceRequest,
 } from '@shared/contracts'
 
-import type {
-  WorkbenchLanguageServiceProjectFileRequest,
-  WorkbenchLanguageServiceProjectFilesChangedRequest,
-  WorkbenchLanguageServiceProjectRequest,
-  WorkbenchLanguageServiceWorkerOperation,
-  WorkbenchLanguageServiceWorkerOperationMap,
-  WorkbenchLanguageServiceWorkerRequest,
-  WorkbenchLanguageServiceWorkerResponse,
+import {
+  getWorkbenchLanguageServiceWorkerPriority,
+  type WorkbenchLanguageServiceProjectFileRequest,
+  type WorkbenchLanguageServiceProjectFilesChangedRequest,
+  type WorkbenchLanguageServiceProjectRequest,
+  type WorkbenchLanguageServiceWorkerOperation,
+  type WorkbenchLanguageServiceWorkerOperationMap,
+  type WorkbenchLanguageServiceWorkerRequest,
+  type WorkbenchLanguageServiceWorkerResponse,
 } from './LanguageServiceWorkerProtocol'
 
 export interface WorkbenchLanguageServiceWorkerPort {
@@ -33,10 +34,31 @@ export interface WorkbenchLanguageServiceWorkerPort {
 type WorkbenchLanguageServiceWorkerFactory = () => WorkbenchLanguageServiceWorkerPort
 
 const GracefulWorkerShutdownTimeoutMs = 8_000
+const InteractiveRequestTimeoutMs = 12_000
+const BackgroundRequestTimeoutMs = 30_000
+const LifecycleRequestTimeoutMs = 15_000
+
+type WorkbenchLanguageServiceRequestTimeout = (
+  operation: WorkbenchLanguageServiceWorkerOperation
+) => number
+
+export function getWorkbenchLanguageServiceRequestTimeoutMs(
+  operation: WorkbenchLanguageServiceWorkerOperation
+): number {
+  switch (getWorkbenchLanguageServiceWorkerPriority(operation)) {
+    case 'background':
+      return BackgroundRequestTimeoutMs
+    case 'lifecycle':
+      return LifecycleRequestTimeoutMs
+    default:
+      return InteractiveRequestTimeoutMs
+  }
+}
 
 interface PendingLanguageServiceRequest {
   resolve: (result: unknown) => void
   reject: (error: AppError) => void
+  timeout: ReturnType<typeof setTimeout>
 }
 
 interface InFlightDiagnosticsRequest {
@@ -91,7 +113,9 @@ export class WorkbenchLanguageServiceWorkerClient {
   private readonly inFlightDiagnostics: InFlightDiagnosticsRequest[] = []
 
   constructor(
-    private readonly createWorker: WorkbenchLanguageServiceWorkerFactory = createDefaultLanguageServiceWorker
+    private readonly createWorker: WorkbenchLanguageServiceWorkerFactory = createDefaultLanguageServiceWorker,
+    private readonly requestTimeoutMs: WorkbenchLanguageServiceRequestTimeout =
+      getWorkbenchLanguageServiceRequestTimeoutMs
   ) {}
 
   public synchronizeProjectFile(
@@ -250,17 +274,23 @@ export class WorkbenchLanguageServiceWorkerClient {
     const id = this.nextRequestId++
 
     return new Promise((resolvePromise, reject) => {
+      const timeout = setTimeout(() => {
+        this.handleWorkerTimeout(worker, id, operation)
+      }, Math.max(1, this.requestTimeoutMs(operation)))
       this.pending.set(id, {
         resolve: (result) =>
           resolvePromise(
             result as WorkbenchLanguageServiceWorkerOperationMap[TOperation]['result']
           ),
         reject,
+        timeout,
       })
 
       try {
         worker.postMessage({ id, operation, request } as WorkbenchLanguageServiceWorkerRequest)
       } catch (error) {
+        const pending = this.pending.get(id)
+        if (pending) clearTimeout(pending.timeout)
         this.pending.delete(id)
         reject(AppError.from(error, 'IPC'))
       }
@@ -291,6 +321,7 @@ export class WorkbenchLanguageServiceWorkerClient {
     const pending = this.pending.get(message.id)
     if (!pending) return
 
+    clearTimeout(pending.timeout)
     this.pending.delete(message.id)
     if (message.error) {
       pending.reject(AppError.fromJSON(message.error))
@@ -306,8 +337,26 @@ export class WorkbenchLanguageServiceWorkerClient {
     this.rejectPending(AppError.from(error, 'IPC'))
   }
 
+  private handleWorkerTimeout(
+    worker: WorkbenchLanguageServiceWorkerPort,
+    requestId: number,
+    operation: WorkbenchLanguageServiceWorkerOperation
+  ): void {
+    if (this.worker !== worker || !this.pending.has(requestId)) return
+
+    this.worker = null
+    this.rejectPending(new AppError(
+      'IPC',
+      `Workbench 语言服务请求超时（${operation}），已自动重启。`
+    ))
+    void worker.terminate().catch(() => 0)
+  }
+
   private rejectPending(error: AppError): void {
-    for (const pending of this.pending.values()) pending.reject(error)
+    for (const pending of this.pending.values()) {
+      clearTimeout(pending.timeout)
+      pending.reject(error)
+    }
     this.pending.clear()
     this.inFlightDiagnostics.splice(0)
   }

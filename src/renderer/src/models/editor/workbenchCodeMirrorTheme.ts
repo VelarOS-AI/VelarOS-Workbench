@@ -10,11 +10,18 @@ import {
 
 const riderLightHighlightStyle = HighlightStyle.define([
   {
-    tag: [tags.keyword, tags.controlKeyword, tags.definitionKeyword, tags.moduleKeyword],
+    tag: [
+      tags.keyword,
+      tags.controlKeyword,
+      tags.definitionKeyword,
+      tags.moduleKeyword,
+      tags.operatorKeyword,
+      tags.self,
+    ],
     color: '#0033b3',
   },
   {
-    tag: [tags.operatorKeyword, tags.operator, tags.derefOperator, tags.arithmeticOperator],
+    tag: [tags.operator, tags.derefOperator, tags.arithmeticOperator],
     color: '#000000',
   },
   {
@@ -53,7 +60,11 @@ const riderLightHighlightStyle = HighlightStyle.define([
     color: '#871094',
   },
   {
-    tag: [tags.variableName, tags.name, tags.self],
+    tag: tags.monospace,
+    color: '#a04b00',
+  },
+  {
+    tag: [tags.variableName, tags.name],
     color: '#000000',
   },
   {
@@ -81,11 +92,18 @@ export const workbenchCodeMirrorRiderTheme: Extension = syntaxHighlighting(rider
 
 const warmPaperHighlightStyle = HighlightStyle.define([
   {
-    tag: [tags.keyword, tags.controlKeyword, tags.definitionKeyword, tags.moduleKeyword],
+    tag: [
+      tags.keyword,
+      tags.controlKeyword,
+      tags.definitionKeyword,
+      tags.moduleKeyword,
+      tags.operatorKeyword,
+      tags.self,
+    ],
     color: '#7c3aed',
   },
   {
-    tag: [tags.operatorKeyword, tags.operator, tags.derefOperator, tags.arithmeticOperator],
+    tag: [tags.operator, tags.derefOperator, tags.arithmeticOperator],
     color: '#5b4635',
   },
   {
@@ -117,7 +135,8 @@ const warmPaperHighlightStyle = HighlightStyle.define([
     color: '#0f766e',
   },
   { tag: [tags.propertyName, tags.attributeName], color: '#9d174d' },
-  { tag: [tags.variableName, tags.name, tags.self], color: '#3d3025' },
+  { tag: tags.monospace, color: '#8b5e1a' },
+  { tag: [tags.variableName, tags.name], color: '#3d3025' },
   {
     tag: [tags.meta, tags.annotation, tags.processingInstruction, tags.macroName],
     color: '#a16207',
@@ -135,11 +154,18 @@ const workbenchCodeMirrorWarmPaperTheme: Extension = syntaxHighlighting(warmPape
 
 const riderDarkHighlightStyle = HighlightStyle.define([
   {
-    tag: [tags.keyword, tags.controlKeyword, tags.definitionKeyword, tags.moduleKeyword],
+    tag: [
+      tags.keyword,
+      tags.controlKeyword,
+      tags.definitionKeyword,
+      tags.moduleKeyword,
+      tags.operatorKeyword,
+      tags.self,
+    ],
     color: '#cf8efa',
   },
   {
-    tag: [tags.operatorKeyword, tags.operator, tags.derefOperator, tags.arithmeticOperator],
+    tag: [tags.operator, tags.derefOperator, tags.arithmeticOperator],
     color: '#bfc7d5',
   },
   {
@@ -178,7 +204,11 @@ const riderDarkHighlightStyle = HighlightStyle.define([
     color: '#bababa',
   },
   {
-    tag: [tags.variableName, tags.name, tags.self],
+    tag: tags.monospace,
+    color: '#ce9178',
+  },
+  {
+    tag: [tags.variableName, tags.name],
     color: '#d8dee9',
   },
   {
@@ -206,11 +236,18 @@ const workbenchCodeMirrorDarculaTheme: Extension = syntaxHighlighting(riderDarkH
 
 const midnightBlueHighlightStyle = HighlightStyle.define([
   {
-    tag: [tags.keyword, tags.controlKeyword, tags.definitionKeyword, tags.moduleKeyword],
+    tag: [
+      tags.keyword,
+      tags.controlKeyword,
+      tags.definitionKeyword,
+      tags.moduleKeyword,
+      tags.operatorKeyword,
+      tags.self,
+    ],
     color: '#c792ea',
   },
   {
-    tag: [tags.operatorKeyword, tags.operator, tags.derefOperator, tags.arithmeticOperator],
+    tag: [tags.operator, tags.derefOperator, tags.arithmeticOperator],
     color: '#89ddff',
   },
   {
@@ -242,7 +279,8 @@ const midnightBlueHighlightStyle = HighlightStyle.define([
     color: '#89ddff',
   },
   { tag: [tags.propertyName, tags.attributeName], color: '#f07178' },
-  { tag: [tags.variableName, tags.name, tags.self], color: '#d6deeb' },
+  { tag: tags.monospace, color: '#f78c6c' },
+  { tag: [tags.variableName, tags.name], color: '#d6deeb' },
   {
     tag: [tags.meta, tags.annotation, tags.processingInstruction, tags.macroName],
     color: '#ffcb6b',

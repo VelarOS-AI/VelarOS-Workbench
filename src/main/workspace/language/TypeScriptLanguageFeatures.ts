@@ -49,6 +49,83 @@ const DISPLAY_PART_KIND_SET = new Set<string>(DISPLAY_PART_KINDS)
 const MAX_WORKBENCH_INFERRED_TYPE_HINT_LENGTH = 56
 const MAX_WORKBENCH_INFERRED_TYPE_GENERIC_DEPTH = 2
 
+interface TypeScriptDefaultLibraryApiDocumentation {
+  documentation: string
+  tags?: readonly string[]
+}
+
+const TYPESCRIPT_DEFAULT_LIBRARY_API_DOCUMENTATION: Readonly<
+  Record<string, TypeScriptDefaultLibraryApiDocumentation>
+> = {
+  'Array.isArray': {
+    documentation: 'Determines whether the supplied value is an Array.',
+    tags: [
+      '@param arg The value to test.',
+      '@returns true when arg is an Array; otherwise false.',
+    ],
+  },
+  'Array.from': {
+    documentation: 'Creates a new Array from an iterable or array-like value.',
+  },
+  'Array.of': {
+    documentation: 'Creates a new Array from the supplied arguments.',
+  },
+  'Date.now': {
+    documentation: 'Returns the current time as milliseconds elapsed since 1 January 1970 UTC.',
+  },
+  'JSON.parse': {
+    documentation: 'Parses JSON text and returns the corresponding JavaScript value or object.',
+  },
+  'JSON.stringify': {
+    documentation: 'Converts a JavaScript value to JSON text.',
+  },
+  'Number.isFinite': {
+    documentation: 'Determines whether a value is a finite number without coercing it.',
+  },
+  'Number.isInteger': {
+    documentation: 'Determines whether a value is an integer.',
+  },
+  'Number.isNaN': {
+    documentation: 'Determines whether a value is the numeric value NaN without coercing it.',
+  },
+  'Number.isSafeInteger': {
+    documentation: 'Determines whether a value is an integer that can be represented exactly.',
+  },
+  'Object.assign': {
+    documentation: 'Copies enumerable own properties from source objects to a target object.',
+  },
+  'Object.create': {
+    documentation: 'Creates an object with the specified prototype and optional properties.',
+  },
+  'Object.entries': {
+    documentation: 'Returns the enumerable own string-keyed property pairs of an object.',
+  },
+  'Object.fromEntries': {
+    documentation: 'Creates an object from an iterable of key-value pairs.',
+  },
+  'Object.hasOwn': {
+    documentation: 'Determines whether an object has the specified property as its own property.',
+  },
+  'Object.keys': {
+    documentation: 'Returns the enumerable own string-keyed property names of an object.',
+  },
+  'Object.values': {
+    documentation: 'Returns the enumerable own string-keyed property values of an object.',
+  },
+  'Promise.all': {
+    documentation: 'Waits for all input promises and returns their resolved values in input order.',
+  },
+  'Promise.allSettled': {
+    documentation: 'Waits for all input promises and reports every fulfillment or rejection.',
+  },
+  'Promise.race': {
+    documentation: 'Settles with the first input promise that settles.',
+  },
+  'Promise.resolve': {
+    documentation: 'Returns a Promise resolved with the supplied value.',
+  },
+}
+
 const TYPESCRIPT_SEMANTIC_TOKEN_TYPES = [
   'class',
   'enum',
@@ -127,6 +204,39 @@ function mapDisplayParts(
         : 'text',
     })) ?? []
   )
+}
+
+function formatTypeScriptJSDocTag(tag: ts.JSDocTagInfo): string {
+  const text = displayPartsToText(tag.text).trim()
+  return text ? `@${tag.name} ${text}` : `@${tag.name}`
+}
+
+function qualifiedJavaScriptNameAtOffset(content: string, offset: number): Nullable<string> {
+  let from = Math.min(Math.max(0, offset), content.length)
+  let to = from
+  while (from > 0 && /[\w$]/u.test(content[from - 1] ?? '')) from -= 1
+  while (to < content.length && /[\w$]/u.test(content[to] ?? '')) to += 1
+  const property = content.slice(from, to)
+  const owner = content.slice(0, from).match(/([A-Za-z_$][\w$]*)\s*\.\s*$/u)?.[1]
+  return owner && property ? `${owner}.${property}` : null
+}
+
+function defaultLibraryApiDocumentationAtOffset(
+  service: ts.LanguageService,
+  fileName: string,
+  content: string,
+  offset: number
+): Nullable<TypeScriptDefaultLibraryApiDocumentation> {
+  const qualifiedName = qualifiedJavaScriptNameAtOffset(content, offset)
+  const documentation = qualifiedName
+    ? TYPESCRIPT_DEFAULT_LIBRARY_API_DOCUMENTATION[qualifiedName]
+    : undefined
+  if (!documentation) return null
+
+  const definitions = service.getDefinitionAtPosition(fileName, offset) ?? []
+  return definitions.some((definition) =>
+    /(?:^|[/\\])lib\.[^/\\]+\.d\.ts$/u.test(definition.fileName)
+  ) ? documentation : null
 }
 
 function rangeFromTextSpan(
@@ -264,7 +374,11 @@ export function buildTypeScriptHoverResult({
   if (!quickInfo) return null
 
   const displayText = displayPartsToText(quickInfo.displayParts)
-  const documentation = displayPartsToText(quickInfo.documentation)
+  const compilerDocumentation = displayPartsToText(quickInfo.documentation)
+  const fallbackDocumentation = compilerDocumentation
+    ? null
+    : defaultLibraryApiDocumentationAtOffset(service, fileName, content, offset)
+  const documentation = compilerDocumentation || fallbackDocumentation?.documentation || ''
   if (!displayText && !documentation) return null
 
   const displayParts = mapDisplayParts(quickInfo.displayParts)
@@ -275,7 +389,8 @@ export function buildTypeScriptHoverResult({
     displayParts: displayParts.length > 0 ? displayParts : undefined,
     documentation: documentation || undefined,
     documentationParts: documentationParts.length > 0 ? documentationParts : undefined,
-    tags: quickInfo.tags?.map((tag) => displayPartsToText(tag.text)) ?? [],
+    tags: quickInfo.tags?.map(formatTypeScriptJSDocTag)
+      ?? [...(fallbackDocumentation?.tags ?? [])],
   }
 }
 

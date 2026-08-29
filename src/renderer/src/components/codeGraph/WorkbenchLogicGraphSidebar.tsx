@@ -11,14 +11,18 @@ export interface WorkbenchLogicGraphSidebarProps {
   projectFiles: ReadonlyArray<{ path: string }>
   snapshot: Nullable<VelarLogicGraphSnapshot>
   scopePaths: readonly string[]
+  expansionOverrides: ReadonlyMap<string, boolean>
   onScopePathsChange: (paths: readonly string[]) => void
+  onExpansionOverridesChange: (paths: ReadonlyMap<string, boolean>) => void
 }
 
 export function WorkbenchLogicGraphSidebar({
   projectFiles,
   snapshot,
   scopePaths,
+  expansionOverrides,
   onScopePathsChange,
+  onExpansionOverridesChange,
 }: WorkbenchLogicGraphSidebarProps): ReactElement {
   const { t } = useWorkbenchI18n()
 
@@ -32,7 +36,9 @@ export function WorkbenchLogicGraphSidebar({
           files={projectFiles}
           snapshot={snapshot}
           selectedPaths={scopePaths}
+          expansionOverrides={expansionOverrides}
           onSelectionChange={onScopePathsChange}
+          onExpansionOverridesChange={onExpansionOverridesChange}
         />
       </div>
     </aside>

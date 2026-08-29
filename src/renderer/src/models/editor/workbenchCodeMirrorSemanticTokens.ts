@@ -8,7 +8,7 @@ import type { WorkbenchThemeId } from '../settings/workbenchPreferences'
 import { languageServiceRangeToOffsets } from './workbenchCodeMirrorLanguageService'
 
 const semanticTokensRefreshEffect = StateEffect.define<void>()
-const SemanticTokenDelayMs = 120
+const SemanticTokenDelayMs = 450
 const SemanticTokenRetryDelaysMs = [250, 500, 1_000, 2_000, 4_000] as const
 const markCache = new Map<string, Decoration>()
 const SemanticBuiltinTypeNames = new Set([
@@ -40,6 +40,13 @@ const SemanticTypeTokenKinds = new Set([
   'type',
   'typeParameter',
 ])
+const SemanticBuiltinOwnerTokenKinds = new Set([
+  'class',
+  'interface',
+  'namespace',
+  'type',
+  'variable',
+])
 
 interface WorkbenchSemanticTokenPalette {
   builtinType: string
@@ -47,9 +54,7 @@ interface WorkbenchSemanticTokenPalette {
   enumMember: string
   function: string
   keyword: string
-  parameter: string
   property: string
-  readonlyVariable: string
   type: string
   variable: string
 }
@@ -58,53 +63,45 @@ function semanticTokenPalette(theme: WorkbenchThemeId): WorkbenchSemanticTokenPa
   switch (theme) {
     case 'warm-paper':
       return {
-        builtinType: '#2563eb',
+        builtinType: '#0f766e',
         decorator: '#a16207',
         enumMember: '#b45309',
         function: '#8b5e1a',
         keyword: '#7c3aed',
-        parameter: '#0369a1',
         property: '#9d174d',
-        readonlyVariable: '#2563eb',
         type: '#0f766e',
         variable: '#3d3025',
       }
     case 'midnight-blue':
       return {
-        builtinType: '#82aaff',
+        builtinType: '#89ddff',
         decorator: '#ffcb6b',
         enumMember: '#f78c6c',
         function: '#82aaff',
         keyword: '#c792ea',
-        parameter: '#89ddff',
         property: '#f07178',
-        readonlyVariable: '#80cbc4',
         type: '#89ddff',
         variable: '#d6deeb',
       }
     case 'dark-modern':
       return {
-        builtinType: '#4da6ff',
+        builtinType: '#4ec9b0',
         decorator: '#c8a56c',
         enumMember: '#4fc1ff',
         function: '#ffd580',
         keyword: '#569cd6',
-        parameter: '#8ecbff',
         property: '#e394dc',
-        readonlyVariable: '#62c8ff',
         type: '#4ec9b0',
         variable: '#d8dee9',
       }
     default:
       return {
-        builtinType: '#0067c0',
+        builtinType: '#007f73',
         decorator: '#808000',
         enumMember: '#0070c1',
         function: '#a04b00',
         keyword: '#0033b3',
-        parameter: '#005fb8',
         property: '#a31574',
-        readonlyVariable: '#0067c0',
         type: '#007f73',
         variable: '#202124',
       }
@@ -114,16 +111,16 @@ function semanticTokenPalette(theme: WorkbenchThemeId): WorkbenchSemanticTokenPa
 function semanticTokenTheme(theme: WorkbenchThemeId): Extension {
   const palette = semanticTokenPalette(theme)
   return EditorView.theme({
-    '& .cm-workbenchSemantic-namespace, & .cm-workbenchSemantic-type, & .cm-workbenchSemantic-class, & .cm-workbenchSemantic-interface, & .cm-workbenchSemantic-struct, & .cm-workbenchSemantic-typeParameter': {
+    '& .cm-workbenchSemantic-namespace, & .cm-workbenchSemantic-namespace *, & .cm-workbenchSemantic-type, & .cm-workbenchSemantic-type *, & .cm-workbenchSemantic-class, & .cm-workbenchSemantic-class *, & .cm-workbenchSemantic-interface, & .cm-workbenchSemantic-interface *, & .cm-workbenchSemantic-struct, & .cm-workbenchSemantic-struct *, & .cm-workbenchSemantic-typeParameter, & .cm-workbenchSemantic-typeParameter *': {
       color: `${palette.type} !important`,
     },
-    '& .cm-workbenchSemantic-enum': {
+    '& .cm-workbenchSemantic-enum, & .cm-workbenchSemantic-enum *': {
       color: `${palette.type} !important`,
     },
-    '& .cm-workbenchSemantic-builtinType': {
+    '& .cm-workbenchSemantic-builtinType, & .cm-workbenchSemantic-builtinType *': {
       color: `${palette.builtinType} !important`,
     },
-    '& .cm-workbenchSemantic-enumMember': {
+    '& .cm-workbenchSemantic-enumMember, & .cm-workbenchSemantic-enumMember *': {
       color: `${palette.enumMember} !important`,
     },
     '& .cm-workbenchSemantic-keyword, & .cm-workbenchSemantic-keyword *': {
@@ -132,13 +129,13 @@ function semanticTokenTheme(theme: WorkbenchThemeId): Extension {
     '& .cm-workbenchSemantic-function, & .cm-workbenchSemantic-function *, & .cm-workbenchSemantic-method, & .cm-workbenchSemantic-method *': {
       color: `${palette.function} !important`,
     },
-    '& .cm-workbenchSemantic-property, & .cm-workbenchSemantic-event': {
+    '& .cm-workbenchSemantic-property, & .cm-workbenchSemantic-property *, & .cm-workbenchSemantic-event, & .cm-workbenchSemantic-event *': {
       color: `${palette.property} !important`,
     },
-    '& .cm-workbenchSemantic-parameter': {
-      color: `${palette.parameter} !important`,
+    '& .cm-workbenchSemantic-parameter, & .cm-workbenchSemantic-parameter *': {
+      color: `${palette.variable} !important`,
     },
-    '& .cm-workbenchSemantic-variable': {
+    '& .cm-workbenchSemantic-variable, & .cm-workbenchSemantic-variable *': {
       color: `${palette.variable} !important`,
     },
     '& .cm-workbenchSemantic-macro, & .cm-workbenchSemantic-macro *, & .cm-workbenchSemantic-decorator, & .cm-workbenchSemantic-decorator *': {
@@ -149,9 +146,6 @@ function semanticTokenTheme(theme: WorkbenchThemeId): Extension {
     },
     '& .cm-workbenchSemanticModifier-readonly': {
       fontStyle: 'normal',
-    },
-    '& .cm-workbenchSemantic-variable.cm-workbenchSemanticModifier-readonly': {
-      color: `${palette.readonlyVariable} !important`,
     },
   })
 }
@@ -216,8 +210,13 @@ export function buildWorkbenchSemanticTokenDecorations(
     if (!range || range.from >= range.to) return []
 
     const tokenText = content.slice(range.from, range.to)
-    const effectiveToken = SemanticTypeTokenKinds.has(token.type)
+    const effectiveToken = (
+      SemanticBuiltinOwnerTokenKinds.has(token.type)
+      && token.modifiers.includes('defaultLibrary')
+    ) || (
+      SemanticTypeTokenKinds.has(token.type)
       && SemanticBuiltinTypeNames.has(tokenText)
+    )
       ? { ...token, type: 'builtinType' }
       : token.type === 'property'
       && callableNames.has(tokenText)

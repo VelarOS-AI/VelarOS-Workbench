@@ -166,6 +166,8 @@ const kernelBridge: WorkbenchKernelBridge = {
 const modelBridge: WorkbenchModelBridge = {
   listProviderModels: (request) =>
     ipcRenderer.invoke(WorkbenchModelChannels.listProviderModels, request),
+  getApiKey: (request) => ipcRenderer.invoke(WorkbenchModelChannels.getApiKey, request),
+  setApiKey: (request) => ipcRenderer.invoke(WorkbenchModelChannels.setApiKey, request),
 }
 
 const workspaceBridge: WorkbenchWorkspaceBridge = {

@@ -4,12 +4,19 @@ import { tmpdir } from 'node:os'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import { describe, test } from 'node:test'
 
+import { highlightingFor, syntaxTree } from '@codemirror/language'
+import { EditorState } from '@codemirror/state'
+import { EditorView } from '@codemirror/view'
+import { tags } from '@lezer/highlight'
+
 import { WorkbenchLanguageServices } from '../src/main/workspace/language/LanguageServices'
+import { resolveWorkbenchCodeMirrorLanguage } from '../src/renderer/src/models/editor/workbenchCodeMirrorLanguage'
 import {
   usesWorkbenchBuiltinLanguageService,
   usesWorkbenchInlayHintLanguageService,
   usesWorkbenchSemanticLanguageService,
 } from '../src/renderer/src/models/editor/workbenchCodeMirrorLanguageService'
+import { getWorkbenchCodeMirrorTheme } from '../src/renderer/src/models/editor/workbenchCodeMirrorTheme'
 import {
   isWorkbenchMarkdownPreviewPath,
   resolveWorkbenchMarkdownLink,
@@ -84,6 +91,34 @@ void describe('Workbench Markdown support', () => {
       /\[data-streamdown='table-wrapper'\][\s\S]*?display:\s*contents/u
     )
     assert.match(editorStyles, /\[data-streamdown='code-block-header'\][\s\S]*?display:\s*none/u)
+  })
+
+  void test('colors Markdown code and mounts the fenced language parser', () => {
+    const fence = String.fromCharCode(96).repeat(3)
+    const content = `${fence}ts\nconst value: string = "ok"\n${fence}`
+    const language = resolveWorkbenchCodeMirrorLanguage('README.md', '')
+    const state = EditorState.create({
+      doc: content,
+      extensions: [language.extension, getWorkbenchCodeMirrorTheme('light-modern')],
+    })
+
+    assert.equal(syntaxTree(state).resolveInner(content.indexOf('const') + 1, 1).name, 'const')
+    assert.equal(
+      syntaxTree(state).resolveInner(content.indexOf('value') + 1, 1).name,
+      'VariableDefinition'
+    )
+    assert.equal(
+      syntaxTree(state).resolveInner(content.indexOf('string') + 1, 1).name,
+      'TypeName'
+    )
+
+    const codeClass = highlightingFor(state, [tags.monospace])
+    assert.ok(codeClass)
+    const rules = state
+      .facet(EditorView.styleModule)
+      .flatMap((module) => module.getRules())
+      .join('\n')
+    assert.ok(rules.includes(`.${codeClass} {color: #a04b00;}`))
   })
 
   void test('provides Markdown symbols, definitions, and broken-link diagnostics', async () => {

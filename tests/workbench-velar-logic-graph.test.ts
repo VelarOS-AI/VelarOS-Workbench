@@ -15,8 +15,10 @@ import { WorkbenchAgentExtensionTools } from '../src/plugins/agent-engines/main/
 import {
   discoverWorkbenchVelarProjectRoots,
   getWorkbenchVelarDefaultScopePaths,
+  mergeWorkbenchVelarProjectSnapshotIndex,
   mergeWorkbenchVelarProjectSnapshots,
   selectWorkbenchVelarProjectRoots,
+  updateWorkbenchVelarProjectSnapshotIndex,
 } from '../src/renderer/src/models/codeGraph/workbenchVelarProjectGraph'
 import {
   applyVelarLogicGraphResponse,
@@ -208,6 +210,23 @@ void describe('Workbench Velar compiler graph consumer', () => {
     assert.deepEqual(
       selectWorkbenchVelarProjectRoots(projectRoots, [merged.nodes[0]!.id], merged),
       ['apps/server']
+    )
+
+    const projectIndex = updateWorkbenchVelarProjectSnapshotIndex(new Map(), [
+      { projectRoot: 'apps/server', snapshot: server },
+      { projectRoot: 'apps/web', snapshot: web },
+    ])
+    const refreshedServer = { ...server, revision: RevisionB }
+    const refreshedIndex = updateWorkbenchVelarProjectSnapshotIndex(projectIndex, [
+      { projectRoot: 'apps/server', snapshot: refreshedServer },
+    ])
+    assert.equal(refreshedIndex.get('apps/server')?.revision, RevisionB)
+    assert.equal(refreshedIndex.get('apps/web')?.revision, RevisionB)
+    assert.deepEqual(
+      mergeWorkbenchVelarProjectSnapshotIndex(refreshedIndex)?.nodes
+        .filter((node) => node.kind === 'module')
+        .map((node) => node.path),
+      ['apps/server/src/main.vel', 'apps/web/src/main.vel']
     )
   })
 

@@ -50,6 +50,7 @@ import {
   selectStandaloneWorkbenchModel,
   selectStandaloneWorkbenchModelProvider,
   StandaloneWorkbenchCompletionDisabledOptionValue,
+  type StandaloneWorkbenchModelConfig,
   updateStandaloneWorkbenchModelConfig,
   useStandaloneWorkbenchModelConfig,
 } from '@renderer/runtime/standaloneWorkbenchModelConfig'
@@ -218,6 +219,8 @@ export function WorkbenchSettingsDialog({
   const [isLoadingProviderModels, setIsLoadingProviderModels] = useState(false)
   const [providerModelCatalogError, setProviderModelCatalogError] =
     useState<Nullable<string>>(null)
+  const [modelBaseURLDraft, setModelBaseURLDraft] = useState(modelConfig.baseURL)
+  const [modelApiKeyDraft, setModelApiKeyDraft] = useState(modelConfig.apiKey)
   const dialogRef = useRef<HTMLDivElement>(null)
   const activeProviderModelCatalog = providerModelCatalog?.provider === modelConfig.provider
     ? providerModelCatalog
@@ -374,6 +377,12 @@ export function WorkbenchSettingsDialog({
   }, [open, timers])
 
   useEffect(() => {
+    if (!open) return
+    setModelBaseURLDraft(modelConfig.baseURL)
+    setModelApiKeyDraft(modelConfig.apiKey)
+  }, [modelConfig.apiKey, modelConfig.baseURL, modelConfig.provider, open])
+
+  useEffect(() => {
     if (!open || activeSection !== 'model') {
       setIsLoadingProviderModels(false)
       return
@@ -443,7 +452,31 @@ export function WorkbenchSettingsDialog({
 
   if (!open) return null
 
+  function commitModelConnectionDrafts(): void {
+    const patch: Partial<Pick<StandaloneWorkbenchModelConfig, 'apiKey' | 'baseURL'>> = {}
+    if (modelBaseURLDraft !== modelConfig.baseURL) patch.baseURL = modelBaseURLDraft
+    if (modelApiKeyDraft !== modelConfig.apiKey) patch.apiKey = modelApiKeyDraft
+    if (Object.keys(patch).length > 0) updateStandaloneWorkbenchModelConfig(patch)
+  }
+
+  function commitModelBaseURLDraft(): void {
+    if (modelBaseURLDraft === modelConfig.baseURL) return
+    updateStandaloneWorkbenchModelConfig({ baseURL: modelBaseURLDraft })
+  }
+
+  function commitModelApiKeyDraft(): void {
+    if (modelApiKeyDraft === modelConfig.apiKey) return
+    updateStandaloneWorkbenchModelConfig({ apiKey: modelApiKeyDraft })
+  }
+
+  function handleModelConnectionDraftKeyDown(event: KeyboardEvent<HTMLInputElement>): void {
+    if (event.key !== 'Enter') return
+    event.preventDefault()
+    event.currentTarget.blur()
+  }
+
   function closeDialog(): void {
+    commitModelConnectionDrafts()
     onOpenChange(false)
   }
 
@@ -771,13 +804,11 @@ export function WorkbenchSettingsDialog({
               type="url"
               autoComplete="url"
               spellCheck={false}
-              value={modelConfig.baseURL}
+              value={modelBaseURLDraft}
               placeholder={t('workbench.settingsModelBaseUrlPlaceholder')}
-              onChange={(event) =>
-                updateStandaloneWorkbenchModelConfig({
-                  baseURL: event.currentTarget.value,
-                })
-              }
+              onChange={(event) => setModelBaseURLDraft(event.currentTarget.value)}
+              onBlur={commitModelBaseURLDraft}
+              onKeyDown={handleModelConnectionDraftKeyDown}
             />
           </SettingRow>
         )}
@@ -790,6 +821,9 @@ export function WorkbenchSettingsDialog({
             className={styles.workbenchSettingsSelectTrigger}
             value={modelConfig.model}
             options={modelOptions}
+            searchable={modelOptions.length > 12}
+            searchPlaceholder={t('workbench.settingsModelSearchPlaceholder')}
+            emptyMessage={t('workbench.settingsModelSearchEmpty')}
             onChange={(model) =>
               selectStandaloneWorkbenchModel(modelConfig.provider, model, 'agent')
             }
@@ -806,6 +840,9 @@ export function WorkbenchSettingsDialog({
               modelConfig.completionModel || StandaloneWorkbenchCompletionDisabledOptionValue
             }
             options={completionModelOptions}
+            searchable={completionModelOptions.length > 12}
+            searchPlaceholder={t('workbench.settingsModelSearchPlaceholder')}
+            emptyMessage={t('workbench.settingsModelSearchEmpty')}
             onChange={(model) =>
               selectStandaloneWorkbenchModel(modelConfig.provider, model, 'completion')
             }
@@ -820,13 +857,11 @@ export function WorkbenchSettingsDialog({
               size="sm"
               type="password"
               autoComplete="off"
-              value={modelConfig.apiKey}
+              value={modelApiKeyDraft}
               placeholder={t('workbench.settingsModelApiKeyPlaceholder')}
-              onChange={(event) =>
-                updateStandaloneWorkbenchModelConfig({
-                  apiKey: event.currentTarget.value,
-                })
-              }
+              onChange={(event) => setModelApiKeyDraft(event.currentTarget.value)}
+              onBlur={commitModelApiKeyDraft}
+              onKeyDown={handleModelConnectionDraftKeyDown}
             />
           </SettingRow>
         )}

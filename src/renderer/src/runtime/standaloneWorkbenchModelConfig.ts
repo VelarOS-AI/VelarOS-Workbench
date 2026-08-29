@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from 'react'
+import { useEffect, useSyncExternalStore } from 'react'
 
 import type { ChatProviderId } from '@velaros-ai/model/contracts'
 
@@ -12,7 +12,7 @@ export interface StandaloneWorkbenchModelConfig {
   model: string
   completionModel: string
   baseURL: string
-  /** 密钥只驻留当前 renderer 进程，不写 localStorage。 */
+  /** 密钥由 main 进程使用 Electron safeStorage 加密持久化，不写 localStorage。 */
   apiKey: string
 }
 
@@ -30,6 +30,9 @@ const DefaultModelConfig: StandaloneWorkbenchModelConfig = {
 
 const listeners = new Set<() => void>()
 let currentConfig = readInitialModelConfig()
+let apiKeyMutationVersion = 0
+let apiKeyHydrationRequest = 0
+let initialApiKeyHydrationStarted = false
 
 function readInitialModelConfig(): StandaloneWorkbenchModelConfig {
   if (typeof window === 'undefined') return DefaultModelConfig
@@ -125,20 +128,59 @@ function persistNonSecretModelConfig(config: StandaloneWorkbenchModelConfig): vo
 export function updateStandaloneWorkbenchModelConfig(
   patch: Partial<StandaloneWorkbenchModelConfig>
 ): void {
+  applyStandaloneWorkbenchModelConfig(patch)
+}
+
+function applyStandaloneWorkbenchModelConfig(
+  patch: Partial<StandaloneWorkbenchModelConfig>,
+  persistApiKey = Object.prototype.hasOwnProperty.call(patch, 'apiKey')
+): void {
   currentConfig = { ...currentConfig, ...patch }
   persistNonSecretModelConfig(currentConfig)
+  if (persistApiKey) {
+    apiKeyMutationVersion += 1
+    persistApiKeyForProvider(currentConfig.provider, currentConfig.apiKey)
+  }
   for (const listener of listeners) listener()
+}
+
+function persistApiKeyForProvider(provider: string, apiKey: string): void {
+  if (typeof window === 'undefined' || !window.velarosWorkbenchModel) return
+  void window.velarosWorkbenchModel.setApiKey({ provider, apiKey }).catch(() => undefined)
+}
+
+async function hydrateApiKeyForProvider(provider: string): Promise<void> {
+  if (typeof window === 'undefined' || !window.velarosWorkbenchModel) return
+  const request = ++apiKeyHydrationRequest
+  const mutationVersion = apiKeyMutationVersion
+  const apiKey = await window.velarosWorkbenchModel
+    .getApiKey({ provider })
+    .catch(() => '')
+  if (
+    request !== apiKeyHydrationRequest
+    || mutationVersion !== apiKeyMutationVersion
+    || currentConfig.provider !== provider
+  ) return
+  applyStandaloneWorkbenchModelConfig({ apiKey }, false)
+}
+
+export function hydrateStandaloneWorkbenchModelApiKey(): void {
+  if (initialApiKeyHydrationStarted) return
+  initialApiKeyHydrationStarted = true
+  void hydrateApiKeyForProvider(currentConfig.provider)
 }
 
 export function selectStandaloneWorkbenchModelProvider(providerId: string): void {
   const provider = getStandaloneWorkbenchModelProviderPreset(providerId)
-  updateStandaloneWorkbenchModelConfig({
+  apiKeyHydrationRequest += 1
+  applyStandaloneWorkbenchModelConfig({
     provider: provider.id,
     model: provider.defaultModel,
     completionModel: provider.completionModel,
     baseURL: provider.defaultBaseURL,
     apiKey: '',
-  })
+  }, false)
+  void hydrateApiKeyForProvider(provider.id)
 }
 
 export function selectStandaloneWorkbenchModel(
@@ -163,13 +205,15 @@ export function selectStandaloneWorkbenchAgentModel(
 ): void {
   const provider = getStandaloneWorkbenchModelProviderPreset(providerId)
   const providerChanged = currentConfig.provider !== provider.id
-  updateStandaloneWorkbenchModelConfig({
+  if (providerChanged) apiKeyHydrationRequest += 1
+  applyStandaloneWorkbenchModelConfig({
     provider: provider.id,
     model: resolveStandaloneWorkbenchProviderModel(provider.id, model, 'agent'),
     completionModel: providerChanged ? provider.completionModel : currentConfig.completionModel,
     baseURL: providerChanged ? provider.defaultBaseURL : currentConfig.baseURL,
     apiKey: providerChanged ? '' : currentConfig.apiKey,
-  })
+  }, false)
+  if (providerChanged) void hydrateApiKeyForProvider(provider.id)
 }
 
 export function getStandaloneWorkbenchModelConfig(): StandaloneWorkbenchModelConfig {
@@ -177,6 +221,7 @@ export function getStandaloneWorkbenchModelConfig(): StandaloneWorkbenchModelCon
 }
 
 export function useStandaloneWorkbenchModelConfig(): StandaloneWorkbenchModelConfig {
+  useEffect(hydrateStandaloneWorkbenchModelApiKey, [])
   return useSyncExternalStore(
     (listener) => {
       listeners.add(listener)

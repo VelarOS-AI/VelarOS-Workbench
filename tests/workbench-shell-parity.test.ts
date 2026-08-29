@@ -117,12 +117,15 @@ void describe('pre-split Workbench shell parity', () => {
 
   void test('opens the branch menu with a Git-only refresh', () => {
     const model = readSource('src/renderer/src/hooks/useStandaloneWorkbenchPageModel.tsx')
+    const toolbar = readSource('src/renderer/src/components/chrome/TopToolbar.tsx')
 
     assert.match(model, /actions:\s*\{[\s\S]*refreshGitPanel:\s*gitState\.refreshGitPanel/)
     assert.doesNotMatch(
       model,
       /actions:\s*\{[\s\S]*refreshGitPanel:\s*refreshGitPanelWithWorkspace/
     )
+    assert.match(toolbar, /if \(!gitControlReady\) return null/u)
+    assert.doesNotMatch(toolbar, /topGitPlaceholder/u)
   })
 
   void test('extends macOS content into the title bar and lets the folder button toggle files', () => {
@@ -158,9 +161,16 @@ void describe('pre-split Workbench shell parity', () => {
     assert.match(presentation, /chrome\.velarLogicGraphAvailable[\s\S]*openVelarStructure/)
     assert.match(presentation, /<WorkbenchCodeGraphDialog[\s\S]*open=\{dialogs\.codeGraphOpen\}/)
     assert.match(presentation, /auxiliaryTabs:[\s\S]*<WorkbenchLogicGraphEditor/)
-    assert.doesNotMatch(presentation, /velar-structure:overview|VelarStructureOverviewTab/)
-    assert.match(presentation, /defaultVelarStructureRoot/)
-    assert.match(presentation, /if \(roots\.has\('src'\)\) return 'src'/)
+    assert.match(presentation, /const VelarStructureOverviewTab[\s\S]*velar-structure:overview/)
+    assert.match(
+      presentation,
+      /\[VelarStructureOverviewTab, \.\.\.velarStructureScopeTabs\]/
+    )
+    assert.match(
+      presentation,
+      /structureTab\.id === VelarStructureOverviewTab\.id[\s\S]*\? \{\}[\s\S]*onClose/
+    )
+    assert.doesNotMatch(presentation, /defaultVelarStructureRoot/)
     assert.match(presentation, /velarStructureTabs\.map/)
     assert.match(presentation, /openVelarStructureScope/)
     assert.match(presentation, /scopePaths=\{structureTab\.scopePaths\}/)
@@ -281,16 +291,28 @@ void describe('pre-split Workbench shell parity', () => {
     assert.doesNotMatch(styles, /workbenchChatCurrentFileChip/)
   })
 
-  void test('preserves user-controlled structure folder expansion across graph refreshes', () => {
+  void test('separates workspace snapshots, fixed overview, tab scopes, and folder state', () => {
+    const presentation = readSource('src/renderer/src/StandaloneWorkbenchPagePresentation.tsx')
     const tree = readSource(
       'src/renderer/src/components/codeGraph/WorkbenchLogicGraphScopeTree.tsx'
     )
+    const tabs = readSource('src/renderer/src/components/editor/EditorTabBar.tsx')
 
-    assert.match(tree, /const initializedExpansionRef = useRef\(false\)/)
-    assert.match(tree, /if \(initializedExpansionRef\.current \|\| tree\.length === 0\) return/)
-    assert.match(tree, /initializedExpansionRef\.current = true/)
-    assert.match(tree, /setExpandedPaths\(directoryKeys\)/)
-    assert.doesNotMatch(tree, /new Set\(\[\.\.\.current, \.\.\.directoryKeys\]\)/)
+    assert.match(presentation, /velarStructureProjectSnapshots/)
+    assert.match(presentation, /mergeWorkbenchVelarProjectSnapshotIndex/)
+    assert.match(presentation, /updateWorkbenchVelarProjectSnapshotIndex/)
+    assert.match(presentation, /velarStructureExpansionOverrides/)
+    assert.match(tree, /expansionOverrides: ReadonlyMap<string, boolean>/)
+    assert.match(
+      tree,
+      /expansionOverrides\.get\(node\.key\) \?\? node\.kind === 'directory'/
+    )
+    assert.match(tree, /data-active=\{selectedPaths\.has\(node\.selection\)\}/)
+    assert.match(tree, /next\.set\(path, !expanded\)/)
+    assert.match(tree, /onExpansionOverridesChange\(next\)/)
+    assert.doesNotMatch(tree, /useEffect|useState|initializedExpansionRef/)
+    assert.match(tabs, /onClose\?: \(\) => void/)
+    assert.match(tabs, /\{tab\.onClose && \(/)
   })
 
   void test('keeps external Agent engines opt-in and exposes shared resource plugins', () => {

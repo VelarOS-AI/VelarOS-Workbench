@@ -16,6 +16,7 @@ import {
   closeBrackets,
   closeBracketsKeymap,
   type CompletionContext,
+  type CompletionResult,
   type CompletionSource,
   startCompletion,
 } from '@codemirror/autocomplete'
@@ -94,6 +95,8 @@ import {
 import { getWorkbenchCodeMirrorAutocompleteTheme } from '@renderer/models/editor/workbenchCodeMirrorAutocompleteTheme'
 import { createWorkbenchBasicSyntaxExtension } from '@renderer/models/editor/workbenchCodeMirrorBasicSyntax'
 import {
+  WORKBENCH_COMPLETION_ACTIVATE_ON_TYPING_DELAY_MS,
+  WORKBENCH_COMPLETION_UPDATE_SYNC_TIME_MS,
   workbenchCompletionAddToOptions,
   workbenchCompletionOptionClass,
 } from '@renderer/models/editor/workbenchCodeMirrorCompletionPresentation'
@@ -159,7 +162,6 @@ import {
   getWorkbenchLanguageServiceDocumentHighlights,
   getWorkbenchLanguageServiceFormat,
   getWorkbenchLanguageServiceInlayHints,
-  getWorkbenchLanguageServiceReferences,
   getWorkbenchLanguageServiceRename,
   getWorkbenchLanguageServiceSemanticTokens,
 } from '@renderer/models/editor/workbenchLanguageServiceIpc'
@@ -336,7 +338,8 @@ const workbenchCodeMirrorBaseExtensions: Extension[] = [
   closeBrackets(),
   autocompletion({
     activateOnTyping: true,
-    activateOnTypingDelay: 200,
+    activateOnTypingDelay: WORKBENCH_COMPLETION_ACTIVATE_ON_TYPING_DELAY_MS,
+    updateSyncTime: WORKBENCH_COMPLETION_UPDATE_SYNC_TIME_MS,
     maxRenderedOptions: 24,
     icons: true,
     defaultKeymap: true,
@@ -592,8 +595,14 @@ function createWorkbenchCompletionSource({
   hostRuntime: WorkbenchHostRuntime
 }): CompletionSource {
   let requestGeneration = 0
+  let pendingLanguageRequest: Nullable<{ content: string; position: number }> = null
+  let cachedLanguageResult: Nullable<{
+    content: string
+    position: number
+    result: CompletionResult
+  }> = null
 
-  return async (context: CompletionContext) => {
+  return (context: CompletionContext) => {
     const selection = context.state.selection.main
     const content = context.state.doc.toString()
     const localResult = buildWorkbenchCodeMirrorCompletionResult({
@@ -607,6 +616,10 @@ function createWorkbenchCompletionSource({
     })
 
     if (!path || !usesWorkbenchBuiltinLanguageService(path)) return localResult || null
+    if (
+      cachedLanguageResult?.content === content
+      && cachedLanguageResult.position === selection.head
+    ) return cachedLanguageResult.result
 
     const before =
       context.matchBefore(/<[\w-]*|[A-Za-z_$][\w$./@-]*/) ??
@@ -623,9 +636,16 @@ function createWorkbenchCompletionSource({
       prefix.length >= 1
 
     if (!shouldQueryLanguageService || context.aborted) return localResult || null
+    if (
+      pendingLanguageRequest?.content === content
+      && pendingLanguageRequest.position === selection.head
+    ) return localResult || null
 
     const generation = ++requestGeneration
-    const lspResult = await getWorkbenchLanguageServiceCompletions({
+    const requestPosition = selection.head
+    pendingLanguageRequest = { content, position: requestPosition }
+    const view = context.view
+    void getWorkbenchLanguageServiceCompletions({
       ...buildWorkbenchLanguageServiceRequestBase({
         projectRoot,
         path,
@@ -634,35 +654,48 @@ function createWorkbenchCompletionSource({
         openTabs: getOpenTabs(),
       }),
       position: positionLineColumnFromState(context.state, selection.head),
-    }, hostRuntime)
-    if (generation !== requestGeneration) return null
-    if (!lspResult.ok || isEmpty(lspResult.data.items)) return localResult || null
+    }, hostRuntime).then((lspResult) => {
+      if (generation !== requestGeneration) return
+      pendingLanguageRequest = null
+      if (!lspResult.ok || isEmpty(lspResult.data.items)) return
 
-    const from = localResult?.from ?? before?.from ?? selection.head
-    const to = localResult?.to ?? selection.head
-    const suppressLocalOptions = path ? usesWorkbenchHtmlLanguageService(path) : false
-    const localOptions = suppressLocalOptions
-      ? []
-      : ((localResult?.options ?? []) as Array<{
-          label: string
-          apply?: string
-          type?: string
-          detail?: string
-          boost?: number
-        }>)
-
-    return {
-      from,
-      to,
-      validFor: /^[\w$.<>\-:]*$/,
-      options: mergeWorkbenchLanguageServiceCompletions({
-        path,
-        localOptions,
-        items: lspResult.data.items,
+      const from = localResult?.from ?? before?.from ?? requestPosition
+      const to = localResult?.to ?? requestPosition
+      const suppressLocalOptions = usesWorkbenchHtmlLanguageService(path)
+      const localOptions = suppressLocalOptions
+        ? []
+        : ((localResult?.options ?? []) as Array<{
+            label: string
+            apply?: string
+            type?: string
+            detail?: string
+            boost?: number
+          }>)
+      const result: CompletionResult = {
         from,
         to,
-      }),
-    }
+        validFor: /^[\w$.<>\-:]*$/,
+        options: mergeWorkbenchLanguageServiceCompletions({
+          path,
+          localOptions,
+          items: lspResult.data.items,
+          from,
+          to,
+        }),
+      }
+      cachedLanguageResult = { content, position: requestPosition, result }
+
+      if (
+        view
+        && view.state.doc.toString() === content
+        && view.state.selection.main.head === requestPosition
+      ) startCompletion(view)
+    }).catch(() => {
+      if (generation === requestGeneration) pendingLanguageRequest = null
+    })
+
+    // 本地项目索引的候选先同步显示；语言服务结果返回后再无闪烁地刷新同一列表。
+    return localResult || null
   }
 }
 
@@ -1127,6 +1160,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
     const containerRef = useRef<HTMLDivElement>(null)
     const contextMenuRef = useRef<HTMLDivElement>(null)
     const viewRef = useRef<EditorView>(null)
+    const definitionRequestGenerationRef = useRef(0)
     const autoFoldedPathRef = useRef<string>(null)
     const synchronizedPathRef = useRef(path)
     const pathRef = useLatest(path)
@@ -1430,8 +1464,6 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         language,
         getOpenTabs: () => openTabsLatest.current,
         hostRuntime,
-        hoverLoadingLabel: t('workbench.editorHoverLoading'),
-        hoverUnavailableLabel: t('workbench.editorHoverUnavailable'),
         hoverDefinitionLabel: t('workbench.editorHoverDefinition'),
         hoverDefinitionPreviewLabel: t('workbench.editorHoverDefinitionPreview'),
       }),
@@ -1497,7 +1529,9 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
                       path,
                       language,
                       content,
-                      openTabs: openTabsLatest.current,
+                      // 当前正文已经由 content 提供；这里只同步其余脏标签，避免每次输入
+                      // 都把同一份大文件重复发送给语义分析 worker。
+                      openTabs: openTabsLatest.current.filter((tab) => tab.path !== path),
                     }),
                     hostRuntime
                   )
@@ -1536,13 +1570,16 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
             if (!path || !usesWorkbenchInlayHintLanguageService(path)) return []
 
             const currentOpenTabs = openTabsLatest.current
+            const siblingOpenTabs = currentOpenTabs.filter((tab) => tab.path !== path)
             const syncOpenFiles =
               !syncedInlayHintOpenFiles ||
-              syncedInlayHintOpenFiles.size !== currentOpenTabs.length ||
-              currentOpenTabs.some((tab) => syncedInlayHintOpenFiles?.get(tab.path) !== tab.content)
+              syncedInlayHintOpenFiles.size !== siblingOpenTabs.length ||
+              siblingOpenTabs.some(
+                (tab) => syncedInlayHintOpenFiles?.get(tab.path) !== tab.content
+              )
             if (syncOpenFiles) {
               syncedInlayHintOpenFiles = new Map(
-                currentOpenTabs.map((tab) => [tab.path, tab.content])
+                siblingOpenTabs.map((tab) => [tab.path, tab.content])
               )
             }
             const request = buildWorkbenchLanguageServiceRequestBase({
@@ -1550,7 +1587,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
               path,
               language,
               content,
-              openTabs: syncOpenFiles ? currentOpenTabs : [],
+              openTabs: syncOpenFiles ? siblingOpenTabs : [],
             })
             if (!syncOpenFiles) delete request.openFiles
 
@@ -1657,8 +1694,10 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       const identifier = word ?? getCurrentIdentifier()
 
       if (view && pathRef.current && identifier) {
+        const requestGeneration = ++definitionRequestGenerationRef.current
         try {
           const currentPath = pathRef.current
+          const sourceDocument = view.state.doc
           const position = positionLineColumnFromState(view.state, identifier.from)
           const origin = {
             path: currentPath,
@@ -1675,12 +1714,14 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
             }),
             position,
           }
-          const [definitionResult, referencesResult] = await Promise.all([
-            getWorkbenchLanguageServiceDefinition(request, hostRuntime),
-            getWorkbenchLanguageServiceReferences(request, hostRuntime).catch(() => null),
-          ])
+          const definitionResult = await getWorkbenchLanguageServiceDefinition(request, hostRuntime)
+          if (
+            requestGeneration !== definitionRequestGenerationRef.current
+            || viewRef.current !== view
+            || view.state.doc !== sourceDocument
+            || pathRef.current !== currentPath
+          ) return
           const definitions = definitionResult.ok ? definitionResult.data.locations : []
-          const references = referencesResult?.ok ? referencesResult.data.locations : []
           const location = definitions[0]
           if (location) {
             setContextMenu(null)
@@ -1693,7 +1734,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
               origin,
               ...(isDefinition ? {} : { destination: location }),
               definitions,
-              references,
+              references: [],
             }), isDefinition)
             if (isDefinition) return
 
@@ -1701,6 +1742,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
             return
           }
         } catch (error) {
+          if (requestGeneration !== definitionRequestGenerationRef.current) return
           log.debug('查询语言服务定义失败，回退到索引', {
             projectRoot,
             path: pathRef.current,
