@@ -38,6 +38,7 @@ import {
   selectStandaloneWorkbenchAgentModel,
   useStandaloneWorkbenchModelConfig,
 } from './standaloneWorkbenchModelConfig'
+import { resolveWorkbenchClipboardFilePath } from './workbenchClipboardFile'
 import { workbenchMessage } from './workbenchMessageHost'
 
 const log = Log.tag('workbench-chat-adapter')
@@ -1272,7 +1273,10 @@ function readConfirmationDetail(
 
 async function buildAttachmentContext(files: readonly File[]): Promise<string> {
   const descriptions = await Promise.all(files.map(async (file) => {
-    const path = window.velarosWorkbenchProjectHub.getPathForFile(file)
+    const path = resolveWorkbenchClipboardFilePath(
+      file,
+      window.velarosWorkbenchProjectHub.getPathForFile
+    )
     if (path) return `Attached file: ${path}`
     if (file.size <= 64 * 1_024 && isTextAttachment(file)) return `Attached file ${file.name}:\n\`\`\`\n${await file.text()}\n\`\`\``
     return `Attached file: ${file.name} (${file.type || 'application/octet-stream'}, ${file.size} bytes)`
