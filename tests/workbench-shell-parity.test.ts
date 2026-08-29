@@ -253,9 +253,10 @@ void describe('pre-split Workbench shell parity', () => {
     const styles = readSource('src/renderer/src/styles/04-insight-chat.module.css')
 
     assert.match(adapter, /data-workbench-chat-empty="true"/)
-    assert.match(adapter, /<VelarSailMark/)
-    assert.match(adapter, /motion="steady"/)
-    assert.match(adapter, /showWindLines=\{false\}/)
+    assert.match(adapter, /workbenchAppIconUrl/)
+    assert.match(adapter, /<img/)
+    assert.match(adapter, /src=\{workbenchAppIconUrl\}/)
+    assert.doesNotMatch(adapter, /VelarSailMark/)
     assert.doesNotMatch(adapter, /ChatCircleDotsIcon/)
     assert.doesNotMatch(adapter, /chatEmptyTitle/)
     assert.doesNotMatch(adapter, /wb_chatComposerError/)
@@ -278,6 +279,18 @@ void describe('pre-split Workbench shell parity', () => {
       /\.workbenchChatTopBar \.workbenchChatSessionMenuButton[\s\S]*justify-content:\s*flex-start/
     )
     assert.doesNotMatch(styles, /workbenchChatCurrentFileChip/)
+  })
+
+  void test('preserves user-controlled structure folder expansion across graph refreshes', () => {
+    const tree = readSource(
+      'src/renderer/src/components/codeGraph/WorkbenchLogicGraphScopeTree.tsx'
+    )
+
+    assert.match(tree, /const initializedExpansionRef = useRef\(false\)/)
+    assert.match(tree, /if \(initializedExpansionRef\.current \|\| tree\.length === 0\) return/)
+    assert.match(tree, /initializedExpansionRef\.current = true/)
+    assert.match(tree, /setExpandedPaths\(directoryKeys\)/)
+    assert.doesNotMatch(tree, /new Set\(\[\.\.\.current, \.\.\.directoryKeys\]\)/)
   })
 
   void test('keeps external Agent engines opt-in and exposes shared resource plugins', () => {

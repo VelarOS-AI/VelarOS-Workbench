@@ -20,7 +20,6 @@ import {
   ChatConversationPane,
   ChatThinkingVisibilityProvider,
   type ConversationView,
-  VelarSailMark,
 } from '@velaros-ai/ui/conversation'
 import {
   type ChatComposerControl,
@@ -30,6 +29,7 @@ import {
 import type { ChatMessage, ContentBlock, ToolCallBlock } from '@shared/contracts'
 import type { WorkbenchAgentEngineModelCatalog } from '@shared/workbenchAgentMods'
 
+import workbenchAppIconUrl from '../../../../build/icon.svg?url'
 import type { WorkbenchChatProviderId } from '../../../plugins/agent-engines/identity'
 import styles from '../styles/workbenchPageStyles'
 
@@ -884,12 +884,11 @@ function StandaloneWorkbenchChatSessionSurface({
         streamSlot={chat.messages.length === 0 ? (
           <div className={styles.workbenchChatEmptyState} data-workbench-chat-empty="true">
             <div className={styles.workbenchChatEmptyContent}>
-              <VelarSailMark
-                className={styles.workbenchChatEmptySail}
-                decorative
-                motion="steady"
-                showWindLines={false}
-                size="small"
+              <img
+                className={styles.workbenchChatEmptyIcon}
+                src={workbenchAppIconUrl}
+                alt=""
+                aria-hidden="true"
               />
               <div
                 className={styles.workbenchChatStarterList}

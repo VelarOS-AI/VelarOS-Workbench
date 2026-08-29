@@ -157,8 +157,10 @@
   pointer-events: auto;
 }
 
-.workbenchChatEmptySail {
+.workbenchChatEmptyIcon {
   flex: none;
+  width: 72px;
+  height: 72px;
 }
 
 .workbenchChatStarterList {

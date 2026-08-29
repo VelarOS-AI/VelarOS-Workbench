@@ -4,6 +4,7 @@ import {
   type ReactNode,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react'
 import {
@@ -317,11 +318,14 @@ export function WorkbenchLogicGraphScopeTree({
   const tree = useMemo(() => buildScopeTree(files, snapshot), [files, snapshot])
   const selectedPathSet = useMemo(() => new Set(selectedPaths), [selectedPaths])
   const [expandedPaths, setExpandedPaths] = useState<ReadonlySet<string>>(() => new Set())
+  const initializedExpansionRef = useRef(false)
 
   useEffect(() => {
+    if (initializedExpansionRef.current || tree.length === 0) return
     const directoryKeys = new Set<string>()
     collectDirectoryKeys(tree, directoryKeys)
-    setExpandedPaths((current) => new Set([...current, ...directoryKeys]))
+    initializedExpansionRef.current = true
+    setExpandedPaths(directoryKeys)
   }, [tree])
 
   function togglePath(path: string): void {
