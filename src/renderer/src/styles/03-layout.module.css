@@ -9,25 +9,36 @@
     minmax(0, 1fr)
     0
     minmax(0, var(--workbench-right-pane-width, 420px))
-    36px;
+    var(--workbench-right-rail-width);
   grid-template-rows: minmax(0, 1fr);
 }
 
 .ideBody[data-right-tool-open='false'] {
-  grid-template-columns: var(--workbench-file-pane-width, 260px) 0 minmax(0, 1fr) 0 0 36px;
+  grid-template-columns:
+    var(--workbench-file-pane-width, 260px)
+    0
+    minmax(0, 1fr)
+    0
+    0
+    var(--workbench-right-rail-width);
 }
 
 .workbenchShell[data-standalone='true'] .ideBody {
   grid-template-columns:
-    38px
+    var(--workbench-left-rail-width)
     minmax(0, 1fr)
     0
     minmax(0, var(--workbench-right-pane-width, 420px))
-    36px;
+    var(--workbench-right-rail-width);
 }
 
 .workbenchShell[data-standalone='true'] .ideBody[data-right-tool-open='false'] {
-  grid-template-columns: 38px minmax(0, 1fr) 0 0 36px;
+  grid-template-columns:
+    var(--workbench-left-rail-width)
+    minmax(0, 1fr)
+    0
+    0
+    var(--workbench-right-rail-width);
 }
 
 .workbenchShell[data-standalone='true'] .leftToolPane {
@@ -64,7 +75,7 @@
 
 .leftToolPane {
   @apply grid min-h-0 min-w-0 border-r;
-  grid-template-columns: 38px minmax(0, 1fr);
+  grid-template-columns: var(--workbench-left-rail-width) minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
   height: 100%;
   border-color: var(--workbench-border);
@@ -80,7 +91,7 @@
   justify-content: space-between;
   align-self: stretch;
   min-height: 0;
-  padding: 6px 4px;
+  padding: var(--workbench-left-rail-padding-block) 4px;
   border-right: 1px solid var(--workbench-border);
   background: var(--workbench-toolbar);
 }
@@ -92,8 +103,8 @@
 
 .leftToolButton {
   @apply relative flex shrink-0 items-center justify-center border bg-transparent text-muted-foreground;
-  width: 30px;
-  height: 30px;
+  width: var(--workbench-left-rail-button-size);
+  height: var(--workbench-left-rail-button-size);
   border-color: transparent;
   border-radius: var(--workbench-radius);
 }
@@ -188,9 +199,9 @@
   box-sizing: border-box;
   position: absolute;
   z-index: 30;
-  left: 38px;
-  right: 36px;
-  bottom: 26px;
+  left: var(--workbench-left-rail-width);
+  right: var(--workbench-right-rail-width);
+  bottom: var(--workbench-statusbar-height);
   height: var(--workbench-command-panel-height, 210px);
   border: 0;
   border-top: 1px solid color-mix(in oklab, var(--workbench-border) 65%, var(--workbench-text) 18%);
@@ -380,8 +391,8 @@
 
 .rightToolRail {
   @apply min-h-0 shrink-0;
-  width: 36px;
-  min-width: 36px;
+  width: var(--workbench-right-rail-width);
+  min-width: var(--workbench-right-rail-width);
   overflow: visible;
   border-left: 1px solid var(--workbench-border);
   background: var(--workbench-surface);
@@ -400,7 +411,7 @@
   position: relative;
   z-index: 2;
   height: 100%;
-  padding: 5px 4px;
+  padding: var(--workbench-right-rail-padding-block) 4px;
   border-color: var(--workbench-border);
   background: var(--workbench-toolbar);
 }
@@ -415,8 +426,8 @@
 .rightToolButton {
   @apply flex shrink-0 items-center justify-center border bg-transparent text-muted-foreground;
   position: relative;
-  width: 28px;
-  height: 28px;
+  width: var(--workbench-right-rail-button-size);
+  height: var(--workbench-right-rail-button-size);
   overflow: visible;
   border-color: transparent;
   border-radius: var(--workbench-radius);
@@ -474,7 +485,7 @@
 
 .toolWindowHeader {
   @apply flex shrink-0 items-center justify-between gap-2 border-b;
-  min-height: 36px;
+  min-height: var(--workbench-topbar-height);
   padding-inline: 10px;
   border-color: var(--workbench-border);
   background: var(--workbench-toolbar);

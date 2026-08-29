@@ -9,7 +9,11 @@ import {
 
 const log = Log.tag('workbench-preferences')
 
-export type WorkbenchThemeId = 'light-modern' | 'dark-modern' | 'dark-plus' | 'light-plus'
+export type WorkbenchThemeId =
+  | 'light-modern'
+  | 'dark-modern'
+  | 'warm-paper'
+  | 'midnight-blue'
 export type WorkbenchDensity = 'compact' | 'balanced' | 'comfortable'
 export type WorkbenchAccent =
   | 'blue'
@@ -29,11 +33,6 @@ export interface WorkbenchPreferences {
   /** 快捷键控制的代码区缩放级别；基础字号和行高仍由设置面板独立维护。 */
   editorZoomLevel: number
   theme: WorkbenchThemeId
-  /**
-   * 是否启用 AI Tab 内联补全（Cursor 式 ghost text）。服务商/模型在设置的 AI 补全区配置。
-   * 默认关闭：远端补全往返可能偏慢，先让用户显式开启。
-   */
-  aiCompletionEnabled: boolean
   /**
    * 用户手动编辑的本地历史快照节流窗口（秒）：自动保存时距上一份快照不足该间隔就不新增，
    * 省内存、更轻量。0=每次保存都存快照。AI/工具改动不受此限制，始终每次都存。
@@ -57,7 +56,6 @@ export const DEFAULT_WORKBENCH_PREFERENCES: WorkbenchPreferences = {
   editorLineHeight: 20.25,
   editorZoomLevel: 0,
   theme: 'light-modern',
-  aiCompletionEnabled: false,
   localHistoryThrottleSeconds: 60,
 }
 
@@ -103,15 +101,26 @@ export const DEFAULT_WORKBENCH_PROJECT_RUN_SETTINGS: WorkbenchProjectRunSettings
 const WorkbenchThemes = new Set<WorkbenchThemeId>([
   'light-modern',
   'dark-modern',
-  'dark-plus',
-  'light-plus',
+  'warm-paper',
+  'midnight-blue',
 ])
-const WorkbenchDarkThemes = new Set<WorkbenchThemeId>(['dark-modern', 'dark-plus'])
+const WorkbenchDarkThemes = new Set<WorkbenchThemeId>(['dark-modern', 'midnight-blue'])
 
 export function isWorkbenchDarkTheme(theme: WorkbenchThemeId): boolean {
   return WorkbenchDarkThemes.has(theme)
 }
 const WorkbenchDensities = new Set<WorkbenchDensity>(['compact', 'balanced', 'comfortable'])
+
+export function getWorkbenchFileTreeRowHeight(density: WorkbenchDensity): number {
+  switch (density) {
+    case 'compact':
+      return 20
+    case 'comfortable':
+      return 27
+    default:
+      return 23
+  }
+}
 const WorkbenchAccents = new Set<WorkbenchAccent>([
   'blue',
   'teal',
@@ -183,6 +192,7 @@ function normalizeChoice<T extends string>(value: any, allowed: ReadonlySet<T>, 
 function normalizeWorkbenchThemeChoice(value: any): WorkbenchThemeId {
   switch (value) {
     // Legacy tinted/neutral light themes collapse onto the neutral VSCode light preset.
+    case 'light-plus':
     case 'warm':
     case 'cool':
     case 'light':
@@ -190,6 +200,7 @@ function normalizeWorkbenchThemeChoice(value: any): WorkbenchThemeId {
     case 'graphite':
       return 'light-modern'
     // Legacy dark themes map onto the neutral VSCode dark preset.
+    case 'dark-plus':
     case 'dark':
     case 'darcula':
       return 'dark-modern'
@@ -233,10 +244,6 @@ export function normalizeWorkbenchPreferences(
       )
     ),
     theme: normalizeWorkbenchThemeChoice(preferences?.theme),
-    aiCompletionEnabled:
-      typeof preferences?.aiCompletionEnabled === 'boolean'
-        ? preferences.aiCompletionEnabled
-        : DEFAULT_WORKBENCH_PREFERENCES.aiCompletionEnabled,
     localHistoryThrottleSeconds: clampNumber(
       preferences?.localHistoryThrottleSeconds,
       0,

@@ -3,7 +3,7 @@ import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate
 
 import type { WorkbenchLanguageServiceSemanticToken } from '@shared/contracts'
 
-import { isWorkbenchDarkTheme, type WorkbenchThemeId } from '../settings/workbenchPreferences'
+import type { WorkbenchThemeId } from '../settings/workbenchPreferences'
 
 import { languageServiceRangeToOffsets } from './workbenchCodeMirrorLanguageService'
 
@@ -41,37 +41,108 @@ const SemanticTypeTokenKinds = new Set([
   'typeParameter',
 ])
 
-function semanticTokenTheme(dark: boolean): Extension {
+interface WorkbenchSemanticTokenPalette {
+  builtinType: string
+  decorator: string
+  enumMember: string
+  function: string
+  keyword: string
+  parameter: string
+  property: string
+  readonlyVariable: string
+  type: string
+  variable: string
+}
+
+function semanticTokenPalette(theme: WorkbenchThemeId): WorkbenchSemanticTokenPalette {
+  switch (theme) {
+    case 'warm-paper':
+      return {
+        builtinType: '#2563eb',
+        decorator: '#a16207',
+        enumMember: '#b45309',
+        function: '#8b5e1a',
+        keyword: '#7c3aed',
+        parameter: '#0369a1',
+        property: '#9d174d',
+        readonlyVariable: '#2563eb',
+        type: '#0f766e',
+        variable: '#3d3025',
+      }
+    case 'midnight-blue':
+      return {
+        builtinType: '#82aaff',
+        decorator: '#ffcb6b',
+        enumMember: '#f78c6c',
+        function: '#82aaff',
+        keyword: '#c792ea',
+        parameter: '#89ddff',
+        property: '#f07178',
+        readonlyVariable: '#80cbc4',
+        type: '#89ddff',
+        variable: '#d6deeb',
+      }
+    case 'dark-modern':
+      return {
+        builtinType: '#4da6ff',
+        decorator: '#c8a56c',
+        enumMember: '#4fc1ff',
+        function: '#ffd580',
+        keyword: '#569cd6',
+        parameter: '#8ecbff',
+        property: '#e394dc',
+        readonlyVariable: '#62c8ff',
+        type: '#4ec9b0',
+        variable: '#d8dee9',
+      }
+    default:
+      return {
+        builtinType: '#0067c0',
+        decorator: '#808000',
+        enumMember: '#0070c1',
+        function: '#a04b00',
+        keyword: '#0033b3',
+        parameter: '#005fb8',
+        property: '#a31574',
+        readonlyVariable: '#0067c0',
+        type: '#007f73',
+        variable: '#202124',
+      }
+  }
+}
+
+function semanticTokenTheme(theme: WorkbenchThemeId): Extension {
+  const palette = semanticTokenPalette(theme)
   return EditorView.theme({
     '& .cm-workbenchSemantic-namespace, & .cm-workbenchSemantic-type, & .cm-workbenchSemantic-class, & .cm-workbenchSemantic-interface, & .cm-workbenchSemantic-struct, & .cm-workbenchSemantic-typeParameter': {
-      color: `${dark ? '#4ec9b0' : '#007f73'} !important`,
+      color: `${palette.type} !important`,
     },
     '& .cm-workbenchSemantic-enum': {
-      color: `${dark ? '#4ec9b0' : '#007f73'} !important`,
+      color: `${palette.type} !important`,
     },
     '& .cm-workbenchSemantic-builtinType': {
-      color: `${dark ? '#4da6ff' : '#0067c0'} !important`,
+      color: `${palette.builtinType} !important`,
     },
     '& .cm-workbenchSemantic-enumMember': {
-      color: `${dark ? '#4fc1ff' : '#0070c1'} !important`,
+      color: `${palette.enumMember} !important`,
     },
     '& .cm-workbenchSemantic-keyword, & .cm-workbenchSemantic-keyword *': {
-      color: `${dark ? '#569cd6' : '#0033b3'} !important`,
+      color: `${palette.keyword} !important`,
     },
     '& .cm-workbenchSemantic-function, & .cm-workbenchSemantic-function *, & .cm-workbenchSemantic-method, & .cm-workbenchSemantic-method *': {
-      color: `${dark ? '#ffd580' : '#a04b00'} !important`,
+      color: `${palette.function} !important`,
     },
     '& .cm-workbenchSemantic-property, & .cm-workbenchSemantic-event': {
-      color: `${dark ? '#e394dc' : '#a31574'} !important`,
+      color: `${palette.property} !important`,
     },
     '& .cm-workbenchSemantic-parameter': {
-      color: `${dark ? '#8ecbff' : '#005fb8'} !important`,
+      color: `${palette.parameter} !important`,
     },
     '& .cm-workbenchSemantic-variable': {
-      color: `${dark ? '#d8dee9' : '#202124'} !important`,
+      color: `${palette.variable} !important`,
     },
     '& .cm-workbenchSemantic-macro, & .cm-workbenchSemantic-macro *, & .cm-workbenchSemantic-decorator, & .cm-workbenchSemantic-decorator *': {
-      color: `${dark ? '#c8a56c' : '#808000'} !important`,
+      color: `${palette.decorator} !important`,
     },
     '& .cm-workbenchSemanticModifier-deprecated': {
       textDecoration: 'line-through',
@@ -80,13 +151,13 @@ function semanticTokenTheme(dark: boolean): Extension {
       fontStyle: 'normal',
     },
     '& .cm-workbenchSemantic-variable.cm-workbenchSemanticModifier-readonly': {
-      color: `${dark ? '#62c8ff' : '#0067c0'} !important`,
+      color: `${palette.readonlyVariable} !important`,
     },
   })
 }
 
 export function getWorkbenchSemanticTokenTheme(theme: WorkbenchThemeId): Extension {
-  return semanticTokenTheme(isWorkbenchDarkTheme(theme))
+  return semanticTokenTheme(theme)
 }
 
 export interface WorkbenchSemanticTokensRuntime {

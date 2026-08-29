@@ -79,6 +79,60 @@ const riderLightHighlightStyle = HighlightStyle.define([
 
 export const workbenchCodeMirrorRiderTheme: Extension = syntaxHighlighting(riderLightHighlightStyle)
 
+const warmPaperHighlightStyle = HighlightStyle.define([
+  {
+    tag: [tags.keyword, tags.controlKeyword, tags.definitionKeyword, tags.moduleKeyword],
+    color: '#7c3aed',
+  },
+  {
+    tag: [tags.operatorKeyword, tags.operator, tags.derefOperator, tags.arithmeticOperator],
+    color: '#5b4635',
+  },
+  {
+    tag: [tags.string, tags.docString, tags.character, tags.attributeValue],
+    color: '#557a1f',
+  },
+  { tag: [tags.escape, tags.regexp], color: '#2f7d4f' },
+  {
+    tag: [tags.number, tags.integer, tags.float, tags.bool, tags.null, tags.atom],
+    color: '#b45309',
+  },
+  {
+    tag: [tags.comment, tags.lineComment, tags.blockComment, tags.docComment],
+    color: '#998773',
+    fontStyle: 'italic',
+  },
+  {
+    tag: [tags.function(tags.variableName), tags.function(tags.propertyName)],
+    color: '#8b5e1a',
+  },
+  {
+    tag: [
+      tags.className,
+      tags.typeName,
+      tags.tagName,
+      tags.namespace,
+      tags.definition(tags.typeName),
+    ],
+    color: '#0f766e',
+  },
+  { tag: [tags.propertyName, tags.attributeName], color: '#9d174d' },
+  { tag: [tags.variableName, tags.name, tags.self], color: '#3d3025' },
+  {
+    tag: [tags.meta, tags.annotation, tags.processingInstruction, tags.macroName],
+    color: '#a16207',
+  },
+  { tag: [tags.heading, tags.strong], color: '#7c3aed', fontWeight: '600' },
+  { tag: [tags.link, tags.url], color: '#0369a1', textDecoration: 'underline' },
+  {
+    tag: tags.invalid,
+    color: '#b91c1c',
+    textDecoration: 'underline wavy #b91c1c',
+  },
+])
+
+const workbenchCodeMirrorWarmPaperTheme: Extension = syntaxHighlighting(warmPaperHighlightStyle)
+
 const riderDarkHighlightStyle = HighlightStyle.define([
   {
     tag: [tags.keyword, tags.controlKeyword, tags.definitionKeyword, tags.moduleKeyword],
@@ -150,6 +204,62 @@ const riderDarkHighlightStyle = HighlightStyle.define([
 
 const workbenchCodeMirrorDarculaTheme: Extension = syntaxHighlighting(riderDarkHighlightStyle)
 
+const midnightBlueHighlightStyle = HighlightStyle.define([
+  {
+    tag: [tags.keyword, tags.controlKeyword, tags.definitionKeyword, tags.moduleKeyword],
+    color: '#c792ea',
+  },
+  {
+    tag: [tags.operatorKeyword, tags.operator, tags.derefOperator, tags.arithmeticOperator],
+    color: '#89ddff',
+  },
+  {
+    tag: [tags.string, tags.docString, tags.character, tags.attributeValue],
+    color: '#addb67',
+  },
+  { tag: [tags.escape, tags.regexp], color: '#c3e88d' },
+  {
+    tag: [tags.number, tags.integer, tags.float, tags.bool, tags.null, tags.atom],
+    color: '#f78c6c',
+  },
+  {
+    tag: [tags.comment, tags.lineComment, tags.blockComment, tags.docComment],
+    color: '#637777',
+    fontStyle: 'italic',
+  },
+  {
+    tag: [tags.function(tags.variableName), tags.function(tags.propertyName)],
+    color: '#82aaff',
+  },
+  {
+    tag: [
+      tags.className,
+      tags.typeName,
+      tags.tagName,
+      tags.namespace,
+      tags.definition(tags.typeName),
+    ],
+    color: '#89ddff',
+  },
+  { tag: [tags.propertyName, tags.attributeName], color: '#f07178' },
+  { tag: [tags.variableName, tags.name, tags.self], color: '#d6deeb' },
+  {
+    tag: [tags.meta, tags.annotation, tags.processingInstruction, tags.macroName],
+    color: '#ffcb6b',
+  },
+  { tag: [tags.heading, tags.strong], color: '#82aaff', fontWeight: '600' },
+  { tag: [tags.link, tags.url], color: '#80cbc4', textDecoration: 'underline' },
+  {
+    tag: tags.invalid,
+    color: '#ff5370',
+    textDecoration: 'underline wavy #ff5370',
+  },
+])
+
+const workbenchCodeMirrorMidnightBlueTheme: Extension = syntaxHighlighting(
+  midnightBlueHighlightStyle
+)
+
 function diagnosticUnderlineBackground(color: string): string {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="6" height="3"><path d="m0 2.5 l2 -1.5 l1 0 l2 1.5 l1 0" stroke="${color}" fill="none" stroke-width=".7"/></svg>`
   return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`
@@ -207,5 +317,14 @@ export function getWorkbenchCodeMirrorLintTheme(theme: WorkbenchThemeId): Extens
 }
 
 export function getWorkbenchCodeMirrorTheme(theme: WorkbenchThemeId): Extension {
-  return isWorkbenchDarkTheme(theme) ? workbenchCodeMirrorDarculaTheme : workbenchCodeMirrorRiderTheme
+  switch (theme) {
+    case 'warm-paper':
+      return workbenchCodeMirrorWarmPaperTheme
+    case 'midnight-blue':
+      return workbenchCodeMirrorMidnightBlueTheme
+    case 'dark-modern':
+      return workbenchCodeMirrorDarculaTheme
+    default:
+      return workbenchCodeMirrorRiderTheme
+  }
 }

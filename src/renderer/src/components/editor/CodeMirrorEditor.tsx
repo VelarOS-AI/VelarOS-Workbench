@@ -70,10 +70,7 @@ import {
   retainWorkbenchCommentAnchorsEffect,
   setWorkbenchCommentAnchorsEffect,
 } from '@renderer/components/editor/workbenchCommentExtension'
-import {
-  useWorkbenchAiCompletionEnabled,
-  useWorkbenchEditorMetrics,
-} from '@renderer/hooks/useWorkbenchPreferences'
+import { useWorkbenchEditorMetrics } from '@renderer/hooks/useWorkbenchPreferences'
 import {
   useWorkbenchHostRuntime,
   type WorkbenchHostRuntime,
@@ -186,6 +183,7 @@ import {
 } from '@renderer/models/editor/workbenchVelarTestRunGutter'
 import type { WorkbenchProjectContextIndex } from '@renderer/models/project/workbenchProjectContextIndex'
 import type { WorkbenchThemeId } from '@renderer/models/settings/workbenchPreferences'
+import { useStandaloneWorkbenchModelConfig } from '@renderer/runtime/standaloneWorkbenchModelConfig'
 import type { WorkbenchOpenEditorTab } from '@renderer/types/workbenchTypes'
 
 import { isEmpty, isPresent, Log, toNullable, toOptional } from '@velaros-ai/core'
@@ -1174,9 +1172,11 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
     )
 
     const projectRootRef = useLatest(projectRoot)
-    const aiCompletionEnabled = useWorkbenchAiCompletionEnabled()
-    // 只读/禁用/关开关时都不请求内联补全；ViewPlugin 每次调用时实时读取。
-    const inlineCompletionEnabledRef = useLatest(aiCompletionEnabled && !readOnly && !disabled)
+    const completionModel = useStandaloneWorkbenchModelConfig().completionModel
+    // 只读、禁用或补全模型为“无”时不请求内联补全；ViewPlugin 每次调用时实时读取。
+    const inlineCompletionEnabledRef = useLatest(
+      !!completionModel.trim() && !readOnly && !disabled
+    )
     const inlineCompletionRuntime = useMemo<WorkbenchInlineCompletionRuntime>(
       () => ({
         isEnabled: () => inlineCompletionEnabledRef.current,

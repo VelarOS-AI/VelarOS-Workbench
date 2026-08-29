@@ -1201,7 +1201,6 @@ export function useStandaloneWorkbenchPageModel(
     workbench,
     surface,
     layout,
-    projectGitSettings,
     workbenchPreferences,
     workbenchKeymap,
     gitState,
@@ -1222,7 +1221,6 @@ export function useStandaloneWorkbenchPageModel(
       translate,
       locale,
       t,
-      globalGitConfig,
       contentSearchMatches: contentSearch.contentSearchMatches,
       isSearchingContent: contentSearch.isSearchingContent,
       contentSearchTruncated: contentSearch.contentSearchTruncated,
@@ -1254,7 +1252,7 @@ export function useStandaloneWorkbenchPageModel(
     /** 交互动作。 */
     actions: {
       runTreeMutation,
-      refreshGitPanel: refreshGitPanelWithWorkspace,
+      refreshGitPanel: gitState.refreshGitPanel,
       refreshProjectAndGit,
       handleRepositoryChanged,
       initializeRepository,

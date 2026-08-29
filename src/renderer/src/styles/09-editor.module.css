@@ -563,7 +563,7 @@
 
 .editorTabBar {
   @apply flex shrink-0 items-center gap-1 overflow-hidden border-b;
-  min-height: 34px;
+  min-height: var(--workbench-tab-height);
   padding: 0 6px 0 0;
   border-color: var(--workbench-border);
   background: var(--background-panel);
@@ -582,7 +582,7 @@
 
 .editorTabActions {
   @apply flex shrink-0 items-center gap-0.5;
-  min-height: 34px;
+  min-height: var(--workbench-tab-height);
   margin-left: 0;
   padding-left: 4px;
 }
@@ -603,7 +603,7 @@
 
 .editorTab {
   @apply relative flex shrink-0 items-center border-0;
-  height: 34px;
+  height: var(--workbench-tab-height);
   background: transparent;
   color: var(--status-blue-contrast);
   box-shadow: none;

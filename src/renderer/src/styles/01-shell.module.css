@@ -498,6 +498,26 @@
   --workbench-editor-diagnostic-hint-underline: #949494;
   --workbench-editor-font-size: 12.5px;
   --workbench-editor-line-height: 20.25px;
+  --workbench-topbar-height: 36px;
+  --workbench-panel-header-height: 40px;
+  --workbench-statusbar-height: 26px;
+  --workbench-tab-height: 34px;
+  --workbench-left-rail-width: 38px;
+  --workbench-right-rail-width: 36px;
+  --workbench-left-rail-button-size: 30px;
+  --workbench-right-rail-button-size: 28px;
+  --workbench-left-rail-padding-block: 6px;
+  --workbench-right-rail-padding-block: 5px;
+  --workbench-tree-row-height: 23px;
+  --workbench-search-result-row-height: 34px;
+  --workbench-settings-header-height: 40px;
+  --workbench-settings-nav-height: 40px;
+  --workbench-settings-nav-padding-block: 6px;
+  --workbench-settings-section-padding-top: 14px;
+  --workbench-settings-row-height: 42px;
+  --workbench-settings-row-padding-block: 7px;
+  --workbench-settings-theme-card-height: 68px;
+  --workbench-settings-theme-card-padding: 10px;
   --background: var(--workbench-bg);
   --background-panel: var(--workbench-toolbar);
   --foreground: var(--workbench-text);
@@ -558,11 +578,8 @@
   --scrollbar-thumb-hover: color-mix(in oklab, var(--workbench-text) 28%, transparent);
 }
 
-/*
- * VSCode-referenced neutral presets. Light themes only override the chrome
- * palette (the base block above already carries a clean light editor); dark
- * themes share one set of editor tokens and differ only in chrome surfaces.
- */
+/* Neutral presets keep the familiar Workbench baseline; the two color themes
+ * deliberately change both chrome layering and editor surfaces. */
 .workbenchShell[data-workbench-theme='light-modern'],
 :global([data-velar-theme-scope='light-modern']) {
   --workbench-bg: #ffffff;
@@ -579,26 +596,49 @@
   --workbench-editor-gutter-bg: #ffffff;
 }
 
-.workbenchShell[data-workbench-theme='light-plus'],
-:global([data-velar-theme-scope='light-plus']) {
-  --workbench-bg: #ffffff;
-  --workbench-surface: #ffffff;
-  --workbench-surface-muted: #f3f3f3;
-  --workbench-toolbar: #f3f3f3;
-  --workbench-control-bg: rgba(0, 0, 0, 0.06);
-  --workbench-border: #e7e7e7;
-  --workbench-hover: rgba(0, 0, 0, 0.045);
-  --workbench-selection-bg: color-mix(in srgb, var(--workbench-theme-color) 12%, #ffffff);
-  --workbench-selection-inactive: rgba(0, 0, 0, 0.05);
-  --chrome-rail-selected-bg: color-mix(in srgb, var(--workbench-theme-color) 11%, #ffffff);
-  --chrome-rail-hover-bg: rgba(0, 0, 0, 0.05);
-  --workbench-editor-gutter-bg: #ffffff;
+.workbenchShell[data-workbench-theme='warm-paper'],
+:global([data-velar-theme-scope='warm-paper']) {
+  --workbench-bg: #fbf5e9;
+  --workbench-surface: #fffaf0;
+  --workbench-surface-muted: #f2e7d5;
+  --workbench-toolbar: #eee0cb;
+  --workbench-control-bg: rgba(105, 78, 48, 0.1);
+  --workbench-border: #ddcbb2;
+  --workbench-border-soft: rgba(105, 78, 48, 0.13);
+  --workbench-hover: rgba(105, 78, 48, 0.08);
+  --workbench-text: #3d3025;
+  --workbench-text-muted: #806e5c;
+  --workbench-selection-bg: color-mix(in srgb, var(--workbench-theme-color) 15%, #fff7e8);
+  --workbench-selection-inactive: rgba(105, 78, 48, 0.08);
+  --chrome-rail-selected-bg: color-mix(in srgb, var(--workbench-theme-color) 14%, #f7ead7);
+  --chrome-rail-hover-bg: rgba(105, 78, 48, 0.1);
+  --workbench-editor-bg: #fffaf0;
+  --workbench-editor-fg: #3d3025;
+  --workbench-editor-muted: #998773;
+  --workbench-editor-gutter-bg: #f6ecdd;
+  --workbench-editor-gutter-border: #e3d3bd;
+  --workbench-editor-active-line: rgba(139, 94, 52, 0.055);
+  --workbench-editor-active-gutter: rgba(139, 94, 52, 0.09);
+  --workbench-editor-caret: #6f4b2d;
+  --workbench-editor-tooltip-bg: #fff8ec;
+  --workbench-editor-hover-keyword: #7c3aed;
+  --workbench-editor-hover-builtin-type: #2563eb;
+  --workbench-editor-hover-type: #0f766e;
+  --workbench-editor-hover-name: #9d174d;
+  --workbench-editor-hover-function: #8b5e1a;
+  --workbench-editor-hover-number: #b45309;
+  --workbench-editor-hover-string: #557a1f;
+  --workbench-editor-hover-link: #0369a1;
+  --workbench-editor-hover-location: #806e5c;
+  --workbench-editor-unused-fg: #998773;
+  --workbench-tree-ignored-fg: #998773;
+  color-scheme: light;
 }
 
 .workbenchShell[data-workbench-theme='dark-modern'],
-.workbenchShell[data-workbench-theme='dark-plus'],
+.workbenchShell[data-workbench-theme='midnight-blue'],
 :global([data-velar-theme-scope='dark-modern']),
-:global([data-velar-theme-scope='dark-plus']) {
+:global([data-velar-theme-scope='midnight-blue']) {
   --workbench-border-soft: rgba(255, 255, 255, 0.05);
   --workbench-active: rgba(var(--workbench-theme-color-rgb), 0.22);
   --workbench-active-soft: rgba(var(--workbench-theme-color-rgb), 0.16);
@@ -695,20 +735,45 @@
   --workbench-editor-gutter-bg: #1f1f1f;
 }
 
-/* Dark+ (Classic): #1e1e1e editor, #252526 sidebar, blue #264f78 selection. */
-.workbenchShell[data-workbench-theme='dark-plus'],
-:global([data-velar-theme-scope='dark-plus']) {
-  --workbench-bg: #1e1e1e;
-  --workbench-surface: #1e1e1e;
-  --workbench-surface-muted: #252526;
-  --workbench-toolbar: #252526;
-  --workbench-control-bg: rgba(255, 255, 255, 0.06);
-  --workbench-border: #2d2d2d;
-  --workbench-hover: rgba(255, 255, 255, 0.06);
-  --workbench-selection-bg: rgba(38, 79, 120, 0.5);
-  --chrome-rail-selected-bg: rgba(38, 79, 120, 0.45);
-  --workbench-editor-bg: #1e1e1e;
-  --workbench-editor-gutter-bg: #1e1e1e;
+/* Midnight Blue: navy chrome, lifted panels, and a saturated editor palette. */
+.workbenchShell[data-workbench-theme='midnight-blue'],
+:global([data-velar-theme-scope='midnight-blue']) {
+  --workbench-bg: #0b1220;
+  --workbench-surface: #101a2b;
+  --workbench-surface-muted: #0d1626;
+  --workbench-toolbar: #080f1c;
+  --workbench-control-bg: rgba(148, 177, 222, 0.09);
+  --workbench-border: #243552;
+  --workbench-border-soft: rgba(148, 177, 222, 0.09);
+  --workbench-hover: rgba(148, 177, 222, 0.1);
+  --workbench-text: #d7e3f4;
+  --workbench-text-muted: #8192ab;
+  --workbench-selection-bg: rgba(var(--workbench-theme-color-rgb), 0.34);
+  --chrome-rail-selected-bg: rgba(var(--workbench-theme-color-rgb), 0.3);
+  --chrome-rail-hover-bg: rgba(148, 177, 222, 0.11);
+  --workbench-editor-bg: #0b1220;
+  --workbench-editor-fg: #d6deeb;
+  --workbench-editor-muted: #637777;
+  --workbench-editor-gutter-bg: #0d1626;
+  --workbench-editor-gutter-border: #22324c;
+  --workbench-editor-active-line: rgba(130, 170, 255, 0.06);
+  --workbench-editor-active-gutter: rgba(130, 170, 255, 0.11);
+  --workbench-editor-selection: rgba(130, 170, 255, 0.28);
+  --workbench-editor-occurrence-match: rgba(128, 203, 196, 0.2);
+  --workbench-editor-occurrence-match-active: rgba(128, 203, 196, 0.36);
+  --workbench-editor-caret: #ffcc80;
+  --workbench-editor-tooltip-bg: #121f33;
+  --workbench-editor-hover-keyword: #c792ea;
+  --workbench-editor-hover-builtin-type: #82aaff;
+  --workbench-editor-hover-type: #89ddff;
+  --workbench-editor-hover-name: #f07178;
+  --workbench-editor-hover-function: #82aaff;
+  --workbench-editor-hover-number: #f78c6c;
+  --workbench-editor-hover-string: #addb67;
+  --workbench-editor-hover-link: #80cbc4;
+  --workbench-editor-hover-location: #8192ab;
+  --workbench-editor-unused-fg: #637777;
+  --workbench-tree-ignored-fg: #637777;
 }
 
 .workbenchShell[data-workbench-accent='blue'],
@@ -763,12 +828,52 @@
   --workbench-radius-sm: 4px;
   --workbench-radius: 6px;
   --workbench-radius-lg: 8px;
+  --workbench-topbar-height: 32px;
+  --workbench-panel-header-height: 34px;
+  --workbench-statusbar-height: 22px;
+  --workbench-tab-height: 30px;
+  --workbench-left-rail-width: 34px;
+  --workbench-right-rail-width: 32px;
+  --workbench-left-rail-button-size: 26px;
+  --workbench-right-rail-button-size: 24px;
+  --workbench-left-rail-padding-block: 4px;
+  --workbench-right-rail-padding-block: 3px;
+  --workbench-tree-row-height: 20px;
+  --workbench-search-result-row-height: 30px;
+  --workbench-settings-header-height: 36px;
+  --workbench-settings-nav-height: 34px;
+  --workbench-settings-nav-padding-block: 4px;
+  --workbench-settings-section-padding-top: 10px;
+  --workbench-settings-row-height: 36px;
+  --workbench-settings-row-padding-block: 4px;
+  --workbench-settings-theme-card-height: 58px;
+  --workbench-settings-theme-card-padding: 7px;
 }
 
 .workbenchShell[data-workbench-density='comfortable'] {
   --workbench-radius-sm: 7px;
   --workbench-radius: 8px;
   --workbench-radius-lg: 10px;
+  --workbench-topbar-height: 42px;
+  --workbench-panel-header-height: 46px;
+  --workbench-statusbar-height: 30px;
+  --workbench-tab-height: 40px;
+  --workbench-left-rail-width: 44px;
+  --workbench-right-rail-width: 42px;
+  --workbench-left-rail-button-size: 34px;
+  --workbench-right-rail-button-size: 34px;
+  --workbench-left-rail-padding-block: 8px;
+  --workbench-right-rail-padding-block: 7px;
+  --workbench-tree-row-height: 27px;
+  --workbench-search-result-row-height: 40px;
+  --workbench-settings-header-height: 44px;
+  --workbench-settings-nav-height: 48px;
+  --workbench-settings-nav-padding-block: 8px;
+  --workbench-settings-section-padding-top: 18px;
+  --workbench-settings-row-height: 50px;
+  --workbench-settings-row-padding-block: 10px;
+  --workbench-settings-theme-card-height: 78px;
+  --workbench-settings-theme-card-padding: 12px;
 }
 
 .workbenchShell[data-standalone='true'] {
@@ -785,7 +890,7 @@
 }
 
 .workbenchShell[data-standalone='true'][data-workbench-theme='dark-modern'],
-.workbenchShell[data-standalone='true'][data-workbench-theme='dark-plus'] {
+.workbenchShell[data-standalone='true'][data-workbench-theme='midnight-blue'] {
   --workbench-seam: rgba(255, 255, 255, 0.14);
   --workbench-seam-strong: rgba(255, 255, 255, 0.2);
   --workbench-card-border: rgba(255, 255, 255, 0.18);

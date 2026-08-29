@@ -86,20 +86,22 @@ void describe('pre-split Workbench shell parity', () => {
     assert.match(sharedGitStyles, /\.gitCompactMenuHeader[\s\S]*padding:\s*3\.5px 4px/)
     assert.match(
       sharedGitStyles,
-      /\.gitCompactInput:focus-visible[\s\S]*background-color:\s*transparent/
+      /(?:\.gitCompactInput:focus-visible[\s\S]*background-color:\s*transparent|\.gitCompactSearchSlot :global\(\.velar-search-field-input\)[\s\S]*font-size:\s*11px)/
     )
     assert.match(
       sharedGitStyles,
       /\.gitCreateBranchInput:focus-visible[\s\S]*git-create-branch-input-bg/
     )
-    assert.doesNotMatch(sharedGitStyles, /\.gitCompactMenu :global\(\.velar-input/)
     assert.match(sharedControl, /FolderIcon[\s\S]*gitCompactBranchTreeFolder/)
     assert.match(sharedControl, /buildBranchTrie\(branches, namespace\)/)
     assert.match(sharedGitStyles, /\.gitCreateBranchDialog[\s\S]*max-width:\s*min\(320px/)
     assert.match(sharedControl, /Dialog[\s\S]*createDialogTitle/)
     assert.match(sharedControl, /DialogFooter[\s\S]*gitCreateBranchDialogFooter/)
     assert.match(sharedControl, /checked(?:=\{|:\s*)checkoutCreatedBranch/)
-    assert.match(sharedControl, /gitCompactSearchField[\s\S]*gitCompactFetchButton/)
+    assert.match(
+      sharedControl,
+      /(?:gitCompactSearchField|gitCompactSearchSlot)[\s\S]*gitCompactFetchButton/
+    )
     assert.match(
       sharedControl,
       /gitCompactBranchList[\s\S]*gitCompactFooter[\s\S]*openCreateBranchDialog/
@@ -111,6 +113,16 @@ void describe('pre-split Workbench shell parity', () => {
     assert.match(control, /themeColor="var\(--workbench-theme-color\)"/)
     assert.match(control, /switchWorkspaceGitBranch\([\s\S]*\{ create: true \}/)
     assert.match(shortcuts, /toggle-changes', defaultShortcut: 'Mod\+Shift\+G'/)
+  })
+
+  void test('opens the branch menu with a Git-only refresh', () => {
+    const model = readSource('src/renderer/src/hooks/useStandaloneWorkbenchPageModel.tsx')
+
+    assert.match(model, /actions:\s*\{[\s\S]*refreshGitPanel:\s*gitState\.refreshGitPanel/)
+    assert.doesNotMatch(
+      model,
+      /actions:\s*\{[\s\S]*refreshGitPanel:\s*refreshGitPanelWithWorkspace/
+    )
   })
 
   void test('extends macOS content into the title bar and lets the folder button toggle files', () => {

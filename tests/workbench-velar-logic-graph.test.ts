@@ -14,6 +14,7 @@ import {
 import { WorkbenchAgentExtensionTools } from '../src/plugins/agent-engines/main/WorkbenchAgentExtensionTools'
 import {
   discoverWorkbenchVelarProjectRoots,
+  getWorkbenchVelarDefaultScopePaths,
   mergeWorkbenchVelarProjectSnapshots,
   selectWorkbenchVelarProjectRoots,
 } from '../src/renderer/src/models/codeGraph/workbenchVelarProjectGraph'
@@ -164,6 +165,15 @@ void describe('Workbench Velar compiler graph consumer', () => {
       'packages/blocks/src/index.vel',
     ])
     assert.deepEqual(projectRoots, ['apps/server', 'apps/web', 'packages/blocks'])
+    const defaultScopePaths = getWorkbenchVelarDefaultScopePaths(projectRoots, projectRoots[0]!)
+    assert.deepEqual(defaultScopePaths, [])
+    assert.deepEqual(
+      selectWorkbenchVelarProjectRoots(projectRoots, defaultScopePaths, null),
+      projectRoots
+    )
+    assert.deepEqual(getWorkbenchVelarDefaultScopePaths(['apps/server'], 'apps/server'), [
+      'apps/server',
+    ])
     assert.deepEqual(
       selectWorkbenchVelarProjectRoots(projectRoots, ['apps'], null),
       ['apps/server', 'apps/web']

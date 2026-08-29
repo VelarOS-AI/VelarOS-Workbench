@@ -49,6 +49,7 @@ import {
 import {
   selectStandaloneWorkbenchModel,
   selectStandaloneWorkbenchModelProvider,
+  StandaloneWorkbenchCompletionDisabledOptionValue,
   updateStandaloneWorkbenchModelConfig,
   useStandaloneWorkbenchModelConfig,
 } from '@renderer/runtime/standaloneWorkbenchModelConfig'
@@ -93,12 +94,10 @@ type WorkbenchSettingsSectionId =
 
 interface WorkbenchSettingsDialogProps {
   conflicts: WorkbenchKeymapConflict[]
-  globalGitSshKeyPath: string
   keymap: WorkbenchKeyboardShortcutMap
   locale: AppLocale
   open: boolean
   preferences: WorkbenchPreferences
-  projectGitSshKeyPath: string
   project?: LooseOptional<{
     name: string
     rootPath: string
@@ -109,7 +108,6 @@ interface WorkbenchSettingsDialogProps {
   onOpenProjectFile?: (path: string) => void | Promise<void>
   onOpenChange: (open: boolean) => void
   onPreferencesChange: (patch: Partial<WorkbenchPreferences>) => void
-  onProjectGitSshKeyPathChange: (value: string) => void
   onResetAllShortcuts: () => void
   onResetPreferences: () => void
   onResetShortcut: (action: WorkbenchKeyboardShortcutAction) => void
@@ -177,18 +175,15 @@ function WorkbenchSettingsPill({
 
 export function WorkbenchSettingsDialog({
   conflicts,
-  globalGitSshKeyPath,
   keymap,
   locale,
   open,
   preferences,
-  projectGitSshKeyPath,
   project = null,
   onExitProject,
   onLocaleChange,
   onOpenChange,
   onPreferencesChange,
-  onProjectGitSshKeyPathChange,
   onResetAllShortcuts,
   onResetPreferences,
   onResetShortcut,
@@ -231,6 +226,13 @@ export function WorkbenchSettingsDialog({
     activeProviderModelCatalog?.models ?? [],
     [modelConfig.model, modelConfig.completionModel]
   )
+  const completionModelOptions = [
+    {
+      value: StandaloneWorkbenchCompletionDisabledOptionValue,
+      label: t('workbench.settingsAiCompletionModelNone'),
+    },
+    ...modelOptions,
+  ]
   const modelCatalogDescription = isLoadingProviderModels
     ? t('workbench.settingsModelCatalogLoading', { provider: modelProviderPreset.label })
     : activeProviderModelCatalog?.models.length
@@ -379,6 +381,7 @@ export function WorkbenchSettingsDialog({
 
     let active = true
     setIsLoadingProviderModels(true)
+    setProviderModelCatalog(null)
     setProviderModelCatalogError(null)
     const lease = timers.after(300, () => {
       void window.velarosWorkbenchModel.listProviderModels({
@@ -521,14 +524,14 @@ export function WorkbenchSettingsDialog({
         description: t('workbench.settingsThemeDarkModernDescription'),
       },
       {
-        value: 'dark-plus',
-        label: t('workbench.settingsThemeDarkPlus'),
-        description: t('workbench.settingsThemeDarkPlusDescription'),
+        value: 'warm-paper',
+        label: t('workbench.settingsThemeWarmPaper'),
+        description: t('workbench.settingsThemeWarmPaperDescription'),
       },
       {
-        value: 'light-plus',
-        label: t('workbench.settingsThemeLightPlus'),
-        description: t('workbench.settingsThemeLightPlusDescription'),
+        value: 'midnight-blue',
+        label: t('workbench.settingsThemeMidnightBlue'),
+        description: t('workbench.settingsThemeMidnightBlueDescription'),
       },
     ]
 
@@ -712,16 +715,6 @@ export function WorkbenchSettingsDialog({
             </span>
           </div>
         </SettingRow>
-        <SettingRow
-          title={t('workbench.settingsAiCompletionEnabled')}
-          description={t('workbench.settingsAiCompletionEnabledHint')}
-        >
-          <Switch
-            size="sm"
-            checked={preferences.aiCompletionEnabled}
-            onCheckedChange={(checked) => onPreferencesChange({ aiCompletionEnabled: checked })}
-          />
-        </SettingRow>
       </div>
     )
   }
@@ -768,6 +761,26 @@ export function WorkbenchSettingsDialog({
             onChange={selectStandaloneWorkbenchModelProvider}
           />
         </SettingRow>
+        {modelProviderPreset.baseURLConfigurable && (
+          <SettingRow
+            title={t('workbench.settingsModelBaseUrl')}
+            description={t('workbench.settingsModelBaseUrlDescription')}
+          >
+            <Input
+              size="sm"
+              type="url"
+              autoComplete="url"
+              spellCheck={false}
+              value={modelConfig.baseURL}
+              placeholder={t('workbench.settingsModelBaseUrlPlaceholder')}
+              onChange={(event) =>
+                updateStandaloneWorkbenchModelConfig({
+                  baseURL: event.currentTarget.value,
+                })
+              }
+            />
+          </SettingRow>
+        )}
         <SettingRow
           title={t('workbench.settingsModelName')}
           description={modelCatalogDescription}
@@ -789,8 +802,10 @@ export function WorkbenchSettingsDialog({
           <Select
             size="sm"
             className={styles.workbenchSettingsSelectTrigger}
-            value={modelConfig.completionModel}
-            options={modelOptions}
+            value={
+              modelConfig.completionModel || StandaloneWorkbenchCompletionDisabledOptionValue
+            }
+            options={completionModelOptions}
             onChange={(model) =>
               selectStandaloneWorkbenchModel(modelConfig.provider, model, 'completion')
             }
@@ -927,7 +942,7 @@ export function WorkbenchSettingsDialog({
     )
   }
 
-  function pluginStatusLabel(plugin: WorkbenchResourcePluginRecord): string {
+  function pluginStatusLabel(plugin: WorkbenchResourcePluginRecord): Nullable<string> {
     switch (plugin.status) {
       case 'available':
         return t('workbench.settingsPluginStatusAvailable')
@@ -940,7 +955,7 @@ export function WorkbenchSettingsDialog({
       case 'failed':
         return t('workbench.settingsPluginStatusFailed')
       default:
-        return t('workbench.settingsPluginStatusMissing')
+        return null
     }
   }
 
@@ -961,6 +976,7 @@ export function WorkbenchSettingsDialog({
   }
 
   function renderPluginRow(plugin: WorkbenchResourcePluginRecord): ReactElement {
+    const statusLabel = pluginStatusLabel(plugin)
     return (
       <div key={plugin.id} className={styles.workbenchSettingsPluginRow}>
         <span className={styles.workbenchSettingsPluginIcon}>
@@ -980,17 +996,19 @@ export function WorkbenchSettingsDialog({
           )}
         </div>
         <div className={styles.workbenchSettingsPluginActions}>
-          <WorkbenchSettingsPill
-            tone={
-              plugin.status === 'available'
-                ? 'success'
-                : plugin.status === 'failed'
-                  ? 'warning'
-                  : 'default'
-            }
-          >
-            {pluginStatusLabel(plugin)}
-          </WorkbenchSettingsPill>
+          {!!statusLabel && (
+            <WorkbenchSettingsPill
+              tone={
+                plugin.status === 'available'
+                  ? 'success'
+                  : plugin.status === 'failed'
+                    ? 'warning'
+                    : 'default'
+              }
+            >
+              {statusLabel}
+            </WorkbenchSettingsPill>
+          )}
           {plugin.installed ? (
             <Switch
               size="sm"
@@ -1135,23 +1153,6 @@ export function WorkbenchSettingsDialog({
               onCheckedChange={productAnalytics.setEnabled}
             />
           </div>
-        </SettingRow>
-        <SettingRow
-          title={t('workbench.settingsGitSshKeyPath')}
-          description={t('workbench.settingsGitSshKeyPathDescription')}
-        >
-          <Input
-            size="sm"
-            value={projectGitSshKeyPath}
-            placeholder={
-              globalGitSshKeyPath
-                ? t('workbench.settingsGitSshKeyPathGlobalPlaceholder', {
-                    path: globalGitSshKeyPath,
-                  })
-                : t('workbench.settingsGitSshKeyPathPlaceholder')
-            }
-            onChange={(event) => onProjectGitSshKeyPathChange(event.currentTarget.value)}
-          />
         </SettingRow>
       </div>
     )

@@ -7,16 +7,17 @@ import {
   useRef,
   useState,
 } from 'react'
+import { useWorkbenchDensity } from '@renderer/hooks/useWorkbenchPreferences'
 import { useWorkbenchI18n } from '@renderer/i18n'
 import {
   buildTreeNodes,
   createOpenState,
   type FileTreeNodeData,
-  ROW_HEIGHT,
   TREE_INDENT,
   TREE_OVERSCAN_COUNT,
 } from '@renderer/models/files/fileTree.model'
 import type { WorkbenchGitDecorationMap } from '@renderer/models/git/workbenchGitModel'
+import { getWorkbenchFileTreeRowHeight } from '@renderer/models/settings/workbenchPreferences'
 import { ROOT_PATH } from '@renderer/models/shared/workbenchUtils'
 import type { NodeApi, NodeRendererProps, TreeApi } from 'react-arborist'
 import { Tree } from 'react-arborist'
@@ -99,6 +100,8 @@ export function FileTree({
   onMoveEntries,
 }: FileTreeProps): ReactElement {
   const { t } = useWorkbenchI18n()
+  const density = useWorkbenchDensity()
+  const rowHeight = getWorkbenchFileTreeRowHeight(density)
   const treeRef = useRef<FileTreeApi>(null)
   const syncingOpenStateRef = useRef(false)
   const openStateChangedInTreeRef = useRef(false)
@@ -223,7 +226,7 @@ export function FileTree({
           data={treeData}
           idAccessor="id"
           childrenAccessor="children"
-          rowHeight={ROW_HEIGHT}
+          rowHeight={rowHeight}
           overscanCount={TREE_OVERSCAN_COUNT}
           indent={TREE_INDENT}
           width={treeSize.width}

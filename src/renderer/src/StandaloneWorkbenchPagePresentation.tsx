@@ -47,7 +47,10 @@ import { WorkbenchGitToolPanel } from './components/git/WorkbenchGitToolPanel'
 import { QuickOpen } from './components/project/QuickOpen'
 import { WorkbenchSettingsDialog } from './components/settings/WorkbenchSettingsDialog'
 import { type BottomTool, CommandPanel } from './components/terminal/CommandPanel'
-import { discoverWorkbenchVelarProjectRoots } from './models/codeGraph/workbenchVelarProjectGraph'
+import {
+  discoverWorkbenchVelarProjectRoots,
+  getWorkbenchVelarDefaultScopePaths,
+} from './models/codeGraph/workbenchVelarProjectGraph'
 import styles from './styles/workbenchPageStyles'
 import { useWorkbenchPageContext } from './WorkbenchPageModelContext'
 
@@ -97,7 +100,6 @@ export function StandaloneWorkbenchPagePresentation({
     workbench,
     surface,
     layout,
-    projectGitSettings,
     workbenchPreferences,
     workbenchKeymap,
     editorNavigation,
@@ -109,7 +111,6 @@ export function StandaloneWorkbenchPagePresentation({
     translate,
     locale,
     t,
-    globalGitConfig,
     shellStyle,
     projectAiIndexSkipped,
     codeGraphAvailable,
@@ -209,6 +210,16 @@ export function StandaloneWorkbenchPagePresentation({
       ),
     [velarStructureProjectFiles, velarStructureProjectRoots, workbench.rootEntries]
   )
+  const velarStructureDefaultScopePaths = useMemo(
+    () =>
+      getWorkbenchVelarDefaultScopePaths(
+        velarStructureProjectRoots,
+        velarStructureDefaultRoot
+      ),
+    [velarStructureDefaultRoot, velarStructureProjectRoots]
+  )
+  const velarStructureAvailable =
+    velarStructureProjectRoots.length > 0 || velarStructureDefaultRoot !== null
   const handleVelarStructureSnapshotChange = useCallback(
     (snapshot: VelarLogicGraphSnapshot): void => setVelarStructureSnapshot(snapshot),
     []
@@ -219,6 +230,10 @@ export function StandaloneWorkbenchPagePresentation({
   )
   const describeVelarStructureTab = useCallback(
     (scopePaths: readonly string[]) => {
+      if (scopePaths.length === 0) {
+        const label = t('workbench.logicGraphProjectOverview')
+        return { label, title: label }
+      }
       const selections = scopePaths.map((scope) => {
         const node = velarStructureSnapshot?.nodes.find((candidate) => candidate.id === scope)
         return {
@@ -239,7 +254,7 @@ export function StandaloneWorkbenchPagePresentation({
         title: selections.map((selection) => selection.title).join('\n'),
       }
     },
-    [velarStructureSnapshot]
+    [t, velarStructureSnapshot]
   )
   useEffect(() => {
     if (!agentEnginesEnabled && surface.activeRightTool !== 'chat') surface.closeRightTool()
@@ -263,17 +278,18 @@ export function StandaloneWorkbenchPagePresentation({
     if (
       !dialogs.velarLogicGraphOpen
       || velarStructureTabs.length > 0
-      || !velarStructureDefaultRoot
+      || !velarStructureAvailable
       || (!velarManifestDiscoveryComplete && velarStructureProjectRoots.length === 0)
     ) return
-    const scopePaths = [velarStructureDefaultRoot]
+    const scopePaths = velarStructureDefaultScopePaths
     const id = velarStructureTabId(scopePaths)
     setVelarStructureTabs([{ id, scopePaths }])
     setActiveVelarStructureTabId(id)
   }, [
     dialogs.velarLogicGraphOpen,
     velarManifestDiscoveryComplete,
-    velarStructureDefaultRoot,
+    velarStructureAvailable,
+    velarStructureDefaultScopePaths,
     velarStructureProjectRoots.length,
     velarStructureTabs.length,
   ])
@@ -456,8 +472,8 @@ export function StandaloneWorkbenchPagePresentation({
     dialogs.setVelarLogicGraphOpen(true)
     dialogs.setVelarLogicGraphActive(true)
     setVelarStructureActiveTab('structure')
-    if (velarStructureDefaultRoot) {
-      const scopePaths = [velarStructureDefaultRoot]
+    if (velarStructureAvailable) {
+      const scopePaths = velarStructureDefaultScopePaths
       const id = velarStructureTabId(scopePaths)
       setVelarStructureTabs((current) =>
         current.some((tab) => tab.id === id) ? current : [...current, { id, scopePaths }]
@@ -467,11 +483,10 @@ export function StandaloneWorkbenchPagePresentation({
   }
 
   function openVelarStructureScope(scopePaths: readonly string[]): void {
-    const normalizedPaths = [...new Set(scopePaths)]
-    if (normalizedPaths.length === 0 && velarStructureDefaultRoot) {
-      normalizedPaths.push(velarStructureDefaultRoot)
-    }
-    if (normalizedPaths.length === 0) return
+    const normalizedPaths = scopePaths.length === 0
+      ? [...velarStructureDefaultScopePaths]
+      : [...new Set(scopePaths)]
+    if (normalizedPaths.length === 0 && !velarStructureAvailable) return
     const id = velarStructureTabId(normalizedPaths)
     setVelarStructureTabs((current) =>
       current.some((tab) => tab.id === id)
@@ -619,6 +634,7 @@ export function StandaloneWorkbenchPagePresentation({
                   : 'files'
             }
             embeddedChrome={{
+              density: workbenchPreferences.preferences.density,
               editorStyle: workbenchPreferences.style,
               filePanelWidth: layout.filePaneWidth,
               isFilePanelOpen: surface.isFilePanelOpen,
@@ -792,8 +808,6 @@ export function StandaloneWorkbenchPagePresentation({
         <WorkbenchSettingsDialog
           open={dialogs.settingsOpen}
           preferences={workbenchPreferences.preferences}
-          globalGitSshKeyPath={globalGitConfig.privateKeyPath || globalGitConfig.sshKeyPath}
-          projectGitSshKeyPath={projectGitSettings.settings.gitSshKeyPath}
           keymap={workbenchKeymap.keymap}
           conflicts={workbenchKeymap.conflicts}
           locale={locale}
@@ -804,9 +818,6 @@ export function StandaloneWorkbenchPagePresentation({
           onExitProject={model.actions.exitCurrentProject}
           onOpenChange={dialogs.setSettingsOpen}
           onPreferencesChange={workbenchPreferences.updatePreferences}
-          onProjectGitSshKeyPathChange={(gitSshKeyPath) =>
-            projectGitSettings.updateSettings({ gitSshKeyPath })
-          }
           onResetPreferences={workbenchPreferences.resetPreferences}
           onSetShortcut={workbenchKeymap.setShortcut}
           onResetShortcut={workbenchKeymap.resetShortcut}

@@ -15,6 +15,7 @@ export interface StandaloneWorkbenchModelProviderPreset {
   defaultModel: string
   completionModel: string
   apiKeyOptional: boolean
+  baseURLConfigurable: boolean
   validationKind: ModelProviderValidationKind
   apiKeyEnvironmentName?: string
   models: readonly string[]
@@ -52,6 +53,7 @@ export const StandaloneWorkbenchModelProviderPresets: readonly StandaloneWorkben
         defaultModel,
         completionModel: resolveCompletionModel(models, defaultModel),
         apiKeyOptional: manifest.apiKeyOptional ?? false,
+        baseURLConfigurable: manifest.baseURLConfigurable ?? false,
         validationKind: manifest.validationKind,
         ...(manifest.defaultApiKeyEnv
           ? { apiKeyEnvironmentName: manifest.defaultApiKeyEnv }

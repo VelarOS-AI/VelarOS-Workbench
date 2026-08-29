@@ -13,6 +13,7 @@ import {
   type ReactElement,
 } from 'react'
 import { useWorkbenchI18n } from '@renderer/i18n'
+import type { WorkbenchDensity } from '@renderer/models/settings/workbenchPreferences'
 
 import styles from '../../styles/workbenchPageStyles'
 import { WorkbenchLogicGraphSidebar } from '../codeGraph/WorkbenchLogicGraphSidebar'
@@ -32,6 +33,7 @@ interface WorkbenchEmbeddedKernelProps {
 }
 
 interface WorkbenchEmbeddedKernelChrome {
+  density: WorkbenchDensity
   filePanelWidth: number
   isFilePanelOpen: boolean
   isFilePanelInline: boolean
@@ -92,7 +94,7 @@ export function WorkbenchEmbeddedKernel({
         data-file-panel-open={embeddedChrome.isFilePanelOpen}
         data-file-panel-inline={embeddedChrome.isFilePanelInline}
         data-workbench-theme={editor.workbenchTheme}
-        data-workbench-density="compact"
+        data-workbench-density={embeddedChrome.density}
         style={
           {
             ...embeddedChrome.editorStyle,

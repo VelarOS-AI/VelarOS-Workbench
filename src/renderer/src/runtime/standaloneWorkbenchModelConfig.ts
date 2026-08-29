@@ -17,6 +17,8 @@ export interface StandaloneWorkbenchModelConfig {
 }
 
 const ModelConfigStorageKey = 'velaros-workbench-app:model-config'
+const LegacyPreferencesStorageKey = 'velaros.workbench.preferences.v1'
+export const StandaloneWorkbenchCompletionDisabledOptionValue = 'workbench:none'
 const DefaultProvider = getStandaloneWorkbenchModelProviderPreset('openrouter')
 const DefaultModelConfig: StandaloneWorkbenchModelConfig = {
   provider: DefaultProvider.id,
@@ -32,31 +34,73 @@ let currentConfig = readInitialModelConfig()
 function readInitialModelConfig(): StandaloneWorkbenchModelConfig {
   if (typeof window === 'undefined') return DefaultModelConfig
 
+  const legacyAiCompletionEnabled = consumeLegacyAiCompletionEnabled()
   try {
     const raw = window.localStorage.getItem(ModelConfigStorageKey)
-    if (!raw) return DefaultModelConfig
+    if (!raw) {
+      const config = {
+        ...DefaultModelConfig,
+        completionModel:
+          legacyAiCompletionEnabled === false ? '' : DefaultModelConfig.completionModel,
+      }
+      if (legacyAiCompletionEnabled !== undefined) persistNonSecretModelConfig(config)
+      return config
+    }
 
     const stored = JSON.parse(raw) as Record<string, unknown>
     const provider = getStandaloneWorkbenchModelProviderPreset(
       typeof stored.provider === 'string' ? stored.provider : DefaultModelConfig.provider
     )
-    return {
+    const storedCompletionModel =
+      typeof stored.completionModel === 'string' ? stored.completionModel : undefined
+    const config = {
       provider: provider.id,
       model: resolveStandaloneWorkbenchProviderModel(
         provider.id,
         typeof stored.model === 'string' ? stored.model : undefined,
         'agent'
       ),
-      completionModel: resolveStandaloneWorkbenchProviderModel(
-        provider.id,
-        typeof stored.completionModel === 'string' ? stored.completionModel : undefined,
-        'completion'
-      ),
-      baseURL: provider.defaultBaseURL,
+      completionModel:
+        legacyAiCompletionEnabled === false || storedCompletionModel === ''
+          ? ''
+          : resolveStandaloneWorkbenchProviderModel(
+              provider.id,
+              storedCompletionModel,
+              'completion'
+            ),
+      baseURL:
+        provider.baseURLConfigurable && typeof stored.baseURL === 'string'
+          ? stored.baseURL
+          : provider.defaultBaseURL,
       apiKey: '',
     }
+    if (legacyAiCompletionEnabled !== undefined) persistNonSecretModelConfig(config)
+    return config
   } catch {
-    return DefaultModelConfig
+    return {
+      ...DefaultModelConfig,
+      completionModel:
+        legacyAiCompletionEnabled === false ? '' : DefaultModelConfig.completionModel,
+    }
+  }
+}
+
+function consumeLegacyAiCompletionEnabled(): boolean | undefined {
+  try {
+    const raw = window.localStorage.getItem(LegacyPreferencesStorageKey)
+    if (!raw) return undefined
+    const stored = JSON.parse(raw)
+    if (!stored || typeof stored !== 'object' || Array.isArray(stored)) return undefined
+
+    const preferences = stored as Record<string, unknown>
+    if (typeof preferences.aiCompletionEnabled !== 'boolean') return undefined
+
+    const enabled = preferences.aiCompletionEnabled
+    delete preferences.aiCompletionEnabled
+    window.localStorage.setItem(LegacyPreferencesStorageKey, JSON.stringify(preferences))
+    return enabled
+  } catch {
+    return undefined
   }
 }
 
@@ -103,7 +147,11 @@ export function selectStandaloneWorkbenchModel(
   kind: 'agent' | 'completion'
 ): void {
   const provider = getStandaloneWorkbenchModelProviderPreset(providerId)
-  const selected = resolveStandaloneWorkbenchProviderModel(provider.id, model, kind)
+  const selected =
+    kind === 'completion'
+    && (model === StandaloneWorkbenchCompletionDisabledOptionValue || !model.trim())
+      ? ''
+      : resolveStandaloneWorkbenchProviderModel(provider.id, model, kind)
   updateStandaloneWorkbenchModelConfig(
     kind === 'completion' ? { completionModel: selected } : { model: selected }
   )
@@ -119,7 +167,7 @@ export function selectStandaloneWorkbenchAgentModel(
     provider: provider.id,
     model: resolveStandaloneWorkbenchProviderModel(provider.id, model, 'agent'),
     completionModel: providerChanged ? provider.completionModel : currentConfig.completionModel,
-    baseURL: provider.defaultBaseURL,
+    baseURL: providerChanged ? provider.defaultBaseURL : currentConfig.baseURL,
     apiKey: providerChanged ? '' : currentConfig.apiKey,
   })
 }

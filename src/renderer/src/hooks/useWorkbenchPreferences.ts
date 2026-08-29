@@ -8,6 +8,7 @@ import {
   readWorkbenchPreferences,
   saveWorkbenchPreferences,
   WORKBENCH_PREFERENCES_CHANGED_EVENT,
+  type WorkbenchDensity,
   type WorkbenchEditorMetrics,
   type WorkbenchPreferences,
 } from '../models/settings/workbenchPreferences'
@@ -72,39 +73,6 @@ export function useWorkbenchPreferences(): WorkbenchPreferencesController {
 }
 
 /**
- * 只订阅“AI 内联补全是否启用”这一个偏好。
- *
- * 编辑器组件用它来实时开关 Tab 补全，避免为了一个布尔值订阅整份偏好（含主题/字号等）。
- */
-export function useWorkbenchAiCompletionEnabled(): boolean {
-  const [enabled, setEnabled] = useState<boolean>(
-    () => readWorkbenchPreferences().aiCompletionEnabled
-  )
-
-  useEffect(() => {
-    const refresh = (): void => {
-      setEnabled(readWorkbenchPreferences().aiCompletionEnabled)
-    }
-
-    const handleStorageChanged = (event: StorageEvent): void => {
-      if (event.key === 'velaros.workbench.preferences.v1') {
-        refresh()
-      }
-    }
-
-    window.addEventListener(WORKBENCH_PREFERENCES_CHANGED_EVENT, refresh)
-    window.addEventListener('storage', handleStorageChanged)
-
-    return () => {
-      window.removeEventListener(WORKBENCH_PREFERENCES_CHANGED_EVENT, refresh)
-      window.removeEventListener('storage', handleStorageChanged)
-    }
-  }, [])
-
-  return enabled
-}
-
-/**
  * 只订阅会改变 CodeMirror 几何尺寸的偏好。
  * 外层 CSS 变量负责视觉样式，这个值负责显式触发编辑器的测量缓存刷新。
  */
@@ -133,4 +101,29 @@ export function useWorkbenchEditorMetrics(): WorkbenchEditorMetrics {
   }, [])
 
   return metrics
+}
+
+/** 只订阅会改变文件树虚拟行高的密度值。 */
+export function useWorkbenchDensity(): WorkbenchDensity {
+  const [density, setDensity] = useState<WorkbenchDensity>(() => readWorkbenchPreferences().density)
+
+  useEffect(() => {
+    const refresh = (): void => {
+      setDensity(readWorkbenchPreferences().density)
+    }
+
+    const handleStorageChanged = (event: StorageEvent): void => {
+      if (event.key === 'velaros.workbench.preferences.v1') refresh()
+    }
+
+    window.addEventListener(WORKBENCH_PREFERENCES_CHANGED_EVENT, refresh)
+    window.addEventListener('storage', handleStorageChanged)
+
+    return () => {
+      window.removeEventListener(WORKBENCH_PREFERENCES_CHANGED_EVENT, refresh)
+      window.removeEventListener('storage', handleStorageChanged)
+    }
+  }, [])
+
+  return density
 }

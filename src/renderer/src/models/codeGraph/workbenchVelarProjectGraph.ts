@@ -49,6 +49,17 @@ export function discoverWorkbenchVelarProjectRoots(paths: readonly string[]): st
   return [...roots].sort((left, right) => left.localeCompare(right))
 }
 
+export function getWorkbenchVelarDefaultScopePaths(
+  projectRoots: readonly string[],
+  fallbackRoot: Nullable<string>
+): string[] {
+  const roots = [...new Set(projectRoots.map(normalizePath))]
+  if (roots.length > 1) return []
+
+  const normalizedFallback = fallbackRoot === null ? '' : normalizePath(fallbackRoot)
+  return normalizedFallback ? [normalizedFallback] : []
+}
+
 export function workbenchVelarProjectRootForPath(
   path: string,
   projectRoots: readonly string[]

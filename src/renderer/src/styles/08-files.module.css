@@ -65,7 +65,7 @@
 
 .panelHeader {
   @apply relative flex shrink-0 items-center gap-1;
-  min-height: 40px;
+  min-height: var(--workbench-panel-header-height);
   padding-inline: 10px;
   border-bottom: 1px solid var(--workbench-border);
   background: var(--workbench-toolbar);
@@ -197,7 +197,7 @@
 .treeRow {
   @apply flex w-full items-center gap-1.5 border-0 bg-transparent text-left text-foreground;
   height: 100%;
-  min-height: 23px;
+  min-height: var(--workbench-tree-row-height);
   border-radius: 0;
   box-shadow: none;
   outline: none;
@@ -215,7 +215,7 @@
 
 .searchResultRow {
   @apply flex w-full items-center gap-2 border-0 bg-transparent text-left text-foreground;
-  min-height: 34px;
+  min-height: var(--workbench-search-result-row-height);
   padding: 4px 10px;
   font-size: 12px;
 }

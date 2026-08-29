@@ -2,7 +2,7 @@
 
 .workbenchTopToolbar {
   @apply flex shrink-0 items-center justify-between gap-3 border-b;
-  min-height: 36px;
+  min-height: var(--workbench-topbar-height);
   padding-inline: 10px 12px;
   border-color: var(--workbench-border);
   background: var(--workbench-toolbar);
@@ -14,7 +14,7 @@
   flex-shrink: 0;
   align-items: center;
   gap: 6px;
-  min-height: 36px;
+  min-height: var(--workbench-topbar-height);
   padding-inline: 2px 0;
   border-bottom: 1px solid var(--workbench-border);
   background: var(--workbench-toolbar);

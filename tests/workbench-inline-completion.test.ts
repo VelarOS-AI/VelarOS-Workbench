@@ -10,6 +10,14 @@ import {
   resolveStandaloneWorkbenchProviderModel,
   StandaloneWorkbenchModelProviderPresets,
 } from '../src/renderer/src/runtime/standaloneWorkbenchModelCatalog'
+import {
+  getStandaloneWorkbenchModelConfig,
+  selectStandaloneWorkbenchAgentModel,
+  selectStandaloneWorkbenchModel,
+  selectStandaloneWorkbenchModelProvider,
+  StandaloneWorkbenchCompletionDisabledOptionValue,
+  updateStandaloneWorkbenchModelConfig,
+} from '../src/renderer/src/runtime/standaloneWorkbenchModelConfig'
 
 describe('Workbench inline completion', () => {
   test('offers supported providers without raw custom-provider setup', () => {
@@ -22,10 +30,15 @@ describe('Workbench inline completion', () => {
 
     const openAI = getStandaloneWorkbenchModelProviderPreset('openai')
     expect(openAI.defaultBaseURL).toBe('https://api.openai.com/v1')
+    expect(openAI.baseURLConfigurable).toBe(false)
     expect(openAI.models).toContain(openAI.defaultModel)
     expect(openAI.models).toContain(openAI.completionModel)
     expect(resolveStandaloneWorkbenchProviderModel('openai', 'remote-model-next', 'agent'))
       .toBe('remote-model-next')
+
+    const gateway = getStandaloneWorkbenchModelProviderPreset('freellmapi')
+    expect(gateway.baseURLConfigurable).toBe(true)
+    expect(gateway.validationKind).toBe('openai-compatible-models')
   })
 
   test('projects only the configured chat model into the composer selector', () => {
@@ -54,6 +67,42 @@ describe('Workbench inline completion', () => {
       { value: 'remote-b', label: 'Remote B' },
       { value: 'configured-legacy', label: 'configured-legacy' },
     ])
+  })
+
+  test('keeps a custom gateway address when the configured model changes', () => {
+    const originalConfig = getStandaloneWorkbenchModelConfig()
+    try {
+      selectStandaloneWorkbenchModelProvider('freellmapi')
+      updateStandaloneWorkbenchModelConfig({
+        baseURL: 'https://gateway.example.com/v1',
+      })
+      selectStandaloneWorkbenchAgentModel('freellmapi', 'relay-model')
+
+      expect(getStandaloneWorkbenchModelConfig()).toMatchObject({
+        provider: 'freellmapi',
+        model: 'relay-model',
+        baseURL: 'https://gateway.example.com/v1',
+      })
+    } finally {
+      updateStandaloneWorkbenchModelConfig(originalConfig)
+    }
+  })
+
+  test('uses the completion model selection as the completion enabled state', () => {
+    const originalConfig = getStandaloneWorkbenchModelConfig()
+    try {
+      selectStandaloneWorkbenchModel(
+        'openrouter',
+        StandaloneWorkbenchCompletionDisabledOptionValue,
+        'completion'
+      )
+      expect(getStandaloneWorkbenchModelConfig().completionModel).toBe('')
+
+      selectStandaloneWorkbenchModel('openrouter', 'openrouter/auto', 'completion')
+      expect(getStandaloneWorkbenchModelConfig().completionModel).toBe('openrouter/auto')
+    } finally {
+      updateStandaloneWorkbenchModelConfig(originalConfig)
+    }
   })
 
   test('uses the independent completion model path and cleans fenced output', async () => {

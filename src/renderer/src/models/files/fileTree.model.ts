@@ -17,7 +17,6 @@ export interface FileTreeNodeData {
   children?: FileTreeNodeData[]
 }
 
-export const ROW_HEIGHT = 23
 export const TREE_INDENT = 16
 export const TREE_OVERSCAN_COUNT = 8
 export const DEFAULT_TREE_WIDTH = 280
