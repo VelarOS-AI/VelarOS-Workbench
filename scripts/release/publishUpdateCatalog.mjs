@@ -95,9 +95,11 @@ class ReleaseClient {
     return contentType.includes('json') ? response.json() : response.arrayBuffer()
   }
 
-  async ensurePrivateRelease(tag, version, sourceCommit) {
+  async ensurePublicRelease(tag, version, sourceCommit) {
     const repository = await this.request(`https://api.github.com/repos/${this.repository}`)
-    if (repository.private !== true) throw new Error(`${this.repository} must remain private`)
+    if (repository.private !== false || repository.visibility !== 'public') {
+      throw new Error(`${this.repository} must remain public`)
+    }
     const existing = await this.request(
       `https://api.github.com/repos/${this.repository}/releases/tags/${encodeURIComponent(tag)}`,
       { allowNotFound: true },
@@ -109,7 +111,7 @@ class ReleaseClient {
       body: JSON.stringify({
         tag_name: tag,
         name: `Workbench v${version} candidate`,
-        body: `Private Workbench update candidate from ${sourceCommit}.`,
+        body: `Public Workbench update candidate from ${sourceCommit}.`,
         draft: false,
         prerelease: true,
         make_latest: 'false',
@@ -192,7 +194,7 @@ async function run() {
     requireEnvironment('VELAROS_RELEASE_REPO_TOKEN'),
   )
   const tag = `workbench-v${version}`
-  const release = await client.ensurePrivateRelease(tag, version, sourceCommit)
+  const release = await client.ensurePublicRelease(tag, version, sourceCommit)
   const artifacts = []
   for (const fileName of files) {
     const descriptor = artifactDescriptor(fileName)
