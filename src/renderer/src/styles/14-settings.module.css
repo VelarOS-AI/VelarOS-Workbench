@@ -159,6 +159,60 @@
   max-width: 880px;
 }
 
+.workbenchSettingsCombinedPanel {
+  gap: 30px;
+}
+
+.workbenchSettingsGroup {
+  width: 100%;
+}
+
+.workbenchSettingsGroupHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 6px;
+}
+
+.workbenchSettingsGroupCopy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.workbenchSettingsGroupAction {
+  display: flex;
+  flex: none;
+  align-items: center;
+}
+
+.workbenchSettingsGroupTitle {
+  color: var(--workbench-text);
+  font-size: 13px;
+  font-weight: 680;
+  line-height: 18px;
+}
+
+.workbenchSettingsGroupDescription {
+  color: var(--workbench-text-muted);
+  font-size: 11px;
+  line-height: 15px;
+}
+
+.workbenchSettingsGroup > .workbenchSettingsSectionPanel {
+  min-height: auto;
+  flex: none;
+  overflow: visible;
+  padding: 0;
+}
+
+.workbenchSettingsGroup > .workbenchSettingsSectionPanel > * {
+  max-width: none;
+}
+
 .workbenchSettingsRow {
   display: grid;
   min-height: var(--workbench-settings-row-height);

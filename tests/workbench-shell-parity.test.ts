@@ -41,7 +41,11 @@ void describe('pre-split Workbench shell parity', () => {
     assert.match(panel, /childrenByPath=\{childrenByPath\}/)
     assert.doesNotMatch(panel, /treeRootEntries/)
     assert.doesNotMatch(row, /treeRootActionButton/)
-    assert.match(styles, /\.filePanelProjectHeader[\s\S]*height:\s*35px/)
+    assert.match(
+      styles,
+      /\.filePanelProjectHeader[\s\S]*flex:\s*0 0 var\(--workbench-tab-height\)[\s\S]*height:\s*var\(--workbench-tab-height\)/
+    )
+    assert.doesNotMatch(styles, /\.filePanelProjectHeader[\s\S]*height:\s*35px/)
     assert.match(panel, /<SearchField/)
     assert.match(panel, /className=\{styles\.searchInputShell\}[\s\S]*<SearchField/)
     assert.doesNotMatch(panel, /searchInputClearButton/)
@@ -321,14 +325,63 @@ void describe('pre-split Workbench shell parity', () => {
     const main = readSource('src/main/index.ts')
     const readme = readSource('README.md')
 
-    assert.match(settings, /id: 'plugins'/)
+    assert.match(settings, /id: 'extensions'/)
     assert.match(settings, /velarosWorkbenchResourcePlugins/)
     assert.match(settings, /settingsPluginSharedHint/)
-    assert.match(settings, /id: 'mods'/)
+    assert.match(settings, /renderPluginsSection\(\)/)
+    assert.match(settings, /renderModsSection\(\)/)
     assert.match(preload, /velarosWorkbenchAgentMods/)
     assert.match(main, /WorkbenchModIpc/)
     assert.match(readme, /product-owned built-ins/)
     assert.match(readme, /Desktop\s+and Workbench discover the same physical installation/)
+  })
+
+  void test('groups related settings into five product-level sections', () => {
+    const settings = readSource('src/renderer/src/components/settings/WorkbenchSettingsDialog.tsx')
+    const sectionIds = [...settings.matchAll(/id: '(general|editor|ai|extensions|system)' as const/g)]
+      .map((match) => match[1])
+
+    assert.deepEqual(sectionIds, ['general', 'editor', 'ai', 'extensions', 'system'])
+    assert.match(settings, /renderGeneralSection\(\)/)
+    assert.match(settings, /renderEditorGroup\(\)/)
+    assert.match(settings, /renderAiSection\(\)/)
+    assert.match(settings, /renderExtensionsSection\(\)/)
+    assert.match(settings, /renderSystemSection\(\)/)
+  })
+
+  void test('keeps compact settings actions on their subsection headers', () => {
+    const settings = readSource('src/renderer/src/components/settings/WorkbenchSettingsDialog.tsx')
+    const projectSection = settings.slice(
+      settings.indexOf('function renderProjectSection'),
+      settings.indexOf('async function changeAccount')
+    )
+    const accountSection = settings.slice(
+      settings.indexOf('function renderAccountSection'),
+      settings.indexOf('function renderEditorSection')
+    )
+    const appearanceSection = settings.slice(
+      settings.indexOf('function renderAppearanceSection'),
+      settings.indexOf('function renderProjectSection')
+    )
+    const keymapSection = settings.slice(
+      settings.indexOf('function renderKeymapSection'),
+      settings.indexOf('function renderLanguageSection')
+    )
+    const generalSection = settings.slice(
+      settings.indexOf('function renderGeneralSection'),
+      settings.indexOf('function renderEditorGroup')
+    )
+    const editorSection = settings.slice(
+      settings.indexOf('function renderEditorGroup'),
+      settings.indexOf('function renderAiSection')
+    )
+
+    assert.equal(projectSection.match(/<SettingRow/g)?.length, 1)
+    assert.equal(accountSection.match(/<SettingRow/g)?.length, 1)
+    assert.doesNotMatch(appearanceSection, /settingsResetAppearance/)
+    assert.doesNotMatch(keymapSection, /settingsResetKeymap/)
+    assert.match(generalSection, /action=\{\([\s\S]*settingsResetAppearance/)
+    assert.match(editorSection, /action=\{\([\s\S]*settingsResetKeymap/)
   })
 
   void test('localizes language options and confirms rollback in the product dialog', () => {

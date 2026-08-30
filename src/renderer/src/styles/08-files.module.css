@@ -21,9 +21,9 @@
 
 .filePanelProjectHeader {
   display: flex;
-  flex: 0 0 35px;
+  flex: 0 0 var(--workbench-tab-height);
   min-width: 0;
-  height: 35px;
+  height: var(--workbench-tab-height);
   align-items: center;
   gap: 6px;
   padding: 0 5px 0 9px;
