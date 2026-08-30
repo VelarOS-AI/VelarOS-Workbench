@@ -7,6 +7,14 @@ on:
         description: Exact root version tag, for example v0.3.1
         required: true
         type: string
+      release_channel:
+        description: Update channel
+        type: choice
+        options:
+          - stable
+          - beta
+          - canary
+        default: stable
   push:
     tags:
       - 'v*'
@@ -21,6 +29,7 @@ concurrency:
 
 env:
   RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+  VELAROS_UPDATE_CHANNEL: ${{ github.event_name == 'workflow_dispatch' && inputs.release_channel || 'stable' }}
 
 jobs:
   prepare:

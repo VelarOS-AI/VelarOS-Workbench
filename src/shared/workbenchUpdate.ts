@@ -7,8 +7,18 @@ export const WorkbenchUpdateChannels = {
   cancel: 'workbench-app:update:cancel',
   restart: 'workbench-app:update:restart',
   setAutomaticDownloads: 'workbench-app:update:set-automatic-downloads',
+  setChannel: 'workbench-app:update:set-channel',
   changed: 'workbench-app:update:changed',
 } as const
+
+export const WorkbenchUpdateChannelValues = ['stable', 'beta', 'canary'] as const
+export type WorkbenchUpdateChannel = (typeof WorkbenchUpdateChannelValues)[number]
+
+export function isWorkbenchUpdateChannel(value: unknown): value is WorkbenchUpdateChannel {
+  return typeof value === 'string' && WorkbenchUpdateChannelValues.includes(
+    value as WorkbenchUpdateChannel
+  )
+}
 
 export type WorkbenchUpdatePhase =
   | 'idle'
@@ -23,6 +33,7 @@ export interface WorkbenchUpdateState {
   readonly revision: number
   readonly phase: WorkbenchUpdatePhase
   readonly currentVersion: string
+  readonly channel: WorkbenchUpdateChannel
   readonly targetVersion?: string
   readonly automaticDownloads: boolean
   readonly percent?: number
@@ -41,5 +52,6 @@ export interface WorkbenchUpdateBridge {
   cancel: () => Promise<WorkbenchUpdateState>
   restart: () => Promise<void>
   setAutomaticDownloads: (enabled: boolean) => Promise<WorkbenchUpdateState>
+  setChannel: (channel: WorkbenchUpdateChannel) => Promise<WorkbenchUpdateState>
   onChanged: (listener: (state: WorkbenchUpdateState) => void) => () => void
 }

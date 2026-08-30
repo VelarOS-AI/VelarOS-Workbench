@@ -348,6 +348,24 @@ void describe('pre-split Workbench shell parity', () => {
     assert.match(settings, /renderSystemSection\(\)/)
   })
 
+  void test('keeps the release channel selector inside the product update settings', () => {
+    const settings = readSource('src/renderer/src/components/settings/WorkbenchSettingsDialog.tsx')
+    const languageSection = settings.slice(
+      settings.indexOf('function renderLanguageSection'),
+      settings.indexOf('function pluginStatusLabel')
+    )
+    const updatesSection = settings.slice(
+      settings.indexOf('function renderUpdatesSection'),
+      settings.indexOf('function renderGeneralSection')
+    )
+
+    assert.doesNotMatch(languageSection, /settingsUpdateChannel/)
+    assert.match(updatesSection, /settingsUpdateChannel/)
+    assert.match(updatesSection, /value: 'stable'/)
+    assert.match(updatesSection, /value: 'beta'/)
+    assert.match(updatesSection, /value: 'canary'/)
+  })
+
   void test('keeps compact settings actions on their subsection headers', () => {
     const settings = readSource('src/renderer/src/components/settings/WorkbenchSettingsDialog.tsx')
     const projectSection = settings.slice(
@@ -377,6 +395,7 @@ void describe('pre-split Workbench shell parity', () => {
 
     assert.equal(projectSection.match(/<SettingRow/g)?.length, 1)
     assert.equal(accountSection.match(/<SettingRow/g)?.length, 1)
+    assert.doesNotMatch(accountSection, /settingsAccountSignedIn/)
     assert.doesNotMatch(appearanceSection, /settingsResetAppearance/)
     assert.doesNotMatch(keymapSection, /settingsResetKeymap/)
     assert.match(generalSection, /action=\{\([\s\S]*settingsResetAppearance/)

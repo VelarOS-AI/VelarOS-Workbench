@@ -6,6 +6,7 @@ const InitialState: WorkbenchUpdateState = {
   revision: 0,
   phase: 'idle',
   currentVersion: '',
+  channel: 'stable',
   automaticDownloads: true,
 }
 

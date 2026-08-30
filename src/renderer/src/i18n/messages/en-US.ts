@@ -797,7 +797,6 @@ export const workbenchAppEnUSMessages = {
     settingsAccountDescription: 'Workbench account used when its built-in Agent starts a chat.',
     settingsAccountCurrent: 'Workbench account',
     settingsAccountLoading: 'Reading the local VelarOS account…',
-    settingsAccountSignedIn: 'Signed in',
     settingsAccountSignedOut: 'Signed out',
     settingsAccountSignedOutDescription: 'Workbench is not currently linked to an account.',
     settingsAccountSignIn: 'Sign in to Workbench',
@@ -863,6 +862,12 @@ export const workbenchAppEnUSMessages = {
     settingsPluginsDescription: 'Install and manage enhanced resources shared with Desktop.',
     settingsModsDescription: 'Manage optional Workbench product capabilities.',
     settingsUpdatesDescription: 'Update checks and automatic downloads.',
+    settingsUpdateChannel: 'Update channel',
+    settingsUpdateChannelDescription:
+      'Switching channels checks that channel immediately. Automatic downloads follow this choice.',
+    settingsUpdateChannelStable: 'Stable',
+    settingsUpdateChannelBeta: 'Beta',
+    settingsUpdateChannelPreview: 'Preview',
     settingsAutomaticUpdates: 'Automatically download updates',
     settingsAutomaticUpdatesDescription:
       'Check in the background and download new Workbench versions automatically. Enabled by default.',

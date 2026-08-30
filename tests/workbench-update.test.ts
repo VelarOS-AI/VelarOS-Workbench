@@ -53,11 +53,11 @@ class FakeUpdater extends EventEmitter {
 
 function releaseSource(): WorkbenchReleaseSource {
   return {
-    getCurrentRelease: async () => ({
+    getCurrentRelease: async ({ channel }) => ({
       baseUrl: 'https://updates.test',
       catalog: {
         product: 'workbench',
-        channel: 'stable',
+        channel,
         updatePolicy: 'optional',
         artifacts: [
           {
@@ -66,7 +66,7 @@ function releaseSource(): WorkbenchReleaseSource {
             artifactRole: 'update-metadata',
             format: 'yml',
             version: '1.1.0',
-            channel: 'stable',
+            channel,
             platform: 'darwin',
             arch: 'arm64',
             fileName: 'latest-mac.yml',
@@ -83,7 +83,7 @@ function releaseSource(): WorkbenchReleaseSource {
             artifactRole: 'update-package',
             format: 'zip',
             version: '1.1.0',
-            channel: 'stable',
+            channel,
             platform: 'darwin',
             arch: 'arm64',
             fileName: 'VelarOS-Workbench-1.1.0-mac-arm64.zip',
@@ -121,12 +121,38 @@ describe('WorkbenchUpdateService', () => {
     await service.checkForUpdates()
     expect(service.getState()).toMatchObject({
       phase: 'downloading',
+      channel: 'stable',
       automaticDownloads: true,
       percent: 25,
     })
     expect(service.pauseDownload().phase).toBe('paused')
     expect(service.cancelDownload().phase).toBe('available')
     expect(service.getState().percent).toBeUndefined()
+    await service.dispose()
+  })
+
+  test('persists a selected channel and checks that catalog immediately', async () => {
+    const dataRoot = await mkdtemp(join(tmpdir(), 'workbench-update-channel-test-'))
+    temporaryRoots.push(dataRoot)
+    const updater = new FakeUpdater()
+    const preferences = new WorkbenchUpdatePreferencesStore(dataRoot)
+    preferences.setAutomaticDownloads(false)
+    const service = new WorkbenchUpdateService(
+      releaseSource(),
+      updater as unknown as AppUpdater,
+      preferences,
+      {
+        currentVersion: '1.0.0',
+        isPackaged: true,
+        platform: 'darwin',
+        arch: 'arm64',
+      }
+    )
+
+    const state = await service.setChannel('beta')
+    expect(state).toMatchObject({ phase: 'available', channel: 'beta' })
+    expect(new WorkbenchUpdatePreferencesStore(dataRoot).channel).toBe('beta')
+    expect(updater.allowPrerelease).toBe(true)
     await service.dispose()
   })
 })

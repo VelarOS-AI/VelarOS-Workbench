@@ -10,6 +10,8 @@ export interface WorkbenchAccountIdentity {
   readonly id: string
   readonly displayName: string
   readonly email: string
+  /** 账号注册来源；官网页面据此留在中文站或国际站。 */
+  readonly market?: 'cn' | 'en'
 }
 
 export type WorkbenchAccountState =

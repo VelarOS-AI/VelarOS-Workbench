@@ -208,6 +208,7 @@ const updateBridge: WorkbenchUpdateBridge = {
   restart: () => ipcRenderer.invoke(WorkbenchUpdateChannels.restart),
   setAutomaticDownloads: (enabled) =>
     ipcRenderer.invoke(WorkbenchUpdateChannels.setAutomaticDownloads, enabled),
+  setChannel: (channel) => ipcRenderer.invoke(WorkbenchUpdateChannels.setChannel, channel),
   onChanged: (listener) => subscribe(WorkbenchUpdateChannels.changed, listener),
 }
 

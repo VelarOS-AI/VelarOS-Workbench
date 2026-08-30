@@ -1,7 +1,10 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
 import electronUpdater from 'electron-updater'
 
-import { WorkbenchUpdateChannels } from '../../shared/workbenchUpdate'
+import {
+  isWorkbenchUpdateChannel,
+  WorkbenchUpdateChannels,
+} from '../../shared/workbenchUpdate'
 
 import { CloudWorkbenchReleaseSource } from './WorkbenchReleaseSource'
 import { WorkbenchUpdatePreferencesStore } from './WorkbenchUpdatePreferencesStore'
@@ -37,6 +40,10 @@ export function installWorkbenchUpdateRuntime(): void {
   ipcMain.handle(WorkbenchUpdateChannels.setAutomaticDownloads, (_event, enabled: unknown) => {
     if (typeof enabled !== 'boolean') throw new Error('Automatic update setting must be boolean.')
     return service.setAutomaticDownloads(enabled)
+  })
+  ipcMain.handle(WorkbenchUpdateChannels.setChannel, (_event, channel: unknown) => {
+    if (!isWorkbenchUpdateChannel(channel)) throw new Error('Update channel is invalid.')
+    return service.setChannel(channel)
   })
 
   app.once('will-quit', () => {

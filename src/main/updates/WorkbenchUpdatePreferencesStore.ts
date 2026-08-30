@@ -1,30 +1,54 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 
-interface WorkbenchUpdatePreferencesFile {
-  readonly version: 1
+import {
+  isWorkbenchUpdateChannel,
+  type WorkbenchUpdateChannel,
+} from '../../shared/workbenchUpdate'
+
+interface WorkbenchUpdatePreferencesFileV2 {
+  readonly version: 2
   readonly automaticDownloads: boolean
+  readonly channel: WorkbenchUpdateChannel
 }
 
 export class WorkbenchUpdatePreferencesStore {
   readonly #filePath: string
   #automaticDownloads: boolean
+  #channel: WorkbenchUpdateChannel
 
   public constructor(dataRootDir: string) {
     this.#filePath = join(dataRootDir, 'storage', 'update-preferences.json')
-    this.#automaticDownloads = readAutomaticDownloads(this.#filePath)
+    const preferences = readPreferences(this.#filePath)
+    this.#automaticDownloads = preferences.automaticDownloads
+    this.#channel = preferences.channel
   }
 
   public get automaticDownloads(): boolean {
     return this.#automaticDownloads
   }
 
+  public get channel(): WorkbenchUpdateChannel {
+    return this.#channel
+  }
+
   public setAutomaticDownloads(enabled: boolean): void {
     if (this.#automaticDownloads === enabled) return
     this.#automaticDownloads = enabled
-    const file: WorkbenchUpdatePreferencesFile = {
-      version: 1,
-      automaticDownloads: enabled,
+    this.#write()
+  }
+
+  public setChannel(channel: WorkbenchUpdateChannel): void {
+    if (this.#channel === channel) return
+    this.#channel = channel
+    this.#write()
+  }
+
+  #write(): void {
+    const file: WorkbenchUpdatePreferencesFileV2 = {
+      version: 2,
+      automaticDownloads: this.#automaticDownloads,
+      channel: this.#channel,
     }
     mkdirSync(dirname(this.#filePath), { recursive: true })
     const temporaryPath = `${this.#filePath}.tmp`
@@ -33,15 +57,20 @@ export class WorkbenchUpdatePreferencesStore {
   }
 }
 
-function readAutomaticDownloads(filePath: string): boolean {
+function readPreferences(filePath: string): {
+  readonly automaticDownloads: boolean
+  readonly channel: WorkbenchUpdateChannel
+} {
   try {
-    const parsed = JSON.parse(readFileSync(filePath, 'utf8')) as Partial<
-      WorkbenchUpdatePreferencesFile
-    >
-    return parsed.version === 1 && typeof parsed.automaticDownloads === 'boolean'
-      ? parsed.automaticDownloads
-      : true
+    const parsed = JSON.parse(readFileSync(filePath, 'utf8')) as Record<string, unknown>
+    return {
+      automaticDownloads:
+        typeof parsed['automaticDownloads'] === 'boolean'
+          ? parsed['automaticDownloads']
+          : true,
+      channel: isWorkbenchUpdateChannel(parsed['channel']) ? parsed['channel'] : 'stable',
+    }
   } catch {
-    return true
+    return { automaticDownloads: true, channel: 'stable' }
   }
 }

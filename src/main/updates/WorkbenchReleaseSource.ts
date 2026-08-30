@@ -1,3 +1,8 @@
+import {
+  isWorkbenchUpdateChannel,
+  type WorkbenchUpdateChannel,
+} from '../../shared/workbenchUpdate'
+
 export const VelarOSCloudBaseUrl = 'https://global.velaros.cn'
 
 export type WorkbenchReleaseSignatureStatus =
@@ -38,6 +43,7 @@ export interface ResolvedWorkbenchReleaseCatalog {
 
 export interface WorkbenchReleaseSource {
   getCurrentRelease(input: {
+    readonly channel: WorkbenchUpdateChannel
     readonly platform: NodeJS.Platform
     readonly arch: string
   }): Promise<ResolvedWorkbenchReleaseCatalog>
@@ -52,12 +58,14 @@ export interface WorkbenchReleaseSource {
 
 export class CloudWorkbenchReleaseSource implements WorkbenchReleaseSource {
   public async getCurrentRelease(input: {
+    readonly channel: WorkbenchUpdateChannel
     readonly platform: NodeJS.Platform
     readonly arch: string
   }): Promise<ResolvedWorkbenchReleaseCatalog> {
+    if (!isWorkbenchUpdateChannel(input.channel)) throw new Error('Update channel is invalid.')
     const search = new URLSearchParams({
       product: 'workbench',
-      channel: 'stable',
+      channel: input.channel,
       platform: input.platform,
       arch: input.arch,
     })

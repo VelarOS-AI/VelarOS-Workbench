@@ -10,6 +10,7 @@ import type { WorkbenchProductAnalyticsReporter } from './WorkbenchProductAnalyt
 
 export function installWorkbenchProductAnalyticsRuntime(input: {
   readonly dataRootDir: string
+  readonly privacyDetailsUrl: string
   readonly reporter?: WorkbenchProductAnalyticsReporter
 }): () => void {
   const preferences = new WorkbenchProductAnalyticsPreferencesStore(input.dataRootDir)
@@ -110,7 +111,7 @@ export function installWorkbenchProductAnalyticsRuntime(input: {
     return getState()
   })
   ipcMain.handle(WorkbenchProductAnalyticsChannels.openDetails, () =>
-    shell.openExternal('https://velaros.cn/privacy#product-improvement-data')
+    shell.openExternal(input.privacyDetailsUrl)
   )
 
   return () => {

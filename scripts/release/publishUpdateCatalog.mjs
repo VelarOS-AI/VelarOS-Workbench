@@ -184,6 +184,10 @@ async function run() {
   const manifest = JSON.parse(await readFile(path.join(repoRoot, 'package.json'), 'utf8'))
   const version = manifest.version
   const sourceCommit = requireEnvironment('GITHUB_SHA')
+  const channel = process.env.VELAROS_UPDATE_CHANNEL?.trim() || 'stable'
+  if (!['stable', 'beta', 'canary'].includes(channel)) {
+    throw new Error(`Unsupported Workbench update channel: ${channel}`)
+  }
   const releaseDirectory = path.resolve(repoRoot, process.argv[2] ?? 'release-stage/final')
   const files = (await readdir(releaseDirectory))
     .filter((fileName) => FileNamePattern.test(fileName) && artifactDescriptor(fileName))
@@ -205,7 +209,7 @@ async function run() {
       softwareProduct: 'workbench',
       ...descriptor,
       version,
-      channel: 'stable',
+      channel,
       assetId,
       fileName,
       sha256: createHash('sha256').update(body).digest('hex'),
@@ -215,11 +219,11 @@ async function run() {
     })
   }
   const catalog = signCatalog({ schemaVersion: 1, artifacts })
-  const catalogName = `candidate-workbench-v${version}-stable.json`
+  const catalogName = `candidate-workbench-v${version}-${channel}.json`
   await writeFile(path.join(releaseDirectory, catalogName), `${JSON.stringify(catalog, null, 2)}\n`)
   await client.upload(release, catalogName, Buffer.from(`${JSON.stringify(catalog, null, 2)}\n`))
   await ingestCatalog(catalog)
-  console.info(`Workbench ${version} update catalog uploaded and ingested; admin promotion remains explicit.`)
+  console.info(`Workbench ${version} ${channel} update catalog uploaded and ingested; admin promotion remains explicit.`)
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(import.meta.filename)) {

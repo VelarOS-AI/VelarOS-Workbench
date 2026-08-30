@@ -3,7 +3,10 @@ import type { AppUpdater, ProgressInfo, UpdateDownloadedEvent, UpdateInfo } from
 
 import { Log } from '@velaros-ai/core'
 
-import type { WorkbenchUpdateState } from '../../shared/workbenchUpdate'
+import type {
+  WorkbenchUpdateChannel,
+  WorkbenchUpdateState,
+} from '../../shared/workbenchUpdate'
 
 import { WorkbenchReleaseFeedServer } from './WorkbenchReleaseFeedServer'
 import type {
@@ -58,11 +61,12 @@ export class WorkbenchUpdateService {
       revision: 0,
       phase: 'idle',
       currentVersion: this.#currentVersion,
+      channel: preferences.channel,
       automaticDownloads: preferences.automaticDownloads,
     }
 
     this.updater.autoDownload = false
-    this.updater.allowPrerelease = false
+    this.updater.allowPrerelease = preferences.channel !== 'stable'
     this.updater.autoInstallOnAppQuit = true
     this.updater.autoRunAppAfterInstall = true
     this.updater.disableDifferentialDownload = true
@@ -173,6 +177,7 @@ export class WorkbenchUpdateService {
     this.preferences.setAutomaticDownloads(enabled)
     const {
       currentVersion: _currentVersion,
+      channel: _channel,
       automaticDownloads: _automaticDownloads,
       ...state
     } = this.#stateWithoutRevision()
@@ -183,6 +188,19 @@ export class WorkbenchUpdateService {
       })
     }
     return this.getState()
+  }
+
+  public async setChannel(channel: WorkbenchUpdateChannel): Promise<WorkbenchUpdateState> {
+    if (this.preferences.channel === channel) return this.getState()
+    if (this.#checkPromise) await this.#checkPromise.catch(() => undefined)
+    this.#feed?.resume()
+    this.#downloadCancellation?.cancel()
+    if (this.#downloadPromise) await this.#downloadPromise.catch(() => undefined)
+    await this.#replaceFeed(null)
+    this.preferences.setChannel(channel)
+    this.updater.allowPrerelease = channel !== 'stable'
+    this.#setState({ phase: 'idle' })
+    return this.checkForUpdates()
   }
 
   public restartToUpdate(): void {
@@ -207,6 +225,7 @@ export class WorkbenchUpdateService {
     this.#setState({ phase: 'checking' })
     try {
       const release = await this.releases.getCurrentRelease({
+        channel: this.preferences.channel,
         platform: this.#platform,
         arch: this.#arch,
       })
@@ -240,7 +259,7 @@ export class WorkbenchUpdateService {
     if (
       !expected ||
       release.catalog.product !== 'workbench' ||
-      release.catalog.channel !== 'stable'
+      release.catalog.channel !== this.preferences.channel
     ) {
       throw new Error('Workbench update catalog identity is invalid.')
     }
@@ -249,7 +268,7 @@ export class WorkbenchUpdateService {
     for (const artifact of release.catalog.artifacts) {
       if (
         artifact.softwareProduct !== 'workbench' ||
-        artifact.channel !== 'stable' ||
+        artifact.channel !== this.preferences.channel ||
         artifact.platform !== this.#platform ||
         artifact.arch !== this.#arch ||
         !artifact.isCurrent ||
@@ -321,7 +340,10 @@ export class WorkbenchUpdateService {
     this.#setError(error, this.#state.targetVersion)
   }
 
-  #downloadSnapshot(): Omit<WorkbenchUpdateState, 'revision' | 'currentVersion' | 'automaticDownloads'> {
+  #downloadSnapshot(): Omit<
+    WorkbenchUpdateState,
+    'revision' | 'currentVersion' | 'automaticDownloads' | 'channel'
+  > {
     return {
       phase: this.#state.phase,
       targetVersion: this.#state.targetVersion,
@@ -346,12 +368,15 @@ export class WorkbenchUpdateService {
   }
 
   #setState(
-    state: Omit<WorkbenchUpdateState, 'revision' | 'currentVersion' | 'automaticDownloads'> &
-      Partial<Pick<WorkbenchUpdateState, 'automaticDownloads'>>
+    state: Omit<
+      WorkbenchUpdateState,
+      'revision' | 'currentVersion' | 'automaticDownloads' | 'channel'
+    > & Partial<Pick<WorkbenchUpdateState, 'automaticDownloads'>>
   ): void {
     const next: Omit<WorkbenchUpdateState, 'revision'> = {
       ...state,
       currentVersion: this.#currentVersion,
+      channel: this.preferences.channel,
       automaticDownloads: state.automaticDownloads ?? this.preferences.automaticDownloads,
     }
     const current = this.#stateWithoutRevision()

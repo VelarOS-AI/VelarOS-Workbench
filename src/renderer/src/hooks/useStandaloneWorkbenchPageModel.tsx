@@ -725,6 +725,11 @@ export function useStandaloneWorkbenchPageModel(
   /** `titleBarStyle: hiddenInset`: reserve horizontal inset for macOS traffic lights on the standalone window */
   const macTitleInset =
     /^Mac/i.test(navigator.platform) || /\bMac OS X\b/i.test(navigator.userAgent)
+  const hostPlatform = macTitleInset
+    ? 'macos'
+    : /\bWindows\b/i.test(navigator.userAgent)
+      ? 'windows'
+      : 'linux'
 
   useWorkbenchKeyboardShortcuts({
     activeRightTool: surface.activeRightTool,
@@ -1232,6 +1237,7 @@ export function useStandaloneWorkbenchPageModel(
       velarLogicGraphAvailable,
       canOpenCodeGraph,
       macTitleInset,
+      hostPlatform,
       commandStatusLabel,
     },
     /** 对话框 / 浮层开关状态。 */

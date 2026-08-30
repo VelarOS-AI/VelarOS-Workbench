@@ -45,6 +45,19 @@ win:
   target:
     - nsis
 
+nsis:
+  oneClick: false
+  allowElevation: true
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  menuCategory: VelarOS
+  shortcutName: VelarOS Workbench
+  uninstallDisplayName: VelarOS Workbench
+  installerLanguages:
+    - en_US
+    - zh_CN
+
 linux:
   category: Development
   executableArgs:

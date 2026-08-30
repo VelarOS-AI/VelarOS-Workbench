@@ -40,6 +40,11 @@ import { registerWorkbenchTerminalIpc } from './workspace/terminal/WorkbenchTerm
 import { registerWorkbenchWatchIpc } from './workspace/watch/WorkbenchWatchIpc'
 import { registerWorkbenchFsIpc } from './workspace/WorkbenchFsIpc'
 import { registerWorkbenchWorkspaceIpc } from './workspace/WorkbenchWorkspaceIpc'
+import {
+  resolveVelarOSOfficialWebsiteMarket,
+  resolveVelarOSOfficialWebsiteOrigin,
+  resolveVelarOSOfficialWebsiteUrl,
+} from './VelarOSOfficialWebsite'
 import { createDefaultWorkbenchMainCapabilityProviders } from './WorkbenchMainCapabilityProviders'
 
 /**
@@ -127,8 +132,12 @@ function createWorkbenchWindow(hub: WorkbenchProjectHub): BrowserWindow {
   const window = new BrowserWindow({
     width: WorkbenchWindowWidth,
     height: WorkbenchWindowHeight,
+    minWidth: 900,
+    minHeight: 600,
     icon: WorkbenchApplicationIconPath,
     show: false,
+    autoHideMenuBar: process.platform !== 'darwin',
+    backgroundColor: '#f7f7f7',
     title: getWorkbenchWindowTitle(hub.getState().currentProject?.name ?? null),
     ...(process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset' as const } : {}),
     webPreferences: {
@@ -169,6 +178,12 @@ function createWorkbenchWindow(hub: WorkbenchProjectHub): BrowserWindow {
 if (hasSingleInstanceLock) void app.whenReady().then(async () => {
   if (WorkbenchIsDevelopmentRuntime) app.dock?.setIcon(WorkbenchApplicationIconPath)
   const dataRootDir = resolveWorkbenchDataRootDir()
+  const websiteMarket = resolveVelarOSOfficialWebsiteMarket({
+    configuredMarket: process.env['VELAROS_MARKET'],
+    locale: app.getLocale(),
+    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+  })
+  const websiteOrigin = resolveVelarOSOfficialWebsiteOrigin(websiteMarket)
   productAnalytics = await WorkbenchProductAnalyticsReporter.create({
     dataRoot: dataRootDir,
     appVersion: app.getVersion(),
@@ -183,6 +198,10 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
   }).catch(() => undefined)
   const disposeProductAnalyticsRuntime = installWorkbenchProductAnalyticsRuntime({
     dataRootDir,
+    privacyDetailsUrl: resolveVelarOSOfficialWebsiteUrl(
+      websiteMarket,
+      '/privacy#product-improvement-data'
+    ),
     ...(productAnalytics ? { reporter: productAnalytics } : {}),
   })
   const disposeAccountIpc = registerWorkbenchAccountIpc(
@@ -207,7 +226,7 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
       providerCollection: modelComposition.providerCollection,
       providerScriptRegistry: modelComposition.providerScriptRegistry,
       attribution: {
-        referer: 'https://velaros.ai',
+        referer: websiteOrigin,
         title: WorkbenchProductName,
       },
     }),

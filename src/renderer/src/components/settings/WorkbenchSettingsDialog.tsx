@@ -72,6 +72,7 @@ import type {
   WorkbenchProjectAiRulesResult,
 } from '@shared/contracts'
 import type { WorkbenchAccountState } from '@shared/workbenchAccount'
+import type { WorkbenchUpdateChannel } from '@shared/workbenchUpdate'
 
 import type { WorkbenchModCatalog, WorkbenchModRecord } from '../../../../shared/workbenchAgentMods'
 import type {
@@ -721,11 +722,6 @@ export function WorkbenchSettingsDialog({
       <div className={styles.workbenchSettingsSectionPanel}>
         <SettingRow title={accountTitle} description={accountDescription}>
           <div className={styles.workbenchSettingsShortcutControls}>
-            {signedIn && (
-              <WorkbenchSettingsPill tone="success">
-                {t('workbench.settingsAccountSignedIn')}
-              </WorkbenchSettingsPill>
-            )}
             <Button
               size="sm"
               variant={signedIn ? 'destructiveOutline' : 'outline'}
@@ -1281,6 +1277,22 @@ export function WorkbenchSettingsDialog({
 
     return (
       <div className={styles.workbenchSettingsSectionPanel}>
+        <SettingRow
+          title={t('workbench.settingsUpdateChannel')}
+          description={t('workbench.settingsUpdateChannelDescription')}
+        >
+          <Select<WorkbenchUpdateChannel>
+            size="sm"
+            className={styles.workbenchSettingsSelectTrigger}
+            value={updateState.channel}
+            options={[
+              { value: 'stable', label: t('workbench.settingsUpdateChannelStable') },
+              { value: 'beta', label: t('workbench.settingsUpdateChannelBeta') },
+              { value: 'canary', label: t('workbench.settingsUpdateChannelPreview') },
+            ]}
+            onChange={(channel) => void window.velarosWorkbenchUpdate.setChannel(channel)}
+          />
+        </SettingRow>
         <SettingRow
           title={t('workbench.settingsAutomaticUpdates')}
           description={t('workbench.settingsAutomaticUpdatesDescription')}

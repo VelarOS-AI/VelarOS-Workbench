@@ -899,6 +899,17 @@
   padding-left: 76px;
 }
 
+/* Windows and Linux retain their native window frame. Workbench's own IDE toolbar stays an
+ * application surface there instead of becoming a second draggable title bar. */
+.workbenchShell[data-standalone='true'][data-host-platform='windows'] .ideUnifiedTopBar,
+.workbenchShell[data-standalone='true'][data-host-platform='windows'] .panelHeader,
+.workbenchShell[data-standalone='true'][data-host-platform='windows'] .leftToolRailColumn,
+.workbenchShell[data-standalone='true'][data-host-platform='linux'] .ideUnifiedTopBar,
+.workbenchShell[data-standalone='true'][data-host-platform='linux'] .panelHeader,
+.workbenchShell[data-standalone='true'][data-host-platform='linux'] .leftToolRailColumn {
+  -webkit-app-region: no-drag;
+}
+
 /* Flush outer seams at pane corners (no divider strokes along sidebar/editor/status joints). */
 .workbenchShell[data-standalone='true'] .leftToolPane {
   border-right: none;

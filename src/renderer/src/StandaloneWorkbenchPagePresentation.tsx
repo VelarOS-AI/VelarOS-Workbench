@@ -99,6 +99,7 @@ export function StandaloneWorkbenchPagePresentation({
     projectAiIndexSkipped,
     codeGraphAvailable,
     macTitleInset,
+    hostPlatform,
     commandStatusLabel,
   } = chrome
 
@@ -480,6 +481,7 @@ export function StandaloneWorkbenchPagePresentation({
         className={styles.workbenchShell}
         data-standalone="true"
         data-mac-title-inset={macTitleInset}
+        data-host-platform={hostPlatform}
         data-right-tool-open={surface.isRightToolOpen}
         data-command-panel-open={!surface.isCommandPanelCollapsed}
         data-workbench-theme={workbenchPreferences.preferences.theme}
