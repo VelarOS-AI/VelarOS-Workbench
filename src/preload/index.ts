@@ -8,6 +8,7 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent, webUtils } from 'electron'
 
 import { type WorkbenchProjectHubBridge, WorkbenchProjectHubChannels } from '../shared/projectHub'
+import { type WorkbenchAccountBridge, WorkbenchAccountChannels } from '../shared/workbenchAccount'
 import {
   type WorkbenchAgentModBridge,
   WorkbenchAgentModChannels,
@@ -69,6 +70,14 @@ const projectHubBridge: WorkbenchProjectHubBridge = {
   closeProject: () => ipcRenderer.invoke(WorkbenchProjectHubChannels.closeProject),
   onStateChanged: (listener) => subscribe(WorkbenchProjectHubChannels.stateChanged, listener),
   onMenuCommand: (listener) => subscribe(WorkbenchProjectHubChannels.menuCommand, listener),
+}
+
+const accountBridge: WorkbenchAccountBridge = {
+  getState: () => ipcRenderer.invoke(WorkbenchAccountChannels.getState),
+  ensureSignedIn: () => ipcRenderer.invoke(WorkbenchAccountChannels.ensureSignedIn),
+  signIn: () => ipcRenderer.invoke(WorkbenchAccountChannels.signIn),
+  signOut: () => ipcRenderer.invoke(WorkbenchAccountChannels.signOut),
+  onChanged: (listener) => subscribe(WorkbenchAccountChannels.changed, listener),
 }
 
 const fsBridge: WorkbenchFsBridge = {
@@ -213,6 +222,7 @@ const productAnalyticsBridge: WorkbenchProductAnalyticsBridge = {
 }
 
 contextBridge.exposeInMainWorld('velarosWorkbenchProjectHub', projectHubBridge)
+contextBridge.exposeInMainWorld('velarosWorkbenchAccount', accountBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchFs', fsBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchLanguage', languageBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchTerminal', terminalBridge)

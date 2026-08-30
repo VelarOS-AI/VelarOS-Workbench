@@ -12,6 +12,9 @@ import { createModelRuntimeComposition } from '@velaros-ai/model/node'
 import productionAppIconPath from '../../build/icon.png?asset'
 import developmentAppIconPath from '../../build/icon-dev.png?asset'
 
+import { registerWorkbenchAccountIpc } from './account/WorkbenchAccountIpc'
+import { WorkbenchAccountService } from './account/WorkbenchAccountService'
+import { WorkbenchSharedAccountStore } from './account/WorkbenchSharedAccountStore'
 import { WorkbenchAgentExecutionStack } from './agent/WorkbenchAgentExecutionStack'
 import { WorkbenchProductAnalyticsReporter } from './analytics/WorkbenchProductAnalyticsReporter'
 import { installWorkbenchProductAnalyticsRuntime } from './analytics/WorkbenchProductAnalyticsRuntime'
@@ -182,6 +185,12 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
     dataRootDir,
     ...(productAnalytics ? { reporter: productAnalytics } : {}),
   })
+  const disposeAccountIpc = registerWorkbenchAccountIpc(
+    new WorkbenchAccountService(
+      new WorkbenchSharedAccountStore(),
+      (url) => shell.openExternal(url)
+    )
+  )
   productAnalytics?.start()
   const providers = createDefaultWorkbenchMainCapabilityProviders(
     dataRootDir,
@@ -272,6 +281,7 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
     // 真正收口后再触发第二次 quit；shutdownStarted 让第二次事件直接放行。
     watchIpc.dispose()
     disposeResourcePluginIpc()
+    disposeAccountIpc()
     disposeModIpc()
     disposeModelIpc()
     disposeKernelIpc()

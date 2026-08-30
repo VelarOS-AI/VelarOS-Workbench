@@ -445,6 +445,7 @@ function StandaloneWorkbenchChatSessionSurface({
   const [planMode, setPlanMode] = useState(false)
   const [followLocked, setFollowLocked] = useState(true)
   const [showThinkingProcess, setShowThinkingProcess] = useState(true)
+  const [accountSignInPending, setAccountSignInPending] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -525,7 +526,11 @@ function StandaloneWorkbenchChatSessionSurface({
 
   async function submit(draftValue = prompt, draftFiles = files): Promise<void> {
     const text = draftValue.trim()
-    if ((!text && draftFiles.length === 0) || isActiveChatRun(chat.status)) return
+    if (
+      (!text && draftFiles.length === 0)
+      || isActiveChatRun(chat.status)
+      || accountSignInPending
+    ) return
     if (
       providerId === 'workbench'
       && (!modelConfig.provider.trim() || !modelConfig.model.trim())
@@ -553,6 +558,23 @@ function StandaloneWorkbenchChatSessionSurface({
         description: engineCatalog.reason ?? t('workbench.chatEngineUnavailableDescription'),
       })
       return
+    }
+    if (providerId === 'workbench') {
+      setAccountSignInPending(true)
+      try {
+        const account = await window.velarosWorkbenchAccount.ensureSignedIn()
+        if (account.status !== 'signed-in') return
+      } catch (error) {
+        workbenchMessage.warning({
+          title: t('workbench.chatSignInFailedTitle'),
+          description: t('workbench.chatSignInFailedDescription', {
+            error: error instanceof Error ? error.message : String(error),
+          }),
+        })
+        return
+      } finally {
+        setAccountSignInPending(false)
+      }
     }
     const attachmentContext = await buildAttachmentContext(draftFiles)
     const currentFileContext = includedCurrentFilePath
@@ -782,7 +804,7 @@ function StandaloneWorkbenchChatSessionSurface({
           placeholder: currentFilePath
             ? t('workbench.chatAskAboutFile', { path: currentFilePath })
             : t('workbench.chatPlaceholder'),
-          disabled: isActiveChatRun(chat.status),
+          disabled: isActiveChatRun(chat.status) || accountSignInPending,
           onValueChange: setPrompt,
           onSend: (draft) => submit(draft?.value ?? prompt, draft?.files ?? files),
         },
@@ -859,6 +881,7 @@ function StandaloneWorkbenchChatSessionSurface({
     [
       chat.sessionId,
       chat.status,
+      accountSignInPending,
       files,
       goalMode,
       includedCurrentFilePath,

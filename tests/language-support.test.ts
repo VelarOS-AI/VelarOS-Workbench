@@ -19,6 +19,8 @@ import {
   WorkbenchLanguageServices,
 } from '../src/main/workspace/language/LanguageServices'
 import {
+  acquireTypeScriptLanguageService,
+  clearTypeScriptProjectCache,
   resolveTypeScriptDefaultLibFilePath,
 } from '../src/main/workspace/language/TypeScriptProjectHost'
 import {
@@ -628,6 +630,97 @@ void describe('focused Workbench language surface', () => {
       )
     } finally {
       await rm(resourcesPath, { recursive: true, force: true })
+    }
+  })
+
+  void test('selects the narrow owning TypeScript config outside the source ancestry', async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), 'workbench-partitioned-tsconfig-'))
+    const requestPath = join(projectRoot, 'src', 'mods', 'project', 'ProjectCodeQuery.ts')
+    const unrelatedPath = join(projectRoot, 'src', 'other.ts')
+    const partitionConfigPath = join(
+      projectRoot,
+      'tsconfig',
+      'typecheck',
+      'node-mods-capabilities.json'
+    )
+    const packageRoot = join(projectRoot, 'node_modules', '@fixture', 'development')
+    const source = "import type { Runtime } from '@fixture/development/runtime'\nconst value: Runtime = { ready: true }\n"
+
+    try {
+      await mkdir(join(projectRoot, 'src', 'mods', 'project'), { recursive: true })
+      await mkdir(join(projectRoot, 'tsconfig', 'typecheck'), { recursive: true })
+      await mkdir(join(packageRoot, 'dist', 'runtime'), { recursive: true })
+      await writeFile(requestPath, source, 'utf8')
+      await writeFile(unrelatedPath, 'export const unrelated = true\n', 'utf8')
+      await writeFile(
+        join(projectRoot, 'package.json'),
+        JSON.stringify({
+          type: 'module',
+          dependencies: { '@fixture/development': '1.0.0' },
+        }),
+        'utf8'
+      )
+      await writeFile(
+        join(projectRoot, 'tsconfig.json'),
+        JSON.stringify({ files: [], references: [{ path: './tsconfig.node.json' }] }),
+        'utf8'
+      )
+      await writeFile(
+        join(projectRoot, 'tsconfig.node.json'),
+        JSON.stringify({
+          compilerOptions: { module: 'ESNext', moduleResolution: 'bundler', target: 'ESNext' },
+          files: [],
+        }),
+        'utf8'
+      )
+      await writeFile(
+        join(projectRoot, 'tsconfig.eslint.json'),
+        JSON.stringify({ extends: './tsconfig.json', include: ['src/**/*.ts'] }),
+        'utf8'
+      )
+      await writeFile(
+        partitionConfigPath,
+        JSON.stringify({
+          extends: '../../tsconfig.node.json',
+          compilerOptions: { noEmit: true },
+          include: ['../../src/mods/project/**/*.ts'],
+        }),
+        'utf8'
+      )
+      await writeFile(
+        join(packageRoot, 'package.json'),
+        JSON.stringify({
+          name: '@fixture/development',
+          version: '1.0.0',
+          type: 'module',
+          exports: {
+            './runtime': {
+              types: './dist/runtime/index.d.ts',
+              import: './dist/runtime/index.js',
+            },
+          },
+        }),
+        'utf8'
+      )
+      await writeFile(
+        join(packageRoot, 'dist', 'runtime', 'index.d.ts'),
+        'export interface Runtime { ready: boolean }\n',
+        'utf8'
+      )
+
+      const project = acquireTypeScriptLanguageService(
+        projectRoot,
+        requestPath,
+        [],
+        new Map([[requestPath, source]])
+      )
+
+      assert.equal(project.config.configPath, partitionConfigPath)
+      assert.equal(project.compilerOptions.moduleResolution, ts.ModuleResolutionKind.Bundler)
+      assert.deepEqual(project.service.getSemanticDiagnostics(requestPath), [])
+    } finally {
+      clearTypeScriptProjectCache(projectRoot)
+      await rm(projectRoot, { recursive: true, force: true })
     }
   })
 

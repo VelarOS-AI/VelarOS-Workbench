@@ -31,7 +31,15 @@ function resolveVelarOSSharedResourcesRoot(
   return join(resolveVelarOSSharedDataRoot(options), 'shared', 'resources')
 }
 
+/** `@velaros-ai/system/shared-resources` 账号磁盘 ABI 的发布兼容投影。 */
+function resolveVelarOSSharedAccountRoot(
+  options: VelarOSSharedResourceStoreOptions = {}
+): string {
+  return join(resolveVelarOSSharedDataRoot(options), 'shared', 'account', 'v1')
+}
+
 export {
+  resolveVelarOSSharedAccountRoot,
   resolveVelarOSSharedDataRoot,
   resolveVelarOSSharedResourcesRoot,
   type VelarOSSharedResourceStoreOptions,

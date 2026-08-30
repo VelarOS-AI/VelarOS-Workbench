@@ -8,6 +8,7 @@ const TypeScriptExtensions = new Set(['.ts', '.tsx', '.js', '.jsx', '.cts', '.mt
 const JavaScriptExtensions = new Set(['.js', '.jsx', '.cjs', '.mjs'])
 const MaxTypeScriptProjectFiles = 2000
 const MaxPackageTypeEntries = 256
+const MaxTypeScriptConfigCandidates = 256
 const SkippedDirectoryNames = new Set([
   '.data',
   '.git',
@@ -51,6 +52,12 @@ interface PooledTypeScriptProject {
 
 const projectCache = new Map<string, TypeScriptProjectCacheEntry>()
 const pooledProjects = new Map<string, PooledTypeScriptProject>()
+const projectConfigCandidates = new Map<string, TypeScriptProjectConfigCandidate[]>()
+
+interface TypeScriptProjectConfigCandidate {
+  configPath: string
+  parsed: ts.ParsedCommandLine
+}
 
 function resolveTypeScriptDefaultLibFilePath(
   options: ts.CompilerOptions,
@@ -163,6 +170,12 @@ function findTypeScriptConfigPath(
     directory = parent
   }
 
+  const projectWideConfigPath = findProjectWideOwningConfigPath(
+    projectRoot,
+    requestAbsolutePath
+  )
+  if (projectWideConfigPath) return projectWideConfigPath
+
   // 新建且尚未写入 config include 的文件仍应继承最近配置；已存在并被某个配置拥有的文件
   // 会在上面的包含关系检查中优先命中，避免同时存在 tsconfig/jsconfig 时选错项目。
   return nearestConfigPath
@@ -179,6 +192,77 @@ function parseTypeScriptConfigFile(configPath: string): Nullable<ts.ParsedComman
     undefined,
     configPath
   )
+}
+
+function isTypeScriptConfigCandidatePath(projectRoot: string, absolutePath: string): boolean {
+  if (!isPathInside(projectRoot, absolutePath) || !absolutePath.toLowerCase().endsWith('.json'))
+    return false
+
+  const relativePath = relative(projectRoot, absolutePath)
+  const segments = relativePath.split(sep)
+  const fileName = segments.at(-1)?.toLowerCase() ?? ''
+  return (
+    /^(?:tsconfig|jsconfig)(?:\..+)?\.json$/u.test(fileName) ||
+    segments.slice(0, -1).some((segment) => /^(?:tsconfig|tsconfigs)$/iu.test(segment))
+  )
+}
+
+function collectProjectTypeScriptConfigCandidates(
+  projectRoot: string
+): TypeScriptProjectConfigCandidate[] {
+  const cached = projectConfigCandidates.get(projectRoot)
+  if (cached) return cached
+
+  const candidates: TypeScriptProjectConfigCandidate[] = []
+  const visit = (directory: string): void => {
+    if (candidates.length >= MaxTypeScriptConfigCandidates) return
+
+    let entries: Dirent[]
+    try {
+      entries = readdirSync(directory, { withFileTypes: true }).sort((left, right) =>
+        left.name.localeCompare(right.name)
+      )
+    } catch {
+      return
+    }
+
+    for (const entry of entries) {
+      if (candidates.length >= MaxTypeScriptConfigCandidates) return
+
+      const absolutePath = resolve(directory, entry.name)
+      if (entry.isDirectory()) {
+        if (!SkippedDirectoryNames.has(entry.name)) visit(absolutePath)
+        continue
+      }
+      if (!entry.isFile() || !isTypeScriptConfigCandidatePath(projectRoot, absolutePath)) continue
+
+      const parsed = parseTypeScriptConfigFile(absolutePath)
+      if (parsed) candidates.push({ configPath: absolutePath, parsed })
+    }
+  }
+
+  visit(projectRoot)
+  projectConfigCandidates.set(projectRoot, candidates)
+  return candidates
+}
+
+function findProjectWideOwningConfigPath(
+  projectRoot: string,
+  requestAbsolutePath: string
+): Nullable<string> {
+  const owningCandidates = collectProjectTypeScriptConfigCandidates(projectRoot)
+    .filter(({ parsed }) => parsed.fileNames.includes(requestAbsolutePath))
+    .sort((left, right) => {
+      const fileCountDifference = left.parsed.fileNames.length - right.parsed.fileNames.length
+      if (fileCountDifference !== 0) return fileCountDifference
+
+      const leftDepth = relative(projectRoot, left.configPath).split(sep).length
+      const rightDepth = relative(projectRoot, right.configPath).split(sep).length
+      if (leftDepth !== rightDepth) return rightDepth - leftDepth
+      return left.configPath.localeCompare(right.configPath)
+    })
+
+  return owningCandidates[0]?.configPath ?? null
 }
 
 function findOwningReferencedConfigPath(
@@ -499,8 +583,11 @@ export function clearTypeScriptProjectCache(projectRoot?: string): void {
     for (const project of pooledProjects.values()) project.service.dispose()
     projectCache.clear()
     pooledProjects.clear()
+    projectConfigCandidates.clear()
     return
   }
+
+  projectConfigCandidates.delete(projectRoot)
 
   for (const key of projectCache.keys()) {
     if (key.startsWith(`${projectRoot}\0`)) {
@@ -525,7 +612,7 @@ export function synchronizeTypeScriptProjectFile(
 
   const fileName = basename(absolutePath)
   const isProjectMetadata =
-    fileName === 'package.json' || /^[jt]sconfig(?:\..+)?\.json$/iu.test(fileName)
+    fileName === 'package.json' || isTypeScriptConfigCandidatePath(projectRoot, absolutePath)
   if (isProjectMetadata) {
     clearTypeScriptProjectCache(projectRoot)
     return

@@ -71,6 +71,7 @@ import type {
   WorkbenchProjectAiRuleFile,
   WorkbenchProjectAiRulesResult,
 } from '@shared/contracts'
+import type { WorkbenchAccountState } from '@shared/workbenchAccount'
 
 import type { WorkbenchModCatalog, WorkbenchModRecord } from '../../../../shared/workbenchAgentMods'
 import type {
@@ -82,6 +83,7 @@ import { useTimerScope } from '../../support/genericHooks'
 
 type WorkbenchSettingsSectionId =
   | 'project'
+  | 'account'
   | 'appearance'
   | 'editor'
   | 'model'
@@ -203,6 +205,12 @@ export function WorkbenchSettingsDialog({
   }))
   const timers = useTimerScope('WorkbenchSettingsDialog')
   const [activeSection, setActiveSection] = useState<WorkbenchSettingsSectionId>('project')
+  const [accountState, setAccountState] = useState<WorkbenchAccountState>({
+    status: 'signed-out',
+  })
+  const [isLoadingAccount, setIsLoadingAccount] = useState(false)
+  const [isChangingAccount, setIsChangingAccount] = useState(false)
+  const [accountError, setAccountError] = useState<Nullable<string>>(null)
   const [capturingAction, setCapturingAction] =
     useState<Nullable<WorkbenchKeyboardShortcutAction>>(null)
   const [projectAiRules, setProjectAiRules] =
@@ -262,6 +270,11 @@ export function WorkbenchSettingsDialog({
         id: 'project' as const,
         label: t('workbench.settingsProject'),
         description: t('workbench.settingsProjectDescription'),
+      },
+      {
+        id: 'account' as const,
+        label: t('workbench.settingsAccount'),
+        description: t('workbench.settingsAccountDescription'),
       },
       {
         id: 'appearance' as const,
@@ -381,6 +394,34 @@ export function WorkbenchSettingsDialog({
     setModelBaseURLDraft(modelConfig.baseURL)
     setModelApiKeyDraft(modelConfig.apiKey)
   }, [modelConfig.apiKey, modelConfig.baseURL, modelConfig.provider, open])
+
+  useEffect(() => {
+    if (!open || activeSection !== 'account') return
+
+    let active = true
+    setIsLoadingAccount(true)
+    setAccountError(null)
+    void window.velarosWorkbenchAccount.getState()
+      .then((state) => {
+        if (active) setAccountState(state)
+      })
+      .catch((error: unknown) => {
+        if (!active) return
+        setAccountError(error instanceof Error ? error.message : String(error))
+      })
+      .finally(() => {
+        if (active) setIsLoadingAccount(false)
+      })
+    const dispose = window.velarosWorkbenchAccount.onChanged((state) => {
+      if (!active) return
+      setAccountState(state)
+      setAccountError(null)
+    })
+    return () => {
+      active = false
+      dispose()
+    }
+  }, [activeSection, open])
 
   useEffect(() => {
     if (!open || activeSection !== 'model') {
@@ -681,6 +722,72 @@ export function WorkbenchSettingsDialog({
             {t('workbench.settingsExitProjectAction')}
           </Button>
         </SettingRow>
+      </div>
+    )
+  }
+
+  async function changeAccount(action: 'sign-in' | 'sign-out'): Promise<void> {
+    setIsChangingAccount(true)
+    setAccountError(null)
+    try {
+      const state = action === 'sign-in'
+        ? await window.velarosWorkbenchAccount.signIn()
+        : await window.velarosWorkbenchAccount.signOut()
+      setAccountState(state)
+    } catch (error) {
+      setAccountError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setIsChangingAccount(false)
+    }
+  }
+
+  function renderAccountSection(): ReactElement {
+    const signedIn = accountState.status === 'signed-in'
+    const accountDescription = signedIn
+      ? `${accountState.account.displayName} · ${accountState.account.email}`
+      : isLoadingAccount
+        ? t('workbench.settingsAccountLoading')
+        : t('workbench.settingsAccountSignedOutDescription')
+
+    return (
+      <div className={styles.workbenchSettingsSectionPanel}>
+        <SettingRow
+          title={t('workbench.settingsAccountCurrent')}
+          description={accountDescription}
+        >
+          <WorkbenchSettingsPill tone={signedIn ? 'success' : 'default'}>
+            {signedIn
+              ? t('workbench.settingsAccountSignedIn')
+              : t('workbench.settingsAccountSignedOut')}
+          </WorkbenchSettingsPill>
+        </SettingRow>
+        <SettingRow
+          title={signedIn
+            ? t('workbench.settingsAccountSignOut')
+            : t('workbench.settingsAccountSignIn')}
+          description={signedIn
+            ? t('workbench.settingsAccountSignOutDescription')
+            : t('workbench.settingsAccountSignInDescription')}
+        >
+          <Button
+            size="sm"
+            variant={signedIn ? 'destructiveOutline' : 'outline'}
+            disabled={isLoadingAccount || isChangingAccount}
+            onClick={() => void changeAccount(signedIn ? 'sign-out' : 'sign-in')}
+          >
+            {signedIn ? <SignOutIcon size={14} /> : <ArrowSquareOutIcon size={14} />}
+            {isChangingAccount
+              ? t('workbench.settingsAccountChanging')
+              : signedIn
+                ? t('workbench.settingsAccountSignOutAction')
+                : t('workbench.settingsAccountSignInAction')}
+          </Button>
+        </SettingRow>
+        {!!accountError && (
+          <Text tone="caption" className={styles.workbenchSettingsPluginError} role="alert">
+            {t('workbench.settingsAccountError', { error: accountError })}
+          </Text>
+        )}
       </div>
     )
   }
@@ -1283,6 +1390,9 @@ export function WorkbenchSettingsDialog({
     switch (activeSection) {
       case 'project': {
         return renderProjectSection()
+      }
+      case 'account': {
+        return renderAccountSection()
       }
       case 'appearance': {
         return renderAppearanceSection()
