@@ -501,7 +501,7 @@
   --workbench-topbar-height: 36px;
   --workbench-panel-header-height: 40px;
   --workbench-statusbar-height: 26px;
-  --workbench-tab-height: 34px;
+  --workbench-tab-height: 35px;
   --workbench-left-rail-width: 38px;
   --workbench-right-rail-width: 36px;
   --workbench-left-rail-button-size: 30px;
@@ -831,7 +831,6 @@
   --workbench-topbar-height: 32px;
   --workbench-panel-header-height: 34px;
   --workbench-statusbar-height: 22px;
-  --workbench-tab-height: 30px;
   --workbench-left-rail-width: 34px;
   --workbench-right-rail-width: 32px;
   --workbench-left-rail-button-size: 26px;
@@ -857,7 +856,6 @@
   --workbench-topbar-height: 42px;
   --workbench-panel-header-height: 46px;
   --workbench-statusbar-height: 30px;
-  --workbench-tab-height: 40px;
   --workbench-left-rail-width: 44px;
   --workbench-right-rail-width: 42px;
   --workbench-left-rail-button-size: 34px;

@@ -32,6 +32,7 @@ void describe('pre-split Workbench shell parity', () => {
     const panel = readSource('src/renderer/src/components/files/FilePanel.tsx')
     const row = readSource('src/renderer/src/components/files/FileTreeRow.tsx')
     const styles = readSource('src/renderer/src/styles/08-files.module.css')
+    const shellStyles = readSource('src/renderer/src/styles/01-shell.module.css')
 
     assert.doesNotMatch(panel, /<div className=\{styles\.panelHeader\}>/)
     assert.match(panel, /className=\{styles\.filePanelProjectHeader\}/)
@@ -41,11 +42,9 @@ void describe('pre-split Workbench shell parity', () => {
     assert.match(panel, /childrenByPath=\{childrenByPath\}/)
     assert.doesNotMatch(panel, /treeRootEntries/)
     assert.doesNotMatch(row, /treeRootActionButton/)
-    assert.match(
-      styles,
-      /\.filePanelProjectHeader[\s\S]*flex:\s*0 0 var\(--workbench-tab-height\)[\s\S]*height:\s*var\(--workbench-tab-height\)/
-    )
-    assert.doesNotMatch(styles, /\.filePanelProjectHeader[\s\S]*height:\s*35px/)
+    assert.match(styles, /\.filePanelProjectHeader[\s\S]*flex:\s*0 0 35px[\s\S]*height:\s*35px/)
+    assert.match(shellStyles, /--workbench-tab-height:\s*35px/)
+    assert.equal(shellStyles.match(/--workbench-tab-height:/g)?.length, 1)
     assert.match(panel, /<SearchField/)
     assert.match(panel, /className=\{styles\.searchInputShell\}[\s\S]*<SearchField/)
     assert.doesNotMatch(panel, /searchInputClearButton/)
