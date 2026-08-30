@@ -7,6 +7,8 @@ import { BrowserCompositionProvider } from '@velaros-ai/browser/composition'
 import {
   type ConversationActionPort,
   ConversationActionPortProvider,
+  type ConversationBlockHooks,
+  ConversationBlockHooksProvider,
   ConversationLocalizationProvider,
 } from '@velaros-ai/ui/conversation'
 import {
@@ -32,6 +34,17 @@ const standaloneConversationActionPort: ConversationActionPort = {
   updateGoalLifecycle: async () => ({ ok: true, goal: null }),
   provideExecutionGuidance: async () => undefined,
   resolveHandoffSuggestion: () => undefined,
+}
+
+const standaloneConversationBlockHooks: ConversationBlockHooks = {
+  useMessageActionView: () => ({
+    actionItems: [],
+    actionRows: [],
+    formatPathForDisplay: (path) => path,
+    hasActionItems: false,
+    openPathInLight: () => Promise.resolve(),
+  }),
+  useAutoTranslateThinkingEnabled: () => false,
 }
 
 /**
@@ -129,44 +142,46 @@ export function StandaloneWorkbenchApp(): ReactElement {
   return (
     <WorkbenchLocalizationProvider value={localization}>
       <ConversationLocalizationProvider value={localization}>
-        <ConversationActionPortProvider value={standaloneConversationActionPort}>
-          <ConversationComposerPortProvider value={emptyConversationComposerPort}>
-            <WorkbenchProductRuntimeProvider value={standaloneWorkbenchProductRuntimeValue}>
-              <BrowserCompositionProvider adapter={standaloneBrowserCompositionAdapter}>
-                <WorkbenchChatProvider adapter={standaloneWorkbenchChatAdapter}>
-                  <div className="workbench-external-project-drop-root">
-                    {state.currentProject ? (
-                      <WorkbenchWorkspaceShell
-                        project={state.currentProject}
-                        projectHubState={state}
+        <ConversationBlockHooksProvider value={standaloneConversationBlockHooks}>
+          <ConversationActionPortProvider value={standaloneConversationActionPort}>
+            <ConversationComposerPortProvider value={emptyConversationComposerPort}>
+              <WorkbenchProductRuntimeProvider value={standaloneWorkbenchProductRuntimeValue}>
+                <BrowserCompositionProvider adapter={standaloneBrowserCompositionAdapter}>
+                  <WorkbenchChatProvider adapter={standaloneWorkbenchChatAdapter}>
+                    <div className="workbench-external-project-drop-root">
+                      {state.currentProject ? (
+                        <WorkbenchWorkspaceShell
+                          project={state.currentProject}
+                          projectHubState={state}
+                        />
+                      ) : (
+                        <WorkbenchWelcomePage
+                          state={state}
+                          onNewProject={() => setNewProjectDialogOpen(true)}
+                        />
+                      )}
+                      <NewProjectDialog
+                        open={newProjectDialogOpen}
+                        onOpenChange={setNewProjectDialogOpen}
                       />
-                    ) : (
-                      <WorkbenchWelcomePage
-                        state={state}
-                        onNewProject={() => setNewProjectDialogOpen(true)}
-                      />
-                    )}
-                    <NewProjectDialog
-                      open={newProjectDialogOpen}
-                      onOpenChange={setNewProjectDialogOpen}
-                    />
-                    <WorkbenchMessageHost />
-                    <WorkbenchProductAnalyticsNoticeDialog />
-                    {externalProjectDropActive && (
-                      <div className="workbench-external-project-drop-overlay" role="status">
-                        <div className="workbench-external-project-drop-card">
-                          <FolderOpenIcon size={30} weight="duotone" />
-                          <span>{localization.t('workbench.dropProjectFolder')}</span>
-                          <small>{localization.t('workbench.dropProjectFolderHint')}</small>
+                      <WorkbenchMessageHost />
+                      <WorkbenchProductAnalyticsNoticeDialog />
+                      {externalProjectDropActive && (
+                        <div className="workbench-external-project-drop-overlay" role="status">
+                          <div className="workbench-external-project-drop-card">
+                            <FolderOpenIcon size={30} weight="duotone" />
+                            <span>{localization.t('workbench.dropProjectFolder')}</span>
+                            <small>{localization.t('workbench.dropProjectFolderHint')}</small>
+                          </div>
                         </div>
-                      </div>
-                    )}
-                  </div>
-                </WorkbenchChatProvider>
-              </BrowserCompositionProvider>
-            </WorkbenchProductRuntimeProvider>
-          </ConversationComposerPortProvider>
-        </ConversationActionPortProvider>
+                      )}
+                    </div>
+                  </WorkbenchChatProvider>
+                </BrowserCompositionProvider>
+              </WorkbenchProductRuntimeProvider>
+            </ConversationComposerPortProvider>
+          </ConversationActionPortProvider>
+        </ConversationBlockHooksProvider>
       </ConversationLocalizationProvider>
     </WorkbenchLocalizationProvider>
   )

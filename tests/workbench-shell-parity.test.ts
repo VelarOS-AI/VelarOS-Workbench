@@ -262,9 +262,14 @@ void describe('pre-split Workbench shell parity', () => {
   })
 
   void test('restores the Workbench chat landing and composer controls', () => {
+    const app = readSource('src/renderer/src/StandaloneWorkbenchApp.tsx')
     const adapter = readSource('src/renderer/src/runtime/standaloneWorkbenchChatAdapter.tsx')
     const styles = readSource('src/renderer/src/styles/04-insight-chat.module.css')
 
+    assert.match(app, /ConversationBlockHooksProvider/)
+    assert.match(app, /value=\{standaloneConversationBlockHooks\}/)
+    assert.match(app, /useMessageActionView:/)
+    assert.match(app, /useAutoTranslateThinkingEnabled:/)
     assert.match(adapter, /data-workbench-chat-empty="true"/)
     assert.match(adapter, /workbenchAppIconUrl/)
     assert.match(adapter, /<img/)
