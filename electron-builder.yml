@@ -3,11 +3,20 @@ productName: VelarOS Workbench
 copyright: Copyright © VelarOS
 
 directories:
-  output: release
+  output: artifacts/desktop
 
 files:
-  - out/**/*
+  - build/electron/**/*
   - package.json
+  - '!node_modules/gpt-tokenizer/cjs/**/*'
+  - '!node_modules/gpt-tokenizer/data/**/*'
+  - '!node_modules/gpt-tokenizer/dist/**/*'
+  - '!node_modules/gpt-tokenizer/src/**/*'
+  - '!node_modules/gpt-tokenizer/esm/**/*.map'
+  - '!node_modules/gpt-tokenizer/esm/bpeRanks/cl100k_base.js'
+  - '!node_modules/gpt-tokenizer/esm/bpeRanks/p50k_base.js'
+  - '!node_modules/gpt-tokenizer/esm/bpeRanks/p50k_edit.js'
+  - '!node_modules/gpt-tokenizer/esm/bpeRanks/r50k_base.js'
 
 asar: true
 artifactName: VelarOS-Workbench-${version}-${os}-${arch}.${ext}

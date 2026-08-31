@@ -30,7 +30,7 @@ export class WorkbenchBrowserController {
     const parsed = parseBrowserSessionInput(input)
     this.assertWorkspaceRootAllowed(parsed.projectRoot)
     const context = { url: parsed.url, workspaceRoot: parsed.projectRoot }
-    const state = await this.runtime.launchBackgroundBrowserPage(
+    const state = await this.runtime.launchExternalBrowserPage(
       parsed.browserSessionId,
       context,
       { url: parsed.url },

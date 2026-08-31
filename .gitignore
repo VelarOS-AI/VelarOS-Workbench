@@ -1,17 +1,14 @@
 node_modules/
 .bun/
 .vite/
-out/
+build/electron/
 dist/
 coverage/
-release/
-release-stage/
-release-existing/
+artifacts/
 !scripts/release/
 !scripts/release/releaseArtifacts.mjs
 !scripts/release/releaseIdentity.mjs
-dist-plugins/
-.data/
+.velaros/
 .cache/
 
 # 根目录 types/ 下的手写全局类型单源

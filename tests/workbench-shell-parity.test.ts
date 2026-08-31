@@ -334,9 +334,9 @@ void describe('pre-split Workbench shell parity', () => {
     assert.match(settings, /settingsPluginSharedHint/)
     assert.match(settings, /renderPluginsSection\(\)/)
     assert.match(settings, /renderModsSection\(\)/)
-    assert.match(preload, /velarosWorkbenchAgentMods/)
-    assert.match(main, /WorkbenchModIpc/)
-    assert.match(readme, /product-owned built-ins/)
+    assert.match(preload, /WorkbenchResourcePluginChannels\.listAgentEngineModels/)
+    assert.match(main, /WorkbenchResourcePluginIpc/)
+    assert.match(readme, /Claude Agent and ChatGPT\/Codex are external engine plugins/)
     assert.match(readme, /Desktop\s+and Workbench discover the same physical installation/)
   })
 

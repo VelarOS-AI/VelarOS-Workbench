@@ -74,7 +74,6 @@ import type {
 import type { WorkbenchAccountState } from '@shared/workbenchAccount'
 import type { WorkbenchUpdateChannel } from '@shared/workbenchUpdate'
 
-import type { WorkbenchModCatalog, WorkbenchModRecord } from '../../../../shared/workbenchAgentMods'
 import type {
   WorkbenchResourcePluginCatalog,
   WorkbenchResourcePluginRecord,
@@ -239,8 +238,6 @@ export function WorkbenchSettingsDialog({
   const [expandedProjectAiRulePath, setExpandedProjectAiRulePath] = useState<Nullable<string>>(null)
   const [isLoadingProjectAiRules, setIsLoadingProjectAiRules] = useState(false)
   const [pluginCatalog, setPluginCatalog] = useState<Nullable<WorkbenchResourcePluginCatalog>>(null)
-  const [modCatalog, setModCatalog] = useState<Nullable<WorkbenchModCatalog>>(null)
-  const [isLoadingMods, setIsLoadingMods] = useState(false)
   const [isLoadingPlugins, setIsLoadingPlugins] = useState(false)
   const [pluginQuery, setPluginQuery] = useState('')
   const [providerModelCatalog, setProviderModelCatalog] =
@@ -348,17 +345,6 @@ export function WorkbenchSettingsDialog({
     }
   }, [])
 
-  const refreshMods = useCallback(async (): Promise<void> => {
-    setIsLoadingMods(true)
-    try {
-      setModCatalog(await window.velarosWorkbenchAgentMods.list())
-    } catch {
-      setModCatalog(null)
-    } finally {
-      setIsLoadingMods(false)
-    }
-  }, [])
-
   const conflictedActions = useMemo(
     () => new Set(conflicts.flatMap((conflict) => conflict.actions)),
     [conflicts]
@@ -462,13 +448,6 @@ export function WorkbenchSettingsDialog({
 
     void refreshProjectAiRules()
   }, [activeSection, open, refreshProjectAiRules])
-
-  useEffect(() => {
-    if (!open || activeSection !== 'extensions') return
-
-    void refreshMods()
-    return window.velarosWorkbenchAgentMods.onChanged(setModCatalog)
-  }, [activeSection, open, refreshMods])
 
   useEffect(() => {
     if (!open || activeSection !== 'extensions') return
@@ -1059,6 +1038,18 @@ export function WorkbenchSettingsDialog({
     )
   }
 
+  function pluginDisplayName(id: WorkbenchResourcePluginRecord['id']): string {
+    if (id === 'claude-agent') return 'Claude Agent'
+    if (id === 'chatgpt') return 'ChatGPT'
+    return 'CodeGraph'
+  }
+
+  function pluginDescription(id: WorkbenchResourcePluginRecord['id']): string {
+    if (id === 'claude-agent') return t('workbench.settingsPluginClaudeDescription')
+    if (id === 'chatgpt') return t('workbench.settingsPluginChatGptDescription')
+    return t('workbench.settingsPluginCodeGraphDescription')
+  }
+
   function renderPluginRow(plugin: WorkbenchResourcePluginRecord): ReactElement {
     const statusLabel = pluginStatusLabel(plugin)
     return (
@@ -1068,10 +1059,10 @@ export function WorkbenchSettingsDialog({
         </span>
         <div className={styles.workbenchSettingsPluginMeta}>
           <Text className={styles.workbenchSettingsPluginName}>
-            CodeGraph{plugin.version ? ` · ${plugin.version}` : ''}
+            {pluginDisplayName(plugin.id)}{plugin.version ? ` · ${plugin.version}` : ''}
           </Text>
           <Text tone="caption" className={styles.workbenchSettingsRowDescription}>
-            {t('workbench.settingsPluginCodeGraphDescription')}
+            {pluginDescription(plugin.id)}
           </Text>
           {!!plugin.error && (
             <Text tone="caption" className={styles.workbenchSettingsPluginError}>
@@ -1118,61 +1109,24 @@ export function WorkbenchSettingsDialog({
     )
   }
 
-  async function setModEnabled(mod: WorkbenchModRecord, enabled: boolean): Promise<void> {
-    setModCatalog(
-      await window.velarosWorkbenchAgentMods.setEnabled({
-        id: mod.id,
-        enabled,
-      })
-    )
-  }
-
   function renderModsSection(): ReactElement {
-    const mod = modCatalog?.mods.find((candidate) => candidate.id === 'velaros.agent-engines')
     return (
       <div className={styles.workbenchSettingsSectionPanel}>
         <Text tone="caption" className={styles.workbenchSettingsPluginSharedHint}>
           {t('workbench.settingsModsHint')}
         </Text>
-        {isLoadingMods && !modCatalog ? (
-          <div className={styles.workbenchSettingsAiRulesEmpty}>
-            <Text>{t('workbench.settingsModsLoading')}</Text>
-          </div>
-        ) : mod ? (
-          <div className={styles.workbenchSettingsPluginList}>
-            <div className={styles.workbenchSettingsPluginRow}>
-              <span className={styles.workbenchSettingsPluginIcon}>
-                <PlugsConnectedIcon size={16} />
-              </span>
-              <div className={styles.workbenchSettingsPluginMeta}>
-                <Text className={styles.workbenchSettingsPluginName}>
-                  {t('workbench.settingsAgentEnginesModTitle')} · {mod.version}
-                </Text>
-                <Text tone="caption" className={styles.workbenchSettingsRowDescription}>
-                  {t('workbench.settingsAgentEnginesModDescription')}
-                </Text>
-              </div>
-              <div className={styles.workbenchSettingsPluginActions}>
-                <Switch
-                  size="sm"
-                  checked={mod.enabled}
-                  onCheckedChange={(enabled) => void setModEnabled(mod, enabled)}
-                />
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className={styles.workbenchSettingsAiRulesEmpty}>
-            <Text>{t('workbench.settingsModsEmpty')}</Text>
-          </div>
-        )}
+        <div className={styles.workbenchSettingsAiRulesEmpty}>
+          <Text>{t('workbench.settingsModsEmpty')}</Text>
+        </div>
       </div>
     )
   }
 
   function renderPluginsSection(): ReactElement {
     const plugins = (pluginCatalog?.plugins ?? []).filter((plugin) =>
-      `${plugin.id} CodeGraph`.toLowerCase().includes(pluginQuery.trim().toLowerCase())
+      `${plugin.id} ${pluginDisplayName(plugin.id)}`
+        .toLowerCase()
+        .includes(pluginQuery.trim().toLowerCase())
     )
     return (
       <div className={styles.workbenchSettingsSectionPanel}>

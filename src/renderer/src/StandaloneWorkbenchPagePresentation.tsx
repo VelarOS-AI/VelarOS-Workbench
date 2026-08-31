@@ -25,8 +25,7 @@ import type { WorkbenchProjectHubState } from '@shared/projectHub'
 
 import { resolveWorkbenchChatProviderId } from '../../plugins/agent-engines/identity'
 import {
-  useWorkbenchAgentEnginesContributionEnabled,
-  WorkbenchAgentEnginesRendererContribution,
+  useWorkbenchAgentPluginContributions,
 } from '../../plugins/agent-engines/renderer/contribution'
 
 import { StatusBar } from './components/chrome/StatusBar'
@@ -79,7 +78,7 @@ export function StandaloneWorkbenchPagePresentation({
 }: StandaloneWorkbenchPagePresentationProps): ReactElement {
   const model = useWorkbenchPageContext()
   const runtime = useWorkbenchHostRuntime()
-  const agentEnginesEnabled = useWorkbenchAgentEnginesContributionEnabled()
+  const agentPluginContributions = useWorkbenchAgentPluginContributions()
   const {
     workbench,
     surface,
@@ -234,8 +233,11 @@ export function StandaloneWorkbenchPagePresentation({
     [t, velarStructureSnapshot]
   )
   useEffect(() => {
-    if (!agentEnginesEnabled && surface.activeRightTool !== 'chat') surface.closeRightTool()
-  }, [agentEnginesEnabled, surface.activeRightTool])
+    if (
+      surface.activeRightTool !== 'chat'
+      && !agentPluginContributions.some((item) => item.id === surface.activeRightTool)
+    ) surface.closeRightTool()
+  }, [agentPluginContributions, surface.activeRightTool])
 
   useEffect(() => {
     if (chrome.velarLogicGraphAvailable) return
@@ -643,7 +645,7 @@ export function StandaloneWorkbenchPagePresentation({
                 >
                   <ChatCircleTextIcon size={18} weight="duotone" />
                 </IconButton>
-                {(agentEnginesEnabled ? WorkbenchAgentEnginesRendererContribution : []).map(
+                {agentPluginContributions.map(
                   (item) => (
                     <IconButton
                       key={item.id}

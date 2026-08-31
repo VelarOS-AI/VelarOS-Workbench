@@ -371,7 +371,7 @@ async function main() {
     sourceSha: process.env.GITHUB_SHA ?? '',
   })
   if (command === 'stage') {
-    const [platform, releaseDir = 'release', stageDir = `release-stage/${platform}`] = args
+    const [platform, releaseDir = 'artifacts/desktop', stageDir = `artifacts/release-stage/${platform}`] = args
     const staged = await stageReleaseArtifacts({
       releaseDir: path.resolve(repoRoot, releaseDir),
       stageDir: path.resolve(repoRoot, stageDir),
@@ -384,7 +384,7 @@ async function main() {
     return
   }
   if (command === 'reuse') {
-    const [platform, existingDir = 'release-existing', stageDir = `release-stage/${platform}`] =
+    const [platform, existingDir = 'artifacts/release-existing', stageDir = `artifacts/release-stage/${platform}`] =
       args
     const result = await reuseReleaseArtifacts({
       existingDir: path.resolve(repoRoot, existingDir),
@@ -402,7 +402,7 @@ async function main() {
     return
   }
   if (command === 'verify') {
-    const [platform, directory = 'release-existing'] = args
+    const [platform, directory = 'artifacts/release-existing'] = args
     await validateStagedRelease({
       directory: path.resolve(repoRoot, directory),
       platform,

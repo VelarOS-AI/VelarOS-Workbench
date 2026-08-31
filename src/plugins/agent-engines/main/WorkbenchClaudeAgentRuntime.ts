@@ -2,7 +2,6 @@ import {
   type ModelInfo,
   type PermissionResult,
   type Query,
-  query,
   type SDKMessage,
 } from '@anthropic-ai/claude-agent-sdk'
 import type { ModelMessage } from 'ai'
@@ -11,7 +10,7 @@ import {
   type ExecutionEventBus,
 } from '@velaros-ai/agent'
 
-import type { WorkbenchAgentEngineModelCatalog } from '../../../shared/workbenchAgentMods'
+import type { WorkbenchAgentEngineModelCatalog } from '../../../shared/workbenchResourcePlugins'
 
 import { getWorkbenchAgentEngineEnvironment } from './WorkbenchAgentEngineProcess'
 import type { WorkbenchAgentEngineSessionStore } from './WorkbenchAgentEngineSessionStore'
@@ -20,6 +19,7 @@ import {
   ProjectCodeToolIdentity,
   type WorkbenchAgentExtensionTools,
 } from './WorkbenchAgentExtensionTools'
+import type { WorkbenchAgentPluginResolver } from './WorkbenchAgentPluginResolver'
 import {
   type WorkbenchAgentEngineQuestion,
   type WorkbenchEngineInteractionBroker,
@@ -44,7 +44,8 @@ export class WorkbenchClaudeAgentRuntime {
   public constructor(
     private readonly interactions: WorkbenchEngineInteractionBroker,
     private readonly sessions: WorkbenchAgentEngineSessionStore,
-    private readonly extensionTools: WorkbenchAgentExtensionTools
+    private readonly extensionTools: WorkbenchAgentExtensionTools,
+    private readonly pluginResolver: WorkbenchAgentPluginResolver
   ) {}
 
   public async run(input: WorkbenchClaudeRunInput): Promise<{ status: 'completed' | 'aborted' }> {
@@ -59,7 +60,8 @@ export class WorkbenchClaudeAgentRuntime {
 
     try {
       const environment = await getWorkbenchAgentEngineEnvironment()
-      active = query({
+      const sdk = await this.pluginResolver.loadClaudeSdk()
+      active = sdk.query({
         prompt: buildClaudePrompt(input.messages, input.executionModes, !!nativeSessionId),
         options: {
           abortController,
@@ -74,7 +76,7 @@ export class WorkbenchClaudeAgentRuntime {
           env: environment,
           includePartialMessages: true,
           mcpServers: {
-            'velaros-workbench': this.extensionTools.claudeServer(input.projectRoot),
+            'velaros-workbench': this.extensionTools.claudeServer(input.projectRoot, sdk),
           },
           pathToClaudeCodeExecutable: 'claude',
           model: input.model,
@@ -148,7 +150,8 @@ export class WorkbenchClaudeAgentRuntime {
   public async listModels(): Promise<WorkbenchAgentEngineModelCatalog> {
     let probe: Query | null = null
     try {
-      probe = query({
+      const sdk = await this.pluginResolver.loadClaudeSdk()
+      probe = sdk.query({
         prompt: '',
         options: {
           env: await getWorkbenchAgentEngineEnvironment(),

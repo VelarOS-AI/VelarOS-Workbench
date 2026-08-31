@@ -17,8 +17,8 @@ const ignoredDirectories = new Set([
   'coverage',
   'dist',
   'node_modules',
-  'out',
-  'release',
+  'artifacts',
+  'build',
 ])
 const localPackageSpecification = /^(?:file|link|portal|workspace):/u
 const cloudDownloadPrefix = 'https://npm.pkg.github.com/download/'

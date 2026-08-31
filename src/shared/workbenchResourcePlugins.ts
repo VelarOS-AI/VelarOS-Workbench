@@ -1,11 +1,14 @@
+import type { WorkbenchAgentEngineId } from '../plugins/agent-engines/identity'
+
 export const WorkbenchResourcePluginChannels = {
   list: 'workbench-app:resource-plugins:list',
   install: 'workbench-app:resource-plugins:install',
   setEnabled: 'workbench-app:resource-plugins:set-enabled',
+  listAgentEngineModels: 'workbench-app:resource-plugins:list-agent-engine-models',
   changed: 'workbench-app:resource-plugins:changed',
 } as const
 
-export type WorkbenchResourcePluginId = 'codegraph'
+export type WorkbenchResourcePluginId = 'codegraph' | 'claude-agent' | 'chatgpt'
 export type WorkbenchResourcePluginStatus =
   | 'available'
   | 'disabled'
@@ -30,6 +33,20 @@ export interface WorkbenchResourcePluginCatalog {
   plugins: readonly WorkbenchResourcePluginRecord[]
 }
 
+export interface WorkbenchAgentEngineModelOption {
+  value: string
+  label: string
+  description?: string
+  isDefault: boolean
+}
+
+export interface WorkbenchAgentEngineModelCatalog {
+  engineId: WorkbenchAgentEngineId
+  available: boolean
+  reason?: string
+  models: readonly WorkbenchAgentEngineModelOption[]
+}
+
 export interface WorkbenchResourcePluginSetEnabledRequest {
   id: WorkbenchResourcePluginId
   enabled: boolean
@@ -47,6 +64,9 @@ export interface WorkbenchResourcePluginBridge {
   setEnabled: (
     request: WorkbenchResourcePluginSetEnabledRequest
   ) => Promise<WorkbenchResourcePluginCatalog>
+  listAgentEngineModels: (
+    engineId: WorkbenchAgentEngineId
+  ) => Promise<WorkbenchAgentEngineModelCatalog>
   onChanged: (
     listener: (catalog: WorkbenchResourcePluginCatalog) => void
   ) => () => void

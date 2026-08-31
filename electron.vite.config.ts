@@ -52,6 +52,9 @@ const rendererAliases = [
 export default defineConfig({
   main: {
     build: {
+      outDir: resolve(repoRoot, 'build/electron/main'),
+      externalizeDeps: false,
+      minify: false,
       rollupOptions: {
         // 语言服务 worker 是第二入口：tsserver 建图/诊断耗时数秒，必须离开主线程，
         // 主进程 client 以 `new Worker(resolve(__dirname, 'workbench-language-worker.js'))`
@@ -64,6 +67,17 @@ export default defineConfig({
             'src/main/workspace/language/LanguageServiceWorker.ts'
           ),
         },
+        external: [
+          'electron',
+          'gpt-tokenizer',
+          /^gpt-tokenizer\/.+/u,
+          'typescript',
+          'vscode-css-languageservice',
+          'vscode-html-languageservice',
+          'vscode-languageserver-textdocument',
+          'vscode-markdown-languageservice',
+          'vscode-uri',
+        ],
       },
     },
     resolve: {
@@ -75,6 +89,7 @@ export default defineConfig({
   },
   preload: {
     build: {
+      outDir: resolve(repoRoot, 'build/electron/preload'),
       rollupOptions: {
         input: source('preload/index.ts'),
       },
@@ -86,6 +101,7 @@ export default defineConfig({
   renderer: {
     root: source('renderer'),
     build: {
+      outDir: resolve(repoRoot, 'build/electron/renderer'),
       rollupOptions: {
         input: source('renderer/index.html'),
       },

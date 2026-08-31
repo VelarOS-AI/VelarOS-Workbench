@@ -27,7 +27,7 @@ import {
 } from '@velaros-ai/ui/conversation/composer'
 
 import type { ChatMessage, ContentBlock, ToolCallBlock } from '@shared/contracts'
-import type { WorkbenchAgentEngineModelCatalog } from '@shared/workbenchAgentMods'
+import type { WorkbenchAgentEngineModelCatalog } from '@shared/workbenchResourcePlugins'
 
 import workbenchAppIconUrl from '../../../../build/icon.svg?url'
 import type { WorkbenchChatProviderId } from '../../../plugins/agent-engines/identity'
@@ -178,7 +178,7 @@ function useAgentEngineCatalog(
   const [catalog, setCatalog] = useState<WorkbenchAgentEngineModelCatalog | null>(() =>
     providerId === 'workbench' ? null : engineCatalogCache.get(providerId) ?? null
   )
-  useEffect(() => window.velarosWorkbenchAgentMods.onChanged(() => {
+  useEffect(() => window.velarosWorkbenchResourcePlugins.onChanged(() => {
     engineCatalogCache.delete('claude-code')
     engineCatalogCache.delete('codex')
     engineCatalogRequests.delete('claude-code')
@@ -197,7 +197,7 @@ function useAgentEngineCatalog(
       return
     }
     const request = engineCatalogRequests.get(providerId)
-      ?? window.velarosWorkbenchAgentMods.listAgentEngineModels(providerId).catch((error) => ({
+      ?? window.velarosWorkbenchResourcePlugins.listAgentEngineModels(providerId).catch((error) => ({
         engineId: providerId,
         available: false,
         reason: error instanceof Error ? error.message : String(error),

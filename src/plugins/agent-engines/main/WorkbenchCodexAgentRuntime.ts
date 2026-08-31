@@ -2,7 +2,7 @@ import type { ModelMessage } from 'ai'
 
 import type { ExecutionEventBus } from '@velaros-ai/agent'
 
-import type { WorkbenchAgentEngineModelCatalog } from '../../../shared/workbenchAgentMods'
+import type { WorkbenchAgentEngineModelCatalog } from '../../../shared/workbenchResourcePlugins'
 
 import type { WorkbenchAgentEngineSessionStore } from './WorkbenchAgentEngineSessionStore'
 import {

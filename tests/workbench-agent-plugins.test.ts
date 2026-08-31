@@ -6,7 +6,7 @@ import { describe, expect, test } from 'bun:test'
 const root = resolve(import.meta.dir, '..')
 const readSource = (path: string): string => readFileSync(resolve(root, path), 'utf8')
 
-describe('Workbench Agent Engines Mod', () => {
+describe('Workbench Agent plugins', () => {
   test('contributes switchable Claude and ChatGPT right-side tools', () => {
     const surface = readSource('src/renderer/src/models/layout/workbenchSurfaceModel.ts')
     const contribution = readSource('src/plugins/agent-engines/renderer/contribution.tsx')
@@ -15,20 +15,19 @@ describe('Workbench Agent Engines Mod', () => {
     expect(surface).toContain("'chat' | 'claude' | 'chatgpt'")
     expect(contribution).toContain("id: 'claude'")
     expect(contribution).toContain("id: 'chatgpt'")
-    expect(contribution).toContain('velarosWorkbenchAgentMods')
-    expect(contribution).not.toContain('velarosWorkbenchResourcePlugins')
+    expect(contribution).toContain('velarosWorkbenchResourcePlugins')
     expect(presentation).toContain('resolveWorkbenchChatProviderId(activeRightTool)')
     expect(presentation).toContain('surface.toggleRightTool(item.id)')
   })
 
-  test('keeps the bundled Agent Engines Mod off until the user enables it', () => {
-    const service = readSource('src/main/mods/WorkbenchModService.ts')
+  test('shows external engines only when their plugins are installed and enabled', () => {
+    const service = readSource('src/main/resources/WorkbenchResourcePluginService.ts')
     const contribution = readSource('src/plugins/agent-engines/renderer/contribution.tsx')
 
-    expect(service).toContain('private enabled = false')
-    expect(service).toContain("join(dataRootDir, 'mods.json')")
-    expect(service).toContain('this.agentEngines.setEnabled(enabled)')
-    expect(contribution).toContain('mod?.enabled ?? false')
+    expect(service).toContain("this.describePlugin('claude-agent')")
+    expect(service).toContain("this.describePlugin('chatgpt')")
+    expect(service).toContain('isAgentPluginEnabled')
+    expect(contribution).toContain("enabledIds.has(contribution.id === 'claude' ? 'claude-agent' : 'chatgpt')")
   })
 
   test('keeps a separate persisted conversation for every provider', () => {
@@ -59,9 +58,10 @@ describe('Workbench Agent Engines Mod', () => {
     expect(`${claude}${codex}`).not.toContain("planMode ? 'plan'")
   })
 
-  test('uses the shared official Mod identity and preserves native engine tools', () => {
-    const identity = readSource('src/plugins/agent-engines/identity.ts')
-    const manifest = readSource('src/plugins/agent-engines/manifest.ts')
+  test('loads the shared external plugins and preserves native engine tools', () => {
+    const resolver = readSource(
+      'src/plugins/agent-engines/main/WorkbenchAgentPluginResolver.ts',
+    )
     const claude = readSource('src/plugins/agent-engines/main/WorkbenchClaudeAgentRuntime.ts')
     const codex = readSource('src/plugins/agent-engines/main/WorkbenchCodexAgentRuntime.ts')
     const broker = readSource('src/plugins/agent-engines/main/WorkbenchEngineInteractionBroker.ts')
@@ -69,8 +69,9 @@ describe('Workbench Agent Engines Mod', () => {
       'src/plugins/agent-engines/main/WorkbenchAgentExtensionTools.ts',
     )
 
-    expect(identity).toContain("WorkbenchAgentEnginesModId = 'velaros.agent-engines'")
-    expect(manifest).toContain("'process:exec', 'agent:execute'")
+    expect(resolver).toContain("resolvePackageRoot('claude-agent')")
+    expect(resolver).toContain("resolvePackageRoot('chatgpt')")
+    expect(resolver).toContain("'claude-agent-sdk', 'sdk.mjs'")
     expect(claude).toContain("toolName === 'AskUserQuestion'")
     expect(codex).toContain("method === 'item/tool/requestUserInput'")
     expect(codex).toContain("method === 'item/permissions/requestApproval'")

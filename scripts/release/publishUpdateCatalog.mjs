@@ -188,7 +188,7 @@ async function run() {
   if (!['stable', 'beta', 'canary'].includes(channel)) {
     throw new Error(`Unsupported Workbench update channel: ${channel}`)
   }
-  const releaseDirectory = path.resolve(repoRoot, process.argv[2] ?? 'release-stage/final')
+  const releaseDirectory = path.resolve(repoRoot, process.argv[2] ?? 'artifacts/release-stage/final')
   const files = (await readdir(releaseDirectory))
     .filter((fileName) => FileNamePattern.test(fileName) && artifactDescriptor(fileName))
     .sort()

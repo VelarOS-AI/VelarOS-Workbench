@@ -115,7 +115,7 @@ describe('VelarOS shared resources', () => {
     const service = new WorkbenchResourcePluginService(
       dataRoot,
       resource,
-      fixture.sharedResourcesRoot
+      resourcePluginOptions(fixture.sharedResourcesRoot)
     )
 
     expect(service.listCatalog().plugins[0]).toMatchObject({
@@ -133,7 +133,7 @@ describe('VelarOS shared resources', () => {
     const restored = new WorkbenchResourcePluginService(
       dataRoot,
       resource,
-      fixture.sharedResourcesRoot
+      resourcePluginOptions(fixture.sharedResourcesRoot)
     )
     expect(restored.listCatalog().plugins[0]).toMatchObject({
       installed: true,
@@ -142,6 +142,21 @@ describe('VelarOS shared resources', () => {
     })
   })
 })
+
+function resourcePluginOptions(sharedResourcesRoot: string) {
+  return {
+    sharedResourcesRoot,
+    artifactBase: () => 'https://example.invalid/plugins/',
+    fetchImpl: fetch,
+    agentEngines: {
+      listModels: async (engineId: 'claude-code' | 'codex') => ({
+        engineId,
+        available: false,
+        models: [],
+      }),
+    },
+  }
+}
 
 function createCodeGraphFixture(): { sharedResourcesRoot: string; projectRoot: string } {
   const root = mkdtempSync(join(tmpdir(), 'velaros-shared-resources-'))

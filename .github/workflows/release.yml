@@ -102,8 +102,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          mkdir -p release-existing
-          gh release download "$RELEASE_TAG" --dir release-existing || true
+          mkdir -p artifacts/release-existing
+          gh release download "$RELEASE_TAG" --dir artifacts/release-existing || true
       - name: Reuse prior immutable platform checkpoint
         id: reuse
         run: node scripts/release/releaseArtifacts.mjs reuse "${{ matrix.artifact }}"
@@ -137,8 +137,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          manifest="release-stage/${{ matrix.artifact }}/workbench-${{ matrix.artifact }}-release.json"
-          for file in "release-stage/${{ matrix.artifact }}"/*
+          manifest="artifacts/release-stage/${{ matrix.artifact }}/workbench-${{ matrix.artifact }}-release.json"
+          for file in "artifacts/release-stage/${{ matrix.artifact }}"/*
           do
             if [[ "$file" != "$manifest" ]]; then
               gh release upload "$RELEASE_TAG" "$file"
@@ -153,8 +153,8 @@ jobs:
         run: |
           assets="$(gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name')"
           for file in \
-            "release-stage/${{ matrix.artifact }}/SHA256SUMS-${{ matrix.artifact }}.txt" \
-            "release-stage/${{ matrix.artifact }}/workbench-${{ matrix.artifact }}-release.json"
+            "artifacts/release-stage/${{ matrix.artifact }}/SHA256SUMS-${{ matrix.artifact }}.txt" \
+            "artifacts/release-stage/${{ matrix.artifact }}/workbench-${{ matrix.artifact }}-release.json"
           do
             if ! grep -Fxq "$(basename "$file")" <<<"$assets"; then
               gh release upload "$RELEASE_TAG" "$file"
@@ -163,7 +163,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: workbench-${{ matrix.artifact }}
-          path: release-stage/${{ matrix.artifact }}/*
+          path: artifacts/release-stage/${{ matrix.artifact }}/*
           if-no-files-found: error
 
   release:
@@ -187,13 +187,13 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           pattern: workbench-*
-          path: release-stage/final
+          path: artifacts/release-stage/final
           merge-multiple: true
       - name: Verify complete immutable release identities
         run: |
-          node scripts/release/releaseArtifacts.mjs verify macos release-stage/final
-          node scripts/release/releaseArtifacts.mjs verify windows release-stage/final
-          node scripts/release/releaseArtifacts.mjs verify linux release-stage/final
+          node scripts/release/releaseArtifacts.mjs verify macos artifacts/release-stage/final
+          node scripts/release/releaseArtifacts.mjs verify windows artifacts/release-stage/final
+          node scripts/release/releaseArtifacts.mjs verify linux artifacts/release-stage/final
       - name: Publish signed Workbench update candidate
         env:
           VELAROS_RELEASE_REPOSITORY: ${{ vars.VELAROS_RELEASE_REPOSITORY }}
@@ -202,7 +202,7 @@ jobs:
           VELAROS_RELEASE_INGEST_TOKEN: ${{ secrets.VELAROS_RELEASE_INGEST_TOKEN }}
           VELAROS_RELEASE_ATTESTATION_PRIVATE_KEY: ${{ secrets.VELAROS_RELEASE_ATTESTATION_PRIVATE_KEY }}
           VELAROS_RELEASE_ATTESTATION_KEY_ID: ${{ vars.VELAROS_RELEASE_ATTESTATION_KEY_ID }}
-        run: node scripts/release/publishUpdateCatalog.mjs release-stage/final
+        run: node scripts/release/publishUpdateCatalog.mjs artifacts/release-stage/final
       - name: Publish the completed draft without replacing assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -23,22 +23,28 @@ export const WorkbenchAgentEnginesRendererContribution: readonly WorkbenchAgentE
     },
   ])
 
-export function useWorkbenchAgentEnginesContributionEnabled(): boolean {
-  const [enabled, setEnabled] = useState(false)
+export function useWorkbenchAgentPluginContributions(): readonly WorkbenchAgentEngineRightToolContribution[] {
+  const [enabledIds, setEnabledIds] = useState<ReadonlySet<string>>(() => new Set())
   useEffect(() => {
     let active = true
     const apply = (catalog: Awaited<ReturnType<
-      typeof window.velarosWorkbenchAgentMods.list
+      typeof window.velarosWorkbenchResourcePlugins.list
     >>): void => {
-      const mod = catalog.mods.find((candidate) => candidate.id === 'velaros.agent-engines')
-      if (active) setEnabled(mod?.enabled ?? false)
+      if (!active) return
+      setEnabledIds(new Set(
+        catalog.plugins
+          .filter((plugin) => plugin.enabled)
+          .map((plugin) => plugin.id)
+      ))
     }
-    void window.velarosWorkbenchAgentMods.list().then(apply)
-    const unsubscribe = window.velarosWorkbenchAgentMods.onChanged(apply)
+    void window.velarosWorkbenchResourcePlugins.list().then(apply)
+    const unsubscribe = window.velarosWorkbenchResourcePlugins.onChanged(apply)
     return () => {
       active = false
       unsubscribe()
     }
   }, [])
-  return enabled
+  return WorkbenchAgentEnginesRendererContribution.filter((contribution) =>
+    enabledIds.has(contribution.id === 'claude' ? 'claude-agent' : 'chatgpt')
+  )
 }

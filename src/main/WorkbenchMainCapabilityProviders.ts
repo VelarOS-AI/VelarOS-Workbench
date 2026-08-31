@@ -1,9 +1,8 @@
 import { WorkbenchAgentEngineSessionStore } from '../plugins/agent-engines/main/WorkbenchAgentEngineSessionStore'
-import { WorkbenchAgentEnginesModRuntime } from '../plugins/agent-engines/main/WorkbenchAgentEnginesModRuntime'
 import { WorkbenchAgentExtensionTools } from '../plugins/agent-engines/main/WorkbenchAgentExtensionTools'
+import { WorkbenchAgentPluginRuntime } from '../plugins/agent-engines/main/WorkbenchAgentPluginRuntime'
 
 import type { WorkbenchKernelCapabilityRoutes } from './kernel/WorkbenchKernelProtocol'
-import { WorkbenchModService } from './mods/WorkbenchModService'
 import { WorkbenchCodeGraphResource } from './resources/WorkbenchCodeGraphResource'
 import { WorkbenchResourcePluginService } from './resources/WorkbenchResourcePluginService'
 import { WorkbenchGitService } from './workspace/git/WorkbenchGitService'
@@ -25,8 +24,7 @@ export interface WorkbenchMainCapabilityProviders {
   readonly watch: WorkbenchFileWatcher
   readonly workspace: WorkbenchProjectCapabilityProvider
   readonly resourcePlugins: WorkbenchResourcePluginService
-  readonly mods: WorkbenchModService
-  readonly agentEngines: WorkbenchAgentEnginesModRuntime
+  readonly agentEngines: WorkbenchAgentPluginRuntime
   readonly kernelRoutes: WorkbenchKernelCapabilityRoutes
 }
 
@@ -41,18 +39,28 @@ export function createDefaultWorkbenchMainCapabilityProviders(
   dataRootDir: string,
   openExternal: (url: string) => Promise<void> = async () => {
     throw new Error('当前 Workbench 宿主没有提供外部链接能力。')
+  },
+  pluginMarket: {
+    artifactBase: () => string
+    fetchImpl: typeof fetch
+  } = {
+    artifactBase: () => 'https://invalid.velaros.local/plugins/',
+    fetchImpl: fetch,
   }
 ): WorkbenchMainCapabilityProviders {
   const language = new WorkbenchLanguageServiceWorkerClient()
   const velarLogicGraph = new WorkbenchVelarLogicGraphService(language)
   const codeGraphResource = new WorkbenchCodeGraphResource()
-  const agentEngines = new WorkbenchAgentEnginesModRuntime(
+  const agentEngines: WorkbenchAgentPluginRuntime = new WorkbenchAgentPluginRuntime(
     new WorkbenchAgentEngineSessionStore(dataRootDir),
     new WorkbenchAgentExtensionTools(codeGraphResource, velarLogicGraph),
-    openExternal
+    openExternal,
+    (engineId): boolean => resourcePlugins.isAgentPluginEnabled(engineId)
   )
-  const resourcePlugins = new WorkbenchResourcePluginService(dataRootDir, codeGraphResource)
-  const mods = new WorkbenchModService(dataRootDir, agentEngines)
+  const resourcePlugins: WorkbenchResourcePluginService = new WorkbenchResourcePluginService(dataRootDir, codeGraphResource, {
+    ...pluginMarket,
+    agentEngines,
+  })
   return {
     parts: createWorkbenchAppParts(dataRootDir),
     fileSystem: new WorkbenchProjectFileSystem(),
@@ -70,7 +78,6 @@ export function createDefaultWorkbenchMainCapabilityProviders(
     }),
     workspace: new ProjectCapabilityProvider({ codeGraphResource, velarLogicGraph }),
     resourcePlugins,
-    mods,
     agentEngines,
     kernelRoutes: DefaultWorkbenchKernelCapabilityRoutes,
   }

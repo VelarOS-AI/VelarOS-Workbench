@@ -3,7 +3,7 @@
  *
  * 只承载片1 两个消费点：删除回收站（delete-undo）与本地历史快照区。目录名与 desktop
  * 保持与 Desktop 已发布目录名一致；这两个目录由独立 Workbench 自己拥有。
- * 可直接搬目录。数据根由 main 入口注入（prod=userData，dev=cwd/.data/workbench-app）。
+ * 可直接搬目录。数据根由 main 入口注入（prod=userData，dev=cwd/.velaros/data/workbench-app）。
  */
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'

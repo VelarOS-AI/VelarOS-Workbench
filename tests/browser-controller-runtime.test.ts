@@ -8,7 +8,7 @@ describe('Workbench Browser controller', () => {
   test('runs create, open, navigate, inspect, input, selection and close through the injected runtime', async () => {
     const calls: Array<{ operation: string; args: unknown[] }> = []
     const runtime = {
-      launchBackgroundBrowserPage: async (...args: unknown[]) => {
+      launchExternalBrowserPage: async (...args: unknown[]) => {
         calls.push({ operation: 'create', args })
         return { sessionId: 'browser-1', url: 'https://example.test/one' }
       },

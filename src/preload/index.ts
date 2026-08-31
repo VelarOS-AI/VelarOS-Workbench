@@ -9,10 +9,6 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent, webUtils } from 'ele
 
 import { type WorkbenchProjectHubBridge, WorkbenchProjectHubChannels } from '../shared/projectHub'
 import { type WorkbenchAccountBridge, WorkbenchAccountChannels } from '../shared/workbenchAccount'
-import {
-  type WorkbenchAgentModBridge,
-  WorkbenchAgentModChannels,
-} from '../shared/workbenchAgentMods'
 import { type WorkbenchFsBridge, WorkbenchFsChannels } from '../shared/workbenchFs'
 import { type WorkbenchGitBridge, WorkbenchGitChannels } from '../shared/workbenchGit'
 import { type WorkbenchKernelBridge, WorkbenchKernelChannels } from '../shared/workbenchKernel'
@@ -187,15 +183,9 @@ const resourcePluginBridge: WorkbenchResourcePluginBridge = {
   list: () => ipcRenderer.invoke(WorkbenchResourcePluginChannels.list),
   install: (request) => ipcRenderer.invoke(WorkbenchResourcePluginChannels.install, request),
   setEnabled: (request) => ipcRenderer.invoke(WorkbenchResourcePluginChannels.setEnabled, request),
-  onChanged: (listener) => subscribe(WorkbenchResourcePluginChannels.changed, listener),
-}
-
-const agentModBridge: WorkbenchAgentModBridge = {
-  list: () => ipcRenderer.invoke(WorkbenchAgentModChannels.list),
-  setEnabled: (request) => ipcRenderer.invoke(WorkbenchAgentModChannels.setEnabled, request),
   listAgentEngineModels: (engineId) =>
-    ipcRenderer.invoke(WorkbenchAgentModChannels.listAgentEngineModels, engineId),
-  onChanged: (listener) => subscribe(WorkbenchAgentModChannels.changed, listener),
+    ipcRenderer.invoke(WorkbenchResourcePluginChannels.listAgentEngineModels, engineId),
+  onChanged: (listener) => subscribe(WorkbenchResourcePluginChannels.changed, listener),
 }
 
 const updateBridge: WorkbenchUpdateBridge = {
@@ -233,7 +223,6 @@ contextBridge.exposeInMainWorld('velarosWorkbenchKernel', kernelBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchModel', modelBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchWorkspace', workspaceBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchResourcePlugins', resourcePluginBridge)
-contextBridge.exposeInMainWorld('velarosWorkbenchAgentMods', agentModBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchUpdate', updateBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchProductAnalytics', productAnalyticsBridge)
 

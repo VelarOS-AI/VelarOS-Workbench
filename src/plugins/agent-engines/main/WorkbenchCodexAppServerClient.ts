@@ -59,7 +59,7 @@ export class WorkbenchCodexAppServerClient {
         clientInfo: {
           name: 'velaros-workbench',
           title: 'VelarOS Workbench',
-          version: '0.3.6',
+          version: '0.3.8',
         },
         capabilities: {
           experimentalApi: true,

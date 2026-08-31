@@ -1,10 +1,11 @@
-import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk'
 import { z } from 'zod'
 
 import { ProjectCodeQuerySchema, ProjectToolNames } from '@velaros-ai/project'
 
 import type { WorkbenchCodeGraphResource } from '../../../main/resources/WorkbenchCodeGraphResource'
 import type { WorkbenchVelarLogicGraphService } from '../../../main/workspace/language/WorkbenchVelarLogicGraphService'
+
+import type { ClaudeAgentSdkModule } from './WorkbenchAgentPluginResolver'
 
 // Provider function names cannot all carry `:`, so the wire alias stays portable while the
 // presented/tool-ledger identity is Platform's canonical `project:query-code`.
@@ -45,12 +46,15 @@ export class WorkbenchAgentExtensionTools {
     }]
   }
 
-  public claudeServer(projectRoot: string): ReturnType<typeof createSdkMcpServer> {
-    return createSdkMcpServer({
+  public claudeServer(
+    projectRoot: string,
+    sdk: ClaudeAgentSdkModule
+  ): ReturnType<ClaudeAgentSdkModule['createSdkMcpServer']> {
+    return sdk.createSdkMcpServer({
       name: 'velaros-workbench',
       version: '1.0.0',
       instructions: 'Read-only structural project tools contributed by VelarOS Workbench plugins.',
-      tools: [tool(
+      tools: [sdk.tool(
         ProjectCodeSearchToolName,
         ProjectCodeSearchDescription,
         ProjectCodeSearchShape,

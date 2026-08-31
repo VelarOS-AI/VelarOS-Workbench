@@ -974,17 +974,15 @@ export const workbenchAppEnUSMessages = {
     settingsPluginsEmpty: 'No matching plugins',
     settingsPluginCodeGraphDescription:
       'Adds project code graphs, structural search, and Agent code-query capabilities.',
+    settingsPluginClaudeDescription:
+      'Downloads the Claude Agent SDK on demand and connects the local Claude session and tools.',
+    settingsPluginChatGptDescription:
+      'Enables the external ChatGPT/Codex engine on demand and uses its local signed-in session.',
     settingsPluginStatusAvailable: 'Enabled',
     settingsPluginStatusDisabled: 'Disabled',
     settingsModsHint:
-      'Mods start disabled. Enable this Mod to show Claude and ChatGPT in the right chat rail.',
-    settingsModsLoading: 'Loading Mods…',
+      'Mods provide lightweight product extensions; capabilities with heavy runtimes or external software are managed as plugins.',
     settingsModsEmpty: 'No Mods available',
-    settingsAgentEnginesModTitle: 'Agent Engines',
-    settingsAgentEnginesModDescription:
-      'Use local Claude Code and Codex login sessions with Workbench goal, plan, input, and approval surfaces.',
-    settingsModEnabled: 'Enabled',
-    settingsModDisabled: 'Disabled',
     settingsPluginStatusInstalling: 'Installing {progress}%',
     settingsPluginStatusFailed: 'Install failed',
     settingsPluginInstall: 'Install',

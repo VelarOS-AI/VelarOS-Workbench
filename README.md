@@ -25,14 +25,14 @@ Workbench is a **complete host**: it composes the Kernel module host *in its own
 (kernel-contract §15) instead of connecting to a daemon. It registers exactly one capability,
 `velaros.agent`, backed by an in-process `@velaros-ai/agent` execution stack. `velaros.model`
 and `velaros.browser` have no implementation here, so those capabilities are simply absent and the
-consumers degrade. Agent prompts, tools, and execution modes are product-owned built-ins rather than
-installable or user-configurable modules.
+consumers degrade. The Workbench Agent prompts, tools, and execution modes are product-owned
+built-ins. Claude Agent and ChatGPT/Codex are external engine plugins resolved from the shared
+VelarOS plugin store and appear only after their individual plugin is installed and enabled.
 
-Optional resource plugins follow a separate boundary from Agent behavior and application state.
-Workbench reads and installs CodeGraph in the VelarOS user-level shared resource store, so Desktop
-and Workbench discover the same physical installation. Each product keeps only its own enablement
-preference. When CodeGraph is absent, the built-in Project file and language capabilities remain
-available.
+Plugins carry resource-heavy capabilities or integrations that need external software. Workbench
+installs CodeGraph, Claude Agent, and ChatGPT into the VelarOS user-level shared resource store, so
+Desktop and Workbench discover the same physical installation while retaining product-local
+enablement preferences. Mods remain a separate system for lightweight product extensions.
 
 ## Development
 
@@ -58,5 +58,5 @@ Velar compiler/editor joint-delivery contract.
 ## Packaging
 
 `bun run package:mac`, `bun run package:win`, and `bun run package:linux` create application
-artifacts under `release/`. Signing and notarization credentials are supplied by the release
+artifacts under `artifacts/desktop/`. Signing and notarization credentials are supplied by the release
 environment; they are never stored in this repository.

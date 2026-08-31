@@ -1,6 +1,3 @@
-export const WorkbenchAgentEnginesModId = 'velaros.agent-engines'
-export const WorkbenchAgentEnginesModVersion = '0.1.0'
-
 export type WorkbenchAgentEngineId = 'claude-code' | 'codex'
 export type WorkbenchChatProviderId = 'workbench' | WorkbenchAgentEngineId
 export type WorkbenchAgentEngineRightTool = 'claude' | 'chatgpt'

@@ -1,5 +1,6 @@
 import { BrowserWindow, ipcMain } from 'electron'
 
+import { isWorkbenchAgentEngineId } from '../../plugins/agent-engines/identity'
 import {
   WorkbenchResourcePluginChannels,
   type WorkbenchResourcePluginId,
@@ -29,6 +30,15 @@ export function registerWorkbenchResourcePluginIpc(
     }
   )
   ipcMain.handle(
+    WorkbenchResourcePluginChannels.listAgentEngineModels,
+    (_event, value: unknown) => {
+      if (!isWorkbenchAgentEngineId(value)) {
+        throw new TypeError('Unknown Workbench Agent engine id.')
+      }
+      return service.listAgentEngineModels(value)
+    }
+  )
+  ipcMain.handle(
     WorkbenchResourcePluginChannels.setEnabled,
     async (_event, request: unknown) => {
       const parsed = readSetEnabledRequest(request)
@@ -41,6 +51,7 @@ export function registerWorkbenchResourcePluginIpc(
     ipcMain.removeHandler(WorkbenchResourcePluginChannels.list)
     ipcMain.removeHandler(WorkbenchResourcePluginChannels.install)
     ipcMain.removeHandler(WorkbenchResourcePluginChannels.setEnabled)
+    ipcMain.removeHandler(WorkbenchResourcePluginChannels.listAgentEngineModels)
   }
 }
 
@@ -49,7 +60,7 @@ function readPluginId(request: unknown): WorkbenchResourcePluginId {
     throw new Error('Resource plugin request must be an object.')
   }
   const id = (request as Record<string, unknown>)['id']
-  if (id !== 'codegraph') {
+  if (id !== 'codegraph' && id !== 'claude-agent' && id !== 'chatgpt') {
     throw new Error('Unsupported Workbench resource plugin.')
   }
   return id

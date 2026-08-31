@@ -46,12 +46,12 @@ async function verifyPackagedWorkbench({ appOutDir, platformName }) {
     )
   }
 
-  const rendererHtml = extractFile(paths.appArchive, 'out/renderer/index.html').toString('utf8')
+  const rendererHtml = extractFile(paths.appArchive, 'build/electron/renderer/index.html').toString('utf8')
   const rendererCssHref = rendererHtml.match(/<link[^>]+href="\.\/([^"]+\.css)"[^>]*>/u)?.[1]
   if (!rendererCssHref) throw new Error('Packaged Workbench renderer CSS asset is missing.')
   const rendererCss = extractFile(
     paths.appArchive,
-    `out/renderer/${rendererCssHref}`
+    `build/electron/renderer/${rendererCssHref}`
   ).toString('utf8')
   const rendererCssWithoutComments = rendererCss.replace(/\/\*[\s\S]*?\*\//gu, '')
   if (rendererCssWithoutComments.includes('@apply')) {
@@ -75,7 +75,7 @@ async function verifyPackagedWorkbench({ appOutDir, platformName }) {
   for (const bundledRuntimeFile of [
     'node_modules/pyright/package.json',
     'node_modules/pyright/langserver.index.js',
-    'out/main/workbench-language-worker.js',
+    'build/electron/main/workbench-language-worker.js',
   ]) {
     const contents = extractFile(paths.appArchive, bundledRuntimeFile)
     if (contents.length === 0)
@@ -83,10 +83,40 @@ async function verifyPackagedWorkbench({ appOutDir, platformName }) {
   }
   const languageWorker = extractFile(
     paths.appArchive,
-    'out/main/workbench-language-worker.js'
+    'build/electron/main/workbench-language-worker.js'
   ).toString('utf8')
   if (!languageWorker.includes('velarscript')) {
     throw new Error('Packaged Workbench language worker is missing the built-in Velar contribution.')
+  }
+
+  for (const excludedRuntime of [
+    'node_modules/@anthropic-ai/claude-agent-sdk/package.json',
+    'node_modules/@velaros-ai/agent/package.json',
+  ]) {
+    try {
+      extractFile(paths.appArchive, excludedRuntime)
+      throw new Error(`Packaged Workbench contains an excluded runtime: ${excludedRuntime}`)
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith('Packaged Workbench contains')) {
+        throw error
+      }
+    }
+  }
+
+  for (const trimmedTokenizerFile of [
+    'node_modules/gpt-tokenizer/cjs/main.js',
+    'node_modules/gpt-tokenizer/dist/o200k_base.js',
+    'node_modules/gpt-tokenizer/src/main.ts',
+    'node_modules/gpt-tokenizer/esm/bpeRanks/cl100k_base.js',
+  ]) {
+    try {
+      extractFile(paths.appArchive, trimmedTokenizerFile)
+      throw new Error(`Packaged Workbench contains unused tokenizer data: ${trimmedTokenizerFile}`)
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith('Packaged Workbench contains')) {
+        throw error
+      }
+    }
   }
 
   for (const standardLibraryFile of ['lib.d.ts', 'lib.es2022.full.d.ts']) {
@@ -135,7 +165,7 @@ export default async function afterPack(context) {
 }
 
 if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url) {
-  const releaseDir = path.resolve(process.cwd(), process.argv[2] ?? 'release')
+  const releaseDir = path.resolve(process.cwd(), process.argv[2] ?? 'artifacts/desktop')
   await verifyPackagedWorkbench(await findPackagedWorkbenchAppOutDir(releaseDir))
 }
 

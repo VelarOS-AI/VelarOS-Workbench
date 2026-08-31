@@ -16,7 +16,7 @@ import {
   isWorkbenchAgentEngineId,
   type WorkbenchAgentEngineId,
 } from '../../plugins/agent-engines/identity'
-import type { WorkbenchAgentEnginesModRuntime } from '../../plugins/agent-engines/main/WorkbenchAgentEnginesModRuntime'
+import type { WorkbenchAgentPluginRuntime } from '../../plugins/agent-engines/main/WorkbenchAgentPluginRuntime'
 import type { WorkbenchAgentExecutionStack } from '../agent/WorkbenchAgentExecutionStack'
 import type { WorkbenchProductAnalyticsReporter } from '../analytics/WorkbenchProductAnalyticsReporter'
 
@@ -106,7 +106,7 @@ class WorkbenchAgentCapabilityRuntime implements AgentCapabilityRuntime {
 
   public constructor(
     private readonly stack: WorkbenchAgentExecutionStack,
-    private readonly agentEngines?: WorkbenchAgentEnginesModRuntime,
+    private readonly agentEngines?: WorkbenchAgentPluginRuntime,
     private readonly productAnalytics?: WorkbenchProductAnalyticsReporter
   ) {}
 
@@ -157,7 +157,7 @@ class WorkbenchAgentCapabilityRuntime implements AgentCapabilityRuntime {
     let outcome: 'completed' | 'aborted' | 'error' = 'error'
     try {
       if ('engineId' in input.config) {
-        if (!this.agentEngines) throw new Error('Workbench Agent Engines Mod 未装配。')
+        if (!this.agentEngines) throw new Error('Workbench Agent 插件运行时未装配。')
         if (!projectRoot?.trim()) throw new Error('外部 Agent 执行需要一个项目根。')
         const result = await this.agentEngines.run({
           executionId: input.executionId,

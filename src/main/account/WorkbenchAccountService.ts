@@ -74,6 +74,26 @@ export class WorkbenchAccountService {
     return { status: 'signed-out' }
   }
 
+  public getPluginArtifactBaseUrl(): string {
+    return `${this.#baseUrl}/v1/plugins/`
+  }
+
+  public async fetchPluginResource(input: URL): Promise<Response> {
+    const base = new URL(this.getPluginArtifactBaseUrl())
+    if (input.origin !== base.origin || !input.pathname.startsWith(base.pathname)) {
+      throw new Error('Workbench 拒绝访问不受信任的插件地址。')
+    }
+    await this.ensureSignedIn()
+    const session = await this.store.load()
+    if (!session) throw new Error('请先登录 VelarOS 再下载插件。')
+    return this.fetchImpl(input, {
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+        [DeviceIdHeader]: await this.store.getDeviceId(),
+      },
+    })
+  }
+
   async #performGoogleSignIn(): Promise<WorkbenchAccountState> {
     const deviceId = await this.store.getDeviceId()
     const started = await this.#request<GoogleDesktopStart>('/v1/auth/google/desktop/start', {

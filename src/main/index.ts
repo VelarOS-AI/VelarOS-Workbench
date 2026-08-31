@@ -25,7 +25,6 @@ import {
 } from './kernel/WorkbenchKernelIpc'
 import { WorkbenchKernelPermissionPolicy } from './kernel/WorkbenchKernelPermissionPolicy'
 import { registerWorkbenchModelIpc } from './model/WorkbenchModelIpc'
-import { registerWorkbenchModIpc } from './mods/WorkbenchModIpc'
 import type { WorkbenchProjectHub } from './projects/ProjectHub'
 import { registerProjectHubIpc } from './projects/ProjectHubIpc'
 import { installProjectHubMenu } from './projects/ProjectHubMenu'
@@ -57,7 +56,7 @@ import { createDefaultWorkbenchMainCapabilityProviders } from './WorkbenchMainCa
  * 不反向依赖 Desktop。Workbench 只自持 Agent 能力，model / browser 没有本体因此不注册，
  * 消费面按能力缺席降级。
  *
- * 数据根对齐 Desktop 惯例（prod=userData，dev=cwd/.data 隔离目录），但完全独立于 Desktop 的
+ * 数据根对齐 Desktop 惯例（prod=userData，dev=cwd/.velaros/data 隔离目录），但完全独立于 Desktop 的
  * chat 存储：应用名固定 `VelarOS Workbench`，prod userData 因此拥有自己的平台目录。
  */
 const WorkbenchProductName = 'VelarOS Workbench'
@@ -85,7 +84,7 @@ interface WorkbenchInstanceLaunchData {
 
 app.setName(WorkbenchApplicationName)
 if (WorkbenchIsDevelopmentRuntime) {
-  app.setPath('userData', join(process.cwd(), '.data', 'workbench-app'))
+  app.setPath('userData', join(process.cwd(), '.velaros', 'data', 'workbench-app'))
 }
 
 let windowManager: Nullable<WorkbenchWindowManager> = null
@@ -204,16 +203,19 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
     ),
     ...(productAnalytics ? { reporter: productAnalytics } : {}),
   })
-  const disposeAccountIpc = registerWorkbenchAccountIpc(
-    new WorkbenchAccountService(
+  const accountService = new WorkbenchAccountService(
       new WorkbenchSharedAccountStore(),
       (url) => shell.openExternal(url)
-    )
   )
+  const disposeAccountIpc = registerWorkbenchAccountIpc(accountService)
   productAnalytics?.start()
   const providers = createDefaultWorkbenchMainCapabilityProviders(
     dataRootDir,
-    (url) => shell.openExternal(url)
+    (url) => shell.openExternal(url),
+    {
+      artifactBase: () => accountService.getPluginArtifactBaseUrl(),
+      fetchImpl: (input) => accountService.fetchPluginResource(new URL(input.toString())),
+    }
   )
   const modelComposition = createModelRuntimeComposition()
   // 进程内 Kernel：只注册 Workbench 自持的 Agent 能力，执行栈也在本进程。
@@ -267,7 +269,6 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
   const disposeResourcePluginIpc = registerWorkbenchResourcePluginIpc(
     providers.resourcePlugins
   )
-  const disposeModIpc = registerWorkbenchModIpc(providers.mods)
   registerWorkbenchFsIpc(providers.fileSystem, providers.parts)
   registerWorkbenchTerminalIpc(providers.parts.terminal)
   registerWorkbenchGitIpc(providers.git)
@@ -301,7 +302,6 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
     watchIpc.dispose()
     disposeResourcePluginIpc()
     disposeAccountIpc()
-    disposeModIpc()
     disposeModelIpc()
     disposeKernelIpc()
     disposeWorkspaceIpc()

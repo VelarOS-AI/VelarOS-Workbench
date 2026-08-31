@@ -2,11 +2,12 @@ import type { ModelMessage } from 'ai'
 
 import type { ExecutionEventBus } from '@velaros-ai/agent'
 
-import type { WorkbenchAgentEngineModelCatalog } from '../../../shared/workbenchAgentMods'
+import type { WorkbenchAgentEngineModelCatalog } from '../../../shared/workbenchResourcePlugins'
 import type { WorkbenchAgentEngineId } from '../identity'
 
 import type { WorkbenchAgentEngineSessionStore } from './WorkbenchAgentEngineSessionStore'
 import type { WorkbenchAgentExtensionTools } from './WorkbenchAgentExtensionTools'
+import { WorkbenchAgentPluginResolver } from './WorkbenchAgentPluginResolver'
 import { WorkbenchClaudeAgentRuntime } from './WorkbenchClaudeAgentRuntime'
 import { WorkbenchCodexAgentRuntime } from './WorkbenchCodexAgentRuntime'
 import { WorkbenchEngineInteractionBroker } from './WorkbenchEngineInteractionBroker'
@@ -28,13 +29,12 @@ type WorkbenchAgentEngineRunResult =
   | { status: 'aborted' | 'error' }
 
 /**
- * Workbench 内置 Agent Engines 的宿主协调层。
+ * Workbench 外部 Agent 插件的宿主协调层。
  *
  * Claude 与 Codex 各自保留原生会话、编辑、检索和命令工具；Workbench 只补充
  * VelarOS 目标/计划语义以及统一的等待输入界面，避免重复注册引擎已有工具。
  */
-export class WorkbenchAgentEnginesModRuntime {
-  private enabled = false
+export class WorkbenchAgentPluginRuntime {
   private readonly running = new Set<string>()
   private readonly runningProjects = new Set<string>()
   private readonly interactions = new WorkbenchEngineInteractionBroker()
@@ -44,27 +44,22 @@ export class WorkbenchAgentEnginesModRuntime {
   public constructor(
     sessions: WorkbenchAgentEngineSessionStore,
     extensionTools: WorkbenchAgentExtensionTools,
-    openExternal: (url: string) => Promise<void>
+    openExternal: (url: string) => Promise<void>,
+    private readonly isPluginEnabled: (engineId: WorkbenchAgentEngineId) => boolean,
+    pluginResolver = new WorkbenchAgentPluginResolver()
   ) {
-    this.claude = new WorkbenchClaudeAgentRuntime(this.interactions, sessions, extensionTools)
+    this.claude = new WorkbenchClaudeAgentRuntime(
+      this.interactions,
+      sessions,
+      extensionTools,
+      pluginResolver
+    )
     this.codex = new WorkbenchCodexAgentRuntime(
       this.interactions,
       sessions,
       extensionTools,
       openExternal
     )
-  }
-
-  public setEnabled(enabled: boolean): void {
-    if (this.enabled === enabled) return
-    this.enabled = enabled
-    if (!enabled) {
-      this.interactions.dispose()
-      this.claude.close()
-      this.codex.close()
-      this.running.clear()
-      this.runningProjects.clear()
-    }
   }
 
   public resolveInput(sessionId: string, answer: string): boolean {
@@ -82,17 +77,23 @@ export class WorkbenchAgentEnginesModRuntime {
   public listModels(
     engineId: WorkbenchAgentEngineId
   ): Promise<WorkbenchAgentEngineModelCatalog> {
-    if (!this.enabled) return Promise.resolve({
+    if (!this.isPluginEnabled(engineId)) return Promise.resolve({
       engineId,
       available: false,
-      reason: '请先在 Workbench 的 Mod 页启用 Agent Engines。',
+      reason: engineId === 'claude-code'
+        ? '请先在 Workbench 插件页安装并启用 Claude Agent。'
+        : '请先在 Workbench 插件页安装并启用 ChatGPT。',
       models: [],
     })
     return engineId === 'claude-code' ? this.claude.listModels() : this.codex.listModels()
   }
 
   public async run(input: WorkbenchAgentEngineRunInput): Promise<WorkbenchAgentEngineRunResult> {
-    if (!this.enabled) throw new Error('请先在 Workbench 的 Mod 页启用 Agent Engines。')
+    if (!this.isPluginEnabled(input.engineId)) {
+      throw new Error(input.engineId === 'claude-code'
+        ? '请先安装并启用 Claude Agent 插件。'
+        : '请先安装并启用 ChatGPT 插件。')
+    }
     if (this.running.has(input.sessionId)) {
       throw new Error('这个外部 Agent 会话已有任务正在运行。')
     }
