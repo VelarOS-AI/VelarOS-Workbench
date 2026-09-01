@@ -1,7 +1,4 @@
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
-
-import { ipcMain, safeStorage } from 'electron'
+import { ipcMain } from 'electron'
 
 import type { ProviderModelCatalogService } from '@velaros-ai/model'
 import type { ChatProviderId, ListProviderModelsRequest } from '@velaros-ai/model/contracts'
@@ -13,76 +10,13 @@ import {
   WorkbenchModelChannels,
 } from '../../shared/workbenchModel'
 
-const ModelCredentialsFileName = 'model-credentials.json'
-
-interface StoredModelCredentials {
-  version: 1
-  apiKeys: Record<string, string>
-}
-
-class WorkbenchModelCredentialStore {
-  private credentials: StoredModelCredentials | null = null
-  private writeQueue: Promise<void> = Promise.resolve()
-
-  public constructor(private readonly path: string) {}
-
-  public async getApiKey(provider: string): Promise<string> {
-    if (!safeStorage.isEncryptionAvailable()) return ''
-    const encrypted = (await this.read()).apiKeys[provider]
-    if (!encrypted) return ''
-
-    try {
-      return safeStorage.decryptString(Buffer.from(encrypted, 'base64'))
-    } catch {
-      return ''
-    }
-  }
-
-  public async setApiKey(provider: string, apiKey: string): Promise<void> {
-    this.writeQueue = this.writeQueue.catch(() => undefined).then(async () => {
-      if (!safeStorage.isEncryptionAvailable()) {
-        throw new Error('Secure credential storage is unavailable.')
-      }
-
-      const credentials = await this.read()
-      if (apiKey) {
-        credentials.apiKeys[provider] = safeStorage.encryptString(apiKey).toString('base64')
-      } else {
-        delete credentials.apiKeys[provider]
-      }
-      await mkdir(dirname(this.path), { recursive: true })
-      const temporaryPath = `${this.path}.tmp`
-      await writeFile(temporaryPath, JSON.stringify(credentials), { mode: 0o600 })
-      await rename(temporaryPath, this.path)
-    })
-    return this.writeQueue
-  }
-
-  private async read(): Promise<StoredModelCredentials> {
-    if (this.credentials) return this.credentials
-    try {
-      const parsed = JSON.parse(await readFile(this.path, 'utf8')) as Partial<StoredModelCredentials>
-      this.credentials = {
-        version: 1,
-        apiKeys:
-          parsed.apiKeys && typeof parsed.apiKeys === 'object' && !Array.isArray(parsed.apiKeys)
-            ? parsed.apiKeys
-            : {},
-      }
-    } catch {
-      this.credentials = { version: 1, apiKeys: {} }
-    }
-    return this.credentials
-  }
-}
+import { WorkbenchModelCredentialStore } from './WorkbenchModelCredentialStore'
 
 export function registerWorkbenchModelIpc(
   service: ProviderModelCatalogService,
   dataRootDir: string
 ): () => void {
-  const credentialStore = new WorkbenchModelCredentialStore(
-    join(dataRootDir, ModelCredentialsFileName)
-  )
+  const credentialStore = new WorkbenchModelCredentialStore(dataRootDir)
   ipcMain.handle(WorkbenchModelChannels.listProviderModels, (_event, request: unknown) =>
     service.listProviderModels(readListProviderModelsRequest(request)))
   ipcMain.handle(WorkbenchModelChannels.getApiKey, (_event, request: unknown) =>

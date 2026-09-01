@@ -84,6 +84,9 @@ for (const sourceRoot of sourceRoots) {
       if (/class\s+\w*KernelRuntime\b/u.test(source)) {
         failures.push(`${label} recreates a product Kernel runtime facade.`)
       }
+      if (/\bsafeStorage\b/u.test(source)) {
+        failures.push(`${label} uses Electron safeStorage; use app-local credential storage.`)
+      }
     }
     const layerRule = resolveLayerRule(label)
     for (const match of source.matchAll(importSpecifierPattern)) {

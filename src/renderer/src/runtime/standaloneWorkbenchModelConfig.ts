@@ -12,7 +12,7 @@ export interface StandaloneWorkbenchModelConfig {
   model: string
   completionModel: string
   baseURL: string
-  /** 密钥由 main 进程使用 Electron safeStorage 加密持久化，不写 localStorage。 */
+  /** 密钥由 main 进程在应用数据目录内加密持久化，不写 localStorage。 */
   apiKey: string
 }
 

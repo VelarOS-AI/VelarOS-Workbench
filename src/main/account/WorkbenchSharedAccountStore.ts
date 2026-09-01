@@ -58,7 +58,7 @@ interface WorkbenchSharedAccountStoreOptions {
   readonly rootDir?: string
 }
 
-/** 文件密钥与密文都在 VelarOS 共享目录，不调用 Electron safeStorage 或系统钥匙串。 */
+/** 文件密钥与密文都在 VelarOS 共享目录，不调用操作系统凭据服务。 */
 export class WorkbenchSharedAccountStore {
   readonly #productId: string
   readonly #rootDir: string
