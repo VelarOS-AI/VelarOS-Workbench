@@ -2,7 +2,8 @@ import assert from 'node:assert/strict'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, test } from 'node:test'
+
+import { describe, test } from 'bun:test'
 
 import type { ProjectKernel } from '@velaros-ai/project/runtime'
 

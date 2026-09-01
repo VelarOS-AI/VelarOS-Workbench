@@ -2,8 +2,9 @@ import assert from 'node:assert/strict'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, test } from 'node:test'
 import { setTimeout as delay } from 'node:timers/promises'
+
+import { describe, test } from 'bun:test'
 
 import { WorkbenchFileWatcher } from '../src/main/workspace/watch/WorkbenchFileWatcher'
 import type { SystemWorkspaceFilesChangedEvent } from '../src/shared/contracts'

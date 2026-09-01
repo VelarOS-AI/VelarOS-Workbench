@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
-import { describe, test } from 'node:test'
+
+import { describe, test } from 'bun:test'
 
 void describe('Workbench chat composer parity', () => {
   void test('delegates side-surface presentation to the shared Platform composer', () => {

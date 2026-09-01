@@ -3,7 +3,8 @@ import { execFileSync } from 'node:child_process'
 import { mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { describe, test } from 'node:test'
+
+import { describe, test } from 'bun:test'
 
 import {
   readReleaseVersions,

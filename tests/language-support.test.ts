@@ -2,11 +2,11 @@ import assert from 'node:assert/strict'
 import { chmod, mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { isAbsolute, join, relative, resolve } from 'node:path'
-import { describe, test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
 import { syntaxTree } from '@codemirror/language'
 import { EditorState } from '@codemirror/state'
+import { describe, test } from 'bun:test'
 import * as ts from 'typescript'
 
 import {

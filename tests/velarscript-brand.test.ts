@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
-import { describe, test } from 'node:test'
 
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
+import { describe, test } from 'bun:test'
 
 import { WorkbenchFileTypeIcon } from '../src/renderer/src/components/files/WorkbenchFileTypeIcon'
 import { getWorkbenchFilePresentationVariant } from '../src/renderer/src/models/files/workbenchFilePresentation'

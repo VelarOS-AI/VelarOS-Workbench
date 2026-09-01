@@ -2,12 +2,12 @@ import assert from 'node:assert/strict'
 import { mkdtemp, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { isAbsolute, join, relative, resolve } from 'node:path'
-import { describe, test } from 'node:test'
 
 import { highlightingFor, syntaxTree } from '@codemirror/language'
 import { EditorState } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import { tags } from '@lezer/highlight'
+import { describe, test } from 'bun:test'
 
 import { WorkbenchLanguageServices } from '../src/main/workspace/language/LanguageServices'
 import { resolveWorkbenchCodeMirrorLanguage } from '../src/renderer/src/models/editor/workbenchCodeMirrorLanguage'

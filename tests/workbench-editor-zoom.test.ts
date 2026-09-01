@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
-import { describe, test } from 'node:test'
+
+import { describe, test } from 'bun:test'
 
 import { getWorkbenchEditorZoomMenuCommand } from '../src/main/projects/WorkbenchEditorZoom'
 import {

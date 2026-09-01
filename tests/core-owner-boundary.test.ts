@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import { readdir, readFile } from 'node:fs/promises'
 import { extname, join, relative, resolve } from 'node:path'
-import { describe, test } from 'node:test'
+
+import { describe, test } from 'bun:test'
 
 const repositoryRoot = resolve(import.meta.dirname, '..')
 const sourceRoots = [resolve(repositoryRoot, 'src')]

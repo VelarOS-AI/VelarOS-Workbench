@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
-import { describe, test } from 'node:test'
+
+import { describe, test } from 'bun:test'
 
 void describe('release workflows', () => {
   void test('dispatch modes gate the exact root tag and never clobber release assets', async () => {

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
-import { describe, test } from 'node:test'
 
 import { FileCodeIcon } from '@phosphor-icons/react'
+import { describe, test } from 'bun:test'
 
 import {
   getWorkbenchFilePresentationVariant,

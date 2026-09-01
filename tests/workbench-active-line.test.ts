@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
-import { describe, test } from 'node:test'
 
 import { EditorSelection, EditorState } from '@codemirror/state'
 import type { EditorView } from '@codemirror/view'
+import { describe, test } from 'bun:test'
 
 import {
   hasWorkbenchMultilineTextSelection,

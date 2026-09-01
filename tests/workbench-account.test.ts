@@ -3,7 +3,8 @@ import { readFileSync } from 'node:fs'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, test } from 'node:test'
+
+import { describe, test } from 'bun:test'
 
 import { WorkbenchAccountService } from '../src/main/account/WorkbenchAccountService'
 import {

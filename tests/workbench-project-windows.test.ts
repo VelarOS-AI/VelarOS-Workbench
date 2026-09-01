@@ -2,7 +2,8 @@ import assert from 'node:assert/strict'
 import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, test } from 'node:test'
+
+import { describe, test } from 'bun:test'
 
 import { WorkbenchProjectHub } from '../src/main/projects/ProjectHub'
 import { RecentProjectsStore } from '../src/main/projects/RecentProjectsStore'

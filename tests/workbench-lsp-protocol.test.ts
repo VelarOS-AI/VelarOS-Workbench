@@ -4,8 +4,9 @@ import { once } from 'node:events'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, test } from 'node:test'
 import { fileURLToPath } from 'node:url'
+
+import { describe, test } from 'bun:test'
 
 import { ExternalLspClient } from '../src/main/workspace/language/ExternalLspClient'
 import {

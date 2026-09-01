@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
-import { test } from 'node:test'
 
 import { EditorState } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
+import { test } from 'bun:test'
 
 import { getWorkbenchCodeMirrorAutocompleteTheme } from '../src/renderer/src/models/editor/workbenchCodeMirrorAutocompleteTheme'
 import {
