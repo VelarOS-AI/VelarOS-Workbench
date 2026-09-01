@@ -106,6 +106,17 @@ class TerminalSessions {
       })
     }
 
+    // Windows taskkill may close the shell between the writable check and a pending stdin write.
+    // A closed pipe reports EPIPE asynchronously on the stream; treat that as the normal end of
+    // the terminal instead of letting the main process (or the cross-platform probe) crash.
+    child.stdin.on('error', (error: NodeJS.ErrnoException) => {
+      if (error.code === 'EPIPE' || error.code === 'ERR_STREAM_DESTROYED') return
+      emit({
+        stream: 'system',
+        chunk: `终端输入通道异常：${error.message}\n`,
+      })
+    })
+
     // 跟随真实目录：扫描 stdout 里的 cwd 探针标记，剥掉后附在事件上回传给渲染层，
     // stdoutCarry 暂存跨 chunk 被切开的半截标记。
     let stdoutCarry = ''
