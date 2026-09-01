@@ -139,10 +139,11 @@ async function terminateExternalLspProcessTree(
   if (!isProcessAlive(pid)) return false
 
   const delivered = await deliverTermination(pid, signal)
-  if (!delivered) return !isProcessAlive(pid)
   if (signal === 'SIGKILL')
-    return waitForProcessExit(pid, TerminationCommandTimeoutMs)
-  if (await waitForProcessExit(pid, TerminationEscalationMs)) return true
+    return delivered
+      ? waitForProcessExit(pid, TerminationCommandTimeoutMs)
+      : !isProcessAlive(pid)
+  if (delivered && await waitForProcessExit(pid, TerminationEscalationMs)) return true
 
   const killed = await deliverTermination(pid, 'SIGKILL')
   if (!killed) return !isProcessAlive(pid)

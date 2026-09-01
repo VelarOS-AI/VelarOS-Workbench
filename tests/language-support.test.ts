@@ -1341,7 +1341,7 @@ void describe('shared external LSP client', () => {
       command: process.execPath,
       args: [fixture, 'hang'],
       documentLanguageId: 'hanging',
-    }, 50)
+    }, 500)
     await assert.rejects(
       hanging.completion(`${projectRoot}/tests/probe.hanging`, 'const value = 1\n', { line: 0, character: 1 }),
       /请求超时.*textDocument\/completion/u
