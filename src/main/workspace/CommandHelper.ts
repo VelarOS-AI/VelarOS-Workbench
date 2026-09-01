@@ -134,6 +134,24 @@ class CommandHelper {
           error,
         })
       }
+
+      // Windows 的非强制 taskkill 对控制台 shell 可能返回失败；此时不能退回只杀父 pid，
+      // 否则它派生的工具链进程仍会占用工作目录。继续升级为 /T /F，确保整棵树退出。
+      if (signal !== 'SIGKILL') {
+        const forceTreeKillSpec = systemPlatformCompatibility
+          .getProcessTreeKillCommandSpec(pid, 'SIGKILL')
+        if (forceTreeKillSpec) {
+          try {
+            execFileSync(forceTreeKillSpec.file, forceTreeKillSpec.args, { stdio: 'ignore' })
+            return
+          } catch (error) {
+            log.debug('强制终止 Windows 前台进程树失败，回退到进程 pid', {
+              pid,
+              error,
+            })
+          }
+        }
+      }
     }
 
     const killPid = systemPlatformCompatibility.getProcessKillPid(pid)
