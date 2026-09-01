@@ -1,9 +1,3 @@
-import {
-  type ModelInfo,
-  type PermissionResult,
-  type Query,
-  type SDKMessage,
-} from '@anthropic-ai/claude-agent-sdk'
 import type { ModelMessage } from 'ai'
 
 import {
@@ -12,6 +6,12 @@ import {
 
 import type { WorkbenchAgentEngineModelCatalog } from '../../../shared/workbenchResourcePlugins'
 
+import type {
+  ClaudeAgentModelInfo,
+  ClaudeAgentPermissionResult,
+  ClaudeAgentQuery,
+  ClaudeAgentSdkMessage,
+} from './ClaudeAgentPluginContract'
 import { getWorkbenchAgentEngineEnvironment } from './WorkbenchAgentEngineProcess'
 import type { WorkbenchAgentEngineSessionStore } from './WorkbenchAgentEngineSessionStore'
 import {
@@ -39,7 +39,7 @@ interface WorkbenchClaudeRunInput {
 /** Claude Code 官方 Agent SDK 适配器；登录态、原生工具与会话账本都仍归 Claude。 */
 export class WorkbenchClaudeAgentRuntime {
   private readonly nativeSessions = new Map<string, string>()
-  private readonly activeQueries = new Map<string, Query>()
+  private readonly activeQueries = new Map<string, ClaudeAgentQuery>()
 
   public constructor(
     private readonly interactions: WorkbenchEngineInteractionBroker,
@@ -56,7 +56,7 @@ export class WorkbenchClaudeAgentRuntime {
       ?? await this.sessions.get('claude-code', input.sessionId, input.projectRoot)
     let emittedText = false
     let resultError: string | null = null
-    let active: Query | null = null
+    let active: ClaudeAgentQuery | null = null
 
     try {
       const environment = await getWorkbenchAgentEngineEnvironment()
@@ -148,7 +148,7 @@ export class WorkbenchClaudeAgentRuntime {
   }
 
   public async listModels(): Promise<WorkbenchAgentEngineModelCatalog> {
-    let probe: Query | null = null
+    let probe: ClaudeAgentQuery | null = null
     try {
       const sdk = await this.pluginResolver.loadClaudeSdk()
       probe = sdk.query({
@@ -184,7 +184,7 @@ export class WorkbenchClaudeAgentRuntime {
     toolName: string,
     toolInput: Record<string, unknown>,
     signal: AbortSignal
-  ): Promise<PermissionResult> {
+  ): Promise<ClaudeAgentPermissionResult> {
     if (this.extensionTools.isBundledReadOnlyTool(toolName)) return { behavior: 'allow' }
     if (toolName === 'AskUserQuestion') {
       const questions = normalizeClaudeQuestions(toolInput)
@@ -231,22 +231,33 @@ interface TranslatedClaudeMessage {
   toolDone?: { id: string; result: unknown; error?: string }
 }
 
-function translateClaudeMessage(message: SDKMessage): TranslatedClaudeMessage {
+function translateClaudeMessage(message: ClaudeAgentSdkMessage): TranslatedClaudeMessage {
   if (message.type === 'stream_event') {
-    const event = message.event
-    if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') return { text: [event.delta.text], reasoning: [], error: null }
-    if (event.type === 'content_block_delta' && event.delta.type === 'thinking_delta') return { text: [], reasoning: [event.delta.thinking], error: null }
-    if (event.type === 'content_block_start' && event.content_block.type === 'tool_use') {
+    const event = asRecord(message.event)
+    const delta = asRecord(event.delta)
+    if (event.type === 'content_block_delta' && delta.type === 'text_delta') {
+      const text = readString(delta.text)
+      return { text: text ? [text] : [], reasoning: [], error: null }
+    }
+    if (event.type === 'content_block_delta' && delta.type === 'thinking_delta') {
+      const thinking = readString(delta.thinking)
+      return { text: [], reasoning: thinking ? [thinking] : [], error: null }
+    }
+    const contentBlock = asRecord(event.content_block)
+    if (event.type === 'content_block_start' && contentBlock.type === 'tool_use') {
+      const name = readString(contentBlock.name)
+      const id = readString(contentBlock.id)
+      if (!name || !id) return { text: [], reasoning: [], error: null }
       const presented = presentClaudeTool(
-        event.content_block.name,
-        asRecord(event.content_block.input)
+        name,
+        asRecord(contentBlock.input)
       )
       return {
         text: [],
         reasoning: [],
         error: null,
         toolStart: {
-          id: event.content_block.id,
+          id,
           name: presented.name,
           input: presented.input,
         },
@@ -254,7 +265,8 @@ function translateClaudeMessage(message: SDKMessage): TranslatedClaudeMessage {
     }
   }
   if (message.type === 'user') {
-    const blocks = Array.isArray(message.message.content) ? message.message.content : []
+    const envelope = asRecord(message.message)
+    const blocks = Array.isArray(envelope.content) ? envelope.content : []
     const result = blocks.map(asRecord).find((block) => block.type === 'tool_result')
     const id = readString(result?.tool_use_id)
     if (result && id) {
@@ -267,8 +279,8 @@ function translateClaudeMessage(message: SDKMessage): TranslatedClaudeMessage {
       }
     }
   }
-  if (message.type === 'result' && message.is_error) {
-    const errors = 'errors' in message && Array.isArray(message.errors)
+  if (message.type === 'result' && message.is_error === true) {
+    const errors = Array.isArray(message.errors)
       ? message.errors.filter((item): item is string => typeof item === 'string')
       : []
     return { text: [], reasoning: [], error: errors.join('\n') || 'Claude 运行失败。' }
@@ -361,13 +373,14 @@ function buildModeInstructions(executionModes: readonly string[]): string {
   ].join('\n')
 }
 
-function readMessageSessionId(message: SDKMessage): string | null {
-  if (!('session_id' in message)) return null
+function readMessageSessionId(message: ClaudeAgentSdkMessage): string | null {
   return readString(message.session_id)
 }
 
-function normalizeClaudeModels(models: readonly ModelInfo[]): WorkbenchAgentEngineModelCatalog['models'] {
-  const groups = new Map<string, ModelInfo[]>()
+function normalizeClaudeModels(
+  models: readonly ClaudeAgentModelInfo[]
+): WorkbenchAgentEngineModelCatalog['models'] {
+  const groups = new Map<string, ClaudeAgentModelInfo[]>()
   for (const model of models) {
     const wireId = model.resolvedModel?.trim() || model.value
     groups.set(wireId, [...(groups.get(wireId) ?? []), model])

@@ -46,7 +46,8 @@ export function createDefaultWorkbenchMainCapabilityProviders(
   } = {
     artifactBase: () => 'https://invalid.velaros.local/plugins/',
     fetchImpl: fetch,
-  }
+  },
+  productVersion = '0.0.0'
 ): WorkbenchMainCapabilityProviders {
   const language = new WorkbenchLanguageServiceWorkerClient()
   const velarLogicGraph = new WorkbenchVelarLogicGraphService(language)
@@ -55,7 +56,8 @@ export function createDefaultWorkbenchMainCapabilityProviders(
     new WorkbenchAgentEngineSessionStore(dataRootDir),
     new WorkbenchAgentExtensionTools(codeGraphResource, velarLogicGraph),
     openExternal,
-    (engineId): boolean => resourcePlugins.isAgentPluginEnabled(engineId)
+    (engineId): boolean => resourcePlugins.isAgentPluginEnabled(engineId),
+    productVersion
   )
   const resourcePlugins: WorkbenchResourcePluginService = new WorkbenchResourcePluginService(dataRootDir, codeGraphResource, {
     ...pluginMarket,

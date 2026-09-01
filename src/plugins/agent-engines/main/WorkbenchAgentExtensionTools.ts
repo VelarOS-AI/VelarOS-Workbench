@@ -5,7 +5,7 @@ import { ProjectCodeQuerySchema, ProjectToolNames } from '@velaros-ai/project'
 import type { WorkbenchCodeGraphResource } from '../../../main/resources/WorkbenchCodeGraphResource'
 import type { WorkbenchVelarLogicGraphService } from '../../../main/workspace/language/WorkbenchVelarLogicGraphService'
 
-import type { ClaudeAgentSdkModule } from './WorkbenchAgentPluginResolver'
+import type { ClaudeAgentSdkModule } from './ClaudeAgentPluginContract'
 
 // Provider function names cannot all carry `:`, so the wire alias stays portable while the
 // presented/tool-ledger identity is Platform's canonical `project:query-code`.
@@ -49,7 +49,7 @@ export class WorkbenchAgentExtensionTools {
   public claudeServer(
     projectRoot: string,
     sdk: ClaudeAgentSdkModule
-  ): ReturnType<ClaudeAgentSdkModule['createSdkMcpServer']> {
+  ): unknown {
     return sdk.createSdkMcpServer({
       name: 'velaros-workbench',
       version: '1.0.0',

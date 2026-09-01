@@ -14,6 +14,7 @@ const forbiddenSpecifiers = [
   /^@velaros-ai\/core\/constants\/(?:storage|toolMetadataCatalog|workbenchViewport|workspaceSpaces|workspaceVisibility)$/,
   /^@velaros-ai\/core\/utils\/(?:CommandExecutionPolicy|PathContainmentHelper|PlatformCompatibilityHelper|messageFileChanges)$/,
   /^@velaros-ai\/system-tools$/,
+  /^@anthropic-ai\/claude-agent-sdk(?:\/|$)/,
 ]
 const importSpecifierPattern =
   /(?:from\s+|import\s*\(|require\s*\()\s*['"]([^'"]+)['"]/gu
@@ -73,6 +74,19 @@ async function collectSourceFiles(directory) {
 }
 
 const failures = []
+const rootManifest = JSON.parse(await readFile(resolve(rootDir, 'package.json'), 'utf8'))
+for (const section of [
+  'dependencies',
+  'devDependencies',
+  'optionalDependencies',
+  'peerDependencies',
+]) {
+  if (rootManifest[section]?.['@anthropic-ai/claude-agent-sdk']) {
+    failures.push(
+      `package.json ${section} bundles Claude Agent SDK; the claude-agent plugin owns this runtime.`,
+    )
+  }
+}
 for (const sourceRoot of sourceRoots) {
   for (const path of await collectSourceFiles(sourceRoot)) {
     const source = await readFile(path, 'utf8')

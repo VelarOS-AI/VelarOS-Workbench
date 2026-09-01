@@ -15,7 +15,6 @@
         "vscode-uri": "^3.1.0",
       },
       "devDependencies": {
-        "@anthropic-ai/claude-agent-sdk": "0.3.251",
         "@codemirror/autocomplete": "^6.20.1",
         "@codemirror/commands": "^6.10.3",
         "@codemirror/lang-css": "^6.3.1",
@@ -46,13 +45,13 @@
         "@typescript-eslint/eslint-plugin": "^8.59.3",
         "@typescript-eslint/parser": "^8.59.3",
         "@velaros-ai/agent": "0.6.7",
-        "@velaros-ai/browser": "0.2.12",
+        "@velaros-ai/browser": "0.2.13",
         "@velaros-ai/core": "0.4.0",
-        "@velaros-ai/development": "1.0.3",
+        "@velaros-ai/development": "1.0.4",
         "@velaros-ai/kernel": "0.2.1",
         "@velaros-ai/model": "0.4.12",
-        "@velaros-ai/project": "2.0.5",
-        "@velaros-ai/system": "1.1.2",
+        "@velaros-ai/project": "2.0.6",
+        "@velaros-ai/system": "1.1.3",
         "@velaros-ai/ui": "0.2.28",
         "@vitejs/plugin-react": "^4.3.0",
         "ahooks": "^3.9.7",
@@ -104,26 +103,6 @@
     "@ai-sdk/provider-utils": ["@ai-sdk/provider-utils@4.0.40", "", { "dependencies": { "@ai-sdk/provider": "3.0.14", "@standard-schema/spec": "^1.1.0", "eventsource-parser": "^3.0.8" }, "peerDependencies": { "zod": "^3.25.76 || ^4.1.8" } }, "sha512-OL5IrpUm9Y8Dwy+w/vvFwPotS6m52O9W0op2oXgXdCROMJIBalBI0oro6OIBYkPxvm5Xg02GSkoQN25RlR0bnw=="],
 
     "@antfu/install-pkg": ["@antfu/install-pkg@1.1.0", "", { "dependencies": { "package-manager-detector": "^1.3.0", "tinyexec": "^1.0.1" } }, "sha512-MGQsmw10ZyI+EJo45CdSER4zEb+p31LpDAFp2Z3gkSd1yqVZGi0Ebx++YTEMonJy4oChEMLsxZ64j8FH6sSqtQ=="],
-
-    "@anthropic-ai/claude-agent-sdk": ["@anthropic-ai/claude-agent-sdk@0.3.251", "", { "optionalDependencies": { "@anthropic-ai/claude-agent-sdk-darwin-arm64": "0.3.251", "@anthropic-ai/claude-agent-sdk-darwin-x64": "0.3.251", "@anthropic-ai/claude-agent-sdk-linux-arm64": "0.3.251", "@anthropic-ai/claude-agent-sdk-linux-arm64-musl": "0.3.251", "@anthropic-ai/claude-agent-sdk-linux-x64": "0.3.251", "@anthropic-ai/claude-agent-sdk-linux-x64-musl": "0.3.251", "@anthropic-ai/claude-agent-sdk-win32-arm64": "0.3.251", "@anthropic-ai/claude-agent-sdk-win32-x64": "0.3.251" }, "peerDependencies": { "@anthropic-ai/sdk": ">=0.93.0", "@modelcontextprotocol/sdk": "^1.29.0", "zod": "^4.0.0" } }, "sha512-DqSi8mH2tQYRlVV0G+lJnQ/WbjJZ/a+8cJ3vPuYoqh8esIIvXHm1ZOXV1UPGsFYRnbBytEoiSGitguEXd+sQ+Q=="],
-
-    "@anthropic-ai/claude-agent-sdk-darwin-arm64": ["@anthropic-ai/claude-agent-sdk-darwin-arm64@0.3.251", "", { "os": "darwin", "cpu": "arm64" }, "sha512-C23h+Dbddcc4gai95+lhm4/94am2IOq+bf3IdEDDS7EPqDQqajo2s5q1/ZSwq9rOc0RJLT7Ws72ZCzYJh67KSg=="],
-
-    "@anthropic-ai/claude-agent-sdk-darwin-x64": ["@anthropic-ai/claude-agent-sdk-darwin-x64@0.3.251", "", { "os": "darwin", "cpu": "x64" }, "sha512-HrLnb3ggk+vMbymUvbosgPmxWp4W6Ot+0mNVjoBYDn5OZrTV3C3LRtbWf7jwcGyKMcg0xJf0AqiudQ2BRrlr8A=="],
-
-    "@anthropic-ai/claude-agent-sdk-linux-arm64": ["@anthropic-ai/claude-agent-sdk-linux-arm64@0.3.251", "", { "os": "linux", "cpu": "arm64" }, "sha512-3E27F5j82EWOyEniRW7crmo0jWYYQmPDdP52jWq6Y6aytiyYIdUFMEGZZ6chVHNlZiU7GsjTa3teKk2xlQ68lQ=="],
-
-    "@anthropic-ai/claude-agent-sdk-linux-arm64-musl": ["@anthropic-ai/claude-agent-sdk-linux-arm64-musl@0.3.251", "", { "os": "linux", "cpu": "arm64" }, "sha512-RTUf7TPBUkQ6oV3pDkEdcD47I0uH0ZpvmZlXHnrLGznFqyLr+7XHupOxUMJD0Jwm9v5qeqpNiPAYB0dL4RYiHg=="],
-
-    "@anthropic-ai/claude-agent-sdk-linux-x64": ["@anthropic-ai/claude-agent-sdk-linux-x64@0.3.251", "", { "os": "linux", "cpu": "x64" }, "sha512-qCD87XPjcNM1u4ukqmcgpHDl3Y6l+cW8j7kPzH91Y5yLBYJ5xYZA2KtJ7AYNEPOteVyOGJw/efmva0S8CRr0fg=="],
-
-    "@anthropic-ai/claude-agent-sdk-linux-x64-musl": ["@anthropic-ai/claude-agent-sdk-linux-x64-musl@0.3.251", "", { "os": "linux", "cpu": "x64" }, "sha512-SzXrdy7jjrjJIuTG+VMRAY0YZ3G/8w21WuhAozwnvnEUAPo6NDv6lgFinu7NO8J6CPE+MK2sGze6JeCF+ljgUg=="],
-
-    "@anthropic-ai/claude-agent-sdk-win32-arm64": ["@anthropic-ai/claude-agent-sdk-win32-arm64@0.3.251", "", { "os": "win32", "cpu": "arm64" }, "sha512-FH1ZLcyc97ie3h7CSlIxA1ppXILgf0V8sFQrWnHyKBrthJXQkMHXhsTq9OZV/2KhXslNf2hTe0gHpZ1nCL1Gmg=="],
-
-    "@anthropic-ai/claude-agent-sdk-win32-x64": ["@anthropic-ai/claude-agent-sdk-win32-x64@0.3.251", "", { "os": "win32", "cpu": "x64" }, "sha512-/jmtFIvfF0UFMxSZ8WV2Aus8aGA3+8Ft6AHvWuBJkY5jM2ubfqi6GnBjKCAL831TTllp2rKZlViANtWWRBvpvg=="],
-
-    "@anthropic-ai/sdk": ["@anthropic-ai/sdk@0.120.0", "", { "dependencies": { "json-schema-to-ts": "^3.1.1", "standardwebhooks": "^1.0.0" }, "peerDependencies": { "zod": "^3.25.0 || ^4.0.0" }, "optionalPeers": ["zod"], "bin": { "anthropic-ai-sdk": "bin/cli" } }, "sha512-ZlvmNFT/iIF6JD13rxbbMWD8nvGR0RaUp6yMQnoc+4Af0YjVVe/bIdW1XSQQsoxXAtg1NaT6Vak0LKFlJ4d37Q=="],
 
     "@babel/code-frame": ["@babel/code-frame@7.29.7", "", { "dependencies": { "@babel/helper-validator-identifier": "^7.29.7", "js-tokens": "^4.0.0", "picocolors": "^1.1.1" } }, "sha512-Aup7aUOfpbAUg2ROOJN6Iw5f9DMBlzu0mIkm/malLQFN/YQgO48wCj0Kxa3sEHJvPVFg7siR+qRInwXd2qhQKw=="],
 
@@ -523,8 +502,6 @@
 
     "@sindresorhus/merge-streams": ["@sindresorhus/merge-streams@4.0.0", "", {}, "sha512-tlqY9xq5ukxTUZBmoOp+m61cqwQD5pHJtFY3Mn8CA8ps6yghLH/Hw8UPdqg4OLmFW3IFlcXnQNmo/dh8HzXYIQ=="],
 
-    "@stablelib/base64": ["@stablelib/base64@1.0.1", "", {}, "sha512-1bnPQqSxSuc3Ii6MhBysoWCg58j97aUjuCSZrGSmDxNqtytIi0k8utUenAwTZN4V5mXXYGsVUI9zeBqy+jBOSQ=="],
-
     "@standard-schema/spec": ["@standard-schema/spec@1.1.0", "", {}, "sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w=="],
 
     "@streamdown/cjk": ["@streamdown/cjk@1.0.3", "", { "dependencies": { "remark-cjk-friendly": "^2.0.1", "remark-cjk-friendly-gfm-strikethrough": "^2.0.1", "unist-util-visit": "^5.0.0" }, "peerDependencies": { "react": "^18.0.0 || ^19.0.0" } }, "sha512-WRg8HR/gHbBoTgsMd91OKFUClIoDcEFVofJvluvEAyjx3KpU0aGgD9tGDqHkHj14ShoMSkX0IYetWGegTcwIJw=="],
@@ -705,11 +682,11 @@
 
     "@velaros-ai/agent": ["@velaros-ai/agent@0.6.7", "https://npm.pkg.github.com/download/@velaros-ai/agent/0.6.7/6bf48124d6203c3f3d8bdb19cc13d9afed9dba90", { "dependencies": { "@modelcontextprotocol/sdk": "^1.29.0", "@velaros-ai/core": "0.4.0", "@velaros-ai/kernel": "0.2.1", "ai": "^6.0.168", "execa": "^9.6.1", "gpt-tokenizer": "3.4.0", "jszip": "^3.10.1", "typescript": "^5.7.0", "ws": "^8.18.3", "zod": "^4.3.6" } }, "sha512-4IUSkjerRC2hbT37jk69o536xJjMj7YsDsoXoTKoCgCXtG0g+1VW+zGEIc22x56hXiMvj4cgwfug0Sp7HC/j5g=="],
 
-    "@velaros-ai/browser": ["@velaros-ai/browser@0.2.12", "https://npm.pkg.github.com/download/@velaros-ai/browser/0.2.12/4a5c0501006ef1cb0fb5f0939377652cfb2b9f5d", { "dependencies": { "@velaros-ai/agent": "0.6.7", "@velaros-ai/core": "0.4.0", "@velaros-ai/kernel": "0.2.1", "gifenc": "^1.0.3", "zod": "^4.3.6" }, "peerDependencies": { "@types/react": "^19.0.0", "electron": ">=41.0.0", "react": "^19.0.0" } }, "sha512-gyYrWr1MPH6AhSqLg6UKzET1gt/J2mord9cBRbz8xCFqBYOZJyCHzxuOrAPB/AjrCEqNjHTJ8FutFRNYyOMM3w=="],
+    "@velaros-ai/browser": ["@velaros-ai/browser@0.2.13", "https://npm.pkg.github.com/download/@velaros-ai/browser/0.2.13/66f476aee52f879271cdf81ea5ec2de59d3519fc", { "dependencies": { "@velaros-ai/core": "0.4.0", "@velaros-ai/kernel": "0.2.1", "gifenc": "^1.0.3", "zod": "^4.3.6" }, "peerDependencies": { "@types/react": "^19.0.0", "@velaros-ai/agent": "0.6.7", "electron": ">=41.0.0", "react": "^19.0.0" } }, "sha512-FgoU5uHVGOLF/ZXHjcr8079FC3llW0ur8d9V6LY1Xa3eZKA+zBpk4FzYkfAsWZp/ATHSdnLtVo1CvfVWzi5TJw=="],
 
     "@velaros-ai/core": ["@velaros-ai/core@0.4.0", "https://npm.pkg.github.com/download/@velaros-ai/core/0.4.0/cd2528479b34ace04dad491f32ef419c5be441a2", {}, "sha512-DpDMnQshiyNCW8EffbryTyGyQVDmz5Tv5qlhqOePf6VT/lNGZP//mQyLuvbTsH+uNbvqkOUrdIV88K0PISrTyA=="],
 
-    "@velaros-ai/development": ["@velaros-ai/development@1.0.3", "https://npm.pkg.github.com/download/@velaros-ai/development/1.0.3/356dd53d245937bb0523a9868f49408ae194d146", { "dependencies": { "@codemirror/lang-python": "^6.2.1", "@velaros-ai/agent": "0.6.7", "@velaros-ai/core": "0.4.0", "@velaros-ai/project": "2.0.5", "zod": "^4.3.6" } }, "sha512-p43fj2Lku91bso0zRH5nhs+tEHB4wqgp7sf3TfWdL71ows5eYPQIXMYculDaYrl5fx1loBNx/Dk5dq8TZbPb9g=="],
+    "@velaros-ai/development": ["@velaros-ai/development@1.0.4", "https://npm.pkg.github.com/download/@velaros-ai/development/1.0.4/0c72d06e70a86448849f7774756ec95993467fb3", { "dependencies": { "@codemirror/lang-python": "^6.2.1", "@velaros-ai/core": "0.4.0", "@velaros-ai/project": "2.0.6", "zod": "^4.3.6" }, "peerDependencies": { "@velaros-ai/agent": "0.6.7" } }, "sha512-AKTIN6IAUl/J9AKyw3/LTmMHP0ar2tx8FVrWvM1s9PTCVsHlMcxzXU8mWMKv8hQnWaqmqbo7qr0Pqe/ZyFGFiQ=="],
 
     "@velaros-ai/html-artifacts": ["@velaros-ai/html-artifacts@0.1.4", "https://npm.pkg.github.com/download/@velaros-ai/html-artifacts/0.1.4/6305480255717b719e77bf84e44b395ab3869f1a", {}, "sha512-T0IPnqRmZrLkTlh8HUgEHpDgcice7Yw7yPUyzIU5yekLdyJYIuh8Dzpy5xVWB0W60FJZIW0+LOBthR+lNVAMVg=="],
 
@@ -717,9 +694,9 @@
 
     "@velaros-ai/model": ["@velaros-ai/model@0.4.12", "https://npm.pkg.github.com/download/@velaros-ai/model/0.4.12/33de7b4caa698b93146281eb31ac1c2940027515", { "dependencies": { "@ai-sdk/anthropic": "^3.0.71", "@ai-sdk/google": "^3.0.64", "@ai-sdk/openai": "^3.0.53", "@ai-sdk/provider": "3.0.8", "@velaros-ai/core": "0.4.0", "@velaros-ai/kernel": "0.2.1", "ai": "^6.0.168" } }, "sha512-cwJibXYycfdMvYnwsqwOYsI7dO8fvs4uKJiMID37Pr9udS/7bmLW1vKSnZ71TNg6KYI6pG23wIKG1uDC41mGZg=="],
 
-    "@velaros-ai/project": ["@velaros-ai/project@2.0.5", "https://npm.pkg.github.com/download/@velaros-ai/project/2.0.5/89cf7426e7cb6ac80d446c30769e07fd286d66dc", { "dependencies": { "@velaros-ai/agent": "0.6.7", "@velaros-ai/core": "0.4.0", "@velaros-ai/kernel": "0.2.1", "diff": "^8.0.4", "execa": "^9.6.1", "iconv-lite": "^0.7.2", "picomatch": "^4.0.3", "typescript": "^5.0.0", "zod": "^4.3.6" } }, "sha512-45cTIFDnvjBVNDG18rCTfuBe+kZlt/voSopfawjPNbJMQothaknLfSjgTmfyvMQg++FEKUAbrgIQwOGsDUz7oQ=="],
+    "@velaros-ai/project": ["@velaros-ai/project@2.0.6", "https://npm.pkg.github.com/download/@velaros-ai/project/2.0.6/2a55ec540e87359b79884b562bf11024e25ab7e0", { "dependencies": { "@velaros-ai/core": "0.4.0", "@velaros-ai/kernel": "0.2.1", "diff": "^8.0.4", "execa": "^9.6.1", "iconv-lite": "^0.7.2", "picomatch": "^4.0.3", "typescript": "^5.0.0", "zod": "^4.3.6" }, "peerDependencies": { "@velaros-ai/agent": "0.6.7" } }, "sha512-i6u5p/ZyTrxyUDQpTUKm+WEFNUNNvEyVgYcOciKnRiR97MNZqYMVj4JmENdz4ZdgNsQa+WRxTaBpMvs+0mnAkA=="],
 
-    "@velaros-ai/system": ["@velaros-ai/system@1.1.2", "https://npm.pkg.github.com/download/@velaros-ai/system/1.1.2/4f286c0bfebaad5b6abce507ee760e13337235f8", { "dependencies": { "@velaros-ai/agent": "0.6.7", "@velaros-ai/core": "0.4.0", "@velaros-ai/kernel": "0.2.1", "zod": "^4.3.6" } }, "sha512-q2cy3BuaoXQfFUq39+R0Reg6JXZ6CNIMuzqlKkZ4TQSG0o/vlLw80LKQNk9VDVCdxPw4FUl/OaRz98nwJ5guQg=="],
+    "@velaros-ai/system": ["@velaros-ai/system@1.1.3", "https://npm.pkg.github.com/download/@velaros-ai/system/1.1.3/a9ac1baa5fcf8de8c80671ad7fc52715e168f3db", { "dependencies": { "@velaros-ai/core": "0.4.0", "@velaros-ai/kernel": "0.2.1", "zod": "^4.3.6" }, "peerDependencies": { "@velaros-ai/agent": "0.6.7" } }, "sha512-eNoa5RA+qvYx3XOtHRqvwqxamaDQ3UvNn8t99eXJVFMzCvmMkCUswBzt7eTZ1Ib9dOPcm4p7YQcw/4dV4FjyBQ=="],
 
     "@velaros-ai/ui": ["@velaros-ai/ui@0.2.28", "https://npm.pkg.github.com/download/@velaros-ai/ui/0.2.28/7ed2ba73bebb9ae1eb9d166c39c365ce317409af", { "dependencies": { "@phosphor-icons/react": "^2.1.10", "@radix-ui/react-dialog": "^1.1.15", "@radix-ui/react-label": "^2.1.8", "@radix-ui/react-select": "^2.2.6", "@radix-ui/react-separator": "^1.1.8", "@radix-ui/react-slot": "^1.2.4", "@radix-ui/react-switch": "^1.2.6", "@radix-ui/react-tabs": "^1.1.13", "@radix-ui/react-tooltip": "^1.2.8", "@streamdown/cjk": "^1.0.3", "@streamdown/code": "^1.1.1", "@streamdown/math": "^1.0.2", "@streamdown/mermaid": "^1.0.2", "@velaros-ai/html-artifacts": "0.1.4", "ahooks": "^3.9.7", "class-variance-authority": "^0.7.1", "clsx": "^2.1.1", "react-day-picker": "^9.14.0", "streamdown": "^2.5.0", "tailwind-merge": "^3.5.0", "type-fest": "^4.41.0" }, "peerDependencies": { "react": "^19.0.0", "react-dom": "^19.0.0" } }, "sha512-gpyPLAjWGaYbxJKzgSOYXkoBLYHQyxFMZ0Xn6hG4k2lir6Pj5goAthWMnqRx7Mocf6rsYYefMHhZv8VjGh4ORA=="],
 
@@ -1131,8 +1108,6 @@
 
     "fast-levenshtein": ["fast-levenshtein@2.0.6", "", {}, "sha512-DCXu6Ifhqcks7TZKY3Hxp3y6qphY5SJZmrWMDrKcERSOXWQdMhU9Ig/PYrzyw/ul9jOIyh0N4M0tbC5hodg8dw=="],
 
-    "fast-sha256": ["fast-sha256@1.3.0", "", {}, "sha512-n11RGP/lrWEFI/bWdygLxhI+pVeo1ZYIVwvvPkW7azl/rOy+F3HYRZ2K5zeE9mmkhQppyv9sQFx0JM9UabnpPQ=="],
-
     "fast-uri": ["fast-uri@3.1.4", "", {}, "sha512-8JnbkQ4juDyvYs4mgFGQqg4yCYtFDtUtmp2QIQq11ZZe5CFQ5wcqm1rqDgAh/QdMySuBnPzMUiJUNZG5N/AiQw=="],
 
     "fdir": ["fdir@6.5.0", "", { "peerDependencies": { "picomatch": "^3 || ^4" }, "optionalPeers": ["picomatch"] }, "sha512-tIbYtZbucOs0BRGqPJkshJUYdL+SDH7dVM8gjy+ERp3WAUjLEFJE+02kanyHtwjWOnwrKYBiwAmM0p4kLJAnXg=="],
@@ -1344,8 +1319,6 @@
     "json-buffer": ["json-buffer@3.0.1", "", {}, "sha512-4bV5BfR2mqfQTJm+V5tPPdf+ZpuhiIvTuAB5g8kcrXOZpTT/QwwVRWBywX1ozr6lEuPdbHxwaJlm9G6mI2sfSQ=="],
 
     "json-schema": ["json-schema@0.4.0", "", {}, "sha512-es94M3nTIfsEPisRafak+HDLfHXnKBhV3vU5eqPcS3flIWqcxJWgXHXiey3YrpaNsanY5ei1VoYEbOzijuq9BA=="],
-
-    "json-schema-to-ts": ["json-schema-to-ts@3.1.1", "", { "dependencies": { "@babel/runtime": "^7.18.3", "ts-algebra": "^2.0.0" } }, "sha512-+DWg8jCJG2TEnpy7kOm/7/AxaYoaRbjVB4LFZLySZlWn8exGs3A4OLJR966cVvU26N7X9TWxl+Jsw7dzAqKT6g=="],
 
     "json-schema-traverse": ["json-schema-traverse@0.4.1", "", {}, "sha512-xbbCH5dCYU5T8LcEhhuh7HJ88HXuW3qsI3Y0zOZFKfZEHcpWiHU/Jxzk629Brsab/mMiHQti9wMP+845RPe3Vg=="],
 
@@ -1845,8 +1818,6 @@
 
     "sprintf-js": ["sprintf-js@1.1.3", "", {}, "sha512-Oo+0REFV59/rz3gfJNKQiBlwfHaSESl1pcGyABQsnnIfWOFt6JNj5gCog2U6MLZ//IGYD+nA8nI+mTShREReaA=="],
 
-    "standardwebhooks": ["standardwebhooks@1.0.0", "", { "dependencies": { "@stablelib/base64": "^1.0.0", "fast-sha256": "^1.3.0" } }, "sha512-BbHGOQK9olHPMvQNHWul6MYlrRTAOKn03rOe4A8O3CLWhNf4YHBqq2HJKKC+sfqpxiBY52pNeesD6jIiLDz8jg=="],
-
     "stat-mode": ["stat-mode@1.0.0", "", {}, "sha512-jH9EhtKIjuXZ2cWxmXS8ZP80XyC3iasQxMDV8jzhNJpfDb7VbQLVW4Wvsxz9QZvzV+G4YoSfBUVKDOyxLzi/sg=="],
 
     "statuses": ["statuses@2.0.2", "", {}, "sha512-DvEy55V3DB7uknRo+4iOGT5fP1slR8wQohVdknigZPMpMstaKJQWhwiYBACJE3Ul2pTnATihhBYnRhZQHGBiRw=="],
@@ -1912,8 +1883,6 @@
     "trough": ["trough@2.2.0", "", {}, "sha512-tmMpK00BjZiUyVyvrBK7knerNgmgvcV/KLVyuma/SC+TQN167GrMRciANTz09+k3zW8L8t60jWO1GpfkZdjTaw=="],
 
     "truncate-utf8-bytes": ["truncate-utf8-bytes@1.0.2", "", { "dependencies": { "utf8-byte-length": "^1.0.1" } }, "sha512-95Pu1QXQvruGEhv62XCMO3Mm90GscOCClvrIUwCM0PYOXK3kaF3l3sIHxx71ThJfcbM2O5Au6SO3AWCSEfW4mQ=="],
-
-    "ts-algebra": ["ts-algebra@2.0.0", "", {}, "sha512-FPAhNPFMrkwz76P7cdjdmiShwMynZYN6SgOujD1urY4oNm80Ou9oMdmbR45LotcKOXoy7wSmHkRFE6Mxbrhefw=="],
 
     "ts-api-utils": ["ts-api-utils@2.5.0", "", { "peerDependencies": { "typescript": ">=4.8.4" } }, "sha512-OJ/ibxhPlqrMM0UiNHJ/0CKQkoKF243/AEmplt3qpRgkW8VG7IfOS41h7V8TjITqdByHzrjcS/2si+y4lIh8NA=="],
 

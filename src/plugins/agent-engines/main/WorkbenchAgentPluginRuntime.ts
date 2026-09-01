@@ -46,6 +46,7 @@ export class WorkbenchAgentPluginRuntime {
     extensionTools: WorkbenchAgentExtensionTools,
     openExternal: (url: string) => Promise<void>,
     private readonly isPluginEnabled: (engineId: WorkbenchAgentEngineId) => boolean,
+    productVersion: string,
     pluginResolver = new WorkbenchAgentPluginResolver()
   ) {
     this.claude = new WorkbenchClaudeAgentRuntime(
@@ -58,7 +59,8 @@ export class WorkbenchAgentPluginRuntime {
       this.interactions,
       sessions,
       extensionTools,
-      openExternal
+      openExternal,
+      productVersion
     )
   }
 

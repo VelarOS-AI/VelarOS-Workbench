@@ -47,7 +47,7 @@ export class WorkbenchCodexAppServerClient {
     })
   }
 
-  public static async create(): Promise<WorkbenchCodexAppServerClient> {
+  public static async create(productVersion: string): Promise<WorkbenchCodexAppServerClient> {
     const child = spawn('codex', ['app-server'], {
       detached: shouldDetachAgentEngineProcess(),
       env: await getWorkbenchAgentEngineEnvironment(),
@@ -59,7 +59,7 @@ export class WorkbenchCodexAppServerClient {
         clientInfo: {
           name: 'velaros-workbench',
           title: 'VelarOS Workbench',
-          version: '0.3.11',
+          version: productVersion,
         },
         capabilities: {
           experimentalApi: true,

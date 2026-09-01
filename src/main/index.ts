@@ -215,7 +215,8 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
     {
       artifactBase: () => accountService.getPluginArtifactBaseUrl(),
       fetchImpl: (input) => accountService.fetchPluginResource(new URL(input.toString())),
-    }
+    },
+    app.getVersion()
   )
   const modelComposition = createModelRuntimeComposition()
   // 进程内 Kernel：只注册 Workbench 自持的 Agent 能力，执行栈也在本进程。

@@ -4,7 +4,10 @@ import { pathToFileURL } from 'node:url'
 
 import { resolveVelarOSSharedResourcesRoot } from '../../../main/resources/VelarOSSharedResourceStore'
 
-type ClaudeAgentSdkModule = typeof import('@anthropic-ai/claude-agent-sdk')
+import {
+  type ClaudeAgentSdkModule,
+  isClaudeAgentSdkModule,
+} from './ClaudeAgentPluginContract'
 
 export class WorkbenchAgentPluginResolver {
   public constructor(
@@ -38,7 +41,11 @@ export class WorkbenchAgentPluginResolver {
   public async loadClaudeSdk(): Promise<ClaudeAgentSdkModule> {
     const entry = this.resolveClaudeSdkEntry()
     if (!entry) throw new Error('Claude Agent 插件尚未安装。')
-    return import(pathToFileURL(entry).href) as Promise<ClaudeAgentSdkModule>
+    const sdk: unknown = await import(pathToFileURL(entry).href)
+    if (!isClaudeAgentSdkModule(sdk)) {
+      throw new Error('Claude Agent 插件接口不完整，请重新安装。')
+    }
+    return sdk
   }
 
   private resolveClaudeSdkEntry(): string | null {
@@ -56,5 +63,3 @@ export class WorkbenchAgentPluginResolver {
       : null
   }
 }
-
-export type { ClaudeAgentSdkModule }
