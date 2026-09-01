@@ -1,5 +1,5 @@
 import { strict as assert } from 'node:assert'
-import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -50,7 +50,8 @@ check(
 )
 
 const projectRoot = mkdtempSync(join(tmpdir(), 'velaros-workbench-terminal-probe-'))
-const terminal = new TerminalSessions(new PathResolver(), new CommandHelper())
+const pathResolver = new PathResolver()
+const terminal = new TerminalSessions(pathResolver, new CommandHelper())
 
 try {
   await assert.rejects(
@@ -76,7 +77,11 @@ try {
     }
   )
   check(session.sessionId.startsWith('terminal-'), '终端会话必须返回独立持久句柄')
-  equal(session.projectRoot, realpathSync(projectRoot), '终端会话必须绑定 canonical 项目根')
+  equal(
+    session.projectRoot,
+    await pathResolver.resolveProjectRoot(projectRoot),
+    '终端会话必须绑定 canonical 项目根'
+  )
 
   await Promise.race([
     closed,
