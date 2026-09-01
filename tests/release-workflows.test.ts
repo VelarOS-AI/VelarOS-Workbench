@@ -23,4 +23,17 @@ void describe('release workflows', () => {
     const builder = await readFile(path.resolve('electron-builder.yml'), 'utf8')
     assert.match(builder, /afterPack: \.\/scripts\/release\/verifyPackagedWorkbench\.mjs/u)
   })
+
+  void test('keeps Linux package maintainer metadata complete', async () => {
+    const manifest = JSON.parse(await readFile(path.resolve('package.json'), 'utf8')) as {
+      author?: { name?: string; email?: string }
+      desktopName?: string
+    }
+    const builder = await readFile(path.resolve('electron-builder.yml'), 'utf8')
+
+    assert.equal(manifest.author?.name, 'VelarOS')
+    assert.match(manifest.author?.email ?? '', /^[^@\s]+@[^@\s]+\.[^@\s]+$/u)
+    assert.equal(manifest.desktopName, 'velaros-workbench.desktop')
+    assert.match(builder, /linux:\n(?:.*\n)*?\s+syncDesktopName: true/u)
+  })
 })

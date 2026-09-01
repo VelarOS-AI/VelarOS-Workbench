@@ -69,6 +69,7 @@ nsis:
 
 linux:
   category: Development
+  syncDesktopName: true
   executableArgs:
     - '%F'
   target:
