@@ -183,8 +183,13 @@ void describe('external LSP process termination', () => {
     const exit = once(child, 'exit')
     try {
       assert.equal(await terminateExternalLspProcessTree(child.pid), true)
-      const [, signal] = await exit as [number | null, NodeJS.Signals | null]
-      assert.equal(signal, 'SIGKILL')
+      const [code, signal] = await exit as [number | null, NodeJS.Signals | null]
+      if (process.platform === 'win32') {
+        assert.equal(signal, null)
+        assert.notEqual(code, null)
+      } else {
+        assert.equal(signal, 'SIGKILL')
+      }
     } finally {
       if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
     }

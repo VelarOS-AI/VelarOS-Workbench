@@ -96,6 +96,14 @@ function isPathInside(parentPath: string, childPath: string): boolean {
   )
 }
 
+function typeScriptPathsEqual(left: string, right: string): boolean {
+  const normalize = (path: string): string => {
+    const absolutePath = resolve(path).replaceAll('\\', '/')
+    return ts.sys.useCaseSensitiveFileNames ? absolutePath : absolutePath.toLowerCase()
+  }
+  return normalize(left) === normalize(right)
+}
+
 function findNearestPackageJsonPath(
   projectRoot: string,
   requestAbsolutePath: string
@@ -251,7 +259,9 @@ function findProjectWideOwningConfigPath(
   requestAbsolutePath: string
 ): Nullable<string> {
   const owningCandidates = collectProjectTypeScriptConfigCandidates(projectRoot)
-    .filter(({ parsed }) => parsed.fileNames.includes(requestAbsolutePath))
+    .filter(({ parsed }) => parsed.fileNames.some((path) =>
+      typeScriptPathsEqual(path, requestAbsolutePath)
+    ))
     .sort((left, right) => {
       const fileCountDifference = left.parsed.fileNames.length - right.parsed.fileNames.length
       if (fileCountDifference !== 0) return fileCountDifference
@@ -286,7 +296,9 @@ function findOwningReferencedConfigPath(
     if (owningConfigPath) return owningConfigPath
   }
 
-  return parsed.fileNames.includes(requestAbsolutePath) ? configPath : null
+  return parsed.fileNames.some((path) => typeScriptPathsEqual(path, requestAbsolutePath))
+    ? configPath
+    : null
 }
 
 function parseTypeScriptProjectConfig(

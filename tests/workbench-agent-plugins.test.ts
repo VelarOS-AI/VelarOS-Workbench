@@ -4,7 +4,8 @@ import { resolve } from 'node:path'
 import { describe, expect, test } from 'bun:test'
 
 const root = resolve(import.meta.dir, '..')
-const readSource = (path: string): string => readFileSync(resolve(root, path), 'utf8')
+const readSource = (path: string): string =>
+  readFileSync(resolve(root, path), 'utf8').replaceAll('\r\n', '\n')
 
 describe('Workbench Agent plugins', () => {
   test('contributes switchable Claude and ChatGPT right-side tools', () => {

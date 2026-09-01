@@ -1275,7 +1275,10 @@ void describe('shared external LSP client', () => {
     await missing.dispose()
 
     const retryRoot = await mkdtemp(join(tmpdir(), 'workbench-retry-lsp-'))
-    const retryCommand = join(retryRoot, 'retry-lsp')
+    const retryCommand = join(
+      retryRoot,
+      process.platform === 'win32' ? 'retry-lsp.cmd' : 'retry-lsp'
+    )
     const retriable = new ExternalLspClient(retryRoot, {
       id: 'retry-language',
       label: 'Retry Language',
@@ -1296,10 +1299,12 @@ void describe('shared external LSP client', () => {
     )
     await writeFile(
       retryCommand,
-      `#!/bin/sh\nexec "${process.execPath.replaceAll('"', '\\"')}" "${fixture.replaceAll('"', '\\"')}"\n`,
+      process.platform === 'win32'
+        ? `@echo off\r\n"${process.execPath}" "${fixture}"\r\n`
+        : `#!/bin/sh\nexec "${process.execPath.replaceAll('"', '\\"')}" "${fixture.replaceAll('"', '\\"')}"\n`,
       'utf8'
     )
-    await chmod(retryCommand, 0o755)
+    if (process.platform !== 'win32') await chmod(retryCommand, 0o755)
     const recoveredCompletions = await retriable.completion(
       join(retryRoot, 'probe.retry'),
       'comp',

@@ -141,6 +141,32 @@ interface OpenDocument {
   version: number
 }
 
+const GracefulLspExitTimeoutMs = 500
+
+async function waitForChildProcessExit(
+  child: ChildProcessWithoutNullStreams,
+  timeoutMs: number
+): Promise<boolean> {
+  if (child.exitCode !== null || child.signalCode !== null) return true
+
+  return new Promise<boolean>((resolve) => {
+    let settled = false
+    const settle = (value: boolean): void => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      child.off('exit', onExit)
+      resolve(value)
+    }
+    const onExit = (): void => settle(true)
+    const timer = setTimeout(() => settle(
+      child.exitCode !== null || child.signalCode !== null
+    ), timeoutMs)
+    timer.unref()
+    child.once('exit', onExit)
+  })
+}
+
 interface DiagnosticSnapshot {
   version: number
   diagnostics: ExternalLspDiagnostic[]
@@ -415,6 +441,7 @@ export class ExternalLspClient {
   private readonly diagnosticWaiters = new Map<string, DiagnosticWaiter[]>()
   private serverCapabilities: Record<string, unknown> = {}
   private initializePromise: Nullable<Promise<void>> = null
+  private processTermination: Nullable<Promise<boolean>> = null
   private stderr = ''
   private disposed = false
 
@@ -685,17 +712,26 @@ export class ExternalLspClient {
   }
 
   public async dispose(): Promise<void> {
-    if (this.disposed) return
+    if (this.disposed) {
+      await this.processTermination
+      return
+    }
     this.disposed = true
     const child = this.process
-    if (!child) return
+    if (!child) {
+      await this.processTermination
+      return
+    }
 
     try {
       await this.request('shutdown', null)
       this.notify('exit', null)
     } catch {
-      await terminateExternalLspProcessTree(child.pid)
+      // 统一由下面的退出确认处理；这里不能在 Windows 上只发信号就返回。
     }
+    if (!await waitForChildProcessExit(child, GracefulLspExitTimeoutMs))
+      await terminateExternalLspProcessTree(child.pid)
+    await waitForChildProcessExit(child, GracefulLspExitTimeoutMs)
     this.process = null
   }
 
@@ -715,6 +751,8 @@ export class ExternalLspClient {
   }
 
   private async startAndInitialize(): Promise<void> {
+    await this.processTermination
+    this.processTermination = null
     const command = this.descriptor.command
     if (!command)
       throw new AppError('INVARIANT', `${this.descriptor.label} 缺少语言服务器命令。`)
@@ -1077,7 +1115,7 @@ export class ExternalLspClient {
     this.outbound.length = 0
     this.outboundLength = 0
     this.outboundPaused = false
-    if (child) void terminateExternalLspProcessTree(child.pid)
+    if (child) this.processTermination = terminateExternalLspProcessTree(child.pid)
     for (const pending of this.pending.values()) {
       clearTimeout(pending.timeout)
       pending.reject(error)

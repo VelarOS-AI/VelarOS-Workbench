@@ -20,9 +20,11 @@ describe('Workbench model credential store', () => {
       const encryptedPath = join(rootDir, 'model-credentials.local-v1.bin')
       const encrypted = await readFile(encryptedPath)
       expect(encrypted.includes(Buffer.from('sk-model-secret'))).toBe(false)
-      expect((await stat(encryptedPath)).mode & 0o777).toBe(0o600)
-      expect((await stat(join(rootDir, 'model-credentials.local-v1.key'))).mode & 0o777)
-        .toBe(0o600)
+      if (process.platform !== 'win32') {
+        expect((await stat(encryptedPath)).mode & 0o777).toBe(0o600)
+        expect((await stat(join(rootDir, 'model-credentials.local-v1.key'))).mode & 0o777)
+          .toBe(0o600)
+      }
     } finally {
       await rm(rootDir, { recursive: true, force: true })
     }

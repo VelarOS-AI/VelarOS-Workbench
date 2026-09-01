@@ -21,7 +21,8 @@ void describe('release workflows', () => {
     assert.match(workflow, /if: steps\.reuse\.outputs\.reuse != 'true'/)
     assert.doesNotMatch(workflow, /--clobber/)
 
-    const builder = await readFile(path.resolve('electron-builder.yml'), 'utf8')
+    const builder = (await readFile(path.resolve('electron-builder.yml'), 'utf8'))
+      .replaceAll('\r\n', '\n')
     assert.match(builder, /afterPack: \.\/scripts\/release\/verifyPackagedWorkbench\.mjs/u)
   })
 
@@ -30,7 +31,8 @@ void describe('release workflows', () => {
       author?: { name?: string; email?: string }
       desktopName?: string
     }
-    const builder = await readFile(path.resolve('electron-builder.yml'), 'utf8')
+    const builder = (await readFile(path.resolve('electron-builder.yml'), 'utf8'))
+      .replaceAll('\r\n', '\n')
 
     assert.equal(manifest.author?.name, 'VelarOS')
     assert.match(manifest.author?.email ?? '', /^[^@\s]+@[^@\s]+\.[^@\s]+$/u)
