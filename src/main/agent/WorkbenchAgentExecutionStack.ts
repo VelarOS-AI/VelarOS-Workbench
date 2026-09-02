@@ -15,6 +15,7 @@ import {
   SoloStreamLoop,
   TurnRunner,
 } from '@velaros-ai/agent'
+import type { AgentModelInputModality } from '@velaros-ai/agent/protocol'
 import { Log } from '@velaros-ai/core'
 import { logRuntime } from '@velaros-ai/core/logger'
 import {
@@ -232,7 +233,7 @@ const EmptySkillRepository = {
  * 逐项对齐 loop 的必填面：codingSession（tracker 直供）、activeContext（内存态，
  * Workbench 没有制品库）、可见工具名（本地状态）、类别列举（注册表直供）。
  */
-function createWorkbenchToolContext(input: {
+export function createWorkbenchToolContext(input: {
   sessionId: string
   projectRoot: string
   abortSignal: AbortSignal
@@ -240,6 +241,7 @@ function createWorkbenchToolContext(input: {
   registry: WorkbenchAgentToolRegistry
 }): Record<string, unknown> {
   let visibleToolNames = input.registry.names
+  let supportedModelInputModalities: AgentModelInputModality[] = ['text']
   return {
     sessionId: input.sessionId,
     resourceId: input.projectRoot,
@@ -259,6 +261,10 @@ function createWorkbenchToolContext(input: {
     getCurrentVisibleToolNames: () => visibleToolNames,
     setCurrentVisibleToolNames: (names: string[]) => {
       visibleToolNames = names
+    },
+    getSupportedModelInputModalities: () => [...supportedModelInputModalities],
+    setSupportedModelInputModalities: (modalities: readonly AgentModelInputModality[]) => {
+      supportedModelInputModalities = [...new Set(modalities)]
     },
     listTools: (scope?: 'all') => input.registry.listAvailable(null, scope ? undefined : undefined),
     listToolCategories: () => input.registry.listCategories(null),

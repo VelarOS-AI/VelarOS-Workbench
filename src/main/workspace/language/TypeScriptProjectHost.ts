@@ -376,6 +376,11 @@ function parseTypeScriptProjectConfig(
 
   return createConfig(
     {
+      // Solution-style 根配置常常只声明 paths / references；供 ESLint 等工具使用的
+      // 派生配置继承它之后，也可能没有 module/moduleResolution。TypeScript 此时会退回
+      // 旧 Node10 解析，进而把带 package exports 的现代子路径误报为找不到模块。
+      // 仅为未显式声明的选项补齐 Workbench 的现代项目默认值，项目自己的设置仍然优先。
+      ...fallbackOptions,
       ...parsed.options,
       allowJs: JavaScriptExtensions.has(extensionWithDot(requestAbsolutePath))
         ? true

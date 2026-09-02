@@ -724,6 +724,76 @@ void describe('focused Workbench language surface', () => {
     }
   })
 
+  void test('uses modern package exports resolution when a derived config omits module resolution', async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), 'workbench-solution-style-tsconfig-'))
+    const requestPath = join(projectRoot, 'src', 'rendererCatalog.tsx')
+    const packageRoot = join(projectRoot, 'node_modules', '@fixture', 'agent')
+    const source = "import type { Protocol } from '@fixture/agent/protocol'\nexport const protocol: Protocol = { ready: true }\n"
+
+    try {
+      await mkdir(join(projectRoot, 'src'), { recursive: true })
+      await mkdir(join(packageRoot, 'dist', 'protocol'), { recursive: true })
+      await writeFile(requestPath, source, 'utf8')
+      await writeFile(
+        join(projectRoot, 'tsconfig.json'),
+        JSON.stringify({ compilerOptions: { paths: {} }, files: [], references: [{ path: './tsconfig.web.json' }] }),
+        'utf8'
+      )
+      await writeFile(
+        join(projectRoot, 'tsconfig.web.json'),
+        JSON.stringify({
+          compilerOptions: { module: 'ESNext', moduleResolution: 'bundler', target: 'ESNext' },
+          files: [],
+        }),
+        'utf8'
+      )
+      await writeFile(
+        join(projectRoot, 'tsconfig.eslint.json'),
+        JSON.stringify({ extends: './tsconfig.json', compilerOptions: { noEmit: true }, include: ['src/**/*.tsx'] }),
+        'utf8'
+      )
+      await writeFile(
+        join(projectRoot, 'package.json'),
+        JSON.stringify({ type: 'module', dependencies: { '@fixture/agent': '1.0.0' } }),
+        'utf8'
+      )
+      await writeFile(
+        join(packageRoot, 'package.json'),
+        JSON.stringify({
+          name: '@fixture/agent',
+          version: '1.0.0',
+          type: 'module',
+          exports: {
+            './protocol': {
+              types: './dist/protocol/index.d.ts',
+              import: './dist/protocol/index.js',
+            },
+          },
+        }),
+        'utf8'
+      )
+      await writeFile(
+        join(packageRoot, 'dist', 'protocol', 'index.d.ts'),
+        'export interface Protocol { ready: boolean }\n',
+        'utf8'
+      )
+
+      const project = acquireTypeScriptLanguageService(
+        projectRoot,
+        requestPath,
+        [],
+        new Map([[requestPath, source]])
+      )
+
+      assert.equal(project.config.configPath, join(projectRoot, 'tsconfig.eslint.json'))
+      assert.equal(project.compilerOptions.moduleResolution, ts.ModuleResolutionKind.Bundler)
+      assert.deepEqual(project.service.getSemanticDiagnostics(requestPath), [])
+    } finally {
+      clearTypeScriptProjectCache(projectRoot)
+      await rm(projectRoot, { recursive: true, force: true })
+    }
+  })
+
   void test('separates LSP signatures from documentation instead of rendering markdown noise', () => {
     assert.deepEqual(
       buildExternalHoverResult({
