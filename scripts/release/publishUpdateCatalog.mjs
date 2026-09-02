@@ -63,7 +63,7 @@ function artifactDescriptor(fileName) {
       : platform === 'darwin'
         ? 'notarized'
         : platform === 'win32'
-          ? 'signed'
+          ? 'unsigned'
           : 'verified',
   }
 }

@@ -23,7 +23,7 @@ test('Workbench update catalog maps each supported release artifact to its produ
     arch: 'x64',
     format: 'exe',
     artifactRole: 'installer',
-    signatureStatus: 'signed',
+    signatureStatus: 'unsigned',
   })
   assert.deepEqual(artifactDescriptor('VelarOS-Workbench-1.2.3-linux-x64.AppImage'), {
     platform: 'linux',

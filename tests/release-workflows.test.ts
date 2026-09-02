@@ -24,6 +24,14 @@ void describe('release workflows', () => {
     )
     assert.match(workflow, /Reuse prior immutable platform checkpoint/)
     assert.match(workflow, /if: steps\.reuse\.outputs\.reuse != 'true'/)
+    assert.match(
+      workflow,
+      /Verify macOS signing and notarization credentials\n\s+if: .*runner\.os == 'macOS'/u
+    )
+    assert.match(
+      workflow,
+      /CSC_IDENTITY_AUTO_DISCOVERY: .*runner\.os == 'Windows'.*'false'/u
+    )
     assert.doesNotMatch(workflow, /--clobber/)
 
     const builder = (await readFile(path.resolve('electron-builder.yml'), 'utf8'))
