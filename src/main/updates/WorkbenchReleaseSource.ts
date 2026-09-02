@@ -3,7 +3,7 @@ import {
   type WorkbenchUpdateChannel,
 } from '../../shared/workbenchUpdate'
 
-export const VelarOSCloudBaseUrl = 'https://global.velaros.cn'
+export const VelarOSCloudBaseUrl = 'https://global.velaros.cn/api'
 
 export type WorkbenchReleaseSignatureStatus =
   | 'unsigned'
@@ -57,6 +57,8 @@ export interface WorkbenchReleaseSource {
 }
 
 export class CloudWorkbenchReleaseSource implements WorkbenchReleaseSource {
+  public constructor(private readonly request: typeof fetch = fetch) {}
+
   public async getCurrentRelease(input: {
     readonly channel: WorkbenchUpdateChannel
     readonly platform: NodeJS.Platform
@@ -69,7 +71,7 @@ export class CloudWorkbenchReleaseSource implements WorkbenchReleaseSource {
       platform: input.platform,
       arch: input.arch,
     })
-    const response = await fetch(`${VelarOSCloudBaseUrl}/v1/releases/current?${search}`, {
+    const response = await this.request(`${VelarOSCloudBaseUrl}/v1/releases/current?${search}`, {
       headers: { Accept: 'application/json' },
       signal: AbortSignal.timeout(20_000),
     })
@@ -90,7 +92,7 @@ export class CloudWorkbenchReleaseSource implements WorkbenchReleaseSource {
     if (!/^\/v1\/releases\/download\/[A-Za-z0-9._~%-]+$/u.test(input.downloadPath)) {
       throw new Error('Update artifact path is not trusted.')
     }
-    const response = await fetch(`${input.baseUrl}${input.downloadPath}`, {
+    const response = await this.request(`${input.baseUrl}${input.downloadPath}`, {
       ...init,
       method: 'GET',
       redirect: 'follow',

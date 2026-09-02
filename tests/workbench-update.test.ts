@@ -7,7 +7,10 @@ import type { CancellationToken } from 'builder-util-runtime'
 import { afterEach, describe, expect, test } from 'bun:test'
 import type { AppUpdater } from 'electron-updater'
 
-import type { WorkbenchReleaseSource } from '../src/main/updates/WorkbenchReleaseSource'
+import {
+  CloudWorkbenchReleaseSource,
+  type WorkbenchReleaseSource,
+} from '../src/main/updates/WorkbenchReleaseSource'
 import { WorkbenchUpdatePreferencesStore } from '../src/main/updates/WorkbenchUpdatePreferencesStore'
 import { WorkbenchUpdateService } from '../src/main/updates/WorkbenchUpdateService'
 
@@ -154,5 +157,32 @@ describe('WorkbenchUpdateService', () => {
     expect(new WorkbenchUpdatePreferencesStore(dataRoot).channel).toBe('beta')
     expect(updater.allowPrerelease).toBe(true)
     await service.dispose()
+  })
+})
+
+describe('CloudWorkbenchReleaseSource', () => {
+  test('requests the Workbench catalog from the public Cloud API route', async () => {
+    const requestedUrls: string[] = []
+    const request = (async (input: string | URL | Request) => {
+      requestedUrls.push(String(input))
+      return Response.json({
+        product: 'workbench',
+        channel: 'stable',
+        updatePolicy: 'optional',
+        artifacts: [],
+      })
+    }) as typeof fetch
+    const source = new CloudWorkbenchReleaseSource(request)
+
+    const release = await source.getCurrentRelease({
+      channel: 'stable',
+      platform: 'darwin',
+      arch: 'arm64',
+    })
+
+    expect(release.baseUrl).toBe('https://global.velaros.cn/api')
+    expect(requestedUrls).toEqual([
+      'https://global.velaros.cn/api/v1/releases/current?product=workbench&channel=stable&platform=darwin&arch=arm64',
+    ])
   })
 })
