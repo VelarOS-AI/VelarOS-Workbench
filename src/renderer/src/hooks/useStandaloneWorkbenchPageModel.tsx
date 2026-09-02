@@ -299,7 +299,7 @@ export function useStandaloneWorkbenchPageModel(
     if (!workbench.closeProject()) return false
 
     setSettingsOpen(false)
-    await window.velarosWorkbenchProjectHub.closeProject()
+    await window.velarosWorkbenchProjectHub.returnToEntry()
     return true
   })
 

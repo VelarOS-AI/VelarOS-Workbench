@@ -52,6 +52,15 @@ void describe('Workbench project window ownership', () => {
     assert.match(presentation, /openProjectPathInNewWindow\(path\)/u)
     assert.match(presentation, /cloneProjectInNewWindow\(remoteUrl\)/u)
     assert.match(settings, /settingsExitProjectAction/u)
+    assert.match(presentation, /onExitProject=\{model\.actions\.exitCurrentProject\}/u)
+    assert.match(
+      await readFile('src/renderer/src/hooks/useStandaloneWorkbenchPageModel.tsx', 'utf8'),
+      /exitCurrentProject[\s\S]*velarosWorkbenchProjectHub\.returnToEntry\(\)/u
+    )
+    assert.match(
+      manager,
+      /public async closeProject[\s\S]*?return this\.returnToEntry\(sender\)/u
+    )
     assert.match(host, /addWorkspaceRoot:[\s\S]*validateProjectPath\(path\)/u)
     assert.doesNotMatch(host, /addWorkspaceRoot:[\s\S]*openProjectPath\(path\)/u)
     assert.match(control, /projectControlRecentMain[\s\S]*onSwitchProject\(project\.path\)/u)
