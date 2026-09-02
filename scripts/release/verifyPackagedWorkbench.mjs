@@ -5,6 +5,10 @@ import { pathToFileURL } from 'node:url'
 
 const ProductFilename = 'VelarOS Workbench'
 
+function archivePath(...segments) {
+  return path.join(...segments)
+}
+
 function resolvePackagedWorkbenchPaths(appOutDir, platformName) {
   const resourcesRoot = platformName === 'darwin'
     ? path.join(appOutDir, `${ProductFilename}.app`, 'Contents', 'Resources')
@@ -38,7 +42,7 @@ async function verifyPackagedWorkbench({ appOutDir, platformName }) {
   const rootRequire = createRequire(import.meta.url)
   const builderRequire = createRequire(rootRequire.resolve('electron-builder/package.json'))
   const { extractFile } = builderRequire('@electron/asar')
-  const packagedApp = JSON.parse(extractFile(paths.appArchive, 'package.json').toString('utf8'))
+  const packagedApp = JSON.parse(extractFile(paths.appArchive, archivePath('package.json')).toString('utf8'))
   if (packagedApp.version !== workbenchPackage.version) {
     throw new Error(
       `Packaged app version ${packagedApp.version ?? '<missing>'} `
@@ -46,12 +50,15 @@ async function verifyPackagedWorkbench({ appOutDir, platformName }) {
     )
   }
 
-  const rendererHtml = extractFile(paths.appArchive, 'build/electron/renderer/index.html').toString('utf8')
+  const rendererHtml = extractFile(
+    paths.appArchive,
+    archivePath('build', 'electron', 'renderer', 'index.html')
+  ).toString('utf8')
   const rendererCssHref = rendererHtml.match(/<link[^>]+href="\.\/([^"]+\.css)"[^>]*>/u)?.[1]
   if (!rendererCssHref) throw new Error('Packaged Workbench renderer CSS asset is missing.')
   const rendererCss = extractFile(
     paths.appArchive,
-    `build/electron/renderer/${rendererCssHref}`
+    archivePath('build', 'electron', 'renderer', rendererCssHref)
   ).toString('utf8')
   const rendererCssWithoutComments = rendererCss.replace(/\/\*[\s\S]*?\*\//gu, '')
   if (rendererCssWithoutComments.includes('@apply')) {
@@ -77,13 +84,13 @@ async function verifyPackagedWorkbench({ appOutDir, platformName }) {
     'node_modules/pyright/langserver.index.js',
     'build/electron/main/workbench-language-worker.js',
   ]) {
-    const contents = extractFile(paths.appArchive, bundledRuntimeFile)
+    const contents = extractFile(paths.appArchive, archivePath(...bundledRuntimeFile.split('/')))
     if (contents.length === 0)
       throw new Error(`Packaged app runtime file is empty: ${bundledRuntimeFile}`)
   }
   const languageWorker = extractFile(
     paths.appArchive,
-    'build/electron/main/workbench-language-worker.js'
+    archivePath('build', 'electron', 'main', 'workbench-language-worker.js')
   ).toString('utf8')
   if (!languageWorker.includes('velarscript')) {
     throw new Error('Packaged Workbench language worker is missing the built-in Velar contribution.')
@@ -94,7 +101,7 @@ async function verifyPackagedWorkbench({ appOutDir, platformName }) {
     'node_modules/@velaros-ai/agent/package.json',
   ]) {
     try {
-      extractFile(paths.appArchive, excludedRuntime)
+      extractFile(paths.appArchive, archivePath(...excludedRuntime.split('/')))
       throw new Error(`Packaged Workbench contains an excluded runtime: ${excludedRuntime}`)
     } catch (error) {
       if (error instanceof Error && error.message.startsWith('Packaged Workbench contains')) {
@@ -110,7 +117,7 @@ async function verifyPackagedWorkbench({ appOutDir, platformName }) {
     'node_modules/gpt-tokenizer/esm/bpeRanks/cl100k_base.js',
   ]) {
     try {
-      extractFile(paths.appArchive, trimmedTokenizerFile)
+      extractFile(paths.appArchive, archivePath(...trimmedTokenizerFile.split('/')))
       throw new Error(`Packaged Workbench contains unused tokenizer data: ${trimmedTokenizerFile}`)
     } catch (error) {
       if (error instanceof Error && error.message.startsWith('Packaged Workbench contains')) {
@@ -170,6 +177,7 @@ if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === imp
 }
 
 export {
+  archivePath,
   findPackagedWorkbenchAppOutDir,
   resolvePackagedWorkbenchPaths,
   verifyPackagedWorkbench,

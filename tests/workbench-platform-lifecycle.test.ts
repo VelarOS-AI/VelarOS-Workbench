@@ -7,6 +7,7 @@ import { describe, test } from 'bun:test'
 import ts from 'typescript'
 
 import {
+  archivePath,
   findPackagedWorkbenchAppOutDir,
   resolvePackagedWorkbenchPaths,
 } from '../scripts/release/verifyPackagedWorkbench.mjs'
@@ -34,6 +35,10 @@ void describe('Workbench cross-platform lifecycle', () => {
   })
 
   void test('verifies the native resource layout for every packaged platform', () => {
+    assert.equal(
+      archivePath('build', 'electron', 'renderer', 'index.html'),
+      join('build', 'electron', 'renderer', 'index.html')
+    )
     assert.equal(
       resolvePackagedWorkbenchPaths('/tmp/mac-arm64', 'darwin').appArchive,
       join(
