@@ -9,6 +9,7 @@ import ts from 'typescript'
 import {
   archivePath,
   findPackagedWorkbenchAppOutDir,
+  requiredLayoutRules,
   resolvePackagedWorkbenchPaths,
 } from '../scripts/release/verifyPackagedWorkbench.mjs'
 import {
@@ -57,6 +58,8 @@ void describe('Workbench cross-platform lifecycle', () => {
       resolvePackagedWorkbenchPaths('/tmp/linux-unpacked', 'linux').typeScriptLibRoot,
       join('/tmp/linux-unpacked', 'resources', 'typescript', 'lib')
     )
+    const groupedLayoutCss = '.wb_filePanel,.wb_shell{display:flex}.wb_filePanelBody,.wb_tree{display:flex}'
+    assert.equal(requiredLayoutRules.every((rule) => rule.test(groupedLayoutCss)), true)
   })
 
   void test('loads TypeScript standard libraries from packaged resources', async () => {

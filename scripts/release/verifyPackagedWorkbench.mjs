@@ -4,6 +4,10 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const ProductFilename = 'VelarOS Workbench'
+const requiredLayoutRules = [
+  /\.wb_filePanel\b[^{}]*\{[^}]*display:\s*flex/u,
+  /\.wb_filePanelBody\b[^{}]*\{[^}]*display:\s*flex/u,
+]
 
 function archivePath(...segments) {
   return path.join(...segments)
@@ -64,10 +68,7 @@ async function verifyPackagedWorkbench({ appOutDir, platformName }) {
   if (rendererCssWithoutComments.includes('@apply')) {
     throw new Error('Packaged Workbench renderer CSS still contains uncompiled Tailwind @apply rules.')
   }
-  for (const requiredLayoutRule of [
-    /\.wb_filePanel\s*\{[^}]*display:\s*flex/u,
-    /\.wb_filePanelBody\s*\{[^}]*display:\s*flex/u,
-  ]) {
+  for (const requiredLayoutRule of requiredLayoutRules) {
     if (!requiredLayoutRule.test(rendererCss)) {
       throw new Error(`Packaged Workbench renderer CSS is missing ${requiredLayoutRule}.`)
     }
@@ -179,6 +180,7 @@ if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === imp
 export {
   archivePath,
   findPackagedWorkbenchAppOutDir,
+  requiredLayoutRules,
   resolvePackagedWorkbenchPaths,
   verifyPackagedWorkbench,
 }
