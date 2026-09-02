@@ -45,6 +45,6 @@ export function useWorkbenchAgentPluginContributions(): readonly WorkbenchAgentE
     }
   }, [])
   return WorkbenchAgentEnginesRendererContribution.filter((contribution) =>
-    enabledIds.has(contribution.id === 'claude' ? 'claude-agent' : 'chatgpt')
+    enabledIds.has(contribution.id === 'claude' ? 'claude-agent' : 'codex-agent')
   )
 }

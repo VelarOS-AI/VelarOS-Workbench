@@ -60,7 +60,8 @@ export class WorkbenchAgentPluginRuntime {
       sessions,
       extensionTools,
       openExternal,
-      productVersion
+      productVersion,
+      pluginResolver
     )
   }
 
@@ -84,7 +85,7 @@ export class WorkbenchAgentPluginRuntime {
       available: false,
       reason: engineId === 'claude-code'
         ? '请先在 Workbench 插件页安装并启用 Claude Agent。'
-        : '请先在 Workbench 插件页安装并启用 ChatGPT。',
+        : '请先在 Workbench 插件页安装并启用 Codex Agent。',
       models: [],
     })
     return engineId === 'claude-code' ? this.claude.listModels() : this.codex.listModels()
@@ -94,7 +95,7 @@ export class WorkbenchAgentPluginRuntime {
     if (!this.isPluginEnabled(input.engineId)) {
       throw new Error(input.engineId === 'claude-code'
         ? '请先安装并启用 Claude Agent 插件。'
-        : '请先安装并启用 ChatGPT 插件。')
+        : '请先安装并启用 Codex Agent 插件。')
     }
     if (this.running.has(input.sessionId)) {
       throw new Error('这个外部 Agent 会话已有任务正在运行。')

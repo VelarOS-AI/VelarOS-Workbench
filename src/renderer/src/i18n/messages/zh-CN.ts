@@ -948,7 +948,7 @@ export const workbenchAppZhCNMessages = {
     settingsPluginsEmpty: '没有匹配的插件',
     settingsPluginCodeGraphDescription: '为项目提供代码图谱、结构检索与 Agent 代码查询能力。',
     settingsPluginClaudeDescription: '按需下载 Claude Agent SDK，并连接本机 Claude 登录与工具。',
-    settingsPluginChatGptDescription: '按需启用 ChatGPT/Codex 外部引擎连接；运行时使用本机登录。',
+    settingsPluginChatGptDescription: '按需下载 Codex SDK 与当前平台运行时，并连接本机 Codex 登录。',
     settingsPluginStatusAvailable: '已启用',
     settingsPluginStatusDisabled: '已停用',
     settingsModsHint: '模组承载轻量产品扩展；需要外部软件或较重运行时的能力归插件管理。',

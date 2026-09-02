@@ -10,6 +10,7 @@ import {
   ProjectCodeToolIdentity,
   type WorkbenchAgentExtensionTools,
 } from './WorkbenchAgentExtensionTools'
+import type { WorkbenchAgentPluginResolver } from './WorkbenchAgentPluginResolver'
 import {
   WorkbenchCodexAppServerClient,
   type WorkbenchCodexRpcEnvelope,
@@ -51,7 +52,8 @@ export class WorkbenchCodexAgentRuntime {
     private readonly sessions: WorkbenchAgentEngineSessionStore,
     private readonly extensionTools: WorkbenchAgentExtensionTools,
     private readonly openExternal: (url: string) => Promise<void>,
-    private readonly productVersion: string
+    private readonly productVersion: string,
+    private readonly pluginResolver: WorkbenchAgentPluginResolver
   ) {}
 
   public async run(input: WorkbenchCodexRunInput): Promise<{ status: 'completed' | 'aborted' }> {
@@ -191,7 +193,9 @@ export class WorkbenchCodexAgentRuntime {
 
   private async ensureClient(): Promise<WorkbenchCodexAppServerClient> {
     if (this.client) return this.client
-    const client = await WorkbenchCodexAppServerClient.create(this.productVersion)
+    const command = this.pluginResolver.resolveCodexCommand()
+    if (!command) throw new Error('Codex Agent 插件运行时不完整，请重新安装。')
+    const client = await WorkbenchCodexAppServerClient.create(command, this.productVersion)
     this.client = client
     this.removeClientListener = client.onEnvelope((envelope) => this.handleEnvelope(envelope))
     return client

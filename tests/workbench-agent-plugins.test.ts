@@ -26,9 +26,9 @@ describe('Workbench Agent plugins', () => {
     const contribution = readSource('src/plugins/agent-engines/renderer/contribution.tsx')
 
     expect(service).toContain("this.describePlugin('claude-agent')")
-    expect(service).toContain("this.describePlugin('chatgpt')")
+    expect(service).toContain("this.describePlugin('codex-agent')")
     expect(service).toContain('isAgentPluginEnabled')
-    expect(contribution).toContain("enabledIds.has(contribution.id === 'claude' ? 'claude-agent' : 'chatgpt')")
+    expect(contribution).toContain("enabledIds.has(contribution.id === 'claude' ? 'claude-agent' : 'codex-agent')")
   })
 
   test('keeps a separate persisted conversation for every provider', () => {
@@ -71,7 +71,11 @@ describe('Workbench Agent plugins', () => {
     )
 
     expect(resolver).toContain("resolvePackageRoot('claude-agent')")
-    expect(resolver).toContain("resolvePackageRoot('chatgpt')")
+    expect(resolver).toContain("resolvePackageRoot('codex-agent')")
+    expect(resolver).toContain('resolveClaudeCommand()')
+    expect(resolver).toContain('resolveCodexCommand()')
+    expect(claude).toContain('pathToClaudeCodeExecutable: executable')
+    expect(codex).toContain('this.pluginResolver.resolveCodexCommand()')
     expect(resolver).toContain("'claude-agent-sdk', 'sdk.mjs'")
     expect(claude).toContain("toolName === 'AskUserQuestion'")
     expect(codex).toContain("method === 'item/tool/requestUserInput'")

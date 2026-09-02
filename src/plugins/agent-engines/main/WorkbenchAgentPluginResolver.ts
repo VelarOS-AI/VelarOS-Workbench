@@ -14,17 +14,17 @@ export class WorkbenchAgentPluginResolver {
     private readonly sharedResourcesRoot = resolveVelarOSSharedResourcesRoot()
   ) {}
 
-  public isInstalled(id: 'claude-agent' | 'chatgpt'): boolean {
+  public isInstalled(id: 'claude-agent' | 'codex-agent'): boolean {
     return id === 'claude-agent'
-      ? this.resolveClaudeSdkEntry() !== null
-      : this.resolveChatGptExtensionRoot() !== null
+      ? this.resolveClaudeSdkEntry() !== null && this.resolveClaudeCommand() !== null
+      : this.resolveCodexSdkEntry() !== null && this.resolveCodexCommand() !== null
   }
 
-  public resolvePackageRoot(id: 'claude-agent' | 'chatgpt'): string {
+  public resolvePackageRoot(id: 'claude-agent' | 'codex-agent'): string {
     return join(this.sharedResourcesRoot, id)
   }
 
-  public readVersion(id: 'claude-agent' | 'chatgpt'): string | null {
+  public readVersion(id: 'claude-agent' | 'codex-agent'): string | null {
     const root = this.resolvePackageRoot(id)
     try {
       const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as {
@@ -48,18 +48,53 @@ export class WorkbenchAgentPluginResolver {
     return sdk
   }
 
+  public resolveClaudeCommand(): string | null {
+    const root = this.resolvePackageRoot('claude-agent')
+    const entry = join(
+      root,
+      'node_modules',
+      '@anthropic-ai',
+      `claude-agent-sdk-${process.platform}-${process.arch}`,
+      `claude${process.platform === 'win32' ? '.exe' : ''}`
+    )
+    return existsSync(entry) ? entry : null
+  }
+
+  public resolveCodexCommand(): string | null {
+    const triple = CodexTargetTriples[`${process.platform}-${process.arch}`]
+    if (!triple) return null
+    const root = this.resolvePackageRoot('codex-agent')
+    const entry = join(
+      root,
+      'node_modules',
+      '@openai',
+      `codex-${process.platform}-${process.arch}`,
+      'vendor',
+      triple,
+      'bin',
+      `codex${process.platform === 'win32' ? '.exe' : ''}`
+    )
+    return existsSync(entry) ? entry : null
+  }
+
   private resolveClaudeSdkEntry(): string | null {
     const root = this.resolvePackageRoot('claude-agent')
     const entry = join(root, 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'sdk.mjs')
     return existsSync(join(root, 'package.json')) && existsSync(entry) ? entry : null
   }
 
-  private resolveChatGptExtensionRoot(): string | null {
-    const root = this.resolvePackageRoot('chatgpt')
-    const extension = join(root, 'extension')
-    return existsSync(join(root, 'package.json'))
-      && existsSync(join(extension, 'manifest.json'))
-      ? extension
-      : null
+  private resolveCodexSdkEntry(): string | null {
+    const root = this.resolvePackageRoot('codex-agent')
+    const entry = join(root, 'node_modules', '@openai', 'codex-sdk', 'dist', 'index.js')
+    return existsSync(join(root, 'package.json')) && existsSync(entry) ? entry : null
   }
+}
+
+const CodexTargetTriples: Readonly<Record<string, string>> = {
+  'darwin-arm64': 'aarch64-apple-darwin',
+  'darwin-x64': 'x86_64-apple-darwin',
+  'linux-arm64': 'aarch64-unknown-linux-musl',
+  'linux-x64': 'x86_64-unknown-linux-musl',
+  'win32-arm64': 'aarch64-pc-windows-msvc',
+  'win32-x64': 'x86_64-pc-windows-msvc',
 }

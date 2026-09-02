@@ -61,6 +61,8 @@ export class WorkbenchClaudeAgentRuntime {
     try {
       const environment = await getWorkbenchAgentEngineEnvironment()
       const sdk = await this.pluginResolver.loadClaudeSdk()
+      const executable = this.pluginResolver.resolveClaudeCommand()
+      if (!executable) throw new Error('Claude Agent 插件运行时不完整，请重新安装。')
       active = sdk.query({
         prompt: buildClaudePrompt(input.messages, input.executionModes, !!nativeSessionId),
         options: {
@@ -78,7 +80,7 @@ export class WorkbenchClaudeAgentRuntime {
           mcpServers: {
             'velaros-workbench': this.extensionTools.claudeServer(input.projectRoot, sdk),
           },
-          pathToClaudeCodeExecutable: 'claude',
+          pathToClaudeCodeExecutable: executable,
           model: input.model,
           permissionMode: 'default',
           resume: nativeSessionId ?? undefined,
@@ -151,11 +153,13 @@ export class WorkbenchClaudeAgentRuntime {
     let probe: ClaudeAgentQuery | null = null
     try {
       const sdk = await this.pluginResolver.loadClaudeSdk()
+      const executable = this.pluginResolver.resolveClaudeCommand()
+      if (!executable) throw new Error('Claude Agent 插件运行时不完整，请重新安装。')
       probe = sdk.query({
         prompt: '',
         options: {
           env: await getWorkbenchAgentEngineEnvironment(),
-          pathToClaudeCodeExecutable: 'claude',
+          pathToClaudeCodeExecutable: executable,
           permissionMode: 'plan',
           settingSources: ['user'],
         },

@@ -8,7 +8,7 @@ export const WorkbenchResourcePluginChannels = {
   changed: 'workbench-app:resource-plugins:changed',
 } as const
 
-export type WorkbenchResourcePluginId = 'codegraph' | 'claude-agent' | 'chatgpt'
+export type WorkbenchResourcePluginId = 'codegraph' | 'claude-agent' | 'codex-agent'
 export type WorkbenchResourcePluginStatus =
   | 'available'
   | 'disabled'

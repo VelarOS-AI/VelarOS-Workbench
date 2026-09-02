@@ -47,8 +47,11 @@ export class WorkbenchCodexAppServerClient {
     })
   }
 
-  public static async create(productVersion: string): Promise<WorkbenchCodexAppServerClient> {
-    const child = spawn('codex', ['app-server'], {
+  public static async create(
+    command: string,
+    productVersion: string
+  ): Promise<WorkbenchCodexAppServerClient> {
+    const child = spawn(command, ['app-server'], {
       detached: shouldDetachAgentEngineProcess(),
       env: await getWorkbenchAgentEngineEnvironment(),
       stdio: ['pipe', 'pipe', 'pipe'],

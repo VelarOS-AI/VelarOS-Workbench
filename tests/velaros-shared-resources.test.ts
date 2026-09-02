@@ -1,8 +1,10 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'bun:test'
+import * as tar from 'tar'
 
 import {
   resolveVelarOSSharedDataRoot,
@@ -13,6 +15,7 @@ import {
   WorkbenchCodeGraphResource,
 } from '../src/main/resources/WorkbenchCodeGraphResource'
 import { WorkbenchResourcePluginService } from '../src/main/resources/WorkbenchResourcePluginService'
+import { WorkbenchAgentPluginResolver } from '../src/plugins/agent-engines/main/WorkbenchAgentPluginResolver'
 
 const temporaryRoots: string[] = []
 
@@ -141,7 +144,107 @@ describe('VelarOS shared resources', () => {
       status: 'disabled',
     })
   })
+
+  test('downloads Claude and Codex plugins by their canonical ids and resolves bundled commands', async () => {
+    const fixture = createCodeGraphFixture()
+    const archives = new Map([
+      ['claude-agent', await createAgentPluginArchive(fixture.projectRoot, 'claude-agent')],
+      ['codex-agent', await createAgentPluginArchive(fixture.projectRoot, 'codex-agent')],
+    ] as const)
+    const plugins = Object.fromEntries(
+      [...archives].map(([id, archive]) => [id, {
+        version: '1.0.0',
+        platforms: {
+          [`${process.platform}-${process.arch}`]: {
+            file: `${id}.tar.gz`,
+            sha256: createHash('sha256').update(archive).digest('hex'),
+            size: archive.byteLength,
+          },
+        },
+      }])
+    )
+    const fetchImpl = (async (input: string | URL | Request) => {
+      const url = new URL(input instanceof Request ? input.url : input.toString())
+      if (url.pathname.endsWith('/manifest.json')) return Response.json({ plugins })
+      const id = url.pathname.split('/').at(-1)?.replace(/\.tar\.gz$/u, '')
+      const archive = id ? archives.get(id as 'claude-agent' | 'codex-agent') : undefined
+      return archive ? new Response(archive) : new Response(null, { status: 404 })
+    }) as typeof fetch
+    const service = new WorkbenchResourcePluginService(
+      join(fixture.projectRoot, '.workbench-data'),
+      new WorkbenchCodeGraphResource({
+        sharedResourcesRoot: fixture.sharedResourcesRoot,
+        platform: process.platform,
+        arch: process.arch,
+      }),
+      {
+        ...resourcePluginOptions(fixture.sharedResourcesRoot),
+        fetchImpl,
+      }
+    )
+
+    await service.install('claude-agent')
+    await service.install('codex-agent')
+
+    expect(service.listCatalog().plugins.slice(1)).toMatchObject([
+      { id: 'claude-agent', installed: true, enabled: true, status: 'available' },
+      { id: 'codex-agent', installed: true, enabled: true, status: 'available' },
+    ])
+    const resolver = new WorkbenchAgentPluginResolver(fixture.sharedResourcesRoot)
+    expect(resolver.resolveClaudeCommand()).not.toBeNull()
+    expect(resolver.resolveCodexCommand()).not.toBeNull()
+  })
 })
+
+async function createAgentPluginArchive(
+  parentRoot: string,
+  id: 'claude-agent' | 'codex-agent'
+): Promise<Buffer> {
+  const sourceRoot = mkdtempSync(join(parentRoot, `${id}-source-`))
+  const archivePath = join(parentRoot, `${id}.tar.gz`)
+  writeFileSync(join(sourceRoot, 'package.json'), JSON.stringify({ version: '1.0.0' }))
+  if (id === 'claude-agent') {
+    const sdkRoot = join(sourceRoot, 'node_modules', '@anthropic-ai', 'claude-agent-sdk')
+    const runtimeRoot = join(
+      sourceRoot,
+      'node_modules',
+      '@anthropic-ai',
+      `claude-agent-sdk-${process.platform}-${process.arch}`
+    )
+    mkdirSync(sdkRoot, { recursive: true })
+    mkdirSync(runtimeRoot, { recursive: true })
+    writeFileSync(join(sdkRoot, 'sdk.mjs'), 'export function query() {}\n')
+    writeFileSync(join(runtimeRoot, `claude${process.platform === 'win32' ? '.exe' : ''}`), '')
+  } else {
+    const triple = CodexTargetTriples[`${process.platform}-${process.arch}`]
+    if (!triple) throw new Error('Unsupported Codex test platform.')
+    const sdkRoot = join(sourceRoot, 'node_modules', '@openai', 'codex-sdk', 'dist')
+    const runtimeRoot = join(
+      sourceRoot,
+      'node_modules',
+      '@openai',
+      `codex-${process.platform}-${process.arch}`,
+      'vendor',
+      triple,
+      'bin'
+    )
+    mkdirSync(sdkRoot, { recursive: true })
+    mkdirSync(runtimeRoot, { recursive: true })
+    writeFileSync(join(sdkRoot, 'index.js'), 'export const codex = true\n')
+    writeFileSync(join(runtimeRoot, `codex${process.platform === 'win32' ? '.exe' : ''}`), '')
+  }
+  await tar.c({ cwd: sourceRoot, file: archivePath, gzip: true }, ['package.json', 'node_modules'])
+  return readFileSync(archivePath)
+}
+
+const CodexTargetTriples: Readonly<Record<string, string>> = {
+  'darwin-arm64': 'aarch64-apple-darwin',
+  'darwin-x64': 'x86_64-apple-darwin',
+  'linux-arm64': 'aarch64-unknown-linux-musl',
+  'linux-x64': 'x86_64-unknown-linux-musl',
+  'win32-arm64': 'aarch64-pc-windows-msvc',
+  'win32-x64': 'x86_64-pc-windows-msvc',
+}
 
 function resourcePluginOptions(sharedResourcesRoot: string) {
   return {

@@ -60,7 +60,7 @@ function readPluginId(request: unknown): WorkbenchResourcePluginId {
     throw new Error('Resource plugin request must be an object.')
   }
   const id = (request as Record<string, unknown>)['id']
-  if (id !== 'codegraph' && id !== 'claude-agent' && id !== 'chatgpt') {
+  if (id !== 'codegraph' && id !== 'claude-agent' && id !== 'codex-agent') {
     throw new Error('Unsupported Workbench resource plugin.')
   }
   return id

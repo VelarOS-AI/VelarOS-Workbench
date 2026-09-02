@@ -85,13 +85,13 @@ class WorkbenchResourcePluginService {
       plugins: [
         this.describePlugin('codegraph'),
         this.describePlugin('claude-agent'),
-        this.describePlugin('chatgpt'),
+        this.describePlugin('codex-agent'),
       ],
     }
   }
 
   public isAgentPluginEnabled(engineId: WorkbenchAgentEngineId): boolean {
-    const id = engineId === 'claude-code' ? 'claude-agent' : 'chatgpt'
+    const id = engineId === 'claude-code' ? 'claude-agent' : 'codex-agent'
     return this.agentPluginResolver.isInstalled(id) && !this.disabled.has(id)
   }
 
@@ -198,7 +198,7 @@ class WorkbenchResourcePluginService {
     this.codeGraph.setEnabled(true)
   }
 
-  private async installCloudPlugin(id: 'claude-agent' | 'chatgpt'): Promise<void> {
+  private async installCloudPlugin(id: 'claude-agent' | 'codex-agent'): Promise<void> {
     this.setInstallState(id, { running: true, progress: 8, error: null })
     const base = this.normalizedArtifactBase()
     const manifestResponse = await this.options.fetchImpl(new URL('manifest.json', base))
@@ -284,7 +284,7 @@ class WorkbenchResourcePluginService {
         readFileSync(this.preferencesPath, 'utf8')
       ) as PersistedResourcePluginPreferences
       for (const id of parsed.disabled ?? []) {
-        if (id === 'codegraph' || id === 'claude-agent' || id === 'chatgpt') {
+        if (id === 'codegraph' || id === 'claude-agent' || id === 'codex-agent') {
           this.disabled.add(id)
         }
       }
@@ -301,7 +301,7 @@ class WorkbenchResourcePluginService {
   }
 
   private assertSupported(id: WorkbenchResourcePluginId): void {
-    if (id !== 'codegraph' && id !== 'claude-agent' && id !== 'chatgpt') {
+    if (id !== 'codegraph' && id !== 'claude-agent' && id !== 'codex-agent') {
       throw new Error(`Unsupported Workbench resource plugin: ${id}`)
     }
   }

@@ -977,7 +977,7 @@ export const workbenchAppEnUSMessages = {
     settingsPluginClaudeDescription:
       'Downloads the Claude Agent SDK on demand and connects the local Claude session and tools.',
     settingsPluginChatGptDescription:
-      'Enables the external ChatGPT/Codex engine on demand and uses its local signed-in session.',
+      'Downloads the Codex SDK and current-platform runtime on demand, then uses the local Codex session.',
     settingsPluginStatusAvailable: 'Enabled',
     settingsPluginStatusDisabled: 'Disabled',
     settingsModsHint:

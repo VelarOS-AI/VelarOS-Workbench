@@ -1043,13 +1043,13 @@ export function WorkbenchSettingsDialog({
 
   function pluginDisplayName(id: WorkbenchResourcePluginRecord['id']): string {
     if (id === 'claude-agent') return 'Claude Agent'
-    if (id === 'chatgpt') return 'ChatGPT'
+    if (id === 'codex-agent') return 'Codex Agent'
     return 'CodeGraph'
   }
 
   function pluginDescription(id: WorkbenchResourcePluginRecord['id']): string {
     if (id === 'claude-agent') return t('workbench.settingsPluginClaudeDescription')
-    if (id === 'chatgpt') return t('workbench.settingsPluginChatGptDescription')
+    if (id === 'codex-agent') return t('workbench.settingsPluginChatGptDescription')
     return t('workbench.settingsPluginCodeGraphDescription')
   }
 
