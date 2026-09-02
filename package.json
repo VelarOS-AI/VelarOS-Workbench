@@ -27,7 +27,7 @@
     "probe": "bun run probe:watch && bun run probe:git && bun run probe:terminal && bun run probe:kernel-host",
     "check:platform-packages": "bun scripts/refreshPrivatePackageLock.mjs --validate-only",
     "check": "bun run check:boundaries && bun run check:platform-packages && bun run typecheck && bun run lint && bun run test && bun run probe && bun run build",
-    "package:mac": "bun run build && electron-builder --config electron-builder.yml --mac",
+    "package:mac": "bun run build && node scripts/release/packageMac.mjs",
     "package:dir": "bun run build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --config electron-builder.yml --mac --dir -c.mac.identity=null -c.mac.notarize=false",
     "verify:dir": "node scripts/release/verifyPackagedWorkbench.mjs",
     "package:win": "bun run build && electron-builder --config electron-builder.yml --win",
