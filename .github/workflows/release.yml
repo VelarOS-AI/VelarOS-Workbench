@@ -40,6 +40,7 @@ jobs:
           fetch-depth: 0
           ref: ${{ env.RELEASE_TAG }}
       - name: Resolve exact checked-out release source
+        shell: bash
         run: echo "RELEASE_SOURCE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
       - uses: oven-sh/setup-bun@v2
         with:
@@ -92,6 +93,7 @@ jobs:
           fetch-depth: 0
           ref: ${{ env.RELEASE_TAG }}
       - name: Resolve exact checked-out release source
+        shell: bash
         run: echo "RELEASE_SOURCE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
       - uses: oven-sh/setup-bun@v2
         with:
@@ -187,6 +189,7 @@ jobs:
           fetch-depth: 0
           ref: ${{ env.RELEASE_TAG }}
       - name: Resolve exact checked-out release source
+        shell: bash
         run: echo "RELEASE_SOURCE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
       - uses: oven-sh/setup-bun@v2
         with:

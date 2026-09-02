@@ -15,7 +15,7 @@ void describe('release workflows', () => {
     assert.match(workflow, /ref: \$\{\{ env\.RELEASE_TAG \}\}/)
     assert.match(
       workflow,
-      /RELEASE_SOURCE_SHA=\$\(git rev-parse HEAD\)/
+      /Resolve exact checked-out release source\n\s+shell: bash\n\s+run: echo "RELEASE_SOURCE_SHA=\$\(git rev-parse HEAD\)/
     )
     assert.doesNotMatch(workflow, /--target "\$GITHUB_SHA"/)
     assert.match(
