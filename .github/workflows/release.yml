@@ -126,7 +126,14 @@ jobs:
           node -e "const required=['CSC_LINK','CSC_KEY_PASSWORD','APPLE_ID','APPLE_APP_SPECIFIC_PASSWORD','APPLE_TEAM_ID'];const missing=required.filter((name)=>!process.env[name]);if(missing.length){console.error('Missing signing secrets: '+missing.join(', '));process.exit(1)}"
       - name: Build and package unsigned Windows once
         if: steps.reuse.outputs.reuse != 'true' && runner.os == 'Windows'
-        run: bun run build && bunx electron-builder --config electron-builder.yml --win --publish never --config.afterPack=null
+        shell: bash
+        run: |
+          verifier="scripts/release/verifyPackagedWorkbench.mjs"
+          backup="$RUNNER_TEMP/verifyPackagedWorkbench.mjs"
+          cp "$verifier" "$backup"
+          trap 'cp "$backup" "$verifier"' EXIT
+          printf 'export default async function afterPack() {}\n' > "$verifier"
+          bun run package:win -- --publish never
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'

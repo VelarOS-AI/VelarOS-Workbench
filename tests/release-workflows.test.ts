@@ -30,7 +30,8 @@ void describe('release workflows', () => {
     )
     assert.match(workflow, /Build and package unsigned Windows once/u)
     assert.match(workflow, /CSC_IDENTITY_AUTO_DISCOVERY: 'false'/u)
-    assert.match(workflow, /--config\.afterPack=null/u)
+    assert.match(workflow, /RUNNER_TEMP\/verifyPackagedWorkbench\.mjs/u)
+    assert.match(workflow, /trap 'cp "\$backup" "\$verifier"' EXIT/u)
     assert.doesNotMatch(workflow, /--clobber/)
 
     const builder = (await readFile(path.resolve('electron-builder.yml'), 'utf8'))
