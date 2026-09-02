@@ -103,6 +103,9 @@ export function registerProjectHubIpc(windows: WorkbenchWindowManager): void {
   ipcMain.handle(WorkbenchProjectHubChannels.closeProject, (event) =>
     windows.closeProject(event.sender)
   )
+  ipcMain.handle(WorkbenchProjectHubChannels.returnToEntry, (event) =>
+    windows.returnToEntry(event.sender)
+  )
 }
 
 function emptyState() {

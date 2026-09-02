@@ -24,6 +24,7 @@ export const WorkbenchProjectHubChannels = {
   createProject: 'workbench-app:project-hub:create-project',
   removeRecentProject: 'workbench-app:project-hub:remove-recent-project',
   closeProject: 'workbench-app:project-hub:close-project',
+  returnToEntry: 'workbench-app:project-hub:return-to-entry',
   stateChanged: 'workbench-app:project-hub:state-changed',
   menuCommand: 'workbench-app:project-hub:menu-command',
 } as const
@@ -125,6 +126,8 @@ export interface WorkbenchProjectHubBridge {
   createProject: (locationPath: string, name: string) => Promise<WorkbenchProjectCreateResult>
   removeRecentProject: (path: string) => Promise<WorkbenchProjectHubState>
   closeProject: () => Promise<WorkbenchProjectHubState>
+  /** 清理当前项目并回到起手页；与关闭项目不同，不退出应用。 */
+  returnToEntry: () => Promise<WorkbenchProjectHubState>
   onStateChanged: (listener: (state: WorkbenchProjectHubState) => void) => () => void
   onMenuCommand: (listener: (command: WorkbenchProjectHubMenuCommand) => void) => () => void
 }

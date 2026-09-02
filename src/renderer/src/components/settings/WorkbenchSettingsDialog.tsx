@@ -154,7 +154,6 @@ function SettingRow({
     </div>
   )
 }
-
 function WorkbenchSettingsPill({
   children,
   tone = 'default',
@@ -679,6 +678,10 @@ export function WorkbenchSettingsDialog({
         ? await window.velarosWorkbenchAccount.signIn()
         : await window.velarosWorkbenchAccount.signOut()
       setAccountState(state)
+      if (action === 'sign-out') {
+        await window.velarosWorkbenchProjectHub.returnToEntry()
+        onOpenChange(false)
+      }
     } catch (error) {
       setAccountError(error instanceof Error ? error.message : String(error))
     } finally {

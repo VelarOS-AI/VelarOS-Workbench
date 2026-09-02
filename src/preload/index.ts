@@ -64,6 +64,7 @@ const projectHubBridge: WorkbenchProjectHubBridge = {
   removeRecentProject: (path) =>
     ipcRenderer.invoke(WorkbenchProjectHubChannels.removeRecentProject, path),
   closeProject: () => ipcRenderer.invoke(WorkbenchProjectHubChannels.closeProject),
+  returnToEntry: () => ipcRenderer.invoke(WorkbenchProjectHubChannels.returnToEntry),
   onStateChanged: (listener) => subscribe(WorkbenchProjectHubChannels.stateChanged, listener),
   onMenuCommand: (listener) => subscribe(WorkbenchProjectHubChannels.menuCommand, listener),
 }

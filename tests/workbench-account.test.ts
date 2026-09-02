@@ -41,6 +41,7 @@ void describe('Workbench shared VelarOS account', () => {
     assert.match(chatAdapter, /providerId === 'workbench'/u)
     assert.match(chatAdapter, /velarosWorkbenchAccount\.ensureSignedIn\(\)/u)
     assert.match(settings, /velarosWorkbenchAccount\.signOut\(\)/u)
+    assert.match(settings, /velarosWorkbenchProjectHub\.returnToEntry\(\)/u)
   })
 
   void test('reuses a local session while keeping product account bindings independent', async () => {

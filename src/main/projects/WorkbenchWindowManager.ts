@@ -318,16 +318,29 @@ export class WorkbenchWindowManager {
   }
 
   public async closeProject(sender: WebContents): Promise<WorkbenchProjectHubState> {
+    const released = await this.releaseCurrentProject(sender)
+    if (released.hadProject) this.quitAfterLastProjectClosed()
+    return released.state
+  }
+
+  /** 账户退出只返回起手页，不能复用会触发 app.quit 的关闭项目语义。 */
+  public async returnToEntry(sender: WebContents): Promise<WorkbenchProjectHubState> {
+    return (await this.releaseCurrentProject(sender)).state
+  }
+
+  private async releaseCurrentProject(sender: WebContents): Promise<{
+    state: WorkbenchProjectHubState
+    hadProject: boolean
+  }> {
     const record = this.getRecord(sender)
-    if (!record) return emptyProjectHubState()
+    if (!record) return { state: emptyProjectHubState(), hadProject: false }
 
     const projectRoot = record.hub.getState().currentProject?.path
     const state = record.hub.closeProject()
     if (projectRoot) {
       await this.releaseProjectResources(sender.id, projectRoot)
-      this.quitAfterLastProjectClosed()
     }
-    return state
+    return { state, hadProject: !!projectRoot }
   }
 
   public async openDroppedPaths(
