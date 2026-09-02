@@ -122,14 +122,20 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           node -e "const required=['CSC_LINK','CSC_KEY_PASSWORD','APPLE_ID','APPLE_APP_SPECIFIC_PASSWORD','APPLE_TEAM_ID'];const missing=required.filter((name)=>!process.env[name]);if(missing.length){console.error('Missing signing secrets: '+missing.join(', '));process.exit(1)}"
-      - name: Build and package once
-        if: steps.reuse.outputs.reuse != 'true'
+      - name: Build and package unsigned Windows once
+        if: steps.reuse.outputs.reuse != 'true' && runner.os == 'Windows'
+        run: bun run build && bunx electron-builder --config electron-builder.yml --win --publish never --config.afterPack=null
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - name: Build and package signed macOS or Linux once
+        if: steps.reuse.outputs.reuse != 'true' && runner.os != 'Windows'
         run: bun run ${{ matrix.command }} -- --publish never
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CSC_LINK: ${{ runner.os == 'macOS' && secrets.MACOS_CSC_LINK || secrets.WINDOWS_CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ runner.os == 'macOS' && secrets.MACOS_CSC_KEY_PASSWORD || secrets.WINDOWS_CSC_KEY_PASSWORD }}
-          CSC_IDENTITY_AUTO_DISCOVERY: ${{ runner.os == 'Windows' && 'false' || 'true' }}
+          CSC_LINK: ${{ secrets.MACOS_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MACOS_CSC_KEY_PASSWORD }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'true'
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}

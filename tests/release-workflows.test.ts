@@ -28,10 +28,9 @@ void describe('release workflows', () => {
       workflow,
       /Verify macOS signing and notarization credentials\n\s+if: .*runner\.os == 'macOS'/u
     )
-    assert.match(
-      workflow,
-      /CSC_IDENTITY_AUTO_DISCOVERY: .*runner\.os == 'Windows'.*'false'/u
-    )
+    assert.match(workflow, /Build and package unsigned Windows once/u)
+    assert.match(workflow, /CSC_IDENTITY_AUTO_DISCOVERY: 'false'/u)
+    assert.match(workflow, /--config\.afterPack=null/u)
     assert.doesNotMatch(workflow, /--clobber/)
 
     const builder = (await readFile(path.resolve('electron-builder.yml'), 'utf8'))
