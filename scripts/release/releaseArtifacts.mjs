@@ -360,7 +360,7 @@ async function main() {
     await validateReleaseSource({
       repoRoot,
       releaseTag: args[0] ?? process.env.RELEASE_TAG ?? '',
-      sourceSha: args[1] ?? process.env.GITHUB_SHA ?? '',
+      sourceSha: args[1] ?? releaseSourceSha(),
     })
     return
   }
@@ -368,7 +368,7 @@ async function main() {
   const versions = await validateReleaseSource({
     repoRoot,
     releaseTag: process.env.RELEASE_TAG ?? '',
-    sourceSha: process.env.GITHUB_SHA ?? '',
+    sourceSha: releaseSourceSha(),
   })
   if (command === 'stage') {
     const [platform, releaseDir = 'artifacts/desktop', stageDir = `artifacts/release-stage/${platform}`] = args
@@ -417,6 +417,10 @@ async function main() {
     'Usage: appReleaseArtifacts.mjs '
     + 'validate-tag <tag> | validate-source | stage <platform> | reuse <platform> | verify <platform>'
   )
+}
+
+function releaseSourceSha() {
+  return process.env.RELEASE_SOURCE_SHA ?? process.env.GITHUB_SHA ?? ''
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {

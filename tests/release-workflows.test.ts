@@ -15,6 +15,11 @@ void describe('release workflows', () => {
     assert.match(workflow, /ref: \$\{\{ env\.RELEASE_TAG \}\}/)
     assert.match(
       workflow,
+      /RELEASE_SOURCE_SHA=\$\(git rev-parse HEAD\)/
+    )
+    assert.doesNotMatch(workflow, /--target "\$GITHUB_SHA"/)
+    assert.match(
+      workflow,
       /node scripts\/release\/releaseArtifacts\.mjs validate-source/
     )
     assert.match(workflow, /Reuse prior immutable platform checkpoint/)

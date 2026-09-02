@@ -39,6 +39,8 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ env.RELEASE_TAG }}
+      - name: Resolve exact checked-out release source
+        run: echo "RELEASE_SOURCE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.13
@@ -58,12 +60,12 @@ jobs:
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             target="$(gh release view "$RELEASE_TAG" --json targetCommitish --jq .targetCommitish)"
             resolved="$(git rev-parse "${target}^{commit}")"
-            test "$resolved" = "$GITHUB_SHA"
+            test "$resolved" = "$RELEASE_SOURCE_SHA"
           else
             gh release create "$RELEASE_TAG" \
               --draft \
               --verify-tag \
-              --target "$GITHUB_SHA" \
+              --target "$RELEASE_SOURCE_SHA" \
               --title "VelarOS Workbench $RELEASE_TAG" \
               --generate-notes
           fi
@@ -89,6 +91,8 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ env.RELEASE_TAG }}
+      - name: Resolve exact checked-out release source
+        run: echo "RELEASE_SOURCE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.13
@@ -175,6 +179,8 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ env.RELEASE_TAG }}
+      - name: Resolve exact checked-out release source
+        run: echo "RELEASE_SOURCE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.13

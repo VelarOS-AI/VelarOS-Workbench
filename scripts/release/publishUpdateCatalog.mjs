@@ -183,7 +183,9 @@ async function ingestCatalog(catalog) {
 async function run() {
   const manifest = JSON.parse(await readFile(path.join(repoRoot, 'package.json'), 'utf8'))
   const version = manifest.version
-  const sourceCommit = requireEnvironment('GITHUB_SHA')
+  const sourceCommit = requireEnvironment(
+    process.env.RELEASE_SOURCE_SHA ? 'RELEASE_SOURCE_SHA' : 'GITHUB_SHA',
+  )
   const channel = process.env.VELAROS_UPDATE_CHANNEL?.trim() || 'stable'
   if (!['stable', 'beta', 'canary'].includes(channel)) {
     throw new Error(`Unsupported Workbench update channel: ${channel}`)
