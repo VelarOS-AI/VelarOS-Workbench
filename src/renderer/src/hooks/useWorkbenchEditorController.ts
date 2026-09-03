@@ -30,6 +30,7 @@ import type {
   WorkbenchLanguageServiceFileEdit,
   WorkbenchReadFileResult,
 } from '@shared/contracts'
+import { isWorkbenchImagePreviewPath } from '@shared/workbenchImage'
 
 import { useStableWorkbenchMessageTranslate } from '../runtime/useStableWorkbenchMessaging'
 import { useLatest, useMemoizedFn, useMonotonicAsyncRequest, useTimerScope } from '../support/genericHooks'
@@ -38,7 +39,35 @@ import { useWorkspaceFilesChangedRefresh } from '../support/useWorkspaceFilesCha
 import { useWorkbenchEditorAutosave } from './useWorkbenchEditorAutosave'
 
 const EXTERNAL_FILE_READ_MAX_CHARS = 300_000
+const IMAGE_PREVIEW_MAX_BYTES = 10 * 1024 * 1024
+const EXTERNAL_FILE_REFRESH_CONCURRENCY = 4
 const log = Log.tag('workbench-editor-controller')
+
+interface WorkbenchExternalFileReadOutcome {
+  path: string
+  baseFile: WorkbenchReadFileResult
+  diskFile: Nullable<WorkbenchReadFileResult>
+  error: Nullable<AppError>
+}
+
+async function readWorkbenchEditorFile(
+  projectRoot: string,
+  path: string,
+  maxChars: number
+): Promise<WorkbenchReadFileResult> {
+  if (isWorkbenchImagePreviewPath(path))
+    return Result.unwrap(
+      await workbenchHost.kernel.project.readWorkbenchImageFile({
+        projectRoot,
+        path,
+        maxBytes: IMAGE_PREVIEW_MAX_BYTES,
+      })
+    )
+
+  return Result.unwrap(
+    await workbenchHost.kernel.project.readWorkbenchFile({ projectRoot, path, maxChars })
+  )
+}
 
 interface UseWorkbenchEditorControllerOptions {
   activeProject: Nullable<WorkbenchProject>
@@ -86,13 +115,17 @@ export function useWorkbenchEditorController({
   const onExternalFilesChangedLatest = useLatest(onExternalFilesChanged)
   const silentSaveInFlightPathsRef = useRef(new Set<string>())
 
-  const hasUnsavedChanges = !!selectedFile && editorContent !== selectedFile.content
+  const hasUnsavedChanges =
+    !!selectedFile && !selectedFile.imagePreview && editorContent !== selectedFile.content
   const hasUnsavedOpenTabs = useMemo(
-    () => [...openTabsByPath.values()].some((tab) => tab.content !== tab.file.content),
+    () => [...openTabsByPath.values()].some(isDirtyTab),
     [openTabsByPath]
   )
   const canEditSelectedFile =
-    !!selectedFile && !selectedFile.truncated && !selectedFile.gitIgnored
+    !!selectedFile
+    && !selectedFile.imagePreview
+    && !selectedFile.truncated
+    && !selectedFile.gitIgnored
   const openTabs = useMemo(() => [...openTabsByPath.values()], [openTabsByPath])
   const openedFileSnapshots = useMemo(() => {
     const snapshots = reuseWorkbenchOpenFileSnapshots(openedFileSnapshotsRef.current, openTabs)
@@ -119,7 +152,12 @@ export function useWorkbenchEditorController({
   }
 
   const updateEditorContent = useMemoizedFn((content: string): void => {
-    if (!selectedFile || selectedFile.truncated || selectedFile.gitIgnored) return
+    if (
+      !selectedFile
+      || selectedFile.imagePreview
+      || selectedFile.truncated
+      || selectedFile.gitIgnored
+    ) return
 
     setEditorContent(content)
     rememberOpenFile(selectedFile, content)
@@ -131,7 +169,13 @@ export function useWorkbenchEditorController({
 
       for (const change of changes) {
         const tab = openTabsByPathLatest.current.get(change.path)
-        if (!tab || tab.file.truncated || tab.file.gitIgnored || isEmpty(change.edits)) continue
+        if (
+          !tab
+          || tab.file.imagePreview
+          || tab.file.truncated
+          || tab.file.gitIgnored
+          || isEmpty(change.edits)
+        ) continue
 
         const nextContent = applyWorkbenchLanguageServiceEditsToContent(tab.content, change.edits)
         rememberOpenFile(tab.file, nextContent)
@@ -180,14 +224,20 @@ export function useWorkbenchEditorController({
         change.status === 'modified'
           ? tLatest.current('workbench.externalFileChangedDescription', { path: tab.path })
           : change.status === 'deleted'
-            ? tLatest.current('workbench.externalFileDeletedDescription', { path: tab.path })
+            ? tLatest.current(
+                tab.file.imagePreview
+                  ? 'workbench.externalImageDeletedDescription'
+                  : 'workbench.externalFileDeletedDescription',
+                { path: tab.path }
+              )
             : tLatest.current('workbench.externalFileUnavailableDescription', { path: tab.path }),
     })
   }
 
   function notifyExternalFileChangedOnce(
     path: string,
-    change: WorkbenchOpenEditorExternalChange
+    change: WorkbenchOpenEditorExternalChange,
+    isImagePreview: boolean
   ): void {
     const key = buildExternalChangeNoticeKey(path, change)
     if (externalChangeNoticeKeysRef.current.has(key)) return
@@ -204,7 +254,12 @@ export function useWorkbenchEditorController({
         change.status === 'modified'
           ? tLatest.current('workbench.externalFileChangedDescription', { path })
           : change.status === 'deleted'
-            ? tLatest.current('workbench.externalFileDeletedDescription', { path })
+            ? tLatest.current(
+                isImagePreview
+                  ? 'workbench.externalImageDeletedDescription'
+                  : 'workbench.externalFileDeletedDescription',
+                { path }
+              )
             : tLatest.current('workbench.externalFileUnavailableDescription', { path }),
     })
   }
@@ -271,13 +326,7 @@ export function useWorkbenchEditorController({
       pendingFilePathRef.current = path
 
       try {
-        const result = Result.unwrap(
-          await workbenchHost.kernel.project.readWorkbenchFile({
-            projectRoot: activeProject.rootPath,
-            path,
-            maxChars: 300_000,
-          })
-        )
+        const result = await readWorkbenchEditorFile(activeProject.rootPath, path, 300_000)
         if (!isActive(generation) || activeProjectRef.current?.id !== owningProjectId) return
 
         // JetBrains 式提交：读取完成前保留当前编辑器；就绪后同一批次提交
@@ -308,12 +357,10 @@ export function useWorkbenchEditorController({
     if (!activeProject || openTabsByPath.has(path)) return true
 
     try {
-      const result = Result.unwrap(
-        await workbenchHost.kernel.project.readWorkbenchFile({
-          projectRoot: activeProject.rootPath,
-          path,
-          maxChars: EXTERNAL_FILE_READ_MAX_CHARS,
-        })
+      const result = await readWorkbenchEditorFile(
+        activeProject.rootPath,
+        path,
+        EXTERNAL_FILE_READ_MAX_CHARS
       )
 
       if (activeProjectRef.current?.id !== activeProject.id) return false
@@ -591,36 +638,44 @@ export function useWorkbenchEditorController({
     if (!project || isEmpty(tabs)) return
 
     const owningProjectId = project.id
-    const outcomes = await Promise.all(
-      tabs.map(async (tab) => {
-        try {
-          const diskFile = Result.unwrap(
-            await workbenchHost.kernel.project.readWorkbenchFile({
-              projectRoot: project.rootPath,
-              path: tab.path,
-              maxChars: EXTERNAL_FILE_READ_MAX_CHARS,
-            })
-          )
-          return {
-            path: tab.path,
-            baseContent: tab.file.content,
-            baseModifiedAt: tab.file.modifiedAt,
-            baseSize: tab.file.size,
-            diskFile,
-            error: null,
+    const selectedPath = selectedFilePathRef.current
+    const selectedIndex = tabs.findIndex((tab) => tab.path === selectedPath)
+    if (selectedIndex > 0) tabs.unshift(...tabs.splice(selectedIndex, 1))
+
+    const outcomes: WorkbenchExternalFileReadOutcome[] = []
+    // 图片读取会跨 main / IPC / renderer 复制字节；小批并发可避免打开多张大图后，
+    // 聚焦窗口或文件事件触发的刷新一次性放大内存峰值。
+    for (let index = 0; index < tabs.length; index += EXTERNAL_FILE_REFRESH_CONCURRENCY) {
+      if (activeProjectRef.current?.id !== owningProjectId) return
+
+      const batch = await Promise.all(
+        tabs.slice(index, index + EXTERNAL_FILE_REFRESH_CONCURRENCY).map(
+          async (tab): Promise<WorkbenchExternalFileReadOutcome> => {
+            try {
+              const diskFile = await readWorkbenchEditorFile(
+                project.rootPath,
+                tab.path,
+                EXTERNAL_FILE_READ_MAX_CHARS
+              )
+              return {
+                path: tab.path,
+                baseFile: tab.file,
+                diskFile,
+                error: null,
+              }
+            } catch (error) {
+              return {
+                path: tab.path,
+                baseFile: tab.file,
+                diskFile: null,
+                error: AppError.from(error),
+              }
+            }
           }
-        } catch (error) {
-          return {
-            path: tab.path,
-            baseContent: tab.file.content,
-            baseModifiedAt: tab.file.modifiedAt,
-            baseSize: tab.file.size,
-            diskFile: null,
-            error: AppError.from(error),
-          }
-        }
-      })
-    )
+        )
+      )
+      outcomes.push(...batch)
+    }
 
     if (activeProjectRef.current?.id !== owningProjectId) return
 
@@ -634,11 +689,7 @@ export function useWorkbenchEditorController({
         continue
       }
 
-      const baseStillCurrent =
-        tab.file.modifiedAt === outcome.baseModifiedAt &&
-        tab.file.size === outcome.baseSize &&
-        tab.file.content === outcome.baseContent
-      if (!baseStillCurrent) {
+      if (tab.file !== outcome.baseFile) {
         continue
       }
 
@@ -666,7 +717,7 @@ export function useWorkbenchEditorController({
             ...tab,
             externalChange,
           })
-          notifyExternalFileChangedOnce(tab.path, externalChange)
+          notifyExternalFileChangedOnce(tab.path, externalChange, !!tab.file.imagePreview)
         } else {
           nextTabs.set(tab.path, {
             ...tab,
@@ -681,7 +732,7 @@ export function useWorkbenchEditorController({
       }
 
       const externalChange: WorkbenchOpenEditorExternalChange = {
-        status: resolveExternalFileUnavailableStatus(outcome.error?.code),
+        status: resolveExternalFileUnavailableStatus(outcome.error?.code ?? null),
         detectedAt: Date.now(),
       }
       const currentKey = tab.externalChange
@@ -693,7 +744,7 @@ export function useWorkbenchEditorController({
           ...tab,
           externalChange,
         })
-        notifyExternalFileChangedOnce(tab.path, externalChange)
+        notifyExternalFileChangedOnce(tab.path, externalChange, !!tab.file.imagePreview)
         changed = true
       }
       externalDetected = true
@@ -702,7 +753,6 @@ export function useWorkbenchEditorController({
     if (!changed) return
 
     setOpenTabsByPath(nextTabs)
-    const selectedPath = selectedFilePathRef.current
     const selectedTab = selectedPath ? nextTabs.get(selectedPath) : null
     if (selectedTab) {
       setSelectedFile(selectedTab.file)
@@ -743,12 +793,10 @@ export function useWorkbenchEditorController({
 
     const owningProjectId = project.id
     try {
-      const diskFile = Result.unwrap(
-        await workbenchHost.kernel.project.readWorkbenchFile({
-          projectRoot: project.rootPath,
-          path,
-          maxChars: EXTERNAL_FILE_READ_MAX_CHARS,
-        })
+      const diskFile = await readWorkbenchEditorFile(
+        project.rootPath,
+        path,
+        EXTERNAL_FILE_READ_MAX_CHARS
       )
       if (activeProjectRef.current?.id !== owningProjectId) return
 
@@ -791,7 +839,7 @@ export function useWorkbenchEditorController({
   const restoreDeletedOpenFile = useMemoizedFn(async (path: string): Promise<void> => {
     const project = activeProjectRef.current
     const tab = openTabsByPathLatest.current.get(path)
-    if (!project || !tab || tab.externalChange?.status !== 'deleted') return
+    if (!project || !tab || tab.file.imagePreview || tab.externalChange?.status !== 'deleted') return
 
     const owningProjectId = project.id
     setIsSavingFile(true)
@@ -915,6 +963,7 @@ export function useWorkbenchEditorController({
     ): Promise<void> => {
       if (
         !activeProject
+        || tab.file.imagePreview
         || tab.file.truncated
         || tab.file.gitIgnored
         || tab.content === tab.file.content
@@ -1006,7 +1055,7 @@ export function useWorkbenchEditorController({
     const owningProject = activeProject
     const owningProjectId = owningProject.id
     const dirtyTabs = [...openTabsByPath.values()].filter(
-      (tab) => !tab.file.truncated && !tab.file.gitIgnored && tab.content !== tab.file.content
+      (tab) => !tab.file.truncated && !tab.file.gitIgnored && isDirtyTab(tab)
     )
     if (isEmpty(dirtyTabs)) return
 

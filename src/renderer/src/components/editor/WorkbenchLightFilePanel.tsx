@@ -12,6 +12,8 @@ import { Text } from '@velaros-ai/ui/primitives/display/Text'
 
 import styles from '../../styles/workbenchPageStyles'
 
+import { WorkbenchImagePreview } from './WorkbenchImagePreview'
+
 const codeMirrorEditorModulePromise =
   import('./CodeMirrorEditor')
 
@@ -37,6 +39,13 @@ export function WorkbenchLightFilePanel({
   onSave,
 }: WorkbenchLightFilePanelProps): ReactElement {
   const { t } = useWorkbenchI18n()
+  if (tab.imagePreview)
+    return (
+      <section className={styles.lightEditorPanel}>
+        <WorkbenchImagePreview path={tab.path} size={tab.size} preview={tab.imagePreview} />
+      </section>
+    )
+
   // Office 预览按裁决归 desktop 查看器拓展面（WorkbenchOfficeFilePanel 不随迁独立宿主）；
   // 命中 office 附件时降级为不可编辑提示。
   if (tab.officePreview)

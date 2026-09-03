@@ -597,6 +597,8 @@ export const workbenchAppEnUSMessages = {
     externalFileDeletedTitle: 'File deleted or moved',
     externalFileDeletedDescription:
       '{path} is no longer at its original location. Its contents are preserved so you can restore the file or close the tab.',
+    externalImageDeletedDescription:
+      '{path} is no longer at its original location. The current preview is retained, and you can close the tab.',
     externalFileUnavailableTitle: 'File state changed',
     externalFileUnavailableDescription:
       '{path} cannot be read from disk. It may have been deleted, moved, or become non-editable.',
@@ -616,6 +618,8 @@ export const workbenchAppEnUSMessages = {
     closeDeletedFileTab: 'Close tab',
     restoreDeletedFileSucceeded: 'File restored',
     restoreDeletedFileFailed: 'Failed to restore file',
+    imagePreviewLabel: 'Image preview for {name}',
+    imagePreviewFailed: 'Unable to display this image.',
     createFile: 'New file',
     createDirectory: 'New folder',
     refreshFiles: 'Refresh files',

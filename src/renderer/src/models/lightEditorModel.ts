@@ -2,6 +2,7 @@ import { AppError } from '@velaros-ai/core/error'
 import { Result } from '@velaros-ai/core/result'
 
 import type { SystemLocalAttachmentFileResult } from '@shared/contracts'
+import { resolveWorkbenchImageMediaType } from '@shared/workbenchImage'
 
 import type {
   WorkbenchLightEditorTab,
@@ -103,6 +104,24 @@ export function decodeFileContent(file: SystemLocalAttachmentFileResult): {
 }
 
 export function buildLightEditorTab(file: SystemLocalAttachmentFileResult): WorkbenchLightEditorTab {
+  const imageMediaType = resolveWorkbenchImageMediaType(file.path, file.mediaType)
+  if (imageMediaType)
+    return {
+      id: file.path,
+      projectRoot: parentPathFromPath(file.path),
+      path: fileNameFromPath(file.path),
+      content: '',
+      size: file.size,
+      modifiedAt: file.lastModified,
+      totalLines: 1,
+      truncated: false,
+      sourceLabel: file.path,
+      imagePreview: {
+        mediaType: imageMediaType,
+        data: Uint8Array.from(file.data),
+      },
+    }
+
   const officePreviewKind = resolveOfficePreviewKind(file.path, file.mediaType)
   if (officePreviewKind)
     return {
@@ -155,8 +174,8 @@ export async function saveLightEditorTab(
     }) => Promise<Result<{ size: number; lastModified: number }>>
   }
 ): Promise<{ size: number; modifiedAt: number }> {
-  if (tab.officePreview)
-    throw new AppError('VALIDATION', 'Office 预览为只读内容，不能作为纯文本保存。')
+  if (tab.officePreview || tab.imagePreview)
+    throw new AppError('VALIDATION', '只读预览不能作为纯文本保存。')
 
   const target = resolveLightEditorSaveTarget(tab)
 

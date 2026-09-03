@@ -587,6 +587,8 @@ export const workbenchAppZhCNMessages = {
     externalFileDeletedTitle: '文件已被删除或移动',
     externalFileDeletedDescription:
       '{path} 已不在原位置。编辑器保留了原内容，你可以恢复文件或关闭标签页。',
+    externalImageDeletedDescription:
+      '{path} 已不在原位置。当前预览仍会保留，你可以关闭标签页。',
     externalFileUnavailableTitle: '文件状态已变化',
     externalFileUnavailableDescription:
       '{path} 当前无法从磁盘读取，可能已被删除、移动或变成不可编辑文件。',
@@ -605,6 +607,8 @@ export const workbenchAppZhCNMessages = {
     closeDeletedFileTab: '关闭标签页',
     restoreDeletedFileSucceeded: '文件已恢复',
     restoreDeletedFileFailed: '恢复文件失败',
+    imagePreviewLabel: '{name} 图片预览',
+    imagePreviewFailed: '无法显示这张图片。',
     createFile: '新建文件',
     createDirectory: '新建目录',
     refreshFiles: '刷新文件树',

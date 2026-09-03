@@ -334,6 +334,8 @@ const standaloneWorkbenchHost: WorkbenchHost = {
         toHostResult(await window.velarosWorkbenchFs.listDirectory(request)),
       readWorkbenchFile: async (request) =>
         toHostResult(await window.velarosWorkbenchFs.readFile(request)),
+      readWorkbenchImageFile: async (request) =>
+        toHostResult(await window.velarosWorkbenchFs.readImageFile(request)),
       indexWorkbenchProject: indexProjectWithWorkspace,
       startWorkbenchProjectAiIndex: async (request) => {
         const startedAt = Date.now()

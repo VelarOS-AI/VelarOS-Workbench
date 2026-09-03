@@ -5,7 +5,11 @@
  * `saveFileSync` 走 `ipcMain.on` + `event.returnValue`（renderer sendSync 的 beforeunload
  * 兜底路径）；`runCommand` 的流式输出只回发给发起请求的 webContents。
  */
+import { resolve } from 'node:path'
+
 import { ipcMain } from 'electron'
+
+import { AppError } from '@velaros-ai/core/error'
 
 import type {
   WorkbenchCreateEntryRequest,
@@ -15,6 +19,7 @@ import type {
   WorkbenchListLocalHistoryRequest,
   WorkbenchMoveEntryRequest,
   WorkbenchReadFileRequest,
+  WorkbenchReadImageFileRequest,
   WorkbenchReadLocalHistorySnapshotRequest,
   WorkbenchRenameEntryRequest,
   WorkbenchRestoreDeletedEntryRequest,
@@ -26,6 +31,7 @@ import type {
 } from '@shared/contracts'
 
 import { WorkbenchFsChannels } from '../../shared/workbenchFs'
+import type { WorkbenchWindowManager } from '../projects/WorkbenchWindowManager'
 
 import {
   callWithEnvelope,
@@ -41,7 +47,8 @@ import type { WorkbenchProjectFileSystem } from './WorkbenchProjectFileSystem'
 
 export function registerWorkbenchFsIpc(
   fileSystem: WorkbenchProjectFileSystem,
-  parts: WorkbenchAppParts
+  parts: WorkbenchAppParts,
+  windowManager: WorkbenchWindowManager
 ): void {
   ipcMain.handle(WorkbenchFsChannels.listDirectory, (_event, request: unknown) =>
     callWithEnvelope(() => {
@@ -58,6 +65,21 @@ export function registerWorkbenchFsIpc(
       if (!parsed) return invalidRequest()
 
       return fileSystem.readTextFile(parsed)
+    })
+  )
+
+  ipcMain.handle(WorkbenchFsChannels.readImageFile, (event, request: unknown) =>
+    callWithEnvelope(() => {
+      const parsed = parseReadImageFileRequest(request)
+      if (!parsed) return invalidRequest()
+
+      const currentProject = windowManager.getHubForWebContents(event.sender)
+        ?.getState().currentProject
+      if (!currentProject || resolve(parsed.projectRoot) !== resolve(currentProject.path)) {
+        throw new AppError('PERMISSION', '当前窗口不能读取这个项目中的图片。')
+      }
+
+      return fileSystem.readImageFile({ ...parsed, projectRoot: currentProject.path })
     })
   )
 
@@ -211,6 +233,16 @@ function parseReadFileRequest(input: unknown): Nullable<WorkbenchReadFileRequest
     projectRoot: input['projectRoot'] as string,
     path: input['path'] as string,
     ...optionalNumber(input, 'maxChars'),
+  }
+}
+
+function parseReadImageFileRequest(input: unknown): Nullable<WorkbenchReadImageFileRequest> {
+  if (!hasStringFields(input, ['projectRoot', 'path'])) return null
+
+  return {
+    projectRoot: input['projectRoot'] as string,
+    path: input['path'] as string,
+    ...optionalNumber(input, 'maxBytes'),
   }
 }
 

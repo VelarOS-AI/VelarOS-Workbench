@@ -17,6 +17,119 @@ import { getWorkbenchFileTreeShortcutAction } from '../src/renderer/src/models/f
 const execFileAsync = promisify(execFile)
 
 void describe('Workbench project file tree', () => {
+  void test('reads PNG, SVG, and WebP files through the read-only image channel', async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), 'workbench-image-files-'))
+    const service = new WorkbenchProjectFileSystem()
+    const png = Uint8Array.from(
+      Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+        'base64'
+      )
+    )
+    const webp = Uint8Array.from([
+      0x52, 0x49, 0x46, 0x46, 0x1a, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50,
+      0x56, 0x50, 0x38, 0x4c, 0x0d, 0x00, 0x00, 0x00, 0x2f, 0x00, 0x00, 0x00,
+      0x10, 0x07, 0x10, 0x11, 0x11, 0x88, 0x88, 0xfe, 0x07, 0x00,
+    ])
+    const images = [
+      {
+        path: 'assets/pixel.png',
+        mediaType: 'image/png',
+        data: png,
+      },
+      {
+        path: 'assets/mark.svg',
+        mediaType: 'image/svg+xml',
+        data: new TextEncoder().encode(
+          '<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0"/></svg>'
+        ),
+      },
+      {
+        path: 'assets/photo.webp',
+        mediaType: 'image/webp',
+        data: webp,
+      },
+    ] as const
+
+    try {
+      await mkdir(join(projectRoot, 'assets'))
+      for (const image of images) await writeFile(join(projectRoot, image.path), image.data)
+
+      for (const image of images) {
+        const result = await service.readImageFile({ projectRoot, path: image.path })
+        assert.equal(result.path, image.path)
+        assert.equal(result.content, '')
+        assert.equal(result.totalLines, 1)
+        assert.equal(result.truncated, false)
+        assert.equal(result.size, image.data.byteLength)
+        assert.equal(result.imagePreview.mediaType, image.mediaType)
+        assert.deepEqual(result.imagePreview.data, image.data)
+      }
+
+      await assert.rejects(
+        () => service.readTextFile({ projectRoot, path: images[0].path }),
+        (error: unknown) =>
+          error instanceof AppError &&
+          error.code === 'VALIDATION' &&
+          /不是可预览的文本文件/u.test(error.message)
+      )
+    } finally {
+      await rm(projectRoot, { recursive: true, force: true })
+    }
+  })
+
+  void test('rejects mismatched image contents and files above the requested preview limit', async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), 'workbench-invalid-images-'))
+    const service = new WorkbenchProjectFileSystem()
+
+    try {
+      await writeFile(join(projectRoot, 'mismatch.png'), '<svg xmlns="http://www.w3.org/2000/svg"/>')
+      await writeFile(
+        join(projectRoot, 'nested.svg'),
+        '<html><body><svg xmlns="http://www.w3.org/2000/svg"/></body></html>'
+      )
+      await writeFile(
+        join(projectRoot, 'invalid-utf8.svg'),
+        Uint8Array.from([0xff, 0xfe, 0x3c, 0x73, 0x76, 0x67, 0x2f, 0x3e])
+      )
+      await writeFile(
+        join(projectRoot, 'oversized.png'),
+        Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+      )
+
+      await assert.rejects(
+        () => service.readImageFile({ projectRoot, path: 'mismatch.png' }),
+        (error: unknown) =>
+          error instanceof AppError &&
+          error.code === 'VALIDATION' &&
+          /内容与文件格式不匹配/u.test(error.message)
+      )
+      for (const path of ['nested.svg', 'invalid-utf8.svg']) {
+        await assert.rejects(
+          () => service.readImageFile({ projectRoot, path }),
+          (error: unknown) =>
+            error instanceof AppError &&
+            error.code === 'VALIDATION' &&
+            /内容与文件格式不匹配/u.test(error.message)
+        )
+      }
+      await assert.rejects(
+        () =>
+          service.readImageFile({
+            projectRoot,
+            path: 'oversized.png',
+            maxBytes: 7,
+          }),
+        (error: unknown) =>
+          error instanceof AppError &&
+          error.code === 'VALIDATION' &&
+          /预览上限/u.test(error.message)
+      )
+    } finally {
+      await rm(projectRoot, { recursive: true, force: true })
+    }
+  })
+
   void test('restores Git-ignored decoration for generated directories and their descendants', async () => {
     const projectRoot = await mkdtemp(join(tmpdir(), 'workbench-file-tree-'))
     const service = new WorkbenchProjectFileSystem()

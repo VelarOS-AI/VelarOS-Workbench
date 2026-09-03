@@ -259,7 +259,32 @@ void describe('Workbench product boundary', () => {
           throw new Error('unexpected save')
         },
       }),
-      /Office 预览为只读内容/
+      /只读预览不能作为纯文本保存/
+    )
+    assert.equal(invoked, false)
+  })
+
+  void test('image attachments remain read-only binary previews', async () => {
+    const bytes = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+    const tab = buildLightEditorTab(createLocalFile('/tmp/sample.png', bytes))
+
+    assert.equal(tab.content, '')
+    assert.equal(tab.imagePreview?.mediaType, 'image/png')
+    assert.deepEqual(tab.imagePreview?.data, bytes)
+
+    let invoked = false
+    await assert.rejects(
+      saveLightEditorTab(tab, {
+        saveWorkbenchFile: async () => {
+          invoked = true
+          throw new Error('unexpected save')
+        },
+        writeLocalAttachmentFile: async () => {
+          invoked = true
+          throw new Error('unexpected save')
+        },
+      }),
+      /只读预览不能作为纯文本保存/
     )
     assert.equal(invoked, false)
   })

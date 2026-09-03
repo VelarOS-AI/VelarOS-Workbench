@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { workbenchHost } from '@renderer/host'
+import { isDirtyTab } from '@renderer/models/editor/workbenchEditorTabs'
 import type { WorkbenchProject } from '@renderer/models/project/workbenchProjects'
 import type { WorkbenchOpenEditorTab } from '@renderer/types/workbenchTypes'
 
@@ -54,7 +55,7 @@ export function useWorkbenchEditorAutosave({
     if (!project) return
 
     for (const tab of openTabsByPathLatest.current.values()) {
-      if (tab.file.truncated || tab.externalChange || tab.content === tab.file.content) {
+      if (tab.file.truncated || tab.externalChange || !isDirtyTab(tab)) {
         continue
       }
 
@@ -88,7 +89,7 @@ export function useWorkbenchEditorAutosave({
     if (!activeProject || isSavingFile || paused) return undefined
 
     const dirtyTab = [...openTabsByPath.values()].find(
-      (tab) => !tab.file.truncated && !tab.externalChange && tab.content !== tab.file.content
+      (tab) => !tab.file.truncated && !tab.externalChange && isDirtyTab(tab)
     )
     if (!dirtyTab) return undefined
 

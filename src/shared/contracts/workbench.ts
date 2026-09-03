@@ -1,3 +1,5 @@
+import type { WorkbenchImageMediaType } from '../workbenchImage'
+
 export interface WorkbenchDirectoryEntry {
   name: string
   path: string
@@ -28,6 +30,17 @@ export interface WorkbenchReadFileRequest {
   maxChars?: number
 }
 
+export interface WorkbenchReadImageFileRequest {
+  projectRoot: string
+  path: string
+  maxBytes?: number
+}
+
+export interface WorkbenchImagePreview {
+  mediaType: WorkbenchImageMediaType
+  data: Uint8Array
+}
+
 export interface WorkbenchReadFileResult {
   projectRoot: string
   path: string
@@ -38,6 +51,12 @@ export interface WorkbenchReadFileResult {
   truncated: boolean
   /** Git 排除内容只用于查看，避免生成物与依赖目录被编辑器写回。 */
   gitIgnored?: boolean
+  /** 二进制图片通过独立只读通道返回，不进入文本编辑、索引或保存链路。 */
+  imagePreview?: WorkbenchImagePreview
+}
+
+export interface WorkbenchReadImageFileResult extends WorkbenchReadFileResult {
+  imagePreview: WorkbenchImagePreview
 }
 
 export interface WorkbenchIndexProjectRequest {

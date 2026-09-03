@@ -80,6 +80,8 @@ import type {
   WorkbenchProjectAiRulesResult,
   WorkbenchReadFileRequest,
   WorkbenchReadFileResult,
+  WorkbenchReadImageFileRequest,
+  WorkbenchReadImageFileResult,
   WorkbenchReadLocalHistorySnapshotRequest,
   WorkbenchReadLocalHistorySnapshotResult,
   WorkbenchRenameEntryRequest,
@@ -113,6 +115,9 @@ export interface WorkbenchProjectKernelPort {
     request: WorkbenchListDirectoryRequest
   ): Promise<Result<WorkbenchListDirectoryResult>>
   readWorkbenchFile(request: WorkbenchReadFileRequest): Promise<Result<WorkbenchReadFileResult>>
+  readWorkbenchImageFile(
+    request: WorkbenchReadImageFileRequest
+  ): Promise<Result<WorkbenchReadImageFileResult>>
   indexWorkbenchProject(
     request: WorkbenchIndexProjectRequest
   ): Promise<Result<WorkbenchIndexProjectResult>>

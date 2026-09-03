@@ -1,8 +1,10 @@
 import type { WorkbenchOpenEditorTab } from '../../types/workbenchTypes'
 import { getParentPath, ROOT_PATH } from '../shared/workbenchUtils'
 
+import { isDirtyTab } from './workbenchEditorTabs'
+
 export function buildWorkbenchDirtyPathSet(openTabs: WorkbenchOpenEditorTab[]): Set<string> {
-  return new Set(openTabs.filter((tab) => tab.content !== tab.file.content).map((tab) => tab.path))
+  return new Set(openTabs.filter(isDirtyTab).map((tab) => tab.path))
 }
 
 export function buildWorkbenchDirtyPathDecorations(

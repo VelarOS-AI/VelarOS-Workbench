@@ -1,5 +1,8 @@
-import type { WorkbenchDirectoryEntry } from '@shared/contracts'
-import type { WorkbenchReadFileResult } from '@shared/contracts'
+import type {
+  WorkbenchDirectoryEntry,
+  WorkbenchImagePreview,
+  WorkbenchReadFileResult,
+} from '@shared/contracts'
 
 export type TreeActionKind = 'create-file' | 'create-directory' | 'rename'
 
@@ -35,6 +38,7 @@ export interface WorkbenchLightEditorTab {
   truncated: boolean
   sourceLabel?: LooseOptional<string>
   officePreview?: LooseOptional<WorkbenchOfficePreview>
+  imagePreview?: LooseOptional<WorkbenchImagePreview>
 }
 
 export interface WorkbenchOpenEditorExternalChange {

@@ -270,7 +270,6 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
   const disposeResourcePluginIpc = registerWorkbenchResourcePluginIpc(
     providers.resourcePlugins
   )
-  registerWorkbenchFsIpc(providers.fileSystem, providers.parts)
   registerWorkbenchTerminalIpc(providers.parts.terminal)
   registerWorkbenchGitIpc(providers.git)
   const watchIpc = registerWorkbenchWatchIpc(providers.watch)
@@ -291,6 +290,7 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
       ])
     },
   })
+  registerWorkbenchFsIpc(providers.fileSystem, providers.parts, windowManager)
   registerProjectHubIpc(windowManager)
   let shutdownStarted = false
   app.on('before-quit', (event) => {

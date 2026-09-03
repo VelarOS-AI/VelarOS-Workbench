@@ -27,7 +27,7 @@ export function getWorkbenchEditorFilesChangedRefreshDelayMs(
 
 /** 标签内容与磁盘版本不一致即视为脏（未保存）。 */
 export function isDirtyTab(tab: WorkbenchOpenEditorTab): boolean {
-  return tab.content !== tab.file.content
+  return !tab.file.imagePreview && tab.content !== tab.file.content
 }
 
 /** 标签是否带有外部变更标记。 */
@@ -43,8 +43,20 @@ export function hasFileSnapshotChanged(
   return (
     currentFile.modifiedAt !== diskFile.modifiedAt ||
     currentFile.size !== diskFile.size ||
-    currentFile.content !== diskFile.content
+    currentFile.content !== diskFile.content ||
+    !sameImagePreview(currentFile.imagePreview, diskFile.imagePreview)
   )
+}
+
+function sameImagePreview(
+  left: WorkbenchReadFileResult['imagePreview'],
+  right: WorkbenchReadFileResult['imagePreview']
+): boolean {
+  if (!left || !right) return left === right
+  if (left.mediaType !== right.mediaType || left.data.byteLength !== right.data.byteLength)
+    return false
+
+  return left.data.every((byte, index) => byte === right.data[index])
 }
 
 /** 在重命名 / 移动场景下，把一条受影响路径映射到新前缀下。 */
@@ -71,11 +83,15 @@ export function resolveExternalFileUnavailableStatus(
 export function toOpenedFileSnapshots(
   openTabs: readonly WorkbenchOpenEditorTab[]
 ): WorkbenchOpenFileSnapshot[] {
-  return openTabs.map((tab) => ({
-    path: tab.path,
-    content: tab.content,
-    language: fileLanguage(tab.path),
-  }))
+  return openTabs.flatMap((tab) =>
+    tab.file.imagePreview
+      ? []
+      : [{
+          path: tab.path,
+          content: tab.content,
+          language: fileLanguage(tab.path),
+        }]
+  )
 }
 
 function areOpenedFileSnapshotsEqual(

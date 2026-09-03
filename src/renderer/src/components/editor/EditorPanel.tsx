@@ -85,6 +85,7 @@ import {
 } from './EditorTabBar'
 import { type FileHistoryMode,FileHistoryView } from './FileHistoryView'
 import { WorkbenchChatChangePreviewPanel } from './WorkbenchChatChangePreviewPanel'
+import { WorkbenchImagePreview } from './WorkbenchImagePreview'
 import { WorkbenchLightFilePanel } from './WorkbenchLightFilePanel'
 
 interface CodeMirrorEditorModule {
@@ -299,6 +300,7 @@ export function EditorPanel({
   }, [selectedFile])
 
   const selectedLanguage = selectedFile ? fileLanguage(selectedFile.path) : ''
+  const selectedImagePreview = selectedFile?.imagePreview
   const selectedPackageManager = useMemo(
     () =>
       selectedFilePath
@@ -450,7 +452,7 @@ export function EditorPanel({
     [editorLineCount, goToLineInput]
   )
   const dirtyTabCount = useMemo(
-    () => openTabs.filter((tab) => tab.content !== tab.file.content).length,
+    () => openTabs.filter((tab) => !tab.file.imagePreview && tab.content !== tab.file.content).length,
     [openTabs]
   )
   const selectedExternalChange = useMemo(
@@ -503,7 +505,7 @@ export function EditorPanel({
   }
 
   function openFindBar(): void {
-    if (!selectedFile) return
+    if (!selectedFile || selectedImagePreview) return
 
     setIsGoToLineOpen(false)
     setIsFindOpen(true)
@@ -526,7 +528,7 @@ export function EditorPanel({
   }
 
   function openGoToLineBar(): void {
-    if (!selectedFile) return
+    if (!selectedFile || selectedImagePreview) return
 
     setIsFindOpen(false)
     setIsGoToLineOpen(true)
@@ -578,6 +580,8 @@ export function EditorPanel({
 
   useEffect(() => {
     onCursorPositionLatest.current?.({ line: 1, column: 1 })
+    setIsFindOpen(false)
+    setFindQuery('')
     setIsGoToLineOpen(false)
     setGoToLineInput('')
     setActiveFindIndex(0)
@@ -791,7 +795,7 @@ export function EditorPanel({
             />
           ) : (
             <>
-              {!!(isFindOpen && selectedFile) && (
+              {!!(isFindOpen && selectedFile && !selectedImagePreview) && (
                 <EditorFindBar
                   findQuery={findQuery}
                   findMatches={findMatches}
@@ -802,7 +806,7 @@ export function EditorPanel({
                   onSelectMatch={selectFindMatch}
                 />
               )}
-              {!!(isGoToLineOpen && selectedFile) && (
+              {!!(isGoToLineOpen && selectedFile && !selectedImagePreview) && (
                 <EditorGoToLineBar
                   goToLineInput={goToLineInput}
                   editorLineCount={editorLineCount}
@@ -832,9 +836,12 @@ export function EditorPanel({
                             path: selectedFilePath ?? '',
                           })
                         : selectedExternalChange.status === 'deleted'
-                          ? t('workbench.externalFileDeletedDescription', {
-                              path: selectedFilePath ?? '',
-                            })
+                          ? t(
+                              selectedImagePreview
+                                ? 'workbench.externalImageDeletedDescription'
+                                : 'workbench.externalFileDeletedDescription',
+                              { path: selectedFilePath ?? '' }
+                            )
                           : t('workbench.externalFileUnavailableDescription', {
                               path: selectedFilePath ?? '',
                             })}
@@ -858,21 +865,23 @@ export function EditorPanel({
                       {t('workbench.closeDeletedFileTab')}
                     </Button>
                   )}
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={isSavingFile}
-                    onClick={() => resolveExternalFileConflict('external')}
-                  >
-                    {selectedExternalChange.status === 'modified'
-                      ? t('workbench.useExternalVersion')
-                      : selectedExternalChange.status === 'deleted'
-                        ? t('workbench.restoreDeletedFile')
-                        : t('workbench.reloadFromDisk')}
-                  </Button>
+                  {!(selectedExternalChange.status === 'deleted' && selectedImagePreview) && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={isSavingFile}
+                      onClick={() => resolveExternalFileConflict('external')}
+                    >
+                      {selectedExternalChange.status === 'modified'
+                        ? t('workbench.useExternalVersion')
+                        : selectedExternalChange.status === 'deleted'
+                          ? t('workbench.restoreDeletedFile')
+                          : t('workbench.reloadFromDisk')}
+                    </Button>
+                  )}
                 </div>
               )}
-              {!!selectedFile && (
+              {!!selectedFile && !selectedImagePreview && (
                 <EditorFileDiagnosticSummary
                   diagnostics={selectedFileDiagnostics}
                   onOpenProblems={onToggleProblems}
@@ -882,7 +891,13 @@ export function EditorPanel({
               )}
               <div className={styles.editorScroll}>
                 {selectedFile ? (
-                  markdownPreviewActive ? (
+                  selectedImagePreview ? (
+                    <WorkbenchImagePreview
+                      path={selectedFile.path}
+                      size={selectedFile.size}
+                      preview={selectedImagePreview}
+                    />
+                  ) : markdownPreviewActive ? (
                     <Suspense fallback={null}>
                       <LazyWorkbenchMarkdownPreview
                         path={selectedFile.path}

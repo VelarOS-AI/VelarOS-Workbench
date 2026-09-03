@@ -26,6 +26,8 @@ import type {
   WorkbenchMoveEntryResult,
   WorkbenchReadFileRequest,
   WorkbenchReadFileResult,
+  WorkbenchReadImageFileRequest,
+  WorkbenchReadImageFileResult,
   WorkbenchReadLocalHistorySnapshotRequest,
   WorkbenchReadLocalHistorySnapshotResult,
   WorkbenchRenameEntryRequest,
@@ -46,6 +48,7 @@ import type {
 export const WorkbenchFsChannels = {
   listDirectory: 'workbench-app:fs:list-directory',
   readFile: 'workbench-app:fs:read-file',
+  readImageFile: 'workbench-app:fs:read-image-file',
   saveFile: 'workbench-app:fs:save-file',
   saveFileSync: 'workbench-app:fs:save-file-sync',
   createEntry: 'workbench-app:fs:create-entry',
@@ -80,6 +83,9 @@ export interface WorkbenchFsBridge {
   readFile: (
     request: WorkbenchReadFileRequest
   ) => Promise<WorkbenchFsCallResult<WorkbenchReadFileResult>>
+  readImageFile: (
+    request: WorkbenchReadImageFileRequest
+  ) => Promise<WorkbenchFsCallResult<WorkbenchReadImageFileResult>>
   saveFile: (
     request: WorkbenchSaveFileRequest
   ) => Promise<WorkbenchFsCallResult<WorkbenchSaveFileResult>>

@@ -66,6 +66,7 @@ import type {
   WorkbenchEditorCommandEvent,
   WorkbenchReadFileResult,
 } from '@shared/contracts'
+import { isWorkbenchImagePreviewPath } from '@shared/workbenchImage'
 
 import { useStableWorkbenchMessageTranslate } from '../runtime/useStableWorkbenchMessaging'
 import { SystemDefaultEditorLightId } from '../support/defaultEditor'
@@ -177,6 +178,7 @@ function buildLightTabFromReadFile(file: WorkbenchReadFileResult): WorkbenchLigh
     modifiedAt: file.modifiedAt,
     totalLines: file.totalLines,
     truncated: file.truncated,
+    imagePreview: file.imagePreview,
   }
 }
 
@@ -437,6 +439,9 @@ export function useStandaloneWorkbenchPageModel(
       const openTab = workbench.openTabs.find((candidate) => candidate.path === command.path)
       if (openTab && openTab.content !== openTab.file.content) {
         throw new AppError('CONFLICT', '目标文件包含未保存内容，无法开始自动写入。')
+      }
+      if (isWorkbenchImagePreviewPath(command.path)) {
+        throw new AppError('VALIDATION', '图片预览是只读内容，不能播放自动写入。')
       }
 
       const file = Result.unwrap(
