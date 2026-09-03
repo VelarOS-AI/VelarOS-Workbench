@@ -21,7 +21,7 @@ The repository intentionally has no dependency on VelarOS Desktop internals. Sha
 are installed from the `VelarOS-Platform` releases on GitHub Packages; the app owns the Electron
 implementation behind the semantic Workbench host.
 
-Workbench is a **complete host**: it composes the Kernel module host *in its own process*
+Workbench is a **complete host**: it composes the Kernel module host _in its own process_
 (kernel-contract §15) instead of connecting to a daemon. It registers exactly one capability,
 `velaros.agent`, backed by an in-process `@velaros-ai/agent` execution stack. `velaros.model`
 and `velaros.browser` have no implementation here, so those capabilities are simply absent and the
@@ -60,3 +60,8 @@ Velar compiler/editor joint-delivery contract.
 `bun run package:mac`, `bun run package:win`, and `bun run package:linux` create application
 artifacts under `artifacts/desktop/`. Signing and notarization credentials are supplied by the release
 environment; they are never stored in this repository.
+
+The public candidate release uses separate manifests: `candidate-*.json` marks a complete build,
+while the Ed25519-signed `catalog-*.json` is the only manifest Cloud imports. After upload, an agent
+publishes an exact Workbench version with Cloud's `release:software:production` command; no
+administrator page or interactive password is part of the release path.

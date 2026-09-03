@@ -17,7 +17,7 @@ on:
         default: stable
   push:
     tags:
-      - 'v*'
+      - "v*"
 
 permissions:
   contents: write
@@ -47,7 +47,7 @@ jobs:
           bun-version: 1.3.13
       - run: bun install --frozen-lockfile --ignore-scripts
         env:
-          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Verify exact immutable release source
         run: node scripts/release/releaseArtifacts.mjs validate-source
@@ -136,7 +136,7 @@ jobs:
           bun run package:win -- --publish never
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
       - name: Build and package signed macOS or Linux once
         if: steps.reuse.outputs.reuse != 'true' && runner.os != 'Windows'
         run: bun run ${{ matrix.command }} -- --publish never
@@ -144,7 +144,7 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_LINK: ${{ secrets.MACOS_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.MACOS_CSC_KEY_PASSWORD }}
-          CSC_IDENTITY_AUTO_DISCOVERY: 'true'
+          CSC_IDENTITY_AUTO_DISCOVERY: "true"
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
@@ -203,7 +203,7 @@ jobs:
           bun-version: 1.3.13
       - run: bun install --frozen-lockfile --ignore-scripts
         env:
-          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Verify exact immutable release source
         run: node scripts/release/releaseArtifacts.mjs validate-source
@@ -221,8 +221,6 @@ jobs:
         env:
           VELAROS_RELEASE_REPOSITORY: ${{ vars.VELAROS_RELEASE_REPOSITORY }}
           VELAROS_RELEASE_REPO_TOKEN: ${{ secrets.VELAROS_RELEASE_REPO_TOKEN }}
-          VELAROS_RELEASE_CATALOG_URL: ${{ vars.VELAROS_RELEASE_CATALOG_URL }}
-          VELAROS_RELEASE_INGEST_TOKEN: ${{ secrets.VELAROS_RELEASE_INGEST_TOKEN }}
           VELAROS_RELEASE_ATTESTATION_PRIVATE_KEY: ${{ secrets.VELAROS_RELEASE_ATTESTATION_PRIVATE_KEY }}
           VELAROS_RELEASE_ATTESTATION_KEY_ID: ${{ vars.VELAROS_RELEASE_ATTESTATION_KEY_ID }}
         run: node scripts/release/publishUpdateCatalog.mjs artifacts/release-stage/final

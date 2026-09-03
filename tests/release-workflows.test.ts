@@ -11,7 +11,7 @@ void describe('release workflows', () => {
       'utf8'
     )).replaceAll('\r\n', '\n')
     assert.match(workflow, /workflow_dispatch:\n\s+inputs:\n\s+release_tag:/)
-    assert.match(workflow, /tags:\n\s+- 'v\*'/)
+    assert.match(workflow, /tags:\n\s+- ["']v\*["']/)
     assert.match(workflow, /ref: \$\{\{ env\.RELEASE_TAG \}\}/)
     assert.match(
       workflow,
@@ -29,7 +29,7 @@ void describe('release workflows', () => {
       /Verify macOS signing and notarization credentials\n\s+if: .*runner\.os == 'macOS'/u
     )
     assert.match(workflow, /Build and package unsigned Windows once/u)
-    assert.match(workflow, /CSC_IDENTITY_AUTO_DISCOVERY: 'false'/u)
+    assert.match(workflow, /CSC_IDENTITY_AUTO_DISCOVERY: ["']false["']/u)
     assert.match(workflow, /RUNNER_TEMP\/verifyPackagedWorkbench\.mjs/u)
     assert.match(workflow, /trap 'cp "\$backup" "\$verifier"' EXIT/u)
     assert.doesNotMatch(workflow, /--clobber/)
