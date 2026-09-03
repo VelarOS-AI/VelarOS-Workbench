@@ -1,6 +1,14 @@
-import { StreamLanguage, type StreamParser, type StringStream } from '@codemirror/language'
+import { javascriptLanguage } from '@codemirror/lang-javascript'
+import {
+  highlightingFor,
+  StreamLanguage,
+  type StreamParser,
+  StringStream,
+} from '@codemirror/language'
 import { javascript as JavaScriptParser } from '@codemirror/legacy-modes/mode/javascript'
-import type { Extension } from '@codemirror/state'
+import { type EditorState, type Extension, Prec, RangeSetBuilder } from '@codemirror/state'
+import { Decoration, type DecorationSet, type EditorView, ViewPlugin, type ViewUpdate } from '@codemirror/view'
+import { type Highlighter, highlightTree } from '@lezer/highlight'
 import type { WorkbenchEditorLanguageContribution } from '@renderer/language/workbenchEditorLanguageContributions'
 
 import {
@@ -560,8 +568,172 @@ const VelarParser: StreamParser<VelarStreamState> = {
   },
 }
 
+export interface VelarEmbeddedJavaScriptRange {
+  readonly from: number
+  readonly to: number
+}
+
+interface ParsedVelarEmbeddedJavaScriptRange extends VelarEmbeddedJavaScriptRange {
+  readonly tree: ReturnType<typeof javascriptLanguage.parser.parse>
+}
+
+function nextLineBoundary(
+  source: string,
+  lineStart: number
+): { readonly lineEnd: number; readonly nextStart: number } {
+  for (let index = lineStart; index < source.length; index += 1) {
+    if (source[index] === '\n') return { lineEnd: index, nextStart: index + 1 }
+    if (source[index] === '\r')
+      return {
+        lineEnd: index,
+        nextStart: source[index + 1] === '\n' ? index + 2 : index + 1,
+      }
+  }
+  return { lineEnd: source.length, nextStart: source.length }
+}
+
+/**
+ * Replays the same state machine used by the editor language so the modern
+ * JavaScript highlighter sees exactly the raw bodies that the Velar fallback
+ * parser accepted. This deliberately does not rediscover blocks with a regex:
+ * header-like text inside a Velar layout string must remain string content.
+ */
+export function findVelarEmbeddedJavaScriptRanges(
+  source: string,
+  tabSize = 4,
+  indentUnit = 2
+): readonly VelarEmbeddedJavaScriptRange[] {
+  const state = VelarParser.startState?.(indentUnit)
+  if (!state) return []
+
+  const ranges: VelarEmbeddedJavaScriptRange[] = []
+  let bodyStart: number | null = null
+  let lineStart = 0
+
+  while (lineStart < source.length) {
+    const boundary = nextLineBoundary(source, lineStart)
+    const stream = new StringStream(source.slice(lineStart, boundary.lineEnd), tabSize, indentUnit)
+
+    while (!stream.eol()) {
+      stream.start = stream.pos
+      const embeddedBefore = state.embeddedJavaScript
+      VelarParser.token(stream, state)
+      if (stream.pos <= stream.start)
+        throw new Error('VelarScript editor parser did not advance while locating embedded JavaScript')
+
+      if (!embeddedBefore && state.embeddedJavaScript) {
+        bodyStart = boundary.nextStart
+      } else if (embeddedBefore && !state.embeddedJavaScript && bodyStart !== null) {
+        ranges.push({ from: bodyStart, to: lineStart })
+        bodyStart = null
+      }
+    }
+
+    if (boundary.nextStart <= lineStart || boundary.nextStart >= source.length) break
+    lineStart = boundary.nextStart
+  }
+
+  if (bodyStart !== null && bodyStart <= source.length)
+    ranges.push({ from: bodyStart, to: source.length })
+  return ranges
+}
+
+function parseVelarEmbeddedJavaScriptRanges(
+  source: string
+): readonly ParsedVelarEmbeddedJavaScriptRange[] {
+  return findVelarEmbeddedJavaScriptRanges(source).map((range) => ({
+    ...range,
+    tree: javascriptLanguage.parser.parse(source.slice(range.from, range.to)),
+  }))
+}
+
+function activeJavaScriptHighlighter(
+  state: EditorState,
+  scope: ReturnType<typeof javascriptLanguage.parser.parse>['topNode']['type']
+): Highlighter {
+  return {
+    style: (tags) => highlightingFor(state, tags, scope),
+  }
+}
+
+export function buildVelarEmbeddedJavaScriptHighlightDecorations(
+  state: EditorState,
+  visibleRanges: readonly VelarEmbeddedJavaScriptRange[] = [{ from: 0, to: state.doc.length }],
+  parsedRanges = parseVelarEmbeddedJavaScriptRanges(state.doc.toString())
+): DecorationSet {
+  const decorations: Array<{ readonly from: number; readonly to: number; readonly value: Decoration }> = []
+  const marks = new Map<string, Decoration>()
+
+  for (const embedded of parsedRanges) {
+    const highlighter = activeJavaScriptHighlighter(state, embedded.tree.topNode.type)
+    for (const visible of visibleRanges) {
+      const from = Math.max(embedded.from, visible.from)
+      const to = Math.min(embedded.to, visible.to)
+      if (from >= to) continue
+      highlightTree(
+        embedded.tree,
+        highlighter,
+        (tokenFrom, tokenTo, classes) => {
+          const value = marks.get(classes) ?? Decoration.mark({ class: classes })
+          marks.set(classes, value)
+          decorations.push({
+            from: embedded.from + tokenFrom,
+            to: embedded.from + tokenTo,
+            value,
+          })
+        },
+        from - embedded.from,
+        to - embedded.from
+      )
+    }
+  }
+
+  decorations.sort((left, right) => left.from - right.from || left.to - right.to)
+  const builder = new RangeSetBuilder<Decoration>()
+  let previousIdentity = ''
+  for (const decoration of decorations) {
+    const identity = `${decoration.from}:${decoration.to}:${String(decoration.value.spec.class)}`
+    if (identity === previousIdentity) continue
+    previousIdentity = identity
+    builder.add(decoration.from, decoration.to, decoration.value)
+  }
+  return builder.finish()
+}
+
+const velarEmbeddedJavaScriptHighlighting = Prec.highest(ViewPlugin.fromClass(
+  class {
+    decorations: DecorationSet
+    private parsedRanges: readonly ParsedVelarEmbeddedJavaScriptRange[]
+
+    constructor(view: EditorView) {
+      this.parsedRanges = parseVelarEmbeddedJavaScriptRanges(view.state.doc.toString())
+      this.decorations = this.build(view)
+    }
+
+    public update(update: ViewUpdate): void {
+      if (update.docChanged)
+        this.parsedRanges = parseVelarEmbeddedJavaScriptRanges(update.state.doc.toString())
+      if (
+        update.docChanged
+        || update.viewportChanged
+        || update.transactions.some((transaction) => transaction.reconfigured)
+      )
+        this.decorations = this.build(update.view)
+    }
+
+    private build(view: EditorView): DecorationSet {
+      return buildVelarEmbeddedJavaScriptHighlightDecorations(
+        view.state,
+        view.visibleRanges,
+        this.parsedRanges
+      )
+    }
+  },
+  { decorations: (plugin) => plugin.decorations }
+))
+
 export function velarScript(): Extension {
-  return StreamLanguage.define(VelarParser)
+  return [StreamLanguage.define(VelarParser), velarEmbeddedJavaScriptHighlighting]
 }
 
 export const VelarWorkbenchEditorLanguage = {

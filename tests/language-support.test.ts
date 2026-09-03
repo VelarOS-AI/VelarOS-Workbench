@@ -4,8 +4,9 @@ import { tmpdir } from 'node:os'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { syntaxTree } from '@codemirror/language'
+import { highlightingFor, syntaxTree } from '@codemirror/language'
 import { EditorState } from '@codemirror/state'
+import { type Highlighter, highlightTree } from '@lezer/highlight'
 import { describe, test } from 'bun:test'
 import * as ts from 'typescript'
 
@@ -24,6 +25,8 @@ import {
   resolveTypeScriptDefaultLibFilePath,
 } from '../src/main/workspace/language/TypeScriptProjectHost'
 import {
+  buildVelarEmbeddedJavaScriptHighlightDecorations,
+  findVelarEmbeddedJavaScriptRanges,
   VELAR_EDITOR_KEYWORDS,
   velarScript,
   VelarWorkbenchEditorLanguage,
@@ -55,6 +58,7 @@ import {
   usesWorkbenchSemanticLanguageService,
 } from '../src/renderer/src/models/editor/workbenchCodeMirrorLanguageService'
 import { buildWorkbenchSemanticTokenDecorations } from '../src/renderer/src/models/editor/workbenchCodeMirrorSemanticTokens'
+import { workbenchCodeMirrorRiderTheme } from '../src/renderer/src/models/editor/workbenchCodeMirrorTheme'
 import { buildWorkbenchSemanticOccurrenceDecorations } from '../src/renderer/src/models/editor/workbenchCodeMirrorTokenOccurrenceHighlight'
 import { fileLanguage } from '../src/renderer/src/models/shared/workbenchUtils'
 import { VelarWorkbenchLanguageService } from '../src/shared/contributions/velar/service'
@@ -377,7 +381,7 @@ void describe('focused Workbench language surface', () => {
       'Document(keyword,"variableName.definition.function")'
     )
     for (const header of ['extern js', 'extern js()']) {
-      const embeddedJavaScriptTree = fallbackTree([
+      const embeddedJavaScript = [
         `${header}\``,
         '  const referencePattern = /^[a-z][A-Za-z0-9]*(?:\\.[a-z][A-Za-z0-9]*)+$/',
         '  export function resolve(value) {',
@@ -386,11 +390,72 @@ void describe('focused Workbench language surface', () => {
         '`:',
         '  export def resolved(value: string) -> string',
         '',
-      ].join('\n'))
+      ].join('\n')
+      const embeddedJavaScriptTree = fallbackTree(embeddedJavaScript)
       assert.match(embeddedJavaScriptTree, /"string\.special"/u)
       assert.match(embeddedJavaScriptTree, /propertyName/u)
-      assert.match(embeddedJavaScriptTree, /"variableName\.definition\.function"/u)
+      assert.deepEqual(
+        fallbackTokens(embeddedJavaScript)
+          .filter(({ text }) => text === 'resolve')
+          .map(({ name }) => name),
+        ['variableName.definition']
+      )
     }
+
+    const javaScriptSource = [
+      'const instances = new WeakSet()',
+      'function requireCanvas(canvas) {',
+      '  if (!Number.isFinite(canvas)) throw new TypeError("invalid")',
+      '}',
+      'export class Surface {',
+      '  constructor() { this.items = new Map() }',
+      '}',
+      '',
+    ].join('\n')
+    const velarSource = [
+      'const example = "',
+      '  extern js`',
+      '    new HiddenInsideLayoutString()',
+      '  `:',
+      '"',
+      'extern js`',
+      javaScriptSource,
+      '`:',
+      '  export def requireCanvas(value: unknown) -> unknown',
+      '',
+    ].join('\n')
+    const embeddedRanges = findVelarEmbeddedJavaScriptRanges(velarSource)
+    assert.deepEqual(embeddedRanges, [{
+      from: velarSource.indexOf(javaScriptSource),
+      to: velarSource.indexOf('`:', velarSource.indexOf(javaScriptSource)),
+    }])
+
+    const javaScriptLanguage = resolveWorkbenchCodeMirrorLanguage('src/example.js', '')
+    const javaScriptState = EditorState.create({
+      doc: javaScriptSource,
+      extensions: [javaScriptLanguage.extension, workbenchCodeMirrorRiderTheme],
+    })
+    const javaScriptTree = syntaxTree(javaScriptState)
+    const javaScriptHighlighter: Highlighter = {
+      style: (tags) => highlightingFor(javaScriptState, tags, javaScriptTree.topNode.type),
+    }
+    const expectedClasses = new Map<string, string>()
+    highlightTree(javaScriptTree, javaScriptHighlighter, (from, to, classes) => {
+      expectedClasses.set(javaScriptSource.slice(from, to), classes)
+    })
+
+    const velarState = EditorState.create({
+      doc: velarSource,
+      extensions: [velarScript(), workbenchCodeMirrorRiderTheme],
+    })
+    const embeddedDecorations = buildVelarEmbeddedJavaScriptHighlightDecorations(velarState)
+    const embeddedClasses = new Map<string, string>()
+    embeddedDecorations.between(0, velarSource.length, (from, to, value) => {
+      embeddedClasses.set(velarSource.slice(from, to), String(value.spec.class))
+    })
+    for (const token of ['WeakSet', 'requireCanvas', 'Number', 'isFinite', 'TypeError', 'Surface', 'constructor', 'Map'])
+      assert.equal(embeddedClasses.get(token), expectedClasses.get(token), token)
+
     const typeScriptLanguage = resolveWorkbenchCodeMirrorLanguage('src/main.ts', '')
     const typeScriptTemplateTree = syntaxTree(EditorState.create({
       doc: 'const label = `hello ${user.name}`',
