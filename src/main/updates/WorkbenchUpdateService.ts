@@ -9,10 +9,8 @@ import type {
 } from '../../shared/workbenchUpdate'
 
 import { WorkbenchReleaseFeedServer } from './WorkbenchReleaseFeedServer'
-import type {
-  ResolvedWorkbenchReleaseCatalog,
-  WorkbenchReleaseSource,
-} from './WorkbenchReleaseSource'
+import type { WorkbenchReleaseSource } from './WorkbenchReleaseSource'
+import { validateWorkbenchReleaseCatalog } from './WorkbenchReleaseSource'
 import type { WorkbenchUpdatePreferencesStore } from './WorkbenchUpdatePreferencesStore'
 
 interface WorkbenchUpdateServiceOptions {
@@ -229,12 +227,16 @@ export class WorkbenchUpdateService {
         platform: this.#platform,
         arch: this.#arch,
       })
+      validateWorkbenchReleaseCatalog(release.catalog, {
+        channel: this.preferences.channel,
+        platform: this.#platform,
+        arch: this.#arch,
+      })
       if (release.catalog.artifacts.length === 0) {
         await this.#replaceFeed(null)
         this.#setState({ phase: 'idle' })
         return this.getState()
       }
-      this.#validateRelease(release)
       const feed = new WorkbenchReleaseFeedServer(this.releases, release)
       const feedUrl = await feed.listen()
       await this.#replaceFeed(feed)
@@ -251,48 +253,6 @@ export class WorkbenchUpdateService {
       await this.#replaceFeed(null)
       this.#setError(error)
       throw error
-    }
-  }
-
-  #validateRelease(release: ResolvedWorkbenchReleaseCatalog): void {
-    const expected = expectedFiles(this.#platform)
-    if (
-      !expected ||
-      release.catalog.product !== 'workbench' ||
-      release.catalog.channel !== this.preferences.channel
-    ) {
-      throw new Error('Workbench update catalog identity is invalid.')
-    }
-    const names = new Set<string>()
-    const versions = new Set<string>()
-    for (const artifact of release.catalog.artifacts) {
-      if (
-        artifact.softwareProduct !== 'workbench' ||
-        artifact.channel !== this.preferences.channel ||
-        artifact.platform !== this.#platform ||
-        artifact.arch !== this.#arch ||
-        !artifact.isCurrent ||
-        !artifact.attestationVerified ||
-        artifact.signatureStatus === 'unsigned' ||
-        !/^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$/u.test(artifact.fileName) ||
-        !/^[a-f0-9]{64}$/u.test(artifact.sha256) ||
-        !Number.isSafeInteger(artifact.sizeBytes) ||
-        artifact.sizeBytes <= 0 ||
-        names.has(artifact.fileName)
-      ) {
-        throw new Error('Workbench update catalog failed integrity validation.')
-      }
-      names.add(artifact.fileName)
-      versions.add(artifact.version)
-    }
-    const metadata = release.catalog.artifacts.filter(
-      (artifact) => artifact.artifactRole === 'update-metadata' && artifact.format === 'yml'
-    )
-    const hasPackage = release.catalog.artifacts.some(
-      (artifact) => artifact.format.toLowerCase() === expected.packageFormat
-    )
-    if (versions.size !== 1 || metadata.length !== 1 || !hasPackage) {
-      throw new Error('Workbench update catalog is incomplete.')
     }
   }
 

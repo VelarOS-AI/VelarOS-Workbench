@@ -5,7 +5,16 @@ import {
   isWorkbenchUpdateChannel,
   WorkbenchUpdateChannels,
 } from '../../shared/workbenchUpdate'
+import { resolveVelarOSOfficialWebsiteMarket } from '../VelarOSOfficialWebsite'
 
+import {
+  WorkbenchCloudEndpointResolver,
+  WorkbenchCloudRoutingManifestFileStore,
+  workbenchCloudRoutingManifestUrls,
+  WorkbenchCloudRoutingMinimumRevision,
+  WorkbenchCloudRoutingPublicKeySpki,
+  WorkbenchEmbeddedCloudBaseUrl,
+} from './WorkbenchCloudEndpointResolver'
 import { CloudWorkbenchReleaseSource } from './WorkbenchReleaseSource'
 import { WorkbenchUpdatePreferencesStore } from './WorkbenchUpdatePreferencesStore'
 import { WorkbenchUpdateService } from './WorkbenchUpdateService'
@@ -13,8 +22,22 @@ import { WorkbenchUpdateService } from './WorkbenchUpdateService'
 const { autoUpdater } = electronUpdater
 
 export function installWorkbenchUpdateRuntime(): void {
+  const market = resolveVelarOSOfficialWebsiteMarket({
+    configuredMarket: process.env.VELAROS_MARKET,
+    locale: app.getLocale(),
+    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+  })
+  const endpointResolver = new WorkbenchCloudEndpointResolver({
+    market,
+    embeddedBaseUrl: WorkbenchEmbeddedCloudBaseUrl,
+    overrideBaseUrl: process.env.VELAROS_CLOUD_URL,
+    manifestUrls: workbenchCloudRoutingManifestUrls(market),
+    routingPublicKeySpki: WorkbenchCloudRoutingPublicKeySpki,
+    minimumRevision: WorkbenchCloudRoutingMinimumRevision,
+    manifestStore: new WorkbenchCloudRoutingManifestFileStore(app.getPath('userData'), market),
+  })
   const service = new WorkbenchUpdateService(
-    new CloudWorkbenchReleaseSource(),
+    new CloudWorkbenchReleaseSource(endpointResolver),
     autoUpdater,
     new WorkbenchUpdatePreferencesStore(app.getPath('userData')),
     {

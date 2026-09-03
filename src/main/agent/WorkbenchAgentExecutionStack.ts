@@ -7,6 +7,7 @@ import {
   ContextGovernanceSessionRegistry,
   createBuiltInPromptRegistry,
   defaultRuntimePromptFeaturePolicy,
+  defaultUnsupportedInteractionPort,
   type ExecutionEventBus,
   ModelRuntime,
   PrimaryAgentProfile,
@@ -250,6 +251,9 @@ export function createWorkbenchToolContext(input: {
     role: { id: 'primary-agent' },
     proposalMode: false,
     agentSurfaceId: 'chat',
+    // Workbench 没有持久化 execution 记录，但 Agent 提示词与计划工具要求一个非空的
+    // interaction 端口；使用框架的显式空降级，读取计划时返回空结构而不是撞 undefined。
+    interaction: defaultUnsupportedInteractionPort,
     execution: null,
     codingSession: input.tracker,
     // Workbench 没有制品库（Desktop 的 ActiveContextStore）；空实现让 loop 的制品分支走空集。
