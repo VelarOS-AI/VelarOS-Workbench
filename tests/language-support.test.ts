@@ -188,6 +188,9 @@ void describe('focused Workbench language surface', () => {
       }]
     )
     assert.equal(semanticDecorations.size, 1)
+    semanticDecorations.between(0, 'component App:\n'.length, (_from, _to, value) => {
+      assert.match(String(value.spec.class), /cm-workbenchSemantic-frameworkDefinition/u)
+    })
     for (const keyword of [
       'abstract',
       'assert',
@@ -224,6 +227,7 @@ void describe('focused Workbench language surface', () => {
       'global',
       'mounted',
       'resource',
+      'server',
       'state',
       'style',
       'watch',
@@ -276,6 +280,10 @@ void describe('focused Workbench language surface', () => {
       'Document(keyword,"variableName.definition",operator,string,punctuation,variableName,punctuation,atom,punctuation,string,punctuation,variableName,punctuation,atom,punctuation,string)'
     )
     assert.equal(
+      fallbackTree('const value: Map<string, Set<List<Promise<Error>>>> = Map()\n'),
+      'Document(keyword,"variableName.definition",punctuation,className,operator,atom,punctuation,className,operator,className,operator,className,operator,className,operator,operator,className,punctuation)'
+    )
+    assert.equal(
       fallbackTree('const label = `hello ${user.name}`\n'),
       'Document(keyword,"variableName.definition",operator,string,punctuation,variableName,operator,propertyName,punctuation,string)'
     )
@@ -299,7 +307,7 @@ void describe('focused Workbench language surface', () => {
         '  ]',
         '',
       ].join('\n')),
-      'Document(keyword,"variableName.definition.function",punctuation,operator,atom,operator,className,operator,keyword,punctuation,punctuation,propertyName,punctuation,string,punctuation,propertyName,punctuation,string,punctuation,propertyName,punctuation,punctuation,propertyName,punctuation,string,punctuation,propertyName,punctuation,keyword,punctuation,punctuation,punctuation)'
+      'Document(keyword,"variableName.definition.function",punctuation,operator,className,operator,className,operator,keyword,punctuation,punctuation,propertyName,punctuation,string,punctuation,propertyName,punctuation,string,punctuation,propertyName,punctuation,punctuation,propertyName,punctuation,string,punctuation,propertyName,punctuation,keyword,punctuation,punctuation,punctuation)'
     )
     assert.equal(
       fallbackTree([
@@ -321,7 +329,7 @@ void describe('focused Workbench language surface', () => {
         '  return <main look={pageLook}><h1>{title}</h1></main>',
         '',
       ].join('\n')),
-      'Document(keyword,"variableName.definition.function",punctuation,variableName,punctuation,atom,punctuation,keyword,"variableName.definition",operator,keyword,keyword,punctuation,tagName,attributeName,operator,punctuation,variableName,punctuation,tagName,punctuation,variableName,punctuation,tagName,punctuation,tagName,punctuation)'
+      'Document(keyword,"variableName.definition.special",punctuation,variableName,punctuation,atom,punctuation,keyword,"variableName.definition.special",operator,keyword,keyword,punctuation,tagName,attributeName,operator,punctuation,variableName,punctuation,tagName,punctuation,variableName,punctuation,tagName,punctuation,tagName,punctuation)'
     )
     assert.equal(
       fallbackTree(
@@ -335,7 +343,7 @@ void describe('focused Workbench language surface', () => {
         '  return <form><p>Add release check</p><label>Title</label></form>',
         '',
       ].join('\n')),
-      'Document(keyword,"variableName.definition.function",punctuation,keyword,punctuation,tagName,punctuation,tagName,punctuation,punctuation,tagName,punctuation,tagName,punctuation,punctuation,tagName,punctuation,tagName,punctuation)'
+      'Document(keyword,"variableName.definition.special",punctuation,keyword,punctuation,tagName,punctuation,tagName,punctuation,punctuation,tagName,punctuation,tagName,punctuation,punctuation,tagName,punctuation,tagName,punctuation)'
     )
     const nestedJsx = [
       'component ReleaseList(releases: readonly List<Release>):',
@@ -377,7 +385,7 @@ void describe('focused Workbench language surface', () => {
     )
     assert.equal(
       fallbackTree('export computed openTasks = tasks.filter(task => not task.done).size\n'),
-      'Document(keyword,keyword,"variableName.definition",operator,variableName,operator,"propertyName.function",punctuation,variableName,operator,keyword,variableName,operator,propertyName,punctuation,operator,propertyName)'
+      'Document(keyword,keyword,"variableName.definition.special",operator,variableName,operator,"propertyName.function",punctuation,variableName,operator,keyword,variableName,operator,propertyName,punctuation,operator,propertyName)'
     )
     assert.equal(
       fallbackTree('const component = render\n'),
@@ -385,7 +393,11 @@ void describe('focused Workbench language surface', () => {
     )
     assert.equal(
       fallbackTree('component RouteNotFound\n'),
-      'Document(keyword,"variableName.definition.function")'
+      'Document(keyword,"variableName.definition.special")'
+    )
+    assert.equal(
+      fallbackTree('export server articles:\n'),
+      'Document(keyword,keyword,"variableName.definition.special",punctuation)'
     )
     for (const header of ['extern js', 'extern js()']) {
       const embeddedJavaScript = [

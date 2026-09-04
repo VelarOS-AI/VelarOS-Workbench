@@ -45,6 +45,7 @@ interface WorkbenchResourcePluginServiceOptions {
   artifactBase: () => string
   fetchImpl: typeof fetch
   agentEngines: Pick<WorkbenchAgentPluginRuntime, 'listModels'>
+    & Partial<Pick<WorkbenchAgentPluginRuntime, 'deactivateEngine'>>
   agentPluginResolver?: WorkbenchAgentPluginResolver
 }
 
@@ -104,7 +105,11 @@ class WorkbenchResourcePluginService {
   public async setEnabled(id: WorkbenchResourcePluginId, enabled: boolean): Promise<void> {
     this.assertSupported(id)
     if (enabled) this.disabled.delete(id)
-    else this.disabled.add(id)
+    else {
+      this.disabled.add(id)
+      const engineId = resolveAgentEngineId(id)
+      if (engineId) this.options.agentEngines.deactivateEngine?.(engineId)
+    }
     if (id === 'codegraph') this.codeGraph.setEnabled(enabled)
     await this.persistPreferences()
     this.notify()
@@ -309,6 +314,14 @@ class WorkbenchResourcePluginService {
   private notify(): void {
     for (const listener of this.listeners) listener()
   }
+}
+
+function resolveAgentEngineId(
+  id: WorkbenchResourcePluginId
+): WorkbenchAgentEngineId | null {
+  if (id === 'claude-agent') return 'claude-code'
+  if (id === 'codex-agent') return 'codex'
+  return null
 }
 
 export { WorkbenchResourcePluginService, type WorkbenchResourcePluginServiceOptions }

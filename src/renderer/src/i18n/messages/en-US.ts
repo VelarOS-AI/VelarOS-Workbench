@@ -681,6 +681,7 @@ export const workbenchAppEnUSMessages = {
     debugForward: 'Forward',
     debugReload: 'Reload',
     debugAddress: 'Address',
+    debugPageUnavailable: 'This page is temporarily unavailable',
     debugLoadFailedHint: 'Can’t connect — make sure the dev server is running, then retry.',
     runCommand: 'Run',
     rerunCommand: 'Rerun',
@@ -985,8 +986,14 @@ export const workbenchAppEnUSMessages = {
     settingsPluginStatusAvailable: 'Enabled',
     settingsPluginStatusDisabled: 'Disabled',
     settingsModsHint:
-      'Mods provide lightweight product extensions; capabilities with heavy runtimes or external software are managed as plugins.',
+      'Mods are optional built-in Workbench capabilities. Capabilities that depend on external software or heavier runtimes are managed as plugins.',
+    settingsModsLoading: 'Loading Mods…',
     settingsModsEmpty: 'No Mods available',
+    settingsModsError: 'Could not update Mods: {error}',
+    settingsBrowserModName: 'Browser',
+    settingsBrowserModDescription:
+      'Adds built-in web previews, page interaction, and browser-assisted verification.',
+    settingsModBundled: 'Built in',
     settingsPluginStatusInstalling: 'Installing {progress}%',
     settingsPluginStatusFailed: 'Install failed',
     settingsPluginInstall: 'Install',

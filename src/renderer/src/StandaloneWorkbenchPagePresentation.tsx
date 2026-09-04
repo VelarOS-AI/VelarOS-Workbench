@@ -742,6 +742,9 @@ export function StandaloneWorkbenchPagePresentation({
               onInterruptRunSession={(sessionId) =>
                 void workbench.sendRunSessionInterrupt(sessionId)
               }
+              onOpenConsoleLink={
+                model.browserModEnabled ? editorNavigation.debug.openTab : undefined
+              }
             />
           </section>
         )}

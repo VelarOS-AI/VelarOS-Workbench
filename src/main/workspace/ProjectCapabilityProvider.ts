@@ -1,5 +1,6 @@
 import { isAbsolute, resolve } from 'node:path'
 
+import type { ToolCategoryDefinition, ToolCategoryId } from '@velaros-ai/agent/protocol'
 import { defaultDenyApprovalPort } from '@velaros-ai/agent/tool-contract'
 import {
   createProjectCodeQuery,
@@ -10,6 +11,12 @@ import {
   type ProjectToolContext,
   projectTools,
 } from '@velaros-ai/project/agent'
+import {
+  createProjectBundledModDefinition,
+  ProjectModId,
+  ProjectSpaceId,
+  ProjectToolCategories,
+} from '@velaros-ai/project/composition'
 import type {
   ProjectCodeQuery,
   ProjectCommandResult,
@@ -24,6 +31,7 @@ import {
 
 import type { WorkbenchGetCodeGraphRequest } from '../../shared/contracts'
 import type { WorkbenchWorkspaceInvokeRequest } from '../../shared/workbenchWorkspace'
+import type { WorkbenchAgentToolDefinition } from '../agent/WorkbenchAgentToolRegistry'
 import { WorkbenchCodeGraphResource } from '../resources/WorkbenchCodeGraphResource'
 
 import { type WorkbenchVelarLogicGraphService } from './language/WorkbenchVelarLogicGraphService'
@@ -31,22 +39,15 @@ import { CommandHelper } from './CommandHelper'
 import { CommandRunner } from './CommandRunner'
 import { PathResolver } from './PathResolver'
 
-interface WorkbenchProjectToolDefinition {
-  name: string
-  category: string
-  role: string
-  description: string
-  permissions: readonly string[]
-  schema: {
-    safeParse(input: unknown): { success: boolean; data?: unknown; error?: unknown }
-  }
-  isConcurrencySafe?: (input: never) => boolean
-  execute(input: unknown, toolContext: unknown): Promise<unknown>
-}
+type WorkbenchProjectToolDefinition = WorkbenchAgentToolDefinition
 
 interface WorkbenchProjectCapability {
   readonly kernel: ProjectKernel
   readonly tools: readonly WorkbenchProjectToolDefinition[]
+  readonly categoryDefinitions: Readonly<Record<ToolCategoryId, ToolCategoryDefinition>>
+  readonly enabledCategoryIds: readonly ToolCategoryId[]
+  readonly residentCategoryIds: readonly ToolCategoryId[]
+  readonly initialVisibleToolNames: readonly string[]
 }
 
 interface WorkbenchProjectCapabilityProvider {
@@ -144,6 +145,10 @@ class ProjectCapabilityProvider implements WorkbenchProjectCapabilityProvider {
       .then((kernel) => ({
         kernel,
         tools: this.bindProjectTools(root, kernel),
+        categoryDefinitions: ProjectToolCategories,
+        enabledCategoryIds: ProjectCategoryIds,
+        residentCategoryIds: ProjectCategoryIds,
+        initialVisibleToolNames: ProjectInitialVisibleToolNames,
       }))
       .catch((error) => {
         this.projects.delete(root)
@@ -164,12 +169,31 @@ class ProjectCapabilityProvider implements WorkbenchProjectCapabilityProvider {
   ): readonly WorkbenchProjectToolDefinition[] {
     return Object.values(projectTools).map((tool) => ({
       name: tool.name,
-      category: tool.category,
+      categoryId: tool.category,
       role: tool.role,
       description: tool.description,
-      permissions: tool.permissions,
-      schema: tool.schema,
-      isConcurrencySafe: tool.isConcurrencySafe,
+      permissions: [...tool.permissions],
+      capabilities: tool.capabilities,
+      requiredModelInputModalities: tool.requiredModelInputModalities,
+      exposure: tool.exposure,
+      usageSkillId: tool.usageSkillId,
+      outputInline: tool.outputInline,
+      hideWhenUnavailable: tool.hideWhenUnavailable,
+      providerId: ProjectModId,
+      schema: tool.schema as WorkbenchProjectToolDefinition['schema'],
+      surfaces: bindProjectToolSurfaces(tool.surfaces, (toolContext) =>
+        this.createProjectToolContext(projectRoot, kernel, toolContext)),
+      isAvailable: tool.isAvailable
+        ? (toolContext) => tool.isAvailable?.(
+            this.createProjectToolContext(projectRoot, kernel, toolContext)
+          ) ?? true
+        : undefined,
+      unavailableReason: tool.unavailableReason
+        ? (toolContext) => tool.unavailableReason?.(
+            this.createProjectToolContext(projectRoot, kernel, toolContext)
+          )
+        : undefined,
+      isConcurrencySafe: tool.isConcurrencySafe as WorkbenchProjectToolDefinition['isConcurrencySafe'],
       execute: (input, toolContext) =>
         Promise.resolve(tool.execute(
           input as never,
@@ -278,6 +302,41 @@ class ProjectCapabilityProvider implements WorkbenchProjectCapabilityProvider {
     }
   }
 }
+
+const ProjectBundledModDefinition = createProjectBundledModDefinition()
+const ProjectCategoryIds = Object.freeze(Object.keys(ProjectToolCategories))
+const ProjectInitialVisibleToolNames = Object.freeze(
+  ProjectBundledModDefinition.manifest.contributes.tools
+    .filter((tool) => tool.residentInSpaces?.includes(ProjectSpaceId) === true)
+    .map((tool) => tool.name)
+)
+
+function bindProjectToolSurfaces(
+  surfaces: ProjectToolSurfaces | undefined,
+  createContext: (toolContext: unknown) => ProjectToolContext
+): WorkbenchProjectToolDefinition['surfaces'] {
+  if (!surfaces) return undefined
+  return Object.fromEntries(Object.entries(surfaces).flatMap(([profileId, surface]) =>
+    surface
+      ? [[
+          profileId,
+          {
+            description: surface.description,
+            schema: surface.schema as WorkbenchProjectToolDefinition['schema'],
+            normalize: surface.normalize
+              ? (input: unknown, toolContext: unknown) => surface.normalize?.(
+                  input,
+                  createContext(toolContext)
+                )
+              : undefined,
+          },
+        ]]
+      : []))
+}
+
+type ProjectToolSurfaces = NonNullable<
+  (typeof projectTools)[keyof typeof projectTools]['surfaces']
+>
 
 function normalizeProjectRoot(projectRoot: string): string {
   const trimmed = projectRoot.trim()

@@ -68,6 +68,10 @@ import type {
 } from '@shared/contracts'
 import { isWorkbenchImagePreviewPath } from '@shared/workbenchImage'
 
+import {
+  findWorkbenchBrowserMod,
+  useStandaloneWorkbenchModCatalog,
+} from '../runtime/standaloneWorkbenchMods'
 import { useStableWorkbenchMessageTranslate } from '../runtime/useStableWorkbenchMessaging'
 import { SystemDefaultEditorLightId } from '../support/defaultEditor'
 import { useLatest, useMemoizedFn, useTimerScope } from '../support/genericHooks'
@@ -255,6 +259,8 @@ export function useStandaloneWorkbenchPageModel(
   const sessionCursorByPathRef = useRef<Record<string, PersistedWorkbenchEditorCursor>>({})
   const shouldUseProjectSession = surfaceMode === 'standalone'
   const codeGraphResourceAvailable = useCodeGraphResourceAvailability()
+  const workbenchMods = useStandaloneWorkbenchModCatalog()
+  const browserModEnabled = findWorkbenchBrowserMod(workbenchMods.value)?.enabled === true
   const workbench = useWorkbenchController({
     bootstrapProjects,
     lockedProjectId,
@@ -267,11 +273,14 @@ export function useStandaloneWorkbenchPageModel(
   })
   const chat = useWorkbenchChatProjectRuntime(toNullable(workbench.activeProject?.rootPath))
   const { currentSession, conversationVersion, sessions } = chat
-  const agentBrowser = useControlledBrowserSurface({
+  const controlledAgentBrowser = useControlledBrowserSurface({
     sessionId: currentSession.id,
     workspaceRefreshKey: currentSession.workspaceVersion + conversationVersion,
     activationToken: chat.browserActivationToken,
   })
+  const agentBrowser = browserModEnabled
+    ? controlledAgentBrowser
+    : { ...controlledAgentBrowser, active: false, activationToken: null }
   const surface = useWorkbenchSurfaceState()
   const layout = useWorkbenchLayoutController({
     commandPanelOpen: !surface.isCommandPanelCollapsed,
@@ -413,6 +422,7 @@ export function useStandaloneWorkbenchPageModel(
     workbench.runSessions,
   ])
   const editorNavigation = useWorkbenchEditorNavigationState({
+    browserEnabled: browserModEnabled,
     gitChangeItems: gitState.changeItems,
     selectedFilePath: workbench.selectedFilePath,
     onSelectFile: workbench.selectFile,
@@ -665,14 +675,16 @@ export function useStandaloneWorkbenchPageModel(
     return () => window.removeEventListener('keydown', blockAutomationKeydown, true)
   }, [exitWorkbenchEditorAutomation, workbenchEditorAutomation])
   const agentBrowserBindingSessionId = agentBrowser.active ? currentSession.id : null
+  const openAgentBrowserTab = editorNavigation.debug.agentBrowser.open
+  const closeAgentBrowserTab = editorNavigation.debug.agentBrowser.close
   useEffect(() => {
     if (agentBrowserBindingSessionId) {
-      editorNavigation.debug.agentBrowser.open(agentBrowserBindingSessionId)
+      openAgentBrowserTab(agentBrowserBindingSessionId)
       return
     }
 
-    editorNavigation.debug.agentBrowser.close()
-  }, [agentBrowser.activationToken, agentBrowserBindingSessionId])
+    closeAgentBrowserTab()
+  }, [agentBrowserBindingSessionId, closeAgentBrowserTab, openAgentBrowserTab])
   useWorkbenchProjectSessionPersistence({
     enabled: shouldUseProjectSession,
     projectId: toNullable(workbench.activeProject?.id),
@@ -1217,6 +1229,7 @@ export function useStandaloneWorkbenchPageModel(
     topRunControl,
     editorNavigation,
     agentBrowser,
+    browserModEnabled,
     pendingBrowserElementSelections,
     aiChangeArchive,
     chatChangePreview,

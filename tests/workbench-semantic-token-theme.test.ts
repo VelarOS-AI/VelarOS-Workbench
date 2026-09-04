@@ -25,6 +25,37 @@ void test('semantic keywords are blue while class-like built-ins use the type co
   assert.match(light, /cm-workbenchSemantic-decorator, .*cm-workbenchSemantic-decorator \* \{color: #808000 !important;\}/u)
   assert.match(dark, /cm-workbenchSemantic-builtinType \* \{color: #4ec9b0 !important;\}/u)
   assert.match(light, /cm-workbenchSemantic-builtinType \* \{color: #007f73 !important;\}/u)
+  assert.match(dark, /cm-workbenchSemantic-frameworkDefinition \* \{color: #d16d9e !important;\}/u)
+  assert.match(light, /cm-workbenchSemantic-frameworkDefinition \* \{color: #9c27b0 !important;\}/u)
+})
+
+void test('framework declarations keep their dedicated color across language-server token kinds', () => {
+  const content = 'component App:\nexport server api:\nstate ready = true\n'
+  const decorations = buildWorkbenchSemanticTokenDecorations(content, [
+    {
+      range: { startLine: 1, startColumn: 11, endLine: 1, endColumn: 14 },
+      type: 'function',
+      modifiers: ['declaration'],
+    },
+    {
+      range: { startLine: 2, startColumn: 15, endLine: 2, endColumn: 18 },
+      type: 'variable',
+      modifiers: ['declaration'],
+    },
+    {
+      range: { startLine: 3, startColumn: 7, endLine: 3, endColumn: 12 },
+      type: 'variable',
+      modifiers: ['declaration'],
+    },
+  ])
+  const classes: string[] = []
+  decorations.between(0, content.length, (_from, _to, value) => {
+    classes.push(String(value.spec.class))
+  })
+
+  assert.equal(classes.length, 3)
+  for (const className of classes)
+    assert.match(className, /cm-workbenchSemantic-frameworkDefinition/u)
 })
 
 void test('color themes use distinct semantic palettes', () => {

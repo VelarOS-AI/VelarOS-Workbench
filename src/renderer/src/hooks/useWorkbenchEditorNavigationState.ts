@@ -40,12 +40,14 @@ function deriveDebugTabTitle(url: string): string {
 }
 
 interface UseWorkbenchEditorNavigationStateOptions {
+  browserEnabled: boolean
   gitChangeItems: WorkbenchGitChangeItem[]
   selectedFilePath: Nullable<string>
   onSelectFile: (path: string) => Promise<any>
 }
 
 export function useWorkbenchEditorNavigationState({
+  browserEnabled,
   gitChangeItems,
   selectedFilePath,
   onSelectFile,
@@ -134,6 +136,7 @@ export function useWorkbenchEditorNavigationState({
   }
 
   const openDebugTab = useCallback((rawUrl: string): void => {
+    if (!browserEnabled) return
     const url = rawUrl.trim()
     if (!url) return
 
@@ -150,7 +153,7 @@ export function useWorkbenchEditorNavigationState({
     const id = `debug-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
     setDebugTabs((current) => [...current, { id, url, title: deriveDebugTabTitle(url) }])
     setActiveDebugTabId(id)
-  }, [debugTabsRef])
+  }, [browserEnabled, debugTabsRef])
 
   const selectDebugTab = useCallback((id: string): void => {
     setDiffItem(null)
@@ -182,6 +185,7 @@ export function useWorkbenchEditorNavigationState({
     ? `${WorkbenchAgentBrowserTabPrefix}${agentBrowserTabSessionId}`
     : null
   const openAgentBrowserTab = useCallback((sessionId: string): void => {
+    if (!browserEnabled) return
     const normalizedSessionId = sessionId.trim()
     if (!normalizedSessionId) return
 
@@ -190,16 +194,17 @@ export function useWorkbenchEditorNavigationState({
     setDiffItem(null)
     setLightTab(null)
     setActiveDebugTabId(id)
-  }, [])
+  }, [browserEnabled])
   const selectAgentBrowserTab = useCallback((): void => {
-    if (!agentBrowserTabSessionId) return
+    if (!browserEnabled || !agentBrowserTabSessionId) return
 
     setDiffItem(null)
     setLightTab(null)
     setActiveDebugTabId(`${WorkbenchAgentBrowserTabPrefix}${agentBrowserTabSessionId}`)
-  }, [agentBrowserTabSessionId])
-  const closeAgentBrowserTab = useCallback((): void => {
+  }, [agentBrowserTabSessionId, browserEnabled])
+  const closeAgentBrowserTab = useCallback((expectedSessionId?: string): void => {
     setAgentBrowserTabSessionId((sessionId) => {
+      if (expectedSessionId && sessionId !== expectedSessionId) return sessionId
       if (sessionId) {
         const id = `${WorkbenchAgentBrowserTabPrefix}${sessionId}`
         setActiveDebugTabId((active) => (active === id ? null : active))
@@ -207,12 +212,21 @@ export function useWorkbenchEditorNavigationState({
       return null
     })
   }, [])
+  const closeAllBrowserTabs = useCallback((): void => {
+    setDebugTabs([])
+    setAgentBrowserTabSessionId(null)
+    setActiveDebugTabId(null)
+  }, [])
+  useEffect(() => {
+    if (!browserEnabled) closeAllBrowserTabs()
+  }, [browserEnabled, closeAllBrowserTabs])
   const agentBrowser = {
     tabId: agentBrowserTabId,
     sessionId: agentBrowserTabSessionId,
     open: openAgentBrowserTab,
     select: selectAgentBrowserTab,
     close: closeAgentBrowserTab,
+    closeAll: closeAllBrowserTabs,
   }
   const debug = {
     tabs: debugTabs,

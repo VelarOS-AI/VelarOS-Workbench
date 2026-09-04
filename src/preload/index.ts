@@ -9,6 +9,7 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent, webUtils } from 'ele
 
 import { type WorkbenchProjectHubBridge, WorkbenchProjectHubChannels } from '../shared/projectHub'
 import { type WorkbenchAccountBridge, WorkbenchAccountChannels } from '../shared/workbenchAccount'
+import { type WorkbenchBrowserBridge, WorkbenchBrowserChannels } from '../shared/workbenchBrowser'
 import { type WorkbenchFsBridge, WorkbenchFsChannels } from '../shared/workbenchFs'
 import { type WorkbenchGitBridge, WorkbenchGitChannels } from '../shared/workbenchGit'
 import { type WorkbenchKernelBridge, WorkbenchKernelChannels } from '../shared/workbenchKernel'
@@ -17,6 +18,7 @@ import {
   WorkbenchLanguageChannels,
 } from '../shared/workbenchLanguage'
 import { type WorkbenchModelBridge, WorkbenchModelChannels } from '../shared/workbenchModel'
+import { type WorkbenchModBridge, WorkbenchModChannels } from '../shared/workbenchMods'
 import {
   type WorkbenchProductAnalyticsBridge,
   WorkbenchProductAnalyticsChannels,
@@ -75,6 +77,13 @@ const accountBridge: WorkbenchAccountBridge = {
   signIn: () => ipcRenderer.invoke(WorkbenchAccountChannels.signIn),
   signOut: () => ipcRenderer.invoke(WorkbenchAccountChannels.signOut),
   onChanged: (listener) => subscribe(WorkbenchAccountChannels.changed, listener),
+}
+
+const browserBridge: WorkbenchBrowserBridge = {
+  getState: (request) => ipcRenderer.invoke(WorkbenchBrowserChannels.getState, request),
+  presentPage: (request) => ipcRenderer.invoke(WorkbenchBrowserChannels.presentPage, request),
+  closeSession: (request) => ipcRenderer.invoke(WorkbenchBrowserChannels.closeSession, request),
+  onChanged: (listener) => subscribe(WorkbenchBrowserChannels.changed, listener),
 }
 
 const fsBridge: WorkbenchFsBridge = {
@@ -190,6 +199,12 @@ const resourcePluginBridge: WorkbenchResourcePluginBridge = {
   onChanged: (listener) => subscribe(WorkbenchResourcePluginChannels.changed, listener),
 }
 
+const modBridge: WorkbenchModBridge = {
+  listCatalog: () => ipcRenderer.invoke(WorkbenchModChannels.listCatalog),
+  setEnabled: (request) => ipcRenderer.invoke(WorkbenchModChannels.setEnabled, request),
+  onChanged: (listener) => subscribe(WorkbenchModChannels.changed, listener),
+}
+
 const updateBridge: WorkbenchUpdateBridge = {
   getState: () => ipcRenderer.invoke(WorkbenchUpdateChannels.getState),
   check: () => ipcRenderer.invoke(WorkbenchUpdateChannels.check),
@@ -216,6 +231,7 @@ const productAnalyticsBridge: WorkbenchProductAnalyticsBridge = {
 
 contextBridge.exposeInMainWorld('velarosWorkbenchProjectHub', projectHubBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchAccount', accountBridge)
+contextBridge.exposeInMainWorld('velarosWorkbenchBrowser', browserBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchFs', fsBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchLanguage', languageBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchTerminal', terminalBridge)
@@ -225,6 +241,7 @@ contextBridge.exposeInMainWorld('velarosWorkbenchKernel', kernelBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchModel', modelBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchWorkspace', workspaceBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchResourcePlugins', resourcePluginBridge)
+contextBridge.exposeInMainWorld('velarosWorkbenchMods', modBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchUpdate', updateBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchProductAnalytics', productAnalyticsBridge)
 

@@ -194,6 +194,32 @@ describe('VelarOS shared resources', () => {
     expect(resolver.resolveClaudeCommand()).not.toBeNull()
     expect(resolver.resolveCodexCommand()).not.toBeNull()
   })
+
+  test('revokes running external engine work when its plugin is disabled', async () => {
+    const fixture = createCodeGraphFixture()
+    const deactivated: string[] = []
+    const service = new WorkbenchResourcePluginService(
+      join(fixture.projectRoot, '.workbench-data'),
+      new WorkbenchCodeGraphResource({
+        sharedResourcesRoot: fixture.sharedResourcesRoot,
+        platform: process.platform,
+        arch: process.arch,
+      }),
+      {
+        ...resourcePluginOptions(fixture.sharedResourcesRoot),
+        agentEngines: {
+          listModels: async (engineId) => ({ engineId, available: false, models: [] }),
+          deactivateEngine: (engineId) => deactivated.push(engineId),
+        },
+      }
+    )
+
+    await service.setEnabled('claude-agent', false)
+    await service.setEnabled('codex-agent', false)
+    await service.setEnabled('codegraph', false)
+
+    expect(deactivated).toEqual(['claude-code', 'codex'])
+  })
 })
 
 async function createAgentPluginArchive(

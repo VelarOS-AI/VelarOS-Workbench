@@ -11,7 +11,7 @@ import { DefaultWorkbenchKernelCapabilityRoutes } from '../src/main/WorkbenchMai
 const repositoryRoot = resolve(import.meta.dirname, '..')
 
 void describe('standalone Workbench Kernel contract', () => {
-  void test('routes only to the standard Agent and Browser capability ids', () => {
+  void test('exposes only the standard Agent routes to renderer Kernel IPC', () => {
     assert.deepEqual(DefaultWorkbenchKernelCapabilityRoutes['agent.execute'], {
       capabilityId: 'velaros.agent',
       operation: 'execute',
@@ -20,20 +20,12 @@ void describe('standalone Workbench Kernel contract', () => {
       capabilityId: 'velaros.agent',
       operation: 'health',
     })
-    assert.deepEqual(DefaultWorkbenchKernelCapabilityRoutes['browser.close-session'], {
-      capabilityId: 'velaros.browser',
-      operation: 'close_session',
-    })
-    assert.deepEqual(DefaultWorkbenchKernelCapabilityRoutes['browser.close-all-sessions'], {
-      capabilityId: 'velaros.browser',
-      operation: 'close_all_sessions',
-    })
     assert.deepEqual(
       [...new Set(
         Object.values(DefaultWorkbenchKernelCapabilityRoutes)
           .map(({ capabilityId }) => capabilityId)
       )].sort(),
-      ['velaros.agent', 'velaros.browser']
+      ['velaros.agent']
     )
   })
 
@@ -70,7 +62,7 @@ void describe('standalone Workbench Kernel contract', () => {
     }
   })
 
-  void test('grants only the main-bound Workbench Agent execution route', async () => {
+  void test('grants only the main-bound Agent execution route', async () => {
     const policy = new WorkbenchKernelPermissionPolicy()
     assert.deepEqual(
       await policy.request({
@@ -239,18 +231,30 @@ void describe('standalone Workbench Kernel contract', () => {
     }
   })
 
-  void test('browser surface consumes the standard Browser capability and session schema', async () => {
-    const source = await readFile(
+  void test('browser surface and lifecycle use the project-owned typed host', async () => {
+    const surfaceSource = await readFile(
       resolve(
         repositoryRoot,
         'src/renderer/src/browser/standaloneBrowserCompositionAdapter.tsx'
       ),
       'utf8'
     )
+    const embeddedSource = await readFile(
+      resolve(
+        repositoryRoot,
+        'src/renderer/src/components/embedded/workbenchEmbeddedKernelAdapter.ts'
+      ),
+      'utf8'
+    )
+    const mainSource = await readFile(resolve(repositoryRoot, 'src/main/index.ts'), 'utf8')
 
-    assert.match(source, /capability\.id\s*===\s*['"]velaros\.browser['"]/u)
-    assert.match(source, /input:\s*\{\s*sessionId:\s*input\.sessionId\s*\}/u)
-    assert.doesNotMatch(source, /input:\s*\{\s*browserSessionId:\s*input\.sessionId\s*\}/u)
+    assert.match(surfaceSource, /velarosWorkbenchBrowser\.getState/u)
+    assert.match(surfaceSource, /velarosWorkbenchBrowser\.presentPage/u)
+    assert.match(embeddedSource, /velarosWorkbenchBrowser\.closeSession/u)
+    assert.match(embeddedSource, /sessionId:\s*model\.agentBrowser\.sessionId/u)
+    assert.match(mainSource, /createBrowserKernelModule/u)
+    assert.match(mainSource, /kernelRuntime\.registerModule/u)
+    assert.doesNotMatch(`${surfaceSource}${embeddedSource}`, /browserSessionId/u)
   })
 })
 

@@ -65,3 +65,7 @@ export const VELAR_WEB_CONTEXTUAL_KEYWORDS = [
   'state',
   'watch',
 ] as const
+
+export const VELAR_NODE_CONTEXTUAL_KEYWORDS = [
+  'server',
+] as const

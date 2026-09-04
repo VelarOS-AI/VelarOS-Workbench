@@ -2,7 +2,7 @@
  * 进程内 Kernel + Agent 执行栈的构造级冒烟探针（bun 直驱，零 Electron、零真机）。
  *
  * 覆盖 P6 宿主化的三段接缝：
- *  ① 进程内 KernelModuleHost 起得来、`velaros.agent` 注册进服务注册表、能力可直取；
+ *  ① 进程内 KernelModuleHost 起得来、Agent 与 Browser Mod 注册进服务注册表、能力可直取；
  *  ② `execute` 的 v1 信封解析（合法信封通过、非法信封拒收、外来产品身份拒收）；
  *  ③ 聊天链构造级：一条消息经 Kernel 能力 → 执行栈 → SoloStreamLoop 装配，一路走到
  *     **模型接口边界**才停（模型解析用桩替掉，不发真请求），沿途 Kernel 事件桥必须收到事件。
@@ -14,7 +14,12 @@ import {
   AgentCapabilityExecutionEventType,
   AgentCapabilityProtocolVersion,
 } from '@velaros-ai/agent/protocol/agent-capability'
+import {
+  createBrowserKernelModule,
+  type ElectronBrowserRuntime,
+} from '@velaros-ai/browser/runtime'
 import { Kernel } from '@velaros-ai/kernel/runtime'
+import { ProjectToolCategories } from '@velaros-ai/project/composition'
 import type { ProjectKernel } from '@velaros-ai/project/runtime'
 
 import { WorkbenchAgentExecutionStack } from '../agent/WorkbenchAgentExecutionStack'
@@ -49,10 +54,18 @@ async function assertRejects(action: () => Promise<unknown>, message: string): P
 const ProbeProjectRoot = '/probe/project'
 const ProbeSessionId = 'probe-session'
 
+function createProbeBrowserRuntime(): ElectronBrowserRuntime {
+  return {
+    closeSession: () => Promise.resolve(),
+    closeAllSessions: () => undefined,
+    dispose: () => undefined,
+  } as unknown as ElectronBrowserRuntime
+}
+
 function createProbeProjectProvider(): WorkbenchProjectCapabilityProvider {
   const tool: WorkbenchProjectToolDefinition = {
     name: 'project:read',
-    category: 'project-files',
+    categoryId: 'project-files',
     role: 'inspect',
     description: 'Read a file in the probe workspace.',
     permissions: ['fs:read'],
@@ -64,6 +77,10 @@ function createProbeProjectProvider(): WorkbenchProjectCapabilityProvider {
     resolveProject: () => Promise.resolve({
       kernel: {} as ProjectKernel,
       tools: [tool],
+      categoryDefinitions: ProjectToolCategories,
+      enabledCategoryIds: ['project-files'],
+      residentCategoryIds: ['project-files'],
+      initialVisibleToolNames: ['project:read'],
     }),
     dispose: () => Promise.resolve(),
   }
@@ -89,7 +106,7 @@ function buildEnvelope(overrides: Record<string, unknown> = {}): unknown {
   }
 }
 
-// ── ① 进程内 host 起来 → velaros.agent 注册 → 能力直取 ──
+// ── ① 进程内 host 起来 → Agent + Browser 注册 → 能力直取 ──
 {
   const stack = new WorkbenchAgentExecutionStack(createProbeProjectProvider())
   const kernel = new Kernel({
@@ -98,16 +115,26 @@ function buildEnvelope(overrides: Record<string, unknown> = {}): unknown {
   kernel.registerModule(
     createAgentKernelModule({ runtime: new WorkbenchAgentCapabilityRuntime(stack) })
   )
+  kernel.registerModule(
+    createBrowserKernelModule({
+      runtime: createProbeBrowserRuntime(),
+      disposeInjectedRuntime: false,
+    })
+  )
 
   assert(!kernel.hasCapability('velaros.agent'), 'start 之前不得报告能力可用')
+  assert(!kernel.hasCapability('velaros.browser'), 'start 之前不得报告 Browser 能力可用')
   await kernel.start()
   assert(kernel.hasCapability('velaros.agent'), 'start 之后 velaros.agent 必须可用')
   assert(!kernel.hasCapability('velaros.model'), 'Workbench 没有 model 能力本体，必须为假')
-  assert(!kernel.hasCapability('velaros.browser'), 'Workbench 没有 browser 能力本体，必须为假')
+  assert(kernel.hasCapability('velaros.browser'), 'Browser Mod 必须发布 velaros.browser 能力')
 
   const modules = kernel.listModules()
-  assert(modules.length === 1, '只应注册一个能力模块')
-  assert(modules[0]?.status === 'ready', 'Agent 模块必须进入 ready 态')
+  assert(modules.length === 2, '应注册 Agent 与 Browser 两个能力模块')
+  assert(
+    modules.every((module) => module.status === 'ready'),
+    'Agent 与 Browser 模块都必须进入 ready 态'
+  )
 
   const health = await kernel.invokeCapability({
     capabilityId: 'velaros.agent',

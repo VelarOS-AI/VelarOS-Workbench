@@ -52,6 +52,7 @@ interface WorkbenchSemanticTokenPalette {
   builtinType: string
   decorator: string
   enumMember: string
+  frameworkDefinition: string
   function: string
   keyword: string
   property: string
@@ -66,6 +67,7 @@ function semanticTokenPalette(theme: WorkbenchThemeId): WorkbenchSemanticTokenPa
         builtinType: '#0f766e',
         decorator: '#a16207',
         enumMember: '#b45309',
+        frameworkDefinition: '#be185d',
         function: '#8b5e1a',
         keyword: '#7c3aed',
         property: '#9d174d',
@@ -77,6 +79,7 @@ function semanticTokenPalette(theme: WorkbenchThemeId): WorkbenchSemanticTokenPa
         builtinType: '#89ddff',
         decorator: '#ffcb6b',
         enumMember: '#f78c6c',
+        frameworkDefinition: '#ffcb6b',
         function: '#82aaff',
         keyword: '#c792ea',
         property: '#f07178',
@@ -88,6 +91,7 @@ function semanticTokenPalette(theme: WorkbenchThemeId): WorkbenchSemanticTokenPa
         builtinType: '#4ec9b0',
         decorator: '#c8a56c',
         enumMember: '#4fc1ff',
+        frameworkDefinition: '#d16d9e',
         function: '#ffd580',
         keyword: '#569cd6',
         property: '#e394dc',
@@ -99,6 +103,7 @@ function semanticTokenPalette(theme: WorkbenchThemeId): WorkbenchSemanticTokenPa
         builtinType: '#007f73',
         decorator: '#808000',
         enumMember: '#0070c1',
+        frameworkDefinition: '#9c27b0',
         function: '#a04b00',
         keyword: '#0033b3',
         property: '#a31574',
@@ -122,6 +127,9 @@ function semanticTokenTheme(theme: WorkbenchThemeId): Extension {
     },
     '& .cm-workbenchSemantic-enumMember, & .cm-workbenchSemantic-enumMember *': {
       color: `${palette.enumMember} !important`,
+    },
+    '& .cm-workbenchSemantic-frameworkDefinition, & .cm-workbenchSemantic-frameworkDefinition *': {
+      color: `${palette.frameworkDefinition} !important`,
     },
     '& .cm-workbenchSemantic-keyword, & .cm-workbenchSemantic-keyword *': {
       color: `${palette.keyword} !important`,
@@ -194,6 +202,12 @@ function isObjectShorthandRange(content: string, from: number, to: number): bool
   return (before === '{' || before === ',') && (after === ',' || after === '}')
 }
 
+function isFrameworkDeclarationName(content: string, from: number): boolean {
+  const lineStart = content.lastIndexOf('\n', Math.max(0, from - 1)) + 1
+  const prefix = content.slice(lineStart, from)
+  return /^\s*(?:export\s+)?(?:action|component|computed|resource|server|state)\s+$/u.test(prefix)
+}
+
 export function buildWorkbenchSemanticTokenDecorations(
   content: string,
   tokens: readonly WorkbenchLanguageServiceSemanticToken[]
@@ -210,19 +224,26 @@ export function buildWorkbenchSemanticTokenDecorations(
     if (!range || range.from >= range.to) return []
 
     const tokenText = content.slice(range.from, range.to)
-    const effectiveToken = (
-      SemanticBuiltinOwnerTokenKinds.has(token.type)
-      && token.modifiers.includes('defaultLibrary')
-    ) || (
-      SemanticTypeTokenKinds.has(token.type)
-      && SemanticBuiltinTypeNames.has(tokenText)
-    )
-      ? { ...token, type: 'builtinType' }
-      : token.type === 'property'
+    let effectiveToken = token
+    if (isFrameworkDeclarationName(content, range.from)) {
+      effectiveToken = { ...token, type: 'frameworkDefinition' }
+    } else if (
+      (
+        SemanticBuiltinOwnerTokenKinds.has(token.type)
+        && token.modifiers.includes('defaultLibrary')
+      ) || (
+        SemanticTypeTokenKinds.has(token.type)
+        && SemanticBuiltinTypeNames.has(tokenText)
+      )
+    ) {
+      effectiveToken = { ...token, type: 'builtinType' }
+    } else if (
+      token.type === 'property'
       && callableNames.has(tokenText)
       && isObjectShorthandRange(content, range.from, range.to)
-        ? { ...token, type: 'function' as const }
-        : token
+    ) {
+      effectiveToken = { ...token, type: 'function' }
+    }
     return [{ ...range, mark: markFor(effectiveToken) }]
   }).sort((left, right) => left.from - right.from || left.to - right.to)
   return Decoration.set(ranges.map((range) => range.mark.range(range.from, range.to)), true)

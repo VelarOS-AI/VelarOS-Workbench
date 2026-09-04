@@ -220,12 +220,12 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
         onCloseDiffTab: editorNavigation.closeDiff,
       },
       debug: {
-        tabs: editorNavigation.debug.tabs,
-        activeTabId: editorNavigation.debug.activeTabId,
+        tabs: model.browserModEnabled ? editorNavigation.debug.tabs : [],
+        activeTabId: model.browserModEnabled ? editorNavigation.debug.activeTabId : null,
         onSelect: editorNavigation.debug.selectTab,
         onClose: editorNavigation.debug.closeTab,
         onNavigate: editorNavigation.debug.navigateTab,
-        agentBrowser: model.agentBrowser.active
+        agentBrowser: model.browserModEnabled && model.agentBrowser.active
           ? {
               id:
                 editorNavigation.debug.agentBrowser.tabId ??
@@ -238,7 +238,12 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
               surface: model.agentBrowser,
               onSelect: () =>
                 editorNavigation.debug.agentBrowser.open(model.agentBrowser.sessionId),
-              onClose: editorNavigation.debug.agentBrowser.close,
+              onClose: () => {
+                const sessionId = model.agentBrowser.sessionId
+                void window.velarosWorkbenchBrowser.closeSession({ sessionId })
+                  .then(() => editorNavigation.debug.agentBrowser.close(sessionId))
+                  .catch(() => undefined)
+              },
               onPicked: model.actions.handleWorkbenchBrowserElementPicked,
             }
           : null,

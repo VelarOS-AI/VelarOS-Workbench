@@ -1,9 +1,13 @@
 import { statSync } from 'node:fs'
 import { basename, join, resolve } from 'node:path'
 
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, session, shell, webContents } from 'electron'
 
 import { createAgentKernelModule } from '@velaros-ai/agent'
+import {
+  createBrowserKernelModule,
+  ElectronBrowserRuntime,
+} from '@velaros-ai/browser/runtime'
 import { Log } from '@velaros-ai/core'
 import { Kernel } from '@velaros-ai/kernel/runtime'
 import { ProviderModelCatalogService } from '@velaros-ai/model'
@@ -11,6 +15,7 @@ import { createModelRuntimeComposition } from '@velaros-ai/model/node'
 
 import productionAppIconPath from '../../build/icon.png?asset'
 import developmentAppIconPath from '../../build/icon-dev.png?asset'
+import { WorkbenchBrowserPartition } from '../shared/workbenchBrowser'
 
 import { registerWorkbenchAccountIpc } from './account/WorkbenchAccountIpc'
 import { WorkbenchAccountService } from './account/WorkbenchAccountService'
@@ -18,6 +23,10 @@ import { WorkbenchSharedAccountStore } from './account/WorkbenchSharedAccountSto
 import { WorkbenchAgentExecutionStack } from './agent/WorkbenchAgentExecutionStack'
 import { WorkbenchProductAnalyticsReporter } from './analytics/WorkbenchProductAnalyticsReporter'
 import { installWorkbenchProductAnalyticsRuntime } from './analytics/WorkbenchProductAnalyticsRuntime'
+import { registerWorkbenchBrowserIpc } from './browser/WorkbenchBrowserIpc'
+import { installWorkbenchBrowserDefaultPermissionPolicy } from './browser/WorkbenchBrowserPermissionPolicy'
+import { WorkbenchBrowserToolHost } from './browser/WorkbenchBrowserToolHost'
+import { WorkbenchBrowserWebviewGate } from './browser/WorkbenchBrowserWebviewGate'
 import { WorkbenchAgentCapabilityRuntime } from './kernel/WorkbenchAgentCapabilityRuntime'
 import {
   broadcastWorkbenchKernelStatus,
@@ -25,10 +34,17 @@ import {
 } from './kernel/WorkbenchKernelIpc'
 import { WorkbenchKernelPermissionPolicy } from './kernel/WorkbenchKernelPermissionPolicy'
 import { registerWorkbenchModelIpc } from './model/WorkbenchModelIpc'
+import { registerWorkbenchModIpc } from './mods/WorkbenchModIpc'
+import { WorkbenchModService } from './mods/WorkbenchModService'
 import type { WorkbenchProjectHub } from './projects/ProjectHub'
 import { registerProjectHubIpc } from './projects/ProjectHubIpc'
 import { installProjectHubMenu } from './projects/ProjectHubMenu'
 import { installWorkbenchEditorZoom } from './projects/WorkbenchEditorZoom'
+import { installWorkbenchExternalNavigation } from './projects/WorkbenchExternalNavigation'
+import {
+  normalizeWorkbenchInternalBrowserUrl,
+  prepareWorkbenchWebviewAttachment,
+} from './projects/WorkbenchWebviewSecurity'
 import { WorkbenchWindowManager } from './projects/WorkbenchWindowManager'
 import { registerWorkbenchResourcePluginIpc } from './resources/WorkbenchResourcePluginIpc'
 import { installWorkbenchUpdateRuntime } from './updates/WorkbenchUpdateRuntime'
@@ -53,8 +69,8 @@ import { createDefaultWorkbenchMainCapabilityProviders } from './WorkbenchMainCa
  * Finder / 第二实例目录投递、窗口标题与菜单跟随焦点项目状态）。
  * IDE 本地能力由应用私有 IPC 语义端口承载；共享能力走**进程内 Kernel**
  * （kernel-contract §15：完整宿主进程内装栈，不经 client 子路径、不拉 daemon），
- * 不反向依赖 Desktop。Workbench 只自持 Agent 能力，model / browser 没有本体因此不注册，
- * 消费面按能力缺席降级。
+ * 不反向依赖 Desktop。Workbench 自持 Agent 与 Browser Mod 能力；Model 仍由宿主组合后直接
+ * 注入 Agent，不额外发布可被 renderer 任意调用的 Kernel 能力。
  *
  * 数据根对齐 Desktop 惯例（prod=userData，dev=cwd/.velaros/data 隔离目录），但完全独立于 Desktop 的
  * chat 存储：应用名固定 `VelarOS Workbench`，prod userData 因此拥有自己的平台目录。
@@ -89,6 +105,7 @@ if (WorkbenchIsDevelopmentRuntime) {
 
 let windowManager: Nullable<WorkbenchWindowManager> = null
 let productAnalytics: WorkbenchProductAnalyticsReporter | undefined
+let workbenchBrowserWebviewGate: Nullable<WorkbenchBrowserWebviewGate> = null
 const pendingExternalPaths = collectExternalPathArguments(process.argv)
 
 app.on('open-file', (event, path) => {
@@ -141,11 +158,38 @@ function createWorkbenchWindow(hub: WorkbenchProjectHub): BrowserWindow {
     ...(process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset' as const } : {}),
     webPreferences: {
       sandbox: false,
+      webviewTag: true,
       // electron-vite 对 type:module 应用输出 ESM preload（.mjs）。
       preload: join(__dirname, '../preload/index.mjs'),
     },
   })
 
+  installWorkbenchExternalNavigation(
+    (handler) => window.webContents.setWindowOpenHandler(handler),
+    (url) => shell.openExternal(url),
+    (url, error) => {
+      Log.tag('WorkbenchExternalNavigation').warn('open_external_failed', { url, error })
+    }
+  )
+  window.webContents.on('will-attach-webview', (event, webPreferences, params) => {
+    if (
+      !workbenchBrowserWebviewGate?.allowsAttachment()
+      || !prepareWorkbenchWebviewAttachment(webPreferences, params)
+    ) event.preventDefault()
+  })
+  window.webContents.on('did-attach-webview', (_event, guestContents) => {
+    if (!workbenchBrowserWebviewGate?.track(guestContents)) return
+    installWorkbenchExternalNavigation(
+      (handler) => guestContents.setWindowOpenHandler(handler),
+      (url) => shell.openExternal(url),
+      (url, error) => {
+        Log.tag('WorkbenchExternalNavigation').warn('open_guest_external_failed', { url, error })
+      }
+    )
+    guestContents.on('will-navigate', (event, url) => {
+      if (!normalizeWorkbenchInternalBrowserUrl(url)) event.preventDefault()
+    })
+  })
   installWorkbenchEditorZoom(window)
 
   // 窗口标题唯一权威在 main（跟随项目状态）；拦掉页面 <title> 的默认回写，避免双权威打架。
@@ -177,6 +221,9 @@ function createWorkbenchWindow(hub: WorkbenchProjectHub): BrowserWindow {
 if (hasSingleInstanceLock) void app.whenReady().then(async () => {
   if (WorkbenchIsDevelopmentRuntime) app.dock?.setIcon(WorkbenchApplicationIconPath)
   const dataRootDir = resolveWorkbenchDataRootDir()
+  const disposeBrowserPermissionPolicy = installWorkbenchBrowserDefaultPermissionPolicy(
+    session.fromPartition(WorkbenchBrowserPartition)
+  )
   const websiteMarket = resolveVelarOSOfficialWebsiteMarket({
     configuredMarket: process.env['VELAROS_MARKET'],
     locale: app.getLocale(),
@@ -208,6 +255,18 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
       (url) => shell.openExternal(url)
   )
   const disposeAccountIpc = registerWorkbenchAccountIpc(accountService)
+  const modService = new WorkbenchModService(dataRootDir)
+  const disposeModIpc = registerWorkbenchModIpc(modService)
+  workbenchBrowserWebviewGate = new WorkbenchBrowserWebviewGate(modService)
+  const browserRuntime = new ElectronBrowserRuntime()
+  const browserHost = new WorkbenchBrowserToolHost({
+    dataRootDir,
+    modState: modService,
+    runtime: browserRuntime,
+    isProjectRootOwned: (projectRoot) =>
+      windowManager?.getOpenProjectPaths().includes(projectRoot) === true,
+    resolveGuestWebContents: (webContentsId) => webContents.fromId(webContentsId) ?? null,
+  })
   productAnalytics?.start()
   const providers = createDefaultWorkbenchMainCapabilityProviders(
     dataRootDir,
@@ -219,10 +278,24 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
     app.getVersion()
   )
   const modelComposition = createModelRuntimeComposition()
-  // 进程内 Kernel：只注册 Workbench 自持的 Agent 能力，执行栈也在本进程。
+  // Browser Mod 每轮发布一份冻结工具面；页面 URL/标题/加载态使用独立 revision，不会
+  // 重建 Agent 会话。每次具体执行仍由 Browser Host 实时校验启用态与项目所有权。
   const agentExecutionStack = new WorkbenchAgentExecutionStack(
     providers.workspace,
-    modelComposition
+    modelComposition,
+    {
+      captureSnapshot: ({ sessionId, projectRoot }) => {
+        const snapshot = browserHost.getModSurfaceSnapshot(sessionId, projectRoot)
+        return {
+          generation: snapshot.generation,
+          tools: snapshot.tools,
+          categoryDefinitions: snapshot.categoryDefinitions,
+          enabledCategoryIds: snapshot.enabledCategoryIds,
+          residentCategoryIds: snapshot.residentCategoryIds,
+          initialVisibleToolNames: snapshot.initialVisibleToolNames,
+        }
+      },
+    }
   )
   const disposeModelIpc = registerWorkbenchModelIpc(
     new ProviderModelCatalogService({
@@ -256,6 +329,12 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
       ),
     })
   )
+  kernelRuntime.registerModule(
+    createBrowserKernelModule({
+      runtime: browserRuntime,
+      disposeInjectedRuntime: false,
+    })
+  )
   const disposeKernelIpc = registerWorkbenchKernelIpc(
     kernelRuntime,
     providers.kernelRoutes,
@@ -287,9 +366,11 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
       await Promise.all([
         providers.parts.terminal.closeSessionsForOwner(ownerId),
         providers.language.invalidateProject({ projectRoot }),
+        browserHost.releaseProject(projectRoot),
       ])
     },
   })
+  const disposeBrowserIpc = registerWorkbenchBrowserIpc(browserHost, windowManager)
   registerWorkbenchFsIpc(providers.fileSystem, providers.parts, windowManager)
   registerProjectHubIpc(windowManager)
   let shutdownStarted = false
@@ -301,19 +382,37 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
     // Electron 不等待 async listener：第一次 before-quit 必须拦住退出，待子进程与 worker
     // 真正收口后再触发第二次 quit；shutdownStarted 让第二次事件直接放行。
     watchIpc.dispose()
+    workbenchBrowserWebviewGate?.dispose()
+    workbenchBrowserWebviewGate = null
+    disposeBrowserIpc()
     disposeResourcePluginIpc()
     disposeAccountIpc()
+    disposeModIpc()
+    modService.dispose()
     disposeModelIpc()
     disposeKernelIpc()
     disposeWorkspaceIpc()
     disposeProductAnalyticsRuntime()
-    void Promise.all([
+    void Promise.allSettled([
       providers.parts.terminal.closeAllSessions(),
       providers.language.dispose(),
       providers.workspace.dispose(),
       kernelRuntime.dispose(),
       productAnalytics?.dispose(),
-    ]).finally(() => app.quit())
+    ]).then((results) => {
+      const failures = results.flatMap((result, index) =>
+        result.status === 'rejected'
+          ? [{ operation: ['terminal', 'language', 'workspace', 'kernel', 'analytics'][index], error: result.reason }]
+          : []
+      )
+      if (failures.length > 0) {
+        Log.tag('WorkbenchShutdown').warn('shutdown_cleanup_failed', { failures })
+      }
+    }).finally(() => {
+      browserHost.dispose()
+      disposeBrowserPermissionPolicy()
+      app.quit()
+    })
   })
 
   installWorkbenchUpdateRuntime()

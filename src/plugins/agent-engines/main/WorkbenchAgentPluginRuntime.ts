@@ -35,7 +35,12 @@ type WorkbenchAgentEngineRunResult =
  * VelarOS 目标/计划语义以及统一的等待输入界面，避免重复注册引擎已有工具。
  */
 export class WorkbenchAgentPluginRuntime {
-  private readonly running = new Set<string>()
+  private readonly running = new Map<string, {
+    engineId: WorkbenchAgentEngineId
+    projectRoot: string
+    abortController: AbortController
+    unbindAbort: () => void
+  }>()
   private readonly runningProjects = new Set<string>()
   private readonly interactions = new WorkbenchEngineInteractionBroker()
   private readonly claude: WorkbenchClaudeAgentRuntime
@@ -104,12 +109,23 @@ export class WorkbenchAgentPluginRuntime {
       throw new Error('这个项目已有一个外部 Agent 正在运行，请先等待或停止它。')
     }
 
-    this.running.add(input.sessionId)
+    const abortController = new AbortController()
+    const unbindAbort = bindAbortSignal(input.abortSignal, abortController)
+    const runInput: WorkbenchAgentEngineRunInput = {
+      ...input,
+      abortSignal: abortController.signal,
+    }
+    this.running.set(input.sessionId, {
+      engineId: input.engineId,
+      projectRoot: input.projectRoot,
+      abortController,
+      unbindAbort,
+    })
     this.runningProjects.add(input.projectRoot)
     try {
       const result = input.engineId === 'claude-code'
-        ? await this.claude.run(input)
-        : await this.codex.run(input)
+        ? await this.claude.run(runInput)
+        : await this.codex.run(runInput)
       if (result.status === 'aborted') {
         input.events.emitRuntime({
           kind: 'aborted',
@@ -121,7 +137,7 @@ export class WorkbenchAgentPluginRuntime {
       input.events.emitRuntime({ kind: 'done' })
       return result
     } catch (error) {
-      if (input.abortSignal.aborted) {
+      if (runInput.abortSignal.aborted) {
         input.events.emitRuntime({
           kind: 'aborted',
           message: '已停止。',
@@ -133,17 +149,53 @@ export class WorkbenchAgentPluginRuntime {
       input.events.emitRuntime({ kind: 'error', message })
       throw error
     } finally {
+      unbindAbort()
       this.interactions.cancelSession(input.sessionId, '本次执行已结束。')
       this.running.delete(input.sessionId)
       this.runningProjects.delete(input.projectRoot)
     }
   }
 
+  /**
+   * 停用一个外部引擎时立即撤销它的在飞任务。
+   *
+   * 插件开关是运行权限，不是只读 UI 偏好；已经进入 SDK/app-server 的请求也必须
+   * 收到同一条 AbortSignal，否则“已停用”后仍可继续改项目。
+   */
+  public deactivateEngine(engineId: WorkbenchAgentEngineId): void {
+    for (const [sessionId, active] of this.running) {
+      if (active.engineId !== engineId) continue
+
+      this.interactions.cancelSession(sessionId, '该外部 Agent 插件已停用。')
+      if (!active.abortController.signal.aborted) {
+        active.abortController.abort(new Error('该外部 Agent 插件已停用。'))
+      }
+    }
+  }
+
   public async dispose(): Promise<void> {
+    for (const active of this.running.values()) {
+      if (!active.abortController.signal.aborted) {
+        active.abortController.abort(new Error('Workbench 正在退出。'))
+      }
+      active.unbindAbort()
+    }
     this.interactions.dispose()
     this.claude.close()
     this.codex.close()
     this.running.clear()
     this.runningProjects.clear()
   }
+}
+
+function bindAbortSignal(source: AbortSignal, target: AbortController): () => void {
+  const abort = (): void => {
+    if (!target.signal.aborted) target.abort(source.reason)
+  }
+  if (source.aborted) {
+    abort()
+    return () => undefined
+  }
+  source.addEventListener('abort', abort, { once: true })
+  return () => source.removeEventListener('abort', abort)
 }

@@ -3,7 +3,7 @@
  *
  * 相对 desktop 原文裁掉的分支（复活批次见各注）：
  * - aiChanges 存档 diff 辅助选项卡 + 左面板（Phase 3 AI 面批）；
- * - webview 调试选项卡层 + agent-browser 选项卡（desktop webview 耦合，独立宿主无此面）；
+ * - webview 调试选项卡层 + Browser Mod 受控选项卡；
  * - 左面 'changes'（CommitPanel/会话变更，片4 git 面）与 'issues'（flagged tasks，Phase 3）。
  * 结构（embeddedChrome 包装 / 类名 / resize 把手）与原文逐字一致，方便后续批次 diff 回填。
  */
@@ -12,12 +12,17 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactElement,
 } from 'react'
+import { GlobeSimpleIcon } from '@phosphor-icons/react'
 import { useWorkbenchI18n } from '@renderer/i18n'
 import type { WorkbenchDensity } from '@renderer/models/settings/workbenchPreferences'
 
 import styles from '../../styles/workbenchPageStyles'
 import { WorkbenchLogicGraphSidebar } from '../codeGraph/WorkbenchLogicGraphSidebar'
-import { EditorPanel } from '../editor/EditorPanel'
+import {
+  EditorPanel,
+  type WorkbenchEditorPanelAuxiliaryTab,
+} from '../editor/EditorPanel'
+import { WorkbenchWebviewDebugPanel } from '../editor/WorkbenchWebviewDebugPanel'
 import { FilePanel } from '../files/FilePanel'
 import { WorkbenchCommitPanel } from '../git/WorkbenchCommitPanel'
 
@@ -49,6 +54,66 @@ export function WorkbenchEmbeddedKernel({
 }: WorkbenchEmbeddedKernelProps): ReactElement {
   const { t } = useWorkbenchI18n()
   const { files, editor } = model
+  const { debug } = editor
+  const debugAuxiliaryTabs: WorkbenchEditorPanelAuxiliaryTab[] = [
+    ...debug.tabs.map((tab) => ({
+      id: tab.id,
+      title: tab.title,
+      label: tab.title,
+      icon: <GlobeSimpleIcon size={13} />,
+      active: debug.activeTabId === tab.id,
+      kind: 'webview-debug',
+      content: null,
+      onSelect: () => debug.onSelect(tab.id),
+      onClose: () => debug.onClose(tab.id),
+    })),
+    ...(debug.agentBrowser?.visible
+      ? [{
+          id: debug.agentBrowser.id,
+          title: debug.agentBrowser.title,
+          label: debug.agentBrowser.title,
+          icon: <GlobeSimpleIcon size={13} />,
+          active: debug.agentBrowser.active,
+          kind: 'agent-browser',
+          content: null,
+          onSelect: debug.agentBrowser.onSelect,
+          onClose: debug.agentBrowser.onClose,
+        }]
+      : []),
+  ]
+  const hasDebugTabsLayer = debug.tabs.length > 0 || !!debug.agentBrowser
+  const debugTabsLayer = hasDebugTabsLayer ? (
+    <div className={styles.webviewDebugLayer}>
+      {debug.tabs.map((tab) => (
+        <div
+          key={tab.id}
+          className={styles.webviewDebugLayerItem}
+          data-active={debug.activeTabId === tab.id}
+        >
+          <WorkbenchWebviewDebugPanel
+            url={tab.url}
+            onNavigate={(url, title) => debug.onNavigate(tab.id, url, title)}
+          />
+        </div>
+      ))}
+      {!!debug.agentBrowser && (
+        <div
+          className={styles.webviewDebugLayerItem}
+          data-active={debug.agentBrowser.visible && debug.agentBrowser.active}
+        >
+          {debug.agentBrowser.surface.render({
+            onElementPicked: debug.agentBrowser.onPicked,
+            onRequestClose: debug.agentBrowser.onClose,
+          })}
+        </div>
+      )}
+    </div>
+  ) : null
+  const editorDiff = {
+    ...editor.diff,
+    auxiliaryTabs: [...(editor.diff.auxiliaryTabs ?? []), ...debugAuxiliaryTabs],
+    debugTabsLayer,
+  }
   const leftPanel = (
     <div className={styles.leftToolContent}>
       {leftMode === 'changes' ? (
@@ -80,7 +145,7 @@ export function WorkbenchEmbeddedKernel({
         selectedFileDiagnostics={editor.selectedFileDiagnostics}
         isSelectedFileDiagnosticsPending={editor.isSelectedFileDiagnosticsPending}
         tabs={editor.tabs}
-        diff={editor.diff}
+        diff={editorDiff}
         workspace={editor.workspace}
       />
     </section>

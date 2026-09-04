@@ -13,6 +13,7 @@ import type { WorkbenchEditorLanguageContribution } from '@renderer/language/wor
 
 import {
   VELAR_LANGUAGE_KEYWORDS,
+  VELAR_NODE_CONTEXTUAL_KEYWORDS,
   VELAR_WEB_CONTEXTUAL_KEYWORDS,
 } from '@shared/contributions/velar/language'
 
@@ -50,27 +51,41 @@ interface VelarStreamState {
 export const VELAR_EDITOR_KEYWORDS = VELAR_LANGUAGE_KEYWORDS
 
 const Keywords = new Set<string>(VELAR_EDITOR_KEYWORDS)
-const WebContextualKeywords = new Set<string>(VELAR_WEB_CONTEXTUAL_KEYWORDS)
+const ExtensionContextualKeywords = new Set<string>([
+  ...VELAR_NODE_CONTEXTUAL_KEYWORDS,
+  ...VELAR_WEB_CONTEXTUAL_KEYWORDS,
+])
+const FrameworkDeclarationKeywords = new Set([
+  'action',
+  'component',
+  'computed',
+  'resource',
+  'server',
+  'state',
+])
 
-const BuiltinTypes = new Set([
+const BuiltinValueTypes = new Set([
   'bool',
-  'Error',
-  'List',
-  'Map',
   'number',
-  'Promise',
-  'Set',
   'string',
   'unknown',
 ])
 
-function isWebContextualKeyword(stream: StringStream, word: string): boolean {
-  if (!WebContextualKeywords.has(word)) return false
+const BuiltinClassTypes = new Set([
+  'Error',
+  'List',
+  'Map',
+  'Promise',
+  'Set',
+])
+
+function isExtensionContextualKeyword(stream: StringStream, word: string): boolean {
+  if (!ExtensionContextualKeywords.has(word)) return false
   const before = stream.string.slice(0, stream.start).trim()
   const after = stream.string.slice(stream.pos).trimStart()
   const declarationStart = before.length === 0 || before === 'export'
 
-  if (word === 'component')
+  if (word === 'component' || word === 'server')
     return declarationStart
       && /^[A-Za-z_$][\w$]*(?:\s*(?:\(|<|:)|\s*$)/u.test(after)
   if (word === 'state' || word === 'computed' || word === 'resource' || word === 'action') return declarationStart && /^[A-Za-z_$][\w$]*\s*(?::|\(|=)/u.test(after)
@@ -500,11 +515,11 @@ const VelarParser: StreamParser<VelarStreamState> = {
         && stream.string.slice(state.lineIndent, stream.start).trim().length === 0
         && /^\s*=/u.test(stream.string.slice(stream.pos))
       ) return 'propertyName'
-      if (Keywords.has(word) || isWebContextualKeyword(stream, word)) {
+      if (Keywords.has(word) || isExtensionContextualKeyword(stream, word)) {
         if (word === 'def') state.nextIdentifierStyle = 'variableName.definition.function'
         else if (word === 'class') state.nextIdentifierStyle = 'className.definition'
-        else if (word === 'component' || word === 'action')
-          state.nextIdentifierStyle = 'variableName.definition.function'
+        else if (FrameworkDeclarationKeywords.has(word))
+          state.nextIdentifierStyle = 'variableName.definition.special'
         else if (word === 'type' || word === 'enum' || word === 'interface')
           state.nextIdentifierStyle = 'typeName.definition'
         else if (
@@ -519,7 +534,8 @@ const VelarParser: StreamParser<VelarStreamState> = {
         if (word === 'look') state.pendingLookBlock = true
         return 'keyword'
       }
-      if (BuiltinTypes.has(word)) return 'atom'
+      if (BuiltinValueTypes.has(word)) return 'atom'
+      if (BuiltinClassTypes.has(word)) return 'className'
       if (/^[A-Z]/u.test(word)) return 'className'
       if (/^\s*\(/u.test(stream.string.slice(stream.pos))) return 'variableName.function'
       return 'variableName'

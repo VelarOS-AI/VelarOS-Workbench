@@ -86,14 +86,6 @@
   white-space: nowrap;
 }
 
-:global(.wb_browserKernelSurface) {
-  box-sizing: border-box;
-  height: 100%;
-  padding: 16px;
-  background: var(--workbench-surface);
-  color: var(--workbench-text);
-}
-
 @keyframes wb-spin {
   to {
     transform: rotate(360deg);

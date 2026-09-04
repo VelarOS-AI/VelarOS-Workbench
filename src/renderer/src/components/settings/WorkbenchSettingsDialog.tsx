@@ -13,6 +13,7 @@ import {
   ArrowSquareOutIcon,
   DownloadSimpleIcon,
   FileTextIcon,
+  GlobeSimpleIcon,
   PlugsConnectedIcon,
   SignOutIcon,
   WarningCircleIcon,
@@ -54,6 +55,11 @@ import {
   updateStandaloneWorkbenchModelConfig,
   useStandaloneWorkbenchModelConfig,
 } from '@renderer/runtime/standaloneWorkbenchModelConfig'
+import {
+  findWorkbenchBrowserMod,
+  setWorkbenchBrowserModEnabled,
+  useStandaloneWorkbenchModCatalog,
+} from '@renderer/runtime/standaloneWorkbenchMods'
 
 import { Result } from '@velaros-ai/core/result'
 import type { ProviderModelCatalog } from '@velaros-ai/model/contracts'
@@ -216,6 +222,7 @@ export function WorkbenchSettingsDialog({
   const updateState = useWorkbenchUpdate()
   const productAnalytics = useWorkbenchProductAnalytics()
   const modelConfig = useStandaloneWorkbenchModelConfig()
+  const mods = useStandaloneWorkbenchModCatalog()
   const modelProviderPreset = getStandaloneWorkbenchModelProviderPreset(modelConfig.provider)
   const modelProviderOptions = StandaloneWorkbenchModelProviderPresets.map((provider) => ({
     value: provider.id,
@@ -239,6 +246,7 @@ export function WorkbenchSettingsDialog({
   const [pluginCatalog, setPluginCatalog] = useState<Nullable<WorkbenchResourcePluginCatalog>>(null)
   const [isLoadingPlugins, setIsLoadingPlugins] = useState(false)
   const [pluginQuery, setPluginQuery] = useState('')
+  const [modMutationPending, setModMutationPending] = useState(false)
   const [providerModelCatalog, setProviderModelCatalog] =
     useState<Nullable<ProviderModelCatalog>>(null)
   const [isLoadingProviderModels, setIsLoadingProviderModels] = useState(false)
@@ -1041,6 +1049,18 @@ export function WorkbenchSettingsDialog({
     )
   }
 
+  async function setBrowserModEnabled(enabled: boolean): Promise<void> {
+    if (modMutationPending) return
+    setModMutationPending(true)
+    try {
+      await setWorkbenchBrowserModEnabled(enabled)
+    } catch {
+      // Mod 状态已保留错误，直接在当前行展示，不再叠加一次全局提示。
+    } finally {
+      setModMutationPending(false)
+    }
+  }
+
   function pluginDisplayName(id: WorkbenchResourcePluginRecord['id']): string {
     if (id === 'claude-agent') return 'Claude Agent'
     if (id === 'codex-agent') return 'Codex Agent'
@@ -1113,14 +1133,53 @@ export function WorkbenchSettingsDialog({
   }
 
   function renderModsSection(): ReactElement {
+    const browser = findWorkbenchBrowserMod(mods.value)
     return (
       <div className={styles.workbenchSettingsSectionPanel}>
         <Text tone="caption" className={styles.workbenchSettingsPluginSharedHint}>
           {t('workbench.settingsModsHint')}
         </Text>
-        <div className={styles.workbenchSettingsAiRulesEmpty}>
-          <Text>{t('workbench.settingsModsEmpty')}</Text>
-        </div>
+        {mods.loading && !browser ? (
+          <div className={styles.workbenchSettingsAiRulesEmpty}>
+            <Text>{t('workbench.settingsModsLoading')}</Text>
+          </div>
+        ) : browser ? (
+          <div className={styles.workbenchSettingsPluginList}>
+            <div className={styles.workbenchSettingsPluginRow}>
+              <span className={styles.workbenchSettingsPluginIcon}>
+                <GlobeSimpleIcon size={16} />
+              </span>
+              <div className={styles.workbenchSettingsPluginMeta}>
+                <Text className={styles.workbenchSettingsPluginName}>
+                  {t('workbench.settingsBrowserModName')} · {browser.version}
+                </Text>
+                <Text tone="caption" className={styles.workbenchSettingsRowDescription}>
+                  {t('workbench.settingsBrowserModDescription')}
+                </Text>
+              </div>
+              <div className={styles.workbenchSettingsPluginActions}>
+                <WorkbenchSettingsPill tone="success">
+                  {t('workbench.settingsModBundled')}
+                </WorkbenchSettingsPill>
+                <Switch
+                  size="sm"
+                  checked={browser.enabled}
+                  disabled={modMutationPending}
+                  onCheckedChange={(enabled) => void setBrowserModEnabled(enabled)}
+                />
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className={styles.workbenchSettingsAiRulesEmpty}>
+            <Text>{t('workbench.settingsModsEmpty')}</Text>
+          </div>
+        )}
+        {!!mods.error && (
+          <Text tone="caption" className={styles.workbenchSettingsPluginError}>
+            {t('workbench.settingsModsError', { error: mods.error })}
+          </Text>
+        )}
       </div>
     )
   }

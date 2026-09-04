@@ -46,6 +46,10 @@ const riderLightHighlightStyle = HighlightStyle.define([
     color: '#795e26',
   },
   {
+    tag: tags.special(tags.definition(tags.variableName)),
+    color: '#9c27b0',
+  },
+  {
     tag: [
       tags.className,
       tags.typeName,
@@ -125,6 +129,10 @@ const warmPaperHighlightStyle = HighlightStyle.define([
     color: '#8b5e1a',
   },
   {
+    tag: tags.special(tags.definition(tags.variableName)),
+    color: '#be185d',
+  },
+  {
     tag: [
       tags.className,
       tags.typeName,
@@ -188,6 +196,10 @@ const riderDarkHighlightStyle = HighlightStyle.define([
   {
     tag: [tags.function(tags.variableName), tags.function(tags.propertyName)],
     color: '#dcdcaa',
+  },
+  {
+    tag: tags.special(tags.definition(tags.variableName)),
+    color: '#d16d9e',
   },
   {
     tag: [
@@ -267,6 +279,10 @@ const midnightBlueHighlightStyle = HighlightStyle.define([
   {
     tag: [tags.function(tags.variableName), tags.function(tags.propertyName)],
     color: '#82aaff',
+  },
+  {
+    tag: tags.special(tags.definition(tags.variableName)),
+    color: '#ffcb6b',
   },
   {
     tag: [

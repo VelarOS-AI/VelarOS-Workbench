@@ -41,15 +41,12 @@ export interface WorkbenchKernelScopeRef {
  * composition root maps these stable product intentions to capabilities the
  * in-process Kernel host actually registered.
  *
- * `browser.*` 保留但 Workbench 没有浏览器能力本体：调用一律回
- * `KERNEL_CAPABILITY_UNAVAILABLE`，消费面按既有降级路径处理（能力不在
- * {@link WorkbenchKernelStatus.capabilities} 里时界面本来就不激活）。
+ * Browser Mod 使用独立的、绑定窗口项目所有权的 typed bridge；它不暴露在这条通用
+ * renderer Kernel invoke 面上。
  */
 export type WorkbenchKernelCapabilityRoute =
   | 'agent.execute'
   | 'agent.health'
-  | 'browser.close-session'
-  | 'browser.close-all-sessions'
 
 export interface WorkbenchKernelInvokeRequest {
   route: WorkbenchKernelCapabilityRoute
