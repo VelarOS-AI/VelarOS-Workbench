@@ -6,6 +6,7 @@ import type { WorkbenchLanguageServiceSemanticToken } from '@shared/contracts'
 import type { WorkbenchThemeId } from '../settings/workbenchPreferences'
 
 import { languageServiceRangeToOffsets } from './workbenchCodeMirrorLanguageService'
+import { getWorkbenchCodeTokenPalette } from './workbenchCodeMirrorTheme'
 
 const semanticTokensRefreshEffect = StateEffect.define<void>()
 const SemanticTokenDelayMs = 450
@@ -51,68 +52,8 @@ const SemanticBuiltinOwnerTokenKinds = new Set([
   'variable',
 ])
 
-interface WorkbenchSemanticTokenPalette {
-  builtinType: string
-  decorator: string
-  frameworkDefinition: string
-  function: string
-  keyword: string
-  property: string
-  type: string
-  variable: string
-}
-
-function semanticTokenPalette(theme: WorkbenchThemeId): WorkbenchSemanticTokenPalette {
-  switch (theme) {
-    case 'warm-paper':
-      return {
-        builtinType: '#0f766e',
-        decorator: '#a16207',
-        frameworkDefinition: '#be185d',
-        function: '#8b5e1a',
-        keyword: '#7c3aed',
-        property: '#9d174d',
-        type: '#0f766e',
-        variable: '#3d3025',
-      }
-    case 'midnight-blue':
-      return {
-        builtinType: '#89ddff',
-        decorator: '#ffcb6b',
-        frameworkDefinition: '#ffcb6b',
-        function: '#82aaff',
-        keyword: '#c792ea',
-        property: '#f07178',
-        type: '#89ddff',
-        variable: '#d6deeb',
-      }
-    case 'dark-modern':
-      return {
-        builtinType: '#4ec9b0',
-        decorator: '#c8a56c',
-        frameworkDefinition: '#d16d9e',
-        function: '#ffd580',
-        keyword: '#569cd6',
-        property: '#e394dc',
-        type: '#4ec9b0',
-        variable: '#d8dee9',
-      }
-    default:
-      return {
-        builtinType: '#007f73',
-        decorator: '#808000',
-        frameworkDefinition: '#9c27b0',
-        function: '#a04b00',
-        keyword: '#0033b3',
-        property: '#a31574',
-        type: '#007f73',
-        variable: '#202124',
-      }
-  }
-}
-
 function semanticTokenTheme(theme: WorkbenchThemeId): Extension {
-  const palette = semanticTokenPalette(theme)
+  const palette = getWorkbenchCodeTokenPalette(theme)
   return EditorView.theme({
     '& .cm-workbenchSemantic-namespace, & .cm-workbenchSemantic-namespace *, & .cm-workbenchSemantic-type, & .cm-workbenchSemantic-type *, & .cm-workbenchSemantic-class, & .cm-workbenchSemantic-class *, & .cm-workbenchSemantic-interface, & .cm-workbenchSemantic-interface *, & .cm-workbenchSemantic-struct, & .cm-workbenchSemantic-struct *, & .cm-workbenchSemantic-typeParameter, & .cm-workbenchSemantic-typeParameter *': {
       color: `${palette.type} !important`,
@@ -121,7 +62,7 @@ function semanticTokenTheme(theme: WorkbenchThemeId): Extension {
       color: `${palette.type} !important`,
     },
     '& .cm-workbenchSemantic-builtinType, & .cm-workbenchSemantic-builtinType *': {
-      color: `${palette.builtinType} !important`,
+      color: `${palette.type} !important`,
     },
     '& .cm-workbenchSemantic-enumMember, & .cm-workbenchSemantic-enumMember *': {
       color: `${palette.property} !important`,

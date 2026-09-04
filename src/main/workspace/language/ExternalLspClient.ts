@@ -1,7 +1,7 @@
 import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process'
 import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs'
 import { createRequire } from 'node:module'
-import { delimiter, dirname, isAbsolute, join } from 'node:path'
+import { delimiter, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 
 import { URI } from 'vscode-uri'
 
@@ -10,6 +10,8 @@ import { AppError } from '@velaros-ai/core/error'
 import type {
   WorkbenchLanguageServiceDescriptor,
 } from '@shared/language/workbenchLanguageServices'
+
+import { isPathInsideRoot } from '../PathContainmentHelper'
 
 import {
   shouldDetachExternalLspProcess,
@@ -225,6 +227,42 @@ const ExternalLspDependencyFileNames = [
 ] as const
 const require = createRequire(import.meta.url)
 
+function canonicalPath(path: string): string {
+  const absolutePath = resolve(path)
+  let existingPath = absolutePath
+  while (!existsSync(existingPath)) {
+    const parent = dirname(existingPath)
+    if (parent === existingPath) return absolutePath
+    existingPath = parent
+  }
+  return resolve(realpathSync(existingPath), relative(existingPath, absolutePath))
+}
+
+function isExistingPathInside(root: string, candidate: string): boolean {
+  try {
+    return isPathInsideRoot(canonicalPath(root), realpathSync(candidate))
+  } catch {
+    return false
+  }
+}
+
+function ancestorDirectories(start: string, boundary?: string): string[] {
+  const first = canonicalPath(start)
+  const limit = boundary ? canonicalPath(boundary) : null
+  if (limit && !isPathInsideRoot(limit, first)) return []
+
+  const directories: string[] = []
+  let current = first
+  while (true) {
+    directories.push(current)
+    if (current === limit) break
+    const parent = dirname(current)
+    if (parent === current || (limit && !isPathInsideRoot(limit, parent))) break
+    current = parent
+  }
+  return directories
+}
+
 function objectValue(value: unknown): Record<string, unknown> | null {
   return typeof value === 'object' && value !== null ? value as Record<string, unknown> : null
 }
@@ -247,35 +285,38 @@ function protocolVersionFromInitialize(
   return typeof version === 'number' ? version : null
 }
 
-function nodeBinDirectories(projectRoot: string): string[] {
-  const directories: string[] = []
-  let current = projectRoot
-  while (true) {
-    directories.push(join(current, 'node_modules', '.bin'))
-    const parent = dirname(current)
-    if (parent === current) return directories
-    current = parent
-  }
+function nodeBinDirectories(runtimeRoot: string, workspaceRoot?: string): string[] {
+  return ancestorDirectories(runtimeRoot, workspaceRoot)
+    .map((directory) => join(directory, 'node_modules', '.bin'))
 }
 
-function executablePath(projectRoot: string, command: string): string {
-  if (isAbsolute(command) || command.includes('/') || command.includes('\\')) return command
+function executablePath(
+  runtimeRoot: string,
+  command: string,
+  workspaceRoot?: string
+): { command: string; rejectedProjectPath?: string } {
+  if (isAbsolute(command) || command.includes('/') || command.includes('\\')) return { command }
   const executable = process.platform === 'win32' ? `${command}.cmd` : command
-  const local = nodeBinDirectories(projectRoot)
-    .map((directory) => join(directory, executable))
-    .find((candidate) => existsSync(candidate))
-  return local ?? command
+  for (const directory of nodeBinDirectories(runtimeRoot, workspaceRoot)) {
+    const candidate = join(directory, executable)
+    if (!existsSync(candidate)) continue
+    if (!workspaceRoot || isExistingPathInside(workspaceRoot, candidate))
+      return { command: realpathSync(candidate) }
+    return { command, rejectedProjectPath: candidate }
+  }
+  return { command }
 }
 
 function projectNodePackageBinPath(
-  projectRoot: string,
+  runtimeRoot: string,
   packageName: string,
-  binName: string
+  binName: string,
+  workspaceRoot?: string
 ): string | null {
-  let current = projectRoot
-  while (true) {
+  for (const current of ancestorDirectories(runtimeRoot, workspaceRoot)) {
     const manifestPath = join(current, 'node_modules', packageName, 'package.json')
     if (existsSync(manifestPath)) {
+      if (workspaceRoot && !isExistingPathInside(workspaceRoot, manifestPath)) return null
       try {
         const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as {
           bin?: string | Record<string, string>
@@ -284,21 +325,22 @@ function projectNodePackageBinPath(
         if (!relativeBin) return null
 
         const entry = join(dirname(manifestPath), relativeBin)
-        return existsSync(entry) ? realpathSync(entry) : null
+        if (!existsSync(entry)) return null
+        const canonicalEntry = realpathSync(entry)
+        return !workspaceRoot || isPathInsideRoot(canonicalPath(workspaceRoot), canonicalEntry)
+          ? canonicalEntry
+          : null
       } catch {
         return null
       }
     }
-
-    const parent = dirname(current)
-    if (parent === current) return null
-    current = parent
   }
+  return null
 }
 
-function extendPath(projectRoot: string): string {
+function extendPath(runtimeRoot: string, workspaceRoot?: string): string {
   const current = process.env['PATH'] ?? ''
-  return [...nodeBinDirectories(projectRoot), ...(current ? current.split(delimiter) : [])]
+  return [...nodeBinDirectories(runtimeRoot, workspaceRoot), ...(current ? current.split(delimiter) : [])]
     .filter((directory, index, directories) => directory && directories.indexOf(directory) === index)
     .join(delimiter)
 }
@@ -340,31 +382,106 @@ function fileIdentity(path: string): string {
   }
 }
 
+function isDirectory(path: string): boolean {
+  try {
+    return statSync(path).isDirectory()
+  } catch {
+    return false
+  }
+}
+
+function hasLocalProjectToolchain(
+  directory: string,
+  descriptor: WorkbenchLanguageServiceDescriptor,
+  workspaceRoot: string
+): boolean {
+  if (!descriptor.projectNodePackageBin) return false
+  const executable = process.platform === 'win32'
+    ? `${descriptor.projectNodePackageBin}.cmd`
+    : descriptor.projectNodePackageBin
+  const executableCandidate = join(directory, 'node_modules', '.bin', executable)
+  if (
+    existsSync(executableCandidate)
+    && isExistingPathInside(workspaceRoot, executableCandidate)
+  )
+    return true
+  const manifestPath = descriptor.packageName
+    ? join(directory, 'node_modules', descriptor.packageName, 'package.json')
+    : null
+  return !!descriptor.packageName
+    && !!manifestPath
+    && existsSync(manifestPath)
+    && isExistingPathInside(workspaceRoot, manifestPath)
+}
+
+function hasProjectRootMarker(
+  directory: string,
+  workspaceRoot: string,
+  descriptor: WorkbenchLanguageServiceDescriptor
+): boolean {
+  for (const marker of descriptor.projectRootMarkers ?? []) {
+    const markerPath = join(directory, marker)
+    if (!existsSync(markerPath)) continue
+    if (!isExistingPathInside(workspaceRoot, markerPath))
+      throw new AppError(
+        'PERMISSION',
+        `${descriptor.label} 项目根标记的真实路径超出工作区。`
+      )
+    return true
+  }
+  return false
+}
+
+/**
+ * Resolves the runtime root owned by an external language contribution without
+ * allowing its marker/toolchain search to leave the Workbench workspace.
+ */
+export function resolveExternalLspRuntimeRoot(
+  workspaceRoot: string,
+  documentPath: string,
+  descriptor: WorkbenchLanguageServiceDescriptor
+): string {
+  const boundary = canonicalPath(workspaceRoot)
+  const absoluteDocumentPath = canonicalPath(documentPath)
+  if (!isPathInsideRoot(boundary, absoluteDocumentPath))
+    throw new AppError('INVARIANT', `Language document escapes the workspace: ${documentPath}`)
+
+  const start = absoluteDocumentPath === boundary || isDirectory(absoluteDocumentPath)
+    ? absoluteDocumentPath
+    : dirname(absoluteDocumentPath)
+  for (const directory of ancestorDirectories(start, boundary)) {
+    if (hasProjectRootMarker(directory, boundary, descriptor)) return directory
+    if (hasLocalProjectToolchain(directory, descriptor, boundary)) return directory
+  }
+  return boundary
+}
+
 /**
  * A bounded identity for the executable plus project dependency metadata that
  * can change which compiler/extensions an external language server loads.
  * This intentionally fingerprints metadata, not dependency source trees.
  */
 export function externalLspRuntimeFingerprint(
-  projectRoot: string,
-  descriptor: WorkbenchLanguageServiceDescriptor
+  runtimeRoot: string,
+  descriptor: WorkbenchLanguageServiceDescriptor,
+  workspaceRoot?: string
 ): string {
-  const launch = launchFor(projectRoot, descriptor)
-  const pathValue = extendPath(projectRoot)
+  const launch = launchFor(runtimeRoot, descriptor, workspaceRoot)
+  const pathValue = extendPath(runtimeRoot, workspaceRoot)
   const executable = resolvedExecutablePath(launch.command, pathValue)
   const identities = [fileIdentity(executable)]
   for (const argument of launch.args) {
     if (isAbsolute(argument) || argument.includes('/') || argument.includes('\\'))
-      identities.push(fileIdentity(isAbsolute(argument) ? argument : join(projectRoot, argument)))
+      identities.push(fileIdentity(isAbsolute(argument) ? argument : join(runtimeRoot, argument)))
   }
 
-  let current = projectRoot
-  while (true) {
-    for (const name of ExternalLspDependencyFileNames)
+  const metadataNames = new Set([
+    ...ExternalLspDependencyFileNames,
+    ...(descriptor.projectRootMarkers ?? []),
+  ])
+  for (const current of ancestorDirectories(runtimeRoot, workspaceRoot)) {
+    for (const name of metadataNames)
       identities.push(fileIdentity(join(current, name)))
-    const parent = dirname(current)
-    if (parent === current) break
-    current = parent
   }
 
   return JSON.stringify({
@@ -380,8 +497,9 @@ function languageIdFor(descriptor: WorkbenchLanguageServiceDescriptor): string {
 }
 
 function launchFor(
-  projectRoot: string,
-  descriptor: WorkbenchLanguageServiceDescriptor
+  runtimeRoot: string,
+  descriptor: WorkbenchLanguageServiceDescriptor,
+  workspaceRoot?: string
 ): ExternalLspLaunch {
   if (descriptor.id === 'python') {
     try {
@@ -398,7 +516,12 @@ function launchFor(
   if (descriptor.projectNodePackageBin) {
     const packageName = descriptor.packageName
     const entry = packageName
-      ? projectNodePackageBinPath(projectRoot, packageName, descriptor.projectNodePackageBin)
+      ? projectNodePackageBinPath(
+        runtimeRoot,
+        packageName,
+        descriptor.projectNodePackageBin,
+        workspaceRoot
+      )
       : null
     if (entry)
       return {
@@ -417,10 +540,17 @@ function launchFor(
     }
   }
 
+  const executable = executablePath(runtimeRoot, descriptor.command ?? '', workspaceRoot)
   return {
-    command: executablePath(projectRoot, descriptor.command ?? ''),
+    command: executable.command,
     args: descriptor.args ?? [],
     electronRunAsNode: false,
+    ...(executable.rejectedProjectPath
+      ? {
+          unavailableMessage:
+            `${descriptor.label} 语言服务器不可用：项目命令的真实路径超出工作区。`,
+        }
+      : {}),
   }
 }
 
@@ -446,9 +576,10 @@ export class ExternalLspClient {
   private disposed = false
 
   public constructor(
-    private readonly projectRoot: string,
+    private readonly runtimeRoot: string,
     private readonly descriptor: WorkbenchLanguageServiceDescriptor,
-    private readonly requestTimeoutMs = DefaultRequestTimeoutMs
+    private readonly requestTimeoutMs = DefaultRequestTimeoutMs,
+    private readonly workspaceRoot?: string
   ) {}
 
   public accepts(path: string): boolean {
@@ -487,6 +618,30 @@ export class ExternalLspClient {
   public async save(path: string, content: string): Promise<void> {
     const document = await this.synchronize(path, content)
     this.notify('textDocument/didSave', { textDocument: { uri: document.uri }, text: content })
+  }
+
+  public close(path: string): void {
+    const directUri = URI.file(path).toString()
+    const uri = this.documents.has(directUri)
+      ? directUri
+      : [...this.documents.keys()].find((candidate) => {
+          try {
+            return canonicalPath(URI.parse(candidate).fsPath) === canonicalPath(path)
+          } catch {
+            return false
+          }
+        })
+    if (!uri) return
+    if (!this.documents.delete(uri)) return
+    this.diagnostics.delete(uri)
+    for (const waiter of this.diagnosticWaiters.get(uri) ?? []) waiter.resolve([])
+    this.diagnosticWaiters.delete(uri)
+    if (!this.process || this.disposed) return
+    try {
+      this.notify('textDocument/didClose', { textDocument: { uri } })
+    } catch {
+      // A concurrently exiting server is already losing all document state.
+    }
   }
 
   public async requestExtension(
@@ -736,6 +891,8 @@ export class ExternalLspClient {
   }
 
   private async initialize(): Promise<void> {
+    if (this.disposed)
+      throw new AppError('INVARIANT', `${this.descriptor.label} 语言服务器客户端已关闭。`)
     if (this.initializePromise) return this.initializePromise
     const attempt = this.startAndInitialize()
     this.initializePromise = attempt
@@ -753,12 +910,14 @@ export class ExternalLspClient {
   private async startAndInitialize(): Promise<void> {
     await this.processTermination
     this.processTermination = null
+    if (this.disposed)
+      throw new AppError('INVARIANT', `${this.descriptor.label} 语言服务器客户端已关闭。`)
     const command = this.descriptor.command
     if (!command)
       throw new AppError('INVARIANT', `${this.descriptor.label} 缺少语言服务器命令。`)
 
-    const launch = launchFor(this.projectRoot, this.descriptor)
-    const pathValue = extendPath(this.projectRoot)
+    const launch = launchFor(this.runtimeRoot, this.descriptor, this.workspaceRoot)
+    const pathValue = extendPath(this.runtimeRoot, this.workspaceRoot)
     if (launch.unavailableMessage)
       throw new AppError('INVARIANT', launch.unavailableMessage)
     if (!launch.electronRunAsNode && !executableExists(launch.command, pathValue)) {
@@ -771,7 +930,7 @@ export class ExternalLspClient {
       )
     }
     const child = spawn(launch.command, launch.args, {
-      cwd: this.projectRoot,
+      cwd: this.runtimeRoot,
       detached: shouldDetachExternalLspProcess(),
       env: {
         ...process.env,
@@ -803,7 +962,7 @@ export class ExternalLspClient {
 
     const result = await this.request('initialize', {
       processId: process.pid,
-      rootUri: URI.file(this.projectRoot).toString(),
+      rootUri: URI.file(this.runtimeRoot).toString(),
       workspaceFolders: [this.workspaceFolder()],
       capabilities: {
         // 声明什么就实现什么：既然 params 里传了 workspaceFolders，能力节就必须对齐，
@@ -846,8 +1005,8 @@ export class ExternalLspClient {
 
   private workspaceFolder(): { uri: string; name: string } {
     return {
-      uri: URI.file(this.projectRoot).toString(),
-      name: this.projectRoot.split(/[\\/]/u).at(-1) ?? 'project',
+      uri: URI.file(this.runtimeRoot).toString(),
+      name: this.runtimeRoot.split(/[\\/]/u).at(-1) ?? 'project',
     }
   }
 
@@ -1146,71 +1305,299 @@ export class ExternalLspManager {
   private readonly clients = new Map<string, {
     client: ExternalLspClient
     fingerprint: string
+    workspaceRoot: string
+    runtimeRoot: string
+    descriptor: WorkbenchLanguageServiceDescriptor
   }>()
-  private readonly refreshes = new Map<string, Promise<ExternalLspClient>>()
+  private readonly refreshes = new Map<string, {
+    promise: Promise<ExternalLspClient>
+    workspaceRoot: string
+  }>()
+  private readonly documentOwners = new Map<string, {
+    clientKey: string
+    workspaceRoot: string
+    documentPath: string
+    descriptor: WorkbenchLanguageServiceDescriptor
+  }>()
+  private readonly clientOwners = new Map<string, Set<string>>()
+  private readonly workspaceGenerations = new Map<string, number>()
+  private readonly workspaceInvalidations = new Map<string, Promise<void>>()
+  private disposed = false
+  private disposal: Promise<void> | null = null
 
   public async client(
-    projectRoot: string,
-    descriptor: WorkbenchLanguageServiceDescriptor
+    workspaceRoot: string,
+    descriptor: WorkbenchLanguageServiceDescriptor,
+    documentPath = workspaceRoot
   ): Promise<ExternalLspClient> {
-    const key = `${projectRoot}\0${descriptor.id}`
-    const fingerprint = externalLspRuntimeFingerprint(projectRoot, descriptor)
+    const boundary = canonicalPath(workspaceRoot)
+    if (this.disposed)
+      throw new AppError('INVARIANT', '外部语言服务管理器已关闭。')
+    const generation = this.workspaceGeneration(boundary)
+    await this.waitForWorkspaceInvalidation(boundary)
+    this.assertClientRequestActive(boundary, generation)
+    const canonicalDocumentPath = canonicalPath(documentPath)
+    const runtimeRoot = resolveExternalLspRuntimeRoot(boundary, canonicalDocumentPath, descriptor)
+    const key = JSON.stringify([boundary, runtimeRoot, descriptor.id])
+    const ownerKey = JSON.stringify([boundary, descriptor.id, canonicalDocumentPath])
+    await this.reconcileOwnership(boundary)
+    this.assertClientRequestActive(boundary, generation)
+    const fingerprint = externalLspRuntimeFingerprint(runtimeRoot, descriptor, boundary)
     const current = this.clients.get(key)
-    if (current?.fingerprint === fingerprint) return current.client
+    if (current?.fingerprint === fingerprint) {
+      await this.claimDocument(
+        ownerKey,
+        key,
+        boundary,
+        canonicalDocumentPath,
+        descriptor
+      )
+      this.assertClientRequestActive(boundary, generation)
+      return current.client
+    }
 
     const activeRefresh = this.refreshes.get(key)
-    if (activeRefresh) return activeRefresh
+    if (activeRefresh) {
+      const client = await activeRefresh.promise
+      this.assertClientRequestActive(boundary, generation)
+      await this.claimDocument(
+        ownerKey,
+        key,
+        boundary,
+        canonicalDocumentPath,
+        descriptor
+      )
+      this.assertClientRequestActive(boundary, generation)
+      return client
+    }
 
     const refresh = (async (): Promise<ExternalLspClient> => {
       if (current) {
         this.clients.delete(key)
         await current.client.dispose()
       }
-      const client = new ExternalLspClient(projectRoot, descriptor)
+      this.assertClientRequestActive(boundary, generation)
+      const client = new ExternalLspClient(
+        runtimeRoot,
+        descriptor,
+        DefaultRequestTimeoutMs,
+        boundary
+      )
       this.clients.set(key, {
         client,
-        fingerprint: externalLspRuntimeFingerprint(projectRoot, descriptor),
+        fingerprint: externalLspRuntimeFingerprint(runtimeRoot, descriptor, boundary),
+        workspaceRoot: boundary,
+        runtimeRoot,
+        descriptor,
       })
       return client
     })()
-    this.refreshes.set(key, refresh)
+    this.refreshes.set(key, { promise: refresh, workspaceRoot: boundary })
     try {
-      return await refresh
+      const client = await refresh
+      this.assertClientRequestActive(boundary, generation)
+      await this.claimDocument(
+        ownerKey,
+        key,
+        boundary,
+        canonicalDocumentPath,
+        descriptor
+      )
+      this.assertClientRequestActive(boundary, generation)
+      return client
     } finally {
-      if (this.refreshes.get(key) === refresh) this.refreshes.delete(key)
+      if (this.refreshes.get(key)?.promise === refresh) this.refreshes.delete(key)
     }
   }
 
-  public async save(projectRoot: string, path: string, content: string): Promise<void> {
-    const clients = [...this.clients.entries()]
-      .filter(([key]) => key.startsWith(`${projectRoot}\0`))
-      .map(([, managed]) => managed.client)
-    await Promise.all(clients.filter((client) => client.accepts(path)).map((client) => client.save(path, content)))
+  public async save(workspaceRoot: string, path: string, content: string): Promise<void> {
+    await this.reconcileOwnership(canonicalPath(workspaceRoot))
+    const clients = this.closestClientsForPath(workspaceRoot, path)
+      .filter(({ client }) => client.accepts(path))
+      .map(({ client }) => client)
+    await Promise.all(clients.map((client) => client.save(path, content)))
   }
 
-  public async filesChanged(projectRoot: string, paths: readonly string[]): Promise<void> {
-    const clients = [...this.clients.entries()]
-      .filter(([key]) => key.startsWith(`${projectRoot}\0`))
-      .map(([, managed]) => managed.client)
-    await Promise.all(clients.map((client) => client.filesChanged(paths)))
+  public async filesChanged(workspaceRoot: string, paths: readonly string[]): Promise<void> {
+    await this.reconcileOwnership(canonicalPath(workspaceRoot))
+    const changes = new Map<ExternalLspClient, Set<string>>()
+    for (const path of paths) {
+      for (const { client } of this.closestClientsForPath(workspaceRoot, path)) {
+        const clientPaths = changes.get(client) ?? new Set<string>()
+        clientPaths.add(path)
+        changes.set(client, clientPaths)
+      }
+    }
+    await Promise.all([...changes].map(([client, clientPaths]) =>
+      client.filesChanged([...clientPaths])
+    ))
   }
 
-  public async invalidate(projectRoot: string): Promise<void> {
-    const prefix = `${projectRoot}\0`
+  public invalidate(workspaceRoot: string): Promise<void> {
+    const boundary = canonicalPath(workspaceRoot)
+    if (this.disposed) return this.disposal ?? Promise.resolve()
+    const activeInvalidation = this.workspaceInvalidations.get(boundary)
+    if (activeInvalidation) return activeInvalidation
+    this.workspaceGenerations.set(boundary, this.workspaceGeneration(boundary) + 1)
+    const invalidation = this.invalidateWorkspace(boundary).finally(() => {
+      if (this.workspaceInvalidations.get(boundary) === invalidation)
+        this.workspaceInvalidations.delete(boundary)
+    })
+    this.workspaceInvalidations.set(boundary, invalidation)
+    return invalidation
+  }
+
+  private async invalidateWorkspace(boundary: string): Promise<void> {
     const activeRefreshes = [...this.refreshes.entries()]
-      .filter(([key]) => key.startsWith(prefix))
-      .map(([, refresh]) => refresh)
+      .filter(([, refresh]) => refresh.workspaceRoot === boundary)
+      .map(([, refresh]) => refresh.promise)
     await Promise.allSettled(activeRefreshes)
 
-    const entries = [...this.clients.entries()].filter(([key]) => key.startsWith(prefix))
+    const entries = [...this.clients.entries()]
+      .filter(([, managed]) => managed.workspaceRoot === boundary)
     for (const [key] of entries) this.clients.delete(key)
+    for (const [ownerKey, owner] of this.documentOwners) {
+      if (owner.workspaceRoot === boundary) this.documentOwners.delete(ownerKey)
+    }
+    for (const [key] of entries) this.clientOwners.delete(key)
     await Promise.all(entries.map(([, managed]) => managed.client.dispose()))
   }
 
-  public async dispose(): Promise<void> {
-    await Promise.allSettled(this.refreshes.values())
+  public dispose(): Promise<void> {
+    if (this.disposal) return this.disposal
+    this.disposed = true
+    const disposal = this.disposeAll()
+    this.disposal = disposal
+    return disposal
+  }
+
+  private async disposeAll(): Promise<void> {
+    await Promise.allSettled(this.workspaceInvalidations.values())
+    await Promise.allSettled([...this.refreshes.values()].map(({ promise }) => promise))
     const clients = [...this.clients.values()].map((managed) => managed.client)
     this.clients.clear()
+    this.documentOwners.clear()
+    this.clientOwners.clear()
     await Promise.all(clients.map((client) => client.dispose()))
+  }
+
+  private async waitForWorkspaceInvalidation(workspaceRoot: string): Promise<void> {
+    while (true) {
+      const invalidation = this.workspaceInvalidations.get(workspaceRoot)
+      if (!invalidation) return
+      await invalidation
+    }
+  }
+
+  private workspaceGeneration(workspaceRoot: string): number {
+    return this.workspaceGenerations.get(workspaceRoot) ?? 0
+  }
+
+  private assertClientRequestActive(workspaceRoot: string, generation: number): void {
+    if (this.disposed)
+      throw new AppError('INVARIANT', '外部语言服务管理器已关闭。')
+    if (this.workspaceGeneration(workspaceRoot) !== generation)
+      throw new AppError('INVARIANT', '外部语言服务请求所属工作区已失效。')
+  }
+
+  private closestClientsForPath(
+    workspaceRoot: string,
+    path: string
+  ): Array<{ client: ExternalLspClient; runtimeRoot: string }> {
+    const boundary = canonicalPath(workspaceRoot)
+    const canonicalDocumentPath = canonicalPath(path)
+    const closest = new Map<string, {
+      client: ExternalLspClient
+      runtimeRoot: string
+    }>()
+    for (const managed of this.clients.values()) {
+      if (
+        managed.workspaceRoot !== boundary
+        || !isPathInsideRoot(managed.runtimeRoot, canonicalDocumentPath)
+      )
+        continue
+      if (
+        resolveExternalLspRuntimeRoot(boundary, canonicalDocumentPath, managed.descriptor)
+        !== managed.runtimeRoot
+      )
+        continue
+      const current = closest.get(managed.descriptor.id)
+      if (!current || managed.runtimeRoot.length > current.runtimeRoot.length)
+        closest.set(managed.descriptor.id, managed)
+    }
+    return [...closest.values()]
+  }
+
+  private async claimDocument(
+    ownerKey: string,
+    clientKey: string,
+    workspaceRoot: string,
+    documentPath: string,
+    descriptor: WorkbenchLanguageServiceDescriptor
+  ): Promise<void> {
+    const previous = this.documentOwners.get(ownerKey)?.clientKey
+    if (previous === clientKey) return
+
+    this.documentOwners.set(ownerKey, {
+      clientKey,
+      workspaceRoot,
+      documentPath,
+      descriptor,
+    })
+    const owners = this.clientOwners.get(clientKey) ?? new Set<string>()
+    owners.add(ownerKey)
+    this.clientOwners.set(clientKey, owners)
+    if (!previous) return
+
+    const previousOwners = this.clientOwners.get(previous)
+    previousOwners?.delete(ownerKey)
+    this.clients.get(previous)?.client.close(documentPath)
+    if (previousOwners && previousOwners.size > 0) return
+    this.clientOwners.delete(previous)
+    await this.disposeClient(previous)
+  }
+
+  private async reconcileOwnership(workspaceRoot: string): Promise<void> {
+    const emptyClients = new Set<string>()
+    for (const [ownerKey, owner] of this.documentOwners) {
+      if (owner.workspaceRoot !== workspaceRoot) continue
+      let expectedClientKey: string | null = null
+      try {
+        const runtimeRoot = resolveExternalLspRuntimeRoot(
+          workspaceRoot,
+          owner.documentPath,
+          owner.descriptor
+        )
+        expectedClientKey = JSON.stringify([workspaceRoot, runtimeRoot, owner.descriptor.id])
+      } catch {
+        // A path that now resolves outside the workspace loses its runtime ownership.
+      }
+      if (expectedClientKey === owner.clientKey) continue
+
+      this.documentOwners.delete(ownerKey)
+      const owners = this.clientOwners.get(owner.clientKey)
+      owners?.delete(ownerKey)
+      this.clients.get(owner.clientKey)?.client.close(owner.documentPath)
+      if (!owners || owners.size === 0) {
+        this.clientOwners.delete(owner.clientKey)
+        emptyClients.add(owner.clientKey)
+      }
+    }
+    await Promise.all([...emptyClients].map((key) => this.disposeClient(key)))
+  }
+
+  private async disposeClient(key: string): Promise<void> {
+    // Disposal is an instance-level decision even though ownership is tracked by
+    // runtime key. A fingerprint refresh temporarily removes the old instance
+    // from `clients`, then installs its replacement under the same key. Never
+    // let a cleanup that observed the old/absent instance dispose that replacement.
+    const expectedClient = this.clients.get(key)?.client
+    const refresh = this.refreshes.get(key)?.promise
+    if (refresh) await Promise.allSettled([refresh])
+    if ((this.clientOwners.get(key)?.size ?? 0) > 0) return
+    const managed = this.clients.get(key)
+    if (!managed || managed.client !== expectedClient) return
+    this.clients.delete(key)
+    await managed.client.dispose()
   }
 }

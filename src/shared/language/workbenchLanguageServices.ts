@@ -21,6 +21,8 @@ export interface WorkbenchLanguageServiceDescriptor {
   command?: string
   /** Project-local package bin executed with Workbench's own Node-compatible runtime. */
   projectNodePackageBin?: string
+  /** Files that establish the nearest runtime root for a document inside a workspace. */
+  projectRootMarkers?: readonly string[]
   args?: string[]
   documentLanguageId?: string
   protocol?: WorkbenchLanguageServerProtocolContract

@@ -17,6 +17,7 @@ export const VelarWorkbenchLanguageService = {
   packageName: '@velarscript/cli',
   command: 'velar',
   projectNodePackageBin: 'velar',
+  projectRootMarkers: ['velar.json'],
   args: ['lsp'],
   documentLanguageId: 'velar',
   hover: {

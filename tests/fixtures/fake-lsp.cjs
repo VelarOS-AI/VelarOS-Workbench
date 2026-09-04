@@ -1,5 +1,10 @@
 let buffer = Buffer.alloc(0)
 let initialized = false
+let initializeRootUri = null
+let initializeWorkspaceFolders = []
+const savedUris = []
+const closedUris = []
+const watchedUris = []
 const mode = process.argv[2]
 
 function send(message) {
@@ -10,6 +15,8 @@ function send(message) {
 function handle(message) {
   switch (message.method) {
     case 'initialize':
+      initializeRootUri = message.params.rootUri
+      initializeWorkspaceFolders = message.params.workspaceFolders ?? []
       if (mode === 'oversized') {
         process.stdout.write(`Content-Length: ${16 * 1024 * 1024 + 1}\r\n\r\n`)
         break
@@ -63,6 +70,15 @@ function handle(message) {
       })
       break
     }
+    case 'textDocument/didSave':
+      savedUris.push(message.params.textDocument.uri)
+      break
+    case 'textDocument/didClose':
+      closedUris.push(message.params.textDocument.uri)
+      break
+    case 'workspace/didChangeWatchedFiles':
+      watchedUris.push(...message.params.changes.map((change) => change.uri))
+      break
     case 'textDocument/completion':
       if (mode === 'hang') break
       send({
@@ -74,7 +90,23 @@ function handle(message) {
                 label: `lookProperty${String(index).padStart(3, '0')}`,
                 kind: 10,
               }))
-            : [{ label: 'component', kind: 14 }],
+            : [{
+                label: 'component',
+                kind: 14,
+                ...(mode === 'runtime-root'
+                  ? {
+                      detail: JSON.stringify({
+                        cwd: process.cwd(),
+                        rootUri: initializeRootUri,
+                        workspaceFolders: initializeWorkspaceFolders,
+                        pid: process.pid,
+                        savedUris,
+                        closedUris,
+                        watchedUris,
+                      }),
+                    }
+                  : {}),
+              }],
         },
       })
       break

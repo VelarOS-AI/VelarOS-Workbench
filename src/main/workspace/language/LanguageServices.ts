@@ -69,6 +69,7 @@ import {
   type ExternalLspSignatureHelp,
   type ExternalLspSymbolInformation,
   type ExternalLspWorkspaceEdit,
+  resolveExternalLspRuntimeRoot,
 } from './ExternalLspClient'
 import {
   clearWorkbenchProjectEslintCache,
@@ -1294,13 +1295,16 @@ class WorkbenchLanguageServices {
     const descriptor = resolveBuiltinWorkbenchLanguageService(this.resolveToken(request))
     if (!descriptor || !this.isExternalRuntime(descriptor.runtime))
       throw new Error(`Unsupported external language service for ${request.path}`)
-    const client = await this.externalLsp.client(projectRoot, descriptor)
+    const absolutePath = this.resolveAbsoluteProjectPath(projectRoot, request.path)
+    const runtimeRoot = resolveExternalLspRuntimeRoot(projectRoot, absolutePath, descriptor)
+    const client = await this.externalLsp.client(projectRoot, descriptor, absolutePath)
     for (const openFile of request.openFiles ?? []) {
       const absoluteOpenPath = this.resolveAbsoluteProjectPath(projectRoot, openFile.path)
       if (!client.accepts(absoluteOpenPath)) continue
+      if (resolveExternalLspRuntimeRoot(projectRoot, absoluteOpenPath, descriptor) !== runtimeRoot)
+        continue
       await client.synchronize(absoluteOpenPath, openFile.content)
     }
-    const absolutePath = this.resolveAbsoluteProjectPath(projectRoot, request.path)
     return {
       client,
       absolutePath,

@@ -1,8 +1,19 @@
 import assert from 'node:assert/strict'
-import { chmod, mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises'
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rename,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { isAbsolute, join, relative, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 import { highlightingFor, syntaxTree } from '@codemirror/language'
 import { EditorState } from '@codemirror/state'
@@ -13,6 +24,7 @@ import * as ts from 'typescript'
 import {
   ExternalLspClient,
   ExternalLspManager,
+  resolveExternalLspRuntimeRoot,
 } from '../src/main/workspace/language/ExternalLspClient'
 import {
   buildExternalDefinitionPreview,
@@ -1328,6 +1340,502 @@ void describe('focused Workbench language surface', () => {
 })
 
 void describe('shared external LSP client', () => {
+  void test('isolates nested runtime roots and their save/change lifecycle inside one workspace', async () => {
+    const fixture = fileURLToPath(new URL('./fixtures/fake-lsp.cjs', import.meta.url))
+    const fixtureRoot = await mkdtemp(join(tmpdir(), 'workbench-nested-lsp-'))
+    const workspaceRoot = join(fixtureRoot, 'workspace')
+    const firstRoot = join(workspaceRoot, 'apps', 'first')
+    const secondRoot = join(workspaceRoot, 'apps', 'second')
+    const firstPath = join(firstRoot, 'src', 'main.nested')
+    const secondPath = join(secondRoot, 'src', 'main.nested')
+    await mkdir(dirname(firstPath), { recursive: true })
+    await mkdir(dirname(secondPath), { recursive: true })
+    await writeFile(join(fixtureRoot, 'runtime.json'), '{}\n', 'utf8')
+    await writeFile(join(firstRoot, 'runtime.json'), '{}\n', 'utf8')
+    await writeFile(join(secondRoot, 'runtime.json'), '{}\n', 'utf8')
+
+    const descriptor = {
+      id: 'nested-fixture-language',
+      label: 'Nested Fixture Language',
+      installKind: 'builtin' as const,
+      runtime: 'lsp-server' as const,
+      extensions: ['nested'],
+      languages: ['nested-fixture-language'],
+      command: process.execPath,
+      args: [fixture, 'runtime-root'],
+      projectRootMarkers: ['runtime.json'],
+      documentLanguageId: 'nested-fixture-language',
+    }
+    const manager = new ExternalLspManager()
+    const probe = async (client: ExternalLspClient, path: string): Promise<{
+      cwd: string
+      rootUri: string
+      workspaceFolders: Array<{ uri: string; name: string }>
+      pid: number
+      savedUris: string[]
+      watchedUris: string[]
+    }> => {
+      const detail = (await client.completion(path, 'comp', { line: 0, character: 4 }))[0]?.detail
+      assert.ok(detail)
+      return JSON.parse(detail) as {
+        cwd: string
+        rootUri: string
+        workspaceFolders: Array<{ uri: string; name: string }>
+        pid: number
+        savedUris: string[]
+        watchedUris: string[]
+      }
+    }
+
+    try {
+      assert.equal(
+        resolveExternalLspRuntimeRoot(workspaceRoot, firstPath, descriptor),
+        await realpath(firstRoot)
+      )
+      assert.equal(
+        resolveExternalLspRuntimeRoot(workspaceRoot, join(workspaceRoot, 'loose', 'main.nested'), descriptor),
+        await realpath(workspaceRoot),
+        'a marker above the workspace boundary must not become the runtime root'
+      )
+      const dotDotOwnedRoot = join(workspaceRoot, '..owned')
+      await mkdir(dotDotOwnedRoot, { recursive: true })
+      await writeFile(join(dotDotOwnedRoot, 'runtime.json'), '{}\n', 'utf8')
+      assert.equal(
+        resolveExternalLspRuntimeRoot(
+          workspaceRoot,
+          join(dotDotOwnedRoot, 'src', 'main.nested'),
+          descriptor
+        ),
+        await realpath(dotDotOwnedRoot),
+        'a legitimate directory beginning with two dots remains inside the workspace'
+      )
+      const escapedRoot = join(workspaceRoot, 'escaped-runtime')
+      await symlink(fixtureRoot, escapedRoot, process.platform === 'win32' ? 'junction' : 'dir')
+      assert.throws(
+        () => resolveExternalLspRuntimeRoot(
+          workspaceRoot,
+          join(escapedRoot, 'main.nested'),
+          descriptor
+        ),
+        /escapes the workspace/u
+      )
+      const escapedMarkerRoot = join(workspaceRoot, 'escaped-marker')
+      await mkdir(escapedMarkerRoot, { recursive: true })
+      await symlink(
+        fixtureRoot,
+        join(escapedMarkerRoot, 'runtime.json'),
+        process.platform === 'win32' ? 'junction' : 'dir'
+      )
+      assert.throws(
+        () => resolveExternalLspRuntimeRoot(
+          workspaceRoot,
+          join(escapedMarkerRoot, 'main.nested'),
+          descriptor
+        ),
+        /项目根标记的真实路径超出工作区/u
+      )
+      const toolchainRoot = join(workspaceRoot, 'tools', 'owned')
+      const toolchainPackage = join(toolchainRoot, 'node_modules', '@fixture', 'nested-lsp')
+      await mkdir(toolchainPackage, { recursive: true })
+      await writeFile(join(toolchainPackage, 'package.json'), '{"name":"@fixture/nested-lsp"}\n', 'utf8')
+      assert.equal(
+        resolveExternalLspRuntimeRoot(
+          workspaceRoot,
+          join(toolchainRoot, 'src', 'main.nested'),
+          {
+            ...descriptor,
+            packageName: '@fixture/nested-lsp',
+            projectNodePackageBin: 'nested-lsp',
+            projectRootMarkers: [],
+          }
+        ),
+        await realpath(toolchainRoot)
+      )
+
+      const first = await manager.client(workspaceRoot, descriptor, firstPath)
+      const second = await manager.client(workspaceRoot, descriptor, secondPath)
+      assert.notEqual(first, second)
+
+      const firstInitial = await probe(first, firstPath)
+      const secondInitial = await probe(second, secondPath)
+      assert.equal(await realpath(firstInitial.cwd), await realpath(firstRoot))
+      assert.equal(firstInitial.rootUri, pathToFileURL(await realpath(firstRoot)).toString())
+      assert.deepEqual(firstInitial.workspaceFolders, [{
+        uri: pathToFileURL(await realpath(firstRoot)).toString(),
+        name: 'first',
+      }])
+      assert.equal(await realpath(secondInitial.cwd), await realpath(secondRoot))
+      assert.equal(secondInitial.rootUri, pathToFileURL(await realpath(secondRoot)).toString())
+
+      await manager.save(workspaceRoot, firstPath, 'component First:\n')
+      await manager.filesChanged(workspaceRoot, [firstPath, secondPath])
+      const firstAfterChanges = await probe(first, firstPath)
+      const secondAfterChanges = await probe(second, secondPath)
+      assert.deepEqual(firstAfterChanges.savedUris, [pathToFileURL(firstPath).toString()])
+      assert.deepEqual(secondAfterChanges.savedUris, [])
+      assert.deepEqual(firstAfterChanges.watchedUris, [pathToFileURL(firstPath).toString()])
+      assert.deepEqual(secondAfterChanges.watchedUris, [pathToFileURL(secondPath).toString()])
+
+      await manager.invalidate(workspaceRoot)
+      const restarted = await manager.client(workspaceRoot, descriptor, firstPath)
+      assert.notEqual(restarted, first)
+      assert.notEqual((await probe(restarted, firstPath)).pid, firstInitial.pid)
+    } finally {
+      await manager.dispose()
+      await rm(fixtureRoot, { recursive: true, force: true })
+    }
+  })
+
+  void test('reclaims obsolete nested clients when runtime ownership moves', async () => {
+    const fixture = fileURLToPath(new URL('./fixtures/fake-lsp.cjs', import.meta.url))
+    const fixtureRoot = await mkdtemp(join(tmpdir(), 'workbench-moving-lsp-root-'))
+    const workspaceRoot = join(fixtureRoot, 'workspace')
+    const nestedRoot = join(workspaceRoot, 'app')
+    const nestedPath = join(nestedRoot, 'src', 'main.moving')
+    const siblingPath = join(workspaceRoot, 'shared', 'main.moving')
+    const markerPath = join(nestedRoot, 'runtime.json')
+    const movedMarkerPath = join(nestedRoot, 'runtime.moved.json')
+    await mkdir(dirname(nestedPath), { recursive: true })
+    await mkdir(dirname(siblingPath), { recursive: true })
+    const descriptor = {
+      id: 'moving-fixture-language',
+      label: 'Moving Fixture Language',
+      installKind: 'builtin' as const,
+      runtime: 'lsp-server' as const,
+      extensions: ['moving'],
+      languages: ['moving-fixture-language'],
+      command: process.execPath,
+      args: [fixture, 'runtime-root'],
+      projectRootMarkers: ['runtime.json'],
+      documentLanguageId: 'moving-fixture-language',
+    }
+    const manager = new ExternalLspManager()
+    const probeFor = async (client: ExternalLspClient, path: string): Promise<{
+      pid: number
+      closedUris: string[]
+    }> => {
+      const detail = (await client.completion(path, 'comp', { line: 0, character: 4 }))[0]?.detail
+      assert.ok(detail)
+      return JSON.parse(detail) as { pid: number; closedUris: string[] }
+    }
+    const pidFor = async (client: ExternalLspClient, path: string): Promise<number> =>
+      (await probeFor(client, path)).pid
+    const isRunning = (pid: number): boolean => {
+      try {
+        process.kill(pid, 0)
+        return true
+      } catch {
+        return false
+      }
+    }
+
+    try {
+      const workspaceClient = await manager.client(workspaceRoot, descriptor, nestedPath)
+      assert.equal(
+        await manager.client(workspaceRoot, descriptor, siblingPath),
+        workspaceClient
+      )
+      const workspacePid = await pidFor(workspaceClient, nestedPath)
+
+      await writeFile(markerPath, '{}\n', 'utf8')
+      const firstNestedClient = await manager.client(workspaceRoot, descriptor, nestedPath)
+      const firstNestedPid = await pidFor(firstNestedClient, nestedPath)
+      assert.notEqual(firstNestedClient, workspaceClient)
+      assert.equal(isRunning(workspacePid), true, 'the sibling document still owns the root client')
+      assert.deepEqual(
+        (await probeFor(workspaceClient, siblingPath)).closedUris,
+        [pathToFileURL(nestedPath).toString()],
+        'moving a document to its nested runtime closes it in the shared root runtime'
+      )
+
+      await rename(markerPath, movedMarkerPath)
+      await manager.filesChanged(workspaceRoot, [markerPath, movedMarkerPath])
+      assert.equal(isRunning(firstNestedPid), false, 'renaming the marker releases the nested client')
+      assert.equal(
+        await manager.client(workspaceRoot, descriptor, nestedPath),
+        workspaceClient
+      )
+
+      await rename(movedMarkerPath, markerPath)
+      const secondNestedClient = await manager.client(workspaceRoot, descriptor, nestedPath)
+      const secondNestedPid = await pidFor(secondNestedClient, nestedPath)
+      assert.notEqual(secondNestedClient, firstNestedClient)
+
+      await rm(markerPath)
+      await manager.filesChanged(workspaceRoot, [markerPath])
+      assert.equal(isRunning(secondNestedPid), false, 'deleting the marker releases the nested client')
+      assert.equal(
+        await manager.client(workspaceRoot, descriptor, nestedPath),
+        workspaceClient
+      )
+
+      const toolchainRoot = join(workspaceRoot, 'toolchain-owned')
+      const toolchainDocument = join(toolchainRoot, 'src', 'main.tool-moving')
+      const toolchainPackage = join(toolchainRoot, 'node_modules', '@fixture', 'moving-lsp')
+      await mkdir(dirname(toolchainDocument), { recursive: true })
+      await mkdir(toolchainPackage, { recursive: true })
+      await writeFile(join(toolchainPackage, 'package.json'), JSON.stringify({
+        name: '@fixture/moving-lsp',
+        bin: { 'moving-lsp': './server.cjs' },
+      }), 'utf8')
+      await writeFile(join(toolchainPackage, 'server.cjs'), await readFile(fixture), 'utf8')
+      const toolchainDescriptor = {
+        ...descriptor,
+        id: 'moving-toolchain-fixture-language',
+        extensions: ['tool-moving'],
+        languages: ['moving-toolchain-fixture-language'],
+        packageName: '@fixture/moving-lsp',
+        command: 'moving-lsp',
+        args: ['runtime-root'],
+        projectNodePackageBin: 'moving-lsp',
+        projectRootMarkers: [],
+        documentLanguageId: 'moving-toolchain-fixture-language',
+      }
+      const toolchainClient = await manager.client(
+        workspaceRoot,
+        toolchainDescriptor,
+        toolchainDocument
+      )
+      const toolchainPid = await pidFor(toolchainClient, toolchainDocument)
+      await rm(toolchainPackage, { recursive: true, force: true })
+      await manager.filesChanged(workspaceRoot, [join(toolchainPackage, 'package.json')])
+      assert.equal(isRunning(toolchainPid), false, 'deleting the toolchain releases its client')
+      assert.notEqual(
+        await manager.client(workspaceRoot, toolchainDescriptor, toolchainDocument),
+        toolchainClient
+      )
+    } finally {
+      await manager.dispose()
+      await rm(fixtureRoot, { recursive: true, force: true })
+    }
+  })
+
+  void test('does not resurrect pending clients across manager disposal or workspace invalidation', async () => {
+    const fixture = fileURLToPath(new URL('./fixtures/fake-lsp.cjs', import.meta.url))
+    const fixtureRoot = await mkdtemp(join(tmpdir(), 'workbench-lsp-manager-race-'))
+    const workspaceRoot = join(fixtureRoot, 'workspace')
+    const documentPath = join(workspaceRoot, 'src', 'main.racing')
+    await mkdir(dirname(documentPath), { recursive: true })
+    const descriptor = {
+      id: 'racing-fixture-language',
+      label: 'Racing Fixture Language',
+      installKind: 'builtin' as const,
+      runtime: 'lsp-server' as const,
+      extensions: ['racing'],
+      languages: ['racing-fixture-language'],
+      command: process.execPath,
+      args: [fixture],
+      documentLanguageId: 'racing-fixture-language',
+    }
+
+    const disposedManager = new ExternalLspManager()
+    const pendingDisposalClient = disposedManager.client(
+      workspaceRoot,
+      descriptor,
+      documentPath
+    )
+    const disposalRejection = assert.rejects(pendingDisposalClient, /管理器已关闭/u)
+    await disposedManager.dispose()
+    await disposalRejection
+    await assert.rejects(
+      disposedManager.client(workspaceRoot, descriptor, documentPath),
+      /管理器已关闭/u
+    )
+
+    const invalidatedManager = new ExternalLspManager()
+    try {
+      const pendingInvalidationClient = invalidatedManager.client(
+        workspaceRoot,
+        descriptor,
+        documentPath
+      )
+      const invalidationRejection = assert.rejects(
+        pendingInvalidationClient,
+        /工作区已失效/u
+      )
+      await invalidatedManager.invalidate(workspaceRoot)
+      await invalidationRejection
+
+      const freshClient = await invalidatedManager.client(workspaceRoot, descriptor, documentPath)
+      assert.equal(
+        (await freshClient.completion(documentPath, 'comp', { line: 0, character: 4 }))[0]?.label,
+        'component'
+      )
+    } finally {
+      await invalidatedManager.dispose()
+      await rm(fixtureRoot, { recursive: true, force: true })
+    }
+  })
+
+  void test('keeps a refreshed client when ownership is reclaimed while reconciliation waits', async () => {
+    const fixture = fileURLToPath(new URL('./fixtures/fake-lsp.cjs', import.meta.url))
+    const fixtureRoot = await mkdtemp(join(tmpdir(), 'workbench-lsp-refresh-reconcile-race-'))
+    const workspaceRoot = join(fixtureRoot, 'workspace')
+    const movingDocument = join(workspaceRoot, 'moving', 'main.refresh-race')
+    const stableDocument = join(workspaceRoot, 'stable', 'main.refresh-race')
+    const markerPath = join(dirname(movingDocument), 'runtime.json')
+    const packagePath = join(workspaceRoot, 'package.json')
+    await mkdir(dirname(movingDocument), { recursive: true })
+    await mkdir(dirname(stableDocument), { recursive: true })
+    await writeFile(packagePath, '{"dependencies":{}}\n', 'utf8')
+    const descriptor = {
+      id: 'refresh-reconcile-race-fixture-language',
+      label: 'Refresh Reconcile Race Fixture Language',
+      installKind: 'builtin' as const,
+      runtime: 'lsp-server' as const,
+      extensions: ['refresh-race'],
+      languages: ['refresh-reconcile-race-fixture-language'],
+      command: process.execPath,
+      args: [fixture],
+      projectRootMarkers: ['runtime.json'],
+      documentLanguageId: 'refresh-reconcile-race-fixture-language',
+    }
+    const manager = new ExternalLspManager()
+    let releaseOldClient = (): void => undefined
+
+    try {
+      const first = await manager.client(workspaceRoot, descriptor, movingDocument)
+      assert.equal(
+        (await first.completion(
+          movingDocument,
+          'comp',
+          { line: 0, character: 4 }
+        ))[0]?.label,
+        'component'
+      )
+
+      let markOldDisposeStarted = (): void => undefined
+      const oldDisposeStarted = new Promise<void>((resolveStarted) => {
+        markOldDisposeStarted = resolveStarted
+      })
+      const oldDisposeReleased = new Promise<void>((resolveReleased) => {
+        releaseOldClient = resolveReleased
+      })
+      const originalDispose = first.dispose.bind(first)
+      first.dispose = async (): Promise<void> => {
+        markOldDisposeStarted()
+        await oldDisposeReleased
+        await originalDispose()
+      }
+
+      await writeFile(
+        packagePath,
+        '{"dependencies":{"@velarscript-labs/refresh-race":"0.1.0"}}\n',
+        'utf8'
+      )
+      const pendingRefresh = manager.client(workspaceRoot, descriptor, stableDocument)
+      await oldDisposeStarted
+
+      await writeFile(markerPath, '{}\n', 'utf8')
+      const pendingReconciliation = manager.filesChanged(workspaceRoot, [markerPath])
+      await new Promise<void>((resolveTurn) => setImmediate(resolveTurn))
+      releaseOldClient()
+
+      const refreshed = await pendingRefresh
+      await pendingReconciliation
+      assert.notEqual(refreshed, first)
+      assert.equal(
+        (await refreshed.completion(
+          stableDocument,
+          'comp',
+          { line: 0, character: 4 }
+        ))[0]?.label,
+        'component',
+        'reconciliation must not dispose the replacement after its key regains an owner'
+      )
+      assert.equal(
+        await manager.client(workspaceRoot, descriptor, stableDocument),
+        refreshed,
+        'the live replacement remains registered under the refreshed runtime key'
+      )
+    } finally {
+      releaseOldClient()
+      await manager.dispose()
+      await rm(fixtureRoot, { recursive: true, force: true })
+    }
+  })
+
+  void test('rejects project-local language bins whose real path leaves the workspace', async () => {
+    const fixture = fileURLToPath(new URL('./fixtures/fake-lsp.cjs', import.meta.url))
+    const fixtureRoot = await mkdtemp(join(tmpdir(), 'workbench-escaped-lsp-bin-'))
+    const workspaceRoot = join(fixtureRoot, 'workspace')
+    const projectRoot = join(workspaceRoot, 'app')
+    const packageRoot = join(projectRoot, 'node_modules', '@fixture', 'escaped-lsp')
+    const outsidePackageRoot = join(fixtureRoot, 'outside-package')
+    const documentPath = join(projectRoot, 'src', 'main.escaped')
+    await mkdir(dirname(documentPath), { recursive: true })
+    await mkdir(dirname(packageRoot), { recursive: true })
+    await mkdir(outsidePackageRoot, { recursive: true })
+    await writeFile(join(projectRoot, 'runtime.json'), '{}\n', 'utf8')
+    await writeFile(join(outsidePackageRoot, 'package.json'), JSON.stringify({
+      name: '@fixture/escaped-lsp',
+      bin: { 'escaped-lsp': './server.cjs' },
+    }), 'utf8')
+    await writeFile(join(outsidePackageRoot, 'server.cjs'), await readFile(fixture), 'utf8')
+    await symlink(
+      outsidePackageRoot,
+      packageRoot,
+      process.platform === 'win32' ? 'junction' : 'dir'
+    )
+    const manager = new ExternalLspManager()
+    const descriptor = {
+      id: 'escaped-bin-fixture-language',
+      label: 'Escaped Bin Fixture Language',
+      installKind: 'builtin' as const,
+      runtime: 'lsp-server' as const,
+      extensions: ['escaped'],
+      languages: ['escaped-bin-fixture-language'],
+      packageName: '@fixture/escaped-lsp',
+      command: 'escaped-lsp',
+      projectNodePackageBin: 'escaped-lsp',
+      projectRootMarkers: ['runtime.json'],
+      documentLanguageId: 'escaped-bin-fixture-language',
+    }
+
+    try {
+      const client = await manager.client(workspaceRoot, descriptor, documentPath)
+      await assert.rejects(
+        client.completion(documentPath, 'comp', { line: 0, character: 4 }),
+        /语言服务器不可用/u
+      )
+
+      const genericRoot = join(workspaceRoot, 'generic')
+      const outsideBinRoot = join(fixtureRoot, 'outside-bin')
+      const genericDocumentPath = join(genericRoot, 'src', 'main.generic-escaped')
+      const genericCommandName = 'escaped-generic-lsp'
+      const genericExecutableName = process.platform === 'win32'
+        ? `${genericCommandName}.cmd`
+        : genericCommandName
+      await mkdir(dirname(genericDocumentPath), { recursive: true })
+      await mkdir(join(genericRoot, 'node_modules'), { recursive: true })
+      await mkdir(outsideBinRoot, { recursive: true })
+      await writeFile(join(genericRoot, 'runtime.json'), '{}\n', 'utf8')
+      await writeFile(join(outsideBinRoot, genericExecutableName), 'not executed\n', 'utf8')
+      await symlink(
+        outsideBinRoot,
+        join(genericRoot, 'node_modules', '.bin'),
+        process.platform === 'win32' ? 'junction' : 'dir'
+      )
+      const genericClient = await manager.client(workspaceRoot, {
+        ...descriptor,
+        id: 'generic-escaped-bin-fixture-language',
+        extensions: ['generic-escaped'],
+        languages: ['generic-escaped-bin-fixture-language'],
+        packageName: undefined,
+        projectNodePackageBin: undefined,
+        command: genericCommandName,
+        documentLanguageId: 'generic-escaped-bin-fixture-language',
+      }, genericDocumentPath)
+      await assert.rejects(
+        genericClient.completion(genericDocumentPath, 'comp', { line: 0, character: 4 }),
+        /真实路径超出工作区/u
+      )
+    } finally {
+      await manager.dispose()
+      await rm(fixtureRoot, { recursive: true, force: true })
+    }
+  })
+
   void test('resolves the nearest ancestor Node toolchain for nested projects', async () => {
     const fixture = fileURLToPath(new URL('./fixtures/fake-lsp.cjs', import.meta.url))
     const workspaceRoot = await mkdtemp(join(tmpdir(), 'workbench-ancestor-lsp-'))

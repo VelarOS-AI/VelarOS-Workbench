@@ -8,310 +8,207 @@ import {
   type WorkbenchThemeId,
 } from '../settings/workbenchPreferences'
 
-const riderLightHighlightStyle = HighlightStyle.define([
-  {
-    tag: [
-      tags.keyword,
-      tags.controlKeyword,
-      tags.definitionKeyword,
-      tags.moduleKeyword,
-      tags.operatorKeyword,
-      tags.self,
-    ],
-    color: '#0033b3',
-  },
-  {
-    tag: [tags.operator, tags.derefOperator, tags.arithmeticOperator],
-    color: '#000000',
-  },
-  {
-    tag: [tags.string, tags.docString, tags.character, tags.attributeValue],
-    color: '#067d17',
-  },
-  {
-    tag: [tags.escape, tags.regexp],
-    color: '#055f12',
-  },
-  {
-    tag: [tags.number, tags.integer, tags.float, tags.bool, tags.null, tags.atom],
-    color: '#1750eb',
-  },
-  {
-    tag: [tags.comment, tags.lineComment, tags.blockComment, tags.docComment],
-    color: '#707070',
-    fontStyle: 'italic',
-  },
-  {
-    tag: [tags.function(tags.variableName), tags.function(tags.propertyName)],
-    color: '#795e26',
-  },
-  {
-    tag: tags.special(tags.definition(tags.variableName)),
-    color: '#9c27b0',
-  },
-  {
-    tag: [
-      tags.className,
-      tags.typeName,
-      tags.tagName,
-      tags.namespace,
-      tags.definition(tags.typeName),
-    ],
-    color: '#007070',
-  },
-  {
-    tag: [tags.propertyName, tags.attributeName],
-    color: '#871094',
-  },
-  {
-    tag: tags.monospace,
-    color: '#a04b00',
-  },
-  {
-    tag: [tags.variableName, tags.name],
-    color: '#000000',
-  },
-  {
-    tag: [tags.meta, tags.annotation, tags.processingInstruction, tags.macroName],
-    color: '#808000',
-  },
-  {
-    tag: [tags.heading, tags.strong],
-    color: '#0033b3',
-    fontWeight: '600',
-  },
-  {
-    tag: [tags.link, tags.url],
-    color: '#2456b3',
-    textDecoration: 'underline',
-  },
-  {
-    tag: tags.invalid,
-    color: '#bc3f3c',
-    textDecoration: 'underline wavy #bc3f3c',
-  },
-])
+export interface WorkbenchCodeTokenPalette {
+  comment: string
+  decorator: string
+  escape: string
+  frameworkDefinition: string
+  function: string
+  heading: string
+  invalid: string
+  keyword: string
+  link: string
+  monospace: string
+  number: string
+  operator: string
+  property: string
+  string: string
+  type: string
+  variable: string
+}
 
-export const workbenchCodeMirrorRiderTheme: Extension = syntaxHighlighting(riderLightHighlightStyle)
+export function getWorkbenchCodeTokenPalette(theme: WorkbenchThemeId): WorkbenchCodeTokenPalette {
+  switch (theme) {
+    case 'warm-paper':
+      return {
+        comment: '#998773',
+        decorator: '#a16207',
+        escape: '#2f7d4f',
+        frameworkDefinition: '#be185d',
+        function: '#8b5e1a',
+        heading: '#7c3aed',
+        invalid: '#b91c1c',
+        keyword: '#7c3aed',
+        link: '#0369a1',
+        monospace: '#8b5e1a',
+        number: '#b45309',
+        operator: '#5b4635',
+        property: '#9d174d',
+        string: '#557a1f',
+        type: '#0f766e',
+        variable: '#3d3025',
+      }
+    case 'midnight-blue':
+      return {
+        comment: '#637777',
+        decorator: '#ffcb6b',
+        escape: '#c3e88d',
+        frameworkDefinition: '#ffcb6b',
+        function: '#82aaff',
+        heading: '#82aaff',
+        invalid: '#ff5370',
+        keyword: '#c792ea',
+        link: '#80cbc4',
+        monospace: '#f78c6c',
+        number: '#f78c6c',
+        operator: '#89ddff',
+        property: '#f07178',
+        string: '#addb67',
+        type: '#89ddff',
+        variable: '#d6deeb',
+      }
+    case 'dark-modern':
+      return {
+        comment: '#7a808b',
+        decorator: '#c8a56c',
+        escape: '#7dd38d',
+        frameworkDefinition: '#d16d9e',
+        function: '#ffd580',
+        heading: '#8ab4f8',
+        invalid: '#ff7373',
+        keyword: '#569cd6',
+        link: '#6aa8ff',
+        monospace: '#ce9178',
+        number: '#2aacb8',
+        operator: '#bfc7d5',
+        property: '#e394dc',
+        string: '#6aab73',
+        type: '#4ec9b0',
+        variable: '#d8dee9',
+      }
+    default:
+      return {
+        comment: '#707070',
+        decorator: '#808000',
+        escape: '#055f12',
+        frameworkDefinition: '#9c27b0',
+        function: '#a04b00',
+        heading: '#0033b3',
+        invalid: '#bc3f3c',
+        keyword: '#0033b3',
+        link: '#2456b3',
+        monospace: '#a04b00',
+        number: '#1750eb',
+        operator: '#000000',
+        property: '#a31574',
+        string: '#067d17',
+        type: '#007f73',
+        variable: '#202124',
+      }
+  }
+}
 
-const warmPaperHighlightStyle = HighlightStyle.define([
-  {
-    tag: [
-      tags.keyword,
-      tags.controlKeyword,
-      tags.definitionKeyword,
-      tags.moduleKeyword,
-      tags.operatorKeyword,
-      tags.self,
-    ],
-    color: '#7c3aed',
-  },
-  {
-    tag: [tags.operator, tags.derefOperator, tags.arithmeticOperator],
-    color: '#5b4635',
-  },
-  {
-    tag: [tags.string, tags.docString, tags.character, tags.attributeValue],
-    color: '#557a1f',
-  },
-  { tag: [tags.escape, tags.regexp], color: '#2f7d4f' },
-  {
-    tag: [tags.number, tags.integer, tags.float, tags.bool, tags.null, tags.atom],
-    color: '#b45309',
-  },
-  {
-    tag: [tags.comment, tags.lineComment, tags.blockComment, tags.docComment],
-    color: '#998773',
-    fontStyle: 'italic',
-  },
-  {
-    tag: [tags.function(tags.variableName), tags.function(tags.propertyName)],
-    color: '#8b5e1a',
-  },
-  {
-    tag: tags.special(tags.definition(tags.variableName)),
-    color: '#be185d',
-  },
-  {
-    tag: [
-      tags.className,
-      tags.typeName,
-      tags.tagName,
-      tags.namespace,
-      tags.definition(tags.typeName),
-    ],
-    color: '#0f766e',
-  },
-  { tag: [tags.propertyName, tags.attributeName], color: '#9d174d' },
-  { tag: tags.monospace, color: '#8b5e1a' },
-  { tag: [tags.variableName, tags.name], color: '#3d3025' },
-  {
-    tag: [tags.meta, tags.annotation, tags.processingInstruction, tags.macroName],
-    color: '#a16207',
-  },
-  { tag: [tags.heading, tags.strong], color: '#7c3aed', fontWeight: '600' },
-  { tag: [tags.link, tags.url], color: '#0369a1', textDecoration: 'underline' },
-  {
-    tag: tags.invalid,
-    color: '#b91c1c',
-    textDecoration: 'underline wavy #b91c1c',
-  },
-])
+function createWorkbenchHighlightStyle(theme: WorkbenchThemeId): HighlightStyle {
+  const palette = getWorkbenchCodeTokenPalette(theme)
+  return HighlightStyle.define([
+    {
+      tag: [
+        tags.keyword,
+        tags.controlKeyword,
+        tags.definitionKeyword,
+        tags.moduleKeyword,
+        tags.operatorKeyword,
+        tags.self,
+      ],
+      color: palette.keyword,
+    },
+    {
+      tag: [tags.operator, tags.derefOperator, tags.arithmeticOperator],
+      color: palette.operator,
+    },
+    {
+      tag: [tags.string, tags.docString, tags.character, tags.attributeValue],
+      color: palette.string,
+    },
+    {
+      tag: [tags.escape, tags.regexp],
+      color: palette.escape,
+    },
+    {
+      tag: [tags.number, tags.integer, tags.float, tags.bool, tags.null, tags.atom],
+      color: palette.number,
+    },
+    {
+      tag: [tags.comment, tags.lineComment, tags.blockComment, tags.docComment],
+      color: palette.comment,
+      fontStyle: 'italic',
+    },
+    {
+      tag: [tags.function(tags.variableName), tags.function(tags.propertyName)],
+      color: palette.function,
+    },
+    {
+      tag: tags.special(tags.definition(tags.variableName)),
+      color: palette.frameworkDefinition,
+    },
+    {
+      tag: [
+        tags.className,
+        tags.typeName,
+        tags.tagName,
+        tags.namespace,
+        tags.definition(tags.typeName),
+      ],
+      color: palette.type,
+    },
+    {
+      tag: [tags.propertyName, tags.attributeName],
+      color: palette.property,
+    },
+    {
+      tag: tags.monospace,
+      color: palette.monospace,
+    },
+    {
+      tag: [tags.variableName, tags.name],
+      color: palette.variable,
+    },
+    {
+      tag: [tags.meta, tags.annotation, tags.processingInstruction, tags.macroName],
+      color: palette.decorator,
+    },
+    {
+      tag: [tags.heading, tags.strong],
+      color: palette.heading,
+      fontWeight: '600',
+    },
+    {
+      tag: [tags.link, tags.url],
+      color: palette.link,
+      textDecoration: 'underline',
+    },
+    {
+      tag: tags.invalid,
+      color: palette.invalid,
+      textDecoration: `underline wavy ${palette.invalid}`,
+    },
+  ])
+}
 
-const workbenchCodeMirrorWarmPaperTheme: Extension = syntaxHighlighting(warmPaperHighlightStyle)
+export const workbenchCodeMirrorRiderTheme: Extension = syntaxHighlighting(
+  createWorkbenchHighlightStyle('light-modern')
+)
 
-const riderDarkHighlightStyle = HighlightStyle.define([
-  {
-    tag: [
-      tags.keyword,
-      tags.controlKeyword,
-      tags.definitionKeyword,
-      tags.moduleKeyword,
-      tags.operatorKeyword,
-      tags.self,
-    ],
-    color: '#cf8efa',
-  },
-  {
-    tag: [tags.operator, tags.derefOperator, tags.arithmeticOperator],
-    color: '#bfc7d5',
-  },
-  {
-    tag: [tags.string, tags.docString, tags.character, tags.attributeValue],
-    color: '#6aab73',
-  },
-  {
-    tag: [tags.escape, tags.regexp],
-    color: '#7dd38d',
-  },
-  {
-    tag: [tags.number, tags.integer, tags.float, tags.bool, tags.null, tags.atom],
-    color: '#2aacb8',
-  },
-  {
-    tag: [tags.comment, tags.lineComment, tags.blockComment, tags.docComment],
-    color: '#7a808b',
-    fontStyle: 'italic',
-  },
-  {
-    tag: [tags.function(tags.variableName), tags.function(tags.propertyName)],
-    color: '#dcdcaa',
-  },
-  {
-    tag: tags.special(tags.definition(tags.variableName)),
-    color: '#d16d9e',
-  },
-  {
-    tag: [
-      tags.className,
-      tags.typeName,
-      tags.tagName,
-      tags.namespace,
-      tags.definition(tags.typeName),
-    ],
-    color: '#56c3d6',
-  },
-  {
-    tag: [tags.propertyName, tags.attributeName],
-    color: '#bababa',
-  },
-  {
-    tag: tags.monospace,
-    color: '#ce9178',
-  },
-  {
-    tag: [tags.variableName, tags.name],
-    color: '#d8dee9',
-  },
-  {
-    tag: [tags.meta, tags.annotation, tags.processingInstruction, tags.macroName],
-    color: '#c8a56c',
-  },
-  {
-    tag: [tags.heading, tags.strong],
-    color: '#8ab4f8',
-    fontWeight: '600',
-  },
-  {
-    tag: [tags.link, tags.url],
-    color: '#6aa8ff',
-    textDecoration: 'underline',
-  },
-  {
-    tag: tags.invalid,
-    color: '#ff7373',
-    textDecoration: 'underline wavy #ff7373',
-  },
-])
+const workbenchCodeMirrorWarmPaperTheme: Extension = syntaxHighlighting(
+  createWorkbenchHighlightStyle('warm-paper')
+)
 
-const workbenchCodeMirrorDarculaTheme: Extension = syntaxHighlighting(riderDarkHighlightStyle)
-
-const midnightBlueHighlightStyle = HighlightStyle.define([
-  {
-    tag: [
-      tags.keyword,
-      tags.controlKeyword,
-      tags.definitionKeyword,
-      tags.moduleKeyword,
-      tags.operatorKeyword,
-      tags.self,
-    ],
-    color: '#c792ea',
-  },
-  {
-    tag: [tags.operator, tags.derefOperator, tags.arithmeticOperator],
-    color: '#89ddff',
-  },
-  {
-    tag: [tags.string, tags.docString, tags.character, tags.attributeValue],
-    color: '#addb67',
-  },
-  { tag: [tags.escape, tags.regexp], color: '#c3e88d' },
-  {
-    tag: [tags.number, tags.integer, tags.float, tags.bool, tags.null, tags.atom],
-    color: '#f78c6c',
-  },
-  {
-    tag: [tags.comment, tags.lineComment, tags.blockComment, tags.docComment],
-    color: '#637777',
-    fontStyle: 'italic',
-  },
-  {
-    tag: [tags.function(tags.variableName), tags.function(tags.propertyName)],
-    color: '#82aaff',
-  },
-  {
-    tag: tags.special(tags.definition(tags.variableName)),
-    color: '#ffcb6b',
-  },
-  {
-    tag: [
-      tags.className,
-      tags.typeName,
-      tags.tagName,
-      tags.namespace,
-      tags.definition(tags.typeName),
-    ],
-    color: '#89ddff',
-  },
-  { tag: [tags.propertyName, tags.attributeName], color: '#f07178' },
-  { tag: tags.monospace, color: '#f78c6c' },
-  { tag: [tags.variableName, tags.name], color: '#d6deeb' },
-  {
-    tag: [tags.meta, tags.annotation, tags.processingInstruction, tags.macroName],
-    color: '#ffcb6b',
-  },
-  { tag: [tags.heading, tags.strong], color: '#82aaff', fontWeight: '600' },
-  { tag: [tags.link, tags.url], color: '#80cbc4', textDecoration: 'underline' },
-  {
-    tag: tags.invalid,
-    color: '#ff5370',
-    textDecoration: 'underline wavy #ff5370',
-  },
-])
+const workbenchCodeMirrorDarculaTheme: Extension = syntaxHighlighting(
+  createWorkbenchHighlightStyle('dark-modern')
+)
 
 const workbenchCodeMirrorMidnightBlueTheme: Extension = syntaxHighlighting(
-  midnightBlueHighlightStyle
+  createWorkbenchHighlightStyle('midnight-blue')
 )
 
 function diagnosticUnderlineBackground(color: string): string {

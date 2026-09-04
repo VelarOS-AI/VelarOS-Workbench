@@ -1,19 +1,86 @@
 import assert from 'node:assert/strict'
 
+import { highlightingFor } from '@codemirror/language'
 import { EditorState } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
+import { type Tag, tags } from '@lezer/highlight'
 import { test } from 'bun:test'
 
 import {
   buildWorkbenchSemanticTokenDecorations,
   getWorkbenchSemanticTokenTheme,
 } from '../src/renderer/src/models/editor/workbenchCodeMirrorSemanticTokens'
+import {
+  getWorkbenchCodeMirrorTheme,
+  getWorkbenchCodeTokenPalette,
+  type WorkbenchCodeTokenPalette,
+} from '../src/renderer/src/models/editor/workbenchCodeMirrorTheme'
 import type { WorkbenchThemeId } from '../src/renderer/src/models/settings/workbenchPreferences'
 
 function semanticThemeRules(theme: WorkbenchThemeId): string {
   const state = EditorState.create({ extensions: [getWorkbenchSemanticTokenTheme(theme)] })
   return state.facet(EditorView.styleModule).flatMap((module) => module.getRules()).join('\n')
 }
+
+function syntaxTheme(theme: WorkbenchThemeId): { readonly rules: string; readonly state: EditorState } {
+  const state = EditorState.create({ extensions: [getWorkbenchCodeMirrorTheme(theme)] })
+  return {
+    rules: state.facet(EditorView.styleModule).flatMap((module) => module.getRules()).join('\n'),
+    state,
+  }
+}
+
+function colorForSyntaxTag(state: EditorState, rules: string, tag: Tag): string {
+  const className = highlightingFor(state, [tag])
+  assert.ok(className)
+  const rule = rules.split('\n').find((candidate) => candidate.includes(`.${className} {`))
+  assert.ok(rule)
+  return /color: ([^;]+);/u.exec(rule)?.[1] ?? ''
+}
+
+function colorForSemanticRole(rules: string, role: string): string {
+  const rule = rules
+    .split('\n')
+    .find((candidate) => candidate.includes(`.cm-workbenchSemantic-${role}`))
+  assert.ok(rule)
+  return /color: ([^ ;]+) !important;/u.exec(rule)?.[1] ?? ''
+}
+
+void test('basic syntax and semantic tokens share one role palette in every theme', () => {
+  const cases: ReadonlyArray<[
+    keyof Pick<
+      WorkbenchCodeTokenPalette,
+      'frameworkDefinition' | 'function' | 'keyword' | 'property' | 'type' | 'variable'
+    >,
+    Tag,
+    string,
+  ]> = [
+    ['keyword', tags.keyword, 'keyword'],
+    ['function', tags.function(tags.variableName), 'function'],
+    ['type', tags.typeName, 'type'],
+    ['property', tags.propertyName, 'property'],
+    ['frameworkDefinition', tags.special(tags.definition(tags.variableName)), 'frameworkDefinition'],
+    ['variable', tags.variableName, 'variable'],
+  ]
+  const themes: readonly WorkbenchThemeId[] = [
+    'light-modern',
+    'dark-modern',
+    'warm-paper',
+    'midnight-blue',
+  ]
+
+  for (const theme of themes) {
+    const palette = getWorkbenchCodeTokenPalette(theme)
+    const syntax = syntaxTheme(theme)
+    const semanticRules = semanticThemeRules(theme)
+    for (const [paletteRole, tag, semanticRole] of cases) {
+      assert.equal(colorForSyntaxTag(syntax.state, syntax.rules, tag), palette[paletteRole])
+      assert.equal(colorForSemanticRole(semanticRules, semanticRole), palette[paletteRole])
+    }
+    assert.equal(colorForSemanticRole(semanticRules, 'builtinType'), palette.type)
+    assert.equal(colorForSemanticRole(semanticRules, 'enumMember'), palette.property)
+  }
+})
 
 void test('semantic keywords are blue while class-like built-ins use the type color', () => {
   const dark = semanticThemeRules('dark-modern')
