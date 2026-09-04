@@ -269,6 +269,8 @@ void describe('pre-split Workbench shell parity', () => {
 
     assert.match(app, /ConversationBlockHooksProvider/)
     assert.match(app, /value=\{standaloneConversationBlockHooks\}/)
+    assert.match(app, /ConversationRenderSlotsProvider/)
+    assert.match(app, /slots=\{standaloneWorkbenchConversationRenderSlots\}/)
     assert.match(app, /useMessageActionView:/)
     assert.match(app, /useAutoTranslateThinkingEnabled:/)
     assert.match(adapter, /data-workbench-chat-empty="true"/)

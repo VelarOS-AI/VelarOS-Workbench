@@ -8,6 +8,10 @@ import {
   ExecutionEventBus,
   normalizeExecutionModes,
 } from '@velaros-ai/agent'
+import {
+  ChatRuntimeEvents,
+  TERMINAL_STREAM_RUNTIME_STATE_KINDS,
+} from '@velaros-ai/agent/protocol'
 import { parseAgentCapabilityExecuteEnvelopeV1 } from '@velaros-ai/agent/protocol/agent-capability'
 import { Log } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
@@ -22,6 +26,7 @@ import type { WorkbenchProductAnalyticsReporter } from '../analytics/WorkbenchPr
 
 /** 只认自家产品身份的执行请求。 */
 const WorkbenchAgentProductId = 'velaros.workbench'
+const WorkbenchTerminalRuntimeKinds = new Set<string>(TERMINAL_STREAM_RUNTIME_STATE_KINDS)
 
 interface WorkbenchAgentExecuteInput {
   executionId: string
@@ -132,8 +137,12 @@ class WorkbenchAgentCapabilityRuntime implements AgentCapabilityRuntime {
         this.log.debug('Kernel Agent event delivery failed', { error })
       }
     )
+    let terminalEventObserved = false
     const publish = (channel: 'agent' | 'state' | 'debug', payload: unknown): void => {
-      if (channel === 'agent') this.productAnalytics?.recordAgentEvent(payload, projectRoot)
+      if (channel === 'agent') {
+        if (isTerminalAgentEvent(payload)) terminalEventObserved = true
+        this.productAnalytics?.recordAgentEvent(payload, projectRoot)
+      }
       publisher.enqueue(channel, payload)
     }
     const events = new ExecutionEventBus({
@@ -141,6 +150,32 @@ class WorkbenchAgentCapabilityRuntime implements AgentCapabilityRuntime {
       state: (payload) => publish('state', payload),
       debug: (payload) => publish('debug', payload),
     })
+    const ensureTerminalEvent = (
+      terminalOutcome: 'completed' | 'aborted' | 'error',
+      failure?: unknown
+    ): void => {
+      if (terminalEventObserved) return
+      if (terminalOutcome === 'completed') {
+        events.emitRuntime(ChatRuntimeEvents.done())
+        return
+      }
+      if (terminalOutcome === 'aborted') {
+        events.emitRuntime(
+          ChatRuntimeEvents.aborted(
+            readAbortMessage(context.signal),
+            input.executionId,
+            'EXECUTION_ABORTED'
+          )
+        )
+        return
+      }
+      const appError = failure === undefined
+        ? new AppError('RUNTIME', 'Agent execution failed.')
+        : AppError.from(failure, 'RUNTIME')
+      events.emitRuntime(
+        ChatRuntimeEvents.error(appError.message, appError.code, appError.context)
+      )
+    }
 
     this.productAnalytics?.recordRunStarted({
       executionId: input.executionId,
@@ -171,6 +206,7 @@ class WorkbenchAgentCapabilityRuntime implements AgentCapabilityRuntime {
           abortSignal: context.signal,
         })
         outcome = readRunOutcome(result, context.signal)
+        ensureTerminalEvent(outcome)
         return result
       }
       const result = await this.stack.run({
@@ -182,7 +218,12 @@ class WorkbenchAgentCapabilityRuntime implements AgentCapabilityRuntime {
         abortSignal: context.signal,
       })
       outcome = result.status
+      ensureTerminalEvent(outcome)
       return result
+    } catch (error) {
+      outcome = 'error'
+      ensureTerminalEvent('error', error)
+      throw error
     } finally {
       this.productAnalytics?.recordRunFinished(input.executionId, outcome)
       await publisher.closeAndDrain()
@@ -195,6 +236,25 @@ class WorkbenchAgentCapabilityRuntime implements AgentCapabilityRuntime {
       this.agentEngines?.dispose() ?? Promise.resolve(),
     ]).then(() => undefined)
   }
+}
+
+function isTerminalAgentEvent(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+  const event = value as { readonly type?: unknown; readonly payload?: unknown }
+  if (
+    event.type !== 'runtime' ||
+    typeof event.payload !== 'object' ||
+    event.payload === null ||
+    Array.isArray(event.payload)
+  ) return false
+  const kind = (event.payload as { readonly kind?: unknown }).kind
+  return typeof kind === 'string' && WorkbenchTerminalRuntimeKinds.has(kind)
+}
+
+function readAbortMessage(signal: AbortSignal): string {
+  return typeof signal.reason === 'string' && signal.reason.trim()
+    ? signal.reason
+    : 'Agent execution was aborted.'
 }
 
 function readRunOutcome(value: unknown, signal: AbortSignal): 'completed' | 'aborted' | 'error' {

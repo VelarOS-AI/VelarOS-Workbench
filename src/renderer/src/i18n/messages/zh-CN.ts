@@ -1,11 +1,15 @@
+import { workbenchConversationZhCNMessages } from './conversation'
+
 /**
  * 独立 Workbench 应用 zh-CN 语言包。
  *
- * `workbench` 节整体考古自 desktop i18n（cf62413e4 摘除的 workbench 整节，逐字保留）；
- * `common` / `chat` 仅收编复活 surface 实际消费的少量键。新键一律先落这里再消费。
+ * `workbench` 节整体考古自 desktop i18n；共享会话组件所需目录由版本锁定的
+ * `conversation.ts` 统一合入，避免 UI 包升级后泄漏原始键名。
  */
 export const workbenchAppZhCNMessages = {
+  ...workbenchConversationZhCNMessages,
   common: {
+    ...workbenchConversationZhCNMessages.common,
     cancel: '取消',
     chinese: '简体中文',
     english: 'English',
@@ -23,6 +27,7 @@ export const workbenchAppZhCNMessages = {
     archivePendingAction: '归档中…',
   },
   status: {
+    ...workbenchConversationZhCNMessages.status,
     aborted: '已中止',
     completed: '已完成',
     failed: '执行失败',
@@ -32,6 +37,7 @@ export const workbenchAppZhCNMessages = {
     turn: '第 {count} 轮',
   },
   chat: {
+    ...workbenchConversationZhCNMessages.chat,
     fileChangeOpenErrorTitle: '打开文件失败',
     messagesRegionAriaLabel: '消息',
     composerRegionAriaLabel: '消息输入',
@@ -763,6 +769,8 @@ export const workbenchAppZhCNMessages = {
     chatModelMissingDescription: '请在设置的“模型”页面填写服务商、模型和 API Key。',
     chatSignInFailedTitle: '无法登录 VelarOS',
     chatSignInFailedDescription: '{error}',
+    chatNoTextResponse: '本次运行没有返回可显示的回复，请重试。',
+    chatExecutionFailed: 'Agent 执行失败，请重试或查看诊断信息。',
     chatEngineLoadingTitle: '正在连接 {engine}',
     chatEngineLoadingDescription: '模型与登录状态还在读取，请稍候再发送。',
     chatEngineUnavailableTitle: '{engine} 不可用',

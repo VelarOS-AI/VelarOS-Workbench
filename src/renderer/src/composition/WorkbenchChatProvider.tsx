@@ -143,6 +143,8 @@ export interface WorkbenchChatCompositionAdapter {
 
 const WorkbenchChatCompositionContext =
   createContext<Nullable<WorkbenchChatCompositionAdapter>>(null)
+const WorkbenchChatSurfaceProviderIdContext =
+  createContext<Nullable<WorkbenchChatProviderId>>(null)
 
 export function WorkbenchChatProvider({
   adapter,
@@ -173,7 +175,16 @@ export function useWorkbenchChatProjectRuntime(
   return adapter.useProjectRuntime(projectRoot, providerId)
 }
 
+/** 当前会话 Surface 的执行体身份；会话 render slot 用它选择宿主品牌标记。 */
+export function useWorkbenchChatSurfaceProviderId(): Nullable<WorkbenchChatProviderId> {
+  return useContext(WorkbenchChatSurfaceProviderIdContext)
+}
+
 export function WorkbenchChatSessionSurface(props: WorkbenchChatSessionSurfaceProps): ReactElement {
   const { SessionSurface } = useWorkbenchChatComposition()
-  return <SessionSurface {...props} />
+  return (
+    <WorkbenchChatSurfaceProviderIdContext.Provider value={props.providerId}>
+      <SessionSurface {...props} />
+    </WorkbenchChatSurfaceProviderIdContext.Provider>
+  )
 }

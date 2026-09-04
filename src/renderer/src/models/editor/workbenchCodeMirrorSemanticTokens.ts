@@ -12,19 +12,22 @@ const SemanticTokenDelayMs = 450
 const SemanticTokenRetryDelaysMs = [250, 500, 1_000, 2_000, 4_000] as const
 const markCache = new Map<string, Decoration>()
 const SemanticBuiltinTypeNames = new Set([
+  'Error',
+  'List',
+  'Map',
+  'Promise',
+  'Set',
+])
+const SemanticKeywordTypeNames = new Set([
   'any',
   'bigint',
   'bool',
   'boolean',
-  'Error',
-  'List',
-  'Map',
+  'intrinsic',
   'never',
   'null',
   'number',
   'object',
-  'Promise',
-  'Set',
   'string',
   'symbol',
   'undefined',
@@ -51,7 +54,6 @@ const SemanticBuiltinOwnerTokenKinds = new Set([
 interface WorkbenchSemanticTokenPalette {
   builtinType: string
   decorator: string
-  enumMember: string
   frameworkDefinition: string
   function: string
   keyword: string
@@ -66,7 +68,6 @@ function semanticTokenPalette(theme: WorkbenchThemeId): WorkbenchSemanticTokenPa
       return {
         builtinType: '#0f766e',
         decorator: '#a16207',
-        enumMember: '#b45309',
         frameworkDefinition: '#be185d',
         function: '#8b5e1a',
         keyword: '#7c3aed',
@@ -78,7 +79,6 @@ function semanticTokenPalette(theme: WorkbenchThemeId): WorkbenchSemanticTokenPa
       return {
         builtinType: '#89ddff',
         decorator: '#ffcb6b',
-        enumMember: '#f78c6c',
         frameworkDefinition: '#ffcb6b',
         function: '#82aaff',
         keyword: '#c792ea',
@@ -90,7 +90,6 @@ function semanticTokenPalette(theme: WorkbenchThemeId): WorkbenchSemanticTokenPa
       return {
         builtinType: '#4ec9b0',
         decorator: '#c8a56c',
-        enumMember: '#4fc1ff',
         frameworkDefinition: '#d16d9e',
         function: '#ffd580',
         keyword: '#569cd6',
@@ -102,7 +101,6 @@ function semanticTokenPalette(theme: WorkbenchThemeId): WorkbenchSemanticTokenPa
       return {
         builtinType: '#007f73',
         decorator: '#808000',
-        enumMember: '#0070c1',
         frameworkDefinition: '#9c27b0',
         function: '#a04b00',
         keyword: '#0033b3',
@@ -126,7 +124,7 @@ function semanticTokenTheme(theme: WorkbenchThemeId): Extension {
       color: `${palette.builtinType} !important`,
     },
     '& .cm-workbenchSemantic-enumMember, & .cm-workbenchSemantic-enumMember *': {
-      color: `${palette.enumMember} !important`,
+      color: `${palette.property} !important`,
     },
     '& .cm-workbenchSemantic-frameworkDefinition, & .cm-workbenchSemantic-frameworkDefinition *': {
       color: `${palette.frameworkDefinition} !important`,
@@ -227,6 +225,11 @@ export function buildWorkbenchSemanticTokenDecorations(
     let effectiveToken = token
     if (isFrameworkDeclarationName(content, range.from)) {
       effectiveToken = { ...token, type: 'frameworkDefinition' }
+    } else if (
+      SemanticTypeTokenKinds.has(token.type)
+      && SemanticKeywordTypeNames.has(tokenText)
+    ) {
+      effectiveToken = { ...token, type: 'keyword' }
     } else if (
       (
         SemanticBuiltinOwnerTokenKinds.has(token.type)

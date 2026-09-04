@@ -150,6 +150,24 @@ const TYPESCRIPT_SEMANTIC_TOKEN_MODIFIERS = [
   'local',
 ] as const
 
+const TYPESCRIPT_PRIMITIVE_KEYWORD_KINDS = new Set<ts.SyntaxKind>([
+  ts.SyntaxKind.AnyKeyword,
+  ts.SyntaxKind.BigIntKeyword,
+  ts.SyntaxKind.BooleanKeyword,
+  ts.SyntaxKind.IntrinsicKeyword,
+  ts.SyntaxKind.NeverKeyword,
+  ts.SyntaxKind.NumberKeyword,
+  ts.SyntaxKind.ObjectKeyword,
+  ts.SyntaxKind.StringKeyword,
+  ts.SyntaxKind.SymbolKeyword,
+  ts.SyntaxKind.UndefinedKeyword,
+  ts.SyntaxKind.UnknownKeyword,
+  ts.SyntaxKind.VoidKeyword,
+])
+const TYPESCRIPT_GLOBAL_KEYWORD_VALUE_NAMES = new Set(['Infinity', 'NaN', 'undefined'])
+const TYPESCRIPT_GLOBAL_BUILTIN_VALUE_NAMES = new Set(['globalThis'])
+const TYPESCRIPT_DEFAULT_LIBRARY_FILE_PATTERN = /(?:^|[/\\])lib\.[^/\\]+\.d\.ts$/u
+
 export function shouldDisplayWorkbenchInferredTypeHint(text: string): boolean {
   const inferredType = text.replace(/^:\s*/u, '').trim()
   if (!inferredType || inferredType.length > MAX_WORKBENCH_INFERRED_TYPE_HINT_LENGTH) return false
@@ -245,6 +263,18 @@ function rangeFromTextSpan(
   textSpan: ts.TextSpan
 ): Nullable<WorkbenchLanguageServiceRange> {
   const sourceFile = ts.createSourceFile(fileName, content, ts.ScriptTarget.Latest, true)
+  return rangeFromSourceFileSpan(sourceFile, textSpan)
+}
+
+function rangeFromSourceFileSpan(
+  sourceFile: ts.SourceFile,
+  textSpan: ts.TextSpan
+): Nullable<WorkbenchLanguageServiceRange> {
+  if (
+    textSpan.start < 0
+    || textSpan.length < 0
+    || textSpan.start + textSpan.length > sourceFile.text.length
+  ) return null
   const start = sourceFile.getLineAndCharacterOfPosition(textSpan.start)
   const end = sourceFile.getLineAndCharacterOfPosition(textSpan.start + textSpan.length)
 
@@ -254,6 +284,44 @@ function rangeFromTextSpan(
     endLine: end.line + 1,
     endColumn: end.character + 1,
   }
+}
+
+function isDefaultLibraryFileName(fileName: string): boolean {
+  return TYPESCRIPT_DEFAULT_LIBRARY_FILE_PATTERN.test(fileName)
+}
+
+function isIdentifierPropertyName(node: ts.Identifier): boolean {
+  const parent = node.parent
+  if (
+    (ts.isPropertyAccessExpression(parent) && parent.name === node)
+    || (ts.isQualifiedName(parent) && parent.right === node)
+  ) return true
+  if (ts.isShorthandPropertyAssignment(parent) && parent.name === node) return false
+  return (parent as ts.NamedDeclaration).name === node
+}
+
+function unshadowedDefaultLibrarySymbol(
+  checker: ts.TypeChecker,
+  node: ts.Identifier
+): Nullable<ts.Symbol> {
+  if (isIdentifierPropertyName(node)) return null
+
+  const shorthand = ts.isShorthandPropertyAssignment(node.parent)
+    ? checker.getShorthandAssignmentValueSymbol(node.parent)
+    : undefined
+  const locationSymbol = shorthand ?? checker.getSymbolAtLocation(node)
+  if (!locationSymbol) return null
+  const symbol = (locationSymbol.flags & ts.SymbolFlags.Alias) !== 0
+    ? checker.getAliasedSymbol(locationSymbol)
+    : locationSymbol
+  if (symbol.getName() !== node.text) return null
+
+  const declarations = symbol.declarations ?? []
+  if (declarations.length === 0)
+    return (symbol.flags & ts.SymbolFlags.Transient) !== 0 ? symbol : null
+  return declarations.every((declaration) =>
+    isDefaultLibraryFileName(declaration.getSourceFile().fileName)
+  ) ? symbol : null
 }
 
 function offsetFromPosition(content: string, position: WorkbenchLanguageServicePosition): number {
@@ -414,26 +482,82 @@ export function buildTypeScriptSemanticTokens({
   ).spans
   if (encoded.length % 3 !== 0) return []
 
-  const tokens: WorkbenchLanguageServiceSemanticToken[] = []
-  for (let index = 0; index < encoded.length && tokens.length < 10_000; index += 3) {
+  const program = service.getProgram?.()
+  const programSourceFile = program?.getSourceFile(fileName)
+  const sourceFile = programSourceFile?.text === content
+    ? programSourceFile
+    : ts.createSourceFile(fileName, content, ts.ScriptTarget.Latest, true)
+  const checker = programSourceFile === sourceFile ? program?.getTypeChecker() : undefined
+  const tokens = new Map<
+    string,
+    { start: number; length: number; token: WorkbenchLanguageServiceSemanticToken }
+  >()
+  const upsertToken = (
+    start: number,
+    length: number,
+    type: string,
+    modifiers: string[],
+    override = false
+  ): void => {
+    const key = `${start}:${length}`
+    if ((!override && tokens.has(key)) || (!tokens.has(key) && tokens.size >= 10_000)) return
+    const range = rangeFromSourceFileSpan(sourceFile, { start, length })
+    if (!range) return
+    tokens.set(key, { start, length, token: { range, type, modifiers } })
+  }
+
+  for (let index = 0; index < encoded.length; index += 3) {
     const start = encoded[index]!
     const length = encoded[index + 1]!
     const classification = encoded[index + 2]!
     const typeIndex = (classification >> 8) - 1
     const type = TYPESCRIPT_SEMANTIC_TOKEN_TYPES[typeIndex]
     if (!type || start < 0 || length <= 0 || start + length > content.length) continue
-    const range = rangeFromTextSpan(content, fileName, { start, length })
-    if (!range) continue
     const modifierBits = classification & 0xff
-    tokens.push({
-      range,
+    upsertToken(
+      start,
+      length,
       type,
-      modifiers: TYPESCRIPT_SEMANTIC_TOKEN_MODIFIERS.filter(
+      TYPESCRIPT_SEMANTIC_TOKEN_MODIFIERS.filter(
         (_modifier, modifierIndex) => (modifierBits & (1 << modifierIndex)) !== 0
       ),
-    })
+    )
   }
-  return tokens
+
+  const visit = (node: ts.Node): void => {
+    if (
+      TYPESCRIPT_PRIMITIVE_KEYWORD_KINDS.has(node.kind)
+      && (node.flags & ts.NodeFlags.JSDoc) === 0
+    ) {
+      upsertToken(node.getStart(sourceFile), node.getWidth(sourceFile), 'keyword', [], true)
+    } else if (
+      checker
+      && ts.isIdentifier(node)
+      && (
+        TYPESCRIPT_GLOBAL_KEYWORD_VALUE_NAMES.has(node.text)
+        || TYPESCRIPT_GLOBAL_BUILTIN_VALUE_NAMES.has(node.text)
+      )
+      && unshadowedDefaultLibrarySymbol(checker, node)
+    ) {
+      if (TYPESCRIPT_GLOBAL_KEYWORD_VALUE_NAMES.has(node.text)) {
+        upsertToken(node.getStart(sourceFile), node.getWidth(sourceFile), 'keyword', [], true)
+      } else {
+        upsertToken(
+          node.getStart(sourceFile),
+          node.getWidth(sourceFile),
+          'variable',
+          ['defaultLibrary'],
+          true
+        )
+      }
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(sourceFile)
+
+  return [...tokens.values()]
+    .sort((left, right) => left.start - right.start || left.length - right.length)
+    .map(({ token }) => token)
 }
 
 export function buildTypeScriptReferences({

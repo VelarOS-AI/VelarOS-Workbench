@@ -128,8 +128,8 @@ export function registerWorkbenchKernelIpc(
 
   const unsubscribeAgentExecution = runtime.subscribeEvent(
     AgentCapabilityExecutionEventType,
-    (payload) => {
-      broadcast(WorkbenchKernelChannels.agentExecution, payload)
+    (event) => {
+      broadcast(WorkbenchKernelChannels.agentExecution, event.payload)
     }
   )
 

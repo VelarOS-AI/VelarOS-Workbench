@@ -10,7 +10,8 @@ import {
 
 import { resolveWorkbenchEditorLanguage } from '../../language/workbenchEditorLanguageContributions'
 
-const WORKBENCH_JAVASCRIPT_KEYWORDS = [
+export const WORKBENCH_JAVASCRIPT_KEYWORDS = [
+  'accessor',
   'as',
   'async',
   'await',
@@ -23,8 +24,10 @@ const WORKBENCH_JAVASCRIPT_KEYWORDS = [
   'debugger',
   'default',
   'delete',
+  'defer',
   'do',
   'else',
+  'enum',
   'export',
   'extends',
   'false',
@@ -34,13 +37,19 @@ const WORKBENCH_JAVASCRIPT_KEYWORDS = [
   'function',
   'get',
   'if',
+  'implements',
   'import',
   'in',
   'instanceof',
+  'interface',
   'let',
   'new',
   'null',
   'of',
+  'package',
+  'private',
+  'protected',
+  'public',
   'return',
   'set',
   'static',
@@ -52,6 +61,7 @@ const WORKBENCH_JAVASCRIPT_KEYWORDS = [
   'try',
   'typeof',
   'undefined',
+  'using',
   'var',
   'void',
   'while',

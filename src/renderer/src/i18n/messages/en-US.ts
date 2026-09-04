@@ -1,11 +1,15 @@
+import { workbenchConversationEnUSMessages } from './conversation'
+
 /**
  * 独立 Workbench 应用 en-US 语言包。
  *
- * `workbench` 节整体考古自 desktop i18n（cf62413e4 摘除的 workbench 整节，逐字保留）；
- * `common` / `chat` 仅收编复活 surface 实际消费的少量键。新键一律先落这里再消费。
+ * `workbench` is the standalone product catalog. The version-locked
+ * `conversation.ts` catalog covers every translation consumed by the shared conversation UI.
  */
 export const workbenchAppEnUSMessages = {
+  ...workbenchConversationEnUSMessages,
   common: {
+    ...workbenchConversationEnUSMessages.common,
     cancel: 'Cancel',
     chinese: 'Simplified Chinese',
     english: 'English',
@@ -23,6 +27,7 @@ export const workbenchAppEnUSMessages = {
     archivePendingAction: 'Archiving…',
   },
   status: {
+    ...workbenchConversationEnUSMessages.status,
     aborted: 'Aborted',
     completed: 'Completed',
     failed: 'Run failed',
@@ -32,6 +37,7 @@ export const workbenchAppEnUSMessages = {
     turn: 'Turn {count}',
   },
   chat: {
+    ...workbenchConversationEnUSMessages.chat,
     fileChangeOpenErrorTitle: 'Failed to open file',
     messagesRegionAriaLabel: 'Messages',
     composerRegionAriaLabel: 'Message composer',
@@ -777,6 +783,8 @@ export const workbenchAppEnUSMessages = {
     chatModelMissingDescription: 'Add a provider, model, and API key on the Model settings page.',
     chatSignInFailedTitle: 'Could not sign in to VelarOS',
     chatSignInFailedDescription: '{error}',
+    chatNoTextResponse: 'This run returned no visible response. Please try again.',
+    chatExecutionFailed: 'Agent execution failed. Try again or open diagnostics.',
     chatEngineLoadingTitle: 'Connecting to {engine}',
     chatEngineLoadingDescription: 'Models and login status are still loading. Try again shortly.',
     chatEngineUnavailableTitle: '{engine} is unavailable',

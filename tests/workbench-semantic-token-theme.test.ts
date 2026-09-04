@@ -29,6 +29,27 @@ void test('semantic keywords are blue while class-like built-ins use the type co
   assert.match(light, /cm-workbenchSemantic-frameworkDefinition \* \{color: #9c27b0 !important;\}/u)
 })
 
+void test('enum members use the same purple property color in every theme', () => {
+  const cases: ReadonlyArray<[WorkbenchThemeId, string]> = [
+    ['light-modern', '#a31574'],
+    ['dark-modern', '#e394dc'],
+    ['warm-paper', '#9d174d'],
+    ['midnight-blue', '#f07178'],
+  ]
+
+  for (const [theme, propertyColor] of cases) {
+    const rules = semanticThemeRules(theme)
+    assert.match(
+      rules,
+      new RegExp(`cm-workbenchSemantic-enumMember \\* \\{color: ${propertyColor} !important;`, 'u')
+    )
+    assert.match(
+      rules,
+      new RegExp(`cm-workbenchSemantic-property[^\\n]*\\{color: ${propertyColor} !important;`, 'u')
+    )
+  }
+})
+
 void test('framework declarations keep their dedicated color across language-server token kinds', () => {
   const content = 'component App:\nexport server api:\nstate ready = true\n'
   const decorations = buildWorkbenchSemanticTokenDecorations(content, [

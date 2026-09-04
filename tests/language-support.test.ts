@@ -38,6 +38,7 @@ import {
 import {
   buildWorkbenchBasicKeywordDecorations,
   getWorkbenchJavaScriptKeywordRangeAtPosition,
+  WORKBENCH_JAVASCRIPT_KEYWORDS,
   WORKBENCH_TYPESCRIPT_KEYWORDS,
 } from '../src/renderer/src/models/editor/workbenchCodeMirrorBasicSyntax'
 import {
@@ -532,6 +533,35 @@ void describe('focused Workbench language surface', () => {
     assert.equal(getWorkbenchJavaScriptKeywordRangeAtPosition(typeScriptDoc, 31, 'typescript'), null)
     assert.equal(getWorkbenchJavaScriptKeywordRangeAtPosition(typeScriptDoc, 40, 'typescript'), null)
 
+    for (const keyword of [
+      'accessor',
+      'defer',
+      'enum',
+      'implements',
+      'interface',
+      'package',
+      'private',
+      'protected',
+      'public',
+      'using',
+    ]) {
+      assert.ok(
+        WORKBENCH_JAVASCRIPT_KEYWORDS.includes(
+          keyword as typeof WORKBENCH_JAVASCRIPT_KEYWORDS[number]
+        )
+      )
+    }
+    const allJavaScriptKeywords = WORKBENCH_JAVASCRIPT_KEYWORDS.join(' ')
+    const allJavaScriptKeywordsDoc = EditorState.create({ doc: allJavaScriptKeywords }).doc
+    assert.equal(
+      buildWorkbenchBasicKeywordDecorations(
+        allJavaScriptKeywordsDoc,
+        [{ from: 0, to: allJavaScriptKeywordsDoc.length }],
+        'javascript'
+      ).size,
+      WORKBENCH_JAVASCRIPT_KEYWORDS.length
+    )
+
     const compilerKeywords: string[] = []
     for (
       let kind = ts.SyntaxKind.FirstKeyword;
@@ -609,7 +639,18 @@ void describe('focused Workbench language surface', () => {
       '}',
       'const greeter = new Greeter()',
       'const label = greeter.format("Hi")',
-      'const builtins = [Date.now(), Math.min(1, 2), Number.NaN, undefined]',
+      'const builtins = [Date.now(), Math.min(1, 2), Number.NaN]',
+      'type PrimitiveKinds = string | number | boolean | bigint | symbol | object | unknown | any | never | void | undefined',
+      'enum IpcChannel { Ready }',
+      'class List<T> { constructor(readonly value: T) {} }',
+      'type ClassLike = Map<string, number> | Set<string> | List<string> | Promise<void> | Error',
+      'const globalValues = [undefined, NaN, Infinity, globalThis]',
+      'const objectValue = { undefined: "property", NaN: 1 }',
+      'objectValue.undefined',
+      'function shadowBuiltins(undefined: number, NaN: number, Infinity: number, globalThis: number) {',
+      '  return [undefined, NaN, Infinity, globalThis]',
+      '}',
+      'const channel = IpcChannel.Ready',
       '',
     ].join('\n')
     const javaScript = [
@@ -620,6 +661,12 @@ void describe('focused Workbench language surface', () => {
       'const box = new Box()',
       'box.read("value")',
       'const values = Array.isArray(box) ? Object.keys(box) : []',
+      'const globals = [undefined, NaN, Infinity, globalThis]',
+      'const objectValue = { undefined: "property" }',
+      'objectValue.undefined',
+      'function shadowBuiltins(undefined, NaN, Infinity, globalThis) {',
+      '  return [undefined, NaN, Infinity, globalThis]',
+      '}',
       '',
     ].join('\n')
 
@@ -655,6 +702,91 @@ void describe('focused Workbench language surface', () => {
           `${builtin} should inherit its TypeScript default-library classification`
         )
       }
+      const uniqueTokenRanges = new Set(typeScriptTokens.tokens.map((token) => [
+        token.range.startLine,
+        token.range.startColumn,
+        token.range.endLine,
+        token.range.endColumn,
+      ].join(':')))
+      assert.equal(uniqueTokenRanges.size, typeScriptTokens.tokens.length)
+
+      const keywordTokens = typeScriptTokenKinds.filter((token) => token.type === 'keyword')
+      for (const primitive of [
+        'any',
+        'bigint',
+        'boolean',
+        'never',
+        'number',
+        'object',
+        'string',
+        'symbol',
+        'undefined',
+        'unknown',
+        'void',
+      ]) {
+        assert.ok(
+          keywordTokens.some((token) => token.text === primitive),
+          `${primitive} should use the semantic keyword role`
+        )
+      }
+      assert.equal(keywordTokens.filter((token) => token.text === 'undefined').length, 2)
+      assert.equal(keywordTokens.filter((token) => token.text === 'NaN').length, 1)
+      assert.equal(keywordTokens.filter((token) => token.text === 'Infinity').length, 1)
+      assert.equal(
+        typeScriptTokenKinds.filter((token) =>
+          token.text === 'globalThis'
+          && token.type === 'variable'
+          && token.modifiers.includes('defaultLibrary')
+        ).length,
+        1
+      )
+      for (const builtinClass of ['Error', 'Map', 'Promise', 'Set']) {
+        assert.ok(
+          typeScriptTokenKinds.some((token) =>
+            token.text === builtinClass
+            && ['class', 'interface', 'type'].includes(token.type)
+            && token.modifiers.includes('defaultLibrary')
+          ),
+          `${builtinClass} should retain a default-library class-like role`
+        )
+      }
+      assert.ok(typeScriptTokenKinds.some((token) =>
+        token.text === 'Ready' && token.type === 'enumMember'
+      ))
+
+      const decorationClasses = new Map<string, string[]>()
+      buildWorkbenchSemanticTokenDecorations(typeScript, typeScriptTokens.tokens).between(
+        0,
+        typeScript.length,
+        (from, to, value) => {
+          const text = typeScript.slice(from, to)
+          const values = decorationClasses.get(text) ?? []
+          values.push(String(value.spec.class))
+          decorationClasses.set(text, values)
+        }
+      )
+      for (const primitive of ['string', 'number', 'boolean', 'undefined']) {
+        assert.ok(
+          decorationClasses.get(primitive)?.some((className) =>
+            className.includes('cm-workbenchSemantic-keyword')
+          ),
+          `${primitive} should render with the keyword class`
+        )
+      }
+      for (const builtinClass of ['Error', 'List', 'Map', 'Promise', 'Set']) {
+        assert.ok(
+          decorationClasses.get(builtinClass)?.some((className) =>
+            className.includes('cm-workbenchSemantic-builtinType')
+          ),
+          `${builtinClass} should render with the built-in class color`
+        )
+      }
+      assert.ok(decorationClasses.get('Ready')?.every((className) =>
+        className.includes('cm-workbenchSemantic-enumMember')
+      ))
+      assert.ok(decorationClasses.get('undefined')?.some((className) =>
+        className.includes('cm-workbenchSemantic-property')
+      ))
 
       const keywordHover = await services.getHover({
         projectRoot,
@@ -703,10 +835,30 @@ void describe('focused Workbench language surface', () => {
       const javaScriptTokenKinds = javaScriptTokens.tokens.map((token) => ({
         text: languageRangeText(javaScript, token.range),
         type: token.type,
+        modifiers: token.modifiers,
       }))
       assert.ok(javaScriptTokenKinds.some((token) => token.text === 'Box' && token.type === 'class'))
       assert.ok(javaScriptTokenKinds.some((token) => token.text === 'read' && token.type === 'method'))
       assert.ok(javaScriptTokenKinds.some((token) => token.text === 'value' && token.type === 'property'))
+      for (const globalKeyword of ['Infinity', 'NaN', 'undefined']) {
+        assert.equal(
+          javaScriptTokenKinds.filter((token) =>
+            token.text === globalKeyword && token.type === 'keyword'
+          ).length,
+          1
+        )
+      }
+      assert.equal(
+        javaScriptTokenKinds.filter((token) =>
+          token.text === 'globalThis'
+          && token.type === 'variable'
+          && token.modifiers.includes('defaultLibrary')
+        ).length,
+        1
+      )
+      assert.ok(javaScriptTokenKinds.some((token) =>
+        token.text === 'undefined' && token.type === 'property'
+      ))
     } finally {
       await services.dispose()
       await rm(projectRoot, { recursive: true, force: true })

@@ -33,6 +33,21 @@ import workbenchAppIconUrl from '../../../../build/icon.svg?url'
 import type { WorkbenchChatProviderId } from '../../../plugins/agent-engines/identity'
 import styles from '../styles/workbenchPageStyles'
 
+import {
+  applyStandaloneAgentRuntimeEvent,
+  applyStandaloneCompletedRunResult,
+  hasStandaloneVisibleAssistantReply,
+  isStandaloneAgentRuntimeEvent,
+  readStandaloneAgentTerminalKind,
+  readStandaloneFinalAgentError,
+  readStandaloneFinalAgentStatus,
+  readStandaloneFinalAgentText,
+  readStandaloneModelVisibleText,
+  sanitizeStandaloneChatMessages,
+  shouldBlockStandaloneRunSubmission,
+  type StandaloneAgentTerminalKind,
+  type StandaloneConversationRuntime,
+} from './standaloneWorkbenchChatRuntime'
 import { createStandaloneWorkbenchConfiguredModelSelectorProviders } from './standaloneWorkbenchModelCatalog'
 import {
   selectStandaloneWorkbenchAgentModel,
@@ -43,18 +58,13 @@ import { workbenchMessage } from './workbenchMessageHost'
 
 const log = Log.tag('workbench-chat-adapter')
 
-interface StandaloneChatState {
+interface StandaloneChatState extends StandaloneConversationRuntime {
   readonly providerId: WorkbenchChatProviderId
   readonly projectRoot: string
   readonly sessionId: string
   readonly folderId: string
   readonly messages: readonly ChatMessage[]
-  readonly status: WorkbenchChatSessionSnapshot['runtime']['status']
-  readonly awaitingInputQuestion: string | null
-  readonly awaitingConfirmationMessage: string | null
-  readonly awaitingConfirmationDetail: ConversationView['runtime']['awaitingConfirmationDetail']
   readonly lastRunStartedAt: number | null
-  readonly lastRunFinishedAt: number | null
   readonly revision: number
 }
 
@@ -112,6 +122,12 @@ function createState(
     folderId: `folder-${id}`,
     messages: [],
     status: 'idle',
+    teamPhase: null,
+    activeTurn: null,
+    completedTurns: 0,
+    lastError: null,
+    connectionRetryAttempt: null,
+    connectionRetryMaxAttempts: null,
     awaitingInputQuestion: null,
     awaitingConfirmationMessage: null,
     awaitingConfirmationDetail: null,
@@ -160,7 +176,7 @@ function restoreStoredState(
     ...empty,
     sessionId: typeof stored.sessionId === 'string' ? stored.sessionId : empty.sessionId,
     folderId: typeof stored.folderId === 'string' ? stored.folderId : empty.folderId,
-    messages: stored.messages.filter(isStoredChatMessage),
+    messages: sanitizeStandaloneChatMessages(stored.messages.filter(isStoredChatMessage)),
     revision: typeof stored.revision === 'number' ? stored.revision : 0,
     lastRunStartedAt: typeof stored.lastRunStartedAt === 'number'
       ? stored.lastRunStartedAt
@@ -433,6 +449,11 @@ function StandaloneWorkbenchChatSessionSurface({
   currentFilePath: Nullable<string>
 }): ReactElement {
   const chat = useStandaloneChatState(projectRoot, providerId)
+  const hasPendingAgentExecution = !!findActiveExecution(
+    projectRoot,
+    providerId,
+    chat.sessionId
+  )
   const { t } = useWorkbenchI18n()
   const modelConfig = useStandaloneWorkbenchModelConfig()
   const engineCatalog = useAgentEngineCatalog(providerId)
@@ -492,24 +513,12 @@ function StandaloneWorkbenchChatSessionSurface({
             activeExecution.providerId,
             envelope
           )
-          applyAgentRuntimeEvent(
+          const terminalKind = applyAgentRuntimeEvent(
             activeExecution.projectRoot,
             activeExecution.providerId,
             envelope
           )
-          const terminal = readAgentTerminalEvent(envelope)
-          if (terminal?.status === 'completed') {
-            finishRun(activeExecution.projectRoot, activeExecution.providerId, 'completed')
-            activeAgentExecutions.delete(activeExecution.executionId)
-          } else if (terminal?.status === 'aborted') {
-            finishRun(activeExecution.projectRoot, activeExecution.providerId, 'aborted')
-            activeAgentExecutions.delete(activeExecution.executionId)
-          } else if (terminal?.status === 'failed') {
-            finishWithError(
-              activeExecution.projectRoot,
-              activeExecution.providerId,
-              terminal.message ?? 'Agent execution failed.'
-            )
+          if (terminalKind && terminalKind !== 'done') {
             activeAgentExecutions.delete(activeExecution.executionId)
           }
         }
@@ -528,8 +537,11 @@ function StandaloneWorkbenchChatSessionSurface({
     const text = draftValue.trim()
     if (
       (!text && draftFiles.length === 0)
-      || isActiveChatRun(chat.status)
-      || accountSignInPending
+      || shouldBlockStandaloneRunSubmission(
+        chat.status,
+        hasPendingAgentExecution,
+        accountSignInPending
+      )
     ) return
     if (
       providerId === 'workbench'
@@ -598,6 +610,12 @@ function StandaloneWorkbenchChatSessionSurface({
       ...state,
       messages: [...state.messages, submittedMessage],
       status: 'running',
+      teamPhase: 'creating-task',
+      activeTurn: null,
+      completedTurns: 0,
+      lastError: null,
+      connectionRetryAttempt: null,
+      connectionRetryMaxAttempts: null,
       awaitingInputQuestion: null,
       awaitingConfirmationMessage: null,
       awaitingConfirmationDetail: null,
@@ -635,23 +653,24 @@ function StandaloneWorkbenchChatSessionSurface({
             surface: 'project',
           },
         },
-        messages: latest.messages.map((message) => ({
-          role: message.role,
-          content: [
-            message.blocks
-            .filter((block) => block.type === 'text')
-            .map((block) => block.text)
-            .join('\n'),
-            ...(message.attachments?.length
-              ? [message.attachments
-                  .map((attachment) => `Attachment: ${attachment.name} (${attachment.mediaType})`)
-                  .join('\n')]
-              : []),
-            ...(message.id === submittedMessage.id
-              ? [currentFileContext, attachmentContext].filter(Boolean)
-              : []),
-          ].filter(Boolean).join('\n\n'),
-        })),
+        messages: sanitizeStandaloneChatMessages(latest.messages)
+          .map((message) => ({
+            role: message.role,
+            content: [
+              readStandaloneModelVisibleText(message),
+              ...(message.attachments?.length
+                ? [message.attachments
+                    .map((attachment) =>
+                      `Attachment: ${attachment.name} (${attachment.mediaType})`
+                    )
+                    .join('\n')]
+                : []),
+              ...(message.id === submittedMessage.id
+                ? [currentFileContext, attachmentContext].filter(Boolean)
+                : []),
+            ].filter(Boolean).join('\n\n'),
+          }))
+          .filter((message) => message.content.trim()),
         config: {
           ...(providerId === 'workbench'
             ? {
@@ -685,42 +704,37 @@ function StandaloneWorkbenchChatSessionSurface({
 
     const executionStillActive = activeAgentExecutions.delete(executionId)
     if (!executionStillActive) return
-    if (readFinalAgentStatus(result.output) === 'aborted') {
+    const finalStatus = readStandaloneFinalAgentStatus(result.output)
+    if (finalStatus === 'aborted') {
       withStateUpdateTarget(projectRoot, providerId, activeExecution.sessionId, () => {
         finishRun(projectRoot, providerId, 'aborted')
       })
       return
     }
+    if (finalStatus === 'error') {
+      withStateUpdateTarget(projectRoot, providerId, activeExecution.sessionId, () => {
+        finishWithError(
+          projectRoot,
+          providerId,
+          readStandaloneFinalAgentError(result.output) ?? t('workbench.chatExecutionFailed')
+        )
+      })
+      return
+    }
     withStateUpdateTarget(projectRoot, providerId, activeExecution.sessionId, () => {
-      updateState(projectRoot, providerId, (state) => ({
-        ...state,
-        messages: hasAssistantReply(state.messages)
-          ? state.messages
-          : [...state.messages, createTextMessage(
-              'assistant',
-              readFinalAgentText(result.output) ?? 'Run completed without a text response.'
-            )],
-        status: 'completed',
-        awaitingInputQuestion: null,
-        awaitingConfirmationMessage: null,
-        awaitingConfirmationDetail: null,
-        lastRunFinishedAt: Date.now(),
-        revision: state.revision + 1,
-      }))
+      finishCompletedRun(
+        projectRoot,
+        providerId,
+        readStandaloneFinalAgentText(result.output),
+        t('workbench.chatNoTextResponse')
+      )
     })
   }
 
   const lastMessage = chat.messages.at(-1)
-  const lastError = chat.status === 'failed' && lastMessage?.role === 'assistant'
-    ? lastMessage.blocks
-        .filter((block) => block.type === 'text')
-        .map((block) => block.text)
-        .join('\n')
-    : null
   const activeAssistantMessage = isActiveChatRun(chat.status) && lastMessage?.role === 'assistant'
     ? lastMessage
     : null
-  const completedTurns = chat.messages.filter((message) => message.role === 'user').length
   const starterSuggestions = useMemo(
     () => [
       {
@@ -753,12 +767,12 @@ function StandaloneWorkbenchChatSessionSurface({
       workerThreads: [],
       runtime: {
         status: chat.status,
-        teamPhase: null,
-        activeTurn: isActiveChatRun(chat.status) ? completedTurns : null,
-        completedTurns,
-        lastError,
-        connectionRetryAttempt: null,
-        connectionRetryMaxAttempts: null,
+        teamPhase: chat.teamPhase,
+        activeTurn: chat.activeTurn,
+        completedTurns: chat.completedTurns,
+        lastError: chat.lastError,
+        connectionRetryAttempt: chat.connectionRetryAttempt,
+        connectionRetryMaxAttempts: chat.connectionRetryMaxAttempts,
         lastRunStartedAt: chat.lastRunStartedAt,
         awaitingConfirmationMessage: chat.awaitingConfirmationMessage,
         awaitingInputQuestion: chat.awaitingInputQuestion,
@@ -786,11 +800,15 @@ function StandaloneWorkbenchChatSessionSurface({
       chat.awaitingInputQuestion,
       chat.awaitingConfirmationDetail,
       chat.awaitingConfirmationMessage,
+      chat.activeTurn,
+      chat.completedTurns,
+      chat.connectionRetryAttempt,
+      chat.connectionRetryMaxAttempts,
+      chat.lastError,
       chat.messages,
       chat.sessionId,
       chat.status,
-      completedTurns,
-      lastError,
+      chat.teamPhase,
       projectRoot,
       t,
     ]
@@ -804,7 +822,11 @@ function StandaloneWorkbenchChatSessionSurface({
           placeholder: currentFilePath
             ? t('workbench.chatAskAboutFile', { path: currentFilePath })
             : t('workbench.chatPlaceholder'),
-          disabled: isActiveChatRun(chat.status) || accountSignInPending,
+          disabled: shouldBlockStandaloneRunSubmission(
+            chat.status,
+            hasPendingAgentExecution,
+            accountSignInPending
+          ),
           onValueChange: setPrompt,
           onSend: (draft) => submit(draft?.value ?? prompt, draft?.files ?? files),
         },
@@ -884,6 +906,7 @@ function StandaloneWorkbenchChatSessionSurface({
       accountSignInPending,
       files,
       goalMode,
+      hasPendingAgentExecution,
       includedCurrentFilePath,
       engineCatalog,
       engineModel,
@@ -949,6 +972,11 @@ function StandaloneWorkbenchChatSessionSurface({
           updateState(projectRoot, providerId, (state) => ({
             ...state,
             status: 'running',
+            teamPhase: 'creating-task',
+            activeTurn: null,
+            lastError: null,
+            connectionRetryAttempt: null,
+            connectionRetryMaxAttempts: null,
             awaitingInputQuestion: null,
             awaitingConfirmationMessage: null,
             awaitingConfirmationDetail: null,
@@ -965,6 +993,12 @@ function StandaloneWorkbenchChatSessionSurface({
           updateState(projectRoot, providerId, (state) => ({
             ...state,
             status: 'running',
+            teamPhase: 'executing',
+            activeTurn: null,
+            lastError: null,
+            connectionRetryAttempt: null,
+            connectionRetryMaxAttempts: null,
+            awaitingInputQuestion: null,
             awaitingConfirmationMessage: null,
             awaitingConfirmationDetail: null,
             revision: state.revision + 1,
@@ -1095,34 +1129,18 @@ function applyAgentRuntimeEvent(
   projectRoot: string,
   providerId: WorkbenchChatProviderId,
   record: AgentExecutionEnvelope
-): void {
+): StandaloneAgentTerminalKind | null {
   const runtime = readAgentRuntimePayload(record)
-  if (!runtime) return
-  if (runtime.kind === 'awaiting-input' && typeof runtime.question === 'string') {
-    const question = runtime.question
-    updateState(projectRoot, providerId, (state) => ({
-      ...state,
-      status: 'awaiting-input',
-      awaitingInputQuestion: question,
-      awaitingConfirmationMessage: null,
-      awaitingConfirmationDetail: null,
-      revision: state.revision + 1,
-    }))
-    return
-  }
-  if (
-    runtime.kind === 'awaiting-confirmation'
-    && typeof runtime.confirmationMessage === 'string'
-  ) {
-    updateState(projectRoot, providerId, (state) => ({
-      ...state,
-      status: 'awaiting-confirmation',
-      awaitingInputQuestion: null,
-      awaitingConfirmationMessage: runtime.confirmationMessage as string,
-      awaitingConfirmationDetail: readConfirmationDetail(runtime.confirmationDetail),
-      revision: state.revision + 1,
-    }))
-  }
+  if (!runtime || !isStandaloneAgentRuntimeEvent(runtime)) return null
+  const terminalKind = readStandaloneAgentTerminalKind(runtime)
+  updateState(projectRoot, providerId, (state) => {
+    const base = terminalKind
+      ? { ...state, messages: sanitizeStandaloneChatMessages(state.messages) }
+      : state
+    const next = applyStandaloneAgentRuntimeEvent(base, runtime)
+    return next === state ? state : { ...next, revision: state.revision + 1 }
+  })
+  return terminalKind
 }
 
 function updateToolCallBlock(
@@ -1165,18 +1183,38 @@ function finishWithError(
   message: string
 ): void {
   updateState(projectRoot, providerId, (state) => ({
-    ...state,
-    messages: [...state.messages, {
-      ...createTextMessage('assistant', message),
-      blocks: [{ type: 'text', text: message, tone: 'error' }],
-    }],
-    status: 'failed',
-    awaitingInputQuestion: null,
-    awaitingConfirmationMessage: null,
-    awaitingConfirmationDetail: null,
-    lastRunFinishedAt: Date.now(),
+    ...applyStandaloneAgentRuntimeEvent(
+      { ...state, messages: sanitizeStandaloneChatMessages(state.messages) },
+      { kind: 'error', message }
+    ),
     revision: state.revision + 1,
   }))
+}
+
+function finishCompletedRun(
+  projectRoot: string,
+  providerId: WorkbenchChatProviderId,
+  finalText: string | null,
+  noTextError: string
+): void {
+  updateState(projectRoot, providerId, (state) => {
+    let messages: readonly ChatMessage[] = sanitizeStandaloneChatMessages(state.messages)
+    if (!hasStandaloneVisibleAssistantReply(messages) && finalText) {
+      const last = messages.at(-1)
+      messages = last?.role === 'assistant'
+        ? [
+            ...messages.slice(0, -1),
+            { ...last, blocks: [...last.blocks, { type: 'text', text: finalText }] },
+          ]
+        : [...messages, createTextMessage('assistant', finalText)]
+    }
+    const completed = applyStandaloneCompletedRunResult(
+      { ...state, messages },
+      messages,
+      noTextError
+    )
+    return { ...completed, revision: state.revision + 1 }
+  })
 }
 
 function createTextMessage(role: ChatMessage['role'], text: string): ChatMessage {
@@ -1186,23 +1224,6 @@ function createTextMessage(role: ChatMessage['role'], text: string): ChatMessage
     blocks: [{ type: 'text', text }],
     timestamp: Date.now(),
   }
-}
-
-function readAgentTerminalEvent(
-  record: AgentExecutionEnvelope
-): { status: 'completed' | 'aborted' | 'failed'; message?: string } | null {
-  const runtimePayload = readAgentRuntimePayload(record) ?? {}
-  const kind = runtimePayload.kind ?? runtimePayload.type
-  if (kind === 'done') return { status: 'completed' }
-  if (kind === 'aborted') return { status: 'aborted' }
-  return kind === 'error'
-    ? {
-        status: 'failed',
-        ...(typeof runtimePayload.message === 'string'
-          ? { message: runtimePayload.message }
-          : {}),
-      }
-    : null
 }
 
 function readAgentRuntimePayload(
@@ -1235,12 +1256,12 @@ function finishRun(
   status: Extract<StandaloneChatState['status'], 'completed' | 'aborted'>
 ): void {
   updateState(projectRoot, providerId, (state) => ({
-    ...state,
-    status,
-    awaitingInputQuestion: null,
-    awaitingConfirmationMessage: null,
-    awaitingConfirmationDetail: null,
-    lastRunFinishedAt: Date.now(),
+    ...applyStandaloneAgentRuntimeEvent(
+      { ...state, messages: sanitizeStandaloneChatMessages(state.messages) },
+      status === 'completed'
+        ? { kind: 'done' }
+        : { kind: 'aborted', message: '' }
+    ),
     revision: state.revision + 1,
   }))
 }
@@ -1249,49 +1270,6 @@ function isActiveChatRun(status: StandaloneChatState['status']): boolean {
   return status === 'running'
     || status === 'awaiting-input'
     || status === 'awaiting-confirmation'
-}
-
-function readFinalAgentText(output: unknown): string | null {
-  if (typeof output === 'string' && output.trim()) return output
-  if (typeof output !== 'object' || output === null) return null
-  const record = output as Record<string, unknown>
-  for (const key of ['text', 'outputText', 'response']) {
-    if (typeof record[key] === 'string' && record[key].trim()) return record[key]
-  }
-  return null
-}
-
-function readFinalAgentStatus(output: unknown): 'completed' | 'aborted' | null {
-  if (typeof output !== 'object' || output === null) return null
-  const status = (output as Record<string, unknown>).status
-  return status === 'completed' || status === 'aborted' ? status : null
-}
-
-function readConfirmationDetail(
-  value: unknown
-): ConversationView['runtime']['awaitingConfirmationDetail'] {
-  const detail = asRecord(value)
-  if (
-    detail.kind === 'tool-category-authorization'
-    && typeof detail.categoryId === 'string'
-    && typeof detail.categoryLabel === 'string'
-    && typeof detail.toolName === 'string'
-  ) return {
-    kind: 'tool-category-authorization',
-    categoryId: detail.categoryId,
-    categoryLabel: detail.categoryLabel,
-    toolName: detail.toolName,
-  }
-  if (
-    detail.kind === 'mcp-tool-call'
-    && typeof detail.serverName === 'string'
-    && typeof detail.toolName === 'string'
-  ) return {
-    kind: 'mcp-tool-call',
-    serverName: detail.serverName,
-    toolName: detail.toolName,
-  }
-  return null
 }
 
 async function buildAttachmentContext(files: readonly File[]): Promise<string> {
@@ -1320,10 +1298,6 @@ function readStoredEngineModel(providerId: WorkbenchChatProviderId): string {
 function storeEngineModel(providerId: WorkbenchChatProviderId, model: string): void {
   if (providerId === 'workbench' || typeof window === 'undefined') return
   window.localStorage.setItem(`velaros.workbench.engine-model:${providerId}`, model)
-}
-
-function hasAssistantReply(messages: readonly ChatMessage[]): boolean {
-  return messages.at(-1)?.role === 'assistant'
 }
 
 function chatStorageKey(projectRoot: string, providerId: WorkbenchChatProviderId): string {
