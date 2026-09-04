@@ -81,4 +81,23 @@ void describe('Workbench run button menu', () => {
     assert.match(styles, /\.runStopButton:not\(:disabled\)[\s\S]*color: var\(--status-red\)/u)
     assert.match(styles, /\.runStopButton:hover:not\(:disabled\)[\s\S]*background: var\(--status-red-soft\)/u)
   })
+
+  void test('shows a green rail indicator while any run session is still executing', async () => {
+    const [presentation, styles] = await Promise.all([
+      readFile('src/renderer/src/StandaloneWorkbenchPagePresentation.tsx', 'utf8'),
+      readFile('src/renderer/src/styles/03-layout.module.css', 'utf8'),
+    ])
+
+    assert.match(
+      presentation,
+      /const hasRunningRunSession = workbench\.runSessions\.some\(\(session\) => session\.isRunning\)/u
+    )
+    assert.match(presentation, /isRunning: hasRunningRunSession/u)
+    assert.match(presentation, /data-running=\{item\.isRunning\}/u)
+    assert.match(presentation, /item\.isRunning[\s\S]*workbench\.commandRunning/u)
+    assert.match(
+      styles,
+      /\.leftToolButton\[data-running='true'\]::after[\s\S]*top: 3px[\s\S]*right: 3px[\s\S]*width: 6px[\s\S]*height: 6px[\s\S]*background: var\(--status-green\)/u
+    )
+  })
 })
