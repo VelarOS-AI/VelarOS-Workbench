@@ -115,6 +115,11 @@ export interface WorkbenchLanguagePathResolver {
   toProjectRelativePath(projectRoot: string, absolutePath: string): string
 }
 
+// A complete Look property roster currently contains 225 entries. Keep the
+// external-language boundary bounded without dropping valid contextual
+// completions before CodeMirror can filter and rank them.
+const MaximumExternalLspCompletionItems = 512
+
 function textFromLspContent(value: unknown): string {
   if (typeof value === 'string') return value
   if (Array.isArray(value)) return value.map(textFromLspContent).filter(Boolean).join('\n\n')
@@ -452,7 +457,9 @@ class WorkbenchLanguageServices {
       return {
         projectRoot: resolved.projectRoot,
         path: request.path,
-        items: items.slice(0, 160).map((item) => this.mapExternalCompletion(request.path, item)),
+        items: items
+          .slice(0, MaximumExternalLspCompletionItems)
+          .map((item) => this.mapExternalCompletion(request.path, item)),
       }
     }
     if (resolved.service?.runtime === 'markdown-language-service') return this.withMarkdownLanguageService(request, resolved.projectRoot, async (markdown) => {

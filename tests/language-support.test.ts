@@ -51,6 +51,7 @@ import {
   shouldUseWorkbenchSingleCodeHoverLayout,
 } from '../src/renderer/src/models/editor/workbenchCodeMirrorLanguageFeatures'
 import {
+  mapWorkbenchLanguageServiceCompletionToCodeMirror,
   usesWorkbenchBuiltinLanguageService,
   usesWorkbenchExternalLspLanguageService,
   usesWorkbenchExternalSemanticLanguageService,
@@ -323,6 +324,12 @@ void describe('focused Workbench language surface', () => {
       'Document(keyword,"variableName.definition.function",punctuation,variableName,punctuation,atom,punctuation,keyword,"variableName.definition",operator,keyword,keyword,punctuation,tagName,attributeName,operator,punctuation,variableName,punctuation,tagName,punctuation,variableName,punctuation,tagName,punctuation,tagName,punctuation)'
     )
     assert.equal(
+      fallbackTree(
+        'return <button type="button" title=\'Settings\' data-copy=`{literal}`>Open</button>\n'
+      ),
+      'Document(keyword,punctuation,tagName,attributeName,operator,string,attributeName,operator,string,attributeName,operator,string,punctuation,punctuation,tagName,punctuation)'
+    )
+    assert.equal(
       fallbackTree([
         'component AddCheckForm:',
         '  return <form><p>Add release check</p><label>Title</label></form>',
@@ -535,6 +542,21 @@ void describe('focused Workbench language surface', () => {
       WORKBENCH_TYPESCRIPT_KEYWORDS.length
     )
     remove()
+  })
+
+  void test('filters contextual LSP values by their source text while preserving the visible label', () => {
+    const completion = mapWorkbenchLanguageServiceCompletionToCodeMirror({
+      path: 'src/main.vel',
+      item: {
+        label: '"no-drop"',
+        filterText: 'no-drop',
+        insertText: 'no-drop',
+        kind: 'property',
+      },
+    })
+    assert.equal(completion.label, 'no-drop')
+    assert.equal(completion.displayLabel, '"no-drop"')
+    assert.equal(typeof completion.apply, 'function')
   })
 
   void test('parses common data, configuration, shell, and database files', () => {

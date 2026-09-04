@@ -275,8 +275,10 @@ export function mapWorkbenchLanguageServiceCompletionToCodeMirror({
 }): Completion {
   const insertText = item.insertText ?? item.label
   const type = mapLanguageServiceCompletionType(item.kind, path)
+  const label = item.filterText || item.label
   const completion: WorkbenchCompletionPresentation = {
-    label: item.label,
+    label,
+    ...(label === item.label ? {} : { displayLabel: item.label }),
     type,
     detail: item.detail,
     [WORKBENCH_COMPLETION_RETURN_TYPE]: item.returnType,

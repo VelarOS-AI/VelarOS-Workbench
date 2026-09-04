@@ -388,6 +388,9 @@ const VelarParser: StreamParser<VelarStreamState> = {
         state.jsxTagNameExpected = false
         return 'tag'
       }
+      const quote = stream.peek()
+      if (quote === '"' || quote === "'" || quote === '`')
+        return beginString(stream, state, false, false)
       if (stream.match(/^[A-Za-z_$][\w$:-]*/u)) return 'attribute'
       if (stream.eat('=')) return 'operator'
       stream.next()

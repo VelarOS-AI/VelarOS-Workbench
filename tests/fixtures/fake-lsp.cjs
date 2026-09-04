@@ -65,7 +65,18 @@ function handle(message) {
     }
     case 'textDocument/completion':
       if (mode === 'hang') break
-      send({ jsonrpc: '2.0', id: message.id, result: { items: [{ label: 'component', kind: 14 }] } })
+      send({
+        jsonrpc: '2.0',
+        id: message.id,
+        result: {
+          items: mode === 'many-completions'
+            ? Array.from({ length: 600 }, (_, index) => ({
+                label: `lookProperty${String(index).padStart(3, '0')}`,
+                kind: 10,
+              }))
+            : [{ label: 'component', kind: 14 }],
+        },
+      })
       break
     case 'textDocument/hover':
       send({ jsonrpc: '2.0', id: message.id, result: { contents: { kind: 'markdown', value: 'Velar hover' } } })
