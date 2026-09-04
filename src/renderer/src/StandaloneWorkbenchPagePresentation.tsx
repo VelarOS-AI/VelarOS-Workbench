@@ -270,11 +270,13 @@ export function StandaloneWorkbenchPagePresentation({
 
   if (!workbench.activeProject) return <main className={styles.root} />
   const projectRoot = workbench.activeProject.rootPath
+  const hasRunningRunSession = workbench.runSessions.some((session) => session.isRunning)
 
   const bottomToolItems: Array<{
     id: BottomTool
     label: string
     icon: ReactElement
+    isRunning?: boolean
   }> = [
     ...(workbench.runSessions.length > 0
       ? [
@@ -282,6 +284,7 @@ export function StandaloneWorkbenchPagePresentation({
             id: 'run' as const,
             label: t('workbench.commandTabRuns'),
             icon: <PlayIcon size={18} weight="regular" />,
+            isRunning: hasRunningRunSession,
           },
         ]
       : []),
@@ -566,10 +569,15 @@ export function StandaloneWorkbenchPagePresentation({
                     size="icon-sm"
                     className={styles.leftToolButton}
                     title={item.label}
-                    label={item.label}
+                    label={
+                      item.isRunning
+                        ? `${item.label} · ${t('workbench.commandRunning')}`
+                        : item.label
+                    }
                     data-active={
                       !surface.isCommandPanelCollapsed && surface.activeBottomTool === item.id
                     }
+                    data-running={item.isRunning}
                     onClick={() => model.actions.toggleBottomTool(item.id)}
                   >
                     {item.icon}

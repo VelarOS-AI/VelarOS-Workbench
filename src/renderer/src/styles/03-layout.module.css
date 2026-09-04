@@ -122,6 +122,19 @@
   font-weight: 600;
 }
 
+.leftToolButton[data-running='true']::after {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 6px;
+  height: 6px;
+  border: 1px solid var(--workbench-toolbar);
+  border-radius: 999px;
+  background: var(--status-green);
+  content: '';
+  pointer-events: none;
+}
+
 .leftToolContent {
   @apply flex min-h-0 min-w-0 flex-col overflow-hidden;
   height: 100%;
