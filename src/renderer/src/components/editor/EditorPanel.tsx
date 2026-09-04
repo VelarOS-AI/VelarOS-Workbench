@@ -378,7 +378,7 @@ export function EditorPanel({
   )
   const openSymbolLocations = useCallback((
     request: WorkbenchSymbolLocationsRequest,
-    visible: boolean
+    visible?: boolean
   ) => {
     setSymbolLocations((current) => {
       const opened = openWorkbenchSymbolLocations(request)
@@ -388,7 +388,7 @@ export function EditorPanel({
       ) return { ...opened, returnLocation: current.returnLocation }
       return opened
     })
-    setSymbolLocationsVisible(visible)
+    if (visible !== undefined) setSymbolLocationsVisible(visible)
   }, [])
   const navigateSymbolLocation = useCallback(
     (location: WorkbenchLanguageServiceLocation) => {

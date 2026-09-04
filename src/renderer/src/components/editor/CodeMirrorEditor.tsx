@@ -162,6 +162,7 @@ import {
   getWorkbenchLanguageServiceDocumentHighlights,
   getWorkbenchLanguageServiceFormat,
   getWorkbenchLanguageServiceInlayHints,
+  getWorkbenchLanguageServiceReferences,
   getWorkbenchLanguageServiceRename,
   getWorkbenchLanguageServiceSemanticTokens,
 } from '@renderer/models/editor/workbenchLanguageServiceIpc'
@@ -238,7 +239,7 @@ interface CodeMirrorEditorProps {
   onOpenGoToLine: () => void
   onGoToDefinition: (path: string, line: number, column?: number) => void
   symbolLocations?: Nullable<WorkbenchSymbolLocationsState>
-  onOpenSymbolLocations?: (request: WorkbenchSymbolLocationsRequest, visible: boolean) => void
+  onOpenSymbolLocations?: (request: WorkbenchSymbolLocationsRequest, visible?: boolean) => void
   onCloseSymbolLocations?: () => void
   onNavigateSymbolLocation?: (location: WorkbenchLanguageServiceLocation) => void
   onApplyLanguageServiceFileChanges?: (changes: WorkbenchLanguageServiceFileEdit[]) => void
@@ -1736,9 +1737,37 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
               definitions,
               references: [],
             }), isDefinition)
-            if (isDefinition) return
 
-            callbacksRef.current.onGoToDefinition(location.path, location.line, location.column)
+            if (!isDefinition)
+              callbacksRef.current.onGoToDefinition(location.path, location.line, location.column)
+
+            // Definition navigation must not wait for a project-wide reference scan. Fill the
+            // panel in after the jump/open has happened, while rejecting results for an edited,
+            // replaced, or superseded source document.
+            void getWorkbenchLanguageServiceReferences(request, hostRuntime).then((referencesResult) => {
+              if (
+                !referencesResult.ok
+                || requestGeneration !== definitionRequestGenerationRef.current
+                || viewRef.current !== view
+                || view.state.doc !== sourceDocument
+                || pathRef.current !== currentPath
+              ) return
+              callbacksRef.current.onOpenSymbolLocations?.(buildWorkbenchSymbolLocationsRequest({
+                symbol: identifier.text,
+                origin,
+                ...(isDefinition ? {} : { destination: location }),
+                definitions,
+                references: referencesResult.data.locations,
+              }))
+            }).catch((error) => {
+              if (requestGeneration !== definitionRequestGenerationRef.current) return
+              log.debug('查询语言服务引用失败，保留定义跳转结果', {
+                projectRoot,
+                path: currentPath,
+                language,
+                error,
+              })
+            })
             return
           }
         } catch (error) {

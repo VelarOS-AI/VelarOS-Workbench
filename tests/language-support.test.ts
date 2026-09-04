@@ -993,6 +993,27 @@ void describe('focused Workbench language surface', () => {
       editor,
       /Promise\.all\([\s\S]{0,320}getWorkbenchLanguageServiceDefinition[\s\S]{0,320}getWorkbenchLanguageServiceReferences/u
     )
+    const definitionQuery = editor.indexOf(
+      'const definitionResult = await getWorkbenchLanguageServiceDefinition'
+    )
+    const initialLocations = editor.indexOf('references: [],', definitionQuery)
+    const referenceQuery = editor.indexOf(
+      'void getWorkbenchLanguageServiceReferences(request, hostRuntime).then',
+      initialLocations
+    )
+    const staleReferenceGuard = editor.indexOf(
+      'requestGeneration !== definitionRequestGenerationRef.current',
+      referenceQuery
+    )
+    const resolvedLocations = editor.indexOf(
+      'references: referencesResult.data.locations',
+      staleReferenceGuard
+    )
+    assert.ok(definitionQuery >= 0)
+    assert.ok(initialLocations > definitionQuery)
+    assert.ok(referenceQuery > initialLocations)
+    assert.ok(staleReferenceGuard > referenceQuery)
+    assert.ok(resolvedLocations > staleReferenceGuard)
 
     const hoverFeatures = await readFile(
       'src/renderer/src/models/editor/workbenchCodeMirrorLanguageFeatures.ts',
