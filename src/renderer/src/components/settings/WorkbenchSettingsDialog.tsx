@@ -43,9 +43,15 @@ import {
   type WorkbenchThemeId,
 } from '@renderer/models/settings/workbenchPreferences'
 import {
+  getStandaloneWorkbenchManagedProvider,
+  isStandaloneWorkbenchManagedProviderId,
+  refreshStandaloneWorkbenchManagedModels,
+  useStandaloneWorkbenchManagedModels,
+} from '@renderer/runtime/standaloneWorkbenchManagedModels'
+import {
   createStandaloneWorkbenchProviderModelOptions,
   getStandaloneWorkbenchModelProviderPreset,
-  StandaloneWorkbenchModelProviderPresets,
+  listStandaloneWorkbenchVisibleModelProviderPresets,
 } from '@renderer/runtime/standaloneWorkbenchModelCatalog'
 import {
   selectStandaloneWorkbenchModel,
@@ -222,12 +228,29 @@ export function WorkbenchSettingsDialog({
   const updateState = useWorkbenchUpdate()
   const productAnalytics = useWorkbenchProductAnalytics()
   const modelConfig = useStandaloneWorkbenchModelConfig()
+  const managedModelState = useStandaloneWorkbenchManagedModels()
   const mods = useStandaloneWorkbenchModCatalog()
-  const modelProviderPreset = getStandaloneWorkbenchModelProviderPreset(modelConfig.provider)
-  const modelProviderOptions = StandaloneWorkbenchModelProviderPresets.map((provider) => ({
+  const managedModels = managedModelState.managedModels
+  const selectedManagedProvider = getStandaloneWorkbenchManagedProvider(
+    modelConfig.provider,
+    managedModelState
+  )
+  const managedSelectionVisible =
+    !isStandaloneWorkbenchManagedProviderId(modelConfig.provider) || !!selectedManagedProvider
+  const visibleModelProviders = listStandaloneWorkbenchVisibleModelProviderPresets(managedModels)
+  const modelProviderPreset =
+    visibleModelProviders.find((provider) => provider.id === modelConfig.provider)
+    ?? getStandaloneWorkbenchModelProviderPreset(modelConfig.provider)
+  const modelProviderOptions = visibleModelProviders.map((provider) => ({
     value: provider.id,
     label: provider.label,
     description: provider.description,
+    ...(isStandaloneWorkbenchManagedProviderId(provider.id)
+      ? {
+          disabled:
+            !managedModels.find((entry) => entry.providerId === provider.id)?.enabled,
+        }
+      : {}),
   }))
   const timers = useTimerScope('WorkbenchSettingsDialog')
   const [activeSection, setActiveSection] = useState<WorkbenchSettingsSectionId>('general')
@@ -260,7 +283,8 @@ export function WorkbenchSettingsDialog({
     : null
   const modelOptions = createStandaloneWorkbenchProviderModelOptions(
     activeProviderModelCatalog?.models ?? [],
-    [modelConfig.model, modelConfig.completionModel]
+    [modelConfig.model, modelConfig.completionModel],
+    !selectedManagedProvider
   )
   const completionModelOptions = [
     {
@@ -443,6 +467,48 @@ export function WorkbenchSettingsDialog({
     modelConfig.provider,
     open,
     timers,
+  ])
+
+  useEffect(() => {
+    if (!open || activeSection !== 'ai') return
+    void refreshStandaloneWorkbenchManagedModels().catch(() => undefined)
+  }, [activeSection, open])
+
+  useEffect(() => {
+    if (
+      managedModelState.status !== 'ready'
+      || !isStandaloneWorkbenchManagedProviderId(modelConfig.provider)
+      || selectedManagedProvider
+    ) return
+    selectStandaloneWorkbenchModelProvider('openrouter')
+  }, [managedModelState.status, modelConfig.provider, selectedManagedProvider])
+
+  useEffect(() => {
+    if (
+      !selectedManagedProvider
+      || activeProviderModelCatalog?.provider !== modelConfig.provider
+      || activeProviderModelCatalog.models.length === 0
+    ) return
+    const available = new Set(activeProviderModelCatalog.models.map((model) => model.id))
+    const fallback =
+      (selectedManagedProvider.defaultModel
+        && available.has(selectedManagedProvider.defaultModel)
+        ? selectedManagedProvider.defaultModel
+        : undefined)
+      ?? activeProviderModelCatalog.models[0]?.id
+    if (!fallback) return
+    const patch: Partial<StandaloneWorkbenchModelConfig> = {}
+    if (!available.has(modelConfig.model)) patch.model = fallback
+    if (modelConfig.completionModel && !available.has(modelConfig.completionModel)) {
+      patch.completionModel = fallback
+    }
+    if (Object.keys(patch).length > 0) updateStandaloneWorkbenchModelConfig(patch)
+  }, [
+    activeProviderModelCatalog,
+    modelConfig.completionModel,
+    modelConfig.model,
+    modelConfig.provider,
+    selectedManagedProvider,
   ])
 
   useEffect(() => {
@@ -840,12 +906,23 @@ export function WorkbenchSettingsDialog({
           <Select
             size="sm"
             className={styles.workbenchSettingsSelectTrigger}
-            value={modelConfig.provider}
+            value={managedSelectionVisible ? modelConfig.provider : undefined}
             options={modelProviderOptions}
-            onChange={selectStandaloneWorkbenchModelProvider}
+            onChange={(providerId) => {
+              const provider = visibleModelProviders.find((entry) => entry.id === providerId)
+              selectStandaloneWorkbenchModelProvider(
+                providerId,
+                provider
+                  ? {
+                      model: provider.defaultModel,
+                      completionModel: provider.completionModel,
+                    }
+                  : undefined
+              )
+            }}
           />
         </SettingRow>
-        {modelProviderPreset.baseURLConfigurable && (
+        {managedSelectionVisible && modelProviderPreset.baseURLConfigurable && (
           <SettingRow
             title={t('workbench.settingsModelBaseUrl')}
             description={t('workbench.settingsModelBaseUrlDescription')}
@@ -863,43 +940,47 @@ export function WorkbenchSettingsDialog({
             />
           </SettingRow>
         )}
-        <SettingRow
-          title={t('workbench.settingsModelName')}
-          description={modelCatalogDescription}
-        >
-          <Select
-            size="sm"
-            className={styles.workbenchSettingsSelectTrigger}
-            value={modelConfig.model}
-            options={modelOptions}
-            searchable={modelOptions.length > 12}
-            searchPlaceholder={t('workbench.settingsModelSearchPlaceholder')}
-            emptyMessage={t('workbench.settingsModelSearchEmpty')}
-            onChange={(model) =>
-              selectStandaloneWorkbenchModel(modelConfig.provider, model, 'agent')
-            }
-          />
-        </SettingRow>
-        <SettingRow
-          title={t('workbench.settingsAiCompletionModel')}
-          description={t('workbench.settingsAiCompletionModelHint')}
-        >
-          <Select
-            size="sm"
-            className={styles.workbenchSettingsSelectTrigger}
-            value={
-              modelConfig.completionModel || StandaloneWorkbenchCompletionDisabledOptionValue
-            }
-            options={completionModelOptions}
-            searchable={completionModelOptions.length > 12}
-            searchPlaceholder={t('workbench.settingsModelSearchPlaceholder')}
-            emptyMessage={t('workbench.settingsModelSearchEmpty')}
-            onChange={(model) =>
-              selectStandaloneWorkbenchModel(modelConfig.provider, model, 'completion')
-            }
-          />
-        </SettingRow>
-        {!modelProviderPreset.apiKeyOptional && (
+        {managedSelectionVisible && (
+          <>
+            <SettingRow
+              title={t('workbench.settingsModelName')}
+              description={modelCatalogDescription}
+            >
+              <Select
+                size="sm"
+                className={styles.workbenchSettingsSelectTrigger}
+                value={modelConfig.model}
+                options={modelOptions}
+                searchable={modelOptions.length > 12}
+                searchPlaceholder={t('workbench.settingsModelSearchPlaceholder')}
+                emptyMessage={t('workbench.settingsModelSearchEmpty')}
+                onChange={(model) =>
+                  selectStandaloneWorkbenchModel(modelConfig.provider, model, 'agent')
+                }
+              />
+            </SettingRow>
+            <SettingRow
+              title={t('workbench.settingsAiCompletionModel')}
+              description={t('workbench.settingsAiCompletionModelHint')}
+            >
+              <Select
+                size="sm"
+                className={styles.workbenchSettingsSelectTrigger}
+                value={
+                  modelConfig.completionModel || StandaloneWorkbenchCompletionDisabledOptionValue
+                }
+                options={completionModelOptions}
+                searchable={completionModelOptions.length > 12}
+                searchPlaceholder={t('workbench.settingsModelSearchPlaceholder')}
+                emptyMessage={t('workbench.settingsModelSearchEmpty')}
+                onChange={(model) =>
+                  selectStandaloneWorkbenchModel(modelConfig.provider, model, 'completion')
+                }
+              />
+            </SettingRow>
+          </>
+        )}
+        {managedSelectionVisible && !modelProviderPreset.apiKeyOptional && (
           <SettingRow
             title={t('workbench.settingsModelApiKey')}
             description={t('workbench.settingsModelApiKeyDescription')}

@@ -146,11 +146,16 @@ function applyStandaloneWorkbenchModelConfig(
 
 function persistApiKeyForProvider(provider: string, apiKey: string): void {
   if (typeof window === 'undefined' || !window.velarosWorkbenchModel) return
+  if (getStandaloneWorkbenchModelProviderPreset(provider).managedByCloud) return
   void window.velarosWorkbenchModel.setApiKey({ provider, apiKey }).catch(() => undefined)
 }
 
 async function hydrateApiKeyForProvider(provider: string): Promise<void> {
   if (typeof window === 'undefined' || !window.velarosWorkbenchModel) return
+  if (getStandaloneWorkbenchModelProviderPreset(provider).managedByCloud) {
+    applyStandaloneWorkbenchModelConfig({ apiKey: '' }, false)
+    return
+  }
   const request = ++apiKeyHydrationRequest
   const mutationVersion = apiKeyMutationVersion
   const apiKey = await window.velarosWorkbenchModel
@@ -170,17 +175,21 @@ export function hydrateStandaloneWorkbenchModelApiKey(): void {
   void hydrateApiKeyForProvider(currentConfig.provider)
 }
 
-export function selectStandaloneWorkbenchModelProvider(providerId: string): void {
+export function selectStandaloneWorkbenchModelProvider(
+  providerId: string,
+  defaults?: { readonly model: string; readonly completionModel?: string }
+): void {
   const provider = getStandaloneWorkbenchModelProviderPreset(providerId)
+  const model = defaults?.model ?? provider.defaultModel
   apiKeyHydrationRequest += 1
   applyStandaloneWorkbenchModelConfig({
     provider: provider.id,
-    model: provider.defaultModel,
-    completionModel: provider.completionModel,
+    model,
+    completionModel: defaults?.completionModel ?? (model || provider.completionModel),
     baseURL: provider.defaultBaseURL,
     apiKey: '',
   }, false)
-  void hydrateApiKeyForProvider(provider.id)
+  if (!provider.managedByCloud) void hydrateApiKeyForProvider(provider.id)
 }
 
 export function selectStandaloneWorkbenchModel(
@@ -213,7 +222,7 @@ export function selectStandaloneWorkbenchAgentModel(
     baseURL: providerChanged ? provider.defaultBaseURL : currentConfig.baseURL,
     apiKey: providerChanged ? '' : currentConfig.apiKey,
   }, false)
-  if (providerChanged) void hydrateApiKeyForProvider(provider.id)
+  if (providerChanged && !provider.managedByCloud) void hydrateApiKeyForProvider(provider.id)
 }
 
 export function getStandaloneWorkbenchModelConfig(): StandaloneWorkbenchModelConfig {

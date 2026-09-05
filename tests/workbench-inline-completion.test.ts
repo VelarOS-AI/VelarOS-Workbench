@@ -7,6 +7,7 @@ import {
   createStandaloneWorkbenchConfiguredModelSelectorProviders,
   createStandaloneWorkbenchProviderModelOptions,
   getStandaloneWorkbenchModelProviderPreset,
+  listStandaloneWorkbenchVisibleModelProviderPresets,
   resolveStandaloneWorkbenchProviderModel,
   StandaloneWorkbenchModelProviderPresets,
 } from '../src/renderer/src/runtime/standaloneWorkbenchModelCatalog'
@@ -27,6 +28,8 @@ describe('Workbench inline completion', () => {
       .toBe(true)
     expect(StandaloneWorkbenchModelProviderPresets.some((provider) => provider.id === 'custom'))
       .toBe(false)
+    expect(StandaloneWorkbenchModelProviderPresets.some((provider) => String(provider.id) === 'velar-dev'))
+      .toBe(false)
 
     const openAI = getStandaloneWorkbenchModelProviderPreset('openai')
     expect(openAI.defaultBaseURL).toBe('https://api.openai.com/v1')
@@ -39,6 +42,34 @@ describe('Workbench inline completion', () => {
     const gateway = getStandaloneWorkbenchModelProviderPreset('openai-compatible-gateway')
     expect(gateway.baseURLConfigurable).toBe(true)
     expect(gateway.validationKind).toBe('openai-compatible-models')
+  })
+
+  test('adds Velar Dev only from explicit online account authorization', () => {
+    expect(listStandaloneWorkbenchVisibleModelProviderPresets([]).some(
+      (provider) => String(provider.id) === 'velar-dev'
+    )).toBe(false)
+
+    const providers = listStandaloneWorkbenchVisibleModelProviderPresets([{
+      providerId: 'velar-dev',
+      displayName: 'Velar Dev',
+      enabled: true,
+      defaultModel: 'velar-dev/Z3B0LTUuNi1zb2w',
+      models: [
+        {
+          id: 'velar-dev/Z3B0LTUuNi1zb2w',
+          label: 'GPT 5.6 Sol',
+          status: 'available',
+        },
+      ],
+    }])
+    expect(providers[0]).toMatchObject({
+      id: 'velar-dev',
+      label: 'Velar Dev',
+      defaultModel: 'velar-dev/Z3B0LTUuNi1zb2w',
+      models: ['velar-dev/Z3B0LTUuNi1zb2w'],
+      apiKeyOptional: true,
+      baseURLConfigurable: false,
+    })
   })
 
   test('projects only the configured chat model into the composer selector', () => {
@@ -67,6 +98,12 @@ describe('Workbench inline completion', () => {
       { value: 'remote-b', label: 'Remote B' },
       { value: 'configured-legacy', label: 'configured-legacy' },
     ])
+
+    expect(createStandaloneWorkbenchProviderModelOptions(
+      [{ id: 'velar-dev/current', label: 'Current' }],
+      ['velar-dev/stale'],
+      false
+    )).toEqual([{ value: 'velar-dev/current', label: 'Current' }])
   })
 
   test('keeps a custom gateway address when the configured model changes', () => {

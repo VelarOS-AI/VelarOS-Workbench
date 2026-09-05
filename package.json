@@ -1,6 +1,6 @@
 {
   "name": "velaros-workbench",
-  "version": "0.3.25",
+  "version": "0.3.26",
   "private": true,
   "description": "VelarOS Workbench standalone Electron IDE.",
   "desktopName": "velaros-workbench.desktop",
@@ -78,7 +78,7 @@
     "@velaros-ai/core": "0.4.0",
     "@velaros-ai/development": "1.0.5",
     "@velaros-ai/kernel": "0.2.1",
-    "@velaros-ai/model": "0.4.12",
+    "@velaros-ai/model": "0.4.13",
     "@velaros-ai/project": "2.0.7",
     "@velaros-ai/system": "1.1.4",
     "@velaros-ai/ui": "0.2.29",

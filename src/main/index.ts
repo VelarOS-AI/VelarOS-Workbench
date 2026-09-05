@@ -278,6 +278,14 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
     app.getVersion()
   )
   const modelComposition = createModelRuntimeComposition()
+  modelComposition.velarCloudRuntime.registerProvider('velar', {
+    baseURL: accountService.getManagedModelBaseUrl('velar'),
+    fetch: (input, init) => accountService.fetchManagedModel('velar', input, init),
+  })
+  modelComposition.velarCloudRuntime.registerProvider('velar-dev', {
+    baseURL: accountService.getManagedModelBaseUrl('velar-dev'),
+    fetch: (input, init) => accountService.fetchManagedModel('velar-dev', input, init),
+  })
   // Browser Mod 每轮发布一份冻结工具面；页面 URL/标题/加载态使用独立 revision，不会
   // 重建 Agent 会话。每次具体执行仍由 Browser Host 实时校验启用态与项目所有权。
   const agentExecutionStack = new WorkbenchAgentExecutionStack(
@@ -306,7 +314,8 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
         title: WorkbenchProductName,
       },
     }),
-    dataRootDir
+    dataRootDir,
+    accountService
   )
   const kernelRuntime = new Kernel({
     lifecycleFailureMode: 'degrade',
@@ -356,7 +365,7 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
 
   registerWorkbenchLanguageServiceIpc(
     providers.language,
-    new WorkbenchInlineCompletionGenerator()
+    new WorkbenchInlineCompletionGenerator(undefined, modelComposition)
   )
   windowManager = new WorkbenchWindowManager(dataRootDir, {
     createBrowserWindow: createWorkbenchWindow,

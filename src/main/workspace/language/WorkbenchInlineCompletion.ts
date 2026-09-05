@@ -1,7 +1,10 @@
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 import { ModelRequestService } from '@velaros-ai/model'
-import { createModelRuntimeComposition } from '@velaros-ai/model/node'
+import {
+  createModelRuntimeComposition,
+  type ModelRuntimeComposition,
+} from '@velaros-ai/model/node'
 
 import type { WorkbenchInlineCompletionResult } from '@shared/contracts'
 import type { WorkbenchInlineCompletionBridgeRequest } from '@shared/workbenchLanguage'
@@ -17,10 +20,10 @@ type InlineCompletionModelRequestPort = Pick<ModelRequestService, 'generateInlin
 /** Workbench 独立宿主的编辑器 Tab 补全生成器。 */
 export class WorkbenchInlineCompletionGenerator {
   private readonly log = logRuntime.tag('WorkbenchInlineCompletionGenerator')
-  private readonly modelComposition = createModelRuntimeComposition()
 
   public constructor(
-    private readonly modelRequestService: InlineCompletionModelRequestPort = new ModelRequestService()
+    private readonly modelRequestService: InlineCompletionModelRequestPort = new ModelRequestService(),
+    private readonly modelComposition: ModelRuntimeComposition = createModelRuntimeComposition()
   ) {}
 
   public async generate(

@@ -7,6 +7,8 @@ import {
 } from '@velaros-ai/model/catalog'
 import type { ChatProviderId, ProviderModelCatalogEntry } from '@velaros-ai/model/contracts'
 
+import type { WorkbenchManagedModelProvider } from '@shared/workbenchModel'
+
 export interface StandaloneWorkbenchModelProviderPreset {
   id: ChatProviderId
   label: string
@@ -16,6 +18,7 @@ export interface StandaloneWorkbenchModelProviderPreset {
   completionModel: string
   apiKeyOptional: boolean
   baseURLConfigurable: boolean
+  managedByCloud: boolean
   validationKind: ModelProviderValidationKind
   apiKeyEnvironmentName?: string
   models: readonly string[]
@@ -32,11 +35,10 @@ function resolveCompletionModel(models: readonly string[], defaultModel: string)
   )
 }
 
-export const StandaloneWorkbenchModelProviderPresets: readonly StandaloneWorkbenchModelProviderPreset[] =
+const AllStandaloneWorkbenchModelProviderPresets: readonly StandaloneWorkbenchModelProviderPreset[] =
   ModelProviderOperationalManifests
     .filter((manifest) =>
       !manifest.debugOnly
-      && !manifest.managedByCloud
       && manifest.id !== 'custom'
     )
     .map((manifest) => {
@@ -54,6 +56,7 @@ export const StandaloneWorkbenchModelProviderPresets: readonly StandaloneWorkben
         completionModel: resolveCompletionModel(models, defaultModel),
         apiKeyOptional: manifest.apiKeyOptional ?? false,
         baseURLConfigurable: manifest.baseURLConfigurable ?? false,
+        managedByCloud: manifest.managedByCloud ?? false,
         validationKind: manifest.validationKind,
         ...(manifest.defaultApiKeyEnv
           ? { apiKeyEnvironmentName: manifest.defaultApiKeyEnv }
@@ -62,16 +65,43 @@ export const StandaloneWorkbenchModelProviderPresets: readonly StandaloneWorkben
       }
     })
 
+/** 自带密钥或本地服务的 provider；Cloud 托管 provider 必须从在线授权快照加入。 */
+export const StandaloneWorkbenchModelProviderPresets: readonly StandaloneWorkbenchModelProviderPreset[] =
+  AllStandaloneWorkbenchModelProviderPresets.filter((provider) => !provider.managedByCloud)
+
 const DefaultProviderId: ChatProviderId = 'openrouter'
 
 export function getStandaloneWorkbenchModelProviderPreset(
   provider: string
 ): StandaloneWorkbenchModelProviderPreset {
   return (
-    StandaloneWorkbenchModelProviderPresets.find((preset) => preset.id === provider)
+    AllStandaloneWorkbenchModelProviderPresets.find((preset) => preset.id === provider)
     ?? StandaloneWorkbenchModelProviderPresets.find((preset) => preset.id === DefaultProviderId)
     ?? StandaloneWorkbenchModelProviderPresets[0]!
   )
+}
+
+export function listStandaloneWorkbenchVisibleModelProviderPresets(
+  managedModels: readonly WorkbenchManagedModelProvider[]
+): readonly StandaloneWorkbenchModelProviderPreset[] {
+  const managed = managedModels.map((config) => {
+    const preset = getStandaloneWorkbenchModelProviderPreset(config.providerId)
+    const models = config.models
+      .filter((model) => model.status === 'available')
+      .map((model) => model.id)
+    const defaultModel =
+      (config.defaultModel && models.includes(config.defaultModel) ? config.defaultModel : undefined)
+      ?? models[0]
+      ?? preset.defaultModel
+    return {
+      ...preset,
+      label: config.displayName,
+      defaultModel,
+      completionModel: resolveCompletionModel(models, defaultModel),
+      models,
+    }
+  })
+  return [...managed, ...StandaloneWorkbenchModelProviderPresets]
 }
 
 export function resolveStandaloneWorkbenchProviderModel(
@@ -89,14 +119,17 @@ export function resolveStandaloneWorkbenchProviderModel(
 
 export function createStandaloneWorkbenchConfiguredModelSelectorProviders(
   providerId: string,
-  modelId: string
+  modelId: string,
+  managedProvider?: WorkbenchManagedModelProvider
 ): Array<{
   value: ChatProviderId
   label: string
   defaultModel: string
   models: Array<{ value: string; label: string }>
 }> {
-  const provider = getStandaloneWorkbenchModelProviderPreset(providerId)
+  const provider = managedProvider
+    ? listStandaloneWorkbenchVisibleModelProviderPresets([managedProvider])[0]!
+    : getStandaloneWorkbenchModelProviderPreset(providerId)
   const model = resolveStandaloneWorkbenchProviderModel(provider.id, modelId, 'agent')
   return [{
     value: provider.id,
@@ -108,7 +141,8 @@ export function createStandaloneWorkbenchConfiguredModelSelectorProviders(
 
 export function createStandaloneWorkbenchProviderModelOptions(
   remoteModels: readonly ProviderModelCatalogEntry[],
-  configuredModels: readonly string[]
+  configuredModels: readonly string[],
+  retainConfiguredModels = true
 ): Array<{ value: string; label: string }> {
   const options: Array<{ value: string; label: string }> = []
   const seen = new Set<string>()
@@ -118,11 +152,13 @@ export function createStandaloneWorkbenchProviderModelOptions(
     seen.add(value)
     options.push({ value, label: model.label.trim() || value })
   }
-  for (const configuredModel of configuredModels) {
-    const value = configuredModel.trim()
-    if (!value || seen.has(value)) continue
-    seen.add(value)
-    options.push({ value, label: value })
+  if (retainConfiguredModels) {
+    for (const configuredModel of configuredModels) {
+      const value = configuredModel.trim()
+      if (!value || seen.has(value)) continue
+      seen.add(value)
+      options.push({ value, label: value })
+    }
   }
   return options
 }

@@ -783,6 +783,10 @@ export const workbenchAppEnUSMessages = {
     chatModelMissingDescription: 'Add a provider, model, and API key on the Model settings page.',
     chatSignInFailedTitle: 'Could not sign in to VelarOS',
     chatSignInFailedDescription: '{error}',
+    chatManagedModelUnavailableTitle: 'Managed model unavailable',
+    chatManagedModelUnavailableDescription:
+      'This account is not authorized, or the selected model is no longer in the live Cloud catalog.',
+    chatManagedModelAccessFailed: 'Could not refresh Cloud model access: {error}',
     chatNoTextResponse: 'This run returned no visible response. Please try again.',
     chatExecutionFailed: 'Agent execution failed. Try again or open diagnostics.',
     chatEngineLoadingTitle: 'Connecting to {engine}',

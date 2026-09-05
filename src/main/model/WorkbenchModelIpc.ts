@@ -5,20 +5,30 @@ import type { ChatProviderId, ListProviderModelsRequest } from '@velaros-ai/mode
 
 import {
   type WorkbenchListProviderModelsRequest,
+  type WorkbenchManagedModelProviderId,
   type WorkbenchModelApiKeyRequest,
   type WorkbenchModelApiKeyUpdate,
   WorkbenchModelChannels,
 } from '../../shared/workbenchModel'
+import type { WorkbenchAccountService } from '../account/WorkbenchAccountService'
 
 import { WorkbenchModelCredentialStore } from './WorkbenchModelCredentialStore'
 
 export function registerWorkbenchModelIpc(
   service: ProviderModelCatalogService,
-  dataRootDir: string
+  dataRootDir: string,
+  accountService: WorkbenchAccountService
 ): () => void {
   const credentialStore = new WorkbenchModelCredentialStore(dataRootDir)
-  ipcMain.handle(WorkbenchModelChannels.listProviderModels, (_event, request: unknown) =>
-    service.listProviderModels(readListProviderModelsRequest(request)))
+  ipcMain.handle(WorkbenchModelChannels.listProviderModels, (_event, request: unknown) => {
+    const parsed = readListProviderModelsRequest(request)
+    const providerId = readManagedProviderId(parsed.provider)
+    return providerId
+      ? accountService.listManagedProviderModels(providerId)
+      : service.listProviderModels(parsed)
+  })
+  ipcMain.handle(WorkbenchModelChannels.listManagedProviders, () =>
+    accountService.getManagedModelAccess())
   ipcMain.handle(WorkbenchModelChannels.getApiKey, (_event, request: unknown) =>
     credentialStore.getApiKey(readApiKeyRequest(request).provider))
   ipcMain.handle(WorkbenchModelChannels.setApiKey, (_event, request: unknown) => {
@@ -28,9 +38,15 @@ export function registerWorkbenchModelIpc(
 
   return () => {
     ipcMain.removeHandler(WorkbenchModelChannels.listProviderModels)
+    ipcMain.removeHandler(WorkbenchModelChannels.listManagedProviders)
     ipcMain.removeHandler(WorkbenchModelChannels.getApiKey)
     ipcMain.removeHandler(WorkbenchModelChannels.setApiKey)
   }
+}
+
+function readManagedProviderId(provider: string): WorkbenchManagedModelProviderId | null {
+  if (provider === 'velar' || provider === 'velar-dev') return provider
+  return null
 }
 
 function readApiKeyRequest(request: unknown): WorkbenchModelApiKeyRequest {

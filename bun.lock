@@ -49,7 +49,7 @@
         "@velaros-ai/core": "0.4.0",
         "@velaros-ai/development": "1.0.5",
         "@velaros-ai/kernel": "0.2.1",
-        "@velaros-ai/model": "0.4.12",
+        "@velaros-ai/model": "0.4.13",
         "@velaros-ai/project": "2.0.7",
         "@velaros-ai/system": "1.1.4",
         "@velaros-ai/ui": "0.2.29",
@@ -692,7 +692,7 @@
 
     "@velaros-ai/kernel": ["@velaros-ai/kernel@0.2.1", "https://npm.pkg.github.com/download/@velaros-ai/kernel/0.2.1/baa0fcacf200bec183ed87441025c7c0ba192766", { "dependencies": { "@velaros-ai/core": "0.4.0", "ws": "^8.18.3", "zod": "^4.3.6" }, "bin": { "velaros-kernel-daemon": "dist/serve/main.js" } }, "sha512-y3dkEb/twu5+9OjcVxC0PKH84GIiCVr4snXskWH08jJyl2hVcf+BvuuBF4QdmZN5jRrYCL0NNauYfTC1kWhkiQ=="],
 
-    "@velaros-ai/model": ["@velaros-ai/model@0.4.12", "https://npm.pkg.github.com/download/@velaros-ai/model/0.4.12/33de7b4caa698b93146281eb31ac1c2940027515", { "dependencies": { "@ai-sdk/anthropic": "^3.0.71", "@ai-sdk/google": "^3.0.64", "@ai-sdk/openai": "^3.0.53", "@ai-sdk/provider": "3.0.8", "@velaros-ai/core": "0.4.0", "@velaros-ai/kernel": "0.2.1", "ai": "^6.0.168" } }, "sha512-cwJibXYycfdMvYnwsqwOYsI7dO8fvs4uKJiMID37Pr9udS/7bmLW1vKSnZ71TNg6KYI6pG23wIKG1uDC41mGZg=="],
+    "@velaros-ai/model": ["@velaros-ai/model@0.4.13", "https://npm.pkg.github.com/download/@velaros-ai/model/0.4.13/b4a8db122c4ec84d0ef42be34b43a6a46dd7e093", { "dependencies": { "@ai-sdk/anthropic": "^3.0.71", "@ai-sdk/google": "^3.0.64", "@ai-sdk/openai": "^3.0.53", "@ai-sdk/provider": "3.0.8", "@velaros-ai/core": "0.4.0", "@velaros-ai/kernel": "0.2.1", "ai": "^6.0.168" } }, "sha512-s/IEcBf2St48d6kuMyNNe7H68gbChfeIK5wr7E3n8HXF3r3c09um8jpt0ZwuvWnwy2UwHHxx5YlXmldx+9WJZA=="],
 
     "@velaros-ai/project": ["@velaros-ai/project@2.0.7", "https://npm.pkg.github.com/download/@velaros-ai/project/2.0.7/02651aa15a1111d2889e4b52695dfe191407d039", { "dependencies": { "@velaros-ai/core": "0.4.0", "@velaros-ai/kernel": "0.2.1", "diff": "^8.0.4", "execa": "^9.6.1", "iconv-lite": "^0.7.2", "picomatch": "^4.0.3", "typescript": "^5.0.0", "zod": "^4.3.6" }, "peerDependencies": { "@velaros-ai/agent": "0.6.8" } }, "sha512-2JGQroE9y1LF3uCuNhhFTjq7lxIiF93wdgpw+fZrSgjPs9ixa5vrpDy5b5PZxlxgTcRJtufYEuaojgZh2aGwIA=="],
 

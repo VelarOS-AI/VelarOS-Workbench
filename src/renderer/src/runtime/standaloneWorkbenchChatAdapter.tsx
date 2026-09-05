@@ -48,9 +48,16 @@ import {
   type StandaloneAgentTerminalKind,
   type StandaloneConversationRuntime,
 } from './standaloneWorkbenchChatRuntime'
+import {
+  getStandaloneWorkbenchManagedProvider,
+  isStandaloneWorkbenchManagedProviderId,
+  refreshStandaloneWorkbenchManagedModels,
+  useStandaloneWorkbenchManagedModels,
+} from './standaloneWorkbenchManagedModels'
 import { createStandaloneWorkbenchConfiguredModelSelectorProviders } from './standaloneWorkbenchModelCatalog'
 import {
   selectStandaloneWorkbenchAgentModel,
+  selectStandaloneWorkbenchModelProvider,
   useStandaloneWorkbenchModelConfig,
 } from './standaloneWorkbenchModelConfig'
 import { resolveWorkbenchClipboardFilePath } from './workbenchClipboardFile'
@@ -456,6 +463,11 @@ function StandaloneWorkbenchChatSessionSurface({
   )
   const { t } = useWorkbenchI18n()
   const modelConfig = useStandaloneWorkbenchModelConfig()
+  const managedModelState = useStandaloneWorkbenchManagedModels()
+  const selectedManagedProvider = getStandaloneWorkbenchManagedProvider(
+    modelConfig.provider,
+    managedModelState
+  )
   const engineCatalog = useAgentEngineCatalog(providerId)
   const [engineModel, setEngineModel] = useState(() => readStoredEngineModel(providerId))
   const [prompt, setPrompt] = useState('')
@@ -472,6 +484,15 @@ function StandaloneWorkbenchChatSessionSurface({
   useEffect(() => {
     setIncludedCurrentFilePath(currentFilePath)
   }, [currentFilePath])
+
+  useEffect(() => {
+    if (
+      managedModelState.status !== 'ready'
+      || !isStandaloneWorkbenchManagedProviderId(modelConfig.provider)
+      || selectedManagedProvider
+    ) return
+    selectStandaloneWorkbenchModelProvider('openrouter')
+  }, [managedModelState.status, modelConfig.provider, selectedManagedProvider])
 
   useEffect(() => {
     if (!engineCatalog?.available || engineCatalog.models.length === 0) return
@@ -586,6 +607,35 @@ function StandaloneWorkbenchChatSessionSurface({
         return
       } finally {
         setAccountSignInPending(false)
+      }
+    }
+    if (
+      providerId === 'workbench'
+      && isStandaloneWorkbenchManagedProviderId(modelConfig.provider)
+    ) {
+      try {
+        const snapshot = await refreshStandaloneWorkbenchManagedModels()
+        const managedProvider = snapshot.managedModels.find(
+          (provider) => provider.providerId === modelConfig.provider
+        )
+        const modelAvailable = managedProvider?.models.some(
+          (model) => model.id === modelConfig.model && model.status === 'available'
+        )
+        if (!managedProvider?.enabled || !modelAvailable) {
+          workbenchMessage.warning({
+            title: t('workbench.chatManagedModelUnavailableTitle'),
+            description: t('workbench.chatManagedModelUnavailableDescription'),
+          })
+          return
+        }
+      } catch (error) {
+        workbenchMessage.warning({
+          title: t('workbench.chatManagedModelUnavailableTitle'),
+          description: t('workbench.chatManagedModelAccessFailed', {
+            error: error instanceof Error ? error.message : String(error),
+          }),
+        })
+        return
       }
     }
     const attachmentContext = await buildAttachmentContext(draftFiles)
@@ -855,13 +905,18 @@ function StandaloneWorkbenchChatSessionSurface({
         },
       },
       modelSelector: providerId === 'workbench'
+        && (
+          !isStandaloneWorkbenchManagedProviderId(modelConfig.provider)
+          || selectedManagedProvider?.enabled
+        )
         ? {
             label: t('chat.composerModelSection'),
             provider: modelConfig.provider,
             model: modelConfig.model,
             providers: createStandaloneWorkbenchConfiguredModelSelectorProviders(
               modelConfig.provider,
-              modelConfig.model
+              modelConfig.model,
+              selectedManagedProvider
             ),
             onChange: (provider, model) =>
               selectStandaloneWorkbenchAgentModel(provider, model),
@@ -912,6 +967,7 @@ function StandaloneWorkbenchChatSessionSurface({
       engineModel,
       modelConfig.model,
       modelConfig.provider,
+      selectedManagedProvider,
       planMode,
       prompt,
       providerId,
