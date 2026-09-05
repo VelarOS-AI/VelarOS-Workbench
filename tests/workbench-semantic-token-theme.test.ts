@@ -92,8 +92,8 @@ void test('semantic keywords are blue while class-like built-ins use the type co
   assert.match(light, /cm-workbenchSemantic-decorator, .*cm-workbenchSemantic-decorator \* \{color: #808000 !important;\}/u)
   assert.match(dark, /cm-workbenchSemantic-builtinType \* \{color: #4ec9b0 !important;\}/u)
   assert.match(light, /cm-workbenchSemantic-builtinType \* \{color: #007f73 !important;\}/u)
-  assert.match(dark, /cm-workbenchSemantic-frameworkDefinition \* \{color: #d16d9e !important;\}/u)
-  assert.match(light, /cm-workbenchSemantic-frameworkDefinition \* \{color: #9c27b0 !important;\}/u)
+  assert.match(dark, /cm-workbenchSemantic-frameworkDefinition \* \{color: #ff8c42 !important;\}/u)
+  assert.match(light, /cm-workbenchSemantic-frameworkDefinition \* \{color: #6f42c1 !important;\}/u)
 })
 
 void test('enum members use the same purple property color in every theme', () => {
@@ -118,20 +118,25 @@ void test('enum members use the same purple property color in every theme', () =
 })
 
 void test('framework declarations keep their dedicated color across language-server token kinds', () => {
-  const content = 'component App:\nexport server api:\nstate ready = true\n'
+  const content = 'component App:\nexport server api:\nstate ready = true\nconst ordinary = true\n'
   const decorations = buildWorkbenchSemanticTokenDecorations(content, [
     {
       range: { startLine: 1, startColumn: 11, endLine: 1, endColumn: 14 },
       type: 'function',
-      modifiers: ['declaration'],
+      modifiers: ['declaration', 'frameworkDefinition'],
     },
     {
       range: { startLine: 2, startColumn: 15, endLine: 2, endColumn: 18 },
       type: 'variable',
-      modifiers: ['declaration'],
+      modifiers: ['declaration', 'frameworkDefinition'],
     },
     {
       range: { startLine: 3, startColumn: 7, endLine: 3, endColumn: 12 },
+      type: 'variable',
+      modifiers: ['declaration', 'frameworkDefinition'],
+    },
+    {
+      range: { startLine: 4, startColumn: 7, endLine: 4, endColumn: 15 },
       type: 'variable',
       modifiers: ['declaration'],
     },
@@ -141,19 +146,39 @@ void test('framework declarations keep their dedicated color across language-ser
     classes.push(String(value.spec.class))
   })
 
-  assert.equal(classes.length, 3)
-  for (const className of classes)
+  assert.equal(classes.length, 4)
+  for (const className of classes.slice(0, 3))
     assert.match(className, /cm-workbenchSemantic-frameworkDefinition/u)
+  assert.match(classes[3] ?? '', /cm-workbenchSemantic-variable/u)
+  assert.doesNotMatch(classes[3] ?? '', /cm-workbenchSemantic-frameworkDefinition/u)
 })
 
-void test('color themes use distinct semantic palettes', () => {
-  const warmPaper = semanticThemeRules('warm-paper')
-  const midnightBlue = semanticThemeRules('midnight-blue')
+void test('framework definitions have a unique semantic color in every theme', () => {
+  const themes: readonly WorkbenchThemeId[] = [
+    'light-modern',
+    'dark-modern',
+    'warm-paper',
+    'midnight-blue',
+  ]
 
-  assert.match(warmPaper, /cm-workbenchSemantic-keyword, .*color: #7c3aed !important;/u)
-  assert.match(warmPaper, /cm-workbenchSemantic-typeParameter \* \{color: #0f766e !important;/u)
-  assert.match(midnightBlue, /cm-workbenchSemantic-keyword, .*color: #c792ea !important;/u)
-  assert.match(midnightBlue, /cm-workbenchSemantic-typeParameter \* \{color: #89ddff !important;/u)
+  for (const theme of themes) {
+    const palette = getWorkbenchCodeTokenPalette(theme)
+    const semanticColors = new Set([
+      palette.decorator,
+      palette.frameworkDefinition,
+      palette.function,
+      palette.keyword,
+      palette.property,
+      palette.type,
+      palette.variable,
+    ])
+    assert.equal(semanticColors.size, 7, `${theme} reuses a semantic role color`)
+
+    const rules = semanticThemeRules(theme)
+    assert.equal(colorForSemanticRole(rules, 'frameworkDefinition'), palette.frameworkDefinition)
+    assert.equal(colorForSemanticRole(rules, 'enumMember'), palette.property)
+    assert.equal(colorForSemanticRole(rules, 'builtinType'), palette.type)
+  }
 })
 
 void test('built-in runtime objects and nested semantic spans keep their semantic colors', () => {

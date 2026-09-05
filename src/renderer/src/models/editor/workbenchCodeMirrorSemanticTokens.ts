@@ -141,12 +141,6 @@ function isObjectShorthandRange(content: string, from: number, to: number): bool
   return (before === '{' || before === ',') && (after === ',' || after === '}')
 }
 
-function isFrameworkDeclarationName(content: string, from: number): boolean {
-  const lineStart = content.lastIndexOf('\n', Math.max(0, from - 1)) + 1
-  const prefix = content.slice(lineStart, from)
-  return /^\s*(?:export\s+)?(?:action|component|computed|resource|server|state)\s+$/u.test(prefix)
-}
-
 export function buildWorkbenchSemanticTokenDecorations(
   content: string,
   tokens: readonly WorkbenchLanguageServiceSemanticToken[]
@@ -164,7 +158,7 @@ export function buildWorkbenchSemanticTokenDecorations(
 
     const tokenText = content.slice(range.from, range.to)
     let effectiveToken = token
-    if (isFrameworkDeclarationName(content, range.from)) {
+    if (token.modifiers.includes('frameworkDefinition')) {
       effectiveToken = { ...token, type: 'frameworkDefinition' }
     } else if (
       SemanticTypeTokenKinds.has(token.type)

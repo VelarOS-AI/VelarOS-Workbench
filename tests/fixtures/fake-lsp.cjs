@@ -37,7 +37,10 @@ function handle(message) {
             documentFormattingProvider: true,
             inlayHintProvider: true,
             semanticTokensProvider: {
-              legend: { tokenTypes: ['class', 'variable'], tokenModifiers: ['declaration'] },
+              legend: {
+                tokenTypes: ['class', 'variable'],
+                tokenModifiers: ['declaration', 'frameworkDefinition'],
+              },
               full: true,
             },
             codeActionProvider: { codeActionKinds: ['quickfix'] },
@@ -198,7 +201,7 @@ function handle(message) {
       })
       break
     case 'textDocument/semanticTokens/full':
-      send({ jsonrpc: '2.0', id: message.id, result: { data: [0, 10, 3, 0, 1] } })
+      send({ jsonrpc: '2.0', id: message.id, result: { data: [0, 10, 3, 0, 3] } })
       break
     case 'textDocument/codeAction':
       send({

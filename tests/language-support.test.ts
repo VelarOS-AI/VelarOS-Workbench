@@ -197,7 +197,7 @@ void describe('focused Workbench language surface', () => {
       [{
         range: { startLine: 1, startColumn: 11, endLine: 1, endColumn: 14 },
         type: 'function',
-        modifiers: ['declaration'],
+        modifiers: ['declaration', 'frameworkDefinition'],
       }]
     )
     assert.equal(semanticDecorations.size, 1)
@@ -212,6 +212,7 @@ void describe('focused Workbench language surface', () => {
       'enum',
       'extends',
       'extern',
+      'detach',
       'get',
       'is',
       'js',
@@ -232,6 +233,7 @@ void describe('focused Workbench language surface', () => {
       'using',
     ])
       assert.ok(VELAR_EDITOR_KEYWORDS.includes(keyword as typeof VELAR_EDITOR_KEYWORDS[number]))
+    assert.ok(VelarWorkbenchLanguageService.hover.suppressWords.includes('detach'))
     for (const webKeyword of [
       'action',
       'cleanup',
@@ -303,6 +305,10 @@ void describe('focused Workbench language surface', () => {
     assert.equal(
       fallbackTree('def treeBlocks(sample: TerrainSample):\n  return range(sample.humidity)\n'),
       'Document(keyword,"variableName.definition.function",punctuation,variableName,punctuation,className,punctuation,keyword,"variableName.function",punctuation,variableName,operator,propertyName,punctuation)'
+    )
+    assert.equal(
+      fallbackTree('detach refresh()\n'),
+      'Document(keyword,"variableName.function",punctuation)'
     )
     assert.equal(
       fallbackTree('const delta = {position: local, revision: nextRevision, changed}\n'),
@@ -2088,7 +2094,7 @@ void describe('shared external LSP client', () => {
     assert.deepEqual(semanticTokens.tokens, [{
       range: { startLine: 1, startColumn: 11, endLine: 1, endColumn: 14 },
       type: 'class',
-      modifiers: ['declaration'],
+      modifiers: ['declaration', 'frameworkDefinition'],
     }])
     assert.equal(codeActions.actions[0]?.title, 'Apply fake quick fix')
     assert.equal(codeActions.actions[0]?.changes[0]?.edits[0]?.newText, 'let')

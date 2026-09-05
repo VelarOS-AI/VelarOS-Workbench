@@ -1,8 +1,13 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
 
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
 import { FileCodeIcon } from '@phosphor-icons/react'
 import { describe, test } from 'bun:test'
 
+import { WorkbenchFileTypeIcon } from '../src/renderer/src/components/files/WorkbenchFileTypeIcon'
 import {
   getWorkbenchFilePresentationVariant,
   registerWorkbenchFileIconContribution,
@@ -16,6 +21,12 @@ void describe('Workbench file icon surface', () => {
     assert.equal(getWorkbenchFilePresentationVariant({ fileName: 'bun.lock' }), 'lock')
     assert.equal(getWorkbenchFilePresentationVariant({ fileName: 'package.json' }), 'json')
     assert.equal(getWorkbenchFilePresentationVariant({ fileName: 'change.patch' }), 'patch')
+    assert.equal(getWorkbenchFilePresentationVariant({ fileName: 'styles/app.css' }), 'css')
+    assert.equal(getWorkbenchFilePresentationVariant({ fileName: 'styles/APP.CSS' }), 'css')
+    assert.equal(getWorkbenchFilePresentationVariant({ fileName: 'styles/app.module.css' }), 'css')
+    assert.equal(getWorkbenchFilePresentationVariant({ fileName: 'styles/app.less' }), 'less')
+    assert.equal(getWorkbenchFilePresentationVariant({ fileName: 'styles/app.sass' }), 'sass')
+    assert.equal(getWorkbenchFilePresentationVariant({ fileName: 'styles/app.scss' }), 'scss')
     assert.equal(getWorkbenchFilePresentationVariant({ fileName: 'main.js' }), 'javascript')
     assert.equal(getWorkbenchFilePresentationVariant({ fileName: 'view.jsx' }), 'jsx')
     assert.equal(getWorkbenchFilePresentationVariant({ fileName: 'main.ts' }), 'typescript')
@@ -25,6 +36,40 @@ void describe('Workbench file icon surface', () => {
     assert.equal(getWorkbenchFilePresentationVariant({ fileName: 'schema.yaml' }), 'yaml')
     assert.equal(getWorkbenchFilePresentationVariant({ fileName: 'electron-builder.yml' }), 'yaml')
     assert.equal(getWorkbenchFilePresentationVariant({ fileName: 'settings.ini' }), 'config')
+  })
+
+  void test('renders stylesheet files with the shared CSS file icon', () => {
+    for (const [fileName, variant, color] of [
+      ['styles/app.css', 'css', '--workbench-file-css'],
+      ['styles/app.less', 'less', '--workbench-file-css'],
+      ['styles/app.sass', 'sass', '--workbench-file-scss'],
+      ['styles/app.scss', 'scss', '--workbench-file-scss'],
+    ] as const) {
+      const markup = renderToStaticMarkup(createElement(WorkbenchFileTypeIcon, {
+        fileName,
+        size: 16,
+      }))
+
+      assert.match(markup, new RegExp(`data-file-icon-kind="${variant}"`, 'u'))
+      assert.match(markup, new RegExp(`var\\(${color}\\)`, 'u'))
+      assert.match(markup, /<svg\b/u)
+    }
+  })
+
+  void test('routes every file-bearing Workbench surface through the shared icon resolver', () => {
+    for (const relativePath of [
+      'src/renderer/src/components/files/FileTreeRow.tsx',
+      'src/renderer/src/components/files/FileSearchResults.tsx',
+      'src/renderer/src/components/project/QuickOpen.tsx',
+      'src/renderer/src/components/editor/EditorTabBar.tsx',
+      'src/renderer/src/components/editor/EditorBreadcrumbBar.tsx',
+      'src/renderer/src/components/chrome/StatusBar.tsx',
+      'src/renderer/src/components/git/GitDiffEditorPanel.tsx',
+      'src/renderer/src/components/git/WorkbenchCommitPanel.tsx',
+    ]) {
+      const source = readFileSync(path.resolve(process.cwd(), relativePath), 'utf8')
+      assert.match(source, /<WorkbenchFileTypeIcon\b/u, relativePath)
+    }
   })
 
   void test('keeps framework-specific icons outside core and exposes a contribution seam', () => {

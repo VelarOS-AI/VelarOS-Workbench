@@ -351,6 +351,20 @@
   color: var(--workbench-file-json);
 }
 
+.treeFileIcon[data-kind='css'],
+.treeFileIcon[data-kind='less'],
+.commitFileIcon[data-kind='css'],
+.commitFileIcon[data-kind='less'] {
+  color: var(--workbench-file-css);
+}
+
+.treeFileIcon[data-kind='sass'],
+.treeFileIcon[data-kind='scss'],
+.commitFileIcon[data-kind='sass'],
+.commitFileIcon[data-kind='scss'] {
+  color: var(--workbench-file-scss);
+}
+
 .treeFileIcon[data-kind='code'],
 .commitFileIcon[data-kind='code'] {
   color: var(--workbench-file-code);

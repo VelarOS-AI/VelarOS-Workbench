@@ -33,6 +33,15 @@ function isInside(projectRoot: string, absolutePath: string): boolean {
   return value === '' || (!value.startsWith('..') && !isAbsolute(value))
 }
 
+function semanticTokenText(
+  content: string,
+  token: { range: { startLine: number; startColumn: number; endLine: number; endColumn: number } }
+): string {
+  if (token.range.startLine !== token.range.endLine) return ''
+  const line = content.split('\n')[token.range.startLine - 1] ?? ''
+  return line.slice(token.range.startColumn - 1, token.range.endColumn - 1)
+}
+
 const releaseInput = process.argv[2]
 const librariesInput = process.argv[3]
 if (!releaseInput) throw new Error(
@@ -279,6 +288,7 @@ try {
     '    action refresh() -> null:',
     '        await loadTicketLabel()',
     '    def inspect() -> null:',
+    '        detach refresh()',
     '        if form:',
     '            const draft = read(form, FormDraft)',
     '            print(draft.label)',
@@ -338,6 +348,15 @@ try {
   })
   assert.ok(semanticTokens.tokens.some((token) => token.type === 'function' && token.modifiers.includes('declaration')))
   assert.ok(semanticTokens.tokens.some((token) => token.type === 'property'))
+  assert.ok(semanticTokens.tokens.some((token) =>
+    semanticTokenText(source, token) === 'detach' && token.type === 'keyword'))
+  assert.ok(semanticTokens.tokens.some((token) =>
+    semanticTokenText(source, token) === 'Choice'
+      && token.modifiers.includes('frameworkDefinition')))
+  assert.ok(semanticTokens.tokens.some((token) =>
+    semanticTokenText(source, token) === 'total'
+      && token.modifiers.includes('declaration')
+      && !token.modifiers.includes('frameworkDefinition')))
   const fixSource = 'const same = 1 === 1\n'
   await writeFile(join(projectRoot, 'src', 'fix.vel'), fixSource, 'utf8')
   const fixDiagnostics = await services.getDiagnostics({
@@ -363,6 +382,7 @@ try {
     position: { line: source.split('\n').findIndex((line) => line === 'comp') + 1, column: 5 },
   })
   assert.ok(completions.items.some((item) => item.label === 'component'))
+  assert.ok(completions.items.some((item) => item.label === 'detach'))
   assert.ok(completions.items.some((item) => item.label === 'throw'))
   assert.ok(completions.items.some((item) => item.label === 'match'))
   assert.ok(completions.items.some((item) => item.label === 'case'))

@@ -13,6 +13,7 @@ export const VELAR_LANGUAGE_KEYWORDS = [
   'continue',
   'constructor',
   'def',
+  'detach',
   'else',
   'enum',
   'export',

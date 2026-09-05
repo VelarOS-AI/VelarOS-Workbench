@@ -213,7 +213,7 @@ const SupportedSemanticTokenTypes = [
 ]
 const SupportedSemanticTokenModifiers = [
   'declaration', 'definition', 'readonly', 'static', 'deprecated', 'abstract', 'async',
-  'modification', 'documentation', 'defaultLibrary',
+  'modification', 'documentation', 'defaultLibrary', 'frameworkDefinition',
 ]
 const ExternalLspDependencyFileNames = [
   'velar.json',

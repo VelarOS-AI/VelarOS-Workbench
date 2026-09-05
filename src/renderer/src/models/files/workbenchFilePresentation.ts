@@ -10,12 +10,16 @@ import {
 export type WorkbenchBuiltinFilePresentationVariant =
   | FilePresentationKind
   | 'config'
+  | 'css'
   | 'gitignore'
   | 'javascript'
   | 'json'
   | 'jsx'
+  | 'less'
   | 'lock'
   | 'patch'
+  | 'sass'
+  | 'scss'
   | 'tsx'
   | 'typescript'
   | 'velarscript'
@@ -88,6 +92,14 @@ function resolveBuiltinFilePresentation(
   ) return { variant: name === 'package.json' ? 'json' : 'config' }
 
   switch (extension) {
+    case 'css':
+      return { variant: 'css' }
+    case 'less':
+      return { variant: 'less' }
+    case 'sass':
+      return { variant: 'sass' }
+    case 'scss':
+      return { variant: 'scss' }
     case 'cjs':
     case 'js':
     case 'mjs':
