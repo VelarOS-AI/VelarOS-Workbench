@@ -37,7 +37,7 @@ Workbench 持有项目根、Kernel 能力取消信号、历史和工具可用性
 复用该会话的 CodingSessionTracker。清理会话通过栈的 `clearSession` 释放执行状态与
 治理登记。
 
-Workbench 通过 GitHub Packages 消费 `@velaros-ai/agent@0.6.9`，依赖要求与包完整性由
+Workbench 通过 GitHub Packages 消费 `@velaros-ai/agent@0.6.10`，依赖要求与包完整性由
 `package.json` 和 `bun.lock` 共同记录。请求、工具 schema、预算与传输名称映射来自同一份
 已过滤工具快照；首轮 baseline 仅包含宿主常驻名单，工具执行与历史保留 canonical 名称。
 版本升级需检查真实多回合工具调用、取消与收尾、类型、生产构建及产品边界。
@@ -52,3 +52,22 @@ Workbench 通过 GitHub Packages 消费 `@velaros-ai/agent@0.6.9`，依赖要求
 schema 包装器与字符数只在当前 Registry 内缓存。工具面保持等价时可跨 UI revision
 复用；工具替换、移除或恢复由执行栈重建 Registry，开始独立缓存。每轮预算和模型工具集
 仍应用当前 allowlist、分类访问和可用性过滤。
+
+## 生产启动与体积预算
+
+生产 main 入口开启压缩，完整 IDE 工作区在项目打开后按需加载；无项目的起手页不再静态
+加载编辑器、终端和代码图控制器。`bun run build` 会在输出完成后执行
+`scripts/checkBuildBudgets.mjs`，统计 `index.html` 实际引用的启动 JS/CSS，并同时限制
+main、renderer 总体积与最大功能块。
+
+| 指标 | 当前基线 | 上限 |
+| --- | ---: | ---: |
+| main 入口 | 3.35 MB | 3.75 MB |
+| main JavaScript | 5.93 MB | 6.50 MB |
+| renderer 启动依赖 | 4.14 MB | 4.75 MB |
+| renderer JavaScript | 23.06 MB | 25.00 MB |
+| renderer CSS | 0.87 MB | 1.00 MB |
+| renderer 最大功能块 | 3.33 MB | 3.75 MB |
+
+单独复核已有生产产物时运行 `bun run check:bundle-budget`。预算留有小幅构建波动空间；
+业务增长需要突破上限时，应先给出加载链数据并调整分包，再更新基线。

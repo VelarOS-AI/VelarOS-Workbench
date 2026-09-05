@@ -7,6 +7,7 @@ import path from 'node:path'
 import { describe, test } from 'bun:test'
 
 import {
+  resolveNativeDistributionIdentity,
   reuseReleaseArtifacts,
   stageReleaseArtifacts,
   validateReleaseTag,
@@ -18,6 +19,15 @@ const version = (JSON.parse(
 ) as { version: string }).version
 const releaseTag = `v${version}`
 const sourceSha = 'a'.repeat(40)
+
+function distribution(platform: 'macos' | 'windows' | 'linux') {
+  return {
+    platform: platform === 'macos' ? 'darwin' : platform === 'windows' ? 'win32' : 'linux',
+    arch: platform === 'macos' ? 'arm64' : 'x64',
+    signatureStatus: platform === 'macos' ? 'notarized' : platform === 'windows' ? 'unsigned' : 'verified',
+    evidence: ['fixture-proof'],
+  }
+}
 
 async function writeMacRelease(releaseDir: string, artifactVersion = version) {
   await mkdir(releaseDir, { recursive: true })
@@ -60,6 +70,72 @@ async function writeLinuxRelease(releaseDir: string) {
 }
 
 void describe('Workbench release artifacts', () => {
+  void test('rejects empty packaged artifacts before writing a stage receipt', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'workbench-empty-artifact-'))
+    const releaseDir = path.join(root, 'release')
+    const stageDir = path.join(root, 'stage')
+    try {
+      await writeLinuxRelease(releaseDir)
+      await writeFile(
+        path.join(releaseDir, `VelarOS-Workbench-${version}-linux-amd64.deb`),
+        '',
+      )
+      await assert.rejects(
+        stageReleaseArtifacts({
+          releaseDir,
+          stageDir,
+          platform: 'linux',
+          distribution: distribution('linux'),
+          version,
+          sourceSha,
+          releaseTag,
+        }),
+        /non-empty Workbench release artifact/u,
+      )
+      await assert.rejects(
+        readFile(path.join(stageDir, 'workbench-linux-release.json')),
+        /ENOENT/u,
+      )
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  void test('reads macOS architecture from the packaged Mach-O identity', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'workbench-native-identity-'))
+    try {
+      await writeMacRelease(root)
+      const calls: string[] = []
+      const execute = async (command: string, args: string[]) => {
+        calls.push(`${command} ${args[0]}`)
+        if (command === 'ditto') {
+          const app = path.join(args.at(-1)!, 'VelarOS Workbench.app', 'Contents')
+          await mkdir(path.join(app, 'MacOS'), { recursive: true })
+          await writeFile(path.join(app, 'Info.plist'), 'plist')
+          await writeFile(path.join(app, 'MacOS', 'Workbench'), 'binary')
+        }
+        if (command === 'plutil') return { stdout: 'Workbench\n' }
+        if (command === 'lipo') return { stdout: 'x86_64\n' }
+        return { stdout: '' }
+      }
+
+      const identity = await resolveNativeDistributionIdentity({
+        releaseDir: root,
+        platform: 'macos',
+        version,
+        host: { platform: 'darwin', arch: 'arm64' },
+        execute,
+      })
+
+      assert.equal(identity.arch, 'x64')
+      assert.equal(identity.signatureStatus, 'notarized')
+      assert.ok(calls.includes('lipo -archs'))
+      assert.ok(calls.includes('xcrun stapler'))
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   void test('requires the release tag to equal the Workbench version', async () => {
     await validateReleaseTag(process.cwd(), releaseTag)
     await assert.rejects(
@@ -78,6 +154,7 @@ void describe('Workbench release artifacts', () => {
       releaseDir,
       stageDir,
       platform: 'macos',
+      distribution: distribution('macos'),
       version,
       sourceSha,
       releaseTag,
@@ -100,9 +177,21 @@ void describe('Workbench release artifacts', () => {
     assert.equal(manifest.sourceSha, sourceSha)
     assert.equal(manifest.version, version)
     assert.equal(manifest.platform, 'macos')
+    assert.deepEqual(manifest.distribution, distribution('macos'))
     assert.deepEqual(
       Object.keys(manifest.artifacts[0]).sort(),
-      ['fileName', 'platform', 'sha256', 'sizeBytes', 'sourceSha', 'version'].sort()
+      [
+        'arch',
+        'artifactRole',
+        'fileName',
+        'format',
+        'platform',
+        'sha256',
+        'signatureStatus',
+        'sizeBytes',
+        'sourceSha',
+        'version',
+      ].sort()
     )
     const checksums = await readFile(
       path.join(stageDir, 'SHA256SUMS-macos.txt'),
@@ -122,6 +211,7 @@ void describe('Workbench release artifacts', () => {
       releaseDir,
       stageDir: existingDir,
       platform: 'macos',
+      distribution: distribution('macos'),
       version,
       sourceSha,
       releaseTag,
@@ -168,6 +258,7 @@ void describe('Workbench release artifacts', () => {
       releaseDir,
       stageDir: existingDir,
       platform: 'macos',
+      distribution: distribution('macos'),
       version,
       sourceSha,
       releaseTag,
@@ -178,6 +269,7 @@ void describe('Workbench release artifacts', () => {
       existingDir,
       stageDir: retryStageDir,
       platform: 'macos',
+      distribution: distribution('macos'),
       version,
       sourceSha,
       releaseTag,
@@ -194,6 +286,55 @@ void describe('Workbench release artifacts', () => {
     })
   })
 
+  void test('upgrades a legacy checkpoint only after native distribution verification', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'workbench-legacy-checkpoint-'))
+    const releaseDir = path.join(root, 'release')
+    const existingDir = path.join(root, 'existing')
+    const retryStageDir = path.join(root, 'retry')
+    await writeMacRelease(releaseDir)
+    await stageReleaseArtifacts({
+      releaseDir,
+      stageDir: existingDir,
+      platform: 'macos',
+      distribution: distribution('macos'),
+      version,
+      sourceSha,
+      releaseTag,
+    })
+    const manifestPath = path.join(existingDir, 'workbench-macos-release.json')
+    const current = JSON.parse(await readFile(manifestPath, 'utf8'))
+    await writeFile(manifestPath, JSON.stringify({
+      schemaVersion: 1,
+      sourceSha,
+      version,
+      releaseTag,
+      platform: 'macos',
+      artifacts: current.artifacts.map(({ fileName, sizeBytes, sha256 }: {
+        fileName: string
+        sizeBytes: number
+        sha256: string
+      }) => ({ sourceSha, version, platform: 'macos', fileName, sizeBytes, sha256 })),
+    }))
+
+    const result = await reuseReleaseArtifacts({
+      existingDir,
+      stageDir: retryStageDir,
+      platform: 'macos',
+      distribution: distribution('macos'),
+      version,
+      sourceSha,
+      releaseTag,
+    })
+
+    assert.equal(result.reused, true)
+    assert.equal(result.adoptedCheckpoint, true)
+    assert.equal(
+      JSON.parse(await readFile(path.join(retryStageDir, 'workbench-macos-release.json'), 'utf8'))
+        .schemaVersion,
+      2
+    )
+  })
+
   void test('fails on same-name different bytes and does not overwrite the checkpoint', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'workbench-conflict-'))
     const releaseDir = path.join(root, 'release')
@@ -203,6 +344,7 @@ void describe('Workbench release artifacts', () => {
       releaseDir,
       stageDir,
       platform: 'macos',
+      distribution: distribution('macos'),
       version,
       sourceSha,
       releaseTag,
@@ -217,6 +359,7 @@ void describe('Workbench release artifacts', () => {
         releaseDir,
         stageDir,
         platform: 'macos',
+        distribution: distribution('macos'),
         version,
         sourceSha,
         releaseTag,
@@ -242,6 +385,7 @@ void describe('Workbench release artifacts', () => {
         releaseDir,
         stageDir: path.join(root, 'stage'),
         platform: 'macos',
+        distribution: distribution('macos'),
         version,
         sourceSha,
         releaseTag,
@@ -260,6 +404,7 @@ void describe('Workbench release artifacts', () => {
         existingDir: incompleteDir,
         stageDir: path.join(root, 'retry'),
         platform: 'macos',
+        distribution: distribution('macos'),
         version,
         sourceSha,
         releaseTag,
@@ -288,6 +433,7 @@ void describe('Workbench release artifacts', () => {
         releaseDir,
         stageDir: finalDir,
         platform,
+        distribution: distribution(platform),
         version,
         sourceSha,
         releaseTag,

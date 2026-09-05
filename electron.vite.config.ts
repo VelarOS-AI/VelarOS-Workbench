@@ -49,12 +49,14 @@ const rendererAliases = [
   { find: /^@shared\/(.+)$/, replacement: source('shared', '$1') },
 ]
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   main: {
     build: {
       outDir: resolve(repoRoot, 'build/electron/main'),
       externalizeDeps: false,
-      minify: false,
+      // Main carries most Platform runtime code. Production minification keeps the
+      // startup entry smaller while development builds retain readable output.
+      minify: mode === 'production',
       rollupOptions: {
         // 语言服务 worker 是第二入口：tsserver 建图/诊断耗时数秒，必须离开主线程，
         // 主进程 client 以 `new Worker(resolve(__dirname, 'workbench-language-worker.js'))`
@@ -124,4 +126,4 @@ export default defineConfig({
     },
     plugins: [react(), tailwindcss()],
   },
-})
+}))

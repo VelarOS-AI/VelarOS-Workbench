@@ -1,4 +1,4 @@
-import { type ReactElement, useEffect, useRef, useState } from 'react'
+import { lazy, type ReactElement, Suspense, useEffect, useRef, useState } from 'react'
 import { FolderOpenIcon } from '@phosphor-icons/react'
 import { WorkbenchChatProvider, WorkbenchProductRuntimeProvider } from '@renderer/composition'
 import { WorkbenchLocalizationProvider } from '@renderer/i18n'
@@ -27,9 +27,13 @@ import { standaloneWorkbenchChatAdapter } from './runtime/standaloneWorkbenchCha
 import { WorkbenchMessageHost } from './runtime/workbenchMessageHost'
 import { NewProjectDialog } from './welcome/NewProjectDialog'
 import { WorkbenchWelcomePage } from './welcome/WorkbenchWelcomePage'
-import { WorkbenchWorkspaceShell } from './workspace/WorkbenchWorkspaceShell'
 
 import './workspace/projectDrop.css'
+
+const LazyWorkbenchWorkspaceShell = lazy(async () => {
+  const module = await import('./workspace/WorkbenchWorkspaceShell')
+  return { default: module.WorkbenchWorkspaceShell }
+})
 
 const standaloneConversationActionPort: ConversationActionPort = {
   getGoalLifecycle: async () => ({ ok: true, goal: null }),
@@ -153,10 +157,12 @@ export function StandaloneWorkbenchApp(): ReactElement {
                     <WorkbenchChatProvider adapter={standaloneWorkbenchChatAdapter}>
                       <div className="workbench-external-project-drop-root">
                         {state.currentProject ? (
-                          <WorkbenchWorkspaceShell
-                            project={state.currentProject}
-                            projectHubState={state}
-                          />
+                          <Suspense fallback={null}>
+                            <LazyWorkbenchWorkspaceShell
+                              project={state.currentProject}
+                              projectHubState={state}
+                            />
+                          </Suspense>
                         ) : (
                           <WorkbenchWelcomePage
                             state={state}

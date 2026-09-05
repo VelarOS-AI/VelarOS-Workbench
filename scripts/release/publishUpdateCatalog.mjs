@@ -1,6 +1,14 @@
-import { createHash, createPrivateKey, sign } from "node:crypto";
+import {
+  createHash,
+  createPrivateKey,
+  createPublicKey,
+  sign,
+  verify,
+} from "node:crypto";
 import { readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+
+import { validateStagedRelease } from "./releaseArtifacts.mjs";
 
 const repoRoot = path.resolve(import.meta.dirname, "../..");
 const FileNamePattern = /^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$/u;
@@ -25,50 +33,31 @@ function sortCanonicalValue(value) {
   return value;
 }
 
-function artifactDescriptor(fileName) {
-  const lower = fileName.toLowerCase();
-  const platform =
-    lower.startsWith("latest-mac") || lower.includes("-mac-")
-      ? "darwin"
-      : lower.startsWith("latest-linux") || lower.includes("-linux-")
-        ? "linux"
-        : lower.startsWith("latest") || lower.includes("-win-")
-          ? "win32"
-          : null;
-  if (!platform) return null;
-  const format = lower.endsWith(".blockmap")
-    ? "blockmap"
-    : lower.endsWith(".yml") || lower.endsWith(".yaml")
-      ? "yml"
-      : lower.endsWith(".dmg")
-        ? "dmg"
-        : lower.endsWith(".zip")
-          ? "zip"
-          : lower.endsWith(".exe")
-            ? "exe"
-            : lower.endsWith(".appimage")
-              ? "appimage"
-              : null;
-  if (!format) return null;
-  const artifactRole =
-    format === "yml" || format === "blockmap"
-      ? "update-metadata"
-      : format === "zip"
-        ? "update-package"
-        : "installer";
+function artifactDescriptor(record) {
+  if (
+    !record ||
+    typeof record.fileName !== "string" ||
+    path.basename(record.fileName) !== record.fileName ||
+    !["darwin", "win32", "linux"].includes(record.platform) ||
+    !["arm64", "x64"].includes(record.arch) ||
+    !["installer", "update-package", "update-metadata"].includes(
+      record.artifactRole,
+    ) ||
+    !["dmg", "zip", "exe", "msi", "appimage", "deb", "rpm", "snap", "yml", "blockmap"].includes(
+      record.format,
+    ) ||
+    !["unsigned", "signed", "notarized", "verified"].includes(
+      record.signatureStatus,
+    )
+  ) {
+    throw new Error("Invalid Workbench staged artifact distribution identity");
+  }
   return {
-    platform,
-    arch: platform === "darwin" ? "arm64" : "x64",
-    format,
-    artifactRole,
-    signatureStatus:
-      artifactRole === "update-metadata"
-        ? "verified"
-        : platform === "darwin"
-          ? "notarized"
-          : platform === "win32"
-            ? "unsigned"
-            : "verified",
+    platform: record.platform,
+    arch: record.arch,
+    format: record.format,
+    artifactRole: record.artifactRole,
+    signatureStatus: record.signatureStatus,
   };
 }
 
@@ -102,7 +91,7 @@ class ReleaseClient {
       : response.arrayBuffer();
   }
 
-  async ensurePublicRelease(tag, version, sourceCommit) {
+  async getPublicRelease(tag) {
     const repository = await this.request(
       `https://api.github.com/repos/${this.repository}`,
     );
@@ -113,6 +102,16 @@ class ReleaseClient {
       `https://api.github.com/repos/${this.repository}/releases/tags/${encodeURIComponent(tag)}`,
       { allowNotFound: true },
     );
+    if (existing) {
+      if (existing.draft || !existing.prerelease) {
+        throw new Error(`${tag} must remain a published prerelease candidate`);
+      }
+    }
+    return existing;
+  }
+
+  async ensurePublicRelease(tag, version, sourceCommit, existing) {
+    existing ??= await this.getPublicRelease(tag);
     if (existing) return existing;
     return this.request(
       `https://api.github.com/repos/${this.repository}/releases`,
@@ -131,20 +130,29 @@ class ReleaseClient {
     );
   }
 
-  async upload(release, fileName, bytes) {
-    const existing = release.assets.find((asset) => asset.name === fileName);
-    if (existing) {
-      const body = Buffer.from(
-        await this.request(existing.url, {
+  async readAsset(release, fileName) {
+    const asset = release.assets.find((entry) => entry.name === fileName);
+    if (!asset) return null;
+    return {
+      asset,
+      bytes: Buffer.from(
+        await this.request(asset.url, {
           headers: { Accept: "application/octet-stream" },
         }),
-      );
+      ),
+    };
+  }
+
+  async upload(release, fileName, bytes) {
+    const current = await this.readAsset(release, fileName);
+    if (current) {
+      const body = current.bytes;
       if (body.length !== bytes.length || !body.equals(bytes)) {
         throw new Error(
           `${release.tag_name} already contains different bytes for ${fileName}`,
         );
       }
-      return String(existing.id);
+      return String(current.asset.id);
     }
     const uploadUrl = release.upload_url.replace(/\{.*$/u, "");
     const asset = await this.request(
@@ -158,10 +166,24 @@ class ReleaseClient {
     release.assets.push(asset);
     return String(asset.id);
   }
+
+  async delete(release, fileName) {
+    const asset = release.assets.find((entry) => entry.name === fileName);
+    if (!asset) return false;
+    await this.request(
+      `https://api.github.com/repos/${this.repository}/releases/assets/${asset.id}`,
+      { method: "DELETE" },
+    );
+    release.assets = release.assets.filter((entry) => entry.id !== asset.id);
+    return true;
+  }
 }
 
-function signCatalog(payload) {
+function releaseSigningConfig() {
   const keyId = requireEnvironment("VELAROS_RELEASE_ATTESTATION_KEY_ID");
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/u.test(keyId)) {
+    throw new Error("Workbench release attestation key ID is invalid");
+  }
   const privateKey = createPrivateKey({
     key: Buffer.from(
       requireEnvironment("VELAROS_RELEASE_ATTESTATION_PRIVATE_KEY"),
@@ -173,15 +195,52 @@ function signCatalog(payload) {
   if (privateKey.asymmetricKeyType !== "ed25519") {
     throw new Error("Workbench release attestation key must be Ed25519");
   }
+  const trustedKeys = new Map([[keyId, createPublicKey(privateKey)]]);
+  const encodedTrustedKeys =
+    process.env.VELAROS_RELEASE_ATTESTATION_PUBLIC_KEYS?.trim() || "";
+  for (const entry of encodedTrustedKeys.split(",").map((item) => item.trim()).filter(Boolean)) {
+    const separator = entry.indexOf(":");
+    if (separator <= 0 || separator === entry.length - 1) {
+      throw new Error("VELAROS_RELEASE_ATTESTATION_PUBLIC_KEYS is invalid");
+    }
+    const trustedKeyId = entry.slice(0, separator);
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/u.test(trustedKeyId)) {
+      throw new Error(`Workbench trusted release key ID ${trustedKeyId} is invalid`);
+    }
+    const trustedKey = createPublicKey({
+      key: Buffer.from(entry.slice(separator + 1), "base64"),
+      format: "der",
+      type: "spki",
+    });
+    if (trustedKey.asymmetricKeyType !== "ed25519") {
+      throw new Error(`Workbench trusted release key ${trustedKeyId} must be Ed25519`);
+    }
+    const existing = trustedKeys.get(trustedKeyId);
+    if (
+      existing &&
+      !existing.export({ format: "der", type: "spki" }).equals(
+        trustedKey.export({ format: "der", type: "spki" }),
+      )
+    ) {
+      throw new Error(
+        `Workbench trusted release key ${trustedKeyId} conflicts with the current signing key`,
+      );
+    }
+    if (!existing) trustedKeys.set(trustedKeyId, trustedKey);
+  }
+  return { keyId, privateKey, trustedKeys };
+}
+
+function signCatalog(payload, signing = releaseSigningConfig()) {
   return {
     ...payload,
     attestation: {
       algorithm: "ed25519",
-      keyId,
+      keyId: signing.keyId,
       signature: sign(
         null,
         Buffer.from(JSON.stringify(sortCanonicalValue(payload)), "utf8"),
-        privateKey,
+        signing.privateKey,
       ).toString("base64url"),
     },
   };
@@ -192,6 +251,247 @@ function releaseManifestNames(version, channel) {
     completion: `candidate-workbench-v${version}-${channel}.json`,
     catalog: `catalog-workbench-v${version}-${channel}.json`,
   };
+}
+
+function completionManifest(artifacts, { version, channel }, { includeScope = true } = {}) {
+  const manifest = {
+    schemaVersion: 1,
+    state: "candidate",
+    kind: "software",
+    softwareProduct: "workbench",
+    version,
+    channel,
+    ...(includeScope
+      ? {
+          platforms: [...new Set(artifacts.map(({ platform, arch }) => `${platform}-${arch}`))].sort(),
+        }
+      : {}),
+    artifacts: artifacts.map(
+      ({
+        assetId: _assetId,
+        channel: _channel,
+        githubTag: _tag,
+        sourceCommit: _sourceCommit,
+        ...artifact
+      }) => artifact,
+    ),
+  };
+  return manifest;
+}
+
+function assertCatalogSignature(catalog, signing) {
+  const { attestation, ...payload } = catalog;
+  const publicKey = signing.trustedKeys?.get(attestation?.keyId) ??
+    (attestation?.keyId === signing.keyId ? createPublicKey(signing.privateKey) : null);
+  if (
+    attestation?.algorithm !== "ed25519" ||
+    !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/u.test(attestation?.keyId ?? "") ||
+    !publicKey ||
+    !/^[A-Za-z0-9_-]{86}$/u.test(attestation?.signature ?? "") ||
+    !verify(
+      null,
+      Buffer.from(JSON.stringify(sortCanonicalValue(payload)), "utf8"),
+      publicKey,
+      Buffer.from(attestation.signature, "base64url"),
+    )
+  ) {
+    throw new Error("Workbench release catalog attestation verification failed");
+  }
+}
+
+function assertCatalogMatchesCompletion(catalog, completion, identity, signing) {
+  if (
+    catalog?.schemaVersion !== 1 ||
+    !Array.isArray(catalog.artifacts) ||
+    catalog.artifacts.length === 0 ||
+    completion?.schemaVersion !== 1 ||
+    completion.state !== "candidate" ||
+    completion.kind !== "software" ||
+    completion.softwareProduct !== "workbench" ||
+    completion.version !== identity.version ||
+    completion.channel !== identity.channel ||
+    !Array.isArray(completion.artifacts) ||
+    completion.artifacts.length === 0
+  ) {
+    throw new Error("Workbench completion receipt is invalid");
+  }
+  const rebuilt = completionManifest(catalog.artifacts, identity, {
+    includeScope: Array.isArray(completion.platforms),
+  });
+  if (
+    JSON.stringify(sortCanonicalValue(rebuilt)) !==
+    JSON.stringify(sortCanonicalValue(completion))
+  ) {
+    throw new Error("Workbench completion receipt does not match its signed catalog");
+  }
+  for (const artifact of catalog.artifacts) {
+    if (
+      artifact.softwareProduct !== "workbench" ||
+      artifact.version !== identity.version ||
+      artifact.channel !== identity.channel ||
+      artifact.githubTag !== identity.tag ||
+      artifact.sourceCommit !== identity.sourceCommit ||
+      typeof artifact.assetId !== "string" ||
+      !/^[a-f0-9]{64}$/u.test(artifact.sha256) ||
+      !Number.isSafeInteger(artifact.sizeBytes) ||
+      artifact.sizeBytes <= 0
+    ) {
+      throw new Error("Workbench signed catalog contains an invalid release identity");
+    }
+    artifactDescriptor(artifact);
+  }
+  assertCatalogSignature(catalog, signing);
+}
+
+async function verifyRemoteArtifacts(client, release, artifacts) {
+  for (const artifact of artifacts) {
+    const current = await client.readAsset(release, artifact.fileName);
+    if (
+      !current ||
+      String(current.asset.id) !== artifact.assetId ||
+      current.bytes.length !== artifact.sizeBytes ||
+      createHash("sha256").update(current.bytes).digest("hex") !== artifact.sha256
+    ) {
+      throw new Error(
+        `Workbench release asset does not match its signed receipt: ${artifact.fileName}`,
+      );
+    }
+  }
+}
+
+async function verifyCompletedRelease({
+  client,
+  release,
+  identity,
+  signing,
+}) {
+  const names = releaseManifestNames(identity.version, identity.channel);
+  const completionAsset = await client.readAsset(release, names.completion);
+  if (!completionAsset) return false;
+  const catalogAsset = await client.readAsset(release, names.catalog);
+  if (!catalogAsset) return false;
+  const completion = JSON.parse(completionAsset.bytes.toString("utf8"));
+  const catalog = JSON.parse(catalogAsset.bytes.toString("utf8"));
+  assertCatalogMatchesCompletion(catalog, completion, identity, signing);
+  await verifyRemoteArtifacts(client, release, catalog.artifacts);
+  return true;
+}
+
+async function readVerifiedStagedArtifacts({
+  releaseDirectory,
+  version,
+  sourceCommit,
+}) {
+  const artifacts = [];
+  const seen = new Set();
+  const manifestNames = new Set(await readdir(releaseDirectory));
+  const releasePlatforms = ["macos", "windows", "linux"].filter((platformName) =>
+    manifestNames.has(`workbench-${platformName}-release.json`),
+  );
+  if (releasePlatforms.length === 0) {
+    throw new Error("No verified Workbench stage receipts were found");
+  }
+  for (const releasePlatform of releasePlatforms) {
+    const manifest = await validateStagedRelease({
+      directory: releaseDirectory,
+      platform: releasePlatform,
+      version,
+      sourceSha: sourceCommit,
+      releaseTag: `v${version}`,
+    });
+    for (const record of manifest.artifacts) {
+      if (!FileNamePattern.test(record.fileName) || seen.has(record.fileName)) {
+        throw new Error(`Invalid or duplicate staged Workbench artifact: ${record.fileName}`);
+      }
+      seen.add(record.fileName);
+      const body = await readFile(path.join(releaseDirectory, record.fileName));
+      if (
+        body.length !== record.sizeBytes ||
+        createHash("sha256").update(body).digest("hex") !== record.sha256
+      ) {
+        throw new Error(`Staged Workbench artifact changed: ${record.fileName}`);
+      }
+      artifacts.push({ record, body });
+    }
+  }
+  if (artifacts.length === 0) {
+    throw new Error("No Workbench update artifacts were staged");
+  }
+  return {
+    platforms: releasePlatforms,
+    artifacts: artifacts.sort((left, right) =>
+      left.record.fileName.localeCompare(right.record.fileName),
+    ),
+  };
+}
+
+async function publishReleaseTransaction({
+  client,
+  release,
+  releaseDirectory,
+  identity,
+  signing,
+  staged,
+}) {
+  if (!staged && await verifyCompletedRelease({ client, release, identity, signing })) {
+    console.info(
+      `Workbench ${identity.version} ${identity.channel} receipt is already complete and verified.`,
+    );
+    return { reused: true };
+  }
+  staged ??= await readVerifiedStagedArtifacts({
+    releaseDirectory,
+    version: identity.version,
+    sourceCommit: identity.sourceCommit,
+  });
+  const { completion: completionName, catalog: catalogName } =
+    releaseManifestNames(identity.version, identity.channel);
+  if (await client.readAsset(release, completionName)) {
+    await client.delete(release, completionName);
+    console.info(
+      `Removed incomplete Workbench completion receipt ${completionName} before retrying.`,
+    );
+  }
+  const artifacts = [];
+  for (const { record, body } of staged.artifacts) {
+    if (
+      !Number.isSafeInteger(record.sizeBytes) ||
+      record.sizeBytes <= 0 ||
+      body.length !== record.sizeBytes ||
+      createHash("sha256").update(body).digest("hex") !== record.sha256
+    ) {
+      throw new Error(`Invalid staged Workbench artifact bytes: ${record.fileName}`);
+    }
+    const descriptor = artifactDescriptor(record);
+    const assetId = await client.upload(release, record.fileName, body);
+    artifacts.push({
+      kind: "software",
+      softwareProduct: "workbench",
+      ...descriptor,
+      version: identity.version,
+      channel: identity.channel,
+      assetId,
+      fileName: record.fileName,
+      sha256: record.sha256,
+      sizeBytes: record.sizeBytes,
+      githubTag: identity.tag,
+      sourceCommit: identity.sourceCommit,
+    });
+  }
+  const catalog = signCatalog({ schemaVersion: 1, artifacts }, signing);
+  const completion = completionManifest(artifacts, identity);
+  const catalogBytes = Buffer.from(`${JSON.stringify(catalog, null, 2)}\n`);
+  await writeFile(path.join(releaseDirectory, catalogName), catalogBytes);
+  await client.upload(release, catalogName, catalogBytes);
+  const completionBytes = Buffer.from(
+    `${JSON.stringify(completion, null, 2)}\n`,
+  );
+  await writeFile(path.join(releaseDirectory, completionName), completionBytes);
+  await client.upload(release, completionName, completionBytes);
+  console.info(
+    `Workbench ${identity.version} ${identity.channel} signed catalog and completion receipt uploaded.`,
+  );
+  return { reused: false, catalog, completion, artifacts };
 }
 
 async function run() {
@@ -210,70 +510,36 @@ async function run() {
     repoRoot,
     process.argv[2] ?? "artifacts/release-stage/final",
   );
-  const files = (await readdir(releaseDirectory))
-    .filter(
-      (fileName) =>
-        FileNamePattern.test(fileName) && artifactDescriptor(fileName),
-    )
-    .sort();
-  if (files.length === 0)
-    throw new Error("No Workbench update artifacts were staged");
   const client = new ReleaseClient(
     requireEnvironment("VELAROS_RELEASE_REPOSITORY"),
     requireEnvironment("VELAROS_RELEASE_REPO_TOKEN"),
   );
   const tag = `workbench-v${version}`;
-  const release = await client.ensurePublicRelease(tag, version, sourceCommit);
-  const artifacts = [];
-  for (const fileName of files) {
-    const descriptor = artifactDescriptor(fileName);
-    const body = await readFile(path.join(releaseDirectory, fileName));
-    const assetId = await client.upload(release, fileName, body);
-    artifacts.push({
-      kind: "software",
-      softwareProduct: "workbench",
-      ...descriptor,
-      version,
-      channel,
-      assetId,
-      fileName,
-      sha256: createHash("sha256").update(body).digest("hex"),
-      sizeBytes: body.length,
-      githubTag: tag,
-      sourceCommit,
-    });
+  const identity = { version, channel, tag, sourceCommit };
+  const signing = releaseSigningConfig();
+  const existing = await client.getPublicRelease(tag);
+  if (
+    existing &&
+    (await verifyCompletedRelease({ client, release: existing, identity, signing }))
+  ) {
+    console.info(`Workbench ${version} ${channel} receipt is already complete and verified.`);
+    return { reused: true };
   }
-  const completion = {
-    schemaVersion: 1,
-    state: "candidate",
-    kind: "software",
-    softwareProduct: "workbench",
+  // The stage receipts and every referenced byte must be valid before creating or mutating a release.
+  const staged = await readVerifiedStagedArtifacts({
+    releaseDirectory,
     version,
-    channel,
-    artifacts: artifacts.map(
-      ({
-        assetId: _assetId,
-        channel: _channel,
-        githubTag: _tag,
-        sourceCommit: _sourceCommit,
-        ...artifact
-      }) => artifact,
-    ),
-  };
-  const catalog = signCatalog({ schemaVersion: 1, artifacts });
-  const { completion: completionName, catalog: catalogName } =
-    releaseManifestNames(version, channel);
-  const completionBytes = Buffer.from(
-    `${JSON.stringify(completion, null, 2)}\n`,
-  );
-  await writeFile(path.join(releaseDirectory, completionName), completionBytes);
-  await client.upload(release, completionName, completionBytes);
-  const catalogBytes = Buffer.from(`${JSON.stringify(catalog, null, 2)}\n`);
-  await writeFile(path.join(releaseDirectory, catalogName), catalogBytes);
-  await client.upload(release, catalogName, catalogBytes);
-  console.info(
-    `Workbench ${version} ${channel} completion marker and signed Cloud catalog uploaded.`,
-  );
+    sourceCommit,
+  });
+  const release = await client.ensurePublicRelease(tag, version, sourceCommit, existing);
+  return publishReleaseTransaction({
+    client,
+    release,
+    releaseDirectory,
+    identity,
+    signing,
+    staged,
+  });
 }
 
 if (
@@ -286,4 +552,13 @@ if (
   });
 }
 
-export { artifactDescriptor, releaseManifestNames, sortCanonicalValue };
+export {
+  artifactDescriptor,
+  assertCatalogMatchesCompletion,
+  completionManifest,
+  publishReleaseTransaction,
+  releaseManifestNames,
+  releaseSigningConfig,
+  sortCanonicalValue,
+  verifyCompletedRelease,
+};
