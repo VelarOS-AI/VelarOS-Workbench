@@ -176,7 +176,10 @@ export function WorkbenchTerminalToolPane({
   const highlightedLines = useMemo(
     () =>
       highlightWorkbenchConsoleOutputSequence(
-        activeTerminalSession?.lines.map((line) => line.text) ?? []
+        activeTerminalSession?.lines.map(({ text, stream }) => ({
+          text,
+          stream,
+        })) ?? []
       ),
     [activeTerminalSession?.lines]
   )
@@ -394,7 +397,9 @@ export function WorkbenchRunToolPane({
 
   const highlightedLines = useMemo(
     () =>
-      highlightWorkbenchConsoleOutputSequence(activeRunSession?.lines.map((line) => line.text) ?? []),
+      highlightWorkbenchConsoleOutputSequence(
+        activeRunSession?.lines.map(({ text, stream }) => ({ text, stream })) ?? []
+      ),
     [activeRunSession?.lines]
   )
 
@@ -423,7 +428,7 @@ export function WorkbenchRunToolPane({
   return (
     <div className={styles.terminalToolPane}>
       <ScrollArea ref={outputRef} className={styles.terminalOutputScroll}>
-        <div className={`${styles.terminalOutput} ${styles.runConsole}`}>
+        <div className={styles.terminalOutput}>
           {activeRunSession.lines.map((line, index) => (
             <WorkbenchConsoleOutputLine
               key={line.id}

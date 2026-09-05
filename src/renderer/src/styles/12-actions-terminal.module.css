@@ -462,17 +462,6 @@
 .commandOutput {
   @apply min-h-full;
   padding: 9px 12px;
-  --workbench-console-timestamp: var(--foreground);
-  --workbench-console-level-dbg: var(--status-blue-muted);
-  --workbench-console-level-info: var(--status-blue);
-  --workbench-console-level-warn: var(--status-amber);
-  --workbench-console-level-error: var(--status-red);
-  --workbench-console-json-key: color-mix(in srgb, var(--status-amber) 72%, var(--foreground));
-  --workbench-console-string: var(--status-green);
-  --workbench-console-number: var(--ui-metric-hot);
-  --workbench-console-boolean: var(--ui-metric-hot);
-  --workbench-console-stack-fn: color-mix(in srgb, var(--status-blue-muted) 78%, var(--foreground));
-  --workbench-console-stack-path: var(--status-teal);
 }
 
 .commandMetaLine {
@@ -495,7 +484,8 @@
 }
 
 .commandStderr {
-  color: var(--status-red);
+  /* stderr is a transport channel; parsed error levels and ANSI decide semantic color. */
+  color: var(--foreground);
 }
 
 .commandSystem {
@@ -544,68 +534,66 @@
 
 .consoleTokenStackPath {
   color: var(--workbench-console-stack-path);
-  text-decoration: underline;
-  text-underline-offset: 2px;
 }
 
 .consoleAnsiBlack {
-  color: color-mix(in srgb, var(--foreground) 55%, var(--background));
+  color: var(--workbench-terminal-ansi-black);
 }
 
 .consoleAnsiRed {
-  color: var(--status-red);
+  color: var(--workbench-terminal-ansi-red);
 }
 
 .consoleAnsiGreen {
-  color: var(--status-green);
+  color: var(--workbench-terminal-ansi-green);
 }
 
 .consoleAnsiYellow {
-  color: var(--status-amber);
+  color: var(--workbench-terminal-ansi-yellow);
 }
 
 .consoleAnsiBlue {
-  color: var(--status-blue);
+  color: var(--workbench-terminal-ansi-blue);
 }
 
 .consoleAnsiMagenta {
-  color: var(--status-violet);
+  color: var(--workbench-terminal-ansi-magenta);
 }
 
 .consoleAnsiCyan {
-  color: var(--status-teal);
+  color: var(--workbench-terminal-ansi-cyan);
 }
 
 .consoleAnsiWhite {
-  color: var(--foreground);
+  color: var(--workbench-terminal-ansi-white);
 }
 
 .consoleAnsiBrightBlack {
-  color: var(--foreground-secondary);
+  color: var(--workbench-terminal-ansi-bright-black);
 }
 
 .consoleAnsiBrightRed {
-  color: color-mix(in srgb, var(--status-red) 82%, white);
+  color: color-mix(in srgb, var(--workbench-terminal-ansi-red) 82%, var(--foreground));
 }
 
 .consoleAnsiBrightGreen {
-  color: color-mix(in srgb, var(--status-green) 82%, white);
+  color: color-mix(in srgb, var(--workbench-terminal-ansi-green) 82%, var(--foreground));
 }
 
 .consoleAnsiBrightYellow {
-  color: color-mix(in srgb, var(--status-amber) 82%, white);
+  color: color-mix(in srgb, var(--workbench-terminal-ansi-yellow) 82%, var(--foreground));
 }
 
 .consoleAnsiBrightBlue {
-  color: color-mix(in srgb, var(--status-blue) 82%, white);
+  color: color-mix(in srgb, var(--workbench-terminal-ansi-blue) 82%, var(--foreground));
 }
 
 .consoleAnsiBrightMagenta {
-  color: color-mix(in srgb, var(--status-violet) 82%, white);
+  color: color-mix(in srgb, var(--workbench-terminal-ansi-magenta) 82%, var(--foreground));
 }
 
 .consoleAnsiBrightCyan {
-  color: color-mix(in srgb, var(--status-teal) 82%, white);
+  color: color-mix(in srgb, var(--workbench-terminal-ansi-cyan) 82%, var(--foreground));
 }
 
 .consoleAnsiBrightWhite {
@@ -796,17 +784,6 @@
 .terminalOutput {
   @apply min-h-full;
   padding: 8px 12px;
-  --workbench-console-timestamp: var(--foreground);
-  --workbench-console-level-dbg: var(--status-blue-muted);
-  --workbench-console-level-info: var(--status-blue);
-  --workbench-console-level-warn: var(--status-amber);
-  --workbench-console-level-error: var(--status-red);
-  --workbench-console-json-key: color-mix(in srgb, var(--status-amber) 72%, var(--foreground));
-  --workbench-console-string: var(--status-green);
-  --workbench-console-number: var(--ui-metric-hot);
-  --workbench-console-boolean: var(--ui-metric-hot);
-  --workbench-console-stack-fn: color-mix(in srgb, var(--status-blue-muted) 78%, var(--foreground));
-  --workbench-console-stack-path: var(--status-teal);
 }
 
 .terminalPromptRow {
@@ -881,7 +858,7 @@
 
 .terminalOutput pre[data-stream='stderr'],
 .terminalOutputLine[data-stream='stderr'] {
-  color: var(--status-red);
+  color: var(--foreground);
 }
 
 .terminalOutput pre[data-stream='system'],
@@ -896,21 +873,21 @@
 
 /* 控制台可点击链接：下划线 + 末尾外链图标。 */
 .consoleLink {
-  color: var(--status-blue);
+  color: var(--workbench-editor-hover-link);
   text-decoration: underline;
   text-underline-offset: 2px;
   cursor: pointer;
 }
 
 .consoleLink:hover {
-  color: color-mix(in srgb, var(--status-blue) 78%, var(--foreground));
+  color: color-mix(in srgb, var(--workbench-editor-hover-link) 78%, var(--foreground));
 }
 
 .consoleLinkExternal {
   display: inline-flex;
   align-items: center;
   margin-left: 3px;
-  color: var(--status-blue);
+  color: var(--workbench-editor-hover-link);
   vertical-align: middle;
   cursor: pointer;
   opacity: 0.7;
@@ -918,20 +895,6 @@
 
 .consoleLinkExternal:hover {
   opacity: 1;
-}
-
-/*
- * 只有可点击链接用真蓝，其余 token 保持原色。--status-blue 在单色设计里别名到
- * --primary，暗色下会退成灰、不是蓝，所以链接单独指到编辑器语法配色的 link 真蓝
- * （随主题明暗自适应）。
- */
-.runConsole .consoleLink,
-.runConsole .consoleLinkExternal {
-  color: var(--workbench-editor-hover-link);
-}
-
-.runConsole .consoleLink:hover {
-  color: color-mix(in srgb, var(--workbench-editor-hover-link) 78%, var(--foreground));
 }
 
 .terminalInputForm {

@@ -62,26 +62,46 @@ const ISO_TIMESTAMP =
   /\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:?\d{2})?/
 const CLOCK_TIMESTAMP = /\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?/
 const LOG_LEVEL = /\[(DBG|DEBUG|INFO|LOG|WARN|WARNING|ERR|ERROR|TRACE|FATAL)\]/i
-const STACK_WITH_FUNCTION =
-  /^(\s*at\s+)((?:async\s+)?(?:[\w.$<>]+|\[[^\]]+\]))(\s+\()([^:]+):(\d+):(\d+)(\))/m
-const STACK_FILE_ONLY = /^(\s*at\s+)([^(\s]+):(\d+):(\d+)/m
+const STACK_PREFIX = /^(\s*at\s+)/u
+const STACK_LOCATION = /^(.*):(\d+):(\d+)$/u
+const STACK_PSEUDO_LOCATION = /^(?:<anonymous>|native|index\s+\d+)$/iu
 const QUOTED_JSON_KEY = /"(?:[^"\\]|\\.)*"\s*:|'(?:[^'\\]|\\.)*'\s*:/g
-const UNQUOTED_JSON_KEY = /\b[A-Za-z_$][\w$]*\s*:/g
+const UNQUOTED_JSON_KEY =
+  /[{,](\s*)([A-Za-z_$][\w$]*\s*:)(?=\s*(?:["'[{]|-?\d|true\b|false\b|null\b|undefined\b))/g
 const QUOTED_STRING = /"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g
-const NUMBER_LITERAL = /\b-?\d+(?:\.\d+)?(?:e[+-]?\d+)?\b/gi
+const NUMBER_LITERAL =
+  /(?<![\w.])-?(?:0[xX][\dA-Fa-f]+|0[bB][01]+|0[oO][0-7]+|(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)(?![\w.])/g
 const BOOLEAN_LITERAL = /\b(?:true|false|null|undefined)\b/g
 // http(s) URL；结尾去掉常见句读（. , ; : ! ? ) ] }）避免把句尾标点吞进链接。
 const URL_LITERAL = /https?:\/\/[^\s<>"'`\])}]*[^\s<>"'`\])}.,;:!?]/gi
+// eslint-disable-next-line no-control-regex -- buffers a trailing ESC until the next process chunk.
+const INCOMPLETE_ANSI_SUFFIX = /\x1b(?:\[[0-9;:]*)?$/u
+const MAX_PENDING_ANSI_LENGTH = 64
+const MAX_SEMANTIC_TEXT_LENGTH = 64 * 1024
+const MAX_RENDERED_SEMANTIC_TOKENS = 4096
 
 interface SemanticMatch {
   start: number
   end: number
   kind: WorkbenchConsoleOutputTokenKind
+  priority: number
 }
 
 interface AnsiForeground {
   kind: WorkbenchConsoleOutputTokenKind
   color?: string
+}
+
+interface AnsiStreamState {
+  foreground: Nullable<AnsiForeground>
+  pendingSequence: string
+}
+
+export type WorkbenchConsoleOutputStream = 'stdout' | 'stderr' | 'system' | 'input'
+
+export interface WorkbenchConsoleOutputChunk {
+  text: string
+  stream: WorkbenchConsoleOutputStream
 }
 
 function pushToken(
@@ -230,7 +250,9 @@ function resolveLogLevelKind(level: string): WorkbenchConsoleOutputTokenKind {
 function collectRegexMatches(
   text: string,
   pattern: RegExp,
-  kind: WorkbenchConsoleOutputTokenKind | ((match: RegExpExecArray) => WorkbenchConsoleOutputTokenKind)
+  kind:
+    WorkbenchConsoleOutputTokenKind | ((match: RegExpExecArray) => WorkbenchConsoleOutputTokenKind),
+  priority: number
 ): SemanticMatch[] {
   const flags = pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`
   const regex = new RegExp(pattern.source, flags)
@@ -241,14 +263,65 @@ function collectRegexMatches(
     const end = start + match[0].length
     const resolvedKind = typeof kind === 'function' ? kind(match) : kind
 
-    matches.push({ start, end, kind: resolvedKind })
+    matches.push({ start, end, kind: resolvedKind, priority })
+  }
+
+  return matches
+}
+
+function collectUnquotedJsonKeyMatches(text: string): SemanticMatch[] {
+  const matches: SemanticMatch[] = []
+
+  for (const match of text.matchAll(UNQUOTED_JSON_KEY)) {
+    const wholeStart = match.index ?? 0
+    const leadingWhitespace = match[1] ?? ''
+    const key = match[2] ?? ''
+    const delimiterLength = match[0].length - leadingWhitespace.length - key.length
+    const start = wholeStart + delimiterLength + leadingWhitespace.length
+
+    matches.push({
+      start,
+      end: start + key.length,
+      kind: 'jsonKey',
+      priority: 80,
+    })
   }
 
   return matches
 }
 
 function mergeSemanticMatches(text: string, matches: SemanticMatch[]): WorkbenchConsoleOutputToken[] {
-  const sorted = matches.toSorted((left, right) => left.start - right.start || right.end - left.end)
+  const selected: SemanticMatch[] = []
+  const occupied = new Uint8Array(text.length)
+  const byPriority = matches.toSorted(
+    (left, right) =>
+      right.priority - left.priority ||
+      right.end - right.start - (left.end - left.start) ||
+      left.start - right.start
+  )
+
+  for (const candidate of byPriority) {
+    let segmentStart = -1
+
+    for (let index = candidate.start; index < candidate.end; index += 1) {
+      if (occupied[index]) {
+        if (segmentStart >= 0) {
+          selected.push({ ...candidate, start: segmentStart, end: index })
+          occupied.fill(1, segmentStart, index)
+          segmentStart = -1
+        }
+      } else if (segmentStart < 0) {
+        segmentStart = index
+      }
+    }
+
+    if (segmentStart >= 0) {
+      selected.push({ ...candidate, start: segmentStart })
+      occupied.fill(1, segmentStart, candidate.end)
+    }
+  }
+
+  const sorted = selected.toSorted((left, right) => left.start - right.start)
   const tokens: WorkbenchConsoleOutputToken[] = []
   let cursor = 0
 
@@ -265,30 +338,57 @@ function mergeSemanticMatches(text: string, matches: SemanticMatch[]): Workbench
   return tokens
 }
 
-function highlightStackTraceLine(line: string): WorkbenchConsoleOutputToken[] {
-  const withFunction = line.match(STACK_WITH_FUNCTION)
-  if (withFunction) {
-    const [, prefix, fnName, openParen, filePath, lineNo, columnNo, closeParen] = withFunction
-    return [
-      { text: prefix ?? '', kind: 'plain' },
-      { text: fnName ?? '', kind: 'stackFunction' },
-      { text: openParen ?? '', kind: 'plain' },
-      { text: filePath ?? '', kind: 'stackPath' },
-      { text: `:${lineNo ?? ''}:${columnNo ?? ''}${closeParen ?? ''}`, kind: 'plain' },
-    ]
-  }
+function highlightStackLocation(location: string): Nullable<WorkbenchConsoleOutputToken[]> {
+  const positioned = location.match(STACK_LOCATION)
+  if (positioned) {
+    const [, path, lineNo, columnNo] = positioned
+    if (!path) return null
 
-  const fileOnly = line.match(STACK_FILE_ONLY)
-  if (fileOnly) {
-    const [, prefix, filePath, lineNo, columnNo] = fileOnly
     return [
-      { text: prefix ?? '', kind: 'plain' },
-      { text: filePath ?? '', kind: 'stackPath' },
+      { text: path, kind: 'stackPath' },
       { text: `:${lineNo ?? ''}:${columnNo ?? ''}`, kind: 'plain' },
     ]
   }
 
-  return highlightSemanticLine(line)
+  if (STACK_PSEUDO_LOCATION.test(location)) return [{ text: location, kind: 'stackPath' }]
+
+  return null
+}
+
+/**
+ * Parses V8/Node/Bun stack frames without ever dispatching back into the general highlighter.
+ * Returning null is intentional: malformed `at ...` text is then rendered by the finite generic
+ * path instead of making the stack and semantic paths recursively call one another.
+ */
+function tryHighlightStackTraceLine(line: string): Nullable<WorkbenchConsoleOutputToken[]> {
+  const prefixMatch = line.match(STACK_PREFIX)
+  if (!prefixMatch) return null
+
+  const prefix = prefixMatch[0]
+  const frame = line.slice(prefix.length)
+  if (!frame) return null
+
+  const withFunction = /^(.+?) \((.*)\)(.*)$/u.exec(frame)
+  if (withFunction) {
+    const [, functionName = '', location = '', trailing = ''] = withFunction
+    if (!functionName || !location) return null
+
+    const locationTokens = highlightStackLocation(location) ?? [
+      { text: location, kind: 'stackPath' as const },
+    ]
+    const tokens: WorkbenchConsoleOutputToken[] = []
+    pushToken(tokens, prefix, 'plain')
+    pushToken(tokens, functionName, 'stackFunction')
+    pushToken(tokens, ' (', 'plain')
+    for (const token of locationTokens) pushToken(tokens, token.text, token.kind)
+    pushToken(tokens, `)${trailing}`, 'plain')
+    return tokens
+  }
+
+  const locationTokens = highlightStackLocation(frame)
+  if (!locationTokens) return null
+
+  return [{ text: prefix, kind: 'plain' }, ...locationTokens]
 }
 
 function highlightLogPrefix(line: string): { consumed: number; tokens: WorkbenchConsoleOutputToken[] } {
@@ -306,9 +406,10 @@ function highlightLogPrefix(line: string): { consumed: number; tokens: Workbench
     tokens.push({ text: isoMatch[0], kind: 'timestamp' })
     index += isoMatch[0].length
 
-    if (line[index] === ' ') {
-      tokens.push({ text: ' ', kind: 'plain' })
-      index += 1
+    const spacing = line.slice(index).match(/^[\t ]+/u)?.[0] ?? ''
+    if (spacing) {
+      tokens.push({ text: spacing, kind: 'plain' })
+      index += spacing.length
     }
   } else {
     const clockMatch = line.slice(index).match(CLOCK_TIMESTAMP)
@@ -316,25 +417,27 @@ function highlightLogPrefix(line: string): { consumed: number; tokens: Workbench
       tokens.push({ text: clockMatch[0], kind: 'timestamp' })
       index += clockMatch[0].length
 
-      if (line[index] === ' ') {
-        tokens.push({ text: ' ', kind: 'plain' })
-        index += 1
+      const spacing = line.slice(index).match(/^[\t ]+/u)?.[0] ?? ''
+      if (spacing) {
+        tokens.push({ text: spacing, kind: 'plain' })
+        index += spacing.length
       }
     }
   }
 
   const levelMatch = line.slice(index).match(LOG_LEVEL)
   if (levelMatch?.index === 0) {
-    tokens.push({ text: levelMatch[0], kind: resolveLogLevelKind(levelMatch[1] ?? '') })
+    tokens.push({
+      text: levelMatch[0],
+      kind: resolveLogLevelKind(levelMatch[1] ?? ''),
+    })
     index += levelMatch[0].length
   }
 
   return { consumed: index, tokens }
 }
 
-function highlightSemanticLine(line: string): WorkbenchConsoleOutputToken[] {
-  if (/^\s*at\s+/.test(line)) return highlightStackTraceLine(line)
-
+function highlightGeneralSemanticLine(line: string): WorkbenchConsoleOutputToken[] {
   const { consumed, tokens: prefixTokens } = highlightLogPrefix(line)
   const remainder = line.slice(consumed)
 
@@ -342,19 +445,24 @@ function highlightSemanticLine(line: string): WorkbenchConsoleOutputToken[] {
 
   const remainderTokens = mergeSemanticMatches(remainder, [
     // URL 优先级最高：整段 URL 先占位，避免内部的数字/字符串把它切碎。
-    ...collectRegexMatches(remainder, URL_LITERAL, 'link'),
-    ...collectRegexMatches(remainder, QUOTED_JSON_KEY, 'jsonKey'),
-    ...collectRegexMatches(remainder, UNQUOTED_JSON_KEY, 'jsonKey'),
-    ...collectRegexMatches(remainder, QUOTED_STRING, 'string'),
-    ...collectRegexMatches(remainder, BOOLEAN_LITERAL, 'boolean'),
-    ...collectRegexMatches(remainder, NUMBER_LITERAL, 'number'),
+    ...collectRegexMatches(remainder, URL_LITERAL, 'link', 100),
+    ...collectRegexMatches(remainder, QUOTED_JSON_KEY, 'jsonKey', 80),
+    ...collectUnquotedJsonKeyMatches(remainder),
+    ...collectRegexMatches(remainder, QUOTED_STRING, 'string', 60),
+    ...collectRegexMatches(remainder, BOOLEAN_LITERAL, 'boolean', 40),
+    ...collectRegexMatches(remainder, NUMBER_LITERAL, 'number', 40),
   ])
 
   return [...prefixTokens, ...remainderTokens]
 }
 
+function highlightSemanticLine(line: string): WorkbenchConsoleOutputToken[] {
+  return tryHighlightStackTraceLine(line) ?? highlightGeneralSemanticLine(line)
+}
+
 function highlightSemanticText(text: string): WorkbenchConsoleOutputToken[] {
-  const lines = text.split('\n')
+  const analyzedText = text.slice(0, MAX_SEMANTIC_TEXT_LENGTH)
+  const lines = analyzedText.split('\n')
   const tokens: WorkbenchConsoleOutputToken[] = []
 
   lines.forEach((line, lineIndex) => {
@@ -364,7 +472,27 @@ function highlightSemanticText(text: string): WorkbenchConsoleOutputToken[] {
     }
   })
 
+  if (tokens.length > MAX_RENDERED_SEMANTIC_TOKENS) {
+    const limited = tokens.slice(0, MAX_RENDERED_SEMANTIC_TOKENS)
+    const consumed = limited.reduce((length, token) => length + token.text.length, 0)
+    pushToken(limited, text.slice(consumed), 'plain')
+    return limited
+  }
+
+  pushToken(tokens, text.slice(analyzedText.length), 'plain')
+
   return tokens
+}
+
+function splitIncompleteAnsiSuffix(text: string): {
+  complete: string
+  pending: string
+} {
+  const match = text.match(INCOMPLETE_ANSI_SUFFIX)
+  const pending = match?.[0] ?? ''
+  if (!pending || pending.length > MAX_PENDING_ANSI_LENGTH) return { complete: text, pending: '' }
+
+  return { complete: text.slice(0, -pending.length), pending }
 }
 
 function highlightWithAnsi(
@@ -386,12 +514,7 @@ function highlightWithAnsi(
         if (token.kind === 'link' || !activeAnsiForeground) {
           pushToken(tokens, token.text, token.kind, token.color)
         } else {
-          pushToken(
-            tokens,
-            token.text,
-            activeAnsiForeground.kind,
-            activeAnsiForeground.color
-          )
+          pushToken(tokens, token.text, activeAnsiForeground.kind, activeAnsiForeground.color)
         }
       }
     }
@@ -417,17 +540,42 @@ function highlightWithAnsi(
 export function highlightWorkbenchConsoleOutput(text: string): WorkbenchConsoleOutputToken[] {
   if (!text) return []
 
-  return highlightWithAnsi(text).tokens
+  try {
+    return highlightWithAnsi(text).tokens
+  } catch {
+    // Console decoration must never be able to take down the entire renderer.
+    return [{ text, kind: 'plain' }]
+  }
 }
 
 export function highlightWorkbenchConsoleOutputSequence(
-  chunks: readonly string[]
+  chunks: ReadonlyArray<string | WorkbenchConsoleOutputChunk>
 ): WorkbenchConsoleOutputToken[][] {
-  let foreground: Nullable<AnsiForeground> = null
+  const states = new Map<string, AnsiStreamState>()
 
   return chunks.map((chunk) => {
-    const highlighted = highlightWithAnsi(chunk, foreground)
-    foreground = highlighted.foreground
-    return highlighted.tokens
+    const text = typeof chunk === 'string' ? chunk : chunk.text
+    const stream = typeof chunk === 'string' ? 'default' : chunk.stream
+    const carriesState = stream === 'default' || stream === 'stdout' || stream === 'stderr'
+
+    if (!carriesState) return highlightWorkbenchConsoleOutput(text)
+
+    const state = states.get(stream) ?? {
+      foreground: null,
+      pendingSequence: '',
+    }
+    const buffered = splitIncompleteAnsiSuffix(`${state.pendingSequence}${text}`)
+
+    try {
+      const highlighted = highlightWithAnsi(buffered.complete, state.foreground)
+      states.set(stream, {
+        foreground: highlighted.foreground,
+        pendingSequence: buffered.pending,
+      })
+      return highlighted.tokens
+    } catch {
+      states.set(stream, { foreground: null, pendingSequence: '' })
+      return text ? [{ text, kind: 'plain' }] : []
+    }
   })
 }
