@@ -13,6 +13,17 @@ import {
   isDirtyTab,
   toOpenedFileSnapshots,
 } from '../src/renderer/src/models/editor/workbenchEditorTabs'
+import {
+  canStepWorkbenchImageZoom,
+  clampWorkbenchImageManualZoom,
+  formatWorkbenchImageZoom,
+  resolveWorkbenchImageFitZoom,
+  resolveWorkbenchImageWheelZoom,
+  resolveWorkbenchImageZoomShortcut,
+  stepWorkbenchImageZoom,
+  WORKBENCH_IMAGE_MAX_MANUAL_ZOOM,
+  WORKBENCH_IMAGE_MIN_MANUAL_ZOOM,
+} from '../src/renderer/src/models/editor/workbenchImagePreview'
 import type { WorkbenchOpenEditorTab } from '../src/renderer/src/types/workbenchTypes'
 
 function createFile(
@@ -96,5 +107,70 @@ void describe('Workbench image preview editor state', () => {
 
     assert.equal(hasFileSnapshotChanged(current, unchanged), false)
     assert.equal(hasFileSnapshotChanged(current, changed), true)
+  })
+
+  void test('fits large images inside the available viewport without enlarging small images', () => {
+    assert.equal(
+      resolveWorkbenchImageFitZoom({
+        naturalWidth: 2400,
+        naturalHeight: 1600,
+        viewportWidth: 1200,
+        viewportHeight: 700,
+      }),
+      0.4375
+    )
+    assert.equal(
+      resolveWorkbenchImageFitZoom({
+        naturalWidth: 320,
+        naturalHeight: 240,
+        viewportWidth: 1200,
+        viewportHeight: 700,
+      }),
+      1
+    )
+    assert.equal(
+      resolveWorkbenchImageFitZoom({
+        naturalWidth: 0,
+        naturalHeight: 0,
+        viewportWidth: 1200,
+        viewportHeight: 700,
+      }),
+      1
+    )
+  })
+
+  void test('steps manual image zoom through stable levels and clamps unsafe values', () => {
+    assert.equal(stepWorkbenchImageZoom(1, 'in'), 1.25)
+    assert.equal(stepWorkbenchImageZoom(1, 'out'), 0.75)
+    assert.equal(stepWorkbenchImageZoom(0.4375, 'in'), 0.5)
+    assert.equal(stepWorkbenchImageZoom(0.4375, 'out'), 0.33)
+    assert.equal(stepWorkbenchImageZoom(WORKBENCH_IMAGE_MAX_MANUAL_ZOOM, 'in'), 8)
+    assert.equal(stepWorkbenchImageZoom(WORKBENCH_IMAGE_MIN_MANUAL_ZOOM, 'out'), 0.1)
+    assert.equal(canStepWorkbenchImageZoom(0.05, 'out'), false)
+    assert.equal(canStepWorkbenchImageZoom(0.05, 'in'), true)
+    assert.equal(canStepWorkbenchImageZoom(8, 'in'), false)
+    assert.equal(clampWorkbenchImageManualZoom(Number.POSITIVE_INFINITY), 1)
+    assert.equal(clampWorkbenchImageManualZoom(12), 8)
+    assert.equal(clampWorkbenchImageManualZoom(0.01), 0.1)
+  })
+
+  void test('formats fit and manual zoom percentages without hiding very small fits', () => {
+    assert.equal(formatWorkbenchImageZoom(1), '100%')
+    assert.equal(formatWorkbenchImageZoom(0.4375), '44%')
+    assert.equal(formatWorkbenchImageZoom(0.054), '5.4%')
+  })
+
+  void test('reserves plain preview shortcuts and modifier-wheel gestures for image zoom', () => {
+    assert.equal(resolveWorkbenchImageZoomShortcut('+', false), 'in')
+    assert.equal(resolveWorkbenchImageZoomShortcut('=', false), 'in')
+    assert.equal(resolveWorkbenchImageZoomShortcut('-', false), 'out')
+    assert.equal(resolveWorkbenchImageZoomShortcut('0', false), 'actual')
+    assert.equal(resolveWorkbenchImageZoomShortcut('F', false), 'fit')
+    assert.equal(resolveWorkbenchImageZoomShortcut('+', true), null)
+    assert.equal(resolveWorkbenchImageZoomShortcut('ArrowRight', false), null)
+    assert.equal(resolveWorkbenchImageWheelZoom(-1, true), 'in')
+    assert.equal(resolveWorkbenchImageWheelZoom(1, true), 'out')
+    assert.equal(resolveWorkbenchImageWheelZoom(1, false), null)
+    assert.equal(resolveWorkbenchImageWheelZoom(0, true), null)
   })
 })

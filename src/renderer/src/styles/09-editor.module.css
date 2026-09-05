@@ -445,8 +445,10 @@
 }
 
 .imagePreviewCanvas {
-  @apply flex min-h-0 min-w-0 items-center justify-center overflow-auto;
-  padding: clamp(20px, 4vw, 56px);
+  @apply min-h-0 min-w-0 overflow-auto;
+  position: relative;
+  outline: none;
+  overscroll-behavior: contain;
   background-color: var(--workbench-editor-bg, var(--card));
   background-image:
     linear-gradient(45deg, var(--workbench-hover) 25%, transparent 25%),
@@ -457,10 +459,39 @@
   background-size: 16px 16px;
 }
 
+.imagePreviewCanvas:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+
+.imagePreviewStage {
+  @apply flex items-center justify-center;
+  box-sizing: border-box;
+  width: max-content;
+  min-width: 100%;
+  height: max-content;
+  min-height: 100%;
+  padding: clamp(20px, 4vw, 56px);
+}
+
+.imagePreviewCanvas[data-pannable='true'] .imagePreviewStage {
+  cursor: grab;
+  touch-action: none;
+}
+
+.imagePreviewCanvas[data-dragging='true'] {
+  scroll-behavior: auto;
+}
+
+.imagePreviewCanvas[data-dragging='true'] .imagePreviewStage {
+  cursor: grabbing;
+  user-select: none;
+}
+
 .imagePreviewImage {
   display: block;
-  max-width: 100%;
-  max-height: 100%;
+  flex: none;
+  max-width: none;
+  max-height: none;
   object-fit: contain;
   user-select: none;
 }
@@ -471,11 +502,63 @@
   background: var(--workbench-toolbar);
 }
 
-.imagePreviewMetadata {
-  @apply block shrink-0 border-t px-3 py-2 text-center;
+.imagePreviewFooter {
+  @apply flex min-w-0 shrink-0 items-center justify-between gap-3 border-t px-3;
+  min-height: 38px;
   border-color: var(--workbench-border);
   background: var(--workbench-toolbar);
+}
+
+.imagePreviewMetadata {
+  @apply block min-w-0 truncate;
   font-variant-numeric: tabular-nums;
+}
+
+.imagePreviewToolbar {
+  @apply flex shrink-0 items-center gap-0.5;
+}
+
+.imagePreviewZoomValue {
+  min-width: 48px;
+  color: var(--foreground-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.imagePreviewToolbarDivider {
+  width: 1px;
+  height: 16px;
+  margin: 0 4px;
+  background: var(--workbench-border);
+}
+
+.imagePreviewActualSizeButton {
+  @apply rounded px-2 py-1;
+  border: 0;
+  background: transparent;
+  color: var(--foreground-secondary);
+  font: inherit;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.imagePreviewActualSizeButton:is(:hover, :focus-visible, [aria-pressed='true']) {
+  background: var(--workbench-hover);
+  color: var(--foreground);
+  outline: none;
+}
+
+@media (max-width: 640px) {
+  .imagePreviewFooter {
+    gap: 6px;
+    padding-inline: 8px;
+  }
+
+  .imagePreviewMetadata {
+    display: none;
+  }
 }
 
 .lightEditorTruncated {
