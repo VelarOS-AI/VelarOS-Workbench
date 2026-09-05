@@ -4,20 +4,15 @@ import type { ModelMessage } from 'ai'
 
 import {
   type AgentExecutionConfig,
+  type AgentExecutionStack,
+  type AgentExecutionStackToolContext,
   type AgentRuntimeCapabilityPorts,
   CodingSessionTracker,
-  ContextBuilder,
   ContextGovernanceSessionRegistry,
-  createBuiltInPromptRegistry,
-  defaultRuntimePromptFeaturePolicy,
+  createAgentExecutionStack,
   defaultUnsupportedInteractionPort,
   type ExecutionEventBus,
-  ModelRuntime,
   PrimaryAgentProfile,
-  RunContext,
-  type SoloLoopToolContext,
-  SoloStreamLoop,
-  TurnRunner,
 } from '@velaros-ai/agent'
 import type {
   AgentModelInputModality,
@@ -45,26 +40,20 @@ import {
 /**
  * Workbench 的**进程内** Agent 执行栈。
  *
- * kernel-contract §15：完整宿主自持执行栈——聊天不再委托远端 `velaros.agent`，而是在本进程
- * 直接跑 `@velaros-ai/agent` 的 {@link SoloStreamLoop}。
+ * 由 Platform 的 createAgentExecutionStack 配对模型、提示词与回合处理，
+ * Workbench 提供项目能力和每轮冻结的 Mod 工具面。
  *
  * ## 组装链
  * ```
  * WorkbenchAgentCapabilityRuntime.execute        （Kernel 能力入口，解析 v1 信封）
  *   → WorkbenchAgentExecutionStack.run           （本类：按 session + Mod surface 取装配）
- *     → SoloStreamLoop.execute                   （Agent 主循环）
- *       ├ ModelRuntime      ← @velaros-ai/model 的 agentModelRuntime（BYOK 选择走 config）
- *       ├ TurnRunner        ← 单轮流式 + 工具执行
- *       ├ RunContext        ← ContextBuilder 的内置提示词段注册表
- *       └ ToolRegistry      ← Project 工具 + 当前全局启用 Agent Mod 的冻结工具面
+ *     → stack.executeSolo                       （Platform 配对的执行栈）
+ *       ├ model             ← @velaros-ai/model 的 agentModelRuntime
+ *       └ toolRegistry      ← Project 工具 + Agent Mod 的冻结工具面
  * ```
  *
- * ## 与 Desktop 的差异（有意为之的裁剪，非遗漏）
- * Desktop 的 `createExecutionRuntime` 还装了 ExecutionService / SoloExecutionService（执行记录
- * 持久化、会话互斥、pending input、审批往返）、SubAgentDispatcher + QueryLoop（子 Agent 派发）、
- * 技能库、记忆/知识域、执行观测账本。Workbench v1 **一个都不装**：一次 execute 就是一轮
- * 前台 solo 运行，abort 靠 Kernel 能力信号，历史由调用方（renderer）持有。
- * 当前实现保留 Workbench 的单项目、前台执行边界；Mod 工具面在每次 run 开始时冻结。
+ * 一次 execute 是单项目的前台 Solo 运行，取消使用 Kernel 能力信号，历史由调用方持有。
+ * Mod 工具面在 run 开始时冻结；等价工具面复用执行栈和会话追踪状态。
  */
 const WorkbenchAgentRunId = 'workbench-solo'
 const WorkbenchDefaultThinkingDepth = 'balanced'
@@ -125,7 +114,7 @@ interface WorkbenchAgentSession {
   surfaceSignature: string
   tracker: CodingSessionTracker
   registry: WorkbenchAgentToolRegistry
-  loop: SoloStreamLoop
+  stack: AgentExecutionStack<WorkbenchAgentToolContext>
   enabledCategoryIds: readonly ToolCategoryId[]
   initialVisibleToolNames: readonly string[]
 }
@@ -145,8 +134,7 @@ const EmptyWorkbenchAgentModSurfaceProvider: WorkbenchAgentModSurfaceProvider = 
 
 class WorkbenchAgentExecutionStack {
   private readonly log = Log.tag('WorkbenchAgentExecutionStack')
-  private readonly runtimeHelper: ModelRuntime
-  private readonly runContextHelper: RunContext
+  private readonly modelRuntime: ModelRuntimeComposition['agentModelRuntime']
   private readonly contextGovernanceSessions = new ContextGovernanceSessionRegistry()
   private readonly sessions = new Map<string, WorkbenchAgentSession>()
 
@@ -158,11 +146,7 @@ class WorkbenchAgentExecutionStack {
   ) {
     // Model 是宿主注入的能力：Agent 不自己发现 provider registry。
     // config.modelSelection 是不透明选择，Workbench 原样转交 Model 包解析（BYOK）。
-    this.runtimeHelper = new ModelRuntime(modelComposition.agentModelRuntime)
-    this.runContextHelper = new RunContext(
-      new ContextBuilder(createBuiltInPromptRegistry(), null),
-      defaultRuntimePromptFeaturePolicy
-    )
+    this.modelRuntime = modelComposition.agentModelRuntime
   }
 
   /** 跑一轮主 Agent。返回 loop 的终态，事件流已经在过程中经 events 出去了。 */
@@ -180,6 +164,7 @@ class WorkbenchAgentExecutionStack {
     const unbindAbort = bindAbortSignal(input.abortSignal, abortController)
     const toolContext = createWorkbenchToolContext({
       sessionId: input.sessionId,
+      locale: input.config.locale,
       projectRoot,
       abortSignal: abortController.signal,
       tracker: session.tracker,
@@ -187,7 +172,7 @@ class WorkbenchAgentExecutionStack {
       enabledCategoryIds: session.enabledCategoryIds,
       initialVisibleToolNames: session.initialVisibleToolNames,
     })
-    session.tracker.attachToolContext(toolContext as never)
+    session.tracker.attachToolContext(toolContext)
     const primaryAgentProfile = new PrimaryAgentProfile(EmptySkillRepository, {
       getToolCategoryId: (toolName) =>
         session.registry.getDescriptor(toolName)?.categoryId ?? 'project-files',
@@ -198,7 +183,7 @@ class WorkbenchAgentExecutionStack {
     })
 
     try {
-      return (await session.loop.execute({
+      return await session.stack.executeSolo({
         history: input.messages,
         config: { ...input.config, sessionId: input.sessionId, abortController },
         chatConfig: {
@@ -207,7 +192,6 @@ class WorkbenchAgentExecutionStack {
         },
         systemConfig: {
           thinkingDepth: input.config.thinkingDepth ?? WorkbenchDefaultThinkingDepth,
-          reasoningLanguage: 'auto',
           disabledToolNames: [],
           prompt: { segmentOverrides: [] },
           advancedRuntime: {},
@@ -219,16 +203,17 @@ class WorkbenchAgentExecutionStack {
           },
         },
         abortController,
-        toolContext: toolContext as never,
+        toolContext,
         resolution,
-        events: input.events as never,
-      } as never)) as WorkbenchAgentRunResult
+        events: input.events,
+      })
     } finally {
       unbindAbort()
     }
   }
 
   public async dispose(): Promise<void> {
+    for (const [sessionId, session] of this.sessions) session.stack.clearSession(sessionId)
     this.sessions.clear()
     await this.projectProvider.dispose().catch((error: unknown) => {
       this.log.warn('agent.project_provider_dispose_failed', {
@@ -237,25 +222,13 @@ class WorkbenchAgentExecutionStack {
     })
   }
 
-  /** Loop 与冻结 Registry 同生命周期，不能按 projectRoot 复用首个 session 的注册表。 */
-  private createLoop(registry: WorkbenchAgentToolRegistry): SoloStreamLoop {
-    return new SoloStreamLoop(
-      this.runtimeHelper,
-      // 显式给出 loop 的上下文类型：TurnRunner 的默认泛型比 SoloStreamLoop 要求的窄
-      // （缺 AutoVerification 那一面），不指名就会推成不兼容的默认值。
-      new TurnRunner<SoloLoopToolContext>(registry, this.contextGovernanceSessions),
-      this.contextGovernanceSessions,
-      // 唯一保留的断言,且只包这一个参数。
-      // 上游不一致:平台的 `RunContext` 要求 `RunContextToolContext.sessionId: string`,
-      // 而 `SoloLoopToolContext.sessionId` 是可选的——于是平台自己的 RunContext 不满足
-      // 平台自己的 `SoloLoopRunContext<SoloLoopToolContext>`。RunContext 又不是泛型类,
-      // 宿主侧无法指名收窄。上游对齐 sessionId 可选性后删掉本断言。
-      this.runContextHelper as unknown as ConstructorParameters<typeof SoloStreamLoop>[3],
-      registry,
-      null,
-      {},
-      null
-    )
+  /** 执行栈绑定本次冻结工具面，内部回合与上下文由 Platform 统一配对。 */
+  private createStack(registry: WorkbenchAgentToolRegistry): AgentExecutionStack<WorkbenchAgentToolContext> {
+    return createAgentExecutionStack<WorkbenchAgentToolContext>({
+      model: this.modelRuntime,
+      toolRegistry: registry,
+      governanceSessions: this.contextGovernanceSessions,
+    })
   }
 
   private async resolveSession(
@@ -297,7 +270,7 @@ class WorkbenchAgentExecutionStack {
       surfaceSignature: snapshot.surfaceSignature,
       tracker,
       registry,
-      loop: this.createLoop(registry),
+      stack: this.createStack(registry),
       enabledCategoryIds: snapshot.enabledCategoryIds,
       initialVisibleToolNames: snapshot.initialVisibleToolNames,
     }
@@ -493,16 +466,27 @@ const EmptySkillRepository = {
  * 逐项对齐 loop 的必填面：codingSession（tracker 直供）、activeContext（内存态，
  * Workbench 没有制品库）、可见工具名（本地状态）、类别列举（注册表直供）。
  */
+type WorkbenchAgentToolContext = AgentExecutionStackToolContext & {
+  resourceId: string
+  describeToolInputSchema(toolName: string): unknown
+  getCurrentVisibleToolTransportNames(): Readonly<Record<string, string>>
+  setCurrentVisibleToolTransportNames(names: Readonly<Record<string, string>>): void
+  codingSession: CodingSessionTracker
+  interaction: typeof defaultUnsupportedInteractionPort
+}
+
 export function createWorkbenchToolContext(input: {
   sessionId: string
+  locale?: AgentExecutionConfig['locale']
   projectRoot: string
   abortSignal: AbortSignal
   tracker: CodingSessionTracker
   registry: WorkbenchAgentToolRegistry
   enabledCategoryIds?: readonly ToolCategoryId[]
   initialVisibleToolNames?: readonly string[]
-}): Record<string, unknown> {
+}): WorkbenchAgentToolContext {
   let visibleToolNames = [...(input.initialVisibleToolNames ?? input.registry.names)]
+  let visibleToolTransportNames: Readonly<Record<string, string>> = {}
   let supportedModelInputModalities: AgentModelInputModality[] = ['text']
   const enabledCategoryIds = input.enabledCategoryIds ?? input.registry.categoryIds
   const capabilityPorts = createWorkbenchAgentCapabilityPorts({
@@ -511,13 +495,19 @@ export function createWorkbenchToolContext(input: {
     initialVisibleToolNames: visibleToolNames,
     toolNames: input.registry.names,
   })
-  const context: Record<string, unknown> = {
+  const context: WorkbenchAgentToolContext = {
     sessionId: input.sessionId,
+    locale: input.locale ?? 'zh-CN',
     resourceId: input.projectRoot,
     abortSignal: input.abortSignal,
     log: logRuntime.tag('WorkbenchAgentTool'),
-    role: { id: 'primary-agent' },
-    proposalMode: false,
+    role: {
+      id: 'primary-agent',
+      label: 'Workbench Agent',
+      description: '当前项目作用域的主 Agent。',
+      nextAllowedRoles: [],
+    },
+    planningMode: false,
     agentSurfaceId: 'chat',
     capabilityPorts,
     // Workbench 没有持久化 execution 记录，但 Agent 提示词与计划工具要求一个非空的
@@ -525,27 +515,38 @@ export function createWorkbenchToolContext(input: {
     interaction: defaultUnsupportedInteractionPort,
     execution: null,
     codingSession: input.tracker,
+    getEnabledToolCategories: () => input.tracker.getEnabledToolCategories(),
+    query: async () => {
+      throw new Error('Workbench 当前执行面未启用子 Agent 委派。')
+    },
     // Workbench 没有制品库（Desktop 的 ActiveContextStore）；空实现让 loop 的制品分支走空集。
     activeContext: {
       listActiveContextArtifacts: async () => [],
-      upsertActiveContextArtifact: async (artifact: unknown) => artifact,
+      upsertActiveContextArtifact: async () => {
+        throw new Error('Workbench 当前执行上下文未提供制品写入存储。')
+      },
     },
     getCurrentVisibleToolSurfaceProfile: () => null,
     getCurrentVisibleToolNames: () => visibleToolNames,
     setCurrentVisibleToolNames: (names: string[]) => {
       visibleToolNames = uniqueStrings(names)
     },
+    getCurrentVisibleToolTransportNames: () => visibleToolTransportNames,
+    setCurrentVisibleToolTransportNames: (names) => {
+      visibleToolTransportNames = { ...names }
+    },
+    describeToolInputSchema: (toolName: string) => input.registry.describeToolInputSchema(toolName),
     getCurrentVisibleToolRegistrationSignature: (toolName: string) =>
       input.registry.getRegistrationSignature(toolName),
     getSupportedModelInputModalities: () => [...supportedModelInputModalities],
     setSupportedModelInputModalities: (modalities: readonly AgentModelInputModality[]) => {
       supportedModelInputModalities = [...new Set(modalities)]
     },
+    listTools: (scope: ToolAvailabilityScope = 'enabled') =>
+      input.registry.listAvailable(context, undefined, scope),
+    listToolCategories: (scope: ToolAvailabilityScope = 'enabled') =>
+      input.registry.listCategories(context, undefined, scope),
   }
-  context['listTools'] = (scope: ToolAvailabilityScope = 'enabled') =>
-    input.registry.listAvailable(context, undefined, scope)
-  context['listToolCategories'] = (scope: ToolAvailabilityScope = 'enabled') =>
-    input.registry.listCategories(context, undefined, scope)
   return context
 }
 
@@ -558,6 +559,8 @@ function createWorkbenchAgentCapabilityPorts(input: {
   const enabledCategoryIds = new Set(input.enabledCategoryIds)
   const residentToolNames = uniqueStrings(input.initialVisibleToolNames)
   return {
+    // 首轮只保留宿主发布的常驻工具；其余 catalog 工具继续由上下文和可用性门决定。
+    allocation: { baselineToolNames: residentToolNames },
     extensions: [{
       descriptor: {
         id: 'velaros.workbench.mod-surface',

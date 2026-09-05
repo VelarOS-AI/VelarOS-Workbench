@@ -1,6 +1,7 @@
 import { jsonSchema, tool as defineAiTool, type ToolSet } from 'ai'
 import { z } from 'zod'
 
+import { createToolTransportProjection, rewriteCanonicalToolReferences } from '@velaros-ai/agent'
 import type {
   AgentModelInputModality,
   ToolAvailabilityScope,
@@ -15,6 +16,10 @@ import type {
   ToolRole,
   ToolSurfaceProfileId,
 } from '@velaros-ai/agent/protocol'
+import {
+  canonicalizeProviderInputSchema,
+  schemaToInputSchema,
+} from '@velaros-ai/agent/tool-contract'
 
 /** 平台 `ToolSchemaResult` 的结构镜像（该类型未从 `@velaros-ai/agent` 导出）。 */
 type WorkbenchToolSchemaResult =
@@ -76,10 +81,18 @@ interface WorkbenchRegisteredTool extends WorkbenchAgentToolDefinition {
   requiredModelInputModalities?: AgentModelInputModality[]
 }
 
+interface WorkbenchProviderToolSurface {
+  jsonSchema: unknown
+  inputSchema: ReturnType<typeof jsonSchema>
+  serializedChars: number
+}
+
 /** SoloStreamLoop 侧要求的注册表切面。每个实例都是一份实际 Mod 工具面的冻结投影。 */
 class WorkbenchAgentToolRegistry {
   private readonly tools = new Map<string, WorkbenchRegisteredTool>()
   private readonly categories = new Map<ToolCategoryId, ToolCategoryDefinition>()
+  /** 工具替换、移除或恢复会重建 Registry；缓存只归属当前冻结工具面。 */
+  private readonly providerSurfaces = new Map<string, WorkbenchProviderToolSurface>()
 
   public constructor(
     definitions: readonly WorkbenchAgentToolDefinition[],
@@ -189,16 +202,33 @@ class WorkbenchAgentToolRegistry {
   /** AI SDK tool set：schema 走 zod → JSON Schema，执行仍回本注册表。 */
   public toAiTools(toolContext: unknown, allowList?: string[]): ToolSet {
     const toolSet: ToolSet = {}
-    for (const name of this.listNames(toolContext, allowList, 'enabled')) {
+    const visibleNames = this.listNames(toolContext, allowList, 'enabled')
+    const projection = createToolTransportProjection(this.names, visibleNames)
+    if (toolContext && typeof toolContext === 'object') {
+      const publisher = toolContext as {
+        setCurrentVisibleToolTransportNames?: (names: Readonly<Record<string, string>>) => void
+      }
+      publisher.setCurrentVisibleToolTransportNames?.(projection.visibleCanonicalToProvider)
+    }
+    for (const name of visibleNames) {
       const registered = this.tools.get(name)
       if (!registered) continue
 
-      toolSet[name] = defineAiTool({
-        description: registered.description,
-        inputSchema: toAiInputSchema(registered.schema),
+      toolSet[projection.visibleCanonicalToProvider[name]!] = defineAiTool({
+        description: rewriteCanonicalToolReferences(
+          registered.description,
+          projection.plan.canonicalToProvider
+        ),
+        inputSchema: this.getProviderSurface(registered).inputSchema,
       })
     }
     return toolSet
+  }
+
+  /** 请求审计与模型工具集读取同一份已物化的 schema。 */
+  public describeToolInputSchema(toolName: string): unknown {
+    const registered = this.tools.get(toolName)
+    return registered ? this.getProviderSurface(registered).jsonSchema : undefined
   }
 
   /** loop 的上下文预算估算钩子。 */
@@ -211,12 +241,20 @@ class WorkbenchAgentToolRegistry {
     toolContext: unknown,
     allowList?: string[]
   ): Record<string, number> {
-    return Object.fromEntries(
-      this.listNames(toolContext, allowList, 'enabled').map((name) => [
-        name,
-        name.length + (this.tools.get(name)?.description.length ?? 0) + 64,
-      ])
-    )
+    const charsByName: Record<string, number> = {}
+    for (const name of this.listNames(toolContext, allowList, 'enabled')) {
+      const registered = this.tools.get(name)
+      if (registered) charsByName[name] = this.getProviderSurface(registered).serializedChars
+    }
+    return charsByName
+  }
+
+  private getProviderSurface(tool: WorkbenchRegisteredTool): WorkbenchProviderToolSurface {
+    const cached = this.providerSurfaces.get(tool.name)
+    if (cached) return cached
+    const surface = createProviderToolSurface(tool)
+    this.providerSurfaces.set(tool.name, surface)
+    return surface
   }
 
   private listNames(
@@ -334,14 +372,31 @@ function readSupportedModelInputModalities(
 }
 
 /**
- * zod schema → AI SDK inputSchema。
+ * 模型请求和预算共用同一份物化 schema，避免预算遗漏参数、描述、枚举或嵌套结构。
  *
- * VelaTool schema 是 zod v4 实例，AI SDK 可直接消费；非 zod 的鸭子类型 schema 回落到
- * 「任意对象」JSON Schema，让工具仍可进入发现面，执行前仍会走原 schema.safeParse。
+ * 非 zod 的鸭子类型 schema 保留「任意对象」发现面，执行前仍走原 schema.safeParse。
  */
-function toAiInputSchema(schema: WorkbenchAgentToolSchema): never {
-  if (schema instanceof z.ZodType) return schema as never
-  return jsonSchema({ type: 'object', properties: {}, additionalProperties: true }) as never
+function createProviderToolSurface(tool: WorkbenchRegisteredTool): WorkbenchProviderToolSurface {
+  const schema = tool.schema
+  const providerSchema = schema instanceof z.ZodType
+    ? canonicalizeProviderInputSchema(schemaToInputSchema(schema))
+    : { type: 'object', properties: {}, additionalProperties: true }
+  const inputSchema = jsonSchema(providerSchema, schema instanceof z.ZodType ? {
+    validate: async (value) => {
+      const result = await schema.safeParseAsync(value)
+      return result.success
+        ? { success: true, value: result.data }
+        : { success: false, error: result.error }
+    },
+  } : undefined)
+
+  return {
+    jsonSchema: providerSchema,
+    inputSchema,
+    // 与 Desktop ToolSurfaceCatalog 使用相同的工具信封开销和 schema 字符预算。
+    serializedChars: tool.name.length + tool.description.length + 50
+      + JSON.stringify(providerSchema).length,
+  }
 }
 
 export { WorkbenchAgentToolRegistry }

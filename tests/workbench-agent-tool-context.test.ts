@@ -12,32 +12,20 @@ import {
 } from '@velaros-ai/agent'
 
 import { createWorkbenchToolContext } from '../src/main/agent/WorkbenchAgentExecutionStack'
+import { WorkbenchAgentToolRegistry } from '../src/main/agent/WorkbenchAgentToolRegistry'
 
 void test('Workbench agent tool context tracks model input modalities required by SoloLoop', () => {
   const context = createWorkbenchToolContext({
     sessionId: 'session-1',
+    locale: 'en-US',
     projectRoot: '/tmp/workbench-project',
     abortSignal: new AbortController().signal,
-    tracker: {} as never,
-    registry: {
-      names: [],
-      listAvailable: () => [],
-      listCategories: () => [],
-    } as never,
-  }) as {
-    interaction: {
-      getCurrentExecutionAdvice: () => unknown
-      getCurrentPlan: () => unknown[]
-      getCurrentRecommendedAction: () => unknown
-      getCurrentTask: () => unknown
-      updateCurrentPlan: (input: unknown) => unknown[]
-    }
-    getSupportedModelInputModalities: () => readonly string[]
-    setSupportedModelInputModalities: (
-      modalities: ReadonlyArray<'text' | 'image' | 'audio'>
-    ) => void
-  }
+    tracker: new CodingSessionTracker([], []),
+    registry: new WorkbenchAgentToolRegistry([], {}, 0),
+  })
 
+  assert.equal(context.locale, 'en-US')
+  assert.deepEqual(context.getEnabledToolCategories(), [])
   assert.deepEqual(context.getSupportedModelInputModalities(), ['text'])
   context.setSupportedModelInputModalities(['text', 'image', 'image'])
   assert.deepEqual(context.getSupportedModelInputModalities(), ['text', 'image'])
@@ -49,13 +37,7 @@ void test('Workbench agent tool context tracks model input modalities required b
 })
 
 void test('Workbench no-execution sessions build an Agent prompt with an empty plan', async () => {
-  const registry = {
-    names: [],
-    categoryIds: [],
-    toolCategoryToolNames: {},
-    listAvailable: () => [],
-    listCategories: () => [],
-  }
+  const registry = new WorkbenchAgentToolRegistry([], {}, 0)
   const tracker = new CodingSessionTracker([], undefined, [], [], {
     toolCategoryToolNames: {},
     residentToolCategories: [],
@@ -65,7 +47,7 @@ void test('Workbench no-execution sessions build an Agent prompt with an empty p
     projectRoot: '/tmp/workbench-project',
     abortSignal: new AbortController().signal,
     tracker,
-    registry: registry as never,
+    registry,
   })
   const profile = new PrimaryAgentProfile(
     {
@@ -87,7 +69,6 @@ void test('Workbench no-execution sessions build an Agent prompt with an empty p
     },
     systemConfig: {
       thinkingDepth: 'balanced',
-      reasoningLanguage: 'auto',
       disabledToolNames: [],
       prompt: { segmentOverrides: [] },
       advancedRuntime: {},
@@ -98,7 +79,7 @@ void test('Workbench no-execution sessions build an Agent prompt with an empty p
     },
     messages: [{ role: 'user', content: 'Explain the Kernel design.' }],
     roleResolution: resolution,
-    toolContext: context as never,
+    toolContext: context,
     contextPhase: 'operational',
   })
 

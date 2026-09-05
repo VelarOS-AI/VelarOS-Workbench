@@ -1,10 +1,7 @@
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
-import { ModelRequestService } from '@velaros-ai/model'
-import {
-  createModelRuntimeComposition,
-  type ModelRuntimeComposition,
-} from '@velaros-ai/model/node'
+import { ModelRequestClient } from '@velaros-ai/model'
+import { createModelRuntimeComposition, type ModelRuntimeComposition } from '@velaros-ai/model/node'
 
 import type { WorkbenchInlineCompletionResult } from '@shared/contracts'
 import type { WorkbenchInlineCompletionBridgeRequest } from '@shared/workbenchLanguage'
@@ -15,14 +12,14 @@ const PrefixMaxChars = 4000
 const SuffixMaxChars = 1200
 const CursorMarker = '<|cursor|>'
 const EmptyResult: WorkbenchInlineCompletionResult = { completion: '' }
-type InlineCompletionModelRequestPort = Pick<ModelRequestService, 'generateInlineCompletion'>
+type InlineCompletionModelRequestPort = Pick<ModelRequestClient, 'collectTextStream'>
 
 /** Workbench 独立宿主的编辑器 Tab 补全生成器。 */
 export class WorkbenchInlineCompletionGenerator {
   private readonly log = logRuntime.tag('WorkbenchInlineCompletionGenerator')
 
   public constructor(
-    private readonly modelRequestService: InlineCompletionModelRequestPort = new ModelRequestService(),
+    private readonly modelRequestService: InlineCompletionModelRequestPort = new ModelRequestClient(),
     private readonly modelComposition: ModelRuntimeComposition = createModelRuntimeComposition()
   ) {}
 
@@ -36,25 +33,33 @@ export class WorkbenchInlineCompletionGenerator {
         ...request.modelSelection,
         thinkingDepth: 'fast' as const,
       }
-      const runtime = await this.modelComposition.agentModelRuntime.resolveRoleRuntime(
-        selection,
-        {
-          providerRuntimeConfigs: [{
+      const runtime = await this.modelComposition.agentModelRuntime.resolveRoleRuntime(selection, {
+        providerRuntimeConfigs: [
+          {
             provider: selection.provider,
             enabled: true,
             apiKey: selection.apiKey,
             baseURL: selection.baseURL,
             defaultModel: selection.model,
-          }],
-          openRouter: { useFreeModelsForDebug: false },
-        }
-      )
-      const text = await this.modelRequestService.generateInlineCompletion({
+          },
+        ],
+        openRouter: { useFreeModelsForDebug: false },
+      })
+      const text = await this.modelRequestService.collectTextStream({
+        endpoint: 'workbench.inline-completion',
+        system: [
+          'You are an inline code completion engine embedded in a code editor (like Cursor/Copilot).',
+          'Continue the code exactly at the cursor marked by <|cursor|>.',
+          'Output ONLY the raw text to insert at the cursor. No explanations, no comments about your answer, no markdown code fences.',
+          'Do not repeat code that already appears before the cursor, and do not restate the code after the cursor.',
+          'Prefer completing the current statement or block; keep indentation consistent with the surrounding code.',
+          'If no meaningful completion is possible, return an empty string.',
+        ].join('\n'),
         model: runtime.provider(runtime.model, runtime.modelRequestOptions),
         modelRequestOptions: runtime.modelRequestOptions,
         maxOutputTokens: InlineCompletionMaxOutputTokens,
         maxRetries: 0,
-        prompt: this.buildPrompt(request),
+        messages: [{ role: 'user', content: this.buildPrompt(request) }],
         onError: () => undefined,
         stopWhen: (accumulated) => accumulated.length > InlineCompletionMaxChars,
       })

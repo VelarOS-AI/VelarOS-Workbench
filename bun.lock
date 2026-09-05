@@ -44,14 +44,14 @@
         "@types/react-dom": "^19.0.0",
         "@typescript-eslint/eslint-plugin": "^8.59.3",
         "@typescript-eslint/parser": "^8.59.3",
-        "@velaros-ai/agent": "0.6.8",
-        "@velaros-ai/browser": "0.2.15",
+        "@velaros-ai/agent": "0.6.9",
+        "@velaros-ai/browser": "0.2.16",
         "@velaros-ai/core": "0.4.0",
-        "@velaros-ai/development": "1.0.5",
+        "@velaros-ai/development": "1.1.0",
         "@velaros-ai/kernel": "0.2.1",
-        "@velaros-ai/model": "0.4.13",
-        "@velaros-ai/project": "2.0.7",
-        "@velaros-ai/system": "1.1.4",
+        "@velaros-ai/model": "0.5.0",
+        "@velaros-ai/project": "2.0.8",
+        "@velaros-ai/system": "1.1.5",
         "@velaros-ai/ui": "0.2.29",
         "@vitejs/plugin-react": "^4.3.0",
         "ahooks": "^3.9.7",
@@ -680,23 +680,23 @@
 
     "@upsetjs/venn.js": ["@upsetjs/venn.js@2.0.0", "", { "optionalDependencies": { "d3-selection": "^3.0.0", "d3-transition": "^3.0.1" } }, "sha512-WbBhLrooyePuQ1VZxrJjtLvTc4NVfpOyKx0sKqioq9bX1C1m7Jgykkn8gLrtwumBioXIqam8DLxp88Adbue6Hw=="],
 
-    "@velaros-ai/agent": ["@velaros-ai/agent@0.6.8", "https://npm.pkg.github.com/download/@velaros-ai/agent/0.6.8/f476954c5f3a59b5916b94c9618e099696f3e8cd", { "dependencies": { "@modelcontextprotocol/sdk": "^1.29.0", "@velaros-ai/core": "0.4.0", "@velaros-ai/kernel": "0.2.1", "ai": "^6.0.168", "execa": "^9.6.1", "gpt-tokenizer": "3.4.0", "jszip": "^3.10.1", "typescript": "^5.7.0", "ws": "^8.18.3", "zod": "^4.3.6" } }, "sha512-T0tteDLwjxsrBuxDYsZiGyINGHqCmikzwHRYcSrqSka8EIy+TU0vM2AE2Atrk6g9S+HJwGTaKyBmMcQN+Pyhbg=="],
+    "@velaros-ai/agent": ["@velaros-ai/agent@0.6.9", "https://npm.pkg.github.com/download/@velaros-ai/agent/0.6.9/7bc42ad64e6edd574082504e2de0e282ac8265c0", { "dependencies": { "@modelcontextprotocol/sdk": "^1.29.0", "@types/json-schema": "7.0.15", "@velaros-ai/core": "0.4.0", "@velaros-ai/kernel": "0.2.1", "ai": "^6.0.168", "execa": "^9.6.1", "gpt-tokenizer": "3.4.0", "jszip": "^3.10.1", "typescript": "^5.7.0", "ws": "^8.18.3", "zod": "^4.3.6" } }, "sha512-tbA39IGKATuJvH1CeGrR0ujLy2oISJhjnfGc1CziIr5kY1tWBub46msyNoHFKSMbRjK6s6fWHNJgaoVB04Lu2w=="],
 
-    "@velaros-ai/browser": ["@velaros-ai/browser@0.2.15", "https://npm.pkg.github.com/download/@velaros-ai/browser/0.2.15/f9c831f51e7a9fa4e8fa0b103460825dfdd59c45", { "dependencies": { "@velaros-ai/core": "0.4.0", "@velaros-ai/kernel": "0.2.1", "gifenc": "^1.0.3", "zod": "^4.3.6" }, "peerDependencies": { "@types/react": "^19.0.0", "@velaros-ai/agent": "0.6.8", "electron": ">=41.0.0", "react": "^19.0.0" } }, "sha512-CS89DKmSCy8GHyVx9r3i5GFT/wFj7Q/T1K1p1/hKSAKLUJn3cgPm5vUYayuYVEsYBgTUJJ3fQcQAInjiAVeItA=="],
+    "@velaros-ai/browser": ["@velaros-ai/browser@0.2.16", "https://npm.pkg.github.com/download/@velaros-ai/browser/0.2.16/576fc8533d9becce39ad37b6daa9bf7f5480f891", { "dependencies": { "@velaros-ai/core": "0.4.0", "@velaros-ai/kernel": "0.2.1", "gifenc": "^1.0.3", "zod": "^4.3.6" }, "peerDependencies": { "@types/react": "^19.0.0", "@velaros-ai/agent": "0.6.9", "electron": ">=41.0.0", "react": "^19.0.0" } }, "sha512-nKmCnUg1ZSkEQlGM+q2zeF5wxMvtyxlItZGU02zo7swhpkSlSGh03QoNlL2WwPd3Jelr4GzYO2DnF1BcCel7CA=="],
 
     "@velaros-ai/core": ["@velaros-ai/core@0.4.0", "https://npm.pkg.github.com/download/@velaros-ai/core/0.4.0/cd2528479b34ace04dad491f32ef419c5be441a2", {}, "sha512-DpDMnQshiyNCW8EffbryTyGyQVDmz5Tv5qlhqOePf6VT/lNGZP//mQyLuvbTsH+uNbvqkOUrdIV88K0PISrTyA=="],
 
-    "@velaros-ai/development": ["@velaros-ai/development@1.0.5", "https://npm.pkg.github.com/download/@velaros-ai/development/1.0.5/7e5b98b7d1487a1c01e3f1f4dfb27d570c4bf927", { "dependencies": { "@codemirror/lang-python": "^6.2.1", "@velaros-ai/core": "0.4.0", "@velaros-ai/project": "2.0.7", "zod": "^4.3.6" }, "peerDependencies": { "@velaros-ai/agent": "0.6.8" } }, "sha512-ZMy4fPX4dXL7S6QNkMgiMO+bkTS9V+k5JPEL5hAbdV5YO+9wUZklExsvVY4vY4S7bGciVVjmvCi1v8HDck/TWw=="],
+    "@velaros-ai/development": ["@velaros-ai/development@1.1.0", "https://npm.pkg.github.com/download/@velaros-ai/development/1.1.0/03ee0ce3a7181c4b2212b5d3aa28b294efacfdfc", { "dependencies": { "@codemirror/lang-python": "^6.2.1", "@velaros-ai/core": "0.4.0", "@velaros-ai/project": "2.0.8", "zod": "^4.3.6" }, "peerDependencies": { "@velaros-ai/agent": "0.6.9" } }, "sha512-Xq+B0BkD4SexwduEUCeXu7EtNX+c7ePLh3yj0detIUmdWJn1hCr7iwbeRImdw0IBaU3VcMdVaB1QZN39wBmqTg=="],
 
     "@velaros-ai/html-artifacts": ["@velaros-ai/html-artifacts@0.1.4", "https://npm.pkg.github.com/download/@velaros-ai/html-artifacts/0.1.4/6305480255717b719e77bf84e44b395ab3869f1a", {}, "sha512-T0IPnqRmZrLkTlh8HUgEHpDgcice7Yw7yPUyzIU5yekLdyJYIuh8Dzpy5xVWB0W60FJZIW0+LOBthR+lNVAMVg=="],
 
     "@velaros-ai/kernel": ["@velaros-ai/kernel@0.2.1", "https://npm.pkg.github.com/download/@velaros-ai/kernel/0.2.1/baa0fcacf200bec183ed87441025c7c0ba192766", { "dependencies": { "@velaros-ai/core": "0.4.0", "ws": "^8.18.3", "zod": "^4.3.6" }, "bin": { "velaros-kernel-daemon": "dist/serve/main.js" } }, "sha512-y3dkEb/twu5+9OjcVxC0PKH84GIiCVr4snXskWH08jJyl2hVcf+BvuuBF4QdmZN5jRrYCL0NNauYfTC1kWhkiQ=="],
 
-    "@velaros-ai/model": ["@velaros-ai/model@0.4.13", "https://npm.pkg.github.com/download/@velaros-ai/model/0.4.13/b4a8db122c4ec84d0ef42be34b43a6a46dd7e093", { "dependencies": { "@ai-sdk/anthropic": "^3.0.71", "@ai-sdk/google": "^3.0.64", "@ai-sdk/openai": "^3.0.53", "@ai-sdk/provider": "3.0.8", "@velaros-ai/core": "0.4.0", "@velaros-ai/kernel": "0.2.1", "ai": "^6.0.168" } }, "sha512-s/IEcBf2St48d6kuMyNNe7H68gbChfeIK5wr7E3n8HXF3r3c09um8jpt0ZwuvWnwy2UwHHxx5YlXmldx+9WJZA=="],
+    "@velaros-ai/model": ["@velaros-ai/model@0.5.0", "https://npm.pkg.github.com/download/@velaros-ai/model/0.5.0/b6af72536d4e510533c28803a351fb805c660fa8", { "dependencies": { "@ai-sdk/anthropic": "^3.0.71", "@ai-sdk/google": "^3.0.64", "@ai-sdk/openai": "^3.0.53", "@ai-sdk/provider": "3.0.8", "@types/json-schema": "7.0.15", "@velaros-ai/core": "0.4.0", "@velaros-ai/kernel": "0.2.1", "ai": "^6.0.168" } }, "sha512-hErvr45ESFJ44gj0e4wnn9LyqFPfavbyXYscWtBndCJgzKSTC+I0irEWL1ayXVeEuOPhkNwyayIRKNQssCb2ug=="],
 
-    "@velaros-ai/project": ["@velaros-ai/project@2.0.7", "https://npm.pkg.github.com/download/@velaros-ai/project/2.0.7/02651aa15a1111d2889e4b52695dfe191407d039", { "dependencies": { "@velaros-ai/core": "0.4.0", "@velaros-ai/kernel": "0.2.1", "diff": "^8.0.4", "execa": "^9.6.1", "iconv-lite": "^0.7.2", "picomatch": "^4.0.3", "typescript": "^5.0.0", "zod": "^4.3.6" }, "peerDependencies": { "@velaros-ai/agent": "0.6.8" } }, "sha512-2JGQroE9y1LF3uCuNhhFTjq7lxIiF93wdgpw+fZrSgjPs9ixa5vrpDy5b5PZxlxgTcRJtufYEuaojgZh2aGwIA=="],
+    "@velaros-ai/project": ["@velaros-ai/project@2.0.8", "https://npm.pkg.github.com/download/@velaros-ai/project/2.0.8/8f19606818611bfcc75d52d40dc34155f4f48320", { "dependencies": { "@velaros-ai/core": "0.4.0", "@velaros-ai/kernel": "0.2.1", "diff": "^8.0.4", "execa": "^9.6.1", "iconv-lite": "^0.7.2", "picomatch": "^4.0.3", "typescript": "^5.0.0", "zod": "^4.3.6" }, "peerDependencies": { "@velaros-ai/agent": "0.6.9" } }, "sha512-t4u3oO1GX/8GrnPxGsKfsIuRFclixsQnoekERnzZUiqN/jXE9P/XFXvBvgys5OdNjkBw1B5NIaCz9bRAPcG7wg=="],
 
-    "@velaros-ai/system": ["@velaros-ai/system@1.1.4", "https://npm.pkg.github.com/download/@velaros-ai/system/1.1.4/7c6971637fd122105a1888c9c1ce9b050f352e4b", { "dependencies": { "@velaros-ai/core": "0.4.0", "@velaros-ai/kernel": "0.2.1", "zod": "^4.3.6" }, "peerDependencies": { "@velaros-ai/agent": "0.6.8" } }, "sha512-0OHR2dGghOrzxCynjRQHpUQL1vkLZC2ONnB2nGJlMME0NT4AefUQkJT4GTRduNS0BaP8DoLZpjXxDGydmrgZhw=="],
+    "@velaros-ai/system": ["@velaros-ai/system@1.1.5", "https://npm.pkg.github.com/download/@velaros-ai/system/1.1.5/a54d0115123240ba026ea5225910be5d276290e3", { "dependencies": { "@velaros-ai/core": "0.4.0", "@velaros-ai/kernel": "0.2.1", "zod": "^4.3.6" }, "peerDependencies": { "@velaros-ai/agent": "0.6.9" } }, "sha512-IMdNZSXqIzBrBNY9NlvHkHr6XpXoL6cJHBZeU5KyJqBKoQFjCI79j0Pn+e/vikTIYcjcUZBKxIIqdE886t/Ggw=="],
 
     "@velaros-ai/ui": ["@velaros-ai/ui@0.2.29", "https://npm.pkg.github.com/download/@velaros-ai/ui/0.2.29/7d70d1ff747261558eb7fd7594535f9b1b8a91e5", { "dependencies": { "@phosphor-icons/react": "^2.1.10", "@radix-ui/react-dialog": "^1.1.15", "@radix-ui/react-label": "^2.1.8", "@radix-ui/react-select": "^2.2.6", "@radix-ui/react-separator": "^1.1.8", "@radix-ui/react-slot": "^1.2.4", "@radix-ui/react-switch": "^1.2.6", "@radix-ui/react-tabs": "^1.1.13", "@radix-ui/react-tooltip": "^1.2.8", "@streamdown/cjk": "^1.0.3", "@streamdown/code": "^1.1.1", "@streamdown/math": "^1.0.2", "@streamdown/mermaid": "^1.0.2", "@velaros-ai/html-artifacts": "0.1.4", "ahooks": "^3.9.7", "class-variance-authority": "^0.7.1", "clsx": "^2.1.1", "react-day-picker": "^9.14.0", "streamdown": "^2.5.0", "tailwind-merge": "^3.5.0", "type-fest": "^4.41.0" }, "peerDependencies": { "react": "^19.0.0", "react-dom": "^19.0.0" } }, "sha512-Jkqu1zpNlTg/myWCYBN/CUtwlhs2lHAypP8QhhIsUF6KJusFUyWkv2dZ5mk+Jgd46x4dLEkTaHueJbUSuD02Pw=="],
 

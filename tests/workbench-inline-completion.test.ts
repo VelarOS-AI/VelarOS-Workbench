@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import type { ModelRequestService } from '@velaros-ai/model'
+import type { ModelRequestClient } from '@velaros-ai/model'
 
 import { WorkbenchInlineCompletionGenerator } from '../src/main/workspace/language/WorkbenchInlineCompletion'
 import {
@@ -144,9 +144,17 @@ describe('Workbench inline completion', () => {
 
   test('uses the independent completion model path and cleans fenced output', async () => {
     let prompt = ''
-    const requestPort: Pick<ModelRequestService, 'generateInlineCompletion'> = {
-      generateInlineCompletion: async (request) => {
-        prompt = request.prompt
+    const requestPort: Pick<ModelRequestClient, 'collectTextStream'> = {
+      collectTextStream: async (request) => {
+        const content = request.messages[0]?.content
+        prompt = typeof content === 'string' ? content : ''
+        expect(request.endpoint).toBe('workbench.inline-completion')
+        expect(request.system).toContain('Continue the code exactly at the cursor marked by <|cursor|>.')
+        expect(request.system).toContain('Output ONLY the raw text to insert at the cursor.')
+        expect(request.maxOutputTokens).toBe(160)
+        expect(request.maxRetries).toBe(0)
+        expect(request.stopWhen?.('x'.repeat(480))).toBe(false)
+        expect(request.stopWhen?.('x'.repeat(481))).toBe(true)
         return '```ts\nreturn total + 1\n```\n'
       },
     }
@@ -173,8 +181,8 @@ describe('Workbench inline completion', () => {
 
   test('does not request a model for an empty prefix', async () => {
     let calls = 0
-    const requestPort: Pick<ModelRequestService, 'generateInlineCompletion'> = {
-      generateInlineCompletion: async () => {
+    const requestPort: Pick<ModelRequestClient, 'collectTextStream'> = {
+      collectTextStream: async () => {
         calls += 1
         return 'unused'
       },
