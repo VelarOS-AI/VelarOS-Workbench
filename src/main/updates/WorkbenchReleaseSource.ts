@@ -73,6 +73,27 @@ function expectedPackage(platform: NodeJS.Platform): Nullable<{
   return null
 }
 
+function isCloudAuthorizedUnsignedWindowsArtifact(
+  artifact: WorkbenchReleaseArtifact,
+  input: { readonly platform: NodeJS.Platform; readonly arch: string }
+): boolean {
+  // Cloud's current-release endpoint exposes only artifacts that have passed the
+  // selected channel's publication policy. Keep the client exception narrower
+  // than that server policy: Workbench accepts only its current, attested x64
+  // Windows installer while Windows code signing is unavailable.
+  return (
+    input.platform === 'win32' &&
+    input.arch === 'x64' &&
+    artifact.platform === 'win32' &&
+    artifact.arch === 'x64' &&
+    artifact.signatureStatus === 'unsigned' &&
+    artifact.artifactRole === 'installer' &&
+    artifact.format.toLowerCase() === 'exe' &&
+    artifact.isCurrent &&
+    artifact.attestationVerified
+  )
+}
+
 export function validateWorkbenchReleaseCatalog(
   value: unknown,
   input: {
@@ -117,7 +138,8 @@ export function validateWorkbenchReleaseCatalog(
       !artifact.attestationVerified ||
       (artifact.signatureStatus !== 'signed' &&
         artifact.signatureStatus !== 'notarized' &&
-        artifact.signatureStatus !== 'verified') ||
+        artifact.signatureStatus !== 'verified' &&
+        !isCloudAuthorizedUnsignedWindowsArtifact(artifact, input)) ||
       typeof artifact.fileName !== 'string' ||
       !/^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$/u.test(artifact.fileName) ||
       typeof artifact.sha256 !== 'string' ||

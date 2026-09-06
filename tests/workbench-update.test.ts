@@ -10,6 +10,7 @@ import type { AppUpdater } from 'electron-updater'
 import type { WorkbenchCloudEndpointProvider } from '../src/main/updates/WorkbenchCloudEndpointResolver'
 import {
   CloudWorkbenchReleaseSource,
+  validateWorkbenchReleaseCatalog,
   type WorkbenchReleaseSource,
 } from '../src/main/updates/WorkbenchReleaseSource'
 import { WorkbenchUpdatePreferencesStore } from '../src/main/updates/WorkbenchUpdatePreferencesStore'
@@ -162,6 +163,136 @@ describe('WorkbenchUpdateService', () => {
 })
 
 describe('CloudWorkbenchReleaseSource', () => {
+  test('accepts only the current attested unsigned Windows x64 installer', () => {
+    const catalog = {
+      product: 'workbench' as const,
+      channel: 'stable',
+      updatePolicy: 'optional' as const,
+      artifacts: [
+        {
+          id: 'metadata',
+          softwareProduct: 'workbench' as const,
+          artifactRole: 'update-metadata' as const,
+          format: 'yml',
+          version: '1.1.0',
+          channel: 'stable',
+          platform: 'win32',
+          arch: 'x64',
+          fileName: 'latest.yml',
+          sha256: 'a'.repeat(64),
+          sizeBytes: 10,
+          signatureStatus: 'verified' as const,
+          attestationVerified: true,
+          isCurrent: true,
+          downloadPath: '/v1/releases/download/metadata',
+        },
+        {
+          id: 'installer',
+          softwareProduct: 'workbench' as const,
+          artifactRole: 'installer' as const,
+          format: 'exe',
+          version: '1.1.0',
+          channel: 'stable',
+          platform: 'win32',
+          arch: 'x64',
+          fileName: 'VelarOS-Workbench-1.1.0-win-x64.exe',
+          sha256: 'b'.repeat(64),
+          sizeBytes: 100,
+          signatureStatus: 'unsigned' as const,
+          attestationVerified: true,
+          isCurrent: true,
+          downloadPath: '/v1/releases/download/installer',
+        },
+      ],
+    }
+
+    expect(
+      validateWorkbenchReleaseCatalog(catalog, {
+        channel: 'stable',
+        platform: 'win32',
+        arch: 'x64',
+      })
+    ).toEqual(catalog)
+
+    for (const installer of [
+      { ...catalog.artifacts[1], attestationVerified: false },
+      { ...catalog.artifacts[1], isCurrent: false },
+      { ...catalog.artifacts[1], artifactRole: 'update-metadata' as const },
+      { ...catalog.artifacts[1], signatureStatus: 'forged' as const },
+    ]) {
+      expect(() =>
+        validateWorkbenchReleaseCatalog(
+          { ...catalog, artifacts: [catalog.artifacts[0], installer] },
+          { channel: 'stable', platform: 'win32', arch: 'x64' }
+        )
+      ).toThrow('integrity validation')
+    }
+
+    const arm64Catalog = {
+      ...catalog,
+      artifacts: catalog.artifacts.map((artifact) => ({ ...artifact, arch: 'arm64' })),
+    }
+    expect(() =>
+      validateWorkbenchReleaseCatalog(arm64Catalog, {
+        channel: 'stable',
+        platform: 'win32',
+        arch: 'arm64',
+      })
+    ).toThrow('integrity validation')
+  })
+
+  test('rejects unsigned artifacts outside Windows x64', () => {
+    const unsignedLinuxCatalog = {
+      product: 'workbench',
+      channel: 'stable',
+      updatePolicy: 'optional',
+      artifacts: [
+        {
+          id: 'metadata',
+          softwareProduct: 'workbench',
+          artifactRole: 'update-metadata',
+          format: 'yml',
+          version: '1.1.0',
+          channel: 'stable',
+          platform: 'linux',
+          arch: 'x64',
+          fileName: 'latest-linux.yml',
+          sha256: 'a'.repeat(64),
+          sizeBytes: 10,
+          signatureStatus: 'verified',
+          attestationVerified: true,
+          isCurrent: true,
+          downloadPath: '/v1/releases/download/metadata',
+        },
+        {
+          id: 'installer',
+          softwareProduct: 'workbench',
+          artifactRole: 'installer',
+          format: 'appimage',
+          version: '1.1.0',
+          channel: 'stable',
+          platform: 'linux',
+          arch: 'x64',
+          fileName: 'VelarOS-Workbench-1.1.0-linux-x64.AppImage',
+          sha256: 'b'.repeat(64),
+          sizeBytes: 100,
+          signatureStatus: 'unsigned',
+          attestationVerified: true,
+          isCurrent: true,
+          downloadPath: '/v1/releases/download/installer',
+        },
+      ],
+    }
+
+    expect(() =>
+      validateWorkbenchReleaseCatalog(unsignedLinuxCatalog, {
+        channel: 'stable',
+        platform: 'linux',
+        arch: 'x64',
+      })
+    ).toThrow('integrity validation')
+  })
+
   test('falls back across connection, HTTP, and malformed catalog failures', async () => {
     const requestedUrls: string[] = []
     const healthyUrls: string[] = []

@@ -1,9 +1,10 @@
-import { access, readFile, readdir } from 'node:fs/promises'
+import { access, open, readFile, readdir } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const ProductFilename = 'VelarOS Workbench'
+const packagedPlatforms = new Set(['darwin', 'win32', 'linux'])
 const requiredLayoutRules = [
   /\.wb_filePanel\b[^{}]*\{[^}]*display:\s*flex/u,
   /\.wb_filePanelBody\b[^{}]*\{[^}]*display:\s*flex/u,
@@ -24,6 +25,43 @@ function resolvePackagedWorkbenchPaths(appOutDir, platformName) {
   }
 }
 
+async function readWindowsExecutableArchitecture(executablePath) {
+  const executable = await open(executablePath, 'r')
+  try {
+    const dosHeader = Buffer.alloc(64)
+    const dosRead = await executable.read(dosHeader, 0, dosHeader.length, 0)
+    if (dosRead.bytesRead !== dosHeader.length || dosHeader.readUInt16LE(0) !== 0x5a4d) {
+      throw new Error(`Packaged Workbench Windows executable has no valid DOS header: ${executablePath}`)
+    }
+    const peOffset = dosHeader.readUInt32LE(0x3c)
+    const peHeader = Buffer.alloc(6)
+    const peRead = await executable.read(peHeader, 0, peHeader.length, peOffset)
+    if (peRead.bytesRead !== peHeader.length || peHeader.readUInt32LE(0) !== 0x00004550) {
+      throw new Error(`Packaged Workbench Windows executable has no valid PE header: ${executablePath}`)
+    }
+    const machine = peHeader.readUInt16LE(4)
+    if (machine === 0x8664) return 'x64'
+    if (machine === 0xaa64) return 'arm64'
+    if (machine === 0x014c) return 'ia32'
+    throw new Error(
+      `Packaged Workbench Windows executable has unsupported PE machine 0x${machine.toString(16)}.`
+    )
+  } finally {
+    await executable.close()
+  }
+}
+
+async function verifyWindowsX64Executable(appOutDir) {
+  const executablePath = path.join(appOutDir, `${ProductFilename}.exe`)
+  const architecture = await readWindowsExecutableArchitecture(executablePath)
+  if (architecture !== 'x64') {
+    throw new Error(
+      `Packaged Workbench Windows executable architecture ${architecture} must equal x64.`
+    )
+  }
+  return executablePath
+}
+
 async function waitForPackagedApp(filePath, timeoutMs = 5_000) {
   const deadline = Date.now() + timeoutMs
   while (true) {
@@ -40,6 +78,7 @@ async function waitForPackagedApp(filePath, timeoutMs = 5_000) {
 async function verifyPackagedWorkbench({ appOutDir, platformName }) {
   const paths = resolvePackagedWorkbenchPaths(appOutDir, platformName)
   await waitForPackagedApp(paths.appArchive)
+  if (platformName === 'win32') await verifyWindowsX64Executable(appOutDir)
 
   const workbenchPackage = JSON.parse(await readFile(path.resolve('package.json'), 'utf8'))
   if (!workbenchPackage.version) throw new Error('Workbench version is missing')
@@ -139,7 +178,10 @@ async function verifyPackagedWorkbench({ appOutDir, platformName }) {
   )
 }
 
-async function findPackagedWorkbenchAppOutDir(releaseDir) {
+async function findPackagedWorkbenchAppOutDir(releaseDir, expectedPlatformName = null) {
+  if (expectedPlatformName && !packagedPlatforms.has(expectedPlatformName)) {
+    throw new Error(`Unsupported packaged Workbench platform: ${expectedPlatformName}`)
+  }
   const entries = await readdir(releaseDir, { withFileTypes: true })
   for (const entry of entries) {
     if (!entry.isDirectory()) continue
@@ -151,7 +193,12 @@ async function findPackagedWorkbenchAppOutDir(releaseDir) {
         : entry.name.startsWith('linux')
           ? 'linux'
           : null
-    const candidates = platformName ? [platformName] : ['darwin', 'win32', 'linux']
+    if (expectedPlatformName && platformName && platformName !== expectedPlatformName) continue
+    const candidates = expectedPlatformName
+      ? [expectedPlatformName]
+      : platformName
+        ? [platformName]
+        : [...packagedPlatforms]
     for (const candidate of candidates) {
       const { appArchive } = resolvePackagedWorkbenchPaths(appOutDir, candidate)
       try {
@@ -174,13 +221,17 @@ export default async function afterPack(context) {
 
 if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url) {
   const releaseDir = path.resolve(process.cwd(), process.argv[2] ?? 'artifacts/desktop')
-  await verifyPackagedWorkbench(await findPackagedWorkbenchAppOutDir(releaseDir))
+  await verifyPackagedWorkbench(
+    await findPackagedWorkbenchAppOutDir(releaseDir, process.argv[3] ?? null)
+  )
 }
 
 export {
   archivePath,
   findPackagedWorkbenchAppOutDir,
+  readWindowsExecutableArchitecture,
   requiredLayoutRules,
   resolvePackagedWorkbenchPaths,
   verifyPackagedWorkbench,
+  verifyWindowsX64Executable,
 }

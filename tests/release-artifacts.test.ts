@@ -13,6 +13,10 @@ import {
   validateReleaseTag,
   validateStagedRelease,
 } from '../scripts/release/releaseArtifacts.mjs'
+import {
+  readWindowsExecutableArchitecture,
+  verifyWindowsX64Executable,
+} from '../scripts/release/verifyPackagedWorkbench.mjs'
 
 const version = (JSON.parse(
   readFileSync(new URL('../package.json', import.meta.url), 'utf8')
@@ -54,6 +58,15 @@ async function writeWindowsRelease(releaseDir: string) {
   ])
 }
 
+async function writeWindowsExecutable(file: string, machine: number) {
+  const executable = Buffer.alloc(0x86)
+  executable.writeUInt16LE(0x5a4d, 0)
+  executable.writeUInt32LE(0x80, 0x3c)
+  executable.writeUInt32LE(0x00004550, 0x80)
+  executable.writeUInt16LE(machine, 0x84)
+  await writeFile(file, executable)
+}
+
 async function writeLinuxRelease(releaseDir: string) {
   await mkdir(releaseDir, { recursive: true })
   await Promise.all([
@@ -70,6 +83,34 @@ async function writeLinuxRelease(releaseDir: string) {
 }
 
 void describe('Workbench release artifacts', () => {
+  void test('accepts only an x64 PE executable for the Windows package', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'workbench-windows-architecture-'))
+    const x64Directory = path.join(root, 'x64')
+    const arm64Directory = path.join(root, 'arm64')
+    try {
+      await Promise.all([
+        mkdir(x64Directory, { recursive: true }),
+        mkdir(arm64Directory, { recursive: true }),
+      ])
+      const x64Executable = path.join(x64Directory, 'VelarOS Workbench.exe')
+      const arm64Executable = path.join(arm64Directory, 'VelarOS Workbench.exe')
+      await Promise.all([
+        writeWindowsExecutable(x64Executable, 0x8664),
+        writeWindowsExecutable(arm64Executable, 0xaa64),
+      ])
+
+      assert.equal(await readWindowsExecutableArchitecture(x64Executable), 'x64')
+      assert.equal(await readWindowsExecutableArchitecture(arm64Executable), 'arm64')
+      await verifyWindowsX64Executable(x64Directory)
+      await assert.rejects(
+        verifyWindowsX64Executable(arm64Directory),
+        /architecture arm64 must equal x64/u
+      )
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   void test('rejects empty packaged artifacts before writing a stage receipt', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'workbench-empty-artifact-'))
     const releaseDir = path.join(root, 'release')

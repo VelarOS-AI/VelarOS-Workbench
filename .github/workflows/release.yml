@@ -133,7 +133,9 @@ jobs:
           cp "$verifier" "$backup"
           trap 'cp "$backup" "$verifier"' EXIT
           printf 'export default async function afterPack() {}\n' > "$verifier"
-          bun run package:win -- --publish never
+          bun run package:win -- --x64 --publish never
+          cp "$backup" "$verifier"
+          node "$verifier" artifacts/desktop win32
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
