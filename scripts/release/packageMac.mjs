@@ -204,14 +204,37 @@ async function discoverCurrentMacDmg({
 
 function buildElectronBuilderArgs(args = []) {
   const forwarded = forwardedArguments(args)
-  const publishIndex = forwarded.findIndex((argument) => publishFlags.has(argument))
-  if (publishIndex >= 0) {
-    if (forwarded[publishIndex + 1] !== 'never') {
-      throw new Error('macOS packaging must keep electron-builder publishing disabled')
+  const safeForwarded = []
+
+  for (let index = 0; index < forwarded.length; index += 1) {
+    const argument = forwarded[index]
+    if (publishFlags.has(argument)) {
+      if (forwarded[index + 1] !== 'never') {
+        throw new Error('macOS packaging must keep electron-builder publishing disabled')
+      }
+      index += 1
+      continue
     }
-    return ['--config', 'electron-builder.yml', '--mac', ...forwarded]
+    const inlinePublishFlag = [...publishFlags].find((flag) =>
+      argument.startsWith(`${flag}=`)
+    )
+    if (inlinePublishFlag) {
+      if (argument.slice(inlinePublishFlag.length + 1) !== 'never') {
+        throw new Error('macOS packaging must keep electron-builder publishing disabled')
+      }
+      continue
+    }
+    safeForwarded.push(argument)
   }
-  return ['--config', 'electron-builder.yml', '--mac', ...forwarded, '--publish', 'never']
+
+  return [
+    '--config',
+    'electron-builder.yml',
+    '--mac',
+    ...safeForwarded,
+    '--publish',
+    'never',
+  ]
 }
 
 async function executeElectronBuilder({ builderArgs, environment }) {

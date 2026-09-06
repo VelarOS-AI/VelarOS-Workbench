@@ -246,8 +246,19 @@ void describe('Workbench macOS release packaging', () => {
       '--publish',
       'never',
     ])
+    assert.deepEqual(buildElectronBuilderArgs(['--publish=never', '-p', 'never']), [
+      '--config',
+      'electron-builder.yml',
+      '--mac',
+      '--publish',
+      'never',
+    ])
     assert.throws(
       () => buildElectronBuilderArgs(['--publish', 'always']),
+      /publishing disabled/u
+    )
+    assert.throws(
+      () => buildElectronBuilderArgs(['--publish', 'never', '-p=always']),
       /publishing disabled/u
     )
   })
