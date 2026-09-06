@@ -30,6 +30,7 @@ extraResources:
 
 mac:
   category: public.app-category.developer-tools
+  forceCodeSigning: true
   hardenedRuntime: true
   notarize: true
   extendInfo:
@@ -49,6 +50,9 @@ mac:
   target:
     - dmg
     - zip
+
+dmg:
+  sign: true
 
 win:
   target:

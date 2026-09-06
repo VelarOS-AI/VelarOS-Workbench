@@ -103,6 +103,7 @@
     "eslint-plugin-unused-imports": "^4.4.1",
     "execa": "^9.6.1",
     "globals": "^17.6.0",
+    "js-yaml": "4.3.0",
     "markdown-it": "^15.0.0",
     "react": "^19.2.5",
     "react-arborist": "^3.5.0",

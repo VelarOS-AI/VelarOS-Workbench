@@ -1,11 +1,17 @@
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
+import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { createRequire } from 'node:module'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
 
 import { describe, test } from 'bun:test'
 
 import {
   buildElectronBuilderArgs,
   discoverCurrentMacDmg,
+  finalizeDmgUpdateMetadata,
   hasCompleteNotarizationCredentials,
   resolveMacOutputDirectory,
   resolveMacPackagingEnvironment,
@@ -14,6 +20,9 @@ import {
   selectCurrentMacDmg,
   snapshotCurrentMacDmgs,
 } from '../scripts/release/packageMac.mjs'
+
+const requireFromTest = createRequire(import.meta.url)
+const { JSON_SCHEMA, load: parseYaml } = requireFromTest('js-yaml')
 
 void describe('Workbench macOS release packaging', () => {
   void test('uses the saved local notarization profile without reading Keychain contents', () => {
@@ -214,21 +223,101 @@ void describe('Workbench macOS release packaging', () => {
           `notarize:${options.appPath}:${options.tool}:${options.keychainProfile}`
         )
       },
+      verifyDmgSignature: async (path: string) => {
+        calls.push(`verify-signed:${path}`)
+      },
+      verifyDmgNotarization: async (path: string) => {
+        calls.push(`verify-notarized:${path}`)
+      },
+      finalizeDmgMetadata: async (path: string) => {
+        calls.push(`finalize-metadata:${path}`)
+      },
     })
 
     assert.deepEqual(calls, [
       'snapshot',
       'build:never',
       'discover:/repo/artifacts/local:0.3.29',
+      `verify-signed:${dmgPath}`,
       `notarize:${dmgPath}:notarytool:test-profile`,
+      `verify-notarized:${dmgPath}`,
+      `finalize-metadata:${dmgPath}`,
     ])
     assert.deepEqual(result, { dmgPath, outputDirectory, version: '0.3.29' })
+  })
+
+  void test('regenerates DMG blockmap and update identity after stapling', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'workbench-mac-metadata-'))
+    const dmgName = 'VelarOS-Workbench-0.3.29-mac-arm64.dmg'
+    const dmgPath = path.join(root, dmgName)
+    const blockmapPath = `${dmgPath}.blockmap`
+    const metadataPath = path.join(root, 'latest-mac.yml')
+    const zipSha512 = 'zip-sha512-is-preserved'
+    const dmgBody = Buffer.from('final signed, notarized, and stapled DMG fixture')
+
+    try {
+      await Promise.all([
+        writeFile(dmgPath, dmgBody),
+        writeFile(blockmapPath, 'stale-blockmap'),
+        writeFile(
+          metadataPath,
+          [
+            'version: 0.3.29',
+            'files:',
+            '  - url: VelarOS-Workbench-0.3.29-mac-arm64.zip',
+            `    sha512: ${zipSha512}`,
+            '    size: 10',
+            `  - url: ${dmgName}`,
+            '    sha512: stale-dmg-sha512',
+            '    size: 1',
+            'path: VelarOS-Workbench-0.3.29-mac-arm64.zip',
+            `sha512: ${zipSha512}`,
+            '',
+          ].join('\n')
+        ),
+      ])
+
+      const result = await finalizeDmgUpdateMetadata(dmgPath)
+      const expectedSha512 = createHash('sha512').update(dmgBody).digest('base64')
+      const metadata = parseYaml(await readFile(metadataPath, 'utf8'), {
+        schema: JSON_SCHEMA,
+      }) as {
+        files: Array<{ url: string; sha512: string; size: number }>
+        path: string
+        sha512: string
+      }
+      const dmgRecord = metadata.files.find((entry) => entry.url === dmgName)
+
+      assert.equal(result.size, dmgBody.length)
+      assert.equal(result.sha512, expectedSha512)
+      assert.deepEqual(dmgRecord, {
+        url: dmgName,
+        sha512: expectedSha512,
+        size: dmgBody.length,
+      })
+      assert.equal(metadata.path, 'VelarOS-Workbench-0.3.29-mac-arm64.zip')
+      assert.equal(metadata.sha512, zipSha512)
+      assert.ok((await stat(blockmapPath)).size > 0)
+      assert.notEqual(await readFile(blockmapPath, 'utf8'), 'stale-blockmap')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
   })
 
   void test('contains no credential-reading preflight', () => {
     const source = readFileSync(new URL('../scripts/release/packageMac.mjs', import.meta.url), 'utf8')
 
     assert.doesNotMatch(source, /find-generic-password|notarytool[\s\S]+history/u)
+  })
+
+  void test('requires signed macOS applications and disk images', () => {
+    const builderConfig = readFileSync(
+      new URL('../electron-builder.yml', import.meta.url),
+      'utf8'
+    )
+
+    assert.match(builderConfig, /\nmac:\n[\s\S]*?\n {2}forceCodeSigning: true\n/u)
+    assert.match(builderConfig, /\ndmg:\n {2}sign: true\n/u)
   })
 
   void test('always disables electron-builder implicit publishing', () => {

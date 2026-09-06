@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 import { spawn } from 'node:child_process'
-import { readFileSync } from 'node:fs'
-import { readdir, stat } from 'node:fs/promises'
+import { createHash, randomUUID } from 'node:crypto'
+import { createReadStream, readFileSync } from 'node:fs'
+import { readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -9,7 +10,12 @@ import { fileURLToPath } from 'node:url'
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const requireFromScript = createRequire(import.meta.url)
 const electronBuilderCli = requireFromScript.resolve('electron-builder/cli.js')
+const requireFromElectronBuilder = createRequire(electronBuilderCli)
 const { notarize } = requireFromScript('@electron/notarize')
+const { JSON_SCHEMA, dump: serializeYaml, load: parseYaml } = requireFromScript('js-yaml')
+const { buildBlockMap } = requireFromElectronBuilder(
+  'app-builder-lib/out/targets/blockmap/blockmap.js'
+)
 const defaultMacOutputDirectory = 'artifacts/desktop'
 
 const completeCredentialGroups = [
@@ -256,6 +262,170 @@ async function executeElectronBuilder({ builderArgs, environment }) {
   })
 }
 
+async function executeReleaseCommand(command, args) {
+  await new Promise((resolveRun, rejectRun) => {
+    const child = spawn(command, args, {
+      cwd: repoRoot,
+      stdio: 'inherit',
+    })
+    child.once('error', rejectRun)
+    child.once('exit', (code, signal) => {
+      if (code === 0) resolveRun()
+      else {
+        rejectRun(
+          new Error(`${command} ${signal ? `received ${signal}` : `exited with ${code}`}`)
+        )
+      }
+    })
+  })
+}
+
+async function verifySignedDmg(dmgPath, execute = executeReleaseCommand) {
+  await execute('codesign', ['--verify', '--verbose=2', dmgPath])
+}
+
+async function verifyNotarizedDmg(dmgPath, execute = executeReleaseCommand) {
+  await execute('xcrun', ['stapler', 'validate', dmgPath])
+  await execute('spctl', [
+    '--assess',
+    '--type',
+    'open',
+    '--context',
+    'context:primary-signature',
+    dmgPath,
+  ])
+}
+
+async function sha512File(filePath) {
+  const hash = createHash('sha512')
+  for await (const chunk of createReadStream(filePath)) hash.update(chunk)
+  return hash.digest('base64')
+}
+
+function locateDmgUpdateRecord(metadata, metadataPath, dmgName) {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+    throw new Error(`${path.basename(metadataPath)} must contain a YAML object`)
+  }
+  if (!Array.isArray(metadata.files)) {
+    throw new Error(`${path.basename(metadataPath)} must contain an update files array`)
+  }
+  const matches = metadata.files.filter(
+    (entry) => entry && typeof entry === 'object' && entry.url === dmgName
+  )
+  if (matches.length !== 1) {
+    throw new Error(
+      `${path.basename(metadataPath)} must contain exactly one update entry for ${dmgName}`
+    )
+  }
+  return matches[0]
+}
+
+async function verifyDmgUpdateMetadata({
+  dmgPath,
+  metadataPath,
+  blockmapPath,
+  expectedSize,
+  expectedSha512,
+}) {
+  const [dmgStat, blockmapStat, actualSha512, metadataBody] = await Promise.all([
+    stat(dmgPath),
+    stat(blockmapPath),
+    sha512File(dmgPath),
+    readFile(metadataPath, 'utf8'),
+  ])
+  if (!blockmapStat.isFile() || blockmapStat.size === 0) {
+    throw new Error(`${path.basename(blockmapPath)} must be a non-empty blockmap`)
+  }
+  if (dmgStat.size !== expectedSize || actualSha512 !== expectedSha512) {
+    throw new Error('Finalized DMG changed while its update metadata was being written')
+  }
+
+  const metadata = parseYaml(metadataBody, { schema: JSON_SCHEMA })
+  const dmgName = path.basename(dmgPath)
+  const record = locateDmgUpdateRecord(metadata, metadataPath, dmgName)
+  if (record.size !== dmgStat.size || record.sha512 !== actualSha512) {
+    throw new Error(`${path.basename(metadataPath)} does not match the finalized DMG`)
+  }
+  if (
+    metadata.path === dmgName &&
+    (metadata.size !== undefined && metadata.size !== dmgStat.size ||
+      metadata.sha512 !== actualSha512)
+  ) {
+    throw new Error(`${path.basename(metadataPath)} primary artifact does not match the finalized DMG`)
+  }
+}
+
+async function finalizeDmgUpdateMetadata(
+  dmgPath,
+  {
+    buildBlockMapFile = buildBlockMap,
+    metadataFileName = 'latest-mac.yml',
+  } = {}
+) {
+  const outputDirectory = path.dirname(dmgPath)
+  const dmgName = path.basename(dmgPath)
+  const metadataPath = path.join(outputDirectory, metadataFileName)
+  const blockmapPath = `${dmgPath}.blockmap`
+  const temporarySuffix = `${process.pid}-${randomUUID()}`
+  const temporaryBlockmapPath = `${blockmapPath}.tmp-${temporarySuffix}`
+  const temporaryMetadataPath = `${metadataPath}.tmp-${temporarySuffix}`
+
+  try {
+    const updateInfo = await buildBlockMapFile(dmgPath, 'gzip', temporaryBlockmapPath)
+    if (
+      !updateInfo ||
+      !Number.isSafeInteger(updateInfo.size) ||
+      updateInfo.size <= 0 ||
+      typeof updateInfo.sha512 !== 'string' ||
+      !updateInfo.sha512
+    ) {
+      throw new Error(`Unable to build update metadata for ${dmgName}`)
+    }
+
+    const metadata = parseYaml(await readFile(metadataPath, 'utf8'), {
+      schema: JSON_SCHEMA,
+    })
+    const record = locateDmgUpdateRecord(metadata, metadataPath, dmgName)
+    record.size = updateInfo.size
+    record.sha512 = updateInfo.sha512
+    if (metadata.path === dmgName) {
+      metadata.size = updateInfo.size
+      metadata.sha512 = updateInfo.sha512
+    }
+
+    await writeFile(
+      temporaryMetadataPath,
+      serializeYaml(metadata, {
+        schema: JSON_SCHEMA,
+        lineWidth: -1,
+        noCompatMode: true,
+        noRefs: true,
+      }),
+      { encoding: 'utf8', flag: 'wx' }
+    )
+    await rename(temporaryBlockmapPath, blockmapPath)
+    await rename(temporaryMetadataPath, metadataPath)
+    await verifyDmgUpdateMetadata({
+      dmgPath,
+      metadataPath,
+      blockmapPath,
+      expectedSize: updateInfo.size,
+      expectedSha512: updateInfo.sha512,
+    })
+    return {
+      blockmapPath,
+      metadataPath,
+      size: updateInfo.size,
+      sha512: updateInfo.sha512,
+    }
+  } finally {
+    await Promise.all([
+      rm(temporaryBlockmapPath, { force: true }),
+      rm(temporaryMetadataPath, { force: true }),
+    ])
+  }
+}
+
 async function runMacPackage({
   args = process.argv.slice(2),
   environment = process.env,
@@ -265,6 +435,9 @@ async function runMacPackage({
   snapshotDmgs = snapshotCurrentMacDmgs,
   discoverDmg = discoverCurrentMacDmg,
   notarizeDmg = notarize,
+  verifyDmgSignature = verifySignedDmg,
+  verifyDmgNotarization = verifyNotarizedDmg,
+  finalizeDmgMetadata = finalizeDmgUpdateMetadata,
 } = {}) {
   if (platform !== 'darwin') {
     throw new Error(`macOS packaging requires darwin; current platform is ${platform}`)
@@ -281,11 +454,14 @@ async function runMacPackage({
 
   await runBuilder({ builderArgs, environment: packagingEnvironment })
   const dmgPath = await discoverDmg({ outputDirectory, version, previousArtifacts })
+  await verifyDmgSignature(dmgPath)
   console.info(`Notarizing macOS disk image: ${dmgPath}`)
   await notarizeDmg({
     appPath: dmgPath,
     ...credentials,
   })
+  await verifyDmgNotarization(dmgPath)
+  await finalizeDmgMetadata(dmgPath)
   console.info(`Notarized and stapled macOS disk image: ${dmgPath}`)
 
   return { dmgPath, outputDirectory, version }
@@ -303,6 +479,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
 export {
   buildElectronBuilderArgs,
   discoverCurrentMacDmg,
+  finalizeDmgUpdateMetadata,
   hasCompleteNotarizationCredentials,
   resolveMacOutputDirectory,
   resolveMacPackagingEnvironment,
@@ -310,4 +487,6 @@ export {
   runMacPackage,
   selectCurrentMacDmg,
   snapshotCurrentMacDmgs,
+  verifyNotarizedDmg,
+  verifySignedDmg,
 }

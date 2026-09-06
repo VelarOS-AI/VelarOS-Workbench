@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
@@ -18,6 +20,12 @@ import {
   verifyWindowsX64Executable,
 } from '../scripts/release/verifyPackagedWorkbench.mjs'
 
+const requireFromTest = createRequire(import.meta.url)
+const electronBuilderCli = requireFromTest.resolve('electron-builder/cli.js')
+const requireFromElectronBuilder = createRequire(electronBuilderCli)
+const { buildBlockMap } = requireFromElectronBuilder(
+  'app-builder-lib/out/targets/blockmap/blockmap.js'
+)
 const version = (JSON.parse(
   readFileSync(new URL('../package.json', import.meta.url), 'utf8')
 ) as { version: string }).version
@@ -35,18 +43,52 @@ function distribution(platform: 'macos' | 'windows' | 'linux') {
 
 async function writeMacRelease(releaseDir: string, artifactVersion = version) {
   await mkdir(releaseDir, { recursive: true })
+  const dmgName = `VelarOS-Workbench-${artifactVersion}-mac-arm64.dmg`
+  const zipName = `VelarOS-Workbench-${artifactVersion}-mac-arm64.zip`
   await Promise.all([
-    writeFile(
-      path.join(releaseDir, `VelarOS-Workbench-${artifactVersion}-mac-arm64.dmg`),
-      'dmg'
-    ),
-    writeFile(
-      path.join(releaseDir, `VelarOS-Workbench-${artifactVersion}-mac-arm64.zip`),
-      'zip'
-    ),
-    writeFile(path.join(releaseDir, 'latest-mac.yml'), `version: ${artifactVersion}\n`),
+    writeFile(path.join(releaseDir, dmgName), 'dmg'),
+    writeFile(path.join(releaseDir, zipName), 'zip'),
     writeFile(path.join(releaseDir, 'builder-debug.yml'), 'debug'),
   ])
+  await writeMacUpdateMetadata(releaseDir, artifactVersion)
+}
+
+async function writeMacUpdateMetadata(releaseDir: string, artifactVersion = version) {
+  const dmgName = `VelarOS-Workbench-${artifactVersion}-mac-arm64.dmg`
+  const zipName = `VelarOS-Workbench-${artifactVersion}-mac-arm64.zip`
+  const [dmg, zip] = await Promise.all([
+    readFile(path.join(releaseDir, dmgName)),
+    readFile(path.join(releaseDir, zipName)),
+  ])
+  await Promise.all([
+    buildBlockMap(
+      path.join(releaseDir, dmgName),
+      'gzip',
+      path.join(releaseDir, `${dmgName}.blockmap`)
+    ),
+    buildBlockMap(
+      path.join(releaseDir, zipName),
+      'gzip',
+      path.join(releaseDir, `${zipName}.blockmap`)
+    ),
+  ])
+  const sha512 = (value: Buffer) => createHash('sha512').update(value).digest('base64')
+  await writeFile(
+    path.join(releaseDir, 'latest-mac.yml'),
+    [
+      `version: ${artifactVersion}`,
+      'files:',
+      `  - url: ${zipName}`,
+      `    sha512: ${sha512(zip)}`,
+      `    size: ${zip.byteLength}`,
+      `  - url: ${dmgName}`,
+      `    sha512: ${sha512(dmg)}`,
+      `    size: ${dmg.byteLength}`,
+      `path: ${zipName}`,
+      `sha512: ${sha512(zip)}`,
+      '',
+    ].join('\n')
+  )
 }
 
 async function writeWindowsRelease(releaseDir: string) {
@@ -142,6 +184,62 @@ void describe('Workbench release artifacts', () => {
     }
   })
 
+  void test('rejects stale macOS update metadata after an artifact changes', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'workbench-stale-update-metadata-'))
+    const releaseDir = path.join(root, 'release')
+    const stageDir = path.join(root, 'stage')
+    try {
+      await writeMacRelease(releaseDir)
+      await writeFile(
+        path.join(releaseDir, `VelarOS-Workbench-${version}-mac-arm64.dmg`),
+        'changed-after-metadata'
+      )
+
+      await assert.rejects(
+        stageReleaseArtifacts({
+          releaseDir,
+          stageDir,
+          platform: 'macos',
+          distribution: distribution('macos'),
+          version,
+          sourceSha,
+          releaseTag,
+        }),
+        /size .* does not match the final artifact/u
+      )
+      await assert.rejects(readFile(path.join(stageDir, 'latest-mac.yml')), /ENOENT/u)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  void test('rejects a macOS blockmap that does not match its final package', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'workbench-stale-blockmap-'))
+    const releaseDir = path.join(root, 'release')
+    const stageDir = path.join(root, 'stage')
+    const blockmapName = `VelarOS-Workbench-${version}-mac-arm64.dmg.blockmap`
+    try {
+      await writeMacRelease(releaseDir)
+      await writeFile(path.join(releaseDir, blockmapName), 'stale-blockmap')
+
+      await assert.rejects(
+        stageReleaseArtifacts({
+          releaseDir,
+          stageDir,
+          platform: 'macos',
+          distribution: distribution('macos'),
+          version,
+          sourceSha,
+          releaseTag,
+        }),
+        new RegExp(`${blockmapName.replaceAll('.', '\\.')} does not match the final`)
+      )
+      await assert.rejects(readFile(path.join(stageDir, blockmapName)), /ENOENT/u)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   void test('reads macOS architecture from the packaged Mach-O identity', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'workbench-native-identity-'))
     try {
@@ -203,7 +301,9 @@ void describe('Workbench release artifacts', () => {
 
     assert.deepEqual(staged, [
       `VelarOS-Workbench-${version}-mac-arm64.dmg`,
+      `VelarOS-Workbench-${version}-mac-arm64.dmg.blockmap`,
       `VelarOS-Workbench-${version}-mac-arm64.zip`,
+      `VelarOS-Workbench-${version}-mac-arm64.zip.blockmap`,
       'latest-mac.yml',
       'SHA256SUMS-macos.txt',
       'workbench-macos-release.json',
@@ -394,6 +494,7 @@ void describe('Workbench release artifacts', () => {
       path.join(releaseDir, `VelarOS-Workbench-${version}-mac-arm64.dmg`),
       'different-dmg'
     )
+    await writeMacUpdateMetadata(releaseDir)
 
     await assert.rejects(
       stageReleaseArtifacts({

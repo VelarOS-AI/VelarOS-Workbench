@@ -11,10 +11,15 @@ import {
   writeFile,
 } from 'node:fs/promises'
 import { execFile } from 'node:child_process'
+import { createHash } from 'node:crypto'
+import { createReadStream } from 'node:fs'
+import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
+
+import yaml from 'js-yaml'
 
 import {
   assertSameFileIdentity,
@@ -23,6 +28,12 @@ import {
   validateReleaseSource,
 } from './releaseIdentity.mjs'
 
+const requireFromScript = createRequire(import.meta.url)
+const electronBuilderCli = requireFromScript.resolve('electron-builder/cli.js')
+const requireFromElectronBuilder = createRequire(electronBuilderCli)
+const { buildBlockMap } = requireFromElectronBuilder(
+  'app-builder-lib/out/targets/blockmap/blockmap.js'
+)
 const platformNames = new Set(['macos', 'windows', 'linux'])
 const supportedArchitectures = new Set(['arm64', 'x64'])
 const execFileAsync = promisify(execFile)
@@ -452,7 +463,119 @@ async function collectPlatformArtifacts(
       }
     }
   }
+  if (platform === 'macos') {
+    await verifyMacUpdateMetadata(directory, artifacts)
+  }
   return artifacts
+}
+
+async function sha512File(file) {
+  return new Promise((resolve, reject) => {
+    const hash = createHash('sha512')
+    const stream = createReadStream(file)
+    stream.on('data', (chunk) => hash.update(chunk))
+    stream.once('error', reject)
+    stream.once('end', () => resolve(hash.digest('base64')))
+  })
+}
+
+async function verifyMacUpdateMetadata(directory, artifacts) {
+  const packageNames = artifacts.filter((name) => /\.(?:dmg|zip)$/iu.test(name))
+  const blockmapNames = artifacts.filter((name) => /\.blockmap$/iu.test(name))
+  const metadataNames = artifacts.filter((name) =>
+    /^latest-mac(?:-[^.]+)?\.ya?ml$/iu.test(name)
+  )
+  const packageIdentities = new Map(
+    await Promise.all(
+      packageNames.map(async (name) => {
+        const file = path.join(directory, name)
+        const [fileStat, sha512] = await Promise.all([stat(file), sha512File(file)])
+        return [name, { sha512, size: fileStat.size }]
+      })
+    )
+  )
+
+  for (const metadataName of metadataNames) {
+    const metadataPath = path.join(directory, metadataName)
+    let document
+    try {
+      document = yaml.load(await readFile(metadataPath, 'utf8'), {
+        schema: yaml.JSON_SCHEMA,
+      })
+    } catch (error) {
+      throw new Error(`${metadataName} is not valid YAML: ${error.message ?? String(error)}`)
+    }
+    if (!document || typeof document !== 'object' || !Array.isArray(document.files)) {
+      throw new Error(`${metadataName} must declare a files array.`)
+    }
+
+    const entriesByName = new Map()
+    for (const entry of document.files) {
+      const name = entry?.url
+      if (
+        typeof name !== 'string'
+        || path.basename(name) !== name
+        || name.includes('\\')
+        || entriesByName.has(name)
+      ) {
+        throw new Error(`${metadataName} contains an invalid or duplicate file URL.`)
+      }
+      const actual = packageIdentities.get(name)
+      if (!actual) throw new Error(`${metadataName} references unexpected package ${name}.`)
+      if (entry.size !== actual.size) {
+        throw new Error(`${metadataName} size for ${name} does not match the final artifact.`)
+      }
+      if (entry.sha512 !== actual.sha512) {
+        throw new Error(`${metadataName} sha512 for ${name} does not match the final artifact.`)
+      }
+      entriesByName.set(name, entry)
+    }
+
+    for (const name of packageNames) {
+      if (!entriesByName.has(name)) {
+        throw new Error(`${metadataName} does not describe final package ${name}.`)
+      }
+    }
+    const primary = entriesByName.get(document.path)
+    if (!primary || document.sha512 !== primary.sha512) {
+      throw new Error(`${metadataName} primary path and sha512 do not match its file entry.`)
+    }
+  }
+
+  const expectedBlockmaps = new Set(packageNames.map((name) => `${name}.blockmap`))
+  for (const blockmapName of blockmapNames) {
+    if (!expectedBlockmaps.has(blockmapName)) {
+      throw new Error(`Unexpected macOS blockmap without a final package: ${blockmapName}.`)
+    }
+  }
+  for (const blockmapName of expectedBlockmaps) {
+    if (!blockmapNames.includes(blockmapName)) {
+      throw new Error(
+        `Incomplete macos release checkpoint; missing blockmap for final package: ${blockmapName}.`
+      )
+    }
+  }
+
+  const verificationRoot = await mkdtemp(path.join(tmpdir(), 'workbench-blockmap-verify-'))
+  try {
+    await Promise.all(
+      packageNames.map(async (packageName) => {
+        const packagePath = path.join(directory, packageName)
+        const blockmapName = `${packageName}.blockmap`
+        const rebuiltPath = path.join(verificationRoot, blockmapName)
+        await buildBlockMap(packagePath, 'gzip', rebuiltPath)
+        const [actual, rebuilt] = await Promise.all([
+          readFile(path.join(directory, blockmapName)),
+          readFile(rebuiltPath),
+        ])
+        if (!actual.equals(rebuilt)) {
+          throw new Error(`${blockmapName} does not match the final ${packageName} artifact.`)
+        }
+      })
+    )
+  } finally {
+    await rm(verificationRoot, { recursive: true, force: true })
+  }
 }
 
 async function findApplicationBundle(root, depth = 0) {
