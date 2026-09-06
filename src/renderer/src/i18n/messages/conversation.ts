@@ -3,7 +3,7 @@
  * Keep this catalog version-locked and contract-tested so shared UI upgrades
  * cannot leak raw translation keys into the standalone Workbench.
  */
-export const WORKBENCH_CONVERSATION_I18N_CONTRACT_VERSION = '0.2.29'
+export const WORKBENCH_CONVERSATION_I18N_CONTRACT_VERSION = '0.2.30'
 
 export const workbenchConversationZhCNMessages = {
   browser: {
