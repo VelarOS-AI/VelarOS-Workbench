@@ -178,10 +178,11 @@ void describe('external LSP process termination', () => {
       ],
       { detached: shouldDetachExternalLspProcess(), stdio: ['ignore', 'pipe', 'ignore'] }
     )
-    // 等到 SIGTERM 处理器真的装上，否则终止信号可能落在 Node 启动期间。
-    await once(child.stdout, 'data')
     const exit = once(child, 'exit')
+    const close = once(child, 'close')
     try {
+      // 等到 SIGTERM 处理器真的装上，否则终止信号可能落在 Bun 启动期间。
+      await waitForOutput(child.stdout)
       assert.equal(await terminateExternalLspProcessTree(child.pid), true)
       const [code, signal] = await exit as [number | null, NodeJS.Signals | null]
       if (process.platform === 'win32') {
@@ -191,7 +192,32 @@ void describe('external LSP process termination', () => {
         assert.equal(signal, 'SIGKILL')
       }
     } finally {
-      if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
+      if (child.exitCode === null && child.signalCode === null) {
+        if (process.platform !== 'win32' && child.pid) {
+          try {
+            process.kill(-child.pid, 'SIGKILL')
+          } catch {
+            child.kill('SIGKILL')
+          }
+        } else {
+          child.kill('SIGKILL')
+        }
+      }
+      await close
     }
   })
 })
+
+async function waitForOutput(stream: NodeJS.ReadableStream): Promise<void> {
+  let timer: NodeJS.Timeout | undefined
+  try {
+    await Promise.race([
+      once(stream, 'data').then(() => undefined),
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error('Timed out waiting for the fixture process.')), 1_000)
+      }),
+    ])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}

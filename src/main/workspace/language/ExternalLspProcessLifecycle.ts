@@ -18,6 +18,8 @@ type ExternalLspProcessTreeTerminationPlan =
 
 /** SIGTERM 之后留给语言服务器清理索引缓存/临时文件的时间，超时才升级到 SIGKILL。 */
 const TerminationEscalationMs = 1_000
+/** SIGKILL 之后确认进程已退出的有界等待，使 POSIX 信号升级路径低于 5 秒关闭预算。 */
+const TerminationKillConfirmationMs = 1_000
 /** 探测进程是否已退出的轮询间隔。 */
 const TerminationPollIntervalMs = 25
 /** 进程树终止命令（taskkill）自身的兜底超时，避免 await 把关闭流程永久挂住。 */
@@ -69,8 +71,7 @@ async function waitForProcessExit(pid: number, timeoutMs: number): Promise<boole
   while (Date.now() < deadline) {
     if (!isProcessAlive(pid)) return true
     await new Promise((resolve) => {
-      const timer = setTimeout(resolve, TerminationPollIntervalMs)
-      timer.unref()
+      setTimeout(resolve, TerminationPollIntervalMs)
     })
   }
   return !isProcessAlive(pid)
@@ -81,7 +82,6 @@ async function runTerminationCommand(file: string, args: string[]): Promise<bool
   return new Promise<boolean>((resolve) => {
     const child = spawn(file, args, { stdio: 'ignore', windowsHide: true })
     const timer = setTimeout(() => child.kill('SIGKILL'), TerminationCommandTimeoutMs)
-    timer.unref()
     const settle = (value: boolean): void => {
       clearTimeout(timer)
       resolve(value)
@@ -141,13 +141,13 @@ async function terminateExternalLspProcessTree(
   const delivered = await deliverTermination(pid, signal)
   if (signal === 'SIGKILL')
     return delivered
-      ? waitForProcessExit(pid, TerminationCommandTimeoutMs)
+      ? waitForProcessExit(pid, TerminationKillConfirmationMs)
       : !isProcessAlive(pid)
   if (delivered && await waitForProcessExit(pid, TerminationEscalationMs)) return true
 
   const killed = await deliverTermination(pid, 'SIGKILL')
   if (!killed) return !isProcessAlive(pid)
-  return waitForProcessExit(pid, TerminationCommandTimeoutMs)
+  return waitForProcessExit(pid, TerminationKillConfirmationMs)
 }
 
 export {

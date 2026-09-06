@@ -18,7 +18,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint . --max-warnings=0",
     "check:boundaries": "node scripts/checkProductBoundaries.mjs",
-    "test": "bun test tests",
+    "test": "bun test tests --parallel=4",
     "test:velar:installed": "bun --conditions=source scripts/test/verifyInstalledVelarToolchain.ts",
     "probe:watch": "bun --conditions=source src/main/workspace/watch/watchProbe.ts",
     "probe:terminal": "bun --conditions=source src/main/workspace/terminal/terminalProbe.ts",
