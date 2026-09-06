@@ -153,6 +153,43 @@ void test('framework declarations keep their dedicated color across language-ser
   assert.doesNotMatch(classes[3] ?? '', /cm-workbenchSemantic-frameworkDefinition/u)
 })
 
+void test('reactive references keep the declaration color while resolved ordinary bindings stay ordinary', () => {
+  const content = [
+    'state count = 0',
+    'count = count + 1',
+    'def shadow(count: number):',
+    '    return count',
+    'print(count)',
+  ].join('\n')
+  const spans: ReadonlyArray<readonly [number, number, string, readonly string[], string]> = [
+    [1, 7, 'variable', ['declaration', 'frameworkDefinition'], 'frameworkDefinition'],
+    [2, 1, 'variable', ['frameworkDefinition'], 'frameworkDefinition'],
+    [2, 9, 'variable', ['frameworkDefinition'], 'frameworkDefinition'],
+    [3, 12, 'parameter', ['declaration'], 'parameter'],
+    [4, 12, 'parameter', [], 'parameter'],
+    [5, 7, 'variable', ['frameworkDefinition'], 'frameworkDefinition'],
+  ]
+  const decorations = buildWorkbenchSemanticTokenDecorations(content, spans.map(
+    ([line, column, type, modifiers]) => ({
+      range: { startLine: line, startColumn: column, endLine: line, endColumn: column + 5 },
+      type,
+      modifiers: [...modifiers],
+    })
+  ))
+  const classes: string[] = []
+  decorations.between(0, content.length, (from, to, value) => {
+    assert.equal(content.slice(from, to), 'count')
+    classes.push(String(value.spec.class))
+  })
+
+  assert.equal(classes.length, spans.length)
+  for (const [index, [, , , , role]] of spans.entries()) {
+    assert.match(classes[index] ?? '', new RegExp(`cm-workbenchSemantic-${role}\\b`, 'u'))
+    if (role === 'parameter')
+      assert.doesNotMatch(classes[index] ?? '', /cm-workbenchSemantic-frameworkDefinition/u)
+  }
+})
+
 void test('framework definitions have a unique semantic color in every theme', () => {
   const themes: readonly WorkbenchThemeId[] = [
     'light-modern',

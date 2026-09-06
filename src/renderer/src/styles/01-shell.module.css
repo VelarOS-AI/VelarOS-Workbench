@@ -553,7 +553,7 @@
   --accent: var(--workbench-hover);
   --accent-foreground: var(--workbench-text);
   --border: var(--workbench-border);
-  --border-strong: color-mix(in srgb, var(--workbench-border) 70%, var(--workbench-text));
+  --border-strong: color-mix(in srgb, var(--workbench-border) 96%, var(--workbench-text));
   --input: var(--workbench-border);
   --ring: color-mix(in srgb, var(--workbench-active-fg) 30%, transparent);
   --primary: var(--workbench-text);
