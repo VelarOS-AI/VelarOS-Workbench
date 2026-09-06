@@ -2,6 +2,7 @@ import { useEffect, useSyncExternalStore } from 'react'
 
 import type { ChatProviderId } from '@velaros-ai/model/contracts'
 
+import { isStandaloneWorkbenchModelProviderSelectable } from './standaloneWorkbenchManagedModels'
 import {
   getStandaloneWorkbenchModelProviderPreset,
   resolveStandaloneWorkbenchProviderModel,
@@ -179,6 +180,7 @@ export function selectStandaloneWorkbenchModelProvider(
   providerId: string,
   defaults?: { readonly model: string; readonly completionModel?: string }
 ): void {
+  if (!isStandaloneWorkbenchModelProviderSelectable(providerId)) return
   const provider = getStandaloneWorkbenchModelProviderPreset(providerId)
   const model = defaults?.model ?? provider.defaultModel
   apiKeyHydrationRequest += 1
@@ -197,6 +199,7 @@ export function selectStandaloneWorkbenchModel(
   model: string,
   kind: 'agent' | 'completion'
 ): void {
+  if (!isStandaloneWorkbenchModelProviderSelectable(providerId)) return
   const provider = getStandaloneWorkbenchModelProviderPreset(providerId)
   const selected =
     kind === 'completion'
@@ -212,6 +215,7 @@ export function selectStandaloneWorkbenchAgentModel(
   providerId: string,
   model: string
 ): void {
+  if (!isStandaloneWorkbenchModelProviderSelectable(providerId)) return
   const provider = getStandaloneWorkbenchModelProviderPreset(providerId)
   const providerChanged = currentConfig.provider !== provider.id
   if (providerChanged) apiKeyHydrationRequest += 1
@@ -229,13 +233,15 @@ export function getStandaloneWorkbenchModelConfig(): StandaloneWorkbenchModelCon
   return currentConfig
 }
 
+export function subscribeStandaloneWorkbenchModelConfig(listener: () => void): () => void {
+  listeners.add(listener)
+  return () => listeners.delete(listener)
+}
+
 export function useStandaloneWorkbenchModelConfig(): StandaloneWorkbenchModelConfig {
   useEffect(hydrateStandaloneWorkbenchModelApiKey, [])
   return useSyncExternalStore(
-    (listener) => {
-      listeners.add(listener)
-      return () => listeners.delete(listener)
-    },
+    subscribeStandaloneWorkbenchModelConfig,
     () => currentConfig,
     () => DefaultModelConfig
   )

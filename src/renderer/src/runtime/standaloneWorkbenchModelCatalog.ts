@@ -8,6 +8,7 @@ import {
 import type { ChatProviderId, ProviderModelCatalogEntry } from '@velaros-ai/model/contracts'
 
 import type { WorkbenchManagedModelProvider } from '@shared/workbenchModel'
+import { getWorkbenchManagedModelProviderLabel } from '@shared/workbenchModel'
 
 export interface StandaloneWorkbenchModelProviderPreset {
   id: ChatProviderId
@@ -49,7 +50,9 @@ const AllStandaloneWorkbenchModelProviderPresets: readonly StandaloneWorkbenchMo
       )
       return {
         id: manifest.id,
-        label: manifest.label,
+        label: manifest.id === 'velar' || manifest.id === 'velar-dev'
+          ? getWorkbenchManagedModelProviderLabel(manifest.id === 'velar-dev' ? 'velar-dev' : 'velar')
+          : manifest.label,
         description: manifest.description,
         defaultBaseURL: manifest.defaultBaseURL,
         defaultModel,
@@ -95,13 +98,29 @@ export function listStandaloneWorkbenchVisibleModelProviderPresets(
       ?? preset.defaultModel
     return {
       ...preset,
-      label: config.displayName,
+      label: getWorkbenchManagedModelProviderLabel(config.providerId),
       defaultModel,
       completionModel: resolveCompletionModel(models, defaultModel),
       models,
     }
   })
   return [...managed, ...StandaloneWorkbenchModelProviderPresets]
+}
+
+export function createStandaloneWorkbenchModelProviderOptions(
+  managedModels: readonly WorkbenchManagedModelProvider[],
+  disabledDescription: (providerLabel: string) => string
+): Array<{ value: ChatProviderId; label: string; description: string; disabled: boolean }> {
+  return listStandaloneWorkbenchVisibleModelProviderPresets(managedModels).map((provider) => {
+    const disabled = provider.managedByCloud
+      && !managedModels.find((entry) => entry.providerId === provider.id)?.enabled
+    return {
+      value: provider.id,
+      label: provider.label,
+      description: disabled ? disabledDescription(provider.label) : provider.description,
+      disabled,
+    }
+  })
 }
 
 export function resolveStandaloneWorkbenchProviderModel(
@@ -135,7 +154,10 @@ export function createStandaloneWorkbenchConfiguredModelSelectorProviders(
     value: provider.id,
     label: provider.label,
     defaultModel: model,
-    models: [{ value: model, label: model }],
+    models: [{
+      value: model,
+      label: managedProvider?.models.find((entry) => entry.id === model)?.label ?? model,
+    }],
   }]
 }
 

@@ -35,7 +35,8 @@ export async function refreshStandaloneWorkbenchManagedModels(): Promise<
   if (activeRequest) return activeRequest
   if (typeof window === 'undefined' || !window.velarosWorkbenchModel) return { managedModels: [], updatedAt: new Date(0).toISOString() }
 
-  publish(InitialState)
+  // 刷新期间继续展示最后一次成功快照，避免已打开的模型选择短暂消失。
+  if (currentState.status !== 'ready') publish(InitialState)
   const request = window.velarosWorkbenchModel.listManagedProviders()
   activeRequest = request
   try {
@@ -79,6 +80,16 @@ export function isStandaloneWorkbenchManagedProviderId(
   return providerId === 'velar' || providerId === 'velar-dev'
 }
 
+export function isStandaloneWorkbenchModelProviderSelectable(providerId: string): boolean {
+  return !isStandaloneWorkbenchManagedProviderId(providerId)
+    || getStandaloneWorkbenchManagedProvider(providerId)?.enabled === true
+}
+
+export function subscribeStandaloneWorkbenchManagedModels(listener: () => void): () => void {
+  listeners.add(listener)
+  return () => listeners.delete(listener)
+}
+
 export function useStandaloneWorkbenchManagedModels(): StandaloneWorkbenchManagedModelState {
   useEffect(() => {
     if (!hydrationStarted) {
@@ -87,6 +98,7 @@ export function useStandaloneWorkbenchManagedModels(): StandaloneWorkbenchManage
     }
     const disposeAccount = window.velarosWorkbenchAccount.onChanged((state) => {
       if (state.status === 'signed-out') {
+        activeRequest = null
         publish({ status: 'ready', managedModels: [], updatedAt: new Date().toISOString() })
         return
       }
@@ -103,10 +115,7 @@ export function useStandaloneWorkbenchManagedModels(): StandaloneWorkbenchManage
   }, [])
 
   return useSyncExternalStore(
-    (listener) => {
-      listeners.add(listener)
-      return () => listeners.delete(listener)
-    },
+    subscribeStandaloneWorkbenchManagedModels,
     () => currentState,
     () => InitialState
   )

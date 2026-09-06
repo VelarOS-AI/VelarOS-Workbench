@@ -766,6 +766,7 @@ export const workbenchAppEnUSMessages = {
     settingsModelProvider: 'Provider',
     settingsModelProviderDescription:
       'Workbench reads the available models dynamically from the selected provider.',
+    settingsModelProviderDisabled: 'The {provider} service is currently unavailable and cannot be selected.',
     settingsModelName: 'Agent model',
     settingsModelNameDescription: 'The primary model used for chat and coding tasks.',
     settingsModelCatalogLoading: 'Loading available models from {provider}…',

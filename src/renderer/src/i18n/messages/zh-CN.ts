@@ -754,6 +754,7 @@ export const workbenchAppZhCNMessages = {
     settingsModelDescription: '配置 Workbench Agent 与代码补全使用的厂商和模型。',
     settingsModelProvider: '提供方',
     settingsModelProviderDescription: '选择厂商后，Workbench 会从该厂商动态读取可用模型。',
+    settingsModelProviderDisabled: '{provider} 服务当前不可用，暂时无法选择。',
     settingsModelName: 'Agent 模型',
     settingsModelNameDescription: '用于聊天和代码任务的主模型。',
     settingsModelCatalogLoading: '正在从 {provider} 读取可用模型…',

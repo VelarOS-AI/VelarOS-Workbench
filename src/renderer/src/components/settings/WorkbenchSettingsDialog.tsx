@@ -49,6 +49,7 @@ import {
   useStandaloneWorkbenchManagedModels,
 } from '@renderer/runtime/standaloneWorkbenchManagedModels'
 import {
+  createStandaloneWorkbenchModelProviderOptions,
   createStandaloneWorkbenchProviderModelOptions,
   getStandaloneWorkbenchModelProviderPreset,
   listStandaloneWorkbenchVisibleModelProviderPresets,
@@ -84,6 +85,7 @@ import type {
   WorkbenchProjectAiRulesResult,
 } from '@shared/contracts'
 import type { WorkbenchAccountState } from '@shared/workbenchAccount'
+import type { WorkbenchManagedModelProvider } from '@shared/workbenchModel'
 import type { WorkbenchUpdateChannel } from '@shared/workbenchUpdate'
 
 import type {
@@ -241,17 +243,10 @@ export function WorkbenchSettingsDialog({
   const modelProviderPreset =
     visibleModelProviders.find((provider) => provider.id === modelConfig.provider)
     ?? getStandaloneWorkbenchModelProviderPreset(modelConfig.provider)
-  const modelProviderOptions = visibleModelProviders.map((provider) => ({
-    value: provider.id,
-    label: provider.label,
-    description: provider.description,
-    ...(isStandaloneWorkbenchManagedProviderId(provider.id)
-      ? {
-          disabled:
-            !managedModels.find((entry) => entry.providerId === provider.id)?.enabled,
-        }
-      : {}),
-  }))
+  const modelProviderOptions = createStandaloneWorkbenchModelProviderOptions(
+    managedModels,
+    (provider) => t('workbench.settingsModelProviderDisabled', { provider })
+  )
   const timers = useTimerScope('WorkbenchSettingsDialog')
   const [activeSection, setActiveSection] = useState<WorkbenchSettingsSectionId>('general')
   const [accountState, setAccountState] = useState<WorkbenchAccountState>({
@@ -271,15 +266,19 @@ export function WorkbenchSettingsDialog({
   const [pluginQuery, setPluginQuery] = useState('')
   const [modMutationPending, setModMutationPending] = useState(false)
   const [providerModelCatalog, setProviderModelCatalog] =
-    useState<Nullable<ProviderModelCatalog>>(null)
+    useState<Nullable<{
+      catalog: ProviderModelCatalog
+      managedProvider: WorkbenchManagedModelProvider | undefined
+    }>>(null)
   const [isLoadingProviderModels, setIsLoadingProviderModels] = useState(false)
   const [providerModelCatalogError, setProviderModelCatalogError] =
     useState<Nullable<string>>(null)
   const [modelBaseURLDraft, setModelBaseURLDraft] = useState(modelConfig.baseURL)
   const [modelApiKeyDraft, setModelApiKeyDraft] = useState(modelConfig.apiKey)
   const dialogRef = useRef<HTMLDivElement>(null)
-  const activeProviderModelCatalog = providerModelCatalog?.provider === modelConfig.provider
-    ? providerModelCatalog
+  const activeProviderModelCatalog = providerModelCatalog?.catalog.provider === modelConfig.provider
+    && providerModelCatalog.managedProvider === selectedManagedProvider
+    ? providerModelCatalog.catalog
     : null
   const modelOptions = createStandaloneWorkbenchProviderModelOptions(
     activeProviderModelCatalog?.models ?? [],
@@ -293,7 +292,10 @@ export function WorkbenchSettingsDialog({
     },
     ...modelOptions,
   ]
-  const modelCatalogDescription = isLoadingProviderModels
+  const selectedManagedProviderDisabled = !!selectedManagedProvider && !selectedManagedProvider.enabled
+  const modelCatalogDescription = selectedManagedProviderDisabled
+    ? t('workbench.settingsModelProviderDisabled', { provider: modelProviderPreset.label })
+    : isLoadingProviderModels
     ? t('workbench.settingsModelCatalogLoading', { provider: modelProviderPreset.label })
     : activeProviderModelCatalog?.models.length
       ? t('workbench.settingsModelCatalogLoaded', {
@@ -433,9 +435,16 @@ export function WorkbenchSettingsDialog({
     }
 
     let active = true
-    setIsLoadingProviderModels(true)
     setProviderModelCatalog(null)
     setProviderModelCatalogError(null)
+    if (
+      isStandaloneWorkbenchManagedProviderId(modelConfig.provider)
+      && !selectedManagedProvider?.enabled
+    ) {
+      setIsLoadingProviderModels(false)
+      return
+    }
+    setIsLoadingProviderModels(true)
     const lease = timers.after(300, () => {
       void window.velarosWorkbenchModel.listProviderModels({
         provider: modelConfig.provider,
@@ -444,7 +453,7 @@ export function WorkbenchSettingsDialog({
         purpose: 'chat',
       }).then((catalog) => {
         if (!active) return
-        setProviderModelCatalog(catalog)
+        setProviderModelCatalog({ catalog, managedProvider: selectedManagedProvider })
         setProviderModelCatalogError(catalog.error ?? null)
       }).catch((error: unknown) => {
         if (!active) return
@@ -466,6 +475,7 @@ export function WorkbenchSettingsDialog({
     modelConfig.baseURL,
     modelConfig.provider,
     open,
+    selectedManagedProvider,
     timers,
   ])
 
@@ -909,6 +919,7 @@ export function WorkbenchSettingsDialog({
             value={managedSelectionVisible ? modelConfig.provider : undefined}
             options={modelProviderOptions}
             onChange={(providerId) => {
+              if (!modelProviderOptions.some((option) => option.value === providerId && !option.disabled)) return
               const provider = visibleModelProviders.find((entry) => entry.id === providerId)
               selectStandaloneWorkbenchModelProvider(
                 providerId,
@@ -951,6 +962,7 @@ export function WorkbenchSettingsDialog({
                 className={styles.workbenchSettingsSelectTrigger}
                 value={modelConfig.model}
                 options={modelOptions}
+                disabled={selectedManagedProviderDisabled}
                 searchable={modelOptions.length > 12}
                 searchPlaceholder={t('workbench.settingsModelSearchPlaceholder')}
                 emptyMessage={t('workbench.settingsModelSearchEmpty')}
@@ -970,6 +982,7 @@ export function WorkbenchSettingsDialog({
                   modelConfig.completionModel || StandaloneWorkbenchCompletionDisabledOptionValue
                 }
                 options={completionModelOptions}
+                disabled={selectedManagedProviderDisabled}
                 searchable={completionModelOptions.length > 12}
                 searchPlaceholder={t('workbench.settingsModelSearchPlaceholder')}
                 emptyMessage={t('workbench.settingsModelSearchEmpty')}

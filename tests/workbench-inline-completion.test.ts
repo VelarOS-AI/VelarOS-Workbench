@@ -64,7 +64,7 @@ describe('Workbench inline completion', () => {
     }])
     expect(providers[0]).toMatchObject({
       id: 'velar-dev',
-      label: 'Velar Dev',
+      label: 'VelarOS-Dev',
       defaultModel: 'velar-dev/Z3B0LTUuNi1zb2w',
       models: ['velar-dev/Z3B0LTUuNi1zb2w'],
       apiKeyOptional: true,

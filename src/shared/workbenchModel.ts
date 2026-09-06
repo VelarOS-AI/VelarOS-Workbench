@@ -12,6 +12,12 @@ export const WorkbenchModelChannels = {
 
 export type WorkbenchManagedModelProviderId = 'velar' | 'velar-dev'
 
+export function getWorkbenchManagedModelProviderLabel(
+  providerId: WorkbenchManagedModelProviderId
+): string {
+  return providerId === 'velar-dev' ? 'VelarOS-Dev' : 'VelarOS'
+}
+
 export interface WorkbenchManagedModelOption {
   readonly id: string
   readonly label: string

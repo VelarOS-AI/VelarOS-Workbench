@@ -142,7 +142,7 @@ void describe('Workbench shared VelarOS account', () => {
     )
     assert.deepEqual(authorized.managedModels, [{
       providerId: 'velar-dev',
-      displayName: 'Velar Dev',
+      displayName: 'VelarOS-Dev',
       enabled: true,
       defaultModel: DevModelId,
       models: [
@@ -273,7 +273,7 @@ void describe('Workbench shared VelarOS account', () => {
           'https://cloud.example.com/api/v1/velar-dev/chat/completions',
           { method: 'POST' }
         ),
-        /尚未获得 Velar Dev 授权/u
+        /尚未获得 VelarOS-Dev 授权/u
       )
       assert.equal(chatRequests, 0)
     } finally {

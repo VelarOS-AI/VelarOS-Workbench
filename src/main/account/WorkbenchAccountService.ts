@@ -10,6 +10,7 @@ import type {
   WorkbenchManagedModelProvider,
   WorkbenchManagedModelProviderId,
 } from '../../shared/workbenchModel'
+import { getWorkbenchManagedModelProviderLabel } from '../../shared/workbenchModel'
 
 import type { WorkbenchCloudSession } from './WorkbenchSharedAccountStore'
 import { type WorkbenchSharedAccountStore } from './WorkbenchSharedAccountStore'
@@ -262,7 +263,7 @@ export class WorkbenchAccountService {
   ): Promise<WorkbenchManagedModelProvider> {
     const access = await this.getManagedModelAccess()
     const provider = access.managedModels.find((entry) => entry.providerId === providerId)
-    if (!provider) throw new Error(`当前账户尚未获得 ${managedProviderLabel(providerId)} 授权。`)
+    if (!provider) throw new Error(`当前账户尚未获得 ${getWorkbenchManagedModelProviderLabel(providerId)} 授权。`)
     if (!provider.enabled) throw new Error(`${provider.displayName} 当前不可用。`)
     return provider
   }
@@ -297,10 +298,10 @@ function parseManagedProvider(value: unknown): WorkbenchManagedModelProvider | n
   if (typeof record['enabled'] !== 'boolean') {
     throw new Error(`${providerId} 托管模型启用状态无效。`)
   }
-  const displayName = readNonEmptyString(
+  readNonEmptyString(
     record['displayName'],
     `${providerId}.displayName`
-  ).slice(0, 120)
+  )
   const defaultModel = optionalNonEmptyString(record['defaultModel'])
   const modelSources = [record['models']]
   const routePolicy = record['routePolicy']
@@ -308,7 +309,7 @@ function parseManagedProvider(value: unknown): WorkbenchManagedModelProvider | n
   const models = parseManagedProviderOptions(modelSources)
   return {
     providerId,
-    displayName,
+    displayName: getWorkbenchManagedModelProviderLabel(providerId),
     enabled: record['enabled'],
     ...(defaultModel ? { defaultModel } : {}),
     models,
@@ -359,10 +360,6 @@ function parseManagedProviderModelList(value: unknown): ProviderModelCatalogEntr
 
 function managedModelEndpointPath(providerId: WorkbenchManagedModelProviderId): string {
   return providerId === 'velar-dev' ? '/v1/velar-dev' : '/v1/model'
-}
-
-function managedProviderLabel(providerId: WorkbenchManagedModelProviderId): string {
-  return providerId === 'velar-dev' ? 'Velar Dev' : 'VelarOS'
 }
 
 function isManagedModelProviderId(value: string): value is WorkbenchManagedModelProviderId {
