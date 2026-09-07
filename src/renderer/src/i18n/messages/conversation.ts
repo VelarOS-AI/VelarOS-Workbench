@@ -3,7 +3,8 @@
  * Keep this catalog version-locked and contract-tested so shared UI upgrades
  * cannot leak raw translation keys into the standalone Workbench.
  */
-export const WORKBENCH_CONVERSATION_I18N_CONTRACT_VERSION = '0.2.30'
+// 已复核 UI 0.2.32：conversation 的 960 个产物文件与 0.2.30 逐字节一致，覆盖 269 个静态翻译键。
+export const WORKBENCH_CONVERSATION_I18N_CONTRACT_VERSION = '0.2.32'
 
 export const workbenchConversationZhCNMessages = {
   browser: {
