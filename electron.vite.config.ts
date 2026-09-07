@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { dirname, resolve } from 'node:path'
+import { dirname, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import tailwindcss from '@tailwindcss/vite'
@@ -26,7 +26,7 @@ function source(...segments: string[]): string {
 function workbenchCssModuleName(name: string, filename: string): string {
   const normalizedFilename = resolve(filename.split('?')[0] ?? filename)
   if (
-    normalizedFilename.startsWith(`${sharedWorkbenchStyleRoot}/`)
+    normalizedFilename.startsWith(`${sharedWorkbenchStyleRoot}${sep}`)
     || normalizedFilename === standaloneWorkbenchChatStyle
   ) return `wb_${name}`
 
