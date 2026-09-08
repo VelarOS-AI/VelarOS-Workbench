@@ -316,8 +316,8 @@ void describe('Workbench macOS release packaging', () => {
       'utf8'
     )
 
-    assert.match(builderConfig, /\nmac:\n[\s\S]*?\n {2}forceCodeSigning: true\n/u)
-    assert.match(builderConfig, /\ndmg:\n {2}sign: true\n/u)
+    assert.match(builderConfig, /\r?\nmac:\r?\n[\s\S]*?\r?\n {2}forceCodeSigning: true\r?\n/u)
+    assert.match(builderConfig, /\r?\ndmg:\r?\n {2}sign: true\r?\n/u)
   })
 
   void test('always disables electron-builder implicit publishing', () => {

@@ -143,7 +143,9 @@ describe('WorkbenchCloudEndpointResolver', () => {
     expect(resolver.currentBaseUrl()).toBe(EmbeddedBaseUrl)
 
     const cachePath = join(root, 'storage', 'cloud-routing-cn.json')
-    expect((await stat(cachePath)).mode & 0o777).toBe(0o600)
+    if (process.platform !== 'win32') {
+      expect((await stat(cachePath)).mode & 0o777).toBe(0o600)
+    }
 
     const offlineResolver = new WorkbenchCloudEndpointResolver({
       market: 'cn',

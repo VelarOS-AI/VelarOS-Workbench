@@ -2,6 +2,7 @@ import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process'
 import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { delimiter, dirname, isAbsolute, join, relative, resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 import { URI } from 'vscode-uri'
 
@@ -589,7 +590,7 @@ export class ExternalLspClient {
 
   public async synchronize(path: string, content: string): Promise<{ uri: string; version: number }> {
     await this.initialize()
-    const uri = URI.file(path).toString()
+    const uri = pathToFileURL(path).toString()
     const current = this.documents.get(uri)
     if (!current) {
       const document = { content, languageId: languageIdFor(this.descriptor), version: 1 }
@@ -621,7 +622,7 @@ export class ExternalLspClient {
   }
 
   public close(path: string): void {
-    const directUri = URI.file(path).toString()
+    const directUri = pathToFileURL(path).toString()
     const uri = this.documents.has(directUri)
       ? directUri
       : [...this.documents.keys()].find((candidate) => {
@@ -661,7 +662,7 @@ export class ExternalLspClient {
       )
     }
     await this.initialize()
-    const uri = URI.file(path).toString()
+    const uri = pathToFileURL(path).toString()
     const current = preserveExistingDocument ? this.documents.get(uri) : undefined
     const document = current
       ? { uri, version: current.version }
@@ -685,7 +686,7 @@ export class ExternalLspClient {
     if (!this.initializePromise || paths.length === 0) return
     await this.initialize()
     this.notify('workspace/didChangeWatchedFiles', {
-      changes: paths.map((path) => ({ uri: URI.file(path).toString(), type: 2 })),
+      changes: paths.map((path) => ({ uri: pathToFileURL(path).toString(), type: 2 })),
     })
   }
 
@@ -962,7 +963,7 @@ export class ExternalLspClient {
 
     const result = await this.request('initialize', {
       processId: process.pid,
-      rootUri: URI.file(this.runtimeRoot).toString(),
+      rootUri: pathToFileURL(this.runtimeRoot).toString(),
       workspaceFolders: [this.workspaceFolder()],
       capabilities: {
         // 声明什么就实现什么：既然 params 里传了 workspaceFolders，能力节就必须对齐，
@@ -1005,7 +1006,7 @@ export class ExternalLspClient {
 
   private workspaceFolder(): { uri: string; name: string } {
     return {
-      uri: URI.file(this.runtimeRoot).toString(),
+      uri: pathToFileURL(this.runtimeRoot).toString(),
       name: this.runtimeRoot.split(/[\\/]/u).at(-1) ?? 'project',
     }
   }
@@ -1247,8 +1248,18 @@ export class ExternalLspClient {
   private handleNotification(method: string, rawParams: unknown): void {
     if (method !== 'textDocument/publishDiagnostics') return
     const params = objectValue(rawParams)
-    const uri = typeof params?.['uri'] === 'string' ? params['uri'] : null
-    if (!uri) return
+    const receivedUri = typeof params?.['uri'] === 'string' ? params['uri'] : null
+    if (!receivedUri) return
+    const uri = this.documents.has(receivedUri)
+      ? receivedUri
+      : [...this.documents.keys()].find((candidate) => {
+          try {
+            return canonicalPath(URI.parse(candidate).fsPath)
+              === canonicalPath(URI.parse(receivedUri).fsPath)
+          } catch {
+            return false
+          }
+        }) ?? receivedUri
     const openVersion = this.documents.get(uri)?.version ?? 0
     const version = typeof params?.['version'] === 'number' ? params['version'] : openVersion
     const diagnostics = Array.isArray(params?.['diagnostics'])

@@ -115,7 +115,7 @@ function resolveMacOutputDirectory(
   if (uniqueOutputs.length > 1) {
     throw new Error('macOS packaging received conflicting output directory overrides')
   }
-  return path.resolve(rootDirectory, uniqueOutputs[0] ?? defaultOutput)
+  return path.posix.resolve(rootDirectory, uniqueOutputs[0] ?? defaultOutput)
 }
 
 function readWorkbenchVersion(readFile = readFileSync) {
@@ -177,7 +177,7 @@ async function snapshotCurrentMacDmgs({
   )
   return Promise.all(
     fileNames.map(async (fileName) => {
-      const fileStat = await readStat(path.join(outputDirectory, fileName))
+      const fileStat = await readStat(path.posix.join(outputDirectory, fileName))
       return {
         fileName,
         signature: [
@@ -205,7 +205,7 @@ async function discoverCurrentMacDmg({
   const generatedNames = currentArtifacts
     .filter((artifact) => previousByName.get(artifact.fileName) !== artifact.signature)
     .map((artifact) => artifact.fileName)
-  return path.join(outputDirectory, selectCurrentMacDmg(generatedNames, version))
+  return path.posix.join(outputDirectory, selectCurrentMacDmg(generatedNames, version))
 }
 
 function buildElectronBuilderArgs(args = []) {
