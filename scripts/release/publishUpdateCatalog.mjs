@@ -12,6 +12,48 @@ import { validateStagedRelease } from "./releaseArtifacts.mjs";
 
 const repoRoot = path.resolve(import.meta.dirname, "../..");
 const FileNamePattern = /^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$/u;
+const LocalReleasePlatformByHost = Object.freeze({
+  darwin: "macos",
+  win32: "windows",
+  linux: "linux",
+});
+
+function resolveLocalReleaseRequest(
+  args = process.argv.slice(2),
+  hostPlatform = process.platform,
+) {
+  const forwarded = args[0] === "--" ? args.slice(1) : [...args];
+  if (forwarded.length !== 2) {
+    throw new Error(
+      "Usage: publishUpdateCatalog.mjs <macos|windows|linux> <platform-stage-directory>",
+    );
+  }
+  const [releasePlatform, releaseDirectory] = forwarded;
+  const nativePlatform = LocalReleasePlatformByHost[hostPlatform];
+  if (!nativePlatform) {
+    throw new Error(`Unsupported local Workbench release host: ${hostPlatform}`);
+  }
+  if (releasePlatform !== nativePlatform) {
+    throw new Error(
+      `${releasePlatform} Workbench candidates must be finalized on ${nativePlatform === "macos" ? "macOS" : nativePlatform}; current host publishes ${nativePlatform} only`,
+    );
+  }
+  if (!releaseDirectory?.trim()) {
+    throw new Error("Workbench local release stage directory is required");
+  }
+  return { releasePlatform, releaseDirectory };
+}
+
+function assertSingleLocalPlatform(stagedPlatforms, releasePlatform) {
+  if (
+    stagedPlatforms.length !== 1 ||
+    stagedPlatforms[0] !== releasePlatform
+  ) {
+    throw new Error(
+      `Local Workbench finalization requires exactly one ${releasePlatform} stage receipt`,
+    );
+  }
+}
 
 function requireEnvironment(name) {
   const value = process.env[name]?.trim();
@@ -518,6 +560,8 @@ async function publishReleaseTransaction({
 }
 
 async function run() {
+  const { releasePlatform, releaseDirectory: requestedReleaseDirectory } =
+    resolveLocalReleaseRequest();
   const manifest = JSON.parse(
     await readFile(path.join(repoRoot, "package.json"), "utf8"),
   );
@@ -531,7 +575,7 @@ async function run() {
   }
   const releaseDirectory = path.resolve(
     repoRoot,
-    process.argv[2] ?? "artifacts/release-stage/final",
+    requestedReleaseDirectory,
   );
   const client = new ReleaseClient(
     requireEnvironment("VELAROS_RELEASE_REPOSITORY"),
@@ -547,6 +591,7 @@ async function run() {
     version,
     sourceCommit,
   });
+  assertSingleLocalPlatform(staged.platforms, releasePlatform);
   const release = await client.ensurePublicRelease(tag, version, sourceCommit, existing);
   const completed = existing
     ? await readCompletedRelease({ client, release, identity, signing })
@@ -585,12 +630,14 @@ if (
 
 export {
   artifactDescriptor,
+  assertSingleLocalPlatform,
   assertCatalogMatchesCompletion,
   completionManifest,
   publishReleaseTransaction,
   readCompletedRelease,
   releaseManifestNames,
   releaseSigningConfig,
+  resolveLocalReleaseRequest,
   sortCanonicalValue,
   verifyCompletedRelease,
 };

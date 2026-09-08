@@ -31,8 +31,11 @@
     "package:mac": "bun run build && node scripts/release/packageMac.mjs",
     "package:dir": "bun run build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --config electron-builder.yml --mac --dir -c.mac.identity=null -c.mac.notarize=false",
     "verify:dir": "node scripts/release/verifyPackagedWorkbench.mjs",
-    "package:win": "bun run build && electron-builder --config electron-builder.yml --win",
-    "package:linux": "bun run build && electron-builder --config electron-builder.yml --linux"
+    "package:win": "bun run build && electron-builder --config electron-builder.yml --win --publish never",
+    "package:linux": "bun run build && electron-builder --config electron-builder.yml --linux --publish never",
+    "release:local:stage": "node scripts/release/releaseArtifacts.mjs stage",
+    "release:local:verify": "node scripts/release/releaseArtifacts.mjs verify",
+    "release:local:finalize": "node scripts/release/publishUpdateCatalog.mjs"
   },
   "dependencies": {
     "gpt-tokenizer": "3.4.0",

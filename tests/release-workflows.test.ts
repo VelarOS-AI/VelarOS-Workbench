@@ -4,39 +4,53 @@ import path from 'node:path'
 
 import { describe, test } from 'bun:test'
 
+import {
+  assertSingleLocalPlatform,
+  resolveLocalReleaseRequest,
+} from '../scripts/release/publishUpdateCatalog.mjs'
+
 void describe('release workflows', () => {
-  void test('dispatch modes gate the exact root tag and never clobber release assets', async () => {
-    const workflow = (await readFile(
-      path.resolve('.github/workflows/release.yml'),
-      'utf8'
-    )).replaceAll('\r\n', '\n')
-    assert.match(workflow, /workflow_dispatch:\n\s+inputs:\n\s+release_tag:/)
-    assert.match(workflow, /tags:\n\s+- ["']v\*["']/)
-    assert.match(workflow, /ref: \$\{\{ env\.RELEASE_TAG \}\}/)
-    assert.match(
-      workflow,
-      /Resolve exact checked-out release source\n\s+shell: bash\n\s+run: echo "RELEASE_SOURCE_SHA=\$\(git rev-parse HEAD\)/
+  void test('uses local native-platform release commands without an Actions release workflow', async () => {
+    await assert.rejects(
+      readFile(path.resolve('.github/workflows/release.yml'), 'utf8'),
+      /ENOENT/u
     )
-    assert.doesNotMatch(workflow, /--target "\$GITHUB_SHA"/)
-    assert.match(
-      workflow,
-      /node scripts\/release\/releaseArtifacts\.mjs validate-source/
+
+    const manifest = JSON.parse(await readFile(path.resolve('package.json'), 'utf8')) as {
+      scripts?: Record<string, string>
+    }
+    assert.equal(
+      manifest.scripts?.['release:local:stage'],
+      'node scripts/release/releaseArtifacts.mjs stage'
     )
-    assert.match(workflow, /Reuse prior immutable platform checkpoint/)
-    assert.match(workflow, /if: steps\.reuse\.outputs\.reuse != 'true'/)
-    assert.match(
-      workflow,
-      /Verify macOS signing and notarization credentials\n\s+if: .*runner\.os == 'macOS'/u
+    assert.equal(
+      manifest.scripts?.['release:local:verify'],
+      'node scripts/release/releaseArtifacts.mjs verify'
     )
-    assert.match(workflow, /Build and package unsigned Windows once/u)
-    assert.match(workflow, /CSC_IDENTITY_AUTO_DISCOVERY: ["']false["']/u)
-    assert.match(workflow, /RUNNER_TEMP\/verifyPackagedWorkbench\.mjs/u)
-    assert.match(workflow, /trap 'cp "\$backup" "\$verifier"' EXIT/u)
-    assert.match(
-      workflow,
-      /bun run package:win -- --x64 --publish never\n\s+cp "\$backup" "\$verifier"\n\s+node "\$verifier" artifacts\/desktop win32/u
+    assert.equal(
+      manifest.scripts?.['release:local:finalize'],
+      'node scripts/release/publishUpdateCatalog.mjs'
     )
-    assert.doesNotMatch(workflow, /--clobber/)
+    assert.match(manifest.scripts?.['package:win'] ?? '', /--publish never/u)
+    assert.match(manifest.scripts?.['package:linux'] ?? '', /--publish never/u)
+
+    assert.deepEqual(
+      resolveLocalReleaseRequest(['macos', 'artifacts/stage'], 'darwin'),
+      { releasePlatform: 'macos', releaseDirectory: 'artifacts/stage' }
+    )
+    assert.deepEqual(
+      resolveLocalReleaseRequest(['--', 'windows', 'artifacts/stage'], 'win32'),
+      { releasePlatform: 'windows', releaseDirectory: 'artifacts/stage' }
+    )
+    assert.throws(
+      () => resolveLocalReleaseRequest(['windows', 'artifacts/stage'], 'darwin'),
+      /current host publishes macos only/u
+    )
+    assert.throws(
+      () => assertSingleLocalPlatform(['macos', 'windows'], 'macos'),
+      /exactly one macos stage receipt/u
+    )
+    assert.doesNotThrow(() => assertSingleLocalPlatform(['macos'], 'macos'))
 
     const builder = (await readFile(path.resolve('electron-builder.yml'), 'utf8'))
       .replaceAll('\r\n', '\n')

@@ -59,9 +59,14 @@ Velar compiler/editor joint-delivery contract.
 
 `bun run package:mac`, `bun run package:win`, and `bun run package:linux` create application
 artifacts under `artifacts/desktop/`. Signing and notarization credentials are supplied by the release
-environment; they are never stored in this repository.
+environment; they are never stored in this repository. Official packages and candidates are produced
+locally on the matching native host, one platform at a time; Electron Builder publishing and the
+GitHub Actions release route are disabled.
 
 The public candidate release uses separate manifests: `candidate-*.json` marks a complete build,
 while the Ed25519-signed `catalog-*.json` is the only manifest Cloud imports. After upload, an agent
 publishes an exact Workbench version with Cloud's `release:software:production` command; no
 administrator page or interactive password is part of the release path.
+
+See [docs/releases/local-platform-release.md](docs/releases/local-platform-release.md) for the clean
+tag, native packaging, immutable staging, signed candidate finalization, and platform isolation gates.
