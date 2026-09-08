@@ -28,6 +28,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@velaros-ai/ui/primitives/overlays/Dialog'
+import { getTopBarControlPanelClassName } from '@velaros-ai/ui/product/layout/TopBarControlFrame'
 
 import type {
   WorkbenchProjectCloneFailureReason,
@@ -175,7 +176,8 @@ export function WorkbenchProjectControl({
       open={open}
       onOpenChange={handleOpenChange}
       anchorClassName={styles.projectControlAnchor}
-      className={styles.projectControlMenu}
+      className={getTopBarControlPanelClassName(styles.projectControlMenu)}
+      data-topbar-panel="picker"
       side="bottom"
       align="start"
       sideOffset={6}
