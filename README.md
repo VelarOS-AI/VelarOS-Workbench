@@ -45,8 +45,10 @@ bun run check
 bun run dev
 ```
 
-Platform 发布成功后会自动为 Workbench 创建依赖升级 PR；`check:platform-packages` 会拒绝
-任何 `file:`、`link:`、`workspace:` 或非 GitHub Packages 的锁文件解析。
+Platform 发布后，在受控本机运行 `bun scripts/refreshPrivatePackageLock.mjs` 刷新已发布依赖，
+审查 `bun.lock` 后再提交。`check:platform-packages` 会拒绝任何 `file:`、`link:`、`workspace:`
+或非 GitHub Packages 的锁文件解析。仓库中的 Actions 文件仅为静态跳过的本机策略哨兵；
+检查和私有包锁定都不在 GitHub runner 上执行。
 
 Workbench deliberately ships a focused language surface: VelarScript, JavaScript / TypeScript,
 Python, and related Web formats. Its generic editor core has no Velar-specific branches. The app
@@ -60,8 +62,8 @@ Velar compiler/editor joint-delivery contract.
 `bun run package:mac`, `bun run package:win`, and `bun run package:linux` create application
 artifacts under `artifacts/desktop/`. Signing and notarization credentials are supplied by the release
 environment; they are never stored in this repository. Official packages and candidates are produced
-locally on the matching native host, one platform at a time; Electron Builder publishing and the
-GitHub Actions release route are disabled.
+locally on the matching native host, one platform at a time. Electron Builder publishing is disabled,
+and the repository's inert Actions sentinels cannot build, upload, or read release credentials.
 
 The public candidate release uses separate manifests: `candidate-*.json` marks a complete build,
 while the Ed25519-signed `catalog-*.json` is the only manifest Cloud imports. After upload, an agent

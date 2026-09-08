@@ -1,69 +1,18 @@
-name: Refresh private package lock
+name: Refresh private package lock (local only)
+
+# Private package resolution is maintained locally with
+# `bun scripts/refreshPrivatePackageLock.mjs`. This sentinel is intentionally
+# inert and cannot allocate a runner or read package credentials.
 
 on:
   workflow_dispatch:
-    inputs:
-      source_ref:
-        description: Branch, tag, or commit to check out
-        required: true
-        default: main
-        type: string
-      expected_sha:
-        description: Exact 40-character commit SHA expected after checkout
-        required: true
-        type: string
 
-permissions:
-  contents: read
-  packages: read
+permissions: {}
 
 jobs:
-  refresh-lock:
-    runs-on: [self-hosted, macOS, ARM64, velaros-package-publish]
+  local-refresh-only:
+    name: Disabled - refresh the private lock locally
+    if: ${{ false }}
+    runs-on: ubuntu-latest
     steps:
-      - name: Check out requested source
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.source_ref }}
-          fetch-depth: 0
-
-      - name: Verify immutable source identity
-        shell: bash
-        env:
-          EXPECTED_SHA: ${{ inputs.expected_sha }}
-        run: |
-          if [[ ! "$EXPECTED_SHA" =~ ^[0-9a-fA-F]{40}$ ]]; then
-            echo "expected_sha must be exactly 40 hexadecimal characters" >&2
-            exit 1
-          fi
-          actual_sha="$(git rev-parse HEAD)"
-          normalized_expected="$(printf '%s' "$EXPECTED_SHA" | tr 'A-F' 'a-f')"
-          if [[ "$actual_sha" != "$normalized_expected" ]]; then
-            echo "Checked-out HEAD does not match expected_sha" >&2
-            exit 1
-          fi
-
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version-file: package.json
-
-      - name: Refresh lockfile from private packages
-        run: bun scripts/refreshPrivatePackageLock.mjs
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Verify manifests and frozen lockfile
-        run: |
-          git diff --exit-code -- package.json ':(glob)**/package.json'
-          bun scripts/refreshPrivatePackageLock.mjs --validate-only
-          bun install --frozen-lockfile --ignore-scripts
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload refreshed lockfile
-        uses: actions/upload-artifact@v4
-        with:
-          name: velaros-workbench-bun-lock-${{ inputs.expected_sha }}
-          path: bun.lock
-          if-no-files-found: error
+      - run: exit 1

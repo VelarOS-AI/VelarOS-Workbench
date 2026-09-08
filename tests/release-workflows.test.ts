@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
+import { readdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
 
 import { describe, test } from 'bun:test'
@@ -10,6 +10,34 @@ import {
 } from '../scripts/release/publishUpdateCatalog.mjs'
 
 void describe('release workflows', () => {
+  void test('keeps every GitHub Actions file as an inert local-only sentinel', async () => {
+    const sentinels = new Map([
+      ['ci.yml', 'bun run check'],
+      [
+        'refresh-private-lock-self-hosted.yml',
+        'bun scripts/refreshPrivatePackageLock.mjs',
+      ],
+    ])
+    const workflowDirectory = path.resolve('.github/workflows')
+    assert.deepEqual(
+      (await readdir(workflowDirectory)).sort(),
+      [...sentinels.keys()].sort()
+    )
+
+    for (const [fileName, localCommand] of sentinels) {
+      const workflow = await readFile(path.join(workflowDirectory, fileName), 'utf8')
+      assert.match(workflow, /on:\n {2}workflow_dispatch:/u)
+      assert.match(workflow, /permissions: \{\}/u)
+      assert.match(workflow, /if: \$\{\{ false \}\}/u)
+      assert.match(workflow, /steps:\n {6}- run: exit 1\n$/u)
+      assert.ok(workflow.includes(localCommand))
+      assert.doesNotMatch(workflow, /\b(?:push|pull_request|schedule)\b/u)
+      assert.doesNotMatch(workflow, /\buses:|secrets\.|vars\./u)
+      assert.doesNotMatch(workflow, /\b(?:checkout|build|upload)\b/iu)
+      assert.equal(workflow.match(/^ {2}[a-z][a-z0-9-]+:$/gmu)?.length, 1)
+    }
+  })
+
   void test('uses local native-platform release commands without an Actions release workflow', async () => {
     await assert.rejects(
       readFile(path.resolve('.github/workflows/release.yml'), 'utf8'),
