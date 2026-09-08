@@ -37,7 +37,7 @@ Workbench 持有项目根、Kernel 能力取消信号、历史和工具可用性
 复用该会话的 CodingSessionTracker。清理会话通过栈的 `clearSession` 释放执行状态与
 治理登记。
 
-Workbench 通过 GitHub Packages 消费 `@velaros-ai/agent@0.6.10`，依赖要求与包完整性由
+Workbench 通过 GitHub Packages 消费 `@velaros-ai/agent@0.6.16`，依赖要求与包完整性由
 `package.json` 和 `bun.lock` 共同记录。请求、工具 schema、预算与传输名称映射来自同一份
 已过滤工具快照；首轮 baseline 仅包含宿主常驻名单，工具执行与历史保留 canonical 名称。
 版本升级需检查真实多回合工具调用、取消与收尾、类型、生产构建及产品边界。

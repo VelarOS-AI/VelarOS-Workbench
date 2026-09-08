@@ -13,7 +13,7 @@ Workbench release, and release operators do not dispatch a release workflow.
 Use a clean checkout at the annotated version tag. Set both values to the immutable tagged commit:
 
 ```bash
-export RELEASE_TAG=v0.3.32
+export RELEASE_TAG=v0.3.33
 export RELEASE_SOURCE_SHA="$(git rev-parse "${RELEASE_TAG}^{}")"
 test "$(git rev-parse HEAD)" = "$RELEASE_SOURCE_SHA"
 test -z "$(git status --porcelain)"
@@ -28,8 +28,8 @@ Build and notarize arm64 artifacts into an isolated directory, then create and v
 macOS-only stage:
 
 ```bash
-release_output="artifacts/releases/0.3.32-official-$(git rev-parse --short=7 HEAD)/desktop"
-release_stage="artifacts/release-stage/v0.3.32-$(git rev-parse --short=7 HEAD)/macos"
+release_output="artifacts/releases/0.3.33-official-$(git rev-parse --short=7 HEAD)/desktop"
+release_stage="artifacts/release-stage/v0.3.33-$(git rev-parse --short=7 HEAD)/macos"
 
 bun run package:mac -- --arm64 --publish never \
   -c.directories.output="$release_output"
@@ -49,19 +49,19 @@ Run the matching package and stage command on that operating system. Cross-platf
 finalization is rejected.
 
 ```powershell
-$env:RELEASE_TAG = "v0.3.32"
+$env:RELEASE_TAG = "v0.3.33"
 $env:RELEASE_SOURCE_SHA = git rev-parse "$env:RELEASE_TAG^{}"
 bun install --frozen-lockfile
 bun run check
 bun run package:win -- --x64
-bun run release:local:stage -- windows artifacts/desktop artifacts/release-stage/v0.3.32-windows
-bun run release:local:verify -- windows artifacts/release-stage/v0.3.32-windows
+bun run release:local:stage -- windows artifacts/desktop artifacts/release-stage/v0.3.33-windows
+bun run release:local:verify -- windows artifacts/release-stage/v0.3.33-windows
 ```
 
 ```bash
 bun run package:linux -- --x64
-bun run release:local:stage -- linux artifacts/desktop artifacts/release-stage/v0.3.32-linux
-bun run release:local:verify -- linux artifacts/release-stage/v0.3.32-linux
+bun run release:local:stage -- linux artifacts/desktop artifacts/release-stage/v0.3.33-linux
+bun run release:local:verify -- linux artifacts/release-stage/v0.3.33-linux
 ```
 
 ## Finalize the platform candidate
@@ -79,11 +79,11 @@ export VELAROS_RELEASE_ATTESTATION_PUBLIC_KEYS="<trusted-key-id>:<base64-spki-ed
 export VELAROS_UPDATE_CHANNEL=stable
 
 bun run release:local:finalize -- macos \
-  artifacts/release-stage/v0.3.32-57c8911/macos
+  artifacts/release-stage/v0.3.33-$(git rev-parse --short=7 "${RELEASE_TAG}^{}")/macos
 ```
 
 The finalizer validates the single native-platform receipt before it creates or mutates a public
 candidate. It reuses identical assets, rejects conflicting bytes, preserves already verified other
-platforms, uploads the signed `catalog-workbench-v0.3.32-stable.json`, and uploads
-`candidate-workbench-v0.3.32-stable.json` last as the completion receipt. Cloud promotion remains a
+platforms, uploads the signed `catalog-workbench-v0.3.33-stable.json`, and uploads
+`candidate-workbench-v0.3.33-stable.json` last as the completion receipt. Cloud promotion remains a
 separate serialized step after the public candidate has been verified.

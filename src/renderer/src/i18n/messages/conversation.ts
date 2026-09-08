@@ -3,8 +3,8 @@
  * Keep this catalog version-locked and contract-tested so shared UI upgrades
  * cannot leak raw translation keys into the standalone Workbench.
  */
-// 已复核 UI 0.2.33：补充停止中与运行验证状态翻译。
-export const WORKBENCH_CONVERSATION_I18N_CONTRACT_VERSION = '0.2.33'
+// 已复核 UI 0.2.34：包内会话翻译键未变，现有停止中与运行验证翻译仍完整。
+export const WORKBENCH_CONVERSATION_I18N_CONTRACT_VERSION = '0.2.34'
 
 export const workbenchConversationZhCNMessages = {
   browser: {
