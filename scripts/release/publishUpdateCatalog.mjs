@@ -359,7 +359,7 @@ async function verifyRemoteArtifacts(client, release, artifacts) {
   }
 }
 
-async function verifyCompletedRelease({
+async function readCompletedRelease({
   client,
   release,
   identity,
@@ -367,14 +367,18 @@ async function verifyCompletedRelease({
 }) {
   const names = releaseManifestNames(identity.version, identity.channel);
   const completionAsset = await client.readAsset(release, names.completion);
-  if (!completionAsset) return false;
+  if (!completionAsset) return null;
   const catalogAsset = await client.readAsset(release, names.catalog);
-  if (!catalogAsset) return false;
+  if (!catalogAsset) return null;
   const completion = JSON.parse(completionAsset.bytes.toString("utf8"));
   const catalog = JSON.parse(catalogAsset.bytes.toString("utf8"));
   assertCatalogMatchesCompletion(catalog, completion, identity, signing);
   await verifyRemoteArtifacts(client, release, catalog.artifacts);
-  return true;
+  return { catalog, completion };
+}
+
+async function verifyCompletedRelease(input) {
+  return Boolean(await readCompletedRelease(input));
 }
 
 async function readVerifiedStagedArtifacts({
@@ -432,6 +436,7 @@ async function publishReleaseTransaction({
   identity,
   signing,
   staged,
+  existingArtifacts = [],
 }) {
   if (!staged && await verifyCompletedRelease({ client, release, identity, signing })) {
     console.info(
@@ -452,7 +457,9 @@ async function publishReleaseTransaction({
       `Removed incomplete Workbench completion receipt ${completionName} before retrying.`,
     );
   }
-  const artifacts = [];
+  const artifactsByName = new Map(
+    existingArtifacts.map((artifact) => [artifact.fileName, artifact]),
+  );
   for (const { record, body } of staged.artifacts) {
     if (
       !Number.isSafeInteger(record.sizeBytes) ||
@@ -464,7 +471,7 @@ async function publishReleaseTransaction({
     }
     const descriptor = artifactDescriptor(record);
     const assetId = await client.upload(release, record.fileName, body);
-    artifacts.push({
+    const artifact = {
       kind: "software",
       softwareProduct: "workbench",
       ...descriptor,
@@ -476,12 +483,28 @@ async function publishReleaseTransaction({
       sizeBytes: record.sizeBytes,
       githubTag: identity.tag,
       sourceCommit: identity.sourceCommit,
-    });
+    };
+    const previous = artifactsByName.get(artifact.fileName);
+    if (
+      previous &&
+      JSON.stringify(sortCanonicalValue(previous)) !==
+        JSON.stringify(sortCanonicalValue(artifact))
+    ) {
+      throw new Error(`Workbench platform addition changed ${artifact.fileName}`);
+    }
+    artifactsByName.set(artifact.fileName, artifact);
   }
+  const artifacts = [...artifactsByName.values()].sort((left, right) =>
+    left.fileName.localeCompare(right.fileName),
+  );
   const catalog = signCatalog({ schemaVersion: 1, artifacts }, signing);
   const completion = completionManifest(artifacts, identity);
   const catalogBytes = Buffer.from(`${JSON.stringify(catalog, null, 2)}\n`);
   await writeFile(path.join(releaseDirectory, catalogName), catalogBytes);
+  if (await client.readAsset(release, catalogName)) {
+    await client.delete(release, catalogName);
+    console.info(`Removed prior Workbench catalog ${catalogName} before additive update.`);
+  }
   await client.upload(release, catalogName, catalogBytes);
   const completionBytes = Buffer.from(
     `${JSON.stringify(completion, null, 2)}\n`,
@@ -518,13 +541,6 @@ async function run() {
   const identity = { version, channel, tag, sourceCommit };
   const signing = releaseSigningConfig();
   const existing = await client.getPublicRelease(tag);
-  if (
-    existing &&
-    (await verifyCompletedRelease({ client, release: existing, identity, signing }))
-  ) {
-    console.info(`Workbench ${version} ${channel} receipt is already complete and verified.`);
-    return { reused: true };
-  }
   // The stage receipts and every referenced byte must be valid before creating or mutating a release.
   const staged = await readVerifiedStagedArtifacts({
     releaseDirectory,
@@ -532,6 +548,20 @@ async function run() {
     sourceCommit,
   });
   const release = await client.ensurePublicRelease(tag, version, sourceCommit, existing);
+  const completed = existing
+    ? await readCompletedRelease({ client, release, identity, signing })
+    : null;
+  const stagedPlatforms = new Set(
+    staged.artifacts.map(({ record }) => `${record.platform}-${record.arch}`),
+  );
+  const completedPlatforms = new Set(completed?.completion.platforms ?? []);
+  if (
+    completed &&
+    [...stagedPlatforms].every((platform) => completedPlatforms.has(platform))
+  ) {
+    console.info(`Workbench ${version} ${channel} requested platforms are already complete.`);
+    return { reused: true };
+  }
   return publishReleaseTransaction({
     client,
     release,
@@ -539,6 +569,7 @@ async function run() {
     identity,
     signing,
     staged,
+    existingArtifacts: completed?.catalog.artifacts ?? [],
   });
 }
 
@@ -557,6 +588,7 @@ export {
   assertCatalogMatchesCompletion,
   completionManifest,
   publishReleaseTransaction,
+  readCompletedRelease,
   releaseManifestNames,
   releaseSigningConfig,
   sortCanonicalValue,

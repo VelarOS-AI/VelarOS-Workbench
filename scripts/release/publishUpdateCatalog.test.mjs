@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { generateKeyPairSync, sign } from "node:crypto";
+import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -202,7 +202,7 @@ test("Workbench removes an orphaned completion receipt before retrying its catal
 });
 
 test("Workbench publisher rejects an empty staged artifact before writing completion", async (t) => {
-  const fixture = await releaseFixture(t, ["macos"]);
+  const fixture = await releaseFixture(t, ["windows"]);
   fixture.input.staged = {
     platforms: ["macos"],
     artifacts: [{
@@ -223,13 +223,53 @@ test("Workbench publisher rejects an empty staged artifact before writing comple
 });
 
 test("Workbench release receipt preserves an explicit macOS-only scope", async (t) => {
-  const fixture = await releaseFixture(t, ["macos"]);
-  const result = await publishReleaseTransaction(fixture.input);
+  const fixture = await releaseFixture(t, ["windows"]);
+  const body = Buffer.from("verified macOS package");
+  const result = await publishReleaseTransaction({
+    ...fixture.input,
+    staged: {
+      platforms: ["macos"],
+      artifacts: [{
+        record: stagedRecord({
+          sizeBytes: body.length,
+          sha256: createHash("sha256").update(body).digest("hex"),
+        }),
+        body,
+      }],
+    },
+  });
   assert.deepEqual(result.completion.platforms, ["darwin-arm64"]);
   assert.equal(result.catalog.artifacts.every(({ platform }) => platform === "darwin"), true);
 });
 
-async function releaseFixture(t, selectedPlatforms = ["macos", "windows", "linux"]) {
+test("Workbench platform additions preserve an already verified platform", async (t) => {
+  const fixture = await releaseFixture(t, ["windows"]);
+  const prior = {
+    kind: "software",
+    softwareProduct: "workbench",
+    platform: "darwin",
+    arch: "arm64",
+    format: "dmg",
+    artifactRole: "installer",
+    signatureStatus: "notarized",
+    version: fixture.input.identity.version,
+    channel: fixture.input.identity.channel,
+    assetId: "99",
+    fileName: `VelarOS-Workbench-${fixture.input.identity.version}-mac-arm64.dmg`,
+    sha256: "b".repeat(64),
+    sizeBytes: 123,
+    githubTag: fixture.input.identity.tag,
+    sourceCommit: fixture.input.identity.sourceCommit,
+  };
+  const result = await publishReleaseTransaction({
+    ...fixture.input,
+    existingArtifacts: [prior],
+  });
+  assert.deepEqual(result.completion.platforms, ["darwin-arm64", "win32-x64"]);
+  assert.equal(result.catalog.artifacts.some(({ fileName }) => fileName === prior.fileName), true);
+});
+
+async function releaseFixture(t, selectedPlatforms = ["windows"]) {
   const root = await mkdtemp(path.join(tmpdir(), "workbench-catalog-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const releaseDirectory = path.join(root, "stage");

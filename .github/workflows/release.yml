@@ -33,7 +33,7 @@ env:
 
 jobs:
   prepare:
-    runs-on: macos-14
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
@@ -190,6 +190,7 @@ jobs:
 
   release:
     needs: package
+    if: ${{ always() && needs.package.result != 'cancelled' }}
     runs-on: ubuntu-latest
     environment: release-candidates
     steps:
@@ -214,12 +215,21 @@ jobs:
           pattern: workbench-*
           path: artifacts/release-stage/final
           merge-multiple: true
-      - name: Verify complete immutable release identities
+      - name: Verify every available immutable platform identity
+        shell: bash
         run: |
-          node scripts/release/releaseArtifacts.mjs verify macos artifacts/release-stage/final
-          node scripts/release/releaseArtifacts.mjs verify windows artifacts/release-stage/final
-          node scripts/release/releaseArtifacts.mjs verify linux artifacts/release-stage/final
-      - name: Publish signed Workbench update candidate
+          available=0
+          for platform in macos windows linux; do
+            if [[ -f "artifacts/release-stage/final/workbench-${platform}-release.json" ]]; then
+              node scripts/release/releaseArtifacts.mjs verify "$platform" artifacts/release-stage/final
+              available=$((available + 1))
+            fi
+          done
+          if [[ "$available" -eq 0 ]]; then
+            echo "::error::No platform completed packaging."
+            exit 1
+          fi
+      - name: Publish signed Workbench update candidate for available platforms
         env:
           VELAROS_RELEASE_REPOSITORY: ${{ vars.VELAROS_RELEASE_REPOSITORY }}
           VELAROS_RELEASE_REPO_TOKEN: ${{ secrets.VELAROS_RELEASE_REPO_TOKEN }}
