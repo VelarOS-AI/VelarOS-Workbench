@@ -17,6 +17,13 @@ const DynamicConversationKeys = [
   'status.elapsedMinutesSeconds',
   'status.elapsedHoursMinutes',
   'status.phasePreparing',
+  'status.verification.aborted',
+  'status.verification.failed',
+  'status.verification.not-run',
+  'status.verification.passed',
+  'status.verification.stale',
+  'status.verification.timed-out',
+  'status.verification.unknown',
 ] as const
 
 void describe('Workbench conversation localization contract', () => {
@@ -69,7 +76,7 @@ function readStaticConversationTranslationKeys(): Set<string> {
   for (const file of listJavaScriptFiles(ConversationUiRoot)) {
     const source = readFileSync(file, 'utf8')
     for (const match of source.matchAll(translationCall)) {
-      if (match[1]?.includes('.')) keys.add(match[1])
+      if (match[1]?.includes('.') && !match[1].includes('${')) keys.add(match[1])
     }
   }
 

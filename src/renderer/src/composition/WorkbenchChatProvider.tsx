@@ -20,6 +20,7 @@ import type { WorkbenchChatSurfaceScope } from './workbenchChatComposition'
 export type WorkbenchChatRunStatus =
   | 'idle'
   | 'running'
+  | 'stopping'
   | 'completed'
   | 'aborted'
   | 'failed'

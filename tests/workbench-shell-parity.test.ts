@@ -87,7 +87,10 @@ void describe('pre-split Workbench shell parity', () => {
     assert.match(control, /<WorkspaceGitCommitControl/)
     assert.doesNotMatch(control, /<Dialog|<FolderIcon/)
     assert.match(sharedGitStyles, /\.gitCompactMenu[\s\S]*background-color:[^;]+!important/)
-    assert.match(sharedGitStyles, /\.gitCompactMenuHeader[\s\S]*padding:\s*3\.5px 4px/)
+    assert.match(
+      sharedGitStyles,
+      /\.gitCompactMenuHeader[\s\S]*padding:\s*var\(--topbar-panel-padding\)/,
+    )
     assert.match(
       sharedGitStyles,
       /(?:\.gitCompactInput:focus-visible[\s\S]*background-color:\s*transparent|\.gitCompactSearchSlot :global\(\.velar-search-field-input\)[\s\S]*font-size:\s*11px)/

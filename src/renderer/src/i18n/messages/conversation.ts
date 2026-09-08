@@ -3,8 +3,8 @@
  * Keep this catalog version-locked and contract-tested so shared UI upgrades
  * cannot leak raw translation keys into the standalone Workbench.
  */
-// 已复核 UI 0.2.32：conversation 的 960 个产物文件与 0.2.30 逐字节一致，覆盖 269 个静态翻译键。
-export const WORKBENCH_CONVERSATION_I18N_CONTRACT_VERSION = '0.2.32'
+// 已复核 UI 0.2.33：补充停止中与运行验证状态翻译。
+export const WORKBENCH_CONVERSATION_I18N_CONTRACT_VERSION = '0.2.33'
 
 export const workbenchConversationZhCNMessages = {
   browser: {
@@ -67,6 +67,7 @@ export const workbenchConversationZhCNMessages = {
     composerWorkbenchEditorControl: 'AI 操控编辑器',
     composerWorkbenchEditorControlHint:
       '允许 Workbench AI 搜索、打开、定位、移动和安全删除文件，并让编辑器界面实时同步。',
+    contextIgnoreOnce: '本次忽略',
     copyAnswer: '复制回答',
     dropFilesHere: '将文件拖到这里',
     dropFilesHint: '支持图片、文档和代码文件',
@@ -78,6 +79,9 @@ export const workbenchConversationZhCNMessages = {
     fileChangeUnknownFile: '未知文件',
     generatedImage: '生成的图片',
     goalDockContinueGuidance: '继续推进当前目标。',
+    guidanceAccepted: '已接收，等待纳入上下文',
+    guidanceApplied: '已纳入执行上下文',
+    guidancePaused: '已暂停，尚未执行',
     guidedConversation: '已引导',
     guidingConversation: '正在引导',
     htmlArtifactCopyCode: '复制 HTML 源码',
@@ -105,7 +109,9 @@ export const workbenchConversationZhCNMessages = {
     providerArtifactCount: '{count} 项',
     providerArtifacts: '网页 Agent 结果',
     providerSources: '参考来源',
+    queuedInputsPaused: '排队输入已暂停',
     removeFile: '移除文件',
+    resumeQueuedInputs: '继续执行排队输入',
     rewindConfirmAction: '回到这里',
     rewindDialogDescription: '会删除这轮之后的对话。',
     rewindDialogKeepFiles: '保留当前文件',
@@ -142,11 +148,13 @@ export const workbenchConversationZhCNMessages = {
     richWebReadFailed: '网页读取失败',
     richWebReadRunning: '正在读取网页…',
     richWebReadTitle: '网页阅读',
+    runQueuedInput: '执行这条输入',
     scrollToBottom: '跳到底部',
     scrollToNextSection: '下一节',
     scrollToPreviousSection: '上一节',
     scrollToTop: '跳到顶部',
     selectModel: '选择模型',
+    sendAfterCurrent: '当前任务结束后执行',
     sendMessage: '发送消息',
     sendingMessage: '正在提交…',
     stopStreaming: '停止生成',
@@ -240,6 +248,7 @@ export const workbenchConversationZhCNMessages = {
     back: '返回',
     confirmRejection: '确认拒绝',
     genericRejectionPlaceholder: '可以告诉模型拒绝原因、替代路径或你希望它跳过的部分。留空也可以。',
+    mcpToolArguments: '调用参数：{arguments}',
     mcpToolDescription: '模型请求调用服务器「{server}」上的工具「{tool}」。',
     mcpToolTitle: '外部 MCP 工具调用',
     optionalNote: '可选说明',
@@ -317,9 +326,20 @@ export const workbenchConversationZhCNMessages = {
     runAbortedTitle: '本次运行已中止',
     running: '运行中',
     seeErrorInContent: '请查看内容区错误信息',
+    stopping: '正在停止',
+    stoppingDescription: '正在等待当前操作和子任务收尾，已有成果会保留。',
     stoppedRun: '已停止本次运行',
     totalTurns: '共 {count} 轮',
     turn: '第 {count} 轮',
+    verification: {
+      aborted: '验证已中止',
+      failed: '验证失败',
+      'not-run': '尚未验证',
+      passed: '验证通过',
+      stale: '最新变更尚未验证',
+      'timed-out': '验证超时',
+      unknown: '验证结果未知',
+    },
   },
   systemToolInstall: {
     alreadyAvailable: '已可用',
@@ -355,6 +375,12 @@ export const workbenchConversationZhCNMessages = {
     suggestionRejectionPlaceholder: '可以告诉模型你的替代工具、已有环境或偏好。留空也可以。',
     suggestionTitle: '建议安装 {label}',
     tellModel: '告诉模型',
+  },
+  taskApproval: {
+    denialContinues: '拒绝只跳过本次操作，Agent 会继续尝试其他方案。',
+    mainAgent: '主 Agent',
+    requester: '发起者：{requester}',
+    target: '对象：{target}',
   },
   toolSummary: {
     activityAskedUserCountMany: '询问用户 {count} 次',
@@ -461,6 +487,7 @@ export const workbenchConversationEnUSMessages = {
     composerWorkbenchEditorControl: 'AI editor control',
     composerWorkbenchEditorControlHint:
       'Let Workbench AI search, open, navigate, move, and safely delete files while keeping the editor UI synchronized.',
+    contextIgnoreOnce: 'Ignore this time',
     copyAnswer: 'Copy answer',
     dropFilesHere: 'Drop files here',
     dropFilesHint: 'Images, docs, and code files are supported',
@@ -472,6 +499,9 @@ export const workbenchConversationEnUSMessages = {
     fileChangeUnknownFile: 'Unknown file',
     generatedImage: 'Generated image',
     goalDockContinueGuidance: 'Continue working on the current goal.',
+    guidanceAccepted: 'Received; waiting to enter context',
+    guidanceApplied: 'Added to execution context',
+    guidancePaused: 'Paused; not yet executed',
     guidedConversation: 'Guided',
     guidingConversation: 'Guiding',
     htmlArtifactCopyCode: 'Copy HTML source',
@@ -499,7 +529,9 @@ export const workbenchConversationEnUSMessages = {
     providerArtifactCount: '{count} items',
     providerArtifacts: 'Web Agent results',
     providerSources: 'Sources',
+    queuedInputsPaused: 'Queued inputs are paused',
     removeFile: 'Remove file',
+    resumeQueuedInputs: 'Resume queued inputs',
     rewindConfirmAction: 'Rewind',
     rewindDialogDescription: 'Deletes conversation after this turn.',
     rewindDialogKeepFiles: 'Keep current files',
@@ -539,11 +571,13 @@ export const workbenchConversationEnUSMessages = {
     richWebReadFailed: 'Page read failed',
     richWebReadRunning: 'Reading page…',
     richWebReadTitle: 'Web read',
+    runQueuedInput: 'Run this input',
     scrollToBottom: 'Jump to bottom',
     scrollToNextSection: 'Next section',
     scrollToPreviousSection: 'Previous section',
     scrollToTop: 'Jump to top',
     selectModel: 'Select model',
+    sendAfterCurrent: 'Run after the current task',
     sendMessage: 'Send message',
     sendingMessage: 'Submitting…',
     stopStreaming: 'Stop generation',
@@ -641,6 +675,7 @@ export const workbenchConversationEnUSMessages = {
     confirmRejection: 'Confirm rejection',
     genericRejectionPlaceholder:
       'Tell the model why, suggest an alternative path, or say what to skip. You can also leave this blank.',
+    mcpToolArguments: 'Arguments: {arguments}',
     mcpToolDescription: 'The model wants to call “{tool}” on server “{server}”.',
     mcpToolTitle: 'External MCP tool call',
     optionalNote: 'Optional note',
@@ -722,9 +757,21 @@ export const workbenchConversationEnUSMessages = {
     runAbortedTitle: 'This run was aborted',
     running: 'Running',
     seeErrorInContent: 'See the error inside the chat content area',
+    stopping: 'Stopping',
+    stoppingDescription:
+      'Waiting for current operations and subtasks to settle. Existing results are retained.',
     stoppedRun: 'This run was stopped',
     totalTurns: '{count} turns',
     turn: 'Turn {count}',
+    verification: {
+      aborted: 'Verification aborted',
+      failed: 'Verification failed',
+      'not-run': 'Not verified',
+      passed: 'Verification passed',
+      stale: 'Latest changes not verified',
+      'timed-out': 'Verification timed out',
+      unknown: 'Verification result unknown',
+    },
   },
   systemToolInstall: {
     alreadyAvailable: 'Already available',
@@ -765,6 +812,13 @@ export const workbenchConversationEnUSMessages = {
       'Tell the model about an alternative tool, existing environment, or preference. You can leave this blank.',
     suggestionTitle: 'Install {label}',
     tellModel: 'Tell model',
+  },
+  taskApproval: {
+    denialContinues:
+      'Declining skips this operation. The Agent can continue with another approach.',
+    mainAgent: 'Main Agent',
+    requester: 'Requested by: {requester}',
+    target: 'Target: {target}',
   },
   toolSummary: {
     activityAskedUserCountMany: 'asked user {count} times',
