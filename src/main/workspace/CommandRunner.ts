@@ -6,7 +6,7 @@ import { spawn } from 'node:child_process'
 import { stat } from 'node:fs/promises'
 
 import { AppError } from '@velaros-ai/core/error'
-import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
+import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import type {
   WorkbenchRunCommandOutputEvent,
@@ -27,8 +27,10 @@ class CommandRunner {
 
   public async runCommand(
     request: WorkbenchRunCommandRequest,
-    onOutput?: (event: WorkbenchRunCommandOutputEvent) => void
+    onOutput?: (event: WorkbenchRunCommandOutputEvent) => void,
+    abortSignal?: AbortSignal
   ): Promise<WorkbenchRunCommandResult> {
+    abortSignal?.throwIfAborted()
     const projectRoot = await this.pathResolver.resolveProjectRoot(request.projectRoot)
     const cwdPath = await this.pathResolver.resolveInsideProject(projectRoot, request.cwd ?? '.')
     const cwdStats = await stat(cwdPath.realPath)
@@ -56,10 +58,14 @@ class CommandRunner {
       })
     }
 
+    abortSignal?.throwIfAborted()
     const timers = new TimerScope({ name: 'WorkbenchCommandRunner.runCommand' })
     return new Promise<WorkbenchRunCommandResult>((resolve, reject) => {
       let timedOut = false
+      let abortRequested = false
       let settled = false
+      let terminationRequested = false
+      let forceKillHandle: TimerLease | undefined
 
       const child = spawn(shellSpec.file, shellSpec.args, {
         cwd: cwdPath.realPath,
@@ -68,16 +74,35 @@ class CommandRunner {
         stdio: ['ignore', 'pipe', 'pipe'],
       })
 
-      const timeoutHandle = timers.after(timeoutMs, () => {
-        timedOut = true
+      const isChildRunning = (): boolean =>
+        !settled && child.exitCode === null && child.signalCode === null
+
+      const requestTermination = (reason: 'abort' | 'timeout'): void => {
+        if (terminationRequested || !isChildRunning()) return
+
+        terminationRequested = true
+        timedOut = reason === 'timeout'
+        abortRequested = reason === 'abort'
         this.commandHelper.terminateForegroundProcess(child.pid, 'SIGTERM')
 
-        timers.after(this.commandHelper.getForceKillDelayMs(), () => {
-          if (!settled) {
+        forceKillHandle = timers.after(this.commandHelper.getForceKillDelayMs(), () => {
+          if (isChildRunning()) {
             this.commandHelper.terminateForegroundProcess(child.pid, 'SIGKILL')
           }
         })
+      }
+
+      const handleAbort = (): void => requestTermination('abort')
+      const timeoutHandle = timers.after(timeoutMs, () => {
+        requestTermination('timeout')
       })
+
+      const cleanup = (): void => {
+        timeoutHandle.cancel()
+        forceKillHandle?.cancel()
+        abortSignal?.removeEventListener('abort', handleAbort)
+        timers.dispose()
+      }
 
       child.stdout.on('data', (chunk: Buffer | string) => {
         const text = chunk.toString()
@@ -94,16 +119,14 @@ class CommandRunner {
       child.on('error', (error) => {
         if (settled) return
         settled = true
-        timeoutHandle.cancel()
-        timers.dispose()
+        cleanup()
         reject(new AppError('PLATFORM', `工作台命令启动失败：${error.message}`, error))
       })
 
       child.on('close', (exitCode, signal) => {
         if (settled) return
         settled = true
-        timeoutHandle.cancel()
-        timers.dispose()
+        cleanup()
 
         const finishedAt = Date.now()
         const truncated = stdoutBuffer.truncated || stderrBuffer.truncated
@@ -119,11 +142,14 @@ class CommandRunner {
           durationMs: finishedAt - startedAt,
           timedOut,
           truncated,
-          success: !timedOut && exitCode === 0,
+          success: !timedOut && !abortRequested && exitCode === 0,
           startedAt,
           finishedAt,
         })
       })
+
+      abortSignal?.addEventListener('abort', handleAbort, { once: true })
+      if (abortSignal?.aborted) handleAbort()
     })
   }
 }

@@ -605,10 +605,10 @@ export function StandaloneWorkbenchPagePresentation({
             }}
           />
           <div
-            className={styles.rightResizeHandle}
+            className={`${styles.verticalResizeHandle} ${styles.rightResizeHandle}`}
             role="separator"
             aria-orientation="vertical"
-            aria-label="Resize chat panel"
+            aria-label={t('workbench.resizeRightPane')}
             onPointerDown={(event) => layout.beginResizePane('right', event)}
             onDoubleClick={() => layout.resetPaneSize('right')}
           />

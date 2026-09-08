@@ -1,11 +1,10 @@
-name: CI (local only)
+name: "[DISABLED] CI (local only)"
 
 # Workbench checks run in a maintained local working tree with `bun run check`.
 # This sentinel is intentionally inert and cannot allocate a runner or read
 # repository credentials.
 
-on:
-  workflow_dispatch:
+on: []
 
 permissions: {}
 

@@ -190,6 +190,72 @@
 
 final result: passed
 
+## 共享聊天侧栏行为与宽度收口补充基准
+
+- source visual truth:
+  - `/var/folders/qp/3d1vmxms7jqcm8353whb8h_80000gn/T/codex-clipboard-f23179b4-7a09-48d7-a78e-8c8f11a86138.png`
+  - `/var/folders/qp/3d1vmxms7jqcm8353whb8h_80000gn/T/codex-clipboard-347d2351-a17d-415f-a3a6-6f8836e11eee.png`
+  - `/var/folders/qp/3d1vmxms7jqcm8353whb8h_80000gn/T/codex-clipboard-d450150d-07a0-4d92-b3f6-9907847e5dbf.png`
+  - `/var/folders/qp/3d1vmxms7jqcm8353whb8h_80000gn/T/codex-clipboard-10b90d8b-4057-45e1-bcb2-17d177232ab0.png`
+  - `/var/folders/qp/3d1vmxms7jqcm8353whb8h_80000gn/T/codex-clipboard-75d31e3a-a923-4e77-917c-4b7b37fdd012.png`
+  - `/var/folders/qp/3d1vmxms7jqcm8353whb8h_80000gn/T/codex-clipboard-71b7d8fa-74b6-4269-82e5-1eacd4aa1373.png`
+  - `/var/folders/qp/3d1vmxms7jqcm8353whb8h_80000gn/T/codex-clipboard-4ed17f72-3707-40fc-8912-ed0d577e43cf.png`
+  - `/var/folders/qp/3d1vmxms7jqcm8353whb8h_80000gn/T/codex-clipboard-383b8f03-7119-4ff2-94cb-99988459067f.png`
+- implementation top: `/tmp/workbench-chat-alignment-final-top-v2.png`
+- implementation bottom: `/tmp/workbench-chat-alignment-final-bottom-v2.png`
+- combined visual comparison: `/tmp/workbench-chat-alignment-comparison-v2.png`
+- viewport: 1280 × 800 CSS px
+- source / implementation pixels: 2560 × 1600 at devicePixelRatio 2
+- state: macOS 浅色主题，隔离 QA 项目，会话含连续用户消息、短代码、短表格、工具活动、九轮长转录、长代码和长表格；聊天侧栏为默认 420px
+- intent normalization: 源图红框只是问题标注，不是产品元素；Desktop 是共享行为与视觉密度基准，Workbench 的 IDE rail、项目状态、会话标题、模型与宿主运行时继续保留自己的组合实现
+
+### Findings
+
+最终对照没有遗留 P0/P1/P2 视觉或交互问题。
+
+- 宽度与边界：聊天面板实测 420px，导航显示时共享内容列为 320px；12 条 assistant 消息、2 个代码块、2 个表格和全部消息外层均精确为 320px。27 个受检外层节点全部落在 `x=840…1160` 的内容列内，页面 `scrollWidth === clientWidth === 1280`。
+- 内容撑满：正文、代码块、表格、工具活动和文件变更卡统一占满内容列。头部隐藏导航后，安全区即时归还，内容、代码和表格宽度由 320px 增至 388px；恢复导航后回到 320px，没有宿主侧补丁。
+- 导航覆盖：导航显示时由共享 Pane 固定预留 5.25rem 安全区，内容右边界 1160px，导航按钮位于 1188…1224px，两者不重叠；隐藏后导航节点数量为 0。
+- 导航稳定性：流式 refresh generation 在运行期间冻结，并且只在 committed layout effect 中提交；高频 revision 不再重挂消息树，StrictMode 或被丢弃的 speculative render 也不会污染下一帧 key。
+- 滚动：跟随按钮初始 `aria-pressed=false`。真实触控板事件落在导航按钮上时，转录 `scrollTop` 从 1200 到 960；随后内容区向下滚动回到 1200。控制台没有 passive-listener / `preventDefault` 告警。
+- 顶部总开关：头部“滚动导航”开关实点完成 `visible → hidden → visible`，同时切换整个 rail 和对应内容安全区；不是只隐藏某个按钮。
+- 短/长内容：短代码高度 79.66px、短表格高度 118px，均为 `data-collapsed=false` 且没有展开按钮；长代码为 436px、长表格为 400px，只有真实溢出时才显示展开控制。
+- 用户消息：两条连续窄侧栏消息的复制操作和时间进入各自第二行；实测两组控件都不相交，下一条消息也没有覆盖上一条元信息。
+- 侧栏拖拽：真实 pointer 拖拽将右栏从 420px 缩到 360px，双击分隔条恢复 420px；上下限、持久化键和 IDE 布局仍由 Workbench 宿主拥有。
+- 停止行为：renderer 先进入 `stopping` 并释放强制跟随，IPC 超时从调用前开始；main 将 execution id、事件与 abort 权限绑定到发起窗口，底层命令按 `TERM → grace → KILL` 收尾。拒绝、超时或未确认终止不会伪报 aborted。
+- 更新下载：进度控件已进入状态栏，最大宽度 260px、高度 18px、黑色胶囊形态；下载、暂停、恢复、取消和已下载重启入口保留，不再用 fixed 全宽浮层遮住状态栏或编辑器。
+- 本地化：Platform 提供 canonical 中英文会话目录与类型化 key 清单；Workbench 只 deep-merge 产品专属命名和少量措辞。实机原始翻译 key 数量为 0。
+- 组件边界：滚动跟随、导航显隐、头部开关、会话布局、消息/代码/表格/工具渲染、canonical 文案、空 action/block ports 和 render-slot factory 只在 Platform 维护；Desktop/Workbench 只组合宿主 store、IPC、标题、项目、模型、窗口与专有 slot。
+- 运行日志：最终冷重载、显隐、导航滚轮、正文滚轮、拖拽和双击复位没有 renderer exception、产品 warning 或 error。只捕获 Electron 开发模式明确标注“打包后不出现”的 CSP 提示，不计为产品回归。
+
+### Comparison history
+
+- Pass 1: `/tmp/velaros-workbench-chat-qa-open.png`。发现 [P1] markdown 阴影 gutter 越界、导航覆盖内容、部分共享 key 未适配，以及流式 revision 可能重挂正文。
+- Fix: 统一 16px 内容 gutter、预留稳定导航安全区、把 canonical 文案与滚动/导航状态迁回 Platform，并冻结运行期 refresh generation。
+- Pass 2: `/tmp/workbench-chat-alignment-final-top.png` 与 `/tmp/workbench-chat-alignment-final-bottom.png`。气泡、短/长内容、导航显隐、拖拽和元信息布局通过；真实导航滚轮暴露 React passive wheel 路径的 `preventDefault` 控制台告警。
+- Fix: 导航保留向上滚动暂停跟随、`stopPropagation` 和 transcript `scrollBy`，移除 React passive 路径的 `preventDefault`；补回归契约。
+- Pass 3: 用户追加“表格和内容宽度撑满”。移除共享 assistant/tool 的 860/920px 内部封顶，让正文、代码、表格、工具活动、截图组和文件变更卡显式占满内容列；导航安全区仍由 Pane 单独负责。
+- Pass 4: 把两张源图与最终 top/bottom capture 放入 `/tmp/workbench-chat-alignment-comparison-v2.png` 同图对照。最终短内容完整、长内容按阈值折叠、内容列撑满、导航无覆盖；滚轮复测无 passive 告警，P1/P2 均关闭。
+
+### Issue checklist
+
+- [x] 气泡、长路径、工具详情不突破聊天侧栏
+- [x] 正文、代码、表格和工具卡占满可用内容列
+- [x] 流式执行期间右侧导航不闪烁、不触发正文 remount
+- [x] 导航命中区域和正文都可以滚动
+- [x] 跟随按钮默认关闭
+- [x] 头部提供整个导航的显示/隐藏开关
+- [x] 短代码和短表格直接完整显示
+- [x] 长代码和长表格只在真实溢出时折叠
+- [x] 连续用户气泡的复制/时间不覆盖
+- [x] 终止按钮进入有界且可验证的停止链
+- [x] 下载进度缩为状态栏小黑条
+- [x] 右侧栏支持拖拽、边界钳制、持久化与双击复位
+- [x] Desktop 与 Workbench 共享聊天行为只维护一份
+- [x] 两端特有标题、会话、项目、模型、窗口与 IPC 通过组合适配
+
+final result: passed
+
 ## Git 日志重设计与统一搜索框补充基准
 
 - Search-field reference: `/var/folders/qp/3d1vmxms7jqcm8353whb8h_80000gn/T/codex-clipboard-b6a4c3d6-bef4-490a-92cb-6553fcfda4f5.png`

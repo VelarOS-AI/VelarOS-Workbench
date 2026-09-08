@@ -158,11 +158,40 @@ function clearPendingRuntime(): Pick<
   }
 }
 
+function beginStandaloneAgentStop<TState extends StandaloneConversationRuntime>(
+  state: TState
+): TState {
+  if (
+    state.status !== 'running'
+    && state.status !== 'awaiting-input'
+    && state.status !== 'awaiting-confirmation'
+  ) return state
+
+  return patchRuntime(state, {
+    ...clearPendingRuntime(),
+    status: 'stopping',
+    teamPhase: null,
+    activeTurn: null,
+    lastError: null,
+  })
+}
+
 function patchRuntime<TState extends StandaloneConversationRuntime>(
   state: TState,
   patch: Partial<StandaloneConversationRuntime>
 ): TState {
-  return { ...state, ...patch }
+  const next = { ...state, ...patch }
+  const nextStatus = patch.status
+  // Abort 已受理后仍可能收到排队中的 phase/turn/等待交互事件；这些进度事件不能把 UI
+  // 从 stopping 拉回 running。只有明确终态才允许结束 stopping。
+  if (
+    state.status === 'stopping'
+    && nextStatus !== 'completed'
+    && nextStatus !== 'aborted'
+    && nextStatus !== 'failed'
+  ) return { ...next, status: 'stopping', teamPhase: null } as TState
+
+  return next
 }
 
 function readStandaloneAgentRuntimeKind(value: unknown): string | null {
@@ -327,6 +356,7 @@ function asRecord(value: unknown): Record<string, unknown> {
 export {
   applyStandaloneAgentRuntimeEvent,
   applyStandaloneCompletedRunResult,
+  beginStandaloneAgentStop,
   hasStandaloneVisibleAssistantReply,
   isStandaloneAgentRuntimeEvent,
   LegacyNoTextResponse,

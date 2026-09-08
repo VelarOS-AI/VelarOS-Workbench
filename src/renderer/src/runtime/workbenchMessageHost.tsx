@@ -8,8 +8,6 @@
 import type { ReactElement } from 'react'
 import { toast, Toaster } from 'sonner'
 
-import { WorkbenchUpdateProgress } from '../components/updates/WorkbenchUpdateProgress'
-
 import {
   makeWorkbenchMessageFingerprint,
   WorkbenchMessageDedupe,
@@ -81,9 +79,6 @@ export const workbenchMessage: WorkbenchMessageApi = {
 
 export function WorkbenchMessageHost(): ReactElement {
   return (
-    <>
-      <WorkbenchUpdateProgress />
-      <Toaster position="bottom-right" closeButton />
-    </>
+    <Toaster position="bottom-right" closeButton />
   )
 }

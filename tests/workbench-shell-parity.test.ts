@@ -268,14 +268,19 @@ void describe('pre-split Workbench shell parity', () => {
   void test('restores the Workbench chat landing and composer controls', () => {
     const app = readSource('src/renderer/src/StandaloneWorkbenchApp.tsx')
     const adapter = readSource('src/renderer/src/runtime/standaloneWorkbenchChatAdapter.tsx')
+    const renderSlots = readSource(
+      'src/renderer/src/runtime/conversation/standaloneWorkbenchConversationRenderSlots.tsx',
+    )
     const styles = readSource('src/renderer/src/styles/04-insight-chat.module.css')
 
     assert.match(app, /ConversationBlockHooksProvider/)
-    assert.match(app, /value=\{standaloneConversationBlockHooks\}/)
+    assert.match(app, /value=\{emptyConversationBlockHooks\}/)
+    assert.match(app, /value=\{emptyConversationActionPort\}/)
     assert.match(app, /ConversationRenderSlotsProvider/)
     assert.match(app, /slots=\{standaloneWorkbenchConversationRenderSlots\}/)
-    assert.match(app, /useMessageActionView:/)
-    assert.match(app, /useAutoTranslateThinkingEnabled:/)
+    assert.match(renderSlots, /createConversationRenderSlots/)
+    assert.match(renderSlots, /runningRuntimeMark:/)
+    assert.doesNotMatch(renderSlots, /capabilityAutoApprovalNotice:/)
     assert.match(adapter, /data-workbench-chat-empty="true"/)
     assert.match(adapter, /workbenchAppIconUrl/)
     assert.match(adapter, /<img/)
@@ -303,6 +308,28 @@ void describe('pre-split Workbench shell parity', () => {
       /\.workbenchChatTopBar \.workbenchChatSessionMenuButton[\s\S]*justify-content:\s*flex-start/
     )
     assert.doesNotMatch(styles, /workbenchChatCurrentFileChip/)
+  })
+
+  void test('keeps update download progress inside the status bar as a compact control', () => {
+    const statusBar = readSource('src/renderer/src/components/chrome/StatusBar.tsx')
+    const messageHost = readSource('src/renderer/src/runtime/workbenchMessageHost.tsx')
+    const progress = readSource(
+      'src/renderer/src/components/updates/WorkbenchUpdateProgress.tsx'
+    )
+    const progressStyles = readSource(
+      'src/renderer/src/components/updates/WorkbenchUpdateProgress.module.css'
+    )
+
+    assert.match(statusBar, /<WorkbenchUpdateProgress \/>/)
+    assert.doesNotMatch(messageHost, /WorkbenchUpdateProgress/)
+    assert.match(progressStyles, /\.host\s*\{[\s\S]*?width:\s*min\(260px, 34vw\)/)
+    assert.match(progressStyles, /\.progressButton\s*\{[\s\S]*?height:\s*18px/)
+    assert.match(progressStyles, /\.progressButton\s*\{[\s\S]*?border-radius:\s*999px/)
+    assert.doesNotMatch(progressStyles, /position:\s*fixed/)
+    assert.match(progress, /velarosWorkbenchUpdate\.pause\(\)/)
+    assert.match(progress, /velarosWorkbenchUpdate\.resume\(\)/)
+    assert.match(progress, /onClick=\{toggle\}/)
+    assert.match(progress, /updateLabel\(state\.phase, percent, targetVersion, t\)/)
   })
 
   void test('separates workspace snapshots, fixed overview, tab scopes, and folder state', () => {

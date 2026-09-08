@@ -7,9 +7,19 @@ import {
   useRef,
   useState,
 } from 'react'
-import { ArchiveIcon, ChatCircleTextIcon, PlusIcon, SpinnerGapIcon } from '@phosphor-icons/react'
+import {
+  ArchiveIcon,
+  ChatCircleTextIcon,
+  PlusIcon,
+  SpinnerGapIcon,
+} from '@phosphor-icons/react'
 
 import { isEmpty, toNullable } from '@velaros-ai/core'
+import {
+  ChatScrollNavigatorVisibilityToggle,
+  createChatScrollNavigatorVisibilityStore,
+  useChatScrollNavigatorHidden,
+} from '@velaros-ai/ui/conversation'
 import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 import { Text } from '@velaros-ai/ui/primitives/display/Text'
@@ -48,6 +58,7 @@ type WorkbenchChatFolderMember = WorkbenchChatSessionMember
 
 const EmptyWorkbenchBrowserElementSelections: readonly WorkbenchBrowserElementSelectionDelivery[] =
   []
+const WorkbenchChatScrollNavigatorVisibility = createChatScrollNavigatorVisibilityStore()
 
 export interface WorkbenchChatPanelProps {
   providerId?: WorkbenchChatProviderId
@@ -250,12 +261,15 @@ export function WorkbenchChatPanel({
   const normalizedProjectRoot = normalizeWorkbenchProjectRoot(projectRoot)
   const { t } = useWorkbenchI18n()
   const chat = useWorkbenchChatProjectRuntime(normalizedProjectRoot, providerId)
-  const { currentSession, conversationVersion } = chat
+  const { currentSession } = chat
   const { activeMemberSessionId, activeSessionId, deletingSessionId, diskSessionHydrated, groups } =
     chat.sessionList
   const { addProjectSession, archiveSession, selectSession, startProjectChat } = chat.actions
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [sessionMenuOpen, setSessionMenuOpen] = useState(false)
+  const scrollNavigatorHidden = useChatScrollNavigatorHidden(
+    WorkbenchChatScrollNavigatorVisibility
+  )
   const pendingStartFolderIdRef = useRef<Nullable<string>>(null)
   const restoredProjectRootRef = useRef<Nullable<string>>(null)
   const [pendingStartFolderId, setPendingStartFolderId] = useState<Nullable<string>>(null)
@@ -420,6 +434,15 @@ export function WorkbenchChatPanel({
           onOpenChange={setSessionMenuOpen}
           onSelectMember={selectWorkbenchChatSessionMember}
         />
+        {currentSession.messages.length > 0 && (
+          <ChatScrollNavigatorVisibilityToggle
+            hoverBackground={false}
+            className={styles.workbenchChatIconButton}
+            hidden={scrollNavigatorHidden}
+            label={t('chat.toggleScrollNavigator')}
+            onHiddenChange={WorkbenchChatScrollNavigatorVisibility.setHidden}
+          />
+        )}
         <IconButton
           variant="ghost"
           size="icon-sm"
@@ -454,7 +477,8 @@ export function WorkbenchChatPanel({
         {ready ? (
           <WorkbenchChatSessionSurface
             providerId={providerId}
-            conversationRefreshKey={conversationVersion}
+            conversationRefreshKey={currentSession.id}
+            scrollNavigatorHidden={scrollNavigatorHidden}
             projectRoot={normalizedProjectRoot}
             currentFilePath={currentFilePath}
             pendingBrowserElementSelections={pendingBrowserElementSelections}

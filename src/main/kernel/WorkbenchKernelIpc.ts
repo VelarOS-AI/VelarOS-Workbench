@@ -2,9 +2,23 @@ import { createHash } from 'node:crypto'
 import { rename, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
-import { BrowserWindow, ipcMain } from 'electron'
+import {
+  BrowserWindow,
+  ipcMain,
+  type IpcMainInvokeEvent,
+  type WebContents,
+} from 'electron'
 
-import { AgentCapabilityExecutionEventType } from '@velaros-ai/agent/protocol/agent-capability'
+import { ChatRuntimeEvents } from '@velaros-ai/agent/protocol'
+import {
+  type AgentCapabilityExecutionDescriptorV1,
+  type AgentCapabilityExecutionEventEnvelopeV1,
+  AgentCapabilityExecutionEventType,
+  AgentCapabilityProtocolVersion,
+  createAgentCapabilityExecutionEventEnvelopeV1,
+  parseAgentCapabilityExecuteEnvelopeV1,
+} from '@velaros-ai/agent/protocol/agent-capability'
+import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
 import {
   type ScopeRef,
   UnknownKernelCapabilityOperationError,
@@ -37,11 +51,43 @@ export type {
   WorkbenchKernelCapabilityRoutes,
 } from './WorkbenchKernelProtocol'
 
+const DEFAULT_AGENT_ABORT_SETTLEMENT_GRACE_MS = 1_500
+const MAX_CLOSED_AGENT_EXECUTION_IDS = 128
+
+interface WorkbenchKernelIpcOptions {
+  /** Abort 已受理、但底层执行没有自行收尾时，Host 最多等待多久。 */
+  abortSettlementGraceMs?: number
+}
+
+interface ActiveAgentExecution {
+  readonly controller: AbortController
+  readonly descriptor: AgentCapabilityExecutionDescriptorV1
+  readonly generation: number
+  readonly ownerWebContentsId: number
+  readonly controlSettlement: Promise<AgentControlSettlement>
+  readonly settleFromControl: (settlement: AgentControlSettlement) => void
+  abortSettlementLease: TimerLease | null
+  abortRequested: boolean
+  terminalStatus: AgentControlSettlement['output']['status'] | null
+}
+
+interface AgentControlSettlement {
+  readonly type: 'control'
+  readonly output: { readonly status: 'completed' | 'aborted' | 'error' }
+}
+
+interface AgentExecutionOwnerLifecycle {
+  readonly sender: WebContents
+  readonly handleDestroyed: () => void
+}
+
+type SyntheticAgentTerminal = 'stop-settlement-timeout' | null
+
 /**
  * 进程内 Kernel 的 renderer 面。
  *
  * 与 daemon 时代的区别只有传输层：路由表仍由组合根注入（renderer 永远不给裸 capabilityId），
- * 状态仍是可订阅投影，Agent 执行事件仍走 `velaros.agent.execution` 广播。没有连接/重试语义——
+ * 状态仍是可订阅投影，Agent 执行事件仍走 `velaros.agent.execution` 并只回送发起窗口。没有连接/重试语义——
  * 进程内 host 起即在，起不来就是 degraded，重试等于重启应用。
  */
 export function registerWorkbenchKernelIpc(
@@ -53,9 +99,82 @@ export function registerWorkbenchKernelIpc(
     sessionId: string,
     approved: boolean,
     rejectionMessage?: string
-  ) => boolean
+  ) => boolean,
+  options: WorkbenchKernelIpcOptions = {}
 ): () => void {
-  const activeAgentExecutions = new Map<string, AbortController>()
+  const timers = new TimerScope({ name: 'WorkbenchKernelIpc' })
+  const abortSettlementGraceMs = Math.max(
+    0,
+    options.abortSettlementGraceMs ?? DEFAULT_AGENT_ABORT_SETTLEMENT_GRACE_MS
+  )
+  const activeAgentExecutions = new Map<string, ActiveAgentExecution>()
+  const ownerLifecycles = new Map<number, AgentExecutionOwnerLifecycle>()
+  const closedAgentExecutionIds = new Map<string, number>()
+  let executionGeneration = 0
+
+  const rememberClosedExecution = (execution: ActiveAgentExecution): void => {
+    const executionId = execution.descriptor.id
+    closedAgentExecutionIds.delete(executionId)
+    closedAgentExecutionIds.set(executionId, execution.generation)
+    while (closedAgentExecutionIds.size > MAX_CLOSED_AGENT_EXECUTION_IDS) {
+      const oldest = closedAgentExecutionIds.keys().next().value
+      if (typeof oldest !== 'string') break
+      closedAgentExecutionIds.delete(oldest)
+    }
+  }
+
+  const settleExecutionFromControl = (
+    execution: ActiveAgentExecution,
+    status: AgentControlSettlement['output']['status'],
+    syntheticTerminal: SyntheticAgentTerminal
+  ): void => {
+    if (activeAgentExecutions.get(execution.descriptor.id) !== execution) return
+    activeAgentExecutions.delete(execution.descriptor.id)
+    execution.abortSettlementLease?.cancel()
+    execution.abortSettlementLease = null
+    rememberClosedExecution(execution)
+    if (syntheticTerminal) {
+      sendToWorkbenchWebContents(
+        execution.ownerWebContentsId,
+        WorkbenchKernelChannels.agentExecution,
+        createAgentCapabilityExecutionEventEnvelopeV1(
+          execution.descriptor,
+          'agent',
+          {
+            type: 'runtime',
+            payload: ChatRuntimeEvents.error(
+              'Stop was requested, but the runtime did not confirm termination.',
+              'AGENT_STOP_SETTLEMENT_TIMEOUT',
+              { executionId: execution.descriptor.id }
+            ),
+          }
+        )
+      )
+    }
+    execution.settleFromControl({ type: 'control', output: { status } })
+  }
+
+  const closeExecutionsForOwner = (ownerWebContentsId: number): void => {
+    ownerLifecycles.delete(ownerWebContentsId)
+    for (const execution of [...activeAgentExecutions.values()]) {
+      if (execution.ownerWebContentsId !== ownerWebContentsId) continue
+      if (execution.terminalStatus) {
+        settleExecutionFromControl(execution, execution.terminalStatus, null)
+        continue
+      }
+      execution.controller.abort('Workbench renderer was closed.')
+      settleExecutionFromControl(execution, 'aborted', null)
+    }
+  }
+
+  const installOwnerLifecycle = (sender: WebContents): void => {
+    if (ownerLifecycles.has(sender.id)) return
+    const ownerWebContentsId = sender.id
+    const handleDestroyed = (): void => closeExecutionsForOwner(ownerWebContentsId)
+    ownerLifecycles.set(ownerWebContentsId, { sender, handleDestroyed })
+    sender.once('destroyed', handleDestroyed)
+  }
+
   ipcMain.handle(WorkbenchKernelChannels.getStatus, () => projectStatus(runtime))
   ipcMain.handle(
     WorkbenchKernelChannels.backupChatHistory,
@@ -64,7 +183,7 @@ export function registerWorkbenchKernelIpc(
   )
   ipcMain.handle(
     WorkbenchKernelChannels.invoke,
-    async (_event, request: unknown): Promise<WorkbenchKernelInvokeResult> => {
+    async (event: IpcMainInvokeEvent, request: unknown): Promise<WorkbenchKernelInvokeResult> => {
       const parsed = parseWorkbenchKernelInvokeRequest(request, routes)
       if (!parsed) return {
         ok: false,
@@ -76,43 +195,107 @@ export function registerWorkbenchKernelIpc(
         },
       }
       const route = routes[parsed.route]
-      const executionId = parsed.route === 'agent.execute'
-        ? readAgentExecutionId(parsed.input)
-        : null
-      const controller = new AbortController()
-      if (executionId) activeAgentExecutions.set(executionId, controller)
-      try {
-        return {
-          ok: true,
-          output: await runtime.invokeCapability({
-            capabilityId: route.capabilityId,
-            operation: route.operation,
-            scope: toKernelScope(parsed.scope),
-            input: parsed.input,
-            signal: controller.signal,
-            permissionContext: {
-              details: {
-                productId: 'velaros.workbench',
-                route: parsed.route,
-              },
+      let executionDescriptor: AgentCapabilityExecutionDescriptorV1 | null = null
+      if (parsed.route === 'agent.execute') {
+        try {
+          executionDescriptor = parseAgentCapabilityExecuteEnvelopeV1(parsed.input).execution
+        } catch {
+          return {
+            ok: false,
+            error: {
+              code: 'KERNEL_REQUEST_INVALID',
+              message: 'Workbench Agent execution descriptor is invalid.',
+              retryable: false,
+              details: null,
             },
-          }),
+          }
         }
-      } catch (error) {
-        return { ok: false, error: toInvocationError(error) }
+      }
+      if (
+        executionDescriptor
+        && (
+          activeAgentExecutions.has(executionDescriptor.id)
+          || closedAgentExecutionIds.has(executionDescriptor.id)
+        )
+      ) return {
+        ok: false,
+        error: {
+          code: 'AGENT_EXECUTION_ID_CONFLICT',
+          message: 'This Agent execution id is active or was recently closed.',
+          retryable: false,
+          details: { executionId: executionDescriptor.id },
+        },
+      }
+      const controller = new AbortController()
+      const activeExecution = executionDescriptor
+        ? createActiveAgentExecution(
+            controller,
+            executionDescriptor,
+            ++executionGeneration,
+            event.sender.id
+          )
+        : null
+      if (activeExecution) {
+        activeAgentExecutions.set(activeExecution.descriptor.id, activeExecution)
+        installOwnerLifecycle(event.sender)
+      }
+      const invocation = Promise.resolve()
+        .then(() => runtime.invokeCapability({
+          capabilityId: route.capabilityId,
+          operation: route.operation,
+          scope: toKernelScope(parsed.scope),
+          input: parsed.input,
+          signal: controller.signal,
+          permissionContext: {
+            details: {
+              productId: 'velaros.workbench',
+              route: parsed.route,
+            },
+          },
+        }))
+        .then(
+          (output) => ({ type: 'output' as const, output }),
+          (error: unknown) => ({ type: 'error' as const, error })
+        )
+      try {
+        const settlement = activeExecution
+          ? await Promise.race([invocation, activeExecution.controlSettlement])
+          : await invocation
+        if (settlement.type === 'error') return { ok: false, error: toInvocationError(settlement.error) }
+        return { ok: true, output: settlement.output }
       } finally {
-        if (executionId && activeAgentExecutions.get(executionId) === controller) {
-          activeAgentExecutions.delete(executionId)
+        if (
+          activeExecution
+          && activeAgentExecutions.get(activeExecution.descriptor.id) === activeExecution
+        ) {
+          activeAgentExecutions.delete(activeExecution.descriptor.id)
+          activeExecution.abortSettlementLease?.cancel()
+          activeExecution.abortSettlementLease = null
+          rememberClosedExecution(activeExecution)
         }
       }
     }
   )
-  ipcMain.handle(WorkbenchKernelChannels.abortAgentExecution, (_event, request: unknown) => {
+  ipcMain.handle(WorkbenchKernelChannels.abortAgentExecution, (event: IpcMainInvokeEvent, request: unknown) => {
     const executionId = readAbortExecutionId(request)
     if (!executionId) return false
-    const controller = activeAgentExecutions.get(executionId)
-    if (!controller) return false
-    controller.abort('Stopped by the user.')
+    const execution = activeAgentExecutions.get(executionId)
+    if (!execution || execution.ownerWebContentsId !== event.sender.id) return false
+    if (execution.terminalStatus) {
+      settleExecutionFromControl(execution, execution.terminalStatus, null)
+      return false
+    }
+    if (!execution.abortRequested) {
+      execution.abortRequested = true
+      execution.controller.abort('Stopped by the user.')
+      // controller 是执行级取消权威，并已贯穿内置 stack 与外部 engine。全局 dispose/close 会误杀
+      // 其他窗口的运行；若提供方忽略 signal，只能隔离其晚到事件并报告未确认，不能声称已终止。
+      execution.abortSettlementLease = timers.after(
+        abortSettlementGraceMs,
+        () => settleExecutionFromControl(execution, 'error', 'stop-settlement-timeout'),
+        { label: 'agent.abort-settlement' }
+      )
+    }
     return true
   })
   ipcMain.handle(WorkbenchKernelChannels.resolveAgentInput, (_event, request: unknown) => {
@@ -129,12 +312,44 @@ export function registerWorkbenchKernelIpc(
   const unsubscribeAgentExecution = runtime.subscribeEvent(
     AgentCapabilityExecutionEventType,
     (event) => {
-      broadcast(WorkbenchKernelChannels.agentExecution, event.payload)
+      const envelope = readAgentExecutionEventEnvelope(event.payload)
+      if (!envelope) return
+      if (closedAgentExecutionIds.has(envelope.executionId)) return
+      const activeExecution = activeAgentExecutions.get(envelope.executionId)
+      if (!activeExecution) return
+      const identity = agentExecutionEventIdentity(envelope)
+      if (
+        agentExecutionIdentity(activeExecution.descriptor) !== identity
+      ) return
+
+      sendToWorkbenchWebContents(
+        activeExecution.ownerWebContentsId,
+        WorkbenchKernelChannels.agentExecution,
+        envelope
+      )
+      const terminalStatus = readAgentTerminalStatus(envelope)
+      if (terminalStatus) activeExecution.terminalStatus = terminalStatus
+      if (activeExecution.abortRequested && terminalStatus) {
+        // 终态已经到达就立刻回收 IPC；底层 Promise 即使不 settle，也不能继续占住 UI。
+        settleExecutionFromControl(activeExecution, terminalStatus, null)
+      }
     }
   )
 
   return () => {
     unsubscribeAgentExecution()
+    for (const lifecycle of ownerLifecycles.values()) {
+      lifecycle.sender.removeListener('destroyed', lifecycle.handleDestroyed)
+    }
+    ownerLifecycles.clear()
+    for (const execution of activeAgentExecutions.values()) {
+      execution.controller.abort('Workbench Kernel IPC disposed.')
+      execution.abortSettlementLease?.cancel()
+      execution.settleFromControl({ type: 'control', output: { status: 'aborted' } })
+    }
+    activeAgentExecutions.clear()
+    closedAgentExecutionIds.clear()
+    timers.dispose()
     ipcMain.removeHandler(WorkbenchKernelChannels.getStatus)
     ipcMain.removeHandler(WorkbenchKernelChannels.invoke)
     ipcMain.removeHandler(WorkbenchKernelChannels.abortAgentExecution)
@@ -144,12 +359,85 @@ export function registerWorkbenchKernelIpc(
   }
 }
 
-function readAgentExecutionId(input: unknown): string | null {
-  if (!input || typeof input !== 'object' || Array.isArray(input)) return null
-  const execution = (input as { execution?: unknown }).execution
-  if (!execution || typeof execution !== 'object' || Array.isArray(execution)) return null
-  const id = (execution as { id?: unknown }).id
-  return typeof id === 'string' && id.trim() ? id : null
+function createActiveAgentExecution(
+  controller: AbortController,
+  descriptor: AgentCapabilityExecutionDescriptorV1,
+  generation: number,
+  ownerWebContentsId: number
+): ActiveAgentExecution {
+  let settleFromControl!: (settlement: AgentControlSettlement) => void
+  const controlSettlement = new Promise<AgentControlSettlement>((resolve) => {
+    settleFromControl = resolve
+  })
+  return {
+    controller,
+    descriptor,
+    generation,
+    ownerWebContentsId,
+    controlSettlement,
+    settleFromControl,
+    abortSettlementLease: null,
+    abortRequested: false,
+    terminalStatus: null,
+  }
+}
+
+function readAgentExecutionEventEnvelope(
+  value: unknown
+): AgentCapabilityExecutionEventEnvelopeV1 | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const envelope = value as Record<string, unknown>
+  if (
+    envelope.protocolVersion !== AgentCapabilityProtocolVersion
+    || typeof envelope.executionId !== 'string'
+    || typeof envelope.sourceProductId !== 'string'
+    || typeof envelope.sourceSessionId !== 'string'
+    || (envelope.sessionCorrelationId !== undefined
+      && typeof envelope.sessionCorrelationId !== 'string')
+    || (envelope.channel !== 'agent'
+      && envelope.channel !== 'state'
+      && envelope.channel !== 'debug')
+  ) return null
+  return value as AgentCapabilityExecutionEventEnvelopeV1
+}
+
+function agentExecutionIdentity(descriptor: AgentCapabilityExecutionDescriptorV1): string {
+  return [
+    descriptor.id,
+    descriptor.source.productId,
+    descriptor.source.sessionId,
+    descriptor.source.correlationId ?? '',
+  ].join('\0')
+}
+
+function agentExecutionEventIdentity(envelope: AgentCapabilityExecutionEventEnvelopeV1): string {
+  return [
+    envelope.executionId,
+    envelope.sourceProductId,
+    envelope.sourceSessionId,
+    envelope.sessionCorrelationId ?? '',
+  ].join('\0')
+}
+
+function readAgentTerminalStatus(
+  envelope: AgentCapabilityExecutionEventEnvelopeV1
+): AgentControlSettlement['output']['status'] | null {
+  if (envelope.channel !== 'agent') return null
+  const event = asUnknownRecord(envelope.payload)
+  const runtime = event.type === 'runtime' ? asUnknownRecord(event.payload) : event
+  return runtime.kind === 'done'
+    ? 'completed'
+    : runtime.kind === 'aborted'
+      ? 'aborted'
+      : runtime.kind === 'error'
+        ? 'error'
+        : null
+}
+
+function asUnknownRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {}
 }
 
 function readAbortExecutionId(request: unknown): string | null {
@@ -197,6 +485,17 @@ function broadcast(channel: string, payload: unknown): void {
   for (const window of BrowserWindow.getAllWindows()) {
     if (!window.isDestroyed()) window.webContents.send(channel, payload)
   }
+}
+
+function sendToWorkbenchWebContents(
+  webContentsId: number,
+  channel: string,
+  payload: unknown
+): void {
+  const target = BrowserWindow.getAllWindows().find((window) =>
+    !window.isDestroyed() && window.webContents.id === webContentsId
+  )
+  target?.webContents.send(channel, payload)
 }
 
 function projectStatus(runtime: Kernel): WorkbenchKernelStatus {

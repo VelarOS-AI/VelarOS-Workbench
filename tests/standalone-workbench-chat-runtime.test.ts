@@ -7,6 +7,7 @@ import type { ChatMessage } from '@shared/contracts'
 import {
   applyStandaloneAgentRuntimeEvent,
   applyStandaloneCompletedRunResult,
+  beginStandaloneAgentStop,
   hasStandaloneVisibleAssistantReply,
   LegacyNoTextResponse,
   readStandaloneFinalAgentError,
@@ -17,6 +18,7 @@ import {
   shouldBlockStandaloneRunSubmission,
   type StandaloneConversationRuntime,
 } from '../src/renderer/src/runtime/standaloneWorkbenchChatRuntime'
+import { awaitStandaloneAgentStopSettlement } from '../src/renderer/src/runtime/standaloneWorkbenchStopSettlement'
 
 void describe('standalone Workbench conversation runtime', () => {
   void test('projects progress, turn, and retry events using Desktop runtime semantics', () => {
@@ -138,6 +140,29 @@ void describe('standalone Workbench conversation runtime', () => {
     })
   })
 
+  void test('keeps stopping authoritative until an abort terminal event settles it', () => {
+    const running = { ...createRuntime(), status: 'running' as const, teamPhase: 'executing' as const }
+    const stopping = beginStandaloneAgentStop(running)
+    assert.equal(stopping.status, 'stopping')
+    assert.equal(stopping.teamPhase, null)
+
+    const lateProgress = applyStandaloneAgentRuntimeEvent(stopping, {
+      kind: 'phase',
+      teamPhase: 'requesting-model',
+    })
+    assert.equal(lateProgress.status, 'stopping')
+    assert.equal(lateProgress.teamPhase, null)
+    assert.equal(shouldBlockStandaloneRunSubmission(lateProgress.status, true, false), true)
+
+    const aborted = applyStandaloneAgentRuntimeEvent(
+      lateProgress,
+      { kind: 'aborted', message: 'Stopped by the user.' },
+      250
+    )
+    assert.equal(aborted.status, 'aborted')
+    assert.equal(aborted.lastRunFinishedAt, 250)
+  })
+
   void test('treats a completed run without visible assistant text as a localized failure', () => {
     const user = message('user', [{ type: 'text', text: 'Question' }])
     const noText = applyStandaloneCompletedRunResult(
@@ -175,6 +200,40 @@ void describe('standalone Workbench conversation runtime', () => {
   void test('blocks a new submit while a completed event is awaiting its invoke result', () => {
     assert.equal(shouldBlockStandaloneRunSubmission('completed', true, false), true)
     assert.equal(shouldBlockStandaloneRunSubmission('completed', false, false), false)
+  })
+
+  void test('bounds stop settlement even when the abort IPC never resolves', async () => {
+    const terminalSettlement = new Promise<never>(() => undefined)
+    const settlement = await awaitStandaloneAgentStopSettlement({
+      requestAbort: () => new Promise<boolean>(() => undefined),
+      terminalSettlement,
+      readTerminalKind: () => null,
+      timeoutMs: 5,
+    })
+
+    assert.deepEqual(settlement, { kind: 'timeout' })
+  })
+
+  void test('waits through a false abort response so a delayed done terminal can win', async () => {
+    let terminalKind: 'done' | null = null
+    let settleTerminal!: (kind: 'done') => void
+    const terminalSettlement = new Promise<'done'>((resolve) => {
+      settleTerminal = resolve
+    })
+    const settlement = await awaitStandaloneAgentStopSettlement({
+      requestAbort: async () => {
+        setTimeout(() => {
+          terminalKind = 'done'
+          settleTerminal('done')
+        }, 5)
+        return false
+      },
+      terminalSettlement,
+      readTerminalKind: () => terminalKind,
+      timeoutMs: 100,
+    })
+
+    assert.deepEqual(settlement, { kind: 'terminal', terminalKind: 'done' })
   })
 
   void test('removes legacy pseudo replies, error-tone text, and empty model messages', () => {

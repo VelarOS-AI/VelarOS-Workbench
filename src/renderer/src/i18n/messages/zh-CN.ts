@@ -1,22 +1,15 @@
-import { workbenchConversationZhCNMessages } from './conversation'
+import { conversationZhCNMessages, mergeConversationMessages } from '@velaros-ai/ui/conversation'
 
 /**
  * 独立 Workbench 应用 zh-CN 语言包。
  *
- * `workbench` 节整体考古自 desktop i18n；共享会话组件所需目录由版本锁定的
- * `conversation.ts` 统一合入，避免 UI 包升级后泄漏原始键名。
+ * 共享会话文案来自 Platform；本文件只保留 Workbench 专属命名空间与有意的产品文案覆盖。
  */
-export const workbenchAppZhCNMessages = {
-  ...workbenchConversationZhCNMessages,
+export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZhCNMessages, {
   common: {
-    ...workbenchConversationZhCNMessages.common,
-    cancel: '取消',
     chinese: '简体中文',
     english: 'English',
-    expand: '展开',
     loading: '正在加载',
-    open: '打开',
-    remove: '移除',
     unknown: '未知',
   },
   sidebar: {
@@ -27,68 +20,14 @@ export const workbenchAppZhCNMessages = {
     archivePendingAction: '归档中…',
   },
   status: {
-    ...workbenchConversationZhCNMessages.status,
-    aborted: '已中止',
     completed: '已完成',
     failed: '执行失败',
     runAbortedDescription: '本次执行已中止。',
     seeErrorInContent: '请查看会话中的错误详情。',
-    totalTurns: '共 {count} 轮',
-    turn: '第 {count} 轮',
   },
   chat: {
-    ...workbenchConversationZhCNMessages.chat,
     fileChangeOpenErrorTitle: '打开文件失败',
-    messagesRegionAriaLabel: '消息',
-    composerRegionAriaLabel: '消息输入',
-    placeholder: '输入任务…',
     running: '运行中…',
-    sendMessage: '发送消息',
-    sendingMessage: '正在提交…',
-    stopStreaming: '停止生成',
-    selectModel: '选择模型',
-    copyAnswer: '复制回答',
-    thinkingProcess: '思考过程',
-    thinkingTranslate: '翻译',
-    thinkingShowOriginal: '显示原文',
-    thinkingShowTranslation: '显示译文',
-    thinkingTranslating: '翻译中…',
-    thinkingTranslateFailed: '翻译失败',
-    attachFile: '添加文件',
-    composerAddMenu: '添加文件和能力',
-    composerAddFiles: '添加照片和文件',
-    composerPlanMode: '计划模式',
-    composerPlanModeHint: '开启后模型会维护可见计划，用于拆分步骤、同步进度和标记完成状态。',
-    composerGoalMode: '目标模式',
-    composerGoalModeHint:
-      '开启后本次会话不会因时间或步骤上限提前停止；模型会持续推进，直到目标完成、你手动停止或出现明确阻塞。',
-    composerModelSection: '模型',
-    composerRunProfile_auto: '自动',
-    composerThinkingVisibility: '思考过程',
-    composerLimitTitle: '消息内容过长',
-    composerInputLimitReached: '已达到消息上限（最多 {max} 个字符）。',
-    composerInputLimitCounter: '{count}/{max} 个字符',
-    composerInputTooLong: '当前消息有 {count} 个字符，最多允许 {max} 个；请缩短后再发送。',
-    composerImageTooLarge: '“{name}” 大小为 {size}，单张图片最多允许 {max}。',
-    composerImagesTooLarge: '附加图片合计 {size}，最多允许 {max}。',
-    composerRequestTooLong: '本次消息会向模型请求追加 {count} 个字符，最多允许 {max} 个。',
-    dropFilesHere: '将文件拖到这里',
-    dropFilesHint: '支持图片、文档和代码文件',
-    openImagePreview: '打开图片预览',
-    removeFile: '移除文件',
-    voiceInputStart: '开始语音输入',
-    voiceInputStop: '停止语音输入',
-    voiceInputProcessing: '正在进行本地语音识别…',
-    voiceInputUnsupported: '当前运行环境不支持语音输入',
-    voiceInputError: '语音输入失败，请检查麦克风权限。',
-    voiceInputPermissionError: '麦克风权限被阻止，请允许麦克风权限后重试。',
-    voiceInputMicrophoneUnavailable: '未找到可用麦克风，请检查音频输入设备。',
-    voiceInputNetworkError: '语音识别服务暂时不可用，请检查网络后重试。',
-    voiceInputOpenMicrophoneSettings: '打开麦克风设置',
-    scrollToTop: '跳到顶部',
-    scrollToPreviousSection: '上一节',
-    scrollToNextSection: '下一节',
-    scrollToBottom: '跳到底部',
   },
   workbench: {
     title: '工作台',
@@ -781,6 +720,7 @@ export const workbenchAppZhCNMessages = {
     chatManagedModelAccessFailed: '无法刷新 Cloud 模型授权：{error}',
     chatNoTextResponse: '本次运行没有返回可显示的回复，请重试。',
     chatExecutionFailed: 'Agent 执行失败，请重试或查看诊断信息。',
+    chatStopFailed: '无法确认当前执行已经停止，请重试。',
     chatEngineLoadingTitle: '正在连接 {engine}',
     chatEngineLoadingDescription: '模型与登录状态还在读取，请稍候再发送。',
     chatEngineUnavailableTitle: '{engine} 不可用',
@@ -991,4 +931,4 @@ export const workbenchAppZhCNMessages = {
     settingsResetKeymap: '重置快捷键',
     settingsReset: '重置',
   },
-} as const
+})

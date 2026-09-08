@@ -221,6 +221,11 @@ class WorkbenchAgentCapabilityRuntime implements AgentCapabilityRuntime {
       ensureTerminalEvent(outcome)
       return result
     } catch (error) {
+      if (context.signal.aborted) {
+        outcome = 'aborted'
+        ensureTerminalEvent('aborted')
+        return { status: 'aborted' }
+      }
       outcome = 'error'
       ensureTerminalEvent('error', error)
       throw error

@@ -2,7 +2,6 @@ import {
   type ReactElement,
   useEffect,
   useMemo,
-  useRef,
   useState,
   useSyncExternalStore,
 } from 'react'
@@ -11,6 +10,7 @@ import type {
   WorkbenchChatCompositionAdapter,
   WorkbenchChatProjectRuntime,
   WorkbenchChatSessionSnapshot,
+  WorkbenchChatSessionSurfaceProps,
 } from '@renderer/composition'
 import { useWorkbenchI18n } from '@renderer/i18n'
 
@@ -20,6 +20,7 @@ import {
   ChatConversationPane,
   ChatThinkingVisibilityProvider,
   type ConversationView,
+  useScrollToBottom,
 } from '@velaros-ai/ui/conversation'
 import {
   type ChatComposerControl,
@@ -36,6 +37,7 @@ import styles from '../styles/workbenchPageStyles'
 import {
   applyStandaloneAgentRuntimeEvent,
   applyStandaloneCompletedRunResult,
+  beginStandaloneAgentStop,
   hasStandaloneVisibleAssistantReply,
   isStandaloneAgentRuntimeEvent,
   readStandaloneAgentTerminalKind,
@@ -60,6 +62,7 @@ import {
   selectStandaloneWorkbenchModelProvider,
   useStandaloneWorkbenchModelConfig,
 } from './standaloneWorkbenchModelConfig'
+import { awaitStandaloneAgentStopSettlement } from './standaloneWorkbenchStopSettlement'
 import { resolveWorkbenchClipboardFilePath } from './workbenchClipboardFile'
 import { workbenchMessage } from './workbenchMessageHost'
 
@@ -91,6 +94,9 @@ interface ActiveAgentExecution {
   readonly sessionId: string
   readonly projectRoot: string
   readonly providerId: WorkbenchChatProviderId
+  readonly terminalSettlement: Promise<StandaloneAgentTerminalKind>
+  terminalKind: StandaloneAgentTerminalKind | null
+  readonly settleTerminal: (kind: StandaloneAgentTerminalKind) => void
 }
 
 const states = new Map<string, StandaloneChatState>()
@@ -100,11 +106,52 @@ const listeners = new Set<() => void>()
 const activeAgentExecutions = new Map<string, ActiveAgentExecution>()
 const engineCatalogCache = new Map<string, WorkbenchAgentEngineModelCatalog>()
 const engineCatalogRequests = new Map<string, Promise<WorkbenchAgentEngineModelCatalog>>()
+const WorkbenchAgentStopSettlementTimeoutMs = 2_250
 let idSequence = 0
 
 function nextId(prefix: string): string {
   idSequence += 1
   return `${prefix}-${Date.now().toString(36)}-${idSequence.toString(36)}`
+}
+
+function createActiveAgentExecution(
+  input: Omit<
+    ActiveAgentExecution,
+    'settleTerminal' | 'terminalKind' | 'terminalSettlement'
+  >
+): ActiveAgentExecution {
+  let settleTerminalPromise!: (kind: StandaloneAgentTerminalKind) => void
+  const terminalSettlement = new Promise<StandaloneAgentTerminalKind>((resolve) => {
+    settleTerminalPromise = resolve
+  })
+  const execution: ActiveAgentExecution = {
+    ...input,
+    terminalKind: null,
+    terminalSettlement,
+    settleTerminal: (kind) => {
+      if (execution.terminalKind) return
+      execution.terminalKind = kind
+      settleTerminalPromise(kind)
+    },
+  }
+  return execution
+}
+
+function settleActiveExecutionFromControlFailure(
+  execution: ActiveAgentExecution,
+  failure: unknown,
+  fallbackMessage: string
+): void {
+  if (activeAgentExecutions.get(execution.executionId) !== execution) return
+  activeAgentExecutions.delete(execution.executionId)
+  execution.settleTerminal('error')
+  withStateUpdateTarget(execution.projectRoot, execution.providerId, execution.sessionId, () => {
+    finishWithError(
+      execution.projectRoot,
+      execution.providerId,
+      failure instanceof Error ? failure.message : fallbackMessage
+    )
+  })
 }
 
 function resolveCurrentFileLabel(path: string): string {
@@ -450,11 +497,9 @@ function StandaloneWorkbenchChatSessionSurface({
   providerId,
   projectRoot,
   currentFilePath,
-}: {
-  providerId: WorkbenchChatProviderId
-  projectRoot: string
-  currentFilePath: Nullable<string>
-}): ReactElement {
+  conversationRefreshKey,
+  scrollNavigatorHidden = false,
+}: WorkbenchChatSessionSurfaceProps): ReactElement {
   const chat = useStandaloneChatState(projectRoot, providerId)
   const hasPendingAgentExecution = !!findActiveExecution(
     projectRoot,
@@ -476,10 +521,18 @@ function StandaloneWorkbenchChatSessionSurface({
     useState<Nullable<string>>(currentFilePath)
   const [goalMode, setGoalMode] = useState(false)
   const [planMode, setPlanMode] = useState(false)
-  const [followLocked, setFollowLocked] = useState(true)
   const [showThinkingProcess, setShowThinkingProcess] = useState(true)
   const [accountSignInPending, setAccountSignInPending] = useState(false)
-  const scrollRef = useRef<HTMLDivElement>(null)
+  const lastOutboundMessage = chat.messages.findLast((message) => message.role === 'user')
+  const autoScrollResetKey = [
+    chat.sessionId,
+    lastOutboundMessage?.id ?? '',
+    lastOutboundMessage?.timestamp ?? '',
+  ].join(':')
+  const { followLocked, scrollRef, setFollowLocked } = useScrollToBottom<HTMLDivElement>(
+    chat.revision,
+    autoScrollResetKey
+  )
 
   useEffect(() => {
     setIncludedCurrentFilePath(currentFilePath)
@@ -539,8 +592,11 @@ function StandaloneWorkbenchChatSessionSurface({
             activeExecution.providerId,
             envelope
           )
-          if (terminalKind && terminalKind !== 'done') {
-            activeAgentExecutions.delete(activeExecution.executionId)
+          if (terminalKind) {
+            activeExecution.settleTerminal(terminalKind)
+            if (terminalKind !== 'done') {
+              activeAgentExecutions.delete(activeExecution.executionId)
+            }
           }
         }
       )
@@ -549,9 +605,37 @@ function StandaloneWorkbenchChatSessionSurface({
   async function stop(): Promise<void> {
     const activeExecution = findActiveExecution(projectRoot, providerId, chat.sessionId)
     if (!activeExecution) return
-    await window.velarosWorkbenchKernel.abortAgentExecution({
-      executionId: activeExecution.executionId,
+
+    // 先在 renderer 收敛到 stopping，阻止晚到的 phase/token 把按钮重新变回运行态；
+    // 同时解除用户可能显式开启的强制跟随，让停止期间也能自由查看已有结果。
+    setFollowLocked(false)
+    withStateUpdateTarget(projectRoot, providerId, activeExecution.sessionId, () => {
+      updateState(projectRoot, providerId, (state) => ({
+        ...beginStandaloneAgentStop(state),
+        revision: state.revision + 1,
+      }))
     })
+
+    const settlement = await awaitStandaloneAgentStopSettlement({
+      // 协调器先启动 timeout，再进入此 IPC；preload/main 永不返回也能有界释放 UI。
+      requestAbort: () => window.velarosWorkbenchKernel.abortAgentExecution({
+        executionId: activeExecution.executionId,
+      }),
+      terminalSettlement: activeExecution.terminalSettlement,
+      readTerminalKind: () => activeExecution.terminalKind,
+      timeoutMs: WorkbenchAgentStopSettlementTimeoutMs,
+    })
+    if (
+      settlement.kind === 'terminal'
+      || activeAgentExecutions.get(activeExecution.executionId) !== activeExecution
+    ) return
+
+    // rejected/error/timeout 都没有确认底层已终止，不能伪装成 aborted；恢复可发送并明确失败。
+    settleActiveExecutionFromControlFailure(
+      activeExecution,
+      settlement.kind === 'request-error' ? settlement.error : null,
+      t('workbench.chatStopFailed')
+    )
   }
 
   async function submit(draftValue = prompt, draftFiles = files): Promise<void> {
@@ -679,13 +763,13 @@ function StandaloneWorkbenchChatSessionSurface({
     const latest = getState(projectRoot, providerId)
     const executionId = nextId('workbench-execution')
     const sessionCorrelationId = nextId('workbench-correlation')
-    const activeExecution: ActiveAgentExecution = {
+    const activeExecution = createActiveAgentExecution({
       executionId,
       sessionCorrelationId,
       sessionId: latest.sessionId,
       projectRoot,
       providerId,
-    }
+    })
     activeAgentExecutions.set(executionId, activeExecution)
     const result = await window.velarosWorkbenchKernel.invoke({
       route: 'agent.execute',
@@ -743,18 +827,27 @@ function StandaloneWorkbenchChatSessionSurface({
       },
     })
     if (!result.ok) {
+      const stopped = getState(projectRoot, providerId).status === 'stopping'
+      activeExecution.settleTerminal(stopped ? 'aborted' : 'error')
       const executionStillActive = activeAgentExecutions.delete(executionId)
       if (executionStillActive) {
         withStateUpdateTarget(projectRoot, providerId, activeExecution.sessionId, () => {
-          finishWithError(projectRoot, providerId, result.error.message)
+          if (stopped) {
+            finishRun(projectRoot, providerId, 'aborted')
+          } else {
+            finishWithError(projectRoot, providerId, result.error.message)
+          }
         })
       }
       return
     }
 
+    const finalStatus = readStandaloneFinalAgentStatus(result.output)
+    activeExecution.settleTerminal(
+      finalStatus === 'aborted' || finalStatus === 'error' ? finalStatus : 'done'
+    )
     const executionStillActive = activeAgentExecutions.delete(executionId)
     if (!executionStillActive) return
-    const finalStatus = readStandaloneFinalAgentStatus(result.output)
     if (finalStatus === 'aborted') {
       withStateUpdateTarget(projectRoot, providerId, activeExecution.sessionId, () => {
         finishRun(projectRoot, providerId, 'aborted')
@@ -980,10 +1073,11 @@ function StandaloneWorkbenchChatSessionSurface({
     <ChatThinkingVisibilityProvider visible={showThinkingProcess}>
       <ChatConversationPane
         conversation={conversation}
-        conversationRefreshKey={chat.revision}
+        conversationRefreshKey={conversationRefreshKey}
         composer={<ChatSurfaceComposer control={composerControl} variant="side" />}
         followLocked={followLocked}
         scrollRef={scrollRef}
+        scrollNavigatorHidden={scrollNavigatorHidden}
         streamSlot={chat.messages.length === 0 ? (
           <div className={styles.workbenchChatEmptyState} data-workbench-chat-empty="true">
             <div className={styles.workbenchChatEmptyContent}>
@@ -1324,6 +1418,7 @@ function finishRun(
 
 function isActiveChatRun(status: StandaloneChatState['status']): boolean {
   return status === 'running'
+    || status === 'stopping'
     || status === 'awaiting-input'
     || status === 'awaiting-confirmation'
 }

@@ -10,7 +10,7 @@ import {
 } from '../scripts/release/publishUpdateCatalog.mjs'
 
 void describe('release workflows', () => {
-  void test('keeps every GitHub Actions file as an inert local-only sentinel', async () => {
+  void test('keeps every GitHub Actions file visibly and fully disabled', async () => {
     const sentinels = new Map([
       ['ci.yml', 'bun run check'],
       [
@@ -26,12 +26,16 @@ void describe('release workflows', () => {
 
     for (const [fileName, localCommand] of sentinels) {
       const workflow = await readFile(path.join(workflowDirectory, fileName), 'utf8')
-      assert.match(workflow, /on:\n {2}workflow_dispatch:/u)
+      assert.match(workflow, /^name: "\[DISABLED\] .+"$/mu)
+      assert.match(workflow, /^on: \[\]$/mu)
       assert.match(workflow, /permissions: \{\}/u)
       assert.match(workflow, /if: \$\{\{ false \}\}/u)
       assert.match(workflow, /steps:\n {6}- run: exit 1\n$/u)
       assert.ok(workflow.includes(localCommand))
-      assert.doesNotMatch(workflow, /\b(?:push|pull_request|schedule)\b/u)
+      assert.doesNotMatch(
+        workflow,
+        /^\s+(?:push|pull_request|schedule|workflow_dispatch):/mu
+      )
       assert.doesNotMatch(workflow, /\buses:|secrets\.|vars\./u)
       assert.doesNotMatch(workflow, /\b(?:checkout|build|upload)\b/iu)
       assert.equal(workflow.match(/^ {2}[a-z][a-z0-9-]+:$/gmu)?.length, 1)

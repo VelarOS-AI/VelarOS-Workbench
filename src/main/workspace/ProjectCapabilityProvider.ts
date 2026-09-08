@@ -279,7 +279,7 @@ class ProjectCapabilityProvider implements WorkbenchProjectCapabilityProvider {
       cwd,
       timeoutMs: options.timeoutMs,
       maxOutputChars: options.maxOutputChars,
-    })
+    }, undefined, abortSignal)
     abortSignal?.throwIfAborted()
 
     return {

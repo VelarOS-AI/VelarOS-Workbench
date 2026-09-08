@@ -1,22 +1,16 @@
-import { workbenchConversationEnUSMessages } from './conversation'
+import { conversationEnUSMessages, mergeConversationMessages } from '@velaros-ai/ui/conversation'
 
 /**
  * 独立 Workbench 应用 en-US 语言包。
  *
- * `workbench` is the standalone product catalog. The version-locked
- * `conversation.ts` catalog covers every translation consumed by the shared conversation UI.
+ * Shared conversation copy comes from Platform; this file keeps Workbench-only namespaces and
+ * deliberate product wording overrides.
  */
-export const workbenchAppEnUSMessages = {
-  ...workbenchConversationEnUSMessages,
+export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEnUSMessages, {
   common: {
-    ...workbenchConversationEnUSMessages.common,
-    cancel: 'Cancel',
     chinese: 'Simplified Chinese',
     english: 'English',
-    expand: 'Expand',
     loading: 'Loading',
-    open: 'Open',
-    remove: 'Remove',
     unknown: 'Unknown',
   },
   sidebar: {
@@ -27,69 +21,22 @@ export const workbenchAppEnUSMessages = {
     archivePendingAction: 'Archiving…',
   },
   status: {
-    ...workbenchConversationEnUSMessages.status,
-    aborted: 'Aborted',
     completed: 'Completed',
     failed: 'Run failed',
     runAbortedDescription: 'This run was aborted.',
     seeErrorInContent: 'See the error details in the conversation.',
-    totalTurns: '{count} turns',
-    turn: 'Turn {count}',
   },
   chat: {
-    ...workbenchConversationEnUSMessages.chat,
     fileChangeOpenErrorTitle: 'Failed to open file',
-    messagesRegionAriaLabel: 'Messages',
-    composerRegionAriaLabel: 'Message composer',
     placeholder: 'Ask Workbench…',
     running: 'Running…',
-    sendMessage: 'Send message',
-    sendingMessage: 'Submitting…',
-    stopStreaming: 'Stop generation',
-    selectModel: 'Select model',
-    copyAnswer: 'Copy answer',
-    thinkingProcess: 'Reasoning',
-    thinkingTranslate: 'Translate',
-    thinkingShowOriginal: 'Show original',
-    thinkingShowTranslation: 'Show translation',
-    thinkingTranslating: 'Translating…',
-    thinkingTranslateFailed: 'Translation failed',
-    attachFile: 'Attach files',
-    composerAddMenu: 'Add files and capabilities',
-    composerAddFiles: 'Add photos and files',
-    composerPlanMode: 'Plan mode',
-    composerPlanModeHint:
-      'Lets the model maintain a visible plan during execution so steps, progress, and completion stay explicit.',
-    composerGoalMode: 'Goal mode',
-    composerGoalModeHint:
-      'Keeps this session running without time or step caps until the goal is complete, you stop it, or it reaches a clear blocker.',
-    composerModelSection: 'Model',
     composerRunProfile_auto: 'Auto',
-    composerThinkingVisibility: 'Reasoning process',
-    composerLimitTitle: 'Message is too large',
-    composerInputLimitReached: 'Message limit reached ({max} characters).',
-    composerInputLimitCounter: '{count}/{max} characters',
     composerInputTooLong: 'This message has {count} characters; the limit is {max}.',
     composerImageTooLarge: '“{name}” is {size}. The per-image limit is {max}.',
-    composerImagesTooLarge: 'Attached images are {size} total. The limit is {max}.',
     composerRequestTooLong: 'This request adds {count} characters; the limit is {max}.',
-    dropFilesHere: 'Drop files here',
-    dropFilesHint: 'Images, docs, and code files are supported',
-    openImagePreview: 'Open image preview',
-    removeFile: 'Remove file',
-    voiceInputStart: 'Start voice input',
-    voiceInputStop: 'Stop voice input',
-    voiceInputProcessing: 'Processing local speech…',
-    voiceInputUnsupported: 'Voice input is not supported in this runtime',
-    voiceInputError: 'Voice input failed. Check microphone permission.',
     voiceInputPermissionError: 'Microphone permission is blocked. Allow it and try again.',
     voiceInputMicrophoneUnavailable: 'No microphone is available. Check your input device.',
     voiceInputNetworkError: 'Speech recognition is unavailable. Check your connection.',
-    voiceInputOpenMicrophoneSettings: 'Open microphone settings',
-    scrollToTop: 'Jump to top',
-    scrollToPreviousSection: 'Previous section',
-    scrollToNextSection: 'Next section',
-    scrollToBottom: 'Jump to bottom',
   },
   workbench: {
     title: 'Workbench',
@@ -796,6 +743,7 @@ export const workbenchAppEnUSMessages = {
     chatManagedModelAccessFailed: 'Could not refresh Cloud model access: {error}',
     chatNoTextResponse: 'This run returned no visible response. Please try again.',
     chatExecutionFailed: 'Agent execution failed. Try again or open diagnostics.',
+    chatStopFailed: 'Workbench could not confirm that the current execution stopped. Try again.',
     chatEngineLoadingTitle: 'Connecting to {engine}',
     chatEngineLoadingDescription: 'Models and login status are still loading. Try again shortly.',
     chatEngineUnavailableTitle: '{engine} is unavailable',
@@ -1021,4 +969,4 @@ export const workbenchAppEnUSMessages = {
     settingsResetKeymap: 'Reset keymap',
     settingsReset: 'Reset',
   },
-} as const
+})

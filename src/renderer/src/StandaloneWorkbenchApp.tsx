@@ -5,12 +5,12 @@ import { WorkbenchLocalizationProvider } from '@renderer/i18n'
 
 import { BrowserCompositionProvider } from '@velaros-ai/browser/composition'
 import {
-  type ConversationActionPort,
   ConversationActionPortProvider,
-  type ConversationBlockHooks,
   ConversationBlockHooksProvider,
   ConversationLocalizationProvider,
   ConversationRenderSlotsProvider,
+  emptyConversationActionPort,
+  emptyConversationBlockHooks,
 } from '@velaros-ai/ui/conversation'
 import {
   ConversationComposerPortProvider,
@@ -34,24 +34,6 @@ const LazyWorkbenchWorkspaceShell = lazy(async () => {
   const module = await import('./workspace/WorkbenchWorkspaceShell')
   return { default: module.WorkbenchWorkspaceShell }
 })
-
-const standaloneConversationActionPort: ConversationActionPort = {
-  getGoalLifecycle: async () => ({ ok: true, goal: null }),
-  updateGoalLifecycle: async () => ({ ok: true, goal: null }),
-  provideExecutionGuidance: async () => undefined,
-  resolveHandoffSuggestion: () => undefined,
-}
-
-const standaloneConversationBlockHooks: ConversationBlockHooks = {
-  useMessageActionView: () => ({
-    actionItems: [],
-    actionRows: [],
-    formatPathForDisplay: (path) => path,
-    hasActionItems: false,
-    openPathInLight: () => Promise.resolve(),
-  }),
-  useAutoTranslateThinkingEnabled: () => false,
-}
 
 /**
  * 独立 Workbench 应用的产品壳：起手页 ↔ 工作台按项目状态切换。
@@ -149,8 +131,8 @@ export function StandaloneWorkbenchApp(): ReactElement {
     <WorkbenchLocalizationProvider value={localization}>
       <ConversationLocalizationProvider value={localization}>
         <ConversationRenderSlotsProvider slots={standaloneWorkbenchConversationRenderSlots}>
-          <ConversationBlockHooksProvider value={standaloneConversationBlockHooks}>
-            <ConversationActionPortProvider value={standaloneConversationActionPort}>
+          <ConversationBlockHooksProvider value={emptyConversationBlockHooks}>
+            <ConversationActionPortProvider value={emptyConversationActionPort}>
               <ConversationComposerPortProvider value={emptyConversationComposerPort}>
                 <WorkbenchProductRuntimeProvider value={standaloneWorkbenchProductRuntimeValue}>
                   <BrowserCompositionProvider adapter={standaloneBrowserCompositionAdapter}>

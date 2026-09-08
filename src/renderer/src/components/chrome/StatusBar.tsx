@@ -8,6 +8,7 @@ import type { WorkbenchProjectAiIndexStatus } from '@shared/contracts'
 
 import styles from '../../styles/workbenchPageStyles'
 import { WorkbenchFileTypeIcon } from '../files/WorkbenchFileTypeIcon'
+import { WorkbenchUpdateProgress } from '../updates/WorkbenchUpdateProgress'
 
 interface StatusBarProps {
   projectName: string
@@ -89,6 +90,7 @@ export function StatusBar({
         </Text>
       )}
       <span className={styles.statusBarSpacer} />
+      <WorkbenchUpdateProgress />
       <Text truncate tone="caption" className={styles.statusBarItem}>
         {t('workbench.openFileCount', { count: openFileCount })}
       </Text>

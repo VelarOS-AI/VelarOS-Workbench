@@ -123,7 +123,9 @@ export interface WorkbenchChatSessionSurfaceProps {
   providerId: WorkbenchChatProviderId
   projectRoot: string
   currentFilePath: Nullable<string>
-  conversationRefreshKey: number
+  /** 只在切换会话代际时变化，流式内容修订不能放进这个 key。 */
+  conversationRefreshKey: string | number
+  scrollNavigatorHidden?: boolean
   pendingBrowserElementSelections: readonly WorkbenchBrowserElementSelectionDelivery[]
   onBrowserElementSelectionsConsumed?: (deliveryIds: readonly string[]) => void
   onOpenFileChange?: (entry: WorkbenchChatFileChangeEntry) => void | Promise<void>
