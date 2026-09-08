@@ -1,0 +1,248 @@
+{
+  "schemaVersion": 1,
+  "product": "VelarOS Workbench",
+  "releases": [
+    {
+      "version": "0.3.36",
+      "releasedAt": "2026-09-08",
+      "title": {
+        "zh": "统一且可靠的侧栏聊天",
+        "en": "Unified and reliable sidebar chat"
+      },
+      "added": {
+        "zh": [
+          "通过 Platform UI 与 Desktop 共用聊天组件和交互逻辑，同时保留 Workbench 专属组合边界。"
+        ],
+        "en": [
+          "Shared chat components and interaction logic with Desktop through Platform UI while preserving Workbench-specific composition."
+        ]
+      },
+      "fixed": {
+        "zh": [
+          "将聊天内容限制在可调整宽度的侧栏内，并恢复稳定滚动、导航、紧凑代码块与更新进度显示。",
+          "让终止状态可靠收敛，并在取消运行时终止由 Workbench 持有的命令进程。"
+        ],
+        "en": [
+          "Kept chat content within the resizable sidebar and restored stable scrolling, navigation, compact code blocks, and update progress.",
+          "Made stop settlement deterministic and terminated Workbench-owned command processes when a run was cancelled."
+        ]
+      }
+    },
+    {
+      "version": "0.3.35",
+      "releasedAt": "2026-09-08",
+      "title": {
+        "zh": "跨平台语言服务与发布修复",
+        "en": "Cross-platform language service and release fixes"
+      },
+      "added": {
+        "zh": [],
+        "en": []
+      },
+      "fixed": {
+        "zh": [
+          "规范化 Windows LSP 文件 URI，使诊断可靠映射回已打开的文档。",
+          "保持 macOS 发布路径检查确定，并继续在各原生平台独立发布。"
+        ],
+        "en": [
+          "Canonicalized Windows LSP file URIs so diagnostics map back to open documents reliably.",
+          "Kept macOS release path checks deterministic and preserved independent native-platform publication."
+        ]
+      }
+    },
+    {
+      "version": "0.3.34",
+      "releasedAt": "2026-09-08",
+      "title": {
+        "zh": "Platform 0.6.34 兼容升级",
+        "en": "Platform 0.6.34 compatibility update"
+      },
+      "added": {
+        "zh": [],
+        "en": []
+      },
+      "fixed": {
+        "zh": [
+          "升级 System 至 1.1.16，并将直接与传递 Platform 依赖锁定到对应正式版本。",
+          "通过本地签名和公证链路发布 macOS arm64 候选。"
+        ],
+        "en": [
+          "Updated System to 1.1.16 and locked direct and transitive Platform dependencies to their corresponding published versions.",
+          "Published the macOS arm64 candidate through the local signing and notarization path."
+        ]
+      }
+    },
+    {
+      "version": "0.3.33",
+      "releasedAt": "2026-09-08",
+      "title": {
+        "zh": "Platform 0.6.32 兼容升级",
+        "en": "Platform 0.6.32 compatibility update"
+      },
+      "added": {
+        "zh": [],
+        "en": []
+      },
+      "fixed": {
+        "zh": [
+          "将全部直接 Platform 包升级到 Platform 0.6.32 发布版本，并保持精确不可变依赖。",
+          "通过本地 Mac 签名和公证链路发布 macOS arm64 候选。"
+        ],
+        "en": [
+          "Updated every direct Platform package to the Platform 0.6.32 release while retaining exact immutable dependencies.",
+          "Published the macOS arm64 candidate through the local Mac signing and notarization path."
+        ]
+      }
+    },
+    {
+      "version": "0.3.32",
+      "releasedAt": "2026-09-08",
+      "title": {
+        "zh": "按原生平台独立发布",
+        "en": "Independent native-platform releases"
+      },
+      "added": {
+        "zh": [
+          "macOS、Windows 与 Linux 的打包结果现在可以独立发布。"
+        ],
+        "en": [
+          "macOS, Windows, and Linux packaging results can now be published independently."
+        ]
+      },
+      "fixed": {
+        "zh": [
+          "单个平台失败或不可用不再阻塞已成功平台生成签名候选目录。",
+          "后续平台运行会追加已验证资产，而不会替换先前发布的下载。"
+        ],
+        "en": [
+          "A failed or unavailable platform no longer blocks successful platforms from producing a signed candidate catalog.",
+          "Later platform runs append verified assets without replacing previously published downloads."
+        ]
+      }
+    },
+    {
+      "version": "0.3.31",
+      "releasedAt": "2026-09-07",
+      "title": {
+        "zh": "菜单外观与焦点修复",
+        "en": "Menu appearance and focus fixes"
+      },
+      "added": {
+        "zh": [],
+        "en": []
+      },
+      "fixed": {
+        "zh": [
+          "统一分支选择菜单在普通与懒加载状态下的边框、背景和阴影。",
+          "修复搜索区域与窗口拖拽冲突，并让浮层正确自动聚焦和恢复焦点。"
+        ],
+        "en": [
+          "Unified branch-menu borders, backgrounds, and shadows across normal and lazy-loaded states.",
+          "Fixed conflicts with window dragging and restored correct autofocus and focus return for overlays."
+        ]
+      }
+    },
+    {
+      "version": "0.3.30",
+      "releasedAt": "2026-09-07",
+      "title": {
+        "zh": "工具安全与搜索性能",
+        "en": "Tool safety and search performance"
+      },
+      "added": {
+        "zh": [],
+        "en": []
+      },
+      "fixed": {
+        "zh": [
+          "对齐 Platform 工具安全边界，强化浏览器脚本、Windows 命令路径与破坏性命令识别。",
+          "加强 Office 预览净化和媒体路径校验，避免不可信内容进入预览。",
+          "将路径提示改为线性扫描，并收紧跨平台路径、模型别名和工具结果解析。"
+        ],
+        "en": [
+          "Aligned Platform tool-safety boundaries for browser scripts, Windows command paths, and destructive-command detection.",
+          "Hardened Office preview sanitization and media-path validation against untrusted content.",
+          "Moved path suggestions to linear scanning and tightened cross-platform path, model-alias, and tool-result parsing."
+        ]
+      }
+    },
+    {
+      "version": "0.3.29",
+      "releasedAt": "2026-09-06",
+      "title": {
+        "zh": "托管模型目录同步",
+        "en": "Managed model catalog synchronization"
+      },
+      "added": {
+        "zh": [
+          "为模型配置和托管模型目录加入可订阅更新，使已打开的界面在刷新后立即同步。"
+        ],
+        "en": [
+          "Added subscriptions for model configuration and managed catalogs so open interfaces update immediately after refresh."
+        ]
+      },
+      "fixed": {
+        "zh": [
+          "稳定显示 VelarOS 与 VelarOS-Dev，并明确标记暂时不可用的服务。",
+          "刷新期间保留最后一次成功快照，并拒绝过期界面状态提交的模型选择。"
+        ],
+        "en": [
+          "Stabilized VelarOS and VelarOS-Dev display names and clearly marked temporarily unavailable services.",
+          "Kept the last successful snapshot during refresh and rejected model selections submitted from stale interface state."
+        ]
+      }
+    },
+    {
+      "version": "0.3.28",
+      "releasedAt": "2026-09-05",
+      "title": {
+        "zh": "可信发布与启动体积门禁",
+        "en": "Trusted releases and startup budgets"
+      },
+      "added": {
+        "zh": [
+          "重构更新发布事务，记录原生平台、架构、签名状态和验证证据，并在 completion 前验证远端字节与签名目录。",
+          "新增 main、renderer 及首屏资源体积预算，防止启动成本回归。"
+        ],
+        "en": [
+          "Reworked the update transaction to record native platform, architecture, signature state, and evidence, then verify remote bytes and the signed catalog before completion.",
+          "Added size budgets for main, renderer, and startup resources to prevent startup-cost regressions."
+        ]
+      },
+      "fixed": {
+        "zh": [
+          "升级共享 Platform 执行栈，修正取消语义并收窄语言操作的运行时依赖边界。"
+        ],
+        "en": [
+          "Updated the shared Platform execution stack, corrected cancellation semantics, and narrowed language-operation runtime dependencies."
+        ]
+      }
+    },
+    {
+      "version": "0.3.27",
+      "releasedAt": "2026-09-05",
+      "title": {
+        "zh": "预览交互与共享执行栈",
+        "en": "Preview interactions and shared execution"
+      },
+      "added": {
+        "zh": [
+          "图片预览加入缩放、适应窗口、快捷键和放大后拖动。",
+          "Agent 与行内补全接入共享执行及模型请求栈，同时保留真实工具 schema 和调用身份。"
+        ],
+        "en": [
+          "Added zoom controls, fit-to-window, shortcuts, and panning for enlarged image previews.",
+          "Moved Agent execution and inline completion onto shared execution and model-request stacks while preserving real tool schemas and call identity."
+        ]
+      },
+      "fixed": {
+        "zh": [
+          "改进终端输出高亮和控制序列处理，使内容与工具面板样式保持一致。"
+        ],
+        "en": [
+          "Improved terminal highlighting and control-sequence handling so output remains consistent with tool-panel styling."
+        ]
+      }
+    }
+  ]
+}

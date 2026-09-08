@@ -23,6 +23,12 @@ bun run check
 node scripts/release/releaseArtifacts.mjs validate-source
 ```
 
+`resources/release-notes/workbench.json` is the machine-readable release-note source. The current
+Workbench version must have exactly one entry with aligned `zh` and `en` fields and at least one
+change item. The loader adds `softwareProduct: "workbench"` before the note enters a manifest, so
+Cloud cannot interpret it as another product. Local staging and finalization stop before publishing
+when that entry is missing, has a different version, or fails validation.
+
 ## macOS
 
 Build and notarize arm64 artifacts into an isolated directory, then create and verify an immutable
@@ -88,6 +94,15 @@ bun run release:local:finalize -- macos \
 
 The finalizer validates the single native-platform receipt before it creates or mutates a public
 candidate. It reuses identical assets, rejects conflicting bytes, preserves already verified other
-platforms, uploads the signed `catalog-workbench-v<version>-stable.json`, and uploads
-`candidate-workbench-v<version>-stable.json` last as the completion receipt. Cloud promotion remains a
-separate serialized step after the public candidate has been verified.
+platforms, and writes the current bilingual release note into both manifests. The schema-2
+`catalog-workbench-v<version>-stable.json` signs the note together with the artifact identities, then
+`candidate-workbench-v<version>-stable.json` is uploaded last as the completion receipt. A pre-notes
+schema-1 catalog is accepted only when its signature, release identity, completion receipt, and every
+referenced byte verify; the next additive native-platform finalization preserves those artifacts and
+upgrades the catalog to schema 2. Unknown schemas and modified catalogs remain rejected. Cloud
+promotion remains a separate serialized step after the public candidate has been verified.
+
+If finalization is interrupted after a signed catalog upload but before the completion receipt, the
+next local run treats that catalog as partial state. It preserves the referenced platforms only after
+the catalog signature, release identity, current release note, and every remote byte verify, then
+rebuilds the completion receipt. Partial state is never reported as a completed release.

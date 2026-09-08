@@ -27,6 +27,7 @@ import {
   readReleaseVersions,
   validateReleaseSource,
 } from './releaseIdentity.mjs'
+import { loadWorkbenchReleaseNote } from './releaseNotes.mjs'
 
 const requireFromScript = createRequire(import.meta.url)
 const electronBuilderCli = requireFromScript.resolve('electron-builder/cli.js')
@@ -795,6 +796,7 @@ async function main() {
     releaseTag: process.env.RELEASE_TAG ?? '',
     sourceSha: releaseSourceSha(),
   })
+  await loadWorkbenchReleaseNote(versions.version)
   if (command === 'stage') {
     const [platform, releaseDir = 'artifacts/desktop', stageDir = `artifacts/release-stage/${platform}`] = args
     const resolvedReleaseDir = path.resolve(repoRoot, releaseDir)

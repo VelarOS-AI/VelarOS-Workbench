@@ -66,9 +66,12 @@ locally on the matching native host, one platform at a time. Electron Builder pu
 and the repository's inert Actions sentinels cannot build, upload, or read release credentials.
 
 The public candidate release uses separate manifests: `candidate-*.json` marks a complete build,
-while the Ed25519-signed `catalog-*.json` is the only manifest Cloud imports. After upload, an agent
-publishes an exact Workbench version with Cloud's `release:software:production` command; no
-administrator page or interactive password is part of the release path.
+while the Ed25519-signed schema-2 `catalog-*.json` is the only manifest Cloud imports. The catalog
+includes the exact bilingual entry for the current version from
+`resources/release-notes/workbench.json`; staging and finalization fail closed when that entry is
+missing or invalid. After upload, an agent publishes an exact Workbench version with Cloud's
+`release:software:production` command; no administrator page or interactive password is part of the
+release path.
 
 See [docs/releases/local-platform-release.md](docs/releases/local-platform-release.md) for the clean
 tag, native packaging, immutable staging, signed candidate finalization, and platform isolation gates.

@@ -9,6 +9,7 @@ import { readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { validateStagedRelease } from "./releaseArtifacts.mjs";
+import { loadWorkbenchReleaseNote } from "./releaseNotes.mjs";
 
 const repoRoot = path.resolve(import.meta.dirname, "../..");
 const FileNamePattern = /^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$/u;
@@ -295,7 +296,19 @@ function releaseManifestNames(version, channel) {
   };
 }
 
-function completionManifest(artifacts, { version, channel }, { includeScope = true } = {}) {
+function releaseNotesForIdentity(identity) {
+  if (!identity.releaseNote) {
+    throw new Error(`Workbench v${identity.version} is missing release notes`);
+  }
+  return [identity.releaseNote];
+}
+
+function completionManifest(
+  artifacts,
+  identity,
+  { includeScope = true, includeReleaseNotes = true } = {},
+) {
+  const { version, channel } = identity;
   const manifest = {
     schemaVersion: 1,
     state: "candidate",
@@ -303,6 +316,9 @@ function completionManifest(artifacts, { version, channel }, { includeScope = tr
     softwareProduct: "workbench",
     version,
     channel,
+    ...(includeReleaseNotes
+      ? { releaseNotes: releaseNotesForIdentity(identity) }
+      : {}),
     ...(includeScope
       ? {
           platforms: [...new Set(artifacts.map(({ platform, arch }) => `${platform}-${arch}`))].sort(),
@@ -341,30 +357,20 @@ function assertCatalogSignature(catalog, signing) {
   }
 }
 
-function assertCatalogMatchesCompletion(catalog, completion, identity, signing) {
+function assertCatalogMatchesIdentity(catalog, identity, signing) {
+  const releaseNotes = releaseNotesForIdentity(identity);
+  const hasReleaseNotes = catalog?.schemaVersion === 2;
+  const isLegacyCatalog = catalog?.schemaVersion === 1;
   if (
-    catalog?.schemaVersion !== 1 ||
+    (!hasReleaseNotes && !isLegacyCatalog) ||
+    (hasReleaseNotes &&
+      JSON.stringify(sortCanonicalValue(catalog.releaseNotes)) !==
+        JSON.stringify(sortCanonicalValue(releaseNotes))) ||
+    (isLegacyCatalog && catalog.releaseNotes !== undefined) ||
     !Array.isArray(catalog.artifacts) ||
-    catalog.artifacts.length === 0 ||
-    completion?.schemaVersion !== 1 ||
-    completion.state !== "candidate" ||
-    completion.kind !== "software" ||
-    completion.softwareProduct !== "workbench" ||
-    completion.version !== identity.version ||
-    completion.channel !== identity.channel ||
-    !Array.isArray(completion.artifacts) ||
-    completion.artifacts.length === 0
+    catalog.artifacts.length === 0
   ) {
-    throw new Error("Workbench completion receipt is invalid");
-  }
-  const rebuilt = completionManifest(catalog.artifacts, identity, {
-    includeScope: Array.isArray(completion.platforms),
-  });
-  if (
-    JSON.stringify(sortCanonicalValue(rebuilt)) !==
-    JSON.stringify(sortCanonicalValue(completion))
-  ) {
-    throw new Error("Workbench completion receipt does not match its signed catalog");
+    throw new Error("Workbench release catalog is invalid");
   }
   for (const artifact of catalog.artifacts) {
     if (
@@ -383,6 +389,34 @@ function assertCatalogMatchesCompletion(catalog, completion, identity, signing) 
     artifactDescriptor(artifact);
   }
   assertCatalogSignature(catalog, signing);
+  return hasReleaseNotes;
+}
+
+function assertCatalogMatchesCompletion(catalog, completion, identity, signing) {
+  const hasReleaseNotes = assertCatalogMatchesIdentity(catalog, identity, signing);
+  if (
+    completion?.schemaVersion !== 1 ||
+    completion.state !== "candidate" ||
+    completion.kind !== "software" ||
+    completion.softwareProduct !== "workbench" ||
+    completion.version !== identity.version ||
+    completion.channel !== identity.channel ||
+    !Array.isArray(completion.artifacts) ||
+    completion.artifacts.length === 0
+  ) {
+    throw new Error("Workbench completion receipt is invalid");
+  }
+  const rebuilt = completionManifest(catalog.artifacts, identity, {
+    includeScope: Array.isArray(completion.platforms),
+    includeReleaseNotes: hasReleaseNotes,
+  });
+  if (
+    JSON.stringify(sortCanonicalValue(rebuilt)) !==
+    JSON.stringify(sortCanonicalValue(completion))
+  ) {
+    throw new Error("Workbench completion receipt does not match its signed catalog");
+  }
+  return hasReleaseNotes;
 }
 
 async function verifyRemoteArtifacts(client, release, artifacts) {
@@ -409,18 +443,32 @@ async function readCompletedRelease({
 }) {
   const names = releaseManifestNames(identity.version, identity.channel);
   const completionAsset = await client.readAsset(release, names.completion);
-  if (!completionAsset) return null;
   const catalogAsset = await client.readAsset(release, names.catalog);
   if (!catalogAsset) return null;
-  const completion = JSON.parse(completionAsset.bytes.toString("utf8"));
   const catalog = JSON.parse(catalogAsset.bytes.toString("utf8"));
-  assertCatalogMatchesCompletion(catalog, completion, identity, signing);
+  if (!completionAsset) {
+    const hasReleaseNotes = assertCatalogMatchesIdentity(catalog, identity, signing);
+    await verifyRemoteArtifacts(client, release, catalog.artifacts);
+    return { catalog, completion: null, hasReleaseNotes, partial: true };
+  }
+  const completion = JSON.parse(completionAsset.bytes.toString("utf8"));
+  const hasReleaseNotes = assertCatalogMatchesCompletion(
+    catalog,
+    completion,
+    identity,
+    signing,
+  );
   await verifyRemoteArtifacts(client, release, catalog.artifacts);
-  return { catalog, completion };
+  return { catalog, completion, hasReleaseNotes, partial: false };
 }
 
 async function verifyCompletedRelease(input) {
-  return Boolean(await readCompletedRelease(input));
+  const releaseState = await readCompletedRelease(input);
+  return Boolean(
+    releaseState &&
+    !releaseState.partial &&
+    releaseState.hasReleaseNotes,
+  );
 }
 
 async function readVerifiedStagedArtifacts({
@@ -480,6 +528,7 @@ async function publishReleaseTransaction({
   staged,
   existingArtifacts = [],
 }) {
+  const releaseNotes = releaseNotesForIdentity(identity);
   if (!staged && await verifyCompletedRelease({ client, release, identity, signing })) {
     console.info(
       `Workbench ${identity.version} ${identity.channel} receipt is already complete and verified.`,
@@ -539,7 +588,10 @@ async function publishReleaseTransaction({
   const artifacts = [...artifactsByName.values()].sort((left, right) =>
     left.fileName.localeCompare(right.fileName),
   );
-  const catalog = signCatalog({ schemaVersion: 1, artifacts }, signing);
+  const catalog = signCatalog(
+    { schemaVersion: 2, releaseNotes, artifacts },
+    signing,
+  );
   const completion = completionManifest(artifacts, identity);
   const catalogBytes = Buffer.from(`${JSON.stringify(catalog, null, 2)}\n`);
   await writeFile(path.join(releaseDirectory, catalogName), catalogBytes);
@@ -582,7 +634,8 @@ async function run() {
     requireEnvironment("VELAROS_RELEASE_REPO_TOKEN"),
   );
   const tag = `workbench-v${version}`;
-  const identity = { version, channel, tag, sourceCommit };
+  const releaseNote = await loadWorkbenchReleaseNote(version);
+  const identity = { version, channel, tag, sourceCommit, releaseNote };
   const signing = releaseSigningConfig();
   const existing = await client.getPublicRelease(tag);
   // The stage receipts and every referenced byte must be valid before creating or mutating a release.
@@ -599,9 +652,10 @@ async function run() {
   const stagedPlatforms = new Set(
     staged.artifacts.map(({ record }) => `${record.platform}-${record.arch}`),
   );
-  const completedPlatforms = new Set(completed?.completion.platforms ?? []);
+  const completedPlatforms = new Set(completed?.completion?.platforms ?? []);
   if (
-    completed &&
+    completed?.completion &&
+    completed?.hasReleaseNotes &&
     [...stagedPlatforms].every((platform) => completedPlatforms.has(platform))
   ) {
     console.info(`Workbench ${version} ${channel} requested platforms are already complete.`);
