@@ -3,6 +3,26 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
+      "version": "0.3.38",
+      "releasedAt": "2026-09-09",
+      "title": {
+        "zh": "Windows 发布可靠性修复",
+        "en": "Windows release reliability fix"
+      },
+      "added": {
+        "zh": [],
+        "en": []
+      },
+      "fixed": {
+        "zh": [
+          "让本地发布工作流校验同时兼容 LF 与 CRLF 检出，确保 Windows 原生发布门禁稳定通过。"
+        ],
+        "en": [
+          "Made local release-workflow verification accept both LF and CRLF checkouts so the native Windows release gate remains deterministic."
+        ]
+      }
+    },
+    {
       "version": "0.3.37",
       "releasedAt": "2026-09-09",
       "title": {

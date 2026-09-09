@@ -25,7 +25,8 @@ void describe('release workflows', () => {
     )
 
     for (const [fileName, localCommand] of sentinels) {
-      const workflow = await readFile(path.join(workflowDirectory, fileName), 'utf8')
+      const workflow = (await readFile(path.join(workflowDirectory, fileName), 'utf8'))
+        .replaceAll('\r\n', '\n')
       assert.match(workflow, /^name: "\[DISABLED\] .+"$/mu)
       assert.match(workflow, /^on: \[\]$/mu)
       assert.match(workflow, /permissions: \{\}/u)
