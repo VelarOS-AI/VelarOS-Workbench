@@ -322,8 +322,13 @@ void describe('pre-split Workbench shell parity', () => {
 
     assert.match(statusBar, /<WorkbenchUpdateProgress \/>/)
     assert.doesNotMatch(messageHost, /WorkbenchUpdateProgress/)
-    assert.match(progressStyles, /\.host\s*\{[\s\S]*?width:\s*min\(260px, 34vw\)/)
-    assert.match(progressStyles, /\.progressButton\s*\{[\s\S]*?height:\s*18px/)
+    // 定宽小条，不再是随视口伸缩的横幅：260px/34vw 在宽屏上占掉状态栏一大截，
+    // 而更新进度与旁边的「已打开 N」同量级。
+    assert.match(progressStyles, /\.host\s*\{[\s\S]*?width:\s*150px/)
+    assert.match(progressStyles, /\.progressButton\s*\{[\s\S]*?height:\s*15px/)
+    // 配色归主题：原来写死近黑底 + 近白字，浅色主题下是一块与周围无关的黑。
+    assert.doesNotMatch(progressStyles, /background:\s*rgb\(14 15 18/)
+    assert.match(progressStyles, /background:\s*var\(--workbench-control-bg\)/)
     assert.match(progressStyles, /\.progressButton\s*\{[\s\S]*?border-radius:\s*999px/)
     assert.doesNotMatch(progressStyles, /position:\s*fixed/)
     assert.match(progress, /velarosWorkbenchUpdate\.pause\(\)/)

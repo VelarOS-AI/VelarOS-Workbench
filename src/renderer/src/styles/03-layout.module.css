@@ -159,8 +159,10 @@
   display: none;
 }
 
+/* 命中区与右侧那条 (.verticalResizeHandle::before) 同宽：两边同样是一条 1px 的线，
+   抓手却一边 8px 一边 12px，靠左边那条要瞄准才拖得动。 */
 .embeddedFileResizeHandle {
-  @apply absolute bottom-0 top-0 z-30 w-2 cursor-col-resize;
+  @apply absolute bottom-0 top-0 z-30 w-3 cursor-col-resize;
   left: var(--workbench-embedded-file-pane-width, 300px);
   transform: translateX(-50%);
   -webkit-app-region: no-drag;
@@ -175,7 +177,7 @@
 .embeddedFileResizeHandle::after {
   @apply absolute bottom-0 left-1/2 top-0 w-px -translate-x-1/2 opacity-0 transition-[background,opacity,width];
   content: '';
-  background: rgba(var(--status-blue-rgb), 0.55);
+  background: color-mix(in oklab, var(--workbench-theme-color) 55%, transparent);
 }
 
 .embeddedFileResizeHandle:hover::after,
@@ -384,7 +386,7 @@
 .horizontalResizeHandle:hover::after,
 .horizontalResizeHandle:active::after {
   opacity: 1;
-  background: rgba(var(--status-blue-rgb), 0.55);
+  background: color-mix(in oklab, var(--workbench-theme-color) 55%, transparent);
 }
 
 .ideBody[data-right-tool-open='false'] .rightResizeHandle {

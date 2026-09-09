@@ -14,7 +14,6 @@ import {
 } from '@velaros-ai/ui/conversation'
 import {
   ConversationComposerPortProvider,
-  emptyConversationComposerPort,
 } from '@velaros-ai/ui/conversation/composer'
 
 import { standaloneBrowserCompositionAdapter } from './browser/standaloneBrowserCompositionAdapter'
@@ -22,6 +21,7 @@ import { WorkbenchProductAnalyticsNoticeDialog } from './components/settings/Wor
 import { standaloneWorkbenchProductRuntimeValue } from './host/standaloneWorkbenchProductRuntime'
 import { useStandaloneWorkbenchLocalization } from './i18n/useStandaloneWorkbenchLocalization'
 import { useProjectHubState } from './projectHub/useProjectHubState'
+import { standaloneWorkbenchComposerPort } from './runtime/conversation/standaloneWorkbenchComposerPort'
 import { standaloneWorkbenchConversationRenderSlots } from './runtime/conversation/standaloneWorkbenchConversationRenderSlots'
 import { standaloneWorkbenchChatAdapter } from './runtime/standaloneWorkbenchChatAdapter'
 import { WorkbenchMessageHost } from './runtime/workbenchMessageHost'
@@ -133,7 +133,7 @@ export function StandaloneWorkbenchApp(): ReactElement {
         <ConversationRenderSlotsProvider slots={standaloneWorkbenchConversationRenderSlots}>
           <ConversationBlockHooksProvider value={emptyConversationBlockHooks}>
             <ConversationActionPortProvider value={emptyConversationActionPort}>
-              <ConversationComposerPortProvider value={emptyConversationComposerPort}>
+              <ConversationComposerPortProvider value={standaloneWorkbenchComposerPort}>
                 <WorkbenchProductRuntimeProvider value={standaloneWorkbenchProductRuntimeValue}>
                   <BrowserCompositionProvider adapter={standaloneBrowserCompositionAdapter}>
                     <WorkbenchChatProvider adapter={standaloneWorkbenchChatAdapter}>

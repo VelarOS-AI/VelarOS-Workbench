@@ -796,6 +796,8 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     contextUsage: 'Context usage',
     contextUsageEstimate: 'Context usage estimate',
     tokenUnit: 'tokens',
+    contextUsagePending: '—',
+    contextUsagePendingHint: 'No estimate yet — usage appears after the first message.',
     settingsPermissions: 'Access permissions',
     settingsPermissionConfirmationMode: 'Permission confirmation strategy',
     settingsPermissionModeStandardOpen: 'Standard open',

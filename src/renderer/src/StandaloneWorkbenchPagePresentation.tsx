@@ -109,6 +109,8 @@ export function StandaloneWorkbenchPagePresentation({
   const activeProjectId = workbench.activeProject?.id
   const activeProjectRoot = workbench.activeProject?.rootPath
   const [velarManifestPaths, setVelarManifestPaths] = useState<readonly string[]>([])
+  /** 全项目扫出来的 VelarScript 源文件；结构树的完整性靠它，不靠「你打开过什么」。 */
+  const [velarSourcePaths, setVelarSourcePaths] = useState<readonly string[]>([])
   const [velarStructureScopeTabs, setVelarStructureScopeTabs] =
     useState<readonly VelarStructureViewTab[]>([])
   const [activeVelarStructureTabId, setActiveVelarStructureTabId] = useState(
@@ -131,22 +133,43 @@ export function StandaloneWorkbenchPagePresentation({
       column?: number
     }>
   >(null)
+  /*
+   * 结构面板要看到项目里**全部**的 VelarScript 源文件，所以这里主动搜一遍磁盘。
+   *
+   * 下面拼装 velarStructureProjectPaths 的那几个来源都只覆盖一部分：`rootEntries` 只有顶层，
+   * `openTabs` 只有你打开过的，两个索引则是懒建的。靠它们拼出来的结构树会随「你今天点过什么」
+   * 变化——真机上 apps 与 packages 下十几个 .vel 只显示出一个，就是这么来的。
+   * 清单要么完整要么没意义，因此与 velar.json 一样直接问一次文件系统。
+   */
   useEffect(() => {
     let cancelled = false
     setVelarManifestPaths([])
+    setVelarSourcePaths([])
     if (!activeProjectRoot) return
-    void runtime.kernel.project
-      .searchWorkbenchEntries({
+    const search = (query: string, limit: number) =>
+      runtime.kernel.project.searchWorkbenchEntries({
         projectRoot: activeProjectRoot,
-        query: 'velar.json',
-        limit: 200,
+        query,
+        limit,
         maxDepth: 12,
       })
+    void search('velar.json', 200)
       .then((result) => {
         if (cancelled || !result.ok) return
         setVelarManifestPaths(
           result.data.entries
             .filter((entry) => entry.type === 'file' && entry.name === 'velar.json')
+            .map((entry) => entry.path)
+        )
+      })
+      .catch(() => undefined)
+    void search('.vel', 2000)
+      .then((result) => {
+        if (cancelled || !result.ok) return
+        setVelarSourcePaths(
+          result.data.entries
+            // 按后缀过滤，别把 `.velar/` 这类目录也收进来。
+            .filter((entry) => entry.type === 'file' && entry.name.endsWith('.vel'))
             .map((entry) => entry.path)
         )
       })
@@ -163,6 +186,7 @@ export function StandaloneWorkbenchPagePresentation({
       ...workbench.openTabs,
       ...workbench.rootEntries,
       ...velarManifestPaths.map((path) => ({ path })),
+      ...velarSourcePaths.map((path) => ({ path })),
     ]) {
       const path = file.path.trim().replace(/\\/g, '/').replace(/^\.\//, '')
       files.set(path, { path })
@@ -174,6 +198,7 @@ export function StandaloneWorkbenchPagePresentation({
     workbench.projectIndexResult,
     workbench.rootEntries,
     velarManifestPaths,
+    velarSourcePaths,
   ])
   const velarStructureProjectFiles = useMemo(
     () => velarStructureProjectPaths.filter((file) => file.path.endsWith('.vel')),

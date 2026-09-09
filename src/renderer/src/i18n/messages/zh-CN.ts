@@ -766,6 +766,8 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     contextUsage: '上下文用量',
     contextUsageEstimate: '上下文用量估算',
     tokenUnit: 'tokens',
+    contextUsagePending: '—',
+    contextUsagePendingHint: '本轮尚未开始估算，发出第一条消息后显示占用。',
     settingsPermissions: '访问权限',
     settingsPermissionConfirmationMode: '权限确认策略',
     settingsPermissionModeStandardOpen: '标准开放',

@@ -1,8 +1,15 @@
+/*
+ * 状态栏里的一条**定宽小条**，不是横贯下沿的大横幅。
+ *
+ * 原来是 `min(260px, 34vw)` 且不收缩，宽屏上占掉状态栏一大截；配色又写死了近黑底 + 近白字，
+ * 在浅色主题里就是一块与周围毫无关系的黑块。更新进度是后台事，量级应当与旁边的
+ * 「已打开 N」「待运行」同级，颜色也归主题管。
+ */
 .host {
   display: flex;
-  width: min(260px, 34vw);
+  width: 150px;
   min-width: 0;
-  flex: 0 1 260px;
+  flex: 0 0 150px;
 }
 
 .progressButton {
@@ -10,14 +17,14 @@
   display: flex;
   width: 100%;
   min-width: 0;
-  height: 18px;
+  height: 15px;
   align-items: center;
   overflow: hidden;
   border: 0;
   border-radius: 999px;
-  background: rgb(14 15 18 / 94%);
+  background: var(--workbench-control-bg);
   box-shadow: none;
-  color: #f7f7f8;
+  color: var(--workbench-text);
   cursor: pointer;
 }
 
@@ -29,7 +36,7 @@
 
 .fill {
   right: auto;
-  background: color-mix(in srgb, var(--workbench-active-fg, #4b8cff) 42%, transparent);
+  background: color-mix(in oklab, var(--workbench-theme-color) 42%, transparent);
   transition: width 160ms ease-out;
 }
 
@@ -39,9 +46,9 @@
   min-width: 0;
   flex: 1;
   overflow: hidden;
-  padding: 0 22px 0 8px;
+  padding: 0 18px 0 8px;
   font-size: 10px;
-  line-height: 18px;
+  line-height: 15px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -50,13 +57,13 @@
   position: absolute;
   z-index: 2;
   top: 1px;
-  right: 2px;
+  right: 1px;
   display: grid;
-  width: 16px;
-  height: 16px;
+  width: 13px;
+  height: 13px;
   place-items: center;
   border: 0;
-  border-radius: 5px;
+  border-radius: var(--workbench-radius-xs);
   background: transparent;
   color: inherit;
   cursor: pointer;
@@ -70,7 +77,7 @@
 }
 
 .cancelButton:hover {
-  background: rgb(255 255 255 / 10%);
+  background: var(--workbench-hover);
 }
 
 @media (prefers-reduced-motion: reduce) {

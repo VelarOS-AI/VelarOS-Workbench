@@ -428,7 +428,7 @@
  * Popover.tsx). Everything below derives from `--workbench-*`, so both surfaces
  * stay in sync from one definition.
  */
-.workbenchShell,
+:global(:root),
 :global([data-velar-theme-scope]) {
   --workbench-bg: var(--background);
   --workbench-surface: var(--card);
@@ -623,6 +623,22 @@
      --primary 重映射成了文字色，于是复选框既不是主题色也不是共享品牌色，两头不靠。 */
   --control-checked: var(--workbench-theme-color);
   --control-checked-rgb: var(--workbench-theme-color-rgb);
+  /*
+   * 开关与主题化边框此前整格没覆盖，于是它们吃共享包 `:root` 上那份挂在 --primary 的默认值
+   * （靛蓝 #333366）——同一个面板里复选框跟着主题色、开关却是靛蓝。凡是「选中/激活」语义的
+   * 控件都归主题色管，这里一次补齐，别再留下按 --primary 走的漏网格子。
+   */
+  --control-switch-checked: var(--workbench-theme-color);
+  --control-switch-checked-hover: color-mix(
+    in oklab,
+    var(--workbench-theme-color) 88%,
+    black
+  );
+  --control-themed-border: color-mix(
+    in oklab,
+    var(--workbench-theme-color) 14%,
+    var(--workbench-border)
+  );
   --control-checked-surface: var(--workbench-active-soft);
   --control-checked-border: color-mix(
     in oklab,
@@ -642,7 +658,7 @@
 
 /* Neutral presets keep the familiar Workbench baseline; the two color themes
  * deliberately change both chrome layering and editor surfaces. */
-.workbenchShell[data-workbench-theme='light-modern'],
+:global([data-workbench-theme='light-modern']),
 :global([data-velar-theme-scope='light-modern']) {
   --workbench-bg: #ffffff;
   --workbench-surface: #ffffff;
@@ -658,7 +674,7 @@
   --workbench-editor-gutter-bg: #ffffff;
 }
 
-.workbenchShell[data-workbench-theme='warm-paper'],
+:global([data-workbench-theme='warm-paper']),
 :global([data-velar-theme-scope='warm-paper']) {
   --workbench-bg: #fbf5e9;
   --workbench-surface: #fffaf0;
@@ -706,8 +722,8 @@
   color-scheme: light;
 }
 
-.workbenchShell[data-workbench-theme='dark-modern'],
-.workbenchShell[data-workbench-theme='midnight-blue'],
+:global([data-workbench-theme='dark-modern']),
+:global([data-workbench-theme='midnight-blue']),
 :global([data-velar-theme-scope='dark-modern']),
 :global([data-velar-theme-scope='midnight-blue']) {
   --workbench-border-soft: rgba(255, 255, 255, 0.05);
@@ -800,7 +816,7 @@
 }
 
 /* Dark Modern: neutral #1f1f1f editor, #181818 sidebar/toolbar. */
-.workbenchShell[data-workbench-theme='dark-modern'],
+:global([data-workbench-theme='dark-modern']),
 :global([data-velar-theme-scope='dark-modern']) {
   --workbench-bg: #1f1f1f;
   --workbench-surface: #1f1f1f;
@@ -816,7 +832,7 @@
 }
 
 /* Midnight Blue: navy chrome, lifted panels, and a saturated editor palette. */
-.workbenchShell[data-workbench-theme='midnight-blue'],
+:global([data-workbench-theme='midnight-blue']),
 :global([data-velar-theme-scope='midnight-blue']) {
   --workbench-bg: #0b1220;
   --workbench-surface: #101a2b;
@@ -905,7 +921,7 @@
   --workbench-theme-color-rgb: 63, 95, 151;
 }
 
-.workbenchShell[data-workbench-density='compact'] {
+:global([data-workbench-density='compact']) {
   --workbench-radius-xs: 2px;
   --workbench-radius-sm: 4px;
   --workbench-radius: 6px;
@@ -931,7 +947,7 @@
   --workbench-settings-theme-card-padding: 7px;
 }
 
-.workbenchShell[data-workbench-density='comfortable'] {
+:global([data-workbench-density='comfortable']) {
   --workbench-radius-xs: 4px;
   --workbench-radius-sm: 7px;
   --workbench-radius: 8px;

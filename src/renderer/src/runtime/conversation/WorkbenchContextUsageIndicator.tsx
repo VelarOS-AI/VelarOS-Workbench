@@ -27,22 +27,32 @@ export function WorkbenchContextUsageIndicator({
   usage: Nullable<StandaloneContextUsageEstimate>
 }): Nullable<ReactElement> {
   const { t, locale } = useWorkbenchI18n()
-  if (!usage) return null
 
-  const percentLabel = formatChatContextUsagePercent(usage.percent)
-  const usedLabel = formatCompactTokens(locale, usage.estimatedTokens)
-  const totalLabel = formatCompactTokens(locale, usage.usableContextWindow)
+  /*
+   * 还没跑过任何一轮时**照样在场**，只是空表。
+   *
+   * 用量数出自 main 每轮送核前的那次估算，新会话自然还没有；如果这时整格隐身，仪表就变成
+   * 「聊过才出现」的幽灵控件——用户第一次打开会话根本不知道有这块表，输入框右侧还会在首轮
+   * 结束后突然多出一个控件、把旁边的按钮挤动一下。空表既守住了位置，也如实说明「尚未估算」。
+   */
+  const percentLabel = usage
+    ? formatChatContextUsagePercent(usage.percent)
+    : t('workbench.contextUsagePending')
+  const detail = usage
+    ? `${percentLabel} · ${formatCompactTokens(locale, usage.estimatedTokens)} / `
+      + `${formatCompactTokens(locale, usage.usableContextWindow)} ${t('workbench.tokenUnit')}`
+    : t('workbench.contextUsagePendingHint')
 
   return (
     <ChatContextUsageGauge
       variant="icon"
-      tone={resolveChatContextUsageTone(usage.percent)}
-      ringPercent={usage.percent}
+      tone={usage ? resolveChatContextUsageTone(usage.percent) : 'safe'}
+      ringPercent={usage?.percent ?? 0}
       label={percentLabel}
-      ariaLabel={`${t('workbench.contextUsage')}: ${percentLabel}, ${usedLabel} / ${totalLabel}`}
+      ariaLabel={`${t('workbench.contextUsage')}: ${detail}`}
       tooltip={{
         title: t('workbench.contextUsageEstimate'),
-        meta: `${percentLabel} · ${usedLabel} / ${totalLabel} ${t('workbench.tokenUnit')}`,
+        meta: detail,
       }}
     />
   )
