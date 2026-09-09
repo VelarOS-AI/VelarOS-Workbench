@@ -3,6 +3,26 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
+      "version": "0.3.37",
+      "releasedAt": "2026-09-09",
+      "title": {
+        "zh": "游戏预览鼠标锁定修复",
+        "en": "Pointer lock fix for game previews"
+      },
+      "added": {
+        "zh": [],
+        "en": []
+      },
+      "fixed": {
+        "zh": [
+          "修复 OpenVoxel 等游戏预览点击后无法锁定鼠标的问题，恢复依赖鼠标锁定的视角转向和键盘移动。"
+        ],
+        "en": [
+          "Fixed pointer lock after clicking game previews such as OpenVoxel, restoring mouse look and keyboard movement that depend on pointer lock."
+        ]
+      }
+    },
+    {
       "version": "0.3.36",
       "releasedAt": "2026-09-08",
       "title": {

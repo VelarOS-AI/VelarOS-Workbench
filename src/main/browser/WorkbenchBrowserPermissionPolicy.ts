@@ -1,4 +1,6 @@
-import type { Session } from 'electron'
+import type { Session, WebContents } from 'electron'
+
+import { normalizeWorkbenchBrowserPageUrl } from '../../shared/workbenchBrowser'
 
 type PermissionCheckHandler = NonNullable<Parameters<Session['setPermissionCheckHandler']>[0]>
 type PermissionRequestHandler = NonNullable<Parameters<Session['setPermissionRequestHandler']>[0]>
@@ -9,16 +11,37 @@ type WorkbenchBrowserPermissionSession = Pick<
   'setDevicePermissionHandler' | 'setPermissionCheckHandler' | 'setPermissionRequestHandler'
 >
 
-const denyPermissionCheck: PermissionCheckHandler = () => false
 const denyDevicePermission: DevicePermissionHandler = () => false
+
+interface WorkbenchBrowserPermissionOptions {
+  isInteractiveGuest: (webContents: WebContents) => boolean
+}
 
 interface PermissionPolicyState {
   delegate: PermissionRequestHandler | null
   installed: boolean
+  isInteractiveGuest: WorkbenchBrowserPermissionOptions['isInteractiveGuest']
+  readonly check: PermissionCheckHandler
   readonly gateway: PermissionRequestHandler
 }
 
 const permissionPolicies = new WeakMap<object, PermissionPolicyState>()
+
+function allowsInteractivePointerLock(
+  state: PermissionPolicyState,
+  webContents: WebContents | null,
+  requestingUrl: string
+): boolean {
+  try {
+    if (!webContents || webContents.isDestroyed() || !state.isInteractiveGuest(webContents)) return false
+    const pageUrl = normalizeWorkbenchBrowserPageUrl(webContents.getURL(), { allowAboutBlank: false })
+    const requestUrl = normalizeWorkbenchBrowserPageUrl(requestingUrl, { allowAboutBlank: false })
+    return !!pageUrl && !!requestUrl && new URL(pageUrl).origin === new URL(requestUrl).origin
+  } catch {
+    // 页面销毁或导航期间无法确认归属时，拒绝本次请求。
+    return false
+  }
+}
 
 function getOrCreatePolicyState(
   electronSession: WorkbenchBrowserPermissionSession
@@ -29,7 +52,18 @@ function getOrCreatePolicyState(
   const state: PermissionPolicyState = {
     delegate: null,
     installed: false,
+    isInteractiveGuest: () => false,
+    check: (webContents, permission, requestingOrigin, details) =>
+      permission === 'pointerLock'
+      && allowsInteractivePointerLock(state, webContents, requestingOrigin)
+      && (details.requestingUrl === undefined
+        || allowsInteractivePointerLock(state, webContents, details.requestingUrl)),
     gateway: (webContents, permission, callback, details) => {
+      if (permission === 'pointerLock') {
+        // 人工预览与已呈现的 Agent 页面共用交互策略；用户手势约束和 Esc 释放由 Chromium 执行。
+        callback(allowsInteractivePointerLock(state, webContents, details.requestingUrl))
+        return
+      }
       const delegate = state.delegate
       if (!delegate) {
         callback(false)
@@ -58,28 +92,30 @@ function applyStableGateway(
   state: PermissionPolicyState
 ): void {
   if (state.installed) return
-  electronSession.setPermissionCheckHandler(denyPermissionCheck)
+  electronSession.setPermissionCheckHandler(state.check)
   electronSession.setDevicePermissionHandler(denyDevicePermission)
   electronSession.setPermissionRequestHandler(state.gateway)
   state.installed = true
 }
 
 /**
- * 在 Browser partition 创建后立即安装。这样人工 debug webview 尚未交给 runtime 前，
- * Chromium 权限检查和请求也都会关闭失败。
+ * Browser partition 创建后立即安装。已由宿主验证的交互页面可使用指针锁定，
+ * 其余权限沿用默认拒绝与 runtime 授权链，不受人工页是否接入 Agent 会话影响。
  */
 export function installWorkbenchBrowserDefaultPermissionPolicy(
-  electronSession: WorkbenchBrowserPermissionSession
+  electronSession: WorkbenchBrowserPermissionSession,
+  options?: WorkbenchBrowserPermissionOptions
 ): () => void {
   const state = getOrCreatePolicyState(electronSession)
+  if (options) state.isInteractiveGuest = options.isInteractiveGuest
   applyStableGateway(electronSession, state)
   // Electron Session 与应用同寿命；清理函数故意不撤掉 fail-closed gateway。
   return () => undefined
 }
 
 /**
- * Runtime 接管页面时临时安装 pending-event handler。注销后恢复默认拒绝，而不是留下
- * Electron 的默认权限行为。
+ * Runtime 接管页面时临时安装 pending-event handler。注销只移除该委托，
+ * 交互页面的指针锁定仍由稳定 gateway 处理。
  */
 export function registerWorkbenchBrowserRuntimePermissionHandler(
   electronSession: WorkbenchBrowserPermissionSession,

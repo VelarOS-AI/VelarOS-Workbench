@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -182,13 +182,16 @@ test("Workbench release keeps completion state separate from the signed Cloud ca
 });
 
 test("Workbench release notes cover the current product version", async () => {
-  const note = await loadWorkbenchReleaseNote("0.3.36");
+  const { version } = JSON.parse(
+    await readFile(new URL("../../package.json", import.meta.url), "utf8"),
+  );
+  const note = await loadWorkbenchReleaseNote(version);
   assert.equal(note.softwareProduct, "workbench");
-  assert.equal(note.version, "0.3.36");
+  assert.equal(note.version, version);
   assert.equal(note.added.zh.length, note.added.en.length);
   assert.equal(note.fixed.zh.length, note.fixed.en.length);
   await assert.rejects(
-    loadWorkbenchReleaseNote("0.3.37"),
+    loadWorkbenchReleaseNote("0.0.0-missing-note"),
     /must have exactly one release note/u,
   );
 });

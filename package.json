@@ -1,6 +1,6 @@
 {
   "name": "velaros-workbench",
-  "version": "0.3.36",
+  "version": "0.3.37",
   "private": true,
   "description": "VelarOS Workbench standalone Electron IDE.",
   "desktopName": "velaros-workbench.desktop",
@@ -18,7 +18,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint . --max-warnings=0",
     "check:boundaries": "node scripts/checkProductBoundaries.mjs",
-    "test": "node scripts/test/runIsolatedTests.mjs",
+    "test": "node scripts/test/runIsolatedTests.mjs && node --test scripts/release/publishUpdateCatalog.test.mjs",
     "test:velar:installed": "bun --conditions=source scripts/test/verifyInstalledVelarToolchain.ts",
     "probe:watch": "bun --conditions=source src/main/workspace/watch/watchProbe.ts",
     "probe:terminal": "bun --conditions=source src/main/workspace/terminal/terminalProbe.ts",

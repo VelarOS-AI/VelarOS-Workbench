@@ -222,7 +222,8 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
   if (WorkbenchIsDevelopmentRuntime) app.dock?.setIcon(WorkbenchApplicationIconPath)
   const dataRootDir = resolveWorkbenchDataRootDir()
   const disposeBrowserPermissionPolicy = installWorkbenchBrowserDefaultPermissionPolicy(
-    session.fromPartition(WorkbenchBrowserPartition)
+    session.fromPartition(WorkbenchBrowserPartition),
+    { isInteractiveGuest: (guest) => workbenchBrowserWebviewGate?.ownsGuest(guest) === true }
   )
   const websiteMarket = resolveVelarOSOfficialWebsiteMarket({
     configuredMarket: process.env['VELAROS_MARKET'],

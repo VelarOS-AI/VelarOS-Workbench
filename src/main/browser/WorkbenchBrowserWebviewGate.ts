@@ -32,6 +32,10 @@ export class WorkbenchBrowserWebviewGate {
     return this.isEnabled()
   }
 
+  public ownsGuest(guest: WorkbenchBrowserGuest): boolean {
+    return this.isEnabled() && this.guests.has(guest) && !guest.isDestroyed()
+  }
+
   /** 返回 false 表示 attach 与 Mod 状态发生竞态，调用方不应再配置该 guest。 */
   public track(guest: WorkbenchBrowserGuest): boolean {
     if (!this.isEnabled() || guest.isDestroyed()) {
