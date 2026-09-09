@@ -27,6 +27,20 @@ export function useWorkbenchPreferences(): WorkbenchPreferencesController {
 
   const style = useMemo(() => getWorkbenchPreferencesStyle(preferences), [preferences])
 
+  /*
+   * 主题色写在**文档根**上，而不是只写在 shell 上。
+   *
+   * accent 是全局单值：一个窗口不存在两半用不同主题色。以前它只挂在 `.workbenchShell` 上，
+   * 于是渲染到 <body> 的门户弹层（Popover 只往外复制 `data-velar-theme-scope`）落不进那条
+   * 覆盖，只能吃到基础块里写死的那支蓝 `#2563eb`——同一个界面里两种主题色，改哪一处都修不全。
+   * 挂到 :root 之后，shell、welcome 页与所有门户共用同一份定义，不再需要谁向谁复制。
+   */
+  useEffect(() => {
+    const root = document.documentElement
+    root.dataset.workbenchAccent = preferences.accent
+    root.dataset.workbenchTheme = preferences.theme
+  }, [preferences.accent, preferences.theme])
+
   useEffect(() => {
     const refresh = (): void => {
       setPreferences(readWorkbenchPreferences())

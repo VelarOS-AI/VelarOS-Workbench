@@ -314,10 +314,16 @@ export function useStandaloneWorkbenchPageModel(
     return true
   })
 
-  const velarLogicGraphAvailable = workbench.selectedFilePath?.endsWith('.vel') === true
-    || workbench.projectContextIndex.files.some(
-      (file) => file.path === 'velar.json' || file.path.endsWith('.vel')
-    )
+  /*
+   * 结构入口按**项目**判定，不看当前选中的是哪个文件。
+   *
+   * 之前第一条是 `selectedFilePath.endsWith('.vel')`：于是在 VelarScript 项目里，只要焦点落在
+   * README 或 package.json 上，左侧栏那颗按钮就整颗消失，用户以为功能没了。结构图描述的是
+   * 整个项目，它在不在场跟你此刻点开哪个文件没有关系。
+   */
+  const velarLogicGraphAvailable = workbench.projectContextIndex.files.some(
+    (file) => file.path === 'velar.json' || file.path.endsWith('.vel')
+  )
   const codeGraphAvailable = codeGraphResourceAvailable && !velarLogicGraphAvailable
 
   useEffect(() => {

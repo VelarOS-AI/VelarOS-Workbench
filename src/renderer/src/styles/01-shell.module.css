@@ -398,6 +398,25 @@
 }
 
 /*
+ * 主题色的**唯一真相源**：默认值与 accent 覆盖都住在文档根。
+ *
+ * 它以前的默认值写在下面那个 shell 块里，而 accent 覆盖挂在 shell 的属性选择器上。两者作用在
+ * 同一个元素、靠特异性分胜负，于是任何拿不到那条覆盖的子树（渲染到 <body> 的门户弹层只复制
+ * `data-velar-theme-scope`）就永远吃默认的蓝，同一个界面里出现两种主题色。
+ *
+ * 现在默认值与覆盖都在 :root：shell、welcome 页与所有门户一律继承同一份，没有谁需要向谁复制，
+ * 也没有第二处可以悄悄分叉。下面的派生量（--workbench-active 等）仍在 shell 块里定义，
+ * 但它们的 var() 在使用处求值，拿到的就是继承下来的这一份。
+ *
+ * `--workbench-theme-color-rgb` 是同一个颜色的 rgb 分量形式，只为共享 UI 组件那条
+ * `rgba(var(--control-checked-rgb), …)` 契约存在——两行必须成对修改。
+ */
+:global(:root) {
+  --workbench-theme-color: #2563eb;
+  --workbench-theme-color-rgb: 37, 99, 235;
+}
+
+/*
  * Workbench theme tokens — single source of truth.
  *
  * Grouped so they apply to the shell itself AND to any portalled popover that
@@ -428,8 +447,6 @@
    * 深浅主题各自跟着 --workbench-text 翻转；**主题色**的悬浮由 --workbench-active 负责，两者分工不同。
    */
   --workbench-hover: color-mix(in srgb, var(--workbench-text) 7%, transparent);
-  --workbench-theme-color: #2563eb;
-  --workbench-theme-color-rgb: 37, 99, 235;
   --workbench-active: rgba(var(--workbench-theme-color-rgb), 0.12);
   --workbench-active-soft: color-mix(in oklab, var(--workbench-theme-color) 12%, var(--card));
   --workbench-active-fg: var(--workbench-theme-color);
@@ -848,50 +865,42 @@
   --workbench-tree-ignored-fg: #637777;
 }
 
-.workbenchShell[data-workbench-accent='blue'],
-:global(.workbench-welcome[data-workbench-accent='blue']) {
+:global(:root[data-workbench-accent='blue']) {
   --workbench-theme-color: #2563eb;
   --workbench-theme-color-rgb: 37, 99, 235;
 }
 
-.workbenchShell[data-workbench-accent='teal'],
-:global(.workbench-welcome[data-workbench-accent='teal']) {
+:global(:root[data-workbench-accent='teal']) {
   --workbench-theme-color: var(--status-teal);
   --workbench-theme-color-rgb: 15, 118, 110;
 }
 
-.workbenchShell[data-workbench-accent='green'],
-:global(.workbench-welcome[data-workbench-accent='green']) {
+:global(:root[data-workbench-accent='green']) {
   --workbench-theme-color: var(--status-green);
   --workbench-theme-color-rgb: 21, 128, 61;
 }
 
-.workbenchShell[data-workbench-accent='amber'],
-:global(.workbench-welcome[data-workbench-accent='amber']) {
+:global(:root[data-workbench-accent='amber']) {
   --workbench-theme-color: var(--status-amber);
   --workbench-theme-color-rgb: 217, 119, 6;
 }
 
-.workbenchShell[data-workbench-accent='orange'],
-:global(.workbench-welcome[data-workbench-accent='orange']) {
+:global(:root[data-workbench-accent='orange']) {
   --workbench-theme-color: #ea580c;
   --workbench-theme-color-rgb: 234, 88, 12;
 }
 
-.workbenchShell[data-workbench-accent='rose'],
-:global(.workbench-welcome[data-workbench-accent='rose']) {
+:global(:root[data-workbench-accent='rose']) {
   --workbench-theme-color: #e11d48;
   --workbench-theme-color-rgb: 225, 29, 72;
 }
 
-.workbenchShell[data-workbench-accent='violet'],
-:global(.workbench-welcome[data-workbench-accent='violet']) {
+:global(:root[data-workbench-accent='violet']) {
   --workbench-theme-color: var(--status-violet);
   --workbench-theme-color-rgb: 124, 58, 237;
 }
 
-.workbenchShell[data-workbench-accent='slate'],
-:global(.workbench-welcome[data-workbench-accent='slate']) {
+:global(:root[data-workbench-accent='slate']) {
   --workbench-theme-color: var(--status-slate);
   --workbench-theme-color-rgb: 63, 95, 151;
 }
