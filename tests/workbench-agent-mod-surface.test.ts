@@ -11,6 +11,10 @@ import { createModelRuntimeComposition } from '@velaros-ai/model/node'
 import type { ProjectKernel } from '@velaros-ai/project/runtime'
 
 import {
+  WorkbenchAgentControlCategoryId,
+  WorkbenchAgentControlToolNames,
+} from '../src/main/agent/WorkbenchAgentControlTools'
+import {
   composeWorkbenchAgentRunToolSnapshot,
   createWorkbenchToolContext,
   WorkbenchAgentExecutionStack,
@@ -188,7 +192,9 @@ void describe('Workbench Agent Mod surface', () => {
       doStream: async (request) => {
         requests += 1
         const names = request.tools?.map((tool) => tool.name) ?? []
-        if (requests === 1) assert.deepEqual(names, ['project__read'])
+        // agent:dispatch 是常驻控制面工具，首轮就在场；job:* 自带可用性门（要宿主提供后台
+        // 作业读写口），Workbench 的执行面没有，因此它们正确地不出现在请求里。
+        if (requests === 1) assert.deepEqual(names, ['project__read', 'agent__dispatch'])
         assert.ok(!names.includes('browser__hidden'))
         assert.ok(!names.includes('browser__resident_unavailable'))
         if (requests === 2) assert.match(JSON.stringify(request.prompt), /file evidence/)
@@ -294,14 +300,25 @@ void describe('Workbench Agent Mod surface', () => {
     )
 
     assert.equal(snapshot.generation, 3)
+    // 控制面工具（agent:dispatch / job:*）属于执行栈自身，恒定夹在项目工具与 Mod 工具之间，
+    // 且恒定常驻——模型看不见「可以派出去」这个选项就不会去选它。
     assert.deepEqual(snapshot.tools.map((tool) => tool.name), [
       'project:read',
+      ...WorkbenchAgentControlToolNames,
       'browser:enter_site',
     ])
-    assert.deepEqual(snapshot.enabledCategoryIds, ['project-files', 'browser-core'])
-    assert.deepEqual(snapshot.residentCategoryIds, ['project-files'])
+    assert.deepEqual(snapshot.enabledCategoryIds, [
+      'project-files',
+      WorkbenchAgentControlCategoryId,
+      'browser-core',
+    ])
+    assert.deepEqual(snapshot.residentCategoryIds, [
+      'project-files',
+      WorkbenchAgentControlCategoryId,
+    ])
     assert.deepEqual(snapshot.initialVisibleToolNames, [
       'project:read',
+      ...WorkbenchAgentControlToolNames,
       'browser:enter_site',
     ])
     assert.equal(snapshot.categoryDefinitions['browser-core'], BrowserCategory)
@@ -330,7 +347,7 @@ void describe('Workbench Agent Mod surface', () => {
     assert.ok(scopePolicy?.getResidency)
     assert.deepEqual(
       scopePolicy.getResidency({}).residentToolNames,
-      ['project:read', 'browser:enter_site']
+      ['project:read', ...WorkbenchAgentControlToolNames, 'browser:enter_site']
     )
     registry.toAiTools(context, ['project:read'])
     assert.deepEqual(context.getCurrentVisibleToolTransportNames(), {
@@ -453,8 +470,12 @@ void describe('Workbench Agent Mod surface', () => {
     const enabledBrowser = await resolveSession(input)
     assert.notEqual(enabledBrowser, first)
     assert.notEqual(enabledBrowser.stack, first.stack)
-    assert.deepEqual(first.registry.names, ['project:read'])
-    assert.deepEqual(enabledBrowser.registry.names, ['project:read', 'browser:enter_site'])
+    assert.deepEqual(first.registry.names, ['project:read', ...WorkbenchAgentControlToolNames])
+    assert.deepEqual(enabledBrowser.registry.names, [
+      'project:read',
+      ...WorkbenchAgentControlToolNames,
+      'browser:enter_site',
+    ])
     const browserAllowList = [browserTool.name]
     const originalBrowserSize = enabledBrowser.registry.estimateToolsSerializedChars({}, browserAllowList)
     const originalBrowserInputSchema = enabledBrowser.registry.toAiTools({})[providerToolName(browserTool.name)]?.inputSchema

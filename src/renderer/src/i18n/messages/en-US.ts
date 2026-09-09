@@ -792,6 +792,15 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     settingsEditorGroupDescription: 'Code display, reading rhythm, and shortcuts.',
     settingsAi: 'AI',
     settingsAiDescription: 'Models, code completion, and project rules.',
+    workerThreadRunning: 'Running',
+    contextUsage: 'Context usage',
+    contextUsageEstimate: 'Context usage estimate',
+    tokenUnit: 'tokens',
+    settingsPermissions: 'Access permissions',
+    settingsPermissionConfirmationMode: 'Permission confirmation strategy',
+    settingsPermissionModeStandardOpen: 'Standard open',
+    settingsPermissionModeAskEveryTime: 'Ask every time',
+    settingsPermissionModeNeverAsk: 'Full access',
     settingsAiRules: 'AI Rules',
     settingsCodeGraph: 'Code Graph',
     settingsCodeGraphStatus: 'Index status',
@@ -827,6 +836,12 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     settingsProjectContextNoProjectDescription: 'Project settings apply after a project is open.',
     settingsAppearanceDescription: 'Theme, density, theme color, and Workbench chrome.',
     settingsEditorDescription: 'Tune code editor text size and reading rhythm.',
+    settingsPermissionsDescription:
+      'Control whether Workbench Agent asks for your approval before acting.',
+    settingsPermissionConfirmationModeDescription:
+      'Choose how strongly tool execution asks for confirmation. Standard open is the default: low-risk actions pass, high-risk categories ask once; ask every time prompts for every action that needs confirmation; full access automatically approves the requests that may be auto-approved.',
+    settingsPermissionHardGateHint:
+      'Two kinds of action still ask every single time in every mode: actions that explicitly promise to wait for you (such as running a plan), and destructive commands like rm -rf or sudo. This strategy applies to the built-in Workbench Agent; Claude Code and Codex use their own engine approval settings.',
     settingsAiRulesDescription: 'Review project rules injected into Workbench AI.',
     settingsCodeGraphDescription: 'Inspect and rebuild the local symbol graph.',
     settingsKeymapDescription: 'Capture shortcuts for common IDE actions.',

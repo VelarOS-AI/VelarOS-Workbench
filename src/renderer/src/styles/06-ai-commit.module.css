@@ -171,18 +171,19 @@
   grid-template-columns: 16px 18px minmax(0, 1fr);
   min-height: 26px;
   padding-inline: 3px 7px;
-  border-radius: var(--workbench-radius);
+  border-radius: var(--workbench-radius-xs);
   color: var(--workbench-text);
 }
 
-.commitGroupRow:hover,
-.commitGroupRow[data-active='true'] {
+/*
+ * 只有悬浮着色，选中不着色。
+ *
+ * 这张列表里「选中」的语义已经由复选框完整表达了——再给整行铺一层底色，就变成同一件事说两遍，
+ * 而且铺出来的那条比复选框还抢眼。行的高亮因此只留给**指针所在**这一个瞬时状态，
+ * 并且用主题色（--workbench-active）而不是中性灰，让它跟工作台其余强调面同一个色相。
+ */
+.commitGroupRow:hover {
   background: var(--workbench-active);
-}
-
-.commitListPane:not(:focus-within) .commitGroupRow[data-active='true'] {
-  background: var(--workbench-selection-inactive);
-  color: var(--workbench-text);
 }
 
 .commitDisclosureButton {
@@ -191,17 +192,25 @@
   border-radius: var(--workbench-radius-xs);
 }
 
+/*
+ * 复选框一律**直接**取工作台主题色，不经 --control-checked / --primary 中转。
+ *
+ * 那两个令牌是共享 UI 包的：`theme-light.css` 在 `:root` 上把它们挂回 `--velar-primary`
+ * （#333366 靛蓝）。工作台虽然在 shell 上重映射过，但只要哪一层没盖住，勾选态就会露出那抹蓝
+ * ——真机上露的正是它。主题色是工作台自己的东西，这里就按自己的来。
+ */
 .commitGroupCheckbox {
-  @apply flex shrink-0 items-center justify-center border bg-card text-primary;
+  @apply flex shrink-0 items-center justify-center border bg-card;
   width: 14px;
   height: 14px;
+  color: var(--workbench-theme-color);
   border-color: var(--border-strong);
   border-radius: var(--workbench-radius-xs);
 }
 
 .commitGroupCheckbox[data-checked='true'] {
-  border-color: var(--control-checked-border);
-  background: var(--control-checked-surface);
+  border-color: color-mix(in oklab, var(--workbench-theme-color) 46%, transparent);
+  background: var(--workbench-active-soft);
 }
 
 .commitGroupCheckbox[data-partial='true']::after {
@@ -209,7 +218,7 @@
   width: 7px;
   height: 2px;
   border-radius: 999px;
-  background: var(--control-checked);
+  background: var(--workbench-theme-color);
 }
 
 .commitGroupMain {
@@ -247,21 +256,13 @@
   grid-template-columns: 18px minmax(0, 1fr) 24px 22px 22px;
   min-height: 24px;
   padding-inline: 4px;
-  border-radius: var(--workbench-radius);
+  border-radius: var(--workbench-radius-xs);
   color: var(--status-blue-strong);
 }
 
-.commitFileRow:hover,
-.commitFileRow[data-active='true'] {
+/* 同 .commitGroupRow：选中态交给复选框，行只在悬浮时用主题色着色。 */
+.commitFileRow:hover {
   background: var(--workbench-active);
-}
-
-.commitFileRow[data-selected='true']:not([data-active='true']) {
-  background: var(--workbench-selection-inactive);
-}
-
-.commitListPane:not(:focus-within) .commitFileRow[data-active='true'] {
-  background: var(--workbench-selection-inactive);
 }
 
 .commitFileRow[data-git-tone='added'] .commitFileName {
@@ -314,12 +315,12 @@
   border-color: var(--border-strong);
   border-radius: var(--workbench-radius-xs);
   background: var(--card);
-  color: var(--control-checked);
+  color: var(--workbench-theme-color);
 }
 
 .commitFileCheckbox[data-checked='true'] {
-  border-color: var(--control-checked-border);
-  background: var(--control-checked-surface);
+  border-color: color-mix(in oklab, var(--workbench-theme-color) 46%, transparent);
+  background: var(--workbench-active-soft);
 }
 
 .commitFileIcon {

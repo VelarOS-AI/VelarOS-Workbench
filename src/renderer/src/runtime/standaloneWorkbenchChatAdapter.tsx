@@ -14,6 +14,7 @@ import type {
 } from '@renderer/composition'
 import { useWorkbenchI18n } from '@renderer/i18n'
 
+import type { ReasoningLevel, RunProfileSelectionId } from '@velaros-ai/agent/protocol'
 import { AgentCapabilityProtocolVersion } from '@velaros-ai/agent/protocol/agent-capability'
 import { Log } from '@velaros-ai/core'
 import {
@@ -32,8 +33,10 @@ import type { WorkbenchAgentEngineModelCatalog } from '@shared/workbenchResource
 
 import workbenchAppIconUrl from '../../../../build/icon.svg?url'
 import type { WorkbenchChatProviderId } from '../../../plugins/agent-engines/identity'
+import { readWorkbenchPermissionConfirmationMode } from '../models/settings/workbenchPreferences'
 import styles from '../styles/workbenchPageStyles'
 
+import { WorkbenchContextUsageIndicator } from './conversation/WorkbenchContextUsageIndicator'
 import {
   applyStandaloneAgentRuntimeEvent,
   applyStandaloneCompletedRunResult,
@@ -41,6 +44,7 @@ import {
   hasStandaloneVisibleAssistantReply,
   isStandaloneAgentRuntimeEvent,
   readStandaloneAgentTerminalKind,
+  readStandaloneContextUsageEstimate,
   readStandaloneFinalAgentError,
   readStandaloneFinalAgentStatus,
   readStandaloneFinalAgentText,
@@ -48,6 +52,7 @@ import {
   sanitizeStandaloneChatMessages,
   shouldBlockStandaloneRunSubmission,
   type StandaloneAgentTerminalKind,
+  type StandaloneContextUsageEstimate,
   type StandaloneConversationRuntime,
 } from './standaloneWorkbenchChatRuntime'
 import {
@@ -63,6 +68,11 @@ import {
   useStandaloneWorkbenchModelConfig,
 } from './standaloneWorkbenchModelConfig'
 import { awaitStandaloneAgentStopSettlement } from './standaloneWorkbenchStopSettlement'
+import {
+  applyStandaloneWorkerThreadEvent,
+  createEmptyWorkerThreadProjection,
+  type StandaloneWorkerThreadProjection,
+} from './standaloneWorkbenchWorkerThreads'
 import { resolveWorkbenchClipboardFilePath } from './workbenchClipboardFile'
 import { workbenchMessage } from './workbenchMessageHost'
 
@@ -75,6 +85,10 @@ interface StandaloneChatState extends StandaloneConversationRuntime {
   readonly folderId: string
   readonly messages: readonly ChatMessage[]
   readonly lastRunStartedAt: number | null
+  /** 本轮派出去的子 Agent 线程；不持久化——它描述的是「这次跑了什么」，不是会话内容。 */
+  readonly workerThreads: StandaloneWorkerThreadProjection
+  /** main 最近一次送核前算出的上下文用量；仪表读它，renderer 不自己重算。 */
+  readonly contextUsage: Nullable<StandaloneContextUsageEstimate>
   readonly revision: number
 }
 
@@ -187,6 +201,8 @@ function createState(
     awaitingConfirmationDetail: null,
     lastRunStartedAt: null,
     lastRunFinishedAt: null,
+    workerThreads: createEmptyWorkerThreadProjection(),
+    contextUsage: null,
     revision: 0,
   }
   if (!restoreStored || !projectRoot || typeof window === 'undefined') return empty
@@ -521,6 +537,8 @@ function StandaloneWorkbenchChatSessionSurface({
     useState<Nullable<string>>(currentFilePath)
   const [goalMode, setGoalMode] = useState(false)
   const [planMode, setPlanMode] = useState(false)
+  const [runProfile, setRunProfile] = useState<RunProfileSelectionId>(readStoredRunProfile)
+  const [reasoningLevel, setReasoningLevel] = useState<ReasoningLevel>(readStoredReasoningLevel)
   const [showThinkingProcess, setShowThinkingProcess] = useState(true)
   const [accountSignInPending, setAccountSignInPending] = useState(false)
   const lastOutboundMessage = chat.messages.findLast((message) => message.role === 'user')
@@ -755,6 +773,8 @@ function StandaloneWorkbenchChatSessionSurface({
       awaitingConfirmationDetail: null,
       lastRunStartedAt: Date.now(),
       lastRunFinishedAt: null,
+      // 子 Agent 线程随轮次归零：上一轮的 worker 卡留在下一轮只会让人以为它还在跑。
+      workerThreads: createEmptyWorkerThreadProjection(),
       revision: state.revision + 1,
     }))
 
@@ -813,7 +833,14 @@ function StandaloneWorkbenchChatSessionSurface({
                 model: modelConfig.model.trim(),
                 apiKey: modelConfig.apiKey,
                 baseURL: modelConfig.baseURL.trim(),
+                // 思考力度是模型请求参数，随选择一起下发（与 Desktop 同一条路径）。
+                reasoningLevel,
               },
+              runProfile,
+              // 权限确认策略随每一轮下发（而不是 main 侧常驻）：设置页改档后立刻对下一轮
+              // 生效，不必重启会话，也不需要 main 反向读 renderer 的 localStorage。
+              // 只对原生执行栈有意义——外部引擎有自己的审批档（approvalPolicy / 沙箱）。
+              permissionConfirmationMode: readWorkbenchPermissionConfirmationMode(),
             }
             : {
                 engineId: providerId,
@@ -907,7 +934,7 @@ function StandaloneWorkbenchChatSessionSurface({
       supportsProjectFiles: true,
       messages: [...chat.messages] as ConversationView['messages'],
       messageRunMarkers: [],
-      workerThreads: [],
+      workerThreads: [...chat.workerThreads.threads],
       runtime: {
         status: chat.status,
         teamPhase: chat.teamPhase,
@@ -952,6 +979,7 @@ function StandaloneWorkbenchChatSessionSurface({
       chat.sessionId,
       chat.status,
       chat.teamPhase,
+      chat.workerThreads,
       projectRoot,
       t,
     ]
@@ -983,6 +1011,28 @@ function StandaloneWorkbenchChatSessionSurface({
           planMode,
           onPlanModeChange: setPlanMode,
         },
+        // 运行模式与思考力度只对原生执行栈有意义：外部引擎自带运行档与推理档，
+        // 由引擎自己的模型选择决定，这里整格不注入而不是给一个点了没反应的开关。
+        ...(providerId === 'workbench'
+          ? {
+              runProfile: {
+                value: runProfile,
+                disabled: isActiveChatRun(chat.status),
+                onChange: (value: RunProfileSelectionId) => {
+                  setRunProfile(value)
+                  storeRunProfile(value)
+                },
+              },
+              thinkingDepth: {
+                value: reasoningLevel,
+                disabled: isActiveChatRun(chat.status),
+                onChange: (value: ReasoningLevel) => {
+                  setReasoningLevel(value)
+                  storeReasoningLevel(value)
+                },
+              },
+            }
+          : {}),
         thinkingVisibility: {
           value: showThinkingProcess,
           onChange: setShowThinkingProcess,
@@ -1039,6 +1089,17 @@ function StandaloneWorkbenchChatSessionSurface({
               },
             }
           : undefined,
+      // 上下文用量仪表只对原生执行栈有意义：外部引擎自管上下文与压缩，Velar 侧的转录不是
+      // 它真正送核的那一份，挂一个恒 0% 的表比不挂更误导。
+      ...(providerId === 'workbench'
+        ? {
+            slots: {
+              contextUsageIndicator: (
+                <WorkbenchContextUsageIndicator usage={chat.contextUsage} />
+              ),
+            },
+          }
+        : {}),
       ...(providerId !== 'workbench' && (!engineCatalog || !engineCatalog.available)
         ? {
             modelRunSummary: {
@@ -1056,6 +1117,8 @@ function StandaloneWorkbenchChatSessionSurface({
       goalMode,
       hasPendingAgentExecution,
       includedCurrentFilePath,
+      reasoningLevel,
+      runProfile,
       engineCatalog,
       engineModel,
       modelConfig.model,
@@ -1206,6 +1269,15 @@ function applyAgentStreamEvent(
   if (record.channel !== 'agent') return
   const event = readAgentEventPayload(record)
   if (!event) return
+  if (event.type === 'worker-thread') {
+    updateState(projectRoot, providerId, (state) => {
+      const workerThreads = applyStandaloneWorkerThreadEvent(state.workerThreads, event.payload)
+      return workerThreads === state.workerThreads
+        ? state
+        : { ...state, workerThreads, revision: state.revision + 1 }
+    })
+    return
+  }
   if (event.type === 'text-delta' && typeof event.text === 'string') {
     appendAssistantText(projectRoot, providerId, event.text)
     return
@@ -1281,7 +1353,17 @@ function applyAgentRuntimeEvent(
   record: AgentExecutionEnvelope
 ): StandaloneAgentTerminalKind | null {
   const runtime = readAgentRuntimePayload(record)
-  if (!runtime || !isStandaloneAgentRuntimeEvent(runtime)) return null
+  if (!runtime) return null
+  const contextUsage = readStandaloneContextUsageEstimate(runtime)
+  if (contextUsage) {
+    updateState(projectRoot, providerId, (state) => ({
+      ...state,
+      contextUsage,
+      revision: state.revision + 1,
+    }))
+    return null
+  }
+  if (!isStandaloneAgentRuntimeEvent(runtime)) return null
   const terminalKind = readStandaloneAgentTerminalKind(runtime)
   updateState(projectRoot, providerId, (state) => {
     const base = terminalKind
@@ -1439,6 +1521,54 @@ async function buildAttachmentContext(files: readonly File[]): Promise<string> {
 function isTextAttachment(file: File): boolean {
   return file.type.startsWith('text/')
     || /\.(?:c|cc|cpp|css|csv|go|h|html|java|js|json|jsx|md|py|rs|sql|toml|ts|tsx|txt|vel|xml|ya?ml)$/iu.test(file.name)
+}
+
+/**
+ * 运行模式 / 思考力度的本地档位。
+ *
+ * 与 Desktop 的语义一致但存储更轻：Workbench 没有会话级 composer draft 账本，档位按**产品**
+ * 记忆（跨会话保留），这样换项目、换会话不会把用户刚调好的档悄悄打回默认。
+ */
+const WorkbenchRunProfiles = new Set<RunProfileSelectionId>([
+  'auto',
+  'compact',
+  'balanced',
+  'expanded',
+])
+const WorkbenchReasoningLevels = new Set<ReasoningLevel>([
+  'off',
+  'low',
+  'medium',
+  'high',
+  'ultra',
+])
+const DefaultWorkbenchRunProfile: RunProfileSelectionId = 'auto'
+const DefaultWorkbenchReasoningLevel: ReasoningLevel = 'medium'
+
+function readStoredRunProfile(): RunProfileSelectionId {
+  if (typeof window === 'undefined') return DefaultWorkbenchRunProfile
+  const stored = window.localStorage.getItem('velaros.workbench.run-profile')
+  return stored && WorkbenchRunProfiles.has(stored as RunProfileSelectionId)
+    ? stored as RunProfileSelectionId
+    : DefaultWorkbenchRunProfile
+}
+
+function storeRunProfile(runProfile: RunProfileSelectionId): void {
+  if (typeof window === 'undefined') return
+  window.localStorage.setItem('velaros.workbench.run-profile', runProfile)
+}
+
+function readStoredReasoningLevel(): ReasoningLevel {
+  if (typeof window === 'undefined') return DefaultWorkbenchReasoningLevel
+  const stored = window.localStorage.getItem('velaros.workbench.thinking-depth')
+  return stored && WorkbenchReasoningLevels.has(stored as ReasoningLevel)
+    ? stored as ReasoningLevel
+    : DefaultWorkbenchReasoningLevel
+}
+
+function storeReasoningLevel(level: ReasoningLevel): void {
+  if (typeof window === 'undefined') return
+  window.localStorage.setItem('velaros.workbench.thinking-depth', level)
 }
 
 function readStoredEngineModel(providerId: WorkbenchChatProviderId): string {

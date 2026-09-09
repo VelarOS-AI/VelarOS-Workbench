@@ -418,7 +418,16 @@
   --workbench-control-bg: var(--background-muted-strong);
   --workbench-border: var(--border);
   --workbench-border-soft: color-mix(in oklab, var(--border) 42%, transparent);
-  --workbench-hover: var(--accent);
+  /*
+   * 中性悬浮底色。
+   *
+   * 这里**不能**写 `var(--accent)`：下面的共享令牌重映射里有 `--accent: var(--workbench-hover)`,
+   * 两条合起来是一个自环，自环的自定义属性整条按 guaranteed-invalid 计算 —— 于是全 IDE 所有
+   * `background: var(--workbench-hover)` 都静默失效，落回 transparent，连带 --muted / --secondary /
+   * --surface-subtle 这一串别名一起哑掉。悬浮要的是「比底色重一点的中性」，直接按前景色兑，
+   * 深浅主题各自跟着 --workbench-text 翻转；**主题色**的悬浮由 --workbench-active 负责，两者分工不同。
+   */
+  --workbench-hover: color-mix(in srgb, var(--workbench-text) 7%, transparent);
   --workbench-theme-color: #2563eb;
   --workbench-theme-color-rgb: 37, 99, 235;
   --workbench-active: rgba(var(--workbench-theme-color-rgb), 0.12);
@@ -519,6 +528,17 @@
   --workbench-editor-diagnostic-hint-underline: #949494;
   --workbench-editor-font-size: 12.5px;
   --workbench-editor-line-height: 20.25px;
+  /*
+   * 默认（balanced）密度的圆角档。
+   *
+   * 此前只有 compact / comfortable 两个密度块声明了圆角，默认密度一条都没有——于是全 IDE 的
+   * `var(--workbench-radius)` 在默认档上按无效值算成 0，所有该有圆角的面都是方角。
+   * `-xs` 更是任何密度都没定义过（文件树、复选框、悬浮行都在引用它）。四档一起补齐。
+   */
+  --workbench-radius-xs: 3px;
+  --workbench-radius-sm: 5px;
+  --workbench-radius: 7px;
+  --workbench-radius-lg: 9px;
   --workbench-topbar-height: 36px;
   --workbench-panel-header-height: 40px;
   --workbench-statusbar-height: 26px;
@@ -582,6 +602,10 @@
   --control-gray-hover-bg: var(--workbench-hover);
   --control-gray-inset-hover-bg: var(--workbench-surface);
   --chat-user-bubble-bg: var(--workbench-control-bg);
+  /* 勾选态跟随工作台主题色：共享令牌里 --control-checked 挂在 --primary 上，而工作台把
+     --primary 重映射成了文字色，于是复选框既不是主题色也不是共享品牌色，两头不靠。 */
+  --control-checked: var(--workbench-theme-color);
+  --control-checked-rgb: var(--workbench-theme-color-rgb);
   --control-checked-surface: var(--workbench-active-soft);
   --control-checked-border: color-mix(
     in oklab,
@@ -873,6 +897,7 @@
 }
 
 .workbenchShell[data-workbench-density='compact'] {
+  --workbench-radius-xs: 2px;
   --workbench-radius-sm: 4px;
   --workbench-radius: 6px;
   --workbench-radius-lg: 8px;
@@ -898,6 +923,7 @@
 }
 
 .workbenchShell[data-workbench-density='comfortable'] {
+  --workbench-radius-xs: 4px;
   --workbench-radius-sm: 7px;
   --workbench-radius: 8px;
   --workbench-radius-lg: 10px;

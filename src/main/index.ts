@@ -350,8 +350,11 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
     providers.kernelRoutes,
     providers.parts.storagePaths,
     (sessionId, answer) => providers.agentEngines.resolveInput(sessionId, answer),
+    // 确认回执按会话找等待方：外部引擎与原生执行栈各自持有一张挂起表，命中谁就由谁结算。
+    // 两条链路共用同一条 IPC 协议，renderer 不需要知道当前会话跑的是哪个执行体。
     (sessionId, approved, rejectionMessage) =>
       providers.agentEngines.resolveConfirmation(sessionId, approved, rejectionMessage)
+      || agentExecutionStack.approvals.resolve(sessionId, approved, rejectionMessage)
   )
   void kernelRuntime.start().finally(() => {
     broadcastWorkbenchKernelStatus(kernelRuntime)

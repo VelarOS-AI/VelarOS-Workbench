@@ -8,6 +8,10 @@ import {
   ExecutionEventBus,
   normalizeExecutionModes,
 } from '@velaros-ai/agent'
+import type {
+  PermissionConfirmationMode,
+  RunProfileSelectionId,
+} from '@velaros-ai/agent/protocol'
 import {
   ChatRuntimeEvents,
   TERMINAL_STREAM_RUNTIME_STATE_KINDS,
@@ -54,14 +58,24 @@ function parseWorkbenchAgentConfig(
   )
   const engineId = config.engineId
   const externalEngine = isWorkbenchAgentEngineId(engineId)
+  const permissionConfirmationMode = config.permissionConfirmationMode
+  const runProfile = config.runProfile
   if (
     (!externalEngine && config.modelSelection === undefined) ||
     (engineId !== undefined && !externalEngine) ||
     Object.keys(config).some((key) =>
       externalEngine
         ? key !== 'engineId' && key !== 'executionModes' && key !== 'model'
-        : key !== 'modelSelection' && key !== 'executionModes'
+        : key !== 'modelSelection'
+          && key !== 'executionModes'
+          && key !== 'permissionConfirmationMode'
+          && key !== 'runProfile'
     ) ||
+    (externalEngine
+      && (permissionConfirmationMode !== undefined || runProfile !== undefined)) ||
+    (permissionConfirmationMode !== undefined
+      && !isPermissionConfirmationMode(permissionConfirmationMode)) ||
+    (runProfile !== undefined && !isRunProfileSelectionId(runProfile)) ||
     (rawExecutionModes !== undefined && !Array.isArray(rawExecutionModes)) ||
     (externalEngine &&
       config.model !== undefined &&
@@ -78,7 +92,26 @@ function parseWorkbenchAgentConfig(
       executionModes,
       ...(typeof config.model === 'string' ? { model: config.model.trim() } : {}),
     }
-  return { modelSelection: config.modelSelection, executionModes }
+  return {
+    modelSelection: config.modelSelection,
+    executionModes,
+    // 缺席时不写字段：执行栈自己回落默认档，避免在协议层再钉一份默认值。
+    ...(permissionConfirmationMode === undefined ? {} : { permissionConfirmationMode }),
+    ...(runProfile === undefined ? {} : { runProfile }),
+  }
+}
+
+/** 运行模式的封闭集；`auto` 表示交给运行时按会话体量自选。 */
+function isRunProfileSelectionId(value: unknown): value is RunProfileSelectionId {
+  return value === 'auto'
+    || value === 'compact'
+    || value === 'balanced'
+    || value === 'expanded'
+}
+
+/** 权限确认策略的封闭集；越界值一律判非法，不做「最接近档位」的猜测。 */
+function isPermissionConfirmationMode(value: unknown): value is PermissionConfirmationMode {
+  return value === 'standard-open' || value === 'ask-every-time' || value === 'never-ask'
 }
 
 /**
@@ -211,6 +244,7 @@ class WorkbenchAgentCapabilityRuntime implements AgentCapabilityRuntime {
       }
       const result = await this.stack.run({
         sessionId: input.source.sessionId,
+        executionId: input.executionId,
         projectRoot,
         messages: input.messages,
         config: input.config,

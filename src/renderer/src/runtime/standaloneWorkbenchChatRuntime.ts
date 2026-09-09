@@ -312,10 +312,18 @@ function readTeamExecutionPhase(
     : null
 }
 
+/**
+ * 确认信封的结构化明细。
+ *
+ * 逐 kind 白名单重建（而不是整包透传）：明细来自 main，但会走 Kernel 事件桥的不透明载荷，
+ * 形状不合就当没有——渲染层回落到散文 message，而不是把半个对象喂给确认卡。
+ * `authorization` 是所有 kind 共用的授权抬头（操作标签/目标/作用域），单独拼。
+ */
 function readStandaloneConfirmationDetail(
   value: unknown
 ): StandaloneConversationRuntime['awaitingConfirmationDetail'] {
   const detail = asRecord(value)
+  const authorization = readStandaloneConfirmationAuthorization(detail.authorization)
   if (
     detail.kind === 'tool-category-authorization'
     && typeof detail.categoryId === 'string'
@@ -326,6 +334,7 @@ function readStandaloneConfirmationDetail(
     categoryId: detail.categoryId,
     categoryLabel: detail.categoryLabel,
     toolName: detail.toolName,
+    ...authorization,
   }
   if (
     detail.kind === 'mcp-tool-call'
@@ -335,8 +344,51 @@ function readStandaloneConfirmationDetail(
     kind: 'mcp-tool-call',
     serverName: detail.serverName,
     toolName: detail.toolName,
+    ...authorization,
+  }
+  // 原生执行栈的通用审批（项目补丁、破坏性命令、技能加载…）都走这一支：
+  // createTaskApprovalPort 统一给 `operation-authorization` + authorization 抬头。
+  if (detail.kind === 'operation-authorization') return {
+    kind: 'operation-authorization',
+    ...authorization,
+  }
+  if (
+    detail.kind === 'skill-load'
+    && typeof detail.skillId === 'string'
+    && typeof detail.label === 'string'
+  ) return {
+    kind: 'skill-load',
+    skillId: detail.skillId,
+    label: detail.label,
+    ...(typeof detail.description === 'string' ? { description: detail.description } : {}),
+    ...authorization,
   }
   return null
+}
+
+type StandaloneConfirmationAuthorization = Pick<
+  NonNullable<StandaloneConversationRuntime['awaitingConfirmationDetail']>,
+  'authorization'
+>
+
+function readStandaloneConfirmationAuthorization(
+  value: unknown
+): StandaloneConfirmationAuthorization {
+  const authorization = asRecord(value)
+  if (typeof authorization.label !== 'string') return {}
+  const scope = authorization.scope === 'call' || authorization.scope === 'task-operation'
+    ? authorization.scope
+    : 'call'
+  return {
+    authorization: {
+      label: authorization.label,
+      scope,
+      ...(typeof authorization.target === 'string' ? { target: authorization.target } : {}),
+      ...(typeof authorization.requester === 'string'
+        ? { requester: authorization.requester }
+        : {}),
+    },
+  }
 }
 
 function readPositiveInteger(value: unknown): number | null {
@@ -345,6 +397,35 @@ function readPositiveInteger(value: unknown): number | null {
 
 function readNonBlankString(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+/**
+ * main 每轮送核前算出的上下文用量。
+ *
+ * 只留仪表要用的三格；完整载荷还带账本、压力面与治理投影，那些是调试视图的事，
+ * 全量搬到 renderer 状态里只会让每一轮都拖着一份没人读的对象。
+ */
+interface StandaloneContextUsageEstimate {
+  readonly percent: number
+  readonly estimatedTokens: number
+  readonly usableContextWindow: number
+}
+
+/** 从 `context-usage-estimate` 运行时事件里收一份用量；形状不全一律当没有。 */
+function readStandaloneContextUsageEstimate(
+  value: unknown
+): Nullable<StandaloneContextUsageEstimate> {
+  const payload = asRecord(value)
+  if (payload.kind !== 'context-usage-estimate') return null
+  const percent = payload.percent
+  const estimatedTokens = payload.estimatedTokens
+  const usableContextWindow = payload.usableContextWindow
+  if (
+    typeof percent !== 'number' || !Number.isFinite(percent)
+    || typeof estimatedTokens !== 'number' || !Number.isFinite(estimatedTokens)
+    || typeof usableContextWindow !== 'number' || usableContextWindow <= 0
+  ) return null
+  return { percent, estimatedTokens, usableContextWindow }
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -356,12 +437,14 @@ function asRecord(value: unknown): Record<string, unknown> {
 export {
   applyStandaloneAgentRuntimeEvent,
   applyStandaloneCompletedRunResult,
+  asRecord,
   beginStandaloneAgentStop,
   hasStandaloneVisibleAssistantReply,
   isStandaloneAgentRuntimeEvent,
   LegacyNoTextResponse,
   readStandaloneAgentRuntimeKind,
   readStandaloneAgentTerminalKind,
+  readStandaloneContextUsageEstimate,
   readStandaloneFinalAgentError,
   readStandaloneFinalAgentStatus,
   readStandaloneFinalAgentText,
@@ -369,4 +452,8 @@ export {
   sanitizeStandaloneChatMessages,
   shouldBlockStandaloneRunSubmission,
 }
-export type { StandaloneAgentTerminalKind, StandaloneConversationRuntime }
+export type {
+  StandaloneAgentTerminalKind,
+  StandaloneContextUsageEstimate,
+  StandaloneConversationRuntime,
+}

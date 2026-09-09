@@ -18,6 +18,8 @@ void describe('Project capability provider', () => {
       createKernel: async () => {
         created += 1
         return {
+          // providers 是内核契约的一部分：宿主要往里装审批 provider，桩件不能少这一格。
+          providers: {},
           listFiles: async (input: unknown) => {
               calls.push(input)
               return [{ path: 'src/index.ts', type: 'file' }]
@@ -106,7 +108,8 @@ void describe('Project capability provider', () => {
     } as unknown as WorkbenchVelarLogicGraphService
     const provider = new ProjectCapabilityProvider({
       velarLogicGraph,
-      createKernel: async () => ({ root: projectRoot }) as ProjectKernel,
+      createKernel: async () =>
+        ({ root: projectRoot, providers: {} }) as unknown as ProjectKernel,
     })
     try {
       const project = await provider.resolveProject(projectRoot)

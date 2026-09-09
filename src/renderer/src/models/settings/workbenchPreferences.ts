@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react'
 
+import type { PermissionConfirmationMode } from '@velaros-ai/agent/protocol'
 import { isFiniteNumber, isObject,isString, Log } from '@velaros-ai/core'
 
 import {
@@ -38,6 +39,13 @@ export interface WorkbenchPreferences {
    * 省内存、更轻量。0=每次保存都存快照。AI/工具改动不受此限制，始终每次都存。
    */
   localHistoryThrottleSeconds: number
+  /**
+   * Agent 执行工具时的权限确认策略。
+   *
+   * 它只调节「要不要弹确认卡」，不改变哪些操作有风险：`requireManualApproval` 的硬门与
+   * 破坏性命令在任何档位下都仍然逐次询问（判据见 main 侧 WorkbenchToolConfirmationPolicy）。
+   */
+  permissionConfirmationMode: PermissionConfirmationMode
 }
 
 export interface WorkbenchEditorMetrics {
@@ -57,6 +65,7 @@ export const DEFAULT_WORKBENCH_PREFERENCES: WorkbenchPreferences = {
   editorZoomLevel: 0,
   theme: 'light-modern',
   localHistoryThrottleSeconds: 60,
+  permissionConfirmationMode: 'standard-open',
 }
 
 export const WORKBENCH_EDITOR_FONT_SIZE_MIN = 11
@@ -105,6 +114,14 @@ const WorkbenchThemes = new Set<WorkbenchThemeId>([
   'midnight-blue',
 ])
 const WorkbenchDarkThemes = new Set<WorkbenchThemeId>(['dark-modern', 'midnight-blue'])
+export const WORKBENCH_PERMISSION_CONFIRMATION_MODES = Object.freeze([
+  'standard-open',
+  'ask-every-time',
+  'never-ask',
+] as const satisfies readonly PermissionConfirmationMode[])
+const WorkbenchPermissionConfirmationModes = new Set<PermissionConfirmationMode>(
+  WORKBENCH_PERMISSION_CONFIRMATION_MODES
+)
 
 export function isWorkbenchDarkTheme(theme: WorkbenchThemeId): boolean {
   return WorkbenchDarkThemes.has(theme)
@@ -250,7 +267,17 @@ export function normalizeWorkbenchPreferences(
       MAX_LOCAL_HISTORY_THROTTLE_SECONDS,
       DEFAULT_WORKBENCH_PREFERENCES.localHistoryThrottleSeconds
     ),
+    permissionConfirmationMode: normalizeChoice(
+      preferences?.permissionConfirmationMode,
+      WorkbenchPermissionConfirmationModes,
+      DEFAULT_WORKBENCH_PREFERENCES.permissionConfirmationMode
+    ),
   }
+}
+
+/** Agent 执行链路读取权限确认策略的唯一入口（main 侧按每轮 config 收到它）。 */
+export function readWorkbenchPermissionConfirmationMode(): PermissionConfirmationMode {
+  return readWorkbenchPreferences().permissionConfirmationMode
 }
 
 /** 用户手动保存时应用的本地历史节流窗口（毫秒）。 */

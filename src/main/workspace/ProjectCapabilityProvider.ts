@@ -1,7 +1,7 @@
 import { isAbsolute, resolve } from 'node:path'
 
 import type { ToolCategoryDefinition, ToolCategoryId } from '@velaros-ai/agent/protocol'
-import { defaultDenyApprovalPort } from '@velaros-ai/agent/tool-contract'
+import { type ApprovalPort, defaultDenyApprovalPort } from '@velaros-ai/agent/tool-contract'
 import {
   createProjectCodeQuery,
   type ProjectCodeIndexApi,
@@ -13,9 +13,11 @@ import {
 } from '@velaros-ai/project/agent'
 import {
   createProjectBundledModDefinition,
+  installProjectApprovalProvider,
   ProjectModId,
   ProjectSpaceId,
   ProjectToolCategories,
+  withProjectApproval,
 } from '@velaros-ai/project/composition'
 import type {
   ProjectCodeQuery,
@@ -88,6 +90,22 @@ class ProjectCapabilityProvider implements WorkbenchProjectCapabilityProvider {
     const project = await this.resolveProject(request.projectRoot)
     const input = request.input as never
 
+    // 这条 IPC 是**用户自己点的**（编辑器应用改动、回滚、运行校验），不是模型动作：它没有确认卡
+    // 可弹，弹了也是问用户「你刚点的这个要不要执行」。因此整条路径进一个直接放行的审批作用域。
+    //
+    // 不进作用域会更糟：内核的 approval provider 读不到 ALS store 时按 `false` 收敛，
+    // 高风险补丁会被**静默拒绝**——用户点了应用，什么也没发生，也没有任何解释。
+    return withProjectApproval(
+      { approval: userInitiatedApprovalPort, abortSignal: new AbortController().signal },
+      () => this.invokeProjectOperation(project, request, input)
+    )
+  }
+
+  private async invokeProjectOperation(
+    project: WorkbenchProjectCapability,
+    request: WorkbenchWorkspaceInvokeRequest,
+    input: never
+  ): Promise<unknown> {
     switch (request.operation) {
       case 'project:status':
         return project.kernel.status()
@@ -142,6 +160,13 @@ class ProjectCapabilityProvider implements WorkbenchProjectCapabilityProvider {
     if (existing) return existing
 
     const created = this.createKernel(root)
+      .then((kernel) => {
+        // 项目内核的高风险补丁要走人审：不装 approval provider，`decide` 会直接抛
+        // 「需要审批，但宿主没有提供审批通道」。实际的征询由当轮 ApprovalPort 经
+        // withProjectApproval 的动态作用域注入（见 createProjectToolContext）。
+        installProjectApprovalProvider(kernel)
+        return kernel
+      })
       .then((kernel) => ({
         kernel,
         tools: this.bindProjectTools(root, kernel),
@@ -209,6 +234,9 @@ class ProjectCapabilityProvider implements WorkbenchProjectCapabilityProvider {
   ): ProjectToolContext {
     let activeDirectory = projectRoot
     const abortSignal = readAbortSignal(toolContext) ?? new AbortController().signal
+    // 审批端口由**当轮**执行注入：provider 是每项目单例，端口却绑定单次运行的会话与事件流。
+    // 读不到就退回设计式拒绝，模型收到「没有审批通道」而不是静默放行。
+    const approval = readApprovalPort(toolContext) ?? defaultDenyApprovalPort
 
     return {
       abortSignal,
@@ -224,7 +252,7 @@ class ProjectCapabilityProvider implements WorkbenchProjectCapabilityProvider {
             activeDirectory = previousDirectory
           }
         },
-        runWithApproval: (action) => action(),
+        runWithApproval: (action) => withProjectApproval({ approval, abortSignal }, action),
         prepareMutation: async (input) =>
           buildApprovedMutation(projectRoot, activeDirectory, input),
         queryCode: this.projectCodeQuery(projectRoot),
@@ -241,7 +269,7 @@ class ProjectCapabilityProvider implements WorkbenchProjectCapabilityProvider {
       system: {
         canStartBackgroundCommands: () => false,
       },
-      approval: defaultDenyApprovalPort,
+      approval,
     }
   }
 
@@ -382,6 +410,33 @@ function readAbortSignal(toolContext: unknown): AbortSignal | undefined {
   if (!toolContext || typeof toolContext !== 'object') return undefined
   const signal = (toolContext as { abortSignal?: unknown }).abortSignal
   return signal instanceof AbortSignal ? signal : undefined
+}
+
+/**
+ * 用户主动操作的审批端口：一律放行。
+ *
+ * 它只挂在 IPC 路径上（见 {@link ProjectCapabilityProvider.invoke} 的注释）。模型动作走的是
+ * 工具上下文里那个真端口，与本端口没有任何交叉——别把它当成「反正都放行」的通用兜底。
+ */
+const userInitiatedApprovalPort: ApprovalPort = {
+  awaitConfirmation: async () => undefined,
+  awaitConfirmationDecision: async () => ({
+    approved: true,
+    message: null,
+    autoApproved: true,
+  }),
+}
+
+/** 从宿主工具上下文里取当轮审批端口；形状不完整一律当缺席，绝不半个端口上场。 */
+function readApprovalPort(toolContext: unknown): ApprovalPort | undefined {
+  if (!toolContext || typeof toolContext !== 'object') return undefined
+  const approval = (toolContext as { approval?: unknown }).approval
+  if (!approval || typeof approval !== 'object') return undefined
+  const port = approval as Partial<ApprovalPort>
+  return typeof port.awaitConfirmation === 'function'
+    && typeof port.awaitConfirmationDecision === 'function'
+    ? approval as ApprovalPort
+    : undefined
 }
 
 function readRequiredPath(input: unknown): string {

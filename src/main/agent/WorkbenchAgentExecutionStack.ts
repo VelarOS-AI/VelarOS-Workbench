@@ -3,23 +3,37 @@ import { createHash } from 'node:crypto'
 import type { ModelMessage } from 'ai'
 
 import {
+  type AgentChatRuntimeConfig,
   type AgentExecutionConfig,
-  type AgentExecutionStack,
   type AgentExecutionStackToolContext,
+  type AgentExecutionStackWithQuery,
   type AgentRuntimeCapabilityPorts,
+  type AgentSystemRuntimeConfig,
   CodingSessionTracker,
   ContextGovernanceSessionRegistry,
   createAgentExecutionStack,
   defaultUnsupportedInteractionPort,
   type ExecutionEventBus,
+  KernelBackgroundJobManager,
   PrimaryAgentProfile,
+  SubAgentDispatcher,
+  type SubAgentDispatchInput,
+  SubAgentGuidanceRelayRegistry,
+  TeamModelRouter,
+  WriteLeaseCoordinator,
 } from '@velaros-ai/agent'
 import type {
   AgentModelInputModality,
+  PermissionConfirmationMode,
   ToolAvailabilityScope,
   ToolCategoryDefinition,
   ToolCategoryId,
 } from '@velaros-ai/agent/protocol'
+import {
+  type ApprovalPort,
+  createTaskApprovalPort,
+  defaultDenyApprovalPort,
+} from '@velaros-ai/agent/tool-contract'
 import { Log } from '@velaros-ai/core'
 import { logRuntime } from '@velaros-ai/core/logger'
 import {
@@ -32,10 +46,26 @@ import type {
   WorkbenchProjectCapabilityProvider,
 } from '../workspace/ProjectCapabilityProvider'
 
+import { WorkbenchAgentApprovalBroker } from './WorkbenchAgentApprovalBroker'
+import {
+  WorkbenchAgentControlCategory,
+  WorkbenchAgentControlCategoryId,
+  WorkbenchAgentControlToolNames,
+  WorkbenchAgentControlTools,
+} from './WorkbenchAgentControlTools'
 import {
   type WorkbenchAgentToolDefinition,
   WorkbenchAgentToolRegistry,
 } from './WorkbenchAgentToolRegistry'
+import {
+  createWorkbenchQueryRoleEngine,
+  createWorkbenchTeamModelRoutingPort,
+  WorkbenchSubAgentTypeProvider,
+} from './WorkbenchSubAgentPolicy'
+import {
+  DefaultWorkbenchPermissionConfirmationMode,
+  shouldAutoApproveWorkbenchToolConfirmation,
+} from './WorkbenchToolConfirmationPolicy'
 
 /**
  * Workbench 的**进程内** Agent 执行栈。
@@ -60,6 +90,8 @@ const WorkbenchDefaultThinkingDepth = 'balanced'
 
 interface WorkbenchAgentRunInput {
   sessionId: string
+  /** 本轮执行 id：审批卡的 runtime 事件要自述它属于哪一次执行。 */
+  executionId: string
   /** 项目根：Project capability 与会话装配都按它分桶。 */
   projectRoot: Nullable<string>
   messages: ModelMessage[]
@@ -106,6 +138,24 @@ interface WorkbenchAgentRunToolSnapshot extends WorkbenchAgentModSurfaceSnapshot
   readonly surfaceSignature: string
 }
 
+/**
+ * 一轮运行的配置快照。
+ *
+ * 主 Agent 和它派出去的子 Agent 必须看到**同一份**模型选择与系统配置：子 Agent 是这一轮的
+ * 一部分，不是另一次运行。
+ *
+ * 由 run() 在开跑前写入，**收尾时不清**：`mode: 'async'` 的 worker 会活过派发它的那一轮，
+ * 排在并发闸后面的还可能在 finally 之后才真正起跑。清掉等于让它们在启动瞬间撞空，
+ * 而它们要的恰恰是「派我出来的那一轮」的配置——留着上一份快照不是将就，是正确答案。
+ * 同一会话不会有两轮并行（renderer 在会话粒度上阻塞重复提交），因此不存在被下一轮覆写的窗口。
+ */
+interface WorkbenchAgentRunRuntime {
+  config: AgentExecutionConfig
+  chatConfig: AgentChatRuntimeConfig
+  systemConfig: AgentSystemRuntimeConfig
+  events: ExecutionEventBus
+}
+
 /** 一个会话 + 一份等价 Mod 工具面的可复用装配。 */
 interface WorkbenchAgentSession {
   projectRoot: string
@@ -114,7 +164,13 @@ interface WorkbenchAgentSession {
   surfaceSignature: string
   tracker: CodingSessionTracker
   registry: WorkbenchAgentToolRegistry
-  stack: AgentExecutionStack<WorkbenchAgentToolContext>
+  stack: AgentExecutionStackWithQuery<WorkbenchAgentToolContext>
+  /** 主 Agent 的角色解析器；子 Agent 的角色引擎也复用它（见 WorkbenchSubAgentPolicy）。 */
+  primaryAgentProfile: PrimaryAgentProfile
+  /** 按需子 Agent 派发器；并发闸、类型路由与写租约都在它手里。 */
+  dispatcher: SubAgentDispatcher
+  /** 最近一轮的配置快照；首轮开跑前为 null。 */
+  runtime: Nullable<WorkbenchAgentRunRuntime>
   enabledCategoryIds: readonly ToolCategoryId[]
   initialVisibleToolNames: readonly string[]
 }
@@ -137,12 +193,19 @@ class WorkbenchAgentExecutionStack {
   private readonly modelRuntime: ModelRuntimeComposition['agentModelRuntime']
   private readonly contextGovernanceSessions = new ContextGovernanceSessionRegistry()
   private readonly sessions = new Map<string, WorkbenchAgentSession>()
+  /** 异步派发（`mode: 'async'`）的收束账本；`job:*` 工具读写的就是它。 */
+  private readonly backgroundJobs = new KernelBackgroundJobManager()
 
   public constructor(
     private readonly projectProvider: WorkbenchProjectCapabilityProvider,
-    modelComposition: ModelRuntimeComposition = createModelRuntimeComposition(),
+    private readonly modelComposition: ModelRuntimeComposition = createModelRuntimeComposition(),
     private readonly modSurfaceProvider: WorkbenchAgentModSurfaceProvider =
-      EmptyWorkbenchAgentModSurfaceProvider
+      EmptyWorkbenchAgentModSurfaceProvider,
+    /**
+     * 审批通道：装配根持有同一个实例，才能把 renderer 的确认回执路由回等待中的执行。
+     * 默认自持一个，让测试与探针不必额外接线。
+     */
+    public readonly approvals: WorkbenchAgentApprovalBroker = new WorkbenchAgentApprovalBroker()
   ) {
     // Model 是宿主注入的能力：Agent 不自己发现 provider registry。
     // config.modelSelection 是不透明选择，Workbench 原样转交 Model 包解析（BYOK）。
@@ -162,6 +225,25 @@ class WorkbenchAgentExecutionStack {
     })
     const abortController = new AbortController()
     const unbindAbort = bindAbortSignal(input.abortSignal, abortController)
+    const config = { ...input.config, sessionId: input.sessionId, abortController }
+    const chatConfig: AgentChatRuntimeConfig = {
+      modelSelection: input.config.modelSelection,
+      systemPromptAppend: '',
+    }
+    const systemConfig: AgentSystemRuntimeConfig = {
+      thinkingDepth: input.config.thinkingDepth ?? WorkbenchDefaultThinkingDepth,
+      disabledToolNames: [],
+      prompt: { segmentOverrides: [] },
+      advancedRuntime: {},
+      // Model 包要求显式上下文。Workbench 是纯 BYOK：provider 的 key / baseURL 直接
+      // 走 config.modelSelection，因此没有 provider 运行时配置表，这里给空集。
+      modelRuntimeContext: {
+        providerRuntimeConfigs: [],
+        openRouter: { useFreeModelsForDebug: false },
+      },
+    }
+    // 子 Agent 与主 Agent 共用这一份快照；派发器与 QueryLoop 都从 session.runtime 读。
+    session.runtime = { config, chatConfig, systemConfig, events: input.events }
     const toolContext = createWorkbenchToolContext({
       sessionId: input.sessionId,
       locale: input.config.locale,
@@ -171,37 +253,35 @@ class WorkbenchAgentExecutionStack {
       registry: session.registry,
       enabledCategoryIds: session.enabledCategoryIds,
       initialVisibleToolNames: session.initialVisibleToolNames,
+      approval: this.buildApprovalPort({
+        sessionId: input.sessionId,
+        executionId: input.executionId,
+        events: input.events,
+        tracker: session.tracker,
+        permissionConfirmationMode:
+          input.config.permissionConfirmationMode
+          ?? DefaultWorkbenchPermissionConfirmationMode,
+      }),
+      dispatchSubAgent: (dispatchInput) =>
+        session.dispatcher.dispatch({
+          input: dispatchInput,
+          parentCtx: toolContext,
+          events: input.events,
+          config,
+        }),
     })
     session.tracker.attachToolContext(toolContext)
-    const primaryAgentProfile = new PrimaryAgentProfile(EmptySkillRepository, {
-      getToolCategoryId: (toolName) =>
-        session.registry.getDescriptor(toolName)?.categoryId ?? 'project-files',
-    })
-    const resolution = primaryAgentProfile.resolve({
+    const resolution = session.primaryAgentProfile.resolve({
       knownToolNames: session.registry.names,
-      allowSubAgents: false,
+      allowSubAgents: true,
     })
 
     try {
       return await session.stack.executeSolo({
         history: input.messages,
-        config: { ...input.config, sessionId: input.sessionId, abortController },
-        chatConfig: {
-          modelSelection: input.config.modelSelection,
-          systemPromptAppend: '',
-        },
-        systemConfig: {
-          thinkingDepth: input.config.thinkingDepth ?? WorkbenchDefaultThinkingDepth,
-          disabledToolNames: [],
-          prompt: { segmentOverrides: [] },
-          advancedRuntime: {},
-          // Model 包要求显式上下文。Workbench 是纯 BYOK：provider 的 key / baseURL 直接
-          // 走 config.modelSelection，因此没有 provider 运行时配置表，这里给空集。
-          modelRuntimeContext: {
-            providerRuntimeConfigs: [],
-            openRouter: { useFreeModelsForDebug: false },
-          },
-        },
+        config,
+        chatConfig,
+        systemConfig,
         abortController,
         toolContext,
         resolution,
@@ -209,10 +289,14 @@ class WorkbenchAgentExecutionStack {
       })
     } finally {
       unbindAbort()
+      // 一轮结束（含中止/失败）后不留悬挂的确认卡：晚到的回执没有等待方，
+      // 而挂着的 Promise 会把整个执行钉死在 awaiting_confirmation。
+      this.approvals.cancelSession(input.sessionId, '本次执行已结束。')
     }
   }
 
   public async dispose(): Promise<void> {
+    this.approvals.dispose()
     for (const [sessionId, session] of this.sessions) session.stack.clearSession(sessionId)
     this.sessions.clear()
     await this.projectProvider.dispose().catch((error: unknown) => {
@@ -222,13 +306,103 @@ class WorkbenchAgentExecutionStack {
     })
   }
 
-  /** 执行栈绑定本次冻结工具面，内部回合与上下文由 Platform 统一配对。 */
-  private createStack(registry: WorkbenchAgentToolRegistry): AgentExecutionStack<WorkbenchAgentToolContext> {
+  /**
+   * 本轮执行的审批端口 = 判定策略（问不问）+ 通道（怎么问）。
+   *
+   * `createTaskApprovalPort` 负责串行化、会话级风险类别记忆与「同一操作只问一次」，
+   * 判据交给 {@link shouldAutoApproveWorkbenchToolConfirmation}，真正要问人时才落到 broker。
+   */
+  private buildApprovalPort(input: {
+    sessionId: string
+    executionId: string
+    events: ExecutionEventBus
+    tracker: CodingSessionTracker
+    permissionConfirmationMode: PermissionConfirmationMode
+  }): ApprovalPort {
+    return createTaskApprovalPort(
+      this.approvals.createPort({
+        sessionId: input.sessionId,
+        executionId: input.executionId,
+        events: input.events,
+      }),
+      input.tracker,
+      {
+        shouldAutoApprove: (options) =>
+          shouldAutoApproveWorkbenchToolConfirmation({
+            permissionConfirmationMode: input.permissionConfirmationMode,
+            hasConfirmedRiskScope: (riskScope) => !!input.tracker.hasConfirmedRiskScope(riskScope),
+            options,
+          }),
+      }
+    )
+  }
+
+  /**
+   * 执行栈绑定本次冻结工具面，内部回合与上下文由 Platform 统一配对。
+   *
+   * 传 `query` 才会配出 QueryLoop——子 Agent 面就是它。省掉这一格的宿主只跑 Solo，
+   * `agent:dispatch` 会因为拿不到 `dispatchSubAgent` 而整格隐身。
+   */
+  private createStack(
+    registry: WorkbenchAgentToolRegistry,
+    primaryAgentProfile: PrimaryAgentProfile
+  ): AgentExecutionStackWithQuery<WorkbenchAgentToolContext> {
+    const toolCategoryToolNames = registry.toolCategoryToolNames
     return createAgentExecutionStack<WorkbenchAgentToolContext>({
       model: this.modelRuntime,
       toolRegistry: registry,
       governanceSessions: this.contextGovernanceSessions,
+      query: {
+        roleEngine: createWorkbenchQueryRoleEngine(primaryAgentProfile),
+        getToolNamesForCategories: (categories) =>
+          categories.flatMap((categoryId) => toolCategoryToolNames[categoryId] ?? []),
+      },
     })
+  }
+
+  /**
+   * 子 Agent 派发器。
+   *
+   * 它要的五样东西 Workbench 都能给出**真**实现，没有一处占位：模型路由跟随当前 BYOK 选择、
+   * 写租约用包内协调器串行化编辑、配置从当轮快照读、引导中继与类型表各自一份。
+   * 派发器不自己跑 loop——`bindAgentRunner` 之后由本栈的 QueryLoop 执行。
+   */
+  private createSubAgentDispatcher(
+    stack: AgentExecutionStackWithQuery<WorkbenchAgentToolContext>,
+    readRuntime: () => WorkbenchAgentRunRuntime
+  ): SubAgentDispatcher {
+    const dispatcher = new SubAgentDispatcher(
+      new TeamModelRouter(createWorkbenchTeamModelRoutingPort(this.modelComposition)),
+      new WriteLeaseCoordinator(),
+      {
+        get systemConfig(): AgentSystemRuntimeConfig {
+          return readRuntime().systemConfig
+        },
+        get chatConfig(): AgentChatRuntimeConfig {
+          return readRuntime().chatConfig
+        },
+      },
+      new SubAgentGuidanceRelayRegistry(),
+      new WorkbenchSubAgentTypeProvider(),
+      undefined,
+      this.backgroundJobs
+    )
+    dispatcher.bindAgentRunner({
+      query: (task, parentCtx, opts) => {
+        const runtime = readRuntime()
+        return stack.executeQuery({
+          task,
+          opts: opts as never,
+          parentCtx: parentCtx as WorkbenchAgentToolContext,
+          chatConfig: runtime.chatConfig,
+          systemConfig: runtime.systemConfig,
+          // Workbench 没有能力侧信号（Desktop 的 codingSignals 那一路）；空快照让子 Agent
+          // 的提示词组装走「无信号」分支，而不是拿一个假对象去渲染。
+          collectCapabilityContext: async () => null,
+        })
+      },
+    })
+    return dispatcher
   }
 
   private async resolveSession(
@@ -264,13 +438,26 @@ class WorkbenchAgentExecutionStack {
         activeCapabilityScope: 'project',
       }
     )
+    const primaryAgentProfile = new PrimaryAgentProfile(EmptySkillRepository, {
+      getToolCategoryId: (toolName) =>
+        registry.getDescriptor(toolName)?.categoryId ?? 'project-files',
+    })
+    const stack = this.createStack(registry, primaryAgentProfile)
     const created: WorkbenchAgentSession = {
       projectRoot: input.projectRoot,
       generation: snapshot.generation,
       surfaceSignature: snapshot.surfaceSignature,
       tracker,
       registry,
-      stack: this.createStack(registry),
+      stack,
+      primaryAgentProfile,
+      dispatcher: this.createSubAgentDispatcher(stack, () => {
+        const runtime = created.runtime
+        // 只有「一轮都还没跑过就派子 Agent」才可能落到这里，那是装配错误而非运行态。
+        if (!runtime) throw new Error('子 Agent 只能在一轮主 Agent 运行内派发。')
+        return runtime
+      }),
+      runtime: null,
       enabledCategoryIds: snapshot.enabledCategoryIds,
       initialVisibleToolNames: snapshot.initialVisibleToolNames,
     }
@@ -289,10 +476,16 @@ function composeWorkbenchAgentRunToolSnapshot(
   }
 
   const categoryDefinitions = mergeCategoryDefinitions(
-    project.categoryDefinitions,
+    mergeCategoryDefinitions(project.categoryDefinitions, WorkbenchAgentControlCategory),
     modSurface.categoryDefinitions
   )
-  const tools = Object.freeze([...project.tools, ...modSurface.tools])
+  // 控制面工具不属于任何 Mod：它们是执行栈自己的能力（派发子 Agent、收束异步作业），
+  // 因此在这里与项目/Mod 工具面合流，而不是伪装成一个 provider 挂进 Mod 目录。
+  const tools = Object.freeze([
+    ...project.tools,
+    ...WorkbenchAgentControlTools,
+    ...modSurface.tools,
+  ])
   const toolsByName = new Map<string, WorkbenchAgentToolDefinition>()
   for (const tool of tools) {
     if (toolsByName.has(tool.name)) {
@@ -308,6 +501,7 @@ function composeWorkbenchAgentRunToolSnapshot(
 
   const enabledCategoryIds = uniqueStrings([
     ...project.enabledCategoryIds,
+    WorkbenchAgentControlCategoryId,
     ...modSurface.enabledCategoryIds,
   ])
   const enabledCategorySet = new Set(enabledCategoryIds)
@@ -319,6 +513,9 @@ function composeWorkbenchAgentRunToolSnapshot(
 
   const residentCategoryIds = uniqueStrings([
     ...project.residentCategoryIds,
+    // 控制面常驻：模型得能看见「这活可以派出去」这个选项，才谈得上选它。
+    // 三个工具的 schema 成本远低于「永远想不到还能委派」的代价。
+    WorkbenchAgentControlCategoryId,
     ...modSurface.residentCategoryIds,
   ])
   for (const categoryId of residentCategoryIds) {
@@ -329,6 +526,7 @@ function composeWorkbenchAgentRunToolSnapshot(
 
   const initialVisibleToolNames = uniqueStrings([
     ...project.initialVisibleToolNames,
+    ...WorkbenchAgentControlToolNames,
     ...modSurface.initialVisibleToolNames,
   ])
   for (const toolName of initialVisibleToolNames) {
@@ -473,6 +671,11 @@ type WorkbenchAgentToolContext = AgentExecutionStackToolContext & {
   setCurrentVisibleToolTransportNames(names: Readonly<Record<string, string>>): void
   codingSession: CodingSessionTracker
   interaction: typeof defaultUnsupportedInteractionPort
+  approval: ApprovalPort
+  /** execution 恒为 null（Workbench 没有执行账），显式写成 null 让子 Agent 面的契约对得上。 */
+  execution: null
+  /** 子 Agent 派发；缺席时 `agent:dispatch` 自带的可用性门会让它整格隐身。 */
+  dispatchSubAgent?: (input: SubAgentDispatchInput) => Promise<string>
 }
 
 export function createWorkbenchToolContext(input: {
@@ -484,6 +687,10 @@ export function createWorkbenchToolContext(input: {
   registry: WorkbenchAgentToolRegistry
   enabledCategoryIds?: readonly ToolCategoryId[]
   initialVisibleToolNames?: readonly string[]
+  /** 审批端口；缺省是设计式拒绝，工具会拿到「没有审批通道」而不是撞 null。 */
+  approval?: ApprovalPort
+  /** 子 Agent 派发；不传即本次执行面不开放委派。 */
+  dispatchSubAgent?: (input: SubAgentDispatchInput) => Promise<string>
 }): WorkbenchAgentToolContext {
   let visibleToolNames = [...(input.initialVisibleToolNames ?? input.registry.names)]
   let visibleToolTransportNames: Readonly<Record<string, string>> = {}
@@ -513,7 +720,10 @@ export function createWorkbenchToolContext(input: {
     // Workbench 没有持久化 execution 记录，但 Agent 提示词与计划工具要求一个非空的
     // interaction 端口；使用框架的显式空降级，读取计划时返回空结构而不是撞 undefined。
     interaction: defaultUnsupportedInteractionPort,
+    // 审批与交互分属两个端口：Workbench 的 execution 恒为空（无执行账），审批却是真通道。
+    approval: input.approval ?? defaultDenyApprovalPort,
     execution: null,
+    ...(input.dispatchSubAgent ? { dispatchSubAgent: input.dispatchSubAgent } : {}),
     codingSession: input.tracker,
     getEnabledToolCategories: () => input.tracker.getEnabledToolCategories(),
     query: async () => {

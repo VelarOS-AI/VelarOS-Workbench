@@ -68,6 +68,7 @@ import {
   useStandaloneWorkbenchModCatalog,
 } from '@renderer/runtime/standaloneWorkbenchMods'
 
+import type { PermissionConfirmationMode } from '@velaros-ai/agent/protocol'
 import { Result } from '@velaros-ai/core/result'
 import type { ProviderModelCatalog } from '@velaros-ai/model/contracts'
 import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
@@ -1532,6 +1533,49 @@ export function WorkbenchSettingsDialog({
     )
   }
 
+  /**
+   * 访问权限：Agent 动手前要不要先问你。
+   *
+   * 三档只调节**询问强度**，不是「能做什么」的开关：明确承诺等待确认的操作（实施计划、
+   * 阻塞式动作卡）与破坏性命令在任何档位下都仍然逐次弹卡，判据住在 main 侧
+   * WorkbenchToolConfirmationPolicy，界面只负责选档。
+   */
+  function renderPermissionsSection(): ReactElement {
+    return (
+      <div className={styles.workbenchSettingsSectionPanel}>
+        <SettingRow
+          title={t('workbench.settingsPermissionConfirmationMode')}
+          description={t('workbench.settingsPermissionConfirmationModeDescription')}
+        >
+          <Select<PermissionConfirmationMode>
+            size="sm"
+            className={styles.workbenchSettingsSelectTrigger}
+            value={preferences.permissionConfirmationMode}
+            options={[
+              {
+                value: 'standard-open',
+                label: t('workbench.settingsPermissionModeStandardOpen'),
+              },
+              {
+                value: 'ask-every-time',
+                label: t('workbench.settingsPermissionModeAskEveryTime'),
+              },
+              {
+                value: 'never-ask',
+                label: t('workbench.settingsPermissionModeNeverAsk'),
+              },
+            ]}
+            onChange={(permissionConfirmationMode) =>
+              onPreferencesChange({ permissionConfirmationMode })}
+          />
+        </SettingRow>
+        <Text tone="caption" className={styles.workbenchSettingsRowDescription}>
+          {t('workbench.settingsPermissionHardGateHint')}
+        </Text>
+      </div>
+    )
+  }
+
   function renderAiSection(): ReactElement {
     return (
       <div
@@ -1542,6 +1586,12 @@ export function WorkbenchSettingsDialog({
           description={t('workbench.settingsModelDescription')}
         >
           {renderModelSection()}
+        </SettingsSubsection>
+        <SettingsSubsection
+          title={t('workbench.settingsPermissions')}
+          description={t('workbench.settingsPermissionsDescription')}
+        >
+          {renderPermissionsSection()}
         </SettingsSubsection>
         <SettingsSubsection
           title={t('workbench.settingsAiRules')}

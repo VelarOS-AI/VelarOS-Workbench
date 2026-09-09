@@ -40,7 +40,9 @@ void describe('Workbench command cancellation', () => {
     const markerPath = join(projectRoot, 'command.pid')
     const controller = new AbortController()
     const provider = new ProjectCapabilityProvider({
-      createKernel: async () => ({ root: projectRoot }) as ProjectKernel,
+      // providers 是内核契约的一部分：宿主要往里装审批 provider，桩件不能少这一格。
+      createKernel: async () =>
+        ({ root: projectRoot, providers: {} }) as unknown as ProjectKernel,
     })
     let childPid: number | undefined
     let commandPromise: Promise<unknown> | undefined
