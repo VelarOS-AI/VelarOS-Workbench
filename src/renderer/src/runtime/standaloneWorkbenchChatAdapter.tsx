@@ -45,6 +45,10 @@ import { readWorkbenchPermissionConfirmationMode } from '../models/settings/work
 import styles from '../styles/workbenchPageStyles'
 
 import { WorkbenchContextUsageIndicator } from './conversation/WorkbenchContextUsageIndicator'
+import {
+  projectStandaloneSessionGroups,
+  standaloneProjectFolderId,
+} from './standaloneChatSessionList'
 import { useStandaloneQueuedDrafts } from './standaloneQueuedDrafts'
 import {
   applyStandaloneAgentRuntimeEvent,
@@ -451,10 +455,10 @@ function useStandaloneChatState(
   )
 }
 
-function toSnapshot(state: StandaloneChatState): WorkbenchChatSessionSnapshot {
+function toSnapshot(state: StandaloneChatState, folderId: string): WorkbenchChatSessionSnapshot {
   return {
     id: state.sessionId,
-    folderId: state.folderId,
+    folderId,
     kind: 'chat',
     rootPath: state.projectRoot,
     space: 'project',
@@ -478,47 +482,37 @@ function useStandaloneProjectRuntime(
 ): WorkbenchChatProjectRuntime {
   const normalizedRoot = projectRoot?.trim() ?? ''
   const state = useStandaloneChatState(normalizedRoot, providerId)
+  // 一个项目一个会话文件夹，会话是它的成员（见 standaloneChatSessionList）。
+  const folderId = standaloneProjectFolderId(normalizedRoot, providerId)
+  // 当前会话在前，其余按最近使用排（切走时排到最前）。
   const allStates = readAllStates(normalizedRoot, providerId)
-  const snapshots = allStates.map(toSnapshot)
-  const groups = allStates.map((candidate) => {
-    const member = {
-      itemId: candidate.sessionId,
-      memberSessionId: candidate.sessionId,
+  const groups = projectStandaloneSessionGroups({
+    folderId,
+    projectRoot: normalizedRoot,
+    activeSessionId: state.sessionId,
+    title: readStandaloneChatTitle(state),
+    entries: allStates.map((candidate) => ({
+      sessionId: candidate.sessionId,
       title: readStandaloneChatTitle(candidate),
-      workspaceTitle: '',
-      workspaceRoot: candidate.projectRoot,
+      projectRoot: candidate.projectRoot,
       updatedAt: candidate.lastRunFinishedAt ?? candidate.lastRunStartedAt ?? 0,
       isEmpty: candidate.messages.length === 0,
       isStreaming: isActiveChatRun(candidate.status),
-    }
-    return {
-      folderId: candidate.folderId,
-      title: readStandaloneChatTitle(candidate),
-      kind: 'chat' as const,
-      surfaceScope: {
-        surface: 'workbench' as const,
-        projectRoot: candidate.projectRoot,
-      },
-      archivedAt: null,
-      updatedAt: member.updatedAt,
-      memberSessionIds: [candidate.sessionId],
-      activeMemberItemId: candidate.sessionId,
-      members: [member],
-    }
+    })),
   })
 
   return {
     projectRoot,
-    currentSession: toSnapshot(state),
-    sessions: snapshots,
+    currentSession: toSnapshot(state, folderId),
+    sessions: allStates.map((candidate) => toSnapshot(candidate, folderId)),
     conversationVersion: state.revision,
     browserActivationToken: null,
     sessionList: {
       activeMemberSessionId: state.sessionId,
-      activeSessionId: state.folderId,
+      activeSessionId: folderId,
       deletingSessionId: null,
       diskSessionHydrated: true,
-      groups: normalizedRoot ? groups : [],
+      groups,
       archiveGroups: [],
     },
     actions: {
@@ -532,11 +526,14 @@ function useStandaloneProjectRuntime(
         for (const listener of listeners) listener()
         return true
       },
-      archiveSession: async (folderId) => {
+      // 面板的「归档当前聊天会话」传的是项目文件夹：归档的是当前这个会话。
+      archiveSession: async (targetFolderId) => {
         const key = stateKey(normalizedRoot, providerId)
         const active = getState(normalizedRoot, providerId)
         const inactive = inactiveStates.get(key) ?? []
-        const target = [active, ...inactive].find((candidate) => candidate.folderId === folderId)
+        const target = targetFolderId === folderId
+          ? active
+          : [active, ...inactive].find((candidate) => candidate.folderId === targetFolderId)
         if (!target || isActiveChatRun(target.status)) return
         // 会话从存储里整个移除，它的检查点也就再没有回溯的机会。
         releaseCheckpointRefs(target.projectRoot, target.sessionId, target.checkpoints)
@@ -558,7 +555,7 @@ function useStandaloneProjectRuntime(
       selectSession: (_folderId, memberSessionId) => {
         activateState(normalizedRoot, providerId, memberSessionId)
       },
-      startProjectChat: () => getState(normalizedRoot, providerId).folderId,
+      startProjectChat: () => folderId,
     },
   }
 }
