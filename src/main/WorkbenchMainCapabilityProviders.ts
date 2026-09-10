@@ -6,6 +6,7 @@ import type { WorkbenchKernelCapabilityRoutes } from './kernel/WorkbenchKernelPr
 import { WorkbenchCodeGraphResource } from './resources/WorkbenchCodeGraphResource'
 import { WorkbenchResourcePluginService } from './resources/WorkbenchResourcePluginService'
 import { WorkbenchChatCheckpointService } from './workspace/git/WorkbenchChatCheckpoints'
+import { WorkbenchChatRunChangeStore } from './workspace/git/WorkbenchChatRunChanges'
 import { WorkbenchGitService } from './workspace/git/WorkbenchGitService'
 import { WorkbenchLanguageServiceWorkerClient } from './workspace/language/LanguageServiceWorkerClient'
 import { WorkbenchVelarLogicGraphService } from './workspace/language/WorkbenchVelarLogicGraphService'
@@ -23,6 +24,8 @@ export interface WorkbenchMainCapabilityProviders {
   readonly git: WorkbenchGitService
   /** 聊天回溯的工作区检查点（git 影子快照）。 */
   readonly chatCheckpoints: WorkbenchChatCheckpointService
+  /** 每轮「本轮改动」的补丁记录（落在数据区的文件里）。 */
+  readonly chatRunChanges: WorkbenchChatRunChangeStore
   readonly language: WorkbenchLanguageServiceWorkerClient
   readonly watch: WorkbenchFileWatcher
   readonly workspace: WorkbenchProjectCapabilityProvider
@@ -67,12 +70,16 @@ export function createDefaultWorkbenchMainCapabilityProviders(
     agentEngines,
   })
   const parts = createWorkbenchAppParts(dataRootDir)
+  const chatCheckpoints = new WorkbenchChatCheckpointService(() =>
+    parts.storagePaths.getChatCheckpointIndexesDir()
+  )
   return {
     parts,
     fileSystem: new WorkbenchProjectFileSystem(),
     git: new WorkbenchGitService(),
-    chatCheckpoints: new WorkbenchChatCheckpointService(() =>
-      parts.storagePaths.getChatCheckpointIndexesDir()
+    chatCheckpoints,
+    chatRunChanges: new WorkbenchChatRunChangeStore(chatCheckpoints, () =>
+      parts.storagePaths.getChatRunChangesDir()
     ),
     language,
     watch: new WorkbenchFileWatcher({

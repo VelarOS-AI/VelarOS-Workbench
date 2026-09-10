@@ -13,6 +13,8 @@ import type {
   WorkbenchChatCheckpointDeleteRequest,
   WorkbenchChatCheckpointRestoreRequest,
   WorkbenchChatCheckpointRestoreResult,
+  WorkbenchChatRunFileChange,
+  WorkbenchChatRunFileChangeStatus,
 } from '../../../shared/workbenchGit'
 
 /**
@@ -26,8 +28,34 @@ const ShadowCommitIdentityEnv = {
   GIT_COMMITTER_NAME: 'VelarOS',
   GIT_COMMITTER_EMAIL: 'velaros@local',
 }
-const CommitIdPattern = /^[0-9a-f]{40,64}$/u
+/** git 对象 id（sha1 40 位 / sha256 64 位）。 */
+const ObjectIdPattern = /^[0-9a-f]{40,64}$/u
 const GitOutputMaxBytes = 16 * 1024 * 1024
+
+/**
+ * 本轮改动的比对参数：用户的 diff 配置（外部 diff 驱动、textconv、颜色、改名探测）一律压住，输出只由
+ * 这里决定；`--relative` 只看项目根之内、路径相对项目根——项目可能只是某个大仓的子目录。
+ */
+const RunChangeDiffArgs = [
+  'diff',
+  '--no-color',
+  '--no-ext-diff',
+  '--no-textconv',
+  '--no-renames',
+  '--relative',
+]
+/**
+ * 本轮改动的逐行补丁上限。文件清单与增删计数永远完整；超限的文件不存补丁，卡片里只给计数——
+ * 一次格式化全仓之类的大改动也撑不爆记录文件。
+ */
+const RunChangePatchLimits = {
+  files: 200,
+  linesPerFile: 4_000,
+  bytesPerFile: 512 * 1024,
+  totalBytes: 6 * 1024 * 1024,
+} as const
+/** 逐文件取补丁时同时跑的 git 进程数。 */
+const PatchReadConcurrency = 4
 
 function shadowRef(sessionId: string, checkpointId: string): string {
   return `${ShadowRefNamespace}/${sanitizeRefSegment(sessionId)}/${sanitizeRefSegment(checkpointId)}`
@@ -72,7 +100,7 @@ export class WorkbenchChatCheckpointService {
             ...ShadowCommitIdentityEnv,
           })
         ).trim()
-        if (!CommitIdPattern.test(commitId)) return { commitId: null }
+        if (!ObjectIdPattern.test(commitId)) return { commitId: null }
         // 单独成 ref，保证对象可达不被 GC；不挂到任何用户分支上。
         await this.runGit(root, [
           'update-ref',
@@ -90,7 +118,7 @@ export class WorkbenchChatCheckpointService {
   public async restore(
     request: WorkbenchChatCheckpointRestoreRequest
   ): Promise<WorkbenchChatCheckpointRestoreResult> {
-    if (!CommitIdPattern.test(request.commitId))
+    if (!ObjectIdPattern.test(request.commitId))
       throw new AppError('VALIDATION', '无效的检查点提交。')
     const root = await this.resolveRoot(request.workspaceRoot)
     return this.serialize(root, async () => {
@@ -123,6 +151,36 @@ export class WorkbenchChatCheckpointService {
           .catch(() => undefined)
       }
     })
+  }
+
+  /**
+   * 当前工作树相对某个检查点提交的逐文件改动：一轮收尾时的「本轮改动」。
+   *
+   * 工作树用同一份持久影子 index 写成 tree 对象——不建提交、不挂 ref，比完就不再需要——与捕获共用
+   * 根锁；比对只读对象库，放在锁外，不挡下一轮开跑前的捕获。
+   */
+  public async diffWorkingTree(request: {
+    workspaceRoot: string
+    baseCommitId: string
+  }): Promise<WorkbenchChatRunFileChange[]> {
+    if (!ObjectIdPattern.test(request.baseCommitId))
+      throw new AppError('VALIDATION', '无效的检查点提交。')
+    const root = await this.resolveRoot(request.workspaceRoot)
+    const tree = await this.serialize(root, async () => {
+      const env = { GIT_INDEX_FILE: await this.persistentIndexFile(root) }
+      await this.runGit(root, ['add', '-A'], env)
+      return (await this.runGit(root, ['write-tree'], env)).trim()
+    })
+    if (!ObjectIdPattern.test(tree)) throw new AppError('PLATFORM', 'git write-tree 未返回 tree 对象。')
+
+    const range = [request.baseCommitId, tree]
+    const [statusText, numstatText] = await Promise.all([
+      this.runGit(root, [...RunChangeDiffArgs, '-z', '--name-status', ...range]),
+      this.runGit(root, [...RunChangeDiffArgs, '-z', '--numstat', ...range]),
+    ])
+    return attachRunChangePatches(parseRunChangeFiles(statusText, numstatText), (path) =>
+      this.runGit(root, [...RunChangeDiffArgs, ...range, '--', `:(literal)${path}`])
+    )
   }
 
   private async isInsideWorkTree(root: string): Promise<boolean> {
@@ -181,4 +239,94 @@ export class WorkbenchChatCheckpointService {
     }
     return result.stdout
   }
+}
+
+/** `-z` 输出下路径原样给出（不转义、不加引号），NUL 分隔。 */
+function parseRunChangeFiles(statusText: string, numstatText: string): WorkbenchChatRunFileChange[] {
+  const statusByPath = new Map<string, WorkbenchChatRunFileChangeStatus>()
+  const statusFields = statusText.split('\0')
+  for (let index = 0; index + 1 < statusFields.length; index += 2) {
+    const code = statusFields[index]
+    const path = statusFields[index + 1]
+    if (code && path) statusByPath.set(path, readRunChangeStatus(code))
+  }
+
+  const files: WorkbenchChatRunFileChange[] = []
+  for (const record of numstatText.split('\0')) {
+    // `增加\t删除\t路径`；路径本身可以含制表符，所以只切前两刀。
+    const firstTab = record.indexOf('\t')
+    const secondTab = firstTab < 0 ? -1 : record.indexOf('\t', firstTab + 1)
+    const path = secondTab < 0 ? '' : record.slice(secondTab + 1)
+    if (!path) continue
+    const additions = record.slice(0, firstTab)
+    const deletions = record.slice(firstTab + 1, secondTab)
+    const binary = additions === '-' && deletions === '-'
+    files.push({
+      path,
+      status: statusByPath.get(path) ?? 'modified',
+      additions: binary ? 0 : readLineCount(additions),
+      deletions: binary ? 0 : readLineCount(deletions),
+      binary,
+      patch: '',
+      patchOmitted: false,
+    })
+  }
+  return files
+}
+
+function readRunChangeStatus(code: string): WorkbenchChatRunFileChangeStatus {
+  if (code.startsWith('A')) return 'added'
+  if (code.startsWith('D')) return 'deleted'
+  return 'modified'
+}
+
+function readLineCount(value: string): number {
+  const parsed = Number.parseInt(value, 10)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
+}
+
+/**
+ * 按上限逐文件取补丁（见 {@link RunChangePatchLimits}），按清单顺序计入总字节预算。
+ * 单个文件取失败只让它退化成「只有计数」，不拖垮整轮采集。
+ */
+async function attachRunChangePatches(
+  files: readonly WorkbenchChatRunFileChange[],
+  readPatch: (path: string) => Promise<string>
+): Promise<WorkbenchChatRunFileChange[]> {
+  const hasLineChanges = (file: WorkbenchChatRunFileChange): boolean =>
+    !file.binary && file.additions + file.deletions > 0
+  const candidates = files
+    .filter(
+      (file) =>
+        hasLineChanges(file) &&
+        file.additions + file.deletions <= RunChangePatchLimits.linesPerFile
+    )
+    .slice(0, RunChangePatchLimits.files)
+  const patches = new Map<string, string>()
+  let totalBytes = 0
+  for (let index = 0; index < candidates.length; index += PatchReadConcurrency) {
+    if (totalBytes >= RunChangePatchLimits.totalBytes) break
+    const batch = candidates.slice(index, index + PatchReadConcurrency)
+    const results = await Promise.all(
+      batch.map((file) => readPatch(file.path).catch(() => null))
+    )
+    batch.forEach((file, batchIndex) => {
+      const patch = results[batchIndex]
+      if (!patch) return
+      const bytes = Buffer.byteLength(patch)
+      if (
+        bytes > RunChangePatchLimits.bytesPerFile ||
+        totalBytes + bytes > RunChangePatchLimits.totalBytes
+      )
+        return
+      totalBytes += bytes
+      patches.set(file.path, patch)
+    })
+  }
+
+  return files.map((file) => {
+    const patch = patches.get(file.path)
+    if (patch) return { ...file, patch }
+    return hasLineChanges(file) ? { ...file, patchOmitted: true } : file
+  })
 }

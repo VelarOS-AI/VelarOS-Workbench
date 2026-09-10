@@ -7,6 +7,7 @@ import type { ChatMessage } from '@shared/contracts'
 import {
   applyStandaloneAgentRuntimeEvent,
   applyStandaloneCompletedRunResult,
+  attachStandaloneRunChanges,
   beginStandaloneAgentStop,
   hasStandaloneVisibleAssistantReply,
   LegacyNoTextResponse,
@@ -16,6 +17,7 @@ import {
   readStandaloneFinalAgentStatus,
   readStandaloneFinalAgentText,
   readStandaloneModelVisibleText,
+  resolveStandaloneRunChangesAnchor,
   restoreStandaloneRunMarkers,
   sanitizeStandaloneChatMessages,
   shouldBlockStandaloneRunSubmission,
@@ -371,6 +373,69 @@ void describe('standalone Workbench conversation runtime', () => {
       ]
     )
     assert.deepEqual(restoreStandaloneRunMarkers(undefined, messages), [])
+  })
+
+  void test('keeps only a summary of a run\'s file changes on its marker', () => {
+    const summary = {
+      recordId: 'checkpoint-2',
+      capturedAt: 9,
+      fileCount: 2,
+      additions: 5,
+      deletions: 1,
+      error: null,
+    }
+    const messages: ChatMessage[] = [
+      { ...message('user', [{ type: 'text', text: 'first' }], 'turn-1'), conversationKind: 'turn-input' },
+      message('assistant', [{ type: 'text', text: 'answer' }], 'reply-1'),
+      { ...message('user', [{ type: 'text', text: 'second' }], 'turn-2'), conversationKind: 'turn-input' },
+      message('assistant', [{ type: 'text', text: 'second answer' }], 'reply-2'),
+    ]
+    const completed = markStandaloneRun({
+      messages,
+      markers: [],
+      status: 'completed',
+      lastError: null,
+      completedTurns: 1,
+      lastRunStartedAt: 1,
+      lastRunFinishedAt: 2,
+    })
+
+    // 这一轮的检查点拍在第二条用户消息之前（下标 2）：改动记在这一轮的回答上。
+    assert.equal(resolveStandaloneRunChangesAnchor(messages, completed, 2), 'reply-2')
+    // 这一轮一条回答都没产出时，最近的回答属于上一轮。
+    assert.equal(resolveStandaloneRunChangesAnchor(messages.slice(0, 3), completed, 2), null)
+
+    const attached = attachStandaloneRunChanges(completed, 'reply-2', summary)
+    assert.ok(attached)
+    assert.deepEqual(attached.markers[0]?.runChanges, summary)
+    assert.equal(attached.replacedRecordId, null)
+    // 被中止改写过的标记不再挂改动。
+    assert.equal(
+      attachStandaloneRunChanges([{ ...completed[0]!, status: 'aborted' }], 'reply-2', summary),
+      null
+    )
+    // 同一条回答再记一次运行标记（迟到的完成回执），摘要不丢。
+    assert.deepEqual(
+      markStandaloneRun({
+        messages,
+        markers: attached.markers,
+        status: 'completed',
+        lastError: null,
+        completedTurns: 2,
+        lastRunStartedAt: 1,
+        lastRunFinishedAt: 3,
+      })[0]?.runChanges,
+      summary
+    )
+    // 摘要随会话持久化；形状不对的当没有。
+    assert.deepEqual(restoreStandaloneRunMarkers(attached.markers, messages)[0]?.runChanges, summary)
+    assert.equal(
+      restoreStandaloneRunMarkers(
+        [{ ...attached.markers[0], runChanges: { recordId: 'x', fileCount: -1 } }],
+        messages
+      )[0]?.runChanges,
+      undefined
+    )
   })
 })
 

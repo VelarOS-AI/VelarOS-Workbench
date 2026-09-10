@@ -2,6 +2,7 @@ import { isConversationTurnInputMessage } from '@velaros-ai/agent/protocol'
 import type { ConversationView } from '@velaros-ai/ui/conversation'
 
 import type { ChatMessage } from '@shared/contracts'
+import type { WorkbenchChatRunChangesSummary } from '@shared/workbenchGit'
 
 type StandaloneConversationRuntime = Pick<
   ConversationView['runtime'],
@@ -272,8 +273,15 @@ function pauseUnappliedRunGuidance(
   )
 }
 
-/** 共享会话视图的运行标记：一轮收尾时记在这一轮最后一条助手消息上。 */
-type StandaloneRunMarker = ConversationView['messageRunMarkers'][number]
+/**
+ * 共享会话视图的运行标记：一轮收尾时记在这一轮最后一条助手消息上。
+ *
+ * `runChanges` 是这一轮的「本轮改动」摘要（Desktop 在同一位置记整份 workspaceCheckpointDiff）。
+ * 补丁全文在主进程数据区的记录文件里，这里只有定长摘要和记录 id——标记随会话进 localStorage。
+ */
+type StandaloneRunMarker = ConversationView['messageRunMarkers'][number] & {
+  readonly runChanges?: WorkbenchChatRunChangesSummary
+}
 
 type StandaloneTerminalRunStatus = Extract<
   StandaloneConversationRuntime['status'],
@@ -326,6 +334,8 @@ function markStandaloneRun(
     turnCount: input.completedTurns > 0 ? input.completedTurns : null,
     turnKind: input.completedTurns > 0 ? 'totalTurns' : null,
     ...(startedAt !== null ? { startedAt, durationMs: timestamp - startedAt } : {}),
+    // 改动摘要是收尾之后才采集到的，重记标记不能把它（和它指向的记录文件）弄丢。
+    ...(existing?.runChanges ? { runChanges: existing.runChanges } : {}),
     timestamp,
   }
   if (
@@ -360,6 +370,7 @@ function restoreStandaloneRunMarkers(
     const startedAt = readFiniteNumber(record.startedAt)
     const durationMs = readFiniteNumber(record.durationMs)
     const turnCount = readPositiveInteger(record.turnCount)
+    const runChanges = readStoredRunChanges(record.runChanges)
     return [{
       messageId,
       status,
@@ -367,9 +378,69 @@ function restoreStandaloneRunMarkers(
       turnCount,
       turnKind: turnCount !== null ? 'totalTurns' : null,
       ...(startedAt !== null && durationMs !== null ? { startedAt, durationMs } : {}),
+      ...(runChanges ? { runChanges } : {}),
       timestamp,
     }]
   })
+}
+
+function readStoredRunChanges(value: unknown): WorkbenchChatRunChangesSummary | null {
+  const record = asRecord(value)
+  const { recordId, capturedAt, fileCount, additions, deletions, error } = record
+  if (
+    typeof recordId !== 'string'
+    || typeof capturedAt !== 'number'
+    || !isCount(fileCount)
+    || !isCount(additions)
+    || !isCount(deletions)
+  ) return null
+  return {
+    recordId,
+    capturedAt,
+    fileCount,
+    additions,
+    deletions,
+    error: readNonBlankString(error),
+  }
+}
+
+function isCount(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0
+}
+
+/**
+ * 这一轮的「本轮改动」记在哪条消息上：刚收尾的这一轮、已完成的运行标记所在的那条助手消息。
+ * 它必须排在这一轮开跑前的检查点之后——这一轮一条助手消息都没产出时，最近的助手回复属于上一轮。
+ */
+function resolveStandaloneRunChangesAnchor(
+  messages: readonly ChatMessage[],
+  markers: readonly StandaloneRunMarker[],
+  captureMessageCount: number
+): string | null {
+  const anchorIndex = messages.findLastIndex((message) => message.role === 'assistant')
+  if (anchorIndex < 0 || anchorIndex < captureMessageCount) return null
+  const messageId = messages[anchorIndex]!.id
+  return markers.some((marker) => marker.messageId === messageId && marker.status === 'completed')
+    ? messageId
+    : null
+}
+
+/**
+ * 把采集到的改动摘要记到那条消息的运行标记上。标记已不在或不再是已完成（采集期间被回溯掉、
+ * 被后来的中止改写）时返回 null——调用方要删掉刚写下的记录；替换掉的旧记录 id 同样交给调用方删。
+ */
+function attachStandaloneRunChanges(
+  markers: readonly StandaloneRunMarker[],
+  messageId: string,
+  runChanges: WorkbenchChatRunChangesSummary
+): { markers: StandaloneRunMarker[]; replacedRecordId: string | null } | null {
+  const marker = markers.find((entry) => entry.messageId === messageId)
+  if (marker?.status !== 'completed') return null
+  const previous = marker.runChanges?.recordId
+  return {
+    markers: markers.map((entry) => (entry === marker ? { ...entry, runChanges } : entry)),
+    replacedRecordId: previous && previous !== runChanges.recordId ? previous : null,
+  }
 }
 
 function readStandaloneModelVisibleText(message: ChatMessage): string {
@@ -562,6 +633,7 @@ export {
   applyStandaloneAgentRuntimeEvent,
   applyStandaloneCompletedRunResult,
   asRecord,
+  attachStandaloneRunChanges,
   beginStandaloneAgentStop,
   hasStandaloneVisibleAssistantReply,
   isStandaloneAgentRuntimeEvent,
@@ -575,6 +647,7 @@ export {
   readStandaloneFinalAgentStatus,
   readStandaloneFinalAgentText,
   readStandaloneModelVisibleText,
+  resolveStandaloneRunChangesAnchor,
   restoreStandaloneRunMarkers,
   sanitizeStandaloneChatMessages,
   shouldBlockStandaloneRunSubmission,

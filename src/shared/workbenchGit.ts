@@ -37,6 +37,9 @@ export const WorkbenchGitChannels = {
   captureChatCheckpoint: 'workbench-app:git:capture-chat-checkpoint',
   restoreChatCheckpoint: 'workbench-app:git:restore-chat-checkpoint',
   deleteChatCheckpoints: 'workbench-app:git:delete-chat-checkpoints',
+  captureChatRunChanges: 'workbench-app:git:capture-chat-run-changes',
+  readChatRunChanges: 'workbench-app:git:read-chat-run-changes',
+  deleteChatRunChanges: 'workbench-app:git:delete-chat-run-changes',
 } as const
 
 export interface WorkbenchGitRootRequest {
@@ -113,6 +116,62 @@ export interface WorkbenchChatCheckpointDeleteRequest extends WorkbenchGitRootRe
   checkpointIds: string[]
 }
 
+/**
+ * 每轮的「本轮改动」（Desktop 运行标记上的 workspaceCheckpointDiff）：一轮正常收尾后，拿工作树与
+ * 这一轮开跑前的检查点做 diff。补丁全文写进主进程数据区的记录文件——会话历史存在 localStorage，
+ * 放不下补丁——运行标记上只留定长摘要，卡片挂出来时再按 recordId 读记录。
+ */
+export interface WorkbenchChatRunChangesCaptureRequest extends WorkbenchGitRootRequest {
+  sessionId: string
+  /** 记录 id（这一轮检查点的 id），会话内唯一。 */
+  recordId: string
+  /** 这一轮开跑前检查点的影子提交：diff 的起点。 */
+  baseCommitId: string
+}
+
+/** 记在运行标记上的摘要：定长，不随改动文件数增长。 */
+export interface WorkbenchChatRunChangesSummary {
+  recordId: string
+  capturedAt: number
+  fileCount: number
+  additions: number
+  deletions: number
+  /** 采集失败的原因；成功（包括这一轮没改文件）为 null。 */
+  error: string | null
+}
+
+export type WorkbenchChatRunFileChangeStatus = 'added' | 'deleted' | 'modified'
+
+export interface WorkbenchChatRunFileChange {
+  /** 相对项目根的路径。 */
+  path: string
+  status: WorkbenchChatRunFileChangeStatus
+  additions: number
+  deletions: number
+  binary: boolean
+  /** 单个文件的统一 diff；二进制或没存逐行补丁时为空串。 */
+  patch: string
+  /** 改动过大（行数、字节或文件数超限）没存逐行补丁；计数仍然准确。 */
+  patchOmitted: boolean
+}
+
+export interface WorkbenchChatRunChangesRecord {
+  recordId: string
+  capturedAt: number
+  changes: WorkbenchChatRunFileChange[]
+}
+
+export interface WorkbenchChatRunChangesReadRequest extends WorkbenchGitRootRequest {
+  sessionId: string
+  recordId: string
+}
+
+export interface WorkbenchChatRunChangesDeleteRequest extends WorkbenchGitRootRequest {
+  sessionId: string
+  /** 省略时删掉这个会话的全部记录（会话被移除时）。 */
+  recordIds?: string[]
+}
+
 export interface WorkbenchGitBridge {
   getSummary(
     request: WorkbenchGitRootRequest
@@ -158,5 +217,15 @@ export interface WorkbenchGitBridge {
   ): Promise<WorkbenchFsCallResult<WorkbenchChatCheckpointRestoreResult>>
   deleteChatCheckpoints(
     request: WorkbenchChatCheckpointDeleteRequest
+  ): Promise<WorkbenchFsCallResult<void>>
+  captureChatRunChanges(
+    request: WorkbenchChatRunChangesCaptureRequest
+  ): Promise<WorkbenchFsCallResult<WorkbenchChatRunChangesSummary>>
+  /** 记录不在（已清理或这一轮没改文件）时为 null。 */
+  readChatRunChanges(
+    request: WorkbenchChatRunChangesReadRequest
+  ): Promise<WorkbenchFsCallResult<WorkbenchChatRunChangesRecord | null>>
+  deleteChatRunChanges(
+    request: WorkbenchChatRunChangesDeleteRequest
   ): Promise<WorkbenchFsCallResult<void>>
 }

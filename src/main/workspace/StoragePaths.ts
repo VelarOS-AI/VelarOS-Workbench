@@ -17,6 +17,11 @@ const WorkbenchStorageDirectory = {
   chatHistoryBackups: 'chat-history-backups',
   /** 聊天回溯检查点的持久影子 index（每个项目根一份，只是 `git add -A` 的 stat 缓存，可随时删）。 */
   chatCheckpointIndexes: 'chat-checkpoint-indexes',
+  /**
+   * 每轮「本轮改动」的补丁记录（按项目根、会话分目录）。补丁全文只落在这里——会话历史在
+   * localStorage，放不下；运行标记上只记摘要和记录 id。
+   */
+  chatRunChanges: 'chat-run-changes',
 } as const
 
 class WorkbenchAppStoragePaths {
@@ -38,6 +43,11 @@ class WorkbenchAppStoragePaths {
   /** 聊天回溯检查点的影子 index 区（见 {@link WorkbenchStorageDirectory.chatCheckpointIndexes}）。 */
   public getChatCheckpointIndexesDir(): string {
     return this.ensureDir(join(this.dataRootDir, WorkbenchStorageDirectory.chatCheckpointIndexes))
+  }
+
+  /** 本轮改动记录区（见 {@link WorkbenchStorageDirectory.chatRunChanges}）。 */
+  public getChatRunChangesDir(): string {
+    return this.ensureDir(join(this.dataRootDir, WorkbenchStorageDirectory.chatRunChanges))
   }
 
   private ensureDir(path: string): string {

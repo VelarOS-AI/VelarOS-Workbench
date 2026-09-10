@@ -37,6 +37,7 @@ import type {
   ContentBlock,
   ToolCallBlock,
 } from '@shared/contracts'
+import type { WorkbenchChatRunChangesSummary } from '@shared/workbenchGit'
 import type { WorkbenchAgentEngineModelCatalog } from '@shared/workbenchResourcePlugins'
 
 import workbenchAppIconUrl from '../../../../build/icon.svg?url'
@@ -46,6 +47,10 @@ import styles from '../styles/workbenchPageStyles'
 
 import { WorkbenchContextUsageIndicator } from './conversation/WorkbenchContextUsageIndicator'
 import {
+  type WorkbenchRunChangesScope,
+  WorkbenchRunChangesScopeContext,
+} from './conversation/WorkbenchRunChangesCard'
+import {
   projectStandaloneSessionGroups,
   standaloneProjectFolderId,
 } from './standaloneChatSessionList'
@@ -53,6 +58,7 @@ import { useStandaloneQueuedDrafts } from './standaloneQueuedDrafts'
 import {
   applyStandaloneAgentRuntimeEvent,
   applyStandaloneCompletedRunResult,
+  attachStandaloneRunChanges,
   beginStandaloneAgentStop,
   hasStandaloneVisibleAssistantReply,
   isStandaloneAgentRuntimeEvent,
@@ -64,6 +70,7 @@ import {
   readStandaloneFinalAgentStatus,
   readStandaloneFinalAgentText,
   readStandaloneModelVisibleText,
+  resolveStandaloneRunChangesAnchor,
   restoreStandaloneRunMarkers,
   sanitizeStandaloneChatMessages,
   shouldBlockStandaloneRunSubmission,
@@ -535,8 +542,9 @@ function useStandaloneProjectRuntime(
           ? active
           : [active, ...inactive].find((candidate) => candidate.folderId === targetFolderId)
         if (!target || isActiveChatRun(target.status)) return
-        // 会话从存储里整个移除，它的检查点也就再没有回溯的机会。
+        // 会话从存储里整个移除，它的检查点再没有回溯的机会，本轮改动记录也不再有人看。
         releaseCheckpointRefs(target.projectRoot, target.sessionId, target.checkpoints)
+        releaseRunChangeRecords(target.projectRoot, target.sessionId)
         if (target.sessionId === active.sessionId) {
           const [replacement, ...remaining] = inactive
           const next = replacement ?? createState(normalizedRoot, providerId, false)
@@ -841,7 +849,7 @@ function StandaloneWorkbenchChatSessionSurface({
     sessionId: string,
     captureMessageCount: number,
     label: string
-  ): Promise<void> {
+  ): Promise<StandaloneChatCheckpoint> {
     const checkpointId = nextId('workbench-checkpoint')
     const captured = await window.velarosWorkbenchGit
       .captureChatCheckpoint({
@@ -851,20 +859,64 @@ function StandaloneWorkbenchChatSessionSurface({
         label: label.replace(/\s+/gu, ' ').trim().slice(0, 48),
       })
       .catch(() => null)
+    const checkpoint: StandaloneChatCheckpoint = {
+      id: checkpointId,
+      captureMessageCount,
+      createdAt: Date.now(),
+      commitId: captured?.ok ? captured.value.commitId : null,
+    }
     let evicted: StandaloneChatCheckpoint[] = []
     withStateUpdateTarget(projectRoot, providerId, sessionId, () =>
       updateState(projectRoot, providerId, (state) => {
-        const appended = appendStandaloneCheckpoint(state.checkpoints, {
-          id: checkpointId,
-          captureMessageCount,
-          createdAt: Date.now(),
-          commitId: captured?.ok ? captured.value.commitId : null,
-        })
+        const appended = appendStandaloneCheckpoint(state.checkpoints, checkpoint)
         evicted = appended.evicted
         return { ...state, checkpoints: appended.checkpoints }
       })
     )
     releaseCheckpointRefs(projectRoot, sessionId, evicted)
+    return checkpoint
+  }
+
+  /**
+   * 一轮正常收尾后记下「本轮改动」（Desktop captureCompletedRunWorkspaceDiff 的对位件）：拿工作树与
+   * 这一轮开跑前的检查点比，补丁落进主进程的记录文件，运行标记上只挂摘要。
+   *
+   * 采集请求在收尾的同一拍同步发出：main 按项目根串行，它排在下一条排队消息开跑前的检查点之前，
+   * 下一轮的改动混不进这一轮。
+   */
+  function captureRunChanges(sessionId: string, checkpoint: StandaloneChatCheckpoint): void {
+    const baseCommitId = checkpoint.commitId
+    const session = readAllStates(projectRoot, providerId)
+      .find((candidate) => candidate.sessionId === sessionId)
+    if (!baseCommitId || !session) return
+    const anchorId = resolveStandaloneRunChangesAnchor(
+      session.messages,
+      session.messageRunMarkers,
+      checkpoint.captureMessageCount
+    )
+    if (!anchorId) return
+
+    void window.velarosWorkbenchGit
+      .captureChatRunChanges({
+        workspaceRoot: projectRoot,
+        sessionId,
+        recordId: checkpoint.id,
+        baseCommitId,
+      })
+      .then((result) => {
+        if (!result.ok) {
+          log.warn('本轮改动采集失败', { sessionId, message: result.message })
+          return
+        }
+        const attached = attachRunChanges(projectRoot, providerId, sessionId, anchorId, result.value)
+        // 这条消息在采集期间被回溯掉了：刚写下的记录没人引用；被替换掉的旧记录同理。
+        const orphaned = attached
+          ? attached.replacedRecordId
+          : result.value.fileCount > 0 ? checkpoint.id : null
+        if (orphaned) releaseRunChangeRecords(projectRoot, sessionId, [orphaned])
+      }, (error: unknown) => {
+        log.warn('本轮改动采集通道不可用', { sessionId, error })
+      })
   }
 
   /**
@@ -936,6 +988,7 @@ function StandaloneWorkbenchChatSessionSurface({
       : null
 
     let evicted: StandaloneChatCheckpoint[] = []
+    let droppedRunChangeRecordIds: string[] = []
     let applied = false
     withStateUpdateTarget(projectRoot, providerId, sessionId, () =>
       updateState(projectRoot, providerId, (state) => {
@@ -945,6 +998,10 @@ function StandaloneWorkbenchChatSessionSurface({
         evicted = latest.evictedCheckpoints
         const kept = state.messages.slice(0, latest.targetIndex)
         const keptIds = new Set(kept.map((message) => message.id))
+        // 被移除的回答连同它们的「本轮改动」记录一起走。
+        droppedRunChangeRecordIds = readRunChangeRecordIds(
+          state.messageRunMarkers.filter((marker) => !keptIds.has(marker.messageId))
+        )
         return {
           ...state,
           messages: notice ? [...kept, notice] : kept,
@@ -977,6 +1034,7 @@ function StandaloneWorkbenchChatSessionSurface({
           : 'workbench.chatRewindMessageNotFound')
       )
     releaseCheckpointRefs(projectRoot, sessionId, evicted)
+    releaseRunChangeRecords(projectRoot, sessionId, droppedRunChangeRecordIds)
     // 原文放回输入框；附件的文件句柄已经不在了，只带文字（只有附件的消息正文就是文件名，不回填）。
     const rewound = selection.removedMessages[0]
     const rewoundText = rewound ? readStandaloneModelVisibleText(rewound) : ''
@@ -1142,14 +1200,16 @@ function StandaloneWorkbenchChatSessionSurface({
       revision: state.revision + 1,
     }))
     options?.onAccepted?.()
-    // 开跑前拍下本轮的工作区检查点，回溯到这条消息时可以一并回退文件（与 Desktop 一致）。
-    // 只对原生执行栈：外部引擎的会话历史在它自己手里，回溯改不了它记住的内容，也就不提供回溯。
-    if (providerId === 'workbench')
-      await captureRunCheckpoint(
-        submittingSession.sessionId,
-        submittingSession.messages.length,
-        text || submittedMessage.attachments?.map((attachment) => attachment.name).join(', ') || ''
-      )
+    // 开跑前拍下本轮的工作区检查点，回溯到这条消息时可以一并回退文件（与 Desktop 一致），
+    // 收尾后也拿它比出「本轮改动」。只对原生执行栈：外部引擎的会话历史在它自己手里，
+    // 回溯改不了它记住的内容，也就不提供回溯。
+    const runCheckpoint = providerId === 'workbench'
+      ? await captureRunCheckpoint(
+          submittingSession.sessionId,
+          submittingSession.messages.length,
+          text || submittedMessage.attachments?.map((attachment) => attachment.name).join(', ') || ''
+        )
+      : null
 
     // P6：模型运行时已在本进程（BYOK 选择直接进 Agent 执行栈），不再有
     // `model.supports-provider` 这种远端预检——provider 不认识时由执行本身报错。
@@ -1276,6 +1336,7 @@ function StandaloneWorkbenchChatSessionSurface({
         t('workbench.chatNoTextResponse')
       )
     })
+    if (runCheckpoint) captureRunChanges(activeExecution.sessionId, runCheckpoint)
     return true
   }
 
@@ -1560,101 +1621,117 @@ function StandaloneWorkbenchChatSessionSurface({
     ]
   )
 
+  // 「本轮改动」卡按消息查摘要：走 context，不受共享气泡 memo 的比较字段限制。
+  const runChangesScope = useMemo<WorkbenchRunChangesScope>(
+    () => ({
+      projectRoot,
+      sessionId: chat.sessionId,
+      summaries: new Map(
+        chat.messageRunMarkers.flatMap((marker) =>
+          marker.runChanges ? [[marker.messageId, marker.runChanges] as const] : []
+        )
+      ),
+    }),
+    [chat.messageRunMarkers, chat.sessionId, projectRoot]
+  )
+
   return (
     <ChatThinkingVisibilityProvider visible={showThinkingProcess}>
-      <ChatConversationPane
-        conversation={conversation}
-        conversationRefreshKey={conversationRefreshKey}
-        composer={<ChatSurfaceComposer control={composerControl} variant="side" />}
-        followLocked={followLocked}
-        scrollRef={scrollRef}
-        scrollNavigatorHidden={scrollNavigatorHidden}
-        streamSlot={chat.messages.length === 0 ? (
-          <div className={styles.workbenchChatEmptyState} data-workbench-chat-empty="true">
-            <div className={styles.workbenchChatEmptyContent}>
-              <img
-                className={styles.workbenchChatEmptyIcon}
-                src={workbenchAppIconUrl}
-                alt=""
-                aria-hidden="true"
-              />
-              <div
-                className={styles.workbenchChatStarterList}
-                aria-label={t('workbench.chatStarterSuggestions')}
-              >
-                {starterSuggestions.map((suggestion) => (
-                  <button
-                    key={suggestion.id}
-                    type="button"
-                    className={styles.workbenchChatStarterButton}
-                    onClick={() => {
-                      setPrompt(suggestion.prompt)
-                      void submit(suggestion.prompt)
-                    }}
-                  >
-                    <span className={styles.workbenchChatStarterCopy}>
-                      <span className={styles.workbenchChatStarterTitle}>{suggestion.title}</span>
-                      <span className={styles.workbenchChatStarterPrompt}>{suggestion.prompt}</span>
-                    </span>
-                    <ArrowRightIcon className={styles.workbenchChatStarterArrow} size={13} />
-                  </button>
-                ))}
+      <WorkbenchRunChangesScopeContext.Provider value={runChangesScope}>
+        <ChatConversationPane
+          conversation={conversation}
+          conversationRefreshKey={conversationRefreshKey}
+          composer={<ChatSurfaceComposer control={composerControl} variant="side" />}
+          followLocked={followLocked}
+          scrollRef={scrollRef}
+          scrollNavigatorHidden={scrollNavigatorHidden}
+          streamSlot={chat.messages.length === 0 ? (
+            <div className={styles.workbenchChatEmptyState} data-workbench-chat-empty="true">
+              <div className={styles.workbenchChatEmptyContent}>
+                <img
+                  className={styles.workbenchChatEmptyIcon}
+                  src={workbenchAppIconUrl}
+                  alt=""
+                  aria-hidden="true"
+                />
+                <div
+                  className={styles.workbenchChatStarterList}
+                  aria-label={t('workbench.chatStarterSuggestions')}
+                >
+                  {starterSuggestions.map((suggestion) => (
+                    <button
+                      key={suggestion.id}
+                      type="button"
+                      className={styles.workbenchChatStarterButton}
+                      onClick={() => {
+                        setPrompt(suggestion.prompt)
+                        void submit(suggestion.prompt)
+                      }}
+                    >
+                      <span className={styles.workbenchChatStarterCopy}>
+                        <span className={styles.workbenchChatStarterTitle}>{suggestion.title}</span>
+                        <span className={styles.workbenchChatStarterPrompt}>{suggestion.prompt}</span>
+                      </span>
+                      <ArrowRightIcon className={styles.workbenchChatStarterArrow} size={13} />
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
-          </div>
-        ) : undefined}
-        variant="side"
-        onSubmitInput={async (answer) => {
-          const accepted = await window.velarosWorkbenchKernel.resolveAgentInput({
-            sessionId: chat.sessionId,
-            answer,
-          })
-          if (!accepted) return
-          updateState(projectRoot, providerId, (state) => ({
-            ...state,
-            status: 'running',
-            teamPhase: 'creating-task',
-            activeTurn: null,
-            lastError: null,
-            connectionRetryAttempt: null,
-            connectionRetryMaxAttempts: null,
-            awaitingInputQuestion: null,
-            awaitingConfirmationMessage: null,
-            awaitingConfirmationDetail: null,
-            revision: state.revision + 1,
-          }))
-        }}
-        onResolveConfirmation={async (approved, rejectionMessage) => {
-          const accepted = await window.velarosWorkbenchKernel.resolveAgentConfirmation({
-            sessionId: chat.sessionId,
-            approved,
-            ...(rejectionMessage?.trim() ? { rejectionMessage } : {}),
-          })
-          if (!accepted) return
-          updateState(projectRoot, providerId, (state) => ({
-            ...state,
-            status: 'running',
-            teamPhase: 'executing',
-            activeTurn: null,
-            lastError: null,
-            connectionRetryAttempt: null,
-            connectionRetryMaxAttempts: null,
-            awaitingInputQuestion: null,
-            awaitingConfirmationMessage: null,
-            awaitingConfirmationDetail: null,
-            revision: state.revision + 1,
-          }))
-        }}
-        // 回溯只对原生执行栈：外部引擎的会话历史在它自己手里，截断这边的对话改不了它记住的内容。
-        {...(providerId === 'workbench'
-          ? { onRewindToMessage: rewindToMessage, getRewindPlan: buildRewindPlanForMessage }
-          : {})}
-        // 回答里的项目路径、文件改动卡与「查看改动」都落到宿主编辑器（与 Desktop 同一组入口）。
-        onOpenProjectPath={onOpenWorkspacePath}
-        onOpenFileChange={onOpenFileChange}
-        onReviewFileChanges={onReviewFileChanges}
-        onFollowLockedChange={setFollowLocked}
-      />
+          ) : undefined}
+          variant="side"
+          onSubmitInput={async (answer) => {
+            const accepted = await window.velarosWorkbenchKernel.resolveAgentInput({
+              sessionId: chat.sessionId,
+              answer,
+            })
+            if (!accepted) return
+            updateState(projectRoot, providerId, (state) => ({
+              ...state,
+              status: 'running',
+              teamPhase: 'creating-task',
+              activeTurn: null,
+              lastError: null,
+              connectionRetryAttempt: null,
+              connectionRetryMaxAttempts: null,
+              awaitingInputQuestion: null,
+              awaitingConfirmationMessage: null,
+              awaitingConfirmationDetail: null,
+              revision: state.revision + 1,
+            }))
+          }}
+          onResolveConfirmation={async (approved, rejectionMessage) => {
+            const accepted = await window.velarosWorkbenchKernel.resolveAgentConfirmation({
+              sessionId: chat.sessionId,
+              approved,
+              ...(rejectionMessage?.trim() ? { rejectionMessage } : {}),
+            })
+            if (!accepted) return
+            updateState(projectRoot, providerId, (state) => ({
+              ...state,
+              status: 'running',
+              teamPhase: 'executing',
+              activeTurn: null,
+              lastError: null,
+              connectionRetryAttempt: null,
+              connectionRetryMaxAttempts: null,
+              awaitingInputQuestion: null,
+              awaitingConfirmationMessage: null,
+              awaitingConfirmationDetail: null,
+              revision: state.revision + 1,
+            }))
+          }}
+          // 回溯只对原生执行栈：外部引擎的会话历史在它自己手里，截断这边的对话改不了它记住的内容。
+          {...(providerId === 'workbench'
+            ? { onRewindToMessage: rewindToMessage, getRewindPlan: buildRewindPlanForMessage }
+            : {})}
+          // 回答里的项目路径、文件改动卡与「查看改动」都落到宿主编辑器（与 Desktop 同一组入口）。
+          onOpenProjectPath={onOpenWorkspacePath}
+          onOpenFileChange={onOpenFileChange}
+          onReviewFileChanges={onReviewFileChanges}
+          onFollowLockedChange={setFollowLocked}
+        />
+      </WorkbenchRunChangesScopeContext.Provider>
     </ChatThinkingVisibilityProvider>
   )
 }
@@ -2163,6 +2240,52 @@ function releaseCheckpointRefs(
     .deleteChatCheckpoints({ workspaceRoot: projectRoot, sessionId, checkpointIds })
     .catch(() => {
       // 清理按幂等处理：残留的私有 ref 只占少量对象，不影响任何功能。
+    })
+}
+
+/** 把本轮改动摘要记到指定会话的运行标记上；null = 标记已不在或不再是已完成。 */
+function attachRunChanges(
+  projectRoot: string,
+  providerId: WorkbenchChatProviderId,
+  sessionId: string,
+  messageId: string,
+  runChanges: WorkbenchChatRunChangesSummary
+): ReturnType<typeof attachStandaloneRunChanges> {
+  let attached: ReturnType<typeof attachStandaloneRunChanges> = null
+  withStateUpdateTarget(projectRoot, providerId, sessionId, () =>
+    updateState(projectRoot, providerId, (state) => {
+      attached = attachStandaloneRunChanges(state.messageRunMarkers, messageId, runChanges)
+      return attached
+        ? { ...state, messageRunMarkers: attached.markers, revision: state.revision + 1 }
+        : state
+    })
+  )
+  return attached
+}
+
+/** 运行标记上摘要指向的改动记录（本轮改动的补丁文件）。 */
+function readRunChangeRecordIds(markers: readonly StandaloneRunMarker[]): string[] {
+  return markers.flatMap((marker) => (marker.runChanges ? [marker.runChanges.recordId] : []))
+}
+
+/**
+ * 删掉本轮改动的记录文件：回溯移除的消息、被移除的会话（不传 recordIds = 整个会话）。
+ * 与检查点 ref 一样按幂等清理，残留文件不影响任何功能。
+ */
+function releaseRunChangeRecords(
+  projectRoot: string,
+  sessionId: string,
+  recordIds?: readonly string[]
+): void {
+  if (!projectRoot || recordIds?.length === 0) return
+  void window.velarosWorkbenchGit
+    .deleteChatRunChanges({
+      workspaceRoot: projectRoot,
+      sessionId,
+      ...(recordIds ? { recordIds: [...recordIds] } : {}),
+    })
+    .catch(() => {
+      // 同上：清理失败只留下一个没人引用的记录文件。
     })
 }
 

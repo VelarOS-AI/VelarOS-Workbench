@@ -4,6 +4,9 @@ import {
   type WorkbenchChatCheckpointCaptureRequest,
   type WorkbenchChatCheckpointDeleteRequest,
   type WorkbenchChatCheckpointRestoreRequest,
+  type WorkbenchChatRunChangesCaptureRequest,
+  type WorkbenchChatRunChangesDeleteRequest,
+  type WorkbenchChatRunChangesReadRequest,
   WorkbenchGitChannels,
   type WorkbenchGitCommitMessageRequest,
   type WorkbenchGitCommitRequest,
@@ -19,11 +22,13 @@ import {
 import { callWithEnvelope, hasStringFields, invalidRequest } from '../ipcBoundary'
 
 import type { WorkbenchChatCheckpointService } from './WorkbenchChatCheckpoints'
+import type { WorkbenchChatRunChangeStore } from './WorkbenchChatRunChanges'
 import type { WorkbenchGitService } from './WorkbenchGitService'
 
 export function registerWorkbenchGitIpc(
   service: WorkbenchGitService,
-  checkpoints: WorkbenchChatCheckpointService
+  checkpoints: WorkbenchChatCheckpointService,
+  runChanges: WorkbenchChatRunChangeStore
 ): void {
   ipcMain.handle(WorkbenchGitChannels.summary, (_event, input: unknown) =>
     callWithEnvelope(() => service.getSummary(parseRoot(input).workspaceRoot))
@@ -106,6 +111,15 @@ export function registerWorkbenchGitIpc(
   )
   ipcMain.handle(WorkbenchGitChannels.deleteChatCheckpoints, (_event, input: unknown) =>
     callWithEnvelope(() => checkpoints.delete(parseCheckpointDelete(input)))
+  )
+  ipcMain.handle(WorkbenchGitChannels.captureChatRunChanges, (_event, input: unknown) =>
+    callWithEnvelope(() => runChanges.capture(parseRunChangesCapture(input)))
+  )
+  ipcMain.handle(WorkbenchGitChannels.readChatRunChanges, (_event, input: unknown) =>
+    callWithEnvelope(() => runChanges.read(parseRunChangesRead(input)))
+  )
+  ipcMain.handle(WorkbenchGitChannels.deleteChatRunChanges, (_event, input: unknown) =>
+    callWithEnvelope(() => runChanges.delete(parseRunChangesDelete(input)))
   )
 }
 
@@ -266,5 +280,40 @@ function parseCheckpointDelete(input: unknown): WorkbenchChatCheckpointDeleteReq
     workspaceRoot: input['workspaceRoot'] as string,
     sessionId: input['sessionId'] as string,
     checkpointIds,
+  }
+}
+
+function parseRunChangesCapture(input: unknown): WorkbenchChatRunChangesCaptureRequest {
+  if (!hasStringFields(input, ['workspaceRoot', 'sessionId', 'recordId', 'baseCommitId']))
+    return invalidRequest()
+  return {
+    workspaceRoot: input['workspaceRoot'] as string,
+    sessionId: input['sessionId'] as string,
+    recordId: input['recordId'] as string,
+    baseCommitId: input['baseCommitId'] as string,
+  }
+}
+
+function parseRunChangesRead(input: unknown): WorkbenchChatRunChangesReadRequest {
+  if (!hasStringFields(input, ['workspaceRoot', 'sessionId', 'recordId'])) return invalidRequest()
+  return {
+    workspaceRoot: input['workspaceRoot'] as string,
+    sessionId: input['sessionId'] as string,
+    recordId: input['recordId'] as string,
+  }
+}
+
+function parseRunChangesDelete(input: unknown): WorkbenchChatRunChangesDeleteRequest {
+  if (!hasStringFields(input, ['workspaceRoot', 'sessionId'])) return invalidRequest()
+  const recordIds = input['recordIds']
+  if (
+    recordIds !== undefined &&
+    (!Array.isArray(recordIds) || !recordIds.every((id) => typeof id === 'string'))
+  )
+    return invalidRequest()
+  return {
+    workspaceRoot: input['workspaceRoot'] as string,
+    sessionId: input['sessionId'] as string,
+    ...(recordIds ? { recordIds } : {}),
   }
 }

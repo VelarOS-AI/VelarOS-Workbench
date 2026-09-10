@@ -28,6 +28,12 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
   },
   chat: {
     fileChangeOpenErrorTitle: 'Failed to open file',
+    fileChangeSummaryFilesChanged: '{count} files changed',
+    fileChangeSummaryReview: 'Review',
+    fileChangeSummaryLoading: 'Loading change summary…',
+    fileChangeSummaryUnavailable: 'Failed to load change summary',
+    fileChangeSummaryBinary: 'Binary file changed',
+    fileChangeSummaryPatchOmitted: 'Too large to keep a line-by-line diff',
     placeholder: 'Ask Workbench…',
     running: 'Running…',
     composerRunProfile_auto: 'Auto',

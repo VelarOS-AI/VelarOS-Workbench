@@ -74,6 +74,28 @@ void describe('Workbench chat composer parity', () => {
     assert.match(slots, /<WorkbenchMessageRenderBoundary message=\{message\}>/)
   })
 
+  void test('shows what each run changed on disk like Desktop, keeping the patches out of localStorage', () => {
+    const adapter = readFileSync(
+      path.resolve(process.cwd(), 'src/renderer/src/runtime/standaloneWorkbenchChatAdapter.tsx'),
+      'utf8'
+    )
+    const slots = readFileSync(
+      path.resolve(
+        process.cwd(),
+        'src/renderer/src/runtime/conversation/standaloneWorkbenchConversationRenderSlots.tsx'
+      ),
+      'utf8'
+    )
+
+    assert.match(slots, /messageFileChangeSummary: \(\{ message, formatPathForDisplay, onOpenEntry, onReviewEntries \}\) =>/)
+    // 一轮正常收尾后拿开跑前的检查点比出本轮改动；补丁落主进程记录文件，标记上只挂摘要。
+    assert.match(adapter, /if \(runCheckpoint\) captureRunChanges\(activeExecution\.sessionId, runCheckpoint\)/)
+    assert.doesNotMatch(adapter, /workspaceCheckpointDiff/)
+    // 回溯掉的回答、被移除的会话，连同它们的改动记录一起清掉。
+    assert.match(adapter, /releaseRunChangeRecords\(projectRoot, sessionId, droppedRunChangeRecordIds\)/)
+    assert.match(adapter, /releaseRunChangeRecords\(target\.projectRoot, target\.sessionId\)/)
+  })
+
   void test('marks finished runs so answers fold and stopped runs show their status', () => {
     const adapter = readFileSync(
       path.resolve(process.cwd(), 'src/renderer/src/runtime/standaloneWorkbenchChatAdapter.tsx'),

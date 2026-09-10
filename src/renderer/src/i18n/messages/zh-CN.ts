@@ -27,6 +27,12 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
   },
   chat: {
     fileChangeOpenErrorTitle: '打开文件失败',
+    fileChangeSummaryFilesChanged: '{count} 个文件已更改',
+    fileChangeSummaryReview: '审核',
+    fileChangeSummaryLoading: '正在加载变更摘要…',
+    fileChangeSummaryUnavailable: '变更摘要加载失败',
+    fileChangeSummaryBinary: '二进制文件已更改',
+    fileChangeSummaryPatchOmitted: '改动过大，没有保存逐行差异',
     running: '运行中…',
   },
   workbench: {
