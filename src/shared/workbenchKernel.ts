@@ -4,6 +4,7 @@ export const WorkbenchKernelChannels = {
   abortAgentExecution: 'workbench-app:kernel:abort-agent-execution',
   resolveAgentInput: 'workbench-app:kernel:resolve-agent-input',
   resolveAgentConfirmation: 'workbench-app:kernel:resolve-agent-confirmation',
+  provideAgentGuidance: 'workbench-app:kernel:provide-agent-guidance',
   statusChanged: 'workbench-app:kernel:status-changed',
   agentExecution: 'workbench-app:kernel:agent-execution',
   backupChatHistory: 'workbench-app:kernel:backup-chat-history',
@@ -61,6 +62,16 @@ export interface WorkbenchAbortAgentExecutionRequest {
 export interface WorkbenchResolveAgentInputRequest {
   sessionId: string
   answer: string
+}
+
+/**
+ * 运行中补发的**引导**：注入正在执行的这一轮，由主 Agent 在下一个轮次边界读到，不另起一轮。
+ * `inputId` 就是 renderer 里那条引导消息的 id——被模型读到时回一条 `input-applied` 运行时事件。
+ */
+export interface WorkbenchProvideAgentGuidanceRequest {
+  sessionId: string
+  inputId: string
+  text: string
 }
 
 export interface WorkbenchResolveAgentConfirmationRequest {
@@ -129,6 +140,8 @@ export interface WorkbenchKernelBridge {
   resolveAgentConfirmation: (
     request: WorkbenchResolveAgentConfirmationRequest
   ) => Promise<boolean>
+  /** 返回 false = 当前没有可接收引导的运行（已结束或不是原生执行栈），调用方应按普通消息处理。 */
+  provideAgentGuidance: (request: WorkbenchProvideAgentGuidanceRequest) => Promise<boolean>
   onStatusChanged: (
     listener: (status: WorkbenchKernelStatus) => void
   ) => () => void

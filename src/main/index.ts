@@ -354,7 +354,9 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
     // 两条链路共用同一条 IPC 协议，renderer 不需要知道当前会话跑的是哪个执行体。
     (sessionId, approved, rejectionMessage) =>
       providers.agentEngines.resolveConfirmation(sessionId, approved, rejectionMessage)
-      || agentExecutionStack.approvals.resolve(sessionId, approved, rejectionMessage)
+      || agentExecutionStack.approvals.resolve(sessionId, approved, rejectionMessage),
+    // 运行中补发的引导只有原生执行栈能接（外部引擎没有中途注入语义），不命中就回 false。
+    { provideAgentGuidance: (request) => agentExecutionStack.provideGuidance(request) }
   )
   void kernelRuntime.start().finally(() => {
     broadcastWorkbenchKernelStatus(kernelRuntime)

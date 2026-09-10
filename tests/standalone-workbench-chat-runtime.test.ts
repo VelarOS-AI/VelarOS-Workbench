@@ -10,6 +10,7 @@ import {
   beginStandaloneAgentStop,
   hasStandaloneVisibleAssistantReply,
   LegacyNoTextResponse,
+  pauseUnappliedRunGuidance,
   readStandaloneFinalAgentError,
   readStandaloneFinalAgentStatus,
   readStandaloneFinalAgentText,
@@ -259,6 +260,37 @@ void describe('standalone Workbench conversation runtime', () => {
       ]),
       false
     )
+  })
+
+  void test('pauses run guidance that the interrupted run never consumed', () => {
+    const guidance = (id: string, guidanceStatus: ChatMessage['guidanceStatus']): ChatMessage => ({
+      ...message('user', [{ type: 'text', text: id }], id),
+      conversationKind: 'run-guidance',
+      guidanceStatus,
+    })
+    const messages = [
+      guidance('applied', 'applied'),
+      guidance('accepted', 'accepted'),
+      guidance('in-flight', 'pending'),
+      guidance('continuation', 'sent'),
+    ]
+    const statuses = (settled: readonly ChatMessage[]) =>
+      settled.map(({ id, guidanceStatus }) => [id, guidanceStatus])
+
+    // 收尾：已受理未读走的暂停；「引导中」等投递回执自己落定；已纳入 / 续接消息不动。
+    assert.deepEqual(statuses(pauseUnappliedRunGuidance(messages)), [
+      ['applied', 'applied'],
+      ['accepted', 'paused'],
+      ['in-flight', 'pending'],
+      ['continuation', 'sent'],
+    ])
+    // 重启恢复：那一轮早就不在了，「引导中」也一并暂停。
+    assert.deepEqual(statuses(pauseUnappliedRunGuidance(messages, { includePending: true })), [
+      ['applied', 'applied'],
+      ['accepted', 'paused'],
+      ['in-flight', 'paused'],
+      ['continuation', 'sent'],
+    ])
   })
 })
 

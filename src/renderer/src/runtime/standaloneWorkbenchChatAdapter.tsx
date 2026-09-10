@@ -25,6 +25,7 @@ import {
 } from '@velaros-ai/ui/conversation'
 import {
   type ChatComposerControl,
+  type ChatInputSendDraft,
   ChatSurfaceComposer,
 } from '@velaros-ai/ui/conversation/composer'
 
@@ -37,12 +38,14 @@ import { readWorkbenchPermissionConfirmationMode } from '../models/settings/work
 import styles from '../styles/workbenchPageStyles'
 
 import { WorkbenchContextUsageIndicator } from './conversation/WorkbenchContextUsageIndicator'
+import { useStandaloneQueuedDrafts } from './standaloneQueuedDrafts'
 import {
   applyStandaloneAgentRuntimeEvent,
   applyStandaloneCompletedRunResult,
   beginStandaloneAgentStop,
   hasStandaloneVisibleAssistantReply,
   isStandaloneAgentRuntimeEvent,
+  pauseUnappliedRunGuidance,
   readStandaloneAgentTerminalKind,
   readStandaloneContextUsageEstimate,
   readStandaloneFinalAgentError,
@@ -242,11 +245,21 @@ function restoreStoredState(
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
   const stored = value as Partial<StandaloneChatState>
   if (!Array.isArray(stored.messages)) return null
+  // 被打断的一轮随会话留存（Desktop 靠持久化的运行 marker）：重启后提示还在，
+  // 下一条消息也仍按续接处理。运行中的状态不留存——重启时那次执行早已不在。
+  const interruptedStatus = stored.status && isInterruptedRunStatus(stored.status)
+    ? stored.status
+    : null
   return {
     ...empty,
     sessionId: typeof stored.sessionId === 'string' ? stored.sessionId : empty.sessionId,
     folderId: typeof stored.folderId === 'string' ? stored.folderId : empty.folderId,
-    messages: sanitizeStandaloneChatMessages(stored.messages.filter(isStoredChatMessage)),
+    messages: pauseUnappliedRunGuidance(
+      sanitizeStandaloneChatMessages(stored.messages.filter(isStoredChatMessage)),
+      { includePending: true }
+    ),
+    status: interruptedStatus ?? empty.status,
+    lastError: interruptedStatus && typeof stored.lastError === 'string' ? stored.lastError : null,
     revision: typeof stored.revision === 'number' ? stored.revision : 0,
     lastRunStartedAt: typeof stored.lastRunStartedAt === 'number'
       ? stored.lastRunStartedAt
@@ -541,6 +554,23 @@ function StandaloneWorkbenchChatSessionSurface({
   const [reasoningLevel, setReasoningLevel] = useState<ReasoningLevel>(readStoredReasoningLevel)
   const [showThinkingProcess, setShowThinkingProcess] = useState(true)
   const [accountSignInPending, setAccountSignInPending] = useState(false)
+  // 原生执行栈正在跑（本会话有在途执行）：输入框保持可用，发送即引导；显式「结束后发送」进排队。
+  const canSteerRun =
+    providerId === 'workbench' && chat.status === 'running' && hasPendingAgentExecution
+  const queuedDrafts = useStandaloneQueuedDrafts({
+    scopeId: chat.sessionId,
+    isRunBlocked: shouldBlockStandaloneRunSubmission(
+      chat.status,
+      hasPendingAgentExecution,
+      accountSignInPending
+    ),
+    // 用户按了停止（或本轮失败）：保留排队，但不替他自动发下一条（与 Desktop 一致）。
+    pauseAutomaticDrain: chat.status === 'stopping' || isInterruptedRunStatus(chat.status),
+    submitDraft: (draft) =>
+      new Promise<boolean>((resolve) => {
+        void submit(draft.value, draft.files, { onAccepted: () => resolve(true) }).then(resolve)
+      }),
+  })
   const lastOutboundMessage = chat.messages.findLast((message) => message.role === 'user')
   const autoScrollResetKey = [
     chat.sessionId,
@@ -656,8 +686,91 @@ function StandaloneWorkbenchChatSessionSurface({
     )
   }
 
-  async function submit(draftValue = prompt, draftFiles = files): Promise<void> {
+  /**
+   * 输入框的发送入口：运行中显式选「结束后发送」进排队，其余交给 submit（运行中即引导）。
+   * 以「受理」为界返回——输入框在返回前一直处于发送中，不能让它等整轮跑完。
+   */
+  function sendComposerDraft(draft?: ChatInputSendDraft): Promise<void> {
+    const value = draft?.value ?? prompt
+    const draftFiles = draft?.files ?? files
+    // 引导通道只带文本：运行中附带文件的消息改为本轮结束后发送。
+    if (canSteerRun && (draft?.delivery === 'after-current' || draftFiles.length > 0)) {
+      if (!value.trim() && draftFiles.length === 0) return Promise.resolve()
+      queuedDrafts.enqueue({ value, files: draftFiles })
+      setPrompt('')
+      setFiles([])
+      return Promise.resolve()
+    }
+    return new Promise<void>((resolve) => {
+      void submit(value, draftFiles, { onAccepted: resolve }).finally(resolve)
+    })
+  }
+
+  async function sendRunGuidance(text: string): Promise<boolean> {
+    const sessionId = chat.sessionId
+    const guidance: ChatMessage = {
+      ...createTextMessage('user', text),
+      conversationKind: 'run-guidance',
+      guidanceStatus: 'pending',
+    }
+    // 回执回来时用户可能已切到别的会话：更新一律落回发出引导的那个会话。
+    const updateGuidanceSession = (
+      updater: (state: StandaloneChatState) => StandaloneChatState
+    ): void =>
+      withStateUpdateTarget(projectRoot, providerId, sessionId, () =>
+        updateState(projectRoot, providerId, updater)
+      )
+    setPrompt('')
+    updateGuidanceSession((state) => ({
+      ...state,
+      messages: [...state.messages, guidance],
+      revision: state.revision + 1,
+    }))
+    const accepted = await window.velarosWorkbenchKernel
+      .provideAgentGuidance({ sessionId, inputId: guidance.id, text })
+      .catch(() => false)
+    if (accepted) {
+      // 只推进「引导中」：回执之前 input-applied 可能已经先到（已纳入），不能被拉回。
+      // 回执到时这一轮已经收尾的，引导不会再被读走——直接记为已暂停。
+      updateGuidanceSession((state) => ({
+        ...state,
+        messages: state.messages.map((message) =>
+          message.id === guidance.id && message.guidanceStatus === 'pending'
+            ? { ...message, guidanceStatus: isActiveChatRun(state.status) ? 'accepted' : 'paused' }
+            : message
+        ),
+        revision: state.revision + 1,
+      }))
+      return true
+    }
+    // 这一轮恰好收尾、或执行体不接收引导：撤回这条引导，原文放回输入框，由用户重新发送。
+    updateGuidanceSession((state) => ({
+      ...state,
+      messages: state.messages.filter((message) => message.id !== guidance.id),
+      revision: state.revision + 1,
+    }))
+    setPrompt(text)
+    workbenchMessage.warning({
+      title: t('workbench.chatGuidanceRejectedTitle'),
+      description: t('workbench.chatGuidanceRejectedDescription'),
+    })
+    return false
+  }
+
+  /**
+   * 发一条消息。返回是否受理；`onAccepted` 在消息追加进对话、这一轮开始跑的那一刻回调——
+   * 函数本身要等整轮结束才 resolve，输入框和排队出队都以「受理」为界，不能等整轮跑完。
+   */
+  async function submit(
+    draftValue = prompt,
+    draftFiles = files,
+    options?: { onAccepted?: () => void }
+  ): Promise<boolean> {
     const text = draftValue.trim()
+    // 运行中补发 = 引导：注入正在执行的这一轮，而不是排到结束后另起一轮（与 Desktop 一致）。
+    // 外部引擎没有中途注入语义、引导通道也不带附件（附件由输入框入口改为结束后发送），这两种仍按原规则拦下。
+    if (providerId === 'workbench' && chat.status === 'running' && text && draftFiles.length === 0)
+      return sendRunGuidance(text)
     if (
       (!text && draftFiles.length === 0)
       || shouldBlockStandaloneRunSubmission(
@@ -665,7 +778,7 @@ function StandaloneWorkbenchChatSessionSurface({
         hasPendingAgentExecution,
         accountSignInPending
       )
-    ) return
+    ) return false
     if (
       providerId === 'workbench'
       && (!modelConfig.provider.trim() || !modelConfig.model.trim())
@@ -674,7 +787,7 @@ function StandaloneWorkbenchChatSessionSurface({
         title: t('workbench.chatModelMissingTitle'),
         description: t('workbench.chatModelMissingDescription'),
       })
-      return
+      return false
     }
     if (providerId !== 'workbench' && !engineCatalog) {
       workbenchMessage.warning({
@@ -683,7 +796,7 @@ function StandaloneWorkbenchChatSessionSurface({
         }),
         description: t('workbench.chatEngineLoadingDescription'),
       })
-      return
+      return false
     }
     if (providerId !== 'workbench' && engineCatalog && !engineCatalog.available) {
       workbenchMessage.warning({
@@ -692,13 +805,13 @@ function StandaloneWorkbenchChatSessionSurface({
         }),
         description: engineCatalog.reason ?? t('workbench.chatEngineUnavailableDescription'),
       })
-      return
+      return false
     }
     if (providerId === 'workbench') {
       setAccountSignInPending(true)
       try {
         const account = await window.velarosWorkbenchAccount.ensureSignedIn()
-        if (account.status !== 'signed-in') return
+        if (account.status !== 'signed-in') return false
       } catch (error) {
         workbenchMessage.warning({
           title: t('workbench.chatSignInFailedTitle'),
@@ -706,7 +819,7 @@ function StandaloneWorkbenchChatSessionSurface({
             error: error instanceof Error ? error.message : String(error),
           }),
         })
-        return
+        return false
       } finally {
         setAccountSignInPending(false)
       }
@@ -728,7 +841,7 @@ function StandaloneWorkbenchChatSessionSurface({
             title: t('workbench.chatManagedModelUnavailableTitle'),
             description: t('workbench.chatManagedModelUnavailableDescription'),
           })
-          return
+          return false
         }
       } catch (error) {
         workbenchMessage.warning({
@@ -737,7 +850,7 @@ function StandaloneWorkbenchChatSessionSurface({
             error: error instanceof Error ? error.message : String(error),
           }),
         })
-        return
+        return false
       }
     }
     const attachmentContext = await buildAttachmentContext(draftFiles)
@@ -746,7 +859,15 @@ function StandaloneWorkbenchChatSessionSurface({
       : ''
     setPrompt('')
     setFiles([])
-    const userMessage = createTextMessage('user', text || draftFiles.map((file) => file.name).join(', '))
+    // 只有正常完成才结束一轮：中止或失败后的下一条消息继续被打断的那一轮，按引导呈现、
+    // 与上一轮归在同一组里，而不是另起一轮（与 Desktop 的 shouldContinueInterruptedConversation 一致）。
+    const continuesInterruptedRun = isInterruptedRunStatus(getState(projectRoot, providerId).status)
+    const userMessage: ChatMessage = {
+      ...createTextMessage('user', text || draftFiles.map((file) => file.name).join(', ')),
+      ...(continuesInterruptedRun
+        ? { conversationKind: 'run-guidance' as const, guidanceStatus: 'sent' as const }
+        : { conversationKind: 'turn-input' as const }),
+    }
     const attachmentMetadata = draftFiles.map((file, index) => ({
       id: `${userMessage.id}-attachment-${index}`,
       kind: file.type.startsWith('image/') ? 'image' as const : 'file' as const,
@@ -777,6 +898,7 @@ function StandaloneWorkbenchChatSessionSurface({
       workerThreads: createEmptyWorkerThreadProjection(),
       revision: state.revision + 1,
     }))
+    options?.onAccepted?.()
 
     // P6：模型运行时已在本进程（BYOK 选择直接进 Agent 执行栈），不再有
     // `model.supports-provider` 这种远端预检——provider 不认识时由执行本身报错。
@@ -866,7 +988,7 @@ function StandaloneWorkbenchChatSessionSurface({
           }
         })
       }
-      return
+      return true
     }
 
     const finalStatus = readStandaloneFinalAgentStatus(result.output)
@@ -874,12 +996,12 @@ function StandaloneWorkbenchChatSessionSurface({
       finalStatus === 'aborted' || finalStatus === 'error' ? finalStatus : 'done'
     )
     const executionStillActive = activeAgentExecutions.delete(executionId)
-    if (!executionStillActive) return
+    if (!executionStillActive) return true
     if (finalStatus === 'aborted') {
       withStateUpdateTarget(projectRoot, providerId, activeExecution.sessionId, () => {
         finishRun(projectRoot, providerId, 'aborted')
       })
-      return
+      return true
     }
     if (finalStatus === 'error') {
       withStateUpdateTarget(projectRoot, providerId, activeExecution.sessionId, () => {
@@ -889,7 +1011,7 @@ function StandaloneWorkbenchChatSessionSurface({
           readStandaloneFinalAgentError(result.output) ?? t('workbench.chatExecutionFailed')
         )
       })
-      return
+      return true
     }
     withStateUpdateTarget(projectRoot, providerId, activeExecution.sessionId, () => {
       finishCompletedRun(
@@ -899,6 +1021,7 @@ function StandaloneWorkbenchChatSessionSurface({
         t('workbench.chatNoTextResponse')
       )
     })
+    return true
   }
 
   const lastMessage = chat.messages.at(-1)
@@ -993,18 +1116,59 @@ function StandaloneWorkbenchChatSessionSurface({
           placeholder: currentFilePath
             ? t('workbench.chatAskAboutFile', { path: currentFilePath })
             : t('workbench.chatPlaceholder'),
-          disabled: shouldBlockStandaloneRunSubmission(
-            chat.status,
-            hasPendingAgentExecution,
-            accountSignInPending
-          ),
+          disabled:
+            !canSteerRun
+            && shouldBlockStandaloneRunSubmission(
+              chat.status,
+              hasPendingAgentExecution,
+              accountSignInPending
+            ),
           onValueChange: setPrompt,
-          onSend: (draft) => submit(draft?.value ?? prompt, draft?.files ?? files),
+          onSend: (draft) => sendComposerDraft(draft),
         },
         attachments: {
           files,
           onFilesChange: setFiles,
         },
+        // 排队与引导只对原生执行栈开放：外部引擎没有中途注入语义。
+        ...(providerId === 'workbench'
+          ? {
+              queue: {
+                canEnqueue: canSteerRun,
+                canGuideCurrentTask: true,
+                isPaused: queuedDrafts.isPaused,
+                errorMessage: queuedDrafts.errorMessage,
+                onResume: queuedDrafts.resume,
+                queuedDrafts: queuedDrafts.drafts,
+                drainingId: queuedDrafts.drainingId,
+                isQueueDraining: queuedDrafts.isDraining,
+                onQueuedDraftMove: queuedDrafts.move,
+                onQueuedDraftRemove: queuedDrafts.remove,
+                onQueuedDraftUpdate: queuedDrafts.update,
+                onQueuedDraftGuide: canSteerRun
+                  ? async (id: string) => {
+                      // 引导通道只带文字：带附件的排队项留在队里，本轮结束后照常发送。
+                      if (queuedDrafts.drafts.find((entry) => entry.id === id)?.files.length) {
+                        workbenchMessage.warning({
+                          title: t('workbench.chatGuidanceFilesTitle'),
+                          description: t('workbench.chatGuidanceFilesDescription'),
+                        })
+                        return
+                      }
+                      const draft = queuedDrafts.take(id)
+                      if (draft) await sendRunGuidance(draft.value)
+                    }
+                  : undefined,
+                onQueuedDraftReturnToInput: (id: string) => {
+                  const draft = queuedDrafts.take(id)
+                  if (!draft) return
+                  setPrompt(draft.value)
+                  setFiles(draft.files)
+                },
+                onQueuedDraftRunNow: queuedDrafts.runNow,
+              },
+            }
+          : {}),
         execution: {
           goalMode,
           onGoalModeChange: setGoalMode,
@@ -1363,16 +1527,38 @@ function applyAgentRuntimeEvent(
     }))
     return null
   }
+  const appliedInputId = readAppliedGuidanceInputId(runtime)
+  if (appliedInputId) {
+    updateState(projectRoot, providerId, (state) => {
+      const index = state.messages.findIndex((message) => message.id === appliedInputId)
+      if (index < 0 || state.messages[index].guidanceStatus === 'applied') return state
+      return {
+        ...state,
+        messages: state.messages.map((message, messageIndex) =>
+          messageIndex === index ? { ...message, guidanceStatus: 'applied' } : message
+        ),
+        revision: state.revision + 1,
+      }
+    })
+    return null
+  }
   if (!isStandaloneAgentRuntimeEvent(runtime)) return null
   const terminalKind = readStandaloneAgentTerminalKind(runtime)
   updateState(projectRoot, providerId, (state) => {
     const base = terminalKind
-      ? { ...state, messages: sanitizeStandaloneChatMessages(state.messages) }
+      ? { ...state, messages: settleTerminalMessages(state.messages) }
       : state
     const next = applyStandaloneAgentRuntimeEvent(base, runtime)
     return next === state ? state : { ...next, revision: state.revision + 1 }
   })
   return terminalKind
+}
+
+/** 主 Agent 读到一条运行中引导时，执行栈回的 `input-applied` 事件里带着那条引导消息的 id。 */
+function readAppliedGuidanceInputId(runtime: Record<string, unknown>): string | null {
+  return runtime.kind === 'input-applied' && typeof runtime.inputId === 'string'
+    ? runtime.inputId
+    : null
 }
 
 function updateToolCallBlock(
@@ -1416,11 +1602,16 @@ function finishWithError(
 ): void {
   updateState(projectRoot, providerId, (state) => ({
     ...applyStandaloneAgentRuntimeEvent(
-      { ...state, messages: sanitizeStandaloneChatMessages(state.messages) },
+      { ...state, messages: settleTerminalMessages(state.messages) },
       { kind: 'error', message }
     ),
     revision: state.revision + 1,
   }))
+}
+
+/** 一轮收尾时的消息整理：去掉模型不可见的占位文本，并暂停没被读走的运行中引导。 */
+function settleTerminalMessages(messages: readonly ChatMessage[]): ChatMessage[] {
+  return pauseUnappliedRunGuidance(sanitizeStandaloneChatMessages(messages))
 }
 
 function finishCompletedRun(
@@ -1430,7 +1621,7 @@ function finishCompletedRun(
   noTextError: string
 ): void {
   updateState(projectRoot, providerId, (state) => {
-    let messages: readonly ChatMessage[] = sanitizeStandaloneChatMessages(state.messages)
+    let messages: readonly ChatMessage[] = settleTerminalMessages(state.messages)
     if (!hasStandaloneVisibleAssistantReply(messages) && finalText) {
       const last = messages.at(-1)
       messages = last?.role === 'assistant'
@@ -1489,7 +1680,7 @@ function finishRun(
 ): void {
   updateState(projectRoot, providerId, (state) => ({
     ...applyStandaloneAgentRuntimeEvent(
-      { ...state, messages: sanitizeStandaloneChatMessages(state.messages) },
+      { ...state, messages: settleTerminalMessages(state.messages) },
       status === 'completed'
         ? { kind: 'done' }
         : { kind: 'aborted', message: '' }
@@ -1503,6 +1694,13 @@ function isActiveChatRun(status: StandaloneChatState['status']): boolean {
     || status === 'stopping'
     || status === 'awaiting-input'
     || status === 'awaiting-confirmation'
+}
+
+/** 上一轮是被打断的（用户停止或执行失败），而不是正常完成。 */
+function isInterruptedRunStatus(
+  status: StandaloneChatState['status']
+): status is 'aborted' | 'failed' {
+  return status === 'aborted' || status === 'failed'
 }
 
 async function buildAttachmentContext(files: readonly File[]): Promise<string> {
@@ -1646,6 +1844,9 @@ function serializeStoredState(state: StandaloneChatState): Record<string, unknow
     messages: state.messages,
     lastRunStartedAt: state.lastRunStartedAt,
     lastRunFinishedAt: state.lastRunFinishedAt,
+    ...(isInterruptedRunStatus(state.status)
+      ? { status: state.status, lastError: state.lastError }
+      : {}),
     revision: state.revision,
   }
 }

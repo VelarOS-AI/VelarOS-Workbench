@@ -14,6 +14,7 @@ import {
   createAgentExecutionStack,
   defaultUnsupportedInteractionPort,
   type ExecutionEventBus,
+  ExecutionGuidanceQueue,
   KernelBackgroundJobManager,
   PrimaryAgentProfile,
   SubAgentDispatcher,
@@ -22,12 +23,13 @@ import {
   TeamModelRouter,
   WriteLeaseCoordinator,
 } from '@velaros-ai/agent'
-import type {
-  AgentModelInputModality,
-  PermissionConfirmationMode,
-  ToolAvailabilityScope,
-  ToolCategoryDefinition,
-  ToolCategoryId,
+import {
+  type AgentModelInputModality,
+  ChatRuntimeEvents,
+  type PermissionConfirmationMode,
+  type ToolAvailabilityScope,
+  type ToolCategoryDefinition,
+  type ToolCategoryId,
 } from '@velaros-ai/agent/protocol'
 import {
   type ApprovalPort,
@@ -193,6 +195,15 @@ class WorkbenchAgentExecutionStack {
   private readonly modelRuntime: ModelRuntimeComposition['agentModelRuntime']
   private readonly contextGovernanceSessions = new ContextGovernanceSessionRegistry()
   private readonly sessions = new Map<string, WorkbenchAgentSession>()
+  /**
+   * 运行中补发的引导：按 executionId 分道排队，主 Agent 在轮次边界读走（`runtimeInput` /
+   * `consumeGuidance`），读到即回 `input-applied`。与 Desktop 的 ExecutionService 同一套队列语义。
+   */
+  private readonly guidanceQueue = new ExecutionGuidanceQueue()
+  private readonly activeRunsBySession = new Map<
+    string,
+    { executionId: string; events: ExecutionEventBus }
+  >()
   /** 异步派发（`mode: 'async'`）的收束账本；`job:*` 工具读写的就是它。 */
   private readonly backgroundJobs = new KernelBackgroundJobManager()
 
@@ -275,6 +286,12 @@ class WorkbenchAgentExecutionStack {
       knownToolNames: session.registry.names,
       allowSubAgents: true,
     })
+    // 执行启动时开引导通道；运行结束后迟到的引导会被拒收，renderer 改按普通消息发送。
+    const runtimeInput = this.guidanceQueue.port(input.executionId)
+    this.activeRunsBySession.set(input.sessionId, {
+      executionId: input.executionId,
+      events: input.events,
+    })
 
     try {
       return await session.stack.executeSolo({
@@ -286,13 +303,36 @@ class WorkbenchAgentExecutionStack {
         toolContext,
         resolution,
         events: input.events,
+        runtimeInput,
+        consumeGuidance: () => this.guidanceQueue.consume(input.executionId),
       })
     } finally {
+      if (this.activeRunsBySession.get(input.sessionId)?.executionId === input.executionId)
+        this.activeRunsBySession.delete(input.sessionId)
+      this.guidanceQueue.clear(input.executionId)
       unbindAbort()
       // 一轮结束（含中止/失败）后不留悬挂的确认卡：晚到的回执没有等待方，
       // 而挂着的 Promise 会把整个执行钉死在 awaiting_confirmation。
       this.approvals.cancelSession(input.sessionId, '本次执行已结束。')
     }
+  }
+
+  /** 把运行中补发的引导注入该会话正在执行的这一轮；没有可接收的运行时返回 false。 */
+  public provideGuidance(request: { sessionId: string; inputId: string; text: string }): boolean {
+    const active = this.activeRunsBySession.get(request.sessionId)
+    const text = request.text.trim()
+    if (!active || !text) return false
+
+    const enqueued = this.guidanceQueue.enqueue(
+      active.executionId,
+      { role: 'user', content: text },
+      {
+        inputId: request.inputId,
+        sourceSessionId: request.sessionId,
+        onConsumed: () => active.events.emitRuntime(ChatRuntimeEvents.inputApplied(request.inputId)),
+      }
+    )
+    return enqueued.status === 'accepted'
   }
 
   public async dispose(): Promise<void> {

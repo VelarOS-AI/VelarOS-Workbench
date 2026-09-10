@@ -57,6 +57,12 @@ const MAX_CLOSED_AGENT_EXECUTION_IDS = 128
 interface WorkbenchKernelIpcOptions {
   /** Abort 已受理、但底层执行没有自行收尾时，Host 最多等待多久。 */
   abortSettlementGraceMs?: number
+  /** 运行中补发引导；未注入时一律回 false（renderer 会按普通消息处理）。 */
+  provideAgentGuidance?: (request: {
+    sessionId: string
+    inputId: string
+    text: string
+  }) => boolean
 }
 
 interface ActiveAgentExecution {
@@ -302,6 +308,10 @@ export function registerWorkbenchKernelIpc(
     const parsed = readResolveAgentInput(request)
     return parsed ? resolveAgentInput(parsed.sessionId, parsed.answer) : false
   })
+  ipcMain.handle(WorkbenchKernelChannels.provideAgentGuidance, (_event, request: unknown) => {
+    const parsed = readProvideAgentGuidance(request)
+    return parsed ? (options.provideAgentGuidance?.(parsed) ?? false) : false
+  })
   ipcMain.handle(WorkbenchKernelChannels.resolveAgentConfirmation, (_event, request: unknown) => {
     const parsed = readResolveAgentConfirmation(request)
     return parsed
@@ -355,6 +365,7 @@ export function registerWorkbenchKernelIpc(
     ipcMain.removeHandler(WorkbenchKernelChannels.abortAgentExecution)
     ipcMain.removeHandler(WorkbenchKernelChannels.resolveAgentInput)
     ipcMain.removeHandler(WorkbenchKernelChannels.resolveAgentConfirmation)
+    ipcMain.removeHandler(WorkbenchKernelChannels.provideAgentGuidance)
     ipcMain.removeHandler(WorkbenchKernelChannels.backupChatHistory)
   }
 }
@@ -455,6 +466,19 @@ function readResolveAgentInput(
   const answer = record.answer
   return typeof sessionId === 'string' && sessionId.trim() && typeof answer === 'string'
     ? { sessionId, answer }
+    : null
+}
+
+function readProvideAgentGuidance(
+  request: unknown
+): { sessionId: string; inputId: string; text: string } | null {
+  if (!request || typeof request !== 'object' || Array.isArray(request)) return null
+  const record = request as Record<string, unknown>
+  const { sessionId, inputId, text } = record
+  return typeof sessionId === 'string' && sessionId.trim()
+    && typeof inputId === 'string' && inputId.trim()
+    && typeof text === 'string' && text.trim()
+    ? { sessionId, inputId, text }
     : null
 }
 

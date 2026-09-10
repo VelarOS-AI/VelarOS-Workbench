@@ -252,6 +252,25 @@ function sanitizeStandaloneChatMessages(messages: readonly ChatMessage[]): ChatM
   })
 }
 
+/**
+ * 一轮收尾时仍没被读走的运行中引导：执行栈不会再送它，标成「已暂停」，而不是一直挂着
+ * 「已接收，等待纳入上下文」。正常完成时执行栈在收尾边界会把已受理的引导全部读走（takeOrSeal），
+ * 能留到这里的只有中止 / 失败的那一轮。
+ *
+ * `includePending`：恢复持久化会话时连「引导中」（投递回执还没回来）也一并暂停——重启后那一轮早就不在了。
+ */
+function pauseUnappliedRunGuidance(
+  messages: readonly ChatMessage[],
+  { includePending = false }: { includePending?: boolean } = {}
+): ChatMessage[] {
+  return messages.map((message) =>
+    message.guidanceStatus === 'accepted'
+    || (includePending && message.guidanceStatus === 'pending')
+      ? { ...message, guidanceStatus: 'paused' }
+      : message
+  )
+}
+
 function readStandaloneModelVisibleText(message: ChatMessage): string {
   return message.blocks
     .filter((block) =>
@@ -442,6 +461,7 @@ export {
   hasStandaloneVisibleAssistantReply,
   isStandaloneAgentRuntimeEvent,
   LegacyNoTextResponse,
+  pauseUnappliedRunGuidance,
   readStandaloneAgentRuntimeKind,
   readStandaloneAgentTerminalKind,
   readStandaloneContextUsageEstimate,
