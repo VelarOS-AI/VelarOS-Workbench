@@ -3,6 +3,36 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
+      "version": "0.3.41",
+      "releasedAt": "2026-09-10",
+      "title": {
+        "zh": "本轮改动、目标模式与执行计划",
+        "en": "Run changes, goal mode, and execution plans"
+      },
+      "added": {
+        "zh": [
+          "每一轮回答末尾会列出这一轮改动过的文件和增删行数，可以展开查看逐行差异，也可以在编辑器中打开；逐行差异保存在本机数据目录，不占浏览器存储。",
+          "目标模式正式可用：开启后按你的消息建立目标，输入框上方的目标卡可以暂停、继续或移除目标。",
+          "模型可以为较长的任务建立并推进执行计划，进度显示在输入框上方。",
+          "已完成的回答会把处理过程收进「已处理」并显示耗时；停止或失败的回答末尾会标出状态。"
+        ],
+        "en": [
+          "Each answer now ends with the files that run changed and their added and removed lines; expand a file for a line-by-line diff or open it in the editor. The diffs are kept in the local data folder, not in browser storage.",
+          "Goal mode now works end to end: it sets a goal from your message, and the goal card above the input box lets you pause, continue, or remove it.",
+          "The model can set up and advance an execution plan for longer tasks, with progress shown above the input box.",
+          "Finished answers fold their work into a processed summary with the run time, and stopped or failed answers show their status at the end."
+        ]
+      },
+      "fixed": {
+        "zh": [
+          "点「+」新建对话后，对话面板不再一直停在加载中。"
+        ],
+        "en": [
+          "Clicking + to start a new conversation no longer leaves the chat panel stuck loading."
+        ]
+      }
+    },
+    {
       "version": "0.3.40",
       "releasedAt": "2026-09-10",
       "title": {
