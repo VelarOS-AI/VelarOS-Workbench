@@ -3,6 +3,32 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
+      "version": "0.3.43",
+      "releasedAt": "2026-09-11",
+      "title": {
+        "zh": "AI 操作编辑器、代码讲解气泡与每一轮的 AI 改动",
+        "en": "The AI works the editor, explains code in place, and shows every run's changes"
+      },
+      "added": {
+        "zh": [
+          "AI 可以直接操作编辑器：打开文件并定位到某一行或选中一段代码、在文件树里定位文件、打开某个文件的 Git 改动对比，也能读取你当前打开的文件和选中的代码。",
+          "AI 讲解代码时会把讲解气泡钉在对应代码旁边，多处讲解连成一条路线；气泡上可以上一条、下一条、收起或结束讲解，行号旁的标记可以随时展开某一处。",
+          "左侧新增「AI 改动」：按轮列出 AI 每一轮改过的文件，每轮一棵文件树；点开文件在编辑区的独立标签组里只读查看整份文件，新增的行为绿色、删除的行为红色。",
+          "一轮 AI 运行改了文件时，结束后会自动打开这一轮的改动（可在设置中关闭）；回答末尾改动卡的「审核」也会打开这里。停止或失败的一轮同样会记录改动。"
+        ],
+        "en": [
+          "The AI can now work the editor: open a file at a line or select a block of code, reveal a file in the file tree, open a file's Git diff, and read the file and selection you are looking at.",
+          "When the AI explains code, it pins explanation bubbles next to the code and links them into a walkthrough. Each bubble has previous, next, collapse, and end controls, and markers next to the line numbers expand any stop.",
+          "A new AI Changes view on the left lists the files each AI run changed, one file tree per run. Open a file to see the whole file read-only in its own editor tab group, with added lines in green and removed lines in red.",
+          "When a run changes files, its changes open automatically afterwards (you can turn this off in Settings), and the Review button on an answer's change card opens the same view. Runs that were stopped or failed record their changes too."
+        ]
+      },
+      "fixed": {
+        "zh": [],
+        "en": []
+      }
+    },
+    {
       "version": "0.3.42",
       "releasedAt": "2026-09-11",
       "title": {
