@@ -4,17 +4,9 @@ import { isEmpty,isString, Log } from '@velaros-ai/core'
 
 const log = Log.tag('workbench-git-diff-model')
 
-export type WorkbenchGitDiffLineKind = 'meta' | 'hunk' | 'addition' | 'deletion' | 'context'
-
-export interface WorkbenchGitDiffLine {
-  id: string
-  kind: WorkbenchGitDiffLineKind
-  text: string
-}
-
 export interface WorkbenchUnifiedDiffRow {
   id: string
-  kind: WorkbenchGitDiffLineKind
+  kind: 'hunk' | 'addition' | 'deletion' | 'context'
   oldLine: Nullable<number>
   newLine: Nullable<number>
   marker: string
@@ -40,141 +32,6 @@ export function collectWorkbenchDiffChangeAnchors(rows: WorkbenchUnifiedDiffRow[
 }
 
 const DefaultMaxDiffLines = 220
-
-function getDiffLineKind(line: string): WorkbenchGitDiffLineKind {
-  if (line.startsWith('@@')) return 'hunk'
-
-  if (line.startsWith('+') && !line.startsWith('+++')) return 'addition'
-
-  if (line.startsWith('-') && !line.startsWith('---')) return 'deletion'
-
-  if (
-    line.startsWith('diff --git') ||
-    line.startsWith('index ') ||
-    line.startsWith('---') ||
-    line.startsWith('+++') ||
-    line.startsWith('new file mode') ||
-    line.startsWith('deleted file mode') ||
-    line.startsWith('similarity index') ||
-    line.startsWith('rename from') ||
-    line.startsWith('rename to') ||
-    line.startsWith('\\ No newline at end of file')
-  )
-    return 'meta'
-
-  return 'context'
-}
-
-export function buildWorkbenchGitDiffLines(
-  diff: string,
-  maxLines = DefaultMaxDiffLines
-): WorkbenchGitDiffLine[] {
-  return diff
-    .split(/\r?\n/)
-    .slice(0, Math.max(1, maxLines))
-    .map((line, index) => ({
-      id: `${index}:${line.slice(0, 32)}`,
-      kind: getDiffLineKind(line),
-      text: line || ' ',
-    }))
-}
-
-export function buildWorkbenchUnifiedDiffRows(
-  diff: string,
-  maxLines = DefaultMaxDiffLines
-): WorkbenchUnifiedDiffRow[] {
-  let oldLine = 0
-  let newLine = 0
-  let insideHunk = false
-
-  const rows = diff
-    .split(/\r?\n/)
-    .slice(0, Math.max(1, maxLines))
-    .map((line, index): WorkbenchUnifiedDiffRow => {
-      const kind = getDiffLineKind(line)
-      const hunkMatch = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@renderer/.exec(line)
-
-      if (hunkMatch) {
-        insideHunk = true
-        oldLine = +hunkMatch[1]
-        newLine = +hunkMatch[2]
-        return {
-          id: `${index}:hunk:${line.slice(0, 24)}`,
-          kind,
-          oldLine: null,
-          newLine: null,
-          marker: '',
-          text: line,
-        }
-      }
-
-      if (kind === 'meta') {
-        if (!line.startsWith('\\ No newline at end of file')) insideHunk = false
-        return {
-          id: `${index}:meta:${line.slice(0, 24)}`,
-          kind,
-          oldLine: null,
-          newLine: null,
-          marker: '',
-          text: line || ' ',
-        }
-      }
-
-      if (!insideHunk)
-        return {
-          id: `${index}:meta:${line.slice(0, 24)}`,
-          kind: 'meta',
-          oldLine: null,
-          newLine: null,
-          marker: '',
-          text: line || ' ',
-        }
-
-      switch (kind) {
-        case 'addition': {
-          return {
-            id: `${index}:add:${newLine}`,
-            kind,
-            oldLine: null,
-            newLine: newLine++,
-            marker: '+',
-            text: line.slice(1) || ' ',
-          }
-        }
-        case 'deletion': {
-          return {
-            id: `${index}:del:${oldLine}`,
-            kind,
-            oldLine: oldLine++,
-            newLine: null,
-            marker: '-',
-            text: line.slice(1) || ' ',
-          }
-        }
-        case 'context': {
-          return {
-            id: `${index}:ctx:${oldLine}:${newLine}`,
-            kind,
-            oldLine: oldLine++,
-            newLine: newLine++,
-            marker: '',
-            text: line.startsWith(' ') ? line.slice(1) || ' ' : line || ' ',
-          }
-        }
-        default:
-          return {
-            id: `${index}:meta:${line.slice(0, 24)}`,
-            kind: 'meta',
-            oldLine: null,
-            newLine: null,
-            marker: '',
-            text: line || ' ',
-          }
-      }
-    })
-
-  return rows.filter((row) => row.kind !== 'meta' && row.kind !== 'hunk')
-}
 
 /** 全文件 diff 一次最多渲染的行数（远大于普通 hunk diff，覆盖整份文件）。 */
 const FullFileMaxDiffLines = 100_000
@@ -301,13 +158,4 @@ export function buildWorkbenchContentDiffRows(
   }
 
   return rows.slice(0, maxLines)
-}
-
-export function buildWorkbenchUntrackedPreviewDiff(content: string): string {
-  if (!content) return '+'
-
-  return content
-    .split(/\r?\n/)
-    .map((line) => `+${line}`)
-    .join('\n')
 }
