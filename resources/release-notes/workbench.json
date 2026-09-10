@@ -3,6 +3,36 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
+      "version": "0.3.42",
+      "releasedAt": "2026-09-11",
+      "title": {
+        "zh": "回答里的路径可点开、运行状态与估算费用",
+        "en": "Clickable answer paths, run status, and cost estimates"
+      },
+      "added": {
+        "zh": [
+          "运行中，状态行会显示模型正在做什么：思考到了哪个阶段，或正在执行哪个工具。",
+          "回答末尾会显示这一轮的估算费用（当前模型在价格表中有定价时）。",
+          "切换到别的对话再回来，会回到上次看到的位置。",
+          "输入框里的附件可以点击打开。"
+        ],
+        "en": [
+          "While a run is in progress, the status line shows what the model is doing: its current thinking stage or the tool it is running.",
+          "Answers now end with an estimated cost for the turn when the current model has a listed price.",
+          "Each conversation keeps its scroll position when you switch away and come back.",
+          "Attachments in the input box can be clicked to open."
+        ]
+      },
+      "fixed": {
+        "zh": [
+          "回答里的文件路径现在可以点击：项目里的文件在编辑器中打开，项目外的文件用系统默认程序打开；回答末尾列出的文件也可以直接打开或在访达中显示。"
+        ],
+        "en": [
+          "File paths in answers are now clickable: project files open in the editor and files outside the project open with the system default app. Files listed at the end of an answer can be opened or shown in Finder."
+        ]
+      }
+    },
+    {
       "version": "0.3.41",
       "releasedAt": "2026-09-10",
       "title": {
