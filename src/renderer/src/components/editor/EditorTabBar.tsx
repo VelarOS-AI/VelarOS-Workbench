@@ -8,6 +8,7 @@ import {
   useState,
 } from 'react'
 import {
+  ArrowUUpLeftIcon,
   CaretDownIcon,
   CodeIcon,
   DotsThreeVerticalIcon,
@@ -48,16 +49,35 @@ interface WorkbenchEditorTabContextMenuState {
   y: number
 }
 
+/**
+ * 辅助标签分组。`structure`（Velar 结构图）与 `ai-changes`（AI 改动对比）是**独占**组：组里有标签
+ * 被激活时，标签栏只显示这一组，与普通文件标签隔开。
+ */
+export type WorkbenchEditorAuxiliaryTabGroup = 'primary' | 'structure' | 'ai-changes'
+
+export const IsolatedWorkbenchEditorTabGroups: ReadonlySet<WorkbenchEditorAuxiliaryTabGroup> =
+  new Set(['structure', 'ai-changes'])
+
 export interface WorkbenchEditorAuxiliaryTabItem {
   id: string
   title: string
   label: ReactNode
   icon?: ReactNode
   active: boolean
-  group?: 'primary' | 'structure'
+  group?: WorkbenchEditorAuxiliaryTabGroup
   kind?: string
   onSelect: () => void
   onClose?: () => void
+}
+
+/** 独占组激活时标签栏最前面的组名，以及回到普通编辑器的按钮。 */
+export interface WorkbenchEditorIsolatedGroupHeader {
+  label: string
+  icon?: ReactNode
+  title?: string
+  onClick?: () => void
+  exitLabel: string
+  onExit: () => void
 }
 
 interface EditorTabBarProps {
@@ -91,6 +111,7 @@ interface EditorTabBarProps {
   onToggleMarkdownPreview?: () => void
   ariaLabel?: string
   showWorkspaceActions?: boolean
+  isolatedGroupHeader?: LooseOptional<WorkbenchEditorIsolatedGroupHeader>
 }
 
 function fileNameFromPath(path: string): string {
@@ -125,6 +146,7 @@ export function EditorTabBar({
   onToggleMarkdownPreview,
   ariaLabel,
   showWorkspaceActions = true,
+  isolatedGroupHeader = null,
 }: EditorTabBarProps): Nullable<ReactElement> {
   const { t } = useWorkbenchI18n()
   const [openMenu, setOpenMenu] = useState<Nullable<'tabs' | 'actions'>>(null)
@@ -239,6 +261,17 @@ export function EditorTabBar({
         role="tablist"
         aria-label={ariaLabel ?? t('workbench.openFiles')}
       >
+        {!!isolatedGroupHeader && (
+          <button
+            type="button"
+            className={styles.editorTabGroupHeader}
+            title={isolatedGroupHeader.title ?? isolatedGroupHeader.label}
+            onClick={isolatedGroupHeader.onClick}
+          >
+            {isolatedGroupHeader.icon}
+            <span>{isolatedGroupHeader.label}</span>
+          </button>
+        )}
         <div ref={tabScrollerRef} className={styles.editorTabScroller}>
           {openTabs.map((tab) => {
             const isDirty = tab.content !== tab.file.content
@@ -389,6 +422,17 @@ export function EditorTabBar({
           ))}
         </div>
         <div className={styles.editorTabActions}>
+          {!!isolatedGroupHeader && (
+            <IconButton
+              size="icon-sm"
+              className={styles.editorTabActionButton}
+              title={isolatedGroupHeader.exitLabel}
+              label={isolatedGroupHeader.exitLabel}
+              onClick={isolatedGroupHeader.onExit}
+            >
+              <ArrowUUpLeftIcon size={15} />
+            </IconButton>
+          )}
           {markdownPreviewAvailable && (
             <IconButton
               size="icon-sm"

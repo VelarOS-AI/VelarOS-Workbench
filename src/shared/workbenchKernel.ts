@@ -1,5 +1,7 @@
 import type { ActiveContextArtifact, ChatGoalLifecycleAction } from '@velaros-ai/agent/protocol'
 
+import type { WorkbenchAgentUiResponse } from './workbenchAgentUi'
+
 export const WorkbenchKernelChannels = {
   getStatus: 'workbench-app:kernel:get-status',
   invoke: 'workbench-app:kernel:invoke',
@@ -13,6 +15,7 @@ export const WorkbenchKernelChannels = {
   getGoalLifecycle: 'workbench-app:kernel:get-goal-lifecycle',
   updateGoalLifecycle: 'workbench-app:kernel:update-goal-lifecycle',
   releaseAgentSession: 'workbench-app:kernel:release-agent-session',
+  respondAgentUiRequest: 'workbench-app:kernel:respond-agent-ui-request',
 } as const
 
 /**
@@ -179,4 +182,9 @@ export interface WorkbenchKernelBridge {
     request: WorkbenchUpdateGoalLifecycleRequest
   ) => Promise<WorkbenchGoalLifecycleResult>
   releaseAgentSession: (request: WorkbenchReleaseAgentSessionRequest) => Promise<void>
+  /**
+   * Agent 界面请求（打开文件、讲解气泡等）的回执。只有发起那一轮执行的窗口能回；返回 false =
+   * 请求已经不在等（超时、这一轮已结束）或不属于本窗口。
+   */
+  respondAgentUiRequest: (response: WorkbenchAgentUiResponse) => Promise<boolean>
 }

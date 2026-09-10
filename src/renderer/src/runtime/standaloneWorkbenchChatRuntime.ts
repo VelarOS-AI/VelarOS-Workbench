@@ -425,14 +425,18 @@ function resolveStandaloneRunChangesAnchor(
   const anchorIndex = messages.findLastIndex((message) => message.role === 'assistant')
   if (anchorIndex < 0 || anchorIndex < captureMessageCount) return null
   const messageId = messages[anchorIndex]!.id
-  return markers.some((marker) => marker.messageId === messageId && marker.status === 'completed')
+  // 停下、失败的一轮同样记：文件可能已经改了，「AI 改动」要列全每一轮。
+  return markers.some(
+    (marker) => marker.messageId === messageId && isStandaloneTerminalRunStatus(marker.status)
+  )
     ? messageId
     : null
 }
 
 /**
- * 把采集到的改动摘要记到那条消息的运行标记上。标记已不在或不再是已完成（采集期间被回溯掉、
- * 被后来的中止改写）时返回 null——调用方要删掉刚写下的记录；替换掉的旧记录 id 同样交给调用方删。
+ * 把采集到的改动摘要记到那条消息的运行标记上。标记已不在（采集期间被回溯掉）时返回 null——调用方要
+ * 删掉刚写下的记录；替换掉的旧记录 id 同样交给调用方删。标记被后来一轮的中止改写过也照样记：改动
+ * 仍然出自这条回答那一轮，而那一轮中止的运行自己找不到回答，不会再记一份。
  */
 function attachStandaloneRunChanges(
   markers: readonly StandaloneRunMarker[],
@@ -440,7 +444,7 @@ function attachStandaloneRunChanges(
   runChanges: WorkbenchChatRunChangesSummary
 ): { markers: StandaloneRunMarker[]; replacedRecordId: string | null } | null {
   const marker = markers.find((entry) => entry.messageId === messageId)
-  if (marker?.status !== 'completed') return null
+  if (!marker || !isStandaloneTerminalRunStatus(marker.status)) return null
   const previous = marker.runChanges?.recordId
   return {
     markers: markers.map((entry) => (entry === marker ? { ...entry, runChanges } : entry)),

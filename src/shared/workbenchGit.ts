@@ -40,6 +40,7 @@ export const WorkbenchGitChannels = {
   captureChatRunChanges: 'workbench-app:git:capture-chat-run-changes',
   readChatRunChanges: 'workbench-app:git:read-chat-run-changes',
   deleteChatRunChanges: 'workbench-app:git:delete-chat-run-changes',
+  readChatRunChangeBaseFile: 'workbench-app:git:read-chat-run-change-base-file',
 } as const
 
 export interface WorkbenchGitRootRequest {
@@ -158,12 +159,33 @@ export interface WorkbenchChatRunFileChange {
 export interface WorkbenchChatRunChangesRecord {
   recordId: string
   capturedAt: number
+  /**
+   * 这一轮开跑前检查点的影子提交：逐行补丁的起点，按它能读出文件改动前的全文。
+   * 早于这个字段写下的记录没有它，只能看补丁本身。
+   */
+  baseCommitId?: string
   changes: WorkbenchChatRunFileChange[]
 }
 
 export interface WorkbenchChatRunChangesReadRequest extends WorkbenchGitRootRequest {
   sessionId: string
   recordId: string
+}
+
+/** 读一轮改动里某个文件改动前的全文（按记录里的起点提交）。 */
+export interface WorkbenchChatRunChangeBaseFileRequest extends WorkbenchGitRootRequest {
+  sessionId: string
+  recordId: string
+  /** 记录里的文件路径（相对项目根）。 */
+  path: string
+}
+
+/**
+ * `content` 为 null：没有全文可读——记录没有起点提交、这个文件是这一轮新建的、快照对象已被清理，
+ * 或文件太大。查看器此时只显示补丁本身。
+ */
+export interface WorkbenchChatRunChangeBaseFileResult {
+  content: string | null
 }
 
 export interface WorkbenchChatRunChangesDeleteRequest extends WorkbenchGitRootRequest {
@@ -225,6 +247,9 @@ export interface WorkbenchGitBridge {
   readChatRunChanges(
     request: WorkbenchChatRunChangesReadRequest
   ): Promise<WorkbenchFsCallResult<WorkbenchChatRunChangesRecord | null>>
+  readChatRunChangeBaseFile(
+    request: WorkbenchChatRunChangeBaseFileRequest
+  ): Promise<WorkbenchFsCallResult<WorkbenchChatRunChangeBaseFileResult>>
   deleteChatRunChanges(
     request: WorkbenchChatRunChangesDeleteRequest
   ): Promise<WorkbenchFsCallResult<void>>

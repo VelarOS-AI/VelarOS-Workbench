@@ -1,0 +1,225 @@
+/* 「AI 改动」面板与对比标签页。只用 Workbench 令牌，原生 CSS（模块里的 @apply 不认间距工具类）。 */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  background: var(--workbench-surface-muted);
+}
+
+.scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 0 12px;
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 32px 20px;
+  color: var(--workbench-text-muted);
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.empty p {
+  margin: 0;
+}
+
+.round {
+  min-width: 0;
+  padding: 2px 0 6px;
+  border-bottom: 1px solid var(--workbench-border);
+}
+
+.roundHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 26px;
+  padding: 4px 10px 2px 8px;
+  border: 0;
+  background: transparent;
+  color: var(--workbench-text);
+  text-align: left;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.roundHeader:hover {
+  background: var(--chrome-rail-hover-bg);
+}
+
+.roundLabel {
+  flex: none;
+  font-weight: 600;
+}
+
+.roundTime {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--workbench-text-muted);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.roundStats,
+.lineStats,
+.treeStats {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.additions {
+  color: var(--status-green);
+}
+
+.deletions {
+  color: var(--status-red);
+}
+
+.roundPrompt {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 0 12px 2px 26px;
+  color: var(--workbench-text-muted);
+  font-size: 11px;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow-wrap: anywhere;
+}
+
+.roundSession {
+  overflow: hidden;
+  margin: 0 12px 2px 26px;
+  color: var(--workbench-text-muted);
+  font-size: 10px;
+  opacity: 0.8;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.roundFeedback {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px 2px 26px;
+  color: var(--workbench-text-muted);
+  font-size: 11px;
+}
+
+.spin {
+  animation: ai-changes-spin 900ms linear infinite;
+}
+
+@keyframes ai-changes-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.tree {
+  padding-top: 2px;
+}
+
+.treeRow {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  min-height: var(--workbench-tree-row-height, 22px);
+  padding-block: 0;
+  padding-inline-end: 10px;
+  border: 0;
+  background: transparent;
+  color: var(--workbench-text);
+  text-align: left;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.treeRow:hover {
+  background: var(--chrome-rail-hover-bg);
+}
+
+.treeRow[data-active='true'] {
+  background: var(--workbench-selection-bg);
+}
+
+.treeCaretSpacer {
+  flex: none;
+  width: 10px;
+}
+
+.folderIcon {
+  flex: none;
+  color: var(--workbench-text-muted);
+}
+
+.treeName {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.treeRow[data-status='deleted'] .treeName {
+  color: var(--workbench-text-muted);
+  text-decoration: line-through;
+}
+
+.statusLetter {
+  flex: none;
+  width: 12px;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.treeRow[data-status='added'] .statusLetter {
+  color: var(--status-green);
+}
+
+.treeRow[data-status='deleted'] .statusLetter {
+  color: var(--status-red);
+}
+
+.treeRow[data-status='modified'] .statusLetter {
+  color: var(--status-teal);
+}
+
+.statusChip {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  line-height: 17px;
+  background: var(--workbench-active);
+  color: var(--workbench-text-muted);
+}
+
+.statusChip[data-status='added'] {
+  background: var(--status-green-soft, rgba(34, 197, 94, 0.14));
+  color: var(--status-green);
+}
+
+.statusChip[data-status='deleted'] {
+  background: var(--status-red-soft, rgba(239, 68, 68, 0.14));
+  color: var(--status-red);
+}

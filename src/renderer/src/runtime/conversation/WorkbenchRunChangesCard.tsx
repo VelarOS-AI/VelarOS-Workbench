@@ -4,7 +4,6 @@ import {
   type ReactElement,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
   useState,
 } from 'react'
@@ -21,10 +20,11 @@ import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
 import { Text } from '@velaros-ai/ui/primitives/display/Text'
 
 import type {
-  WorkbenchChatRunChangesRecord,
   WorkbenchChatRunChangesSummary,
   WorkbenchChatRunFileChange,
 } from '@shared/workbenchGit'
+
+import { useWorkbenchRunChangeRecord } from '../workbenchRunChangeRecords'
 
 import styles from './WorkbenchRunChangesCard.module.css'
 
@@ -33,6 +33,8 @@ export interface WorkbenchRunChangesScope {
   readonly projectRoot: string
   readonly sessionId: string
   readonly summaries: ReadonlyMap<string, WorkbenchChatRunChangesSummary>
+  /** 「查看」这一轮：在编辑区打开「AI 改动」对比标签页（宿主没接时退回共享 UI 的查看改动）。 */
+  readonly onReviewRound?: (target: { sessionId: string; recordId: string }) => void
 }
 
 /**
@@ -40,77 +42,6 @@ export interface WorkbenchRunChangesScope {
  * 只比较它认识的标记字段，经 props 会被挡在门外；context 一变，卡片自己重渲。
  */
 export const WorkbenchRunChangesScopeContext = createContext<WorkbenchRunChangesScope | null>(null)
-
-/** 读过的记录在内存里留一小份：会话列表是虚拟滚动的，卡片滚出去再回来不必重读磁盘。 */
-const RecordCacheLimit = 24
-const recordCache = new Map<string, WorkbenchChatRunChangesRecord>()
-
-function readCachedRecord(key: string): WorkbenchChatRunChangesRecord | undefined {
-  const record = recordCache.get(key)
-  if (record) {
-    recordCache.delete(key)
-    recordCache.set(key, record)
-  }
-  return record
-}
-
-function cacheRecord(key: string, record: WorkbenchChatRunChangesRecord): void {
-  recordCache.set(key, record)
-  const oldest = recordCache.keys().next()
-  if (recordCache.size > RecordCacheLimit && !oldest.done) recordCache.delete(oldest.value)
-}
-
-interface RecordLoad {
-  readonly key: string
-  readonly record: WorkbenchChatRunChangesRecord | null
-}
-
-/** 补丁全文在主进程的记录文件里，卡片挂出来时按 recordId 读一次。 */
-function useRunChangesRecord(
-  scope: WorkbenchRunChangesScope | null,
-  summary: WorkbenchChatRunChangesSummary | null
-): { record: WorkbenchChatRunChangesRecord | null; loading: boolean; failed: boolean } {
-  const projectRoot = scope?.projectRoot ?? ''
-  const sessionId = scope?.sessionId ?? ''
-  const recordId = summary && summary.fileCount > 0 && !summary.error ? summary.recordId : null
-  const key = recordId ? `${projectRoot}\0${sessionId}\0${recordId}` : null
-  const [load, setLoad] = useState<RecordLoad | null>(() => {
-    const cached = key ? readCachedRecord(key) : undefined
-    return key && cached ? { key, record: cached } : null
-  })
-
-  useEffect(() => {
-    if (!key || !recordId) return undefined
-    const cached = readCachedRecord(key)
-    if (cached) {
-      setLoad({ key, record: cached })
-      return undefined
-    }
-    let cancelled = false
-    void window.velarosWorkbenchGit
-      .readChatRunChanges({ workspaceRoot: projectRoot, sessionId, recordId })
-      .then(
-        (result) => {
-          if (cancelled) return
-          if (result.ok && result.value) cacheRecord(key, result.value)
-          setLoad({ key, record: result.ok ? result.value : null })
-        },
-        () => {
-          if (!cancelled) setLoad({ key, record: null })
-        }
-      )
-    return () => {
-      cancelled = true
-    }
-  }, [key, projectRoot, recordId, sessionId])
-
-  const current = load?.key === key ? load : null
-  return {
-    record: current?.record ?? null,
-    loading: !!key && !current,
-    failed: !!current && !current.record,
-  }
-}
 
 function buildRunChangeDiffSummary(
   change: WorkbenchChatRunFileChange,
@@ -153,7 +84,11 @@ export const WorkbenchRunChangesCard = memo(function WorkbenchRunChangesCard({
   const { t } = useWorkbenchI18n()
   const scope = useContext(WorkbenchRunChangesScopeContext)
   const summary = scope?.summaries.get(messageId) ?? null
-  const { record, loading, failed } = useRunChangesRecord(scope, summary)
+  const { record, loading, failed } = useWorkbenchRunChangeRecord(
+    scope?.projectRoot ?? '',
+    scope?.sessionId ?? '',
+    summary && summary.fileCount > 0 && !summary.error ? summary.recordId : null
+  )
   const [expandedKeys, setExpandedKeys] = useState<ReadonlySet<string>>(() => new Set())
   const projectRoot = scope?.projectRoot ?? ''
   const binaryLabel = t('chat.fileChangeSummaryBinary')
@@ -201,7 +136,7 @@ export const WorkbenchRunChangesCard = memo(function WorkbenchRunChangesCard({
           <Text className={styles.added}>+{summary.additions}</Text>
           <Text className={styles.removed}>-{summary.deletions}</Text>
         </div>
-        {!!onReviewEntries && (
+        {(!!scope?.onReviewRound || !!onReviewEntries) && (
           <Button
             variant="ghost"
             size="sm"
@@ -209,7 +144,9 @@ export const WorkbenchRunChangesCard = memo(function WorkbenchRunChangesCard({
             className={styles.reviewButton}
             disabled={entries.length === 0}
             onClick={() => {
-              void onReviewEntries(entries)
+              if (scope?.onReviewRound)
+                scope.onReviewRound({ sessionId: scope.sessionId, recordId: summary.recordId })
+              else void onReviewEntries?.(entries)
             }}
           >
             <MagnifyingGlassIcon size={15} />

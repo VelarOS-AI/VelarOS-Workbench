@@ -8,8 +8,9 @@ import {
   useWorkbenchProductRuntime,
   type WorkbenchBrowserElementSelectionDelivery,
   type WorkbenchChatFileChangeEntry,
+  type WorkbenchChatRunChangesTarget,
 } from '@renderer/composition'
-import { useWorkbenchAiChangeArchive } from '@renderer/hooks/useWorkbenchAiChangeArchive'
+import { useWorkbenchAiChanges } from '@renderer/hooks/useWorkbenchAiChanges'
 import { useWorkbenchChatChangePreview } from '@renderer/hooks/useWorkbenchChatChangePreview'
 import { useWorkbenchKeyboardShortcuts } from '@renderer/hooks/useWorkbenchKeyboardShortcuts'
 import { useWorkbenchKeymapController } from '@renderer/hooks/useWorkbenchKeymapController'
@@ -24,6 +25,7 @@ import { resolveWorkbenchChatWorkspacePath } from '@renderer/models/chat/workben
 import { getWorkbenchCommandStatusLabel } from '@renderer/models/commands/workbenchCommandStatusModel'
 import { inferPackageManagerCommand } from '@renderer/models/commands/workbenchCommandSuggestions'
 import { inferWorkbenchPackageManagerForPackageJsonPath } from '@renderer/models/commands/workbenchPackageScriptCommand'
+import { buildWorkbenchAgentEditorState } from '@renderer/models/editor/workbenchAgentEditorState'
 import {
   buildWorkbenchEditorAnimationPlan,
   buildWorkbenchEditorDeleteFrame,
@@ -31,6 +33,10 @@ import {
   type WorkbenchEditorAutomationState,
 } from '@renderer/models/editor/workbenchEditorAutomation'
 import { buildWorkbenchPackageScriptRunActions } from '@renderer/models/editor/workbenchPackageScriptRunGutter'
+import {
+  useWorkbenchExplanations,
+  useWorkbenchExplanationStore,
+} from '@renderer/models/explanations/workbenchExplanationStore'
 import { resolveWorkbenchGitSurfacesActive } from '@renderer/models/git/workbenchGitSurfaceActivation'
 import { saveLightEditorTab } from '@renderer/models/lightEditorModel'
 import {
@@ -66,6 +72,7 @@ import type {
   WorkbenchEditorCommandEvent,
   WorkbenchReadFileResult,
 } from '@shared/contracts'
+import type { WorkbenchAgentUiCommand } from '@shared/workbenchAgentUi'
 import { isWorkbenchImagePreviewPath } from '@shared/workbenchImage'
 
 import {
@@ -73,6 +80,7 @@ import {
   useStandaloneWorkbenchModCatalog,
 } from '../runtime/standaloneWorkbenchMods'
 import { useStableWorkbenchMessageTranslate } from '../runtime/useStableWorkbenchMessaging'
+import { registerWorkbenchAgentUiHandler } from '../runtime/workbenchAgentUiHost'
 import { SystemDefaultEditorLightId } from '../support/defaultEditor'
 import { useLatest, useMemoizedFn, useTimerScope } from '../support/genericHooks'
 import { useWorkspaceFilesChangedRefresh } from '../support/useWorkspaceFilesChangedRefresh'
@@ -905,25 +913,144 @@ export function useStandaloneWorkbenchPageModel(
     await gitState.refreshAfterGitAction()
   }
 
-  const isAiChangePathDirty = useMemoizedFn((path: string): boolean =>
-    workbench.openTabs.some((tab) => tab.path === path && tab.content !== tab.file.content)
+  // 左侧「AI 改动」面板与编辑区的只读对比标签组。会话标题取自会话列表（与聊天面板的会话菜单同源）。
+  const aiChangeSessionTitleEntries = chat.sessionList.groups.flatMap((group) =>
+    group.members.map((member) => [member.memberSessionId, member.title] as const)
   )
-  const refreshAfterAiChangeApply = useMemoizedFn(async (): Promise<void> => {
-    await refreshProjectAndGit()
-  })
-  const aiChangeArchive = useWorkbenchAiChangeArchive({
-    active: surfaceMode === 'standalone' && surface.activeLeftTool === 'ai-changes',
-    projectRoot: workbench.activeProject?.rootPath,
+  const aiChangeSessionTitlesKey = aiChangeSessionTitleEntries
+    .map(([sessionId, title]) => `${sessionId}\u0001${title}`)
+    .join('\u0002')
+  const aiChangeSessionTitles = useMemo(
+    () => new Map(aiChangeSessionTitleEntries),
+    // 会话列表每次渲染都重建，按标题内容判等。
+    [aiChangeSessionTitlesKey]
+  )
+  const aiChanges = useWorkbenchAiChanges({
+    projectRoot: toNullable(workbench.activeProject?.rootPath),
     sessions,
-    sessionGroups: chat.sessionList.archiveGroups,
-    isPathDirty: isAiChangePathDirty,
-    onFilesChanged: refreshAfterAiChangeApply,
-    notify: (notification) =>
-      translate.messageLatest.current[notification.tone]({
-        title: notification.title,
-        description: notification.description,
-      }),
+    sessionTitles: aiChangeSessionTitles,
+    currentSessionId: currentSession.id,
+    autoOpen: workbenchPreferences.preferences.aiChangesAutoOpen,
+    onShow: () => setVelarLogicGraphActive(false),
   })
+
+  /** 让编辑区回到普通文件视图：收起结构图与「AI 改动」这类独占标签组。 */
+  const showEditorSurface = useMemoizedFn((): void => {
+    setVelarLogicGraphActive(false)
+    aiChanges.deactivate()
+  })
+
+  function handleWorkbenchChatRunChangesReview(target: WorkbenchChatRunChangesTarget): void {
+    if (surface.activeLeftTool !== 'ai-changes') surface.setActiveLeftTool('ai-changes')
+    if (!surface.isFilePanelOpen) surface.toggleFilePanel()
+    void aiChanges.openRound(target)
+  }
+
+  // AI 讲解气泡：切到某条讲解时把它所在的文件带到编辑器里（滚动由编辑器自己完成）。
+  const explanationStore = useWorkbenchExplanationStore()
+  const explanations = useWorkbenchExplanations()
+  const explanationNavigationRef = useLatest({
+    selectedFilePath: workbench.selectedFilePath,
+    overlayActive:
+      !!editorNavigation.diffItem ||
+      !!editorNavigation.lightTab ||
+      !!editorNavigation.debug.activeTabId ||
+      velarLogicGraphActive ||
+      aiChanges.active,
+  })
+  useEffect(() => {
+    const active = explanations.explanations.find(
+      (explanation) => explanation.id === explanations.activeId
+    )
+    if (!active) return
+    const { selectedFilePath, overlayActive } = explanationNavigationRef.current
+    if (active.path === selectedFilePath && !overlayActive) return
+    showEditorSurface()
+    void editorNavigation.selectFile(active.path)
+    // 只跟随「切到某条讲解」这一个信号；行号回写、清掉别的讲解都不该把编辑器拽走。
+  }, [explanations.focusRevision])
+
+  const gitChangeItemsRef = useLatest(gitState.changeItems)
+  /** 刚改完的文件可能还没进 Git 状态：刷新一次，等下一次提交把它带出来（最多 1.5 秒）。 */
+  async function findGitChangeItem(path: string): Promise<(typeof gitState.changeItems)[number] | null> {
+    const find = () => gitChangeItemsRef.current.find((item) => item.path === path) ?? null
+    const existing = find()
+    if (existing) return existing
+    await gitState.refreshGitPanel()
+    for (let waited = 0; waited < 1500; waited += 50) {
+      const refreshed = find()
+      if (refreshed) return refreshed
+      await automationTimers.sleep(50, { label: 'agent-ui.git-refresh' })
+    }
+    return find()
+  }
+
+  // `workbench:*` 工具的界面请求落在这里：在用户眼前打开文件、定位、加讲解气泡。
+  const handleAgentUiCommand = useMemoizedFn(
+    async (
+      command: WorkbenchAgentUiCommand,
+      context: { projectRoot: string; sessionId: string }
+    ): Promise<Record<string, unknown>> => {
+      switch (command.type) {
+        case 'open-file':
+          showEditorSurface()
+          await editorNavigation.goToLocation(command.path, command.line, command.column, {
+            ...(command.endLine ? { endLine: command.endLine } : {}),
+            focus: false,
+          })
+          return { path: command.path, line: command.line }
+        case 'reveal-path':
+          if (surface.activeLeftTool !== 'project') surface.setActiveLeftTool('project')
+          if (!surface.isFilePanelOpen) surface.toggleFilePanel()
+          await workbench.revealEntryPath(command.path)
+          return { path: command.path }
+        case 'open-diff': {
+          const item = await findGitChangeItem(command.path)
+          if (!item) throw new AppError('NOT_FOUND', `${command.path} has no uncommitted changes.`)
+          showEditorSurface()
+          editorNavigation.openDiff(item, { focusFirstChange: true })
+          return { path: command.path }
+        }
+        case 'explain-code': {
+          const batch = explanationStore.addBatch({
+            projectRoot: context.projectRoot,
+            sessionId: context.sessionId,
+            explanations: command.explanations,
+            replace: command.replace,
+          })
+          return { added: batch.length }
+        }
+        case 'clear-explanations':
+          return { cleared: explanationStore.clear(context.projectRoot, command.path) }
+        case 'read-editor-state':
+          return {
+            ...buildWorkbenchAgentEditorState({
+              view: aiChanges.active
+                ? 'ai-changes'
+                : editorNavigation.diffItem
+                  ? 'git-diff'
+                  : editorNavigation.lightTab ||
+                      editorNavigation.debug.activeTabId ||
+                      velarLogicGraphActive
+                    ? 'other'
+                    : workbench.selectedFilePath
+                      ? 'file'
+                      : 'empty',
+              selectedFilePath: workbench.selectedFilePath,
+              cursor: editorNavigation.cursorPosition,
+              editorContent: workbench.editorContent,
+              openTabs: workbench.openTabs,
+              explanationCount: explanationStore.listForProject(context.projectRoot).length,
+            }),
+          }
+      }
+    }
+  )
+  const agentUiProjectRoot = workbench.activeProject?.rootPath
+  useEffect(() => {
+    if (!agentUiProjectRoot) return undefined
+    return registerWorkbenchAgentUiHandler(agentUiProjectRoot, handleAgentUiCommand)
+  }, [agentUiProjectRoot, handleAgentUiCommand])
 
   async function handleRepositoryChanged(): Promise<void> {
     workbench.closeAllOpenFiles()
@@ -1020,15 +1147,6 @@ export function useStandaloneWorkbenchPageModel(
         description: appError.message,
       })
     }
-  }
-
-  function handleWorkbenchChatFileChangeArchiveOpen(entry: WorkbenchChatFileChangeEntry): void {
-    surface.setActiveLeftTool('ai-changes')
-    aiChangeArchive.selectLinkedEntry({
-      sessionId: currentSession.id,
-      path: entry.path,
-      changeIds: entry.changeIds,
-    })
   }
 
   async function handleWorkbenchChatFileChangesReview(
@@ -1239,7 +1357,7 @@ export function useStandaloneWorkbenchPageModel(
     agentBrowser,
     browserModEnabled,
     pendingBrowserElementSelections,
-    aiChangeArchive,
+    aiChanges,
     chatChangePreview,
     gitChangeActions,
     automation: {
@@ -1289,8 +1407,9 @@ export function useStandaloneWorkbenchPageModel(
       handleRepositoryChanged,
       initializeRepository,
       handleWorkbenchChatFileChangeOpen,
-      handleWorkbenchChatFileChangeArchiveOpen,
       handleWorkbenchChatFileChangesReview,
+      handleWorkbenchChatRunChangesReview,
+      showEditorSurface,
       handleWorkbenchChatWorkspacePathOpen,
       handleWorkbenchBrowserElementPicked,
       consumeWorkbenchBrowserElementSelections,

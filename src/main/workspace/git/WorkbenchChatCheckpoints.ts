@@ -183,6 +183,40 @@ export class WorkbenchChatCheckpointService {
     )
   }
 
+  /**
+   * 某个检查点提交里一个文件的全文（「本轮改动」查看器拿它和补丁拼出改动前后两份全文）。
+   *
+   * 路径相对项目根，用 `./` 前缀按工作目录解析——项目可能只是某个大仓的子目录。读原始 blob，不走
+   * textconv；超过 `maxBytes` 或提交里没有这个文件时为 null。只读对象库，不进根锁。
+   */
+  public async readFileAtCommit(request: {
+    workspaceRoot: string
+    commitId: string
+    path: string
+    maxBytes: number
+  }): Promise<string | null> {
+    if (!ObjectIdPattern.test(request.commitId))
+      throw new AppError('VALIDATION', '无效的检查点提交。')
+    const path = request.path.replaceAll('\\', '/')
+    if (
+      !path ||
+      path.includes('\0') ||
+      path.startsWith('/') ||
+      path.split('/').some((segment) => segment === '..' || segment === '')
+    )
+      throw new AppError('VALIDATION', '无效的文件路径。')
+    const root = await this.resolveRoot(request.workspaceRoot)
+    const object = `${request.commitId}:./${path}`
+    try {
+      const size = Number.parseInt((await this.runGit(root, ['cat-file', '-s', object])).trim(), 10)
+      if (!Number.isFinite(size) || size > request.maxBytes) return null
+      // 文件全文要逐字节原样：结尾换行也算内容，不能像读命令输出那样剥掉。
+      return await this.runGit(root, ['cat-file', 'blob', object], {}, { keepFinalNewline: true })
+    } catch {
+      return null
+    }
+  }
+
   private async isInsideWorkTree(root: string): Promise<boolean> {
     try {
       return (await this.runGit(root, ['rev-parse', '--is-inside-work-tree'])).trim() === 'true'
@@ -221,7 +255,8 @@ export class WorkbenchChatCheckpointService {
   private async runGit(
     root: string,
     args: string[],
-    extraEnv: Record<string, string> = {}
+    extraEnv: Record<string, string> = {},
+    options: { keepFinalNewline?: boolean } = {}
   ): Promise<string> {
     const result = await execa('git', args, {
       cwd: root,
@@ -229,6 +264,7 @@ export class WorkbenchChatCheckpointService {
       env: { ...process.env, GIT_TERMINAL_PROMPT: '0', LC_ALL: 'C', LANG: 'C', ...extraEnv },
       maxBuffer: GitOutputMaxBytes,
       reject: false,
+      stripFinalNewline: !options.keepFinalNewline,
     })
     if (result.failed) {
       const detail = (result.stderr || result.stdout).trim()

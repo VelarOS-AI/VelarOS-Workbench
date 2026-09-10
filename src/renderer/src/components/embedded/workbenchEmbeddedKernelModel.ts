@@ -1,4 +1,4 @@
-import type { WorkbenchAiChangeArchiveState } from '@renderer/hooks/useWorkbenchAiChangeArchive'
+import type { WorkbenchAiChangesState } from '@renderer/hooks/useWorkbenchAiChanges'
 import type { WorkbenchGitDecorationMap } from '@renderer/models/git/workbenchGitModel'
 import type { WorkbenchProject } from '@renderer/models/project/workbenchProjects'
 import type { WorkbenchThemeId } from '@renderer/models/settings/workbenchPreferences'
@@ -30,7 +30,7 @@ import type {
 import type { WorkbenchCommitPanelProps } from '../git/WorkbenchCommitPanel'
 import type { WorkbenchGitPanelSessionProps } from '../git/workbenchGitPanelProps'
 
-export type WorkbenchEmbeddedKernelLeftMode = 'changes' | 'files' | 'velar-structure'
+export type WorkbenchEmbeddedKernelLeftMode = 'ai-changes' | 'changes' | 'files' | 'velar-structure'
 
 export interface WorkbenchEmbeddedFilePanelModel {
   tree: WorkbenchFilePanelTreeProps
@@ -80,12 +80,12 @@ export interface WorkbenchEmbeddedEditorPanelModel {
 }
 
 /**
- * 片2 过渡形态：`changes`（提交/会话变更左面模型）随片4 CommitPanel 族复活时恢复；
- * `aiChanges` 状态仍由页 model 供给（存档面 UI 在 Phase 3 批复活）。
+ * 中央装配件的输入：左侧各面板（文件、提交、结构、AI 改动）与编辑区。
+ * `aiChanges` 是每一轮 AI 运行的改动（左侧面板 + 编辑区只读对比标签组），状态由页 model 供给。
  */
 export interface WorkbenchEmbeddedKernelModel {
   activeProject: WorkbenchProject
-  aiChanges: WorkbenchAiChangeArchiveState
+  aiChanges: WorkbenchAiChangesState
   files: WorkbenchEmbeddedFilePanelModel
   changes: WorkbenchEmbeddedCommitPanelModel
   velarStructure?: WorkbenchLogicGraphSidebarProps

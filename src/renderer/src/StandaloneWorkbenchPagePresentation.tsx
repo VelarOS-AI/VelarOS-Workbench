@@ -12,6 +12,7 @@ import {
   GitBranchIcon,
   GitCommitIcon,
   PlayIcon,
+  SparkleIcon,
   TerminalWindowIcon,
   TreeViewIcon,
   WarningCircleIcon,
@@ -28,6 +29,7 @@ import {
   useWorkbenchAgentPluginContributions,
 } from '../../plugins/agent-engines/renderer/contribution'
 
+import { WorkbenchAiChangeDiffPanel } from './components/aiChanges/WorkbenchAiChangeDiffPanel'
 import { StatusBar } from './components/chrome/StatusBar'
 import { WorkbenchTopLeading, WorkbenchTopTrailing } from './components/chrome/TopToolbar'
 import { WorkbenchProjectControl } from './components/chrome/WorkbenchProjectControl'
@@ -331,6 +333,33 @@ export function StandaloneWorkbenchPagePresentation({
   ]
   const editorChrome = buildStandaloneWorkbenchEditorChrome(model)
   const baseEmbeddedKernelModel = buildStandaloneWorkbenchEmbeddedKernelModel(model, editorChrome)
+  const { aiChanges } = model
+  // 「AI 改动」对比标签：独占标签组，激活时标签栏只显示这一组，与普通文件标签隔开。
+  const aiChangeTabs = aiChanges.tabs.map((tab) => {
+    const fileName = tab.path.slice(tab.path.lastIndexOf('/') + 1)
+    return {
+      id: tab.id,
+      title: `${tab.path} · ${t('workbench.aiChangesRunLabel', { number: tab.runNumber })}`,
+      label: fileName,
+      icon: <WorkbenchFileTypeIcon fileName={tab.path} size={13} />,
+      active: aiChanges.active && aiChanges.activeTab?.id === tab.id,
+      group: 'ai-changes' as const,
+      kind: 'ai-change',
+      onSelect: () => aiChanges.selectTab(tab.id),
+      onClose: () => aiChanges.closeTab(tab.id),
+      content: (
+        <WorkbenchAiChangeDiffPanel
+          projectRoot={projectRoot}
+          tab={tab}
+          workbenchTheme={workbenchPreferences.preferences.theme}
+          onOpenFile={(path, line) => {
+            model.actions.showEditorSurface()
+            void editorNavigation.goToLocation(path, line)
+          }}
+        />
+      ),
+    }
+  })
   const embeddedKernelModel = {
     ...baseEmbeddedKernelModel,
     velarStructure: {
@@ -345,7 +374,19 @@ export function StandaloneWorkbenchPagePresentation({
       ...baseEmbeddedKernelModel.editor,
       diff: {
         ...baseEmbeddedKernelModel.editor.diff,
-        auxiliaryTabs: dialogs.velarLogicGraphOpen
+        isolatedGroupHeaders: {
+          'ai-changes': {
+            label: t('workbench.aiChangesTitle'),
+            icon: <SparkleIcon size={13} weight="fill" />,
+            title: t('workbench.aiChangesShowPanel'),
+            onClick: showAiChangesPanel,
+            exitLabel: t('workbench.aiChangesBackToEditor'),
+            onExit: aiChanges.deactivate,
+          },
+        },
+        auxiliaryTabs: [
+          ...aiChangeTabs,
+          ...(dialogs.velarLogicGraphOpen
           ? [
               ...velarStructureTabs.map((structureTab) => {
                 const tab = describeVelarStructureTab(structureTab.scopePaths)
@@ -421,7 +462,8 @@ export function StandaloneWorkbenchPagePresentation({
                   ]
                 : []),
             ]
-          : [],
+          : []),
+        ],
       },
     },
   }
@@ -442,7 +484,7 @@ export function StandaloneWorkbenchPagePresentation({
     return result.ok
   }
   function toggleLeftTool(tool: 'commit' | 'project'): void {
-    dialogs.setVelarLogicGraphActive(false)
+    model.actions.showEditorSurface()
     if (surface.activeLeftTool === tool) {
       surface.toggleFilePanel()
       return
@@ -451,7 +493,25 @@ export function StandaloneWorkbenchPagePresentation({
     if (!surface.isFilePanelOpen) surface.toggleFilePanel()
   }
 
+  /** 打开左侧「AI 改动」面板（不动编辑区）。 */
+  function showAiChangesPanel(): void {
+    surface.setActiveLeftTool('ai-changes')
+    if (!surface.isFilePanelOpen) surface.toggleFilePanel()
+  }
+
+  /** 左侧「AI 改动」图标：开关面板；有打开过的改动标签时一并把它们带回编辑区。 */
+  function toggleAiChanges(): void {
+    if (surface.activeLeftTool === 'ai-changes' && surface.isFilePanelOpen) {
+      surface.toggleFilePanel()
+      return
+    }
+    showAiChangesPanel()
+    const tab = aiChanges.activeTab ?? aiChanges.tabs[0]
+    if (tab) aiChanges.selectTab(tab.id)
+  }
+
   function openVelarStructure(): void {
+    aiChanges.deactivate()
     if (surface.activeLeftTool === 'velar-structure' && surface.isFilePanelOpen) {
       surface.toggleFilePanel()
       return
@@ -465,6 +525,7 @@ export function StandaloneWorkbenchPagePresentation({
   }
 
   function openVelarStructureScope(scopePaths: readonly string[]): void {
+    aiChanges.deactivate()
     const normalizedPaths = [...new Set(scopePaths)]
     if (normalizedPaths.length === 0) {
       selectVelarStructureTab(VelarStructureOverviewTab.id)
@@ -484,6 +545,7 @@ export function StandaloneWorkbenchPagePresentation({
   }
 
   function selectVelarStructureTab(id: string): void {
+    aiChanges.deactivate()
     setActiveVelarStructureTabId(id)
     dialogs.setVelarLogicGraphActive(true)
     setVelarStructureActiveTab('structure')
@@ -585,6 +647,18 @@ export function StandaloneWorkbenchPagePresentation({
                 >
                   <GitCommitIcon size={18} />
                 </IconButton>
+                <IconButton
+                  variant="ghost"
+                  size="icon-sm"
+                  className={styles.leftToolButton}
+                  title={t('workbench.aiChangesTitle')}
+                  label={t('workbench.aiChangesTitle')}
+                  data-active={surface.isFilePanelOpen && surface.activeLeftTool === 'ai-changes'}
+                  data-badge={aiChanges.hasUnseenRounds}
+                  onClick={toggleAiChanges}
+                >
+                  <SparkleIcon size={18} weight="duotone" />
+                </IconButton>
               </div>
               <div className={styles.leftToolRailBottom}>
                 {bottomToolItems.map((item) => (
@@ -618,7 +692,9 @@ export function StandaloneWorkbenchPagePresentation({
                 ? 'changes'
                 : surface.activeLeftTool === 'velar-structure'
                   ? 'velar-structure'
-                  : 'files'
+                  : surface.activeLeftTool === 'ai-changes'
+                    ? 'ai-changes'
+                    : 'files'
             }
             embeddedChrome={{
               density: workbenchPreferences.preferences.density,
@@ -661,6 +737,7 @@ export function StandaloneWorkbenchPagePresentation({
                 onOpenFileChange={model.actions.handleWorkbenchChatFileChangeOpen}
                 onOpenWorkspacePath={model.actions.handleWorkbenchChatWorkspacePathOpen}
                 onReviewFileChanges={model.actions.handleWorkbenchChatFileChangesReview}
+                onReviewRunChanges={model.actions.handleWorkbenchChatRunChangesReview}
               />
             </div>
           </aside>
@@ -818,9 +895,10 @@ export function StandaloneWorkbenchPagePresentation({
           open={dialogs.codeGraphOpen}
           onOpenChange={dialogs.setCodeGraphOpen}
           projectRoot={workbench.activeProject.rootPath}
-          onOpenLocation={(path, line, column) =>
+          onOpenLocation={(path, line, column) => {
+            model.actions.showEditorSurface()
             void editorNavigation.goToLocation(path, line ?? 1, column ?? 1)
-          }
+          }}
         />
       </div>
       <QuickOpen
@@ -829,7 +907,7 @@ export function StandaloneWorkbenchPagePresentation({
         openTabs={workbench.openTabs}
         onClose={surface.closeQuickOpen}
         onOpenLocation={(path, line, column) => {
-          dialogs.setVelarLogicGraphActive(false)
+          model.actions.showEditorSurface()
           void editorNavigation.goToLocation(path, line, column)
         }}
       />

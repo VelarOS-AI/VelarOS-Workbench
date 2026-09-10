@@ -83,7 +83,12 @@ export function useWorkbenchEditorNavigationState({
     await onSelectFileLatest.current(path)
   }
 
-  async function goToLocation(path: string, line: number, column?: number): Promise<void> {
+  async function goToLocation(
+    path: string,
+    line: number,
+    column?: number,
+    options?: Pick<EditorNavigationRequest, 'endLine' | 'focus'>
+  ): Promise<void> {
     setDiffItem(null)
     setDiffFocusFirstChangeRequestId(0)
     setLightTab(null)
@@ -96,6 +101,8 @@ export function useWorkbenchEditorNavigationState({
       id: (request?.id ?? 0) + 1,
       line,
       column,
+      ...(options?.endLine ? { endLine: options.endLine } : {}),
+      ...(options?.focus === false ? { focus: false } : {}),
     }))
   }
 

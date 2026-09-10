@@ -6,6 +6,8 @@ import { AppError } from '@velaros-ai/core/error'
 import { writeJsonFileAtomically } from '@velaros-ai/core/utils/FilePersistence'
 
 import type {
+  WorkbenchChatRunChangeBaseFileRequest,
+  WorkbenchChatRunChangeBaseFileResult,
   WorkbenchChatRunChangesCaptureRequest,
   WorkbenchChatRunChangesDeleteRequest,
   WorkbenchChatRunChangesReadRequest,
@@ -19,6 +21,9 @@ import type { WorkbenchChatCheckpointService } from './WorkbenchChatCheckpoints'
 const RecordFileVersion = 1
 /** 会话 id 与记录 id 直接当路径段用，只收保守字符。 */
 const RecordSegmentPattern = /^[A-Za-z0-9][A-Za-z0-9._-]{0,159}$/u
+const ObjectIdPattern = /^[0-9a-f]{40,64}$/u
+/** 查看器读改动前全文的上限；更大的文件只看补丁。 */
+const BaseFileMaxBytes = 2 * 1024 * 1024
 
 interface StoredRunChangesRecord extends WorkbenchChatRunChangesRecord {
   version: typeof RecordFileVersion
@@ -63,6 +68,7 @@ export class WorkbenchChatRunChangeStore {
         version: RecordFileVersion,
         recordId: request.recordId,
         capturedAt,
+        baseCommitId: request.baseCommitId,
         changes,
       })
     }
@@ -88,6 +94,27 @@ export class WorkbenchChatRunChangeStore {
       throw error
     }
     return parseStoredRecord(text, request.recordId)
+  }
+
+  /**
+   * 记录里一个文件改动前的全文。只读记录里列着的文件，起点是记录自己写下的提交，renderer 指定不了
+   * 任意提交或任意路径；这一轮新建的文件没有改动前。
+   */
+  public async readBaseFile(
+    request: WorkbenchChatRunChangeBaseFileRequest
+  ): Promise<WorkbenchChatRunChangeBaseFileResult> {
+    const record = await this.read(request)
+    const change = record?.changes.find((candidate) => candidate.path === request.path)
+    if (!record?.baseCommitId || !change || change.status === 'added' || change.binary)
+      return { content: null }
+    return {
+      content: await this.checkpoints.readFileAtCommit({
+        workspaceRoot: request.workspaceRoot,
+        commitId: record.baseCommitId,
+        path: change.path,
+        maxBytes: BaseFileMaxBytes,
+      }),
+    }
   }
 
   public async delete(request: WorkbenchChatRunChangesDeleteRequest): Promise<void> {
@@ -136,7 +163,7 @@ function parseStoredRecord(text: string, recordId: string): WorkbenchChatRunChan
     return null
   }
   if (!isPlainRecord(value)) return null
-  const { version, capturedAt, changes } = value
+  const { version, capturedAt, changes, baseCommitId } = value
   if (
     version !== RecordFileVersion ||
     value.recordId !== recordId ||
@@ -144,7 +171,14 @@ function parseStoredRecord(text: string, recordId: string): WorkbenchChatRunChan
     !Array.isArray(changes)
   )
     return null
-  return { recordId, capturedAt, changes: changes.filter(isStoredFileChange) }
+  return {
+    recordId,
+    capturedAt,
+    ...(typeof baseCommitId === 'string' && ObjectIdPattern.test(baseCommitId)
+      ? { baseCommitId }
+      : {}),
+    changes: changes.filter(isStoredFileChange),
+  }
 }
 
 function isStoredFileChange(value: unknown): value is WorkbenchChatRunFileChange {

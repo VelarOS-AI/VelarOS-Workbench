@@ -124,6 +124,10 @@ import {
   type StandaloneWorkerThreadProjection,
 } from './standaloneWorkbenchWorkerThreads'
 import {
+  performWorkbenchAgentUiRequest,
+  readWorkbenchAgentUiRequest,
+} from './workbenchAgentUiHost'
+import {
   buildBrowserElementDisplayFallback,
   formatBrowserElementSelectionsForPrompt,
 } from './workbenchBrowserElementContext'
@@ -589,6 +593,7 @@ function StandaloneWorkbenchChatSessionSurface({
   onOpenFileChange,
   onOpenWorkspacePath,
   onReviewFileChanges,
+  onReviewRunChanges,
 }: WorkbenchChatSessionSurfaceProps): ReactElement {
   const chat = useStandaloneChatState(projectRoot, providerId)
   const hasPendingAgentExecution = !!findActiveExecution(
@@ -720,6 +725,18 @@ function StandaloneWorkbenchChatSessionSurface({
         || envelope.sourceSessionId !== activeExecution.sessionId
         || envelope.sessionCorrelationId !== activeExecution.sessionCorrelationId
       ) return
+      // `workbench:*` 工具的界面请求：交给页面在界面上执行，回执交回主进程；不进会话内容。
+      const uiRequest = envelope.channel === 'agent'
+        ? readWorkbenchAgentUiRequest(readAgentEventPayload(envelope))
+        : null
+      if (uiRequest) {
+        void performWorkbenchAgentUiRequest(activeExecution.projectRoot, uiRequest)
+          .then((response) => window.velarosWorkbenchKernel.respondAgentUiRequest(response))
+          .catch((error: unknown) => {
+            log.warn('Agent 界面请求回执失败', { requestId: uiRequest.requestId, error })
+          })
+        return
+      }
       withStateUpdateTarget(
         activeExecution.projectRoot,
         activeExecution.providerId,
@@ -1331,6 +1348,10 @@ function StandaloneWorkbenchChatSessionSurface({
         },
       },
     })
+    // 停下或失败的一轮也可能已经改了文件：收尾之后照样记下「本轮改动」（「AI 改动」要列全每一轮）。
+    const captureEndedRunChanges = (): void => {
+      if (runCheckpoint) captureRunChanges(activeExecution.sessionId, runCheckpoint)
+    }
     if (!result.ok) {
       const stopped = getState(projectRoot, providerId).status === 'stopping'
       activeExecution.settleTerminal(stopped ? 'aborted' : 'error')
@@ -1344,6 +1365,7 @@ function StandaloneWorkbenchChatSessionSurface({
           }
         })
       }
+      captureEndedRunChanges()
       return true
     }
 
@@ -1352,11 +1374,16 @@ function StandaloneWorkbenchChatSessionSurface({
       finalStatus === 'aborted' || finalStatus === 'error' ? finalStatus : 'done'
     )
     const executionStillActive = activeAgentExecutions.delete(executionId)
-    if (!executionStillActive) return true
+    // 流里的终态事件已经把这一轮收了尾（停止、失败）：只差记下改动。
+    if (!executionStillActive) {
+      captureEndedRunChanges()
+      return true
+    }
     if (finalStatus === 'aborted') {
       withStateUpdateTarget(projectRoot, providerId, activeExecution.sessionId, () => {
         finishRun(projectRoot, providerId, 'aborted')
       })
+      captureEndedRunChanges()
       return true
     }
     if (finalStatus === 'error') {
@@ -1367,6 +1394,7 @@ function StandaloneWorkbenchChatSessionSurface({
           readStandaloneFinalAgentError(result.output) ?? t('workbench.chatExecutionFailed')
         )
       })
+      captureEndedRunChanges()
       return true
     }
     withStateUpdateTarget(projectRoot, providerId, activeExecution.sessionId, () => {
@@ -1704,8 +1732,9 @@ function StandaloneWorkbenchChatSessionSurface({
           marker.runChanges ? [[marker.messageId, marker.runChanges] as const] : []
         )
       ),
+      ...(onReviewRunChanges ? { onReviewRound: onReviewRunChanges } : {}),
     }),
-    [chat.messageRunMarkers, chat.sessionId, projectRoot]
+    [chat.messageRunMarkers, chat.sessionId, onReviewRunChanges, projectRoot]
   )
 
   return (

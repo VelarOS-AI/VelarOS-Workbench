@@ -74,6 +74,7 @@ import {
   type WorkbenchAgentToolDefinition,
   WorkbenchAgentToolRegistry,
 } from './WorkbenchAgentToolRegistry'
+import { WorkbenchAgentUiBridge, type WorkbenchAgentUiPort } from './WorkbenchAgentUiBridge'
 import {
   createWorkbenchQueryRoleEngine,
   createWorkbenchTeamModelRoutingPort,
@@ -236,7 +237,9 @@ class WorkbenchAgentExecutionStack {
      * 审批通道：装配根持有同一个实例，才能把 renderer 的确认回执路由回等待中的执行。
      * 默认自持一个，让测试与探针不必额外接线。
      */
-    public readonly approvals: WorkbenchAgentApprovalBroker = new WorkbenchAgentApprovalBroker()
+    public readonly approvals: WorkbenchAgentApprovalBroker = new WorkbenchAgentApprovalBroker(),
+    /** 界面请求（`workbench:*` 工具）的挂起表；renderer 的回执经装配根转进来结算。 */
+    public readonly ui: WorkbenchAgentUiBridge = new WorkbenchAgentUiBridge()
   ) {
     // Model 是宿主注入的能力：Agent 不自己发现 provider registry。
     // config.modelSelection 是不透明选择，Workbench 原样转交 Model 包解析（BYOK）。
@@ -293,6 +296,13 @@ class WorkbenchAgentExecutionStack {
       initialVisibleToolNames: session.initialVisibleToolNames,
       activeContext: this.activeContexts.forSession(input.sessionId),
       interaction: createWorkbenchInteractionPort(input.executionId),
+      // 界面请求走这一轮自己的事件流，只会到达发起这一轮的窗口。
+      workbenchUi: this.ui.forExecution({
+        executionId: input.executionId,
+        sessionId: input.sessionId,
+        events: input.events,
+        abortSignal: abortController.signal,
+      }),
       approval: this.buildApprovalPort({
         sessionId: input.sessionId,
         executionId: input.executionId,
@@ -343,6 +353,7 @@ class WorkbenchAgentExecutionStack {
       // 一轮结束（含中止/失败）后不留悬挂的确认卡：晚到的回执没有等待方，
       // 而挂着的 Promise 会把整个执行钉死在 awaiting_confirmation。
       this.approvals.cancelSession(input.sessionId, '本次执行已结束。')
+      this.ui.cancelExecution(input.executionId, 'This run has ended.')
     }
   }
 
@@ -816,6 +827,8 @@ type WorkbenchAgentToolContext = AgentExecutionStackToolContext & {
   execution: null
   /** 子 Agent 派发；缺席时 `agent:dispatch` 自带的可用性门会让它整格隐身。 */
   dispatchSubAgent?: (input: SubAgentDispatchInput) => Promise<string>
+  /** 发起这一轮的窗口；缺席时 `workbench:*` 界面工具整格隐身。 */
+  workbenchUi?: WorkbenchAgentUiPort
 }
 
 export function createWorkbenchToolContext(input: {
@@ -835,6 +848,8 @@ export function createWorkbenchToolContext(input: {
   interaction?: InteractionPort
   /** 子 Agent 派发；不传即本次执行面不开放委派。 */
   dispatchSubAgent?: (input: SubAgentDispatchInput) => Promise<string>
+  /** 界面操作口；不传即本次执行面没有可操作的窗口。 */
+  workbenchUi?: WorkbenchAgentUiPort
 }): WorkbenchAgentToolContext {
   let visibleToolNames = [...(input.initialVisibleToolNames ?? input.registry.names)]
   let visibleToolTransportNames: Readonly<Record<string, string>> = {}
@@ -868,6 +883,7 @@ export function createWorkbenchToolContext(input: {
     approval: input.approval ?? defaultDenyApprovalPort,
     execution: null,
     ...(input.dispatchSubAgent ? { dispatchSubAgent: input.dispatchSubAgent } : {}),
+    ...(input.workbenchUi ? { workbenchUi: input.workbenchUi } : {}),
     codingSession: input.tracker,
     getEnabledToolCategories: () => input.tracker.getEnabledToolCategories(),
     query: async () => {

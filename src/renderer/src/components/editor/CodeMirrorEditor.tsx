@@ -71,6 +71,11 @@ import {
   retainWorkbenchCommentAnchorsEffect,
   setWorkbenchCommentAnchorsEffect,
 } from '@renderer/components/editor/workbenchCommentExtension'
+import {
+  buildWorkbenchExplanationAnchors,
+  createWorkbenchExplanationExtension,
+  setWorkbenchExplanationAnchorsEffect,
+} from '@renderer/components/editor/workbenchExplanationExtension'
 import { useWorkbenchEditorMetrics } from '@renderer/hooks/useWorkbenchPreferences'
 import {
   useWorkbenchHostRuntime,
@@ -184,6 +189,10 @@ import {
   createWorkbenchVelarTestRunGutterExtension,
   shouldShowWorkbenchVelarTestRunGutter,
 } from '@renderer/models/editor/workbenchVelarTestRunGutter'
+import {
+  useWorkbenchExplanations,
+  useWorkbenchExplanationStore,
+} from '@renderer/models/explanations/workbenchExplanationStore'
 import type { WorkbenchProjectContextIndex } from '@renderer/models/project/workbenchProjectContextIndex'
 import type { WorkbenchThemeId } from '@renderer/models/settings/workbenchPreferences'
 import { useStandaloneWorkbenchModelConfig } from '@renderer/runtime/standaloneWorkbenchModelConfig'
@@ -206,9 +215,20 @@ import { useDismissOnWindowInteract } from '../../support/useDismissOnWindowInte
 import { EditorSymbolLocationsPanel } from './EditorSymbolLocationsPanel'
 import { workbenchEditorLanguageFeatureClasses } from './workbenchEditorLanguageFeatureClasses'
 
+/** Agent 带用户看代码时不抢焦点：用户可能正在输入框里打字。 */
+export interface CodeMirrorEditorNavigationOptions {
+  focus?: boolean
+}
+
 export interface CodeMirrorEditorHandle {
   focus: () => void
-  moveToLine: (line: number, column?: number) => void
+  moveToLine: (line: number, column?: number, options?: CodeMirrorEditorNavigationOptions) => void
+  /** 选中 startLine..endLine 整行并滚到视野中间（指给用户看一段代码）。 */
+  selectLines: (
+    startLine: number,
+    endLine: number,
+    options?: CodeMirrorEditorNavigationOptions
+  ) => void
   openCompletion: () => void
   selectRange: (from: number, to: number) => void
 }
@@ -1421,6 +1441,54 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       ]
     )
 
+    const explanationStore = useWorkbenchExplanationStore()
+    const explanationLabelsRef = useLatest({
+      badge: t('workbench.explanationBadge'),
+      previous: t('workbench.explanationPrevious'),
+      next: t('workbench.explanationNext'),
+      collapse: t('workbench.explanationCollapse'),
+      finish: t('workbench.explanationFinish'),
+      expand: t('workbench.explanationExpand'),
+    })
+    const workbenchExplanationExtension = useMemo(
+      () =>
+        createWorkbenchExplanationExtension({
+          onActivate: explanationStore.activate,
+          onStep: explanationStore.step,
+          onCollapse: () => explanationStore.activate(null),
+          onFinish: () => explanationStore.clear(projectRootRef.current),
+          resolveLabels: () => explanationLabelsRef.current,
+          onAnchorsRemoved: explanationStore.removeMany,
+          onAnchorLinesChanged: explanationStore.updateLines,
+          isExternalDocReplace: (tr) => tr.annotation(externalValueSync) === true,
+        }),
+      [explanationLabelsRef, explanationStore, projectRootRef]
+    )
+    /** 已经把哪一次「切到某条讲解」带进过视野；切文件后补做一次。 */
+    const appliedExplanationFocusRef = useRef(0)
+
+    // 按存储行号把当前文件的讲解锚定成装饰；有新的「切到某条讲解」且它就在这个文件里时，把它滚到视野上方。
+    const syncWorkbenchExplanations = (view: EditorView): void => {
+      const currentPath = pathRef.current
+      const snapshot = explanationStore.getSnapshot()
+      const tour = explanationStore.listForProject(projectRootRef.current)
+      const anchors = currentPath
+        ? buildWorkbenchExplanationAnchors(view.state.doc, currentPath, tour, snapshot.activeId)
+        : []
+      const activeAnchor = anchors.find((anchor) => anchor.active)
+      const shouldFocus =
+        !!activeAnchor && snapshot.focusRevision > appliedExplanationFocusRef.current
+      if (shouldFocus) appliedExplanationFocusRef.current = snapshot.focusRevision
+      view.dispatch({
+        effects: [
+          setWorkbenchExplanationAnchorsEffect.of(anchors),
+          ...(shouldFocus && activeAnchor
+            ? [EditorView.scrollIntoView(activeAnchor.from, { y: 'start', yMargin: 72 })]
+            : []),
+        ],
+      })
+    }
+
     const openFileHistory = (mode: 'local' | 'git'): void => {
       setContextMenu(null)
       if (path) callbacksRef.current.onOpenFileHistory?.(mode)
@@ -2031,7 +2099,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       focus: () => {
         viewRef.current?.focus()
       },
-      moveToLine: (line, column = 1) => {
+      moveToLine: (line, column = 1, options) => {
         const view = viewRef.current
         if (!view) return
 
@@ -2046,7 +2114,22 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
           effects: EditorView.scrollIntoView(targetPosition, { y: 'center', x: 'nearest' }),
         })
         revealWorkbenchActiveLine(view)
-        view.focus()
+        if (options?.focus !== false) view.focus()
+        emitCursorPosition(view, callbacksRef.current.onCursorPositionChange)
+      },
+      selectLines: (startLine, endLine, options) => {
+        const view = viewRef.current
+        if (!view) return
+
+        const lines = view.state.doc.lines
+        const first = view.state.doc.line(Math.min(Math.max(1, startLine), lines))
+        const last = view.state.doc.line(Math.min(Math.max(first.number, endLine), lines))
+        view.dispatch({
+          selection: { anchor: first.from, head: last.to },
+          effects: EditorView.scrollIntoView(first.from, { y: 'center', x: 'nearest' }),
+        })
+        revealWorkbenchActiveLine(view)
+        if (options?.focus !== false) view.focus()
         emitCursorPosition(view, callbacksRef.current.onCursorPositionChange)
       },
       openCompletion: () => {
@@ -2295,6 +2378,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
           EditorState.tabSize.of(2),
           workbenchIndentGuideExtension,
           workbenchCommentExtension,
+          workbenchExplanationExtension,
           mouseHandlers,
           languageHoverCompartment.of(languageServiceHoverExtension),
           languageServiceCompartment.of([]),
@@ -2325,6 +2409,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
 
       viewRef.current = view
       reanchorWorkbenchComments(view)
+      syncWorkbenchExplanations(view)
       emitCursorPosition(view, callbacksRef.current.onCursorPositionChange)
       if (path) {
         autoFoldedPathRef.current = path
@@ -2431,10 +2516,18 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         setCommentDraft(null)
         view.scrollDOM.scrollTo({ left: 0, top: 0 })
       }
-      // 外部整篇替换会清空评论锚点，按存储行号重新锚定当前文件的评论。
+      // 外部整篇替换会清空评论锚点，按存储行号重新锚定当前文件的评论（讲解同理）。
       reanchorWorkbenchComments(view)
+      syncWorkbenchExplanations(view)
       emitCursorPosition(view, callbacksRef.current.onCursorPositionChange)
     }, [path, value])
+
+    // 讲解加了、换了、切到下一条：重新锚定，必要时把当前讲解带进视野。
+    const workbenchExplanations = useWorkbenchExplanations()
+    useEffect(() => {
+      const view = viewRef.current
+      if (view) syncWorkbenchExplanations(view)
+    }, [workbenchExplanations])
 
     // 存储侧评论被删除/消费时，回收对应的编辑器锚点装饰。
     const workbenchComments = useWorkbenchComments(projectRoot)

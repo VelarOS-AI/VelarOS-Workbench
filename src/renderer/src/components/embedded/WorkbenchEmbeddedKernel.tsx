@@ -1,11 +1,9 @@
 /**
- * 工作台中央装配件（文件面 + 编辑面），考古自 desktop 同名组件的片2 裁形。
+ * 工作台中央装配件（左侧面板 + 编辑面），考古自 desktop 同名组件。
  *
- * 相对 desktop 原文裁掉的分支（复活批次见各注）：
- * - aiChanges 存档 diff 辅助选项卡 + 左面板（Phase 3 AI 面批）；
- * - webview 调试选项卡层 + Browser Mod 受控选项卡；
- * - 左面 'changes'（CommitPanel/会话变更，片4 git 面）与 'issues'（flagged tasks，Phase 3）。
- * 结构（embeddedChrome 包装 / 类名 / resize 把手）与原文逐字一致，方便后续批次 diff 回填。
+ * 左侧面板：文件树、提交、Velar 结构、AI 改动（每一轮 AI 运行一棵改动文件树）。「AI 改动」的对比
+ * 标签由页面组装进编辑区的独占标签组，这里只放左侧面板。结构（embeddedChrome 包装 / 类名 /
+ * resize 把手）与原文逐字一致。
  */
 import {
   type CSSProperties,
@@ -17,6 +15,7 @@ import { useWorkbenchI18n } from '@renderer/i18n'
 import type { WorkbenchDensity } from '@renderer/models/settings/workbenchPreferences'
 
 import styles from '../../styles/workbenchPageStyles'
+import { WorkbenchAiChangesPanel } from '../aiChanges/WorkbenchAiChangesPanel'
 import { WorkbenchLogicGraphSidebar } from '../codeGraph/WorkbenchLogicGraphSidebar'
 import {
   EditorPanel,
@@ -116,7 +115,12 @@ export function WorkbenchEmbeddedKernel({
   }
   const leftPanel = (
     <div className={styles.leftToolContent}>
-      {leftMode === 'changes' ? (
+      {leftMode === 'ai-changes' ? (
+        <WorkbenchAiChangesPanel
+          projectRoot={model.activeProject.rootPath}
+          aiChanges={model.aiChanges}
+        />
+      ) : leftMode === 'changes' ? (
         <WorkbenchCommitPanel
           git={model.changes.git}
           onOpenDiff={model.changes.onOpenDiff}

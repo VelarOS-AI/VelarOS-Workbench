@@ -33,6 +33,7 @@ import {
   KernelCapabilityUnavailableError,
 } from '@velaros-ai/kernel/runtime'
 
+import type { WorkbenchAgentUiResponse } from '../../shared/workbenchAgentUi'
 import type {
   WorkbenchChatHistoryBackupResult,
   WorkbenchGoalLifecycleResult,
@@ -75,6 +76,8 @@ interface WorkbenchKernelIpcOptions {
   }
   /** 会话被移除时释放主进程里它的执行装配与活动上下文。 */
   releaseAgentSession?: (sessionId: string) => Promise<void>
+  /** Agent 界面请求（`workbench:*` 工具）的回执；返回是否结算了一条还在等的请求。 */
+  resolveAgentUiRequest?: (response: WorkbenchAgentUiResponse) => boolean
 }
 
 interface ActiveAgentExecution {
@@ -356,6 +359,17 @@ export function registerWorkbenchKernelIpc(
     const sessionId = readSessionId(request)
     if (sessionId) await options.releaseAgentSession?.(sessionId)
   })
+  ipcMain.handle(
+    WorkbenchKernelChannels.respondAgentUiRequest,
+    (event: IpcMainInvokeEvent, request: unknown) => {
+      const response = readAgentUiResponse(request)
+      if (!response) return false
+      // 只认发起这一轮的窗口：请求只送到了它那里，别的窗口回执一律不收。
+      const execution = activeAgentExecutions.get(response.executionId)
+      if (!execution || execution.ownerWebContentsId !== event.sender.id) return false
+      return options.resolveAgentUiRequest?.(response) ?? false
+    }
+  )
   ipcMain.handle(WorkbenchKernelChannels.resolveAgentInput, (_event, request: unknown) => {
     const parsed = readResolveAgentInput(request)
     return parsed ? resolveAgentInput(parsed.sessionId, parsed.answer) : false
@@ -421,6 +435,7 @@ export function registerWorkbenchKernelIpc(
     ipcMain.removeHandler(WorkbenchKernelChannels.getGoalLifecycle)
     ipcMain.removeHandler(WorkbenchKernelChannels.updateGoalLifecycle)
     ipcMain.removeHandler(WorkbenchKernelChannels.releaseAgentSession)
+    ipcMain.removeHandler(WorkbenchKernelChannels.respondAgentUiRequest)
     ipcMain.removeHandler(WorkbenchKernelChannels.backupChatHistory)
   }
 }
@@ -535,6 +550,30 @@ function readProvideAgentGuidance(
     && typeof text === 'string' && text.trim()
     ? { sessionId, inputId, text }
     : null
+}
+
+/** 回执是 renderer 送来的外来数据：形状不对当没收到，数据只接普通对象。 */
+function readAgentUiResponse(request: unknown): WorkbenchAgentUiResponse | null {
+  if (!request || typeof request !== 'object' || Array.isArray(request)) return null
+  const record = request as Record<string, unknown>
+  const { requestId, executionId, ok } = record
+  if (
+    typeof requestId !== 'string' || !requestId.trim()
+    || typeof executionId !== 'string' || !executionId.trim()
+  ) return null
+  if (ok === true) {
+    const data = record.data
+    return data && typeof data === 'object' && !Array.isArray(data)
+      ? { requestId, executionId, ok: true, data: data as Record<string, unknown> }
+      : { requestId, executionId, ok: true, data: {} }
+  }
+  if (ok === false) {
+    const message = typeof record.message === 'string' && record.message.trim()
+      ? record.message
+      : 'Workbench could not complete the UI action.'
+    return { requestId, executionId, ok: false, message }
+  }
+  return null
 }
 
 function readSessionId(request: unknown): string | null {

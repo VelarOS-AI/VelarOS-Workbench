@@ -461,11 +461,17 @@ void describe('standalone Workbench conversation runtime', () => {
     assert.ok(attached)
     assert.deepEqual(attached.markers[0]?.runChanges, summary)
     assert.equal(attached.replacedRecordId, null)
-    // 被中止改写过的标记不再挂改动。
+    // 停下、失败的一轮也记改动（文件可能已经改了）；消息被回溯掉、标记不在了才不记。
     assert.equal(
-      attachStandaloneRunChanges([{ ...completed[0]!, status: 'aborted' }], 'reply-2', summary),
-      null
+      resolveStandaloneRunChangesAnchor(messages, [{ ...completed[0]!, status: 'aborted' }], 2),
+      'reply-2'
     )
+    assert.deepEqual(
+      attachStandaloneRunChanges([{ ...completed[0]!, status: 'failed' }], 'reply-2', summary)
+        ?.markers[0]?.runChanges,
+      summary
+    )
+    assert.equal(attachStandaloneRunChanges(completed, 'rewound-reply', summary), null)
     // 同一条回答再记一次运行标记（迟到的完成回执），摘要不丢。
     assert.deepEqual(
       markStandaloneRun({

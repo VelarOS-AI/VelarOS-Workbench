@@ -177,6 +177,8 @@ const gitBridge: WorkbenchGitBridge = {
     ipcRenderer.invoke(WorkbenchGitChannels.readChatRunChanges, request),
   deleteChatRunChanges: (request) =>
     ipcRenderer.invoke(WorkbenchGitChannels.deleteChatRunChanges, request),
+  readChatRunChangeBaseFile: (request) =>
+    ipcRenderer.invoke(WorkbenchGitChannels.readChatRunChangeBaseFile, request),
 }
 
 const kernelBridge: WorkbenchKernelBridge = {
@@ -196,6 +198,8 @@ const kernelBridge: WorkbenchKernelBridge = {
     ipcRenderer.invoke(WorkbenchKernelChannels.updateGoalLifecycle, request),
   releaseAgentSession: (request) =>
     ipcRenderer.invoke(WorkbenchKernelChannels.releaseAgentSession, request),
+  respondAgentUiRequest: (response) =>
+    ipcRenderer.invoke(WorkbenchKernelChannels.respondAgentUiRequest, response),
   onStatusChanged: (listener) => subscribe(WorkbenchKernelChannels.statusChanged, listener),
   onAgentExecution: (listener) => subscribe(WorkbenchKernelChannels.agentExecution, listener),
   backupChatHistory: (request) =>

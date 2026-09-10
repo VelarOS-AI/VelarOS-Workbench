@@ -135,6 +135,58 @@ void describe('Workbench chat run changes', () => {
     })
   })
 
+  void test('reads a changed file as it was before the run, only for files the record lists', async () => {
+    await withRepository(async ({ project, checkpoints, store }) => {
+      const { commitId } = await checkpoints.capture({
+        workspaceRoot: project,
+        sessionId: 'workbench-session',
+        checkpointId: 'run-base',
+      })
+      assert.ok(commitId)
+      await writeFile(join(project, 'tracked.ts'), 'export const a = 2\nexport const b = 1\n', 'utf8')
+      await writeFile(join(project, 'created.ts'), 'new\n', 'utf8')
+      await store.capture({
+        workspaceRoot: project,
+        sessionId: 'workbench-session',
+        recordId: 'run-base',
+        baseCommitId: commitId,
+      })
+      const request = { workspaceRoot: project, sessionId: 'workbench-session', recordId: 'run-base' }
+
+      const record = await store.read(request)
+      assert.equal(record?.baseCommitId, commitId)
+      // 项目是大仓里的子目录：按项目根相对路径读出改动前的全文。
+      assert.deepEqual(await store.readBaseFile({ ...request, path: 'tracked.ts' }), {
+        content: 'export const a = 1\nexport const b = 1\n',
+      })
+      // 这一轮新建的文件没有「改动前」；记录里没有的路径一律不读（renderer 指定不了任意文件）。
+      assert.deepEqual(await store.readBaseFile({ ...request, path: 'created.ts' }), { content: null })
+      assert.deepEqual(await store.readBaseFile({ ...request, path: 'removed.ts' }), { content: null })
+      assert.deepEqual(await store.readBaseFile({ ...request, path: '../outside.txt' }), {
+        content: null,
+      })
+      await assert.rejects(
+        () =>
+          checkpoints.readFileAtCommit({
+            workspaceRoot: project,
+            commitId,
+            path: '../outside.txt',
+            maxBytes: 1024,
+          }),
+        /无效的文件路径/u
+      )
+      assert.equal(
+        await checkpoints.readFileAtCommit({
+          workspaceRoot: project,
+          commitId,
+          path: 'tracked.ts',
+          maxBytes: 8,
+        }),
+        null
+      )
+    })
+  })
+
   void test('writes nothing for a run without changes and drops a whole session on removal', async () => {
     await withRepository(async ({ project, records, checkpoints, store }) => {
       const first = await checkpoints.capture({ workspaceRoot: project, sessionId: 's', checkpointId: 'a' })

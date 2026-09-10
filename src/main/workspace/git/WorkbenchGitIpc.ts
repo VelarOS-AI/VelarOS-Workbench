@@ -4,6 +4,7 @@ import {
   type WorkbenchChatCheckpointCaptureRequest,
   type WorkbenchChatCheckpointDeleteRequest,
   type WorkbenchChatCheckpointRestoreRequest,
+  type WorkbenchChatRunChangeBaseFileRequest,
   type WorkbenchChatRunChangesCaptureRequest,
   type WorkbenchChatRunChangesDeleteRequest,
   type WorkbenchChatRunChangesReadRequest,
@@ -120,6 +121,9 @@ export function registerWorkbenchGitIpc(
   )
   ipcMain.handle(WorkbenchGitChannels.deleteChatRunChanges, (_event, input: unknown) =>
     callWithEnvelope(() => runChanges.delete(parseRunChangesDelete(input)))
+  )
+  ipcMain.handle(WorkbenchGitChannels.readChatRunChangeBaseFile, (_event, input: unknown) =>
+    callWithEnvelope(() => runChanges.readBaseFile(parseRunChangeBaseFile(input)))
   )
 }
 
@@ -300,6 +304,17 @@ function parseRunChangesRead(input: unknown): WorkbenchChatRunChangesReadRequest
     workspaceRoot: input['workspaceRoot'] as string,
     sessionId: input['sessionId'] as string,
     recordId: input['recordId'] as string,
+  }
+}
+
+function parseRunChangeBaseFile(input: unknown): WorkbenchChatRunChangeBaseFileRequest {
+  if (!hasStringFields(input, ['workspaceRoot', 'sessionId', 'recordId', 'path']))
+    return invalidRequest()
+  return {
+    workspaceRoot: input['workspaceRoot'] as string,
+    sessionId: input['sessionId'] as string,
+    recordId: input['recordId'] as string,
+    path: input['path'] as string,
   }
 }
 

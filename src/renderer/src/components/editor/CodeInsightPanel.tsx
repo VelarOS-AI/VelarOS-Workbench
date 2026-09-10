@@ -41,6 +41,10 @@ export interface EditorNavigationRequest {
   id: number
   line: number
   column?: number
+  /** 给出时选中 line..endLine 整行（Agent 把一段代码指给用户看）。 */
+  endLine?: number
+  /** false：只移动视图不抢焦点（Agent 发起的定位，用户可能正在输入框里打字）。 */
+  focus?: boolean
 }
 
 export function CodeInsightPanel({

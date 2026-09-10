@@ -43,6 +43,7 @@ import {
   useWorkbenchProductRuntime,
   type WorkbenchBrowserElementSelectionDelivery,
   type WorkbenchChatFileChangeEntry,
+  type WorkbenchChatRunChangesTarget,
   type WorkbenchChatSessionGroup,
   type WorkbenchChatSessionMember,
   WorkbenchChatSessionSurface,
@@ -69,6 +70,7 @@ export interface WorkbenchChatPanelProps {
   onOpenFileChange?: (entry: WorkbenchChatFileChangeEntry) => void | Promise<void>
   onOpenWorkspacePath?: (path: string) => unknown
   onReviewFileChanges?: (entries: readonly WorkbenchChatFileChangeEntry[]) => void | Promise<void>
+  onReviewRunChanges?: (target: WorkbenchChatRunChangesTarget) => void
   onArchiveError?: (error: unknown) => void
 }
 
@@ -255,6 +257,7 @@ export function WorkbenchChatPanel({
   onOpenFileChange,
   onOpenWorkspacePath,
   onReviewFileChanges,
+  onReviewRunChanges,
   onArchiveError,
 }: WorkbenchChatPanelProps): ReactElement {
   const styles = useWorkbenchProductRuntime().ui.chatPanel
@@ -486,6 +489,7 @@ export function WorkbenchChatPanel({
             onOpenFileChange={onOpenFileChange}
             onOpenWorkspacePath={onOpenWorkspacePath}
             onReviewFileChanges={onReviewFileChanges}
+            onReviewRunChanges={onReviewRunChanges}
           />
         ) : (
           <div className={styles.workbenchChatLoading}>

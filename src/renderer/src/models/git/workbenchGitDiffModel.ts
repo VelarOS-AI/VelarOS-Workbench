@@ -82,17 +82,50 @@ export function buildWorkbenchContentDiffRows(
   const patch = structuredPatch(path, path, oldContent, newContent, '', '', { context })
   if (isEmpty(patch.hunks)) return []
 
-  const maxLines = fullFile ? FullFileMaxDiffLines : DefaultMaxDiffLines
+  return buildRowsFromHunks(patch.hunks, {
+    separateHunks: !fullFile,
+    maxLines: fullFile ? FullFileMaxDiffLines : DefaultMaxDiffLines,
+  })
+}
+
+/**
+ * 只有单文件统一补丁、没有两侧全文时的差异行：按补丁里的 hunk 逐行展开，hunk 之间插分隔行。
+ * 补丁读不懂（不是单文件补丁）时为空。
+ */
+export function buildWorkbenchPatchDiffRows(diff: string): WorkbenchUnifiedDiffRow[] {
+  try {
+    const patches = parsePatch(diff)
+    if (patches.length !== 1 || isEmpty(patches[0].hunks)) return []
+    return buildRowsFromHunks(patches[0].hunks, {
+      separateHunks: true,
+      maxLines: FullFileMaxDiffLines,
+    })
+  } catch (error) {
+    log.debug('补丁无法解析为差异行', { error })
+    return []
+  }
+}
+
+function buildRowsFromHunks(
+  hunks: ReadonlyArray<{
+    oldStart: number
+    oldLines: number
+    newStart: number
+    newLines: number
+    lines: string[]
+  }>,
+  { separateHunks, maxLines }: { separateHunks: boolean; maxLines: number }
+): WorkbenchUnifiedDiffRow[] {
   const rows: WorkbenchUnifiedDiffRow[] = []
   let id = 0
 
-  for (let hunkIndex = 0; hunkIndex < patch.hunks.length; hunkIndex += 1) {
-    const hunk = patch.hunks[hunkIndex]
+  for (let hunkIndex = 0; hunkIndex < hunks.length; hunkIndex += 1) {
+    const hunk = hunks[hunkIndex]
     let oldLine = hunk.oldStart
     let newLine = hunk.newStart
 
     // 非全文件模式下多个 hunk 之间插一条分隔行；全文件只有一个 hunk，不需要噪音。
-    if (!fullFile && hunkIndex > 0) {
+    if (separateHunks && hunkIndex > 0) {
       rows.push({
         id: `${id++}:hunk`,
         kind: 'hunk',

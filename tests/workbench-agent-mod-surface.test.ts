@@ -192,8 +192,8 @@ void describe('Workbench Agent Mod surface', () => {
       doStream: async (request) => {
         requests += 1
         const names = request.tools?.map((tool) => tool.name) ?? []
-        // agent:dispatch 与目标 / 计划工具常驻，首轮就在场；job:* 自带可用性门（要宿主提供后台
-        // 作业读写口），Workbench 的执行面没有，因此它们正确地不出现在请求里。
+        // agent:dispatch、目标 / 计划与工作台界面工具常驻，首轮就在场；job:* 自带可用性门（要宿主
+        // 提供后台作业读写口），Workbench 的执行面没有，因此它们正确地不出现在请求里。
         if (requests === 1)
           assert.deepEqual(names, [
             'project__read',
@@ -203,6 +203,12 @@ void describe('Workbench Agent Mod surface', () => {
             'goal__update',
             'plan__update',
             'plan__get',
+            'workbench__open_file',
+            'workbench__reveal_in_explorer',
+            'workbench__open_diff',
+            'workbench__explain_code',
+            'workbench__clear_explanations',
+            'workbench__get_editor_state',
           ])
         assert.ok(!names.includes('browser__hidden'))
         assert.ok(!names.includes('browser__resident_unavailable'))

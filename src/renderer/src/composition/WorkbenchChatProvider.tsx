@@ -10,8 +10,8 @@ import type {
   BrowserElementSelection,
   ChatMessage,
   SystemFileChangePreviewResult,
-  WorkspaceCheckpointFileDiff,
 } from '@shared/contracts'
+import type { WorkbenchChatRunChangesSummary } from '@shared/workbenchGit'
 
 import type { WorkbenchChatProviderId } from '../../../plugins/agent-engines/identity'
 
@@ -50,9 +50,8 @@ export interface WorkbenchChatSessionSnapshot {
   readonly messageRunMarkers: ReadonlyArray<{
     readonly messageId: string
     readonly timestamp: number
-    readonly workspaceCheckpointDiff?: {
-      readonly changes: readonly WorkspaceCheckpointFileDiff[]
-    }
+    /** 这一轮的「本轮改动」摘要（补丁全文在主进程的记录文件里，按 recordId 读）。 */
+    readonly runChanges?: WorkbenchChatRunChangesSummary
   }>
   readonly workerThreads: ReadonlyArray<{
     readonly messages: readonly ChatMessage[]
@@ -131,6 +130,14 @@ export interface WorkbenchChatSessionSurfaceProps {
   onOpenFileChange?: (entry: WorkbenchChatFileChangeEntry) => void | Promise<void>
   onOpenWorkspacePath?: (path: string) => unknown
   onReviewFileChanges?: (entries: readonly WorkbenchChatFileChangeEntry[]) => void | Promise<void>
+  /** 「本轮改动」卡的「查看」：在编辑区打开这一轮的「AI 改动」对比。 */
+  onReviewRunChanges?: (target: WorkbenchChatRunChangesTarget) => void
+}
+
+/** 某个会话里的某一轮改动（记录 id = 这一轮检查点的 id）。 */
+export interface WorkbenchChatRunChangesTarget {
+  readonly sessionId: string
+  readonly recordId: string
 }
 
 export interface WorkbenchChatCompositionAdapter {

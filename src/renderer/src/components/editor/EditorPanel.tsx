@@ -81,7 +81,10 @@ import { EditorFindBar } from './EditorFindBar'
 import { EditorGoToLineBar } from './EditorGoToLineBar'
 import {
   EditorTabBar,
+  IsolatedWorkbenchEditorTabGroups,
+  type WorkbenchEditorAuxiliaryTabGroup,
   type WorkbenchEditorAuxiliaryTabItem,
+  type WorkbenchEditorIsolatedGroupHeader,
 } from './EditorTabBar'
 import { type FileHistoryMode,FileHistoryView } from './FileHistoryView'
 import { WorkbenchChatChangePreviewPanel } from './WorkbenchChatChangePreviewPanel'
@@ -144,6 +147,10 @@ export interface WorkbenchEditorPanelDiffProps {
     onSelectItem: (item: WorkbenchGitChangeItem) => void
   }>
   auxiliaryTabs?: WorkbenchEditorPanelAuxiliaryTab[]
+  /** 独占标签组激活时标签栏最前面的组名与「返回编辑器」。 */
+  isolatedGroupHeaders?: Partial<
+    Record<WorkbenchEditorAuxiliaryTabGroup, WorkbenchEditorIsolatedGroupHeader>
+  >
   /**
    * 调试 webview 常驻层：所有打开的调试选项卡的 webview 一直挂载在编辑区里，
    * 由该层内部按激活态切换可见性，从而切走再切回不丢页面状态。
@@ -224,6 +231,7 @@ export function EditorPanel({
     focusFirstChangeRequestId = 0,
     chatChangePreview = null,
     auxiliaryTabs = [],
+    isolatedGroupHeaders,
     debugTabsLayer = null,
     lightTab = null,
     onCloseDiffTab,
@@ -463,11 +471,17 @@ export function EditorPanel({
     () => toNullable(auxiliaryTabs.find((tab) => tab.active)),
     [auxiliaryTabs]
   )
-  const structureTabGroupActive = activeAuxiliaryTab?.group === 'structure'
+  // 独占组（结构图、AI 改动）激活时标签栏只显示这一组；否则独占组的标签都不在普通标签栏里。
+  const isolatedTabGroup =
+    activeAuxiliaryTab?.group && IsolatedWorkbenchEditorTabGroups.has(activeAuxiliaryTab.group)
+      ? activeAuxiliaryTab.group
+      : null
   const visibleAuxiliaryTabs = useMemo(
     () => auxiliaryTabs.filter((tab) =>
-      structureTabGroupActive ? tab.group === 'structure' : tab.group !== 'structure'),
-    [auxiliaryTabs, structureTabGroupActive]
+      isolatedTabGroup
+        ? tab.group === isolatedTabGroup
+        : !tab.group || !IsolatedWorkbenchEditorTabGroups.has(tab.group)),
+    [auxiliaryTabs, isolatedTabGroup]
   )
   const hasEditorOverlayTab = !!(activeDiffItem || lightTab || activeAuxiliaryTab)
   const markdownPreviewAvailable =
@@ -609,7 +623,11 @@ export function EditorPanel({
 
     timers.nextFrame(
       () => {
-        editorRef.current?.moveToLine(navigationRequest.line, navigationRequest.column)
+        const options = { focus: navigationRequest.focus }
+        if (navigationRequest.endLine)
+          editorRef.current?.selectLines(navigationRequest.line, navigationRequest.endLine, options)
+        else
+          editorRef.current?.moveToLine(navigationRequest.line, navigationRequest.column, options)
       },
       { label: 'workbench.editor.navigationRequest' }
     )
@@ -654,16 +672,16 @@ export function EditorPanel({
       {showTopBar && <WorkbenchTopBar {...chrome} />}
       <div className={styles.editorMain}>
         <EditorTabBar
-          openTabs={structureTabGroupActive ? [] : openTabs}
-          selectedFilePath={structureTabGroupActive ? null : selectedFilePath}
+          openTabs={isolatedTabGroup ? [] : openTabs}
+          selectedFilePath={isolatedTabGroup ? null : selectedFilePath}
           selectedFile={hasEditorOverlayTab ? null : selectedFile}
           hasUnsavedChanges={hasEditorOverlayTab ? false : hasUnsavedChanges}
           canEditSelectedFile={hasEditorOverlayTab ? false : canEditSelectedFile}
           isSavingFile={isSavingFile}
           dirtyTabCount={dirtyTabCount}
           gitDecorations={gitDecorations}
-          diffTabItem={structureTabGroupActive ? null : activeDiffItem}
-          lightTabItem={structureTabGroupActive ? null : lightTab?.item || null}
+          diffTabItem={isolatedTabGroup ? null : activeDiffItem}
+          lightTabItem={isolatedTabGroup ? null : lightTab?.item || null}
           auxiliaryTabItems={visibleAuxiliaryTabs}
           tabContextMenu={tabContextMenu}
           onOpenTabContextMenu={openTabContextMenu}
@@ -682,8 +700,15 @@ export function EditorPanel({
           markdownPreviewAvailable={markdownPreviewAvailable}
           markdownPreviewActive={markdownPreviewActive}
           onToggleMarkdownPreview={toggleMarkdownPreview}
-          ariaLabel={structureTabGroupActive ? t('workbench.logicGraphStructureView') : undefined}
-          showWorkspaceActions={!structureTabGroupActive}
+          ariaLabel={
+            isolatedTabGroup === 'structure'
+              ? t('workbench.logicGraphStructureView')
+              : isolatedTabGroup === 'ai-changes'
+                ? t('workbench.aiChangesTitle')
+                : undefined
+          }
+          showWorkspaceActions={!isolatedTabGroup}
+          isolatedGroupHeader={isolatedTabGroup ? isolatedGroupHeaders?.[isolatedTabGroup] : null}
         />
         <Dialog
           open={!!shouldShowExternalConflictDialog && externalConflictDialogOpen}

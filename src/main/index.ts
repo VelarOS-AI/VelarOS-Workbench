@@ -384,6 +384,8 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
         update: (sessionId, action) => agentExecutionStack.updateGoalLifecycle(sessionId, action),
       },
       releaseAgentSession: (sessionId) => agentExecutionStack.releaseSession(sessionId),
+      // `workbench:*` 界面工具的回执：请求在原生执行栈的挂起表里等着。
+      resolveAgentUiRequest: (response) => agentExecutionStack.ui.resolve(response),
     }
   )
   void kernelRuntime.start().finally(() => {

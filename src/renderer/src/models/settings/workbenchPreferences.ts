@@ -46,6 +46,8 @@ export interface WorkbenchPreferences {
    * 破坏性命令在任何档位下都仍然逐次询问（判据见 main 侧 WorkbenchToolConfirmationPolicy）。
    */
   permissionConfirmationMode: PermissionConfirmationMode
+  /** 一轮 AI 运行改了文件时，结束后在编辑区自动打开这一轮的「AI 改动」对比。 */
+  aiChangesAutoOpen: boolean
 }
 
 export interface WorkbenchEditorMetrics {
@@ -66,6 +68,7 @@ export const DEFAULT_WORKBENCH_PREFERENCES: WorkbenchPreferences = {
   theme: 'light-modern',
   localHistoryThrottleSeconds: 60,
   permissionConfirmationMode: 'standard-open',
+  aiChangesAutoOpen: true,
 }
 
 export const WORKBENCH_EDITOR_FONT_SIZE_MIN = 11
@@ -272,6 +275,10 @@ export function normalizeWorkbenchPreferences(
       WorkbenchPermissionConfirmationModes,
       DEFAULT_WORKBENCH_PREFERENCES.permissionConfirmationMode
     ),
+    aiChangesAutoOpen:
+      typeof preferences?.aiChangesAutoOpen === 'boolean'
+        ? preferences.aiChangesAutoOpen
+        : DEFAULT_WORKBENCH_PREFERENCES.aiChangesAutoOpen,
   }
 }
 

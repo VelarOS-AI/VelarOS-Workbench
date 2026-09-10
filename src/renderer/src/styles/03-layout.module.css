@@ -122,7 +122,8 @@
   font-weight: 600;
 }
 
-.leftToolButton[data-running='true']::after {
+.leftToolButton[data-running='true']::after,
+.leftToolButton[data-badge='true']::after {
   position: absolute;
   top: 3px;
   right: 3px;
@@ -133,6 +134,11 @@
   background: var(--status-green);
   content: '';
   pointer-events: none;
+}
+
+/* 有新的一轮 AI 改动还没看过。 */
+.leftToolButton[data-badge='true']::after {
+  background: var(--workbench-editor-explain-accent, #6366f1);
 }
 
 .leftToolContent {

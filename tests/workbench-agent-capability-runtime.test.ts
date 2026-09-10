@@ -420,6 +420,69 @@ void describe('Workbench Agent capability runtime', () => {
     unregister()
   })
 
+  void test('accepts UI replies only from the renderer that started the run', async () => {
+    const runtime = {
+      invokeCapability: () => new Promise<unknown>(() => undefined),
+      subscribeEvent: () => () => undefined,
+    } as unknown as Kernel
+    const resolved: unknown[] = []
+    const { registerWorkbenchKernelIpc } = await import(
+      '../src/main/kernel/WorkbenchKernelIpc'
+    )
+    const unregister = registerWorkbenchKernelIpc(
+      runtime,
+      createKernelRoutes(),
+      {} as never,
+      () => false,
+      () => false,
+      {
+        abortSettlementGraceMs: 5,
+        resolveAgentUiRequest: (response) => {
+          resolved.push(response)
+          return true
+        },
+      }
+    )
+    const invoke = ipcHandlers.get(WorkbenchKernelChannels.invoke)
+    const respond = ipcHandlers.get(WorkbenchKernelChannels.respondAgentUiRequest)
+    const abort = ipcHandlers.get(WorkbenchKernelChannels.abortAgentExecution)
+    assert.ok(invoke)
+    assert.ok(respond)
+    assert.ok(abort)
+
+    const running = Promise.resolve(
+      invoke(createIpcEvent(1), createKernelAgentRequest('execution-ui', 'correlation-ui'))
+    )
+    await Promise.resolve()
+    const reply = { requestId: 'request-1', executionId: 'execution-ui', ok: true, data: { opened: true } }
+
+    // 别的窗口、不存在的执行、坏形状的回执都不收。
+    assert.equal(await respond(createIpcEvent(2), reply), false)
+    assert.equal(await respond(createIpcEvent(1), { ...reply, executionId: 'missing' }), false)
+    assert.equal(await respond(createIpcEvent(1), { requestId: 'request-1' }), false)
+    assert.deepEqual(resolved, [])
+
+    assert.equal(await respond(createIpcEvent(1), reply), true)
+    assert.equal(
+      await respond(createIpcEvent(1), { requestId: 'request-2', executionId: 'execution-ui', ok: false }),
+      true
+    )
+    assert.deepEqual(resolved, [
+      reply,
+      {
+        requestId: 'request-2',
+        executionId: 'execution-ui',
+        ok: false,
+        message: 'Workbench could not complete the UI action.',
+      },
+    ])
+
+    await abort(createIpcEvent(1), { executionId: 'execution-ui' })
+    await running
+    unregister()
+    assert.equal(ipcHandlers.has(WorkbenchKernelChannels.respondAgentUiRequest), false)
+  })
+
   void test('rejects an invalid Agent descriptor before invoking the Kernel', async () => {
     let invocationCount = 0
     const runtime = {

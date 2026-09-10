@@ -1572,6 +1572,16 @@ export function WorkbenchSettingsDialog({
         <Text tone="caption" className={styles.workbenchSettingsRowDescription}>
           {t('workbench.settingsPermissionHardGateHint')}
         </Text>
+        <SettingRow
+          title={t('workbench.settingsAiChangesAutoOpen')}
+          description={t('workbench.settingsAiChangesAutoOpenDescription')}
+        >
+          <Switch
+            size="sm"
+            checked={preferences.aiChangesAutoOpen}
+            onCheckedChange={(aiChangesAutoOpen) => onPreferencesChange({ aiChangesAutoOpen })}
+          />
+        </SettingRow>
       </div>
     )
   }
