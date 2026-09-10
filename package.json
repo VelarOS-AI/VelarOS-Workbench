@@ -86,7 +86,7 @@
     "@velaros-ai/model": "0.6.3",
     "@velaros-ai/project": "2.0.15",
     "@velaros-ai/system": "1.1.16",
-    "@velaros-ai/ui": "0.2.38",
+    "@velaros-ai/ui": "0.2.39",
     "@vitejs/plugin-react": "^4.3.0",
     "ahooks": "^3.9.7",
     "ai": "^6.0.168",
