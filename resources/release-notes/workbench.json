@@ -3,6 +3,32 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
+      "version": "0.3.39",
+      "releasedAt": "2026-09-10",
+      "title": {
+        "zh": "聊天能力对齐与代码块体验修复",
+        "en": "Chat parity and code block fixes"
+      },
+      "added": {
+        "zh": ["工作台聊天支持操作审批、权限设置与子 Agent，与 Desktop 保持一致。"],
+        "en": ["Workbench chat now supports action approvals, permission settings, and sub-agents, matching Desktop."]
+      },
+      "fixed": {
+        "zh": [
+          "结构面板完整列出项目中的全部 Velar 源文件；运行档位恢复完整三档；状态栏更新进度改为与主题一致的轻量样式。",
+          "主题强调色只有一个来源，弹出菜单与主界面颜色保持一致。",
+          "回复输出过程中代码块不再反复刷新：点开的代码块保持展开，短代码块直接完整显示，鼠标停在代码块上页面可正常滚动。",
+          "模型长时间思考时显示「思考中」，只有真正断网重试时才显示「重连中」。"
+        ],
+        "en": [
+          "The structure panel now lists every Velar source file in the project, all three run profiles are available again, and the status-bar update progress uses a light, theme-matched style.",
+          "The theme accent now has a single source, so popovers match the main window.",
+          "Code blocks no longer refresh repeatedly while a reply streams: expanded blocks stay open, short blocks are shown in full, and the page scrolls normally over code blocks.",
+          "Long model pauses now show “Thinking”; “Reconnecting” only appears when a real network retry happens."
+        ]
+      }
+    },
+    {
       "version": "0.3.38",
       "releasedAt": "2026-09-09",
       "title": {
