@@ -3,6 +3,44 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
+      "version": "0.3.40",
+      "releasedAt": "2026-09-10",
+      "title": {
+        "zh": "运行中引导、会话回溯与聊天体验对齐",
+        "en": "Run guidance, conversation rewind, and chat parity"
+      },
+      "added": {
+        "zh": [
+          "运行中发送的消息会作为引导注入当前这一轮并显示引导进度，也可以选择本轮结束后再发送。",
+          "支持回溯到任意一条消息之前，可同时把项目文件恢复到那一轮开始前的状态。",
+          "在浏览器中拾取的页面元素会出现在输入框里，随消息一起交给模型。",
+          "主 Agent 派出子 Agent 时，可以指定当前模型厂商下已配置的任意模型；不指定时沿用主模型。"
+        ],
+        "en": [
+          "Messages sent while a run is in progress now reach the current run as guidance with visible progress; you can also choose to send after the run ends.",
+          "You can rewind the conversation to before any message, optionally restoring project files to how they were when that turn started.",
+          "Page elements picked in the browser now appear in the input box and are sent to the model with your message.",
+          "When the main agent dispatches a sub-agent, it can pick any configured model from the current provider; otherwise the sub-agent uses the main model."
+        ]
+      },
+      "fixed": {
+        "zh": [
+          "从「提交」切回文件面板时，文件树顶部不再出现空白。",
+          "发出新一轮消息后，运行状态显示在新消息下方，不再先出现在上一轮回复上方。",
+          "子 Agent 不再一派发就报「模型 selection.provider 必须显式提供」。",
+          "中止或失败后再发的消息会接着那一轮继续；停止后，排队的消息不再自动发出。",
+          "回答中的文件路径和改动卡可以直接在编辑器中打开；单条消息渲染出错时只影响这一条。"
+        ],
+        "en": [
+          "The file tree no longer shows a blank top after switching back from the Commit view.",
+          "After you send a new message, the run status appears below it instead of above it on the previous reply.",
+          "Sub-agents no longer fail on dispatch with a missing model provider error.",
+          "A message sent after a stopped or failed run now continues that run, and queued messages are no longer sent automatically after you stop.",
+          "File paths and change cards in answers open in the editor, and a message that fails to render no longer breaks the whole conversation."
+        ]
+      }
+    },
+    {
       "version": "0.3.39",
       "releasedAt": "2026-09-10",
       "title": {
