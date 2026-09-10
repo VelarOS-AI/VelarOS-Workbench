@@ -187,6 +187,12 @@ const kernelBridge: WorkbenchKernelBridge = {
     ipcRenderer.invoke(WorkbenchKernelChannels.resolveAgentConfirmation, request),
   provideAgentGuidance: (request) =>
     ipcRenderer.invoke(WorkbenchKernelChannels.provideAgentGuidance, request),
+  getGoalLifecycle: (request) =>
+    ipcRenderer.invoke(WorkbenchKernelChannels.getGoalLifecycle, request),
+  updateGoalLifecycle: (request) =>
+    ipcRenderer.invoke(WorkbenchKernelChannels.updateGoalLifecycle, request),
+  releaseAgentSession: (request) =>
+    ipcRenderer.invoke(WorkbenchKernelChannels.releaseAgentSession, request),
   onStatusChanged: (listener) => subscribe(WorkbenchKernelChannels.statusChanged, listener),
   onAgentExecution: (listener) => subscribe(WorkbenchKernelChannels.agentExecution, listener),
   backupChatHistory: (request) =>

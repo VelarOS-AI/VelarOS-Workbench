@@ -20,6 +20,7 @@ import { WorkbenchBrowserPartition } from '../shared/workbenchBrowser'
 import { registerWorkbenchAccountIpc } from './account/WorkbenchAccountIpc'
 import { WorkbenchAccountService } from './account/WorkbenchAccountService'
 import { WorkbenchSharedAccountStore } from './account/WorkbenchSharedAccountStore'
+import { WorkbenchActiveContextStore } from './agent/WorkbenchActiveContextStore'
 import { WorkbenchAgentExecutionStack } from './agent/WorkbenchAgentExecutionStack'
 import { WorkbenchProductAnalyticsReporter } from './analytics/WorkbenchProductAnalyticsReporter'
 import { installWorkbenchProductAnalyticsRuntime } from './analytics/WorkbenchProductAnalyticsRuntime'
@@ -322,7 +323,8 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
             .map(({ id, label }) => ({ id, label }))
         : []
       return models.length > 0 ? models : null
-    }
+    },
+    new WorkbenchActiveContextStore(() => providers.parts.storagePaths.getChatActiveContextDir())
   )
   const disposeModelIpc = registerWorkbenchModelIpc(
     new ProviderModelCatalogService({
@@ -373,8 +375,16 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
     (sessionId, approved, rejectionMessage) =>
       providers.agentEngines.resolveConfirmation(sessionId, approved, rejectionMessage)
       || agentExecutionStack.approvals.resolve(sessionId, approved, rejectionMessage),
-    // 运行中补发的引导只有原生执行栈能接（外部引擎没有中途注入语义），不命中就回 false。
-    { provideAgentGuidance: (request) => agentExecutionStack.provideGuidance(request) }
+    {
+      // 运行中补发的引导只有原生执行栈能接（外部引擎没有中途注入语义），不命中就回 false。
+      provideAgentGuidance: (request) => agentExecutionStack.provideGuidance(request),
+      // 目标与会话的活动上下文归原生执行栈；外部引擎的会话读到的就是「没有目标」。
+      goalLifecycle: {
+        get: (sessionId) => agentExecutionStack.getGoalLifecycle(sessionId),
+        update: (sessionId, action) => agentExecutionStack.updateGoalLifecycle(sessionId, action),
+      },
+      releaseAgentSession: (sessionId) => agentExecutionStack.releaseSession(sessionId),
+    }
   )
   void kernelRuntime.start().finally(() => {
     broadcastWorkbenchKernelStatus(kernelRuntime)

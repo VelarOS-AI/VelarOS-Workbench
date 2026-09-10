@@ -11,7 +11,7 @@ import { createModelRuntimeComposition } from '@velaros-ai/model/node'
 import type { ProjectKernel } from '@velaros-ai/project/runtime'
 
 import {
-  WorkbenchAgentControlCategoryId,
+  WorkbenchAgentControlCategoryIds,
   WorkbenchAgentControlToolNames,
 } from '../src/main/agent/WorkbenchAgentControlTools'
 import {
@@ -192,9 +192,18 @@ void describe('Workbench Agent Mod surface', () => {
       doStream: async (request) => {
         requests += 1
         const names = request.tools?.map((tool) => tool.name) ?? []
-        // agent:dispatch 是常驻控制面工具，首轮就在场；job:* 自带可用性门（要宿主提供后台
+        // agent:dispatch 与目标 / 计划工具常驻，首轮就在场；job:* 自带可用性门（要宿主提供后台
         // 作业读写口），Workbench 的执行面没有，因此它们正确地不出现在请求里。
-        if (requests === 1) assert.deepEqual(names, ['project__read', 'agent__dispatch'])
+        if (requests === 1)
+          assert.deepEqual(names, [
+            'project__read',
+            'agent__dispatch',
+            'goal__get',
+            'goal__create',
+            'goal__update',
+            'plan__update',
+            'plan__get',
+          ])
         assert.ok(!names.includes('browser__hidden'))
         assert.ok(!names.includes('browser__resident_unavailable'))
         if (requests === 2) assert.match(JSON.stringify(request.prompt), /file evidence/)
@@ -300,8 +309,8 @@ void describe('Workbench Agent Mod surface', () => {
     )
 
     assert.equal(snapshot.generation, 3)
-    // 控制面工具（agent:dispatch / job:*）属于执行栈自身，恒定夹在项目工具与 Mod 工具之间，
-    // 且恒定常驻——模型看不见「可以派出去」这个选项就不会去选它。
+    // 执行栈自有的工具（agent:dispatch / job:* 与 goal:* / plan:*）恒定夹在项目工具与 Mod 工具之间，
+    // 且恒定常驻——模型看不见「可以派出去」「该先立个计划」这些选项就不会去选。
     assert.deepEqual(snapshot.tools.map((tool) => tool.name), [
       'project:read',
       ...WorkbenchAgentControlToolNames,
@@ -309,12 +318,12 @@ void describe('Workbench Agent Mod surface', () => {
     ])
     assert.deepEqual(snapshot.enabledCategoryIds, [
       'project-files',
-      WorkbenchAgentControlCategoryId,
+      ...WorkbenchAgentControlCategoryIds,
       'browser-core',
     ])
     assert.deepEqual(snapshot.residentCategoryIds, [
       'project-files',
-      WorkbenchAgentControlCategoryId,
+      ...WorkbenchAgentControlCategoryIds,
     ])
     assert.deepEqual(snapshot.initialVisibleToolNames, [
       'project:read',

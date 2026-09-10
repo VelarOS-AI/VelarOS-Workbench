@@ -93,7 +93,27 @@ void describe('Workbench chat composer parity', () => {
     assert.doesNotMatch(adapter, /workspaceCheckpointDiff/)
     // 回溯掉的回答、被移除的会话，连同它们的改动记录一起清掉。
     assert.match(adapter, /releaseRunChangeRecords\(projectRoot, sessionId, droppedRunChangeRecordIds\)/)
-    assert.match(adapter, /releaseRunChangeRecords\(target\.projectRoot, target\.sessionId\)/)
+    assert.match(adapter, /releaseRemovedSession\(target\)/)
+    assert.match(adapter, /releaseRunChangeRecords\(session\.projectRoot, session\.sessionId\)/)
+  })
+
+  void test('shows the goal card above the composer like Desktop', () => {
+    const adapter = readFileSync(
+      path.resolve(process.cwd(), 'src/renderer/src/runtime/standaloneWorkbenchChatAdapter.tsx'),
+      'utf8'
+    )
+    const slots = readFileSync(
+      path.resolve(
+        process.cwd(),
+        'src/renderer/src/runtime/conversation/standaloneWorkbenchConversationRenderSlots.tsx'
+      ),
+      'utf8'
+    )
+
+    assert.match(slots, /content\.kind === 'goal-lifecycle' \? \(\s*<WorkbenchGoalDockCard/)
+    // 目标卡的「继续」空闲时按目标模式另起一轮，运行中经动作端口投引导（Desktop continueGoal 同一分工）。
+    assert.match(adapter, /onContinueGoal=\{\(guidance\) => submit\(guidance, \[\], \{ goalMode: true \}\)\}/)
+    assert.match(adapter, /\(options\?\.goalMode \?\? goalMode\) \? \['goal' as const\]/)
   })
 
   void test('marks finished runs so answers fold and stopped runs show their status', () => {

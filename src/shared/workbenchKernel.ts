@@ -1,3 +1,5 @@
+import type { ActiveContextArtifact, ChatGoalLifecycleAction } from '@velaros-ai/agent/protocol'
+
 export const WorkbenchKernelChannels = {
   getStatus: 'workbench-app:kernel:get-status',
   invoke: 'workbench-app:kernel:invoke',
@@ -8,6 +10,9 @@ export const WorkbenchKernelChannels = {
   statusChanged: 'workbench-app:kernel:status-changed',
   agentExecution: 'workbench-app:kernel:agent-execution',
   backupChatHistory: 'workbench-app:kernel:backup-chat-history',
+  getGoalLifecycle: 'workbench-app:kernel:get-goal-lifecycle',
+  updateGoalLifecycle: 'workbench-app:kernel:update-goal-lifecycle',
+  releaseAgentSession: 'workbench-app:kernel:release-agent-session',
 } as const
 
 /**
@@ -72,6 +77,26 @@ export interface WorkbenchProvideAgentGuidanceRequest {
   sessionId: string
   inputId: string
   text: string
+}
+
+/** 会话的目标（目标模式建立、目标卡显示）。 */
+export interface WorkbenchGoalLifecycleRequest {
+  sessionId: string
+}
+
+/** 目标卡上的暂停、继续、移除；非「继续」的动作会停下正在跑的这一轮（与 Desktop 相同）。 */
+export interface WorkbenchUpdateGoalLifecycleRequest extends WorkbenchGoalLifecycleRequest {
+  action: ChatGoalLifecycleAction
+}
+
+/** `ok:false` 是软失败（没有目标、写入失败）：卡片保留当前状态。 */
+export type WorkbenchGoalLifecycleResult =
+  | { ok: true; goal: ActiveContextArtifact | null }
+  | { ok: false; message: string }
+
+/** 会话被移除时释放它在主进程里的执行装配与活动上下文（目标、计划制品）。 */
+export interface WorkbenchReleaseAgentSessionRequest {
+  sessionId: string
 }
 
 export interface WorkbenchResolveAgentConfirmationRequest {
@@ -149,4 +174,9 @@ export interface WorkbenchKernelBridge {
   backupChatHistory: (
     request: WorkbenchChatHistoryBackupRequest
   ) => Promise<WorkbenchChatHistoryBackupResult>
+  getGoalLifecycle: (request: WorkbenchGoalLifecycleRequest) => Promise<WorkbenchGoalLifecycleResult>
+  updateGoalLifecycle: (
+    request: WorkbenchUpdateGoalLifecycleRequest
+  ) => Promise<WorkbenchGoalLifecycleResult>
+  releaseAgentSession: (request: WorkbenchReleaseAgentSessionRequest) => Promise<void>
 }

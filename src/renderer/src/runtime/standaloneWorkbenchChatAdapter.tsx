@@ -542,9 +542,7 @@ function useStandaloneProjectRuntime(
           ? active
           : [active, ...inactive].find((candidate) => candidate.folderId === targetFolderId)
         if (!target || isActiveChatRun(target.status)) return
-        // 会话从存储里整个移除，它的检查点再没有回溯的机会，本轮改动记录也不再有人看。
-        releaseCheckpointRefs(target.projectRoot, target.sessionId, target.checkpoints)
-        releaseRunChangeRecords(target.projectRoot, target.sessionId)
+        releaseRemovedSession(target)
         if (target.sessionId === active.sessionId) {
           const [replacement, ...remaining] = inactive
           const next = replacement ?? createState(normalizedRoot, providerId, false)
@@ -1051,7 +1049,11 @@ function StandaloneWorkbenchChatSessionSurface({
   async function submit(
     draftValue = prompt,
     draftFiles = files,
-    options?: { onAccepted?: () => void }
+    options?: {
+      onAccepted?: () => void
+      /** 目标卡的「继续」：这一轮按目标模式跑，不看输入框里的模式开关（与 Desktop continueGoal 相同）。 */
+      goalMode?: boolean
+    }
   ): Promise<boolean> {
     const text = draftValue.trim()
     const selections = browserSelections
@@ -1284,7 +1286,7 @@ function StandaloneWorkbenchChatSessionSurface({
                 ...(engineModel ? { model: engineModel } : {}),
               }),
           executionModes: [
-            ...(goalMode ? ['goal' as const] : []),
+            ...((options?.goalMode ?? goalMode) ? ['goal' as const] : []),
             ...(planMode ? ['plan' as const] : []),
           ],
         },
@@ -1729,6 +1731,8 @@ function StandaloneWorkbenchChatSessionSurface({
           onOpenProjectPath={onOpenWorkspacePath}
           onOpenFileChange={onOpenFileChange}
           onReviewFileChanges={onReviewFileChanges}
+          // 目标卡的「继续」在空闲时另起一轮（运行中则经动作端口投引导）。
+          onContinueGoal={(guidance) => submit(guidance, [], { goalMode: true })}
           onFollowLockedChange={setFollowLocked}
         />
       </WorkbenchRunChangesScopeContext.Provider>
@@ -2224,6 +2228,20 @@ function serializeStoredState(state: StandaloneChatState): Record<string, unknow
     messageRunMarkers: state.messageRunMarkers,
     revision: state.revision,
   }
+}
+
+/**
+ * 会话从存储里整个移除：它的检查点再没有回溯的机会、本轮改动记录也不再有人看，主进程里它的执行
+ * 装配与活动上下文（目标、计划）一并释放。
+ */
+function releaseRemovedSession(session: StandaloneChatState): void {
+  releaseCheckpointRefs(session.projectRoot, session.sessionId, session.checkpoints)
+  releaseRunChangeRecords(session.projectRoot, session.sessionId)
+  void window.velarosWorkbenchKernel
+    .releaseAgentSession({ sessionId: session.sessionId })
+    .catch(() => {
+      // 释放失败只会在主进程留下一份没人用的装配与制品文件。
+    })
 }
 
 /** 清掉检查点的影子 ref（回溯淘汰的「未来」检查点、超出保留上限的、被删掉的会话的）。 */

@@ -275,7 +275,8 @@ void describe('pre-split Workbench shell parity', () => {
 
     assert.match(app, /ConversationBlockHooksProvider/)
     assert.match(app, /value=\{emptyConversationBlockHooks\}/)
-    assert.match(app, /value=\{emptyConversationActionPort\}/)
+    // 目标卡的读写走主进程（Desktop 同一个动作端口职责）。
+    assert.match(app, /value=\{standaloneWorkbenchConversationActionPort\}/)
     assert.match(app, /ConversationRenderSlotsProvider/)
     assert.match(app, /slots=\{standaloneWorkbenchConversationRenderSlots\}/)
     assert.match(renderSlots, /createConversationRenderSlots/)

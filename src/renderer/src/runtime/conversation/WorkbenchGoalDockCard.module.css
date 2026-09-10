@@ -1,0 +1,46 @@
+/* 与 Desktop 的 GoalDockCard 同一副外观：按目标状态染一层底色，标题与目标同行、目标过长省略。 */
+.card {
+  background: var(--surface-interaction-card);
+}
+
+.card[data-goal-status='paused'] {
+  background: color-mix(in srgb, var(--status-amber) 5%, transparent);
+}
+
+.card[data-goal-status='complete'] {
+  background: color-mix(in srgb, var(--status-green) 5%, transparent);
+}
+
+.card[data-goal-status='blocked'] {
+  background: color-mix(in srgb, var(--status-red) 5.5%, transparent);
+}
+
+.card[data-goal-status='cancelled'],
+.card[data-goal-status='removed'] {
+  background: color-mix(in srgb, var(--background-panel) 90%, transparent);
+}
+
+.card :global(.velar-action-card-main) {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.card :global(.velar-action-card-title) {
+  flex-shrink: 0;
+}
+
+.card :global(.velar-action-card-description) {
+  min-width: 0;
+  flex: 1;
+  margin-top: 0;
+}
+
+.description {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

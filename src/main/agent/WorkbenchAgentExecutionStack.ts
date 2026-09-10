@@ -13,8 +13,14 @@ import {
   ContextGovernanceSessionRegistry,
   createAgentExecutionStack,
   defaultUnsupportedInteractionPort,
+  ExecPlanLedger,
+  ExecPlanState,
+  ExecRouting,
   type ExecutionEventBus,
   ExecutionGuidanceQueue,
+  findCurrentGoalArtifact,
+  goalLifecycleToUpsertInput,
+  isExecutionModeActive,
   KernelBackgroundJobManager,
   PrimaryAgentProfile,
   SubAgentDispatcher,
@@ -24,8 +30,11 @@ import {
   WriteLeaseCoordinator,
 } from '@velaros-ai/agent'
 import {
+  type ActiveContextArtifact,
   type AgentModelInputModality,
+  type ChatGoalLifecycleAction,
   ChatRuntimeEvents,
+  type ExecutionTaskPlanStep,
   type PermissionConfirmationMode,
   type ToolAvailabilityScope,
   type ToolCategoryDefinition,
@@ -35,8 +44,10 @@ import {
   type ApprovalPort,
   createTaskApprovalPort,
   defaultDenyApprovalPort,
+  type InteractionPort,
 } from '@velaros-ai/agent/tool-contract'
 import { Log } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
 import {
   createModelRuntimeComposition,
@@ -48,10 +59,14 @@ import type {
   WorkbenchProjectCapabilityProvider,
 } from '../workspace/ProjectCapabilityProvider'
 
+import {
+  type WorkbenchActiveContextPort,
+  WorkbenchActiveContextStore,
+} from './WorkbenchActiveContextStore'
 import { WorkbenchAgentApprovalBroker } from './WorkbenchAgentApprovalBroker'
 import {
   WorkbenchAgentControlCategory,
-  WorkbenchAgentControlCategoryId,
+  WorkbenchAgentControlCategoryIds,
   WorkbenchAgentControlToolNames,
   WorkbenchAgentControlTools,
 } from './WorkbenchAgentControlTools'
@@ -215,6 +230,8 @@ class WorkbenchAgentExecutionStack {
       EmptyWorkbenchAgentModSurfaceProvider,
     /** 托管厂商的可用模型目录（账号层授权）；子 Agent 指定模型时据此校验。 */
     private readonly listManagedModels: WorkbenchManagedModelLister = async () => null,
+    /** 会话的目标 / 计划制品（活动上下文）；缺省只放内存，供探针与测试。 */
+    private readonly activeContexts: WorkbenchActiveContextStore = new WorkbenchActiveContextStore(),
     /**
      * 审批通道：装配根持有同一个实例，才能把 renderer 的确认回执路由回等待中的执行。
      * 默认自持一个，让测试与探针不必额外接线。
@@ -239,7 +256,14 @@ class WorkbenchAgentExecutionStack {
     })
     const abortController = new AbortController()
     const unbindAbort = bindAbortSignal(input.abortSignal, abortController)
-    const config = { ...input.config, sessionId: input.sessionId, abortController }
+    const config = {
+      ...input.config,
+      // 目标模式：执行开始前按用户这条消息建目标，收尾门据此把关（Desktop 经 resolveChatSendRequest
+      // 折算的同一位；loop 读的是它，不是 executionModes）。
+      goalMode: isExecutionModeActive('goal', input.config.executionModes ?? []),
+      sessionId: input.sessionId,
+      abortController,
+    }
     const chatConfig: AgentChatRuntimeConfig = {
       modelSelection: input.config.modelSelection,
       systemPromptAppend: '',
@@ -267,6 +291,8 @@ class WorkbenchAgentExecutionStack {
       registry: session.registry,
       enabledCategoryIds: session.enabledCategoryIds,
       initialVisibleToolNames: session.initialVisibleToolNames,
+      activeContext: this.activeContexts.forSession(input.sessionId),
+      interaction: createWorkbenchInteractionPort(input.executionId),
       approval: this.buildApprovalPort({
         sessionId: input.sessionId,
         executionId: input.executionId,
@@ -336,6 +362,36 @@ class WorkbenchAgentExecutionStack {
       }
     )
     return enqueued.status === 'accepted'
+  }
+
+  /** 会话当前的目标（目标卡读它）；没有目标时为 null。 */
+  public async getGoalLifecycle(sessionId: string): Promise<Nullable<ActiveContextArtifact>> {
+    return findCurrentGoalArtifact(
+      await this.activeContexts.list(sessionId, { status: 'all', kinds: ['requirement'] })
+    )
+  }
+
+  /**
+   * 用户在目标卡上暂停、继续或移除目标（Desktop handleUpdateGoalLifecycle 同一规则）。
+   * 非「继续」的动作要停下正在跑的这一轮——停在 Kernel IPC 那一层做，它握着执行的取消权。
+   */
+  public async updateGoalLifecycle(
+    sessionId: string,
+    action: ChatGoalLifecycleAction
+  ): Promise<ActiveContextArtifact> {
+    const goal = await this.getGoalLifecycle(sessionId)
+    if (!goal) throw new AppError('VALIDATION', 'No goal exists in this session.')
+    return this.activeContexts.upsert(sessionId, goalLifecycleToUpsertInput(goal, action))
+  }
+
+  /** 会话被移除：丢掉它的执行装配，删掉它的活动上下文。 */
+  public async releaseSession(sessionId: string): Promise<void> {
+    const session = this.sessions.get(sessionId)
+    if (session) {
+      session.stack.clearSession(sessionId)
+      this.sessions.delete(sessionId)
+    }
+    await this.activeContexts.deleteSession(sessionId)
   }
 
   public async dispose(): Promise<void> {
@@ -546,7 +602,7 @@ function composeWorkbenchAgentRunToolSnapshot(
 
   const enabledCategoryIds = uniqueStrings([
     ...project.enabledCategoryIds,
-    WorkbenchAgentControlCategoryId,
+    ...WorkbenchAgentControlCategoryIds,
     ...modSurface.enabledCategoryIds,
   ])
   const enabledCategorySet = new Set(enabledCategoryIds)
@@ -558,9 +614,9 @@ function composeWorkbenchAgentRunToolSnapshot(
 
   const residentCategoryIds = uniqueStrings([
     ...project.residentCategoryIds,
-    // 控制面常驻：模型得能看见「这活可以派出去」这个选项，才谈得上选它。
-    // 三个工具的 schema 成本远低于「永远想不到还能委派」的代价。
-    WorkbenchAgentControlCategoryId,
+    // 控制面与目标 / 计划常驻：模型得能看见「这活可以派出去」「这事该先立个计划」这些选项，
+    // 才谈得上选它们。几个工具的 schema 成本远低于永远想不到的代价。
+    ...WorkbenchAgentControlCategoryIds,
     ...modSurface.residentCategoryIds,
   ])
   for (const categoryId of residentCategoryIds) {
@@ -703,11 +759,50 @@ const EmptySkillRepository = {
   listSkillsForRole: () => [],
 }
 
+/** 主 Agent 的角色 id；执行计划的步骤也记在这个角色名下。 */
+const WorkbenchPrimaryRoleId = 'primary-agent'
+
+/**
+ * 一轮执行的交互面：只承载 `plan:update` / `plan:get` 读写的执行计划。Workbench 没有执行账，任务、
+ * 推荐动作与执行建议一概没有；计划与 Desktop 一样按 execution 分，下一轮从空计划开始——计划正文
+ * 另由 plan:update 写进活动上下文，跨轮、跨压缩都在。步骤合并与编号用 Platform 的计划账本。
+ */
+export function createWorkbenchInteractionPort(executionId: string): InteractionPort {
+  const ledger = new ExecPlanLedger(new ExecRouting())
+  const planState = new ExecPlanState()
+  let plan: ExecutionTaskPlanStep[] = []
+  return {
+    executionId,
+    getCurrentPlan: () => plan,
+    updateCurrentPlan: (update) => {
+      plan = planState.refreshExecutionPlan(
+        ledger.buildManualExecutionPlan(plan, update, {
+          now: Date.now(),
+          roleId: WorkbenchPrimaryRoleId,
+          kind: 'implement',
+        })
+      )
+      return plan
+    },
+    getCurrentTask: () => null,
+    getCurrentRecommendedAction: () => null,
+    getCurrentExecutionAdvice: () => null,
+  }
+}
+
+/** 没接活动上下文的工具面（探针、子 Agent 测试）：读是空集，写明确报错。 */
+const DetachedActiveContext: WorkbenchActiveContextPort = {
+  listActiveContextArtifacts: async () => [],
+  upsertActiveContextArtifact: async () => {
+    throw new Error('Workbench 当前执行上下文未提供制品写入存储。')
+  },
+}
+
 /**
  * 建一轮工具上下文（SoloLoopToolContext 的 Workbench 裁剪版）。
  *
- * 逐项对齐 loop 的必填面：codingSession（tracker 直供）、activeContext（内存态，
- * Workbench 没有制品库）、可见工具名（本地状态）、类别列举（注册表直供）。
+ * 逐项对齐 loop 的必填面：codingSession（tracker 直供）、activeContext（会话的目标 / 计划制品）、
+ * interaction（本轮执行计划）、可见工具名（本地状态）、类别列举（注册表直供）。
  */
 type WorkbenchAgentToolContext = AgentExecutionStackToolContext & {
   resourceId: string
@@ -715,7 +810,7 @@ type WorkbenchAgentToolContext = AgentExecutionStackToolContext & {
   getCurrentVisibleToolTransportNames(): Readonly<Record<string, string>>
   setCurrentVisibleToolTransportNames(names: Readonly<Record<string, string>>): void
   codingSession: CodingSessionTracker
-  interaction: typeof defaultUnsupportedInteractionPort
+  interaction: InteractionPort
   approval: ApprovalPort
   /** execution 恒为 null（Workbench 没有执行账），显式写成 null 让子 Agent 面的契约对得上。 */
   execution: null
@@ -734,6 +829,10 @@ export function createWorkbenchToolContext(input: {
   initialVisibleToolNames?: readonly string[]
   /** 审批端口；缺省是设计式拒绝，工具会拿到「没有审批通道」而不是撞 null。 */
   approval?: ApprovalPort
+  /** 会话的目标 / 计划制品；缺省读空、写报错。 */
+  activeContext?: WorkbenchActiveContextPort
+  /** 本轮执行计划；缺省是框架的显式空降级。 */
+  interaction?: InteractionPort
   /** 子 Agent 派发；不传即本次执行面不开放委派。 */
   dispatchSubAgent?: (input: SubAgentDispatchInput) => Promise<string>
 }): WorkbenchAgentToolContext {
@@ -754,7 +853,7 @@ export function createWorkbenchToolContext(input: {
     abortSignal: input.abortSignal,
     log: logRuntime.tag('WorkbenchAgentTool'),
     role: {
-      id: 'primary-agent',
+      id: WorkbenchPrimaryRoleId,
       label: 'Workbench Agent',
       description: '当前项目作用域的主 Agent。',
       nextAllowedRoles: [],
@@ -762,9 +861,9 @@ export function createWorkbenchToolContext(input: {
     planningMode: false,
     agentSurfaceId: 'chat',
     capabilityPorts,
-    // Workbench 没有持久化 execution 记录，但 Agent 提示词与计划工具要求一个非空的
-    // interaction 端口；使用框架的显式空降级，读取计划时返回空结构而不是撞 undefined。
-    interaction: defaultUnsupportedInteractionPort,
+    // Workbench 没有持久化 execution 记录；执行计划由本轮的交互面承载，没接的上下文用框架的
+    // 显式空降级，读取计划时返回空结构而不是撞 undefined。
+    interaction: input.interaction ?? defaultUnsupportedInteractionPort,
     // 审批与交互分属两个端口：Workbench 的 execution 恒为空（无执行账），审批却是真通道。
     approval: input.approval ?? defaultDenyApprovalPort,
     execution: null,
@@ -774,13 +873,7 @@ export function createWorkbenchToolContext(input: {
     query: async () => {
       throw new Error('Workbench 当前执行面未启用子 Agent 委派。')
     },
-    // Workbench 没有制品库（Desktop 的 ActiveContextStore）；空实现让 loop 的制品分支走空集。
-    activeContext: {
-      listActiveContextArtifacts: async () => [],
-      upsertActiveContextArtifact: async () => {
-        throw new Error('Workbench 当前执行上下文未提供制品写入存储。')
-      },
-    },
+    activeContext: input.activeContext ?? DetachedActiveContext,
     getCurrentVisibleToolSurfaceProfile: () => null,
     getCurrentVisibleToolNames: () => visibleToolNames,
     setCurrentVisibleToolNames: (names: string[]) => {

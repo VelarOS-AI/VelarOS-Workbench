@@ -9,7 +9,11 @@ import {
   type WebContents,
 } from 'electron'
 
-import { ChatRuntimeEvents } from '@velaros-ai/agent/protocol'
+import {
+  type ActiveContextArtifact,
+  type ChatGoalLifecycleAction,
+  ChatRuntimeEvents,
+} from '@velaros-ai/agent/protocol'
 import {
   type AgentCapabilityExecutionDescriptorV1,
   type AgentCapabilityExecutionEventEnvelopeV1,
@@ -31,6 +35,7 @@ import {
 
 import type {
   WorkbenchChatHistoryBackupResult,
+  WorkbenchGoalLifecycleResult,
   WorkbenchKernelCapabilityStatus,
   WorkbenchKernelInvocationError,
   WorkbenchKernelInvokeRequest,
@@ -63,6 +68,13 @@ interface WorkbenchKernelIpcOptions {
     inputId: string
     text: string
   }) => boolean
+  /** 会话目标的读写（目标卡）；未注入时读到的一律是「没有目标」。 */
+  goalLifecycle?: {
+    get: (sessionId: string) => Promise<ActiveContextArtifact | null>
+    update: (sessionId: string, action: ChatGoalLifecycleAction) => Promise<ActiveContextArtifact>
+  }
+  /** 会话被移除时释放主进程里它的执行装配与活动上下文。 */
+  releaseAgentSession?: (sessionId: string) => Promise<void>
 }
 
 interface ActiveAgentExecution {
@@ -282,11 +294,8 @@ export function registerWorkbenchKernelIpc(
       }
     }
   )
-  ipcMain.handle(WorkbenchKernelChannels.abortAgentExecution, (event: IpcMainInvokeEvent, request: unknown) => {
-    const executionId = readAbortExecutionId(request)
-    if (!executionId) return false
-    const execution = activeAgentExecutions.get(executionId)
-    if (!execution || execution.ownerWebContentsId !== event.sender.id) return false
+  /** 用户要停下一次执行：返回是否受理（已到终态的不再受理）。 */
+  const requestExecutionAbort = (execution: ActiveAgentExecution): boolean => {
     if (execution.terminalStatus) {
       settleExecutionFromControl(execution, execution.terminalStatus, null)
       return false
@@ -303,6 +312,49 @@ export function registerWorkbenchKernelIpc(
       )
     }
     return true
+  }
+
+  ipcMain.handle(WorkbenchKernelChannels.abortAgentExecution, (event: IpcMainInvokeEvent, request: unknown) => {
+    const executionId = readAbortExecutionId(request)
+    if (!executionId) return false
+    const execution = activeAgentExecutions.get(executionId)
+    if (!execution || execution.ownerWebContentsId !== event.sender.id) return false
+    return requestExecutionAbort(execution)
+  })
+  ipcMain.handle(
+    WorkbenchKernelChannels.getGoalLifecycle,
+    async (_event, request: unknown): Promise<WorkbenchGoalLifecycleResult> => {
+      const sessionId = readSessionId(request)
+      if (!sessionId) return { ok: false, message: 'Workbench goal request is invalid.' }
+      if (!options.goalLifecycle) return { ok: true, goal: null }
+      return settleGoalLifecycle(() => options.goalLifecycle!.get(sessionId))
+    }
+  )
+  ipcMain.handle(
+    WorkbenchKernelChannels.updateGoalLifecycle,
+    async (event: IpcMainInvokeEvent, request: unknown): Promise<WorkbenchGoalLifecycleResult> => {
+      const parsed = readGoalLifecycleUpdate(request)
+      if (!parsed || !options.goalLifecycle)
+        return { ok: false, message: 'Workbench goal request is invalid.' }
+      const result = await settleGoalLifecycle(() =>
+        options.goalLifecycle!.update(parsed.sessionId, parsed.action)
+      )
+      // 暂停、移除等动作要停下这个会话正在跑的这一轮（Desktop 同一规则）；「继续」不停。
+      if (result.ok && parsed.action !== 'resume') {
+        for (const execution of [...activeAgentExecutions.values()]) {
+          if (
+            execution.descriptor.source.sessionId === parsed.sessionId
+            && execution.ownerWebContentsId === event.sender.id
+          )
+            requestExecutionAbort(execution)
+        }
+      }
+      return result
+    }
+  )
+  ipcMain.handle(WorkbenchKernelChannels.releaseAgentSession, async (_event, request: unknown) => {
+    const sessionId = readSessionId(request)
+    if (sessionId) await options.releaseAgentSession?.(sessionId)
   })
   ipcMain.handle(WorkbenchKernelChannels.resolveAgentInput, (_event, request: unknown) => {
     const parsed = readResolveAgentInput(request)
@@ -366,6 +418,9 @@ export function registerWorkbenchKernelIpc(
     ipcMain.removeHandler(WorkbenchKernelChannels.resolveAgentInput)
     ipcMain.removeHandler(WorkbenchKernelChannels.resolveAgentConfirmation)
     ipcMain.removeHandler(WorkbenchKernelChannels.provideAgentGuidance)
+    ipcMain.removeHandler(WorkbenchKernelChannels.getGoalLifecycle)
+    ipcMain.removeHandler(WorkbenchKernelChannels.updateGoalLifecycle)
+    ipcMain.removeHandler(WorkbenchKernelChannels.releaseAgentSession)
     ipcMain.removeHandler(WorkbenchKernelChannels.backupChatHistory)
   }
 }
@@ -480,6 +535,42 @@ function readProvideAgentGuidance(
     && typeof text === 'string' && text.trim()
     ? { sessionId, inputId, text }
     : null
+}
+
+function readSessionId(request: unknown): string | null {
+  if (!request || typeof request !== 'object' || Array.isArray(request)) return null
+  const sessionId = (request as { sessionId?: unknown }).sessionId
+  return typeof sessionId === 'string' && sessionId.trim() ? sessionId : null
+}
+
+const GoalLifecycleActions = new Set<unknown>([
+  'resume',
+  'pause',
+  'block',
+  'complete',
+  'cancel',
+  'remove',
+] satisfies ChatGoalLifecycleAction[])
+
+function readGoalLifecycleUpdate(
+  request: unknown
+): { sessionId: string; action: ChatGoalLifecycleAction } | null {
+  const sessionId = readSessionId(request)
+  const action = (request as { action?: unknown } | null)?.action
+  return sessionId && GoalLifecycleActions.has(action)
+    ? { sessionId, action: action as ChatGoalLifecycleAction }
+    : null
+}
+
+/** 目标读写失败是软失败：卡片保留当前状态，原因交给 renderer 记日志。 */
+async function settleGoalLifecycle(
+  read: () => Promise<ActiveContextArtifact | null>
+): Promise<WorkbenchGoalLifecycleResult> {
+  try {
+    return { ok: true, goal: await read() }
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : String(error) }
+  }
 }
 
 function readResolveAgentConfirmation(

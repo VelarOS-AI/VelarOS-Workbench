@@ -48,7 +48,8 @@ describe('Workbench Agent plugins', () => {
     const claude = readSource('src/plugins/agent-engines/main/WorkbenchClaudeAgentRuntime.ts')
     const codex = readSource('src/plugins/agent-engines/main/WorkbenchCodexAgentRuntime.ts')
 
-    expect(adapter).toContain("goalMode ? ['goal' as const]")
+    // 目标卡的「继续」可以把这一轮强制切到目标模式，其余时候跟随输入框里的开关。
+    expect(adapter).toContain("(options?.goalMode ?? goalMode) ? ['goal' as const]")
     expect(adapter).toContain("planMode ? ['plan' as const]")
     expect(codex).toContain("sandbox: 'workspace-write'")
     expect(claude).toContain("permissionMode: 'default'")

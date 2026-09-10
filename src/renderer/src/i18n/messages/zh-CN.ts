@@ -33,6 +33,10 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     fileChangeSummaryUnavailable: '变更摘要加载失败',
     fileChangeSummaryBinary: '二进制文件已更改',
     fileChangeSummaryPatchOmitted: '改动过大，没有保存逐行差异',
+    goalDockTitle: '目标',
+    goalDockActionPause: '暂停目标',
+    goalDockActionContinue: '继续目标',
+    goalDockActionRemove: '移除目标',
     running: '运行中…',
   },
   workbench: {
