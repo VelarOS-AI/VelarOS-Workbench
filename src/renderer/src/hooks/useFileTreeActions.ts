@@ -13,12 +13,25 @@ import type { WorkbenchDirectoryEntry } from '@shared/contracts'
 
 import { useLatest, useMemoizedFn } from '../support/genericHooks'
 
-function useElementSize(): [
-  (node: Nullable<HTMLDivElement>) => void,
-  { width: number; height: number },
-] {
+export interface FileTreeSize {
+  width: number
+  height: number
+  /**
+   * 是否已拿到真实尺寸。挂载首帧只有占位值（高 1px），树必须等它为 true 才渲染：
+   * 在 1px 视口里执行「滚到选中项」会算出越界的滚动偏移，react-window 不做夹取，
+   * 真实高度到位后 DOM scrollTop 被浏览器夹回 0，列表内部却仍按旧偏移只渲染后半截——
+   * 从「提交」切回文件面板时顶部一片空白就是这么来的。
+   */
+  measured: boolean
+}
+
+function useElementSize(): [(node: Nullable<HTMLDivElement>) => void, FileTreeSize] {
   const [node, setNode] = useState<Nullable<HTMLDivElement>>(null)
-  const [size, setSize] = useState({ width: DEFAULT_TREE_WIDTH, height: 1 })
+  const [size, setSize] = useState<FileTreeSize>({
+    width: DEFAULT_TREE_WIDTH,
+    height: 1,
+    measured: false,
+  })
 
   useEffect(() => {
     if (!node) return
@@ -28,7 +41,9 @@ function useElementSize(): [
       const width = Math.max(1, nextRect.width)
       const height = Math.max(1, nextRect.height)
       setSize((current) =>
-        current.width === width && current.height === height ? current : { width, height }
+        current.measured && current.width === width && current.height === height
+          ? current
+          : { width, height, measured: true }
       )
     }
     updateSize()
@@ -82,7 +97,7 @@ export function useFileTreeActions({
   onMoveEntries,
 }: UseFileTreeActionsParams): {
   setTreeShell: (node: Nullable<HTMLDivElement>) => void
-  treeSize: { width: number; height: number }
+  treeSize: FileTreeSize
   setTreeRef: (api: LooseOptional<TreeApi<FileTreeNodeData>>) => void
   handleTreeContextMenuEntry: (entry: WorkbenchDirectoryEntry, event: MouseEvent) => void
   handleTreeActivate: (node: NodeApi<FileTreeNodeData>) => void

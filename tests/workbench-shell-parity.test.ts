@@ -512,7 +512,16 @@ void describe('pre-split Workbench shell parity', () => {
     assert.doesNotMatch(editor, /onSelectEntryPath/)
     assert.doesNotMatch(tree, /selectionOriginRef/)
     assert.doesNotMatch(treeActions, /selectionOriginRef/)
-    assert.match(tree, /\[selectedPath, treeData\]/)
+    assert.match(tree, /\[selectedPath, treeData, treeSize\.measured\]/)
     assert.match(tree, /selectionAlreadyMatches/)
+  })
+
+  void test('mounts the virtual tree only after the shell has a measured size', () => {
+    const tree = readSource('src/renderer/src/components/files/FileTree.tsx')
+    const treeActions = readSource('src/renderer/src/hooks/useFileTreeActions.ts')
+
+    // 1px 占位视口里「滚到选中项」会让 react-window 记住越界偏移，切回文件面板时顶部空白。
+    assert.match(tree, /\{treeSize\.measured && \(\s*<Tree<FileTreeNodeData>/)
+    assert.match(treeActions, /height: 1,\s*measured: false/)
   })
 })

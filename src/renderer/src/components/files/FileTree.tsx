@@ -200,8 +200,9 @@ export function FileTree({
     } finally {
       syncingOpenStateRef.current = false
     }
-  }, [expandedPaths, treeData])
+  }, [expandedPaths, treeData, treeSize.measured])
 
+  // 树要等测到真实尺寸才挂载（见 FileTreeSize.measured）；依赖带上 measured，挂上后补一次选中同步与滚动。
   useEffect(() => {
     const tree = treeRef.current
     if (!tree) return
@@ -216,39 +217,41 @@ export function FileTree({
     }
 
     if (tree.selectedIds.size > 0) tree.deselectAll()
-  }, [selectedPath, treeData])
+  }, [selectedPath, treeData, treeSize.measured])
 
   return (
     <div ref={setTreeShell} className={styles.arboristTreeShell}>
       <FileTreeRowRuntimeContext.Provider value={rowRuntime}>
-        <Tree<FileTreeNodeData>
-          ref={setTreeRef}
-          data={treeData}
-          idAccessor="id"
-          childrenAccessor="children"
-          rowHeight={rowHeight}
-          overscanCount={TREE_OVERSCAN_COUNT}
-          indent={TREE_INDENT}
-          width={treeSize.width}
-          height={treeSize.height}
-          initialOpenState={initialOpenState}
-          disableEdit={disableTreeEntryMutation}
-          disableDrag={disableTreeEntryMutation}
-          disableDrop={disableTreeDrop}
-          searchTerm={normalizedSearchTerm}
-          searchMatch={matchFileTreeSearch}
-          onActivate={handleTreeActivate}
-          onSelect={handleTreeSelect}
-          onToggle={handleTreeToggleFromTree}
-          onCreate={handleTreeCreate}
-          onRename={handleTreeRename}
-          onDelete={handleTreeDelete}
-          onMove={handleTreeMove}
-          className={styles.arboristTreeList}
-          rowClassName={styles.arboristTreeVirtualRow}
-        >
-          {renderFileTreeNode}
-        </Tree>
+        {treeSize.measured && (
+          <Tree<FileTreeNodeData>
+            ref={setTreeRef}
+            data={treeData}
+            idAccessor="id"
+            childrenAccessor="children"
+            rowHeight={rowHeight}
+            overscanCount={TREE_OVERSCAN_COUNT}
+            indent={TREE_INDENT}
+            width={treeSize.width}
+            height={treeSize.height}
+            initialOpenState={initialOpenState}
+            disableEdit={disableTreeEntryMutation}
+            disableDrag={disableTreeEntryMutation}
+            disableDrop={disableTreeDrop}
+            searchTerm={normalizedSearchTerm}
+            searchMatch={matchFileTreeSearch}
+            onActivate={handleTreeActivate}
+            onSelect={handleTreeSelect}
+            onToggle={handleTreeToggleFromTree}
+            onCreate={handleTreeCreate}
+            onRename={handleTreeRename}
+            onDelete={handleTreeDelete}
+            onMove={handleTreeMove}
+            className={styles.arboristTreeList}
+            rowClassName={styles.arboristTreeVirtualRow}
+          >
+            {renderFileTreeNode}
+          </Tree>
+        )}
       </FileTreeRowRuntimeContext.Provider>
     </div>
   )
