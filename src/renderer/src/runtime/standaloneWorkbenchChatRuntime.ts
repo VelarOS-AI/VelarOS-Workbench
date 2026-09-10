@@ -1,3 +1,4 @@
+import { isConversationTurnInputMessage } from '@velaros-ai/agent/protocol'
 import type { ConversationView } from '@velaros-ai/ui/conversation'
 
 import type { ChatMessage } from '@shared/contracts'
@@ -271,6 +272,106 @@ function pauseUnappliedRunGuidance(
   )
 }
 
+/** 共享会话视图的运行标记：一轮收尾时记在这一轮最后一条助手消息上。 */
+type StandaloneRunMarker = ConversationView['messageRunMarkers'][number]
+
+type StandaloneTerminalRunStatus = Extract<
+  StandaloneConversationRuntime['status'],
+  'completed' | 'aborted' | 'failed'
+>
+
+function isStandaloneTerminalRunStatus(value: unknown): value is StandaloneTerminalRunStatus {
+  return value === 'completed' || value === 'aborted' || value === 'failed'
+}
+
+/**
+ * 一轮收尾时给这一轮的最后一条助手消息记运行标记（与 Desktop `setLastAssistantMessageRunMarker` 同一规则）。
+ *
+ * 共享会话视图靠它把已完成回答的过程收进「已处理」、显示耗时，并在中止 / 失败的回答末尾挂状态角标——
+ * 回答已有正文时，中止与失败的运行提示不会再在正文里出现，没有标记就看不出这一轮停在了哪里。
+ * 这一轮一条助手消息都没产出（开口前就失败）时不记：最近那条助手回复属于上一轮。
+ * 已中止的标记不会被随后迟到的完成回执改写成已完成。
+ */
+function markStandaloneRun(
+  input: {
+    messages: readonly ChatMessage[]
+    markers: readonly StandaloneRunMarker[]
+    status: StandaloneConversationRuntime['status']
+    lastError: StandaloneConversationRuntime['lastError']
+    completedTurns: number
+    lastRunStartedAt: Nullable<number>
+    lastRunFinishedAt: Nullable<number>
+  },
+  now = Date.now()
+): readonly StandaloneRunMarker[] {
+  const status = input.status
+  if (!isStandaloneTerminalRunStatus(status)) return input.markers
+  const anchorIndex = input.messages.findLastIndex((message) => message.role === 'assistant')
+  if (anchorIndex < 0 || anchorIndex < input.messages.findLastIndex(isConversationTurnInputMessage))
+    return input.markers
+
+  const messageId = input.messages[anchorIndex]!.id
+  const existing = input.markers.find((marker) => marker.messageId === messageId)
+  if (existing?.status === 'aborted' && status === 'completed') return input.markers
+
+  const timestamp = input.lastRunFinishedAt ?? now
+  const startedAt =
+    input.lastRunStartedAt !== null && input.lastRunStartedAt <= timestamp
+      ? input.lastRunStartedAt
+      : null
+  const marker: StandaloneRunMarker = {
+    messageId,
+    status,
+    detail: status === 'completed' ? null : input.lastError,
+    turnCount: input.completedTurns > 0 ? input.completedTurns : null,
+    turnKind: input.completedTurns > 0 ? 'totalTurns' : null,
+    ...(startedAt !== null ? { startedAt, durationMs: timestamp - startedAt } : {}),
+    timestamp,
+  }
+  if (
+    existing
+    && existing.status === marker.status
+    && existing.detail === marker.detail
+    && existing.turnCount === marker.turnCount
+    && existing.timestamp === marker.timestamp
+  ) return input.markers
+
+  return existing
+    ? input.markers.map((entry) => (entry === existing ? marker : entry))
+    : [...input.markers, marker]
+}
+
+/** 恢复持久化的运行标记：只收终态标记、只留仍在会话里的消息；形状不对的当没有。 */
+function restoreStandaloneRunMarkers(
+  value: unknown,
+  messages: readonly ChatMessage[]
+): StandaloneRunMarker[] {
+  if (!Array.isArray(value)) return []
+  const messageIds = new Set(messages.map((message) => message.id))
+  return value.flatMap((candidate): StandaloneRunMarker[] => {
+    const record = asRecord(candidate)
+    const { messageId, status, timestamp } = record
+    if (
+      typeof messageId !== 'string'
+      || !messageIds.has(messageId)
+      || !isStandaloneTerminalRunStatus(status)
+      || typeof timestamp !== 'number'
+    ) return []
+    const startedAt = readFiniteNumber(record.startedAt)
+    const durationMs = readFiniteNumber(record.durationMs)
+    const turnCount = readPositiveInteger(record.turnCount)
+    return [{
+      messageId,
+      status,
+      detail: readNonBlankString(record.detail),
+      turnCount,
+      turnKind: turnCount !== null ? 'totalTurns' : null,
+      ...(startedAt !== null && durationMs !== null ? { startedAt, durationMs } : {}),
+      timestamp,
+    }]
+  })
+}
+
 function readStandaloneModelVisibleText(message: ChatMessage): string {
   return message.blocks
     .filter((block) =>
@@ -414,6 +515,10 @@ function readPositiveInteger(value: unknown): number | null {
   return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : null
 }
 
+function readFiniteNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
 function readNonBlankString(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null
 }
@@ -461,6 +566,7 @@ export {
   hasStandaloneVisibleAssistantReply,
   isStandaloneAgentRuntimeEvent,
   LegacyNoTextResponse,
+  markStandaloneRun,
   pauseUnappliedRunGuidance,
   readStandaloneAgentRuntimeKind,
   readStandaloneAgentTerminalKind,
@@ -469,6 +575,7 @@ export {
   readStandaloneFinalAgentStatus,
   readStandaloneFinalAgentText,
   readStandaloneModelVisibleText,
+  restoreStandaloneRunMarkers,
   sanitizeStandaloneChatMessages,
   shouldBlockStandaloneRunSubmission,
 }
@@ -476,4 +583,5 @@ export type {
   StandaloneAgentTerminalKind,
   StandaloneContextUsageEstimate,
   StandaloneConversationRuntime,
+  StandaloneRunMarker,
 }

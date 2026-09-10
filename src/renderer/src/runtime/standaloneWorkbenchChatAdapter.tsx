@@ -52,6 +52,7 @@ import {
   beginStandaloneAgentStop,
   hasStandaloneVisibleAssistantReply,
   isStandaloneAgentRuntimeEvent,
+  markStandaloneRun,
   pauseUnappliedRunGuidance,
   readStandaloneAgentTerminalKind,
   readStandaloneContextUsageEstimate,
@@ -59,11 +60,13 @@ import {
   readStandaloneFinalAgentStatus,
   readStandaloneFinalAgentText,
   readStandaloneModelVisibleText,
+  restoreStandaloneRunMarkers,
   sanitizeStandaloneChatMessages,
   shouldBlockStandaloneRunSubmission,
   type StandaloneAgentTerminalKind,
   type StandaloneContextUsageEstimate,
   type StandaloneConversationRuntime,
+  type StandaloneRunMarker,
 } from './standaloneWorkbenchChatRuntime'
 import {
   getStandaloneWorkbenchManagedProvider,
@@ -119,6 +122,8 @@ interface StandaloneChatState extends StandaloneConversationRuntime {
   readonly contextUsage: Nullable<StandaloneContextUsageEstimate>
   /** 每轮开跑前的工作区检查点（对话边界 + git 影子提交），回溯时据此一并回退文件。 */
   readonly checkpoints: readonly StandaloneChatCheckpoint[]
+  /** 每轮收尾时记在这一轮最后一条助手消息上的运行标记（已处理折叠、耗时、中止/失败角标）。 */
+  readonly messageRunMarkers: readonly StandaloneRunMarker[]
   readonly revision: number
 }
 
@@ -234,6 +239,7 @@ function createState(
     workerThreads: createEmptyWorkerThreadProjection(),
     contextUsage: null,
     checkpoints: [],
+    messageRunMarkers: [],
     revision: 0,
   }
   if (!restoreStored || !projectRoot || typeof window === 'undefined') return empty
@@ -278,19 +284,21 @@ function restoreStoredState(
   const interruptedStatus = stored.status && isInterruptedRunStatus(stored.status)
     ? stored.status
     : null
+  const messages = pauseUnappliedRunGuidance(
+    sanitizeStandaloneChatMessages(stored.messages.filter(isStoredChatMessage)),
+    { includePending: true }
+  )
   return {
     ...empty,
     sessionId: typeof stored.sessionId === 'string' ? stored.sessionId : empty.sessionId,
     folderId: typeof stored.folderId === 'string' ? stored.folderId : empty.folderId,
-    messages: pauseUnappliedRunGuidance(
-      sanitizeStandaloneChatMessages(stored.messages.filter(isStoredChatMessage)),
-      { includePending: true }
-    ),
+    messages,
     status: interruptedStatus ?? empty.status,
     lastError: interruptedStatus && typeof stored.lastError === 'string' ? stored.lastError : null,
     checkpoints: Array.isArray(stored.checkpoints)
       ? stored.checkpoints.filter(isStoredStandaloneCheckpoint)
       : [],
+    messageRunMarkers: restoreStandaloneRunMarkers(stored.messageRunMarkers, messages),
     revision: typeof stored.revision === 'number' ? stored.revision : 0,
     lastRunStartedAt: typeof stored.lastRunStartedAt === 'number'
       ? stored.lastRunStartedAt
@@ -459,7 +467,7 @@ function toSnapshot(state: StandaloneChatState): WorkbenchChatSessionSnapshot {
     },
     activeBranchId: 'main',
     messagePaging: null,
-    messageRunMarkers: [],
+    messageRunMarkers: state.messageRunMarkers,
     workerThreads: [],
   }
 }
@@ -939,10 +947,12 @@ function StandaloneWorkbenchChatSessionSurface({
         applied = true
         evicted = latest.evictedCheckpoints
         const kept = state.messages.slice(0, latest.targetIndex)
+        const keptIds = new Set(kept.map((message) => message.id))
         return {
           ...state,
           messages: notice ? [...kept, notice] : kept,
           checkpoints: latest.keptCheckpoints,
+          messageRunMarkers: state.messageRunMarkers.filter((marker) => keptIds.has(marker.messageId)),
           status: 'idle',
           teamPhase: null,
           activeTurn: null,
@@ -1304,7 +1314,7 @@ function StandaloneWorkbenchChatSessionSurface({
       activeMemberSessionId: chat.sessionId,
       supportsProjectFiles: true,
       messages: [...chat.messages] as ConversationView['messages'],
-      messageRunMarkers: [],
+      messageRunMarkers: [...chat.messageRunMarkers],
       workerThreads: [...chat.workerThreads.threads],
       runtime: {
         status: chat.status,
@@ -1346,6 +1356,7 @@ function StandaloneWorkbenchChatSessionSurface({
       chat.connectionRetryAttempt,
       chat.connectionRetryMaxAttempts,
       chat.lastError,
+      chat.messageRunMarkers,
       chat.messages,
       chat.sessionId,
       chat.status,
@@ -1813,7 +1824,8 @@ function applyAgentRuntimeEvent(
       ? { ...state, messages: settleTerminalMessages(state.messages) }
       : state
     const next = applyStandaloneAgentRuntimeEvent(base, runtime)
-    return next === state ? state : { ...next, revision: state.revision + 1 }
+    if (next === state) return state
+    return { ...(terminalKind ? withRunMarker(next) : next), revision: state.revision + 1 }
   })
   return terminalKind
 }
@@ -1865,10 +1877,10 @@ function finishWithError(
   message: string
 ): void {
   updateState(projectRoot, providerId, (state) => ({
-    ...applyStandaloneAgentRuntimeEvent(
+    ...withRunMarker(applyStandaloneAgentRuntimeEvent(
       { ...state, messages: settleTerminalMessages(state.messages) },
       { kind: 'error', message }
-    ),
+    )),
     revision: state.revision + 1,
   }))
 }
@@ -1876,6 +1888,20 @@ function finishWithError(
 /** 一轮收尾时的消息整理：去掉模型不可见的占位文本，并暂停没被读走的运行中引导。 */
 function settleTerminalMessages(messages: readonly ChatMessage[]): ChatMessage[] {
   return pauseUnappliedRunGuidance(sanitizeStandaloneChatMessages(messages))
+}
+
+/** 一轮收尾后的状态：给这一轮最后一条助手消息记运行标记（与 Desktop 同一规则）。 */
+function withRunMarker(state: StandaloneChatState): StandaloneChatState {
+  const messageRunMarkers = markStandaloneRun({
+    messages: state.messages,
+    markers: state.messageRunMarkers,
+    status: state.status,
+    lastError: state.lastError,
+    completedTurns: state.completedTurns,
+    lastRunStartedAt: state.lastRunStartedAt,
+    lastRunFinishedAt: state.lastRunFinishedAt,
+  })
+  return messageRunMarkers === state.messageRunMarkers ? state : { ...state, messageRunMarkers }
 }
 
 function finishCompletedRun(
@@ -1900,7 +1926,7 @@ function finishCompletedRun(
       messages,
       noTextError
     )
-    return { ...completed, revision: state.revision + 1 }
+    return { ...withRunMarker(completed), revision: state.revision + 1 }
   })
 }
 
@@ -1952,12 +1978,12 @@ function finishRun(
   status: Extract<StandaloneChatState['status'], 'completed' | 'aborted'>
 ): void {
   updateState(projectRoot, providerId, (state) => ({
-    ...applyStandaloneAgentRuntimeEvent(
+    ...withRunMarker(applyStandaloneAgentRuntimeEvent(
       { ...state, messages: settleTerminalMessages(state.messages) },
       status === 'completed'
         ? { kind: 'done' }
         : { kind: 'aborted', message: '' }
-    ),
+    )),
     revision: state.revision + 1,
   }))
 }
@@ -2121,6 +2147,7 @@ function serializeStoredState(state: StandaloneChatState): Record<string, unknow
       ? { status: state.status, lastError: state.lastError }
       : {}),
     checkpoints: state.checkpoints,
+    messageRunMarkers: state.messageRunMarkers,
     revision: state.revision,
   }
 }

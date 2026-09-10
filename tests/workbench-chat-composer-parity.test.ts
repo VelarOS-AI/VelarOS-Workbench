@@ -73,4 +73,16 @@ void describe('Workbench chat composer parity', () => {
     assert.match(slots, /renderMessageBoundary: \(\{ message, children \}\) =>/)
     assert.match(slots, /<WorkbenchMessageRenderBoundary message=\{message\}>/)
   })
+
+  void test('marks finished runs so answers fold and stopped runs show their status', () => {
+    const adapter = readFileSync(
+      path.resolve(process.cwd(), 'src/renderer/src/runtime/standaloneWorkbenchChatAdapter.tsx'),
+      'utf8'
+    )
+
+    assert.match(adapter, /messageRunMarkers: \[\.\.\.chat\.messageRunMarkers\]/)
+    // 四个收尾点（流内终态事件、执行报错、完成、中止）都经同一个标记函数。
+    assert.equal(adapter.match(/withRunMarker\(/g)?.length, 5)
+    assert.match(adapter, /messageRunMarkers: restoreStandaloneRunMarkers\(stored\.messageRunMarkers, messages\)/)
+  })
 })

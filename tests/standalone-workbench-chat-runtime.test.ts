@@ -10,11 +10,13 @@ import {
   beginStandaloneAgentStop,
   hasStandaloneVisibleAssistantReply,
   LegacyNoTextResponse,
+  markStandaloneRun,
   pauseUnappliedRunGuidance,
   readStandaloneFinalAgentError,
   readStandaloneFinalAgentStatus,
   readStandaloneFinalAgentText,
   readStandaloneModelVisibleText,
+  restoreStandaloneRunMarkers,
   sanitizeStandaloneChatMessages,
   shouldBlockStandaloneRunSubmission,
   type StandaloneConversationRuntime,
@@ -291,6 +293,84 @@ void describe('standalone Workbench conversation runtime', () => {
       ['in-flight', 'paused'],
       ['continuation', 'sent'],
     ])
+  })
+
+  void test('marks the finished run on its last assistant message like Desktop', () => {
+    const turn: ChatMessage = { ...message('user', [{ type: 'text', text: 'task' }], 'turn'), conversationKind: 'turn-input' }
+    const reply = message('assistant', [{ type: 'text', text: 'done' }], 'reply')
+    const base = {
+      messages: [turn, reply],
+      markers: [],
+      lastError: null,
+      completedTurns: 3,
+      lastRunStartedAt: 1_000,
+      lastRunFinishedAt: 4_000,
+    }
+
+    assert.deepEqual(markStandaloneRun({ ...base, status: 'completed' }), [
+      {
+        messageId: 'reply',
+        status: 'completed',
+        detail: null,
+        turnCount: 3,
+        turnKind: 'totalTurns',
+        startedAt: 1_000,
+        durationMs: 3_000,
+        timestamp: 4_000,
+      },
+    ])
+    // 运行中不记；同一轮先中止、再来迟到的完成回执时保持中止。
+    assert.deepEqual(markStandaloneRun({ ...base, status: 'running' }), [])
+    const aborted = markStandaloneRun({ ...base, status: 'aborted', lastError: 'stopped' })
+    assert.equal(aborted[0]?.status, 'aborted')
+    assert.equal(aborted[0]?.detail, 'stopped')
+    assert.equal(markStandaloneRun({ ...base, markers: aborted, status: 'completed' }), aborted)
+  })
+
+  void test('does not pin a new run that failed before speaking onto the previous reply', () => {
+    const messages: ChatMessage[] = [
+      { ...message('user', [{ type: 'text', text: 'first' }], 'turn-1'), conversationKind: 'turn-input' },
+      message('assistant', [{ type: 'text', text: 'answer' }], 'reply-1'),
+      { ...message('user', [{ type: 'text', text: 'second' }], 'turn-2'), conversationKind: 'turn-input' },
+    ]
+    const markers = markStandaloneRun({
+      messages,
+      markers: [],
+      status: 'failed',
+      lastError: 'provider down',
+      completedTurns: 0,
+      lastRunStartedAt: 1,
+      lastRunFinishedAt: 2,
+    })
+    assert.deepEqual(markers, [])
+  })
+
+  void test('restores only terminal markers of messages still in the session', () => {
+    const messages = [message('assistant', [{ type: 'text', text: 'kept' }], 'kept')]
+    assert.deepEqual(
+      restoreStandaloneRunMarkers(
+        [
+          { messageId: 'kept', status: 'completed', timestamp: 5, turnCount: 2, startedAt: 1, durationMs: 4 },
+          { messageId: 'gone', status: 'completed', timestamp: 5 },
+          { messageId: 'kept', status: 'awaiting-input', timestamp: 5 },
+          'garbage',
+        ],
+        messages
+      ),
+      [
+        {
+          messageId: 'kept',
+          status: 'completed',
+          detail: null,
+          turnCount: 2,
+          turnKind: 'totalTurns',
+          startedAt: 1,
+          durationMs: 4,
+          timestamp: 5,
+        },
+      ]
+    )
+    assert.deepEqual(restoreStandaloneRunMarkers(undefined, messages), [])
   })
 })
 
