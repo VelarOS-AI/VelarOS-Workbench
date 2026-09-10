@@ -8,6 +8,7 @@ import {
   ExecutionEventBus,
   normalizeExecutionModes,
 } from '@velaros-ai/agent'
+import { ChatMessageHelper } from '@velaros-ai/agent/chat'
 import type {
   PermissionConfirmationMode,
   RunProfileSelectionId,
@@ -127,9 +128,29 @@ function parseWorkbenchAgentExecuteInput(input: unknown): WorkbenchAgentExecuteI
     executionId: envelope.execution.id,
     source: envelope.execution.source,
     scopeMetadata: envelope.execution.scopeMetadata ?? {},
-    messages: [...envelope.messages],
+    messages: envelope.messages.map(wrapSystemNoticeMessage),
     config: parseWorkbenchAgentConfig(envelope.config),
   }
+}
+
+const HistoryMessages = new ChatMessageHelper()
+
+/**
+ * renderer 用 `conversationKind: 'system-notice'` 标出宿主写的留痕（会话回溯说明）。它在模型协议里
+ * 只能走 user role，却不是一轮用户诉求：交给 Agent 自己的历史转换器包进 `<sys_note>` 信封——
+ * 不占轮边界，模型读到的也是明确署名「系统」的说明，而不是一句冒充用户的话（与 Desktop 同一条路径）。
+ */
+function wrapSystemNoticeMessage(message: ModelMessage): ModelMessage {
+  const record = message as ModelMessage & { conversationKind?: unknown }
+  if (
+    record.conversationKind !== 'system-notice'
+    || record.role !== 'user'
+    || typeof record.content !== 'string'
+  ) return message
+  const [wrapped] = HistoryMessages.toModelMessages([
+    { role: 'user', conversationKind: 'system-notice', textBlocks: [record.content], toolCalls: [] },
+  ])
+  return wrapped ?? { role: 'user', content: record.content }
 }
 
 /**

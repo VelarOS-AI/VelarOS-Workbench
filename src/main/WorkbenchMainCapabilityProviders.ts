@@ -5,6 +5,7 @@ import { WorkbenchAgentPluginRuntime } from '../plugins/agent-engines/main/Workb
 import type { WorkbenchKernelCapabilityRoutes } from './kernel/WorkbenchKernelProtocol'
 import { WorkbenchCodeGraphResource } from './resources/WorkbenchCodeGraphResource'
 import { WorkbenchResourcePluginService } from './resources/WorkbenchResourcePluginService'
+import { WorkbenchChatCheckpointService } from './workspace/git/WorkbenchChatCheckpoints'
 import { WorkbenchGitService } from './workspace/git/WorkbenchGitService'
 import { WorkbenchLanguageServiceWorkerClient } from './workspace/language/LanguageServiceWorkerClient'
 import { WorkbenchVelarLogicGraphService } from './workspace/language/WorkbenchVelarLogicGraphService'
@@ -20,6 +21,8 @@ export interface WorkbenchMainCapabilityProviders {
   readonly parts: WorkbenchAppParts
   readonly fileSystem: WorkbenchProjectFileSystem
   readonly git: WorkbenchGitService
+  /** 聊天回溯的工作区检查点（git 影子快照）。 */
+  readonly chatCheckpoints: WorkbenchChatCheckpointService
   readonly language: WorkbenchLanguageServiceWorkerClient
   readonly watch: WorkbenchFileWatcher
   readonly workspace: WorkbenchProjectCapabilityProvider
@@ -63,10 +66,14 @@ export function createDefaultWorkbenchMainCapabilityProviders(
     ...pluginMarket,
     agentEngines,
   })
+  const parts = createWorkbenchAppParts(dataRootDir)
   return {
-    parts: createWorkbenchAppParts(dataRootDir),
+    parts,
     fileSystem: new WorkbenchProjectFileSystem(),
     git: new WorkbenchGitService(),
+    chatCheckpoints: new WorkbenchChatCheckpointService(() =>
+      parts.storagePaths.getChatCheckpointIndexesDir()
+    ),
     language,
     watch: new WorkbenchFileWatcher({
       onFilesChanged: (event) => {

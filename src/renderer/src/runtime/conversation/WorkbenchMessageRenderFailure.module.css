@@ -1,0 +1,38 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--status-amber) 45%, var(--workbench-border));
+  border-radius: var(--workbench-radius);
+  background: color-mix(in srgb, var(--status-amber) 6%, var(--workbench-surface));
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--workbench-text);
+}
+
+.icon {
+  flex-shrink: 0;
+  color: var(--status-amber);
+}
+
+.title {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 富渲染失败时保全原文：回答不能因为视图故障「被截断」。 */
+.degradedText {
+  margin: 0;
+  max-height: 320px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--workbench-text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--ui-font-body-sm);
+}

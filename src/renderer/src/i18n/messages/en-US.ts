@@ -739,6 +739,34 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     chatGuidanceRejectedDescription: 'It could not join the running turn (it may have just finished). The text is back in the input box so you can send it again.',
     chatGuidanceFilesTitle: 'Guidance is text only',
     chatGuidanceFilesDescription: 'This queued message has attachments, so it will be sent as a new message after this turn.',
+    chatMessageRenderFailed: 'This message can’t be displayed right now. Its original text is below.',
+    chatMessageRenderRetry: 'Retry',
+    chatRewindWhileActive: 'You can’t rewind while a run is in progress. Stop it first.',
+    chatRewindMessageNotFound: 'The message to rewind to could not be found.',
+    chatRewindAppliedFilesOnly:
+      'Files were rolled back, but the conversation could not be truncated. Reload and try again.',
+    chatRewindNoticeListSeparator: ', ',
+    chatRewindNoticeListOverflow: '{items} and {rest} more',
+    chatRewindNoticeSummaryDiverged:
+      'Rewound {turns} turn(s), {messages} message(s) · files not rolled back',
+    chatRewindNoticeSummaryRestored:
+      'Rewound {turns} turn(s), {messages} message(s) · files restored',
+    chatRewindNoticeRemoved:
+      '[conversation rewind] The {turns} turn(s) starting here — {messages} message(s) — were removed from the history by the user. Those turns issued {tools} tool call(s): {toolNames}.',
+    chatRewindNoticeRemovedNoTools:
+      '[conversation rewind] The {turns} turn(s) starting here — {messages} message(s) — were removed from the history by the user.',
+    chatRewindNoticeCarriedDivergence:
+      'The removed range also contained {notices} earlier rewind notice(s): that earlier rewind was likewise never reconciled, and its original record is gone along with this one.',
+    chatRewindNoticeFilesKept:
+      'Files were NOT rolled back: these files were modified during the removed turns and were not restored by this rewind — {files}.',
+    chatRewindNoticeFilesUntouched:
+      'No file changes were recorded in those turns; whatever those tool calls did outside the filesystem was not undone.',
+    chatRewindNoticeFilesRestored:
+      'Files were restored: the project was reset to this point. Effects outside the filesystem — shell commands, network requests, git commits — are not in the snapshot and were not undone.',
+    chatRewindNoticeFilesRestoreFailed:
+      'Restoring files failed, so the current state of the project files is unknown — {error}',
+    chatRewindNoticeGuidance:
+      'So: do not assume the files on disk match the conversation history above — re-read any file before changing it, and do not resume the removed work unless the user asks again.',
     chatSignInFailedTitle: 'Could not sign in to VelarOS',
     chatSignInFailedDescription: '{error}',
     chatManagedModelUnavailableTitle: 'Managed model unavailable',

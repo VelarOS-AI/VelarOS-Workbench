@@ -717,6 +717,30 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     chatGuidanceRejectedDescription: '这条引导没能加入正在运行的这一轮（可能刚好结束），内容已放回输入框，可以重新发送。',
     chatGuidanceFilesTitle: '引导只能带文字',
     chatGuidanceFilesDescription: '这条排队消息带有附件，会在本轮结束后作为新消息发送。',
+    chatMessageRenderFailed: '这条消息暂时无法显示，下面是它的原文。',
+    chatMessageRenderRetry: '重试',
+    chatRewindWhileActive: '正在运行时不能回溯，请先停止当前任务。',
+    chatRewindMessageNotFound: '未找到要回退到的消息。',
+    chatRewindAppliedFilesOnly: '文件已回退，但对话没能截断，请刷新后重试。',
+    chatRewindNoticeListSeparator: '、',
+    chatRewindNoticeListOverflow: '{items} 等 {rest} 项',
+    chatRewindNoticeSummaryDiverged: '已回退 {turns} 轮对话（{messages} 条消息）· 文件未回退',
+    chatRewindNoticeSummaryRestored: '已回退 {turns} 轮对话（{messages} 条消息）· 文件已还原',
+    chatRewindNoticeRemoved:
+      '［会话回退］此处起的 {turns} 轮对话（共 {messages} 条消息）已被用户从历史中移除。这些轮次里发起过 {tools} 次工具调用：{toolNames}。',
+    chatRewindNoticeRemovedNoTools:
+      '［会话回退］此处起的 {turns} 轮对话（共 {messages} 条消息）已被用户从历史中移除。',
+    chatRewindNoticeCarriedDivergence:
+      '被移除的内容里还包含 {notices} 条更早的回退说明——那次回退造成的错位当时也没有被还原，其原始记录已随本次回退一并消失。',
+    chatRewindNoticeFilesKept:
+      '文件未回退：以下文件在被移除的那几轮里被改动过，且没有随本次回退还原 —— {files}。',
+    chatRewindNoticeFilesUntouched:
+      '这几轮没有记录到文件改动；工具调用在文件之外产生的影响没有被撤销。',
+    chatRewindNoticeFilesRestored:
+      '文件已还原：项目已恢复到该时点。命令行执行、网络请求、git 提交等文件之外的影响不在快照里，没有被撤销。',
+    chatRewindNoticeFilesRestoreFailed: '文件还原失败，项目文件的当前状态未知 —— {error}',
+    chatRewindNoticeGuidance:
+      '因此：不要假设当前文件内容与上面的对话历史一致，改动任何文件前先重新读取它的真实内容；除非用户重新提出，不要沿着被移除轮次里的工作继续。',
     chatSignInFailedTitle: '无法登录 VelarOS',
     chatSignInFailedDescription: '{error}',
     chatManagedModelUnavailableTitle: '托管模型当前不可用',

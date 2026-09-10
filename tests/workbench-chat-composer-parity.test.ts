@@ -28,7 +28,7 @@ void describe('Workbench chat composer parity', () => {
       adapter,
       /canSteerRun =\s*providerId === 'workbench' && chat\.status === 'running' && hasPendingAgentExecution/
     )
-    assert.match(adapter, /return sendRunGuidance\(text\)/)
+    assert.match(adapter, /return sendRunGuidance\(text, selections\)/)
     // 中止 / 失败后的下一条消息续接被打断的那一轮，而不是另起新一轮。
     assert.match(adapter, /const continuesInterruptedRun = isInterruptedRunStatus\(/)
     assert.match(adapter, /conversationKind: 'run-guidance' as const, guidanceStatus: 'sent' as const/)
@@ -37,5 +37,40 @@ void describe('Workbench chat composer parity', () => {
       adapter,
       /pauseAutomaticDrain: chat\.status === 'stopping' \|\| isInterruptedRunStatus\(chat\.status\)/
     )
+  })
+
+  void test('wires rewind, editor navigation and picked browser elements like Desktop', () => {
+    const adapter = readFileSync(
+      path.resolve(process.cwd(), 'src/renderer/src/runtime/standaloneWorkbenchChatAdapter.tsx'),
+      'utf8'
+    )
+
+    // 回溯：每轮开跑前拍检查点；只对原生执行栈开放入口。
+    assert.match(adapter, /await captureRunCheckpoint\(/)
+    assert.match(
+      adapter,
+      /providerId === 'workbench'\s*\?\s*\{ onRewindToMessage: rewindToMessage, getRewindPlan: buildRewindPlanForMessage \}/
+    )
+    // 回答里的路径、改动卡与「查看改动」落到宿主编辑器。
+    assert.match(adapter, /onOpenProjectPath=\{onOpenWorkspacePath\}/)
+    assert.match(adapter, /onOpenFileChange=\{onOpenFileChange\}/)
+    assert.match(adapter, /onReviewFileChanges=\{onReviewFileChanges\}/)
+    // 浏览器里拾取的元素进入输入框 chip，随消息带给模型。
+    assert.match(adapter, /browserElementSelections: browserSelections/)
+    assert.match(adapter, /onBrowserElementSelectionsConsumed\?\.\(/)
+    assert.match(adapter, /\[currentFileContext, attachmentContext, browserElementContext\]/)
+  })
+
+  void test('isolates a message that fails to render instead of unmounting the conversation', () => {
+    const slots = readFileSync(
+      path.resolve(
+        process.cwd(),
+        'src/renderer/src/runtime/conversation/standaloneWorkbenchConversationRenderSlots.tsx'
+      ),
+      'utf8'
+    )
+
+    assert.match(slots, /renderMessageBoundary: \(\{ message, children \}\) =>/)
+    assert.match(slots, /<WorkbenchMessageRenderBoundary message=\{message\}>/)
   })
 })

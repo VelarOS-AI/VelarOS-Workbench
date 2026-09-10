@@ -17,9 +17,11 @@ import { useWorkbenchI18n } from '@renderer/i18n'
 import type { ReasoningLevel, RunProfileSelectionId } from '@velaros-ai/agent/protocol'
 import { AgentCapabilityProtocolVersion } from '@velaros-ai/agent/protocol/agent-capability'
 import { Log } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 import {
   ChatConversationPane,
   ChatThinkingVisibilityProvider,
+  type ConversationRewindPlan,
   type ConversationView,
   useScrollToBottom,
 } from '@velaros-ai/ui/conversation'
@@ -29,7 +31,12 @@ import {
   ChatSurfaceComposer,
 } from '@velaros-ai/ui/conversation/composer'
 
-import type { ChatMessage, ContentBlock, ToolCallBlock } from '@shared/contracts'
+import type {
+  BrowserElementSelection,
+  ChatMessage,
+  ContentBlock,
+  ToolCallBlock,
+} from '@shared/contracts'
 import type { WorkbenchAgentEngineModelCatalog } from '@shared/workbenchResourcePlugins'
 
 import workbenchAppIconUrl from '../../../../build/icon.svg?url'
@@ -70,12 +77,30 @@ import {
   selectStandaloneWorkbenchModelProvider,
   useStandaloneWorkbenchModelConfig,
 } from './standaloneWorkbenchModelConfig'
+import {
+  appendStandaloneCheckpoint,
+  buildRewindNoticeText,
+  buildRewindPlan,
+  createStandaloneSystemNotice,
+  isStoredStandaloneCheckpoint,
+  NoRewindFileOutcome,
+  resolveRewindFidelity,
+  resolveRewindFileCapability,
+  type RewindFileOutcome,
+  selectStandaloneRewind,
+  type StandaloneChatCheckpoint,
+  surveyRewindRemoval,
+} from './standaloneWorkbenchRewind'
 import { awaitStandaloneAgentStopSettlement } from './standaloneWorkbenchStopSettlement'
 import {
   applyStandaloneWorkerThreadEvent,
   createEmptyWorkerThreadProjection,
   type StandaloneWorkerThreadProjection,
 } from './standaloneWorkbenchWorkerThreads'
+import {
+  buildBrowserElementDisplayFallback,
+  formatBrowserElementSelectionsForPrompt,
+} from './workbenchBrowserElementContext'
 import { resolveWorkbenchClipboardFilePath } from './workbenchClipboardFile'
 import { workbenchMessage } from './workbenchMessageHost'
 
@@ -92,6 +117,8 @@ interface StandaloneChatState extends StandaloneConversationRuntime {
   readonly workerThreads: StandaloneWorkerThreadProjection
   /** main 最近一次送核前算出的上下文用量；仪表读它，renderer 不自己重算。 */
   readonly contextUsage: Nullable<StandaloneContextUsageEstimate>
+  /** 每轮开跑前的工作区检查点（对话边界 + git 影子提交），回溯时据此一并回退文件。 */
+  readonly checkpoints: readonly StandaloneChatCheckpoint[]
   readonly revision: number
 }
 
@@ -206,6 +233,7 @@ function createState(
     lastRunFinishedAt: null,
     workerThreads: createEmptyWorkerThreadProjection(),
     contextUsage: null,
+    checkpoints: [],
     revision: 0,
   }
   if (!restoreStored || !projectRoot || typeof window === 'undefined') return empty
@@ -260,6 +288,9 @@ function restoreStoredState(
     ),
     status: interruptedStatus ?? empty.status,
     lastError: interruptedStatus && typeof stored.lastError === 'string' ? stored.lastError : null,
+    checkpoints: Array.isArray(stored.checkpoints)
+      ? stored.checkpoints.filter(isStoredStandaloneCheckpoint)
+      : [],
     revision: typeof stored.revision === 'number' ? stored.revision : 0,
     lastRunStartedAt: typeof stored.lastRunStartedAt === 'number'
       ? stored.lastRunStartedAt
@@ -499,6 +530,8 @@ function useStandaloneProjectRuntime(
         const inactive = inactiveStates.get(key) ?? []
         const target = [active, ...inactive].find((candidate) => candidate.folderId === folderId)
         if (!target || isActiveChatRun(target.status)) return
+        // 会话从存储里整个移除，它的检查点也就再没有回溯的机会。
+        releaseCheckpointRefs(target.projectRoot, target.sessionId, target.checkpoints)
         if (target.sessionId === active.sessionId) {
           const [replacement, ...remaining] = inactive
           const next = replacement ?? createState(normalizedRoot, providerId, false)
@@ -528,6 +561,11 @@ function StandaloneWorkbenchChatSessionSurface({
   currentFilePath,
   conversationRefreshKey,
   scrollNavigatorHidden = false,
+  pendingBrowserElementSelections,
+  onBrowserElementSelectionsConsumed,
+  onOpenFileChange,
+  onOpenWorkspacePath,
+  onReviewFileChanges,
 }: WorkbenchChatSessionSurfaceProps): ReactElement {
   const chat = useStandaloneChatState(projectRoot, providerId)
   const hasPendingAgentExecution = !!findActiveExecution(
@@ -546,6 +584,8 @@ function StandaloneWorkbenchChatSessionSurface({
   const [engineModel, setEngineModel] = useState(() => readStoredEngineModel(providerId))
   const [prompt, setPrompt] = useState('')
   const [files, setFiles] = useState<File[]>([])
+  /** 用户在浏览器里拾取、还没随消息发出的页面元素（输入框上方的 chip）。 */
+  const [browserSelections, setBrowserSelections] = useState<BrowserElementSelection[]>([])
   const [includedCurrentFilePath, setIncludedCurrentFilePath] =
     useState<Nullable<string>>(currentFilePath)
   const [goalMode, setGoalMode] = useState(false)
@@ -585,6 +625,27 @@ function StandaloneWorkbenchChatSessionSurface({
   useEffect(() => {
     setIncludedCurrentFilePath(currentFilePath)
   }, [currentFilePath])
+
+  // 换会话清空未发出的拾取；必须声明在收件 effect 之前——挂载时两者同帧执行，顺序反了会把
+  // 刚收进来的投递立刻清掉。
+  useEffect(() => {
+    setBrowserSelections([])
+  }, [chat.sessionId])
+
+  // 宿主投递来的拾取结果收进输入框，并回执「已接收」让宿主清掉待投递项。
+  useEffect(() => {
+    if (pendingBrowserElementSelections.length === 0) return
+    setBrowserSelections((current) => {
+      const known = new Set(current.map((selection) => selection.id))
+      const incoming = pendingBrowserElementSelections
+        .map((delivery) => delivery.selection)
+        .filter((selection) => !known.has(selection.id))
+      return incoming.length > 0 ? [...current, ...incoming] : current
+    })
+    onBrowserElementSelectionsConsumed?.(
+      pendingBrowserElementSelections.map((delivery) => delivery.deliveryId)
+    )
+  }, [onBrowserElementSelectionsConsumed, pendingBrowserElementSelections])
 
   useEffect(() => {
     if (
@@ -706,13 +767,21 @@ function StandaloneWorkbenchChatSessionSurface({
     })
   }
 
-  async function sendRunGuidance(text: string): Promise<boolean> {
+  async function sendRunGuidance(
+    text: string,
+    selections: readonly BrowserElementSelection[] = []
+  ): Promise<boolean> {
     const sessionId = chat.sessionId
     const guidance: ChatMessage = {
-      ...createTextMessage('user', text),
+      ...createTextMessage('user', text || buildBrowserElementDisplayFallback(selections)),
       conversationKind: 'run-guidance',
       guidanceStatus: 'pending',
+      ...(selections.length > 0 ? { browserElementSelections: [...selections] } : {}),
     }
+    // 引导通道只带文字：拾取的元素折成上下文段跟在正文后面。
+    const guidanceText = [text, formatBrowserElementSelectionsForPrompt(selections)]
+      .filter(Boolean)
+      .join('\n\n')
     // 回执回来时用户可能已切到别的会话：更新一律落回发出引导的那个会话。
     const updateGuidanceSession = (
       updater: (state: StandaloneChatState) => StandaloneChatState
@@ -721,13 +790,14 @@ function StandaloneWorkbenchChatSessionSurface({
         updateState(projectRoot, providerId, updater)
       )
     setPrompt('')
+    setBrowserSelections([])
     updateGuidanceSession((state) => ({
       ...state,
       messages: [...state.messages, guidance],
       revision: state.revision + 1,
     }))
     const accepted = await window.velarosWorkbenchKernel
-      .provideAgentGuidance({ sessionId, inputId: guidance.id, text })
+      .provideAgentGuidance({ sessionId, inputId: guidance.id, text: guidanceText })
       .catch(() => false)
     if (accepted) {
       // 只推进「引导中」：回执之前 input-applied 可能已经先到（已纳入），不能被拉回。
@@ -750,11 +820,163 @@ function StandaloneWorkbenchChatSessionSurface({
       revision: state.revision + 1,
     }))
     setPrompt(text)
+    setBrowserSelections([...selections])
     workbenchMessage.warning({
       title: t('workbench.chatGuidanceRejectedTitle'),
       description: t('workbench.chatGuidanceRejectedDescription'),
     })
     return false
+  }
+
+  /**
+   * 本轮开跑前的检查点：对话边界（这条用户消息的下标）+ 项目工作树的 git 影子提交。
+   * 不是 git 仓库或捕获失败时 commitId 为 null——照样记下边界，这一轮只能回溯对话。
+   */
+  async function captureRunCheckpoint(
+    sessionId: string,
+    captureMessageCount: number,
+    label: string
+  ): Promise<void> {
+    const checkpointId = nextId('workbench-checkpoint')
+    const captured = await window.velarosWorkbenchGit
+      .captureChatCheckpoint({
+        workspaceRoot: projectRoot,
+        sessionId,
+        checkpointId,
+        label: label.replace(/\s+/gu, ' ').trim().slice(0, 48),
+      })
+      .catch(() => null)
+    let evicted: StandaloneChatCheckpoint[] = []
+    withStateUpdateTarget(projectRoot, providerId, sessionId, () =>
+      updateState(projectRoot, providerId, (state) => {
+        const appended = appendStandaloneCheckpoint(state.checkpoints, {
+          id: checkpointId,
+          captureMessageCount,
+          createdAt: Date.now(),
+          commitId: captured?.ok ? captured.value.commitId : null,
+        })
+        evicted = appended.evicted
+        return { ...state, checkpoints: appended.checkpoints }
+      })
+    )
+    releaseCheckpointRefs(projectRoot, sessionId, evicted)
+  }
+
+  /**
+   * 回溯预览：确认框打开那一刻同步算出「这次会移除什么、文件能不能跟着回」。与真正执行回溯共用
+   * 同一对纯函数（survey + capability），弹窗上写的和实际发生的不会分家。
+   */
+  function buildRewindPlanForMessage(messageId: string): Nullable<ConversationRewindPlan> {
+    const session = getState(projectRoot, providerId)
+    const selection = selectStandaloneRewind(session.messages, session.checkpoints, messageId)
+    if (!selection) return null
+    const survey = surveyRewindRemoval(selection.removedMessages)
+    return buildRewindPlan({
+      survey,
+      files: resolveRewindFileCapability({
+        checkpoint: selection.checkpoint,
+        changedFilePaths: survey.changedFilePaths,
+        toolCallCount: survey.toolCallCount,
+      }),
+    })
+  }
+
+  /**
+   * 回溯到某条用户消息之前：截断对话（这条消息本身也移除），按用户选择把项目文件还原到那一轮
+   * 开跑前，非干净回溯给模型留一条说明，最后把这条消息的原文放回输入框（与 Desktop 一致）。
+   */
+  async function rewindToMessage(
+    messageId: string,
+    options?: { restoreFiles?: boolean }
+  ): Promise<void> {
+    const sessionId = chat.sessionId
+    const session = getState(projectRoot, providerId)
+    if (isActiveChatRun(session.status) || findActiveExecution(projectRoot, providerId, sessionId))
+      throw new AppError('VALIDATION', t('workbench.chatRewindWhileActive'))
+
+    const selection = session.sessionId === sessionId
+      ? selectStandaloneRewind(session.messages, session.checkpoints, messageId)
+      : null
+    if (!selection) throw new AppError('NOT_FOUND', t('workbench.chatRewindMessageNotFound'))
+    const survey = surveyRewindRemoval(selection.removedMessages)
+    const files = resolveRewindFileCapability({
+      checkpoint: selection.checkpoint,
+      changedFilePaths: survey.changedFilePaths,
+      toolCallCount: survey.toolCallCount,
+    })
+
+    let fileOutcome: RewindFileOutcome = NoRewindFileOutcome
+    const commitId = selection.checkpoint?.commitId
+    if (options?.restoreFiles && files.kind === 'restorable' && commitId) {
+      const restored = await window.velarosWorkbenchGit
+        .restoreChatCheckpoint({ workspaceRoot: projectRoot, commitId })
+        .catch((error: unknown) => ({
+          ok: false as const,
+          message: error instanceof Error ? error.message : String(error),
+        }))
+      fileOutcome = restored.ok
+        ? { attempted: true, restored: restored.value.restored, error: restored.value.error }
+        : { attempted: true, restored: false, error: restored.message }
+    }
+
+    const rewoundAt = Date.now()
+    const noticeText = buildRewindNoticeText({
+      t,
+      fidelity: resolveRewindFidelity({ survey, fileOutcome }),
+      survey,
+      fileOutcome,
+    })
+    const notice = noticeText
+      ? createStandaloneSystemNotice({ id: nextId('workbench-notice'), ...noticeText, timestamp: rewoundAt })
+      : null
+
+    let evicted: StandaloneChatCheckpoint[] = []
+    let applied = false
+    withStateUpdateTarget(projectRoot, providerId, sessionId, () =>
+      updateState(projectRoot, providerId, (state) => {
+        const latest = selectStandaloneRewind(state.messages, state.checkpoints, messageId)
+        if (!latest) return state
+        applied = true
+        evicted = latest.evictedCheckpoints
+        const kept = state.messages.slice(0, latest.targetIndex)
+        return {
+          ...state,
+          messages: notice ? [...kept, notice] : kept,
+          checkpoints: latest.keptCheckpoints,
+          status: 'idle',
+          teamPhase: null,
+          activeTurn: null,
+          completedTurns: 0,
+          lastError: null,
+          connectionRetryAttempt: null,
+          connectionRetryMaxAttempts: null,
+          awaitingInputQuestion: null,
+          awaitingConfirmationMessage: null,
+          awaitingConfirmationDetail: null,
+          workerThreads: createEmptyWorkerThreadProjection(),
+          // 用量是按被截掉的那段历史算的，留着会让仪表继续显示回溯前的占用。
+          contextUsage: null,
+          revision: state.revision + 1,
+        }
+      })
+    )
+    // 文件已经动过、对话却没截断，是最坏的半途而废：宁可报错让用户看见，也不能静默留一个
+    // 「磁盘回到过去、对话停在未来」的反向错位。
+    if (!applied)
+      throw new AppError(
+        fileOutcome.attempted ? 'CONFLICT' : 'NOT_FOUND',
+        t(fileOutcome.attempted
+          ? 'workbench.chatRewindAppliedFilesOnly'
+          : 'workbench.chatRewindMessageNotFound')
+      )
+    releaseCheckpointRefs(projectRoot, sessionId, evicted)
+    // 原文放回输入框；附件的文件句柄已经不在了，只带文字（只有附件的消息正文就是文件名，不回填）。
+    const rewound = selection.removedMessages[0]
+    const rewoundText = rewound ? readStandaloneModelVisibleText(rewound) : ''
+    const attachmentNames = rewound?.attachments?.map((attachment) => attachment.name).join(', ')
+    if (rewoundText && rewoundText !== attachmentNames) setPrompt(rewoundText)
+    const rewoundSelections = rewound ? readMessageBrowserSelections(rewound) : []
+    if (rewoundSelections.length > 0) setBrowserSelections([...rewoundSelections])
   }
 
   /**
@@ -767,12 +989,17 @@ function StandaloneWorkbenchChatSessionSurface({
     options?: { onAccepted?: () => void }
   ): Promise<boolean> {
     const text = draftValue.trim()
+    const selections = browserSelections
     // 运行中补发 = 引导：注入正在执行的这一轮，而不是排到结束后另起一轮（与 Desktop 一致）。
     // 外部引擎没有中途注入语义、引导通道也不带附件（附件由输入框入口改为结束后发送），这两种仍按原规则拦下。
-    if (providerId === 'workbench' && chat.status === 'running' && text && draftFiles.length === 0)
-      return sendRunGuidance(text)
     if (
-      (!text && draftFiles.length === 0)
+      providerId === 'workbench'
+      && chat.status === 'running'
+      && (text || selections.length > 0)
+      && draftFiles.length === 0
+    ) return sendRunGuidance(text, selections)
+    if (
+      (!text && draftFiles.length === 0 && selections.length === 0)
       || shouldBlockStandaloneRunSubmission(
         chat.status,
         hasPendingAgentExecution,
@@ -857,16 +1084,24 @@ function StandaloneWorkbenchChatSessionSurface({
     const currentFileContext = includedCurrentFilePath
       ? `Current Workbench file: ${includedCurrentFilePath}`
       : ''
+    const browserElementContext = formatBrowserElementSelectionsForPrompt(selections)
     setPrompt('')
     setFiles([])
+    setBrowserSelections([])
     // 只有正常完成才结束一轮：中止或失败后的下一条消息继续被打断的那一轮，按引导呈现、
     // 与上一轮归在同一组里，而不是另起一轮（与 Desktop 的 shouldContinueInterruptedConversation 一致）。
     const continuesInterruptedRun = isInterruptedRunStatus(getState(projectRoot, providerId).status)
     const userMessage: ChatMessage = {
-      ...createTextMessage('user', text || draftFiles.map((file) => file.name).join(', ')),
+      ...createTextMessage(
+        'user',
+        text
+          || draftFiles.map((file) => file.name).join(', ')
+          || buildBrowserElementDisplayFallback(selections)
+      ),
       ...(continuesInterruptedRun
         ? { conversationKind: 'run-guidance' as const, guidanceStatus: 'sent' as const }
         : { conversationKind: 'turn-input' as const }),
+      ...(selections.length > 0 ? { browserElementSelections: [...selections] } : {}),
     }
     const attachmentMetadata = draftFiles.map((file, index) => ({
       id: `${userMessage.id}-attachment-${index}`,
@@ -879,6 +1114,7 @@ function StandaloneWorkbenchChatSessionSurface({
     const submittedMessage = attachmentMetadata.length > 0
       ? { ...userMessage, attachments: attachmentMetadata }
       : userMessage
+    const submittingSession = getState(projectRoot, providerId)
     updateState(projectRoot, providerId, (state) => ({
       ...state,
       messages: [...state.messages, submittedMessage],
@@ -899,6 +1135,14 @@ function StandaloneWorkbenchChatSessionSurface({
       revision: state.revision + 1,
     }))
     options?.onAccepted?.()
+    // 开跑前拍下本轮的工作区检查点，回溯到这条消息时可以一并回退文件（与 Desktop 一致）。
+    // 只对原生执行栈：外部引擎的会话历史在它自己手里，回溯改不了它记住的内容，也就不提供回溯。
+    if (providerId === 'workbench')
+      await captureRunCheckpoint(
+        submittingSession.sessionId,
+        submittingSession.messages.length,
+        text || submittedMessage.attachments?.map((attachment) => attachment.name).join(', ') || ''
+      )
 
     // P6：模型运行时已在本进程（BYOK 选择直接进 Agent 执行栈），不再有
     // `model.supports-provider` 这种远端预检——provider 不认识时由执行本身报错。
@@ -932,6 +1176,10 @@ function StandaloneWorkbenchChatSessionSurface({
         messages: sanitizeStandaloneChatMessages(latest.messages)
           .map((message) => ({
             role: message.role,
+            // 宿主留痕（回溯说明）带着语义过去，main 把它包成系统说明而不是一句用户原话。
+            ...(message.conversationKind === 'system-notice'
+              ? { conversationKind: 'system-notice' as const }
+              : {}),
             content: [
               readStandaloneModelVisibleText(message),
               ...(message.attachments?.length
@@ -942,7 +1190,7 @@ function StandaloneWorkbenchChatSessionSurface({
                     .join('\n')]
                 : []),
               ...(message.id === submittedMessage.id
-                ? [currentFileContext, attachmentContext].filter(Boolean)
+                ? [currentFileContext, attachmentContext, browserElementContext].filter(Boolean)
                 : []),
             ].filter(Boolean).join('\n\n'),
           }))
@@ -1204,6 +1452,9 @@ function StandaloneWorkbenchChatSessionSurface({
         features: {
           workbenchCurrentFilePath: includedCurrentFilePath ?? undefined,
           onDismissWorkbenchCurrentFile: () => setIncludedCurrentFilePath(null),
+          browserElementSelections: browserSelections,
+          onRemoveBrowserElementSelection: (id: string) =>
+            setBrowserSelections((current) => current.filter((selection) => selection.id !== id)),
         },
         streaming: {
           isStreaming: isActiveChatRun(chat.status),
@@ -1277,10 +1528,15 @@ function StandaloneWorkbenchChatSessionSurface({
       chat.sessionId,
       chat.status,
       accountSignInPending,
+      browserSelections,
       files,
       goalMode,
       hasPendingAgentExecution,
       includedCurrentFilePath,
+      queuedDrafts.drafts,
+      queuedDrafts.drainingId,
+      queuedDrafts.errorMessage,
+      queuedDrafts.isPaused,
       reasoningLevel,
       runProfile,
       engineCatalog,
@@ -1381,6 +1637,14 @@ function StandaloneWorkbenchChatSessionSurface({
             revision: state.revision + 1,
           }))
         }}
+        // 回溯只对原生执行栈：外部引擎的会话历史在它自己手里，截断这边的对话改不了它记住的内容。
+        {...(providerId === 'workbench'
+          ? { onRewindToMessage: rewindToMessage, getRewindPlan: buildRewindPlanForMessage }
+          : {})}
+        // 回答里的项目路径、文件改动卡与「查看改动」都落到宿主编辑器（与 Desktop 同一组入口）。
+        onOpenProjectPath={onOpenWorkspacePath}
+        onOpenFileChange={onOpenFileChange}
+        onReviewFileChanges={onReviewFileChanges}
         onFollowLockedChange={setFollowLocked}
       />
     </ChatThinkingVisibilityProvider>
@@ -1649,6 +1913,15 @@ function createTextMessage(role: ChatMessage['role'], text: string): ChatMessage
   }
 }
 
+/**
+ * 用户消息上随发的拾取元素。字段属于共享会话视图的消息形状（气泡据此显示 chip），Agent 协议的
+ * ChatMessage 不声明它；读取时按数组校验，持久化恢复回来的旧数据形状不对就当没有。
+ */
+function readMessageBrowserSelections(message: ChatMessage): readonly BrowserElementSelection[] {
+  const selections = (message as { browserElementSelections?: unknown }).browserElementSelections
+  return Array.isArray(selections) ? (selections as BrowserElementSelection[]) : []
+}
+
 function readAgentRuntimePayload(
   record: AgentExecutionEnvelope
 ): Record<string, unknown> | null {
@@ -1847,8 +2120,26 @@ function serializeStoredState(state: StandaloneChatState): Record<string, unknow
     ...(isInterruptedRunStatus(state.status)
       ? { status: state.status, lastError: state.lastError }
       : {}),
+    checkpoints: state.checkpoints,
     revision: state.revision,
   }
+}
+
+/** 清掉检查点的影子 ref（回溯淘汰的「未来」检查点、超出保留上限的、被删掉的会话的）。 */
+function releaseCheckpointRefs(
+  projectRoot: string,
+  sessionId: string,
+  checkpoints: readonly StandaloneChatCheckpoint[]
+): void {
+  const checkpointIds = checkpoints
+    .filter((checkpoint) => checkpoint.commitId)
+    .map((checkpoint) => checkpoint.id)
+  if (!projectRoot || checkpointIds.length === 0) return
+  void window.velarosWorkbenchGit
+    .deleteChatCheckpoints({ workspaceRoot: projectRoot, sessionId, checkpointIds })
+    .catch(() => {
+      // 清理按幂等处理：残留的私有 ref 只占少量对象，不影响任何功能。
+    })
 }
 
 /**

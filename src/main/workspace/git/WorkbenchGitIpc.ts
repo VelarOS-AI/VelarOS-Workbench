@@ -1,6 +1,9 @@
 import { ipcMain } from 'electron'
 
 import {
+  type WorkbenchChatCheckpointCaptureRequest,
+  type WorkbenchChatCheckpointDeleteRequest,
+  type WorkbenchChatCheckpointRestoreRequest,
   WorkbenchGitChannels,
   type WorkbenchGitCommitMessageRequest,
   type WorkbenchGitCommitRequest,
@@ -15,9 +18,13 @@ import {
 } from '../../../shared/workbenchGit'
 import { callWithEnvelope, hasStringFields, invalidRequest } from '../ipcBoundary'
 
+import type { WorkbenchChatCheckpointService } from './WorkbenchChatCheckpoints'
 import type { WorkbenchGitService } from './WorkbenchGitService'
 
-export function registerWorkbenchGitIpc(service: WorkbenchGitService): void {
+export function registerWorkbenchGitIpc(
+  service: WorkbenchGitService,
+  checkpoints: WorkbenchChatCheckpointService
+): void {
   ipcMain.handle(WorkbenchGitChannels.summary, (_event, input: unknown) =>
     callWithEnvelope(() => service.getSummary(parseRoot(input).workspaceRoot))
   )
@@ -90,6 +97,15 @@ export function registerWorkbenchGitIpc(service: WorkbenchGitService): void {
       const request = parseRemoteAction(input)
       return service.performRemoteAction(request.workspaceRoot, request.action, request)
     })
+  )
+  ipcMain.handle(WorkbenchGitChannels.captureChatCheckpoint, (_event, input: unknown) =>
+    callWithEnvelope(() => checkpoints.capture(parseCheckpointCapture(input)))
+  )
+  ipcMain.handle(WorkbenchGitChannels.restoreChatCheckpoint, (_event, input: unknown) =>
+    callWithEnvelope(() => checkpoints.restore(parseCheckpointRestore(input)))
+  )
+  ipcMain.handle(WorkbenchGitChannels.deleteChatCheckpoints, (_event, input: unknown) =>
+    callWithEnvelope(() => checkpoints.delete(parseCheckpointDelete(input)))
   )
 }
 
@@ -219,5 +235,36 @@ function parseRemoteAction(input: unknown): WorkbenchGitRemoteActionRequest {
     ...(typeof record['sshKeyPath'] === 'string'
       ? { sshKeyPath: record['sshKeyPath'] }
       : {}),
+  }
+}
+
+function parseCheckpointCapture(input: unknown): WorkbenchChatCheckpointCaptureRequest {
+  if (!hasStringFields(input, ['workspaceRoot', 'sessionId', 'checkpointId']))
+    return invalidRequest()
+  return {
+    workspaceRoot: input['workspaceRoot'] as string,
+    sessionId: input['sessionId'] as string,
+    checkpointId: input['checkpointId'] as string,
+    ...(typeof input['label'] === 'string' ? { label: input['label'] } : {}),
+  }
+}
+
+function parseCheckpointRestore(input: unknown): WorkbenchChatCheckpointRestoreRequest {
+  if (!hasStringFields(input, ['workspaceRoot', 'commitId'])) return invalidRequest()
+  return {
+    workspaceRoot: input['workspaceRoot'] as string,
+    commitId: input['commitId'] as string,
+  }
+}
+
+function parseCheckpointDelete(input: unknown): WorkbenchChatCheckpointDeleteRequest {
+  if (!hasStringFields(input, ['workspaceRoot', 'sessionId'])) return invalidRequest()
+  const checkpointIds = input['checkpointIds']
+  if (!Array.isArray(checkpointIds) || !checkpointIds.every((id) => typeof id === 'string'))
+    return invalidRequest()
+  return {
+    workspaceRoot: input['workspaceRoot'] as string,
+    sessionId: input['sessionId'] as string,
+    checkpointIds,
   }
 }

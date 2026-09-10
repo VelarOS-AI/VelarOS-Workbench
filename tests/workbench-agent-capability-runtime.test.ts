@@ -78,6 +78,25 @@ void describe('Workbench Agent capability runtime', () => {
     ])
   })
 
+  void test('hands a rewind notice to the model as a system note, not a user turn', async () => {
+    let received: WorkbenchAgentRunInput['messages'] = []
+    const runtime = createRuntime(async (input) => {
+      received = input.messages
+      return { status: 'completed' }
+    })
+    await execute(runtime, [], new AbortController().signal, [
+      { role: 'user', content: 'first request' },
+      { role: 'user', content: 'Rewound 1 turn', conversationKind: 'system-notice' },
+      { role: 'user', content: 'next request' },
+    ])
+
+    assert.equal(received.length, 3)
+    assert.deepEqual(received[0], { role: 'user', content: 'first request' })
+    assert.equal(received[1]?.role, 'user')
+    assert.match(String(received[1]?.content), /^<sys_note [^>]*>[\s\S]*Rewound 1 turn/u)
+    assert.deepEqual(received[2], { role: 'user', content: 'next request' })
+  })
+
   void test('adds aborted and error terminal events for terminal results', async () => {
     for (const status of ['aborted', 'error'] as const) {
       const runtime = createRuntime(async () => ({ status }))
@@ -611,7 +630,8 @@ function createRuntime(
 async function execute(
   runtime: WorkbenchAgentCapabilityRuntime,
   published: PublishedCapabilityEvent[] = [],
-  signal: AbortSignal = new AbortController().signal
+  signal: AbortSignal = new AbortController().signal,
+  messages: ReadonlyArray<Record<string, unknown>> = [{ role: 'user', content: 'hello' }]
 ): Promise<PublishedCapabilityEvent[]> {
   const context: AgentCapabilityExecutionContext = {
     signal,
@@ -633,7 +653,7 @@ async function execute(
       },
       scopeMetadata: { resourceId: '/workspace' },
     },
-    messages: [{ role: 'user', content: 'hello' }],
+    messages,
     config: {
       modelSelection: { provider: 'test', model: 'test' },
       executionModes: [],

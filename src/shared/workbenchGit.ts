@@ -34,6 +34,9 @@ export const WorkbenchGitChannels = {
   switchBranch: 'workbench-app:git:switch-branch',
   createBranch: 'workbench-app:git:create-branch',
   remoteAction: 'workbench-app:git:remote-action',
+  captureChatCheckpoint: 'workbench-app:git:capture-chat-checkpoint',
+  restoreChatCheckpoint: 'workbench-app:git:restore-chat-checkpoint',
+  deleteChatCheckpoints: 'workbench-app:git:delete-chat-checkpoints',
 } as const
 
 export interface WorkbenchGitRootRequest {
@@ -80,6 +83,36 @@ export interface WorkbenchGitRemoteActionRequest
   action: WorkspaceGitRemoteAction
 }
 
+/**
+ * 聊天回溯的工作区检查点：每轮开跑前把项目工作树拍成一个 git 影子提交（私有 ref
+ * `refs/velaros/checkpoints/<session>/<id>`，隔离 index，不碰用户的分支 / HEAD / index / stash）。
+ */
+export interface WorkbenchChatCheckpointCaptureRequest extends WorkbenchGitRootRequest {
+  sessionId: string
+  checkpointId: string
+  label?: string
+}
+
+/** `commitId` 为 null：项目不是 git 仓库或捕获失败——这一轮只能回溯对话，不能回退文件。 */
+export interface WorkbenchChatCheckpointCaptureResult {
+  commitId: string | null
+}
+
+export interface WorkbenchChatCheckpointRestoreRequest extends WorkbenchGitRootRequest {
+  commitId: string
+}
+
+/** 还原的**实际结果**：失败也要能如实写进回溯说明，所以不抛错。 */
+export interface WorkbenchChatCheckpointRestoreResult {
+  restored: boolean
+  error: string | null
+}
+
+export interface WorkbenchChatCheckpointDeleteRequest extends WorkbenchGitRootRequest {
+  sessionId: string
+  checkpointIds: string[]
+}
+
 export interface WorkbenchGitBridge {
   getSummary(
     request: WorkbenchGitRootRequest
@@ -117,4 +150,13 @@ export interface WorkbenchGitBridge {
   performRemoteAction(
     request: WorkbenchGitRemoteActionRequest
   ): Promise<WorkbenchFsCallResult<SystemWorkspaceGitActionResult>>
+  captureChatCheckpoint(
+    request: WorkbenchChatCheckpointCaptureRequest
+  ): Promise<WorkbenchFsCallResult<WorkbenchChatCheckpointCaptureResult>>
+  restoreChatCheckpoint(
+    request: WorkbenchChatCheckpointRestoreRequest
+  ): Promise<WorkbenchFsCallResult<WorkbenchChatCheckpointRestoreResult>>
+  deleteChatCheckpoints(
+    request: WorkbenchChatCheckpointDeleteRequest
+  ): Promise<WorkbenchFsCallResult<void>>
 }

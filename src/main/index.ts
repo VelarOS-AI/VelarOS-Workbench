@@ -365,7 +365,7 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
     providers.resourcePlugins
   )
   registerWorkbenchTerminalIpc(providers.parts.terminal)
-  registerWorkbenchGitIpc(providers.git)
+  registerWorkbenchGitIpc(providers.git, providers.chatCheckpoints)
   const watchIpc = registerWorkbenchWatchIpc(providers.watch)
   const disposeWorkspaceIpc = registerWorkbenchWorkspaceIpc(providers.workspace)
 

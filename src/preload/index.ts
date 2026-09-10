@@ -162,6 +162,12 @@ const gitBridge: WorkbenchGitBridge = {
   switchBranch: (request) => ipcRenderer.invoke(WorkbenchGitChannels.switchBranch, request),
   createBranch: (request) => ipcRenderer.invoke(WorkbenchGitChannels.createBranch, request),
   performRemoteAction: (request) => ipcRenderer.invoke(WorkbenchGitChannels.remoteAction, request),
+  captureChatCheckpoint: (request) =>
+    ipcRenderer.invoke(WorkbenchGitChannels.captureChatCheckpoint, request),
+  restoreChatCheckpoint: (request) =>
+    ipcRenderer.invoke(WorkbenchGitChannels.restoreChatCheckpoint, request),
+  deleteChatCheckpoints: (request) =>
+    ipcRenderer.invoke(WorkbenchGitChannels.deleteChatCheckpoints, request),
 }
 
 const kernelBridge: WorkbenchKernelBridge = {

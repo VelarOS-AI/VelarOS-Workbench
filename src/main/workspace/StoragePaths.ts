@@ -15,6 +15,8 @@ const WorkbenchStorageDirectory = {
    * 这里只兜住「localStorage 被清空或撞配额」的数据丢失。会话权威上收后整个目录可弃。
    */
   chatHistoryBackups: 'chat-history-backups',
+  /** 聊天回溯检查点的持久影子 index（每个项目根一份，只是 `git add -A` 的 stat 缓存，可随时删）。 */
+  chatCheckpointIndexes: 'chat-checkpoint-indexes',
 } as const
 
 class WorkbenchAppStoragePaths {
@@ -31,6 +33,11 @@ class WorkbenchAppStoragePaths {
   /** 聊天历史备份区（见 {@link WorkbenchStorageDirectory.chatHistoryBackups}）。 */
   public getChatHistoryBackupsDir(): string {
     return this.ensureDir(join(this.dataRootDir, WorkbenchStorageDirectory.chatHistoryBackups))
+  }
+
+  /** 聊天回溯检查点的影子 index 区（见 {@link WorkbenchStorageDirectory.chatCheckpointIndexes}）。 */
+  public getChatCheckpointIndexesDir(): string {
+    return this.ensureDir(join(this.dataRootDir, WorkbenchStorageDirectory.chatCheckpointIndexes))
   }
 
   private ensureDir(path: string): string {
