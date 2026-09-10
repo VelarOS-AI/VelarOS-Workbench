@@ -59,6 +59,8 @@ const projectHubBridge: WorkbenchProjectHubBridge = {
     ipcRenderer.invoke(WorkbenchProjectHubChannels.acknowledgeFileOpen, id),
   getPathForFile: (file) => webUtils.getPathForFile(file),
   openSystemPath: (path) => ipcRenderer.invoke(WorkbenchProjectHubChannels.openSystemPath, path),
+  revealSystemPath: (path) =>
+    ipcRenderer.invoke(WorkbenchProjectHubChannels.revealSystemPath, path),
   pickNewProjectLocation: () =>
     ipcRenderer.invoke(WorkbenchProjectHubChannels.pickNewProjectLocation),
   createProject: (locationPath, name) =>
@@ -77,6 +79,7 @@ const accountBridge: WorkbenchAccountBridge = {
   signIn: () => ipcRenderer.invoke(WorkbenchAccountChannels.signIn),
   signOut: () => ipcRenderer.invoke(WorkbenchAccountChannels.signOut),
   onChanged: (listener) => subscribe(WorkbenchAccountChannels.changed, listener),
+  getModelPricing: () => ipcRenderer.invoke(WorkbenchAccountChannels.getModelPricing),
 }
 
 const browserBridge: WorkbenchBrowserBridge = {

@@ -3,6 +3,8 @@
  *
  * IPC 入参是边界外来数据，在此解析一次（非字符串一律按无效路径处理），枢纽服务内部只见类型。
  */
+import { stat } from 'node:fs/promises'
+
 import { BrowserWindow, ipcMain, shell } from 'electron'
 
 import { WorkbenchProjectHubChannels } from '../../shared/projectHub'
@@ -74,6 +76,17 @@ export function registerProjectHubIpc(windows: WorkbenchWindowManager): void {
     if (typeof path !== 'string' || path.trim().length === 0) return { opened: false, error: 'Path is required.' }
     const error = await shell.openPath(path)
     return error ? { opened: false, error } : { opened: true }
+  })
+
+  ipcMain.handle(WorkbenchProjectHubChannels.revealSystemPath, async (_event, path: unknown) => {
+    if (typeof path !== 'string' || path.trim().length === 0) return { opened: false, error: 'Path is required.' }
+    try {
+      await stat(path)
+    } catch {
+      return { opened: false, error: `Path does not exist: ${path}` }
+    }
+    shell.showItemInFolder(path)
+    return { opened: true }
   })
 
   ipcMain.handle(WorkbenchProjectHubChannels.pickNewProjectLocation, async (event) => {

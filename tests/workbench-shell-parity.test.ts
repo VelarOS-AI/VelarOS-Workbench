@@ -274,7 +274,8 @@ void describe('pre-split Workbench shell parity', () => {
     const styles = readSource('src/renderer/src/styles/04-insight-chat.module.css')
 
     assert.match(app, /ConversationBlockHooksProvider/)
-    assert.match(app, /value=\{emptyConversationBlockHooks\}/)
+    // 回答里的路径与产物行经消息动作层落到编辑器（Desktop 同一个 blocks hook 职责）。
+    assert.match(app, /value=\{standaloneWorkbenchConversationBlockHooks\}/)
     // 目标卡的读写走主进程（Desktop 同一个动作端口职责）。
     assert.match(app, /value=\{standaloneWorkbenchConversationActionPort\}/)
     assert.match(app, /ConversationRenderSlotsProvider/)

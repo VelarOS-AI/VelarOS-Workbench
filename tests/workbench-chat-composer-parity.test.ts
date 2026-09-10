@@ -116,6 +116,25 @@ void describe('Workbench chat composer parity', () => {
     assert.match(adapter, /\(options\?\.goalMode \?\? goalMode\) \? \['goal' as const\]/)
   })
 
+  void test('shows what the run is doing, the answer cost and the last scroll position like Desktop', () => {
+    const adapter = readFileSync(
+      path.resolve(process.cwd(), 'src/renderer/src/runtime/standaloneWorkbenchChatAdapter.tsx'),
+      'utf8'
+    )
+
+    // 状态行：思考阶段名或正在跑的工具；翻译器走会话 UI 组合根注入的那一份，不碰进程级默认实例。
+    assert.match(adapter, /hasStreamingThinkingBlock: liveActivity\.hasStreamingThinkingBlock/)
+    assert.match(adapter, /liveTraceSummary: liveActivity\.liveTraceSummary/)
+    assert.match(adapter, /conversationTranslator = useConversationTranslatorRuntime\(\)/)
+    // 回答末尾的约价：当前模型 + 公开价格目录。
+    assert.match(adapter, /const pricingCatalog = useStandaloneModelPricing\(\)/)
+    assert.match(adapter, /billingModel,\n\s*pricingCatalog,/)
+    // 每个会话记住自己的滚动位置。
+    assert.match(adapter, /\{ restoreKey: chat\.sessionId, readScrollTop, writeScrollTop \}/)
+    // 输入框里的附件可以点开。
+    assert.match(adapter, /onOpenFile: openAttachedFile/)
+  })
+
   void test('marks finished runs so answers fold and stopped runs show their status', () => {
     const adapter = readFileSync(
       path.resolve(process.cwd(), 'src/renderer/src/runtime/standaloneWorkbenchChatAdapter.tsx'),

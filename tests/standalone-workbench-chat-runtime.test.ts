@@ -16,6 +16,7 @@ import {
   readStandaloneFinalAgentError,
   readStandaloneFinalAgentStatus,
   readStandaloneFinalAgentText,
+  readStandaloneLiveActivity,
   readStandaloneModelVisibleText,
   resolveStandaloneRunChangesAnchor,
   restoreStandaloneRunMarkers,
@@ -373,6 +374,57 @@ void describe('standalone Workbench conversation runtime', () => {
       ]
     )
     assert.deepEqual(restoreStandaloneRunMarkers(undefined, messages), [])
+  })
+
+  void test('tells what a run is doing now: the thinking stage, else the running tool', () => {
+    const formatPath = (path: string): string => path.replace('/work/project/', '')
+    const translator = {
+      translate: (_locale: string, key: string, params?: Record<string, unknown>) =>
+        `${key}(${String(params?.action ?? '')})`,
+      lookupMessage: () => null,
+    }
+    const idle = { liveTraceSummary: undefined, hasStreamingThinkingBlock: false }
+
+    assert.deepEqual(
+      readStandaloneLiveActivity(
+        message('assistant', [{ type: 'thinking', text: '### 检查项目结构\n继续处理' }]),
+        'zh-CN',
+        formatPath,
+        translator
+      ),
+      { liveTraceSummary: '检查项目结构', hasStreamingThinkingBlock: true }
+    )
+    // 半句还没说完的思考不逐字刷状态行。
+    assert.deepEqual(
+      readStandaloneLiveActivity(message('assistant', [{ type: 'thinking', text: '让我' }]), 'zh-CN', formatPath, translator),
+      { liveTraceSummary: undefined, hasStreamingThinkingBlock: true }
+    )
+
+    const running = readStandaloneLiveActivity(
+      message('assistant', [
+        { type: 'text', text: '先看一下入口。' },
+        {
+          type: 'tool-call',
+          toolCallId: 'read-1',
+          toolName: 'project:read',
+          args: { path: '/work/project/src/app.ts' },
+          isRunning: true,
+        },
+      ] as ChatMessage['blocks']),
+      'zh-CN',
+      formatPath,
+      translator
+    )
+    assert.equal(running.hasStreamingThinkingBlock, false)
+    assert.match(running.liveTraceSummary ?? '', /project:read/u)
+    assert.match(running.liveTraceSummary ?? '', /src\/app\.ts/u)
+    assert.doesNotMatch(running.liveTraceSummary ?? '', /\/work\/project/u)
+
+    assert.deepEqual(
+      readStandaloneLiveActivity(message('assistant', [{ type: 'text', text: '好了' }]), 'zh-CN', formatPath, translator),
+      idle
+    )
+    assert.deepEqual(readStandaloneLiveActivity(null, 'zh-CN', formatPath, translator), idle)
   })
 
   void test('keeps only a summary of a run\'s file changes on its marker', () => {

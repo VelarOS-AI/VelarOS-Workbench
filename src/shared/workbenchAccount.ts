@@ -1,9 +1,12 @@
+import type { ModelPricingCatalog } from '@velaros-ai/model/contracts'
+
 export const WorkbenchAccountChannels = {
   getState: 'workbench-app:account:get-state',
   ensureSignedIn: 'workbench-app:account:ensure-signed-in',
   signIn: 'workbench-app:account:sign-in',
   signOut: 'workbench-app:account:sign-out',
   changed: 'workbench-app:account:changed',
+  getModelPricing: 'workbench-app:account:get-model-pricing',
 } as const
 
 export interface WorkbenchAccountIdentity {
@@ -24,4 +27,6 @@ export interface WorkbenchAccountBridge {
   signIn: () => Promise<WorkbenchAccountState>
   signOut: () => Promise<WorkbenchAccountState>
   onChanged: (listener: (state: WorkbenchAccountState) => void) => () => void
+  /** 公开模型价格目录（回答末尾的约价用）；拿不到时为 null。 */
+  getModelPricing: () => Promise<ModelPricingCatalog | null>
 }

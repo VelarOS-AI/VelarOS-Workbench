@@ -1090,14 +1090,16 @@ export function useStandaloneWorkbenchPageModel(
     }
   }
 
-  async function handleWorkbenchChatWorkspacePathOpen(path: string): Promise<void> {
+  /** 回答里的路径在编辑器里打开；返回 false = 不在当前项目里，交给调用方决定要不要让系统打开。 */
+  async function handleWorkbenchChatWorkspacePathOpen(path: string): Promise<boolean> {
     const activeProject = workbench.activeProject
-    if (!activeProject) return
+    if (!activeProject) return false
 
     const relativePath = resolveWorkbenchChatWorkspacePath(path, activeProject.rootPath)
-    if (!relativePath || relativePath === '.') return
+    if (!relativePath || relativePath === '.') return false
 
     await editorNavigation.selectFile(relativePath)
+    return true
   }
 
   const handleWorkbenchBrowserElementPicked = useCallback(

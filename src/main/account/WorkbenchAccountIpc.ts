@@ -19,10 +19,14 @@ export function registerWorkbenchAccountIpc(service: WorkbenchAccountService): (
     service.ensureSignedIn().then(publish))
   ipcMain.handle(WorkbenchAccountChannels.signIn, () => service.signIn().then(publish))
   ipcMain.handle(WorkbenchAccountChannels.signOut, () => service.signOut().then(publish))
+  // 价格目录拿不到只是不显示约价，不算错误。
+  ipcMain.handle(WorkbenchAccountChannels.getModelPricing, () =>
+    service.getPublicModelPricing().catch(() => null))
   return () => {
     ipcMain.removeHandler(WorkbenchAccountChannels.getState)
     ipcMain.removeHandler(WorkbenchAccountChannels.ensureSignedIn)
     ipcMain.removeHandler(WorkbenchAccountChannels.signIn)
     ipcMain.removeHandler(WorkbenchAccountChannels.signOut)
+    ipcMain.removeHandler(WorkbenchAccountChannels.getModelPricing)
   }
 }

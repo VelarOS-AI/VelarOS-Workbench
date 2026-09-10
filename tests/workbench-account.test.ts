@@ -7,6 +7,7 @@ import { join } from 'node:path'
 import { describe, test } from 'bun:test'
 
 import {
+  parseModelPricingCatalog,
   parseWorkbenchManagedModelAccessSnapshot,
   WorkbenchAccountService,
 } from '../src/main/account/WorkbenchAccountService'
@@ -276,6 +277,57 @@ void describe('Workbench shared VelarOS account', () => {
         /尚未获得 VelarOS-Dev 授权/u
       )
       assert.equal(chatRequests, 0)
+    } finally {
+      await rm(rootDir, { recursive: true, force: true })
+    }
+  })
+  void test('reads the public model price list without signing in, keeping only well-formed prices', async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), 'velaros-model-pricing-'))
+    const store = new WorkbenchSharedAccountStore({ rootDir })
+    const requests: Array<{ url: string; authorization: string | null }> = []
+    let reachable = true
+    try {
+      const service = new WorkbenchAccountService(
+        store,
+        async () => undefined,
+        'https://cloud.example.com/api',
+        (async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+          const url = input instanceof Request ? input.url : input.toString()
+          requests.push({ url, authorization: new Headers(init?.headers).get('authorization') })
+          if (!reachable) throw new Error('offline')
+          return Response.json({
+            currency: 'USD',
+            version: '2026-09-10',
+            updatedAt: '2026-09-10T00:00:00.000Z',
+            expiresAt: '2000-01-01T00:00:00.000Z',
+            entries: [
+              { provider: 'openai', model: 'gpt-5', aliases: ['gpt-5-latest', 7], inputUsdPerMillion: 1.25, outputUsdPerMillion: 10, source: 'openai' },
+              { provider: 'openai', model: 'broken', inputUsdPerMillion: -1, outputUsdPerMillion: 2 },
+              'garbage',
+            ],
+          })
+        }) as typeof fetch
+      )
+
+      const catalog = await service.getPublicModelPricing()
+      assert.deepEqual(catalog.entries, [
+        {
+          provider: 'openai',
+          model: 'gpt-5',
+          aliases: ['gpt-5-latest'],
+          inputUsdPerMillion: 1.25,
+          outputUsdPerMillion: 10,
+          source: 'openai',
+        },
+      ])
+      assert.deepEqual(requests, [
+        { url: 'https://cloud.example.com/api/v1/model-pricing', authorization: null },
+      ])
+      // 服务端给的过期时间已过：下一次重新取；取不到时沿用上一份。
+      reachable = false
+      assert.deepEqual(await service.getPublicModelPricing(), catalog)
+      assert.equal(requests.length, 2)
+      assert.throws(() => parseModelPricingCatalog({ currency: 'EUR', entries: [] }), /币种/u)
     } finally {
       await rm(rootDir, { recursive: true, force: true })
     }

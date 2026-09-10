@@ -1,7 +1,12 @@
 import { randomUUID } from 'node:crypto'
 import os from 'node:os'
 
-import type { ProviderModelCatalog, ProviderModelCatalogEntry } from '@velaros-ai/model/contracts'
+import type {
+  ModelPricingCatalog,
+  ModelPricingEntry,
+  ProviderModelCatalog,
+  ProviderModelCatalogEntry,
+} from '@velaros-ai/model/contracts'
 
 import type { WorkbenchAccountState } from '../../shared/workbenchAccount'
 import type {
@@ -19,6 +24,8 @@ const DefaultCloudBaseUrl = 'https://8.152.209.233/api'
 const DeviceIdHeader = 'X-VelarOS-Device-Id'
 const GoogleSignInTimeoutMs = 3 * 60_000
 const CloudRequestTimeoutMs = 20_000
+/** 公开价格目录在进程里留多久（与 Desktop 相同）；服务端给的过期时间更早时以它为准。 */
+const PublicModelPricingCacheMs = 15 * 60_000
 const ManagedProviderIds = new Set<WorkbenchManagedModelProviderId>(['velar', 'velar-dev'])
 
 interface GoogleDesktopStart {
@@ -36,6 +43,8 @@ type GoogleDesktopResult =
 export class WorkbenchAccountService {
   readonly #baseUrl: string
   #signInOperation: Promise<WorkbenchAccountState> | null = null
+  #publicModelPricing: { readonly catalog: ModelPricingCatalog; readonly expiresAt: number } | null =
+    null
 
   public constructor(
     private readonly store: WorkbenchSharedAccountStore,
@@ -161,6 +170,37 @@ export class WorkbenchAccountService {
 
     const requestInput = input instanceof Request ? new Request(target, input) : target
     return this.fetchImpl(requestInput, { ...init, headers })
+  }
+
+  /**
+   * 公开模型价格目录：只用来在本地估算用户所选服务商的成本（回答末尾的约价），不代表 Velar 计费，
+   * 也不需要登录。刷新失败时沿用上一份。
+   */
+  public async getPublicModelPricing(): Promise<ModelPricingCatalog> {
+    const cached = this.#publicModelPricing
+    if (cached && cached.expiresAt > Date.now()) return cached.catalog
+
+    try {
+      const response = await this.fetchImpl(`${this.#baseUrl}/v1/model-pricing`, {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+        signal: AbortSignal.timeout(CloudRequestTimeoutMs),
+      })
+      if (!response.ok) throw new Error(`VelarOS 模型价格目录请求失败（${response.status}）。`)
+      const catalog = parseModelPricingCatalog(await response.json())
+      const serverExpiry = Date.parse(catalog.expiresAt)
+      this.#publicModelPricing = {
+        catalog,
+        expiresAt: Math.min(
+          Number.isFinite(serverExpiry) ? serverExpiry : Number.POSITIVE_INFINITY,
+          Date.now() + PublicModelPricingCacheMs
+        ),
+      }
+      return catalog
+    } catch (error) {
+      if (cached) return cached.catalog
+      throw error
+    }
   }
 
   public async fetchPluginResource(input: URL): Promise<Response> {
@@ -364,6 +404,45 @@ function managedModelEndpointPath(providerId: WorkbenchManagedModelProviderId): 
 
 function isManagedModelProviderId(value: string): value is WorkbenchManagedModelProviderId {
   return ManagedProviderIds.has(value as WorkbenchManagedModelProviderId)
+}
+
+/** 价格目录来自网络：外壳不对就报错，单条价格不对就丢掉那一条。 */
+export function parseModelPricingCatalog(value: unknown): ModelPricingCatalog {
+  const root = readRecord(value, 'model pricing')
+  if (root['currency'] !== 'USD') throw new Error('VelarOS 模型价格目录币种无效。')
+  const entries = root['entries']
+  if (!Array.isArray(entries)) throw new Error('VelarOS 模型价格目录格式无效。')
+  return {
+    currency: 'USD',
+    version: readNonEmptyString(root['version'], 'model pricing.version'),
+    updatedAt: readNonEmptyString(root['updatedAt'], 'model pricing.updatedAt'),
+    expiresAt: readNonEmptyString(root['expiresAt'], 'model pricing.expiresAt'),
+    entries: entries.flatMap((entry): ModelPricingEntry[] => {
+      if (!isRecord(entry)) return []
+      const { provider, model, aliases, inputUsdPerMillion, outputUsdPerMillion, source } = entry
+      if (
+        typeof provider !== 'string' || !provider.trim()
+        || typeof model !== 'string' || !model.trim()
+        || !isNonNegativePrice(inputUsdPerMillion)
+        || !isNonNegativePrice(outputUsdPerMillion)
+      )
+        return []
+      return [{
+        provider,
+        model,
+        aliases: Array.isArray(aliases)
+          ? aliases.filter((alias): alias is string => typeof alias === 'string')
+          : [],
+        inputUsdPerMillion,
+        outputUsdPerMillion,
+        source: typeof source === 'string' ? source : '',
+      }]
+    }),
+  }
+}
+
+function isNonNegativePrice(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

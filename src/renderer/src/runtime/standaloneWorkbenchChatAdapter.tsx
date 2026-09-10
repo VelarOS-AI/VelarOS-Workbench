@@ -1,5 +1,6 @@
 import {
   type ReactElement,
+  useCallback,
   useEffect,
   useMemo,
   useState,
@@ -23,6 +24,7 @@ import {
   ChatThinkingVisibilityProvider,
   type ConversationRewindPlan,
   type ConversationView,
+  useConversationTranslatorRuntime,
   useScrollToBottom,
 } from '@velaros-ai/ui/conversation'
 import {
@@ -42,6 +44,10 @@ import type { WorkbenchAgentEngineModelCatalog } from '@shared/workbenchResource
 
 import workbenchAppIconUrl from '../../../../build/icon.svg?url'
 import type { WorkbenchChatProviderId } from '../../../plugins/agent-engines/identity'
+import {
+  formatWorkbenchChatPathForDisplay,
+  resolveWorkbenchChatAbsolutePath,
+} from '../models/chat/workbenchChatWorkspacePath'
 import { readWorkbenchPermissionConfirmationMode } from '../models/settings/workbenchPreferences'
 import styles from '../styles/workbenchPageStyles'
 
@@ -51,9 +57,14 @@ import {
   WorkbenchRunChangesScopeContext,
 } from './conversation/WorkbenchRunChangesCard'
 import {
+  readStandaloneChatScrollPosition,
+  saveStandaloneChatScrollPosition,
+} from './standaloneChatScrollPositions'
+import {
   projectStandaloneSessionGroups,
   standaloneProjectFolderId,
 } from './standaloneChatSessionList'
+import { useStandaloneModelPricing } from './standaloneModelPricing'
 import { useStandaloneQueuedDrafts } from './standaloneQueuedDrafts'
 import {
   applyStandaloneAgentRuntimeEvent,
@@ -69,6 +80,7 @@ import {
   readStandaloneFinalAgentError,
   readStandaloneFinalAgentStatus,
   readStandaloneFinalAgentText,
+  readStandaloneLiveActivity,
   readStandaloneModelVisibleText,
   resolveStandaloneRunChangesAnchor,
   restoreStandaloneRunMarkers,
@@ -584,7 +596,8 @@ function StandaloneWorkbenchChatSessionSurface({
     providerId,
     chat.sessionId
   )
-  const { t } = useWorkbenchI18n()
+  const { t, locale } = useWorkbenchI18n()
+  const conversationTranslator = useConversationTranslatorRuntime()
   const modelConfig = useStandaloneWorkbenchModelConfig()
   const managedModelState = useStandaloneWorkbenchManagedModels()
   const selectedManagedProvider = getStandaloneWorkbenchManagedProvider(
@@ -628,9 +641,19 @@ function StandaloneWorkbenchChatSessionSurface({
     lastOutboundMessage?.id ?? '',
     lastOutboundMessage?.timestamp ?? '',
   ].join(':')
+  const readScrollTop = useCallback(
+    () => readStandaloneChatScrollPosition(chat.sessionId),
+    [chat.sessionId]
+  )
+  const writeScrollTop = useCallback(
+    (scrollTop: number) => saveStandaloneChatScrollPosition(chat.sessionId, scrollTop),
+    [chat.sessionId]
+  )
+  // 切会话、收起再打开面板都回到这个会话上次看的位置（与 Desktop 相同）。
   const { followLocked, scrollRef, setFollowLocked } = useScrollToBottom<HTMLDivElement>(
     chat.revision,
-    autoScrollResetKey
+    autoScrollResetKey,
+    { restoreKey: chat.sessionId, readScrollTop, writeScrollTop }
   )
 
   useEffect(() => {
@@ -756,6 +779,22 @@ function StandaloneWorkbenchChatSessionSurface({
       settlement.kind === 'request-error' ? settlement.error : null,
       t('workbench.chatStopFailed')
     )
+  }
+
+  /**
+   * 点开输入框里的附件（与 Desktop 相同，附件得有本机路径）：项目里的文件在编辑器里打开，
+   * 项目之外的交给系统默认应用。
+   */
+  async function openAttachedFile(file: File): Promise<void> {
+    const path = resolveWorkbenchClipboardFilePath(file, window.velarosWorkbenchProjectHub.getPathForFile)
+    if (!path) return
+    if (onOpenWorkspacePath && (await onOpenWorkspacePath(path)) !== false) return
+    const opened = await window.velarosWorkbenchProjectHub.openSystemPath(path)
+    if (!opened.opened)
+      workbenchMessage.error({
+        title: t('chat.fileChangeOpenErrorTitle'),
+        description: opened.error ?? path,
+      })
   }
 
   /**
@@ -1368,8 +1407,29 @@ function StandaloneWorkbenchChatSessionSurface({
     ],
     [currentFilePath, t]
   )
-  const conversation = useMemo<ConversationView>(
-    () => ({
+  const pricingCatalog = useStandaloneModelPricing()
+  const billingProvider = providerId === 'workbench' ? modelConfig.provider.trim() : ''
+  const billingModelId = providerId === 'workbench' ? modelConfig.model.trim() : ''
+  const billingModel = useMemo(
+    () =>
+      billingProvider && billingModelId
+        ? { provider: billingProvider, model: billingModelId }
+        : null,
+    [billingModelId, billingProvider]
+  )
+  const conversation = useMemo<ConversationView>(() => {
+    // 状态行上「现在在做什么」：思考阶段名或正在跑的工具（Desktop 由执行轨迹算同一格）。
+    const liveActivity = readStandaloneLiveActivity(
+      activeAssistantMessage,
+      locale,
+      (path) =>
+        formatWorkbenchChatPathForDisplay(
+          resolveWorkbenchChatAbsolutePath(path, projectRoot),
+          projectRoot
+        ),
+      conversationTranslator
+    )
+    return {
       sessionId: chat.sessionId,
       activeMemberSessionId: chat.sessionId,
       supportsProjectFiles: true,
@@ -1399,13 +1459,22 @@ function StandaloneWorkbenchChatSessionSurface({
       },
       isStreaming: isActiveChatRun(chat.status),
       streamingAssistantMessageId: activeAssistantMessage?.id,
-      hasStreamingThinkingBlock: false,
+      hasStreamingThinkingBlock: liveActivity.hasStreamingThinkingBlock,
+      liveTraceSummary: liveActivity.liveTraceSummary,
       runningLabel: t('chat.running'),
       activeProjectRoot: projectRoot,
       workspaceSourceRoot: projectRoot,
-    }),
+      // 回答末尾的约价：按当前选的模型与公开价格目录估算（与 Desktop 相同）；外部引擎自管计费，不估。
+      billingModel,
+      pricingCatalog,
+    }
+  },
     [
-      activeAssistantMessage?.id,
+      activeAssistantMessage,
+      conversationTranslator,
+      locale,
+      billingModel,
+      pricingCatalog,
       chat.lastRunFinishedAt,
       chat.lastRunStartedAt,
       chat.awaitingInputQuestion,
@@ -1448,6 +1517,7 @@ function StandaloneWorkbenchChatSessionSurface({
         attachments: {
           files,
           onFilesChange: setFiles,
+          onOpenFile: openAttachedFile,
         },
         // 排队与引导只对原生执行栈开放：外部引擎没有中途注入语义。
         ...(providerId === 'workbench'
@@ -1615,6 +1685,7 @@ function StandaloneWorkbenchChatSessionSurface({
       modelConfig.model,
       modelConfig.provider,
       selectedManagedProvider,
+      onOpenWorkspacePath,
       planMode,
       prompt,
       providerId,

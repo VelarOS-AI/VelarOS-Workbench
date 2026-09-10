@@ -20,6 +20,7 @@ export const WorkbenchProjectHubChannels = {
   openDroppedPaths: 'workbench-app:project-hub:open-dropped-paths',
   acknowledgeFileOpen: 'workbench-app:project-hub:acknowledge-file-open',
   openSystemPath: 'workbench-app:project-hub:open-system-path',
+  revealSystemPath: 'workbench-app:project-hub:reveal-system-path',
   pickNewProjectLocation: 'workbench-app:project-hub:pick-new-project-location',
   createProject: 'workbench-app:project-hub:create-project',
   removeRecentProject: 'workbench-app:project-hub:remove-recent-project',
@@ -122,6 +123,8 @@ export interface WorkbenchProjectHubBridge {
   /** Electron 41 不再暴露 File.path；preload 用 webUtils 恢复可信的原生拖拽路径。 */
   getPathForFile: (file: File) => string
   openSystemPath: (path: string) => Promise<{ opened: boolean; error?: string }>
+  /** 在访达（资源管理器）中显示这个文件或目录。 */
+  revealSystemPath: (path: string) => Promise<{ opened: boolean; error?: string }>
   pickNewProjectLocation: () => Promise<WorkbenchPickLocationResult>
   createProject: (locationPath: string, name: string) => Promise<WorkbenchProjectCreateResult>
   removeRecentProject: (path: string) => Promise<WorkbenchProjectHubState>

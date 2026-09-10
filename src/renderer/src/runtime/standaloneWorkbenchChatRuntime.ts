@@ -1,5 +1,10 @@
-import { isConversationTurnInputMessage } from '@velaros-ai/agent/protocol'
-import type { ConversationView } from '@velaros-ai/ui/conversation'
+import { type AppLocale, isConversationTurnInputMessage } from '@velaros-ai/agent/protocol'
+import {
+  type ConversationTranslator,
+  type ConversationView,
+  getThinkingStageLabel,
+  getToolActivitySummary,
+} from '@velaros-ai/ui/conversation'
 
 import type { ChatMessage } from '@shared/contracts'
 import type { WorkbenchChatRunChangesSummary } from '@shared/workbenchGit'
@@ -443,6 +448,31 @@ function attachStandaloneRunChanges(
   }
 }
 
+/**
+ * 运行状态行上「现在在做什么」（Desktop 从执行轨迹算 liveTraceSummary，Workbench 从正在流式的这条
+ * 回答里读）：思考块正在输出时取它的阶段名，否则取最近一个还在跑的工具的活动摘要；都没有时交给
+ * 状态行按阶段 / 轮次显示。
+ */
+function readStandaloneLiveActivity(
+  message: ChatMessage | null | undefined,
+  locale: AppLocale,
+  formatPath: (path: string) => string,
+  translator: ConversationTranslator
+): { liveTraceSummary: string | undefined; hasStreamingThinkingBlock: boolean } {
+  if (message?.role !== 'assistant') return { liveTraceSummary: undefined, hasStreamingThinkingBlock: false }
+  const lastBlock = message.blocks.at(-1)
+  const hasStreamingThinkingBlock = lastBlock?.type === 'thinking' && !!lastBlock.text.trim()
+  const thinkingStage = hasStreamingThinkingBlock ? getThinkingStageLabel(lastBlock.text) : null
+  if (thinkingStage) return { liveTraceSummary: thinkingStage, hasStreamingThinkingBlock }
+  const runningTool = message.blocks.findLast(
+    (block) => block.type === 'tool-call' && block.isRunning === true
+  )
+  const toolActivity = runningTool?.type === 'tool-call'
+    ? getToolActivitySummary(runningTool, locale, formatPath, translator)
+    : null
+  return { liveTraceSummary: toolActivity ?? undefined, hasStreamingThinkingBlock }
+}
+
 function readStandaloneModelVisibleText(message: ChatMessage): string {
   return message.blocks
     .filter((block) =>
@@ -646,6 +676,7 @@ export {
   readStandaloneFinalAgentError,
   readStandaloneFinalAgentStatus,
   readStandaloneFinalAgentText,
+  readStandaloneLiveActivity,
   readStandaloneModelVisibleText,
   resolveStandaloneRunChangesAnchor,
   restoreStandaloneRunMarkers,

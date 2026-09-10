@@ -9,7 +9,6 @@ import {
   ConversationBlockHooksProvider,
   ConversationLocalizationProvider,
   ConversationRenderSlotsProvider,
-  emptyConversationBlockHooks,
 } from '@velaros-ai/ui/conversation'
 import {
   ConversationComposerPortProvider,
@@ -22,6 +21,7 @@ import { useStandaloneWorkbenchLocalization } from './i18n/useStandaloneWorkbenc
 import { useProjectHubState } from './projectHub/useProjectHubState'
 import { standaloneWorkbenchComposerPort } from './runtime/conversation/standaloneWorkbenchComposerPort'
 import { standaloneWorkbenchConversationActionPort } from './runtime/conversation/standaloneWorkbenchConversationActionPort'
+import { standaloneWorkbenchConversationBlockHooks } from './runtime/conversation/standaloneWorkbenchConversationBlockHooks'
 import { standaloneWorkbenchConversationRenderSlots } from './runtime/conversation/standaloneWorkbenchConversationRenderSlots'
 import { standaloneWorkbenchChatAdapter } from './runtime/standaloneWorkbenchChatAdapter'
 import { WorkbenchMessageHost } from './runtime/workbenchMessageHost'
@@ -131,7 +131,7 @@ export function StandaloneWorkbenchApp(): ReactElement {
     <WorkbenchLocalizationProvider value={localization}>
       <ConversationLocalizationProvider value={localization}>
         <ConversationRenderSlotsProvider slots={standaloneWorkbenchConversationRenderSlots}>
-          <ConversationBlockHooksProvider value={emptyConversationBlockHooks}>
+          <ConversationBlockHooksProvider value={standaloneWorkbenchConversationBlockHooks}>
             <ConversationActionPortProvider value={standaloneWorkbenchConversationActionPort}>
               <ConversationComposerPortProvider value={standaloneWorkbenchComposerPort}>
                 <WorkbenchProductRuntimeProvider value={standaloneWorkbenchProductRuntimeValue}>
