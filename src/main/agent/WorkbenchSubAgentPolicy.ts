@@ -5,10 +5,15 @@ import type {
   SubAgentTypeDescriptor,
   SubAgentTypeProvider,
   TeamModelRoutingPort,
+  TeamSelectableModel,
 } from '@velaros-ai/agent'
 import type { AgentRoleId, ToolCategoryId } from '@velaros-ai/agent/protocol'
+import { Log } from '@velaros-ai/core'
 import { asRecord } from '@velaros-ai/core/utils/unknownJsonRecord'
+import type { ChatProviderId } from '@velaros-ai/model'
 import type { ModelRuntimeComposition } from '@velaros-ai/model/node'
+
+import type { WorkbenchManagedModelProviderId } from '../../shared/workbenchModel'
 
 /**
  * 子 Agent 的**只读边界文案**。
@@ -172,15 +177,55 @@ function createWorkbenchQueryRoleEngine(primaryAgentProfile: PrimaryAgentProfile
   }
 }
 
+/** 托管厂商（VelarOS / VelarOS-Dev）当前账号可用的模型；账号层拥有这份授权目录。 */
+type WorkbenchManagedModelLister = (
+  providerId: WorkbenchManagedModelProviderId
+) => Promise<Nullable<readonly TeamSelectableModel[]>>
+
+function readSelectionString(record: Nullable<Record<string, unknown>>, key: string): string {
+  const value = record?.[key]
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+/**
+ * 可选模型目录缓存几分钟：调度器每次派发子 Agent 都会问一次（沿用主模型时也要把可选项回报给
+ * 主 Agent），而厂商目录每次都强制刷新远端 /models、托管目录要打一次账号接口。读失败（null）不缓存。
+ */
+const SelectableModelCatalogTtlMs = 5 * 60 * 1000
+
+function createSelectableModelCatalogCache(): (
+  key: string,
+  load: () => Promise<Nullable<readonly TeamSelectableModel[]>>
+) => Promise<Nullable<readonly TeamSelectableModel[]>> {
+  const entries = new Map<
+    string,
+    { expiresAt: number; models: Promise<Nullable<readonly TeamSelectableModel[]>> }
+  >()
+  return (key, load) => {
+    const cached = entries.get(key)
+    if (cached && cached.expiresAt > Date.now()) return cached.models
+    const models = load()
+    entries.set(key, { expiresAt: Date.now() + SelectableModelCatalogTtlMs, models })
+    void models.then((resolved) => {
+      if (!resolved && entries.get(key)?.models === models) entries.delete(key)
+    })
+    return models
+  }
+}
+
 /**
  * 把 Workbench 当轮的模型选择适配成团队路由端口。
  *
- * Workbench 是纯 BYOK：没有按 worker 类型分模型的候选表，子 Agent 一律沿用主 Agent 这一次的
- * provider/model。`trace` 如实写明「跟随当前选择」，免得以后有人从日志里读出并不存在的路由策略。
+ * 没有按 worker 类型分模型的候选表：子 Agent 默认沿用主 Agent 这一次的 provider/model，`trace`
+ * 如实写明「跟随当前选择」。主 Agent 用 `agent:dispatch.model` 指定时，可选范围是主模型所在厂商下
+ * 已配置可用的模型（与聊天输入框的模型选择器同一来源：托管厂商读账号授权目录，其余读厂商模型目录）。
+ * 自定义端点接受任意 id、目录读不到时返回 null——调度器据此按原样透传指定值。
  */
 function createWorkbenchTeamModelRoutingPort(
-  modelRuntime: ModelRuntimeComposition
+  modelRuntime: ModelRuntimeComposition,
+  listManagedModels: WorkbenchManagedModelLister = async () => null
 ): TeamModelRoutingPort {
+  const cachedCatalog = createSelectableModelCatalogCache()
   return {
     resolve: ({ selection, workerType, category }) => {
       const record = asRecord(selection)
@@ -205,9 +250,42 @@ function createWorkbenchTeamModelRoutingPort(
         },
       }
     },
+    listSelectableModels: async (selection) => {
+      const record = asRecord(selection)
+      const provider = readSelectionString(record, 'provider')
+      if (!provider || provider === 'custom') return null
+      if (provider === 'velar' || provider === 'velar-dev')
+        return cachedCatalog(`managed:${provider}`, () => listManagedModels(provider))
+
+      const apiKey = readSelectionString(record, 'apiKey')
+      const baseURL = readSelectionString(record, 'baseURL')
+      return cachedCatalog(JSON.stringify([provider, baseURL, apiKey]), async () => {
+        const catalog = await modelRuntime.providerModelCatalogService
+          ?.listProviderModels({
+            provider: provider as ChatProviderId,
+            apiKey,
+            baseURL,
+            defaultModel: readSelectionString(record, 'model'),
+            purpose: 'chat',
+          })
+          .catch((error: unknown) => {
+            // 目录读不到不拦派发：返回 null 让调度器按原样透传主 Agent 指定的模型。
+            Log.tag('WorkbenchTeamModelRouting').warn('读取子 Agent 可选模型目录失败', {
+              provider,
+              error: String(error),
+            })
+            return null
+          })
+        const models = (catalog?.models ?? [])
+          .filter((entry) => entry.available !== false)
+          .map(({ id, label }) => ({ id, label }))
+        return models.length > 0 ? models : null
+      })
+    },
   }
 }
 
+export type { WorkbenchManagedModelLister }
 export {
   createWorkbenchQueryRoleEngine,
   createWorkbenchTeamModelRoutingPort,

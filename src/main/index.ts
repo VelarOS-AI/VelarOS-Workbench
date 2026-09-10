@@ -304,6 +304,24 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
           initialVisibleToolNames: snapshot.initialVisibleToolNames,
         }
       },
+    },
+    // 子 Agent 在托管厂商下可选的模型 = 当前账号授权目录里可用的那些（与模型选择器同一来源）。
+    // 账号接口读不到时回 null：派发照常进行，调度器按原样透传指定的模型。
+    async (providerId) => {
+      const access = await accountService.getManagedModelAccess().catch((error: unknown) => {
+        Log.tag('WorkbenchTeamModelRouting').warn('managed_model_access_failed', {
+          providerId,
+          error: String(error),
+        })
+        return null
+      })
+      const provider = access?.managedModels.find((entry) => entry.providerId === providerId)
+      const models = provider?.enabled
+        ? provider.models
+            .filter((model) => model.status === 'available')
+            .map(({ id, label }) => ({ id, label }))
+        : []
+      return models.length > 0 ? models : null
     }
   )
   const disposeModelIpc = registerWorkbenchModelIpc(

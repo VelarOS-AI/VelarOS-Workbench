@@ -62,6 +62,7 @@ import {
 import {
   createWorkbenchQueryRoleEngine,
   createWorkbenchTeamModelRoutingPort,
+  type WorkbenchManagedModelLister,
   WorkbenchSubAgentTypeProvider,
 } from './WorkbenchSubAgentPolicy'
 import {
@@ -212,6 +213,8 @@ class WorkbenchAgentExecutionStack {
     private readonly modelComposition: ModelRuntimeComposition = createModelRuntimeComposition(),
     private readonly modSurfaceProvider: WorkbenchAgentModSurfaceProvider =
       EmptyWorkbenchAgentModSurfaceProvider,
+    /** 托管厂商的可用模型目录（账号层授权）；子 Agent 指定模型时据此校验。 */
+    private readonly listManagedModels: WorkbenchManagedModelLister = async () => null,
     /**
      * 审批通道：装配根持有同一个实例，才能把 renderer 的确认回执路由回等待中的执行。
      * 默认自持一个，让测试与探针不必额外接线。
@@ -412,7 +415,9 @@ class WorkbenchAgentExecutionStack {
     readRuntime: () => WorkbenchAgentRunRuntime
   ): SubAgentDispatcher {
     const dispatcher = new SubAgentDispatcher(
-      new TeamModelRouter(createWorkbenchTeamModelRoutingPort(this.modelComposition)),
+      new TeamModelRouter(
+        createWorkbenchTeamModelRoutingPort(this.modelComposition, this.listManagedModels)
+      ),
       new WriteLeaseCoordinator(),
       {
         get systemConfig(): AgentSystemRuntimeConfig {
