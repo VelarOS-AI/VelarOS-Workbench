@@ -3,6 +3,52 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
+      "version": "0.3.45",
+      "releasedAt": "2026-09-11",
+      "title": {
+        "zh": "子 Agent 卡片看得到完整输出，回答输出更平滑",
+        "en": "Sub-agent cards show their full output, and answers stream more smoothly"
+      },
+      "added": {
+        "zh": [
+          "子 Agent 卡片展开后显示它的完整输出：文字、思考和工具调用用与聊天页相同的样式呈现，运行中自动跟到最新内容。卡片标题收成一行，名字、类型和状态并排显示。",
+          "回答改为与 Desktop 相同的节奏逐字平滑输出，不再一阵一阵地跳；内容积压多时平稳加速、追上后平稳减速回平时的速度，新出现的字带淡入。",
+          "AI 讲解气泡更紧凑：顶部一行只放翻页、序号、标题和关闭按钮，只给正在看的那一段代码着色；点行号旁的序号标记可以显示或隐藏这一条讲解。",
+          "AI 可以一次打开多个文件，并把要你看的代码标成淡紫色的 AI 选区：选区锁在文件上，切换文件也还在，关掉这个文件才消失，AI 也可以一次取消。"
+        ],
+        "en": [
+          "Expanding a sub-agent card now shows its full output, with text, thinking and tool calls rendered the same way as in the chat, following the latest output while it runs. The card title fits on one line, with the name, type and status side by side.",
+          "Answers now stream out smoothly at the same pace as Desktop instead of arriving in bursts. When a lot of text piles up the speed eases up and then back down to the usual pace, and new text fades in.",
+          "The AI explanation bubble is more compact: a single header row with previous, next, position, title and a close button, and only the code being explained is highlighted. Click the numbered marker next to the line numbers to show or hide an explanation.",
+          "The AI can open several files at once and mark the code it wants you to look at as light purple AI selections. They stay on the file when you switch files, go away when you close that file, and the AI can clear them in one go."
+        ]
+      },
+      "fixed": {
+        "zh": [
+          "第二个及之后派出的子 Agent 在运行时会显示成两张一模一样的卡片。",
+          "模型输出时界面发卡、风扇常转：聊天历史不再随每个字整份写一次存储，文件树、编辑区等页面其它部分也不再跟着回答重绘。",
+          "查看 AI 改动时左右两侧不再各显示一套：编辑区进入改动对比时左侧切到改动树，点「打开文件」回到普通编辑时左侧回到文件树，左侧切走时对比标签组也一并收起。去掉了标签栏上多余的「AI 改动」组名和返回按钮。",
+          "发送多行的提问后，回答输出时聊天不再停在原处、需要手动往下滚。",
+          "上下文用量在这一轮开始时就显示，不再要等回答结束；重新打开对话时直接显示上一次的用量。",
+          "子 Agent 读了几个大文件后会以「模型请求不变量校验失败」中断：现在大的工具结果会收成摘要，需要时 Agent 可以取回原文。",
+          "格式化文档不再把行内评论删掉、把讲解气泡和 AI 选区挤到文件开头，也不再在没装 Prettier 的 TS/JS 项目里删掉运算符和逗号两旁的空格；格式化只改动真正要变的地方，光标留在原处。",
+          "模型的思考内容不再整段重复一遍；一轮里后面步骤的思考也不再拼进前一步、工具卡上方的思考块里。",
+          "文件树里重命名时，输入框不再盖住上下两行和文件图标；按 Esc 取消重命名或收起搜索框时，也不再顺带把右侧的聊天面板收起来。"
+        ],
+        "en": [
+          "Sub-agents dispatched after the first one showed up as two identical cards while running.",
+          "The window lagged and the fans spun up while the model was answering: chat history is no longer written out in full for every token, and the rest of the page, such as the file tree and editor, no longer re-renders along with the answer.",
+          "Reviewing AI changes keeps both sides in step: the left panel shows the change tree while the editor compares, returns to the file tree when you choose Open file, and leaving the change tree closes the comparison tabs. The extra group label and back button are gone from the tab bar.",
+          "After sending a multi-line message, the chat now keeps following the answer instead of staying put until you scroll down.",
+          "Context usage shows as soon as a turn starts instead of only after the answer ends, and a reopened conversation shows its last usage right away.",
+          "Sub-agents no longer stop with a request invariant error after reading a few large files: large tool results are summarized and the agent can fetch the full text when it needs it.",
+          "Formatting a document no longer deletes inline comments, sends explanation bubbles and AI selections to the top of the file, or strips the spaces around operators and commas in TS/JS projects without Prettier. Only the text that needs to change is touched, and the cursor stays put.",
+          "The model's thinking no longer shows up twice, and a later step's thinking no longer gets merged into an earlier step's thinking block above its tool cards.",
+          "Renaming in the file tree no longer covers the rows above and below or the file icon, and pressing Esc to cancel a rename or close the search box no longer also collapses the chat panel."
+        ]
+      }
+    },
+    {
       "version": "0.3.44",
       "releasedAt": "2026-09-11",
       "title": {
