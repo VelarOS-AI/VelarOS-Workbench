@@ -373,16 +373,6 @@ export function StandaloneWorkbenchPagePresentation({
       ...baseEmbeddedKernelModel.editor,
       diff: {
         ...baseEmbeddedKernelModel.editor.diff,
-        isolatedGroupHeaders: {
-          'ai-changes': {
-            label: t('workbench.aiChangesTitle'),
-            icon: <SparkleIcon size={13} weight="fill" />,
-            title: t('workbench.aiChangesShowPanel'),
-            onClick: showAiChangesPanel,
-            exitLabel: t('workbench.aiChangesBackToEditor'),
-            onExit: aiChanges.deactivate,
-          },
-        },
         auxiliaryTabs: [
           ...aiChangeTabs,
           ...(dialogs.velarLogicGraphOpen

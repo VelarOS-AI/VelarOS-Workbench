@@ -82,9 +82,7 @@ import { EditorGoToLineBar } from './EditorGoToLineBar'
 import {
   EditorTabBar,
   IsolatedWorkbenchEditorTabGroups,
-  type WorkbenchEditorAuxiliaryTabGroup,
   type WorkbenchEditorAuxiliaryTabItem,
-  type WorkbenchEditorIsolatedGroupHeader,
 } from './EditorTabBar'
 import { type FileHistoryMode,FileHistoryView } from './FileHistoryView'
 import { WorkbenchChatChangePreviewPanel } from './WorkbenchChatChangePreviewPanel'
@@ -147,10 +145,6 @@ export interface WorkbenchEditorPanelDiffProps {
     onSelectItem: (item: WorkbenchGitChangeItem) => void
   }>
   auxiliaryTabs?: WorkbenchEditorPanelAuxiliaryTab[]
-  /** 独占标签组激活时标签栏最前面的组名与「返回编辑器」。 */
-  isolatedGroupHeaders?: Partial<
-    Record<WorkbenchEditorAuxiliaryTabGroup, WorkbenchEditorIsolatedGroupHeader>
-  >
   /**
    * 调试 webview 常驻层：所有打开的调试选项卡的 webview 一直挂载在编辑区里，
    * 由该层内部按激活态切换可见性，从而切走再切回不丢页面状态。
@@ -231,7 +225,6 @@ export function EditorPanel({
     focusFirstChangeRequestId = 0,
     chatChangePreview = null,
     auxiliaryTabs = [],
-    isolatedGroupHeaders,
     debugTabsLayer = null,
     lightTab = null,
     onCloseDiffTab,
@@ -708,7 +701,6 @@ export function EditorPanel({
                 : undefined
           }
           showWorkspaceActions={!isolatedTabGroup}
-          isolatedGroupHeader={isolatedTabGroup ? isolatedGroupHeaders?.[isolatedTabGroup] : null}
         />
         <Dialog
           open={!!shouldShowExternalConflictDialog && externalConflictDialogOpen}

@@ -14,6 +14,18 @@ interface EditorCursorSnapshot {
   }
 }
 
+function groupAiHighlightsByPath(
+  highlights: ReadonlyArray<{ path: string; startLine: number; endLine: number }>
+): WorkbenchAgentEditorState['aiHighlights'] {
+  const byPath = new Map<string, Array<{ startLine: number; endLine: number }>>()
+  for (const { path, startLine, endLine } of highlights) {
+    const ranges = byPath.get(path) ?? []
+    ranges.push({ startLine, endLine })
+    byPath.set(path, ranges)
+  }
+  return [...byPath].map(([path, ranges]) => ({ path, ranges }))
+}
+
 /** 按 1 基行列从文档里切出选区文字。 */
 function sliceSelection(
   content: string,
@@ -41,6 +53,8 @@ export function buildWorkbenchAgentEditorState(input: {
   editorContent: string
   openTabs: ReadonlyArray<{ path: string; content: string; file: { content: string } }>
   explanationCount: number
+  /** 还标着的 AI 选区，已按文件与行号排好。 */
+  aiHighlights: ReadonlyArray<{ path: string; startLine: number; endLine: number }>
 }): WorkbenchAgentEditorState {
   const unsavedPaths = new Set(
     input.openTabs.filter((tab) => tab.content !== tab.file.content).map((tab) => tab.path)
@@ -74,5 +88,6 @@ export function buildWorkbenchAgentEditorState(input: {
         : null,
     openFiles: input.openTabs.map((tab) => ({ path: tab.path, unsaved: unsavedPaths.has(tab.path) })),
     explanationCount: input.explanationCount,
+    aiHighlights: groupAiHighlightsByPath(input.aiHighlights),
   }
 }

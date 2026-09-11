@@ -9,6 +9,8 @@ import {
   type WorkbenchComment,
 } from '../../models/comments/workbenchCommentStore'
 
+import { resolveWorkbenchAnchorEndLine } from './workbenchLineAnchors'
+
 /**
  * 工作台行内评论装饰扩展。
  *
@@ -310,7 +312,7 @@ export function createWorkbenchCommentExtension(
       const lineUpdates = after.anchors.map((anchor) => ({
         id: anchor.id,
         startLine: update.state.doc.lineAt(anchor.from).number,
-        endLine: update.state.doc.lineAt(Math.max(anchor.from, anchor.to - 1)).number,
+        endLine: resolveWorkbenchAnchorEndLine(update.state.doc, anchor),
       }))
       if (!isEmpty(lineUpdates)) options.onAnchorLinesChanged(lineUpdates)
     }

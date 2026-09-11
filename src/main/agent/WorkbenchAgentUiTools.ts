@@ -15,6 +15,7 @@ import { AppError } from '@velaros-ai/core/error'
 import type {
   WorkbenchAgentUiCommand,
   WorkbenchAgentUiExplanation,
+  WorkbenchAgentUiOpenFile,
 } from '../../shared/workbenchAgentUi'
 import { analyzeWorkbenchCommandExecution } from '../workspace/CommandExecutionPolicy'
 import {
@@ -33,7 +34,7 @@ const WorkbenchAgentUiCategory: Readonly<Record<ToolCategoryId, ToolCategoryDefi
       id: WorkbenchAgentUiCategoryId,
       label: '工作台界面',
       description:
-        '在用户眼前的 Workbench 里打开文件并定位代码、在文件树里定位、打开改动对比、给代码加讲解气泡，' +
+        '在用户眼前的 Workbench 里批量打开文件、用淡紫色 AI 选区标出代码、在文件树里定位、打开改动对比、给代码加讲解气泡，' +
         '在「运行」面板里跑长驻命令并读输出、打开本机预览、读问题列表，以及读取用户此刻在编辑器里看的内容。',
       toolOs: Object.freeze({ domain: 'workbench', defaultState: 'resident' }),
     }),
@@ -103,21 +104,44 @@ async function resolveProjectEntry(projectRoot: string, rawPath: string): Promis
   }
 }
 
+/** 只校验落在项目里（不要求存在）：清掉标记这类操作针对的文件可能已经被删了。 */
+function resolveProjectRelativePath(projectRoot: string, rawPath: string): string {
+  const root = resolve(projectRoot)
+  const input = rawPath.trim()
+  const relativePath = getRelativePathInsideRoot(
+    root,
+    isAbsolute(input) ? resolve(input) : resolve(root, input)
+  )
+  if (!isPresent(relativePath) || relativePath === '.')
+    throw new AppError('PERMISSION', `${input} is not a file inside the project.`)
+  return toPortableRelativePath(relativePath)
+}
+
 async function resolveProjectFile(projectRoot: string, rawPath: string): Promise<ProjectEntry> {
   const entry = await resolveProjectEntry(projectRoot, rawPath)
   if (entry.isDirectory) throw new AppError('VALIDATION', `${rawPath.trim()} is a folder, not a file.`)
   return entry
 }
 
-/** 与编辑器同一种数法：`\n` 的个数 + 1（结尾换行后面那一行也算）。读不了或太大时为 null。 */
-async function countFileLines(absolutePath: string): Promise<number | null> {
+interface FileLineInfo {
+  /** 与编辑器同一种数法：`\n` 的个数 + 1（结尾换行后面那一行也算）。 */
+  lineCount: number
+  /** 最后一个有内容的行：文件以换行结尾时，结尾换行后面那个空行不算。 */
+  lastContentLine: number
+}
+
+/** 读不了或太大时为 null（不钳行号，交给编辑器自己夹住）。 */
+async function readFileLineInfo(absolutePath: string): Promise<FileLineInfo | null> {
   try {
     if ((await stat(absolutePath)).size > LineCountReadLimitBytes) return null
     const content = await readFile(absolutePath, 'utf8')
-    let lines = 1
+    let lineCount = 1
     for (let index = content.indexOf('\n'); index >= 0; index = content.indexOf('\n', index + 1))
-      lines += 1
-    return lines
+      lineCount += 1
+    return {
+      lineCount,
+      lastContentLine: content.endsWith('\n') ? Math.max(1, lineCount - 1) : lineCount,
+    }
   } catch {
     return null
   }
@@ -212,34 +236,115 @@ function isLocalPreviewHost(hostname: string): boolean {
 
 const PathSchema = z.string().min(1).describe('Project-relative path (an absolute path inside the project also works).')
 const LineSchema = z.number().int().min(1)
+const MaxFilesPerOpen = 12
+const MaxHighlightsPerFile = 20
 
-const openFileTool = defineToolRuntimeSpec<
-  { path: string; line?: number; column?: number; endLine?: number },
-  WorkbenchAgentUiToolContext
->({
+const HighlightSchema = z.object({
+  startLine: LineSchema,
+  endLine: LineSchema.optional().describe('Last highlighted line (inclusive); defaults to startLine.'),
+})
+
+const OpenFileItemSchema = z.object({
+  path: PathSchema,
+  line: LineSchema.optional().describe('Line to jump to, 1-based; defaults to the first highlight or line 1.'),
+  column: LineSchema.optional().describe('Column on that line, 1-based.'),
+  endLine: LineSchema.optional().describe('Shorthand for one highlight from line to endLine.'),
+  highlights: z.array(HighlightSchema).optional()
+    .describe(`Line ranges to mark as AI selections (light purple) in this file; up to ${MaxHighlightsPerFile} per file.`),
+})
+
+type OpenFileItemInput = z.infer<typeof OpenFileItemSchema>
+type OpenFileInput = Partial<OpenFileItemInput> & { files?: OpenFileItemInput[] }
+
+/**
+ * 单个文件的写法（顶层 path）与批量写法（files）都收；两者都给时顶层那一项当第一个文件（files 里
+ * 有同一个文件就并进去），并在回执里说明。两者都没有才打回。
+ */
+function readOpenFileItems(input: OpenFileInput, notes: string[]): OpenFileItemInput[] {
+  const items = [...(input.files ?? [])]
+  if (input.path) {
+    if (items.length > 0) notes.push(`Both path and files were given; ${input.path} was opened as the first file.`)
+    items.unshift({
+      path: input.path,
+      ...(isPresent(input.line) ? { line: input.line } : {}),
+      ...(isPresent(input.column) ? { column: input.column } : {}),
+      ...(isPresent(input.endLine) ? { endLine: input.endLine } : {}),
+      ...(input.highlights ? { highlights: input.highlights } : {}),
+    })
+  }
+  if (items.length === 0) throw new AppError('VALIDATION', 'Pass files: [{ path, ... }] (or a single path).')
+  return items
+}
+
+/** 一个要打开的文件，同一文件出现多次时合并在这里。 */
+interface OpenFilePlan {
+  path: string
+  /** 模型明确给的跳转位置；没给时跳到第一段选区。 */
+  line: number | null
+  column: number | null
+  highlights: Array<{ startLine: number; endLine: number }>
+}
+
+/**
+ * 一段选区落到文件的真实行上：起始行越界的这一段丢掉（在回执里说），结束行夹到最后一个有内容的行
+ * （结尾换行后面那个空行不标）。
+ */
+function clampHighlight(
+  path: string,
+  info: FileLineInfo | null,
+  range: { startLine: number; endLine?: number },
+  notes: string[]
+): { startLine: number; endLine: number } | null {
+  if (info && range.startLine > info.lineCount) {
+    notes.push(`${path} has only ${info.lineCount} lines; the selection starting at line ${range.startLine} was skipped.`)
+    return null
+  }
+  const requestedEnd = Math.max(range.startLine, range.endLine ?? range.startLine)
+  return {
+    startLine: range.startLine,
+    endLine: info ? Math.min(requestedEnd, Math.max(range.startLine, info.lastContentLine)) : requestedEnd,
+  }
+}
+
+function readStringList(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
+}
+
+const openFileTool = defineToolRuntimeSpec<OpenFileInput, WorkbenchAgentUiToolContext>({
   name: 'workbench:open_file',
   category: WorkbenchAgentUiCategoryId,
   role: 'control',
-  summary: '在用户眼前的编辑器里打开项目文件，可以定位到某一行，并选中一段行指给用户看。',
+  summary:
+    '在用户眼前的编辑器里打开项目文件（一次可以打开多个），定位到某一行，并把要用户看的代码标成 AI 选区（淡紫色）。',
   suitable: [
     '用户想看某个文件或某段代码：让它直接出现在编辑器里，而不是只在回答里贴路径。',
-    '讲解、排查或改完代码后，把用户带到相关的位置。',
+    '讲解、排查或改完代码后，把用户带到相关的位置；涉及几个文件时一次打开。',
   ],
   forbidden: [
     '不要用它读文件内容；读内容用 project:read。',
-    '不要一口气打开一串文件；一次只打开用户此刻需要看的那一个。',
+    '不要打开与用户此刻要看的内容无关的文件。',
   ],
   usage: [
-    'line / column 从 1 开始；给 endLine 会选中 line 到 endLine 这几行。',
-    '只给 path 时停在文件开头。',
+    `files 批量打开（最多 ${MaxFilesPerOpen} 个），编辑器最后停在第一个文件；只开一个文件时也可以直接传 path。`,
+    'line / column 从 1 开始；highlights（或 endLine 简写）把这些行标成 AI 选区：淡紫色、锁在文件上，切换文件也还在，用户关掉这个文件才消失。',
+    '要取消 AI 选区用 workbench:clear_highlights；再次打开同一个文件时新加的选区与原有的并存。',
   ],
-  examples: [{ path: 'src/main.ts' }, { path: 'src/server/router.ts', line: 42, endLine: 58 }],
-  notes: ['返回的 line / endLine 是实际定位到的行（越界的结束行会被夹到文件末尾）。'],
-  schema: z.object({
-    path: PathSchema,
-    line: LineSchema.optional().describe('Line to jump to, 1-based.'),
-    column: LineSchema.optional().describe('Column on that line, 1-based.'),
-    endLine: LineSchema.optional().describe('Select line..endLine to point the user at a block.'),
+  examples: [
+    { path: 'src/main.ts' },
+    {
+      files: [
+        { path: 'src/server/router.ts', highlights: [{ startLine: 42, endLine: 58 }] },
+        { path: 'src/server/auth.ts', line: 10, highlights: [{ startLine: 10, endLine: 24 }, { startLine: 80 }] },
+      ],
+    },
+  ],
+  notes: [
+    '返回每个文件实际定位到的行和标上的选区（越界的结束行会被夹到文件末尾）。',
+    '打不开的文件、起始行越界的选区会被跳过，不连累同一批里的其他文件；跳过了什么写在 failed / notes 里。',
+  ],
+  schema: OpenFileItemSchema.partial().extend({
+    files: z.array(OpenFileItemSchema).optional()
+      .describe(`Files to open in one call (up to ${MaxFilesPerOpen}); the editor ends on the first one.`),
   }),
   permissions: [],
   capabilities: { effectKind: 'read', readScopes: ['workbench-ui'], concurrency: 'unsafe' },
@@ -247,27 +352,113 @@ const openFileTool = defineToolRuntimeSpec<
   isAvailable: hasWorkbenchUi,
   isConcurrencySafe: () => false,
   execute: async (input, context) => {
-    const file = await resolveProjectFile(context.resourceId, input.path)
-    const line = input.line ?? 1
-    const range = resolveLineRange(
-      file.path,
-      await countFileLines(file.absolutePath),
-      line,
-      input.endLine
-    )
-    await sendCommand(context, {
-      type: 'open-file',
-      path: file.path,
-      line: range.startLine,
-      column: input.column ?? 1,
-      endLine: isPresent(input.endLine) ? range.endLine : null,
-    })
-    return {
-      opened: true,
-      path: file.path,
-      line: range.startLine,
-      ...(isPresent(input.endLine) ? { endLine: range.endLine } : {}),
+    const notes: string[] = []
+    const failed: Array<{ path: string; reason: string }> = []
+    let firstError: AppError | null = null
+    const plans: OpenFilePlan[] = []
+    const skipped: string[] = []
+    for (const item of readOpenFileItems(input, notes)) {
+      let file: ProjectEntry
+      try {
+        file = await resolveProjectFile(context.resourceId, item.path)
+      } catch (error) {
+        const appError = AppError.from(error)
+        firstError ??= appError
+        failed.push({ path: item.path, reason: appError.message })
+        continue
+      }
+      let plan = plans.find((candidate) => candidate.path === file.path)
+      if (!plan) {
+        if (plans.length >= MaxFilesPerOpen) {
+          skipped.push(file.path)
+          continue
+        }
+        plan = { path: file.path, line: null, column: null, highlights: [] }
+        plans.push(plan)
+      }
+      const info = await readFileLineInfo(file.absolutePath)
+      if (isPresent(item.line) && plan.line === null) {
+        plan.line = info ? Math.min(item.line, info.lineCount) : item.line
+        plan.column = item.column ?? null
+        if (plan.line !== item.line)
+          notes.push(`${file.path} has only ${plan.line} lines; jumped to line ${plan.line} instead of ${item.line}.`)
+      }
+      const requested = [
+        ...(isPresent(item.endLine) ? [{ startLine: item.line ?? 1, endLine: item.endLine }] : []),
+        ...(item.highlights ?? []),
+      ]
+      for (const range of requested) {
+        const highlight = clampHighlight(file.path, info, range, notes)
+        if (!highlight) continue
+        if (plan.highlights.length >= MaxHighlightsPerFile) {
+          notes.push(`Only the first ${MaxHighlightsPerFile} selections in ${file.path} were kept.`)
+          break
+        }
+        plan.highlights.push(highlight)
+      }
     }
+    if (skipped.length > 0)
+      notes.push(`Only the first ${MaxFilesPerOpen} files were opened; skipped ${skipped.join(', ')}.`)
+    if (plans.length === 0) throw firstError ?? new AppError('VALIDATION', 'No file to open.')
+
+    const files: WorkbenchAgentUiOpenFile[] = plans.map((plan) => ({
+      path: plan.path,
+      line: plan.line ?? plan.highlights[0]?.startLine ?? 1,
+      column: plan.column ?? 1,
+      highlights: plan.highlights,
+    }))
+    const result = await sendCommand(context, { type: 'open-files', files })
+    const notOpened = new Set(readStringList(result.failed))
+    for (const path of notOpened) failed.push({ path, reason: 'The editor could not read this file.' })
+    return {
+      opened: files
+        .filter((file) => !notOpened.has(file.path))
+        .map((file) => ({
+          path: file.path,
+          line: file.line,
+          ...(file.highlights.length > 0
+            ? { highlights: file.highlights.map((range) => formatRange(file.path, range.startLine, range.endLine)) }
+            : {}),
+        })),
+      ...(failed.length > 0 ? { failed } : {}),
+      ...(notes.length > 0 ? { notes } : {}),
+    }
+  },
+})
+
+const clearHighlightsTool = defineToolRuntimeSpec<{ paths?: string[] }, WorkbenchAgentUiToolContext>({
+  name: 'workbench:clear_highlights',
+  category: WorkbenchAgentUiCategoryId,
+  role: 'control',
+  summary: '取消编辑器里的 AI 选区（淡紫色标记）：全部取消，或只取消某几个文件上的。',
+  suitable: ['指给用户看的代码已经讲完、或要换一批位置标记时，先把旧的选区取消。'],
+  forbidden: ['不要取消用户还在对照着看的选区；用户关掉文件时选区会自己消失。'],
+  usage: ['不给 paths（或给空数组）取消全部 AI 选区；给 paths 只取消这些文件上的。'],
+  examples: [{}, { paths: ['src/cache.ts', 'src/store.ts'] }],
+  notes: ['返回取消了几段选区；不在项目里的路径会被忽略并列在 ignored 里。'],
+  schema: z.object({ paths: z.array(PathSchema).optional() }),
+  permissions: [],
+  capabilities: { effectKind: 'read', readScopes: ['workbench-ui'], concurrency: 'unsafe' },
+  hideWhenUnavailable: true,
+  isAvailable: hasWorkbenchUi,
+  isConcurrencySafe: () => false,
+  execute: async (input, context) => {
+    if (!input.paths || input.paths.length === 0)
+      return sendCommand(context, { type: 'clear-highlights', paths: null })
+    const paths = new Set<string>()
+    const ignored: string[] = []
+    for (const path of input.paths) {
+      try {
+        paths.add(resolveProjectRelativePath(context.resourceId, path))
+      } catch {
+        ignored.push(path)
+      }
+    }
+    // 给的路径全都不在项目里：一个也不取消，而不是退回「全部取消」。
+    const result = paths.size > 0
+      ? await sendCommand(context, { type: 'clear-highlights', paths: [...paths] })
+      : { cleared: 0 }
+    return { ...result, ...(ignored.length > 0 ? { ignored } : {}) }
   },
 })
 
@@ -400,7 +591,7 @@ const explainCodeTool = defineToolRuntimeSpec<ExplainCodeInput, WorkbenchAgentUi
     for (const item of input.explanations) {
       const file = await resolveProjectFile(context.resourceId, item.path)
       if (!lineCounts.has(file.absolutePath))
-        lineCounts.set(file.absolutePath, await countFileLines(file.absolutePath))
+        lineCounts.set(file.absolutePath, (await readFileLineInfo(file.absolutePath))?.lineCount ?? null)
       const range = resolveLineRange(
         file.path,
         lineCounts.get(file.absolutePath) ?? null,
@@ -444,18 +635,7 @@ const clearExplanationsTool = defineToolRuntimeSpec<{ path?: string }, Workbench
   isAvailable: hasWorkbenchUi,
   isConcurrencySafe: () => false,
   execute: async (input, context) => {
-    let path: string | null = null
-    if (isPresent(input.path)) {
-      const root = resolve(context.resourceId)
-      const rawPath = input.path.trim()
-      const relativePath = getRelativePathInsideRoot(
-        root,
-        isAbsolute(rawPath) ? resolve(rawPath) : resolve(root, rawPath)
-      )
-      if (!isPresent(relativePath) || relativePath === '.')
-        throw new AppError('PERMISSION', `${rawPath} is not a file inside the project.`)
-      path = toPortableRelativePath(relativePath)
-    }
+    const path = isPresent(input.path) ? resolveProjectRelativePath(context.resourceId, input.path) : null
     return sendCommand(context, { type: 'clear-explanations', path })
   },
 })
@@ -722,6 +902,7 @@ const getProblemsTool = defineToolRuntimeSpec<
  */
 const WorkbenchAgentUiToolSpecs = Object.freeze([
   openFileTool,
+  clearHighlightsTool,
   revealTool,
   openDiffTool,
   explainCodeTool,

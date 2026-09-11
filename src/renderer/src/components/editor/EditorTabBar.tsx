@@ -8,7 +8,6 @@ import {
   useState,
 } from 'react'
 import {
-  ArrowUUpLeftIcon,
   CaretDownIcon,
   CodeIcon,
   DotsThreeVerticalIcon,
@@ -70,16 +69,6 @@ export interface WorkbenchEditorAuxiliaryTabItem {
   onClose?: () => void
 }
 
-/** 独占组激活时标签栏最前面的组名，以及回到普通编辑器的按钮。 */
-export interface WorkbenchEditorIsolatedGroupHeader {
-  label: string
-  icon?: ReactNode
-  title?: string
-  onClick?: () => void
-  exitLabel: string
-  onExit: () => void
-}
-
 interface EditorTabBarProps {
   openTabs: WorkbenchOpenEditorTab[]
   selectedFilePath: Nullable<string>
@@ -111,7 +100,6 @@ interface EditorTabBarProps {
   onToggleMarkdownPreview?: () => void
   ariaLabel?: string
   showWorkspaceActions?: boolean
-  isolatedGroupHeader?: LooseOptional<WorkbenchEditorIsolatedGroupHeader>
 }
 
 function fileNameFromPath(path: string): string {
@@ -146,7 +134,6 @@ export function EditorTabBar({
   onToggleMarkdownPreview,
   ariaLabel,
   showWorkspaceActions = true,
-  isolatedGroupHeader = null,
 }: EditorTabBarProps): Nullable<ReactElement> {
   const { t } = useWorkbenchI18n()
   const [openMenu, setOpenMenu] = useState<Nullable<'tabs' | 'actions'>>(null)
@@ -261,17 +248,6 @@ export function EditorTabBar({
         role="tablist"
         aria-label={ariaLabel ?? t('workbench.openFiles')}
       >
-        {!!isolatedGroupHeader && (
-          <button
-            type="button"
-            className={styles.editorTabGroupHeader}
-            title={isolatedGroupHeader.title ?? isolatedGroupHeader.label}
-            onClick={isolatedGroupHeader.onClick}
-          >
-            {isolatedGroupHeader.icon}
-            <span>{isolatedGroupHeader.label}</span>
-          </button>
-        )}
         <div ref={tabScrollerRef} className={styles.editorTabScroller}>
           {openTabs.map((tab) => {
             const isDirty = tab.content !== tab.file.content
@@ -422,17 +398,6 @@ export function EditorTabBar({
           ))}
         </div>
         <div className={styles.editorTabActions}>
-          {!!isolatedGroupHeader && (
-            <IconButton
-              size="icon-sm"
-              className={styles.editorTabActionButton}
-              title={isolatedGroupHeader.exitLabel}
-              label={isolatedGroupHeader.exitLabel}
-              onClick={isolatedGroupHeader.onExit}
-            >
-              <ArrowUUpLeftIcon size={15} />
-            </IconButton>
-          )}
           {markdownPreviewAvailable && (
             <IconButton
               size="icon-sm"

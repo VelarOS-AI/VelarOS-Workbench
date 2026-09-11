@@ -30,7 +30,7 @@ void describe('Workbench agent UI and AI changes wiring', () => {
     const editor = readSource('src/renderer/src/components/editor/CodeMirrorEditor.tsx')
 
     assert.match(pageModel, /registerWorkbenchAgentUiHandler\(agentUiProjectRoot, handleAgentUiCommand\)/u)
-    assert.match(pageModel, /case 'open-file':[\s\S]*?focus: false/u)
+    assert.match(pageModel, /case 'open-files': \{[\s\S]*?focus: false/u)
     assert.match(editorPanel, /editorRef\.current\?\.selectLines\(navigationRequest\.line, navigationRequest\.endLine, options\)/u)
     assert.match(editor, /if \(options\?\.focus !== false\) view\.focus\(\)/u)
     // 跑命令进底部「运行」面板并把面板打开；预览优先用内置浏览器，没开时交给系统浏览器。
@@ -64,5 +64,54 @@ void describe('Workbench agent UI and AI changes wiring', () => {
     assert.match(editorPanel, /openTabs=\{isolatedTabGroup \? \[\] : openTabs\}/u)
     // 回答末尾改动卡的「查看」打开这一轮的对比，而不是随便开一个文件预览。
     assert.match(card, /scope\.onReviewRound\(\{ sessionId: scope\.sessionId, recordId: summary\.recordId \}\)/u)
+    // 独占组不再有组名标签与「返回编辑器」按钮：进出由左侧面板与「打开文件」决定。
+    assert.doesNotMatch(tabBar, /editorTabGroupHeader|ArrowUUpLeftIcon/u)
+  })
+
+  void test('left panel and editor never show different domains', () => {
+    const pageModel = readSource('src/renderer/src/hooks/useStandaloneWorkbenchPageModel.tsx')
+
+    // 编辑区进入对比 → 左侧切到改动树；编辑区回到普通文件 → 左侧回文件树；左侧离开改动树 → 编辑区收起对比。
+    assert.match(pageModel, /if \(aiChangesActive\) setActiveLeftTool\('ai-changes'\)/u)
+    assert.match(pageModel, /else if \(activeLeftTool === 'ai-changes'\) setActiveLeftTool\('project'\)/u)
+    assert.match(
+      pageModel,
+      /if \(aiChangesActive && previous\.leftTool === 'ai-changes' && activeLeftTool !== 'ai-changes'\)\n\s*deactivateAiChanges\(\)/u
+    )
+  })
+
+  void test('AI selections stay locked on the file until its tab closes', () => {
+    const pageModel = readSource('src/renderer/src/hooks/useStandaloneWorkbenchPageModel.tsx')
+    const editor = readSource('src/renderer/src/components/editor/CodeMirrorEditor.tsx')
+
+    const openFiles = /case 'open-files': \{[\s\S]*?\n {8}\}/u.exec(pageModel)?.[0] ?? ''
+    // 一批文件在后台开成标签，不逐个切过去；只给开出了标签的文件标选区，最后停在第一个文件。
+    assert.match(openFiles, /if \(await workbench\.preloadOpenTab\(file\.path\)\) opened\.push\(file\)/u)
+    assert.match(openFiles, /aiHighlightStore\.add\(\n\s*context\.projectRoot,\n\s*opened\.flatMap/u)
+    assert.match(openFiles, /await editorNavigation\.goToLocation\(primary\.path/u)
+    assert.doesNotMatch(openFiles, /editorNavigation\.selectFile/u)
+    // AI 用 clear-highlights 取消。
+    assert.match(pageModel, /case 'clear-highlights':\n\s*return \{ cleared: aiHighlightStore\.clear\(context\.projectRoot, command\.paths\) \}/u)
+    // 关掉标签（任意方式）才释放，换项目整项目释放；改名、移动跟着换路径。
+    assert.match(pageModel, /const released = resolveReleasedAiHighlightTabs\(previous, next\)/u)
+    assert.match(pageModel, /onOpenEntryPathMoved: aiHighlightStore\.renamePath/u)
+    // 编辑器按存储重锚：切文件、外部替换、存储变化都重算；编辑时行号回写。存储变化直接订阅，不重渲染编辑器。
+    assert.match(editor, /workbenchAiHighlightExtension,/u)
+    assert.match(editor, /syncWorkbenchExplanations\(view\)\n\s*syncWorkbenchAiHighlights\(view\)/u)
+    assert.match(editor, /onAnchorLinesChanged: aiHighlightStore\.updateLines/u)
+    assert.match(editor, /aiHighlightStore\.subscribe\(resync\(syncWorkbenchAiHighlights\)\)/u)
+    assert.doesNotMatch(editor, /useWorkbenchAiHighlights\(\)|useWorkbenchExplanations\(\)/u)
+    // 格式化按最小改动应用，选区、讲解、评论不会塌到文件开头。
+    assert.match(editor, /view\.dispatch\(\{ changes: buildWorkbenchMinimalTextChanges\(content, nextContent\) \}\)/u)
+  })
+
+  void test('the explanation bubble keeps a single icon-only header row', () => {
+    const extension = readSource('src/renderer/src/components/editor/workbenchExplanationExtension.ts')
+
+    assert.match(extension, /flexWrap: 'nowrap'/u)
+    assert.match(extension, /createActionButton\('cm-wbExplainClose', labels\.close, CloseSvg, \(\) => this\.options\.onCollapse\(\)\)/u)
+    // 行号栏里的序号标记：当前这条点了隐藏，其余的点了显示。
+    assert.match(extension, /if \(this\.anchor\.active\) this\.options\.onCollapse\(\)\n\s*else this\.options\.onActivate\(this\.anchor\.id\)/u)
+    assert.doesNotMatch(extension, /labels\.badge|labels\.finish|onFinish/u)
   })
 })

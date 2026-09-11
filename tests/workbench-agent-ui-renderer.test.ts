@@ -172,6 +172,11 @@ void describe('Workbench agent UI host', () => {
         { path: 'README.md', content: 'same', file: { content: 'same' } },
       ],
       explanationCount: 2,
+      aiHighlights: [
+        { path: 'src/a.ts', startLine: 2, endLine: 3 },
+        { path: 'src/a.ts', startLine: 9, endLine: 9 },
+        { path: 'src/b.ts', startLine: 1, endLine: 4 },
+      ],
     })
     assert.deepEqual(state, {
       view: 'file',
@@ -182,6 +187,11 @@ void describe('Workbench agent UI host', () => {
         { path: 'README.md', unsaved: false },
       ],
       explanationCount: 2,
+      // AI 选区按文件归组交给模型。
+      aiHighlights: [
+        { path: 'src/a.ts', ranges: [{ startLine: 2, endLine: 3 }, { startLine: 9, endLine: 9 }] },
+        { path: 'src/b.ts', ranges: [{ startLine: 1, endLine: 4 }] },
+      ],
     })
 
     // 对比视图里光标不属于可编辑文件：只报视图种类。
@@ -192,6 +202,7 @@ void describe('Workbench agent UI host', () => {
       editorContent: '',
       openTabs: [],
       explanationCount: 0,
+      aiHighlights: [],
     })
     assert.equal(diffState.activeFile, null)
     assert.equal(diffState.selection, null)

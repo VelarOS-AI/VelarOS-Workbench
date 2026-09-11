@@ -65,6 +65,11 @@ import {
 } from '@codemirror/view'
 import { HammerIcon, PlayIcon } from '@phosphor-icons/react'
 import {
+  buildWorkbenchAiHighlightAnchors,
+  createWorkbenchAiHighlightExtension,
+  setWorkbenchAiHighlightAnchorsEffect,
+} from '@renderer/components/editor/workbenchAiHighlightExtension'
+import {
   addWorkbenchCommentAnchorEffect,
   anchorFromLineRange,
   createWorkbenchCommentExtension,
@@ -82,6 +87,7 @@ import {
   type WorkbenchHostRuntime,
 } from '@renderer/host'
 import { useWorkbenchI18n } from '@renderer/i18n'
+import { useWorkbenchAiHighlightStore } from '@renderer/models/aiHighlights/workbenchAiHighlightStore'
 import type { PackageManagerCommand } from '@renderer/models/commands/workbenchPackageScriptCommand'
 import {
   buildWorkbenchVelarBuildCommand,
@@ -171,6 +177,7 @@ import {
   getWorkbenchLanguageServiceRename,
   getWorkbenchLanguageServiceSemanticTokens,
 } from '@renderer/models/editor/workbenchLanguageServiceIpc'
+import { buildWorkbenchMinimalTextChanges } from '@renderer/models/editor/workbenchMinimalTextChanges'
 import {
   createWorkbenchPackageScriptRunGutterExtension,
   shouldShowWorkbenchPackageScriptRunGutter,
@@ -189,10 +196,7 @@ import {
   createWorkbenchVelarTestRunGutterExtension,
   shouldShowWorkbenchVelarTestRunGutter,
 } from '@renderer/models/editor/workbenchVelarTestRunGutter'
-import {
-  useWorkbenchExplanations,
-  useWorkbenchExplanationStore,
-} from '@renderer/models/explanations/workbenchExplanationStore'
+import { useWorkbenchExplanationStore } from '@renderer/models/explanations/workbenchExplanationStore'
 import type { WorkbenchProjectContextIndex } from '@renderer/models/project/workbenchProjectContextIndex'
 import type { WorkbenchThemeId } from '@renderer/models/settings/workbenchPreferences'
 import { useStandaloneWorkbenchModelConfig } from '@renderer/runtime/standaloneWorkbenchModelConfig'
@@ -1443,11 +1447,10 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
 
     const explanationStore = useWorkbenchExplanationStore()
     const explanationLabelsRef = useLatest({
-      badge: t('workbench.explanationBadge'),
       previous: t('workbench.explanationPrevious'),
       next: t('workbench.explanationNext'),
+      close: t('workbench.explanationClose'),
       collapse: t('workbench.explanationCollapse'),
-      finish: t('workbench.explanationFinish'),
       expand: t('workbench.explanationExpand'),
     })
     const workbenchExplanationExtension = useMemo(
@@ -1456,16 +1459,38 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
           onActivate: explanationStore.activate,
           onStep: explanationStore.step,
           onCollapse: () => explanationStore.activate(null),
-          onFinish: () => explanationStore.clear(projectRootRef.current),
           resolveLabels: () => explanationLabelsRef.current,
           onAnchorsRemoved: explanationStore.removeMany,
           onAnchorLinesChanged: explanationStore.updateLines,
           isExternalDocReplace: (tr) => tr.annotation(externalValueSync) === true,
         }),
-      [explanationLabelsRef, explanationStore, projectRootRef]
+      [explanationLabelsRef, explanationStore]
     )
     /** 已经把哪一次「切到某条讲解」带进过视野；切文件后补做一次。 */
     const appliedExplanationFocusRef = useRef(0)
+
+    // AI 选区：锁在文件上的淡紫色标记，切文件后按存储行号重新锚定，编辑时行号回写。
+    const aiHighlightStore = useWorkbenchAiHighlightStore()
+    const workbenchAiHighlightExtension = useMemo(
+      () =>
+        createWorkbenchAiHighlightExtension({
+          onAnchorsRemoved: aiHighlightStore.removeMany,
+          onAnchorLinesChanged: aiHighlightStore.updateLines,
+          isExternalDocReplace: (tr) => tr.annotation(externalValueSync) === true,
+        }),
+      [aiHighlightStore]
+    )
+    const syncWorkbenchAiHighlights = (view: EditorView): void => {
+      const currentPath = pathRef.current
+      const highlights = currentPath
+        ? aiHighlightStore.listForPath(projectRootRef.current, currentPath)
+        : []
+      view.dispatch({
+        effects: setWorkbenchAiHighlightAnchorsEffect.of(
+          buildWorkbenchAiHighlightAnchors(view.state.doc, highlights)
+        ),
+      })
+    }
 
     // 按存储行号把当前文件的讲解锚定成装饰；有新的「切到某条讲解」且它就在这个文件里时，把它滚到视野上方。
     const syncWorkbenchExplanations = (view: EditorView): void => {
@@ -2051,13 +2076,11 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
           content,
           currentFileChange.edits
         )
-        // 语言服务的内容可能已滞后于最新编辑；从当前实时文档重新取一次基准再比对。
-        const liveContent = view.state.doc.toString()
-        if (nextContent === liveContent) return
+        // 格式化期间文档又被改过：这份结果已经过时，套上去会冲掉新敲的字。
+        if (nextContent === content || view.state.doc.toString() !== content) return
 
-        view.dispatch({
-          changes: { from: 0, to: view.state.doc.length, insert: nextContent },
-        })
+        // 按最小改动应用：整篇替换会让光标、讲解、AI 选区、评论全部塌到文件开头。
+        view.dispatch({ changes: buildWorkbenchMinimalTextChanges(content, nextContent) })
         view.focus()
       } catch (error) {
         log.debug('格式化文档失败', {
@@ -2379,6 +2402,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
           workbenchIndentGuideExtension,
           workbenchCommentExtension,
           workbenchExplanationExtension,
+          workbenchAiHighlightExtension,
           mouseHandlers,
           languageHoverCompartment.of(languageServiceHoverExtension),
           languageServiceCompartment.of([]),
@@ -2410,6 +2434,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       viewRef.current = view
       reanchorWorkbenchComments(view)
       syncWorkbenchExplanations(view)
+      syncWorkbenchAiHighlights(view)
       emitCursorPosition(view, callbacksRef.current.onCursorPositionChange)
       if (path) {
         autoFoldedPathRef.current = path
@@ -2516,18 +2541,29 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         setCommentDraft(null)
         view.scrollDOM.scrollTo({ left: 0, top: 0 })
       }
-      // 外部整篇替换会清空评论锚点，按存储行号重新锚定当前文件的评论（讲解同理）。
+      // 外部整篇替换会清空评论锚点，按存储行号重新锚定当前文件的评论（讲解、AI 选区同理）。
       reanchorWorkbenchComments(view)
       syncWorkbenchExplanations(view)
+      syncWorkbenchAiHighlights(view)
       emitCursorPosition(view, callbacksRef.current.onCursorPositionChange)
     }, [path, value])
 
-    // 讲解加了、换了、切到下一条：重新锚定，必要时把当前讲解带进视野。
-    const workbenchExplanations = useWorkbenchExplanations()
+    // 讲解加了、换了、切到下一条：重新锚定，必要时把当前讲解带进视野。AI 选区加了、取消了、跟着编辑挪了行：
+    // 同样按存储重新锚定当前文件。直接订阅存储而不经 React——编辑器每回写一次行号就重渲染整个编辑器组件
+    // 太贵；通知可能来自编辑器自己的 update listener，重锚推迟到微任务，不在更新过程中再派发事务。
     useEffect(() => {
-      const view = viewRef.current
-      if (view) syncWorkbenchExplanations(view)
-    }, [workbenchExplanations])
+      const resync = (sync: (view: EditorView) => void) => () =>
+        queueMicrotask(() => {
+          const view = viewRef.current
+          if (view) sync(view)
+        })
+      const unsubscribeExplanations = explanationStore.subscribe(resync(syncWorkbenchExplanations))
+      const unsubscribeAiHighlights = aiHighlightStore.subscribe(resync(syncWorkbenchAiHighlights))
+      return () => {
+        unsubscribeExplanations()
+        unsubscribeAiHighlights()
+      }
+    }, [aiHighlightStore, explanationStore])
 
     // 存储侧评论被删除/消费时，回收对应的编辑器锚点装饰。
     const workbenchComments = useWorkbenchComments(projectRoot)

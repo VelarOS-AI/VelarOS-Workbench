@@ -32,6 +32,8 @@ interface UseWorkbenchControllerOptions {
   restoreProjectSession?: boolean
   projectIndexEnabled?: boolean
   sessionCursorByPathRef?: React.MutableRefObject<Record<string, { line: number; column: number }>>
+  /** 打开着的文件（或它所在的目录）被改名 / 移动：跟着文件走的状态（如 AI 选区）换到新路径。 */
+  onOpenEntryPathMoved?: (projectRoot: string, previousPath: string, nextPath: string) => void
 }
 
 export interface WorkbenchSelectFileOptions {
@@ -95,13 +97,22 @@ export function useWorkbenchController(options: UseWorkbenchControllerOptions = 
     void tree.revealEntryPath(editor.selectedFilePath, { quiet: true })
   }, [editor.selectedFilePath, tree.revealEntryPath])
 
+  const moveOpenEntryPath = useMemoizedFn(
+    (previousPath: string, nextPath: string, modifiedAt?: LooseOptional<number>): void => {
+      // 先把跟着文件走的状态挪到新路径，再换标签：换完标签的那次提交里，旧路径已经不算「被关掉」。
+      const rootPath = project.activeProject?.rootPath
+      if (rootPath) options.onOpenEntryPathMoved?.(rootPath, previousPath, nextPath)
+      editor.moveOpenEntryPath(previousPath, nextPath, modifiedAt)
+    }
+  )
+
   const mutation = useWorkbenchMutationController({
     activeProject: project.activeProject,
     selectedEntry: tree.selectedEntry,
     selectedEntryPath: tree.selectedEntryPath,
     ensureNoUnsavedFilesInPath: editor.ensureNoUnsavedFilesInPath,
     selectFile,
-    moveOpenEntryPath: editor.moveOpenEntryPath,
+    moveOpenEntryPath,
     closeOpenEntryPath: editor.closeOpenEntryPath,
     setSelectedEntryPath: tree.setSelectedEntryPath,
     refreshMutationParent: tree.refreshMutationParent,
@@ -355,6 +366,8 @@ export function useWorkbenchController(options: UseWorkbenchControllerOptions = 
     revealEntryPath: tree.revealEntryPath,
     openSearchEntry,
     selectFile,
+    /** 在后台开出一个标签，不切换当前文件；读不出来时返回 false。 */
+    preloadOpenTab: editor.preloadOpenTab,
     closeOpenFile: editor.closeOpenFile,
     closeOtherOpenFiles: editor.closeOtherOpenFiles,
     closeAllOpenFiles: editor.closeAllOpenFiles,

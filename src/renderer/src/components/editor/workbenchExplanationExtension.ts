@@ -13,14 +13,16 @@ import {
 
 import { isEmpty } from '@velaros-ai/core'
 
+import { mapWorkbenchLineAnchor, resolveWorkbenchAnchorEndLine } from './workbenchLineAnchors'
+
 /**
  * AI 讲解气泡的编辑器装饰（`workbench:explain_code`）。
  *
- * - 每条讲解 = 被讲解的那几行打一层浅底色 + 行号旁一个序号标记；当前讲解在最后一行下面展开成
- *   气泡（标题、正文、上一条 / 下一条），其余讲解只留标记，点它展开。标记放在行号栏里而不是行尾：
- *   编辑区窄、代码行长时，行尾早就滚出视野了。
- * - 位置随编辑实时映射：代码被整段删掉时讲解跟着消失，改动时回写新行号。切文件 / 外部整篇替换
- *   不算删除——清空后由上层按存储行号重新锚定（与行内评论同一套约定）。
+ * - 每条讲解在行号旁留一个序号标记，点它显示 / 隐藏这一条的气泡；当前讲解的那几行打一层浅底色，
+ *   在最后一行下面展开成气泡：顶部一行「‹ 序号 › 标题 ×」，下面是正文。其余讲解只留标记，不着色。
+ *   标记放在行号栏里而不是行尾：编辑区窄、代码行长时，行尾早就滚出视野了。
+ * - 位置随编辑实时映射（规则见 `mapWorkbenchLineAnchor`）：代码被整段删掉时讲解跟着消失，改动时
+ *   回写新行号。切文件 / 外部整篇替换不算删除——清空后由上层按存储行号重新锚定（与行内评论同一套约定）。
  */
 
 export interface WorkbenchExplanationAnchor {
@@ -42,19 +44,19 @@ export const setWorkbenchExplanationAnchorsEffect =
   StateEffect.define<WorkbenchExplanationAnchor[]>()
 
 export interface WorkbenchExplanationLabels {
-  badge: string
   previous: string
   next: string
+  close: string
+  /** 行号栏标记的提示：当前这条点了收起，其余的点了展开。 */
   collapse: string
-  finish: string
   expand: string
 }
 
 export interface WorkbenchExplanationExtensionOptions {
   onActivate: (id: string) => void
   onStep: (id: string, direction: 1 | -1) => void
+  /** 收起当前气泡（气泡上的 ×、再点一次当前标记）。 */
   onCollapse: () => void
-  onFinish: () => void
   /** 文案在 React 之外读取（widget 由 CodeMirror 构建），惰性取最新值。 */
   resolveLabels: () => WorkbenchExplanationLabels
   /** 锚住的代码被整段删掉。 */
@@ -74,6 +76,8 @@ const ChevronRightSvg =
   '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" d="M6 3.5 10.5 8 6 12.5"/></svg>'
 const SparkleSvg =
   '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path fill="currentColor" d="M8 1.5c.3 2.9 1.6 4.2 4.5 4.5-2.9.3-4.2 1.6-4.5 4.5-.3-2.9-1.6-4.2-4.5-4.5C6.4 5.7 7.7 4.4 8 1.5Zm4.3 8.3c.15 1.3.75 1.9 2.05 2.05-1.3.15-1.9.75-2.05 2.05-.15-1.3-.75-1.9-2.05-2.05 1.3-.15 1.9-.75 2.05-2.05Z"/></svg>'
+const CloseSvg =
+  '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" d="m4.5 4.5 7 7m0-7-7 7"/></svg>'
 
 function stopEditorEvents(element: HTMLElement): void {
   // 气泡是独立交互面：事件到此为止，不让 CodeMirror 在下层挪光标、改选区。
@@ -99,7 +103,7 @@ function appendExplanationText(parent: HTMLElement, text: string): void {
 function createActionButton(
   className: string,
   label: string,
-  content: { svg?: string; text?: string },
+  svg: string,
   action: () => void,
   disabled = false
 ): HTMLButtonElement {
@@ -108,8 +112,7 @@ function createActionButton(
   button.className = `cm-wbExplainAction ${className}`
   button.title = label
   button.setAttribute('aria-label', label)
-  if (content.svg) button.innerHTML = content.svg
-  if (content.text) button.append(document.createTextNode(content.text))
+  button.innerHTML = svg
   button.disabled = disabled
   button.addEventListener('mousedown', (event) => {
     event.preventDefault()
@@ -147,54 +150,39 @@ class WorkbenchExplanationBubbleWidget extends WidgetType {
     root.setAttribute('role', 'note')
     stopEditorEvents(root)
 
+    // 顶部一行：‹ 序号 › 标题 ×。窄的时候只让标题省略，按钮与序号不换行、不挤掉。
     const header = document.createElement('div')
     header.className = 'cm-wbExplainHeader'
-    const badge = document.createElement('span')
-    badge.className = 'cm-wbExplainBadge'
-    badge.innerHTML = SparkleSvg
-    badge.append(document.createTextNode(labels.badge))
-    header.appendChild(badge)
     if (anchor.total > 1) {
       const counter = document.createElement('span')
       counter.className = 'cm-wbExplainCounter'
-      counter.textContent = `${anchor.index} / ${anchor.total}`
-      header.appendChild(counter)
-    }
-    if (anchor.title) {
-      const title = document.createElement('span')
-      title.className = 'cm-wbExplainTitle'
-      title.textContent = anchor.title
-      header.appendChild(title)
-    }
-    const actions = document.createElement('span')
-    actions.className = 'cm-wbExplainActions'
-    if (anchor.total > 1) {
-      actions.append(
+      counter.textContent = `${anchor.index}/${anchor.total}`
+      header.append(
         createActionButton(
           'cm-wbExplainPrevious',
           labels.previous,
-          { svg: ChevronLeftSvg },
+          ChevronLeftSvg,
           () => this.options.onStep(anchor.id, -1),
           anchor.index <= 1
         ),
+        counter,
         createActionButton(
           'cm-wbExplainNext',
           labels.next,
-          { svg: ChevronRightSvg },
+          ChevronRightSvg,
           () => this.options.onStep(anchor.id, 1),
           anchor.index >= anchor.total
         )
       )
     }
-    actions.append(
-      createActionButton('cm-wbExplainCollapse', labels.collapse, { text: labels.collapse }, () =>
-        this.options.onCollapse()
-      ),
-      createActionButton('cm-wbExplainFinish', labels.finish, { text: labels.finish }, () =>
-        this.options.onFinish()
-      )
+    const title = document.createElement('span')
+    title.className = 'cm-wbExplainTitle'
+    title.textContent = anchor.title
+    if (anchor.title) title.title = anchor.title
+    header.append(
+      title,
+      createActionButton('cm-wbExplainClose', labels.close, CloseSvg, () => this.options.onCollapse())
     )
-    header.appendChild(actions)
     root.appendChild(header)
 
     const body = document.createElement('div')
@@ -263,12 +251,12 @@ function buildExplanationDecorations(
     if (anchor.to > doc.length || anchor.from > anchor.to) continue
     const firstLine = doc.lineAt(anchor.from)
     const lastLine = doc.lineAt(anchor.to)
-    const lineClass = anchor.active ? 'cm-wbExplainLine cm-wbExplainLine-active' : 'cm-wbExplainLine'
-    const lastHighlighted = Math.min(lastLine.number, firstLine.number + MaxHighlightedLines - 1)
-    for (let lineNumber = firstLine.number; lineNumber <= lastHighlighted; lineNumber += 1)
-      ranges.push(Decoration.line({ class: lineClass }).range(doc.line(lineNumber).from))
     markers.push(new WorkbenchExplanationGutterMarker(anchor, options).range(firstLine.from))
     if (anchor.active) {
+      // 只给正在看的这一条着色；其余讲解只留行号栏标记，不把整篇代码染一片。
+      const lastHighlighted = Math.min(lastLine.number, firstLine.number + MaxHighlightedLines - 1)
+      for (let lineNumber = firstLine.number; lineNumber <= lastHighlighted; lineNumber += 1)
+        ranges.push(Decoration.line({ class: 'cm-wbExplainLine' }).range(doc.line(lineNumber).from))
       ranges.push(
         Decoration.widget({
           widget: new WorkbenchExplanationBubbleWidget(anchor, options),
@@ -287,6 +275,29 @@ interface WorkbenchExplanationFieldValue {
   gutter: RangeSet<GutterMarker>
 }
 
+function sameAnchors(
+  left: readonly WorkbenchExplanationAnchor[],
+  right: readonly WorkbenchExplanationAnchor[]
+): boolean {
+  return (
+    left.length === right.length &&
+    left.every((anchor, index) => {
+      const other = right[index]
+      return (
+        !!other &&
+        anchor.id === other.id &&
+        anchor.from === other.from &&
+        anchor.to === other.to &&
+        anchor.index === other.index &&
+        anchor.total === other.total &&
+        anchor.title === other.title &&
+        anchor.text === other.text &&
+        anchor.active === other.active
+      )
+    })
+  )
+}
+
 export function createWorkbenchExplanationExtension(
   options: WorkbenchExplanationExtensionOptions
 ): Extension {
@@ -297,17 +308,13 @@ export function createWorkbenchExplanationExtension(
       if (tr.docChanged) {
         anchors = options.isExternalDocReplace(tr)
           ? []
-          : anchors.flatMap((anchor) => {
-              // 挂在空行上的讲解本来就是零宽，不能拿「塌成零宽」当被删的信号。
-              const empty = anchor.to === anchor.from
-              const from = tr.changes.mapPos(anchor.from, empty ? -1 : 1)
-              const to = empty ? from : tr.changes.mapPos(anchor.to, -1)
-              return empty || to > from ? [{ ...anchor, from, to }] : []
-            })
+          : anchors.flatMap((anchor) => mapWorkbenchLineAnchor(anchor, tr.changes, tr.newDoc) ?? [])
       }
       for (const effect of tr.effects) {
-        if (effect.is(setWorkbenchExplanationAnchorsEffect))
-          anchors = effect.value.filter((anchor) => anchor.to >= anchor.from)
+        if (!effect.is(setWorkbenchExplanationAnchorsEffect)) continue
+        // 编辑器自己回写行号后，存储通知回来的重锚与眼下的锚点一致：不必重建气泡。
+        const next = effect.value.filter((anchor) => anchor.to >= anchor.from)
+        if (!sameAnchors(anchors, next)) anchors = next
       }
       if (anchors === value.anchors && !tr.docChanged) return value
       return { anchors, ...buildExplanationDecorations(tr.state, anchors, options) }
@@ -330,7 +337,7 @@ export function createWorkbenchExplanationExtension(
     const lineUpdates = after.anchors.map((anchor) => ({
       id: anchor.id,
       startLine: update.state.doc.lineAt(anchor.from).number,
-      endLine: update.state.doc.lineAt(Math.max(anchor.from, anchor.to - 1)).number,
+      endLine: resolveWorkbenchAnchorEndLine(update.state.doc, anchor),
     }))
     if (!isEmpty(lineUpdates)) options.onAnchorLinesChanged(lineUpdates)
   })
@@ -374,9 +381,6 @@ export function createWorkbenchExplanationExtension(
 
   const explanationTheme = EditorView.theme({
     '.cm-wbExplainLine': {
-      backgroundColor: 'var(--workbench-editor-explain-line-bg, rgba(99, 102, 241, 0.07))',
-    },
-    '.cm-wbExplainLine-active': {
       backgroundColor: 'var(--workbench-editor-explain-line-active-bg, rgba(99, 102, 241, 0.14))',
       boxShadow: 'inset 3px 0 0 var(--workbench-editor-explain-accent, #6366f1)',
     },
@@ -414,7 +418,7 @@ export function createWorkbenchExplanationExtension(
       width: 'calc(var(--wb-explain-visible-width, 792px) - 32px)',
       minWidth: '220px',
       maxWidth: '760px',
-      padding: '10px 14px 12px',
+      padding: '6px 8px 10px 12px',
       borderRadius: '10px',
       border: '1px solid var(--workbench-editor-explain-border, rgba(99, 102, 241, 0.35))',
       borderLeft: '3px solid var(--workbench-editor-explain-accent, #6366f1)',
@@ -426,58 +430,53 @@ export function createWorkbenchExplanationExtension(
       cursor: 'default',
     },
     '.cm-wbExplainHeader': {
+      // 始终一行：翻页、序号、关闭都不收缩，只有标题在放不下时省略。
       display: 'flex',
-      flexWrap: 'wrap',
+      flexWrap: 'nowrap',
       alignItems: 'center',
-      columnGap: '8px',
-      rowGap: '2px',
+      gap: '2px',
       minWidth: '0',
-      marginBottom: '6px',
-    },
-    '.cm-wbExplainBadge': {
-      display: 'inline-flex',
-      alignItems: 'center',
-      gap: '4px',
-      flex: 'none',
-      fontSize: '11px',
-      fontWeight: '600',
-      color: 'var(--workbench-editor-explain-accent, #6366f1)',
+      marginBottom: '4px',
     },
     '.cm-wbExplainCounter': {
       flex: 'none',
+      minWidth: '2.2em',
+      textAlign: 'center',
       fontSize: '11px',
       fontVariantNumeric: 'tabular-nums',
       opacity: '0.7',
     },
     '.cm-wbExplainTitle': {
-      // 编辑区窄时标题至少留出几个字的位置，按钮换到下一行，而不是把标题挤成省略号。
-      flex: '1 1 8em',
+      flex: '1 1 auto',
       minWidth: '0',
+      margin: '0 6px',
       overflow: 'hidden',
       textOverflow: 'ellipsis',
       whiteSpace: 'nowrap',
       fontWeight: '600',
     },
-    '.cm-wbExplainActions': {
-      display: 'inline-flex',
-      alignItems: 'center',
-      gap: '2px',
-      flex: 'none',
-      marginLeft: 'auto',
+    '.cm-wbExplainTitle:first-child': {
+      marginLeft: '0',
     },
     '.cm-wbExplainAction': {
       display: 'inline-flex',
       alignItems: 'center',
       justifyContent: 'center',
-      minWidth: '22px',
+      flex: 'none',
+      width: '22px',
       height: '22px',
-      padding: '0 6px',
+      padding: '0',
       border: 'none',
       borderRadius: '6px',
-      font: '12px/22px var(--workbench-font-sans, system-ui, sans-serif)',
       color: 'inherit',
       backgroundColor: 'transparent',
       cursor: 'pointer',
+    },
+    '.cm-wbExplainClose': {
+      opacity: '0.7',
+    },
+    '.cm-wbExplainClose:hover': {
+      opacity: '1',
     },
     '.cm-wbExplainAction:hover:not(:disabled)': {
       backgroundColor: 'var(--workbench-editor-explain-marker-bg, rgba(99, 102, 241, 0.14))',

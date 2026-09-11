@@ -21,6 +21,11 @@ import { useWorkbenchProjectRunSettings } from '@renderer/hooks/useWorkbenchProj
 import { useWorkbenchStandaloneProjectSync } from '@renderer/hooks/useWorkbenchStandaloneProjectSync'
 import { useWorkbenchSurfaceState } from '@renderer/hooks/useWorkbenchSurfaceState'
 import { workbenchHost } from '@renderer/host'
+import {
+  resolveReleasedAiHighlightTabs,
+  useWorkbenchAiHighlightStore,
+  type WorkbenchAiHighlightTabSet,
+} from '@renderer/models/aiHighlights/workbenchAiHighlightStore'
 import { resolveWorkbenchChatWorkspacePath } from '@renderer/models/chat/workbenchChatWorkspacePath'
 import { buildWorkbenchAgentRunSnapshot } from '@renderer/models/commands/workbenchAgentRunSnapshot'
 import { getWorkbenchCommandStatusLabel } from '@renderer/models/commands/workbenchCommandStatusModel'
@@ -68,7 +73,12 @@ import type {
   SystemFileChangePreviewResult,
   WorkbenchReadFileResult,
 } from '@shared/contracts'
-import type { WorkbenchAgentFileProblems, WorkbenchAgentUiCommand } from '@shared/workbenchAgentUi'
+import type {
+  WorkbenchAgentFileProblems,
+  WorkbenchAgentOpenFilesResult,
+  WorkbenchAgentUiCommand,
+  WorkbenchAgentUiOpenFile,
+} from '@shared/workbenchAgentUi'
 
 import {
   findWorkbenchBrowserMod,
@@ -232,6 +242,7 @@ export function useStandaloneWorkbenchPageModel(
   const codeGraphResourceAvailable = useCodeGraphResourceAvailability()
   const workbenchMods = useStandaloneWorkbenchModCatalog()
   const browserModEnabled = findWorkbenchBrowserMod(workbenchMods.value)?.enabled === true
+  const aiHighlightStore = useWorkbenchAiHighlightStore()
   const workbench = useWorkbenchController({
     bootstrapProjects,
     lockedProjectId,
@@ -241,6 +252,8 @@ export function useStandaloneWorkbenchPageModel(
     // Project 基础索引是内置能力；CodeGraph 只决定增强图谱入口是否点亮。
     projectIndexEnabled: true,
     sessionCursorByPathRef,
+    // AI 选区锁在文件上：文件改名、移动不算关掉，跟着换路径。
+    onOpenEntryPathMoved: aiHighlightStore.renamePath,
   })
   const chat = useWorkbenchChatProjectRuntime(toNullable(workbench.activeProject?.rootPath))
   const { currentSession, conversationVersion, sessions } = chat
@@ -647,11 +660,46 @@ export function useStandaloneWorkbenchPageModel(
     aiChanges.deactivate()
   })
 
+  // 左右两侧说的是同一件事，不跨域显示：编辑区进入「AI 改动」对比（打开一轮、自动打开、改动卡的「查看」），
+  // 左侧跟着切到改动树；编辑区回到普通文件（「打开文件」、关掉最后一个对比标签），左侧跟着回到文件树；
+  // 左侧从改动树切到别的面板，编辑区也收起对比标签组（标签保留，点回改动树时再带回来）。
+  // 只在进出的那一刻切换——左侧单独打开改动树浏览、编辑区还没有对比标签时不去动它。
+  const aiChangesSyncRef = useRef({ active: aiChanges.active, leftTool: surface.activeLeftTool })
+  const { activeLeftTool, setActiveLeftTool } = surface
+  const { active: aiChangesActive, deactivate: deactivateAiChanges } = aiChanges
+  useEffect(() => {
+    const previous = aiChangesSyncRef.current
+    aiChangesSyncRef.current = { active: aiChangesActive, leftTool: activeLeftTool }
+    if (aiChangesActive !== previous.active) {
+      if (aiChangesActive) setActiveLeftTool('ai-changes')
+      else if (activeLeftTool === 'ai-changes') setActiveLeftTool('project')
+      return
+    }
+    if (aiChangesActive && previous.leftTool === 'ai-changes' && activeLeftTool !== 'ai-changes')
+      deactivateAiChanges()
+  }, [activeLeftTool, aiChangesActive, deactivateAiChanges, setActiveLeftTool])
+
   function handleWorkbenchChatRunChangesReview(target: WorkbenchChatRunChangesTarget): void {
     if (surface.activeLeftTool !== 'ai-changes') surface.setActiveLeftTool('ai-changes')
     if (!surface.isFilePanelOpen) surface.toggleFilePanel()
     void aiChanges.openRound(target)
   }
+
+  // AI 选区锁在文件上：用户关掉某个文件的标签（关一个、关其他、关全部、换项目都算），
+  // 它上面的选区才释放（规则见 `resolveReleasedAiHighlightTabs`）。
+  const openTabPathsKey = workbench.openTabs.map((tab) => tab.path).join('\0')
+  const aiHighlightTabsRef = useRef<WorkbenchAiHighlightTabSet>({ root: '', paths: new Set() })
+  const aiHighlightProjectRoot = workbench.activeProject?.rootPath ?? ''
+  useEffect(() => {
+    const previous = aiHighlightTabsRef.current
+    const next = {
+      root: aiHighlightProjectRoot,
+      paths: new Set(openTabPathsKey ? openTabPathsKey.split('\0') : []),
+    }
+    aiHighlightTabsRef.current = next
+    const released = resolveReleasedAiHighlightTabs(previous, next)
+    if (released) aiHighlightStore.clear(released.root, released.paths)
+  }, [aiHighlightProjectRoot, aiHighlightStore, openTabPathsKey])
 
   // AI 讲解气泡：切到某条讲解时把它所在的文件带到编辑器里（滚动由编辑器自己完成）。
   const explanationStore = useWorkbenchExplanationStore()
@@ -759,13 +807,34 @@ export function useStandaloneWorkbenchPageModel(
       context: { projectRoot: string; sessionId: string }
     ): Promise<Record<string, unknown>> => {
       switch (command.type) {
-        case 'open-file':
+        case 'open-files': {
           showEditorSurface()
-          await editorNavigation.goToLocation(command.path, command.line, command.column, {
-            ...(command.endLine ? { endLine: command.endLine } : {}),
+          // 按列表顺序在后台开出标签（已经开着的不动），不逐个切过去：逐个切会让编辑器闪一遍每个文件，
+          // 最后那次定位也会拿切走前的「当前文件」判断，落到别的文件上。
+          const opened: WorkbenchAgentUiOpenFile[] = []
+          const failed: string[] = []
+          for (const file of command.files) {
+            if (await workbench.preloadOpenTab(file.path)) opened.push(file)
+            else failed.push(file.path)
+          }
+          const [primary] = opened
+          if (!primary) throw new AppError('NOT_FOUND', `Workbench could not open ${failed.join(', ')}.`)
+          // 只给真正开出标签的文件标选区：选区靠「关标签」释放，没开出来的文件永远等不到那一刻。
+          aiHighlightStore.add(
+            context.projectRoot,
+            opened.flatMap((file) => file.highlights.map((range) => ({ path: file.path, ...range })))
+          )
+          // 最后停在第一个文件、定位到它的行（不抢聊天输入框的焦点）。
+          await editorNavigation.goToLocation(primary.path, primary.line, primary.column, {
             focus: false,
           })
-          return { path: command.path, line: command.line }
+          return {
+            opened: opened.map((file) => file.path),
+            failed,
+          } satisfies WorkbenchAgentOpenFilesResult
+        }
+        case 'clear-highlights':
+          return { cleared: aiHighlightStore.clear(context.projectRoot, command.paths) }
         case 'reveal-path':
           if (surface.activeLeftTool !== 'project') surface.setActiveLeftTool('project')
           if (!surface.isFilePanelOpen) surface.toggleFilePanel()
@@ -808,6 +877,7 @@ export function useStandaloneWorkbenchPageModel(
               editorContent: workbench.editorContent,
               openTabs: workbench.openTabs,
               explanationCount: explanationStore.listForProject(context.projectRoot).length,
+              aiHighlights: aiHighlightStore.listForProject(context.projectRoot),
             }),
           }
         case 'start-run': {
@@ -1175,6 +1245,12 @@ export function useStandaloneWorkbenchPageModel(
     },
     t
   )
+  // 这几个回调一路传进聊天记录的每一条消息（消息气泡按引用判等）：引用不稳，页面任何一次
+  // 重渲染（编辑器里打字、光标移动）都会让整段对话跟着重画。
+  const openChatFileChange = useMemoizedFn(handleWorkbenchChatFileChangeOpen)
+  const reviewChatFileChanges = useMemoizedFn(handleWorkbenchChatFileChangesReview)
+  const reviewChatRunChanges = useMemoizedFn(handleWorkbenchChatRunChangesReview)
+  const openChatWorkspacePath = useMemoizedFn(handleWorkbenchChatWorkspacePathOpen)
 
   return {
     workbench,
@@ -1233,11 +1309,11 @@ export function useStandaloneWorkbenchPageModel(
       refreshProjectAndGit,
       handleRepositoryChanged,
       initializeRepository,
-      handleWorkbenchChatFileChangeOpen,
-      handleWorkbenchChatFileChangesReview,
-      handleWorkbenchChatRunChangesReview,
+      handleWorkbenchChatFileChangeOpen: openChatFileChange,
+      handleWorkbenchChatFileChangesReview: reviewChatFileChanges,
+      handleWorkbenchChatRunChangesReview: reviewChatRunChanges,
       showEditorSurface,
-      handleWorkbenchChatWorkspacePathOpen,
+      handleWorkbenchChatWorkspacePathOpen: openChatWorkspacePath,
       handleWorkbenchBrowserElementPicked,
       consumeWorkbenchBrowserElementSelections,
       saveEmbeddedLightTab,

@@ -20,15 +20,30 @@ export interface WorkbenchAgentUiExplanation {
   text: string
 }
 
+/** 一段 AI 选区：`startLine..endLine`（从 1 开始，含两端）。 */
+export interface WorkbenchAgentUiLineRange {
+  startLine: number
+  endLine: number
+}
+
+/** 批量打开里的一个文件。 */
+export interface WorkbenchAgentUiOpenFile {
+  /** 相对项目根的路径（主进程已校验存在）。 */
+  path: string
+  line: number
+  column: number
+  /**
+   * AI 选区：这些行标成淡紫色，锁在文件上——切换文件也还在，用户关掉这个文件才释放，
+   * AI 可以用 `clear-highlights` 取消。
+   */
+  highlights: WorkbenchAgentUiLineRange[]
+}
+
 export type WorkbenchAgentUiCommand =
-  | {
-      type: 'open-file'
-      path: string
-      line: number
-      column: number
-      /** 给出时选中 `line..endLine` 这几行。 */
-      endLine: number | null
-    }
+  /** 打开一批文件；编辑器最后停在第一个文件的 `line`。 */
+  | { type: 'open-files'; files: WorkbenchAgentUiOpenFile[] }
+  /** 取消 AI 选区；`paths` 为 null 时取消全部。 */
+  | { type: 'clear-highlights'; paths: string[] | null }
   | { type: 'reveal-path'; path: string }
   | { type: 'open-diff'; path: string }
   | {
@@ -59,6 +74,14 @@ export interface WorkbenchAgentUiRequest {
 export type WorkbenchAgentUiResponse =
   | { requestId: string; executionId: string; ok: true; data: Record<string, unknown> }
   | { requestId: string; executionId: string; ok: false; message: string }
+
+/** `open-files` 的回执数据。 */
+export interface WorkbenchAgentOpenFilesResult {
+  /** 开出了标签的文件，按请求顺序。 */
+  opened: string[]
+  /** 编辑器读不出来、没能开出标签的文件（它们的 AI 选区也没标上）。 */
+  failed: string[]
+}
 
 /** `read-run` 的回执数据。 */
 export interface WorkbenchAgentRunSnapshot {
@@ -105,4 +128,6 @@ export interface WorkbenchAgentEditorState {
   } | null
   openFiles: Array<{ path: string; unsaved: boolean }>
   explanationCount: number
+  /** 还标着的 AI 选区（按文件，行号随用户编辑实时更新）。 */
+  aiHighlights: Array<{ path: string; ranges: WorkbenchAgentUiLineRange[] }>
 }

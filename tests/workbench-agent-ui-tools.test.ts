@@ -176,21 +176,25 @@ void describe('Workbench agent UI tools', () => {
         { path: './src/cache/store.ts', line: 2, endLine: 99 },
         toolContext(root, ui) as never
       )
-      // 文件以换行结尾：编辑器里是 5 行（最后一行为空），结束行夹到第 5 行。
-      assert.deepEqual(result, { opened: true, path: 'src/cache/store.ts', line: 2, endLine: 5 })
+      // 文件以换行结尾：编辑器里是 5 行（最后一行为空），选区只夹到最后一个有内容的第 4 行；
+      // endLine 是一段 AI 选区的简写。
+      assert.deepEqual(result, {
+        opened: [{ path: 'src/cache/store.ts', line: 2, highlights: ['src/cache/store.ts:2-4'] }],
+      })
       assert.deepEqual(ui.commands, [
-        { type: 'open-file', path: 'src/cache/store.ts', line: 2, column: 1, endLine: 5 },
+        {
+          type: 'open-files',
+          files: [{ path: 'src/cache/store.ts', line: 2, column: 1, highlights: [{ startLine: 2, endLine: 4 }] }],
+        },
       ])
 
       await openFile.execute({ path: join(root, 'README.md') }, toolContext(root, ui) as never)
       assert.deepEqual(ui.commands.at(-1), {
-        type: 'open-file',
-        path: 'README.md',
-        line: 1,
-        column: 1,
-        endLine: null,
+        type: 'open-files',
+        files: [{ path: 'README.md', line: 1, column: 1, highlights: [] }],
       })
 
+      // 只开一个文件、它又开不了：照实报错。
       await assert.rejects(
         Promise.resolve(openFile.execute({ path: 'missing.ts' }, toolContext(root, ui) as never)),
         /does not exist/u
@@ -203,13 +207,160 @@ void describe('Workbench agent UI tools', () => {
         Promise.resolve(openFile.execute({ path: 'src' }, toolContext(root, ui) as never)),
         /is a folder/u
       )
-      await assert.rejects(
-        Promise.resolve(
-          openFile.execute({ path: 'src/cache/store.ts', line: 40 }, toolContext(root, ui) as never)
-        ),
-        /has only 5 lines/u
-      )
       assert.equal(ui.commands.length, 2)
+
+      // 跳转行越界：夹到最后一行并说明，而不是打回。
+      const clamped = await openFile.execute(
+        { path: 'src/cache/store.ts', line: 40 },
+        toolContext(root, ui) as never
+      )
+      assert.deepEqual(clamped, {
+        opened: [{ path: 'src/cache/store.ts', line: 5 }],
+        notes: ['src/cache/store.ts has only 5 lines; jumped to line 5 instead of 40.'],
+      })
+    })
+  })
+
+  void test('open_file tolerates loose batches: skips what it cannot open and says so', async () => {
+    await withProject(async (root) => {
+      for (let index = 0; index < 13; index += 1)
+        await writeFile(join(root, `f${index}.ts`), `export const f${index} = ${index}\n`, 'utf8')
+      const openFile = findTool('workbench:open_file')
+
+      // highlights: [] 当作不标；顶层 path 与 files 同时给时，顶层那一项排第一。
+      const merged = createFakeUi()
+      assert.deepEqual(
+        await openFile.execute(
+          { path: 'README.md', highlights: [], files: [{ path: 'src/cache/store.ts', line: 2 }] },
+          toolContext(root, merged) as never
+        ),
+        {
+          opened: [
+            { path: 'README.md', line: 1 },
+            { path: 'src/cache/store.ts', line: 2 },
+          ],
+          notes: ['Both path and files were given; README.md was opened as the first file.'],
+        }
+      )
+
+      // 打不开的文件、越界的选区各自跳过，同一批里其余的照开；同一文件第一次没给行号时停在第一段选区。
+      const loose = createFakeUi()
+      const result = await openFile.execute(
+        {
+          files: [
+            { path: 'src/cache/store.ts' },
+            { path: 'missing.ts', highlights: [{ startLine: 1 }] },
+            { path: './src/cache/store.ts', highlights: [{ startLine: 40 }, { startLine: 3, endLine: 4 }] },
+          ],
+        },
+        toolContext(root, loose) as never
+      )
+      assert.deepEqual(loose.commands, [
+        {
+          type: 'open-files',
+          files: [{ path: 'src/cache/store.ts', line: 3, column: 1, highlights: [{ startLine: 3, endLine: 4 }] }],
+        },
+      ])
+      assert.deepEqual(result, {
+        opened: [{ path: 'src/cache/store.ts', line: 3, highlights: ['src/cache/store.ts:3-4'] }],
+        failed: [{ path: 'missing.ts', reason: 'missing.ts does not exist in the project.' }],
+        notes: ['src/cache/store.ts has only 5 lines; the selection starting at line 40 was skipped.'],
+      })
+
+      // 超过上限的文件截掉并说明；编辑器读不出来的文件从 opened 挪到 failed。
+      const capped = createFakeUi((command) =>
+        command.type === 'open-files'
+          ? { opened: command.files.slice(1).map((file) => file.path), failed: ['f0.ts'] }
+          : {}
+      )
+      const cappedResult = (await openFile.execute(
+        { files: Array.from({ length: 13 }, (_, index) => ({ path: `f${index}.ts` })) },
+        toolContext(root, capped) as never
+      )) as { opened: Array<{ path: string }>; failed: unknown[]; notes: string[] }
+      const sent = capped.commands[0]
+      assert.equal(sent?.type === 'open-files' ? sent.files.length : 0, 12)
+      assert.equal(cappedResult.opened.length, 11)
+      assert.deepEqual(cappedResult.failed, [{ path: 'f0.ts', reason: 'The editor could not read this file.' }])
+      assert.deepEqual(cappedResult.notes, ['Only the first 12 files were opened; skipped f12.ts.'])
+    })
+  })
+
+  void test('open_file opens a batch of files with several AI selections, ending on the first file', async () => {
+    await withProject(async (root) => {
+      const ui = createFakeUi()
+      const openFile = findTool('workbench:open_file')
+
+      const result = await openFile.execute(
+        {
+          files: [
+            { path: 'src/cache/store.ts', highlights: [{ startLine: 3, endLine: 4 }, { startLine: 1 }] },
+            { path: 'README.md' },
+            { path: './src/cache/store.ts', highlights: [{ startLine: 5, endLine: 9 }] },
+          ],
+        },
+        toolContext(root, ui) as never
+      )
+      // 没给 line 时停在第一段选区；同一个文件出现两次合成一项。
+      assert.deepEqual(ui.commands, [
+        {
+          type: 'open-files',
+          files: [
+            {
+              path: 'src/cache/store.ts',
+              line: 3,
+              column: 1,
+              highlights: [
+                { startLine: 3, endLine: 4 },
+                { startLine: 1, endLine: 1 },
+                { startLine: 5, endLine: 5 },
+              ],
+            },
+            { path: 'README.md', line: 1, column: 1, highlights: [] },
+          ],
+        },
+      ])
+      assert.deepEqual(result, {
+        opened: [
+          {
+            path: 'src/cache/store.ts',
+            line: 3,
+            highlights: ['src/cache/store.ts:3-4', 'src/cache/store.ts:1', 'src/cache/store.ts:5'],
+          },
+          { path: 'README.md', line: 1 },
+        ],
+      })
+      await assert.rejects(
+        Promise.resolve(openFile.execute({}, toolContext(root, ui) as never)),
+        /Pass files/u
+      )
+    })
+  })
+
+  void test('clear_highlights cancels AI selections for the whole project or for some files', async () => {
+    await withProject(async (root) => {
+      const ui = createFakeUi()
+      const clear = findTool('workbench:clear_highlights')
+
+      await clear.execute({}, toolContext(root, ui) as never)
+      await clear.execute({ paths: [] }, toolContext(root, ui) as never)
+      const partial = await clear.execute(
+        { paths: ['src/cache/store.ts', './src/cache/store.ts', join(root, 'src/deleted.ts'), '../escape.ts'] },
+        toolContext(root, ui) as never
+      )
+      assert.deepEqual(ui.commands, [
+        { type: 'clear-highlights', paths: null },
+        // 空数组与不给一样：全部取消。
+        { type: 'clear-highlights', paths: null },
+        // 不要求文件还在：被删掉的文件上的选区也要能取消。项目外的路径忽略并说明。
+        { type: 'clear-highlights', paths: ['src/cache/store.ts', 'src/deleted.ts'] },
+      ])
+      assert.deepEqual(partial, { ignored: ['../escape.ts'] })
+      // 给的路径全在项目外：一个也不取消，而不是退回「全部取消」。
+      assert.deepEqual(await clear.execute({ paths: ['../escape.ts'] }, toolContext(root, ui) as never), {
+        cleared: 0,
+        ignored: ['../escape.ts'],
+      })
+      assert.equal(ui.commands.length, 3)
     })
   })
 
@@ -554,7 +705,12 @@ void describe('Workbench agent UI tools in a real run', () => {
           [
             'ui-session',
             'ui-run',
-            { type: 'open-file', path: 'src/cache/store.ts', line: 2, column: 1, endLine: 3 },
+            {
+              type: 'open-files',
+              files: [
+                { path: 'src/cache/store.ts', line: 2, column: 1, highlights: [{ startLine: 2, endLine: 3 }] },
+              ],
+            },
           ],
         ])
         assert.match(prompts[1] ?? '', /opened/u)
