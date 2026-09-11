@@ -88,7 +88,6 @@ export function StandaloneWorkbenchPagePresentation({
     workbenchPreferences,
     workbenchKeymap,
     editorNavigation,
-    automation,
     chrome,
     dialogs,
   } = model
@@ -581,7 +580,6 @@ export function StandaloneWorkbenchPagePresentation({
         data-workbench-density={workbenchPreferences.preferences.density}
         data-workbench-accent={workbenchPreferences.preferences.accent}
         data-workbench-viewport={layout.viewportProfile}
-        data-ai-automation-active={!!automation.state}
         style={shellStyle}
       >
         <header className={styles.ideUnifiedTopBar}>

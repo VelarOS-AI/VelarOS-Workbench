@@ -99,7 +99,6 @@ export function useWorkbenchEditorController({
     () => new Map()
   )
   const [isSavingFile, setIsSavingFile] = useState(false)
-  const [isAutomatedPreviewActive, setIsAutomatedPreviewActive] = useState(false)
   const [saveRevision, setSaveRevision] = useState(0)
   const externalChangeNoticeKeysRef = useRef(new Set<string>())
   const externalFileRefreshInFlightRef = useRef(false)
@@ -829,13 +828,6 @@ export function useWorkbenchEditorController({
     }
   })
 
-  const reloadSelectedFileFromDisk = useMemoizedFn(async (): Promise<void> => {
-    const path = selectedFilePathRef.current
-    if (!path) return
-
-    await reloadOpenFileFromDisk(path)
-  })
-
   const restoreDeletedOpenFile = useMemoizedFn(async (path: string): Promise<void> => {
     const project = activeProjectRef.current
     const tab = openTabsByPathLatest.current.get(path)
@@ -1030,7 +1022,6 @@ export function useWorkbenchEditorController({
   useWorkbenchEditorAutosave({
     activeProject,
     isSavingFile,
-    paused: isAutomatedPreviewActive,
     openTabsByPath,
     saveEditorTab,
   })
@@ -1124,7 +1115,6 @@ export function useWorkbenchEditorController({
     isSavingFile,
     saveRevision,
     setEditorContent: updateEditorContent,
-    setAutomatedPreviewActive: setIsAutomatedPreviewActive,
     applyLanguageServiceFileChanges,
     ensureNoUnsavedChanges,
     ensureNoUnsavedFilesInPath,
@@ -1142,7 +1132,6 @@ export function useWorkbenchEditorController({
     closeOpenEntryPath,
     saveSelectedFile,
     saveAllOpenFiles,
-    reloadSelectedFileFromDisk,
     resolveSelectedExternalFileConflict,
   }
 }

@@ -861,37 +861,3 @@ export interface WorkbenchInlineCompletionResult {
   /** 应插入到光标处的补全文本；无建议时为空串。 */
   completion: string
 }
-
-/** Main → renderer：由 Workbench AI 请求、必须在编辑器真实状态上执行的命令。 */
-export type WorkbenchEditorCommand =
-  | { action: 'search'; query: string }
-  | { action: 'open'; path: string; line?: number; column?: number }
-  | { action: 'reveal'; path: string }
-  | { action: 'close'; path: string }
-  | { action: 'refresh' }
-  | { action: 'move'; fromPath: string; toPath: string }
-  | { action: 'delete'; path: string }
-  | { action: 'write'; path: string; content: string }
-  | {
-      action: 'replace'
-      path: string
-      oldText: string
-      newText: string
-      replaceAll?: boolean
-    }
-
-export interface WorkbenchEditorCommandEvent {
-  kind: 'velaros.workbenchEditorCommand'
-  commandId: string
-  sessionId: string
-  projectRoot: string
-  command: WorkbenchEditorCommand
-}
-
-/** Renderer → main：编辑器命令完成回执；AI 工具会等待这份回执再返回。 */
-export interface WorkbenchEditorCommandResult {
-  commandId: string
-  success: boolean
-  message: string
-  data?: Record<string, unknown>
-}

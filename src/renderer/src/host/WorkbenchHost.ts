@@ -36,8 +36,6 @@ import type {
   WorkbenchCreateEntryRequest,
   WorkbenchDeleteEntryRequest,
   WorkbenchDeleteEntryResult,
-  WorkbenchEditorCommandEvent,
-  WorkbenchEditorCommandResult,
   WorkbenchEntryMutationResult,
   WorkbenchGetCodeGraphRequest,
   WorkbenchGetCodeGraphResult,
@@ -227,8 +225,6 @@ export interface WorkbenchProjectKernelPort {
   onWorkbenchProjectAiIndexStatusChanged(
     listener: (event: WorkbenchProjectAiIndexStatusChangedEvent) => void
   ): () => void
-  onWorkbenchEditorCommand(listener: (event: WorkbenchEditorCommandEvent) => void): () => void
-  acknowledgeWorkbenchEditorCommand(result: WorkbenchEditorCommandResult): Promise<Result<void>>
 }
 
 /** Workbench 使用的 Kernel 会话与附件能力。 */

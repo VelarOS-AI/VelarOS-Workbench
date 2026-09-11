@@ -488,8 +488,6 @@ const standaloneWorkbenchHost: WorkbenchHost = {
       onWorkbenchTerminalOutput: (listener) =>
         window.velarosWorkbenchTerminal.onOutput(listener),
       onWorkbenchProjectAiIndexStatusChanged: () => noopUnsubscribe,
-      onWorkbenchEditorCommand: () => noopUnsubscribe,
-      acknowledgeWorkbenchEditorCommand: () => Promise.resolve(Result.ok(undefined)),
     },
     sessions: {
       loadOlderMessages: (request) => Promise.resolve(Result.ok({

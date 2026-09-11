@@ -14,7 +14,6 @@ const log = Log.tag('workbench-editor-autosave')
 interface UseWorkbenchEditorAutosaveParams {
   activeProject: Nullable<WorkbenchProject>
   isSavingFile: boolean
-  paused?: boolean
   openTabsByPath: Map<string, WorkbenchOpenEditorTab>
   saveEditorTab: (
     tab: WorkbenchOpenEditorTab,
@@ -26,7 +25,6 @@ interface UseWorkbenchEditorAutosaveParams {
 export function useWorkbenchEditorAutosave({
   activeProject,
   isSavingFile,
-  paused = false,
   openTabsByPath,
   saveEditorTab,
 }: UseWorkbenchEditorAutosaveParams): void {
@@ -49,7 +47,6 @@ export function useWorkbenchEditorAutosave({
 
   const flushDirtyTabsBeforeExit = useMemoizedFn((): void => {
     cancelAutoSave()
-    if (paused) return
 
     const project = activeProjectLatest.current
     if (!project) return
@@ -86,7 +83,7 @@ export function useWorkbenchEditorAutosave({
   useEffect(() => {
     cancelAutoSave()
 
-    if (!activeProject || isSavingFile || paused) return undefined
+    if (!activeProject || isSavingFile) return undefined
 
     const dirtyTab = [...openTabsByPath.values()].find(
       (tab) => !tab.file.truncated && !tab.externalChange && isDirtyTab(tab)
@@ -97,7 +94,7 @@ export function useWorkbenchEditorAutosave({
     scheduleAutoSave()
 
     return (): void => cancelAutoSave()
-  }, [activeProject, cancelAutoSave, isSavingFile, openTabsByPath, paused, scheduleAutoSave])
+  }, [activeProject, cancelAutoSave, isSavingFile, openTabsByPath, scheduleAutoSave])
 
   useEffect(() => {
     window.addEventListener('beforeunload', flushDirtyTabsBeforeExit)

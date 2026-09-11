@@ -26,12 +26,6 @@ import { getWorkbenchCommandStatusLabel } from '@renderer/models/commands/workbe
 import { inferPackageManagerCommand } from '@renderer/models/commands/workbenchCommandSuggestions'
 import { inferWorkbenchPackageManagerForPackageJsonPath } from '@renderer/models/commands/workbenchPackageScriptCommand'
 import { buildWorkbenchAgentEditorState } from '@renderer/models/editor/workbenchAgentEditorState'
-import {
-  buildWorkbenchEditorAnimationPlan,
-  buildWorkbenchEditorDeleteFrame,
-  buildWorkbenchEditorTypeFrame,
-  type WorkbenchEditorAutomationState,
-} from '@renderer/models/editor/workbenchEditorAutomation'
 import { buildWorkbenchPackageScriptRunActions } from '@renderer/models/editor/workbenchPackageScriptRunGutter'
 import {
   useWorkbenchExplanations,
@@ -68,12 +62,9 @@ import { currentSystemPlatform as systemPlatformCompatibility } from '@velaros-a
 import type {
   BrowserElementSelection,
   SystemFileChangePreviewResult,
-  WorkbenchEditorCommand,
-  WorkbenchEditorCommandEvent,
   WorkbenchReadFileResult,
 } from '@shared/contracts'
 import type { WorkbenchAgentUiCommand } from '@shared/workbenchAgentUi'
-import { isWorkbenchImagePreviewPath } from '@shared/workbenchImage'
 
 import {
   findWorkbenchBrowserMod,
@@ -112,38 +103,6 @@ export type PendingWorkbenchBrowserElementSelection = WorkbenchBrowserElementSel
 
 function normalizeWorkspaceRoot(root: LooseOptional<string>): string {
   return (root ?? '').replace(/[\\/]+$/, '')
-}
-
-type WorkbenchEditorWriteCommand = Extract<WorkbenchEditorCommand, { action: 'replace' | 'write' }>
-
-function getWorkbenchEditorCommandPath(command: WorkbenchEditorCommand): Nullable<string> {
-  switch (command.action) {
-    case 'open':
-    case 'reveal':
-    case 'close':
-    case 'delete':
-    case 'write':
-    case 'replace':
-      return command.path
-    case 'move':
-      return command.toPath
-    default:
-      return null
-  }
-}
-
-function resolveWorkbenchAutomatedEditContent(
-  command: WorkbenchEditorWriteCommand,
-  before: string
-): string {
-  if (command.action === 'write') return command.content
-  if (!before.includes(command.oldText)) {
-    throw new AppError('CONFLICT', '要替换的旧代码与编辑器当前内容不一致。')
-  }
-
-  return command.replaceAll
-    ? before.split(command.oldText).join(command.newText)
-    : before.replace(command.oldText, command.newText)
 }
 
 function countLines(content: string): number {
@@ -308,11 +267,6 @@ export function useStandaloneWorkbenchPageModel(
     PendingWorkbenchBrowserElementSelection[]
   >([])
   const [aiIndexDecisionVersion, setAiIndexDecisionVersion] = useState(0)
-  const [workbenchEditorAutomation, setWorkbenchEditorAutomation] =
-    useState<Nullable<WorkbenchEditorAutomationState>>(null)
-  const workbenchEditorAutomationAbortRef = useRef<Nullable<AbortController>>(null)
-  const workbenchEditorAutomationRollbackRef = useRef<Nullable<() => void>>(null)
-  const automationTimers = useTimerScope('WorkbenchEditorAutomation')
 
   const exitCurrentProject = useMemoizedFn(async (): Promise<boolean> => {
     if (!workbench.closeProject()) return false
@@ -441,253 +395,6 @@ export function useStandaloneWorkbenchPageModel(
     selectedFilePath: workbench.selectedFilePath,
     onSelectFile: workbench.selectFile,
   })
-  const updateWorkbenchEditorAutomation = useMemoizedFn(
-    (
-      commandId: string,
-      patch: Partial<Pick<WorkbenchEditorAutomationState, 'phase' | 'progress'>>
-    ): void => {
-      setWorkbenchEditorAutomation((current) =>
-        current?.commandId === commandId ? { ...current, ...patch } : current
-      )
-    }
-  )
-
-  const playWorkbenchAutomatedEdit = useMemoizedFn(
-    async (
-      event: WorkbenchEditorCommandEvent,
-      command: WorkbenchEditorWriteCommand,
-      signal: AbortSignal
-    ): Promise<Record<string, unknown>> => {
-      const activeProject = workbench.activeProject
-      if (!activeProject) throw new AppError('NOT_FOUND', '当前没有打开的 Workbench 项目。')
-      const openTab = workbench.openTabs.find((candidate) => candidate.path === command.path)
-      if (openTab && openTab.content !== openTab.file.content) {
-        throw new AppError('CONFLICT', '目标文件包含未保存内容，无法开始自动写入。')
-      }
-      if (isWorkbenchImagePreviewPath(command.path)) {
-        throw new AppError('VALIDATION', '图片预览是只读内容，不能播放自动写入。')
-      }
-
-      const file = Result.unwrap(
-        await workbenchHost.kernel.project.readWorkbenchFile({
-          projectRoot: activeProject.rootPath,
-          path: command.path,
-          maxChars: 1_500_000,
-        })
-      )
-      if (file.truncated) {
-        throw new AppError('VALIDATION', '文件过大，Workbench 不会对截断内容播放自动写入。')
-      }
-
-      const targetContent = resolveWorkbenchAutomatedEditContent(command, file.content)
-      if (targetContent === file.content)
-        return { path: command.path, changed: false, charactersWritten: 0 }
-
-      await editorNavigation.selectFile(command.path)
-      signal.throwIfAborted()
-      workbench.setAutomatedPreviewActive(true)
-      const rollback = (): void => workbench.setEditorContent(file.content)
-      workbenchEditorAutomationRollbackRef.current = rollback
-      const plan = buildWorkbenchEditorAnimationPlan(file.content, targetContent)
-
-      if (plan.deleteFrameCount > 0) {
-        updateWorkbenchEditorAutomation(event.commandId, { phase: 'deleting', progress: 0.12 })
-        for (let frame = 1; frame <= plan.deleteFrameCount; frame += 1) {
-          signal.throwIfAborted()
-          workbench.setEditorContent(buildWorkbenchEditorDeleteFrame(plan, frame))
-          updateWorkbenchEditorAutomation(event.commandId, {
-            progress: 0.12 + (frame / plan.deleteFrameCount) * 0.18,
-          })
-          await automationTimers.sleep(18, { signal, label: 'automation.delete-frame' })
-        }
-      }
-
-      updateWorkbenchEditorAutomation(event.commandId, { phase: 'typing', progress: 0.3 })
-      for (let frame = 1; frame <= Math.max(1, plan.typeFrameCount); frame += 1) {
-        signal.throwIfAborted()
-        workbench.setEditorContent(buildWorkbenchEditorTypeFrame(plan, frame))
-        updateWorkbenchEditorAutomation(event.commandId, {
-          progress: 0.3 + (frame / Math.max(1, plan.typeFrameCount)) * 0.58,
-        })
-        await automationTimers.sleep(20, { signal, label: 'automation.type-frame' })
-      }
-
-      signal.throwIfAborted()
-      updateWorkbenchEditorAutomation(event.commandId, { phase: 'saving', progress: 0.92 })
-      const saved = Result.unwrap(
-        await workbenchHost.kernel.project.saveWorkbenchFile({
-          projectRoot: activeProject.rootPath,
-          path: command.path,
-          content: targetContent,
-          expectedModifiedAt: file.modifiedAt,
-          expectedSize: file.size,
-        })
-      )
-      workbenchEditorAutomationRollbackRef.current = null
-      await workbench.reloadSelectedFileFromDisk()
-      await workbench.refreshLoadedDirectories()
-      updateWorkbenchEditorAutomation(event.commandId, { phase: 'finishing', progress: 1 })
-      return {
-        path: saved.path,
-        changed: true,
-        charactersWritten: plan.afterMiddle.length,
-      }
-    }
-  )
-
-  const exitWorkbenchEditorAutomation = useMemoizedFn((): void => {
-    const rollback = workbenchEditorAutomationRollbackRef.current
-    workbenchEditorAutomationRollbackRef.current = null
-    rollback?.()
-    workbenchEditorAutomationAbortRef.current?.abort(
-      new AppError('CONFLICT', '用户已退出 Workbench AI 接管。')
-    )
-    workbenchEditorAutomationAbortRef.current = null
-    workbench.setAutomatedPreviewActive(false)
-    setWorkbenchEditorAutomation(null)
-  })
-
-  const handleWorkbenchEditorCommand = useMemoizedFn(
-    async (event: WorkbenchEditorCommandEvent): Promise<void> => {
-      const controller = new AbortController()
-      workbenchEditorAutomationAbortRef.current?.abort()
-      workbenchEditorAutomationAbortRef.current = controller
-      setWorkbenchEditorAutomation({
-        commandId: event.commandId,
-        action: event.command.action,
-        path: getWorkbenchEditorCommandPath(event.command),
-        phase: 'preparing',
-        progress: 0.04,
-      })
-
-      try {
-        const activeProject = workbench.activeProject
-        if (!activeProject) throw new AppError('NOT_FOUND', '当前没有打开的 Workbench 项目。')
-        if (
-          normalizeWorkspaceRoot(activeProject.rootPath) !==
-          normalizeWorkspaceRoot(event.projectRoot)
-        ) {
-          throw new AppError('CONFLICT', 'AI 命令所属项目与当前 Workbench 项目不一致。')
-        }
-        if (event.sessionId !== currentSession.id) {
-          throw new AppError('CONFLICT', 'AI 命令所属会话已不是当前 Workbench 会话。')
-        }
-
-        await automationTimers.sleep(140, {
-          signal: controller.signal,
-          label: 'automation.enter',
-        })
-        const command = event.command
-        let data: Record<string, unknown> | undefined
-        switch (command.action) {
-          case 'search':
-            surface.setActiveLeftTool('project')
-            workbench.setSearchQuery(command.query)
-            data = { query: command.query }
-            break
-          case 'open':
-            if (command.line) {
-              await editorNavigation.goToLocation(command.path, command.line, command.column)
-            } else {
-              await editorNavigation.selectFile(command.path)
-            }
-            data = { path: command.path, line: command.line, column: command.column }
-            break
-          case 'reveal':
-            surface.setActiveLeftTool('project')
-            await workbench.revealEntryPath(command.path)
-            data = { path: command.path }
-            break
-          case 'close': {
-            const tab = workbench.openTabs.find((candidate) => candidate.path === command.path)
-            if (tab && tab.content !== tab.file.content) {
-              throw new AppError('CONFLICT', '文件包含未保存内容，Workbench 已拒绝关闭。')
-            }
-            workbench.closeOpenFile(command.path)
-            data = { path: command.path, wasOpen: !!tab }
-            break
-          }
-          case 'refresh':
-            await workbench.refreshLoadedDirectories()
-            data = { refreshed: true }
-            break
-          case 'move': {
-            const result = await workbench.moveEntryByPath(command.fromPath, command.toPath)
-            data = { previousPath: result.previousPath, path: result.entry.path }
-            break
-          }
-          case 'delete': {
-            const result = await workbench.deleteEntryByPath(command.path)
-            data = { path: result.deletedPath, restoreId: result.restoreId }
-            break
-          }
-          case 'write':
-          case 'replace':
-            data = await playWorkbenchAutomatedEdit(event, command, controller.signal)
-            break
-        }
-
-        updateWorkbenchEditorAutomation(event.commandId, { phase: 'finishing', progress: 1 })
-        await workbenchHost.kernel.project.acknowledgeWorkbenchEditorCommand({
-          commandId: event.commandId,
-          success: true,
-          message: `Workbench 编辑器已完成 ${command.action} 命令。`,
-          data,
-        })
-      } catch (error) {
-        workbenchEditorAutomationRollbackRef.current?.()
-        workbenchEditorAutomationRollbackRef.current = null
-        const appError = AppError.from(error)
-        log.warn('Workbench AI 编辑器命令执行失败', {
-          commandId: event.commandId,
-          action: event.command.action,
-          error: appError,
-        })
-        await workbenchHost.kernel.project.acknowledgeWorkbenchEditorCommand({
-          commandId: event.commandId,
-          success: false,
-          message: appError.message,
-        })
-      } finally {
-        if (workbenchEditorAutomationAbortRef.current === controller) {
-          workbenchEditorAutomationAbortRef.current = null
-          workbenchEditorAutomationRollbackRef.current = null
-          workbench.setAutomatedPreviewActive(false)
-          setWorkbenchEditorAutomation(null)
-        }
-      }
-    }
-  )
-  useEffect(
-    () => workbenchHost.kernel.project.onWorkbenchEditorCommand(handleWorkbenchEditorCommand),
-    [handleWorkbenchEditorCommand]
-  )
-  useEffect(
-    () => () => {
-      workbenchEditorAutomationAbortRef.current?.abort()
-      workbenchEditorAutomationAbortRef.current = null
-      workbenchEditorAutomationRollbackRef.current = null
-    },
-    []
-  )
-  useEffect(() => {
-    if (!workbenchEditorAutomation) return undefined
-
-    const blockAutomationKeydown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') {
-        event.preventDefault()
-        exitWorkbenchEditorAutomation()
-        return
-      }
-
-      const target = event.target
-      if (target instanceof Element && target.closest('[data-workbench-automation-exit]')) return
-      event.preventDefault()
-      event.stopImmediatePropagation()
-    }
-    window.addEventListener('keydown', blockAutomationKeydown, true)
-    return () => window.removeEventListener('keydown', blockAutomationKeydown, true)
-  }, [exitWorkbenchEditorAutomation, workbenchEditorAutomation])
   const agentBrowserBindingSessionId = agentBrowser.active ? currentSession.id : null
   const openAgentBrowserTab = editorNavigation.debug.agentBrowser.open
   const closeAgentBrowserTab = editorNavigation.debug.agentBrowser.close
@@ -764,11 +471,7 @@ export function useStandaloneWorkbenchPageModel(
 
   useWorkbenchKeyboardShortcuts({
     activeRightTool: surface.activeRightTool,
-    enabled:
-      surfaceMode === 'standalone' &&
-      !!workbench.activeProject &&
-      !settingsOpen &&
-      !workbenchEditorAutomation,
+    enabled: surfaceMode === 'standalone' && !!workbench.activeProject && !settingsOpen,
     isQuickOpenOpen: surface.isQuickOpenOpen,
     keymap: workbenchKeymap.keymap,
     onCloseRightTool: surface.closeRightTool,
@@ -971,6 +674,7 @@ export function useStandaloneWorkbenchPageModel(
   }, [explanations.focusRevision])
 
   const gitChangeItemsRef = useLatest(gitState.changeItems)
+  const agentUiTimers = useTimerScope('WorkbenchAgentUi')
   /** 刚改完的文件可能还没进 Git 状态：刷新一次，等下一次提交把它带出来（最多 1.5 秒）。 */
   async function findGitChangeItem(path: string): Promise<(typeof gitState.changeItems)[number] | null> {
     const find = () => gitChangeItemsRef.current.find((item) => item.path === path) ?? null
@@ -980,7 +684,7 @@ export function useStandaloneWorkbenchPageModel(
     for (let waited = 0; waited < 1500; waited += 50) {
       const refreshed = find()
       if (refreshed) return refreshed
-      await automationTimers.sleep(50, { label: 'agent-ui.git-refresh' })
+      await agentUiTimers.sleep(50, { label: 'agent-ui.git-refresh' })
     }
     return find()
   }
@@ -1360,10 +1064,6 @@ export function useStandaloneWorkbenchPageModel(
     aiChanges,
     chatChangePreview,
     gitChangeActions,
-    automation: {
-      state: workbenchEditorAutomation,
-      exit: exitWorkbenchEditorAutomation,
-    },
     /** 页面 chrome / i18n / 派生展示值。 */
     chrome: {
       lockedProjectId,

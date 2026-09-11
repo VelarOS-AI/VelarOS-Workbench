@@ -537,90 +537,6 @@ export function useWorkbenchMutationController({
     }
   }
 
-  /** Workbench AI 命令桥专用：按路径移动并复用与文件树拖拽相同的状态同步。 */
-  async function moveEntryByPath(
-    fromPath: string,
-    toPath: string
-  ): Promise<WorkbenchMoveEntryResult> {
-    const owningProject = activeProjectRef.current
-    if (!owningProject) throw new AppError('NOT_FOUND', '当前没有打开的 Workbench 项目。')
-    if (isMutatingTree) throw new AppError('CONFLICT', '文件树正在执行其他变更。')
-    if (!ensureNoUnsavedFilesInPath(fromPath)) {
-      throw new AppError('CONFLICT', '目标路径包含未保存的编辑器内容。')
-    }
-
-    const name = toPath.split('/').filter((value) => !!value).at(-1)?.trim()
-    if (!name || fromPath === ROOT_PATH || toPath === ROOT_PATH) {
-      throw new AppError('VALIDATION', '移动路径无效或指向项目根目录。')
-    }
-
-    try {
-      setIsMutatingTree(true)
-      const result = Result.unwrap(
-        await workbenchHost.kernel.project.moveWorkbenchEntry({
-          projectRoot: owningProject.rootPath,
-          path: fromPath,
-          parentPath: getParentPath(toPath),
-          name,
-        })
-      )
-      if (activeProjectRef.current?.id !== owningProject.id) {
-        throw new AppError('CONFLICT', 'Workbench 项目在命令执行期间发生了切换。')
-      }
-
-      onTreeChangedLatest.current()
-      pruneTreeCacheLatest.current(result.previousPath)
-      moveOpenEntryPathLatest.current(result.previousPath, result.entry.path, result.entry.modifiedAt)
-      commentStore.renamePath(owningProject.rootPath, result.previousPath, result.entry.path)
-      await Promise.all(
-        [...new Set([result.previousParentPath, result.parentPath])].map((parentPath) =>
-          refreshMutationParentLatest.current(parentPath)
-        )
-      )
-      setSelectedEntryPathLatest.current(result.entry.path)
-      resetSearchLatest.current()
-      return result
-    } finally {
-      setIsMutatingTree(false)
-    }
-  }
-
-  /** Workbench AI 命令桥专用：走可撤销删除并立即收敛标签页、树缓存和评论。 */
-  async function deleteEntryByPath(path: string): Promise<WorkbenchDeleteEntryResult> {
-    const owningProject = activeProjectRef.current
-    if (!owningProject) throw new AppError('NOT_FOUND', '当前没有打开的 Workbench 项目。')
-    if (isMutatingTree) throw new AppError('CONFLICT', '文件树正在执行其他变更。')
-    if (path === ROOT_PATH) throw new AppError('VALIDATION', '不能删除项目根目录。')
-    if (!ensureNoUnsavedFilesInPath(path)) {
-      throw new AppError('CONFLICT', '目标路径包含未保存的编辑器内容。')
-    }
-
-    try {
-      setIsMutatingTree(true)
-      const result = Result.unwrap(
-        await workbenchHost.kernel.project.deleteWorkbenchEntry({
-          projectRoot: owningProject.rootPath,
-          path,
-        })
-      )
-      if (activeProjectRef.current?.id !== owningProject.id) {
-        throw new AppError('CONFLICT', 'Workbench 项目在命令执行期间发生了切换。')
-      }
-
-      onTreeChangedLatest.current()
-      pruneTreeCacheLatest.current(result.deletedPath)
-      closeOpenEntryPathLatest.current(result.deletedPath)
-      commentStore.removeUnderPath(owningProject.rootPath, result.deletedPath)
-      await refreshMutationParentLatest.current(result.parentPath)
-      setSelectedEntryPathLatest.current(null)
-      resetSearchLatest.current()
-      rememberDeletedEntries(owningProject, [result])
-      return result
-    } finally {
-      setIsMutatingTree(false)
-    }
-  }
-
   return {
     pendingTreeAction,
     treeActionName,
@@ -636,7 +552,5 @@ export function useWorkbenchMutationController({
     submitTreeAction,
     deleteSelectedEntry,
     undoLastDeletedEntries,
-    moveEntryByPath,
-    deleteEntryByPath,
   }
 }
