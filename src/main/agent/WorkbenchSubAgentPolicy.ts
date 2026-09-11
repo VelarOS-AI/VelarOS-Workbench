@@ -28,11 +28,13 @@ const WorkbenchReadonlyBoundary =
 const WorkbenchProjectMutateLeaseScope = 'project-mutate'
 
 /**
- * 每个子 Agent 都看得到的控制面类别。
+ * 每个子 Agent 都看得到的控制面类别（与 Desktop 的共享控制面同理）。
  *
- * 少了它子 Agent 连「换入工具、读上下文、交付结果」都做不到——它不是能力，是活着的最低要求。
+ * 少了它们子 Agent 连「换入工具、读上下文、交付结果」都做不到——不是能力，是活着的最低要求。
+ * `context`（`context:recall`）尤其不能少：子 Agent 读几个大文件后结果会被页出成句柄，出核地板要求
+ * 这时请求里带着召回工具，缺了它下一次请求直接被拦下，子 Agent 以「不变量校验失败」收场。
  */
-const WorkbenchSharedControlCategoryIds: readonly ToolCategoryId[] = ['agent-control']
+const WorkbenchSharedControlCategoryIds: readonly ToolCategoryId[] = ['agent-control', 'context']
 
 /**
  * Workbench 的子 Agent 类型表。

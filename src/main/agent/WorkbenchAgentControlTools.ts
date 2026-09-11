@@ -1,5 +1,6 @@
 import {
   backgroundJobTools,
+  contextRetrievalTools,
   dispatchAgentTools,
   goalTools,
   plansTools,
@@ -19,6 +20,11 @@ import {
 const WorkbenchAgentControlCategoryId: ToolCategoryId = 'agent-control'
 /** 目标与计划，与 Desktop 同名；只给主 Agent，子 Agent 的类型表不含它。 */
 const WorkbenchAgentPlanningCategoryId: ToolCategoryId = 'planning'
+/**
+ * 上下文召回，与 Desktop 同名。大工具结果会被页出成可召回句柄，出核地板要求此时请求里一定带着
+ * `context:recall`——所以它常驻，而且每一种子 Agent 都要有（见 WorkbenchSubAgentPolicy）。
+ */
+const WorkbenchAgentContextCategoryId: ToolCategoryId = 'context'
 
 const WorkbenchAgentControlCategory: Readonly<Record<ToolCategoryId, ToolCategoryDefinition>> =
   Object.freeze({
@@ -31,6 +37,11 @@ const WorkbenchAgentControlCategory: Readonly<Record<ToolCategoryId, ToolCategor
       id: WorkbenchAgentPlanningCategoryId,
       label: '目标与计划',
       description: '长任务的活动目标与可见执行计划：建立、推进、完成。',
+    }) as ToolCategoryDefinition,
+    [WorkbenchAgentContextCategoryId]: Object.freeze({
+      id: WorkbenchAgentContextCategoryId,
+      label: '上下文召回',
+      description: '取回这一轮里被页出成句柄的大工具结果。',
     }) as ToolCategoryDefinition,
     ...WorkbenchAgentUiCategory,
   })
@@ -90,6 +101,9 @@ const WorkbenchAgentControlTools: readonly WorkbenchAgentToolDefinition[] = Obje
   ...[...Object.values(goalTools), ...Object.values(plansTools)].map((tool) =>
     adoptBuiltinTool(tool as VelaTool, WorkbenchAgentPlanningCategoryId)
   ),
+  ...Object.values(contextRetrievalTools).map((tool) =>
+    adoptBuiltinTool(tool as VelaTool, WorkbenchAgentContextCategoryId)
+  ),
   ...WorkbenchAgentUiToolSpecs.map((tool) => adoptBuiltinTool(tool, WorkbenchAgentUiCategoryId)),
 ])
 
@@ -104,10 +118,12 @@ const WorkbenchAgentControlToolNames: readonly string[] = Object.freeze(
 const WorkbenchAgentControlCategoryIds: readonly ToolCategoryId[] = Object.freeze([
   WorkbenchAgentControlCategoryId,
   WorkbenchAgentPlanningCategoryId,
+  WorkbenchAgentContextCategoryId,
   WorkbenchAgentUiCategoryId,
 ])
 
 export {
+  WorkbenchAgentContextCategoryId,
   WorkbenchAgentControlCategory,
   WorkbenchAgentControlCategoryId,
   WorkbenchAgentControlCategoryIds,

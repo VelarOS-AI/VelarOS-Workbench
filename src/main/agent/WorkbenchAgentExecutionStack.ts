@@ -11,6 +11,7 @@ import {
   type AgentSystemRuntimeConfig,
   CodingSessionTracker,
   ContextGovernanceSessionRegistry,
+  type ContextPayloadStore,
   createAgentExecutionStack,
   defaultUnsupportedInteractionPort,
   ExecPlanLedger,
@@ -27,6 +28,7 @@ import {
   type SubAgentDispatchInput,
   SubAgentGuidanceRelayRegistry,
   TeamModelRouter,
+  type ToolConversationContextApi,
   WriteLeaseCoordinator,
 } from '@velaros-ai/agent'
 import {
@@ -75,6 +77,7 @@ import {
   WorkbenchAgentToolRegistry,
 } from './WorkbenchAgentToolRegistry'
 import { WorkbenchAgentUiBridge, type WorkbenchAgentUiPort } from './WorkbenchAgentUiBridge'
+import { createWorkbenchContextRecall } from './WorkbenchContextRecall'
 import {
   createWorkbenchQueryRoleEngine,
   createWorkbenchTeamModelRoutingPort,
@@ -211,6 +214,8 @@ class WorkbenchAgentExecutionStack {
   private readonly log = Log.tag('WorkbenchAgentExecutionStack')
   private readonly modelRuntime: ModelRuntimeComposition['agentModelRuntime']
   private readonly contextGovernanceSessions = new ContextGovernanceSessionRegistry()
+  /** 页出的大工具结果与 `context:recall` 的取回口，主 Agent 与它派出的子 Agent 共用。 */
+  private readonly contextRecall = createWorkbenchContextRecall(this.contextGovernanceSessions)
   private readonly sessions = new Map<string, WorkbenchAgentSession>()
   /**
    * 运行中补发的引导：按 executionId 分道排队，主 Agent 在轮次边界读走（`runtimeInput` /
@@ -296,6 +301,11 @@ class WorkbenchAgentExecutionStack {
       initialVisibleToolNames: session.initialVisibleToolNames,
       activeContext: this.activeContexts.forSession(input.sessionId),
       interaction: createWorkbenchInteractionPort(input.executionId),
+      conversation: this.contextRecall.conversationFor({
+        sessionId: input.sessionId,
+        executionId: input.executionId,
+      }),
+      contextPayloadStore: this.contextRecall.payloadStore,
       // 界面请求走这一轮自己的事件流，只会到达发起这一轮的窗口。
       workbenchUi: this.ui.forExecution({
         executionId: input.executionId,
@@ -829,6 +839,10 @@ type WorkbenchAgentToolContext = AgentExecutionStackToolContext & {
   dispatchSubAgent?: (input: SubAgentDispatchInput) => Promise<string>
   /** 发起这一轮的窗口；缺席时 `workbench:*` 界面工具整格隐身。 */
   workbenchUi?: WorkbenchAgentUiPort
+  /** `context:recall` 的取回口；子 Agent 的上下文从主 Agent 这里继承同一份。 */
+  conversation?: ToolConversationContextApi
+  /** 执行器页出大工具结果时写入的存储；缺席时结果只内联、超出预算就截断。 */
+  contextPayloadStore?: ContextPayloadStore
 }
 
 export function createWorkbenchToolContext(input: {
@@ -850,6 +864,9 @@ export function createWorkbenchToolContext(input: {
   dispatchSubAgent?: (input: SubAgentDispatchInput) => Promise<string>
   /** 界面操作口；不传即本次执行面没有可操作的窗口。 */
   workbenchUi?: WorkbenchAgentUiPort
+  /** 上下文召回口与页出存储；不传即这一面不页出、也没有 `context:recall` 可用。 */
+  conversation?: ToolConversationContextApi
+  contextPayloadStore?: ContextPayloadStore
 }): WorkbenchAgentToolContext {
   let visibleToolNames = [...(input.initialVisibleToolNames ?? input.registry.names)]
   let visibleToolTransportNames: Readonly<Record<string, string>> = {}
@@ -884,6 +901,8 @@ export function createWorkbenchToolContext(input: {
     execution: null,
     ...(input.dispatchSubAgent ? { dispatchSubAgent: input.dispatchSubAgent } : {}),
     ...(input.workbenchUi ? { workbenchUi: input.workbenchUi } : {}),
+    ...(input.conversation ? { conversation: input.conversation } : {}),
+    ...(input.contextPayloadStore ? { contextPayloadStore: input.contextPayloadStore } : {}),
     codingSession: input.tracker,
     getEnabledToolCategories: () => input.tracker.getEnabledToolCategories(),
     query: async () => {
