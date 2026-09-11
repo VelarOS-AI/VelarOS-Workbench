@@ -54,10 +54,34 @@ function createFakeUi(reply: (command: WorkbenchAgentUiCommand) => Record<string
   }
 }
 
-function toolContext(root: string, ui?: ReturnType<typeof createFakeUi>) {
+/** 假审批通道：记下每次征询，按给定答案放行或拒绝。 */
+function createFakeApproval(approved = true) {
+  const asked: Array<{ message: string; riskScope?: string; approvalRisk?: string }> = []
+  return {
+    asked,
+    port: {
+      awaitConfirmation: async () => undefined,
+      awaitConfirmationDecision: async (
+        message: string,
+        _signal?: AbortSignal,
+        options?: { riskScope?: string; approvalRisk?: string }
+      ) => {
+        asked.push({ message, riskScope: options?.riskScope, approvalRisk: options?.approvalRisk })
+        return { approved, message: approved ? null : '先别跑' }
+      },
+    },
+  }
+}
+
+function toolContext(
+  root: string,
+  ui?: ReturnType<typeof createFakeUi>,
+  approval: ReturnType<typeof createFakeApproval> = createFakeApproval()
+) {
   return {
     resourceId: root,
     abortSignal: new AbortController().signal,
+    approval: approval.port,
     ...(ui ? { workbenchUi: ui.port } : {}),
   }
 }
@@ -284,6 +308,142 @@ void describe('Workbench agent UI tools', () => {
   })
 })
 
+void describe('Workbench agent run, preview and problems tools', () => {
+  void test('start_run refuses dangerous commands and asks before commands that may change the project', async () => {
+    await withProject(async (root) => {
+      const startRun = findTool('workbench:start_run')
+      const ui = createFakeUi((command) =>
+        command.type === 'start-run' ? { sessionId: 'run-1' } : {}
+      )
+
+      await assert.rejects(
+        Promise.resolve(startRun.execute({ command: 'rm -rf /' }, toolContext(root, ui) as never)),
+        /rejected by the safety policy/u
+      )
+
+      // 只读命令不打扰用户；返回会话 id 给后续 read_run / stop_run。
+      const approval = createFakeApproval()
+      assert.deepEqual(
+        await startRun.execute({ command: 'git status' }, toolContext(root, ui, approval) as never),
+        { started: true, sessionId: 'run-1', command: 'git status' }
+      )
+      assert.deepEqual(approval.asked, [])
+
+      await startRun.execute({ command: 'npm run dev', label: '开发服务器' }, toolContext(root, ui, approval) as never)
+      assert.deepEqual(approval.asked, [
+        { message: '在底部「运行」面板里运行：npm run dev', riskScope: 'workbench-run:command', approvalRisk: 'high' },
+      ])
+      assert.deepEqual(ui.commands.filter((command) => command.type === 'start-run'), [
+        { type: 'start-run', command: 'git status', label: 'git status' },
+        { type: 'start-run', command: 'npm run dev', label: '开发服务器' },
+      ])
+
+      // 用户不同意：什么都不启动，把原因交给模型。
+      const declined = await startRun.execute(
+        { command: 'npm install' },
+        toolContext(root, ui, createFakeApproval(false)) as never
+      )
+      assert.deepEqual(declined, { started: false, command: 'npm install', message: '先别跑' })
+      assert.equal(ui.commands.filter((command) => command.type === 'start-run').length, 2)
+    })
+  })
+
+  void test('reading a run can wait for the output a dev server prints when it is ready', async () => {
+    await withProject(async (root) => {
+      let reads = 0
+      const ui = createFakeUi((command) => {
+        if (command.type === 'start-run') return { sessionId: 'run-dev' }
+        if (command.type !== 'read-run') return {}
+        reads += 1
+        return {
+          sessionId: 'run-dev',
+          command: 'npm run dev',
+          running: true,
+          output: reads === 1 ? 'starting…' : 'Local: http://localhost:5173/',
+          totalLines: reads,
+          matched: reads > 1,
+        }
+      })
+
+      const result = await findTool('workbench:start_run').execute(
+        { command: 'npm run dev', waitFor: 'Local:', waitSeconds: 5 },
+        toolContext(root, ui) as never
+      )
+      assert.equal((result as { matched?: boolean }).matched, true)
+      assert.equal((result as { started?: boolean }).started, true)
+      assert.equal(reads, 2)
+      // 读输出盯住同一条运行，默认 60 行，按 waitFor 在整段输出里找。
+      assert.deepEqual(ui.commands.filter((command) => command.type === 'read-run')[0], {
+        type: 'read-run',
+        sessionId: 'run-dev',
+        lines: 60,
+        match: 'Local:',
+      })
+
+      // 不等待时读一次就回；进程已经退出也立刻回。
+      reads = 0
+      assert.equal(findTool('workbench:read_run').schema.safeParse({ lines: 500 }).success, false)
+      const once = await findTool('workbench:read_run').execute({ lines: 20 }, toolContext(root, ui) as never)
+      assert.equal((once as { output?: string }).output, 'starting…')
+      assert.deepEqual(ui.commands.at(-1), { type: 'read-run', sessionId: null, lines: 20, match: null })
+
+      assert.deepEqual(
+        await findTool('workbench:stop_run').execute({ sessionId: 'run-dev' }, toolContext(root, ui) as never),
+        { stopped: true, sessionId: 'run-dev' }
+      )
+    })
+  })
+
+  void test('open_preview only opens local development servers', async () => {
+    await withProject(async (root) => {
+      const ui = createFakeUi((command) => (command.type === 'open-preview' ? { opened: 'workbench-browser' } : {}))
+      const openPreview = findTool('workbench:open_preview')
+      for (const url of [
+        'http://localhost:5173/',
+        'http://127.0.0.1:3000/docs',
+        'http://192.168.1.20:8080',
+        'https://app.localhost/',
+        'http://[::1]:4000/',
+      ]) {
+        const result = (await openPreview.execute({ url }, toolContext(root, ui) as never)) as { opened?: string }
+        assert.equal(result.opened, 'workbench-browser', url)
+      }
+      for (const [url, pattern] of [
+        ['https://example.com/', /Only local development servers/u],
+        ['http://8.8.8.8/', /Only local development servers/u],
+        ['file:///etc/passwd', /Only http\(s\)/u],
+        ['not a url', /not a valid address/u],
+      ] as const) {
+        await assert.rejects(
+          Promise.resolve(openPreview.execute({ url }, toolContext(root, ui) as never)),
+          pattern,
+          url
+        )
+      }
+    })
+  })
+
+  void test('get_problems resolves the files in the project before asking the language service', async () => {
+    await withProject(async (root) => {
+      const ui = createFakeUi(() => ({ files: [], errors: 0, warnings: 0 }))
+      const getProblems = findTool('workbench:get_problems')
+      await getProblems.execute(
+        { paths: ['./src/cache/store.ts', 'src/cache/store.ts', 'README.md'], show: true },
+        toolContext(root, ui) as never
+      )
+      await getProblems.execute({}, toolContext(root, ui) as never)
+      assert.deepEqual(ui.commands, [
+        { type: 'read-problems', paths: ['src/cache/store.ts', 'README.md'], show: true },
+        { type: 'read-problems', paths: null, show: false },
+      ])
+      await assert.rejects(
+        Promise.resolve(getProblems.execute({ paths: ['nope.ts'] }, toolContext(root, ui) as never)),
+        /does not exist/u
+      )
+    })
+  })
+})
+
 const EmptyProjectProvider: WorkbenchProjectCapabilityProvider = {
   invoke: () => Promise.resolve(null),
   resolveProject: async (root) => ({
@@ -389,6 +549,7 @@ void describe('Workbench agent UI tools in a real run', () => {
         // 界面工具常驻：第一轮就摆在模型面前。
         assert.ok(toolNamesPerRequest[0]?.includes('workbench__open_file'))
         assert.ok(toolNamesPerRequest[0]?.includes('workbench__explain_code'))
+        assert.ok(toolNamesPerRequest[0]?.includes('workbench__start_run'))
         assert.deepEqual(requests.map((request) => [request.sessionId, request.executionId, request.command]), [
           [
             'ui-session',

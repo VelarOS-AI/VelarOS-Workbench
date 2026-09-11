@@ -39,6 +39,15 @@ export type WorkbenchAgentUiCommand =
     }
   | { type: 'clear-explanations'; path: string | null }
   | { type: 'read-editor-state' }
+  /** 在底部「运行」面板里启动一条命令（主进程已按命令策略校验、审批过）。 */
+  | { type: 'start-run'; command: string; label: string }
+  /** 读一条运行的最近输出；`sessionId` 为 null 时读最近启动的那条。 */
+  | { type: 'read-run'; sessionId: string | null; lines: number; match: string | null }
+  | { type: 'stop-run'; sessionId: string }
+  /** 在内置浏览器里打开本机开发服务器的地址；内置浏览器没开时交给系统浏览器。 */
+  | { type: 'open-preview'; url: string }
+  /** 语言服务诊断；`paths` 为 null 时读编辑器里打开着的文件。 */
+  | { type: 'read-problems'; paths: string[] | null; show: boolean }
 
 export interface WorkbenchAgentUiRequest {
   requestId: string
@@ -50,6 +59,33 @@ export interface WorkbenchAgentUiRequest {
 export type WorkbenchAgentUiResponse =
   | { requestId: string; executionId: string; ok: true; data: Record<string, unknown> }
   | { requestId: string; executionId: string; ok: false; message: string }
+
+/** `read-run` 的回执数据。 */
+export interface WorkbenchAgentRunSnapshot {
+  sessionId: string
+  command: string
+  running: boolean
+  /** 最近若干行输出，已去掉终端控制序列。 */
+  output: string
+  /** 面板里保留着的输出总行数（面板只留最近一段）。 */
+  totalLines: number
+  /** 给了 `match` 时：面板保留的输出里是否出现过这段文字（不分大小写）。 */
+  matched?: boolean
+}
+
+/** `read-problems` 里的一个文件。 */
+export interface WorkbenchAgentFileProblems {
+  path: string
+  problems: Array<{
+    severity: 'error' | 'warning' | 'info'
+    line: number
+    column: number
+    message: string
+    code?: number | string
+  }>
+  /** 问题太多只回前面这些时为 true。 */
+  truncated: boolean
+}
 
 /** `read-editor-state` 的回执数据。 */
 export interface WorkbenchAgentEditorState {

@@ -346,8 +346,9 @@ export function useWorkbenchCommandController({
 
   // ── 运行卡（PTY 支持的运行会话，走终端会话基础设施）─────────────────────────
 
+  /** 启动一张运行卡；返回会话 id（期间切走了项目时为 null，进程随即停掉）。 */
   const startRunSessionForProject = useMemoizedFn(
-    async (project: WorkbenchProject, command: string, label: string): Promise<void> => {
+    async (project: WorkbenchProject, command: string, label: string): Promise<string | null> => {
       const owningProjectId = project.id
       const result = Result.unwrap(
         await workbenchHost.kernel.project.startWorkbenchTerminalSession({
@@ -358,7 +359,7 @@ export function useWorkbenchCommandController({
 
       if (activeProjectRef.current?.id !== owningProjectId) {
         void workbenchHost.kernel.project.stopWorkbenchTerminalSession({ sessionId: result.sessionId })
-        return
+        return null
       }
 
       const session: WorkbenchTerminalSessionView = {
@@ -373,26 +374,29 @@ export function useWorkbenchCommandController({
       }
       setRunSessions((current) => [...current, session])
       setActiveRunSessionId(result.sessionId)
+      return result.sessionId
     }
   )
 
+  /** 返回新运行卡的会话 id；没有项目、命令为空或启动失败（已提示用户）时为 null。 */
   const launchRunSession = useMemoizedFn(
-    async (commandInput: string, label?: string): Promise<void> => {
+    async (commandInput: string, label?: string): Promise<string | null> => {
       const project = activeProjectRef.current
       const command = commandInput.trim()
-      if (!project || !command) return
+      if (!project || !command) return null
 
       // 记住最近一次运行的命令：侧边栏 ▶ 默认指向它，并进入右键切换列表。
       setLastLaunchedCommand(command)
 
       try {
-        await startRunSessionForProject(project, command, label?.trim() || command)
+        return await startRunSessionForProject(project, command, label?.trim() || command)
       } catch (error) {
         const appError = AppError.from(error)
         messageLatest.current.error({
           title: tLatest.current('workbench.commandFailed'),
           description: appError.message,
         })
+        return null
       }
     }
   )

@@ -33,6 +33,13 @@ void describe('Workbench agent UI and AI changes wiring', () => {
     assert.match(pageModel, /case 'open-file':[\s\S]*?focus: false/u)
     assert.match(editorPanel, /editorRef\.current\?\.selectLines\(navigationRequest\.line, navigationRequest\.endLine, options\)/u)
     assert.match(editor, /if \(options\?\.focus !== false\) view\.focus\(\)/u)
+    // 跑命令进底部「运行」面板并把面板打开；预览优先用内置浏览器，没开时交给系统浏览器。
+    assert.match(pageModel, /case 'start-run': \{[\s\S]*?surface\.openBottomTool\('run'\)/u)
+    assert.match(pageModel, /editorNavigation\.debug\.openTab\(command\.url\)/u)
+    assert.match(pageModel, /window\.open\(command\.url, '_blank', 'noopener'\)/u)
+    // 问题面板只列当前文件：先把有问题的文件定位到第一个问题再开面板。
+    assert.match(pageModel, /await editorNavigation\.goToLocation\(shown\.path, firstProblem\.line, firstProblem\.column, \{\n\s*focus: false,/u)
+    assert.match(pageModel, /if \(command\.show\) surface\.openBottomTool\('problems'\)/u)
     // 讲解气泡是编辑器扩展，随切文件按存储行号重新锚定。
     assert.match(editor, /workbenchExplanationExtension,/u)
     assert.match(editor, /reanchorWorkbenchComments\(view\)\n\s*syncWorkbenchExplanations\(view\)/u)

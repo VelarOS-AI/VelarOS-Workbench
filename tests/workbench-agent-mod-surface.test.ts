@@ -209,6 +209,11 @@ void describe('Workbench Agent Mod surface', () => {
             'workbench__explain_code',
             'workbench__clear_explanations',
             'workbench__get_editor_state',
+            'workbench__start_run',
+            'workbench__read_run',
+            'workbench__stop_run',
+            'workbench__open_preview',
+            'workbench__get_problems',
           ])
         assert.ok(!names.includes('browser__hidden'))
         assert.ok(!names.includes('browser__resident_unavailable'))

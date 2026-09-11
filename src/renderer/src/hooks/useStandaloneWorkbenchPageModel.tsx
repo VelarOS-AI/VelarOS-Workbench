@@ -22,10 +22,13 @@ import { useWorkbenchStandaloneProjectSync } from '@renderer/hooks/useWorkbenchS
 import { useWorkbenchSurfaceState } from '@renderer/hooks/useWorkbenchSurfaceState'
 import { workbenchHost } from '@renderer/host'
 import { resolveWorkbenchChatWorkspacePath } from '@renderer/models/chat/workbenchChatWorkspacePath'
+import { buildWorkbenchAgentRunSnapshot } from '@renderer/models/commands/workbenchAgentRunSnapshot'
 import { getWorkbenchCommandStatusLabel } from '@renderer/models/commands/workbenchCommandStatusModel'
 import { inferPackageManagerCommand } from '@renderer/models/commands/workbenchCommandSuggestions'
 import { inferWorkbenchPackageManagerForPackageJsonPath } from '@renderer/models/commands/workbenchPackageScriptCommand'
 import { buildWorkbenchAgentEditorState } from '@renderer/models/editor/workbenchAgentEditorState'
+import { buildWorkbenchLanguageServiceRequestBase } from '@renderer/models/editor/workbenchCodeMirrorLanguageService'
+import { getWorkbenchLanguageServiceDiagnostics } from '@renderer/models/editor/workbenchLanguageServiceIpc'
 import { buildWorkbenchPackageScriptRunActions } from '@renderer/models/editor/workbenchPackageScriptRunGutter'
 import {
   useWorkbenchExplanations,
@@ -49,6 +52,7 @@ import {
   getZoomedWorkbenchEditorZoomLevel,
   type WorkbenchEditorZoomAction,
 } from '@renderer/models/settings/workbenchPreferences'
+import { fileLanguage } from '@renderer/models/shared/workbenchUtils'
 import type { WorkbenchLightEditorTab } from '@renderer/types/workbenchTypes'
 
 // 独立宿主改判：受控浏览器面走应用内空实现（无内嵌浏览器宿主），契约形状与
@@ -64,7 +68,7 @@ import type {
   SystemFileChangePreviewResult,
   WorkbenchReadFileResult,
 } from '@shared/contracts'
-import type { WorkbenchAgentUiCommand } from '@shared/workbenchAgentUi'
+import type { WorkbenchAgentFileProblems, WorkbenchAgentUiCommand } from '@shared/workbenchAgentUi'
 
 import {
   findWorkbenchBrowserMod,
@@ -689,7 +693,66 @@ export function useStandaloneWorkbenchPageModel(
     return find()
   }
 
-  // `workbench:*` 工具的界面请求落在这里：在用户眼前打开文件、定位、加讲解气泡。
+  const runSessionsRef = useLatest(workbench.runSessions)
+  /** 刚启动的运行卡要等一次状态提交才出现在列表里：给它一点时间（最多 1 秒）。 */
+  async function findRunSession(
+    sessionId: string | null
+  ): Promise<(typeof workbench.runSessions)[number] | null> {
+    const find = () =>
+      sessionId
+        ? (runSessionsRef.current.find((session) => session.id === sessionId) ?? null)
+        : (runSessionsRef.current.at(-1) ?? null)
+    for (let waited = 0; waited < 1000; waited += 50) {
+      const session = find()
+      if (session || !sessionId) return session
+      await new Promise((resolve) => window.setTimeout(resolve, 50))
+    }
+    return find()
+  }
+
+  /** 语言服务诊断（`workbench:get_problems`）：打开着的文件按编辑器里的内容查，其余读磁盘。 */
+  async function readAgentProblems(
+    projectRoot: string,
+    requestedPaths: readonly string[] | null
+  ): Promise<WorkbenchAgentFileProblems[]> {
+    const MaxProblemsPerFile = 50
+    const liveTabs = workbench.openTabs.map((tab) =>
+      tab.path === workbench.selectedFilePath ? { ...tab, content: workbench.editorContent } : tab
+    )
+    const paths =
+      requestedPaths ?? liveTabs.filter((tab) => !tab.file.imagePreview).map((tab) => tab.path).slice(0, 20)
+    return Promise.all(
+      paths.map(async (path): Promise<WorkbenchAgentFileProblems> => {
+        const openTab = liveTabs.find((tab) => tab.path === path)
+        const result = await getWorkbenchLanguageServiceDiagnostics(
+          openTab
+            ? buildWorkbenchLanguageServiceRequestBase({
+                projectRoot,
+                path,
+                language: fileLanguage(path),
+                content: openTab.content,
+                openTabs: liveTabs,
+              })
+            : { projectRoot, path, language: fileLanguage(path) }
+        )
+        if (!result.ok) throw new AppError('PLATFORM', result.error.message)
+        const diagnostics = result.data.diagnostics.filter((diagnostic) => diagnostic.path === path)
+        return {
+          path,
+          problems: diagnostics.slice(0, MaxProblemsPerFile).map((diagnostic) => ({
+            severity: diagnostic.severity,
+            line: diagnostic.range.startLine,
+            column: diagnostic.range.startColumn,
+            message: diagnostic.message,
+            ...(diagnostic.code !== undefined ? { code: diagnostic.code } : {}),
+          })),
+          truncated: diagnostics.length > MaxProblemsPerFile,
+        }
+      })
+    )
+  }
+
+  // `workbench:*` 工具的界面请求落在这里：在用户眼前打开文件、定位、加讲解气泡、跑命令、开预览。
   const handleAgentUiCommand = useMemoizedFn(
     async (
       command: WorkbenchAgentUiCommand,
@@ -747,6 +810,70 @@ export function useStandaloneWorkbenchPageModel(
               explanationCount: explanationStore.listForProject(context.projectRoot).length,
             }),
           }
+        case 'start-run': {
+          const sessionId = await workbench.launchRunSession(command.command, command.label)
+          if (!sessionId) throw new AppError('PLATFORM', 'Workbench could not start the run.')
+          surface.openBottomTool('run')
+          return { sessionId }
+        }
+        case 'read-run': {
+          const session = await findRunSession(command.sessionId)
+          if (!session)
+            throw new AppError(
+              'NOT_FOUND',
+              command.sessionId
+                ? `There is no run ${command.sessionId} in the Run panel.`
+                : 'There is no run in the Run panel yet.'
+            )
+          return { ...buildWorkbenchAgentRunSnapshot(session, command.lines, command.match) }
+        }
+        case 'stop-run': {
+          const session = await findRunSession(command.sessionId)
+          if (!session)
+            throw new AppError('NOT_FOUND', `There is no run ${command.sessionId} in the Run panel.`)
+          if (session.isRunning) await workbench.stopRunSession(session.id)
+          return { sessionId: session.id }
+        }
+        case 'open-preview':
+          if (browserModEnabled) {
+            showEditorSurface()
+            editorNavigation.debug.openTab(command.url)
+            return { opened: 'workbench-browser' }
+          }
+          // 内置浏览器没开：新窗口请求由主进程的外链处理交给系统浏览器。
+          window.open(command.url, '_blank', 'noopener')
+          return { opened: 'system-browser' }
+        case 'read-problems': {
+          const files = await readAgentProblems(context.projectRoot, command.paths)
+          // 「问题」面板只列当前文件的问题：先把第一个有问题的文件定位到它的第一个问题，面板里才是模型说的那些。
+          const shown = command.show
+            ? (files.find((file) => file.problems.some((problem) => problem.severity === 'error')) ??
+              files.find((file) => file.problems.length > 0))
+            : undefined
+          const firstProblem =
+            shown?.problems.find((problem) => problem.severity === 'error') ?? shown?.problems[0]
+          if (shown && firstProblem) {
+            showEditorSurface()
+            await editorNavigation.goToLocation(shown.path, firstProblem.line, firstProblem.column, {
+              focus: false,
+            })
+          }
+          if (command.show) surface.openBottomTool('problems')
+          return {
+            ...(shown && firstProblem
+              ? { shown: `${shown.path}:${firstProblem.line}:${firstProblem.column}` }
+              : {}),
+            files,
+            errors: files.reduce(
+              (total, file) => total + file.problems.filter((problem) => problem.severity === 'error').length,
+              0
+            ),
+            warnings: files.reduce(
+              (total, file) => total + file.problems.filter((problem) => problem.severity === 'warning').length,
+              0
+            ),
+          }
+        }
       }
     }
   )

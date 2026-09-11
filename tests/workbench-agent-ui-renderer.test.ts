@@ -3,6 +3,10 @@ import assert from 'node:assert/strict'
 import { describe, test } from 'bun:test'
 
 import { buildWorkbenchExplanationAnchors } from '../src/renderer/src/components/editor/workbenchExplanationExtension'
+import {
+  buildWorkbenchAgentRunSnapshot,
+  stripWorkbenchTerminalControlSequences,
+} from '../src/renderer/src/models/commands/workbenchAgentRunSnapshot'
 import { buildWorkbenchAgentEditorState } from '../src/renderer/src/models/editor/workbenchAgentEditorState'
 import { WorkbenchExplanationStore } from '../src/renderer/src/models/explanations/workbenchExplanationStore'
 import {
@@ -191,5 +195,43 @@ void describe('Workbench agent UI host', () => {
     })
     assert.equal(diffState.activeFile, null)
     assert.equal(diffState.selection, null)
+  })
+})
+
+void describe('Workbench agent run snapshot', () => {
+  void test('hands the model clean text: no colors, no redrawn progress, only the last lines', () => {
+    const colored = '\u001b[32mready\u001b[39m in 120ms\r\n'
+    const progress = 'building 10%\rbuilding 60%\rbuilding 100%\n'
+    const title = '\u001b]0;vite\u0007Local: http://localhost:5173/\n'
+    assert.equal(
+      stripWorkbenchTerminalControlSequences(colored + progress + title),
+      'ready in 120ms\nbuilding 100%\nLocal: http://localhost:5173/\n'
+    )
+
+    const session = {
+      id: 'run-1',
+      title: '开发服务器',
+      shell: 'zsh',
+      cwd: '/repo',
+      input: '',
+      isRunning: true,
+      command: 'npm run dev',
+      lines: [colored, progress, title].map((text, index) => ({
+        id: String(index),
+        stream: 'stdout' as const,
+        text,
+        createdAt: index,
+      })),
+    }
+    assert.deepEqual(buildWorkbenchAgentRunSnapshot(session, 2, 'local:'), {
+      sessionId: 'run-1',
+      command: 'npm run dev',
+      running: true,
+      output: 'building 100%\nLocal: http://localhost:5173/',
+      totalLines: 3,
+      matched: true,
+    })
+    assert.equal(buildWorkbenchAgentRunSnapshot(session, 60, null).matched, undefined)
+    assert.equal(buildWorkbenchAgentRunSnapshot({ ...session, isRunning: false }, 1, 'error').matched, false)
   })
 })

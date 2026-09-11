@@ -4,7 +4,11 @@ import { isAbsolute, resolve } from 'node:path'
 import { z } from 'zod'
 
 import type { ToolCategoryDefinition, ToolCategoryId } from '@velaros-ai/agent/protocol'
-import { defineToolRuntimeSpec } from '@velaros-ai/agent/tool-contract'
+import {
+  type ApprovalPort,
+  createApprovalOperationKey,
+  defineToolRuntimeSpec,
+} from '@velaros-ai/agent/tool-contract'
 import { isPresent } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
@@ -12,6 +16,7 @@ import type {
   WorkbenchAgentUiCommand,
   WorkbenchAgentUiExplanation,
 } from '../../shared/workbenchAgentUi'
+import { analyzeWorkbenchCommandExecution } from '../workspace/CommandExecutionPolicy'
 import {
   getRelativePathInsideRoot,
   toPortableRelativePath,
@@ -29,7 +34,7 @@ const WorkbenchAgentUiCategory: Readonly<Record<ToolCategoryId, ToolCategoryDefi
       label: '工作台界面',
       description:
         '在用户眼前的 Workbench 里打开文件并定位代码、在文件树里定位、打开改动对比、给代码加讲解气泡，' +
-        '以及读取用户此刻在编辑器里看的内容。',
+        '在「运行」面板里跑长驻命令并读输出、打开本机预览、读问题列表，以及读取用户此刻在编辑器里看的内容。',
       toolOs: Object.freeze({ domain: 'workbench', defaultState: 'resident' }),
     }),
   })
@@ -37,11 +42,20 @@ const WorkbenchAgentUiCategory: Readonly<Record<ToolCategoryId, ToolCategoryDefi
 /** 数行号时最多读这么大的文件；更大的文件不钳行号，交给编辑器自己夹住。 */
 const LineCountReadLimitBytes = 16 * 1024 * 1024
 const MaxExplanationsPerCall = 30
+const DefaultRunOutputLines = 60
+const MaxRunOutputLines = 300
+/** 等运行输出里出现某段文字最多等这么久；再久让模型自己分次读。 */
+const MaxRunWaitSeconds = 60
+const DefaultRunWaitSeconds = 20
+const RunPollIntervalMs = 1000
+const MaxProblemFiles = 20
 
 /** 工具要用到的那部分 Workbench 工具上下文。 */
 interface WorkbenchAgentUiToolContext {
   resourceId: string
   abortSignal: AbortSignal
+  /** 这一轮的审批通道；「运行」面板里跑可能改动项目的命令前先问。 */
+  approval: ApprovalPort
   workbenchUi?: WorkbenchAgentUiPort
 }
 
@@ -135,6 +149,65 @@ async function sendCommand(
 ): Promise<Readonly<Record<string, unknown>>> {
   context.abortSignal.throwIfAborted()
   return requireWorkbenchUi(context).request(command)
+}
+
+/** 等一会儿再读；这一轮被停下时立刻结束等待。 */
+function sleepUnlessAborted(ms: number, signal: AbortSignal): Promise<void> {
+  signal.throwIfAborted()
+  return new Promise((resolve, reject) => {
+    const onAbort = (): void => {
+      clearTimeout(timer)
+      reject(signal.reason instanceof Error ? signal.reason : new AppError('ABORTED', 'This run was stopped.'))
+    }
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort)
+      resolve()
+    }, ms)
+    signal.addEventListener('abort', onAbort, { once: true })
+  })
+}
+
+/**
+ * 读一条运行的输出；给了 `waitFor` 就轮询到这段文字出现（例如开发服务器打出 `Local:`），进程退出或
+ * 等满 `waitSeconds` 为止。只给 `waitSeconds` 时等满再读。
+ */
+async function readRunOutput(
+  context: WorkbenchAgentUiToolContext,
+  input: { sessionId: string | null; lines?: number; waitFor?: string; waitSeconds?: number }
+): Promise<Readonly<Record<string, unknown>>> {
+  const lines = Math.min(input.lines ?? DefaultRunOutputLines, MaxRunOutputLines)
+  const match = input.waitFor?.trim() || null
+  const waitSeconds = Math.min(
+    input.waitSeconds ?? (match ? DefaultRunWaitSeconds : 0),
+    MaxRunWaitSeconds
+  )
+  const deadline = Date.now() + waitSeconds * 1000
+  let sessionId = input.sessionId
+  for (;;) {
+    const snapshot = await sendCommand(context, { type: 'read-run', sessionId, lines, match })
+    // 第一次读到的是哪条运行，之后就一直盯着它，别在等待期间换到别人新开的那条。
+    if (typeof snapshot.sessionId === 'string') sessionId = snapshot.sessionId
+    if ((match && snapshot.matched === true) || snapshot.running !== true || Date.now() >= deadline)
+      return snapshot
+    await sleepUnlessAborted(RunPollIntervalMs, context.abortSignal)
+  }
+}
+
+/** 预览只开本机开发服务器：localhost、回环、局域网私有地址与 `.local`。 */
+function isLocalPreviewHost(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/gu, '')
+  if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local')) return true
+  if (host === '::1' || host === '0.0.0.0') return true
+  const octets = host.split('.').map((part) => Number(part))
+  if (octets.length !== 4 || octets.some((part) => !Number.isInteger(part) || part < 0 || part > 255))
+    return false
+  const [first, second] = octets as [number, number, number, number]
+  return (
+    first === 127 ||
+    first === 10 ||
+    (first === 192 && second === 168) ||
+    (first === 172 && second >= 16 && second <= 31)
+  )
 }
 
 const PathSchema = z.string().min(1).describe('Project-relative path (an absolute path inside the project also works).')
@@ -406,6 +479,243 @@ const editorStateTool = defineToolRuntimeSpec<Record<string, unknown>, Workbench
   execute: async (_input, context) => sendCommand(context, { type: 'read-editor-state' }),
 })
 
+const RunWaitSchema = {
+  waitFor: z
+    .string()
+    .min(1)
+    .max(200)
+    .optional()
+    .describe('Wait until this text appears in the output (case-insensitive), e.g. "Local:" or "ready".'),
+  waitSeconds: z.number().int().min(0).max(MaxRunWaitSeconds).optional(),
+}
+
+const startRunTool = defineToolRuntimeSpec<
+  { command: string; label?: string; waitFor?: string; waitSeconds?: number },
+  WorkbenchAgentUiToolContext
+>({
+  name: 'workbench:start_run',
+  category: WorkbenchAgentUiCategoryId,
+  role: 'execute',
+  summary:
+    '在底部「运行」面板里启动一条命令，用户能看到实时输出、随时停止；适合开发服务器、监听模式测试这类长驻进程。',
+  suitable: [
+    '要把项目跑起来（`npm run dev` 这类不会自己结束的命令）给用户看效果时。',
+    '用户说「帮我启动」「跑一下测试看看」并希望在运行面板里看到过程时。',
+  ],
+  forbidden: [
+    '跑完就结束、只需要结果的一次性命令用 project:run，不要占运行面板。',
+    '不要重复启动同一条长驻命令；先用 workbench:read_run 看它还在不在跑。',
+  ],
+  usage: [
+    '开发服务器传 waitFor（例如 "Local:"、"ready"），会等到这段输出出现再返回，最多等 60 秒。',
+    '返回的 sessionId 给 workbench:read_run / workbench:stop_run 用。',
+    '可能改动项目的命令会先请用户确认；破坏性命令直接拒绝。',
+  ],
+  examples: [
+    { command: 'npm run dev', label: '开发服务器', waitFor: 'Local:' },
+    { command: 'bun test --watch' },
+  ],
+  notes: ['进程跑在项目根目录，关掉窗口或用户点停止都会结束它。'],
+  schema: z.object({
+    command: z.string().min(1).max(2000),
+    label: z.string().max(80).optional(),
+    ...RunWaitSchema,
+  }),
+  permissions: ['process:exec'],
+  capabilities: {
+    effectKind: 'execute',
+    readScopes: ['workbench-ui'],
+    process: { execution: 'long-running' },
+    concurrency: 'unsafe',
+  },
+  hideWhenUnavailable: true,
+  isAvailable: hasWorkbenchUi,
+  isConcurrencySafe: () => false,
+  execute: async (input, context) => {
+    const command = input.command.trim()
+    const plan = analyzeWorkbenchCommandExecution(command)
+    if (plan.isDangerous)
+      throw new AppError('PERMISSION', `The command was rejected by the safety policy: ${command}`)
+    if (!plan.isReadOnly) {
+      const decision = await context.approval.awaitConfirmationDecision(
+        `在底部「运行」面板里运行：${command}`,
+        context.abortSignal,
+        {
+          approvalRisk: 'high',
+          riskScope: 'workbench-run:command',
+          operation: {
+            key: createApprovalOperationKey('workbench-run', { command, root: context.resourceId }),
+            label: command,
+            target: context.resourceId,
+          },
+        }
+      )
+      if (!decision.approved)
+        return {
+          started: false,
+          command,
+          message: decision.message ?? 'The user declined to run this command.',
+        }
+    }
+    const started = await sendCommand(context, {
+      type: 'start-run',
+      command,
+      label: input.label?.trim() || command,
+    })
+    const sessionId = typeof started.sessionId === 'string' ? started.sessionId : null
+    if (!sessionId) throw new AppError('PLATFORM', 'Workbench could not start the run.')
+    if (!input.waitFor && !input.waitSeconds) return { started: true, sessionId, command }
+    return {
+      started: true,
+      ...(await readRunOutput(context, {
+        sessionId,
+        waitFor: input.waitFor,
+        waitSeconds: input.waitSeconds,
+      })),
+    }
+  },
+})
+
+const readRunTool = defineToolRuntimeSpec<
+  { sessionId?: string; lines?: number; waitFor?: string; waitSeconds?: number },
+  WorkbenchAgentUiToolContext
+>({
+  name: 'workbench:read_run',
+  category: WorkbenchAgentUiCategoryId,
+  role: 'inspect',
+  summary: '读「运行」面板里一条运行的最近输出和是否还在跑，可以等某段输出出现再返回。',
+  suitable: [
+    '启动开发服务器或测试后，看它有没有起来、有没有报错。',
+    '用户说「运行面板里报错了」时，先读输出再判断。',
+  ],
+  forbidden: ['不要用它读普通文件；读文件用 project:read。'],
+  usage: [
+    '不给 sessionId 读最近启动的那条运行。',
+    'lines 是返回的输出行数（默认 60，最多 300）；面板本身只保留最近一段输出。',
+    'waitFor / waitSeconds 同 workbench:start_run。',
+  ],
+  examples: [{}, { sessionId: 'run-session-id', lines: 120 }, { waitFor: 'compiled', waitSeconds: 30 }],
+  notes: ['output 已去掉终端颜色等控制序列；running 为 false 表示进程已经退出。'],
+  schema: z.object({
+    sessionId: z.string().min(1).optional(),
+    lines: z.number().int().min(1).max(MaxRunOutputLines).optional(),
+    ...RunWaitSchema,
+  }),
+  permissions: [],
+  capabilities: { effectKind: 'read', readScopes: ['workbench-ui'], concurrency: 'safe' },
+  hideWhenUnavailable: true,
+  isAvailable: hasWorkbenchUi,
+  isConcurrencySafe: () => true,
+  execute: async (input, context) =>
+    readRunOutput(context, {
+      sessionId: input.sessionId ?? null,
+      lines: input.lines,
+      waitFor: input.waitFor,
+      waitSeconds: input.waitSeconds,
+    }),
+})
+
+const stopRunTool = defineToolRuntimeSpec<{ sessionId: string }, WorkbenchAgentUiToolContext>({
+  name: 'workbench:stop_run',
+  category: WorkbenchAgentUiCategoryId,
+  role: 'control',
+  summary: '停止「运行」面板里的一条运行（相当于用户点停止）。',
+  suitable: ['要重启开发服务器、或用户让你停掉某个进程时。'],
+  forbidden: ['不要停掉用户自己启动、且没让你停的运行。'],
+  usage: ['sessionId 来自 workbench:start_run 或 workbench:read_run 的返回。'],
+  examples: [{ sessionId: 'run-session-id' }],
+  notes: ['停止后面板里的输出还在，用户可以接着看。'],
+  schema: z.object({ sessionId: z.string().min(1) }),
+  permissions: ['process:exec'],
+  capabilities: { effectKind: 'execute', readScopes: ['workbench-ui'], concurrency: 'unsafe' },
+  hideWhenUnavailable: true,
+  isAvailable: hasWorkbenchUi,
+  isConcurrencySafe: () => false,
+  execute: async (input, context) => {
+    await sendCommand(context, { type: 'stop-run', sessionId: input.sessionId })
+    return { stopped: true, sessionId: input.sessionId }
+  },
+})
+
+const openPreviewTool = defineToolRuntimeSpec<{ url: string }, WorkbenchAgentUiToolContext>({
+  name: 'workbench:open_preview',
+  category: WorkbenchAgentUiCategoryId,
+  role: 'control',
+  summary: '把本机开发服务器的地址打开给用户看：优先在 Workbench 内置浏览器里，没开内置浏览器时用系统浏览器。',
+  suitable: ['开发服务器起来之后，让用户直接看到页面效果。'],
+  forbidden: [
+    '只能打开本机地址（localhost、127.0.0.1、局域网地址）；外部网址写在回答里给用户。',
+    '不要用它自己浏览网页；要操作页面用 browser 工具。',
+  ],
+  usage: ['url 用开发服务器打印出来的地址，例如 http://localhost:5173/。'],
+  examples: [{ url: 'http://localhost:5173/' }],
+  notes: ['返回 opened: workbench-browser 或 system-browser。'],
+  schema: z.object({ url: z.string().min(1).max(2000) }),
+  permissions: [],
+  capabilities: { effectKind: 'read', readScopes: ['workbench-ui'], concurrency: 'unsafe' },
+  hideWhenUnavailable: true,
+  isAvailable: hasWorkbenchUi,
+  isConcurrencySafe: () => false,
+  execute: async (input, context) => {
+    let url: URL
+    try {
+      url = new URL(input.url.trim())
+    } catch {
+      throw new AppError('VALIDATION', `${input.url} is not a valid address.`)
+    }
+    if (url.protocol !== 'http:' && url.protocol !== 'https:')
+      throw new AppError('VALIDATION', 'Only http(s) addresses can be previewed.')
+    if (!isLocalPreviewHost(url.hostname))
+      throw new AppError(
+        'PERMISSION',
+        'Only local development servers can be previewed (localhost, 127.0.0.1, LAN addresses). Put other links in the answer.'
+      )
+    return { url: url.toString(), ...(await sendCommand(context, { type: 'open-preview', url: url.toString() })) }
+  },
+})
+
+const getProblemsTool = defineToolRuntimeSpec<
+  { paths?: string[]; show?: boolean },
+  WorkbenchAgentUiToolContext
+>({
+  name: 'workbench:get_problems',
+  category: WorkbenchAgentUiCategoryId,
+  role: 'inspect',
+  summary: '读编辑器语言服务报告的问题（类型错误、未使用的变量等），可以同时把「问题」面板打开给用户看。',
+  suitable: [
+    '改完代码后检查有没有引入类型错误，而不必跑一遍完整的类型检查。',
+    '用户说「这里标红了」「有报错」时，先读具体问题。',
+  ],
+  forbidden: ['它只看语言服务支持的文件（如 TS/JS）；需要完整构建或测试结果时用 project:run。'],
+  usage: [
+    '给 paths 读这些文件（最多 20 个）；不给读编辑器里打开着的文件。',
+    'show 为 true 时把第一个有问题的文件定位到它的第一个问题，并打开底部「问题」面板（面板列的是当前文件的问题）。',
+  ],
+  examples: [{ paths: ['src/cache.ts'] }, { show: true }],
+  notes: ['未保存的文件按编辑器里的内容检查。'],
+  schema: z.object({
+    paths: z.array(PathSchema).min(1).max(MaxProblemFiles).optional(),
+    show: z.boolean().optional(),
+  }),
+  permissions: [],
+  capabilities: { effectKind: 'read', readScopes: ['workbench-ui'], concurrency: 'safe' },
+  hideWhenUnavailable: true,
+  isAvailable: hasWorkbenchUi,
+  isConcurrencySafe: () => true,
+  execute: async (input, context) => {
+    const paths = input.paths
+      ? await Promise.all(
+          input.paths.map(async (path) => (await resolveProjectFile(context.resourceId, path)).path)
+        )
+      : null
+    return sendCommand(context, {
+      type: 'read-problems',
+      paths: paths ? [...new Set(paths)] : null,
+      show: input.show ?? false,
+    })
+  },
+})
+
 /**
  * 在用户眼前操作 Workbench 的工具。它们只在界面口在场时可见（`hideWhenUnavailable`）：探针、测试
  * 与子 Agent 的上下文里没有发起窗口，工具整格隐身，而不是被调用后才报「没有窗口」。
@@ -417,6 +727,11 @@ const WorkbenchAgentUiToolSpecs = Object.freeze([
   explainCodeTool,
   clearExplanationsTool,
   editorStateTool,
+  startRunTool,
+  readRunTool,
+  stopRunTool,
+  openPreviewTool,
+  getProblemsTool,
 ])
 
 export { WorkbenchAgentUiCategory, WorkbenchAgentUiCategoryId, WorkbenchAgentUiToolSpecs }
