@@ -509,7 +509,14 @@
   color: inherit;
 }
 
-.treeInlineInput {
+/*
+ * 行内重命名框要落在一行树行里。共享 Input 的 sm 尺寸从这两个变量取高度和内边距：在这里改变量，
+ * 不跟它的类选择器比先后。边框、底色和聚焦态同样要压过 ghost 变体与工作台通用的输入聚焦环——
+ * 32px 高的框加 3px 外环会盖住上下两行和左边的文件图标。
+ */
+.treeRow .treeInlineInput {
+  --ui-control-height-xs: 19px;
+  --velar-input-padding-inline: 4px;
   @apply min-w-0 flex-1 border bg-card text-foreground;
   height: 19px;
   padding-inline: 4px;
@@ -517,6 +524,12 @@
   border-radius: var(--workbench-radius-xs);
   font-size: 11.5px;
   outline: none;
+}
+
+.workbenchShell .treeRow .treeInlineInput:focus-visible {
+  border-color: var(--border-strong);
+  background: var(--card);
+  box-shadow: none;
 }
 
 .searchResultCopy {

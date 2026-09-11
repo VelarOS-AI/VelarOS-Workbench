@@ -623,6 +623,17 @@ export function buildTypeScriptSignatureHelp({
   }
 }
 
+/**
+ * 内置 TS 格式化与补全插入代码共用的排版规则：以 TypeScript 自己的默认值为底（逗号后、二元运算符两侧、
+ * 控制语句关键字后留空格），只把缩进改成两格。只给缩进那几项时，TypeScript 把没给的空格规则一律当成关，
+ * 格式化出来是 `left+right`、`if(right===0)`。
+ */
+export const WorkbenchTypeScriptFormatCodeSettings: Readonly<ts.FormatCodeSettings> = Object.freeze({
+  ...ts.getDefaultFormatCodeSettings('\n'),
+  tabSize: 2,
+  indentSize: 2,
+})
+
 export function buildTypeScriptFormatEdits({
   service,
   fileName,
@@ -632,14 +643,7 @@ export function buildTypeScriptFormatEdits({
   fileName: string
   content: string
 }): WorkbenchLanguageServiceTextEdit[] {
-  const formatSettings: ts.FormatCodeSettings = {
-    convertTabsToSpaces: true,
-    tabSize: 2,
-    indentSize: 2,
-    indentStyle: ts.IndentStyle.Smart,
-    newLineCharacter: '\n',
-  }
-  const edits = service.getFormattingEditsForDocument(fileName, formatSettings)
+  const edits = service.getFormattingEditsForDocument(fileName, WorkbenchTypeScriptFormatCodeSettings)
 
   return edits
     .map((edit) => {

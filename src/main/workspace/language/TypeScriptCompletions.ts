@@ -7,15 +7,10 @@ import type {
   WorkbenchLanguageServiceRange,
 } from '@shared/contracts'
 
+import { WorkbenchTypeScriptFormatCodeSettings } from './TypeScriptLanguageFeatures'
+
 const MaxCompletionItems = 120
 const MaxCompletionDetailResolutions = 16
-const CompletionFormatCodeSettings: ts.FormatCodeSettings = {
-  convertTabsToSpaces: true,
-  tabSize: 2,
-  indentSize: 2,
-  indentStyle: ts.IndentStyle.Smart,
-  newLineCharacter: '\n',
-}
 const CompletionPreferences: ts.UserPreferences = {
   quotePreference: 'single',
   importModuleSpecifierPreference: 'relative',
@@ -219,7 +214,7 @@ export function buildTypeScriptCompletionItems({
       includeCompletionsWithSnippetText: true,
       useLabelDetailsInCompletionEntries: true,
     },
-    CompletionFormatCodeSettings
+    WorkbenchTypeScriptFormatCodeSettings
   )
 
   if (!completions?.entries.length) return []
@@ -245,7 +240,7 @@ export function buildTypeScriptCompletionItems({
             fileName,
             offset,
             entry.name,
-            CompletionFormatCodeSettings,
+            WorkbenchTypeScriptFormatCodeSettings,
             entry.source,
             CompletionPreferences,
             entry.data
