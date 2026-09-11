@@ -3,6 +3,30 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
+      "version": "0.3.44",
+      "releasedAt": "2026-09-11",
+      "title": {
+        "zh": "AI 在运行面板里跑命令、打开本机预览与读取问题",
+        "en": "The AI runs commands in the Run panel, opens local previews, and reads problems"
+      },
+      "added": {
+        "zh": [
+          "AI 可以在底部「运行」面板里启动开发服务器、监听测试这类长驻命令，你能看到实时输出、随时停止；它会等服务就绪再继续，也会读输出判断有没有报错。可能改动项目的命令会先请你确认，破坏性命令直接拒绝。",
+          "开发服务器起来后，AI 可以把本机地址直接在 Workbench 内置浏览器里打开给你看；没开内置浏览器时用系统浏览器。",
+          "AI 可以读取编辑器报告的类型错误等问题，并把出问题的位置和「问题」面板打开给你看。"
+        ],
+        "en": [
+          "The AI can start long-running commands such as a dev server or tests in watch mode in the bottom Run panel, where you see the live output and can stop them. It waits for the server to be ready and reads the output to spot errors. Commands that may change the project ask you first, and destructive commands are refused.",
+          "Once a dev server is up, the AI can open its local address in Workbench's built-in browser, or in your system browser when the built-in one is off.",
+          "The AI can read the problems the editor reports, such as type errors, and show you the location and the Problems panel."
+        ]
+      },
+      "fixed": {
+        "zh": [],
+        "en": []
+      }
+    },
+    {
       "version": "0.3.43",
       "releasedAt": "2026-09-11",
       "title": {
