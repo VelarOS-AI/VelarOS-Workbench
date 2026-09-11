@@ -46,6 +46,21 @@ void describe('Project capability provider', () => {
     await provider.dispose()
   })
 
+  void test('shows every Project tool from the first turn, rollback included', async () => {
+    const provider = new ProjectCapabilityProvider({
+      createKernel: async () => ({ providers: {} }) as unknown as ProjectKernel,
+    })
+    const project = await provider.resolveProject('/tmp/workbench-project')
+
+    // Workbench 没有 tooling:map 换入机制，不在首轮可见集里的工具等于不存在。
+    assert.deepEqual(
+      [...project.initialVisibleToolNames].sort(),
+      project.tools.map((tool) => tool.name).sort()
+    )
+    assert.ok(project.initialVisibleToolNames.includes('project:rollback'))
+    await provider.dispose()
+  })
+
   void test('rejects relative roots before constructing a module', async () => {
     const provider = new ProjectCapabilityProvider({
       createKernel: async () => {

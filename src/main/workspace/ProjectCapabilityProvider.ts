@@ -333,9 +333,12 @@ class ProjectCapabilityProvider implements WorkbenchProjectCapabilityProvider {
 
 const ProjectBundledModDefinition = createProjectBundledModDefinition()
 const ProjectCategoryIds = Object.freeze(Object.keys(ProjectToolCategories))
+// Project mod 只把主回路工具标成常驻，`project:rollback` 这类事故通道留给 `tooling:map` 按名换入。
+// Workbench 没有 `tooling:map`：不常驻的工具模型永远拿不到（真机里 Agent 想回滚自己的改动却找不到入口），
+// 所以这里让 Project 的全部工具首轮可见；多出的只是一条回滚工具的 schema。
 const ProjectInitialVisibleToolNames = Object.freeze(
   ProjectBundledModDefinition.manifest.contributes.tools
-    .filter((tool) => tool.residentInSpaces?.includes(ProjectSpaceId) === true)
+    .filter((tool) => tool.availableInSpaces?.includes(ProjectSpaceId) === true)
     .map((tool) => tool.name)
 )
 
