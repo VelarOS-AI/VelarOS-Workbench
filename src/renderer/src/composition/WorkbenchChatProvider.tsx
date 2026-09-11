@@ -81,6 +81,14 @@ export interface WorkbenchChatSessionGroup {
   readonly members: readonly WorkbenchChatSessionMember[]
 }
 
+/**
+ * 项目级聊天运行时：当前会话是谁、会话列表、各会话的运行标记。
+ *
+ * 它由整个 Workbench 页面模型订阅，**不随流式输出逐 token 更新**——只在会话列表、标题、运行起止、
+ * 运行标记这些项目级字段变化时换一份（否则文件树、编辑区会跟着回答整页重渲染）。因此快照里的
+ * `messages` 与 `conversationVersion` 停在最近一次项目级变化；要跟着回答实时变的只有会话 Surface，
+ * 它自己订阅会话状态。
+ */
 export interface WorkbenchChatProjectRuntime {
   readonly projectRoot: Nullable<string>
   readonly currentSession: WorkbenchChatSessionSnapshot

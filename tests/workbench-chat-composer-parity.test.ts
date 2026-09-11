@@ -49,7 +49,7 @@ void describe('Workbench chat composer parity', () => {
     assert.match(adapter, /await captureRunCheckpoint\(/)
     assert.match(
       adapter,
-      /providerId === 'workbench'\s*\?\s*\{ onRewindToMessage: rewindToMessage, getRewindPlan: buildRewindPlanForMessage \}/
+      /providerId === 'workbench'\s*\?\s*\{ onRewindToMessage: stableRewindToMessage, getRewindPlan: stableRewindPlan \}/
     )
     // 回答里的路径、改动卡与「查看改动」落到宿主编辑器。
     assert.match(adapter, /onOpenProjectPath=\{onOpenWorkspacePath\}/)
@@ -133,6 +133,20 @@ void describe('Workbench chat composer parity', () => {
     assert.match(adapter, /\{ restoreKey: chat\.sessionId, readScrollTop, writeScrollTop \}/)
     // 输入框里的附件可以点开。
     assert.match(adapter, /onOpenFile: openAttachedFile/)
+  })
+
+  void test('updates the context usage gauge when each turn is estimated, not only when the run ends', () => {
+    const adapter = readFileSync(
+      path.resolve(process.cwd(), 'src/renderer/src/runtime/standaloneWorkbenchChatAdapter.tsx'),
+      'utf8'
+    )
+
+    // 输入框控件按依赖重算：用量每轮送核前到达一次，必须在依赖里。
+    assert.match(adapter, /<WorkbenchContextUsageIndicator usage=\{chat\.contextUsage\} \/>/)
+    assert.match(adapter, /chat\.status,\n\s*\/\/[^\n]*\n\s*chat\.contextUsage,/)
+    // 上一轮的用量随会话留存，重新打开对话时直接显示。
+    assert.match(adapter, /\.\.\.\(state\.contextUsage \? \{ contextUsage: state\.contextUsage \} : \{\}\)/)
+    assert.match(adapter, /contextUsage: readStandaloneContextUsageEstimate\(\{\n\s*\.\.\.asRecord\(stored\.contextUsage\),/)
   })
 
   void test('marks finished runs so answers fold and stopped runs show their status', () => {

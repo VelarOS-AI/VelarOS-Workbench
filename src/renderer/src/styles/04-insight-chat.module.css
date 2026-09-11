@@ -492,8 +492,15 @@
   margin-block: 4px;
 }
 
-.workbenchWorkerThreadSubtitle {
+/* 名字（加粗）后面紧跟类型 · 模型 · 状态（常规字重），同一行显示。 */
+.workbenchWorkerThreadTitle {
+  @apply inline-flex min-w-0 max-w-full items-baseline;
+  gap: 8px;
+}
+
+.workbenchWorkerThreadCaption {
   @apply min-w-0 truncate;
+  font-weight: var(--font-weight-normal, 400);
 }
 
 .workbenchWorkerThreadBody {
@@ -513,4 +520,12 @@
   @apply min-w-0;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+/* 线程时间线（聊天页同一套消息渲染）：自带滚动，跑着的时候跟随最新输出。 */
+.workbenchWorkerThreadTranscript {
+  @apply min-w-0;
+  max-height: 420px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }

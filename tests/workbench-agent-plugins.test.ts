@@ -40,7 +40,7 @@ describe('Workbench Agent plugins', () => {
     expect(adapter).toContain('const activeAgentExecutions = new Map')
     expect(adapter).toContain('const inactiveStates = new Map')
     expect(adapter).toContain('findActiveExecution(projectRoot, providerId, chat.sessionId)')
-    expect(adapter).toContain('activeSessionId: getState')
+    expect(adapter).toContain('const activeSessionId = getState(projectRoot, providerId).sessionId')
   })
 
   test('passes VelarOS goal and plan axes without making plan mode read-only', () => {

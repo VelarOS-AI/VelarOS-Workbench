@@ -16,7 +16,9 @@ import { WorkbenchWorkerThreadPanel } from './WorkbenchWorkerThreadPanel'
  */
 export const standaloneWorkbenchConversationRenderSlots = createConversationRenderSlots({
   runningRuntimeMark: () => <WorkbenchRunningRuntimeMark />,
-  workerThreadPanel: ({ threads }) => <WorkbenchWorkerThreadPanel threads={threads} />,
+  workerThreadPanel: ({ threads, sessionId }) => (
+    <WorkbenchWorkerThreadPanel threads={threads} sessionId={sessionId} />
+  ),
   renderMessageBoundary: ({ message, children }) => (
     <WorkbenchMessageRenderBoundary message={message}>{children}</WorkbenchMessageRenderBoundary>
   ),

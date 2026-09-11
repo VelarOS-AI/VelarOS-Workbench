@@ -50,12 +50,18 @@ import {
 } from '../models/chat/workbenchChatWorkspacePath'
 import { readWorkbenchPermissionConfirmationMode } from '../models/settings/workbenchPreferences'
 import styles from '../styles/workbenchPageStyles'
+import { useMemoizedFn } from '../support/genericHooks'
 
 import { WorkbenchContextUsageIndicator } from './conversation/WorkbenchContextUsageIndicator'
 import {
   type WorkbenchRunChangesScope,
   WorkbenchRunChangesScopeContext,
 } from './conversation/WorkbenchRunChangesCard'
+import {
+  type WorkbenchWorkerThreadScope,
+  WorkbenchWorkerThreadScopeContext,
+} from './conversation/WorkbenchWorkerThreadPanel'
+import { createCoalescedChatPersistence, isSameIdentityList } from './standaloneChatPersistence'
 import {
   readStandaloneChatScrollPosition,
   saveStandaloneChatScrollPosition,
@@ -118,6 +124,10 @@ import {
   surveyRewindRemoval,
 } from './standaloneWorkbenchRewind'
 import { awaitStandaloneAgentStopSettlement } from './standaloneWorkbenchStopSettlement'
+import {
+  createStandaloneStreamPacer,
+  type StandalonePacedStreamEvent,
+} from './standaloneWorkbenchStreamPacer'
 import {
   applyStandaloneWorkerThreadEvent,
   createEmptyWorkerThreadProjection,
@@ -183,7 +193,21 @@ const activeAgentExecutions = new Map<string, ActiveAgentExecution>()
 const engineCatalogCache = new Map<string, WorkbenchAgentEngineModelCatalog>()
 const engineCatalogRequests = new Map<string, Promise<WorkbenchAgentEngineModelCatalog>>()
 const WorkbenchAgentStopSettlementTimeoutMs = 2_250
+/** main 已跑完、起搏器还在逐帧吐字时，最多等这么久再一次性排空（积压极大或收尾事件丢失时的兜底）。 */
+const StreamPacingSettleLimitMs = 60_000
 let idSequence = 0
+let streamSequence = 0
+
+/**
+ * 会话流的屏显节奏：执行事件先进起搏器，正文逐帧吐字、结构事件按序逐帧应用、干净收尾等积压吐完，
+ * 再由下面两个应用函数改会话状态（见 standaloneWorkbenchStreamPacer）。
+ */
+const standaloneStreamPacer = createStandaloneStreamPacer({
+  applyText: applyPacedStreamText,
+  applyEvent: applyPacedStreamEvent,
+  isStreaming: (executionId) => activeAgentExecutions.has(executionId),
+  isSuspended: () => typeof document !== 'undefined' && document.visibilityState === 'hidden',
+})
 
 function nextId(prefix: string): string {
   idSequence += 1
@@ -219,6 +243,8 @@ function settleActiveExecutionFromControlFailure(
   fallbackMessage: string
 ): void {
   if (activeAgentExecutions.get(execution.executionId) !== execution) return
+  // 已收到的正文先落地，再以失败了结（挂着的干净收尾作废）。
+  standaloneStreamPacer.flushImmediate(execution.executionId)
   activeAgentExecutions.delete(execution.executionId)
   execution.settleTerminal('error')
   withStateUpdateTarget(execution.projectRoot, execution.providerId, execution.sessionId, () => {
@@ -333,6 +359,11 @@ function restoreStoredState(
     lastRunFinishedAt: typeof stored.lastRunFinishedAt === 'number'
       ? stored.lastRunFinishedAt
       : null,
+    // 上一轮的用量随会话留存：重新打开对话时仪表直接显示，不必等下一轮送核。
+    contextUsage: readStandaloneContextUsageEstimate({
+      ...asRecord(stored.contextUsage),
+      kind: 'context-usage-estimate',
+    }),
   }
 }
 
@@ -459,9 +490,15 @@ function activateState(
   if (!next) return false
   states.set(key, next)
   inactiveStates.set(key, [active, ...inactive.filter((candidate) => candidate !== next)])
-  persistState(next)
+  persistState(next, { immediate: true })
   for (const listener of listeners) listener()
   return true
+}
+
+/** 订阅函数保持同一个引用：换引用会让 useSyncExternalStore 每次渲染都退订再重订。 */
+function subscribeStandaloneChatStore(listener: () => void): () => void {
+  listeners.add(listener)
+  return () => listeners.delete(listener)
 }
 
 function useStandaloneChatState(
@@ -469,13 +506,53 @@ function useStandaloneChatState(
   providerId: WorkbenchChatProviderId
 ): StandaloneChatState {
   return useSyncExternalStore(
-    (listener) => {
-      listeners.add(listener)
-      return () => listeners.delete(listener)
-    },
+    subscribeStandaloneChatStore,
     () => getState(projectRoot, providerId),
     () => getState(projectRoot, providerId)
   )
+}
+
+/**
+ * 项目级视图（见 WorkbenchChatProjectRuntime）：当前会话、会话列表、各会话的运行标记。
+ * 按视图用到的字段判等，字段都没变就交回同一份，订阅它的页面模型直接跳过这次渲染；
+ * 流式输出只改最后一条回答的内容，不会让它换新。
+ */
+interface StandaloneProjectRuntimeView {
+  readonly active: StandaloneChatState
+  readonly sessions: readonly StandaloneChatState[]
+}
+
+const projectRuntimeViews = new Map<
+  string,
+  { readonly signature: readonly unknown[]; readonly view: StandaloneProjectRuntimeView }
+>()
+
+function readStandaloneProjectRuntimeView(
+  projectRoot: string,
+  providerId: WorkbenchChatProviderId
+): StandaloneProjectRuntimeView {
+  const key = stateKey(projectRoot, providerId)
+  const active = getState(projectRoot, providerId)
+  const sessions = readAllStates(projectRoot, providerId)
+  const signature = [active.sessionId, ...sessions.flatMap(readProjectRuntimeFieldIdentities)]
+  const cached = projectRuntimeViews.get(key)
+  if (cached && isSameIdentityList(cached.signature, signature)) return cached.view
+  const view = { active, sessions }
+  projectRuntimeViews.set(key, { signature, view })
+  return view
+}
+
+function readProjectRuntimeFieldIdentities(state: StandaloneChatState): unknown[] {
+  return [
+    state.sessionId,
+    state.folderId,
+    readStandaloneChatTitle(state),
+    state.messages.length === 0,
+    isActiveChatRun(state.status),
+    state.lastRunStartedAt,
+    state.lastRunFinishedAt,
+    state.messageRunMarkers,
+  ]
 }
 
 function toSnapshot(state: StandaloneChatState, folderId: string): WorkbenchChatSessionSnapshot {
@@ -504,11 +581,24 @@ function useStandaloneProjectRuntime(
   providerId: WorkbenchChatProviderId = 'workbench'
 ): WorkbenchChatProjectRuntime {
   const normalizedRoot = projectRoot?.trim() ?? ''
-  const state = useStandaloneChatState(normalizedRoot, providerId)
+  const readView = (): StandaloneProjectRuntimeView =>
+    readStandaloneProjectRuntimeView(normalizedRoot, providerId)
+  const view = useSyncExternalStore(subscribeStandaloneChatStore, readView, readView)
+  return useMemo(
+    () => buildStandaloneProjectRuntime(projectRoot, normalizedRoot, providerId, view),
+    [normalizedRoot, projectRoot, providerId, view]
+  )
+}
+
+function buildStandaloneProjectRuntime(
+  projectRoot: Nullable<string>,
+  normalizedRoot: string,
+  providerId: WorkbenchChatProviderId,
+  { active: state, sessions: allStates }: StandaloneProjectRuntimeView
+): WorkbenchChatProjectRuntime {
   // 一个项目一个会话文件夹，会话是它的成员（见 standaloneChatSessionList）。
   const folderId = standaloneProjectFolderId(normalizedRoot, providerId)
   // 当前会话在前，其余按最近使用排（切走时排到最前）。
-  const allStates = readAllStates(normalizedRoot, providerId)
   const groups = projectStandaloneSessionGroups({
     folderId,
     projectRoot: normalizedRoot,
@@ -545,7 +635,7 @@ function useStandaloneProjectRuntime(
         const next = createState(normalizedRoot, providerId, false)
         inactiveStates.set(key, [active, ...(inactiveStates.get(key) ?? [])])
         states.set(key, next)
-        persistState(next)
+        persistState(next, { immediate: true })
         for (const listener of listeners) listener()
         return true
       },
@@ -564,13 +654,13 @@ function useStandaloneProjectRuntime(
           const next = replacement ?? createState(normalizedRoot, providerId, false)
           states.set(key, next)
           inactiveStates.set(key, remaining)
-          persistState(next)
+          persistState(next, { immediate: true })
         } else {
           inactiveStates.set(
             key,
             inactive.filter((candidate) => candidate.sessionId !== target.sessionId)
           )
-          persistState(active)
+          persistState(active, { immediate: true })
         }
         for (const listener of listeners) listener()
       },
@@ -737,29 +827,20 @@ function StandaloneWorkbenchChatSessionSurface({
           })
         return
       }
-      withStateUpdateTarget(
-        activeExecution.projectRoot,
-        activeExecution.providerId,
-        activeExecution.sessionId,
-        () => {
-          applyAgentStreamEvent(
-            activeExecution.projectRoot,
-            activeExecution.providerId,
-            envelope
-          )
-          const terminalKind = applyAgentRuntimeEvent(
-            activeExecution.projectRoot,
-            activeExecution.providerId,
-            envelope
-          )
-          if (terminalKind) {
-            activeExecution.settleTerminal(terminalKind)
-            if (terminalKind !== 'done') {
-              activeAgentExecutions.delete(activeExecution.executionId)
-            }
-          }
-        }
-      )
+      // 进起搏器按屏显节奏落地（与 Desktop 同一个起搏器）：正文逐帧吐字，其余按序逐帧应用。
+      const payload = readAgentEventPayload(envelope)
+      if (!payload) return
+      streamSequence += 1
+      if (envelope.channel === 'agent' && payload.type === 'text-delta') {
+        if (typeof payload.text === 'string')
+          standaloneStreamPacer.enqueueText(activeExecution.executionId, streamSequence, payload.text)
+        return
+      }
+      standaloneStreamPacer.enqueueLiveEvent(activeExecution.executionId, streamSequence, {
+        kind: 'envelope',
+        channel: envelope.channel,
+        payload,
+      })
     }), [])
 
   async function stop(): Promise<void> {
@@ -775,6 +856,9 @@ function StandaloneWorkbenchChatSessionSurface({
         revision: state.revision + 1,
       }))
     })
+    // 要停就不再逐帧吐字：已收到的正文立刻落地。main 若已跑完，挂着的收尾也随之落地，
+    // 停止在这里就了结，不必干等打字效果吐完。
+    standaloneStreamPacer.drain(activeExecution.executionId)
 
     const settlement = await awaitStandaloneAgentStopSettlement({
       // 协调器先启动 timeout，再进入此 IPC；preload/main 永不返回也能有界释放 UI。
@@ -1354,6 +1438,8 @@ function StandaloneWorkbenchChatSessionSurface({
     }
     if (!result.ok) {
       const stopped = getState(projectRoot, providerId).status === 'stopping'
+      // 起搏器里没吐完的正文先落地；挂着的干净收尾作废——这一轮以停止/失败收尾。
+      standaloneStreamPacer.flushImmediate(executionId)
       activeExecution.settleTerminal(stopped ? 'aborted' : 'error')
       const executionStillActive = activeAgentExecutions.delete(executionId)
       if (executionStillActive) {
@@ -1370,6 +1456,9 @@ function StandaloneWorkbenchChatSessionSurface({
     }
 
     const finalStatus = readStandaloneFinalAgentStatus(result.output)
+    // 正常跑完：等起搏器把正文平滑吐完、落地收尾再了结；停止/失败直接排空积压。
+    if (finalStatus === 'aborted' || finalStatus === 'error') standaloneStreamPacer.flushImmediate(executionId)
+    else await settleStreamPacing(executionId)
     activeExecution.settleTerminal(
       finalStatus === 'aborted' || finalStatus === 'error' ? finalStatus : 'done'
     )
@@ -1696,6 +1785,8 @@ function StandaloneWorkbenchChatSessionSurface({
     [
       chat.sessionId,
       chat.status,
+      // 每轮送核前到达一次；漏了它，仪表要等这一轮收尾、status 变了才跟着刷新。
+      chat.contextUsage,
       accountSignInPending,
       browserSelections,
       files,
@@ -1737,104 +1828,122 @@ function StandaloneWorkbenchChatSessionSurface({
     [chat.messageRunMarkers, chat.sessionId, onReviewRunChanges, projectRoot]
   )
 
+  // 回溯入口传进每一条用户消息（消息气泡按引用判等）。两者都在点击时才读最新会话，
+  // 引用固定下来不会读到旧数据；不固定的话，每个 token 都会让整段对话重画一遍。
+  const stableRewindToMessage = useMemoizedFn(rewindToMessage)
+  const stableRewindPlan = useMemoizedFn(buildRewindPlanForMessage)
+
+  // 子 Agent 卡片里嵌的时间线与会话落到同一组宿主入口。
+  const workerThreadScope = useMemo<WorkbenchWorkerThreadScope>(
+    () => ({
+      projectRoot,
+      onOpenProjectPath: onOpenWorkspacePath,
+      onOpenFileChange,
+      onReviewFileChanges,
+    }),
+    [onOpenFileChange, onOpenWorkspacePath, onReviewFileChanges, projectRoot]
+  )
+
   return (
     <ChatThinkingVisibilityProvider visible={showThinkingProcess}>
       <WorkbenchRunChangesScopeContext.Provider value={runChangesScope}>
-        <ChatConversationPane
-          conversation={conversation}
-          conversationRefreshKey={conversationRefreshKey}
-          composer={<ChatSurfaceComposer control={composerControl} variant="side" />}
-          followLocked={followLocked}
-          scrollRef={scrollRef}
-          scrollNavigatorHidden={scrollNavigatorHidden}
-          streamSlot={chat.messages.length === 0 ? (
-            <div className={styles.workbenchChatEmptyState} data-workbench-chat-empty="true">
-              <div className={styles.workbenchChatEmptyContent}>
-                <img
-                  className={styles.workbenchChatEmptyIcon}
-                  src={workbenchAppIconUrl}
-                  alt=""
-                  aria-hidden="true"
-                />
-                <div
-                  className={styles.workbenchChatStarterList}
-                  aria-label={t('workbench.chatStarterSuggestions')}
-                >
-                  {starterSuggestions.map((suggestion) => (
-                    <button
-                      key={suggestion.id}
-                      type="button"
-                      className={styles.workbenchChatStarterButton}
-                      onClick={() => {
-                        setPrompt(suggestion.prompt)
-                        void submit(suggestion.prompt)
-                      }}
-                    >
-                      <span className={styles.workbenchChatStarterCopy}>
-                        <span className={styles.workbenchChatStarterTitle}>{suggestion.title}</span>
-                        <span className={styles.workbenchChatStarterPrompt}>{suggestion.prompt}</span>
-                      </span>
-                      <ArrowRightIcon className={styles.workbenchChatStarterArrow} size={13} />
-                    </button>
-                  ))}
+        <WorkbenchWorkerThreadScopeContext.Provider value={workerThreadScope}>
+          <ChatConversationPane
+            conversation={conversation}
+            conversationRefreshKey={conversationRefreshKey}
+            composer={<ChatSurfaceComposer control={composerControl} variant="side" />}
+            followLocked={followLocked}
+            scrollRef={scrollRef}
+            scrollNavigatorHidden={scrollNavigatorHidden}
+            streamSlot={chat.messages.length === 0 ? (
+              <div className={styles.workbenchChatEmptyState} data-workbench-chat-empty="true">
+                <div className={styles.workbenchChatEmptyContent}>
+                  <img
+                    className={styles.workbenchChatEmptyIcon}
+                    src={workbenchAppIconUrl}
+                    alt=""
+                    aria-hidden="true"
+                  />
+                  <div
+                    className={styles.workbenchChatStarterList}
+                    aria-label={t('workbench.chatStarterSuggestions')}
+                  >
+                    {starterSuggestions.map((suggestion) => (
+                      <button
+                        key={suggestion.id}
+                        type="button"
+                        className={styles.workbenchChatStarterButton}
+                        onClick={() => {
+                          setPrompt(suggestion.prompt)
+                          void submit(suggestion.prompt)
+                        }}
+                      >
+                        <span className={styles.workbenchChatStarterCopy}>
+                          <span className={styles.workbenchChatStarterTitle}>{suggestion.title}</span>
+                          <span className={styles.workbenchChatStarterPrompt}>{suggestion.prompt}</span>
+                        </span>
+                        <ArrowRightIcon className={styles.workbenchChatStarterArrow} size={13} />
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
-            </div>
-          ) : undefined}
-          variant="side"
-          onSubmitInput={async (answer) => {
-            const accepted = await window.velarosWorkbenchKernel.resolveAgentInput({
-              sessionId: chat.sessionId,
-              answer,
-            })
-            if (!accepted) return
-            updateState(projectRoot, providerId, (state) => ({
-              ...state,
-              status: 'running',
-              teamPhase: 'creating-task',
-              activeTurn: null,
-              lastError: null,
-              connectionRetryAttempt: null,
-              connectionRetryMaxAttempts: null,
-              awaitingInputQuestion: null,
-              awaitingConfirmationMessage: null,
-              awaitingConfirmationDetail: null,
-              revision: state.revision + 1,
-            }))
-          }}
-          onResolveConfirmation={async (approved, rejectionMessage) => {
-            const accepted = await window.velarosWorkbenchKernel.resolveAgentConfirmation({
-              sessionId: chat.sessionId,
-              approved,
-              ...(rejectionMessage?.trim() ? { rejectionMessage } : {}),
-            })
-            if (!accepted) return
-            updateState(projectRoot, providerId, (state) => ({
-              ...state,
-              status: 'running',
-              teamPhase: 'executing',
-              activeTurn: null,
-              lastError: null,
-              connectionRetryAttempt: null,
-              connectionRetryMaxAttempts: null,
-              awaitingInputQuestion: null,
-              awaitingConfirmationMessage: null,
-              awaitingConfirmationDetail: null,
-              revision: state.revision + 1,
-            }))
-          }}
-          // 回溯只对原生执行栈：外部引擎的会话历史在它自己手里，截断这边的对话改不了它记住的内容。
-          {...(providerId === 'workbench'
-            ? { onRewindToMessage: rewindToMessage, getRewindPlan: buildRewindPlanForMessage }
-            : {})}
-          // 回答里的项目路径、文件改动卡与「查看改动」都落到宿主编辑器（与 Desktop 同一组入口）。
-          onOpenProjectPath={onOpenWorkspacePath}
-          onOpenFileChange={onOpenFileChange}
-          onReviewFileChanges={onReviewFileChanges}
-          // 目标卡的「继续」在空闲时另起一轮（运行中则经动作端口投引导）。
-          onContinueGoal={(guidance) => submit(guidance, [], { goalMode: true })}
-          onFollowLockedChange={setFollowLocked}
-        />
+            ) : undefined}
+            variant="side"
+            onSubmitInput={async (answer) => {
+              const accepted = await window.velarosWorkbenchKernel.resolveAgentInput({
+                sessionId: chat.sessionId,
+                answer,
+              })
+              if (!accepted) return
+              updateState(projectRoot, providerId, (state) => ({
+                ...state,
+                status: 'running',
+                teamPhase: 'creating-task',
+                activeTurn: null,
+                lastError: null,
+                connectionRetryAttempt: null,
+                connectionRetryMaxAttempts: null,
+                awaitingInputQuestion: null,
+                awaitingConfirmationMessage: null,
+                awaitingConfirmationDetail: null,
+                revision: state.revision + 1,
+              }))
+            }}
+            onResolveConfirmation={async (approved, rejectionMessage) => {
+              const accepted = await window.velarosWorkbenchKernel.resolveAgentConfirmation({
+                sessionId: chat.sessionId,
+                approved,
+                ...(rejectionMessage?.trim() ? { rejectionMessage } : {}),
+              })
+              if (!accepted) return
+              updateState(projectRoot, providerId, (state) => ({
+                ...state,
+                status: 'running',
+                teamPhase: 'executing',
+                activeTurn: null,
+                lastError: null,
+                connectionRetryAttempt: null,
+                connectionRetryMaxAttempts: null,
+                awaitingInputQuestion: null,
+                awaitingConfirmationMessage: null,
+                awaitingConfirmationDetail: null,
+                revision: state.revision + 1,
+              }))
+            }}
+            // 回溯只对原生执行栈：外部引擎的会话历史在它自己手里，截断这边的对话改不了它记住的内容。
+            {...(providerId === 'workbench'
+              ? { onRewindToMessage: stableRewindToMessage, getRewindPlan: stableRewindPlan }
+              : {})}
+            // 回答里的项目路径、文件改动卡与「查看改动」都落到宿主编辑器（与 Desktop 同一组入口）。
+            onOpenProjectPath={onOpenWorkspacePath}
+            onOpenFileChange={onOpenFileChange}
+            onReviewFileChanges={onReviewFileChanges}
+            // 目标卡的「继续」在空闲时另起一轮（运行中则经动作端口投引导）。
+            onContinueGoal={(guidance) => submit(guidance, [], { goalMode: true })}
+            onFollowLockedChange={setFollowLocked}
+          />
+        </WorkbenchWorkerThreadScopeContext.Provider>
       </WorkbenchRunChangesScopeContext.Provider>
     </ChatThinkingVisibilityProvider>
   )
@@ -1878,6 +1987,70 @@ function appendAssistantText(
   })
 }
 
+/** 起搏器吐出的一段正文，落到这一轮所在的会话上。 */
+function applyPacedStreamText(executionId: string, text: string): void {
+  const execution = activeAgentExecutions.get(executionId)
+  if (!execution) return
+  withStateUpdateTarget(execution.projectRoot, execution.providerId, execution.sessionId, () => {
+    appendAssistantText(execution.projectRoot, execution.providerId, text)
+  })
+}
+
+/** 起搏器放行的一条事件：改会话状态，遇到终态就了结这一轮执行。 */
+function applyPacedStreamEvent(executionId: string, event: StandalonePacedStreamEvent): void {
+  const execution = activeAgentExecutions.get(executionId)
+  if (!execution) return
+  const { projectRoot, providerId } = execution
+  withStateUpdateTarget(projectRoot, providerId, execution.sessionId, () => {
+    if (event.kind === 'reasoning') {
+      appendAssistantReasoning(projectRoot, providerId, event.id, event.text)
+      return
+    }
+    const record: AgentExecutionEnvelope = { channel: event.channel, payload: event.payload }
+    applyAgentStreamEvent(projectRoot, providerId, record)
+    const terminalKind = applyAgentRuntimeEvent(projectRoot, providerId, record)
+    if (!terminalKind) return
+    execution.settleTerminal(terminalKind)
+    if (terminalKind !== 'done') activeAgentExecutions.delete(executionId)
+  })
+}
+
+/**
+ * main 那边这一轮已经跑完（agent.execute 已返回），起搏器可能还在逐帧吐正文、挂着收尾：等它吐完
+ * 再收尾——否则后面的正文会落在一个已了结的执行上被丢掉。积压总会按速率吐完，超过兜底上限
+ * （收尾事件丢失、积压极大）就一次性排空。
+ */
+async function settleStreamPacing(executionId: string): Promise<void> {
+  const deadline = Date.now() + StreamPacingSettleLimitMs
+  while (standaloneStreamPacer.hasPendingOutput(executionId) && Date.now() < deadline)
+    await new Promise((resolve) => setTimeout(resolve, 50))
+  standaloneStreamPacer.drain(executionId)
+}
+
+/** 窗口隐藏或关闭前：所有进行中的一轮立刻排空积压（后台动画帧不走，关闭前要落盘完整回答）。 */
+function drainStreamPacing(): void {
+  for (const executionId of activeAgentExecutions.keys()) standaloneStreamPacer.drain(executionId)
+}
+
+function appendAssistantReasoning(
+  projectRoot: string,
+  providerId: WorkbenchChatProviderId,
+  streamId: string,
+  text: string
+): void {
+  updateAssistantBlocks(projectRoot, providerId, (blocks) => {
+    const index = blocks.findLastIndex(
+      (block) => block.type === 'thinking' && block.streamId === streamId
+    )
+    if (index < 0) return [...blocks, { type: 'thinking', streamId, text }]
+    return blocks.map((block, blockIndex) =>
+      blockIndex === index && block.type === 'thinking'
+        ? { ...block, text: block.text + text }
+        : block
+    )
+  })
+}
+
 function applyAgentStreamEvent(
   projectRoot: string,
   providerId: WorkbenchChatProviderId,
@@ -1900,18 +2073,12 @@ function applyAgentStreamEvent(
     return
   }
   if (event.type === 'reasoning-delta' && typeof event.text === 'string') {
-    const streamId = typeof event.id === 'string' ? event.id : 'reasoning'
-    updateAssistantBlocks(projectRoot, providerId, (blocks) => {
-      const index = blocks.findLastIndex(
-        (block) => block.type === 'thinking' && block.streamId === streamId
-      )
-      if (index < 0) return [...blocks, { type: 'thinking', streamId, text: event.text as string }]
-      return blocks.map((block, blockIndex) =>
-        blockIndex === index && block.type === 'thinking'
-          ? { ...block, text: block.text + event.text }
-          : block
-      )
-    })
+    appendAssistantReasoning(
+      projectRoot,
+      providerId,
+      typeof event.id === 'string' ? event.id : 'reasoning',
+      event.text
+    )
     return
   }
   if (
@@ -2005,6 +2172,8 @@ function applyAgentRuntimeEvent(
     if (next === state) return state
     return { ...(terminalKind ? withRunMarker(next) : next), revision: state.revision + 1 }
   })
+  // 一轮收尾时回答已经完整：立刻落盘，不等合并窗口。
+  if (terminalKind) flushChatPersistence()
   return terminalKind
 }
 
@@ -2280,26 +2449,78 @@ const persistFailureNotified = new Set<string>()
  * > 会话权威搬进主进程、renderer 退回投影才是正解，但那是结构改动（见 Desktop 仓
  * > `docs/workbench-alignment-audit-2026-08.md`）。本函数是那之前的遏制层。
  */
-function persistState(state: StandaloneChatState): void {
-  if (!state.projectRoot || typeof window === 'undefined') return
+/**
+ * 聊天历史落盘是**合并写**。
+ *
+ * 流式输出时每个 token 都改一次状态。以前每改一次就把这个项目的全部会话序列化（带着完整工具结果，
+ * 常见几百 KB 到上 MB）、同步写进 localStorage、再经 IPC 写一份磁盘备份——按 token 频率重复，
+ * 渲染进程、存储进程、主进程和磁盘一起空转，界面发卡、风扇常转。
+ *
+ * 现在状态变了只记下「这个项目要写」，一个窗口期内同一项目只写一次；写之前与上次写入比落盘字段，
+ * 一个都没变（子 Agent 线程、上下文用量、运行阶段这类只在内存里的更新）就不写。一轮结束与新建、
+ * 切换、归档会话这些结构性变化立刻写；窗口隐藏或关闭前把没写的补上。
+ */
+const ChatPersistCoalesceMs = 1_000
 
+const chatPersistence = createCoalescedChatPersistence<{
+  readonly projectRoot: string
+  readonly providerId: WorkbenchChatProviderId
+}>({
+  delayMs: ChatPersistCoalesceMs,
+  readSignature: ({ projectRoot, providerId }) => [
+    getState(projectRoot, providerId).sessionId,
+    ...readAllStates(projectRoot, providerId).flatMap(readPersistedFieldIdentities),
+  ],
+  write: (_key, { projectRoot, providerId }) => writePersistedChatHistory(projectRoot, providerId),
+})
+
+function persistState(state: StandaloneChatState, options?: { immediate?: boolean }): void {
+  if (!state.projectRoot || typeof window === 'undefined') return
+  chatPersistence.schedule(
+    stateKey(state.projectRoot, state.providerId),
+    { projectRoot: state.projectRoot, providerId: state.providerId },
+    options
+  )
+}
+
+function flushChatPersistence(): void {
+  chatPersistence.flush()
+}
+
+if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+  // 退出、刷新、切到后台前：起搏器里没吐完的正文先落地（后台动画帧不走），再补写历史
+  // （localStorage 是同步写，来得及）。
+  const settleBeforeLeaving = (): void => {
+    drainStreamPacing()
+    flushChatPersistence()
+  }
+  window.addEventListener('pagehide', settleBeforeLeaving)
+  window.addEventListener('beforeunload', settleBeforeLeaving)
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') settleBeforeLeaving()
+  })
+}
+
+function writePersistedChatHistory(projectRoot: string, providerId: WorkbenchChatProviderId): void {
+  const key = stateKey(projectRoot, providerId)
+  const activeSessionId = getState(projectRoot, providerId).sessionId
+  const sessions = readAllStates(projectRoot, providerId)
   const payload = JSON.stringify({
     version: 2,
-    activeSessionId: getState(state.projectRoot, state.providerId).sessionId,
-    sessions: readAllStates(state.projectRoot, state.providerId).map(serializeStoredState),
+    activeSessionId,
+    sessions: sessions.map(serializeStoredState),
   })
 
   try {
-    window.localStorage.setItem(chatStorageKey(state.projectRoot, state.providerId), payload)
-    persistFailureNotified.delete(stateKey(state.projectRoot, state.providerId))
+    window.localStorage.setItem(chatStorageKey(projectRoot, providerId), payload)
+    persistFailureNotified.delete(key)
   } catch (error) {
     // 不中断正在跑的 Kernel run,但绝不静默:日志 + 用户可见提示(每个项目根只提示一次)。
     log.error('聊天历史写入 localStorage 失败', {
-      projectRoot: state.projectRoot,
-      messageCount: state.messages.length,
+      projectRoot,
+      messageCount: sessions.reduce((count, session) => count + session.messages.length, 0),
       error,
     })
-    const key = stateKey(state.projectRoot, state.providerId)
     if (!persistFailureNotified.has(key)) {
       persistFailureNotified.add(key)
       workbenchMessage.error({
@@ -2310,7 +2531,27 @@ function persistState(state: StandaloneChatState): void {
     }
   }
 
-  backupChatHistoryToDisk(stateKey(state.projectRoot, state.providerId), payload)
+  backupChatHistoryToDisk(key, payload)
+}
+
+/**
+ * 落盘字段的身份：状态按不可变方式更新，字段没换引用就是没变。`revision` 不在里面——它随每次
+ * 内存更新递增，只为下次启动接着计数，晚一点写不影响任何东西。
+ */
+function readPersistedFieldIdentities(state: StandaloneChatState): unknown[] {
+  const interrupted = isInterruptedRunStatus(state.status)
+  return [
+    state.sessionId,
+    state.folderId,
+    state.messages,
+    state.lastRunStartedAt,
+    state.lastRunFinishedAt,
+    interrupted ? state.status : null,
+    interrupted ? state.lastError : null,
+    state.checkpoints,
+    state.messageRunMarkers,
+    state.contextUsage,
+  ]
 }
 
 function serializeStoredState(state: StandaloneChatState): Record<string, unknown> {
@@ -2326,6 +2567,7 @@ function serializeStoredState(state: StandaloneChatState): Record<string, unknow
       : {}),
     checkpoints: state.checkpoints,
     messageRunMarkers: state.messageRunMarkers,
+    ...(state.contextUsage ? { contextUsage: state.contextUsage } : {}),
     revision: state.revision,
   }
 }
