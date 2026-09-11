@@ -45,7 +45,7 @@
         "@types/react-dom": "^19.0.0",
         "@typescript-eslint/eslint-plugin": "^8.59.3",
         "@typescript-eslint/parser": "^8.59.3",
-        "@velaros-ai/agent": "0.6.18",
+        "@velaros-ai/agent": "0.6.19",
         "@velaros-ai/browser": "0.2.20",
         "@velaros-ai/core": "0.4.2",
         "@velaros-ai/development": "1.1.4",
@@ -682,7 +682,7 @@
 
     "@upsetjs/venn.js": ["@upsetjs/venn.js@2.0.0", "", { "optionalDependencies": { "d3-selection": "^3.0.0", "d3-transition": "^3.0.1" } }, "sha512-WbBhLrooyePuQ1VZxrJjtLvTc4NVfpOyKx0sKqioq9bX1C1m7Jgykkn8gLrtwumBioXIqam8DLxp88Adbue6Hw=="],
 
-    "@velaros-ai/agent": ["@velaros-ai/agent@0.6.18", "https://npm.pkg.github.com/download/@velaros-ai/agent/0.6.18/d4b8f1bc8db14076d159f7a32713ac2329babce4", { "dependencies": { "@modelcontextprotocol/sdk": "^1.29.0", "@types/json-schema": "7.0.15", "@velaros-ai/core": "0.4.2", "@velaros-ai/kernel": "0.2.3", "ai": "^6.0.168", "execa": "^9.6.1", "gpt-tokenizer": "3.4.0", "jszip": "^3.10.1", "typescript": "^5.7.0", "ws": "^8.18.3", "zod": "^4.3.6" } }, "sha512-DU0rZlErdZRqlgb32pBaP6uW49NcxOuV8fEWJw1v9FTdUWAGXCPignqkRqanTC9qksKe4NC0iG1XD6G9anJW2g=="],
+    "@velaros-ai/agent": ["@velaros-ai/agent@0.6.19", "https://npm.pkg.github.com/download/@velaros-ai/agent/0.6.19/3ece49b4394e44bd23c1c84dae2bef8f0979358c", { "dependencies": { "@modelcontextprotocol/sdk": "^1.29.0", "@types/json-schema": "7.0.15", "@velaros-ai/core": "0.4.2", "@velaros-ai/kernel": "0.2.3", "ai": "^6.0.168", "execa": "^9.6.1", "gpt-tokenizer": "3.4.0", "jszip": "^3.10.1", "typescript": "^5.7.0", "ws": "^8.18.3", "zod": "^4.3.6" } }, "sha512-NK570hkf1y6cXCZWkfKNEhZC6JXTJKAdN+TbaBw6eUSqum0L6uJTwNpBSUBOT5DZYE8DE8iwVbps6NikqjPoVw=="],
 
     "@velaros-ai/browser": ["@velaros-ai/browser@0.2.20", "https://npm.pkg.github.com/download/@velaros-ai/browser/0.2.20/606b8bfa2b673a2fa093089f2db237037a9bf7e2", { "dependencies": { "@velaros-ai/core": "0.4.2", "@velaros-ai/kernel": "0.2.3", "gifenc": "^1.0.3", "zod": "^4.3.6" }, "peerDependencies": { "@types/react": "^19.0.0", "@velaros-ai/agent": "^0.6.16", "electron": ">=41.0.0", "react": "^19.0.0" } }, "sha512-VVYIcwdKpMwOggI7LLmuwn+4SL23whfUfRwq383PhfNLdvhChg2mQULpSW6mogK8IXNtAyZuqKBnHkjFAWQCrQ=="],
 

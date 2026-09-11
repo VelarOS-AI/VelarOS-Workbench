@@ -2038,16 +2038,12 @@ function appendAssistantReasoning(
   streamId: string,
   text: string
 ): void {
+  // 紧挨着的最后一块是思考才续写，否则另起一块（与 Desktop、子 Agent 线程同一规则）。不能按 id 往回找：
+  // 一轮里各步骤的思考流 id 会重复（Anthropic 每次响应都是 "0"），会把后一步的思考拼进工具卡上面那块。
   updateAssistantBlocks(projectRoot, providerId, (blocks) => {
-    const index = blocks.findLastIndex(
-      (block) => block.type === 'thinking' && block.streamId === streamId
-    )
-    if (index < 0) return [...blocks, { type: 'thinking', streamId, text }]
-    return blocks.map((block, blockIndex) =>
-      blockIndex === index && block.type === 'thinking'
-        ? { ...block, text: block.text + text }
-        : block
-    )
+    const last = blocks.at(-1)
+    if (last?.type !== 'thinking') return [...blocks, { type: 'thinking', streamId, text }]
+    return [...blocks.slice(0, -1), { ...last, text: last.text + text }]
   })
 }
 

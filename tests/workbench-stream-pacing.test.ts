@@ -76,4 +76,12 @@ void describe('Workbench stream pacing wiring', () => {
     assert.match(adapter, /standaloneStreamPacer\.drain\(activeExecution\.executionId\)/u)
     assert.match(adapter, /drainStreamPacing\(\)\n\s*flushChatPersistence\(\)/u)
   })
+
+  void test('thinking continues only the block right before it, never an earlier step with the same id', () => {
+    const adapter = readSource('src/renderer/src/runtime/standaloneWorkbenchChatAdapter.tsx')
+    const append = /function appendAssistantReasoning\([\s\S]*?\n\}/u.exec(adapter)?.[0] ?? ''
+
+    assert.match(append, /const last = blocks\.at\(-1\)\n\s*if \(last\?\.type !== 'thinking'\) return \[\.\.\.blocks, \{ type: 'thinking', streamId, text \}\]/u)
+    assert.doesNotMatch(append, /findLastIndex/u)
+  })
 })

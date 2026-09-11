@@ -78,7 +78,7 @@
     "@types/react-dom": "^19.0.0",
     "@typescript-eslint/eslint-plugin": "^8.59.3",
     "@typescript-eslint/parser": "^8.59.3",
-    "@velaros-ai/agent": "0.6.18",
+    "@velaros-ai/agent": "0.6.19",
     "@velaros-ai/browser": "0.2.20",
     "@velaros-ai/core": "0.4.2",
     "@velaros-ai/development": "1.1.4",
