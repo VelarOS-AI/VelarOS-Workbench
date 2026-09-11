@@ -3,6 +3,46 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
+      "version": "0.3.46",
+      "releasedAt": "2026-09-12",
+      "title": {
+        "zh": "AI 改代码更可靠，往上翻聊天不再被拽走",
+        "en": "AI edits land reliably, and scrolling up in the chat stays put"
+      },
+      "added": {
+        "zh": [
+          "AI 的编辑失败时会告诉它该怎么改：语法错误带上文件、行、列和出错的那一行；要替换的文本找不到时指出最接近的位置和第一处不同（缩进、换行符、反斜杠多一层或少一层）；匹配到多处时列出每一处的行号。",
+          "AI 可以回滚自己的改动；如果文件在它改完之后又被你改过，回滚会被拒绝，不会覆盖你的内容。"
+        ],
+        "en": [
+          "When an AI edit fails, the AI learns how to fix it: syntax errors include the file, line, column and offending line; a missed match points to the closest spot and the first difference (indentation, line endings, an extra or missing backslash); several matches list every line.",
+          "The AI can roll back its own changes. If you edited the file after the AI changed it, the rollback is refused instead of overwriting your work."
+        ]
+      },
+      "fixed": {
+        "zh": [
+          "AI 在同一次编辑里改同一个文件的多处时，只有最后一处真正写进文件，前面的改动会悄悄丢失。",
+          "AI 按函数名替换整段代码时，遇到参数里带对象类型、或函数体里有带花括号的正则，会切错范围把代码改坏。",
+          "AI 用「新建」写一个已经存在的文件时会直接覆盖它；覆盖之后再回滚，还会把原文件删掉。",
+          "AI 一次读多个文件时，只要有一个文件行数不够，整批读取都会失败。",
+          "AI 查看代码诊断时会误报 Record、Set 等标准类型不存在；对整个文件夹做诊断时实际上没有检查任何文件。",
+          "AI 新建又删掉的文件会在 Git 状态里留下残项。",
+          "往上翻看聊天时，AI 调用工具、输出内容或一轮结束，会把视图拽回底部或这条消息的开头。",
+          "编辑失败时，聊天里的工具卡片显示「未知文件」。"
+        ],
+        "en": [
+          "When the AI changed several places in the same file in one edit, only the last change reached the file and the earlier ones were silently lost.",
+          "Replacing a whole function by name could cut at the wrong place and break the code when the function took an object-typed parameter or its body contained a regular expression with braces.",
+          "Writing an existing file in \"create\" mode overwrote it, and rolling that back deleted the original file.",
+          "Reading several files at once failed as a whole when any one of them had fewer lines than the requested range.",
+          "Code diagnostics falsely reported standard types such as Record and Set as missing, and diagnosing a whole folder did not actually check any file.",
+          "Files the AI created and then deleted left entries behind in the Git status.",
+          "While you scrolled up in the chat, AI tool calls, new output or the end of a run pulled the view back to the bottom or to the start of the message.",
+          "Failed edits showed \"Unknown file\" on their tool card in the chat."
+        ]
+      }
+    },
+    {
       "version": "0.3.45",
       "releasedAt": "2026-09-11",
       "title": {
