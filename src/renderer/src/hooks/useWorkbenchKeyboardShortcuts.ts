@@ -23,6 +23,56 @@ export interface UseWorkbenchKeyboardShortcutsOptions {
   onToggleRightTool: (tool: WorkbenchRightToolWindow) => void
 }
 
+/** 全局快捷键的 keydown 处理：按当前选项把按键分发成动作（独立出来，不挂 DOM 也能测）。 */
+export function createWorkbenchShortcutKeydownHandler(
+  readOptions: () => UseWorkbenchKeyboardShortcutsOptions
+): (event: KeyboardEvent) => void {
+  return (event) => {
+    const current = readOptions()
+    const action = getWorkbenchKeyboardShortcut(event, current.keymap)
+    if (!action) return
+    // 焦点里的控件已经用掉了这次关闭键（取消行内重命名、收起搜索框、关掉补全）：只做那件事，
+    // 不连带收起右侧面板。
+    if (action === 'close-right-tool' && event.defaultPrevented) return
+
+    event.preventDefault()
+
+    switch (action) {
+      case 'close-right-tool': {
+        if (!current.isQuickOpenOpen && current.activeRightTool) current.onCloseRightTool()
+        return
+      }
+      case 'quick-open': {
+        current.onOpenQuickOpen()
+        return
+      }
+      case 'save-current': {
+        void current.onSaveCurrent()
+        return
+      }
+      case 'save-all': {
+        void current.onSaveAll()
+        return
+      }
+      case 'toggle-problems': {
+        current.onOpenBottomTool('problems')
+        return
+      }
+      case 'toggle-changes': {
+        current.onOpenBottomTool('git')
+        return
+      }
+      case 'toggle-actions': {
+        current.onToggleRightTool('chat')
+        return
+      }
+      case 'run-last-command': {
+        void current.onRunLastCommand()
+      }
+    }
+  }
+}
+
 export function useWorkbenchKeyboardShortcuts({
   activeRightTool,
   enabled,
@@ -66,48 +116,7 @@ export function useWorkbenchKeyboardShortcuts({
   useEffect(() => {
     if (!enabled) return
 
-    const handleKeydown = (event: KeyboardEvent): void => {
-      const current = optionsRef.current
-      const action = getWorkbenchKeyboardShortcut(event, current.keymap)
-      if (!action) return
-
-      event.preventDefault()
-
-      switch (action) {
-        case 'close-right-tool': {
-          if (!current.isQuickOpenOpen && current.activeRightTool) current.onCloseRightTool()
-          return
-        }
-        case 'quick-open': {
-          current.onOpenQuickOpen()
-          return
-        }
-        case 'save-current': {
-          void current.onSaveCurrent()
-          return
-        }
-        case 'save-all': {
-          void current.onSaveAll()
-          return
-        }
-        case 'toggle-problems': {
-          current.onOpenBottomTool('problems')
-          return
-        }
-        case 'toggle-changes': {
-          current.onOpenBottomTool('git')
-          return
-        }
-        case 'toggle-actions': {
-          current.onToggleRightTool('chat')
-          return
-        }
-        case 'run-last-command': {
-          void current.onRunLastCommand()
-        }
-      }
-    }
-
+    const handleKeydown = createWorkbenchShortcutKeydownHandler(() => optionsRef.current)
     window.addEventListener('keydown', handleKeydown)
     return () => window.removeEventListener('keydown', handleKeydown)
   }, [enabled])
