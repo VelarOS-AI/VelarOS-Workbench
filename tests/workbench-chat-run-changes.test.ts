@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { mkdir, mkdtemp, readdir, readFile, rm, unlink, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, readFile, realpath, rm, unlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
@@ -313,6 +313,34 @@ interface AttributedFixture extends RepositoryFixture {
   attribution: WorkbenchChatRunAttribution
   /** 接了改动归属的记录区（生产里的装配）。 */
   attributed: WorkbenchChatRunChangeStore
+  /** 按假时钟写盘（改动时刻记在假时钟上）。 */
+  write: (path: string, content: string | null) => Promise<void>
+}
+
+/**
+ * 与假时钟对得上的改动时刻：经 {@link AttributedFixture.write} 写的记下当时的假时刻（写文件改它自己的，
+ * 新建、删除改上级目录的，建出来的目录也一样）；没经它写过的在世路径算作远早于这一轮。
+ */
+function createFakeChangeTimes(root: string, clock: { now: number }) {
+  const times = new Map<string, number>()
+  return {
+    read: async (absolutePath: string): Promise<number | null> =>
+      existsSync(absolutePath) ? times.get(absolutePath) ?? 0 : null,
+    write: async (path: string, content: string | null): Promise<void> => {
+      const target = join(root, path)
+      const existed = existsSync(target)
+      const createdDirectories: string[] = []
+      for (let directory = dirname(target); !existsSync(directory); directory = dirname(directory))
+        createdDirectories.push(directory)
+      await writeProjectFile(root, path, content)
+      if (content !== null) times.set(target, clock.now)
+      if (content === null || !existed) times.set(dirname(target), clock.now)
+      for (const directory of createdDirectories) {
+        times.set(directory, clock.now)
+        times.set(dirname(directory), clock.now)
+      }
+    },
+  }
 }
 
 async function withAttributedRepository(
@@ -323,15 +351,26 @@ async function withAttributedRepository(
     await withRepository(async (fixture) => {
       const clock = { now: 1_757_000_000_000 }
       const watcher = createFakeWatcher()
+      // 账本按真实路径读改动时刻：临时目录在 macOS 上经过 /var → /private/var 的符号链接。
+      const changeTimes = createFakeChangeTimes(await realpath(fixture.project), clock)
       const checkpoints = new WorkbenchChatCheckpointService(() => indexes)
-      const attribution = new WorkbenchChatRunAttribution(watcher.source, () => clock.now)
+      const attribution = new WorkbenchChatRunAttribution(watcher.source, () => clock.now, changeTimes.read)
       const attributed = new WorkbenchChatRunChangeStore(
         checkpoints,
         () => fixture.records,
         () => clock.now,
         attribution
       )
-      await run({ ...fixture, checkpoints, indexes, clock, watcher, attribution, attributed })
+      await run({
+        ...fixture,
+        checkpoints,
+        indexes,
+        clock,
+        watcher,
+        attribution,
+        attributed,
+        write: changeTimes.write,
+      })
     })
   } finally {
     await rm(indexes, { recursive: true, force: true })
@@ -364,14 +403,14 @@ async function startRound(fixture: AttributedFixture, recordId: string) {
     /** Agent 的写文件工具：落盘、监听回声、报告改过的路径。 */
     agentWrite: async (files: Record<string, string | null>): Promise<void> => {
       const finish = activity.beginFileWrite()
-      for (const [path, content] of Object.entries(files)) await writeProjectFile(fixture.project, path, content)
+      for (const [path, content] of Object.entries(files)) await fixture.write(path, content)
       fixture.watcher.emit(...Object.keys(files))
       finish(Object.keys(files))
     },
     /** Agent 的命令：命令跑着时写出来的文件。 */
     agentCommand: async (files: Record<string, string | null>): Promise<void> => {
       const end = activity.beginCommand()
-      for (const [path, content] of Object.entries(files)) await writeProjectFile(fixture.project, path, content)
+      for (const [path, content] of Object.entries(files)) await fixture.write(path, content)
       fixture.watcher.emit(...Object.keys(files))
       end()
     },
@@ -381,13 +420,13 @@ async function startRound(fixture: AttributedFixture, recordId: string) {
 
 /** 用户在外部编辑器 / 终端里改文件：只有监听看得到。 */
 async function editOutside(fixture: AttributedFixture, files: Record<string, string | null>): Promise<void> {
-  for (const [path, content] of Object.entries(files)) await writeProjectFile(fixture.project, path, content)
+  for (const [path, content] of Object.entries(files)) await fixture.write(path, content)
   fixture.watcher.emit(...Object.keys(files))
 }
 
 /** 用户在 Workbench 编辑器里保存：保存口明确报是用户。 */
 async function saveInEditor(fixture: AttributedFixture, path: string, content: string): Promise<void> {
-  await writeProjectFile(fixture.project, path, content)
+  await fixture.write(path, content)
   fixture.watcher.emit(path)
   fixture.attribution.recordUserWrites({ workspaceRoot: fixture.project, paths: [path] })
 }
@@ -616,6 +655,38 @@ void describe('Workbench chat run changes attributed to the agent', () => {
     })
   }, 10_000)
 
+  void test('when a change happened decides who made it, not when its watcher event arrives', async () => {
+    await withAttributedRepository(async (fixture) => {
+      const { project, watcher } = fixture
+      // 真实时钟、真实的改动时刻（macOS 忙的时候文件事件要攒好几秒才到）。
+      const attribution = new WorkbenchChatRunAttribution(watcher.source)
+      const store = new WorkbenchChatRunChangeStore(fixture.checkpoints, () => fixture.records, Date.now, attribution)
+      const { commitId } = await store.captureCheckpoint({ workspaceRoot: project, sessionId: 's', checkpointId: 'run' })
+      assert.ok(commitId)
+      const request = { workspaceRoot: project, sessionId: 's', recordId: 'run', baseCommitId: commitId }
+      const activity = attribution.activityFor({ projectRoot: project, sessionId: 's' })
+
+      // 用户在命令开跑前改了 notes.md，它的事件等命令跑起来才到。
+      await writeProjectFile(project, 'notes.md', 'mine\n')
+      await delay(120)
+      const endCommand = activity.beginCommand()
+      watcher.emit('notes.md')
+      // 命令写出 build/out.txt、删掉 removed.ts：删除的事件一直没来，产物的事件在余量过去之后才到。
+      await writeProjectFile(project, 'build/out.txt', 'built\n')
+      await writeProjectFile(project, 'removed.ts', null)
+      endCommand()
+      await delay(AgentCommandGraceMs + 200)
+      watcher.emit('build', 'build/out.txt')
+
+      await store.capture({ ...request, final: true })
+      const record = await store.read(request)
+      assert.deepEqual(record?.changes.map((change) => [change.path, change.status, change.attribution]), [
+        ['build/out.txt', 'added', 'agent'],
+        ['removed.ts', 'deleted', 'agent'],
+      ])
+    })
+  }, 10_000)
+
   void test('without a ledger nothing is attributed, and a folder that is not a repository opens none', async () => {
     await withAttributedRepository(async (fixture) => {
       const { project, checkpoints, attributed, records } = fixture
@@ -635,7 +706,7 @@ void describe('Workbench chat run changes attributed to the agent', () => {
       try {
         const opened = await attributed.captureCheckpoint({ workspaceRoot: plain, sessionId: 's', checkpointId: 'c' })
         assert.equal(opened.commitId, null)
-        assert.equal(fixture.attribution.resolve({ workspaceRoot: plain, sessionId: 's', recordId: 'c' }, ['a'], { final: true }), null)
+        assert.equal(await fixture.attribution.resolve({ workspaceRoot: plain, sessionId: 's', recordId: 'c' }, ['a'], { final: true }), null)
       } finally {
         await rm(plain, { recursive: true, force: true })
       }

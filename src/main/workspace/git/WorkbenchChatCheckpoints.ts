@@ -293,7 +293,9 @@ export class WorkbenchChatCheckpointService {
     workspaceRoot: string
     baseCommitId: string
     tree: string
-    select?: (changes: WorkbenchChatRunTreeChange[]) => WorkbenchChatRunTreeChange[]
+    select?: (
+      changes: WorkbenchChatRunTreeChange[]
+    ) => WorkbenchChatRunTreeChange[] | Promise<WorkbenchChatRunTreeChange[]>
   }): Promise<WorkbenchChatRunTreeChange[]> {
     if (!ObjectIdPattern.test(request.baseCommitId) || !ObjectIdPattern.test(request.tree))
       throw new AppError('VALIDATION', '无效的检查点提交。')
@@ -305,7 +307,7 @@ export class WorkbenchChatCheckpointService {
       this.runGit(root, [...RunChangeDiffArgs, '-z', '--numstat', ...range]),
     ])
     const listed = parseRunChangeFiles(rawText, numstatText)
-    return attachRunChangePatches(request.select ? request.select(listed) : listed, (path) =>
+    return attachRunChangePatches(request.select ? await request.select(listed) : listed, (path) =>
       this.runGit(root, [...RunChangeDiffArgs, ...range, '--', `:(literal)${path}`])
     )
   }

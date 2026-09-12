@@ -230,9 +230,9 @@ export class WorkbenchChatRunChangeStore {
       changes = await this.checkpoints.diffWorkingTree({
         ...request,
         tree: await tree,
-        select: (listed) => {
+        select: async (listed) => {
           if (!this.attribution) return listed
-          selection.attribution = this.attribution.resolve(
+          selection.attribution = await this.attribution.resolve(
             request,
             listed.map((change) => change.path),
             { final: request.final === true }

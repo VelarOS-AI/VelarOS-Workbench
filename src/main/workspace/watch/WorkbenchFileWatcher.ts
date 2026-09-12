@@ -32,7 +32,10 @@ interface WorkbenchFileWatcherDependencies {
 
 /** 一个根目录上的原始文件事件：路径相对根目录、`/` 分隔。 */
 export interface WorkbenchRawPathObserver {
-  /** 某个路径有了动静；监听回调里同步调用，调用那一刻就是事件到达的时刻。 */
+  /**
+   * 某个路径有了动静；监听回调里同步调用。到达可能比改动晚好几秒（macOS 忙时成批送达），改动发生的时刻
+   * 要看路径自己的时间戳。
+   */
   onPath(path: string): void
   /** 监听出错或报了一个没有路径的事件：从这里起可能漏掉了事件。 */
   onError(): void
@@ -76,8 +79,8 @@ function normalizeRelativePath(rootPath: string, filename: string): Nullable<str
  * 同一真实根目录只持有一个递归 fs.watch；renderer 订阅以 UUID 隔离，根事件在 120ms
  * 窗口内合并后逐订阅投递。服务不依赖 Desktop session，也不写 Agent signals。
  *
- * 改动归属账本另走原始事件（{@link observeRawPaths}）：它要的是每个事件到达的时刻，合并窗口会把
- * 时刻抹平；生成目录（build、dist……）里的文件也可能是 Agent 命令的产物，不能先滤掉。
+ * 改动归属账本另走原始事件（{@link observeRawPaths}）：它要每个路径各自的动静，一到就去读那个路径的
+ * 改动时刻；生成目录（build、dist……）里的文件也可能是 Agent 命令的产物，不能先滤掉。
  */
 export class WorkbenchFileWatcher implements WorkbenchRawPathSource {
   private readonly roots = new Map<string, RootWatch>()
