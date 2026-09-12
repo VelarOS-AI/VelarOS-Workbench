@@ -16,7 +16,7 @@
           "子 Agent 可以跨轮续跑：主 Agent 用上次返回的 thread_id 接着使用同一个子 Agent（它保留着读过的上下文），追问、补做、修复后复验不再从头重读；需要独立复核时才新派。"
         ],
         "en": [
-          "\"Add to Chat\" in the right-click menus of the editor, editor tabs and the file tree attaches files to the chat box as chips, several at once (a multi-selection in the file tree becomes \"Add N Files to Chat\"). Only the file paths are sent and the AI reads what it needs itself; typing @ in the chat box re-picks files referenced earlier in the session.",
+          "Right-click \"Add to Chat\" in the editor, on a tab or in the file tree attaches files to the chat box, several at once (a multi-selection in the file tree adds them all). Only the paths are sent and the AI reads what it needs itself; typing @ re-picks files referenced earlier in the session.",
           "Hovering a tool call row opens a detail bubble that names the operation that actually ran (for example append, find_references, replace_text) and its target; merged ×N rows list each call with its command and duration. The bubble is as wide as the row and you can move into it to select text.",
           "Sub-agents can be continued across turns: the main agent reuses a sub-agent through the thread_id it returned, keeping everything it already read, so follow-ups, fixes and re-checks no longer start from scratch; a fresh sub-agent is only started when an independent review is needed."
         ]
