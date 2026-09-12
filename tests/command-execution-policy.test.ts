@@ -3,6 +3,8 @@ import { resolve } from 'node:path'
 
 import { describe, test } from 'bun:test'
 
+import { analyzeCommandExecution } from '@velaros-ai/project/execution'
+
 import { analyzeWorkbenchCommandExecution } from '../src/main/workspace/CommandExecutionPolicy'
 
 /**
@@ -157,12 +159,11 @@ const mustStayAllowed = [
   'npm test 2>&1 | tee build.log',
   // cmd.exe 原生命令的 /x 是开关，不是绝对路径
   'xcopy /E /I src dst',
-  // 命令位置守卫:文本里出现危险片段不等于真的执行它（Git 与递归删除除外，见下方单测）
+  // 命令位置守卫:文本里出现危险片段不等于真的执行它（Git 除外，见下方单测）
   'echo chmod 777',
   'grep -rn cp /usr/include',
-  // 引号里的提交说明、heredoc 正文都不是命令
+  // 引号里的提交说明不是命令。heredoc 正文里的丢改动 Git 写法由平台保守判定、会问一次，不在此列。
   'git commit -m "undo git reset --hard"',
-  'cat <<EOF > notes.md\ngit reset --hard\nEOF\nnpm test',
   // PowerShell 的 -Verbose 不是递归
   'rm -Verbose a.txt',
 ]
@@ -208,16 +209,16 @@ void describe('Workbench command execution policy', () => {
     )
   })
 
-  void test('counts git and rm wherever they appear in a command', () => {
+  void test('counts git wherever it appears in a command', () => {
     // 包装命令列不全，只认命令位置就会漏掉 `watch -n 1 git pull` 这类写法；漏一次就是一次静默丢改动。
-    // 代价是命令文本里出现的 git / rm 调用也会问一句——有意接受的误判。
-    for (const command of ['echo git reset --hard', 'watch -n 1 git pull', 'parallel rm -r ::: a b']) {
+    // 代价是命令文本里出现的 git 调用也会问一句——有意接受的误判。
+    for (const command of ['echo git reset --hard', 'watch -n 1 git pull']) {
       assert.equal(analyzeWorkbenchCommandExecution(command, projectRoot).isDangerous, true, command)
     }
   })
 
-  void test('judges recursive rm exactly like the platform rule it mirrors', () => {
-    // 与 Platform 线递归删除规则的单测同一组用例：平台版本进来、删掉本层镜像时结论一条不变。
+  void test('takes the recursive rm verdict from the platform', () => {
+    // 递归删除只由平台判定：任何形态的 `rm -r` 都问，普通删文件不问。
     for (const command of [
       'rm -r ./directory',
       'rm -R ./directory',
@@ -231,10 +232,10 @@ void describe('Workbench command execution policy', () => {
     ]) {
       assert.equal(analyzeWorkbenchCommandExecution(command, projectRoot).isDangerous, true, command)
     }
-    // 平台单测里的 `rm docs/s.md`、`rm ./file -Force` 不在这里：当前依赖的平台版本的 Windows 正则还会误伤它们，
-    // 那是平台自己的判定，随平台版本修好。
     for (const command of [
       'rm ./file',
+      'rm docs/s.md',
+      'rm ./file -Force',
       'rm -f ./file',
       'rm -v src',
       'git rm -r --cached ./directory',
@@ -249,6 +250,6 @@ void describe('Workbench command execution policy', () => {
     // 平台已判危险时补充层不得覆盖它的理由——两层各自的判据要能分辨。
     const plan = analyzeWorkbenchCommandExecution('sudo rm -rf /', projectRoot)
     assert.equal(plan.isDangerous, true)
-    assert.ok(plan.dangerousReason?.includes('删除数据') || plan.dangerousReason?.includes('提升权限'))
+    assert.equal(plan.dangerousReason, analyzeCommandExecution('sudo rm -rf /').dangerousReason)
   })
 })

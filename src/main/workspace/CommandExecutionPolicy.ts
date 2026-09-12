@@ -27,8 +27,8 @@ import { isPathInsideRoot } from './PathContainmentHelper'
  *    {@link GitInvocationRules}；只动索引、或只挪当前分支指针而不碰工作区文件的形态不算；
  * 2. **写到工作区外**——写操作的目标是工作区外的绝对路径（或 `~`），命令路径上唯一的工作区逃逸护栏；
  *    复制类命令只看目的地，从项目外读个模板进来不算；
- * 3. **通用正则打不到的高危形态**——递归删除目录（`rm -r`，不论带不带 `-f`）、`chmod 777` 这类
- *    全局可写授权、macOS `diskutil erase` 与几个平台侧未覆盖的 PowerShell 磁盘 cmdlet。
+ * 3. **平台判定没覆盖的高危形态**——`chmod 777` 这类全局可写授权、macOS `diskutil erase` 与几个
+ *    平台侧未覆盖的 PowerShell 磁盘 cmdlet。递归删除目录由平台判定（任何形态的 `rm -r` 都算危险）。
  *
  * ## 怎么读一条命令
  *
@@ -37,9 +37,8 @@ import { isPathInsideRoot } from './PathContainmentHelper'
  * 找「这一段真正执行的是谁」时跳过环境变量赋值、shell 关键字（`if` / `do` / `!` …）和包装命令
  * （`sudo` / `timeout 60` / `nice -n 5` / `xargs -0` …）连同它们的选项。
  *
- * 丢改动的代价远大于多问一句，所以 Git 与递归删除不依赖这个「命令位置」：段内任何位置出现 `git`、`rm`
- * 都当一次调用来判（包装命令列不全，漏一个就是一次静默丢改动），代价是 `echo git reset --hard`
- * 这种文本也会问。写到工作区外、`chmod 777` 才要求出现在命令位置——`grep -rn cp /usr/include`
+ * 丢改动的代价远大于多问一句，所以 Git 不依赖这个「命令位置」：段内任何位置出现 `git` 都当一次调用
+ * 来判（包装命令列不全，漏一个就是一次静默丢改动），代价是 `echo git reset --hard` 这种文本也会问。写到工作区外、`chmod 777` 才要求出现在命令位置——`grep -rn cp /usr/include`
  * 不是一次复制。
  *
  * ## 命中之后：先问，不是拒绝
@@ -334,55 +333,6 @@ function resolveGitDangerReason(segments: ReadonlyArray<readonly string[]>): Nul
   return null
 }
 
-/** 长参数按 GNU getopt 的唯一前缀规则匹配：`--rec` 即 `--recursive`，至少要写到 `--` 后一个字母。 */
-function matchesLongOption(argument: string, option: string): boolean {
-  return argument.length >= 3 && option.startsWith(argument)
-}
-
-/**
- * 读出 `rm` 之后的删除参数。只由 POSIX rm 短选项字母（d f i r v）组成的是选项簇（`-rf`、`-R`），
- * 逐字母判定；其余单杠参数是 PowerShell 参数名（`-Recurse`、`-Force`、`-Verbose`），按参数名前缀判定。
- */
-function readRemoveFlags(args: readonly string[]): { recursive: boolean; force: boolean } {
-  let recursive = false
-  let force = false
-  for (const argument of args) {
-    if (argument === '--') break
-    const normalized = argument.toLowerCase()
-    if (normalized.startsWith('--')) {
-      recursive ||= matchesLongOption(normalized, '--recursive')
-      force ||= matchesLongOption(normalized, '--force')
-    } else if (/^-[dfirv]+$/u.test(normalized)) {
-      recursive ||= normalized.includes('r')
-      force ||= normalized.includes('f')
-    } else if (normalized.length > 1 && normalized.startsWith('-')) {
-      // `-Recurse:$true` 只看冒号前的参数名；`-f` 在 PowerShell 里有歧义，至少写到 `-fo`。
-      const parameter = normalized.split(':')[0] ?? normalized
-      recursive ||= parameter.length > 1 && '-recurse'.startsWith(parameter)
-      force ||= parameter.length > 2 && '-force'.startsWith(parameter)
-    }
-  }
-  return { recursive, force }
-}
-
-/**
- * 递归删除（`rm -r` / `-R` / `--recursive` / PowerShell `rm -Recurse`，不论是否带 `-f`）会整棵删掉目录，
- * 不进回收站也不在项目事务里，恢复不了。`rm` 出现在段内任何位置都算（`xargs rm -r`、`find … -exec rm -r`）；
- * `git rm` 只在 `-r` 叠加 `-f` 时算，内容能从 Git 取回。
- *
- * 这是平台 `@velaros-ai/project` 同名判定（Platform 线的递归删除规则）的镜像：当前依赖的平台版本还只拦
- * `rm -rf`。带这条规则的平台版本进 Workbench 后删掉本函数，由平台统一判定——两边判据一致，
- * 删掉时不改变任何一条命令的结论。
- */
-function hasRecursiveRemove(segment: readonly string[]): boolean {
-  const gitSubcommands = new Set(gitSubcommandIndices(segment))
-  return segment.some((token, index) => {
-    if (executableName(token) !== 'rm') return false
-    const flags = readRemoveFlags(segment.slice(index + 1))
-    return gitSubcommands.has(index) ? flags.recursive && flags.force : flags.recursive
-  })
-}
-
 /** `chmod 777` / `a+w` 这类把文件放开成全局可写的授权（平台侧只覆盖 `chmod -R`）。 */
 function hasWorldWritableChmod(invocations: readonly ShellInvocation[]): boolean {
   return invocations.some(({ name, args }) => {
@@ -461,8 +411,6 @@ function resolveWorkspaceIntegrityDangerReason(command: string, projectRoot: str
   if (gitReason) return gitReason
 
   if (containsTokenSequence(lowered, ['gh', 'pr', 'checkout'])) return '命令会通过 GitHub CLI 切换分支或修改当前工作区。'
-
-  if (segments.some(hasRecursiveRemove)) return '命令会递归删除整个目录，目录里的内容会一起删掉。'
 
   if (hasWorldWritableChmod(invocations)) return '命令会把文件权限改成 777 或全局可写，可能扩大写入和执行权限。'
 
