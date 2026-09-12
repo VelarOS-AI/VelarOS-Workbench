@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { EventEmitter } from 'node:events'
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 
 import { describe, test } from 'bun:test'
@@ -14,6 +14,19 @@ import { WorkbenchWindowStateChannels } from '../src/shared/workbenchWindowState
 
 function readSource(relativePath: string): string {
   return readFileSync(path.resolve(process.cwd(), relativePath), 'utf8')
+}
+
+function listSourceFiles(relativeDirectory: string): string[] {
+  const root = path.resolve(process.cwd(), relativeDirectory)
+  return readdirSync(root, { recursive: true, encoding: 'utf8' })
+    .filter((entry) => /\.(?:ts|tsx)$/u.test(entry))
+    .map((entry) => path.join(relativeDirectory, entry))
+}
+
+/** 选择器恰好以 `selector {` 开头的那条顶层规则（含规则体）；找不到时为空串。 */
+function ruleBody(styles: string, selector: string): string {
+  const escaped = selector.replaceAll(/[.*+?^${}()|[\]\\]/gu, '\\$&')
+  return styles.match(new RegExp(`\\n${escaped} \\{[^}]*\\}`, 'u'))?.[0] ?? ''
 }
 
 class FakeWorkbenchWindow extends EventEmitter {
@@ -81,6 +94,67 @@ void describe('Workbench window and chat chrome details', () => {
     )
   })
 
+  void test('loads the shared UI stylesheets before every app module', () => {
+    const entry = readSource('src/renderer/src/main.tsx')
+    const globalStyles = readSource('src/renderer/src/globalStyles.ts')
+
+    // 产物里样式按模块求值顺序拼接：全局样式表必须是入口的第一个导入，产品样式才排在共享原语之后。
+    const firstImport = entry.split('\n').find((line) => line.startsWith('import '))
+    assert.equal(firstImport, "import './globalStyles'")
+    assert.deepEqual(
+      [...globalStyles.matchAll(/^import '([^']+)'$/gmu)].map((match) => match[1]),
+      [
+        '@velaros-ai/ui/styles/tokens/design-tokens.css',
+        '@velaros-ai/ui/styles/components/index.css',
+        '@velaros-ai/ui/styles/components/product.css',
+        './index.css',
+      ]
+    )
+    // 顺序只有一个主人：别处再引一次共享全局样式，就可能把它们重新排到应用模块后面。
+    const otherOwners = listSourceFiles('src/renderer').filter(
+      (file) =>
+        !file.endsWith('globalStyles.ts')
+        && /['"]@velaros-ai\/ui\/styles\//u.test(readSource(file))
+    )
+    assert.deepEqual(otherOwners, [])
+  })
+
+  void test('keeps the shared focus ring and the conversation rhythm the Workbench has always shown', () => {
+    const settingsStyles = readSource('src/renderer/src/styles/14-settings.module.css')
+    const overrides = readSource('src/renderer/src/styles/15-overrides.module.css')
+    const chatStyles = readSource('src/renderer/src/styles/04-insight-chat.module.css')
+    const bubble = readSource('node_modules/@velaros-ai/ui/dist/conversation/blocks/MessageBubble.module.css')
+    const pane = readSource('node_modules/@velaros-ai/ui/dist/conversation/shell/ChatConversationPane.module.css')
+
+    // 按钮去阴影仍是两个类的分量（发送按钮有内容时的投影照旧压住），只给原语同分量的聚焦环与分段控件选中项的
+    // 悬停投影让路；标签 / 面板里两个类的那组也不压阴影，带子选择器或元素名、特异性更高的那组一直连聚焦环一起
+    // 压掉，保持原样。
+    assert.match(settingsStyles, /\n\.root \[data-slot='button'\] \{\n\s*transform: none;\n\}/u)
+    assert.match(
+      settingsStyles,
+      /\n\.root :global\(\[data-slot='button'\]:where\(:not\(:focus-visible, \.velar-segmented-control-active:hover\)\)\) \{\n\s*box-shadow: none;\n\}/u
+    )
+    const primitives = 'node_modules/@velaros-ai/ui/dist/styles/components/primitives'
+    assert.match(readSource(`${primitives}/button.css`), /\n\.velar-button:focus-visible \{\n\s*box-shadow:/u)
+    assert.match(
+      readSource(`${primitives}/segmented-control.css`),
+      /\.velar-segmented-control-active:hover \{[^}]*box-shadow:/u
+    )
+    assert.doesNotMatch(ruleBody(overrides, '.workbenchShell .workbenchContextMenuItem'), /box-shadow/u)
+    assert.match(ruleBody(overrides, '.workbenchShell .editorTabContextMenu button'), /box-shadow: none;/u)
+    // 共享包这两条规则还在，Workbench 的钉住才有意义；共享包改了取值就该回来重新定夺。
+    assert.match(bubble, /\n\.textContent \{[^}]*line-height: calc\(var\(--spacing, 0\.25rem\) \* 6\);/u)
+    assert.match(pane, /\n\.messageListInnerSide \{[^}]*gap: calc\(var\(--spacing, 0\.25rem\) \* 3\);/u)
+    assert.match(
+      chatStyles,
+      /\.workbenchChatBody :global\(\.velar-paragraph\)\[class\*='_textContent'\] \{\n\s*line-height: var\(--ui-line-default\);/u
+    )
+    assert.match(
+      chatStyles,
+      /\.workbenchChatBody :global\(\.velar-stack-gap-lg\)\[class\*='_messageListInnerSide'\] \{\n\s*gap: var\(--ui-space-4\);/u
+    )
+  })
+
   void test('centers the settings gear over the chat button of the right tool rail', () => {
     const topStyles = readSource('src/renderer/src/styles/02-chrome-top.module.css')
     const layoutStyles = readSource('src/renderer/src/styles/03-layout.module.css')
@@ -91,12 +165,14 @@ void describe('Workbench window and chat chrome details', () => {
       topBar,
       /padding-inline: 2px calc\(\(var\(--workbench-right-rail-width\) - var\(--ui-icon-button-sm\)\) \/ 2\);/u
     )
-    // 按钮边长只由 icon-sm 预设决定，顶栏自己的类不再写一个与之打架的尺寸。
-    for (const rule of ['.topRunButton', '.topToolbarIconButton']) {
-      const body = topStyles.match(new RegExp(`\\n\\${rule} \\{[^}]*\\}`, 'u'))?.[0] ?? ''
-      assert.ok(body, `${rule} rule exists`)
-      assert.doesNotMatch(body, /\bwidth:|\bheight:/u)
-    }
+    // 按钮边长只由 icon-sm 预设决定：顶栏图标按钮的类不再写尺寸、圆角或配色，运行按钮只在禁用时转灰。
+    const toolbar = readSource('src/renderer/src/components/chrome/TopToolbar.tsx')
+    assert.match(toolbar, /function WorkbenchTopIconAction[\s\S]*<IconButton\n\s*variant="ghost"\n\s*size="icon-sm"/u)
+    assert.doesNotMatch(topStyles, /\.topToolbarIconButton/u)
+    assert.deepEqual(
+      [...topStyles.matchAll(/\n(\.topRunButton[^{]*) \{/gu)].map((match) => match[1]),
+      ['.topRunButton:disabled']
+    )
     assert.match(layoutStyles, /\.rightToolStrip \{\n\s*@apply [^;]*\bitems-center\b/u)
     assert.match(layoutStyles, /\.rightToolRail \{[^}]*width: var\(--workbench-right-rail-width\);/u)
   })
@@ -130,16 +206,18 @@ void describe('Workbench window and chat chrome details', () => {
       'node_modules/@velaros-ai/ui/dist/conversation/cards/FileChangeSummaryList.module.css'
     )
 
-    // 合计是共享 Text 原语，默认色阶自带正文色；抬高特异性，颜色与文件行统计同一对令牌。
+    // 合计是共享 Text 原语，默认色阶自带正文色；全局样式表先加载，单类就压得住，颜色与文件行统计同一对令牌。
     assert.match(card, /<Text className=\{styles\.added\}>/u)
-    assert.match(styles, /\.added\.added \{\n\s*color: var\(--status-green\);/u)
-    assert.match(styles, /\.removed\.removed \{\n\s*color: var\(--status-red\);/u)
+    assert.match(styles, /\n\.added \{\n\s*color: var\(--status-green\);/u)
+    assert.match(styles, /\n\.removed \{\n\s*color: var\(--status-red\);/u)
+    assert.doesNotMatch(styles, /\.(added|removed|reviewButton)\.\1/u)
     assert.match(sharedList, /\n\.added \{\n\s*color: var\(--status-green\);/u)
     assert.match(sharedList, /\n\.removed \{\n\s*color: var\(--status-red\);/u)
-    // 行收到 30px：上下 4px + 22px 的箭头按钮；箭头按钮钉回它那条 22px 网格列。
+    // 行收到 30px：上下 4px + 22px 的箭头按钮；箭头按钮的 22px 由共享列表自己的 `.fileExpandButton` 给出，
+    // 与它那条 22px 网格列同宽，卡片不再另外钉尺寸。
     assert.match(styles, /\.root \[class\*='_fileButton'\] \{\n\s*min-height: 30px;\n\s*padding-block: 4px;/u)
-    assert.match(styles, /\.root \[class\*='_fileExpandButton'\] \{\n\s*width: 22px;\n\s*height: 22px;/u)
+    assert.doesNotMatch(styles, /_fileExpandButton/u)
     assert.match(sharedList, /\.fileButton \{[^}]*grid-template-columns: minmax\(0, 1fr\) auto auto 22px;/u)
-    assert.match(sharedList, /\.fileExpandButton \{/u)
+    assert.match(sharedList, /\n\.fileExpandButton \{[^}]*width: 22px;\n\s*height: 22px;/u)
   })
 })

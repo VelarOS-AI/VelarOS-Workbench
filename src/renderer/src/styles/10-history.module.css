@@ -54,10 +54,10 @@
   background: var(--workbench-editor-bg, var(--card));
 }
 
+/* 两端标签是共享 Text 原语，字号与配色随它的默认色阶。 */
 .editorHistoryDiffLabel {
-  @apply truncate text-muted-foreground;
+  @apply truncate;
   max-width: 240px;
-  font-size: 11px;
 }
 
 .editorHistoryDiffArrow {
@@ -303,10 +303,10 @@
   @apply flex min-w-0 items-center gap-2;
 }
 
+/* 次要信息与时间是共享 Text 原语，字号与配色随它的默认色阶。 */
 .historyTimelineSecondary,
 .historyTimelineMeta {
-  @apply truncate text-muted-foreground;
-  font-size: 11px;
+  @apply truncate;
 }
 
 .historyTimelineMeta {

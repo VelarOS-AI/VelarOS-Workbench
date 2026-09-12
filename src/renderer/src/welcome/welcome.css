@@ -109,10 +109,6 @@
   min-width: 0;
 }
 
-.workbench-welcome__recent-path {
-  color: var(--foreground-tertiary);
-}
-
 .workbench-welcome__recent-meta {
   display: flex;
   flex-shrink: 0;
@@ -121,9 +117,9 @@
   color: var(--foreground-tertiary);
 }
 
+/* 移除按钮是 IconButton：过渡随按钮原语（其中已含 opacity），这里只管默认隐藏、悬停行时出现。 */
 .workbench-welcome__recent-remove {
   opacity: 0;
-  transition: opacity var(--ui-transition-fast);
 }
 
 .workbench-welcome__recent-row:hover .workbench-welcome__recent-remove,

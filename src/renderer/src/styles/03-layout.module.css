@@ -140,12 +140,10 @@
   @apply flex shrink-0 flex-col items-center gap-1;
 }
 
+/* 工具条按钮的边长、圆角、默认配色归 IconButton 的 icon-sm 档与 ghost 变体；这里只管悬停、激活与角标。 */
 .leftToolButton {
-  @apply relative flex shrink-0 items-center justify-center border bg-transparent text-muted-foreground;
-  width: var(--workbench-left-rail-button-size);
-  height: var(--workbench-left-rail-button-size);
+  @apply relative flex shrink-0 items-center justify-center border bg-transparent;
   border-color: transparent;
-  border-radius: var(--workbench-radius);
 }
 
 .leftToolButton:hover:not([data-active='true']) {
@@ -502,13 +500,10 @@
 }
 
 .rightToolButton {
-  @apply flex shrink-0 items-center justify-center border bg-transparent text-muted-foreground;
+  @apply flex shrink-0 items-center justify-center border bg-transparent;
   position: relative;
-  width: var(--workbench-right-rail-button-size);
-  height: var(--workbench-right-rail-button-size);
   overflow: visible;
   border-color: transparent;
-  border-radius: var(--workbench-radius);
 }
 
 .rightToolButton:hover:not(.rightToolButtonActive) {
@@ -573,14 +568,14 @@
   @apply flex min-w-0 flex-1 items-center gap-2 text-foreground;
 }
 
+/* 标题与计数是共享 Title / Text 原语，字重、字号与配色随它们的档位与色阶。 */
 .toolWindowTitle {
-  @apply truncate font-medium;
+  @apply truncate;
   font-size: var(--ui-font-body-sm);
 }
 
 .toolWindowMeta {
-  @apply shrink-0 text-muted-foreground;
-  font-size: 11px;
+  @apply shrink-0;
 }
 
 .toolWindowBody {

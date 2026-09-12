@@ -52,15 +52,16 @@
   padding: 6px;
 }
 
+/*
+ * 结果项是 block 档的 ghost Button：行高、间距、边框、圆角与默认 / 悬停配色随原语。键盘移到的项染选中底色；
+ * 指针停在上面时（悬停也会把它设为当前项）让位给按钮原语的悬停底色。
+ */
 .quickOpenItem {
-  @apply flex min-w-0 items-center gap-2 border-0 bg-transparent text-left;
-  min-height: 54px;
+  @apply flex min-w-0 items-center bg-transparent text-left;
   padding: 6px 8px;
-  border-radius: var(--workbench-radius);
-  color: var(--foreground-secondary);
 }
 
-.quickOpenItem[data-active='true'] {
+.quickOpenItem[data-active='true']:where(:not(:hover)) {
   background: var(--workbench-selection-bg);
   color: var(--foreground);
 }
@@ -75,14 +76,13 @@
   font-size: 12px;
 }
 
+/* 路径与标注是 caption 色阶的 Text，字号与配色随原语（已打开的标注仍转绿）。 */
 .quickOpenItemPath {
-  @apply truncate text-muted-foreground;
-  font-size: 11px;
+  @apply truncate;
 }
 
 .quickOpenItemMeta {
-  @apply shrink-0 text-muted-foreground;
-  font-size: 11px;
+  @apply shrink-0;
 }
 
 .quickOpenItem[data-open='true'] .quickOpenItemMeta {

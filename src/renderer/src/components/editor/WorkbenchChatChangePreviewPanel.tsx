@@ -197,7 +197,6 @@ export function WorkbenchChatChangePreviewPanel({
                     label={t('workbench.gitRollback')}
                     title={t('workbench.gitRollback')}
                     disabled={!!pendingFileAction}
-                    className={styles.aiChangePreviewRowButton}
                     onClick={(event) => {
                       event.stopPropagation()
                       onDiscardItem(item)
@@ -215,7 +214,6 @@ export function WorkbenchChatChangePreviewPanel({
                     label={t('workbench.openChangedFile')}
                     title={t('workbench.openChangedFile')}
                     disabled={isDeleted}
-                    className={styles.aiChangePreviewRowButton}
                     onClick={(event) => {
                       event.stopPropagation()
                       onOpenFile(item.path)

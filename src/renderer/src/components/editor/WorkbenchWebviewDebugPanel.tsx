@@ -189,7 +189,6 @@ export function WorkbenchWebviewDebugPanel({
         <IconButton
           variant="ghost"
           size="icon-sm"
-          className={styles.webviewDebugChromeButton}
           label={t('workbench.debugBack')}
           title={t('workbench.debugBack')}
           disabled={!canGoBack}
@@ -202,7 +201,6 @@ export function WorkbenchWebviewDebugPanel({
         <IconButton
           variant="ghost"
           size="icon-sm"
-          className={styles.webviewDebugChromeButton}
           label={t('workbench.debugForward')}
           title={t('workbench.debugForward')}
           disabled={!canGoForward}
@@ -215,7 +213,6 @@ export function WorkbenchWebviewDebugPanel({
         <IconButton
           variant="ghost"
           size="icon-sm"
-          className={styles.webviewDebugChromeButton}
           label={t('workbench.debugReload')}
           title={t('workbench.debugReload')}
           onClick={() => {
@@ -245,7 +242,6 @@ export function WorkbenchWebviewDebugPanel({
         <IconButton
           variant="ghost"
           size="icon-sm"
-          className={styles.webviewDebugChromeButton}
           label={t('workbench.runOpenExternal')}
           title={t('workbench.runOpenExternal')}
           onClick={handleOpenExternal}

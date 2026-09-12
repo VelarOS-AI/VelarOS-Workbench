@@ -468,8 +468,9 @@
   user-select: none;
 }
 
+/* 占位文字是默认色阶的 Paragraph，配色随原语。 */
 .editorPlaceholder {
-  @apply flex h-full w-full min-w-0 items-center justify-center text-muted-foreground;
+  @apply flex h-full w-full min-w-0 items-center justify-center;
   min-height: 220px;
   font-size: var(--ui-font-body-sm);
 }

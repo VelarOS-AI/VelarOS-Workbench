@@ -313,11 +313,11 @@
   font-size: 10.5px;
 }
 
+/* 空态 / 截断提示是 muted 色阶的 Paragraph，字号随原语。 */
 .gitDiffEmpty,
 .gitDiffTruncated {
   @apply m-0 text-muted-foreground;
   padding: 9px;
-  font-size: 11px;
 }
 
 .gitDiffTruncated {

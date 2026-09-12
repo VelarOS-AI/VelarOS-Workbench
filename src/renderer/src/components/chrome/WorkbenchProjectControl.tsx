@@ -309,7 +309,7 @@ export function WorkbenchProjectControl({
               }}
             />
             {cloneError && <p className={styles.projectCloneError}>{cloneError}</p>}
-            <DialogFooter className={styles.projectCloneFooter}>
+            <DialogFooter>
               <Button
                 variant="ghost"
                 size="sm"

@@ -18,12 +18,15 @@
   @apply flex min-w-0 flex-1;
 }
 
+/*
+ * 会话切换按钮与右侧图标按钮都是共享 Button 原语：高度、间距、圆角、默认与悬停配色随它的 sm / icon-sm
+ * 档与 ghost 变体；这里只管在顶栏里撑满（收缩系数也随原语）、聚焦与展开 / 激活态。
+ */
 .workbenchChatSessionMenuButton {
-  @apply flex min-w-0 flex-1 items-center justify-start;
-  height: 28px;
-  gap: 7px;
+  @apply flex min-w-0 items-center justify-start;
+  flex-grow: 1;
+  flex-basis: 0%;
   padding-inline: 7px 9px;
-  border-radius: var(--workbench-radius);
   color: var(--workbench-text);
   cursor: pointer;
 }
@@ -34,7 +37,7 @@
   text-align: left;
 }
 
-.workbenchChatSessionMenuButton:is(:hover, :focus-visible, [data-open='true']) {
+.workbenchChatSessionMenuButton:is(:focus-visible, [data-open='true']) {
   color: var(--workbench-text);
   background: var(--workbench-hover);
   transform: none;
@@ -52,13 +55,9 @@
 
 .workbenchChatIconButton {
   @apply flex-none;
-  width: 28px;
-  height: 28px;
-  border-radius: var(--workbench-radius);
-  color: var(--workbench-text-muted);
 }
 
-.workbenchChatIconButton:is(:hover, :focus-visible, [data-active='true']) {
+.workbenchChatIconButton:is(:focus-visible, [data-active='true']) {
   color: var(--workbench-text);
   background: var(--workbench-hover);
   transform: none;
@@ -85,16 +84,15 @@
   box-shadow: 0 12px 36px color-mix(in srgb, var(--workbench-text) 16%, transparent);
 }
 
+/* 列表与条目的宽度、内边距、行高、间距、圆角都随共享级联菜单与 block 档按钮原语。 */
 .workbenchChatSessionMenuList {
-  @apply flex w-full min-w-0 flex-col gap-1;
+  @apply flex flex-col gap-1;
 }
 
 .workbenchChatSessionMenuItem {
-  @apply flex w-full min-w-0 items-center gap-2 text-left;
-  min-height: 32px;
+  @apply flex w-full min-w-0 items-center text-left;
   justify-content: flex-start;
   padding: 5px 8px;
-  border-radius: var(--workbench-radius);
 }
 
 .workbenchChatSessionMenuItem[data-active='true'] {
@@ -119,7 +117,6 @@
 
 .workbenchChatSessionMenuCheck {
   @apply flex-none;
-  color: var(--workbench-active-fg);
 }
 
 .workbenchChatBody {
@@ -129,6 +126,21 @@
 
 .workbenchChatBody :global(.chatPane) {
   background: var(--workbench-surface);
+}
+
+/*
+ * 共享对话 UI 里有两处组件样式，以前一直被同特异性的全局原语盖住，Workbench 里看到的是原语的样子；全局
+ * 样式表改到应用模块之前加载后它们会生效，这里按原样钉住（取值就是原语自己的令牌），留给共享包定夺：
+ * - 用户气泡正文（Paragraph 原语）：共享包 `.textContent` 写的行高是 24px，放在 12px 字上接近双倍行距；
+ * - 侧栏消息列表（Stack 原语 gap-lg）：共享包 side 变体写的消息间距是 12px。
+ * 类名按共享包 CSS Module 的 `velar_<文件哈希>_<local>` 后缀选中，并带上原语类，只命中这两个位置。
+ */
+.workbenchChatBody :global(.velar-paragraph)[class*='_textContent'] {
+  line-height: var(--ui-line-default);
+}
+
+.workbenchChatBody :global(.velar-stack-gap-lg)[class*='_messageListInnerSide'] {
+  gap: var(--ui-space-4);
 }
 
 .workbenchChatBody :global([data-tour-id='chat-output']) {
@@ -513,7 +525,6 @@
   @apply min-w-0;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  color: var(--foreground-tertiary);
 }
 
 .workbenchWorkerThreadOutput {

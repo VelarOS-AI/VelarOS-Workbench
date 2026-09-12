@@ -600,8 +600,8 @@
   color: var(--foreground);
 }
 
+/* 空态说明是默认色阶的 Paragraph，配色随原语。 */
 .commandEmpty {
-  color: color-mix(in srgb, var(--workbench-text-muted) 78%, transparent);
   padding: 12px 14px;
   font-size: 12px;
 }
@@ -747,15 +747,6 @@
 
 .terminalToolHeaderTabActions {
   @apply flex shrink-0 items-center gap-0.5;
-}
-
-.terminalToolHeaderIconButton {
-  color: var(--workbench-text-muted);
-}
-
-.terminalToolHeaderIconButton:hover {
-  color: var(--workbench-text);
-  background: var(--workbench-hover);
 }
 
 .runStopButton:not(:disabled) {

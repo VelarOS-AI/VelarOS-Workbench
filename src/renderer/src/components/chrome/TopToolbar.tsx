@@ -176,7 +176,6 @@ export function WorkbenchTopTrailing({
         <WorkbenchTopIconAction
           tooltip={codeGraphTooltip}
           label={codeGraphLabel}
-          className={styles.topToolbarIconButton}
           tooltipSide="top"
           disabled={aiIndexRunning}
           onClick={handleCodeGraphAction}
@@ -191,7 +190,6 @@ export function WorkbenchTopTrailing({
       <WorkbenchTopIconAction
         tooltip={settingsLabel}
         label={settingsLabel}
-        className={styles.topToolbarIconButton}
         tooltipSide="top"
         onClick={onOpenSettings}
       >
@@ -427,7 +425,6 @@ function WorkbenchRunAction({
 function WorkbenchTopIconAction({
   tooltip,
   label,
-  className,
   tooltipSide = 'top',
   disabled,
   onClick,
@@ -435,7 +432,6 @@ function WorkbenchTopIconAction({
 }: {
   tooltip: string
   label: string
-  className?: string
   tooltipSide?: 'bottom' | 'left' | 'right' | 'top'
   disabled?: boolean
   onClick?: () => void
@@ -452,7 +448,6 @@ function WorkbenchTopIconAction({
       <IconButton
         variant="ghost"
         size="icon-sm"
-        className={className}
         label={label}
         disabled={disabled}
         onClick={onClick}

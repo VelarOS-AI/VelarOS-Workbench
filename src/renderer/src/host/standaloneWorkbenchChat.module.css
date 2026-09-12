@@ -68,11 +68,6 @@
 .workbenchChatSessionMenuList {
   display: flex;
   flex-direction: column;
-  padding: 4px;
-}
-
-.workbenchChatSessionMenuItem {
-  justify-content: space-between;
 }
 
 .workbenchChatSessionMenuIcon,
