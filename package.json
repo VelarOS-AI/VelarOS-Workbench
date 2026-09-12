@@ -1,6 +1,6 @@
 {
   "name": "velaros-workbench",
-  "version": "0.3.49",
+  "version": "0.3.50",
   "private": true,
   "description": "VelarOS Workbench standalone Electron IDE.",
   "desktopName": "velaros-workbench.desktop",

@@ -3,6 +3,46 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
+      "version": "0.3.50",
+      "releasedAt": "2026-09-13",
+      "title": {
+        "zh": "文件一键加进聊天，拖分栏不再卡，工具气泡说清做了什么",
+        "en": "Add files to the chat, smooth pane resizing, and tool bubbles that say what ran"
+      },
+      "added": {
+        "zh": [
+          "编辑器、标签页和文件树的右键菜单新增「添加到聊天」：文件以 chip 挂到输入框，可以一次挂多个（文件树多选后右键就是「添加 N 个文件到聊天」）。发出去的只是文件路径，AI 自己按需去读，不会把内容塞进消息；在输入框里敲 @ 还能重新选本会话挂过的文件。",
+          "工具调用行悬停时弹出详情气泡：写明实际执行的操作（例如 append、find_references、replace_text）和对象，归并的 ×N 行逐次列出每次调用的命令与耗时；气泡与行等宽、可以移进去选中文字。",
+          "子 Agent 可以跨轮续跑：主 Agent 用上次返回的 thread_id 接着使用同一个子 Agent（它保留着读过的上下文），追问、补做、修复后复验不再从头重读；需要独立复核时才新派。"
+        ],
+        "en": [
+          "\"Add to Chat\" in the right-click menus of the editor, editor tabs and the file tree attaches files to the chat box as chips, several at once (a multi-selection in the file tree becomes \"Add N Files to Chat\"). Only the file paths are sent and the AI reads what it needs itself; typing @ in the chat box re-picks files referenced earlier in the session.",
+          "Hovering a tool call row opens a detail bubble that names the operation that actually ran (for example append, find_references, replace_text) and its target; merged ×N rows list each call with its command and duration. The bubble is as wide as the row and you can move into it to select text.",
+          "Sub-agents can be continued across turns: the main agent reuses a sub-agent through the thread_id it returned, keeping everything it already read, so follow-ups, fixes and re-checks no longer start from scratch; a fresh sub-agent is only started when an independent review is needed."
+        ]
+      },
+      "fixed": {
+        "zh": [
+          "拖动左右分栏和底部面板的分隔条时很卡，聊天记录越长越卡，AI 运行中尤其明显；三条分隔条的抓手和高亮线也统一了粗细。",
+          "回答末尾的费用估算只按可见的问答文字算，一次上百轮、带子 Agent 的执行只显示几毛钱；现在按整次执行（全部轮次加子 Agent，推理与缓存分开）估价。",
+          "运行结束后「已处理」不再自动收起。",
+          "一次调用多个工具时，排在后面的工具把排队等待的时间也算成自己的耗时。",
+          "AI 用 project:edit 改过的文件没有计入「已编辑」。",
+          "全屏时顶栏左侧还留着红绿灯的空位；右上角设置按钮与下方聊天按钮没有对齐；上下文仪表多了一圈外框；「本轮改动」卡片行太高、合计的增删数字没有颜色。",
+          "文件树多选后右键，选择会被收回成单选。"
+        ],
+        "en": [
+          "Dragging the dividers between panes and above the bottom panel was janky, worse with a long chat and especially while the AI was running; all three dividers now also share one grab size and highlight width.",
+          "The cost estimate under an answer only counted the visible question and answer text, so a run with 100+ turns and sub-agents showed a few cents; it now prices the whole run (every turn plus sub-agents, with reasoning and cached tokens priced separately).",
+          "\"Processed\" no longer collapsed on its own after a run finished.",
+          "When several tools were called at once, a queued tool counted its waiting time as its own duration.",
+          "Files changed through project:edit were not counted as edited.",
+          "In fullscreen the top bar kept an empty gap for the window buttons; the settings button was not aligned with the chat button below it; the context gauge had an extra outer ring; rows in the round changes card were too tall and the totals lost their colors.",
+          "Right-clicking a multi-selection in the file tree collapsed it to a single file."
+        ]
+      }
+    },
+    {
       "version": "0.3.49",
       "releasedAt": "2026-09-12",
       "title": {
