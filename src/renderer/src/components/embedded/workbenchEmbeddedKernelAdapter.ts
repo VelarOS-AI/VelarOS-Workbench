@@ -131,8 +131,7 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
           void editorNavigation.goToLocation(match.path, match.line, match.column),
         onSetDirectoryOpen: (path, open) => void workbench.setDirectoryOpen(path, open),
         onSelectFile: (path) => {
-          model.aiChanges.deactivate()
-          model.dialogs.setVelarLogicGraphActive(false)
+          model.actions.showEditorSurface()
           void editorNavigation.selectFile(path)
         },
         onRunFile: (path) => {
@@ -156,7 +155,7 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
         onRefresh: model.actions.refreshGitPanel,
       },
       onOpenDiff: (item, options) => {
-        model.aiChanges.deactivate()
+        model.actions.showEditorSurface()
         editorNavigation.openDiff(item, options)
       },
       onOpenFile: (path) => void editorNavigation.selectFile(path),
@@ -184,8 +183,7 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
       isSelectedFileDiagnosticsPending: selectedFileDiagnosticView.isPending,
       tabs: {
         onSelectOpenFile: (path) => {
-          model.aiChanges.deactivate()
-          model.dialogs.setVelarLogicGraphActive(false)
+          model.actions.showEditorSurface()
           void editorNavigation.selectFile(path)
         },
         onCloseOpenFile: workbench.closeOpenFile,

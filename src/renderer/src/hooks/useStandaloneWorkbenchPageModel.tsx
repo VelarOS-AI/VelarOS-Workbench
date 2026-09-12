@@ -39,7 +39,9 @@ import {
   useWorkbenchExplanations,
   useWorkbenchExplanationStore,
 } from '@renderer/models/explanations/workbenchExplanationStore'
+import type { WorkbenchGitChangeItem } from '@renderer/models/git/workbenchGitModel'
 import { resolveWorkbenchGitSurfacesActive } from '@renderer/models/git/workbenchGitSurfaceActivation'
+import { resolveWorkbenchNavigationSurface } from '@renderer/models/layout/workbenchSurfaceModel'
 import { saveLightEditorTab } from '@renderer/models/lightEditorModel'
 import {
   clearWorkbenchProjectAiIndexDecision,
@@ -114,6 +116,22 @@ interface UseStandaloneWorkbenchPageModelOptions {
 }
 
 export type PendingWorkbenchBrowserElementSelection = WorkbenchBrowserElementSelectionDelivery
+
+/** 一次页面导航：去向（决定编辑区落在哪一组、左侧切到哪个面板）加上要放进编辑区的东西。 */
+type WorkbenchNavigationRequest =
+  | {
+      target: 'file'
+      path: string
+      /** 给出时定位到这一行；不给只切到文件。 */
+      line?: number
+      column?: number
+      /** false：只移动视图不抢焦点（Agent 发起的定位）。 */
+      focus?: boolean
+    }
+  | { target: 'file-preview'; tab: WorkbenchLightEditorTab }
+  | { target: 'reveal'; path: string }
+  | { target: 'git-diff'; item: WorkbenchGitChangeItem }
+  | { target: 'ai-changes'; round: WorkbenchChatRunChangesTarget }
 
 function normalizeWorkspaceRoot(root: LooseOptional<string>): string {
   return (root ?? '').replace(/[\\/]+$/, '')
@@ -648,10 +666,47 @@ export function useStandaloneWorkbenchPageModel(
     aiChanges.deactivate()
   })
 
-  // 左右两侧说的是同一件事，不跨域显示：编辑区进入「AI 改动」对比（打开一轮、自动打开、改动卡的「查看」），
-  // 左侧跟着切到改动树；编辑区回到普通文件（「打开文件」、关掉最后一个对比标签），左侧跟着回到文件树；
-  // 左侧从改动树切到别的面板，编辑区也收起对比标签组（标签保留，点回改动树时再带回来）。
-  // 只在进出的那一刻切换——左侧单独打开改动树浏览、编辑区还没有对比标签时不去动它。
+  /**
+   * 页面导航的唯一入口：先按 `resolveWorkbenchNavigationSurface` 把编辑区落在哪一组、左侧切到哪个面板
+   * 一起定好，再把东西放进编辑区。聊天里的路径与改动卡、Agent 的界面请求、快速打开等「从别处把东西带到
+   * 眼前」的导航都走这里，不再各自收独占组、切左侧。Agent 发起的定位传 `focus: false`，不抢输入框的焦点。
+   */
+  const navigate = useMemoizedFn(async (request: WorkbenchNavigationRequest): Promise<void> => {
+    const { editorGroup, leftTool, revealLeftPanel } = resolveWorkbenchNavigationSurface(
+      request.target
+    )
+    if (editorGroup === 'primary') showEditorSurface()
+    if (surface.activeLeftTool !== leftTool) surface.setActiveLeftTool(leftTool)
+    if (revealLeftPanel && !surface.isFilePanelOpen) surface.toggleFilePanel()
+
+    switch (request.target) {
+      case 'file':
+        // 文件树跟随编辑器的当前文件自己定位（见 useWorkbenchController），这里只管把文件带到编辑器。
+        if (request.line === undefined) await editorNavigation.selectFile(request.path)
+        else
+          await editorNavigation.goToLocation(request.path, request.line, request.column, {
+            focus: request.focus,
+          })
+        return
+      case 'file-preview':
+        editorNavigation.openLightTab(request.tab)
+        return
+      case 'reveal':
+        await workbench.revealEntryPath(request.path)
+        return
+      case 'git-diff':
+        editorNavigation.openDiff(request.item, { focusFirstChange: true })
+        return
+      case 'ai-changes':
+        await aiChanges.openRound(request.round)
+    }
+  })
+
+  // 左右两侧说的是同一件事，不跨域显示。与 `navigate` 分工：`navigate` 在同一次提交里把两侧一起定好，
+  // 这里看到的已是一致的两侧，不会再改；这里只管编辑区组被别的途径进出时让左侧跟上——编辑区进入
+  // 「AI 改动」对比（自动打开、改动卡的「查看」、点回对比标签），左侧切到改动树；编辑区离开对比
+  // （关掉最后一个对比标签），左侧回到文件树；左侧从改动树切到别的面板，编辑区也收起对比标签组（标签保留，
+  // 点回改动树时再带回来）。只在进出的那一刻切换——左侧单独打开改动树浏览、编辑区还没有对比标签时不去动它。
   const aiChangesSyncRef = useRef({ active: aiChanges.active, leftTool: surface.activeLeftTool })
   const { activeLeftTool, setActiveLeftTool } = surface
   const { active: aiChangesActive, deactivate: deactivateAiChanges } = aiChanges
@@ -668,9 +723,7 @@ export function useStandaloneWorkbenchPageModel(
   }, [activeLeftTool, aiChangesActive, deactivateAiChanges, setActiveLeftTool])
 
   function handleWorkbenchChatRunChangesReview(target: WorkbenchChatRunChangesTarget): void {
-    if (surface.activeLeftTool !== 'ai-changes') surface.setActiveLeftTool('ai-changes')
-    if (!surface.isFilePanelOpen) surface.toggleFilePanel()
-    void aiChanges.openRound(target)
+    void navigate({ target: 'ai-changes', round: target })
   }
 
   // AI 选区锁在文件上：用户关掉某个文件的标签（关一个、关其他、关全部、换项目都算），
@@ -708,8 +761,7 @@ export function useStandaloneWorkbenchPageModel(
     if (!active) return
     const { selectedFilePath, overlayActive } = explanationNavigationRef.current
     if (active.path === selectedFilePath && !overlayActive) return
-    showEditorSurface()
-    void editorNavigation.selectFile(active.path)
+    void navigate({ target: 'file', path: active.path })
     // 只跟随「切到某条讲解」这一个信号；行号回写、清掉别的讲解都不该把编辑器拽走。
   }, [explanations.focusRevision])
 
@@ -796,7 +848,6 @@ export function useStandaloneWorkbenchPageModel(
     ): Promise<Record<string, unknown>> => {
       switch (command.type) {
         case 'open-files': {
-          showEditorSurface()
           // 按列表顺序在后台开出标签（已经开着的不动），不逐个切过去：逐个切会让编辑器闪一遍每个文件，
           // 最后那次定位也会拿切走前的「当前文件」判断，落到别的文件上。
           const opened: WorkbenchAgentUiOpenFile[] = []
@@ -813,7 +864,11 @@ export function useStandaloneWorkbenchPageModel(
             opened.flatMap((file) => file.highlights.map((range) => ({ path: file.path, ...range })))
           )
           // 最后停在第一个文件、定位到它的行（不抢聊天输入框的焦点）。
-          await editorNavigation.goToLocation(primary.path, primary.line, primary.column, {
+          await navigate({
+            target: 'file',
+            path: primary.path,
+            line: primary.line,
+            column: primary.column,
             focus: false,
           })
           return {
@@ -824,15 +879,12 @@ export function useStandaloneWorkbenchPageModel(
         case 'clear-highlights':
           return { cleared: aiHighlightStore.clear(context.projectRoot, command.paths) }
         case 'reveal-path':
-          if (surface.activeLeftTool !== 'project') surface.setActiveLeftTool('project')
-          if (!surface.isFilePanelOpen) surface.toggleFilePanel()
-          await workbench.revealEntryPath(command.path)
+          await navigate({ target: 'reveal', path: command.path })
           return { path: command.path }
         case 'open-diff': {
           const item = await findGitChangeItem(command.path)
           if (!item) throw new AppError('NOT_FOUND', `${command.path} has no uncommitted changes.`)
-          showEditorSurface()
-          editorNavigation.openDiff(item, { focusFirstChange: true })
+          await navigate({ target: 'git-diff', item })
           return { path: command.path }
         }
         case 'explain-code': {
@@ -842,6 +894,10 @@ export function useStandaloneWorkbenchPageModel(
             explanations: command.explanations,
             replace: command.replace,
           })
+          // 第一条讲解成了当前讲解：把它的文件带到普通文件区（滚到气泡由编辑器自己完成）。「切到某条讲解」的
+          // effect 随后也会跟一次，同一个文件的第二次打开是空操作。
+          const [first] = batch
+          if (first) await navigate({ target: 'file', path: first.path })
           return { added: batch.length }
         }
         case 'clear-explanations':
@@ -910,12 +966,14 @@ export function useStandaloneWorkbenchPageModel(
             : undefined
           const firstProblem =
             shown?.problems.find((problem) => problem.severity === 'error') ?? shown?.problems[0]
-          if (shown && firstProblem) {
-            showEditorSurface()
-            await editorNavigation.goToLocation(shown.path, firstProblem.line, firstProblem.column, {
+          if (shown && firstProblem)
+            await navigate({
+              target: 'file',
+              path: shown.path,
+              line: firstProblem.line,
+              column: firstProblem.column,
               focus: false,
             })
-          }
           if (command.show) surface.openBottomTool('problems')
           return {
             ...(shown && firstProblem
@@ -998,6 +1056,35 @@ export function useStandaloneWorkbenchPageModel(
     }
   }
 
+  /** 改动卡里的文件以只读预览打开：优先用卡片带的改动后正文，没有就从磁盘读。 */
+  async function openFileChangePreview(
+    entry: WorkbenchChatFileChangeEntry,
+    projectRoot: string
+  ): Promise<void> {
+    const previewTab = buildLightTabFromChangePreview(entry, projectRoot)
+    if (previewTab) {
+      await navigate({ target: 'file-preview', tab: previewTab })
+      return
+    }
+
+    try {
+      const file = Result.unwrap(
+        await workbenchHost.kernel.project.readWorkbenchFile({
+          projectRoot,
+          path: entry.path,
+          maxChars: LIGHT_FILE_PREVIEW_MAX_CHARS,
+        })
+      )
+      await navigate({ target: 'file-preview', tab: buildLightTabFromReadFile(file) })
+    } catch (error) {
+      const appError = AppError.from(error)
+      translate.messageLatest.current.error({
+        title: translate.tLatest.current('workbench.readFileFailed'),
+        description: appError.message,
+      })
+    }
+  }
+
   async function handleWorkbenchChatFileChangeOpen(
     entry: WorkbenchChatFileChangeEntry
   ): Promise<void> {
@@ -1008,34 +1095,12 @@ export function useStandaloneWorkbenchPageModel(
     const activeRoot = normalizeWorkspaceRoot(activeProject.rootPath)
 
     if (!entryRoot || entryRoot === activeRoot) {
-      await editorNavigation.selectFile(entry.path)
+      await navigate({ target: 'file', path: entry.path })
       return
     }
 
     if (!entry.rootPath) return
-
-    const previewTab = buildLightTabFromChangePreview(entry, entry.rootPath)
-    if (previewTab) {
-      editorNavigation.openLightTab(previewTab)
-      return
-    }
-
-    try {
-      const file = Result.unwrap(
-        await workbenchHost.kernel.project.readWorkbenchFile({
-          projectRoot: entry.rootPath,
-          path: entry.path,
-          maxChars: LIGHT_FILE_PREVIEW_MAX_CHARS,
-        })
-      )
-      editorNavigation.openLightTab(buildLightTabFromReadFile(file))
-    } catch (error) {
-      const appError = AppError.from(error)
-      translate.messageLatest.current.error({
-        title: translate.tLatest.current('workbench.readFileFailed'),
-        description: appError.message,
-      })
-    }
+    await openFileChangePreview(entry, entry.rootPath)
   }
 
   async function handleWorkbenchChatFileChangesReview(
@@ -1069,32 +1134,7 @@ export function useStandaloneWorkbenchPageModel(
       return
     }
 
-    const previewTab = buildLightTabFromChangePreview(
-      entry,
-      entry.rootPath ?? activeProject.rootPath
-    )
-    if (previewTab) {
-      editorNavigation.openLightTab(previewTab)
-      return
-    }
-
-    const projectRoot = entry.rootPath ?? activeProject.rootPath
-    try {
-      const file = Result.unwrap(
-        await workbenchHost.kernel.project.readWorkbenchFile({
-          projectRoot,
-          path: entry.path,
-          maxChars: LIGHT_FILE_PREVIEW_MAX_CHARS,
-        })
-      )
-      editorNavigation.openLightTab(buildLightTabFromReadFile(file))
-    } catch (error) {
-      const appError = AppError.from(error)
-      translate.messageLatest.current.error({
-        title: translate.tLatest.current('workbench.readFileFailed'),
-        description: appError.message,
-      })
-    }
+    await openFileChangePreview(entry, entry.rootPath ?? activeProject.rootPath)
   }
 
   /** 回答里的路径在编辑器里打开；返回 false = 不在当前项目里，交给调用方决定要不要让系统打开。 */
@@ -1105,7 +1145,7 @@ export function useStandaloneWorkbenchPageModel(
     const relativePath = resolveWorkbenchChatWorkspacePath(path, activeProject.rootPath)
     if (!relativePath || relativePath === '.') return false
 
-    await editorNavigation.selectFile(relativePath)
+    await navigate({ target: 'file', path: relativePath })
     return true
   }
 
@@ -1222,7 +1262,7 @@ export function useStandaloneWorkbenchPageModel(
       await workbench.refreshLoadedDirectories()
     }
 
-    await workbench.selectFile(WORKBENCH_NATIVE_AI_RULES_PATH)
+    await navigate({ target: 'file', path: WORKBENCH_NATIVE_AI_RULES_PATH })
   }
 
   const commandStatusLabel = getWorkbenchCommandStatusLabel(
@@ -1300,6 +1340,7 @@ export function useStandaloneWorkbenchPageModel(
       handleWorkbenchChatFileChangeOpen: openChatFileChange,
       handleWorkbenchChatFileChangesReview: reviewChatFileChanges,
       handleWorkbenchChatRunChangesReview: reviewChatRunChanges,
+      navigate,
       showEditorSurface,
       handleWorkbenchChatWorkspacePathOpen: openChatWorkspacePath,
       handleWorkbenchBrowserElementPicked,

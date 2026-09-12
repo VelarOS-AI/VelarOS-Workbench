@@ -18,10 +18,10 @@ export interface WorkspaceGitLineStatsRefreshRequest {
   force?: boolean
 }
 
+/** 什么时候拉取由调用方决定（见 useWorkbenchGitState 的刷新时机）；这里只管拉取与代际守卫。 */
 export interface UseWorkspaceGitLineStatsOptions {
   enabled?: boolean
   refreshOnMount?: boolean
-  watchFileChanges?: boolean
 }
 
 interface UseWorkspaceGitLineStatsResult {

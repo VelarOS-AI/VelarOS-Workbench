@@ -9,9 +9,7 @@ import type { SystemWorkspaceGitSummary } from '@shared/contracts'
 export type WorkspaceGitSummariesRefreshReason =
   | 'mount'
   | 'manual'
-  | 'refresh-key'
   | 'files-changed'
-  | 'session-workspace'
   | 'surface-open'
   | 'workspace-bound'
   | 'git-action'
@@ -22,12 +20,10 @@ export interface WorkspaceGitSummariesRefreshRequest {
   force?: boolean
 }
 
+/** 什么时候拉取由调用方决定（见 useWorkbenchGitState 的刷新时机）；这里只管拉取与代际守卫。 */
 export interface UseWorkspaceGitSummariesOptions {
   enabled?: boolean
-  refreshKey?: number | string
   refreshOnMount?: boolean
-  watchFileChanges?: boolean
-  watchSessionWorkspace?: boolean
 }
 
 interface UseWorkspaceGitSummariesResult {
@@ -42,7 +38,7 @@ export function useWorkspaceGitSummaries(
   workspaceRoot: Nullable<string>,
   options: UseWorkspaceGitSummariesOptions = {}
 ): UseWorkspaceGitSummariesResult {
-  const { enabled = true, refreshKey, refreshOnMount = true } = options
+  const { enabled = true, refreshOnMount = true } = options
   const [activeSummary, setActiveSummary] =
     useState<Nullable<SystemWorkspaceGitSummary>>(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -80,7 +76,7 @@ export function useWorkspaceGitSummaries(
       return
     }
     if (refreshOnMount) void refresh({ reason: 'mount' })
-  }, [enabled, refresh, refreshKey, refreshOnMount, workspaceRoot])
+  }, [enabled, refresh, refreshOnMount, workspaceRoot])
 
   return {
     summaries: activeSummary ? [activeSummary] : [],

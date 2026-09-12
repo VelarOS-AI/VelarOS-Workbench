@@ -38,7 +38,7 @@ void describe('Workbench agent UI and AI changes wiring', () => {
     assert.match(pageModel, /editorNavigation\.debug\.openTab\(command\.url\)/u)
     assert.match(pageModel, /window\.open\(command\.url, '_blank', 'noopener'\)/u)
     // 问题面板只列当前文件：先把有问题的文件定位到第一个问题再开面板。
-    assert.match(pageModel, /await editorNavigation\.goToLocation\(shown\.path, firstProblem\.line, firstProblem\.column, \{\n\s*focus: false,/u)
+    assert.match(pageModel, /await navigate\(\{\n\s*target: 'file',\n\s*path: shown\.path,\n\s*line: firstProblem\.line,\n\s*column: firstProblem\.column,\n\s*focus: false,/u)
     assert.match(pageModel, /if \(command\.show\) surface\.openBottomTool\('problems'\)/u)
     // 讲解气泡是编辑器扩展，随切文件按存储行号重新锚定。
     assert.match(editor, /workbenchExplanationExtension,/u)
@@ -88,7 +88,7 @@ void describe('Workbench agent UI and AI changes wiring', () => {
     // 一批文件在后台开成标签，不逐个切过去；只给开出了标签的文件标选区，最后停在第一个文件。
     assert.match(openFiles, /if \(await workbench\.preloadOpenTab\(file\.path\)\) opened\.push\(file\)/u)
     assert.match(openFiles, /aiHighlightStore\.add\(\n\s*context\.projectRoot,\n\s*opened\.flatMap/u)
-    assert.match(openFiles, /await editorNavigation\.goToLocation\(primary\.path/u)
+    assert.match(openFiles, /await navigate\(\{\n\s*target: 'file',\n\s*path: primary\.path/u)
     assert.doesNotMatch(openFiles, /editorNavigation\.selectFile/u)
     // AI 用 clear-highlights 取消。
     assert.match(pageModel, /case 'clear-highlights':\n\s*return \{ cleared: aiHighlightStore\.clear\(context\.projectRoot, command\.paths\) \}/u)

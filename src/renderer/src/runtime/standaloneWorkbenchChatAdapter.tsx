@@ -45,6 +45,7 @@ import type { WorkbenchAgentEngineModelCatalog } from '@shared/workbenchResource
 
 import workbenchAppIconUrl from '../../../../build/icon.svg?url'
 import type { WorkbenchChatProviderId } from '../../../plugins/agent-engines/identity'
+import { resolveWorkbenchChatComposerPlaceholder } from '../models/chat/workbenchChatComposerPlaceholder'
 import {
   formatWorkbenchChatPathForDisplay,
   resolveWorkbenchChatAbsolutePath,
@@ -1688,9 +1689,7 @@ function StandaloneWorkbenchChatSessionSurface({
       input: {
         input: {
           value: prompt,
-          placeholder: currentFilePath
-            ? t('workbench.chatAskAboutFile', { path: currentFilePath })
-            : t('workbench.chatPlaceholder'),
+          placeholder: resolveWorkbenchChatComposerPlaceholder(includedCurrentFilePath, t),
           disabled:
             !canSteerRun
             && shouldBlockStandaloneRunSubmission(

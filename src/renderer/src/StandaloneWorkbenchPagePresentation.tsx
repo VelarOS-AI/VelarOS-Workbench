@@ -284,7 +284,7 @@ export function StandaloneWorkbenchPagePresentation({
     if (!pendingFileOpenId || !pendingFileOpenPath || !activeProjectId) return
 
     let active = true
-    void workbench.selectFile(pendingFileOpenPath).finally(() => {
+    void model.actions.navigate({ target: 'file', path: pendingFileOpenPath }).finally(() => {
       if (active) {
         void window.velarosWorkbenchProjectHub.acknowledgeFileOpen(pendingFileOpenId)
       }
@@ -292,7 +292,7 @@ export function StandaloneWorkbenchPagePresentation({
     return () => {
       active = false
     }
-  }, [activeProjectId, pendingFileOpenId, pendingFileOpenPath, workbench.selectFile])
+  }, [activeProjectId, model.actions.navigate, pendingFileOpenId, pendingFileOpenPath])
 
   if (!workbench.activeProject) return <main className={styles.root} />
   const projectRoot = workbench.activeProject.rootPath
@@ -351,10 +351,7 @@ export function StandaloneWorkbenchPagePresentation({
           projectRoot={projectRoot}
           tab={tab}
           workbenchTheme={workbenchPreferences.preferences.theme}
-          onOpenFile={(path, line) => {
-            model.actions.showEditorSurface()
-            void editorNavigation.goToLocation(path, line)
-          }}
+          onOpenFile={(path, line) => void model.actions.navigate({ target: 'file', path, line })}
         />
       ),
     }
@@ -883,10 +880,9 @@ export function StandaloneWorkbenchPagePresentation({
           open={dialogs.codeGraphOpen}
           onOpenChange={dialogs.setCodeGraphOpen}
           projectRoot={workbench.activeProject.rootPath}
-          onOpenLocation={(path, line, column) => {
-            model.actions.showEditorSurface()
-            void editorNavigation.goToLocation(path, line ?? 1, column ?? 1)
-          }}
+          onOpenLocation={(path, line, column) =>
+            void model.actions.navigate({ target: 'file', path, line: line ?? 1, column: column ?? 1 })
+          }
         />
       </div>
       <QuickOpen
@@ -894,10 +890,9 @@ export function StandaloneWorkbenchPagePresentation({
         activeProject={workbench.activeProject}
         openTabs={workbench.openTabs}
         onClose={surface.closeQuickOpen}
-        onOpenLocation={(path, line, column) => {
-          model.actions.showEditorSurface()
-          void editorNavigation.goToLocation(path, line, column)
-        }}
+        onOpenLocation={(path, line, column) =>
+          void model.actions.navigate({ target: 'file', path, line, column })
+        }
       />
     </main>
   )
