@@ -469,6 +469,11 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     gitDiffNext: 'Next difference',
     gitDiffChangeSummary: '{count} differences',
     aiChangePreviewTitle: 'Round Changes',
+    goalAutoContinueNotice: 'Goal not finished yet, continuing automatically',
+    goalAutoContinueInstruction:
+      'The current goal is not finished: {objective}\nKeep going without waiting for the user: decide the next step from the progress so far, then keep reading, editing, running or verifying. When the goal is truly done, call goal:update({status:"complete"}); if a real blocker stops progress, call goal:update({status:"blocked"}) and explain why.',
+    goalAutoContinueLimitTitle: 'Paused automatic goal continuation',
+    goalAutoContinueLimitDescription: 'The goal continued automatically for {count} rounds in a row without finishing. Click Continue on the goal card to keep going.',
     aiChangePreviewClose: 'Close AI changes preview',
     aiChangePreviewFileCount: '{count} files',
     aiChangePreviewAdded: 'Added',

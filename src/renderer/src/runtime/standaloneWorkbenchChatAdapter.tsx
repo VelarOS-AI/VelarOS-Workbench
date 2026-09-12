@@ -3,6 +3,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   useSyncExternalStore,
 } from 'react'
@@ -50,9 +51,10 @@ import {
   formatWorkbenchChatPathForDisplay,
   resolveWorkbenchChatAbsolutePath,
 } from '../models/chat/workbenchChatWorkspacePath'
+import { resolveWorkbenchGoalAutoContinue } from '../models/chat/workbenchGoalAutoContinue'
 import { readWorkbenchPermissionConfirmationMode } from '../models/settings/workbenchPreferences'
 import styles from '../styles/workbenchPageStyles'
-import { useMemoizedFn } from '../support/genericHooks'
+import { useLatest, useMemoizedFn } from '../support/genericHooks'
 
 import { WorkbenchContextUsageIndicator } from './conversation/WorkbenchContextUsageIndicator'
 import {
@@ -757,6 +759,80 @@ function StandaloneWorkbenchChatSessionSurface({
         void submit(draft.value, draft.files, { onAccepted: () => resolve(true) }).then(resolve)
       }),
   })
+  // 目标自动续跑（规则见 resolveWorkbenchGoalAutoContinue）：每个会话自上次用户亲自发言以来续跑了几轮。
+  const goalAutoContinueRoundsRef = useRef(new Map<string, number>())
+  const handledGoalContinueRunRef = useRef<Nullable<string>>(null)
+  const queuedDraftCountLatest = useLatest(queuedDrafts.drafts.length)
+
+  useEffect(() => {
+    // 流里的完成事件先把状态记成 completed，执行记录要等 invoke 返回才释放：释放之前开不了下一轮，
+    // 先不处理这一轮，等释放后的那次渲染再判断。
+    if (
+      providerId !== 'workbench'
+      || chat.status !== 'completed'
+      || !chat.lastRunFinishedAt
+      || hasPendingAgentExecution
+    ) return
+    const sessionId = chat.sessionId
+    const finishedAt = chat.lastRunFinishedAt
+    const runKey = `${sessionId}:${finishedAt}`
+    if (handledGoalContinueRunRef.current === runKey) return
+    handledGoalContinueRunRef.current = runKey
+
+    void (async () => {
+      const lifecycle = await window.velarosWorkbenchKernel
+        .getGoalLifecycle({ sessionId })
+        .catch((error: unknown) => {
+          log.warn('读取目标失败，不自动续跑', { sessionId, error })
+          return null
+        })
+      // 读目标期间用户可能已经发了新消息或切到别的会话：只在同一轮结束的现场续跑。
+      const current = getState(projectRoot, providerId)
+      if (
+        current.sessionId !== sessionId
+        || current.status !== 'completed'
+        || current.lastRunFinishedAt !== finishedAt
+        || !!findActiveExecution(projectRoot, providerId, sessionId)
+      ) return
+
+      const consecutiveAutoRounds = goalAutoContinueRoundsRef.current.get(sessionId) ?? 0
+      const decision = resolveWorkbenchGoalAutoContinue({
+        runCompleted: true,
+        msSinceRunFinished: Date.now() - finishedAt,
+        goal: lifecycle?.ok ? lifecycle.goal : null,
+        hasQueuedUserInput: queuedDraftCountLatest.current > 0,
+        consecutiveAutoRounds,
+      })
+      if (decision.kind === 'round-limit') {
+        workbenchMessage.info({
+          title: t('workbench.goalAutoContinueLimitTitle'),
+          description: t('workbench.goalAutoContinueLimitDescription', {
+            count: consecutiveAutoRounds,
+          }),
+        })
+        return
+      }
+      if (decision.kind !== 'continue') return
+
+      goalAutoContinueRoundsRef.current.set(sessionId, consecutiveAutoRounds + 1)
+      const summary = t('workbench.goalAutoContinueNotice')
+      await submit(summary, [], {
+        goalMode: true,
+        systemNotice: {
+          summary,
+          detail: t('workbench.goalAutoContinueInstruction', { objective: decision.objective }),
+        },
+      })
+    })()
+  }, [
+    chat.lastRunFinishedAt,
+    chat.sessionId,
+    chat.status,
+    hasPendingAgentExecution,
+    projectRoot,
+    providerId,
+  ])
+
   const lastOutboundMessage = chat.messages.findLast((message) => message.role === 'user')
   const autoScrollResetKey = [
     chat.sessionId,
@@ -1279,10 +1355,18 @@ function StandaloneWorkbenchChatSessionSurface({
       onAccepted?: () => void
       /** 目标卡的「继续」：这一轮按目标模式跑，不看输入框里的模式开关（与 Desktop continueGoal 相同）。 */
       goalMode?: boolean
+      /**
+       * 宿主替用户开的一轮（目标自动续跑）：以系统说明而不是用户消息起头，不动输入框里的草稿、附件和
+       * 拾取的元素，也不附带当前文件。
+       */
+      systemNotice?: { summary: string; detail: string }
     }
   ): Promise<boolean> {
+    const systemNotice = options?.systemNotice
+    // 宿主续跑只接在一轮正常完成之后：运行中进来的话会被当成引导注入，冒充用户发言。
+    if (systemNotice && getState(projectRoot, providerId).status !== 'completed') return false
     const text = draftValue.trim()
-    const selections = browserSelections
+    const selections = systemNotice ? [] : browserSelections
     // 运行中补发 = 引导：注入正在执行的这一轮，而不是排到结束后另起一轮（与 Desktop 一致）。
     // 外部引擎没有中途注入语义、引导通道也不带附件（附件由输入框入口改为结束后发送），这两种仍按原规则拦下。
     if (
@@ -1374,28 +1458,39 @@ function StandaloneWorkbenchChatSessionSurface({
       }
     }
     const attachmentContext = await buildAttachmentContext(draftFiles)
-    const currentFileContext = includedCurrentFilePath
+    const currentFileContext = includedCurrentFilePath && !systemNotice
       ? `Current Workbench file: ${includedCurrentFilePath}`
       : ''
     const browserElementContext = formatBrowserElementSelectionsForPrompt(selections)
-    setPrompt('')
-    setFiles([])
-    setBrowserSelections([])
+    if (!systemNotice) {
+      setPrompt('')
+      setFiles([])
+      setBrowserSelections([])
+      // 用户亲自发了话：目标自动续跑的连续轮数从头算。
+      goalAutoContinueRoundsRef.current.delete(chat.sessionId)
+    }
     // 只有正常完成才结束一轮：中止或失败后的下一条消息继续被打断的那一轮，按引导呈现、
     // 与上一轮归在同一组里，而不是另起一轮（与 Desktop 的 shouldContinueInterruptedConversation 一致）。
     const continuesInterruptedRun = isInterruptedRunStatus(getState(projectRoot, providerId).status)
-    const userMessage: ChatMessage = {
-      ...createTextMessage(
-        'user',
-        text
-          || draftFiles.map((file) => file.name).join(', ')
-          || buildBrowserElementDisplayFallback(selections)
-      ),
-      ...(continuesInterruptedRun
-        ? { conversationKind: 'run-guidance' as const, guidanceStatus: 'sent' as const }
-        : { conversationKind: 'turn-input' as const }),
-      ...(selections.length > 0 ? { browserElementSelections: [...selections] } : {}),
-    }
+    const userMessage: ChatMessage = systemNotice
+      ? createStandaloneSystemNotice({
+          id: nextId('workbench-goal-continue'),
+          ...systemNotice,
+          timestamp: Date.now(),
+          kind: 'goal-continuation',
+        })
+      : {
+          ...createTextMessage(
+            'user',
+            text
+              || draftFiles.map((file) => file.name).join(', ')
+              || buildBrowserElementDisplayFallback(selections)
+          ),
+          ...(continuesInterruptedRun
+            ? { conversationKind: 'run-guidance' as const, guidanceStatus: 'sent' as const }
+            : { conversationKind: 'turn-input' as const }),
+          ...(selections.length > 0 ? { browserElementSelections: [...selections] } : {}),
+        }
     const attachmentMetadata = draftFiles.map((file, index) => ({
       id: `${userMessage.id}-attachment-${index}`,
       kind: file.type.startsWith('image/') ? 'image' as const : 'file' as const,

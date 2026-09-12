@@ -240,17 +240,22 @@ export function buildRewindNoticeText(input: {
   }
 }
 
-/** 宿主写的留痕：user role 传输、`system-notice` 语义，模型侧由 main 包进 `<sys_note>` 信封。 */
+/**
+ * 宿主写的留痕：user role 传输、`system-notice` 语义，模型侧由 main 包进 `<sys_note>` 信封。
+ * `kind` 只决定通知行的图标，缺省是会话回溯。
+ */
 export function createStandaloneSystemNotice(input: {
   id: string
   summary: string
   detail: string
   timestamp: number
+  kind?: ChatMessage['systemNoticeKind']
 }): ChatMessage {
   return {
     id: input.id,
     role: 'user',
     conversationKind: 'system-notice',
+    ...(input.kind ? { systemNoticeKind: input.kind } : {}),
     blocks: [
       { type: 'text', text: input.summary },
       { type: 'text', text: input.detail },

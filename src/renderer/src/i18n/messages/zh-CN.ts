@@ -455,6 +455,11 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     gitDiffNext: '下一处差异',
     gitDiffChangeSummary: '{count} 个差异',
     aiChangePreviewTitle: '本轮改动',
+    goalAutoContinueNotice: '目标还没完成，自动继续推进',
+    goalAutoContinueInstruction:
+      '当前目标尚未完成：{objective}\n请直接接着推进，不必等用户回复：先根据已有进展确定下一步，再继续读取、修改、执行或验证。目标真正完成时调用 goal:update({status:"complete"})；遇到无法继续推进的真实阻碍时调用 goal:update({status:"blocked"}) 并说明原因。',
+    goalAutoContinueLimitTitle: '已暂停目标的自动续跑',
+    goalAutoContinueLimitDescription: '已经连续自动续跑 {count} 轮，目标仍未收束。要接着推进，点目标卡上的「继续」。',
     aiChangePreviewClose: '关闭 AI 改动预览',
     aiChangePreviewFileCount: '{count} 个文件',
     aiChangePreviewAdded: '新增',
