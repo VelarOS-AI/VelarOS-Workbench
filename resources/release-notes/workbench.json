@@ -3,6 +3,36 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
+      "version": "0.3.49",
+      "releasedAt": "2026-09-12",
+      "title": {
+        "zh": "文件可切换只读与编辑，目标会自己接着推进",
+        "en": "Switch files between read-only and edit, and goals keep going on their own"
+      },
+      "added": {
+        "zh": [
+          "编辑器里每个文件都可以在只读和编辑之间切换（标签栏右侧的锁 / 笔图标）。被 .gitignore 忽略的文件默认只读，切到编辑后就能改；只读只挡你在编辑器里输入，不影响 AI 改文件。",
+          "目标还没完成、没有阻塞也没有暂停时，一轮结束后会自动接着推进下一轮，聊天里留一行说明，不会替你发消息；你停止、执行出错或排着自己的消息时不会自动续，连续 20 轮后自动暂停。",
+          "左侧「AI 改动」改名为「会话改动」并换了图标；在聊天里打开的单轮改动预览标题为「本轮改动」。"
+        ],
+        "en": [
+          "Every file in the editor can switch between read-only and edit mode (the lock / pencil icon on the right of the tab bar). Files ignored by .gitignore open read-only and become editable once you switch; read-only only blocks your typing in the editor and never blocks AI edits.",
+          "While a goal is not finished, blocked or paused, the next round starts automatically when a round ends, leaving a note in the chat instead of sending a message for you. It does not continue after you stop, after an error or while your own messages are queued, and it pauses after 20 rounds in a row.",
+          "The \"AI Changes\" panel on the left is now \"Session Changes\" with a new icon; the single-round preview opened from the chat is titled \"Round Changes\"."
+        ]
+      },
+      "fixed": {
+        "zh": [
+          "被 .gitignore 忽略的文件在编辑器里无法修改。",
+          "顶部的目标和计划两行没有对齐：目标图标带着底色、比文字高，计划标题显示成 plan:update。"
+        ],
+        "en": [
+          "Files ignored by .gitignore could not be edited in the editor.",
+          "The goal and plan rows at the top were misaligned: the goal icon had a background and sat above its text, and the plan was titled plan:update."
+        ]
+      }
+    },
+    {
       "version": "0.3.48",
       "releasedAt": "2026-09-12",
       "title": {
