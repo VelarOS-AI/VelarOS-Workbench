@@ -38,6 +38,8 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     goalDockActionPause: 'Pause goal',
     goalDockActionContinue: 'Continue goal',
     goalDockActionRemove: 'Remove goal',
+    // 回溯只撤回 Agent 的改动（见 WorkbenchChatRunChanges），不是把项目整个恢复到那一刻。
+    rewindDialogRestoreFilesHint: "Also undo the AI's file changes from these turns. Your own edits are kept.",
     placeholder: 'Ask Workbench…',
     running: 'Running…',
     composerRunProfile_auto: 'Auto',

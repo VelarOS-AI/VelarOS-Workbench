@@ -31,6 +31,15 @@ void describe('Workbench conversation localization contract', () => {
       translateWorkbenchAppMessage('zh-CN', 'chat.goalDockContinueGuidance'),
       '基于当前实际状态继续推进原目标；保留已完成的工作，先确认未完成事项与未执行输入，再继续。',
     )
+    // 回溯只撤回 Agent 的改动：确认框不能再说「把项目根恢复到该时点」。
+    assert.equal(
+      translateWorkbenchAppMessage('zh-CN', 'chat.rewindDialogRestoreFilesHint', { roots: 1 }),
+      '同时撤回这几轮里 AI 对文件的改动，你自己的改动会保留。',
+    )
+    assert.equal(
+      translateWorkbenchAppMessage('en-US', 'chat.rewindDialogRestoreFilesHint', { roots: 1 }),
+      "Also undo the AI's file changes from these turns. Your own edits are kept.",
+    )
   })
 
   void test('localizes elapsed run time instead of rendering the translation key', () => {

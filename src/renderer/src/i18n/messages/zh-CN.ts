@@ -37,6 +37,8 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     goalDockActionPause: '暂停目标',
     goalDockActionContinue: '继续目标',
     goalDockActionRemove: '移除目标',
+    // 回溯只撤回 Agent 的改动（见 WorkbenchChatRunChanges），不是把项目整个恢复到那一刻。
+    rewindDialogRestoreFilesHint: '同时撤回这几轮里 AI 对文件的改动，你自己的改动会保留。',
     running: '运行中…',
   },
   workbench: {
