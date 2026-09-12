@@ -43,6 +43,7 @@ function renderRuntimeMark(providerId: WorkbenchChatProviderId): string {
           currentFilePath: null,
           conversationRefreshKey: 0,
           pendingBrowserElementSelections: [],
+          pendingFileReferences: [],
         })
       )
     )

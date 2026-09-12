@@ -10,6 +10,7 @@ import {
 } from 'react'
 import {
   ArrowClockwiseIcon,
+  ChatCircleTextIcon,
   CopyIcon,
   FilePlusIcon,
   FolderPlusIcon,
@@ -46,7 +47,14 @@ import { requestScrollIntoView } from '../../support/scrollUtils'
 import { WorkbenchContextMenu } from '../chrome/WorkbenchContextMenu'
 
 import { FileSearchResults } from './FileSearchResults'
-import { createTreeEntry, deleteSelectedTreeEntries, FileTree, type FileTreeApi } from './FileTree'
+import {
+  createTreeEntry,
+  deleteSelectedTreeEntries,
+  FileTree,
+  type FileTreeApi,
+  isTreeEntryInMultiSelection,
+  resolveTreeChatFilePaths,
+} from './FileTree'
 
 export interface WorkbenchFilePanelTreeProps {
   project: WorkbenchProject
@@ -99,6 +107,8 @@ export interface WorkbenchFilePanelHandlersProps {
   onSelectFile: (path: string) => void
   onRunFile?: (path: string) => void
   onBuildFile?: (path: string) => void
+  /** 右键「添加到聊天」：把文件作为引用挂到聊天输入框（只挂路径，一次可以挂一组多选的文件）。 */
+  onAddFilesToChat?: (paths: readonly string[]) => void
 }
 
 export function resolveWorkbenchEntryAbsolutePath(projectRoot: string, entryPath: string): string {
@@ -150,6 +160,7 @@ export function FilePanel({
     onSelectFile,
     onRunFile,
     onBuildFile,
+    onAddFilesToChat,
   },
 }: FilePanelProps): ReactElement {
   const { t } = useWorkbenchI18n()
@@ -162,6 +173,8 @@ export function FilePanel({
       x: number
       y: number
       entry: WorkbenchDirectoryEntry
+      /** 「添加到聊天」要挂的文件：右键时就定下来，点在多选里是整组里的文件。 */
+      chatFilePaths: string[]
     }>
   >(null)
   const [activeSearchResultIndex, setActiveSearchResultIndex] = useState(0)
@@ -240,11 +253,13 @@ export function FilePanel({
   function openContextMenu(entry: WorkbenchDirectoryEntry, event: MouseEvent): void {
     event.preventDefault()
     event.stopPropagation()
-    onSelectEntryPath(entry.path)
+    // 右键点在一组多选里时保留这组选择（菜单里的「添加到聊天」作用于整组），否则选中右键的这一项。
+    if (!isTreeEntryInMultiSelection(treeApiRef.current, entry.path)) onSelectEntryPath(entry.path)
     setContextMenu({
       x: event.clientX,
       y: event.clientY,
       entry,
+      chatFilePaths: resolveTreeChatFilePaths(treeApiRef.current, entry),
     })
   }
 
@@ -257,6 +272,7 @@ export function FilePanel({
       x: event.clientX,
       y: event.clientY,
       entry: rootTreeEntry,
+      chatFilePaths: [],
     })
   }
 
@@ -440,6 +456,20 @@ export function FilePanel({
           compact
           onDismiss={() => setContextMenu(null)}
           items={[
+            ...(contextMenu.chatFilePaths.length > 0
+              ? [
+                  {
+                    id: 'add-to-chat',
+                    label:
+                      contextMenu.chatFilePaths.length > 1
+                        ? t('workbench.addFilesToChat', { count: contextMenu.chatFilePaths.length })
+                        : t('workbench.editorContextAddToChat'),
+                    icon: <ChatCircleTextIcon size={14} />,
+                    disabled: !onAddFilesToChat,
+                    onSelect: () => onAddFilesToChat?.(contextMenu.chatFilePaths),
+                  },
+                ]
+              : []),
             ...(contextMenu.entry.type === 'file'
               && isWorkbenchVelarFilePath(contextMenu.entry.path)
               ? [
@@ -447,6 +477,7 @@ export function FilePanel({
                     id: 'run-file',
                     label: t('workbench.editorContextRun'),
                     icon: <PlayIcon size={14} />,
+                    separatorBefore: contextMenu.chatFilePaths.length > 0,
                     disabled: !onRunFile,
                     onSelect: () => onRunFile?.(contextMenu.entry.path),
                   },
@@ -464,8 +495,9 @@ export function FilePanel({
               label: t('workbench.createFile'),
               icon: <FilePlusIcon size={14} />,
               separatorBefore:
-                contextMenu.entry.type === 'file'
-                && isWorkbenchVelarFilePath(contextMenu.entry.path),
+                contextMenu.chatFilePaths.length > 0
+                || (contextMenu.entry.type === 'file'
+                  && isWorkbenchVelarFilePath(contextMenu.entry.path)),
               disabled: isMutatingTree,
               onSelect: () => createEntryFromContext('file'),
             },

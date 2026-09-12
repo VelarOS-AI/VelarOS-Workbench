@@ -48,6 +48,13 @@ import workbenchAppIconUrl from '../../../../build/icon.svg?url'
 import type { WorkbenchChatProviderId } from '../../../plugins/agent-engines/identity'
 import { resolveWorkbenchChatComposerPlaceholder } from '../models/chat/workbenchChatComposerPlaceholder'
 import {
+  appendWorkbenchChatFileReferences,
+  buildWorkbenchChatFileReferenceOptions,
+  formatWorkbenchChatFileReferencesForPrompt,
+  readWorkbenchChatFileReferencePath,
+  workbenchChatFileReferenceId,
+} from '../models/chat/workbenchChatFileReferences'
+import {
   formatWorkbenchChatPathForDisplay,
   resolveWorkbenchChatAbsolutePath,
 } from '../models/chat/workbenchChatWorkspacePath'
@@ -709,6 +716,8 @@ function StandaloneWorkbenchChatSessionSurface({
   scrollNavigatorHidden = false,
   pendingBrowserElementSelections,
   onBrowserElementSelectionsConsumed,
+  pendingFileReferences,
+  onFileReferencesConsumed,
   onOpenFileChange,
   onOpenWorkspacePath,
   onReviewFileChanges,
@@ -736,6 +745,12 @@ function StandaloneWorkbenchChatSessionSurface({
   const [browserSelections, setBrowserSelections] = useState<BrowserElementSelection[]>([])
   const [includedCurrentFilePath, setIncludedCurrentFilePath] =
     useState<Nullable<string>>(currentFilePath)
+  /**
+   * 右键「添加到聊天」挂上的文件（只发路径锚点，由 Agent 自己读）：前者是本会话挂过的全部，输入框里敲 `@`
+   * 可以从中重新选；后者是这条消息挂着的那些，显示成 chip，发出后清空。
+   */
+  const [fileReferencePaths, setFileReferencePaths] = useState<string[]>([])
+  const [selectedFileReferencePaths, setSelectedFileReferencePaths] = useState<string[]>([])
   const [goalMode, setGoalMode] = useState(false)
   const [planMode, setPlanMode] = useState(false)
   const [runProfile, setRunProfile] = useState<RunProfileSelectionId>(readStoredRunProfile)
@@ -862,6 +877,8 @@ function StandaloneWorkbenchChatSessionSurface({
   // 刚收进来的投递立刻清掉。
   useEffect(() => {
     setBrowserSelections([])
+    setFileReferencePaths([])
+    setSelectedFileReferencePaths([])
   }, [chat.sessionId])
 
   // 宿主投递来的拾取结果收进输入框，并回执「已接收」让宿主清掉待投递项。
@@ -878,6 +895,29 @@ function StandaloneWorkbenchChatSessionSurface({
       pendingBrowserElementSelections.map((delivery) => delivery.deliveryId)
     )
   }, [onBrowserElementSelectionsConsumed, pendingBrowserElementSelections])
+
+  // 宿主投递来的「添加到聊天」：挂到这条消息上，同时记进本会话的可引用列表。
+  useEffect(() => {
+    if (pendingFileReferences.length === 0) return
+    const incoming = pendingFileReferences.map((delivery) => delivery.path)
+    setFileReferencePaths((current) => appendWorkbenchChatFileReferences(current, incoming))
+    setSelectedFileReferencePaths((current) => appendWorkbenchChatFileReferences(current, incoming))
+    onFileReferencesConsumed?.(pendingFileReferences.map((delivery) => delivery.deliveryId))
+  }, [onFileReferencesConsumed, pendingFileReferences])
+
+  const fileReferenceOptions = useMemo(
+    () => buildWorkbenchChatFileReferenceOptions(fileReferencePaths),
+    [fileReferencePaths]
+  )
+  /** 这条消息要问的文件：「当前文件」chip 加上挂着的引用，同一个文件只算一次。输入框提示据此说问几个文件。 */
+  const askedFilePaths = useMemo(
+    () =>
+      appendWorkbenchChatFileReferences(
+        includedCurrentFilePath ? [includedCurrentFilePath] : [],
+        selectedFileReferencePaths
+      ),
+    [includedCurrentFilePath, selectedFileReferencePaths]
+  )
 
   useEffect(() => {
     if (
@@ -1026,19 +1066,39 @@ function StandaloneWorkbenchChatSessionSurface({
     })
   }
 
+  /** 只挂了文件、没写字就发出去的消息：气泡里写明问的是哪几个文件。 */
+  function buildFileReferenceDisplayFallback(paths: readonly string[]): string {
+    if (paths.length === 0) return ''
+    return t('workbench.chatFileReferencesMessageFallback', {
+      files: buildWorkbenchChatFileReferenceOptions(paths)
+        .map((option) => option.label)
+        .join(t('workbench.chatFileReferenceListSeparator')),
+    })
+  }
+
   async function sendRunGuidance(
     text: string,
-    selections: readonly BrowserElementSelection[] = []
+    selections: readonly BrowserElementSelection[] = [],
+    referencedFilePaths: readonly string[] = []
   ): Promise<boolean> {
     const sessionId = chat.sessionId
     const guidance: ChatMessage = {
-      ...createTextMessage('user', text || buildBrowserElementDisplayFallback(selections)),
+      ...createTextMessage(
+        'user',
+        text
+          || buildBrowserElementDisplayFallback(selections)
+          || buildFileReferenceDisplayFallback(referencedFilePaths)
+      ),
       conversationKind: 'run-guidance',
       guidanceStatus: 'pending',
       ...(selections.length > 0 ? { browserElementSelections: [...selections] } : {}),
     }
-    // 引导通道只带文字：拾取的元素折成上下文段跟在正文后面。
-    const guidanceText = [text, formatBrowserElementSelectionsForPrompt(selections)]
+    // 引导通道只带文字：拾取的元素、引用的文件路径折成上下文段跟在正文后面。
+    const guidanceText = [
+      text,
+      formatBrowserElementSelectionsForPrompt(selections),
+      formatWorkbenchChatFileReferencesForPrompt(referencedFilePaths),
+    ]
       .filter(Boolean)
       .join('\n\n')
     // 回执回来时用户可能已切到别的会话：更新一律落回发出引导的那个会话。
@@ -1050,6 +1110,7 @@ function StandaloneWorkbenchChatSessionSurface({
       )
     setPrompt('')
     setBrowserSelections([])
+    setSelectedFileReferencePaths([])
     updateGuidanceSession((state) => ({
       ...state,
       messages: [...state.messages, guidance],
@@ -1367,16 +1428,17 @@ function StandaloneWorkbenchChatSessionSurface({
     if (systemNotice && getState(projectRoot, providerId).status !== 'completed') return false
     const text = draftValue.trim()
     const selections = systemNotice ? [] : browserSelections
+    const referencedFilePaths = systemNotice ? [] : selectedFileReferencePaths
     // 运行中补发 = 引导：注入正在执行的这一轮，而不是排到结束后另起一轮（与 Desktop 一致）。
     // 外部引擎没有中途注入语义、引导通道也不带附件（附件由输入框入口改为结束后发送），这两种仍按原规则拦下。
     if (
       providerId === 'workbench'
       && chat.status === 'running'
-      && (text || selections.length > 0)
+      && (text || selections.length > 0 || referencedFilePaths.length > 0)
       && draftFiles.length === 0
-    ) return sendRunGuidance(text, selections)
+    ) return sendRunGuidance(text, selections, referencedFilePaths)
     if (
-      (!text && draftFiles.length === 0 && selections.length === 0)
+      (!text && draftFiles.length === 0 && selections.length === 0 && referencedFilePaths.length === 0)
       || shouldBlockStandaloneRunSubmission(
         chat.status,
         hasPendingAgentExecution,
@@ -1462,10 +1524,13 @@ function StandaloneWorkbenchChatSessionSurface({
       ? `Current Workbench file: ${includedCurrentFilePath}`
       : ''
     const browserElementContext = formatBrowserElementSelectionsForPrompt(selections)
+    // 引用的文件只发路径锚点，内容由 Agent 自己按需去读。
+    const fileReferenceContext = formatWorkbenchChatFileReferencesForPrompt(referencedFilePaths)
     if (!systemNotice) {
       setPrompt('')
       setFiles([])
       setBrowserSelections([])
+      setSelectedFileReferencePaths([])
       // 用户亲自发了话：目标自动续跑的连续轮数从头算。
       goalAutoContinueRoundsRef.current.delete(chat.sessionId)
     }
@@ -1485,6 +1550,7 @@ function StandaloneWorkbenchChatSessionSurface({
             text
               || draftFiles.map((file) => file.name).join(', ')
               || buildBrowserElementDisplayFallback(selections)
+              || buildFileReferenceDisplayFallback(referencedFilePaths)
           ),
           ...(continuesInterruptedRun
             ? { conversationKind: 'run-guidance' as const, guidanceStatus: 'sent' as const }
@@ -1582,7 +1648,12 @@ function StandaloneWorkbenchChatSessionSurface({
                     .join('\n')]
                 : []),
               ...(message.id === submittedMessage.id
-                ? [currentFileContext, attachmentContext, browserElementContext].filter(Boolean)
+                ? [
+                    currentFileContext,
+                    fileReferenceContext,
+                    attachmentContext,
+                    browserElementContext,
+                  ].filter(Boolean)
                 : []),
             ].filter(Boolean).join('\n\n'),
           }))
@@ -1799,7 +1870,7 @@ function StandaloneWorkbenchChatSessionSurface({
       input: {
         input: {
           value: prompt,
-          placeholder: resolveWorkbenchChatComposerPlaceholder(includedCurrentFilePath, t),
+          placeholder: resolveWorkbenchChatComposerPlaceholder(askedFilePaths, t),
           disabled:
             !canSteerRun
             && shouldBlockStandaloneRunSubmission(
@@ -1887,8 +1958,33 @@ function StandaloneWorkbenchChatSessionSurface({
           onChange: setShowThinkingProcess,
         },
         features: {
-          workbenchCurrentFilePath: includedCurrentFilePath ?? undefined,
+          // 当前文件已经作为引用挂着时只留引用那枚 chip，免得同一个文件出现两次。
+          workbenchCurrentFilePath:
+            includedCurrentFilePath && !selectedFileReferencePaths.includes(includedCurrentFilePath)
+              ? includedCurrentFilePath
+              : undefined,
           onDismissWorkbenchCurrentFile: () => setIncludedCurrentFilePath(null),
+          mentionables: {
+            available: fileReferenceOptions,
+            selectedIds: selectedFileReferencePaths.map(workbenchChatFileReferenceId),
+            header: t('workbench.chatFileReferencesHeader'),
+            deleteLabel: t('workbench.chatFileReferenceForget'),
+            onToggleSelected: (id: string, selected: boolean) => {
+              const path = readWorkbenchChatFileReferencePath(id)
+              if (!path) return
+              setSelectedFileReferencePaths((current) =>
+                selected
+                  ? appendWorkbenchChatFileReferences(current, [path])
+                  : current.filter((entry) => entry !== path)
+              )
+            },
+            onDelete: (id: string) => {
+              const path = readWorkbenchChatFileReferencePath(id)
+              if (!path) return
+              setFileReferencePaths((current) => current.filter((entry) => entry !== path))
+              setSelectedFileReferencePaths((current) => current.filter((entry) => entry !== path))
+            },
+          },
           browserElementSelections: browserSelections,
           onRemoveBrowserElementSelection: (id: string) =>
             setBrowserSelections((current) => current.filter((selection) => selection.id !== id)),
@@ -1972,6 +2068,9 @@ function StandaloneWorkbenchChatSessionSurface({
       goalMode,
       hasPendingAgentExecution,
       includedCurrentFilePath,
+      askedFilePaths,
+      fileReferenceOptions,
+      selectedFileReferencePaths,
       queuedDrafts.drafts,
       queuedDrafts.drainingId,
       queuedDrafts.errorMessage,

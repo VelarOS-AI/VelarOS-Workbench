@@ -9,6 +9,7 @@ import {
 } from 'react'
 import {
   CaretDownIcon,
+  ChatCircleTextIcon,
   CodeIcon,
   DotsThreeVerticalIcon,
   EyeIcon,
@@ -95,6 +96,8 @@ interface EditorTabBarProps {
   onCloseOtherOpenFiles: (path: string) => void
   onCloseAllOpenFiles: () => void
   onCloseUnmodifiedOpenFiles: () => void
+  /** 标签右键「添加到聊天」：把这个文件作为引用挂到聊天输入框（只挂路径）。 */
+  onAddFileToChat?: (path: string) => void
   onReorderOpenTabs: (fromPath: string, toPath: string) => void
   onSelectDiffTab?: () => void
   onCloseDiffTab?: () => void
@@ -132,6 +135,7 @@ export function EditorTabBar({
   onCloseOtherOpenFiles,
   onCloseAllOpenFiles,
   onCloseUnmodifiedOpenFiles,
+  onAddFileToChat,
   onReorderOpenTabs,
   onSelectDiffTab,
   onCloseDiffTab,
@@ -648,6 +652,16 @@ export function EditorTabBar({
             <FileIcon size={14} />
             <Text truncate>{t('workbench.openTab')}</Text>
           </Button>
+          {!!onAddFileToChat && (
+            <Button
+              variant="ghost"
+              size="block"
+              onClick={() => onRunTabContextAction(() => onAddFileToChat(tabContextMenu.path))}
+            >
+              <ChatCircleTextIcon size={14} />
+              <Text truncate>{t('workbench.editorContextAddToChat')}</Text>
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="block"

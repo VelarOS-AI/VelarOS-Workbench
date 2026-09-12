@@ -141,6 +141,7 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
         onBuildFile: (path) => {
           void workbench.launchRunSession(buildWorkbenchVelarBuildCommand(path, packageManager))
         },
+        onAddFilesToChat: model.actions.addWorkbenchFilesToChat,
       },
     },
     changes: {
@@ -271,6 +272,7 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
           // 让右侧 ▶ 记住并可右键切换；会话创建后由页面 model 自动打开运行面板。
           void workbench.launchRunSession(command)
         },
+        onAddFilesToChat: model.actions.addWorkbenchFilesToChat,
         onOpenQuickOpen: model.surface.openQuickOpen,
         onToggleGitTool: () => model.surface.openBottomTool('git'),
         onToggleProblems: () => model.surface.openBottomTool('problems'),

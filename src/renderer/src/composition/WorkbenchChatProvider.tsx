@@ -138,6 +138,12 @@ export interface WorkbenchBrowserElementSelectionDelivery {
   readonly selection: BrowserElementSelection
 }
 
+/** 编辑器、标签页或文件树里右键「添加到聊天」投递给聊天面板的一个文件（项目内相对路径）。 */
+export interface WorkbenchChatFileReferenceDelivery {
+  readonly deliveryId: string
+  readonly path: string
+}
+
 export interface WorkbenchChatSessionSurfaceProps {
   providerId: WorkbenchChatProviderId
   projectRoot: string
@@ -147,6 +153,9 @@ export interface WorkbenchChatSessionSurfaceProps {
   scrollNavigatorHidden?: boolean
   pendingBrowserElementSelections: readonly WorkbenchBrowserElementSelectionDelivery[]
   onBrowserElementSelectionsConsumed?: (deliveryIds: readonly string[]) => void
+  /** 挂到输入框上的文件引用；面板收下后回执 deliveryId，宿主据此清掉待投递项。 */
+  pendingFileReferences: readonly WorkbenchChatFileReferenceDelivery[]
+  onFileReferencesConsumed?: (deliveryIds: readonly string[]) => void
   onOpenFileChange?: (entry: WorkbenchChatFileChangeEntry) => void | Promise<void>
   onOpenWorkspacePath?: (path: string) => unknown
   onReviewFileChanges?: (entries: readonly WorkbenchChatFileChangeEntry[]) => void | Promise<void>

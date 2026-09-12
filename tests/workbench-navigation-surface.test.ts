@@ -134,19 +134,32 @@ void describe('Workbench navigation surface', () => {
 })
 
 void describe('Workbench chat composer placeholder', () => {
-  const t = (key: string, params?: { path: string }): string =>
-    key === 'workbench.chatAskAboutFile' ? `Ask about ${params?.path}…` : 'Ask Workbench Agent…'
+  const t = (key: string, params?: { path: string } | { count: number }): string =>
+    key === 'workbench.chatAskAboutFile' && params && 'path' in params
+      ? `Ask about ${params.path}…`
+      : key === 'workbench.chatAskAboutFiles' && params && 'count' in params
+        ? `Ask about ${params.count} files…`
+        : 'Ask Workbench Agent…'
 
-  void test('follows the current-file chip, not the raw editor file', () => {
-    assert.equal(resolveWorkbenchChatComposerPlaceholder('src/app.ts', t), 'Ask about src/app.ts…')
+  void test('follows the files the message asks about, not the raw editor file', () => {
+    assert.equal(resolveWorkbenchChatComposerPlaceholder(['src/app.ts'], t), 'Ask about src/app.ts…')
+    // 右键「添加到聊天」又挂了文件：提示说问几个文件。
+    assert.equal(
+      resolveWorkbenchChatComposerPlaceholder(['src/app.ts', 'src/lib.ts'], t),
+      'Ask about 2 files…'
+    )
     // 用户取消了 chip：提示回到通用提示。
-    assert.equal(resolveWorkbenchChatComposerPlaceholder(null, t), 'Ask Workbench Agent…')
+    assert.equal(resolveWorkbenchChatComposerPlaceholder([], t), 'Ask Workbench Agent…')
   })
 
   void test('the composer reads the chip state for its placeholder', () => {
     const adapter = readSource('src/renderer/src/runtime/standaloneWorkbenchChatAdapter.tsx')
 
-    assert.match(adapter, /placeholder: resolveWorkbenchChatComposerPlaceholder\(includedCurrentFilePath, t\)/u)
+    assert.match(adapter, /placeholder: resolveWorkbenchChatComposerPlaceholder\(askedFilePaths, t\)/u)
+    assert.match(
+      adapter,
+      /appendWorkbenchChatFileReferences\(\s*includedCurrentFilePath \? \[includedCurrentFilePath\] : \[\],\s*selectedFileReferencePaths\s*\)/u
+    )
     assert.match(adapter, /onDismissWorkbenchCurrentFile: \(\) => setIncludedCurrentFilePath\(null\)/u)
     // 打开别的文件时 chip 重新出现，提示随之回来。
     assert.match(adapter, /setIncludedCurrentFilePath\(currentFilePath\)\n\s*\}, \[currentFilePath\]\)/u)

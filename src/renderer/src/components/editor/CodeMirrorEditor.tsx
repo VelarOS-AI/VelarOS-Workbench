@@ -63,7 +63,7 @@ import {
   ViewPlugin,
   type ViewUpdate,
 } from '@codemirror/view'
-import { HammerIcon, PlayIcon } from '@phosphor-icons/react'
+import { ChatCircleTextIcon, HammerIcon, PlayIcon } from '@phosphor-icons/react'
 import {
   buildWorkbenchAiHighlightAnchors,
   createWorkbenchAiHighlightExtension,
@@ -269,6 +269,8 @@ interface CodeMirrorEditorProps {
   onApplyLanguageServiceFileChanges?: (changes: WorkbenchLanguageServiceFileEdit[]) => void
   onRunPackageScript?: (command: string) => void
   onOpenFileHistory?: (mode: 'local' | 'git') => void
+  /** 右键「添加到聊天」：把当前文件作为引用挂到聊天输入框（只挂路径）。 */
+  onAddToChat?: () => void
   onSave: () => void
 }
 
@@ -1175,6 +1177,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       onApplyLanguageServiceFileChanges,
       onRunPackageScript,
       onOpenFileHistory,
+      onAddToChat,
       onSave,
     },
     ref
@@ -1203,6 +1206,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       onApplyLanguageServiceFileChanges,
       onRunPackageScript,
       onOpenFileHistory,
+      onAddToChat,
       onSave,
     })
     const languageCompartment = useMemo(() => new Compartment(), [])
@@ -1517,6 +1521,11 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
     const openFileHistory = (mode: 'local' | 'git'): void => {
       setContextMenu(null)
       if (path) callbacksRef.current.onOpenFileHistory?.(mode)
+    }
+
+    const addCurrentFileToChat = (): void => {
+      setContextMenu(null)
+      if (path) callbacksRef.current.onAddToChat?.()
     }
 
     // 按存储里的行号，把当前文件的评论重新锚定成实时块（打开文件/外部整篇替换后调用）。
@@ -2100,7 +2109,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       const position = view.posAtCoords({ x: event.clientX, y: event.clientY })
       const word = !isPresent(position) ? null : getIdentifierAt(view.state, position)
       const x = Math.min(event.clientX, window.innerWidth - 188)
-      const y = Math.min(event.clientY, window.innerHeight - 344)
+      const y = Math.min(event.clientY, window.innerHeight - 380)
       const selection = view.state.selection.main
       setContextMenu({
         x: Math.max(8, x),
@@ -2805,6 +2814,20 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
               </button>
             )}
             <div className={styles.editorContextMenuDivider} />
+            <button
+              type="button"
+              role="menuitem"
+              disabled={!path || !onAddToChat}
+              onClick={addCurrentFileToChat}
+            >
+              <ChatCircleTextIcon
+                size={14}
+                weight="regular"
+                className={styles.editorContextActionIcon}
+                aria-hidden="true"
+              />
+              {t('workbench.editorContextAddToChat')}
+            </button>
             <button
               type="button"
               role="menuitem"

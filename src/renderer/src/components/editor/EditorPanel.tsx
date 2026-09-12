@@ -175,6 +175,8 @@ export interface WorkbenchEditorPanelWorkspaceProps {
   onApplyLanguageServiceFileChanges?: (changes: WorkbenchLanguageServiceFileEdit[]) => void
   packageManager: PackageManagerCommand
   onRunPackageScript: (command: string) => void
+  /** 右键「添加到聊天」（编辑器与标签页）：把文件作为引用挂到聊天输入框，只挂路径。 */
+  onAddFilesToChat?: (paths: readonly string[]) => void
   onOpenQuickOpen: () => void
   onToggleGitTool: () => void
   onToggleProblems: () => void
@@ -241,6 +243,7 @@ export function EditorPanel({
     onApplyLanguageServiceFileChanges,
     packageManager,
     onRunPackageScript,
+    onAddFilesToChat,
     onToggleProblems,
     onCursorPositionChange,
     onActiveProblemIdChange,
@@ -690,6 +693,7 @@ export function EditorPanel({
           onCloseOtherOpenFiles={onCloseOtherOpenFiles}
           onCloseAllOpenFiles={onCloseAllOpenFiles}
           onCloseUnmodifiedOpenFiles={onCloseUnmodifiedOpenFiles}
+          onAddFileToChat={onAddFilesToChat ? (path) => onAddFilesToChat([path]) : undefined}
           onReorderOpenTabs={onReorderOpenTabs}
           onSelectDiffTab={() => undefined}
           onCloseDiffTab={onCloseDiffTab}
@@ -954,6 +958,9 @@ export function EditorPanel({
                         onApplyLanguageServiceFileChanges={onApplyLanguageServiceFileChanges}
                         onRunPackageScript={onRunPackageScript}
                         onOpenFileHistory={setFileHistoryMode}
+                        onAddToChat={
+                          onAddFilesToChat ? () => onAddFilesToChat([selectedFile.path]) : undefined
+                        }
                         onSave={onSaveSelectedFile}
                       />
                     </Suspense>

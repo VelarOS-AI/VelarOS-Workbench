@@ -283,6 +283,24 @@ export function renameSelectedTreeEntry(tree: Nullable<FileTreeApi>): void {
   void tree?.edit(node)
 }
 
+/** 右键点在一组多选（两项及以上）里面：这时菜单作用于整组，而不是把选择收成右键的那一项。 */
+export function isTreeEntryInMultiSelection(tree: Nullable<FileTreeApi>, path: string): boolean {
+  return !!tree && tree.selectedIds.size > 1 && tree.selectedIds.has(path)
+}
+
+/** 右键「添加到聊天」要挂的文件：点在多选里取整组里的文件，否则只取右键的那个；目录不挂。 */
+export function resolveTreeChatFilePaths(
+  tree: Nullable<FileTreeApi>,
+  entry: WorkbenchDirectoryEntry
+): string[] {
+  if (tree && isTreeEntryInMultiSelection(tree, entry.path))
+    return tree.selectedNodes
+      .filter((node) => node.data.entry.type === 'file')
+      .map((node) => node.data.entry.path)
+
+  return entry.type === 'file' ? [entry.path] : []
+}
+
 export function deleteSelectedTreeEntries(tree: Nullable<FileTreeApi>): void {
   if (!tree) return
 

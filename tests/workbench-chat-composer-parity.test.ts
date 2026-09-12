@@ -28,7 +28,7 @@ void describe('Workbench chat composer parity', () => {
       adapter,
       /canSteerRun =\s*providerId === 'workbench' && chat\.status === 'running' && hasPendingAgentExecution/
     )
-    assert.match(adapter, /return sendRunGuidance\(text, selections\)/)
+    assert.match(adapter, /return sendRunGuidance\(text, selections, referencedFilePaths\)/)
     // 中止 / 失败后的下一条消息续接被打断的那一轮，而不是另起新一轮。
     assert.match(adapter, /const continuesInterruptedRun = isInterruptedRunStatus\(/)
     assert.match(adapter, /conversationKind: 'run-guidance' as const, guidanceStatus: 'sent' as const/)
@@ -58,7 +58,10 @@ void describe('Workbench chat composer parity', () => {
     // 浏览器里拾取的元素进入输入框 chip，随消息带给模型。
     assert.match(adapter, /browserElementSelections: browserSelections/)
     assert.match(adapter, /onBrowserElementSelectionsConsumed\?\.\(/)
-    assert.match(adapter, /\[currentFileContext, attachmentContext, browserElementContext\]/)
+    assert.match(
+      adapter,
+      /\[\s*currentFileContext,\s*fileReferenceContext,\s*attachmentContext,\s*browserElementContext,\s*\]/
+    )
   })
 
   void test('isolates a message that fails to render instead of unmounting the conversation', () => {

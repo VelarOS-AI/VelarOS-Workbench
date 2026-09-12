@@ -86,10 +86,10 @@ describe('goal auto-continue', () => {
     // 不冒充用户：以 goal-continuation 系统说明起头，只接在正常完成之后。
     assert.match(adapter, /createStandaloneSystemNotice\(\{[\s\S]*?kind: 'goal-continuation',[\s\S]*?\}\)/u)
     assert.match(adapter, /if \(systemNotice && getState\(projectRoot, providerId\)\.status !== 'completed'\) return false/u)
-    // 不动输入框里的草稿、附件和拾取；用户亲自发言时连续轮数清零。
+    // 不动输入框里的草稿、附件、拾取和挂着的文件引用；用户亲自发言时连续轮数清零。
     assert.match(
       adapter,
-      /if \(!systemNotice\) \{\s*setPrompt\(''\)\s*setFiles\(\[\]\)\s*setBrowserSelections\(\[\]\)\s*\/\/[^\n]*\n\s*goalAutoContinueRoundsRef\.current\.delete\(chat\.sessionId\)\s*\}/u
+      /if \(!systemNotice\) \{\s*setPrompt\(''\)\s*setFiles\(\[\]\)\s*setBrowserSelections\(\[\]\)\s*setSelectedFileReferencePaths\(\[\]\)\s*\/\/[^\n]*\n\s*goalAutoContinueRoundsRef\.current\.delete\(chat\.sessionId\)\s*\}/u
     )
     // 续跑的这一轮按目标模式跑：模型不更新目标就想收尾时，收尾门会把它拉回来。
     assert.match(adapter, /await submit\(summary, \[\], \{\s*goalMode: true,\s*systemNotice:/u)

@@ -8,6 +8,7 @@ import {
   useWorkbenchProductRuntime,
   type WorkbenchBrowserElementSelectionDelivery,
   type WorkbenchChatFileChangeEntry,
+  type WorkbenchChatFileReferenceDelivery,
   type WorkbenchChatRunChangesTarget,
 } from '@renderer/composition'
 import { useWorkbenchAiChanges } from '@renderer/hooks/useWorkbenchAiChanges'
@@ -301,6 +302,10 @@ export function useStandaloneWorkbenchPageModel(
   const [pendingBrowserElementSelections, setPendingBrowserElementSelections] = useState<
     PendingWorkbenchBrowserElementSelection[]
   >([])
+  const [pendingChatFileReferences, setPendingChatFileReferences] = useState<
+    WorkbenchChatFileReferenceDelivery[]
+  >([])
+  const chatFileReferenceDeliverySeqRef = useRef(0)
   const [aiIndexDecisionVersion, setAiIndexDecisionVersion] = useState(0)
 
   const exitCurrentProject = useMemoizedFn(async (): Promise<boolean> => {
@@ -1174,6 +1179,36 @@ export function useStandaloneWorkbenchPageModel(
     },
     []
   )
+  /**
+   * 右键「添加到聊天」：把文件作为引用挂到聊天输入框上——只挂路径，内容由 Agent 自己去读。聊天面板收着就
+   * 打开它；已经开着的留在用户正在用的那个聊天里，不替他换 Agent。
+   */
+  const addWorkbenchFilesToChat = useCallback(
+    (paths: readonly string[]): void => {
+      const incoming = paths.filter((path) => !!path.trim())
+      if (incoming.length === 0) return
+      setPendingChatFileReferences((current) => [
+        ...current,
+        ...incoming
+          .filter((path) => !current.some((delivery) => delivery.path === path))
+          .map((path) => {
+            chatFileReferenceDeliverySeqRef.current += 1
+            return { deliveryId: `file-reference-${chatFileReferenceDeliverySeqRef.current}`, path }
+          }),
+      ])
+      if (!surface.activeRightTool) surface.openRightTool('chat')
+    },
+    [surface.activeRightTool, surface.openRightTool]
+  )
+  const consumeWorkbenchChatFileReferences = useCallback(
+    (deliveryIds: readonly string[]): void => {
+      const consumed = new Set(deliveryIds)
+      setPendingChatFileReferences((current) =>
+        current.filter((item) => !consumed.has(item.deliveryId))
+      )
+    },
+    []
+  )
 
   function toggleBottomTool(tool: Parameters<typeof surface.openBottomTool>[0]): void {
     if (surface.activeBottomTool === tool && !surface.isCommandPanelCollapsed) {
@@ -1294,6 +1329,7 @@ export function useStandaloneWorkbenchPageModel(
     agentBrowser,
     browserModEnabled,
     pendingBrowserElementSelections,
+    pendingChatFileReferences,
     aiChanges,
     chatChangePreview,
     gitChangeActions,
@@ -1347,6 +1383,8 @@ export function useStandaloneWorkbenchPageModel(
       handleWorkbenchChatWorkspacePathOpen: openChatWorkspacePath,
       handleWorkbenchBrowserElementPicked,
       consumeWorkbenchBrowserElementSelections,
+      addWorkbenchFilesToChat,
+      consumeWorkbenchChatFileReferences,
       saveEmbeddedLightTab,
       toggleBottomTool,
       skipProjectAiIndex,

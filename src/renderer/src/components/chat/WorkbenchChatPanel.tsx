@@ -43,6 +43,7 @@ import {
   useWorkbenchProductRuntime,
   type WorkbenchBrowserElementSelectionDelivery,
   type WorkbenchChatFileChangeEntry,
+  type WorkbenchChatFileReferenceDelivery,
   type WorkbenchChatRunChangesTarget,
   type WorkbenchChatSessionGroup,
   type WorkbenchChatSessionMember,
@@ -59,6 +60,7 @@ type WorkbenchChatFolderMember = WorkbenchChatSessionMember
 
 const EmptyWorkbenchBrowserElementSelections: readonly WorkbenchBrowserElementSelectionDelivery[] =
   []
+const EmptyWorkbenchChatFileReferences: readonly WorkbenchChatFileReferenceDelivery[] = []
 const WorkbenchChatScrollNavigatorVisibility = createChatScrollNavigatorVisibilityStore()
 
 export interface WorkbenchChatPanelProps {
@@ -67,6 +69,8 @@ export interface WorkbenchChatPanelProps {
   currentFilePath: Nullable<string>
   pendingBrowserElementSelections?: readonly WorkbenchBrowserElementSelectionDelivery[]
   onBrowserElementSelectionsConsumed?: (deliveryIds: readonly string[]) => void
+  pendingFileReferences?: readonly WorkbenchChatFileReferenceDelivery[]
+  onFileReferencesConsumed?: (deliveryIds: readonly string[]) => void
   onOpenFileChange?: (entry: WorkbenchChatFileChangeEntry) => void | Promise<void>
   onOpenWorkspacePath?: (path: string) => unknown
   onReviewFileChanges?: (entries: readonly WorkbenchChatFileChangeEntry[]) => void | Promise<void>
@@ -254,6 +258,8 @@ export function WorkbenchChatPanel({
   currentFilePath,
   pendingBrowserElementSelections = EmptyWorkbenchBrowserElementSelections,
   onBrowserElementSelectionsConsumed,
+  pendingFileReferences = EmptyWorkbenchChatFileReferences,
+  onFileReferencesConsumed,
   onOpenFileChange,
   onOpenWorkspacePath,
   onReviewFileChanges,
@@ -486,6 +492,8 @@ export function WorkbenchChatPanel({
             currentFilePath={currentFilePath}
             pendingBrowserElementSelections={pendingBrowserElementSelections}
             onBrowserElementSelectionsConsumed={onBrowserElementSelectionsConsumed}
+            pendingFileReferences={pendingFileReferences}
+            onFileReferencesConsumed={onFileReferencesConsumed}
             onOpenFileChange={onOpenFileChange}
             onOpenWorkspacePath={onOpenWorkspacePath}
             onReviewFileChanges={onReviewFileChanges}

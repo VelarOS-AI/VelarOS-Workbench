@@ -719,6 +719,8 @@ export function StandaloneWorkbenchPagePresentation({
                 onBrowserElementSelectionsConsumed={
                   model.actions.consumeWorkbenchBrowserElementSelections
                 }
+                pendingFileReferences={model.pendingChatFileReferences}
+                onFileReferencesConsumed={model.actions.consumeWorkbenchChatFileReferences}
                 onOpenFileChange={model.actions.handleWorkbenchChatFileChangeOpen}
                 onOpenWorkspacePath={model.actions.handleWorkbenchChatWorkspacePathOpen}
                 onReviewFileChanges={model.actions.handleWorkbenchChatFileChangesReview}
