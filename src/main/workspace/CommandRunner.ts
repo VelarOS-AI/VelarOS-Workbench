@@ -1,6 +1,6 @@
 /**
- * 工作台一次性命令运行器（照搬 desktop `workspace/workbench/CommandRunner.ts`，保形零改动；
- * CommandHelper 改为本目录裁剪版，见 `CommandHelper.ts` 头注）。
+ * 工作台一次性命令运行器（照搬 desktop `workspace/workbench/CommandRunner.ts`；CommandHelper 改为
+ * 本目录裁剪版，见 `CommandHelper.ts` 头注。唯一增量是 `allowDangerous`：问过用户的危险命令能真的跑）。
  */
 import { spawn } from 'node:child_process'
 import { stat } from 'node:fs/promises'
@@ -25,10 +25,15 @@ class CommandRunner {
     private readonly commandHelper: CommandHelper
   ) {}
 
+  /**
+   * @param allowDangerous 调用方已经就这条危险命令问过用户并获批（`project:run` 的宿主端口）；
+   *   其余路径不传，危险命令在这里被挡回。
+   */
   public async runCommand(
     request: WorkbenchRunCommandRequest,
     onOutput?: (event: WorkbenchRunCommandOutputEvent) => void,
-    abortSignal?: AbortSignal
+    abortSignal?: AbortSignal,
+    allowDangerous = false
   ): Promise<WorkbenchRunCommandResult> {
     abortSignal?.throwIfAborted()
     const projectRoot = await this.pathResolver.resolveProjectRoot(request.projectRoot)
@@ -38,7 +43,8 @@ class CommandRunner {
       throw new AppError('VALIDATION', '工作台命令运行目录必须是目录。')
     }
 
-    const command = this.commandHelper.validateCommand(request.command, false)
+    // 工作区边界用调用方给的原始根：与它问用户前的判定同一个输入，两层结论才不会因符号链接而分叉。
+    const command = this.commandHelper.validateCommand(request.command, request.projectRoot, allowDangerous)
     const timeoutMs = this.commandHelper.normalizeTimeoutMs(request.timeoutMs)
     const shellEnv = { ...process.env }
     const shellSpec = this.commandHelper.getShellSpec(command)

@@ -55,16 +55,18 @@ class CommandHelper {
   /**
    * 校验命令文本。
    *
-   * 空命令直接拒绝；危险命令默认拒绝，除非调用方明确传入 allowDangerous。
+   * 空命令直接拒绝。危险命令要先经用户确认：问过并获批的调用方传 `allowDangerous`，
+   * 没问过人的执行路径在这里被挡回（判据见 `CommandExecutionPolicy`，`projectRoot` 划定工作区边界）。
    */
-  public validateCommand(command: string, allowDangerous = false): string {
+  public validateCommand(command: string, projectRoot: string, allowDangerous = false): string {
     const trimmed = command.trim()
     if (!trimmed) {
       throw new AppError('VALIDATION', '命令不能为空')
     }
 
-    if (!allowDangerous && analyzeWorkbenchCommandExecution(trimmed).isDangerous) {
-      throw new AppError('PERMISSION', `命令被安全策略拒绝：${trimmed}`)
+    const plan = analyzeWorkbenchCommandExecution(trimmed, projectRoot)
+    if (!allowDangerous && plan.isDangerous) {
+      throw new AppError('PERMISSION', `命令需要用户确认后才能执行：${trimmed}（${plan.dangerousReason}）`)
     }
 
     return trimmed

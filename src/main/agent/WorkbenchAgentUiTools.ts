@@ -3,7 +3,11 @@ import { isAbsolute, resolve } from 'node:path'
 
 import { z } from 'zod'
 
-import type { ToolCategoryDefinition, ToolCategoryId } from '@velaros-ai/agent/protocol'
+import type {
+  ToolCategoryDefinition,
+  ToolCategoryId,
+  ToolConfirmationDecisionOptions,
+} from '@velaros-ai/agent/protocol'
 import {
   type ApprovalPort,
   createApprovalOperationKey,
@@ -11,13 +15,18 @@ import {
 } from '@velaros-ai/agent/tool-contract'
 import { isPresent } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
+import { buildBackgroundCommandConfirmationMessage } from '@velaros-ai/project/execution'
 
 import type {
   WorkbenchAgentUiCommand,
   WorkbenchAgentUiExplanation,
   WorkbenchAgentUiOpenFile,
 } from '../../shared/workbenchAgentUi'
-import { analyzeWorkbenchCommandExecution } from '../workspace/CommandExecutionPolicy'
+import {
+  analyzeWorkbenchCommandExecution,
+  type CommandExecutionPlan,
+  createDangerousCommandApprovalOptions,
+} from '../workspace/CommandExecutionPolicy'
 import {
   getRelativePathInsideRoot,
   toPortableRelativePath,
@@ -669,6 +678,27 @@ const RunWaitSchema = {
   waitSeconds: z.number().int().min(0).max(MaxRunWaitSeconds).optional(),
 }
 
+/**
+ * 「运行」面板启动命令的审批请求。
+ *
+ * 危险命令每次都由用户亲自确认；其余可能改动项目的命令只是日常开发动作（`npm run dev`、`npm install`），
+ * 按低风险交给权限档：标准档直接放行、「每次询问」照问、「完全访问」放行——不再每条不同的命令弹一张卡。
+ */
+function startRunApprovalOptions(
+  command: string,
+  projectRoot: string,
+  plan: CommandExecutionPlan
+): ToolConfirmationDecisionOptions {
+  const operation = {
+    key: createApprovalOperationKey('workbench-run', { command, root: projectRoot }),
+    label: command,
+    target: projectRoot,
+  }
+  return plan.isDangerous
+    ? createDangerousCommandApprovalOptions('workbench-run:dangerous', operation)
+    : { approvalRisk: 'low', riskScope: 'workbench-run:command', operation }
+}
+
 const startRunTool = defineToolRuntimeSpec<
   { command: string; label?: string; waitFor?: string; waitSeconds?: number },
   WorkbenchAgentUiToolContext
@@ -689,7 +719,7 @@ const startRunTool = defineToolRuntimeSpec<
   usage: [
     '开发服务器传 waitFor（例如 "Local:"、"ready"），会等到这段输出出现再返回，最多等 60 秒。',
     '返回的 sessionId 给 workbench:read_run / workbench:stop_run 用。',
-    '可能改动项目的命令会先请用户确认；破坏性命令直接拒绝。',
+    '会丢工作区改动、递归删除目录、写到项目外这类危险命令每次都先请用户确认，批准后照常启动；其余命令按用户的权限档位处理，标准档不打扰。',
   ],
   examples: [
     { command: 'npm run dev', label: '开发服务器', waitFor: 'Local:' },
@@ -713,22 +743,14 @@ const startRunTool = defineToolRuntimeSpec<
   isConcurrencySafe: () => false,
   execute: async (input, context) => {
     const command = input.command.trim()
-    const plan = analyzeWorkbenchCommandExecution(command)
-    if (plan.isDangerous)
-      throw new AppError('PERMISSION', `The command was rejected by the safety policy: ${command}`)
-    if (!plan.isReadOnly) {
+    const plan = analyzeWorkbenchCommandExecution(command, context.resourceId)
+    if (plan.isDangerous || !plan.isReadOnly) {
       const decision = await context.approval.awaitConfirmationDecision(
-        `在底部「运行」面板里运行：${command}`,
+        plan.isDangerous
+          ? buildBackgroundCommandConfirmationMessage(command, plan, '底部「运行」面板', false)
+          : `在底部「运行」面板里运行：${command}`,
         context.abortSignal,
-        {
-          approvalRisk: 'high',
-          riskScope: 'workbench-run:command',
-          operation: {
-            key: createApprovalOperationKey('workbench-run', { command, root: context.resourceId }),
-            label: command,
-            target: context.resourceId,
-          },
-        }
+        startRunApprovalOptions(command, context.resourceId, plan)
       )
       if (!decision.approved)
         return {

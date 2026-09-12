@@ -460,17 +460,23 @@ void describe('Workbench agent UI tools', () => {
 })
 
 void describe('Workbench agent run, preview and problems tools', () => {
-  void test('start_run refuses dangerous commands and asks before commands that may change the project', async () => {
+  void test('start_run asks before dangerous commands and hands ordinary ones to the permission mode', async () => {
     await withProject(async (root) => {
       const startRun = findTool('workbench:start_run')
       const ui = createFakeUi((command) =>
         command.type === 'start-run' ? { sessionId: 'run-1' } : {}
       )
 
-      await assert.rejects(
-        Promise.resolve(startRun.execute({ command: 'rm -rf /' }, toolContext(root, ui) as never)),
-        /rejected by the safety policy/u
+      // 危险命令不再直接拒绝，而是先问；用户不同意就什么都不启动，把原因交给模型。
+      const dangerousApproval = createFakeApproval(false)
+      assert.deepEqual(
+        await startRun.execute({ command: 'rm -rf /' }, toolContext(root, ui, dangerousApproval) as never),
+        { started: false, command: 'rm -rf /', message: '先别跑' }
       )
+      assert.deepEqual(dangerousApproval.asked.map(({ riskScope, approvalRisk }) => ({ riskScope, approvalRisk })), [
+        { riskScope: 'workbench-run:dangerous', approvalRisk: 'high' },
+      ])
+      assert.match(dangerousApproval.asked[0]?.message ?? '', /高风险命令：rm -rf \//u)
 
       // 只读命令不打扰用户；返回会话 id 给后续 read_run / stop_run。
       const approval = createFakeApproval()
@@ -480,16 +486,16 @@ void describe('Workbench agent run, preview and problems tools', () => {
       )
       assert.deepEqual(approval.asked, [])
 
+      // 可能改动项目的日常命令按低风险交给权限档（标准档由策略直接放行，见 workbench-command-approval）。
       await startRun.execute({ command: 'npm run dev', label: '开发服务器' }, toolContext(root, ui, approval) as never)
       assert.deepEqual(approval.asked, [
-        { message: '在底部「运行」面板里运行：npm run dev', riskScope: 'workbench-run:command', approvalRisk: 'high' },
+        { message: '在底部「运行」面板里运行：npm run dev', riskScope: 'workbench-run:command', approvalRisk: 'low' },
       ])
       assert.deepEqual(ui.commands.filter((command) => command.type === 'start-run'), [
         { type: 'start-run', command: 'git status', label: 'git status' },
         { type: 'start-run', command: 'npm run dev', label: '开发服务器' },
       ])
 
-      // 用户不同意：什么都不启动，把原因交给模型。
       const declined = await startRun.execute(
         { command: 'npm install' },
         toolContext(root, ui, createFakeApproval(false)) as never

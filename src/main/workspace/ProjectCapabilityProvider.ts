@@ -1,7 +1,11 @@
 import { isAbsolute, resolve } from 'node:path'
 
 import type { ToolCategoryDefinition, ToolCategoryId } from '@velaros-ai/agent/protocol'
-import { type ApprovalPort, defaultDenyApprovalPort } from '@velaros-ai/agent/tool-contract'
+import {
+  type ApprovalPort,
+  createApprovalOperationKey,
+  defaultDenyApprovalPort,
+} from '@velaros-ai/agent/tool-contract'
 import {
   createProjectCodeQuery,
   type ProjectCodeIndexApi,
@@ -25,6 +29,7 @@ import type {
   ProjectMutationAuthorizationInput,
   ProjectRunCommandOptions,
 } from '@velaros-ai/project/contracts'
+import { buildBackgroundCommandConfirmationMessage } from '@velaros-ai/project/execution'
 import { isPathInsideProjectRoot } from '@velaros-ai/project/files'
 import {
   createProjectKernel,
@@ -37,6 +42,10 @@ import type { WorkbenchAgentToolDefinition } from '../agent/WorkbenchAgentToolRe
 import { WorkbenchCodeGraphResource } from '../resources/WorkbenchCodeGraphResource'
 
 import { type WorkbenchVelarLogicGraphService } from './language/WorkbenchVelarLogicGraphService'
+import {
+  analyzeWorkbenchCommandExecution,
+  createDangerousCommandApprovalOptions,
+} from './CommandExecutionPolicy'
 import { CommandHelper } from './CommandHelper'
 import { CommandRunner } from './CommandRunner'
 import { PathResolver } from './PathResolver'
@@ -258,12 +267,10 @@ class ProjectCapabilityProvider implements WorkbenchProjectCapabilityProvider {
         queryCode: this.projectCodeQuery(projectRoot),
         runCommand: (command, options, allowDangerous, signal) =>
           this.runProjectCommand(
-            projectRoot,
-            activeDirectory,
+            { projectRoot, activeDirectory, approval, abortSignal: signal ?? abortSignal },
             command,
             options,
-            allowDangerous,
-            signal ?? abortSignal
+            allowDangerous
           ),
       },
       system: {
@@ -287,28 +294,51 @@ class ProjectCapabilityProvider implements WorkbenchProjectCapabilityProvider {
     return createProjectCodeQuery(codeIndex)
   }
 
+  /**
+   * `project:run` 落到宿主的执行口。
+   *
+   * 平台判危险的命令它自己问过了，批准后带 `allowDangerous` 进来，这里不再问第二遍；平台放行、而
+   * Workbench 补充判定为危险的（丢工作区改动的 Git 调用、递归删除目录、写到工作区外……）由这里经
+   * 当轮审批端口补问一次，批准照常执行，拒绝返回与平台同形的 skipped 结果。
+   */
   private async runProjectCommand(
-    projectRoot: string,
-    activeDirectory: string,
+    scope: ProjectCommandScope,
     command: string,
     options: ProjectRunCommandOptions = {},
-    _allowDangerous = false,
-    abortSignal?: AbortSignal
+    allowDangerous = false
   ): Promise<ProjectCommandResult> {
-    abortSignal?.throwIfAborted()
+    const { projectRoot, abortSignal } = scope
+    abortSignal.throwIfAborted()
     if (options.background) {
       throw new Error('Workbench Project 不提供后台命令执行。')
     }
 
-    const cwd = resolveInsideProject(projectRoot, activeDirectory, options.cwd ?? '.')
+    const cwd = resolveInsideProject(projectRoot, scope.activeDirectory, options.cwd ?? '.')
+    const plan = analyzeWorkbenchCommandExecution(command, projectRoot)
+    if (plan.isDangerous && !allowDangerous) {
+      const decision = await scope.approval.awaitConfirmationDecision(
+        buildBackgroundCommandConfirmationMessage(command, plan, '当前项目', false),
+        abortSignal,
+        createDangerousCommandApprovalOptions('project-command:dangerous', {
+          // 与平台同一个操作身份：同一条命令被拒过，换哪一层来问都记得。
+          key: createApprovalOperationKey('shell-command', { command: command.trim(), cwd, background: false }),
+          label: command,
+          target: cwd,
+        })
+      )
+      if (!decision.approved)
+        return skippedCommandResult(command, cwd, decision.message ?? '用户拒绝执行该危险命令。')
+    }
+
+    // 走到这里的危险命令都已经有人批准过：平台那一问，或上面这一问。
     const result = await this.commandRunner.runCommand({
       projectRoot,
       command,
       cwd,
       timeoutMs: options.timeoutMs,
       maxOutputChars: options.maxOutputChars,
-    }, undefined, abortSignal)
-    abortSignal?.throwIfAborted()
+    }, undefined, abortSignal, plan.isDangerous)
+    abortSignal.throwIfAborted()
 
     return {
       command: result.command,
@@ -328,6 +358,44 @@ class ProjectCapabilityProvider implements WorkbenchProjectCapabilityProvider {
         issues: result.success ? [] : [result.stderr || `命令退出码：${result.exitCode}`],
       },
     }
+  }
+}
+
+/** 一次 `project:run` 落到宿主时的执行范围：根、当前目录，以及当轮的审批端口与取消信号。 */
+interface ProjectCommandScope {
+  projectRoot: string
+  activeDirectory: string
+  approval: ApprovalPort
+  abortSignal: AbortSignal
+}
+
+/**
+ * 用户拒绝危险命令时的结果。
+ *
+ * `project:run` 把宿主 `runCommand` 的返回原样交给模型，所以这里带上平台自己拒绝时的那几个字段
+ * （approved / skipped / message），其余按「没有执行」填满命令结果，读结果的一方不用分两种形状。
+ */
+function skippedCommandResult(
+  command: string,
+  cwd: string,
+  message: string
+): ProjectCommandResult & { approved: false; skipped: true; message: string } {
+  return {
+    approved: false,
+    skipped: true,
+    message,
+    command,
+    cwd,
+    exitCode: null,
+    signal: null,
+    stdout: '',
+    stderr: '',
+    durationMs: 0,
+    timedOut: false,
+    aborted: false,
+    truncated: false,
+    success: false,
+    verification: { kind: 'unknown', status: 'unknown', issues: [] },
   }
 }
 
