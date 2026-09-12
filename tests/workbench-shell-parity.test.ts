@@ -126,7 +126,7 @@ void describe('pre-split Workbench shell parity', () => {
     const model = readSource('src/renderer/src/hooks/useStandaloneWorkbenchPageModel.tsx')
     const toolbar = readSource('src/renderer/src/components/chrome/TopToolbar.tsx')
 
-    assert.match(model, /actions:\s*\{[\s\S]*refreshGitPanel:\s*gitState\.refreshGitPanel/)
+    assert.match(model, /actions:\s*\{[\s\S]*refreshGitPanel:\s*gitState\.refresh\b/)
     assert.doesNotMatch(
       model,
       /actions:\s*\{[\s\S]*refreshGitPanel:\s*refreshGitPanelWithWorkspace/

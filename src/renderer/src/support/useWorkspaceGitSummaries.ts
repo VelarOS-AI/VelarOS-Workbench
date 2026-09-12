@@ -6,20 +6,6 @@ import { Result } from '@velaros-ai/core/result'
 
 import type { SystemWorkspaceGitSummary } from '@shared/contracts'
 
-export type WorkspaceGitSummariesRefreshReason =
-  | 'mount'
-  | 'manual'
-  | 'files-changed'
-  | 'surface-open'
-  | 'workspace-bound'
-  | 'git-action'
-  | 'agent-run-finished'
-
-export interface WorkspaceGitSummariesRefreshRequest {
-  reason?: WorkspaceGitSummariesRefreshReason
-  force?: boolean
-}
-
 /** 什么时候拉取由调用方决定（见 useWorkbenchGitState 的刷新时机）；这里只管拉取与代际守卫。 */
 export interface UseWorkspaceGitSummariesOptions {
   enabled?: boolean
@@ -31,7 +17,7 @@ interface UseWorkspaceGitSummariesResult {
   activeSummary: Nullable<SystemWorkspaceGitSummary>
   isLoading: boolean
   error: Nullable<string>
-  refresh: (options?: WorkspaceGitSummariesRefreshRequest) => Promise<void>
+  refresh: () => Promise<void>
 }
 
 export function useWorkspaceGitSummaries(
@@ -46,7 +32,7 @@ export function useWorkspaceGitSummaries(
   const generationRef = useRef(0)
 
   const refresh = useCallback(
-    async (_request?: WorkspaceGitSummariesRefreshRequest): Promise<void> => {
+    async (): Promise<void> => {
       if (!enabled || !workspaceRoot) return
       const generation = ++generationRef.current
       setIsLoading(true)
@@ -75,7 +61,7 @@ export function useWorkspaceGitSummaries(
       setIsLoading(false)
       return
     }
-    if (refreshOnMount) void refresh({ reason: 'mount' })
+    if (refreshOnMount) void refresh()
   }, [enabled, refresh, refreshOnMount, workspaceRoot])
 
   return {

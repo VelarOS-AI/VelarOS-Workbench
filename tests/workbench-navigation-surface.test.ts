@@ -238,7 +238,7 @@ void describe('Workbench Git refresh on workspace changes', () => {
     assert.ok(WorkbenchGitWorkspaceChangeRefreshDelayMs <= 800)
   })
 
-  void test('Git state owns the refresh triggers; the fetch hooks carry no dead watch options', () => {
+  void test('Git state owns the refresh triggers; the fetch hooks carry no dead options or parameters', () => {
     const gitState = readSource('src/renderer/src/hooks/useWorkbenchGitState.ts')
     const summaries = readSource('src/renderer/src/support/useWorkspaceGitSummaries.ts')
     const lineStats = readSource('src/renderer/src/support/useWorkspaceGitLineStats.ts')
@@ -250,14 +250,21 @@ void describe('Workbench Git refresh on workspace changes', () => {
       /subscribeWorkbenchAgentProjectWrites\(workspaceRoot, workspaceChangeRefresh\.schedule\)/u
     )
     // 顶栏 +/- 总是跟；完整快照只在 Git 界面开着时跟。
-    assert.match(gitState, /refreshLineStatsLatest\.current\(\{ reason: 'files-changed' \}\)/u)
     assert.match(
       gitState,
-      /gitSurfacesActiveLatest\.current\n\s*\? refreshSummaryLatest\.current\(\{ reason: 'files-changed' \}\)/u
+      /refreshLineStatsLatest\.current\(\),\n\s*gitSurfacesActiveLatest\.current \? refreshSummaryLatest\.current\(\) : undefined/u
     )
-    // 一轮结束时的刷新保留。
-    assert.match(gitState, /reason: 'agent-run-finished'/u)
-    for (const source of [gitState, summaries, lineStats])
+    // Git 操作之后、手动刷新、一轮 Agent 结束共用一个 refresh，不再是三份一样的实现。
+    assert.match(gitState, /await Promise\.all\(\[refreshSummary\(\), refreshLineStats\(\)\]\)/u)
+    assert.doesNotMatch(gitState, /refreshAfterGitAction|refreshAfterAgentRun|refreshGitPanel/u)
+    for (const source of [gitState, summaries, lineStats]) {
       assert.doesNotMatch(source, /watchFileChanges|watchSessionWorkspace|refreshKey/u)
+      // 拉取不看原因、没有 force：刷新请求不带参数。
+      assert.doesNotMatch(source, /RefreshReason|RefreshRequest|reason:|force:|_request/u)
+    }
+    for (const source of [summaries, lineStats]) {
+      assert.match(source, /refresh: \(\) => Promise<void>/u)
+      assert.match(source, /async \(\): Promise<void> => \{/u)
+    }
   })
 })

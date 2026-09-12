@@ -44,10 +44,10 @@ export function isWorkbenchGitSnapshotForProjectRoot(
  * - 顶栏 +/-：`useWorkspaceGitLineStats`（轻量 IPC）
  * - Git 面板 / 变更树：完整 `useWorkspaceGitSummaries`
  *
- * 刷新时机都在这里：挂载与 workspace 绑定完成、Git 界面打开、Git 操作之后、一轮 Agent 结束，以及工作区
- * 一有改动就合并刷新一次——顶栏 +/- 总是跟，完整快照只在 Git 界面开着时跟（界面打开那一刻会补拉一次）。
- * 工作区改动有两路：文件监听（用户在编辑器、终端里的改动，也包括 Agent 的）与 Agent 写入信号
- * （workbenchAgentProjectWrites，主 Agent 与子 Agent 的写工具一出结果就到，不等监听那一拍）。
+ * 刷新时机都在这里：挂载与 workspace 绑定完成、Git 界面打开、`refresh`（Git 操作之后、手动刷新、一轮 Agent
+ * 结束），以及工作区一有改动就合并刷新一次——顶栏 +/- 总是跟，完整快照只在 Git 界面开着时跟（界面打开
+ * 那一刻会补拉一次）。工作区改动有两路：文件监听（用户在编辑器、终端里的改动，也包括 Agent 的）与 Agent
+ * 写入信号（workbenchAgentProjectWrites，主 Agent 与子 Agent 的写工具一出结果就到，不等监听那一拍）。
  */
 export function useWorkbenchGitState({
   activeProject,
@@ -85,10 +85,8 @@ export function useWorkbenchGitState({
       delayMs: WorkbenchGitWorkspaceChangeRefreshDelayMs,
       run: async () => {
         await Promise.all([
-          refreshLineStatsLatest.current({ reason: 'files-changed' }),
-          gitSurfacesActiveLatest.current
-            ? refreshSummaryLatest.current({ reason: 'files-changed' })
-            : undefined,
+          refreshLineStatsLatest.current(),
+          gitSurfacesActiveLatest.current ? refreshSummaryLatest.current() : undefined,
         ])
       },
     })
@@ -144,16 +142,14 @@ export function useWorkbenchGitState({
   useEffect(() => {
     if (!activeProject || !gitSurfacesActive) return
 
-    void refreshSummaryLatest.current({ reason: 'surface-open' })
+    void refreshSummaryLatest.current()
   }, [activeProject?.id, gitSurfacesActive, refreshSummaryLatest])
 
   useEffect(() => {
     if (!activeProject || workspaceBindingVersion <= 0) return
 
-    void refreshLineStatsLatest.current({ reason: 'workspace-bound', force: true })
-    if (gitSurfacesActive) {
-      void refreshSummaryLatest.current({ reason: 'workspace-bound', force: true })
-    }
+    void refreshLineStatsLatest.current()
+    if (gitSurfacesActive) void refreshSummaryLatest.current()
   }, [
     activeProject?.id,
     gitSurfacesActive,
@@ -162,32 +158,10 @@ export function useWorkbenchGitState({
     workspaceBindingVersion,
   ])
 
-  const refreshAfterGitAction = useMemo(
+  /** 顶栏 +/- 与完整快照一起重拉：Git 操作之后、手动刷新、一轮 Agent 结束都用它。 */
+  const refresh = useMemo(
     () => async (): Promise<void> => {
-      await Promise.all([
-        refreshSummary({ reason: 'git-action', force: true }),
-        refreshLineStats({ reason: 'git-action', force: true }),
-      ])
-    },
-    [refreshLineStats, refreshSummary]
-  )
-
-  const refreshAfterAgentRun = useMemo(
-    () => async (): Promise<void> => {
-      await Promise.all([
-        refreshSummary({ reason: 'agent-run-finished' }),
-        refreshLineStats({ reason: 'files-changed' }),
-      ])
-    },
-    [refreshLineStats, refreshSummary]
-  )
-
-  const refreshGitPanel = useMemo(
-    () => async (): Promise<void> => {
-      await Promise.all([
-        refreshSummary({ reason: 'manual', force: true }),
-        refreshLineStats({ reason: 'manual', force: true }),
-      ])
+      await Promise.all([refreshSummary(), refreshLineStats()])
     },
     [refreshLineStats, refreshSummary]
   )
@@ -202,12 +176,7 @@ export function useWorkbenchGitState({
     isLoading: isSummaryLoading,
     isSummaryLoading,
     lineStatsSnapshot: scopedLineStatsSnapshot,
-    refresh: refreshGitPanel,
-    refreshAfterAgentRun,
-    refreshAfterGitAction,
-    refreshGitPanel,
-    refreshLineStats,
-    refreshSummary,
+    refresh,
     workspaceRoot,
     summary: scopedSummary,
     topBarSummary,

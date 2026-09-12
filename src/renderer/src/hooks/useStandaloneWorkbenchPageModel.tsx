@@ -587,7 +587,7 @@ export function useStandaloneWorkbenchPageModel(
     enabled: !!workbench.activeProject && !!activeWorkbenchChatSessionId,
     onOpenDiff: editorNavigation.openDiff,
     onRefreshWorkspace: refreshWorkspaceChanges,
-    onRefreshGit: gitState.refreshAfterAgentRun,
+    onRefreshGit: gitState.refresh,
     session: currentSession,
   })
   const gitChangeActions = useWorkbenchGitChangeActions({
@@ -643,12 +643,12 @@ export function useStandaloneWorkbenchPageModel(
 
   async function refreshGitPanelWithWorkspace(): Promise<void> {
     await refreshWorkspaceChanges()
-    await gitState.refreshGitPanel()
+    await gitState.refresh()
   }
 
   async function refreshProjectAndGit(): Promise<void> {
     await refreshProjectTree()
-    await gitState.refreshAfterGitAction()
+    await gitState.refresh()
   }
 
   // 左侧「AI 改动」面板（跟着右侧的当前会话走）与编辑区的只读对比标签组。
@@ -772,7 +772,7 @@ export function useStandaloneWorkbenchPageModel(
     const find = () => gitChangeItemsRef.current.find((item) => item.path === path) ?? null
     const existing = find()
     if (existing) return existing
-    await gitState.refreshGitPanel()
+    await gitState.refresh()
     for (let waited = 0; waited < 1500; waited += 50) {
       const refreshed = find()
       if (refreshed) return refreshed
@@ -1029,7 +1029,7 @@ export function useStandaloneWorkbenchPageModel(
         tone: appError.code === 'VALIDATION' ? 'warning' : 'error',
         showClose: true,
       })
-      await gitState.refreshGitPanel()
+      await gitState.refresh()
     }
   }
 
@@ -1333,7 +1333,7 @@ export function useStandaloneWorkbenchPageModel(
     /** 交互动作。 */
     actions: {
       runTreeMutation,
-      refreshGitPanel: gitState.refreshGitPanel,
+      refreshGitPanel: gitState.refresh,
       refreshProjectAndGit,
       handleRepositoryChanged,
       initializeRepository,
