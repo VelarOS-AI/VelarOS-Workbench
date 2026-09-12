@@ -322,12 +322,14 @@ class WorkbenchAgentExecutionStack {
           input.config.permissionConfirmationMode
           ?? DefaultWorkbenchPermissionConfirmationMode,
       }),
+      // 按轮区分执行：派发计数、并发槽和进展账本每轮一份；子 Agent 线程本身挂在会话上，下一轮还能续跑。
       dispatchSubAgent: (dispatchInput) =>
         session.dispatcher.dispatch({
           input: dispatchInput,
           parentCtx: toolContext,
           events: input.events,
           config,
+          executionId: input.executionId,
         }),
     })
     session.tracker.attachToolContext(toolContext)
@@ -359,6 +361,9 @@ class WorkbenchAgentExecutionStack {
       if (this.activeRunsBySession.get(input.sessionId)?.executionId === input.executionId)
         this.activeRunsBySession.delete(input.sessionId)
       this.guidanceQueue.clear(input.executionId)
+      // 这一轮收尾：跑着的子 Agent 被中断，本轮的派发计数与账本回收；已完成的线程转入保留期，
+      // 下一轮用 thread_id 还能接着用它的上下文。
+      session.dispatcher.clearExecution(input.executionId)
       unbindAbort()
       // 一轮结束（含中止/失败）后不留悬挂的确认卡：晚到的回执没有等待方，
       // 而挂着的 Promise 会把整个执行钉死在 awaiting_confirmation。
@@ -409,6 +414,8 @@ class WorkbenchAgentExecutionStack {
   public async releaseSession(sessionId: string): Promise<void> {
     const session = this.sessions.get(sessionId)
     if (session) {
+      // 会话没了，它保留着的子 Agent 线程也一并丢掉。
+      session.dispatcher.releaseParentSession(sessionId)
       session.stack.clearSession(sessionId)
       this.sessions.delete(sessionId)
     }
