@@ -397,8 +397,12 @@ export class WorkbenchGitService {
   }
 
   private async getStatus(rootPath: string): Promise<WorkspaceGitStatusResult> {
+    // `--no-optional-locks`：只读的 status 不顺手刷新并重写 .git/index。否则工作区每改一次，这次刷新
+    // 写下的 .git/index 又被文件监听报回来（监听要放行它：终端里 git add / commit 之后面板得跟上），
+    // 平白多一次全量刷新。用户自己的 git 命令照常写 index，照常被监听到。
     const output = (
       await this.runGit(rootPath, [
+        '--no-optional-locks',
         'status',
         '--porcelain=v1',
         '--branch',
