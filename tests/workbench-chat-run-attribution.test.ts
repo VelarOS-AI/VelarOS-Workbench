@@ -208,6 +208,41 @@ void describe('Workbench chat run attribution', () => {
     })
   })
 
+  void test('a change made before the round started is nobody’s in this round, even when its event arrives during it', async () => {
+    const { agentWrite, clock, files, resolve, watcher } = await createLedger()
+
+    // 用户发消息前刚保存了 saved.ts（已经在检查点里），事件在这一轮里才到；Agent 之后改了它。
+    const now = clock.now
+    clock.now = 9_000
+    files.write('src/saved.ts')
+    clock.now = now
+    watcher.emit('src/saved.ts')
+    await new Promise((resolveTick) => setTimeout(resolveTick, 0))
+    agentWrite(() => files.write('src/saved.ts'), ['src/saved.ts'])
+
+    assert.deepEqual((await resolve(['src/saved.ts'])).origins, { 'src/saved.ts': 'agent' })
+  })
+
+  void test('the agent’s own deletion stays its own when the event arrives after the folder changed again', async () => {
+    const { agentWrite, files, passTime, resolve, watcher } = await createLedger()
+
+    // Agent 先删了 x.ts，下一步又在同一目录里建了 y.ts；删除的事件等到那之后才到。
+    agentWrite(() => files.remove('src/x.ts'), ['src/x.ts'])
+    passTime()
+    agentWrite(() => files.create('src/y.ts'), ['src/y.ts'])
+    // Agent 改过的 z.ts 之后被别人删了：那是 AI 之外的改动。
+    agentWrite(() => files.write('src/z.ts'), ['src/z.ts'])
+    passTime()
+    files.remove('src/z.ts')
+    watcher.emit('src/x.ts', 'src/y.ts', 'src/z.ts')
+
+    assert.deepEqual((await resolve(['src/x.ts', 'src/y.ts', 'src/z.ts'])).origins, {
+      'src/x.ts': 'agent',
+      'src/y.ts': 'agent',
+      'src/z.ts': 'mixed',
+    })
+  })
+
   void test('a file touched by the agent and by someone else is mixed, including through its parent folder', async () => {
     const { attribution, activity, agentWrite, clock, files, passTime, resolve, watcher } = await createLedger()
 

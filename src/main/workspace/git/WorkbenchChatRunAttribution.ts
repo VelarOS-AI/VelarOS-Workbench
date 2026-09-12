@@ -139,6 +139,13 @@ interface FileWriteWindow extends ActionWindow {
 class RunAttributionLedger {
   private readonly marks = new Map<string, number>()
   private readonly agentWrites = new Set<string>()
+  /**
+   * 写文件工具删掉的路径：报告里有、那次写入结束时已经不在。删除的事件要是晚到、同一目录其间又有改动，
+   * 按上级目录推出的时刻会落到别的窗里——认它就是 Agent 的删除，回溯时照样重建。
+   */
+  private readonly agentDeletions = new Set<string>()
+  /** 还没读完的「写入结束时哪些路径已经不在」。 */
+  private readonly deletionChecks = new Set<Promise<void>>()
   private readonly fileWrites: FileWriteWindow[] = []
   private readonly commands: ActionWindow[] = []
   private pendingEchoes: Array<{ path: string; at: number }> = []
@@ -183,12 +190,18 @@ class RunAttributionLedger {
   public observePath(path: string): void {
     if (this.disposedState || isUntrackedPath(path)) return
     const arrivedAt = this.now()
-    const task = this.eventChangeTime(path, arrivedAt).then(
-      (changedAt) => this.classifyEvent(path, changedAt),
+    this.track(this.inFlight, this.eventChangeTime(path, arrivedAt).then(
+      (changedAt) => {
+        if (changedAt !== 'agent-deletion') this.classifyEvent(path, changedAt)
+      },
       () => this.mark(path, MarkOutside)
-    )
-    this.inFlight.add(task)
-    void task.then(() => this.inFlight.delete(task))
+    ))
+  }
+
+  /** 跟踪一个不会失败的后台判定，判完自己移除。 */
+  private track(tasks: Set<Promise<void>>, task: Promise<void>): void {
+    tasks.add(task)
+    void task.then(() => tasks.delete(task))
   }
 
   public beginFileWrite(): (changedPaths: readonly string[]) => void {
@@ -202,7 +215,16 @@ class RunAttributionLedger {
       write.paths = new Set(changedPaths)
       for (const path of changedPaths) this.agentWrites.add(path)
       this.settlePendingEchoes(false)
+      this.track(this.deletionChecks, this.recordAgentDeletions(changedPaths))
     }
+  }
+
+  private async recordAgentDeletions(paths: readonly string[]): Promise<void> {
+    await Promise.all(paths.map(async (path) => {
+      const changedAt = await this.readChangeTime(this.absolute(path)).catch(() => undefined)
+      if (changedAt === null) this.agentDeletions.add(path)
+      else if (changedAt !== undefined) this.agentDeletions.delete(path)
+    }))
   }
 
   public beginCommand(): () => void {
@@ -236,7 +258,8 @@ class RunAttributionLedger {
     paths: readonly string[],
     final: boolean
   ): Promise<WorkbenchChatRunAttributionResult> {
-    while (this.inFlight.size > 0) await Promise.all([...this.inFlight])
+    while (this.inFlight.size > 0 || this.deletionChecks.size > 0)
+      await Promise.all([...this.inFlight, ...this.deletionChecks])
     if (final) this.settlePendingEchoes(true)
     await this.reviewChangedPaths(paths)
     const origins = new Map<string, WorkbenchChatRunFileAttribution>()
@@ -252,12 +275,15 @@ class RunAttributionLedger {
 
   /**
    * 一次事件的改动发生在什么时候：路径还在就是它的 ctime；已经不在（删掉、移走）就是最近的在世上级目录的
-   * ctime，再不晚于事件到达的时刻——真正删除的那一刻不晚于这两者。读不了按到达时刻算。
+   * ctime，再不晚于事件到达的时刻——真正删除的那一刻不晚于这两者。写文件工具删掉的路径是它自己的删除
+   * （`agent-deletion`）。读不了按到达时刻算。
    */
-  private async eventChangeTime(path: string, arrivedAt: number): Promise<number> {
+  private async eventChangeTime(path: string, arrivedAt: number): Promise<number | 'agent-deletion'> {
     try {
       const own = await this.readChangeTime(this.absolute(path))
       if (own !== null) return own
+      while (this.deletionChecks.size > 0) await Promise.all([...this.deletionChecks])
+      if (this.agentDeletions.has(path)) return 'agent-deletion'
       const ancestor = await this.nearestAncestorChangeTime(path, () => true)
       return ancestor === null ? arrivedAt : Math.min(ancestor, arrivedAt)
     } catch {
@@ -266,7 +292,8 @@ class RunAttributionLedger {
   }
 
   private classifyEvent(path: string, changedAt: number): void {
-    if (this.disposedState) return
+    // 改在这一轮开跑之前的（事件晚到）：已经在检查点里，不是这一轮任何人的改动。
+    if (this.disposedState || changedAt < this.startedAt - ChangeTimeSlackMs) return
     if (this.inCommandWindow(changedAt)) {
       this.mark(path, MarkAgentCommand)
       return
