@@ -11,8 +11,8 @@ import {
   FolderIcon,
   GitBranchIcon,
   GitCommitIcon,
+  NotePencilIcon,
   PlayIcon,
-  SparkleIcon,
   TerminalWindowIcon,
   TreeViewIcon,
   WarningCircleIcon,
@@ -642,7 +642,7 @@ export function StandaloneWorkbenchPagePresentation({
                   data-badge={aiChanges.hasUnseenRounds}
                   onClick={toggleAiChanges}
                 >
-                  <SparkleIcon size={18} weight="duotone" />
+                  <NotePencilIcon size={18} weight="duotone" />
                 </IconButton>
               </div>
               <div className={styles.leftToolRailBottom}>

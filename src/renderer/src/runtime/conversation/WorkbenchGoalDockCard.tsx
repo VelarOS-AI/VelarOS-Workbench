@@ -44,7 +44,7 @@ export function WorkbenchGoalDockCard({
       className={styles.card}
       data-goal-status={model.status}
       tone={getCardTone(model.tone)}
-      icon={<TargetIcon size={17} weight="bold" />}
+      icon={<TargetIcon size={14} weight="bold" />}
       title={t('chat.goalDockTitle')}
       description={
         <span className={styles.description} title={model.objective}>

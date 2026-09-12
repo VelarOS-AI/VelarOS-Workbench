@@ -2,7 +2,7 @@ import { type KeyboardEvent, type ReactElement, useMemo } from 'react'
 import {
   ArrowCounterClockwiseIcon,
   ArrowSquareOutIcon,
-  SparkleIcon,
+  NotePencilIcon,
   SpinnerGapIcon,
   XIcon,
 } from '@phosphor-icons/react'
@@ -131,7 +131,7 @@ export function WorkbenchChatChangePreviewPanel({
       <aside className={styles.aiChangePreviewSidebar}>
         <header className={styles.aiChangePreviewHeader}>
           <div className={styles.aiChangePreviewTitle}>
-            <SparkleIcon size={15} />
+            <NotePencilIcon size={15} />
             <Text truncate>{t('workbench.aiChangePreviewTitle')}</Text>
           </div>
           <Text tone="caption" truncate>

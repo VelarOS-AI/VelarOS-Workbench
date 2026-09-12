@@ -20,6 +20,28 @@
   background: color-mix(in srgb, var(--background-panel) 90%, transparent);
 }
 
+/* 与计划卡（ui PlanToolRender 的紧凑 plain 版）同一套度量，固定坞里两行的图标与标题上下对齐：
+   图标不加底色、放在 20px 槽位里，标题 12px。双类名选择器保证盖过 ActionCard 的默认度量。 */
+.card:global(.velar-action-card) {
+  gap: 8px;
+  padding: 8px 10px 7px;
+  border-radius: 8px;
+}
+
+.card :global(.velar-action-card-icon) {
+  width: 20px;
+  height: 20px;
+  border-radius: 0;
+  background: none;
+  color: var(--muted-foreground);
+}
+
+.card :global(.velar-action-card-title) {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
 .card :global(.velar-action-card-main) {
   display: flex;
   min-width: 0;

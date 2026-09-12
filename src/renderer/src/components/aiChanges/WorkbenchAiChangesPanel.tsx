@@ -4,7 +4,7 @@ import {
   CaretRightIcon,
   FolderIcon,
   FolderOpenIcon,
-  SparkleIcon,
+  NotePencilIcon,
   SpinnerGapIcon,
 } from '@phosphor-icons/react'
 import { useWorkbenchI18n } from '@renderer/i18n'
@@ -91,7 +91,7 @@ export function WorkbenchAiChangesPanel({
       <div className={styles.scroll}>
         {rounds.length === 0 ? (
           <div className={styles.empty}>
-            <SparkleIcon size={20} weight="duotone" />
+            <NotePencilIcon size={20} weight="duotone" />
             <p>{t('workbench.aiChangesEmpty')}</p>
           </div>
         ) : (
