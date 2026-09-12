@@ -8,24 +8,58 @@ import { WorkbenchFileWatcher } from './WorkbenchFileWatcher'
 
 let assertions = 0
 
+/**
+ * 等一个文件事件的上限。macOS 在磁盘忙的时候把文件事件攒上好几秒才成批送达（门禁里探针紧跟在建了大量
+ * 临时仓库的测试之后，实测过 4–16 秒），事件来得快时不会多等。
+ */
+const WatchEventTimeoutMs = 20_000
+/**
+ * 拥塞时 FSEvents 还会把事件并成「这个目录要重扫」、丢掉具体路径：隔这么久还没等到，就把同一个文件原样再
+ * 写一遍，让它重新报一次。
+ */
+const RewriteAfterMs = 3_000
+
 function assert(condition: unknown, message: string): asserts condition {
   assertions += 1
   if (!condition) throw new Error(message)
 }
 
-async function waitForPath(
-  events: SystemWorkspaceFilesChangedEvent[],
-  path: string,
-  fromIndex = 0,
-  timeoutMs = 2_000
-): Promise<SystemWorkspaceFilesChangedEvent> {
+/** 写一个文件，等到 `seen` 成立；迟迟等不到就原样重写。 */
+async function writeUntilSeen(file: string, content: string, seen: () => boolean): Promise<boolean> {
+  await writeFile(file, content)
   const startedAt = Date.now()
-  while (Date.now() - startedAt < timeoutMs) {
-    const event = events.slice(fromIndex).find((candidate) => candidate.paths.includes(path))
-    if (event) return event
+  let wroteAt = startedAt
+  while (!seen() && Date.now() - startedAt < WatchEventTimeoutMs) {
+    if (Date.now() - wroteAt >= RewriteAfterMs) {
+      wroteAt = Date.now()
+      await writeFile(file, content)
+    }
     await new Promise((resolve) => setTimeout(resolve, 20))
   }
-  throw new Error(`watch event timeout for ${path}`)
+  return seen()
+}
+
+function findPathEvent(
+  events: SystemWorkspaceFilesChangedEvent[],
+  path: string,
+  fromIndex = 0
+): SystemWorkspaceFilesChangedEvent | undefined {
+  return events.slice(fromIndex).find((candidate) => candidate.paths.includes(path))
+}
+
+/** 写一个文件，等列出的每个订阅都收到这个路径的事件。 */
+async function writeAndWaitForPath(
+  root: string,
+  path: string,
+  content: string,
+  subscribers: ReadonlyArray<{ events: SystemWorkspaceFilesChangedEvent[]; fromIndex: number }>
+): Promise<SystemWorkspaceFilesChangedEvent[]> {
+  const seenBy = (): Array<SystemWorkspaceFilesChangedEvent | undefined> =>
+    subscribers.map(({ events, fromIndex }) => findPathEvent(events, path, fromIndex))
+  await writeUntilSeen(join(root, path), content, () => seenBy().every(Boolean))
+  const events = seenBy()
+  if (!events.every(Boolean)) throw new Error(`watch event timeout for ${path}`)
+  return events as SystemWorkspaceFilesChangedEvent[]
 }
 
 const root = await mkdtemp(join(tmpdir(), 'velaros-workbench-watch-'))
@@ -47,15 +81,15 @@ try {
   assert(first.subscriptionId !== second.subscriptionId, 'subscriptions must be isolated')
   assert(first.workspaceRoot === (await realpath(root)), 'root must be canonical')
 
-  await writeFile(join(root, 'one.ts'), 'one')
-  const event = await waitForPath(firstEvents, 'one.ts')
-  await waitForPath(secondEvents, 'one.ts')
+  const [event] = await writeAndWaitForPath(root, 'one.ts', 'one', [
+    { events: firstEvents, fromIndex: 0 },
+    { events: secondEvents, fromIndex: 0 },
+  ])
 
-  const firstTwoStart = firstEvents.length
-  const secondTwoStart = secondEvents.length
-  await writeFile(join(root, 'two.ts'), 'two')
-  const secondPathEvent = await waitForPath(firstEvents, 'two.ts', firstTwoStart)
-  await waitForPath(secondEvents, 'two.ts', secondTwoStart)
+  const [secondPathEvent] = await writeAndWaitForPath(root, 'two.ts', 'two', [
+    { events: firstEvents, fromIndex: firstEvents.length },
+    { events: secondEvents, fromIndex: secondEvents.length },
+  ])
 
   assert(event.kind === 'velaros.systemWorkspaceFilesChanged', 'event kind must be stable')
   assert(event.source === 'filesystem-watch', 'event source must identify watcher')
@@ -67,16 +101,16 @@ try {
 
   service.unsubscribe(first.subscriptionId)
   const firstCount = firstEvents.length
-  const secondCount = secondEvents.length
-  await writeFile(join(root, 'three.ts'), 'three')
-  const secondEvent = await waitForPath(secondEvents, 'three.ts', secondCount)
+  const [secondEvent] = await writeAndWaitForPath(root, 'three.ts', 'three', [
+    { events: secondEvents, fromIndex: secondEvents.length },
+  ])
   assert(secondEvent.paths.includes('three.ts'), 'remaining subscriber must receive changes')
   await new Promise((resolve) => setTimeout(resolve, 80))
   assert(firstEvents.length === firstCount, 'released subscriber must receive no changes')
 
-  const beforeGitWrite = secondEvents.length
-  await writeFile(join(root, '.git', 'HEAD'), 'ref: refs/heads/main\n')
-  const gitEvent = await waitForPath(secondEvents, '.git/HEAD', beforeGitWrite)
+  const [gitEvent] = await writeAndWaitForPath(root, '.git/HEAD', 'ref: refs/heads/main\n', [
+    { events: secondEvents, fromIndex: secondEvents.length },
+  ])
   assert(gitEvent.paths.includes('.git/HEAD'), 'Git state changes must refresh Git surfaces')
 
   const beforeIgnoredWrite = secondEvents.length
@@ -91,11 +125,10 @@ try {
     onError: () => undefined,
   })
   const beforeBuildWrite = secondEvents.length
-  await writeFile(join(root, 'build', 'out.js'), 'built')
-  const rawStartedAt = Date.now()
-  while (!rawPaths.has('build/out.js') && Date.now() - rawStartedAt < 2_000)
-    await new Promise((resolve) => setTimeout(resolve, 20))
-  assert(rawPaths.has('build/out.js'), 'raw observers must see writes in generated directories')
+  assert(
+    await writeUntilSeen(join(root, 'build', 'out.js'), 'built', () => rawPaths.has('build/out.js')),
+    'raw observers must see writes in generated directories'
+  )
   await new Promise((resolve) => setTimeout(resolve, 80))
   assert(
     secondEvents.slice(beforeBuildWrite).every((candidate) => !candidate.paths.includes('build/out.js')),
