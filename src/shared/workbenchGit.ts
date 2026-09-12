@@ -118,13 +118,14 @@ export interface WorkbenchChatCheckpointDeleteRequest extends WorkbenchGitRootRe
 }
 
 /**
- * 每轮的「本轮改动」（Desktop 运行标记上的 workspaceCheckpointDiff）：一轮正常收尾后，拿工作树与
- * 这一轮开跑前的检查点做 diff。补丁全文写进主进程数据区的记录文件——会话历史存在 localStorage，
- * 放不下补丁——运行标记上只留定长摘要，卡片挂出来时再按 recordId 读记录。
+ * 每轮的「本轮改动」（Desktop 运行标记上的 workspaceCheckpointDiff）：拿工作树与这一轮开跑前的检查点
+ * 做 diff。运行中每有写入就采一次（「AI 改动」面板实时刷新），收尾时再采一次最终的，同一个 recordId
+ * 覆盖同一条记录。补丁全文写进主进程数据区的记录文件——会话历史存在 localStorage，放不下补丁——
+ * 运行标记上只留定长摘要，卡片挂出来时再按 recordId 读记录。
  */
 export interface WorkbenchChatRunChangesCaptureRequest extends WorkbenchGitRootRequest {
   sessionId: string
-  /** 记录 id（这一轮检查点的 id），会话内唯一。 */
+  /** 记录 id（这一轮检查点的 id），会话内唯一；这一轮的每次采集都用它。 */
   recordId: string
   /** 这一轮开跑前检查点的影子提交：diff 的起点。 */
   baseCommitId: string
@@ -133,6 +134,7 @@ export interface WorkbenchChatRunChangesCaptureRequest extends WorkbenchGitRootR
 /** 记在运行标记上的摘要：定长，不随改动文件数增长。 */
 export interface WorkbenchChatRunChangesSummary {
   recordId: string
+  /** 这次采集的时刻，也是记录文件的版本：同一条记录被重新采集后，读过的旧内容按它作废。 */
   capturedAt: number
   fileCount: number
   additions: number

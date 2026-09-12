@@ -87,7 +87,8 @@ export const WorkbenchRunChangesCard = memo(function WorkbenchRunChangesCard({
   const { record, loading, failed } = useWorkbenchRunChangeRecord(
     scope?.projectRoot ?? '',
     scope?.sessionId ?? '',
-    summary && summary.fileCount > 0 && !summary.error ? summary.recordId : null
+    summary && summary.fileCount > 0 && !summary.error ? summary.recordId : null,
+    summary?.capturedAt ?? 0
   )
   const [expandedKeys, setExpandedKeys] = useState<ReadonlySet<string>>(() => new Set())
   const projectRoot = scope?.projectRoot ?? ''

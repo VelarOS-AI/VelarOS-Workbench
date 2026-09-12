@@ -49,8 +49,8 @@ function formatRoundTime(timestamp: number, locale: string): string {
 }
 
 /**
- * 左侧「AI 改动」面板：AI 每一轮改了哪些文件，一轮一棵文件树（最近的在上）。点文件在编辑区打开这一轮
- * 这个文件的只读对比。
+ * 左侧「AI 改动」面板：右侧当前会话里 AI 每一轮改了哪些文件，一轮一棵文件树（最近的在上）。还在跑的
+ * 那一轮标着「进行中」，随写入实时刷新。点文件在编辑区打开这一轮这个文件的只读对比。
  */
 export function WorkbenchAiChangesPanel({
   projectRoot,
@@ -59,10 +59,6 @@ export function WorkbenchAiChangesPanel({
   const { t, locale } = useWorkbenchI18n()
   const { rounds, expandedRoundKeys, revealRequest, activeTab, markRoundsSeen } = aiChanges
   const roundElementsRef = useRef(new Map<string, HTMLDivElement>())
-  const sessionCount = useMemo(
-    () => new Set(rounds.map((round) => round.sessionId)).size,
-    [rounds]
-  )
   const fileCount = useMemo(
     () => rounds.reduce((total, round) => total + round.fileCount, 0),
     [rounds]
@@ -83,7 +79,7 @@ export function WorkbenchAiChangesPanel({
   return (
     <section className={styles.panel} aria-label={t('workbench.aiChangesTitle')}>
       <header className={pageStyles.panelHeader}>
-        <div className={pageStyles.panelTitleGroup}>
+        <div className={styles.headerTitle}>
           <span className={pageStyles.panelTitle}>{t('workbench.aiChangesTitle')}</span>
           {rounds.length > 0 && (
             <span className={pageStyles.panelSubtitle}>
@@ -111,7 +107,6 @@ export function WorkbenchAiChangesPanel({
                 projectRoot={projectRoot}
                 round={round}
                 expanded={expandedRoundKeys.has(round.key)}
-                showSessionTitle={sessionCount > 1}
                 activePath={activeTab?.roundKey === round.key ? activeTab.path : null}
                 timeLabel={formatRoundTime(round.capturedAt, locale)}
                 onToggle={aiChanges.toggleRound}
@@ -129,7 +124,6 @@ interface WorkbenchAiChangeRoundItemProps {
   projectRoot: string
   round: WorkbenchAiChangeRound
   expanded: boolean
-  showSessionTitle: boolean
   activePath: string | null
   timeLabel: string
   onToggle: (roundKey: string) => void
@@ -140,7 +134,6 @@ const WorkbenchAiChangeRoundItem = memo(function WorkbenchAiChangeRoundItem({
   projectRoot,
   round,
   expanded,
-  showSessionTitle,
   activePath,
   timeLabel,
   onToggle,
@@ -159,6 +152,7 @@ const WorkbenchAiChangeRoundItem = memo(function WorkbenchAiChangeRoundItem({
         <span className={styles.roundLabel}>
           {t('workbench.aiChangesRunLabel', { number: round.runNumber })}
         </span>
+        {round.live && <span className={styles.roundLive}>{t('workbench.aiChangesLive')}</span>}
         <span className={styles.roundTime}>{timeLabel}</span>
         <span className={styles.roundStats}>
           <span className={styles.additions}>+{round.additions}</span>
@@ -168,9 +162,6 @@ const WorkbenchAiChangeRoundItem = memo(function WorkbenchAiChangeRoundItem({
       <div className={styles.roundPrompt} title={round.prompt}>
         {round.prompt || t('workbench.aiChangesNoPrompt')}
       </div>
-      {showSessionTitle && !!round.sessionTitle && (
-        <div className={styles.roundSession}>{round.sessionTitle}</div>
-      )}
       {expanded && (
         <WorkbenchAiChangeRoundFiles
           projectRoot={projectRoot}
@@ -195,10 +186,12 @@ function WorkbenchAiChangeRoundFiles({
   onOpenFile: WorkbenchAiChangesState['openFile']
 }): ReactElement {
   const { t } = useWorkbenchI18n()
+  // 还在跑的一轮每采一次 capturedAt 就变：记录随之重读，展开着的文件树跟着刷新。
   const { record, loading, failed } = useWorkbenchRunChangeRecord(
     projectRoot,
     round.sessionId,
-    round.error ? null : round.recordId
+    round.error ? null : round.recordId,
+    round.capturedAt
   )
   const tree = useMemo(() => (record ? buildWorkbenchAiChangeTree(record.changes) : []), [record])
   const [collapsedDirectories, setCollapsedDirectories] = useState<ReadonlySet<string>>(

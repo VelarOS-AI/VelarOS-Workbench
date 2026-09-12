@@ -32,6 +32,16 @@ export interface WorkbenchChatMessagePaging {
   totalCount: number
 }
 
+/**
+ * 正在跑的这一轮的「本轮改动」：运行中每有写入就实时采集一次，与收尾时的最终采集是同一条记录；
+ * 最终摘要挂上运行标记时它就撤下。
+ */
+export interface WorkbenchChatLiveRunChanges {
+  /** 这一轮开跑时会话里已有的消息数：这一轮的消息都排在它之后。 */
+  readonly firstMessageIndex: number
+  readonly summary: WorkbenchChatRunChangesSummary
+}
+
 export interface WorkbenchChatSessionSnapshot {
   readonly id: string
   readonly folderId: string
@@ -53,6 +63,8 @@ export interface WorkbenchChatSessionSnapshot {
     /** 这一轮的「本轮改动」摘要（补丁全文在主进程的记录文件里，按 recordId 读）。 */
     readonly runChanges?: WorkbenchChatRunChangesSummary
   }>
+  /** 这一轮还在跑、已经采到改动时才有。 */
+  readonly liveRunChanges: Nullable<WorkbenchChatLiveRunChanges>
   readonly workerThreads: ReadonlyArray<{
     readonly messages: readonly ChatMessage[]
   }>

@@ -33,9 +33,15 @@ interface StoredRunChangesRecord extends WorkbenchChatRunChangesRecord {
  * 每轮「本轮改动」的记录区：`<数据根>/chat-run-changes/<项目根摘要>/<会话 id>/<记录 id>.json`。
  *
  * 补丁全文只落在这里，renderer 的会话状态（localStorage）里只有摘要。记录跟着运行标记走：回溯掉的
- * 消息、被移除的会话，由 renderer 按 id 删掉对应记录。这一轮没改文件时不写记录。
+ * 消息、被移除的会话，由 renderer 按 id 删掉对应记录。
+ *
+ * 一轮运行中会被反复采集（实时刷新），收尾时再采一次最终的：记录 id 是这一轮的，每次采集整份覆盖
+ * 同一个文件（原子写入），改动清零时删掉文件——文件里永远是最近一次采集看到的改动。同一个会话的采集
+ * 与删除排队执行，写盘顺序就是请求到达的顺序。
  */
 export class WorkbenchChatRunChangeStore {
+  private readonly sessionQueues = new Map<string, Promise<unknown>>()
+
   constructor(
     private readonly checkpoints: WorkbenchChatCheckpointService,
     private readonly recordsRootDir: () => string,
@@ -46,40 +52,49 @@ export class WorkbenchChatRunChangeStore {
     request: WorkbenchChatRunChangesCaptureRequest
   ): Promise<WorkbenchChatRunChangesSummary> {
     const file = this.recordFile(request)
-    let changes: WorkbenchChatRunFileChange[]
-    try {
-      changes = await this.checkpoints.diffWorkingTree(request)
-    } catch (error) {
-      // 采集失败不影响这一轮本身：摘要带上原因，卡片据此说明改动读不出来。
+    // 工作树在请求到达的这一刻就排进项目根的锁里拍下：收尾的最终采集哪怕还要在会话队列里等上一次
+    // 实时采集写完，拍到的也是下一轮开跑之前的工作区。等候期间的失败轮到它时照常读出来。
+    const tree = this.checkpoints.snapshotWorkingTree(request.workspaceRoot)
+    tree.catch(() => undefined)
+    return this.serialize(dirname(file), async () => {
+      let changes: WorkbenchChatRunFileChange[]
+      try {
+        changes = await this.checkpoints.diffWorkingTree({ ...request, tree: await tree })
+      } catch (error) {
+        // 采集失败不影响这一轮本身：摘要带上原因，卡片据此说明改动读不出来。
+        return {
+          recordId: request.recordId,
+          capturedAt: this.now(),
+          fileCount: 0,
+          additions: 0,
+          deletions: 0,
+          error: error instanceof Error ? error.message : String(error),
+        }
+      }
+
+      const capturedAt = this.now()
+      if (changes.length > 0) {
+        await mkdir(dirname(file), { recursive: true })
+        await writeJsonFileAtomically<StoredRunChangesRecord>(file, {
+          version: RecordFileVersion,
+          recordId: request.recordId,
+          capturedAt,
+          baseCommitId: request.baseCommitId,
+          changes,
+        })
+      } else {
+        // 上一次采集时有改动、这一次全被撤回了：旧记录不能留着冒充现在。
+        await rm(file, { force: true })
+      }
       return {
         recordId: request.recordId,
-        capturedAt: this.now(),
-        fileCount: 0,
-        additions: 0,
-        deletions: 0,
-        error: error instanceof Error ? error.message : String(error),
-      }
-    }
-
-    const capturedAt = this.now()
-    if (changes.length > 0) {
-      await mkdir(dirname(file), { recursive: true })
-      await writeJsonFileAtomically<StoredRunChangesRecord>(file, {
-        version: RecordFileVersion,
-        recordId: request.recordId,
         capturedAt,
-        baseCommitId: request.baseCommitId,
-        changes,
-      })
-    }
-    return {
-      recordId: request.recordId,
-      capturedAt,
-      fileCount: changes.length,
-      additions: changes.reduce((total, change) => total + change.additions, 0),
-      deletions: changes.reduce((total, change) => total + change.deletions, 0),
-      error: null,
-    }
+        fileCount: changes.length,
+        additions: changes.reduce((total, change) => total + change.additions, 0),
+        deletions: changes.reduce((total, change) => total + change.deletions, 0),
+        error: null,
+      }
+    })
   }
 
   /** 记录不在（已被清理或这一轮没改文件）或已损坏时为 null。 */
@@ -117,16 +132,14 @@ export class WorkbenchChatRunChangeStore {
     }
   }
 
+  /** 与采集同一条会话队列：刚收尾的采集还没写完时回溯掉这一轮，删除排在写入之后。 */
   public async delete(request: WorkbenchChatRunChangesDeleteRequest): Promise<void> {
-    if (!request.recordIds) {
-      await rm(this.sessionDir(request), { recursive: true, force: true })
-      return
-    }
-    await Promise.all(
-      request.recordIds.map((recordId) =>
-        rm(this.recordFile({ ...request, recordId }), { force: true })
-      )
-    )
+    const sessionDir = this.sessionDir(request)
+    const files = request.recordIds?.map((recordId) => this.recordFile({ ...request, recordId }))
+    await this.serialize(sessionDir, async () => {
+      if (!files) await rm(sessionDir, { recursive: true, force: true })
+      else await Promise.all(files.map((file) => rm(file, { force: true })))
+    })
   }
 
   private recordFile(request: {
@@ -146,6 +159,18 @@ export class WorkbenchChatRunChangeStore {
       .digest('hex')
       .slice(0, 16)
     return join(this.recordsRootDir(), rootDigest, readSegment(request.sessionId))
+  }
+
+  /** 同一个会话目录上的写入与删除按到达顺序执行。 */
+  private serialize<T>(sessionDir: string, task: () => Promise<T>): Promise<T> {
+    const previous = this.sessionQueues.get(sessionDir) ?? Promise.resolve()
+    const next = previous.catch(() => undefined).then(task)
+    const settled = next.catch(() => undefined)
+    this.sessionQueues.set(sessionDir, settled)
+    void settled.then(() => {
+      if (this.sessionQueues.get(sessionDir) === settled) this.sessionQueues.delete(sessionDir)
+    })
+    return next
   }
 }
 

@@ -633,22 +633,10 @@ export function useStandaloneWorkbenchPageModel(
     await gitState.refreshAfterGitAction()
   }
 
-  // 左侧「AI 改动」面板与编辑区的只读对比标签组。会话标题取自会话列表（与聊天面板的会话菜单同源）。
-  const aiChangeSessionTitleEntries = chat.sessionList.groups.flatMap((group) =>
-    group.members.map((member) => [member.memberSessionId, member.title] as const)
-  )
-  const aiChangeSessionTitlesKey = aiChangeSessionTitleEntries
-    .map(([sessionId, title]) => `${sessionId}\u0001${title}`)
-    .join('\u0002')
-  const aiChangeSessionTitles = useMemo(
-    () => new Map(aiChangeSessionTitleEntries),
-    // 会话列表每次渲染都重建，按标题内容判等。
-    [aiChangeSessionTitlesKey]
-  )
+  // 左侧「AI 改动」面板（跟着右侧的当前会话走）与编辑区的只读对比标签组。
   const aiChanges = useWorkbenchAiChanges({
     projectRoot: toNullable(workbench.activeProject?.rootPath),
     sessions,
-    sessionTitles: aiChangeSessionTitles,
     currentSessionId: currentSession.id,
     autoOpen: workbenchPreferences.preferences.aiChangesAutoOpen,
     onShow: () => setVelarLogicGraphActive(false),

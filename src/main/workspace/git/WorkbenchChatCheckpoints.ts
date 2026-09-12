@@ -154,26 +154,36 @@ export class WorkbenchChatCheckpointService {
   }
 
   /**
-   * 当前工作树相对某个检查点提交的逐文件改动：一轮收尾时的「本轮改动」。
+   * 把当前工作树写成 tree 对象：「本轮改动」采集的那一刻的工作区。
    *
-   * 工作树用同一份持久影子 index 写成 tree 对象——不建提交、不挂 ref，比完就不再需要——与捕获共用
-   * 根锁；比对只读对象库，放在锁外，不挡下一轮开跑前的捕获。
+   * 用同一份持久影子 index——不建提交、不挂 ref，比完就不再需要——与捕获共用根锁，所以它与下一轮开跑前
+   * 的捕获按到达顺序排队：先到的采集拍到的一定是下一轮动手之前的工作树。
    */
-  public async diffWorkingTree(request: {
-    workspaceRoot: string
-    baseCommitId: string
-  }): Promise<WorkbenchChatRunFileChange[]> {
-    if (!ObjectIdPattern.test(request.baseCommitId))
-      throw new AppError('VALIDATION', '无效的检查点提交。')
-    const root = await this.resolveRoot(request.workspaceRoot)
+  public async snapshotWorkingTree(workspaceRoot: string): Promise<string> {
+    const root = await this.resolveRoot(workspaceRoot)
     const tree = await this.serialize(root, async () => {
       const env = { GIT_INDEX_FILE: await this.persistentIndexFile(root) }
       await this.runGit(root, ['add', '-A'], env)
       return (await this.runGit(root, ['write-tree'], env)).trim()
     })
     if (!ObjectIdPattern.test(tree)) throw new AppError('PLATFORM', 'git write-tree 未返回 tree 对象。')
+    return tree
+  }
 
-    const range = [request.baseCommitId, tree]
+  /**
+   * 工作树快照（{@link snapshotWorkingTree} 写出的 tree）相对某个检查点提交的逐文件改动。
+   * 只读对象库，放在根锁外，不挡下一轮开跑前的捕获。
+   */
+  public async diffWorkingTree(request: {
+    workspaceRoot: string
+    baseCommitId: string
+    tree: string
+  }): Promise<WorkbenchChatRunFileChange[]> {
+    if (!ObjectIdPattern.test(request.baseCommitId) || !ObjectIdPattern.test(request.tree))
+      throw new AppError('VALIDATION', '无效的检查点提交。')
+    const root = await this.resolveRoot(request.workspaceRoot)
+
+    const range = [request.baseCommitId, request.tree]
     const [statusText, numstatText] = await Promise.all([
       this.runGit(root, [...RunChangeDiffArgs, '-z', '--name-status', ...range]),
       this.runGit(root, [...RunChangeDiffArgs, '-z', '--numstat', ...range]),

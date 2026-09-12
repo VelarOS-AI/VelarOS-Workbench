@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import type { WorkbenchChatRunFileChangeStatus } from '@shared/workbenchGit'
+import type {
+  WorkbenchChatRunChangesSummary,
+  WorkbenchChatRunFileChangeStatus,
+} from '@shared/workbenchGit'
 
 import type { WorkbenchChatSessionSnapshot } from '../composition'
 import {
@@ -15,6 +18,7 @@ import { useLatest } from '../support/genericHooks'
 
 /** 一轮结束后自动打开的文件标签最多这么多个；其余的在左侧面板里点开。 */
 const MaxAutoOpenedTabs = 8
+const NoRounds: readonly WorkbenchAiChangeRound[] = Object.freeze([])
 
 /** 编辑区里一个「AI 改动」对比标签：某一轮里某个文件的改动，只读。 */
 export interface WorkbenchAiChangeTab {
@@ -22,6 +26,8 @@ export interface WorkbenchAiChangeTab {
   readonly roundKey: string
   readonly sessionId: string
   readonly recordId: string
+  /** 这一轮最近一次采集的时刻：还在跑的一轮每采一次就跟着更新，对比内容据此重读。 */
+  readonly capturedAt: number
   readonly path: string
   readonly status: WorkbenchChatRunFileChangeStatus
   readonly runNumber: number
@@ -30,6 +36,7 @@ export interface WorkbenchAiChangeTab {
 }
 
 export interface WorkbenchAiChangesState {
+  /** 当前会话的轮次，最近的在前（还在跑的那一轮排最前）。 */
   readonly rounds: readonly WorkbenchAiChangeRound[]
   readonly expandedRoundKeys: ReadonlySet<string>
   /** 左侧面板要把哪一轮滚进视野（每次请求 +1）。 */
@@ -57,8 +64,8 @@ export interface WorkbenchAiChangesState {
 
 interface UseWorkbenchAiChangesOptions {
   projectRoot: string | null
+  /** 项目下全部会话：面板只列当前会话的轮次，其余会话只用来判断编辑区里它们的标签还在不在。 */
   sessions: readonly WorkbenchChatSessionSnapshot[]
-  sessionTitles: ReadonlyMap<string, string>
   currentSessionId: string
   /** 一轮结束后自动打开这一轮改过的文件。 */
   autoOpen: boolean
@@ -68,6 +75,11 @@ interface UseWorkbenchAiChangesOptions {
 
 function tabId(sessionId: string, recordId: string, path: string): string {
   return `ai-change:${sessionId}\0${recordId}\0${path}`
+}
+
+/** 摘要里与面板显示有关的全部字段；会话快照每换一份，按它判断轮次要不要重算。 */
+function summaryFingerprint(summary: WorkbenchChatRunChangesSummary): string {
+  return `${summary.recordId}:${summary.capturedAt}:${summary.fileCount}:${summary.additions}:${summary.deletions}:${summary.error ?? ''}`
 }
 
 interface TabGroupState {
@@ -91,58 +103,99 @@ function withoutTabs(state: TabGroupState, removed: (tab: WorkbenchAiChangeTab) 
 }
 
 /**
- * 「AI 改动」的页面状态：左侧面板（每一轮一棵文件树）与编辑区的只读对比标签组。
+ * 按眼下的轮次校正标签：轮次被回溯、会话被移除（记录文件已经删了，留着只会显示读不到）的标签关掉；
+ * 还在跑的一轮又采了一次，它的标签换上新的采集时刻，对比内容随之重读。
+ */
+function syncTabsWithRounds(
+  state: TabGroupState,
+  capturedAtByRound: ReadonlyMap<string, number>
+): TabGroupState {
+  const kept = withoutTabs(state, (tab) => !capturedAtByRound.has(tab.roundKey))
+  const stale = (tab: WorkbenchAiChangeTab): boolean =>
+    capturedAtByRound.get(tab.roundKey) !== tab.capturedAt
+  if (!kept.tabs.some(stale)) return kept
+  return {
+    ...kept,
+    tabs: kept.tabs.map((tab) =>
+      stale(tab) ? { ...tab, capturedAt: capturedAtByRound.get(tab.roundKey) ?? tab.capturedAt } : tab
+    ),
+  }
+}
+
+/** 面板认得的轮次：属于哪个会话，见过哪些、其中哪些已经收尾。 */
+interface KnownRounds {
+  readonly sessionId: string
+  readonly seen: Set<string>
+  readonly settled: Set<string>
+}
+
+/**
+ * 「AI 改动」的页面状态：左侧面板（当前会话每一轮一棵文件树）与编辑区的只读对比标签组。
  *
- * 轮次从会话的运行标记投影出来；一轮收尾、改动摘要挂上标记之后，这一轮第一次出现在列表里——当前会话
- * 的新一轮在这时自动打开它改过的文件。应用启动时已经在的轮次不自动打开。
+ * 面板跟着右侧的当前会话走，切会话就换成那个会话的轮次。轮次从会话的运行标记与「进行中」的实时摘要
+ * 投影出来：一轮跑着的时候，第一次采到改动它就出现在面板里并展开，此后随写入实时刷新，编辑区不动；
+ * 收尾、最终摘要挂上运行标记的那一刻（进行中 → 已完成）才按「自动打开」把它改过的文件摆进编辑区——
+ * 与原来「一轮结束后自动打开」同一时机，一轮只一次。启动、切会话时已经在的轮次只记下，不自动打开。
  */
 export function useWorkbenchAiChanges({
   projectRoot,
   sessions,
-  sessionTitles,
   currentSessionId,
   autoOpen,
   onShow,
 }: UseWorkbenchAiChangesOptions): WorkbenchAiChangesState {
-  // 会话快照在流式输出时每个 token 都换一份；轮次只随运行标记与改动摘要变，按它们的指纹重算。
+  // 会话快照随会话列表、运行起止这些项目级字段换新；轮次只随运行标记与改动摘要变，按它们的指纹重算。
   const sessionsRef = useLatest(sessions)
   const roundSourceKey = sessions
-    .map(
-      (session) =>
-        `${session.id}\u0001${sessionTitles.get(session.id) ?? ''}\u0001${session.messageRunMarkers
+    .map((session) =>
+      [
+        session.id,
+        session.messageRunMarkers
           .map((marker) =>
             marker.runChanges
-              ? `${marker.messageId}:${marker.runChanges.recordId}:${marker.runChanges.fileCount}:${marker.runChanges.error ?? ''}`
+              ? `${marker.messageId}:${summaryFingerprint(marker.runChanges)}`
               : marker.messageId
           )
-          .join(',')}`
+          .join(','),
+        session.liveRunChanges ? summaryFingerprint(session.liveRunChanges.summary) : '',
+      ].join('\u0001')
     )
     .join('\u0002')
-  const rounds = useMemo(
+  const roundsBySession = useMemo(
     () =>
-      listWorkbenchAiChangeRounds(
-        sessionsRef.current.map((session) => ({
-          id: session.id,
-          title: sessionTitles.get(session.id) ?? '',
-          messages: session.messages,
-          messageRunMarkers: session.messageRunMarkers,
-        }))
+      new Map(
+        sessionsRef.current.map((session) => [session.id, listWorkbenchAiChangeRounds(session)])
       ),
     // 指纹 roundSourceKey 覆盖了 sessions 里与轮次相关的全部字段。
     [roundSourceKey]
+  )
+  const rounds = roundsBySession.get(currentSessionId) ?? NoRounds
+  const capturedAtByRound = useMemo(
+    () =>
+      new Map(
+        [...roundsBySession.values()].flatMap((sessionRounds) =>
+          sessionRounds.map((round) => [round.key, round.capturedAt] as const)
+        )
+      ),
+    [roundsBySession]
+  )
+  const latestCapturedAt = useMemo(
+    () => rounds.reduce((latest, round) => Math.max(latest, round.capturedAt), 0),
+    [rounds]
   )
   const [expandedRoundKeys, setExpandedRoundKeys] = useState<ReadonlySet<string>>(() => new Set())
   const [revealRequest, setRevealRequest] = useState<{ roundKey: string; id: number } | null>(null)
   const [seenUntil, setSeenUntil] = useState<number | null>(null)
   const [tabGroup, setTabGroup] = useState<TabGroupState>(EmptyTabGroup)
-  const knownRoundKeysRef = useRef<Set<string> | null>(null)
+  const knownRoundsRef = useRef<KnownRounds | null>(null)
   const roundsRef = useLatest(rounds)
+  const latestCapturedAtRef = useLatest(latestCapturedAt)
   const onShowRef = useLatest(onShow)
   const openGenerationRef = useRef(0)
 
   // 换项目：面板与标签都是这个项目的，一并清空。
   useEffect(() => {
-    knownRoundKeysRef.current = null
+    knownRoundsRef.current = null
     setExpandedRoundKeys(new Set())
     setRevealRequest(null)
     setSeenUntil(null)
@@ -171,7 +224,8 @@ export function useWorkbenchAiChanges({
       const record = await readWorkbenchRunChangeRecord(
         projectRoot,
         target.sessionId,
-        target.recordId
+        target.recordId,
+        round?.capturedAt ?? 0
       )
       if (!record || generation !== openGenerationRef.current) return
       const files = listWorkbenchAiChangeTreeFiles(buildWorkbenchAiChangeTree(record.changes))
@@ -183,6 +237,7 @@ export function useWorkbenchAiChanges({
           roundKey,
           sessionId: target.sessionId,
           recordId: target.recordId,
+          capturedAt: record.capturedAt,
           path: change.path,
           status: change.status,
           runNumber: round?.runNumber ?? 0,
@@ -203,23 +258,37 @@ export function useWorkbenchAiChanges({
     [expandRound, notifyShown, projectRoot, roundsRef]
   )
 
-  // 新的一轮出现在列表里：当前会话的就自动打开。第一次看到的那批（启动时已有的轮次）只记下不打开。
   useEffect(() => {
-    const known = knownRoundKeysRef.current
-    if (!known) {
-      knownRoundKeysRef.current = new Set(rounds.map((round) => round.key))
-      setSeenUntil(rounds[0]?.capturedAt ?? 0)
-      if (rounds[0]) setExpandedRoundKeys(new Set([rounds[0].key]))
+    const known = knownRoundsRef.current
+    // 第一次看到这个会话的轮次（启动、切会话）：只记下、展开最新一轮，不自动打开，也不算新改动。
+    if (!known || known.sessionId !== currentSessionId) {
+      knownRoundsRef.current = {
+        sessionId: currentSessionId,
+        seen: new Set(rounds.map((round) => round.key)),
+        settled: new Set(rounds.filter((round) => !round.live).map((round) => round.key)),
+      }
+      setSeenUntil(latestCapturedAt)
+      const newest = rounds[0]
+      if (newest)
+        setExpandedRoundKeys((current) =>
+          current.has(newest.key) ? current : new Set([...current, newest.key])
+        )
       return
     }
-    const fresh = rounds.filter((round) => !known.has(round.key))
-    for (const round of fresh) known.add(round.key)
-    const newest = fresh.find(
-      (round) => round.sessionId === currentSessionId && !round.error && round.fileCount > 0
-    )
-    if (newest && autoOpen) void openRound(newest, { auto: true })
-    else if (newest) setExpandedRoundKeys((current) => new Set([...current, newest.key]))
-  }, [autoOpen, currentSessionId, openRound, rounds])
+    const appeared = rounds.filter((round) => !known.seen.has(round.key))
+    const settled = rounds.filter((round) => !round.live && !known.settled.has(round.key))
+    for (const round of appeared) known.seen.add(round.key)
+    for (const round of settled) known.settled.add(round.key)
+    // 一轮收尾、最终摘要挂上了（包括来不及实时采集就收尾的短轮次）：按设置把它改过的文件摆进编辑区。
+    const finished = settled.find((round) => !round.error && round.fileCount > 0)
+    if (finished && autoOpen) {
+      void openRound(finished, { auto: true })
+      return
+    }
+    // 新出现的一轮（多半还在跑）只在面板里展开，不抢编辑区。
+    if (appeared.length > 0)
+      setExpandedRoundKeys((current) => new Set([...current, ...appeared.map((round) => round.key)]))
+  }, [autoOpen, currentSessionId, latestCapturedAt, openRound, rounds])
 
   const openFile = useCallback(
     (
@@ -237,6 +306,7 @@ export function useWorkbenchAiChanges({
                 roundKey: round.key,
                 sessionId: round.sessionId,
                 recordId: round.recordId,
+                capturedAt: round.capturedAt,
                 path: change.path,
                 status: change.status,
                 runNumber: round.runNumber,
@@ -267,11 +337,9 @@ export function useWorkbenchAiChanges({
     setTabGroup((current) => withoutTabs(current, (tab) => tab.id === id))
   }, [])
 
-  // 轮次被回溯或会话被移除后，指向它的标签一并关掉（记录文件已经删了，留着只会显示读不到）。
   useEffect(() => {
-    const roundKeys = new Set(rounds.map((round) => round.key))
-    setTabGroup((current) => withoutTabs(current, (tab) => !roundKeys.has(tab.roundKey)))
-  }, [rounds])
+    setTabGroup((current) => syncTabsWithRounds(current, capturedAtByRound))
+  }, [capturedAtByRound])
 
   const toggleRound = useCallback((roundKey: string): void => {
     setExpandedRoundKeys((current) => {
@@ -282,8 +350,8 @@ export function useWorkbenchAiChanges({
     })
   }, [])
   const markRoundsSeen = useCallback(
-    (): void => setSeenUntil(roundsRef.current[0]?.capturedAt ?? 0),
-    [roundsRef]
+    (): void => setSeenUntil(latestCapturedAtRef.current),
+    [latestCapturedAtRef]
   )
   const closeAllTabs = useCallback((): void => setTabGroup(EmptyTabGroup), [])
   const deactivate = useCallback(
@@ -294,7 +362,6 @@ export function useWorkbenchAiChanges({
 
   const { tabs } = tabGroup
   const activeTab = tabs.find((tab) => tab.id === tabGroup.activeTabId) ?? null
-  const latestCapturedAt = rounds[0]?.capturedAt ?? 0
 
   return {
     rounds,

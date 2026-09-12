@@ -9,6 +9,7 @@ import {
 import { ArrowRightIcon } from '@phosphor-icons/react'
 import type {
   WorkbenchChatCompositionAdapter,
+  WorkbenchChatLiveRunChanges,
   WorkbenchChatProjectRuntime,
   WorkbenchChatSessionSnapshot,
   WorkbenchChatSessionSurfaceProps,
@@ -123,6 +124,11 @@ import {
   type StandaloneChatCheckpoint,
   surveyRewindRemoval,
 } from './standaloneWorkbenchRewind'
+import {
+  createStandaloneRunChangeCapture,
+  type StandaloneRunChangeCapture,
+  StandaloneRunChangeCaptureDebounceMs,
+} from './standaloneWorkbenchRunChangeCapture'
 import { awaitStandaloneAgentStopSettlement } from './standaloneWorkbenchStopSettlement'
 import {
   createStandaloneStreamPacer,
@@ -161,6 +167,8 @@ interface StandaloneChatState extends StandaloneConversationRuntime {
   readonly checkpoints: readonly StandaloneChatCheckpoint[]
   /** 每轮收尾时记在这一轮最后一条助手消息上的运行标记（已处理折叠、耗时、中止/失败角标）。 */
   readonly messageRunMarkers: readonly StandaloneRunMarker[]
+  /** 正在跑的这一轮实时采到的改动；不持久化——重启时那次执行早已不在。 */
+  readonly liveRunChanges: Nullable<WorkbenchChatLiveRunChanges>
   readonly revision: number
 }
 
@@ -180,6 +188,8 @@ interface ActiveAgentExecution {
   readonly sessionId: string
   readonly projectRoot: string
   readonly providerId: WorkbenchChatProviderId
+  /** 这一轮的「本轮改动」实时采集；没有检查点（外部引擎、不是 git 仓库）时为 null。 */
+  readonly runChangeCapture: Nullable<StandaloneRunChangeCapture>
   readonly terminalSettlement: Promise<StandaloneAgentTerminalKind>
   terminalKind: StandaloneAgentTerminalKind | null
   readonly settleTerminal: (kind: StandaloneAgentTerminalKind) => void
@@ -293,6 +303,7 @@ function createState(
     contextUsage: null,
     checkpoints: [],
     messageRunMarkers: [],
+    liveRunChanges: null,
     revision: 0,
   }
   if (!restoreStored || !projectRoot || typeof window === 'undefined') return empty
@@ -552,6 +563,7 @@ function readProjectRuntimeFieldIdentities(state: StandaloneChatState): unknown[
     state.lastRunStartedAt,
     state.lastRunFinishedAt,
     state.messageRunMarkers,
+    state.liveRunChanges,
   ]
 }
 
@@ -572,6 +584,7 @@ function toSnapshot(state: StandaloneChatState, folderId: string): WorkbenchChat
     activeBranchId: 'main',
     messagePaging: null,
     messageRunMarkers: state.messageRunMarkers,
+    liveRunChanges: state.liveRunChanges,
     workerThreads: [],
   }
 }
@@ -830,6 +843,7 @@ function StandaloneWorkbenchChatSessionSurface({
       // 进起搏器按屏显节奏落地（与 Desktop 同一个起搏器）：正文逐帧吐字，其余按序逐帧应用。
       const payload = readAgentEventPayload(envelope)
       if (!payload) return
+      if (envelope.channel === 'agent') activeExecution.runChangeCapture?.observe(payload)
       streamSequence += 1
       if (envelope.channel === 'agent' && payload.type === 'text-delta') {
         if (typeof payload.text === 'string')
@@ -1016,8 +1030,51 @@ function StandaloneWorkbenchChatSessionSurface({
   }
 
   /**
-   * 一轮正常收尾后记下「本轮改动」（Desktop captureCompletedRunWorkspaceDiff 的对位件）：拿工作树与
-   * 这一轮开跑前的检查点比，补丁落进主进程的记录文件，运行标记上只挂摘要。
+   * 运行中的「本轮改动」实时采集：写工具的结果一到（防抖后）就拿工作树与这一轮开跑前的检查点比一次，
+   * 与收尾时的最终采集用同一个记录 id、覆盖同一条记录；摘要挂在会话的「进行中」上，「AI 改动」面板
+   * 据此实时显示这一轮。
+   */
+  function createRunChangeCapture(
+    sessionId: string,
+    checkpoint: StandaloneChatCheckpoint
+  ): Nullable<StandaloneRunChangeCapture> {
+    const baseCommitId = checkpoint.commitId
+    if (!baseCommitId) return null
+    return createStandaloneRunChangeCapture({
+      debounceMs: StandaloneRunChangeCaptureDebounceMs,
+      capture: () =>
+        window.velarosWorkbenchGit
+          .captureChatRunChanges({
+            workspaceRoot: projectRoot,
+            sessionId,
+            recordId: checkpoint.id,
+            baseCommitId,
+          })
+          .then(
+            (result) => {
+              if (result.ok) return result.value
+              log.warn('本轮改动实时采集失败', { sessionId, message: result.message })
+              return null
+            },
+            (error: unknown) => {
+              log.warn('本轮改动采集通道不可用', { sessionId, error })
+              return null
+            }
+          ),
+      onCaptured: (summary) => {
+        withStateUpdateTarget(projectRoot, providerId, sessionId, () =>
+          updateState(projectRoot, providerId, (state) => ({
+            ...state,
+            liveRunChanges: { firstMessageIndex: checkpoint.captureMessageCount, summary },
+          }))
+        )
+      },
+    })
+  }
+
+  /**
+   * 一轮收尾后记下「本轮改动」（Desktop captureCompletedRunWorkspaceDiff 的对位件）：拿工作树与
+   * 这一轮开跑前的检查点比，补丁落进主进程的记录文件，运行标记上只挂摘要；运行中实时采到的那份随之撤下。
    *
    * 采集请求在收尾的同一拍同步发出：main 按项目根串行，它排在下一条排队消息开跑前的检查点之前，
    * 下一轮的改动混不进这一轮。
@@ -1032,7 +1089,15 @@ function StandaloneWorkbenchChatSessionSurface({
       session.messageRunMarkers,
       checkpoint.captureMessageCount
     )
-    if (!anchorId) return
+    // 最终摘要挂不上：运行中实时采到的那份连同它的记录一起撤掉，面板里不留一轮永远「进行中」。
+    const withdrawLive = (): void => {
+      if (withdrawLiveRunChanges(projectRoot, providerId, sessionId, checkpoint.id))
+        releaseRunChangeRecords(projectRoot, sessionId, [checkpoint.id])
+    }
+    if (!anchorId) {
+      withdrawLive()
+      return
+    }
 
     void window.velarosWorkbenchGit
       .captureChatRunChanges({
@@ -1044,6 +1109,7 @@ function StandaloneWorkbenchChatSessionSurface({
       .then((result) => {
         if (!result.ok) {
           log.warn('本轮改动采集失败', { sessionId, message: result.message })
+          withdrawLive()
           return
         }
         const attached = attachRunChanges(projectRoot, providerId, sessionId, anchorId, result.value)
@@ -1054,6 +1120,7 @@ function StandaloneWorkbenchChatSessionSurface({
         if (orphaned) releaseRunChangeRecords(projectRoot, sessionId, [orphaned])
       }, (error: unknown) => {
         log.warn('本轮改动采集通道不可用', { sessionId, error })
+        withdrawLive()
       })
   }
 
@@ -1364,6 +1431,7 @@ function StandaloneWorkbenchChatSessionSurface({
       sessionId: latest.sessionId,
       projectRoot,
       providerId,
+      runChangeCapture: runCheckpoint ? createRunChangeCapture(latest.sessionId, runCheckpoint) : null,
     })
     activeAgentExecutions.set(executionId, activeExecution)
     const result = await window.velarosWorkbenchKernel.invoke({
@@ -1433,7 +1501,9 @@ function StandaloneWorkbenchChatSessionSurface({
       },
     })
     // 停下或失败的一轮也可能已经改了文件：收尾之后照样记下「本轮改动」（「AI 改动」要列全每一轮）。
+    // 挂着的实时采集先作废，由这一次最终采集收尾。
     const captureEndedRunChanges = (): void => {
+      activeExecution.runChangeCapture?.finish()
       if (runCheckpoint) captureRunChanges(activeExecution.sessionId, runCheckpoint)
     }
     if (!result.ok) {
@@ -1494,7 +1564,7 @@ function StandaloneWorkbenchChatSessionSurface({
         t('workbench.chatNoTextResponse')
       )
     })
-    if (runCheckpoint) captureRunChanges(activeExecution.sessionId, runCheckpoint)
+    captureEndedRunChanges()
     return true
   }
 
@@ -2599,7 +2669,10 @@ function releaseCheckpointRefs(
     })
 }
 
-/** 把本轮改动摘要记到指定会话的运行标记上；null = 标记已不在或不再是已完成。 */
+/**
+ * 把本轮改动摘要记到指定会话的运行标记上，同一次更新里撤下这一轮运行中实时采到的那份——面板里
+ * 同一轮从「进行中」直接变成已完成，中间不空一拍。null = 标记已不在或不再是已完成。
+ */
 function attachRunChanges(
   projectRoot: string,
   providerId: WorkbenchChatProviderId,
@@ -2611,12 +2684,37 @@ function attachRunChanges(
   withStateUpdateTarget(projectRoot, providerId, sessionId, () =>
     updateState(projectRoot, providerId, (state) => {
       attached = attachStandaloneRunChanges(state.messageRunMarkers, messageId, runChanges)
+      const settled = withoutLiveRunChanges(state, runChanges.recordId)
       return attached
-        ? { ...state, messageRunMarkers: attached.markers, revision: state.revision + 1 }
-        : state
+        ? { ...settled, messageRunMarkers: attached.markers, revision: state.revision + 1 }
+        : settled
     })
   )
   return attached
+}
+
+/** 撤下这一轮运行中实时采到的改动；返回它是否留下了记录文件（有改动才写）。 */
+function withdrawLiveRunChanges(
+  projectRoot: string,
+  providerId: WorkbenchChatProviderId,
+  sessionId: string,
+  recordId: string
+): boolean {
+  let recorded = false
+  withStateUpdateTarget(projectRoot, providerId, sessionId, () =>
+    updateState(projectRoot, providerId, (state) => {
+      recorded = state.liveRunChanges?.summary.recordId === recordId
+        && state.liveRunChanges.summary.fileCount > 0
+      return withoutLiveRunChanges(state, recordId)
+    })
+  )
+  return recorded
+}
+
+function withoutLiveRunChanges(state: StandaloneChatState, recordId: string): StandaloneChatState {
+  return state.liveRunChanges?.summary.recordId === recordId
+    ? { ...state, liveRunChanges: null }
+    : state
 }
 
 /** 运行标记上摘要指向的改动记录（本轮改动的补丁文件）。 */

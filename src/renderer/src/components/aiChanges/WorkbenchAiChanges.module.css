@@ -9,6 +9,27 @@
   background: var(--workbench-surface-muted);
 }
 
+/* 标题与「N 轮 · M 个文件」排成一行：窄的时候先截断统计，再截断标题，都不换行。 */
+.headerTitle {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.headerTitle > :first-child {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.headerTitle > :nth-child(2) {
+  flex: 0 1000 auto;
+  min-width: 0;
+}
+
 .scroll {
   flex: 1 1 auto;
   min-height: 0;
@@ -62,6 +83,34 @@
   font-weight: 600;
 }
 
+.roundLive {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--workbench-active);
+  color: var(--status-teal);
+  font-size: 10px;
+  line-height: 16px;
+}
+
+.roundLive::before {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  content: '';
+  animation: ai-changes-live 1.2s ease-in-out infinite;
+}
+
+@keyframes ai-changes-live {
+  50% {
+    opacity: 0.25;
+  }
+}
+
 .roundTime {
   flex: 1 1 auto;
   min-width: 0;
@@ -102,16 +151,6 @@
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   overflow-wrap: anywhere;
-}
-
-.roundSession {
-  overflow: hidden;
-  margin: 0 12px 2px 26px;
-  color: var(--workbench-text-muted);
-  font-size: 10px;
-  opacity: 0.8;
-  white-space: nowrap;
-  text-overflow: ellipsis;
 }
 
 .roundFeedback {

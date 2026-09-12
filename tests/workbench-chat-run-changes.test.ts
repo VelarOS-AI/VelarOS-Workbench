@@ -211,6 +211,52 @@ void describe('Workbench chat run changes', () => {
     })
   })
 
+  void test('re-captures a running round into the same record, in request order, and drops it once reverted', async () => {
+    await withRepository(async ({ project, records, checkpoints }) => {
+      let clock = 1_000
+      const store = new WorkbenchChatRunChangeStore(checkpoints, () => records, () => (clock += 1))
+      const { commitId } = await checkpoints.capture({
+        workspaceRoot: project,
+        sessionId: 's',
+        checkpointId: 'run',
+      })
+      assert.ok(commitId)
+      const request = { workspaceRoot: project, sessionId: 's', recordId: 'run', baseCommitId: commitId }
+
+      // 运行中第一次采集：只改了一个文件。
+      await writeFile(join(project, 'tracked.ts'), 'export const a = 2\nexport const b = 1\n', 'utf8')
+      const first = await store.capture(request)
+      assert.equal(first.fileCount, 1)
+
+      // 又写了一个文件：实时采集与收尾的最终采集前后脚到达，同一条记录按到达顺序写，最终那次最后落地。
+      await writeFile(join(project, 'created.ts'), 'new\n', 'utf8')
+      const [live, final] = await Promise.all([store.capture(request), store.capture(request)])
+      assert.equal(live.fileCount, 2)
+      assert.equal(final.fileCount, 2)
+      assert.ok(final.capturedAt > live.capturedAt)
+      const [rootDirectory] = await readdir(records)
+      assert.ok(rootDirectory)
+      assert.deepEqual(await readdir(join(records, rootDirectory, 's')), ['run.json'])
+      const record = await store.read(request)
+      assert.equal(record?.capturedAt, final.capturedAt)
+      assert.deepEqual(record?.changes.map((change) => change.path).sort(), ['created.ts', 'tracked.ts'])
+
+      // 改动全被撤回：记录文件随之删掉，不留旧内容冒充现在。
+      await writeFile(join(project, 'tracked.ts'), 'export const a = 1\nexport const b = 1\n', 'utf8')
+      await unlink(join(project, 'created.ts'))
+      const reverted = await store.capture(request)
+      assert.deepEqual([reverted.fileCount, reverted.error], [0, null])
+      assert.equal(await store.read(request), null)
+
+      // 删除与采集排在同一条会话队列里：刚发出的采集写完之后才删，不会删了又被写回来。
+      await writeFile(join(project, 'tracked.ts'), 'changed again\n', 'utf8')
+      const capturing = store.capture(request)
+      await store.delete({ workspaceRoot: project, sessionId: 's', recordIds: ['run'] })
+      assert.equal((await capturing).fileCount, 1)
+      assert.equal(await store.read(request), null)
+    })
+  })
+
   void test('reports a failed capture in the summary and rejects unsafe ids', async () => {
     await withRepository(async ({ project, store }) => {
       const failed = await store.capture({

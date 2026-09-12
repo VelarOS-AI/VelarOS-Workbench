@@ -12,20 +12,24 @@ import {
 } from '../git/workbenchGitDiffModel'
 
 /**
- * 「AI 改动」面板的数据模型：每一轮 AI 运行改了哪些文件。
+ * 「AI 改动」面板的数据模型：一个会话里每一轮 AI 运行改了哪些文件。
  *
- * 轮次来自会话的运行标记——一轮收尾时，本轮改动的摘要（记录 id、文件数、增删行）挂在标记上；逐文件
- * 补丁在主进程的记录文件里，面板展开某一轮时再按记录 id 读。这里只做纯投影，不读盘。
+ * 收尾的轮次来自会话的运行标记——本轮改动的摘要（记录 id、文件数、增删行）挂在标记上；还在跑的
+ * 那一轮来自会话上实时采集的摘要，记录 id 与它收尾后的一样，同一轮在面板里从「进行中」无缝变成
+ * 已完成。逐文件补丁在主进程的记录文件里，面板展开某一轮时再按记录 id 读。这里只做纯投影，不读盘。
  */
 
 export interface WorkbenchAiChangeRoundSource {
   readonly id: string
-  readonly title: string
   readonly messages: readonly ChatMessage[]
   readonly messageRunMarkers: ReadonlyArray<{
     readonly messageId: string
     readonly timestamp: number
     readonly runChanges?: WorkbenchChatRunChangesSummary
+  }>
+  readonly liveRunChanges: Nullable<{
+    readonly firstMessageIndex: number
+    readonly summary: WorkbenchChatRunChangesSummary
   }>
 }
 
@@ -33,8 +37,8 @@ export interface WorkbenchAiChangeRound {
   /** `${sessionId}\0${recordId}`。 */
   readonly key: string
   readonly sessionId: string
-  readonly sessionTitle: string
   readonly recordId: string
+  /** 最近一次采集的时刻；也是记录的版本，变了就要重读记录。 */
   readonly capturedAt: number
   readonly fileCount: number
   readonly additions: number
@@ -45,6 +49,8 @@ export interface WorkbenchAiChangeRound {
   readonly prompt: string
   /** 这一轮是所属会话的第几轮运行（从 1 开始）。 */
   readonly runNumber: number
+  /** 这一轮还在跑：改动随写入实时刷新，收尾时的最终采集覆盖同一条记录。 */
+  readonly live: boolean
 }
 
 export function getWorkbenchAiChangeRoundKey(sessionId: string, recordId: string): string {
@@ -61,10 +67,12 @@ function readMessageText(message: ChatMessage): string {
   return parts.join(' ').replace(/\s+/gu, ' ').trim()
 }
 
-/** 这一轮的诉求：运行标记所在消息之前最近的一条用户消息（宿主写的系统留痕不算）。 */
-function findRoundPrompt(messages: readonly ChatMessage[], messageId: string): string {
-  const index = messages.findIndex((message) => message.id === messageId)
-  for (let cursor = (index < 0 ? messages.length : index) - 1; cursor >= 0; cursor -= 1) {
+/**
+ * 这一轮的诉求：`endIndex` 之前最近的一条用户消息（宿主写的系统留痕不算）。收尾的一轮从它的运行标记
+ * 所在的回答往前找；还在跑的一轮从会话末尾往前找——与它收尾后找到的是同一条。
+ */
+function findRoundPrompt(messages: readonly ChatMessage[], endIndex: number): string {
+  for (let cursor = endIndex - 1; cursor >= 0; cursor -= 1) {
     const message = messages[cursor]
     if (message.role !== 'user' || message.conversationKind === 'system-notice') continue
     const text = readMessageText(message)
@@ -74,34 +82,59 @@ function findRoundPrompt(messages: readonly ChatMessage[], messageId: string): s
   return ''
 }
 
-/** 所有会话里改过文件的轮次，最近的在前。 */
+/** 没改文件的一轮不进面板；采集失败的一轮要进，面板里说明读不出来。 */
+function hasRoundChanges(summary: WorkbenchChatRunChangesSummary): boolean {
+  return summary.fileCount > 0 || !!summary.error
+}
+
+/** 一个会话里改过文件的轮次，最近的在前（还在跑的那一轮排最前）。 */
 export function listWorkbenchAiChangeRounds(
-  sessions: readonly WorkbenchAiChangeRoundSource[]
+  session: WorkbenchAiChangeRoundSource
 ): WorkbenchAiChangeRound[] {
-  const rounds: WorkbenchAiChangeRound[] = []
-  for (const session of sessions) {
-    const markers = [...session.messageRunMarkers].sort(
-      (left, right) => left.timestamp - right.timestamp
-    )
-    markers.forEach((marker, index) => {
-      const summary = marker.runChanges
-      if (!summary || (summary.fileCount === 0 && !summary.error)) return
-      rounds.push({
-        key: getWorkbenchAiChangeRoundKey(session.id, summary.recordId),
-        sessionId: session.id,
-        sessionTitle: session.title,
-        recordId: summary.recordId,
-        capturedAt: summary.capturedAt,
-        fileCount: summary.fileCount,
-        additions: summary.additions,
-        deletions: summary.deletions,
-        error: summary.error,
-        prompt: findRoundPrompt(session.messages, marker.messageId),
-        runNumber: index + 1,
-      })
-    })
+  const messageIndexes = new Map(session.messages.map((message, index) => [message.id, index]))
+  const markers = [...session.messageRunMarkers].sort(
+    (left, right) => left.timestamp - right.timestamp
+  )
+  const toRound = (
+    summary: WorkbenchChatRunChangesSummary,
+    promptEndIndex: number,
+    runNumber: number,
+    live: boolean
+  ): WorkbenchAiChangeRound => ({
+    key: getWorkbenchAiChangeRoundKey(session.id, summary.recordId),
+    sessionId: session.id,
+    recordId: summary.recordId,
+    capturedAt: summary.capturedAt,
+    fileCount: summary.fileCount,
+    additions: summary.additions,
+    deletions: summary.deletions,
+    error: summary.error,
+    prompt: findRoundPrompt(session.messages, promptEndIndex),
+    runNumber,
+    live,
+  })
+
+  const rounds = markers.flatMap((marker, index) =>
+    marker.runChanges && hasRoundChanges(marker.runChanges)
+      ? [
+          toRound(
+            marker.runChanges,
+            messageIndexes.get(marker.messageId) ?? session.messages.length,
+            index + 1,
+            false
+          ),
+        ]
+      : []
+  )
+  const live = session.liveRunChanges
+  if (live && hasRoundChanges(live.summary)) {
+    // 这一轮排在开跑前那些轮之后：它收尾时记下的运行标记（若已记上）不算在前面。
+    const earlierRuns = markers.filter(
+      (marker) => (messageIndexes.get(marker.messageId) ?? Infinity) < live.firstMessageIndex
+    ).length
+    rounds.push(toRound(live.summary, session.messages.length, earlierRuns + 1, true))
   }
-  return rounds.sort((left, right) => right.capturedAt - left.capturedAt)
+  return rounds.reverse()
 }
 
 export type WorkbenchAiChangeTreeNode =

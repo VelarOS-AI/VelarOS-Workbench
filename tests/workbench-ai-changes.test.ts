@@ -24,6 +24,10 @@ function change(
   return { path, status, additions: 1, deletions: 0, binary: false, patch, patchOmitted: false }
 }
 
+function summary(recordId: string, capturedAt: number, fileCount: number, error: string | null = null) {
+  return { recordId, capturedAt, fileCount, additions: fileCount * 2, deletions: fileCount, error }
+}
+
 function summarizeTree(nodes: readonly WorkbenchAiChangeTreeNode[]): unknown[] {
   return nodes.map((node) =>
     node.kind === 'directory' ? { [node.name]: summarizeTree(node.children) } : node.name
@@ -31,52 +35,112 @@ function summarizeTree(nodes: readonly WorkbenchAiChangeTreeNode[]): unknown[] {
 }
 
 void describe('Workbench AI changes model', () => {
-  void test('lists every run that changed files, newest first, with its prompt and run number', () => {
-    const summary = (recordId: string, capturedAt: number, fileCount: number, error: string | null = null) => ({
-      recordId,
-      capturedAt,
-      fileCount,
-      additions: fileCount * 2,
-      deletions: fileCount,
-      error,
-    })
-    const rounds = listWorkbenchAiChangeRounds([
-      {
-        id: 'session-a',
-        title: '重构缓存',
-        messages: [
-          message('u1', 'user', '  把缓存改成\nLRU  ', 1),
-          message('a1', 'assistant', '好的', 2),
-          { ...message('n1', 'user', '已回溯到第 1 轮之前', 3), conversationKind: 'system-notice' } as ChatMessage,
-          message('u2', 'user', '补测试', 4),
-          message('a2', 'assistant', '补好了', 5),
-          message('u3', 'user', '只回答，不改文件', 6),
-          message('a3', 'assistant', '这是说明', 7),
-        ],
-        messageRunMarkers: [
-          { messageId: 'a2', timestamp: 50, runChanges: summary('r2', 500, 3) },
-          { messageId: 'a1', timestamp: 20, runChanges: summary('r1', 200, 1) },
-          // 没改文件的一轮不进面板；采集失败的一轮要进，面板里说明读不出来。
-          { messageId: 'a3', timestamp: 70, runChanges: summary('r3', 700, 0) },
-        ],
-      },
-      {
-        id: 'session-b',
-        title: '另一个会话',
-        messages: [message('b1', 'user', '修样式', 1), message('b2', 'assistant', '改了', 2)],
-        messageRunMarkers: [{ messageId: 'b2', timestamp: 10, runChanges: summary('rb', 600, 0, 'git failed') }],
-      },
-    ])
+  void test('lists one session\'s runs that changed files, newest first, with prompt and run number', () => {
+    const sessionA = {
+      id: 'session-a',
+      messages: [
+        message('u1', 'user', '  把缓存改成\nLRU  ', 1),
+        message('a1', 'assistant', '好的', 2),
+        { ...message('n1', 'user', '已回溯到第 1 轮之前', 3), conversationKind: 'system-notice' } as ChatMessage,
+        message('u2', 'user', '补测试', 4),
+        message('a2', 'assistant', '补好了', 5),
+        message('u3', 'user', '只回答，不改文件', 6),
+        message('a3', 'assistant', '这是说明', 7),
+      ],
+      messageRunMarkers: [
+        { messageId: 'a2', timestamp: 50, runChanges: summary('r2', 500, 3) },
+        { messageId: 'a1', timestamp: 20, runChanges: summary('r1', 200, 1) },
+        // 没改文件的一轮不进面板；采集失败的一轮要进，面板里说明读不出来。
+        { messageId: 'a3', timestamp: 70, runChanges: summary('r3', 700, 0) },
+      ],
+      liveRunChanges: null,
+    }
+    const sessionB = {
+      id: 'session-b',
+      messages: [message('b1', 'user', '修样式', 1), message('b2', 'assistant', '改了', 2)],
+      messageRunMarkers: [{ messageId: 'b2', timestamp: 10, runChanges: summary('rb', 900, 0, 'git failed') }],
+      liveRunChanges: null,
+    }
 
+    // 面板只列当前会话：别的会话更晚的轮次不会混进来，轮次编号按各自会话数。
     assert.deepEqual(
-      rounds.map((round) => [round.key, round.runNumber, round.prompt, round.fileCount, round.error]),
+      listWorkbenchAiChangeRounds(sessionA).map((round) => [
+        round.key,
+        round.runNumber,
+        round.prompt,
+        round.fileCount,
+        round.error,
+        round.live,
+      ]),
       [
-        ['session-b\0rb', 1, '修样式', 0, 'git failed'],
-        ['session-a\0r2', 2, '补测试', 3, null],
-        ['session-a\0r1', 1, '把缓存改成 LRU', 1, null],
+        ['session-a\0r2', 2, '补测试', 3, null, false],
+        ['session-a\0r1', 1, '把缓存改成 LRU', 1, null, false],
       ]
     )
-    assert.equal(rounds[1]?.sessionTitle, '重构缓存')
+    assert.deepEqual(
+      listWorkbenchAiChangeRounds(sessionB).map((round) => [round.key, round.runNumber, round.error]),
+      [['session-b\0rb', 1, 'git failed']]
+    )
+  })
+
+  void test('shows the running round as live on top and hands it over to its marker in place', () => {
+    const messages = [
+      message('u1', 'user', '改一下缓存', 1),
+      message('a1', 'assistant', '改好了', 2),
+      message('u2', 'user', '再补上测试', 3),
+      message('a2', 'assistant', '正在写测试', 4),
+    ]
+    const earlier = { messageId: 'a1', timestamp: 20, runChanges: summary('r1', 200, 1) }
+    const running = {
+      id: 's',
+      messages,
+      messageRunMarkers: [earlier],
+      liveRunChanges: { firstMessageIndex: 2, summary: summary('r2', 300, 2) },
+    }
+    assert.deepEqual(
+      listWorkbenchAiChangeRounds(running).map((round) => [round.key, round.runNumber, round.prompt, round.live]),
+      [
+        ['s\0r2', 2, '再补上测试', true],
+        ['s\0r1', 1, '改一下缓存', false],
+      ]
+    )
+
+    // 收尾：这一轮的运行标记先记上（摘要还没到），实时那份仍在——编号不因多出的标记跳成第 3 轮。
+    const markedWithoutSummary = {
+      ...running,
+      messageRunMarkers: [earlier, { messageId: 'a2', timestamp: 40 }],
+      liveRunChanges: { firstMessageIndex: 2, summary: summary('r2', 310, 3) },
+    }
+    assert.deepEqual(
+      listWorkbenchAiChangeRounds(markedWithoutSummary).map((round) => [round.key, round.runNumber, round.fileCount, round.live]),
+      [
+        ['s\0r2', 2, 3, true],
+        ['s\0r1', 1, 1, false],
+      ]
+    )
+
+    // 最终摘要挂上标记、实时那份撤下：同一个轮次（同一个 key），不再是进行中。
+    const settled = listWorkbenchAiChangeRounds({
+      ...running,
+      messageRunMarkers: [earlier, { messageId: 'a2', timestamp: 40, runChanges: summary('r2', 320, 3) }],
+      liveRunChanges: null,
+    })
+    assert.deepEqual(
+      settled.map((round) => [round.key, round.runNumber, round.prompt, round.capturedAt, round.live]),
+      [
+        ['s\0r2', 2, '再补上测试', 320, false],
+        ['s\0r1', 1, '改一下缓存', 200, false],
+      ]
+    )
+
+    // 这一轮还没采到改动（或改动又全撤回了）：不占一行。
+    assert.deepEqual(
+      listWorkbenchAiChangeRounds({
+        ...running,
+        liveRunChanges: { firstMessageIndex: 2, summary: summary('r2', 330, 0) },
+      }).map((round) => round.key),
+      ['s\0r1']
+    )
   })
 
   void test('builds a compact file tree: folders first, single-child chains merged', () => {

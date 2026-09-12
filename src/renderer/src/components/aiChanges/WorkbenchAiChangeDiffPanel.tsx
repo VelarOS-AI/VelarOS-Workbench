@@ -61,12 +61,15 @@ export function WorkbenchAiChangeDiffPanel({
 }: WorkbenchAiChangeDiffPanelProps): ReactElement {
   const { t } = useWorkbenchI18n()
   const diffViewRef = useRef<WorkbenchUnifiedDiffRowsHandle>(null)
+  // 还在跑的一轮每采一次，标签上的采集时刻就跟着换：对比内容随之重读。
   const { record, loading, failed } = useWorkbenchRunChangeRecord(
     projectRoot,
     tab.sessionId,
-    tab.recordId
+    tab.recordId,
+    tab.capturedAt
   )
   const change = record?.changes.find((candidate) => candidate.path === tab.path) ?? null
+  const status = change?.status ?? tab.status
   const needsBaseFile =
     !!change && change.status !== 'added' && !change.binary && !change.patchOmitted && !!change.patch
   const baseKey = `${tab.id}\0${record?.baseCommitId ?? ''}`
@@ -110,9 +113,9 @@ export function WorkbenchAiChangeDiffPanel({
   }, [changedLineCount, rows, tab.id])
 
   const statusLabel =
-    tab.status === 'added'
+    status === 'added'
       ? t('workbench.aiChangesStatusAdded')
-      : tab.status === 'deleted'
+      : status === 'deleted'
         ? t('workbench.aiChangesStatusDeleted')
         : t('workbench.aiChangesStatusModified')
 
@@ -121,7 +124,7 @@ export function WorkbenchAiChangeDiffPanel({
       <div className={pageStyles.diffViewerToolbar}>
         <div className={pageStyles.diffViewerFile}>
           <WorkbenchFileTypeIcon fileName={tab.path} size={14} />
-          <span className={styles.statusChip} data-status={tab.status}>
+          <span className={styles.statusChip} data-status={status}>
             {statusLabel}
           </span>
           <strong title={tab.path}>{tab.path}</strong>
@@ -163,7 +166,7 @@ export function WorkbenchAiChangeDiffPanel({
           <Button
             variant="ghost"
             size="sm"
-            disabled={tab.status === 'deleted'}
+            disabled={status === 'deleted'}
             title={t('workbench.aiChangesOpenFile')}
             onClick={() => onOpenFile(tab.path, rows ? findFirstChangedLine(rows) : 1)}
           >
