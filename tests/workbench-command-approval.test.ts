@@ -168,10 +168,13 @@ void describe('project:run command approval on the Workbench host', () => {
       const harness = createApprovalHarness('standard-open', false)
 
       try {
-        const declined = await run('git checkout -- a.txt', harness)
-        assert.equal(declined.approved, false)
-        assert.equal(declined.skipped, true)
-        assert.equal(declined.message, '先别动')
+        // 与平台自己拒绝时同形：没有伪造的退出码、耗时、输出，界面不会把它画成「已完成」的命令卡。
+        assert.deepEqual(await run('git checkout -- a.txt', harness), {
+          approved: false,
+          skipped: true,
+          command: 'git checkout -- a.txt',
+          message: '先别动',
+        })
         assert.equal(await readFile(join(root, 'a.txt'), 'utf8'), 'unsaved work\n')
 
         // 写到工作区外：先问，拒绝就不动。
@@ -182,6 +185,25 @@ void describe('project:run command approval on the Workbench host', () => {
       } finally {
         await provider.dispose()
         await rm(outside, { recursive: true, force: true })
+      }
+    })
+  }, 30_000)
+
+  void test('a dangerous Git call on a later line of the command is still asked about', async () => {
+    await withProject(async (root) => {
+      await initRepository(root)
+      await writeFile(join(root, 'a.txt'), 'UNCOMMITTED WORK\n', 'utf8')
+      const { provider, run } = await createRunTool(root)
+      const harness = createApprovalHarness('standard-open', false)
+
+      try {
+        // 换行分开的第二条命令、包装命令后面的 Git 调用：此前都当普通命令静默执行，未提交的改动被还原。
+        assert.equal((await run('git status\ngit checkout -- a.txt', harness)).skipped, true)
+        assert.equal((await run('timeout 60 git checkout -- a.txt', harness)).skipped, true)
+        assert.equal(await readFile(join(root, 'a.txt'), 'utf8'), 'UNCOMMITTED WORK\n')
+        assert.equal(harness.prompts.length, 2)
+      } finally {
+        await provider.dispose()
       }
     })
   }, 30_000)
@@ -216,7 +238,7 @@ void describe('project:run command approval on the Workbench host', () => {
 
       await assert.rejects(
         runner.runCommand({ projectRoot: root, command: 'rm -r cache' }),
-        /需要用户确认/u
+        /未经用户确认/u
       )
       assert.ok(await exists(join(root, 'cache')))
 
@@ -265,9 +287,17 @@ void describe('workbench:start_run approval across permission modes', () => {
       'npm install',
       'git reset --hard',
       'git reset --hard',
+      'npm run build\ngit reset --hard',
     ])
-    assert.deepEqual(prompted, ['git reset --hard', 'git reset --hard'])
-    assert.deepEqual(started, ['git status', 'npm run dev', 'npm install', 'git reset --hard', 'git reset --hard'])
+    assert.deepEqual(prompted, ['git reset --hard', 'git reset --hard', 'npm run build\ngit reset --hard'])
+    assert.deepEqual(started, [
+      'git status',
+      'npm run dev',
+      'npm install',
+      'git reset --hard',
+      'git reset --hard',
+      'npm run build\ngit reset --hard',
+    ])
   })
 
   void test('ask-every-time mode also asks before ordinary commands that may change the project', async () => {

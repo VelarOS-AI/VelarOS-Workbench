@@ -26,8 +26,8 @@ class CommandRunner {
   ) {}
 
   /**
-   * @param allowDangerous 调用方已经就这条危险命令问过用户并获批（`project:run` 的宿主端口）；
-   *   其余路径不传，危险命令在这里被挡回。
+   * @param allowDangerous 用户已经确认过这条命令：`project:run` 的宿主端口问过并获批，或者命令就是
+   *   用户自己在命令面板里输入的。不传的调用方遇到危险命令在这里被挡回。
    */
   public async runCommand(
     request: WorkbenchRunCommandRequest,

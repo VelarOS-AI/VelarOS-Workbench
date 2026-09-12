@@ -55,8 +55,9 @@ class CommandHelper {
   /**
    * 校验命令文本。
    *
-   * 空命令直接拒绝。危险命令要先经用户确认：问过并获批的调用方传 `allowDangerous`，
-   * 没问过人的执行路径在这里被挡回（判据见 `CommandExecutionPolicy`，`projectRoot` 划定工作区边界）。
+   * 空命令直接拒绝。危险命令只有调用方声明「用户已确认」（`allowDangerous`）才放行：问过并获批的
+   * Agent 工具、用户自己在命令面板里输入的命令都会声明；没声明的调用方在这里被挡回
+   * （判据见 `CommandExecutionPolicy`，`projectRoot` 划定工作区边界）。
    */
   public validateCommand(command: string, projectRoot: string, allowDangerous = false): string {
     const trimmed = command.trim()
@@ -66,7 +67,7 @@ class CommandHelper {
 
     const plan = analyzeWorkbenchCommandExecution(trimmed, projectRoot)
     if (!allowDangerous && plan.isDangerous) {
-      throw new AppError('PERMISSION', `命令需要用户确认后才能执行：${trimmed}（${plan.dangerousReason}）`)
+      throw new AppError('PERMISSION', `命令未经用户确认，未执行：${trimmed}（${plan.dangerousReason}）`)
     }
 
     return trimmed

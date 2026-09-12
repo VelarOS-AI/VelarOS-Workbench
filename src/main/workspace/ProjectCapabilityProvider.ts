@@ -265,13 +265,15 @@ class ProjectCapabilityProvider implements WorkbenchProjectCapabilityProvider {
         prepareMutation: async (input) =>
           buildApprovedMutation(projectRoot, activeDirectory, input),
         queryCode: this.projectCodeQuery(projectRoot),
+        // 平台合同只把宿主返回值声明成命令结果，但 `project:run` 把它原样交给模型，自己拒绝时也返回
+        // 同形的 skipped；宿主补问被拒时同样返回 skipped，模型和界面读到的两种拒绝才是一个样子。
         runCommand: (command, options, allowDangerous, signal) =>
           this.runProjectCommand(
             { projectRoot, activeDirectory, approval, abortSignal: signal ?? abortSignal },
             command,
             options,
             allowDangerous
-          ),
+          ) as Promise<ProjectCommandResult>,
       },
       system: {
         canStartBackgroundCommands: () => false,
@@ -306,7 +308,7 @@ class ProjectCapabilityProvider implements WorkbenchProjectCapabilityProvider {
     command: string,
     options: ProjectRunCommandOptions = {},
     allowDangerous = false
-  ): Promise<ProjectCommandResult> {
+  ): Promise<ProjectCommandResult | SkippedProjectCommand> {
     const { projectRoot, abortSignal } = scope
     abortSignal.throwIfAborted()
     if (options.background) {
@@ -327,7 +329,7 @@ class ProjectCapabilityProvider implements WorkbenchProjectCapabilityProvider {
         })
       )
       if (!decision.approved)
-        return skippedCommandResult(command, cwd, decision.message ?? '用户拒绝执行该危险命令。')
+        return { approved: false, skipped: true, command, message: decision.message ?? '用户拒绝执行该危险命令。' }
     }
 
     // 走到这里的危险命令都已经有人批准过：平台那一问，或上面这一问。
@@ -369,34 +371,12 @@ interface ProjectCommandScope {
   abortSignal: AbortSignal
 }
 
-/**
- * 用户拒绝危险命令时的结果。
- *
- * `project:run` 把宿主 `runCommand` 的返回原样交给模型，所以这里带上平台自己拒绝时的那几个字段
- * （approved / skipped / message），其余按「没有执行」填满命令结果，读结果的一方不用分两种形状。
- */
-function skippedCommandResult(
-  command: string,
-  cwd: string,
+/** 用户拒绝危险命令时交给模型的结果：与平台 `project:run` 自己拒绝时同形，命令没有执行，没有输出可报。 */
+interface SkippedProjectCommand {
+  approved: false
+  skipped: true
+  command: string
   message: string
-): ProjectCommandResult & { approved: false; skipped: true; message: string } {
-  return {
-    approved: false,
-    skipped: true,
-    message,
-    command,
-    cwd,
-    exitCode: null,
-    signal: null,
-    stdout: '',
-    stderr: '',
-    durationMs: 0,
-    timedOut: false,
-    aborted: false,
-    truncated: false,
-    success: false,
-    verification: { kind: 'unknown', status: 'unknown', issues: [] },
-  }
 }
 
 const ProjectBundledModDefinition = createProjectBundledModDefinition()
