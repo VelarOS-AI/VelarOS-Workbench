@@ -3,6 +3,46 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
+      "version": "0.3.47",
+      "releasedAt": "2026-09-12",
+      "title": {
+        "zh": "AI 改动实时跟着会话走，审批只在危险时打扰",
+        "en": "AI changes follow the chat live, and approvals only interrupt for risky actions"
+      },
+      "added": {
+        "zh": [
+          "左侧「AI 改动」跟右侧当前会话绑定：AI 一改完就出现，运行中实时更新，切换会话时跟着切换，并列出这个会话每一轮的改动。",
+          "AI 打开文件、查看改动，或你在聊天里点开某个文件改动时，左侧会自动切到对应的视图（AI 改动或文件树）并定位到那个文件。",
+          "Git 面板在 AI 或你改动文件后及时刷新，不用等这一轮结束。"
+        ],
+        "en": [
+          "The AI changes panel on the left follows the current chat: changes appear as soon as the AI makes them, update live during a run, switch with the chat, and list every round of that chat.",
+          "When the AI opens a file or reviews changes, or you open a file change from the chat, the left side switches to the matching view (AI changes or file tree) and locates the file.",
+          "The Git panel refreshes as soon as the AI or you change files, without waiting for the run to end."
+        ]
+      },
+      "fixed": {
+        "zh": [
+          "AI 写文件、改代码，以及删除或重命名能完整回滚的内容时，不再反复请求批准；只有删除整个文件夹、会丢掉未提交改动的 Git 操作、写到项目外等危险命令才会询问，而且每次都问。",
+          "你批准的危险命令会照常执行，不再批准之后仍被拦下。",
+          "AI 把对话历史里被省略的内容当成真实代码写进文件时，会在执行前被拦下，并提示它写出完整内容。",
+          "同一轮里先建目标再更新计划时，目标没有显示在顶部。",
+          "从聊天框里去掉当前文件后，输入框里对它的描述还留着。",
+          "AI 查看代码诊断时把语言写成 typescript，会什么都不检查。",
+          "AI 删除或重命名 UTF-16、GBK 等非 UTF-8 编码的文件后，回滚会改变文件的编码。"
+        ],
+        "en": [
+          "Writing files, editing code, and deleting or renaming anything that can be fully rolled back no longer asks for approval again and again. Only risky commands ask, such as deleting a whole folder, Git operations that discard uncommitted work, or writing outside the project, and they ask every time.",
+          "A risky command you approved now runs instead of being blocked after your approval.",
+          "If the AI writes the placeholder for content omitted from the chat history instead of real code, the edit is stopped before it runs and the AI is told to write the full content.",
+          "A goal created in the same round as a plan update did not show at the top.",
+          "After you removed the current file from the chat box, its description stayed in the input.",
+          "Code diagnostics checked nothing when the AI named the language \"typescript\".",
+          "Rolling back a deleted or renamed file in a non-UTF-8 encoding such as UTF-16 or GBK changed its encoding."
+        ]
+      }
+    },
+    {
       "version": "0.3.46",
       "releasedAt": "2026-09-12",
       "title": {
