@@ -128,7 +128,7 @@ import {
 import {
   createStandaloneRunChangeCapture,
   type StandaloneRunChangeCapture,
-  StandaloneRunChangeCaptureDebounceMs,
+  StandaloneRunChangeCaptureTiming,
 } from './standaloneWorkbenchRunChangeCapture'
 import { awaitStandaloneAgentStopSettlement } from './standaloneWorkbenchStopSettlement'
 import {
@@ -140,6 +140,11 @@ import {
   createEmptyWorkerThreadProjection,
   type StandaloneWorkerThreadProjection,
 } from './standaloneWorkbenchWorkerThreads'
+import {
+  createWorkbenchAgentProjectWriteTracker,
+  publishWorkbenchAgentProjectWrite,
+  type WorkbenchAgentProjectWriteTracker,
+} from './workbenchAgentProjectWrites'
 import {
   performWorkbenchAgentUiRequest,
   readWorkbenchAgentUiRequest,
@@ -189,7 +194,12 @@ interface ActiveAgentExecution {
   readonly sessionId: string
   readonly projectRoot: string
   readonly providerId: WorkbenchChatProviderId
-  /** 这一轮的「本轮改动」实时采集；没有检查点（外部引擎、不是 git 仓库）时为 null。 */
+  /** 这一轮的写入识别器：认出主 Agent 与子 Agent 的项目写工具结果（见 workbenchAgentProjectWrites）。 */
+  readonly projectWrites: WorkbenchAgentProjectWriteTracker
+  /**
+   * 这一轮的「本轮改动」：运行中的实时采集与收尾时的最终采集；没有检查点（外部引擎、不是 git 仓库）
+   * 时为 null。收尾一律走它的 `finish`。
+   */
   readonly runChangeCapture: Nullable<StandaloneRunChangeCapture>
   readonly terminalSettlement: Promise<StandaloneAgentTerminalKind>
   terminalKind: StandaloneAgentTerminalKind | null
@@ -265,6 +275,9 @@ function settleActiveExecutionFromControlFailure(
       failure instanceof Error ? failure.message : fallbackMessage
     )
   })
+  // 这一轮在界面上已经了结（可以接着发下一条）：「进行中」的改动现在就按正常收尾规则落定或撤下，
+  // 不等底层 invoke 哪天返回——那时下一轮可能已经开跑，再比对就混进了下一轮的改动。
+  execution.runChangeCapture?.finish()
 }
 
 function resolveCurrentFileLabel(path: string): string {
@@ -844,7 +857,11 @@ function StandaloneWorkbenchChatSessionSurface({
       // 进起搏器按屏显节奏落地（与 Desktop 同一个起搏器）：正文逐帧吐字，其余按序逐帧应用。
       const payload = readAgentEventPayload(envelope)
       if (!payload) return
-      if (envelope.channel === 'agent') activeExecution.runChangeCapture?.observe(payload)
+      // Agent（含子 Agent）写了项目文件：这一轮的「本轮改动」跟上，Git 等界面也按项目根收到通知。
+      if (envelope.channel === 'agent' && activeExecution.projectWrites.observe(payload)) {
+        activeExecution.runChangeCapture?.request()
+        publishWorkbenchAgentProjectWrite(activeExecution.projectRoot)
+      }
       streamSequence += 1
       if (envelope.channel === 'agent' && payload.type === 'text-delta') {
         if (typeof payload.text === 'string')
@@ -1031,9 +1048,9 @@ function StandaloneWorkbenchChatSessionSurface({
   }
 
   /**
-   * 运行中的「本轮改动」实时采集：写工具的结果一到（防抖后）就拿工作树与这一轮开跑前的检查点比一次，
+   * 这一轮的「本轮改动」：运行中写工具的结果一到（按节奏合并）就拿工作树与这一轮开跑前的检查点比一次，
    * 与收尾时的最终采集用同一个记录 id、覆盖同一条记录；摘要挂在会话的「进行中」上，「AI 改动」面板
-   * 据此实时显示这一轮。
+   * 据此实时显示这一轮。收尾时的最终采集见 `captureRunChanges`。
    */
   function createRunChangeCapture(
     sessionId: string,
@@ -1042,7 +1059,7 @@ function StandaloneWorkbenchChatSessionSurface({
     const baseCommitId = checkpoint.commitId
     if (!baseCommitId) return null
     return createStandaloneRunChangeCapture({
-      debounceMs: StandaloneRunChangeCaptureDebounceMs,
+      timing: StandaloneRunChangeCaptureTiming,
       capture: () =>
         window.velarosWorkbenchGit
           .captureChatRunChanges({
@@ -1070,6 +1087,7 @@ function StandaloneWorkbenchChatSessionSurface({
           }))
         )
       },
+      settle: () => captureRunChanges(sessionId, checkpoint),
     })
   }
 
@@ -1432,6 +1450,7 @@ function StandaloneWorkbenchChatSessionSurface({
       sessionId: latest.sessionId,
       projectRoot,
       providerId,
+      projectWrites: createWorkbenchAgentProjectWriteTracker(),
       runChangeCapture: runCheckpoint ? createRunChangeCapture(latest.sessionId, runCheckpoint) : null,
     })
     activeAgentExecutions.set(executionId, activeExecution)
@@ -1501,12 +1520,8 @@ function StandaloneWorkbenchChatSessionSurface({
         },
       },
     })
-    // 停下或失败的一轮也可能已经改了文件：收尾之后照样记下「本轮改动」（「AI 改动」要列全每一轮）。
-    // 挂着的实时采集先作废，由这一次最终采集收尾。
-    const captureEndedRunChanges = (): void => {
-      activeExecution.runChangeCapture?.finish()
-      if (runCheckpoint) captureRunChanges(activeExecution.sessionId, runCheckpoint)
-    }
+    // 停下或失败的一轮也可能已经改了文件：下面每条收尾路径最后都记下「本轮改动」（「AI 改动」要列全
+    // 每一轮）。`finish` 只生效一次：停止超时或控制失败时会话面已经提前了结过，这里就是空操作。
     if (!result.ok) {
       const stopped = getState(projectRoot, providerId).status === 'stopping'
       // 起搏器里没吐完的正文先落地；挂着的干净收尾作废——这一轮以停止/失败收尾。
@@ -1522,7 +1537,7 @@ function StandaloneWorkbenchChatSessionSurface({
           }
         })
       }
-      captureEndedRunChanges()
+      activeExecution.runChangeCapture?.finish()
       return true
     }
 
@@ -1536,14 +1551,14 @@ function StandaloneWorkbenchChatSessionSurface({
     const executionStillActive = activeAgentExecutions.delete(executionId)
     // 流里的终态事件已经把这一轮收了尾（停止、失败）：只差记下改动。
     if (!executionStillActive) {
-      captureEndedRunChanges()
+      activeExecution.runChangeCapture?.finish()
       return true
     }
     if (finalStatus === 'aborted') {
       withStateUpdateTarget(projectRoot, providerId, activeExecution.sessionId, () => {
         finishRun(projectRoot, providerId, 'aborted')
       })
-      captureEndedRunChanges()
+      activeExecution.runChangeCapture?.finish()
       return true
     }
     if (finalStatus === 'error') {
@@ -1554,7 +1569,7 @@ function StandaloneWorkbenchChatSessionSurface({
           readStandaloneFinalAgentError(result.output) ?? t('workbench.chatExecutionFailed')
         )
       })
-      captureEndedRunChanges()
+      activeExecution.runChangeCapture?.finish()
       return true
     }
     withStateUpdateTarget(projectRoot, providerId, activeExecution.sessionId, () => {
@@ -1565,7 +1580,7 @@ function StandaloneWorkbenchChatSessionSurface({
         t('workbench.chatNoTextResponse')
       )
     })
-    captureEndedRunChanges()
+    activeExecution.runChangeCapture?.finish()
     return true
   }
 

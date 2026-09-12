@@ -88,8 +88,8 @@ void describe('Workbench chat composer parity', () => {
     )
 
     assert.match(slots, /messageFileChangeSummary: \(\{ message, formatPathForDisplay, onOpenEntry, onReviewEntries \}\) =>/)
-    // 一轮正常收尾后拿开跑前的检查点比出本轮改动；补丁落主进程记录文件，标记上只挂摘要。
-    assert.match(adapter, /if \(runCheckpoint\) captureRunChanges\(activeExecution\.sessionId, runCheckpoint\)/)
+    // 一轮收尾后拿开跑前的检查点比出本轮改动（由这一轮的采集在 finish 时发出）；补丁落主进程记录文件，标记上只挂摘要。
+    assert.match(adapter, /settle: \(\) => captureRunChanges\(sessionId, checkpoint\)/)
     assert.doesNotMatch(adapter, /workspaceCheckpointDiff/)
     // 回溯掉的回答、被移除的会话，连同它们的改动记录一起清掉。
     assert.match(adapter, /releaseRunChangeRecords\(projectRoot, sessionId, droppedRunChangeRecordIds\)/)

@@ -4,11 +4,8 @@ import path from 'node:path'
 
 import { describe, test } from 'bun:test'
 
+import { WorkbenchGitWorkspaceChangeRefreshDelayMs } from '../src/renderer/src/hooks/useWorkbenchGitState'
 import { resolveWorkbenchChatComposerPlaceholder } from '../src/renderer/src/models/chat/workbenchChatComposerPlaceholder'
-import {
-  isWorkbenchAgentProjectWriteResult,
-  WorkbenchGitWorkspaceChangeRefreshDelayMs,
-} from '../src/renderer/src/models/git/workbenchGitRefreshTriggers'
 import { resolveWorkbenchNavigationSurface } from '../src/renderer/src/models/layout/workbenchSurfaceModel'
 import { createCoalescedRefresh } from '../src/renderer/src/support/coalescedRefresh'
 
@@ -137,8 +134,11 @@ void describe('Workbench chat composer placeholder', () => {
 void describe('Workbench Git refresh on workspace changes', () => {
   void test('coalesces a burst of triggers into one refresh after the delay', async () => {
     let runs = 0
-    const refresh = createCoalescedRefresh(20, async () => {
-      runs += 1
+    const refresh = createCoalescedRefresh({
+      delayMs: 20,
+      run: async () => {
+        runs += 1
+      },
     })
 
     refresh.schedule()
@@ -149,16 +149,63 @@ void describe('Workbench Git refresh on workspace changes', () => {
     assert.equal(runs, 1)
   })
 
+  void test('without a max wait the window is fixed: it runs delayMs after the first trigger', async () => {
+    let runs = 0
+    const refresh = createCoalescedRefresh({
+      delayMs: 40,
+      run: async () => {
+        runs += 1
+      },
+    })
+
+    refresh.schedule()
+    await sleep(25)
+    // 窗口里的新触发并进这一次，不把它往后推。
+    refresh.schedule()
+    await sleep(30)
+    assert.equal(runs, 1)
+  })
+
+  void test('with a max wait it debounces, but still runs on the max-wait cadence while triggers never pause', async () => {
+    let runs = 0
+    const refresh = createCoalescedRefresh({
+      delayMs: 30,
+      maxDelayMs: 60,
+      run: async () => {
+        runs += 1
+      },
+    })
+
+    const startedAt = Date.now()
+    while (Date.now() - startedAt < 200) {
+      refresh.schedule()
+      await sleep(5)
+    }
+    assert.ok(runs >= 2 && runs <= 4, `expected the max-wait cadence, got ${runs}`)
+
+    // 平时是尾沿防抖：一次触发之后安静 delayMs 才跑。
+    await sleep(100)
+    const before = runs
+    refresh.schedule()
+    await sleep(15)
+    assert.equal(runs, before)
+    await sleep(40)
+    assert.equal(runs, before + 1)
+  })
+
   void test('never overlaps a running refresh and catches up once after it finishes', async () => {
     let runs = 0
     let concurrent = 0
     let maxConcurrent = 0
-    const refresh = createCoalescedRefresh(10, async () => {
-      runs += 1
-      concurrent += 1
-      maxConcurrent = Math.max(maxConcurrent, concurrent)
-      await sleep(40)
-      concurrent -= 1
+    const refresh = createCoalescedRefresh({
+      delayMs: 10,
+      run: async () => {
+        runs += 1
+        concurrent += 1
+        maxConcurrent = Math.max(maxConcurrent, concurrent)
+        await sleep(40)
+        concurrent -= 1
+      },
     })
 
     refresh.schedule()
@@ -173,8 +220,11 @@ void describe('Workbench Git refresh on workspace changes', () => {
 
   void test('cancel drops the pending refresh', async () => {
     let runs = 0
-    const refresh = createCoalescedRefresh(20, async () => {
-      runs += 1
+    const refresh = createCoalescedRefresh({
+      delayMs: 20,
+      run: async () => {
+        runs += 1
+      },
     })
 
     refresh.schedule()
@@ -188,38 +238,16 @@ void describe('Workbench Git refresh on workspace changes', () => {
     assert.ok(WorkbenchGitWorkspaceChangeRefreshDelayMs <= 800)
   })
 
-  void test('recognizes project write tool results on the agent execution stream', () => {
-    const toolDone = (result: unknown, error?: string) => ({
-      channel: 'agent',
-      payload: { type: 'tool-done', toolCallId: 'call-1', result, ...(error ? { error } : {}) },
-    })
-
-    assert.equal(isWorkbenchAgentProjectWriteResult(toolDone({ changed: true, changedFiles: ['a.ts'] })), true)
-    assert.equal(
-      isWorkbenchAgentProjectWriteResult(toolDone({ status: 'rolled_back', changedFiles: ['a.ts'] })),
-      true
-    )
-    // 没改到文件、失败的回执、读工具、正文流都不算。
-    assert.equal(isWorkbenchAgentProjectWriteResult(toolDone({ changed: false, changedFiles: [] })), false)
-    assert.equal(isWorkbenchAgentProjectWriteResult(toolDone({ changedFiles: ['a.ts'] }, 'denied')), false)
-    assert.equal(isWorkbenchAgentProjectWriteResult(toolDone({ content: 'x' })), false)
-    assert.equal(
-      isWorkbenchAgentProjectWriteResult({ channel: 'agent', payload: { type: 'text-delta', text: 'hi' } }),
-      false
-    )
-    assert.equal(isWorkbenchAgentProjectWriteResult({ channel: 'runtime', payload: {} }), false)
-    assert.equal(isWorkbenchAgentProjectWriteResult(null), false)
-  })
-
   void test('Git state owns the refresh triggers; the fetch hooks carry no dead watch options', () => {
     const gitState = readSource('src/renderer/src/hooks/useWorkbenchGitState.ts')
     const summaries = readSource('src/renderer/src/support/useWorkspaceGitSummaries.ts')
     const lineStats = readSource('src/renderer/src/support/useWorkspaceGitLineStats.ts')
 
     assert.match(gitState, /useWorkspaceFilesChangedRefresh\(\{[\s\S]*?onChanged: workspaceChangeRefresh\.schedule/u)
+    // Agent 写入（主 Agent 与子 Agent）走共用的识别器，按项目根订阅。
     assert.match(
       gitState,
-      /onAgentExecution\(\(envelope\) => \{\n\s*if \(isWorkbenchAgentProjectWriteResult\(envelope\)\) workspaceChangeRefresh\.schedule\(\)/u
+      /subscribeWorkbenchAgentProjectWrites\(workspaceRoot, workspaceChangeRefresh\.schedule\)/u
     )
     // 顶栏 +/- 总是跟；完整快照只在 Git 界面开着时跟。
     assert.match(gitState, /refreshLineStatsLatest\.current\(\{ reason: 'files-changed' \}\)/u)

@@ -5,21 +5,24 @@ import {
   EMPTY_WORKBENCH_GIT_DECORATIONS,
 } from '@renderer/models/git/workbenchGitModel'
 import {
-  isWorkbenchAgentProjectWriteResult,
-  WorkbenchGitWorkspaceChangeRefreshDelayMs,
-} from '@renderer/models/git/workbenchGitRefreshTriggers'
-import {
   buildWorkbenchGitTopBarSummary,
   resolveWorkbenchCanShowGitBranchControl,
   resolveWorkbenchHasGitRepository,
 } from '@renderer/models/git/workbenchGitTopBarModel'
 import type { WorkbenchProject } from '@renderer/models/project/workbenchProjects'
 
+import { subscribeWorkbenchAgentProjectWrites } from '../runtime/workbenchAgentProjectWrites'
 import { createCoalescedRefresh } from '../support/coalescedRefresh'
 import { useLatest } from '../support/genericHooks'
 import { useWorkspaceFilesChangedRefresh } from '../support/useWorkspaceFilesChangedRefresh'
 import { useWorkspaceGitLineStats } from '../support/useWorkspaceGitLineStats'
 import { useWorkspaceGitSummaries } from '../support/useWorkspaceGitSummaries'
+
+/**
+ * 工作区改动后 Git 状态合并刷新的窗口：第一次触发后这么久刷一次，一次落盘的几批文件事件、Agent 连着改的
+ * 几个文件都并进这一次。
+ */
+export const WorkbenchGitWorkspaceChangeRefreshDelayMs = 600
 
 interface UseWorkbenchGitStateOptions {
   activeProject: Nullable<WorkbenchProject>
@@ -42,8 +45,9 @@ export function isWorkbenchGitSnapshotForProjectRoot(
  * - Git 面板 / 变更树：完整 `useWorkspaceGitSummaries`
  *
  * 刷新时机都在这里：挂载与 workspace 绑定完成、Git 界面打开、Git 操作之后、一轮 Agent 结束，以及工作区
- * 一有改动（文件监听事件、Agent 的项目写工具回执）就合并刷新一次——顶栏 +/- 总是跟，完整快照只在 Git
- * 界面开着时跟（界面打开那一刻会补拉一次）。
+ * 一有改动就合并刷新一次——顶栏 +/- 总是跟，完整快照只在 Git 界面开着时跟（界面打开那一刻会补拉一次）。
+ * 工作区改动有两路：文件监听（用户在编辑器、终端里的改动，也包括 Agent 的）与 Agent 写入信号
+ * （workbenchAgentProjectWrites，主 Agent 与子 Agent 的写工具一出结果就到，不等监听那一拍）。
  */
 export function useWorkbenchGitState({
   activeProject,
@@ -77,13 +81,16 @@ export function useWorkbenchGitState({
   const refreshLineStatsLatest = useLatest(refreshLineStats)
   const gitSurfacesActiveLatest = useLatest(gitSurfacesActive)
   const [workspaceChangeRefresh] = useState(() =>
-    createCoalescedRefresh(WorkbenchGitWorkspaceChangeRefreshDelayMs, async () => {
-      await Promise.all([
-        refreshLineStatsLatest.current({ reason: 'files-changed' }),
-        gitSurfacesActiveLatest.current
-          ? refreshSummaryLatest.current({ reason: 'files-changed' })
-          : undefined,
-      ])
+    createCoalescedRefresh({
+      delayMs: WorkbenchGitWorkspaceChangeRefreshDelayMs,
+      run: async () => {
+        await Promise.all([
+          refreshLineStatsLatest.current({ reason: 'files-changed' }),
+          gitSurfacesActiveLatest.current
+            ? refreshSummaryLatest.current({ reason: 'files-changed' })
+            : undefined,
+        ])
+      },
     })
   )
   // 换项目（或卸载）时撤掉给上一个项目排着的那一次。
@@ -95,13 +102,10 @@ export function useWorkbenchGitState({
     onChanged: workspaceChangeRefresh.schedule,
   })
 
-  // 文件监听也会报 Agent 写的文件；回执这一路让写工具一落盘就排上刷新，不等监听那一拍。
   useEffect(() => {
-    if (!projectEnabled) return undefined
-    return window.velarosWorkbenchKernel.onAgentExecution((envelope) => {
-      if (isWorkbenchAgentProjectWriteResult(envelope)) workspaceChangeRefresh.schedule()
-    })
-  }, [projectEnabled, workspaceChangeRefresh])
+    if (!workspaceRoot) return undefined
+    return subscribeWorkbenchAgentProjectWrites(workspaceRoot, workspaceChangeRefresh.schedule)
+  }, [workspaceChangeRefresh, workspaceRoot])
 
   const scopedSummary = isWorkbenchGitSnapshotForProjectRoot(summary, activeProject)
     ? summary
