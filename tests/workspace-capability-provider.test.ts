@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { describe, test } from 'bun:test'
 
+import type { ApprovalPort } from '@velaros-ai/agent/tool-contract'
 import type { ProjectKernel } from '@velaros-ai/project/runtime'
 
+import type { WorkbenchAgentProjectActivityPort } from '../src/main/workspace/git/WorkbenchChatRunAttribution'
 import type { WorkbenchVelarLogicGraphService } from '../src/main/workspace/language/WorkbenchVelarLogicGraphService'
 import { ProjectCapabilityProvider } from '../src/main/workspace/ProjectCapabilityProvider'
 
@@ -152,4 +154,58 @@ void describe('Project capability provider', () => {
       await rm(projectRoot, { recursive: true, force: true })
     }
   })
+
+  void test('reports the agent’s file writes and the time its commands run to the run attribution', async () => {
+    const projectRoot = await realpath(await mkdtemp(join(tmpdir(), 'velaros-workbench-activity-')))
+    const provider = new ProjectCapabilityProvider()
+    const reports: unknown[] = []
+    const projectActivity: WorkbenchAgentProjectActivityPort = {
+      beginFileWrite: () => {
+        reports.push('write:start')
+        return (paths) => reports.push(['write:end', [...paths]])
+      },
+      beginCommand: () => {
+        reports.push('command:start')
+        return () => reports.push('command:end')
+      },
+    }
+    const approval: ApprovalPort = {
+      awaitConfirmation: async () => undefined,
+      awaitConfirmationDecision: async () => ({ approved: true, message: null }),
+    }
+    const toolContext = { abortSignal: new AbortController().signal, approval, projectActivity }
+    try {
+      const project = await provider.resolveProject(projectRoot)
+      const run = (name: string, input: unknown) => {
+        const tool = project.tools.find((candidate) => candidate.name === name)
+        assert.ok(tool, name)
+        return tool.execute(input, toolContext) as Promise<Record<string, unknown>>
+      }
+
+      await run('project:write', { path: 'notes/a.md', content: 'first\n', mode: 'create' })
+      const edited = await run('project:edit', {
+        operations: [{ operation: { type: 'replace_text', path: 'notes/a.md', oldText: 'first', newText: 'second' } }],
+      })
+      await run('project:rollback', { transactionId: edited.transactionId })
+      await run('project:read', { path: 'notes/a.md' })
+      await run('project:run', { command: 'echo built > out.txt' })
+      // 失败的写入也要收尾（报空清单），不留一个永远没结束的写入窗。
+      await assert.rejects(() => run('project:edit', {
+        operations: [{ operation: { type: 'replace_text', path: 'notes/a.md', oldText: 'missing', newText: 'x' } }],
+      }))
+
+      assert.deepEqual(reports, [
+        'write:start', ['write:end', ['notes/a.md']],
+        'write:start', ['write:end', ['notes/a.md']],
+        'write:start', ['write:end', ['notes/a.md']],
+        'command:start', 'command:end',
+        'write:start', ['write:end', []],
+      ])
+      assert.equal(await readFile(join(projectRoot, 'notes', 'a.md'), 'utf8'), 'first\n')
+      assert.equal(await readFile(join(projectRoot, 'out.txt'), 'utf8'), 'built\n')
+    } finally {
+      await provider.dispose()
+      await rm(projectRoot, { recursive: true, force: true })
+    }
+  }, 30_000)
 })

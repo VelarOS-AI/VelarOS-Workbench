@@ -80,6 +80,78 @@ void describe('Workbench chat checkpoints', () => {
     }
   })
 
+  void test('restores only the given paths, and leaves one that changed since untouched', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'workbench-checkpoint-paths-'))
+    const indexes = await mkdtemp(join(tmpdir(), 'workbench-checkpoint-indexes-'))
+    const service = new WorkbenchChatCheckpointService(() => indexes)
+
+    try {
+      await git(root, ['init', '-q'])
+      await writeFile(join(root, 'edited.ts'), 'before\n', 'utf8')
+      await writeFile(join(root, 'deleted.ts'), 'keep me\n', 'utf8')
+      await writeFile(join(root, 'touched-later.ts'), 'before\n', 'utf8')
+      await writeFile(join(root, 'bystander.ts'), 'before\n', 'utf8')
+      await git(root, ['add', '-A'])
+      await git(root, ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'base'])
+      const headBefore = (await git(root, ['rev-parse', 'HEAD'])).trim()
+      const { commitId } = await service.capture({ workspaceRoot: root, sessionId: 's', checkpointId: 'c' })
+      assert.ok(commitId)
+
+      await writeFile(join(root, 'edited.ts'), 'after\n', 'utf8')
+      await unlink(join(root, 'deleted.ts'))
+      await mkdir(join(root, 'fresh', 'dir'), { recursive: true })
+      await writeFile(join(root, 'fresh', 'dir', 'created.ts'), 'new\n', 'utf8')
+      await writeFile(join(root, 'touched-later.ts'), 'after\n', 'utf8')
+      await writeFile(join(root, 'bystander.ts'), 'someone else\n', 'utf8')
+      const changes = await service.diffWorkingTree({
+        workspaceRoot: root,
+        baseCommitId: commitId!,
+        tree: await service.snapshotWorkingTree(root),
+      })
+      const byPath = new Map(changes.map((change) => [change.path, change]))
+      assert.equal(byPath.get('fresh/dir/created.ts')?.before, null)
+      assert.equal(byPath.get('deleted.ts')?.after, null)
+      // 采集之后又被别人改过：此刻已不是期望的样子。
+      await writeFile(join(root, 'touched-later.ts'), 'after, then user\n', 'utf8')
+
+      const restores = ['edited.ts', 'deleted.ts', 'fresh/dir/created.ts', 'touched-later.ts'].map((path) => ({
+        path,
+        expected: byPath.get(path)!.after,
+        target: byPath.get(path)!.before,
+      }))
+      const result = await service.restorePaths({ workspaceRoot: root, paths: restores })
+      assert.deepEqual(
+        { ...result, restoredPaths: [...result.restoredPaths].sort() },
+        {
+          restored: true,
+          error: null,
+          restoredPaths: ['deleted.ts', 'edited.ts', 'fresh/dir/created.ts'],
+          changedSince: ['touched-later.ts'],
+        }
+      )
+      assert.equal(await readFile(join(root, 'edited.ts'), 'utf8'), 'before\n')
+      assert.equal(await readFile(join(root, 'deleted.ts'), 'utf8'), 'keep me\n')
+      assert.equal(existsSync(join(root, 'fresh')), false)
+      assert.equal(await readFile(join(root, 'touched-later.ts'), 'utf8'), 'after, then user\n')
+      assert.equal(await readFile(join(root, 'bystander.ts'), 'utf8'), 'someone else\n')
+      assert.equal((await git(root, ['rev-parse', 'HEAD'])).trim(), headBefore)
+      assert.equal((await git(root, ['diff', '--cached', '--name-only'])).trim(), '')
+
+      // 已经是目标样子的路径不算撤回；路径越出项目根直接拒绝。
+      assert.deepEqual(
+        await service.restorePaths({ workspaceRoot: root, paths: restores.slice(0, 1).map((item) => ({ ...item, expected: item.target })) }),
+        { restored: true, error: null, restoredPaths: [], changedSince: [] }
+      )
+      await assert.rejects(
+        () => service.restorePaths({ workspaceRoot: root, paths: [{ path: '../escape.ts', expected: null, target: null }] }),
+        /无效的文件路径/u
+      )
+    } finally {
+      await rm(root, { recursive: true, force: true })
+      await rm(indexes, { recursive: true, force: true })
+    }
+  })
+
   void test('falls back to conversation-only checkpoints outside a git repository', async () => {
     const root = await mkdtemp(join(tmpdir(), 'workbench-checkpoint-plain-'))
     const indexes = await mkdtemp(join(tmpdir(), 'workbench-checkpoint-indexes-'))

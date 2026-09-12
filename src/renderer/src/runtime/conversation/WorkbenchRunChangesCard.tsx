@@ -69,11 +69,12 @@ interface WorkbenchRunChangesCardProps {
 }
 
 /**
- * 一轮回答末尾的「本轮改动」卡（Desktop `MessageFileChangeSummary` 的对位件）：这一轮在磁盘上改了
+ * 一轮回答末尾的「本轮改动」卡（Desktop `MessageFileChangeSummary` 的对位件）：这一轮 AI 在磁盘上改了
  * 哪些文件、各增删多少行，展开看逐行差异，点开跳进编辑器。
  *
- * 数据是这一轮开跑前后两个工作树快照的 git diff；Workbench 的文件编辑没有可单独撤销的事务，
- * 所以不带 Desktop 的逐文件撤销 / 恢复——整轮撤回走回溯。
+ * 数据是这一轮开跑前后两个工作树快照的 git diff，按改动归属只留 Agent 改过的文件；AI 之外也改过的文件
+ * 在路径后面注明（它的差异里混着两边的改动）。Workbench 的文件编辑没有可单独撤销的事务，所以不带
+ * Desktop 的逐文件撤销 / 恢复——整轮撤回走回溯。
  */
 export const WorkbenchRunChangesCard = memo(function WorkbenchRunChangesCard({
   messageId,
@@ -119,6 +120,18 @@ export const WorkbenchRunChangesCard = memo(function WorkbenchRunChangesCard({
       return next
     })
   }, [])
+  const mixedPathSuffix = t('workbench.chatRunChangesMixedPathSuffix')
+  const formatEntryPath = useMemo(() => {
+    const mixedPaths = new Set(
+      (record?.changes ?? [])
+        .filter((change) => change.attribution === 'mixed')
+        .map((change) => change.path)
+    )
+    return (path: string): string => {
+      const displayPath = formatPathForDisplay ? formatPathForDisplay(path) : path
+      return mixedPaths.has(path) ? `${displayPath}${mixedPathSuffix}` : displayPath
+    }
+  }, [formatPathForDisplay, mixedPathSuffix, record])
 
   if (!summary || (summary.fileCount === 0 && !summary.error)) return null
 
@@ -166,7 +179,7 @@ export const WorkbenchRunChangesCard = memo(function WorkbenchRunChangesCard({
         <FileChangeSummaryList
           entries={entries}
           expandedKeys={expandedKeys}
-          formatPathForDisplay={formatPathForDisplay}
+          formatPathForDisplay={formatEntryPath}
           onToggleEntry={toggleEntry}
           {...(onOpenEntry
             ? {

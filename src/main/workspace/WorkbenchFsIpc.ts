@@ -4,6 +4,10 @@
  * IPC 入参是边界外来数据，在此解析一次（形状不符按无效请求处理），服务内部只见类型。
  * `saveFileSync` 走 `ipcMain.on` + `event.returnValue`（renderer sendSync 的 beforeunload
  * 兜底路径）；`runCommand` 的流式输出只回发给发起请求的 webContents。
+ *
+ * 写族通道只由用户在界面上的动作触发（编辑器保存、文件树里新建 / 改名 / 移动 / 删除 / 恢复）；Agent 的
+ * 写入走项目内核，不经这里。写成功后把路径报给改动归属账本：这些改动是用户亲手做的，正在跑的那一轮
+ * 不能把它们算成 Agent 的，回溯时也不能替用户撤掉。
  */
 import { resolve } from 'node:path'
 
@@ -33,6 +37,7 @@ import type {
 import { WorkbenchFsChannels } from '../../shared/workbenchFs'
 import type { WorkbenchWindowManager } from '../projects/WorkbenchWindowManager'
 
+import type { WorkbenchUserWriteSink } from './git/WorkbenchChatRunAttribution'
 import {
   callWithEnvelope,
   callWithEnvelopeSync,
@@ -48,8 +53,19 @@ import type { WorkbenchProjectFileSystem } from './WorkbenchProjectFileSystem'
 export function registerWorkbenchFsIpc(
   fileSystem: WorkbenchProjectFileSystem,
   parts: WorkbenchAppParts,
-  windowManager: WorkbenchWindowManager
+  windowManager: WorkbenchWindowManager,
+  userWrites?: WorkbenchUserWriteSink
 ): void {
+  /** 写成功之后才报：没写成的不算动过。路径相对项目根。 */
+  const recordUserWrites = <T>(
+    result: T,
+    workspaceRoot: string,
+    paths: (result: T) => string[]
+  ): T => {
+    userWrites?.recordUserWrites({ workspaceRoot, paths: paths(result) })
+    return result
+  }
+
   ipcMain.handle(WorkbenchFsChannels.listDirectory, (_event, request: unknown) =>
     callWithEnvelope(() => {
       const parsed = parseListDirectoryRequest(request)
@@ -84,11 +100,13 @@ export function registerWorkbenchFsIpc(
   )
 
   ipcMain.handle(WorkbenchFsChannels.saveFile, (_event, request: unknown) =>
-    callWithEnvelope(() => {
+    callWithEnvelope(async () => {
       const parsed = parseSaveFileRequest(request)
       if (!parsed) return invalidRequest()
 
-      return parts.files.saveFile(parsed)
+      return recordUserWrites(await parts.files.saveFile(parsed), parsed.projectRoot, () => [
+        parsed.path,
+      ])
     })
   )
 
@@ -97,34 +115,48 @@ export function registerWorkbenchFsIpc(
       const parsed = parseSaveFileRequest(request)
       if (!parsed) return invalidRequest()
 
-      return parts.files.saveFileSync(parsed)
+      return recordUserWrites(parts.files.saveFileSync(parsed), parsed.projectRoot, () => [
+        parsed.path,
+      ])
     })
   })
 
   ipcMain.handle(WorkbenchFsChannels.createEntry, (_event, request: unknown) =>
-    callWithEnvelope(() => {
+    callWithEnvelope(async () => {
       const parsed = parseCreateEntryRequest(request)
       if (!parsed) return invalidRequest()
 
-      return parts.files.createEntry(parsed)
+      return recordUserWrites(
+        await parts.files.createEntry(parsed),
+        parsed.projectRoot,
+        (result) => [result.entry.path]
+      )
     })
   )
 
   ipcMain.handle(WorkbenchFsChannels.renameEntry, (_event, request: unknown) =>
-    callWithEnvelope(() => {
+    callWithEnvelope(async () => {
       const parsed = parseRenameEntryRequest(request)
       if (!parsed) return invalidRequest()
 
-      return parts.files.renameEntry(parsed)
+      return recordUserWrites(
+        await parts.files.renameEntry(parsed),
+        parsed.projectRoot,
+        (result) => [parsed.path, result.entry.path]
+      )
     })
   )
 
   ipcMain.handle(WorkbenchFsChannels.moveEntry, (_event, request: unknown) =>
-    callWithEnvelope(() => {
+    callWithEnvelope(async () => {
       const parsed = parseMoveEntryRequest(request)
       if (!parsed) return invalidRequest()
 
-      return parts.files.moveEntry(parsed)
+      return recordUserWrites(
+        await parts.files.moveEntry(parsed),
+        parsed.projectRoot,
+        (result) => [result.previousPath, result.entry.path]
+      )
     })
   )
 
@@ -138,29 +170,41 @@ export function registerWorkbenchFsIpc(
   )
 
   ipcMain.handle(WorkbenchFsChannels.deleteEntry, (_event, request: unknown) =>
-    callWithEnvelope(() => {
+    callWithEnvelope(async () => {
       const parsed = parseDeleteEntryRequest(request)
       if (!parsed) return invalidRequest()
 
-      return parts.files.deleteEntry(parsed)
+      return recordUserWrites(
+        await parts.files.deleteEntry(parsed),
+        parsed.projectRoot,
+        (result) => [result.deletedPath]
+      )
     })
   )
 
   ipcMain.handle(WorkbenchFsChannels.restoreDeletedEntry, (_event, request: unknown) =>
-    callWithEnvelope(() => {
+    callWithEnvelope(async () => {
       const parsed = parseRestoreDeletedEntryRequest(request)
       if (!parsed) return invalidRequest()
 
-      return parts.files.restoreDeletedEntry(parsed)
+      return recordUserWrites(
+        await parts.files.restoreDeletedEntry(parsed),
+        parsed.projectRoot,
+        (result) => [result.restoredPath]
+      )
     })
   )
 
   ipcMain.handle(WorkbenchFsChannels.restoreMissingFile, (_event, request: unknown) =>
-    callWithEnvelope(() => {
+    callWithEnvelope(async () => {
       const parsed = parseRestoreMissingFileRequest(request)
       if (!parsed) return invalidRequest()
 
-      return parts.files.restoreMissingFile(parsed)
+      return recordUserWrites(
+        await parts.files.restoreMissingFile(parsed),
+        parsed.projectRoot,
+        () => [parsed.path]
+      )
     })
   )
 

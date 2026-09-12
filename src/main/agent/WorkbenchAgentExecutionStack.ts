@@ -57,6 +57,10 @@ import {
 } from '@velaros-ai/model/node'
 
 import type {
+  WorkbenchAgentProjectActivityPort,
+  WorkbenchAgentProjectActivitySource,
+} from '../workspace/git/WorkbenchChatRunAttribution'
+import type {
   WorkbenchProjectCapability,
   WorkbenchProjectCapabilityProvider,
 } from '../workspace/ProjectCapabilityProvider'
@@ -244,7 +248,12 @@ class WorkbenchAgentExecutionStack {
      */
     public readonly approvals: WorkbenchAgentApprovalBroker = new WorkbenchAgentApprovalBroker(),
     /** 界面请求（`workbench:*` 工具）的挂起表；renderer 的回执经装配根转进来结算。 */
-    public readonly ui: WorkbenchAgentUiBridge = new WorkbenchAgentUiBridge()
+    public readonly ui: WorkbenchAgentUiBridge = new WorkbenchAgentUiBridge(),
+    /**
+     * 改动归属账本的上报面：每一轮按 (项目根, 会话) 绑一个上报口放进工具上下文，写文件工具与命令经它报出
+     * Agent 动过的文件与时间窗。缺省不上报（探针、测试）。
+     */
+    private readonly projectActivity?: WorkbenchAgentProjectActivitySource
   ) {
     // Model 是宿主注入的能力：Agent 不自己发现 provider registry。
     // config.modelSelection 是不透明选择，Workbench 原样转交 Model 包解析（BYOK）。
@@ -312,6 +321,11 @@ class WorkbenchAgentExecutionStack {
         sessionId: input.sessionId,
         events: input.events,
         abortSignal: abortController.signal,
+      }),
+      // 子 Agent 的工具上下文从这里展开继承，它们的写入与命令一样记在这一轮头上。
+      projectActivity: this.projectActivity?.activityFor({
+        projectRoot,
+        sessionId: input.sessionId,
       }),
       approval: this.buildApprovalPort({
         sessionId: input.sessionId,
@@ -846,6 +860,8 @@ type WorkbenchAgentToolContext = AgentExecutionStackToolContext & {
   dispatchSubAgent?: (input: SubAgentDispatchInput) => Promise<string>
   /** 发起这一轮的窗口；缺席时 `workbench:*` 界面工具整格隐身。 */
   workbenchUi?: WorkbenchAgentUiPort
+  /** 这一轮 Agent 动手痕迹的上报口（写了哪些文件、命令跑在哪段时间）；缺席时不上报。 */
+  projectActivity?: WorkbenchAgentProjectActivityPort
   /** `context:recall` 的取回口；子 Agent 的上下文从主 Agent 这里继承同一份。 */
   conversation?: ToolConversationContextApi
   /** 执行器页出大工具结果时写入的存储；缺席时结果只内联、超出预算就截断。 */
@@ -871,6 +887,8 @@ export function createWorkbenchToolContext(input: {
   dispatchSubAgent?: (input: SubAgentDispatchInput) => Promise<string>
   /** 界面操作口；不传即本次执行面没有可操作的窗口。 */
   workbenchUi?: WorkbenchAgentUiPort
+  /** Agent 动手痕迹的上报口；不传即这一面的写入与命令不记入改动归属。 */
+  projectActivity?: WorkbenchAgentProjectActivityPort
   /** 上下文召回口与页出存储；不传即这一面不页出、也没有 `context:recall` 可用。 */
   conversation?: ToolConversationContextApi
   contextPayloadStore?: ContextPayloadStore
@@ -908,6 +926,7 @@ export function createWorkbenchToolContext(input: {
     execution: null,
     ...(input.dispatchSubAgent ? { dispatchSubAgent: input.dispatchSubAgent } : {}),
     ...(input.workbenchUi ? { workbenchUi: input.workbenchUi } : {}),
+    ...(input.projectActivity ? { projectActivity: input.projectActivity } : {}),
     ...(input.conversation ? { conversation: input.conversation } : {}),
     ...(input.contextPayloadStore ? { contextPayloadStore: input.contextPayloadStore } : {}),
     codingSession: input.tracker,

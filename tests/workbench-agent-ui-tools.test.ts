@@ -551,6 +551,48 @@ void describe('Workbench agent run, preview and problems tools', () => {
     })
   })
 
+  void test('start_run counts only the launch itself as an agent command window, not the approval before it', async () => {
+    await withProject(async (root) => {
+      const timeline: string[] = []
+      const ui = createFakeUi((command) => {
+        timeline.push(`ui:${command.type}`)
+        return command.type === 'start-run'
+          ? { sessionId: 'run-dev' }
+          : { sessionId: 'run-dev', command: 'npm run dev', running: true, output: 'ready', totalLines: 1, matched: true }
+      })
+      const approval = (approved: boolean) => {
+        const fake = createFakeApproval(approved)
+        const ask = fake.port.awaitConfirmationDecision
+        fake.port.awaitConfirmationDecision = async (...args) => {
+          timeline.push('approval')
+          return ask(...args)
+        }
+        return fake
+      }
+      const projectActivity = {
+        beginFileWrite: () => () => undefined,
+        beginCommand: () => {
+          timeline.push('command:start')
+          return () => void timeline.push('command:end')
+        },
+      }
+
+      await findTool('workbench:start_run').execute(
+        { command: 'npm run dev', waitFor: 'ready', waitSeconds: 5 },
+        { ...toolContext(root, ui, approval(true)), projectActivity } as never
+      )
+      assert.deepEqual(timeline, ['approval', 'command:start', 'ui:start-run', 'ui:read-run', 'command:end'])
+
+      // 用户没同意：什么都没启动，也就没有命令窗。
+      timeline.length = 0
+      await findTool('workbench:start_run').execute(
+        { command: 'npm install' },
+        { ...toolContext(root, ui, approval(false)), projectActivity } as never
+      )
+      assert.deepEqual(timeline, ['approval'])
+    })
+  })
+
   void test('open_preview only opens local development servers', async () => {
     await withProject(async (root) => {
       const ui = createFakeUi((command) => (command.type === 'open-preview' ? { opened: 'workbench-browser' } : {}))
@@ -720,6 +762,116 @@ void describe('Workbench agent UI tools in a real run', () => {
           ],
         ])
         assert.match(prompts[1] ?? '', /opened/u)
+      } finally {
+        await stack.dispose()
+      }
+    })
+  })
+
+  void test('each run hands its tools this session’s activity port, so a launch counts as its command', async () => {
+    await withProject(async (root) => {
+      let requestCount = 0
+      const model = new MockLanguageModelV3({
+        provider: 'probe',
+        modelId: 'probe',
+        doStream: async () => {
+          requestCount += 1
+          const first = requestCount === 1
+          return {
+            stream: simulateReadableStream({
+              initialDelayInMs: null,
+              chunkDelayInMs: null,
+              chunks: [
+                { type: 'stream-start', warnings: [] },
+                ...(first
+                  ? [{
+                      type: 'tool-call' as const,
+                      toolCallId: 'run-1',
+                      toolName: 'workbench__start_run',
+                      input: '{"command":"git status"}',
+                    }]
+                  : [
+                      { type: 'text-start' as const, id: 'reply' },
+                      { type: 'text-delta' as const, id: 'reply', delta: '跑起来了。' },
+                      { type: 'text-end' as const, id: 'reply' },
+                    ]),
+                {
+                  type: 'finish',
+                  finishReason: { unified: first ? 'tool-calls' : 'stop', raw: 'stop' },
+                  usage: {
+                    inputTokens: { total: 10, noCache: 10, cacheRead: 0, cacheWrite: 0 },
+                    outputTokens: { total: 4, text: 4, reasoning: 0 },
+                  },
+                },
+              ],
+            }),
+          }
+        },
+      })
+      const provider = () => model
+      const activity: string[] = []
+      const stack = new WorkbenchAgentExecutionStack(
+        EmptyProjectProvider,
+        {
+          ...createModelRuntimeComposition(),
+          agentModelRuntime: {
+            createAgentProvider: () => provider,
+            resolveRoleRuntime: async () => ({
+              provider,
+              providerId: 'probe',
+              model: 'probe',
+              providerModel: 'probe',
+              contextWindow: 128_000,
+              supportedInputModalities: ['text'],
+              resolutionSource: 'probe',
+              resolutionTrace: [],
+            }),
+          },
+        },
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          activityFor: ({ projectRoot, sessionId }) => {
+            activity.push(`bind:${projectRoot === root}:${sessionId}`)
+            return {
+              beginFileWrite: () => () => undefined,
+              beginCommand: () => {
+                activity.push('command:start')
+                return () => void activity.push('command:end')
+              },
+            }
+          },
+        }
+      )
+      const events = new ExecutionEventBus({
+        agent: (event) => {
+          if (event.type !== 'notice' || event.kind !== WorkbenchAgentUiNoticeKind) return
+          const request = event.payload as WorkbenchAgentUiRequest
+          queueMicrotask(() =>
+            stack.ui.resolve({
+              requestId: request.requestId,
+              executionId: request.executionId,
+              ok: true,
+              data: { sessionId: 'terminal-1' },
+            })
+          )
+        },
+      })
+      try {
+        const result = await stack.run({
+          sessionId: 'activity-session',
+          executionId: 'activity-run',
+          projectRoot: root,
+          messages: [{ role: 'user', content: '看看状态' }],
+          config: { modelSelection: { provider: 'probe', model: 'probe' } },
+          events,
+          abortSignal: new AbortController().signal,
+        })
+        assert.equal(result.status, 'completed')
+        assert.deepEqual(activity, ['bind:true:activity-session', 'command:start', 'command:end'])
       } finally {
         await stack.dispose()
       }

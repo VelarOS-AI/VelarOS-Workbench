@@ -122,9 +122,9 @@ void describe('standalone Workbench rewind', () => {
     assert.match(kept?.detail ?? '', /chatRewindNoticeRemoved\(turns=1 messages=4 tools=2 toolNames=project:edit, project:run\)/u)
     assert.match(kept?.detail ?? '', /chatRewindNoticeFilesKept\(files=src\/a\.ts\)/u)
 
-    const restoredOutcome = { attempted: true, restored: true, error: null }
+    const restoredOutcome = { ...NoRewindFileOutcome, attempted: true, restored: true }
     assert.equal(resolveRewindFidelity({ survey: worldly, fileOutcome: restoredOutcome }), 'files-restored')
-    const failedOutcome = { attempted: true, restored: false, error: 'read-tree failed' }
+    const failedOutcome = { ...NoRewindFileOutcome, attempted: true, error: 'read-tree failed' }
     const failed = buildRewindNoticeText({
       t,
       fidelity: resolveRewindFidelity({ survey: worldly, fileOutcome: failedOutcome }),
@@ -136,6 +136,48 @@ void describe('standalone Workbench rewind', () => {
     // 连带删掉上一次回溯说明时，即使这次零工具调用也不能算干净。
     const carried = surveyRewindRemoval([user('turn'), user('notice', 'system-notice')])
     assert.equal(resolveRewindFidelity({ survey: carried, fileOutcome: restoredOutcome }), 'diverged')
+  })
+
+  void test('says only the AI’s changes were undone and lists the files kept for outside edits', () => {
+    const worldly = surveyRewindRemoval(messages.slice(2))
+    const partly = { ...NoRewindFileOutcome, attempted: true, restored: true, keptPaths: ['src/b.ts', 'notes.md'] }
+    const notice = buildRewindNoticeText({
+      t,
+      fidelity: resolveRewindFidelity({ survey: worldly, fileOutcome: partly }),
+      survey: worldly,
+      fileOutcome: partly,
+    })
+    assert.equal(
+      notice?.summary,
+      'workbench.chatRewindNoticeSummaryRestoredWithKept(turns=1 messages=4 kept=2)'
+    )
+    assert.match(notice?.detail ?? '', /^workbench\.chatRewindNoticeFilesRestoredAgentChanges$/mu)
+    assert.match(
+      notice?.detail ?? '',
+      /^workbench\.chatRewindNoticeFilesKeptOutsideEdits\(files=src\/b\.ts, notes\.md\)$/mu
+    )
+
+    const clean = { ...NoRewindFileOutcome, attempted: true, restored: true }
+    const agentOnly = buildRewindNoticeText({ t, fidelity: 'files-restored', survey: worldly, fileOutcome: clean })
+    assert.equal(agentOnly?.summary, 'workbench.chatRewindNoticeSummaryRestored(turns=1 messages=4)')
+    assert.doesNotMatch(agentOnly?.detail ?? '', /FilesKeptOutsideEdits/u)
+
+    // 有早于改动归属的旧记录：照旧整体还原到检查点，说明也照旧。
+    const checkpoint = { ...clean, scope: 'checkpoint' as const }
+    const whole = buildRewindNoticeText({ t, fidelity: 'files-restored', survey: worldly, fileOutcome: checkpoint })
+    assert.match(whole?.detail ?? '', /^workbench\.chatRewindNoticeFilesRestored$/mu)
+
+    // 上一次回溯留下的错位跟着一起移除时，这次文件确实还原了就照实说还原了。
+    const carried = surveyRewindRemoval([...messages.slice(2), user('notice', 'system-notice')])
+    const carriedNotice = buildRewindNoticeText({
+      t,
+      fidelity: resolveRewindFidelity({ survey: carried, fileOutcome: clean }),
+      survey: carried,
+      fileOutcome: clean,
+    })
+    assert.match(carriedNotice?.summary ?? '', /chatRewindNoticeSummaryRestored\(/u)
+    assert.match(carriedNotice?.detail ?? '', /chatRewindNoticeCarriedDivergence\(notices=1\)/u)
+    assert.match(carriedNotice?.detail ?? '', /^workbench\.chatRewindNoticeFilesRestoredAgentChanges$/mu)
   })
 
   void test('keeps at most 80 checkpoints and validates persisted ones', () => {

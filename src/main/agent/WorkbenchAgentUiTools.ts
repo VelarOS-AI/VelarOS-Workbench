@@ -27,6 +27,7 @@ import {
   type CommandExecutionPlan,
   createDangerousCommandApprovalOptions,
 } from '../workspace/CommandExecutionPolicy'
+import type { WorkbenchAgentProjectActivityPort } from '../workspace/git/WorkbenchChatRunAttribution'
 import {
   getRelativePathInsideRoot,
   toPortableRelativePath,
@@ -67,6 +68,8 @@ interface WorkbenchAgentUiToolContext {
   /** 这一轮的审批通道；「运行」面板里跑可能改动项目的命令前先问。 */
   approval: ApprovalPort
   workbenchUi?: WorkbenchAgentUiPort
+  /** Agent 动手痕迹的上报口：「运行」面板里启动命令的那段时间记成 Agent 命令的时间窗。 */
+  projectActivity?: WorkbenchAgentProjectActivityPort
 }
 
 function readUiToolContext(value: unknown): WorkbenchAgentUiToolContext {
@@ -759,21 +762,28 @@ const startRunTool = defineToolRuntimeSpec<
           message: decision.message ?? 'The user declined to run this command.',
         }
     }
-    const started = await sendCommand(context, {
-      type: 'start-run',
-      command,
-      label: input.label?.trim() || command,
-    })
-    const sessionId = typeof started.sessionId === 'string' ? started.sessionId : null
-    if (!sessionId) throw new AppError('PLATFORM', 'Workbench could not start the run.')
-    if (!input.waitFor && !input.waitSeconds) return { started: true, sessionId, command }
-    return {
-      started: true,
-      ...(await readRunOutput(context, {
-        sessionId,
-        waitFor: input.waitFor,
-        waitSeconds: input.waitSeconds,
-      })),
+    // 从启动到这次调用返回（含等输出）记成 Agent 命令的时间窗：这段时间里它写出的文件算这一轮的。
+    // 长驻进程之后的写入（多半是被文件改动触发的重新构建）不再算。
+    const endCommand = context.projectActivity?.beginCommand()
+    try {
+      const started = await sendCommand(context, {
+        type: 'start-run',
+        command,
+        label: input.label?.trim() || command,
+      })
+      const sessionId = typeof started.sessionId === 'string' ? started.sessionId : null
+      if (!sessionId) throw new AppError('PLATFORM', 'Workbench could not start the run.')
+      if (!input.waitFor && !input.waitSeconds) return { started: true, sessionId, command }
+      return {
+        started: true,
+        ...(await readRunOutput(context, {
+          sessionId,
+          waitFor: input.waitFor,
+          waitSeconds: input.waitSeconds,
+        })),
+      }
+    } finally {
+      endCommand?.()
     }
   },
 })

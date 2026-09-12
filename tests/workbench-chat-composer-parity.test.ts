@@ -94,6 +94,14 @@ void describe('Workbench chat composer parity', () => {
     // 一轮收尾后拿开跑前的检查点比出本轮改动（由这一轮的采集在 finish 时发出）；补丁落主进程记录文件，标记上只挂摘要。
     assert.match(adapter, /settle: \(\) => captureRunChanges\(sessionId, checkpoint\)/)
     assert.doesNotMatch(adapter, /workspaceCheckpointDiff/)
+    // 收尾的最终采集带着标记：主进程等最后一条命令的余量走完再拍，采完关掉这一轮的改动归属账本。
+    assert.match(adapter, /baseCommitId,\n\s*final: true,\n\s*\}\)/)
+    // 回溯只撤回被移除各轮里 Agent 的改动：回溯到的那一轮和它之后每一轮的记录一起交给主进程。
+    assert.match(
+      adapter,
+      /recordIds: \[selection\.checkpoint, \.\.\.selection\.evictedCheckpoints\]\.map\(\(\{ id \}\) => id\)/
+    )
+    assert.doesNotMatch(adapter, /restoreChatCheckpoint/)
     // 回溯掉的回答、被移除的会话，连同它们的改动记录一起清掉。
     assert.match(adapter, /releaseRunChangeRecords\(projectRoot, sessionId, droppedRunChangeRecordIds\)/)
     assert.match(adapter, /releaseRemovedSession\(target\)/)

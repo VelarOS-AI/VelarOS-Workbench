@@ -140,6 +140,10 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     aiChangesOmitted: 'The change is too large (+{additions} -{deletions}), so no line-by-line diff was saved.',
     aiChangesNoLineChanges: 'This file has no line changes.',
     aiChangesDiffLabel: 'AI changes in {path}',
+    aiChangesMixedChip: 'Outside edits',
+    aiChangesMixedHint:
+      'This file was also changed outside the AI during this run (by you or another program): the diff mixes both, and rewinding this run won’t roll it back.',
+    chatRunChangesMixedPathSuffix: ' (also edited outside the AI)',
     explanationPrevious: 'Previous explanation',
     explanationNext: 'Next explanation',
     explanationClose: 'Close explanation',
@@ -773,6 +777,8 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
       'Rewound {turns} turn(s), {messages} message(s) · files not rolled back',
     chatRewindNoticeSummaryRestored:
       'Rewound {turns} turn(s), {messages} message(s) · files restored',
+    chatRewindNoticeSummaryRestoredWithKept:
+      'Rewound {turns} turn(s), {messages} message(s) · AI changes undone, {kept} file(s) with outside edits kept',
     chatRewindNoticeRemoved:
       '[conversation rewind] The {turns} turn(s) starting here — {messages} message(s) — were removed from the history by the user. Those turns issued {tools} tool call(s): {toolNames}.',
     chatRewindNoticeRemovedNoTools:
@@ -785,6 +791,10 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
       'No file changes were recorded in those turns; whatever those tool calls did outside the filesystem was not undone.',
     chatRewindNoticeFilesRestored:
       'Files were restored: the project was reset to this point. Effects outside the filesystem — shell commands, network requests, git commits — are not in the snapshot and were not undone.',
+    chatRewindNoticeFilesRestoredAgentChanges:
+      'Files were restored: the files the AI changed in those turns were put back to how they were before it changed them; changes made outside the AI (the user’s own edits in the editor or terminal, files written by other programs) were left as they are. Effects outside the filesystem — shell commands, network requests, git commits — were not undone.',
+    chatRewindNoticeFilesKeptOutsideEdits:
+      'These files were also changed outside the AI, so they were not rolled back and keep their current content (which may still include the AI’s changes from the removed turns) — {files}.',
     chatRewindNoticeFilesRestoreFailed:
       'Restoring files failed, so the current state of the project files is unknown — {error}',
     chatRewindNoticeGuidance:

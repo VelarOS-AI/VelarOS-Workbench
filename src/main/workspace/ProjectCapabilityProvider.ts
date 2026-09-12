@@ -23,11 +23,12 @@ import {
   ProjectToolCategories,
   withProjectApproval,
 } from '@velaros-ai/project/composition'
-import type {
-  ProjectCodeQuery,
-  ProjectCommandResult,
-  ProjectMutationAuthorizationInput,
-  ProjectRunCommandOptions,
+import {
+  type ProjectCodeQuery,
+  type ProjectCommandResult,
+  type ProjectMutationAuthorizationInput,
+  type ProjectRunCommandOptions,
+  ProjectToolNames,
 } from '@velaros-ai/project/contracts'
 import { buildBackgroundCommandConfirmationMessage } from '@velaros-ai/project/execution'
 import { isPathInsideProjectRoot } from '@velaros-ai/project/files'
@@ -41,6 +42,11 @@ import type { WorkbenchWorkspaceInvokeRequest } from '../../shared/workbenchWork
 import type { WorkbenchAgentToolDefinition } from '../agent/WorkbenchAgentToolRegistry'
 import { WorkbenchCodeGraphResource } from '../resources/WorkbenchCodeGraphResource'
 
+import {
+  readReportedChangedFiles,
+  readWorkbenchAgentProjectActivity,
+  type WorkbenchAgentProjectActivityPort,
+} from './git/WorkbenchChatRunAttribution'
 import { type WorkbenchVelarLogicGraphService } from './language/WorkbenchVelarLogicGraphService'
 import {
   analyzeWorkbenchCommandExecution,
@@ -228,11 +234,16 @@ class ProjectCapabilityProvider implements WorkbenchProjectCapabilityProvider {
           )
         : undefined,
       isConcurrencySafe: tool.isConcurrencySafe as WorkbenchProjectToolDefinition['isConcurrencySafe'],
-      execute: (input, toolContext) =>
-        Promise.resolve(tool.execute(
+      execute: (input, toolContext) => {
+        const run = (): Promise<unknown> => Promise.resolve(tool.execute(
           input as never,
           this.createProjectToolContext(projectRoot, kernel, toolContext)
-        )),
+        ))
+        const activity = ProjectFileWriteToolNames.has(tool.name)
+          ? readWorkbenchAgentProjectActivity(toolContext)
+          : undefined
+        return activity ? reportProjectFileWrite(activity, run) : run()
+      },
     }))
   }
 
@@ -246,6 +257,7 @@ class ProjectCapabilityProvider implements WorkbenchProjectCapabilityProvider {
     // 审批端口由**当轮**执行注入：provider 是每项目单例，端口却绑定单次运行的会话与事件流。
     // 读不到就退回设计式拒绝，模型收到「没有审批通道」而不是静默放行。
     const approval = readApprovalPort(toolContext) ?? defaultDenyApprovalPort
+    const activity = readWorkbenchAgentProjectActivity(toolContext)
 
     return {
       abortSignal,
@@ -269,7 +281,7 @@ class ProjectCapabilityProvider implements WorkbenchProjectCapabilityProvider {
         // 同形的 skipped；宿主补问被拒时同样返回 skipped，模型和界面读到的两种拒绝才是一个样子。
         runCommand: (command, options, allowDangerous, signal) =>
           this.runProjectCommand(
-            { projectRoot, activeDirectory, approval, abortSignal: signal ?? abortSignal },
+            { projectRoot, activeDirectory, approval, abortSignal: signal ?? abortSignal, activity },
             command,
             options,
             allowDangerous
@@ -332,14 +344,16 @@ class ProjectCapabilityProvider implements WorkbenchProjectCapabilityProvider {
         return { approved: false, skipped: true, command, message: decision.message ?? '用户拒绝执行该危险命令。' }
     }
 
-    // 走到这里的危险命令都已经有人批准过：平台那一问，或上面这一问。
+    // 走到这里的危险命令都已经有人批准过：平台那一问，或上面这一问。时间窗只框进程真正在跑的那段
+    // （审批等待不算）：这段时间里项目里冒出来的改动算 Agent 命令的副作用。
+    const endCommand = scope.activity?.beginCommand()
     const result = await this.commandRunner.runCommand({
       projectRoot,
       command,
       cwd,
       timeoutMs: options.timeoutMs,
       maxOutputChars: options.maxOutputChars,
-    }, undefined, abortSignal, plan.isDangerous)
+    }, undefined, abortSignal, plan.isDangerous).finally(() => endCommand?.())
     abortSignal.throwIfAborted()
 
     return {
@@ -363,12 +377,36 @@ class ProjectCapabilityProvider implements WorkbenchProjectCapabilityProvider {
   }
 }
 
-/** 一次 `project:run` 落到宿主时的执行范围：根、当前目录，以及当轮的审批端口与取消信号。 */
+/** 一次 `project:run` 落到宿主时的执行范围：根、当前目录，以及当轮的审批端口、取消信号与上报口。 */
 interface ProjectCommandScope {
   projectRoot: string
   activeDirectory: string
   approval: ApprovalPort
   abortSignal: AbortSignal
+  activity?: WorkbenchAgentProjectActivityPort
+}
+
+/** 会写文件的 Project 工具：结果里的 `changedFiles` 就是它改过的路径（相对项目根）。 */
+const ProjectFileWriteToolNames: ReadonlySet<string> = new Set([
+  ProjectToolNames.write,
+  ProjectToolNames.edit,
+  ProjectToolNames.rollback,
+])
+
+/** 写文件工具的起止与它报告改过的路径交给改动归属账本；失败的调用报空清单（内核会把半途的写入复原）。 */
+async function reportProjectFileWrite(
+  activity: WorkbenchAgentProjectActivityPort,
+  run: () => Promise<unknown>
+): Promise<unknown> {
+  const finish = activity.beginFileWrite()
+  let changedFiles: string[] = []
+  try {
+    const result = await run()
+    changedFiles = readReportedChangedFiles(result)
+    return result
+  } finally {
+    finish(changedFiles)
+  }
 }
 
 /** 用户拒绝危险命令时交给模型的结果：与平台 `project:run` 自己拒绝时同形，命令没有执行，没有输出可报。 */

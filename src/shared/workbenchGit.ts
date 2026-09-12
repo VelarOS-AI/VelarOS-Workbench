@@ -35,12 +35,12 @@ export const WorkbenchGitChannels = {
   createBranch: 'workbench-app:git:create-branch',
   remoteAction: 'workbench-app:git:remote-action',
   captureChatCheckpoint: 'workbench-app:git:capture-chat-checkpoint',
-  restoreChatCheckpoint: 'workbench-app:git:restore-chat-checkpoint',
   deleteChatCheckpoints: 'workbench-app:git:delete-chat-checkpoints',
   captureChatRunChanges: 'workbench-app:git:capture-chat-run-changes',
   readChatRunChanges: 'workbench-app:git:read-chat-run-changes',
   deleteChatRunChanges: 'workbench-app:git:delete-chat-run-changes',
   readChatRunChangeBaseFile: 'workbench-app:git:read-chat-run-change-base-file',
+  rewindChatRunChanges: 'workbench-app:git:rewind-chat-run-changes',
 } as const
 
 export interface WorkbenchGitRootRequest {
@@ -90,6 +90,7 @@ export interface WorkbenchGitRemoteActionRequest
 /**
  * 聊天回溯的工作区检查点：每轮开跑前把项目工作树拍成一个 git 影子提交（私有 ref
  * `refs/velaros/checkpoints/<session>/<id>`，隔离 index，不碰用户的分支 / HEAD / index / stash）。
+ * 拍检查点的同时主进程为这一轮开一本改动归属账本（检查点 id 就是这一轮的记录 id）。
  */
 export interface WorkbenchChatCheckpointCaptureRequest extends WorkbenchGitRootRequest {
   sessionId: string
@@ -119,9 +120,10 @@ export interface WorkbenchChatCheckpointDeleteRequest extends WorkbenchGitRootRe
 
 /**
  * 每轮的「本轮改动」（Desktop 运行标记上的 workspaceCheckpointDiff）：拿工作树与这一轮开跑前的检查点
- * 做 diff。运行中每有写入就采一次（「AI 改动」面板实时刷新），收尾时再采一次最终的，同一个 recordId
- * 覆盖同一条记录。补丁全文写进主进程数据区的记录文件——会话历史存在 localStorage，放不下补丁——
- * 运行标记上只留定长摘要，卡片挂出来时再按 recordId 读记录。
+ * 做 diff，再按这一轮的改动归属只留 Agent 改过的文件——运行期间用户在编辑器、终端里的改动，别的程序、
+ * 别的会话写的文件都不算这一轮的。运行中每有写入就采一次（「AI 改动」面板实时刷新），收尾时再采一次
+ * 最终的，同一个 recordId 覆盖同一条记录。补丁全文写进主进程数据区的记录文件——会话历史存在
+ * localStorage，放不下补丁——运行标记上只留定长摘要，卡片挂出来时再按 recordId 读记录。
  */
 export interface WorkbenchChatRunChangesCaptureRequest extends WorkbenchGitRootRequest {
   sessionId: string
@@ -129,6 +131,8 @@ export interface WorkbenchChatRunChangesCaptureRequest extends WorkbenchGitRootR
   recordId: string
   /** 这一轮开跑前检查点的影子提交：diff 的起点。 */
   baseCommitId: string
+  /** 收尾时的最终采集：等最后一条命令的余量走完再拍工作树，采完关掉这一轮的归属账本。 */
+  final?: boolean
 }
 
 /** 记在运行标记上的摘要：定长，不随改动文件数增长。 */
@@ -145,6 +149,12 @@ export interface WorkbenchChatRunChangesSummary {
 
 export type WorkbenchChatRunFileChangeStatus = 'added' | 'deleted' | 'modified'
 
+/**
+ * 一个文件改动的归属：`agent` 只有 Agent 动过；`mixed` 这一轮里 AI 之外（用户、别的程序、别的会话）
+ * 也动过它——差异里混着两边的改动，回溯时不回退它。
+ */
+export type WorkbenchChatRunFileAttribution = 'agent' | 'mixed'
+
 export interface WorkbenchChatRunFileChange {
   /** 相对项目根的路径。 */
   path: string
@@ -156,6 +166,8 @@ export interface WorkbenchChatRunFileChange {
   patch: string
   /** 改动过大（行数、字节或文件数超限）没存逐行补丁；计数仍然准确。 */
   patchOmitted: boolean
+  /** 归属；早于改动归属的旧记录没有它，整轮都按 Agent 的算。 */
+  attribution?: WorkbenchChatRunFileAttribution
 }
 
 export interface WorkbenchChatRunChangesRecord {
@@ -194,6 +206,31 @@ export interface WorkbenchChatRunChangesDeleteRequest extends WorkbenchGitRootRe
   sessionId: string
   /** 省略时删掉这个会话的全部记录（会话被移除时）。 */
   recordIds?: string[]
+}
+
+/** 回溯时撤回被移除各轮里 Agent 的文件改动。 */
+export interface WorkbenchChatRunChangesRewindRequest extends WorkbenchGitRootRequest {
+  sessionId: string
+  /** 回溯到的那一轮开跑前的检查点提交：旧记录（早于改动归属）分不出谁改的，照旧整体还原到它。 */
+  commitId: string
+  /** 被移除各轮的记录 id（= 检查点 id），最早的在前；第一个就是回溯到的那一轮。 */
+  recordIds: string[]
+}
+
+/**
+ * 回溯的文件结果（失败也要能如实写进回溯说明，所以不抛错）。
+ *
+ * `scope`：`agent-changes` 只把 Agent 改过、此后也没被 AI 之外改过的文件撤回到它动手之前，其余一概不碰；
+ * `checkpoint` 被移除的轮次里有早于改动归属的旧记录，照旧把整个项目还原到检查点。
+ */
+export interface WorkbenchChatRunChangesRewindResult {
+  restored: boolean
+  error: string | null
+  scope: 'agent-changes' | 'checkpoint'
+  /** 撤回了的文件（相对项目根）。 */
+  restoredPaths: string[]
+  /** Agent 改过、但 AI 之外也改过的文件：保留当前内容，没有回退。 */
+  keptPaths: string[]
 }
 
 export interface WorkbenchGitBridge {
@@ -236,9 +273,6 @@ export interface WorkbenchGitBridge {
   captureChatCheckpoint(
     request: WorkbenchChatCheckpointCaptureRequest
   ): Promise<WorkbenchFsCallResult<WorkbenchChatCheckpointCaptureResult>>
-  restoreChatCheckpoint(
-    request: WorkbenchChatCheckpointRestoreRequest
-  ): Promise<WorkbenchFsCallResult<WorkbenchChatCheckpointRestoreResult>>
   deleteChatCheckpoints(
     request: WorkbenchChatCheckpointDeleteRequest
   ): Promise<WorkbenchFsCallResult<void>>
@@ -255,4 +289,7 @@ export interface WorkbenchGitBridge {
   deleteChatRunChanges(
     request: WorkbenchChatRunChangesDeleteRequest
   ): Promise<WorkbenchFsCallResult<void>>
+  rewindChatRunChanges(
+    request: WorkbenchChatRunChangesRewindRequest
+  ): Promise<WorkbenchFsCallResult<WorkbenchChatRunChangesRewindResult>>
 }

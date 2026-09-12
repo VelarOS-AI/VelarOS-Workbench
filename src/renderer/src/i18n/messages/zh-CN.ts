@@ -129,6 +129,10 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     aiChangesOmitted: '改动太大（+{additions} -{deletions}），没有保存逐行差异。',
     aiChangesNoLineChanges: '这个文件没有逐行改动。',
     aiChangesDiffLabel: '{path} 的 AI 改动',
+    aiChangesMixedChip: '含外部改动',
+    aiChangesMixedHint:
+      '这一轮里 AI 之外（你自己或别的程序）也改过这个文件：差异里混着两边的改动，回溯这一轮时不会回退它。',
+    chatRunChangesMixedPathSuffix: '（含 AI 之外的改动）',
     explanationPrevious: '上一条讲解',
     explanationNext: '下一条讲解',
     explanationClose: '关闭讲解',
@@ -748,6 +752,8 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     chatRewindNoticeListOverflow: '{items} 等 {rest} 项',
     chatRewindNoticeSummaryDiverged: '已回退 {turns} 轮对话（{messages} 条消息）· 文件未回退',
     chatRewindNoticeSummaryRestored: '已回退 {turns} 轮对话（{messages} 条消息）· 文件已还原',
+    chatRewindNoticeSummaryRestoredWithKept:
+      '已回退 {turns} 轮对话（{messages} 条消息）· AI 的改动已撤回，{kept} 个文件因有 AI 之外的改动未回退',
     chatRewindNoticeRemoved:
       '［会话回退］此处起的 {turns} 轮对话（共 {messages} 条消息）已被用户从历史中移除。这些轮次里发起过 {tools} 次工具调用：{toolNames}。',
     chatRewindNoticeRemovedNoTools:
@@ -760,6 +766,10 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
       '这几轮没有记录到文件改动；工具调用在文件之外产生的影响没有被撤销。',
     chatRewindNoticeFilesRestored:
       '文件已还原：项目已恢复到该时点。命令行执行、网络请求、git 提交等文件之外的影响不在快照里，没有被撤销。',
+    chatRewindNoticeFilesRestoredAgentChanges:
+      '文件已还原：这几轮里 AI 改过的文件已撤回到它动手之前；AI 之外的改动（用户在编辑器、终端里的修改，别的程序写的文件）原样保留。命令行执行、网络请求、git 提交等文件之外的影响没有被撤销。',
+    chatRewindNoticeFilesKeptOutsideEdits:
+      '以下文件在 AI 之外也被改过，为保住这些改动没有回退，内容仍是当前的样子（可能还带着被移除轮次里 AI 的改动）—— {files}。',
     chatRewindNoticeFilesRestoreFailed: '文件还原失败，项目文件的当前状态未知 —— {error}',
     chatRewindNoticeGuidance:
       '因此：不要假设当前文件内容与上面的对话历史一致，改动任何文件前先重新读取它的真实内容；除非用户重新提出，不要沿着被移除轮次里的工作继续。',

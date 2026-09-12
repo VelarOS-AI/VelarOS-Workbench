@@ -327,7 +327,11 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
         : []
       return models.length > 0 ? models : null
     },
-    new WorkbenchActiveContextStore(() => providers.parts.storagePaths.getChatActiveContextDir())
+    new WorkbenchActiveContextStore(() => providers.parts.storagePaths.getChatActiveContextDir()),
+    undefined,
+    undefined,
+    // Agent 写了哪些文件、命令跑在哪段时间，报给改动归属账本：「本轮改动」与回溯只认 Agent 的改动。
+    providers.chatRunAttribution
   )
   const disposeModelIpc = registerWorkbenchModelIpc(
     new ProviderModelCatalogService({
@@ -400,7 +404,10 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
   registerWorkbenchTerminalIpc(providers.parts.terminal)
   registerWorkbenchGitIpc(providers.git, providers.chatCheckpoints, providers.chatRunChanges)
   const watchIpc = registerWorkbenchWatchIpc(providers.watch)
-  const disposeWorkspaceIpc = registerWorkbenchWorkspaceIpc(providers.workspace)
+  const disposeWorkspaceIpc = registerWorkbenchWorkspaceIpc(
+    providers.workspace,
+    providers.chatRunAttribution
+  )
 
   registerWorkbenchLanguageServiceIpc(
     providers.language,
@@ -419,7 +426,12 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
     },
   })
   const disposeBrowserIpc = registerWorkbenchBrowserIpc(browserHost, windowManager)
-  registerWorkbenchFsIpc(providers.fileSystem, providers.parts, windowManager)
+  registerWorkbenchFsIpc(
+    providers.fileSystem,
+    providers.parts,
+    windowManager,
+    providers.chatRunAttribution
+  )
   registerProjectHubIpc(windowManager)
   registerWorkbenchWindowStateIpc()
   let shutdownStarted = false

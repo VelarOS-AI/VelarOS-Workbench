@@ -50,7 +50,8 @@ function formatRoundTime(timestamp: number, locale: string): string {
 
 /**
  * 左侧「AI 改动」面板：右侧当前会话里 AI 每一轮改了哪些文件，一轮一棵文件树（最近的在上）。还在跑的
- * 那一轮标着「进行中」，随写入实时刷新。点文件在编辑区打开这一轮这个文件的只读对比。
+ * 那一轮标着「进行中」，随写入实时刷新。点文件在编辑区打开这一轮这个文件的只读对比。只列 Agent 改过的
+ * 文件（按每轮的改动归属）；这一轮里 AI 之外也改过的文件挂一个「含外部改动」标记。
  */
 export function WorkbenchAiChangesPanel({
   projectRoot,
@@ -244,6 +245,7 @@ function WorkbenchAiChangeRoundFiles({
         )
       }
       const { change } = node
+      const mixed = change.attribution === 'mixed'
       return (
         <button
           key={node.key}
@@ -253,12 +255,14 @@ function WorkbenchAiChangeRoundFiles({
           data-file="true"
           data-active={activePath === change.path}
           data-status={change.status}
-          title={change.path}
+          data-attribution={change.attribution}
+          title={mixed ? `${change.path}\n${t('workbench.aiChangesMixedHint')}` : change.path}
           onClick={() => onOpenFile(round, change)}
         >
           <span className={styles.treeCaretSpacer} />
           <WorkbenchFileTypeIcon fileName={change.path} size={14} />
           <span className={styles.treeName}>{node.name}</span>
+          {mixed && <span className={styles.statusChip}>{t('workbench.aiChangesMixedChip')}</span>}
           <span className={styles.treeStats}>
             {change.additions > 0 && <span className={styles.additions}>+{change.additions}</span>}
             {change.deletions > 0 && <span className={styles.deletions}>-{change.deletions}</span>}

@@ -37,6 +37,7 @@ try {
   // creation is observed before the native watcher has attached to that directory.
   await mkdir(join(root, '.git'))
   await mkdir(join(root, 'node_modules'))
+  await mkdir(join(root, 'build'))
 
   const firstEvents: SystemWorkspaceFilesChangedEvent[] = []
   const secondEvents: SystemWorkspaceFilesChangedEvent[] = []
@@ -82,6 +83,25 @@ try {
   await writeFile(join(root, 'node_modules', 'ignored.js'), 'ignored')
   await new Promise((resolve) => setTimeout(resolve, 80))
   assert(secondEvents.length === beforeIgnoredWrite, 'heavy tool directories must be ignored')
+
+  // 改动归属账本听原始事件：生成目录里的写入照样交出（可能正是 Agent 命令的产物），renderer 订阅仍滤掉。
+  const rawPaths = new Set<string>()
+  const observation = await service.observeRawPaths(root, {
+    onPath: (path) => void rawPaths.add(path),
+    onError: () => undefined,
+  })
+  const beforeBuildWrite = secondEvents.length
+  await writeFile(join(root, 'build', 'out.js'), 'built')
+  const rawStartedAt = Date.now()
+  while (!rawPaths.has('build/out.js') && Date.now() - rawStartedAt < 2_000)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+  assert(rawPaths.has('build/out.js'), 'raw observers must see writes in generated directories')
+  await new Promise((resolve) => setTimeout(resolve, 80))
+  assert(
+    secondEvents.slice(beforeBuildWrite).every((candidate) => !candidate.paths.includes('build/out.js')),
+    'subscribers must keep generated directories filtered'
+  )
+  observation.stop()
 
   service.unsubscribe(second.subscriptionId)
   service.dispose()

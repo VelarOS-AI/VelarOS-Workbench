@@ -1246,7 +1246,8 @@ function StandaloneWorkbenchChatSessionSurface({
 
   /**
    * 一轮收尾后记下「本轮改动」（Desktop captureCompletedRunWorkspaceDiff 的对位件）：拿工作树与
-   * 这一轮开跑前的检查点比，补丁落进主进程的记录文件，运行标记上只挂摘要；运行中实时采到的那份随之撤下。
+   * 这一轮开跑前的检查点比、按这一轮的改动归属只留 Agent 改的文件，补丁落进主进程的记录文件，运行标记上
+   * 只挂摘要；运行中实时采到的那份随之撤下。主进程采完这一次就关掉这一轮的归属账本。
    *
    * 采集请求在收尾的同一拍同步发出：main 按项目根串行，它排在下一条排队消息开跑前的检查点之前，
    * 下一轮的改动混不进这一轮。
@@ -1261,10 +1262,11 @@ function StandaloneWorkbenchChatSessionSurface({
       session.messageRunMarkers,
       checkpoint.captureMessageCount
     )
-    // 最终摘要挂不上：运行中实时采到的那份连同它的记录一起撤掉，面板里不留一轮永远「进行中」。
+    // 最终摘要挂不上：运行中实时采到的那份撤下，面板里不留一轮永远「进行中」；它的记录连同主进程里
+    // 这一轮还开着的归属账本一起清掉。
     const withdrawLive = (): void => {
-      if (withdrawLiveRunChanges(projectRoot, providerId, sessionId, checkpoint.id))
-        releaseRunChangeRecords(projectRoot, sessionId, [checkpoint.id])
+      withdrawLiveRunChanges(projectRoot, providerId, sessionId, checkpoint.id)
+      releaseRunChangeRecords(projectRoot, sessionId, [checkpoint.id])
     }
     if (!anchorId) {
       withdrawLive()
@@ -1277,6 +1279,7 @@ function StandaloneWorkbenchChatSessionSurface({
         sessionId,
         recordId: checkpoint.id,
         baseCommitId,
+        final: true,
       })
       .then((result) => {
         if (!result.ok) {
@@ -1316,8 +1319,9 @@ function StandaloneWorkbenchChatSessionSurface({
   }
 
   /**
-   * 回溯到某条用户消息之前：截断对话（这条消息本身也移除），按用户选择把项目文件还原到那一轮
-   * 开跑前，非干净回溯给模型留一条说明，最后把这条消息的原文放回输入框（与 Desktop 一致）。
+   * 回溯到某条用户消息之前：截断对话（这条消息本身也移除），按用户选择撤回被移除各轮里 Agent 的文件改动
+   * （AI 之外的改动原样保留，两边都改过的文件不回退、写进说明），非干净回溯给模型留一条说明，最后把这条
+   * 消息的原文放回输入框（与 Desktop 一致）。
    */
   async function rewindToMessage(
     messageId: string,
@@ -1341,16 +1345,29 @@ function StandaloneWorkbenchChatSessionSurface({
 
     let fileOutcome: RewindFileOutcome = NoRewindFileOutcome
     const commitId = selection.checkpoint?.commitId
-    if (options?.restoreFiles && files.kind === 'restorable' && commitId) {
-      const restored = await window.velarosWorkbenchGit
-        .restoreChatCheckpoint({ workspaceRoot: projectRoot, commitId })
+    if (options?.restoreFiles && files.kind === 'restorable' && selection.checkpoint && commitId) {
+      // 被移除的是回溯到的那一轮和它之后的每一轮：各轮的改动记录（记录 id 就是检查点 id）说清哪些是
+      // Agent 改的。
+      const rewound = await window.velarosWorkbenchGit
+        .rewindChatRunChanges({
+          workspaceRoot: projectRoot,
+          sessionId,
+          commitId,
+          recordIds: [selection.checkpoint, ...selection.evictedCheckpoints].map(({ id }) => id),
+        })
         .catch((error: unknown) => ({
           ok: false as const,
           message: error instanceof Error ? error.message : String(error),
         }))
-      fileOutcome = restored.ok
-        ? { attempted: true, restored: restored.value.restored, error: restored.value.error }
-        : { attempted: true, restored: false, error: restored.message }
+      fileOutcome = rewound.ok
+        ? {
+            attempted: true,
+            restored: rewound.value.restored,
+            error: rewound.value.error,
+            scope: rewound.value.scope,
+            keptPaths: rewound.value.keptPaths,
+          }
+        : { ...NoRewindFileOutcome, attempted: true, error: rewound.message }
     }
 
     const rewoundAt = Date.now()
@@ -2940,22 +2957,16 @@ function attachRunChanges(
   return attached
 }
 
-/** 撤下这一轮运行中实时采到的改动；返回它是否留下了记录文件（有改动才写）。 */
+/** 撤下这一轮运行中实时采到的改动。 */
 function withdrawLiveRunChanges(
   projectRoot: string,
   providerId: WorkbenchChatProviderId,
   sessionId: string,
   recordId: string
-): boolean {
-  let recorded = false
+): void {
   withStateUpdateTarget(projectRoot, providerId, sessionId, () =>
-    updateState(projectRoot, providerId, (state) => {
-      recorded = state.liveRunChanges?.summary.recordId === recordId
-        && state.liveRunChanges.summary.fileCount > 0
-      return withoutLiveRunChanges(state, recordId)
-    })
+    updateState(projectRoot, providerId, (state) => withoutLiveRunChanges(state, recordId))
   )
-  return recorded
 }
 
 function withoutLiveRunChanges(state: StandaloneChatState, recordId: string): StandaloneChatState {

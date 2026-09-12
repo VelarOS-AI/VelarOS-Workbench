@@ -171,8 +171,6 @@ const gitBridge: WorkbenchGitBridge = {
   performRemoteAction: (request) => ipcRenderer.invoke(WorkbenchGitChannels.remoteAction, request),
   captureChatCheckpoint: (request) =>
     ipcRenderer.invoke(WorkbenchGitChannels.captureChatCheckpoint, request),
-  restoreChatCheckpoint: (request) =>
-    ipcRenderer.invoke(WorkbenchGitChannels.restoreChatCheckpoint, request),
   deleteChatCheckpoints: (request) =>
     ipcRenderer.invoke(WorkbenchGitChannels.deleteChatCheckpoints, request),
   captureChatRunChanges: (request) =>
@@ -183,6 +181,8 @@ const gitBridge: WorkbenchGitBridge = {
     ipcRenderer.invoke(WorkbenchGitChannels.deleteChatRunChanges, request),
   readChatRunChangeBaseFile: (request) =>
     ipcRenderer.invoke(WorkbenchGitChannels.readChatRunChangeBaseFile, request),
+  rewindChatRunChanges: (request) =>
+    ipcRenderer.invoke(WorkbenchGitChannels.rewindChatRunChanges, request),
 }
 
 const kernelBridge: WorkbenchKernelBridge = {

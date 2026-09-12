@@ -6,6 +6,7 @@ import type { WorkbenchKernelCapabilityRoutes } from './kernel/WorkbenchKernelPr
 import { WorkbenchCodeGraphResource } from './resources/WorkbenchCodeGraphResource'
 import { WorkbenchResourcePluginService } from './resources/WorkbenchResourcePluginService'
 import { WorkbenchChatCheckpointService } from './workspace/git/WorkbenchChatCheckpoints'
+import { WorkbenchChatRunAttribution } from './workspace/git/WorkbenchChatRunAttribution'
 import { WorkbenchChatRunChangeStore } from './workspace/git/WorkbenchChatRunChanges'
 import { WorkbenchGitService } from './workspace/git/WorkbenchGitService'
 import { WorkbenchLanguageServiceWorkerClient } from './workspace/language/LanguageServiceWorkerClient'
@@ -26,6 +27,11 @@ export interface WorkbenchMainCapabilityProviders {
   readonly chatCheckpoints: WorkbenchChatCheckpointService
   /** 每轮「本轮改动」的补丁记录（落在数据区的文件里）。 */
   readonly chatRunChanges: WorkbenchChatRunChangeStore
+  /**
+   * 每轮改动的归属账本：执行栈报 Agent 的写入与命令时间窗，文件监听报原始事件，Workbench 的写入口报
+   * 用户亲手的改动；「本轮改动」与回溯据此只认 Agent 的改动。
+   */
+  readonly chatRunAttribution: WorkbenchChatRunAttribution
   readonly language: WorkbenchLanguageServiceWorkerClient
   readonly watch: WorkbenchFileWatcher
   readonly workspace: WorkbenchProjectCapabilityProvider
@@ -73,25 +79,31 @@ export function createDefaultWorkbenchMainCapabilityProviders(
   const chatCheckpoints = new WorkbenchChatCheckpointService(() =>
     parts.storagePaths.getChatCheckpointIndexesDir()
   )
+  const watch = new WorkbenchFileWatcher({
+    onFilesChanged: (event) => {
+      void language.projectFilesChanged({
+        projectRoot: event.rootPath,
+        paths: event.paths,
+      }).catch(() => {
+        // 文件监听不能因语言服务器退出或项目切换制造未处理的 Promise 拒绝。
+      })
+    },
+  })
+  const chatRunAttribution = new WorkbenchChatRunAttribution(watch)
   return {
     parts,
     fileSystem: new WorkbenchProjectFileSystem(),
     git: new WorkbenchGitService(),
     chatCheckpoints,
-    chatRunChanges: new WorkbenchChatRunChangeStore(chatCheckpoints, () =>
-      parts.storagePaths.getChatRunChangesDir()
+    chatRunChanges: new WorkbenchChatRunChangeStore(
+      chatCheckpoints,
+      () => parts.storagePaths.getChatRunChangesDir(),
+      Date.now,
+      chatRunAttribution
     ),
+    chatRunAttribution,
     language,
-    watch: new WorkbenchFileWatcher({
-      onFilesChanged: (event) => {
-        void language.projectFilesChanged({
-          projectRoot: event.rootPath,
-          paths: event.paths,
-        }).catch(() => {
-          // 文件监听不能因语言服务器退出或项目切换制造未处理的 Promise 拒绝。
-        })
-      },
-    }),
+    watch,
     workspace: new ProjectCapabilityProvider({ codeGraphResource, velarLogicGraph }),
     resourcePlugins,
     agentEngines,

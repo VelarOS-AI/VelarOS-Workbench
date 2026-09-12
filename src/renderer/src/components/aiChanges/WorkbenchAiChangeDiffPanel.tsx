@@ -51,7 +51,8 @@ function findFirstChangedLine(rows: readonly WorkbenchUnifiedDiffRow[]): number 
  * 「AI 改动」标签页：某一轮里某个文件改了什么，只读。
  *
  * 能拼出前后全文时显示整份文件、新增行绿底删除行红底，打开时跳到第一处改动；这一轮的起点快照读不到时
- * 退回补丁本身（只有改动附近的行），顶上标一句说明。
+ * 退回补丁本身（只有改动附近的行），顶上标一句说明。这一轮里 AI 之外也改过的文件同样在顶上说明：差异里
+ * 混着两边的改动。
  */
 export function WorkbenchAiChangeDiffPanel({
   projectRoot,
@@ -175,6 +176,11 @@ export function WorkbenchAiChangeDiffPanel({
           </Button>
         </div>
       </div>
+      {change?.attribution === 'mixed' && (
+        <div className={pageStyles.aiChangesDiffFallbackNotice}>
+          {t('workbench.aiChangesMixedHint')}
+        </div>
+      )}
       {view?.kind === 'rows' && !view.fullFile && (
         <div className={pageStyles.aiChangesDiffFallbackNotice}>
           {t('workbench.aiChangesPatchOnly')}

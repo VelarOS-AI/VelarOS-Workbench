@@ -2,6 +2,7 @@ import { isConversationTurnInputMessage, isSystemNoticeMessage } from '@velaros-
 import type { ConversationRewindPlan } from '@velaros-ai/ui/conversation'
 
 import type { ChatMessage } from '@shared/contracts'
+import type { WorkbenchChatRunChangesRewindResult } from '@shared/workbenchGit'
 
 /**
  * 聊天回溯的判据层（纯函数，零 IO），与 Desktop 的 chatHistoryRewind / chatRewindNotice 同一套规则：
@@ -10,7 +11,8 @@ import type { ChatMessage } from '@shared/contracts'
  * changedFiles、检查点是否存在、还原的实际结果。
  *
  * Workbench 的会话固定绑一个项目根，所以文件轴永远在（没有 Desktop 的「系统 / 浏览器空间」分支），
- * 快照也只有一个根。
+ * 快照也只有一个根。文件跟着回时只撤回 Agent 的改动（主进程按每轮的改动归属决定），AI 之外的改动
+ * 原样保留；两边都改过的文件不回退，写进说明里。
  */
 
 /** 每轮开跑前拍下的检查点：对话边界 + 项目工作树的 git 影子提交。 */
@@ -157,12 +159,18 @@ export interface RewindFileOutcome {
   attempted: boolean
   restored: boolean
   error: string | null
+  /** `agent-changes`：只撤回了 Agent 的改动；`checkpoint`：有旧记录，整个项目还原到了检查点。 */
+  scope: WorkbenchChatRunChangesRewindResult['scope']
+  /** Agent 改过、AI 之外也改过而没有回退的文件。 */
+  keptPaths: readonly string[]
 }
 
 export const NoRewindFileOutcome: RewindFileOutcome = Object.freeze({
   attempted: false,
   restored: false,
   error: null,
+  scope: 'agent-changes',
+  keptPaths: Object.freeze([]),
 })
 
 /**
@@ -187,6 +195,9 @@ type Translate = (key: string, params?: Record<string, string | number>) => stri
 /**
  * 生成回溯说明（`clean` 返回 null）。非幂等的回溯必须给模型留一条看得见的说明，否则它会拿着
  * 已经不存在的历史去操作一个已经变了的工作区。说明只陈述写下时的事实，并带上文件路径。
+ *
+ * 文件那一段按实际结果写：还原成功就说还原了（只撤回 Agent 的改动时写明 AI 之外的改动原样保留），
+ * 两边都改过而没回退的文件逐个列出——它们可能还带着被移除轮次里 AI 的改动。
  */
 export function buildRewindNoticeText(input: {
   t: Translate
@@ -206,10 +217,13 @@ export function buildRewindNoticeText(input: {
     })
   }
   const counts = { turns: survey.removedTurnCount, messages: survey.removedMessageCount }
+  const keptPaths = fileOutcome.restored ? fileOutcome.keptPaths : []
   const fileParagraph = fileOutcome.attempted && !fileOutcome.restored
     ? t('workbench.chatRewindNoticeFilesRestoreFailed', { error: fileOutcome.error ?? '' })
-    : fidelity === 'files-restored'
-      ? t('workbench.chatRewindNoticeFilesRestored')
+    : fileOutcome.restored
+      ? t(fileOutcome.scope === 'agent-changes'
+          ? 'workbench.chatRewindNoticeFilesRestoredAgentChanges'
+          : 'workbench.chatRewindNoticeFilesRestored')
       : survey.changedFilePaths.length === 0
         ? t('workbench.chatRewindNoticeFilesUntouched')
         : t('workbench.chatRewindNoticeFilesKept', { files: formatList(survey.changedFilePaths) })
@@ -226,16 +240,18 @@ export function buildRewindNoticeText(input: {
       ? t('workbench.chatRewindNoticeCarriedDivergence', { notices: survey.removedNoticeCount })
       : '',
     fileParagraph,
+    keptPaths.length > 0
+      ? t('workbench.chatRewindNoticeFilesKeptOutsideEdits', { files: formatList(keptPaths) })
+      : '',
     t('workbench.chatRewindNoticeGuidance'),
   ]
 
   return {
-    summary: t(
-      fidelity === 'files-restored'
-        ? 'workbench.chatRewindNoticeSummaryRestored'
-        : 'workbench.chatRewindNoticeSummaryDiverged',
-      counts
-    ),
+    summary: !fileOutcome.restored
+      ? t('workbench.chatRewindNoticeSummaryDiverged', counts)
+      : keptPaths.length > 0
+        ? t('workbench.chatRewindNoticeSummaryRestoredWithKept', { ...counts, kept: keptPaths.length })
+        : t('workbench.chatRewindNoticeSummaryRestored', counts),
     detail: paragraphs.filter(Boolean).join('\n'),
   }
 }
