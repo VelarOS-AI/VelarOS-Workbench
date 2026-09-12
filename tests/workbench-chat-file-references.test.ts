@@ -93,6 +93,9 @@ void describe('Workbench chat file references', () => {
     // 文件树：右键点在多选里时整组一起挂。
     assert.match(files, /chatFilePaths: resolveTreeChatFilePaths\(treeApiRef\.current, entry\)/u)
     assert.match(files, /onAddFilesToChat\?\.\(contextMenu\.chatFilePaths\)/u)
+    // 多选能留住：选中项在当前选择里（⌘/Shift 多选时是最后点的那项）就不把选择收回成单选。
+    const tree = readSource('src/renderer/src/components/files/FileTree.tsx')
+    assert.match(tree, /const selectionAlreadyMatches = tree\.selectedIds\.has\(selectedPath\)/u)
     assert.equal(adapter.match(/onAddFilesToChat: model\.actions\.addWorkbenchFilesToChat/gu)?.length, 2)
   })
 })

@@ -214,8 +214,9 @@ export function FileTree({
 
     if (selectedPath) {
       if (!tree.get(selectedPath)) return
-      const selectionAlreadyMatches =
-        tree.selectedIds.size === 1 && tree.selectedIds.has(selectedPath)
+      // 选中项已经在当前选择里（含 ⌘/Shift 多选：selectedPath 是最后点的那一项）就不动它。
+      // 以前要求选择恰好只有这一项，多选刚形成就被这里收回成单选，多选删除、多选「添加到聊天」都用不上。
+      const selectionAlreadyMatches = tree.selectedIds.has(selectedPath)
       // select 自带滚动；选中项没变时，只有新的定位请求才滚。
       if (!selectionAlreadyMatches) tree.select(selectedPath, { focus: false })
       else if (scrolledRevealRevisionRef.current !== revealRevision) void tree.scrollTo(selectedPath)
