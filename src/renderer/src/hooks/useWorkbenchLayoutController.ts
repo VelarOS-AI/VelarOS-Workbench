@@ -1,32 +1,46 @@
-import { type CSSProperties, useCallback, useEffect, useMemo, useState } from 'react'
-
-import { type PointerResizeStarter, usePointerResize } from '@velaros-ai/ui/hooks/usePointerResize'
+import {
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 
 import {
+  buildWorkbenchLayoutStyleVariables,
   DEFAULT_WORKBENCH_LAYOUT_SIZES,
   readWorkbenchLayoutSizes,
+  resizeWorkbenchLayoutSizes,
   saveWorkbenchLayoutSizes,
-  type WorkbenchLayoutSizes,
   type WorkbenchResizablePane,
 } from '../models/layout/workbenchLayoutModel'
 import {
-  clampWorkbenchPaneSize,
   getWorkbenchViewportProfile,
   resolveWorkbenchLayoutSizesForViewport,
   WORKBENCH_DESKTOP_VIEWPORT,
   type WorkbenchViewportProfile,
 } from '../models/layout/workbenchViewport'
+import { useLatest } from '../support/genericHooks'
 
 interface UseWorkbenchLayoutControllerOptions {
   commandPanelOpen?: boolean
   rightToolOpen?: boolean
 }
 
+export type WorkbenchPaneResizeStarter = (
+  pane: WorkbenchResizablePane,
+  event: ReactPointerEvent<Element>
+) => void
+
 export interface WorkbenchLayoutController {
   style: CSSProperties
+  /** 挂到外壳元素上：拖分隔条时逐帧直接改它身上的布局变量。 */
+  shellRef: (element: Nullable<HTMLElement>) => void
   viewportProfile: WorkbenchViewportProfile
   filePaneWidth: number
-  beginResizePane: PointerResizeStarter<WorkbenchResizablePane>
+  beginResizePane: WorkbenchPaneResizeStarter
   resetPaneSize: (pane: WorkbenchResizablePane) => void
 }
 
@@ -40,6 +54,8 @@ export function useWorkbenchLayoutController(
     width: window.innerWidth,
     height: window.innerHeight,
   }))
+  const shellElementRef = useRef<Nullable<HTMLElement>>(null)
+  const latest = useLatest({ layoutSizes, viewportSize, commandPanelOpen, rightToolOpen })
 
   useEffect(() => {
     function handleResize(): void {
@@ -70,11 +86,9 @@ export function useWorkbenchLayoutController(
   const style = useMemo(
     () =>
       ({
-        '--workbench-command-panel-height': `${effectiveSizes.commandPanelHeight}px`,
-        '--workbench-file-pane-width': `${effectiveSizes.filePaneWidth}px`,
+        ...buildWorkbenchLayoutStyleVariables(effectiveSizes),
         '--workbench-min-height': `${WORKBENCH_DESKTOP_VIEWPORT.minHeight}px`,
         '--workbench-min-width': `${WORKBENCH_DESKTOP_VIEWPORT.minWidth}px`,
-        '--workbench-right-pane-width': `${effectiveSizes.rightPaneWidth}px`,
       }) as CSSProperties,
     [effectiveSizes]
   )
@@ -83,40 +97,79 @@ export function useWorkbenchLayoutController(
     saveWorkbenchLayoutSizes(layoutSizes)
   }, [layoutSizes])
 
-  const beginResizePane = usePointerResize<WorkbenchResizablePane, WorkbenchLayoutSizes>({
-    cursor: (pane) => (pane === 'command' ? 'row-resize' : 'col-resize'),
-    onResizeStart: () => layoutSizes,
-    onResize: useCallback((pane, move, startSizes) => {
-      setLayoutSizes((currentSizes) => {
-        switch (pane) {
-          case 'file': {
-            return {
-              ...currentSizes,
-              filePaneWidth: clampWorkbenchPaneSize('file', startSizes.filePaneWidth + move.deltaX),
-            }
-          }
-          case 'right': {
-            return {
-              ...currentSizes,
-              rightPaneWidth: clampWorkbenchPaneSize(
-                'right',
-                startSizes.rightPaneWidth - move.deltaX
-              ),
-            }
-          }
-          default: {
-            return {
-              ...currentSizes,
-              commandPanelHeight: clampWorkbenchPaneSize(
-                'command',
-                startSizes.commandPanelHeight - move.deltaY
-              ),
-            }
-          }
-        }
-      })
-    }, []),
-  })
+  const shellRef = useCallback((element: Nullable<HTMLElement>): void => {
+    shellElementRef.current = element
+  }, [])
+
+  /**
+   * 拖分隔条：拖拽中每帧只直接改外壳上的布局变量，松手时才把最终尺寸写回 React 状态（并落盘）一次。
+   *
+   * 以前每个 pointermove 都 setState，布局状态又挂在页面总 model 上，于是文件树、编辑器、整段聊天记录
+   * 每帧都跟着重渲染，拖起来一顿一顿的。现在拖拽过程完全不经过 React：浏览器只做样式和布局。
+   */
+  const beginResizePane = useCallback<WorkbenchPaneResizeStarter>(
+    (pane, event) => {
+      if (event.button !== 0) return
+      event.preventDefault()
+
+      const pointerId = event.pointerId
+      const startX = event.clientX
+      const startY = event.clientY
+      const startSizes = latest.current.layoutSizes
+      const shell = shellElementRef.current
+      const previousCursor = document.body.style.cursor
+      const previousUserSelect = document.body.style.userSelect
+      let draftSizes = startSizes
+      let pointerX = startX
+      let pointerY = startY
+      let frame = 0
+
+      const applyDraft = (): void => {
+        frame = 0
+        draftSizes = resizeWorkbenchLayoutSizes(startSizes, pane, {
+          x: pointerX - startX,
+          y: pointerY - startY,
+        })
+        if (!shell) return
+        const { viewportSize: viewport, commandPanelOpen: commandOpen, rightToolOpen: rightOpen } =
+          latest.current
+        const effective = resolveWorkbenchLayoutSizesForViewport(viewport, draftSizes, {
+          commandPanelOpen: commandOpen,
+          rightToolOpen: rightOpen,
+        })
+        for (const [name, value] of Object.entries(buildWorkbenchLayoutStyleVariables(effective)))
+          shell.style.setProperty(name, value)
+      }
+
+      const handlePointerMove = (moveEvent: PointerEvent): void => {
+        if (moveEvent.pointerId !== pointerId) return
+        pointerX = moveEvent.clientX
+        pointerY = moveEvent.clientY
+        if (!frame) frame = window.requestAnimationFrame(applyDraft)
+      }
+
+      const stopResize = (): void => {
+        window.removeEventListener('pointermove', handlePointerMove)
+        window.removeEventListener('pointerup', stopResize)
+        window.removeEventListener('pointercancel', stopResize)
+        if (frame) window.cancelAnimationFrame(frame)
+        applyDraft()
+        document.body.style.cursor = previousCursor
+        document.body.style.userSelect = previousUserSelect
+        shell?.removeAttribute('data-pane-resizing')
+        setLayoutSizes(draftSizes)
+      }
+
+      document.body.style.cursor = pane === 'command' ? 'row-resize' : 'col-resize'
+      document.body.style.userSelect = 'none'
+      // 拖拽期间的样式开关：调试浏览器等 webview 不吃指针（否则拖过去就断），分隔条保持高亮。
+      shell?.setAttribute('data-pane-resizing', pane)
+      window.addEventListener('pointermove', handlePointerMove)
+      window.addEventListener('pointerup', stopResize)
+      window.addEventListener('pointercancel', stopResize)
+    },
+    [latest]
+  )
 
   function resetPaneSize(pane: WorkbenchResizablePane): void {
     setLayoutSizes((currentSizes) => {
@@ -145,6 +198,7 @@ export function useWorkbenchLayoutController(
 
   return {
     style,
+    shellRef,
     viewportProfile,
     filePaneWidth: effectiveSizes.filePaneWidth,
     beginResizePane,

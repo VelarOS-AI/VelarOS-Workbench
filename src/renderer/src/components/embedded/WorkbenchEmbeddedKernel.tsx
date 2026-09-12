@@ -38,7 +38,11 @@ interface WorkbenchEmbeddedKernelProps {
 
 interface WorkbenchEmbeddedKernelChrome {
   density: WorkbenchDensity
-  filePanelWidth: number
+  /**
+   * 文件面板宽度：px 数值，或一段 CSS 长度。独立工作台传外壳上的 `var(--workbench-file-pane-width)`，
+   * 拖分隔条时外壳变量逐帧直写，这里不必每帧重渲染也能跟上。
+   */
+  filePanelWidth: number | string
   isFilePanelOpen: boolean
   isFilePanelInline: boolean
   /** 编辑器字号等仅作用于代码面的偏好，显式穿过嵌套 shell，避免默认值覆盖。 */
@@ -167,7 +171,10 @@ export function WorkbenchEmbeddedKernel({
         style={
           {
             ...embeddedChrome.editorStyle,
-            '--workbench-embedded-file-pane-width': `${embeddedChrome.filePanelWidth}px`,
+            '--workbench-embedded-file-pane-width':
+              typeof embeddedChrome.filePanelWidth === 'number'
+                ? `${embeddedChrome.filePanelWidth}px`
+                : embeddedChrome.filePanelWidth,
           } as CSSProperties
         }
       >

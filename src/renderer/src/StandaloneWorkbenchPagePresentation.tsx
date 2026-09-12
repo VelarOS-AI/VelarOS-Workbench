@@ -568,6 +568,7 @@ export function StandaloneWorkbenchPagePresentation({
         data-workbench-accent={workbenchPreferences.preferences.accent}
         data-workbench-viewport={layout.viewportProfile}
         style={shellStyle}
+        ref={layout.shellRef}
       >
         <header className={styles.ideUnifiedTopBar}>
           <div className={styles.ideUnifiedTopLeading}>
@@ -684,7 +685,8 @@ export function StandaloneWorkbenchPagePresentation({
             embeddedChrome={{
               density: workbenchPreferences.preferences.density,
               editorStyle: workbenchPreferences.style,
-              filePanelWidth: layout.filePaneWidth,
+              // 跟外壳上的布局变量走：拖分隔条时外壳逐帧直写这条变量，文件面板随之变宽，不经过 React。
+              filePanelWidth: 'var(--workbench-file-pane-width)',
               isFilePanelOpen: surface.isFilePanelOpen,
               isFilePanelInline: true,
               onFilePanelResizePointerDown: (event) => layout.beginResizePane('file', event),

@@ -1,5 +1,44 @@
 @reference "../index.css";
 
+/*
+ * 三条分栏尺寸登记成「不继承」的自定义属性：值写在外壳上，只在真正用到它的那一层显式 inherit
+ * （外壳的直接子级 .ideBody / .bottomToolWindowSlot，以及 .ideBody 下的编辑区根 .embeddedKernelRoot）。
+ *
+ * 未登记的自定义属性一律继承：外壳上改一下，整棵子树——聊天记录动辄上万个节点——都要重算样式，
+ * 实测拖分隔条每一步 ~70ms；登记成不继承后只重算显式 inherit 的那几层，~7ms。
+ * 以后新增用到这三条变量的规则时，要在该元素到外壳的每一层上都显式 inherit，否则拿到的是初始值。
+ */
+@property --workbench-right-pane-width {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 420px;
+}
+
+@property --workbench-file-pane-width {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 260px;
+}
+
+@property --workbench-command-panel-height {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 210px;
+}
+
+.ideBody {
+  --workbench-right-pane-width: inherit;
+  --workbench-file-pane-width: inherit;
+}
+
+.ideBody > .embeddedKernelRoot {
+  --workbench-file-pane-width: inherit;
+}
+
+.bottomToolWindowSlot {
+  --workbench-command-panel-height: inherit;
+}
+
 .ideBody {
   @apply grid min-h-0 flex-1;
   position: relative;
@@ -165,10 +204,24 @@
   display: none;
 }
 
-/* 命中区与右侧那条 (.verticalResizeHandle::before) 同宽：两边同样是一条 1px 的线，
-   抓手却一边 8px 一边 12px，靠左边那条要瞄准才拖得动。 */
+/*
+ * 分隔条全局一套尺寸：左侧文件栏、右侧聊天、底部面板三条分隔条的命中区一样宽，悬停和拖拽时
+ * 都换成同样粗细的主题色线。以前左边那条命中区 8px、高亮 1px，底部那条干脆不高亮，三条各长各的。
+ */
+.workbenchShell {
+  --workbench-resize-hit-size: 12px;
+  --workbench-resize-line-size: 2px;
+}
+
+/* 拖分隔条期间（外壳带 data-pane-resizing）：调试浏览器等 webview / iframe 不吃指针，拖过去也不断。 */
+.workbenchShell[data-pane-resizing] webview,
+.workbenchShell[data-pane-resizing] iframe {
+  pointer-events: none;
+}
+
 .embeddedFileResizeHandle {
-  @apply absolute bottom-0 top-0 z-30 w-3 cursor-col-resize;
+  @apply absolute bottom-0 top-0 z-30 cursor-col-resize;
+  width: var(--workbench-resize-hit-size);
   left: var(--workbench-embedded-file-pane-width, 300px);
   transform: translateX(-50%);
   -webkit-app-region: no-drag;
@@ -181,8 +234,9 @@
 }
 
 .embeddedFileResizeHandle::after {
-  @apply absolute bottom-0 left-1/2 top-0 w-px -translate-x-1/2 opacity-0 transition-[background,opacity,width];
+  @apply absolute bottom-0 left-1/2 top-0 -translate-x-1/2 opacity-0 transition-[background,opacity];
   content: '';
+  width: var(--workbench-resize-line-size);
   background: color-mix(in oklab, var(--workbench-theme-color) 55%, transparent);
 }
 
@@ -201,7 +255,7 @@
   @apply absolute bottom-0 top-0 z-30;
   left: var(--workbench-embedded-file-pane-width, 300px);
   transform: translateX(-50%);
-  width: 8px;
+  width: var(--workbench-resize-hit-size);
 }
 
 .ideMainPane {
@@ -272,16 +326,19 @@
   top: 0;
   right: 0;
   left: 0;
-  height: 14px;
-  transform: translateY(-7px);
+  height: var(--workbench-resize-hit-size);
+  transform: translateY(-50%);
 }
 
+/* 高亮线压在面板上沿那条缝的正中，与左右两条同粗细。 */
 .bottomToolWindowSlot > .horizontalResizeHandle::after {
-  display: none;
-}
-
-.bottomToolWindowSlot > .horizontalResizeHandle:hover::after {
-  display: none;
+  z-index: 2;
+  top: 0;
+  right: 0;
+  bottom: auto;
+  left: 0;
+  height: var(--workbench-resize-line-size);
+  transform: translateY(-50%);
 }
 
 .workbenchShell[data-workbench-viewport='narrow'] .ideUnifiedTopTrailing {
@@ -339,7 +396,7 @@
   bottom: 0;
   left: 50%;
   z-index: 0;
-  width: 12px;
+  width: var(--workbench-resize-hit-size);
   transform: translateX(-50%);
 }
 
@@ -377,7 +434,7 @@
   bottom: 0;
   left: 50%;
   z-index: 1;
-  width: 2px;
+  width: var(--workbench-resize-line-size);
   transform: translateX(-50%);
 }
 

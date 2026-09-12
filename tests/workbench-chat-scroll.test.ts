@@ -150,11 +150,10 @@ void describe("Workbench shared chat scrolling", () => {
       presentation,
       /aria-label=\{t\('workbench\.resizeRightPane'\)\}/u,
     );
-    assert.match(
-      controller,
-      /usePointerResize<WorkbenchResizablePane, WorkbenchLayoutSizes>/u,
-    );
-    assert.match(controller, /startSizes\.rightPaneWidth - move\.deltaX/u);
+    // 拖拽中逐帧直写外壳变量，松手才写回 React 状态；右栏宽度随左移变宽。
+    assert.match(controller, /window\.requestAnimationFrame\(applyDraft\)/u);
+    assert.match(controller, /setLayoutSizes\(draftSizes\)/u);
+    assert.match(layoutModel, /startSizes\.rightPaneWidth - delta\.x/u);
     assert.match(layoutModel, /velaros\.workbench\.layout\.v1/u);
     assert.match(viewport, /right:\s*\{\s*min:\s*360,\s*max:\s*720\s*\}/u);
   });
