@@ -36,15 +36,6 @@
   background: var(--workbench-surface-muted);
 }
 
-.webviewDebugChromeButton {
-  color: var(--workbench-text-muted);
-}
-
-.webviewDebugChromeButton:hover {
-  color: var(--workbench-text);
-  background: var(--workbench-hover);
-}
-
 .webviewDebugAddressForm {
   @apply min-w-0 flex-1;
 }
@@ -286,13 +277,11 @@
   @apply shrink-0;
 }
 
+/* 关闭按钮与行内回滚按钮都是 icon-sm 档 IconButton，边长与配色随原语。 */
 .aiChangePreviewCloseButton {
   grid-column: 2;
   grid-row: 1 / span 2;
   align-self: center;
-  width: 22px;
-  height: 22px;
-  color: var(--muted-foreground);
 }
 
 .aiChangePreviewScroll {
@@ -337,14 +326,13 @@
   gap: 1px;
 }
 
+/* 文件名与路径是共享 Text 原语，字号随它的色阶。 */
 .aiChangePreviewFileName {
   @apply min-w-0 font-medium text-foreground;
-  font-size: 11.5px;
 }
 
 .aiChangePreviewFilePath {
   @apply min-w-0;
-  font-size: 10.5px;
 }
 
 .aiChangePreviewStatus {
@@ -356,12 +344,6 @@
   font-size: 10.5px;
   font-weight: 600;
   line-height: 1.25;
-}
-
-.aiChangePreviewRowButton {
-  width: 22px;
-  height: 22px;
-  color: var(--muted-foreground);
 }
 
 .aiChangePreviewRow[data-change-action='added'] .aiChangePreviewFileName,
@@ -711,16 +693,16 @@
   padding-left: 4px;
 }
 
+/* 标签栏的图标按钮（操作 / 关闭）是 icon-sm 档 IconButton：圆角与默认配色随原语。 */
 .editorTabActionButton {
-  @apply flex items-center justify-center border-0 bg-transparent text-muted-foreground;
+  @apply flex items-center justify-center border-0 bg-transparent;
   width: 24px;
   height: 24px;
-  border-radius: var(--workbench-radius);
 }
 
 .editorTabActionButton:hover,
 .editorTabActionButton[aria-expanded='true'],
-.editorTabActionButton[aria-pressed='true'] {
+.editorTabActionButton[aria-pressed='true']:where(:not(:hover)) {
   color: var(--workbench-text);
   background: var(--workbench-hover);
 }
@@ -801,7 +783,7 @@
 }
 
 .editorTabMain {
-  @apply flex shrink-0 items-center gap-1 border-0 bg-transparent text-left;
+  @apply flex shrink-0 items-center border-0 bg-transparent text-left;
   height: 100%;
   min-width: max-content;
   max-width: none;
@@ -821,11 +803,10 @@
 }
 
 .editorTabClose {
-  @apply flex shrink-0 items-center justify-center border-0 bg-transparent text-muted-foreground;
+  @apply flex shrink-0 items-center justify-center border-0 bg-transparent;
   width: 22px;
   height: 22px;
   margin-right: 6px;
-  border-radius: var(--workbench-radius);
   opacity: 0.62;
 }
 
@@ -871,8 +852,11 @@
   background: var(--workbench-selection-bg);
 }
 
+/* 标签列表的条目与关闭按钮是共享 Button 原语：间距、收缩系数、圆角与默认配色随它。 */
 .editorTabListMain {
-  @apply flex min-w-0 flex-1 items-center gap-1.5 border-0 bg-transparent text-left;
+  @apply flex min-w-0 items-center border-0 bg-transparent text-left;
+  flex-grow: 1;
+  flex-basis: 0%;
   height: 32px;
   padding-inline: 8px 4px;
   font-size: 12px;
@@ -894,11 +878,10 @@
 }
 
 .editorTabListClose {
-  @apply flex shrink-0 items-center justify-center border-0 bg-transparent text-muted-foreground;
+  @apply flex shrink-0 items-center justify-center border-0 bg-transparent;
   width: 26px;
   height: 26px;
   margin-right: 3px;
-  border-radius: var(--workbench-radius);
 }
 
 .editorTabListClose:hover {
@@ -992,10 +975,9 @@
   font-size: 12px;
 }
 
+/* 计数是 caption 色阶的 Text，最小宽度、字号与配色随原语。 */
 .editorFindMeta {
-  @apply shrink-0 text-right text-muted-foreground;
-  min-width: 58px;
-  font-size: 11px;
+  @apply shrink-0 text-right;
 }
 
 .editorExternalChangeBanner {
@@ -1146,10 +1128,6 @@
   font-size: 11.5px;
 }
 
-.editorExternalConflictDialog {
-  width: min(520px, calc(100vw - 32px));
-}
-
 .editorExternalConflictOptions {
   @apply grid gap-2;
 }
@@ -1163,8 +1141,7 @@
 }
 
 .editorExternalConflictOptionTitle {
-  @apply font-semibold text-primary;
-  font-size: 12.5px;
+  @apply font-semibold;
 }
 
 .editorScroll {
@@ -1849,7 +1826,8 @@
   --control-themed-open-bg: var(--workbench-control-bg);
 }
 
-.workbenchShell :global(.velar-input:focus-visible),
+/* 搜索框的聚焦由外框（focus-within）表达，里面那格输入框不再叠一圈。 */
+.workbenchShell :global(.velar-input:where(:not(.velar-search-field-input)):focus-visible),
 .workbenchShell :global(.velar-textarea:focus-visible),
 .workbenchShell :global(.velar-number-input:focus-within) {
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--workbench-text) 8%, transparent);

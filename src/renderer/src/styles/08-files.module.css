@@ -44,17 +44,16 @@
   white-space: nowrap;
 }
 
+/*
+ * 边长、圆角、默认与悬停配色归 IconButton 的 icon-sm 档与 ghost 变体；搜索展开时换激活底色，指针停在
+ * 按钮上时仍让位给悬停底色。
+ */
 .filePanelProjectAction {
   flex: 0 0 auto;
-  width: 26px;
-  height: 26px;
-  color: var(--workbench-text-muted);
-  border-radius: var(--workbench-radius);
   -webkit-app-region: no-drag;
 }
 
-.filePanelProjectAction:hover,
-.filePanelProjectAction[data-active='true'] {
+.filePanelProjectAction[data-active='true']:where(:not(:hover)) {
   color: var(--workbench-text);
   background: var(--chrome-rail-hover-bg);
 }
@@ -183,9 +182,8 @@
 }
 
 .searchSectionTitle {
-  @apply m-0 flex items-center justify-between gap-2 text-muted-foreground;
+  @apply m-0 flex items-center justify-between gap-2;
   padding: 7px 10px 2px;
-  font-size: 11px;
   font-weight: 500;
 }
 
@@ -213,15 +211,17 @@
   background: var(--chrome-rail-hover-bg);
 }
 
+/*
+ * 搜索结果行是 block 档的 ghost Button：排版方式、边框、行高与悬停底色都随按钮原语。选中行与文件树共用下面
+ * 那套选中底色——以前这条被同特异性的 ghost 原语盖住，点中的结果在列表还有焦点时一点底色都没有。
+ */
 .searchResultRow {
-  @apply flex w-full items-center gap-2 border-0 bg-transparent text-left text-foreground;
-  min-height: var(--workbench-search-result-row-height);
+  @apply w-full items-center bg-transparent text-left text-foreground;
   padding: 4px 10px;
   font-size: 12px;
 }
 
-.treeRow:hover,
-.searchResultRow:hover {
+.treeRow:hover {
   background: var(--chrome-rail-hover-bg);
 }
 
@@ -541,21 +541,17 @@
   @apply truncate font-medium;
 }
 
+/* 下面三处都是共享 Text 原语，字号、行高与配色随它的色阶（caption / default）。 */
 .searchResultPath {
-  @apply truncate text-muted-foreground;
-  font-size: 11px;
+  @apply truncate;
 }
 
 .searchContentExcerpt {
   @apply truncate font-mono;
-  color: var(--status-blue-contrast);
-  font-size: 10.5px;
-  line-height: 1.35;
 }
 
 .searchContentBadge {
-  @apply shrink-0 text-muted-foreground;
-  font-size: 10.5px;
+  @apply shrink-0;
 }
 
 .panelEmpty,

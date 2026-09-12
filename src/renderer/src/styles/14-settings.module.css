@@ -21,13 +21,17 @@
   outline: none;
 }
 
+/*
+ * 左侧 18px 让标题与侧栏导航项的文字对齐（侧栏 8px + 导航项 10px）；macOS 非全屏时红绿灯压在这一行上，
+ * 外壳上的 data-mac-title-inset 再把左侧撑到 76px（见 01-shell）。
+ */
 .workbenchSettingsHeader {
   display: flex;
   min-height: var(--workbench-settings-header-height);
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding-inline: 76px 10px;
+  padding-inline: 18px 10px;
   border-bottom: 1px solid var(--workbench-border);
   background: var(--workbench-toolbar);
   -webkit-app-region: drag;
@@ -39,33 +43,17 @@
   align-items: center;
 }
 
+/*
+ * 设置页的标题、说明、按钮都是共享原语（Title / Text / IconButton / Select）：字号、行高、配色、圆角、
+ * 边框与悬停底色随各自的档位与色阶，这一段只补原语不管的排版（块级、字重、间距、拖拽区）。
+ */
 .workbenchSettingsTitle {
   margin: 0;
   color: var(--workbench-text);
-  font-size: 13px;
-  line-height: 16px;
-}
-
-.workbenchSettingsCloseButton {
-  color: var(--workbench-text-muted);
-  border-radius: var(--workbench-radius);
-}
-
-.workbenchSettingsSmallIconButton {
-  border-color: var(--workbench-border);
-  border-radius: var(--workbench-radius);
-  color: var(--workbench-text-muted);
-  background: var(--workbench-control-bg);
 }
 
 .workbenchSettingsCloseButton {
   -webkit-app-region: no-drag;
-}
-
-.workbenchSettingsCloseButton:hover,
-.workbenchSettingsSmallIconButton:hover {
-  color: var(--workbench-text);
-  background: var(--workbench-hover);
 }
 
 .workbenchSettingsBody {
@@ -191,15 +179,7 @@
 
 .workbenchSettingsGroupTitle {
   color: var(--workbench-text);
-  font-size: 13px;
   font-weight: 680;
-  line-height: 18px;
-}
-
-.workbenchSettingsGroupDescription {
-  color: var(--workbench-text-muted);
-  font-size: 11px;
-  line-height: 15px;
 }
 
 .workbenchSettingsGroup > .workbenchSettingsSectionPanel {
@@ -233,7 +213,6 @@
   color: var(--workbench-text);
   font-size: 12px;
   font-weight: 650;
-  line-height: 16px;
 }
 
 .workbenchSettingsRowDescription,
@@ -242,9 +221,6 @@
 .workbenchSettingsPluginDescription {
   display: block;
   margin-top: 2px;
-  color: var(--workbench-text-muted);
-  font-size: 11px;
-  line-height: 15px;
 }
 
 .workbenchSettingsRowControl {
@@ -260,17 +236,9 @@
 }
 
 .workbenchSettingsSelectTrigger {
-  border-width: 1px;
-  border-color: var(--workbench-border);
   color: var(--workbench-text);
   background: var(--workbench-control-bg);
   box-shadow: none;
-}
-
-.workbenchSettingsSelectTrigger:hover,
-.workbenchSettingsSelectTrigger[data-state='open'] {
-  border-color: var(--workbench-border);
-  background: var(--workbench-hover);
 }
 
 .workbenchSettingsSelectTrigger:focus-visible {
@@ -416,7 +384,6 @@
   color: var(--workbench-text);
   font-size: 12px;
   font-weight: 650;
-  line-height: 16px;
 }
 
 .workbenchSettingsRangeControl {
@@ -483,7 +450,6 @@
   color: var(--workbench-text);
   font-size: 12px;
   font-weight: 600;
-  line-height: 16px;
 }
 
 .workbenchSettingsShortcutControls {
@@ -618,15 +584,11 @@
   color: var(--workbench-text);
   font-size: 12px;
   font-weight: 650;
-  line-height: 16px;
 }
 
 .workbenchSettingsAiRulesEmptyDescription {
   display: block;
   margin-top: 2px;
-  color: var(--workbench-text-muted);
-  font-size: 11px;
-  line-height: 15px;
   overflow-wrap: anywhere;
 }
 
@@ -710,7 +672,6 @@
     monospace;
   font-size: 12px;
   font-weight: 650;
-  line-height: 16px;
   overflow-wrap: anywhere;
 }
 
@@ -742,8 +703,15 @@
   text-align: center;
 }
 
-/* Workbench uses dense IDE-style icon/text buttons; keep global button defaults out of this surface. */
+/*
+ * Workbench 的按钮是紧凑的 IDE 式图标 / 文字按钮，不要共享按钮的阴影与位移。两个类的分量照旧压得住共享组件
+ * 自己的状态投影（如输入框有内容时发送按钮的投影）；投影只给共享原语同分量的两种状态让路，让它们照常显示：
+ * 键盘聚焦环，与分段控件选中项悬停时的浅投影。
+ */
 .root [data-slot='button'] {
-  box-shadow: none;
   transform: none;
+}
+
+.root :global([data-slot='button']:where(:not(:focus-visible, .velar-segmented-control-active:hover))) {
+  box-shadow: none;
 }

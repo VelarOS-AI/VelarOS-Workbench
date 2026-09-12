@@ -5,17 +5,25 @@
   transform: none;
 }
 
+/*
+ * 两个类的这组只去边框与位移，聚焦时照常显示共享按钮的聚焦环；带子选择器或元素名、特异性更高的那组一直
+ * 连阴影一起压掉（聚焦环也不出现），保持原样。
+ */
 .workbenchShell .panelTitleButton,
-.workbenchShell .panelHeader > [data-slot='button'],
-.workbenchShell .panelActions button,
-.workbenchShell .searchBar > [data-slot='button'],
 .workbenchShell .treeDisclosureButton,
 .workbenchShell .editorTabActionButton,
 .workbenchShell .editorTabMain,
 .workbenchShell .editorTabClose,
 .workbenchShell .editorTabListMain,
 .workbenchShell .editorTabListClose,
-.workbenchShell .workbenchContextMenuItem,
+.workbenchShell .workbenchContextMenuItem {
+  border: 0;
+  transform: none;
+}
+
+.workbenchShell .panelHeader > [data-slot='button'],
+.workbenchShell .panelActions button,
+.workbenchShell .searchBar > [data-slot='button'],
 .workbenchShell .treeOptionsMenu button,
 .workbenchShell .editorTabContextMenu button {
   border: 0;

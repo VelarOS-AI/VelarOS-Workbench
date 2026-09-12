@@ -87,7 +87,7 @@ function RecentProjectRow({ project }: { project: WorkbenchRecentProject }): Rea
           </Text>
           {project.missing && <Tag variant="warning">路径不存在</Tag>}
         </span>
-        <Text tone="caption" truncate className="workbench-welcome__recent-path">
+        <Text tone="caption" truncate>
           {project.path}
         </Text>
       </button>

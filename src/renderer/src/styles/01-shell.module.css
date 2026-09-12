@@ -34,7 +34,6 @@
 
 .pageSubtitle,
 .projectPath,
-.panelEmpty,
 .emptyDescription {
   @apply text-muted-foreground;
   font-size: var(--ui-font-body-sm);
@@ -319,12 +318,9 @@
   --workbench-tab-height: 35px;
   --workbench-left-rail-width: 38px;
   --workbench-right-rail-width: 36px;
-  --workbench-left-rail-button-size: 30px;
-  --workbench-right-rail-button-size: 28px;
   --workbench-left-rail-padding-block: 6px;
   --workbench-right-rail-padding-block: 5px;
   --workbench-tree-row-height: 23px;
-  --workbench-search-result-row-height: 34px;
   --workbench-settings-header-height: 40px;
   --workbench-settings-nav-height: 40px;
   --workbench-settings-nav-padding-block: 6px;
@@ -688,12 +684,9 @@
   --workbench-statusbar-height: 22px;
   --workbench-left-rail-width: 34px;
   --workbench-right-rail-width: 32px;
-  --workbench-left-rail-button-size: 26px;
-  --workbench-right-rail-button-size: 24px;
   --workbench-left-rail-padding-block: 4px;
   --workbench-right-rail-padding-block: 3px;
   --workbench-tree-row-height: 20px;
-  --workbench-search-result-row-height: 30px;
   --workbench-settings-header-height: 36px;
   --workbench-settings-nav-height: 34px;
   --workbench-settings-nav-padding-block: 4px;
@@ -714,12 +707,9 @@
   --workbench-statusbar-height: 30px;
   --workbench-left-rail-width: 44px;
   --workbench-right-rail-width: 42px;
-  --workbench-left-rail-button-size: 34px;
-  --workbench-right-rail-button-size: 34px;
   --workbench-left-rail-padding-block: 8px;
   --workbench-right-rail-padding-block: 7px;
   --workbench-tree-row-height: 27px;
-  --workbench-search-result-row-height: 40px;
   --workbench-settings-header-height: 44px;
   --workbench-settings-nav-height: 48px;
   --workbench-settings-nav-padding-block: 8px;
@@ -751,8 +741,10 @@
 }
 
 /* macOS hiddenInset: the unified title row owns the traffic-light inset.
- * 全屏时红绿灯随标题栏一起收起，外壳上的 data-mac-title-inset 随之为 false，空位一并还回去。 */
-.workbenchShell[data-standalone='true'][data-mac-title-inset='true'] .ideUnifiedTopBar {
+ * 全屏时红绿灯随标题栏一起收起，外壳上的 data-mac-title-inset 随之为 false，空位一并还回去。
+ * 设置页是盖满整窗的同窗浮层，它的标题行同样压在红绿灯下面，跟顶栏一起让位、一起收回。 */
+.workbenchShell[data-standalone='true'][data-mac-title-inset='true'] .ideUnifiedTopBar,
+.workbenchShell[data-standalone='true'][data-mac-title-inset='true'] .workbenchSettingsHeader {
   padding-left: 76px;
 }
 

@@ -126,8 +126,8 @@ export function FileHistoryView({
       : t('workbench.gitLogLoading')
 
   return (
-    <div className={styles.fileHistoryWindowRoot}>
-      <header className={`${styles.editorGitHistoryHeader} ${styles.fileHistoryWindowHeader}`}>
+    <div className={styles.fileHistoryRoot}>
+      <header className={styles.editorGitHistoryHeader}>
         <div className={styles.editorHistoryHeaderMain}>
           <Text truncate className={styles.editorGitHistoryTitle}>
             {t('workbench.fileHistoryTitle', { file: fileNameFromPath(path) })}

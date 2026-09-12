@@ -54,10 +54,10 @@
   background: var(--workbench-editor-bg, var(--card));
 }
 
+/* 两端标签是共享 Text 原语，字号与配色随它的默认色阶。 */
 .editorHistoryDiffLabel {
-  @apply truncate text-muted-foreground;
+  @apply truncate;
   max-width: 240px;
-  font-size: 11px;
 }
 
 .editorHistoryDiffArrow {
@@ -74,23 +74,14 @@
   font-size: 11px;
 }
 
-/* 独立文件历史窗口：铺满整窗的竖向布局（头部 + 主体）。 */
-.fileHistoryWindowRoot {
+/*
+ * 文件历史：铺满编辑区视口的竖向布局（头部 + 主体）。它在主窗口的编辑区里就地展开，上方始终压着顶栏，
+ * 碰不到 macOS 红绿灯，也不当窗口拖拽区——头部用 editorGitHistoryHeader 的常规内边距。
+ */
+.fileHistoryRoot {
   @apply flex h-full min-h-0 w-full flex-col;
   background: var(--workbench-editor-bg, var(--card));
   color: var(--workbench-text, var(--foreground));
-}
-
-/* 头部整条作为窗口拖拽区（hiddenInset 标题栏下内容默认不可拖），为 mac 红绿灯留出左侧空位。 */
-.fileHistoryWindowHeader {
-  -webkit-app-region: drag;
-  padding-left: 78px;
-}
-
-.fileHistoryWindowHeader button,
-.fileHistoryWindowHeader input,
-.fileHistoryWindowHeader [role='tablist'] {
-  -webkit-app-region: no-drag;
 }
 
 .editorHistoryCodeViewer {
@@ -303,10 +294,10 @@
   @apply flex min-w-0 items-center gap-2;
 }
 
+/* 次要信息与时间是共享 Text 原语，字号与配色随它的默认色阶。 */
 .historyTimelineSecondary,
 .historyTimelineMeta {
-  @apply truncate text-muted-foreground;
-  font-size: 11px;
+  @apply truncate;
 }
 
 .historyTimelineMeta {

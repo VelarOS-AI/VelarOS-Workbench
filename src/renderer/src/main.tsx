@@ -1,4 +1,7 @@
 /** 独立 Workbench 应用渲染进程入口：装配共享 UI、独立宿主端口与产品壳。 */
+// 全局样式表必须先于一切应用模块求值，产品样式才排在共享原语之后（见 globalStyles.ts）。
+import './globalStyles'
+
 import ReactDOM from 'react-dom/client'
 import { registerWorkbenchEditorLanguage } from '@renderer/language/workbenchEditorLanguageContributions'
 import { WorkbenchRuntimeProvider } from '@renderer/runtime'
@@ -9,11 +12,6 @@ import { registerWorkbenchLanguageService } from '@shared/language/workbenchLang
 import { VelarWorkbenchEditorLanguage } from './contributions/velar/editor'
 import { installStandaloneWorkbenchHost } from './host/standaloneWorkbenchHost'
 import { StandaloneWorkbenchApp } from './StandaloneWorkbenchApp'
-
-import '@velaros-ai/ui/styles/tokens/design-tokens.css'
-import '@velaros-ai/ui/styles/components/index.css'
-import '@velaros-ai/ui/styles/components/product.css'
-import './index.css'
 
 registerWorkbenchEditorLanguage(VelarWorkbenchEditorLanguage)
 registerWorkbenchLanguageService(VelarWorkbenchLanguageService)

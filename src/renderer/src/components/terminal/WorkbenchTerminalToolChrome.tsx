@@ -96,7 +96,6 @@ export function WorkbenchTerminalToolHeader({
             type="button"
             variant="ghost"
             size="icon-sm"
-            className={styles.terminalToolHeaderIconButton}
             title={t('workbench.terminalNew')}
             label={t('workbench.terminalNew')}
             onClick={onCreateTerminalSession}
@@ -110,7 +109,6 @@ export function WorkbenchTerminalToolHeader({
           type="button"
           variant="ghost"
           size="icon-sm"
-          className={styles.terminalToolHeaderIconButton}
           title={isCollapsed ? t('workbench.expandToolWindow') : t('workbench.collapseToolWindow')}
           label={isCollapsed ? t('workbench.expandToolWindow') : t('workbench.collapseToolWindow')}
           onClick={onToggleCollapsed}
@@ -330,7 +328,6 @@ export function WorkbenchRunToolHeader({
             type="button"
             variant="ghost"
             size="icon-sm"
-            className={styles.terminalToolHeaderIconButton}
             title={t('workbench.runRestart')}
             label={t('workbench.runRestart')}
             disabled={!canRestart}
@@ -342,7 +339,7 @@ export function WorkbenchRunToolHeader({
             type="button"
             variant="ghost"
             size="icon-sm"
-            className={`${styles.terminalToolHeaderIconButton} ${styles.runStopButton}`}
+            className={styles.runStopButton}
             title={t('workbench.runStop')}
             label={t('workbench.runStop')}
             disabled={!canStop}
@@ -355,7 +352,6 @@ export function WorkbenchRunToolHeader({
           type="button"
           variant="ghost"
           size="icon-sm"
-          className={styles.terminalToolHeaderIconButton}
           title={isCollapsed ? t('workbench.expandToolWindow') : t('workbench.collapseToolWindow')}
           label={isCollapsed ? t('workbench.expandToolWindow') : t('workbench.collapseToolWindow')}
           onClick={onToggleCollapsed}

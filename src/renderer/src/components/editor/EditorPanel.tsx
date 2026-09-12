@@ -716,7 +716,7 @@ export function EditorPanel({
           open={!!shouldShowExternalConflictDialog && externalConflictDialogOpen}
           onOpenChange={setExternalConflictDialogState}
         >
-          <DialogContent className={styles.editorExternalConflictDialog}>
+          <DialogContent>
             <DialogHeader>
               <DialogTitle>{t('workbench.externalFileConflictDialogTitle')}</DialogTitle>
               <DialogDescription>

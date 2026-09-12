@@ -199,9 +199,7 @@ function SettingsSubsection({
       <header className={styles.workbenchSettingsGroupHeader}>
         <div className={styles.workbenchSettingsGroupCopy}>
           <Text className={styles.workbenchSettingsGroupTitle}>{title}</Text>
-          <Text tone="caption" className={styles.workbenchSettingsGroupDescription}>
-            {description}
-          </Text>
+          <Text tone="caption">{description}</Text>
         </div>
         {!!action && <div className={styles.workbenchSettingsGroupAction}>{action}</div>}
       </header>
@@ -1061,7 +1059,6 @@ export function WorkbenchSettingsDialog({
                   <IconButton
                     variant="ghost"
                     size="icon-sm"
-                    className={styles.workbenchSettingsSmallIconButton}
                     disabled={isDefault}
                     label={t('workbench.settingsShortcutReset')}
                     title={t('workbench.settingsShortcutReset')}
@@ -1299,7 +1296,6 @@ export function WorkbenchSettingsDialog({
           <IconButton
             size="icon-sm"
             variant="outline"
-            className={styles.workbenchSettingsSmallIconButton}
             label={t('workbench.settingsAiRulesRefresh')}
             title={t('workbench.settingsAiRulesRefresh')}
             onClick={() => void refreshPlugins()}
@@ -1479,7 +1475,6 @@ export function WorkbenchSettingsDialog({
             <IconButton
               size="icon-sm"
               variant="outline"
-              className={styles.workbenchSettingsSmallIconButton}
               label={t('workbench.settingsResetAppearance')}
               title={t('workbench.settingsResetAppearance')}
               onClick={onResetPreferences}
@@ -1518,7 +1513,6 @@ export function WorkbenchSettingsDialog({
             <IconButton
               size="icon-sm"
               variant="outline"
-              className={styles.workbenchSettingsSmallIconButton}
               label={t('workbench.settingsResetKeymap')}
               title={t('workbench.settingsResetKeymap')}
               onClick={onResetAllShortcuts}

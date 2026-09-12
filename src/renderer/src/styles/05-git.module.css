@@ -826,6 +826,7 @@
   background: var(--workbench-surface);
 }
 
+/* 提交说明是 sm 档的 ghost Textarea：左右内边距、行高、边框与圆角随原语。 */
 .gitCommitInput {
   width: calc(100% - 20px);
   max-width: calc(100% - 20px);
@@ -834,15 +835,11 @@
   flex: 1;
   margin: 6px 10px 4px;
   padding-block: 8px;
-  padding-inline: 10px;
-  border: 1px solid var(--workbench-border);
-  border-radius: var(--workbench-radius);
   box-shadow: none;
   resize: none;
   background: transparent;
   color: var(--workbench-text);
   font-size: var(--ui-font-body-sm);
-  line-height: var(--ui-line-relaxed);
 }
 
 .commitForm .gitCommitInput,

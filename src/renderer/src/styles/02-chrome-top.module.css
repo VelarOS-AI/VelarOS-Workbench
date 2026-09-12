@@ -109,21 +109,19 @@
   -webkit-app-region: no-drag;
 }
 
+/*
+ * 高度、左右内边距、间距、圆角都归 Button 的 sm 档预设；悬停底色随 ghost 变体。展开时染主题色，指针还停在
+ * 按钮上时仍让位给悬停底色。
+ */
 .projectControlButton {
-  display: flex;
   min-width: 0;
   max-width: 100%;
-  height: 28px;
-  min-height: 28px;
   align-items: center;
-  gap: 5px;
-  padding: 0 5px 0 2px;
-  border-radius: 6px;
+  padding-block: 0;
   color: var(--workbench-text);
 }
 
-.projectControlButton:hover,
-.projectControlButton[data-state='open'] {
+.projectControlButton[data-state='open']:where(:not(:hover)) {
   background: color-mix(in srgb, var(--workbench-theme-color) 11%, transparent);
 }
 
@@ -326,7 +324,6 @@
 
   width: min(360px, calc(100vw - 24px));
   max-width: min(360px, calc(100vw - 24px));
-  border-color: var(--workbench-border);
   background: var(--workbench-surface);
   color: var(--workbench-text);
 }
@@ -345,58 +342,27 @@
   line-height: 1.35;
 }
 
-.projectCloneFooter {
-  margin-top: 6px;
-}
-
 .projectCloneSubmit,
 .projectCloneSubmit:hover:not(:disabled) {
-  border-color: var(--project-control-theme-color);
   background: var(--project-control-theme-color);
   color: var(--primary-foreground);
 }
 
 /*
- * 顶栏图标按钮的边长归 IconButton 的 icon-sm 预设（--ui-icon-button-sm），这里不另写：以前写的
- * 28px 同为单类选择器，却排在共享原语 `.velar-button-size-icon-sm` 之前，从来没生效过，实际一直是
- * 32px。顶栏尾部留白按同一个令牌换算（见 .ideUnifiedTopBar）。
+ * 顶栏图标按钮（运行 / 代码图 / 设置）的边长、圆角、配色都归 IconButton 的 icon-sm 档与 ghost 变体，
+ * 这里不另写；顶栏尾部留白按同一个边长令牌换算（见 .ideUnifiedTopBar）。运行按钮只在禁用时转灰。
  */
-.topRunButton {
-  color: var(--status-green);
-  border-radius: var(--workbench-radius);
-}
-
-.topToolbarIconButton {
-  color: var(--workbench-text-muted);
-  border-radius: var(--workbench-radius);
-}
-
-.topToolbarIconButton:hover {
-  color: var(--workbench-text);
-  background: var(--workbench-hover);
-}
-
-.topRunButton:hover {
-  color: color-mix(in oklab, var(--status-green) 94%, black);
-  background: var(--status-green-soft);
-}
-
 .topRunButton:disabled {
   color: var(--workbench-text-muted);
 }
 
 .runActionPopover {
-  /* z above the chat empty-state watermark so the panel never shows through. */
-  z-index: 60;
   width: min(280px, calc(100vw - 24px));
-  padding: 5px;
   border: 1px solid var(--workbench-border);
-  border-radius: 8px;
   /* --workbench-surface-elevated was never defined → the panel rendered with no
    * background (transparent) and the watermark bled through. Use the real,
    * theme-aware surface token so the panel is opaque in light and dark. */
   background: var(--workbench-surface);
-  box-shadow: var(--shadow-lg);
 }
 
 .runActionPanel {
@@ -492,7 +458,6 @@
   min-width: 0;
   flex: 1 1 auto;
   font-family: var(--font-mono);
-  font-size: 11.5px;
   /*
    * The default Input variant tints its fill with --control-themed-*, which in
    * the workbench derives from --workbench-active-soft (the accent = blue). Pin
