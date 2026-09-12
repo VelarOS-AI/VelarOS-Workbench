@@ -3,6 +3,26 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
+      "version": "0.3.48",
+      "releasedAt": "2026-09-12",
+      "title": {
+        "zh": "运行中往上翻聊天不再被拽回底部",
+        "en": "Scrolling up in the chat during a run no longer snaps back to the bottom"
+      },
+      "added": {
+        "zh": [],
+        "en": []
+      },
+      "fixed": {
+        "zh": [
+          "更新或重开 Workbench 后，AI 运行时往上翻聊天会被一次次拽回底部，发新消息也不管用，要等内容足够长才恢复正常。"
+        ],
+        "en": [
+          "After updating or reopening Workbench, scrolling up in the chat while the AI was running kept snapping back to the bottom, even after sending a new message, until the conversation grew long enough."
+        ]
+      }
+    },
+    {
       "version": "0.3.47",
       "releasedAt": "2026-09-12",
       "title": {
