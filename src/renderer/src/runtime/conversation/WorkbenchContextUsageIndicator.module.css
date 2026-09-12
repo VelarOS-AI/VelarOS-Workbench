@@ -1,0 +1,23 @@
+/*
+ * 共享上下文仪表只留进度环，去掉最外那圈描边。
+ *
+ * 图标档的 20px 圆盘叠了三层：外沿一道 1px 描边（`.iconRing` 的 inset box-shadow）、紧贴其内 3px 宽的
+ * 进度环（同一元素上的 conic-gradient）、中间放图标的芯。描边与进度环贴在一起，挤在麦克风按钮旁读成
+ * 「圈外又套一圈」。告警 / 危险色阶下 32px 外框还会亮出一道着色边框（色阶类盖过了图标档的透明边框），
+ * 同样收掉，外轮廓只剩进度环本身。
+ *
+ * 这些类名在共享包的 CSS Module 里，构建时按文件哈希成 `velar_<文件哈希>_<local>`
+ * （electron.vite.config.ts 的 workbenchCssModuleName），local 名稳定，因此在自己的包裹层下按
+ * `_<local>` 后缀选中，不改共享包。包裹层 display: contents，不参与输入框工具条的排版。
+ */
+.gauge {
+  display: contents;
+}
+
+.gauge [class*='_iconRing'] {
+  box-shadow: none;
+}
+
+.gauge [class*='_iconOnly'] {
+  border-color: transparent;
+}

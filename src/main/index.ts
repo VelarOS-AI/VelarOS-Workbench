@@ -47,6 +47,8 @@ import {
   prepareWorkbenchWebviewAttachment,
 } from './projects/WorkbenchWebviewSecurity'
 import { WorkbenchWindowManager } from './projects/WorkbenchWindowManager'
+import { installWorkbenchWindowState } from './projects/WorkbenchWindowState'
+import { registerWorkbenchWindowStateIpc } from './projects/WorkbenchWindowStateIpc'
 import { registerWorkbenchResourcePluginIpc } from './resources/WorkbenchResourcePluginIpc'
 import { installWorkbenchUpdateRuntime } from './updates/WorkbenchUpdateRuntime'
 import { registerWorkbenchGitIpc } from './workspace/git/WorkbenchGitIpc'
@@ -192,6 +194,7 @@ function createWorkbenchWindow(hub: WorkbenchProjectHub): BrowserWindow {
     })
   })
   installWorkbenchEditorZoom(window)
+  installWorkbenchWindowState(window)
 
   // 窗口标题唯一权威在 main（跟随项目状态）；拦掉页面 <title> 的默认回写，避免双权威打架。
   window.on('page-title-updated', (event) => {
@@ -418,6 +421,7 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
   const disposeBrowserIpc = registerWorkbenchBrowserIpc(browserHost, windowManager)
   registerWorkbenchFsIpc(providers.fileSystem, providers.parts, windowManager)
   registerProjectHubIpc(windowManager)
+  registerWorkbenchWindowStateIpc()
   let shutdownStarted = false
   app.on('before-quit', (event) => {
     if (shutdownStarted) return

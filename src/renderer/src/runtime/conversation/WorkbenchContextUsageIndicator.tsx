@@ -9,6 +9,8 @@ import {
 import { useWorkbenchI18n } from '../../i18n'
 import type { StandaloneContextUsageEstimate } from '../standaloneWorkbenchChatRuntime'
 
+import styles from './WorkbenchContextUsageIndicator.module.css'
+
 /**
  * Workbench 的上下文用量仪表。
  *
@@ -43,18 +45,21 @@ export function WorkbenchContextUsageIndicator({
       + `${formatCompactTokens(locale, usage.usableContextWindow)} ${t('workbench.tokenUnit')}`
     : t('workbench.contextUsagePendingHint')
 
+  // 包一层只为给共享仪表一个 Workbench 自己的样式作用域（外圈描边在这层下收掉，见样式文件）。
   return (
-    <ChatContextUsageGauge
-      variant="icon"
-      tone={usage ? resolveChatContextUsageTone(usage.percent) : 'safe'}
-      ringPercent={usage?.percent ?? 0}
-      label={percentLabel}
-      ariaLabel={`${t('workbench.contextUsage')}: ${detail}`}
-      tooltip={{
-        title: t('workbench.contextUsageEstimate'),
-        meta: detail,
-      }}
-    />
+    <span className={styles.gauge}>
+      <ChatContextUsageGauge
+        variant="icon"
+        tone={usage ? resolveChatContextUsageTone(usage.percent) : 'safe'}
+        ringPercent={usage?.percent ?? 0}
+        label={percentLabel}
+        ariaLabel={`${t('workbench.contextUsage')}: ${detail}`}
+        tooltip={{
+          title: t('workbench.contextUsageEstimate'),
+          meta: detail,
+        }}
+      />
+    </span>
   )
 }
 

@@ -750,7 +750,8 @@
   --workbench-card-border: rgba(255, 255, 255, 0.18);
 }
 
-/* macOS hiddenInset: the unified title row owns the traffic-light inset. */
+/* macOS hiddenInset: the unified title row owns the traffic-light inset.
+ * 全屏时红绿灯随标题栏一起收起，外壳上的 data-mac-title-inset 随之为 false，空位一并还回去。 */
 .workbenchShell[data-standalone='true'][data-mac-title-inset='true'] .ideUnifiedTopBar {
   padding-left: 76px;
 }

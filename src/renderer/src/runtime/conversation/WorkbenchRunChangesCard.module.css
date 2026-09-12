@@ -54,12 +54,39 @@
   color: var(--foreground);
 }
 
-.added {
+/*
+ * 合计的 +N / -N 与文件行里的统计用同一对颜色令牌（--status-green / --status-red）。
+ * 这两个数字是共享 Text 原语，它的默认色阶 `.velar-text-tone-default` 自带 `color: var(--foreground)`，
+ * 与这里同为单类选择器；而共享原语的全局样式在产物里排在本模块之后（main.tsx 先引应用模块、后引
+ * 共享样式），同特异性后写者胜，颜色就被刷回了正文色。双写类名把特异性抬一档，不再看样式表先后。
+ */
+.added.added {
   color: var(--status-green);
 }
 
-.removed {
+.removed.removed {
   color: var(--status-red);
+}
+
+/*
+ * 文件行收紧。行与展开箭头都由共享包的 FileChangeSummaryList 画，这里在卡片根下按 `_<local>` 类名
+ * 后缀覆写（共享包 CSS Module 的类名构建时哈希成 `velar_<文件哈希>_<local>`，local 名稳定）。
+ *
+ * 原先一行 48px：共享样式给行留了上下各 8px 内边距；展开箭头是 icon-sm 档的 IconButton，
+ * `.fileExpandButton` 本想把它压到 22px，可全局原语 `.velar-button-size-icon-sm`（32px）同样排在模块
+ * 样式之后、同特异性胜出，箭头按钮撑到 32px：8 + 32 + 8 = 48px，还比它所在的 22px 网格列宽出 10px、
+ * 顶到卡片右缘。现在箭头按钮钉回 22px（与列同宽、回到列中，右侧与标题行的「审核」按钮同样留 10px），
+ * 行内边距收成上下 4px：4 + 22 + 4 = 30px，约为原来的 62%，整行仍是 30px 高的点击区；
+ * 路径、统计与箭头照旧在行内垂直居中。
+ */
+.root [class*='_fileButton'] {
+  min-height: 30px;
+  padding-block: 4px;
+}
+
+.root [class*='_fileExpandButton'] {
+  width: 22px;
+  height: 22px;
 }
 
 .feedback {

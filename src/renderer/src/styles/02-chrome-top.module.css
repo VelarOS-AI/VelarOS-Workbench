@@ -9,13 +9,21 @@
   -webkit-app-region: no-drag;
 }
 
+/*
+ * 尾部留白让最右那颗设置齿轮与正下方右侧工具条里的聊天按钮共用一条竖直中线：
+ * - 工具条贴窗口右缘、宽 --workbench-right-rail-width，按钮在其中水平居中 → 中线距右缘 rail / 2；
+ * - 齿轮是 icon-sm 档 IconButton，边长 --ui-icon-button-sm（32px）→ 中线距右缘 = 留白 + 16px；
+ * - 两者相等：留白 = (rail − icon) / 2。默认密度 (36 − 32) / 2 = 2px，紧凑 (32 − 32) / 2 = 0，
+ *   宽松 (42 − 32) / 2 = 5px。以前留白是 0，齿轮中线距右缘 16px、聊天按钮 18px，差 2px 且贴边。
+ * 留白加在整行尾部，运行 / 代码图 / 设置几颗按钮一起平移，彼此间距不变。
+ */
 .ideUnifiedTopBar {
   display: flex;
   flex-shrink: 0;
   align-items: center;
   gap: 6px;
   min-height: var(--workbench-topbar-height);
-  padding-inline: 2px 0;
+  padding-inline: 2px calc((var(--workbench-right-rail-width) - var(--ui-icon-button-sm)) / 2);
   border-bottom: 1px solid var(--workbench-border);
   background: var(--workbench-toolbar);
   -webkit-app-region: drag;
@@ -348,16 +356,17 @@
   color: var(--primary-foreground);
 }
 
+/*
+ * 顶栏图标按钮的边长归 IconButton 的 icon-sm 预设（--ui-icon-button-sm），这里不另写：以前写的
+ * 28px 同为单类选择器，却排在共享原语 `.velar-button-size-icon-sm` 之前，从来没生效过，实际一直是
+ * 32px。顶栏尾部留白按同一个令牌换算（见 .ideUnifiedTopBar）。
+ */
 .topRunButton {
   color: var(--status-green);
   border-radius: var(--workbench-radius);
-  width: 28px;
-  height: 28px;
 }
 
 .topToolbarIconButton {
-  width: 28px;
-  height: 28px;
   color: var(--workbench-text-muted);
   border-radius: var(--workbench-radius);
 }

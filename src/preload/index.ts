@@ -34,6 +34,10 @@ import {
 import { type WorkbenchUpdateBridge, WorkbenchUpdateChannels } from '../shared/workbenchUpdate'
 import { type WorkbenchWatchBridge, WorkbenchWatchChannels } from '../shared/workbenchWatch'
 import {
+  type WorkbenchWindowStateBridge,
+  WorkbenchWindowStateChannels,
+} from '../shared/workbenchWindowState'
+import {
   type WorkbenchWorkspaceBridge,
   WorkbenchWorkspaceChannels,
 } from '../shared/workbenchWorkspace'
@@ -248,6 +252,11 @@ const updateBridge: WorkbenchUpdateBridge = {
   onChanged: (listener) => subscribe(WorkbenchUpdateChannels.changed, listener),
 }
 
+const windowStateBridge: WorkbenchWindowStateBridge = {
+  getState: () => ipcRenderer.invoke(WorkbenchWindowStateChannels.getState),
+  onChanged: (listener) => subscribe(WorkbenchWindowStateChannels.changed, listener),
+}
+
 const productAnalyticsBridge: WorkbenchProductAnalyticsBridge = {
   getState: () => ipcRenderer.invoke(WorkbenchProductAnalyticsChannels.getState),
   setEnabled: (enabled) =>
@@ -272,6 +281,7 @@ contextBridge.exposeInMainWorld('velarosWorkbenchWorkspace', workspaceBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchResourcePlugins', resourcePluginBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchMods', modBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchUpdate', updateBridge)
+contextBridge.exposeInMainWorld('velarosWorkbenchWindowState', windowStateBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchProductAnalytics', productAnalyticsBridge)
 
 function subscribe<TPayload>(channel: string, listener: (payload: TPayload) => void): () => void {

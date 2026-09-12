@@ -47,6 +47,7 @@ import { WorkbenchGitToolPanel } from './components/git/WorkbenchGitToolPanel'
 import { QuickOpen } from './components/project/QuickOpen'
 import { WorkbenchSettingsDialog } from './components/settings/WorkbenchSettingsDialog'
 import { type BottomTool, CommandPanel } from './components/terminal/CommandPanel'
+import { useWorkbenchWindowFullScreen } from './hooks/useWorkbenchWindowFullScreen'
 import {
   discoverWorkbenchVelarProjectRoots,
   mergeWorkbenchVelarProjectSnapshotIndex,
@@ -81,6 +82,8 @@ export function StandaloneWorkbenchPagePresentation({
   const model = useWorkbenchPageContext()
   const runtime = useWorkbenchHostRuntime()
   const agentPluginContributions = useWorkbenchAgentPluginContributions()
+  // 全屏时红绿灯随标题栏一起收起，顶栏不再给它们留左侧空位（见 data-mac-title-inset）。
+  const windowFullScreen = useWorkbenchWindowFullScreen()
   const {
     workbench,
     surface,
@@ -558,7 +561,7 @@ export function StandaloneWorkbenchPagePresentation({
       <div
         className={styles.workbenchShell}
         data-standalone="true"
-        data-mac-title-inset={macTitleInset}
+        data-mac-title-inset={macTitleInset && !windowFullScreen}
         data-host-platform={hostPlatform}
         data-right-tool-open={surface.isRightToolOpen}
         data-command-panel-open={!surface.isCommandPanelCollapsed}
