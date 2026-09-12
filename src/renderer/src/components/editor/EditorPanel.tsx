@@ -164,6 +164,8 @@ export interface WorkbenchEditorPanelDiffProps {
 export interface WorkbenchEditorPanelWorkspaceProps {
   onRevertSelectedFile: () => void
   onSaveSelectedFile: () => void
+  /** 当前文件在只读与编辑之间切换（只挡用户在编辑器里输入，AI 经内核写盘不受影响）。 */
+  onToggleSelectedFileEditMode: () => void
   onSaveAllOpenFiles: () => void
   onResolveExternalFileConflict: (resolution: 'external' | 'local') => void
   onEditorContentChange: (content: string) => void
@@ -231,6 +233,7 @@ export function EditorPanel({
   },
   workspace: {
     onSaveSelectedFile,
+    onToggleSelectedFileEditMode,
     onSaveAllOpenFiles,
     onResolveExternalFileConflict,
     onEditorContentChange,
@@ -252,6 +255,7 @@ export function EditorPanel({
     openTabs,
     hasUnsavedChanges,
     canEditSelectedFile,
+    selectedFileEditMode,
     projectContextIndex,
     isSavingFile,
   } = workbenchEditor
@@ -670,6 +674,8 @@ export function EditorPanel({
           selectedFile={hasEditorOverlayTab ? null : selectedFile}
           hasUnsavedChanges={hasEditorOverlayTab ? false : hasUnsavedChanges}
           canEditSelectedFile={hasEditorOverlayTab ? false : canEditSelectedFile}
+          selectedFileEditMode={hasEditorOverlayTab ? null : selectedFileEditMode}
+          onToggleSelectedFileEditMode={onToggleSelectedFileEditMode}
           isSavingFile={isSavingFile}
           dirtyTabCount={dirtyTabCount}
           gitDecorations={gitDecorations}

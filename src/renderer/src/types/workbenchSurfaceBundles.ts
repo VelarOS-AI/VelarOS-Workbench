@@ -1,6 +1,7 @@
 import type { WorkbenchCommandHistoryItem } from '@renderer/models/commands/workbenchCommandHistory'
 import type { WorkbenchCommandSuggestion } from '@renderer/models/commands/workbenchCommandSuggestions'
 import type { WorkbenchRunConfiguration } from '@renderer/models/commands/workbenchRunConfigurations'
+import type { WorkbenchEditorEditMode } from '@renderer/models/editor/workbenchEditorEditMode'
 import type {
   WorkbenchProjectContextFile,
   WorkbenchProjectContextIndex,
@@ -41,6 +42,8 @@ export interface WorkbenchEditorSurfaceBundle extends WorkbenchEditorDocumentBun
   selectedFilePath: Nullable<string>
   selectedFile: Nullable<WorkbenchReadFileResult>
   canEditSelectedFile: boolean
+  /** 当前文件的只读 / 编辑模式；没有选中文件时为 null。 */
+  selectedFileEditMode: Nullable<WorkbenchEditorEditMode>
   projectContextIndex: WorkbenchProjectContextIndex
   isSavingFile: boolean
 }

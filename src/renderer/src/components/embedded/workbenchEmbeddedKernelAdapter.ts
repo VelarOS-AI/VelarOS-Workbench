@@ -176,6 +176,7 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
         selectedFilePath: workbench.selectedFilePath,
         selectedFile: workbench.selectedFile,
         canEditSelectedFile: workbench.canEditSelectedFile,
+        selectedFileEditMode: workbench.selectedFileEditMode,
         projectContextIndex: workbench.projectContextIndex,
         isSavingFile: workbench.isSavingFile,
       },
@@ -250,6 +251,7 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
       workspace: {
         onRevertSelectedFile: workbench.revertSelectedFile,
         onSaveSelectedFile: () => void workbench.saveSelectedFile(),
+        onToggleSelectedFileEditMode: workbench.toggleSelectedFileEditMode,
         onSaveAllOpenFiles: () => void workbench.saveAllOpenFiles(),
         onResolveExternalFileConflict: (resolution) =>
           void workbench.resolveSelectedExternalFileConflict(resolution),

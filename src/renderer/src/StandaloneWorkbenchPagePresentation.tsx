@@ -848,6 +848,12 @@ export function StandaloneWorkbenchPagePresentation({
               ? false
               : workbench.hasUnsavedChanges
           }
+          readOnly={
+            !editorNavigation.diffItem
+            && !editorNavigation.lightTab
+            && !!workbench.selectedFile
+            && !workbench.canEditSelectedFile
+          }
           isSavingFile={workbench.isSavingFile}
           openFileCount={workbench.openTabs.length}
           commandStatusLabel={commandStatusLabel}

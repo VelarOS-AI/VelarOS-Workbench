@@ -172,6 +172,8 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     noCodeSuggestions: 'No suggestions',
     markdownShowPreview: 'Show rendered Markdown',
     markdownShowSource: 'Show Markdown source',
+    editorSwitchToEditMode: 'Read-only: click to switch to edit mode',
+    editorSwitchToReadOnlyMode: 'Editing: click to switch to read-only mode',
     openFiles: 'Open files',
     openFileCount: '{count} open',
     aiIndexing: 'Building code graph',
@@ -548,6 +550,7 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     saving: 'Saving',
     saved: 'Saved',
     unsaved: 'Unsaved',
+    readOnlyFile: 'Read-only',
     unsavedChangesTitle: 'This file has unsaved changes',
     unsavedChangesDescription:
       'Save or revert the related files before closing tabs, closing the project, or changing the file tree.',

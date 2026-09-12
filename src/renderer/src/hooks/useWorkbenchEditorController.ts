@@ -2,6 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { workbenchHost } from '@renderer/host'
 import { applyWorkbenchLanguageServiceEditsToContent } from '@renderer/models/editor/workbenchCodeMirrorLanguageService'
 import {
+  canEditWorkbenchFileContent,
+  isWorkbenchFileEditable,
+  resolveWorkbenchEditorEditMode,
+  type WorkbenchEditorEditMode,
+} from '@renderer/models/editor/workbenchEditorEditMode'
+import {
   buildExternalChangeNoticeKey,
   getWorkbenchEditorFilesChangedRefreshDelayMs,
   hasExternalChange,
@@ -120,11 +126,15 @@ export function useWorkbenchEditorController({
     () => [...openTabsByPath.values()].some(isDirtyTab),
     [openTabsByPath]
   )
+  // 用户为每个文件选过的编辑模式；没选过的按 resolveWorkbenchEditorEditMode 的默认规则。
+  const [chosenEditModes, setChosenEditModes] = useState<ReadonlyMap<string, WorkbenchEditorEditMode>>(
+    () => new Map()
+  )
+  const selectedFileEditMode: Nullable<WorkbenchEditorEditMode> = selectedFile
+    ? resolveWorkbenchEditorEditMode(selectedFile, chosenEditModes.get(selectedFile.path))
+    : null
   const canEditSelectedFile =
-    !!selectedFile
-    && !selectedFile.imagePreview
-    && !selectedFile.truncated
-    && !selectedFile.gitIgnored
+    !!selectedFile && isWorkbenchFileEditable(selectedFile, chosenEditModes.get(selectedFile.path))
   const openTabs = useMemo(() => [...openTabsByPath.values()], [openTabsByPath])
   const openedFileSnapshots = useMemo(() => {
     const snapshots = reuseWorkbenchOpenFileSnapshots(openedFileSnapshotsRef.current, openTabs)
@@ -151,12 +161,8 @@ export function useWorkbenchEditorController({
   }
 
   const updateEditorContent = useMemoizedFn((content: string): void => {
-    if (
-      !selectedFile
-      || selectedFile.imagePreview
-      || selectedFile.truncated
-      || selectedFile.gitIgnored
-    ) return
+    if (!selectedFile || !isWorkbenchFileEditable(selectedFile, chosenEditModes.get(selectedFile.path)))
+      return
 
     setEditorContent(content)
     rememberOpenFile(selectedFile, content)
@@ -168,11 +174,10 @@ export function useWorkbenchEditorController({
 
       for (const change of changes) {
         const tab = openTabsByPathLatest.current.get(change.path)
+        // 只读的文件不接跨文件改名重构的改动。
         if (
           !tab
-          || tab.file.imagePreview
-          || tab.file.truncated
-          || tab.file.gitIgnored
+          || !isWorkbenchFileEditable(tab.file, chosenEditModes.get(tab.path))
           || isEmpty(change.edits)
         ) continue
 
@@ -287,7 +292,16 @@ export function useWorkbenchEditorController({
     setSelectedFile(null)
     setEditorContent('')
     setOpenTabsByPath(new Map())
+    setChosenEditModes(new Map())
     pendingFilePathRef.current = null
+  })
+
+  /** 在只读与编辑之间切换当前文件；没有完整文本的文件（图片、截断的大文件）不能切到编辑。 */
+  const toggleSelectedFileEditMode = useMemoizedFn((): void => {
+    if (!selectedFile || !selectedFileEditMode || !canEditWorkbenchFileContent(selectedFile)) return
+
+    const nextMode: WorkbenchEditorEditMode = selectedFileEditMode === 'edit' ? 'read-only' : 'edit'
+    setChosenEditModes((current) => new Map(current).set(selectedFile.path, nextMode))
   })
 
   const revertSelectedFile = useMemoizedFn((): void => {
@@ -953,11 +967,10 @@ export function useWorkbenchEditorController({
       tab: WorkbenchOpenEditorTab,
       options: WorkbenchSaveEditorTabOptions = {}
     ): Promise<void> => {
+      // 只读只挡输入：切到只读之前已经改下的内容照样能保存。
       if (
         !activeProject
-        || tab.file.imagePreview
-        || tab.file.truncated
-        || tab.file.gitIgnored
+        || !canEditWorkbenchFileContent(tab.file)
         || tab.content === tab.file.content
         || isSavingFile
       )
@@ -1046,7 +1059,7 @@ export function useWorkbenchEditorController({
     const owningProject = activeProject
     const owningProjectId = owningProject.id
     const dirtyTabs = [...openTabsByPath.values()].filter(
-      (tab) => !tab.file.truncated && !tab.file.gitIgnored && isDirtyTab(tab)
+      (tab) => canEditWorkbenchFileContent(tab.file) && isDirtyTab(tab)
     )
     if (isEmpty(dirtyTabs)) return
 
@@ -1110,6 +1123,8 @@ export function useWorkbenchEditorController({
     hasUnsavedChanges,
     hasUnsavedOpenTabs,
     canEditSelectedFile,
+    selectedFileEditMode,
+    toggleSelectedFileEditMode,
     openTabs,
     openedFileSnapshots,
     isSavingFile,

@@ -15,11 +15,14 @@ import {
   FileIcon,
   FloppyDiskIcon,
   GitDiffIcon,
+  LockSimpleIcon,
+  PencilSimpleIcon,
   WarningCircleIcon,
   XIcon,
 } from '@phosphor-icons/react'
 import { useWorkbenchEditorTabOverflow } from '@renderer/hooks/useWorkbenchEditorTabOverflow'
 import { useWorkbenchI18n } from '@renderer/i18n'
+import type { WorkbenchEditorEditMode } from '@renderer/models/editor/workbenchEditorEditMode'
 import {
   getWorkbenchGitChangeDisplayPath,
   type WorkbenchGitChangeItem,
@@ -75,6 +78,9 @@ interface EditorTabBarProps {
   selectedFile: Nullable<WorkbenchReadFileResult>
   hasUnsavedChanges: boolean
   canEditSelectedFile: boolean
+  /** 当前文件的只读 / 编辑模式；null 表示当前没有可切换的普通文件（差异、预览等标签）。 */
+  selectedFileEditMode?: Nullable<WorkbenchEditorEditMode>
+  onToggleSelectedFileEditMode?: () => void
   isSavingFile: boolean
   dirtyTabCount: number
   gitDecorations: WorkbenchGitDecorationMap
@@ -109,6 +115,9 @@ function fileNameFromPath(path: string): string {
 export function EditorTabBar({
   openTabs,
   selectedFilePath,
+  selectedFile,
+  selectedFileEditMode = null,
+  onToggleSelectedFileEditMode,
   isSavingFile,
   dirtyTabCount,
   gitDecorations,
@@ -398,6 +407,34 @@ export function EditorTabBar({
           ))}
         </div>
         <div className={styles.editorTabActions}>
+          {!!selectedFileEditMode
+            && !!onToggleSelectedFileEditMode
+            && !selectedFile?.imagePreview
+            && !selectedFile?.truncated && (
+            <IconButton
+              size="icon-sm"
+              className={styles.editorTabActionButton}
+              title={
+                selectedFileEditMode === 'read-only'
+                  ? t('workbench.editorSwitchToEditMode')
+                  : t('workbench.editorSwitchToReadOnlyMode')
+              }
+              label={
+                selectedFileEditMode === 'read-only'
+                  ? t('workbench.editorSwitchToEditMode')
+                  : t('workbench.editorSwitchToReadOnlyMode')
+              }
+              aria-pressed={selectedFileEditMode === 'read-only'}
+              data-edit-mode={selectedFileEditMode}
+              onClick={onToggleSelectedFileEditMode}
+            >
+              {selectedFileEditMode === 'read-only' ? (
+                <LockSimpleIcon size={15} />
+              ) : (
+                <PencilSimpleIcon size={15} />
+              )}
+            </IconButton>
+          )}
           {markdownPreviewAvailable && (
             <IconButton
               size="icon-sm"

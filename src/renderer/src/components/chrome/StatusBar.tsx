@@ -18,6 +18,8 @@ interface StatusBarProps {
     column: number
   }
   hasUnsavedChanges: boolean
+  /** 当前文件处于只读模式（或无法在编辑器里修改）。 */
+  readOnly?: boolean
   isSavingFile: boolean
   openFileCount: number
   commandStatusLabel: string
@@ -33,6 +35,7 @@ export function StatusBar({
   selectedFilePath,
   cursorPosition,
   hasUnsavedChanges,
+  readOnly = false,
   isSavingFile,
   openFileCount,
   commandStatusLabel,
@@ -87,6 +90,11 @@ export function StatusBar({
             : hasUnsavedChanges
               ? t('workbench.unsaved')
               : t('workbench.saved')}
+        </Text>
+      )}
+      {!!selectedFilePath && readOnly && (
+        <Text truncate tone="caption" className={styles.statusBarItem}>
+          {t('workbench.readOnlyFile')}
         </Text>
       )}
       <span className={styles.statusBarSpacer} />
