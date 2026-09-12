@@ -3,6 +3,32 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
+      "version": "0.3.51",
+      "releasedAt": "2026-09-13",
+      "title": {
+        "zh": "「本轮改动」只算 AI 的，回溯不再撤掉你自己的修改",
+        "en": "Round changes count only the AI's edits, and rewind keeps yours"
+      },
+      "added": {
+        "zh": [],
+        "en": []
+      },
+      "fixed": {
+        "zh": [
+          "「本轮改动」卡片和 AI 改动面板把运行期间你在编辑器里保存的、终端或别的程序改的、别的会话写的文件也算成 AI 的；现在只列 AI 改过的文件（含它跑的命令生成的），两边都改过的注明「含 AI 之外的改动」。",
+          "回溯并选择同时回退文件时，会把整个项目恢复到那一刻，连你自己的修改一起撤掉；现在只撤回 AI 改过、之后没人再动过的文件，两边都改过或事后又改过的保留原样，并在回溯说明里列出。这个版本之前的旧会话仍按原方式整体还原。",
+          "共享组件的样式此前被加载顺序压住：深色主题下 Quick Open、菜单和对话框还是浅色的，点中的搜索结果没有选中底色，错误提示文字不是红色；现在都按设计显示，输入框工具栏等共享组件也与 Desktop 一致。",
+          "全屏时设置页标题左侧和文件历史的头部还留着红绿灯的空位。"
+        ],
+        "en": [
+          "The round changes card and the AI changes panel counted files you saved in the editor, changed in a terminal or another program, or that another conversation wrote during a run, as the AI's. They now list only the files the AI changed, including output of its commands, and mark files also edited outside the AI.",
+          "Rewinding with files restored the whole project to that point and reverted your own edits too. It now undoes only files the AI changed that nobody touched since; files edited on both sides or afterwards are kept and listed in the rewind note. Conversations from earlier versions still restore the whole project.",
+          "Load order let older Workbench rules override the shared component styles: in the dark theme Quick Open, menus and dialogs stayed light, a clicked search result showed no selection, and error text was not red. They now look as designed, and shared parts such as the composer toolbar match Desktop.",
+          "In full screen, the settings title and the file history header still left a gap for the window buttons."
+        ]
+      }
+    },
+    {
       "version": "0.3.50",
       "releasedAt": "2026-09-13",
       "title": {
