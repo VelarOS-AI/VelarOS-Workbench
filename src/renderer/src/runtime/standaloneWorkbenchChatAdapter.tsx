@@ -84,6 +84,14 @@ import {
 import { useStandaloneModelPricing } from './standaloneModelPricing'
 import { useStandaloneQueuedDrafts } from './standaloneQueuedDrafts'
 import {
+  appendStandaloneUsageTelemetry,
+  readStandaloneUsageTelemetry,
+  restoreStandaloneUsageTelemetry,
+  retainStandaloneUsageTelemetryThrough,
+  serializeStandaloneUsageTelemetry,
+  type StandaloneUsageTelemetry,
+} from './standaloneUsageTelemetry'
+import {
   applyStandaloneAgentRuntimeEvent,
   applyStandaloneCompletedRunResult,
   attachStandaloneRunChanges,
@@ -178,6 +186,11 @@ interface StandaloneChatState extends StandaloneConversationRuntime {
   readonly workerThreads: StandaloneWorkerThreadProjection
   /** main 最近一次送核前算出的上下文用量；仪表读它，renderer 不自己重算。 */
   readonly contextUsage: Nullable<StandaloneContextUsageEstimate>
+  /**
+   * 主 Agent 每次模型调用的供应方用量（`usage-telemetry`）。共享会话视图按执行时间窗归属，给回答
+   * 末尾算整轮约价；随会话持久化（有上限），重启后已完成回答的约价仍在。
+   */
+  readonly usageTelemetry: readonly StandaloneUsageTelemetry[]
   /** 每轮开跑前的工作区检查点（对话边界 + git 影子提交），回溯时据此一并回退文件。 */
   readonly checkpoints: readonly StandaloneChatCheckpoint[]
   /** 每轮收尾时记在这一轮最后一条助手消息上的运行标记（已处理折叠、耗时、中止/失败角标）。 */
@@ -324,6 +337,7 @@ function createState(
     lastRunFinishedAt: null,
     workerThreads: createEmptyWorkerThreadProjection(),
     contextUsage: null,
+    usageTelemetry: [],
     checkpoints: [],
     messageRunMarkers: [],
     liveRunChanges: null,
@@ -398,6 +412,8 @@ function restoreStoredState(
       ...asRecord(stored.contextUsage),
       kind: 'context-usage-estimate',
     }),
+    // 模型调用用量随会话留存：重启后已完成回答的整轮约价照样算得出。
+    usageTelemetry: restoreStandaloneUsageTelemetry(stored.usageTelemetry),
   }
 }
 
@@ -1363,11 +1379,12 @@ function StandaloneWorkbenchChatSessionSurface({
         droppedRunChangeRecordIds = readRunChangeRecordIds(
           state.messageRunMarkers.filter((marker) => !keptIds.has(marker.messageId))
         )
+        const keptMarkers = state.messageRunMarkers.filter((marker) => keptIds.has(marker.messageId))
         return {
           ...state,
           messages: notice ? [...kept, notice] : kept,
           checkpoints: latest.keptCheckpoints,
-          messageRunMarkers: state.messageRunMarkers.filter((marker) => keptIds.has(marker.messageId)),
+          messageRunMarkers: keptMarkers,
           status: 'idle',
           teamPhase: null,
           activeTurn: null,
@@ -1381,6 +1398,13 @@ function StandaloneWorkbenchChatSessionSurface({
           workerThreads: createEmptyWorkerThreadProjection(),
           // 用量是按被截掉的那段历史算的，留着会让仪表继续显示回溯前的占用。
           contextUsage: null,
+          // 被截掉的执行的模型调用用量一并丢掉，只留仍在会话里的执行的。
+          usageTelemetry: retainStandaloneUsageTelemetryThrough(
+            state.usageTelemetry,
+            keptMarkers.length > 0
+              ? Math.max(...keptMarkers.map((marker) => marker.timestamp))
+              : null
+          ),
           revision: state.revision + 1,
         }
       })
@@ -1824,7 +1848,8 @@ function StandaloneWorkbenchChatSessionSurface({
           : null,
         awaitingConfirmationDetail: chat.awaitingConfirmationDetail,
         lastRunFinishedAt: chat.lastRunFinishedAt,
-        usageTelemetry: [],
+        // 主 Agent 每次模型调用的供应方用量：回答末尾的约价按它算整轮（含全部轮次），不再只数可见问答。
+        usageTelemetry: [...chat.usageTelemetry],
       },
       isStreaming: isActiveChatRun(chat.status),
       streamingAssistantMessageId: activeAssistantMessage?.id,
@@ -1859,6 +1884,7 @@ function StandaloneWorkbenchChatSessionSurface({
       chat.sessionId,
       chat.status,
       chat.teamPhase,
+      chat.usageTelemetry,
       chat.workerThreads,
       projectRoot,
       t,
@@ -2412,6 +2438,15 @@ function applyAgentRuntimeEvent(
 ): StandaloneAgentTerminalKind | null {
   const runtime = readAgentRuntimePayload(record)
   if (!runtime) return null
+  const usageTelemetry = readStandaloneUsageTelemetry(runtime)
+  if (usageTelemetry) {
+    updateState(projectRoot, providerId, (state) => ({
+      ...state,
+      usageTelemetry: appendStandaloneUsageTelemetry(state.usageTelemetry, usageTelemetry),
+      revision: state.revision + 1,
+    }))
+    return null
+  }
   const contextUsage = readStandaloneContextUsageEstimate(runtime)
   if (contextUsage) {
     updateState(projectRoot, providerId, (state) => ({
@@ -2825,6 +2860,7 @@ function readPersistedFieldIdentities(state: StandaloneChatState): unknown[] {
     state.checkpoints,
     state.messageRunMarkers,
     state.contextUsage,
+    state.usageTelemetry,
   ]
 }
 
@@ -2842,6 +2878,9 @@ function serializeStoredState(state: StandaloneChatState): Record<string, unknow
     checkpoints: state.checkpoints,
     messageRunMarkers: state.messageRunMarkers,
     ...(state.contextUsage ? { contextUsage: state.contextUsage } : {}),
+    ...(state.usageTelemetry.length > 0
+      ? { usageTelemetry: serializeStandaloneUsageTelemetry(state.usageTelemetry) }
+      : {}),
     revision: state.revision,
   }
 }

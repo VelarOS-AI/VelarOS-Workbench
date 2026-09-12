@@ -419,7 +419,16 @@ export function parseModelPricingCatalog(value: unknown): ModelPricingCatalog {
     expiresAt: readNonEmptyString(root['expiresAt'], 'model pricing.expiresAt'),
     entries: entries.flatMap((entry): ModelPricingEntry[] => {
       if (!isRecord(entry)) return []
-      const { provider, model, aliases, inputUsdPerMillion, outputUsdPerMillion, source } = entry
+      const {
+        provider,
+        model,
+        aliases,
+        inputUsdPerMillion,
+        outputUsdPerMillion,
+        cacheReadUsdPerMillion,
+        cacheWriteUsdPerMillion,
+        source,
+      } = entry
       if (
         typeof provider !== 'string' || !provider.trim()
         || typeof model !== 'string' || !model.trim()
@@ -435,6 +444,9 @@ export function parseModelPricingCatalog(value: unknown): ModelPricingCatalog {
           : [],
         inputUsdPerMillion,
         outputUsdPerMillion,
+        // 缓存读 / 写单价是可选项：目录给了才透传，回答末尾的整轮约价据此给缓存命中的输入单独计价。
+        ...(isNonNegativePrice(cacheReadUsdPerMillion) ? { cacheReadUsdPerMillion } : {}),
+        ...(isNonNegativePrice(cacheWriteUsdPerMillion) ? { cacheWriteUsdPerMillion } : {}),
         source: typeof source === 'string' ? source : '',
       }]
     }),
