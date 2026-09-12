@@ -301,6 +301,7 @@ export function useWorkbenchController(options: UseWorkbenchControllerOptions = 
     rootEntries: tree.rootEntries,
     selectedEntry: tree.selectedEntry,
     selectedEntryPath: tree.selectedEntryPath,
+    revealRevision: tree.revealRevision,
     selectedFilePath: editor.selectedFilePath,
     selectedFile: editor.selectedFile,
     editorContent: editor.editorContent,

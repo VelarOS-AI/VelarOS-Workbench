@@ -48,6 +48,8 @@ export function useWorkbenchTreeController({ activeProject }: UseWorkbenchTreeCo
   )
   const childrenByPathRef = useLatest(childrenByPath)
   const [selectedEntryPath, setSelectedEntryPath] = useState<Nullable<string>>(null)
+  /** 每次定位（`revealEntryPath`）加一：文件树据此把选中项滚进视野，哪怕选中项本来就是它。 */
+  const [revealRevision, setRevealRevision] = useState(0)
   const [isLoadingTree, setIsLoadingTree] = useState(false)
 
   const rootEntries = childrenByPath.get(ROOT_PATH) ?? EMPTY_ROOT_ENTRIES
@@ -313,6 +315,7 @@ export function useWorkbenchTreeController({ activeProject }: UseWorkbenchTreeCo
 
       const ancestorDirectories = getWorkbenchPathAncestorDirectories(path)
       setSelectedEntryPath(path)
+      setRevealRevision((revision) => revision + 1)
       setExpandedPaths((current) => {
         const next = new Set(current)
         ancestorDirectories.forEach((directoryPath) => next.add(directoryPath))
@@ -375,6 +378,7 @@ export function useWorkbenchTreeController({ activeProject }: UseWorkbenchTreeCo
     rootEntries,
     selectedEntry,
     selectedEntryPath,
+    revealRevision,
     expandedPaths,
     childrenByPath,
     isLoadingTree,

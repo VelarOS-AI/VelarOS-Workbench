@@ -95,6 +95,7 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
         project: activeProject,
         rootEntries: workbench.rootEntries,
         selectedEntryPath: workbench.selectedEntryPath,
+        revealRevision: workbench.revealRevision,
         expandedPaths: workbench.expandedPaths,
         childrenByPath: workbench.childrenByPath,
         isLoadingTree: workbench.isLoadingTree,

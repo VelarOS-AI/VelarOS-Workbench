@@ -514,7 +514,7 @@ void describe('pre-split Workbench shell parity', () => {
     assert.doesNotMatch(editor, /onSelectEntryPath/)
     assert.doesNotMatch(tree, /selectionOriginRef/)
     assert.doesNotMatch(treeActions, /selectionOriginRef/)
-    assert.match(tree, /\[selectedPath, treeData, treeSize\.measured\]/)
+    assert.match(tree, /\[revealRevision, selectedPath, treeData, treeSize\.measured\]/)
     assert.match(tree, /selectionAlreadyMatches/)
   })
 

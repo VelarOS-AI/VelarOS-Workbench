@@ -41,6 +41,8 @@ export type FileTreeApi = TreeApi<FileTreeNodeData>
 interface FileTreeProps {
   entries: WorkbenchDirectoryEntry[]
   selectedPath: Nullable<string>
+  /** 定位请求的计数：变了就把选中项滚进视野，哪怕选中项没变（用户滚走了、又定位到同一个文件）。 */
+  revealRevision: number
   expandedPaths: Set<string>
   childrenByPath: Map<string, WorkbenchDirectoryEntry[]>
   gitDecorations: WorkbenchGitDecorationMap
@@ -84,6 +86,7 @@ function matchFileTreeSearch(node: NodeApi<FileTreeNodeData>, normalizedTerm: st
 export function FileTree({
   entries,
   selectedPath,
+  revealRevision,
   expandedPaths,
   childrenByPath,
   gitDecorations,
@@ -203,21 +206,25 @@ export function FileTree({
   }, [expandedPaths, treeData, treeSize.measured])
 
   // 树要等测到真实尺寸才挂载（见 FileTreeSize.measured）；依赖带上 measured，挂上后补一次选中同步与滚动。
+  // 定位的祖先目录还在加载时节点还不在树里：等 treeData 带上它再选中、滚动。
+  const scrolledRevealRevisionRef = useRef(revealRevision)
   useEffect(() => {
     const tree = treeRef.current
     if (!tree) return
 
     if (selectedPath) {
+      if (!tree.get(selectedPath)) return
       const selectionAlreadyMatches =
         tree.selectedIds.size === 1 && tree.selectedIds.has(selectedPath)
-      if (!selectionAlreadyMatches && tree.get(selectedPath)) {
-        tree.select(selectedPath, { focus: false })
-      }
+      // select 自带滚动；选中项没变时，只有新的定位请求才滚。
+      if (!selectionAlreadyMatches) tree.select(selectedPath, { focus: false })
+      else if (scrolledRevealRevisionRef.current !== revealRevision) void tree.scrollTo(selectedPath)
+      scrolledRevealRevisionRef.current = revealRevision
       return
     }
 
     if (tree.selectedIds.size > 0) tree.deselectAll()
-  }, [selectedPath, treeData, treeSize.measured])
+  }, [revealRevision, selectedPath, treeData, treeSize.measured])
 
   return (
     <div ref={setTreeShell} className={styles.arboristTreeShell}>

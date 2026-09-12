@@ -52,6 +52,8 @@ export interface WorkbenchFilePanelTreeProps {
   project: WorkbenchProject
   rootEntries: WorkbenchDirectoryEntry[]
   selectedEntryPath: Nullable<string>
+  /** 定位请求的计数（见 useWorkbenchTreeController）：变了就把选中项滚进视野。 */
+  revealRevision: number
   expandedPaths: Set<string>
   childrenByPath: Map<string, WorkbenchDirectoryEntry[]>
   isLoadingTree: boolean
@@ -116,6 +118,7 @@ export function FilePanel({
     project,
     rootEntries,
     selectedEntryPath,
+    revealRevision,
     expandedPaths,
     childrenByPath,
     isLoadingTree,
@@ -404,6 +407,7 @@ export function FilePanel({
               <FileTree
                 entries={rootEntries}
                 selectedPath={selectedEntryPath}
+                revealRevision={revealRevision}
                 expandedPaths={expandedPaths}
                 childrenByPath={childrenByPath}
                 gitDecorations={gitDecorations}

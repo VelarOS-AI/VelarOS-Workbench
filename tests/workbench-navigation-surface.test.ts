@@ -102,6 +102,28 @@ void describe('Workbench navigation surface', () => {
     assert.match(presentation, /model\.actions\.navigate\(\{ target: 'file', path: pendingFileOpenPath \}\)/u)
   })
 
+  void test('opening a file locates it in the file tree even when it already is the current file', () => {
+    const pageModel = readSource('src/renderer/src/hooks/useStandaloneWorkbenchPageModel.tsx')
+    const treeController = readSource('src/renderer/src/hooks/useWorkbenchTreeController.ts')
+    const panel = readSource('src/renderer/src/components/files/FilePanel.tsx')
+    const adapter = readSource('src/renderer/src/components/embedded/workbenchEmbeddedKernelAdapter.ts')
+    const tree = readSource('src/renderer/src/components/files/FileTree.tsx')
+
+    // 当前文件不变时「跟着当前文件定位」的 effect 不会动：导航的 file 分支自己无条件定位一次。
+    const fileCase = sliceSource(
+      sliceSource(pageModel, 'const navigate = useMemoizedFn(', '\n  })\n'),
+      "case 'file':",
+      "case 'file-preview':"
+    )
+    assert.match(fileCase, /\n\s*await workbench\.revealEntryPath\(request\.path, \{ quiet: true \}\)\n\s*return/u)
+    // 每次定位都记一笔，一路传到文件树：选中项没变（用户滚走了）也要滚回视野。
+    assert.match(treeController, /setSelectedEntryPath\(path\)\n\s*setRevealRevision\(\(revision\) => revision \+ 1\)/u)
+    assert.match(adapter, /revealRevision: workbench\.revealRevision/u)
+    assert.match(panel, /revealRevision=\{revealRevision\}/u)
+    assert.match(tree, /if \(!selectionAlreadyMatches\) tree\.select\(selectedPath, \{ focus: false \}\)\n\s*else if \(scrolledRevealRevisionRef\.current !== revealRevision\) void tree\.scrollTo\(selectedPath\)/u)
+    assert.match(tree, /\}, \[revealRevision, selectedPath, treeData, treeSize\.measured\]\)/u)
+  })
+
   void test('the edge-sync effect keeps its job and documents how it splits work with navigate', () => {
     const pageModel = readSource('src/renderer/src/hooks/useStandaloneWorkbenchPageModel.tsx')
 

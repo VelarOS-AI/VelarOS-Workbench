@@ -681,12 +681,14 @@ export function useStandaloneWorkbenchPageModel(
 
     switch (request.target) {
       case 'file':
-        // 文件树跟随编辑器的当前文件自己定位（见 useWorkbenchController），这里只管把文件带到编辑器。
         if (request.line === undefined) await editorNavigation.selectFile(request.path)
         else
           await editorNavigation.goToLocation(request.path, request.line, request.column, {
             focus: request.focus,
           })
+        // 文件树平时跟着编辑器的当前文件自己定位（见 useWorkbenchController），但文件本来就是当前文件时
+        // 当前文件不变、那边不会动；导航是「把它带到眼前」，左侧也要定位到它。
+        await workbench.revealEntryPath(request.path, { quiet: true })
         return
       case 'file-preview':
         editorNavigation.openLightTab(request.tab)
