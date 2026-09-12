@@ -90,8 +90,56 @@ void describe('Workbench window and chat chrome details', () => {
     assert.match(presentation, /data-mac-title-inset=\{macTitleInset && !windowFullScreen\}/u)
     assert.match(
       shellStyles,
-      /\[data-mac-title-inset='true'\] \.ideUnifiedTopBar \{\n\s*padding-left: 76px;/u
+      /\[data-mac-title-inset='true'\] \.ideUnifiedTopBar,\n[^{]*\[data-mac-title-inset='true'\] \.workbenchSettingsHeader \{\n\s*padding-left: 76px;/u
     )
+  })
+
+  void test('pushes full-screen changes to the window that changed, one window at a time', () => {
+    const first = new FakeWorkbenchWindow()
+    const second = new FakeWorkbenchWindow()
+    installWorkbenchWindowState(first as unknown as BrowserWindow)
+    installWorkbenchWindowState(second as unknown as BrowserWindow)
+
+    second.fullScreen = true
+    second.emit('enter-full-screen')
+
+    assert.deepEqual(first.sent, [])
+    assert.deepEqual(second.sent, [
+      { channel: WorkbenchWindowStateChannels.changed, payload: { fullScreen: true } },
+    ])
+
+    // 设置页与文件历史不是独立窗口：主进程只有一种 BrowserWindow，由创建项目窗口的工厂装上推送，
+    // 所以它们跟着所在的项目窗口一起拿到全屏状态。以后若另开窗口，这里会先失败。
+    const windowFactories = listSourceFiles('src/main').filter((file) =>
+      /new BrowserWindow\(/u.test(readSource(file))
+    )
+    assert.deepEqual(windowFactories, [path.join('src/main', 'index.ts')])
+    assert.equal(readSource('src/main/index.ts').match(/new BrowserWindow\(/gu)?.length, 1)
+  })
+
+  void test('drops the traffic-light inset on the settings page and never reserves it in file history', () => {
+    const presentation = readSource('src/renderer/src/StandaloneWorkbenchPagePresentation.tsx')
+    const settingsDialog = readSource('src/renderer/src/components/settings/WorkbenchSettingsDialog.tsx')
+    const settingsStyles = readSource('src/renderer/src/styles/14-settings.module.css')
+    const editorPanel = readSource('src/renderer/src/components/editor/EditorPanel.tsx')
+    const historyView = readSource('src/renderer/src/components/editor/FileHistoryView.tsx')
+    const historyStyles = readSource('src/renderer/src/styles/10-history.module.css')
+
+    // 设置页是外壳里的同窗浮层（不走 portal），外壳上的 data-mac-title-inset 管得到它的标题行。
+    const shellStart = presentation.indexOf('data-mac-title-inset=')
+    const settingsAt = presentation.indexOf('<WorkbenchSettingsDialog')
+    const quickOpenAt = presentation.indexOf('<QuickOpen')
+    assert.ok(shellStart > 0 && shellStart < settingsAt && settingsAt < quickOpenAt)
+    assert.doesNotMatch(settingsDialog, /createPortal/u)
+    // 左侧常规留白与侧栏导航文字对齐；76px 只在外壳标记了红绿灯空位时才撑出来。
+    const header = ruleBody(settingsStyles, '.workbenchSettingsHeader')
+    assert.match(header, /padding-inline: 18px 10px;/u)
+    assert.doesNotMatch(header, /76px/u)
+
+    // 文件历史在编辑区里就地展开，头部压不到红绿灯，也不是窗口拖拽区。
+    assert.match(editorPanel, /<FileHistoryView/u)
+    assert.match(historyView, /<header className=\{styles\.editorGitHistoryHeader\}>/u)
+    assert.doesNotMatch(historyStyles, /78px|-webkit-app-region|fileHistoryWindow/u)
   })
 
   void test('loads the shared UI stylesheets before every app module', () => {

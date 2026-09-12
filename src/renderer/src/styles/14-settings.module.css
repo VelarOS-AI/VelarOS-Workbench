@@ -21,13 +21,17 @@
   outline: none;
 }
 
+/*
+ * 左侧 18px 让标题与侧栏导航项的文字对齐（侧栏 8px + 导航项 10px）；macOS 非全屏时红绿灯压在这一行上，
+ * 外壳上的 data-mac-title-inset 再把左侧撑到 76px（见 01-shell）。
+ */
 .workbenchSettingsHeader {
   display: flex;
   min-height: var(--workbench-settings-header-height);
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding-inline: 76px 10px;
+  padding-inline: 18px 10px;
   border-bottom: 1px solid var(--workbench-border);
   background: var(--workbench-toolbar);
   -webkit-app-region: drag;

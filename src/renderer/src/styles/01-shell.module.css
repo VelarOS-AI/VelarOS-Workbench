@@ -741,8 +741,10 @@
 }
 
 /* macOS hiddenInset: the unified title row owns the traffic-light inset.
- * 全屏时红绿灯随标题栏一起收起，外壳上的 data-mac-title-inset 随之为 false，空位一并还回去。 */
-.workbenchShell[data-standalone='true'][data-mac-title-inset='true'] .ideUnifiedTopBar {
+ * 全屏时红绿灯随标题栏一起收起，外壳上的 data-mac-title-inset 随之为 false，空位一并还回去。
+ * 设置页是盖满整窗的同窗浮层，它的标题行同样压在红绿灯下面，跟顶栏一起让位、一起收回。 */
+.workbenchShell[data-standalone='true'][data-mac-title-inset='true'] .ideUnifiedTopBar,
+.workbenchShell[data-standalone='true'][data-mac-title-inset='true'] .workbenchSettingsHeader {
   padding-left: 76px;
 }
 
