@@ -61,7 +61,7 @@
 }
 
 .projectCard:hover,
-.projectCard:focus-within {
+.projectCard:is(:focus-visible, :has(:focus-visible)) {
   background: color-mix(in srgb, var(--workbench-hover) 72%, transparent);
 }
 

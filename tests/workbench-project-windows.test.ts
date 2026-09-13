@@ -68,7 +68,11 @@ void describe('Workbench project window ownership', () => {
     assert.match(control, /projectAddLocal[\s\S]*projectCloneRemote/u)
     assert.doesNotMatch(control, /projectSwitch|projectOpenNewWindow/u)
     assert.match(control, /data-velar-theme-scope=\{themeTokens\?\.scope/u)
-    assert.match(styles, /\.projectControlRecentRow:hover,[\s\S]*\.projectControlRecentRow:focus-within/u)
+    // 键盘走到行上才跟着高亮；鼠标点过的按钮留着焦点，用 :focus-within 会一直亮着。
+    assert.match(
+      styles,
+      /\.projectControlRecentRow:hover,\s*\.projectControlRecentRow:is\(:focus-visible, :has\(:focus-visible\)\)/u
+    )
     assert.match(styles, /\.projectControlActions[\s\S]*flex-direction:\s*column/u)
     assert.match(
       styles,

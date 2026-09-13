@@ -843,12 +843,12 @@
 }
 
 .editorTabListItem:hover,
-.editorTabListItem:focus-within {
+.editorTabListItem:is(:focus-visible, :has(:focus-visible)) {
   background: var(--workbench-hover);
 }
 
 .editorTabListItem[data-active='true']:hover,
-.editorTabListItem[data-active='true']:focus-within {
+.editorTabListItem[data-active='true']:is(:focus-visible, :has(:focus-visible)) {
   background: var(--workbench-selection-bg);
 }
 

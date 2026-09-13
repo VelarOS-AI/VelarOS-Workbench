@@ -217,10 +217,12 @@ void describe('Workbench window and chat chrome details', () => {
     const toolbar = readSource('src/renderer/src/components/chrome/TopToolbar.tsx')
     assert.match(toolbar, /function WorkbenchTopIconAction[\s\S]*<IconButton\n\s*variant="ghost"\n\s*size="icon-sm"/u)
     assert.doesNotMatch(topStyles, /\.topToolbarIconButton/u)
+    // 运行按钮只染色（绿、悬停淡绿底、禁用灰），边长与圆角照旧归 icon-sm。
     assert.deepEqual(
       [...topStyles.matchAll(/\n(\.topRunButton[^{]*) \{/gu)].map((match) => match[1]),
-      ['.topRunButton:disabled']
+      ['.topRunButton', '.topRunButton:hover:not(:disabled)', '.topRunButton:disabled']
     )
+    assert.match(topStyles, /\n\.topRunButton \{\n\s*color: var\(--status-green\);\n\}/u)
     assert.match(layoutStyles, /\.rightToolStrip \{\n\s*@apply [^;]*\bitems-center\b/u)
     assert.match(layoutStyles, /\.rightToolRail \{[^}]*width: var\(--workbench-right-rail-width\);/u)
   })

@@ -367,7 +367,7 @@ export function createWorkbenchCommentExtension(
       width: '100%',
       height: '6px',
     },
-    '.cm-workbenchCommentMarker:hover .cm-workbenchCommentMarkerBubble, .cm-workbenchCommentMarker:focus-within .cm-workbenchCommentMarkerBubble':
+    '.cm-workbenchCommentMarker:hover .cm-workbenchCommentMarkerBubble, .cm-workbenchCommentMarker:is(:focus-visible, :has(:focus-visible)) .cm-workbenchCommentMarkerBubble':
       {
         display: 'block',
       },
