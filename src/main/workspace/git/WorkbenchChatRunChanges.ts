@@ -5,19 +5,20 @@ import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { AppError } from '@velaros-ai/core/error'
 import { writeJsonFileAtomically } from '@velaros-ai/core/utils/FilePersistence'
 
-import type {
-  WorkbenchChatCheckpointCaptureRequest,
-  WorkbenchChatCheckpointCaptureResult,
-  WorkbenchChatRunChangeBaseFileRequest,
-  WorkbenchChatRunChangeBaseFileResult,
-  WorkbenchChatRunChangesCaptureRequest,
-  WorkbenchChatRunChangesDeleteRequest,
-  WorkbenchChatRunChangesReadRequest,
-  WorkbenchChatRunChangesRecord,
-  WorkbenchChatRunChangesRewindRequest,
-  WorkbenchChatRunChangesRewindResult,
-  WorkbenchChatRunChangesSummary,
-  WorkbenchChatRunFileChange,
+import {
+  type WorkbenchChatCheckpointCaptureRequest,
+  type WorkbenchChatCheckpointCaptureResult,
+  type WorkbenchChatRunChangeBaseFileRequest,
+  type WorkbenchChatRunChangeBaseFileResult,
+  type WorkbenchChatRunChangesCaptureRequest,
+  type WorkbenchChatRunChangesDeleteRequest,
+  type WorkbenchChatRunChangesReadRequest,
+  type WorkbenchChatRunChangesRecord,
+  type WorkbenchChatRunChangesRewindRequest,
+  type WorkbenchChatRunChangesRewindResult,
+  type WorkbenchChatRunChangesSummary,
+  WorkbenchChatRunChangesSummaryMaxPaths,
+  type WorkbenchChatRunFileChange,
 } from '../../../shared/workbenchGit'
 
 import {
@@ -388,6 +389,9 @@ function summarize(
     additions: changes.reduce((total, change) => total + change.additions, 0),
     deletions: changes.reduce((total, change) => total + change.deletions, 0),
     error: null,
+    ...(changes.length <= WorkbenchChatRunChangesSummaryMaxPaths
+      ? { paths: changes.map((change) => change.path) }
+      : {}),
   }
 }
 

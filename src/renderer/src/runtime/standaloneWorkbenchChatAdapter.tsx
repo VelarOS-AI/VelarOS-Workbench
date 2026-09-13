@@ -135,6 +135,7 @@ import {
   createStandaloneSystemNotice,
   isStoredStandaloneCheckpoint,
   NoRewindFileOutcome,
+  readRemovedRunChanges,
   resolveRewindFidelity,
   resolveRewindFileCapability,
   type RewindFileOutcome,
@@ -1307,7 +1308,10 @@ function StandaloneWorkbenchChatSessionSurface({
     const session = getState(projectRoot, providerId)
     const selection = selectStandaloneRewind(session.messages, session.checkpoints, messageId)
     if (!selection) return null
-    const survey = surveyRewindRemoval(selection.removedMessages)
+    const survey = surveyRewindRemoval(
+      selection.removedMessages,
+      readRemovedRunChanges(session.messageRunMarkers, selection.removedMessages)
+    )
     return buildRewindPlan({
       survey,
       files: resolveRewindFileCapability({
@@ -1336,7 +1340,10 @@ function StandaloneWorkbenchChatSessionSurface({
       ? selectStandaloneRewind(session.messages, session.checkpoints, messageId)
       : null
     if (!selection) throw new AppError('NOT_FOUND', t('workbench.chatRewindMessageNotFound'))
-    const survey = surveyRewindRemoval(selection.removedMessages)
+    const survey = surveyRewindRemoval(
+      selection.removedMessages,
+      readRemovedRunChanges(session.messageRunMarkers, selection.removedMessages)
+    )
     const files = resolveRewindFileCapability({
       checkpoint: selection.checkpoint,
       changedFilePaths: survey.changedFilePaths,

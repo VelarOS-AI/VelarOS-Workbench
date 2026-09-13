@@ -10,6 +10,7 @@ import {
   buildRewindPlan,
   isStoredStandaloneCheckpoint,
   NoRewindFileOutcome,
+  readRemovedRunChanges,
   resolveRewindFidelity,
   resolveRewindFileCapability,
   selectStandaloneRewind,
@@ -82,6 +83,33 @@ void describe('standalone Workbench rewind', () => {
       changedFilePaths: ['src/a.ts'],
       removedNoticeCount: 0,
     })
+  })
+
+  void test('counts the files the round changes cards list, including what commands wrote', () => {
+    const removed = selectStandaloneRewind(messages, checkpoints, 'turn-2')!.removedMessages
+    const summary = (recordId: string, paths?: string[]) => ({
+      recordId,
+      capturedAt: 1,
+      fileCount: paths?.length ?? 3,
+      additions: 1,
+      deletions: 0,
+      error: null,
+      ...(paths ? { paths } : {}),
+    })
+    const markers = [
+      { messageId: 'reply-1', runChanges: summary('r1', ['src/old.ts']) },
+      { messageId: 'reply-2', runChanges: summary('r2', ['src/a.ts', 'dist/out.js']) },
+      { messageId: 'reply-3', runChanges: summary('r3', ['dist/out.js', 'src/b.ts']) },
+    ]
+
+    // 每一轮都带着文件清单：就是卡片上那些，命令写的 dist/out.js 也算，重复的只数一次。
+    const listed = readRemovedRunChanges(markers, removed)
+    assert.deepEqual(listed.map(({ recordId }) => recordId), ['r2', 'r3'])
+    assert.deepEqual(surveyRewindRemoval(removed, listed).changedFilePaths, ['src/a.ts', 'dist/out.js', 'src/b.ts'])
+
+    // 有一轮没有清单（旧记录、超大的一轮）：再并上工具结果报的文件。
+    const partial = [summary('r2', ['dist/out.js']), summary('r3')]
+    assert.deepEqual(surveyRewindRemoval(removed, partial).changedFilePaths, ['dist/out.js', 'src/a.ts'])
   })
 
   void test('offers file rollback only when tools ran and a snapshot exists', () => {

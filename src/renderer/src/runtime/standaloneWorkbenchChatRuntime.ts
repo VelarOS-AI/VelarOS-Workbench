@@ -391,7 +391,7 @@ function restoreStandaloneRunMarkers(
 
 function readStoredRunChanges(value: unknown): WorkbenchChatRunChangesSummary | null {
   const record = asRecord(value)
-  const { recordId, capturedAt, fileCount, additions, deletions, error } = record
+  const { recordId, capturedAt, fileCount, additions, deletions, error, paths } = record
   if (
     typeof recordId !== 'string'
     || typeof capturedAt !== 'number'
@@ -399,6 +399,7 @@ function readStoredRunChanges(value: unknown): WorkbenchChatRunChangesSummary | 
     || !isCount(additions)
     || !isCount(deletions)
   ) return null
+  const storedPaths = readStoredRunChangePaths(paths, fileCount)
   return {
     recordId,
     capturedAt,
@@ -406,7 +407,16 @@ function readStoredRunChanges(value: unknown): WorkbenchChatRunChangesSummary | 
     additions,
     deletions,
     error: readNonBlankString(error),
+    ...(storedPaths ? { paths: storedPaths } : {}),
   }
+}
+
+/** 摘要里的文件清单：条数要对得上计数，形状不对就当没有（回溯时退回按工具报的文件数）。 */
+function readStoredRunChangePaths(value: unknown, fileCount: number): string[] | null {
+  if (!Array.isArray(value) || value.length !== fileCount) return null
+  return value.every((path): path is string => typeof path === 'string' && path.length > 0)
+    ? value
+    : null
 }
 
 function isCount(value: unknown): value is number {

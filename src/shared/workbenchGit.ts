@@ -145,7 +145,15 @@ export interface WorkbenchChatRunChangesSummary {
   deletions: number
   /** 采集失败的原因；成功（包括这一轮没改文件）为 null。 */
   error: string | null
+  /**
+   * 这一轮改过的文件（相对项目根，就是卡片上列的那些）：回溯确认框要同步数出「这几轮改了几个文件」。
+   * 超过 {@link WorkbenchChatRunChangesSummaryMaxPaths} 个、或是早于它的记录时没有，只剩计数。
+   */
+  paths?: string[]
 }
+
+/** 改动摘要最多带这么多个路径：再多的一轮只留计数，不让聊天记录跟着膨胀。 */
+export const WorkbenchChatRunChangesSummaryMaxPaths = 1_000
 
 export type WorkbenchChatRunFileChangeStatus = 'added' | 'deleted' | 'modified'
 

@@ -2,7 +2,10 @@ import { isConversationTurnInputMessage, isSystemNoticeMessage } from '@velaros-
 import type { ConversationRewindPlan } from '@velaros-ai/ui/conversation'
 
 import type { ChatMessage } from '@shared/contracts'
-import type { WorkbenchChatRunChangesRewindResult } from '@shared/workbenchGit'
+import type {
+  WorkbenchChatRunChangesRewindResult,
+  WorkbenchChatRunChangesSummary,
+} from '@shared/workbenchGit'
 
 /**
  * 聊天回溯的判据层（纯函数，零 IO），与 Desktop 的 chatHistoryRewind / chatRewindNotice 同一套规则：
@@ -82,7 +85,26 @@ export function selectStandaloneRewind(
   }
 }
 
-export function surveyRewindRemoval(removedMessages: readonly ChatMessage[]): RewindRemovalSurvey {
+/** 被移除的那些回答挂着的「本轮改动」摘要。 */
+export function readRemovedRunChanges(
+  markers: ReadonlyArray<{ messageId: string; runChanges?: WorkbenchChatRunChangesSummary }>,
+  removedMessages: readonly ChatMessage[]
+): WorkbenchChatRunChangesSummary[] {
+  const removedIds = new Set(removedMessages.map((message) => message.id))
+  return markers.flatMap((marker) =>
+    marker.runChanges && removedIds.has(marker.messageId) ? [marker.runChanges] : []
+  )
+}
+
+/**
+ * 清点被移除的区间。改过的文件与改动卡同一口径：被移除各轮的「本轮改动」摘要都带着文件清单时就是它们
+ * （Agent 用命令改的也在里面）；缺了哪一轮的清单（早于它的记录、超大的一轮、采集失败、不是 git 仓库）
+ * 就再并上工具结果里报的文件。
+ */
+export function surveyRewindRemoval(
+  removedMessages: readonly ChatMessage[],
+  removedRunChanges: readonly WorkbenchChatRunChangesSummary[] = []
+): RewindRemovalSurvey {
   const toolNames = new Set<string>()
   const changedFilePaths = new Set<string>()
   let toolCallCount = 0
@@ -106,12 +128,18 @@ export function surveyRewindRemoval(removedMessages: readonly ChatMessage[]): Re
     }
   }
 
+  const changedRounds = removedRunChanges.filter((summary) => summary.fileCount > 0 || summary.error)
+  const attributedPaths = changedRounds.flatMap((summary) => summary.paths ?? [])
+  const everyRoundListed = changedRounds.length > 0 && changedRounds.every((summary) => summary.paths)
+
   return {
     removedMessageCount: removedMessages.length,
     removedTurnCount,
     toolCallCount,
     toolNames: [...toolNames],
-    changedFilePaths: [...changedFilePaths],
+    changedFilePaths: everyRoundListed
+      ? [...new Set(attributedPaths)]
+      : [...new Set([...attributedPaths, ...changedFilePaths])],
     removedNoticeCount,
   }
 }

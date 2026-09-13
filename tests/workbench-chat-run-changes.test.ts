@@ -93,6 +93,7 @@ void describe('Workbench chat run changes', () => {
         additions: 1 + 1 + 1 + 5_000,
         deletions: 1 + 1,
         error: null,
+        paths: ['created.ts', 'generated.ts', 'image.bin', 'odd\tname.ts', 'removed.ts', 'tracked.ts'],
       })
 
       const record = await store.read({
@@ -457,6 +458,11 @@ void describe('Workbench chat run changes attributed to the agent', () => {
       assert.deepEqual(
         { fileCount: summary.fileCount, error: summary.error },
         { fileCount: 5, error: null }
+      )
+      // 摘要带着卡片上列的那些文件：回溯确认框按它同步数出改了几个文件。
+      assert.deepEqual(
+        [...(summary.paths ?? [])].sort(),
+        ['created.ts', 'generated/out.txt', 'mixed.ts', 'removed.ts', 'tracked.ts']
       )
       const record = await attributed.read(round.request)
       assert.ok(record)
