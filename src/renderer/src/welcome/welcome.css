@@ -18,9 +18,11 @@
   color: var(--foreground);
 }
 
+/* 两栏在竖直方向上彼此居中：最近项目再多，左侧也停在中间。 */
 .workbench-welcome__panel {
   display: grid;
   grid-template-columns: minmax(260px, 1fr) minmax(320px, 1.25fr);
+  align-items: center;
   gap: 56px;
   width: 100%;
   max-width: 920px;
@@ -56,12 +58,19 @@
   min-width: 0;
 }
 
+/*
+ * 最近项目不跟着条目无限变高：最多八行左右，窗口矮时按窗口收，超出的在列表里滚动。四周留 2px，滚动
+ * 容器不裁掉行内按钮的焦点环。
+ */
 .workbench-welcome__recent-list {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  margin: 0;
-  padding: 0;
+  max-height: min(440px, calc(100vh - 220px));
+  margin: -2px;
+  padding: 2px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   list-style: none;
 }
 

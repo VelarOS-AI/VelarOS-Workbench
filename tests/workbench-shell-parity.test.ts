@@ -502,6 +502,12 @@ void describe('pre-split Workbench shell parity', () => {
     assert.doesNotMatch(welcome, /Kernel：内置宿主/)
     assert.doesNotMatch(styles, /workbench-welcome__kernel-status/)
     assert.match(styles, /\.workbench-welcome__hero[\s\S]*min-height:\s*211px/)
+    // 左侧在竖直方向居中；最近项目有上限，超出的在列表里滚动。
+    assert.match(styles, /\.workbench-welcome__panel \{[^}]*align-items: center;/)
+    assert.match(
+      styles,
+      /\.workbench-welcome__recent-list \{[^}]*max-height: min\(440px, calc\(100vh - 220px\)\);[^}]*overflow-y: auto;/
+    )
   })
 
   void test('projects every active editor file into the tree without alternating sync state', () => {
