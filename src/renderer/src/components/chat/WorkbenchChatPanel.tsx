@@ -61,7 +61,8 @@ type WorkbenchChatFolderMember = WorkbenchChatSessionMember
 const EmptyWorkbenchBrowserElementSelections: readonly WorkbenchBrowserElementSelectionDelivery[] =
   []
 const EmptyWorkbenchChatFileReferences: readonly WorkbenchChatFileReferenceDelivery[] = []
-const WorkbenchChatScrollNavigatorVisibility = createChatScrollNavigatorVisibilityStore()
+/** 楼层导航默认收起：侧栏窄，常驻的一列按钮压着正文；要用时点标题栏的开关。 */
+const WorkbenchChatScrollNavigatorVisibility = createChatScrollNavigatorVisibilityStore(true)
 
 export interface WorkbenchChatPanelProps {
   providerId?: WorkbenchChatProviderId

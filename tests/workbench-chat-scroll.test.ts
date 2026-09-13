@@ -50,7 +50,8 @@ void describe("Workbench shared chat scrolling", () => {
       "src/renderer/src/runtime/standaloneWorkbenchChatAdapter.tsx",
     );
 
-    assert.match(panel, /createChatScrollNavigatorVisibilityStore\(\)/u);
+    // 楼层导航默认收起，点标题栏的开关才出来。
+    assert.match(panel, /createChatScrollNavigatorVisibilityStore\(true\)/u);
     assert.match(panel, /useChatScrollNavigatorHidden/u);
     assert.match(panel, /ChatScrollNavigatorVisibilityToggle/u);
     assert.match(panel, /hidden=\{scrollNavigatorHidden\}/u);
