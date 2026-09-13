@@ -183,16 +183,23 @@ void describe('Project capability provider', () => {
       }
 
       await run('project:write', { path: 'notes/a.md', content: 'first\n', mode: 'create' })
-      const edited = await run('project:edit', {
-        operations: [{ operation: { type: 'replace_text', path: 'notes/a.md', oldText: 'first', newText: 'second' } }],
-      })
+      const editTool = project.tools.find((tool) => tool.name === 'project:edit')!
+      // Exercise both the published dependency and the local candidate through their declared schema.
+      const edit = (oldText: string, newText: string) => {
+        const operation = { type: 'replace_text', path: 'notes/a.md', oldText, newText }
+        const flat = { edits: [operation] }
+        const input = editTool.schema.safeParse(flat).success
+          ? flat : { operations: [{ operation }] }
+        const parsed = editTool.schema.safeParse(input)
+        assert(parsed.success)
+        return run('project:edit', parsed.data)
+      }
+      const edited = await edit('first', 'second')
       await run('project:rollback', { transactionId: edited.transactionId })
       await run('project:read', { path: 'notes/a.md' })
       await run('project:run', { command: 'echo built > out.txt' })
       // 失败的写入也要收尾（报空清单），不留一个永远没结束的写入窗。
-      await assert.rejects(() => run('project:edit', {
-        operations: [{ operation: { type: 'replace_text', path: 'notes/a.md', oldText: 'missing', newText: 'x' } }],
-      }))
+      await assert.rejects(() => edit('missing', 'x'))
 
       assert.deepEqual(reports, [
         'write:start', ['write:end', ['notes/a.md']],

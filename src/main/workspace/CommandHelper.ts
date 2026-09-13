@@ -93,12 +93,28 @@ class CommandHelper {
   public appendOutput(buffer: WorkspaceCommandBuffer, chunk: string): void {
     const nextText = `${buffer.text}${chunk}`
     if (nextText.length > buffer.maxChars) {
-      buffer.text = nextText.slice(-buffer.maxChars)
+      let start = nextText.length - buffer.maxChars
+      const first = nextText.charCodeAt(start)
+      const previous = nextText.charCodeAt(start - 1)
+      if (first >= 0xdc00 && first <= 0xdfff && previous >= 0xd800 && previous <= 0xdbff) start++
+      buffer.text = nextText.slice(start)
       buffer.truncated = true
       return
     }
 
     buffer.text = nextText
+  }
+
+  /** 两条输出流都可能承载失败诊断；每条摘要最多 1,000 字符。 */
+  public summarizeFailureOutput(stdout: string, stderr: string): string[] {
+    return (['stdout', 'stderr'] as const).flatMap((stream) => {
+      const text = (stream === 'stdout' ? stdout : stderr).trim()
+      if (!text) return []
+      const prefix = `${stream}:\n`
+      const buffer = this.createOutputBuffer(1_000 - prefix.length)
+      this.appendOutput(buffer, text)
+      return [`${prefix}${buffer.text}`]
+    })
   }
 
   /** 获取当前平台应该如何调用 shell 执行这条命令。 */

@@ -1,5 +1,7 @@
 import { isAbsolute, resolve } from 'node:path'
 
+import { z } from 'zod'
+
 import type { ToolCategoryDefinition, ToolCategoryId } from '@velaros-ai/agent/protocol'
 import {
   type ApprovalPort,
@@ -24,7 +26,9 @@ import {
   withProjectApproval,
 } from '@velaros-ai/project/composition'
 import {
+  ProjectCodeLanguageActions,
   type ProjectCodeQuery,
+  ProjectCodeQuerySchema,
   type ProjectCommandResult,
   type ProjectMutationAuthorizationInput,
   type ProjectRunCommandOptions,
@@ -55,6 +59,19 @@ import {
 import { CommandHelper } from './CommandHelper'
 import { CommandRunner } from './CommandRunner'
 import { PathResolver } from './PathResolver'
+
+function createAvailableCodeQuerySchema(withIndex: boolean) {
+  const actions = new Set<string>(ProjectCodeLanguageActions)
+  // These graph contracts have no matching Workbench backend implementation yet.
+  const unsupported = new Set(['trace', 'find_dead_code', 'type_hierarchy'])
+  const [first, ...remaining] = ProjectCodeQuerySchema.options.filter((schema) =>
+    actions.has(schema.shape.action.value)
+      || (withIndex && !unsupported.has(schema.shape.action.value)))
+  if (!first) throw new Error('Project language query schema has no actions')
+  return z.discriminatedUnion('action', [first, ...remaining])
+}
+const LanguageCodeQuerySchema = createAvailableCodeQuerySchema(false)
+const IndexedCodeQuerySchema = createAvailableCodeQuerySchema(true)
 
 type WorkbenchProjectToolDefinition = WorkbenchAgentToolDefinition
 
@@ -88,7 +105,8 @@ interface ProjectCapabilityProviderOptions {
 class ProjectCapabilityProvider implements WorkbenchProjectCapabilityProvider {
   private readonly projects = new Map<string, Promise<WorkbenchProjectCapability>>()
   private readonly createKernel: (projectRoot: string) => Promise<ProjectKernel>
-  private readonly commandRunner = new CommandRunner(new PathResolver(), new CommandHelper())
+  private readonly commandHelper = new CommandHelper()
+  private readonly commandRunner = new CommandRunner(new PathResolver(), this.commandHelper)
   private readonly codeGraphResource: WorkbenchCodeGraphResource
   private readonly velarLogicGraph?: WorkbenchVelarLogicGraphService
 
@@ -207,11 +225,17 @@ class ProjectCapabilityProvider implements WorkbenchProjectCapabilityProvider {
     projectRoot: string,
     kernel: ProjectKernel
   ): readonly WorkbenchProjectToolDefinition[] {
+    const hasIndex = (): boolean => this.codeGraphResource.describe().available
+      && !this.velarLogicGraph?.isProject(projectRoot)
     return Object.values(projectTools).map((tool) => ({
       name: tool.name,
       categoryId: tool.category,
       role: tool.role,
-      description: tool.description,
+      get description() {
+        return tool.name === ProjectToolNames.queryCode && !hasIndex()
+          ? `查询项目代码。当前可用 action：${ProjectCodeLanguageActions.join('、')}。先用 find_symbols 定位声明，再按任务查询引用、导入、导出或诊断。`
+          : tool.description
+      },
       permissions: [...tool.permissions],
       capabilities: tool.capabilities,
       requiredModelInputModalities: tool.requiredModelInputModalities,
@@ -220,7 +244,11 @@ class ProjectCapabilityProvider implements WorkbenchProjectCapabilityProvider {
       outputInline: tool.outputInline,
       hideWhenUnavailable: tool.hideWhenUnavailable,
       providerId: ProjectModId,
-      schema: tool.schema as WorkbenchProjectToolDefinition['schema'],
+      get schema() {
+        return (tool.name === ProjectToolNames.queryCode
+          ? hasIndex() ? IndexedCodeQuerySchema : LanguageCodeQuerySchema
+          : tool.schema) as WorkbenchProjectToolDefinition['schema']
+      },
       surfaces: bindProjectToolSurfaces(tool.surfaces, (toolContext) =>
         this.createProjectToolContext(projectRoot, kernel, toolContext)),
       isAvailable: tool.isAvailable
@@ -371,7 +399,7 @@ class ProjectCapabilityProvider implements WorkbenchProjectCapabilityProvider {
       verification: {
         kind: 'unknown',
         status: result.timedOut ? 'timed-out' : result.success ? 'passed' : 'failed',
-        issues: result.success ? [] : [result.stderr || `命令退出码：${result.exitCode}`],
+        issues: result.success ? [] : this.commandHelper.summarizeFailureOutput(result.stdout, result.stderr),
       },
     }
   }

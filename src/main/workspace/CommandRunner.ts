@@ -1,9 +1,7 @@
-/**
- * 工作台一次性命令运行器（照搬 desktop `workspace/workbench/CommandRunner.ts`；CommandHelper 改为
- * 本目录裁剪版，见 `CommandHelper.ts` 头注。唯一增量是 `allowDangerous`：问过用户的危险命令能真的跑）。
- */
+/** Workbench 前台命令执行：有界增量输出、超时/取消与进程组清理。 */
 import { spawn } from 'node:child_process'
 import { stat } from 'node:fs/promises'
+import { StringDecoder } from 'node:string_decoder'
 
 import { AppError } from '@velaros-ai/core/error'
 import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
@@ -110,17 +108,17 @@ class CommandRunner {
         timers.dispose()
       }
 
-      child.stdout.on('data', (chunk: Buffer | string) => {
-        const text = chunk.toString()
-        this.commandHelper.appendOutput(stdoutBuffer, text)
-        emit({ stream: 'stdout', chunk: text })
-      })
-
-      child.stderr.on('data', (chunk: Buffer | string) => {
-        const text = chunk.toString()
-        this.commandHelper.appendOutput(stderrBuffer, text)
-        emit({ stream: 'stderr', chunk: text })
-      })
+      const decoders = { stdout: new StringDecoder('utf8'), stderr: new StringDecoder('utf8') }
+      const append = (stream: 'stdout' | 'stderr', text: string): void => {
+        if (!text) return
+        this.commandHelper.appendOutput(stream === 'stdout' ? stdoutBuffer : stderrBuffer, text)
+        emit({ stream, chunk: text })
+      }
+      for (const stream of ['stdout', 'stderr'] as const) {
+        child[stream].on('data', (chunk: Buffer | string) => {
+          append(stream, typeof chunk === 'string' ? chunk : decoders[stream].write(chunk))
+        })
+      }
 
       child.on('error', (error) => {
         if (settled) return
@@ -134,6 +132,7 @@ class CommandRunner {
         settled = true
         cleanup()
 
+        for (const stream of ['stdout', 'stderr'] as const) append(stream, decoders[stream].end())
         const finishedAt = Date.now()
         const truncated = stdoutBuffer.truncated || stderrBuffer.truncated
         emit({ stream: 'system', chunk: '', closed: true, exitCode, signal })

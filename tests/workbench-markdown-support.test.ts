@@ -3,7 +3,7 @@ import { mkdtemp, readFile, realpath, rm, stat, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 
-import { highlightingFor, syntaxTree } from '@codemirror/language'
+import { ensureSyntaxTree, highlightingFor } from '@codemirror/language'
 import { EditorState } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import { tags } from '@lezer/highlight'
@@ -102,15 +102,11 @@ void describe('Workbench Markdown support', () => {
       extensions: [language.extension, getWorkbenchCodeMirrorTheme('light-modern')],
     })
 
-    assert.equal(syntaxTree(state).resolveInner(content.indexOf('const') + 1, 1).name, 'const')
-    assert.equal(
-      syntaxTree(state).resolveInner(content.indexOf('value') + 1, 1).name,
-      'VariableDefinition'
-    )
-    assert.equal(
-      syntaxTree(state).resolveInner(content.indexOf('string') + 1, 1).name,
-      'TypeName'
-    )
+    const tree = ensureSyntaxTree(state, state.doc.length)
+    assert.ok(tree, 'expected Markdown and its fenced TypeScript parser to finish')
+    assert.equal(tree.resolveInner(content.indexOf('const') + 1, 1).name, 'const')
+    assert.equal(tree.resolveInner(content.indexOf('value') + 1, 1).name, 'VariableDefinition')
+    assert.equal(tree.resolveInner(content.indexOf('string') + 1, 1).name, 'TypeName')
 
     const codeClass = highlightingFor(state, [tags.monospace])
     assert.ok(codeClass)

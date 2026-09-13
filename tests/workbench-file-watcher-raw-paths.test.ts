@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict'
+import { once } from 'node:events'
+import type { FSWatcher } from 'node:fs'
 import { mkdtemp, realpath, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { setTimeout as delay } from 'node:timers/promises'
 
 import { describe, test } from 'bun:test'
 
@@ -14,8 +15,22 @@ import { WorkbenchFileWatcher } from '../src/main/workspace/watch/WorkbenchFileW
  */
 
 interface WatcherTestPort {
-  roots: Map<string, unknown>
+  roots: Map<string, { watcher: FSWatcher }>
   receive(rootPath: string, filename: string | null): void
+}
+
+async function waitForEvent(event: Promise<void>): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    await Promise.race([
+      event,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error('Timed out waiting for the debounced watcher event.')), 1_000)
+      }),
+    ])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
 }
 
 async function withProject(run: (root: string) => Promise<void>): Promise<void> {
@@ -35,6 +50,9 @@ void describe('Workbench file watcher raw paths', () => {
       const raw: string[] = []
       let errors = 0
       const debounced: string[] = []
+      let stopObservation: (() => void) | undefined
+      let subscriptionId: string | undefined
+      let watcherClosed: Promise<void> | undefined
       try {
         const observation = await watcher.observeRawPaths(root, {
           onPath: (path) => raw.push(path),
@@ -42,7 +60,16 @@ void describe('Workbench file watcher raw paths', () => {
             errors += 1
           },
         })
-        const subscription = await watcher.subscribe(root, (event) => debounced.push(...event.paths))
+        stopObservation = observation.stop
+        const debouncedEvent = Promise.withResolvers<void>()
+        const subscription = await watcher.subscribe(root, (event) => {
+          debounced.push(...event.paths)
+          debouncedEvent.resolve()
+        })
+        subscriptionId = subscription.subscriptionId
+        const rootWatcher = port.roots.get(root)?.watcher
+        assert.ok(rootWatcher)
+        watcherClosed = once(rootWatcher, 'close').then(() => undefined)
         assert.equal(observation.workspaceRoot, root)
 
         port.receive(root, 'dist/app.js')
@@ -52,7 +79,7 @@ void describe('Workbench file watcher raw paths', () => {
         // 原始事件同步交出，不等合并窗口。
         assert.deepEqual(raw, ['dist/app.js', 'src/a.ts'])
         assert.equal(errors, 1)
-        await delay(30)
+        await waitForEvent(debouncedEvent.promise)
         // renderer 订阅照旧合并、照旧滤掉生成目录。
         assert.deepEqual(debounced, ['src/a.ts'])
 
@@ -63,7 +90,10 @@ void describe('Workbench file watcher raw paths', () => {
         watcher.unsubscribe(subscription.subscriptionId)
         assert.equal(port.roots.size, 0)
       } finally {
+        stopObservation?.()
+        if (subscriptionId) watcher.unsubscribe(subscriptionId)
         watcher.dispose()
+        await watcherClosed
       }
     })
   })
