@@ -19,7 +19,7 @@ function toolStart(toolCallId: string, toolName: string): Record<string, unknown
 }
 
 function toolDone(toolCallId: string, error?: string): Record<string, unknown> {
-  return { type: 'tool-done', toolCallId, result: {}, ...(error ? { error } : {}) }
+  return { type: 'tool-done', toolCallId, result: {}, error }
 }
 
 function workerEvent(chatEvent: Record<string, unknown>): Record<string, unknown> {

@@ -156,7 +156,7 @@ void describe('Workbench chat composer parity', () => {
     assert.match(adapter, /<WorkbenchContextUsageIndicator usage=\{chat\.contextUsage\} \/>/)
     assert.match(adapter, /chat\.status,\n\s*\/\/[^\n]*\n\s*chat\.contextUsage,/)
     // 上一轮的用量随会话留存，重新打开对话时直接显示。
-    assert.match(adapter, /\.\.\.\(state\.contextUsage \? \{ contextUsage: state\.contextUsage \} : \{\}\)/)
+    assert.match(adapter, /contextUsage: toOptional\(state\.contextUsage\)/)
     assert.match(adapter, /contextUsage: readStandaloneContextUsageEstimate\(\{\n\s*\.\.\.asRecord\(stored\.contextUsage\),/)
   })
 

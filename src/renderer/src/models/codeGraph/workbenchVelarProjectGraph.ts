@@ -1,3 +1,5 @@
+import { mapDefined } from '@velaros-ai/core'
+
 import type { VelarLogicGraphSnapshot } from '@shared/contributions/velar/logicGraph'
 
 export interface WorkbenchVelarProjectSnapshot {
@@ -105,7 +107,7 @@ export function mergeWorkbenchVelarProjectSnapshots(
     snapshot.nodes.map((node) => ({
       ...node,
       id: projectNodeId(projectRoot, node.id),
-      ...(node.path === undefined ? {} : { path: workspacePath(projectRoot, node.path) }),
+      path: mapDefined(node.path, (path) => workspacePath(projectRoot, path)),
     }))
   )
   const edges = projects.flatMap(({ projectRoot, snapshot }) =>
@@ -114,7 +116,7 @@ export function mergeWorkbenchVelarProjectSnapshots(
       id: projectNodeId(projectRoot, edge.id),
       from: projectNodeId(projectRoot, edge.from),
       to: projectNodeId(projectRoot, edge.to),
-      ...(edge.path === undefined ? {} : { path: workspacePath(projectRoot, edge.path) }),
+      path: mapDefined(edge.path, (path) => workspacePath(projectRoot, path)),
     }))
   )
   const snapshots = projects.map(({ snapshot }) => snapshot)

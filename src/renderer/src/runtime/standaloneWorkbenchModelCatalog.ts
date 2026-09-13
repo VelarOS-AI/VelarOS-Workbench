@@ -1,3 +1,4 @@
+import { optionalWhen } from '@velaros-ai/core'
 import type { ModelProviderValidationKind } from '@velaros-ai/model/catalog'
 import {
   DefaultProviderModels,
@@ -61,9 +62,7 @@ const AllStandaloneWorkbenchModelProviderPresets: readonly StandaloneWorkbenchMo
         baseURLConfigurable: manifest.baseURLConfigurable ?? false,
         managedByCloud: manifest.managedByCloud ?? false,
         validationKind: manifest.validationKind,
-        ...(manifest.defaultApiKeyEnv
-          ? { apiKeyEnvironmentName: manifest.defaultApiKeyEnv }
-          : {}),
+        apiKeyEnvironmentName: optionalWhen(!!manifest.defaultApiKeyEnv, manifest.defaultApiKeyEnv),
         models,
       }
     })

@@ -3,7 +3,7 @@ import { pickedCompletion } from '@codemirror/autocomplete'
 import type { ChangeSpec, EditorState } from '@codemirror/state'
 import type { EditorView } from '@codemirror/view'
 
-import { isPresent } from '@velaros-ai/core'
+import { isPresent, optionalWhen } from '@velaros-ai/core'
 
 import type {
   WorkbenchLanguageServiceCompletionItem,
@@ -278,7 +278,7 @@ export function mapWorkbenchLanguageServiceCompletionToCodeMirror({
   const label = item.filterText || item.label
   const completion: WorkbenchCompletionPresentation = {
     label,
-    ...(label === item.label ? {} : { displayLabel: item.label }),
+    displayLabel: optionalWhen(label !== item.label, item.label),
     type,
     detail: item.detail,
     [WORKBENCH_COMPLETION_RETURN_TYPE]: item.returnType,

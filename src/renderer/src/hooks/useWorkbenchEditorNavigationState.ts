@@ -5,7 +5,7 @@ import type {
 } from '@renderer/models/git/workbenchGitModel'
 import type { WorkbenchLightEditorTab } from '@renderer/types/workbenchTypes'
 
-import { toNullable } from '@velaros-ai/core'
+import { isFalse, isPositiveNumber, optionalWhen, toNullable } from '@velaros-ai/core'
 
 import type { EditorNavigationRequest } from '../components/editor/CodeInsightPanel'
 import { useLatest } from '../support/genericHooks'
@@ -101,8 +101,8 @@ export function useWorkbenchEditorNavigationState({
       id: (request?.id ?? 0) + 1,
       line,
       column,
-      ...(options?.endLine ? { endLine: options.endLine } : {}),
-      ...(options?.focus === false ? { focus: false } : {}),
+      endLine: optionalWhen(isPositiveNumber, options?.endLine),
+      focus: optionalWhen(isFalse, options?.focus),
     }))
   }
 

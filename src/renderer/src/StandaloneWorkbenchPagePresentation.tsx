@@ -20,6 +20,7 @@ import {
 import { WorkbenchChatPanel } from '@renderer/components/chat/WorkbenchChatPanel'
 import { useWorkbenchHostRuntime } from '@renderer/host'
 
+import { optionalWhen } from '@velaros-ai/core'
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 
 import type { WorkbenchProjectHubState } from '@shared/projectHub'
@@ -391,9 +392,10 @@ export function StandaloneWorkbenchPagePresentation({
                   group: 'structure' as const,
                   kind: 'velar-structure',
                   onSelect: () => selectVelarStructureTab(structureTab.id),
-                  ...(structureTab.id === VelarStructureOverviewTab.id
-                    ? {}
-                    : { onClose: () => closeVelarStructureTab(structureTab.id) }),
+                  onClose: optionalWhen(
+                    structureTab.id !== VelarStructureOverviewTab.id,
+                    () => closeVelarStructureTab(structureTab.id)
+                  ),
                   content: (
                     <WorkbenchLogicGraphEditor
                       active={

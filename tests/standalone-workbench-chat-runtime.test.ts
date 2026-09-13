@@ -319,6 +319,7 @@ void describe('standalone Workbench conversation runtime', () => {
         turnKind: 'totalTurns',
         startedAt: 1_000,
         durationMs: 3_000,
+        runChanges: undefined,
         timestamp: 4_000,
       },
     ])
@@ -369,6 +370,7 @@ void describe('standalone Workbench conversation runtime', () => {
           turnKind: 'totalTurns',
           startedAt: 1,
           durationMs: 4,
+          runChanges: undefined,
           timestamp: 5,
         },
       ]
@@ -486,7 +488,10 @@ void describe('standalone Workbench conversation runtime', () => {
       summary
     )
     // 摘要随会话持久化；形状不对的当没有。
-    assert.deepEqual(restoreStandaloneRunMarkers(attached.markers, messages)[0]?.runChanges, summary)
+    assert.deepEqual(
+      restoreStandaloneRunMarkers(attached.markers, messages)[0]?.runChanges,
+      { ...summary, paths: undefined }
+    )
     assert.equal(
       restoreStandaloneRunMarkers(
         [{ ...attached.markers[0], runChanges: { recordId: 'x', fileCount: -1 } }],

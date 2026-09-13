@@ -826,7 +826,7 @@ export function WorkbenchLogicGraphEditor({
             parameters: {
               maximumNodes: 10_000,
               maximumEdges: 20_000,
-              ...(previous ? { previousRevision: previous.revision } : {}),
+              previousRevision: previous?.revision,
             },
           })
           if (!response.ok) throw response.error

@@ -175,7 +175,7 @@ void describe('pre-split Workbench shell parity', () => {
     )
     assert.match(
       presentation,
-      /structureTab\.id === VelarStructureOverviewTab\.id[\s\S]*\? \{\}[\s\S]*onClose/
+      /onClose: optionalWhen\(\s*structureTab\.id !== VelarStructureOverviewTab\.id/
     )
     assert.doesNotMatch(presentation, /defaultVelarStructureRoot/)
     assert.match(presentation, /velarStructureTabs\.map/)

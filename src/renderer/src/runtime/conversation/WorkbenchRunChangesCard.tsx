@@ -10,6 +10,7 @@ import {
 import { MagnifyingGlassIcon, SpinnerGapIcon } from '@phosphor-icons/react'
 import { useWorkbenchI18n } from '@renderer/i18n'
 
+import { isPresent, optionalWhen } from '@velaros-ai/core'
 import {
   buildFileDiffSummaryFromUnifiedPatch,
   FileChangeSummaryList,
@@ -181,13 +182,9 @@ export const WorkbenchRunChangesCard = memo(function WorkbenchRunChangesCard({
           expandedKeys={expandedKeys}
           formatPathForDisplay={formatEntryPath}
           onToggleEntry={toggleEntry}
-          {...(onOpenEntry
-            ? {
-                onOpenEntry: (entry: FileChangeSummaryListEntry) => {
-                  void onOpenEntry(entry)
-                },
-              }
-            : {})}
+          onOpenEntry={optionalWhen(isPresent(onOpenEntry), (entry: FileChangeSummaryListEntry) => {
+            void onOpenEntry?.(entry)
+          })}
         />
       )}
     </div>

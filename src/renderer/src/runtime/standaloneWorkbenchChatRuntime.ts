@@ -1,4 +1,5 @@
 import { type AppLocale, isConversationTurnInputMessage } from '@velaros-ai/agent/protocol'
+import { isString, optionalWhen, toOptional } from '@velaros-ai/core'
 import {
   type ConversationTranslator,
   type ConversationView,
@@ -340,7 +341,7 @@ function markStandaloneRun(
     turnKind: input.completedTurns > 0 ? 'totalTurns' : null,
     ...(startedAt !== null ? { startedAt, durationMs: timestamp - startedAt } : {}),
     // 改动摘要是收尾之后才采集到的，重记标记不能把它（和它指向的记录文件）弄丢。
-    ...(existing?.runChanges ? { runChanges: existing.runChanges } : {}),
+    runChanges: existing?.runChanges,
     timestamp,
   }
   if (
@@ -383,7 +384,7 @@ function restoreStandaloneRunMarkers(
       turnCount,
       turnKind: turnCount !== null ? 'totalTurns' : null,
       ...(startedAt !== null && durationMs !== null ? { startedAt, durationMs } : {}),
-      ...(runChanges ? { runChanges } : {}),
+      runChanges: toOptional(runChanges),
       timestamp,
     }]
   })
@@ -407,7 +408,7 @@ function readStoredRunChanges(value: unknown): WorkbenchChatRunChangesSummary | 
     additions,
     deletions,
     error: readNonBlankString(error),
-    ...(storedPaths ? { paths: storedPaths } : {}),
+    paths: toOptional(storedPaths),
   }
 }
 
@@ -595,7 +596,7 @@ function readStandaloneConfirmationDetail(
     kind: 'skill-load',
     skillId: detail.skillId,
     label: detail.label,
-    ...(typeof detail.description === 'string' ? { description: detail.description } : {}),
+    description: optionalWhen(isString, detail.description),
     ...authorization,
   }
   return null
@@ -618,10 +619,8 @@ function readStandaloneConfirmationAuthorization(
     authorization: {
       label: authorization.label,
       scope,
-      ...(typeof authorization.target === 'string' ? { target: authorization.target } : {}),
-      ...(typeof authorization.requester === 'string'
-        ? { requester: authorization.requester }
-        : {}),
+      target: optionalWhen(isString, authorization.target),
+      requester: optionalWhen(isString, authorization.requester),
     },
   }
 }

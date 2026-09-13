@@ -202,7 +202,7 @@ import type { WorkbenchThemeId } from '@renderer/models/settings/workbenchPrefer
 import { useStandaloneWorkbenchModelConfig } from '@renderer/runtime/standaloneWorkbenchModelConfig'
 import type { WorkbenchOpenEditorTab } from '@renderer/types/workbenchTypes'
 
-import { isEmpty, isPresent, Log, toNullable, toOptional } from '@velaros-ai/core'
+import { isEmpty, isPresent, Log, optionalWhen, toNullable, toOptional } from '@velaros-ai/core'
 
 import type {
   WorkbenchLanguageServiceCodeAction,
@@ -1835,7 +1835,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
             callbacksRef.current.onOpenSymbolLocations?.(buildWorkbenchSymbolLocationsRequest({
               symbol: identifier.text,
               origin,
-              ...(isDefinition ? {} : { destination: location }),
+              destination: optionalWhen(!isDefinition, location),
               definitions,
               references: [],
             }), isDefinition)
@@ -1857,7 +1857,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
               callbacksRef.current.onOpenSymbolLocations?.(buildWorkbenchSymbolLocationsRequest({
                 symbol: identifier.text,
                 origin,
-                ...(isDefinition ? {} : { destination: location }),
+                destination: optionalWhen(!isDefinition, location),
                 definitions,
                 references: referencesResult.data.locations,
               }))

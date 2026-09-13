@@ -1,3 +1,5 @@
+import { isBoolean, optionalWhen } from '@velaros-ai/core'
+
 import type {
   WorkbenchCodeGraphEdge,
   WorkbenchCodeGraphNode,
@@ -145,15 +147,15 @@ function graphNode(value: unknown): VelarLogicGraphNode | null {
     id,
     kind,
     name,
-    ...optionalField('documentation', documentation),
-    ...optionalField('context', context),
-    ...optionalField('type', type),
-    ...optionalField('path', path),
-    ...optionalField('uri', uri),
-    ...(typeof item['exported'] === 'boolean' ? { exported: item['exported'] } : {}),
-    ...(typeof item['mutable'] === 'boolean' ? { mutable: item['mutable'] } : {}),
-    ...(declarationRange ? { range: declarationRange } : {}),
-    ...(selectionRange ? { selectionRange } : {}),
+    documentation,
+    context,
+    type,
+    path,
+    uri,
+    exported: optionalWhen(isBoolean, item['exported']),
+    mutable: optionalWhen(isBoolean, item['mutable']),
+    range: declarationRange,
+    selectionRange,
   }
 }
 
@@ -174,17 +176,10 @@ function graphEdge(value: unknown): VelarLogicGraphEdge | null {
     kind,
     from,
     to,
-    ...optionalField('path', path),
-    ...optionalField('uri', uri),
-    ...(edgeRange ? { range: edgeRange } : {}),
+    path,
+    uri,
+    range: edgeRange,
   }
-}
-
-function optionalField<Key extends string, Value>(
-  key: Key,
-  value: Value | undefined
-): { [Property in Key]?: Value } {
-  return value === undefined ? {} : { [key]: value } as { [Property in Key]?: Value }
 }
 
 function stringList(value: unknown, maximum: number): string[] | null {
@@ -230,7 +225,7 @@ export function parseVelarLogicGraphResponse(value: unknown): VelarLogicGraphRes
     mode: item['mode'],
     rootUri: item['rootUri'],
     revision: item['revision'],
-    ...(item['mode'] === 'patch' ? { baseRevision: item['baseRevision'] as string } : {}),
+    baseRevision: optionalWhen(item['mode'] === 'patch', item['baseRevision'] as string),
     nodes: parsedNodes,
     edges: parsedEdges,
     removedNodeIds,
@@ -309,11 +304,11 @@ export function velarLogicGraphForWorkbench(
       path: node.path ?? '',
       language: 'velar',
       kind: node.kind,
-      ...optionalField('documentation', node.documentation),
-      ...optionalField('context', node.context),
-      ...optionalField('type', node.type),
-      ...(node.exported === undefined ? {} : { exported: node.exported }),
-      ...(node.mutable === undefined ? {} : { mutable: node.mutable }),
+      documentation: node.documentation,
+      context: node.context,
+      type: node.type,
+      exported: node.exported,
+      mutable: node.mutable,
       ...(node.selectionRange ? {
         line: node.selectionRange.start.line + 1,
         column: node.selectionRange.start.character + 1,

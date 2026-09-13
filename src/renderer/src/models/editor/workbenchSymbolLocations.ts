@@ -75,7 +75,7 @@ export function buildWorkbenchSymbolLocationsRequest({
   return {
     symbol,
     origin,
-    ...(destination ? { destination } : {}),
+    destination,
     items: items.slice(0, MaximumSymbolLocations),
     truncated: items.length > MaximumSymbolLocations,
   }

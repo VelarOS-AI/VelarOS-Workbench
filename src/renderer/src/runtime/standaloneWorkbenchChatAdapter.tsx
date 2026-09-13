@@ -19,7 +19,14 @@ import { useWorkbenchI18n } from '@renderer/i18n'
 
 import type { ReasoningLevel, RunProfileSelectionId } from '@velaros-ai/agent/protocol'
 import { AgentCapabilityProtocolVersion } from '@velaros-ai/agent/protocol/agent-capability'
-import { Log } from '@velaros-ai/core'
+import {
+  isNonBlankString,
+  Log,
+  mapDefined,
+  optionalWhen,
+  optionalWhenLazy,
+  toOptional,
+} from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import {
   ChatConversationPane,
@@ -1099,7 +1106,7 @@ function StandaloneWorkbenchChatSessionSurface({
     referencedFilePaths: readonly string[] = []
   ): Promise<boolean> {
     const sessionId = chat.sessionId
-    const guidance: ChatMessage = {
+    const guidance: ChatMessageWithBrowserSelections = {
       ...createTextMessage(
         'user',
         text
@@ -1108,7 +1115,7 @@ function StandaloneWorkbenchChatSessionSurface({
       ),
       conversationKind: 'run-guidance',
       guidanceStatus: 'pending',
-      ...(selections.length > 0 ? { browserElementSelections: [...selections] } : {}),
+      browserElementSelections: optionalWhen(selections.length > 0, [...selections]),
     }
     // 引导通道只带文字：拾取的元素、引用的文件路径折成上下文段跟在正文后面。
     const guidanceText = [
@@ -1585,7 +1592,7 @@ function StandaloneWorkbenchChatSessionSurface({
     // 只有正常完成才结束一轮：中止或失败后的下一条消息继续被打断的那一轮，按引导呈现、
     // 与上一轮归在同一组里，而不是另起一轮（与 Desktop 的 shouldContinueInterruptedConversation 一致）。
     const continuesInterruptedRun = isInterruptedRunStatus(getState(projectRoot, providerId).status)
-    const userMessage: ChatMessage = systemNotice
+    const userMessage: ChatMessageWithBrowserSelections = systemNotice
       ? createStandaloneSystemNotice({
           id: nextId('workbench-goal-continue'),
           ...systemNotice,
@@ -1603,7 +1610,7 @@ function StandaloneWorkbenchChatSessionSurface({
           ...(continuesInterruptedRun
             ? { conversationKind: 'run-guidance' as const, guidanceStatus: 'sent' as const }
             : { conversationKind: 'turn-input' as const }),
-          ...(selections.length > 0 ? { browserElementSelections: [...selections] } : {}),
+          browserElementSelections: optionalWhen(selections.length > 0, [...selections]),
         }
     const attachmentMetadata = draftFiles.map((file, index) => ({
       id: `${userMessage.id}-attachment-${index}`,
@@ -1680,31 +1687,32 @@ function StandaloneWorkbenchChatSessionSurface({
           },
         },
         messages: sanitizeStandaloneChatMessages(latest.messages)
-          .map((message) => ({
-            role: message.role,
+          .map((message) => {
+            const envelopeMessage: AgentEnvelopeMessage = {
+              role: message.role,
+              content: [
+                readStandaloneModelVisibleText(message),
+                ...(message.attachments?.length
+                  ? [message.attachments
+                      .map((attachment) =>
+                        `Attachment: ${attachment.name} (${attachment.mediaType})`
+                      )
+                      .join('\n')]
+                  : []),
+                ...(message.id === submittedMessage.id
+                  ? [
+                      currentFileContext,
+                      fileReferenceContext,
+                      attachmentContext,
+                      browserElementContext,
+                    ].filter(Boolean)
+                  : []),
+              ].filter(Boolean).join('\n\n'),
+            }
             // 宿主留痕（回溯说明）带着语义过去，main 把它包成系统说明而不是一句用户原话。
-            ...(message.conversationKind === 'system-notice'
-              ? { conversationKind: 'system-notice' as const }
-              : {}),
-            content: [
-              readStandaloneModelVisibleText(message),
-              ...(message.attachments?.length
-                ? [message.attachments
-                    .map((attachment) =>
-                      `Attachment: ${attachment.name} (${attachment.mediaType})`
-                    )
-                    .join('\n')]
-                : []),
-              ...(message.id === submittedMessage.id
-                ? [
-                    currentFileContext,
-                    fileReferenceContext,
-                    attachmentContext,
-                    browserElementContext,
-                  ].filter(Boolean)
-                : []),
-            ].filter(Boolean).join('\n\n'),
-          }))
+            if (message.conversationKind === 'system-notice') envelopeMessage.conversationKind = 'system-notice'
+            return envelopeMessage
+          })
           .filter((message) => message.content.trim()),
         config: {
           ...(providerId === 'workbench'
@@ -1723,10 +1731,7 @@ function StandaloneWorkbenchChatSessionSurface({
               // 只对原生执行栈有意义——外部引擎有自己的审批档（approvalPolicy / 沙箱）。
               permissionConfirmationMode: readWorkbenchPermissionConfirmationMode(),
             }
-            : {
-                engineId: providerId,
-                ...(engineModel ? { model: engineModel } : {}),
-              }),
+            : createEngineExecutionConfig(providerId, engineModel)),
           executionModes: [
             ...((options?.goalMode ?? goalMode) ? ['goal' as const] : []),
             ...(planMode ? ['plan' as const] : []),
@@ -1937,44 +1942,40 @@ function StandaloneWorkbenchChatSessionSurface({
           onOpenFile: openAttachedFile,
         },
         // 排队与引导只对原生执行栈开放：外部引擎没有中途注入语义。
-        ...(providerId === 'workbench'
-          ? {
-              queue: {
-                canEnqueue: canSteerRun,
-                canGuideCurrentTask: true,
-                isPaused: queuedDrafts.isPaused,
-                errorMessage: queuedDrafts.errorMessage,
-                onResume: queuedDrafts.resume,
-                queuedDrafts: queuedDrafts.drafts,
-                drainingId: queuedDrafts.drainingId,
-                isQueueDraining: queuedDrafts.isDraining,
-                onQueuedDraftMove: queuedDrafts.move,
-                onQueuedDraftRemove: queuedDrafts.remove,
-                onQueuedDraftUpdate: queuedDrafts.update,
-                onQueuedDraftGuide: canSteerRun
-                  ? async (id: string) => {
-                      // 引导通道只带文字：带附件的排队项留在队里，本轮结束后照常发送。
-                      if (queuedDrafts.drafts.find((entry) => entry.id === id)?.files.length) {
-                        workbenchMessage.warning({
-                          title: t('workbench.chatGuidanceFilesTitle'),
-                          description: t('workbench.chatGuidanceFilesDescription'),
-                        })
-                        return
-                      }
-                      const draft = queuedDrafts.take(id)
-                      if (draft) await sendRunGuidance(draft.value)
-                    }
-                  : undefined,
-                onQueuedDraftReturnToInput: (id: string) => {
-                  const draft = queuedDrafts.take(id)
-                  if (!draft) return
-                  setPrompt(draft.value)
-                  setFiles(draft.files)
-                },
-                onQueuedDraftRunNow: queuedDrafts.runNow,
-              },
-            }
-          : {}),
+        queue: optionalWhen(providerId === 'workbench', {
+          canEnqueue: canSteerRun,
+          canGuideCurrentTask: true,
+          isPaused: queuedDrafts.isPaused,
+          errorMessage: queuedDrafts.errorMessage,
+          onResume: queuedDrafts.resume,
+          queuedDrafts: queuedDrafts.drafts,
+          drainingId: queuedDrafts.drainingId,
+          isQueueDraining: queuedDrafts.isDraining,
+          onQueuedDraftMove: queuedDrafts.move,
+          onQueuedDraftRemove: queuedDrafts.remove,
+          onQueuedDraftUpdate: queuedDrafts.update,
+          onQueuedDraftGuide: canSteerRun
+            ? async (id: string) => {
+                // 引导通道只带文字：带附件的排队项留在队里，本轮结束后照常发送。
+                if (queuedDrafts.drafts.find((entry) => entry.id === id)?.files.length) {
+                  workbenchMessage.warning({
+                    title: t('workbench.chatGuidanceFilesTitle'),
+                    description: t('workbench.chatGuidanceFilesDescription'),
+                  })
+                  return
+                }
+                const draft = queuedDrafts.take(id)
+                if (draft) await sendRunGuidance(draft.value)
+              }
+            : undefined,
+          onQueuedDraftReturnToInput: (id: string) => {
+            const draft = queuedDrafts.take(id)
+            if (!draft) return
+            setPrompt(draft.value)
+            setFiles(draft.files)
+          },
+          onQueuedDraftRunNow: queuedDrafts.runNow,
+        }),
         execution: {
           goalMode,
           onGoalModeChange: setGoalMode,
@@ -2078,7 +2079,7 @@ function StandaloneWorkbenchChatSessionSurface({
                 models: engineCatalog.models.map((model) => ({
                   value: model.value,
                   label: model.label,
-                  ...(model.description ? { description: model.description } : {}),
+                  description: optionalWhen(!!model.description, model.description),
                 })),
               }],
               onChange: (_provider, model) => {
@@ -2089,23 +2090,16 @@ function StandaloneWorkbenchChatSessionSurface({
           : undefined,
       // 上下文用量仪表只对原生执行栈有意义：外部引擎自管上下文与压缩，Velar 侧的转录不是
       // 它真正送核的那一份，挂一个恒 0% 的表比不挂更误导。
-      ...(providerId === 'workbench'
-        ? {
-            slots: {
-              contextUsageIndicator: (
-                <WorkbenchContextUsageIndicator usage={chat.contextUsage} />
-              ),
-            },
-          }
-        : {}),
-      ...(providerId !== 'workbench' && (!engineCatalog || !engineCatalog.available)
-        ? {
-            modelRunSummary: {
-              primaryLabel: providerId === 'claude-code' ? 'Claude Code' : 'ChatGPT / Codex',
-              secondaryLabel: engineCatalog?.reason ?? t('workbench.chatEngineLoadingModels'),
-            },
-          }
-        : {}),
+      slots: optionalWhenLazy(providerId === 'workbench', () => ({
+        contextUsageIndicator: <WorkbenchContextUsageIndicator usage={chat.contextUsage} />,
+      })),
+      modelRunSummary: optionalWhenLazy(
+        providerId !== 'workbench' && (!engineCatalog || !engineCatalog.available),
+        () => ({
+          primaryLabel: providerId === 'claude-code' ? 'Claude Code' : 'ChatGPT / Codex',
+          secondaryLabel: engineCatalog?.reason ?? t('workbench.chatEngineLoadingModels'),
+        })
+      ),
     }),
     [
       chat.sessionId,
@@ -2151,7 +2145,7 @@ function StandaloneWorkbenchChatSessionSurface({
           marker.runChanges ? [[marker.messageId, marker.runChanges] as const] : []
         )
       ),
-      ...(onReviewRunChanges ? { onReviewRound: onReviewRunChanges } : {}),
+      onReviewRound: onReviewRunChanges,
     }),
     [chat.messageRunMarkers, chat.sessionId, onReviewRunChanges, projectRoot]
   )
@@ -2242,7 +2236,7 @@ function StandaloneWorkbenchChatSessionSurface({
               const accepted = await window.velarosWorkbenchKernel.resolveAgentConfirmation({
                 sessionId: chat.sessionId,
                 approved,
-                ...(rejectionMessage?.trim() ? { rejectionMessage } : {}),
+                rejectionMessage: optionalWhen(isNonBlankString, rejectionMessage),
               })
               if (!accepted) return
               updateState(projectRoot, providerId, (state) => ({
@@ -2436,22 +2430,26 @@ function applyAgentStreamEvent(
     return
   }
   if (event.type === 'tool-metadata' && typeof event.toolCallId === 'string') {
-    updateToolCallBlock(projectRoot, providerId, event.toolCallId, (block) => ({
-      ...block,
-      ...(typeof event.title === 'string' ? { title: event.title } : {}),
-      metadata: { ...block.metadata, ...asRecord(event.metadata) },
-    }))
+    updateToolCallBlock(projectRoot, providerId, event.toolCallId, (block) => {
+      const next: ToolCallBlock = { ...block, metadata: { ...block.metadata, ...asRecord(event.metadata) } }
+      // 事件没带标题时留着块上原有的。
+      if (typeof event.title === 'string') next.title = event.title
+      return next
+    })
     return
   }
   if (event.type === 'tool-done' && typeof event.toolCallId === 'string') {
-    updateToolCallBlock(projectRoot, providerId, event.toolCallId, (block) => ({
-      ...block,
-      result: event.result,
-      ...(typeof event.error === 'string' ? { error: event.error } : {}),
-      isRunning: false,
-      finishedAt: Date.now(),
-      effects: asRecord(event.effects) as ToolCallBlock['effects'],
-    }))
+    updateToolCallBlock(projectRoot, providerId, event.toolCallId, (block) => {
+      const next: ToolCallBlock = {
+        ...block,
+        result: event.result,
+        isRunning: false,
+        finishedAt: Date.now(),
+        effects: asRecord(event.effects) as ToolCallBlock['effects'],
+      }
+      if (typeof event.error === 'string') next.error = event.error
+      return next
+    })
   }
 }
 
@@ -2617,6 +2615,30 @@ function createTextMessage(role: ChatMessage['role'], text: string): ChatMessage
     blocks: [{ type: 'text', text }],
     timestamp: Date.now(),
   }
+}
+
+/** 随发拾取元素的用户消息：这个字段 Agent 协议的 ChatMessage 不声明，见 readMessageBrowserSelections。 */
+type ChatMessageWithBrowserSelections = ChatMessage & {
+  browserElementSelections?: BrowserElementSelection[]
+}
+
+/**
+ * 执行信封（main 按键白名单严格解析）里的一条消息与外部引擎配置：可选键缺值时整个不写，
+ * 只有宿主留痕带 conversationKind，没选模型时不带 model。
+ */
+interface AgentEnvelopeMessage {
+  role: ChatMessage['role']
+  conversationKind?: 'system-notice'
+  content: string
+}
+
+function createEngineExecutionConfig(
+  engineId: WorkbenchChatProviderId,
+  model: string
+): { engineId: WorkbenchChatProviderId; model?: string } {
+  const config: { engineId: WorkbenchChatProviderId; model?: string } = { engineId }
+  if (model) config.model = model
+  return config
 }
 
 /**
@@ -2901,10 +2923,10 @@ function serializeStoredState(state: StandaloneChatState): Record<string, unknow
       : {}),
     checkpoints: state.checkpoints,
     messageRunMarkers: state.messageRunMarkers,
-    ...(state.contextUsage ? { contextUsage: state.contextUsage } : {}),
-    ...(state.usageTelemetry.length > 0
-      ? { usageTelemetry: serializeStandaloneUsageTelemetry(state.usageTelemetry) }
-      : {}),
+    contextUsage: toOptional(state.contextUsage),
+    usageTelemetry: optionalWhenLazy(state.usageTelemetry.length > 0, () =>
+      serializeStandaloneUsageTelemetry(state.usageTelemetry)
+    ),
     revision: state.revision,
   }
 }
@@ -3001,7 +3023,7 @@ function releaseRunChangeRecords(
     .deleteChatRunChanges({
       workspaceRoot: projectRoot,
       sessionId,
-      ...(recordIds ? { recordIds: [...recordIds] } : {}),
+      recordIds: mapDefined(recordIds, (ids) => [...ids]),
     })
     .catch(() => {
       // 同上：清理失败只留下一个没人引用的记录文件。

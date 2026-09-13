@@ -1,3 +1,4 @@
+import { isNonBlankString, optionalWhen, toOptional } from '@velaros-ai/core'
 import type { ConversationView } from '@velaros-ai/ui/conversation'
 
 /**
@@ -69,19 +70,17 @@ function readStandaloneUsageTelemetry(value: unknown): StandaloneUsageTelemetry 
   return {
     kind: 'usage-telemetry',
     turn: typeof turn === 'number' && Number.isInteger(turn) && turn > 0 ? turn : null,
-    ...(typeof payload.provider === 'string' && payload.provider.trim()
-      ? { provider: payload.provider.trim() }
-      : {}),
+    provider: optionalWhen(isNonBlankString, payload.provider)?.trim(),
     model,
     inputTokens: readTokenCount(payload.inputTokens),
     outputTokens: readTokenCount(payload.outputTokens),
     totalTokens: readTokenCount(payload.totalTokens),
     reasoningTokens: readTokenCount(payload.reasoningTokens),
-    ...(visibleOutputTokens !== null ? { visibleOutputTokens } : {}),
-    ...(cachedInputTokens !== null ? { cachedInputTokens } : {}),
-    ...(cacheReadInputTokens !== null ? { cacheReadInputTokens } : {}),
-    ...(cacheWriteInputTokens !== null ? { cacheWriteInputTokens } : {}),
-    ...(costUsd !== null ? { costUsd } : {}),
+    visibleOutputTokens: toOptional(visibleOutputTokens),
+    cachedInputTokens: toOptional(cachedInputTokens),
+    cacheReadInputTokens: toOptional(cacheReadInputTokens),
+    cacheWriteInputTokens: toOptional(cacheWriteInputTokens),
+    costUsd: toOptional(costUsd),
     source: readUsageSource(payload.source),
     confidence: readUsageConfidence(payload.confidence),
     timestamp,

@@ -118,7 +118,10 @@ function pushToken(
     return
   }
 
-  tokens.push({ text, kind, ...(color ? { color } : {}) })
+  // 只有自定义色的片段才带 color 键：普通片段的形状保持 { text, kind }。
+  const token: WorkbenchConsoleOutputToken = { text, kind }
+  if (color) token.color = color
+  tokens.push(token)
 }
 
 function parseAnsiParameters(sequence: string): number[] {

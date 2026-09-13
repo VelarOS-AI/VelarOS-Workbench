@@ -4,6 +4,7 @@ import type { ChatMessage, ContentBlock } from '@velaros-ai/ui/conversation/cont
 import { asRecord } from './standaloneWorkbenchChatRuntime'
 
 type ToolCallBlock = Extract<ContentBlock, { type: 'tool-call' }>
+type ThinkingBlock = Extract<ContentBlock, { type: 'thinking' }>
 
 /**
  * 子 Agent 线程的**渲染投影**。
@@ -47,7 +48,6 @@ export function applyStandaloneWorkerThreadEvent(
   const text = readRawText(event.text)
   const next: ConversationWorkerThread = {
     threadId,
-    ...(resolvedActivationId ? { activationId: resolvedActivationId } : {}),
     taskId: readString(event.taskId) ?? existing?.taskId ?? null,
     nodeId: readString(event.nodeId) ?? existing?.nodeId ?? null,
     title: readString(event.title) ?? existing?.title ?? threadId,
@@ -80,6 +80,8 @@ export function applyStandaloneWorkerThreadEvent(
       timestamp
     ),
   }
+  // 可选字段缺值时不写键：投影里不塞 undefined（见文件头）。下面几处块字段同理。
+  if (resolvedActivationId) next.activationId = resolvedActivationId
 
   if (existing && isSameWorkerThread(existing, next)) return projection
   return {
@@ -158,17 +160,17 @@ function applyWorkerThreadChatEvent(
       const toolCallId = readString(chatEvent.toolCallId)
       const toolName = readString(chatEvent.toolName)
       if (!toolCallId || !toolName || hasToolCall(messages, toolCallId)) return messages
-      return appendAssistantBlock(messages, scopeId, {
+      const block: ToolCallBlock = {
         type: 'tool-call',
         toolCallId,
         toolName,
         args: asRecord(chatEvent.args),
-        ...(typeof chatEvent.categoryId === 'string'
-          ? { categoryId: chatEvent.categoryId as ToolCallBlock['categoryId'] }
-          : {}),
         isRunning: true,
         startedAt: timestamp,
-      }, timestamp)
+      }
+      if (typeof chatEvent.categoryId === 'string')
+        block.categoryId = chatEvent.categoryId as ToolCallBlock['categoryId']
+      return appendAssistantBlock(messages, scopeId, block, timestamp)
     }
     case 'tool-progress': {
       const chunk = readRawText(chatEvent.chunk)
@@ -179,20 +181,29 @@ function applyWorkerThreadChatEvent(
       }))
     }
     case 'tool-metadata':
-      return updateToolCall(messages, chatEvent.toolCallId, (block) => ({
-        ...block,
-        ...(readString(chatEvent.title) ? { title: readString(chatEvent.title)! } : {}),
-        metadata: { ...block.metadata, ...asRecord(chatEvent.metadata) },
-      }))
+      return updateToolCall(messages, chatEvent.toolCallId, (block) => {
+        const next: ToolCallBlock = {
+          ...block,
+          metadata: { ...block.metadata, ...asRecord(chatEvent.metadata) },
+        }
+        // 事件没带标题时留着块上原有的。
+        const title = readString(chatEvent.title)
+        if (title) next.title = title
+        return next
+      })
     case 'tool-done':
-      return updateToolCall(messages, chatEvent.toolCallId, (block) => ({
-        ...block,
-        result: chatEvent.result,
-        ...(readString(chatEvent.error) ? { error: readString(chatEvent.error)! } : {}),
-        effects: asRecord(chatEvent.effects) as ToolCallBlock['effects'],
-        isRunning: false,
-        finishedAt: timestamp,
-      }))
+      return updateToolCall(messages, chatEvent.toolCallId, (block) => {
+        const next: ToolCallBlock = {
+          ...block,
+          result: chatEvent.result,
+          effects: asRecord(chatEvent.effects) as ToolCallBlock['effects'],
+          isRunning: false,
+          finishedAt: timestamp,
+        }
+        const error = readString(chatEvent.error)
+        if (error) next.error = error
+        return next
+      })
     default:
       return messages
   }
@@ -242,14 +253,11 @@ function appendReasoningDelta(
   timestamp: number
 ): ChatMessage[] {
   const lastBlock = readLastAssistantBlock(messages)
-  return lastBlock?.type === 'thinking'
-    ? replaceLastBlock(messages, { ...lastBlock, text: lastBlock.text + text }, timestamp)
-    : appendAssistantBlock(
-        messages,
-        scopeId,
-        { type: 'thinking', text, ...(streamId ? { streamId } : {}) },
-        timestamp
-      )
+  if (lastBlock?.type === 'thinking')
+    return replaceLastBlock(messages, { ...lastBlock, text: lastBlock.text + text }, timestamp)
+  const block: ThinkingBlock = { type: 'thinking', text }
+  if (streamId) block.streamId = streamId
+  return appendAssistantBlock(messages, scopeId, block, timestamp)
 }
 
 function readLastAssistantBlock(messages: readonly ChatMessage[]): ContentBlock | undefined {

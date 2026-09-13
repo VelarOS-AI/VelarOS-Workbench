@@ -299,7 +299,7 @@ export function createStandaloneSystemNotice(input: {
     id: input.id,
     role: 'user',
     conversationKind: 'system-notice',
-    ...(input.kind ? { systemNoticeKind: input.kind } : {}),
+    systemNoticeKind: input.kind,
     blocks: [
       { type: 'text', text: input.summary },
       { type: 'text', text: input.detail },

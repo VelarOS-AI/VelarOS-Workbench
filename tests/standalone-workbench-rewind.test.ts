@@ -94,7 +94,7 @@ void describe('standalone Workbench rewind', () => {
       additions: 1,
       deletions: 0,
       error: null,
-      ...(paths ? { paths } : {}),
+      paths,
     })
     const markers = [
       { messageId: 'reply-1', runChanges: summary('r1', ['src/old.ts']) },

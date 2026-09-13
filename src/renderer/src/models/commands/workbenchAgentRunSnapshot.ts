@@ -1,3 +1,5 @@
+import { optionalWhenLazy } from '@velaros-ai/core'
+
 import type { WorkbenchAgentRunSnapshot } from '@shared/workbenchAgentUi'
 
 import type { WorkbenchTerminalSessionView } from './workbenchCommandLines'
@@ -44,6 +46,6 @@ export function buildWorkbenchAgentRunSnapshot(
     running: session.isRunning,
     output: allLines.slice(-Math.max(1, lines)).join('\n'),
     totalLines: allLines.length,
-    ...(match ? { matched: text.toLowerCase().includes(match.toLowerCase()) } : {}),
+    matched: optionalWhenLazy(match, () => text.toLowerCase().includes(match!.toLowerCase())),
   }
 }
