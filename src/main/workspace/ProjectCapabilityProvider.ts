@@ -38,6 +38,7 @@ import { buildBackgroundCommandConfirmationMessage } from '@velaros-ai/project/e
 import { isPathInsideProjectRoot } from '@velaros-ai/project/files'
 import {
   createProjectKernel,
+  ProjectError,
   type ProjectKernel,
 } from '@velaros-ai/project/runtime'
 
@@ -498,7 +499,12 @@ function resolveInsideProject(
 ): string {
   const resolvedPath = resolve(activeDirectory, inputPath)
   if (!isPathInsideProjectRoot(projectRoot, resolvedPath)) {
-    throw new Error('Project path escapes the selected project root.')
+    throw new ProjectError(
+      'SCOPE_VIOLATION',
+      `工作目录超出当前项目：${inputPath}`,
+      { projectRoot, activeDirectory, requestedPath: inputPath, resolvedPath },
+      'cwd 只接受当前项目内的目录（相对路径或绝对路径）；省略 cwd 使用当前项目目录。如需操作其他项目，请先切换项目。',
+    )
   }
   return resolvedPath
 }

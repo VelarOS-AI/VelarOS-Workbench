@@ -24,6 +24,8 @@ const WorkbenchStorageDirectory = {
   chatRunChanges: 'chat-run-changes',
   /** 会话的活动上下文制品（目标模式的目标、执行计划），一个会话一个 JSON。 */
   chatActiveContext: 'chat-active-context',
+  /** 工具原始参数与输出，支持跨进程召回。 */
+  chatContextPayloads: 'chat-context-payloads',
 } as const
 
 class WorkbenchAppStoragePaths {
@@ -55,6 +57,10 @@ class WorkbenchAppStoragePaths {
   /** 活动上下文区（见 {@link WorkbenchStorageDirectory.chatActiveContext}）。 */
   public getChatActiveContextDir(): string {
     return this.ensureDir(join(this.dataRootDir, WorkbenchStorageDirectory.chatActiveContext))
+  }
+
+  public getChatContextPayloadsDir(): string {
+    return this.ensureDir(join(this.dataRootDir, WorkbenchStorageDirectory.chatContextPayloads))
   }
 
   private ensureDir(path: string): string {

@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { describe, test } from 'bun:test'
 
 import type { ApprovalPort } from '@velaros-ai/agent/tool-contract'
-import type { ProjectKernel } from '@velaros-ai/project/runtime'
+import { ProjectError, type ProjectKernel } from '@velaros-ai/project/runtime'
 
 import type { WorkbenchAgentProjectActivityPort } from '../src/main/workspace/git/WorkbenchChatRunAttribution'
 import type { WorkbenchVelarLogicGraphService } from '../src/main/workspace/language/WorkbenchVelarLogicGraphService'
@@ -61,6 +61,37 @@ void describe('Project capability provider', () => {
     )
     assert.ok(project.initialVisibleToolNames.includes('project:rollback'))
     await provider.dispose()
+  })
+
+  void test('reports an actionable scope error for a command cwd outside the project', async () => {
+    const provider = new ProjectCapabilityProvider({
+      createKernel: async () => ({ providers: {} }) as unknown as ProjectKernel,
+    })
+    try {
+      const project = await provider.resolveProject('/tmp/workbench-project')
+      const tool = project.tools.find((candidate) => candidate.name === 'project:run')!
+      const parsed = tool.schema.safeParse({ command: 'echo must-not-run', cwd: '..' })
+      assert(parsed.success)
+      await assert.rejects(
+        async () => tool.execute(parsed.data, {
+          abortSignal: new AbortController().signal,
+        }),
+        (error: unknown) => {
+          assert.ok(error instanceof ProjectError)
+          assert.equal(error.reason, 'SCOPE_VIOLATION')
+          assert.deepEqual(error.details, {
+            projectRoot: '/tmp/workbench-project',
+            activeDirectory: '/tmp/workbench-project',
+            requestedPath: '..',
+            resolvedPath: '/tmp',
+          })
+          assert.match(error.suggestedNextAction ?? '', /cwd/)
+          return true
+        },
+      )
+    } finally {
+      await provider.dispose()
+    }
   })
 
   void test('rejects relative roots before constructing a module', async () => {

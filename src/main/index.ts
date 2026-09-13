@@ -22,6 +22,7 @@ import { WorkbenchAccountService } from './account/WorkbenchAccountService'
 import { WorkbenchSharedAccountStore } from './account/WorkbenchSharedAccountStore'
 import { WorkbenchActiveContextStore } from './agent/WorkbenchActiveContextStore'
 import { WorkbenchAgentExecutionStack } from './agent/WorkbenchAgentExecutionStack'
+import { WorkbenchContextPayloadStore } from './agent/WorkbenchContextRecall'
 import { WorkbenchProductAnalyticsReporter } from './analytics/WorkbenchProductAnalyticsReporter'
 import { installWorkbenchProductAnalyticsRuntime } from './analytics/WorkbenchProductAnalyticsRuntime'
 import { registerWorkbenchBrowserIpc } from './browser/WorkbenchBrowserIpc'
@@ -331,7 +332,8 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
     undefined,
     undefined,
     // Agent 写了哪些文件、命令跑在哪段时间，报给改动归属账本：「本轮改动」与回溯只认 Agent 的改动。
-    providers.chatRunAttribution
+    providers.chatRunAttribution,
+    new WorkbenchContextPayloadStore(() => providers.parts.storagePaths.getChatContextPayloadsDir())
   )
   const disposeModelIpc = registerWorkbenchModelIpc(
     new ProviderModelCatalogService({

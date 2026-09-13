@@ -81,7 +81,11 @@ import {
   WorkbenchAgentToolRegistry,
 } from './WorkbenchAgentToolRegistry'
 import { WorkbenchAgentUiBridge, type WorkbenchAgentUiPort } from './WorkbenchAgentUiBridge'
-import { createWorkbenchContextRecall } from './WorkbenchContextRecall'
+import {
+  createWorkbenchContextRecall,
+  WorkbenchContextPayloadStore,
+  type WorkbenchContextRecall,
+} from './WorkbenchContextRecall'
 import {
   createWorkbenchQueryRoleEngine,
   createWorkbenchTeamModelRoutingPort,
@@ -219,7 +223,7 @@ class WorkbenchAgentExecutionStack {
   private readonly modelRuntime: ModelRuntimeComposition['agentModelRuntime']
   private readonly contextGovernanceSessions = new ContextGovernanceSessionRegistry()
   /** 页出的大工具结果与 `context:recall` 的取回口，主 Agent 与它派出的子 Agent 共用。 */
-  private readonly contextRecall = createWorkbenchContextRecall(this.contextGovernanceSessions)
+  private readonly contextRecall: WorkbenchContextRecall
   private readonly sessions = new Map<string, WorkbenchAgentSession>()
   /**
    * 运行中补发的引导：按 executionId 分道排队，主 Agent 在轮次边界读走（`runtimeInput` /
@@ -253,10 +257,12 @@ class WorkbenchAgentExecutionStack {
      * 改动归属账本的上报面：每一轮按 (项目根, 会话) 绑一个上报口放进工具上下文，写文件工具与命令经它报出
      * Agent 动过的文件与时间窗。缺省不上报（探针、测试）。
      */
-    private readonly projectActivity?: WorkbenchAgentProjectActivitySource
+    private readonly projectActivity?: WorkbenchAgentProjectActivitySource,
+    payloadStore = new WorkbenchContextPayloadStore()
   ) {
     // Model 是宿主注入的能力：Agent 不自己发现 provider registry。
     // config.modelSelection 是不透明选择，Workbench 原样转交 Model 包解析（BYOK）。
+    this.contextRecall = createWorkbenchContextRecall(this.contextGovernanceSessions, payloadStore)
     this.modelRuntime = modelComposition.agentModelRuntime
   }
 
@@ -433,6 +439,7 @@ class WorkbenchAgentExecutionStack {
       session.stack.clearSession(sessionId)
       this.sessions.delete(sessionId)
     }
+    await this.contextRecall.payloadStore.deleteSession(sessionId)
     await this.activeContexts.deleteSession(sessionId)
   }
 
