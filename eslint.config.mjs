@@ -95,6 +95,82 @@ const localStylePlugin = {
         }
       },
     },
+    // 单属性条件展开 `...(cond ? { k: v } : {})` / `...(cond && { k: v })` 只是在拐弯写一个可选字段,
+    // 直接写字段即可。非空分支含 2+ 属性或展开(一组字段同进同出)时不报。
+    'no-single-property-conditional-spread': {
+      meta: {
+        type: 'suggestion',
+        messages: {
+          objectSpread:
+            '不要用单属性条件展开 `...(cond ? { k: v } : {})` / `...(cond && { k: v })`，直接写字段：'
+            + '值为 undefined 即缺省写 `k: v`；null 也算缺省写 `k: toOptional(v)`；其它条件写 `k: optionalWhen(cond, v)`，'
+            + '值有副作用或只在 cond 成立时才能求值写 `k: optionalWhenLazy(cond, () => v)`。'
+            + '消费方确实依赖「键不存在」（headers、env、URLSearchParams、Object.keys、前面还有展开或要与默认值合并）时，'
+            + '先构造对象再用 if 赋值。',
+          jsxSpread:
+            '不要在 JSX 里用单属性条件展开 `{...(cond ? { k: v } : {})}`，直接写属性：'
+            + '`k={v}` / `k={toOptional(v)}` / `k={optionalWhen(cond, v)}`；'
+            + '值有副作用或只在 cond 成立时才能求值写 `k={optionalWhenLazy(cond, () => v)}`。',
+        },
+        schema: [],
+      },
+      create(context) {
+        const typeScriptWrapperTypes = new Set([
+          'TSAsExpression',
+          'TSNonNullExpression',
+          'TSSatisfiesExpression',
+          'TSTypeAssertion',
+        ])
+
+        // 剥掉 `as` / `satisfies` / `!` / `<T>` 包装(括号在 ESTree 里本就不成节点)。
+        function unwrap(node) {
+          let current = node
+          while (current && typeScriptWrapperTypes.has(current.type)) current = current.expression
+          return current
+        }
+
+        function isEmptyBranch(node) {
+          const branch = unwrap(node)
+          switch (branch?.type) {
+            case 'ObjectExpression':
+              return branch.properties.length === 0
+            case 'Identifier':
+              return branch.name === 'undefined'
+            case 'Literal':
+              return branch.raw === 'null'
+            case 'UnaryExpression':
+              return branch.operator === 'void'
+            default:
+              return false
+          }
+        }
+
+        function isSinglePropertyObject(node) {
+          const branch = unwrap(node)
+          return branch?.type === 'ObjectExpression'
+            && branch.properties.length === 1
+            && branch.properties[0].type === 'Property'
+        }
+
+        function isSinglePropertyConditional(argument) {
+          const expression = unwrap(argument)
+          if (expression?.type === 'LogicalExpression') return expression.operator === '&&' && isSinglePropertyObject(expression.right)
+          if (expression?.type !== 'ConditionalExpression') return false
+          const { alternate, consequent } = expression
+          return (isSinglePropertyObject(consequent) && isEmptyBranch(alternate))
+            || (isEmptyBranch(consequent) && isSinglePropertyObject(alternate))
+        }
+
+        return {
+          'ObjectExpression > SpreadElement'(node) {
+            if (isSinglePropertyConditional(node.argument)) context.report({ node, messageId: 'objectSpread' })
+          },
+          JSXSpreadAttribute(node) {
+            if (isSinglePropertyConditional(node.argument)) context.report({ node, messageId: 'jsxSpread' })
+          },
+        }
+      },
+    },
   },
 }
 
@@ -277,6 +353,7 @@ export default [
       '@typescript-eslint/return-await': ['error', 'in-try-catch'],
       '@typescript-eslint/unified-signatures': 'error',
       'velaros-style/explicit-public-methods': 'error',
+      'velaros-style/no-single-property-conditional-spread': 'error',
       'no-redeclare': 'off',
       'unused-imports/no-unused-vars': [
         'error',
