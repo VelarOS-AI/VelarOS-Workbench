@@ -590,9 +590,9 @@ function readCodeGraphRequest(
   return {
     projectRoot,
     mode,
-    ...(centerPath === undefined ? {} : { centerPath }),
-    ...(depth === undefined ? {} : { depth }),
-    ...(maxNodes === undefined ? {} : { maxNodes }),
+    centerPath,
+    depth,
+    maxNodes,
   }
 }
 

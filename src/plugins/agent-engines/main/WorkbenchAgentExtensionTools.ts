@@ -81,7 +81,7 @@ export class WorkbenchAgentExtensionTools {
     const query = ProjectCodeQuerySchema.parse({
       action: 'search_symbols',
       query: input.query,
-      ...(input.kind ? { kind: input.kind } : {}),
+      kind: input.kind,
       limit: input.limit ?? 30,
     })
     if (query.action !== 'search_symbols') throw new Error('Unsupported project code query.')

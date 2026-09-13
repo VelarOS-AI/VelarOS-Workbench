@@ -249,7 +249,7 @@ function parseExtensionRequest(
   return {
     ...base,
     requestId,
-    ...(rawParameters === undefined ? {} : { parameters: rawParameters }),
+    parameters: rawParameters,
   }
 }
 
@@ -290,7 +290,7 @@ function parseCodeActionsRequest(input: unknown): Nullable<WorkbenchLanguageServ
       severity: value['severity'] as WorkbenchLanguageServiceDiagnostic['severity'],
       message: value['message'],
       ...optionalString(value, 'source'),
-      ...(code === undefined ? {} : { code }),
+      code,
       range: diagnosticRange,
     })
   }

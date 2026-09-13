@@ -317,6 +317,8 @@ void describe('Workbench shared VelarOS account', () => {
           aliases: ['gpt-5-latest'],
           inputUsdPerMillion: 1.25,
           outputUsdPerMillion: 10,
+          cacheReadUsdPerMillion: undefined,
+          cacheWriteUsdPerMillion: undefined,
           source: 'openai',
         },
       ])

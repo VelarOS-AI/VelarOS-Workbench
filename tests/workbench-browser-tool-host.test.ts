@@ -266,7 +266,7 @@ async function createRig(
     runtime: runtime as unknown as ElectronBrowserRuntime,
     isProjectRootOwned: (candidate) => ownedRoots.has(candidate),
     resolveGuestWebContents,
-    ...(ensureSiteWorkspace ? { ensureSiteWorkspace } : {}),
+    ensureSiteWorkspace,
   })
   const rig = {
     root,

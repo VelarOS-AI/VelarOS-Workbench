@@ -8,6 +8,8 @@ import { fileURLToPath } from 'node:url'
 
 import { describe, test } from 'bun:test'
 
+import { optionalWhen } from '@velaros-ai/core'
+
 import { ExternalLspClient } from '../src/main/workspace/language/ExternalLspClient'
 import {
   shouldDetachExternalLspProcess,
@@ -41,13 +43,11 @@ function extensionClient(projectRoot: string, declared = true): ExternalLspClien
     command: process.execPath,
     args: [fixture, 'extension'],
     documentLanguageId: 'protocol-fixture',
-    ...(declared ? {
-      extensionRequests: [{
-        id: 'ownership-graph',
-        method: 'velar/ownershipGraph',
-        capabilityPath: ['experimental', 'velar', 'ownershipGraph'],
-      }],
-    } : {}),
+    extensionRequests: optionalWhen(declared, [{
+      id: 'ownership-graph',
+      method: 'velar/ownershipGraph',
+      capabilityPath: ['experimental', 'velar', 'ownershipGraph'],
+    }]),
   })
 }
 

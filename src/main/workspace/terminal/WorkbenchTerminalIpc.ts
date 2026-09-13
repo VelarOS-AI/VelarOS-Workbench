@@ -8,6 +8,8 @@
  */
 import { ipcMain } from 'electron'
 
+import { toOptional } from '@velaros-ai/core'
+
 import type {
   WorkbenchTerminalInputRequest,
   WorkbenchTerminalStartRequest,
@@ -87,7 +89,7 @@ function parseStopRequest(input: unknown): Nullable<WorkbenchTerminalStopRequest
 
   return {
     sessionId: input['sessionId'] as string,
-    ...(signal ? { signal } : {}),
+    signal: toOptional(signal),
     ...optionalBoolean(input, 'skipForceKill'),
   }
 }

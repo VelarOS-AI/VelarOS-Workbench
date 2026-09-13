@@ -1,5 +1,7 @@
 import { ipcMain } from 'electron'
 
+import { isBoolean, isNumber, isString, isTrue, optionalWhen } from '@velaros-ai/core'
+
 import {
   type WorkbenchChatCheckpointCaptureRequest,
   type WorkbenchChatCheckpointDeleteRequest,
@@ -138,13 +140,11 @@ function parseDiff(input: unknown): WorkbenchGitDiffRequest {
   const record = input as Record<string, unknown>
   return {
     ...root,
-    ...(typeof record['commitSha'] === 'string' ? { commitSha: record['commitSha'] } : {}),
-    ...(typeof record['staged'] === 'boolean' ? { staged: record['staged'] } : {}),
-    ...(typeof record['path'] === 'string' ? { path: record['path'] } : {}),
-    ...(typeof record['originalPath'] === 'string'
-      ? { originalPath: record['originalPath'] }
-      : {}),
-    ...(typeof record['maxChars'] === 'number' ? { maxChars: record['maxChars'] } : {}),
+    commitSha: optionalWhen(isString, record['commitSha']),
+    staged: optionalWhen(isBoolean, record['staged']),
+    path: optionalWhen(isString, record['path']),
+    originalPath: optionalWhen(isString, record['originalPath']),
+    maxChars: optionalWhen(isNumber, record['maxChars']),
   }
 }
 
@@ -163,9 +163,9 @@ function parseLog(input: unknown): WorkbenchGitLogRequest {
   const record = input as Record<string, unknown>
   return {
     ...root,
-    ...(typeof record['branch'] === 'string' ? { branch: record['branch'] } : {}),
-    ...(typeof record['limit'] === 'number' ? { limit: record['limit'] } : {}),
-    ...(typeof record['path'] === 'string' ? { path: record['path'] } : {}),
+    branch: optionalWhen(isString, record['branch']),
+    limit: optionalWhen(isNumber, record['limit']),
+    path: optionalWhen(isString, record['path']),
   }
 }
 
@@ -182,8 +182,8 @@ function parseCommitMessage(input: unknown): WorkbenchGitCommitMessageRequest {
   ) return invalidRequest()
   return {
     ...root,
-    ...(locale ? { locale } : {}),
-    ...(paths ? { paths } : {}),
+    locale,
+    paths,
   }
 }
 
@@ -191,7 +191,7 @@ function parseCommit(input: unknown): WorkbenchGitCommitRequest {
   const request = parseCommitMessage(input)
   const message = (input as Record<string, unknown>)['message']
   if (message !== undefined && typeof message !== 'string') return invalidRequest()
-  return { ...request, ...(typeof message === 'string' ? { message } : {}) }
+  return { ...request, message }
 }
 
 function parseFileAction(input: unknown): WorkbenchGitFileActionRequest {
@@ -217,10 +217,8 @@ function parseSwitchBranch(input: unknown): WorkbenchGitSwitchBranchRequest {
   return {
     workspaceRoot: record['workspaceRoot'] as string,
     branch: record['branch'] as string,
-    ...(typeof record['create'] === 'boolean' ? { create: record['create'] } : {}),
-    ...(typeof record['startPoint'] === 'string'
-      ? { startPoint: record['startPoint'] }
-      : {}),
+    create: optionalWhen(isBoolean, record['create']),
+    startPoint: optionalWhen(isString, record['startPoint']),
   }
 }
 
@@ -245,15 +243,9 @@ function parseRemoteAction(input: unknown): WorkbenchGitRemoteActionRequest {
   return {
     workspaceRoot: record['workspaceRoot'] as string,
     action,
-    ...(typeof record['githubToken'] === 'string'
-      ? { githubToken: record['githubToken'] }
-      : {}),
-    ...(typeof record['privateKeyPath'] === 'string'
-      ? { privateKeyPath: record['privateKeyPath'] }
-      : {}),
-    ...(typeof record['sshKeyPath'] === 'string'
-      ? { sshKeyPath: record['sshKeyPath'] }
-      : {}),
+    githubToken: optionalWhen(isString, record['githubToken']),
+    privateKeyPath: optionalWhen(isString, record['privateKeyPath']),
+    sshKeyPath: optionalWhen(isString, record['sshKeyPath']),
   }
 }
 
@@ -264,7 +256,7 @@ function parseCheckpointCapture(input: unknown): WorkbenchChatCheckpointCaptureR
     workspaceRoot: input['workspaceRoot'] as string,
     sessionId: input['sessionId'] as string,
     checkpointId: input['checkpointId'] as string,
-    ...(typeof input['label'] === 'string' ? { label: input['label'] } : {}),
+    label: optionalWhen(isString, input['label']),
   }
 }
 
@@ -290,7 +282,7 @@ function parseRunChangesCapture(input: unknown): WorkbenchChatRunChangesCaptureR
     sessionId: input['sessionId'] as string,
     recordId: input['recordId'] as string,
     baseCommitId: input['baseCommitId'] as string,
-    ...(final ? { final } : {}),
+    final: optionalWhen(isTrue, final),
   }
 }
 
@@ -338,6 +330,6 @@ function parseRunChangesDelete(input: unknown): WorkbenchChatRunChangesDeleteReq
   return {
     workspaceRoot: input['workspaceRoot'] as string,
     sessionId: input['sessionId'] as string,
-    ...(recordIds ? { recordIds } : {}),
+    recordIds,
   }
 }

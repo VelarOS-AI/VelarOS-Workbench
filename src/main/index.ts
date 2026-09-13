@@ -159,7 +159,7 @@ function createWorkbenchWindow(hub: WorkbenchProjectHub): BrowserWindow {
     autoHideMenuBar: process.platform !== 'darwin',
     backgroundColor: '#f7f7f7',
     title: getWorkbenchWindowTitle(hub.getState().currentProject?.name ?? null),
-    ...(process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset' as const } : {}),
+    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     webPreferences: {
       sandbox: false,
       webviewTag: true,
@@ -254,7 +254,7 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
       websiteMarket,
       '/privacy#product-improvement-data'
     ),
-    ...(productAnalytics ? { reporter: productAnalytics } : {}),
+    reporter: productAnalytics,
   })
   const accountService = new WorkbenchAccountService(
       new WorkbenchSharedAccountStore(),

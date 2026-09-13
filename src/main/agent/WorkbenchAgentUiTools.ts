@@ -13,7 +13,7 @@ import {
   createApprovalOperationKey,
   defineToolRuntimeSpec,
 } from '@velaros-ai/agent/tool-contract'
-import { isPresent } from '@velaros-ai/core'
+import { isPresent, optionalWhen, optionalWhenLazy } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { buildBackgroundCommandConfirmationMessage } from '@velaros-ai/project/execution'
 
@@ -278,10 +278,10 @@ function readOpenFileItems(input: OpenFileInput, notes: string[]): OpenFileItemI
     if (items.length > 0) notes.push(`Both path and files were given; ${input.path} was opened as the first file.`)
     items.unshift({
       path: input.path,
-      ...(isPresent(input.line) ? { line: input.line } : {}),
-      ...(isPresent(input.column) ? { column: input.column } : {}),
-      ...(isPresent(input.endLine) ? { endLine: input.endLine } : {}),
-      ...(input.highlights ? { highlights: input.highlights } : {}),
+      line: input.line,
+      column: input.column,
+      endLine: input.endLine,
+      highlights: input.highlights,
     })
   }
   if (items.length === 0) throw new AppError('VALIDATION', 'Pass files: [{ path, ... }] (or a single path).')
@@ -428,12 +428,12 @@ const openFileTool = defineToolRuntimeSpec<OpenFileInput, WorkbenchAgentUiToolCo
         .map((file) => ({
           path: file.path,
           line: file.line,
-          ...(file.highlights.length > 0
-            ? { highlights: file.highlights.map((range) => formatRange(file.path, range.startLine, range.endLine)) }
-            : {}),
+          highlights: optionalWhenLazy(file.highlights.length > 0, () =>
+            file.highlights.map((range) => formatRange(file.path, range.startLine, range.endLine))
+          ),
         })),
-      ...(failed.length > 0 ? { failed } : {}),
-      ...(notes.length > 0 ? { notes } : {}),
+      failed: optionalWhen(failed.length > 0, failed),
+      notes: optionalWhen(notes.length > 0, notes),
     }
   },
 })
@@ -470,7 +470,8 @@ const clearHighlightsTool = defineToolRuntimeSpec<{ paths?: string[] }, Workbenc
     const result = paths.size > 0
       ? await sendCommand(context, { type: 'clear-highlights', paths: [...paths] })
       : { cleared: 0 }
-    return { ...result, ...(ignored.length > 0 ? { ignored } : {}) }
+    // 渲染端回执的键不受控：没有要说明的路径时原样返回，不拿 undefined 盖掉回执里的同名键。
+    return ignored.length > 0 ? { ...result, ignored } : result
   },
 })
 

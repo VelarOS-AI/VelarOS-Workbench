@@ -82,7 +82,7 @@ function toolContext(
     resourceId: root,
     abortSignal: new AbortController().signal,
     approval: approval.port,
-    ...(ui ? { workbenchUi: ui.port } : {}),
+    workbenchUi: ui?.port,
   }
 }
 
@@ -180,6 +180,8 @@ void describe('Workbench agent UI tools', () => {
       // endLine 是一段 AI 选区的简写。
       assert.deepEqual(result, {
         opened: [{ path: 'src/cache/store.ts', line: 2, highlights: ['src/cache/store.ts:2-4'] }],
+        failed: undefined,
+        notes: undefined,
       })
       assert.deepEqual(ui.commands, [
         {
@@ -215,7 +217,8 @@ void describe('Workbench agent UI tools', () => {
         toolContext(root, ui) as never
       )
       assert.deepEqual(clamped, {
-        opened: [{ path: 'src/cache/store.ts', line: 5 }],
+        opened: [{ path: 'src/cache/store.ts', line: 5, highlights: undefined }],
+        failed: undefined,
         notes: ['src/cache/store.ts has only 5 lines; jumped to line 5 instead of 40.'],
       })
     })
@@ -236,9 +239,10 @@ void describe('Workbench agent UI tools', () => {
         ),
         {
           opened: [
-            { path: 'README.md', line: 1 },
-            { path: 'src/cache/store.ts', line: 2 },
+            { path: 'README.md', line: 1, highlights: undefined },
+            { path: 'src/cache/store.ts', line: 2, highlights: undefined },
           ],
+          failed: undefined,
           notes: ['Both path and files were given; README.md was opened as the first file.'],
         }
       )
@@ -326,8 +330,10 @@ void describe('Workbench agent UI tools', () => {
             line: 3,
             highlights: ['src/cache/store.ts:3-4', 'src/cache/store.ts:1', 'src/cache/store.ts:5'],
           },
-          { path: 'README.md', line: 1 },
+          { path: 'README.md', line: 1, highlights: undefined },
         ],
+        failed: undefined,
+        notes: undefined,
       })
       await assert.rejects(
         Promise.resolve(openFile.execute({}, toolContext(root, ui) as never)),

@@ -355,6 +355,7 @@ void describe('Workbench Velar compiler graph consumer', () => {
     assert.deepEqual(calls, [{
       action: 'search_symbols',
       query: 'run',
+      kind: undefined,
       limit: 12,
     }])
   })

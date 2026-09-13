@@ -1,6 +1,7 @@
 import type { ModelMessage } from 'ai'
 
 import type { ExecutionEventBus } from '@velaros-ai/agent'
+import { optionalWhen, toOptional } from '@velaros-ai/core'
 
 import type { WorkbenchAgentEngineModelCatalog } from '../../../shared/workbenchResourcePlugins'
 
@@ -169,14 +170,14 @@ export class WorkbenchCodexAgentRuntime {
           return [{
             value,
             label: readString(model.displayName) ?? value,
-            ...(description ? { description } : {}),
+            description: toOptional(description),
             isDefault: model.isDefault === true,
           }]
         })
       return {
         engineId: 'codex',
         available: models.length > 0,
-        ...(models.length > 0 ? {} : { reason: 'Codex 未上报可用模型，请检查安装与登录状态。' }),
+        reason: optionalWhen(models.length === 0, 'Codex 未上报可用模型，请检查安装与登录状态。'),
         models,
       }
     } catch (error) {
@@ -536,9 +537,10 @@ export class WorkbenchCodexAgentRuntime {
     active.input.events.emitToolDone({
       toolCallId: id,
       result: presentCodexToolResult(type, item),
-      ...(status === 'failed' || status === 'declined'
-        ? { error: `${type} ${status === 'declined' ? '被拒绝' : '执行失败'}。` }
-        : {}),
+      error: optionalWhen(
+        status === 'failed' || status === 'declined',
+        `${type} ${status === 'declined' ? '被拒绝' : '执行失败'}。`
+      ),
     })
   }
 

@@ -22,6 +22,7 @@ import {
   createAgentCapabilityExecutionEventEnvelopeV1,
   parseAgentCapabilityExecuteEnvelopeV1,
 } from '@velaros-ai/agent/protocol/agent-capability'
+import { isNonBlankString, optionalWhen } from '@velaros-ai/core'
 import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
 import {
   type ScopeRef,
@@ -624,9 +625,7 @@ function readResolveAgentConfirmation(
   return {
     sessionId,
     approved,
-    ...(typeof rejectionMessage === 'string' && rejectionMessage.trim()
-      ? { rejectionMessage }
-      : {}),
+    rejectionMessage: optionalWhen(isNonBlankString, rejectionMessage),
   }
 }
 
@@ -678,7 +677,7 @@ function projectStatus(runtime: Kernel): WorkbenchKernelStatus {
       generation: module.generation,
       lifecycleStatus: module.status,
       healthStatus: module.health.status,
-      ...(module.error ? { error: module.error } : {}),
+      error: optionalWhen(!!module.error, module.error),
     })),
     capabilities,
     error: buildRuntimeError(runtimeStatus, modules.length, unhealthy),
@@ -724,11 +723,13 @@ function toKernelScope(
   value: WorkbenchKernelInvokeRequest['scope']
 ): ScopeRef | undefined {
   if (!value) return undefined
-  return {
+  // 与 Kernel 的 SDK 作用域同形：协议里 kind 为 null 时，这里整个不带这个键。
+  const scope: { id: string; ownerModuleId: string; kind?: string } = {
     id: value.id,
     ownerModuleId: value.ownerModuleId,
-    ...(value.kind === null ? {} : { kind: value.kind }),
   }
+  if (value.kind !== null) scope.kind = value.kind
+  return scope
 }
 
 function toInvocationError(error: unknown): WorkbenchKernelInvocationError {

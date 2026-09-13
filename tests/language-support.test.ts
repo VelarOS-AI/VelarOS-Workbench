@@ -1123,6 +1123,8 @@ void describe('focused Workbench language surface', () => {
       }),
       {
         displayText: 'function catalogHeaders: () -> Map<string, string>',
+        documentation: undefined,
+        documentationBlocks: undefined,
       }
     )
   })

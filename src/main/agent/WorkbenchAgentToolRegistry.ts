@@ -20,6 +20,7 @@ import {
   canonicalizeProviderInputSchema,
   schemaToInputSchema,
 } from '@velaros-ai/agent/tool-contract'
+import { mapDefined } from '@velaros-ai/core'
 
 /** 平台 `ToolSchemaResult` 的结构镜像（该类型未从 `@velaros-ai/agent` 导出）。 */
 type WorkbenchToolSchemaResult =
@@ -289,6 +290,13 @@ function cloneCategoryDefinition(definition: ToolCategoryDefinition): ToolCatego
   }
 }
 
+/** 副本与原件同形：工具没声明 profiles 时副本里也没有这个键。 */
+function cloneToolExposure(exposure: ToolExposurePolicy): ToolExposurePolicy {
+  const clone: ToolExposurePolicy = { ...exposure }
+  if (exposure.profiles) clone.profiles = { ...exposure.profiles }
+  return clone
+}
+
 function cloneToolDefinition(definition: WorkbenchAgentToolDefinition): WorkbenchRegisteredTool {
   return {
     ...definition,
@@ -296,14 +304,7 @@ function cloneToolDefinition(definition: WorkbenchAgentToolDefinition): Workbenc
     requiredModelInputModalities: definition.requiredModelInputModalities
       ? [...definition.requiredModelInputModalities]
       : undefined,
-    exposure: definition.exposure
-      ? {
-          ...definition.exposure,
-          ...(definition.exposure.profiles
-            ? { profiles: { ...definition.exposure.profiles } }
-            : {}),
-        }
-      : undefined,
+    exposure: mapDefined(definition.exposure, cloneToolExposure),
     surfaces: definition.surfaces ? { ...definition.surfaces } : undefined,
   }
 }

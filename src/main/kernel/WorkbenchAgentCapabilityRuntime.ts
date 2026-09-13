@@ -18,7 +18,7 @@ import {
   TERMINAL_STREAM_RUNTIME_STATE_KINDS,
 } from '@velaros-ai/agent/protocol'
 import { parseAgentCapabilityExecuteEnvelopeV1 } from '@velaros-ai/agent/protocol/agent-capability'
-import { Log } from '@velaros-ai/core'
+import { isString, Log, optionalWhen } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import {
@@ -91,14 +91,14 @@ function parseWorkbenchAgentConfig(
     return {
       engineId,
       executionModes,
-      ...(typeof config.model === 'string' ? { model: config.model.trim() } : {}),
+      model: optionalWhen(isString, config.model)?.trim(),
     }
   return {
     modelSelection: config.modelSelection,
     executionModes,
-    // 缺席时不写字段：执行栈自己回落默认档，避免在协议层再钉一份默认值。
-    ...(permissionConfirmationMode === undefined ? {} : { permissionConfirmationMode }),
-    ...(runProfile === undefined ? {} : { runProfile }),
+    // 缺席时留空：执行栈自己回落默认档，避免在协议层再钉一份默认值。
+    permissionConfirmationMode,
+    runProfile,
   }
 }
 

@@ -387,7 +387,7 @@ export class WorkbenchChatCheckpointService {
       maxBuffer: GitOutputMaxBytes,
       reject: false,
       stripFinalNewline: !options.keepFinalNewline,
-      ...(options.input === undefined ? {} : { input: options.input }),
+      input: options.input,
     })
     if (result.failed) {
       const detail = (result.stderr || result.stdout).trim()

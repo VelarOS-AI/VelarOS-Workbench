@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs'
 import { isAbsolute, relative, resolve } from 'node:path'
 
+import { optionalWhen } from '@velaros-ai/core'
 import type { ProjectCodeIndexQuery } from '@velaros-ai/project/contracts'
 
 import type {
@@ -191,7 +192,7 @@ export class WorkbenchVelarLogicGraphService {
       parameters: {
         maximumNodes: 10_000,
         maximumEdges: 20_000,
-        ...(previousRevision ? { previousRevision } : {}),
+        previousRevision: optionalWhen(!!previousRevision, previousRevision),
       },
     })
     const parsed = parseVelarLogicGraphResponse(result.result)

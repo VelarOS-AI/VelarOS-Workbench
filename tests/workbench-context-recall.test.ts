@@ -9,6 +9,7 @@ import { MockLanguageModelV3 } from 'ai/test'
 import { z } from 'zod'
 
 import { ExecutionEventBus } from '@velaros-ai/agent'
+import { optionalWhen } from '@velaros-ai/core'
 import { createModelRuntimeComposition } from '@velaros-ai/model/node'
 import type { ProjectKernel } from '@velaros-ai/project/runtime'
 
@@ -261,7 +262,7 @@ void describe('Workbench context recall in a real run', () => {
                     toolName: 'context__recall',
                     input: JSON.stringify({
                       ref,
-                      ...(source === 'input' ? { jsonPath: '$.content' } : {}),
+                      jsonPath: optionalWhen(source === 'input', '$.content'),
                       offset: 29_000,
                       maxChars: 4_000,
                       reason: 'read the middle',

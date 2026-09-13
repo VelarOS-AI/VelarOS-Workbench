@@ -6,6 +6,7 @@ import { pathToFileURL } from 'node:url'
 
 import { URI } from 'vscode-uri'
 
+import { optionalWhen } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type {
@@ -546,12 +547,10 @@ function launchFor(
     command: executable.command,
     args: descriptor.args ?? [],
     electronRunAsNode: false,
-    ...(executable.rejectedProjectPath
-      ? {
-          unavailableMessage:
-            `${descriptor.label} 语言服务器不可用：项目命令的真实路径超出工作区。`,
-        }
-      : {}),
+    unavailableMessage: optionalWhen(
+      executable.rejectedProjectPath,
+      `${descriptor.label} 语言服务器不可用：项目命令的真实路径超出工作区。`
+    ),
   }
 }
 
@@ -930,14 +929,13 @@ export class ExternalLspClient {
         `${this.descriptor.label} 语言服务器不可用：未找到 '${launch.command}'。 ${installHint}`
       )
     }
+    // 不走 Electron 运行时时一个键也不写：继承来的 ELECTRON_RUN_AS_NODE 要原样留给子进程。
+    const env: NodeJS.ProcessEnv = { ...process.env, PATH: pathValue }
+    if (launch.electronRunAsNode) env.ELECTRON_RUN_AS_NODE = '1'
     const child = spawn(launch.command, launch.args, {
       cwd: this.runtimeRoot,
       detached: shouldDetachExternalLspProcess(),
-      env: {
-        ...process.env,
-        PATH: pathValue,
-        ...(launch.electronRunAsNode ? { ELECTRON_RUN_AS_NODE: '1' } : {}),
-      },
+      env,
       shell: process.platform === 'win32' && launch.command.endsWith('.cmd'),
       stdio: ['pipe', 'pipe', 'pipe'],
     })

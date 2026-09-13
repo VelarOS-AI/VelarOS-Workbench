@@ -1,4 +1,5 @@
 import type { ExecutionEventBus } from '@velaros-ai/agent'
+import { isNonBlankString, optionalWhen } from '@velaros-ai/core'
 
 export interface WorkbenchAgentEngineQuestion {
   id: string
@@ -127,7 +128,7 @@ export class WorkbenchEngineInteractionBroker {
     this.confirmationsBySession.delete(sessionId)
     pending.resolve({
       approved,
-      ...(rejectionMessage?.trim() ? { message: rejectionMessage.trim() } : {}),
+      message: optionalWhen(isNonBlankString, rejectionMessage)?.trim(),
     })
     return true
   }

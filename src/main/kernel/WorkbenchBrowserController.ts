@@ -5,6 +5,7 @@ import type {
   BrowserSiteContext,
 } from '@velaros-ai/browser/core'
 import type { ElectronBrowserRuntime } from '@velaros-ai/browser/runtime'
+import { isNonBlankString, optionalWhen } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 interface BrowserSessionBinding {
@@ -85,11 +86,11 @@ export class WorkbenchBrowserController {
       || record.action === 'goto'
         ? record.action
         : 'goto'
-    const url = typeof record.url === 'string' ? record.url.trim() : undefined
+    const url = optionalWhen(isNonBlankString, record.url)?.trim()
     const result = await this.runtime.navigatePage(
       browserSessionId,
       binding.context,
-      { action, ...(url ? { url } : {}) },
+      { action, url },
       signal
     )
     binding.context = { ...binding.context, url: result.url }

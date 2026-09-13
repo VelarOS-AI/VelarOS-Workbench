@@ -140,7 +140,7 @@ void describe('pre-split Workbench shell parity', () => {
     const presentation = readSource('src/renderer/src/StandaloneWorkbenchPagePresentation.tsx')
     const surface = readSource('src/renderer/src/hooks/useWorkbenchSurfaceState.ts')
 
-    assert.match(main, /titleBarStyle:\s*'hiddenInset'/)
+    assert.match(main, /titleBarStyle:\s*process\.platform === 'darwin' \? 'hiddenInset'/)
     assert.match(presentation, /onClick=\{\(\) => toggleLeftTool\('project'\)\}/)
     assert.match(presentation, /isFilePanelOpen:\s*surface\.isFilePanelOpen/)
     assert.match(surface, /const \[isFilePanelOpen, setIsFilePanelOpen\] = useState\(true\)/)

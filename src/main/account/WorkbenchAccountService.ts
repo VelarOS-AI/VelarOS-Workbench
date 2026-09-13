@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import os from 'node:os'
 
+import { optionalWhen } from '@velaros-ai/core'
 import type {
   ModelPricingCatalog,
   ModelPricingEntry,
@@ -351,7 +352,7 @@ function parseManagedProvider(value: unknown): WorkbenchManagedModelProvider | n
     providerId,
     displayName: getWorkbenchManagedModelProviderLabel(providerId),
     enabled: record['enabled'],
-    ...(defaultModel ? { defaultModel } : {}),
+    defaultModel,
     models,
   }
 }
@@ -445,8 +446,8 @@ export function parseModelPricingCatalog(value: unknown): ModelPricingCatalog {
         inputUsdPerMillion,
         outputUsdPerMillion,
         // 缓存读 / 写单价是可选项：目录给了才透传，回答末尾的整轮约价据此给缓存命中的输入单独计价。
-        ...(isNonNegativePrice(cacheReadUsdPerMillion) ? { cacheReadUsdPerMillion } : {}),
-        ...(isNonNegativePrice(cacheWriteUsdPerMillion) ? { cacheWriteUsdPerMillion } : {}),
+        cacheReadUsdPerMillion: readOptionalPrice(cacheReadUsdPerMillion),
+        cacheWriteUsdPerMillion: readOptionalPrice(cacheWriteUsdPerMillion),
         source: typeof source === 'string' ? source : '',
       }]
     }),
@@ -455,6 +456,10 @@ export function parseModelPricingCatalog(value: unknown): ModelPricingCatalog {
 
 function isNonNegativePrice(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0
+}
+
+function readOptionalPrice(value: unknown): number | undefined {
+  return optionalWhen(isNonNegativePrice(value), value as number)
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

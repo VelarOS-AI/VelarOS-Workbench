@@ -15,7 +15,7 @@ import {
 } from 'vscode-markdown-languageservice'
 import { URI } from 'vscode-uri'
 
-import { isNumber,isPresent, toNullable, toOptional } from '@velaros-ai/core'
+import { isNumber,isPresent, optionalWhen, toNullable, toOptional } from '@velaros-ai/core'
 
 import type {
   WorkbenchLanguageServiceCapability,
@@ -165,7 +165,7 @@ function parseHoverDocumentationBlocks(
     const text = (match[2] ?? '').trim()
     if (text) {
       const language = (match[1] ?? '').trim()
-      blocks.push({ kind: 'code', text, ...(language ? { language } : {}) })
+      blocks.push({ kind: 'code', text, language: optionalWhen(!!language, language) })
     }
     cursor = start + match[0].length
   }
@@ -235,8 +235,8 @@ export function buildExternalHoverResult(contents: unknown): Nullable<WorkbenchL
   if (!displayText && !documentation) return null
   return {
     displayText: displayText || documentation,
-    ...(displayText && documentation ? { documentation } : {}),
-    ...(displayText && documentationBlocks.length > 0 ? { documentationBlocks } : {}),
+    documentation: optionalWhen(!!displayText && !!documentation, documentation),
+    documentationBlocks: optionalWhen(!!displayText && documentationBlocks.length > 0, documentationBlocks),
   }
 }
 
@@ -731,9 +731,7 @@ class WorkbenchLanguageServices {
               result.definitionPreview = {
                 kind: 'code',
                 text,
-                ...(descriptor?.documentLanguageId
-                  ? { language: descriptor.documentLanguageId }
-                  : {}),
+                language: optionalWhen(!!descriptor?.documentLanguageId, descriptor?.documentLanguageId),
               }
             }
           }

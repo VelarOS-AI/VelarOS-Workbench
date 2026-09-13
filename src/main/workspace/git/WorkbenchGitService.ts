@@ -4,6 +4,7 @@ import { isAbsolute, join, resolve } from 'node:path'
 
 import { execa } from 'execa'
 
+import { optionalWhen } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type {
@@ -132,7 +133,7 @@ export class WorkbenchGitService {
     return {
       rootPath,
       scope: options.commitSha ? 'commit' : options.staged ? 'staged' : 'working',
-      ...(options.path ? { path: options.path } : {}),
+      path: optionalWhen(!!options.path, options.path),
       diff: output.slice(0, maxChars),
       truncated: output.length > maxChars,
     }
@@ -558,7 +559,7 @@ export class WorkbenchGitService {
         path,
         indexStatus,
         workTreeStatus,
-        ...(originalPath ? { originalPath } : {}),
+        originalPath: optionalWhen(!!originalPath, originalPath),
       })
     }
     return {

@@ -931,11 +931,11 @@ export function createWorkbenchToolContext(input: {
     // 审批与交互分属两个端口：Workbench 的 execution 恒为空（无执行账），审批却是真通道。
     approval: input.approval ?? defaultDenyApprovalPort,
     execution: null,
-    ...(input.dispatchSubAgent ? { dispatchSubAgent: input.dispatchSubAgent } : {}),
-    ...(input.workbenchUi ? { workbenchUi: input.workbenchUi } : {}),
-    ...(input.projectActivity ? { projectActivity: input.projectActivity } : {}),
-    ...(input.conversation ? { conversation: input.conversation } : {}),
-    ...(input.contextPayloadStore ? { contextPayloadStore: input.contextPayloadStore } : {}),
+    dispatchSubAgent: input.dispatchSubAgent,
+    workbenchUi: input.workbenchUi,
+    projectActivity: input.projectActivity,
+    conversation: input.conversation,
+    contextPayloadStore: input.contextPayloadStore,
     codingSession: input.tracker,
     getEnabledToolCategories: () => input.tracker.getEnabledToolCategories(),
     query: async () => {

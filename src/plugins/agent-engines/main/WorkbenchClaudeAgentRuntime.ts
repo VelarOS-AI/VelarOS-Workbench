@@ -3,6 +3,7 @@ import type { ModelMessage } from 'ai'
 import {
   type ExecutionEventBus,
 } from '@velaros-ai/agent'
+import { isNonBlankString, optionalWhen } from '@velaros-ai/core'
 
 import type { WorkbenchAgentEngineModelCatalog } from '../../../shared/workbenchResourcePlugins'
 
@@ -114,7 +115,7 @@ export class WorkbenchClaudeAgentRuntime {
           input.events.emitToolDone({
             toolCallId: translated.toolDone.id,
             result: translated.toolDone.result,
-            ...(translated.toolDone.error ? { error: translated.toolDone.error } : {}),
+            error: translated.toolDone.error,
           })
         }
         if (translated.error) resultError = translated.error
@@ -168,7 +169,7 @@ export class WorkbenchClaudeAgentRuntime {
       return {
         engineId: 'claude-code',
         available: models.length > 0,
-        ...(models.length > 0 ? {} : { reason: 'Claude Code 未上报可用模型，请检查安装与登录状态。' }),
+        reason: optionalWhen(models.length === 0, 'Claude Code 未上报可用模型，请检查安装与登录状态。'),
         models,
       }
     } catch (error) {
@@ -279,7 +280,7 @@ function translateClaudeMessage(message: ClaudeAgentSdkMessage): TranslatedClaud
         text: [],
         reasoning: [],
         error: null,
-        toolDone: { id, result: result.content, ...(error ? { error } : {}) },
+        toolDone: { id, result: result.content, error: optionalWhen(!!error, error) },
       }
     }
   }
@@ -323,8 +324,11 @@ function presentClaudeTool(
   if (name === ProjectCodeSearchToolName || name.endsWith(`__${ProjectCodeSearchToolName}`)) return { name: ProjectCodeToolIdentity, input }
   if (name === 'Bash') return { name: 'project:run', input }
   if (['Write', 'Edit', 'MultiEdit', 'NotebookEdit'].includes(name)) {
+    // 只在拿到路径时补 path：原始入参里已有的同名键不拿 undefined 盖掉。
+    const editInput = { ...input }
     const path = input.file_path ?? input.notebook_path
-    return { name: 'project:edit', input: { ...input, ...(path ? { path } : {}) } }
+    if (path) editInput.path = path
+    return { name: 'project:edit', input: editInput }
   }
   if (name === 'Read') return { name: 'project:read', input }
   if (name === 'Glob') return { name: 'project:list', input }
@@ -397,7 +401,7 @@ function normalizeClaudeModels(
     return {
       value: model.value,
       label: model.displayName,
-      ...(model.description?.trim() ? { description: model.description } : {}),
+      description: optionalWhen(isNonBlankString, model.description),
       isDefault: wireId === recommended,
     }
   })

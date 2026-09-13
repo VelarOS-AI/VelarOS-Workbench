@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process'
 
+import { optionalWhen } from '@velaros-ai/core'
 import { logRuntime } from '@velaros-ai/core/logger'
 import { SystemPlatformCompatibility } from '@velaros-ai/system/platform-compatibility'
 
@@ -47,7 +48,7 @@ function buildExternalLspProcessTreeTerminationPlan(
   return {
     kind: 'signal',
     pid: killPid,
-    ...(killPid === pid ? {} : { fallbackPid: pid }),
+    fallbackPid: optionalWhen(killPid !== pid, pid),
     signal,
   }
 }

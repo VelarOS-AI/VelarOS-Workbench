@@ -35,6 +35,7 @@ import {
   type ToolBrowserApi,
   type VelaTool,
 } from '@velaros-ai/browser/tools'
+import { isPresent, optionalWhen, optionalWhenLazy } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { createProjectBundledModDefinition } from '@velaros-ai/project/composition'
 
@@ -505,44 +506,30 @@ export class WorkbenchBrowserToolHost {
         description: source.description,
         providerId: BrowserModId,
         providerKind: 'mod',
-        ...(source.usageSkillId ? { usageSkillId: source.usageSkillId } : {}),
+        usageSkillId: optionalWhen(!!source.usageSkillId, source.usageSkillId),
         schema: source.schema,
-        ...(source.surfaces ? { surfaces: bindToolSurfaces(source, createContext) } : {}),
+        surfaces: optionalWhenLazy(source.surfaces, () => bindToolSurfaces(source, createContext)),
         permissions: Object.freeze([...source.permissions]),
-        ...(source.capabilities ? { capabilities: source.capabilities } : {}),
-        ...(source.requiredModelInputModalities
-          ? { requiredModelInputModalities: source.requiredModelInputModalities }
-          : {}),
-        ...(source.exposure ? { exposure: source.exposure } : {}),
-        ...(source.outputInline === undefined ? {} : { outputInline: source.outputInline }),
-        ...(source.hideWhenUnavailable === undefined
-          ? {}
-          : { hideWhenUnavailable: source.hideWhenUnavailable }),
-        ...(source.isConcurrencySafe
-          ? { isConcurrencySafe: source.isConcurrencySafe as (input: Record<string, unknown>) => boolean }
-          : {}),
-        ...(source.isAvailable
-          ? {
-              isAvailable: (toolContext: unknown) => {
-                try {
-                  return source.isAvailable?.(createContext(toolContext)) ?? true
-                } catch {
-                  return false
-                }
-              },
-            }
-          : {}),
-        ...(source.unavailableReason
-          ? {
-              unavailableReason: (toolContext: unknown) => {
-                try {
-                  return source.unavailableReason?.(createContext(toolContext)) ?? null
-                } catch {
-                  return 'Browser Mod is disabled or the Workbench project is no longer open.'
-                }
-              },
-            }
-          : {}),
+        capabilities: source.capabilities,
+        requiredModelInputModalities: source.requiredModelInputModalities,
+        exposure: source.exposure,
+        outputInline: source.outputInline,
+        hideWhenUnavailable: source.hideWhenUnavailable,
+        isConcurrencySafe: source.isConcurrencySafe,
+        isAvailable: optionalWhen(isPresent(source.isAvailable), (toolContext: unknown) => {
+          try {
+            return source.isAvailable?.(createContext(toolContext)) ?? true
+          } catch {
+            return false
+          }
+        }),
+        unavailableReason: optionalWhen(isPresent(source.unavailableReason), (toolContext: unknown) => {
+          try {
+            return source.unavailableReason?.(createContext(toolContext)) ?? null
+          } catch {
+            return 'Browser Mod is disabled or the Workbench project is no longer open.'
+          }
+        }),
         execute: (input: unknown, toolContext: unknown) => {
           const context = createContext(toolContext)
           return source.execute(input as Record<string, unknown>, context)
@@ -1071,12 +1058,9 @@ function bindToolSurfaces(
     result[profileId] = {
       description: surface.description,
       schema: surface.schema,
-      ...(surface.normalize
-        ? {
-            normalize: (input, toolContext) =>
-              surface.normalize?.(input, createContext(toolContext)) ?? input,
-          }
-        : {}),
+      normalize: optionalWhen(isPresent(surface.normalize), (input: unknown, toolContext: unknown) =>
+        surface.normalize?.(input, createContext(toolContext)) ?? input
+      ),
     }
   }
   return result

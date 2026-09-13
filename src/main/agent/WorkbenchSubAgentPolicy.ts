@@ -8,7 +8,7 @@ import type {
   TeamSelectableModel,
 } from '@velaros-ai/agent'
 import type { AgentRoleId, ToolCategoryId } from '@velaros-ai/agent/protocol'
-import { Log } from '@velaros-ai/core'
+import { Log, optionalWhen } from '@velaros-ai/core'
 import { asRecord } from '@velaros-ai/core/utils/unknownJsonRecord'
 import type { ChatProviderId } from '@velaros-ai/model'
 import type { ModelRuntimeComposition } from '@velaros-ai/model/node'
@@ -161,10 +161,8 @@ function createWorkbenchQueryRoleEngine(primaryAgentProfile: PrimaryAgentProfile
         selectedSkillIds: options.selectedSkillIds ?? [],
         // 子 Agent 不再往下派：嵌套派发在 Workbench 这一档没有收益，只会让并发账更难读。
         allowSubAgents: false,
-        ...(options.promptFeatures ? { promptFeatures: options.promptFeatures } : {}),
-        ...(options.activeCapabilityScope
-          ? { activeCapabilityScope: options.activeCapabilityScope }
-          : {}),
+        promptFeatures: options.promptFeatures,
+        activeCapabilityScope: optionalWhen(!!options.activeCapabilityScope, options.activeCapabilityScope),
       })
       const lockedRoleId = options.lockedRoleId?.trim()
       if (!lockedRoleId) return resolution

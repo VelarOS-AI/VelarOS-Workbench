@@ -90,7 +90,7 @@ function readListProviderModelsRequest(request: unknown): ListProviderModelsRequ
     provider: value.provider as ChatProviderId,
     apiKey: value.apiKey,
     baseURL: value.baseURL,
-    ...(typeof value.defaultModel === 'string' ? { defaultModel: value.defaultModel } : {}),
-    ...(value.purpose ? { purpose: value.purpose } : {}),
+    defaultModel: value.defaultModel,
+    purpose: value.purpose,
   }
 }

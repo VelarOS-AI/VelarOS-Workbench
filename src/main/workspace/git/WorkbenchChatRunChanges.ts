@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { mkdir, readFile, rm } from 'node:fs/promises'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 
+import { optionalWhenLazy } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { writeJsonFileAtomically } from '@velaros-ai/core/utils/FilePersistence'
 
@@ -141,7 +142,7 @@ export class WorkbenchChatRunChangeStore {
     return {
       recordId: record.recordId,
       capturedAt: record.capturedAt,
-      ...(record.baseCommitId ? { baseCommitId: record.baseCommitId } : {}),
+      baseCommitId: record.baseCommitId,
       changes: record.changes.map(toPublicChange),
     }
   }
@@ -266,7 +267,7 @@ export class WorkbenchChatRunChangeStore {
         capturedAt,
         baseCommitId: request.baseCommitId,
         changes,
-        ...(selection.attribution ? { attribution: { watcher: selection.attribution.watcher } } : {}),
+        attribution: optionalWhenLazy(selection.attribution, () => ({ watcher: selection.attribution!.watcher })),
       })
     } else {
       // 上一次采集时有改动、这一次全被撤回了：旧记录不能留着冒充现在。
@@ -389,9 +390,9 @@ function summarize(
     additions: changes.reduce((total, change) => total + change.additions, 0),
     deletions: changes.reduce((total, change) => total + change.deletions, 0),
     error: null,
-    ...(changes.length <= WorkbenchChatRunChangesSummaryMaxPaths
-      ? { paths: changes.map((change) => change.path) }
-      : {}),
+    paths: optionalWhenLazy(changes.length <= WorkbenchChatRunChangesSummaryMaxPaths, () =>
+      changes.map((change) => change.path)
+    ),
   }
 }
 
@@ -404,7 +405,7 @@ function toPublicChange(change: StoredRunFileChange): WorkbenchChatRunFileChange
     binary: change.binary,
     patch: change.patch,
     patchOmitted: change.patchOmitted,
-    ...(change.attribution ? { attribution: change.attribution } : {}),
+    attribution: change.attribution,
   }
 }
 
@@ -431,16 +432,16 @@ function parseStoredRecord(text: string, recordId: string): StoredRunChangesReco
   )
     return null
   const watcher = isPlainRecord(attribution) ? attribution.watcher : undefined
-  return {
+  const record: StoredRunChangesRecord = {
     version,
     recordId,
     capturedAt,
-    ...(typeof baseCommitId === 'string' && ObjectIdPattern.test(baseCommitId)
-      ? { baseCommitId }
-      : {}),
     changes: changes.filter(isStoredFileChange),
-    ...(watcher === 'observed' || watcher === 'unavailable' ? { attribution: { watcher } } : {}),
   }
+  // 两个可选字段都要先认形状再收：在 if 里收窄，不必把外来值强转成字段类型。
+  if (typeof baseCommitId === 'string' && ObjectIdPattern.test(baseCommitId)) record.baseCommitId = baseCommitId
+  if (watcher === 'observed' || watcher === 'unavailable') record.attribution = { watcher }
+  return record
 }
 
 function isStoredFileChange(value: unknown): value is StoredRunFileChange {
