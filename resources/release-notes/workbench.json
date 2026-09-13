@@ -3,6 +3,36 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
+      "version": "0.3.52",
+      "releasedAt": "2026-09-13",
+      "title": {
+        "zh": "点过的按钮会收起，键盘焦点看得见，会话改动带着编辑区一起切",
+        "en": "Hover buttons that go away after a click, visible keyboard focus, and Session Changes that opens its diffs"
+      },
+      "added": {
+        "zh": [],
+        "en": []
+      },
+      "fixed": {
+        "zh": [
+          "悬停才出现的按钮（比如改动卡片文件行的「打开文件」）点过之后一直留在那里；现在鼠标移开就收起，用 Tab 键走到行上时照样显示。消息下方的操作栏、工具行、最近项目、标签列表等同样修正。",
+          "输入框工具栏、模型选择和文件改动卡片里的按钮用 Tab 键聚焦时看不到焦点框。",
+          "点左侧「会话改动」后编辑区还停在原来的文件；现在会带回打开过的改动对比，没打开过就打开最新一轮改过的文件。",
+          "回溯确认框里「保留这 N 个文件」没算上 AI 用命令改的文件，和改动卡片对不上。",
+          "聊天右侧的滚动导航一直压着正文；现在默认收起，点标题栏的「滚动导航」按钮才显示。",
+          "顶栏的运行按钮恢复绿色。"
+        ],
+        "en": [
+          "Buttons that appear on hover, such as Open file in a changes card row, stayed visible after a click; they now hide when the pointer leaves and still show when you Tab to the row. Message action bars, tool rows, recent projects and the tab list behave the same way.",
+          "The composer toolbar, model picker and file change card buttons showed no focus ring when reached with Tab.",
+          "Opening Session Changes from the left rail left the editor on the previous file; it now brings back open change tabs, or opens the newest round's files when none are open.",
+          "The rewind dialog's file count left out files the AI changed through commands, so it did not match the changes card.",
+          "The scroll navigator sat over the chat all the time; it now starts hidden and the Scroll navigation button in the chat header shows it.",
+          "The run button in the top bar is green again."
+        ]
+      }
+    },
+    {
       "version": "0.3.51",
       "releasedAt": "2026-09-13",
       "title": {
