@@ -482,21 +482,24 @@ export function StandaloneWorkbenchPagePresentation({
     if (!surface.isFilePanelOpen) surface.toggleFilePanel()
   }
 
-  /** 打开左侧「AI 改动」面板（不动编辑区）。 */
-  function showAiChangesPanel(): void {
-    surface.setActiveLeftTool('ai-changes')
-    if (!surface.isFilePanelOpen) surface.toggleFilePanel()
-  }
-
-  /** 左侧「AI 改动」图标：开关面板；有打开过的改动标签时一并把它们带回编辑区。 */
+  /**
+   * 左侧「AI 改动」图标：开关面板。打开时编辑区也换成改动——左右说的是同一件事：有打开过的改动标签就
+   * 把它们带回来，一个都没有就像改动卡的「审核」那样打开最新一轮改过的文件。
+   */
   function toggleAiChanges(): void {
     if (surface.activeLeftTool === 'ai-changes' && surface.isFilePanelOpen) {
       surface.toggleFilePanel()
       return
     }
-    showAiChangesPanel()
+    surface.setActiveLeftTool('ai-changes')
+    if (!surface.isFilePanelOpen) surface.toggleFilePanel()
     const tab = aiChanges.activeTab ?? aiChanges.tabs[0]
-    if (tab) aiChanges.selectTab(tab.id)
+    if (tab) {
+      aiChanges.selectTab(tab.id)
+      return
+    }
+    const newest = aiChanges.rounds.find((round) => !round.error && round.fileCount > 0)
+    if (newest) void aiChanges.openRound(newest, { auto: true })
   }
 
   function openVelarStructure(): void {

@@ -53,6 +53,11 @@ void describe('Workbench agent UI and AI changes wiring', () => {
     const card = readSource('src/renderer/src/runtime/conversation/WorkbenchRunChangesCard.tsx')
 
     assert.match(presentation, /onClick=\{toggleAiChanges\}/u)
+    // 点开改动面板时编辑区也换成改动：带回打开过的标签，一个都没有就打开最新一轮。
+    assert.match(
+      presentation,
+      /if \(tab\) \{\n\s*aiChanges\.selectTab\(tab\.id\)\n\s*return\n\s*\}\n\s*const newest = aiChanges\.rounds\.find\(\(round\) => !round\.error && round\.fileCount > 0\)\n\s*if \(newest\) void aiChanges\.openRound\(newest, \{ auto: true \}\)/u
+    )
     assert.match(presentation, /data-badge=\{aiChanges\.hasUnseenRounds\}/u)
     assert.match(presentation, /: surface\.activeLeftTool === 'ai-changes'\n\s*\? 'ai-changes'/u)
     assert.match(presentation, /group: 'ai-changes' as const/u)
