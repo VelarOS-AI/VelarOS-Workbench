@@ -3,6 +3,44 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
+      "version": "0.3.53",
+      "releasedAt": "2026-09-13",
+      "title": {
+        "zh": "AI 改文件更稳，失败的编辑能原样重试，欢迎页和工具行更清楚",
+        "en": "Steadier AI file edits, failed edits that can be retried as they were, and a clearer welcome page and tool rows"
+      },
+      "added": {
+        "zh": [
+          "AI 可以按行号改文件：读文件时自动带上行号，改动绑定读到的文件版本，文件在别处被改过会先要求重读，不会改错位置。",
+          "工具调用的原始参数和结果保存到磁盘。历史被压缩或重启应用之后，AI 仍能取回之前失败编辑的完整内容，修正后直接重试，不必重新生成。"
+        ],
+        "en": [
+          "The AI can edit files by line number: reads show line numbers, and each edit is tied to the version it read, so a file changed elsewhere is re-read first instead of being edited in the wrong place.",
+          "Tool call arguments and results are saved to disk. After history compaction or a restart, the AI can still recover a failed edit's full input, fix it and retry instead of generating it again."
+        ]
+      },
+      "fixed": {
+        "zh": [
+          "欢迎页左侧内容改为居中；最近项目列表不再无限变长，超过上限后在列表里滚动。",
+          "工具行的悬停气泡重新带上指向工具行的小箭头；和工具行内容完全一样的气泡不再弹出；计划、目标、浏览器等工具行补上了具体在做什么。",
+          "重命名、删除或回滚后重建的文件保留原来的权限（例如可执行脚本）和编码（例如 UTF-16）。",
+          "一批改动失败并恢复之后，可以直接重试，不再因为文件版本过期被拒。",
+          "命令输出中的中文等多字节字符不再被拆成乱码，标准错误里的诊断信息也会完整保留。",
+          "AI 在项目以外的目录执行命令时，会明确提示超出当前项目并给出建议，不再只报未知错误。",
+          "失败的编辑卡片不再显示「未知文件」。"
+        ],
+        "en": [
+          "The welcome page's left column is centered, and the recent projects list stops growing and scrolls within a capped height.",
+          "Tool row bubbles point at their row again, bubbles that only repeat the row no longer open, and plan, goal, browser and other tool rows now say what they acted on.",
+          "Files recreated by a rename, delete or rollback keep their permissions (such as executable scripts) and encoding (such as UTF-16).",
+          "After a failed batch of changes is recovered, it can be retried without being rejected as out of date.",
+          "Command output no longer garbles multi-byte characters such as Chinese, and diagnostics printed to stderr are kept in full.",
+          "Running a command in a directory outside the project now says it is outside the current project and suggests what to do, instead of reporting an unknown error.",
+          "Failed edit cards no longer show an unknown file."
+        ]
+      }
+    },
+    {
       "version": "0.3.52",
       "releasedAt": "2026-09-13",
       "title": {
