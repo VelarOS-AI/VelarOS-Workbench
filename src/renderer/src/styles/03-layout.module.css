@@ -299,7 +299,7 @@
   border-top-color: var(--workbench-seam);
 }
 
-.workbenchShell[data-standalone='true'] .terminalPromptRow {
+.workbenchShell[data-standalone='true'] .terminalViewHost {
   -webkit-app-region: no-drag;
 }
 

@@ -777,67 +777,19 @@
   padding: 8px 12px;
 }
 
-.terminalPromptRow {
-  @apply flex min-w-0 items-center;
-  margin-top: 2px;
+/* xterm 宿主：撑满面板，配色由 workbenchTerminalTheme 按主题变量算出来喂给 xterm。 */
+.terminalViewHost {
+  @apply relative min-h-0 flex-1;
+  padding: 6px 4px 6px 10px;
+  background: var(--workbench-surface);
 }
 
-.terminalPromptLabel {
-  @apply shrink-0 whitespace-pre font-mono text-foreground;
-  font-size: 12px;
-  line-height: 1.5;
+.terminalViewHost :global(.xterm) {
+  height: 100%;
 }
 
-.terminalPromptField {
-  @apply relative flex min-w-0 flex-1 items-center;
-  overflow: hidden;
-}
-
-.terminalPromptInput {
-  @apply relative z-10 w-full min-w-0 border-0 bg-transparent p-0 font-mono text-foreground outline-none;
-  font-size: 12px;
-  line-height: 1.5;
-  /* Native caret is a thin I-beam and can't be widened; hide it and draw a
-   * block caret below. Monospace makes `1ch` the exact cell width, so the caret
-   * sits precisely on the character index. */
-  caret-color: transparent;
-}
-
-.terminalPromptCaret {
-  position: absolute;
-  left: 0;
-  top: 50%;
-  z-index: 20;
-  width: 4px;
-  height: 1.05em;
-  translate: 0 -50%;
-  border-radius: 1px;
-  background: var(--foreground);
-  pointer-events: none;
-  opacity: 0;
-  /*
-   * Horizontal position is transform: translateX(<index>ch). `ch` is the "0"
-   * advance in THIS element's font, so it must match the input exactly (mono,
-   * 12px) — otherwise the block drifts away from the typed text by a fraction of
-   * a cell per character, reading as an off-by-a-space gap.
-   */
-  font-family: var(--font-mono);
-  font-size: 12px;
-}
-
-.terminalPromptField:focus-within .terminalPromptCaret {
-  animation: terminalPromptCaretBlink 1.06s steps(1, start) infinite;
-}
-
-@keyframes terminalPromptCaretBlink {
-  0%,
-  50% {
-    opacity: 1;
-  }
-  50.01%,
-  100% {
-    opacity: 0;
-  }
+.terminalViewHost :global(.xterm-viewport) {
+  scrollbar-width: thin;
 }
 
 .terminalOutput pre,

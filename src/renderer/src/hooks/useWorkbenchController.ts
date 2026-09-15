@@ -396,8 +396,8 @@ export function useWorkbenchController(options: UseWorkbenchControllerOptions = 
     runCommand: commandActions.command.runCommand,
     rerunLastCommand: commandActions.command.rerunLastCommand,
     createTerminalSession: commandActions.terminal.createTerminalSession,
-    setTerminalInput: commandActions.terminal.setTerminalInput,
-    runTerminalInput: commandActions.terminal.runTerminalInput,
+    writeTerminalData: commandActions.terminal.writeTerminalData,
+    resizeTerminalSession: commandActions.terminal.resizeTerminalSession,
     stopTerminalSession: commandActions.terminal.stopTerminalSession,
     closeTerminalSession: commandActions.terminal.closeTerminalSession,
     setActiveRunSessionId: commandActions.run.setActiveRunSessionId,
@@ -405,8 +405,5 @@ export function useWorkbenchController(options: UseWorkbenchControllerOptions = 
     stopRunSession: commandActions.run.stopRunSession,
     restartRunSession: commandActions.run.restartRunSession,
     closeRunSession: commandActions.run.closeRunSession,
-    setRunSessionInput: commandActions.run.setRunSessionInput,
-    writeRunSessionInput: commandActions.run.writeRunSessionInput,
-    sendRunSessionInterrupt: commandActions.run.sendRunSessionInterrupt,
   }
 }

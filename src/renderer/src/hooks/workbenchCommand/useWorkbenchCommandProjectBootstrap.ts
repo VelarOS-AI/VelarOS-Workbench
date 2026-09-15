@@ -13,6 +13,7 @@ import type {
   WorkbenchTerminalSessionView,
 } from '../../models/commands/workbenchCommandLines'
 import type { WorkbenchCommandSuggestion } from '../../models/commands/workbenchCommandSuggestions'
+import { discardWorkbenchTerminalOutput } from '../../models/commands/workbenchTerminalOutputBus'
 import type { WorkbenchProject } from '../../models/project/workbenchProjects'
 
 interface UseWorkbenchCommandProjectBootstrapOptions {
@@ -52,6 +53,7 @@ export function useWorkbenchCommandProjectBootstrap({
   useEffect(() => {
     terminalSessionsRef.current.forEach((session) => {
       void hostRuntime.kernel.project.stopWorkbenchTerminalSession({ sessionId: session.id })
+      discardWorkbenchTerminalOutput(session.id)
     })
     setTerminalSessions([])
     setActiveTerminalSessionId(null)

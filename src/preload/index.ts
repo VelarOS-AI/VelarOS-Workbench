@@ -151,6 +151,7 @@ const watchBridge: WorkbenchWatchBridge = {
 const terminalBridge: WorkbenchTerminalBridge = {
   startSession: (request) => ipcRenderer.invoke(WorkbenchTerminalChannels.start, request),
   writeInput: (request) => ipcRenderer.invoke(WorkbenchTerminalChannels.write, request),
+  resizeSession: (request) => ipcRenderer.invoke(WorkbenchTerminalChannels.resize, request),
   stopSession: (request) => ipcRenderer.invoke(WorkbenchTerminalChannels.stop, request),
   onOutput: (listener) => subscribe(WorkbenchTerminalChannels.output, listener),
 }

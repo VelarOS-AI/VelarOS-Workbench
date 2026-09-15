@@ -14,8 +14,9 @@ export interface WorkbenchTerminalSessionView {
   id: string
   title: string
   shell: string
+  /** 启动目录；shell 自己的提示符跟随真实目录，这里只记起点。 */
   cwd: string
-  input: string
+  /** 运行卡的文本日志（给 Agent 读、给 waitFor 等）；普通终端会话不记，输出直接进 xterm。 */
   lines: WorkbenchTerminalLine[]
   isRunning: boolean
   /** 运行卡才有：启动该会话的命令，用于「重启」；普通终端会话为 undefined。 */

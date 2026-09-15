@@ -19,6 +19,9 @@ files:
   - '!node_modules/gpt-tokenizer/esm/bpeRanks/r50k_base.js'
 
 asar: true
+# 伪终端的原生二进制与 spawn-helper 可执行文件必须是磁盘上的真文件，asar 里的不能 exec。
+asarUnpack:
+  - node_modules/@lydell/**
 artifactName: VelarOS-Workbench-${version}-${os}-${arch}.${ext}
 afterPack: ./scripts/release/verifyPackagedWorkbench.mjs
 

@@ -1,13 +1,4 @@
-import {
-  type FormEvent,
-  type KeyboardEvent,
-  type ReactElement,
-  type RefObject,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react'
+import { lazy, type ReactElement, Suspense } from 'react'
 import {
   ArrowClockwiseIcon,
   BrowsersIcon,
@@ -16,22 +7,52 @@ import {
   StopIcon,
   XIcon,
 } from '@phosphor-icons/react'
-import { useWorkbenchTerminalCompletionInteractions } from '@renderer/components/terminal/useWorkbenchTerminalCompletionInteractions'
 import { useWorkbenchI18n } from '@renderer/i18n'
-import type { WorkbenchCommandHistoryItem } from '@renderer/models/commands/workbenchCommandHistory'
 import type { WorkbenchTerminalSessionView } from '@renderer/models/commands/workbenchCommandLines'
-import { highlightWorkbenchConsoleOutputSequence } from '@renderer/models/commands/workbenchConsoleOutputHighlight'
-import type { WorkbenchRunConfiguration } from '@renderer/models/commands/workbenchRunConfigurations'
-import { formatWorkbenchTerminalPrompt } from '@renderer/models/commands/workbenchTerminalPresentation'
-import type { WorkbenchProjectContextFile } from '@renderer/models/project/workbenchProjectContextIndex'
+import type { WorkbenchThemeId } from '@renderer/models/settings/workbenchPreferences'
 
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 import { Paragraph } from '@velaros-ai/ui/primitives/display/Paragraph'
-import { ScrollArea } from '@velaros-ai/ui/primitives/layout/ScrollArea'
 
 import styles from '../../styles/workbenchPageStyles'
 
-import { WorkbenchConsoleOutputLine } from './WorkbenchConsoleOutputLine'
+// xterm 及其渲染器只在真的打开终端 / 运行卡时才加载，不进启动包。
+const LazyWorkbenchTerminalView = lazy(async () => {
+  const module = await import('./WorkbenchTerminalView')
+  return { default: module.WorkbenchTerminalView }
+})
+
+/** 终端与运行卡共用的 xterm 面：只挂当前会话，其余会话的 xterm 实例留在表里等切回来。 */
+export interface WorkbenchTerminalSurfaceHandlers {
+  workbenchTheme: WorkbenchThemeId
+  onTerminalData: (sessionId: string, data: string) => void
+  onTerminalResize: (sessionId: string, cols: number, rows: number) => void
+  onOpenLink?: (url: string) => void
+}
+
+function WorkbenchTerminalSurface({
+  session,
+  workbenchTheme,
+  onTerminalData,
+  onTerminalResize,
+  onOpenLink,
+}: WorkbenchTerminalSurfaceHandlers & { session: WorkbenchTerminalSessionView }): ReactElement {
+  return (
+    <div className={styles.terminalToolPane}>
+      <Suspense fallback={null}>
+        <LazyWorkbenchTerminalView
+          key={session.id}
+          sessionId={session.id}
+          isRunning={session.isRunning}
+          workbenchTheme={workbenchTheme}
+          onData={onTerminalData}
+          onResize={onTerminalResize}
+          onOpenLink={onOpenLink}
+        />
+      </Suspense>
+    </div>
+  )
+}
 
 interface WorkbenchTerminalToolHeaderProps {
   terminalSessions: WorkbenchTerminalSessionView[]
@@ -120,78 +141,20 @@ export function WorkbenchTerminalToolHeader({
   )
 }
 
-interface WorkbenchTerminalToolPaneProps {
+interface WorkbenchTerminalToolPaneProps extends WorkbenchTerminalSurfaceHandlers {
   terminalSessions: WorkbenchTerminalSessionView[]
   activeTerminalSessionId: Nullable<string>
-  commandHistory: readonly WorkbenchCommandHistoryItem[]
-  projectFiles: readonly WorkbenchProjectContextFile[]
-  runConfigurations: readonly WorkbenchRunConfiguration[]
-  outputRef: RefObject<HTMLDivElement | null>
-  onTerminalInputChange: (sessionId: string, input: string) => void
-  onRunTerminalInput: (sessionId: string) => void
-  onOpenLink?: (url: string) => void
 }
 
 export function WorkbenchTerminalToolPane({
   terminalSessions,
   activeTerminalSessionId,
-  commandHistory,
-  projectFiles,
-  runConfigurations,
-  outputRef,
-  onTerminalInputChange,
-  onRunTerminalInput,
-  onOpenLink,
+  ...surface
 }: WorkbenchTerminalToolPaneProps): ReactElement {
   const { t } = useWorkbenchI18n()
-  const inputRef = useRef<HTMLInputElement>(null)
-  const [caret, setCaret] = useState({ index: 0, scrollLeft: 0 })
-  const { activeTerminalSession, handleTerminalKeyDown } =
-    useWorkbenchTerminalCompletionInteractions({
-      terminalSessions,
-      activeTerminalSessionId,
-      commandHistory,
-      projectFiles,
-      runConfigurations,
-      onTerminalInputChange,
-      onRunTerminalInput,
-    })
-
-  function syncCaret(input: HTMLInputElement): void {
-    setCaret({ index: input.selectionStart ?? input.value.length, scrollLeft: input.scrollLeft })
-  }
-
-  useEffect(() => {
-    inputRef.current?.focus()
-  }, [activeTerminalSession?.id])
-
-  // Keep the block caret aligned when the input value changes from outside typing
-  // (history navigation, completion insertion) rather than a keystroke.
-  useEffect(() => {
-    if (inputRef.current) syncCaret(inputRef.current)
-  }, [activeTerminalSession?.input])
-
-  const highlightedLines = useMemo(
-    () =>
-      highlightWorkbenchConsoleOutputSequence(
-        activeTerminalSession?.lines.map(({ text, stream }) => ({
-          text,
-          stream,
-        })) ?? []
-      ),
-    [activeTerminalSession?.lines]
-  )
-
-  function submitTerminalInput(event: FormEvent<HTMLFormElement>): void {
-    event.preventDefault()
-    if (!activeTerminalSession) return
-
-    onRunTerminalInput(activeTerminalSession.id)
-  }
-
-  function handleInputKeyDown(event: KeyboardEvent<HTMLInputElement>): void {
-    handleTerminalKeyDown(event)
-  }
+  const activeTerminalSession =
+    terminalSessions.find((session) => session.id === activeTerminalSessionId) ??
+    terminalSessions[0]
 
   if (!activeTerminalSession)
     return (
@@ -200,57 +163,7 @@ export function WorkbenchTerminalToolPane({
       </Paragraph>
     )
 
-  const prompt = formatWorkbenchTerminalPrompt(activeTerminalSession)
-
-  return (
-    <div className={styles.terminalToolPane}>
-      <ScrollArea ref={outputRef} className={styles.terminalOutputScroll}>
-        <div className={styles.terminalOutput}>
-          {activeTerminalSession.lines.map((line, index) => (
-            <WorkbenchConsoleOutputLine
-              key={line.id}
-              text={line.text}
-              tokens={highlightedLines[index]}
-              stream={line.stream}
-              className={styles.terminalOutputLine}
-              onOpenLink={onOpenLink}
-            />
-          ))}
-          {activeTerminalSession.isRunning && (
-            <form className={styles.terminalPromptRow} onSubmit={submitTerminalInput}>
-              <span className={styles.terminalPromptLabel}>{prompt}</span>
-              <span className={styles.terminalPromptField}>
-                <input
-                  ref={inputRef}
-                  className={styles.terminalPromptInput}
-                  value={activeTerminalSession.input}
-                  aria-label={t('workbench.terminalPlaceholder')}
-                  autoComplete="off"
-                  autoCorrect="off"
-                  autoCapitalize="off"
-                  spellCheck={false}
-                  onChange={(event) => {
-                    onTerminalInputChange(activeTerminalSession.id, event.target.value)
-                    syncCaret(event.currentTarget)
-                  }}
-                  onKeyUp={(event) => syncCaret(event.currentTarget)}
-                  onClick={(event) => syncCaret(event.currentTarget)}
-                  onSelect={(event) => syncCaret(event.currentTarget)}
-                  onScroll={(event) => syncCaret(event.currentTarget)}
-                  onKeyDown={handleInputKeyDown}
-                />
-                <span
-                  aria-hidden
-                  className={styles.terminalPromptCaret}
-                  style={{ transform: `translateX(calc(${caret.index}ch - ${caret.scrollLeft}px))` }}
-                />
-              </span>
-            </form>
-          )}
-        </div>
-      </ScrollArea>
-    </div>
-  )
+  return <WorkbenchTerminalSurface session={activeTerminalSession} {...surface} />
 }
 
 interface WorkbenchRunToolHeaderProps {
@@ -363,41 +276,19 @@ export function WorkbenchRunToolHeader({
   )
 }
 
-interface WorkbenchRunToolPaneProps {
+interface WorkbenchRunToolPaneProps extends WorkbenchTerminalSurfaceHandlers {
   runSessions: WorkbenchTerminalSessionView[]
   activeRunSessionId: Nullable<string>
-  outputRef: RefObject<HTMLDivElement | null>
-  onRunInputChange: (sessionId: string, input: string) => void
-  onSubmitRunInput: (sessionId: string) => void
-  onInterruptRunSession: (sessionId: string) => void
-  onOpenLink?: (url: string) => void
 }
 
 export function WorkbenchRunToolPane({
   runSessions,
   activeRunSessionId,
-  outputRef,
-  onRunInputChange,
-  onSubmitRunInput,
-  onInterruptRunSession,
-  onOpenLink,
+  ...surface
 }: WorkbenchRunToolPaneProps): ReactElement {
   const { t } = useWorkbenchI18n()
-  const inputRef = useRef<HTMLInputElement>(null)
   const activeRunSession =
     runSessions.find((session) => session.id === activeRunSessionId) ?? runSessions[0]
-
-  useEffect(() => {
-    inputRef.current?.focus()
-  }, [activeRunSession?.id])
-
-  const highlightedLines = useMemo(
-    () =>
-      highlightWorkbenchConsoleOutputSequence(
-        activeRunSession?.lines.map(({ text, stream }) => ({ text, stream })) ?? []
-      ),
-    [activeRunSession?.lines]
-  )
 
   if (!activeRunSession)
     return (
@@ -406,56 +297,5 @@ export function WorkbenchRunToolPane({
       </Paragraph>
     )
 
-  const sessionId = activeRunSession.id
-
-  function submitRunInput(event: FormEvent<HTMLFormElement>): void {
-    event.preventDefault()
-    onSubmitRunInput(sessionId)
-  }
-
-  function handleInputKeyDown(event: KeyboardEvent<HTMLInputElement>): void {
-    // Ctrl+C → 向前台进程发送 SIGINT（真终端语义）。
-    if (event.ctrlKey && (event.key === 'c' || event.key === 'C')) {
-      event.preventDefault()
-      onInterruptRunSession(sessionId)
-    }
-  }
-
-  return (
-    <div className={styles.terminalToolPane}>
-      <ScrollArea ref={outputRef} className={styles.terminalOutputScroll}>
-        <div className={styles.terminalOutput}>
-          {activeRunSession.lines.map((line, index) => (
-            <WorkbenchConsoleOutputLine
-              key={line.id}
-              text={line.text}
-              tokens={highlightedLines[index]}
-              stream={line.stream}
-              className={styles.terminalOutputLine}
-              onOpenLink={onOpenLink}
-            />
-          ))}
-          {activeRunSession.isRunning && (
-            <form className={styles.terminalPromptRow} onSubmit={submitRunInput}>
-              <span className={styles.terminalPromptField}>
-                <input
-                  ref={inputRef}
-                  className={styles.terminalPromptInput}
-                  value={activeRunSession.input}
-                  aria-label={t('workbench.runInputPlaceholder')}
-                  placeholder={t('workbench.runInputPlaceholder')}
-                  autoComplete="off"
-                  autoCorrect="off"
-                  autoCapitalize="off"
-                  spellCheck={false}
-                  onChange={(event) => onRunInputChange(sessionId, event.target.value)}
-                  onKeyDown={handleInputKeyDown}
-                />
-              </span>
-            </form>
-          )}
-        </div>
-      </ScrollArea>
-    </div>
-  )
+  return <WorkbenchTerminalSurface session={activeRunSession} {...surface} />
 }

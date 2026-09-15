@@ -100,6 +100,7 @@ import type {
   WorkbenchStartProjectAiIndexResult,
   WorkbenchTerminalInputRequest,
   WorkbenchTerminalOutputEvent,
+  WorkbenchTerminalResizeRequest,
   WorkbenchTerminalStartRequest,
   WorkbenchTerminalStartResult,
   WorkbenchTerminalStopRequest,
@@ -214,6 +215,7 @@ export interface WorkbenchProjectKernelPort {
     request: WorkbenchTerminalStartRequest
   ): Promise<Result<WorkbenchTerminalStartResult>>
   writeWorkbenchTerminalInput(request: WorkbenchTerminalInputRequest): Promise<Result<void>>
+  resizeWorkbenchTerminalSession(request: WorkbenchTerminalResizeRequest): Promise<Result<void>>
   stopWorkbenchTerminalSession(request: WorkbenchTerminalStopRequest): Promise<Result<void>>
   reportWorkbenchAgentWorkspaceSignals(
     request: WorkbenchReportAgentWorkspaceSignalsRequest

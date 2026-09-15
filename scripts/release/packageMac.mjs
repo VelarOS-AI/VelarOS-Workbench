@@ -7,6 +7,8 @@ import { createRequire } from 'node:module'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { ensureTerminalBackends } from './ensureTerminalBackends.mjs'
+
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const requireFromScript = createRequire(import.meta.url)
 const electronBuilderCli = requireFromScript.resolve('electron-builder/cli.js')
@@ -432,6 +434,7 @@ async function runMacPackage({
   platform = process.platform,
   version = readWorkbenchVersion(),
   runBuilder = executeElectronBuilder,
+  ensureBackends = ensureTerminalBackends,
   snapshotDmgs = snapshotCurrentMacDmgs,
   discoverDmg = discoverCurrentMacDmg,
   notarizeDmg = notarize,
@@ -452,6 +455,8 @@ async function runMacPackage({
     allowMissing: true,
   })
 
+  // 通用包 / x64 包要另一架构的终端后端；bun 只装了本机那个。
+  ensureBackends(['darwin'])
   await runBuilder({ builderArgs, environment: packagingEnvironment })
   const dmgPath = await discoverDmg({ outputDirectory, version, previousArtifacts })
   await verifyDmgSignature(dmgPath)

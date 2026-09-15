@@ -787,14 +787,12 @@ export function StandaloneWorkbenchPagePresentation({
               workbenchRun={{
                 runSessions: workbench.runSessions,
                 activeRunSessionId: workbench.activeRunSessionId,
-                commandHistory: workbench.commandHistory,
-                runConfigurations: workbench.runConfigurations,
-                projectFiles: workbench.projectContextIndex.files,
               }}
               workbenchTerminal={{
                 terminalSessions: workbench.terminalSessions,
                 activeTerminalSessionId: workbench.activeTerminalSessionId,
               }}
+              workbenchTheme={workbenchPreferences.preferences.theme}
               isCollapsed={false}
               gitPanel={
                 <WorkbenchGitToolPanel
@@ -829,18 +827,13 @@ export function StandaloneWorkbenchPagePresentation({
               onToggleCollapsed={surface.toggleCommandPanelCollapsed}
               onCreateTerminalSession={() => void workbench.createTerminalSession()}
               onActiveTerminalSessionChange={workbench.setActiveTerminalSessionId}
-              onTerminalInputChange={workbench.setTerminalInput}
-              onRunTerminalInput={(sessionId) => void workbench.runTerminalInput(sessionId)}
               onCloseTerminalSession={workbench.closeTerminalSession}
+              onTerminalData={workbench.writeTerminalData}
+              onTerminalResize={workbench.resizeTerminalSession}
               onActiveRunSessionChange={workbench.setActiveRunSessionId}
               onCloseRunSession={workbench.closeRunSession}
               onRestartRunSession={(sessionId) => void workbench.restartRunSession(sessionId)}
               onStopRunSession={(sessionId) => void workbench.stopRunSession(sessionId)}
-              onRunInputChange={workbench.setRunSessionInput}
-              onSubmitRunInput={(sessionId) => void workbench.writeRunSessionInput(sessionId)}
-              onInterruptRunSession={(sessionId) =>
-                void workbench.sendRunSessionInterrupt(sessionId)
-              }
               onOpenConsoleLink={
                 model.browserModEnabled ? editorNavigation.debug.openTab : undefined
               }

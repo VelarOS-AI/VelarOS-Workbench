@@ -1,22 +1,17 @@
 /**
- * 工作台持久终端会话服务（照搬 desktop `workspace/workbench/TerminalSessions.ts`，语义保形；
- * 依赖从 desktop 的 storage/commands Helpers 改为本目录裁剪版 CommandHelper + PathResolver，
- * 契约类型走 `@shared/contracts` 单源）。
+ * 工作台持久终端会话服务：每个会话一个真正的伪终端（PTY）。
  *
- * 键控轴对齐独立应用惯例：service 单例（Parts 装配），会话按请求 `projectRoot` 解析根、按自增
- * 随机 `sessionId` 登记进程内 Map——不引入 desktop 时代的 chat-session 轴（desktop 曾按 chat
- * 会话实例化整个 workbench 服务，独立应用只有 projectRoot）。`WorkbenchTerminalStartResult.sessionId`
- * 是 PTY 会话 id（非 chat sessionId），是本服务对外的持久句柄，保留。
+ * 以前子进程用 pipe stdio：shell 不是交互态，没有提示符、没有 tab 补全、没有颜色，Ctrl+C 要靠给进程组发信号，
+ * 目录跟随要靠往 stdin 里塞探针命令。现在 shell 坐在 PTY 上，提示符、行编辑、补全、颜色、进度条、交互式程序
+ * 都是 shell 和程序自己的事；renderer 只负责把字节送进 xterm、把按键送回来。
  *
- * 踩坑要点（沿用 desktop 实现）：子进程用 pipe stdio（非 PTY），Ctrl+C 语义走 stop 的 SIGINT
- * 信号（signal/skipForceKill）而非写 \x03；运行卡 initialCommand/raw 输入跳过 cwd 探针（探针会被
- * 前台进程误读）；多卡 = 每次运行新开会话，支持重启/终止/清空。
+ * 键控轴：service 单例（Parts 装配），会话按请求 `projectRoot` 解析根、按随机 `sessionId` 登记进程内 Map；
+ * `WorkbenchTerminalStartResult.sessionId` 是 PTY 会话 id，是本服务对外的持久句柄。多卡 = 每次运行新开会话，
+ * 支持重启 / 终止 / 关闭。
  */
-import type { ChildProcessWithoutNullStreams } from 'node:child_process'
-import { spawn } from 'node:child_process'
 import { stat } from 'node:fs/promises'
 
-import { isEmpty, isNotNull, isNull } from '@velaros-ai/core'
+import { isEmpty } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
 import { currentSystemPlatform as systemPlatformCompatibility } from '@velaros-ai/system/platform-compatibility'
@@ -24,6 +19,7 @@ import { currentSystemPlatform as systemPlatformCompatibility } from '@velaros-a
 import type {
   WorkbenchTerminalInputRequest,
   WorkbenchTerminalOutputEvent,
+  WorkbenchTerminalResizeRequest,
   WorkbenchTerminalStartRequest,
   WorkbenchTerminalStartResult,
   WorkbenchTerminalStopRequest,
@@ -32,39 +28,70 @@ import type {
 import type { CommandHelper } from '../CommandHelper'
 import type { PathResolver } from '../PathResolver'
 
-import { buildTerminalCwdProbeCommand, scanTerminalCwdMarkers } from './terminalCwdMarker'
+import { nodePtyFactory, type WorkbenchPtyFactory, type WorkbenchPtyProcess } from './WorkbenchPty'
+
+export const DefaultTerminalColumns = 80
+export const DefaultTerminalRows = 24
+const MaxTerminalColumns = 1_000
+const MaxTerminalRows = 500
+/**
+ * 输出合并窗口：PTY 一次读出来常常只有几十字节（一个按键的回显、进度条的一格），逐条过 IPC 会把 renderer
+ * 淹没在事件里。攒这么久（或攒到这么大）发一次，肉眼看不出延迟。
+ */
+const OutputFlushDelayMs = 8
+const OutputFlushChars = 64 * 1024
+const DefaultUtf8Locale = 'en_US.UTF-8'
+const TerminalName = 'xterm-256color'
+/** Ctrl+C（ETX）：写进伪终端后行规程给前台进程组发 SIGINT。 */
+const InterruptCharacter = String.fromCharCode(3)
 
 interface WorkbenchTerminalSession {
-  /** spawn 出的真实 shell 子进程，stdio 全 pipe，便于把输出送回 renderer。 */
-  child: ChildProcessWithoutNullStreams
-  /** renderer 端回调，按 sessionId 把 stdout/stderr/system 事件转发回去。 */
+  pty: WorkbenchPtyProcess
   onOutput: (event: WorkbenchTerminalOutputEvent) => void
-  /** 该终端会话的延迟强杀和兜底收口任务作用域。 */
+  /** 该会话的输出合并、延迟强杀与兜底收口任务作用域。 */
   timers: TimerScope
   /** 发起该会话的 renderer webContents.id；用于多项目窗口的资源与权限隔离。 */
   ownerId: Nullable<number>
-  /**
-   * 标记该会话是否已经走过停止/关闭流程；用于防止延迟强杀回调
-   * 在 PID 复用场景下误伤新进程。一旦子进程关闭事件触发，整个会话从映射删除，
-   * disposed=true 让停止流程上的延迟回调直接空操作。
-   */
-  disposed: boolean
+  /** 进程已退出（onExit 已到）；停止流程上的延迟回调据此空操作。 */
+  exited: boolean
+  pendingOutput: string
+  flushLease: Nullable<TimerLease>
 }
 
-/**
- * 工作台终端服务。
- *
- * 为工作台界面提供持久化终端会话：渲染进程通过进程通信启动一个终端
- * 子进程，写入键入内容并订阅标准输出和标准错误。所有会话都保存在进程内映射中，
- * 进程退出/出错时自动清理。
- */
+/** 交给 shell 的环境：告诉它这是个真终端，并保证有 UTF-8 locale。 */
+export function buildTerminalEnvironment(
+  base: NodeJS.ProcessEnv,
+  platform: NodeJS.Platform = process.platform
+): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {
+    ...base,
+    TERM: TerminalName,
+    COLORTERM: 'truecolor',
+    TERM_PROGRAM: 'VelarOS-Workbench',
+    VELAROS_WORKBENCH_TERMINAL: '1',
+  }
+  // 从 Finder / Dock 启动的 Electron 没有 LANG：zsh 会按 C locale 处理输入，中文成了乱码或问号。
+  if (platform !== 'win32' && !env.LANG && !env.LC_ALL && !env.LC_CTYPE) env.LANG = DefaultUtf8Locale
+  return env
+}
+
+export function clampTerminalDimension(
+  value: LooseOptional<number>,
+  fallback: number,
+  max: number
+): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback
+  return Math.min(max, Math.max(1, Math.floor(value)))
+}
+
 class TerminalSessions {
-  /** sessionId -> 会话实体；存活的子进程都在这里登记。 */
+  /** sessionId -> 会话实体；存活的伪终端都在这里登记。 */
   private readonly terminalSessions = new Map<string, WorkbenchTerminalSession>()
 
   constructor(
     private readonly pathResolver: PathResolver,
-    private readonly commandHelper: CommandHelper
+    private readonly commandHelper: CommandHelper,
+    private readonly ptyFactory: WorkbenchPtyFactory = nodePtyFactory
   ) {}
 
   public async startTerminalSession(
@@ -86,85 +113,48 @@ class TerminalSessions {
           file: systemPlatformCompatibility.getPreferredShellPath(process.env),
           args: systemPlatformCompatibility.getInteractiveShellArgs(),
         }
+    const cols = clampTerminalDimension(request.cols, DefaultTerminalColumns, MaxTerminalColumns)
+    const rows = clampTerminalDimension(request.rows, DefaultTerminalRows, MaxTerminalRows)
     const sessionId = `terminal-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-    const timers = new TimerScope({ name: 'WorkbenchTerminalSession' })
-    const child = spawn(shellSpec.file, shellSpec.args, {
-      cwd: cwdPath.realPath,
-      detached: this.commandHelper.shouldDetachForegroundProcess(),
-      env: {
-        ...process.env,
-        TERM: process.env.TERM || 'xterm-256color',
-        VELAROS_WORKBENCH_TERMINAL: '1',
-      },
-      stdio: ['pipe', 'pipe', 'pipe'],
-    })
 
-    const emit = (event: Omit<WorkbenchTerminalOutputEvent, 'sessionId'>): void => {
-      onOutput({
-        sessionId,
-        ...event,
+    let pty: WorkbenchPtyProcess
+    try {
+      pty = this.ptyFactory.spawn(shellSpec.file, shellSpec.args, {
+        cwd: cwdPath.realPath,
+        env: buildTerminalEnvironment(process.env),
+        cols,
+        rows,
+        name: TerminalName,
       })
+    } catch (error) {
+      throw AppError.from(error, 'PLATFORM')
     }
 
-    // Windows taskkill may close the shell between the writable check and a pending stdin write.
-    // A closed pipe reports EPIPE asynchronously on the stream; treat that as the normal end of
-    // the terminal instead of letting the main process (or the cross-platform probe) crash.
-    child.stdin.on('error', (error: NodeJS.ErrnoException) => {
-      if (error.code === 'EPIPE' || error.code === 'ERR_STREAM_DESTROYED') return
-      emit({
-        stream: 'system',
-        chunk: `终端输入通道异常：${error.message}\n`,
-      })
-    })
+    const session: WorkbenchTerminalSession = {
+      pty,
+      onOutput,
+      timers: new TimerScope({ name: 'WorkbenchTerminalSession' }),
+      ownerId,
+      exited: false,
+      pendingOutput: '',
+      flushLease: null,
+    }
+    this.terminalSessions.set(sessionId, session)
 
-    // 跟随真实目录：扫描 stdout 里的 cwd 探针标记，剥掉后附在事件上回传给渲染层，
-    // stdoutCarry 暂存跨 chunk 被切开的半截标记。
-    let stdoutCarry = ''
-    child.stdout.on('data', (chunk: Buffer | string) => {
-      const scan = scanTerminalCwdMarkers(stdoutCarry + chunk.toString())
-      stdoutCarry = scan.carry
-      if (scan.text || isNotNull(scan.cwd)) {
-        emit({ stream: 'stdout', chunk: scan.text, cwd: scan.cwd ?? undefined })
-      }
-    })
-    child.stderr.on('data', (chunk: Buffer | string) => {
-      emit({ stream: 'stderr', chunk: chunk.toString() })
-    })
-    child.on('error', (error) => {
-      emit({
+    pty.onData((data) => this.queueOutput(sessionId, session, data))
+    pty.onExit(({ exitCode, signal }) => {
+      session.exited = true
+      this.flushOutput(sessionId, session)
+      // 终端里换行要 CR LF：xterm 不会替 LF 补回车。
+      onOutput({
+        sessionId,
         stream: 'system',
-        chunk: `终端启动失败：${error.message}\n`,
-        closed: true,
-      })
-      const session = this.terminalSessions.get(sessionId)
-      if (session) {
-        session.disposed = true
-        session.timers.dispose()
-      }
-      this.terminalSessions.delete(sessionId)
-    })
-    child.on('close', (exitCode, signal) => {
-      emit({
-        stream: 'system',
-        chunk: `\n进程已结束（exit=${exitCode ?? '-'} signal=${signal ?? '-'}）\n`,
+        chunk: `\r\n进程已结束（exit=${exitCode} signal=${signal ?? '-'}）\r\n`,
         closed: true,
         exitCode,
-        signal,
+        signal: signal === undefined ? undefined : String(signal),
       })
-      const session = this.terminalSessions.get(sessionId)
-      if (session) {
-        session.disposed = true
-        session.timers.dispose()
-      }
-      this.terminalSessions.delete(sessionId)
-    })
-
-    this.terminalSessions.set(sessionId, {
-      child,
-      onOutput,
-      timers,
-      ownerId,
-      disposed: false,
+      this.dropSession(sessionId, session)
     })
 
     return {
@@ -180,30 +170,30 @@ class TerminalSessions {
     request: WorkbenchTerminalInputRequest,
     ownerId: Nullable<number> = null
   ): void {
-    const session = this.terminalSessions.get(request.sessionId)
-    if (!session || session.child.killed || !session.child.stdin.writable) {
-      throw new AppError('VALIDATION', '终端会话已结束。')
-    }
+    const session = this.liveSession(request.sessionId)
     assertSessionOwner(session, ownerId)
+    session.pty.write(request.input)
+  }
 
-    session.child.stdin.write(request.input)
-
-    // 一条完整命令（以换行提交）之后追加一次 cwd 探针，让提示符跟随用户的 cd。
-    // 仅在提交（末尾换行）时追加，避免把探针拼进未完成的输入。
-    // raw 输入（运行卡把内容直送前台进程 stdin）不追加探针，否则会被前台进程误读。
-    if (!request.raw && request.input.endsWith('\n')) {
-      session.child.stdin.write(buildTerminalCwdProbeCommand())
-    }
+  /** xterm 量出的格子数变了：伪终端跟着改，前台程序会收到 SIGWINCH 重排版。 */
+  public resizeTerminalSession(
+    request: WorkbenchTerminalResizeRequest,
+    ownerId: Nullable<number> = null
+  ): void {
+    const session = this.liveSession(request.sessionId)
+    assertSessionOwner(session, ownerId)
+    session.pty.resize(
+      clampTerminalDimension(request.cols, DefaultTerminalColumns, MaxTerminalColumns),
+      clampTerminalDimension(request.rows, DefaultTerminalRows, MaxTerminalRows)
+    )
   }
 
   /**
    * 停止终端会话。
    *
-   * 先 SIGTERM 让 shell 自行收尾，延迟后若仍未退出再 SIGKILL。判断使用
-   * sessionId 是否仍存在 map 中——child.on('close') 会负责 map.delete。
-   *
-   * sessionId 单调随机生成不会复用，因此不存在 PID 复用误杀新会话的风险；
-   * disposed + exitCode + killed 三重判断保护延迟强杀不误伤已退出进程。
+   * `SIGINT` 是「打断」：往伪终端里写 Ctrl+C，行规程把 SIGINT 送给前台进程组，与在真终端里按 Ctrl+C 完全
+   * 一样，shell 本身活着。默认硬停走 SIGTERM，延迟后仍未退出再 SIGKILL；伪终端关闭时，它上面的进程组会收到
+   * SIGHUP，shell 起的子进程不会成为孤儿。
    */
   public stopTerminalSession(
     request: WorkbenchTerminalStopRequest,
@@ -213,46 +203,71 @@ class TerminalSessions {
     if (!session) return
     assertSessionOwner(session, ownerId)
 
-    // Ctrl+C 走 SIGINT（作用于前台进程组，等价终端中断），默认硬停走 SIGTERM。
-    const signal = request.signal ?? 'SIGTERM'
-    this.commandHelper.terminateForegroundProcess(session.child.pid, signal)
+    if (request.signal === 'SIGINT') {
+      session.pty.write(InterruptCharacter)
+      return
+    }
 
-    // SIGINT 只是「打断」：不做 SIGKILL 兜底强杀，进程可能只是回到提示符继续存活。
+    session.pty.kill('SIGTERM')
     if (request.skipForceKill) return
 
     session.timers.after(this.commandHelper.getForceKillDelayMs(), () => {
-      // 双重保护：1) sessionId 已被新会话替换或自然结束时不再 kill；
-      // 2) session.disposed 为 true（child close 已触发）说明进程已退出，
-      //    避免 PID 复用导致误杀新进程；3) child.exitCode === null 表明进程仍存活。
-      const current = this.terminalSessions.get(request.sessionId)
-      if (
-        current === session &&
-        !session.disposed &&
-        isNull(session.child.exitCode) &&
-        !session.child.killed
-      ) {
-        this.commandHelper.terminateForegroundProcess(session.child.pid, 'SIGKILL')
+      // sessionId 不会复用：仍在表里且还没退出，才是同一个进程。
+      if (this.terminalSessions.get(request.sessionId) === session && !session.exited) {
+        session.pty.kill('SIGKILL')
       }
     })
   }
 
-  /**
-   * 关闭所有持久终端会话；进程退出前调用。
-   *
-   * 流程：先对每个会话发 SIGTERM，等待短超时后若 'close' 未触发，统一 SIGKILL。
-   * 用 SIGTERM → SIGKILL 二步策略给 shell 留下处理 trap 的窗口。
-   */
+  /** 关闭所有持久终端会话；进程退出前调用。 */
   public async closeAllSessions(): Promise<void> {
     await this.closeSessions([...this.terminalSessions.entries()])
   }
 
-  /** 关闭一个项目窗口拥有的全部终端/运行卡，其他项目窗口不受影响。 */
+  /** 关闭一个项目窗口拥有的全部终端 / 运行卡，其他项目窗口不受影响。 */
   public async closeSessionsForOwner(ownerId: number): Promise<void> {
     await this.closeSessions(
       [...this.terminalSessions.entries()].filter(([, session]) => session.ownerId === ownerId)
     )
   }
 
+  private liveSession(sessionId: string): WorkbenchTerminalSession {
+    const session = this.terminalSessions.get(sessionId)
+    if (!session || session.exited) throw new AppError('VALIDATION', '终端会话已结束。')
+    return session
+  }
+
+  private queueOutput(sessionId: string, session: WorkbenchTerminalSession, data: string): void {
+    session.pendingOutput += data
+    if (session.pendingOutput.length >= OutputFlushChars) {
+      this.flushOutput(sessionId, session)
+      return
+    }
+    if (session.flushLease) return
+    session.flushLease = session.timers.after(OutputFlushDelayMs, () => {
+      session.flushLease = null
+      this.flushOutput(sessionId, session)
+    })
+  }
+
+  private flushOutput(sessionId: string, session: WorkbenchTerminalSession): void {
+    session.flushLease?.cancel()
+    session.flushLease = null
+    if (!session.pendingOutput) return
+    const chunk = session.pendingOutput
+    session.pendingOutput = ''
+    session.onOutput({ sessionId, stream: 'stdout', chunk })
+  }
+
+  private dropSession(sessionId: string, session: WorkbenchTerminalSession): void {
+    if (this.terminalSessions.get(sessionId) === session) this.terminalSessions.delete(sessionId)
+    session.timers.dispose()
+  }
+
+  /**
+   * 先 SIGTERM 让 shell 自行收尾，等待短超时后若还没退出再 SIGKILL，再兜底一秒后强制结算——
+   * 给 shell 留下处理 trap 的窗口，也不让退出流程被一个僵掉的进程卡住。
+   */
   private async closeSessions(
     sessions: Array<[string, WorkbenchTerminalSession]>
   ): Promise<void> {
@@ -263,37 +278,27 @@ class TerminalSessions {
       sessions.map(
         ([sessionId, session]) =>
           new Promise<void>((resolve) => {
-            if (session.disposed || isNotNull(session.child.exitCode)) {
-              session.disposed = true
-              this.terminalSessions.delete(sessionId)
-              session.timers.dispose()
+            if (session.exited) {
+              this.dropSession(sessionId, session)
               resolve()
               return
             }
 
             let settled = false
-            let killTimer: LooseOptional<TimerLease> = null
             const finish = (): void => {
               if (settled) return
               settled = true
-              session.disposed = true
-              killTimer?.cancel()
-              this.terminalSessions.delete(sessionId)
-              session.timers.dispose()
+              this.dropSession(sessionId, session)
               resolve()
             }
 
-            session.child.once('close', finish)
-            session.child.once('exit', finish)
-
-            this.commandHelper.terminateForegroundProcess(session.child.pid, 'SIGTERM')
-            killTimer = session.timers.after(
+            session.pty.onExit(finish)
+            session.pty.kill('SIGTERM')
+            session.timers.after(
               forceKillDelayMs,
               () => {
-                if (!settled && isNull(session.child.exitCode) && !session.child.killed) {
-                  this.commandHelper.terminateForegroundProcess(session.child.pid, 'SIGKILL')
-                }
-                // 即便 SIGKILL，仍等待 'close' 触发 finish；下方兜底超时强制结算。
+                if (!settled && !session.exited) session.pty.kill('SIGKILL')
+                // 即便 SIGKILL，仍等 onExit 触发 finish；再兜底一秒强制结算。
                 session.timers.after(1_000, finish, { unref: true })
               },
               { unref: true }

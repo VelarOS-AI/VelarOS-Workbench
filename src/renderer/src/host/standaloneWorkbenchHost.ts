@@ -470,6 +470,8 @@ const standaloneWorkbenchHost: WorkbenchHost = {
         toHostResult(await window.velarosWorkbenchTerminal.startSession(request)),
       writeWorkbenchTerminalInput: async (request) =>
         toHostResult(await window.velarosWorkbenchTerminal.writeInput(request)),
+      resizeWorkbenchTerminalSession: async (request) =>
+        toHostResult(await window.velarosWorkbenchTerminal.resizeSession(request)),
       stopWorkbenchTerminalSession: async (request) =>
         toHostResult(await window.velarosWorkbenchTerminal.stopSession(request)),
       reportWorkbenchAgentWorkspaceSignals: () => Promise.resolve(Result.ok(undefined)),

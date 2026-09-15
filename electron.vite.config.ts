@@ -71,6 +71,8 @@ export default defineConfig(({ mode }) => ({
         },
         external: [
           'electron',
+          // 伪终端是原生模块：留在 node_modules 里按平台加载，不进 bundle（见 WorkbenchPty.ts）。
+          /^@lydell\/node-pty/u,
           'gpt-tokenizer',
           /^gpt-tokenizer\/.+/u,
           'typescript',

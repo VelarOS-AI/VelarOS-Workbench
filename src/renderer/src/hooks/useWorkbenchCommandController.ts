@@ -16,10 +16,8 @@ import {
 } from '@renderer/models/commands/workbenchCommandLines'
 import type { WorkbenchCommandSuggestion } from '@renderer/models/commands/workbenchCommandSuggestions'
 import { buildWorkbenchRunConfigurations } from '@renderer/models/commands/workbenchRunConfigurations'
-import {
-  buildWorkbenchTerminalSessionTitle,
-  formatWorkbenchTerminalPrompt,
-} from '@renderer/models/commands/workbenchTerminalPresentation'
+import { discardWorkbenchTerminalOutput } from '@renderer/models/commands/workbenchTerminalOutputBus'
+import { buildWorkbenchTerminalSessionTitle } from '@renderer/models/commands/workbenchTerminalPresentation'
 import type { WorkbenchProject } from '@renderer/models/project/workbenchProjects'
 
 import { isPresent,toNullable } from '@velaros-ai/core'
@@ -123,7 +121,6 @@ export function useWorkbenchCommandController({
           title,
           shell: result.shell,
           cwd: result.cwd,
-          input: '',
           isRunning: true,
           lines: [],
         }
@@ -269,52 +266,16 @@ export function useWorkbenchCommandController({
     setIsValidationStale(false)
   })
 
-  const setTerminalInput = useMemoizedFn((sessionId: string, input: string): void => {
-    setTerminalSessions((current) =>
-      current.map((session) => (session.id === sessionId ? { ...session, input } : session))
-    )
+  /** xterm 收齐的按键原样进伪终端。会话已经结束时写入失败是常态（用户还在敲），不弹提示。 */
+  const writeTerminalData = useMemoizedFn((sessionId: string, data: string): void => {
+    void workbenchHost.kernel.project.writeWorkbenchTerminalInput({ sessionId, input: data })
   })
 
-  const runTerminalInput = useMemoizedFn(async (sessionId: string): Promise<void> => {
-    const session = terminalSessionsRef.current.find((candidate) => candidate.id === sessionId)
-    if (!session || !session.isRunning) return
-
-    const command = session.input.trimEnd()
-    if (!command.trim()) return
-
-    setTerminalSessions((current) =>
-      current.map((candidate) =>
-        candidate.id === sessionId
-          ? {
-              ...candidate,
-              input: '',
-              lines: [
-                ...candidate.lines,
-                createTerminalLine(
-                  'input',
-                  `${formatWorkbenchTerminalPrompt(candidate)}${command.trim()}\n`
-                ),
-              ].slice(-500),
-            }
-          : candidate
-      )
-    )
-
-    try {
-      Result.unwrap(
-        await workbenchHost.kernel.project.writeWorkbenchTerminalInput({
-          sessionId,
-          input: `${command}\n`,
-        })
-      )
-    } catch (error) {
-      const appError = AppError.from(error)
-      messageLatest.current.error({
-        title: tLatest.current('workbench.terminalWriteFailed'),
-        description: appError.message,
-      })
+  const resizeTerminalSession = useMemoizedFn(
+    (sessionId: string, cols: number, rows: number): void => {
+      void workbenchHost.kernel.project.resizeWorkbenchTerminalSession({ sessionId, cols, rows })
     }
-  })
+  )
 
   const stopTerminalSession = useMemoizedFn(async (sessionId: string): Promise<void> => {
     try {
@@ -335,6 +296,7 @@ export function useWorkbenchCommandController({
 
   const closeTerminalSession = useMemoizedFn((sessionId: string): void => {
     void workbenchHost.kernel.project.stopWorkbenchTerminalSession({ sessionId })
+    discardWorkbenchTerminalOutput(sessionId)
     setTerminalSessions((current) => {
       const next = current.filter((session) => session.id !== sessionId)
       setActiveTerminalSessionId((currentActive) =>
@@ -367,7 +329,6 @@ export function useWorkbenchCommandController({
         title: label || command,
         shell: result.shell,
         cwd: result.cwd,
-        input: '',
         isRunning: true,
         command,
         lines: [createTerminalLine('input', `$ ${command}\n`)],
@@ -401,79 +362,6 @@ export function useWorkbenchCommandController({
     }
   )
 
-  const setRunSessionInput = useMemoizedFn((sessionId: string, input: string): void => {
-    setRunSessions((current) =>
-      current.map((session) => (session.id === sessionId ? { ...session, input } : session))
-    )
-  })
-
-  const writeRunSessionInput = useMemoizedFn(async (sessionId: string): Promise<void> => {
-    const session = runSessionsRef.current.find((candidate) => candidate.id === sessionId)
-    if (!session || !session.isRunning) return
-
-    const value = session.input
-    setRunSessions((current) =>
-      current.map((candidate) =>
-        candidate.id === sessionId
-          ? {
-              ...candidate,
-              input: '',
-              lines: [...candidate.lines, createTerminalLine('input', `${value}\n`)].slice(-500),
-            }
-          : candidate
-      )
-    )
-
-    try {
-      Result.unwrap(
-        await workbenchHost.kernel.project.writeWorkbenchTerminalInput({
-          sessionId,
-          input: `${value}\n`,
-          raw: true,
-        })
-      )
-    } catch (error) {
-      const appError = AppError.from(error)
-      messageLatest.current.error({
-        title: tLatest.current('workbench.terminalWriteFailed'),
-        description: appError.message,
-      })
-    }
-  })
-
-  const sendRunSessionInterrupt = useMemoizedFn(async (sessionId: string): Promise<void> => {
-    const session = runSessionsRef.current.find((candidate) => candidate.id === sessionId)
-    if (!session || !session.isRunning) return
-
-    setRunSessions((current) =>
-      current.map((candidate) =>
-        candidate.id === sessionId
-          ? {
-              ...candidate,
-              lines: [...candidate.lines, createTerminalLine('system', '^C\n')].slice(-500),
-            }
-          : candidate
-      )
-    )
-
-    // 子进程用 pipe stdio（非 PTY），\x03 不会触发信号；直接向前台进程组发 SIGINT。
-    try {
-      Result.unwrap(
-        await workbenchHost.kernel.project.stopWorkbenchTerminalSession({
-          sessionId,
-          signal: 'SIGINT',
-          skipForceKill: true,
-        })
-      )
-    } catch (error) {
-      const appError = AppError.from(error)
-      messageLatest.current.error({
-        title: tLatest.current('workbench.terminalStopFailed'),
-        description: appError.message,
-      })
-    }
-  })
-
   const stopRunSession = useMemoizedFn(async (sessionId: string): Promise<void> => {
     try {
       Result.unwrap(await workbenchHost.kernel.project.stopWorkbenchTerminalSession({ sessionId }))
@@ -497,6 +385,7 @@ export function useWorkbenchCommandController({
     if (!session?.command || !project) return
 
     void workbenchHost.kernel.project.stopWorkbenchTerminalSession({ sessionId })
+    discardWorkbenchTerminalOutput(sessionId)
 
     const command = session.command
     const label = session.title
@@ -512,7 +401,6 @@ export function useWorkbenchCommandController({
         title: label,
         shell: result.shell,
         cwd: result.cwd,
-        input: '',
         isRunning: true,
         command,
         lines: [createTerminalLine('input', `$ ${command}\n`)],
@@ -531,6 +419,7 @@ export function useWorkbenchCommandController({
 
   const closeRunSession = useMemoizedFn((sessionId: string): void => {
     void workbenchHost.kernel.project.stopWorkbenchTerminalSession({ sessionId })
+    discardWorkbenchTerminalOutput(sessionId)
     setRunSessions((current) => {
       const next = current.filter((session) => session.id !== sessionId)
       setActiveRunSessionId((currentActive) =>
@@ -574,8 +463,8 @@ export function useWorkbenchCommandController({
       terminal: {
         setActiveTerminalSessionId,
         createTerminalSession,
-        setTerminalInput,
-        runTerminalInput,
+        writeTerminalData,
+        resizeTerminalSession,
         stopTerminalSession,
         closeTerminalSession,
       },
@@ -585,9 +474,6 @@ export function useWorkbenchCommandController({
         stopRunSession,
         restartRunSession,
         closeRunSession,
-        setRunSessionInput,
-        writeRunSessionInput,
-        sendRunSessionInterrupt,
       },
     },
   }

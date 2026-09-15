@@ -1,5 +1,5 @@
 /**
- * 持久终端 IPC 装配：handle start / write / stop 三通道，start 的流式输出只回发给发起窗口。
+ * 持久终端 IPC 装配：handle start / write / resize / stop 四通道，start 的流式输出只回发给发起窗口。
  *
  * IPC 入参是边界外来数据，在此解析一次（形状不符按无效请求处理），服务内部只见类型。异常经
  * `callWithEnvelope` 降为错误信封，renderer 侧再升回 Result。终端输出走 `event.sender.send`
@@ -12,6 +12,7 @@ import { toOptional } from '@velaros-ai/core'
 
 import type {
   WorkbenchTerminalInputRequest,
+  WorkbenchTerminalResizeRequest,
   WorkbenchTerminalStartRequest,
   WorkbenchTerminalStopRequest,
 } from '@shared/contracts'
@@ -23,6 +24,7 @@ import {
   invalidRequest,
   isRecord,
   optionalBoolean,
+  optionalNumber,
   optionalString,
 } from '../ipcBoundary'
 
@@ -52,6 +54,15 @@ export function registerWorkbenchTerminalIpc(terminal: TerminalSessions): void {
     })
   )
 
+  ipcMain.handle(WorkbenchTerminalChannels.resize, (event, request: unknown) =>
+    callWithEnvelope(async () => {
+      const parsed = parseResizeRequest(request)
+      if (!parsed) return invalidRequest()
+
+      terminal.resizeTerminalSession(parsed, event.sender.id)
+    })
+  )
+
   ipcMain.handle(WorkbenchTerminalChannels.stop, (event, request: unknown) =>
     callWithEnvelope(async () => {
       const parsed = parseStopRequest(request)
@@ -69,6 +80,8 @@ function parseStartRequest(input: unknown): Nullable<WorkbenchTerminalStartReque
     projectRoot: input['projectRoot'] as string,
     ...optionalString(input, 'cwd'),
     ...optionalString(input, 'initialCommand'),
+    ...optionalNumber(input, 'cols'),
+    ...optionalNumber(input, 'rows'),
   }
 }
 
@@ -78,7 +91,17 @@ function parseInputRequest(input: unknown): Nullable<WorkbenchTerminalInputReque
   return {
     sessionId: input['sessionId'] as string,
     input: input['input'] as string,
-    ...optionalBoolean(input, 'raw'),
+  }
+}
+
+function parseResizeRequest(input: unknown): Nullable<WorkbenchTerminalResizeRequest> {
+  if (!hasStringFields(input, ['sessionId']) || !isRecord(input)) return null
+  if (typeof input['cols'] !== 'number' || typeof input['rows'] !== 'number') return null
+
+  return {
+    sessionId: input['sessionId'] as string,
+    cols: input['cols'],
+    rows: input['rows'],
   }
 }
 

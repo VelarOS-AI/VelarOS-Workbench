@@ -1,4 +1,4 @@
-import { access, open, readFile, readdir } from 'node:fs/promises'
+import { access, open, readdir, readFile, stat } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -71,6 +71,36 @@ async function waitForPackagedApp(filePath, timeoutMs = 5_000) {
     } catch (error) {
       if (error?.code !== 'ENOENT' || Date.now() >= deadline) throw error
       await new Promise((resolve) => setTimeout(resolve, 50))
+    }
+  }
+}
+
+/**
+ * 终端后端（@lydell/node-pty）必须以真文件解包：原生模块不能从 asar 里 dlopen，spawn-helper 要能 exec。
+ * 每个包只装一个平台，包目录名就是平台；这里按包出来的 app 找它自己那个平台的二进制。
+ */
+async function verifyPackagedTerminalBackend(resourcesRoot, platformName) {
+  const unpackedRoot = path.join(resourcesRoot, 'app.asar.unpacked', 'node_modules', '@lydell')
+  const entries = await readdir(unpackedRoot, { withFileTypes: true }).catch(() => [])
+  const platformPackages = entries
+    .filter((entry) => entry.isDirectory() && entry.name.startsWith(`node-pty-${platformName}-`))
+    .map((entry) => entry.name)
+  if (platformPackages.length === 0) {
+    throw new Error(`Packaged Workbench is missing the unpacked terminal backend for ${platformName}.`)
+  }
+  for (const packageName of platformPackages) {
+    const target = packageName.slice('node-pty-'.length)
+    const prebuildDir = path.join(unpackedRoot, packageName, 'prebuilds', target)
+    await access(path.join(prebuildDir, 'pty.node')).catch(() => {
+      throw new Error(`Packaged terminal backend is missing pty.node for ${target}.`)
+    })
+    if (platformName === 'win32') continue
+    const helperPath = path.join(prebuildDir, 'spawn-helper')
+    const helperStats = await stat(helperPath).catch(() => {
+      throw new Error(`Packaged terminal backend is missing spawn-helper for ${target}.`)
+    })
+    if ((helperStats.mode & 0o111) === 0) {
+      throw new Error(`Packaged terminal spawn-helper is not executable: ${helperPath}`)
     }
   }
 }
@@ -165,6 +195,8 @@ async function verifyPackagedWorkbench({ appOutDir, platformName }) {
       }
     }
   }
+
+  await verifyPackagedTerminalBackend(paths.resourcesRoot, platformName)
 
   for (const standardLibraryFile of ['lib.d.ts', 'lib.es2022.full.d.ts']) {
     const filePath = path.join(paths.typeScriptLibRoot, standardLibraryFile)

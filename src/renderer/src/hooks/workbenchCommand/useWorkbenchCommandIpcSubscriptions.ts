@@ -1,8 +1,6 @@
 import { useEffect } from 'react'
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 
-import type { WorkbenchTerminalOutputEvent } from '@shared/contracts'
-
 import { useWorkbenchHostRuntime } from '../../host'
 import {
   createRunOutputLine,
@@ -10,25 +8,41 @@ import {
   type WorkbenchRunOutputLine,
   type WorkbenchTerminalSessionView,
 } from '../../models/commands/workbenchCommandLines'
+import { publishWorkbenchTerminalOutput } from '../../models/commands/workbenchTerminalOutputBus'
+import { createWorkbenchTerminalRunLog } from '../../models/commands/workbenchTerminalRunLog'
 
-function applyTerminalOutputEvent(
+/** 运行卡文本日志落进 React 状态的合并周期。 */
+const RunLogFlushDelayMs = 100
+const MaxRunLogLines = 500
+
+/** 运行卡的文本日志追加一段（终端会话不在 runSessions 里，自然跳过）。 */
+export function appendWorkbenchRunLogChunks(
   sessions: WorkbenchTerminalSessionView[],
-  event: WorkbenchTerminalOutputEvent
+  chunksBySession: ReadonlyMap<string, string>
 ): WorkbenchTerminalSessionView[] {
-  return sessions.map((session) => {
-    if (session.id !== event.sessionId) return session
-
-    // cwd 探针可能只带 cwd、chunk 为空：更新目录但不产生空行。
-    const shouldAppendLine = event.chunk.length > 0
+  if (chunksBySession.size === 0) return sessions
+  let changed = false
+  const next = sessions.map((session) => {
+    const chunk = chunksBySession.get(session.id)
+    if (!chunk) return session
+    changed = true
     return {
       ...session,
-      cwd: event.cwd ?? session.cwd,
-      isRunning: event.closed ? false : session.isRunning,
-      lines: shouldAppendLine
-        ? [...session.lines, createTerminalLine(event.stream, event.chunk)].slice(-500)
-        : session.lines,
+      lines: [...session.lines, createTerminalLine('stdout', chunk)].slice(-MaxRunLogLines),
     }
   })
+  return changed ? next : sessions
+}
+
+export function markWorkbenchTerminalSessionClosed(
+  sessions: WorkbenchTerminalSessionView[],
+  sessionId: string
+): WorkbenchTerminalSessionView[] {
+  return sessions.some((session) => session.id === sessionId && session.isRunning)
+    ? sessions.map((session) =>
+        session.id === sessionId ? { ...session, isRunning: false } : session
+      )
+    : sessions
 }
 
 export function useWorkbenchCommandIpcSubscriptions(
@@ -56,15 +70,25 @@ export function useWorkbenchCommandIpcSubscriptions(
       )
     })
 
+    // 伪终端输出直送 xterm；只有运行卡的文本日志（给 Agent 读、给 waitFor 等）与收口状态走 React。
+    const runLog = createWorkbenchTerminalRunLog({
+      flushDelayMs: RunLogFlushDelayMs,
+      onFlush: (chunksBySession) =>
+        setRunSessions((current) => appendWorkbenchRunLogChunks(current, chunksBySession)),
+    })
     const unsubscribe = hostRuntime.kernel.project.onWorkbenchTerminalOutput((event) => {
-      // 一个 sessionId 只会命中终端会话或运行卡其中一处；两处都按 sessionId 更新即可。
-      setTerminalSessions((current) => applyTerminalOutputEvent(current, event))
-      setRunSessions((current) => applyTerminalOutputEvent(current, event))
+      publishWorkbenchTerminalOutput(event.sessionId, event.chunk)
+      runLog.append(event.sessionId, event.chunk)
+      if (!event.closed) return
+      runLog.flush()
+      setTerminalSessions((current) => markWorkbenchTerminalSessionClosed(current, event.sessionId))
+      setRunSessions((current) => markWorkbenchTerminalSessionClosed(current, event.sessionId))
     })
 
     return () => {
       unsubscribeRunOutput()
       unsubscribe()
+      runLog.dispose()
     }
   }, [
     activeRunIdRef,

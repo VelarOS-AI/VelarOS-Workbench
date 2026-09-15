@@ -794,6 +794,9 @@ export interface WorkbenchTerminalStartRequest {
   cwd?: string
   /** 以一次性 shell 进程执行的命令（运行卡用，例如 `bun run dev`）；命令退出即关闭会话。 */
   initialCommand?: string
+  /** 伪终端初始尺寸（字符格）；不给按 80×24，xterm 挂上后会按真实尺寸再调一次。 */
+  cols?: number
+  rows?: number
 }
 
 export interface WorkbenchTerminalStartResult {
@@ -804,30 +807,34 @@ export interface WorkbenchTerminalStartResult {
   startedAt: number
 }
 
+/** xterm 收到的按键原样写进伪终端：回显、行编辑、Ctrl+C 都由 shell 与行规程处理。 */
 export interface WorkbenchTerminalInputRequest {
   sessionId: string
   input: string
-  /** 原样写入，不追加 cwd 探针（运行卡把输入直接送进前台进程 stdin 时用）。 */
-  raw?: boolean
+}
+
+export interface WorkbenchTerminalResizeRequest {
+  sessionId: string
+  cols: number
+  rows: number
 }
 
 export interface WorkbenchTerminalStopRequest {
   sessionId: string
-  /** 终止信号，默认 SIGTERM。运行卡的 Ctrl+C 用 SIGINT（作用于前台进程组）。 */
+  /** 终止信号，默认 SIGTERM。SIGINT = 往伪终端写 Ctrl+C，只打断前台程序，shell 本身活着。 */
   signal?: 'SIGINT' | 'SIGTERM'
-  /** 跳过延迟 SIGKILL 兜底强杀。SIGINT 中断（可能只是打断而非杀死）时用。 */
+  /** 跳过延迟 SIGKILL 兜底强杀。 */
   skipForceKill?: boolean
 }
 
+/** 伪终端的输出：`stdout` 是 PTY 原始字节（含控制序列，直接喂 xterm），`system` 是宿主自己的提示。 */
 export interface WorkbenchTerminalOutputEvent {
   sessionId: string
-  stream: 'stderr' | 'stdout' | 'system'
+  stream: 'stdout' | 'system'
   chunk: string
   closed?: boolean
   exitCode?: LooseOptional<number>
   signal?: LooseOptional<string>
-  /** shell 真实 `$PWD`（由 cwd 探针标记解析而来），用于让终端提示符跟随实际目录。 */
-  cwd?: LooseOptional<string>
 }
 
 /** Renderer → main：同步 Workbench 当前焦点文件与选区，供 Agent prompt 轻量提示。 */

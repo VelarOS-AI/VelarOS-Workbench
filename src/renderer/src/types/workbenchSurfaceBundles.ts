@@ -1,9 +1,7 @@
-import type { WorkbenchCommandHistoryItem } from '@renderer/models/commands/workbenchCommandHistory'
 import type { WorkbenchCommandSuggestion } from '@renderer/models/commands/workbenchCommandSuggestions'
 import type { WorkbenchRunConfiguration } from '@renderer/models/commands/workbenchRunConfigurations'
 import type { WorkbenchEditorEditMode } from '@renderer/models/editor/workbenchEditorEditMode'
 import type {
-  WorkbenchProjectContextFile,
   WorkbenchProjectContextIndex,
 } from '@renderer/models/project/workbenchProjectContextIndex'
 import type { WorkbenchProject } from '@renderer/models/project/workbenchProjects'
@@ -60,13 +58,10 @@ export interface WorkbenchCommandBundle {
   isRunningCommand: boolean
 }
 
-/** 运行卡（PTY 运行会话）+ 终端补全所需的历史、配置和文件列表。 */
+/** 运行卡（伪终端上的一次性运行会话）。 */
 export interface WorkbenchRunToolBundle {
   runSessions: WorkbenchTerminalSessionView[]
   activeRunSessionId: Nullable<string>
-  commandHistory: WorkbenchCommandHistoryItem[]
-  runConfigurations: WorkbenchRunConfiguration[]
-  projectFiles: WorkbenchProjectContextFile[]
 }
 
 export interface WorkbenchTerminalToolBundle {

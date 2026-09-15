@@ -1,7 +1,7 @@
 /**
  * 独立 Workbench 应用「持久终端会话」的 main ↔ renderer IPC 契约（应用私有）。
  *
- * 这是 `WorkbenchHost.kernel.project` 端口三个终端动词（start / write / stop）+ 输出事件在独立
+ * 这是 `WorkbenchHost.kernel.project` 端口四个终端动词（start / write / resize / stop）+ 输出事件在独立
  * 应用侧的实装传输面：请求/结果形状直接复用 `@shared/contracts` 的 Workbench Kernel contracts
  * （单源，不另造镜像），本文件只补通道名与桥面。错误信封复用 `WorkbenchFsCallResult`（main 侧
  * 异常降为数据，renderer 侧再升回 Result）。
@@ -13,6 +13,7 @@
 import type {
   WorkbenchTerminalInputRequest,
   WorkbenchTerminalOutputEvent,
+  WorkbenchTerminalResizeRequest,
   WorkbenchTerminalStartRequest,
   WorkbenchTerminalStartResult,
   WorkbenchTerminalStopRequest,
@@ -23,17 +24,21 @@ import type { WorkbenchFsCallResult } from './workbenchFs'
 export const WorkbenchTerminalChannels = {
   start: 'workbench-app:terminal:start',
   write: 'workbench-app:terminal:write',
+  resize: 'workbench-app:terminal:resize',
   stop: 'workbench-app:terminal:stop',
   output: 'workbench-app:terminal:output',
 } as const
 
-/** preload 通过 contextBridge 暴露给 renderer 的终端会话桥面（3 动词 + 输出订阅）。 */
+/** preload 通过 contextBridge 暴露给 renderer 的终端会话桥面（4 动词 + 输出订阅）。 */
 export interface WorkbenchTerminalBridge {
   startSession: (
     request: WorkbenchTerminalStartRequest
   ) => Promise<WorkbenchFsCallResult<WorkbenchTerminalStartResult>>
   writeInput: (
     request: WorkbenchTerminalInputRequest
+  ) => Promise<WorkbenchFsCallResult<void>>
+  resizeSession: (
+    request: WorkbenchTerminalResizeRequest
   ) => Promise<WorkbenchFsCallResult<void>>
   stopSession: (
     request: WorkbenchTerminalStopRequest
