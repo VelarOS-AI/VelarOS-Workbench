@@ -44,7 +44,19 @@ interface ProjectEslintEntry {
   instance: Nullable<EslintInstanceLike>
 }
 
+interface CachedLintResult {
+  content: string
+  diagnostics: WorkbenchLanguageServiceDiagnostic[]
+}
+
+const MaxCachedLintResults = 64
 const projectEslintCache = new Map<string, ProjectEslintEntry>()
+/**
+ * 按文件缓存最近一次的 lint 结果：编辑器的 linter 与问题面板、外部改动后的复核会拿同一份文本再问一遍，
+ * 类型感知的 ESLint 一次要几十到几百毫秒。磁盘上任何文件变了就整体作废（{@link clearWorkbenchProjectEslintResults}），
+ * 别的标签里没保存的改动不作废——VS Code 的 ESLint 也只在文档自己变了时重新 lint。
+ */
+const lintResultCache = new Map<string, CachedLintResult>()
 
 function isPathInside(parentPath: string, childPath: string): boolean {
   const childRelativePath = relative(parentPath, childPath)
@@ -100,6 +112,7 @@ function loadProjectEslint(projectRoot: string, absolutePath: string): ProjectEs
 }
 
 export function clearWorkbenchProjectEslintCache(projectRoot?: string): void {
+  clearWorkbenchProjectEslintResults(projectRoot)
   if (!projectRoot) {
     projectEslintCache.clear()
     return
@@ -108,6 +121,32 @@ export function clearWorkbenchProjectEslintCache(projectRoot?: string): void {
   for (const packageJsonPath of projectEslintCache.keys()) {
     if (isPathInside(projectRoot, packageJsonPath)) projectEslintCache.delete(packageJsonPath)
   }
+}
+
+/** 项目里有文件在磁盘上变了：缓存的 lint 结果可能已经过时（类型感知规则看得到别的文件），整体作废。 */
+export function clearWorkbenchProjectEslintResults(projectRoot?: string): void {
+  if (!projectRoot) {
+    lintResultCache.clear()
+    return
+  }
+
+  for (const absolutePath of lintResultCache.keys()) {
+    if (isPathInside(projectRoot, absolutePath)) lintResultCache.delete(absolutePath)
+  }
+}
+
+function rememberLintResult(
+  absolutePath: string,
+  content: string,
+  diagnostics: WorkbenchLanguageServiceDiagnostic[]
+): WorkbenchLanguageServiceDiagnostic[] {
+  lintResultCache.delete(absolutePath)
+  lintResultCache.set(absolutePath, { content, diagnostics })
+  if (lintResultCache.size > MaxCachedLintResults) {
+    const oldest = lintResultCache.keys().next().value
+    if (oldest !== undefined) lintResultCache.delete(oldest)
+  }
+  return diagnostics
 }
 
 export async function getWorkbenchJavaScriptLintDiagnostics(input: {
@@ -119,12 +158,15 @@ export async function getWorkbenchJavaScriptLintDiagnostics(input: {
   const eslint = loadProjectEslint(input.projectRoot, input.absolutePath).instance
   if (!eslint) return []
 
+  const cached = lintResultCache.get(input.absolutePath)
+  if (cached && cached.content === input.content) return cached.diagnostics
+
   try {
     const results = await eslint.lintText(input.content, {
       filePath: input.absolutePath,
       warnIgnored: false,
     })
-    return results.flatMap((result) =>
+    return rememberLintResult(input.absolutePath, input.content, results.flatMap((result) =>
       result.messages.map((message) => {
         const startLine = Math.max(1, message.line ?? 1)
         const startColumn = Math.max(1, message.column ?? 1)
@@ -147,9 +189,9 @@ export async function getWorkbenchJavaScriptLintDiagnostics(input: {
           },
         }
       })
-    )
+    ))
   } catch {
     // 项目可能没有 ESLint 配置，或其插件与当前 Node 运行时不兼容；TS 诊断仍然可用。
-    return []
+    return rememberLintResult(input.absolutePath, input.content, [])
   }
 }

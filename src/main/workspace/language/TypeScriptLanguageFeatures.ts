@@ -257,13 +257,60 @@ function defaultLibraryApiDocumentationAtOffset(
   ) ? documentation : null
 }
 
+const MaxCachedLineMaps = 32
+const lineMapCache = new Map<string, ts.SourceFileLike>()
+
+/**
+ * 把一段文本当作 TypeScript 的 SourceFileLike 用：行首表只算一次并随对象缓存（TypeScript 自己会挂在
+ * `lineMap` 上），按文件名留最近的几份。以前每映射一个 span 都 `createSourceFile` 重新解析整个文件，
+ * 一个 1400 个符号的文件算一次大纲要七秒。
+ */
+function lineMapSourceFor(fileName: string, content: string): ts.SourceFileLike {
+  const cached = lineMapCache.get(fileName)
+  if (cached && cached.text === content) return cached
+
+  const source: ts.SourceFileLike = {
+    text: content,
+    getLineAndCharacterOfPosition: (position) => ts.getLineAndCharacterOfPosition(source, position),
+  }
+  lineMapCache.delete(fileName)
+  lineMapCache.set(fileName, source)
+  if (lineMapCache.size > MaxCachedLineMaps) {
+    const oldest = lineMapCache.keys().next().value
+    if (oldest !== undefined) lineMapCache.delete(oldest)
+  }
+  return source
+}
+
+/** span → 1 起始的行列范围；越界为 null。不解析文件，只查行首表。 */
+export function rangeFromTextSpanInContent(
+  content: string,
+  fileName: string,
+  textSpan: ts.TextSpan
+): Nullable<WorkbenchLanguageServiceRange> {
+  if (
+    textSpan.start < 0
+    || textSpan.length < 0
+    || textSpan.start + textSpan.length > content.length
+  ) return null
+  const source = lineMapSourceFor(fileName, content)
+  const start = ts.getLineAndCharacterOfPosition(source, textSpan.start)
+  const end = ts.getLineAndCharacterOfPosition(source, textSpan.start + textSpan.length)
+
+  return {
+    startLine: start.line + 1,
+    startColumn: start.character + 1,
+    endLine: end.line + 1,
+    endColumn: end.character + 1,
+  }
+}
+
 function rangeFromTextSpan(
   content: string,
   fileName: string,
   textSpan: ts.TextSpan
 ): Nullable<WorkbenchLanguageServiceRange> {
-  const sourceFile = ts.createSourceFile(fileName, content, ts.ScriptTarget.Latest, true)
-  return rangeFromSourceFileSpan(sourceFile, textSpan)
+  return rangeFromTextSpanInContent(content, fileName, textSpan)
 }
 
 function rangeFromSourceFileSpan(
@@ -684,13 +731,9 @@ export function buildTypeScriptDocumentHighlights({
   position: WorkbenchLanguageServicePosition
 }): WorkbenchLanguageServiceDocumentHighlight[] {
   const offset = offsetFromPosition(content, position)
-  const highlights =
-    service.getDocumentHighlights(fileName, offset, [
-      ts.HighlightSpanKind.none,
-      ts.HighlightSpanKind.definition,
-      ts.HighlightSpanKind.reference,
-      ts.HighlightSpanKind.writtenReference,
-    ]) ?? []
+  // 第三个参数是要搜索的文件清单（必须含当前文件），不是高亮种类；传种类名会让 TypeScript 断言失败，
+  // JS/TS 的同名符号高亮此前一直静默退回到按单词匹配。
+  const highlights = service.getDocumentHighlights(fileName, offset, [fileName]) ?? []
 
   const fileHighlights =
     highlights.find((entry) => entry.fileName === fileName)?.highlightSpans ?? []

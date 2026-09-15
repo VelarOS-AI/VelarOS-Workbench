@@ -29,6 +29,9 @@ export interface TypeScriptProjectConfig {
   fileNames: string[]
   projectReferences?: readonly ts.ProjectReference[]
   packageJsonPaths: string[]
+  /** 编译选项、配置文件、依赖清单的指纹；不含文件清单。 */
+  optionsFingerprint: string
+  /** 连文件清单一起的指纹。 */
   fingerprint: string
 }
 
@@ -50,9 +53,17 @@ interface PooledTypeScriptProject {
   service: ts.LanguageService
 }
 
+const MaxMemoizedProjectConfigs = 256
 const projectCache = new Map<string, TypeScriptProjectCacheEntry>()
 const pooledProjects = new Map<string, PooledTypeScriptProject>()
 const projectConfigCandidates = new Map<string, TypeScriptProjectConfigCandidate[]>()
+/**
+ * 按 (项目根, 请求文件) 记住解析好的项目配置。解析一次要找 tsconfig、按 include 全局扫描目录、stat 每个
+ * package.json，大项目里要一百多毫秒，而每一次悬浮、补全、诊断都会走到这里。配置文件、package.json 变了整体
+ * 清掉（{@link clearTypeScriptProjectCache}）；源文件新建、删除只作废这份记忆（{@link invalidateTypeScriptProjectConfigs}），
+ * 下一次请求重新解析并按新清单增删根文件。
+ */
+const projectConfigMemo = new Map<string, TypeScriptProjectConfig>()
 
 interface TypeScriptProjectConfigCandidate {
   configPath: string
@@ -340,11 +351,10 @@ function parseTypeScriptProjectConfig(
     fileNames: string[],
     projectReferences?: readonly ts.ProjectReference[]
   ): TypeScriptProjectConfig => {
-    const fingerprint = createHash('sha1')
+    const options = createHash('sha1')
       .update(configPath ?? 'inferred')
       .update(projectDirectory)
       .update(JSON.stringify(compilerOptions))
-      .update(fileNames.join('\0'))
     for (const packageJsonPath of packageJsonPaths) {
       const stats = (() => {
         try {
@@ -353,9 +363,14 @@ function parseTypeScriptProjectConfig(
           return null
         }
       })()
-      fingerprint.update(packageJsonPath)
-      fingerprint.update(stats ? `${stats.size}:${stats.mtimeMs}` : 'missing')
+      options.update(packageJsonPath)
+      options.update(stats ? `${stats.size}:${stats.mtimeMs}` : 'missing')
     }
+    const optionsFingerprint = options.digest('hex')
+    const fingerprint = createHash('sha1')
+      .update(optionsFingerprint)
+      .update(fileNames.join('\0'))
+      .digest('hex')
 
     return {
       projectRoot,
@@ -365,7 +380,8 @@ function parseTypeScriptProjectConfig(
       fileNames,
       projectReferences,
       packageJsonPaths,
-      fingerprint: fingerprint.digest('hex'),
+      optionsFingerprint,
+      fingerprint,
     }
   }
 
@@ -538,15 +554,87 @@ function getProjectCacheKey(config: TypeScriptProjectConfig): string {
   return `${config.projectRoot}\0${config.configPath ?? `inferred:${config.projectDirectory}`}`
 }
 
+function resolveProjectConfig(
+  projectRoot: string,
+  requestAbsolutePath: string
+): TypeScriptProjectConfig {
+  const key = `${projectRoot}\0${requestAbsolutePath}`
+  const cached = projectConfigMemo.get(key)
+  if (cached) return cached
+
+  const config = parseTypeScriptProjectConfig(projectRoot, requestAbsolutePath)
+  projectConfigMemo.set(key, config)
+  if (projectConfigMemo.size > MaxMemoizedProjectConfigs) {
+    const oldest = projectConfigMemo.keys().next().value
+    if (oldest !== undefined) projectConfigMemo.delete(oldest)
+  }
+  return config
+}
+
+function forgetProjectConfigs(projectRoot?: string): void {
+  if (!projectRoot) {
+    projectConfigMemo.clear()
+    return
+  }
+  for (const key of projectConfigMemo.keys()) {
+    if (key.startsWith(`${projectRoot}\0`)) projectConfigMemo.delete(key)
+  }
+}
+
+/**
+ * 项目的源文件清单可能变了（新建、删除了 TS 文件）：忘掉记住的配置，下一次请求重新解析 tsconfig；
+ * 已建的服务按新清单增删根文件，TypeScript 增量更新程序，不整体重建。
+ */
+export function invalidateTypeScriptProjectConfigs(projectRoot: string): void {
+  projectConfigCandidates.delete(projectRoot)
+  forgetProjectConfigs(projectRoot)
+}
+
+/**
+ * 只是文件清单变了（编译选项、配置、依赖都没变）：新进清单的文件读进来当根文件，从清单里消失且磁盘上
+ * 也没有了的移出去。旧做法是丢掉整个服务重新建库、重新类型检查，Agent 每新建一个文件编辑器就停顿好几秒。
+ */
+function reconcileProjectFileNames(
+  cacheKey: string,
+  entry: TypeScriptProjectCacheEntry,
+  config: TypeScriptProjectConfig
+): void {
+  const pooled = pooledProjects.get(cacheKey)
+  const previousFileNames = new Set(entry.config.fileNames)
+  const nextFileNames = new Set(config.fileNames)
+
+  for (const fileName of config.fileNames) {
+    if (previousFileNames.has(fileName) || entry.diskFiles.has(fileName)) continue
+    if (entry.diskFiles.size >= MaxTypeScriptProjectFiles) break
+    if (!TypeScriptExtensions.has(extensionWithDot(fileName))) continue
+    const content = safeReadFile(fileName)
+    if (content == null) continue
+    entry.diskFiles.set(fileName, content)
+    if (pooled && !pooled.overlayPaths.has(fileName)) setPooledFile(pooled, fileName, content)
+  }
+
+  for (const fileName of entry.config.fileNames) {
+    if (nextFileNames.has(fileName) || !entry.diskFiles.has(fileName)) continue
+    if (safeReadFile(fileName) != null) continue
+    entry.diskFiles.delete(fileName)
+    if (pooled && !pooled.overlayPaths.has(fileName)) pooled.liveFiles.delete(fileName)
+  }
+}
+
 function getOrCreateProjectCache(
   projectRoot: string,
   requestAbsolutePath: string,
   priorityPaths: string[]
 ): TypeScriptProjectCacheEntry {
-  const config = parseTypeScriptProjectConfig(projectRoot, requestAbsolutePath)
+  const config = resolveProjectConfig(projectRoot, requestAbsolutePath)
   const cacheKey = getProjectCacheKey(config)
   const cached = projectCache.get(cacheKey)
   if (cached?.config.fingerprint === config.fingerprint) return cached
+  if (cached && cached.config.optionsFingerprint === config.optionsFingerprint) {
+    reconcileProjectFileNames(cacheKey, cached, config)
+    cached.config = config
+    return cached
+  }
 
   const pooledProject = pooledProjects.get(cacheKey)
   pooledProject?.service.dispose()
@@ -596,6 +684,7 @@ function createLanguageServiceHost(project: PooledTypeScriptProject): ts.Languag
 }
 
 export function clearTypeScriptProjectCache(projectRoot?: string): void {
+  forgetProjectConfigs(projectRoot)
   if (!projectRoot) {
     for (const project of pooledProjects.values()) project.service.dispose()
     projectCache.clear()
@@ -714,8 +803,18 @@ export function refreshTypeScriptProjectFilesFromDisk(
     }
   }
 
-  for (const absolutePath of knownPaths)
-    applyDiskFileToProjects(projectRoot, absolutePath, safeReadFile(absolutePath), true)
+  // 认得的文件没了、不认得的文件出现了：文件清单可能变了，记住的配置作废（只重新解析，不重建服务）。
+  let fileListMayHaveChanged = false
+  for (const absolutePath of scriptPaths) {
+    if (knownPaths.has(absolutePath)) {
+      const content = safeReadFile(absolutePath)
+      if (content == null) fileListMayHaveChanged = true
+      applyDiskFileToProjects(projectRoot, absolutePath, content, true)
+    } else if (existsSync(absolutePath)) {
+      fileListMayHaveChanged = true
+    }
+  }
+  if (fileListMayHaveChanged) invalidateTypeScriptProjectConfigs(projectRoot)
 }
 
 function currentTypeScriptProgram(project: PooledTypeScriptProject): ts.Program | undefined {

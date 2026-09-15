@@ -73,6 +73,7 @@ import {
 } from './ExternalLspClient'
 import {
   clearWorkbenchProjectEslintCache,
+  clearWorkbenchProjectEslintResults,
   getWorkbenchJavaScriptLintDiagnostics,
 } from './JavaScriptLinting'
 import type {
@@ -94,6 +95,7 @@ import {
   buildTypeScriptSemanticTokens,
   buildTypeScriptSignatureHelp,
   isTypeScriptDeprecatedDiagnostic,
+  rangeFromTextSpanInContent,
 } from './TypeScriptLanguageFeatures'
 import {
   acquireTypeScriptLanguageService,
@@ -320,6 +322,7 @@ class WorkbenchLanguageServices {
     const projectRoot = await this.pathResolver.resolveProjectRoot(request.projectRoot)
     const absolutePath = this.resolveAbsoluteProjectPath(projectRoot, request.path)
     synchronizeTypeScriptProjectFile(projectRoot, absolutePath, request.content)
+    clearWorkbenchProjectEslintResults(projectRoot)
     if (isPresent(request.content))
       await this.externalLsp.save(projectRoot, absolutePath, request.content)
     if (basename(absolutePath) === 'package.json') {
@@ -352,6 +355,7 @@ class WorkbenchLanguageServices {
     if (paths.length === 0) return
 
     refreshTypeScriptProjectFilesFromDisk(projectRoot, paths)
+    clearWorkbenchProjectEslintResults(projectRoot)
     if (paths.some((absolutePath) => basename(absolutePath) === 'package.json')) {
       clearWorkbenchProjectEslintCache(projectRoot)
       clearWorkbenchProjectPrettierCache(projectRoot)
@@ -1791,16 +1795,7 @@ class WorkbenchLanguageServices {
     const content = snapshot.files.get(fileName) ?? safeReadFile(fileName)
     if (!isPresent(content)) return null
 
-    const sourceFile = ts.createSourceFile(fileName, content, ts.ScriptTarget.Latest, true)
-    const start = sourceFile.getLineAndCharacterOfPosition(textSpan.start)
-    const end = sourceFile.getLineAndCharacterOfPosition(textSpan.start + textSpan.length)
-
-    return {
-      startLine: start.line + 1,
-      startColumn: start.character + 1,
-      endLine: end.line + 1,
-      endColumn: end.character + 1,
-    }
+    return rangeFromTextSpanInContent(content, fileName, textSpan)
   }
 
   private locationFromTextSpan(

@@ -7,7 +7,10 @@ import type {
   WorkbenchLanguageServiceRange,
 } from '@shared/contracts'
 
-import { WorkbenchTypeScriptFormatCodeSettings } from './TypeScriptLanguageFeatures'
+import {
+  rangeFromTextSpanInContent,
+  WorkbenchTypeScriptFormatCodeSettings,
+} from './TypeScriptLanguageFeatures'
 
 const MaxCompletionItems = 120
 const MaxCompletionDetailResolutions = 16
@@ -112,16 +115,7 @@ function rangeFromTextSpan(
   fileName: string,
   textSpan: ts.TextSpan
 ): Nullable<WorkbenchLanguageServiceRange> {
-  const sourceFile = ts.createSourceFile(fileName, content, ts.ScriptTarget.Latest, true)
-  const start = sourceFile.getLineAndCharacterOfPosition(textSpan.start)
-  const end = sourceFile.getLineAndCharacterOfPosition(textSpan.start + textSpan.length)
-
-  return {
-    startLine: start.line + 1,
-    startColumn: start.character + 1,
-    endLine: end.line + 1,
-    endColumn: end.character + 1,
-  }
+  return rangeFromTextSpanInContent(content, fileName, textSpan)
 }
 
 function buildCompletionDetail(entry: ts.CompletionEntry): string | undefined {

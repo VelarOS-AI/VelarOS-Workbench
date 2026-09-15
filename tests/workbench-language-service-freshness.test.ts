@@ -294,8 +294,10 @@ void describe('editor re-checks diagnostics when the workspace changes outside t
     assert.match(editor, /effect\.is\(externalWorkspaceChange\)/u)
     assert.match(editor, /externalWorkspaceChange\.of\(externalRevision\)/u)
     const insights = readSource('src/renderer/src/hooks/useWorkbenchLanguageServiceInsights.ts')
-    assert.match(insights, /diagnosticContentKey,\n\s+diagnosticTargets,\n\s+externalRevision,/u)
-    // 只是工作区在外面变了：旧诊断留在面板上直到新结果回来，不先清空。
-    assert.match(insights, /if \(scheduledContentKeyRef\.current !== diagnosticContentKey\) \{/u)
+    assert.match(insights, /\[contextRef, diagnosticContentKey, externalRevision, hostRuntime, messageLatest, tLatest\]/u)
+    // 只是工作区在外面变了：旧诊断留在面板上直到新结果回来，只有内容变了的文件先撤下。
+    assert.match(insights, /if \(changedPaths\.size > 0\)\n\s+setDiagnosticsByPath\(\(current\) => omitWorkbenchPendingDiagnostics\(current, changedPaths\)\)/u)
+    // 别的标签等手停下来再复核，不跟着每一波输入全算一遍。
+    assert.match(insights, /setTimeout\(\(\) => void request\(siblingPaths\), SIBLING_DIAGNOSTIC_DEBOUNCE_MS\)/u)
   })
 })
