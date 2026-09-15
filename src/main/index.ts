@@ -55,6 +55,10 @@ import { installWorkbenchUpdateRuntime } from './updates/WorkbenchUpdateRuntime'
 import { registerWorkbenchGitIpc } from './workspace/git/WorkbenchGitIpc'
 import { WorkbenchInlineCompletionGenerator } from './workspace/language/WorkbenchInlineCompletion'
 import { registerWorkbenchLanguageServiceIpc } from './workspace/language/WorkbenchLanguageServiceIpc'
+import {
+  withLanguageSyncOnAgentWrites,
+  withLanguageSyncOnUserWrites,
+} from './workspace/language/WorkbenchLanguageWriteSync'
 import { registerWorkbenchTerminalIpc } from './workspace/terminal/WorkbenchTerminalIpc'
 import { registerWorkbenchWatchIpc } from './workspace/watch/WorkbenchWatchIpc'
 import { registerWorkbenchFsIpc } from './workspace/WorkbenchFsIpc'
@@ -332,7 +336,8 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
     undefined,
     undefined,
     // Agent 写了哪些文件、命令跑在哪段时间，报给改动归属账本：「本轮改动」与回溯只认 Agent 的改动。
-    providers.chatRunAttribution,
+    // 写完的文件同时告诉语言服务，编辑器的诊断不必等文件监听（macOS 忙时事件晚到好几秒）。
+    withLanguageSyncOnAgentWrites(providers.chatRunAttribution, providers.language),
     new WorkbenchContextPayloadStore(() => providers.parts.storagePaths.getChatContextPayloadsDir())
   )
   const disposeModelIpc = registerWorkbenchModelIpc(
@@ -432,7 +437,7 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
     providers.fileSystem,
     providers.parts,
     windowManager,
-    providers.chatRunAttribution
+    withLanguageSyncOnUserWrites(providers.chatRunAttribution, providers.language)
   )
   registerProjectHubIpc(windowManager)
   registerWorkbenchWindowStateIpc()

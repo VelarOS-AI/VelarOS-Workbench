@@ -46,6 +46,8 @@ export interface WorkbenchEditorSurfaceBundle extends WorkbenchEditorDocumentBun
   selectedFileEditMode: Nullable<WorkbenchEditorEditMode>
   projectContextIndex: WorkbenchProjectContextIndex
   isSavingFile: boolean
+  /** 工作区在编辑器之外被改动的次数（Agent 写入、磁盘监听）；变了编辑器就重新要一次诊断。 */
+  externalRevision: number
 }
 
 /** 命令输入、上次运行结果、建议和运行器标记。 */

@@ -46,6 +46,7 @@ import {
   EditorSelection,
   EditorState,
   RangeSetBuilder,
+  StateEffect,
 } from '@codemirror/state'
 import {
   closeHoverTooltips,
@@ -248,6 +249,8 @@ interface CodeMirrorEditorProps {
   openTabs?: WorkbenchOpenEditorTab[]
   packageManager?: PackageManagerCommand
   workbenchTheme: WorkbenchThemeId
+  /** 工作区在编辑器之外被改动的次数（Agent 写入、磁盘监听）；变了就重新要一次诊断，当前文档没变也要。 */
+  externalRevision?: number
   onChange: (content: string) => void
   onCursorPositionChange?: (position: {
     line: number
@@ -278,6 +281,8 @@ type GetWorkbenchOpenTabs = () => readonly WorkbenchOpenEditorTab[]
 type GetWorkbenchProjectContextIndex = () => WorkbenchProjectContextIndex
 
 const externalValueSync = Annotation.define<boolean>()
+/** 别的文件在磁盘上变了：linter 据此重跑，不必等当前文档改动。 */
+const externalWorkspaceChange = StateEffect.define<number>()
 const log = Log.tag('codemirror-editor')
 const INDENT_GUIDE_STROKE_PX = 0.75
 const INDENT_GUIDE_COLOR = 'rgba(105, 118, 142, 0.26)'
@@ -799,7 +804,14 @@ function createWorkbenchLanguageServiceLinter({
         })
         .filter((diagnostic): diagnostic is Diagnostic => isPresent(diagnostic))
     },
-    { delay: 500 }
+    {
+      delay: 500,
+      // 依赖文件在磁盘上变了（Agent 修好了它 import 的那个文件）：当前文档没变，诊断也要重算。
+      needsRefresh: (update) =>
+        update.transactions.some((transaction) =>
+          transaction.effects.some((effect) => effect.is(externalWorkspaceChange))
+        ),
+    }
   )
 }
 
@@ -1165,6 +1177,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       openTabs = [],
       packageManager = 'npm',
       workbenchTheme,
+      externalRevision = 0,
       onChange,
       onCursorPositionChange,
       onOpenFind,
@@ -2612,6 +2625,13 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         ]),
       })
     }, [diagnosticForegroundExtension, languageServiceLinter, lintCompartment, lintTheme])
+
+    const appliedExternalRevisionRef = useRef(externalRevision)
+    useEffect(() => {
+      if (appliedExternalRevisionRef.current === externalRevision) return
+      appliedExternalRevisionRef.current = externalRevision
+      viewRef.current?.dispatch({ effects: externalWorkspaceChange.of(externalRevision) })
+    }, [externalRevision])
 
     useEffect(() => {
       const view = viewRef.current

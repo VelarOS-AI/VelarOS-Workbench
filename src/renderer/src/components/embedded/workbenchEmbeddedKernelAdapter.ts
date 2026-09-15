@@ -180,6 +180,7 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
         selectedFileEditMode: workbench.selectedFileEditMode,
         projectContextIndex: workbench.projectContextIndex,
         isSavingFile: workbench.isSavingFile,
+        externalRevision: workbench.externalRevision,
       },
       gitDecorations: gitState.decorations,
       selectedFileDiagnostics: selectedFileDiagnosticView.diagnostics,

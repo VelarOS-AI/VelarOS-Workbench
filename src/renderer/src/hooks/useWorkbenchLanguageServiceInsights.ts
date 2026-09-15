@@ -37,11 +37,14 @@ export function useWorkbenchLanguageServiceInsights({
   openTabs,
   selectedFilePath,
   editorContent,
+  externalRevision,
 }: {
   projectRoot: Nullable<string>
   openTabs: readonly WorkbenchOpenEditorTab[]
   selectedFilePath: Nullable<string>
   editorContent: string
+  /** 工作区在编辑器之外被改动的次数：变了就重算所有打开文件的诊断，即使它们的内容没变。 */
+  externalRevision: number
 }): WorkbenchLanguageServiceInsights {
   const hostRuntime = useWorkbenchHostRuntime()
   const { messageLatest, tLatest } = useStableWorkbenchMessageTranslate()
@@ -66,7 +69,7 @@ export function useWorkbenchLanguageServiceInsights({
         .slice(0, MAX_DIAGNOSTIC_TABS),
     [openTabs]
   )
-  const diagnosticScheduleKey = useMemo(
+  const diagnosticContentKey = useMemo(
     () =>
       diagnosticTargets
         .map((tab) => {
@@ -77,11 +80,15 @@ export function useWorkbenchLanguageServiceInsights({
         .join('\u001e'),
     [diagnosticTargets, editorContent, selectedFilePath]
   )
+  const scheduledContentKeyRef = useRef<Nullable<string>>(null)
 
+  // 打开文件的内容变了要重算；依赖文件、配置在磁盘上变了（externalRevision：Agent 写的、监听送到的）
+  // 也要重算——错误可能已经在别的文件里修好。
   useEffect(() => {
     const root = contextRef.current.projectRoot
     if (!root || isEmpty(diagnosticTargets)) {
       announcedErrorRef.current = null
+      scheduledContentKeyRef.current = null
       setDiagnosticsByPath(new Map())
       setDiagnosticsPendingPaths(new Set())
       return undefined
@@ -89,8 +96,13 @@ export function useWorkbenchLanguageServiceInsights({
 
     const generation = ++diagnosticGenerationRef.current
     const pendingPaths = new Set(diagnosticTargets.map((tab) => tab.path))
-    setDiagnosticsPendingPaths(pendingPaths)
-    setDiagnosticsByPath((current) => omitWorkbenchPendingDiagnostics(current, pendingPaths))
+    // 内容变了：旧诊断已经对不上文本，先撤下。只是工作区在外面变了：文本没动，旧诊断继续显示到
+    // 新结果回来，问题面板不闪。
+    if (scheduledContentKeyRef.current !== diagnosticContentKey) {
+      scheduledContentKeyRef.current = diagnosticContentKey
+      setDiagnosticsPendingPaths(pendingPaths)
+      setDiagnosticsByPath((current) => omitWorkbenchPendingDiagnostics(current, pendingPaths))
+    }
 
     const timer = setTimeout(() => {
       void (async () => {
@@ -146,7 +158,15 @@ export function useWorkbenchLanguageServiceInsights({
     }, DIAGNOSTIC_DEBOUNCE_MS)
 
     return () => clearTimeout(timer)
-  }, [contextRef, diagnosticScheduleKey, diagnosticTargets, hostRuntime, messageLatest, tLatest])
+  }, [
+    contextRef,
+    diagnosticContentKey,
+    diagnosticTargets,
+    externalRevision,
+    hostRuntime,
+    messageLatest,
+    tLatest,
+  ])
 
   useEffect(() => {
     const root = contextRef.current.projectRoot

@@ -620,23 +620,25 @@ export function clearTypeScriptProjectCache(projectRoot?: string): void {
   }
 }
 
-export function synchronizeTypeScriptProjectFile(
+function isTypeScriptProjectMetadataPath(projectRoot: string, absolutePath: string): boolean {
+  return (
+    basename(absolutePath) === 'package.json' ||
+    isTypeScriptConfigCandidatePath(projectRoot, absolutePath)
+  )
+}
+
+/**
+ * 一个磁盘文件的最新内容（null = 已不存在）写进项目缓存与已建的服务。
+ * `keepOverlay`：正被编辑器覆盖（有未保存改动）的文件只更新磁盘版本，编辑缓冲仍是权威；
+ * 否则这份内容就是权威（显式同步），覆盖层一并撤掉。
+ * 版本号只增不减：文件删了再建也不能回到旧版本号，否则 TypeScript 会当成没变过而沿用旧文本。
+ */
+function applyDiskFileToProjects(
   projectRoot: string,
   absolutePath: string,
-  content: Nullable<string>
+  content: Nullable<string>,
+  keepOverlay: boolean
 ): void {
-  if (!isPathInside(projectRoot, absolutePath)) return
-
-  const fileName = basename(absolutePath)
-  const isProjectMetadata =
-    fileName === 'package.json' || isTypeScriptConfigCandidatePath(projectRoot, absolutePath)
-  if (isProjectMetadata) {
-    clearTypeScriptProjectCache(projectRoot)
-    return
-  }
-
-  if (!TypeScriptExtensions.has(extensionWithDot(absolutePath))) return
-
   for (const [key, cacheEntry] of projectCache) {
     if (!key.startsWith(`${projectRoot}\0`)) continue
     if (!isPathInside(cacheEntry.config.projectDirectory, absolutePath)) continue
@@ -648,15 +650,80 @@ export function synchronizeTypeScriptProjectFile(
     if (!key.startsWith(`${projectRoot}\0`)) continue
     if (!isPathInside(project.projectDirectory, absolutePath)) continue
 
+    if (content == null) project.diskFiles.delete(absolutePath)
+    else project.diskFiles.set(absolutePath, content)
+    if (keepOverlay && project.overlayPaths.has(absolutePath)) continue
+
     project.overlayPaths.delete(absolutePath)
-    if (content == null) {
-      project.diskFiles.delete(absolutePath)
-      project.liveFiles.delete(absolutePath)
-      project.fileVersions.delete(absolutePath)
-    } else {
-      project.diskFiles.set(absolutePath, content)
-      setPooledFile(project, absolutePath, content)
+    if (content == null) project.liveFiles.delete(absolutePath)
+    else setPooledFile(project, absolutePath, content)
+  }
+}
+
+export function synchronizeTypeScriptProjectFile(
+  projectRoot: string,
+  absolutePath: string,
+  content: Nullable<string>
+): void {
+  if (!isPathInside(projectRoot, absolutePath)) return
+  if (isTypeScriptProjectMetadataPath(projectRoot, absolutePath)) {
+    clearTypeScriptProjectCache(projectRoot)
+    return
+  }
+  if (!TypeScriptExtensions.has(extensionWithDot(absolutePath))) return
+
+  applyDiskFileToProjects(projectRoot, absolutePath, content, false)
+}
+
+/**
+ * 磁盘上这些路径变了（文件监听送到的、Agent 或用户刚写完的）：按此刻的磁盘内容更新已建的 TypeScript 项目，
+ * 下一次诊断才不会照着旧文件算。以前这些改动根本到不了这里：项目建好后磁盘文件只在 package.json / tsconfig
+ * 变化时整体重读，别的文件一直是首次扫描时的文本，跨文件的错误修好了也不消。
+ *
+ * 只更新项目已经认得的文件——项目根文件，以及被 import 拉进程序的文件；别的新文件被 import 时 TypeScript
+ * 自己会发现（缺失文件复查），在编辑器里打开时成为请求文件。package.json / tsconfig 变了整个项目重建。
+ */
+export function refreshTypeScriptProjectFilesFromDisk(
+  projectRoot: string,
+  absolutePaths: readonly string[]
+): void {
+  const scriptPaths = new Set<string>()
+  for (const absolutePath of absolutePaths) {
+    if (!isPathInside(projectRoot, absolutePath)) continue
+    if (isTypeScriptProjectMetadataPath(projectRoot, absolutePath)) {
+      clearTypeScriptProjectCache(projectRoot)
+      return
     }
+    if (TypeScriptExtensions.has(extensionWithDot(absolutePath))) scriptPaths.add(absolutePath)
+  }
+  if (scriptPaths.size === 0) return
+
+  const knownPaths = new Set<string>()
+  for (const [key, cacheEntry] of projectCache) {
+    if (!key.startsWith(`${projectRoot}\0`)) continue
+    for (const absolutePath of scriptPaths)
+      if (cacheEntry.diskFiles.has(absolutePath)) knownPaths.add(absolutePath)
+  }
+  for (const [key, project] of pooledProjects) {
+    if (!key.startsWith(`${projectRoot}\0`)) continue
+    // 程序只取一次：更新过一个文件的版本再取会触发增量重建，一批改动就成了一批次重建。
+    const program = currentTypeScriptProgram(project)
+    for (const absolutePath of scriptPaths) {
+      if (project.liveFiles.has(absolutePath) || program?.getSourceFile(absolutePath))
+        knownPaths.add(absolutePath)
+    }
+  }
+
+  for (const absolutePath of knownPaths)
+    applyDiskFileToProjects(projectRoot, absolutePath, safeReadFile(absolutePath), true)
+}
+
+function currentTypeScriptProgram(project: PooledTypeScriptProject): ts.Program | undefined {
+  try {
+    return project.service.getProgram()
+  } catch {
+    // arch-guard:silent-catch-ok 程序同步失败只影响「这个文件算不算已知」的判断；下一次请求会重建程序。
+    return undefined
   }
 }
 
@@ -713,11 +780,18 @@ export function acquireTypeScriptLanguageService(
   for (const path of preserveExistingOverlays ? [] : project.overlayPaths) {
     if (nextOverlayPaths.has(path)) continue
 
-    const diskContent = project.diskFiles.get(path)
-    if (diskContent == null) {
+    // 编辑器不再覆盖这个文件（保存了、标签干净了、关掉了）：回到磁盘内容。缓存里的磁盘版本可能已经过时
+    // （刚保存的内容还没经文件监听送回来），所以项目认得的文件直接重读一次；不属于项目的文件照旧退出程序。
+    if (!project.diskFiles.has(path)) {
       project.liveFiles.delete(path)
-      project.fileVersions.delete(path)
+      continue
+    }
+    const diskContent = safeReadFile(path)
+    if (diskContent == null) {
+      project.diskFiles.delete(path)
+      project.liveFiles.delete(path)
     } else {
+      project.diskFiles.set(path, diskContent)
       setPooledFile(project, path, diskContent)
     }
   }

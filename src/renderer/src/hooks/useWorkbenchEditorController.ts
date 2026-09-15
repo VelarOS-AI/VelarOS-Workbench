@@ -13,6 +13,7 @@ import {
   hasExternalChange,
   hasFileSnapshotChanged,
   isDirtyTab,
+  mayAffectWorkbenchDiagnostics,
   movePath,
   resolveExternalFileUnavailableStatus,
   reuseWorkbenchOpenFileSnapshots,
@@ -39,6 +40,7 @@ import type {
 import { isWorkbenchImagePreviewPath } from '@shared/workbenchImage'
 
 import { useStableWorkbenchMessageTranslate } from '../runtime/useStableWorkbenchMessaging'
+import { subscribeWorkbenchAgentProjectWrites } from '../runtime/workbenchAgentProjectWrites'
 import { useLatest, useMemoizedFn, useMonotonicAsyncRequest, useTimerScope } from '../support/genericHooks'
 import { useWorkspaceFilesChangedRefresh } from '../support/useWorkspaceFilesChangedRefresh'
 
@@ -106,8 +108,12 @@ export function useWorkbenchEditorController({
   )
   const [isSavingFile, setIsSavingFile] = useState(false)
   const [saveRevision, setSaveRevision] = useState(0)
+  // 工作区在编辑器之外被改动的次数：Agent 写了文件、磁盘监听送到了事件、窗口回到前台重读了磁盘。
+  // 编辑器与问题面板据此重算诊断——当前文档没变时也要，错误可能已经在依赖文件里修好。
+  const [externalRevision, setExternalRevision] = useState(0)
   const externalChangeNoticeKeysRef = useRef(new Set<string>())
   const externalFileRefreshInFlightRef = useRef(false)
+  const externalFileRefreshQueuedRef = useRef(false)
   const openedFileSnapshotsRef = useRef<WorkbenchOpenFileSnapshot[]>([])
   const pendingFilePathRef = useRef<Nullable<string>>(null)
   const timers = useTimerScope('useWorkbenchEditorController')
@@ -779,12 +785,23 @@ export function useWorkbenchEditorController({
   })
 
   const refreshOpenFilesFromDiskLatest = useLatest(refreshOpenFilesFromDisk)
+  const noteExternalWorkspaceChange = useMemoizedFn((): void => {
+    setExternalRevision((revision) => revision + 1)
+  })
   const runRefreshOpenFilesFromDisk = useMemoizedFn((): void => {
-    if (document.visibilityState === 'hidden' || externalFileRefreshInFlightRef.current) return
+    if (document.visibilityState === 'hidden') return
+    // 正在刷新时又来了改动（Agent 连着写了第二个文件）：记下来，这一轮读完紧接着再读一轮，不能丢。
+    if (externalFileRefreshInFlightRef.current) {
+      externalFileRefreshQueuedRef.current = true
+      return
+    }
 
     externalFileRefreshInFlightRef.current = true
     void refreshOpenFilesFromDiskLatest.current().finally(() => {
       externalFileRefreshInFlightRef.current = false
+      if (!externalFileRefreshQueuedRef.current) return
+      externalFileRefreshQueuedRef.current = false
+      runRefreshOpenFilesFromDisk()
     })
   })
   const scheduleRefreshOpenFilesFromDisk = useMemo(
@@ -927,6 +944,8 @@ export function useWorkbenchEditorController({
     const refreshIfVisible = (): void => {
       if (document.visibilityState === 'hidden') return
 
+      // 不在前台的这段时间里磁盘上发生的改动没有重算过诊断，回来时补一次。
+      noteExternalWorkspaceChange()
       void refreshOpenFilesFromDisk()
     }
     const handleVisibilityChange = (): void => {
@@ -942,15 +961,15 @@ export function useWorkbenchEditorController({
       window.removeEventListener('focus', refreshIfVisible)
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
-  }, [activeProject, refreshOpenFilesFromDisk])
+  }, [activeProject, noteExternalWorkspaceChange, refreshOpenFilesFromDisk])
 
   useWorkspaceFilesChangedRefresh({
     rootPath: activeProject?.rootPath,
     enabled: !!activeProject,
-    refreshInFlightRef: externalFileRefreshInFlightRef,
     onChanged: (event) => {
-      if (document.visibilityState === 'hidden' || !shouldRefreshOpenFilesForWorkspaceEvent(event))
-        return
+      if (document.visibilityState === 'hidden') return
+      if (mayAffectWorkbenchDiagnostics(event)) noteExternalWorkspaceChange()
+      if (!shouldRefreshOpenFilesForWorkspaceEvent(event)) return
 
       if (getWorkbenchEditorFilesChangedRefreshDelayMs(event) <= 0) {
         scheduleRefreshOpenFilesFromDisk.cancel()
@@ -961,6 +980,26 @@ export function useWorkbenchEditorController({
       scheduleRefreshOpenFilesFromDisk()
     },
   })
+
+  // Agent（含子 Agent、外部引擎）写了项目文件：不等文件监听——macOS 在机器忙的时候把事件攒上好几秒才送到，
+  // 而 Agent 跑构建时正是最忙的时候——工具结果一到就重读打开的文件、重算诊断。监听随后送到的事件照常处理，
+  // 多刷一次是幂等的。
+  const activeProjectRootPath = activeProject?.rootPath
+  useEffect(() => {
+    if (!activeProjectRootPath) return undefined
+
+    return subscribeWorkbenchAgentProjectWrites(activeProjectRootPath, () => {
+      if (document.visibilityState === 'hidden') return
+      noteExternalWorkspaceChange()
+      scheduleRefreshOpenFilesFromDisk.cancel()
+      runRefreshOpenFilesFromDisk()
+    })
+  }, [
+    activeProjectRootPath,
+    noteExternalWorkspaceChange,
+    runRefreshOpenFilesFromDisk,
+    scheduleRefreshOpenFilesFromDisk,
+  ])
 
   const saveEditorTab = useMemoizedFn(
     async (
@@ -1129,6 +1168,7 @@ export function useWorkbenchEditorController({
     openedFileSnapshots,
     isSavingFile,
     saveRevision,
+    externalRevision,
     setEditorContent: updateEditorContent,
     applyLanguageServiceFileChanges,
     ensureNoUnsavedChanges,

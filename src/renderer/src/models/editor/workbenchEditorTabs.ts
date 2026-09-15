@@ -25,6 +25,14 @@ export function getWorkbenchEditorFilesChangedRefreshDelayMs(
     : WORKBENCH_EDITOR_FILES_CHANGED_DEBOUNCE_MS
 }
 
+/**
+ * 这批文件事件会不会改变语言服务的结论（依赖文件、配置都算，不只是打开的那几个）：
+ * 只有版本库内部状态（`.git/…`）变了不算。
+ */
+export function mayAffectWorkbenchDiagnostics(event: SystemWorkspaceFilesChangedEvent): boolean {
+  return event.paths.some((path) => path !== '.git' && !path.startsWith('.git/'))
+}
+
 /** 标签内容与磁盘版本不一致即视为脏（未保存）。 */
 export function isDirtyTab(tab: WorkbenchOpenEditorTab): boolean {
   return !tab.file.imagePreview && tab.content !== tab.file.content

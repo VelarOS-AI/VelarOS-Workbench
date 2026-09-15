@@ -231,7 +231,15 @@ export class WorkbenchLanguageServiceWorkerClient {
     operation: TOperation,
     request: WorkbenchLanguageServiceWorkerOperationMap[TOperation]['request']
   ): Promise<WorkbenchLanguageServiceWorkerOperationMap[TOperation]['result']> {
-    if (operation !== 'getDiagnostics') return this.send(operation, request)
+    if (operation !== 'getDiagnostics') {
+      // 项目文件变了：还在飞的诊断是照旧文件算的，之后同样的请求不能再搭它的便车。
+      if (
+        operation === 'projectFilesChanged'
+        || operation === 'synchronizeProjectFile'
+        || operation === 'invalidateProject'
+      ) this.inFlightDiagnostics.splice(0)
+      return this.send(operation, request)
+    }
 
     const diagnosticsRequest = request as WorkbenchLanguageServiceRequest
     const current = this.inFlightDiagnostics.find((item) =>

@@ -137,6 +137,7 @@ export function useWorkbenchController(options: UseWorkbenchControllerOptions = 
     openTabs: editor.openTabs,
     selectedFilePath: editor.selectedFilePath,
     editorContent: editor.editorContent,
+    externalRevision: editor.externalRevision,
   })
   const persistActiveProjectSession = useMemoizedFn((): void => {
     if (!shouldPersistProjectSession) return
@@ -323,6 +324,7 @@ export function useWorkbenchController(options: UseWorkbenchControllerOptions = 
     isLoadingTree: tree.isLoadingTree,
     isSavingFile: editor.isSavingFile,
     saveRevision: editor.saveRevision,
+    externalRevision: editor.externalRevision,
     isMutatingTree: mutation.isMutatingTree,
     isSearchingEntries: search.isSearchingEntries,
     isIndexingProject: projectIndex.isIndexingProject,

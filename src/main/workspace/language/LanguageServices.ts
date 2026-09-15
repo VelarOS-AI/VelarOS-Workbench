@@ -98,6 +98,7 @@ import {
 import {
   acquireTypeScriptLanguageService,
   clearTypeScriptProjectCache,
+  refreshTypeScriptProjectFilesFromDisk,
   safeReadFile,
   synchronizeTypeScriptProjectFile,
   TypeScriptExtensions,
@@ -335,12 +336,26 @@ class WorkbenchLanguageServices {
     await this.externalLsp.invalidate(projectRoot)
   }
 
+  /**
+   * 磁盘上这些文件变了（文件监听、Agent 的写文件工具、用户在编辑器与文件树里的写入）：内置 TypeScript 项目按
+   * 磁盘内容更新，项目级 ESLint / Prettier 缓存随 package.json 作废，外部语言服务器收到标准的文件变更通知。
+   * 路径相对项目根或绝对都收；项目之外的一律忽略，不让一个越界路径把整批通知打掉。
+   */
   public async projectFilesChanged(request: {
     projectRoot: string
     paths: readonly string[]
   }): Promise<void> {
     const projectRoot = await this.pathResolver.resolveProjectRoot(request.projectRoot)
-    const paths = request.paths.map((path) => this.resolveAbsoluteProjectPath(projectRoot, path))
+    const paths = request.paths
+      .map((path) => resolve(projectRoot, path))
+      .filter((absolutePath) => this.pathResolver.isAllowedProjectPath(projectRoot, absolutePath))
+    if (paths.length === 0) return
+
+    refreshTypeScriptProjectFilesFromDisk(projectRoot, paths)
+    if (paths.some((absolutePath) => basename(absolutePath) === 'package.json')) {
+      clearWorkbenchProjectEslintCache(projectRoot)
+      clearWorkbenchProjectPrettierCache(projectRoot)
+    }
     await this.externalLsp.filesChanged(projectRoot, paths)
   }
 

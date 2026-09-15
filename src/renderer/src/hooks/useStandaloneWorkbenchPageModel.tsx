@@ -564,6 +564,7 @@ export function useStandaloneWorkbenchPageModel(
     })
   }, [exitCurrentProject, surfaceMode, zoomEditor])
   const workspaceFileRefreshInFlightRef = useRef(false)
+  const workspaceFileRefreshQueuedRef = useRef(false)
 
   useEffect(() => {
     if (
@@ -620,18 +621,28 @@ export function useStandaloneWorkbenchPageModel(
     cursor: editorNavigation.cursorPosition,
   })
 
+  // 文件树按磁盘事件刷新，一次只跑一轮；正在刷新时又来了事件就记下来，读完紧接着再刷一轮——
+  // 丢掉的话 Agent 连着新建的第二个文件在树里一直不出现。
+  const runWorkspaceFileRefresh = useMemoizedFn(async (): Promise<void> => {
+    if (workspaceFileRefreshInFlightRef.current) {
+      workspaceFileRefreshQueuedRef.current = true
+      return
+    }
+    workspaceFileRefreshInFlightRef.current = true
+    try {
+      await workbench.refreshLoadedDirectories()
+    } finally {
+      workspaceFileRefreshInFlightRef.current = false
+    }
+    if (!workspaceFileRefreshQueuedRef.current) return
+    workspaceFileRefreshQueuedRef.current = false
+    await runWorkspaceFileRefresh()
+  })
+
   useWorkspaceFilesChangedRefresh({
     rootPath: workbench.activeProject?.rootPath,
     enabled: !!workbench.activeProject,
-    refreshInFlightRef: workspaceFileRefreshInFlightRef,
-    onChanged: async () => {
-      workspaceFileRefreshInFlightRef.current = true
-      try {
-        await workbench.refreshLoadedDirectories()
-      } finally {
-        workspaceFileRefreshInFlightRef.current = false
-      }
-    },
+    onChanged: runWorkspaceFileRefresh,
   })
 
   async function runTreeMutation<T>(action: () => Promise<T>): Promise<T> {

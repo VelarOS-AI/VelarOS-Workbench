@@ -261,6 +261,7 @@ export function EditorPanel({
     selectedFileEditMode,
     projectContextIndex,
     isSavingFile,
+    externalRevision,
   } = workbenchEditor
   const { t } = useWorkbenchI18n()
   const onCursorPositionLatest = useLatest(onCursorPositionChange)
@@ -946,6 +947,7 @@ export function EditorPanel({
                         openTabs={openTabs}
                         packageManager={selectedPackageManager}
                         workbenchTheme={workbenchTheme}
+                        externalRevision={externalRevision}
                         onChange={onEditorContentChange}
                         onCursorPositionChange={handleCursorPositionChange}
                         onOpenFind={openFindBar}

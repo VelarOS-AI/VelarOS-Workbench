@@ -53,6 +53,33 @@ schema 包装器与字符数只在当前 Registry 内缓存。工具面保持等
 复用；工具替换、移除或恢复由执行栈重建 Registry，开始独立缓存。每轮预算和模型工具集
 仍应用当前 allowlist、分类访问和可用性过滤。
 
+## 语言服务与磁盘的同步
+
+编辑器的诊断由主进程的语言服务 worker 计算（内置 TypeScript 项目、ESLint、外部 LSP）。
+worker 里的 TypeScript 项目在首次请求时整体读盘建库，之后只有请求文件本身和有未保存
+改动的标签走请求里的覆盖层；别的文件必须由下面三路通知刷新，否则它们一直是首次扫描时
+的文本，Agent 在依赖文件里修好的错误在导入它的文件里不会消失：
+
+1. **Agent 的写文件工具**：执行栈拿到的改动归属上报口经
+   `WorkbenchLanguageWriteSync` 包装，工具报出改过的路径时同步调用
+   `projectFilesChanged`。这一步发生在工具结果回到模型和 renderer 之前。
+2. **用户在编辑器、文件树里的写入**：fs IPC 的用户写入回报同样包装，保存、新建、改名、
+   删除、恢复当场通知。
+3. **文件监听**：`WorkbenchFileWatcher` 合并后的每批事件都发 `projectFilesChanged`。
+   这是命令产物、外部引擎自己写盘、第三方工具改动的唯一来源，但 macOS 在机器忙时
+   （Agent 跑构建、装依赖时正是如此）会把事件攒上好几秒才成批送到，所以前两路不能省。
+
+`projectFilesChanged` 在 worker 里按此刻的磁盘内容更新已建项目里认得的文件（项目根文件
+与被 import 拉进程序的文件），有未保存改动的文件只更新磁盘版本、编辑缓冲仍是权威；
+`package.json` / tsconfig 变化整个项目重建并作废 ESLint、Prettier 缓存；外部 LSP 收到标准的
+`didChangeWatchedFiles`。标签由脏变干净时也直接重读磁盘，不信首次扫描的缓存。worker
+客户端在这些通知到达时作废「相同请求搭在飞诊断便车」的去重，后来的同样请求会重新计算。
+
+renderer 侧对应两件事：编辑器控制器订阅 Agent 写入通知（`workbenchAgentProjectWrites`），
+工具结果一到就重读打开的文件（不等文件监听，正在刷新时来的事件排队重跑而不是丢掉）；
+并维护 `externalRevision`——Agent 写入、监听事件、窗口回到前台都让它加一——CodeMirror
+的 linter 以它为 `needsRefresh` 信号、问题面板把它并入调度键，当前文档没变时也重算诊断。
+
 ## 生产启动与体积预算
 
 生产 main 入口开启压缩，完整 IDE 工作区在项目打开后按需加载；无项目的起手页不再静态
