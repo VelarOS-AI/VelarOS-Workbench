@@ -1,6 +1,8 @@
+import { totalmem } from 'node:os'
 import { resolve } from 'node:path'
 import { Worker } from 'node:worker_threads'
 
+import { Log } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type {
@@ -12,6 +14,10 @@ import type {
   WorkbenchLanguageServiceRequest,
 } from '@shared/contracts'
 
+import {
+  computeWorkbenchLanguageWorkerHeapLimitMb,
+  isWorkbenchLanguageMemoryNotification,
+} from './LanguageServiceMemoryGuard'
 import {
   getWorkbenchLanguageServiceWorkerPriority,
   type WorkbenchLanguageServiceProjectFileRequest,
@@ -97,8 +103,18 @@ function isWorkerResponse(value: unknown): value is WorkbenchLanguageServiceWork
   return typeof (value as { id?: unknown }).id === 'number'
 }
 
+const log = Log.tag('WorkbenchLanguageService')
+const WorkerOutOfMemoryCode = 'ERR_WORKER_OUT_OF_MEMORY'
+
 function createDefaultLanguageServiceWorker(): WorkbenchLanguageServiceWorkerPort {
-  return new Worker(resolve(__dirname, 'workbench-language-worker.js'))
+  // 显式的堆上限让 OOM 变成可恢复的 worker 终止（error 事件），而不是 Node 直接 abort 整个主进程。
+  return new Worker(resolve(__dirname, 'workbench-language-worker.js'), {
+    resourceLimits: { maxOldGenerationSizeMb: computeWorkbenchLanguageWorkerHeapLimitMb(totalmem()) },
+  })
+}
+
+function isWorkerOutOfMemory(error: unknown): boolean {
+  return (error as { code?: unknown } | null)?.code === WorkerOutOfMemoryCode
 }
 
 /**
@@ -324,6 +340,12 @@ export class WorkbenchLanguageServiceWorkerClient {
   }
 
   private handleWorkerMessage(message: unknown): void {
+    if (isWorkbenchLanguageMemoryNotification(message)) {
+      const { notification: _kind, ...fields } = message
+      if (message.action === 'none') log.info('language_worker_memory', fields)
+      else log.warn('language_worker_memory_trimmed', fields)
+      return
+    }
     if (!isWorkerResponse(message)) return
 
     const pending = this.pending.get(message.id)
@@ -342,6 +364,12 @@ export class WorkbenchLanguageServiceWorkerClient {
     if (this.worker !== worker) return
 
     this.worker = null
+    if (isWorkerOutOfMemory(error)) {
+      // 项目太大把语言服务的堆用满了：只丢语言服务，编辑器与 Agent 都不受影响，下一次请求重建。
+      log.warn('language_worker_out_of_memory', { message: String((error as Error).message) })
+      this.rejectPending(new AppError('PLATFORM', '语言服务内存不足（项目过大），已自动重启。'))
+      return
+    }
     this.rejectPending(AppError.from(error, 'IPC'))
   }
 

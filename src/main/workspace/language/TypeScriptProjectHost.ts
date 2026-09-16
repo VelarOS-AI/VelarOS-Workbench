@@ -54,8 +54,36 @@ interface PooledTypeScriptProject {
 }
 
 const MaxMemoizedProjectConfigs = 256
+/**
+ * 同时活着的 TypeScript 服务上限。monorepo 里每个包一个 tsconfig，每个服务连同它 import 的兄弟包源码、
+ * lib.d.ts 与依赖类型要 200–250MB 堆（VelarOS-Platform 实测），22 个包一路打开就是 4GB——正是语言服务
+ * worker 被 V8 OOM 掐死、连带整个应用闪退的原因。最近用过的留着，其余丢掉；重建一个只要一秒左右。
+ */
+export const MaxPooledTypeScriptProjects = 4
+let pooledProjectLimit = MaxPooledTypeScriptProjects
+
+/**
+ * 按 worker 的堆上限定同时活着的服务数：每个服务按 700MB 预留（monorepo 里的大包连同兄弟包源码就有这么大），
+ * 最少 2 个、最多 6 个。16GB 机器（4GB 堆）5 个，8GB 机器（2GB 堆）2 个。
+ */
+export function configureTypeScriptProjectPool(heapLimitBytes: number): number {
+  const budgeted = Math.floor(heapLimitBytes / (700 * 1024 * 1024))
+  pooledProjectLimit = Math.min(6, Math.max(2, budgeted))
+  return pooledProjectLimit
+}
 const projectCache = new Map<string, TypeScriptProjectCacheEntry>()
+/** 按最近使用排序：Map 的插入序即 LRU 序，命中时删掉重插到末尾。 */
 const pooledProjects = new Map<string, PooledTypeScriptProject>()
+/**
+ * 所有服务共用一份文档注册表：编译选项相同的服务共享同一份解析好的 SourceFile（lib.d.ts、@types、
+ * 被多个包 import 的同一个源文件），不再每个服务各存一份。
+ */
+let sharedDocumentRegistry: Nullable<ts.DocumentRegistry> = null
+
+function documentRegistry(): ts.DocumentRegistry {
+  sharedDocumentRegistry ??= ts.createDocumentRegistry(ts.sys.useCaseSensitiveFileNames)
+  return sharedDocumentRegistry
+}
 const projectConfigCandidates = new Map<string, TypeScriptProjectConfigCandidate[]>()
 /**
  * 按 (项目根, 请求文件) 记住解析好的项目配置。解析一次要找 tsconfig、按 include 全局扫描目录、stat 每个
@@ -683,6 +711,52 @@ function createLanguageServiceHost(project: PooledTypeScriptProject): ts.Languag
   }
 }
 
+function disposePooledProject(key: string): void {
+  const project = pooledProjects.get(key)
+  if (!project) return
+  pooledProjects.delete(key)
+  projectCache.delete(key)
+  project.service.dispose()
+}
+
+function evictLeastRecentlyUsedProjects(keep: string): void {
+  while (pooledProjects.size > pooledProjectLimit) {
+    const oldest = [...pooledProjects.keys()].find((key) => key !== keep)
+    if (!oldest) return
+    disposePooledProject(oldest)
+  }
+}
+
+export type WorkbenchTypeScriptTrimLevel = 'semantic' | 'inactive' | 'all'
+
+/**
+ * 主动释放内存。
+ * - `semantic`：只丢类型检查缓存（每个服务几十到一百多 MB），下一次请求重新检查即可，文件解析结果都还在。
+ * - `inactive`：最近用的那个服务留着，其余整个丢掉。
+ * - `all`：全部丢掉，下一次请求从磁盘重建。
+ */
+export function trimTypeScriptProjects(level: WorkbenchTypeScriptTrimLevel): number {
+  if (level === 'semantic') {
+    for (const project of pooledProjects.values()) project.service.cleanupSemanticCache()
+    return 0
+  }
+  const keys = [...pooledProjects.keys()]
+  const victims = level === 'all' ? keys : keys.slice(0, -1)
+  for (const key of victims) disposePooledProject(key)
+  return victims.length
+}
+
+export interface WorkbenchTypeScriptProjectMemorySummary {
+  projects: number
+  files: number
+}
+
+export function describeTypeScriptProjects(): WorkbenchTypeScriptProjectMemorySummary {
+  let files = 0
+  for (const project of pooledProjects.values()) files += project.liveFiles.size
+  return { projects: pooledProjects.size, files }
+}
+
 export function clearTypeScriptProjectCache(projectRoot?: string): void {
   forgetProjectConfigs(projectRoot)
   if (!projectRoot) {
@@ -860,8 +934,12 @@ export function acquireTypeScriptLanguageService(
       overlayPaths: new Set(),
       service: null as unknown as ts.LanguageService,
     }
-    draft.service = ts.createLanguageService(createLanguageServiceHost(draft))
+    draft.service = ts.createLanguageService(createLanguageServiceHost(draft), documentRegistry())
     project = draft
+    pooledProjects.set(poolKey, project)
+    evictLeastRecentlyUsedProjects(poolKey)
+  } else {
+    pooledProjects.delete(poolKey)
     pooledProjects.set(poolKey, project)
   }
 

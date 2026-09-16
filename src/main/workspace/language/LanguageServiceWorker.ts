@@ -1,3 +1,4 @@
+import * as v8 from 'node:v8'
 import { parentPort } from 'node:worker_threads'
 
 import { AppError } from '@velaros-ai/core/error'
@@ -7,12 +8,18 @@ import { registerWorkbenchLanguageService } from '@shared/language/workbenchLang
 
 import { PathResolver } from '../PathResolver'
 
+import {
+  decideWorkbenchLanguageMemoryAction,
+  type WorkbenchLanguageMemoryAction,
+  type WorkbenchLanguageMemoryNotification,
+} from './LanguageServiceMemoryGuard'
 import { WorkbenchLanguageServices } from './LanguageServices'
 import type {
   WorkbenchLanguageServiceWorkerRequest,
   WorkbenchLanguageServiceWorkerResponse,
 } from './LanguageServiceWorkerProtocol'
 import { getWorkbenchLanguageServiceWorkerPriority } from './LanguageServiceWorkerProtocol'
+import { configureTypeScriptProjectPool } from './TypeScriptProjectHost'
 
 const port = (() => {
   if (!parentPort) throw new AppError('INVARIANT', 'Workbench 语言服务 worker 缺少消息端口。')
@@ -20,6 +27,7 @@ const port = (() => {
 })()
 
 registerWorkbenchLanguageService(VelarWorkbenchLanguageService)
+configureTypeScriptProjectPool(v8.getHeapStatistics().heap_size_limit)
 const languageServices = new WorkbenchLanguageServices(new PathResolver())
 
 async function dispatch(request: WorkbenchLanguageServiceWorkerRequest): Promise<unknown> {
@@ -116,9 +124,68 @@ async function drainRequests(): Promise<void> {
 }
 
 port.on('message', (request: WorkbenchLanguageServiceWorkerRequest) => {
+  lastRequestAt = Date.now()
+  idleTrimDone = 'none'
   enqueueRequest(request)
 })
 
+// ── 内存看守：逼近堆上限先自己减负，长时间空闲把大块缓存放掉；每次动作与定期心跳报给主进程记日志。
+const MemoryCheckIntervalMs = 15_000
+const MemoryHeartbeatIntervalMs = 10 * 60 * 1_000
+let lastRequestAt = Date.now()
+let idleTrimDone: WorkbenchLanguageMemoryAction = 'none'
+let lastHeartbeatAt = Date.now()
+
+function reportMemory(
+  action: WorkbenchLanguageMemoryAction,
+  reason: WorkbenchLanguageMemoryNotification['reason']
+): void {
+  const heap = v8.getHeapStatistics()
+  const summary = languageServices.describeMemory()
+  const notification: WorkbenchLanguageMemoryNotification = {
+    notification: 'memory',
+    heapUsedMb: Math.round(heap.used_heap_size / 1024 / 1024),
+    heapLimitMb: Math.round(heap.heap_size_limit / 1024 / 1024),
+    rssMb: Math.round(process.memoryUsage().rss / 1024 / 1024),
+    projects: summary.projects,
+    files: summary.files,
+    eslintInstances: summary.eslintInstances,
+    action,
+    reason,
+  }
+  port.postMessage(notification)
+}
+
+function guardMemory(): void {
+  // 正在处理请求时不动手：服务正在用。
+  if (drainingRequests) return
+  const heap = v8.getHeapStatistics()
+  const idleMs = Date.now() - lastRequestAt
+  const action = decideWorkbenchLanguageMemoryAction({
+    heapUsedBytes: heap.used_heap_size,
+    heapLimitBytes: heap.heap_size_limit,
+    idleMs,
+    idleTrimDone,
+  })
+  if (action !== 'none') {
+    const pressure = heap.used_heap_size / heap.heap_size_limit
+    const reason = pressure >= 0.6 ? 'pressure' : 'idle'
+    languageServices.trimMemory(action)
+    if (reason === 'idle') idleTrimDone = action
+    lastHeartbeatAt = Date.now()
+    reportMemory(action, reason)
+    return
+  }
+  if (Date.now() - lastHeartbeatAt >= MemoryHeartbeatIntervalMs) {
+    lastHeartbeatAt = Date.now()
+    reportMemory('none', 'heartbeat')
+  }
+}
+
+const memoryGuard = setInterval(guardMemory, MemoryCheckIntervalMs)
+memoryGuard.unref()
+
 port.on('close', () => {
+  clearInterval(memoryGuard)
   void languageServices.dispose()
 })

@@ -74,7 +74,9 @@ import {
 import {
   clearWorkbenchProjectEslintCache,
   clearWorkbenchProjectEslintResults,
+  describeWorkbenchProjectEslint,
   getWorkbenchJavaScriptLintDiagnostics,
+  releaseWorkbenchProjectEslint,
 } from './JavaScriptLinting'
 import type {
   WorkbenchLanguageServiceProjectFileRequest,
@@ -100,10 +102,13 @@ import {
 import {
   acquireTypeScriptLanguageService,
   clearTypeScriptProjectCache,
+  describeTypeScriptProjects,
   refreshTypeScriptProjectFilesFromDisk,
   safeReadFile,
   synchronizeTypeScriptProjectFile,
+  trimTypeScriptProjects,
   TypeScriptExtensions,
+  type WorkbenchTypeScriptTrimLevel,
 } from './TypeScriptProjectHost'
 import {
   buildWholeDocumentReplaceEdit,
@@ -361,6 +366,28 @@ class WorkbenchLanguageServices {
       clearWorkbenchProjectPrettierCache(projectRoot)
     }
     await this.externalLsp.filesChanged(projectRoot, paths)
+  }
+
+  /**
+   * 主动释放内存（见 LanguageServiceMemoryGuard）。`semantic` 只丢类型检查缓存；`inactive` / `all` 连服务带
+   * ESLint 的类型程序一起放掉，下一次请求重建。外部语言服务器是独立进程，不在这里管。
+   */
+  public trimMemory(level: WorkbenchTypeScriptTrimLevel): { projects: number; eslint: number } {
+    const projects = trimTypeScriptProjects(level)
+    if (level === 'semantic') {
+      clearWorkbenchProjectEslintResults()
+      return { projects, eslint: 0 }
+    }
+    return { projects, eslint: releaseWorkbenchProjectEslint() }
+  }
+
+  public describeMemory(): { projects: number; files: number; eslintInstances: number } {
+    const typescript = describeTypeScriptProjects()
+    return {
+      projects: typescript.projects,
+      files: typescript.files,
+      eslintInstances: describeWorkbenchProjectEslint().instances,
+    }
   }
 
   public async dispose(): Promise<void> {

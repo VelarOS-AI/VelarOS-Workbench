@@ -123,6 +123,35 @@ export function clearWorkbenchProjectEslintCache(projectRoot?: string): void {
   }
 }
 
+/**
+ * 把项目自己的 ESLint 连同它的类型程序一起放掉。
+ *
+ * 类型感知规则让 typescript-eslint 为整个仓库建一个 TypeScript 程序（VelarOS-Platform 实测 600MB），
+ * 缓存在**项目那份** `@typescript-eslint/typescript-estree` 模块里——扔掉我们的 ESLint 实例它还在。
+ * 那个包公开了 `clearCaches()`，能找到就调；找不到（老版本）只能等 worker 重启。下一次 lint 会重建（几秒）。
+ */
+export function releaseWorkbenchProjectEslint(): number {
+  const released = projectEslintCache.size
+  for (const entry of projectEslintCache.values()) {
+    try {
+      const projectRequire = createRequire(entry.packageJsonPath)
+      const estree = projectRequire('@typescript-eslint/typescript-estree') as {
+        clearCaches?: () => void
+      }
+      estree.clearCaches?.()
+    } catch {
+      // arch-guard:silent-catch-ok 项目没装 typescript-eslint：没有类型程序可放。
+    }
+  }
+  projectEslintCache.clear()
+  lintResultCache.clear()
+  return released
+}
+
+export function describeWorkbenchProjectEslint(): { instances: number; cachedResults: number } {
+  return { instances: projectEslintCache.size, cachedResults: lintResultCache.size }
+}
+
 /** 项目里有文件在磁盘上变了：缓存的 lint 结果可能已经过时（类型感知规则看得到别的文件），整体作废。 */
 export function clearWorkbenchProjectEslintResults(projectRoot?: string): void {
   if (!projectRoot) {
