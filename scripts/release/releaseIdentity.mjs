@@ -34,6 +34,7 @@ export async function validateReleaseSource({
       `Release tag ${releaseTag || '<empty>'} must equal Workbench version tag ${versions.releaseTag}.`
     )
   }
+  assertPublishedDependencies(versions.manifest)
 
   const headSha = git(repoRoot, ['rev-parse', 'HEAD'])
   if (!sourceSha) throw new Error('Source SHA is required.')
@@ -72,6 +73,31 @@ export function assertSameFileIdentity(actual, expected, label = expected.fileNa
     throw new Error(
       `${label} identity conflict: expected ${expected.sizeBytes}/${expected.sha256}, `
       + `received ${actual.sizeBytes}/${actual.sha256}.`
+    )
+  }
+}
+
+/**
+ * 开发期 Platform 与 UI 经 `bun link` 从本机兄弟仓消费（`link:`）；那样打出的包取决于兄弟仓当时的构建，
+ * 不可重现。发布前要换成已发布的版本。
+ */
+function assertPublishedDependencies(manifest) {
+  const unpublished = []
+  for (const field of [
+    'dependencies',
+    'devDependencies',
+    'optionalDependencies',
+    'peerDependencies',
+  ]) {
+    for (const [name, range] of Object.entries(manifest[field] ?? {})) {
+      if (typeof range === 'string' && /^(?:file|link|portal|workspace):/u.test(range)) {
+        unpublished.push(`${field}.${name} ${range}`)
+      }
+    }
+  }
+  if (unpublished.length > 0) {
+    throw new Error(
+      `Release builds need published dependency versions, not development links:\n- ${unpublished.join('\n- ')}`
     )
   }
 }

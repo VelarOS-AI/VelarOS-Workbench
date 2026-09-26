@@ -21,6 +21,8 @@ const ignoredDirectories = new Set([
   'build',
 ])
 const localPackageSpecification = /^(?:file|link|portal|workspace):/u
+// 与 Desktop 一致，Platform 与 UI 在发版前经 `bun link` 从本机兄弟仓消费：只认 `link:<同名包>`。
+const siblingLinkSpecification = /^link:(@velaros-ai\/[\w.-]+)$/u
 const cloudDownloadPrefix = 'https://npm.pkg.github.com/download/'
 const supportedArguments = new Set(['--validate-only'])
 const unexpectedArguments = process.argv.slice(2).filter(
@@ -43,23 +45,29 @@ const manifests = await readPackageManifests(repositoryRoot)
 const workspacePackageNames = new Set(
   manifests.map(({ manifest }) => manifest.name).filter(Boolean)
 )
-const requirements = collectExternalVelarPackageRequirements(
+const { requirements, linked } = collectExternalVelarPackageRequirements(
   manifests,
   workspacePackageNames
 )
 const packageNames = [...new Set(requirements.map(({ packageName }) => packageName))].sort()
+const linkedPackageNames = [...new Set(linked.map(({ packageName }) => packageName))].sort()
 
-if (packageNames.length === 0) {
+if (packageNames.length === 0 && linkedPackageNames.length === 0) {
   throw new Error('No external @velaros-ai packages were found in repository manifests.')
 }
 
-if (!process.argv.includes('--validate-only')) {
+if (!process.argv.includes('--validate-only') && packageNames.length > 0) {
   await updatePrivatePackages(requirements, manifests)
 }
-await validateLockfile(requirements)
+await validateLockfile(requirements, linked)
 
 console.info(
-  `Private package lock is valid for ${packageNames.length} package(s): ${packageNames.join(', ')}`
+  [
+    `Private package lock is valid for ${packageNames.length} published package(s)${packageNames.length > 0 ? `: ${packageNames.join(', ')}` : ''}`,
+    linkedPackageNames.length > 0
+      ? `and ${linkedPackageNames.length} sibling link(s): ${linkedPackageNames.join(', ')}`
+      : '',
+  ].filter(Boolean).join(' ')
 )
 
 async function readPackageManifests(directory) {
@@ -100,6 +108,7 @@ function toWorkspaceKey(manifestPath) {
 
 function collectExternalVelarPackageRequirements(packageManifests, ownPackageNames) {
   const packageRequirements = []
+  const linkedRequirements = []
   for (const { manifest, manifestPath, workspaceKey } of packageManifests) {
     for (const field of dependencyFields) {
       for (const [packageName, range] of Object.entries(manifest[field] ?? {})) {
@@ -107,6 +116,11 @@ function collectExternalVelarPackageRequirements(packageManifests, ownPackageNam
           !packageName.startsWith('@velaros-ai/') ||
           ownPackageNames.has(packageName)
         ) {
+          continue
+        }
+        const siblingLink = siblingLinkSpecification.exec(range)
+        if (siblingLink?.[1] === packageName) {
+          linkedRequirements.push({ field, manifestPath, packageName, range, workspaceKey })
           continue
         }
         if (localPackageSpecification.test(range)) {
@@ -124,11 +138,14 @@ function collectExternalVelarPackageRequirements(packageManifests, ownPackageNam
       }
     }
   }
-  return packageRequirements.sort((left, right) =>
+  const byPackage = (left, right) =>
     `${left.packageName}:${left.workspaceKey}:${left.field}`.localeCompare(
       `${right.packageName}:${right.workspaceKey}:${right.field}`
     )
-  )
+  return {
+    requirements: packageRequirements.sort(byPackage),
+    linked: linkedRequirements.sort(byPackage),
+  }
 }
 
 async function updatePrivatePackages(packageRequirements, packageManifests) {
@@ -210,13 +227,23 @@ async function restoreAndValidateManifestSources(packageManifests, updateError) 
   }
 }
 
-async function validateLockfile(packageRequirements) {
+async function validateLockfile(packageRequirements, linkedRequirements) {
   const lockfilePath = path.join(repositoryRoot, 'bun.lock')
   const lockfile = bunRuntime.JSONC.parse(await readFile(lockfilePath, 'utf8'))
 
   for (const requirement of packageRequirements) {
     validateWorkspaceRequirement(lockfile, requirement)
     validateResolvedVersion(lockfile, requirement)
+  }
+  // 兄弟仓链接：锁文件得记着同一个 link，解析到的也得是这个 link，而不是别处的同名包。
+  for (const requirement of linkedRequirements) {
+    validateWorkspaceRequirement(lockfile, requirement)
+    const resolution = lockfile.packages?.[requirement.packageName]?.[0]
+    if (resolution !== `${requirement.packageName}@${requirement.range}`) {
+      throw new Error(
+        `${formatRequirement(requirement)} must resolve to its sibling link in bun.lock, not ${String(resolution)}.`
+      )
+    }
   }
 }
 

@@ -3,6 +3,8 @@ import { createRequire } from 'node:module'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
+import { assertExternalEsmArchive } from './externalEsmArchive.mjs'
+
 const ProductFilename = 'VelarOS Workbench'
 const packagedPlatforms = new Set(['darwin', 'win32', 'linux'])
 const requiredLayoutRules = [
@@ -105,16 +107,16 @@ async function verifyPackagedTerminalBackend(resourcesRoot, platformName) {
   }
 }
 
-async function verifyPackagedWorkbench({ appOutDir, platformName }) {
+async function verifyPackagedWorkbench({ appOutDir, platformName, projectDir = process.cwd() }) {
   const paths = resolvePackagedWorkbenchPaths(appOutDir, platformName)
   await waitForPackagedApp(paths.appArchive)
   if (platformName === 'win32') await verifyWindowsX64Executable(appOutDir)
 
-  const workbenchPackage = JSON.parse(await readFile(path.resolve('package.json'), 'utf8'))
+  const workbenchPackage = JSON.parse(await readFile(path.join(projectDir, 'package.json'), 'utf8'))
   if (!workbenchPackage.version) throw new Error('Workbench version is missing')
   const rootRequire = createRequire(import.meta.url)
   const builderRequire = createRequire(rootRequire.resolve('electron-builder/package.json'))
-  const { extractFile } = builderRequire('@electron/asar')
+  const { extractFile, listPackage } = builderRequire('@electron/asar')
   const packagedApp = JSON.parse(extractFile(paths.appArchive, archivePath('package.json')).toString('utf8'))
   if (packagedApp.version !== workbenchPackage.version) {
     throw new Error(
@@ -166,10 +168,20 @@ async function verifyPackagedWorkbench({ appOutDir, platformName }) {
     throw new Error('Packaged Workbench language worker is missing the built-in Velar contribution.')
   }
 
-  for (const excludedRuntime of [
-    'node_modules/@anthropic-ai/claude-agent-sdk/package.json',
-    'node_modules/@velaros-ai/agent/package.json',
-  ]) {
+  // 主进程在运行时从 node_modules 加载 Platform 的原生 ESM 包（脚本子进程入口、ScriptAct 模板都按包内路径
+  // 解析）：按包的真实依赖与发布资源核对 asar 里每个静态 import 都能解析到。
+  const archiveEntries = listPackage(paths.appArchive).map((entry) => ({
+    path: entry.replaceAll('\\', '/'),
+    lookupPath: entry.replace(/^[\\/]/u, ''),
+  }))
+  const archiveLookups = new Map(archiveEntries.map((entry) => [entry.path, entry.lookupPath]))
+  const externalPackageCount = assertExternalEsmArchive({
+    root: projectDir,
+    entries: archiveEntries.map((entry) => entry.path),
+    read: (entry) => extractFile(paths.appArchive, archiveLookups.get(entry)).toString('utf8'),
+  })
+
+  for (const excludedRuntime of ['node_modules/@anthropic-ai/claude-agent-sdk/package.json']) {
     try {
       extractFile(paths.appArchive, archivePath(...excludedRuntime.split('/')))
       throw new Error(`Packaged Workbench contains an excluded runtime: ${excludedRuntime}`)
@@ -206,7 +218,8 @@ async function verifyPackagedWorkbench({ appOutDir, platformName }) {
   }
 
   console.log(
-    `Verified Workbench ${workbenchPackage.version} ${platformName} package runtime: ${paths.appArchive}`
+    `Verified Workbench ${workbenchPackage.version} ${platformName} package runtime `
+    + `(${externalPackageCount} external ESM packages): ${paths.appArchive}`
   )
 }
 
@@ -248,6 +261,7 @@ export default async function afterPack(context) {
   await verifyPackagedWorkbench({
     appOutDir: context.appOutDir,
     platformName: context.electronPlatformName,
+    projectDir: context.packager.info.projectDir,
   })
 }
 

@@ -42,22 +42,15 @@ const layerRules = [
 ]
 
 function resolveLayerRule(label) {
-  const fixedRule = layerRules.find(({ prefix }) => label.startsWith(prefix))
-  if (fixedRule) return fixedRule
+  return layerRules.find(({ prefix }) => label.startsWith(prefix))
+}
 
-  const pluginLayer = label.match(/^src\/plugins\/[^/]+\/(main|renderer)(?:\/|$)/u)?.[1]
-  if (pluginLayer === 'main') {
-    return { forbidden: [/^@renderer\//, /(?:^|\/)renderer(?:\/|$)/] }
-  }
-  if (pluginLayer === 'renderer') {
-    return { forbidden: [/^@main\//, /(?:^|\/)main(?:\/|$)/] }
-  }
-  if (label.startsWith('src/plugins/')) {
-    return {
-      forbidden: [/^@main\//, /^@renderer\//, /(?:^|\/)(?:main|renderer)(?:\/|$)/],
-    }
-  }
-  return undefined
+/**
+ * 进程边界只看仓库自己的源码：相对路径与 `@main/`、`@renderer/`、`@shared/` 别名。包的子路径另有含义，
+ * 例如 `@velaros-ai/velaros/renderer` 是把 Act 事件投影成展示数据的纯函数，主进程与 Desktop 一样直接用。
+ */
+function isRepositorySpecifier(specifier) {
+  return specifier.startsWith('.') || /^@(?:main|renderer|shared)\//u.test(specifier)
 }
 
 async function collectSourceFiles(directory) {
@@ -83,7 +76,7 @@ for (const section of [
 ]) {
   if (rootManifest[section]?.['@anthropic-ai/claude-agent-sdk']) {
     failures.push(
-      `package.json ${section} bundles Claude Agent SDK; the claude-agent plugin owns this runtime.`,
+      `package.json ${section} bundles Claude Agent SDK; Workbench runs only the built-in VelarOS agent.`,
     )
   }
 }
@@ -108,7 +101,10 @@ for (const sourceRoot of sourceRoots) {
       if (forbiddenSpecifiers.some((pattern) => pattern.test(specifier))) {
         failures.push(`${label} imports forbidden dependency "${specifier}"`)
       }
-      if (layerRule?.forbidden.some((pattern) => pattern.test(specifier))) {
+      if (
+        isRepositorySpecifier(specifier)
+        && layerRule?.forbidden.some((pattern) => pattern.test(specifier))
+      ) {
         failures.push(`${label} crosses its process boundary through "${specifier}"`)
       }
     }
@@ -123,11 +119,11 @@ for (const sourceRoot of sourceRoots) {
   }
 }
 
-const allowedSourceDirectories = new Set(['main', 'plugins', 'preload', 'renderer', 'shared'])
+const allowedSourceDirectories = new Set(['main', 'preload', 'renderer', 'shared'])
 for (const entry of await readdir(resolve(rootDir, 'src'), { withFileTypes: true })) {
   if (!entry.isDirectory() || !allowedSourceDirectories.has(entry.name)) {
     failures.push(
-      `src/${entry.name}: 单体源码根只允许 main、plugins、preload、renderer、shared 五层。`
+      `src/${entry.name}: 单体源码根只允许 main、preload、renderer、shared 四层。`
     )
   }
 }

@@ -1,0 +1,3 @@
+# 与 Desktop 一致钉死 hoisted 链接器：isolated 布局会让带品牌类型的共享库被多实例加载。
+[install]
+linker = "hoisted"

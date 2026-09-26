@@ -6,6 +6,8 @@ import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'electron-vite'
 
+import mainExternalEsmPlatformPackages from './scripts/release/mainExternalEsmPlatformPackages.json'
+
 /**
  * VelarOS Workbench 单体仓库的 electron-vite 构建入口。
  *
@@ -71,6 +73,12 @@ export default defineConfig(({ mode }) => ({
         },
         external: [
           'electron',
+          // Platform 运行时（与 Desktop 一致）：脚本子进程入口、原生帮手与 ScriptAct 模板都按包内路径在运行时
+          // 解析，打进 bundle 就找不到了；它们只发 ESM，由主进程的原生 ESM 在运行时从 node_modules 加载。
+          // 同一份清单也是打包后 asar 依赖闭包检查的输入（scripts/release/externalEsmArchive.mjs）。
+          ...mainExternalEsmPlatformPackages.map(
+            (name) => new RegExp(`^${name.replaceAll('/', '\\/')}(?:\\/.+)?$`, 'u')
+          ),
           // 伪终端是原生模块：留在 node_modules 里按平台加载，不进 bundle（见 WorkbenchPty.ts）。
           /^@lydell\/node-pty/u,
           'gpt-tokenizer',
@@ -125,6 +133,10 @@ export default defineConfig(({ mode }) => ({
     resolve: {
       extensions: ['.ts', '.tsx', '.mts', '.js', '.mjs', '.json'],
       alias: rendererAliases,
+      // UI 包链接自本机的 VelarOS-UI 仓，它自己的 node_modules 里也有一份 React：必须复用宿主这一份，
+      // 两个 React 实例会让 hooks 直接报错（Desktop 同样这样配）。图标库同理：UI 仓那份按整包打进来，
+      // 复用宿主这一份才按用到的图标摇树（启动包差出约 400 KB）。
+      dedupe: ['react', 'react-dom', '@phosphor-icons/react'],
     },
     plugins: [react(), tailwindcss()],
   },

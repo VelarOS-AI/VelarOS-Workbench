@@ -71,6 +71,27 @@ void describe('release source identity', () => {
     )
   })
 
+  void test('rejects development links to sibling repositories', async () => {
+    const { root, sourceSha } = await createReleaseRepository()
+    await writeFile(
+      path.join(root, 'package.json'),
+      '{"name":"root","version":"0.3.0","dependencies":{"@velaros-ai/core":"link:@velaros-ai/core"}}\n'
+    )
+    await writeFile(
+      path.join(root, 'bun.lock'),
+      `{
+        "workspaces": {
+          "": { "name": "root", "dependencies": { "@velaros-ai/core": "link:@velaros-ai/core" } },
+        },
+      }\n`
+    )
+
+    await assert.rejects(
+      validateReleaseSource({ repoRoot: root, releaseTag: 'v0.3.0', sourceSha }),
+      /published dependency versions[\s\S]*dependencies\.@velaros-ai\/core link:@velaros-ai\/core/
+    )
+  })
+
   void test('rejects a root manifest without the Workbench version', async () => {
     const { root } = await createReleaseRepository()
     await writeFile(
