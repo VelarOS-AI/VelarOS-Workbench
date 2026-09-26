@@ -183,6 +183,10 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
         externalRevision: workbench.externalRevision,
       },
       gitDecorations: gitState.decorations,
+      // 顶栏 +/- 的轻量快照在工作区一有改动（包括 .git 里的提交、切分支）就会重拉，拿它的时刻当序号。
+      gitStateRevision: gitState.lineStatsSnapshot?.repository
+        ? gitState.lineStatsSnapshot.checkedAt
+        : null,
       selectedFileDiagnostics: selectedFileDiagnosticView.diagnostics,
       isSelectedFileDiagnosticsPending: selectedFileDiagnosticView.isPending,
       tabs: {

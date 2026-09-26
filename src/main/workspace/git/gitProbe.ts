@@ -110,7 +110,7 @@ async function runGitProbe(): Promise<void> {
       committed.commit.commitSha,
       'alpha file.txt'
     )
-    equal(historical.content, 'alpha\nbeta', '应读取提交时文件内容')
+    equal(historical.content, 'alpha\nbeta\n', '应原样读取提交时文件内容（含末尾换行）')
 
     writeFileSync(filePath, 'alpha\nbeta\ngamma\n')
     const diff = await service.getDiff(projectRoot, { path: 'alpha file.txt' })

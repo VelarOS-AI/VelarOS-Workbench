@@ -150,6 +150,7 @@ export function WorkbenchEmbeddedKernel({
         workbenchProject={editor.workbenchProject}
         workbenchEditor={editor.workbenchEditor}
         gitDecorations={editor.gitDecorations}
+        gitStateRevision={editor.gitStateRevision}
         selectedFileDiagnostics={editor.selectedFileDiagnostics}
         isSelectedFileDiagnosticsPending={editor.isSelectedFileDiagnosticsPending}
         tabs={editor.tabs}

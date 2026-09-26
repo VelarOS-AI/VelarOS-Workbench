@@ -51,6 +51,8 @@ const GitOutputMaxBytes = 4 * 1024 * 1024
 
 interface GitRunOptions extends WorkspaceGitRemoteActionOptions {
   allowFailure?: boolean
+  /** 默认去掉输出末尾的换行；读文件内容时要原样保留。 */
+  stripFinalNewline?: boolean
 }
 
 interface GitRunResult {
@@ -147,7 +149,13 @@ export class WorkbenchGitService {
     const rootPath = await this.resolveRoot(workspaceRoot)
     const revision = this.assertRevision(commitSha)
     const relativePath = this.normalizePathspec(rootPath, path)
-    const content = (await this.runGit(rootPath, ['show', `${revision}:${relativePath}`])).stdout
+    // `./`：路径相对项目根而不是仓库根（项目可能是仓库里的一个子目录）。原样保留文件末尾的换行，
+    // 拿它跟磁盘上的当前版本比时，最后一行才不会平白算作改动。
+    const content = (
+      await this.runGit(rootPath, ['show', `${revision}:./${relativePath}`], {
+        stripFinalNewline: false,
+      })
+    ).stdout
     return { rootPath, content }
   }
 
@@ -776,6 +784,7 @@ export class WorkbenchGitService {
       env: this.buildGitEnvironment(options),
       maxBuffer: GitOutputMaxBytes,
       reject: false,
+      stripFinalNewline: options.stripFinalNewline ?? true,
     })
     const output = {
       stdout: result.stdout,

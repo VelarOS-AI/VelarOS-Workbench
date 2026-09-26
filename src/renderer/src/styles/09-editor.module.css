@@ -1467,6 +1467,53 @@
   transform: translateY(-50%);
 }
 
+/* 行号旁的 Git 改动标记：新增 / 修改是一条贴左的细竖线（相邻行连成一段），删除是压在行边沿的小三角。 */
+.codeMirrorEditor :global(.cm-workbenchGitChangeGutter) {
+  /* 至少容下删除三角（左 1px + 宽 5px），字号再小也不被 gutter 裁掉。 */
+  width: max(7px, calc(var(--workbench-editor-font-size) * 0.5));
+}
+
+.codeMirrorEditor :global(.cm-workbenchGitChangeGutter .cm-gutterElement) {
+  position: relative;
+  padding: 0;
+}
+
+.codeMirrorEditor :global(.cm-workbenchGitChange) {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 1px;
+  width: 3px;
+}
+
+.codeMirrorEditor :global(.cm-workbenchGitChange-added) {
+  background: var(--workbench-editor-git-added);
+}
+
+.codeMirrorEditor :global(.cm-workbenchGitChange-modified) {
+  background: var(--workbench-editor-git-modified);
+}
+
+.codeMirrorEditor :global(.cm-workbenchGitChange-deleted),
+.codeMirrorEditor :global(.cm-workbenchGitChange-deleted-top) {
+  z-index: 1;
+  width: 0;
+  height: 0;
+  border-block: 4px solid transparent;
+  border-left: 5px solid var(--workbench-editor-git-deleted);
+}
+
+/* 删在这一行之后：三角压在它和下一行的分界上。 */
+.codeMirrorEditor :global(.cm-workbenchGitChange-deleted) {
+  top: auto;
+  bottom: -4px;
+}
+
+/* 删在文件开头：画在第一行的上边沿。 */
+.codeMirrorEditor :global(.cm-workbenchGitChange-deleted-top) {
+  bottom: auto;
+}
+
 .codeMirrorEditor :global(.cm-foldGutter) {
   min-width: calc(var(--workbench-editor-font-size) * 1.44);
 }

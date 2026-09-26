@@ -71,6 +71,8 @@ export interface WorkbenchEmbeddedEditorPanelModel {
   workbenchProject: WorkbenchEditorProjectBundle
   workbenchEditor: WorkbenchEditorSurfaceBundle
   gitDecorations: WorkbenchGitDecorationMap
+  /** 版本库状态的刷新序号，编辑区据此重读 HEAD 来标行的 Git 改动；null：项目不是 Git 仓库。 */
+  gitStateRevision: Nullable<number>
   selectedFileDiagnostics: readonly WorkbenchLanguageServiceDiagnostic[]
   isSelectedFileDiagnosticsPending: boolean
   tabs: WorkbenchEditorPanelTabsProps

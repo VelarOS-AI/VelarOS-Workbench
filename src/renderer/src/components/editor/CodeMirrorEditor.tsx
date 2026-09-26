@@ -167,6 +167,10 @@ import {
   getWorkbenchCodeMirrorTheme,
 } from '@renderer/models/editor/workbenchCodeMirrorTheme'
 import { createWorkbenchTokenOccurrenceHighlightExtension } from '@renderer/models/editor/workbenchCodeMirrorTokenOccurrenceHighlight'
+import {
+  setWorkbenchGitChangeBaseEffect,
+  workbenchGitChangeGutterExtension,
+} from '@renderer/models/editor/workbenchGitChangeGutter'
 import { buildWorkbenchIdeaIndentGuideColumnsForLineRange } from '@renderer/models/editor/workbenchIndentGuides'
 import {
   getWorkbenchInlineCompletion,
@@ -215,6 +219,7 @@ import type {
   WorkbenchLanguageServiceLocation,
 } from '@shared/contracts'
 
+import type { WorkbenchGitHeadContent } from '../../hooks/useWorkbenchGitHeadContent'
 import styles from '../../styles/workbenchPageStyles'
 import { useLatest, useTimerScope } from '../../support/genericHooks'
 import { useBlockWheelScroll } from '../../support/useBlockWheelScroll'
@@ -254,6 +259,8 @@ interface CodeMirrorEditorProps {
   workbenchTheme: WorkbenchThemeId
   /** 工作区在编辑器之外被改动的次数（Agent 写入、磁盘监听）；变了就重新要一次诊断，当前文档没变也要。 */
   externalRevision?: number
+  /** 当前文件在 HEAD 里的全文，行号旁的 Git 改动标记拿它对照；不属于当前文件时不用。 */
+  gitHeadContent?: Nullable<WorkbenchGitHeadContent>
   onChange: (content: string) => void
   onCursorPositionChange?: (position: {
     line: number
@@ -360,6 +367,7 @@ const workbenchTripleClickLineSelectionExtension = EditorView.mouseSelectionStyl
 /** 对齐基础编辑器配置，同时替换折叠栏并保持扩展顺序稳定。 */
 const workbenchCodeMirrorBaseExtensions: Extension[] = [
   workbenchLineNumbersExtension,
+  workbenchGitChangeGutterExtension,
   workbenchActiveLineExtension,
   highlightSpecialChars(),
   history(),
@@ -1138,6 +1146,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       packageManager = 'npm',
       workbenchTheme,
       externalRevision = 0,
+      gitHeadContent = null,
       onChange,
       onCursorPositionChange,
       onOpenFind,
@@ -2529,6 +2538,13 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       syncWorkbenchAiHighlights(view)
       emitCursorPosition(view, callbacksRef.current.onCursorPositionChange)
     }, [path, value])
+
+    // Git 改动标记只拿属于当前文件的 HEAD 全文对照。必须排在上面的文档同步之后：切文件时文档先换好，
+    // 新文件的 HEAD 还没读回来就先清掉标记，读回来再标。
+    const gitBaseContent = gitHeadContent?.path === path ? gitHeadContent.content : null
+    useEffect(() => {
+      viewRef.current?.dispatch({ effects: setWorkbenchGitChangeBaseEffect.of(gitBaseContent) })
+    }, [gitBaseContent, path])
 
     // 讲解加了、换了、切到下一条：重新锚定，必要时把当前讲解带进视野。AI 选区加了、取消了、跟着编辑挪了行：
     // 同样按存储重新锚定当前文件。直接订阅存储而不经 React——编辑器每回写一次行号就重渲染整个编辑器组件

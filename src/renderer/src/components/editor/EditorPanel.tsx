@@ -60,6 +60,7 @@ import type {
   WorkbenchLanguageServiceLocation,
 } from '@shared/contracts'
 
+import { useWorkbenchGitHeadContent } from '../../hooks/useWorkbenchGitHeadContent'
 import styles from '../../styles/workbenchPageStyles'
 import { useLatest, useTimerScope } from '../../support/genericHooks'
 import { useDismissOnWindowInteract } from '../../support/useDismissOnWindowInteract'
@@ -201,6 +202,11 @@ interface EditorPanelProps {
   workbenchProject: WorkbenchEditorProjectBundle
   workbenchEditor: WorkbenchEditorSurfaceBundle
   gitDecorations: WorkbenchGitDecorationMap
+  /**
+   * 版本库状态的刷新序号（工作区改动、提交、切分支之后都会变），编辑区据此重读当前文件在 HEAD 里的
+   * 全文来标 Git 改动；null 表示项目不是 Git 仓库。
+   */
+  gitStateRevision?: Nullable<number>
   selectedFileDiagnostics?: readonly WorkbenchLanguageServiceDiagnostic[]
   isSelectedFileDiagnosticsPending?: boolean
   tabs: WorkbenchEditorPanelTabsProps
@@ -215,6 +221,7 @@ export function EditorPanel({
   workbenchProject,
   workbenchEditor,
   gitDecorations,
+  gitStateRevision = null,
   selectedFileDiagnostics = [],
   tabs: {
     onSelectOpenFile,
@@ -310,6 +317,13 @@ export function EditorPanel({
 
   const selectedLanguage = selectedFile ? fileLanguage(selectedFile.path) : ''
   const selectedImagePreview = selectedFile?.imagePreview
+  // 截断打开的文件只有前一部分正文，跟 HEAD 全文比会把后面整段算成删除：不标。
+  const gitHeadContent = useWorkbenchGitHeadContent({
+    projectRoot,
+    path:
+      selectedFile && !selectedFile.truncated && !selectedImagePreview ? selectedFile.path : null,
+    revision: gitStateRevision,
+  })
   const selectedPackageManager = useMemo(
     () =>
       selectedFilePath
@@ -948,6 +962,7 @@ export function EditorPanel({
                         packageManager={selectedPackageManager}
                         workbenchTheme={workbenchTheme}
                         externalRevision={externalRevision}
+                        gitHeadContent={gitHeadContent}
                         onChange={onEditorContentChange}
                         onCursorPositionChange={handleCursorPositionChange}
                         onOpenFind={openFindBar}

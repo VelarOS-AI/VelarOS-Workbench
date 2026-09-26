@@ -213,6 +213,10 @@
   --workbench-text: oklch(0.18 0 0);
   --workbench-text-muted: oklch(0.56 0 0);
   --workbench-git-untracked-fg: var(--status-amber);
+  /* 编辑区行号旁的 Git 改动标记，与 Git 面板的新增 / 修改配色一致。 */
+  --workbench-editor-git-added: var(--status-green, #15803d);
+  --workbench-editor-git-modified: var(--status-teal, #0f766e);
+  --workbench-editor-git-deleted: var(--status-red, #dc2626);
   --workbench-test-fg: var(--status-violet);
   --workbench-tree-ignored-fg: var(--workbench-text-muted);
   --workbench-file-typescript: #3178c6;
@@ -530,6 +534,9 @@
   --workbench-terminal-ansi-white: #d8dee9;
   --workbench-terminal-ansi-bright-black: #a3abb5;
   --workbench-editor-unused-fg: #848d98;
+  --workbench-editor-git-added: #48a868;
+  --workbench-editor-git-modified: #2ea3a8;
+  --workbench-editor-git-deleted: #e5534b;
   --workbench-tree-ignored-fg: var(--workbench-editor-muted);
   --workbench-file-typescript: #4da6ff;
   --workbench-file-velarscript: #7aa2ff;
