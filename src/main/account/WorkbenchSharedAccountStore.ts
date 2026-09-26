@@ -17,8 +17,9 @@ import { mkdir, readFile, rename, rmdir, stat, writeFile } from 'node:fs/promise
 import { dirname, join } from 'node:path'
 import { promisify } from 'node:util'
 
+import { velarosSharedResources } from '@velaros-ai/core/platform/shared-resources'
+
 import type { WorkbenchAccountIdentity } from '../../shared/workbenchAccount'
-import { resolveVelarOSSharedAccountRoot } from '../resources/VelarOSSharedResourceStore'
 
 const WorkbenchProductId = 'velaros.workbench'
 const RegistryFileName = 'account-sessions.local-v1.bin'
@@ -68,7 +69,8 @@ export class WorkbenchSharedAccountStore {
 
   public constructor(options: WorkbenchSharedAccountStoreOptions = {}) {
     this.#productId = options.productId?.trim() || WorkbenchProductId
-    this.#rootDir = options.rootDir ?? resolveVelarOSSharedAccountRoot()
+    // 与 Desktop 同一个账号目录（磁盘布局归 Core），登录一次两边都认。
+    this.#rootDir = options.rootDir ?? velarosSharedResources.accountRoot()
     this.#registryPath = join(this.#rootDir, RegistryFileName)
     this.#keyPath = join(this.#rootDir, CredentialKeyFileName)
     this.#lockPath = join(this.#rootDir, MutationLockDirectoryName)

@@ -4,9 +4,10 @@ import { realpath, stat } from 'node:fs/promises'
 import { relative, resolve } from 'node:path'
 
 import { AppError } from '@velaros-ai/core/error'
-import { shouldSkipProjectDirectory } from '@velaros-ai/project/files'
 
 import type { SystemWorkspaceFilesChangedEvent } from '@shared/contracts'
+
+import { shouldSkipProjectDirectory } from '../WorkbenchSkippedDirectories'
 
 const WorkbenchWatchDebounceMs = 120
 

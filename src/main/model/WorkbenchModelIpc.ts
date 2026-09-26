@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron'
 
-import type { ProviderModelCatalogService } from '@velaros-ai/model'
+import type { ProviderModelCatalogApi } from '@velaros-ai/model'
 import type { ChatProviderId, ListProviderModelsRequest } from '@velaros-ai/model/contracts'
 
 import {
@@ -15,7 +15,7 @@ import type { WorkbenchAccountService } from '../account/WorkbenchAccountService
 import { WorkbenchModelCredentialStore } from './WorkbenchModelCredentialStore'
 
 export function registerWorkbenchModelIpc(
-  service: ProviderModelCatalogService,
+  service: ProviderModelCatalogApi,
   dataRootDir: string,
   accountService: WorkbenchAccountService
 ): () => void {
@@ -45,7 +45,7 @@ export function registerWorkbenchModelIpc(
 }
 
 function readManagedProviderId(provider: string): WorkbenchManagedModelProviderId | null {
-  if (provider === 'velar' || provider === 'velar-dev') return provider
+  if (provider === 'velaros' || provider === 'velar-dev') return provider
   return null
 }
 

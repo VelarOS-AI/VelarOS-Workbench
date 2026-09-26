@@ -10,7 +10,7 @@ export const WorkbenchModelChannels = {
   setApiKey: 'workbench-app:model:set-api-key',
 } as const
 
-export type WorkbenchManagedModelProviderId = 'velar' | 'velar-dev'
+export type WorkbenchManagedModelProviderId = 'velaros' | 'velar-dev'
 
 export function getWorkbenchManagedModelProviderLabel(
   providerId: WorkbenchManagedModelProviderId

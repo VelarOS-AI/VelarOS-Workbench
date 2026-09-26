@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { readdir, readFile } from 'node:fs/promises'
-import { extname, join, relative, resolve } from 'node:path'
+import { basename, extname, join, relative, resolve } from 'node:path'
 
 import { describe, test } from 'bun:test'
 
@@ -9,16 +9,33 @@ const sourceRoots = [resolve(repositoryRoot, 'src')]
 const sourceExtensions = new Set(['.ts', '.tsx'])
 
 const removedCoreModules = new Set([
-  '@velaros-ai/agent/protocol',
-  '@velaros-ai/agent/protocol',
-  '@velaros-ai/agent/protocol',
-  '@velaros-ai/agent/protocol',
-  '@velaros-ai/agent/protocol',
   '@velaros-ai/core/utils/CommandExecutionPolicy',
   '@velaros-ai/core/utils/PathContainmentHelper',
   '@velaros-ai/core/utils/PlatformCompatibilityHelper',
   '@velaros-ai/core/utils/messageFileChanges',
 ])
+
+/**
+ * 已退役的 Platform 属主。它们的零件各有新家：项目与命令在 `@velaros-ai/velaros/project`、
+ * `@velaros-ai/velaros/shell`，浏览器在 `@velaros-ai/velaros/browser/...`，跨平台行为在
+ * `@velaros-ai/core/platform`，对话数据在 `@velaros-ai/ui/conversation/contracts`。
+ */
+const retiredOwnerModules = [
+  /^@velaros-ai\/(?:browser|development|project|system|system-tools)(?:\/|$)/u,
+  /^@velaros-ai\/agent\/(?:protocol|tool-contract)(?:\/|$)/u,
+]
+
+/** 共享合同入口里每个外来 DTO 的唯一属主。 */
+const contractOwners: Readonly<Record<string, string>> = {
+  AppLocale: '@velaros-ai/ui/conversation/contracts',
+  ChatMessage: '@velaros-ai/ui/conversation/contracts',
+  ContentBlock: '@velaros-ai/ui/conversation/contracts',
+  ToolCallBlock: '@velaros-ai/ui/conversation/contracts',
+  BrowserElementSelection: '@velaros-ai/velaros/browser/contracts',
+  AgentProviderRuntimeConfig: '@velaros-ai/model',
+  ListProviderModelsRequest: '@velaros-ai/model',
+  ProviderModelCatalog: '@velaros-ai/model',
+}
 
 const concreteOwnerNames = new Set([
   'AgentProviderRuntimeConfig',
@@ -56,6 +73,28 @@ function importedNames(clause: string): string[] {
     .filter((entry): entry is string => Boolean(entry))
 }
 
+/** 静态导入、再导出、动态导入与副作用导入里的 `@velaros-ai/*` 模块名。 */
+function velarosSpecifiers(source: string): string[] {
+  return [...source.matchAll(
+    /(?:\bfrom\s+|\bimport\s*\(\s*|\bimport\s+)['"](@velaros-ai\/[^'"]+)['"]/gu
+  )].map((match) => match[1]!)
+}
+
+/** `export type { A, B as C } from 'x'` 里每个名字（按原名）来自哪个模块。 */
+function reexportOwners(source: string): Map<string, string> {
+  const owners = new Map<string, string>()
+  for (const match of source.matchAll(
+    /export\s+(?:type\s+)?\{([^}]*)\}\s+from\s+['"]([^'"]+)['"]/gu
+  )) {
+    for (const name of importedNames(match[1] ?? '')) owners.set(name, match[2]!)
+  }
+  return owners
+}
+
+function repositoryPath(path: string): string {
+  return relative(repositoryRoot, path).replaceAll('\\', '/')
+}
+
 void describe('Core 0.4 owner boundary', () => {
   void test('never restores deleted product modules or concrete owner DTOs to Core', async () => {
     const failures: string[] = []
@@ -63,7 +102,7 @@ void describe('Core 0.4 owner boundary', () => {
     for (const sourceRoot of sourceRoots) {
       for (const path of await collectSourceFiles(sourceRoot)) {
         const source = await readFile(path, 'utf8')
-        const label = relative(repositoryRoot, path)
+        const label = repositoryPath(path)
 
         for (const match of source.matchAll(
           /(?:from\s+|import\s*\()\s*['"](@velaros-ai\/core[^'"]*)['"]/gu
@@ -89,48 +128,69 @@ void describe('Core 0.4 owner boundary', () => {
     assert.deepEqual(failures, [])
   })
 
-  void test('re-exports Browser, Model and Project contracts from their owners', async () => {
+  void test('imports nothing from the retired Platform owners', async () => {
+    const failures: string[] = []
+
+    for (const sourceRoot of sourceRoots) {
+      for (const path of await collectSourceFiles(sourceRoot)) {
+        const source = await readFile(path, 'utf8')
+        for (const specifier of velarosSpecifiers(source)) {
+          if (retiredOwnerModules.some((pattern) => pattern.test(specifier))) {
+            failures.push(`${repositoryPath(path)} imports retired owner ${specifier}`)
+          }
+        }
+      }
+    }
+
+    assert.deepEqual(failures, [])
+  })
+
+  void test('re-exports chat, Browser and Model contracts from their owners', async () => {
     const contracts = await readFile(
       resolve(repositoryRoot, 'src/shared/contracts/index.ts'),
       'utf8'
     )
+    const owners = reexportOwners(contracts)
 
-    assert.match(
-      contracts,
-      /BrowserElementSelection[\s\S]*from '@velaros-ai\/browser\/core'/u
-    )
-    assert.match(
-      contracts,
-      /AgentProviderRuntimeConfig[\s\S]*ProviderModelCatalog[\s\S]*from '@velaros-ai\/model'/u
-    )
-    assert.match(
-      contracts,
-      /ProjectGitBranch as WorkspaceGitBranch[\s\S]*ProjectGitStatusResult as WorkspaceGitStatusResult[\s\S]*from '@velaros-ai\/project\/contracts'/u
+    assert.deepEqual(
+      Object.fromEntries(Object.keys(contractOwners).map((name) => [name, owners.get(name)])),
+      contractOwners
     )
   })
 
-  void test('consumes cross-platform OS behavior through the browser-safe System owner', async () => {
-    const sources = (
-      await Promise.all(
-        (await collectSourceFiles(resolve(repositoryRoot, 'src')))
-          .map((path) => readFile(path, 'utf8'))
-      )
-    ).join('\n')
-
-    assert.match(
-      sources,
-      /from '@velaros-ai\/system\/platform-compatibility'/u
+  void test('owns the Git contracts in one Workbench file', async () => {
+    // Platform 的项目能力不再带 Git 合同：Workbench 的 Git 服务与面板是唯一的生产方和消费方，定义只在这一处。
+    const owner = 'src/shared/contracts/workspaceGit.ts'
+    const contracts = await readFile(
+      resolve(repositoryRoot, 'src/shared/contracts/index.ts'),
+      'utf8'
     )
-    assert.doesNotMatch(sources, /from '@velaros-ai\/system-tools/u)
-    await assert.rejects(
-      readFile(
-        resolve(
-          repositoryRoot,
-          'src/utils/PlatformCompatibilityHelper.ts'
-        ),
-        'utf8'
-      ),
-      { code: 'ENOENT' }
+    assert.match(contracts, /^export type \* from '\.\/workspaceGit'$/mu)
+
+    const declaredIn = new Map<string, string[]>()
+    for (const path of await collectSourceFiles(resolve(repositoryRoot, 'src'))) {
+      const source = await readFile(path, 'utf8')
+      for (const match of source.matchAll(
+        /^\s*(?:export\s+)?(?:declare\s+)?(?:interface\s+(WorkspaceGit\w+)\b|type\s+(WorkspaceGit\w+)\s*(?:<[^>]*>)?\s*=)/gmu
+      )) {
+        const name = match[1] ?? match[2]!
+        declaredIn.set(name, [...(declaredIn.get(name) ?? []), repositoryPath(path)])
+      }
+    }
+
+    assert.ok(declaredIn.has('WorkspaceGitStatusResult'))
+    for (const [name, files] of declaredIn) assert.deepEqual(files, [owner], name)
+  })
+
+  void test('consumes cross-platform OS behavior through the Core platform owner', async () => {
+    const files = await collectSourceFiles(resolve(repositoryRoot, 'src'))
+    const sources = (await Promise.all(files.map((path) => readFile(path, 'utf8')))).join('\n')
+
+    assert.match(sources, /from '@velaros-ai\/core\/platform'/u)
+    // 不留本地的兼容层副本：平台判断只有 Core 这一份。
+    assert.deepEqual(
+      files.filter((path) => /PlatformCompatibility/u.test(basename(path))).map(repositoryPath),
+      []
     )
   })
 })

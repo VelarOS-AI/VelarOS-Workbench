@@ -27,7 +27,7 @@ const GoogleSignInTimeoutMs = 3 * 60_000
 const CloudRequestTimeoutMs = 20_000
 /** 公开价格目录在进程里留多久（与 Desktop 相同）；服务端给的过期时间更早时以它为准。 */
 const PublicModelPricingCacheMs = 15 * 60_000
-const ManagedProviderIds = new Set<WorkbenchManagedModelProviderId>(['velar', 'velar-dev'])
+const ManagedProviderIds = new Set<WorkbenchManagedModelProviderId>(['velaros', 'velar-dev'])
 
 interface GoogleDesktopStart {
   readonly authorizationUrl: string

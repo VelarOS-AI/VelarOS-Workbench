@@ -20,8 +20,6 @@ import {
   updateStandaloneWorkbenchModelConfig,
 } from '../src/renderer/src/runtime/standaloneWorkbenchModelConfig'
 
-import { assertCurrentWorkbenchPrompt } from './helpers/workbenchPromptAudit'
-
 describe('Workbench inline completion', () => {
   test('offers supported providers without raw custom-provider setup', () => {
     expect(StandaloneWorkbenchModelProviderPresets.some((provider) => provider.id === 'openai'))
@@ -178,7 +176,8 @@ describe('Workbench inline completion', () => {
     })
 
     expect(result).toEqual({ completion: 'return total + 1' })
-    assertCurrentWorkbenchPrompt({ prompt: [{ role: 'system', content: instructions }] })
+    // 补全的系统提示词只讲插入规则：不带 Agent 的模块合同、工具名或重试说明。
+    expect(instructions).not.toMatch(/velaros:|project:|workbench:|tooling:/u)
     expect(prompt).toContain('Language: typescript')
     expect(prompt).toContain('File: value.ts')
     expect(prompt).toContain('<|cursor|>')

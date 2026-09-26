@@ -34,7 +34,7 @@ import type { WorkbenchProject } from '@renderer/models/project/workbenchProject
 import { getParentPath, ROOT_PATH } from '@renderer/models/shared/workbenchUtils'
 
 import { toNullable } from '@velaros-ai/core'
-import { currentSystemPlatform as systemPlatformCompatibility } from '@velaros-ai/system/platform-compatibility'
+import { currentPlatform as systemPlatformCompatibility } from '@velaros-ai/core/platform'
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 import { Paragraph } from '@velaros-ai/ui/primitives/display/Paragraph'
 import { SearchField } from '@velaros-ai/ui/primitives/forms/SearchField'

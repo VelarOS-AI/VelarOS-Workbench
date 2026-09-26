@@ -1,9 +1,11 @@
 import { optionalWhen } from '@velaros-ai/core'
-import type { ModelProviderValidationKind } from '@velaros-ai/model/catalog'
+import type {
+  ModelProviderOperationalManifest,
+  ModelProviderValidationKind,
+} from '@velaros-ai/model/catalog'
 import {
   DefaultProviderModels,
-  getResolvedProviderModel,
-  getSharedProviderSuggestedModels,
+  modelCatalog,
   ModelProviderOperationalManifests,
 } from '@velaros-ai/model/catalog'
 import type { ChatProviderId, ProviderModelCatalogEntry } from '@velaros-ai/model/contracts'
@@ -37,22 +39,37 @@ function resolveCompletionModel(models: readonly string[], defaultModel: string)
   )
 }
 
-const AllStandaloneWorkbenchModelProviderPresets: readonly StandaloneWorkbenchModelProviderPreset[] =
+const OperationalManifests: readonly ModelProviderOperationalManifest[] =
   ModelProviderOperationalManifests
+const ProviderDefaultModels: Readonly<Partial<Record<ChatProviderId, string>>> = DefaultProviderModels
+
+/**
+ * 旧版本存下的 provider id：VelarOS 托管模型原先叫 `velar`（默认模型 `velar/auto`），Platform 与 Cloud
+ * 都已改叫 `velaros`。读到旧 id 时按新 id 解析，用户选过的托管模型不会退回到默认 provider。
+ */
+const LegacyProviderIds: Readonly<Record<string, ChatProviderId>> = { velar: 'velaros' }
+const LegacyModelIds: Readonly<Record<string, string>> = { 'velar/auto': 'velaros/auto' }
+
+export function normalizeStandaloneWorkbenchModelId(model: string): string {
+  return LegacyModelIds[model] ?? model
+}
+
+const AllStandaloneWorkbenchModelProviderPresets: readonly StandaloneWorkbenchModelProviderPreset[] =
+  OperationalManifests
     .filter((manifest) =>
       !manifest.debugOnly
       && manifest.id !== 'custom'
     )
     .map((manifest) => {
-      const models = getSharedProviderSuggestedModels(manifest.id)
-      const defaultModel = getResolvedProviderModel(
+      const models = modelCatalog.suggestedModels(manifest.id)
+      const defaultModel = modelCatalog.resolveModel(
         manifest.id,
-        DefaultProviderModels[manifest.id] ?? models[0]
+        ProviderDefaultModels[manifest.id] ?? models[0]
       )
       return {
         id: manifest.id,
-        label: manifest.id === 'velar' || manifest.id === 'velar-dev'
-          ? getWorkbenchManagedModelProviderLabel(manifest.id === 'velar-dev' ? 'velar-dev' : 'velar')
+        label: manifest.id === 'velaros' || manifest.id === 'velar-dev'
+          ? getWorkbenchManagedModelProviderLabel(manifest.id === 'velar-dev' ? 'velar-dev' : 'velaros')
           : manifest.label,
         description: manifest.description,
         defaultBaseURL: manifest.defaultBaseURL,
@@ -76,8 +93,9 @@ const DefaultProviderId: ChatProviderId = 'openrouter'
 export function getStandaloneWorkbenchModelProviderPreset(
   provider: string
 ): StandaloneWorkbenchModelProviderPreset {
+  const providerId = LegacyProviderIds[provider] ?? provider
   return (
-    AllStandaloneWorkbenchModelProviderPresets.find((preset) => preset.id === provider)
+    AllStandaloneWorkbenchModelProviderPresets.find((preset) => preset.id === providerId)
     ?? StandaloneWorkbenchModelProviderPresets.find((preset) => preset.id === DefaultProviderId)
     ?? StandaloneWorkbenchModelProviderPresets[0]!
   )

@@ -1,4 +1,4 @@
-import { currentSystemPlatform as systemPlatformCompatibility } from '@velaros-ai/system/platform-compatibility'
+import { currentPlatform as systemPlatformCompatibility } from '@velaros-ai/core/platform'
 
 /** 回答里的路径 → 相对项目根的路径；项目根之外的绝对路径返回 null，项目根本身返回 `.`。 */
 export function resolveWorkbenchChatWorkspacePath(

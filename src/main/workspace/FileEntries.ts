@@ -7,11 +7,10 @@
 import { opendir, realpath, stat } from 'node:fs/promises'
 import { basename } from 'node:path'
 
-import { shouldSkipProjectDirectory } from '@velaros-ai/project/files'
-
 import type { WorkbenchDirectoryEntry } from '@shared/contracts'
 
 import type { PathResolver } from './PathResolver'
+import { shouldSkipProjectDirectory } from './WorkbenchSkippedDirectories'
 
 class DirectoryEntries {
   constructor(private readonly pathResolver: PathResolver) {}

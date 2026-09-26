@@ -77,7 +77,7 @@ export function getStandaloneWorkbenchManagedProvider(
 export function isStandaloneWorkbenchManagedProviderId(
   providerId: string
 ): providerId is WorkbenchManagedModelProviderId {
-  return providerId === 'velar' || providerId === 'velar-dev'
+  return providerId === 'velaros' || providerId === 'velar-dev'
 }
 
 export function isStandaloneWorkbenchModelProviderSelectable(providerId: string): boolean {

@@ -5,6 +5,7 @@ import type { ChatProviderId } from '@velaros-ai/model/contracts'
 import { isStandaloneWorkbenchModelProviderSelectable } from './standaloneWorkbenchManagedModels'
 import {
   getStandaloneWorkbenchModelProviderPreset,
+  normalizeStandaloneWorkbenchModelId,
   resolveStandaloneWorkbenchProviderModel,
 } from './standaloneWorkbenchModelCatalog'
 
@@ -61,7 +62,7 @@ function readInitialModelConfig(): StandaloneWorkbenchModelConfig {
       provider: provider.id,
       model: resolveStandaloneWorkbenchProviderModel(
         provider.id,
-        typeof stored.model === 'string' ? stored.model : undefined,
+        typeof stored.model === 'string' ? normalizeStandaloneWorkbenchModelId(stored.model) : undefined,
         'agent'
       ),
       completionModel:

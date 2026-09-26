@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process'
 
 import { optionalWhen } from '@velaros-ai/core'
 import { logRuntime } from '@velaros-ai/core/logger'
-import { SystemPlatformCompatibility } from '@velaros-ai/system/platform-compatibility'
+import { createPlatform } from '@velaros-ai/core/platform'
 
 type ExternalLspProcessTreeTerminationPlan =
   | {
@@ -27,12 +27,12 @@ const TerminationPollIntervalMs = 25
 const TerminationCommandTimeoutMs = 5_000
 
 const log = logRuntime.tag('ExternalLspProcessLifecycle')
-const currentPlatform = new SystemPlatformCompatibility()
+const currentPlatform = createPlatform()
 
 function shouldDetachExternalLspProcess(
   platform: NodeJS.Platform = process.platform
 ): boolean {
-  return new SystemPlatformCompatibility({ platform }).shouldUseDetachedProcessGroup()
+  return createPlatform({ platform }).shouldUseDetachedProcessGroup()
 }
 
 function buildExternalLspProcessTreeTerminationPlan(
@@ -40,7 +40,7 @@ function buildExternalLspProcessTreeTerminationPlan(
   signal: NodeJS.Signals,
   platform: NodeJS.Platform = process.platform
 ): ExternalLspProcessTreeTerminationPlan {
-  const compatibility = new SystemPlatformCompatibility({ platform })
+  const compatibility = createPlatform({ platform })
   const command = compatibility.getProcessTreeKillCommandSpec(pid, signal)
   if (command) return { kind: 'command', file: command.file, args: command.args }
 

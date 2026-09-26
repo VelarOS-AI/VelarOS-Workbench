@@ -1,7 +1,11 @@
 import { AppError } from '@velaros-ai/core/error'
 import { logRuntime } from '@velaros-ai/core/logger'
-import { ModelRequestClient } from '@velaros-ai/model'
-import { createModelRuntimeComposition, type ModelRuntimeComposition } from '@velaros-ai/model/node'
+import {
+  createModelRequestClient,
+  createModelRuntimeComposition,
+  type ModelRequestClientApi,
+  type ModelRuntimeCompositionApi,
+} from '@velaros-ai/model'
 
 import type { WorkbenchInlineCompletionResult } from '@shared/contracts'
 import type { WorkbenchInlineCompletionBridgeRequest } from '@shared/workbenchLanguage'
@@ -12,15 +16,15 @@ const PrefixMaxChars = 4000
 const SuffixMaxChars = 1200
 const CursorMarker = '<|cursor|>'
 const EmptyResult: WorkbenchInlineCompletionResult = { completion: '' }
-type InlineCompletionModelRequestPort = Pick<ModelRequestClient, 'collectTextStream'>
+type InlineCompletionModelRequestPort = Pick<ModelRequestClientApi, 'collectTextStream'>
 
 /** Workbench 独立宿主的编辑器 Tab 补全生成器。 */
 export class WorkbenchInlineCompletionGenerator {
   private readonly log = logRuntime.tag('WorkbenchInlineCompletionGenerator')
 
   public constructor(
-    private readonly modelRequestService: InlineCompletionModelRequestPort = new ModelRequestClient(),
-    private readonly modelComposition: ModelRuntimeComposition = createModelRuntimeComposition()
+    private readonly modelRequestService: InlineCompletionModelRequestPort = createModelRequestClient(),
+    private readonly modelComposition: ModelRuntimeCompositionApi = createModelRuntimeComposition()
   ) {}
 
   public async generate(
@@ -29,11 +33,9 @@ export class WorkbenchInlineCompletionGenerator {
     if (!request.prefix.trim()) return EmptyResult
 
     try {
-      const selection = {
-        ...request.modelSelection,
-        thinkingDepth: 'fast' as const,
-      }
-      const runtime = await this.modelComposition.agentModelRuntime.resolveRoleRuntime(selection, {
+      // 补全要快：按低档思考力度跑（与 Desktop 的辅助任务一致）。
+      const selection = { ...request.modelSelection, reasoningLevel: 'low' as const }
+      const runtime = await this.modelComposition.agentModelResolver.resolve(selection, {
         providerRuntimeConfigs: [
           {
             provider: selection.provider,
@@ -61,7 +63,7 @@ export class WorkbenchInlineCompletionGenerator {
         maxRetries: 0,
         messages: [{ role: 'user', content: this.buildPrompt(request) }],
         onError: () => undefined,
-        stopWhen: (accumulated) => accumulated.length > InlineCompletionMaxChars,
+        stopWhen: (accumulated: string) => accumulated.length > InlineCompletionMaxChars,
       })
 
       return { completion: this.cleanCompletion(text) }

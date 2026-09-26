@@ -10,12 +10,12 @@ import { basename, resolve } from 'node:path'
 
 import { AppError } from '@velaros-ai/core/error'
 import { LoggerFactory } from '@velaros-ai/core/logger'
-import { shouldSkipProjectDirectory } from '@velaros-ai/project/files'
 
 import {
   getRelativePathInsideRoot,
   toPortableRelativePath,
 } from './PathContainmentHelper'
+import { shouldSkipProjectDirectory } from './WorkbenchSkippedDirectories'
 
 interface ResolvedPath {
   requestedPath: string

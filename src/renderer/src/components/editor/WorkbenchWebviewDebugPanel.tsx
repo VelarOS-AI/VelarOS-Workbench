@@ -7,9 +7,9 @@ import {
 } from '@phosphor-icons/react'
 import { useWorkbenchI18n } from '@renderer/i18n'
 
-import { resolveBrowserSearchOrNavigationInput } from '@velaros-ai/browser/core/contracts'
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 import { Input } from '@velaros-ai/ui/primitives/forms/Input'
+import { browserAddress } from '@velaros-ai/velaros/browser/renderer'
 
 import {
   normalizeWorkbenchBrowserPageUrl,
@@ -51,7 +51,7 @@ interface WebviewFailLoadEvent extends Event {
 export function normalizeWorkbenchBrowserAddress(input: string): string {
   const candidate = input.trim() === 'about:blank'
     ? 'about:blank'
-    : resolveBrowserSearchOrNavigationInput(input)
+    : browserAddress.resolveSearchOrNavigationInput(input)
   return candidate ? normalizeWorkbenchBrowserPageUrl(candidate) ?? '' : ''
 }
 

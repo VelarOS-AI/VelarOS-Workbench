@@ -13,8 +13,8 @@ import { stat } from 'node:fs/promises'
 
 import { isEmpty } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
+import { currentPlatform as systemPlatformCompatibility } from '@velaros-ai/core/platform'
 import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
-import { currentSystemPlatform as systemPlatformCompatibility } from '@velaros-ai/system/platform-compatibility'
 
 import type {
   WorkbenchTerminalInputRequest,

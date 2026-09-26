@@ -23,7 +23,7 @@ import type {
 } from '../src/shared/workbenchModel'
 
 function managedProvider(
-  providerId: 'velar' | 'velar-dev',
+  providerId: 'velaros' | 'velar-dev',
   enabled: boolean,
   model = `${providerId}/current`
 ): WorkbenchManagedModelProvider {
@@ -66,14 +66,14 @@ describe('Workbench managed model selection', () => {
   test('disables each service independently and preserves model names', () => {
     for (const productionEnabled of [false, true]) {
       const providers = [
-        managedProvider('velar', productionEnabled),
+        managedProvider('velaros', productionEnabled),
         managedProvider('velar-dev', !productionEnabled),
       ]
       const options = createStandaloneWorkbenchModelProviderOptions(
         providers,
         (label) => `${label} service is disabled`
       )
-      expect(options.find((option) => option.value === 'velar')).toMatchObject({
+      expect(options.find((option) => option.value === 'velaros')).toMatchObject({
         label: 'VelarOS',
         disabled: !productionEnabled,
       })
@@ -97,7 +97,7 @@ describe('Workbench managed model selection', () => {
 
   test('publishes settings selections immediately and rejects callbacks using an outdated enabled option', async () => {
     const originalConfig = getStandaloneWorkbenchModelConfig()
-    let access = snapshot([managedProvider('velar', false), managedProvider('velar-dev', true)])
+    let access = snapshot([managedProvider('velaros', false), managedProvider('velar-dev', true)])
     let notifications = 0
     const dispose = subscribeStandaloneWorkbenchModelConfig(() => { notifications += 1 })
     try {
@@ -110,10 +110,10 @@ describe('Workbench managed model selection', () => {
           model: 'velar-dev/current',
         })
         const selectedConfig = getStandaloneWorkbenchModelConfig()
-        selectStandaloneWorkbenchModelProvider('velar')
+        selectStandaloneWorkbenchModelProvider('velaros')
         expect(getStandaloneWorkbenchModelConfig()).toBe(selectedConfig)
 
-        access = snapshot([managedProvider('velar', true), managedProvider('velar-dev', false)])
+        access = snapshot([managedProvider('velaros', true), managedProvider('velar-dev', false)])
         await refreshStandaloneWorkbenchManagedModels()
         selectStandaloneWorkbenchModelProvider('velar-dev', { model: 'stale-default' })
         selectStandaloneWorkbenchAgentModel('velar-dev', 'stale-model')
@@ -121,8 +121,8 @@ describe('Workbench managed model selection', () => {
         expect(getStandaloneWorkbenchModelConfig()).toBe(selectedConfig)
         expect(notifications).toBe(1)
 
-        selectStandaloneWorkbenchModelProvider('velar', { model: 'velar/current' })
-        expect(getStandaloneWorkbenchModelConfig().provider).toBe('velar')
+        selectStandaloneWorkbenchModelProvider('velaros', { model: 'velaros/current' })
+        expect(getStandaloneWorkbenchModelConfig().provider).toBe('velaros')
         expect(notifications).toBe(2)
       })
     } finally {
