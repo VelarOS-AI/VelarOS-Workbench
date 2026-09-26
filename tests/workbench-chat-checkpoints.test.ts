@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
-import { existsSync } from 'node:fs'
-import { mkdir, mkdtemp, readFile, rm, unlink, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, unlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -18,7 +17,7 @@ async function git(root: string, args: string[]): Promise<string> {
 }
 
 void describe('Workbench chat checkpoints', () => {
-  void test('restores the working tree to a captured turn without touching the user index or HEAD', async () => {
+  void test('captures a turn under a private ref without touching the user index or HEAD', async () => {
     const root = await mkdtemp(join(tmpdir(), 'workbench-checkpoint-'))
     const indexes = await mkdtemp(join(tmpdir(), 'workbench-checkpoint-indexes-'))
     const service = new WorkbenchChatCheckpointService(() => indexes)
@@ -27,11 +26,12 @@ void describe('Workbench chat checkpoints', () => {
       await git(root, ['init', '-q'])
       await writeFile(join(root, '.gitignore'), 'node_modules/\n', 'utf8')
       await writeFile(join(root, 'tracked.ts'), 'export const a = 1\n', 'utf8')
-      await writeFile(join(root, 'removed-later.ts'), 'keep me\n', 'utf8')
       await git(root, ['add', '-A'])
       await git(root, ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'base'])
       const headBefore = (await git(root, ['rev-parse', 'HEAD'])).trim()
       await writeFile(join(root, 'untracked-before.ts'), 'draft\n', 'utf8')
+      await mkdir(join(root, 'node_modules'), { recursive: true })
+      await writeFile(join(root, 'node_modules', 'dep.js'), 'dep\n', 'utf8')
 
       const { commitId } = await service.capture({
         workspaceRoot: root,
@@ -44,26 +44,16 @@ void describe('Workbench chat checkpoints', () => {
         (await git(root, ['rev-parse', 'refs/velaros/checkpoints/session-1/checkpoint-1'])).trim(),
         commitId
       )
-
-      // 这一轮里 agent 改了、删了、也新建了文件；忽略目录里的东西不该被快照动到。
-      await writeFile(join(root, 'tracked.ts'), 'export const a = 2\n', 'utf8')
-      await unlink(join(root, 'removed-later.ts'))
-      await writeFile(join(root, 'created-by-agent.ts'), 'new\n', 'utf8')
-      await mkdir(join(root, 'node_modules'), { recursive: true })
-      await writeFile(join(root, 'node_modules', 'dep.js'), 'dep\n', 'utf8')
-
+      assert.equal((await git(root, ['log', '-1', '--format=%s', commitId!])).trim(), 'first turn')
+      // 快照是整棵工作树（未跟踪的文件也在），忽略目录里的东西不进来。
       assert.deepEqual(
-        await service.restore({ workspaceRoot: root, commitId: commitId! }),
-        { restored: true, error: null }
+        (await git(root, ['ls-tree', '-r', '--name-only', commitId!])).trim().split('\n').sort(),
+        ['.gitignore', 'tracked.ts', 'untracked-before.ts']
       )
-      assert.equal(await readFile(join(root, 'tracked.ts'), 'utf8'), 'export const a = 1\n')
-      assert.equal(await readFile(join(root, 'removed-later.ts'), 'utf8'), 'keep me\n')
-      assert.equal(await readFile(join(root, 'untracked-before.ts'), 'utf8'), 'draft\n')
-      assert.equal(existsSync(join(root, 'created-by-agent.ts')), false)
-      assert.equal(await readFile(join(root, 'node_modules', 'dep.js'), 'utf8'), 'dep\n')
-      // 用户的分支与暂存区原样：还原只动工作树。
+      // 影子 index 另放一处：用户的分支、暂存区原样，未跟踪的文件仍是未跟踪。
       assert.equal((await git(root, ['rev-parse', 'HEAD'])).trim(), headBefore)
       assert.equal((await git(root, ['diff', '--cached', '--name-only'])).trim(), '')
+      assert.equal((await git(root, ['status', '--porcelain'])).trim(), '?? untracked-before.ts')
 
       await service.delete({
         workspaceRoot: root,
@@ -80,8 +70,8 @@ void describe('Workbench chat checkpoints', () => {
     }
   })
 
-  void test('restores only the given paths, and leaves one that changed since untouched', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'workbench-checkpoint-paths-'))
+  void test('diffs the working tree against a captured turn and reads files as they were', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'workbench-checkpoint-diff-'))
     const indexes = await mkdtemp(join(tmpdir(), 'workbench-checkpoint-indexes-'))
     const service = new WorkbenchChatCheckpointService(() => indexes)
 
@@ -89,11 +79,9 @@ void describe('Workbench chat checkpoints', () => {
       await git(root, ['init', '-q'])
       await writeFile(join(root, 'edited.ts'), 'before\n', 'utf8')
       await writeFile(join(root, 'deleted.ts'), 'keep me\n', 'utf8')
-      await writeFile(join(root, 'touched-later.ts'), 'before\n', 'utf8')
-      await writeFile(join(root, 'bystander.ts'), 'before\n', 'utf8')
+      await writeFile(join(root, 'bystander.ts'), 'untouched\n', 'utf8')
       await git(root, ['add', '-A'])
       await git(root, ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'base'])
-      const headBefore = (await git(root, ['rev-parse', 'HEAD'])).trim()
       const { commitId } = await service.capture({ workspaceRoot: root, sessionId: 's', checkpointId: 'c' })
       assert.ok(commitId)
 
@@ -101,50 +89,42 @@ void describe('Workbench chat checkpoints', () => {
       await unlink(join(root, 'deleted.ts'))
       await mkdir(join(root, 'fresh', 'dir'), { recursive: true })
       await writeFile(join(root, 'fresh', 'dir', 'created.ts'), 'new\n', 'utf8')
-      await writeFile(join(root, 'touched-later.ts'), 'after\n', 'utf8')
-      await writeFile(join(root, 'bystander.ts'), 'someone else\n', 'utf8')
-      const changes = await service.diffWorkingTree({
+      const tree = await service.snapshotWorkingTree(root)
+      assert.match(tree, /^[0-9a-f]{40,64}$/u)
+
+      const changes = await service.diffWorkingTree({ workspaceRoot: root, baseCommitId: commitId, tree })
+      assert.deepEqual(
+        changes.map((change) => [change.path, change.status, change.additions, change.deletions]).sort(),
+        [
+          ['deleted.ts', 'deleted', 0, 1],
+          ['edited.ts', 'modified', 1, 1],
+          ['fresh/dir/created.ts', 'added', 1, 0],
+        ]
+      )
+      const edited = changes.find((change) => change.path === 'edited.ts')
+      assert.match(edited?.patch ?? '', /^-before$/mu)
+      assert.match(edited?.patch ?? '', /^\+after$/mu)
+      // 只剩逐文件的公开改动：没有回溯用的前后快照条目。
+      assert.equal(changes.some((change) => 'before' in change || 'after' in change), false)
+
+      // select 先筛出要留的文件，补丁只给留下的取。
+      const selected = await service.diffWorkingTree({
         workspaceRoot: root,
-        baseCommitId: commitId!,
-        tree: await service.snapshotWorkingTree(root),
+        baseCommitId: commitId,
+        tree,
+        select: (listed) => listed.filter((change) => change.path === 'edited.ts'),
       })
-      const byPath = new Map(changes.map((change) => [change.path, change]))
-      assert.equal(byPath.get('fresh/dir/created.ts')?.before, null)
-      assert.equal(byPath.get('deleted.ts')?.after, null)
-      // 采集之后又被别人改过：此刻已不是期望的样子。
-      await writeFile(join(root, 'touched-later.ts'), 'after, then user\n', 'utf8')
+      assert.deepEqual(selected, [edited])
 
-      const restores = ['edited.ts', 'deleted.ts', 'fresh/dir/created.ts', 'touched-later.ts'].map((path) => ({
-        path,
-        expected: byPath.get(path)!.after,
-        target: byPath.get(path)!.before,
-      }))
-      const result = await service.restorePaths({ workspaceRoot: root, paths: restores })
-      assert.deepEqual(
-        { ...result, restoredPaths: [...result.restoredPaths].sort() },
-        {
-          restored: true,
-          error: null,
-          restoredPaths: ['deleted.ts', 'edited.ts', 'fresh/dir/created.ts'],
-          changedSince: ['touched-later.ts'],
-        }
-      )
-      assert.equal(await readFile(join(root, 'edited.ts'), 'utf8'), 'before\n')
-      assert.equal(await readFile(join(root, 'deleted.ts'), 'utf8'), 'keep me\n')
-      assert.equal(existsSync(join(root, 'fresh')), false)
-      assert.equal(await readFile(join(root, 'touched-later.ts'), 'utf8'), 'after, then user\n')
-      assert.equal(await readFile(join(root, 'bystander.ts'), 'utf8'), 'someone else\n')
-      assert.equal((await git(root, ['rev-parse', 'HEAD'])).trim(), headBefore)
-      assert.equal((await git(root, ['diff', '--cached', '--name-only'])).trim(), '')
-
-      // 已经是目标样子的路径不算撤回；路径越出项目根直接拒绝。
-      assert.deepEqual(
-        await service.restorePaths({ workspaceRoot: root, paths: restores.slice(0, 1).map((item) => ({ ...item, expected: item.target })) }),
-        { restored: true, error: null, restoredPaths: [], changedSince: [] }
-      )
+      // 改动前的全文按检查点里的样子原样读出（结尾换行也在）；检查点里没有的文件为 null。
+      const read = (path: string) =>
+        service.readFileAtCommit({ workspaceRoot: root, commitId, path, maxBytes: 1024 })
+      assert.equal(await read('deleted.ts'), 'keep me\n')
+      assert.equal(await read('fresh/dir/created.ts'), null)
+      await assert.rejects(() => read('../escape.ts'), /无效的文件路径/u)
       await assert.rejects(
-        () => service.restorePaths({ workspaceRoot: root, paths: [{ path: '../escape.ts', expected: null, target: null }] }),
-        /无效的文件路径/u
+        () => service.diffWorkingTree({ workspaceRoot: root, baseCommitId: 'HEAD', tree }),
+        /无效的检查点提交/u
       )
     } finally {
       await rm(root, { recursive: true, force: true })
@@ -152,7 +132,7 @@ void describe('Workbench chat checkpoints', () => {
     }
   })
 
-  void test('falls back to conversation-only checkpoints outside a git repository', async () => {
+  void test('captures no checkpoint outside a git repository', async () => {
     const root = await mkdtemp(join(tmpdir(), 'workbench-checkpoint-plain-'))
     const indexes = await mkdtemp(join(tmpdir(), 'workbench-checkpoint-indexes-'))
     const service = new WorkbenchChatCheckpointService(() => indexes)
@@ -164,7 +144,13 @@ void describe('Workbench chat checkpoints', () => {
         { commitId: null }
       )
       await assert.rejects(
-        () => service.restore({ workspaceRoot: root, commitId: 'not-a-commit' }),
+        () =>
+          service.readFileAtCommit({
+            workspaceRoot: root,
+            commitId: 'not-a-commit',
+            path: 'notes.txt',
+            maxBytes: 1024,
+          }),
         /无效的检查点提交/u
       )
     } finally {

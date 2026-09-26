@@ -9,7 +9,6 @@ import {
   type WorkbenchChatRunChangesCaptureRequest,
   type WorkbenchChatRunChangesDeleteRequest,
   type WorkbenchChatRunChangesReadRequest,
-  type WorkbenchChatRunChangesRewindRequest,
   WorkbenchGitChannels,
   type WorkbenchGitCommitMessageRequest,
   type WorkbenchGitCommitRequest,
@@ -124,9 +123,6 @@ export function registerWorkbenchGitIpc(
   )
   ipcMain.handle(WorkbenchGitChannels.readChatRunChangeBaseFile, (_event, input: unknown) =>
     callWithEnvelope(() => runChanges.readBaseFile(parseRunChangeBaseFile(input)))
-  )
-  ipcMain.handle(WorkbenchGitChannels.rewindChatRunChanges, (_event, input: unknown) =>
-    callWithEnvelope(() => runChanges.rewind(parseRunChangesRewind(input)))
   )
 }
 
@@ -283,19 +279,6 @@ function parseRunChangesCapture(input: unknown): WorkbenchChatRunChangesCaptureR
     recordId: input['recordId'] as string,
     baseCommitId: input['baseCommitId'] as string,
     final: optionalWhen(isTrue, final),
-  }
-}
-
-function parseRunChangesRewind(input: unknown): WorkbenchChatRunChangesRewindRequest {
-  if (!hasStringFields(input, ['workspaceRoot', 'sessionId', 'commitId'])) return invalidRequest()
-  const recordIds = input['recordIds']
-  if (!Array.isArray(recordIds) || !recordIds.every((id) => typeof id === 'string'))
-    return invalidRequest()
-  return {
-    workspaceRoot: input['workspaceRoot'] as string,
-    sessionId: input['sessionId'] as string,
-    commitId: input['commitId'] as string,
-    recordIds,
   }
 }
 

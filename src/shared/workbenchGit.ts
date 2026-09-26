@@ -40,7 +40,6 @@ export const WorkbenchGitChannels = {
   readChatRunChanges: 'workbench-app:git:read-chat-run-changes',
   deleteChatRunChanges: 'workbench-app:git:delete-chat-run-changes',
   readChatRunChangeBaseFile: 'workbench-app:git:read-chat-run-change-base-file',
-  rewindChatRunChanges: 'workbench-app:git:rewind-chat-run-changes',
 } as const
 
 export interface WorkbenchGitRootRequest {
@@ -98,19 +97,9 @@ export interface WorkbenchChatCheckpointCaptureRequest extends WorkbenchGitRootR
   label?: string
 }
 
-/** `commitId` 为 null：项目不是 git 仓库或捕获失败——这一轮只能回溯对话，不能回退文件。 */
+/** `commitId` 为 null：项目不是 git 仓库或捕获失败——这一轮没有「本轮改动」可比。 */
 export interface WorkbenchChatCheckpointCaptureResult {
   commitId: string | null
-}
-
-export interface WorkbenchChatCheckpointRestoreRequest extends WorkbenchGitRootRequest {
-  commitId: string
-}
-
-/** 还原的**实际结果**：失败也要能如实写进回溯说明，所以不抛错。 */
-export interface WorkbenchChatCheckpointRestoreResult {
-  restored: boolean
-  error: string | null
 }
 
 export interface WorkbenchChatCheckpointDeleteRequest extends WorkbenchGitRootRequest {
@@ -145,15 +134,7 @@ export interface WorkbenchChatRunChangesSummary {
   deletions: number
   /** 采集失败的原因；成功（包括这一轮没改文件）为 null。 */
   error: string | null
-  /**
-   * 这一轮改过的文件（相对项目根，就是卡片上列的那些）：回溯确认框要同步数出「这几轮改了几个文件」。
-   * 超过 {@link WorkbenchChatRunChangesSummaryMaxPaths} 个、或是早于它的记录时没有，只剩计数。
-   */
-  paths?: string[]
 }
-
-/** 改动摘要最多带这么多个路径：再多的一轮只留计数，不让聊天记录跟着膨胀。 */
-export const WorkbenchChatRunChangesSummaryMaxPaths = 1_000
 
 export type WorkbenchChatRunFileChangeStatus = 'added' | 'deleted' | 'modified'
 
@@ -216,31 +197,6 @@ export interface WorkbenchChatRunChangesDeleteRequest extends WorkbenchGitRootRe
   recordIds?: string[]
 }
 
-/** 回溯时撤回被移除各轮里 Agent 的文件改动。 */
-export interface WorkbenchChatRunChangesRewindRequest extends WorkbenchGitRootRequest {
-  sessionId: string
-  /** 回溯到的那一轮开跑前的检查点提交：旧记录（早于改动归属）分不出谁改的，照旧整体还原到它。 */
-  commitId: string
-  /** 被移除各轮的记录 id（= 检查点 id），最早的在前；第一个就是回溯到的那一轮。 */
-  recordIds: string[]
-}
-
-/**
- * 回溯的文件结果（失败也要能如实写进回溯说明，所以不抛错）。
- *
- * `scope`：`agent-changes` 只把 Agent 改过、此后也没被 AI 之外改过的文件撤回到它动手之前，其余一概不碰；
- * `checkpoint` 被移除的轮次里有早于改动归属的旧记录，照旧把整个项目还原到检查点。
- */
-export interface WorkbenchChatRunChangesRewindResult {
-  restored: boolean
-  error: string | null
-  scope: 'agent-changes' | 'checkpoint'
-  /** 撤回了的文件（相对项目根）。 */
-  restoredPaths: string[]
-  /** Agent 改过、但 AI 之外也改过的文件：保留当前内容，没有回退。 */
-  keptPaths: string[]
-}
-
 export interface WorkbenchGitBridge {
   getSummary(
     request: WorkbenchGitRootRequest
@@ -297,7 +253,4 @@ export interface WorkbenchGitBridge {
   deleteChatRunChanges(
     request: WorkbenchChatRunChangesDeleteRequest
   ): Promise<WorkbenchFsCallResult<void>>
-  rewindChatRunChanges(
-    request: WorkbenchChatRunChangesRewindRequest
-  ): Promise<WorkbenchFsCallResult<WorkbenchChatRunChangesRewindResult>>
 }

@@ -93,7 +93,6 @@ void describe('Workbench chat run changes', () => {
         additions: 1 + 1 + 1 + 5_000,
         deletions: 1 + 1,
         error: null,
-        paths: ['created.ts', 'generated.ts', 'image.bin', 'odd\tname.ts', 'removed.ts', 'tracked.ts'],
       })
 
       const record = await store.read({
@@ -459,11 +458,6 @@ void describe('Workbench chat run changes attributed to the agent', () => {
         { fileCount: summary.fileCount, error: summary.error },
         { fileCount: 5, error: null }
       )
-      // 摘要带着卡片上列的那些文件：回溯确认框按它同步数出改了几个文件。
-      assert.deepEqual(
-        [...(summary.paths ?? [])].sort(),
-        ['created.ts', 'generated/out.txt', 'mixed.ts', 'removed.ts', 'tracked.ts']
-      )
       const record = await attributed.read(round.request)
       assert.ok(record)
       assert.deepEqual(
@@ -476,12 +470,22 @@ void describe('Workbench chat run changes attributed to the agent', () => {
           'tracked.ts': ['modified', 'agent'],
         }
       )
-      // 快照里的对象 id 只留在主进程的记录文件里，不交给 renderer。
-      assert.equal(record.changes.some((change) => 'before' in change || 'after' in change), false)
       const [rootDirectory] = await readdir(records)
-      const stored = JSON.parse(await readFile(join(records, rootDirectory!, 's', 'run-1.json'), 'utf8'))
+      const recordFile = join(records, rootDirectory!, 's', 'run-1.json')
+      const stored = JSON.parse(await readFile(recordFile, 'utf8'))
       assert.deepEqual(stored.attribution, { watcher: 'observed' })
-      assert.match(stored.changes.find((change: { path: string }) => change.path === 'tracked.ts').before.oid, /^[0-9a-f]{40}$/u)
+      assert.equal(stored.baseCommitId, round.commitId)
+
+      // 带回溯的旧版本在每个文件上多记了前后快照条目：照样读得出来，只交公开字段。
+      stored.changes = stored.changes.map((change: object) => ({
+        ...change,
+        before: null,
+        after: { mode: '100644', oid: 'a'.repeat(40) },
+      }))
+      await writeFile(recordFile, JSON.stringify(stored), 'utf8')
+      const legacy = await attributed.read(round.request)
+      assert.deepEqual(legacy?.changes, record.changes)
+      assert.equal(legacy?.changes.some((change) => 'before' in change || 'after' in change), false)
 
       // 最终采集之后账本关掉：再采认不出谁改的，不把用户后来的改动记成这一轮的，也不动已经落定的记录。
       await editOutside(fixture, { 'after-run.ts': 'later\n' })
@@ -491,77 +495,7 @@ void describe('Workbench chat run changes attributed to the agent', () => {
     })
   })
 
-  void test('rewind puts back only the agent’s files and keeps files edited outside the AI', async () => {
-    await withAttributedRepository(async (fixture) => {
-      const { repo, project, attributed } = fixture
-      await writeProjectFile(project, 'notes.ts', 'notes\n')
-      await writeProjectFile(project, 'between.ts', 'between\n')
-      await writeProjectFile(project, 'later.ts', 'later\n')
-      await writeProjectFile(project, 'mixed.ts', 'mixed\n')
-      const headBefore = (await git(repo, ['rev-parse', 'HEAD'])).trim()
-
-      // 第一轮：Agent 改、建、删；运行期间用户改了 notes.ts；mixed.ts 两边都改了。
-      const first = await startRound(fixture, 'run-1')
-      await first.agentWrite({
-        'tracked.ts': 'export const a = 2\nexport const b = 1\n',
-        'deep/new/created.ts': 'new\n',
-        'removed.ts': null,
-        'between.ts': 'between by agent\n',
-        'mixed.ts': 'mixed by agent\n',
-      })
-      passTime(fixture)
-      await editOutside(fixture, { 'notes.ts': 'notes by user\n', 'mixed.ts': 'mixed by agent and user\n' })
-      await attributed.capture({ ...first.request, final: true })
-
-      // 两轮之间用户改了 between.ts。
-      await writeProjectFile(project, 'between.ts', 'between by user\n')
-
-      // 第二轮：Agent 接着改 tracked.ts、between.ts，又改了 later.ts。
-      passTime(fixture)
-      const second = await startRound(fixture, 'run-2')
-      await second.agentWrite({
-        'tracked.ts': 'export const a = 3\nexport const b = 1\n',
-        'between.ts': 'between by user, then agent\n',
-        'later.ts': 'later by agent\n',
-      })
-      await attributed.capture({ ...second.request, final: true })
-
-      // 这一轮收尾之后用户又改了 later.ts。
-      await writeProjectFile(project, 'later.ts', 'later by agent, then user\n')
-
-      const result = await attributed.rewind({
-        workspaceRoot: project,
-        sessionId: 's',
-        commitId: first.commitId,
-        recordIds: ['run-1', 'run-2'],
-      })
-      assert.deepEqual(
-        { ...result, restoredPaths: [...result.restoredPaths].sort() },
-        {
-          restored: true,
-          error: null,
-          scope: 'agent-changes',
-          restoredPaths: ['deep/new/created.ts', 'removed.ts', 'tracked.ts'],
-          keptPaths: ['between.ts', 'later.ts', 'mixed.ts'],
-        }
-      )
-
-      // Agent 的改动撤回：改过的回到原样，删掉的重建，新建的连同空出来的目录一起删掉。
-      assert.equal(await readFile(join(project, 'tracked.ts'), 'utf8'), 'export const a = 1\nexport const b = 1\n')
-      assert.equal(await readFile(join(project, 'removed.ts'), 'utf8'), 'bye\n')
-      assert.equal(existsSync(join(project, 'deep')), false)
-      // AI 之外的改动一个不少。
-      assert.equal(await readFile(join(project, 'notes.ts'), 'utf8'), 'notes by user\n')
-      assert.equal(await readFile(join(project, 'between.ts'), 'utf8'), 'between by user, then agent\n')
-      assert.equal(await readFile(join(project, 'later.ts'), 'utf8'), 'later by agent, then user\n')
-      assert.equal(await readFile(join(project, 'mixed.ts'), 'utf8'), 'mixed by agent and user\n')
-      // 用户的分支与暂存区原样。
-      assert.equal((await git(repo, ['rev-parse', 'HEAD'])).trim(), headBefore)
-      assert.equal((await git(repo, ['diff', '--cached', '--name-only'])).trim(), '')
-    })
-  })
-
-  void test('records written before attribution keep rewinding the whole checkpoint', async () => {
+  void test('records written before attribution still list the whole diff, unattributed', async () => {
     await withAttributedRepository(async (fixture) => {
       const { project, checkpoints, records, attributed } = fixture
       // 旧版本写下的记录：没有归属，整个 diff 都在里面。
@@ -577,26 +511,10 @@ void describe('Workbench chat run changes attributed to the agent', () => {
         record?.changes.map((change) => [change.path, change.attribution]).sort(),
         [['tracked.ts', undefined], ['user.ts', undefined]]
       )
-
-      const result = await attributed.rewind({
-        workspaceRoot: project,
-        sessionId: 's',
-        commitId,
-        recordIds: ['old-run'],
-      })
-      assert.deepEqual(result, {
-        restored: true,
-        error: null,
-        scope: 'checkpoint',
-        restoredPaths: [],
-        keptPaths: [],
-      })
-      assert.equal(await readFile(join(project, 'tracked.ts'), 'utf8'), 'export const a = 1\nexport const b = 1\n')
-      assert.equal(existsSync(join(project, 'user.ts')), false)
     })
   })
 
-  void test('round changes and rewind stay attributed after the app restarts', async () => {
+  void test('round changes stay attributed and readable after the app restarts', async () => {
     await withAttributedRepository(async (fixture) => {
       const { project, records, indexes } = fixture
       await writeProjectFile(project, 'mixed.ts', 'base\n')
@@ -618,20 +536,16 @@ void describe('Workbench chat run changes attributed to the agent', () => {
         record?.changes.map((change) => [change.path, change.attribution]).sort(),
         [['mixed.ts', 'mixed'], ['tracked.ts', 'agent']]
       )
-
-      const result = await restarted.rewind({
-        workspaceRoot: project,
-        sessionId: 's',
-        commitId: round.commitId,
-        recordIds: ['run-1'],
+      // 改动前的全文照样按记录里的检查点读出；AI 之外的改动（user.ts）不在记录里，也就读不到。
+      assert.deepEqual(await restarted.readBaseFile({ ...round.request, path: 'tracked.ts' }), {
+        content: 'export const a = 1\nexport const b = 1\n',
       })
-      assert.deepEqual(
-        [result.scope, result.restoredPaths, result.keptPaths],
-        ['agent-changes', ['tracked.ts'], ['mixed.ts']]
-      )
-      assert.equal(await readFile(join(project, 'tracked.ts'), 'utf8'), 'export const a = 1\nexport const b = 1\n')
-      assert.equal(await readFile(join(project, 'mixed.ts'), 'utf8'), 'agent and mine\n')
-      assert.equal(await readFile(join(project, 'user.ts'), 'utf8'), 'mine\n')
+      assert.deepEqual(await restarted.readBaseFile({ ...round.request, path: 'mixed.ts' }), {
+        content: 'base\n',
+      })
+      assert.deepEqual(await restarted.readBaseFile({ ...round.request, path: 'user.ts' }), {
+        content: null,
+      })
     })
   })
 

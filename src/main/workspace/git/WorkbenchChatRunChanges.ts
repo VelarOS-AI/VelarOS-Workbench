@@ -15,20 +15,11 @@ import {
   type WorkbenchChatRunChangesDeleteRequest,
   type WorkbenchChatRunChangesReadRequest,
   type WorkbenchChatRunChangesRecord,
-  type WorkbenchChatRunChangesRewindRequest,
-  type WorkbenchChatRunChangesRewindResult,
   type WorkbenchChatRunChangesSummary,
-  WorkbenchChatRunChangesSummaryMaxPaths,
   type WorkbenchChatRunFileChange,
 } from '../../../shared/workbenchGit'
 
-import {
-  isSameTreeEntry,
-  type WorkbenchChatCheckpointService,
-  type WorkbenchChatPathRestore,
-  type WorkbenchChatRunTreeChange,
-  type WorkbenchChatTreeEntry,
-} from './WorkbenchChatCheckpoints'
+import type { WorkbenchChatCheckpointService } from './WorkbenchChatCheckpoints'
 import type {
   WorkbenchChatRunAttribution,
   WorkbenchChatRunAttributionResult,
@@ -39,24 +30,15 @@ const RecordFileVersion = 1
 /** 会话 id 与记录 id 直接当路径段用，只收保守字符。 */
 const RecordSegmentPattern = /^[A-Za-z0-9][A-Za-z0-9._-]{0,159}$/u
 const ObjectIdPattern = /^[0-9a-f]{40,64}$/u
-const FileModePattern = /^[0-7]{6}$/u
-/** 子模块（gitlink）：按路径撤回写不回它的内容，回溯不碰。 */
-const GitlinkMode = '160000'
 /** 查看器读改动前全文的上限；更大的文件只看补丁。 */
 const BaseFileMaxBytes = 2 * 1024 * 1024
-
-interface StoredRunFileChange extends WorkbenchChatRunFileChange {
-  /** 这个文件在这一轮开跑前 / 采集那一刻的样子（不存在为 null）；回溯按路径撤回靠它。旧记录没有。 */
-  before?: WorkbenchChatTreeEntry | null
-  after?: WorkbenchChatTreeEntry | null
-}
 
 interface StoredRunChangesRecord {
   version: typeof RecordFileVersion
   recordId: string
   capturedAt: number
   baseCommitId?: string
-  changes: StoredRunFileChange[]
+  changes: WorkbenchChatRunFileChange[]
   /**
    * 这一轮的改动归属：有它，`changes` 就只含 Agent 改过的文件（混改的标着 `mixed`）；`watcher` 为
    * `unavailable` 时这一轮只认得出写文件工具报的路径。早于改动归属的旧记录没有它——整个 diff 都算 Agent 的。
@@ -67,15 +49,15 @@ interface StoredRunChangesRecord {
 /**
  * 每轮「本轮改动」的记录区：`<数据根>/chat-run-changes/<项目根摘要>/<会话 id>/<记录 id>.json`。
  *
- * 补丁全文只落在这里，renderer 的会话状态（localStorage）里只有摘要。记录跟着运行标记走：回溯掉的
- * 消息、被移除的会话，由 renderer 按 id 删掉对应记录。
+ * 补丁全文只落在这里，renderer 的会话状态（localStorage）里只有摘要。记录跟着运行标记走：被替换掉的
+ * 记录、被移除的会话，由 renderer 按 id 删掉对应记录。
  *
  * 记录里只有这一轮 Agent 改过的文件：检查点 diff 按这一轮的改动归属（{@link WorkbenchChatRunAttribution}）
  * 筛过，运行期间用户自己、别的程序、别的会话改的文件不进来。没有接归属（探针、测试）时照旧记整个 diff。
  *
  * 一轮运行中会被反复采集（实时刷新），收尾时再采一次最终的：记录 id 是这一轮的，每次采集整份覆盖
- * 同一个文件（原子写入），改动清零时删掉文件——文件里永远是最近一次采集看到的改动。同一个会话的采集、
- * 删除与回溯排队执行，写盘顺序就是请求到达的顺序。
+ * 同一个文件（原子写入），改动清零时删掉文件——文件里永远是最近一次采集看到的改动。同一个会话的采集与
+ * 删除排队执行，写盘顺序就是请求到达的顺序。
  */
 export class WorkbenchChatRunChangeStore {
   private readonly sessionQueues = new Map<string, Promise<unknown>>()
@@ -168,47 +150,7 @@ export class WorkbenchChatRunChangeStore {
     }
   }
 
-  /**
-   * 回溯时撤回被移除各轮（最早的在前）里 Agent 的文件改动。
-   *
-   * 一个文件只在这几轮里都只被 Agent 改过、此后也没被别人动过时才撤回：逐轮核对它这一轮开跑前的样子正是
-   * 上一次 Agent 留下的样子，再由按路径撤回核对它此刻仍是 Agent 最后留下的样子，然后写回 Agent 第一次动它
-   * 之前的样子。混改的、轮次之间或事后被 AI 之外改过的文件保留当前内容，交回给回溯说明；Agent 没碰过的
-   * 文件一概不碰。与采集同一条会话队列：刚收尾那一轮的最终采集写完之后才读记录。
-   */
-  public async rewind(
-    request: WorkbenchChatRunChangesRewindRequest
-  ): Promise<WorkbenchChatRunChangesRewindResult> {
-    if (!ObjectIdPattern.test(request.commitId))
-      throw new AppError('VALIDATION', '无效的检查点提交。')
-    const requests = request.recordIds.map((recordId) => ({ ...request, recordId }))
-    for (const recordRequest of requests) this.recordFile(recordRequest)
-    return this.serialize(this.sessionDir(request), async () => {
-      const records = await Promise.all(requests.map((recordRequest) => this.readStored(recordRequest)))
-      if (records.some((record) => record && !record.attribution)) {
-        // 旧记录（早于改动归属）分不出这几轮里谁改了什么：照旧把整个项目还原到回溯那一轮开跑前的检查点。
-        const restored = await this.checkpoints.restore({
-          workspaceRoot: request.workspaceRoot,
-          commitId: request.commitId,
-        })
-        return { ...restored, scope: 'checkpoint', restoredPaths: [], keptPaths: [] }
-      }
-      const plan = planAgentRewind(records.filter((record) => record !== null))
-      const result = await this.checkpoints.restorePaths({
-        workspaceRoot: request.workspaceRoot,
-        paths: plan.restores,
-      })
-      return {
-        restored: result.restored,
-        error: result.error,
-        scope: 'agent-changes',
-        restoredPaths: result.restoredPaths,
-        keptPaths: result.restored ? [...new Set([...plan.kept, ...result.changedSince])].sort() : [],
-      }
-    })
-  }
-
-  /** 与采集同一条会话队列：刚收尾的采集还没写完时回溯掉这一轮，删除排在写入之后。 */
+  /** 与采集同一条会话队列：刚收尾的采集还没写完时删掉这一轮，删除排在写入之后。 */
   public async delete(request: WorkbenchChatRunChangesDeleteRequest): Promise<void> {
     const sessionDir = this.sessionDir(request)
     const files = request.recordIds?.map((recordId) => this.recordFile({ ...request, recordId }))
@@ -227,7 +169,7 @@ export class WorkbenchChatRunChangeStore {
   ): Promise<WorkbenchChatRunChangesSummary> {
     // 这一轮的归属结论：没接归属（探针、测试）时不填，整个 diff 照旧；null 是没有账本，认不出谁改的。
     const selection: { attribution?: WorkbenchChatRunAttributionResult | null } = {}
-    let changes: WorkbenchChatRunTreeChange[]
+    let changes: WorkbenchChatRunFileChange[]
     try {
       changes = await this.checkpoints.diffWorkingTree({
         ...request,
@@ -310,7 +252,7 @@ export class WorkbenchChatRunChangeStore {
     return join(this.recordsRootDir(), rootDigest, readSegment(request.sessionId))
   }
 
-  /** 同一个会话目录上的写入、删除与回溯按到达顺序执行。 */
+  /** 同一个会话目录上的写入与删除按到达顺序执行。 */
   private serialize<T>(sessionDir: string, task: () => Promise<T>): Promise<T> {
     const previous = this.sessionQueues.get(sessionDir) ?? Promise.resolve()
     const next = previous.catch(() => undefined).then(task)
@@ -323,53 +265,11 @@ export class WorkbenchChatRunChangeStore {
   }
 }
 
-/**
- * 被移除各轮（最早的在前）里 Agent 改过的文件，逐个定下撤回成什么样、此刻应当是什么样。混改的、两轮之间
- * 被别人改过的（后一轮开跑前的样子不是前一轮 Agent 留下的样子）直接保留；子模块不碰。
- */
-function planAgentRewind(records: readonly StoredRunChangesRecord[]): {
-  restores: WorkbenchChatPathRestore[]
-  kept: string[]
-} {
-  const chains = new Map<string, StoredRunFileChange[]>()
-  for (const record of records) {
-    for (const change of record.changes) {
-      const chain = chains.get(change.path)
-      if (chain) chain.push(change)
-      else chains.set(change.path, [change])
-    }
-  }
-
-  const restores: WorkbenchChatPathRestore[] = []
-  const kept: string[] = []
-  for (const [path, chain] of chains) {
-    if (chain.some((change) => change.before?.mode === GitlinkMode || change.after?.mode === GitlinkMode))
-      continue
-    const agentOnly = chain.every(
-      (change, index) =>
-        change.attribution === 'agent'
-        && change.before !== undefined
-        && change.after !== undefined
-        && (index === 0 || isSameTreeEntry(chain[index - 1]!.after ?? null, change.before))
-    )
-    if (!agentOnly) {
-      kept.push(path)
-      continue
-    }
-    restores.push({
-      path,
-      expected: chain.at(-1)!.after ?? null,
-      target: chain[0]!.before ?? null,
-    })
-  }
-  return { restores, kept }
-}
-
 /** 只留 Agent 改过的文件，每个带上归属（两边都改过的是 `mixed`）。 */
 function selectAttributedChanges(
-  changes: readonly WorkbenchChatRunTreeChange[],
+  changes: readonly WorkbenchChatRunFileChange[],
   attribution: WorkbenchChatRunAttributionResult
-): WorkbenchChatRunTreeChange[] {
+): WorkbenchChatRunFileChange[] {
   return changes.flatMap((change) => {
     const origin = attribution.origins.get(change.path)
     return origin ? [{ ...change, attribution: origin }] : []
@@ -390,13 +290,10 @@ function summarize(
     additions: changes.reduce((total, change) => total + change.additions, 0),
     deletions: changes.reduce((total, change) => total + change.deletions, 0),
     error: null,
-    paths: optionalWhenLazy(changes.length <= WorkbenchChatRunChangesSummaryMaxPaths, () =>
-      changes.map((change) => change.path)
-    ),
   }
 }
 
-function toPublicChange(change: StoredRunFileChange): WorkbenchChatRunFileChange {
+function toPublicChange(change: WorkbenchChatRunFileChange): WorkbenchChatRunFileChange {
   return {
     path: change.path,
     status: change.status,
@@ -436,7 +333,8 @@ function parseStoredRecord(text: string, recordId: string): StoredRunChangesReco
     version,
     recordId,
     capturedAt,
-    changes: changes.filter(isStoredFileChange),
+    // 旧记录里每个文件还带着回溯用的前后快照条目：只取公开字段。
+    changes: changes.filter(isStoredFileChange).map(toPublicChange),
   }
   // 两个可选字段都要先认形状再收：在 if 里收窄，不必把外来值强转成字段类型。
   if (typeof baseCommitId === 'string' && ObjectIdPattern.test(baseCommitId)) record.baseCommitId = baseCommitId
@@ -444,7 +342,7 @@ function parseStoredRecord(text: string, recordId: string): StoredRunChangesReco
   return record
 }
 
-function isStoredFileChange(value: unknown): value is StoredRunFileChange {
+function isStoredFileChange(value: unknown): value is WorkbenchChatRunFileChange {
   return (
     isPlainRecord(value) &&
     typeof value.path === 'string' &&
@@ -454,21 +352,7 @@ function isStoredFileChange(value: unknown): value is StoredRunFileChange {
     typeof value.binary === 'boolean' &&
     typeof value.patch === 'string' &&
     typeof value.patchOmitted === 'boolean' &&
-    (value.attribution === undefined || value.attribution === 'agent' || value.attribution === 'mixed') &&
-    isStoredTreeEntry(value.before) &&
-    isStoredTreeEntry(value.after)
-  )
-}
-
-function isStoredTreeEntry(value: unknown): boolean {
-  return (
-    value === undefined ||
-    value === null ||
-    (isPlainRecord(value) &&
-      typeof value.mode === 'string' &&
-      FileModePattern.test(value.mode) &&
-      typeof value.oid === 'string' &&
-      ObjectIdPattern.test(value.oid))
+    (value.attribution === undefined || value.attribution === 'agent' || value.attribution === 'mixed')
   )
 }
 
