@@ -12,7 +12,6 @@ import {
   type WorkbenchChatRunChangesTarget,
 } from '@renderer/composition'
 import { useWorkbenchAiChanges } from '@renderer/hooks/useWorkbenchAiChanges'
-import { useWorkbenchChatChangePreview } from '@renderer/hooks/useWorkbenchChatChangePreview'
 import { useWorkbenchKeyboardShortcuts } from '@renderer/hooks/useWorkbenchKeyboardShortcuts'
 import { useWorkbenchKeymapController } from '@renderer/hooks/useWorkbenchKeymapController'
 import { useWorkbenchLayoutController } from '@renderer/hooks/useWorkbenchLayoutController'
@@ -22,33 +21,14 @@ import { useWorkbenchProjectRunSettings } from '@renderer/hooks/useWorkbenchProj
 import { useWorkbenchStandaloneProjectSync } from '@renderer/hooks/useWorkbenchStandaloneProjectSync'
 import { useWorkbenchSurfaceState } from '@renderer/hooks/useWorkbenchSurfaceState'
 import { workbenchHost } from '@renderer/host'
-import {
-  resolveReleasedAiHighlightTabs,
-  useWorkbenchAiHighlightStore,
-  type WorkbenchAiHighlightTabSet,
-} from '@renderer/models/aiHighlights/workbenchAiHighlightStore'
 import { resolveWorkbenchChatWorkspacePath } from '@renderer/models/chat/workbenchChatWorkspacePath'
-import { buildWorkbenchAgentRunSnapshot } from '@renderer/models/commands/workbenchAgentRunSnapshot'
 import { getWorkbenchCommandStatusLabel } from '@renderer/models/commands/workbenchCommandStatusModel'
 import { inferPackageManagerCommand } from '@renderer/models/commands/workbenchCommandSuggestions'
 import { inferWorkbenchPackageManagerForPackageJsonPath } from '@renderer/models/commands/workbenchPackageScriptCommand'
-import { buildWorkbenchAgentEditorState } from '@renderer/models/editor/workbenchAgentEditorState'
-import { buildWorkbenchLanguageServiceRequestBase } from '@renderer/models/editor/workbenchCodeMirrorLanguageService'
-import { getWorkbenchLanguageServiceDiagnostics } from '@renderer/models/editor/workbenchLanguageServiceIpc'
 import { buildWorkbenchPackageScriptRunActions } from '@renderer/models/editor/workbenchPackageScriptRunGutter'
-import {
-  useWorkbenchExplanations,
-  useWorkbenchExplanationStore,
-} from '@renderer/models/explanations/workbenchExplanationStore'
-import type { WorkbenchGitChangeItem } from '@renderer/models/git/workbenchGitModel'
 import { resolveWorkbenchGitSurfacesActive } from '@renderer/models/git/workbenchGitSurfaceActivation'
 import { resolveWorkbenchNavigationSurface } from '@renderer/models/layout/workbenchSurfaceModel'
 import { saveLightEditorTab } from '@renderer/models/lightEditorModel'
-import {
-  clearWorkbenchProjectAiIndexDecision,
-  getWorkbenchProjectAiIndexDecision,
-  setWorkbenchProjectAiIndexDecision,
-} from '@renderer/models/project/workbenchProjectAiIndexDecision'
 import {
   createTransientWorkbenchProject,
   ensureWorkbenchProjectRegistered,
@@ -60,41 +40,24 @@ import {
   getZoomedWorkbenchEditorZoomLevel,
   type WorkbenchEditorZoomAction,
 } from '@renderer/models/settings/workbenchPreferences'
-import { fileLanguage } from '@renderer/models/shared/workbenchUtils'
 import type { WorkbenchLightEditorTab } from '@renderer/types/workbenchTypes'
 
-// 独立宿主改判：受控浏览器面走应用内空实现（无内嵌浏览器宿主），契约形状与
-// @velaros-ai/browser/composition 同源；desktop 的 onboarding 派发已剥除（独立应用无引导层）。
-import { useControlledBrowserSurface } from '@velaros-ai/browser/composition'
-import { isEmpty,isObject, isString, isTrue, Log, optionalWhenLazy, toNullable } from '@velaros-ai/core'
+import { isEmpty,isObject, isString, isTrue, Log, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
+import { currentPlatform as systemPlatformCompatibility } from '@velaros-ai/core/platform'
 import { Result } from '@velaros-ai/core/result'
-import { currentSystemPlatform as systemPlatformCompatibility } from '@velaros-ai/system/platform-compatibility'
 
 import type {
   BrowserElementSelection,
   SystemFileChangePreviewResult,
   WorkbenchReadFileResult,
 } from '@shared/contracts'
-import type {
-  WorkbenchAgentFileProblems,
-  WorkbenchAgentOpenFilesResult,
-  WorkbenchAgentUiCommand,
-  WorkbenchAgentUiOpenFile,
-} from '@shared/workbenchAgentUi'
 
-import {
-  findWorkbenchBrowserMod,
-  useStandaloneWorkbenchModCatalog,
-} from '../runtime/standaloneWorkbenchMods'
 import { useStableWorkbenchMessageTranslate } from '../runtime/useStableWorkbenchMessaging'
-import { registerWorkbenchAgentUiHandler } from '../runtime/workbenchAgentUiHost'
 import { SystemDefaultEditorLightId } from '../support/defaultEditor'
-import { useLatest, useMemoizedFn, useTimerScope } from '../support/genericHooks'
+import { useLatest, useMemoizedFn } from '../support/genericHooks'
 import { useWorkspaceFilesChangedRefresh } from '../support/useWorkspaceFilesChangedRefresh'
 
-import { useCodeGraphResourceAvailability } from './useCodeGraphResourceAvailability'
-import { useWorkbenchAgentWorkspaceSignalsReporting } from './useWorkbenchAgentWorkspaceSignalsReporting'
 import { useWorkbenchContentSearchController } from './useWorkbenchContentSearchController'
 import { useWorkbenchController } from './useWorkbenchController'
 import { useWorkbenchEditorNavigationState } from './useWorkbenchEditorNavigationState'
@@ -126,12 +89,8 @@ type WorkbenchNavigationRequest =
       /** 给出时定位到这一行；不给只切到文件。 */
       line?: number
       column?: number
-      /** false：只移动视图不抢焦点（Agent 发起的定位）。 */
-      focus?: boolean
     }
   | { target: 'file-preview'; tab: WorkbenchLightEditorTab }
-  | { target: 'reveal'; path: string }
-  | { target: 'git-diff'; item: WorkbenchGitChangeItem }
   | { target: 'ai-changes'; round: WorkbenchChatRunChangesTarget }
 
 function normalizeWorkspaceRoot(root: LooseOptional<string>): string {
@@ -258,10 +217,6 @@ export function useStandaloneWorkbenchPageModel(
   } = useWorkbenchProductRuntime()
   const sessionCursorByPathRef = useRef<Record<string, PersistedWorkbenchEditorCursor>>({})
   const shouldUseProjectSession = surfaceMode === 'standalone'
-  const codeGraphResourceAvailable = useCodeGraphResourceAvailability()
-  const workbenchMods = useStandaloneWorkbenchModCatalog()
-  const browserModEnabled = findWorkbenchBrowserMod(workbenchMods.value)?.enabled === true
-  const aiHighlightStore = useWorkbenchAiHighlightStore()
   const workbench = useWorkbenchController({
     bootstrapProjects,
     lockedProjectId,
@@ -271,19 +226,9 @@ export function useStandaloneWorkbenchPageModel(
     // Project 基础索引是内置能力；CodeGraph 只决定增强图谱入口是否点亮。
     projectIndexEnabled: true,
     sessionCursorByPathRef,
-    // AI 选区锁在文件上：文件改名、移动不算关掉，跟着换路径。
-    onOpenEntryPathMoved: aiHighlightStore.renamePath,
   })
   const chat = useWorkbenchChatProjectRuntime(toNullable(workbench.activeProject?.rootPath))
-  const { currentSession, conversationVersion, sessions } = chat
-  const controlledAgentBrowser = useControlledBrowserSurface({
-    sessionId: currentSession.id,
-    workspaceRefreshKey: currentSession.workspaceVersion + conversationVersion,
-    activationToken: chat.browserActivationToken,
-  })
-  const agentBrowser = browserModEnabled
-    ? controlledAgentBrowser
-    : { ...controlledAgentBrowser, active: false, activationToken: null }
+  const { currentSession, sessions } = chat
   const surface = useWorkbenchSurfaceState()
   const layout = useWorkbenchLayoutController({
     commandPanelOpen: !surface.isCommandPanelCollapsed,
@@ -294,9 +239,6 @@ export function useStandaloneWorkbenchPageModel(
   const workbenchPreferences = useWorkbenchPreferences()
   const workbenchKeymap = useWorkbenchKeymapController()
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [aiIndexPromptOpen, setAiIndexPromptOpen] = useState(false)
-  const [aiIndexDetailsOpen, setAiIndexDetailsOpen] = useState(false)
-  const [codeGraphOpen, setCodeGraphOpen] = useState(false)
   const [velarLogicGraphOpen, setVelarLogicGraphOpen] = useState(false)
   const [velarLogicGraphActive, setVelarLogicGraphActive] = useState(false)
   const [pendingBrowserElementSelections, setPendingBrowserElementSelections] = useState<
@@ -306,7 +248,6 @@ export function useStandaloneWorkbenchPageModel(
     WorkbenchChatFileReferenceDelivery[]
   >([])
   const chatFileReferenceDeliverySeqRef = useRef(0)
-  const [aiIndexDecisionVersion, setAiIndexDecisionVersion] = useState(0)
 
   const exitCurrentProject = useMemoizedFn(async (): Promise<boolean> => {
     if (!workbench.closeProject()) return false
@@ -326,18 +267,6 @@ export function useStandaloneWorkbenchPageModel(
   const velarLogicGraphAvailable = workbench.projectContextIndex.files.some(
     (file) => file.path === 'velar.json' || file.path.endsWith('.vel')
   )
-  const codeGraphAvailable = codeGraphResourceAvailable && !velarLogicGraphAvailable
-
-  useEffect(() => {
-    if (codeGraphAvailable) return
-    setAiIndexPromptOpen(false)
-    setAiIndexDetailsOpen(false)
-  }, [codeGraphAvailable])
-
-  useEffect(() => {
-    if (codeGraphAvailable) return
-    setCodeGraphOpen(false)
-  }, [codeGraphAvailable])
 
   useEffect(() => {
     if (velarLogicGraphAvailable) return
@@ -430,22 +359,10 @@ export function useStandaloneWorkbenchPageModel(
     workbench.runSessions,
   ])
   const editorNavigation = useWorkbenchEditorNavigationState({
-    browserEnabled: browserModEnabled,
     gitChangeItems: gitState.changeItems,
     selectedFilePath: workbench.selectedFilePath,
     onSelectFile: workbench.selectFile,
   })
-  const agentBrowserBindingSessionId = agentBrowser.active ? currentSession.id : null
-  const openAgentBrowserTab = editorNavigation.debug.agentBrowser.open
-  const closeAgentBrowserTab = editorNavigation.debug.agentBrowser.close
-  useEffect(() => {
-    if (agentBrowserBindingSessionId) {
-      openAgentBrowserTab(agentBrowserBindingSessionId)
-      return
-    }
-
-    closeAgentBrowserTab()
-  }, [agentBrowserBindingSessionId, closeAgentBrowserTab, openAgentBrowserTab])
   useWorkbenchProjectSessionPersistence({
     enabled: shouldUseProjectSession,
     projectId: toNullable(workbench.activeProject?.id),
@@ -487,18 +404,6 @@ export function useStandaloneWorkbenchPageModel(
     ...layout.style,
     ...workbenchPreferences.style,
   }
-  const aiIndexDecision = useMemo(
-    () =>
-      workbench.activeProject
-        ? getWorkbenchProjectAiIndexDecision(workbench.activeProject.id)
-        : null,
-    [aiIndexDecisionVersion, workbench.activeProject]
-  )
-  const projectAiIndexSkipped = aiIndexDecision === 'skipped'
-  const canOpenCodeGraph =
-    codeGraphAvailable &&
-    workbench.projectAiIndexStatus?.status === 'ready' &&
-    !!workbench.projectAiIndexStatus?.codeIndex?.initialized
 
   /** `titleBarStyle: hiddenInset`: reserve horizontal inset for macOS traffic lights on the standalone window */
   const macTitleInset =
@@ -566,36 +471,6 @@ export function useStandaloneWorkbenchPageModel(
   const workspaceFileRefreshInFlightRef = useRef(false)
   const workspaceFileRefreshQueuedRef = useRef(false)
 
-  useEffect(() => {
-    if (
-      !codeGraphAvailable ||
-      !workbench.activeProject ||
-      !workbench.projectAiIndexStatus ||
-      workbench.projectAiIndexStatus.status !== 'not-indexed' ||
-      projectAiIndexSkipped ||
-      workbench.isStartingProjectAiIndex
-    )
-      return
-
-    setAiIndexPromptOpen(true)
-  }, [
-    projectAiIndexSkipped,
-    codeGraphAvailable,
-    workbench.activeProject,
-    workbench.isStartingProjectAiIndex,
-    workbench.projectAiIndexStatus,
-  ])
-
-  const chatChangePreview = useWorkbenchChatChangePreview({
-    activeDiffItem: editorNavigation.diffItem,
-    autoOpen: false,
-    changeItems: gitState.changeItems,
-    enabled: !!workbench.activeProject && !!activeWorkbenchChatSessionId,
-    onOpenDiff: editorNavigation.openDiff,
-    onRefreshWorkspace: refreshWorkspaceChanges,
-    onRefreshGit: gitState.refresh,
-    session: currentSession,
-  })
   const gitChangeActions = useWorkbenchGitChangeActions({
     workspaceRoot: workbench.activeProject?.rootPath ?? '',
     locale,
@@ -609,16 +484,6 @@ export function useStandaloneWorkbenchPageModel(
       }
     },
     translate,
-  })
-
-  useWorkbenchAgentWorkspaceSignalsReporting({
-    projectRoot: workbench.activeProject?.rootPath,
-    chatSessionId: activeWorkbenchChatSessionId,
-    focusedRelativePath:
-      editorNavigation.diffItem?.path ??
-      editorNavigation.lightTab?.path ??
-      workbench.selectedFilePath,
-    cursor: editorNavigation.cursorPosition,
   })
 
   // 文件树按磁盘事件刷新，一次只跑一轮；正在刷新时又来了事件就记下来，读完紧接着再刷一轮——
@@ -698,22 +563,13 @@ export function useStandaloneWorkbenchPageModel(
     switch (request.target) {
       case 'file':
         if (request.line === undefined) await editorNavigation.selectFile(request.path)
-        else
-          await editorNavigation.goToLocation(request.path, request.line, request.column, {
-            focus: request.focus,
-          })
+        else await editorNavigation.goToLocation(request.path, request.line, request.column)
         // 文件树平时跟着编辑器的当前文件自己定位（见 useWorkbenchController），但文件本来就是当前文件时
         // 当前文件不变、那边不会动；导航是「把它带到眼前」，左侧也要定位到它。
         await workbench.revealEntryPath(request.path, { quiet: true })
         return
       case 'file-preview':
         editorNavigation.openLightTab(request.tab)
-        return
-      case 'reveal':
-        await workbench.revealEntryPath(request.path)
-        return
-      case 'git-diff':
-        editorNavigation.openDiff(request.item, { focusFirstChange: true })
         return
       case 'ai-changes':
         await aiChanges.openRound(request.round)
@@ -743,279 +599,6 @@ export function useStandaloneWorkbenchPageModel(
   function handleWorkbenchChatRunChangesReview(target: WorkbenchChatRunChangesTarget): void {
     void navigate({ target: 'ai-changes', round: target })
   }
-
-  // AI 选区锁在文件上：用户关掉某个文件的标签（关一个、关其他、关全部、换项目都算），
-  // 它上面的选区才释放（规则见 `resolveReleasedAiHighlightTabs`）。
-  const openTabPathsKey = workbench.openTabs.map((tab) => tab.path).join('\0')
-  const aiHighlightTabsRef = useRef<WorkbenchAiHighlightTabSet>({ root: '', paths: new Set() })
-  const aiHighlightProjectRoot = workbench.activeProject?.rootPath ?? ''
-  useEffect(() => {
-    const previous = aiHighlightTabsRef.current
-    const next = {
-      root: aiHighlightProjectRoot,
-      paths: new Set(openTabPathsKey ? openTabPathsKey.split('\0') : []),
-    }
-    aiHighlightTabsRef.current = next
-    const released = resolveReleasedAiHighlightTabs(previous, next)
-    if (released) aiHighlightStore.clear(released.root, released.paths)
-  }, [aiHighlightProjectRoot, aiHighlightStore, openTabPathsKey])
-
-  // AI 讲解气泡：切到某条讲解时把它所在的文件带到编辑器里（滚动由编辑器自己完成）。
-  const explanationStore = useWorkbenchExplanationStore()
-  const explanations = useWorkbenchExplanations()
-  const explanationNavigationRef = useLatest({
-    selectedFilePath: workbench.selectedFilePath,
-    overlayActive:
-      !!editorNavigation.diffItem ||
-      !!editorNavigation.lightTab ||
-      !!editorNavigation.debug.activeTabId ||
-      velarLogicGraphActive ||
-      aiChanges.active,
-  })
-  useEffect(() => {
-    const active = explanations.explanations.find(
-      (explanation) => explanation.id === explanations.activeId
-    )
-    if (!active) return
-    const { selectedFilePath, overlayActive } = explanationNavigationRef.current
-    if (active.path === selectedFilePath && !overlayActive) return
-    void navigate({ target: 'file', path: active.path })
-    // 只跟随「切到某条讲解」这一个信号；行号回写、清掉别的讲解都不该把编辑器拽走。
-  }, [explanations.focusRevision])
-
-  const gitChangeItemsRef = useLatest(gitState.changeItems)
-  const agentUiTimers = useTimerScope('WorkbenchAgentUi')
-  /** 刚改完的文件可能还没进 Git 状态：刷新一次，等下一次提交把它带出来（最多 1.5 秒）。 */
-  async function findGitChangeItem(path: string): Promise<(typeof gitState.changeItems)[number] | null> {
-    const find = () => gitChangeItemsRef.current.find((item) => item.path === path) ?? null
-    const existing = find()
-    if (existing) return existing
-    await gitState.refresh()
-    for (let waited = 0; waited < 1500; waited += 50) {
-      const refreshed = find()
-      if (refreshed) return refreshed
-      await agentUiTimers.sleep(50, { label: 'agent-ui.git-refresh' })
-    }
-    return find()
-  }
-
-  const runSessionsRef = useLatest(workbench.runSessions)
-  /** 刚启动的运行卡要等一次状态提交才出现在列表里：给它一点时间（最多 1 秒）。 */
-  async function findRunSession(
-    sessionId: string | null
-  ): Promise<(typeof workbench.runSessions)[number] | null> {
-    const find = () =>
-      sessionId
-        ? (runSessionsRef.current.find((session) => session.id === sessionId) ?? null)
-        : (runSessionsRef.current.at(-1) ?? null)
-    for (let waited = 0; waited < 1000; waited += 50) {
-      const session = find()
-      if (session || !sessionId) return session
-      await new Promise((resolve) => window.setTimeout(resolve, 50))
-    }
-    return find()
-  }
-
-  /** 语言服务诊断（`workbench:get_problems`）：打开着的文件按编辑器里的内容查，其余读磁盘。 */
-  async function readAgentProblems(
-    projectRoot: string,
-    requestedPaths: readonly string[] | null
-  ): Promise<WorkbenchAgentFileProblems[]> {
-    const MaxProblemsPerFile = 50
-    const liveTabs = workbench.openTabs.map((tab) =>
-      tab.path === workbench.selectedFilePath ? { ...tab, content: workbench.editorContent } : tab
-    )
-    const paths =
-      requestedPaths ?? liveTabs.filter((tab) => !tab.file.imagePreview).map((tab) => tab.path).slice(0, 20)
-    return Promise.all(
-      paths.map(async (path): Promise<WorkbenchAgentFileProblems> => {
-        const openTab = liveTabs.find((tab) => tab.path === path)
-        const result = await getWorkbenchLanguageServiceDiagnostics(
-          openTab
-            ? buildWorkbenchLanguageServiceRequestBase({
-                projectRoot,
-                path,
-                language: fileLanguage(path),
-                content: openTab.content,
-                openTabs: liveTabs,
-              })
-            : { projectRoot, path, language: fileLanguage(path) }
-        )
-        if (!result.ok) throw new AppError('PLATFORM', result.error.message)
-        const diagnostics = result.data.diagnostics.filter((diagnostic) => diagnostic.path === path)
-        return {
-          path,
-          problems: diagnostics.slice(0, MaxProblemsPerFile).map((diagnostic) => ({
-            severity: diagnostic.severity,
-            line: diagnostic.range.startLine,
-            column: diagnostic.range.startColumn,
-            message: diagnostic.message,
-            code: diagnostic.code,
-          })),
-          truncated: diagnostics.length > MaxProblemsPerFile,
-        }
-      })
-    )
-  }
-
-  // `workbench:*` 工具的界面请求落在这里：在用户眼前打开文件、定位、加讲解气泡、跑命令、开预览。
-  const handleAgentUiCommand = useMemoizedFn(
-    async (
-      command: WorkbenchAgentUiCommand,
-      context: { projectRoot: string; sessionId: string }
-    ): Promise<Record<string, unknown>> => {
-      switch (command.type) {
-        case 'open-files': {
-          // 按列表顺序在后台开出标签（已经开着的不动），不逐个切过去：逐个切会让编辑器闪一遍每个文件，
-          // 最后那次定位也会拿切走前的「当前文件」判断，落到别的文件上。
-          const opened: WorkbenchAgentUiOpenFile[] = []
-          const failed: string[] = []
-          for (const file of command.files) {
-            if (await workbench.preloadOpenTab(file.path)) opened.push(file)
-            else failed.push(file.path)
-          }
-          const [primary] = opened
-          if (!primary) throw new AppError('NOT_FOUND', `Workbench could not open ${failed.join(', ')}.`)
-          // 只给真正开出标签的文件标选区：选区靠「关标签」释放，没开出来的文件永远等不到那一刻。
-          aiHighlightStore.add(
-            context.projectRoot,
-            opened.flatMap((file) => file.highlights.map((range) => ({ path: file.path, ...range })))
-          )
-          // 最后停在第一个文件、定位到它的行（不抢聊天输入框的焦点）。
-          await navigate({
-            target: 'file',
-            path: primary.path,
-            line: primary.line,
-            column: primary.column,
-            focus: false,
-          })
-          return {
-            opened: opened.map((file) => file.path),
-            failed,
-          } satisfies WorkbenchAgentOpenFilesResult
-        }
-        case 'clear-highlights':
-          return { cleared: aiHighlightStore.clear(context.projectRoot, command.paths) }
-        case 'reveal-path':
-          await navigate({ target: 'reveal', path: command.path })
-          return { path: command.path }
-        case 'open-diff': {
-          const item = await findGitChangeItem(command.path)
-          if (!item) throw new AppError('NOT_FOUND', `${command.path} has no uncommitted changes.`)
-          await navigate({ target: 'git-diff', item })
-          return { path: command.path }
-        }
-        case 'explain-code': {
-          const batch = explanationStore.addBatch({
-            projectRoot: context.projectRoot,
-            sessionId: context.sessionId,
-            explanations: command.explanations,
-            replace: command.replace,
-          })
-          // 第一条讲解成了当前讲解：把它的文件带到普通文件区（滚到气泡由编辑器自己完成）。「切到某条讲解」的
-          // effect 随后也会跟一次，同一个文件的第二次打开是空操作。
-          const [first] = batch
-          if (first) await navigate({ target: 'file', path: first.path })
-          return { added: batch.length }
-        }
-        case 'clear-explanations':
-          return { cleared: explanationStore.clear(context.projectRoot, command.path) }
-        case 'read-editor-state':
-          return {
-            ...buildWorkbenchAgentEditorState({
-              view: aiChanges.active
-                ? 'ai-changes'
-                : editorNavigation.diffItem
-                  ? 'git-diff'
-                  : editorNavigation.lightTab ||
-                      editorNavigation.debug.activeTabId ||
-                      velarLogicGraphActive
-                    ? 'other'
-                    : workbench.selectedFilePath
-                      ? 'file'
-                      : 'empty',
-              selectedFilePath: workbench.selectedFilePath,
-              cursor: editorNavigation.cursorPosition,
-              editorContent: workbench.editorContent,
-              openTabs: workbench.openTabs,
-              explanationCount: explanationStore.listForProject(context.projectRoot).length,
-              aiHighlights: aiHighlightStore.listForProject(context.projectRoot),
-            }),
-          }
-        case 'start-run': {
-          const sessionId = await workbench.launchRunSession(command.command, command.label)
-          if (!sessionId) throw new AppError('PLATFORM', 'Workbench could not start the run.')
-          surface.openBottomTool('run')
-          return { sessionId }
-        }
-        case 'read-run': {
-          const session = await findRunSession(command.sessionId)
-          if (!session)
-            throw new AppError(
-              'NOT_FOUND',
-              command.sessionId
-                ? `There is no run ${command.sessionId} in the Run panel.`
-                : 'There is no run in the Run panel yet.'
-            )
-          return { ...buildWorkbenchAgentRunSnapshot(session, command.lines, command.match) }
-        }
-        case 'stop-run': {
-          const session = await findRunSession(command.sessionId)
-          if (!session)
-            throw new AppError('NOT_FOUND', `There is no run ${command.sessionId} in the Run panel.`)
-          if (session.isRunning) await workbench.stopRunSession(session.id)
-          return { sessionId: session.id }
-        }
-        case 'open-preview':
-          if (browserModEnabled) {
-            showEditorSurface()
-            editorNavigation.debug.openTab(command.url)
-            return { opened: 'workbench-browser' }
-          }
-          // 内置浏览器没开：新窗口请求由主进程的外链处理交给系统浏览器。
-          window.open(command.url, '_blank', 'noopener')
-          return { opened: 'system-browser' }
-        case 'read-problems': {
-          const files = await readAgentProblems(context.projectRoot, command.paths)
-          // 「问题」面板只列当前文件的问题：先把第一个有问题的文件定位到它的第一个问题，面板里才是模型说的那些。
-          const shown = command.show
-            ? (files.find((file) => file.problems.some((problem) => problem.severity === 'error')) ??
-              files.find((file) => file.problems.length > 0))
-            : undefined
-          const firstProblem =
-            shown?.problems.find((problem) => problem.severity === 'error') ?? shown?.problems[0]
-          if (shown && firstProblem)
-            await navigate({
-              target: 'file',
-              path: shown.path,
-              line: firstProblem.line,
-              column: firstProblem.column,
-              focus: false,
-            })
-          if (command.show) surface.openBottomTool('problems')
-          return {
-            shown: optionalWhenLazy(shown && firstProblem, () =>
-              `${shown!.path}:${firstProblem!.line}:${firstProblem!.column}`
-            ),
-            files,
-            errors: files.reduce(
-              (total, file) => total + file.problems.filter((problem) => problem.severity === 'error').length,
-              0
-            ),
-            warnings: files.reduce(
-              (total, file) => total + file.problems.filter((problem) => problem.severity === 'warning').length,
-              0
-            ),
-          }
-        }
-      }
-    }
-  )
-  const agentUiProjectRoot = workbench.activeProject?.rootPath
-  useEffect(() => {
-    if (!agentUiProjectRoot) return undefined
-    return registerWorkbenchAgentUiHandler(agentUiProjectRoot, handleAgentUiCommand)
-  }, [agentUiProjectRoot, handleAgentUiCommand])
 
   async function handleRepositoryChanged(): Promise<void> {
     workbench.closeAllOpenFiles()
@@ -1230,23 +813,6 @@ export function useStandaloneWorkbenchPageModel(
     surface.openBottomTool(tool)
   }
 
-  function skipProjectAiIndex(): void {
-    if (workbench.activeProject) {
-      setWorkbenchProjectAiIndexDecision(workbench.activeProject.id, 'skipped')
-      setAiIndexDecisionVersion((version) => version + 1)
-    }
-    setAiIndexPromptOpen(false)
-  }
-
-  function startProjectAiIndex(): void {
-    if (workbench.activeProject) {
-      clearWorkbenchProjectAiIndexDecision(workbench.activeProject.id)
-      setAiIndexDecisionVersion((version) => version + 1)
-    }
-    setAiIndexPromptOpen(false)
-    void workbench.startProjectAiIndex(true, true)
-  }
-
   async function createProjectAiRulesFile(): Promise<void> {
     const project = workbench.activeProject
     if (!project) return
@@ -1337,12 +903,9 @@ export function useStandaloneWorkbenchPageModel(
     gitState,
     topRunControl,
     editorNavigation,
-    agentBrowser,
-    browserModEnabled,
     pendingBrowserElementSelections,
     pendingChatFileReferences,
     aiChanges,
-    chatChangePreview,
     gitChangeActions,
     /** 页面 chrome / i18n / 派生展示值。 */
     chrome: {
@@ -1355,11 +918,7 @@ export function useStandaloneWorkbenchPageModel(
       contentSearchTruncated: contentSearch.contentSearchTruncated,
       effectiveGitSshKeyPath,
       shellStyle,
-      projectAiIndexSkipped,
-      codeGraphAvailable,
-      codeGraphResourceAvailable,
       velarLogicGraphAvailable,
-      canOpenCodeGraph,
       macTitleInset,
       hostPlatform,
       commandStatusLabel,
@@ -1368,12 +927,6 @@ export function useStandaloneWorkbenchPageModel(
     dialogs: {
       settingsOpen,
       setSettingsOpen,
-      aiIndexPromptOpen,
-      setAiIndexPromptOpen,
-      aiIndexDetailsOpen,
-      setAiIndexDetailsOpen,
-      codeGraphOpen,
-      setCodeGraphOpen,
       velarLogicGraphOpen,
       setVelarLogicGraphOpen,
       velarLogicGraphActive,
@@ -1398,8 +951,6 @@ export function useStandaloneWorkbenchPageModel(
       consumeWorkbenchChatFileReferences,
       saveEmbeddedLightTab,
       toggleBottomTool,
-      skipProjectAiIndex,
-      startProjectAiIndex,
       createProjectAiRulesFile,
       exitCurrentProject,
     },

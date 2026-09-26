@@ -5,7 +5,7 @@
  * 文件、Git、终端、运行与语言洞察由独立应用自持；chat/model 走 Kernel 语义路由，
  * 项目索引与事务变更走发布版 Workspace 模块，Browser 走发布版 composition 端口。
  */
-import { type ReactElement, useCallback, useEffect, useMemo, useState } from 'react'
+import { lazy, type ReactElement, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ChatCircleTextIcon,
   FolderIcon,
@@ -25,17 +25,10 @@ import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 
 import type { WorkbenchProjectHubState } from '@shared/projectHub'
 
-import { resolveWorkbenchChatProviderId } from '../../plugins/agent-engines/identity'
-import {
-  useWorkbenchAgentPluginContributions,
-} from '../../plugins/agent-engines/renderer/contribution'
-
 import { WorkbenchAiChangeDiffPanel } from './components/aiChanges/WorkbenchAiChangeDiffPanel'
 import { StatusBar } from './components/chrome/StatusBar'
 import { WorkbenchTopLeading, WorkbenchTopTrailing } from './components/chrome/TopToolbar'
 import { WorkbenchProjectControl } from './components/chrome/WorkbenchProjectControl'
-import { WorkbenchCodeGraphDialog } from './components/codeGraph/WorkbenchCodeGraphDialog'
-import { WorkbenchLogicGraphEditor } from './components/codeGraph/WorkbenchLogicGraphDialog'
 import { CodeInsightPanel } from './components/editor/CodeInsightPanel'
 import { ReadOnlyWorkbenchCode } from './components/editor/ReadOnlyWorkbenchCode'
 import { WorkbenchEmbeddedKernel } from './components/embedded/WorkbenchEmbeddedKernel'
@@ -58,6 +51,12 @@ import {
 } from './models/codeGraph/workbenchVelarProjectGraph'
 import styles from './styles/workbenchPageStyles'
 import { useWorkbenchPageContext } from './WorkbenchPageModelContext'
+
+// VelarScript 结构图只在打开结构标签时才加载，不进工作区外壳。
+const LazyWorkbenchLogicGraphEditor = lazy(async () => {
+  const module = await import('./components/codeGraph/WorkbenchLogicGraphDialog')
+  return { default: module.WorkbenchLogicGraphEditor }
+})
 
 interface StandaloneWorkbenchPagePresentationProps {
   projectHubState: WorkbenchProjectHubState
@@ -82,7 +81,6 @@ export function StandaloneWorkbenchPagePresentation({
 }: StandaloneWorkbenchPagePresentationProps): ReactElement {
   const model = useWorkbenchPageContext()
   const runtime = useWorkbenchHostRuntime()
-  const agentPluginContributions = useWorkbenchAgentPluginContributions()
   // 全屏时红绿灯随标题栏一起收起，顶栏不再给它们留左侧空位（见 data-mac-title-inset）。
   const windowFullScreen = useWorkbenchWindowFullScreen()
   const {
@@ -100,15 +98,11 @@ export function StandaloneWorkbenchPagePresentation({
     locale,
     t,
     shellStyle,
-    projectAiIndexSkipped,
-    codeGraphAvailable,
     macTitleInset,
     hostPlatform,
     commandStatusLabel,
   } = chrome
 
-  const activeRightTool = surface.activeRightTool ?? 'chat'
-  const activeChatProviderId = resolveWorkbenchChatProviderId(activeRightTool)
   const pendingFileOpenId = projectHubState.pendingFileOpen?.id
   const pendingFileOpenPath = projectHubState.pendingFileOpen?.path
   const activeProjectId = workbench.activeProject?.id
@@ -263,13 +257,6 @@ export function StandaloneWorkbenchPagePresentation({
     [t, velarStructureSnapshot]
   )
   useEffect(() => {
-    if (
-      surface.activeRightTool !== 'chat'
-      && !agentPluginContributions.some((item) => item.id === surface.activeRightTool)
-    ) surface.closeRightTool()
-  }, [agentPluginContributions, surface.activeRightTool])
-
-  useEffect(() => {
     if (chrome.velarLogicGraphAvailable) return
     dialogs.setVelarLogicGraphOpen(false)
     dialogs.setVelarLogicGraphActive(false)
@@ -397,28 +384,30 @@ export function StandaloneWorkbenchPagePresentation({
                     () => closeVelarStructureTab(structureTab.id)
                   ),
                   content: (
-                    <WorkbenchLogicGraphEditor
-                      active={
-                        dialogs.velarLogicGraphActive &&
-                        velarStructureActiveTab === 'structure' &&
-                        activeVelarStructureTabId === structureTab.id
-                      }
-                      projectRoot={projectRoot}
-                      projectRoots={velarStructureProjectRoots}
-                      scopePaths={structureTab.scopePaths}
-                      selectedFilePath={workbench.selectedFilePath}
-                      selectedContent={workbench.editorContent}
-                      openTabs={workbench.openTabs}
-                      projectFiles={velarStructureProjectFiles}
-                      projectSnapshots={velarStructureProjectSnapshots}
-                      refreshVersion={workbench.saveRevision + workbench.workspaceBindingVersion}
-                      workbenchTheme={workbenchPreferences.preferences.theme}
-                      onProjectSnapshotsChange={handleVelarStructureProjectSnapshotsChange}
-                      onOpenSource={(source) => {
-                        setVelarSourcePreview(source)
-                        setVelarStructureActiveTab('source')
-                      }}
-                    />
+                    <Suspense fallback={null}>
+                      <LazyWorkbenchLogicGraphEditor
+                        active={
+                          dialogs.velarLogicGraphActive &&
+                          velarStructureActiveTab === 'structure' &&
+                          activeVelarStructureTabId === structureTab.id
+                        }
+                        projectRoot={projectRoot}
+                        projectRoots={velarStructureProjectRoots}
+                        scopePaths={structureTab.scopePaths}
+                        selectedFilePath={workbench.selectedFilePath}
+                        selectedContent={workbench.editorContent}
+                        openTabs={workbench.openTabs}
+                        projectFiles={velarStructureProjectFiles}
+                        projectSnapshots={velarStructureProjectSnapshots}
+                        refreshVersion={workbench.saveRevision + workbench.workspaceBindingVersion}
+                        workbenchTheme={workbenchPreferences.preferences.theme}
+                        onProjectSnapshotsChange={handleVelarStructureProjectSnapshotsChange}
+                        onOpenSource={(source) => {
+                          setVelarSourcePreview(source)
+                          setVelarStructureActiveTab('source')
+                        }}
+                      />
+                    </Suspense>
                   ),
                 }
               }),
@@ -711,18 +700,10 @@ export function StandaloneWorkbenchPagePresentation({
           <aside
             className={styles.rightToolPanel}
             data-open={surface.isRightToolOpen}
-            aria-label={
-              activeRightTool === 'claude'
-                ? 'Claude'
-                : activeRightTool === 'chatgpt'
-                  ? 'ChatGPT'
-                  : 'Workbench Agent'
-            }
+            aria-label="Workbench Agent"
           >
             <div className={styles.rightToolContent}>
               <WorkbenchChatPanel
-                key={activeChatProviderId}
-                providerId={activeChatProviderId}
                 projectRoot={workbench.activeProject.rootPath}
                 currentFilePath={workbench.selectedFilePath}
                 pendingBrowserElementSelections={model.pendingBrowserElementSelections}
@@ -752,22 +733,6 @@ export function StandaloneWorkbenchPagePresentation({
                 >
                   <ChatCircleTextIcon size={18} weight="duotone" />
                 </IconButton>
-                {agentPluginContributions.map(
-                  (item) => (
-                    <IconButton
-                      key={item.id}
-                      variant="ghost"
-                      size="icon-sm"
-                      className={styles.rightToolButton}
-                      title={item.label}
-                      label={item.label}
-                      data-active={surface.activeRightTool === item.id}
-                      onClick={() => surface.toggleRightTool(item.id)}
-                    >
-                      {item.icon}
-                    </IconButton>
-                  )
-                )}
               </div>
             </div>
           </aside>
@@ -834,9 +799,7 @@ export function StandaloneWorkbenchPagePresentation({
               onCloseRunSession={workbench.closeRunSession}
               onRestartRunSession={(sessionId) => void workbench.restartRunSession(sessionId)}
               onStopRunSession={(sessionId) => void workbench.stopRunSession(sessionId)}
-              onOpenConsoleLink={
-                model.browserModEnabled ? editorNavigation.debug.openTab : undefined
-              }
+              onOpenConsoleLink={editorNavigation.debug.openTab}
             />
           </section>
         )}
@@ -862,11 +825,6 @@ export function StandaloneWorkbenchPagePresentation({
           isSavingFile={workbench.isSavingFile}
           openFileCount={workbench.openTabs.length}
           commandStatusLabel={commandStatusLabel}
-          isIndexingProject={workbench.isIndexingProject}
-          projectAiIndexStatus={workbench.projectAiIndexStatus}
-          projectAiIndexSkipped={projectAiIndexSkipped}
-          codeGraphAvailable={codeGraphAvailable}
-          onOpenProjectAiIndexDetails={() => model.dialogs.setAiIndexDetailsOpen(true)}
         />
         <WorkbenchSettingsDialog
           open={dialogs.settingsOpen}
@@ -886,14 +844,6 @@ export function StandaloneWorkbenchPagePresentation({
           onResetShortcut={workbenchKeymap.resetShortcut}
           onResetAllShortcuts={workbenchKeymap.resetAllShortcuts}
           onLocaleChange={(nextLocale) => void translate.setLocale(nextLocale)}
-        />
-        <WorkbenchCodeGraphDialog
-          open={dialogs.codeGraphOpen}
-          onOpenChange={dialogs.setCodeGraphOpen}
-          projectRoot={workbench.activeProject.rootPath}
-          onOpenLocation={(path, line, column) =>
-            void model.actions.navigate({ target: 'file', path, line: line ?? 1, column: column ?? 1 })
-          }
         />
       </div>
       <QuickOpen

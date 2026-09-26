@@ -1,10 +1,9 @@
 import { homedir } from 'node:os'
 import { isAbsolute, join } from 'node:path'
 
-import type { ToolConfirmationDecisionOptions } from '@velaros-ai/agent/protocol'
-import { createManualApprovalOptions } from '@velaros-ai/agent/tool-contract'
 import { isEmpty } from '@velaros-ai/core'
-import { analyzeCommandExecution, type CommandExecutionPlan } from '@velaros-ai/project/execution'
+import { shellCommandPolicy } from '@velaros-ai/velaros/shell'
+import type { ShellCommandPlan } from '@velaros-ai/velaros/shell/contracts'
 
 import { containsTokenSequence, tokenizeShellCommand } from './CommandParsingHelper'
 import { isPathInsideRoot } from './PathContainmentHelper'
@@ -14,9 +13,9 @@ import { isPathInsideRoot } from './PathContainmentHelper'
  *
  * ## 为什么不是自己一套
  *
- * 通用判定——只读性、长驻进程、端口、跨平台破坏性命令、提权——单一权威源是
- * `@velaros-ai/project/execution` 的 {@link analyzeCommandExecution}。本文件**不复制也不改写**
- * 它的语义，只在其结论之上叠加 Workbench 作为 IDE 宿主特有的一类判定。
+ * 通用判定——只读性、长驻进程、端口、成片毁掉找不回来的破坏性命令——单一权威源是
+ * `@velaros-ai/velaros/shell` 的 `shellCommandPolicy.analyze`（Agent 的 `velaros:shell` 用的也是这一份）。
+ * 本文件**不复制也不改写**它的语义，只在其结论之上叠加 Workbench 作为 IDE 宿主特有的一类判定。
  *
  * ## 补充判定的边界（只有这三类）
  *
@@ -43,10 +42,10 @@ import { isPathInsideRoot } from './PathContainmentHelper'
  *
  * ## 命中之后：先问，不是拒绝
  *
- * `isDangerous` 的意思是「执行前必须经用户确认」。发起执行的工具经当轮审批端口问用户，批准后带
- * `allowDangerous` 照常执行，拒绝则返回 skipped：`project:run` 里平台判危险的由平台自己问、带着
- * `allowDangerous` 进宿主，平台放行而本层判危险的由宿主补问（`ProjectCapabilityProvider`），同一条
- * 命令只问一次；`workbench:start_run` 同理；命令面板里用户自己输入的命令，用户就是确认者。
+ * `isDangerous` 的意思是「执行前必须经用户确认」。Agent 的命令走 Platform 的 `velaros:shell`：平台判危险的
+ * 由平台自己经审批端口问；平台放行而本层判危险的，由会话宿主在派发前补问（`WorkbenchConversationSession`
+ * 的 authorize，用 {@link resolveWorkspaceIntegrityConfirmation}），同一条命令只问一次。命令面板里用户自己
+ * 输入的命令，用户就是确认者。
  */
 
 /** 分段边界：两侧是两条独立执行的命令。find 的 `-exec` 族之后是它要跑的命令。 */
@@ -102,11 +101,18 @@ const GitGlobalOptionsWithValue = new Set([
   '-C', '-c', '--config-env', '--git-dir', '--namespace', '--work-tree',
 ])
 
-/** 一条 Git 子命令的危险判定。 */
-interface GitInvocationRule {
-  readonly subcommand: string
-  /** 判危险时给用户看的理由。 */
+/**
+ * 一次补充判定的结论。`title` 是确认卡上唯一摊开的那一行（「在当前项目重置 Git 工作区：<命令>」），
+ * `reason` 是完整理由，回答之后点开回看，也写进分析结果的 `dangerousReason`。
+ */
+interface WorkspaceIntegrityDanger {
+  readonly title: string
   readonly reason: string
+}
+
+/** 一条 Git 子命令的危险判定。 */
+interface GitInvocationRule extends WorkspaceIntegrityDanger {
+  readonly subcommand: string
   /** 实参（子命令之后、`--` 之前）形态无害时返回 true；缺省表示这条子命令任何形态都要先问。 */
   readonly isHarmless?: (args: readonly string[]) => boolean
 }
@@ -125,12 +131,14 @@ const GitInvocationRules: readonly GitInvocationRule[] = [
     // 默认的 --mixed 与 --soft 只改索引和分支指针，工作区不动，撤下的提交还在 reflog 里；
     // 只有这三种模式会把工作区文件改写成目标提交的样子。
     subcommand: 'reset',
+    title: '重置 Git 工作区',
     reason: '命令会重置 Git 工作区，未提交的改动可能被覆盖。',
     isHarmless: (args) => !args.some((arg) => ['--hard', '--merge', '--keep'].includes(arg)),
   },
   {
     // restore 默认写工作区；只有纯 --staged（不带 --worktree）才是「取消暂存」，只动索引。
     subcommand: 'restore',
+    title: '用 Git 里的版本覆盖文件',
     reason: '命令会用 Git 里的版本覆盖工作区文件，未提交的改动会丢失。',
     isHarmless: (args) =>
       hasGitOption(args, 'S', '--staged') && !hasGitOption(args, 'W', '--worktree'),
@@ -139,24 +147,39 @@ const GitInvocationRules: readonly GitInvocationRule[] = [
     // --cached 只把文件移出索引、磁盘上原样保留；不带 --cached 时 Git 自己会拒绝删有本地改动的文件，
     // 只有 -f 会连未提交的改动一起删掉。
     subcommand: 'rm',
+    title: '强制删除工作区文件',
     reason: '命令会强制删除工作区文件，未提交的改动会一起丢失。',
     isHarmless: (args) => hasGitOption(args, null, '--cached') || !hasGitOption(args, 'f', '--force'),
   },
   {
     // -n / --dry-run 只列出将要删除的文件。
     subcommand: 'clean',
+    title: '删除未跟踪的文件',
     reason: '命令会删除未跟踪的文件，尚未提交的新文件会一起消失。',
     isHarmless: (args) => hasGitOption(args, 'n', '--dry-run'),
   },
-  { subcommand: 'checkout', reason: '命令会切换 Git 分支或用 Git 里的版本覆盖文件，可能丢掉当前工作区的改动。' },
-  { subcommand: 'switch', reason: '命令会切换 Git 分支，可能打断其他智能体或工作台正在进行的工作。' },
-  { subcommand: 'merge', reason: '命令会合并 Git 历史，可能改写当前工作区内容。' },
-  { subcommand: 'pull', reason: '命令会更新当前 Git HEAD，可能与正在进行的文件修改冲突。' },
-  { subcommand: 'rebase', reason: '命令会变基 Git 历史，可能改写提交或工作区内容。' },
-  { subcommand: 'revert', reason: '命令会回滚已有提交，可能与当前工作区的改动冲突。' },
+  {
+    subcommand: 'checkout',
+    title: '切换 Git 分支或覆盖文件',
+    reason: '命令会切换 Git 分支或用 Git 里的版本覆盖文件，可能丢掉当前工作区的改动。',
+  },
+  {
+    subcommand: 'switch',
+    title: '切换 Git 分支',
+    reason: '命令会切换 Git 分支，可能打断其他智能体或工作台正在进行的工作。',
+  },
+  { subcommand: 'merge', title: '合并 Git 历史', reason: '命令会合并 Git 历史，可能改写当前工作区内容。' },
+  {
+    subcommand: 'pull',
+    title: '拉取并更新 Git HEAD',
+    reason: '命令会更新当前 Git HEAD，可能与正在进行的文件修改冲突。',
+  },
+  { subcommand: 'rebase', title: '变基 Git 历史', reason: '命令会变基 Git 历史，可能改写提交或工作区内容。' },
+  { subcommand: 'revert', title: '回滚 Git 提交', reason: '命令会回滚已有提交，可能与当前工作区的改动冲突。' },
   {
     // 普通推送只在远端追加提交；强推（-f / --force* / +refspec）会覆盖远端已有的历史。
     subcommand: 'push',
+    title: '强制推送 Git 分支',
     reason: '命令会强制推送 Git 分支，可能覆盖远端历史。',
     isHarmless: (args) =>
       !hasGitOption(args, 'f', '--force')
@@ -165,6 +188,7 @@ const GitInvocationRules: readonly GitInvocationRule[] = [
   {
     // stash push / pop / apply 不丢内容；drop / clear 会把暂存的改动永久扔掉。
     subcommand: 'stash',
+    title: '丢弃 Git stash',
     reason: '命令会永久丢弃 Git stash 里暂存的改动。',
     isHarmless: (args) => {
       const action = args.find((arg) => !arg.startsWith('-'))
@@ -323,11 +347,14 @@ function gitSubcommandIndices(segment: readonly string[]): number[] {
   })
 }
 
-function resolveGitDangerReason(segments: ReadonlyArray<readonly string[]>): Nullable<string> {
+function resolveGitDanger(
+  segments: ReadonlyArray<readonly string[]>
+): Nullable<WorkspaceIntegrityDanger> {
   for (const segment of segments) {
     for (const subcommandIndex of gitSubcommandIndices(segment)) {
       const rule = GitInvocationRules.find((candidate) => candidate.subcommand === segment[subcommandIndex])
-      if (rule && !rule.isHarmless?.(argsBeforePathspec(segment.slice(subcommandIndex + 1)))) return rule.reason
+      if (rule && !rule.isHarmless?.(argsBeforePathspec(segment.slice(subcommandIndex + 1))))
+        return { title: rule.title, reason: rule.reason }
     }
   }
   return null
@@ -401,31 +428,42 @@ function findOutsideWorkspaceTarget(invocations: readonly ShellInvocation[], pro
 }
 
 /** Workbench 特有的补充危险判定；返回 null 表示「按平台结论走」。 */
-function resolveWorkspaceIntegrityDangerReason(command: string, projectRoot: string): Nullable<string> {
+function resolveWorkspaceIntegrityDanger(
+  command: string,
+  projectRoot: string
+): Nullable<WorkspaceIntegrityDanger> {
   const segments = parseCommandSegments(command)
   if (isEmpty(segments)) return null
   const invocations = segments.flatMap((segment) => invocationOf(segment) ?? [])
   const lowered = segments.flat().map((token) => token.toLowerCase())
 
-  const gitReason = resolveGitDangerReason(segments)
-  if (gitReason) return gitReason
+  const gitDanger = resolveGitDanger(segments)
+  if (gitDanger) return gitDanger
 
-  if (containsTokenSequence(lowered, ['gh', 'pr', 'checkout'])) return '命令会通过 GitHub CLI 切换分支或修改当前工作区。'
+  if (containsTokenSequence(lowered, ['gh', 'pr', 'checkout']))
+    return { title: '经 GitHub CLI 切换分支', reason: '命令会通过 GitHub CLI 切换分支或修改当前工作区。' }
 
-  if (hasWorldWritableChmod(invocations)) return '命令会把文件权限改成 777 或全局可写，可能扩大写入和执行权限。'
+  if (hasWorldWritableChmod(invocations))
+    return {
+      title: '放开文件的全局写权限',
+      reason: '命令会把文件权限改成 777 或全局可写，可能扩大写入和执行权限。',
+    }
 
   const outsideTarget = findOutsideWorkspaceTarget(invocations, projectRoot)
-  if (outsideTarget) return `命令会改动当前工作区之外的路径 ${outsideTarget}。`
+  if (outsideTarget)
+    return { title: '改动项目之外的路径', reason: `命令会改动当前工作区之外的路径 ${outsideTarget}。` }
 
-  if (lowered.includes('halt') || lowered.includes('poweroff')) return '命令可能会关闭、重启或中断当前系统环境。'
+  if (lowered.includes('halt') || lowered.includes('poweroff'))
+    return { title: '关闭或重启系统', reason: '命令可能会关闭、重启或中断当前系统环境。' }
 
   // `diskutil erase` 之外还要覆盖 eraseDisk / eraseVolume 这类拼接子命令。
   const erasesDisk =
     containsTokenSequence(lowered, ['diskutil', 'erase'])
     || invocations.some(({ name, args }) => name === 'diskutil' && !!args[0]?.toLowerCase().startsWith('erase'))
-  if (erasesDisk) return '命令看起来会抹除磁盘或卷。'
+  if (erasesDisk) return { title: '抹除磁盘', reason: '命令看起来会抹除磁盘或卷。' }
 
-  if (lowered.some((token) => UncoveredDiskCommands.has(token))) return '命令可能会格式化、初始化或修改磁盘分区。'
+  if (lowered.some((token) => UncoveredDiskCommands.has(token)))
+    return { title: '修改磁盘分区', reason: '命令可能会格式化、初始化或修改磁盘分区。' }
 
   return null
 }
@@ -437,27 +475,28 @@ function resolveWorkspaceIntegrityDangerReason(command: string, projectRoot: str
  * 才由本层升格为危险并附上工作区视角的理由。`projectRoot` 划定「工作区外」的边界。
  */
 export function analyzeWorkbenchCommandExecution(command: string, projectRoot: string): CommandExecutionPlan {
-  const plan = analyzeCommandExecution(command)
+  const plan = shellCommandPolicy.analyze(command)
   if (plan.isDangerous) return plan
 
-  const dangerousReason = resolveWorkspaceIntegrityDangerReason(command, projectRoot)
-  if (!dangerousReason) return plan
+  const danger = resolveWorkspaceIntegrityDanger(command, projectRoot)
+  if (!danger) return plan
 
-  return { ...plan, isDangerous: true, dangerousReason, shouldRequestConfirmation: true }
+  return { ...plan, isDangerous: true, dangerousReason: danger.reason }
 }
 
 /**
- * 危险命令的审批请求：每次都由用户亲自点头，批准只管这一次。
- *
- * 光有 `:dangerous` 后缀的 riskScope 兑现不了「每次都问」：任务审批端口（`createTaskApprovalPort`）
- * 把 riskScope 换成 operation key 再交给权限策略，后缀在那一步就丢了——标准档会记住这条命令的答案，
- * 「完全访问」档直接放行。人工审批标记能原样穿过去，它正是平台给「承诺等用户确认」准备的构造器。
+ * 只有工作区完整性这一层判危险时的结论：平台已判危险（`velaros:shell` 自己会问）或两边都放行时为 null。
+ * 带上平台那份分类，调用方照它算前台还是后台，与平台的确认卡同一口径。
  */
-export function createDangerousCommandApprovalOptions(
-  riskScope: `${string}:dangerous`,
-  operation: NonNullable<ToolConfirmationDecisionOptions['operation']>
-): ToolConfirmationDecisionOptions {
-  return createManualApprovalOptions({ approvalRisk: 'high', riskScope, operation })
+export function resolveWorkspaceIntegrityConfirmation(
+  command: string,
+  projectRoot: string
+): Nullable<WorkspaceIntegrityDanger & { plan: CommandExecutionPlan }> {
+  const plan = shellCommandPolicy.analyze(command)
+  if (plan.isDangerous) return null
+  const danger = resolveWorkspaceIntegrityDanger(command, projectRoot)
+  return danger ? { ...danger, plan } : null
 }
 
-export type { CommandExecutionPlan }
+/** 一条命令的执行前分类；危险的命令先问用户（平台结论之上叠加了工作区完整性判定）。 */
+export type CommandExecutionPlan = ShellCommandPlan

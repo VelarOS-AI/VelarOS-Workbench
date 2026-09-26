@@ -4,83 +4,64 @@ import { createElement, type ReactElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, test } from 'bun:test'
 
-import {
-  ConversationRenderSlotsProvider,
-  useConversationRenderSlots,
-} from '@velaros-ai/ui/conversation'
+import { shareHostReactWithLinkedUi } from './helpers/linkedUiReact'
 
-import type { WorkbenchChatProviderId } from '../src/plugins/agent-engines/identity'
-import {
-  type WorkbenchChatCompositionAdapter,
+shareHostReactWithLinkedUi()
+
+const { ConversationRenderSlotsProvider, useConversationRenderSlots } = await import(
+  '@velaros-ai/ui/conversation'
+)
+const {
   WorkbenchChatProvider,
   WorkbenchChatSessionSurface,
-} from '../src/renderer/src/composition/WorkbenchChatProvider'
-import { standaloneWorkbenchConversationRenderSlots } from '../src/renderer/src/runtime/conversation/standaloneWorkbenchConversationRenderSlots'
+} = await import('../src/renderer/src/composition/WorkbenchChatProvider')
+const { standaloneWorkbenchConversationRenderSlots } = await import(
+  '../src/renderer/src/runtime/conversation/standaloneWorkbenchConversationRenderSlots'
+)
 
 function RuntimeMarkProbe(): Nullable<ReactElement> {
   const slots = useConversationRenderSlots()
   return slots.runningRuntimeMark?.({ sessionId: 'test-session' }) ?? null
 }
 
-const adapter: WorkbenchChatCompositionAdapter = {
-  useProjectRuntime: () => {
-    throw new Error('RuntimeMarkProbe does not read project runtime')
-  },
-  SessionSurface: RuntimeMarkProbe,
+function renderWithSlots(child: ReactElement): string {
+  return renderToStaticMarkup(
+    createElement(ConversationRenderSlotsProvider, {
+      slots: standaloneWorkbenchConversationRenderSlots,
+      children: child,
+    })
+  )
 }
 
-function renderRuntimeMark(providerId: WorkbenchChatProviderId): string {
-  return renderToStaticMarkup(
-    createElement(
-      ConversationRenderSlotsProvider,
-      { slots: standaloneWorkbenchConversationRenderSlots },
-      createElement(
-        WorkbenchChatProvider,
-        { adapter },
-        createElement(WorkbenchChatSessionSurface, {
-          providerId,
+void describe('Workbench running runtime mark', () => {
+  void test('uses the Velar sail for the Workbench agent inside a chat surface', () => {
+    const markup = renderWithSlots(
+      createElement(WorkbenchChatProvider, {
+        adapter: {
+          useProjectRuntime: () => {
+            throw new Error('RuntimeMarkProbe does not read project runtime')
+          },
+          SessionSurface: RuntimeMarkProbe,
+        },
+        children: createElement(WorkbenchChatSessionSurface, {
           projectRoot: '/test/project',
           currentFilePath: null,
           conversationRefreshKey: 0,
           pendingBrowserElementSelections: [],
           pendingFileReferences: [],
-        })
-      )
+        }),
+      })
     )
-  )
-}
-
-void describe('Workbench running runtime mark', () => {
-  void test('uses the Velar sail for the native Workbench agent', () => {
-    const markup = renderRuntimeMark('workbench')
 
     assert.match(markup, /data-workbench-running-runtime-mark="workbench"/u)
     assert.match(markup, /viewBox="12 4 31 28"/u)
     assert.doesNotMatch(markup, /viewBox="0 0 24 24"/u)
   })
 
-  void test('uses each external agent engine brand mark', () => {
-    const codexMarkup = renderRuntimeMark('codex')
-    const claudeMarkup = renderRuntimeMark('claude-code')
+  void test('needs no chat surface identity: every Workbench run is a Platform run', () => {
+    const markup = renderWithSlots(createElement(RuntimeMarkProbe))
 
-    assert.match(codexMarkup, /data-workbench-running-runtime-mark="codex"/u)
-    assert.match(claudeMarkup, /data-workbench-running-runtime-mark="claude-code"/u)
-    assert.match(codexMarkup, /viewBox="0 0 24 24"/u)
-    assert.match(claudeMarkup, /viewBox="0 0 24 24"/u)
-    assert.notEqual(codexMarkup, claudeMarkup)
-    assert.doesNotMatch(codexMarkup, /viewBox="12 4 31 28"/u)
-    assert.doesNotMatch(claudeMarkup, /viewBox="12 4 31 28"/u)
-  })
-
-  void test('returns no asserted brand when a chat surface identity is absent', () => {
-    const markup = renderToStaticMarkup(
-      createElement(
-        ConversationRenderSlotsProvider,
-        { slots: standaloneWorkbenchConversationRenderSlots },
-        createElement(RuntimeMarkProbe)
-      )
-    )
-
-    assert.equal(markup, '')
+    assert.match(markup, /data-workbench-running-runtime-mark="workbench"/u)
+    assert.match(markup, /viewBox="12 4 31 28"/u)
   })
 })

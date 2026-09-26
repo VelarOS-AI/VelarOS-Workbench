@@ -9,24 +9,21 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent, webUtils } from 'ele
 
 import { type WorkbenchProjectHubBridge, WorkbenchProjectHubChannels } from '../shared/projectHub'
 import { type WorkbenchAccountBridge, WorkbenchAccountChannels } from '../shared/workbenchAccount'
-import { type WorkbenchBrowserBridge, WorkbenchBrowserChannels } from '../shared/workbenchBrowser'
+import {
+  type WorkbenchConversationBridge,
+  WorkbenchConversationChannels,
+} from '../shared/workbenchConversation'
 import { type WorkbenchFsBridge, WorkbenchFsChannels } from '../shared/workbenchFs'
 import { type WorkbenchGitBridge, WorkbenchGitChannels } from '../shared/workbenchGit'
-import { type WorkbenchKernelBridge, WorkbenchKernelChannels } from '../shared/workbenchKernel'
 import {
   type WorkbenchLanguageBridge,
   WorkbenchLanguageChannels,
 } from '../shared/workbenchLanguage'
 import { type WorkbenchModelBridge, WorkbenchModelChannels } from '../shared/workbenchModel'
-import { type WorkbenchModBridge, WorkbenchModChannels } from '../shared/workbenchMods'
 import {
   type WorkbenchProductAnalyticsBridge,
   WorkbenchProductAnalyticsChannels,
 } from '../shared/workbenchProductAnalytics'
-import {
-  type WorkbenchResourcePluginBridge,
-  WorkbenchResourcePluginChannels,
-} from '../shared/workbenchResourcePlugins'
 import {
   type WorkbenchTerminalBridge,
   WorkbenchTerminalChannels,
@@ -84,13 +81,6 @@ const accountBridge: WorkbenchAccountBridge = {
   signOut: () => ipcRenderer.invoke(WorkbenchAccountChannels.signOut),
   onChanged: (listener) => subscribe(WorkbenchAccountChannels.changed, listener),
   getModelPricing: () => ipcRenderer.invoke(WorkbenchAccountChannels.getModelPricing),
-}
-
-const browserBridge: WorkbenchBrowserBridge = {
-  getState: (request) => ipcRenderer.invoke(WorkbenchBrowserChannels.getState, request),
-  presentPage: (request) => ipcRenderer.invoke(WorkbenchBrowserChannels.presentPage, request),
-  closeSession: (request) => ipcRenderer.invoke(WorkbenchBrowserChannels.closeSession, request),
-  onChanged: (listener) => subscribe(WorkbenchBrowserChannels.changed, listener),
 }
 
 const fsBridge: WorkbenchFsBridge = {
@@ -182,33 +172,21 @@ const gitBridge: WorkbenchGitBridge = {
     ipcRenderer.invoke(WorkbenchGitChannels.deleteChatRunChanges, request),
   readChatRunChangeBaseFile: (request) =>
     ipcRenderer.invoke(WorkbenchGitChannels.readChatRunChangeBaseFile, request),
-  rewindChatRunChanges: (request) =>
-    ipcRenderer.invoke(WorkbenchGitChannels.rewindChatRunChanges, request),
 }
 
-const kernelBridge: WorkbenchKernelBridge = {
-  getStatus: () => ipcRenderer.invoke(WorkbenchKernelChannels.getStatus),
-  invoke: (request) => ipcRenderer.invoke(WorkbenchKernelChannels.invoke, request),
-  abortAgentExecution: (request) =>
-    ipcRenderer.invoke(WorkbenchKernelChannels.abortAgentExecution, request),
-  resolveAgentInput: (request) =>
-    ipcRenderer.invoke(WorkbenchKernelChannels.resolveAgentInput, request),
-  resolveAgentConfirmation: (request) =>
-    ipcRenderer.invoke(WorkbenchKernelChannels.resolveAgentConfirmation, request),
-  provideAgentGuidance: (request) =>
-    ipcRenderer.invoke(WorkbenchKernelChannels.provideAgentGuidance, request),
-  getGoalLifecycle: (request) =>
-    ipcRenderer.invoke(WorkbenchKernelChannels.getGoalLifecycle, request),
-  updateGoalLifecycle: (request) =>
-    ipcRenderer.invoke(WorkbenchKernelChannels.updateGoalLifecycle, request),
-  releaseAgentSession: (request) =>
-    ipcRenderer.invoke(WorkbenchKernelChannels.releaseAgentSession, request),
-  respondAgentUiRequest: (response) =>
-    ipcRenderer.invoke(WorkbenchKernelChannels.respondAgentUiRequest, response),
-  onStatusChanged: (listener) => subscribe(WorkbenchKernelChannels.statusChanged, listener),
-  onAgentExecution: (listener) => subscribe(WorkbenchKernelChannels.agentExecution, listener),
-  backupChatHistory: (request) =>
-    ipcRenderer.invoke(WorkbenchKernelChannels.backupChatHistory, request),
+const conversationBridge: WorkbenchConversationBridge = {
+  send: (request) => ipcRenderer.invoke(WorkbenchConversationChannels.send, request),
+  cancel: (request) => ipcRenderer.invoke(WorkbenchConversationChannels.cancel, request),
+  guidance: (request) => ipcRenderer.invoke(WorkbenchConversationChannels.guidance, request),
+  input: (request) => ipcRenderer.invoke(WorkbenchConversationChannels.input, request),
+  answer: (request) => ipcRenderer.invoke(WorkbenchConversationChannels.answer, request),
+  getGoal: (request) => ipcRenderer.invoke(WorkbenchConversationChannels.getGoal, request),
+  updateGoal: (request) => ipcRenderer.invoke(WorkbenchConversationChannels.updateGoal, request),
+  deleteSession: (request) =>
+    ipcRenderer.invoke(WorkbenchConversationChannels.deleteSession, request),
+  backupHistory: (request) =>
+    ipcRenderer.invoke(WorkbenchConversationChannels.backupHistory, request),
+  onEvent: (listener) => subscribe(WorkbenchConversationChannels.event, listener),
 }
 
 const modelBridge: WorkbenchModelBridge = {
@@ -222,21 +200,6 @@ const modelBridge: WorkbenchModelBridge = {
 
 const workspaceBridge: WorkbenchWorkspaceBridge = {
   invoke: (request) => ipcRenderer.invoke(WorkbenchWorkspaceChannels.invoke, request),
-}
-
-const resourcePluginBridge: WorkbenchResourcePluginBridge = {
-  list: () => ipcRenderer.invoke(WorkbenchResourcePluginChannels.list),
-  install: (request) => ipcRenderer.invoke(WorkbenchResourcePluginChannels.install, request),
-  setEnabled: (request) => ipcRenderer.invoke(WorkbenchResourcePluginChannels.setEnabled, request),
-  listAgentEngineModels: (engineId) =>
-    ipcRenderer.invoke(WorkbenchResourcePluginChannels.listAgentEngineModels, engineId),
-  onChanged: (listener) => subscribe(WorkbenchResourcePluginChannels.changed, listener),
-}
-
-const modBridge: WorkbenchModBridge = {
-  listCatalog: () => ipcRenderer.invoke(WorkbenchModChannels.listCatalog),
-  setEnabled: (request) => ipcRenderer.invoke(WorkbenchModChannels.setEnabled, request),
-  onChanged: (listener) => subscribe(WorkbenchModChannels.changed, listener),
 }
 
 const updateBridge: WorkbenchUpdateBridge = {
@@ -270,17 +233,14 @@ const productAnalyticsBridge: WorkbenchProductAnalyticsBridge = {
 
 contextBridge.exposeInMainWorld('velarosWorkbenchProjectHub', projectHubBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchAccount', accountBridge)
-contextBridge.exposeInMainWorld('velarosWorkbenchBrowser', browserBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchFs', fsBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchLanguage', languageBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchTerminal', terminalBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchWatch', watchBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchGit', gitBridge)
-contextBridge.exposeInMainWorld('velarosWorkbenchKernel', kernelBridge)
+contextBridge.exposeInMainWorld('velarosWorkbenchConversation', conversationBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchModel', modelBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchWorkspace', workspaceBridge)
-contextBridge.exposeInMainWorld('velarosWorkbenchResourcePlugins', resourcePluginBridge)
-contextBridge.exposeInMainWorld('velarosWorkbenchMods', modBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchUpdate', updateBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchWindowState', windowStateBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchProductAnalytics', productAnalyticsBridge)

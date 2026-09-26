@@ -2,33 +2,8 @@ export const WorkbenchWorkspaceChannels = {
   invoke: 'workbench-app:workspace:invoke',
 } as const
 
-/** Workbench IPC operations backed by the Project domain. */
-export type WorkbenchWorkspaceOperation =
-  | 'resource:codegraph-status'
-  | 'project:status'
-  | 'project:read'
-  | 'project:stat'
-  | 'project:list'
-  | 'project:search'
-  | 'project:symbols'
-  | 'project:resolve-target'
-  | 'project:build-evidence'
-  | 'project:diff'
-  | 'project:prepare-edit'
-  | 'project:amend-edit'
-  | 'project:apply-edit'
-  | 'project:validate'
-  | 'project:rollback'
-  | 'project:run-batch'
-  | 'project:codegraph-index'
-  | 'project:codegraph-graph'
-
-export interface WorkbenchCodeGraphResourceStatus {
-  available: boolean
-  version: string | null
-  packageRoot: string | null
-  sharedResourcesRoot: string
-}
+/** IDE 面的项目读取（列文件、读文件、读项目 AI 规则），由 Platform 项目内核承载。 */
+export type WorkbenchWorkspaceOperation = 'project:list' | 'project:read' | 'project:rules'
 
 export interface WorkbenchWorkspaceInvokeRequest {
   projectRoot: string

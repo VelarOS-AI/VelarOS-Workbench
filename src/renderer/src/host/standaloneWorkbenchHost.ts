@@ -7,13 +7,8 @@ import type { Result as ResultType } from '@velaros-ai/core/result'
 
 import type {
   SystemOverview,
-  WorkbenchGetCodeGraphResult,
   WorkbenchIndexProjectRequest,
   WorkbenchIndexProjectResult,
-  WorkbenchProjectAiCodeIndexDiagnostics,
-  WorkbenchProjectAiIndexStatus,
-  WorkbenchProjectAiRuleFile,
-  WorkbenchProjectAiRuleSource,
   WorkbenchProjectAiRulesResult,
 } from '@shared/contracts'
 
@@ -33,15 +28,9 @@ import type {
  * 重命名 / hover / 引用 / 签名帮助 / 格式化 / 文档符号 / 文档高亮 / inlay，由 main 的语言服务
  * worker 托管 tsserver）+ Git + 持久终端会话 + 文件监听 + 按需语法。
  *
- * 可选能力也必须返回稳定结果：没有 CodeGraph/补全建议时返回空结果；会话附件走受项目根
+ * 可选能力也必须返回稳定结果：没有补全建议时返回空结果；会话附件走受项目根
  * 约束的文件 IPC；项目选择和系统打开走 ProjectHub main 端口。
  */
-function invalidSession<T>(): ResultType<T> {
-  return Result.fail(new AppError(
-    'VALIDATION',
-    'The Workbench session is not linked to an active project root.'
-  ))
-}
 
 /** main 侧错误信封 → 产品端口 Result：跨进程边界的一次性升格点（保留 AppError 语义码）。 */
 function toHostResult<T>(envelope: WorkbenchFsCallResult<T>): ResultType<T> {
@@ -50,7 +39,12 @@ function toHostResult<T>(envelope: WorkbenchFsCallResult<T>): ResultType<T> {
     : Result.fail(new AppError(envelope.code ?? 'UNKNOWN', envelope.message))
 }
 
-function noopUnsubscribe(): void {}
+function invalidSession<T>(): ResultType<T> {
+  return Result.fail(new AppError(
+    'VALIDATION',
+    'The Workbench session is not linked to an active project root.'
+  ))
+}
 
 interface WorkspaceFileEntry {
   path: string
@@ -69,8 +63,6 @@ interface WorkspaceReadManyResult {
     truncated?: boolean
   }>
 }
-
-const aiIndexStatusByRoot = new Map<string, WorkbenchProjectAiIndexStatus>()
 
 async function invokeWorkspace<T>(
   projectRoot: string,
@@ -152,49 +144,6 @@ async function indexProjectWithWorkspace(
   })
 }
 
-function createAiIndexStatus(
-  projectRoot: string,
-  projectIndex: WorkbenchIndexProjectResult,
-  startedAt: number,
-  codeIndex: WorkbenchProjectAiCodeIndexDiagnostics
-): WorkbenchProjectAiIndexStatus {
-  const packageFile = projectIndex.files.find((file) => file.path === 'package.json')
-  let packageName: string | null = null
-  try {
-    const parsed = packageFile ? JSON.parse(packageFile.content) as { name?: unknown } : null
-    packageName = typeof parsed?.name === 'string' ? parsed.name : null
-  } catch {
-    packageName = null
-  }
-  const languages = [...new Set(projectIndex.files.map((file) =>
-    file.path.split('.').at(-1)?.toLowerCase() ?? '').filter(Boolean))]
-  const status: WorkbenchProjectAiIndexStatus = {
-    projectRoot,
-    projectId: stableRootId(projectRoot),
-    projectName: projectRoot.split(/[\\/]/).at(-1) ?? projectRoot,
-    status: 'ready',
-    phase: 'ready',
-    memoryId: null,
-    indexedAt: Date.now(),
-    startedAt,
-    updatedAt: Date.now(),
-    scannedFiles: projectIndex.scannedFiles,
-    indexedFiles: projectIndex.files.length,
-    skippedFiles: projectIndex.skippedFiles,
-    error: null,
-    packageName,
-    packageManager: inferPackageManager(projectIndex),
-    keyFileCount: projectIndex.files.filter((file) =>
-      /(^|\/)(package\.json|README|AGENTS\.md|tsconfig\.json)/i.test(file.path)).length,
-    likelyCommandCount: 0,
-    sourceRootCount: new Set(projectIndex.files.map((file) => file.path.split('/')[0])).size,
-    languages,
-    codeIndex,
-  }
-  aiIndexStatusByRoot.set(projectRoot, status)
-  return status
-}
-
 function isWorkspaceFileEntry(value: unknown): value is WorkspaceFileEntry {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
   const record = value as Record<string, unknown>
@@ -202,15 +151,6 @@ function isWorkspaceFileEntry(value: unknown): value is WorkspaceFileEntry {
     typeof record.path === 'string'
     && (record.type === 'file' || record.type === 'directory')
   )
-}
-
-function stableRootId(value: string): string {
-  let hash = 2166136261
-  for (const character of value) {
-    hash ^= character.codePointAt(0) ?? 0
-    hash = Math.imul(hash, 16777619)
-  }
-  return `workspace-${Math.abs(hash).toString(36)}`
 }
 
 function createSystemOverview(activeWorkspaceRoot: string): SystemOverview {
@@ -233,21 +173,6 @@ function createSystemOverview(activeWorkspaceRoot: string): SystemOverview {
   }
 }
 
-function inferPackageManager(projectIndex: WorkbenchIndexProjectResult): string | null {
-  if (projectIndex.files.some((file) => file.path === 'bun.lock')) return 'bun'
-  if (projectIndex.files.some((file) => file.path === 'pnpm-lock.yaml')) return 'pnpm'
-  if (projectIndex.files.some((file) => file.path === 'yarn.lock')) return 'yarn'
-  if (projectIndex.files.some((file) => file.path === 'package-lock.json')) return 'npm'
-  return null
-}
-
-function ruleSource(path: string): WorkbenchProjectAiRuleSource {
-  if (path.includes('CLAUDE')) return 'claude'
-  if (path.includes('.cursor')) return 'cursor'
-  if (path.includes('copilot')) return 'copilot'
-  return 'codex'
-}
-
 function projectRootFromSessionId(sessionId: string): string | null {
   const prefix = 'workbench-chat:'
   if (!sessionId.startsWith(prefix)) return null
@@ -257,74 +182,6 @@ function projectRootFromSessionId(sessionId: string): string | null {
   } catch {
     return null
   }
-}
-
-function splitWorkspaceDiff(diff: string): { beforeContent: string; afterContent: string } {
-  const before: string[] = []
-  const after: string[] = []
-  for (const line of diff.split('\n')) {
-    if (line.startsWith('---') || line.startsWith('+++') || line.startsWith('@@')) continue
-    if (line.startsWith('-')) before.push(line.slice(1))
-    else if (line.startsWith('+')) after.push(line.slice(1))
-    else if (line.startsWith(' ')) {
-      before.push(line.slice(1))
-      after.push(line.slice(1))
-    }
-  }
-  return { beforeContent: before.join('\n'), afterContent: after.join('\n') }
-}
-
-async function readProjectAiRules(
-  projectRoot: string
-): Promise<ResultType<WorkbenchProjectAiRulesResult>> {
-  const listed = await invokeWorkspace<unknown[]>(projectRoot, 'project:list', {
-    path: '.',
-    recursive: true,
-    maxDepth: 4,
-    maxFiles: 500,
-    include: [
-      'AGENTS.md',
-      '**/AGENTS.md',
-      'CLAUDE.md',
-      '.cursorrules',
-      '.cursor/rules/**',
-      '.github/copilot-instructions.md',
-    ],
-  })
-  if (!listed.ok) return listed as ResultType<WorkbenchProjectAiRulesResult>
-  const paths = listed.data.filter(isWorkspaceFileEntry)
-    .filter((entry) => entry.type === 'file')
-    .map((entry) => entry.path)
-  if (paths.length === 0) return Result.ok({
-    projectRoot,
-    files: [],
-    totalChars: 0,
-    truncatedFiles: 0,
-    omittedFiles: 0,
-  })
-  const read = await invokeWorkspace<WorkspaceReadManyResult>(
-    projectRoot,
-    'project:read',
-    { path: paths, maxChars: 64_000 }
-  )
-  if (!read.ok) return read as ResultType<WorkbenchProjectAiRulesResult>
-  const files: WorkbenchProjectAiRuleFile[] = read.data.files.map((file) => {
-    const source = ruleSource(file.snapshot.path)
-    return {
-      source,
-      sourceLabel: source,
-      relativePath: file.snapshot.path,
-      content: file.content ?? '',
-      truncated: file.truncated ?? false,
-    }
-  })
-  return Result.ok({
-    projectRoot,
-    files,
-    totalChars: files.reduce((total, file) => total + file.content.length, 0),
-    truncatedFiles: files.filter((file) => file.truncated).length,
-    omittedFiles: paths.length - files.length,
-  })
 }
 
 const standaloneWorkbenchHost: WorkbenchHost = {
@@ -337,77 +194,9 @@ const standaloneWorkbenchHost: WorkbenchHost = {
       readWorkbenchImageFile: async (request) =>
         toHostResult(await window.velarosWorkbenchFs.readImageFile(request)),
       indexWorkbenchProject: indexProjectWithWorkspace,
-      startWorkbenchProjectAiIndex: async (request) => {
-        const startedAt = Date.now()
-        const projectIndex = await indexProjectWithWorkspace(request)
-        if (!projectIndex.ok) return projectIndex
-        const codeGraphIndex = await invokeWorkspace<WorkbenchProjectAiCodeIndexDiagnostics>(
-          request.projectRoot,
-          'project:codegraph-index',
-          { force: request.forceCodeGraph || request.force }
-        )
-        const codeIndex = codeGraphIndex.ok
-          ? codeGraphIndex.data
-          : {
-              providerId: 'codegraph',
-              providerLabel: 'CodeGraph',
-              version: null,
-              initialized: false,
-              indexing: false,
-              watching: false,
-              fileCount: 0,
-              nodeCount: 0,
-              edgeCount: 0,
-              frameworks: [],
-              backend: null,
-              journalMode: null,
-              pendingFileCount: 0,
-              lastError: codeGraphIndex.error.message,
-              skipped: false,
-            } satisfies WorkbenchProjectAiCodeIndexDiagnostics
-        return Result.ok({
-          projectIndex: projectIndex.data,
-          status: createAiIndexStatus(
-            request.projectRoot,
-            projectIndex.data,
-            startedAt,
-            codeIndex
-          ),
-          scheduled: false,
-        })
-      },
-      getWorkbenchProjectAiIndexStatus: (request) => {
-        const status = aiIndexStatusByRoot.get(request.projectRoot)
-        return Promise.resolve(Result.ok(status ?? {
-          projectRoot: request.projectRoot,
-          projectId: stableRootId(request.projectRoot),
-          projectName: request.projectRoot.split(/[\\/]/).at(-1) ?? request.projectRoot,
-          status: 'not-indexed',
-          phase: 'not-indexed',
-          memoryId: null,
-          indexedAt: null,
-          startedAt: null,
-          updatedAt: null,
-          scannedFiles: 0,
-          indexedFiles: 0,
-          skippedFiles: 0,
-          error: null,
-          packageName: null,
-          packageManager: null,
-          keyFileCount: 0,
-          likelyCommandCount: 0,
-          sourceRootCount: 0,
-          languages: [],
-        }))
-      },
+      // 设置页「AI 规则」列的就是每轮交给 Agent 的那一份（主进程按同一套约定去找）。
       getWorkbenchProjectAiRules: (request) =>
-        readProjectAiRules(request.projectRoot),
-      getWorkbenchCodeGraph: (request) =>
-        invokeWorkspace<WorkbenchGetCodeGraphResult>(
-          request.projectRoot,
-          'project:codegraph-graph',
-          request
-        ),
+        invokeWorkspace<WorkbenchProjectAiRulesResult>(request.projectRoot, 'project:rules', {}),
       saveWorkbenchFile: async (request) =>
         toHostResult(await window.velarosWorkbenchFs.saveFile(request)),
       saveWorkbenchFileSync: (request) =>
@@ -474,7 +263,6 @@ const standaloneWorkbenchHost: WorkbenchHost = {
         toHostResult(await window.velarosWorkbenchTerminal.resizeSession(request)),
       stopWorkbenchTerminalSession: async (request) =>
         toHostResult(await window.velarosWorkbenchTerminal.stopSession(request)),
-      reportWorkbenchAgentWorkspaceSignals: () => Promise.resolve(Result.ok(undefined)),
       getWorkbenchInlineCompletion: async (request) => {
         const modelConfig = getStandaloneWorkbenchModelConfig()
         return toHostResult(await window.velarosWorkbenchLanguage.getInlineCompletion({
@@ -489,14 +277,8 @@ const standaloneWorkbenchHost: WorkbenchHost = {
       },
       onWorkbenchTerminalOutput: (listener) =>
         window.velarosWorkbenchTerminal.onOutput(listener),
-      onWorkbenchProjectAiIndexStatusChanged: () => noopUnsubscribe,
     },
     sessions: {
-      loadOlderMessages: (request) => Promise.resolve(Result.ok({
-        messages: [],
-        loadedFromIndex: Math.max(0, request.beforeIndex),
-        hasMore: false,
-      })),
       readLocalAttachmentFile: async (request) => {
         const projectRoot = projectRootFromSessionId(request.sessionId)
         if (!projectRoot) return invalidSession()
@@ -552,43 +334,6 @@ const standaloneWorkbenchHost: WorkbenchHost = {
           application: opened.error,
         })
       },
-      getFileChangePreview: async (sessionId, changeId, path) => {
-        const projectRoot = projectRootFromSessionId(sessionId)
-        if (!projectRoot) return invalidSession()
-        const diff = await invokeWorkspace<{
-          diff: string
-          changedFiles: string[]
-        }>(projectRoot, 'project:diff', { transactionId: changeId })
-        if (!diff.ok) return diff
-        const contents = splitWorkspaceDiff(diff.data.diff)
-        return Result.ok({
-          changeId,
-          rootPath: projectRoot,
-          path: path ?? diff.data.changedFiles[0] ?? '',
-          created: contents.beforeContent.length === 0,
-          rolledBack: false,
-          revertAvailable: true,
-          ...contents,
-        })
-      },
-      rollbackFileChange: async (sessionId, changeId, path) => {
-        const projectRoot = projectRootFromSessionId(sessionId)
-        if (!projectRoot) return invalidSession()
-        const rollback = await invokeWorkspace<{
-          changedFiles: string[]
-        }>(projectRoot, 'project:rollback', { transactionId: changeId })
-        if (!rollback.ok) return rollback
-        return Result.ok({
-          changeId,
-          path: path ?? rollback.data.changedFiles[0] ?? '',
-          rolledBack: true,
-          alreadyRolledBack: false,
-        })
-      },
-      restoreFileChange: () => Promise.resolve(Result.fail(new AppError(
-        'UNKNOWN',
-        'The Project capability does not expose transaction restore.'
-      ))),
       pickDirectory: async () => {
         const picked = await window.velarosWorkbenchProjectHub.pickNewProjectLocation()
         return Result.ok(picked.ok ? picked.path : null)

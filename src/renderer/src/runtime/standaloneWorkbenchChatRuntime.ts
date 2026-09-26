@@ -1,13 +1,9 @@
-import { type AppLocale, isConversationTurnInputMessage } from '@velaros-ai/agent/protocol'
-import { isString, optionalWhen, toOptional } from '@velaros-ai/core'
-import {
-  type ConversationTranslator,
-  type ConversationView,
-  getThinkingStageLabel,
-  getToolActivitySummary,
-} from '@velaros-ai/ui/conversation'
+import { optionalWhen, toOptional } from '@velaros-ai/core'
+import { type ConversationView, getThinkingStageLabel } from '@velaros-ai/ui/conversation'
+import { isConversationTurnInputMessage } from '@velaros-ai/ui/conversation/contracts'
 
 import type { ChatMessage } from '@shared/contracts'
+import type { WorkbenchConversationState } from '@shared/workbenchConversation'
 import type { WorkbenchChatRunChangesSummary } from '@shared/workbenchGit'
 
 type StandaloneConversationRuntime = Pick<
@@ -21,23 +17,16 @@ type StandaloneConversationRuntime = Pick<
   | 'connectionRetryMaxAttempts'
   | 'awaitingInputQuestion'
   | 'awaitingConfirmationMessage'
-  | 'awaitingConfirmationDetail'
+  | 'awaitingConfirmationExecutionId'
   | 'lastRunFinishedAt'
->
+> & {
+  /** 正在等回答的交互请求；卡片上的回答按它认。 */
+  readonly awaitingConfirmationId: Nullable<string>
+  /** 重试或限流等待时主进程给的说明（例如每小时用量上限），状态行显示它。 */
+  readonly connectionRetryMessage: Nullable<string>
+}
 
 const LegacyNoTextResponse = 'Run completed without a text response.'
-const StandaloneAgentRuntimeKinds = new Set([
-  'phase',
-  'turn-start',
-  'turn-end',
-  'reconnecting',
-  'retrying-turn',
-  'awaiting-input',
-  'awaiting-confirmation',
-  'done',
-  'aborted',
-  'error',
-])
 const TeamExecutionPhases = new Set<NonNullable<StandaloneConversationRuntime['teamPhase']>>([
   'creating-task',
   'collecting-context',
@@ -60,112 +49,139 @@ const TeamExecutionPhases = new Set<NonNullable<StandaloneConversationRuntime['t
 
 type StandaloneAgentTerminalKind = 'done' | 'aborted' | 'error'
 
-function applyStandaloneAgentRuntimeEvent<TState extends StandaloneConversationRuntime>(
+/** 会话运行状态随主进程推来的运行状态变化（与 Desktop 的运行状态规约同一套规则）。 */
+function applyStandaloneConversationState<TState extends StandaloneConversationRuntime>(
   state: TState,
-  value: unknown,
+  runtime: WorkbenchConversationState,
   now = Date.now()
 ): TState {
-  const runtime = asRecord(value)
-  const kind = readStandaloneAgentRuntimeKind(runtime)
-  if (!kind) return state
+  switch (runtime.kind) {
+    case 'phase': {
+      const teamPhase = readTeamExecutionPhase(runtime.teamPhase)
+      if (!teamPhase) return state
+      return patchRuntime(state, {
+        ...clearAwaitingRuntime(),
+        status: 'running',
+        teamPhase,
+        connectionRetryAttempt: null,
+        connectionRetryMaxAttempts: null,
+        connectionRetryMessage: null,
+      })
+    }
+    case 'turn-start':
+      return patchRuntime(state, {
+        ...clearAwaitingRuntime(),
+        status: 'running',
+        teamPhase: 'executing',
+        activeTurn: readPositiveInteger(runtime.turn) ?? state.activeTurn,
+        connectionRetryAttempt: null,
+        connectionRetryMaxAttempts: null,
+        connectionRetryMessage: null,
+      })
+    case 'turn-end':
+      return patchRuntime(state, {
+        teamPhase: state.teamPhase === 'executing' ? 'researching' : state.teamPhase,
+        activeTurn: null,
+        completedTurns: readPositiveInteger(runtime.turn) ?? state.completedTurns,
+        connectionRetryAttempt: null,
+        connectionRetryMaxAttempts: null,
+        connectionRetryMessage: null,
+      })
+    case 'reconnecting':
+      return patchRuntime(state, {
+        ...clearAwaitingRuntime(),
+        status: 'running',
+        connectionRetryAttempt: readPositiveInteger(runtime.attempt) ?? 1,
+        connectionRetryMaxAttempts: null,
+        connectionRetryMessage: runtime.message?.trim() || null,
+      })
+    case 'awaiting-input':
+      return patchRuntime(state, {
+        ...clearPendingRuntime(),
+        status: 'awaiting-input',
+        teamPhase: 'waiting-confirmation',
+        activeTurn: null,
+        lastError: null,
+        awaitingInputQuestion: runtime.question.trim() || null,
+        awaitingConfirmationExecutionId: runtime.executionId,
+      })
+    case 'awaiting-confirmation':
+      return patchRuntime(state, {
+        ...clearPendingRuntime(),
+        status: 'awaiting-confirmation',
+        teamPhase: 'waiting-confirmation',
+        activeTurn: null,
+        lastError: null,
+        awaitingConfirmationMessage: runtime.confirmationMessage.trim() || null,
+        awaitingConfirmationId: runtime.confirmationId,
+        awaitingConfirmationExecutionId: runtime.executionId,
+      })
+    case 'done':
+      return patchRuntime(state, {
+        ...clearPendingRuntime(),
+        status: 'completed',
+        teamPhase: 'completed',
+        activeTurn: null,
+        lastError: null,
+        lastRunFinishedAt: now,
+      })
+    case 'aborted':
+      return patchRuntime(state, {
+        ...clearPendingRuntime(),
+        status: 'aborted',
+        teamPhase: null,
+        activeTurn: null,
+        lastError: readNonBlankString(runtime.message) ?? state.lastError,
+        lastRunFinishedAt: now,
+      })
+    case 'error':
+      return patchRuntime(state, {
+        ...clearPendingRuntime(),
+        status: 'failed',
+        teamPhase: null,
+        activeTurn: null,
+        lastError: readNonBlankString(runtime.message) ?? state.lastError,
+        lastRunFinishedAt: now,
+      })
+    default:
+      return state
+  }
+}
 
-  if (kind === 'phase') {
-    const teamPhase = readTeamExecutionPhase(runtime.teamPhase)
-    if (!teamPhase) return state
-    return patchRuntime(state, {
-      status: 'running',
-      teamPhase,
-      connectionRetryAttempt: null,
-      connectionRetryMaxAttempts: null,
-    })
+function clearAwaitingRuntime(): Pick<
+  StandaloneConversationRuntime,
+  | 'awaitingInputQuestion'
+  | 'awaitingConfirmationMessage'
+  | 'awaitingConfirmationId'
+  | 'awaitingConfirmationExecutionId'
+> {
+  return {
+    awaitingInputQuestion: null,
+    awaitingConfirmationMessage: null,
+    awaitingConfirmationId: null,
+    awaitingConfirmationExecutionId: null,
   }
-  if (kind === 'turn-start') return patchRuntime(state, {
-    status: 'running',
-    teamPhase: 'executing',
-    activeTurn: readPositiveInteger(runtime.turn) ?? state.activeTurn,
-    connectionRetryAttempt: null,
-    connectionRetryMaxAttempts: null,
-  })
-  if (kind === 'turn-end') return patchRuntime(state, {
-    teamPhase: state.teamPhase === 'executing' ? 'researching' : state.teamPhase,
-    activeTurn: null,
-    completedTurns: readPositiveInteger(runtime.turn) ?? state.completedTurns,
-    connectionRetryAttempt: null,
-    connectionRetryMaxAttempts: null,
-  })
-  if (kind === 'reconnecting' || kind === 'retrying-turn') return patchRuntime(state, {
-    status: 'running',
-    connectionRetryAttempt: readPositiveInteger(runtime.attempt) ?? 1,
-    connectionRetryMaxAttempts: readPositiveInteger(runtime.maxAttempts),
-  })
-  if (kind === 'awaiting-input') {
-    const question = readNonBlankString(runtime.question)
-    if (!question) return state
-    return patchRuntime(state, {
-      ...clearPendingRuntime(),
-      status: 'awaiting-input',
-      teamPhase: 'waiting-confirmation',
-      activeTurn: null,
-      lastError: null,
-      awaitingInputQuestion: question,
-    })
-  }
-  if (kind === 'awaiting-confirmation') {
-    const message = readNonBlankString(runtime.confirmationMessage)
-    if (!message) return state
-    return patchRuntime(state, {
-      ...clearPendingRuntime(),
-      status: 'awaiting-confirmation',
-      teamPhase: 'waiting-confirmation',
-      activeTurn: null,
-      lastError: null,
-      awaitingConfirmationMessage: message,
-      awaitingConfirmationDetail: readStandaloneConfirmationDetail(runtime.confirmationDetail),
-    })
-  }
-  if (kind === 'done') return patchRuntime(state, {
-    ...clearPendingRuntime(),
-    status: 'completed',
-    teamPhase: 'completed',
-    activeTurn: null,
-    lastError: null,
-    lastRunFinishedAt: state.lastRunFinishedAt ?? now,
-  })
-  if (kind === 'aborted') return patchRuntime(state, {
-    ...clearPendingRuntime(),
-    status: 'aborted',
-    teamPhase: null,
-    activeTurn: null,
-    lastError: readNonBlankString(runtime.message) ?? state.lastError,
-    lastRunFinishedAt: now,
-  })
-  return patchRuntime(state, {
-    ...clearPendingRuntime(),
-    status: 'failed',
-    teamPhase: null,
-    activeTurn: null,
-    lastError: readNonBlankString(runtime.message) ?? state.lastError,
-    lastRunFinishedAt: now,
-  })
 }
 
 function clearPendingRuntime(): Pick<
   StandaloneConversationRuntime,
   | 'connectionRetryAttempt'
   | 'connectionRetryMaxAttempts'
+  | 'connectionRetryMessage'
   | 'awaitingInputQuestion'
   | 'awaitingConfirmationMessage'
-  | 'awaitingConfirmationDetail'
+  | 'awaitingConfirmationId'
+  | 'awaitingConfirmationExecutionId'
 > {
   return {
     connectionRetryAttempt: null,
     connectionRetryMaxAttempts: null,
-    awaitingInputQuestion: null,
-    awaitingConfirmationMessage: null,
-    awaitingConfirmationDetail: null,
+    connectionRetryMessage: null,
+    ...clearAwaitingRuntime(),
   }
 }
 
+/** 界面这一侧先把运行收敛到「停止中」：晚到的进度事件不能把按钮重新变回运行态。 */
 function beginStandaloneAgentStop<TState extends StandaloneConversationRuntime>(
   state: TState
 ): TState {
@@ -190,8 +206,8 @@ function patchRuntime<TState extends StandaloneConversationRuntime>(
 ): TState {
   const next = { ...state, ...patch }
   const nextStatus = patch.status
-  // Abort 已受理后仍可能收到排队中的 phase/turn/等待交互事件；这些进度事件不能把 UI
-  // 从 stopping 拉回 running。只有明确终态才允许结束 stopping。
+  // 停止已受理后仍可能收到排队中的阶段、回合、等待交互事件；这些进度事件不能把 UI 从 stopping 拉回
+  // running。只有明确终态才允许结束 stopping。
   if (
     state.status === 'stopping'
     && nextStatus !== 'completed'
@@ -202,51 +218,10 @@ function patchRuntime<TState extends StandaloneConversationRuntime>(
   return next
 }
 
-function readStandaloneAgentRuntimeKind(value: unknown): string | null {
-  const runtime = asRecord(value)
-  const kind = runtime.kind ?? runtime.type
-  return typeof kind === 'string' ? kind : null
-}
-
-function isStandaloneAgentRuntimeEvent(value: unknown): boolean {
-  const kind = readStandaloneAgentRuntimeKind(value)
-  return !!kind && StandaloneAgentRuntimeKinds.has(kind)
-}
-
-function readStandaloneAgentTerminalKind(value: unknown): StandaloneAgentTerminalKind | null {
-  const kind = readStandaloneAgentRuntimeKind(value)
-  return kind === 'done' || kind === 'aborted' || kind === 'error' ? kind : null
-}
-
-function readStandaloneFinalAgentStatus(
-  output: unknown
-): 'completed' | 'aborted' | 'error' | null {
-  const status = asRecord(output).status
-  return status === 'completed' || status === 'aborted' || status === 'error'
-    ? status
+function readStandaloneTerminalKind(runtime: WorkbenchConversationState): Nullable<StandaloneAgentTerminalKind> {
+  return runtime.kind === 'done' || runtime.kind === 'aborted' || runtime.kind === 'error'
+    ? runtime.kind
     : null
-}
-
-function readStandaloneFinalAgentText(output: unknown): string | null {
-  if (typeof output === 'string') return readVisibleFinalText(output)
-  const record = asRecord(output)
-  for (const key of ['text', 'outputText', 'response']) {
-    const text = readVisibleFinalText(record[key])
-    if (text) return text
-  }
-  return null
-}
-
-function readVisibleFinalText(value: unknown): string | null {
-  const text = readNonBlankString(value)
-  return text === LegacyNoTextResponse ? null : text
-}
-
-function readStandaloneFinalAgentError(output: unknown): string | null {
-  const record = asRecord(output)
-  const direct = readNonBlankString(record.error) ?? readNonBlankString(record.message)
-  if (direct) return direct
-  return readNonBlankString(asRecord(record.error).message)
 }
 
 function sanitizeStandaloneChatMessages(messages: readonly ChatMessage[]): ChatMessage[] {
@@ -261,21 +236,34 @@ function sanitizeStandaloneChatMessages(messages: readonly ChatMessage[]): ChatM
 }
 
 /**
- * 一轮收尾时仍没被读走的运行中引导：执行栈不会再送它，标成「已暂停」，而不是一直挂着
- * 「已接收，等待纳入上下文」。正常完成时执行栈在收尾边界会把已受理的引导全部读走（takeOrSeal），
- * 能留到这里的只有中止 / 失败的那一轮。
+ * 一轮收尾时仍没被读走的运行中引导：运行时不会再送它，标成「已暂停」，而不是一直挂着「已接收，等待纳入
+ * 上下文」。正常完成时 Platform 在收尾边界会把已受理的引导读走，能留到这里的只有中止 / 失败的那一轮。
  *
  * `includePending`：恢复持久化会话时连「引导中」（投递回执还没回来）也一并暂停——重启后那一轮早就不在了。
  */
 function pauseUnappliedRunGuidance(
   messages: readonly ChatMessage[],
-  { includePending = false }: { includePending?: boolean } = {}
+  { includePending = false, inputIds }: { includePending?: boolean; inputIds?: readonly string[] } = {}
 ): ChatMessage[] {
+  const only = inputIds ? new Set(inputIds) : null
   return messages.map((message) =>
-    message.guidanceStatus === 'accepted'
-    || (includePending && message.guidanceStatus === 'pending')
+    (message.guidanceStatus === 'accepted'
+      || (includePending && message.guidanceStatus === 'pending'))
+    && (!only || only.has(message.id))
       ? { ...message, guidanceStatus: 'paused' }
       : message
+  )
+}
+
+/** 引导被运行时读进了上下文：那条引导记为「已纳入」。 */
+function markStandaloneGuidanceApplied(
+  messages: readonly ChatMessage[],
+  inputId: string
+): readonly ChatMessage[] {
+  const index = messages.findIndex((message) => message.id === inputId)
+  if (index < 0 || messages[index]!.guidanceStatus === 'applied') return messages
+  return messages.map((message, position) =>
+    position === index ? { ...message, guidanceStatus: 'applied' } : message
   )
 }
 
@@ -301,8 +289,7 @@ function isStandaloneTerminalRunStatus(value: unknown): value is StandaloneTermi
 /**
  * 一轮收尾时给这一轮的最后一条助手消息记运行标记（与 Desktop `setLastAssistantMessageRunMarker` 同一规则）。
  *
- * 共享会话视图靠它把已完成回答的过程收进「已处理」、显示耗时，并在中止 / 失败的回答末尾挂状态角标——
- * 回答已有正文时，中止与失败的运行提示不会再在正文里出现，没有标记就看不出这一轮停在了哪里。
+ * 共享会话视图靠它把已完成回答的过程收进「已处理」、显示耗时，并在中止 / 失败的回答末尾挂状态角标。
  * 这一轮一条助手消息都没产出（开口前就失败）时不记：最近那条助手回复属于上一轮。
  * 已中止的标记不会被随后迟到的完成回执改写成已完成。
  */
@@ -315,6 +302,8 @@ function markStandaloneRun(
     completedTurns: number
     lastRunStartedAt: Nullable<number>
     lastRunFinishedAt: Nullable<number>
+    goalMode?: boolean
+    goalStatus?: StandaloneRunMarker['goalStatus']
   },
   now = Date.now()
 ): readonly StandaloneRunMarker[] {
@@ -340,6 +329,8 @@ function markStandaloneRun(
     turnCount: input.completedTurns > 0 ? input.completedTurns : null,
     turnKind: input.completedTurns > 0 ? 'totalTurns' : null,
     ...(startedAt !== null ? { startedAt, durationMs: timestamp - startedAt } : {}),
+    goalMode: optionalWhen(input.goalMode === true, true),
+    goalStatus: input.goalStatus,
     // 改动摘要是收尾之后才采集到的，重记标记不能把它（和它指向的记录文件）弄丢。
     runChanges: existing?.runChanges,
     timestamp,
@@ -356,6 +347,8 @@ function markStandaloneRun(
     ? input.markers.map((entry) => (entry === existing ? marker : entry))
     : [...input.markers, marker]
 }
+
+const GoalStatuses = new Set(['active', 'paused', 'complete', 'blocked', 'cancelled', 'removed'])
 
 /** 恢复持久化的运行标记：只收终态标记、只留仍在会话里的消息；形状不对的当没有。 */
 function restoreStandaloneRunMarkers(
@@ -377,6 +370,9 @@ function restoreStandaloneRunMarkers(
     const durationMs = readFiniteNumber(record.durationMs)
     const turnCount = readPositiveInteger(record.turnCount)
     const runChanges = readStoredRunChanges(record.runChanges)
+    const goalStatus = typeof record.goalStatus === 'string' && GoalStatuses.has(record.goalStatus)
+      ? record.goalStatus as StandaloneRunMarker['goalStatus']
+      : undefined
     return [{
       messageId,
       status,
@@ -384,6 +380,8 @@ function restoreStandaloneRunMarkers(
       turnCount,
       turnKind: turnCount !== null ? 'totalTurns' : null,
       ...(startedAt !== null && durationMs !== null ? { startedAt, durationMs } : {}),
+      goalMode: optionalWhen(record.goalMode === true, true),
+      goalStatus,
       runChanges: toOptional(runChanges),
       timestamp,
     }]
@@ -392,7 +390,7 @@ function restoreStandaloneRunMarkers(
 
 function readStoredRunChanges(value: unknown): WorkbenchChatRunChangesSummary | null {
   const record = asRecord(value)
-  const { recordId, capturedAt, fileCount, additions, deletions, error, paths } = record
+  const { recordId, capturedAt, fileCount, additions, deletions, error } = record
   if (
     typeof recordId !== 'string'
     || typeof capturedAt !== 'number'
@@ -400,7 +398,6 @@ function readStoredRunChanges(value: unknown): WorkbenchChatRunChangesSummary | 
     || !isCount(additions)
     || !isCount(deletions)
   ) return null
-  const storedPaths = readStoredRunChangePaths(paths, fileCount)
   return {
     recordId,
     capturedAt,
@@ -408,16 +405,7 @@ function readStoredRunChanges(value: unknown): WorkbenchChatRunChangesSummary | 
     additions,
     deletions,
     error: readNonBlankString(error),
-    paths: toOptional(storedPaths),
   }
-}
-
-/** 摘要里的文件清单：条数要对得上计数，形状不对就当没有（回溯时退回按工具报的文件数）。 */
-function readStoredRunChangePaths(value: unknown, fileCount: number): string[] | null {
-  if (!Array.isArray(value) || value.length !== fileCount) return null
-  return value.every((path): path is string => typeof path === 'string' && path.length > 0)
-    ? value
-    : null
 }
 
 function isCount(value: unknown): value is number {
@@ -445,9 +433,8 @@ function resolveStandaloneRunChangesAnchor(
 }
 
 /**
- * 把采集到的改动摘要记到那条消息的运行标记上。标记已不在（采集期间被回溯掉）时返回 null——调用方要
- * 删掉刚写下的记录；替换掉的旧记录 id 同样交给调用方删。标记被后来一轮的中止改写过也照样记：改动
- * 仍然出自这条回答那一轮，而那一轮中止的运行自己找不到回答，不会再记一份。
+ * 把采集到的改动摘要记到那条消息的运行标记上。标记已不在时返回 null——调用方要删掉刚写下的记录；替换掉的
+ * 旧记录 id 同样交给调用方删。
  */
 function attachStandaloneRunChanges(
   markers: readonly StandaloneRunMarker[],
@@ -464,28 +451,28 @@ function attachStandaloneRunChanges(
 }
 
 /**
- * 运行状态行上「现在在做什么」（Desktop 从执行轨迹算 liveTraceSummary，Workbench 从正在流式的这条
- * 回答里读）：思考块正在输出时取它的阶段名，否则取最近一个还在跑的工具的活动摘要；都没有时交给
- * 状态行按阶段 / 轮次显示。
+ * 运行状态行上「现在在做什么」（Desktop 从执行轨迹算 liveTraceSummary，Workbench 从正在流式的这条回答里
+ * 读）：限流、重试时显示主进程的说明；思考块正在输出时取它的阶段名；否则取最近一张还在跑的脚本卡的标题；
+ * 都没有时交给状态行按阶段 / 轮次显示。
  */
 function readStandaloneLiveActivity(
   message: ChatMessage | null | undefined,
-  locale: AppLocale,
-  formatPath: (path: string) => string,
-  translator: ConversationTranslator
+  retryMessage: Nullable<string>
 ): { liveTraceSummary: string | undefined; hasStreamingThinkingBlock: boolean } {
-  if (message?.role !== 'assistant') return { liveTraceSummary: undefined, hasStreamingThinkingBlock: false }
+  if (message?.role !== 'assistant')
+    return { liveTraceSummary: retryMessage ?? undefined, hasStreamingThinkingBlock: false }
   const lastBlock = message.blocks.at(-1)
   const hasStreamingThinkingBlock = lastBlock?.type === 'thinking' && !!lastBlock.text.trim()
+  if (retryMessage) return { liveTraceSummary: retryMessage, hasStreamingThinkingBlock }
   const thinkingStage = hasStreamingThinkingBlock ? getThinkingStageLabel(lastBlock.text) : null
   if (thinkingStage) return { liveTraceSummary: thinkingStage, hasStreamingThinkingBlock }
-  const runningTool = message.blocks.findLast(
-    (block) => block.type === 'tool-call' && block.isRunning === true
+  const runningScript = message.blocks.findLast(
+    (block) => block.type === 'script-execution' && (block.status === 'running' || block.status === 'writing')
   )
-  const toolActivity = runningTool?.type === 'tool-call'
-    ? getToolActivitySummary(runningTool, locale, formatPath, translator)
-    : null
-  return { liveTraceSummary: toolActivity ?? undefined, hasStreamingThinkingBlock }
+  const scriptActivity = runningScript?.type === 'script-execution' && runningScript.title
+    ? runningScript.title
+    : undefined
+  return { liveTraceSummary: scriptActivity, hasStreamingThinkingBlock }
 }
 
 function readStandaloneModelVisibleText(message: ChatMessage): string {
@@ -499,39 +486,17 @@ function readStandaloneModelVisibleText(message: ChatMessage): string {
     .join('\n')
 }
 
-function hasStandaloneVisibleAssistantReply(messages: readonly ChatMessage[]): boolean {
-  const lastUserIndex = messages.findLastIndex((message) => message.role === 'user')
-  return messages.slice(lastUserIndex + 1).some((message) =>
-    message.role === 'assistant' && readStandaloneModelVisibleText(message).trim().length > 0
-  )
-}
-
 function shouldBlockStandaloneRunSubmission(
   status: StandaloneConversationRuntime['status'],
   hasPendingExecution: boolean,
   accountSignInPending: boolean
 ): boolean {
   return status === 'running'
+    || status === 'stopping'
     || status === 'awaiting-input'
     || status === 'awaiting-confirmation'
     || hasPendingExecution
     || accountSignInPending
-}
-
-function applyStandaloneCompletedRunResult<TState extends StandaloneConversationRuntime>(
-  state: TState,
-  messages: readonly ChatMessage[],
-  noTextError: string,
-  now = Date.now()
-): TState {
-  const completed = applyStandaloneAgentRuntimeEvent(state, { kind: 'done' }, now)
-  return hasStandaloneVisibleAssistantReply(messages)
-    ? completed
-    : patchRuntime(completed, {
-        status: 'failed',
-        teamPhase: null,
-        lastError: noTextError,
-      })
 }
 
 function isModelVisibleAssistantText(text: string, tone: 'default' | 'error' | undefined): boolean {
@@ -548,83 +513,6 @@ function readTeamExecutionPhase(
     : null
 }
 
-/**
- * 确认信封的结构化明细。
- *
- * 逐 kind 白名单重建（而不是整包透传）：明细来自 main，但会走 Kernel 事件桥的不透明载荷，
- * 形状不合就当没有——渲染层回落到散文 message，而不是把半个对象喂给确认卡。
- * `authorization` 是所有 kind 共用的授权抬头（操作标签/目标/作用域），单独拼。
- */
-function readStandaloneConfirmationDetail(
-  value: unknown
-): StandaloneConversationRuntime['awaitingConfirmationDetail'] {
-  const detail = asRecord(value)
-  const authorization = readStandaloneConfirmationAuthorization(detail.authorization)
-  if (
-    detail.kind === 'tool-category-authorization'
-    && typeof detail.categoryId === 'string'
-    && typeof detail.categoryLabel === 'string'
-    && typeof detail.toolName === 'string'
-  ) return {
-    kind: 'tool-category-authorization',
-    categoryId: detail.categoryId,
-    categoryLabel: detail.categoryLabel,
-    toolName: detail.toolName,
-    ...authorization,
-  }
-  if (
-    detail.kind === 'mcp-tool-call'
-    && typeof detail.serverName === 'string'
-    && typeof detail.toolName === 'string'
-  ) return {
-    kind: 'mcp-tool-call',
-    serverName: detail.serverName,
-    toolName: detail.toolName,
-    ...authorization,
-  }
-  // 原生执行栈的通用审批（项目补丁、破坏性命令、技能加载…）都走这一支：
-  // createTaskApprovalPort 统一给 `operation-authorization` + authorization 抬头。
-  if (detail.kind === 'operation-authorization') return {
-    kind: 'operation-authorization',
-    ...authorization,
-  }
-  if (
-    detail.kind === 'skill-load'
-    && typeof detail.skillId === 'string'
-    && typeof detail.label === 'string'
-  ) return {
-    kind: 'skill-load',
-    skillId: detail.skillId,
-    label: detail.label,
-    description: optionalWhen(isString, detail.description),
-    ...authorization,
-  }
-  return null
-}
-
-type StandaloneConfirmationAuthorization = Pick<
-  NonNullable<StandaloneConversationRuntime['awaitingConfirmationDetail']>,
-  'authorization'
->
-
-function readStandaloneConfirmationAuthorization(
-  value: unknown
-): StandaloneConfirmationAuthorization {
-  const authorization = asRecord(value)
-  if (typeof authorization.label !== 'string') return {}
-  const scope = authorization.scope === 'call' || authorization.scope === 'task-operation'
-    ? authorization.scope
-    : 'call'
-  return {
-    authorization: {
-      label: authorization.label,
-      scope,
-      target: optionalWhen(isString, authorization.target),
-      requester: optionalWhen(isString, authorization.requester),
-    },
-  }
-}
-
 function readPositiveInteger(value: unknown): number | null {
   return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : null
 }
@@ -638,10 +526,7 @@ function readNonBlankString(value: unknown): string | null {
 }
 
 /**
- * main 每轮送核前算出的上下文用量。
- *
- * 只留仪表要用的三格；完整载荷还带账本、压力面与治理投影，那些是调试视图的事，
- * 全量搬到 renderer 状态里只会让每一轮都拖着一份没人读的对象。
+ * main 每次模型请求算出的上下文用量。只留仪表要用的三格。
  */
 interface StandaloneContextUsageEstimate {
   readonly percent: number
@@ -649,7 +534,7 @@ interface StandaloneContextUsageEstimate {
   readonly usableContextWindow: number
 }
 
-/** 从 `context-usage-estimate` 运行时事件里收一份用量；形状不全一律当没有。 */
+/** 从 `context-usage-estimate` 运行状态里收一份用量；形状不全一律当没有。 */
 function readStandaloneContextUsageEstimate(
   value: unknown
 ): Nullable<StandaloneContextUsageEstimate> {
@@ -673,24 +558,18 @@ function asRecord(value: unknown): Record<string, unknown> {
 }
 
 export {
-  applyStandaloneAgentRuntimeEvent,
-  applyStandaloneCompletedRunResult,
+  applyStandaloneConversationState,
   asRecord,
   attachStandaloneRunChanges,
   beginStandaloneAgentStop,
-  hasStandaloneVisibleAssistantReply,
-  isStandaloneAgentRuntimeEvent,
   LegacyNoTextResponse,
+  markStandaloneGuidanceApplied,
   markStandaloneRun,
   pauseUnappliedRunGuidance,
-  readStandaloneAgentRuntimeKind,
-  readStandaloneAgentTerminalKind,
   readStandaloneContextUsageEstimate,
-  readStandaloneFinalAgentError,
-  readStandaloneFinalAgentStatus,
-  readStandaloneFinalAgentText,
   readStandaloneLiveActivity,
   readStandaloneModelVisibleText,
+  readStandaloneTerminalKind,
   resolveStandaloneRunChangesAnchor,
   restoreStandaloneRunMarkers,
   sanitizeStandaloneChatMessages,

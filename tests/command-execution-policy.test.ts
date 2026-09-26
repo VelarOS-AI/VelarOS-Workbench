@@ -3,14 +3,17 @@ import { resolve } from 'node:path'
 
 import { describe, test } from 'bun:test'
 
-import { analyzeCommandExecution } from '@velaros-ai/project/execution'
+import { shellCommandPolicy } from '@velaros-ai/velaros/shell'
 
-import { analyzeWorkbenchCommandExecution } from '../src/main/workspace/CommandExecutionPolicy'
+import {
+  analyzeWorkbenchCommandExecution,
+  resolveWorkspaceIntegrityConfirmation,
+} from '../src/main/workspace/CommandExecutionPolicy'
 
 /**
  * 锁住命令安全门的行为，而不是它的实现。
  *
- * 通用判定的权威源是 `@velaros-ai/project/execution`；本仓只叠加「IDE 工作区完整性」一层。
+ * 通用判定的权威源是 `@velaros-ai/velaros/shell` 的 `shellCommandPolicy`；本仓只叠加「IDE 工作区完整性」一层。
  * 这里分三组断言：平台层不能因归并而丢、补充层必须真的生效、日常开发命令不许误伤。
  * 三组任一破了都说明安全门漂了——这正是当初 1225 行本地分叉与权威源悄悄发散的原因。
  * 「危险」的意思是执行前先问用户（批准就照常跑），所以误伤同样是缺陷：每一条都是一次无谓的打扰。
@@ -18,16 +21,20 @@ import { analyzeWorkbenchCommandExecution } from '../src/main/workspace/CommandE
 
 const projectRoot = resolve('/workspace/demo')
 
-/** 平台权威源负责的破坏性命令；归并后必须原样保留。 */
+/**
+ * 平台权威源负责的破坏性命令；归并后必须原样保留。
+ * 平台只收成片毁掉、找不回来的操作：提权（`sudo …`）本身已不算危险，`chown -R` 也不再由平台判，
+ * 写到工作区外的那部分由补充层接住（见下方「写到工作区外」）。
+ */
 const platformDangerous = [
   'rm -rf /',
   'rm -r -f /tmp/x',
-  'sudo apt install foo',
   'mkfs.ext4 /dev/sda1',
   'dd if=/dev/zero of=/dev/sda',
   'shutdown -h now',
   'kill -9 -1',
-  'chown -R me /srv',
+  'find . -name "*.log" -delete',
+  'npx rimraf ./dist',
 ]
 
 /** 平台放行、但 Workbench 作为 IDE 宿主要先问用户的命令。 */
@@ -106,6 +113,7 @@ const workbenchDangerous = [
   'xargs -I {} cp {} /usr/local/lib',
   'find . -name "*.ts" -exec cp {} /usr/local/lib \\;',
   'bash -c "touch /usr/local/lib/x"',
+  'chown -R me /srv',
   // 平台未覆盖的关机/磁盘形态
   'halt',
   'diskutil eraseDisk JHFS+ X disk2',
@@ -174,6 +182,8 @@ void describe('Workbench command execution policy', () => {
       const plan = analyzeWorkbenchCommandExecution(command, projectRoot)
       assert.equal(plan.isDangerous, true, `平台层应判危险: ${command}`)
       assert.ok(plan.dangerousReason, `危险命令必须带理由: ${command}`)
+      // 结论必须真的来自平台、原样交出：平台哪天不再判它，这里要报出来，而不是被补充层悄悄接住。
+      assert.deepEqual(plan, shellCommandPolicy.analyze(command), `平台结论应原样保留: ${command}`)
     }
   })
 
@@ -182,7 +192,6 @@ void describe('Workbench command execution policy', () => {
       const plan = analyzeWorkbenchCommandExecution(command, projectRoot)
       assert.equal(plan.isDangerous, true, `补充层应判危险: ${command}`)
       assert.ok(plan.dangerousReason, `危险命令必须带理由: ${command}`)
-      assert.equal(plan.shouldRequestConfirmation, true, `危险命令必须要求确认: ${command}`)
     }
   })
 
@@ -246,10 +255,34 @@ void describe('Workbench command execution policy', () => {
     }
   })
 
+  void test('asks for the workspace layer only where the platform lets the command through', () => {
+    // Agent 的命令走平台的 velaros:shell：平台判危险的由平台自己问，补问只管平台放行的这一层，同一条命令只问一次。
+    for (const command of platformDangerous)
+      assert.equal(resolveWorkspaceIntegrityConfirmation(command, projectRoot), null, command)
+    for (const command of mustStayAllowed)
+      assert.equal(resolveWorkspaceIntegrityConfirmation(command, projectRoot), null, command)
+    const workspaceOnly = workbenchDangerous.filter(
+      (command) => !shellCommandPolicy.analyze(command).isDangerous
+    )
+    assert.ok(workspaceOnly.length > 10)
+    for (const command of workspaceOnly) {
+      const confirmation = resolveWorkspaceIntegrityConfirmation(command, projectRoot)
+      assert.ok(confirmation, `补充层应补问: ${command}`)
+      // 确认卡只摊开一行：短标题说清这条命令要干什么，完整理由回答之后回看。
+      assert.ok(confirmation.title.length > 0 && confirmation.title.length <= 20, command)
+      assert.equal(confirmation.reason, analyzeWorkbenchCommandExecution(command, projectRoot).dangerousReason)
+    }
+    assert.equal(resolveWorkspaceIntegrityConfirmation('git reset --hard', projectRoot)?.title, '重置 Git 工作区')
+    assert.equal(
+      resolveWorkspaceIntegrityConfirmation('mv src /usr/local/lib', projectRoot)?.title,
+      '改动项目之外的路径'
+    )
+  })
+
   void test('leaves the platform verdict untouched when it already fired', () => {
     // 平台已判危险时补充层不得覆盖它的理由——两层各自的判据要能分辨。
     const plan = analyzeWorkbenchCommandExecution('sudo rm -rf /', projectRoot)
     assert.equal(plan.isDangerous, true)
-    assert.equal(plan.dangerousReason, analyzeCommandExecution('sudo rm -rf /').dangerousReason)
+    assert.equal(plan.dangerousReason, shellCommandPolicy.analyze('sudo rm -rf /').dangerousReason)
   })
 })

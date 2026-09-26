@@ -100,18 +100,6 @@ function appendStandaloneUsageTelemetry(
   ].slice(-StandaloneUsageTelemetryLimit)
 }
 
-/**
- * 回溯截断对话后，只留仍在会话里的那些执行的用量：最后一条保留下来的运行标记之后的用量属于被
- * 截掉的执行，留着只会占上限。
- */
-function retainStandaloneUsageTelemetryThrough(
-  entries: readonly StandaloneUsageTelemetry[],
-  keptUntil: number | null
-): readonly StandaloneUsageTelemetry[] {
-  if (keptUntil === null) return []
-  return entries.filter((entry) => entry.timestamp <= keptUntil)
-}
-
 /** 落盘形状：去掉固定的 `kind` 与空字段（本地存储配额紧，每条都在每个会话里重复）。 */
 function serializeStandaloneUsageTelemetry(
   entries: readonly StandaloneUsageTelemetry[]
@@ -140,7 +128,6 @@ export {
   appendStandaloneUsageTelemetry,
   readStandaloneUsageTelemetry,
   restoreStandaloneUsageTelemetry,
-  retainStandaloneUsageTelemetryThrough,
   serializeStandaloneUsageTelemetry,
   StandaloneUsageTelemetryLimit,
 }

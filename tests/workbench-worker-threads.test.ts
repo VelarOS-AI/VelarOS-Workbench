@@ -4,155 +4,153 @@ import path from 'node:path'
 
 import { describe, test } from 'bun:test'
 
+import type { ActAgentSummary, ActTurnTrace } from '@velaros-ai/velaros/contracts'
+
+import { ConversationAgentBoard } from '../src/main/conversation/ConversationAgents'
+import {
+  applyWorkbenchConversationNotice,
+  withSettledWorkerThreads,
+  type WorkbenchConversationTranscript,
+} from '../src/renderer/src/runtime/conversation/workbenchConversationNotices'
 import {
   createCoalescedChatPersistence,
   isSameIdentityList,
 } from '../src/renderer/src/runtime/standaloneChatPersistence'
 import {
-  applyStandaloneWorkerThreadEvent,
-  createEmptyWorkerThreadProjection,
-  type StandaloneWorkerThreadProjection,
-} from '../src/renderer/src/runtime/standaloneWorkbenchWorkerThreads'
+  ConversationAgentNotice,
+  type ConversationAgentProjection,
+} from '../src/shared/workbenchConversation'
 
-const Thread = 'subagent:forge'
-const Activation = 'subagent:forge:activation:1'
+const Execution = 'exec-1'
+const EmptyTranscript: WorkbenchConversationTranscript = { messages: [], workerThreads: [] }
 
-function workerEvent(fields: Record<string, unknown>): Record<string, unknown> {
+function agentSummary(overrides: Partial<ActAgentSummary> = {}): ActAgentSummary {
   return {
-    kind: 'worker-thread',
-    threadId: Thread,
-    activationId: Activation,
-    title: '审计 Project 事务核心',
-    agentName: 'Forge',
-    timestamp: 1_000,
-    ...fields,
+    id: 'job-1',
+    sessionId: 'job-1-session',
+    executionId: Execution,
+    profile: 'worker',
+    task: '\n  审计 Project 事务核心\n先读 src/core',
+    status: 'running',
+    error: null,
+    answer: '',
+    answerTruncated: false,
+    durationMs: null,
+    ...overrides,
   }
 }
 
-function apply(
-  events: ReadonlyArray<Record<string, unknown>>,
-  projection: StandaloneWorkerThreadProjection = createEmptyWorkerThreadProjection()
-): StandaloneWorkerThreadProjection {
-  return events.reduce(applyStandaloneWorkerThreadEvent, projection)
+/** 追踪里子 Agent 线程只读回合身份与子任务列表。 */
+function turnTrace(turnId: string, agents: readonly ActAgentSummary[]): ActTurnTrace {
+  return { turnId, agents } as Pick<ActTurnTrace, 'turnId' | 'agents'> as ActTurnTrace
 }
 
-function timelineBlocks(projection: StandaloneWorkerThreadProjection, index = 0): unknown[] {
-  return projection.threads[index]!.messages.flatMap((message) => message.blocks)
+/** 主进程的子 Agent 账：发出的每条通知都记下来，会话面按到达顺序归约成线程卡。 */
+function createBoard(): {
+  board: ConversationAgentBoard
+  emitted: ConversationAgentProjection[]
+  threads: () => WorkbenchConversationTranscript['workerThreads']
+} {
+  const emitted: ConversationAgentProjection[] = []
+  return {
+    board: new ConversationAgentBoard((projection) => emitted.push(projection)),
+    emitted,
+    threads: () =>
+      emitted.reduce(
+        (transcript, projection) =>
+          applyWorkbenchConversationNotice(transcript, ConversationAgentNotice, projection),
+        EmptyTranscript
+      ).workerThreads,
+  }
 }
 
-void describe('Workbench sub-agent thread projection', () => {
-  void test('streams text deltas into one growing answer instead of showing only the latest token', () => {
-    const projection = apply([
-      workerEvent({ event: 'status', status: 'running', input: 'audit the core', summary: '审计' }),
-      workerEvent({ event: 'delta', text: '## 结论' }),
-      // 单独的换行也是正文：丢掉它 markdown 段落就粘在一起。
-      workerEvent({ event: 'delta', text: '\n\n' }),
-      workerEvent({ event: 'delta', text: '事务状态机缺少幂等键。' }),
-    ])
+function anchorOf(executionId: string): string {
+  return `conversation:script:run-1:turn-1:${executionId}`
+}
 
-    const [thread] = projection.threads
-    assert.equal(thread?.output, '## 结论\n\n事务状态机缺少幂等键。')
-    assert.deepEqual(timelineBlocks(projection), [
-      { type: 'text', text: '## 结论\n\n事务状态机缺少幂等键。' },
-    ])
-    assert.equal(thread?.input, 'audit the core')
-  })
-
-  void test('lays out thinking, tool calls and text in arrival order, updating tools in place', () => {
-    const projection = apply([
-      workerEvent({ event: 'chat-event', chatEvent: { type: 'reasoning-delta', id: 'r1', text: '先看' } }),
-      workerEvent({ event: 'chat-event', chatEvent: { type: 'reasoning-delta', id: 'r1', text: '目录' } }),
-      workerEvent({
-        event: 'chat-event',
-        timestamp: 1_100,
-        chatEvent: {
-          type: 'tool-start',
-          toolCallId: 'call-1',
-          toolName: 'project:read',
-          args: { path: 'src/core/project-kernel.ts' },
-          categoryId: 'project-files',
-        },
-      }),
-      workerEvent({ event: 'chat-event', chatEvent: { type: 'tool-progress', toolCallId: 'call-1', chunk: 'reading' } }),
-      workerEvent({
-        event: 'chat-event',
-        timestamp: 1_200,
-        chatEvent: { type: 'tool-done', toolCallId: 'call-1', result: { lines: 420 } },
-      }),
-      workerEvent({ event: 'delta', text: '读完了。' }),
-    ])
-
-    assert.deepEqual(timelineBlocks(projection), [
-      { type: 'thinking', text: '先看目录', streamId: 'r1' },
-      {
-        type: 'tool-call',
-        toolCallId: 'call-1',
-        toolName: 'project:read',
-        args: { path: 'src/core/project-kernel.ts' },
-        categoryId: 'project-files',
-        isRunning: false,
-        startedAt: 1_100,
-        progress: 'reading',
-        result: { lines: 420 },
-        effects: {},
-        finishedAt: 1_200,
-      },
-      { type: 'text', text: '读完了。' },
-    ])
-  })
-
-  void test('a resumed thread gets its own card; events without an activation id stay on the latest one', () => {
-    const projection = apply([
-      workerEvent({ event: 'delta', text: 'first pass' }),
-      workerEvent({ event: 'status', status: 'completed' }),
-      workerEvent({ activationId: 'subagent:forge:activation:2', event: 'status', status: 'running' }),
-      { kind: 'worker-thread', threadId: Thread, title: 'x', event: 'delta', text: 'follow-up', timestamp: 2_000 },
-    ])
+void describe('Workbench sub-agent threads', () => {
+  void test('each dispatch or resume the main process reports becomes its own card, updated in place', () => {
+    const { board, emitted, threads } = createBoard()
+    board.trace(turnTrace('turn-1', [agentSummary()]), anchorOf)
+    board.trace(
+      turnTrace('turn-1', [
+        agentSummary({ status: 'completed', answer: '三处高风险', durationMs: 900 }),
+        // 同一个子任务续跑：这段执行里的第二段，另起一张卡。
+        agentSummary({ task: '复核第二处' }),
+      ]),
+      anchorOf
+    )
 
     assert.deepEqual(
-      projection.threads.map((thread) => [thread.activationId, thread.status, thread.output]),
+      threads().map((thread) => [thread.threadId, thread.title, thread.status, thread.output]),
       [
-        [Activation, 'completed', 'first pass'],
-        ['subagent:forge:activation:2', 'running', 'follow-up'],
+        ['conversation:agent:exec-1:job-1:0', '审计 Project 事务核心', 'completed', '三处高风险'],
+        ['conversation:agent:exec-1:job-1:1', '复核第二处', 'running', null],
+      ]
+    )
+    const [first] = threads()
+    // 卡挂在派发它的脚本卡后面；点开看完整任务；原位更新时开始时刻不变。
+    assert.equal(first?.anchorId, anchorOf(Execution))
+    assert.equal(first?.input, '\n  审计 Project 事务核心\n先读 src/core')
+    assert.equal(first?.subagentType, 'worker')
+    assert.equal(first?.startedAt, emitted[0]?.startedAt)
+    assert.deepEqual(first?.messages, [])
+  })
+
+  void test('a trace that changes nothing sends nothing', () => {
+    const { board, emitted } = createBoard()
+    board.trace(turnTrace('turn-1', [agentSummary()]), anchorOf)
+    board.trace(turnTrace('turn-1', [agentSummary()]), anchorOf)
+
+    assert.equal(emitted.length, 1)
+  })
+
+  void test('maps sub-task states onto card states and keeps the failure reason', () => {
+    const { board, threads } = createBoard()
+    board.trace(
+      turnTrace('turn-1', [
+        agentSummary({ id: 'waiting', status: 'waiting' }),
+        agentSummary({ id: 'cancelled', status: 'cancelled' }),
+        agentSummary({ id: 'interrupted', status: 'interrupted' }),
+        agentSummary({ id: 'failed', status: 'failed', error: '模型不可用' }),
+      ]),
+      () => null
+    )
+
+    assert.deepEqual(
+      threads().map((thread) => [thread.status, thread.error, 'anchorId' in thread]),
+      [
+        ['awaiting_input', null, false],
+        ['aborted', null, false],
+        ['aborted', null, false],
+        ['failed', '模型不可用', false],
       ]
     )
   })
 
-  void test('status events keep the streamed answer and bring the final summary', () => {
-    const projection = apply([
-      workerEvent({ event: 'delta', text: '完整结论' }),
-      workerEvent({
-        event: 'status',
-        status: 'completed',
-        result: { summary: '三处高风险' },
-      }),
-    ])
-
-    assert.equal(projection.threads[0]?.output, '完整结论')
-    assert.equal(projection.threads[0]?.summary, '三处高风险')
-  })
-
-  void test('the same retry error in a row is recorded once', () => {
-    const projection = apply([
-      workerEvent({ event: 'status', status: 'running', error: 'rate limited' }),
-      workerEvent({ event: 'status', status: 'running', error: 'rate limited' }),
-      workerEvent({ event: 'status', status: 'failed', error: 'gave up' }),
-    ])
-
-    assert.deepEqual(timelineBlocks(projection), [
-      { type: 'text', text: 'rate limited', tone: 'error' },
-      { type: 'text', text: 'gave up', tone: 'error' },
-    ])
-  })
-
-  void test('an event that changes nothing returns the same projection so the chat can skip a render', () => {
-    const projection = apply([workerEvent({ event: 'status', status: 'running', summary: 's' })])
-    const again = applyStandaloneWorkerThreadEvent(
-      projection,
-      workerEvent({ event: 'status', status: 'running', summary: 's', timestamp: 1_000 })
+  void test('threads still running when the run ends settle as aborted on both sides', () => {
+    const { board, emitted, threads } = createBoard()
+    board.trace(
+      turnTrace('turn-2', [
+        agentSummary({ id: 'running' }),
+        agentSummary({ id: 'waiting', status: 'waiting' }),
+        agentSummary({ id: 'done', status: 'completed', answer: '完成' }),
+      ]),
+      anchorOf
     )
-    assert.equal(again, projection)
-    assert.equal(applyStandaloneWorkerThreadEvent(projection, { kind: 'notice' }), projection)
+    // 子任务还在后台跑：主进程定时重读它所在的回合。
+    assert.deepEqual(board.pendingTurns(), ['turn-2'])
+
+    // 收尾通知没送到的线程，会话面收尾时自己按中断收掉。
+    assert.deepEqual(
+      withSettledWorkerThreads(threads()).map((thread) => thread.status),
+      ['aborted', 'aborted', 'completed']
+    )
+
+    board.settle()
+    assert.equal(emitted.length, 5)
+    assert.deepEqual(threads().map((thread) => thread.status), ['aborted', 'aborted', 'completed'])
+    assert.deepEqual(board.pendingTurns(), [])
   })
 })
 
@@ -225,10 +223,18 @@ void describe('streaming stays cheap for the rest of the page', () => {
       adapter.indexOf('function flushChatPersistence(')
     )
 
+    const finishRun = adapter.slice(
+      adapter.indexOf('function finishRun('),
+      adapter.indexOf('function settleTerminalMessages(')
+    )
+
     assert.match(persistState, /chatPersistence\.schedule\(/u)
     assert.doesNotMatch(persistState, /JSON\.stringify|localStorage/u)
-    assert.match(adapter, /if \(terminalKind\) flushChatPersistence\(\)/u)
-    assert.match(adapter, /window\.addEventListener\('pagehide', settleBeforeLeaving\)/u)
+    // 一轮收尾时回答已经完整：立刻落盘，不等合并窗口。
+    assert.match(finishRun, /run\.settleTerminal\(terminalKind\)\n(?:\s*\/\/[^\n]*\n)*\s*flushChatPersistence\(\)/u)
+    // 退出、刷新、切到后台前把没写的补上。
+    assert.match(adapter, /window\.addEventListener\('pagehide', flushChatPersistence\)/u)
+    assert.match(adapter, /window\.addEventListener\('beforeunload', flushChatPersistence\)/u)
   })
 
   void test('the page-level chat runtime ignores streamed content', () => {
@@ -242,16 +248,30 @@ void describe('streaming stays cheap for the rest of the page', () => {
       adapter.indexOf('function toSnapshot(')
     )
 
-    assert.match(projectRuntime, /readStandaloneProjectRuntimeView\(normalizedRoot, providerId\)/u)
+    assert.match(projectRuntime, /readStandaloneProjectRuntimeView\(normalizedRoot\)/u)
     assert.doesNotMatch(projectRuntime, /useStandaloneChatState/u)
     // 视图只认会话级字段：消息条数有没有、运行起止、运行标记——不认消息内容。
     assert.doesNotMatch(viewFields, /state\.messages,|state\.revision/u)
   })
 
-  void test('sub-agent cards render their timeline with the chat transcript', () => {
+  void test('sub-agent threads belong to one run and stay out of the saved history', () => {
+    const adapter = readSource('src/renderer/src/runtime/standaloneWorkbenchChatAdapter.tsx')
+    const persistedFields = adapter.slice(
+      adapter.indexOf('function readPersistedFieldIdentities('),
+      adapter.indexOf('function releaseRemovedSession(')
+    )
+
+    // 新的一轮开跑时清空上一轮的线程卡；线程卡不落盘。
+    assert.match(adapter, /\/\/ 子 Agent 线程随轮次归零[^\n]*\n\s*workerThreads: \[\],/u)
+    assert.doesNotMatch(persistedFields, /workerThreads/u)
+  })
+
+  void test('sub-agent cards show the task and then the answer, or the chat transcript when there is one', () => {
     const panel = readSource('src/renderer/src/runtime/conversation/WorkbenchWorkerThreadPanel.tsx')
     const slots = readSource('src/renderer/src/runtime/conversation/standaloneWorkbenchConversationRenderSlots.tsx')
 
+    assert.match(panel, /const fallbackBody = thread\.error \?\? thread\.output \?\? thread\.summary \?\? null/u)
+    assert.match(panel, /\{thread\.input\}/u)
     assert.match(panel, /<ChatTranscript\n\s*messages=\{thread\.messages\}/u)
     assert.match(slots, /<WorkbenchWorkerThreadPanel threads=\{threads\} sessionId=\{sessionId\} \/>/u)
   })

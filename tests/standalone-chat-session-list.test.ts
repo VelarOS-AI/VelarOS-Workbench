@@ -14,7 +14,7 @@ import {
 } from '../src/renderer/src/runtime/standaloneChatSessionList'
 
 const Root = '/work/project'
-const FolderId = standaloneProjectFolderId(Root, 'workbench')
+const FolderId = standaloneProjectFolderId(Root)
 
 /** WorkbenchChatPanel 的就绪判定：认项目里最近更新的会话组，它必须就是当前活跃的文件夹。 */
 function isPanelReady(groups: readonly WorkbenchChatSessionGroup[], currentFolderId: string): boolean {
@@ -37,6 +37,12 @@ function entry(overrides: Partial<StandaloneSessionListEntry>): StandaloneSessio
 }
 
 void describe('standalone chat session list', () => {
+  void test('gives each project one folder, the id the built-in agent always had', () => {
+    // 只剩内置 Agent：不再按服务商分文件夹，身份仍是旧版内置 Agent 的那一份，只随项目根变。
+    assert.equal(FolderId, 'workbench-project:workbench:/work/project')
+    assert.notEqual(standaloneProjectFolderId('/work/other'), FolderId)
+  })
+
   void test('a freshly created empty session is ready at once and listed with the older ones', () => {
     const older = entry({ sessionId: 'older', title: 'Kernel 设计', updatedAt: 1_757_000_000_000, isEmpty: false })
     const created = entry({ sessionId: 'created' })

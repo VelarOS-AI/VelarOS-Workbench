@@ -15,17 +15,18 @@ const WorkbenchStorageDirectory = {
    * 这里只兜住「localStorage 被清空或撞配额」的数据丢失。会话权威上收后整个目录可弃。
    */
   chatHistoryBackups: 'chat-history-backups',
-  /** 聊天回溯检查点的持久影子 index（每个项目根一份，只是 `git add -A` 的 stat 缓存，可随时删）。 */
+  /** 「本轮改动」检查点的持久影子 index（每个项目根一份，只是 `git add -A` 的 stat 缓存，可随时删）。 */
   chatCheckpointIndexes: 'chat-checkpoint-indexes',
   /**
    * 每轮「本轮改动」的补丁记录（按项目根、会话分目录）。补丁全文只落在这里——会话历史在
    * localStorage，放不下；运行标记上只记摘要和记录 id。
    */
   chatRunChanges: 'chat-run-changes',
-  /** 会话的活动上下文制品（目标模式的目标、执行计划），一个会话一个 JSON。 */
-  chatActiveContext: 'chat-active-context',
-  /** 工具原始参数与输出，支持跨进程召回。 */
-  chatContextPayloads: 'chat-context-payloads',
+  /**
+   * Platform 会话数据（上下文、运行状态、目标与项目事务），一个会话一个目录（与 Desktop 同名）。
+   * 必须在任何项目之外：Platform 拒绝放在工作区里的数据目录。
+   */
+  conversationRuntime: 'conversation-runtime',
 } as const
 
 class WorkbenchAppStoragePaths {
@@ -44,7 +45,7 @@ class WorkbenchAppStoragePaths {
     return this.ensureDir(join(this.dataRootDir, WorkbenchStorageDirectory.chatHistoryBackups))
   }
 
-  /** 聊天回溯检查点的影子 index 区（见 {@link WorkbenchStorageDirectory.chatCheckpointIndexes}）。 */
+  /** 「本轮改动」检查点的影子 index 区（见 {@link WorkbenchStorageDirectory.chatCheckpointIndexes}）。 */
   public getChatCheckpointIndexesDir(): string {
     return this.ensureDir(join(this.dataRootDir, WorkbenchStorageDirectory.chatCheckpointIndexes))
   }
@@ -54,13 +55,9 @@ class WorkbenchAppStoragePaths {
     return this.ensureDir(join(this.dataRootDir, WorkbenchStorageDirectory.chatRunChanges))
   }
 
-  /** 活动上下文区（见 {@link WorkbenchStorageDirectory.chatActiveContext}）。 */
-  public getChatActiveContextDir(): string {
-    return this.ensureDir(join(this.dataRootDir, WorkbenchStorageDirectory.chatActiveContext))
-  }
-
-  public getChatContextPayloadsDir(): string {
-    return this.ensureDir(join(this.dataRootDir, WorkbenchStorageDirectory.chatContextPayloads))
+  /** Platform 会话数据区（见 {@link WorkbenchStorageDirectory.conversationRuntime}）。 */
+  public getConversationRuntimeDir(): string {
+    return this.ensureDir(join(this.dataRootDir, WorkbenchStorageDirectory.conversationRuntime))
   }
 
   private ensureDir(path: string): string {

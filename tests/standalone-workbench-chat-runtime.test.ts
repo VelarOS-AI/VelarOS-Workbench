@@ -3,21 +3,20 @@ import assert from 'node:assert/strict'
 import { describe, test } from 'bun:test'
 
 import type { ChatMessage } from '@shared/contracts'
+import type { WorkbenchConversationState } from '@shared/workbenchConversation'
 
 import {
-  applyStandaloneAgentRuntimeEvent,
-  applyStandaloneCompletedRunResult,
+  applyStandaloneConversationState,
   attachStandaloneRunChanges,
   beginStandaloneAgentStop,
-  hasStandaloneVisibleAssistantReply,
   LegacyNoTextResponse,
+  markStandaloneGuidanceApplied,
   markStandaloneRun,
   pauseUnappliedRunGuidance,
-  readStandaloneFinalAgentError,
-  readStandaloneFinalAgentStatus,
-  readStandaloneFinalAgentText,
+  readStandaloneContextUsageEstimate,
   readStandaloneLiveActivity,
   readStandaloneModelVisibleText,
+  readStandaloneTerminalKind,
   resolveStandaloneRunChangesAnchor,
   restoreStandaloneRunMarkers,
   sanitizeStandaloneChatMessages,
@@ -27,13 +26,10 @@ import {
 import { awaitStandaloneAgentStopSettlement } from '../src/renderer/src/runtime/standaloneWorkbenchStopSettlement'
 
 void describe('standalone Workbench conversation runtime', () => {
-  void test('projects progress, turn, and retry events using Desktop runtime semantics', () => {
+  void test('projects progress, turn, and retry states using Desktop runtime semantics', () => {
     let runtime = createRuntime()
 
-    runtime = applyStandaloneAgentRuntimeEvent(runtime, {
-      kind: 'phase',
-      teamPhase: 'building-prompt',
-    })
+    runtime = apply(runtime, { kind: 'phase', teamPhase: 'building-prompt' })
     assert.deepEqual(readProgress(runtime), {
       status: 'running',
       teamPhase: 'building-prompt',
@@ -41,12 +37,15 @@ void describe('standalone Workbench conversation runtime', () => {
       completedTurns: 0,
       retryAttempt: null,
       retryMaxAttempts: null,
+      retryMessage: null,
     })
 
-    runtime = applyStandaloneAgentRuntimeEvent(runtime, { kind: 'turn-start', turn: 2 })
-    runtime = applyStandaloneAgentRuntimeEvent(runtime, {
+    runtime = apply(runtime, { kind: 'turn-start', turn: 2 })
+    // 限流等待：主进程给的说明留在状态上，状态行显示它。
+    runtime = apply(runtime, {
       kind: 'reconnecting',
       attempt: 1,
+      message: '  已到每小时的模型用量上限，约 3 分钟后自动继续。  ',
     })
     assert.deepEqual(readProgress(runtime), {
       status: 'running',
@@ -55,18 +54,12 @@ void describe('standalone Workbench conversation runtime', () => {
       completedTurns: 0,
       retryAttempt: 1,
       retryMaxAttempts: null,
+      retryMessage: '已到每小时的模型用量上限，约 3 分钟后自动继续。',
     })
+    assert.equal(apply(runtime, { kind: 'reconnecting', attempt: 0 }).connectionRetryAttempt, 1)
+    assert.equal(apply(runtime, { kind: 'reconnecting', attempt: 2 }).connectionRetryMessage, null)
 
-    runtime = applyStandaloneAgentRuntimeEvent(runtime, {
-      kind: 'retrying-turn',
-      turn: 2,
-      attempt: 3,
-      maxAttempts: 5,
-    })
-    assert.equal(runtime.connectionRetryAttempt, 3)
-    assert.equal(runtime.connectionRetryMaxAttempts, 5)
-
-    runtime = applyStandaloneAgentRuntimeEvent(runtime, { kind: 'turn-end', turn: 2 })
+    runtime = apply(runtime, { kind: 'turn-end', turn: 2 })
     assert.deepEqual(readProgress(runtime), {
       status: 'running',
       teamPhase: 'researching',
@@ -74,46 +67,67 @@ void describe('standalone Workbench conversation runtime', () => {
       completedTurns: 2,
       retryAttempt: null,
       retryMaxAttempts: null,
+      retryMessage: null,
     })
+
+    // 认不出的阶段、只管用量与引导回执的状态都不动状态行。
+    assert.equal(apply(runtime, { kind: 'phase', teamPhase: 'dreaming' as never }), runtime)
+    assert.equal(apply(runtime, { kind: 'input-applied', inputId: 'guidance-1' }), runtime)
+    assert.equal(apply(runtime, contextUsage({ percent: 40 })), runtime)
   })
 
-  void test('projects awaiting events into stopped interaction states', () => {
-    const waitingForInput = applyStandaloneAgentRuntimeEvent(createRuntime(), {
+  void test('projects awaiting states into interaction states that the next progress clears', () => {
+    const waitingForInput = apply(createRuntime(), {
       kind: 'awaiting-input',
-      question: 'Which package?',
+      executionId: 'run-1',
+      question: ' Which package? ',
     })
     assert.deepEqual(readInteraction(waitingForInput), {
       status: 'awaiting-input',
       teamPhase: 'waiting-confirmation',
       input: 'Which package?',
       confirmation: null,
-      detail: null,
+      confirmationId: null,
+      executionId: 'run-1',
     })
 
-    const waitingForConfirmation = applyStandaloneAgentRuntimeEvent(createRuntime(), {
+    const waitingForConfirmation = apply(createRuntime(), {
       kind: 'awaiting-confirmation',
-      confirmationMessage: 'Allow this tool?',
-      confirmationDetail: {
-        kind: 'mcp-tool-call',
-        serverName: 'browser',
-        toolName: 'open',
-      },
+      executionId: 'run-2',
+      confirmationId: 'request-7',
+      confirmationMessage: 'Run rm -rf build?',
     })
     assert.deepEqual(readInteraction(waitingForConfirmation), {
       status: 'awaiting-confirmation',
       teamPhase: 'waiting-confirmation',
       input: null,
-      confirmation: 'Allow this tool?',
-      detail: {
-        kind: 'mcp-tool-call',
-        serverName: 'browser',
-        toolName: 'open',
-      },
+      confirmation: 'Run rm -rf build?',
+      confirmationId: 'request-7',
+      executionId: 'run-2',
+    })
+
+    // 卡片答完后主进程推来「执行中」：等待中的请求随之撤下，运行接着跑。
+    assert.deepEqual(readInteraction(apply(waitingForConfirmation, { kind: 'phase', teamPhase: 'executing' })), {
+      status: 'running',
+      teamPhase: 'executing',
+      input: null,
+      confirmation: null,
+      confirmationId: null,
+      executionId: null,
+    })
+    // 输入框答完同理：界面不自己推断恢复，等主进程的状态。
+    assert.deepEqual(readInteraction(apply(waitingForInput, { kind: 'phase', teamPhase: 'executing' })), {
+      status: 'running',
+      teamPhase: 'executing',
+      input: null,
+      confirmation: null,
+      confirmationId: null,
+      executionId: null,
     })
   })
 
-  void test('projects all terminal events and keeps errors in runtime state', () => {
-    const done = applyStandaloneAgentRuntimeEvent(createRuntime(), { kind: 'done' }, 100)
+  void test('projects all terminal states and keeps errors in runtime state', () => {
+    const done = apply(createRuntime(), { kind: 'done' }, 100)
     assert.deepEqual(readTerminal(done), {
       status: 'completed',
       teamPhase: 'completed',
@@ -121,11 +135,7 @@ void describe('standalone Workbench conversation runtime', () => {
       finishedAt: 100,
     })
 
-    const aborted = applyStandaloneAgentRuntimeEvent(
-      createRuntime(),
-      { kind: 'aborted', message: 'Stopped by the user.' },
-      200
-    )
+    const aborted = apply(createRuntime(), { kind: 'aborted', message: 'Stopped by the user.' }, 200)
     assert.deepEqual(readTerminal(aborted), {
       status: 'aborted',
       teamPhase: null,
@@ -133,82 +143,76 @@ void describe('standalone Workbench conversation runtime', () => {
       finishedAt: 200,
     })
 
-    const failed = applyStandaloneAgentRuntimeEvent(
-      createRuntime(),
-      { kind: 'error', message: 'Provider unavailable' },
-      300
-    )
+    const failed = apply(createRuntime(), { kind: 'error', message: 'Provider unavailable' }, 300)
     assert.deepEqual(readTerminal(failed), {
       status: 'failed',
       teamPhase: null,
       lastError: 'Provider unavailable',
       finishedAt: 300,
     })
+
+    // 每一轮都按自己的收尾时刻记，不沿用上一轮的。
+    assert.equal(apply(done, { kind: 'done' }, 400).lastRunFinishedAt, 400)
   })
 
-  void test('keeps stopping authoritative until an abort terminal event settles it', () => {
+  void test('tells which states end the run', () => {
+    assert.equal(readStandaloneTerminalKind({ kind: 'done', goalStatus: 'complete' }), 'done')
+    assert.equal(readStandaloneTerminalKind({ kind: 'aborted', message: 'stopped' }), 'aborted')
+    assert.equal(readStandaloneTerminalKind({ kind: 'error', message: 'failed' }), 'error')
+    assert.equal(readStandaloneTerminalKind({ kind: 'turn-end', turn: 1 }), null)
+    assert.equal(
+      readStandaloneTerminalKind({ kind: 'awaiting-input', executionId: 'run', question: 'Which?' }),
+      null
+    )
+  })
+
+  void test('keeps stopping authoritative until an abort terminal state settles it', () => {
     const running = { ...createRuntime(), status: 'running' as const, teamPhase: 'executing' as const }
     const stopping = beginStandaloneAgentStop(running)
     assert.equal(stopping.status, 'stopping')
     assert.equal(stopping.teamPhase, null)
 
-    const lateProgress = applyStandaloneAgentRuntimeEvent(stopping, {
-      kind: 'phase',
-      teamPhase: 'requesting-model',
-    })
+    const lateProgress = apply(stopping, { kind: 'phase', teamPhase: 'requesting-model' })
     assert.equal(lateProgress.status, 'stopping')
     assert.equal(lateProgress.teamPhase, null)
-    assert.equal(shouldBlockStandaloneRunSubmission(lateProgress.status, true, false), true)
+    const lateQuestion = apply(lateProgress, {
+      kind: 'awaiting-input',
+      executionId: 'run',
+      question: 'Continue?',
+    })
+    assert.equal(lateQuestion.status, 'stopping')
+    assert.equal(shouldBlockStandaloneRunSubmission(lateQuestion.status, false, false), true)
 
-    const aborted = applyStandaloneAgentRuntimeEvent(
-      lateProgress,
-      { kind: 'aborted', message: 'Stopped by the user.' },
-      250
-    )
+    const aborted = apply(lateQuestion, { kind: 'aborted', message: 'Stopped by the user.' }, 250)
     assert.equal(aborted.status, 'aborted')
     assert.equal(aborted.lastRunFinishedAt, 250)
+    // 没在跑的会话不进停止中。
+    assert.equal(beginStandaloneAgentStop(aborted), aborted)
   })
 
-  void test('treats a completed run without visible assistant text as a localized failure', () => {
-    const user = message('user', [{ type: 'text', text: 'Question' }])
-    const noText = applyStandaloneCompletedRunResult(
-      createRuntime(),
-      [user],
-      'No visible response',
-      400
-    )
-    assert.deepEqual(readTerminal(noText), {
-      status: 'failed',
-      teamPhase: null,
-      lastError: 'No visible response',
-      finishedAt: 400,
+  void test('reads the context usage the meter shows from the main-process estimate', () => {
+    assert.deepEqual(readStandaloneContextUsageEstimate(contextUsage({ percent: 42.5 })), {
+      percent: 42.5,
+      estimatedTokens: 85_000,
+      usableContextWindow: 200_000,
     })
-
-    const answered = applyStandaloneCompletedRunResult(
-      createRuntime(),
-      [user, message('assistant', [{ type: 'text', text: 'Answer' }])],
-      'No visible response',
-      500
-    )
-    assert.equal(answered.status, 'completed')
-    assert.equal(answered.lastError, null)
+    assert.equal(readStandaloneContextUsageEstimate({ kind: 'usage-telemetry', percent: 10 }), null)
+    assert.equal(readStandaloneContextUsageEstimate(contextUsage({ usableContextWindow: 0 })), null)
+    assert.equal(readStandaloneContextUsageEstimate(contextUsage({ percent: Number.NaN })), null)
+    assert.equal(readStandaloneContextUsageEstimate(undefined), null)
   })
 
-  void test('recognizes error output instead of falling through to completed', () => {
-    assert.equal(readStandaloneFinalAgentStatus({ status: 'error' }), 'error')
-    assert.equal(
-      readStandaloneFinalAgentError({ status: 'error', error: { message: 'Bad key' } }),
-      'Bad key'
-    )
-    assert.equal(readStandaloneFinalAgentText({ response: LegacyNoTextResponse }), null)
-  })
-
-  void test('blocks a new submit while a completed event is awaiting its invoke result', () => {
+  void test('blocks a new submit while a run is active, stopping, or still settling', () => {
     assert.equal(shouldBlockStandaloneRunSubmission('completed', true, false), true)
     assert.equal(shouldBlockStandaloneRunSubmission('completed', false, false), false)
+    assert.equal(shouldBlockStandaloneRunSubmission('completed', false, true), true)
+    for (const status of ['running', 'stopping', 'awaiting-input', 'awaiting-confirmation'] as const)
+      assert.equal(shouldBlockStandaloneRunSubmission(status, false, false), true)
+    for (const status of ['idle', 'aborted', 'failed'] as const)
+      assert.equal(shouldBlockStandaloneRunSubmission(status, false, false), false)
   })
 
-  void test('bounds stop settlement even when the abort IPC never resolves', async () => {
+  void test('bounds stop settlement even when the cancel IPC never resolves', async () => {
     const terminalSettlement = new Promise<never>(() => undefined)
     const settlement = await awaitStandaloneAgentStopSettlement({
       requestAbort: () => new Promise<boolean>(() => undefined),
@@ -220,7 +224,7 @@ void describe('standalone Workbench conversation runtime', () => {
     assert.deepEqual(settlement, { kind: 'timeout' })
   })
 
-  void test('waits through a false abort response so a delayed done terminal can win', async () => {
+  void test('waits through a false cancel response so a delayed done terminal can win', async () => {
     let terminalKind: 'done' | null = null
     let settleTerminal!: (kind: 'done') => void
     const terminalSettlement = new Promise<'done'>((resolve) => {
@@ -257,45 +261,62 @@ void describe('standalone Workbench conversation runtime', () => {
     const restored = sanitizeStandaloneChatMessages(messages)
     assert.deepEqual(restored.map(({ id }) => id), ['user', 'answer'])
     assert.equal(readStandaloneModelVisibleText(restored[1]!), 'Real answer')
-    assert.equal(hasStandaloneVisibleAssistantReply(restored), true)
-    assert.equal(
-      hasStandaloneVisibleAssistantReply([
-        message('assistant', [{ type: 'text', text: 'Earlier answer' }]),
-        message('user', [{ type: 'text', text: 'Unanswered question' }]),
-      ]),
-      false
-    )
+    // 没被清理掉的消息原样交回，不换新引用。
+    assert.equal(restored[0], messages[3])
   })
 
   void test('pauses run guidance that the interrupted run never consumed', () => {
-    const guidance = (id: string, guidanceStatus: ChatMessage['guidanceStatus']): ChatMessage => ({
-      ...message('user', [{ type: 'text', text: id }], id),
-      conversationKind: 'run-guidance',
-      guidanceStatus,
-    })
     const messages = [
       guidance('applied', 'applied'),
       guidance('accepted', 'accepted'),
       guidance('in-flight', 'pending'),
       guidance('continuation', 'sent'),
     ]
-    const statuses = (settled: readonly ChatMessage[]) =>
-      settled.map(({ id, guidanceStatus }) => [id, guidanceStatus])
 
     // 收尾：已受理未读走的暂停；「引导中」等投递回执自己落定；已纳入 / 续接消息不动。
-    assert.deepEqual(statuses(pauseUnappliedRunGuidance(messages)), [
+    assert.deepEqual(readGuidanceStatuses(pauseUnappliedRunGuidance(messages)), [
       ['applied', 'applied'],
       ['accepted', 'paused'],
       ['in-flight', 'pending'],
       ['continuation', 'sent'],
     ])
     // 重启恢复：那一轮早就不在了，「引导中」也一并暂停。
-    assert.deepEqual(statuses(pauseUnappliedRunGuidance(messages, { includePending: true })), [
+    assert.deepEqual(readGuidanceStatuses(pauseUnappliedRunGuidance(messages, { includePending: true })), [
       ['applied', 'applied'],
       ['accepted', 'paused'],
       ['in-flight', 'paused'],
       ['continuation', 'sent'],
     ])
+    // 停止：只暂停主进程说还留着没读走的那几条。
+    assert.deepEqual(
+      readGuidanceStatuses(
+        pauseUnappliedRunGuidance(messages, { includePending: true, inputIds: ['in-flight'] })
+      ),
+      [
+        ['applied', 'applied'],
+        ['accepted', 'accepted'],
+        ['in-flight', 'paused'],
+        ['continuation', 'sent'],
+      ]
+    )
+  })
+
+  void test('marks guidance applied when the runtime reads it into the context', () => {
+    const messages = [guidance('in-flight', 'pending'), guidance('accepted', 'accepted')]
+
+    // 回执之前 input-applied 可能先到：「引导中」直接记为已纳入。
+    assert.deepEqual(readGuidanceStatuses(markStandaloneGuidanceApplied(messages, 'in-flight')), [
+      ['in-flight', 'applied'],
+      ['accepted', 'accepted'],
+    ])
+    const applied = markStandaloneGuidanceApplied(messages, 'accepted')
+    assert.deepEqual(readGuidanceStatuses(applied), [
+      ['in-flight', 'pending'],
+      ['accepted', 'applied'],
+    ])
+    // 重复回执、不认识的输入都不换新消息列表。
+    assert.equal(markStandaloneGuidanceApplied(applied, 'accepted'), applied)
+    assert.equal(markStandaloneGuidanceApplied(messages, 'unknown-input'), messages)
   })
 
   void test('marks the finished run on its last assistant message like Desktop', () => {
@@ -319,6 +340,8 @@ void describe('standalone Workbench conversation runtime', () => {
         turnKind: 'totalTurns',
         startedAt: 1_000,
         durationMs: 3_000,
+        goalMode: undefined,
+        goalStatus: undefined,
         runChanges: undefined,
         timestamp: 4_000,
       },
@@ -329,6 +352,11 @@ void describe('standalone Workbench conversation runtime', () => {
     assert.equal(aborted[0]?.status, 'aborted')
     assert.equal(aborted[0]?.detail, 'stopped')
     assert.equal(markStandaloneRun({ ...base, markers: aborted, status: 'completed' }), aborted)
+
+    // 目标模式的一轮记下目标模式与主进程报来的目标状态。
+    const goalRun = markStandaloneRun({ ...base, status: 'completed', goalMode: true, goalStatus: 'complete' })
+    assert.equal(goalRun[0]?.goalMode, true)
+    assert.equal(goalRun[0]?.goalStatus, 'complete')
   })
 
   void test('does not pin a new run that failed before speaking onto the previous reply', () => {
@@ -354,7 +382,16 @@ void describe('standalone Workbench conversation runtime', () => {
     assert.deepEqual(
       restoreStandaloneRunMarkers(
         [
-          { messageId: 'kept', status: 'completed', timestamp: 5, turnCount: 2, startedAt: 1, durationMs: 4 },
+          {
+            messageId: 'kept',
+            status: 'completed',
+            timestamp: 5,
+            turnCount: 2,
+            startedAt: 1,
+            durationMs: 4,
+            goalMode: true,
+            goalStatus: 'blocked',
+          },
           { messageId: 'gone', status: 'completed', timestamp: 5 },
           { messageId: 'kept', status: 'awaiting-input', timestamp: 5 },
           'garbage',
@@ -370,63 +407,69 @@ void describe('standalone Workbench conversation runtime', () => {
           turnKind: 'totalTurns',
           startedAt: 1,
           durationMs: 4,
+          goalMode: true,
+          goalStatus: 'blocked',
           runChanges: undefined,
           timestamp: 5,
         },
       ]
     )
+    assert.equal(
+      restoreStandaloneRunMarkers(
+        [{ messageId: 'kept', status: 'completed', timestamp: 5, goalStatus: 'unknown' }],
+        messages
+      )[0]?.goalStatus,
+      undefined
+    )
     assert.deepEqual(restoreStandaloneRunMarkers(undefined, messages), [])
   })
 
-  void test('tells what a run is doing now: the thinking stage, else the running tool', () => {
-    const formatPath = (path: string): string => path.replace('/work/project/', '')
-    const translator = {
-      translate: (_locale: string, key: string, params?: Record<string, unknown>) =>
-        `${key}(${String(params?.action ?? '')})`,
-      lookupMessage: () => null,
-    }
+  void test('tells what a run is doing now: the retry notice, the thinking stage, else the running script', () => {
     const idle = { liveTraceSummary: undefined, hasStreamingThinkingBlock: false }
 
     assert.deepEqual(
       readStandaloneLiveActivity(
         message('assistant', [{ type: 'thinking', text: '### 检查项目结构\n继续处理' }]),
-        'zh-CN',
-        formatPath,
-        translator
+        null
       ),
       { liveTraceSummary: '检查项目结构', hasStreamingThinkingBlock: true }
     )
     // 半句还没说完的思考不逐字刷状态行。
     assert.deepEqual(
-      readStandaloneLiveActivity(message('assistant', [{ type: 'thinking', text: '让我' }]), 'zh-CN', formatPath, translator),
+      readStandaloneLiveActivity(message('assistant', [{ type: 'thinking', text: '让我' }]), null),
       { liveTraceSummary: undefined, hasStreamingThinkingBlock: true }
     )
 
-    const running = readStandaloneLiveActivity(
-      message('assistant', [
-        { type: 'text', text: '先看一下入口。' },
-        {
-          type: 'tool-call',
-          toolCallId: 'read-1',
-          toolName: 'project:read',
-          args: { path: '/work/project/src/app.ts' },
-          isRunning: true,
-        },
-      ] as ChatMessage['blocks']),
-      'zh-CN',
-      formatPath,
-      translator
+    const running = message('assistant', [
+      { type: 'text', text: '先看一下入口。' },
+      script('script-1', '读取入口文件', 'succeeded'),
+      script('script-2', '运行类型检查', 'running'),
+    ])
+    assert.deepEqual(readStandaloneLiveActivity(running, null), {
+      liveTraceSummary: '运行类型检查',
+      hasStreamingThinkingBlock: false,
+    })
+    assert.equal(
+      readStandaloneLiveActivity(message('assistant', [script('script-3', '整理改动', 'writing')]), null)
+        .liveTraceSummary,
+      '整理改动'
     )
-    assert.equal(running.hasStreamingThinkingBlock, false)
-    assert.match(running.liveTraceSummary ?? '', /project:read/u)
-    assert.match(running.liveTraceSummary ?? '', /src\/app\.ts/u)
-    assert.doesNotMatch(running.liveTraceSummary ?? '', /\/work\/project/u)
+    // 限流、重试时主进程的说明优先，还没开口时也照样显示。
+    assert.equal(readStandaloneLiveActivity(running, '约 3 分钟后自动继续').liveTraceSummary, '约 3 分钟后自动继续')
+    assert.deepEqual(readStandaloneLiveActivity(null, '约 3 分钟后自动继续'), {
+      liveTraceSummary: '约 3 分钟后自动继续',
+      hasStreamingThinkingBlock: false,
+    })
 
     assert.deepEqual(
-      readStandaloneLiveActivity(message('assistant', [{ type: 'text', text: '好了' }]), 'zh-CN', formatPath, translator),
+      readStandaloneLiveActivity(
+        message('assistant', [{ type: 'text', text: '好了' }, script('script-4', '收尾', 'succeeded')]),
+        null
+      ),
       idle
     )
-    assert.deepEqual(readStandaloneLiveActivity(null, 'zh-CN', formatPath, translator), idle)
+    assert.deepEqual(readStandaloneLiveActivity(message('assistant', [script('script-5', '', 'running')]), null), idle)
+    assert.deepEqual(readStandaloneLiveActivity(null, null), idle)
   })
 
   void test('keeps only a summary of a run\'s file changes on its marker', () => {
@@ -463,7 +506,13 @@ void describe('standalone Workbench conversation runtime', () => {
     assert.ok(attached)
     assert.deepEqual(attached.markers[0]?.runChanges, summary)
     assert.equal(attached.replacedRecordId, null)
-    // 停下、失败的一轮也记改动（文件可能已经改了）；消息被回溯掉、标记不在了才不记。
+    // 同一条回答换了一份记录：旧记录交给调用方删。
+    assert.equal(
+      attachStandaloneRunChanges(attached.markers, 'reply-2', { ...summary, recordId: 'checkpoint-3' })
+        ?.replacedRecordId,
+      'checkpoint-2'
+    )
+    // 停下、失败的一轮也记改动（文件可能已经改了）；消息已不在会话里、标记不在了才不记。
     assert.equal(
       resolveStandaloneRunChangesAnchor(messages, [{ ...completed[0]!, status: 'aborted' }], 2),
       'reply-2'
@@ -473,7 +522,7 @@ void describe('standalone Workbench conversation runtime', () => {
         ?.markers[0]?.runChanges,
       summary
     )
-    assert.equal(attachStandaloneRunChanges(completed, 'rewound-reply', summary), null)
+    assert.equal(attachStandaloneRunChanges(completed, 'removed-reply', summary), null)
     // 同一条回答再记一次运行标记（迟到的完成回执），摘要不丢。
     assert.deepEqual(
       markStandaloneRun({
@@ -488,10 +537,7 @@ void describe('standalone Workbench conversation runtime', () => {
       summary
     )
     // 摘要随会话持久化；形状不对的当没有。
-    assert.deepEqual(
-      restoreStandaloneRunMarkers(attached.markers, messages)[0]?.runChanges,
-      { ...summary, paths: undefined }
-    )
+    assert.deepEqual(restoreStandaloneRunMarkers(attached.markers, messages)[0]?.runChanges, summary)
     assert.equal(
       restoreStandaloneRunMarkers(
         [{ ...attached.markers[0], runChanges: { recordId: 'x', fileCount: -1 } }],
@@ -511,10 +557,37 @@ function createRuntime(): StandaloneConversationRuntime {
     lastError: null,
     connectionRetryAttempt: null,
     connectionRetryMaxAttempts: null,
+    connectionRetryMessage: null,
     awaitingInputQuestion: null,
     awaitingConfirmationMessage: null,
-    awaitingConfirmationDetail: null,
+    awaitingConfirmationId: null,
+    awaitingConfirmationExecutionId: null,
     lastRunFinishedAt: null,
+  }
+}
+
+function apply(
+  runtime: StandaloneConversationRuntime,
+  state: WorkbenchConversationState,
+  now?: number
+): StandaloneConversationRuntime {
+  return applyStandaloneConversationState(runtime, state, now)
+}
+
+function contextUsage(
+  overrides: Partial<Extract<WorkbenchConversationState, { kind: 'context-usage-estimate' }>> = {}
+): Extract<WorkbenchConversationState, { kind: 'context-usage-estimate' }> {
+  return {
+    kind: 'context-usage-estimate',
+    turn: 1,
+    model: 'gpt-5.6-sol',
+    estimatedTokens: 85_000,
+    contextWindow: 272_000,
+    usableContextWindow: 200_000,
+    reservedOutputTokens: 72_000,
+    percent: 42.5,
+    timestamp: 1_000,
+    ...overrides,
   }
 }
 
@@ -526,6 +599,36 @@ function message(
   return { id, role, blocks, timestamp: 1 }
 }
 
+function guidance(id: string, guidanceStatus: ChatMessage['guidanceStatus']): ChatMessage {
+  return {
+    ...message('user', [{ type: 'text', text: id }], id),
+    conversationKind: 'run-guidance',
+    guidanceStatus,
+  }
+}
+
+function readGuidanceStatuses(messages: readonly ChatMessage[]): unknown[] {
+  return messages.map(({ id, guidanceStatus }) => [id, guidanceStatus])
+}
+
+function script(
+  id: string,
+  title: string,
+  status: 'writing' | 'running' | 'succeeded' | 'failed' | 'cancelled'
+): ChatMessage['blocks'][number] {
+  return {
+    type: 'script-execution',
+    id,
+    kind: 'execute',
+    title,
+    status,
+    source: '',
+    sourceTruncated: false,
+    calls: [],
+    durationMs: null,
+  }
+}
+
 function readProgress(runtime: StandaloneConversationRuntime): Record<string, unknown> {
   return {
     status: runtime.status,
@@ -534,6 +637,7 @@ function readProgress(runtime: StandaloneConversationRuntime): Record<string, un
     completedTurns: runtime.completedTurns,
     retryAttempt: runtime.connectionRetryAttempt,
     retryMaxAttempts: runtime.connectionRetryMaxAttempts,
+    retryMessage: runtime.connectionRetryMessage,
   }
 }
 
@@ -543,7 +647,8 @@ function readInteraction(runtime: StandaloneConversationRuntime): Record<string,
     teamPhase: runtime.teamPhase,
     input: runtime.awaitingInputQuestion,
     confirmation: runtime.awaitingConfirmationMessage,
-    detail: runtime.awaitingConfirmationDetail,
+    confirmationId: runtime.awaitingConfirmationId,
+    executionId: runtime.awaitingConfirmationExecutionId,
   }
 }
 

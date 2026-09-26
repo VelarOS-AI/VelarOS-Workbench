@@ -61,7 +61,7 @@ const VelarDevAccess = {
 }
 
 void describe('Workbench shared VelarOS account', () => {
-  void test('gates only the built-in chat and exposes product-local sign-out in settings', () => {
+  void test('gates the built-in chat on the shared account and exposes product-local sign-out in settings', () => {
     const chatAdapter = readFileSync(
       new URL('../src/renderer/src/runtime/standaloneWorkbenchChatAdapter.tsx', import.meta.url),
       'utf8'
@@ -70,9 +70,17 @@ void describe('Workbench shared VelarOS account', () => {
       new URL('../src/renderer/src/components/settings/WorkbenchSettingsDialog.tsx', import.meta.url),
       'utf8'
     )
+    const submitStart = chatAdapter.indexOf('  async function submit(')
+    const submit = chatAdapter.slice(submitStart, chatAdapter.indexOf('\n  }\n', submitStart))
 
-    assert.match(chatAdapter, /providerId === 'workbench'/u)
-    assert.match(chatAdapter, /velarosWorkbenchAccount\.ensureSignedIn\(\)/u)
+    // 一轮开跑前先要有账号：没登录就不发，登录期间输入框按「发送中」挡住重复提交。
+    assert.match(
+      submit,
+      /const account = await window\.velarosWorkbenchAccount\.ensureSignedIn\(\)\n\s*if \(account\.status !== 'signed-in'\) return false/u
+    )
+    assert.ok(submit.indexOf('ensureSignedIn()') < submit.indexOf('velarosWorkbenchConversation'))
+    assert.equal(chatAdapter.match(/velarosWorkbenchAccount\.ensureSignedIn\(\)/gu)?.length, 1)
+    assert.match(submit, /shouldBlockStandaloneRunSubmission\(chat\.status, hasActiveRun, accountSignInPending\)/u)
     assert.match(settings, /velarosWorkbenchAccount\.signOut\(\)/u)
     assert.match(settings, /velarosWorkbenchProjectHub\.returnToEntry\(\)/u)
   })

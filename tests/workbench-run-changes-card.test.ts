@@ -4,15 +4,22 @@ import { createElement, type ReactElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, test } from 'bun:test'
 
-import {
-  ConversationRenderSlotsProvider,
-  useConversationRenderSlots,
-} from '@velaros-ai/ui/conversation'
-
-import { WorkbenchLocalizationProvider } from '../src/renderer/src/i18n'
-import { standaloneWorkbenchConversationRenderSlots } from '../src/renderer/src/runtime/conversation/standaloneWorkbenchConversationRenderSlots'
-import { WorkbenchRunChangesScopeContext } from '../src/renderer/src/runtime/conversation/WorkbenchRunChangesCard'
 import type { WorkbenchChatRunChangesSummary } from '../src/shared/workbenchGit'
+
+import { shareHostReactWithLinkedUi } from './helpers/linkedUiReact'
+
+shareHostReactWithLinkedUi()
+
+const { ConversationRenderSlotsProvider, useConversationRenderSlots } = await import(
+  '@velaros-ai/ui/conversation'
+)
+const { WorkbenchLocalizationProvider } = await import('../src/renderer/src/i18n')
+const { standaloneWorkbenchConversationRenderSlots } = await import(
+  '../src/renderer/src/runtime/conversation/standaloneWorkbenchConversationRenderSlots'
+)
+const { WorkbenchRunChangesScopeContext } = await import(
+  '../src/renderer/src/runtime/conversation/WorkbenchRunChangesCard'
+)
 
 type SlotMessage = Parameters<
   ReturnType<typeof useConversationRenderSlots>['messageFileChangeSummary']
@@ -33,25 +40,21 @@ function renderCard(
   summaries: ReadonlyMap<string, WorkbenchChatRunChangesSummary>
 ): string {
   return renderToStaticMarkup(
-    createElement(
-      WorkbenchLocalizationProvider,
-      {
-        value: {
-          locale: 'zh-CN',
-          setLocale: async () => undefined,
-          t: (key, params) => (params ? `${key}${JSON.stringify(params)}` : key),
-        },
+    createElement(WorkbenchLocalizationProvider, {
+      value: {
+        locale: 'zh-CN',
+        setLocale: async () => undefined,
+        t: (key, params) => (params ? `${key}${JSON.stringify(params)}` : key),
       },
-      createElement(
-        ConversationRenderSlotsProvider,
-        { slots: standaloneWorkbenchConversationRenderSlots },
-        createElement(
+      children: createElement(ConversationRenderSlotsProvider, {
+        slots: standaloneWorkbenchConversationRenderSlots,
+        children: createElement(
           WorkbenchRunChangesScopeContext.Provider,
           { value: { projectRoot: '/work/project', sessionId: 'session', summaries } },
           createElement(SummaryProbe, { messageId })
-        )
-      )
-    )
+        ),
+      }),
+    })
   )
 }
 

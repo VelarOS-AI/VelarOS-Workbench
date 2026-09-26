@@ -3,11 +3,8 @@ import type { Result } from '@velaros-ai/core/result'
 
 import type {
   AppLocale,
-  ChatLoadOlderMessagesRequest,
-  ChatLoadOlderMessagesResponse,
   ListProviderModelsRequest,
   ProviderModelCatalog,
-  SystemFileChangePreviewResult,
   SystemLocalAttachmentFileRequest,
   SystemLocalAttachmentFileResult,
   SystemLocalAttachmentFileWriteRequest,
@@ -15,8 +12,6 @@ import type {
   SystemOpenPathOptions,
   SystemOpenPathResult,
   SystemOverview,
-  SystemRestoreFileChangeResult,
-  SystemRollbackFileChangeResult,
   SystemWorkspaceGitActionRequest,
   SystemWorkspaceGitActionResult,
   SystemWorkspaceGitCommitMessageResult,
@@ -37,8 +32,6 @@ import type {
   WorkbenchDeleteEntryRequest,
   WorkbenchDeleteEntryResult,
   WorkbenchEntryMutationResult,
-  WorkbenchGetCodeGraphRequest,
-  WorkbenchGetCodeGraphResult,
   WorkbenchIndexProjectRequest,
   WorkbenchIndexProjectResult,
   WorkbenchInlineCompletionRequest,
@@ -71,9 +64,6 @@ import type {
   WorkbenchListLocalHistoryResult,
   WorkbenchMoveEntryRequest,
   WorkbenchMoveEntryResult,
-  WorkbenchProjectAiIndexStatus,
-  WorkbenchProjectAiIndexStatusChangedEvent,
-  WorkbenchProjectAiIndexStatusRequest,
   WorkbenchProjectAiRulesRequest,
   WorkbenchProjectAiRulesResult,
   WorkbenchReadFileRequest,
@@ -83,7 +73,6 @@ import type {
   WorkbenchReadLocalHistorySnapshotRequest,
   WorkbenchReadLocalHistorySnapshotResult,
   WorkbenchRenameEntryRequest,
-  WorkbenchReportAgentWorkspaceSignalsRequest,
   WorkbenchRestoreDeletedEntryRequest,
   WorkbenchRestoreDeletedEntryResult,
   WorkbenchRestoreMissingFileRequest,
@@ -96,8 +85,6 @@ import type {
   WorkbenchSearchContentResult,
   WorkbenchSearchEntriesRequest,
   WorkbenchSearchEntriesResult,
-  WorkbenchStartProjectAiIndexRequest,
-  WorkbenchStartProjectAiIndexResult,
   WorkbenchTerminalInputRequest,
   WorkbenchTerminalOutputEvent,
   WorkbenchTerminalResizeRequest,
@@ -120,18 +107,9 @@ export interface WorkbenchProjectKernelPort {
   indexWorkbenchProject(
     request: WorkbenchIndexProjectRequest
   ): Promise<Result<WorkbenchIndexProjectResult>>
-  startWorkbenchProjectAiIndex(
-    request: WorkbenchStartProjectAiIndexRequest
-  ): Promise<Result<WorkbenchStartProjectAiIndexResult>>
-  getWorkbenchProjectAiIndexStatus(
-    request: WorkbenchProjectAiIndexStatusRequest
-  ): Promise<Result<WorkbenchProjectAiIndexStatus>>
   getWorkbenchProjectAiRules(
     request: WorkbenchProjectAiRulesRequest
   ): Promise<Result<WorkbenchProjectAiRulesResult>>
-  getWorkbenchCodeGraph(
-    request: WorkbenchGetCodeGraphRequest
-  ): Promise<Result<WorkbenchGetCodeGraphResult>>
   saveWorkbenchFile(request: WorkbenchSaveFileRequest): Promise<Result<WorkbenchSaveFileResult>>
   saveWorkbenchFileSync(request: WorkbenchSaveFileRequest): Result<WorkbenchSaveFileResult>
   listWorkbenchLocalHistory(
@@ -217,23 +195,14 @@ export interface WorkbenchProjectKernelPort {
   writeWorkbenchTerminalInput(request: WorkbenchTerminalInputRequest): Promise<Result<void>>
   resizeWorkbenchTerminalSession(request: WorkbenchTerminalResizeRequest): Promise<Result<void>>
   stopWorkbenchTerminalSession(request: WorkbenchTerminalStopRequest): Promise<Result<void>>
-  reportWorkbenchAgentWorkspaceSignals(
-    request: WorkbenchReportAgentWorkspaceSignalsRequest
-  ): Promise<Result<void>>
   getWorkbenchInlineCompletion(
     request: WorkbenchInlineCompletionRequest
   ): Promise<Result<WorkbenchInlineCompletionResult>>
   onWorkbenchTerminalOutput(listener: (event: WorkbenchTerminalOutputEvent) => void): () => void
-  onWorkbenchProjectAiIndexStatusChanged(
-    listener: (event: WorkbenchProjectAiIndexStatusChangedEvent) => void
-  ): () => void
 }
 
 /** Workbench 使用的 Kernel 会话与附件能力。 */
 export interface WorkbenchSessionKernelPort {
-  loadOlderMessages(
-    request: ChatLoadOlderMessagesRequest
-  ): Promise<Result<ChatLoadOlderMessagesResponse>>
   readLocalAttachmentFile(
     request: SystemLocalAttachmentFileRequest
   ): Promise<Result<SystemLocalAttachmentFileResult>>
@@ -253,21 +222,6 @@ export interface WorkbenchWorkspaceKernelPort {
     path: string,
     options?: SystemOpenPathOptions
   ): Promise<Result<SystemOpenPathResult>>
-  getFileChangePreview(
-    sessionId: string,
-    changeId: string,
-    path?: string
-  ): Promise<Result<SystemFileChangePreviewResult>>
-  rollbackFileChange(
-    sessionId: string,
-    changeId: string,
-    path?: string
-  ): Promise<Result<SystemRollbackFileChangeResult>>
-  restoreFileChange(
-    sessionId: string,
-    changeId: string,
-    path?: string
-  ): Promise<Result<SystemRestoreFileChangeResult>>
   pickDirectory(): Promise<Result<Nullable<string>>>
   addWorkspaceRoot(
     sessionId: string,

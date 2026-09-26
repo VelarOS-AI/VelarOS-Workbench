@@ -9,8 +9,8 @@ import { WorkbenchFsChannels } from '../src/shared/workbenchFs'
 import { WorkbenchWorkspaceChannels } from '../src/shared/workbenchWorkspace'
 
 /**
- * 用户在 Workbench 里亲手做的写入（编辑器保存、文件树操作、应用 / 撤销一处改动）要报给改动归属账本：
- * 正在跑的那一轮不能把它们算成 Agent 的改动，回溯时也不能替用户撤掉。只报写成功的。
+ * 用户在 Workbench 里亲手做的写入（编辑器保存、文件树操作）要报给改动归属账本：
+ * 正在跑的那一轮不能把它们算成 Agent 的改动。只报写成功的。
  */
 
 const ipcHandlers = new Map<string, (...args: unknown[]) => unknown>()
@@ -110,33 +110,36 @@ void describe('user writes reported to the run attribution', () => {
     }
   })
 
-  void test('applying or undoing a change from the UI reports its files; reads report nothing', async () => {
+  void test('the workspace channel only reads: write operations are refused before reaching the provider', async () => {
+    // 这条通道上已没有会写文件的操作（应用 / 撤销改动随旧 Agent 栈退役），也就没有用户写入要报。
     const { registerWorkbenchWorkspaceIpc } = await import('../src/main/workspace/WorkbenchWorkspaceIpc')
-    const { writes, sink } = createSink()
-    const dispose = registerWorkbenchWorkspaceIpc(
-      {
-        invoke: async (request: { operation: string }) =>
-          request.operation === 'project:read' ? { files: [] } : { changedFiles: ['src/a.ts', 'src/b.ts'] },
-        resolveProject: async () => {
-          throw new Error('unused')
-        },
-        dispose: async () => undefined,
-      } as never,
-      sink
-    )
+    const invoked: string[] = []
+    const dispose = registerWorkbenchWorkspaceIpc({
+      invoke: async (request: { operation: string }) => {
+        invoked.push(request.operation)
+        return { files: [] }
+      },
+      projectRules: async () => {
+        throw new Error('unused')
+      },
+      dispose: async () => undefined,
+    } as never)
     try {
-      for (const operation of ['project:apply-edit', 'project:rollback', 'project:read']) {
+      for (const operation of ['project:list', 'project:read', 'project:rules']) {
+        assert.deepEqual(
+          await invoke(WorkbenchWorkspaceChannels.invoke, { projectRoot: '/work/app', operation, input: {} }),
+          { ok: true, output: { files: [] } }
+        )
+      }
+      for (const operation of ['project:apply-edit', 'project:rollback', 'project:run-batch']) {
         const result = await invoke(WorkbenchWorkspaceChannels.invoke, {
           projectRoot: '/work/app',
           operation,
           input: {},
-        })
-        assert.equal(result.ok, true)
+        }) as { ok: boolean; error?: { code: string } }
+        assert.deepEqual([result.ok, result.error?.code], [false, 'WORKSPACE_REQUEST_INVALID'], operation)
       }
-      assert.deepEqual(writes, [
-        { workspaceRoot: '/work/app', paths: ['src/a.ts', 'src/b.ts'] },
-        { workspaceRoot: '/work/app', paths: ['src/a.ts', 'src/b.ts'] },
-      ])
+      assert.deepEqual(invoked, ['project:list', 'project:read', 'project:rules'])
     } finally {
       dispose()
     }

@@ -6,7 +6,6 @@ import {
   appendStandaloneUsageTelemetry,
   readStandaloneUsageTelemetry,
   restoreStandaloneUsageTelemetry,
-  retainStandaloneUsageTelemetryThrough,
   serializeStandaloneUsageTelemetry,
   type StandaloneUsageTelemetry,
   StandaloneUsageTelemetryLimit,
@@ -77,15 +76,5 @@ void describe('standalone usage telemetry', () => {
     assert.equal('kind' in persisted[0]!, false)
     assert.deepEqual(restoreStandaloneUsageTelemetry(JSON.parse(JSON.stringify(persisted))), entries)
     assert.deepEqual(restoreStandaloneUsageTelemetry('not a list'), [])
-  })
-
-  void test('drops usage of runs removed by a rewind', () => {
-    const entries = [readEntry({ timestamp: 1_000 }), readEntry({ turn: 2, timestamp: 5_000 })]
-
-    assert.deepEqual(
-      retainStandaloneUsageTelemetryThrough(entries, 2_000).map((entry) => entry.timestamp),
-      [1_000]
-    )
-    assert.deepEqual(retainStandaloneUsageTelemetryThrough(entries, null), [])
   })
 })

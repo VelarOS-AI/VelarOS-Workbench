@@ -1,7 +1,4 @@
-import type {
-  WorkbenchAgentProjectActivitySource,
-  WorkbenchUserWriteSink,
-} from '../git/WorkbenchChatRunAttribution'
+import type { WorkbenchUserWriteSink } from '../git/WorkbenchChatRunAttribution'
 
 import type { WorkbenchLanguageServiceWorkerClient } from './LanguageServiceWorkerClient'
 
@@ -13,30 +10,15 @@ type WorkbenchLanguageFilesChangedPort = Pick<
 /**
  * 写完文件当场告诉语言服务，不等文件监听。
  *
- * macOS 在机器忙的时候（Agent 跑构建、装依赖时正是如此）把文件事件攒上好几秒才成批送到，这段时间里编辑器要到的
- * 诊断还是照着旧文件算的：Agent 明明已经把错误修掉，红线却还在。Agent 的写文件工具报它改过的路径（改动归属账本
- * 也靠这个），用户在编辑器、文件树里的写入由 fs IPC 报；两路都只是提前通知，文件监听照常兜底（命令的产物、
- * 外部引擎自己写盘的文件仍由它送到）。
+ * macOS 在机器忙的时候（Agent 跑构建、装依赖时正是如此）把文件事件攒上好几秒才成批送到，这段时间里编辑器
+ * 要到的诊断还是照着旧文件算的：Agent 明明已经把错误修掉，红线却还在。Agent 在 Platform 里的项目编辑由会话
+ * 宿主报它写到的路径，用户在编辑器、文件树里的写入由 fs IPC 报；两路都只是提前通知，文件监听照常兜底（命令的
+ * 产物仍由它送到）。
  */
-export function withLanguageSyncOnAgentWrites(
-  inner: WorkbenchAgentProjectActivitySource,
+export function languageSyncOnAgentEdits(
   language: WorkbenchLanguageFilesChangedPort
-): WorkbenchAgentProjectActivitySource {
-  return {
-    activityFor: (request) => {
-      const port = inner.activityFor(request)
-      return {
-        beginFileWrite: () => {
-          const finish = port.beginFileWrite()
-          return (changedPaths) => {
-            finish(changedPaths)
-            notifyLanguageFilesChanged(language, request.projectRoot, changedPaths)
-          }
-        },
-        beginCommand: () => port.beginCommand(),
-      }
-    },
-  }
+): (projectRoot: string, paths: readonly string[]) => void {
+  return (projectRoot, paths) => notifyLanguageFilesChanged(language, projectRoot, paths)
 }
 
 export function withLanguageSyncOnUserWrites(

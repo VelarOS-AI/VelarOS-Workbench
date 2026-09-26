@@ -1,0 +1,534 @@
+import {
+  isArray,
+  isBoolean,
+  isFiniteNumber,
+  isPlainObject,
+  isPresent,
+  isString,
+  isUndefined,
+} from '@velaros-ai/core'
+import type { ConversationWorkerThread } from '@velaros-ai/ui/conversation'
+import type {
+  ChatMessage,
+  ContentBlock,
+  InteractionBlock,
+  ScriptExecutionBlock,
+  TextBlock,
+  ThinkingBlock,
+  WidgetBlock,
+} from '@velaros-ai/ui/conversation/contracts'
+
+import {
+  ConversationAgentNotice,
+  type ConversationAgentProjection,
+  ConversationAgentTextMaxChars,
+  ConversationInteractionLimits,
+  ConversationInteractionNotice,
+  type ConversationInteractionProjection,
+  ConversationScriptNotice,
+  type ConversationScriptProjection,
+  ConversationScriptSourceMaxChars,
+  ConversationTextNotice,
+  type ConversationTextProjection,
+  ConversationThinkingMaxChars,
+  ConversationThinkingNotice,
+  type ConversationThinkingProjection,
+  ConversationWidgetLimits,
+  ConversationWidgetNotice,
+  type ConversationWidgetProjection,
+} from '@shared/workbenchConversation'
+
+/**
+ * 会话里的正文块：除了 UI 合同的字段，还记着它是哪一回合的哪段正文、是不是还没被协议接纳的预览
+ * （与 Desktop 同一套：收尾与重启恢复时预览一律去掉）。
+ */
+export type WorkbenchConversationTextBlock = TextBlock & {
+  segmentId?: string
+  turnId?: string
+  preview?: boolean
+}
+
+/** 一次运行的通知落到会话上的两处：消息（运行消息里的块）与子 Agent 线程。 */
+export interface WorkbenchConversationTranscript {
+  readonly messages: readonly ChatMessage[]
+  readonly workerThreads: readonly ConversationWorkerThread[]
+}
+
+/** 新建运行消息时记在它上面的这一轮的界面身份（与用户消息同一组）。 */
+export interface WorkbenchConversationRunScope {
+  readonly runId?: string
+  readonly turnId?: string
+}
+
+type Block = ContentBlock
+
+const ScriptStatuses = ['writing', 'running', 'succeeded', 'failed', 'cancelled', 'discarded']
+const ScriptKinds = ['execute', 'observe']
+const CallStatuses = ['pending', 'succeeded', 'failed', 'cancelled']
+const CallEffects = ['none', 'committed', 'partial', 'unknown']
+const AgentStatuses = ['running', 'awaiting_input', 'completed', 'failed', 'aborted']
+const InteractionKinds = ['choice', 'form', 'input', 'confirm', 'danger', 'login', 'capability']
+const InteractionStatuses = ['pending', 'answered', 'declined', 'expired']
+const InteractionFieldKinds = ['text', 'number', 'boolean', 'choice']
+/** 脚本卡上每次调用的参数与返回值最多这么长（与 Desktop 相同）。 */
+const CallInputMaxChars = 2_000
+const CallOutputMaxChars = 6_000
+
+/** 一次运行的全部回合思考、正文、脚本卡与小部件都在这一条助手消息里（与 Desktop 相同）。 */
+export function conversationRunMessageId(runId: string): string {
+  return `conversation:run:${runId}`
+}
+
+/**
+ * 运行中的一条通知写进会话：脚本卡、交互卡、小部件、子 Agent 线程、回合思考与正文。别的种类（命令输出、
+ * 项目动静）不进会话，由调用方另行处理；形状不对的通知一律忽略。
+ */
+export function applyWorkbenchConversationNotice(
+  transcript: WorkbenchConversationTranscript,
+  kind: string,
+  payload: unknown,
+  scope: WorkbenchConversationRunScope = {}
+): WorkbenchConversationTranscript {
+  switch (kind) {
+    case ConversationTextNotice:
+      return isTextProjection(payload) ? applyText(transcript, payload, scope) : transcript
+    case ConversationThinkingNotice:
+      return isThinkingProjection(payload) ? applyThinking(transcript, payload, scope) : transcript
+    case ConversationScriptNotice:
+      return isScriptProjection(payload) ? applyScript(transcript, payload, scope) : transcript
+    case ConversationWidgetNotice:
+      return isWidgetProjection(payload) ? applyWidget(transcript, payload, scope) : transcript
+    case ConversationInteractionNotice:
+      return isInteractionProjection(payload)
+        ? applyInteraction(transcript, payload, scope)
+        : transcript
+    case ConversationAgentNotice:
+      return isAgentProjection(payload) ? applyAgent(transcript, payload) : transcript
+    default:
+      return transcript
+  }
+}
+
+/** 预览与思考只会变长：比块里现有的字短、又是它前缀的快照已经过时，不回退。 */
+function isStaleSnapshot(current: string, incoming: string): boolean {
+  return incoming.length < current.length && current.startsWith(incoming)
+}
+
+/** 回合正文：preview 原位更新，accepted 转为正式正文，rejected 撤回还没接纳的预览。 */
+function applyText(
+  transcript: WorkbenchConversationTranscript,
+  payload: ConversationTextProjection,
+  scope: WorkbenchConversationRunScope
+): WorkbenchConversationTranscript {
+  return updateRunMessage(transcript, payload.runId, scope, (blocks) => {
+    const index = blocks.findIndex(
+      (block) => block.type === 'text' && (block as WorkbenchConversationTextBlock).segmentId === payload.id
+    )
+    const current = index >= 0 ? (blocks[index] as WorkbenchConversationTextBlock) : undefined
+    if (payload.phase === 'preview' && current && !current.preview) return blocks
+    if (payload.phase === 'preview' && current && isStaleSnapshot(current.text, payload.text))
+      return blocks
+    if (payload.phase === 'rejected' || !payload.text)
+      return current?.preview ? blocks.filter((_, position) => position !== index) : blocks
+    const next: WorkbenchConversationTextBlock = {
+      type: 'text',
+      text: payload.text,
+      segmentId: payload.id,
+      turnId: payload.turnId,
+    }
+    if (payload.phase === 'preview') next.preview = true
+    return current ? replaceAt(blocks, index, next) : [...blocks, next]
+  })
+}
+
+/** 回合思考：同一回合的思考整段原位替换；这一回合的响应作废时撤掉。 */
+function applyThinking(
+  transcript: WorkbenchConversationTranscript,
+  payload: ConversationThinkingProjection,
+  scope: WorkbenchConversationRunScope
+): WorkbenchConversationTranscript {
+  return updateRunMessage(transcript, payload.runId, scope, (blocks) => {
+    const index = blocks.findIndex(
+      (block) => block.type === 'thinking' && block.streamId === payload.id
+    )
+    if (payload.phase === 'rejected' || !payload.text)
+      return index < 0 ? blocks : blocks.filter((_, position) => position !== index)
+    const current = index >= 0 ? (blocks[index] as ThinkingBlock).text : undefined
+    if (current === payload.text || (current && isStaleSnapshot(current, payload.text)))
+      return blocks
+    const next: ThinkingBlock = { type: 'thinking', text: payload.text, streamId: payload.id }
+    return index >= 0 ? replaceAt(blocks, index, next) : [...blocks, next]
+  })
+}
+
+/** 脚本卡：同一张卡的编写、执行与结果按 id 原位替换；被撤回的卡移除。标题取脚本第一行注释。 */
+function applyScript(
+  transcript: WorkbenchConversationTranscript,
+  payload: ConversationScriptProjection,
+  scope: WorkbenchConversationRunScope
+): WorkbenchConversationTranscript {
+  if (payload.status === 'discarded')
+    return updateRunMessage(transcript, payload.runId, scope, (blocks) => {
+      const index = blocks.findIndex(
+        (item) => item.type === 'script-execution' && item.id === payload.id
+      )
+      return index < 0 ? blocks : blocks.filter((_, position) => position !== index)
+    })
+  const block: ScriptExecutionBlock = {
+    type: 'script-execution',
+    id: payload.id,
+    kind: payload.kind,
+    title: readLeadingComment(payload.source) ?? '',
+    status: payload.status,
+    source: payload.source,
+    sourceTruncated: payload.sourceTruncated,
+    calls: payload.calls.map((call) => ({
+      module: call.moduleId,
+      operation: call.operation,
+      status: call.status,
+      effect: call.effect,
+      input: call.input,
+      output: call.output,
+      inputTruncated: call.inputTruncated,
+      outputTruncated: call.outputTruncated,
+    })),
+    durationMs: payload.durationMs ?? null,
+  }
+  if (payload.error) block.error = payload.error
+  return updateRunMessage(transcript, payload.runId, scope, (blocks) => {
+    const index = blocks.findIndex(
+      (item) => item.type === 'script-execution' && item.id === payload.id
+    )
+    return index >= 0 ? replaceAt(blocks, index, block) : [...blocks, block]
+  })
+}
+
+/** 小部件：按交来的先后接在运行消息后面，同一个小部件原位替换。 */
+function applyWidget(
+  transcript: WorkbenchConversationTranscript,
+  payload: ConversationWidgetProjection,
+  scope: WorkbenchConversationRunScope
+): WorkbenchConversationTranscript {
+  const block: WidgetBlock = {
+    type: 'widget',
+    id: payload.id,
+    title: payload.title,
+    code: payload.code,
+    height: payload.height,
+  }
+  return updateRunMessage(transcript, payload.runId, scope, (blocks) => {
+    const index = blocks.findIndex((item) => item.type === 'widget' && item.id === payload.id)
+    return index >= 0 ? replaceAt(blocks, index, block) : [...blocks, block]
+  })
+}
+
+/** 交互卡：请求到达时接在运行消息后面；回答、跳过或失效时按请求身份原位替换。 */
+function applyInteraction(
+  transcript: WorkbenchConversationTranscript,
+  payload: ConversationInteractionProjection,
+  scope: WorkbenchConversationRunScope
+): WorkbenchConversationTranscript {
+  const { runId, ...card } = payload
+  const block: InteractionBlock = { type: 'interaction', ...card }
+  return updateRunMessage(transcript, runId, scope, (blocks) => {
+    const index = blocks.findIndex((item) => item.type === 'interaction' && item.id === card.id)
+    return index >= 0 ? replaceAt(blocks, index, block) : [...blocks, block]
+  })
+}
+
+/**
+ * 子 Agent 线程：每次派发或续跑一个，按身份原位替换。线程挂在派发它的脚本卡后面，卡上的标题是任务第一行，
+ * 点开看任务与回答。
+ */
+function applyAgent(
+  transcript: WorkbenchConversationTranscript,
+  payload: ConversationAgentProjection
+): WorkbenchConversationTranscript {
+  const thread: ConversationWorkerThread = {
+    threadId: payload.id,
+    activationId: payload.id,
+    taskId: null,
+    nodeId: null,
+    title: payload.task.split('\n').find((line) => line.trim())?.trim() ?? '',
+    agentName: null,
+    roleId: null,
+    phase: null,
+    status: payload.status,
+    workspaceTarget: null,
+    dag: null,
+    subagentType: payload.profile,
+    customAgentName: null,
+    mode: null,
+    model: null,
+    startedAt: payload.startedAt,
+    updatedAt: payload.updatedAt,
+    input: payload.task,
+    output: payload.answer || null,
+    summary: null,
+    error: payload.error,
+    messages: [],
+  }
+  if (payload.anchorId) thread.anchorId = payload.anchorId
+  const index = transcript.workerThreads.findIndex((item) => item.threadId === payload.id)
+  return {
+    ...transcript,
+    workerThreads:
+      index >= 0
+        ? transcript.workerThreads.map((item, position) => (position === index ? thread : item))
+        : [...transcript.workerThreads, thread],
+  }
+}
+
+/**
+ * 去掉还没被协议接纳的预览：运行消息里标了 preview 的正文块；块清空的消息整条去掉。运行收尾与重启恢复
+ * 都经这里。
+ */
+export function withoutConversationPreviews(messages: readonly ChatMessage[]): ChatMessage[] {
+  return messages.flatMap((message) => {
+    if (!message.blocks.some(isPreviewBlock)) return [message]
+    const blocks = message.blocks.filter((block) => !isPreviewBlock(block))
+    return blocks.length === 0 ? [] : [{ ...message, blocks }]
+  })
+}
+
+/** 运行收尾（或上次停在运行中的会话恢复）时，编写中或执行中的脚本卡不会再有消息，按取消收掉。 */
+export function withSettledScripts(messages: readonly ChatMessage[]): ChatMessage[] {
+  return messages.map((message) =>
+    message.blocks.some(isUnsettledScript)
+      ? {
+          ...message,
+          blocks: message.blocks.map((block): Block =>
+            isUnsettledScript(block) ? { ...block, status: 'cancelled' } : block
+          ),
+        }
+      : message
+  )
+}
+
+/** 还在等回答的交互卡在运行结束后不会再被回答，按失效收掉（main 收尾时也会发，这里兜底）。 */
+export function withExpiredInteractions(messages: readonly ChatMessage[]): ChatMessage[] {
+  return messages.map((message) =>
+    message.blocks.some(isPendingInteraction)
+      ? {
+          ...message,
+          blocks: message.blocks.map((block): Block =>
+            isPendingInteraction(block) ? { ...block, status: 'expired' } : block
+          ),
+        }
+      : message
+  )
+}
+
+/** 同样的收尾：还在跑或等回答的子 Agent 线程不会再有消息，按中断收掉。 */
+export function withSettledWorkerThreads(
+  threads: readonly ConversationWorkerThread[]
+): ConversationWorkerThread[] {
+  return threads.map((thread) =>
+    thread.status === 'running' || thread.status === 'awaiting_input'
+      ? { ...thread, status: 'aborted' as const }
+      : thread
+  )
+}
+
+/** 交互卡上的回答原位写上（输入框答了一句话的提问、卡片自己答的都走这里）。 */
+export function withAnsweredInteraction(
+  messages: readonly ChatMessage[],
+  requestId: string,
+  update: (block: InteractionBlock) => InteractionBlock
+): ChatMessage[] {
+  return messages.map((message) =>
+    message.blocks.some((block) => block.type === 'interaction' && block.id === requestId)
+      ? {
+          ...message,
+          blocks: message.blocks.map((block) =>
+            block.type === 'interaction' && block.id === requestId ? update(block) : block
+          ),
+        }
+      : message
+  )
+}
+
+/** 脚本第一行 `//` 注释：模型按宿主说明写的这一步要做什么，界面拿它当脚本卡的标题。 */
+export function readLeadingComment(source: string): Nullable<string> {
+  for (const line of source.split('\n')) {
+    if (!line.trim()) continue
+    const match = /^\s*\/\/\s*(.+)$/u.exec(line)
+    return match?.[1]?.trim() || null
+  }
+  return null
+}
+
+function isPreviewBlock(block: Block): boolean {
+  return block.type === 'text' && !!(block as WorkbenchConversationTextBlock).preview
+}
+
+function isUnsettledScript(block: Block): block is ScriptExecutionBlock {
+  return block.type === 'script-execution' && (block.status === 'writing' || block.status === 'running')
+}
+
+function isPendingInteraction(block: Block): block is InteractionBlock {
+  return block.type === 'interaction' && block.status === 'pending'
+}
+
+function updateRunMessage(
+  transcript: WorkbenchConversationTranscript,
+  runId: string,
+  scope: WorkbenchConversationRunScope,
+  update: (blocks: Block[]) => Block[]
+): WorkbenchConversationTranscript {
+  const id = conversationRunMessageId(runId)
+  const existing = transcript.messages.find((message) => message.id === id)
+  const current = existing?.blocks ?? []
+  const blocks = update(current)
+  if (blocks === current) return transcript
+  if (existing && blocks.length === 0)
+    return { ...transcript, messages: transcript.messages.filter((message) => message.id !== id) }
+  if (existing)
+    return {
+      ...transcript,
+      messages: transcript.messages.map((message) =>
+        message.id === id ? { ...message, blocks } : message
+      ),
+    }
+  if (blocks.length === 0) return transcript
+  const message: ChatMessage = {
+    id,
+    role: 'assistant',
+    conversationKind: 'assistant-output',
+    blocks,
+    timestamp: Date.now(),
+  }
+  if (scope.runId) message.runId = scope.runId
+  if (scope.turnId) message.turnId = scope.turnId
+  return { ...transcript, messages: [...transcript.messages, message] }
+}
+
+function replaceAt(blocks: Block[], index: number, block: Block): Block[] {
+  return blocks.map((item, position) => (position === index ? block : item))
+}
+
+// ---------------------------------------------------------------------------------------------
+// 通知是进程边界外来的数据：只收形状完整、正文有界的
+// ---------------------------------------------------------------------------------------------
+
+function isTextProjection(value: unknown): value is ConversationTextProjection {
+  return (
+    isPlainObject(value) &&
+    isString(value.id) &&
+    isString(value.runId) &&
+    isString(value.turnId) &&
+    (value.phase === 'preview' || value.phase === 'accepted' || value.phase === 'rejected') &&
+    isString(value.text)
+  )
+}
+
+function isThinkingProjection(value: unknown): value is ConversationThinkingProjection {
+  return (
+    isPlainObject(value) &&
+    isString(value.id) &&
+    isString(value.runId) &&
+    isString(value.turnId) &&
+    (value.phase === 'update' || value.phase === 'rejected') &&
+    isString(value.text) &&
+    value.text.length <= ConversationThinkingMaxChars
+  )
+}
+
+function isScriptProjection(value: unknown): value is ConversationScriptProjection {
+  if (
+    !isPlainObject(value) ||
+    !isString(value.id) ||
+    !value.id.startsWith('conversation:script:') ||
+    !ScriptKinds.includes(String(value.kind)) ||
+    !(!isPresent(value.durationMs) || (isFiniteNumber(value.durationMs) && value.durationMs >= 0)) ||
+    !isString(value.runId) ||
+    !isString(value.turnId) ||
+    !ScriptStatuses.includes(String(value.status)) ||
+    !isString(value.source) ||
+    value.source.length > ConversationScriptSourceMaxChars ||
+    !isBoolean(value.sourceTruncated) ||
+    !(value.error === null || isString(value.error)) ||
+    !isArray(value.calls)
+  )
+    return false
+  return value.calls.every(
+    (call) =>
+      isPlainObject(call) &&
+      isString(call.moduleId) &&
+      isString(call.operation) &&
+      CallStatuses.includes(String(call.status)) &&
+      CallEffects.includes(String(call.effect)) &&
+      isString(call.input) &&
+      call.input.length <= CallInputMaxChars &&
+      isString(call.output) &&
+      call.output.length <= CallOutputMaxChars &&
+      isBoolean(call.inputTruncated) &&
+      isBoolean(call.outputTruncated)
+  )
+}
+
+function isAgentProjection(value: unknown): value is ConversationAgentProjection {
+  return (
+    isPlainObject(value) &&
+    isString(value.id) &&
+    value.id.startsWith('conversation:agent:') &&
+    (value.anchorId === null || isString(value.anchorId)) &&
+    isString(value.task) &&
+    value.task.length <= ConversationAgentTextMaxChars &&
+    isString(value.profile) &&
+    AgentStatuses.includes(String(value.status)) &&
+    isString(value.answer) &&
+    value.answer.length <= ConversationAgentTextMaxChars &&
+    (value.error === null || isString(value.error)) &&
+    isFiniteNumber(value.startedAt) &&
+    isFiniteNumber(value.updatedAt)
+  )
+}
+
+function isWidgetProjection(value: unknown): value is ConversationWidgetProjection {
+  return (
+    isPlainObject(value) &&
+    isString(value.id) &&
+    isString(value.runId) &&
+    isString(value.title) &&
+    value.title.length <= ConversationWidgetLimits.titleChars &&
+    isString(value.code) &&
+    value.code.length <= ConversationWidgetLimits.codeChars &&
+    isFiniteNumber(value.height) &&
+    value.height >= ConversationWidgetLimits.minHeight &&
+    value.height <= ConversationWidgetLimits.maxHeight
+  )
+}
+
+function isInteractionProjection(value: unknown): value is ConversationInteractionProjection {
+  return (
+    isPlainObject(value) &&
+    isString(value.id) &&
+    isString(value.runId) &&
+    InteractionKinds.includes(String(value.kind)) &&
+    InteractionStatuses.includes(String(value.status)) &&
+    isString(value.message) &&
+    value.message.length <= ConversationInteractionLimits.messageChars &&
+    (isUndefined(value.options) || isInteractionOptions(value.options)) &&
+    (isUndefined(value.fields) ||
+      (isArray(value.fields) &&
+        value.fields.every(
+          (field) =>
+            isPlainObject(field) &&
+            isString(field.id) &&
+            isString(field.label) &&
+            InteractionFieldKinds.includes(String(field.kind)) &&
+            (isUndefined(field.options) || isInteractionOptions(field.options))
+        ))) &&
+    (isUndefined(value.operation) ||
+      (isPlainObject(value.operation) && isString(value.operation.label))) &&
+    (isUndefined(value.answer) || isPlainObject(value.answer))
+  )
+}
+
+function isInteractionOptions(value: unknown): boolean {
+  return (
+    isArray(value) &&
+    value.every((option) => isPlainObject(option) && isString(option.id) && isString(option.label))
+  )
+}

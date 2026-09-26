@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
 
 import { ChangeSet, Text } from '@codemirror/state'
 import { describe, test } from 'bun:test'
@@ -39,5 +41,17 @@ void describe('Workbench minimal text changes', () => {
       ["const s = 'x'\nfoo(a, b)\n", 'const s = "x"\nfoo(\n  a,\n  b\n)\n'],
     ] as const)
       assert.equal(apply(before, after).result, after, JSON.stringify([before, after]))
+  })
+
+  void test('are what formatting the document applies, so the cursor and comments stay put', () => {
+    const editor = readFileSync(
+      path.resolve(process.cwd(), 'src/renderer/src/components/editor/CodeMirrorEditor.tsx'),
+      'utf8'
+    )
+
+    assert.match(
+      editor,
+      /view\.dispatch\(\{ changes: buildWorkbenchMinimalTextChanges\(content, nextContent\) \}\)/u
+    )
   })
 })

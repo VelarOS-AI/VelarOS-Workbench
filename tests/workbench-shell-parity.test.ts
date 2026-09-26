@@ -14,7 +14,7 @@ void describe('pre-split Workbench shell parity', () => {
 
     assert.match(adapter, /@velaros-ai\/ui\/conversation/)
     assert.match(adapter, /<ChatConversationPane/)
-    assert.match(adapter, /<ChatComposer/)
+    assert.match(adapter, /<ChatSurfaceComposer control=\{composerControl\}/)
     assert.doesNotMatch(adapter, /wb_standaloneChatSurface/)
     assert.doesNotMatch(adapter, /Ask the injected VelarOS Agent/)
   })
@@ -72,11 +72,9 @@ void describe('pre-split Workbench shell parity', () => {
     assert.doesNotMatch(presentation, /placement="rail"|rightToolActionGroup/)
     assert.match(toolbar, /<WorkbenchGitCommitControl/)
     const runButton = toolbar.indexOf('<WorkbenchRunAction')
-    const codeGraphButton = toolbar.indexOf('{codeGraphAvailable && (')
     const settingsButton = toolbar.indexOf('tooltip={settingsLabel}')
     assert.ok(runButton >= 0)
-    assert.ok(runButton < codeGraphButton)
-    assert.ok(codeGraphButton < settingsButton)
+    assert.ok(runButton < settingsButton)
     assert.match(adapter, /gitWorkspaceRoot:\s*workbench\.activeProject\?\.rootPath/)
     assert.match(adapter, /onOpenGitCommitTool:[\s\S]*setActiveLeftTool\('commit'\)/)
     assert.match(adapter, /onOpenGitBottomTool:[\s\S]*openBottomTool\('git'\)/)
@@ -152,9 +150,6 @@ void describe('pre-split Workbench shell parity', () => {
     const velarGraph = readSource(
       'src/renderer/src/components/codeGraph/WorkbenchLogicGraphDialog.tsx'
     )
-    const codeGraph = readSource(
-      'src/renderer/src/components/codeGraph/WorkbenchCodeGraphDialog.tsx'
-    )
     const scopeTree = readSource(
       'src/renderer/src/components/codeGraph/WorkbenchLogicGraphScopeTree.tsx'
     )
@@ -166,8 +161,9 @@ void describe('pre-split Workbench shell parity', () => {
     assert.ok(folderButton < velarStructureButton)
     assert.ok(velarStructureButton < commitButton)
     assert.match(presentation, /chrome\.velarLogicGraphAvailable[\s\S]*openVelarStructure/)
-    assert.match(presentation, /<WorkbenchCodeGraphDialog[\s\S]*open=\{dialogs\.codeGraphOpen\}/)
-    assert.match(presentation, /auxiliaryTabs:[\s\S]*<WorkbenchLogicGraphEditor/)
+    // 结构图按需加载：打开结构标签时才拉它那一块，不进工作区外壳。
+    assert.match(presentation, /auxiliaryTabs:[\s\S]*<Suspense fallback=\{null\}>\s*<LazyWorkbenchLogicGraphEditor/)
+    assert.match(presentation, /const LazyWorkbenchLogicGraphEditor = lazy\(async \(\) => \{\n\s*const module = await import\('\.\/components\/codeGraph\/WorkbenchLogicGraphDialog'\)/)
     assert.match(presentation, /const VelarStructureOverviewTab[\s\S]*velar-structure:overview/)
     assert.match(
       presentation,
@@ -188,10 +184,7 @@ void describe('pre-split Workbench shell parity', () => {
       presentation,
       /leftMode=\{\s*surface\.activeLeftTool === 'commit'[\s\S]*'velar-structure'[\s\S]*'files'[\s\S]*\}/
     )
-    assert.match(
-      model,
-      /const codeGraphAvailable = codeGraphResourceAvailable && !velarLogicGraphAvailable/
-    )
+    assert.match(model, /const velarLogicGraphAvailable = workbench\.projectContextIndex\.files\.some\(/)
     assert.match(model, /const \[velarLogicGraphOpen, setVelarLogicGraphOpen\] = useState\(false\)/)
     assert.match(
       model,
@@ -232,8 +225,6 @@ void describe('pre-split Workbench shell parity', () => {
       readSource('src/renderer/src/components/codeGraph/WorkbenchLogicGraphSidebar.tsx'),
       /<WorkbenchLogicGraphScopeTree/
     )
-    assert.match(codeGraph, /getWorkbenchCodeGraph/)
-    assert.doesNotMatch(codeGraph, /VelarOwnershipGraphRequestId/)
     assert.match(
       readSource('src/renderer/src/components/editor/CodeInsightPanel.tsx'),
       /diagnosticsByPath:\s*languageServiceInsights\?\.diagnosticsByPath/
@@ -266,20 +257,22 @@ void describe('pre-split Workbench shell parity', () => {
   })
 
   void test('restores the Workbench chat landing and composer controls', () => {
-    const app = readSource('src/renderer/src/StandaloneWorkbenchApp.tsx')
+    const shell = readSource('src/renderer/src/workspace/WorkbenchWorkspaceShell.tsx')
     const adapter = readSource('src/renderer/src/runtime/standaloneWorkbenchChatAdapter.tsx')
     const renderSlots = readSource(
       'src/renderer/src/runtime/conversation/standaloneWorkbenchConversationRenderSlots.tsx',
     )
     const styles = readSource('src/renderer/src/styles/04-insight-chat.module.css')
 
-    assert.match(app, /ConversationBlockHooksProvider/)
+    // 聊天装配跟着工作台按需加载：共享会话 UI 的各层 Provider 与会话适配器都挂在工作台外壳上。
+    assert.match(shell, /ConversationBlockHooksProvider/)
     // 回答里的路径与产物行经消息动作层落到编辑器（Desktop 同一个 blocks hook 职责）。
-    assert.match(app, /value=\{standaloneWorkbenchConversationBlockHooks\}/)
+    assert.match(shell, /value=\{standaloneWorkbenchConversationBlockHooks\}/)
     // 目标卡的读写走主进程（Desktop 同一个动作端口职责）。
-    assert.match(app, /value=\{standaloneWorkbenchConversationActionPort\}/)
-    assert.match(app, /ConversationRenderSlotsProvider/)
-    assert.match(app, /slots=\{standaloneWorkbenchConversationRenderSlots\}/)
+    assert.match(shell, /value=\{standaloneWorkbenchConversationActionPort\}/)
+    assert.match(shell, /ConversationRenderSlotsProvider/)
+    assert.match(shell, /slots=\{standaloneWorkbenchConversationRenderSlots\}/)
+    assert.match(shell, /<WorkbenchChatProvider adapter=\{standaloneWorkbenchChatAdapter\}>/)
     assert.match(renderSlots, /createConversationRenderSlots/)
     assert.match(renderSlots, /runningRuntimeMark:/)
     assert.doesNotMatch(renderSlots, /capabilityAutoApprovalNotice:/)
@@ -292,18 +285,17 @@ void describe('pre-split Workbench shell parity', () => {
     assert.doesNotMatch(adapter, /chatEmptyTitle/)
     assert.doesNotMatch(adapter, /wb_chatComposerError/)
     assert.match(adapter, /starterSuggestions\.map/)
-    assert.match(adapter, /onFilesChange:\s*setFiles/)
+    assert.match(adapter, /onFilesChange:\s*optionalWhen\(!isAwaitingInput, setFiles\)/)
     assert.match(adapter, /workbenchCurrentFilePath:\s*includedCurrentFilePath/)
     assert.match(adapter, /onDismissWorkbenchCurrentFile:/)
     assert.match(adapter, /setIncludedCurrentFilePath\(null\)/)
     assert.match(adapter, /onGoalModeChange:\s*setGoalMode/)
     assert.match(adapter, /onPlanModeChange:\s*setPlanMode/)
-    assert.match(adapter, /reasoning-delta/)
-    assert.match(adapter, /tool-start/)
-    assert.match(adapter, /tool-progress/)
-    assert.match(adapter, /tool-done/)
-    assert.match(adapter, /canStop:\s*true/)
-    assert.match(adapter, /abortAgentExecution/)
+    // 运行中的展示由主进程逐条推来的会话通知落到发起那一轮的会话上；停止走会话通道的取消。
+    assert.match(adapter, /window\.velarosWorkbenchConversation\.onEvent\(\s*applyConversationEnvelope\s*\)/)
+    assert.match(adapter, /applyWorkbenchConversationNotice\(/)
+    assert.match(adapter, /canStop:\s*isRunActive/)
+    assert.match(adapter, /velarosWorkbenchConversation\.cancel\(/)
     assert.doesNotMatch(adapter, /workbenchEditorControlAvailable/)
     assert.match(
       styles,
@@ -363,41 +355,28 @@ void describe('pre-split Workbench shell parity', () => {
     assert.match(tabs, /\{tab\.onClose && \(/)
   })
 
-  void test('keeps external Agent engines opt-in and exposes shared resource plugins', () => {
+  void test('groups related settings into four product-level sections', () => {
     const settings = readSource('src/renderer/src/components/settings/WorkbenchSettingsDialog.tsx')
-    const preload = readSource('src/preload/index.ts')
-    const main = readSource('src/main/index.ts')
-    const readme = readSource('README.md')
+    const sectionIds = [...settings.matchAll(/id: '([a-z]+)' as const/g)].map((match) => match[1])
 
-    assert.match(settings, /id: 'extensions'/)
-    assert.match(settings, /velarosWorkbenchResourcePlugins/)
-    assert.match(settings, /settingsPluginSharedHint/)
-    assert.match(settings, /renderPluginsSection\(\)/)
-    assert.match(settings, /renderModsSection\(\)/)
-    assert.match(preload, /WorkbenchResourcePluginChannels\.listAgentEngineModels/)
-    assert.match(main, /WorkbenchResourcePluginIpc/)
-    assert.match(readme, /Claude Agent and ChatGPT\/Codex are external engine plugins/)
-    assert.match(readme, /Desktop\s+and Workbench discover the same physical installation/)
-  })
-
-  void test('groups related settings into five product-level sections', () => {
-    const settings = readSource('src/renderer/src/components/settings/WorkbenchSettingsDialog.tsx')
-    const sectionIds = [...settings.matchAll(/id: '(general|editor|ai|extensions|system)' as const/g)]
-      .map((match) => match[1])
-
-    assert.deepEqual(sectionIds, ['general', 'editor', 'ai', 'extensions', 'system'])
+    assert.deepEqual(sectionIds, ['general', 'editor', 'ai', 'system'])
     assert.match(settings, /renderGeneralSection\(\)/)
     assert.match(settings, /renderEditorGroup\(\)/)
     assert.match(settings, /renderAiSection\(\)/)
-    assert.match(settings, /renderExtensionsSection\(\)/)
     assert.match(settings, /renderSystemSection\(\)/)
+    // AI 一节收模型、权限确认与项目 AI 规则。
+    const aiSection = settings.slice(
+      settings.indexOf('function renderAiSection'),
+      settings.indexOf('function renderSystemSection')
+    )
+    assert.match(aiSection, /renderModelSection\(\)[\s\S]*renderPermissionsSection\(\)[\s\S]*renderAiRulesSection\(\)/)
   })
 
   void test('keeps the release channel selector inside the product update settings', () => {
     const settings = readSource('src/renderer/src/components/settings/WorkbenchSettingsDialog.tsx')
     const languageSection = settings.slice(
       settings.indexOf('function renderLanguageSection'),
-      settings.indexOf('function pluginStatusLabel')
+      settings.indexOf('function renderAdvancedSection')
     )
     const updatesSection = settings.slice(
       settings.indexOf('function renderUpdatesSection'),

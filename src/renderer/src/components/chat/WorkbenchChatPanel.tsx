@@ -37,7 +37,6 @@ import {
   BusinessCascadingMenuSelectedIndicator,
 } from '@velaros-ai/ui/product/menus/BusinessCascadingMenu'
 
-import type { WorkbenchChatProviderId } from '../../../../plugins/agent-engines/identity'
 import {
   useWorkbenchChatProjectRuntime,
   useWorkbenchProductRuntime,
@@ -65,7 +64,6 @@ const EmptyWorkbenchChatFileReferences: readonly WorkbenchChatFileReferenceDeliv
 const WorkbenchChatScrollNavigatorVisibility = createChatScrollNavigatorVisibilityStore(true)
 
 export interface WorkbenchChatPanelProps {
-  providerId?: WorkbenchChatProviderId
   projectRoot: string
   currentFilePath: Nullable<string>
   pendingBrowserElementSelections?: readonly WorkbenchBrowserElementSelectionDelivery[]
@@ -254,7 +252,6 @@ function WorkbenchChatSessionMenu({
 }
 
 export function WorkbenchChatPanel({
-  providerId = 'workbench',
   projectRoot,
   currentFilePath,
   pendingBrowserElementSelections = EmptyWorkbenchBrowserElementSelections,
@@ -270,7 +267,7 @@ export function WorkbenchChatPanel({
   const styles = useWorkbenchProductRuntime().ui.chatPanel
   const normalizedProjectRoot = normalizeWorkbenchProjectRoot(projectRoot)
   const { t } = useWorkbenchI18n()
-  const chat = useWorkbenchChatProjectRuntime(normalizedProjectRoot, providerId)
+  const chat = useWorkbenchChatProjectRuntime(normalizedProjectRoot)
   const { currentSession } = chat
   const { activeMemberSessionId, activeSessionId, deletingSessionId, diskSessionHydrated, groups } =
     chat.sessionList
@@ -486,7 +483,6 @@ export function WorkbenchChatPanel({
       <div className={styles.workbenchChatBody}>
         {ready ? (
           <WorkbenchChatSessionSurface
-            providerId={providerId}
             conversationRefreshKey={currentSession.id}
             scrollNavigatorHidden={scrollNavigatorHidden}
             projectRoot={normalizedProjectRoot}

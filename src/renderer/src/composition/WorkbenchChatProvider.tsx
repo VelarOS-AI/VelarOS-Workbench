@@ -13,8 +13,6 @@ import type {
 } from '@shared/contracts'
 import type { WorkbenchChatRunChangesSummary } from '@shared/workbenchGit'
 
-import type { WorkbenchChatProviderId } from '../../../plugins/agent-engines/identity'
-
 import type { WorkbenchChatSurfaceScope } from './workbenchChatComposition'
 
 export type WorkbenchChatRunStatus =
@@ -145,7 +143,6 @@ export interface WorkbenchChatFileReferenceDelivery {
 }
 
 export interface WorkbenchChatSessionSurfaceProps {
-  providerId: WorkbenchChatProviderId
   projectRoot: string
   currentFilePath: Nullable<string>
   /** 只在切换会话代际时变化，流式内容修订不能放进这个 key。 */
@@ -173,17 +170,12 @@ export interface WorkbenchChatCompositionAdapter {
   /**
    * Provider 安装后保持引用稳定；实现可以调用宿主自己的 hooks，但返回值只能是 Workbench 投影。
    */
-  useProjectRuntime: (
-    projectRoot: Nullable<string>,
-    providerId?: WorkbenchChatProviderId
-  ) => WorkbenchChatProjectRuntime
+  useProjectRuntime: (projectRoot: Nullable<string>) => WorkbenchChatProjectRuntime
   SessionSurface: ComponentType<WorkbenchChatSessionSurfaceProps>
 }
 
 const WorkbenchChatCompositionContext =
   createContext<Nullable<WorkbenchChatCompositionAdapter>>(null)
-const WorkbenchChatSurfaceProviderIdContext =
-  createContext<Nullable<WorkbenchChatProviderId>>(null)
 
 export function WorkbenchChatProvider({
   adapter,
@@ -206,24 +198,14 @@ function useWorkbenchChatComposition(): WorkbenchChatCompositionAdapter {
 }
 
 export function useWorkbenchChatProjectRuntime(
-  projectRoot: Nullable<string>,
-  providerId: WorkbenchChatProviderId = 'workbench'
+  projectRoot: Nullable<string>
 ): WorkbenchChatProjectRuntime {
   const adapter = useWorkbenchChatComposition()
   // Adapter 在应用生命周期内固定，因此这里的宿主 hook 拓扑不会变化。
-  return adapter.useProjectRuntime(projectRoot, providerId)
-}
-
-/** 当前会话 Surface 的执行体身份；会话 render slot 用它选择宿主品牌标记。 */
-export function useWorkbenchChatSurfaceProviderId(): Nullable<WorkbenchChatProviderId> {
-  return useContext(WorkbenchChatSurfaceProviderIdContext)
+  return adapter.useProjectRuntime(projectRoot)
 }
 
 export function WorkbenchChatSessionSurface(props: WorkbenchChatSessionSurfaceProps): ReactElement {
   const { SessionSurface } = useWorkbenchChatComposition()
-  return (
-    <WorkbenchChatSurfaceProviderIdContext.Provider value={props.providerId}>
-      <SessionSurface {...props} />
-    </WorkbenchChatSurfaceProviderIdContext.Provider>
-  )
+  return <SessionSurface {...props} />
 }

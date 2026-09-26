@@ -1,16 +1,8 @@
-import { WorkbenchAgentEngineSessionStore } from '../plugins/agent-engines/main/WorkbenchAgentEngineSessionStore'
-import { WorkbenchAgentExtensionTools } from '../plugins/agent-engines/main/WorkbenchAgentExtensionTools'
-import { WorkbenchAgentPluginRuntime } from '../plugins/agent-engines/main/WorkbenchAgentPluginRuntime'
-
-import type { WorkbenchKernelCapabilityRoutes } from './kernel/WorkbenchKernelProtocol'
-import { WorkbenchCodeGraphResource } from './resources/WorkbenchCodeGraphResource'
-import { WorkbenchResourcePluginService } from './resources/WorkbenchResourcePluginService'
 import { WorkbenchChatCheckpointService } from './workspace/git/WorkbenchChatCheckpoints'
 import { WorkbenchChatRunAttribution } from './workspace/git/WorkbenchChatRunAttribution'
 import { WorkbenchChatRunChangeStore } from './workspace/git/WorkbenchChatRunChanges'
 import { WorkbenchGitService } from './workspace/git/WorkbenchGitService'
 import { WorkbenchLanguageServiceWorkerClient } from './workspace/language/LanguageServiceWorkerClient'
-import { WorkbenchVelarLogicGraphService } from './workspace/language/WorkbenchVelarLogicGraphService'
 import { createWorkbenchAppParts, type WorkbenchAppParts } from './workspace/Parts'
 import {
   ProjectCapabilityProvider,
@@ -23,21 +15,18 @@ export interface WorkbenchMainCapabilityProviders {
   readonly parts: WorkbenchAppParts
   readonly fileSystem: WorkbenchProjectFileSystem
   readonly git: WorkbenchGitService
-  /** 聊天回溯的工作区检查点（git 影子快照）。 */
+  /** 「本轮改动」的工作区检查点（git 影子快照）。 */
   readonly chatCheckpoints: WorkbenchChatCheckpointService
   /** 每轮「本轮改动」的补丁记录（落在数据区的文件里）。 */
   readonly chatRunChanges: WorkbenchChatRunChangeStore
   /**
-   * 每轮改动的归属账本：执行栈报 Agent 的写入与命令时间窗，文件监听报原始事件，Workbench 的写入口报
-   * 用户亲手的改动；「本轮改动」与回溯据此只认 Agent 的改动。
+   * 每轮改动的归属账本：会话运行时报 Agent 改项目的时间窗，文件监听报原始事件，Workbench 的写入口报
+   * 用户亲手的改动；「本轮改动」据此只认 Agent 的改动。
    */
   readonly chatRunAttribution: WorkbenchChatRunAttribution
   readonly language: WorkbenchLanguageServiceWorkerClient
   readonly watch: WorkbenchFileWatcher
   readonly workspace: WorkbenchProjectCapabilityProvider
-  readonly resourcePlugins: WorkbenchResourcePluginService
-  readonly agentEngines: WorkbenchAgentPluginRuntime
-  readonly kernelRoutes: WorkbenchKernelCapabilityRoutes
 }
 
 /**
@@ -48,33 +37,9 @@ export interface WorkbenchMainCapabilityProviders {
  * while the default Workspace implementation stays the published package.
  */
 export function createDefaultWorkbenchMainCapabilityProviders(
-  dataRootDir: string,
-  openExternal: (url: string) => Promise<void> = async () => {
-    throw new Error('当前 Workbench 宿主没有提供外部链接能力。')
-  },
-  pluginMarket: {
-    artifactBase: () => string
-    fetchImpl: typeof fetch
-  } = {
-    artifactBase: () => 'https://invalid.velaros.local/plugins/',
-    fetchImpl: fetch,
-  },
-  productVersion = '0.0.0'
+  dataRootDir: string
 ): WorkbenchMainCapabilityProviders {
   const language = new WorkbenchLanguageServiceWorkerClient()
-  const velarLogicGraph = new WorkbenchVelarLogicGraphService(language)
-  const codeGraphResource = new WorkbenchCodeGraphResource()
-  const agentEngines: WorkbenchAgentPluginRuntime = new WorkbenchAgentPluginRuntime(
-    new WorkbenchAgentEngineSessionStore(dataRootDir),
-    new WorkbenchAgentExtensionTools(codeGraphResource, velarLogicGraph),
-    openExternal,
-    (engineId): boolean => resourcePlugins.isAgentPluginEnabled(engineId),
-    productVersion
-  )
-  const resourcePlugins: WorkbenchResourcePluginService = new WorkbenchResourcePluginService(dataRootDir, codeGraphResource, {
-    ...pluginMarket,
-    agentEngines,
-  })
   const parts = createWorkbenchAppParts(dataRootDir)
   const chatCheckpoints = new WorkbenchChatCheckpointService(() =>
     parts.storagePaths.getChatCheckpointIndexesDir()
@@ -104,23 +69,6 @@ export function createDefaultWorkbenchMainCapabilityProviders(
     chatRunAttribution,
     language,
     watch,
-    workspace: new ProjectCapabilityProvider({ codeGraphResource, velarLogicGraph }),
-    resourcePlugins,
-    agentEngines,
-    kernelRoutes: DefaultWorkbenchKernelCapabilityRoutes,
+    workspace: new ProjectCapabilityProvider(),
   }
 }
-
-/**
- * Domain addresses are injected here—not embedded in the generic IPC face.
- * Replacing a capability implementation or version does not change renderer
- * IPC and does not create a Desktop dependency.
- *
- * Browser 的页面操作与会话收口均由 Browser Mod 的 typed host 承载；renderer 不能自行
- * 选择 capability id、operation 或跨窗口会话。
- */
-export const DefaultWorkbenchKernelCapabilityRoutes: WorkbenchKernelCapabilityRoutes =
-  Object.freeze({
-    'agent.execute': { capabilityId: 'velaros.agent', operation: 'execute' },
-    'agent.health': { capabilityId: 'velaros.agent', operation: 'health' },
-  })

@@ -17,8 +17,8 @@ export interface StandaloneSessionListEntry {
   readonly isStreaming: boolean
 }
 
-export function standaloneProjectFolderId(projectRoot: string, providerId: string): string {
-  return `workbench-project:${providerId}:${projectRoot}`
+export function standaloneProjectFolderId(projectRoot: string): string {
+  return `workbench-project:workbench:${projectRoot}`
 }
 
 /** `entries` 按面板要列的顺序给（当前会话在前，其余按最近使用）；没有项目根时没有文件夹。 */

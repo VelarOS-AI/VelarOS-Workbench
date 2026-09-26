@@ -13,6 +13,8 @@ import {
 } from '../../models/chat/workbenchChatWorkspacePath'
 import { workbenchMessage } from '../workbenchMessageHost'
 
+import { useWorkbenchScriptLiveOutput } from './workbenchScriptLiveOutput'
+
 type MessageActionOptions = Parameters<ConversationBlockHooks['useMessageActionView']>[0]
 type MessageActionView = ReturnType<ConversationBlockHooks['useMessageActionView']>
 
@@ -104,9 +106,11 @@ function useWorkbenchMessageActionView({
 }
 
 /**
- * 独立 Workbench 的会话 blocks hook 注入面。思考块翻译按产品决定不做，开关恒为关。
+ * 独立 Workbench 的会话 blocks hook 注入面。思考块翻译按产品决定不做，开关恒为关；脚本卡上的运行中输出
+ * 来自主进程推来的命令输出（不进会话记录）。
  */
 export const standaloneWorkbenchConversationBlockHooks: ConversationBlockHooks = {
   useMessageActionView: useWorkbenchMessageActionView,
   useAutoTranslateThinkingEnabled: () => false,
+  useScriptLiveOutput: useWorkbenchScriptLiveOutput,
 }

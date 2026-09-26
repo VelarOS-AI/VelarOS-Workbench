@@ -1,9 +1,3 @@
-.engineMark {
-  @apply inline-flex shrink-0 items-center justify-center;
-  color: var(--foreground-tertiary);
-  animation: workbench-running-runtime-mark-breathe 2.4s ease-in-out infinite;
-}
-
 /*
  * VelarSailMark 的 tiny 形态仍按品牌标记尺寸绘制。运行状态行只有 12px 正文，
  * 因此只在宿主挂载点缩放，不修改共享品牌件本身。
@@ -24,15 +18,4 @@
 
 .sailMark svg {
   filter: none;
-}
-
-@keyframes workbench-running-runtime-mark-breathe {
-  0%,
-  100% {
-    opacity: 0.55;
-  }
-
-  50% {
-    opacity: 1;
-  }
 }

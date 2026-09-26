@@ -23,12 +23,19 @@ void describe('Workbench chat composer parity', () => {
       'utf8'
     )
 
-    // 运行中（本会话有在途执行）发送 = 引导注入当前这一轮；在途执行是引导的前提，不是阻挡条件。
+    // 运行中（本会话有在途的一轮）发送 = 引导注入当前这一轮；在途的一轮是引导的前提，不是阻挡条件。
+    assert.match(adapter, /const canSteerRun = chat\.status === 'running' && hasActiveRun\n/)
+    assert.match(adapter, /return sendRunGuidance\(text, selections, referencedFilePaths\)/)
+    // 引导走会话通道；运行时读进上下文后回执 input-applied，那条引导记为已纳入。
     assert.match(
       adapter,
-      /canSteerRun =\s*providerId === 'workbench' && chat\.status === 'running' && hasPendingAgentExecution/
+      /\.guidance\(\{ sessionId, projectRoot, inputId: guidance\.id, text: guidanceText \}\)/
     )
-    assert.match(adapter, /return sendRunGuidance\(text, selections, referencedFilePaths\)/)
+    assert.match(adapter, /markStandaloneGuidanceApplied\(state\.messages, runtime\.inputId\)/)
+    // 等一句话回答时输入框就是回答：直接交给主进程，不另起一轮。
+    assert.match(adapter, /if \(isAwaitingInput\) return answerPendingInput\(value\)/)
+    assert.match(adapter, /answering: isAwaitingInput,/)
+    assert.match(adapter, /\.input\(\{ sessionId: chat\.sessionId, projectRoot, answer \}\)/)
     // 中止 / 失败后的下一条消息续接被打断的那一轮，而不是另起新一轮。
     assert.match(adapter, /const continuesInterruptedRun = isInterruptedRunStatus\(/)
     assert.match(adapter, /conversationKind: 'run-guidance' as const, guidanceStatus: 'sent' as const/)
@@ -39,17 +46,17 @@ void describe('Workbench chat composer parity', () => {
     )
   })
 
-  void test('wires rewind, editor navigation and picked browser elements like Desktop', () => {
+  void test('wires interaction cards, editor navigation and picked browser elements like Desktop', () => {
     const adapter = readFileSync(
       path.resolve(process.cwd(), 'src/renderer/src/runtime/standaloneWorkbenchChatAdapter.tsx'),
       'utf8'
     )
 
-    // 回溯：每轮开跑前拍检查点；只对原生执行栈开放入口。
-    assert.match(adapter, /await captureRunCheckpoint\(/)
+    // 交互卡上的回答交给主进程，卡片随后由主进程推来的更新原位写上回答。
+    assert.match(adapter, /onAnswerInteraction=\{answerInteraction\}/)
     assert.match(
       adapter,
-      /providerId === 'workbench'\s*\?\s*\{ onRewindToMessage: stableRewindToMessage, getRewindPlan: stableRewindPlan \}/
+      /\.answer\(\{ sessionId: chat\.sessionId, projectRoot, requestId, answer \}\)/
     )
     // 回答里的路径、改动卡与「查看改动」落到宿主编辑器。
     assert.match(adapter, /onOpenProjectPath=\{onOpenWorkspacePath\}/)
@@ -60,8 +67,23 @@ void describe('Workbench chat composer parity', () => {
     assert.match(adapter, /onBrowserElementSelectionsConsumed\?\.\(/)
     assert.match(
       adapter,
-      /\[\s*currentFileContext,\s*fileReferenceContext,\s*attachmentContext,\s*browserElementContext,\s*\]/
+      /\[text, currentFileContext, fileReferenceContext, attachmentContext, browserElementContext\]/
     )
+  })
+
+  void test('offers the Desktop thinking depths, migrates the legacy ones and has no voice input', () => {
+    const adapter = readFileSync(
+      path.resolve(process.cwd(), 'src/renderer/src/runtime/standaloneWorkbenchChatAdapter.tsx'),
+      'utf8'
+    )
+
+    assert.match(adapter, /new Set<ReasoningLevel>\(\['low', 'medium', 'high', 'xhigh', 'max'\]\)/)
+    assert.match(adapter, /LegacyReasoningLevels: Readonly<Record<string, ReasoningLevel>> = \{ off: 'low', ultra: 'max' \}/)
+    assert.match(adapter, /DefaultWorkbenchReasoningLevel: ReasoningLevel = 'medium'/)
+    // 思考力度按产品记忆，随每一轮与执行模式一起发给主进程。
+    assert.match(adapter, /reasoningLevel,\n\s*executionModes,/)
+    // Electron 里没有语音识别服务（与 Desktop 相同）。
+    assert.match(adapter, /voiceInput: false,/)
   })
 
   void test('isolates a message that fails to render instead of unmounting the conversation', () => {
@@ -91,19 +113,17 @@ void describe('Workbench chat composer parity', () => {
     )
 
     assert.match(slots, /messageFileChangeSummary: \(\{ message, formatPathForDisplay, onOpenEntry, onReviewEntries \}\) =>/)
-    // 一轮收尾后拿开跑前的检查点比出本轮改动（由这一轮的采集在 finish 时发出）；补丁落主进程记录文件，标记上只挂摘要。
+    // 每轮开跑前拍检查点；一轮收尾后拿它比出本轮改动（由这一轮的采集在 finish 时发出）；补丁落主进程记录文件，标记上只挂摘要。
+    assert.match(adapter, /const runCheckpoint = await captureRunCheckpoint\(/)
+    assert.match(adapter, /runChangeCapture: createRunChangeCapture\(sessionId, runCheckpoint\)/)
     assert.match(adapter, /settle: \(\) => captureRunChanges\(sessionId, checkpoint\)/)
     assert.doesNotMatch(adapter, /workspaceCheckpointDiff/)
     // 收尾的最终采集带着标记：主进程等最后一条命令的余量走完再拍，采完关掉这一轮的改动归属账本。
     assert.match(adapter, /baseCommitId,\n\s*final: true,\n\s*\}\)/)
-    // 回溯只撤回被移除各轮里 Agent 的改动：回溯到的那一轮和它之后每一轮的记录一起交给主进程。
-    assert.match(
-      adapter,
-      /recordIds: \[selection\.checkpoint, \.\.\.selection\.evictedCheckpoints\]\.map\(\(\{ id \}\) => id\)/
-    )
-    assert.doesNotMatch(adapter, /restoreChatCheckpoint/)
-    // 回溯掉的回答、被移除的会话，连同它们的改动记录一起清掉。
-    assert.match(adapter, /releaseRunChangeRecords\(projectRoot, sessionId, droppedRunChangeRecordIds\)/)
+    // 摘要挂不上（这一轮没有回答、采集失败）时撤下「进行中」，记录连同归属账本一起清掉；挂上后被替换掉的旧记录同样清掉。
+    assert.match(adapter, /withdrawLiveRunChanges\(projectRoot, sessionId, checkpoint\.id\)\n\s*releaseRunChangeRecords\(projectRoot, sessionId, \[checkpoint\.id\]\)/)
+    assert.match(adapter, /if \(orphaned\) releaseRunChangeRecords\(projectRoot, sessionId, \[orphaned\]\)/)
+    // 被移除的会话，连同它的检查点与改动记录一起清掉。
     assert.match(adapter, /releaseRemovedSession\(target\)/)
     assert.match(adapter, /releaseRunChangeRecords\(session\.projectRoot, session\.sessionId\)/)
   })
@@ -133,10 +153,13 @@ void describe('Workbench chat composer parity', () => {
       'utf8'
     )
 
-    // 状态行：思考阶段名或正在跑的工具；翻译器走会话 UI 组合根注入的那一份，不碰进程级默认实例。
+    // 状态行：限流说明、思考阶段名或正在跑的脚本卡标题（限流说明只在运行中显示）。
+    assert.match(
+      adapter,
+      /readStandaloneLiveActivity\(\n\s*activeAssistantMessage,\n\s*chat\.status === 'running' \? chat\.connectionRetryMessage : null\n\s*\)/
+    )
     assert.match(adapter, /hasStreamingThinkingBlock: liveActivity\.hasStreamingThinkingBlock/)
     assert.match(adapter, /liveTraceSummary: liveActivity\.liveTraceSummary/)
-    assert.match(adapter, /conversationTranslator = useConversationTranslatorRuntime\(\)/)
     // 回答末尾的约价：当前模型 + 公开价格目录。
     assert.match(adapter, /const pricingCatalog = useStandaloneModelPricing\(\)/)
     assert.match(adapter, /billingModel,\n\s*pricingCatalog,/)
@@ -167,8 +190,12 @@ void describe('Workbench chat composer parity', () => {
     )
 
     assert.match(adapter, /messageRunMarkers: \[\.\.\.chat\.messageRunMarkers\]/)
-    // 四个收尾点（流内终态事件、执行报错、完成、中止）都经同一个标记函数。
-    assert.equal(adapter.match(/withRunMarker\(/g)?.length, 5)
+    // 所有收尾点（主进程推来的终态、发送失败、停止超时）都经 finishRun 里同一个标记函数，目标模式的一轮带上目标状态。
+    assert.equal(adapter.match(/withRunMarker\(/g)?.length, 2)
+    assert.match(
+      adapter,
+      /\.\.\.withRunMarker\(settled, \{\n\s*goalMode: run\.goalMode,\n\s*goalStatus: runtime\.kind === 'done' \? runtime\.goalStatus : undefined,/
+    )
     assert.match(adapter, /messageRunMarkers: restoreStandaloneRunMarkers\(stored\.messageRunMarkers, messages\)/)
   })
 })

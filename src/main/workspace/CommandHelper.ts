@@ -9,7 +9,7 @@ import { execFileSync } from 'node:child_process'
 
 import { Log } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
-import { currentSystemPlatform as systemPlatformCompatibility } from '@velaros-ai/system/platform-compatibility'
+import { currentPlatform as systemPlatformCompatibility } from '@velaros-ai/core/platform'
 
 import { analyzeWorkbenchCommandExecution } from './CommandExecutionPolicy'
 
@@ -55,9 +55,8 @@ class CommandHelper {
   /**
    * 校验命令文本。
    *
-   * 空命令直接拒绝。危险命令只有调用方声明「用户已确认」（`allowDangerous`）才放行：问过并获批的
-   * Agent 工具、用户自己在命令面板里输入的命令都会声明；没声明的调用方在这里被挡回
-   * （判据见 `CommandExecutionPolicy`，`projectRoot` 划定工作区边界）。
+   * 空命令直接拒绝。危险命令只有调用方声明「用户已确认」（`allowDangerous`）才放行：用户自己在命令面板里
+   * 输入的命令会声明；没声明的调用方在这里被挡回（判据见 `CommandExecutionPolicy`，`projectRoot` 划定工作区边界）。
    */
   public validateCommand(command: string, projectRoot: string, allowDangerous = false): string {
     const trimmed = command.trim()

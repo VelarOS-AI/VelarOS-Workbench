@@ -1,12 +1,11 @@
-import { getGoalLifecycleStatus } from '@velaros-ai/agent/chat'
-import type { ActiveContextArtifact } from '@velaros-ai/agent/protocol'
+import type { ActiveContextArtifact } from '@velaros-ai/ui/conversation/contracts'
 
 /**
  * 目标自动续跑：一轮正常跑完，而会话目标仍在进行中（没完成、没阻塞、没暂停）时，宿主替用户接着开下一轮——
  * 效果相当于替他说一句「继续」，但以宿主系统说明的身份写进会话，不冒充用户发言。
  *
- * 续跑的这一轮按目标模式执行：模型想收尾却不更新目标时，Agent 的收尾门会把它拉回来，连续挡满三次就把
- * 目标记为阻塞、这一轮以失败收尾，续跑随之停下。下面的轮数上限只是再兜一层底。
+ * 续跑的这一轮按目标模式执行：模型想收尾却不更新目标时，Platform 的完成检查会把它拉回来，目标没记成完成
+ * 这一轮就以失败收尾，续跑随之停下。下面的轮数上限只是再兜一层底。
  */
 
 /** 连续自动续跑的轮数上限：目标迟迟不收束时停下来交还用户，免得无人看管时一直开轮。 */
@@ -36,7 +35,7 @@ export function resolveWorkbenchGoalAutoContinue(input: {
     || input.msSinceRunFinished > WorkbenchGoalAutoContinueWindowMs
     || input.hasQueuedUserInput
     || !input.goal
-    || getGoalLifecycleStatus(input.goal) !== 'active'
+    || input.goal.metadata?.goalStatus !== 'active'
   )
     return { kind: 'skip' }
 

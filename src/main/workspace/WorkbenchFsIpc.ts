@@ -251,7 +251,8 @@ export function registerWorkbenchFsIpc(
 
       const sender = event.sender
       // 命令面板里的命令是用户自己输入、自己点运行（或按快捷键重跑自己的上一条）的：用户就是确认者，
-      // 这里没有也不需要再弹确认卡。Agent 的命令走 `project:run` / `workbench:start_run`，不经这条通道。
+      // 这里没有也不需要再弹确认卡。Agent 的命令走 Platform 的 `velaros:shell`（工作区完整性由会话宿主
+      // 补问，见 WorkbenchConversationSession），不经这条通道。
       return parts.commands.runCommand(parsed, (outputEvent) => {
         if (!sender.isDestroyed()) {
           sender.send(WorkbenchFsChannels.runCommandOutput, outputEvent)

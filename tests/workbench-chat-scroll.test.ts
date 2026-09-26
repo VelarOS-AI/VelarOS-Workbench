@@ -92,12 +92,12 @@ void describe("Workbench shared chat scrolling", () => {
     }
   });
 
-  void test("enters stopping before the abort IPC and releases forced follow", () => {
+  void test("enters stopping before the cancel IPC and releases forced follow", () => {
     const adapter = readSource(
       "src/renderer/src/runtime/standaloneWorkbenchChatAdapter.tsx",
     );
     const stopStart = adapter.indexOf("async function stop()");
-    const stopEnd = adapter.indexOf("\n  async function submit(", stopStart);
+    const stopEnd = adapter.indexOf("\n  }\n", stopStart);
     const stopSource = adapter.slice(stopStart, stopEnd);
 
     assert.ok(stopStart >= 0);
@@ -110,22 +110,22 @@ void describe("Workbench shared chat scrolling", () => {
     );
     assert.match(
       stopSource,
-      /requestAbort:\s*\(\)\s*=>[\s\S]*abortAgentExecution/u,
+      /requestAbort:\s*async \(\)\s*=>[\s\S]*velarosWorkbenchConversation\.cancel\(\{/u,
     );
+    assert.match(stopSource, /terminalSettlement:\s*run\.terminalSettlement/u);
+    assert.match(stopSource, /timeoutMs:\s*WorkbenchAgentStopSettlementTimeoutMs/u);
+    // 没等到终态（取消被拒、出错或超时）：明确按停止失败收尾，不伪装成已中止。
     assert.match(
       stopSource,
-      /terminalSettlement:\s*activeExecution\.terminalSettlement/u,
+      /finishRun\(run, \{\n\s*kind: 'error',[\s\S]*t\('workbench\.chatStopFailed'\)/u,
     );
-    assert.match(stopSource, /settleActiveExecutionFromControlFailure/u);
-    assert.doesNotMatch(
-      stopSource,
-      /finishRun\(projectRoot, providerId, 'aborted'\)/u,
-    );
+    assert.doesNotMatch(stopSource, /kind: 'aborted'/u);
     assert.match(
       adapter,
-      /isStreaming:\s*isActiveChatRun\(chat\.status\),\s*canStop:\s*true,/u,
+      /streaming: \{\s*isStreaming:\s*isRunActive,\s*canStop:\s*isRunActive,\s*onStop:\s*stop,/u,
     );
-    assert.match(adapter, /WorkbenchAgentStopSettlementTimeoutMs\s*=\s*2_250/u);
+    assert.match(adapter, /const isRunActive = isActiveChatRun\(chat\.status\)/u);
+    assert.match(adapter, /WorkbenchAgentStopSettlementTimeoutMs\s*=\s*15_000/u);
   });
 
   void test("keeps the persisted right chat pane resize handle hittable", () => {

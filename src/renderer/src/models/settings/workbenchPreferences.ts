@@ -1,7 +1,8 @@
 import type { CSSProperties } from 'react'
 
-import type { PermissionConfirmationMode } from '@velaros-ai/agent/protocol'
 import { isFiniteNumber, isObject,isString, Log } from '@velaros-ai/core'
+
+import type { WorkbenchPermissionConfirmationMode as PermissionConfirmationMode } from '@shared/workbenchConversation'
 
 import {
   createLocalStorageJsonStore,

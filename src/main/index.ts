@@ -1,17 +1,11 @@
 import { statSync } from 'node:fs'
 import { basename, join, resolve } from 'node:path'
 
-import { app, BrowserWindow, session, shell, webContents } from 'electron'
+import { app, BrowserWindow, session, shell } from 'electron'
 
-import { createAgentKernelModule } from '@velaros-ai/agent'
-import {
-  createBrowserKernelModule,
-  ElectronBrowserRuntime,
-} from '@velaros-ai/browser/runtime'
 import { Log } from '@velaros-ai/core'
-import { Kernel } from '@velaros-ai/kernel/runtime'
-import { ProviderModelCatalogService } from '@velaros-ai/model'
-import { createModelRuntimeComposition } from '@velaros-ai/model/node'
+import { createModelRuntimeComposition } from '@velaros-ai/model'
+import { createShellEnvironment } from '@velaros-ai/velaros/shell/local'
 
 import productionAppIconPath from '../../build/icon.png?asset'
 import developmentAppIconPath from '../../build/icon-dev.png?asset'
@@ -20,24 +14,18 @@ import { WorkbenchBrowserPartition } from '../shared/workbenchBrowser'
 import { registerWorkbenchAccountIpc } from './account/WorkbenchAccountIpc'
 import { WorkbenchAccountService } from './account/WorkbenchAccountService'
 import { WorkbenchSharedAccountStore } from './account/WorkbenchSharedAccountStore'
-import { WorkbenchActiveContextStore } from './agent/WorkbenchActiveContextStore'
-import { WorkbenchAgentExecutionStack } from './agent/WorkbenchAgentExecutionStack'
-import { WorkbenchContextPayloadStore } from './agent/WorkbenchContextRecall'
 import { WorkbenchProductAnalyticsReporter } from './analytics/WorkbenchProductAnalyticsReporter'
 import { installWorkbenchProductAnalyticsRuntime } from './analytics/WorkbenchProductAnalyticsRuntime'
-import { registerWorkbenchBrowserIpc } from './browser/WorkbenchBrowserIpc'
 import { installWorkbenchBrowserDefaultPermissionPolicy } from './browser/WorkbenchBrowserPermissionPolicy'
-import { WorkbenchBrowserToolHost } from './browser/WorkbenchBrowserToolHost'
 import { WorkbenchBrowserWebviewGate } from './browser/WorkbenchBrowserWebviewGate'
-import { WorkbenchAgentCapabilityRuntime } from './kernel/WorkbenchAgentCapabilityRuntime'
-import {
-  broadcastWorkbenchKernelStatus,
-  registerWorkbenchKernelIpc,
-} from './kernel/WorkbenchKernelIpc'
-import { WorkbenchKernelPermissionPolicy } from './kernel/WorkbenchKernelPermissionPolicy'
+import workbenchScriptWorkerPath from './conversation/workbench-script-worker.ts?modulePath'
+import { createWorkbenchConversationConfiguration } from './conversation/WorkbenchConversationConfiguration'
+import { registerWorkbenchConversationIpc } from './conversation/WorkbenchConversationIpc'
+import { createWorkbenchConversationRuntime } from './conversation/WorkbenchConversationRuntime'
+import { createWorkbenchScriptRunner } from './conversation/WorkbenchScriptRunner'
+import { WorkbenchShellHostRegistry } from './conversation/WorkbenchShellHostRegistry'
+import { loadWorkbenchShellTerminal } from './conversation/WorkbenchShellTerminal'
 import { registerWorkbenchModelIpc } from './model/WorkbenchModelIpc'
-import { registerWorkbenchModIpc } from './mods/WorkbenchModIpc'
-import { WorkbenchModService } from './mods/WorkbenchModService'
 import type { WorkbenchProjectHub } from './projects/ProjectHub'
 import { registerProjectHubIpc } from './projects/ProjectHubIpc'
 import { installProjectHubMenu } from './projects/ProjectHubMenu'
@@ -50,13 +38,12 @@ import {
 import { WorkbenchWindowManager } from './projects/WorkbenchWindowManager'
 import { installWorkbenchWindowState } from './projects/WorkbenchWindowState'
 import { registerWorkbenchWindowStateIpc } from './projects/WorkbenchWindowStateIpc'
-import { registerWorkbenchResourcePluginIpc } from './resources/WorkbenchResourcePluginIpc'
 import { installWorkbenchUpdateRuntime } from './updates/WorkbenchUpdateRuntime'
 import { registerWorkbenchGitIpc } from './workspace/git/WorkbenchGitIpc'
 import { WorkbenchInlineCompletionGenerator } from './workspace/language/WorkbenchInlineCompletion'
 import { registerWorkbenchLanguageServiceIpc } from './workspace/language/WorkbenchLanguageServiceIpc'
 import {
-  withLanguageSyncOnAgentWrites,
+  languageSyncOnAgentEdits,
   withLanguageSyncOnUserWrites,
 } from './workspace/language/WorkbenchLanguageWriteSync'
 import { registerWorkbenchTerminalIpc } from './workspace/terminal/WorkbenchTerminalIpc'
@@ -75,10 +62,8 @@ import { createDefaultWorkbenchMainCapabilityProviders } from './WorkbenchMainCa
  *
  * 负责多窗口生命周期 + 项目枢纽（一个项目一个窗口、起手页三主动作、最近项目持久化、
  * Finder / 第二实例目录投递、窗口标题与菜单跟随焦点项目状态）。
- * IDE 本地能力由应用私有 IPC 语义端口承载；共享能力走**进程内 Kernel**
- * （kernel-contract §15：完整宿主进程内装栈，不经 client 子路径、不拉 daemon），
- * 不反向依赖 Desktop。Workbench 自持 Agent 与 Browser Mod 能力；Model 仍由宿主组合后直接
- * 注入 Agent，不额外发布可被 renderer 任意调用的 Kernel 能力。
+ * IDE 本地能力由应用私有 IPC 语义端口承载；主聊天接 VelarOS Platform 的会话运行时（与 Desktop 同一套：
+ * 模型写脚本、隔离子进程执行、项目与命令能力由 Platform 模块提供），不反向依赖 Desktop。
  *
  * 数据根对齐 Desktop 惯例（prod=userData，dev=cwd/.velaros/data 隔离目录），但完全独立于 Desktop 的
  * chat 存储：应用名固定 `VelarOS Workbench`，prod userData 因此拥有自己的平台目录。
@@ -86,6 +71,15 @@ import { createDefaultWorkbenchMainCapabilityProviders } from './WorkbenchMainCa
 const WorkbenchProductName = 'VelarOS Workbench'
 const WorkbenchWindowWidth = 1280
 const WorkbenchWindowHeight = 800
+const PlatformNames: Partial<Record<NodeJS.Platform, string>> = {
+  darwin: 'macOS',
+  win32: 'Windows',
+  linux: 'Linux',
+}
+/** 给模型看的操作系统：产品名、系统版本与架构，例如 macOS 26.3.1 (arm64)；进程内不变，启动时算一次。 */
+const WorkbenchHostEnvironment = Object.freeze({
+  os: `${PlatformNames[process.platform] ?? process.platform} ${process.getSystemVersion()} (${process.arch})`,
+})
 
 function isWorkbenchDevelopmentRuntime(): boolean {
   return process.env['NODE_ENV'] === 'development' || !app.isPackaged
@@ -265,156 +259,53 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
       (url) => shell.openExternal(url)
   )
   const disposeAccountIpc = registerWorkbenchAccountIpc(accountService)
-  const modService = new WorkbenchModService(dataRootDir)
-  const disposeModIpc = registerWorkbenchModIpc(modService)
-  workbenchBrowserWebviewGate = new WorkbenchBrowserWebviewGate(modService)
-  const browserRuntime = new ElectronBrowserRuntime()
-  const browserHost = new WorkbenchBrowserToolHost({
-    dataRootDir,
-    modState: modService,
-    runtime: browserRuntime,
-    isProjectRootOwned: (projectRoot) =>
-      windowManager?.getOpenProjectPaths().includes(projectRoot) === true,
-    resolveGuestWebContents: (webContentsId) => webContents.fromId(webContentsId) ?? null,
-  })
+  // 界面里的调试浏览器（用户自己开的网页标签）：闸门只负责记下挂上来的页面，退出时一并关掉。
+  workbenchBrowserWebviewGate = new WorkbenchBrowserWebviewGate()
   productAnalytics?.start()
-  const providers = createDefaultWorkbenchMainCapabilityProviders(
-    dataRootDir,
-    (url) => shell.openExternal(url),
-    {
-      artifactBase: () => accountService.getPluginArtifactBaseUrl(),
-      fetchImpl: (input) => accountService.fetchPluginResource(new URL(input.toString())),
-    },
-    app.getVersion()
-  )
-  const modelComposition = createModelRuntimeComposition()
-  modelComposition.velarCloudRuntime.registerProvider('velar', {
-    baseURL: accountService.getManagedModelBaseUrl('velar'),
-    fetch: (input, init) => accountService.fetchManagedModel('velar', input, init),
-  })
-  modelComposition.velarCloudRuntime.registerProvider('velar-dev', {
-    baseURL: accountService.getManagedModelBaseUrl('velar-dev'),
-    fetch: (input, init) => accountService.fetchManagedModel('velar-dev', input, init),
-  })
-  // Browser Mod 每轮发布一份冻结工具面；页面 URL/标题/加载态使用独立 revision，不会
-  // 重建 Agent 会话。每次具体执行仍由 Browser Host 实时校验启用态与项目所有权。
-  const agentExecutionStack = new WorkbenchAgentExecutionStack(
-    providers.workspace,
-    modelComposition,
-    {
-      captureSnapshot: ({ sessionId, projectRoot }) => {
-        const snapshot = browserHost.getModSurfaceSnapshot(sessionId, projectRoot)
-        return {
-          generation: snapshot.generation,
-          tools: snapshot.tools,
-          categoryDefinitions: snapshot.categoryDefinitions,
-          enabledCategoryIds: snapshot.enabledCategoryIds,
-          residentCategoryIds: snapshot.residentCategoryIds,
-          initialVisibleToolNames: snapshot.initialVisibleToolNames,
-        }
-      },
-    },
-    // 子 Agent 在托管厂商下可选的模型 = 当前账号授权目录里可用的那些（与模型选择器同一来源）。
-    // 账号接口读不到时回 null：派发照常进行，调度器按原样透传指定的模型。
-    async (providerId) => {
-      const access = await accountService.getManagedModelAccess().catch((error: unknown) => {
-        Log.tag('WorkbenchTeamModelRouting').warn('managed_model_access_failed', {
-          providerId,
-          error: String(error),
-        })
-        return null
-      })
-      const provider = access?.managedModels.find((entry) => entry.providerId === providerId)
-      const models = provider?.enabled
-        ? provider.models
-            .filter((model) => model.status === 'available')
-            .map(({ id, label }) => ({ id, label }))
-        : []
-      return models.length > 0 ? models : null
-    },
-    new WorkbenchActiveContextStore(() => providers.parts.storagePaths.getChatActiveContextDir()),
-    undefined,
-    undefined,
-    // Agent 写了哪些文件、命令跑在哪段时间，报给改动归属账本：「本轮改动」与回溯只认 Agent 的改动。
-    // 写完的文件同时告诉语言服务，编辑器的诊断不必等文件监听（macOS 忙时事件晚到好几秒）。
-    withLanguageSyncOnAgentWrites(providers.chatRunAttribution, providers.language),
-    new WorkbenchContextPayloadStore(() => providers.parts.storagePaths.getChatContextPayloadsDir())
-  )
-  const disposeModelIpc = registerWorkbenchModelIpc(
-    new ProviderModelCatalogService({
-      providerCollection: modelComposition.providerCollection,
-      providerScriptRegistry: modelComposition.providerScriptRegistry,
+  const providers = createDefaultWorkbenchMainCapabilityProviders(dataRootDir)
+  const modelComposition = createModelRuntimeComposition({
+    environment: Object.freeze({ ...process.env }),
+    providerCatalog: {
       attribution: {
         referer: websiteOrigin,
         title: WorkbenchProductName,
       },
-    }),
+    },
+  })
+  for (const providerId of ['velaros', 'velar-dev'] as const) {
+    modelComposition.velarCloudRuntime.registerProvider(providerId, {
+      baseURL: accountService.getManagedModelBaseUrl(providerId),
+      fetch: (input, init) => accountService.fetchManagedModel(providerId, input, init),
+    })
+  }
+  const disposeModelIpc = registerWorkbenchModelIpc(
+    modelComposition.providerModelCatalogService,
     dataRootDir,
     accountService
   )
-  const kernelRuntime = new Kernel({
-    lifecycleFailureMode: 'degrade',
-    permissionBroker: new WorkbenchKernelPermissionPolicy(),
-    onLifecycleFailure: ({ phase, error }) => {
-      Log.tag('WorkbenchKernel').warn(`kernel.${phase}_failed`, {
-        error: error.message,
-        hint: phase === 'start'
-          ? 'Workbench continues without in-process Kernel capabilities; dependent surfaces stay inactive.'
-          : 'Workbench shutdown continues after Kernel capability cleanup failure.',
-      })
-    },
+  // 本机 shell 宿主全应用共用：Agent 起的后台任务才能活过一轮运行；交互式命令跑在 node-pty 的真终端里。
+  const shellHosts = new WorkbenchShellHostRegistry(
+    createShellEnvironment(),
+    loadWorkbenchShellTerminal
+  )
+  const syncAgentEdits = languageSyncOnAgentEdits(providers.language)
+  const conversationRuntime = createWorkbenchConversationRuntime({
+    runner: createWorkbenchScriptRunner({ workerPath: workbenchScriptWorkerPath }),
+    shells: shellHosts,
+    dataDir: providers.parts.storagePaths.getConversationRuntimeDir(),
+    configure: createWorkbenchConversationConfiguration(modelComposition.agentModelResolver),
+    environment: () => WorkbenchHostEnvironment,
+    // Agent 改项目的时间窗报给改动归属账本：「本轮改动」只认 Agent 的改动。
+    activity: (ref) => providers.chatRunAttribution.activityFor(ref),
+    // Agent 改完的文件当场告诉语言服务，别的文件里的诊断不等文件监听。
+    projectFilesEdited: (ref, paths) => syncAgentEdits(ref.projectRoot, paths),
+    projectRules: async (projectRoot) =>
+      (await providers.workspace.projectRules(projectRoot)).files,
   })
-  kernelRuntime.registerModule(
-    createAgentKernelModule({
-      runtime: new WorkbenchAgentCapabilityRuntime(
-        agentExecutionStack,
-        providers.agentEngines,
-        productAnalytics
-      ),
-    })
-  )
-  kernelRuntime.registerModule(
-    createBrowserKernelModule({
-      runtime: browserRuntime,
-      disposeInjectedRuntime: false,
-    })
-  )
-  const disposeKernelIpc = registerWorkbenchKernelIpc(
-    kernelRuntime,
-    providers.kernelRoutes,
-    providers.parts.storagePaths,
-    (sessionId, answer) => providers.agentEngines.resolveInput(sessionId, answer),
-    // 确认回执按会话找等待方：外部引擎与原生执行栈各自持有一张挂起表，命中谁就由谁结算。
-    // 两条链路共用同一条 IPC 协议，renderer 不需要知道当前会话跑的是哪个执行体。
-    (sessionId, approved, rejectionMessage) =>
-      providers.agentEngines.resolveConfirmation(sessionId, approved, rejectionMessage)
-      || agentExecutionStack.approvals.resolve(sessionId, approved, rejectionMessage),
-    {
-      // 运行中补发的引导只有原生执行栈能接（外部引擎没有中途注入语义），不命中就回 false。
-      provideAgentGuidance: (request) => agentExecutionStack.provideGuidance(request),
-      // 目标与会话的活动上下文归原生执行栈；外部引擎的会话读到的就是「没有目标」。
-      goalLifecycle: {
-        get: (sessionId) => agentExecutionStack.getGoalLifecycle(sessionId),
-        update: (sessionId, action) => agentExecutionStack.updateGoalLifecycle(sessionId, action),
-      },
-      releaseAgentSession: (sessionId) => agentExecutionStack.releaseSession(sessionId),
-      // `workbench:*` 界面工具的回执：请求在原生执行栈的挂起表里等着。
-      resolveAgentUiRequest: (response) => agentExecutionStack.ui.resolve(response),
-    }
-  )
-  void kernelRuntime.start().finally(() => {
-    broadcastWorkbenchKernelStatus(kernelRuntime)
-  })
-  const disposeResourcePluginIpc = registerWorkbenchResourcePluginIpc(
-    providers.resourcePlugins
-  )
   registerWorkbenchTerminalIpc(providers.parts.terminal)
   registerWorkbenchGitIpc(providers.git, providers.chatCheckpoints, providers.chatRunChanges)
   const watchIpc = registerWorkbenchWatchIpc(providers.watch)
-  const disposeWorkspaceIpc = registerWorkbenchWorkspaceIpc(
-    providers.workspace,
-    providers.chatRunAttribution
-  )
+  const disposeWorkspaceIpc = registerWorkbenchWorkspaceIpc(providers.workspace)
 
   registerWorkbenchLanguageServiceIpc(
     providers.language,
@@ -428,11 +319,17 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
       await Promise.all([
         providers.parts.terminal.closeSessionsForOwner(ownerId),
         providers.language.invalidateProject({ projectRoot }),
-        browserHost.releaseProject(projectRoot),
+        // 窗口关掉或切走项目：这个项目里还在跑的对话一并停下。
+        conversationRuntime.cancelProject(projectRoot),
       ])
     },
   })
-  const disposeBrowserIpc = registerWorkbenchBrowserIpc(browserHost, windowManager)
+  const disposeConversationIpc = registerWorkbenchConversationIpc({
+    runtime: conversationRuntime,
+    windows: windowManager,
+    backupDir: () => providers.parts.storagePaths.getChatHistoryBackupsDir(),
+    analytics: productAnalytics,
+  })
   registerWorkbenchFsIpc(
     providers.fileSystem,
     providers.parts,
@@ -452,32 +349,28 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
     watchIpc.dispose()
     workbenchBrowserWebviewGate?.dispose()
     workbenchBrowserWebviewGate = null
-    disposeBrowserIpc()
-    disposeResourcePluginIpc()
     disposeAccountIpc()
-    disposeModIpc()
-    modService.dispose()
     disposeModelIpc()
-    disposeKernelIpc()
+    disposeConversationIpc()
     disposeWorkspaceIpc()
     disposeProductAnalyticsRuntime()
     void Promise.allSettled([
       providers.parts.terminal.closeAllSessions(),
       providers.language.dispose(),
       providers.workspace.dispose(),
-      kernelRuntime.dispose(),
+      // 先停对话（运行时关闭时释放脚本子进程与存储），再停 Agent 起的后台任务。
+      conversationRuntime.close().finally(() => shellHosts.dispose()),
       productAnalytics?.dispose(),
     ]).then((results) => {
       const failures = results.flatMap((result, index) =>
         result.status === 'rejected'
-          ? [{ operation: ['terminal', 'language', 'workspace', 'kernel', 'analytics'][index], error: result.reason }]
+          ? [{ operation: ['terminal', 'language', 'workspace', 'conversation', 'analytics'][index], error: result.reason }]
           : []
       )
       if (failures.length > 0) {
         Log.tag('WorkbenchShutdown').warn('shutdown_cleanup_failed', { failures })
       }
     }).finally(() => {
-      browserHost.dispose()
       disposeBrowserPermissionPolicy()
       app.quit()
     })

@@ -22,7 +22,7 @@ import {
   refreshTypeScriptProjectFilesFromDisk,
 } from '../src/main/workspace/language/TypeScriptProjectHost'
 import {
-  withLanguageSyncOnAgentWrites,
+  languageSyncOnAgentEdits,
   withLanguageSyncOnUserWrites,
 } from '../src/main/workspace/language/WorkbenchLanguageWriteSync'
 import { PathResolver } from '../src/main/workspace/PathResolver'
@@ -215,17 +215,12 @@ void describe('language worker client after project files change', () => {
   })
 })
 
-void describe('writes reach the language service without waiting for the file watcher', () => {
-  void test('agent file writes report their changed paths after the attribution ledger saw them', () => {
+void describe('user and agent writes reach the language service without waiting for the file watcher', () => {
+  void test('user writes reach the attribution ledger first, then the language service', () => {
     const order: string[] = []
     const notified: Array<{ projectRoot: string; paths: string[] }> = []
-    const source = withLanguageSyncOnAgentWrites(
-      {
-        activityFor: () => ({
-          beginFileWrite: () => (paths) => order.push(`ledger:${paths.join(',')}`),
-          beginCommand: () => () => order.push('command-end'),
-        }),
-      },
+    const sink = withLanguageSyncOnUserWrites(
+      { recordUserWrites: (request) => order.push(`ledger:${request.paths.join(',')}`) },
       {
         projectFilesChanged: async (request) => {
           order.push(`language:${request.paths.join(',')}`)
@@ -234,12 +229,11 @@ void describe('writes reach the language service without waiting for the file wa
       }
     )
 
-    const port = source.activityFor({ projectRoot: '/project', sessionId: 'session' })
-    port.beginFileWrite()(['src/a.ts', 'src/b.ts'])
-    port.beginFileWrite()([])
-    port.beginCommand()()
+    sink.recordUserWrites({ workspaceRoot: '/project', paths: ['src/a.ts', 'src/b.ts'] })
+    // 没写成任何文件：账本照记，语言服务不必打扰。
+    sink.recordUserWrites({ workspaceRoot: '/project', paths: [] })
 
-    assert.deepEqual(order, ['ledger:src/a.ts,src/b.ts', 'language:src/a.ts,src/b.ts', 'ledger:', 'command-end'])
+    assert.deepEqual(order, ['ledger:src/a.ts,src/b.ts', 'language:src/a.ts,src/b.ts', 'ledger:'])
     assert.deepEqual(notified, [{ projectRoot: '/project', paths: ['src/a.ts', 'src/b.ts'] }])
   })
 
@@ -255,10 +249,30 @@ void describe('writes reach the language service without waiting for the file wa
     assert.deepEqual(recorded, ['src/a.ts', ''])
   })
 
-  void test('the main composition root wires both write paths into the language service', () => {
+  void test('agent edits notify the language service by path, skip empty edits, and swallow a failing worker', async () => {
+    const notified: Array<{ projectRoot: string; paths: string[] }> = []
+    const notify = languageSyncOnAgentEdits({
+      projectFilesChanged: async (request) => {
+        notified.push(request)
+      },
+    })
+    notify('/project', ['src/a.ts'])
+    notify('/project', [])
+    assert.deepEqual(notified, [{ projectRoot: '/project', paths: ['src/a.ts'] }])
+
+    const failing = languageSyncOnAgentEdits({
+      projectFilesChanged: () => Promise.reject(new Error('worker gone')),
+    })
+    failing('/project', ['src/a.ts'])
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  })
+
+  void test('the main composition root wires user writes and agent edits into the language service', () => {
+    // 用户经 fs IPC 的写入、Agent 在 Platform 里的项目编辑都提前通知；命令的产物由文件监听送到。
     const main = readSource('src/main/index.ts')
-    assert.match(main, /withLanguageSyncOnAgentWrites\(providers\.chatRunAttribution, providers\.language\)/u)
-    assert.match(main, /withLanguageSyncOnUserWrites\(providers\.chatRunAttribution, providers\.language\)/u)
+    assert.match(main, /registerWorkbenchFsIpc\([\s\S]*?withLanguageSyncOnUserWrites\(providers\.chatRunAttribution, providers\.language\)\s*\)/u)
+    assert.match(main, /const syncAgentEdits = languageSyncOnAgentEdits\(providers\.language\)/u)
+    assert.match(main, /projectFilesEdited: \(ref, paths\) => syncAgentEdits\(ref\.projectRoot, paths\)/u)
   })
 })
 

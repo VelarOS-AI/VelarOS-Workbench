@@ -13,8 +13,6 @@ import {
   ArrowSquareOutIcon,
   DownloadSimpleIcon,
   FileTextIcon,
-  GlobeSimpleIcon,
-  PlugsConnectedIcon,
   SignOutIcon,
   WarningCircleIcon,
   XIcon,
@@ -62,13 +60,7 @@ import {
   updateStandaloneWorkbenchModelConfig,
   useStandaloneWorkbenchModelConfig,
 } from '@renderer/runtime/standaloneWorkbenchModelConfig'
-import {
-  findWorkbenchBrowserMod,
-  setWorkbenchBrowserModEnabled,
-  useStandaloneWorkbenchModCatalog,
-} from '@renderer/runtime/standaloneWorkbenchMods'
 
-import type { PermissionConfirmationMode } from '@velaros-ai/agent/protocol'
 import { Result } from '@velaros-ai/core/result'
 import type { ProviderModelCatalog } from '@velaros-ai/model/contracts'
 import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
@@ -76,7 +68,6 @@ import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 import { Text } from '@velaros-ai/ui/primitives/display/Text'
 import { Title } from '@velaros-ai/ui/primitives/display/Title'
 import { Input } from '@velaros-ai/ui/primitives/forms/Input'
-import { SearchField } from '@velaros-ai/ui/primitives/forms/SearchField'
 import { Select } from '@velaros-ai/ui/primitives/forms/Select'
 import { Switch } from '@velaros-ai/ui/primitives/forms/Switch'
 
@@ -86,13 +77,10 @@ import type {
   WorkbenchProjectAiRulesResult,
 } from '@shared/contracts'
 import type { WorkbenchAccountState } from '@shared/workbenchAccount'
+import type { WorkbenchPermissionConfirmationMode as PermissionConfirmationMode } from '@shared/workbenchConversation'
 import type { WorkbenchManagedModelProvider } from '@shared/workbenchModel'
 import type { WorkbenchUpdateChannel } from '@shared/workbenchUpdate'
 
-import type {
-  WorkbenchResourcePluginCatalog,
-  WorkbenchResourcePluginRecord,
-} from '../../../../shared/workbenchResourcePlugins'
 import styles from '../../styles/workbenchPageStyles'
 import { useTimerScope } from '../../support/genericHooks'
 
@@ -100,7 +88,6 @@ type WorkbenchSettingsSectionId =
   | 'general'
   | 'editor'
   | 'ai'
-  | 'extensions'
   | 'system'
 
 interface WorkbenchSettingsDialogProps {
@@ -230,7 +217,6 @@ export function WorkbenchSettingsDialog({
   const productAnalytics = useWorkbenchProductAnalytics()
   const modelConfig = useStandaloneWorkbenchModelConfig()
   const managedModelState = useStandaloneWorkbenchManagedModels()
-  const mods = useStandaloneWorkbenchModCatalog()
   const managedModels = managedModelState.managedModels
   const selectedManagedProvider = getStandaloneWorkbenchManagedProvider(
     modelConfig.provider,
@@ -260,10 +246,6 @@ export function WorkbenchSettingsDialog({
     useState<Nullable<WorkbenchProjectAiRulesResult>>(null)
   const [expandedProjectAiRulePath, setExpandedProjectAiRulePath] = useState<Nullable<string>>(null)
   const [isLoadingProjectAiRules, setIsLoadingProjectAiRules] = useState(false)
-  const [pluginCatalog, setPluginCatalog] = useState<Nullable<WorkbenchResourcePluginCatalog>>(null)
-  const [isLoadingPlugins, setIsLoadingPlugins] = useState(false)
-  const [pluginQuery, setPluginQuery] = useState('')
-  const [modMutationPending, setModMutationPending] = useState(false)
   const [providerModelCatalog, setProviderModelCatalog] =
     useState<Nullable<{
       catalog: ProviderModelCatalog
@@ -332,11 +314,6 @@ export function WorkbenchSettingsDialog({
         description: t('workbench.settingsAiDescription'),
       },
       {
-        id: 'extensions' as const,
-        label: t('workbench.settingsExtensions'),
-        description: t('workbench.settingsExtensionsDescription'),
-      },
-      {
         id: 'system' as const,
         label: t('workbench.settingsSystem'),
         description: t('workbench.settingsSystemDescription'),
@@ -365,17 +342,6 @@ export function WorkbenchSettingsDialog({
       setIsLoadingProjectAiRules(false)
     }
   }, [hostRuntime, project?.rootPath])
-
-  const refreshPlugins = useCallback(async (): Promise<void> => {
-    setIsLoadingPlugins(true)
-    try {
-      setPluginCatalog(await window.velarosWorkbenchResourcePlugins.list())
-    } catch {
-      setPluginCatalog(null)
-    } finally {
-      setIsLoadingPlugins(false)
-    }
-  }, [])
 
   const conflictedActions = useMemo(
     () => new Set(conflicts.flatMap((conflict) => conflict.actions)),
@@ -530,13 +496,6 @@ export function WorkbenchSettingsDialog({
 
     void refreshProjectAiRules()
   }, [activeSection, open, refreshProjectAiRules])
-
-  useEffect(() => {
-    if (!open || activeSection !== 'extensions') return
-
-    void refreshPlugins()
-    return window.velarosWorkbenchResourcePlugins.onChanged(setPluginCatalog)
-  }, [activeSection, open, refreshPlugins])
 
   if (!open) return null
 
@@ -1108,221 +1067,6 @@ export function WorkbenchSettingsDialog({
     )
   }
 
-  function pluginStatusLabel(plugin: WorkbenchResourcePluginRecord): Nullable<string> {
-    switch (plugin.status) {
-      case 'available':
-        return t('workbench.settingsPluginStatusAvailable')
-      case 'disabled':
-        return t('workbench.settingsPluginStatusDisabled')
-      case 'installing':
-        return t('workbench.settingsPluginStatusInstalling', {
-          progress: plugin.progress ?? 0,
-        })
-      case 'failed':
-        return t('workbench.settingsPluginStatusFailed')
-      default:
-        return null
-    }
-  }
-
-  async function installPlugin(plugin: WorkbenchResourcePluginRecord): Promise<void> {
-    setPluginCatalog(await window.velarosWorkbenchResourcePlugins.install({ id: plugin.id }))
-  }
-
-  async function setPluginEnabled(
-    plugin: WorkbenchResourcePluginRecord,
-    enabled: boolean
-  ): Promise<void> {
-    setPluginCatalog(
-      await window.velarosWorkbenchResourcePlugins.setEnabled({
-        id: plugin.id,
-        enabled,
-      })
-    )
-  }
-
-  async function setBrowserModEnabled(enabled: boolean): Promise<void> {
-    if (modMutationPending) return
-    setModMutationPending(true)
-    try {
-      await setWorkbenchBrowserModEnabled(enabled)
-    } catch {
-      // Mod 状态已保留错误，直接在当前行展示，不再叠加一次全局提示。
-    } finally {
-      setModMutationPending(false)
-    }
-  }
-
-  function pluginDisplayName(id: WorkbenchResourcePluginRecord['id']): string {
-    if (id === 'claude-agent') return 'Claude Agent'
-    if (id === 'codex-agent') return 'Codex Agent'
-    return 'CodeGraph'
-  }
-
-  function pluginDescription(id: WorkbenchResourcePluginRecord['id']): string {
-    if (id === 'claude-agent') return t('workbench.settingsPluginClaudeDescription')
-    if (id === 'codex-agent') return t('workbench.settingsPluginChatGptDescription')
-    return t('workbench.settingsPluginCodeGraphDescription')
-  }
-
-  function renderPluginRow(plugin: WorkbenchResourcePluginRecord): ReactElement {
-    const statusLabel = pluginStatusLabel(plugin)
-    return (
-      <div key={plugin.id} className={styles.workbenchSettingsPluginRow}>
-        <span className={styles.workbenchSettingsPluginIcon}>
-          <PlugsConnectedIcon size={16} />
-        </span>
-        <div className={styles.workbenchSettingsPluginMeta}>
-          <Text className={styles.workbenchSettingsPluginName}>
-            {pluginDisplayName(plugin.id)}{plugin.version ? ` · ${plugin.version}` : ''}
-          </Text>
-          <Text tone="caption" className={styles.workbenchSettingsRowDescription}>
-            {pluginDescription(plugin.id)}
-          </Text>
-          {!!plugin.error && (
-            <Text tone="caption" className={styles.workbenchSettingsPluginError}>
-              {plugin.error}
-            </Text>
-          )}
-        </div>
-        <div className={styles.workbenchSettingsPluginActions}>
-          {!!statusLabel && (
-            <WorkbenchSettingsPill
-              tone={
-                plugin.status === 'available'
-                  ? 'success'
-                  : plugin.status === 'failed'
-                    ? 'warning'
-                    : 'default'
-              }
-            >
-              {statusLabel}
-            </WorkbenchSettingsPill>
-          )}
-          {plugin.installed ? (
-            <Switch
-              size="sm"
-              checked={plugin.enabled}
-              disabled={plugin.status === 'installing'}
-              onCheckedChange={(enabled) => void setPluginEnabled(plugin, enabled)}
-            />
-          ) : (
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={!plugin.canInstall || plugin.status === 'installing'}
-              onClick={() => void installPlugin(plugin)}
-            >
-              <DownloadSimpleIcon size={14} />
-              {plugin.status === 'failed'
-                ? t('workbench.settingsPluginRetry')
-                : t('workbench.settingsPluginInstall')}
-            </Button>
-          )}
-        </div>
-      </div>
-    )
-  }
-
-  function renderModsSection(): ReactElement {
-    const browser = findWorkbenchBrowserMod(mods.value)
-    return (
-      <div className={styles.workbenchSettingsSectionPanel}>
-        <Text tone="caption" className={styles.workbenchSettingsPluginSharedHint}>
-          {t('workbench.settingsModsHint')}
-        </Text>
-        {mods.loading && !browser ? (
-          <div className={styles.workbenchSettingsAiRulesEmpty}>
-            <Text>{t('workbench.settingsModsLoading')}</Text>
-          </div>
-        ) : browser ? (
-          <div className={styles.workbenchSettingsPluginList}>
-            <div className={styles.workbenchSettingsPluginRow}>
-              <span className={styles.workbenchSettingsPluginIcon}>
-                <GlobeSimpleIcon size={16} />
-              </span>
-              <div className={styles.workbenchSettingsPluginMeta}>
-                <Text className={styles.workbenchSettingsPluginName}>
-                  {t('workbench.settingsBrowserModName')} · {browser.version}
-                </Text>
-                <Text tone="caption" className={styles.workbenchSettingsRowDescription}>
-                  {t('workbench.settingsBrowserModDescription')}
-                </Text>
-              </div>
-              <div className={styles.workbenchSettingsPluginActions}>
-                <WorkbenchSettingsPill tone="success">
-                  {t('workbench.settingsModBundled')}
-                </WorkbenchSettingsPill>
-                <Switch
-                  size="sm"
-                  checked={browser.enabled}
-                  disabled={modMutationPending}
-                  onCheckedChange={(enabled) => void setBrowserModEnabled(enabled)}
-                />
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className={styles.workbenchSettingsAiRulesEmpty}>
-            <Text>{t('workbench.settingsModsEmpty')}</Text>
-          </div>
-        )}
-        {!!mods.error && (
-          <Text tone="caption" className={styles.workbenchSettingsPluginError}>
-            {t('workbench.settingsModsError', { error: mods.error })}
-          </Text>
-        )}
-      </div>
-    )
-  }
-
-  function renderPluginsSection(): ReactElement {
-    const plugins = (pluginCatalog?.plugins ?? []).filter((plugin) =>
-      `${plugin.id} ${pluginDisplayName(plugin.id)}`
-        .toLowerCase()
-        .includes(pluginQuery.trim().toLowerCase())
-    )
-    return (
-      <div className={styles.workbenchSettingsSectionPanel}>
-        <div className={styles.workbenchSettingsPluginToolbar}>
-          <div className={styles.workbenchSettingsPluginSearch}>
-            <SearchField
-              size="sm"
-              value={pluginQuery}
-              placeholder={t('workbench.settingsPluginSearch')}
-              onChange={(event) => setPluginQuery(event.currentTarget.value)}
-            />
-          </div>
-          <IconButton
-            size="icon-sm"
-            variant="outline"
-            label={t('workbench.settingsAiRulesRefresh')}
-            title={t('workbench.settingsAiRulesRefresh')}
-            onClick={() => void refreshPlugins()}
-          >
-            <ArrowCounterClockwiseIcon size={14} />
-          </IconButton>
-        </div>
-        <Text tone="caption" className={styles.workbenchSettingsPluginSharedHint}>
-          {t('workbench.settingsPluginSharedHint')}
-        </Text>
-        {isLoadingPlugins && !pluginCatalog ? (
-          <div className={styles.workbenchSettingsAiRulesEmpty}>
-            <Text>{t('workbench.settingsPluginsLoading')}</Text>
-          </div>
-        ) : plugins.length ? (
-          <div className={styles.workbenchSettingsPluginList}>
-            {plugins.map((plugin) => renderPluginRow(plugin))}
-          </div>
-        ) : (
-          <div className={styles.workbenchSettingsAiRulesEmpty}>
-            <Text>{t('workbench.settingsPluginsEmpty')}</Text>
-          </div>
-        )}
-      </div>
-    )
-  }
-
   function renderAdvancedSection(): ReactElement {
     return (
       <div className={styles.workbenchSettingsSectionPanel}>
@@ -1607,27 +1351,6 @@ export function WorkbenchSettingsDialog({
     )
   }
 
-  function renderExtensionsSection(): ReactElement {
-    return (
-      <div
-        className={`${styles.workbenchSettingsSectionPanel} ${styles.workbenchSettingsCombinedPanel}`}
-      >
-        <SettingsSubsection
-          title={t('workbench.settingsMods')}
-          description={t('workbench.settingsModsDescription')}
-        >
-          {renderModsSection()}
-        </SettingsSubsection>
-        <SettingsSubsection
-          title={t('workbench.settingsPlugins')}
-          description={t('workbench.settingsPluginsDescription')}
-        >
-          {renderPluginsSection()}
-        </SettingsSubsection>
-      </div>
-    )
-  }
-
   function renderSystemSection(): ReactElement {
     return (
       <div
@@ -1659,9 +1382,6 @@ export function WorkbenchSettingsDialog({
       }
       case 'ai': {
         return renderAiSection()
-      }
-      case 'extensions': {
-        return renderExtensionsSection()
       }
       default: {
         return renderSystemSection()

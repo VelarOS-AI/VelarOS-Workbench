@@ -8,8 +8,9 @@ import { translateWorkbenchAppMessage } from '../src/renderer/src/i18n/useStanda
 
 void describe('Workbench conversation localization contract', () => {
   void test('resolves the shared typed manifest in both locales', () => {
+    // UI 0.2.54 的共享会话文案清单有 345 个键；远少于此说明没读到完整清单。
     assert.ok(
-      canonicalConversationMessageKeys.length > 400,
+      canonicalConversationMessageKeys.length > 300,
       'shared conversation manifest unexpectedly found too few keys',
     )
 
@@ -30,15 +31,6 @@ void describe('Workbench conversation localization contract', () => {
     assert.equal(
       translateWorkbenchAppMessage('zh-CN', 'chat.goalDockContinueGuidance'),
       '基于当前实际状态继续推进原目标；保留已完成的工作，先确认未完成事项与未执行输入，再继续。',
-    )
-    // 回溯只撤回 Agent 的改动：确认框的说法来自共享文案，不能再说「把项目根恢复到该时点」。
-    assert.equal(
-      translateWorkbenchAppMessage('zh-CN', 'chat.rewindDialogRestoreFilesHint', { roots: 1 }),
-      '同时撤回这几轮里 AI 对文件的改动，你自己的改动会保留。',
-    )
-    assert.equal(
-      translateWorkbenchAppMessage('en-US', 'chat.rewindDialogRestoreFilesHint', { roots: 1 }),
-      "Also undo the AI's file changes from these turns. Your own edits are kept.",
     )
   })
 

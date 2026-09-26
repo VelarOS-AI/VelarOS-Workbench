@@ -7,18 +7,19 @@ import { setTimeout as delay } from 'node:timers/promises'
 
 import { describe, test } from 'bun:test'
 
-import type { ProjectKernel } from '@velaros-ai/project/runtime'
-
 import { CommandHelper } from '../src/main/workspace/CommandHelper'
 import { CommandRunner } from '../src/main/workspace/CommandRunner'
 import { PathResolver } from '../src/main/workspace/PathResolver'
-import { ProjectCapabilityProvider } from '../src/main/workspace/ProjectCapabilityProvider'
 
 class RecordingCommandHelper extends CommandHelper {
   public readonly terminationSignals: NodeJS.Signals[] = []
 
+  public constructor(private readonly forceKillDelayMs = 50) {
+    super()
+  }
+
   public override getForceKillDelayMs(): number {
-    return 50
+    return this.forceKillDelayMs
   }
 
   public override terminateForegroundProcess(
@@ -31,7 +32,7 @@ class RecordingCommandHelper extends CommandHelper {
 }
 
 void describe('Workbench command cancellation', () => {
-  void test('a Project tool abort terminates its live child process', async () => {
+  void test('an abort terminates the live child process, escalating when it ignores SIGTERM', async () => {
     if (process.platform === 'win32') return
 
     const projectRoot = await realpath(
@@ -39,19 +40,14 @@ void describe('Workbench command cancellation', () => {
     )
     const markerPath = join(projectRoot, 'command.pid')
     const controller = new AbortController()
-    const provider = new ProjectCapabilityProvider({
-      // providers 是内核契约的一部分：宿主要往里装审批 provider，桩件不能少这一格。
-      createKernel: async () =>
-        ({ root: projectRoot, providers: {} }) as unknown as ProjectKernel,
-    })
+    // 强杀余量留足：机器忙时子进程也来得及先处理 SIGTERM。
+    const commandHelper = new RecordingCommandHelper(500)
+    const runner = new CommandRunner(new PathResolver(), commandHelper)
     let childPid: number | undefined
-    let commandPromise: Promise<unknown> | undefined
+    let commandPromise: ReturnType<CommandRunner['runCommand']> | undefined
 
     try {
-      const project = await provider.resolveProject(projectRoot)
-      const runTool = project.tools.find((tool) => tool.name === 'project:run')
-      assert.ok(runTool)
-
+      // 子进程接住 SIGTERM 却不退出：先礼后兵，过了强杀余量再补一记 SIGKILL。
       const childScript = [
         "const fs = require('node:fs')",
         `const marker = ${JSON.stringify(markerPath)}`,
@@ -60,18 +56,24 @@ void describe('Workbench command cancellation', () => {
         'setInterval(() => {}, 1_000)',
       ].join(';')
 
-      commandPromise = Promise.resolve(runTool.execute({
+      commandPromise = runner.runCommand({
+        projectRoot,
         command: `exec node -e ${quotePosixShellArgument(childScript)}`,
         timeoutMs: 10_000,
-      }, { abortSignal: controller.signal }))
+      }, undefined, controller.signal)
 
       childPid = Number(await waitForFile(markerPath, 3_000))
       assert.ok(Number.isInteger(childPid) && childPid > 1)
 
       controller.abort(new Error('test user stop'))
-      await assert.rejects(commandPromise, /test user stop/)
+      const result = await commandPromise
 
+      assert.equal(result.success, false)
+      assert.equal(result.timedOut, false)
+      assert.equal(result.signal, 'SIGKILL')
+      assert.deepEqual(commandHelper.terminationSignals, ['SIGTERM', 'SIGKILL'])
       assert.match(await readFile(markerPath, 'utf8'), /^\d+:term$/u)
+      assert.equal(getEventListeners(controller.signal, 'abort').length, 0)
       await waitForProcessExit(childPid, 2_000)
     } finally {
       if (!controller.signal.aborted) controller.abort(new Error('test cleanup'))
@@ -79,10 +81,28 @@ void describe('Workbench command cancellation', () => {
       if (childPid && isProcessAlive(childPid)) {
         new CommandHelper().terminateForegroundProcess(childPid, 'SIGKILL')
       }
-      await provider.dispose()
       await rm(projectRoot, { recursive: true, force: true })
     }
   }, 15_000)
+
+  void test('an already aborted signal refuses to start the command', async () => {
+    const projectRoot = await realpath(
+      await mkdtemp(join(tmpdir(), 'velaros-workbench-command-preaborted-'))
+    )
+    const controller = new AbortController()
+    controller.abort(new Error('stopped before start'))
+    try {
+      await assert.rejects(
+        new CommandRunner(new PathResolver(), new CommandHelper()).runCommand({
+          projectRoot,
+          command: 'echo never',
+        }, undefined, controller.signal),
+        /stopped before start/u
+      )
+    } finally {
+      await rm(projectRoot, { recursive: true, force: true })
+    }
+  })
 
   void test('normal completion removes the abort listener without terminating the child', async () => {
     if (process.platform === 'win32') return
