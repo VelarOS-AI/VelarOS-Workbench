@@ -41,7 +41,7 @@ void describe('Workbench agent project writes', () => {
     assert.equal(tracker.observe(toolDone('edit-1')), true)
     // 同一个调用的结果只认一次。
     assert.equal(tracker.observe(toolDone('edit-1')), false)
-    for (const [id, name] of [['w', 'project:write'], ['r', 'project:rollback'], ['c', 'project:run']]) {
+    for (const [id, name] of [['w', 'project:write'], ['r', 'project:rollback'], ['c', 'project:run'], ['f', 'project:file'], ['u', 'project:change']]) {
       tracker.observe(toolStart(id, name))
       assert.equal(tracker.observe(toolDone(id)), true, name)
     }

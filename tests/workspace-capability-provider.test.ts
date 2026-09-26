@@ -5,7 +5,8 @@ import { join } from 'node:path'
 
 import { describe, test } from 'bun:test'
 
-import type { ApprovalPort } from '@velaros-ai/agent/tool-contract'
+import { InMemoryContextPayloadStore } from '@velaros-ai/agent'
+import { type ApprovalPort, fileContextFor } from '@velaros-ai/agent/tool-contract'
 import { ProjectError, type ProjectKernel } from '@velaros-ai/project/runtime'
 
 import type { WorkbenchAgentProjectActivityPort } from '../src/main/workspace/git/WorkbenchChatRunAttribution'
@@ -48,18 +49,18 @@ void describe('Project capability provider', () => {
     await provider.dispose()
   })
 
-  void test('shows every Project tool from the first turn, rollback included', async () => {
+  void test('keeps the six everyday Project tools resident and analysis/change available for discovery', async () => {
     const provider = new ProjectCapabilityProvider({
       createKernel: async () => ({ providers: {} }) as unknown as ProjectKernel,
     })
     const project = await provider.resolveProject('/tmp/workbench-project')
 
-    // Workbench 没有 tooling:map 换入机制，不在首轮可见集里的工具等于不存在。
     assert.deepEqual(
       [...project.initialVisibleToolNames].sort(),
-      project.tools.map((tool) => tool.name).sort()
+      ['project:read', 'project:list', 'project:search', 'project:file', 'project:edit', 'project:run'].sort()
     )
-    assert.ok(project.initialVisibleToolNames.includes('project:rollback'))
+    assert.ok(project.tools.some((tool) => tool.name === 'project:change'))
+    assert.ok(project.tools.some((tool) => tool.name === 'project:code'))
     await provider.dispose()
   })
 
@@ -150,26 +151,26 @@ void describe('Project capability provider', () => {
       isProject: () => true,
       queryProjectCode: async (_root: string, input: unknown) => {
         calls.push(input)
-        return { source: 'velar-compiler', provider: 'velar-compiler', nodes: [] }
+        return { source: 'velar-compiler', provider: 'velar-compiler', nodes: [{ id: 'app', name: 'App', path: 'app.velar' }] }
       },
       clear: () => undefined,
     } as unknown as WorkbenchVelarLogicGraphService
     const provider = new ProjectCapabilityProvider({
       velarLogicGraph,
       createKernel: async () =>
-        ({ root: projectRoot, providers: {} }) as unknown as ProjectKernel,
+        ({ root: projectRoot, providers: {}, listFiles: async () => [] }) as unknown as ProjectKernel,
     })
     try {
       const project = await provider.resolveProject(projectRoot)
-      const queryCode = project.tools.find((tool) => tool.name === 'project:query-code')
+      const queryCode = project.tools.find((tool) => tool.name === 'project:code')
       assert.ok(queryCode)
       const result = await queryCode.execute({
-        action: 'search_symbols',
+        action: 'symbols',
         query: 'App',
         limit: 20,
       }, {}) as { source: string; provider: string }
 
-      assert.deepEqual(calls, [{ action: 'search_symbols', query: 'App', limit: 20 }])
+      assert.deepEqual(calls, [{ action: 'search_symbols', query: 'App', limit: 20, kind: undefined }])
       assert.equal(result.source, 'velar-compiler')
       assert.equal(result.provider, 'velar-compiler')
       await assert.rejects(
@@ -204,7 +205,7 @@ void describe('Project capability provider', () => {
       awaitConfirmation: async () => undefined,
       awaitConfirmationDecision: async () => ({ approved: true, message: null }),
     }
-    const toolContext = { abortSignal: new AbortController().signal, approval, projectActivity }
+    const toolContext = { abortSignal: new AbortController().signal, approval, projectActivity, codingSession: {}, sessionId: 'attribution', contextPayloadStore: new InMemoryContextPayloadStore() }
     try {
       const project = await provider.resolveProject(projectRoot)
       const run = (name: string, input: unknown) => {
@@ -213,20 +214,18 @@ void describe('Project capability provider', () => {
         return tool.execute(input, toolContext) as Promise<Record<string, unknown>>
       }
 
-      await run('project:write', { path: 'notes/a.md', content: 'first\n', mode: 'create' })
+      await run('project:file', { actions: [{ op: 'create', path: 'notes/a.md', text: 'first\n' }] })
       const editTool = project.tools.find((tool) => tool.name === 'project:edit')!
-      // Exercise both the published dependency and the local candidate through their declared schema.
-      const edit = (oldText: string, newText: string) => {
-        const operation = { type: 'replace_text', path: 'notes/a.md', oldText, newText }
-        const flat = { edits: [operation] }
-        const input = editTool.schema.safeParse(flat).success
-          ? flat : { operations: [{ operation }] }
+      const edit = async (oldText: string, newText: string) => {
+        const read = await run('project:read', { path: 'notes/a.md' })
+        const visible = await fileContextFor(toolContext)!.finalizeModelResult(read) as { files: Array<{ fileRef: string }> }
+        const input = { files: [{ fileRef: visible.files[0]!.fileRef, edits: [{ op: 'replace', range: 1, match: oldText, text: newText }] }] }
         const parsed = editTool.schema.safeParse(input)
         assert(parsed.success)
         return run('project:edit', parsed.data)
       }
       const edited = await edit('first', 'second')
-      await run('project:rollback', { transactionId: edited.transactionId })
+      await run('project:change', { action: 'undo', changeRef: edited.changeRef })
       await run('project:read', { path: 'notes/a.md' })
       await run('project:run', { command: 'echo built > out.txt' })
       // 失败的写入也要收尾（报空清单），不留一个永远没结束的写入窗。

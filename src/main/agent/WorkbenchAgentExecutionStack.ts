@@ -24,6 +24,7 @@ import {
   isExecutionModeActive,
   KernelBackgroundJobManager,
   PrimaryAgentProfile,
+  type SubAgentDispatchCatalog,
   SubAgentDispatcher,
   type SubAgentDispatchInput,
   SubAgentGuidanceRelayRegistry,
@@ -55,6 +56,7 @@ import {
   createModelRuntimeComposition,
   type ModelRuntimeComposition,
 } from '@velaros-ai/model/node'
+import { registerProjectFileContext } from '@velaros-ai/project/agent'
 
 import type {
   WorkbenchAgentProjectActivityPort,
@@ -81,6 +83,7 @@ import {
   WorkbenchAgentToolRegistry,
 } from './WorkbenchAgentToolRegistry'
 import { WorkbenchAgentUiBridge, type WorkbenchAgentUiPort } from './WorkbenchAgentUiBridge'
+import { workbenchCommandEnvironment } from './WorkbenchCommandEnvironment'
 import {
   createWorkbenchContextRecall,
   WorkbenchContextPayloadStore,
@@ -128,6 +131,8 @@ interface WorkbenchAgentRunInput {
   config: AgentExecutionConfig
   events: ExecutionEventBus
   abortSignal: AbortSignal
+  /** CLI consumers have no renderer to settle workbench UI requests. */
+  rendererAttached?: boolean
 }
 
 type WorkbenchAgentRunResult = { status: 'completed' } | { status: 'aborted' | 'error' }
@@ -289,7 +294,7 @@ class WorkbenchAgentExecutionStack {
     }
     const chatConfig: AgentChatRuntimeConfig = {
       modelSelection: input.config.modelSelection,
-      systemPromptAppend: '',
+      systemPromptAppend: workbenchCommandEnvironment(),
     }
     const systemConfig: AgentSystemRuntimeConfig = {
       thinkingDepth: input.config.thinkingDepth ?? WorkbenchDefaultThinkingDepth,
@@ -322,7 +327,7 @@ class WorkbenchAgentExecutionStack {
       }),
       contextPayloadStore: this.contextRecall.payloadStore,
       // 界面请求走这一轮自己的事件流，只会到达发起这一轮的窗口。
-      workbenchUi: this.ui.forExecution({
+      workbenchUi: input.rendererAttached === false ? undefined : this.ui.forExecution({
         executionId: input.executionId,
         sessionId: input.sessionId,
         events: input.events,
@@ -351,7 +356,12 @@ class WorkbenchAgentExecutionStack {
           config,
           executionId: input.executionId,
         }),
+      getSubAgentDispatchCatalog: () => session.dispatcher.describeDispatchCatalog(),
     })
+    const fileProject = await this.projectProvider.resolveProject(projectRoot)
+    registerProjectFileContext({ ...toolContext, project: {
+      getRootPath: () => projectRoot, kernel: async () => fileProject.kernel,
+    } })
     session.tracker.attachToolContext(toolContext)
     const resolution = session.primaryAgentProfile.resolve({
       knownToolNames: session.registry.names,
@@ -865,6 +875,7 @@ type WorkbenchAgentToolContext = AgentExecutionStackToolContext & {
   execution: null
   /** 子 Agent 派发；缺席时 `agent:dispatch` 自带的可用性门会让它整格隐身。 */
   dispatchSubAgent?: (input: SubAgentDispatchInput) => Promise<string>
+  getSubAgentDispatchCatalog?: () => SubAgentDispatchCatalog
   /** 发起这一轮的窗口；缺席时 `workbench:*` 界面工具整格隐身。 */
   workbenchUi?: WorkbenchAgentUiPort
   /** 这一轮 Agent 动手痕迹的上报口（写了哪些文件、命令跑在哪段时间）；缺席时不上报。 */
@@ -892,6 +903,7 @@ export function createWorkbenchToolContext(input: {
   interaction?: InteractionPort
   /** 子 Agent 派发；不传即本次执行面不开放委派。 */
   dispatchSubAgent?: (input: SubAgentDispatchInput) => Promise<string>
+  getSubAgentDispatchCatalog?: () => SubAgentDispatchCatalog
   /** 界面操作口；不传即本次执行面没有可操作的窗口。 */
   workbenchUi?: WorkbenchAgentUiPort
   /** Agent 动手痕迹的上报口；不传即这一面的写入与命令不记入改动归属。 */
@@ -932,6 +944,7 @@ export function createWorkbenchToolContext(input: {
     approval: input.approval ?? defaultDenyApprovalPort,
     execution: null,
     dispatchSubAgent: input.dispatchSubAgent,
+    getSubAgentDispatchCatalog: input.getSubAgentDispatchCatalog,
     workbenchUi: input.workbenchUi,
     projectActivity: input.projectActivity,
     conversation: input.conversation,
@@ -951,7 +964,10 @@ export function createWorkbenchToolContext(input: {
     setCurrentVisibleToolTransportNames: (names) => {
       visibleToolTransportNames = { ...names }
     },
-    describeToolInputSchema: (toolName: string) => input.registry.describeToolInputSchema(toolName),
+    describeToolInputSchema: (toolName: string) => {
+      const tool = input.registry.get(toolName)
+      return tool ? { profileId: 'base' as const, description: tool.description, schema: input.registry.describeToolInputSchema(toolName) } : null
+    },
     getCurrentVisibleToolRegistrationSignature: (toolName: string) =>
       input.registry.getRegistrationSignature(toolName),
     getSupportedModelInputModalities: () => [...supportedModelInputModalities],

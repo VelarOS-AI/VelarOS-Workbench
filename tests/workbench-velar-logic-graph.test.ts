@@ -347,7 +347,7 @@ void describe('Workbench Velar compiler graph consumer', () => {
       velarLogicGraph
     )
 
-    const result = await tools.execute('/project', 'project_query_code', {
+    const result = await tools.execute('/project', 'project_code', {
       query: 'run',
       limit: 12,
     }) as { source: string }

@@ -34,6 +34,14 @@ installs CodeGraph, Claude Agent, and ChatGPT into the VelarOS user-level shared
 Desktop and Workbench discover the same physical installation while retaining product-local
 enablement preferences. Mods remain a separate system for lightweight product extensions.
 
+The built-in Agent consumes the shared Project tool contracts: `read`, `list`, `search`, `file`,
+`edit`, and `run` are resident; `code` and `change` are discovered through `tooling:map` when needed.
+Reads keep source lines separate from their positions. Edits use visible file references and can
+combine line ranges with exact text, while changes group operations for inspection and undo.
+The shared Agent context refreshes source references after edits and retains historical versions
+and failed-call inputs for scoped recall and retry. Workbench binds those contracts to the current
+project, session, shell and available UI capabilities.
+
 ## Development
 
 Workbench 的 VelarOS 包统一从 GitHub Packages 安装，本地多仓环境也不切换 sibling 软链。

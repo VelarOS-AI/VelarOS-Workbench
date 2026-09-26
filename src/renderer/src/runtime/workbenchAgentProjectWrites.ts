@@ -18,6 +18,8 @@ import { asRecord } from './standaloneWorkbenchChatRuntime'
 /** 可能改动项目文件的工具：它们的结果一到，工作区就可能变了。 */
 const WorkspaceWritingToolNames: ReadonlySet<string> = new Set([
   'project:edit',
+  'project:file',
+  'project:change',
   'project:write',
   'project:rollback',
   'project:run',

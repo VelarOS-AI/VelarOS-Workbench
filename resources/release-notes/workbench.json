@@ -3,6 +3,44 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
+      "version": "0.3.54",
+      "releasedAt": "2026-09-14",
+      "title": {
+        "zh": "更清楚的 AI 项目工具，整组修改可以检查和撤销",
+        "en": "Clearer AI project tools, with batch changes you can inspect and undo"
+      },
+      "added": {
+        "zh": [
+          "文件管理、内容编辑和整组改动有各自的工具。AI 可以组合行范围与原文定位修改，读到的源码和行位置分别呈现，减少定位歧义。",
+          "修改后自动更新 AI 使用的文件版本，历史源码可以按需召回；失败的编辑可以沿用已有正文，只补充需要修正的参数。",
+          "符号、引用、依赖与影响范围按需查询，查询结果会说明覆盖范围；整组改动可以检查后撤销。",
+          "AI 可以按需把多个文件统一转换为指定编码和换行（默认 UTF-8、无 BOM、LF），正文不变，整组转换可以撤销；读取过大批量文件时不再丢失部分源码。"
+        ],
+        "en": [
+          "File management, content edits and batch changes have dedicated tools. The AI can combine line ranges with source text to locate edits, while reads keep source text and line positions separate.",
+          "Edits refresh the file version available to the AI, and earlier source versions can be recalled. Failed edits can reuse their original content with only the corrected arguments supplied.",
+          "Symbols, references, dependencies and impact can be queried on demand with explicit coverage. Batch changes can be inspected and undone.",
+          "The AI can convert many files to a chosen encoding and line ending on request (UTF-8 without BOM and LF by default) with the text unchanged, and the whole batch can be undone. Large batch reads no longer lose part of the source."
+        ]
+      },
+      "fixed": {
+        "zh": [
+          "编辑范围校验、失败重试和旧会话恢复统一检查当前文件，批量修改在校验失败时保持文件原样，并保留编码、换行与权限。",
+          "依赖查询会直接展示各方向支持的参数，减少把「谁依赖它」和「它依赖谁」的筛选条件混用导致的失败。",
+          "命令执行会识别项目路径的系统别名，并向 AI 提供当前系统和 Shell 信息；没有窗口的任务按实际可用能力发现工具。",
+          "切换计划或目标模式后，Claude 和 ChatGPT 会按当前模式继续任务；只读子任务的工具说明与实际权限保持一致。",
+          "更新安装器在发现可安装版本时才加载，减少应用启动时加载的代码。"
+        ],
+        "en": [
+          "Edit validation, retries and restored sessions check the current file consistently. Validation failures leave batch targets unchanged, preserving encoding, line endings and permissions.",
+          "Dependency queries expose the fields supported by each direction, reducing failures from mixing incoming and outgoing filters.",
+          "Commands recognize system aliases of the project path and provide the AI with the current system and shell. Headless tasks discover tools according to the capabilities available to them.",
+          "Claude and ChatGPT resume with the current plan and goal modes. Read-only task guidance stays aligned with the tools actually available.",
+          "The update installer loads when an installable version is found, reducing code loaded at startup."
+        ]
+      }
+    },
+    {
       "version": "0.3.53",
       "releasedAt": "2026-09-13",
       "title": {
@@ -468,8 +506,12 @@
         "en": "Chat parity and code block fixes"
       },
       "added": {
-        "zh": ["工作台聊天支持操作审批、权限设置与子 Agent，与 Desktop 保持一致。"],
-        "en": ["Workbench chat now supports action approvals, permission settings, and sub-agents, matching Desktop."]
+        "zh": [
+          "工作台聊天支持操作审批、权限设置与子 Agent，与 Desktop 保持一致。"
+        ],
+        "en": [
+          "Workbench chat now supports action approvals, permission settings, and sub-agents, matching Desktop."
+        ]
       },
       "fixed": {
         "zh": [

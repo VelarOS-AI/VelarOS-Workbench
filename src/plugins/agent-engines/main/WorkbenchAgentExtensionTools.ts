@@ -8,9 +8,10 @@ import type { WorkbenchVelarLogicGraphService } from '../../../main/workspace/la
 import type { ClaudeAgentSdkModule } from './ClaudeAgentPluginContract'
 
 // Provider function names cannot all carry `:`, so the wire alias stays portable while the
-// presented/tool-ledger identity is Platform's canonical `project:query-code`.
-const ProjectCodeSearchToolName = 'project_query_code'
-const ProjectCodeToolIdentity = ProjectToolNames.queryCode
+// presented/tool-ledger identity is Platform's canonical `project:code`.
+const ProjectCodeSearchToolName = 'project_code'
+const LegacyProjectCodeSearchToolName = 'project_query_code'
+const ProjectCodeToolIdentity = ProjectToolNames.code
 const ProjectCodeSearchDescription =
   'Search the current project semantic graph. VelarScript projects use the compiler-owned live logic graph; other languages use the installed structural index.'
 
@@ -64,7 +65,7 @@ export class WorkbenchAgentExtensionTools {
             text: JSON.stringify(await this.execute(projectRoot, ProjectCodeSearchToolName, input)),
           }],
         }),
-        { searchHint: 'project symbols code graph dependencies', alwaysLoad: false }
+        { searchHint: 'project symbols code graph search', alwaysLoad: false }
       )],
     })
   }
@@ -74,7 +75,7 @@ export class WorkbenchAgentExtensionTools {
     toolName: string,
     value: unknown
   ): Promise<unknown> {
-    if (toolName !== ProjectCodeSearchToolName) {
+    if (toolName !== ProjectCodeSearchToolName && toolName !== LegacyProjectCodeSearchToolName) {
       throw new Error(`Unknown Workbench extension tool: ${toolName}`)
     }
     const input = z.object(ProjectCodeSearchShape).parse(value)
@@ -91,8 +92,8 @@ export class WorkbenchAgentExtensionTools {
   }
 
   public isBundledReadOnlyTool(toolName: string): boolean {
-    return toolName === ProjectCodeSearchToolName
-      || toolName.endsWith(`__${ProjectCodeSearchToolName}`)
+    return [ProjectCodeSearchToolName, LegacyProjectCodeSearchToolName].some((name) =>
+      toolName === name || toolName.endsWith(`__${name}`))
   }
 }
 

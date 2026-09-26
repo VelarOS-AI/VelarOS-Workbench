@@ -44,10 +44,13 @@ export class WorkbenchUpdateService {
   #checkPromise: Nullable<Promise<WorkbenchUpdateState>> = null
   #downloadPromise: Nullable<Promise<WorkbenchUpdateState>> = null
   #downloadCancellation: Nullable<CancellationToken> = null
+  #updater: AppUpdater | null = null
+  #updaterPromise: Promise<AppUpdater> | null = null
+  #disposed = false
 
   public constructor(
     private readonly releases: WorkbenchReleaseSource,
-    private readonly updater: AppUpdater,
+    private readonly updaterSource: AppUpdater | (() => Promise<AppUpdater>),
     private readonly preferences: WorkbenchUpdatePreferencesStore,
     options: WorkbenchUpdateServiceOptions
   ) {
@@ -63,23 +66,48 @@ export class WorkbenchUpdateService {
       automaticDownloads: preferences.automaticDownloads,
     }
 
-    this.updater.autoDownload = false
-    this.updater.allowPrerelease = preferences.channel !== 'stable'
-    this.updater.autoInstallOnAppQuit = true
-    this.updater.autoRunAppAfterInstall = true
-    this.updater.disableDifferentialDownload = true
-    this.updater.logger = {
+    if (typeof updaterSource !== 'function') this.#configureUpdater(updaterSource)
+  }
+
+  #configureUpdater(updater: AppUpdater): void {
+    this.#updater = updater
+    updater.autoDownload = false
+    updater.allowPrerelease = this.preferences.channel !== 'stable'
+    updater.autoInstallOnAppQuit = true
+    updater.autoRunAppAfterInstall = true
+    updater.disableDifferentialDownload = true
+    updater.logger = {
       info: (message) => this.#log.info(String(message)),
       warn: (message) => this.#log.warn(String(message)),
       error: (message) => this.#log.error(String(message)),
       debug: (message) => this.#log.debug(String(message)),
     }
-    this.updater.on('update-available', this.#handleAvailable)
-    this.updater.on('update-not-available', this.#handleNotAvailable)
-    this.updater.on('download-progress', this.#handleProgress)
-    this.updater.on('update-downloaded', this.#handleDownloaded)
-    this.updater.on('update-cancelled', this.#handleCancelled)
-    this.updater.on('error', this.#handleError)
+    updater.on('update-available', this.#handleAvailable)
+    updater.on('update-not-available', this.#handleNotAvailable)
+    updater.on('download-progress', this.#handleProgress)
+    updater.on('update-downloaded', this.#handleDownloaded)
+    updater.on('update-cancelled', this.#handleCancelled)
+    updater.on('error', this.#handleError)
+  }
+
+  private get updater(): AppUpdater {
+    if (!this.#updater) throw new Error('Workbench update installer is not initialized.')
+    return this.#updater
+  }
+
+  #loadUpdater(): Promise<AppUpdater> {
+    if (this.#disposed) return Promise.reject(new Error('Workbench update service is disposed.'))
+    if (this.#updater) return Promise.resolve(this.#updater)
+    if (!this.#updaterPromise) {
+      const pending = Promise.resolve().then(() => typeof this.updaterSource === 'function' ? this.updaterSource() : this.updaterSource)
+        .then((updater) => {
+          if (this.#disposed) throw new Error('Workbench update service was disposed while loading its installer.')
+          this.#configureUpdater(updater)
+          return updater
+        }).finally(() => { if (this.#updaterPromise === pending) this.#updaterPromise = null })
+      this.#updaterPromise = pending
+    }
+    return this.#updaterPromise
   }
 
   public getState(): WorkbenchUpdateState {
@@ -196,7 +224,7 @@ export class WorkbenchUpdateService {
     if (this.#downloadPromise) await this.#downloadPromise.catch(() => undefined)
     await this.#replaceFeed(null)
     this.preferences.setChannel(channel)
-    this.updater.allowPrerelease = channel !== 'stable'
+    if (this.#updater) this.#updater.allowPrerelease = channel !== 'stable'
     this.#setState({ phase: 'idle' })
     return this.checkForUpdates()
   }
@@ -207,19 +235,20 @@ export class WorkbenchUpdateService {
   }
 
   public async dispose(): Promise<void> {
-    this.updater.removeListener('update-available', this.#handleAvailable)
-    this.updater.removeListener('update-not-available', this.#handleNotAvailable)
-    this.updater.removeListener('download-progress', this.#handleProgress)
-    this.updater.removeListener('update-downloaded', this.#handleDownloaded)
-    this.updater.removeListener('update-cancelled', this.#handleCancelled)
-    this.updater.removeListener('error', this.#handleError)
+    this.#disposed = true
+    this.#updater?.removeListener('update-available', this.#handleAvailable)
+    this.#updater?.removeListener('update-not-available', this.#handleNotAvailable)
+    this.#updater?.removeListener('download-progress', this.#handleProgress)
+    this.#updater?.removeListener('update-downloaded', this.#handleDownloaded)
+    this.#updater?.removeListener('update-cancelled', this.#handleCancelled)
+    this.#updater?.removeListener('error', this.#handleError)
     this.#downloadCancellation?.cancel()
     await this.#replaceFeed(null)
     this.#listeners.clear()
   }
 
   async #performCheck(): Promise<WorkbenchUpdateState> {
-    if (!this.#isPackaged || !expectedFiles(this.#platform)) return this.getState()
+    if (this.#disposed || !this.#isPackaged || !expectedFiles(this.#platform)) return this.getState()
     this.#setState({ phase: 'checking' })
     try {
       const release = await this.releases.getCurrentRelease({
@@ -232,13 +261,20 @@ export class WorkbenchUpdateService {
         platform: this.#platform,
         arch: this.#arch,
       })
-      if (release.catalog.artifacts.length === 0) {
+      // The verified catalog can prove there is no version change without initializing the
+      // platform installer, differential downloader, or local update-feed server.
+      if (release.catalog.artifacts.length === 0 || release.catalog.artifacts.every((artifact) => artifact.version === this.#currentVersion)) {
         await this.#replaceFeed(null)
         this.#setState({ phase: 'idle' })
         return this.getState()
       }
+      await this.#loadUpdater()
       const feed = new WorkbenchReleaseFeedServer(this.releases, release)
       const feedUrl = await feed.listen()
+      if (this.#disposed) {
+        await feed.close()
+        return this.getState()
+      }
       await this.#replaceFeed(feed)
       this.updater.setFeedURL({
         provider: 'generic',

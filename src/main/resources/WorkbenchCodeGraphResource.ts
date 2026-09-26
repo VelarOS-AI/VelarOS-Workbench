@@ -199,8 +199,9 @@ class WorkbenchCodeGraphResource {
           )
         )
       case 'read_node':
-      case 'type_hierarchy':
         return this.runQueryCommand(launch, root, ['node', input.nodeId, '--path', root])
+      case 'type_hierarchy':
+        return { nodes: [], degraded: '当前 CodeGraph CLI 没有类型层级接口，未把节点详情当作类型关系。' }
       case 'callers':
       case 'callees':
       case 'impact':

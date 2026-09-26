@@ -162,6 +162,78 @@ describe('WorkbenchUpdateService', () => {
   })
 })
 
+describe('Workbench lazy update installer', () => {
+  async function preferences() {
+    const root = await mkdtemp(join(tmpdir(), 'workbench-lazy-update-'))
+    temporaryRoots.push(root)
+    const store = new WorkbenchUpdatePreferencesStore(root)
+    store.setAutomaticDownloads(false)
+    return store
+  }
+  const options = { currentVersion: '1.0.0', isPackaged: true, platform: 'darwin' as const, arch: 'arm64' }
+
+  test('current, empty and development release checks never load the platform installer', async () => {
+    let loads = 0
+    for (const scenario of ['current', 'empty', 'development'] as const) {
+      const releases = releaseSource()
+      if (scenario === 'empty') releases.getCurrentRelease = async ({ channel }) => ({ baseUrl: 'https://updates.test', catalog: { product: 'workbench', channel, updatePolicy: 'optional', artifacts: [] } })
+      const service = new WorkbenchUpdateService(releases, async () => { loads++; return new FakeUpdater() as unknown as AppUpdater }, await preferences(), {
+        ...options, currentVersion: scenario === 'current' ? '1.1.0' : '1.0.0', isPackaged: scenario !== 'development',
+      })
+      expect((await service.checkForUpdates()).phase).toBe('idle')
+      expect(loads).toBe(0)
+      await service.dispose()
+    }
+  })
+
+  test('concurrent real update checks share one installer and retain channel, events and disposal', async () => {
+    let loads = 0
+    const updater = new FakeUpdater()
+    const service = new WorkbenchUpdateService(releaseSource(), async () => { loads++; return updater as unknown as AppUpdater }, await preferences(), options)
+    expect(loads).toBe(0)
+    const first = service.checkForUpdates()
+    expect(service.checkForUpdates()).toBe(first)
+    expect((await first).phase).toBe('available')
+    expect(loads).toBe(1)
+    expect(updater.listenerCount('update-available')).toBe(1)
+    expect(updater.autoDownload).toBe(false)
+    await service.setChannel('beta')
+    expect(updater.allowPrerelease).toBe(true)
+    expect(loads).toBe(1)
+    updater.emit('update-downloaded', { version: '1.1.0' })
+    service.restartToUpdate()
+    expect(updater.quitCalls).toBe(1)
+    await service.dispose()
+    expect(updater.listenerCount('update-available')).toBe(0)
+  })
+
+  test('failed installer loading can retry and disposal during loading never attaches listeners', async () => {
+    let loads = 0
+    const updater = new FakeUpdater()
+    const service = new WorkbenchUpdateService(releaseSource(), async () => {
+      if (++loads === 1) throw new Error('controlled loader failure')
+      return updater as unknown as AppUpdater
+    }, await preferences(), options)
+    await expect(service.checkForUpdates()).rejects.toThrow('controlled loader failure')
+    expect((await service.checkForUpdates()).phase).toBe('available')
+    expect(loads).toBe(2)
+    await service.dispose()
+
+    let release!: (updater: AppUpdater) => void
+    let started!: () => void
+    const loading = new Promise<AppUpdater>((resolve) => { release = resolve })
+    const ready = new Promise<void>((resolve) => { started = resolve })
+    const other = new FakeUpdater()
+    const disposed = new WorkbenchUpdateService(releaseSource(), () => { started(); return loading }, await preferences(), options)
+    const check = disposed.checkForUpdates()
+    await ready
+    await disposed.dispose()
+    release(other as unknown as AppUpdater)
+    await expect(check).rejects.toThrow('disposed while loading')
+    expect(other.listenerCount('update-available')).toBe(0)
+  })
+})
+
 describe('CloudWorkbenchReleaseSource', () => {
   test('accepts only the current attested unsigned Windows x64 installer', () => {
     const catalog = {

@@ -192,11 +192,14 @@ void describe('Workbench Agent Mod surface', () => {
       doStream: async (request) => {
         requests += 1
         const names = request.tools?.map((tool) => tool.name) ?? []
+        assert.match(JSON.stringify(request.prompt), /Host command environment:/)
         // agent:dispatch、目标 / 计划、上下文召回与工作台界面工具常驻，首轮就在场；job:* 自带可用性门
         // （要宿主提供后台作业读写口），Workbench 的执行面没有，因此它们正确地不出现在请求里。
         if (requests === 1)
           assert.deepEqual(names, [
             'project__read',
+            'tooling__map',
+            'tooling__replace',
             'agent__dispatch',
             'goal__get',
             'goal__create',
@@ -219,6 +222,7 @@ void describe('Workbench Agent Mod surface', () => {
           ])
         assert.ok(!names.includes('browser__hidden'))
         assert.ok(!names.includes('browser__resident_unavailable'))
+        if (requests === 3) assert.ok(!names.some((name) => name.startsWith('workbench__')))
         if (requests === 2) assert.match(JSON.stringify(request.prompt), /file evidence/)
         return { stream: simulateReadableStream({
           initialDelayInMs: null, chunkDelayInMs: null,
@@ -268,6 +272,15 @@ void describe('Workbench Agent Mod surface', () => {
       assert.match(JSON.stringify(messages), /read-1/)
       assert.match(JSON.stringify(messages), /project:read/)
       assert.doesNotMatch(JSON.stringify(messages), /project__read/)
+      const headless = await stack.run({
+        sessionId: 'resident-tools', executionId: 'headless-run',
+        projectRoot: '/tmp/workbench-project', messages: [{ role: 'user', content: 'Report available capabilities.' }],
+        config: { modelSelection: { provider: 'probe', model: 'probe' } },
+        events: new ExecutionEventBus(), abortSignal: new AbortController().signal,
+        rendererAttached: false,
+      })
+      assert.equal(headless.status, 'completed')
+      assert.equal(requests, 3)
     } finally { await stack.dispose() }
   })
 
@@ -364,7 +377,11 @@ void describe('Workbench Agent Mod surface', () => {
       initialVisibleToolNames: snapshot.initialVisibleToolNames,
     })
     assert.deepEqual(context.capabilityPorts?.allocation?.baselineToolNames, snapshot.initialVisibleToolNames)
-    assert.deepEqual(context.describeToolInputSchema('project:read'), registry.describeToolInputSchema('project:read'))
+    assert.deepEqual(context.describeToolInputSchema('project:read'), {
+      profileId: 'base',
+      description: registry.get('project:read')?.description,
+      schema: registry.describeToolInputSchema('project:read'),
+    })
     const scopePolicy = context.capabilityPorts?.scopePolicy
     assert.ok(scopePolicy?.getResidency)
     assert.deepEqual(

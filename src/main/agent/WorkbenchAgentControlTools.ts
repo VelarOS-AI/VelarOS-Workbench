@@ -1,5 +1,6 @@
 import {
   backgroundJobTools,
+  categoriesTools,
   contextRetrievalTools,
   dispatchAgentTools,
   goalTools,
@@ -30,8 +31,8 @@ const WorkbenchAgentControlCategory: Readonly<Record<ToolCategoryId, ToolCategor
   Object.freeze({
     [WorkbenchAgentControlCategoryId]: Object.freeze({
       id: WorkbenchAgentControlCategoryId,
-      label: '智能体调度',
-      description: '把可独立完成的子任务派给子 Agent，并收束它们的运行结果。',
+      label: '工具发现与智能体调度',
+      description: '发现并装载当前可用工具，把独立子任务派给子 Agent，并收束运行结果。',
     }) as ToolCategoryDefinition,
     [WorkbenchAgentPlanningCategoryId]: Object.freeze({
       id: WorkbenchAgentPlanningCategoryId,
@@ -41,7 +42,7 @@ const WorkbenchAgentControlCategory: Readonly<Record<ToolCategoryId, ToolCategor
     [WorkbenchAgentContextCategoryId]: Object.freeze({
       id: WorkbenchAgentContextCategoryId,
       label: '上下文召回',
-      description: '取回这一轮里被页出成句柄的大工具结果。',
+      description: '召回会话中保存的工具结果、失败调用参数与文件历史版本；编辑使用当前可见文件版本。',
     }) as ToolCategoryDefinition,
     ...WorkbenchAgentUiCategory,
   })
@@ -95,6 +96,9 @@ function adoptBuiltinTool(
  *   只有发起这一轮的窗口在场时可见。
  */
 const WorkbenchAgentControlTools: readonly WorkbenchAgentToolDefinition[] = Object.freeze([
+  ...[categoriesTools['tooling:map'], categoriesTools['tooling:replace']].map((tool) =>
+    adoptBuiltinTool(tool as VelaTool, WorkbenchAgentControlCategoryId)
+  ),
   ...[...Object.values(dispatchAgentTools), ...Object.values(backgroundJobTools)].map((tool) =>
     adoptBuiltinTool(tool as VelaTool, WorkbenchAgentControlCategoryId)
   ),

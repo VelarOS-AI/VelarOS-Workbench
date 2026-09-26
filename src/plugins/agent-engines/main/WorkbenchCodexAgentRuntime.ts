@@ -11,6 +11,7 @@ import {
   ProjectCodeToolIdentity,
   type WorkbenchAgentExtensionTools,
 } from './WorkbenchAgentExtensionTools'
+import { buildModeInstructions } from './WorkbenchAgentModeInstructions'
 import type { WorkbenchAgentPluginResolver } from './WorkbenchAgentPluginResolver'
 import {
   WorkbenchCodexAppServerClient,
@@ -71,6 +72,7 @@ export class WorkbenchCodexAgentRuntime {
             approvalsReviewer: 'user',
             sandbox: 'workspace-write',
             model: input.model,
+            developerInstructions: buildModeInstructions(input.executionModes),
           })) ?? existingThreadId
       } catch {
         this.nativeThreads.delete(input.sessionId)
@@ -743,18 +745,6 @@ function buildCodexPrompt(
     return `${message.role.toUpperCase()}:\n${content}`
   }).join('\n\n')
   return `${buildModeInstructions(executionModes)}\n\n${conversation}`
-}
-
-function buildModeInstructions(executionModes: readonly string[]): string {
-  return [
-    'Work directly in the current project. Keep changes focused and report the result concisely.',
-    ...(executionModes.includes('goal')
-      ? ['VelarOS goal mode is active: keep advancing the objective until it is genuinely achieved.']
-      : []),
-    ...(executionModes.includes('plan')
-      ? ['VelarOS plan mode is active: maintain and update a concise plan while continuing implementation. Plan mode is writable.']
-      : []),
-  ].join('\n')
 }
 
 function latestUserText(messages: readonly ModelMessage[]): string {

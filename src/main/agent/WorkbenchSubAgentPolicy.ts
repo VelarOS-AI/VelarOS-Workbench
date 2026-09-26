@@ -30,9 +30,8 @@ const WorkbenchProjectMutateLeaseScope = 'project-mutate'
 /**
  * 每个子 Agent 都看得到的控制面类别（与 Desktop 的共享控制面同理）。
  *
- * 少了它们子 Agent 连「换入工具、读上下文、交付结果」都做不到——不是能力，是活着的最低要求。
- * `context`（`context:recall`）尤其不能少：子 Agent 读几个大文件后结果会被页出成句柄，出核地板要求
- * 这时请求里带着召回工具，缺了它下一次请求直接被拦下，子 Agent 以「不变量校验失败」收场。
+ * 类别声明是允许范围；最终工具还会按只读约束、当前能力和 QueryLoop 策略收窄。
+ * `context`（`context:recall`）保留被页出证据的召回能力，最终请求按实际可用工具生成发现指导。
  */
 const WorkbenchSharedControlCategoryIds: readonly ToolCategoryId[] = ['agent-control', 'context']
 
@@ -46,6 +45,7 @@ const WorkbenchSharedControlCategoryIds: readonly ToolCategoryId[] = ['agent-con
 const WorkbenchSubAgentDescriptors: readonly SubAgentTypeDescriptor[] = [
   {
     id: 'explore',
+    description: '搜索、阅读并归纳项目结构。',
     workerType: 'scout',
     roleId: 'operator',
     routeCategory: 'scout',
@@ -62,6 +62,7 @@ const WorkbenchSubAgentDescriptors: readonly SubAgentTypeDescriptor[] = [
   },
   {
     id: 'edit',
+    description: '修改项目文件并运行验证。',
     workerType: 'coder',
     roleId: 'coder',
     routeCategory: 'writer',
@@ -80,8 +81,9 @@ const WorkbenchSubAgentDescriptors: readonly SubAgentTypeDescriptor[] = [
   },
   {
     id: 'verify',
+    description: '运行检查并汇总验证证据。',
     workerType: 'verifier',
-    roleId: 'coder',
+    roleId: 'verifier',
     routeCategory: 'verifier',
     workerPhase: 'verifying',
     toolCategories: [
@@ -98,6 +100,7 @@ const WorkbenchSubAgentDescriptors: readonly SubAgentTypeDescriptor[] = [
   },
   {
     id: 'general',
+    description: '阅读资料并综合独立子任务结论。',
     workerType: 'synthesizer',
     roleId: 'chat',
     routeCategory: 'synthesizer',
@@ -136,6 +139,10 @@ const WorkbenchSubAgentRoleCopy: Readonly<Record<string, { label: string; descri
     coder: {
       label: '执行者',
       description: '在授权范围内改动项目文件并运行验证命令。',
+    },
+    verifier: {
+      label: '验证者',
+      description: '运行只读检查，依据输出报告结果，把需要修改的地方交回主 Agent。',
     },
     chat: {
       label: '通用子 Agent',

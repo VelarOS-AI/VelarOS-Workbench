@@ -31,7 +31,6 @@ import {
 } from '@codemirror/commands'
 import {
   bracketMatching,
-  foldEffect,
   foldGutter,
   foldKeymap,
   indentOnInput,
@@ -126,6 +125,10 @@ import {
   buildWorkbenchExternalValueSyncTransaction,
   resolveWorkbenchExternalValueSyncSelection,
 } from '@renderer/models/editor/workbenchCodeMirrorExternalSync'
+import {
+  foldWorkbenchImportBlock,
+  workbenchImportFoldExtension,
+} from '@renderer/models/editor/workbenchCodeMirrorImportFold'
 import { createWorkbenchInlayHintExtension } from '@renderer/models/editor/workbenchCodeMirrorInlayHints'
 import {
   workbenchInlineCompletionExtension,
@@ -361,6 +364,7 @@ const workbenchCodeMirrorBaseExtensions: Extension[] = [
   highlightSpecialChars(),
   history(),
   workbenchFoldGutter,
+  workbenchImportFoldExtension,
   workbenchTripleClickLineSelectionExtension,
   drawSelection(),
   dropCursor(),
@@ -515,50 +519,6 @@ function buildIdentifierRenameChanges(
   }
 
   return changes
-}
-
-function findImportFoldRange(state: EditorState): Nullable<{ from: number; to: number }> {
-  let firstImportLine: Nullable<number> = null
-  let lastImportLine: Nullable<number> = null
-  let lineNumber = 1
-
-  while (lineNumber <= state.doc.lines) {
-    const line = state.doc.line(lineNumber)
-    const trimmed = line.text.trim()
-
-    if (!trimmed) {
-      lineNumber += 1
-      continue
-    }
-
-    if (!trimmed.startsWith('import ')) {
-      break
-    }
-
-    firstImportLine ??= lineNumber
-    lastImportLine = lineNumber
-    lineNumber += 1
-  }
-
-  if (
-    !isPresent(firstImportLine) ||
-    !isPresent(lastImportLine) ||
-    lastImportLine <= firstImportLine
-  )
-    return null
-
-  const firstLine = state.doc.line(firstImportLine)
-  const lastLine = state.doc.line(lastImportLine)
-
-  return { from: firstLine.to, to: lastLine.to }
-}
-
-function foldImportBlock(view: EditorView): boolean {
-  const range = findImportFoldRange(view.state)
-  if (!range || range.to <= range.from) return false
-
-  view.dispatch({ effects: foldEffect.of(range) })
-  return true
 }
 
 function buildIdentifierSelectionRanges(
@@ -2460,7 +2420,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       emitCursorPosition(view, callbacksRef.current.onCursorPositionChange)
       if (path) {
         autoFoldedPathRef.current = path
-        foldImportBlock(view)
+        foldWorkbenchImportBlock(view)
       }
 
       return () => {
@@ -2723,7 +2683,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       if (!view || !path || autoFoldedPathRef.current === path) return
 
       autoFoldedPathRef.current = path
-      foldImportBlock(view)
+      foldWorkbenchImportBlock(view)
     }, [path, value])
 
     return (

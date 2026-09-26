@@ -7,12 +7,14 @@ import {
   type ApprovalPort,
   createApprovalOperationKey,
   defaultDenyApprovalPort,
+  type FileContextCarrier,
 } from '@velaros-ai/agent/tool-contract'
 import {
   createProjectCodeQuery,
   type ProjectCodeIndexApi,
 } from '@velaros-ai/development/runtime'
 import {
+  createProjectCodeAnalysisTools,
   executeAgentProjectRead,
   type ProjectToolContext,
   projectTools,
@@ -26,9 +28,8 @@ import {
   withProjectApproval,
 } from '@velaros-ai/project/composition'
 import {
-  ProjectCodeLanguageActions,
+  ProjectCodeAnalysisSchema,
   type ProjectCodeQuery,
-  ProjectCodeQuerySchema,
   type ProjectCommandResult,
   type ProjectMutationAuthorizationInput,
   type ProjectRunCommandOptions,
@@ -61,18 +62,10 @@ import { CommandHelper } from './CommandHelper'
 import { CommandRunner } from './CommandRunner'
 import { PathResolver } from './PathResolver'
 
-function createAvailableCodeQuerySchema(withIndex: boolean) {
-  const actions = new Set<string>(ProjectCodeLanguageActions)
-  // These graph contracts have no matching Workbench backend implementation yet.
-  const unsupported = new Set(['trace', 'find_dead_code', 'type_hierarchy'])
-  const [first, ...remaining] = ProjectCodeQuerySchema.options.filter((schema) =>
-    actions.has(schema.shape.action.value)
-      || (withIndex && !unsupported.has(schema.shape.action.value)))
-  if (!first) throw new Error('Project language query schema has no actions')
-  return z.discriminatedUnion('action', [first, ...remaining])
-}
-const LanguageCodeQuerySchema = createAvailableCodeQuerySchema(false)
-const IndexedCodeQuerySchema = createAvailableCodeQuerySchema(true)
+// The installed CodeGraph CLI implements cycles/routing; the Velar compiler also owns trace/deadcode.
+const CliCodeAnalysisSchema = z.discriminatedUnion('action', ProjectCodeAnalysisSchema.options.filter(
+  (schema) => schema.shape.action.value === 'cycles' || schema.shape.action.value === 'routing'
+) as [typeof ProjectCodeAnalysisSchema.options[number], ...Array<typeof ProjectCodeAnalysisSchema.options[number]>])
 
 type WorkbenchProjectToolDefinition = WorkbenchAgentToolDefinition
 
@@ -226,19 +219,25 @@ class ProjectCapabilityProvider implements WorkbenchProjectCapabilityProvider {
     projectRoot: string,
     kernel: ProjectKernel
   ): readonly WorkbenchProjectToolDefinition[] {
-    const hasIndex = (): boolean => this.codeGraphResource.describe().available
-      && !this.velarLogicGraph?.isProject(projectRoot)
-    return Object.values(projectTools).map((tool) => ({
+    const hasCompiler = (): boolean => this.velarLogicGraph?.isProject(projectRoot) === true
+    const hasIndex = (): boolean => hasCompiler() || this.codeGraphResource.describe().available
+    const tools = [...Object.values(projectTools), ...Object.values(createProjectCodeAnalysisTools(hasIndex))]
+    return tools.map((tool) => ({
       name: tool.name,
       categoryId: tool.category,
       role: tool.role,
       get description() {
-        return tool.name === ProjectToolNames.queryCode && !hasIndex()
-          ? `查询项目代码。当前可用 action：${ProjectCodeLanguageActions.join('、')}。先用 find_symbols 定位声明，再按任务查询引用、导入、导出或诊断。`
+        return tool.name === 'project:code-analysis' && !hasCompiler()
+          ? '按需查询项目依赖环（cycles）和框架路由（routing）。当前 CodeGraph CLI 提供这两项分析。'
           : tool.description
       },
       permissions: [...tool.permissions],
       capabilities: tool.capabilities,
+      inputContractVersion: tool.inputContractVersion,
+      inputReuseSourceTools: tool.inputReuseSourceTools,
+      migrateReusedInput: tool.migrateReusedInput
+        ? (request, toolContext) => tool.migrateReusedInput!(request, this.createProjectToolContext(projectRoot, kernel, toolContext))
+        : undefined,
       requiredModelInputModalities: tool.requiredModelInputModalities,
       exposure: tool.exposure,
       usageSkillId: tool.usageSkillId,
@@ -246,8 +245,8 @@ class ProjectCapabilityProvider implements WorkbenchProjectCapabilityProvider {
       hideWhenUnavailable: tool.hideWhenUnavailable,
       providerId: ProjectModId,
       get schema() {
-        return (tool.name === ProjectToolNames.queryCode
-          ? hasIndex() ? IndexedCodeQuerySchema : LanguageCodeQuerySchema
+        return (tool.name === 'project:code-analysis'
+          ? hasCompiler() ? ProjectCodeAnalysisSchema : CliCodeAnalysisSchema
           : tool.schema) as WorkbenchProjectToolDefinition['schema']
       },
       surfaces: bindProjectToolSurfaces(tool.surfaces, (toolContext) =>
@@ -288,7 +287,13 @@ class ProjectCapabilityProvider implements WorkbenchProjectCapabilityProvider {
     const approval = readApprovalPort(toolContext) ?? defaultDenyApprovalPort
     const activity = readWorkbenchAgentProjectActivity(toolContext)
 
+    const carrier = toolContext && typeof toolContext === 'object' ? toolContext as FileContextCarrier : {}
     return {
+      codingSession: carrier.codingSession,
+      fileContextScope: carrier.fileContextScope,
+      sessionId: carrier.sessionId,
+      contextPayloadStore: carrier.contextPayloadStore,
+      toolCallId: carrier.toolCallId,
       abortSignal,
       project: {
         getRootPath: () => projectRoot,
@@ -417,9 +422,9 @@ interface ProjectCommandScope {
 
 /** 会写文件的 Project 工具：结果里的 `changedFiles` 就是它改过的路径（相对项目根）。 */
 const ProjectFileWriteToolNames: ReadonlySet<string> = new Set([
-  ProjectToolNames.write,
+  ProjectToolNames.file,
   ProjectToolNames.edit,
-  ProjectToolNames.rollback,
+  ProjectToolNames.change,
 ])
 
 /** 写文件工具的起止与它报告改过的路径交给改动归属账本；失败的调用报空清单（内核会把半途的写入复原）。 */
@@ -448,12 +453,10 @@ interface SkippedProjectCommand {
 
 const ProjectBundledModDefinition = createProjectBundledModDefinition()
 const ProjectCategoryIds = Object.freeze(Object.keys(ProjectToolCategories))
-// Project mod 只把主回路工具标成常驻，`project:rollback` 这类事故通道留给 `tooling:map` 按名换入。
-// Workbench 没有 `tooling:map`：不常驻的工具模型永远拿不到（真机里 Agent 想回滚自己的改动却找不到入口），
-// 所以这里让 Project 的全部工具首轮可见；多出的只是一条回滚工具的 schema。
+// Common tools are resident; code/change and optional graph analysis are discovered through tooling:map.
 const ProjectInitialVisibleToolNames = Object.freeze(
   ProjectBundledModDefinition.manifest.contributes.tools
-    .filter((tool) => tool.availableInSpaces?.includes(ProjectSpaceId) === true)
+    .filter((tool) => tool.residentInSpaces?.includes(ProjectSpaceId) === true)
     .map((tool) => tool.name)
 )
 

@@ -23,6 +23,7 @@
     "src/renderer/src/types/tinykeys.d.ts",
     "electron.vite.config.ts",
     "scripts/test/verifyProjectTools.ts",
+    "scripts/test/projectSurfaceNaturalAcceptance.ts",
     "tests/workbench-context-recall.test.ts",
     "tests/workbench-context-persistence.test.ts",
     "src/**/*.ts",

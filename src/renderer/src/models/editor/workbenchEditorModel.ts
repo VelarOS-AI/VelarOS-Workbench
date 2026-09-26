@@ -22,18 +22,6 @@ export interface WorkbenchEditorGoToLineTarget {
   column: number
 }
 
-export interface WorkbenchEditorFoldRange {
-  id: string
-  startLine: number
-  endLine: number
-  hiddenLineCount: number
-}
-
-export interface WorkbenchFoldedEditorDocument {
-  content: string
-  lineNumbers: number[]
-}
-
 export type WorkbenchEditorOutlineKind =
   | 'class'
   | 'constant'
@@ -152,91 +140,6 @@ export function parseWorkbenchGoToLineInput(
   return {
     line: Math.min(Math.max(1, Math.floor(maxLine)), line),
     column,
-  }
-}
-
-function countFoldTokens(line: string): { opens: number; closes: number } {
-  let opens = 0
-  let closes = 0
-
-  for (const char of line) {
-    if (char === '{' || char === '[' || char === '(') {
-      opens += 1
-    } else if (char === '}' || char === ']' || char === ')') {
-      closes += 1
-    }
-  }
-
-  return { opens, closes }
-}
-
-export function buildWorkbenchEditorFoldRanges(content: string): WorkbenchEditorFoldRange[] {
-  const lines = content ? content.split('\n') : ['']
-  const stack: number[] = []
-  const rangesByStartLine = new Map<number, WorkbenchEditorFoldRange>()
-
-  lines.forEach((line, index) => {
-    const lineNumber = index + 1
-    const tokens = countFoldTokens(line)
-
-    for (let closeIndex = 0; closeIndex < tokens.closes; closeIndex += 1) {
-      const startLine = stack.pop()
-      if (!startLine || lineNumber - startLine < 2) {
-        continue
-      }
-
-      const range = {
-        id: `${startLine}:${lineNumber}`,
-        startLine,
-        endLine: lineNumber,
-        hiddenLineCount: lineNumber - startLine,
-      }
-      const currentRange = rangesByStartLine.get(startLine)
-      if (!currentRange || currentRange.endLine < range.endLine) {
-        rangesByStartLine.set(startLine, range)
-      }
-    }
-
-    for (let openIndex = 0; openIndex < tokens.opens; openIndex += 1) {
-      stack.push(lineNumber)
-    }
-  })
-
-  return [...rangesByStartLine.values()].sort(
-    (left, right) => left.startLine - right.startLine || right.endLine - left.endLine
-  )
-}
-
-export function buildWorkbenchFoldedEditorDocument(
-  content: string,
-  foldRanges: readonly WorkbenchEditorFoldRange[],
-  foldedRangeIds: ReadonlySet<string>
-): WorkbenchFoldedEditorDocument {
-  const lines = content ? content.split('\n') : ['']
-  const rangesByStartLine = new Map(foldRanges.map((range) => [range.startLine, range]))
-  const visibleLines: string[] = []
-  const lineNumbers: number[] = []
-  let lineIndex = 0
-
-  while (lineIndex < lines.length) {
-    const lineNumber = lineIndex + 1
-    const range = rangesByStartLine.get(lineNumber)
-
-    if (range && foldedRangeIds.has(range.id)) {
-      visibleLines.push(`${lines[lineIndex]} /* ... ${range.hiddenLineCount} lines folded ... */`)
-      lineNumbers.push(lineNumber)
-      lineIndex = range.endLine
-      continue
-    }
-
-    visibleLines.push(lines[lineIndex] ?? '')
-    lineNumbers.push(lineNumber)
-    lineIndex += 1
-  }
-
-  return {
-    content: visibleLines.join('\n'),
-    lineNumbers,
   }
 }
 

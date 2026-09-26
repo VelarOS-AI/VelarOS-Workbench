@@ -19,6 +19,7 @@ import type {
 import {
   canonicalizeProviderInputSchema,
   schemaToInputSchema,
+  type ToolInputReuseContract,
 } from '@velaros-ai/agent/tool-contract'
 import { mapDefined } from '@velaros-ai/core'
 
@@ -53,7 +54,7 @@ interface WorkbenchAgentToolSurfaceDefinition {
  * Project 与可插拔 Agent Mod 都先适配到这一层。这里有意保留 VelaTool 中会影响发现、执行、
  * 模型输入兼容性与输出治理的元数据，避免组合时只剩 name/description/category 三个字段。
  */
-interface WorkbenchAgentToolDefinition {
+interface WorkbenchAgentToolDefinition extends ToolInputReuseContract<any> {
   descriptorId?: string
   registrationSignature?: string
   name: string
@@ -300,6 +301,7 @@ function cloneToolExposure(exposure: ToolExposurePolicy): ToolExposurePolicy {
 function cloneToolDefinition(definition: WorkbenchAgentToolDefinition): WorkbenchRegisteredTool {
   return {
     ...definition,
+    inputReuseSourceTools: definition.inputReuseSourceTools ? [...definition.inputReuseSourceTools] : undefined,
     permissions: [...definition.permissions],
     requiredModelInputModalities: definition.requiredModelInputModalities
       ? [...definition.requiredModelInputModalities]

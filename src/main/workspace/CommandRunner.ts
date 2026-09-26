@@ -1,6 +1,7 @@
 /** Workbench 前台命令执行：有界增量输出、超时/取消与进程组清理。 */
 import { spawn } from 'node:child_process'
 import { stat } from 'node:fs/promises'
+import { isAbsolute, resolve as resolvePath } from 'node:path'
 import { StringDecoder } from 'node:string_decoder'
 
 import { AppError } from '@velaros-ai/core/error'
@@ -13,6 +14,7 @@ import type {
 } from '@shared/contracts'
 
 import type { CommandHelper } from './CommandHelper'
+import { getRelativePathInsideRoot } from './PathContainmentHelper'
 import type { PathResolver } from './PathResolver'
 
 const DEFAULT_COMMAND_OUTPUT_CHARS = 8_000
@@ -35,7 +37,12 @@ class CommandRunner {
   ): Promise<WorkbenchRunCommandResult> {
     abortSignal?.throwIfAborted()
     const projectRoot = await this.pathResolver.resolveProjectRoot(request.projectRoot)
-    const cwdPath = await this.pathResolver.resolveInsideProject(projectRoot, request.cwd ?? '.')
+    // A project root may be an alias (for example /var -> /private/var on macOS). Translate
+    // absolute cwd paths under that same requested root before checking canonical containment.
+    const relativeCwd = request.cwd && isAbsolute(request.cwd)
+      ? getRelativePathInsideRoot(request.projectRoot, request.cwd) : null
+    const cwd = relativeCwd !== null ? resolvePath(projectRoot, relativeCwd) : request.cwd ?? '.'
+    const cwdPath = await this.pathResolver.resolveInsideProject(projectRoot, cwd)
     const cwdStats = await stat(cwdPath.realPath)
     if (!cwdStats.isDirectory()) {
       throw new AppError('VALIDATION', '工作台命令运行目录必须是目录。')

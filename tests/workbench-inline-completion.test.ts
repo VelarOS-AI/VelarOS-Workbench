@@ -20,6 +20,8 @@ import {
   updateStandaloneWorkbenchModelConfig,
 } from '../src/renderer/src/runtime/standaloneWorkbenchModelConfig'
 
+import { assertCurrentWorkbenchPrompt } from './helpers/workbenchPromptAudit'
+
 describe('Workbench inline completion', () => {
   test('offers supported providers without raw custom-provider setup', () => {
     expect(StandaloneWorkbenchModelProviderPresets.some((provider) => provider.id === 'openai'))
@@ -144,8 +146,10 @@ describe('Workbench inline completion', () => {
 
   test('uses the independent completion model path and cleans fenced output', async () => {
     let prompt = ''
+    let instructions = ''
     const requestPort: Pick<ModelRequestClient, 'collectTextStream'> = {
       collectTextStream: async (request) => {
+        instructions = request.system ?? ''
         const content = request.messages[0]?.content
         prompt = typeof content === 'string' ? content : ''
         expect(request.endpoint).toBe('workbench.inline-completion')
@@ -174,6 +178,7 @@ describe('Workbench inline completion', () => {
     })
 
     expect(result).toEqual({ completion: 'return total + 1' })
+    assertCurrentWorkbenchPrompt({ prompt: [{ role: 'system', content: instructions }] })
     expect(prompt).toContain('Language: typescript')
     expect(prompt).toContain('File: value.ts')
     expect(prompt).toContain('<|cursor|>')

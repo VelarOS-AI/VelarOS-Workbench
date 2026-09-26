@@ -15,7 +15,7 @@ void describe('Workbench agent UI and AI changes wiring', () => {
     const main = readSource('src/main/index.ts')
 
     // 每轮的工具上下文拿到只属于这一轮的界面口；一轮结束，挂着的请求一律失败。
-    assert.match(stack, /workbenchUi: this\.ui\.forExecution\(\{/u)
+    assert.match(stack, /this\.ui\.forExecution\(\{/u)
     assert.match(stack, /this\.ui\.cancelExecution\(input\.executionId/u)
     // 会话面把界面请求交给页面执行、回执交回主进程，请求本身不进会话内容。
     assert.match(adapter, /readWorkbenchAgentUiRequest\(readAgentEventPayload\(envelope\)\)/u)

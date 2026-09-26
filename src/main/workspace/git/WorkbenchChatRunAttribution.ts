@@ -122,7 +122,7 @@ interface FileWriteWindow extends ActionWindow {
  * 一轮运行的改动归属账本。每一次改动按它发生的时刻（{@link WorkbenchPathChangeTimeReader}）归到这一轮的
  * 工具时间窗里：
  *
- * - 写文件工具（`project:write` / `edit` / `rollback`）报告改过的路径：确定是 Agent 的。它自己那几笔写入
+ * - 写文件工具（`project:file` / `edit` / `change`）报告改过的路径：确定是 Agent 的。它自己那几笔写入
  *   的监听回声（改动时刻落在这次写入的时间窗里，路径在它报告的清单里或是清单里文件的上级目录）不另算。
  * - 改动时刻落在 Agent 命令执行期间（开始到结束，再加 {@link AgentCommandGraceMs}）：算命令的副作用。
  * - 其余的改动、用户在 Workbench 里亲手写的、同一项目里别的会话的 Agent 写的：不是这一轮 Agent 的。

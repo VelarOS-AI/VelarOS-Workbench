@@ -1,5 +1,4 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
-import electronUpdater from 'electron-updater'
 
 import {
   isWorkbenchUpdateChannel,
@@ -19,8 +18,6 @@ import { CloudWorkbenchReleaseSource } from './WorkbenchReleaseSource'
 import { WorkbenchUpdatePreferencesStore } from './WorkbenchUpdatePreferencesStore'
 import { WorkbenchUpdateService } from './WorkbenchUpdateService'
 
-const { autoUpdater } = electronUpdater
-
 export function installWorkbenchUpdateRuntime(): void {
   const market = resolveVelarOSOfficialWebsiteMarket({
     configuredMarket: process.env.VELAROS_MARKET,
@@ -38,7 +35,7 @@ export function installWorkbenchUpdateRuntime(): void {
   })
   const service = new WorkbenchUpdateService(
     new CloudWorkbenchReleaseSource(endpointResolver),
-    autoUpdater,
+    async () => (await import('electron-updater')).default.autoUpdater,
     new WorkbenchUpdatePreferencesStore(app.getPath('userData')),
     {
       currentVersion: app.getVersion(),
