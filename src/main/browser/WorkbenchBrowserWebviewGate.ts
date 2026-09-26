@@ -1,10 +1,3 @@
-import type { WorkbenchModId } from '../../shared/workbenchMods'
-
-interface WorkbenchBrowserWebviewModState {
-  isEnabled(id: WorkbenchModId): boolean
-  subscribe(listener: () => void): () => void
-}
-
 interface WorkbenchBrowserGuest {
   isDestroyed(): boolean
   close(options?: { waitForBeforeUnload?: boolean }): void
@@ -12,33 +5,26 @@ interface WorkbenchBrowserGuest {
 }
 
 /**
- * Browser Mod 对 Electron guest 的主进程权威闸门。
+ * 界面里调试浏览器（用户自己开的网页标签）对 Electron guest 的主进程闸门。
  *
- * Renderer 的条件渲染只负责体验；这里同时拒绝禁用后的新 attach，并立即销毁此前挂载的
- * guest，避免 renderer 卡住或被篡改时仍保留浏览器能力。
+ * 只认经它登记过的 guest：权限策略据此判断请求是不是来自用户正在交互的调试页；应用退出（闸门释放）后
+ * 拒绝新的 attach，并销毁此前挂上来的 guest。
  */
 export class WorkbenchBrowserWebviewGate {
   private readonly guests = new Set<WorkbenchBrowserGuest>()
-  private readonly unsubscribe: () => void
   private disposed = false
 
-  public constructor(private readonly modState: WorkbenchBrowserWebviewModState) {
-    this.unsubscribe = modState.subscribe(() => {
-      if (!this.isEnabled()) this.closeAllGuests()
-    })
-  }
-
   public allowsAttachment(): boolean {
-    return this.isEnabled()
+    return !this.disposed
   }
 
   public ownsGuest(guest: WorkbenchBrowserGuest): boolean {
-    return this.isEnabled() && this.guests.has(guest) && !guest.isDestroyed()
+    return !this.disposed && this.guests.has(guest) && !guest.isDestroyed()
   }
 
-  /** 返回 false 表示 attach 与 Mod 状态发生竞态，调用方不应再配置该 guest。 */
+  /** 返回 false 表示 attach 与闸门释放发生竞态，调用方不应再配置该 guest。 */
   public track(guest: WorkbenchBrowserGuest): boolean {
-    if (!this.isEnabled() || guest.isDestroyed()) {
+    if (this.disposed || guest.isDestroyed()) {
       closeGuest(guest)
       return false
     }
@@ -52,15 +38,6 @@ export class WorkbenchBrowserWebviewGate {
   public dispose(): void {
     if (this.disposed) return
     this.disposed = true
-    this.unsubscribe()
-    this.closeAllGuests()
-  }
-
-  private isEnabled(): boolean {
-    return !this.disposed && this.modState.isEnabled('velaros.browser')
-  }
-
-  private closeAllGuests(): void {
     const guests = [...this.guests]
     this.guests.clear()
     for (const guest of guests) closeGuest(guest)
@@ -72,8 +49,8 @@ function closeGuest(guest: WorkbenchBrowserGuest): void {
   try {
     guest.close({ waitForBeforeUnload: false })
   } catch {
-    // guest 可能在 Mod 通知与 close 之间已由 renderer 卸载；销毁路径天然幂等。
+    // guest 可能已由 renderer 卸载；销毁路径天然幂等。
   }
 }
 
-export type { WorkbenchBrowserGuest, WorkbenchBrowserWebviewModState }
+export type { WorkbenchBrowserGuest }

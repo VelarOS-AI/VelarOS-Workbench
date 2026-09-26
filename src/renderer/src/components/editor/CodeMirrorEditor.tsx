@@ -65,29 +65,18 @@ import {
 } from '@codemirror/view'
 import { ChatCircleTextIcon, HammerIcon, PlayIcon } from '@phosphor-icons/react'
 import {
-  buildWorkbenchAiHighlightAnchors,
-  createWorkbenchAiHighlightExtension,
-  setWorkbenchAiHighlightAnchorsEffect,
-} from '@renderer/components/editor/workbenchAiHighlightExtension'
-import {
   addWorkbenchCommentAnchorEffect,
   anchorFromLineRange,
   createWorkbenchCommentExtension,
   retainWorkbenchCommentAnchorsEffect,
   setWorkbenchCommentAnchorsEffect,
 } from '@renderer/components/editor/workbenchCommentExtension'
-import {
-  buildWorkbenchExplanationAnchors,
-  createWorkbenchExplanationExtension,
-  setWorkbenchExplanationAnchorsEffect,
-} from '@renderer/components/editor/workbenchExplanationExtension'
 import { useWorkbenchEditorMetrics } from '@renderer/hooks/useWorkbenchPreferences'
 import {
   useWorkbenchHostRuntime,
   type WorkbenchHostRuntime,
 } from '@renderer/host'
 import { useWorkbenchI18n } from '@renderer/i18n'
-import { useWorkbenchAiHighlightStore } from '@renderer/models/aiHighlights/workbenchAiHighlightStore'
 import type { PackageManagerCommand } from '@renderer/models/commands/workbenchPackageScriptCommand'
 import {
   buildWorkbenchVelarBuildCommand,
@@ -204,7 +193,6 @@ import {
   createWorkbenchVelarTestRunGutterExtension,
   shouldShowWorkbenchVelarTestRunGutter,
 } from '@renderer/models/editor/workbenchVelarTestRunGutter'
-import { useWorkbenchExplanationStore } from '@renderer/models/explanations/workbenchExplanationStore'
 import type { WorkbenchProjectContextIndex } from '@renderer/models/project/workbenchProjectContextIndex'
 import type { WorkbenchThemeId } from '@renderer/models/settings/workbenchPreferences'
 import { useStandaloneWorkbenchModelConfig } from '@renderer/runtime/standaloneWorkbenchModelConfig'
@@ -1431,75 +1419,6 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       ]
     )
 
-    const explanationStore = useWorkbenchExplanationStore()
-    const explanationLabelsRef = useLatest({
-      previous: t('workbench.explanationPrevious'),
-      next: t('workbench.explanationNext'),
-      close: t('workbench.explanationClose'),
-      collapse: t('workbench.explanationCollapse'),
-      expand: t('workbench.explanationExpand'),
-    })
-    const workbenchExplanationExtension = useMemo(
-      () =>
-        createWorkbenchExplanationExtension({
-          onActivate: explanationStore.activate,
-          onStep: explanationStore.step,
-          onCollapse: () => explanationStore.activate(null),
-          resolveLabels: () => explanationLabelsRef.current,
-          onAnchorsRemoved: explanationStore.removeMany,
-          onAnchorLinesChanged: explanationStore.updateLines,
-          isExternalDocReplace: (tr) => tr.annotation(externalValueSync) === true,
-        }),
-      [explanationLabelsRef, explanationStore]
-    )
-    /** 已经把哪一次「切到某条讲解」带进过视野；切文件后补做一次。 */
-    const appliedExplanationFocusRef = useRef(0)
-
-    // AI 选区：锁在文件上的淡紫色标记，切文件后按存储行号重新锚定，编辑时行号回写。
-    const aiHighlightStore = useWorkbenchAiHighlightStore()
-    const workbenchAiHighlightExtension = useMemo(
-      () =>
-        createWorkbenchAiHighlightExtension({
-          onAnchorsRemoved: aiHighlightStore.removeMany,
-          onAnchorLinesChanged: aiHighlightStore.updateLines,
-          isExternalDocReplace: (tr) => tr.annotation(externalValueSync) === true,
-        }),
-      [aiHighlightStore]
-    )
-    const syncWorkbenchAiHighlights = (view: EditorView): void => {
-      const currentPath = pathRef.current
-      const highlights = currentPath
-        ? aiHighlightStore.listForPath(projectRootRef.current, currentPath)
-        : []
-      view.dispatch({
-        effects: setWorkbenchAiHighlightAnchorsEffect.of(
-          buildWorkbenchAiHighlightAnchors(view.state.doc, highlights)
-        ),
-      })
-    }
-
-    // 按存储行号把当前文件的讲解锚定成装饰；有新的「切到某条讲解」且它就在这个文件里时，把它滚到视野上方。
-    const syncWorkbenchExplanations = (view: EditorView): void => {
-      const currentPath = pathRef.current
-      const snapshot = explanationStore.getSnapshot()
-      const tour = explanationStore.listForProject(projectRootRef.current)
-      const anchors = currentPath
-        ? buildWorkbenchExplanationAnchors(view.state.doc, currentPath, tour, snapshot.activeId)
-        : []
-      const activeAnchor = anchors.find((anchor) => anchor.active)
-      const shouldFocus =
-        !!activeAnchor && snapshot.focusRevision > appliedExplanationFocusRef.current
-      if (shouldFocus) appliedExplanationFocusRef.current = snapshot.focusRevision
-      view.dispatch({
-        effects: [
-          setWorkbenchExplanationAnchorsEffect.of(anchors),
-          ...(shouldFocus && activeAnchor
-            ? [EditorView.scrollIntoView(activeAnchor.from, { y: 'start', yMargin: 72 })]
-            : []),
-        ],
-      })
-    }
-
     const openFileHistory = (mode: 'local' | 'git'): void => {
       setContextMenu(null)
       if (path) callbacksRef.current.onOpenFileHistory?.(mode)
@@ -2392,8 +2311,6 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
           EditorState.tabSize.of(2),
           workbenchIndentGuideExtension,
           workbenchCommentExtension,
-          workbenchExplanationExtension,
-          workbenchAiHighlightExtension,
           mouseHandlers,
           languageHoverCompartment.of(languageServiceHoverExtension),
           languageServiceCompartment.of([]),
@@ -2424,8 +2341,6 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
 
       viewRef.current = view
       reanchorWorkbenchComments(view)
-      syncWorkbenchExplanations(view)
-      syncWorkbenchAiHighlights(view)
       emitCursorPosition(view, callbacksRef.current.onCursorPositionChange)
       if (path) {
         autoFoldedPathRef.current = path
@@ -2532,10 +2447,8 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         setCommentDraft(null)
         view.scrollDOM.scrollTo({ left: 0, top: 0 })
       }
-      // 外部整篇替换会清空评论锚点，按存储行号重新锚定当前文件的评论（讲解、AI 选区同理）。
+      // 外部整篇替换会清空评论锚点，按存储行号重新锚定当前文件的评论。
       reanchorWorkbenchComments(view)
-      syncWorkbenchExplanations(view)
-      syncWorkbenchAiHighlights(view)
       emitCursorPosition(view, callbacksRef.current.onCursorPositionChange)
     }, [path, value])
 
@@ -2545,23 +2458,6 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
     useEffect(() => {
       viewRef.current?.dispatch({ effects: setWorkbenchGitChangeBaseEffect.of(gitBaseContent) })
     }, [gitBaseContent, path])
-
-    // 讲解加了、换了、切到下一条：重新锚定，必要时把当前讲解带进视野。AI 选区加了、取消了、跟着编辑挪了行：
-    // 同样按存储重新锚定当前文件。直接订阅存储而不经 React——编辑器每回写一次行号就重渲染整个编辑器组件
-    // 太贵；通知可能来自编辑器自己的 update listener，重锚推迟到微任务，不在更新过程中再派发事务。
-    useEffect(() => {
-      const resync = (sync: (view: EditorView) => void) => () =>
-        queueMicrotask(() => {
-          const view = viewRef.current
-          if (view) sync(view)
-        })
-      const unsubscribeExplanations = explanationStore.subscribe(resync(syncWorkbenchExplanations))
-      const unsubscribeAiHighlights = aiHighlightStore.subscribe(resync(syncWorkbenchAiHighlights))
-      return () => {
-        unsubscribeExplanations()
-        unsubscribeAiHighlights()
-      }
-    }, [aiHighlightStore, explanationStore])
 
     // 存储侧评论被删除/消费时，回收对应的编辑器锚点装饰。
     const workbenchComments = useWorkbenchComments(projectRoot)

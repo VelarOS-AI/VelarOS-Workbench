@@ -33,11 +33,6 @@ export function buildStandaloneWorkbenchEditorChrome(
   const editorChromeProject = {
     isRunningCommand: workbench.isRunningCommand,
     hasActiveRunCommand: workbench.hasActiveRunCommand,
-    projectAiIndexStatus: workbench.projectAiIndexStatus,
-    projectAiIndexSkipped: chrome.projectAiIndexSkipped,
-    isStartingProjectAiIndex: workbench.isStartingProjectAiIndex,
-    codeGraphAvailable: chrome.codeGraphAvailable,
-    canOpenCodeGraph: chrome.canOpenCodeGraph,
   }
   const editorChromeActions = {
     onGitRefresh: model.actions.refreshGitPanel,
@@ -49,8 +44,6 @@ export function buildStandaloneWorkbenchEditorChrome(
     onOpenGitBottomTool: () => model.surface.openBottomTool('git'),
     onOpenQuickOpen: model.surface.openQuickOpen,
     onOpenSettings: () => model.dialogs.setSettingsOpen(true),
-    onStartProjectAiIndex: model.actions.startProjectAiIndex,
-    onOpenCodeGraph: () => model.dialogs.setCodeGraphOpen(true),
   }
 
   return {
@@ -69,8 +62,6 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
   const workbench = model.workbench
   const gitState = model.gitState
   const editorNavigation = model.editorNavigation
-  const chatChangePreview = model.chatChangePreview
-  const gitChangeActions = model.gitChangeActions
   const activeProject = workbench.activeProject
 
   if (!activeProject) {
@@ -204,16 +195,6 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
         diffWorkspaceRoot: activeProject.rootPath,
         activeDiffItem: editorNavigation.diffItem,
         focusFirstChangeRequestId: editorNavigation.diffFocusFirstChangeRequestId,
-        chatChangePreview: chatChangePreview.active
-          ? {
-              items: chatChangePreview.items,
-              pendingFileAction: gitChangeActions.pendingFileAction,
-              onClose: editorNavigation.closeDiff,
-              onDiscardItem: (item) => void gitChangeActions.runFileAction(item, 'discard'),
-              onOpenFile: (path) => void editorNavigation.selectFile(path),
-              onSelectItem: editorNavigation.openDiff,
-            }
-          : null,
         lightTab: editorNavigation.lightTab
           ? {
               item: editorNavigation.lightTab,
@@ -226,33 +207,11 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
         onCloseDiffTab: editorNavigation.closeDiff,
       },
       debug: {
-        tabs: model.browserModEnabled ? editorNavigation.debug.tabs : [],
-        activeTabId: model.browserModEnabled ? editorNavigation.debug.activeTabId : null,
+        tabs: editorNavigation.debug.tabs,
+        activeTabId: editorNavigation.debug.activeTabId,
         onSelect: editorNavigation.debug.selectTab,
         onClose: editorNavigation.debug.closeTab,
         onNavigate: editorNavigation.debug.navigateTab,
-        agentBrowser: model.browserModEnabled && model.agentBrowser.active
-          ? {
-              id:
-                editorNavigation.debug.agentBrowser.tabId ??
-                `agent-browser:${model.agentBrowser.sessionId}`,
-              sessionId: model.agentBrowser.sessionId,
-              title: model.agentBrowser.page.title,
-              visible: !!editorNavigation.debug.agentBrowser.tabId,
-              active:
-                editorNavigation.debug.activeTabId === editorNavigation.debug.agentBrowser.tabId,
-              surface: model.agentBrowser,
-              onSelect: () =>
-                editorNavigation.debug.agentBrowser.open(model.agentBrowser.sessionId),
-              onClose: () => {
-                const sessionId = model.agentBrowser.sessionId
-                void window.velarosWorkbenchBrowser.closeSession({ sessionId })
-                  .then(() => editorNavigation.debug.agentBrowser.close(sessionId))
-                  .catch(() => undefined)
-              },
-              onPicked: model.actions.handleWorkbenchBrowserElementPicked,
-            }
-          : null,
       },
       workspace: {
         onRevertSelectedFile: workbench.revertSelectedFile,

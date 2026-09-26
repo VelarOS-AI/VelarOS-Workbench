@@ -70,21 +70,8 @@ export function WorkbenchEmbeddedKernel({
       onSelect: () => debug.onSelect(tab.id),
       onClose: () => debug.onClose(tab.id),
     })),
-    ...(debug.agentBrowser?.visible
-      ? [{
-          id: debug.agentBrowser.id,
-          title: debug.agentBrowser.title,
-          label: debug.agentBrowser.title,
-          icon: <GlobeSimpleIcon size={13} />,
-          active: debug.agentBrowser.active,
-          kind: 'agent-browser',
-          content: null,
-          onSelect: debug.agentBrowser.onSelect,
-          onClose: debug.agentBrowser.onClose,
-        }]
-      : []),
   ]
-  const hasDebugTabsLayer = debug.tabs.length > 0 || !!debug.agentBrowser
+  const hasDebugTabsLayer = debug.tabs.length > 0
   const debugTabsLayer = hasDebugTabsLayer ? (
     <div className={styles.webviewDebugLayer}>
       {debug.tabs.map((tab) => (
@@ -99,17 +86,6 @@ export function WorkbenchEmbeddedKernel({
           />
         </div>
       ))}
-      {!!debug.agentBrowser && (
-        <div
-          className={styles.webviewDebugLayerItem}
-          data-active={debug.agentBrowser.visible && debug.agentBrowser.active}
-        >
-          {debug.agentBrowser.surface.render({
-            onElementPicked: debug.agentBrowser.onPicked,
-            onRequestClose: debug.agentBrowser.onClose,
-          })}
-        </div>
-      )}
     </div>
   ) : null
   const editorDiff = {

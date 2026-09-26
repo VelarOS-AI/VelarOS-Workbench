@@ -9,7 +9,6 @@ import {
 import {
   CheckIcon,
   GearSixIcon,
-  GraphIcon,
   PlayIcon,
   SpinnerGapIcon,
 } from '@phosphor-icons/react'
@@ -30,7 +29,7 @@ import {
 } from '@velaros-ai/ui/primitives/overlays/Dialog'
 import { BubbleTooltip } from '@velaros-ai/ui/primitives/overlays/Tooltip'
 
-import type { SystemWorkspaceGitSummary, WorkbenchProjectAiIndexStatus } from '@shared/contracts'
+import type { SystemWorkspaceGitSummary } from '@shared/contracts'
 
 import { type WorkbenchTopRunControl } from '../../hooks/useWorkbenchTopRunControl'
 import styles from '../../styles/workbenchPageStyles'
@@ -55,13 +54,6 @@ export interface TopToolbarProps {
   topRun: WorkbenchTopRunControl
   isRunningCommand: boolean
   hasActiveRunCommand: boolean
-  projectAiIndexStatus: Nullable<WorkbenchProjectAiIndexStatus>
-  projectAiIndexSkipped: boolean
-  isStartingProjectAiIndex: boolean
-  onStartProjectAiIndex: () => void
-  codeGraphAvailable: boolean
-  canOpenCodeGraph: boolean
-  onOpenCodeGraph: () => void
 }
 
 export function WorkbenchTopLeading({
@@ -110,56 +102,16 @@ export function WorkbenchTopTrailing({
   topRun,
   isRunningCommand,
   hasActiveRunCommand,
-  projectAiIndexStatus,
-  projectAiIndexSkipped,
-  isStartingProjectAiIndex,
-  onStartProjectAiIndex,
-  codeGraphAvailable,
-  canOpenCodeGraph,
-  onOpenCodeGraph,
 }: Pick<
   TopToolbarProps,
   | 'onOpenSettings'
   | 'topRun'
   | 'isRunningCommand'
   | 'hasActiveRunCommand'
-  | 'projectAiIndexStatus'
-  | 'projectAiIndexSkipped'
-  | 'isStartingProjectAiIndex'
-  | 'onStartProjectAiIndex'
-  | 'codeGraphAvailable'
-  | 'canOpenCodeGraph'
-  | 'onOpenCodeGraph'
 >): ReactElement {
   const { t } = useWorkbenchI18n()
-  const aiIndexRunning = isStartingProjectAiIndex || projectAiIndexStatus?.status === 'indexing'
-  const aiIndexTooltip = aiIndexRunning
-    ? getProjectAiIndexActionLabel({
-        status: projectAiIndexStatus,
-        skipped: projectAiIndexSkipped,
-        running: aiIndexRunning,
-        t,
-      })
-    : getProjectAiIndexActionTitle({
-        status: projectAiIndexStatus,
-        skipped: projectAiIndexSkipped,
-        t,
-      })
-  const codeGraphLabel = canOpenCodeGraph
-    ? t('workbench.codeGraphOpenTitle')
-    : t('workbench.aiIndexWarm')
-  const codeGraphTooltip = aiIndexRunning || !canOpenCodeGraph ? aiIndexTooltip : codeGraphLabel
   const runCommandLabel = t('workbench.runCommand')
   const settingsLabel = t('workbench.settingsTitle')
-
-  function handleCodeGraphAction(): void {
-    if (canOpenCodeGraph) {
-      onOpenCodeGraph()
-      return
-    }
-
-    onStartProjectAiIndex()
-  }
 
   return (
     <>
@@ -172,21 +124,6 @@ export function WorkbenchTopTrailing({
         isRunningCommand={isRunningCommand}
         hasActiveRunCommand={hasActiveRunCommand}
       />
-      {codeGraphAvailable && (
-        <WorkbenchTopIconAction
-          tooltip={codeGraphTooltip}
-          label={codeGraphLabel}
-          tooltipSide="top"
-          disabled={aiIndexRunning}
-          onClick={handleCodeGraphAction}
-        >
-          {aiIndexRunning ? (
-            <SpinnerGapIcon size={17} className={styles.spinIcon} />
-          ) : (
-            <GraphIcon size={17} />
-          )}
-        </WorkbenchTopIconAction>
-      )}
       <WorkbenchTopIconAction
         tooltip={settingsLabel}
         label={settingsLabel}
@@ -456,79 +393,6 @@ function WorkbenchTopIconAction({
       </IconButton>
     </BubbleTooltip>
   )
-}
-
-function getProjectAiIndexActionLabel({
-  status,
-  skipped,
-  running,
-  t,
-}: {
-  status: Nullable<WorkbenchProjectAiIndexStatus>
-  skipped: boolean
-  running: boolean
-  t: ReturnType<typeof useWorkbenchI18n>['t']
-}): string {
-  if (running) return t(projectAiIndexPhaseKey(status?.phase ?? 'scanning-project'))
-
-  switch (status?.status) {
-    case 'ready': {
-      return t('workbench.aiIndexRewarm')
-    }
-    case 'failed': {
-      return t('workbench.aiIndexRetry')
-    }
-    default: {
-      return skipped ? t('workbench.aiIndexWarmSkipped') : t('workbench.aiIndexWarm')
-    }
-  }
-}
-
-function getProjectAiIndexActionTitle({
-  status,
-  skipped,
-  t,
-}: {
-  status: Nullable<WorkbenchProjectAiIndexStatus>
-  skipped: boolean
-  t: ReturnType<typeof useWorkbenchI18n>['t']
-}): string {
-  if (status?.status === 'ready' && status.indexedAt)
-    return t('workbench.aiIndexReadyTitle', {
-      time: new Intl.DateTimeFormat(undefined, {
-        dateStyle: 'short',
-        timeStyle: 'short',
-      }).format(status.indexedAt),
-    })
-
-  if (status?.status === 'failed' && status.error)
-    return t('workbench.aiIndexFailedWithReason', { reason: status.error })
-
-  if (skipped) return t('workbench.aiIndexSkippedTitle')
-
-  return t('workbench.aiIndexWarmTitle')
-}
-
-function projectAiIndexPhaseKey(
-  phase: WorkbenchProjectAiIndexStatus['phase']
-):
-  | 'workbench.aiIndexPreparing'
-  | 'workbench.aiIndexBuildingCodeGraph'
-  | 'workbench.aiIndexSyncingKnowledge'
-  | 'workbench.aiIndexWritingMemory'
-  | 'workbench.aiIndexing' {
-  switch (phase) {
-    case 'scanning-project':
-      return 'workbench.aiIndexPreparing'
-    case 'building-codegraph':
-      return 'workbench.aiIndexBuildingCodeGraph'
-    case 'syncing-knowledge':
-      return 'workbench.aiIndexSyncingKnowledge'
-    case 'writing-memory':
-      return 'workbench.aiIndexWritingMemory'
-    default:
-      return 'workbench.aiIndexing'
-  }
 }
 
 /** 旧的独立标题行；工作台现在在编辑器面板中组合左侧、标签和右侧区域。 */

@@ -39,18 +39,6 @@ void describe('Workbench navigation surface', () => {
       leftTool: 'project',
       revealLeftPanel: false,
     })
-    // 在资源管理器里定位：就是给人看左侧的，面板收起时展开。
-    assert.deepEqual(resolveWorkbenchNavigationSurface('reveal'), {
-      editorGroup: 'primary',
-      leftTool: 'project',
-      revealLeftPanel: true,
-    })
-    // Git 工作区对比：普通文件区里的对比 + 左侧 Git 面板。
-    assert.deepEqual(resolveWorkbenchNavigationSurface('git-diff'), {
-      editorGroup: 'primary',
-      leftTool: 'commit',
-      revealLeftPanel: false,
-    })
     // 审核本轮改动：「AI 改动」独占组 + 左侧改动树。
     assert.deepEqual(resolveWorkbenchNavigationSurface('ai-changes'), {
       editorGroup: 'ai-changes',
@@ -69,7 +57,7 @@ void describe('Workbench navigation surface', () => {
     assert.match(navigate, /if \(editorGroup === 'primary'\) showEditorSurface\(\)/u)
     assert.match(navigate, /if \(surface\.activeLeftTool !== leftTool\) surface\.setActiveLeftTool\(leftTool\)/u)
     assert.match(navigate, /if \(revealLeftPanel && !surface\.isFilePanelOpen\) surface\.toggleFilePanel\(\)/u)
-    assert.match(navigate, /editorNavigation\.goToLocation\(request\.path, request\.line, request\.column, \{\n\s*focus: request\.focus,/u)
+    assert.match(navigate, /await editorNavigation\.goToLocation\(request\.path, request\.line, request\.column\)/u)
 
     // 聊天：回答里的路径、改动卡的逐文件打开（项目外走只读预览）、「审核」本轮改动。
     const workspacePath = sliceSource(pageModel, 'async function handleWorkbenchChatWorkspacePathOpen', '\n  }\n')
@@ -81,16 +69,6 @@ void describe('Workbench navigation surface', () => {
     assert.match(preview, /await navigate\(\{ target: 'file-preview', tab: previewTab \}\)/u)
     const review = sliceSource(pageModel, 'function handleWorkbenchChatRunChangesReview', '\n  }\n')
     assert.match(review, /navigate\(\{ target: 'ai-changes', round: target \}\)/u)
-
-    // Agent：open_file 最后停在第一个文件且不抢焦点；explain_code、reveal、open_diff、读问题。
-    const openFiles = sliceSource(pageModel, "case 'open-files': {", "case 'clear-highlights':")
-    assert.match(openFiles, /await navigate\(\{\n\s*target: 'file',\n\s*path: primary\.path,[\s\S]*?focus: false,/u)
-    assert.match(pageModel, /case 'reveal-path':\n\s*await navigate\(\{ target: 'reveal', path: command\.path \}\)/u)
-    assert.match(pageModel, /await navigate\(\{ target: 'git-diff', item \}\)/u)
-    const explain = sliceSource(pageModel, "case 'explain-code': {", "case 'clear-explanations':")
-    assert.match(explain, /if \(first\) await navigate\(\{ target: 'file', path: first\.path \}\)/u)
-    const problems = sliceSource(pageModel, "case 'read-problems': {", "if (command.show)")
-    assert.match(problems, /await navigate\(\{\n\s*target: 'file',\n\s*path: shown\.path,[\s\S]*?focus: false,/u)
 
     // 零散的「收独占组 + 切左侧」不再散落在各个处理函数里：切左侧只剩入口与边沿同步 effect。
     assert.equal(pageModel.match(/setActiveLeftTool\(/gu)?.length, 3)

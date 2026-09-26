@@ -19,10 +19,7 @@ import type {
   WorkbenchPtyProcess,
   WorkbenchPtySpawnOptions,
 } from '../src/main/workspace/terminal/WorkbenchPty'
-import {
-  appendWorkbenchRunLogChunks,
-  markWorkbenchTerminalSessionClosed,
-} from '../src/renderer/src/hooks/workbenchCommand/useWorkbenchCommandIpcSubscriptions'
+import { markWorkbenchTerminalSessionClosed } from '../src/renderer/src/hooks/workbenchCommand/useWorkbenchCommandIpcSubscriptions'
 import type { WorkbenchTerminalSessionView } from '../src/renderer/src/models/commands/workbenchCommandLines'
 import {
   attachWorkbenchTerminalOutput,
@@ -31,7 +28,6 @@ import {
   publishWorkbenchTerminalOutput,
   readWorkbenchTerminalOutputBacklog,
 } from '../src/renderer/src/models/commands/workbenchTerminalOutputBus'
-import { createWorkbenchTerminalRunLog } from '../src/renderer/src/models/commands/workbenchTerminalRunLog'
 import type { WorkbenchTerminalOutputEvent } from '../src/shared/contracts'
 
 function readSource(relativePath: string): string {
@@ -256,24 +252,7 @@ void describe('terminal output on the renderer side', () => {
     discardWorkbenchTerminalOutput('s2')
   })
 
-  void test('coalesces run-card log chunks per session and appends them in order', async () => {
-    const flushes: Array<Array<[string, string]>> = []
-    const log = createWorkbenchTerminalRunLog({
-      flushDelayMs: 10,
-      onFlush: (batch) => flushes.push([...batch.entries()]),
-    })
-    log.append('run', 'a')
-    log.append('run', 'b')
-    log.append('other', '1')
-    log.append('run', '')
-    assert.deepEqual(flushes, [])
-    await settle(30)
-    assert.deepEqual(flushes, [[['run', 'ab'], ['other', '1']]])
-    log.append('run', 'c')
-    log.flush()
-    assert.deepEqual(flushes.at(-1), [['run', 'c']])
-    log.dispose()
-
+  void test('a closed session stops running once, and repeated close events change nothing', () => {
     const session: WorkbenchTerminalSessionView = {
       id: 'run',
       title: 'dev',
@@ -281,16 +260,12 @@ void describe('terminal output on the renderer side', () => {
       cwd: '/p',
       isRunning: true,
       command: 'bun run dev',
-      lines: [],
     }
-    const appended = appendWorkbenchRunLogChunks([session], new Map([['run', 'ready\r\n']]))
-    assert.equal(appended[0]?.lines.length, 1)
-    assert.equal(appended[0]?.lines[0]?.text, 'ready\r\n')
-    const untouched = [session]
-    assert.equal(appendWorkbenchRunLogChunks(untouched, new Map([['nope', 'x']])), untouched)
-    const closed = markWorkbenchTerminalSessionClosed(appended, 'run')
+    const closed = markWorkbenchTerminalSessionClosed([session], 'run')
     assert.equal(closed[0]?.isRunning, false)
     assert.equal(markWorkbenchTerminalSessionClosed(closed, 'run'), closed)
+    const untouched = [session]
+    assert.equal(markWorkbenchTerminalSessionClosed(untouched, 'other'), untouched)
   })
 
   void test('the panels render xterm instead of a line list with a fake prompt', () => {

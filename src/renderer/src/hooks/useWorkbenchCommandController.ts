@@ -9,7 +9,6 @@ import {
 } from '@renderer/models/commands/workbenchCommandHistory'
 import {
   createRunOutputLine,
-  createTerminalLine,
   formatRunDuration,
   type WorkbenchRunOutputLine,
   type WorkbenchTerminalSessionView,
@@ -32,7 +31,6 @@ import {
 
 export type {
   WorkbenchRunOutputLine,
-  WorkbenchTerminalLine,
   WorkbenchTerminalSessionView,
 } from '@renderer/models/commands/workbenchCommandLines'
 
@@ -122,7 +120,6 @@ export function useWorkbenchCommandController({
           shell: result.shell,
           cwd: result.cwd,
           isRunning: true,
-          lines: [],
         }
 
         setTerminalSessions((current) => [...current, session])
@@ -331,7 +328,6 @@ export function useWorkbenchCommandController({
         cwd: result.cwd,
         isRunning: true,
         command,
-        lines: [createTerminalLine('input', `$ ${command}\n`)],
       }
       setRunSessions((current) => [...current, session])
       setActiveRunSessionId(result.sessionId)
@@ -403,7 +399,6 @@ export function useWorkbenchCommandController({
         cwd: result.cwd,
         isRunning: true,
         command,
-        lines: [createTerminalLine('input', `$ ${command}\n`)],
       }
       // 就地替换该卡（保持标签位置），旧 sessionId 的收口事件因 id 已不在集合而自然忽略。
       setRunSessions((current) => current.map((item) => (item.id === sessionId ? fresh : item)))

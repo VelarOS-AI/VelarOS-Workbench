@@ -4,35 +4,10 @@ import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 import { useWorkbenchHostRuntime } from '../../host'
 import {
   createRunOutputLine,
-  createTerminalLine,
   type WorkbenchRunOutputLine,
   type WorkbenchTerminalSessionView,
 } from '../../models/commands/workbenchCommandLines'
 import { publishWorkbenchTerminalOutput } from '../../models/commands/workbenchTerminalOutputBus'
-import { createWorkbenchTerminalRunLog } from '../../models/commands/workbenchTerminalRunLog'
-
-/** 运行卡文本日志落进 React 状态的合并周期。 */
-const RunLogFlushDelayMs = 100
-const MaxRunLogLines = 500
-
-/** 运行卡的文本日志追加一段（终端会话不在 runSessions 里，自然跳过）。 */
-export function appendWorkbenchRunLogChunks(
-  sessions: WorkbenchTerminalSessionView[],
-  chunksBySession: ReadonlyMap<string, string>
-): WorkbenchTerminalSessionView[] {
-  if (chunksBySession.size === 0) return sessions
-  let changed = false
-  const next = sessions.map((session) => {
-    const chunk = chunksBySession.get(session.id)
-    if (!chunk) return session
-    changed = true
-    return {
-      ...session,
-      lines: [...session.lines, createTerminalLine('stdout', chunk)].slice(-MaxRunLogLines),
-    }
-  })
-  return changed ? next : sessions
-}
 
 export function markWorkbenchTerminalSessionClosed(
   sessions: WorkbenchTerminalSessionView[],
@@ -70,17 +45,10 @@ export function useWorkbenchCommandIpcSubscriptions(
       )
     })
 
-    // 伪终端输出直送 xterm；只有运行卡的文本日志（给 Agent 读、给 waitFor 等）与收口状态走 React。
-    const runLog = createWorkbenchTerminalRunLog({
-      flushDelayMs: RunLogFlushDelayMs,
-      onFlush: (chunksBySession) =>
-        setRunSessions((current) => appendWorkbenchRunLogChunks(current, chunksBySession)),
-    })
+    // 伪终端输出直送 xterm，不经 React；只有收口状态走 React。
     const unsubscribe = hostRuntime.kernel.project.onWorkbenchTerminalOutput((event) => {
       publishWorkbenchTerminalOutput(event.sessionId, event.chunk)
-      runLog.append(event.sessionId, event.chunk)
       if (!event.closed) return
-      runLog.flush()
       setTerminalSessions((current) => markWorkbenchTerminalSessionClosed(current, event.sessionId))
       setRunSessions((current) => markWorkbenchTerminalSessionClosed(current, event.sessionId))
     })
@@ -88,7 +56,6 @@ export function useWorkbenchCommandIpcSubscriptions(
     return () => {
       unsubscribeRunOutput()
       unsubscribe()
-      runLog.dispose()
     }
   }, [
     activeRunIdRef,

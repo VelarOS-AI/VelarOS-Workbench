@@ -28,8 +28,6 @@ export interface WorkbenchDebugTab {
   title: string
 }
 
-const WorkbenchAgentBrowserTabPrefix = 'agent-browser:'
-
 /** 用 host（含端口）作为调试选项卡标题，取不到就退回原始 URL。 */
 function deriveDebugTabTitle(url: string): string {
   try {
@@ -40,14 +38,12 @@ function deriveDebugTabTitle(url: string): string {
 }
 
 interface UseWorkbenchEditorNavigationStateOptions {
-  browserEnabled: boolean
   gitChangeItems: WorkbenchGitChangeItem[]
   selectedFilePath: Nullable<string>
   onSelectFile: (path: string) => Promise<any>
 }
 
 export function useWorkbenchEditorNavigationState({
-  browserEnabled,
   gitChangeItems,
   selectedFilePath,
   onSelectFile,
@@ -62,8 +58,6 @@ export function useWorkbenchEditorNavigationState({
   const [lightTab, setLightTab] = useState<Nullable<WorkbenchLightEditorTab>>(null)
   const [debugTabs, setDebugTabs] = useState<WorkbenchDebugTab[]>([])
   const [activeDebugTabId, setActiveDebugTabId] = useState<Nullable<string>>(null)
-  const [agentBrowserTabSessionId, setAgentBrowserTabSessionId] =
-    useState<Nullable<string>>(null)
   const debugTabsRef = useLatest(debugTabs)
   const [navigationRequest, setNavigationRequest] = useState<Nullable<EditorNavigationRequest>>(null)
   const [activeProblemId, setActiveProblemIdState] = useState<Nullable<string>>(null)
@@ -143,7 +137,6 @@ export function useWorkbenchEditorNavigationState({
   }
 
   const openDebugTab = useCallback((rawUrl: string): void => {
-    if (!browserEnabled) return
     const url = rawUrl.trim()
     if (!url) return
 
@@ -160,7 +153,7 @@ export function useWorkbenchEditorNavigationState({
     const id = `debug-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
     setDebugTabs((current) => [...current, { id, url, title: deriveDebugTabTitle(url) }])
     setActiveDebugTabId(id)
-  }, [browserEnabled, debugTabsRef])
+  }, [debugTabsRef])
 
   const selectDebugTab = useCallback((id: string): void => {
     setDiffItem(null)
@@ -188,53 +181,6 @@ export function useWorkbenchEditorNavigationState({
     )
   }, [])
 
-  const agentBrowserTabId = agentBrowserTabSessionId
-    ? `${WorkbenchAgentBrowserTabPrefix}${agentBrowserTabSessionId}`
-    : null
-  const openAgentBrowserTab = useCallback((sessionId: string): void => {
-    if (!browserEnabled) return
-    const normalizedSessionId = sessionId.trim()
-    if (!normalizedSessionId) return
-
-    const id = `${WorkbenchAgentBrowserTabPrefix}${normalizedSessionId}`
-    setAgentBrowserTabSessionId(normalizedSessionId)
-    setDiffItem(null)
-    setLightTab(null)
-    setActiveDebugTabId(id)
-  }, [browserEnabled])
-  const selectAgentBrowserTab = useCallback((): void => {
-    if (!browserEnabled || !agentBrowserTabSessionId) return
-
-    setDiffItem(null)
-    setLightTab(null)
-    setActiveDebugTabId(`${WorkbenchAgentBrowserTabPrefix}${agentBrowserTabSessionId}`)
-  }, [agentBrowserTabSessionId, browserEnabled])
-  const closeAgentBrowserTab = useCallback((expectedSessionId?: string): void => {
-    setAgentBrowserTabSessionId((sessionId) => {
-      if (expectedSessionId && sessionId !== expectedSessionId) return sessionId
-      if (sessionId) {
-        const id = `${WorkbenchAgentBrowserTabPrefix}${sessionId}`
-        setActiveDebugTabId((active) => (active === id ? null : active))
-      }
-      return null
-    })
-  }, [])
-  const closeAllBrowserTabs = useCallback((): void => {
-    setDebugTabs([])
-    setAgentBrowserTabSessionId(null)
-    setActiveDebugTabId(null)
-  }, [])
-  useEffect(() => {
-    if (!browserEnabled) closeAllBrowserTabs()
-  }, [browserEnabled, closeAllBrowserTabs])
-  const agentBrowser = {
-    tabId: agentBrowserTabId,
-    sessionId: agentBrowserTabSessionId,
-    open: openAgentBrowserTab,
-    select: selectAgentBrowserTab,
-    close: closeAgentBrowserTab,
-    closeAll: closeAllBrowserTabs,
-  }
   const debug = {
     tabs: debugTabs,
     activeTabId: activeDebugTabId,
@@ -242,7 +188,6 @@ export function useWorkbenchEditorNavigationState({
     selectTab: selectDebugTab,
     closeTab: closeDebugTab,
     navigateTab: navigateDebugTab,
-    agentBrowser,
   }
 
   function updateLightTabContent(content: string): void {

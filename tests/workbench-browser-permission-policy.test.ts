@@ -3,7 +3,6 @@ import type { Session, WebContents } from 'electron'
 
 import {
   installWorkbenchBrowserDefaultPermissionPolicy,
-  registerWorkbenchBrowserRuntimePermissionHandler,
   type WorkbenchBrowserPermissionSession,
 } from '../src/main/browser/WorkbenchBrowserPermissionPolicy'
 
@@ -45,7 +44,7 @@ function createRig(registerGuest = true) {
 }
 
 describe('Workbench browser interactive permissions', () => {
-  test('allows pointer lock for a registered web guest before an Agent session exists', () => {
+  test('allows pointer lock for a registered web guest', () => {
     const rig = createRig()
     expect(rig.check('pointerLock')).toBe(true)
     expect(rig.request('pointerLock')).toEqual([true])
@@ -77,7 +76,7 @@ describe('Workbench browser interactive permissions', () => {
     expect(rig.request('pointerLock')).toEqual([false])
   })
 
-  test('rechecks guest lifetime and Browser Mod ownership on every request', () => {
+  test('rechecks guest lifetime and gate ownership on every request', () => {
     const rig = createRig()
     rig.state.destroyed = true
     expect(rig.check('pointerLock')).toBe(false)
@@ -90,26 +89,17 @@ describe('Workbench browser interactive permissions', () => {
     expect(rig.request('pointerLock')).toEqual([true])
   })
 
-  test('keeps pointer lock independent of runtime delegation while retaining other permission policy', () => {
+  test('denies every other permission and device request, and keeps the gateway after dispose', () => {
     const rig = createRig()
     for (const permission of ['geolocation', 'media', 'clipboard-read', 'keyboardLock'] as const) {
       expect(rig.request(permission)).toEqual([false])
     }
+    for (const permission of ['geolocation', 'media', 'clipboard-read', 'usb'] as const) {
+      expect(rig.check(permission)).toBe(false)
+    }
     expect(rig.device()).toBe(false)
-    const delegated: string[] = []
-    const unregister = registerWorkbenchBrowserRuntimePermissionHandler(rig.session,
-      (_guest, permission, callback) => {
-        delegated.push(permission)
-        callback(permission === 'geolocation')
-      })
     expect(rig.request('pointerLock')).toEqual([true])
-    expect(rig.request('geolocation')).toEqual([true])
-    expect(delegated).toEqual(['geolocation'])
-    rig.state.owned = false
-    expect(rig.request('pointerLock')).toEqual([false])
-    expect(delegated).toEqual(['geolocation'])
-    rig.state.owned = true
-    unregister()
+    // Session 与应用同寿命：清理函数不撤掉 fail-closed gateway，指针锁定仍按宿主登记放行。
     rig.dispose()
     expect(rig.request('pointerLock')).toEqual([true])
     expect(rig.request('geolocation')).toEqual([false])

@@ -1,14 +1,4 @@
-import type {
-  WorkbenchRunCommandOutputEvent,
-  WorkbenchTerminalOutputEvent,
-} from '@shared/contracts'
-
-export interface WorkbenchTerminalLine {
-  id: string
-  stream: WorkbenchTerminalOutputEvent['stream'] | 'input'
-  text: string
-  createdAt: number
-}
+import type { WorkbenchRunCommandOutputEvent } from '@shared/contracts'
 
 export interface WorkbenchTerminalSessionView {
   id: string
@@ -16,8 +6,6 @@ export interface WorkbenchTerminalSessionView {
   shell: string
   /** 启动目录；shell 自己的提示符跟随真实目录，这里只记起点。 */
   cwd: string
-  /** 运行卡的文本日志（给 Agent 读、给 waitFor 等）；普通终端会话不记，输出直接进 xterm。 */
-  lines: WorkbenchTerminalLine[]
   isRunning: boolean
   /** 运行卡才有：启动该会话的命令，用于「重启」；普通终端会话为 undefined。 */
   command?: string
@@ -45,18 +33,6 @@ export function createRunOutputLine(
   return {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     runId,
-    stream,
-    text,
-    createdAt: Date.now(),
-  }
-}
-
-export function createTerminalLine(
-  stream: WorkbenchTerminalLine['stream'],
-  text: string
-): WorkbenchTerminalLine {
-  return {
-    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     stream,
     text,
     createdAt: Date.now(),

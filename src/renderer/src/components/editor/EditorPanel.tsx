@@ -34,7 +34,6 @@ import {
   type WorkbenchSymbolLocationsState,
 } from '@renderer/models/editor/workbenchSymbolLocations'
 import {
-  isSameWorkbenchGitChangeItem,
   type WorkbenchGitChangeItem,
   type WorkbenchGitDecorationMap,
 } from '@renderer/models/git/workbenchGitModel'
@@ -86,7 +85,6 @@ import {
   type WorkbenchEditorAuxiliaryTabItem,
 } from './EditorTabBar'
 import { type FileHistoryMode,FileHistoryView } from './FileHistoryView'
-import { WorkbenchChatChangePreviewPanel } from './WorkbenchChatChangePreviewPanel'
 import { WorkbenchImagePreview } from './WorkbenchImagePreview'
 import { WorkbenchLightFilePanel } from './WorkbenchLightFilePanel'
 
@@ -137,14 +135,6 @@ export interface WorkbenchEditorPanelDiffProps {
   diffWorkspaceRoot: string
   activeDiffItem?: LooseOptional<WorkbenchGitChangeItem>
   focusFirstChangeRequestId?: number
-  chatChangePreview?: LooseOptional<{
-    items: WorkbenchGitChangeItem[]
-    pendingFileAction: Nullable<string>
-    onClose: () => void
-    onDiscardItem: (item: WorkbenchGitChangeItem) => void
-    onOpenFile: (path: string) => void
-    onSelectItem: (item: WorkbenchGitChangeItem) => void
-  }>
   auxiliaryTabs?: WorkbenchEditorPanelAuxiliaryTab[]
   /**
    * 调试 webview 常驻层：所有打开的调试选项卡的 webview 一直挂载在编辑区里，
@@ -234,7 +224,6 @@ export function EditorPanel({
   diff: {
     activeDiffItem = null,
     focusFirstChangeRequestId = 0,
-    chatChangePreview = null,
     auxiliaryTabs = [],
     debugTabsLayer = null,
     lightTab = null,
@@ -805,28 +794,12 @@ export function EditorPanel({
           ) : activeAuxiliaryTab ? (
             <>{toNullable(activeAuxiliaryTab.content)}</>
           ) : activeDiffItem ? (
-            chatChangePreview?.items.some((item) =>
-              isSameWorkbenchGitChangeItem(item, activeDiffItem)
-            ) ? (
-              <WorkbenchChatChangePreviewPanel
-                projectRoot={projectRoot}
-                workbenchTheme={workbenchTheme}
-                activeItem={activeDiffItem}
-                items={chatChangePreview.items}
-                pendingFileAction={chatChangePreview.pendingFileAction}
-                onClose={chatChangePreview.onClose}
-                onDiscardItem={chatChangePreview.onDiscardItem}
-                onSelectItem={chatChangePreview.onSelectItem}
-                onOpenFile={chatChangePreview.onOpenFile}
-              />
-            ) : (
-              <GitDiffEditorPanel
-                projectRoot={projectRoot}
-                item={activeDiffItem}
-                workbenchTheme={workbenchTheme}
-                focusFirstChangeRequestId={focusFirstChangeRequestId}
-              />
-            )
+            <GitDiffEditorPanel
+              projectRoot={projectRoot}
+              item={activeDiffItem}
+              workbenchTheme={workbenchTheme}
+              focusFirstChangeRequestId={focusFirstChangeRequestId}
+            />
           ) : lightTab ? (
             <WorkbenchLightFilePanel
               tab={lightTab.item}

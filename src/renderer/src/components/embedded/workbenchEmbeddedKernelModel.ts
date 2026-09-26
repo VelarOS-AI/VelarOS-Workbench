@@ -3,12 +3,7 @@ import type { WorkbenchGitDecorationMap } from '@renderer/models/git/workbenchGi
 import type { WorkbenchProject } from '@renderer/models/project/workbenchProjects'
 import type { WorkbenchThemeId } from '@renderer/models/settings/workbenchPreferences'
 
-import type { ControlledBrowserSurface } from '@velaros-ai/browser/composition'
-
-import type {
-  BrowserElementSelection,
-  WorkbenchLanguageServiceDiagnostic,
-} from '@shared/contracts'
+import type { WorkbenchLanguageServiceDiagnostic } from '@shared/contracts'
 
 import type { WorkbenchDebugTab } from '../../hooks/useWorkbenchEditorNavigationState'
 import type {
@@ -51,17 +46,6 @@ export interface WorkbenchEmbeddedDebugTabsModel {
   onSelect: (id: string) => void
   onClose: (id: string) => void
   onNavigate: (id: string, url: string, title?: string) => void
-  agentBrowser?: LooseOptional<{
-    id: string
-    sessionId: string
-    title: string
-    visible: boolean
-    active: boolean
-    surface: ControlledBrowserSurface
-    onSelect: () => void
-    onClose: () => void
-    onPicked: (selection: BrowserElementSelection) => void
-  }>
 }
 
 export interface WorkbenchEmbeddedEditorPanelModel {
