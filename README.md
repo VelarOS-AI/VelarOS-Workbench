@@ -2,7 +2,8 @@
 
 VelarOS Workbench is the independently releasable IDE application in the VelarOS ecosystem. It owns
 project navigation, editing, language intelligence, Git, terminals, run surfaces and local project
-history while consuming the shared VelarOS Kernel contracts and `@velaros-ai/ui`.
+history, and runs its chat on the VelarOS Platform agent runtime with the shared `@velaros-ai/ui`
+conversation surface.
 
 Workbench uses one project per window so multiple projects can stay open with isolated editor, Git,
 terminal, language-service, and Agent state. Open folders from the start screen or File menu, pass a
@@ -12,51 +13,65 @@ window. Opening an already active folder focuses its existing window.
 The repository itself is the Workbench application. It is a single package and all product code
 lives directly below the root `src/`:
 
-- `src/main`: Electron main process, Kernel host and privileged capability implementations.
+- `src/main`: Electron main process, the conversation runtime host and privileged capability
+  implementations.
 - `src/preload`: the narrow bridge exposed to the renderer.
 - `src/renderer`: UI entry point, components, models, hooks and renderer composition.
 - `src/shared`: cross-process contracts, IPC envelopes and language-service descriptors.
 
-The repository intentionally has no dependency on VelarOS Desktop internals. Shared VelarOS packages
-are installed from the `VelarOS-Platform` releases on GitHub Packages; the app owns the Electron
+The repository intentionally has no dependency on VelarOS Desktop internals. It consumes the
+VelarOS Platform and UI through their public package entry points only; the app owns the Electron
 implementation behind the semantic Workbench host.
 
-Workbench is a **complete host**: it composes the Kernel module host _in its own process_
-(kernel-contract §15) instead of connecting to a daemon. It registers exactly one capability,
-`velaros.agent`, backed by an in-process `@velaros-ai/agent` execution stack. `velaros.model`
-and `velaros.browser` have no implementation here, so those capabilities are simply absent and the
-consumers degrade. The Workbench Agent prompts, tools, and execution modes are product-owned
-built-ins. Claude Agent and ChatGPT/Codex are external engine plugins resolved from the shared
-VelarOS plugin store and appear only after their individual plugin is installed and enabled.
+The chat runs the Platform ScriptAct runtime in the main process, the same runtime VelarOS Desktop
+uses. Each run opens a Platform session bound to the window's project: the agent works by writing
+short scripts against resident modules (`velaros:project`, `velaros:code`, `velaros:shell`,
+`velaros:interaction`, `velaros:widget`), and the scripts execute in an isolated utility process.
+Sub-agents are available; web search and long-term memory are off. Workbench adds its host
+instructions (reply language, plan and goal modes) and the project's AI rule files (`.velar/rules.md`,
+`AGENTS.md`, `CLAUDE.md`, `.cursorrules`, `.cursor/rules/`, `.github/copilot-instructions.md`).
+Conversation state lives in the Platform's session store outside the project.
 
-Plugins carry resource-heavy capabilities or integrations that need external software. Workbench
-installs CodeGraph, Claude Agent, and ChatGPT into the VelarOS user-level shared resource store, so
-Desktop and Workbench discover the same physical installation while retaining product-local
-enablement preferences. Mods remain a separate system for lightweight product extensions.
+Permissions follow the Settings mode. "Ask every time" confirms each project write and command;
+the standard mode lets routine work run, while the Platform confirms mass-destructive commands and
+Workbench additionally confirms commands that would discard uncommitted work, switch branches or
+write outside the project (`git reset --hard`, `git checkout`, `git pull`, …); "never ask" runs
+everything.
 
-The built-in Agent consumes the shared Project tool contracts: `read`, `list`, `search`, `file`,
-`edit`, and `run` are resident; `code` and `change` are discovered through `tooling:map` when needed.
-Reads keep source lines separate from their positions. Edits use visible file references and can
-combine line ranges with exact text, while changes group operations for inspection and undo.
-The shared Agent context refreshes source references after edits and retains historical versions
-and failed-call inputs for scoped recall and retry. Workbench binds those contracts to the current
-project, session, shell and available UI capabilities.
+Every run captures a Git checkpoint first. When the run's writes settle, the AI changes card lists
+the files the agent changed, with diffs and per-file attribution (agent-only or mixed with other
+edits). The agent's write windows come from the runtime's effect metrics; project edits also refresh
+the language service immediately. Rewind, external engines (Claude Code, Codex), Mods, resource
+plugins and CodeGraph were retired with the Platform migration, matching Desktop.
 
 ## Development
 
-Workbench 的 VelarOS 包统一从 GitHub Packages 安装，本地多仓环境也不切换 sibling 软链。
-配置具有 Packages 读取权限的 `NODE_AUTH_TOKEN` 后，严格按已提交锁文件安装：
+与 Desktop 一样，Workbench 经 `bun link` 消费本机兄弟仓的 Platform 与 UI（`package.json` 里是
+`link:@velaros-ai/*`）：`@velaros-ai/{agent,core,kernel,model,script,velaros}` 来自 `../VelarOS-Platform`，
+`@velaros-ai/ui` 来自 `../VelarOS-UI`。首次准备：
 
 ```bash
-bun install --frozen-lockfile
+# VelarOS-UI 根目录（仓根就是 @velaros-ai/ui 包）
+bun run build && bun link
+
+# VelarOS-Platform 根目录：构建 velaros 及其依赖，再逐个登记
+node scripts/build/buildPackageTopology.mjs --for @velaros-ai/velaros
+for package in velaros model script core agent kernel; do (cd packages/$package && bun link); done
+
+# Workbench 根目录
+bun install
 bun run check
 bun run dev
 ```
 
-Platform 发布后，在受控本机运行 `bun scripts/refreshPrivatePackageLock.mjs` 刷新已发布依赖，
-审查 `bun.lock` 后再提交。`check:platform-packages` 会拒绝任何 `file:`、`link:`、`workspace:`
-或非 GitHub Packages 的锁文件解析。仓库中的 Actions 文件仅为静态跳过的本机策略哨兵；
-检查和私有包锁定都不在 GitHub runner 上执行。
+Workbench 只消费这些包的公开 dist：改了 Platform 或 UI 要先在对应仓重新构建。
+`check:platform-packages` 只接受同名的兄弟仓链接（`link:@velaros-ai/<name>`）或 GitHub Packages 的正式解析，
+锁文件里的链接必须与清单一致。Platform 恢复发版后，把依赖换回已发布的版本，在受控本机运行
+`bun scripts/refreshPrivatePackageLock.mjs` 刷新锁文件，审查 `bun.lock` 后再提交。仓库中的 Actions 文件仅为
+静态跳过的本机策略哨兵；检查和私有包锁定都不在 GitHub runner 上执行。
+
+Platform 的本地存储用 `node:sqlite`，bun 里没有：会话运行时的集成测试
+（`scripts/test/conversationRuntime.test.mjs`）先用 bun 打包，再在 Node 里跑，`bun run test` 已包含它。
 
 Workbench deliberately ships a focused language surface: VelarScript, JavaScript / TypeScript,
 Python, and related Web formats. Its generic editor core has no Velar-specific branches. The app
@@ -68,7 +83,11 @@ Velar compiler/editor joint-delivery contract.
 ## Packaging
 
 `bun run package:mac`, `bun run package:win`, and `bun run package:linux` create application
-artifacts under `artifacts/desktop/`. Signing and notarization credentials are supplied by the release
+artifacts under `artifacts/desktop/`. The main process loads `@velaros-ai/{model,script,velaros}` as
+native ESM from `node_modules` at runtime (the script worker entry and ScriptAct templates resolve by
+package path); `afterPack` checks that every static import of those packages resolves inside
+`app.asar`. Release staging refuses development links: switch the Platform and UI dependencies to
+published versions before an official build. Signing and notarization credentials are supplied by the release
 environment; they are never stored in this repository. Official packages and candidates are produced
 locally on the matching native host, one platform at a time. Electron Builder publishing is disabled,
 and the repository's inert Actions sentinels cannot build, upload, or read release credentials.

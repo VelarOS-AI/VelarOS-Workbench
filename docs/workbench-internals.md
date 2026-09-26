@@ -6,7 +6,7 @@ Workbench 是单体仓库：根 `package.json` 是唯一清单，全部产品源
 
 ## 目录职责
 
-- `src/main`：Electron 主进程、Kernel 能力实现、文件/Git/终端/语言服务宿主。
+- `src/main`：Electron 主进程、会话运行时宿主（Platform ScriptAct）、文件/Git/终端/语言服务宿主。
 - `src/preload`：主进程能力到 renderer 的受控桥接。
 - `src/renderer`：UI 入口、产品模型、React 控制器、组件、页面组合与样式。
 - `src/shared`：跨进程 contracts、IPC 信封、通用语言服务描述和无进程状态代码。
@@ -17,41 +17,46 @@ Workbench 是单体仓库：根 `package.json` 是唯一清单，全部产品源
 ## 结构边界
 
 - 产品核心模块不依赖 Electron 主进程、Desktop store、Desktop IPC 或 Desktop 窗口实现。
-- 产品端口只依赖共享 Kernel contracts；具体能力由应用组合根安装。
+- Platform 与 UI 只经包的公开入口消费（开发期是兄弟仓的 `link:`，见 README）；具体能力由应用组合根安装。
 - 跨产品共享的无状态组件继续归属 `@velaros-ai/ui`，不复制进 Workbench。
 - 通用语言宿主不包含 VelarScript 特判；editor 贡献归 renderer，服务描述归 shared。
 - Workbench 不依赖 VelarOS Desktop 内部源码，仍作为独立应用构建和发布。
-- 可重复下载的外部 runtime 使用 VelarOS 组织级共享资源磁盘 ABI；Workbench 只消费共享
-  CodeGraph 安装，不在自身 `userData` 建第二份。配置、启停、项目索引和缓存仍由 Workbench
-  独立持有；未安装时相关 CodeGraph UI 整体隐藏。
+- 账号会话与 Desktop 共用 VelarOS 组织级共享目录，目录布局归 `@velaros-ai/core/platform/shared-resources`，
+  Workbench 不留自己的一份。
 
-## Agent 执行装配
+## 会话运行时
 
-`src/main/agent/WorkbenchAgentExecutionStack.ts` 使用 Platform 公共导出的
-`createAgentExecutionStack`。工厂在包内配对 ModelRuntime、TurnRunner、RunContext 和
-SoloLoop；Workbench 注入模型端口、冻结的工具 Registry、提示词策略与共享治理登记处，
-通过 `executeSolo` 执行当前前台项目回合。
+聊天跑在 Platform 的 ScriptAct 运行时上，与 Desktop 同一套（`src/main/conversation/` 是 Desktop 会话运行时
+的移植）：
 
-Workbench 持有项目根、Kernel 能力取消信号、历史和工具可用性策略。执行装配按会话与
-等价 Mod 工具面复用；工具面改变时重建 Registry 与执行栈，单纯 UI revision 变化继续
-复用该会话的 CodingSessionTracker。清理会话通过栈的 `clearSession` 释放执行状态与
-治理登记。
+- **一轮一个运行时**：`WorkbenchConversationSession` 每轮 `createRuntime`，工作区是窗口的项目根（按真实路径），
+  同一个项目内核上挂项目模块、问代码（`velaros:code`）与看图；`velaros:shell` 借应用共用的 shell 宿主
+  （`WorkbenchShellHostRegistry`，后台任务活过一轮，会话删除时停掉）。常驻模块是 project、code、shell、
+  interaction、widget；子任务开，搜索与长期记忆关。模型写的脚本在 `utilityProcess` 起的隔离进程里跑
+  （`workbench-script-worker.ts`）。
+- **状态**：会话数据在 `userData/conversation-runtime/<sha256(项目根 \0 会话 id)>`，任何项目之外；
+  空闲时读、改目标用无模型的控制会话。旧的 Kernel 会话历史不迁移，老会话下一轮从 Platform 的新上下文开始。
+- **宿主说明**（`WorkbenchConversationRules.buildHostInstructions`）：身份、回复语言、脚本首行 `//` 注释
+  （界面拿它当脚本卡标题）、计划 / 目标模式，以及项目里的 AI 规则文件原文（`.velar/rules.md`、`AGENTS.md`、
+  `CLAUDE.md`、`.cursorrules`、`.cursor/rules/**`、`.github/copilot-instructions.md`，合计 32,000 字符，放不下的
+  整份略去并点名）。设置页「AI 规则」列的就是这一份。
+- **权限**：「每次询问」档确认每次项目写入与命令；标准档平台只问成片毁掉的命令，Workbench 另在派发前补问会丢
+  未提交改动、切分支或写到项目外的命令（`CommandExecutionPolicy.resolveWorkspaceIntegrityConfirmation`，
+  确认卡与平台的危险命令同一套选项）；「从不询问」档全部放行。
+- **IPC**：`workbench-app:conversation:*`（send / cancel / guidance / input / answer / get-goal / update-goal /
+  delete-session / backup-history / event），只认发起窗口当前打开的项目；窗口销毁时取消它的运行。
 
-Workbench 通过 GitHub Packages 消费 `@velaros-ai/agent@0.6.16`，依赖要求与包完整性由
-`package.json` 和 `bun.lock` 共同记录。请求、工具 schema、预算与传输名称映射来自同一份
-已过滤工具快照；首轮 baseline 仅包含宿主常驻名单，工具执行与历史保留 canonical 名称。
-版本升级需检查真实多回合工具调用、取消与收尾、类型、生产构建及产品边界。
+renderer 侧 `standaloneWorkbenchChatAdapter.tsx` 把主进程推来的通知（正文、思考、脚本卡、子任务、小部件、交互卡、
+命令输出、改项目）归并进消息（`workbenchConversationNotices.ts`，一次运行的块都在 `conversation:run:<runId>`
+这条消息里），状态经 `applyStandaloneConversationState` 落到运行态。停止等主进程收尾最多 15 秒。
 
-## Agent 工具预算
+### AI 改动审阅
 
-每份冻结工具面的 Registry 使用 `@velaros-ai/agent/tool-contract` 物化并规范化 Zod
-输入 schema，模型请求和上下文预算共用这份结果。预算计入工具名、描述、实际 schema
-字符数，以及与 Desktop 一致的 50 字符工具信封开销；非 Zod schema 按实际发送的任意
-对象发现结构计量，执行仍由原 schema 校验。
-
-schema 包装器与字符数只在当前 Registry 内缓存。工具面保持等价时可跨 UI revision
-复用；工具替换、移除或恢复由执行栈重建 Registry，开始独立缓存。每轮预算和模型工具集
-仍应用当前 allowlist、分类访问和可用性过滤。
+每轮开跑前拍一个 Git 检查点（影子提交，不动用户的 HEAD / 索引），同时开这一轮的改动归属账本。Platform 的
+写操作都过同一道效果闸，闸放行（`effect-wait`）与这次操作跑完（`effect-run`）各报一次计量；项目与 shell
+模块的这两点之间就是一段 Agent 动手的时间窗，交给账本（`beginCommand`）。窗关闭时主进程推
+`conversation-project-activity`，renderer 据此实时采集改动、重读打开的文件；一轮结束做最终采集，改动卡列出
+Agent 改过的文件、差异与逐文件归属。回溯（把改动推回去）已下线。
 
 ## 语言服务与磁盘的同步
 
@@ -60,14 +65,14 @@ worker 里的 TypeScript 项目在首次请求时整体读盘建库，之后只�
 改动的标签走请求里的覆盖层；别的文件必须由下面三路通知刷新，否则它们一直是首次扫描时
 的文本，Agent 在依赖文件里修好的错误在导入它的文件里不会消失：
 
-1. **Agent 的写文件工具**：执行栈拿到的改动归属上报口经
-   `WorkbenchLanguageWriteSync` 包装，工具报出改过的路径时同步调用
-   `projectFilesChanged`。这一步发生在工具结果回到模型和 renderer 之前。
-2. **用户在编辑器、文件树里的写入**：fs IPC 的用户写入回报同样包装，保存、新建、改名、
-   删除、恢复当场通知。
+1. **Agent 的项目编辑**：Platform 的计量不带路径，会话宿主在派发 `velaros:project.edit` 前从入参读下它要写的
+   路径（写、换原文、删除的 path，移动的两头，转码的 paths），那次编辑成功跑完、改项目的时间窗关闭之前调
+   `projectFilesChanged`（`WorkbenchLanguageWriteSync.languageSyncOnAgentEdits`），先于界面收到通知。
+2. **用户在编辑器、文件树里的写入**：fs IPC 的用户写入回报经 `withLanguageSyncOnUserWrites` 包装，保存、新建、
+   改名、删除、恢复当场通知。
 3. **文件监听**：`WorkbenchFileWatcher` 合并后的每批事件都发 `projectFilesChanged`。
-   这是命令产物、外部引擎自己写盘、第三方工具改动的唯一来源，但 macOS 在机器忙时
-   （Agent 跑构建、装依赖时正是如此）会把事件攒上好几秒才成批送到，所以前两路不能省。
+   这是命令产物、第三方工具改动的唯一来源，但 macOS 在机器忙时（Agent 跑构建、装依赖时正是如此）
+   会把事件攒上好几秒才成批送到，所以前两路不能省。
 
 `projectFilesChanged` 在 worker 里按此刻的磁盘内容更新已建项目里认得的文件（项目根文件
 与被 import 拉进程序的文件），有未保存改动的文件只更新磁盘版本、编辑缓冲仍是权威；
@@ -75,8 +80,9 @@ worker 里的 TypeScript 项目在首次请求时整体读盘建库，之后只�
 `didChangeWatchedFiles`。标签由脏变干净时也直接重读磁盘，不信首次扫描的缓存。worker
 客户端在这些通知到达时作废「相同请求搭在飞诊断便车」的去重，后来的同样请求会重新计算。
 
-renderer 侧对应两件事：编辑器控制器订阅 Agent 写入通知（`workbenchAgentProjectWrites`），
-工具结果一到就重读打开的文件（不等文件监听，正在刷新时来的事件排队重跑而不是丢掉）；
+renderer 侧对应两件事：编辑器控制器订阅 Agent 写入通知（`workbenchAgentProjectWrites`，由主进程的
+`conversation-project-activity` 触发），一段改项目的时间窗关闭就重读打开的文件（不等文件监听，正在刷新时来的
+事件排队重跑而不是丢掉）；
 并维护 `externalRevision`——Agent 写入、监听事件、窗口回到前台都让它加一——CodeMirror
 的 linter 以它为 `needsRefresh` 信号、问题面板把它并入调度键，当前文档没变时也重算诊断。
 
@@ -123,9 +129,8 @@ Node 的 OOM 处理直接 `abort()` 主进程。实测 VelarOS-Platform：每个
 一个 xterm.js 实例（`workbenchTerminalInstances.ts`，活到会话被关掉；切标签只摘挂 DOM）。
 
 - 输出：PTY 数据在主进程按 8ms / 64KB 合并后经 IPC 到 renderer，由 `workbenchTerminalOutputBus`
-  直送 `terminal.write`，不经 React 状态；视图没挂上时先攒（上限 512KB），挂上整段回放。只有运行卡
-  另记一份文本日志（`workbenchTerminalRunLog` 每 100ms 合并落进状态），给 `workbench:read_run` 与
-  `start_run` 的 waitFor 用。
+  直送 `terminal.write`，不经 React 状态；视图没挂上时先攒（上限 512KB），挂上整段回放。React 只记
+  会话收口（是否还在跑）。
 - 输入：xterm 收齐的按键（含输入法组合完成后的中文）原样写进伪终端；回显、行编辑、Tab 补全、历史都是
   shell 自己的。Ctrl+C 就是往终端写 ETX；`stopTerminalSession` 的 `SIGINT` 也只是这个。
 - 尺寸：容器 ResizeObserver → fit → `resize` IPC，前台程序收到 SIGWINCH。
@@ -134,24 +139,32 @@ Node 的 OOM 处理直接 `abort()` 主进程。实测 VelarOS-Platform：每个
 - 配色：`workbenchTerminalTheme.ts` 按宿主元素此刻的 CSS 变量（经 canvas 折成 hex，Tailwind 的 oklch
   也能用）算 xterm 主题，换主题重算。
 - 打包：`asarUnpack` 解包 `node_modules/@lydell/**`，`verifyPackagedWorkbench.mjs` 检查目标平台的
-  `pty.node` 与可执行的 `spawn-helper`。探针 `probe:terminal` 经 `scripts/probe/runTerminalProbe.mjs`
+  `pty.node` 与可执行的 `spawn-helper`。Agent 的交互式命令也经 `@lydell/node-pty` 跑在真终端里
+  （`WorkbenchShellTerminal.ts` 惰性加载）。探针 `probe:terminal` 经 `scripts/probe/runTerminalProbe.mjs`
   先用 bun 打包再在 Electron 运行时里跑（node-pty 在 bun 下收不到数据）。
 
 ## 生产启动与体积预算
 
 生产 main 入口开启压缩，完整 IDE 工作区在项目打开后按需加载；无项目的起手页不再静态
-加载编辑器、终端和代码图控制器。`bun run build` 会在输出完成后执行
+加载编辑器、终端和聊天（聊天的 Provider 装在按需加载的工作区外壳里）。Platform 的
+`@velaros-ai/{model,script,velaros}` 不进 main bundle，运行时从 `node_modules` 以原生 ESM 加载
+（清单 `scripts/release/mainExternalEsmPlatformPackages.json`，打包后逐个核对 asar 里的 import 闭包）。`bun run build` 会在输出完成后执行
 `scripts/checkBuildBudgets.mjs`，统计 `index.html` 实际引用的启动 JS/CSS，并同时限制
 main、renderer 总体积与最大功能块。
 
 | 指标 | 当前基线 | 上限 |
 | --- | ---: | ---: |
-| main 入口 | 3.35 MB | 3.75 MB |
-| main JavaScript | 5.93 MB | 6.50 MB |
-| renderer 启动依赖 | 4.14 MB | 4.75 MB |
-| renderer JavaScript | 23.06 MB | 25.00 MB |
-| renderer CSS | 0.87 MB | 1.00 MB |
-| renderer 最大功能块 | 3.33 MB | 3.75 MB |
+| main 入口 | 0.41 MB | 3.75 MB |
+| main JavaScript | 0.84 MB | 6.50 MB |
+| renderer 启动依赖 | 2.19 MB | 4.75 MB |
+| renderer JavaScript | 24.71 MB | 25.00 MB |
+| renderer CSS | 0.88 MB | 1.00 MB |
+| renderer 最大功能块 | 3.66 MB | 3.75 MB |
 
 单独复核已有生产产物时运行 `bun run check:bundle-budget`。预算留有小幅构建波动空间；
 业务增长需要突破上限时，应先给出加载链数据并调整分包，再更新基线。
+
+迁到 Platform 之后（2026-09-27）：main 小了一个量级，因为 Platform 的运行时不再打进 bundle；renderer
+启动依赖减半，因为聊天随工作区外壳按需加载。最大功能块就是工作区外壳（其中图标库约 0.55 MB：每个
+Phosphor 图标带六种字重；消息 Markdown 的代码高亮由 UI 包静态引入约 0.3 MB）。renderer 总量贴近上限，
+增量主要是 UI 0.2.54 的 Markdown 图表（mermaid 各类图）按需分块；它们不进启动包，但计入总量。
