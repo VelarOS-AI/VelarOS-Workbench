@@ -103,15 +103,23 @@ export function useWorkbenchGitDiffPreview({
           })
         )
 
-        const addedFile = item.indexStatus === 'A' || item.workTreeStatus === 'A'
-        const deletedFile = item.indexStatus === 'D' || item.workTreeStatus === 'D'
+        // 冲突文件哪一侧都可能不在（一方删掉了）：读不到的一侧按空文件算。
+        const conflicted = item.group === 'conflicted'
+        const addedFile = !conflicted && (item.indexStatus === 'A' || item.workTreeStatus === 'A')
+        const deletedFile = !conflicted && (item.indexStatus === 'D' || item.workTreeStatus === 'D')
         const [baseContent, currentFile] = await Promise.all([
           addedFile
             ? Promise.resolve('')
-            : readHeadFileContent(projectRoot, item.originalPath ?? item.path),
+            : readHeadFileContent(projectRoot, item.originalPath ?? item.path).catch((error) => {
+                if (conflicted) return ''
+                throw error
+              }),
           deletedFile
             ? Promise.resolve({ content: '', truncated: false })
-            : readCurrentFileContent(projectRoot, item.path),
+            : readCurrentFileContent(projectRoot, item.path).catch((error) => {
+                if (conflicted) return { content: '', truncated: false }
+                throw error
+              }),
         ])
         const fullContents = resolveWorkbenchFullFileDiffContents({
           diff: result.diff,

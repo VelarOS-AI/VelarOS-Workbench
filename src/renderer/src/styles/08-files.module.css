@@ -484,6 +484,14 @@
   color: var(--workbench-git-untracked-fg);
 }
 
+.treeRow[data-git-tone='conflicted'] .treeName,
+.treeRow[data-git-tone='conflicted'] .treeName [data-slot='text'],
+.searchResultRow[data-git-tone='conflicted'] .searchResultName,
+.searchResultRow[data-git-tone='conflicted'] .searchResultName [data-slot='text'],
+.editorTabName[data-git-tone='conflicted'] {
+  color: var(--status-red);
+}
+
 /* Ignored subtree: fade label + Git tone colors; no selection-like background */
 .treeRowIgnored .treeName,
 .treeRowIgnored[data-git-tone='added'] .treeName,

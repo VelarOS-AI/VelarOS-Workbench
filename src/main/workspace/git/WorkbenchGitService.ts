@@ -36,6 +36,7 @@ import type {
   WorkspaceGitRemoteActionResult,
   WorkspaceGitStatusResult,
 } from '@shared/contracts'
+import { isWorkspaceGitConflictEntry } from '@shared/workbenchGit'
 
 import {
   getRelativePathInsideRoot,
@@ -61,6 +62,10 @@ const GitListingMaxBytes = 32 * 1024 * 1024
 const MaxExpandedUntrackedFiles = 5_000
 /** 获取远端、推送的时限：网络卡住、远端等着输入凭据时不一直挂着。 */
 const RemoteActionTimeoutMs = 120_000
+/** 标记冲突已解决前检查冲突标记，最多读这么大的文件；更大的不查。 */
+const MaxConflictMarkerScanBytes = 16 * 1024 * 1024
+/** 冲突标记：行首 7 个 `<` 或 `>`，后面是空格（分支名）或行尾。 */
+const ConflictMarkerPattern = /^(?:<{7}|>{7})(?: |\r?$)/m
 
 /**
  * 每条 git 命令都带上的配置。输出要拿来解析，不能跟着用户的 git 配置变：中文文件名被转成八进制转义、
@@ -76,6 +81,12 @@ const GitOutputConfig = [
   'diff.relative=false',
   'log.showSignature=false',
 ].flatMap((setting) => ['-c', setting])
+
+/** 要带上一起完成的操作：进行中时 git 不许只提交一部分文件。 */
+const InProgressOperations = [
+  { ref: 'MERGE_HEAD', label: '合并' },
+  { ref: 'CHERRY_PICK_HEAD', label: '拣选提交' },
+] as const
 
 interface GitRunOptions extends WorkspaceGitRemoteActionOptions {
   allowFailure?: boolean
@@ -298,7 +309,7 @@ export class WorkbenchGitService {
 
   /**
    * 提交。给了路径就只提交这些文件在工作区里的样子，暂存区里别的文件原样留着；没给就是项目里的全部改动
-   * （项目是仓库的子目录时不碰项目外面的文件）。
+   * （项目是仓库的子目录时不碰项目外面的文件）。还有没解决的冲突时拒绝。
    */
   public async commit(
     workspaceRoot: string,
@@ -310,23 +321,49 @@ export class WorkbenchGitService {
     const repository = await this.openRepository(rootPath)
     const status = await this.getStatus(repository)
     if (status.isClean) throw new AppError('VALIDATION', '当前项目没有可提交的改动。')
+    const conflicts = status.entries.filter((entry) => isWorkspaceGitConflictEntry(entry))
+    if (conflicts.length > 0)
+      throw new AppError(
+        'VALIDATION',
+        `${this.describePaths(conflicts)}还有未解决的合并冲突。请先解决冲突并标记为已解决，再提交。`
+      )
     const selection = paths?.length
       ? this.scopeStatus(status, this.normalizePathspecs(rootPath, paths))
       : status
     if (selection.isClean) throw new AppError('VALIDATION', '当前选择没有可提交的改动。')
+    const operation = await this.getInProgressOperation(rootPath)
+    if (operation && selection.changedFiles < status.changedFiles)
+      throw new AppError(
+        'VALIDATION',
+        `正在${operation}：这次提交会一并完成${operation}，必须包含全部改动。请不勾选文件直接提交全部，或勾选全部文件。`
+      )
 
     const parent = await this.readHeadCommit(rootPath)
-    const commitMessage = message?.trim() || this.createCommitMessage(selection, locale)
-    // `commit --only` 提交的是这些路径在工作区里的样子，不看暂存区；它只认 git 已知的路径，未跟踪的先加进去。
-    await this.stagePaths(
-      rootPath,
-      selection.entries.filter((entry) => entry.indexStatus === '?').map((entry) => entry.path)
-    )
-    await this.runCommit(
-      rootPath,
-      ['commit', '-m', commitMessage, '--only', '--pathspec-from-file=-', '--pathspec-file-nul'],
-      this.entryPaths(selection.entries)
-    )
+    const userMessage = message?.trim()
+    let commitMessage: Nullable<string> = userMessage || null
+    if (operation) {
+      // 合并提交收下暂存区里的全部内容：工作区里还没暂存的改动先暂存上。没写说明就用 git 备好的那条。
+      await this.stagePaths(
+        rootPath,
+        selection.entries.filter((entry) => entry.workTreeStatus !== ' ').map((entry) => entry.path)
+      )
+      await this.runCommit(
+        rootPath,
+        commitMessage ? ['commit', '-m', commitMessage] : ['commit', '--no-edit']
+      )
+    } else {
+      // `commit --only` 提交的是这些路径在工作区里的样子，不看暂存区；它只认 git 已知的路径，未跟踪的先加进去。
+      commitMessage ??= this.createCommitMessage(selection, locale)
+      await this.stagePaths(
+        rootPath,
+        selection.entries.filter((entry) => entry.indexStatus === '?').map((entry) => entry.path)
+      )
+      await this.runCommit(
+        rootPath,
+        ['commit', '-m', commitMessage, '--only', '--pathspec-from-file=-', '--pathspec-file-nul'],
+        this.entryPaths(selection.entries)
+      )
+    }
 
     const commitSha = (
       await this.runGit(rootPath, ['rev-parse', '--verify', 'HEAD'])
@@ -350,7 +387,9 @@ export class WorkbenchGitService {
     )
     const commit: WorkspaceGitCommitResult = {
       commitSha,
-      message: commitMessage,
+      message:
+        commitMessage ??
+        (await this.runGit(rootPath, ['log', '-1', '--format=%s', commitSha])).stdout.trim(),
       changedFiles: lineStats.changedFiles,
       lineStats,
     }
@@ -367,13 +406,22 @@ export class WorkbenchGitService {
     const relativePath = this.normalizePathspec(rootPath, path)
     const before = await this.getStatus(repository)
     const entry = before.entries.find((candidate) => candidate.path === relativePath)
+    const conflicted = !!entry && isWorkspaceGitConflictEntry(entry)
 
-    if (action === 'stage') {
+    if (action === 'resolve' || (action === 'stage' && conflicted)) {
+      if (!entry || !conflicted)
+        throw new AppError('VALIDATION', `“${relativePath}”没有待解决的合并冲突。`)
+      await this.markResolved(rootPath, entry)
+    } else if (action === 'stage') {
       if (entry && entry.workTreeStatus !== ' ') await this.stagePaths(rootPath, [entry.path])
-    } else if (action === 'unstage') {
-      if (entry) await this.unstage(rootPath, this.entryPaths([entry]))
-    } else if (action === 'discard') {
-      await this.discard(repository, entry)
+    } else if (action === 'unstage' || action === 'discard') {
+      if (entry && conflicted)
+        throw new AppError(
+          'VALIDATION',
+          `“${entry.path}”还有未解决的合并冲突，不能${action === 'discard' ? '回滚' : '取消暂存'}。请先解决冲突并标记为已解决，或在终端里中止这次合并（git merge --abort）。`
+        )
+      if (action === 'unstage' && entry) await this.unstage(rootPath, this.entryPaths([entry]))
+      if (action === 'discard') await this.discard(repository, entry)
     } else {
       throw new AppError('VALIDATION', '不支持的 Git 文件操作。')
     }
@@ -686,6 +734,17 @@ export class WorkbenchGitService {
     ).stdout.trim()
   }
 
+  /** 进行中、这次提交要一并完成的操作（合并、拣选）；没有为 null。 */
+  private async getInProgressOperation(rootPath: string): Promise<Nullable<string>> {
+    for (const operation of InProgressOperations) {
+      const result = await this.runGit(rootPath, ['rev-parse', '-q', '--verify', operation.ref], {
+        allowFailure: true,
+      })
+      if (!result.failed) return operation.label
+    }
+    return null
+  }
+
   /** `git add -A` 这些路径：逐字匹配，路径从标准输入给，文件再多也不会超出命令行长度。 */
   private async stagePaths(rootPath: string, paths: readonly string[]): Promise<void> {
     if (paths.length === 0) return
@@ -758,6 +817,26 @@ export class WorkbenchGitService {
     ])
   }
 
+  /** 把冲突文件标记为已解决（`git add`）；文件里还留着冲突标记时拒绝。 */
+  private async markResolved(rootPath: string, entry: WorkspaceGitFileStatusEntry): Promise<void> {
+    if (await this.hasConflictMarkers(resolve(rootPath, entry.path)))
+      throw new AppError(
+        'VALIDATION',
+        `“${entry.path}”里还有冲突标记（<<<<<<< 或 >>>>>>>），请先解决冲突再标记为已解决。`
+      )
+    // `-A`：两边都删掉了、或解决成删除时文件已经不在，同样记作已解决（删除）。
+    await this.stagePaths(rootPath, [entry.path])
+  }
+
+  private async hasConflictMarkers(absolutePath: string): Promise<boolean> {
+    const fileStat = await stat(absolutePath).catch(() => null)
+    if (!fileStat?.isFile() || fileStat.size > MaxConflictMarkerScanBytes) return false
+    const content = await readFile(absolutePath)
+    // 二进制文件里 git 不写冲突标记。
+    if (content.includes(0)) return false
+    return ConflictMarkerPattern.test(content.toString('utf8'))
+  }
+
   private parseStatus(raw: string, prefix: string): WorkspaceGitStatusResult {
     const tokens = raw.split('\0')
     const header = tokens.shift() ?? ''
@@ -788,19 +867,21 @@ export class WorkbenchGitService {
     branchInfo: Pick<WorkspaceGitStatusResult, 'branch' | 'upstream' | 'ahead' | 'behind'>,
     entries: WorkspaceGitFileStatusEntry[]
   ): WorkspaceGitStatusResult {
+    const settled = entries.filter((entry) => !isWorkspaceGitConflictEntry(entry))
     return {
       ...branchInfo,
       isClean: entries.length === 0,
       changedFiles: entries.length,
-      stagedFiles: entries.filter(
+      stagedFiles: settled.filter(
         (entry) => entry.indexStatus !== ' ' && entry.indexStatus !== '?'
       ).length,
-      unstagedFiles: entries.filter(
+      unstagedFiles: settled.filter(
         (entry) => entry.workTreeStatus !== ' ' && entry.workTreeStatus !== '?'
       ).length,
-      untrackedFiles: entries.filter(
+      untrackedFiles: settled.filter(
         (entry) => entry.indexStatus === '?' && entry.workTreeStatus === '?'
       ).length,
+      conflictedFiles: entries.length - settled.length,
       entries,
     }
   }
@@ -919,6 +1000,15 @@ export class WorkbenchGitService {
       branches: [],
       lineStats: { ...EmptyLineStats },
     }
+  }
+
+  /** 报错时点名的文件：最多列 5 个，其余说个数。 */
+  private describePaths(entries: readonly WorkspaceGitFileStatusEntry[]): string {
+    const names = entries
+      .slice(0, 5)
+      .map((entry) => `“${entry.path}”`)
+      .join('、')
+    return entries.length > 5 ? `${names} 等 ${entries.length} 个文件` : names
   }
 
   /** 这些改动涉及的路径：改名的新旧路径都算。 */

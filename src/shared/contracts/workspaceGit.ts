@@ -19,9 +19,12 @@ export interface WorkspaceGitStatusResult {
   behind: number
   isClean: boolean
   changedFiles: number
+  /** 以下三项不含冲突文件。 */
   stagedFiles: number
   unstagedFiles: number
   untrackedFiles: number
+  /** 还没解决的合并冲突（状态码 DD AU UD UA DU AA UU）。 */
+  conflictedFiles: number
   entries: WorkspaceGitFileStatusEntry[]
 }
 
@@ -68,7 +71,8 @@ export interface WorkspaceGitCommitResult {
 
 export type WorkspaceGitRemoteAction = 'fetch' | 'update' | 'upload'
 
-export type WorkspaceGitFileAction = 'discard' | 'stage' | 'unstage'
+/** `resolve`：把一个合并冲突文件标记为已解决（文件里还有冲突标记时拒绝）。 */
+export type WorkspaceGitFileAction = 'discard' | 'stage' | 'unstage' | 'resolve'
 
 export interface WorkspaceGitRemoteActionOptions {
   githubToken?: string

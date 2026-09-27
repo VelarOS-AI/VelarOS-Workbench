@@ -14,6 +14,7 @@ import type {
   SystemWorkspaceGitSwitchBranchResult,
   WorkspaceGitDiffOptions,
   WorkspaceGitFileAction,
+  WorkspaceGitFileStatusEntry,
   WorkspaceGitLogOptions,
   WorkspaceGitRemoteAction,
   WorkspaceGitRemoteActionOptions,
@@ -41,6 +42,16 @@ export const WorkbenchGitChannels = {
   deleteChatRunChanges: 'workbench-app:git:delete-chat-run-changes',
   readChatRunChangeBaseFile: 'workbench-app:git:read-chat-run-change-base-file',
 } as const
+
+/** 未合并（冲突）的状态码组合，见 git status 文档「Unmerged」一节。 */
+const UnmergedStatusPairs = new Set(['DD', 'AU', 'UD', 'UA', 'DU', 'AA', 'UU'])
+
+/** 这个文件还有没解决的合并冲突：不能提交、不能回滚，只能解决后标记为已解决。 */
+export function isWorkspaceGitConflictEntry(
+  entry: Pick<WorkspaceGitFileStatusEntry, 'indexStatus' | 'workTreeStatus'>
+): boolean {
+  return UnmergedStatusPairs.has(`${entry.indexStatus}${entry.workTreeStatus}`)
+}
 
 export interface WorkbenchGitRootRequest {
   workspaceRoot: string

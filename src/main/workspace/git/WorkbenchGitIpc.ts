@@ -193,7 +193,7 @@ function parseFileAction(input: unknown): WorkbenchGitFileActionRequest {
   if (!hasStringFields(input, ['workspaceRoot', 'path', 'action']))
     return invalidRequest()
   const action = input['action']
-  if (action !== 'discard' && action !== 'stage' && action !== 'unstage')
+  if (action !== 'discard' && action !== 'stage' && action !== 'unstage' && action !== 'resolve')
     return invalidRequest()
   return {
     workspaceRoot: input['workspaceRoot'] as string,

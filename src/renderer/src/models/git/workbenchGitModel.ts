@@ -1,7 +1,9 @@
 import type { AppLocale, WorkspaceGitFileStatusEntry } from '@shared/contracts'
+import { isWorkspaceGitConflictEntry } from '@shared/workbenchGit'
 
-export type WorkbenchGitChangeGroupId = 'staged' | 'unstaged' | 'untracked'
-export type WorkbenchGitDecorationTone = 'added' | 'modified' | 'untracked'
+/** `conflicted`：还没解决的合并冲突。 */
+export type WorkbenchGitChangeGroupId = 'conflicted' | 'staged' | 'unstaged' | 'untracked'
+export type WorkbenchGitDecorationTone = 'added' | 'modified' | 'untracked' | 'conflicted'
 
 export interface WorkbenchGitChangeItem extends WorkspaceGitFileStatusEntry {
   fileName: string
@@ -25,15 +27,18 @@ export type WorkbenchGitDecorationMap = Map<string, WorkbenchGitPathDecoration>
 export const EMPTY_WORKBENCH_GIT_DECORATIONS: WorkbenchGitDecorationMap = new Map()
 
 const StatusOrder: Record<WorkbenchGitChangeGroupId, number> = {
-  staged: 0,
-  unstaged: 1,
-  untracked: 2,
+  conflicted: 0,
+  staged: 1,
+  unstaged: 2,
+  untracked: 3,
 }
 
+/** 目录取它下面最要紧的那个：有冲突的目录显示成冲突。 */
 const ToneOrder: Record<WorkbenchGitDecorationTone, number> = {
   modified: 0,
   added: 1,
   untracked: 2,
+  conflicted: 3,
 }
 
 function fileNameFromPath(path: string): string {
@@ -71,6 +76,8 @@ function readStatusCode(entry: WorkspaceGitFileStatusEntry): string {
 }
 
 function getChangeGroup(entry: WorkspaceGitFileStatusEntry): WorkbenchGitChangeGroupId {
+  if (isWorkspaceGitConflictEntry(entry)) return 'conflicted'
+
   if (entry.indexStatus === '?' || entry.workTreeStatus === '?') return 'untracked'
 
   if (entry.indexStatus.trim()) return 'staged'
@@ -99,6 +106,8 @@ function mergeGroup(
 export function getWorkbenchGitChangeItemTone(
   item: WorkbenchGitChangeItem
 ): WorkbenchGitDecorationTone {
+  if (item.group === 'conflicted') return 'conflicted'
+
   if (item.group === 'untracked') return 'untracked'
 
   if (item.indexStatus === 'A' || item.workTreeStatus === 'A') return 'added'

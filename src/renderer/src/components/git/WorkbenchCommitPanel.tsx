@@ -9,6 +9,7 @@ import {
   ArrowUpRightIcon,
   CaretDownIcon,
   CaretRightIcon,
+  CheckCircleIcon,
   CheckIcon,
   ClockCounterClockwiseIcon,
   CrosshairIcon,
@@ -60,6 +61,9 @@ export interface WorkbenchCommitPanelProps {
   onOpenFile: (path: string) => Promise<void> | void
 }
 
+/** 报冲突时点名的文件：最多列 3 个，其余说个数。 */
+const ConflictNamesShown = 3
+
 /** 拆分前 Workbench 左上角“提交”工具：只负责本次提交，不承载 Git 历史。 */
 export function WorkbenchCommitPanel({
   git: {
@@ -89,7 +93,7 @@ export function WorkbenchCommitPanel({
     () => new Set()
   )
   const [expandedGroups, setExpandedGroups] = useState<ReadonlySet<CommitPanelGroupId>>(
-    () => new Set(['changed', 'untracked'])
+    () => new Set(['conflicted', 'changed', 'untracked'])
   )
 
   const status = summary?.status ?? null
@@ -98,11 +102,17 @@ export function WorkbenchCommitPanel({
       buildCommitPanelGroups(changeItems).map((group) => ({
         ...group,
         label:
-          group.id === 'changed'
-            ? t('workbench.commitGroupChanged')
-            : t('workbench.commitGroupUnversioned'),
+          group.id === 'conflicted'
+            ? t('workbench.commitGroupConflicted')
+            : group.id === 'changed'
+              ? t('workbench.commitGroupChanged')
+              : t('workbench.commitGroupUnversioned'),
       })),
     [changeItems, t]
+  )
+  const conflictItems = useMemo(
+    () => changeItems.filter((item) => item.group === 'conflicted'),
+    [changeItems]
   )
   const selectedItem = useMemo(
     () =>
@@ -131,6 +141,7 @@ export function WorkbenchCommitPanel({
     () => buildWorkbenchGitCommitDraft(selectedItems.length ? selectedItems : changeItems, locale),
     [changeItems, locale, selectedItems]
   )
+  const conflictNames = describeConflictNames(conflictItems)
   const rollbackDeletions = rollbackRequest?.filter(isCommitPanelRollbackDeletion) ?? []
   const commitAllSummary = commitAllRequest
     ? summarizeCommitPanelCommitAll(commitAllRequest)
@@ -229,6 +240,33 @@ export function WorkbenchCommitPanel({
     setRollbackRequest([...items])
   }
 
+  async function resolveConflict(item: WorkbenchGitChangeItem): Promise<void> {
+    if (pendingFileAction || warnUnsavedOpenTabs()) return
+    try {
+      setPendingFileAction(`resolve:${item.path}`)
+      Result.unwrap(
+        await workbenchHost.kernel.workspace.performWorkspaceGitFileAction(
+          workspaceRoot,
+          item.path,
+          'resolve'
+        )
+      )
+      await onRefresh()
+      messageLatest.current.success({
+        title: tLatest.current('workbench.gitMarkResolvedSuccessTitle'),
+        description: item.path,
+      })
+    } catch (actionError) {
+      showActionError(
+        actionError,
+        tLatest.current('workbench.gitFileActionFailedTitle'),
+        tLatest.current('workbench.gitFileActionFailedFallback')
+      )
+    } finally {
+      setPendingFileAction(null)
+    }
+  }
+
   async function generateCommitMessage(): Promise<void> {
     if (!summary?.repository || !changeItems.length || busyAction) return
     try {
@@ -255,6 +293,15 @@ export function WorkbenchCommitPanel({
   /** 勾了文件就只提交它们；一个都没勾时先问要不要提交全部，不默默全提交。 */
   function commitChanges(): void {
     if (!summary?.repository || !changeItems.length || busyAction || warnUnsavedOpenTabs()) return
+    if (conflictItems.length) {
+      messageLatest.current.warning({
+        title: tLatest.current('workbench.gitCommitConflictsTitle'),
+        description: tLatest.current('workbench.gitCommitConflictsBlocked', {
+          files: conflictNames,
+        }),
+      })
+      return
+    }
     if (!selectedItems.length) {
       setCommitAllRequest([...changeItems])
       return
@@ -335,6 +382,16 @@ export function WorkbenchCommitPanel({
     })
   }
 
+  function describeConflictNames(items: readonly WorkbenchGitChangeItem[]): string {
+    const names = items
+      .slice(0, ConflictNamesShown)
+      .map((item) => item.path)
+      .join(locale === 'zh-CN' ? '、' : ', ')
+    return items.length > ConflictNamesShown
+      ? t('workbench.gitConflictMoreFiles', { files: names, count: items.length })
+      : names
+  }
+
   function handleKeyDown(event: KeyboardEvent<HTMLElement>): void {
     if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
       event.preventDefault()
@@ -413,6 +470,14 @@ export function WorkbenchCommitPanel({
                               {group.items.map((item) => {
                                 const checked = selectedCommitPaths.has(item.path)
                                 const displayPath = getWorkbenchGitChangeDisplayPath(item)
+                                const conflicted = item.group === 'conflicted'
+                                const conflictTitle = conflicted
+                                  ? t('workbench.gitConflictStatus', {
+                                      kind: t(
+                                        `workbench.gitConflictKinds.${item.indexStatus}${item.workTreeStatus}`
+                                      ),
+                                    })
+                                  : undefined
                                 return (
                                   <div
                                     key={`${item.group}:${item.path}:${item.statusCode}`}
@@ -449,20 +514,43 @@ export function WorkbenchCommitPanel({
                                       <span className={styles.commitFileName}>{item.fileName}</span>
                                       <span className={styles.commitFilePath}>{displayPath}</span>
                                     </button>
-                                    <span className={styles.commitFileStatus}>{item.statusCode}</span>
-                                    <button
-                                      type="button"
-                                      className={styles.commitFileRollbackButton}
-                                      title={t('workbench.gitRollback')}
-                                      disabled={!!pendingFileAction || hasUnsavedOpenTabs}
-                                      onClick={() => requestRollback([item])}
+                                    <span
+                                      className={styles.commitFileStatus}
+                                      title={conflictTitle}
+                                      aria-label={conflictTitle}
                                     >
-                                      {pendingFileAction === `discard:${item.path}` ? (
-                                        <SpinnerGapIcon size={12} className={styles.spinIcon} />
-                                      ) : (
-                                        <ClockCounterClockwiseIcon size={12} />
-                                      )}
-                                    </button>
+                                      {conflicted ? '!' : item.statusCode}
+                                    </span>
+                                    {conflicted ? (
+                                      <button
+                                        type="button"
+                                        className={styles.commitFileRollbackButton}
+                                        title={t('workbench.gitMarkResolved')}
+                                        aria-label={t('workbench.gitMarkResolved')}
+                                        disabled={!!pendingFileAction || hasUnsavedOpenTabs}
+                                        onClick={() => void resolveConflict(item)}
+                                      >
+                                        {pendingFileAction === `resolve:${item.path}` ? (
+                                          <SpinnerGapIcon size={12} className={styles.spinIcon} />
+                                        ) : (
+                                          <CheckCircleIcon size={12} />
+                                        )}
+                                      </button>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        className={styles.commitFileRollbackButton}
+                                        title={t('workbench.gitRollback')}
+                                        disabled={!!pendingFileAction || hasUnsavedOpenTabs}
+                                        onClick={() => requestRollback([item])}
+                                      >
+                                        {pendingFileAction === `discard:${item.path}` ? (
+                                          <SpinnerGapIcon size={12} className={styles.spinIcon} />
+                                        ) : (
+                                          <ClockCounterClockwiseIcon size={12} />
+                                        )}
+                                      </button>
+                                    )}
                                     <button
                                       type="button"
                                       className={styles.commitFileLocateButton}
@@ -503,6 +591,11 @@ export function WorkbenchCommitPanel({
                 {t('workbench.gitUnsavedBlockedDescription')}
               </p>
             )}
+            {!!conflictItems.length && (
+              <p className={styles.gitCommitWarning}>
+                {t('workbench.gitCommitConflictsBlocked', { files: conflictNames })}
+              </p>
+            )}
             <div className={styles.gitCommitFooter}>
               <div className={styles.commitFooterLeft}>
                 <CommitIconButton
@@ -531,7 +624,12 @@ export function WorkbenchCommitPanel({
                 </CommitIconButton>
                 <CommitIconButton
                   label={t('workbench.gitCommitAction')}
-                  disabled={!!busyAction || !changeItems.length || hasUnsavedOpenTabs}
+                  disabled={
+                    !!busyAction ||
+                    !changeItems.length ||
+                    !!conflictItems.length ||
+                    hasUnsavedOpenTabs
+                  }
                   onClick={commitChanges}
                 >
                   {busyAction === 'commit' ? (

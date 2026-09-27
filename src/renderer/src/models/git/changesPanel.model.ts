@@ -9,6 +9,7 @@ import {
 } from './workbenchGitModel'
 
 export const WORKBENCH_GIT_CHANGE_GROUPS: WorkbenchGitChangeGroupId[] = [
+  'conflicted',
   'staged',
   'unstaged',
   'untracked',
@@ -19,6 +20,9 @@ export function workbenchGitChangeGroupLabel(
   t: WorkbenchI18nContextValue['t']
 ): string {
   switch (group) {
+    case 'conflicted': {
+      return t('workbench.commitGroupConflicted')
+    }
     case 'staged': {
       return t('workbench.gitGroupStaged')
     }

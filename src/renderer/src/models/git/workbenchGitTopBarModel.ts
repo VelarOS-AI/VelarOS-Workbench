@@ -18,6 +18,7 @@ function buildPartialTopBarStatus(
     stagedFiles: 0,
     unstagedFiles: 0,
     untrackedFiles: 0,
+    conflictedFiles: 0,
     entries: [],
   }
 }

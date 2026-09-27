@@ -147,6 +147,7 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     aiChangesMixedHint:
       'This file was also changed outside the AI during this run (by you or another program): the diff mixes both, and rewinding this run won’t roll it back.',
     chatRunChangesMixedPathSuffix: ' (also edited outside the AI)',
+    commitGroupConflicted: 'Merge Conflicts',
     commitGroupChanged: 'Changes',
     commitGroupUnversioned: 'Unversioned Files',
     commitGroupFileCount: '{count} files',
@@ -375,6 +376,22 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
       'This is an untracked new file: rolling back deletes it from disk permanently. It does not go to the Trash and cannot be recovered.',
     gitDiscardDeletesUntrackedFiles:
       '{count} of them are untracked new files and will be deleted permanently. They do not go to the Trash and cannot be recovered.',
+    gitMarkResolved: 'Mark as resolved',
+    gitMarkResolvedSuccessTitle: 'Marked as resolved',
+    gitConflictStatus: 'Merge conflict: {kind}',
+    gitConflictKinds: {
+      DD: 'both deleted',
+      AU: 'added by us',
+      UD: 'deleted by them',
+      UA: 'added by them',
+      DU: 'deleted by us',
+      AA: 'both added',
+      UU: 'both modified',
+    },
+    gitConflictMoreFiles: '{files} and others ({count} files)',
+    gitCommitConflictsTitle: 'Unresolved merge conflicts',
+    gitCommitConflictsBlocked:
+      '{files} still have merge conflicts. Resolve them and mark each one as resolved before committing.',
     gitDeleteFileConfirm: 'Delete “{path}” from the workspace?',
     gitDeleteSelectedConfirm: 'Delete {count} selected files from the workspace?',
     gitRollback: 'Rollback',

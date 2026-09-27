@@ -225,6 +225,65 @@ void describe('Workbench Git service', () => {
     })
   })
 
+  void test('merge conflicts block the commit until each file is resolved, then the merge completes', async () => {
+    await withRepository(async (root) => {
+      await writeFile(join(root, 'both.txt'), 'base\n')
+      await writeFile(join(root, 'clean.txt'), 'base\n')
+      await commitAll(root, 'base')
+      await git(root, ['switch', '-q', '-c', 'feature'])
+      await writeFile(join(root, 'both.txt'), 'feature\n')
+      await commitAll(root, 'feature')
+      await git(root, ['switch', '-q', 'main'])
+      await writeFile(join(root, 'both.txt'), 'main\n')
+      await commitAll(root, 'main')
+      await assert.rejects(git(root, ['merge', 'feature']))
+
+      const service = createService()
+      const summary = await service.getSummary(root)
+      assert.deepEqual(entryCodes(summary), ['UU both.txt'])
+      assert.equal(summary.status?.conflictedFiles, 1)
+      assert.equal(summary.status?.stagedFiles, 0)
+      // 冲突文件的差异：HEAD 那一版对照工作区里带冲突标记的那一版。
+      const conflictDiff = await service.getDiff(root, { path: 'both.txt' })
+      assert.match(conflictDiff.diff, /^\+<<<<<<< HEAD$/m)
+      assert.match(conflictDiff.diff, /^\+feature$/m)
+
+      await assert.rejects(
+        service.commit(root, 'en-US', 'merge'),
+        isAppError('VALIDATION', /“both\.txt”还有未解决的合并冲突/)
+      )
+      await assert.rejects(
+        service.performFileAction(root, 'both.txt', 'discard'),
+        isAppError('VALIDATION', /合并冲突，不能回滚/)
+      )
+      await assert.rejects(
+        service.performFileAction(root, 'both.txt', 'resolve'),
+        isAppError('VALIDATION', /还有冲突标记/)
+      )
+      await assert.rejects(
+        service.performFileAction(root, 'clean.txt', 'resolve'),
+        isAppError('VALIDATION', /没有待解决的合并冲突/)
+      )
+
+      await writeFile(join(root, 'both.txt'), 'resolved\n')
+      const resolved = await service.performFileAction(root, 'both.txt', 'resolve')
+      assert.equal(resolved.fileAction.status.conflictedFiles, 0)
+      assert.deepEqual(entryCodes(resolved.summary), ['M  both.txt'])
+
+      // 合并提交要收下全部改动：只提交一部分文件时拒绝，而不是让 git 报「不能部分提交」。
+      await writeFile(join(root, 'clean.txt'), 'edited while merging\n')
+      await assert.rejects(
+        service.commit(root, 'en-US', undefined, ['clean.txt']),
+        isAppError('VALIDATION', /正在合并/)
+      )
+      const merged = await service.commit(root, 'en-US')
+      assert.equal(merged.commit.message, "Merge branch 'feature'")
+      assert.equal((await git(root, ['rev-list', '--parents', '-n', '1', 'HEAD'])).trim().split(' ').length, 3)
+      assert.equal(await git(root, ['show', 'HEAD:clean.txt']), 'edited while merging\n')
+      assert.equal(merged.summary.status?.isClean, true)
+    })
+  })
+
   void test('git and its hooks run in the injected login-shell environment', async () => {
     await withRepository(async (root) => {
       const output = join(root, '.git', 'hook-environment.txt')

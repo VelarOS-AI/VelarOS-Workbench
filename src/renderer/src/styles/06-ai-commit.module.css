@@ -196,6 +196,18 @@
   color: var(--workbench-git-untracked-fg);
 }
 
+/* 合并冲突：还没解决，不能提交也不能回滚。 */
+.commitFileRow[data-git-tone='conflicted'] .commitFileName,
+.commitFileRow[data-git-tone='conflicted'] .commitFileIcon,
+.commitFileRow[data-git-tone='conflicted'] .commitFileIcon[data-kind] {
+  color: var(--status-red);
+}
+
+.commitFileRow[data-git-tone='conflicted'] .commitFileStatus {
+  color: var(--status-red);
+  font-weight: 700;
+}
+
 /* 回滚确认里列出的文件：多了在框里滚动；会被删掉的文件标出来。 */
 .commitConfirmFileList {
   @apply m-0 flex min-w-0 list-none flex-col overflow-y-auto border p-0;

@@ -6,11 +6,16 @@ import { describe, test } from 'bun:test'
 
 import { translateWorkbenchAppMessage } from '../src/renderer/src/i18n/useStandaloneWorkbenchLocalization'
 import {
+  buildCommitPanelGroups,
   deriveRollbackTargetItems,
   isCommitPanelRollbackDeletion,
   summarizeCommitPanelCommitAll,
 } from '../src/renderer/src/models/git/commitPanel.model'
-import { buildWorkbenchGitChangeItems } from '../src/renderer/src/models/git/workbenchGitModel'
+import {
+  buildWorkbenchGitChangeItems,
+  buildWorkbenchGitDecorationMap,
+  getWorkbenchGitChangeItemTone,
+} from '../src/renderer/src/models/git/workbenchGitModel'
 
 function readSource(relativePath: string): string {
   return readFileSync(path.resolve(process.cwd(), relativePath), 'utf8')
@@ -22,6 +27,8 @@ const items = buildWorkbenchGitChangeItems([
   { path: 'src/added.ts', indexStatus: 'A', workTreeStatus: ' ' },
   { path: 'src/moved.ts', originalPath: 'src/old.ts', indexStatus: 'R', workTreeStatus: ' ' },
   { path: 'notes.md', indexStatus: '?', workTreeStatus: '?' },
+  { path: 'src/both.ts', indexStatus: 'U', workTreeStatus: 'U' },
+  { path: 'src/theirs.ts', indexStatus: 'D', workTreeStatus: 'U' },
 ])
 
 function item(itemPath: string) {
@@ -31,6 +38,22 @@ function item(itemPath: string) {
 }
 
 void describe('Workbench commit panel', () => {
+  void test('shows unmerged files as merge conflicts, first and in their own group', () => {
+    assert.equal(item('src/both.ts').group, 'conflicted')
+    assert.equal(item('src/theirs.ts').group, 'conflicted')
+    assert.equal(getWorkbenchGitChangeItemTone(item('src/both.ts')), 'conflicted')
+    assert.deepEqual(
+      buildCommitPanelGroups(items).map((group) => [group.id, group.items.map((entry) => entry.path)]),
+      [
+        ['conflicted', ['src/both.ts', 'src/theirs.ts']],
+        ['changed', ['src/added.ts', 'src/moved.ts', 'src/partly.ts', 'src/edited.ts']],
+        ['untracked', ['notes.md']],
+      ]
+    )
+    // 文件树里的目录跟着显示成冲突。
+    assert.equal(buildWorkbenchGitDecorationMap(items).get('src')?.tone, 'conflicted')
+  })
+
   void test('rolls back only files the user explicitly chose, never everything', () => {
     assert.deepEqual(deriveRollbackTargetItems(items, new Set(), null), [])
     assert.deepEqual(
@@ -38,9 +61,11 @@ void describe('Workbench commit panel', () => {
       ['notes.md']
     )
     assert.deepEqual(
-      deriveRollbackTargetItems(items, new Set(['src/edited.ts']), item('notes.md')).map(
-        (entry) => entry.path
-      ),
+      deriveRollbackTargetItems(
+        items,
+        new Set(['src/edited.ts', 'src/both.ts']),
+        item('notes.md')
+      ).map((entry) => entry.path),
       ['src/edited.ts']
     )
   })
@@ -50,7 +75,10 @@ void describe('Workbench commit panel', () => {
       items.filter((entry) => isCommitPanelRollbackDeletion(entry)).map((entry) => entry.path),
       ['src/added.ts', 'notes.md']
     )
-    assert.deepEqual(summarizeCommitPanelCommitAll(items), { count: 5, untracked: 1 })
+    assert.deepEqual(summarizeCommitPanelCommitAll(items.filter((entry) => entry.group !== 'conflicted')), {
+      count: 5,
+      untracked: 1,
+    })
   })
 
   void test('asks before committing everything and names untracked files in the question', () => {
@@ -66,6 +94,11 @@ void describe('Workbench commit panel', () => {
       'No files are checked. Commit all 3 changes?'
     )
     for (const key of [
+      'workbench.commitGroupConflicted',
+      'workbench.gitConflictKinds.UU',
+      'workbench.gitConflictKinds.DU',
+      'workbench.gitMarkResolved',
+      'workbench.gitCommitConflictsBlocked',
       'workbench.gitDiscardDeletesUntrackedFiles',
       'workbench.gitCommitAllConfirmTitle',
     ]) {
@@ -82,5 +115,6 @@ void describe('Workbench commit panel', () => {
     assert.match(panel, /requestRollback\(rollbackTargets\)/)
     assert.match(panel, /setCommitAllRequest\(\[\.\.\.changeItems\]\)/)
     assert.match(panel, /<Dialog[\s\S]*open=\{!!commitAllRequest\}/)
+    assert.match(panel, /performWorkspaceGitFileAction\([\s\S]*'resolve'/)
   })
 })

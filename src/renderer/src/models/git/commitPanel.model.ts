@@ -3,7 +3,8 @@ import {
   type WorkbenchGitChangeItem,
 } from './workbenchGitModel'
 
-export type CommitPanelGroupId = 'changed' | 'untracked'
+/** `conflicted`：还没解决的合并冲突，排在最前。 */
+export type CommitPanelGroupId = 'conflicted' | 'changed' | 'untracked'
 
 export type CommitPanelPrimaryAction = 'commit' | 'push'
 
@@ -27,6 +28,7 @@ export function commitPanelStatusTitle(item: WorkbenchGitChangeItem): string {
 }
 
 export interface CommitPanelItemPartition {
+  conflicted: WorkbenchGitChangeItem[]
   tracked: WorkbenchGitChangeItem[]
   untracked: WorkbenchGitChangeItem[]
 }
@@ -34,16 +36,19 @@ export interface CommitPanelItemPartition {
 export function partitionCommitPanelChangeItems(
   items: readonly WorkbenchGitChangeItem[]
 ): CommitPanelItemPartition {
+  const conflicted: WorkbenchGitChangeItem[] = []
   const tracked: WorkbenchGitChangeItem[] = []
   const untracked: WorkbenchGitChangeItem[] = []
   for (const item of items) {
-    if (item.group === 'untracked') {
+    if (item.group === 'conflicted') {
+      conflicted.push(item)
+    } else if (item.group === 'untracked') {
       untracked.push(item)
     } else {
       tracked.push(item)
     }
   }
-  return { tracked, untracked }
+  return { conflicted, tracked, untracked }
 }
 
 export interface CommitPanelGroupItems {
@@ -54,8 +59,11 @@ export interface CommitPanelGroupItems {
 export function buildCommitPanelGroups(
   items: readonly WorkbenchGitChangeItem[]
 ): CommitPanelGroupItems[] {
-  const { tracked, untracked } = partitionCommitPanelChangeItems(items)
+  const { conflicted, tracked, untracked } = partitionCommitPanelChangeItems(items)
   const groups: CommitPanelGroupItems[] = []
+  if (conflicted.length > 0) {
+    groups.push({ id: 'conflicted', items: conflicted })
+  }
   if (tracked.length > 0) {
     groups.push({ id: 'changed', items: tracked })
   }
@@ -82,17 +90,19 @@ export function deriveCommitPanelSelectedItem(
 
 /**
  * 回滚的对象只能是用户明确选的：勾选了的文件；一个都没勾时是在列表里点中的那一行（`clickedItem`，
- * 不是默认高亮的那一行）；都没有就什么也不回滚。
+ * 不是默认高亮的那一行）；都没有就什么也不回滚。冲突文件不回滚，要先解决。
  */
 export function deriveRollbackTargetItems(
   changeItems: readonly WorkbenchGitChangeItem[],
   selectedCommitPaths: ReadonlySet<string>,
   clickedItem: Nullable<WorkbenchGitChangeItem>
 ): WorkbenchGitChangeItem[] {
-  if (selectedCommitPaths.size)
-    return changeItems.filter((item) => selectedCommitPaths.has(item.path))
-
-  return clickedItem ? [clickedItem] : []
+  const targets = selectedCommitPaths.size
+    ? changeItems.filter((item) => selectedCommitPaths.has(item.path))
+    : clickedItem
+      ? [clickedItem]
+      : []
+  return targets.filter((item) => item.group !== 'conflicted')
 }
 
 /**
