@@ -247,6 +247,11 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     unsavedCloseSave: 'Save',
     unsavedCloseSaveAll: 'Save All',
     unsavedCloseDiscard: "Don't Save",
+    unsavedCloseSaveFailed: 'Save failed: {reason}',
+    unsavedWindowCloseTitle: 'Save changes before closing the window?',
+    unsavedQuitTitle: 'Save changes before quitting?',
+    unsavedWindowCloseDescription:
+      "Changes to these files could not be saved yet. They will be lost if you don't save them.",
     showOpenEditorTabs: 'Show open files',
     editorTabActions: 'Tab actions',
     editorFileErrorCount: '{count} errors',

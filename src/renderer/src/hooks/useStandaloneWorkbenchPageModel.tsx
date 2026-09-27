@@ -467,6 +467,33 @@ export function useStandaloneWorkbenchPageModel(
     })
   })
 
+  // 关窗与退出前的确认：这个窗口有没有未保存的改动随时报给主进程（macOS 顺带标在关闭按钮上）；
+  // 主进程拦下关闭时交回这里，先存能存的，存不下的再问用户，答复送回去由主进程放行或作罢。
+  const { hasUnsavedOpenTabs, confirmWindowClose } = workbench
+  useEffect(() => {
+    if (surfaceMode !== 'standalone') return
+    window.velarosWorkbenchWindowClose.setUnsavedChanges(hasUnsavedOpenTabs)
+  }, [hasUnsavedOpenTabs, surfaceMode])
+
+  useEffect(() => {
+    if (surfaceMode !== 'standalone') return undefined
+
+    const unsubscribe = window.velarosWorkbenchWindowClose.onCloseRequested((request) => {
+      void confirmWindowClose(request.reason)
+        .catch((error: unknown) => {
+          log.error('关窗前确认未保存改动失败', { error })
+          return false
+        })
+        .then((proceed) => {
+          window.velarosWorkbenchWindowClose.resolveCloseRequest({ id: request.id, proceed })
+        })
+    })
+    return () => {
+      unsubscribe()
+      window.velarosWorkbenchWindowClose.setUnsavedChanges(false)
+    }
+  }, [confirmWindowClose, surfaceMode])
+
   useEffect(() => {
     if (surfaceMode !== 'standalone') return
 

@@ -11,6 +11,7 @@ import type { WorkbenchProductAnalyticsBridge } from './workbenchProductAnalytic
 import type { WorkbenchTerminalBridge } from './workbenchTerminal'
 import type { WorkbenchUpdateBridge } from './workbenchUpdate'
 import type { WorkbenchWatchBridge } from './workbenchWatch'
+import type { WorkbenchWindowCloseBridge } from './workbenchWindowClose'
 import type { WorkbenchWindowStateBridge } from './workbenchWindowState'
 import type { WorkbenchWorkspaceBridge } from './workbenchWorkspace'
 
@@ -30,6 +31,7 @@ declare global {
     velarosWorkbenchWorkspace: WorkbenchWorkspaceBridge
     velarosWorkbenchUpdate: WorkbenchUpdateBridge
     velarosWorkbenchWindowState: WorkbenchWindowStateBridge
+    velarosWorkbenchWindowClose: WorkbenchWindowCloseBridge
     velarosWorkbenchProductAnalytics: WorkbenchProductAnalyticsBridge
   }
 }

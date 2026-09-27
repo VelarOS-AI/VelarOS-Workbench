@@ -35,6 +35,13 @@ interface UseWorkbenchEditorAutosaveParams {
   onAutosaveFailed: (path: string, message: string) => void
 }
 
+export interface WorkbenchEditorAutosave {
+  /** 存不下的文件与原因（按路径）；存好、撤回或关掉标签后撤销。 */
+  failures: WorkbenchEditorAutosaveFailures
+  /** 这些标签的当前内容在页面卸载时不再同步写回（用户选了不保存）。 */
+  skipExitFlush: (tabs: readonly WorkbenchOpenEditorTab[]) => void
+}
+
 /**
  * 项目编辑器挂载期间的自动保存：输入停顿后把每个改过的标签各自写回磁盘。
  *
@@ -48,7 +55,7 @@ export function useWorkbenchEditorAutosave({
   openTabsByPath,
   saveEditorTab,
   onAutosaveFailed,
-}: UseWorkbenchEditorAutosaveParams): WorkbenchEditorAutosaveFailures {
+}: UseWorkbenchEditorAutosaveParams): WorkbenchEditorAutosave {
   const [failures, setFailures] = useState<WorkbenchEditorAutosaveFailures>(() => new Map())
   const failuresLatest = useLatest(failures)
   const heldPathsLatest = useLatest(heldPaths)
@@ -186,5 +193,15 @@ export function useWorkbenchEditorAutosave({
     }
   }, [flushDirtyTabsBeforeExit])
 
-  return failures
+  /** 用户选了「不保存」的标签：页面卸载时也别再替它写回去。 */
+  const skipExitFlush = useMemoizedFn((tabs: readonly WorkbenchOpenEditorTab[]): void => {
+    const project = activeProjectLatest.current
+    if (!project) return
+
+    for (const tab of tabs) {
+      exitFlushedTabKeysRef.current.add(`${project.rootPath}\0${tab.path}\0${tab.content}`)
+    }
+  })
+
+  return { failures, skipExitFlush }
 }

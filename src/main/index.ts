@@ -50,6 +50,8 @@ import {
   normalizeWorkbenchInternalBrowserUrl,
   prepareWorkbenchWebviewAttachment,
 } from './projects/WorkbenchWebviewSecurity'
+import { WorkbenchWindowCloseGuard } from './projects/WorkbenchWindowCloseGuard'
+import { registerWorkbenchWindowCloseIpc } from './projects/WorkbenchWindowCloseIpc'
 import { WorkbenchWindowManager } from './projects/WorkbenchWindowManager'
 import { installWorkbenchWindowState } from './projects/WorkbenchWindowState'
 import { registerWorkbenchWindowStateIpc } from './projects/WorkbenchWindowStateIpc'
@@ -121,6 +123,8 @@ if (WorkbenchIsDevelopmentRuntime) {
 }
 
 let windowManager: Nullable<WorkbenchWindowManager> = null
+// 有未保存编辑器改动的窗口，关窗与退出前先交给 renderer 存或问；答应了才继续退出。
+const windowCloseGuard = new WorkbenchWindowCloseGuard(() => app.quit())
 let productAnalytics: WorkbenchProductAnalyticsReporter | undefined
 let workbenchBrowserWebviewGate: Nullable<WorkbenchBrowserWebviewGate> = null
 const pendingExternalPaths = collectExternalPathArguments(process.argv)
@@ -209,6 +213,7 @@ function createWorkbenchWindow(hub: WorkbenchProjectHub): BrowserWindow {
   })
   installWorkbenchEditorZoom(window)
   installWorkbenchWindowState(window)
+  windowCloseGuard.install(window)
 
   // 窗口标题唯一权威在 main（跟随项目状态）；拦掉页面 <title> 的默认回写，避免双权威打架。
   window.on('page-title-updated', (event) => {
@@ -395,9 +400,16 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
   )
   registerProjectHubIpc(windowManager)
   registerWorkbenchWindowStateIpc()
+  registerWorkbenchWindowCloseIpc(windowCloseGuard)
   let shutdownStarted = false
   app.on('before-quit', (event) => {
     if (shutdownStarted) return
+    // 有未保存改动的窗口先存或问过用户：都答应了才开始收拾。先收拾再关窗的话，用户在确认框里点了
+    // 取消，窗口还开着，IPC 与子进程却已经停了。
+    if (windowCloseGuard.holdQuit()) {
+      event.preventDefault()
+      return
+    }
 
     shutdownStarted = true
     event.preventDefault()

@@ -32,7 +32,8 @@ interface EditorUnsavedChangesDialogProps {
 
 /**
  * 关闭有未保存改动的标签（或窗口）前的确认：保存 / 不保存 / 取消。批量关闭只问一次，
- * 列出每个有改动的文件；存不下的（磁盘上被删了、被外部改了、自动保存失败）写明原因。
+ * 列出每个有改动的文件；存不下的（磁盘上被删了、被外部改了、写盘或自动保存失败）写明原因。
+ * 关窗与退出前只列替用户存过一遍之后仍没存下的文件。
  */
 export function EditorUnsavedChangesDialog({
   request,
@@ -51,13 +52,25 @@ export function EditorUnsavedChangesDialog({
     if (change?.status === 'modified') return t('workbench.externalFileChangedTitle')
     if (change) return t('workbench.externalFileUnavailableTitle')
 
+    const saveFailure = request?.reasons?.[path]
+    if (saveFailure) return t('workbench.unsavedCloseSaveFailed', { reason: saveFailure })
+
     const failure = autosaveFailures?.get(path)
     return failure ? t('workbench.autosaveFailedTooltip', { reason: failure.message }) : null
   }
 
-  const title = singlePath
-    ? t('workbench.unsavedCloseTitle', { name: workbenchEditorTabFileName(singlePath) })
-    : t('workbench.unsavedCloseTitleMany', { count: dirtyPaths.length })
+  const title =
+    request?.kind === 'window'
+      ? request.windowReason === 'quit'
+        ? t('workbench.unsavedQuitTitle')
+        : t('workbench.unsavedWindowCloseTitle')
+      : singlePath
+        ? t('workbench.unsavedCloseTitle', { name: workbenchEditorTabFileName(singlePath) })
+        : t('workbench.unsavedCloseTitleMany', { count: dirtyPaths.length })
+  const description =
+    request?.kind === 'window'
+      ? t('workbench.unsavedWindowCloseDescription')
+      : t('workbench.unsavedCloseDescription')
 
   return (
     <Dialog
@@ -69,7 +82,7 @@ export function EditorUnsavedChangesDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>{t('workbench.unsavedCloseDescription')}</DialogDescription>
+          <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
         <ul className={styles.editorUnsavedFileList}>
           {dirtyPaths.map((path) => {

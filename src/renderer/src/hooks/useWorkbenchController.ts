@@ -377,6 +377,8 @@ export function useWorkbenchController(options: UseWorkbenchControllerOptions = 
     closeRequest: editor.closeRequest,
     isResolvingCloseRequest: editor.isResolvingCloseRequest,
     resolveCloseRequest: editor.resolveCloseRequest,
+    /** 主进程要关窗 / 退出：先存能存的，存不下的问用户；true 表示可以关。 */
+    confirmWindowClose: editor.confirmWindowClose,
     reorderOpenTabs: editor.reorderOpenTabs,
     revertOpenFiles: editor.revertOpenFiles,
     beginCreateEntry: mutation.beginCreateEntry,

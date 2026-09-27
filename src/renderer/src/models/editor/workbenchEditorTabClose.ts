@@ -8,15 +8,22 @@
 /** 用户对「要不要保存」的回答。 */
 export type WorkbenchEditorCloseChoice = 'save' | 'discard' | 'cancel'
 
+/** 关窗确认因何而起：关这一个窗口，还是退出应用。 */
+export type WorkbenchEditorWindowCloseReason = 'close' | 'quit'
+
 /** 一次等用户拿主意的关闭。 */
 export interface WorkbenchEditorCloseRequest {
   id: number
   /** `tabs`：关标签；`window`：关窗口或退出应用之前。 */
   kind: 'tabs' | 'window'
+  /** 关窗确认因何而起；只有 `window` 有。 */
+  windowReason?: WorkbenchEditorWindowCloseReason
   /** 要关掉的标签（标签栏顺序）；关窗时为空，整个窗口一起走。 */
   paths: string[]
   /** 其中有未保存改动、要用户决定的标签。 */
   dirtyPaths: string[]
+  /** 已经试过、没存下的文件的原因（按路径），确认框里写给用户看。 */
+  reasons?: Readonly<Record<string, string>>
 }
 
 /**
@@ -40,6 +47,20 @@ export function resolveWorkbenchEditorSelectionAfterClose(
     if (path && !closingPaths.has(path)) return path
   }
   return null
+}
+
+/**
+ * 关窗前先替用户存过一遍之后，还剩哪些改动没落盘：没归自动保存管的（外部冲突、被删、读不出），
+ * 以及这次写盘冲突或失败的。存好的、以及已经跟磁盘一致（跳过）的都不算。
+ */
+export function collectWorkbenchEditorUnsavedAfterFlush(
+  dirtyPaths: readonly string[],
+  flushedStatuses: ReadonlyMap<string, 'saved' | 'skipped' | 'conflict' | 'failed'>
+): string[] {
+  return dirtyPaths.filter((path) => {
+    const status = flushedStatuses.get(path)
+    return !status || status === 'conflict' || status === 'failed'
+  })
 }
 
 /** 某个标签右边的所有标签。 */

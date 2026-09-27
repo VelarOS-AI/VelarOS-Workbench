@@ -33,6 +33,10 @@ import {
 import { type WorkbenchUpdateBridge, WorkbenchUpdateChannels } from '../shared/workbenchUpdate'
 import { type WorkbenchWatchBridge, WorkbenchWatchChannels } from '../shared/workbenchWatch'
 import {
+  type WorkbenchWindowCloseBridge,
+  WorkbenchWindowCloseChannels,
+} from '../shared/workbenchWindowClose'
+import {
   type WorkbenchWindowStateBridge,
   WorkbenchWindowStateChannels,
 } from '../shared/workbenchWindowState'
@@ -239,6 +243,14 @@ const windowStateBridge: WorkbenchWindowStateBridge = {
   onChanged: (listener) => subscribe(WorkbenchWindowStateChannels.changed, listener),
 }
 
+const windowCloseBridge: WorkbenchWindowCloseBridge = {
+  setUnsavedChanges: (unsaved) =>
+    ipcRenderer.send(WorkbenchWindowCloseChannels.setUnsavedChanges, unsaved),
+  onCloseRequested: (listener) => subscribe(WorkbenchWindowCloseChannels.closeRequested, listener),
+  resolveCloseRequest: (response) =>
+    ipcRenderer.send(WorkbenchWindowCloseChannels.resolveCloseRequest, response),
+}
+
 const productAnalyticsBridge: WorkbenchProductAnalyticsBridge = {
   getState: () => ipcRenderer.invoke(WorkbenchProductAnalyticsChannels.getState),
   setEnabled: (enabled) =>
@@ -263,6 +275,7 @@ contextBridge.exposeInMainWorld('velarosWorkbenchModel', modelBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchWorkspace', workspaceBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchUpdate', updateBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchWindowState', windowStateBridge)
+contextBridge.exposeInMainWorld('velarosWorkbenchWindowClose', windowCloseBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchProductAnalytics', productAnalyticsBridge)
 
 function subscribe<TPayload>(channel: string, listener: (payload: TPayload) => void): () => void {

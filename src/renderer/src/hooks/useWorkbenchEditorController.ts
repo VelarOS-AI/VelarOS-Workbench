@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { workbenchHost } from '@renderer/host'
 import { applyWorkbenchLanguageServiceEditsToContent } from '@renderer/models/editor/workbenchCodeMirrorLanguageService'
+import { isWorkbenchEditorTabAutosavable } from '@renderer/models/editor/workbenchEditorAutosave'
 import {
   canEditWorkbenchFileContent,
   canSaveWorkbenchTabContent,
@@ -17,9 +18,11 @@ import {
   type WorkbenchEditorSaveSummary,
 } from '@renderer/models/editor/workbenchEditorSaving'
 import {
+  collectWorkbenchEditorUnsavedAfterFlush,
   resolveWorkbenchEditorSelectionAfterClose,
   type WorkbenchEditorCloseChoice,
   type WorkbenchEditorCloseRequest,
+  type WorkbenchEditorWindowCloseReason,
 } from '@renderer/models/editor/workbenchEditorTabClose'
 import {
   buildExternalChangeNoticeKey,
@@ -156,6 +159,9 @@ export function useWorkbenchEditorController({
   const [closeRequest, setCloseRequest] = useState<Nullable<WorkbenchEditorCloseRequest>>(null)
   const [isResolvingCloseRequest, setIsResolvingCloseRequest] = useState(false)
   const closeRequestSeqRef = useRef(0)
+  // 关窗确认的答复要交回主进程：用户答了（或替他存好了）就用它把结果送出去。
+  const windowCloseSettleRef = useRef<Nullable<(proceed: boolean) => void>>(null)
+  const windowCloseDecisionRef = useRef<Nullable<Promise<boolean>>>(null)
 
   const hasUnsavedChanges =
     !!selectedFile
@@ -1276,7 +1282,7 @@ export function useWorkbenchEditorController({
     () => new Set(closeRequest?.dirtyPaths ?? []),
     [closeRequest]
   )
-  const autosaveFailures = useWorkbenchEditorAutosave({
+  const { failures: autosaveFailures, skipExitFlush } = useWorkbenchEditorAutosave({
     activeProject,
     isSavingFile,
     heldPaths: autosaveHeldPaths,
@@ -1411,6 +1417,24 @@ export function useWorkbenchEditorController({
    * 用户对关闭确认的回答。取消：什么都不关。不保存：丢掉改动直接关。保存：先存，存好的（和本来就
    * 没改的）关掉；外部改过或写不进去的标签留着并说明原因，用户处理完再关。
    */
+  function settleWindowClose(proceed: boolean): void {
+    const settle = windowCloseSettleRef.current
+    windowCloseSettleRef.current = null
+    settle?.(proceed)
+  }
+
+  /** 关窗时选了「不保存」：放弃所有改动，页面卸载时也别再替它们写回去。 */
+  function discardAllChangesForWindowClose(): void {
+    const dirtyTabs = [...openTabsByPathLatest.current.values()].filter(isDirtyTab)
+    skipExitFlush(dirtyTabs)
+    revertOpenFiles(dirtyTabs.map((tab) => tab.path))
+  }
+
+  /**
+   * 用户对关闭确认的回答。取消：什么都不关。不保存：丢掉改动直接关。保存：先存，存好的（和本来就
+   * 没改的）关掉；外部改过或写不进去的标签留着并说明原因，用户处理完再关。关窗确认同理，
+   * 结果交回主进程：全都存下或选了不保存才关窗。
+   */
   const resolveCloseRequest = useMemoizedFn(
     async (choice: WorkbenchEditorCloseChoice): Promise<void> => {
       const request = closeRequest
@@ -1418,10 +1442,16 @@ export function useWorkbenchEditorController({
 
       if (choice === 'cancel') {
         setCloseRequest(null)
+        if (request.kind === 'window') settleWindowClose(false)
         return
       }
       if (choice === 'discard') {
         setCloseRequest(null)
+        if (request.kind === 'window') {
+          discardAllChangesForWindowClose()
+          settleWindowClose(true)
+          return
+        }
         commitCloseOpenFiles(request.paths)
         return
       }
@@ -1437,12 +1467,66 @@ export function useWorkbenchEditorController({
         )
         setCloseRequest(null)
         reportUnsavedResults(summarizeWorkbenchEditorSaveResults(results))
+        if (request.kind === 'window') {
+          settleWindowClose(unsavedPaths.size === 0)
+          return
+        }
         commitCloseOpenFiles(request.paths.filter((path) => !unsavedPaths.has(path)))
       } finally {
         setIsResolvingCloseRequest(false)
       }
     }
   )
+
+  /**
+   * 主进程要关这个窗口（或退出应用）而编辑器里还有改动。先像自动保存那样把能存的都存掉：
+   * 都存下了就直接关，不打扰用户；还有存不下的（外部改过、磁盘上被删、写盘失败），
+   * 再问「保存全部 / 不保存 / 取消」。返回 true 表示可以关。
+   */
+  const confirmWindowClose = useMemoizedFn(
+    (reason: WorkbenchEditorWindowCloseReason): Promise<boolean> => {
+      // 已经在处理这个窗口的关闭了（又点了一次关闭、又按了一次退出）：跟着那一次的结果走。
+      if (windowCloseDecisionRef.current) return windowCloseDecisionRef.current
+
+      const decision = decideWindowClose(reason)
+      windowCloseDecisionRef.current = decision
+      const release = (): void => {
+        if (windowCloseDecisionRef.current === decision) windowCloseDecisionRef.current = null
+      }
+      decision.then(release, release)
+      return decision
+    }
+  )
+
+  async function decideWindowClose(reason: WorkbenchEditorWindowCloseReason): Promise<boolean> {
+    const dirtyTabs = [...openTabsByPathLatest.current.values()].filter(isDirtyTab)
+    if (isEmpty(dirtyTabs)) return true
+
+    const flushed = await saveEditorTabs(dirtyTabs.filter(isWorkbenchEditorTabAutosavable))
+    const unsavedPaths = collectWorkbenchEditorUnsavedAfterFlush(
+      dirtyTabs.map((tab) => tab.path),
+      new Map([...flushed].map(([path, result]) => [path, result.status]))
+    )
+    if (isEmpty(unsavedPaths)) return true
+
+    const reasons: Record<string, string> = {}
+    for (const [path, result] of flushed) {
+      if (result.status === 'failed') reasons[path] = result.error.message
+    }
+    return new Promise<boolean>((resolve) => {
+      windowCloseSettleRef.current = resolve
+      closeRequestSeqRef.current += 1
+      // 关标签的确认还开着：让位给关窗，一起问。
+      setCloseRequest({
+        id: closeRequestSeqRef.current,
+        kind: 'window',
+        windowReason: reason,
+        paths: [],
+        dirtyPaths: unsavedPaths,
+        reasons,
+      })
+    })
+  }
 
   return {
     selectedFilePath,
@@ -1477,6 +1561,7 @@ export function useWorkbenchEditorController({
     closeRequest,
     isResolvingCloseRequest,
     resolveCloseRequest,
+    confirmWindowClose,
     reorderOpenTabs,
     moveOpenEntryPath,
     closeOpenEntryPath,
