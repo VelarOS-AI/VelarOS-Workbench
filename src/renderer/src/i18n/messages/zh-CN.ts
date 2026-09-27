@@ -480,6 +480,13 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     closeDeletedFileTab: '关闭标签页',
     restoreDeletedFileSucceeded: '文件已恢复',
     restoreDeletedFileFailed: '恢复文件失败',
+    textEncodingTitle: '文件编码：{encoding}',
+    textEolMixed: '混用（{eol} 为主）',
+    textEolTitle: '换行符：{eol}',
+    textEolChangeTitle: '换行符：{eol}。点击更改',
+    textEolMenuLabel: '选择换行符',
+    textEolOptionLf: 'LF（macOS、Linux）',
+    textEolOptionCrlf: 'CRLF（Windows）',
     textIssueUndecodableTitle: '认不出这个文件的编码，已只读打开',
     textIssueUndecodableDescription:
       '它不是有效的 UTF-8、UTF-16 或 GB18030。为免写坏原来的字节，编辑已关闭。',

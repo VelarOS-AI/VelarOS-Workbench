@@ -67,6 +67,29 @@ button.statusBarItem:hover {
   color: var(--workbench-text);
 }
 
+/* 状态栏换行符菜单：向上弹出的小菜单，选一种即转换并保存。 */
+.statusEolMenu {
+  @apply flex flex-col border bg-card shadow-lg;
+  min-width: 150px;
+  padding: 4px;
+  border-color: var(--workbench-border);
+  border-radius: var(--workbench-radius-lg);
+}
+
+.statusEolMenuItem {
+  @apply flex items-center justify-between gap-3 border-0 bg-transparent text-left text-foreground;
+  width: 100%;
+  min-height: 26px;
+  padding-inline: 8px;
+  border-radius: var(--workbench-radius);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.statusEolMenuItem:hover {
+  background: var(--workbench-hover);
+}
+
 .statusPathTrail {
   @apply flex min-w-0 items-center;
   max-width: min(56vw, 980px);

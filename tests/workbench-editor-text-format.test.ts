@@ -15,11 +15,16 @@ import {
   isDirtyTab,
 } from '../src/renderer/src/models/editor/workbenchEditorTabs'
 import {
+  buildWorkbenchStatusBarTextFormat,
   resolveWorkbenchTabTextFormat,
   resolveWorkbenchTextConversion,
   resolveWorkbenchTextFormatNotice,
 } from '../src/renderer/src/models/editor/workbenchEditorTextFormat'
 import type { WorkbenchOpenEditorTab } from '../src/renderer/src/types/workbenchTypes'
+import {
+  formatWorkbenchTextEncoding,
+  formatWorkbenchTextEol,
+} from '../src/shared/workbenchTextFormat'
 
 /**
  * 编辑器的打开标签带着磁盘上的编码与换行符，每条保存路径都按它写回；用户明确选的转换
@@ -89,6 +94,52 @@ void describe('Workbench editor text format', () => {
     assert.equal(hasFileSnapshotChanged(file, { ...file, textIssue: 'mixed-eol' }), true)
   })
 
+  void test('the status bar shows the format and offers line endings only where they can be changed', () => {
+    const tab = createTab(createFile())
+    assert.deepEqual(buildWorkbenchStatusBarTextFormat(tab, 'edit'), {
+      encoding: 'gb18030',
+      eol: 'crlf',
+      mixedEol: false,
+      canChangeEol: true,
+    })
+    assert.equal(buildWorkbenchStatusBarTextFormat(tab, 'read-only')?.canChangeEol, false)
+    assert.equal(
+      buildWorkbenchStatusBarTextFormat(createTab(createFile({ truncated: true })), 'edit')
+        ?.canChangeEol,
+      false
+    )
+    // 编码写不回的文件换换行符也解决不了，只能转换为 UTF-8。
+    assert.equal(
+      buildWorkbenchStatusBarTextFormat(createTab(createFile({ textIssue: 'undecodable' })), 'edit')
+        ?.canChangeEol,
+      false
+    )
+    const mixed = buildWorkbenchStatusBarTextFormat(
+      createTab(createFile({ textIssue: 'mixed-eol' })),
+      'edit'
+    )
+    assert.equal(mixed?.mixedEol, true)
+    assert.equal(mixed?.canChangeEol, true)
+    // 选了转换之后显示的是要写成的格式。
+    assert.deepEqual(
+      buildWorkbenchStatusBarTextFormat(
+        createTab(createFile(), { textConversion: { encoding: 'gb18030', eol: 'lf' } }),
+        'edit'
+      ),
+      { encoding: 'gb18030', eol: 'lf', mixedEol: false, canChangeEol: true }
+    )
+    assert.equal(
+      buildWorkbenchStatusBarTextFormat(
+        createTab(createFile({ imagePreview: { mediaType: 'image/png', data: new Uint8Array() } })),
+        'edit'
+      ),
+      null
+    )
+    assert.equal(formatWorkbenchTextEncoding('utf-16le-bom'), 'UTF-16 LE BOM')
+    assert.equal(formatWorkbenchTextEncoding('gb18030'), 'GB18030')
+    assert.equal(formatWorkbenchTextEol('crlf'), 'CRLF')
+  })
+
   void test('the editor notice explains why a file is read-only and what the user can choose', () => {
     assert.equal(resolveWorkbenchTextFormatNotice(createTab(createFile())), null)
     assert.equal(
@@ -152,6 +203,20 @@ void describe('Workbench editor text format', () => {
     assert.match(pageModel, /encoding: file\.encoding,\n\s*eol: file\.eol,\n\s*textIssue: file\.textIssue,/u)
     assert.match(lightEditor, /encoding: toOptional\(tab\.encoding\),\n\s*eol: toOptional\(tab\.eol\),/u)
     assert.match(editorPanel, /onEditorContentChange\(normalizeWorkbenchTextEol\(content\)\)/u)
+  })
+
+  void test('the status bar shows the format next to the cursor position', () => {
+    const statusBar = readSource('src/renderer/src/components/chrome/StatusBar.tsx')
+    const presentation = readSource('src/renderer/src/StandaloneWorkbenchPagePresentation.tsx')
+    assert.match(
+      statusBar,
+      /\{t\('workbench\.cursorPosition', cursorPosition\)\}\n\s*<\/Text>\n\s*\{!!textFormat && <StatusBarTextFormat/u
+    )
+    assert.match(statusBar, /const StatusBarEolOptions: readonly WorkbenchTextEol\[\] = \['lf', 'crlf'\]/u)
+    assert.match(
+      presentation,
+      /void workbench\.convertSelectedFileTextFormat\(\{\n\s*encoding: selectedTextFormat\.encoding,\n\s*eol,/u
+    )
   })
 
   void test('find offsets in a CRLF file land where the editor document has the match', async () => {

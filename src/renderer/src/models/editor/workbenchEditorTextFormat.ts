@@ -3,6 +3,8 @@ import type { WorkbenchTextFormat, WorkbenchTextIssue } from '@shared/workbenchT
 
 import type { WorkbenchOpenEditorTab } from '../../types/workbenchTypes'
 
+import type { WorkbenchEditorEditMode } from './workbenchEditorEditMode'
+
 /**
  * 编辑器标签的文本格式（编码、BOM、换行符）纯逻辑。
  *
@@ -37,6 +39,28 @@ export function hasWorkbenchEncodingIssue(
   file: Pick<WorkbenchReadFileResult, 'textIssue'>
 ): boolean {
   return file.textIssue === 'undecodable' || file.textIssue === 'irreversible'
+}
+
+/** 状态栏上当前文件的编码与换行符。 */
+export interface WorkbenchStatusBarTextFormat extends WorkbenchTextFormat {
+  /** 磁盘上混用了多种换行符（`eol` 是占多数的那种），用户还没选定统一成哪种。 */
+  mixedEol: boolean
+  /** 能不能在状态栏换换行符：完整的文本、编码写得回，并且处在编辑模式。 */
+  canChangeEol: boolean
+}
+
+export function buildWorkbenchStatusBarTextFormat(
+  tab: Pick<WorkbenchOpenEditorTab, 'file' | 'textConversion'>,
+  editMode: Nullable<WorkbenchEditorEditMode>
+): Nullable<WorkbenchStatusBarTextFormat> {
+  if (tab.file.imagePreview) return null
+
+  return {
+    ...resolveWorkbenchTabTextFormat(tab),
+    mixedEol: tab.file.textIssue === 'mixed-eol' && !tab.textConversion,
+    canChangeEol:
+      !tab.file.truncated && !hasWorkbenchEncodingIssue(tab.file) && editMode === 'edit',
+  }
 }
 
 /**

@@ -498,6 +498,13 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     closeDeletedFileTab: 'Close tab',
     restoreDeletedFileSucceeded: 'File restored',
     restoreDeletedFileFailed: 'Failed to restore file',
+    textEncodingTitle: 'Encoding: {encoding}',
+    textEolMixed: 'Mixed ({eol})',
+    textEolTitle: 'Line endings: {eol}',
+    textEolChangeTitle: 'Line endings: {eol}. Click to change',
+    textEolMenuLabel: 'Choose line endings',
+    textEolOptionLf: 'LF (macOS, Linux)',
+    textEolOptionCrlf: 'CRLF (Windows)',
     textIssueUndecodableTitle: 'Unknown encoding, opened read-only',
     textIssueUndecodableDescription:
       'This file is not valid UTF-8, UTF-16 or GB18030. Editing is off so its original bytes cannot be damaged.',

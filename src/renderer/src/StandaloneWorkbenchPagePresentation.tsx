@@ -49,6 +49,7 @@ import {
   type WorkbenchVelarProjectSnapshot,
   type WorkbenchVelarProjectSnapshotIndex,
 } from './models/codeGraph/workbenchVelarProjectGraph'
+import { buildWorkbenchStatusBarTextFormat } from './models/editor/workbenchEditorTextFormat'
 import styles from './styles/workbenchPageStyles'
 import { useWorkbenchPageContext } from './WorkbenchPageModelContext'
 
@@ -107,6 +108,14 @@ export function StandaloneWorkbenchPagePresentation({
   const pendingFileOpenPath = projectHubState.pendingFileOpen?.path
   const activeProjectId = workbench.activeProject?.id
   const activeProjectRoot = workbench.activeProject?.rootPath
+  // 状态栏：当前文本文件的编码与换行符（差异、预览标签不显示）。
+  const selectedEditorTab = workbench.openTabs.find(
+    (tab) => tab.path === workbench.selectedFilePath
+  )
+  const selectedTextFormat =
+    selectedEditorTab && !editorNavigation.diffItem && !editorNavigation.lightTab
+      ? buildWorkbenchStatusBarTextFormat(selectedEditorTab, workbench.selectedFileEditMode)
+      : null
   const [velarManifestPaths, setVelarManifestPaths] = useState<readonly string[]>([])
   /** 全项目扫出来的 VelarScript 源文件；结构树的完整性靠它，不靠「你打开过什么」。 */
   const [velarSourcePaths, setVelarSourcePaths] = useState<readonly string[]>([])
@@ -825,6 +834,14 @@ export function StandaloneWorkbenchPagePresentation({
           isSavingFile={workbench.isSavingFile}
           openFileCount={workbench.openTabs.length}
           commandStatusLabel={commandStatusLabel}
+          textFormat={selectedTextFormat}
+          onChangeEol={(eol) => {
+            if (!selectedTextFormat) return
+            void workbench.convertSelectedFileTextFormat({
+              encoding: selectedTextFormat.encoding,
+              eol,
+            })
+          }}
         />
         <WorkbenchSettingsDialog
           open={dialogs.settingsOpen}
