@@ -164,6 +164,42 @@ void describe('Workbench project file tree', () => {
     }
   })
 
+  void test('lists and reads entries whose names start with two dots', async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), 'workbench-dot-dot-names-'))
+    const service = new WorkbenchProjectFileSystem()
+
+    try {
+      await writeFile(join(projectRoot, '..notes.md'), '# kept\n', 'utf8')
+      await mkdir(join(projectRoot, '..cache'))
+      await writeFile(join(projectRoot, '..cache', 'entry.txt'), 'inside\n', 'utf8')
+
+      const root = await service.listDirectory({ projectRoot, includeHidden: true })
+      assert.deepEqual(
+        root.entries.map((entry) => [entry.path, entry.type]),
+        [
+          ['..cache', 'directory'],
+          ['..notes.md', 'file'],
+        ]
+      )
+      const nested = await service.listDirectory({ projectRoot, path: '..cache' })
+      assert.deepEqual(nested.entries.map((entry) => entry.path), ['..cache/entry.txt'])
+      const notes = await service.readTextFile({ projectRoot, path: '..notes.md' })
+      assert.equal(notes.content, '# kept\n')
+
+      // 真正往上走的 `..` 仍然越界。
+      await assert.rejects(
+        () => service.listDirectory({ projectRoot, path: '..' }),
+        /路径超出工程范围/u
+      )
+      await assert.rejects(
+        () => service.readTextFile({ projectRoot, path: '../outside.txt' }),
+        /路径超出工程范围/u
+      )
+    } finally {
+      await rm(projectRoot, { recursive: true, force: true })
+    }
+  })
+
   void test('reports a deleted file as NOT_FOUND without leaking the realpath ENOENT', async () => {
     const projectRoot = await mkdtemp(join(tmpdir(), 'workbench-deleted-file-'))
     const service = new WorkbenchProjectFileSystem()

@@ -15,7 +15,7 @@
  */
 import type { Stats } from 'node:fs'
 import { open, opendir, readdir, realpath, stat } from 'node:fs/promises'
-import { isAbsolute, relative, resolve, sep } from 'node:path'
+import { relative, resolve, sep } from 'node:path'
 
 import { execa } from 'execa'
 
@@ -36,6 +36,7 @@ import {
 } from '@shared/workbenchImage'
 import { DefaultWorkbenchTextFormat } from '@shared/workbenchTextFormat'
 
+import { isPathInsideRoot } from './PathContainmentHelper'
 import { readWorkbenchTextFile } from './TextFile'
 
 const DefaultDirectoryLimit = 1000
@@ -286,9 +287,9 @@ export class WorkbenchProjectFileSystem {
     }
   }
 
+  /** 只有 `..` 这一段才是往上走：`..foo` 这样以两个点开头的名字仍在工程里。 */
   private isInsideProject(projectRoot: string, absolutePath: string): boolean {
-    const relativePath = relative(projectRoot, absolutePath)
-    return relativePath === '' || (!relativePath.startsWith('..') && !isAbsolute(relativePath))
+    return isPathInsideRoot(projectRoot, absolutePath)
   }
 
   private toProjectRelativePath(projectRoot: string, absolutePath: string): string {
