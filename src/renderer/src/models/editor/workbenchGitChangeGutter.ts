@@ -1,6 +1,7 @@
 import {
   type EditorState,
   type Extension,
+  Prec,
   type Range,
   RangeSet,
   StateEffect,
@@ -18,7 +19,7 @@ import {
 import { diffArrays } from 'diff'
 
 /**
- * 行号旁的 Git 改动标记（对照 HEAD）：新增的行一条绿线，改过的行一条青线，删掉的行在删除处画一个
+ * 贴着代码的 Git 改动标记（对照 HEAD）：新增的行一条绿线，改过的行一条青线，删掉的行在删除处画一个
  * 红色小三角。对照的是编辑器里的当前正文，没保存的改动也算。HEAD 里没有这个文件（新文件、不在版本库
  * 里）时不标：整个文件都是新的，文件树和标签已经上了色。
  *
@@ -296,12 +297,15 @@ function foldedGitChangeMarker(
 export const workbenchGitChangeGutterExtension: Extension = [
   workbenchGitChangeField,
   workbenchGitChangeRecompute,
-  gutter({
-    class: 'cm-workbenchGitChangeGutter',
-    markers: (view) => view.state.field(workbenchGitChangeField).markers,
-    lineMarker: foldedGitChangeMarker,
-    lineMarkerChange: (update) =>
-      update.startState.field(workbenchGitChangeField) !==
-      update.state.field(workbenchGitChangeField),
-  }),
+  // 最低优先级：排在所有栏（行号、折叠、运行按钮）之后，紧挨着代码。
+  Prec.lowest(
+    gutter({
+      class: 'cm-workbenchGitChangeGutter',
+      markers: (view) => view.state.field(workbenchGitChangeField).markers,
+      lineMarker: foldedGitChangeMarker,
+      lineMarkerChange: (update) =>
+        update.startState.field(workbenchGitChangeField) !==
+        update.state.field(workbenchGitChangeField),
+    })
+  ),
 ]
