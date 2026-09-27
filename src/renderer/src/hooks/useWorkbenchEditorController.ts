@@ -17,6 +17,11 @@ import {
   type WorkbenchEditorSaveSummary,
 } from '@renderer/models/editor/workbenchEditorSaving'
 import {
+  resolveWorkbenchEditorSelectionAfterClose,
+  type WorkbenchEditorCloseChoice,
+  type WorkbenchEditorCloseRequest,
+} from '@renderer/models/editor/workbenchEditorTabClose'
+import {
   buildExternalChangeNoticeKey,
   getWorkbenchEditorFilesChangedRefreshDelayMs,
   hasFileSnapshotChanged,
@@ -147,6 +152,10 @@ export function useWorkbenchEditorController({
   const savedSnapshotTrailsRef = useRef(new Map<string, WorkbenchEditorSavedSnapshot[]>())
   // 进行中的手动保存（单个或批量）数；isSavingFile 只在全部结束后才落回 false。
   const manualSaveCountRef = useRef(0)
+  // 等用户回答「保存 / 不保存 / 取消」的那次关闭；同一时间只问一个。
+  const [closeRequest, setCloseRequest] = useState<Nullable<WorkbenchEditorCloseRequest>>(null)
+  const [isResolvingCloseRequest, setIsResolvingCloseRequest] = useState(false)
+  const closeRequestSeqRef = useRef(0)
 
   const hasUnsavedChanges =
     !!selectedFile
@@ -175,21 +184,15 @@ export function useWorkbenchEditorController({
     return snapshots
   }, [openTabs])
 
-  function rememberOpenFile(
-    file: WorkbenchReadFileResult,
-    content: string,
-    { keepTextConversion = true }: { keepTextConversion?: boolean } = {}
-  ): void {
+  function rememberOpenFile(file: WorkbenchReadFileResult, content: string): void {
     setOpenTabsByPath((current) => {
       const next = new Map(current)
       const currentTab = current.get(file.path)
       const sameSnapshot = !!currentTab && !hasFileSnapshotChanged(currentTab.file, file)
       const externalChange = optionalWhenLazy(sameSnapshot, () => currentTab!.externalChange)
-      // 选过的格式转换跟着编辑缓冲走，直到存下去或还原；上次保存被拒的说明内容一改就作废。
-      const textConversion = optionalWhenLazy(
-        sameSnapshot && keepTextConversion,
-        () => currentTab!.textConversion
-      )
+      // 选过的格式转换跟着编辑缓冲走，直到存下去或还原（见 revertOpenFiles）；上次保存被拒的说明
+      // 内容一改就作废。
+      const textConversion = optionalWhenLazy(sameSnapshot, () => currentTab!.textConversion)
       next.set(file.path, {
         path: file.path,
         file,
@@ -374,11 +377,47 @@ export function useWorkbenchEditorController({
     setChosenEditModes((current) => new Map(current).set(selectedFile.path, nextMode))
   })
 
-  const revertSelectedFile = useMemoizedFn((): void => {
-    if (!selectedFile) return
+  /**
+   * 放弃这些标签里没保存的改动，回到磁盘上的版本；磁盘上已经被外部改过的，直接换成外部那一份。
+   * 标签留着，只是不再有改动。
+   */
+  const revertOpenFiles = useMemoizedFn((paths: readonly string[]): void => {
+    const revertedTabs = paths.flatMap((path): WorkbenchOpenEditorTab[] => {
+      const tab = openTabsByPath.get(path)
+      if (!tab || !isDirtyTab(tab)) return []
 
-    setEditorContent(selectedFile.content)
-    rememberOpenFile(selectedFile, selectedFile.content, { keepTextConversion: false })
+      // 选过的格式转换与上次保存被拒的说明也一并放弃。
+      const diskFile = tab.externalChange?.status === 'modified' ? tab.externalChange.diskFile : null
+      return [
+        diskFile
+          ? { path, file: diskFile, content: diskFile.content }
+          : {
+              ...tab,
+              content: tab.file.content,
+              textConversion: undefined,
+              unencodableSaveError: undefined,
+            },
+      ]
+    })
+    if (isEmpty(revertedTabs)) return
+
+    setOpenTabsByPath((current) => {
+      const next = new Map(current)
+      for (const tab of revertedTabs) {
+        if (next.has(tab.path)) next.set(tab.path, tab)
+      }
+      return next
+    })
+    const selectedTab = revertedTabs.find((tab) => tab.path === selectedFilePathRef.current)
+    if (selectedTab) {
+      setSelectedFile(selectedTab.file)
+      setEditorContent(selectedTab.content)
+    }
+    const adoptedDiskFiles = revertedTabs.filter((tab) => tab.file !== openTabsByPath.get(tab.path)?.file)
+    if (!isEmpty(adoptedDiskFiles)) {
+      adoptedDiskFiles.forEach((tab) => onFileMetadataSavedLatest.current(tab.file))
+      onExternalFilesChangedLatest.current()
+    }
   })
 
   const selectFile = useMemoizedFn(
@@ -563,29 +602,26 @@ export function useWorkbenchEditorController({
     setEditorContent(nextSelectedTab.content)
   })
 
-  const closeOpenFile = useMemoizedFn((path: string): void => {
-    const closingTab = openTabsByPath.get(path)
-    if (!closingTab) return
+  /** 真正关掉这些标签（不再过问未保存改动），关的是当前标签时按关闭前的顺序选好下一个。 */
+  const commitCloseOpenFiles = useMemoizedFn((paths: readonly string[]): void => {
+    const closingPaths = new Set(paths.filter((path) => openTabsByPath.has(path)))
+    if (closingPaths.size === 0) return
 
-    if (isDirtyTab(closingTab)) {
-      warnUnsavedChanges()
-      return
-    }
-
-    const currentTabs = [...openTabsByPath.values()]
-    const closingIndex = currentTabs.findIndex((tab) => tab.path === path)
-    const remainingTabs = currentTabs.filter((tab) => tab.path !== path)
+    const nextSelectedPath = resolveWorkbenchEditorSelectionAfterClose(
+      [...openTabsByPath.keys()],
+      closingPaths,
+      selectedFilePath
+    )
     setOpenTabsByPath((current) => {
       const next = new Map(current)
-      next.delete(path)
+      closingPaths.forEach((path) => next.delete(path))
       return next
     })
+    closingPaths.forEach((path) => savedSnapshotTrailsRef.current.delete(path))
 
-    if (path !== selectedFilePath) return
+    if (nextSelectedPath === selectedFilePath) return
 
-    const nextSelectedTab = toNullable(
-      remainingTabs[Math.max(0, closingIndex - 1)] ?? remainingTabs[0]
-    )
+    const nextSelectedTab = nextSelectedPath ? openTabsByPath.get(nextSelectedPath) : null
     if (!nextSelectedTab) {
       setSelectedFilePath(null)
       setSelectedFile(null)
@@ -596,57 +632,49 @@ export function useWorkbenchEditorController({
     setSelectedFilePath(nextSelectedTab.path)
     setSelectedFile(nextSelectedTab.file)
     setEditorContent(nextSelectedTab.content)
+  })
+
+  /**
+   * 关掉一批标签。都没有未保存改动就直接关；有的话先问一次「保存 / 不保存 / 取消」，
+   * 列出所有有改动的文件，等用户回答（见 resolveCloseRequest）。
+   */
+  const requestCloseOpenFiles = useMemoizedFn((paths: readonly string[]): void => {
+    const targetPaths = paths.filter((path) => openTabsByPath.has(path))
+    if (isEmpty(targetPaths)) return
+
+    const dirtyPaths = targetPaths.filter((path) => isDirtyTab(openTabsByPath.get(path)!))
+    if (isEmpty(dirtyPaths)) {
+      commitCloseOpenFiles(targetPaths)
+      return
+    }
+    // 已经在问了（连按了两次关闭）：先把这一次答完。
+    if (closeRequest) return
+
+    closeRequestSeqRef.current += 1
+    setCloseRequest({
+      id: closeRequestSeqRef.current,
+      kind: 'tabs',
+      paths: targetPaths,
+      dirtyPaths,
+    })
+  })
+
+  const closeOpenFile = useMemoizedFn((path: string): void => {
+    requestCloseOpenFiles([path])
   })
 
   const closeAllOpenFiles = useMemoizedFn((): void => {
-    if (hasUnsavedOpenTabs) {
-      warnUnsavedChanges()
-      return
-    }
-
-    setOpenTabsByPath(new Map())
-    setSelectedFilePath(null)
-    setSelectedFile(null)
-    setEditorContent('')
+    requestCloseOpenFiles([...openTabsByPath.keys()])
   })
 
   const closeUnmodifiedOpenFiles = useMemoizedFn((): void => {
-    const dirtyTabs = [...openTabsByPath.values()].filter(isDirtyTab)
-    if (dirtyTabs.length === openTabsByPath.size) return
-
-    setOpenTabsByPath(new Map(dirtyTabs.map((tab) => [tab.path, tab])))
-
-    if (selectedFilePath && dirtyTabs.some((tab) => tab.path === selectedFilePath)) return
-
-    const nextSelectedTab = toNullable(dirtyTabs[0])
-    if (!nextSelectedTab) {
-      setSelectedFilePath(null)
-      setSelectedFile(null)
-      setEditorContent('')
-      return
-    }
-
-    setSelectedFilePath(nextSelectedTab.path)
-    setSelectedFile(nextSelectedTab.file)
-    setEditorContent(nextSelectedTab.content)
+    commitCloseOpenFiles(openTabs.filter((tab) => !isDirtyTab(tab)).map((tab) => tab.path))
   })
 
   const closeOtherOpenFiles = useMemoizedFn((path: string): void => {
-    const targetTab = openTabsByPath.get(path)
-    if (!targetTab) return
+    if (!openTabsByPath.has(path)) return
 
-    const dirtyOtherTab = [...openTabsByPath.values()].find(
-      (tab) => tab.path !== path && isDirtyTab(tab)
-    )
-    if (dirtyOtherTab) {
-      warnUnsavedChanges()
-      return
-    }
-
-    setOpenTabsByPath(new Map([[path, targetTab]]))
-    setSelectedFilePath(path)
-    setSelectedFile(targetTab.file)
-    setEditorContent(targetTab.content)
+    requestCloseOpenFiles([...openTabsByPath.keys()].filter((openPath) => openPath !== path))
   })
 
   const reorderOpenTabs = useMemoizedFn((fromPath: string, toPath: string): void => {
@@ -932,29 +960,21 @@ export function useWorkbenchEditorController({
     const owningProjectId = project.id
     beginManualSave()
     try {
-      const restoredFile = Result.unwrap(
-        await workbenchHost.kernel.project.restoreMissingWorkbenchFile({
-          projectRoot: project.rootPath,
-          path,
-          content: tab.content,
-          ...resolveWorkbenchTabTextFormat(tab),
+      const result = await restoreDeletedTab(tab)
+      if (activeProjectRef.current?.id !== owningProjectId) return
+
+      if (result.status === 'saved') {
+        notifyFilesSaved()
+        onExternalFilesChangedLatest.current()
+        messageLatest.current.success({
+          title: tLatest.current('workbench.restoreDeletedFileSucceeded'),
         })
-      )
-      if (activeProjectRef.current?.id !== owningProjectId) return
-
-      applySavedFile(restoredFile, tab.content)
-      onExternalFilesChangedLatest.current()
-      messageLatest.current.success({
-        title: tLatest.current('workbench.restoreDeletedFileSucceeded'),
-      })
-    } catch (error) {
-      if (activeProjectRef.current?.id !== owningProjectId) return
-
-      const appError = AppError.from(error)
-      messageLatest.current.error({
-        title: tLatest.current('workbench.restoreDeletedFileFailed'),
-        description: appError.message,
-      })
+      } else if (result.status === 'failed') {
+        messageLatest.current.error({
+          title: tLatest.current('workbench.restoreDeletedFileFailed'),
+          description: result.error.message,
+        })
+      }
     } finally {
       endManualSave()
     }
@@ -1153,6 +1173,32 @@ export function useWorkbenchEditorController({
     }
   )
 
+  /** 把磁盘上已经被删掉的文件按标签里的内容重新建出来（与写盘同一条队，落状态、不提示）。 */
+  const restoreDeletedTab = useMemoizedFn(
+    (tab: WorkbenchOpenEditorTab): Promise<WorkbenchEditorSaveResult> =>
+      runSerializedSave(tab.path, async (): Promise<WorkbenchEditorSaveResult> => {
+        const project = activeProjectRef.current
+        if (!project) return { status: 'skipped' }
+
+        try {
+          const restoredFile = Result.unwrap(
+            await workbenchHost.kernel.project.restoreMissingWorkbenchFile({
+              projectRoot: project.rootPath,
+              path: tab.path,
+              content: tab.content,
+              ...resolveWorkbenchTabTextFormat(tab),
+            })
+          )
+          if (activeProjectRef.current?.id !== project.id) return { status: 'skipped' }
+
+          applySavedFile(restoredFile, tab.content, { silent: true })
+          return { status: 'saved', file: restoredFile }
+        } catch (error) {
+          return { status: 'failed', error: AppError.from(error) }
+        }
+      })
+  )
+
   /** 保存一个标签。手动保存提示冲突与失败；静默的自动保存只返回结果，由自动保存自己记账和提示。 */
   const saveEditorTab = useMemoizedFn(
     async (
@@ -1226,9 +1272,14 @@ export function useWorkbenchEditorController({
     }
   )
 
+  const autosaveHeldPaths = useMemo(
+    () => new Set(closeRequest?.dirtyPaths ?? []),
+    [closeRequest]
+  )
   const autosaveFailures = useWorkbenchEditorAutosave({
     activeProject,
     isSavingFile,
+    heldPaths: autosaveHeldPaths,
     openTabsByPath,
     saveEditorTab,
     onAutosaveFailed: (path, message) => {
@@ -1326,6 +1377,73 @@ export function useWorkbenchEditorController({
     reportUnsavedResults(summary)
   })
 
+  /**
+   * 关闭前按「保存」存这些标签：磁盘上已被删掉的文件按标签内容重新建出来，其余照常写盘。
+   * 外部改过的（冲突）与写不进去的留着不关，由调用方逐个提示。
+   */
+  const saveTabsBeforeClose = useMemoizedFn(
+    async (paths: readonly string[]): Promise<Map<string, WorkbenchEditorSaveResult>> => {
+      const tabs = paths.flatMap((path) => {
+        const tab = openTabsByPathLatest.current.get(path)
+        return tab ? [tab] : []
+      })
+      const deletedTabs = tabs.filter((tab) => tab.externalChange?.status === 'deleted')
+      const results = await saveEditorTabs(
+        tabs.filter((tab) => tab.externalChange?.status !== 'deleted')
+      )
+      if (isEmpty(deletedTabs)) return results
+
+      beginManualSave()
+      try {
+        for (const tab of deletedTabs) results.set(tab.path, await restoreDeletedTab(tab))
+      } finally {
+        endManualSave()
+      }
+      if (deletedTabs.some((tab) => results.get(tab.path)?.status === 'saved')) {
+        notifyFilesSaved()
+        onExternalFilesChangedLatest.current()
+      }
+      return results
+    }
+  )
+
+  /**
+   * 用户对关闭确认的回答。取消：什么都不关。不保存：丢掉改动直接关。保存：先存，存好的（和本来就
+   * 没改的）关掉；外部改过或写不进去的标签留着并说明原因，用户处理完再关。
+   */
+  const resolveCloseRequest = useMemoizedFn(
+    async (choice: WorkbenchEditorCloseChoice): Promise<void> => {
+      const request = closeRequest
+      if (!request || isResolvingCloseRequest) return
+
+      if (choice === 'cancel') {
+        setCloseRequest(null)
+        return
+      }
+      if (choice === 'discard') {
+        setCloseRequest(null)
+        commitCloseOpenFiles(request.paths)
+        return
+      }
+
+      setIsResolvingCloseRequest(true)
+      try {
+        const results = await saveTabsBeforeClose(request.dirtyPaths)
+        const unsavedPaths = new Set(
+          request.dirtyPaths.filter((path) => {
+            const status = results.get(path)?.status
+            return status === 'conflict' || status === 'failed'
+          })
+        )
+        setCloseRequest(null)
+        reportUnsavedResults(summarizeWorkbenchEditorSaveResults(results))
+        commitCloseOpenFiles(request.paths.filter((path) => !unsavedPaths.has(path)))
+      } finally {
+        setIsResolvingCloseRequest(false)
+      }
+    }
+  )
+
   return {
     selectedFilePath,
     selectedFile,
@@ -1347,7 +1465,7 @@ export function useWorkbenchEditorController({
     ensureNoUnsavedChanges,
     ensureNoUnsavedFilesInPath,
     resetSelectedFile,
-    revertSelectedFile,
+    revertOpenFiles,
     selectFile,
     preloadOpenTab,
     restoreEditorSession,
@@ -1355,6 +1473,10 @@ export function useWorkbenchEditorController({
     closeOtherOpenFiles,
     closeAllOpenFiles,
     closeUnmodifiedOpenFiles,
+    /** 等用户回答「保存 / 不保存 / 取消」的关闭；null 表示没有。 */
+    closeRequest,
+    isResolvingCloseRequest,
+    resolveCloseRequest,
     reorderOpenTabs,
     moveOpenEntryPath,
     closeOpenEntryPath,

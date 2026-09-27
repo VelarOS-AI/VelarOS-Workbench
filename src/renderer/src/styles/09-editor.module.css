@@ -1153,6 +1153,28 @@
   @apply font-semibold;
 }
 
+/* 关闭前确认里的未保存文件清单：每行一个相对路径，存不下的在下面写原因。 */
+.editorUnsavedFileList {
+  @apply flex flex-col gap-1 overflow-y-auto border;
+  max-height: 220px;
+  margin: 0;
+  padding: 6px 10px;
+  list-style: none;
+  border-color: var(--workbench-border);
+  border-radius: var(--workbench-radius);
+  background: var(--workbench-toolbar);
+}
+
+.editorUnsavedFileItem {
+  @apply flex min-w-0 flex-col;
+  padding: 2px 0;
+}
+
+.editorUnsavedFilePath {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
 .editorScroll {
   @apply relative min-h-0 min-w-0 flex-1;
   height: 100%;

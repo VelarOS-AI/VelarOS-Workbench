@@ -8,6 +8,7 @@ import {
   useState,
 } from 'react'
 import {
+  ArrowCounterClockwiseIcon,
   CaretDownIcon,
   ChatCircleTextIcon,
   CodeIcon,
@@ -100,6 +101,8 @@ interface EditorTabBarProps {
   onCloseOtherOpenFiles: (path: string) => void
   onCloseAllOpenFiles: () => void
   onCloseUnmodifiedOpenFiles: () => void
+  /** 标签右键「放弃修改」：丢掉这个标签里没保存的改动，回到磁盘上的版本。 */
+  onRevertOpenFile?: (path: string) => void
   /** 标签右键「添加到聊天」：把这个文件作为引用挂到聊天输入框（只挂路径）。 */
   onAddFileToChat?: (path: string) => void
   onReorderOpenTabs: (fromPath: string, toPath: string) => void
@@ -140,6 +143,7 @@ export function EditorTabBar({
   onCloseOtherOpenFiles,
   onCloseAllOpenFiles,
   onCloseUnmodifiedOpenFiles,
+  onRevertOpenFile,
   onAddFileToChat,
   onReorderOpenTabs,
   onSelectDiffTab,
@@ -258,6 +262,11 @@ export function EditorTabBar({
 
   const diffTabTitle = diffTabItem ? getWorkbenchGitChangeDisplayPath(diffTabItem) : ''
   const lightTabFileName = lightTabItem ? fileNameFromPath(lightTabItem.path) : ''
+  const contextTab = tabContextMenu
+    ? openTabs.find((tab) => tab.path === tabContextMenu.path)
+    : undefined
+  const contextTabIsDirty =
+    !!contextTab && !contextTab.file.imagePreview && contextTab.content !== contextTab.file.content
 
   return (
     <>
@@ -704,6 +713,17 @@ export function EditorTabBar({
             <FloppyDiskIcon size={14} />
             <Text truncate>{t('workbench.saveAllFiles')}</Text>
           </Button>
+          {!!onRevertOpenFile && (
+            <Button
+              variant="ghost"
+              size="block"
+              disabled={!contextTabIsDirty}
+              onClick={() => onRunTabContextAction(() => onRevertOpenFile(tabContextMenu.path))}
+            >
+              <ArrowCounterClockwiseIcon size={14} />
+              <Text truncate>{t('workbench.revertEditorTab')}</Text>
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="block"

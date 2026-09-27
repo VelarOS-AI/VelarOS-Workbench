@@ -193,6 +193,7 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
         onCloseOtherOpenFiles: workbench.closeOtherOpenFiles,
         onCloseAllOpenFiles: workbench.closeAllOpenFiles,
         onCloseUnmodifiedOpenFiles: workbench.closeUnmodifiedOpenFiles,
+        onRevertOpenFile: (path) => workbench.revertOpenFiles([path]),
         onReorderOpenTabs: workbench.reorderOpenTabs,
       },
       diff: {
@@ -219,7 +220,6 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
         agentBrowser: buildAgentBrowserTab(model, activeProject.rootPath),
       },
       workspace: {
-        onRevertSelectedFile: workbench.revertSelectedFile,
         onSaveSelectedFile: () => void workbench.saveSelectedFile(),
         onToggleSelectedFileEditMode: workbench.toggleSelectedFileEditMode,
         onSaveAllOpenFiles: () => void workbench.saveAllOpenFiles(),

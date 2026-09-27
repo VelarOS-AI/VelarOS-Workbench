@@ -132,10 +132,13 @@ const LazyWorkbenchMarkdownPreview = lazy(async () => {
 
 export interface WorkbenchEditorPanelTabsProps {
   onSelectOpenFile: (path: string) => void
+  /** 关标签；有未保存改动的先问「保存 / 不保存 / 取消」。 */
   onCloseOpenFile: (path: string) => void
   onCloseOtherOpenFiles: (path: string) => void
   onCloseAllOpenFiles: () => void
   onCloseUnmodifiedOpenFiles: () => void
+  /** 放弃这个标签里没保存的改动，回到磁盘上的版本。 */
+  onRevertOpenFile: (path: string) => void
   onReorderOpenTabs: (fromPath: string, toPath: string) => void
 }
 
@@ -165,7 +168,6 @@ export interface WorkbenchEditorPanelDiffProps {
 }
 
 export interface WorkbenchEditorPanelWorkspaceProps {
-  onRevertSelectedFile: () => void
   onSaveSelectedFile: () => void
   /** 当前文件在只读与编辑之间切换（只挡用户在编辑器里输入，AI 经内核写盘不受影响）。 */
   onToggleSelectedFileEditMode: () => void
@@ -235,6 +237,7 @@ export function EditorPanel({
     onCloseOtherOpenFiles,
     onCloseAllOpenFiles,
     onCloseUnmodifiedOpenFiles,
+    onRevertOpenFile,
     onReorderOpenTabs,
   },
   diff: {
@@ -723,6 +726,7 @@ export function EditorPanel({
           onCloseOtherOpenFiles={onCloseOtherOpenFiles}
           onCloseAllOpenFiles={onCloseAllOpenFiles}
           onCloseUnmodifiedOpenFiles={onCloseUnmodifiedOpenFiles}
+          onRevertOpenFile={onRevertOpenFile}
           onAddFileToChat={onAddFilesToChat ? (path) => onAddFilesToChat([path]) : undefined}
           onReorderOpenTabs={onReorderOpenTabs}
           onSelectDiffTab={() => undefined}
@@ -898,7 +902,7 @@ export function EditorPanel({
                       {t('workbench.keepLocalDraft')}
                     </Button>
                   )}
-                  {selectedExternalChange.status === 'deleted' && !hasUnsavedChanges && (
+                  {selectedExternalChange.status === 'deleted' && (
                     <Button
                       size="sm"
                       variant="ghost"

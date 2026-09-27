@@ -240,6 +240,13 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     closeOtherEditorTabs: 'Close others',
     closeAllEditorTabs: 'Close all',
     closeUnmodifiedEditorTabs: 'Close unmodified files',
+    revertEditorTab: 'Discard changes',
+    unsavedCloseTitle: 'Save changes to “{name}”?',
+    unsavedCloseTitleMany: 'Save changes to these {count} files?',
+    unsavedCloseDescription: "Your changes will be lost if you don't save them.",
+    unsavedCloseSave: 'Save',
+    unsavedCloseSaveAll: 'Save All',
+    unsavedCloseDiscard: "Don't Save",
     showOpenEditorTabs: 'Show open files',
     editorTabActions: 'Tab actions',
     editorFileErrorCount: '{count} errors',
@@ -476,7 +483,7 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     readOnlyFile: 'Read-only',
     unsavedChangesTitle: 'This file has unsaved changes',
     unsavedChangesDescription:
-      'Save or revert the related files before closing tabs, closing the project, or changing the file tree.',
+      'Save or discard the changes to the related files before closing the project or changing the file tree.',
     externalFileChangedTitle: 'File changed externally',
     externalFileChangedDescription:
       '{path} has a newer version on disk; your draft is kept until you reload or merge manually.',

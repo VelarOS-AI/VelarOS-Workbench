@@ -30,6 +30,7 @@ import { StatusBar } from './components/chrome/StatusBar'
 import { WorkbenchTopLeading, WorkbenchTopTrailing } from './components/chrome/TopToolbar'
 import { WorkbenchProjectControl } from './components/chrome/WorkbenchProjectControl'
 import { CodeInsightPanel } from './components/editor/CodeInsightPanel'
+import { EditorUnsavedChangesDialog } from './components/editor/EditorUnsavedChangesDialog'
 import { ReadOnlyWorkbenchCode } from './components/editor/ReadOnlyWorkbenchCode'
 import { WorkbenchEmbeddedKernel } from './components/embedded/WorkbenchEmbeddedKernel'
 import {
@@ -842,6 +843,13 @@ export function StandaloneWorkbenchPagePresentation({
               eol,
             })
           }}
+        />
+        <EditorUnsavedChangesDialog
+          request={workbench.closeRequest}
+          openTabs={workbench.openTabs}
+          autosaveFailures={workbench.autosaveFailures}
+          saving={workbench.isResolvingCloseRequest}
+          onResolve={(choice) => void workbench.resolveCloseRequest(choice)}
         />
         <WorkbenchSettingsDialog
           open={dialogs.settingsOpen}

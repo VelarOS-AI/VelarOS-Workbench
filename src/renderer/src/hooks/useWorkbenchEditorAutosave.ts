@@ -24,6 +24,8 @@ const log = Log.tag('workbench-editor-autosave')
 interface UseWorkbenchEditorAutosaveParams {
   activeProject: Nullable<WorkbenchProject>
   isSavingFile: boolean
+  /** 正在问用户要不要保存的标签：等用户回答，别抢在「不保存」之前把它写回去。 */
+  heldPaths: ReadonlySet<string>
   openTabsByPath: Map<string, WorkbenchOpenEditorTab>
   saveEditorTab: (
     tab: WorkbenchOpenEditorTab,
@@ -42,12 +44,14 @@ interface UseWorkbenchEditorAutosaveParams {
 export function useWorkbenchEditorAutosave({
   activeProject,
   isSavingFile,
+  heldPaths,
   openTabsByPath,
   saveEditorTab,
   onAutosaveFailed,
 }: UseWorkbenchEditorAutosaveParams): WorkbenchEditorAutosaveFailures {
   const [failures, setFailures] = useState<WorkbenchEditorAutosaveFailures>(() => new Map())
   const failuresLatest = useLatest(failures)
+  const heldPathsLatest = useLatest(heldPaths)
   const saveEditorTabLatest = useLatest(saveEditorTab)
   const onAutosaveFailedLatest = useLatest(onAutosaveFailed)
   const activeProjectLatest = useLatest(activeProject)
@@ -73,7 +77,9 @@ export function useWorkbenchEditorAutosave({
     if (!project || autosaveRunningRef.current) return
 
     const dueTabs = selectDueWorkbenchEditorAutosaveTabs(
-      openTabsByPathLatest.current.values(),
+      [...openTabsByPathLatest.current.values()].filter(
+        (tab) => !heldPathsLatest.current.has(tab.path)
+      ),
       failuresLatest.current,
       Date.now()
     )
@@ -120,7 +126,11 @@ export function useWorkbenchEditorAutosave({
   useEffect(() => {
     if (!activeProject || isSavingFile) return undefined
 
-    const nextAt = resolveNextWorkbenchEditorAutosaveAt(openTabsByPath.values(), failures, Date.now())
+    const nextAt = resolveNextWorkbenchEditorAutosaveAt(
+      [...openTabsByPath.values()].filter((tab) => !heldPaths.has(tab.path)),
+      failures,
+      Date.now()
+    )
     if (nextAt === null) return undefined
 
     const lease = timers.after(nextAt - Date.now(), () => void runAutosave(), {
@@ -129,7 +139,7 @@ export function useWorkbenchEditorAutosave({
     return (): void => {
       lease.cancel()
     }
-  }, [activeProject, failures, isSavingFile, openTabsByPath, runAutosave, timers])
+  }, [activeProject, failures, heldPaths, isSavingFile, openTabsByPath, runAutosave, timers])
 
   // 页面卸载（重新加载窗口）前把还能存的改动同步写回：关窗与退出另有确认，走不到这里还没存的改动。
   const flushDirtyTabsBeforeExit = useMemoizedFn((): void => {
