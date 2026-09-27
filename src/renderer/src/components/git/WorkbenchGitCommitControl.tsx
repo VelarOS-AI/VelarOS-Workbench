@@ -70,19 +70,12 @@ export function WorkbenchGitCommitControl({
     return true
   }
 
+  /** 有没提交的改动也照样切：git 能带过去就带过去，会被覆盖时 git 自己拒绝，原因经 onActionError 显示。 */
   async function switchBranch(
     branch: string,
     options?: { create?: boolean; startPoint?: string }
   ): Promise<boolean> {
     if (warnUnsavedOpenTabs()) return false
-
-    if (activeStatus.changedFiles > 0) {
-      messageLatest.current.warning({
-        title: tLatest.current('workbench.gitBranchDirtyBlockedTitle'),
-        description: tLatest.current('workbench.gitBranchDirtyBlockedDescription'),
-      })
-      return false
-    }
 
     const result = Result.unwrap(
       await workbenchHost.kernel.workspace.switchWorkspaceGitBranch(

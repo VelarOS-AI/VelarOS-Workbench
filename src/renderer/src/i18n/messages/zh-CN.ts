@@ -452,8 +452,6 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     gitBranchLocal: '本地分支',
     gitBranchRemoteGroup: '远程分支',
     gitBranchRemote: '跟踪 {upstream}',
-    gitBranchDirtyBlockedTitle: '请先提交或清理改动',
-    gitBranchDirtyBlockedDescription: '工作台不会在切换分支时自动处理未提交改动。',
     gitBranchSwitchSuccessTitle: '已切换分支',
     gitBranchSwitchSuccessDescription: '{from} → {to}',
     gitBranchCreateSuccessTitle: '已创建分支',

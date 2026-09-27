@@ -122,16 +122,13 @@ async function runGitProbe(): Promise<void> {
 
     const feature = await service.createBranch(projectRoot, 'feature/probe')
     equal(feature.branch, 'feature/probe', '创建分支结果')
-    await expectCode(
-      'VALIDATION',
-      () => service.switchBranch(projectRoot, 'feature/probe'),
-      '脏工作区切分支必须拒绝'
-    )
-    await service.performFileAction(projectRoot, 'alpha file.txt', 'discard')
+    // 没提交的改动不预先拦：两个分支指向同一个提交，git 把改动原样带过去。
     const switched = await service.switchBranch(projectRoot, 'feature/probe')
-    equal(switched.branch, 'feature/probe', 'clean 后应可切分支')
+    equal(switched.branch, 'feature/probe', '改动不冲突时应照常切分支')
     equal(switched.previousBranch, initial.status?.branch ?? null, '切分支应返回来源分支')
-    check(switched.summary.status?.isClean, '切分支后应 clean')
+    equal(switched.summary.status?.changedFiles, 1, '切分支应把没提交的改动带过去')
+    await service.performFileAction(projectRoot, 'alpha file.txt', 'discard')
+    check((await service.getSummary(projectRoot)).status?.isClean, '丢弃改动后应 clean')
 
     await execa('git', ['mv', 'alpha file.txt', 'renamed file.txt'], {
       cwd: projectRoot,
@@ -213,5 +210,5 @@ async function configureIdentity(rootPath: string): Promise<void> {
 }
 
 await runGitProbe()
-assert.equal(assertionCount, 42, 'Git 探针断言数变化必须显式复核')
-console.info(`workbench git probe: ${assertionCount}/42 assertions passed`)
+assert.equal(assertionCount, 41, 'Git 探针断言数变化必须显式复核')
+console.info(`workbench git probe: ${assertionCount}/41 assertions passed`)

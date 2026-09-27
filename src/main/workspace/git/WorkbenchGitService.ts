@@ -450,6 +450,10 @@ export class WorkbenchGitService {
     return { rootPath, summary: await this.getSummary(rootPath) }
   }
 
+  /**
+   * 切换分支。有没提交的改动不预先拦：git 能把它们带过去就带过去，会被覆盖时 git 自己拒绝，
+   * 把它的说明（哪些文件）原样转告。
+   */
   public async switchBranch(
     workspaceRoot: string,
     branch: string,
@@ -457,16 +461,19 @@ export class WorkbenchGitService {
   ): Promise<SystemWorkspaceGitSwitchBranchResult> {
     const rootPath = await this.resolveRoot(workspaceRoot)
     const targetBranch = this.assertBranch(branch)
-    const status = await this.getStatus(await this.openRepository(rootPath))
-    if (!status.isClean)
-      throw new AppError('VALIDATION', '切换分支前请先提交或丢弃当前改动。')
-    const previousBranch = status.branch
+    const previousBranch = await this.getCurrentBranch(rootPath)
     const args = options.create
       ? ['switch', '--create', targetBranch]
       : ['switch', targetBranch]
     if (options.create && options.startPoint)
       args.push(this.assertRevision(options.startPoint))
-    await this.runGit(rootPath, args)
+    const result = await this.runGit(rootPath, args, { allowFailure: true })
+    if (result.failed) {
+      const output = this.readableGitOutput(result)
+      if (/would be overwritten|untracked working tree files/i.test(output))
+        throw new AppError('VALIDATION', `Git 拒绝切换分支：${output.slice(0, 800)}`)
+      this.throwGitFailure(args, result)
+    }
     return {
       rootPath,
       previousBranch,

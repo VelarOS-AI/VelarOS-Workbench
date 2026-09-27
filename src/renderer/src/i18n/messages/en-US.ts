@@ -470,9 +470,6 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     gitBranchLocal: 'Local branch',
     gitBranchRemoteGroup: 'Remote branches',
     gitBranchRemote: 'Tracking {upstream}',
-    gitBranchDirtyBlockedTitle: 'Commit or clean changes first',
-    gitBranchDirtyBlockedDescription:
-      'The workbench will not automatically handle uncommitted changes while switching branches.',
     gitBranchSwitchSuccessTitle: 'Switched branch',
     gitBranchSwitchSuccessDescription: '{from} → {to}',
     gitBranchCreateSuccessTitle: 'Branch created',

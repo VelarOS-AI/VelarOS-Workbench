@@ -115,14 +115,7 @@ export function useWorkbenchGitChangeActions({
 
     if (warnUnsavedOpenTabs()) return
 
-    if (status?.changedFiles) {
-      messageLatest.current.warning({
-        title: tLatest.current('workbench.gitBranchDirtyBlockedTitle'),
-        description: tLatest.current('workbench.gitBranchDirtyBlockedDescription'),
-      })
-      return
-    }
-
+    // 有没提交的改动不预先拦：会被覆盖时 git 自己拒绝，下面照原话报出来。
     try {
       setPendingBranchAction(`switch:${targetBranch}`)
       const result = Result.unwrap(

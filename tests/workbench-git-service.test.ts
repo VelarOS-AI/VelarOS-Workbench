@@ -344,6 +344,33 @@ void describe('Workbench Git service', () => {
     })
   })
 
+  void test('switching branches lets git decide instead of refusing any dirty tree', async () => {
+    await withRepository(async (root) => {
+      await writeFile(join(root, 'shared.txt'), 'base\n')
+      await commitAll(root, 'base')
+      await git(root, ['switch', '-q', '-c', 'feature'])
+      await writeFile(join(root, 'shared.txt'), 'feature\n')
+      await commitAll(root, 'feature')
+      await git(root, ['switch', '-q', 'main'])
+
+      const service = createService()
+      // 未跟踪文件不挡路：git 能带过去就带过去。
+      await writeFile(join(root, 'scratch.txt'), 'untracked\n')
+      assert.equal((await service.switchBranch(root, 'feature')).branch, 'feature')
+      assert.equal(await readFile(join(root, 'scratch.txt'), 'utf8'), 'untracked\n')
+      await service.switchBranch(root, 'main')
+
+      // 会被覆盖的本地改动：git 拒绝，把它说的哪个文件原样转告。
+      await writeFile(join(root, 'shared.txt'), 'local edit\n')
+      await assert.rejects(
+        service.switchBranch(root, 'feature'),
+        isAppError('VALIDATION', /Git 拒绝切换分支[\s\S]*shared\.txt/)
+      )
+      assert.equal((await git(root, ['branch', '--show-current'])).trim(), 'main')
+      assert.equal(await readFile(join(root, 'shared.txt'), 'utf8'), 'local edit\n')
+    })
+  })
+
   void test('the first push of a branch goes to its configured remote, the default one, or the only one', async () => {
     await withTempDirectory(async (base) => {
       const origin = join(base, 'origin.git')
