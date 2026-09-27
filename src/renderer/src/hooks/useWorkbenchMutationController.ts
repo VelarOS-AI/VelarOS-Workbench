@@ -2,11 +2,13 @@ import { useRef, useState } from 'react'
 import { workbenchHost } from '@renderer/host'
 import { useWorkbenchCommentStore } from '@renderer/models/comments/workbenchCommentStore'
 import {
+  partitionDeleteResultsByUndo,
   resolveTreeActionBasePath,
   resolveTreeActionBasePathForEntry,
   resolveTreeCreateParentPath,
   selectMovableTreeEntries,
   selectTreeEntriesToMove,
+  type WorkbenchUndoableDeleteResult,
 } from '@renderer/models/files/workbenchTreeMutation'
 import type { WorkbenchProject } from '@renderer/models/project/workbenchProjects'
 import { getParentPath, ROOT_PATH } from '@renderer/models/shared/workbenchUtils'
@@ -40,7 +42,7 @@ interface UseWorkbenchMutationControllerOptions {
 interface WorkbenchDeleteUndoBatch {
   projectId: string
   projectRoot: string
-  results: WorkbenchDeleteEntryResult[]
+  results: WorkbenchUndoableDeleteResult[]
 }
 
 export function useWorkbenchMutationController({
@@ -119,7 +121,7 @@ export function useWorkbenchMutationController({
 
   function rememberDeletedEntries(
     project: WorkbenchProject,
-    results: WorkbenchDeleteEntryResult[]
+    results: WorkbenchUndoableDeleteResult[]
   ): void {
     if (isEmpty(results)) return
 
@@ -131,6 +133,24 @@ export function useWorkbenchMutationController({
         results,
       },
     ].slice(-20)
+  }
+
+  /** 没留私有副本的删除（太大）：不能在这里撤销，告诉用户到系统废纸篓里找回。 */
+  function notifyTrashOnlyDeletes(results: readonly WorkbenchDeleteEntryResult[]): void {
+    const first = results[0]
+    if (!first) return
+
+    messageLatest.current.info({
+      title: tLatest.current('workbench.deleteMovedToTrashTitle'),
+      description:
+        results.length === 1
+          ? tLatest.current('workbench.deleteMovedToTrashDescription', {
+              name: first.deletedPath.split('/').at(-1) ?? first.deletedPath,
+            })
+          : tLatest.current('workbench.deleteManyMovedToTrashDescription', {
+              count: results.length,
+            }),
+    })
   }
 
   function takeLatestDeleteUndoBatch(project: WorkbenchProject): Nullable<WorkbenchDeleteUndoBatch> {
@@ -402,7 +422,9 @@ export function useWorkbenchMutationController({
       setSelectedEntryPathLatest.current(null)
       resetTreeAction()
       resetSearchLatest.current()
-      rememberDeletedEntries(owningProject, deletedResults)
+      const { undoable, trashOnly } = partitionDeleteResultsByUndo(deletedResults)
+      rememberDeletedEntries(owningProject, undoable)
+      notifyTrashOnlyDeletes(trashOnly)
     } catch (error) {
       if (activeProjectRef.current?.id !== owningProjectId) return
 

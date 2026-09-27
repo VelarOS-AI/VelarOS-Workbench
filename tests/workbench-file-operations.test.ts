@@ -19,6 +19,8 @@ import { AppError } from '@velaros-ai/core/error'
 
 import { createWorkbenchAppParts, type WorkbenchAppParts } from '../src/main/workspace/Parts'
 
+import { createFakeTrash } from './helpers/fakeTrash'
+
 /**
  * 文件树的新建 / 改名 / 移动：看得到的都能管（点号开头的名字、dist、node_modules……），
  * 只挡越出工程与版本库内部；只改大小写的改名在大小写不敏感的文件系统上也能成。
@@ -33,7 +35,11 @@ async function withWorkspace(run: (workspace: Workspace) => Promise<void>): Prom
   const projectRoot = await realpath(await mkdtemp(join(tmpdir(), 'workbench-file-ops-')))
   const dataRoot = await mkdtemp(join(tmpdir(), 'workbench-file-ops-data-'))
   try {
-    await run({ projectRoot, parts: createWorkbenchAppParts(dataRoot) })
+    const trash = createFakeTrash(join(dataRoot, 'fake-trash'))
+    await run({
+      projectRoot,
+      parts: createWorkbenchAppParts(dataRoot, { moveToTrash: trash.moveToTrash }),
+    })
   } finally {
     await rm(projectRoot, { recursive: true, force: true })
     await rm(dataRoot, { recursive: true, force: true })

@@ -725,7 +725,11 @@ export interface WorkbenchDeleteEntryResult {
   projectRoot: string
   parentPath: string
   deletedPath: string
-  restoreId: string
+  /**
+   * 应用内撤销的记录：删掉的东西都在系统废纸篓里，小的另留了一份私有副本，可以直接撤销；
+   * 大的没有副本，为 null，只能去废纸篓里找回。
+   */
+  restoreId: Nullable<string>
 }
 
 export interface WorkbenchRestoreDeletedEntryResult extends WorkbenchEntryMutationResult {

@@ -3,7 +3,11 @@ import { WorkbenchChatRunAttribution } from './workspace/git/WorkbenchChatRunAtt
 import { WorkbenchChatRunChangeStore } from './workspace/git/WorkbenchChatRunChanges'
 import { WorkbenchGitService } from './workspace/git/WorkbenchGitService'
 import { WorkbenchLanguageServiceWorkerClient } from './workspace/language/LanguageServiceWorkerClient'
-import { createWorkbenchAppParts, type WorkbenchAppParts } from './workspace/Parts'
+import {
+  createWorkbenchAppParts,
+  type WorkbenchAppParts,
+  type WorkbenchAppPartsDependencies,
+} from './workspace/Parts'
 import {
   ProjectCapabilityProvider,
   type WorkbenchProjectCapabilityProvider,
@@ -37,10 +41,11 @@ export interface WorkbenchMainCapabilityProviders {
  * while the default Workspace implementation stays the published package.
  */
 export function createDefaultWorkbenchMainCapabilityProviders(
-  dataRootDir: string
+  dataRootDir: string,
+  dependencies: WorkbenchAppPartsDependencies
 ): WorkbenchMainCapabilityProviders {
   const language = new WorkbenchLanguageServiceWorkerClient()
-  const parts = createWorkbenchAppParts(dataRootDir)
+  const parts = createWorkbenchAppParts(dataRootDir, dependencies)
   const chatCheckpoints = new WorkbenchChatCheckpointService(() =>
     parts.storagePaths.getChatCheckpointIndexesDir()
   )

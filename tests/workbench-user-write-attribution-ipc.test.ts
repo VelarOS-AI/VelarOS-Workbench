@@ -58,8 +58,15 @@ void describe('user writes reported to the run attribution', () => {
       await writeFile(join(root, 'src', 'a.ts'), 'before\n', 'utf8')
       const { registerWorkbenchFsIpc } = await import('../src/main/workspace/WorkbenchFsIpc')
       const { createWorkbenchAppParts } = await import('../src/main/workspace/Parts')
+      const { createFakeTrash } = await import('./helpers/fakeTrash')
       const { writes, sink } = createSink()
-      registerWorkbenchFsIpc({} as never, createWorkbenchAppParts(data), {} as never, sink)
+      const trash = createFakeTrash(join(data, 'fake-trash'))
+      registerWorkbenchFsIpc(
+        {} as never,
+        createWorkbenchAppParts(data, { moveToTrash: trash.moveToTrash }),
+        {} as never,
+        sink
+      )
 
       assert.equal((await invoke(WorkbenchFsChannels.saveFile, {
         projectRoot: root,

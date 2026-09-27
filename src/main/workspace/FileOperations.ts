@@ -4,31 +4,26 @@
  *
  * 独立应用适配（三处，均为装配面不动行为）：
  * - `storagePathService` / `workbenchLocalHistoryStore` 模块单例 → 构造注入
- *   （`WorkbenchAppStoragePaths` / `WorkbenchLocalHistoryStore`）。
+ *   （`WorkbenchDeleteUndoStore` / `WorkbenchLocalHistoryStore`）。
  * - desktop 的 `WorkspaceCollaborationCoordinator` 租约层不随迁（独立应用没有 agent
  *   第二写者）；`runWorkbenchMutation` 保留为接缝直通，未来接协作协调时在此恢复包裹。
- * - 删除回收站布局保形：`<dataRoot>/workbench-delete-undo/<restoreId>/<basename>`，
- *   restore 记录仅存内存（应用重启即失效），与 desktop 一致。
+ * - 删除移到系统废纸篓，小的另留私有副本给应用内撤销（见 `WorkbenchDeleteUndoStore`）。
  */
 import { randomUUID } from 'node:crypto'
 import type { BigIntStats } from 'node:fs'
 import { lstatSync, readFileSync, type Stats, statSync } from 'node:fs'
 import {
-  copyFile,
-  cp,
   lstat,
   mkdir,
   readdir,
   readFile,
   rename,
-  rm,
   stat,
-  unlink,
   writeFile,
 } from 'node:fs/promises'
-import { basename, dirname, join } from 'node:path'
+import { basename, dirname, join, resolve } from 'node:path'
 
-import { isObject, isPresent } from '@velaros-ai/core'
+import { isPresent } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type {
@@ -56,11 +51,11 @@ import type {
 import { DefaultWorkbenchTextFormat, type WorkbenchTextFormat } from '@shared/workbenchTextFormat'
 
 import { writeFileAtomically, writeFileAtomicallySync } from './AtomicFileWrite'
+import type { WorkbenchDeleteUndoStore } from './DeleteUndoStore'
 import type { DirectoryEntries } from './FileEntries'
 import type { GitNewFileTracker } from './GitNewFileTracker'
 import type { WorkbenchLocalHistoryStore } from './LocalHistoryStore'
 import type { PathResolver, ResolvedPath } from './PathResolver'
-import type { WorkbenchAppStoragePaths } from './StoragePaths'
 import { countWorkbenchTextLines, decodeWorkbenchText, encodeWorkbenchText } from './TextCodec'
 import { isLikelyTextFile, readWorkbenchTextFile } from './TextFile'
 
@@ -68,17 +63,6 @@ const DEFAULT_READ_MAX_CHARS = 300_000
 const MAX_READ_CHARS = 1_000_000
 const MAX_WRITE_CHARS = 1_000_000
 const FILE_CONFLICT_MTIME_TOLERANCE_MS = 1
-const DELETE_UNDO_DIR_NAME = 'workbench-delete-undo'
-
-interface DeletedEntryRestoreRecord {
-  id: string
-  projectRoot: string
-  deletedPath: string
-  parentPath: string
-  originalPath: string
-  trashPath: string
-  type: 'directory' | 'file'
-}
 
 /**
  * 比较条目名时抹掉大小写与 Unicode 组合形式的差别
@@ -107,14 +91,12 @@ function isSameEntrySpelledDifferently(
 }
 
 class FileOperations {
-  private readonly deletedEntryRestores = new Map<string, DeletedEntryRestoreRecord>()
-
   constructor(
     private readonly pathResolver: PathResolver,
     private readonly entryHelper: DirectoryEntries,
     private readonly gitNewFileTracker: GitNewFileTracker,
     private readonly localHistoryStore: WorkbenchLocalHistoryStore,
-    private readonly storagePaths: WorkbenchAppStoragePaths
+    private readonly deleteUndo: WorkbenchDeleteUndoStore
   ) {}
 
   public async readFile(request: WorkbenchReadFileRequest): Promise<WorkbenchReadFileResult> {
@@ -415,27 +397,15 @@ class FileOperations {
         }
       }
 
-      const restoreId = randomUUID()
-      const trashPath = this.getDeleteUndoPath(restoreId, targetPath.requestedPath)
-      await mkdir(dirname(trashPath), { recursive: true })
-      await this.movePathToUndoLocation(
-        targetPath.requestedPath,
-        trashPath,
-        targetStats.isDirectory()
-      )
-
       const parentPath = this.pathResolver.toProjectRelativePath(
         projectRoot,
         dirname(targetPath.requestedPath)
       )
-      this.deletedEntryRestores.set(restoreId, {
-        id: restoreId,
+      const restoreId = await this.deleteUndo.trash({
         projectRoot,
         deletedPath: relativePath,
         parentPath,
-        originalPath: targetPath.requestedPath,
-        trashPath,
-        type: targetStats.isDirectory() ? 'directory' : 'file',
+        entryPath: targetPath.requestedPath,
       })
 
       return {
@@ -488,44 +458,41 @@ class FileOperations {
     request: WorkbenchRestoreDeletedEntryRequest
   ): Promise<WorkbenchRestoreDeletedEntryResult> {
     const projectRoot = await this.pathResolver.resolveProjectRoot(request.projectRoot)
-    const restore = this.deletedEntryRestores.get(request.restoreId)
-    if (!restore || restore.projectRoot !== projectRoot) {
-      throw new AppError('NOT_FOUND', '删除撤销记录不存在或已失效。')
+    const restore = this.deleteUndo.find(projectRoot, request.restoreId)
+    if (!restore) {
+      throw new AppError(
+        'NOT_FOUND',
+        '删除撤销记录不存在或已失效，删掉的内容可以到系统废纸篓里找回。'
+      )
     }
 
-    this.pathResolver.assertAllowedProjectPath(
-      projectRoot,
-      restore.originalPath,
-      restore.deletedPath
-    )
+    this.assertOutsideGitInternals(projectRoot, [restore.entryPath], restore.deletedPath)
 
     return this.runWorkbenchMutation(async () => {
-      const existing = await lstat(restore.originalPath).catch(() => null)
+      const existing = await lstat(restore.entryPath).catch(() => null)
       if (existing) {
-        throw new AppError('CONFLICT', '还原目标已存在，无法撤销删除。')
+        throw new AppError('CONFLICT', `还原目标已存在，无法撤销删除：${restore.deletedPath}`)
       }
 
-      const parentPath = dirname(restore.originalPath)
-      const parentStats = await stat(parentPath)
-      const parentLinkStats = await lstat(parentPath)
-      if (!parentStats.isDirectory()) {
-        throw new AppError('VALIDATION', '还原目标父级必须是目录。')
+      const parentPath = dirname(restore.entryPath)
+      const parentStats = await stat(parentPath).catch(() => null)
+      const parentLinkStats = await lstat(parentPath).catch(() => null)
+      if (!parentStats?.isDirectory() || !parentLinkStats) {
+        throw new AppError(
+          'CONFLICT',
+          `原来所在的目录已不存在，无法撤销删除：${restore.deletedPath}`
+        )
       }
       if (parentLinkStats.isSymbolicLink()) {
         throw new AppError('VALIDATION', '工作台暂不还原内容到符号链接目录。')
       }
 
-      await this.movePathToUndoLocation(
-        restore.trashPath,
-        restore.originalPath,
-        restore.type === 'directory'
-      )
+      await this.deleteUndo.restore(restore)
       const entry = await this.entryHelper.toDirectoryEntry(
         projectRoot,
-        restore.originalPath,
+        resolve(projectRoot, restore.deletedPath),
         false
       )
-      this.deletedEntryRestores.delete(restore.id)
 
       return {
         projectRoot,
@@ -534,6 +501,11 @@ class FileOperations {
         entry,
       }
     })
+  }
+
+  /** 启动时清掉以前会话留下的删除撤销副本（见 `WorkbenchDeleteUndoStore`）。 */
+  public purgePreviousDeleteUndoCopies(): Promise<void> {
+    return this.deleteUndo.purgePreviousSessions()
   }
 
   private assertOutsideGitInternals(
@@ -573,41 +545,6 @@ class FileOperations {
       await rename(temporaryPath, sourcePath).catch(() => undefined)
       throw error
     }
-  }
-
-  private getDeleteUndoPath(restoreId: string, originalPath: string): string {
-    return join(
-      this.storagePaths.getRootDir(),
-      DELETE_UNDO_DIR_NAME,
-      restoreId,
-      basename(originalPath)
-    )
-  }
-
-  private async movePathToUndoLocation(
-    sourcePath: string,
-    targetPath: string,
-    directory: boolean
-  ): Promise<void> {
-    try {
-      await rename(sourcePath, targetPath)
-      return
-    } catch (error) {
-      if (!this.isCrossDeviceMoveError(error)) throw error
-    }
-
-    if (directory) {
-      await cp(sourcePath, targetPath, { recursive: true, errorOnExist: true })
-      await rm(sourcePath, { recursive: true, force: false })
-      return
-    }
-
-    await copyFile(sourcePath, targetPath)
-    await unlink(sourcePath)
-  }
-
-  private isCrossDeviceMoveError(error: unknown): boolean {
-    return isObject(error) && (error as { code?: unknown }).code === 'EXDEV'
   }
 
   private normalizeReadMaxChars(value: number | undefined): number {

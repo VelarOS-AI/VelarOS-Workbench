@@ -1,4 +1,4 @@
-import type { WorkbenchDirectoryEntry } from '@shared/contracts'
+import type { WorkbenchDeleteEntryResult, WorkbenchDirectoryEntry } from '@shared/contracts'
 
 import {
   getParentPath,
@@ -73,6 +73,27 @@ export function selectTreeEntriesToMove(
   return selectMovableTreeEntries(entries).filter(
     (entry) => getParentPath(entry.path) !== targetParentPath
   )
+}
+
+/** 留了私有副本、能在应用内撤销的删除结果。 */
+export type WorkbenchUndoableDeleteResult = WorkbenchDeleteEntryResult & { restoreId: string }
+
+/**
+ * 删掉的东西都在系统废纸篓里；其中小的另留了私有副本（有 restoreId），进撤销栈，⌘Z 可以直接放回。
+ * 大的没有副本，只能去废纸篓里找回，界面要告诉用户。
+ */
+export function partitionDeleteResultsByUndo(results: readonly WorkbenchDeleteEntryResult[]): {
+  undoable: WorkbenchUndoableDeleteResult[]
+  trashOnly: WorkbenchDeleteEntryResult[]
+} {
+  const undoable: WorkbenchUndoableDeleteResult[] = []
+  const trashOnly: WorkbenchDeleteEntryResult[] = []
+  for (const result of results) {
+    const { restoreId } = result
+    if (restoreId) undoable.push({ ...result, restoreId })
+    else trashOnly.push(result)
+  }
+  return { undoable, trashOnly }
 }
 
 export type WorkbenchFileTreeShortcutAction = 'delete-selected' | 'undo-delete'

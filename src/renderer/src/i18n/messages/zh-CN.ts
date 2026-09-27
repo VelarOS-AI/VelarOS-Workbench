@@ -527,11 +527,17 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     moveSucceeded: '已移动',
     deleteSucceeded: '已删除',
     treeMutationFailed: '文件树操作失败',
-    deleteConfirm: '确定删除“{name}”吗？删除后可使用 ⌘Z / Ctrl+Z 撤销。',
+    deleteConfirm:
+      '确定删除“{name}”吗？它会被移到系统废纸篓（回收站），较小的项目还可以用 ⌘Z / Ctrl+Z 撤销。',
     deleteDirectoryConfirm:
-      '确定删除目录“{name}”及其中的全部内容吗？删除后可使用 ⌘Z / Ctrl+Z 撤销。',
+      '确定删除目录“{name}”及其中的全部内容吗？它会被移到系统废纸篓（回收站），较小的目录还可以用 ⌘Z / Ctrl+Z 撤销。',
     deleteManyConfirm:
-      '确定删除选中的 {count} 项吗？目录中的内容也会被删除，之后可使用 ⌘Z / Ctrl+Z 撤销。',
+      '确定删除选中的 {count} 项吗？目录中的内容一并删除，全部移到系统废纸篓（回收站），较小的项目还可以用 ⌘Z / Ctrl+Z 撤销。',
+    deleteMovedToTrashTitle: '已移到系统废纸篓',
+    deleteMovedToTrashDescription:
+      '“{name}”较大，不能在这里撤销；需要时可以到系统废纸篓（回收站）里找回。',
+    deleteManyMovedToTrashDescription:
+      '其中 {count} 项较大，不能在这里撤销；需要时可以到系统废纸篓（回收站）里找回。',
     treeExpandAll: '展开已加载目录',
     treeCollapseAll: '收起目录',
     treeExpandFolder: '展开文件夹',

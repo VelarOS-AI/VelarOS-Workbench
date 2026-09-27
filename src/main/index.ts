@@ -277,7 +277,11 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
   // 界面里的调试浏览器（用户自己开的网页标签）：闸门只负责记下挂上来的页面，退出时一并关掉。
   workbenchBrowserWebviewGate = new WorkbenchBrowserWebviewGate()
   productAnalytics?.start()
-  const providers = createDefaultWorkbenchMainCapabilityProviders(dataRootDir)
+  const providers = createDefaultWorkbenchMainCapabilityProviders(dataRootDir, {
+    moveToTrash: (path) => shell.trashItem(path),
+  })
+  // 上次运行留下的删除撤销副本：撤销记录只在内存里，重启后已对不上；删掉的东西在系统废纸篓里。
+  void providers.parts.files.purgePreviousDeleteUndoCopies()
   const modelComposition = createModelRuntimeComposition({
     environment: Object.freeze({ ...process.env }),
     providerCatalog: {

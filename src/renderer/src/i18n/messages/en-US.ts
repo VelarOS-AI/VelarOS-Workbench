@@ -545,11 +545,17 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     moveSucceeded: 'Moved',
     deleteSucceeded: 'Deleted',
     treeMutationFailed: 'File tree operation failed',
-    deleteConfirm: 'Delete “{name}”? You can undo with Cmd+Z / Ctrl+Z.',
+    deleteConfirm:
+      'Delete “{name}”? It moves to the system Trash (Recycle Bin); small items can also be undone with Cmd+Z / Ctrl+Z.',
     deleteDirectoryConfirm:
-      'Delete “{name}” and all of its contents? You can undo with Cmd+Z / Ctrl+Z.',
+      'Delete “{name}” and all of its contents? It moves to the system Trash (Recycle Bin); small folders can also be undone with Cmd+Z / Ctrl+Z.',
     deleteManyConfirm:
-      'Delete {count} selected entries and any contents? You can undo with Cmd+Z / Ctrl+Z.',
+      'Delete {count} selected entries and any contents? They move to the system Trash (Recycle Bin); small items can also be undone with Cmd+Z / Ctrl+Z.',
+    deleteMovedToTrashTitle: 'Moved to the system Trash',
+    deleteMovedToTrashDescription:
+      '“{name}” is too large to undo here. Restore it from the system Trash (Recycle Bin) if you need it back.',
+    deleteManyMovedToTrashDescription:
+      '{count} of them are too large to undo here. Restore them from the system Trash (Recycle Bin) if you need them back.',
     treeExpandAll: 'Expand loaded folders',
     treeCollapseAll: 'Collapse folders',
     treeExpandFolder: 'Expand folder',

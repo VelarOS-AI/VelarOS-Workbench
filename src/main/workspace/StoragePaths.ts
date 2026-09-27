@@ -1,7 +1,7 @@
 /**
  * 独立 Workbench 应用的数据区路径服务（desktop `storagePathService` 的最小对位件）。
  *
- * 只承载片1 两个消费点：删除回收站（delete-undo）与本地历史快照区。目录名与 desktop
+ * 只承载片1 两个消费点：删除撤销副本区（delete-undo）与本地历史快照区。目录名与 desktop
  * 保持与 Desktop 已发布目录名一致；这两个目录由独立 Workbench 自己拥有。
  * 可直接搬目录。数据根由 main 入口注入（prod=userData，dev=cwd/.velaros/data/workbench-app）。
  */
@@ -10,6 +10,11 @@ import { join } from 'node:path'
 
 const WorkbenchStorageDirectory = {
   localHistory: 'workbench-local-history',
+  /**
+   * 文件树删除的私有副本（只给小的留，供应用内撤销），一个会话一个子目录；
+   * 删掉的东西本身在系统废纸篓里。启动时清掉以前会话的。
+   */
+  deleteUndo: 'workbench-delete-undo',
   /**
    * 聊天历史的落盘备份区。**不是会话权威**——权威仍在 renderer 的 localStorage，
    * 这里只兜住「localStorage 被清空或撞配额」的数据丢失。会话权威上收后整个目录可弃。
@@ -38,6 +43,11 @@ class WorkbenchAppStoragePaths {
 
   public getRootDir(): string {
     return this.dataRootDir
+  }
+
+  /** 删除撤销副本区（见 {@link WorkbenchStorageDirectory.deleteUndo}）。 */
+  public getDeleteUndoDir(): string {
+    return this.ensureDir(join(this.dataRootDir, WorkbenchStorageDirectory.deleteUndo))
   }
 
   public getWorkbenchLocalHistoryDir(): string {

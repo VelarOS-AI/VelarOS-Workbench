@@ -14,6 +14,8 @@ import { WorkbenchProjectFileSystem } from '../src/main/workspace/WorkbenchProje
 import { resolveExternalFileUnavailableStatus } from '../src/renderer/src/models/editor/workbenchEditorTabs'
 import { getWorkbenchFileTreeShortcutAction } from '../src/renderer/src/models/files/workbenchTreeMutation'
 
+import { createFakeTrash, refuseTrash } from './helpers/fakeTrash'
+
 const execFileAsync = promisify(execFile)
 
 void describe('Workbench project file tree', () => {
@@ -245,7 +247,7 @@ void describe('Workbench project file tree', () => {
   void test('restores a missing file from the preserved editor buffer, including dotfiles', async () => {
     const projectRoot = await mkdtemp(join(tmpdir(), 'workbench-restore-file-'))
     const dataRoot = await mkdtemp(join(tmpdir(), 'workbench-restore-data-'))
-    const parts = createWorkbenchAppParts(dataRoot)
+    const parts = createWorkbenchAppParts(dataRoot, { moveToTrash: refuseTrash })
 
     try {
       const restored = await parts.files.restoreMissingFile({
@@ -275,7 +277,8 @@ void describe('Workbench project file tree', () => {
   void test('deletes empty directories immediately and confirms content before recursive deletion', async () => {
     const projectRoot = await mkdtemp(join(tmpdir(), 'workbench-delete-project-'))
     const dataRoot = await mkdtemp(join(tmpdir(), 'workbench-delete-data-'))
-    const parts = createWorkbenchAppParts(dataRoot)
+    const trash = createFakeTrash(join(dataRoot, 'fake-trash'))
+    const parts = createWorkbenchAppParts(dataRoot, { moveToTrash: trash.moveToTrash })
 
     try {
       await mkdir(join(projectRoot, 'empty'))
@@ -288,6 +291,7 @@ void describe('Workbench project file tree', () => {
 
       const emptyDelete = await parts.files.deleteEntry({ projectRoot, path: 'empty' })
       await assert.rejects(() => readFile(join(projectRoot, 'empty')), /ENOENT/u)
+      assert.ok(emptyDelete.restoreId)
       await parts.files.restoreDeletedEntry({
         projectRoot,
         restoreId: emptyDelete.restoreId,
@@ -320,10 +324,12 @@ void describe('Workbench project file tree', () => {
         () => readFile(join(projectRoot, 'filled', 'nested', '.hidden')),
         /ENOENT/u
       )
+      assert.ok(filledDelete.restoreId)
       await parts.files.restoreDeletedEntry({
         projectRoot,
         restoreId: filledDelete.restoreId,
       })
+      assert.equal(trash.trashed.length, 2)
       assert.equal(await readFile(join(projectRoot, 'filled', 'nested', '.hidden'), 'utf8'), 'preserved')
 
       const filePreview = await parts.files.inspectDeleteEntry({
