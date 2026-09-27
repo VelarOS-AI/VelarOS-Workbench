@@ -7,6 +7,7 @@ import { AppError } from '@velaros-ai/core/error'
 
 import type { SystemWorkspaceFilesChangedEvent } from '@shared/contracts'
 
+import { isWorkbenchSaveTemporaryName } from '../AtomicFileWrite'
 import { shouldSkipProjectDirectory } from '../WorkbenchSkippedDirectories'
 
 const WorkbenchWatchDebounceMs = 120
@@ -70,6 +71,8 @@ function normalizeRelativePath(rootPath: string, filename: string): Nullable<str
       segments[1] === 'refs')
   if (isGitState) return path
   if (segments.some((segment) => shouldSkipProjectDirectory(segment))) return null
+  // 编辑器保存时写在目标旁边、随即 rename 盖过去的临时文件：真正的改动是目标本身的事件。
+  if (isWorkbenchSaveTemporaryName(segments.at(-1) ?? '')) return null
 
   return path
 }

@@ -11,13 +11,14 @@
  *   restore 记录仅存内存（应用重启即失效），与 desktop 一致。
  */
 import { randomUUID } from 'node:crypto'
-import { lstatSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { lstatSync, readFileSync, type Stats, statSync } from 'node:fs'
 import {
   copyFile,
   cp,
   lstat,
   mkdir,
   readdir,
+  readFile,
   rename,
   rm,
   stat,
@@ -53,6 +54,7 @@ import type {
 } from '@shared/contracts'
 import { DefaultWorkbenchTextFormat, type WorkbenchTextFormat } from '@shared/workbenchTextFormat'
 
+import { writeFileAtomically, writeFileAtomicallySync } from './AtomicFileWrite'
 import type { DirectoryEntries } from './FileEntries'
 import type { GitNewFileTracker } from './GitNewFileTracker'
 import type { WorkbenchLocalHistoryStore } from './LocalHistoryStore'
@@ -95,8 +97,23 @@ class FileOperations {
     return result
   }
 
+  /** 编辑器保存：异步、原子地写（同目录临时文件 + rename，见 `AtomicFileWrite`）。 */
   public async saveFile(request: WorkbenchSaveFileRequest): Promise<WorkbenchSaveFileResult> {
-    return this.saveFileSync(request)
+    const projectRoot = await this.pathResolver.resolveProjectRoot(request.projectRoot)
+    const filePath = await this.pathResolver.resolveInsideProject(projectRoot, request.path)
+    return this.runWorkbenchMutation(async () => {
+      const fileStats = await stat(filePath.realPath)
+      this.assertSaveTarget(fileStats, await lstat(filePath.requestedPath), request)
+      const bytes = this.encodeSaveContent(request, await readFile(filePath.realPath))
+      await writeFileAtomically(filePath.realPath, bytes, fileStats)
+      return this.recordSavedTextFile(
+        projectRoot,
+        filePath,
+        request,
+        bytes,
+        await stat(filePath.realPath)
+      )
+    })
   }
 
   public async restoreMissingFile(
@@ -134,38 +151,22 @@ class FileOperations {
     })
   }
 
+  /** beforeunload 兜底保存（renderer sendSync）：与 {@link saveFile} 同一套校验与原子写，只是同步。 */
   public saveFileSync(request: WorkbenchSaveFileRequest): WorkbenchSaveFileResult {
     const projectRoot = this.pathResolver.resolveProjectRootSync(request.projectRoot)
     const filePath = this.pathResolver.resolveInsideProjectSync(projectRoot, request.path)
     return this.runWorkbenchMutationSync(() => {
       const fileStats = statSync(filePath.realPath)
-      const linkStats = lstatSync(filePath.requestedPath)
-
-      if (linkStats.isSymbolicLink()) {
-        throw new AppError('VALIDATION', '工作台暂不直接编辑符号链接。')
-      }
-
-      if (!fileStats.isFile()) {
-        throw new AppError('VALIDATION', '工作台文件保存目标必须是文件。')
-      }
-
-      this.assertContentIsWritable(request.content)
-      this.assertFileHasNotChanged(fileStats, request)
-      const currentBuffer = readFileSync(filePath.realPath)
-      if (!isLikelyTextFile(currentBuffer)) {
-        throw new AppError('VALIDATION', '当前文件不是可编辑的文本文件。')
-      }
-
-      const bytes = encodeWorkbenchText(
-        request.content,
-        this.resolveSaveTextFormat(request, currentBuffer)
+      this.assertSaveTarget(fileStats, lstatSync(filePath.requestedPath), request)
+      const bytes = this.encodeSaveContent(request, readFileSync(filePath.realPath))
+      writeFileAtomicallySync(filePath.realPath, bytes, fileStats)
+      return this.recordSavedTextFile(
+        projectRoot,
+        filePath,
+        request,
+        bytes,
+        statSync(filePath.realPath)
       )
-      writeFileSync(filePath.realPath, bytes)
-      const saved = this.toSavedTextFile(projectRoot, filePath, bytes, statSync(filePath.realPath))
-      this.localHistoryStore.capture(projectRoot, request.path, saved.content, {
-        minIntervalMs: request.localHistoryMinIntervalMs,
-      })
-      return saved
     })
   }
 
@@ -551,6 +552,48 @@ class FileOperations {
       path: this.pathResolver.toProjectRelativePath(projectRoot, filePath.requestedPath),
       ...file,
     }
+  }
+
+  /** 保存目标必须是普通文件、没有在外部改过，要写的内容在上限内。 */
+  private assertSaveTarget(
+    fileStats: Stats,
+    linkStats: Stats,
+    request: WorkbenchSaveFileRequest
+  ): void {
+    if (linkStats.isSymbolicLink()) {
+      throw new AppError('VALIDATION', '工作台暂不直接编辑符号链接。')
+    }
+
+    if (!fileStats.isFile()) {
+      throw new AppError('VALIDATION', '工作台文件保存目标必须是文件。')
+    }
+
+    this.assertContentIsWritable(request.content)
+    this.assertFileHasNotChanged(fileStats, request)
+  }
+
+  /** 磁盘上的现有字节必须是文本；按请求的格式（没带齐时沿用磁盘上的）编码要写的内容。 */
+  private encodeSaveContent(request: WorkbenchSaveFileRequest, currentBytes: Uint8Array): Buffer {
+    if (!isLikelyTextFile(currentBytes)) {
+      throw new AppError('VALIDATION', '当前文件不是可编辑的文本文件。')
+    }
+
+    return encodeWorkbenchText(request.content, this.resolveSaveTextFormat(request, currentBytes))
+  }
+
+  /** 写盘之后：按写下的字节给出保存结果，并把正文存进本地历史。 */
+  private recordSavedTextFile(
+    projectRoot: string,
+    filePath: ResolvedPath,
+    request: WorkbenchSaveFileRequest,
+    bytes: Uint8Array,
+    fileStats: { size: number; mtimeMs: number }
+  ): WorkbenchSaveFileResult {
+    const saved = this.toSavedTextFile(projectRoot, filePath, bytes, fileStats)
+    this.localHistoryStore.capture(projectRoot, request.path, saved.content, {
+      minIntervalMs: request.localHistoryMinIntervalMs,
+    })
+    return saved
   }
 
   /**
