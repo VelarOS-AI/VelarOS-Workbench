@@ -57,6 +57,9 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     emptyDescription:
       'Add a local project directory first. The workbench locks onto it when opened.',
     loadDirectoryFailed: 'Failed to read directory',
+    fileWatchUnavailableTitle: 'File watching stopped',
+    fileWatchUnavailableDescription:
+      'Changes on disk will not show up in the file tree or open files until watching recovers; retrying in the background. Refresh the file tree to catch up. {reason}',
     openProjectFailed: 'Failed to open project',
     openProjectWindowFailed: 'Failed to open project window',
     openFullIde: 'Open full IDE',

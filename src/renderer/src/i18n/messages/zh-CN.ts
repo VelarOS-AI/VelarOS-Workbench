@@ -47,6 +47,9 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     emptyTitle: '还没有工程',
     emptyDescription: '先添加一个本地项目目录，工作台会在打开后锁定到这个工程。',
     loadDirectoryFailed: '读取目录失败',
+    fileWatchUnavailableTitle: '文件监听停了',
+    fileWatchUnavailableDescription:
+      '磁盘上的改动暂时不会自动出现在文件树和打开的文件里，正在后台重试；需要时可以手动刷新文件树。{reason}',
     openProjectFailed: '打开工程失败',
     openProjectWindowFailed: '打开工程窗口失败',
     openFullIde: '打开完整 IDE',

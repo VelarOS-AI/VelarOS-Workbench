@@ -6,6 +6,7 @@ import {
   type WorkbenchWatchChangedPayload,
   WorkbenchWatchChannels,
   type WorkbenchWatchStartRequest,
+  type WorkbenchWatchStatusPayload,
   type WorkbenchWatchStopRequest,
 } from '../../../shared/workbenchWatch'
 import { callWithEnvelope, hasStringFields, invalidRequest } from '../ipcBoundary'
@@ -40,14 +41,26 @@ export function registerWorkbenchWatchIpc(
       if (!parsed) return invalidRequest()
 
       const sender = event.sender
-      const result = await service.subscribe(parsed.workspaceRoot, (changedEvent) => {
-        if (sender.isDestroyed()) return
-        const payload: WorkbenchWatchChangedPayload = {
-          subscriptionId: result.subscriptionId,
-          event: changedEvent,
+      const result = await service.subscribe(
+        parsed.workspaceRoot,
+        (changedEvent) => {
+          if (sender.isDestroyed()) return
+          const payload: WorkbenchWatchChangedPayload = {
+            subscriptionId: result.subscriptionId,
+            event: changedEvent,
+          }
+          sender.send(WorkbenchWatchChannels.changed, payload)
+        },
+        // 监听停了 / 恢复了：只告诉发起订阅的窗口，由它把「改动收不到了」挂出来或收起。
+        (status) => {
+          if (sender.isDestroyed()) return
+          const payload: WorkbenchWatchStatusPayload = {
+            subscriptionId: result.subscriptionId,
+            status,
+          }
+          sender.send(WorkbenchWatchChannels.status, payload)
         }
-        sender.send(WorkbenchWatchChannels.changed, payload)
-      })
+      )
       owned.set(result.subscriptionId, {
         senderId: sender.id,
         unsubscribe: () => service.unsubscribe(result.subscriptionId),

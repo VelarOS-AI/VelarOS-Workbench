@@ -52,6 +52,7 @@ import type {
   SystemFileChangePreviewResult,
   WorkbenchReadFileResult,
 } from '@shared/contracts'
+import type { WorkbenchWatchStatus } from '@shared/workbenchWatch'
 
 import { useStableWorkbenchMessageTranslate } from '../runtime/useStableWorkbenchMessaging'
 import { useWorkbenchAgentBrowserSite } from '../runtime/workbenchAgentBrowserSite'
@@ -68,6 +69,8 @@ import { useWorkbenchProjectSessionPersistence } from './useWorkbenchProjectSess
 import { useWorkbenchTopRunControl } from './useWorkbenchTopRunControl'
 
 const LIGHT_FILE_PREVIEW_MAX_CHARS = 300_000
+/** 「文件监听停了」提示的固定 id：同一时刻只挂一张，恢复或换项目时按 id 收起。 */
+const WorkspaceWatchUnavailableNoticeId = 'workbench-workspace-watch-unavailable'
 const WORKBENCH_NATIVE_AI_RULES_PATH = '.velar/rules.md'
 const log = Log.tag('workbench-page')
 
@@ -523,10 +526,35 @@ export function useStandaloneWorkbenchPageModel(
     await runWorkspaceFileRefresh()
   })
 
+  // 文件监听停了（起不来、出错后还没恢复）：一直挂着提示，恢复了或换了项目再收起。恢复时主进程补发
+  // 一次整个根目录的变更，文件树、打开的文件、Git 状态会各自重读。
+  const showWorkspaceWatchStatus = useMemoizedFn((status: WorkbenchWatchStatus): void => {
+    const message = translate.messageLatest.current
+    if (status.state === 'watching') {
+      message.dismiss(WorkspaceWatchUnavailableNoticeId)
+      return
+    }
+
+    message.warning({
+      id: WorkspaceWatchUnavailableNoticeId,
+      title: translate.tLatest.current('workbench.fileWatchUnavailableTitle'),
+      description: translate.tLatest.current('workbench.fileWatchUnavailableDescription', {
+        reason: status.message ?? '',
+      }),
+      duration: Number.POSITIVE_INFINITY,
+    })
+  })
+  const watchedProjectRoot = workbench.activeProject?.rootPath
+  useEffect(
+    () => () => translate.messageLatest.current.dismiss(WorkspaceWatchUnavailableNoticeId),
+    [translate.messageLatest, watchedProjectRoot]
+  )
+
   useWorkspaceFilesChangedRefresh({
     rootPath: workbench.activeProject?.rootPath,
     enabled: !!workbench.activeProject,
     onChanged: runWorkspaceFileRefresh,
+    onWatchStatus: showWorkspaceWatchStatus,
   })
 
   async function runTreeMutation<T>(action: () => Promise<T>): Promise<T> {

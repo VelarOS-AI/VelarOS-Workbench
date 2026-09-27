@@ -138,6 +138,7 @@ const watchBridge: WorkbenchWatchBridge = {
   start: (request) => ipcRenderer.invoke(WorkbenchWatchChannels.start, request),
   stop: (request) => ipcRenderer.invoke(WorkbenchWatchChannels.stop, request),
   onChanged: (listener) => subscribe(WorkbenchWatchChannels.changed, listener),
+  onStatus: (listener) => subscribe(WorkbenchWatchChannels.status, listener),
 }
 
 const terminalBridge: WorkbenchTerminalBridge = {

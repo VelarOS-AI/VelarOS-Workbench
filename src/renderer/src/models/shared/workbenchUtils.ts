@@ -98,6 +98,10 @@ export function getParentPath(path: string): string {
   return !isEmpty(segments) ? segments.join('/') : ROOT_PATH
 }
 
+/**
+ * `path` 是 `parentPath` 本身或在它里面。工程根（`.`）包含一切：
+ * 文件监听说「整个根目录都可能变了」时报的就是它，打开的每个文件都要重读。
+ */
 export function isSameOrChildPath(path: string, parentPath: string): boolean {
-  return path === parentPath || path.startsWith(`${parentPath}/`)
+  return parentPath === ROOT_PATH || path === parentPath || path.startsWith(`${parentPath}/`)
 }
