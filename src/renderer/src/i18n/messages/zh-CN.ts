@@ -451,6 +451,7 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     suggestionKindSymbol: '符号',
     saveSucceeded: '文件已保存',
     saveFileFailed: '保存文件失败',
+    saveFileFailedDescription: '{path}：{reason}',
     saving: '保存中',
     saved: '已保存',
     unsaved: '未保存',

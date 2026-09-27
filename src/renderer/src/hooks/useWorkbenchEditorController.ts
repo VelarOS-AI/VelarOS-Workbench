@@ -9,9 +9,16 @@ import {
   type WorkbenchEditorEditMode,
 } from '@renderer/models/editor/workbenchEditorEditMode'
 import {
+  appendWorkbenchEditorSavedSnapshot,
+  resolveWorkbenchEditorSaveBase,
+  summarizeWorkbenchEditorSaveResults,
+  type WorkbenchEditorSavedSnapshot,
+  type WorkbenchEditorSaveResult,
+  type WorkbenchEditorSaveSummary,
+} from '@renderer/models/editor/workbenchEditorSaving'
+import {
   buildExternalChangeNoticeKey,
   getWorkbenchEditorFilesChangedRefreshDelayMs,
-  hasExternalChange,
   hasFileSnapshotChanged,
   isDirtyTab,
   mayAffectWorkbenchDiagnostics,
@@ -134,7 +141,12 @@ export function useWorkbenchEditorController({
   const onFileMetadataSavedLatest = useLatest(onFileMetadataSaved)
   const onFileSavedLatest = useLatest(onFileSaved)
   const onExternalFilesChangedLatest = useLatest(onExternalFilesChanged)
-  const silentSaveInFlightPathsRef = useRef(new Set<string>())
+  // 每个文件的写盘排成一队（值是这条队的尾巴）：同一文件的两次写盘不并发，后一次以前一次存下的快照为准。
+  const saveChainsRef = useRef(new Map<string, Promise<unknown>>())
+  // 每个文件最近几次写盘「从哪个快照存成了哪个」，见 resolveWorkbenchEditorSaveBase。
+  const savedSnapshotTrailsRef = useRef(new Map<string, WorkbenchEditorSavedSnapshot[]>())
+  // 进行中的手动保存（单个或批量）数；isSavingFile 只在全部结束后才落回 false。
+  const manualSaveCountRef = useRef(0)
 
   const hasUnsavedChanges =
     !!selectedFile
@@ -189,12 +201,31 @@ export function useWorkbenchEditorController({
     })
   }
 
+  /**
+   * 只改标签正文，不动标签手里的磁盘快照。保存刚写完、新快照还没提交时，调用方闭包里的文件对象还是
+   * 保存前那份；拿它整个覆盖回去，下一次保存和磁盘比对都会把刚写下的版本误报成「外部修改」。
+   * 选过的格式转换跟着正文走；上次保存被拒的说明针对的是旧正文，一改就作废。
+   */
+  function updateOpenTabContent(file: WorkbenchReadFileResult, content: string): void {
+    setOpenTabsByPath((current) => {
+      const currentTab = current.get(file.path)
+      if (currentTab?.content === content) return current
+
+      return new Map(current).set(
+        file.path,
+        currentTab
+          ? { ...currentTab, content, unencodableSaveError: undefined }
+          : { path: file.path, file, content }
+      )
+    })
+  }
+
   const updateEditorContent = useMemoizedFn((content: string): void => {
     if (!selectedFile || !isWorkbenchFileEditable(selectedFile, chosenEditModes.get(selectedFile.path)))
       return
 
     setEditorContent(content)
-    rememberOpenFile(selectedFile, content)
+    updateOpenTabContent(selectedFile, content)
   })
 
   const applyLanguageServiceFileChanges = useMemoizedFn(
@@ -211,7 +242,7 @@ export function useWorkbenchEditorController({
         ) continue
 
         const nextContent = applyWorkbenchLanguageServiceEditsToContent(tab.content, change.edits)
-        rememberOpenFile(tab.file, nextContent)
+        updateOpenTabContent(tab.file, nextContent)
         if (selectedFilePathRef.current === change.path) {
           setEditorContent(nextContent)
         }
@@ -899,7 +930,7 @@ export function useWorkbenchEditorController({
     if (!project || !tab || tab.file.imagePreview || tab.externalChange?.status !== 'deleted') return
 
     const owningProjectId = project.id
-    setIsSavingFile(true)
+    beginManualSave()
     try {
       const restoredFile = Result.unwrap(
         await workbenchHost.kernel.project.restoreMissingWorkbenchFile({
@@ -925,7 +956,7 @@ export function useWorkbenchEditorController({
         description: appError.message,
       })
     } finally {
-      setIsSavingFile(false)
+      endManualSave()
     }
   })
 
@@ -1041,79 +1072,157 @@ export function useWorkbenchEditorController({
     scheduleRefreshOpenFilesFromDisk,
   ])
 
+  /** 同一文件的写盘排队进行；不同文件互不等待。 */
+  function runSerializedSave<T>(path: string, task: () => Promise<T>): Promise<T> {
+    const previous = saveChainsRef.current.get(path) ?? Promise.resolve()
+    const next = previous.then(task, task)
+    saveChainsRef.current.set(path, next)
+    const release = (): void => {
+      if (saveChainsRef.current.get(path) === next) saveChainsRef.current.delete(path)
+    }
+    next.then(release, release)
+    return next
+  }
+
+  function beginManualSave(): void {
+    manualSaveCountRef.current += 1
+    setIsSavingFile(true)
+  }
+
+  function endManualSave(): void {
+    manualSaveCountRef.current = Math.max(0, manualSaveCountRef.current - 1)
+    if (manualSaveCountRef.current === 0) setIsSavingFile(false)
+  }
+
+  /** 手动保存落盘后的通知：刷新校验状态、项目索引与依赖保存序号的视图（自动保存不发）。 */
+  function notifyFilesSaved(): void {
+    onFileSavedLatest.current()
+    setSaveRevision((revision) => revision + 1)
+  }
+
+  /**
+   * 把一个标签写回磁盘，写好就把新快照落进状态（不发保存通知、不弹提示，交给调用方）。
+   * 同一文件的写盘排队；静默的自动保存碰上同一文件正在写就跳过，下一轮再来。
+   */
+  const writeEditorTab = useMemoizedFn(
+    (
+      requestedTab: WorkbenchOpenEditorTab,
+      options: WorkbenchSaveEditorTabOptions = {}
+    ): Promise<WorkbenchEditorSaveResult> => {
+      if (options.silent && saveChainsRef.current.has(requestedTab.path))
+        return Promise.resolve({ status: 'skipped' })
+
+      return runSerializedSave(requestedTab.path, async (): Promise<WorkbenchEditorSaveResult> => {
+        const project = activeProjectRef.current
+        const trail = savedSnapshotTrailsRef.current.get(requestedTab.path) ?? []
+        const baseFile = resolveWorkbenchEditorSaveBase(requestedTab.file, trail)
+        const tab = baseFile === requestedTab.file ? requestedTab : { ...requestedTab, file: baseFile }
+        // 只读只挡输入：切到只读之前已经改下的内容照样能保存。
+        if (
+          !project
+          || !canSaveWorkbenchTabContent(tab)
+          || !isDirtyTab(tab)
+        )
+          return { status: 'skipped' }
+
+        const latestTab = openTabsByPathLatest.current.get(tab.path)
+        // 内容里有文件编码写不出的字符：改之前不再自动保存（结果只会一样）。
+        if (options.silent && latestTab?.unencodableSaveError) return { status: 'skipped' }
+        const externalChange = latestTab?.externalChange ?? tab.externalChange
+        if (externalChange) return { status: 'conflict', change: externalChange }
+
+        try {
+          const saved = await saveTab(project, tab, options.silent)
+          savedSnapshotTrailsRef.current.set(
+            tab.path,
+            appendWorkbenchEditorSavedSnapshot(trail, { base: tab.file, saved })
+          )
+          if (activeProjectRef.current?.id !== project.id) return { status: 'skipped' }
+
+          applySavedFile(saved, tab.content, { silent: true })
+          return { status: 'saved', file: saved }
+        } catch (error) {
+          const appError = AppError.from(error)
+          if (appError.code === WorkbenchUnencodableTextErrorCode) {
+            // 编辑区据此提示并提供「转换为 UTF-8」；自动保存失败时也要让用户看到。
+            rememberUnencodableSaveError(tab, appError.message)
+          }
+          return { status: 'failed', error: appError }
+        }
+      })
+    }
+  )
+
+  /** 保存一个标签。手动保存提示冲突与失败；静默的自动保存只返回结果，由自动保存自己记账和提示。 */
   const saveEditorTab = useMemoizedFn(
     async (
       tab: WorkbenchOpenEditorTab,
       options: WorkbenchSaveEditorTabOptions = {}
-    ): Promise<void> => {
-      // 只读只挡输入：切到只读之前已经改下的内容照样能保存。
-      if (
-        !activeProject
-        || !canSaveWorkbenchTabContent(tab)
-        || !isDirtyTab(tab)
-        || isSavingFile
-      )
-        return
-      if (options.silent && silentSaveInFlightPathsRef.current.has(tab.path)) return
+    ): Promise<WorkbenchEditorSaveResult> => {
+      if (!activeProject) return { status: 'skipped' }
 
-      const latestTab = openTabsByPathLatest.current.get(tab.path)
-      // 内容里有文件编码写不出的字符：改之前不再自动保存（结果只会一样）。
-      if (options.silent && latestTab?.unencodableSaveError) return
-      const externalChange = latestTab?.externalChange ?? tab.externalChange
-      if (externalChange) {
-        if (!options.silent) {
-          warnExternalFileChanged({
-            ...tab,
-            externalChange,
-          })
-        }
-        return
-      }
-
-      const owningProject = activeProject
-      const owningProjectId = owningProject.id
-
+      const owningProjectId = activeProject.id
+      if (!options.silent) beginManualSave()
       try {
-        if (options.silent) {
-          silentSaveInFlightPathsRef.current.add(tab.path)
-        } else {
-          setIsSavingFile(true)
-        }
-        const saved = await saveTab(owningProject, tab, options.silent)
-        if (activeProjectRef.current?.id !== owningProjectId) return
+        const result = await writeEditorTab(tab, options)
+        if (options.silent || activeProjectRef.current?.id !== owningProjectId) return result
 
-        applySavedFile(saved, tab.content, options)
-        if (options.notify) {
-          messageLatest.current.success({
-            title: tLatest.current('workbench.saveSucceeded'),
-          })
+        switch (result.status) {
+          case 'saved': {
+            notifyFilesSaved()
+            if (options.notify) {
+              messageLatest.current.success({
+                title: tLatest.current('workbench.saveSucceeded'),
+              })
+            }
+            break
+          }
+          case 'conflict': {
+            warnExternalFileChanged({ ...tab, externalChange: result.change })
+            break
+          }
+          case 'failed': {
+            messageLatest.current.error({
+              title: tLatest.current('workbench.saveFileFailed'),
+              description: result.error.message,
+            })
+            break
+          }
         }
-      } catch (error) {
-        if (activeProjectRef.current?.id !== owningProjectId) return
+        return result
+      } finally {
+        if (!options.silent) endManualSave()
+      }
+    }
+  )
 
-        const appError = AppError.from(error)
-        if (appError.code === WorkbenchUnencodableTextErrorCode) {
-          // 编辑区据此提示并提供「转换为 UTF-8」；自动保存失败时也要让用户看到。
-          rememberUnencodableSaveError(tab, appError.message)
-        }
-        if (options.silent) {
-          log.debug('工作台编辑器静默自动保存失败', {
-            path: tab.path,
-            error: appError.message,
-          })
-        } else {
-          messageLatest.current.error({
-            title: tLatest.current('workbench.saveFileFailed'),
-            description: appError.message,
-          })
+  /**
+   * 逐个保存一批标签，每存好一个就把它的新快照落进状态：中途哪个失败了，前面已经写下的文件也不会
+   * 留着旧快照、在之后被当成外部修改。全部结束后统一发一次保存通知。
+   */
+  const saveEditorTabs = useMemoizedFn(
+    async (
+      tabs: readonly WorkbenchOpenEditorTab[]
+    ): Promise<Map<string, WorkbenchEditorSaveResult>> => {
+      const results = new Map<string, WorkbenchEditorSaveResult>()
+      const owningProjectId = activeProjectRef.current?.id
+      if (!owningProjectId || isEmpty(tabs)) return results
+
+      beginManualSave()
+      try {
+        for (const tab of tabs) {
+          results.set(tab.path, await writeEditorTab(tab))
+          if (activeProjectRef.current?.id !== owningProjectId) break
         }
       } finally {
-        if (options.silent) {
-          silentSaveInFlightPathsRef.current.delete(tab.path)
-        } else {
-          setIsSavingFile(false)
-        }
+        endManualSave()
       }
+      if (
+        activeProjectRef.current?.id === owningProjectId
+        && [...results.values()].some((result) => result.status === 'saved')
+      )
+        notifyFilesSaved()
+      return results
     }
   )
 
@@ -1167,67 +1276,45 @@ export function useWorkbenchEditorController({
     }
   )
 
-  const saveAllOpenFiles = useMemoizedFn(async (): Promise<void> => {
-    if (!activeProject || isSavingFile) return
+  /** 一批保存里存不下的文件逐个提示：外部改过的提示先处理冲突，写盘失败的带上路径与原因。 */
+  function reportUnsavedResults(summary: WorkbenchEditorSaveSummary): void {
+    for (const { path, change } of summary.conflicts) {
+      const tab = openTabsByPathLatest.current.get(path)
+      if (tab) warnExternalFileChanged({ ...tab, externalChange: change })
+    }
+    for (const { path, error } of summary.failures) {
+      messageLatest.current.error({
+        title: tLatest.current('workbench.saveFileFailed'),
+        description: tLatest.current('workbench.saveFileFailedDescription', {
+          path,
+          reason: error.message,
+        }),
+      })
+    }
+  }
 
-    const owningProject = activeProject
-    const owningProjectId = owningProject.id
+  /**
+   * 保存全部已修改的标签。每个文件各存各的：一个文件外部改过或写不进去，不挡其它文件；
+   * 存好的文件只在正文仍是保存那一刻的内容时才换成磁盘版本，保存期间接着打的字不会被冲掉。
+   */
+  const saveAllOpenFiles = useMemoizedFn(async (): Promise<void> => {
+    if (!activeProject) return
+
+    const owningProjectId = activeProject.id
     const dirtyTabs = [...openTabsByPath.values()].filter(
       (tab) => canSaveWorkbenchTabContent(tab) && isDirtyTab(tab)
     )
     if (isEmpty(dirtyTabs)) return
 
-    const conflictedTab = dirtyTabs.find(hasExternalChange)
-    if (conflictedTab) {
-      warnExternalFileChanged(conflictedTab)
-      return
-    }
+    const summary = summarizeWorkbenchEditorSaveResults(await saveEditorTabs(dirtyTabs))
+    if (activeProjectRef.current?.id !== owningProjectId) return
 
-    try {
-      setIsSavingFile(true)
-      const savedFiles: WorkbenchReadFileResult[] = []
-
-      for (const tab of dirtyTabs) {
-        const saved = await saveTab(owningProject, tab)
-        savedFiles.push(saved)
-      }
-
-      if (activeProjectRef.current?.id !== owningProjectId) return
-
-      setOpenTabsByPath((current) => {
-        const next = new Map(current)
-        for (const saved of savedFiles) {
-          next.set(saved.path, {
-            path: saved.path,
-            file: saved,
-            content: saved.content,
-          })
-        }
-        return next
-      })
-
-      const selectedSavedFile = savedFiles.find((file) => file.path === selectedFilePath)
-      if (selectedSavedFile) {
-        setSelectedFile(selectedSavedFile)
-        setEditorContent(selectedSavedFile.content)
-      }
-      savedFiles.forEach((file) => onFileMetadataSavedLatest.current(file))
-      onFileSavedLatest.current()
-      setSaveRevision((revision) => revision + 1)
+    if (!isEmpty(summary.savedPaths)) {
       messageLatest.current.success({
-        title: tLatest.current('workbench.saveAllSucceeded', { count: savedFiles.length }),
+        title: tLatest.current('workbench.saveAllSucceeded', { count: summary.savedPaths.length }),
       })
-    } catch (error) {
-      if (activeProjectRef.current?.id !== owningProjectId) return
-
-      const appError = AppError.from(error)
-      messageLatest.current.error({
-        title: tLatest.current('workbench.saveFileFailed'),
-        description: appError.message,
-      })
-    } finally {
-      setIsSavingFile(false)
     }
+    reportUnsavedResults(summary)
   })
 
   return {

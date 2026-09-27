@@ -19,7 +19,7 @@ interface UseWorkbenchEditorAutosaveParams {
   saveEditorTab: (
     tab: WorkbenchOpenEditorTab,
     options?: { notify?: boolean; silent?: boolean }
-  ) => Promise<void>
+  ) => Promise<unknown>
 }
 
 /** 项目编辑器挂载期间，对第一个未截断且已修改的打开标签做防抖保存。 */

@@ -467,6 +467,7 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     suggestionKindSymbol: 'Symbol',
     saveSucceeded: 'File saved',
     saveFileFailed: 'Failed to save file',
+    saveFileFailedDescription: '{path}: {reason}',
     saving: 'Saving',
     saved: 'Saved',
     unsaved: 'Unsaved',
