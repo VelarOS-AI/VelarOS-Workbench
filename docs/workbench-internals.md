@@ -82,6 +82,22 @@ renderer 侧 `standaloneWorkbenchChatAdapter.tsx` 把主进程推来的通知（
 `conversation-project-activity`，renderer 据此实时采集改动、重读打开的文件；一轮结束做最终采集，改动卡列出
 Agent 改过的文件、差异与逐文件归属。回溯（把改动推回去）已下线。
 
+## 文本文件的编码与换行
+
+不变量：Workbench 不改用户没编辑过的字节。`src/main/workspace/TextCodec.ts` 读盘时认编码（UTF-8 BOM、
+UTF-16 LE/BE BOM、严格 UTF-8、严格 GB18030）与占多数的换行符，交给编辑器的正文一律去掉 BOM、换行统一为
+LF；读盘结果带着 `encoding`、`eol`，字节不能按它们逐字节写回时再带 `textIssue`（认不出的字节、写不回的
+GB18030、混用的换行符），编辑器据此只读打开，用户明确选「转换为 UTF-8」或统一换行符后才重写整份文件。
+
+- 新增保存路径必须把标签的格式（`resolveWorkbenchTabTextFormat`）带进保存请求；没带时主进程沿用磁盘上的
+  格式，磁盘上的字节本身写不回时拒绝保存。GB18030 只写单双字节，表外的字符拒绝保存（`UNENCODABLE_TEXT`）。
+- 保存走 `AtomicFileWrite`：同目录临时文件、刷盘、rename，权限位不变；硬链接、别人的文件、建不了临时文件的
+  目录、rename 被占用挡住时退回原地写。
+- 大文件只读截断视图要的开头（每字符最多 4 字节）；重读打开的文件用 `resolveWorkbenchEditorRereadMaxChars`，
+  存过的大于打开上限的文件不会被读成截断的。
+- 与编辑器正文比较的文本（Git 的 HEAD 版本、内容搜索）用同一个解码（`decodeWorkbenchTextContent`）。
+  Agent 经 Platform 内核的读写不走这里。
+
 ## 语言服务与磁盘的同步
 
 编辑器的诊断由主进程的语言服务 worker 计算（内置 TypeScript 项目、ESLint、外部 LSP）。
