@@ -2,7 +2,7 @@
 // Platform 的本地存储要 node:sqlite，bun 没有，所以把运行时打成包放进 Node 跑（与 Desktop 的运行时测试同一做法）。
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { after, test } from 'node:test'
@@ -32,9 +32,8 @@ const built = spawnSync(
   { cwd: root, encoding: 'utf8' }
 )
 assert.equal(built.status, 0, built.stderr)
-const { createWorkbenchConversationRuntime, WorkbenchShellHostRegistry } = await import(
-  pathToFileURL(bundle).href
-)
+const { createWorkbenchConversationRuntime, WorkbenchMemoryService, WorkbenchShellHostRegistry } =
+  await import(pathToFileURL(bundle).href)
 
 /** ScriptAct 协议的帧标记在编译好的提示词里。 */
 function marker(frame) {
@@ -76,6 +75,13 @@ async function fixture(t, generate, options = {}) {
     },
   }
   const shells = new WorkbenchShellHostRegistry()
+  const memory = new WorkbenchMemoryService(join(directory, 'memory'))
+  // 网上查资料的无头页面：测试里只看模块挂没挂上，不真的开网页。
+  const webPages = {
+    openPage: async () => {
+      throw new Error('测试不开网页')
+    },
+  }
   const runtime = createWorkbenchConversationRuntime({
     runner: nodeSubprocessCodeRunner,
     shells,
@@ -94,6 +100,8 @@ async function fixture(t, generate, options = {}) {
         notices: events.filter((event) => event.kind === 'conversation-project-activity').length,
       }),
     projectRules: async () => options.rules ?? [],
+    memory: (workspace) => memory.forRun(workspace),
+    webPages,
   })
   t.after(async () => {
     await runtime.close()
@@ -113,10 +121,12 @@ async function fixture(t, generate, options = {}) {
     reasoningLevel: 'medium',
     executionModes: [],
     permissionMode: 'standard-open',
+    memory: true,
+    webSearchEngine: 'google',
     ...overrides,
   })
   const lastState = () => events.filter((event) => event.type === 'state').at(-1)?.payload ?? null
-  return { runtime, workspace, directory, events, frames, windows, edits, sink, request, lastState }
+  return { runtime, workspace, directory, events, frames, windows, edits, memory, sink, request, lastState }
 }
 
 test(
@@ -223,6 +233,48 @@ test(
     await run.completed
     await assert.rejects(stat(join(f.workspace, 'ran.txt')))
     assert.equal(f.lastState()?.kind, 'done')
+  }
+)
+
+test(
+  "carries the project's memory index into the run and mounts velaros:web",
+  { timeout: 30_000 },
+  async (t) => {
+    const f = await fixture(t, async function* (frame, _signal, call) {
+      if (call === 1)
+        yield {
+          type: 'text',
+          text: execute(
+            frame,
+            "// 看看查资料的模块\nimport {search} from 'velaros:web';console.log('web-module:' + typeof search);"
+          ),
+        }
+      else yield { type: 'text', text: done(frame, '好了') }
+      yield { type: 'finish', reason: 'stop' }
+    })
+    // 这个项目之前存过一条记忆：作用域按项目根的真实路径
+    const workspace = await realpath(f.workspace)
+    const { scope } = await f.memory.forRun(workspace)
+    await scope.save({
+      id: 'build-command',
+      type: 'work',
+      title: '构建用 bun run build',
+      description: '项目的构建命令',
+      content: '构建前先跑 bun install。',
+    })
+    const run = f.runtime.submit(f.sink, f.request('构建怎么跑'))
+    await run.completed
+    assert.equal(f.lastState()?.kind, 'done', JSON.stringify(f.events.slice(-3)))
+    const first = JSON.stringify(f.frames[0])
+    assert.match(first, /跨会话长期记忆的索引/u)
+    assert.match(first, /构建用 bun run build/u)
+    // 脚本里 import 得到 velaros:web
+    assert.match(JSON.stringify(f.frames[1]), /web-module:function/u)
+
+    // 关掉记忆：这一轮不带索引
+    const off = f.runtime.submit(f.sink, f.request('再问一次', { memory: false, sessionId: 'session-2' }))
+    await off.completed
+    assert.doesNotMatch(JSON.stringify(f.frames.at(-1)), /跨会话长期记忆的索引/u)
   }
 )
 

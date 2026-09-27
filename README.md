@@ -27,7 +27,9 @@ The chat runs the Platform ScriptAct runtime in the main process, the same runti
 uses. Each run opens a Platform session bound to the window's project: the agent works by writing
 short scripts against resident modules (`velaros:project`, `velaros:code`, `velaros:shell`,
 `velaros:interaction`, `velaros:widget`), and the scripts execute in an isolated utility process.
-Sub-agents are available; web search and long-term memory are off. Workbench adds its host
+Sub-agents, web search and long-term memory are on, as in Desktop: `velaros:web` searches and reads pages
+in hidden windows (Google or Bing, set in Settings → AI), and memories are kept per project and can be
+reviewed or deleted in Settings → AI. Workbench adds its host
 instructions (reply language, plan and goal modes) and the project's AI rule files (`.velar/rules.md`,
 `AGENTS.md`, `CLAUDE.md`, `.cursorrules`, `.cursor/rules/`, `.github/copilot-instructions.md`).
 Conversation state lives in the Platform's session store outside the project.

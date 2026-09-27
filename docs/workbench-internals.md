@@ -32,7 +32,10 @@ Workbench 是单体仓库：根 `package.json` 是唯一清单，全部产品源
 - **一轮一个运行时**：`WorkbenchConversationSession` 每轮 `createRuntime`，工作区是窗口的项目根（按真实路径），
   同一个项目内核上挂项目模块、问代码（`velaros:code`）与看图；`velaros:shell` 借应用共用的 shell 宿主
   （`WorkbenchShellHostRegistry`，后台任务活过一轮，会话删除时停掉）。常驻模块是 project、code、shell、
-  interaction、widget；子任务开，搜索与长期记忆关。模型写的脚本在 `utilityProcess` 起的隔离进程里跑
+  interaction、widget；子任务开。网上查资料（`velaros:web`，与 Desktop 同一套）每个会话都挂、不常驻：搜索与
+  读网页跑在不显示的窗口里（`WorkbenchWebSearchPages`，独立分区 `persist:velaros-workbench-web`，不带内置浏览器的
+  登录），搜索引擎跟设置走。长期记忆（`WorkbenchMemoryService`，记忆库在 `userData/memory`）按项目根的真实路径
+  各一份作用域，这一轮开始时的索引附在宿主说明末尾；设置里能关、能看、能删。模型写的脚本在 `utilityProcess` 起的隔离进程里跑
   （`workbench-script-worker.ts`）。
 - **状态**：会话数据在 `userData/conversation-runtime/<sha256(项目根 \0 会话 id)>`，任何项目之外；
   空闲时读、改目标用无模型的控制会话。旧的 Kernel 会话历史不迁移，老会话下一轮从 Platform 的新上下文开始。

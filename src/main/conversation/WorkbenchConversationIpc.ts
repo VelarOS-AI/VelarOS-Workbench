@@ -24,6 +24,7 @@ import {
   type WorkbenchConversationUpdateGoalRequest,
   type WorkbenchExecutionMode,
   WorkbenchPermissionConfirmationModes,
+  WorkbenchWebSearchEngines,
 } from '../../shared/workbenchConversation'
 import type { WorkbenchProjectHub } from '../projects/ProjectHub'
 import { callWithEnvelope } from '../workspace/ipcBoundary'
@@ -45,7 +46,7 @@ const GoalActions = new Set(['resume', 'pause', 'block', 'complete', 'cancel', '
 const MaxImages = 16
 
 /** 窗口 → 它当前打开的项目。 */
-interface WorkbenchConversationWindows {
+export interface WorkbenchConversationWindows {
   getHubForWebContents(sender: WebContents): Nullable<WorkbenchProjectHub>
 }
 
@@ -319,7 +320,11 @@ function parseSendRequest(raw: unknown): WorkbenchConversationSendRequest {
     !isNonBlankString(model.provider) ||
     !isNonBlankString(model.model) ||
     !isString(model.apiKey) ||
-    !isString(model.baseURL)
+    !isString(model.baseURL) ||
+    typeof input.memory !== 'boolean' ||
+    !WorkbenchWebSearchEngines.includes(
+      input.webSearchEngine as WorkbenchConversationSendRequest['webSearchEngine']
+    )
   )
     return invalid()
   const request: WorkbenchConversationSendRequest = {
@@ -336,6 +341,8 @@ function parseSendRequest(raw: unknown): WorkbenchConversationSendRequest {
     reasoningLevel: input.reasoningLevel as WorkbenchConversationSendRequest['reasoningLevel'],
     executionModes: [...new Set(input.executionModes as WorkbenchExecutionMode[])],
     permissionMode: input.permissionMode as WorkbenchConversationSendRequest['permissionMode'],
+    memory: input.memory,
+    webSearchEngine: input.webSearchEngine as WorkbenchConversationSendRequest['webSearchEngine'],
   }
   if (input.images !== undefined) request.images = parseImages(input.images)
   return request

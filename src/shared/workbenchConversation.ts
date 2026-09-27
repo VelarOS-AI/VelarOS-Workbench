@@ -54,6 +54,11 @@ export interface WorkbenchConversationImage {
   label?: string
 }
 
+/** 网上查资料（`velaros:web`）先用的搜索引擎；搜不通时 Platform 自动换另一个。 */
+export type WorkbenchWebSearchEngine = 'google' | 'bing'
+
+export const WorkbenchWebSearchEngines: readonly WorkbenchWebSearchEngine[] = ['google', 'bing']
+
 export interface WorkbenchConversationSendRequest {
   sessionId: string
   projectRoot: string
@@ -66,6 +71,9 @@ export interface WorkbenchConversationSendRequest {
   reasoningLevel: ReasoningLevel
   executionModes: WorkbenchExecutionMode[]
   permissionMode: WorkbenchPermissionConfirmationMode
+  /** 长期记忆（设置里的总开关）：关着时这一轮不接记忆，已存的留在盘上。 */
+  memory: boolean
+  webSearchEngine: WorkbenchWebSearchEngine
 }
 
 /** 会话按 (项目根, 会话) 认：窗口只能动自己打开的项目里的会话。 */

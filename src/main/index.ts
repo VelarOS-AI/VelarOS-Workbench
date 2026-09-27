@@ -22,9 +22,12 @@ import workbenchScriptWorkerPath from './conversation/workbench-script-worker.ts
 import { createWorkbenchConversationConfiguration } from './conversation/WorkbenchConversationConfiguration'
 import { registerWorkbenchConversationIpc } from './conversation/WorkbenchConversationIpc'
 import { createWorkbenchConversationRuntime } from './conversation/WorkbenchConversationRuntime'
+import { registerWorkbenchMemoryIpc } from './conversation/WorkbenchMemoryIpc'
+import { WorkbenchMemoryService } from './conversation/WorkbenchMemoryService'
 import { createWorkbenchScriptRunner } from './conversation/WorkbenchScriptRunner'
 import { WorkbenchShellHostRegistry } from './conversation/WorkbenchShellHostRegistry'
 import { loadWorkbenchShellTerminal } from './conversation/WorkbenchShellTerminal'
+import { WorkbenchWebSearchPages } from './conversation/WorkbenchWebSearchPages'
 import { registerWorkbenchModelIpc } from './model/WorkbenchModelIpc'
 import type { WorkbenchProjectHub } from './projects/ProjectHub'
 import { registerProjectHubIpc } from './projects/ProjectHubIpc'
@@ -289,6 +292,9 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
     loadWorkbenchShellTerminal
   )
   const syncAgentEdits = languageSyncOnAgentEdits(providers.language)
+  // 长期记忆与网上查资料（与 Desktop 同一套）：记忆按项目各一份，查资料跑在不显示的页面里。
+  const memory = new WorkbenchMemoryService(providers.parts.storagePaths.getMemoryDir())
+  const webPages = new WorkbenchWebSearchPages()
   const conversationRuntime = createWorkbenchConversationRuntime({
     runner: createWorkbenchScriptRunner({ workerPath: workbenchScriptWorkerPath }),
     shells: shellHosts,
@@ -301,6 +307,8 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
     projectFilesEdited: (ref, paths) => syncAgentEdits(ref.projectRoot, paths),
     projectRules: async (projectRoot) =>
       (await providers.workspace.projectRules(projectRoot)).files,
+    memory: (workspace) => memory.forRun(workspace),
+    webPages,
   })
   registerWorkbenchTerminalIpc(providers.parts.terminal)
   registerWorkbenchGitIpc(providers.git, providers.chatCheckpoints, providers.chatRunChanges)
@@ -330,6 +338,7 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
     backupDir: () => providers.parts.storagePaths.getChatHistoryBackupsDir(),
     analytics: productAnalytics,
   })
+  const disposeMemoryIpc = registerWorkbenchMemoryIpc({ memory, windows: windowManager })
   registerWorkbenchFsIpc(
     providers.fileSystem,
     providers.parts,
@@ -352,6 +361,7 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
     disposeAccountIpc()
     disposeModelIpc()
     disposeConversationIpc()
+    disposeMemoryIpc()
     disposeWorkspaceIpc()
     disposeProductAnalyticsRuntime()
     void Promise.allSettled([

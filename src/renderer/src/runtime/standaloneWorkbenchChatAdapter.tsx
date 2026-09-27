@@ -64,7 +64,10 @@ import {
   workbenchChatFileReferenceId,
 } from '../models/chat/workbenchChatFileReferences'
 import { resolveWorkbenchGoalAutoContinue } from '../models/chat/workbenchGoalAutoContinue'
-import { readWorkbenchPermissionConfirmationMode } from '../models/settings/workbenchPreferences'
+import {
+  readWorkbenchConversationRunPreferences,
+  readWorkbenchPermissionConfirmationMode,
+} from '../models/settings/workbenchPreferences'
 import styles from '../styles/workbenchPageStyles'
 import { useLatest } from '../support/genericHooks'
 
@@ -1487,6 +1490,7 @@ function StandaloneWorkbenchChatSessionSurface({
       : [text, currentFileContext, fileReferenceContext, attachmentContext, browserElementContext]
           .filter(Boolean)
           .join('\n\n')
+    const runPreferences = readWorkbenchConversationRunPreferences()
     const result = await window.velarosWorkbenchConversation
       .send({
         sessionId,
@@ -1503,8 +1507,10 @@ function StandaloneWorkbenchChatSessionSurface({
         },
         reasoningLevel,
         executionModes,
-        // 权限确认策略随每一轮下发：设置页改档后立刻对下一轮生效。
+        // 权限确认策略、记忆开关与搜索引擎随每一轮下发：设置页改了立刻对下一轮生效。
         permissionMode: readWorkbenchPermissionConfirmationMode(),
+        memory: runPreferences.memoryEnabled,
+        webSearchEngine: runPreferences.webSearchEngine,
       })
       .catch((error: unknown) => ({
         ok: false as const,

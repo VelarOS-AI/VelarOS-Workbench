@@ -108,12 +108,17 @@ void describe('Workbench window and chat chrome details', () => {
       { channel: WorkbenchWindowStateChannels.changed, payload: { fullScreen: true } },
     ])
 
-    // 设置页与文件历史不是独立窗口：主进程只有一种 BrowserWindow，由创建项目窗口的工厂装上推送，
-    // 所以它们跟着所在的项目窗口一起拿到全屏状态。以后若另开窗口，这里会先失败。
+    // 设置页与文件历史不是独立窗口：主进程只有一种界面 BrowserWindow，由创建项目窗口的工厂装上推送，
+    // 所以它们跟着所在的项目窗口一起拿到全屏状态。以后若另开界面窗口，这里会先失败。网上查资料的无头页面
+    // 也是 BrowserWindow，但从不显示、没有界面，不需要全屏状态。
     const windowFactories = listSourceFiles('src/main').filter((file) =>
       /new BrowserWindow\(/u.test(readSource(file))
     )
-    assert.deepEqual(windowFactories, [path.join('src/main', 'index.ts')])
+    assert.deepEqual(windowFactories.sort(), [
+      path.join('src/main', 'conversation', 'WorkbenchWebSearchPages.ts'),
+      path.join('src/main', 'index.ts'),
+    ])
+    assert.match(readSource('src/main/conversation/WorkbenchWebSearchPages.ts'), /show: false,/u)
     assert.equal(readSource('src/main/index.ts').match(/new BrowserWindow\(/gu)?.length, 1)
   })
 

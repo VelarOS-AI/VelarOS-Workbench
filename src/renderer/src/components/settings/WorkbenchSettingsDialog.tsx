@@ -77,12 +77,17 @@ import type {
   WorkbenchProjectAiRulesResult,
 } from '@shared/contracts'
 import type { WorkbenchAccountState } from '@shared/workbenchAccount'
-import type { WorkbenchPermissionConfirmationMode as PermissionConfirmationMode } from '@shared/workbenchConversation'
+import type {
+  WorkbenchPermissionConfirmationMode as PermissionConfirmationMode,
+  WorkbenchWebSearchEngine,
+} from '@shared/workbenchConversation'
 import type { WorkbenchManagedModelProvider } from '@shared/workbenchModel'
 import type { WorkbenchUpdateChannel } from '@shared/workbenchUpdate'
 
 import styles from '../../styles/workbenchPageStyles'
 import { useTimerScope } from '../../support/genericHooks'
+
+import { WorkbenchMemorySettings } from './WorkbenchMemorySettings'
 
 type WorkbenchSettingsSectionId =
   | 'general'
@@ -1340,6 +1345,46 @@ export function WorkbenchSettingsDialog({
           description={t('workbench.settingsPermissionsDescription')}
         >
           {renderPermissionsSection()}
+        </SettingsSubsection>
+        <SettingsSubsection
+          title={t('workbench.settingsWebSearch')}
+          description={t('workbench.settingsWebSearchDescription')}
+        >
+          <div className={styles.workbenchSettingsSectionPanel}>
+            <SettingRow
+              title={t('workbench.settingsWebSearchEngine')}
+              description={t('workbench.settingsWebSearchEngineDescription')}
+            >
+              <Select<WorkbenchWebSearchEngine>
+                size="sm"
+                className={styles.workbenchSettingsSelectTrigger}
+                value={preferences.webSearchEngine}
+                options={[
+                  { value: 'google', label: 'Google' },
+                  { value: 'bing', label: 'Bing' },
+                ]}
+                onChange={(webSearchEngine) => onPreferencesChange({ webSearchEngine })}
+              />
+            </SettingRow>
+          </div>
+        </SettingsSubsection>
+        <SettingsSubsection
+          title={t('workbench.settingsMemory')}
+          description={t('workbench.settingsMemoryDescription')}
+        >
+          <div className={styles.workbenchSettingsSectionPanel}>
+            <SettingRow
+              title={t('workbench.settingsMemoryEnabled')}
+              description={t('workbench.settingsMemoryEnabledDescription')}
+            >
+              <Switch
+                size="sm"
+                checked={preferences.memoryEnabled}
+                onCheckedChange={(memoryEnabled) => onPreferencesChange({ memoryEnabled })}
+              />
+            </SettingRow>
+          </div>
+          <WorkbenchMemorySettings projectRoot={project?.rootPath ?? null} />
         </SettingsSubsection>
         <SettingsSubsection
           title={t('workbench.settingsAiRules')}

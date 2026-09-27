@@ -19,6 +19,7 @@ import {
   type WorkbenchLanguageBridge,
   WorkbenchLanguageChannels,
 } from '../shared/workbenchLanguage'
+import { type WorkbenchMemoryBridge, WorkbenchMemoryChannels } from '../shared/workbenchMemory'
 import { type WorkbenchModelBridge, WorkbenchModelChannels } from '../shared/workbenchModel'
 import {
   type WorkbenchProductAnalyticsBridge,
@@ -189,6 +190,11 @@ const conversationBridge: WorkbenchConversationBridge = {
   onEvent: (listener) => subscribe(WorkbenchConversationChannels.event, listener),
 }
 
+const memoryBridge: WorkbenchMemoryBridge = {
+  listEntries: (request) => ipcRenderer.invoke(WorkbenchMemoryChannels.listEntries, request),
+  removeEntry: (request) => ipcRenderer.invoke(WorkbenchMemoryChannels.removeEntry, request),
+}
+
 const modelBridge: WorkbenchModelBridge = {
   listProviderModels: (request) =>
     ipcRenderer.invoke(WorkbenchModelChannels.listProviderModels, request),
@@ -239,6 +245,7 @@ contextBridge.exposeInMainWorld('velarosWorkbenchTerminal', terminalBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchWatch', watchBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchGit', gitBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchConversation', conversationBridge)
+contextBridge.exposeInMainWorld('velarosWorkbenchMemory', memoryBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchModel', modelBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchWorkspace', workspaceBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchUpdate', updateBridge)

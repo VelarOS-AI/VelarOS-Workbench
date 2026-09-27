@@ -4,7 +4,9 @@ import type {
   VelarosSession,
 } from '@velaros-ai/velaros'
 import type { WidgetView } from '@velaros-ai/velaros/act/agents'
+import type { MemoryScopeApi } from '@velaros-ai/velaros/memory'
 import type { ActEventProjectorApi, ActPresentation } from '@velaros-ai/velaros/renderer'
+import type { WebSpacePort } from '@velaros-ai/velaros/web'
 
 import type {
   WorkbenchConversationSendRequest,
@@ -26,12 +28,13 @@ export type ConversationSessionEvent = Awaited<
 /** Platform 用户输入。 */
 export type ConversationInput = Exclude<Parameters<VelarosSession['submit']>[0], string>
 
-/** 一轮提交的回复语言与执行模式，外加项目里的 AI 规则：宿主说明按它写。 */
+/** 一轮提交的回复语言与执行模式，外加项目里的 AI 规则与这一轮开始时的记忆索引：宿主说明按它写。 */
 export type ConversationHostInstructionOptions = Pick<
   WorkbenchConversationSendRequest,
   'locale' | 'executionModes'
 > & {
   projectRules?: readonly ConversationProjectRule[]
+  memoryIndex?: string
 }
 
 /** 项目里的一份 AI 规则文件（AGENTS.md、CLAUDE.md……）。 */
@@ -69,6 +72,10 @@ export interface ConversationWorkspaceOptions {
    * 时间窗关闭之前调用。
    */
   projectFilesEdited?(paths: readonly string[]): void
+  /** 这一轮接的长期记忆作用域；没有就不挂记忆。 */
+  memory?: MemoryScopeApi
+  /** 网上查资料（`velaros:web`）的无头页面与搜索引擎；没有就不挂这个模块。 */
+  web?: WebSpacePort
   model: ConversationModel
   confirmationMode: WorkbenchPermissionConfirmationMode
   signal: AbortSignal

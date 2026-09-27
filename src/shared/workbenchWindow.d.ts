@@ -4,6 +4,7 @@ import type { WorkbenchConversationBridge } from './workbenchConversation'
 import type { WorkbenchFsBridge } from './workbenchFs'
 import type { WorkbenchGitBridge } from './workbenchGit'
 import type { WorkbenchLanguageBridge } from './workbenchLanguage'
+import type { WorkbenchMemoryBridge } from './workbenchMemory'
 import type { WorkbenchModelBridge } from './workbenchModel'
 import type { WorkbenchProductAnalyticsBridge } from './workbenchProductAnalytics'
 import type { WorkbenchTerminalBridge } from './workbenchTerminal'
@@ -20,6 +21,7 @@ declare global {
     velarosWorkbenchFs: WorkbenchFsBridge
     velarosWorkbenchGit: WorkbenchGitBridge
     velarosWorkbenchLanguage: WorkbenchLanguageBridge
+    velarosWorkbenchMemory: WorkbenchMemoryBridge
     velarosWorkbenchModel: WorkbenchModelBridge
     velarosWorkbenchTerminal: WorkbenchTerminalBridge
     velarosWorkbenchWatch: WorkbenchWatchBridge

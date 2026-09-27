@@ -1,8 +1,13 @@
 import type { CSSProperties } from 'react'
 
 import { isFiniteNumber, isObject,isString, Log } from '@velaros-ai/core'
+import { DefaultBrowserSearchEngine } from '@velaros-ai/velaros/browser/contracts'
 
-import type { WorkbenchPermissionConfirmationMode as PermissionConfirmationMode } from '@shared/workbenchConversation'
+import {
+  type WorkbenchPermissionConfirmationMode as PermissionConfirmationMode,
+  type WorkbenchWebSearchEngine,
+  WorkbenchWebSearchEngines,
+} from '@shared/workbenchConversation'
 
 import {
   createLocalStorageJsonStore,
@@ -49,6 +54,10 @@ export interface WorkbenchPreferences {
   permissionConfirmationMode: PermissionConfirmationMode
   /** 一轮 AI 运行改了文件时，结束后在编辑区自动打开这一轮的「AI 改动」对比。 */
   aiChangesAutoOpen: boolean
+  /** 长期记忆总开关（与 Desktop 同默认开）：关掉后对话里不再读写记忆，已存的留着。 */
+  memoryEnabled: boolean
+  /** 网上查资料先用的搜索引擎（与 Desktop 同一默认）。 */
+  webSearchEngine: WorkbenchWebSearchEngine
 }
 
 export interface WorkbenchEditorMetrics {
@@ -70,6 +79,8 @@ export const DEFAULT_WORKBENCH_PREFERENCES: WorkbenchPreferences = {
   localHistoryThrottleSeconds: 60,
   permissionConfirmationMode: 'standard-open',
   aiChangesAutoOpen: true,
+  memoryEnabled: true,
+  webSearchEngine: DefaultBrowserSearchEngine,
 }
 
 export const WORKBENCH_EDITOR_FONT_SIZE_MIN = 11
@@ -280,12 +291,30 @@ export function normalizeWorkbenchPreferences(
       typeof preferences?.aiChangesAutoOpen === 'boolean'
         ? preferences.aiChangesAutoOpen
         : DEFAULT_WORKBENCH_PREFERENCES.aiChangesAutoOpen,
+    memoryEnabled:
+      typeof preferences?.memoryEnabled === 'boolean'
+        ? preferences.memoryEnabled
+        : DEFAULT_WORKBENCH_PREFERENCES.memoryEnabled,
+    webSearchEngine: normalizeChoice(
+      preferences?.webSearchEngine,
+      new Set(WorkbenchWebSearchEngines),
+      DEFAULT_WORKBENCH_PREFERENCES.webSearchEngine
+    ),
   }
 }
 
 /** Agent 执行链路读取权限确认策略的唯一入口（main 侧按每轮 config 收到它）。 */
 export function readWorkbenchPermissionConfirmationMode(): PermissionConfirmationMode {
   return readWorkbenchPreferences().permissionConfirmationMode
+}
+
+/** 每轮随请求带给主进程的长期记忆开关与搜索引擎。 */
+export function readWorkbenchConversationRunPreferences(): Pick<
+  WorkbenchPreferences,
+  'memoryEnabled' | 'webSearchEngine'
+> {
+  const { memoryEnabled, webSearchEngine } = readWorkbenchPreferences()
+  return { memoryEnabled, webSearchEngine }
 }
 
 /** 用户手动保存时应用的本地历史节流窗口（毫秒）。 */

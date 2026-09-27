@@ -102,7 +102,7 @@ const ProjectRulesMaxChars = 32_000
 
 /**
  * 按本次执行模式提供任务说明和回复语言（与 Desktop 同一套，身份换成 IDE 里的编程助手）；项目里有
- * AGENTS.md 之类的 AI 规则文件时原文附上（设置页「AI 规则」列的就是这一份）。
+ * AGENTS.md 之类的 AI 规则文件时原文附上（设置页「AI 规则」列的就是这一份），最后附上这一轮开始时的记忆索引。
  */
 export function buildHostInstructions(options: ConversationHostInstructionOptions): string {
   const language = options.locale === 'en-US' ? 'English' : '简体中文'
@@ -123,6 +123,14 @@ export function buildHostInstructions(options: ConversationHostInstructionOption
         ]
       : []),
     ...projectRulesSection(options.projectRules ?? []),
+    // 索引按项目变、会随记忆增删变：放在最后，前面几行的前缀缓存才留得住（与 Desktop 同一顺序）。
+    ...(options.memoryIndex
+      ? [
+          '',
+          '下面是跨会话长期记忆的索引，取自这一轮开始时，本轮里新存或删掉的不会反映在这里：',
+          options.memoryIndex,
+        ]
+      : []),
   ].join('\n')
 }
 

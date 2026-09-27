@@ -27,6 +27,8 @@ const WorkbenchStorageDirectory = {
    * 必须在任何项目之外：Platform 拒绝放在工作区里的数据目录。
    */
   conversationRuntime: 'conversation-runtime',
+  /** 长期记忆（Platform 的记忆库）：一个作用域一个目录的 Markdown，项目按项目根的真实路径各一份。 */
+  memory: 'memory',
 } as const
 
 class WorkbenchAppStoragePaths {
@@ -58,6 +60,11 @@ class WorkbenchAppStoragePaths {
   /** Platform 会话数据区（见 {@link WorkbenchStorageDirectory.conversationRuntime}）。 */
   public getConversationRuntimeDir(): string {
     return this.ensureDir(join(this.dataRootDir, WorkbenchStorageDirectory.conversationRuntime))
+  }
+
+  /** 长期记忆库根目录（见 {@link WorkbenchStorageDirectory.memory}）。 */
+  public getMemoryDir(): string {
+    return this.ensureDir(join(this.dataRootDir, WorkbenchStorageDirectory.memory))
   }
 
   private ensureDir(path: string): string {

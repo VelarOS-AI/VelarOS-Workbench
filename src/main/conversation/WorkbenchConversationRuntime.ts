@@ -7,6 +7,7 @@ import type { InteractionAnswer } from '@velaros-ai/ui/conversation/contracts'
 import type { GoalControl, GoalState } from '@velaros-ai/velaros/contracts'
 import type { ActPresentation } from '@velaros-ai/velaros/renderer'
 import { createActEventProjector } from '@velaros-ai/velaros/renderer'
+import type { WebSpacePort } from '@velaros-ai/velaros/web'
 
 import {
   ConversationAgentNotice,
@@ -57,6 +58,7 @@ import type {
   ConversationWorkspaceHandle,
   ConversationWorkspaceOptions,
 } from './WorkbenchConversationTypes'
+import type { ConversationMemory } from './WorkbenchMemoryService'
 import type { WorkbenchShellHostRegistryApi } from './WorkbenchShellHostRegistry'
 
 const log = Log.tag('WorkbenchConversationRuntime')
@@ -99,6 +101,10 @@ interface WorkbenchConversationRuntimeOptions {
   activity?(ref: WorkbenchConversationRef): WorkbenchAgentProjectActivityPort
   /** Agent 的一次项目编辑写完了这些文件（相对项目根）：告诉语言服务，不等文件监听。 */
   projectFilesEdited?(ref: WorkbenchConversationRef, paths: readonly string[]): void
+  /** 这一轮接的长期记忆（`workspace` 是项目根的真实路径）；请求里关了记忆时不问。 */
+  memory?(workspace: string): Promise<ConversationMemory>
+  /** 网上查资料（`velaros:web`）的无头页面；搜索引擎按这一轮请求里的设置。不给就不挂这个模块。 */
+  webPages?: Pick<WebSpacePort, 'openPage' | 'resolveRedirect'>
   /** 项目里的 AI 规则文件（AGENTS.md 等），每轮附进宿主说明；读不到就不附。 */
   projectRules?(projectRoot: string): Promise<readonly ConversationProjectRule[]>
   /** 注入执行会话的资源所有者（测试用）。 */
@@ -411,7 +417,9 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
       const workspace = await this.storage.workspace(request.projectRoot)
       const activity = this.options.activity?.(request)
       const projectRules = await this.readProjectRules(request.projectRoot)
+      const memory = request.memory ? await this.options.memory?.(workspace) : undefined
       signal.throwIfAborted()
+      const webPages = this.options.webPages
       run.handle = await (this.options.open ?? ((options) => this.session.open(options)))({
         sessionId: request.sessionId,
         dataDir: this.storage.path(request.projectRoot, request.sessionId),
@@ -441,10 +449,19 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
           },
         },
         projectFilesEdited: (paths) => this.options.projectFilesEdited?.(request, paths),
+        memory: memory?.scope,
+        web: webPages && {
+          openPage: (pageSignal) => webPages.openPage(pageSignal),
+          resolveRedirect: webPages.resolveRedirect
+            ? (url, redirectSignal) => webPages.resolveRedirect!(url, redirectSignal)
+            : undefined,
+          searchEngine: () => request.webSearchEngine,
+        },
         instructions: buildHostInstructions({
           locale: request.locale,
           executionModes: request.executionModes,
           projectRules,
+          memoryIndex: memory?.index,
         }),
         model,
         confirmationMode: request.permissionMode,

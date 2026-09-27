@@ -9,10 +9,16 @@ import type {
 } from '@velaros-ai/kernel'
 import type { CodeRunnerApi } from '@velaros-ai/script'
 import type { RuntimeMetric, VelarosRuntime, VelarosSession } from '@velaros-ai/velaros'
-import { createRuntime, createShellCapabilityModule } from '@velaros-ai/velaros'
+import {
+  createCapabilityModule,
+  createRuntime,
+  createShellCapabilityModule,
+} from '@velaros-ai/velaros'
 import { projectCapabilityPorts } from '@velaros-ai/velaros/project'
 import type { ShellSpacePort } from '@velaros-ai/velaros/shell'
 import { shellCommandApproval } from '@velaros-ai/velaros/shell'
+import { webOperations } from '@velaros-ai/velaros/web'
+import { VelarWebModule } from '@velaros-ai/velaros/web/contracts'
 
 import { resolveWorkspaceIntegrityConfirmation } from '../workspace/CommandExecutionPolicy'
 import type { WorkbenchAgentProjectActivityPort } from '../workspace/git/WorkbenchChatRunAttribution'
@@ -72,6 +78,7 @@ export class WorkbenchConversationSession implements WorkbenchConversationSessio
     let session: VelarosSession | undefined
     let runtime: VelarosRuntime | undefined
     const windows = new ProjectActivityWindows(root, options.activity, options.projectFilesEdited)
+    const { memory, web } = options
     // 审批选项（危险命令的操作身份与风险）随请求交给交互卡；回答是卡上给的 { approved, reason }
     const decide = async (
       message: string,
@@ -127,13 +134,24 @@ export class WorkbenchConversationSession implements WorkbenchConversationSessio
                 decide(message, signal, detail),
             },
           }),
+          // 网上查资料（与 Desktop 一样每个会话都挂、不常驻，要用时 import）：搜索与读网页跑在不显示的页面里。
+          ...(web
+            ? [
+                createCapabilityModule({
+                  surface: VelarWebModule,
+                  implementation: webOperations,
+                  instanceId: 'web',
+                  context: (call) => ({ abortSignal: call.signal, web }),
+                }),
+              ]
+            : []),
         ],
         // 子任务用 Platform 的默认配置 worker：与主会话同一个模型、同一套模块。
         agents: true,
         widgets: { show: (widget) => options.showWidget(widget) },
         search: false,
-        // IDE 不接长期记忆：项目自己的说明与代码就是上下文。
-        memory: false,
+        // 长期记忆（与 Desktop 同一套）：这个项目的作用域；设置里关掉时不挂。
+        memory: memory ? () => memory : false,
         authorize: async (invocation, descriptor, signal) => {
           options.signal.throwIfAborted()
           if (
