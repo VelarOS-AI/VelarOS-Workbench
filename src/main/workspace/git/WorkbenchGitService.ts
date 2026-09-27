@@ -118,6 +118,14 @@ interface GitRepository {
   prefix: string
 }
 
+interface GitBranchUpstream {
+  /** 如 `origin/main`。 */
+  name: string
+  remote: string
+  /** 远端那边的分支引用，如 `refs/heads/main`。 */
+  remoteRef: string
+}
+
 const EmptyLineStats: WorkspaceGitLineStats = {
   additions: 0,
   deletions: 0,
@@ -491,35 +499,41 @@ export class WorkbenchGitService {
     options: WorkspaceGitRemoteActionOptions = {}
   ): Promise<SystemWorkspaceGitActionResult> {
     const rootPath = await this.resolveRoot(workspaceRoot)
-    const status = await this.getStatus(await this.openRepository(rootPath))
-    if (!status.branch)
+    const currentBranch = await this.getCurrentBranch(rootPath)
+    if (!currentBranch)
       throw new AppError('VALIDATION', '当前 Git 工作区没有可识别的本地分支。')
     const actionBranch =
-      action === 'upload' && options.branch
-        ? this.assertBranch(options.branch)
-        : status.branch
-    if (action === 'upload' && actionBranch !== status.branch) {
-      await this.runGit(rootPath, ['rev-parse', '--verify', `refs/heads/${actionBranch}`])
+      action === 'upload' && options.branch ? this.assertBranch(options.branch) : currentBranch
+    if (actionBranch !== currentBranch) {
+      const exists = await this.runGit(
+        rootPath,
+        ['rev-parse', '-q', '--verify', `refs/heads/${actionBranch}`],
+        { allowFailure: true }
+      )
+      if (exists.failed) throw new AppError('VALIDATION', `本地没有分支 ${actionBranch}。`)
     }
-    const actionUpstream =
-      action === 'upload' && actionBranch !== status.branch
-        ? await this.getLocalBranchUpstream(rootPath, actionBranch)
-        : status.upstream
-    const args =
-      action === 'fetch'
-        ? ['fetch', '--prune']
-        : action === 'update'
-          ? ['pull', '--ff-only', '--autostash']
-          : actionUpstream
-            ? this.buildBranchPushArgs(actionBranch, actionUpstream)
-            : [
-                'push',
-                '--set-upstream',
-                'origin',
-                `refs/heads/${actionBranch}:refs/heads/${actionBranch}`,
-              ]
-    if (action === 'update' && !status.upstream)
-      throw new AppError('VALIDATION', `当前分支 ${status.branch} 没有关联的远程跟踪分支。`)
+    const upstream = await this.getBranchUpstream(rootPath, actionBranch)
+    if (action === 'update' && !upstream)
+      throw new AppError('VALIDATION', `当前分支 ${actionBranch} 没有关联的远程跟踪分支。`)
+
+    let args: string[]
+    let resultUpstream = upstream?.name ?? null
+    if (action === 'fetch') {
+      args = ['fetch', '--prune']
+    } else if (action === 'update') {
+      args = ['pull', '--ff-only', '--autostash']
+    } else if (upstream) {
+      args = ['push', upstream.remote, `refs/heads/${actionBranch}:${upstream.remoteRef}`]
+    } else {
+      const remote = await this.resolvePushRemote(rootPath, actionBranch)
+      args = [
+        'push',
+        '--set-upstream',
+        remote,
+        `refs/heads/${actionBranch}:refs/heads/${actionBranch}`,
+      ]
+      resultUpstream = `${remote}/${actionBranch}`
+    }
     // 获取与推送有时限，中途结束不伤本地；拉取带着 --autostash，中途结束可能把本地改动留在储藏（stash）
     // 里，不设时限。
     const output = (
@@ -531,34 +545,60 @@ export class WorkbenchGitService {
     const remoteAction: WorkspaceGitRemoteActionResult = {
       action,
       branch: actionBranch,
-      upstream: actionUpstream ?? (action === 'upload' ? `origin/${actionBranch}` : null),
+      upstream: resultUpstream,
       output,
     }
     return { rootPath, action: remoteAction, summary: await this.getSummary(rootPath) }
   }
 
-  private buildBranchPushArgs(branch: string, upstream: string): string[] {
-    const separatorIndex = upstream.indexOf('/')
-    if (separatorIndex <= 0 || separatorIndex === upstream.length - 1)
-      return ['push', '--set-upstream', 'origin', `refs/heads/${branch}:refs/heads/${branch}`]
-
-    const remote = upstream.slice(0, separatorIndex)
-    const remoteBranch = upstream.slice(separatorIndex + 1)
-    return ['push', remote, `refs/heads/${branch}:refs/heads/${remoteBranch}`]
+  /**
+   * 还没有上游的分支第一次推送推到哪个远端：分支自己配置的远端，其次 `remote.pushDefault`，再次仓库里
+   * 唯一的远端；有好几个远端又都没配置时不替用户挑。
+   */
+  private async resolvePushRemote(rootPath: string, branch: string): Promise<string> {
+    for (const key of [
+      `branch.${branch}.pushRemote`,
+      `branch.${branch}.remote`,
+      'remote.pushDefault',
+    ]) {
+      const configured = await this.readConfig(rootPath, key)
+      if (configured && configured !== '.') return configured
+    }
+    const remotes = (await this.runGit(rootPath, ['remote'])).stdout
+      .split(/\r?\n/)
+      .map((remote) => remote.trim())
+      .filter(Boolean)
+    if (remotes.length === 1) return remotes[0]
+    if (remotes.length === 0)
+      throw new AppError(
+        'VALIDATION',
+        '当前仓库还没有配置远端，无法推送。请先添加远端（git remote add origin <地址>）。'
+      )
+    throw new AppError(
+      'VALIDATION',
+      `仓库有 ${remotes.length} 个远端（${remotes.join('、')}），无法确定把分支 ${branch} 推送到哪一个。请在终端里推送一次并指定远端（git push -u <远端> ${branch}），或设置默认推送远端（git config remote.pushDefault <远端>）。`
+    )
   }
 
-  private async getLocalBranchUpstream(
+  private async readConfig(rootPath: string, key: string): Promise<Nullable<string>> {
+    const result = await this.runGit(rootPath, ['config', '--get', key], { allowFailure: true })
+    return (!result.failed && result.stdout.trim()) || null
+  }
+
+  private async getBranchUpstream(
     rootPath: string,
     branch: string
-  ): Promise<Nullable<string>> {
+  ): Promise<Nullable<GitBranchUpstream>> {
     const output = (
       await this.runGit(rootPath, [
         'for-each-ref',
-        '--format=%(upstream:short)',
+        '--format=%(upstream:short)%09%(upstream:remotename)%09%(upstream:remoteref)',
         `refs/heads/${branch}`,
       ])
-    ).stdout.trim()
-    return output || null
+    ).stdout
+    const [name = '', remote = '', remoteRef = ''] = output.split('\t')
+    if (!name.trim() || !remote.trim() || !remoteRef.trim()) return null
+    return { name: name.trim(), remote: remote.trim(), remoteRef: remoteRef.trim() }
   }
 
   /**

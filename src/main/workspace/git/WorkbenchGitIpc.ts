@@ -231,13 +231,15 @@ function parseRemoteAction(input: unknown): WorkbenchGitRemoteActionRequest {
   if (action !== 'fetch' && action !== 'update' && action !== 'upload')
     return invalidRequest()
   const record = input as Record<string, unknown>
-  for (const key of ['githubToken', 'privateKeyPath', 'sshKeyPath']) {
+  for (const key of ['branch', 'githubToken', 'privateKeyPath', 'sshKeyPath']) {
     if (record[key] !== undefined && typeof record[key] !== 'string')
       return invalidRequest()
   }
   return {
     workspaceRoot: record['workspaceRoot'] as string,
     action,
+    // 分支菜单里推送别的分支时带着它；丢了就会推成当前分支。
+    branch: optionalWhen(isString, record['branch']),
     githubToken: optionalWhen(isString, record['githubToken']),
     privateKeyPath: optionalWhen(isString, record['privateKeyPath']),
     sshKeyPath: optionalWhen(isString, record['sshKeyPath']),

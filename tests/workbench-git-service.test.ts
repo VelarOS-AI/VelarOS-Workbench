@@ -344,6 +344,49 @@ void describe('Workbench Git service', () => {
     })
   })
 
+  void test('the first push of a branch goes to its configured remote, the default one, or the only one', async () => {
+    await withTempDirectory(async (base) => {
+      const origin = join(base, 'origin.git')
+      const fork = join(base, 'fork.git')
+      await git(base, ['init', '-q', '--bare', origin])
+      await git(base, ['init', '-q', '--bare', fork])
+      const root = join(base, 'work')
+      await mkdir(root)
+      await initRepository(root)
+      await writeFile(join(root, 'a.txt'), 'a\n')
+      await commitAll(root, 'base')
+      const head = (await git(root, ['rev-parse', 'HEAD'])).trim()
+      const service = createService()
+
+      // 唯一的远端不叫 origin。
+      await git(root, ['remote', 'add', 'upstream', fork])
+      const first = await service.performRemoteAction(root, 'upload')
+      assert.equal(first.action.upstream, 'upstream/main')
+      assert.equal((await git(fork, ['rev-parse', 'refs/heads/main'])).trim(), head)
+
+      await git(root, ['remote', 'add', 'origin', origin])
+      await git(root, ['branch', 'topic'])
+      await assert.rejects(
+        service.performRemoteAction(root, 'upload', { branch: 'topic' }),
+        isAppError('VALIDATION', /2 个远端（origin、upstream）/)
+      )
+
+      await git(root, ['config', 'remote.pushDefault', 'origin'])
+      const pushed = await service.performRemoteAction(root, 'upload', { branch: 'topic' })
+      // 推的是菜单里选的分支，不是当前分支。
+      assert.equal(pushed.action.branch, 'topic')
+      assert.equal(pushed.action.upstream, 'origin/topic')
+      assert.equal((await git(origin, ['rev-parse', 'refs/heads/topic'])).trim(), head)
+      await assert.rejects(git(origin, ['rev-parse', '--verify', 'refs/heads/main']))
+
+      // 分支自己配置的推送远端优先。
+      await git(root, ['branch', 'topic2'])
+      await git(root, ['config', 'branch.topic2.pushRemote', 'upstream'])
+      const configured = await service.performRemoteAction(root, 'upload', { branch: 'topic2' })
+      assert.equal(configured.action.upstream, 'upstream/topic2')
+    })
+  })
+
   void test.skipIf(process.platform === 'win32')(
     'a fetch that hangs is stopped at the time limit with a clear error',
     async () => {
