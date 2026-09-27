@@ -99,7 +99,7 @@ describe('external changes to the open file', () => {
     let state = fileState('const a = 1\nconst b = 2\nconst c = 3\n')
     state = state.update({ selection: { anchor: 20 } }).state
     const next = state.update(
-      buildWorkbenchExternalValueSyncTransaction(state, 'const a = 10\nconst b = 2\nconst c = 3\n', external.of(true))
+      buildWorkbenchExternalValueSyncTransaction(state, 'const a = 10\nconst b = 2\nconst c = 3\n', external.of(true))!
     ).state
     expect(next.doc.toString()).toBe('const a = 10\nconst b = 2\nconst c = 3\n')
     expect(next.selection.main.head).toBe(21)
@@ -108,13 +108,26 @@ describe('external changes to the open file', () => {
   test('form their own undo step, separate from typing right before them', () => {
     let state = type(fileState('let x = 1\n'), 9, '0')
     state = state.update(
-      buildWorkbenchExternalValueSyncTransaction(state, 'let x = 10\nlet y = 2\n', external.of(true))
+      buildWorkbenchExternalValueSyncTransaction(state, 'let x = 10\nlet y = 2\n', external.of(true))!
     ).state
     state = run(state, undo)
     expect(state.doc.toString()).toBe('let x = 10\n')
     state = run(state, undo)
     expect(state.doc.toString()).toBe('let x = 1\n')
     expect(run(state, redo).doc.toString()).toBe('let x = 10\n')
+  })
+
+  test('ignore a different line ending and never split a CRLF into two lines', () => {
+    const state = fileState('line one\r\nline two\r\n')
+    expect(state.doc.lines).toBe(3)
+    expect(buildWorkbenchExternalValueSyncTransaction(state, 'line one\r\nline two\r\n', external.of(true))).toBeNull()
+    expect(buildWorkbenchExternalValueSyncTransaction(state, 'line one\nline two\n', external.of(true))).toBeNull()
+
+    const next = state.update(
+      buildWorkbenchExternalValueSyncTransaction(state, 'line one\r\nline 2\r\nline three\r\n', external.of(true))!
+    ).state
+    expect(next.doc.lines).toBe(4)
+    expect(next.doc.toString()).toBe('line one\nline 2\nline three\n')
   })
 })
 

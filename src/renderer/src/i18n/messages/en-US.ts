@@ -814,6 +814,8 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     settingsAccentSlate: 'Slate',
     settingsEditorFontSize: 'Editor font size',
     settingsEditorLineHeight: 'Editor line height',
+    settingsEditorWordWrap: 'Word wrap',
+    settingsEditorWordWrapHint: 'Wrap long lines at the editor width. Press {shortcut} in the editor to toggle.',
     settingsLocalHistoryThrottle: 'Local history throttle',
     settingsLocalHistoryThrottleHint:
       'While you type, skip a new local-history snapshot if the last one is within this interval — lighter, less memory. AI edits are always recorded.',

@@ -73,7 +73,11 @@ import {
   retainWorkbenchCommentAnchorsEffect,
   setWorkbenchCommentAnchorsEffect,
 } from '@renderer/components/editor/workbenchCommentExtension'
-import { useWorkbenchEditorMetrics } from '@renderer/hooks/useWorkbenchPreferences'
+import { useWorkbenchEditorConfig } from '@renderer/hooks/useWorkbenchEditorConfig'
+import {
+  useWorkbenchEditorMetrics,
+  useWorkbenchEditorWordWrap,
+} from '@renderer/hooks/useWorkbenchPreferences'
 import {
   useWorkbenchHostRuntime,
   type WorkbenchHostRuntime,
@@ -168,6 +172,11 @@ import {
   setWorkbenchGitChangeBaseEffect,
   workbenchGitChangeGutterExtension,
 } from '@renderer/models/editor/workbenchGitChangeGutter'
+import {
+  detectWorkbenchIndentation,
+  resolveWorkbenchIndentation,
+  workbenchIndentUnit,
+} from '@renderer/models/editor/workbenchIndentation'
 import { buildWorkbenchIdeaIndentGuideColumnsForLineRange } from '@renderer/models/editor/workbenchIndentGuides'
 import {
   getWorkbenchInlineCompletion,
@@ -202,7 +211,10 @@ import {
   shouldShowWorkbenchVelarTestRunGutter,
 } from '@renderer/models/editor/workbenchVelarTestRunGutter'
 import type { WorkbenchProjectContextIndex } from '@renderer/models/project/workbenchProjectContextIndex'
-import type { WorkbenchThemeId } from '@renderer/models/settings/workbenchPreferences'
+import {
+  toggleWorkbenchEditorWordWrap,
+  type WorkbenchThemeId,
+} from '@renderer/models/settings/workbenchPreferences'
 import { useStandaloneWorkbenchModelConfig } from '@renderer/runtime/standaloneWorkbenchModelConfig'
 import type { WorkbenchOpenEditorTab } from '@renderer/types/workbenchTypes'
 
@@ -290,6 +302,8 @@ interface CodeMirrorEditorProps {
 
 /** 编辑器实例建一次、各文件状态共用的扩展（按键、鼠标、更新监听……），它们只通过 ref 读当前的值。 */
 interface WorkbenchEditorInstanceExtensions {
+  /** 建它们的模块。开发时热更新会换掉整个模块：旧扩展认不出新模块的注解（会把外部同步当成用户输入），得重建。 */
+  module: object
   keymap: Extension
   tooltips: Extension
   comments: Extension
@@ -301,6 +315,7 @@ interface WorkbenchEditorInstanceExtensions {
 type GetWorkbenchOpenTabs = () => readonly WorkbenchOpenEditorTab[]
 type GetWorkbenchProjectContextIndex = () => WorkbenchProjectContextIndex
 
+const EditorModule = {}
 const externalValueSync = Annotation.define<boolean>()
 /** 别的文件在磁盘上变了：linter 据此重跑，不必等当前文档改动。 */
 const externalWorkspaceChange = StateEffect.define<number>()
@@ -902,7 +917,11 @@ const workbenchIndentGuideExtension = ViewPlugin.fromClass(
     }
 
     public update(update: ViewUpdate): void {
-      if (update.docChanged || update.viewportChanged) {
+      if (
+        update.docChanged
+        || update.viewportChanged
+        || update.startState.tabSize !== update.state.tabSize
+      ) {
         this.decorations = this.buildDecorations(update.view)
       }
     }
@@ -1224,6 +1243,8 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
     const languageServiceCompartment = useMemo(() => new Compartment(), [])
     const syntaxThemeCompartment = useMemo(() => new Compartment(), [])
     const editorMetricsCompartment = useMemo(() => new Compartment(), [])
+    const indentationCompartment = useMemo(() => new Compartment(), [])
+    const wordWrapCompartment = useMemo(() => new Compartment(), [])
     const editorMetrics = useWorkbenchEditorMetrics()
     const progressiveLoadTimers = useTimerScope('WorkbenchEditorProgressiveLoad')
     const languageSupport = useMemo(
@@ -1350,6 +1371,31 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       () => [languageServiceLinter, lintTheme, diagnosticForegroundExtension],
       [diagnosticForegroundExtension, languageServiceLinter, lintTheme]
     )
+    // 缩进按切到这个文件那一刻的正文识别（不随每次输入重算），`.editorconfig` 写了的优先。
+    const valueRef = useLatest(value)
+    const detectedIndentation = useMemo(
+      () => detectWorkbenchIndentation(valueRef.current),
+      [path, valueRef]
+    )
+    const editorConfig = useWorkbenchEditorConfig({
+      projectRoot,
+      path,
+      openTabs,
+      revision: externalRevision,
+    })
+    const indentation = useMemo(
+      () => resolveWorkbenchIndentation({ path, detected: detectedIndentation, editorConfig }),
+      [detectedIndentation, editorConfig, path]
+    )
+    const indentationExtension = useMemo(
+      () => [
+        indentUnit.of(workbenchIndentUnit(indentation)),
+        EditorState.tabSize.of(indentation.tabSize),
+      ],
+      [indentation]
+    )
+    const wordWrap = useWorkbenchEditorWordWrap()
+    const wordWrapExtension = useMemo(() => (wordWrap ? EditorView.lineWrapping : []), [wordWrap])
     const [contextMenu, setContextMenu] = useState<Nullable<EditorContextMenuState>>(null)
     const [symbolLocationsAnchor, setSymbolLocationsAnchor] =
       useState<Nullable<WorkbenchSymbolLocationsAnchor>>(null)
@@ -2155,6 +2201,8 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       readOnly: readOnlyExtension,
       completion: completionExtension,
       lint: lintExtension,
+      indentation: indentationExtension,
+      wordWrap: wordWrapExtension,
     })
 
     const createInstanceExtensions = (
@@ -2227,6 +2275,14 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
           preventDefault: true,
           run: () => {
             void editorActionsRef.current.formatDocument()
+            return true
+          },
+        },
+        {
+          key: 'Alt-z',
+          preventDefault: true,
+          run: () => {
+            toggleWorkbenchEditorWordWrap()
             return true
           },
         },
@@ -2352,6 +2408,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       })
 
       return {
+        module: EditorModule,
         keymap: customKeymap,
         tooltips: tooltips({
           parent: toOptional(container),
@@ -2387,8 +2444,8 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         editorMetricsCompartment.of(current.editorMetrics),
         syntaxThemeCompartment.of(current.syntaxTheme),
         autocompleteThemeCompartment.of(current.autocompleteTheme),
-        indentUnit.of('  '),
-        EditorState.tabSize.of(2),
+        indentationCompartment.of(current.indentation),
+        wordWrapCompartment.of(current.wordWrap),
         workbenchIndentGuideExtension,
         instance.comments,
         instance.mouseHandlers,
@@ -2421,6 +2478,8 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         [readOnlyCompartment, current.readOnly],
         [completionCompartment, current.completion],
         [lintCompartment, current.lint],
+        [indentationCompartment, current.indentation],
+        [wordWrapCompartment, current.wordWrap],
       ]
       const effects = wanted.flatMap(([compartment, extension]) =>
         compartment.get(view.state) === extension ? [] : [compartment.reconfigure(extension)]
@@ -2482,10 +2541,12 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         view.dispatch({ effects: saved.scroll })
         if (saved.activeLineSuppressed) suppressWorkbenchActiveLine(view)
         else revealWorkbenchActiveLine(view)
-        if (view.state.doc.toString() !== content)
-          view.dispatch(
-            buildWorkbenchExternalValueSyncTransaction(view.state, content, externalValueSync.of(true))
-          )
+        const sync = buildWorkbenchExternalValueSyncTransaction(
+          view.state,
+          content,
+          externalValueSync.of(true)
+        )
+        if (sync) view.dispatch(sync)
       } else {
         suppressWorkbenchActiveLine(view)
         view.scrollDOM.scrollTo({ left: 0, top: 0 })
@@ -2499,7 +2560,9 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       const container = containerRef.current
       if (!container || viewRef.current) return
 
-      const instance = (instanceExtensionsRef.current ??= createInstanceExtensions(container))
+      let instance = instanceExtensionsRef.current
+      if (instance?.module !== EditorModule)
+        instance = instanceExtensionsRef.current = createInstanceExtensions(container)
       const key = path ? workbenchEditorFileStateKey(projectRoot, path) : null
       const { state, saved } = loadFileState(key, value, instance)
       const view = new EditorView({ state, parent: container })
@@ -2535,9 +2598,14 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         settleFileState(view, saved, value)
         return
       }
-      if (view.state.doc.toString() === value) return
+      const sync = buildWorkbenchExternalValueSyncTransaction(
+        view.state,
+        value,
+        externalValueSync.of(true)
+      )
+      if (!sync) return
 
-      view.dispatch(buildWorkbenchExternalValueSyncTransaction(view.state, value, externalValueSync.of(true)))
+      view.dispatch(sync)
       emitCursorPosition(view, callbacksRef.current.onCursorPositionChange)
     }, [path, projectRoot, value])
 
@@ -2639,6 +2707,14 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
     useEffect(() => {
       reconfigureCompartment(viewRef.current, lintCompartment, lintExtension)
     }, [lintCompartment, lintExtension])
+
+    useEffect(() => {
+      reconfigureCompartment(viewRef.current, indentationCompartment, indentationExtension)
+    }, [indentationCompartment, indentationExtension])
+
+    useEffect(() => {
+      reconfigureCompartment(viewRef.current, wordWrapCompartment, wordWrapExtension)
+    }, [wordWrapCompartment, wordWrapExtension])
 
     const appliedExternalRevisionRef = useRef(externalRevision)
     useEffect(() => {

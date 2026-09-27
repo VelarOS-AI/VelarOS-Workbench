@@ -813,6 +813,17 @@ export function WorkbenchSettingsDialog({
           </div>
         </SettingRow>
         <SettingRow
+          title={t('workbench.settingsEditorWordWrap')}
+          description={t('workbench.settingsEditorWordWrapHint', {
+            shortcut: /Mac|iPhone|iPad/.test(navigator.platform) ? '⌥Z' : 'Alt+Z',
+          })}
+        >
+          <Switch
+            checked={preferences.editorWordWrap}
+            onCheckedChange={(editorWordWrap) => onPreferencesChange({ editorWordWrap })}
+          />
+        </SettingRow>
+        <SettingRow
           title={t('workbench.settingsLocalHistoryThrottle')}
           description={t('workbench.settingsLocalHistoryThrottleHint')}
         >

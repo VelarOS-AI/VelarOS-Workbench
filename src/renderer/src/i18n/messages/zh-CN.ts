@@ -782,6 +782,8 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     settingsAccentSlate: '石板蓝',
     settingsEditorFontSize: '编辑器字号',
     settingsEditorLineHeight: '编辑器行高',
+    settingsEditorWordWrap: '自动换行',
+    settingsEditorWordWrapHint: '长行在编辑区宽度处折行显示；在编辑区里按 {shortcut} 也能切换。',
     settingsLocalHistoryThrottle: '本地历史节流',
     settingsLocalHistoryThrottleHint:
       '手动编辑时，距上一份快照不足该间隔就不新增本地历史，省内存、更轻量。AI 改动不受此限，每次都会记录。',

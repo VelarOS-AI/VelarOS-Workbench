@@ -39,6 +39,8 @@ export interface WorkbenchPreferences {
   editorLineHeight: number
   /** 快捷键控制的代码区缩放级别；基础字号和行高仍由设置面板独立维护。 */
   editorZoomLevel: number
+  /** 长行在编辑区宽度处折行显示（⌥Z 切换）。 */
+  editorWordWrap: boolean
   theme: WorkbenchThemeId
   /**
    * 用户手动编辑的本地历史快照节流窗口（秒）：自动保存时距上一份快照不足该间隔就不新增，
@@ -75,6 +77,7 @@ export const DEFAULT_WORKBENCH_PREFERENCES: WorkbenchPreferences = {
   editorFontSize: 12.5,
   editorLineHeight: 20.25,
   editorZoomLevel: 0,
+  editorWordWrap: false,
   theme: 'light-modern',
   localHistoryThrottleSeconds: 60,
   permissionConfirmationMode: 'standard-open',
@@ -275,6 +278,10 @@ export function normalizeWorkbenchPreferences(
         DEFAULT_WORKBENCH_PREFERENCES.editorZoomLevel
       )
     ),
+    editorWordWrap:
+      typeof preferences?.editorWordWrap === 'boolean'
+        ? preferences.editorWordWrap
+        : DEFAULT_WORKBENCH_PREFERENCES.editorWordWrap,
     theme: normalizeWorkbenchThemeChoice(preferences?.theme),
     localHistoryThrottleSeconds: clampNumber(
       preferences?.localHistoryThrottleSeconds,
@@ -315,6 +322,12 @@ export function readWorkbenchConversationRunPreferences(): Pick<
 > {
   const { memoryEnabled, webSearchEngine } = readWorkbenchPreferences()
   return { memoryEnabled, webSearchEngine }
+}
+
+/** 编辑区里按 ⌥Z：切换自动换行，存进偏好。 */
+export function toggleWorkbenchEditorWordWrap(): void {
+  const preferences = readWorkbenchPreferences()
+  saveWorkbenchPreferences({ ...preferences, editorWordWrap: !preferences.editorWordWrap })
 }
 
 /** 用户手动保存时应用的本地历史节流窗口（毫秒）。 */

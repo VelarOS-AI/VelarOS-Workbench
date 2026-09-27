@@ -88,82 +88,62 @@ export function useWorkbenchPreferences(): WorkbenchPreferencesController {
 }
 
 /**
+ * 只订阅偏好里的一项：别的偏好变了、这一项没变时不触发重新渲染。`select` 须是稳定的函数（模块级），
+ * `same` 判断两次取到的值是否相同。
+ */
+function useWorkbenchPreferenceValue<T>(
+  select: (preferences: WorkbenchPreferences) => T,
+  same: (current: T, next: T) => boolean = Object.is
+): T {
+  const [value, setValue] = useState<T>(() => select(readWorkbenchPreferences()))
+
+  useEffect(() => {
+    const refresh = (): void => {
+      const next = select(readWorkbenchPreferences())
+      setValue((current) => (same(current, next) ? current : next))
+    }
+
+    const handleStorageChanged = (event: StorageEvent): void => {
+      if (event.key === 'velaros.workbench.preferences.v1') refresh()
+    }
+
+    window.addEventListener(WORKBENCH_PREFERENCES_CHANGED_EVENT, refresh)
+    window.addEventListener('storage', handleStorageChanged)
+
+    return () => {
+      window.removeEventListener(WORKBENCH_PREFERENCES_CHANGED_EVENT, refresh)
+      window.removeEventListener('storage', handleStorageChanged)
+    }
+  }, [same, select])
+
+  return value
+}
+
+const selectTheme = (preferences: WorkbenchPreferences): WorkbenchThemeId => preferences.theme
+const selectDensity = (preferences: WorkbenchPreferences): WorkbenchDensity => preferences.density
+const selectWordWrap = (preferences: WorkbenchPreferences): boolean => preferences.editorWordWrap
+const sameEditorMetrics = (current: WorkbenchEditorMetrics, next: WorkbenchEditorMetrics): boolean =>
+  current.key === next.key
+
+/**
  * 只订阅会改变 CodeMirror 几何尺寸的偏好。
  * 外层 CSS 变量负责视觉样式，这个值负责显式触发编辑器的测量缓存刷新。
  */
 export function useWorkbenchEditorMetrics(): WorkbenchEditorMetrics {
-  const [metrics, setMetrics] = useState<WorkbenchEditorMetrics>(() =>
-    getWorkbenchEditorMetrics(readWorkbenchPreferences())
-  )
-
-  useEffect(() => {
-    const refresh = (): void => {
-      const next = getWorkbenchEditorMetrics(readWorkbenchPreferences())
-      setMetrics((current) => (current.key === next.key ? current : next))
-    }
-
-    const handleStorageChanged = (event: StorageEvent): void => {
-      if (event.key === 'velaros.workbench.preferences.v1') refresh()
-    }
-
-    window.addEventListener(WORKBENCH_PREFERENCES_CHANGED_EVENT, refresh)
-    window.addEventListener('storage', handleStorageChanged)
-
-    return () => {
-      window.removeEventListener(WORKBENCH_PREFERENCES_CHANGED_EVENT, refresh)
-      window.removeEventListener('storage', handleStorageChanged)
-    }
-  }, [])
-
-  return metrics
+  return useWorkbenchPreferenceValue(getWorkbenchEditorMetrics, sameEditorMetrics)
 }
 
 /** 只订阅主题：编辑器之外的代码片段（搜索结果）按它着色。 */
 export function useWorkbenchCodeTheme(): WorkbenchThemeId {
-  const [theme, setTheme] = useState<WorkbenchThemeId>(() => readWorkbenchPreferences().theme)
-
-  useEffect(() => {
-    const refresh = (): void => {
-      setTheme(readWorkbenchPreferences().theme)
-    }
-
-    const handleStorageChanged = (event: StorageEvent): void => {
-      if (event.key === 'velaros.workbench.preferences.v1') refresh()
-    }
-
-    window.addEventListener(WORKBENCH_PREFERENCES_CHANGED_EVENT, refresh)
-    window.addEventListener('storage', handleStorageChanged)
-
-    return () => {
-      window.removeEventListener(WORKBENCH_PREFERENCES_CHANGED_EVENT, refresh)
-      window.removeEventListener('storage', handleStorageChanged)
-    }
-  }, [])
-
-  return theme
+  return useWorkbenchPreferenceValue(selectTheme)
 }
 
 /** 只订阅会改变文件树虚拟行高的密度值。 */
 export function useWorkbenchDensity(): WorkbenchDensity {
-  const [density, setDensity] = useState<WorkbenchDensity>(() => readWorkbenchPreferences().density)
+  return useWorkbenchPreferenceValue(selectDensity)
+}
 
-  useEffect(() => {
-    const refresh = (): void => {
-      setDensity(readWorkbenchPreferences().density)
-    }
-
-    const handleStorageChanged = (event: StorageEvent): void => {
-      if (event.key === 'velaros.workbench.preferences.v1') refresh()
-    }
-
-    window.addEventListener(WORKBENCH_PREFERENCES_CHANGED_EVENT, refresh)
-    window.addEventListener('storage', handleStorageChanged)
-
-    return () => {
-      window.removeEventListener(WORKBENCH_PREFERENCES_CHANGED_EVENT, refresh)
-      window.removeEventListener('storage', handleStorageChanged)
-    }
-  }, [])
-
-  return density
+/** 只订阅编辑区的自动换行开关。 */
+export function useWorkbenchEditorWordWrap(): boolean {
+  return useWorkbenchPreferenceValue(selectWordWrap)
 }
