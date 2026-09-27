@@ -1734,7 +1734,7 @@ class WorkbenchLanguageServices {
   private cssLanguageIdForPath(path: string): 'css' | 'less' | 'scss' {
     const extension = getWorkbenchPathExtension(path)
     if (extension === 'less') return 'less'
-    if (extension === 'scss' || extension === 'sass') return 'scss'
+    if (extension === 'scss') return 'scss'
     return 'css'
   }
 

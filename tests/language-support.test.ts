@@ -164,6 +164,34 @@ void describe('focused Workbench language surface', () => {
       assert.equal(resolveBuiltinWorkbenchLanguageService(language), null)
   })
 
+  void test('leaves indented Sass to syntax highlighting instead of the SCSS service', async () => {
+    assert.equal(resolveBuiltinWorkbenchLanguageService('sass'), null)
+    assert.equal(resolveBuiltinWorkbenchLanguageService('scss')?.id, 'web-css')
+    assert.equal(usesWorkbenchBuiltinLanguageService('styles/app.sass'), false)
+    assert.equal(usesWorkbenchBuiltinLanguageService('styles/app.scss'), true)
+    assert.equal(resolveWorkbenchCodeMirrorLanguage('styles/app.sass', '').mode, 'builtin')
+
+    const projectRoot = await mkdtemp(join(tmpdir(), 'workbench-sass-'))
+    const services = new WorkbenchLanguageServices(languagePathResolver)
+    try {
+      const sass = await services.getDiagnostics({
+        projectRoot,
+        path: 'app.sass',
+        content: '.a\n  color: red\n  &:hover\n    color: blue\n',
+      })
+      assert.deepEqual(sass.diagnostics, [])
+      const scss = await services.getDiagnostics({
+        projectRoot,
+        path: 'app.scss',
+        content: '.a {\n  color: red\n',
+      })
+      assert.ok(scss.diagnostics.length > 0)
+    } finally {
+      await services.dispose()
+      await rm(projectRoot, { recursive: true, force: true })
+    }
+  })
+
   void test('loads VelarScript syntax as a built-in language', () => {
     const remove = installVelarWorkbenchContribution()
     const velar = resolveWorkbenchCodeMirrorLanguage('src/main.vel', '')

@@ -85,8 +85,9 @@ const BuiltinLanguageServices: WorkbenchLanguageServiceDescriptor[] = [
     label: 'CSS',
     installKind: 'builtin',
     runtime: 'css-language-service',
-    extensions: ['css', 'less', 'sass', 'scss'],
-    languages: ['css', 'less', 'sass', 'scss'],
+    // 缩进语法的 `.sass` 不是 SCSS：交给 SCSS 服务只会满屏误报，它只做语法着色。
+    extensions: ['css', 'less', 'scss'],
+    languages: ['css', 'less', 'scss'],
   },
   {
     id: 'markdown',
