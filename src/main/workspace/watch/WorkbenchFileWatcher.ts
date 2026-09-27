@@ -8,7 +8,10 @@ import { AppError } from '@velaros-ai/core/error'
 import type { SystemWorkspaceFilesChangedEvent } from '@shared/contracts'
 
 import { isWorkbenchSaveTemporaryName } from '../AtomicFileWrite'
-import { shouldSkipProjectDirectory } from '../WorkbenchSkippedDirectories'
+import {
+  isGeneratedProjectDirectory,
+  isInternalProjectDirectory,
+} from '../WorkbenchSkippedDirectories'
 
 const WorkbenchWatchDebounceMs = 120
 
@@ -58,6 +61,12 @@ function toRootRelativePath(rootPath: string, filename: string): Nullable<string
   return path
 }
 
+/**
+ * 订阅方收到的路径。版本库的状态文件（HEAD、index、refs）照报，其余内部目录里的改动不报；依赖目录与
+ * 根目录下的构建产物里的改动收成那个目录本身（`node_modules`、`packages/a/node_modules`、`dist`）——
+ * 一装依赖、一跑构建就是成千上万个文件事件，不逐个灌给语言服务与界面，展开着的那个目录照样会刷新。
+ * 更深处的 `build` / `dist` / `out`（常是源码）照常逐个报。
+ */
 function normalizeRelativePath(rootPath: string, filename: string): Nullable<string> {
   const path = toRootRelativePath(rootPath, filename)
   if (!path) return null
@@ -70,10 +79,14 @@ function normalizeRelativePath(rootPath: string, filename: string): Nullable<str
       segments[1] === 'packed-refs' ||
       segments[1] === 'refs')
   if (isGitState) return path
-  if (segments.some((segment) => shouldSkipProjectDirectory(segment))) return null
   // 编辑器保存时写在目标旁边、随即 rename 盖过去的临时文件：真正的改动是目标本身的事件。
   if (isWorkbenchSaveTemporaryName(segments.at(-1) ?? '')) return null
 
+  for (const [index, segment] of segments.entries()) {
+    if (isInternalProjectDirectory(segment)) return null
+    if (isGeneratedProjectDirectory(segment, index === 0))
+      return segments.slice(0, index + 1).join('/')
+  }
   return path
 }
 
@@ -84,7 +97,8 @@ function normalizeRelativePath(rootPath: string, filename: string): Nullable<str
  * 窗口内合并后逐订阅投递。服务不依赖 Desktop session，也不写 Agent signals。
  *
  * 改动归属账本另走原始事件（{@link observeRawPaths}）：它要每个路径各自的动静，一到就去读那个路径的
- * 改动时刻；生成目录（build、dist……）里的文件也可能是 Agent 命令的产物，不能先滤掉。
+ * 改动时刻；生成目录（build、dist……）里的文件也可能是 Agent 命令的产物，不能先滤掉、
+ * 也不能收成目录。
  */
 export class WorkbenchFileWatcher implements WorkbenchRawPathSource {
   private readonly roots = new Map<string, RootWatch>()

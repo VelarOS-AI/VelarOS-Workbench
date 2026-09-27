@@ -37,7 +37,8 @@ void describe('Workbench file watcher language synchronization', () => {
         kind: 'velaros.systemWorkspaceFilesChanged',
         source: 'filesystem-watch',
         rootPath: subscription.workspaceRoot,
-        paths: ['src/first.vel', 'src/second.vel'],
+        // 依赖目录里的改动收成目录本身，不逐个文件报。
+        paths: ['node_modules', 'src/first.vel', 'src/second.vel'],
         sessionIds: [],
         changedAt: 123,
       })

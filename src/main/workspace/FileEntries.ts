@@ -1,8 +1,9 @@
 /**
  * 目录条目辅助（照搬 desktop `workspace/workbench/FileEntries.ts`，保形零改动）。
  *
- * 两套可见性规则并存：搜索/变异面用 shouldIncludeEntry（内部重型目录整体隐身），
- * 目录列表面用 shouldIncludeDirectoryListingEntry（仅 `.git` 恒隐藏）。
+ * 两套可见性规则并存：搜索/变异面用 shouldIncludeEntry（内部目录与生成目录按位置隐身，
+ * 见 WorkbenchSkippedDirectories），目录列表面用 shouldIncludeDirectoryListingEntry
+ * （仅 `.git` 恒隐藏）。
  */
 import { lstat, opendir, realpath, stat } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
@@ -38,7 +39,9 @@ class DirectoryEntries {
       type: isDirectory ? 'directory' : 'file',
       size: entryStats.isFile() ? entryStats.size : null,
       modifiedAt: entryStats.mtimeMs,
-      hasChildren: isDirectory ? await this.hasVisibleChildren(realPath, includeHidden) : false,
+      hasChildren: isDirectory
+        ? await this.hasVisibleChildren(realPath, includeHidden, realPath === projectRoot)
+        : false,
     }
   }
 
@@ -57,8 +60,11 @@ class DirectoryEntries {
     const link = await describeWorkbenchSymlink(projectRoot, linkPath)
     const target = link.resolved
     const isDirectory = !!target?.stats.isDirectory()
+    const isProjectRoot = target?.realPath === projectRoot
     const hasChildren =
-      !!target && isDirectory && (await this.hasVisibleChildren(target.realPath, includeHidden))
+      !!target &&
+      isDirectory &&
+      (await this.hasVisibleChildren(target.realPath, includeHidden, isProjectRoot))
 
     return {
       name,
@@ -71,8 +77,14 @@ class DirectoryEntries {
     }
   }
 
-  public shouldIncludeEntry(name: string, isDirectory: boolean, includeHidden: boolean): boolean {
-    if (isDirectory && shouldSkipProjectDirectory(name)) return false
+  /** `atProjectRoot`：这一项直接在工程根目录下（根目录下的构建产物才跳过）。 */
+  public shouldIncludeEntry(
+    name: string,
+    isDirectory: boolean,
+    includeHidden: boolean,
+    atProjectRoot: boolean
+  ): boolean {
+    if (isDirectory && shouldSkipProjectDirectory(name, atProjectRoot)) return false
 
     if (!includeHidden && name.startsWith('.')) return false
 
@@ -105,12 +117,18 @@ class DirectoryEntries {
     return false
   }
 
-  public async hasVisibleChildren(path: string, includeHidden: boolean): Promise<boolean> {
+  /** `isProjectRoot`：`path` 就是工程根目录。 */
+  public async hasVisibleChildren(
+    path: string,
+    includeHidden: boolean,
+    isProjectRoot: boolean
+  ): Promise<boolean> {
     const directory = await opendir(path).catch(() => null)
     if (!directory) return false
 
     for await (const entry of directory) {
-      if (this.shouldIncludeEntry(entry.name, entry.isDirectory(), includeHidden)) return true
+      if (this.shouldIncludeEntry(entry.name, entry.isDirectory(), includeHidden, isProjectRoot))
+        return true
     }
     return false
   }

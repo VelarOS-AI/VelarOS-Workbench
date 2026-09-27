@@ -196,9 +196,15 @@ class SearchIndex {
     options.state.visitedRealPaths.add(options.realPath)
 
     const entries = await readdir(options.realPath, { withFileTypes: true }).catch(() => [])
+    const atProjectRoot = options.requestedPath === options.projectRoot
     const visibleEntries = entries
       .filter((entry) =>
-        this.entryHelper.shouldIncludeEntry(entry.name, entry.isDirectory(), options.includeHidden)
+        this.entryHelper.shouldIncludeEntry(
+          entry.name,
+          entry.isDirectory(),
+          options.includeHidden,
+          atProjectRoot
+        )
       )
       .sort((left, right) => {
         if (left.isDirectory() !== right.isDirectory()) return left.isDirectory() ? -1 : 1
@@ -365,9 +371,15 @@ class SearchIndex {
     options.state.visitedRealPaths.add(options.realPath)
 
     const entries = await readdir(options.realPath, { withFileTypes: true }).catch(() => [])
+    const atProjectRoot = options.requestedPath === options.projectRoot
     for (const entry of entries) {
       if (
-        !this.entryHelper.shouldIncludeEntry(entry.name, entry.isDirectory(), options.includeHidden)
+        !this.entryHelper.shouldIncludeEntry(
+          entry.name,
+          entry.isDirectory(),
+          options.includeHidden,
+          atProjectRoot
+        )
       ) {
         continue
       }

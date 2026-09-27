@@ -80,8 +80,8 @@ void describe('Workbench file watcher raw paths', () => {
         assert.deepEqual(raw, ['dist/app.js', 'src/a.ts'])
         assert.equal(errors, 1)
         await waitForEvent(debouncedEvent.promise)
-        // renderer 订阅照旧合并、照旧滤掉生成目录。
-        assert.deepEqual(debounced, ['src/a.ts'])
+        // renderer 订阅照旧合并；根目录下构建产物里的改动收成那个目录本身。
+        assert.deepEqual(debounced, ['dist', 'src/a.ts'])
 
         // 两边都退订之后才关掉这个根上的递归监听。
         observation.stop()
