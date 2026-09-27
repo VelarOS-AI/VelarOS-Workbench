@@ -101,6 +101,8 @@ export type WorkbenchPickLocationResult =
   | { ok: false; reason: 'canceled' }
 
 export type WorkbenchProjectHubMenuCommand =
+  /** ⌘W / Ctrl+W：关掉编辑区当前的标签；没有标签时什么也不做。 */
+  | 'close-editor'
   | 'close-project'
   | 'new-project'
   | 'zoom-editor-in'

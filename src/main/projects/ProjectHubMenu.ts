@@ -70,6 +70,23 @@ function buildApplicationMenu(windows: WorkbenchWindowManager): Menu {
         },
         { type: 'separator' },
         {
+          // 同 VS Code：⌘W / Ctrl+W 关编辑区当前的标签，没有标签时什么也不做，不会把项目窗口关掉。
+          label: '关闭编辑器',
+          accelerator: 'CmdOrCtrl+W',
+          enabled: state.currentProject !== null,
+          click: (_item, window) => {
+            windows.sendMenuCommandToWindow(window ?? null, 'close-editor')
+          },
+        },
+        {
+          // 关窗走窗口的 close：有未保存改动时先确认（见 WorkbenchWindowCloseGuard）。
+          label: '关闭窗口',
+          accelerator: 'CmdOrCtrl+Shift+W',
+          click: (_item, window) => {
+            window?.close()
+          },
+        },
+        {
           label: '关闭项目',
           enabled: state.currentProject !== null,
           click: () => {
@@ -114,7 +131,17 @@ function buildApplicationMenu(windows: WorkbenchWindowManager): Menu {
         { role: 'togglefullscreen' },
       ],
     },
-    { role: 'windowMenu' }
+    {
+      // 不用内置的 windowMenu：它在 Windows / Linux 上带着占用 Ctrl+W 的「关闭」，会把整个窗口关掉。
+      role: 'window',
+      submenu: [
+        { role: 'minimize' },
+        { role: 'zoom' },
+        ...(process.platform === 'darwin'
+          ? ([{ type: 'separator' }, { role: 'front' }] satisfies MenuItemConstructorOptions[])
+          : []),
+      ],
+    }
   )
 
   return Menu.buildFromTemplate(template)

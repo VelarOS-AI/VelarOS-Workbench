@@ -246,6 +246,8 @@ export function useStandaloneWorkbenchPageModel(
   const workbenchPreferences = useWorkbenchPreferences()
   const workbenchKeymap = useWorkbenchKeymapController()
   const [settingsOpen, setSettingsOpen] = useState(false)
+  // ⌘W / Ctrl+W 菜单命令的序号：编辑区看到它变了就关掉当前那个标签（它才知道哪个标签在前台）。
+  const [closeActiveEditorTabRequestId, setCloseActiveEditorTabRequestId] = useState(0)
   const [velarLogicGraphOpen, setVelarLogicGraphOpen] = useState(false)
   const [velarLogicGraphActive, setVelarLogicGraphActive] = useState(false)
   const [pendingBrowserElementSelections, setPendingBrowserElementSelections] = useState<
@@ -499,6 +501,11 @@ export function useStandaloneWorkbenchPageModel(
 
     return window.velarosWorkbenchProjectHub.onMenuCommand((command) => {
       switch (command) {
+        case 'close-editor': {
+          // 设置页盖在编辑区上时不去关背后看不见的标签。
+          if (!settingsOpen) setCloseActiveEditorTabRequestId((requestId) => requestId + 1)
+          return
+        }
         case 'close-project': {
           void exitCurrentProject()
           return
@@ -516,7 +523,7 @@ export function useStandaloneWorkbenchPageModel(
         }
       }
     })
-  }, [exitCurrentProject, surfaceMode, zoomEditor])
+  }, [exitCurrentProject, settingsOpen, surfaceMode, zoomEditor])
   const workspaceFileRefreshInFlightRef = useRef(false)
   const workspaceFileRefreshQueuedRef = useRef(false)
 
@@ -977,6 +984,8 @@ export function useStandaloneWorkbenchPageModel(
     gitState,
     topRunControl,
     editorNavigation,
+    /** ⌘W / Ctrl+W 的请求序号：变了就关掉编辑区当前的标签。 */
+    closeActiveEditorTabRequestId,
     /** 当前会话的 Agent 浏览器此刻进的站点；没进为 null。 */
     agentBrowser: { sessionId: currentSession.id, site: agentBrowserSite },
     pendingBrowserElementSelections,

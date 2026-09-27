@@ -140,6 +140,8 @@ export interface WorkbenchEditorPanelTabsProps {
   /** 放弃这个标签里没保存的改动，回到磁盘上的版本。 */
   onRevertOpenFile: (path: string) => void
   onReorderOpenTabs: (fromPath: string, toPath: string) => void
+  /** ⌘W / Ctrl+W 的请求序号：变了就关掉编辑区当前在前台的标签（没有标签就什么也不做）。 */
+  closeActiveTabRequestId?: number
 }
 
 export interface WorkbenchEditorPanelAuxiliaryTab extends WorkbenchEditorAuxiliaryTabItem {
@@ -239,6 +241,7 @@ export function EditorPanel({
     onCloseUnmodifiedOpenFiles,
     onRevertOpenFile,
     onReorderOpenTabs,
+    closeActiveTabRequestId = 0,
   },
   diff: {
     activeDiffItem = null,
@@ -697,6 +700,35 @@ export function EditorPanel({
   useDismissOnWindowInteract({
     enabled: tabMenuOpen,
     onDismiss: () => setTabContextMenu(null),
+  })
+
+  /** 关掉编辑区前台的那个标签，顺序与画面一致：文件历史、辅助标签、差异、轻量预览、文件。 */
+  function closeActiveEditorTab(): void {
+    if (fileHistoryMode && selectedFile) {
+      setFileHistoryMode(null)
+      return
+    }
+    if (activeAuxiliaryTab) {
+      activeAuxiliaryTab.onClose?.()
+      return
+    }
+    if (activeDiffItem) {
+      onCloseDiffTab?.()
+      return
+    }
+    if (lightTab) {
+      lightTab.onClose()
+      return
+    }
+    if (selectedFilePath) onCloseOpenFile(selectedFilePath)
+  }
+
+  const handledCloseActiveTabRequestIdRef = useRef(closeActiveTabRequestId)
+  useEffect(() => {
+    if (handledCloseActiveTabRequestIdRef.current === closeActiveTabRequestId) return
+
+    handledCloseActiveTabRequestIdRef.current = closeActiveTabRequestId
+    closeActiveEditorTab()
   })
 
   return (

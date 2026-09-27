@@ -2,7 +2,7 @@ import { existsSync, statSync } from 'node:fs'
 import { rm } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 
-import { BrowserWindow, type WebContents } from 'electron'
+import { type BaseWindow, BrowserWindow, type WebContents } from 'electron'
 import { execa } from 'execa'
 
 import {
@@ -422,6 +422,17 @@ export class WorkbenchWindowManager {
     }
 
     return { opened, openedFiles, rejected }
+  }
+
+  /** 只发给触发菜单的那个项目窗口；不是项目窗口（或已经关了）就什么也不做，不会新开窗口。 */
+  public sendMenuCommandToWindow(
+    target: Nullable<BaseWindow>,
+    command: WorkbenchProjectHubMenuCommand
+  ): void {
+    const record = [...this.records.values()].find((candidate) => candidate.window === target)
+    if (!record || record.window.isDestroyed()) return
+
+    record.window.webContents.send(WorkbenchProjectHubChannels.menuCommand, command)
   }
 
   public sendMenuCommand(command: WorkbenchProjectHubMenuCommand): void {

@@ -195,6 +195,7 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
         onCloseUnmodifiedOpenFiles: workbench.closeUnmodifiedOpenFiles,
         onRevertOpenFile: (path) => workbench.revertOpenFiles([path]),
         onReorderOpenTabs: workbench.reorderOpenTabs,
+        closeActiveTabRequestId: model.closeActiveEditorTabRequestId,
       },
       diff: {
         diffWorkspaceRoot: activeProject.rootPath,
