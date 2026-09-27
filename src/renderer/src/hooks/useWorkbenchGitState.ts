@@ -12,7 +12,7 @@ import {
 import type { WorkbenchProject } from '@renderer/models/project/workbenchProjects'
 
 import { subscribeWorkbenchAgentProjectWrites } from '../runtime/workbenchAgentProjectWrites'
-import { createCoalescedRefresh } from '../support/coalescedRefresh'
+import { type CoalescedRefresh, createCoalescedRefresh } from '../support/coalescedRefresh'
 import { useLatest } from '../support/genericHooks'
 import { useWorkspaceFilesChangedRefresh } from '../support/useWorkspaceFilesChangedRefresh'
 import { useWorkspaceGitLineStats } from '../support/useWorkspaceGitLineStats'
@@ -24,9 +24,65 @@ import { useWorkspaceGitSummaries } from '../support/useWorkspaceGitSummaries'
  */
 export const WorkbenchGitWorkspaceChangeRefreshDelayMs = 600
 
+/**
+ * Git 界面没开时，完整快照跟工作区改动的节奏：文件树的 Git 颜色靠它，要跟上，但一次构建、一次装依赖
+ * 期间不必每 600ms 跑一遍 `git status`、分支列表。
+ */
+export const WorkbenchGitTreeDecorationRefreshDelayMs = 2_000
+
+interface WorkbenchGitWorkspaceChangeRefreshOptions {
+  refreshLineStats: () => Promise<void>
+  refreshSummary: () => Promise<void>
+  /** Git 界面（Git 面板、提交面板、聊天里的改动卡）开着没有。 */
+  isGitSurfaceActive: () => boolean
+  lineStatsDelayMs?: number
+  treeDecorationDelayMs?: number
+}
+
+/**
+ * 工作区一有改动就排上的 Git 刷新：顶栏 +/- 总是按
+ * {@link WorkbenchGitWorkspaceChangeRefreshDelayMs} 跟；完整快照在 Git 界面开着时同一节奏，
+ * 没开时也跟——文件树的 Git 颜色靠它——只是放慢到 {@link WorkbenchGitTreeDecorationRefreshDelayMs}。
+ */
+export function createWorkbenchGitWorkspaceChangeRefresh({
+  refreshLineStats,
+  refreshSummary,
+  isGitSurfaceActive,
+  lineStatsDelayMs = WorkbenchGitWorkspaceChangeRefreshDelayMs,
+  treeDecorationDelayMs = WorkbenchGitTreeDecorationRefreshDelayMs,
+}: WorkbenchGitWorkspaceChangeRefreshOptions): CoalescedRefresh {
+  const topBarAndSurfaces = createCoalescedRefresh({
+    delayMs: lineStatsDelayMs,
+    run: async () => {
+      await Promise.all([
+        refreshLineStats(),
+        isGitSurfaceActive() ? refreshSummary() : undefined,
+      ])
+    },
+  })
+  const treeDecorations = createCoalescedRefresh({
+    delayMs: treeDecorationDelayMs,
+    run: refreshSummary,
+  })
+
+  return {
+    schedule: () => {
+      topBarAndSurfaces.schedule()
+      if (!isGitSurfaceActive()) treeDecorations.schedule()
+    },
+    cancel: () => {
+      topBarAndSurfaces.cancel()
+      treeDecorations.cancel()
+    },
+  }
+}
+
 interface UseWorkbenchGitStateOptions {
   activeProject: Nullable<WorkbenchProject>
-  /** Git 相关 UI 可见时为 true（底部 Git 面板、Agent 变更预览等），触发完整快照拉取。 */
+  /**
+   * Git 相关 UI 可见时为 true（底部 Git 面板、Agent 变更预览等）：打开那一刻补拉完整快照，之后完整快照
+   * 跟顶栏同一节奏；为 false 时完整快照也跟（文件树的 Git 颜色靠它），只是放慢。
+   */
   gitSurfacesActive: boolean
   /** 项目 workspace 绑定完成版本；用于修复首次进入时 Git 刷新早于 root 注册的竞态。 */
   workspaceBindingVersion?: number
@@ -45,9 +101,11 @@ export function isWorkbenchGitSnapshotForProjectRoot(
  * - Git 面板 / 变更树：完整 `useWorkspaceGitSummaries`
  *
  * 刷新时机都在这里：挂载与 workspace 绑定完成、Git 界面打开、`refresh`（Git 操作之后、手动刷新、一轮 Agent
- * 结束），以及工作区一有改动就合并刷新一次——顶栏 +/- 总是跟，完整快照只在 Git 界面开着时跟（界面打开
- * 那一刻会补拉一次）。工作区改动有两路：文件监听（用户在编辑器、终端里的改动，也包括 Agent 的）与 Agent
- * 写入信号（workbenchAgentProjectWrites，主 Agent 与子 Agent 的写工具一出结果就到，不等监听那一拍）。
+ * 结束），以及工作区一有改动就合并刷新一次（见 {@link createWorkbenchGitWorkspaceChangeRefresh}）
+ * ——顶栏 +/- 与完整快照都跟，文件树的 Git 颜色靠完整快照，打开了项目就要跟上；
+ * Git 界面没开时完整快照放慢节奏。
+ * 工作区改动有两路：文件监听（用户在编辑器、终端里的改动，也包括 Agent 的）与 Agent 写入信号
+ * （workbenchAgentProjectWrites，主 Agent 与子 Agent 的写工具一出结果就到，不等监听那一拍）。
  */
 export function useWorkbenchGitState({
   activeProject,
@@ -81,14 +139,10 @@ export function useWorkbenchGitState({
   const refreshLineStatsLatest = useLatest(refreshLineStats)
   const gitSurfacesActiveLatest = useLatest(gitSurfacesActive)
   const [workspaceChangeRefresh] = useState(() =>
-    createCoalescedRefresh({
-      delayMs: WorkbenchGitWorkspaceChangeRefreshDelayMs,
-      run: async () => {
-        await Promise.all([
-          refreshLineStatsLatest.current(),
-          gitSurfacesActiveLatest.current ? refreshSummaryLatest.current() : undefined,
-        ])
-      },
+    createWorkbenchGitWorkspaceChangeRefresh({
+      refreshLineStats: () => refreshLineStatsLatest.current(),
+      refreshSummary: () => refreshSummaryLatest.current(),
+      isGitSurfaceActive: () => gitSurfacesActiveLatest.current,
     })
   )
   // 换项目（或卸载）时撤掉给上一个项目排着的那一次。
@@ -145,18 +199,13 @@ export function useWorkbenchGitState({
     void refreshSummaryLatest.current()
   }, [activeProject?.id, gitSurfacesActive, refreshSummaryLatest])
 
+  // 项目的 workspace 绑定好了：顶栏 +/- 与完整快照都拉一次——文件树的 Git 颜色不等 Git 界面打开。
   useEffect(() => {
     if (!activeProject || workspaceBindingVersion <= 0) return
 
     void refreshLineStatsLatest.current()
-    if (gitSurfacesActive) void refreshSummaryLatest.current()
-  }, [
-    activeProject?.id,
-    gitSurfacesActive,
-    refreshLineStatsLatest,
-    refreshSummaryLatest,
-    workspaceBindingVersion,
-  ])
+    void refreshSummaryLatest.current()
+  }, [activeProject?.id, refreshLineStatsLatest, refreshSummaryLatest, workspaceBindingVersion])
 
   /** 顶栏 +/- 与完整快照一起重拉：Git 操作之后、手动刷新、一轮 Agent 结束都用它。 */
   const refresh = useMemo(

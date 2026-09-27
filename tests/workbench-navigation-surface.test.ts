@@ -4,7 +4,11 @@ import path from 'node:path'
 
 import { describe, test } from 'bun:test'
 
-import { WorkbenchGitWorkspaceChangeRefreshDelayMs } from '../src/renderer/src/hooks/useWorkbenchGitState'
+import {
+  createWorkbenchGitWorkspaceChangeRefresh,
+  WorkbenchGitTreeDecorationRefreshDelayMs,
+  WorkbenchGitWorkspaceChangeRefreshDelayMs,
+} from '../src/renderer/src/hooks/useWorkbenchGitState'
 import { resolveWorkbenchChatComposerPlaceholder } from '../src/renderer/src/models/chat/workbenchChatComposerPlaceholder'
 import { resolveWorkbenchNavigationSurface } from '../src/renderer/src/models/layout/workbenchSurfaceModel'
 import { createCoalescedRefresh } from '../src/renderer/src/support/coalescedRefresh'
@@ -255,6 +259,56 @@ void describe('Workbench Git refresh on workspace changes', () => {
   void test('the refresh window stays inside 500–800ms', () => {
     assert.ok(WorkbenchGitWorkspaceChangeRefreshDelayMs >= 500)
     assert.ok(WorkbenchGitWorkspaceChangeRefreshDelayMs <= 800)
+    // Git 界面没开时文件树颜色的节奏：慢一些，但几秒之内跟上。
+    assert.ok(WorkbenchGitTreeDecorationRefreshDelayMs > WorkbenchGitWorkspaceChangeRefreshDelayMs)
+    assert.ok(WorkbenchGitTreeDecorationRefreshDelayMs <= 5_000)
+  })
+
+  void test('tree Git colours follow workspace changes with the Git surfaces closed', async () => {
+    const calls: string[] = []
+    let surfaceActive = false
+    const refresh = createWorkbenchGitWorkspaceChangeRefresh({
+      refreshLineStats: async () => {
+        calls.push('line-stats')
+      },
+      refreshSummary: async () => {
+        calls.push('summary')
+      },
+      isGitSurfaceActive: () => surfaceActive,
+      lineStatsDelayMs: 10,
+      treeDecorationDelayMs: 150,
+    })
+    const waitForCalls = async (count: number): Promise<void> => {
+      for (let waited = 0; calls.length < count; waited += 5) {
+        assert.ok(waited < 2_000, `timed out waiting for ${count} refreshes: ${calls.join(', ')}`)
+        await sleep(5)
+      }
+    }
+
+    // Git 界面没开：顶栏 +/- 先跟，完整快照（文件树的颜色）放慢之后也跟，一串改动只刷一次。
+    refresh.schedule()
+    refresh.schedule()
+    await waitForCalls(1)
+    assert.deepEqual(calls, ['line-stats'])
+    await waitForCalls(2)
+    assert.deepEqual(calls, ['line-stats', 'summary'])
+
+    // Git 界面开着：完整快照与顶栏同一节奏，不再多排一次慢的。
+    calls.length = 0
+    surfaceActive = true
+    refresh.schedule()
+    await waitForCalls(2)
+    assert.deepEqual([...calls].sort(), ['line-stats', 'summary'])
+    await sleep(200)
+    assert.equal(calls.length, 2)
+
+    // 撤掉之后两种节奏都不再跑。
+    calls.length = 0
+    surfaceActive = false
+    refresh.schedule()
+    refresh.cancel()
+    await sleep(200)
+    assert.deepEqual(calls, [])
   })
 
   void test('Git state owns the refresh triggers; the fetch hooks carry no dead options or parameters', () => {
@@ -268,10 +322,15 @@ void describe('Workbench Git refresh on workspace changes', () => {
       gitState,
       /subscribeWorkbenchAgentProjectWrites\(workspaceRoot, workspaceChangeRefresh\.schedule\)/u
     )
-    // 顶栏 +/- 总是跟；完整快照只在 Git 界面开着时跟。
+    // 顶栏 +/- 与完整快照都跟工作区改动；Git 界面没开时完整快照放慢（文件树的 Git 颜色靠它）。
+    assert.match(gitState, /createWorkbenchGitWorkspaceChangeRefresh\(\{/u)
+    assert.match(gitState, /refreshLineStats: \(\) => refreshLineStatsLatest\.current\(\),/u)
+    assert.match(gitState, /refreshSummary: \(\) => refreshSummaryLatest\.current\(\),/u)
+    assert.match(gitState, /isGitSurfaceActive: \(\) => gitSurfacesActiveLatest\.current,/u)
+    // 项目绑定好就拉完整快照，不等 Git 界面打开。
     assert.match(
       gitState,
-      /refreshLineStatsLatest\.current\(\),\n\s*gitSurfacesActiveLatest\.current \? refreshSummaryLatest\.current\(\) : undefined/u
+      /void refreshLineStatsLatest\.current\(\)\n\s*void refreshSummaryLatest\.current\(\)/u
     )
     // Git 操作之后、手动刷新、一轮 Agent 结束共用一个 refresh，不再是三份一样的实现。
     assert.match(gitState, /await Promise\.all\(\[refreshSummary\(\), refreshLineStats\(\)\]\)/u)
