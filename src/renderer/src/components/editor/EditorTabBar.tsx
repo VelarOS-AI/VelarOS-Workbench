@@ -23,6 +23,7 @@ import {
 } from '@phosphor-icons/react'
 import { useWorkbenchEditorTabOverflow } from '@renderer/hooks/useWorkbenchEditorTabOverflow'
 import { useWorkbenchI18n } from '@renderer/i18n'
+import type { WorkbenchEditorAutosaveFailures } from '@renderer/models/editor/workbenchEditorAutosave'
 import type { WorkbenchEditorEditMode } from '@renderer/models/editor/workbenchEditorEditMode'
 import { isDirtyTab } from '@renderer/models/editor/workbenchEditorTabs'
 import {
@@ -85,6 +86,8 @@ interface EditorTabBarProps {
   onToggleSelectedFileEditMode?: () => void
   isSavingFile: boolean
   dirtyTabCount: number
+  /** 自动保存存不下的文件与原因：标签名后标一个红点，悬停看原因。 */
+  autosaveFailures?: WorkbenchEditorAutosaveFailures
   gitDecorations: WorkbenchGitDecorationMap
   diffTabItem?: LooseOptional<WorkbenchGitChangeItem>
   lightTabItem?: LooseOptional<WorkbenchLightEditorTab>
@@ -124,6 +127,7 @@ export function EditorTabBar({
   onToggleSelectedFileEditMode,
   isSavingFile,
   dirtyTabCount,
+  autosaveFailures,
   gitDecorations,
   diffTabItem = null,
   lightTabItem = null,
@@ -272,6 +276,10 @@ export function EditorTabBar({
               tab.path === selectedFilePath
             const gitDecoration = gitDecorations.get(tab.path)
             const hasExternalChange = !!tab.externalChange
+            const autosaveFailure = autosaveFailures?.get(tab.path)
+            const autosaveFailureLabel = autosaveFailure
+              ? t('workbench.autosaveFailedTooltip', { reason: autosaveFailure.message })
+              : null
 
             return (
               <div
@@ -280,6 +288,7 @@ export function EditorTabBar({
                 data-active={isActive}
                 data-dirty={isDirty}
                 data-external-change={hasExternalChange}
+                data-autosave-failed={!!autosaveFailure}
                 data-dragging={tab.path === draggingTabPath}
                 data-drop-target={tab.path === dragOverTabPath && tab.path !== draggingTabPath}
                 draggable
@@ -298,7 +307,9 @@ export function EditorTabBar({
                   title={
                     hasExternalChange
                       ? `${tab.path} · ${t('workbench.externalFileChangedTitle')}`
-                      : tab.path
+                      : autosaveFailureLabel
+                        ? `${tab.path} · ${autosaveFailureLabel}`
+                        : tab.path
                   }
                   onClick={() => onSelectOpenFile(tab.path)}
                 >
@@ -307,6 +318,14 @@ export function EditorTabBar({
                     {fileNameFromPath(tab.path)}
                   </span>
                   {hasExternalChange && <WarningCircleIcon size={12} weight="fill" />}
+                  {!!autosaveFailureLabel && (
+                    <span
+                      className={styles.editorTabAutosaveFailed}
+                      role="img"
+                      aria-label={autosaveFailureLabel}
+                      title={autosaveFailureLabel}
+                    />
+                  )}
                 </Button>
                 <IconButton
                   size="icon-sm"
@@ -504,6 +523,10 @@ export function EditorTabBar({
               tab.path === selectedFilePath
             const gitDecoration = gitDecorations.get(tab.path)
             const hasExternalChange = !!tab.externalChange
+            const autosaveFailure = autosaveFailures?.get(tab.path)
+            const autosaveFailureLabel = autosaveFailure
+              ? t('workbench.autosaveFailedTooltip', { reason: autosaveFailure.message })
+              : null
 
             return (
               <div
@@ -516,7 +539,7 @@ export function EditorTabBar({
                   variant="ghost"
                   size="block"
                   className={styles.editorTabListMain}
-                  title={tab.path}
+                  title={autosaveFailureLabel ? `${tab.path} · ${autosaveFailureLabel}` : tab.path}
                   onClick={() => runToolbarAction(() => onSelectOpenFile(tab.path))}
                 >
                   <WorkbenchFileTypeIcon fileName={tab.path} size={14} />
@@ -524,6 +547,14 @@ export function EditorTabBar({
                     {fileNameFromPath(tab.path)}
                   </span>
                   {hasExternalChange && <WarningCircleIcon size={12} weight="fill" />}
+                  {!!autosaveFailureLabel && (
+                    <span
+                      className={styles.editorTabAutosaveFailed}
+                      role="img"
+                      aria-label={autosaveFailureLabel}
+                      title={autosaveFailureLabel}
+                    />
+                  )}
                 </Button>
                 <IconButton
                   size="icon-sm"

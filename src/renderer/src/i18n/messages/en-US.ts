@@ -468,6 +468,8 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     saveSucceeded: 'File saved',
     saveFileFailed: 'Failed to save file',
     saveFileFailedDescription: '{path}: {reason}',
+    autosaveFailedTitle: 'Auto save failed',
+    autosaveFailedTooltip: 'Auto save failed: {reason}',
     saving: 'Saving',
     saved: 'Saved',
     unsaved: 'Unsaved',

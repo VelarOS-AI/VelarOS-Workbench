@@ -1226,11 +1226,20 @@ export function useWorkbenchEditorController({
     }
   )
 
-  useWorkbenchEditorAutosave({
+  const autosaveFailures = useWorkbenchEditorAutosave({
     activeProject,
     isSavingFile,
     openTabsByPath,
     saveEditorTab,
+    onAutosaveFailed: (path, message) => {
+      messageLatest.current.error({
+        title: tLatest.current('workbench.autosaveFailedTitle'),
+        description: tLatest.current('workbench.saveFileFailedDescription', {
+          path,
+          reason: message,
+        }),
+      })
+    },
   })
 
   const saveSelectedFile = useMemoizedFn(async (): Promise<void> => {
@@ -1329,6 +1338,8 @@ export function useWorkbenchEditorController({
     openTabs,
     openedFileSnapshots,
     isSavingFile,
+    /** 自动保存存不下的文件与原因（按路径）；存好、撤回或关掉标签后撤销。 */
+    autosaveFailures,
     saveRevision,
     externalRevision,
     setEditorContent: updateEditorContent,

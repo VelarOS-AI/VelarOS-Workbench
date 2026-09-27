@@ -782,6 +782,15 @@
   color: var(--status-amber);
 }
 
+/* 自动保存存不下这个文件：标签名后一个红点，悬停看原因。 */
+.editorTabAutosaveFailed {
+  @apply shrink-0 rounded-full;
+  width: 6px;
+  height: 6px;
+  margin-left: 2px;
+  background: var(--status-red);
+}
+
 .editorTabMain {
   @apply flex shrink-0 items-center border-0 bg-transparent text-left;
   height: 100%;

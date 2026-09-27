@@ -323,6 +323,7 @@ export function useWorkbenchController(options: UseWorkbenchControllerOptions = 
     isPicking: project.isPicking,
     isLoadingTree: tree.isLoadingTree,
     isSavingFile: editor.isSavingFile,
+    autosaveFailures: editor.autosaveFailures,
     saveRevision: editor.saveRevision,
     externalRevision: editor.externalRevision,
     isMutatingTree: mutation.isMutatingTree,

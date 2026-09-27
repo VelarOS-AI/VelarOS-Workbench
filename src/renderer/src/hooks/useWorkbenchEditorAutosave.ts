@@ -1,15 +1,24 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { workbenchHost } from '@renderer/host'
-import { isDirtyTab } from '@renderer/models/editor/workbenchEditorTabs'
+import {
+  buildWorkbenchEditorAutosaveNoticeKey,
+  clearWorkbenchEditorAutosaveFailure,
+  isWorkbenchEditorTabAutosavable,
+  pruneWorkbenchEditorAutosaveFailures,
+  recordWorkbenchEditorAutosaveFailure,
+  resolveNextWorkbenchEditorAutosaveAt,
+  selectDueWorkbenchEditorAutosaveTabs,
+  type WorkbenchEditorAutosaveFailures,
+} from '@renderer/models/editor/workbenchEditorAutosave'
+import type { WorkbenchEditorSaveResult } from '@renderer/models/editor/workbenchEditorSaving'
 import { resolveWorkbenchTabTextFormat } from '@renderer/models/editor/workbenchEditorTextFormat'
 import type { WorkbenchProject } from '@renderer/models/project/workbenchProjects'
 import type { WorkbenchOpenEditorTab } from '@renderer/types/workbenchTypes'
 
-import { Log } from '@velaros-ai/core'
+import { isEmpty, Log } from '@velaros-ai/core'
 
-import { useDebounceFn, useLatest, useMemoizedFn } from '../support/genericHooks'
+import { useLatest, useMemoizedFn, useTimerScope } from '../support/genericHooks'
 
-const AUTO_SAVE_DELAY_MS = 3000
 const log = Log.tag('workbench-editor-autosave')
 
 interface UseWorkbenchEditorAutosaveParams {
@@ -19,46 +28,116 @@ interface UseWorkbenchEditorAutosaveParams {
   saveEditorTab: (
     tab: WorkbenchOpenEditorTab,
     options?: { notify?: boolean; silent?: boolean }
-  ) => Promise<unknown>
+  ) => Promise<WorkbenchEditorSaveResult>
+  /** 某个文件自动保存失败：同一文件的同一种失败只通知一次。 */
+  onAutosaveFailed: (path: string, message: string) => void
 }
 
-/** 项目编辑器挂载期间，对第一个未截断且已修改的打开标签做防抖保存。 */
+/**
+ * 项目编辑器挂载期间的自动保存：输入停顿后把每个改过的标签各自写回磁盘。
+ *
+ * 一个文件写不进去只按它自己的节奏退避重试，其它标签照常保存；失败原因留在返回的记录里，
+ * 标签上据此标出来，关窗前的确认也据此列出存不下的文件。
+ */
 export function useWorkbenchEditorAutosave({
   activeProject,
   isSavingFile,
   openTabsByPath,
   saveEditorTab,
-}: UseWorkbenchEditorAutosaveParams): void {
+  onAutosaveFailed,
+}: UseWorkbenchEditorAutosaveParams): WorkbenchEditorAutosaveFailures {
+  const [failures, setFailures] = useState<WorkbenchEditorAutosaveFailures>(() => new Map())
+  const failuresLatest = useLatest(failures)
   const saveEditorTabLatest = useLatest(saveEditorTab)
+  const onAutosaveFailedLatest = useLatest(onAutosaveFailed)
   const activeProjectLatest = useLatest(activeProject)
   const openTabsByPathLatest = useLatest(openTabsByPath)
-  const autoSaveTargetRef = useRef<WorkbenchOpenEditorTab>(null)
+  const notifiedFailureKeysRef = useRef(new Set<string>())
+  const autosaveRunningRef = useRef(false)
   const exitFlushedTabKeysRef = useRef(new Set<string>())
+  const timers = useTimerScope('useWorkbenchEditorAutosave')
 
-  const flushAutoSave = useMemoizedFn((): void => {
-    const tab = autoSaveTargetRef.current
-    if (!tab) return
+  // 标签存好了、撤回了、关掉了或转成了外部冲突：失败记录与标签上的标记一并撤掉。
+  useEffect(() => {
+    setFailures((current) => pruneWorkbenchEditorAutosaveFailures(current, openTabsByPath))
+  }, [openTabsByPath])
 
-    void saveEditorTabLatest.current(tab, { silent: true })
+  const forgetNotifiedFailures = (path: string): void => {
+    for (const key of notifiedFailureKeysRef.current) {
+      if (key.startsWith(`${path}\u0000`)) notifiedFailureKeysRef.current.delete(key)
+    }
+  }
+
+  const runAutosave = useMemoizedFn(async (): Promise<void> => {
+    const project = activeProjectLatest.current
+    if (!project || autosaveRunningRef.current) return
+
+    const dueTabs = selectDueWorkbenchEditorAutosaveTabs(
+      openTabsByPathLatest.current.values(),
+      failuresLatest.current,
+      Date.now()
+    )
+    if (isEmpty(dueTabs)) return
+
+    autosaveRunningRef.current = true
+    try {
+      const results = await Promise.all(
+        dueTabs.map(async (tab) => ({
+          path: tab.path,
+          result: await saveEditorTabLatest.current(tab, { silent: true }),
+        }))
+      )
+      if (activeProjectLatest.current?.id !== project.id) return
+
+      const now = Date.now()
+      setFailures((current) =>
+        results.reduce<WorkbenchEditorAutosaveFailures>((next, { path, result }) => {
+          if (result.status === 'saved') return clearWorkbenchEditorAutosaveFailure(next, path)
+          if (result.status === 'failed')
+            return recordWorkbenchEditorAutosaveFailure(next, path, result.error.message, now)
+          return next
+        }, current)
+      )
+
+      for (const { path, result } of results) {
+        if (result.status === 'saved') {
+          forgetNotifiedFailures(path)
+          continue
+        }
+        if (result.status !== 'failed') continue
+
+        log.warn('编辑器自动保存失败', { path, error: result.error.message })
+        const noticeKey = buildWorkbenchEditorAutosaveNoticeKey(path, result.error.message)
+        if (notifiedFailureKeysRef.current.has(noticeKey)) continue
+        notifiedFailureKeysRef.current.add(noticeKey)
+        onAutosaveFailedLatest.current(path, result.error.message)
+      }
+    } finally {
+      autosaveRunningRef.current = false
+    }
   })
 
-  const { run: scheduleAutoSave, cancel: cancelAutoSave } = useDebounceFn(flushAutoSave, {
-    wait: AUTO_SAVE_DELAY_MS,
-  })
+  useEffect(() => {
+    if (!activeProject || isSavingFile) return undefined
 
+    const nextAt = resolveNextWorkbenchEditorAutosaveAt(openTabsByPath.values(), failures, Date.now())
+    if (nextAt === null) return undefined
+
+    const lease = timers.after(nextAt - Date.now(), () => void runAutosave(), {
+      label: 'workbench.editor.autosave',
+    })
+    return (): void => {
+      lease.cancel()
+    }
+  }, [activeProject, failures, isSavingFile, openTabsByPath, runAutosave, timers])
+
+  // 页面卸载（重新加载窗口）前把还能存的改动同步写回：关窗与退出另有确认，走不到这里还没存的改动。
   const flushDirtyTabsBeforeExit = useMemoizedFn((): void => {
-    cancelAutoSave()
-
     const project = activeProjectLatest.current
     if (!project) return
 
     for (const tab of openTabsByPathLatest.current.values()) {
-      if (
-        tab.file.truncated
-        || tab.externalChange
-        || tab.unencodableSaveError
-        || !isDirtyTab(tab)
-      ) {
+      if (!isWorkbenchEditorTabAutosavable(tab)) {
         continue
       }
 
@@ -78,7 +157,7 @@ export function useWorkbenchEditorAutosave({
           expectedSize: tab.file.size,
         })
       } catch (error) {
-        log.debug('窗口关闭前同步保存脏标签页失败，继续关闭流程', {
+        log.warn('页面卸载前同步保存标签失败', {
           projectRoot: project.rootPath,
           path: tab.path,
           error: String(error),
@@ -86,24 +165,6 @@ export function useWorkbenchEditorAutosave({
       }
     }
   })
-
-  useEffect(() => {
-    cancelAutoSave()
-
-    if (!activeProject || isSavingFile) return undefined
-
-    // 有编码写不出的字符、上次被拒的标签不排队：改之前结果只会一样，也别挡住后面的标签。
-    const dirtyTab = [...openTabsByPath.values()].find(
-      (tab) =>
-        !tab.file.truncated && !tab.externalChange && !tab.unencodableSaveError && isDirtyTab(tab)
-    )
-    if (!dirtyTab) return undefined
-
-    autoSaveTargetRef.current = dirtyTab
-    scheduleAutoSave()
-
-    return (): void => cancelAutoSave()
-  }, [activeProject, cancelAutoSave, isSavingFile, openTabsByPath, scheduleAutoSave])
 
   useEffect(() => {
     window.addEventListener('beforeunload', flushDirtyTabsBeforeExit)
@@ -114,4 +175,6 @@ export function useWorkbenchEditorAutosave({
       window.removeEventListener('pagehide', flushDirtyTabsBeforeExit)
     }
   }, [flushDirtyTabsBeforeExit])
+
+  return failures
 }

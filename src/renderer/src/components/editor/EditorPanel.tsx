@@ -275,6 +275,7 @@ export function EditorPanel({
     selectedFileEditMode,
     projectContextIndex,
     isSavingFile,
+    autosaveFailures,
     externalRevision,
   } = workbenchEditor
   const { t } = useWorkbenchI18n()
@@ -709,6 +710,7 @@ export function EditorPanel({
           onToggleSelectedFileEditMode={onToggleSelectedFileEditMode}
           isSavingFile={isSavingFile}
           dirtyTabCount={dirtyTabCount}
+          autosaveFailures={autosaveFailures}
           gitDecorations={gitDecorations}
           diffTabItem={isolatedTabGroup ? null : activeDiffItem}
           lightTabItem={isolatedTabGroup ? null : lightTab?.item || null}

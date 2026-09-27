@@ -1,5 +1,6 @@
 import type { WorkbenchCommandSuggestion } from '@renderer/models/commands/workbenchCommandSuggestions'
 import type { WorkbenchRunConfiguration } from '@renderer/models/commands/workbenchRunConfigurations'
+import type { WorkbenchEditorAutosaveFailures } from '@renderer/models/editor/workbenchEditorAutosave'
 import type { WorkbenchEditorEditMode } from '@renderer/models/editor/workbenchEditorEditMode'
 import type {
   WorkbenchProjectContextIndex,
@@ -44,6 +45,8 @@ export interface WorkbenchEditorSurfaceBundle extends WorkbenchEditorDocumentBun
   selectedFileEditMode: Nullable<WorkbenchEditorEditMode>
   projectContextIndex: WorkbenchProjectContextIndex
   isSavingFile: boolean
+  /** 自动保存存不下的文件与原因：标签上标红点，悬停看原因。 */
+  autosaveFailures?: WorkbenchEditorAutosaveFailures
   /** 工作区在编辑器之外被改动的次数（Agent 写入、磁盘监听）；变了编辑器就重新要一次诊断。 */
   externalRevision: number
 }
