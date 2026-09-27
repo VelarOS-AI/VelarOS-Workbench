@@ -30,7 +30,7 @@ export interface WorkbenchFileHistorySource {
   records: WorkbenchFileHistoryRecord[]
   isLoadingList: boolean
   listError: Nullable<string>
-  /** 按 id 读取该版本文件的完整内容（本地=快照，git=`git show sha:path`）。 */
+  /** 按 id 读取该版本文件的完整内容（本地=快照，git=`git show sha:path`，path 是文件在那个提交里的路径）。 */
   loadContent: (id: string) => Promise<string>
 }
 
@@ -56,6 +56,8 @@ export function useWorkbenchFileHistory({
   const [isLoadingList, setIsLoadingList] = useState(false)
   const [listError, setListError] = useState<Nullable<string>>(null)
   const generationRef = useRef(0)
+  /** Git 历史里每个提交时文件的路径：改名之前的提交要按旧路径读。 */
+  const gitPathsRef = useRef<ReadonlyMap<string, string>>(new Map())
 
   useEffect(() => {
     if (!enabled || !path) {
@@ -65,17 +67,22 @@ export function useWorkbenchFileHistory({
     }
 
     const generation = ++generationRef.current
+    gitPathsRef.current = new Map()
     setIsLoadingList(true)
     setListError(null)
 
     void (async () => {
       try {
-        const nextRecords =
-          mode === 'local'
-            ? await loadLocalRecords(hostRuntime, projectRoot, path, locale)
-            : await loadGitRecords(hostRuntime, projectRoot, path, locale)
+        if (mode === 'local') {
+          const nextRecords = await loadLocalRecords(hostRuntime, projectRoot, path, locale)
+          if (generation !== generationRef.current) return
+          setRecords(nextRecords)
+          return
+        }
+        const git = await loadGitRecords(hostRuntime, projectRoot, path, locale)
         if (generation !== generationRef.current) return
-        setRecords(nextRecords)
+        gitPathsRef.current = git.paths
+        setRecords(git.records)
       } catch (error) {
         if (generation !== generationRef.current) return
         setRecords([])
@@ -98,7 +105,7 @@ export function useWorkbenchFileHistory({
       const result = Result.unwrap(
         await hostRuntime.kernel.workspace.getWorkspaceGitFileAtCommit(projectRoot, {
           commitSha: id,
-          path,
+          path: gitPathsRef.current.get(id) ?? path,
         })
       )
       return result.content
@@ -131,19 +138,22 @@ async function loadGitRecords(
   projectRoot: string,
   path: string,
   locale: AppLocale
-): Promise<WorkbenchFileHistoryRecord[]> {
+): Promise<{ records: WorkbenchFileHistoryRecord[]; paths: ReadonlyMap<string, string> }> {
   const result = Result.unwrap(
     await hostRuntime.kernel.workspace.getWorkspaceGitLog(projectRoot, {
       path,
       limit: GIT_HISTORY_COMMIT_LIMIT,
     })
   )
-  return result.commits.map((commit, index) => ({
-    id: commit.sha,
-    title: commit.subject,
-    subtitle: commit.authorName,
-    meta: formatWorkbenchGitCommitDate(locale, commit),
-    timestamp: commit.authoredAt,
-    special: index === 0,
-  }))
+  return {
+    records: result.commits.map((commit, index) => ({
+      id: commit.sha,
+      title: commit.subject,
+      subtitle: commit.authorName,
+      meta: formatWorkbenchGitCommitDate(locale, commit),
+      timestamp: commit.authoredAt,
+      special: index === 0,
+    })),
+    paths: new Map(result.commits.map((commit) => [commit.sha, commit.path ?? path])),
+  }
 }

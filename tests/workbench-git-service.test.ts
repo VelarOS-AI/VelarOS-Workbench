@@ -344,6 +344,60 @@ void describe('Workbench Git service', () => {
     })
   })
 
+  void test('file history reads each commit at the path the file had then', async () => {
+    await withRepository(async (root) => {
+      await writeFile(join(root, 'old.ts'), 'v1\n')
+      await commitAll(root, 'create')
+      await writeFile(join(root, 'old.ts'), 'v2\n')
+      await commitAll(root, 'edit')
+      await git(root, ['mv', 'old.ts', 'new.ts'])
+      await commitAll(root, 'rename')
+      await writeFile(join(root, 'new.ts'), 'v3\n')
+      await commitAll(root, 'edit again')
+
+      const service = createService()
+      const log = await service.getLog(root, { path: 'new.ts' })
+      assert.deepEqual(
+        log.commits.map((commit) => [commit.subject, commit.path]),
+        [
+          ['edit again', 'new.ts'],
+          ['rename', 'new.ts'],
+          ['edit', 'old.ts'],
+          ['create', 'old.ts'],
+        ]
+      )
+      const contents = await Promise.all(
+        log.commits.map((commit) => service.getFileAtCommit(root, commit.sha, commit.path ?? ''))
+      )
+      assert.deepEqual(
+        contents.map((result) => result.content),
+        ['v3\n', 'v2\n', 'v2\n', 'v1\n']
+      )
+    })
+  })
+
+  void test('file history of a nested project stops where the file moved in from outside', async () => {
+    await withRepository(async (root) => {
+      await mkdir(join(root, 'shared'))
+      await mkdir(join(root, 'app'))
+      await writeFile(join(root, 'shared', 'util.ts'), 'v1\n')
+      await commitAll(root, 'create outside')
+      await git(root, ['mv', 'shared/util.ts', 'app/util.ts'])
+      await commitAll(root, 'move in')
+      await writeFile(join(root, 'app', 'util.ts'), 'v2\n')
+      await commitAll(root, 'edit inside')
+
+      const log = await createService().getLog(join(root, 'app'), { path: 'util.ts' })
+      assert.deepEqual(
+        log.commits.map((commit) => [commit.subject, commit.path]),
+        [
+          ['edit inside', 'util.ts'],
+          ['move in', 'util.ts'],
+        ]
+      )
+    })
+  })
+
   void test('switching branches lets git decide instead of refusing any dirty tree', async () => {
     await withRepository(async (root) => {
       await writeFile(join(root, 'shared.txt'), 'base\n')

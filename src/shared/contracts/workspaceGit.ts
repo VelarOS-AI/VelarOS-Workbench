@@ -46,6 +46,11 @@ export interface WorkspaceGitLogEntry {
   authorEmail: Nullable<string>
   authoredAt: number
   refs: string[]
+  /**
+   * 按文件查历史时，文件在这个提交里的路径（相对项目根）：改名之前的提交是旧路径，读那时的内容要用它。
+   * 不按文件查时没有。
+   */
+  path?: string
 }
 
 export interface WorkspaceGitLogOptions {

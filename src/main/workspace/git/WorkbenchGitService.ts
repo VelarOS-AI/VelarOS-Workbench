@@ -66,6 +66,8 @@ const RemoteActionTimeoutMs = 120_000
 const MaxConflictMarkerScanBytes = 16 * 1024 * 1024
 /** 冲突标记：行首 7 个 `<` 或 `>`，后面是空格（分支名）或行尾。 */
 const ConflictMarkerPattern = /^(?:<{7}|>{7})(?: |\r?$)/m
+/** 日志的每个提交以 \x1e 开头，字段之间是 \x1f。 */
+const LogFormat = '--format=%x1e%H%x1f%h%x1f%s%x1f%an%x1f%ae%x1f%ct%x1f%D'
 
 /**
  * 每条 git 命令都带上的配置。输出要拿来解析，不能跟着用户的 git 配置变：中文文件名被转成八进制转义、
@@ -265,21 +267,18 @@ export class WorkbenchGitService {
   ): Promise<SystemWorkspaceGitLogResult> {
     const rootPath = await this.resolveRoot(workspaceRoot)
     const limit = Math.min(Math.max(Math.floor(options.limit ?? DefaultLogLimit), 1), MaxLogLimit)
-    const args = [
-      'log',
-      `--max-count=${limit}`,
-      '--date-order',
-      '--no-color',
-      '--format=%H%x1f%h%x1f%s%x1f%an%x1f%ae%x1f%ct%x1f%D%x1e',
-    ]
+    const args = ['log', `--max-count=${limit}`, '--date-order', '--no-color', LogFormat]
     if (options.branch) args.push(this.assertRevision(options.branch))
     else if (!options.path) args.push('--all')
-    if (options.path)
-      args.push(
-        '--follow',
-        '--',
-        this.toLiteralPathspec(this.normalizePathspec(rootPath, options.path))
-      )
+    let file: Nullable<{ path: string; prefix: string }> = null
+    if (options.path) {
+      file = {
+        path: this.normalizePathspec(rootPath, options.path),
+        prefix: (await this.openRepository(rootPath)).prefix,
+      }
+      // 跟着改名往回找，并列出每个提交里这个文件叫什么：改名之前的提交要按旧路径读内容。
+      args.push('--follow', '--name-status', '-z', '--', this.toLiteralPathspec(file.path))
+    }
 
     const result = await this.runGit(rootPath, args, { allowFailure: true })
     const output = `${result.stderr}\n${result.stdout}`.toLowerCase()
@@ -291,11 +290,12 @@ export class WorkbenchGitService {
     ) {
       this.throwGitFailure(args, result)
     }
-    return {
-      rootPath,
-      checkedAt: Date.now(),
-      commits: result.failed ? [] : this.parseLog(result.stdout),
-    }
+    const commits = result.failed
+      ? []
+      : file
+        ? this.parseFileLog(result.stdout, file.prefix, `${file.prefix}${file.path}`)
+        : this.parseLog(result.stdout)
+    return { rootPath, checkedAt: Date.now(), commits }
   }
 
   public async generateCommitMessage(
@@ -957,26 +957,66 @@ export class WorkbenchGitService {
       .split('\x1e')
       .map((record) => record.trim())
       .filter(Boolean)
-      .map((record) => {
-        const [
-          sha = '',
-          shortSha = '',
-          subject = '',
-          authorName = '',
-          authorEmail = '',
-          timestamp = '',
-          refs = '',
-        ] = record.split('\x1f')
-        return {
-          sha,
-          shortSha,
-          subject,
-          authorName,
-          authorEmail: authorEmail || null,
-          authoredAt: Number(timestamp) * 1000 || 0,
-          refs: refs.split(',').map((ref) => ref.trim()).filter(Boolean),
+      .map((record) => this.parseLogCommit(record))
+  }
+
+  /**
+   * `log --follow --name-status -z` 的输出：每个提交是 `\x1e<字段>\0\n<状态>\0<路径>\0`，改名是
+   * `R<相似度>\0<旧路径>\0<新路径>\0`，路径相对仓库根。从新往旧读，记着文件在更早的提交里叫什么。
+   */
+  private parseFileLog(
+    raw: string,
+    prefix: string,
+    currentPath: string
+  ): WorkspaceGitLogEntry[] {
+    const commits: WorkspaceGitLogEntry[] = []
+    let pathInCommit = currentPath
+    for (const record of raw.split('\x1e')) {
+      const headerEnd = record.indexOf('\0')
+      const header = (headerEnd < 0 ? record : record.slice(0, headerEnd)).trim()
+      if (!header) continue
+      const fields = headerEnd < 0 ? [] : record.slice(headerEnd + 1).split('\0')
+      let olderPath = pathInCommit
+      for (let index = 0; index < fields.length; index += 1) {
+        const status = fields[index]?.trim()
+        if (!status) continue
+        if (status.startsWith('R') || status.startsWith('C')) {
+          olderPath = fields[index + 1] || olderPath
+          pathInCommit = fields[index + 2] || pathInCommit
+          index += 2
+        } else {
+          pathInCommit = fields[index + 1] || pathInCommit
+          olderPath = pathInCommit
+          index += 1
         }
-      })
+      }
+      // 从项目外面挪进来的文件：挪进来之前的提交不在项目里，不列。
+      const path = this.toProjectPath(prefix, pathInCommit)
+      if (path) commits.push({ ...this.parseLogCommit(header), path })
+      pathInCommit = olderPath
+    }
+    return commits
+  }
+
+  private parseLogCommit(header: string): WorkspaceGitLogEntry {
+    const [
+      sha = '',
+      shortSha = '',
+      subject = '',
+      authorName = '',
+      authorEmail = '',
+      timestamp = '',
+      refs = '',
+    ] = header.split('\x1f')
+    return {
+      sha,
+      shortSha,
+      subject,
+      authorName,
+      authorEmail: authorEmail || null,
+      authoredAt: Number(timestamp) * 1000 || 0,
+      refs: refs.split(',').map((ref) => ref.trim()).filter(Boolean),
+    }
   }
 
   /** `--numstat -z`：`增\t删\t路径\0`；改名是 `增\t删\t\0旧路径\0新路径\0`；二进制文件的增删是 `-`。 */
