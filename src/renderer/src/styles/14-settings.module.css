@@ -715,3 +715,8 @@
 .root :global([data-slot='button']:where(:not(:focus-visible, .velar-segmented-control-active:hover))) {
   box-shadow: none;
 }
+
+/* 数据共享提示是窄弹窗：中文只在标点处换行，「设置 > 高级」这段路径不被拆开。 */
+.productAnalyticsNoticeDescription {
+  word-break: keep-all;
+}

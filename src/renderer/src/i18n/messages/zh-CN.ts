@@ -798,7 +798,8 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     settingsProductAnalytics: '帮助改进 VelarOS',
     settingsProductAnalyticsDescription: '分享软件使用过程中的非隐私数据。',
     settingsProductAnalyticsDetails: '查看产品改进数据说明',
-    productAnalyticsNoticeDescription: '分享软件使用过程中的非隐私数据，可在“设置 > 高级”关闭。',
+    // 设置路径用不换行空格连着：弹窗窄，换行时整段挪到下一行，不从中间断开。
+    productAnalyticsNoticeDescription: '分享软件使用过程中的非隐私数据，可在“设置\u00a0>\u00a0高级”关闭。',
     productAnalyticsNoticeDecline: '拒绝',
     productAnalyticsNoticeAllow: '允许',
     settingsAiRulesNoProject: '未打开项目',

@@ -832,7 +832,7 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     settingsProductAnalyticsDescription: 'Share non-private data from normal software use.',
     settingsProductAnalyticsDetails: 'View product improvement data details',
     productAnalyticsNoticeDescription:
-      'Share non-private data from normal software use. You can turn this off in Settings > Advanced.',
+      'Share non-private data from normal software use. You can turn this off in Settings\u00a0>\u00a0Advanced.',
     productAnalyticsNoticeDecline: 'Decline',
     productAnalyticsNoticeAllow: 'Allow',
     settingsAiRulesNoProject: 'No project open',

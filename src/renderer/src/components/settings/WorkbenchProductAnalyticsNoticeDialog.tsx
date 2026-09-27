@@ -12,6 +12,8 @@ import {
   DialogTitle,
 } from '@velaros-ai/ui/primitives/overlays/Dialog'
 
+import styles from '../../styles/workbenchPageStyles'
+
 export function WorkbenchProductAnalyticsNoticeDialog(): ReactElement | null {
   const { t } = useWorkbenchI18n()
   const analytics = useWorkbenchProductAnalytics()
@@ -28,6 +30,7 @@ export function WorkbenchProductAnalyticsNoticeDialog(): ReactElement | null {
   return (
     <Dialog open>
       <DialogContent
+        className="velar-confirm-dialog"
         showClose={false}
         onEscapeKeyDown={(event) => event.preventDefault()}
         onPointerDownOutside={(event) => event.preventDefault()}
@@ -35,7 +38,9 @@ export function WorkbenchProductAnalyticsNoticeDialog(): ReactElement | null {
       >
         <DialogHeader>
           <DialogTitle>{t('workbench.settingsProductAnalytics')}</DialogTitle>
-          <DialogDescription>{t('workbench.productAnalyticsNoticeDescription')}</DialogDescription>
+          <DialogDescription className={styles.productAnalyticsNoticeDescription}>
+            {t('workbench.productAnalyticsNoticeDescription')}
+          </DialogDescription>
         </DialogHeader>
         <DialogFooter>
           <Button
