@@ -871,6 +871,9 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     settingsEditorFontSize: '编辑器字号',
     settingsEditorLineHeight: '编辑器行高',
     settingsEditorWordWrap: '自动换行',
+    settingsEditorFormatOnSave: '保存时格式化',
+    settingsEditorFormatOnSaveHint:
+      '在编辑区里按 ⌘S / Ctrl+S 保存时先格式化当前文件：项目里有 Prettier 就用它，没有就用内置规则。自动保存不格式化。',
     settingsEditorWordWrapHint: '长行在编辑区宽度处折行显示；在编辑区里按 {shortcut} 也能切换。',
     settingsLocalHistoryThrottle: '本地历史节流',
     settingsLocalHistoryThrottleHint:

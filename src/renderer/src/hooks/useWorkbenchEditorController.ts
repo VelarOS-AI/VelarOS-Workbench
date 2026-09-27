@@ -1324,16 +1324,24 @@ export function useWorkbenchEditorController({
     },
   })
 
-  const saveSelectedFile = useMemoizedFn(async (): Promise<void> => {
-    if (!selectedFile || !hasUnsavedChanges) return
+  /**
+   * 保存当前文件。`content` 是编辑器这一刻的正文：在编辑区里按 ⌘S 时刚格式化、收拾过空白，标签里的正文要等
+   * 下一次渲染才跟上；不给就用标签里的。
+   */
+  const saveSelectedFile = useMemoizedFn(async (content?: string): Promise<void> => {
+    if (!selectedFile) return
+    const tab = openTabsByPath.get(selectedFile.path)
+    const nextContent = content ?? editorContent
+    if (!isDirtyTab({ file: selectedFile, content: nextContent, textConversion: tab?.textConversion }))
+      return
 
     await saveEditorTab(
       {
         path: selectedFile.path,
         file: selectedFile,
-        content: editorContent,
-        textConversion: openTabsByPath.get(selectedFile.path)?.textConversion,
-        externalChange: openTabsByPath.get(selectedFile.path)?.externalChange,
+        content: nextContent,
+        textConversion: tab?.textConversion,
+        externalChange: tab?.externalChange,
       },
       { notify: true }
     )

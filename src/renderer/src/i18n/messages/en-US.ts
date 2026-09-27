@@ -906,6 +906,9 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     settingsEditorFontSize: 'Editor font size',
     settingsEditorLineHeight: 'Editor line height',
     settingsEditorWordWrap: 'Word wrap',
+    settingsEditorFormatOnSave: 'Format on save',
+    settingsEditorFormatOnSaveHint:
+      "Format the file when you save it with ⌘S / Ctrl+S in the editor, using the project's Prettier if it has one and the built-in rules otherwise. Autosave doesn't format.",
     settingsEditorWordWrapHint: 'Wrap long lines at the editor width. Press {shortcut} in the editor to toggle.',
     settingsLocalHistoryThrottle: 'Local history throttle',
     settingsLocalHistoryThrottleHint:

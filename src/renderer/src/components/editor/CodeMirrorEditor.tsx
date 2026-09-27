@@ -219,6 +219,7 @@ import {
   createWorkbenchPackageScriptRunGutterExtension,
   shouldShowWorkbenchPackageScriptRunGutter,
 } from '@renderer/models/editor/workbenchPackageScriptRunGutter'
+import { buildWorkbenchSaveWhitespaceChanges } from '@renderer/models/editor/workbenchSaveWhitespace'
 import {
   buildWorkbenchSymbolLocationsRequest,
   sameWorkbenchSymbolLocation,
@@ -235,6 +236,7 @@ import {
 } from '@renderer/models/editor/workbenchVelarTestRunGutter'
 import type { WorkbenchProjectContextIndex } from '@renderer/models/project/workbenchProjectContextIndex'
 import {
+  readWorkbenchPreferences,
   toggleWorkbenchEditorWordWrap,
   type WorkbenchThemeId,
 } from '@renderer/models/settings/workbenchPreferences'
@@ -337,7 +339,8 @@ interface CodeMirrorEditorProps {
   onOpenFileHistory?: (mode: 'local' | 'git') => void
   /** 右键「添加到聊天」：把当前文件作为引用挂到聊天输入框（只挂路径）。 */
   onAddToChat?: () => void
-  onSave: () => void
+  /** 保存；`content` 是这一刻的正文（⌘S 时按设置格式化、按 `.editorconfig` 收拾过空白）。 */
+  onSave: (content?: string) => void
 }
 
 /** 编辑器实例建一次、各文件状态共用的扩展（按键、鼠标、更新监听……），它们只通过 ref 读当前的值。 */
@@ -1436,6 +1439,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       openTabs,
       revision: externalRevision,
     })
+    const editorConfigRef = useLatest(editorConfig)
     const indentation = useMemo(
       () => resolveWorkbenchIndentation({ path, detected: detectedIndentation, editorConfig }),
       [detectedIndentation, editorConfig, path]
@@ -2288,6 +2292,19 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         }
       })
 
+      /**
+       * ⌘S：打开了「保存时格式化」就先格式化，再按 `.editorconfig` 去掉行尾空白、补上结尾换行，最后把这一刻的正文
+       * 交去保存（不等标签里的正文随渲染跟上）。只读文件原样保存。
+       */
+      const saveFromEditor = async (view: EditorView): Promise<void> => {
+        if (!view.state.readOnly) {
+          if (readWorkbenchPreferences().editorFormatOnSave) await editorActionsRef.current.formatDocument()
+          const whitespace = buildWorkbenchSaveWhitespaceChanges(view.state, editorConfigRef.current)
+          if (whitespace.length > 0) view.dispatch({ changes: whitespace })
+        }
+        callbacksRef.current.onSave(view.state.doc.toString())
+      }
+
       /** 有查找词就找下一处，还没有就打开查找栏。 */
       const findNextOrOpen = (view: EditorView): boolean => {
         if (getSearchQuery(view.state).valid) findNext(view)
@@ -2371,8 +2388,8 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         {
           key: 'Mod-s',
           preventDefault: true,
-          run: () => {
-            callbacksRef.current.onSave()
+          run: (view) => {
+            void saveFromEditor(view)
             return true
           },
         },

@@ -830,6 +830,15 @@ export function WorkbenchSettingsDialog({
           />
         </SettingRow>
         <SettingRow
+          title={t('workbench.settingsEditorFormatOnSave')}
+          description={t('workbench.settingsEditorFormatOnSaveHint')}
+        >
+          <Switch
+            checked={preferences.editorFormatOnSave}
+            onCheckedChange={(editorFormatOnSave) => onPreferencesChange({ editorFormatOnSave })}
+          />
+        </SettingRow>
+        <SettingRow
           title={t('workbench.settingsLocalHistoryThrottle')}
           description={t('workbench.settingsLocalHistoryThrottleHint')}
         >

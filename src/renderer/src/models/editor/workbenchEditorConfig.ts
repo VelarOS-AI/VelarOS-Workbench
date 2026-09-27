@@ -15,6 +15,10 @@ export interface WorkbenchEditorConfigProperties {
   /** 一级缩进的宽度；`tab` 表示跟制表符宽度一致。 */
   indentSize?: number | 'tab'
   tabWidth?: number
+  /** 保存时去掉行尾空白。 */
+  trimTrailingWhitespace?: boolean
+  /** 保存时保证文件以换行结尾（false 表示去掉结尾的换行）。 */
+  insertFinalNewline?: boolean
 }
 
 /** 从文件往上找到的一份配置：`directory` 是它所在的目录（相对项目根，根目录为空串）。 */
@@ -93,7 +97,16 @@ export function resolveWorkbenchEditorConfig(
   }
   const tabWidth = positiveInteger(merged.get('tab_width') ?? '')
   if (tabWidth) properties.tabWidth = tabWidth
+  const trimTrailingWhitespace = booleanValue(merged.get('trim_trailing_whitespace'))
+  if (trimTrailingWhitespace !== undefined) properties.trimTrailingWhitespace = trimTrailingWhitespace
+  const insertFinalNewline = booleanValue(merged.get('insert_final_newline'))
+  if (insertFinalNewline !== undefined) properties.insertFinalNewline = insertFinalNewline
   return properties
+}
+
+function booleanValue(value: string | undefined): boolean | undefined {
+  const normalized = value?.toLowerCase()
+  return normalized === 'true' ? true : normalized === 'false' ? false : undefined
 }
 
 function positiveInteger(value: string): number | undefined {

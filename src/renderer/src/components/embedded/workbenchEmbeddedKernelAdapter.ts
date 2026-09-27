@@ -222,7 +222,7 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
         agentBrowser: buildAgentBrowserTab(model, activeProject.rootPath),
       },
       workspace: {
-        onSaveSelectedFile: () => void workbench.saveSelectedFile(),
+        onSaveSelectedFile: (content) => void workbench.saveSelectedFile(content),
         onToggleSelectedFileEditMode: workbench.toggleSelectedFileEditMode,
         onSaveAllOpenFiles: () => void workbench.saveAllOpenFiles(),
         onConvertSelectedFileTextFormat: (format) =>

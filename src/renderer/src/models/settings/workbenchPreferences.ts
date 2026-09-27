@@ -41,6 +41,8 @@ export interface WorkbenchPreferences {
   editorZoomLevel: number
   /** 长行在编辑区宽度处折行显示（⌥Z 切换）。 */
   editorWordWrap: boolean
+  /** 在编辑区里按 ⌘S 保存时先格式化（项目的 Prettier 优先，没有就用内置规则）。 */
+  editorFormatOnSave: boolean
   theme: WorkbenchThemeId
   /**
    * 用户手动编辑的本地历史快照节流窗口（秒）：自动保存时距上一份快照不足该间隔就不新增，
@@ -78,6 +80,7 @@ export const DEFAULT_WORKBENCH_PREFERENCES: WorkbenchPreferences = {
   editorLineHeight: 20.25,
   editorZoomLevel: 0,
   editorWordWrap: false,
+  editorFormatOnSave: false,
   theme: 'light-modern',
   localHistoryThrottleSeconds: 60,
   permissionConfirmationMode: 'standard-open',
@@ -282,6 +285,10 @@ export function normalizeWorkbenchPreferences(
       typeof preferences?.editorWordWrap === 'boolean'
         ? preferences.editorWordWrap
         : DEFAULT_WORKBENCH_PREFERENCES.editorWordWrap,
+    editorFormatOnSave:
+      typeof preferences?.editorFormatOnSave === 'boolean'
+        ? preferences.editorFormatOnSave
+        : DEFAULT_WORKBENCH_PREFERENCES.editorFormatOnSave,
     theme: normalizeWorkbenchThemeChoice(preferences?.theme),
     localHistoryThrottleSeconds: clampNumber(
       preferences?.localHistoryThrottleSeconds,

@@ -177,7 +177,8 @@ export interface WorkbenchEditorPanelDiffProps {
 }
 
 export interface WorkbenchEditorPanelWorkspaceProps {
-  onSaveSelectedFile: () => void
+  /** 保存当前文件；`content` 是编辑器这一刻的正文（⌘S 时可能刚格式化过）。 */
+  onSaveSelectedFile: (content?: string) => void
   /** 当前文件在只读与编辑之间切换（只挡用户在编辑器里输入，AI 经内核写盘不受影响）。 */
   onToggleSelectedFileEditMode: () => void
   onSaveAllOpenFiles: () => void
