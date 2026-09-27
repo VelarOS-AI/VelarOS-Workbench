@@ -15,6 +15,7 @@ import type {
   ScriptExecutionBlock,
   TextBlock,
   ThinkingBlock,
+  ToolCallBlock,
   WidgetBlock,
 } from '@velaros-ai/ui/conversation/contracts'
 
@@ -33,6 +34,9 @@ import {
   ConversationThinkingMaxChars,
   ConversationThinkingNotice,
   type ConversationThinkingProjection,
+  ConversationToolCallLimits,
+  ConversationToolCallNotice,
+  type ConversationToolCallProjection,
   ConversationWidgetLimits,
   ConversationWidgetNotice,
   type ConversationWidgetProjection,
@@ -104,6 +108,8 @@ export function applyWorkbenchConversationNotice(
         : transcript
     case ConversationAgentNotice:
       return isAgentProjection(payload) ? applyAgent(transcript, payload) : transcript
+    case ConversationToolCallNotice:
+      return isToolCallProjection(payload) ? applyToolCall(transcript, payload, scope) : transcript
     default:
       return transcript
   }
@@ -222,6 +228,33 @@ function applyWidget(
   })
 }
 
+/** 外部引擎的工具卡：调用开始时接在运行消息后面，进度与结果按调用身份原位替换。 */
+function applyToolCall(
+  transcript: WorkbenchConversationTranscript,
+  payload: ConversationToolCallProjection,
+  scope: WorkbenchConversationRunScope
+): WorkbenchConversationTranscript {
+  const block: ToolCallBlock = {
+    type: 'tool-call',
+    toolCallId: payload.id,
+    toolName: payload.toolName,
+    title: payload.title,
+    args: payload.args,
+    isRunning: payload.isRunning,
+    startedAt: payload.startedAt,
+  }
+  if (payload.progress) block.progress = payload.progress
+  if (payload.result !== undefined) block.result = payload.result
+  if (payload.error) block.error = payload.error
+  if (payload.finishedAt !== undefined) block.finishedAt = payload.finishedAt
+  return updateRunMessage(transcript, payload.runId, scope, (blocks) => {
+    const index = blocks.findIndex(
+      (item) => item.type === 'tool-call' && item.toolCallId === payload.id
+    )
+    return index >= 0 ? replaceAt(blocks, index, block) : [...blocks, block]
+  })
+}
+
 /** 交互卡：请求到达时接在运行消息后面；回答、跳过或失效时按请求身份原位替换。 */
 function applyInteraction(
   transcript: WorkbenchConversationTranscript,
@@ -305,6 +338,22 @@ export function withSettledScripts(messages: readonly ChatMessage[]): ChatMessag
   )
 }
 
+/** 运行收尾（或上次停在运行中的会话恢复）时，还在跑的工具卡不会再有结果，按中断收掉。 */
+export function withSettledToolCalls(messages: readonly ChatMessage[]): ChatMessage[] {
+  return messages.map((message) =>
+    message.blocks.some(isRunningToolCall)
+      ? {
+          ...message,
+          blocks: message.blocks.map((block): Block =>
+            isRunningToolCall(block)
+              ? { ...block, isRunning: false, error: block.error ?? '运行已停止。' }
+              : block
+          ),
+        }
+      : message
+  )
+}
+
 /** 还在等回答的交互卡在运行结束后不会再被回答，按失效收掉（main 收尾时也会发，这里兜底）。 */
 export function withExpiredInteractions(messages: readonly ChatMessage[]): ChatMessage[] {
   return messages.map((message) =>
@@ -364,6 +413,10 @@ function isPreviewBlock(block: Block): boolean {
 
 function isUnsettledScript(block: Block): block is ScriptExecutionBlock {
   return block.type === 'script-execution' && (block.status === 'writing' || block.status === 'running')
+}
+
+function isRunningToolCall(block: Block): block is ToolCallBlock {
+  return block.type === 'tool-call' && !!block.isRunning
 }
 
 function isPendingInteraction(block: Block): block is InteractionBlock {
@@ -482,6 +535,26 @@ function isAgentProjection(value: unknown): value is ConversationAgentProjection
     (value.error === null || isString(value.error)) &&
     isFiniteNumber(value.startedAt) &&
     isFiniteNumber(value.updatedAt)
+  )
+}
+
+function isToolCallProjection(value: unknown): value is ConversationToolCallProjection {
+  return (
+    isPlainObject(value) &&
+    isString(value.id) &&
+    value.id.startsWith('conversation:tool:') &&
+    isString(value.runId) &&
+    isString(value.toolName) &&
+    isString(value.title) &&
+    value.title.length <= ConversationToolCallLimits.titleChars &&
+    isPlainObject(value.args) &&
+    isBoolean(value.isRunning) &&
+    (isUndefined(value.progress) ||
+      (isString(value.progress) && value.progress.length <= ConversationToolCallLimits.progressChars)) &&
+    (isUndefined(value.error) ||
+      (isString(value.error) && value.error.length <= ConversationToolCallLimits.payloadChars)) &&
+    isFiniteNumber(value.startedAt) &&
+    (isUndefined(value.finishedAt) || isFiniteNumber(value.finishedAt))
   )
 }
 

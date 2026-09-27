@@ -24,7 +24,14 @@ void describe('Workbench chat composer parity', () => {
     )
 
     // 运行中（本会话有在途的一轮）发送 = 引导注入当前这一轮；在途的一轮是引导的前提，不是阻挡条件。
-    assert.match(adapter, /const canSteerRun = chat\.status === 'running' && hasActiveRun\n/)
+    // 外部引擎不收运行中的引导：它跑着时发的消息排队，这一轮结束后再发。
+    assert.match(adapter, /const canSteerRun = chat\.status === 'running' && hasActiveRun && !engine\n/)
+    assert.match(
+      adapter,
+      /const engineRunActive = !!engine && chat\.status === 'running' && hasActiveRun\n/
+    )
+    assert.match(adapter, /canEnqueue: canSteerRun \|\| engineRunActive,/)
+    assert.match(adapter, /canGuideCurrentTask: !engine,/)
     assert.match(adapter, /return sendRunGuidance\(text, selections, referencedFilePaths\)/)
     // 引导走会话通道；运行时读进上下文后回执 input-applied，那条引导记为已纳入。
     assert.match(

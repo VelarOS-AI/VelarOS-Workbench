@@ -7,6 +7,7 @@ import {
   withExpiredInteractions,
   withoutConversationPreviews,
   withSettledScripts,
+  withSettledToolCalls,
   withSettledWorkerThreads,
   type WorkbenchConversationTranscript,
 } from '../src/renderer/src/runtime/conversation/workbenchConversationNotices'
@@ -16,6 +17,7 @@ import {
   ConversationScriptNotice,
   ConversationTextNotice,
   ConversationThinkingNotice,
+  ConversationToolCallNotice,
   ConversationWidgetNotice,
 } from '../src/shared/workbenchConversation'
 
@@ -201,6 +203,48 @@ describe('Workbench conversation notices', () => {
     expect(settled[0]!.blocks.map((block) => block.type)).toEqual(['script-execution', 'interaction'])
     expect(settled[0]!.blocks[0]).toMatchObject({ status: 'cancelled' })
     expect(settled[0]!.blocks[1]).toMatchObject({ status: 'expired' })
+  })
+
+  test('engine tool calls become tool-call blocks updated in place, and run end stops the running ones', () => {
+    const call = {
+      id: `conversation:tool:${RunId}:toolu_1`,
+      runId: RunId,
+      toolName: 'project:run',
+      title: 'Run the tests',
+      args: { command: 'npm test' },
+      isRunning: true,
+      startedAt: 1,
+    }
+    let state = applyWorkbenchConversationNotice(Empty, ConversationTextNotice, text('accepted', '我先跑测试'))
+    state = applyWorkbenchConversationNotice(state, ConversationToolCallNotice, call)
+    state = applyWorkbenchConversationNotice(state, ConversationToolCallNotice, { ...call, progress: 'ok' })
+    expect(state.messages[0]!.blocks.map((block) => block.type)).toEqual(['text', 'tool-call'])
+    expect(state.messages[0]!.blocks[1]).toMatchObject({
+      type: 'tool-call',
+      toolCallId: call.id,
+      toolName: 'project:run',
+      title: 'Run the tests',
+      progress: 'ok',
+      isRunning: true,
+    })
+    const finished = applyWorkbenchConversationNotice(state, ConversationToolCallNotice, {
+      ...call,
+      isRunning: false,
+      result: 'all passed',
+      finishedAt: 2,
+    })
+    expect(finished.messages[0]!.blocks).toHaveLength(2)
+    expect(finished.messages[0]!.blocks[1]).toMatchObject({ isRunning: false, result: 'all passed', finishedAt: 2 })
+    // 没跑完就收尾的：不再转圈，标成停止
+    expect(withSettledToolCalls(state.messages)[0]!.blocks[1]).toMatchObject({
+      isRunning: false,
+      error: '运行已停止。',
+    })
+    // 形状不对的不进会话
+    expect(applyWorkbenchConversationNotice(Empty, ConversationToolCallNotice, { ...call, id: 'tool-1' })).toBe(Empty)
+    expect(applyWorkbenchConversationNotice(Empty, ConversationToolCallNotice, { ...call, args: 'npm test' })).toBe(
+      Empty
+    )
   })
 
   test('the leading comment is only the first non-blank line', () => {

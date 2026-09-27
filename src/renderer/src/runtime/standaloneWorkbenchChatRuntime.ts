@@ -472,7 +472,14 @@ function readStandaloneLiveActivity(
   const scriptActivity = runningScript?.type === 'script-execution' && runningScript.title
     ? runningScript.title
     : undefined
-  return { liveTraceSummary: scriptActivity, hasStreamingThinkingBlock }
+  // 外部引擎的会话没有脚本卡：状态行写正在跑的那张工具卡。
+  const runningTool = scriptActivity
+    ? undefined
+    : message.blocks.findLast((block) => block.type === 'tool-call' && block.isRunning)
+  const toolActivity = runningTool?.type === 'tool-call'
+    ? runningTool.title?.trim() || runningTool.toolName
+    : undefined
+  return { liveTraceSummary: scriptActivity ?? toolActivity, hasStreamingThinkingBlock }
 }
 
 function readStandaloneModelVisibleText(message: ChatMessage): string {

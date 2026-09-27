@@ -112,12 +112,14 @@ void describe('Workbench navigation surface', () => {
 })
 
 void describe('Workbench chat composer placeholder', () => {
-  const t = (key: string, params?: { path: string } | { count: number }): string =>
+  const t = (key: string, params?: { path: string } | { count: number } | { engine: string }): string =>
     key === 'workbench.chatAskAboutFile' && params && 'path' in params
       ? `Ask about ${params.path}…`
       : key === 'workbench.chatAskAboutFiles' && params && 'count' in params
         ? `Ask about ${params.count} files…`
-        : 'Ask Workbench Agent…'
+        : key === 'workbench.chatEnginePlaceholder' && params && 'engine' in params
+          ? `Ask ${params.engine}…`
+          : 'Ask Workbench Agent…'
 
   void test('follows the files the message asks about, not the raw editor file', () => {
     assert.equal(resolveWorkbenchChatComposerPlaceholder(['src/app.ts'], t), 'Ask about src/app.ts…')
@@ -126,14 +128,18 @@ void describe('Workbench chat composer placeholder', () => {
       resolveWorkbenchChatComposerPlaceholder(['src/app.ts', 'src/lib.ts'], t),
       'Ask about 2 files…'
     )
-    // 用户取消了 chip：提示回到通用提示。
+    // 用户取消了 chip：提示回到通用提示；交给外部引擎的会话写引擎的名字。
     assert.equal(resolveWorkbenchChatComposerPlaceholder([], t), 'Ask Workbench Agent…')
+    assert.equal(resolveWorkbenchChatComposerPlaceholder([], t, 'Claude Code'), 'Ask Claude Code…')
   })
 
   void test('the composer reads the chip state for its placeholder', () => {
     const adapter = readSource('src/renderer/src/runtime/standaloneWorkbenchChatAdapter.tsx')
 
-    assert.match(adapter, /placeholder: resolveWorkbenchChatComposerPlaceholder\(askedFilePaths, t\)/u)
+    assert.match(
+      adapter,
+      /placeholder: resolveWorkbenchChatComposerPlaceholder\(askedFilePaths, t, engineLabel\)/u
+    )
     assert.match(
       adapter,
       /appendWorkbenchChatFileReferences\(\s*includedCurrentFilePath \? \[includedCurrentFilePath\] : \[\],\s*selectedFileReferencePaths\s*\)/u

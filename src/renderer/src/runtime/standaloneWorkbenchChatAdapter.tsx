@@ -47,6 +47,7 @@ import type { BrowserElementSelection, ChatMessage } from '@shared/contracts'
 import {
   ConversationCommandOutputNotice,
   ConversationProjectActivityNotice,
+  type WorkbenchConversationEngineSelection,
   type WorkbenchConversationEventEnvelope,
   type WorkbenchConversationImage,
   type WorkbenchConversationState,
@@ -72,11 +73,13 @@ import styles from '../styles/workbenchPageStyles'
 import { useLatest } from '../support/genericHooks'
 
 import { WorkbenchContextUsageIndicator } from './conversation/WorkbenchContextUsageIndicator'
+import { WorkbenchConversationEngineContext } from './conversation/workbenchConversationEngineContext'
 import {
   applyWorkbenchConversationNotice,
   withExpiredInteractions,
   withoutConversationPreviews,
   withSettledScripts,
+  withSettledToolCalls,
   withSettledWorkerThreads,
 } from './conversation/workbenchConversationNotices'
 import {
@@ -153,6 +156,15 @@ import {
   StandaloneRunChangeCaptureTiming,
 } from './standaloneWorkbenchRunChangeCapture'
 import { awaitStandaloneAgentStopSettlement } from './standaloneWorkbenchStopSettlement'
+import {
+  isWorkbenchAgentEngineId,
+  readPreferredWorkbenchEngine,
+  readWorkbenchEngineSelection,
+  resolveWorkbenchEngineModel,
+  storePreferredWorkbenchEngine,
+  useWorkbenchAgentEngines,
+  workbenchAgentEngineLabel,
+} from './workbenchAgentEngines'
 import { publishWorkbenchAgentProjectWrite } from './workbenchAgentProjectWrites'
 import {
   buildBrowserElementDisplayFallback,
@@ -184,6 +196,11 @@ interface StandaloneChatState extends StandaloneConversationRuntime {
   readonly messageRunMarkers: readonly StandaloneRunMarker[]
   /** 正在跑的这一轮实时采到的改动；不持久化——重启时那次执行早已不在。 */
   readonly liveRunChanges: Nullable<WorkbenchChatLiveRunChanges>
+  /**
+   * 这个会话交给哪个外部引擎（Claude Code、Codex）执行；null 是 VelarOS 自己的 Agent。会话发出第一条消息后
+   * 就定下来，引擎的上下文在引擎那边，换执行体要新开会话。
+   */
+  readonly engine: Nullable<WorkbenchConversationEngineSelection>
   readonly revision: number
 }
 
@@ -282,6 +299,8 @@ function createState(projectRoot: string, restoreStored = true): StandaloneChatS
     checkpoints: [],
     messageRunMarkers: [],
     liveRunChanges: null,
+    // 新会话沿用上一次在模型菜单里选的执行体。
+    engine: readPreferredWorkbenchEngine(),
     revision: 0,
   }
   registerStandaloneChatSession(empty.sessionId, projectRoot)
@@ -325,9 +344,11 @@ function restoreStoredState(
     : null
   const messages = pauseUnappliedRunGuidance(
     withExpiredInteractions(
-      withSettledScripts(
-        withoutConversationPreviews(
-          sanitizeStandaloneChatMessages(stored.messages.filter(isStoredChatMessage))
+      withSettledToolCalls(
+        withSettledScripts(
+          withoutConversationPreviews(
+            sanitizeStandaloneChatMessages(stored.messages.filter(isStoredChatMessage))
+          )
         )
       )
     ),
@@ -338,6 +359,7 @@ function restoreStoredState(
     sessionId: typeof stored.sessionId === 'string' ? stored.sessionId : empty.sessionId,
     folderId: typeof stored.folderId === 'string' ? stored.folderId : empty.folderId,
     messages,
+    engine: readWorkbenchEngineSelection(stored.engine),
     status: interruptedStatus ?? empty.status,
     lastError: interruptedStatus && typeof stored.lastError === 'string' ? stored.lastError : null,
     checkpoints: Array.isArray(stored.checkpoints)
@@ -586,7 +608,9 @@ function finishRun(run: ActiveConversationRun, runtime: WorkbenchConversationSta
 function settleTerminalMessages(messages: readonly ChatMessage[]): ChatMessage[] {
   return pauseUnappliedRunGuidance(
     withExpiredInteractions(
-      withSettledScripts(withoutConversationPreviews(sanitizeStandaloneChatMessages(messages)))
+      withSettledToolCalls(
+        withSettledScripts(withoutConversationPreviews(sanitizeStandaloneChatMessages(messages)))
+      )
     )
   )
 }
@@ -800,6 +824,11 @@ function StandaloneWorkbenchChatSessionSurface({
     modelConfig.provider,
     managedModelState
   )
+  // 交给外部引擎的会话：模型、登录与上下文都是引擎自己的，这一侧只管它选了哪个引擎、哪个模型。
+  const engines = useWorkbenchAgentEngines()
+  const engine = chat.engine
+  const engineStatus = engine ? engines.find((status) => status.id === engine.id) : undefined
+  const engineLabel = engine ? workbenchAgentEngineLabel(engine.id) : null
   const [prompt, setPrompt] = useState('')
   const [files, setFiles] = useState<File[]>([])
   /** 用户在浏览器里拾取、还没随消息发出的页面元素（输入框上方的 chip）。 */
@@ -819,8 +848,10 @@ function StandaloneWorkbenchChatSessionSurface({
   const [accountSignInPending, setAccountSignInPending] = useState(false)
   const isAwaitingInput = chat.status === 'awaiting-input'
   const isAwaitingConfirmation = chat.status === 'awaiting-confirmation'
-  // 这一轮正在跑：输入框保持可用，发送即引导；显式「结束后发送」进排队。
-  const canSteerRun = chat.status === 'running' && hasActiveRun
+  // 这一轮正在跑：输入框保持可用，发送即引导；显式「结束后发送」进排队。外部引擎不收运行中的引导，
+  // 它跑着时发的消息一律排队，这一轮结束后再发。
+  const canSteerRun = chat.status === 'running' && hasActiveRun && !engine
+  const engineRunActive = !!engine && chat.status === 'running' && hasActiveRun
   const queuedDrafts = useStandaloneQueuedDrafts({
     scopeId: chat.sessionId,
     isRunBlocked: shouldBlockStandaloneRunSubmission(
@@ -845,7 +876,8 @@ function StandaloneWorkbenchChatSessionSurface({
   }, [])
 
   useEffect(() => {
-    if (chat.status !== 'completed' || !chat.lastRunFinishedAt || hasActiveRun) return
+    // 目标自动续跑只对 VelarOS 自己的 Agent：外部引擎的目标归引擎自己管。
+    if (chat.status !== 'completed' || !chat.lastRunFinishedAt || hasActiveRun || chat.engine) return
     const sessionId = chat.sessionId
     const finishedAt = chat.lastRunFinishedAt
     const runKeyForGoal = `${sessionId}:${finishedAt}`
@@ -897,7 +929,7 @@ function StandaloneWorkbenchChatSessionSurface({
         },
       })
     })()
-  }, [chat.lastRunFinishedAt, chat.sessionId, chat.status, hasActiveRun, projectRoot])
+  }, [chat.engine, chat.lastRunFinishedAt, chat.sessionId, chat.status, hasActiveRun, projectRoot])
 
   const lastOutboundMessage = chat.messages.findLast((message) => message.role === 'user')
   const autoScrollResetKey = [
@@ -1051,8 +1083,11 @@ function StandaloneWorkbenchChatSessionSurface({
     const value = draft?.value ?? prompt
     const draftFiles = draft?.files ?? files
     if (isAwaitingInput) return answerPendingInput(value)
-    // 引导通道只带文本：运行中附带文件的消息改为本轮结束后发送。
-    if (canSteerRun && (draft?.delivery === 'after-current' || draftFiles.length > 0)) {
+    // 引导通道只带文本：运行中附带文件的消息改为本轮结束后发送；外部引擎跑着时发的一律排队。
+    if (
+      (canSteerRun && (draft?.delivery === 'after-current' || draftFiles.length > 0))
+      || engineRunActive
+    ) {
       if (!value.trim() && draftFiles.length === 0) return Promise.resolve()
       queuedDrafts.enqueue({ value, files: draftFiles })
       setPrompt('')
@@ -1326,8 +1361,7 @@ function StandaloneWorkbenchChatSessionSurface({
     // 运行中补发 = 引导：注入正在执行的这一轮，而不是排到结束后另起一轮（与 Desktop 一致）。
     // 引导通道不带附件（附件由输入框入口改为结束后发送）。
     if (
-      chat.status === 'running'
-      && hasActiveRun
+      canSteerRun
       && (text || selections.length > 0 || referencedFilePaths.length > 0)
       && draftFiles.length === 0
     ) return sendRunGuidance(text, selections, referencedFilePaths)
@@ -1335,52 +1369,65 @@ function StandaloneWorkbenchChatSessionSurface({
       (!text && draftFiles.length === 0 && selections.length === 0 && referencedFilePaths.length === 0)
       || shouldBlockStandaloneRunSubmission(chat.status, hasActiveRun, accountSignInPending)
     ) return false
-    if (!modelConfig.provider.trim() || !modelConfig.model.trim()) {
-      workbenchMessage.warning({
-        title: t('workbench.chatModelMissingTitle'),
-        description: t('workbench.chatModelMissingDescription'),
-      })
-      return false
-    }
-    setAccountSignInPending(true)
-    try {
-      const account = await window.velarosWorkbenchAccount.ensureSignedIn()
-      if (account.status !== 'signed-in') return false
-    } catch (error) {
-      workbenchMessage.warning({
-        title: t('workbench.chatSignInFailedTitle'),
-        description: t('workbench.chatSignInFailedDescription', {
-          error: error instanceof Error ? error.message : String(error),
-        }),
-      })
-      return false
-    } finally {
-      setAccountSignInPending(false)
-    }
-    if (isStandaloneWorkbenchManagedProviderId(modelConfig.provider)) {
+    if (engine) {
+      // 引擎在本机不能用（没装、没登录）：先说清楚，不发出去。还没探到的照常发，失败由引擎报原因。
+      if (engineStatus && !engineStatus.available) {
+        workbenchMessage.warning({
+          title: t('workbench.chatEngineUnavailableTitle', { engine: engineLabel ?? '' }),
+          description:
+            engineStatus.reason ?? t('workbench.chatEngineUnavailableDescription', { engine: engineLabel ?? '' }),
+        })
+        return false
+      }
+    } else {
+      // VelarOS 自己的 Agent：要有模型、登录 VelarOS，托管模型还要在线授权。
+      if (!modelConfig.provider.trim() || !modelConfig.model.trim()) {
+        workbenchMessage.warning({
+          title: t('workbench.chatModelMissingTitle'),
+          description: t('workbench.chatModelMissingDescription'),
+        })
+        return false
+      }
+      setAccountSignInPending(true)
       try {
-        const snapshot = await refreshStandaloneWorkbenchManagedModels()
-        const managedProvider = snapshot.managedModels.find(
-          (provider) => provider.providerId === modelConfig.provider
-        )
-        const modelAvailable = managedProvider?.models.some(
-          (model) => model.id === modelConfig.model && model.status === 'available'
-        )
-        if (!managedProvider?.enabled || !modelAvailable) {
-          workbenchMessage.warning({
-            title: t('workbench.chatManagedModelUnavailableTitle'),
-            description: t('workbench.chatManagedModelUnavailableDescription'),
-          })
-          return false
-        }
+        const account = await window.velarosWorkbenchAccount.ensureSignedIn()
+        if (account.status !== 'signed-in') return false
       } catch (error) {
         workbenchMessage.warning({
-          title: t('workbench.chatManagedModelUnavailableTitle'),
-          description: t('workbench.chatManagedModelAccessFailed', {
+          title: t('workbench.chatSignInFailedTitle'),
+          description: t('workbench.chatSignInFailedDescription', {
             error: error instanceof Error ? error.message : String(error),
           }),
         })
         return false
+      } finally {
+        setAccountSignInPending(false)
+      }
+      if (isStandaloneWorkbenchManagedProviderId(modelConfig.provider)) {
+        try {
+          const snapshot = await refreshStandaloneWorkbenchManagedModels()
+          const managedProvider = snapshot.managedModels.find(
+            (provider) => provider.providerId === modelConfig.provider
+          )
+          const modelAvailable = managedProvider?.models.some(
+            (model) => model.id === modelConfig.model && model.status === 'available'
+          )
+          if (!managedProvider?.enabled || !modelAvailable) {
+            workbenchMessage.warning({
+              title: t('workbench.chatManagedModelUnavailableTitle'),
+              description: t('workbench.chatManagedModelUnavailableDescription'),
+            })
+            return false
+          }
+        } catch (error) {
+          workbenchMessage.warning({
+            title: t('workbench.chatManagedModelUnavailableTitle'),
+            description: t('workbench.chatManagedModelAccessFailed', {
+              error: error instanceof Error ? error.message : String(error),
+            }),
+          })
+          return false
+        }
       }
     }
     const { images, describedFiles } = await readImageAttachments(draftFiles)
@@ -1511,6 +1558,9 @@ function StandaloneWorkbenchChatSessionSurface({
         permissionMode: readWorkbenchPermissionConfirmationMode(),
         memory: runPreferences.memoryEnabled,
         webSearchEngine: runPreferences.webSearchEngine,
+        engine: engine
+          ? { id: engine.id, model: resolveWorkbenchEngineModel(engine, engineStatus) }
+          : undefined,
       })
       .catch((error: unknown) => ({
         ok: false as const,
@@ -1551,12 +1601,13 @@ function StandaloneWorkbenchChatSessionSurface({
   const pricingCatalog = useStandaloneModelPricing()
   const billingProvider = modelConfig.provider.trim()
   const billingModelId = modelConfig.model.trim()
+  // 外部引擎按它自己的账号计费，回答末尾不估 VelarOS 的价。
   const billingModel = useMemo(
     () =>
-      billingProvider && billingModelId
+      !engine && billingProvider && billingModelId
         ? { provider: billingProvider, model: billingModelId }
         : null,
-    [billingModelId, billingProvider]
+    [billingModelId, billingProvider, engine]
   )
   const conversation = useMemo<ConversationView>(() => {
     // 状态行上「现在在做什么」：限流说明、思考阶段名或正在跑的脚本卡标题。
@@ -1629,18 +1680,118 @@ function StandaloneWorkbenchChatSessionSurface({
     t,
   ])
   const isRunActive = isActiveChatRun(chat.status)
+  /** 选执行体：外部引擎记在会话上，VelarOS 自己的 Agent 用设置里的模型；都记作新会话的默认。 */
+  const selectEngine = useCallback(
+    (next: Nullable<WorkbenchConversationEngineSelection>) => {
+      storePreferredWorkbenchEngine(next)
+      updateSession(projectRoot, chat.sessionId, (state) => ({
+        ...state,
+        engine: next,
+        revision: state.revision + 1,
+      }))
+    },
+    [chat.sessionId, projectRoot]
+  )
+  /**
+   * 模型菜单：VelarOS 自己的模型与本机能用的外部引擎（每个引擎一组，模型是它报上来的）。会话发出第一条消息后
+   * 执行体就定下了，菜单只留这一侧；换执行体要新开会话。
+   */
+  const hasMessages = chat.messages.length > 0
+  const modelSelector = useMemo<ChatComposerControl['modelSelector']>(() => {
+    const velarProviders =
+      !isStandaloneWorkbenchManagedProviderId(modelConfig.provider) || selectedManagedProvider?.enabled
+        ? createStandaloneWorkbenchConfiguredModelSelectorProviders(
+            modelConfig.provider,
+            modelConfig.model,
+            selectedManagedProvider
+          )
+        : []
+    // 装了却用不了的引擎（没登录、探不通）照样列出来但点不了，悬停看原因；没装的不列。
+    const engineProviders = engines
+      .filter((status) => status.problem !== 'missing')
+      .map((status) => {
+        const usable = status.available && status.models.length > 0
+        return {
+          value: status.id,
+          label: workbenchAgentEngineLabel(status.id),
+          description: usable ? undefined : status.reason,
+          defaultModel: usable
+            ? (resolveWorkbenchEngineModel({ id: status.id }, status) ?? '')
+            : t(
+                status.problem === 'signed-out'
+                  ? 'workbench.chatEngineSignedOut'
+                  : 'workbench.chatEngineUnusable'
+              ),
+          models: usable
+            ? status.models.map((model) => ({
+                value: model.value,
+                label: model.label,
+                description: model.description,
+              }))
+            : [],
+        }
+      })
+    // 会话的引擎这会儿探不到（还没探完、被卸载）：照样列出它，菜单上认得出这个会话是谁在跑。
+    if (engine && !engineProviders.some((provider) => provider.value === engine.id))
+      engineProviders.push({
+        value: engine.id,
+        label: workbenchAgentEngineLabel(engine.id),
+        description: undefined,
+        defaultModel: engine.model ?? '',
+        models: [
+          {
+            value: engine.model ?? '',
+            label: engine.model ?? t('workbench.chatEngineDefaultModel'),
+            description: undefined,
+          },
+        ],
+      })
+    const providers = !hasMessages
+      ? [...velarProviders, ...engineProviders]
+      : engine
+        ? engineProviders.filter((provider) => provider.value === engine.id)
+        : velarProviders
+    if (providers.length === 0) return undefined
+    return {
+      label: t('chat.composerModelSection'),
+      hint: engineLabel ? t('workbench.chatEngineModelHint', { engine: engineLabel }) : undefined,
+      provider: engine?.id ?? modelConfig.provider,
+      model: engine ? (resolveWorkbenchEngineModel(engine, engineStatus) ?? '') : modelConfig.model,
+      providers,
+      onChange: (provider, model) => {
+        if (isWorkbenchAgentEngineId(provider)) {
+          selectEngine({ id: provider, model: model || undefined })
+          return
+        }
+        if (engine) selectEngine(null)
+        selectStandaloneWorkbenchAgentModel(provider, model)
+      },
+    }
+  }, [
+    engine,
+    engineLabel,
+    engineStatus,
+    engines,
+    hasMessages,
+    modelConfig.model,
+    modelConfig.provider,
+    selectEngine,
+    selectedManagedProvider,
+    t,
+  ])
   const composerControl = useMemo<ChatComposerControl>(
     () => ({
       scopeKey: chat.sessionId,
       input: {
         input: {
           value: prompt,
-          placeholder: resolveWorkbenchChatComposerPlaceholder(askedFilePaths, t),
+          placeholder: resolveWorkbenchChatComposerPlaceholder(askedFilePaths, t, engineLabel),
           // 停止中、等卡片上的回答时不能发；等一句话回答时输入框就是回答。
           disabled:
             chat.status === 'stopping'
             || isAwaitingConfirmation
             || (!canSteerRun
+              && !engineRunActive
               && !isAwaitingInput
               && shouldBlockStandaloneRunSubmission(chat.status, hasActiveRun, accountSignInPending)),
           onValueChange: setPrompt,
@@ -1652,8 +1803,8 @@ function StandaloneWorkbenchChatSessionSurface({
           onOpenFile: openAttachedFile,
         },
         queue: {
-          canEnqueue: canSteerRun,
-          canGuideCurrentTask: true,
+          canEnqueue: canSteerRun || engineRunActive,
+          canGuideCurrentTask: !engine,
           answering: isAwaitingInput,
           isPaused: queuedDrafts.isPaused,
           errorMessage: queuedDrafts.errorMessage,
@@ -1744,24 +1895,12 @@ function StandaloneWorkbenchChatSessionSurface({
           onStop: stop,
         },
       },
-      modelSelector:
-        !isStandaloneWorkbenchManagedProviderId(modelConfig.provider)
-        || selectedManagedProvider?.enabled
-          ? {
-              label: t('chat.composerModelSection'),
-              provider: modelConfig.provider,
-              model: modelConfig.model,
-              providers: createStandaloneWorkbenchConfiguredModelSelectorProviders(
-                modelConfig.provider,
-                modelConfig.model,
-                selectedManagedProvider
-              ),
-              onChange: (provider, model) =>
-                selectStandaloneWorkbenchAgentModel(provider, model),
-            }
-          : undefined,
+      modelSelector,
       slots: {
-        contextUsageIndicator: <WorkbenchContextUsageIndicator usage={chat.contextUsage} />,
+        // 外部引擎不报上下文用量。
+        contextUsageIndicator: engine ? undefined : (
+          <WorkbenchContextUsageIndicator usage={chat.contextUsage} />
+        ),
       },
     }),
     [
@@ -1783,9 +1922,10 @@ function StandaloneWorkbenchChatSessionSurface({
       queuedDrafts.errorMessage,
       queuedDrafts.isPaused,
       reasoningLevel,
-      modelConfig.model,
-      modelConfig.provider,
-      selectedManagedProvider,
+      modelSelector,
+      engine,
+      engineLabel,
+      engineRunActive,
       onOpenWorkspacePath,
       planMode,
       prompt,
@@ -1822,61 +1962,63 @@ function StandaloneWorkbenchChatSessionSurface({
 
   return (
     <ChatThinkingVisibilityProvider visible={showThinkingProcess}>
-      <WorkbenchRunChangesScopeContext.Provider value={runChangesScope}>
-        <WorkbenchWorkerThreadScopeContext.Provider value={workerThreadScope}>
-          <ChatConversationPane
-            conversation={conversation}
-            conversationRefreshKey={conversationRefreshKey}
-            composer={<ChatSurfaceComposer control={composerControl} variant="side" />}
-            followLocked={followLocked}
-            scrollRef={scrollRef}
-            scrollNavigatorHidden={scrollNavigatorHidden}
-            streamSlot={chat.messages.length === 0 ? (
-              <div className={styles.workbenchChatEmptyState} data-workbench-chat-empty="true">
-                <div className={styles.workbenchChatEmptyContent}>
-                  <img
-                    className={styles.workbenchChatEmptyIcon}
-                    src={workbenchAppIconUrl}
-                    alt=""
-                    aria-hidden="true"
-                  />
-                  <div
-                    className={styles.workbenchChatStarterList}
-                    aria-label={t('workbench.chatStarterSuggestions')}
-                  >
-                    {starterSuggestions.map((suggestion) => (
-                      <button
-                        key={suggestion.id}
-                        type="button"
-                        className={styles.workbenchChatStarterButton}
-                        onClick={() => {
-                          setPrompt(suggestion.prompt)
-                          void submit(suggestion.prompt)
-                        }}
-                      >
-                        <span className={styles.workbenchChatStarterCopy}>
-                          <span className={styles.workbenchChatStarterTitle}>{suggestion.title}</span>
-                          <span className={styles.workbenchChatStarterPrompt}>{suggestion.prompt}</span>
-                        </span>
-                        <ArrowRightIcon className={styles.workbenchChatStarterArrow} size={13} />
-                      </button>
-                    ))}
+      <WorkbenchConversationEngineContext.Provider value={engine?.id ?? null}>
+        <WorkbenchRunChangesScopeContext.Provider value={runChangesScope}>
+          <WorkbenchWorkerThreadScopeContext.Provider value={workerThreadScope}>
+            <ChatConversationPane
+              conversation={conversation}
+              conversationRefreshKey={conversationRefreshKey}
+              composer={<ChatSurfaceComposer control={composerControl} variant="side" />}
+              followLocked={followLocked}
+              scrollRef={scrollRef}
+              scrollNavigatorHidden={scrollNavigatorHidden}
+              streamSlot={chat.messages.length === 0 ? (
+                <div className={styles.workbenchChatEmptyState} data-workbench-chat-empty="true">
+                  <div className={styles.workbenchChatEmptyContent}>
+                    <img
+                      className={styles.workbenchChatEmptyIcon}
+                      src={workbenchAppIconUrl}
+                      alt=""
+                      aria-hidden="true"
+                    />
+                    <div
+                      className={styles.workbenchChatStarterList}
+                      aria-label={t('workbench.chatStarterSuggestions')}
+                    >
+                      {starterSuggestions.map((suggestion) => (
+                        <button
+                          key={suggestion.id}
+                          type="button"
+                          className={styles.workbenchChatStarterButton}
+                          onClick={() => {
+                            setPrompt(suggestion.prompt)
+                            void submit(suggestion.prompt)
+                          }}
+                        >
+                          <span className={styles.workbenchChatStarterCopy}>
+                            <span className={styles.workbenchChatStarterTitle}>{suggestion.title}</span>
+                            <span className={styles.workbenchChatStarterPrompt}>{suggestion.prompt}</span>
+                          </span>
+                          <ArrowRightIcon className={styles.workbenchChatStarterArrow} size={13} />
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ) : undefined}
-            variant="side"
-            onAnswerInteraction={answerInteraction}
-            // 回答里的项目路径、文件改动卡与「查看改动」都落到宿主编辑器（与 Desktop 同一组入口）。
-            onOpenProjectPath={onOpenWorkspacePath}
-            onOpenFileChange={onOpenFileChange}
-            onReviewFileChanges={onReviewFileChanges}
-            // 目标卡的「继续」在空闲时另起一轮（运行中则经动作端口投引导）。
-            onContinueGoal={(guidance) => submit(guidance, [], { goalMode: true })}
-            onFollowLockedChange={setFollowLocked}
-          />
-        </WorkbenchWorkerThreadScopeContext.Provider>
-      </WorkbenchRunChangesScopeContext.Provider>
+              ) : undefined}
+              variant="side"
+              onAnswerInteraction={answerInteraction}
+              // 回答里的项目路径、文件改动卡与「查看改动」都落到宿主编辑器（与 Desktop 同一组入口）。
+              onOpenProjectPath={onOpenWorkspacePath}
+              onOpenFileChange={onOpenFileChange}
+              onReviewFileChanges={onReviewFileChanges}
+              // 目标卡的「继续」在空闲时另起一轮（运行中则经动作端口投引导）。
+              onContinueGoal={(guidance) => submit(guidance, [], { goalMode: true })}
+              onFollowLockedChange={setFollowLocked}
+            />
+          </WorkbenchWorkerThreadScopeContext.Provider>
+        </WorkbenchRunChangesScopeContext.Provider>
+      </WorkbenchConversationEngineContext.Provider>
     </ChatThinkingVisibilityProvider>
   )
 }
@@ -2090,14 +2232,15 @@ function readPersistedFieldIdentities(state: StandaloneChatState): unknown[] {
     state.messageRunMarkers,
     state.contextUsage,
     state.usageTelemetry,
+    state.engine,
   ]
 }
 
 function serializeStoredState(state: StandaloneChatState): Record<string, unknown> {
   return {
-    providerId: 'workbench',
     sessionId: state.sessionId,
     folderId: state.folderId,
+    engine: toOptional(state.engine),
     messages: state.messages,
     lastRunStartedAt: state.lastRunStartedAt,
     lastRunFinishedAt: state.lastRunFinishedAt,

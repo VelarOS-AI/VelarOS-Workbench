@@ -99,7 +99,10 @@ describe('goal auto-continue', () => {
 
   test('decides from the goal the conversation bridge reads once the round completed', () => {
     const adapter = readSource('src/renderer/src/runtime/standaloneWorkbenchChatAdapter.tsx')
-    const effectStart = adapter.indexOf("if (chat.status !== 'completed' || !chat.lastRunFinishedAt || hasActiveRun) return")
+    // 外部引擎的会话不续跑：目标归引擎自己管。
+    const effectStart = adapter.indexOf(
+      "if (chat.status !== 'completed' || !chat.lastRunFinishedAt || hasActiveRun || chat.engine) return"
+    )
     const effect = adapter.slice(effectStart, adapter.indexOf('\n  }, [', effectStart))
 
     assert.ok(effectStart >= 0)
