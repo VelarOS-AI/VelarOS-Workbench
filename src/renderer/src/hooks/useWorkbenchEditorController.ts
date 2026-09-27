@@ -162,6 +162,7 @@ export function useWorkbenchEditorController({
   const [closeRequest, setCloseRequest] = useState<Nullable<WorkbenchEditorCloseRequest>>(null)
   const [isResolvingCloseRequest, setIsResolvingCloseRequest] = useState(false)
   const closeRequestSeqRef = useRef(0)
+  const answeredCloseRequestIdRef = useRef<Nullable<number>>(null)
   // 关窗确认的答复要交回主进程：用户答了（或替他存好了）就用它把结果送出去。
   const windowCloseSettleRef = useRef<Nullable<(proceed: boolean) => void>>(null)
   const windowCloseDecisionRef = useRef<Nullable<Promise<boolean>>>(null)
@@ -1462,7 +1463,10 @@ export function useWorkbenchEditorController({
   const resolveCloseRequest = useMemoizedFn(
     async (choice: WorkbenchEditorCloseChoice): Promise<void> => {
       const request = closeRequest
-      if (!request || isResolvingCloseRequest) return
+      // 同一次确认只认第一个回答（连点两下「保存」、点了保存又按 Esc）。
+      if (!request || isResolvingCloseRequest || answeredCloseRequestIdRef.current === request.id)
+        return
+      answeredCloseRequestIdRef.current = request.id
 
       if (choice === 'cancel') {
         setCloseRequest(null)
