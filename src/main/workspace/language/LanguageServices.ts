@@ -1111,7 +1111,7 @@ class WorkbenchLanguageServices {
       return {
         projectRoot: resolved.projectRoot,
         path: request.path,
-        hints: this.mapExternalInlayHints(hints),
+        hints: this.mapExternalInlayHints(external.content, hints),
       }
     }
     if (resolved.service?.runtime !== 'typescript-language-service')
@@ -1500,8 +1500,13 @@ class WorkbenchLanguageServices {
   }
 
   private mapExternalInlayHints(
+    content: string,
     values: readonly ExternalLspInlayHint[]
   ): WorkbenchLanguageServiceInlayHintsResult['hints'] {
+    // 编辑器按文档偏移放提示；只给行列的提示会被整个丢掉（此前外部语言服务器的提示一个都显示不出来）。
+    const lineStarts = [0]
+    for (let index = content.indexOf('\n'); index !== -1; index = content.indexOf('\n', index + 1))
+      lineStarts.push(index + 1)
     return values.slice(0, 10_000).flatMap((value) => {
       if (value.kind !== undefined && value.kind !== 1) return []
       const text = typeof value.label === 'string'
@@ -1511,10 +1516,16 @@ class WorkbenchLanguageServices {
           : ''
       if (!text || text.length > 1024 || !Number.isSafeInteger(value.position?.line)
         || !Number.isSafeInteger(value.position?.character) || value.position.line < 0
-        || value.position.character < 0)
+        || value.position.character < 0 || value.position.line >= lineStarts.length)
         return []
+      const lineStart = lineStarts[value.position.line]!
+      const lineEnd = (lineStarts[value.position.line + 1] ?? content.length + 1) - 1
       return [{
-        position: { line: value.position.line + 1, column: value.position.character + 1 },
+        position: {
+          line: value.position.line + 1,
+          column: value.position.character + 1,
+          offset: Math.min(lineStart + value.position.character, lineEnd),
+        },
         text,
         kind: 'type' as const,
         whitespaceBefore: value.paddingLeft,

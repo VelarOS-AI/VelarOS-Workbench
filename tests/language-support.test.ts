@@ -2100,7 +2100,12 @@ void describe('shared external LSP client', () => {
     }])
     assert.equal(codeActions.actions[0]?.title, 'Apply fake quick fix')
     assert.equal(codeActions.actions[0]?.changes[0]?.edits[0]?.newText, 'let')
-    assert.deepEqual(hints.hints[0]?.position, { line: 1, column: 14 })
+    assert.deepEqual(hints.hints[0]?.position, { line: 1, column: 14, offset: 13 })
+    // 编辑器只按偏移放提示：外部语言服务器的提示也得真的变成装饰。
+    const hintPositions: number[] = []
+    buildWorkbenchInlayHintDecorations('component App:\n'.length, hints.hints)
+      .between(0, 15, (from) => { hintPositions.push(from) })
+    assert.deepEqual(hintPositions, [13])
 
     await services.dispose()
     remove()
