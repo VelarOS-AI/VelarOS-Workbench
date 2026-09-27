@@ -80,15 +80,47 @@ export function deriveCommitPanelSelectedItem(
   return selectedChangeItem ?? selectedFileItem ?? changeItems[0] ?? null
 }
 
+/**
+ * 回滚的对象只能是用户明确选的：勾选了的文件；一个都没勾时是在列表里点中的那一行（`clickedItem`，
+ * 不是默认高亮的那一行）；都没有就什么也不回滚。
+ */
 export function deriveRollbackTargetItems(
   changeItems: readonly WorkbenchGitChangeItem[],
   selectedCommitPaths: ReadonlySet<string>,
-  selectedItem: Nullable<WorkbenchGitChangeItem>
+  clickedItem: Nullable<WorkbenchGitChangeItem>
 ): WorkbenchGitChangeItem[] {
   if (selectedCommitPaths.size)
     return changeItems.filter((item) => selectedCommitPaths.has(item.path))
 
-  return selectedItem ? [selectedItem] : []
+  return clickedItem ? [clickedItem] : []
+}
+
+/**
+ * 回滚会把它从磁盘上删掉（`git clean`，不进废纸篓）：未跟踪的文件，以及只在暂存区里新增或复制出来、
+ * HEAD 里没有的文件。
+ */
+export function isCommitPanelRollbackDeletion(item: WorkbenchGitChangeItem): boolean {
+  return (
+    item.group === 'untracked' ||
+    item.indexStatus === 'A' ||
+    item.indexStatus === 'C' ||
+    item.workTreeStatus === 'A'
+  )
+}
+
+export interface CommitPanelCommitAllSummary {
+  count: number
+  untracked: number
+}
+
+/** 一个都没勾就点提交时先问一句：一共几个改动，其中几个是未跟踪的新文件。 */
+export function summarizeCommitPanelCommitAll(
+  items: readonly WorkbenchGitChangeItem[]
+): CommitPanelCommitAllSummary {
+  return {
+    count: items.length,
+    untracked: items.filter((item) => item.group === 'untracked').length,
+  }
 }
 
 export function deriveSelectedCommitItems(

@@ -196,6 +196,43 @@
   color: var(--workbench-git-untracked-fg);
 }
 
+/* 回滚确认里列出的文件：多了在框里滚动；会被删掉的文件标出来。 */
+.commitConfirmFileList {
+  @apply m-0 flex min-w-0 list-none flex-col overflow-y-auto border p-0;
+  max-height: 180px;
+  border-color: var(--workbench-border);
+  border-radius: var(--workbench-radius-xs);
+  background: var(--workbench-surface-muted);
+}
+
+.commitConfirmFileRow {
+  @apply flex min-w-0 items-center gap-2;
+  padding: 3px 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.commitConfirmFilePath {
+  @apply min-w-0 flex-1 truncate;
+}
+
+.commitConfirmDeletedTag {
+  @apply shrink-0;
+  color: var(--status-red);
+  font-family: var(--font-sans);
+  font-size: 10px;
+}
+
+.commitConfirmWarning {
+  @apply m-0;
+  padding: 6px 8px;
+  border-radius: var(--workbench-radius-xs);
+  background: var(--status-red-soft);
+  color: var(--status-red);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
 .commitFileMain {
   @apply flex min-w-0 items-center justify-start gap-1.5 overflow-hidden border-0 bg-transparent p-0 text-left;
   color: inherit;

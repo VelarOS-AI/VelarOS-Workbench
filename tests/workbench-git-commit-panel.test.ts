@@ -1,0 +1,86 @@
+import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
+
+import { describe, test } from 'bun:test'
+
+import { translateWorkbenchAppMessage } from '../src/renderer/src/i18n/useStandaloneWorkbenchLocalization'
+import {
+  deriveRollbackTargetItems,
+  isCommitPanelRollbackDeletion,
+  summarizeCommitPanelCommitAll,
+} from '../src/renderer/src/models/git/commitPanel.model'
+import { buildWorkbenchGitChangeItems } from '../src/renderer/src/models/git/workbenchGitModel'
+
+function readSource(relativePath: string): string {
+  return readFileSync(path.resolve(process.cwd(), relativePath), 'utf8')
+}
+
+const items = buildWorkbenchGitChangeItems([
+  { path: 'src/edited.ts', indexStatus: ' ', workTreeStatus: 'M' },
+  { path: 'src/partly.ts', indexStatus: 'M', workTreeStatus: 'M' },
+  { path: 'src/added.ts', indexStatus: 'A', workTreeStatus: ' ' },
+  { path: 'src/moved.ts', originalPath: 'src/old.ts', indexStatus: 'R', workTreeStatus: ' ' },
+  { path: 'notes.md', indexStatus: '?', workTreeStatus: '?' },
+])
+
+function item(itemPath: string) {
+  const found = items.find((candidate) => candidate.path === itemPath)
+  assert.ok(found, itemPath)
+  return found
+}
+
+void describe('Workbench commit panel', () => {
+  void test('rolls back only files the user explicitly chose, never everything', () => {
+    assert.deepEqual(deriveRollbackTargetItems(items, new Set(), null), [])
+    assert.deepEqual(
+      deriveRollbackTargetItems(items, new Set(), item('notes.md')).map((entry) => entry.path),
+      ['notes.md']
+    )
+    assert.deepEqual(
+      deriveRollbackTargetItems(items, new Set(['src/edited.ts']), item('notes.md')).map(
+        (entry) => entry.path
+      ),
+      ['src/edited.ts']
+    )
+  })
+
+  void test('tells which rolled-back files are deleted from disk for good', () => {
+    assert.deepEqual(
+      items.filter((entry) => isCommitPanelRollbackDeletion(entry)).map((entry) => entry.path),
+      ['src/added.ts', 'notes.md']
+    )
+    assert.deepEqual(summarizeCommitPanelCommitAll(items), { count: 5, untracked: 1 })
+  })
+
+  void test('asks before committing everything and names untracked files in the question', () => {
+    assert.equal(
+      translateWorkbenchAppMessage('zh-CN', 'workbench.gitCommitAllConfirm', {
+        count: 5,
+        untracked: 2,
+      }),
+      '没有勾选文件，要提交全部 5 个改动（含 2 个未跟踪文件）吗？'
+    )
+    assert.equal(
+      translateWorkbenchAppMessage('en-US', 'workbench.gitCommitAllTrackedConfirm', { count: 3 }),
+      'No files are checked. Commit all 3 changes?'
+    )
+    for (const key of [
+      'workbench.gitDiscardDeletesUntrackedFiles',
+      'workbench.gitCommitAllConfirmTitle',
+    ]) {
+      const zh = translateWorkbenchAppMessage('zh-CN', key)
+      const en = translateWorkbenchAppMessage('en-US', key)
+      assert.notEqual(en, key, `en-US is missing ${key}`)
+      assert.notEqual(zh, en, `zh-CN is missing ${key}`)
+    }
+
+    const panel = readSource('src/renderer/src/components/git/WorkbenchCommitPanel.tsx')
+    // 没勾选时不再默默拿全部改动去提交、去回滚。
+    assert.doesNotMatch(panel, /selectedItems\.length \? selectedItems : changeItems\n/)
+    assert.doesNotMatch(panel, /requestRollback\(actionItems\)/)
+    assert.match(panel, /requestRollback\(rollbackTargets\)/)
+    assert.match(panel, /setCommitAllRequest\(\[\.\.\.changeItems\]\)/)
+    assert.match(panel, /<Dialog[\s\S]*open=\{!!commitAllRequest\}/)
+  })
+})

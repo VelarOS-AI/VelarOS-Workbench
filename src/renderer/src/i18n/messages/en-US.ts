@@ -369,7 +369,12 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     gitUnstageFile: 'Unstage file',
     gitDiscardFile: 'Discard changes',
     gitDiscardConfirm: 'Discard local changes in “{path}”? This cannot be undone.',
-    gitDiscardSelectedConfirm: 'Rollback changes in {count} selected files? This cannot be undone.',
+    gitDiscardSelectedConfirm: 'Roll back the changes in these {count} files? This cannot be undone.',
+    gitDiscardDeletedTag: 'Deleted',
+    gitDiscardDeletesUntrackedFile:
+      'This is an untracked new file: rolling back deletes it from disk permanently. It does not go to the Trash and cannot be recovered.',
+    gitDiscardDeletesUntrackedFiles:
+      '{count} of them are untracked new files and will be deleted permanently. They do not go to the Trash and cannot be recovered.',
     gitDeleteFileConfirm: 'Delete “{path}” from the workspace?',
     gitDeleteSelectedConfirm: 'Delete {count} selected files from the workspace?',
     gitRollback: 'Rollback',
@@ -424,6 +429,10 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     gitCommitAction: 'Commit',
     gitCommitButton: 'Commit',
     gitCommitAll: 'Commit All',
+    gitCommitAllConfirmTitle: 'Commit all changes',
+    gitCommitAllConfirm:
+      'No files are checked. Commit all {count} changes (including {untracked} untracked files)?',
+    gitCommitAllTrackedConfirm: 'No files are checked. Commit all {count} changes?',
     gitCommitAmend: 'Amend',
     gitCommitAndPush: 'Commit and Push...',
     gitCommitPending: 'Committing…',

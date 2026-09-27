@@ -356,7 +356,12 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     gitUnstageFile: '取消暂存',
     gitDiscardFile: '丢弃改动',
     gitDiscardConfirm: '确定丢弃“{path}”的本地改动吗？该操作不可撤销。',
-    gitDiscardSelectedConfirm: '确定回滚选中的 {count} 个文件改动吗？该操作不可撤销。',
+    gitDiscardSelectedConfirm: '确定回滚下面 {count} 个文件的改动吗？该操作不可撤销。',
+    gitDiscardDeletedTag: '将删除',
+    gitDiscardDeletesUntrackedFile:
+      '这是未跟踪的新文件：回滚会把它从磁盘上永久删除，不进废纸篓，无法恢复。',
+    gitDiscardDeletesUntrackedFiles:
+      '其中 {count} 个未跟踪的新文件会被永久删除，不进废纸篓，无法恢复。',
     gitDeleteFileConfirm: '确定从工作区删除“{path}”吗？',
     gitDeleteSelectedConfirm: '确定从工作区删除选中的 {count} 个文件吗？',
     gitRollback: '回滚',
@@ -409,6 +414,9 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     gitCommitAction: '提交',
     gitCommitButton: '提交(T)',
     gitCommitAll: '提交全部',
+    gitCommitAllConfirmTitle: '提交全部改动',
+    gitCommitAllConfirm: '没有勾选文件，要提交全部 {count} 个改动（含 {untracked} 个未跟踪文件）吗？',
+    gitCommitAllTrackedConfirm: '没有勾选文件，要提交全部 {count} 个改动吗？',
     gitCommitAmend: '修正(M)',
     gitCommitAndPush: '提交并推送(P)...',
     gitCommitPending: '提交中…',

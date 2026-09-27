@@ -20,6 +20,10 @@ import { getWorkbenchFilePresentationVariant } from '@renderer/models/files/work
 import {
   buildCommitPanelGroups,
   type CommitPanelGroupId,
+  deriveCommitPanelGitPaths,
+  deriveRollbackTargetItems,
+  isCommitPanelRollbackDeletion,
+  summarizeCommitPanelCommitAll,
 } from '@renderer/models/git/commitPanel.model'
 import {
   buildWorkbenchGitCommitDraft,
@@ -78,6 +82,8 @@ export function WorkbenchCommitPanel({
   const [pendingFileAction, setPendingFileAction] = useState<Nullable<string>>(null)
   const [rollbackRequest, setRollbackRequest] =
     useState<Nullable<WorkbenchGitChangeItem[]>>(null)
+  const [commitAllRequest, setCommitAllRequest] =
+    useState<Nullable<WorkbenchGitChangeItem[]>>(null)
   const [selectedChangePath, setSelectedChangePath] = useState<Nullable<string>>(null)
   const [selectedCommitPaths, setSelectedCommitPaths] = useState<ReadonlySet<string>>(
     () => new Set()
@@ -110,19 +116,25 @@ export function WorkbenchCommitPanel({
     () => changeItems.filter((item) => selectedCommitPaths.has(item.path)),
     [changeItems, selectedCommitPaths]
   )
-  const actionItems = selectedItems.length ? selectedItems : changeItems
-  const actionPaths = useMemo(() => {
-    const paths = new Set<string>()
-    for (const item of selectedItems) {
-      if (item.originalPath) paths.add(item.originalPath)
-      paths.add(item.path)
-    }
-    return [...paths]
-  }, [selectedItems])
-  const commitDraft = useMemo(
-    () => buildWorkbenchGitCommitDraft(actionItems, locale),
-    [actionItems, locale]
+  // 回滚只对用户明确选的文件：勾选的，或者点中的那一行；默认高亮的那一行不算。
+  const rollbackTargets = useMemo(
+    () =>
+      deriveRollbackTargetItems(
+        changeItems,
+        selectedCommitPaths,
+        changeItems.find((item) => item.path === selectedChangePath) ?? null
+      ),
+    [changeItems, selectedChangePath, selectedCommitPaths]
   )
+  const actionPaths = useMemo(() => deriveCommitPanelGitPaths(selectedItems), [selectedItems])
+  const commitDraft = useMemo(
+    () => buildWorkbenchGitCommitDraft(selectedItems.length ? selectedItems : changeItems, locale),
+    [changeItems, locale, selectedItems]
+  )
+  const rollbackDeletions = rollbackRequest?.filter(isCommitPanelRollbackDeletion) ?? []
+  const commitAllSummary = commitAllRequest
+    ? summarizeCommitPanelCommitAll(commitAllRequest)
+    : null
 
   useEffect(() => {
     const availablePaths = new Set(changeItems.map((item) => item.path))
@@ -206,6 +218,7 @@ export function WorkbenchCommitPanel({
         tLatest.current('workbench.gitFileActionFailedTitle'),
         tLatest.current('workbench.gitFileActionFailedFallback')
       )
+      await onRefresh()
     } finally {
       setPendingFileAction(null)
     }
@@ -239,16 +252,27 @@ export function WorkbenchCommitPanel({
     }
   }
 
-  async function commitChanges(): Promise<void> {
+  /** 勾了文件就只提交它们；一个都没勾时先问要不要提交全部，不默默全提交。 */
+  function commitChanges(): void {
     if (!summary?.repository || !changeItems.length || busyAction || warnUnsavedOpenTabs()) return
+    if (!selectedItems.length) {
+      setCommitAllRequest([...changeItems])
+      return
+    }
+    void submitCommit(selectedItems)
+  }
+
+  async function submitCommit(items: WorkbenchGitChangeItem[]): Promise<void> {
+    if (!items.length || busyAction) return
     try {
+      setCommitAllRequest(null)
       setBusyAction('commit')
       const result = Result.unwrap(
         await workbenchHost.kernel.workspace.commitWorkspaceGitChanges(
           workspaceRoot,
           locale,
           commitMessage.trim() || undefined,
-          actionPaths.length ? actionPaths : undefined
+          deriveCommitPanelGitPaths(items)
         )
       )
       setCommitMessage('')
@@ -314,7 +338,7 @@ export function WorkbenchCommitPanel({
   function handleKeyDown(event: KeyboardEvent<HTMLElement>): void {
     if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
       event.preventDefault()
-      void commitChanges()
+      commitChanges()
       return
     }
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'a') {
@@ -496,8 +520,8 @@ export function WorkbenchCommitPanel({
               <div className={styles.commitButtonRow}>
                 <CommitIconButton
                   label={t('workbench.gitRollback')}
-                  disabled={!actionItems.length || !!pendingFileAction || hasUnsavedOpenTabs}
-                  onClick={() => requestRollback(actionItems)}
+                  disabled={!rollbackTargets.length || !!pendingFileAction || hasUnsavedOpenTabs}
+                  onClick={() => requestRollback(rollbackTargets)}
                 >
                   {pendingFileAction === 'discard:selected' ? (
                     <SpinnerGapIcon size={14} className={styles.spinIcon} />
@@ -508,7 +532,7 @@ export function WorkbenchCommitPanel({
                 <CommitIconButton
                   label={t('workbench.gitCommitAction')}
                   disabled={!!busyAction || !changeItems.length || hasUnsavedOpenTabs}
-                  onClick={() => void commitChanges()}
+                  onClick={commitChanges}
                 >
                   {busyAction === 'commit' ? (
                     <SpinnerGapIcon size={14} className={styles.spinIcon} />
@@ -548,6 +572,31 @@ export function WorkbenchCommitPanel({
                   })}
             </DialogDescription>
           </DialogHeader>
+          {!!rollbackRequest && rollbackRequest.length > 1 && (
+            <ul className={styles.commitConfirmFileList}>
+              {rollbackRequest.map((item) => (
+                <li key={item.path} className={styles.commitConfirmFileRow}>
+                  <span className={styles.commitConfirmFilePath}>
+                    {getWorkbenchGitChangeDisplayPath(item)}
+                  </span>
+                  {isCommitPanelRollbackDeletion(item) && (
+                    <span className={styles.commitConfirmDeletedTag}>
+                      {t('workbench.gitDiscardDeletedTag')}
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+          {!!rollbackDeletions.length && (
+            <p className={styles.commitConfirmWarning}>
+              {rollbackRequest?.length === 1
+                ? t('workbench.gitDiscardDeletesUntrackedFile')
+                : t('workbench.gitDiscardDeletesUntrackedFiles', {
+                    count: rollbackDeletions.length,
+                  })}
+            </p>
+          )}
           <DialogFooter>
             <Button variant="ghost" onClick={() => setRollbackRequest(null)}>
               {t('common.cancel')}
@@ -558,6 +607,37 @@ export function WorkbenchCommitPanel({
               onClick={() => rollbackRequest && void rollbackItems(rollbackRequest)}
             >
               {t('workbench.gitRollbackConfirmAction')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={!!commitAllRequest}
+        onOpenChange={(open) => !open && setCommitAllRequest(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('workbench.gitCommitAllConfirmTitle')}</DialogTitle>
+            <DialogDescription>
+              {commitAllSummary?.untracked
+                ? t('workbench.gitCommitAllConfirm', {
+                    count: commitAllSummary.count,
+                    untracked: commitAllSummary.untracked,
+                  })
+                : t('workbench.gitCommitAllTrackedConfirm', {
+                    count: commitAllSummary?.count ?? 0,
+                  })}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setCommitAllRequest(null)}>
+              {t('common.cancel')}
+            </Button>
+            <Button
+              disabled={!commitAllRequest?.length || !!busyAction}
+              onClick={() => commitAllRequest && void submitCommit(commitAllRequest)}
+            >
+              {t('workbench.gitCommitAll')}
             </Button>
           </DialogFooter>
         </DialogContent>
