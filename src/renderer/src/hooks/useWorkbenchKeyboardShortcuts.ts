@@ -16,6 +16,9 @@ export interface UseWorkbenchKeyboardShortcutsOptions {
   isQuickOpenOpen: boolean
   keymap?: WorkbenchKeyboardShortcutMap
   onCloseRightTool: () => void
+  /** 编辑区的后退 / 前进：回到切文件、跳转之前的位置。 */
+  onNavigateBack: () => void
+  onNavigateForward: () => void
   onOpenQuickOpen: () => void
   /** 重新打开最近关掉的文件标签（回到上次的光标位置）。 */
   onReopenClosedTab: () => void
@@ -55,6 +58,14 @@ export function createWorkbenchShortcutKeydownHandler(
         current.onOpenQuickOpen()
         return
       }
+      case 'navigate-back': {
+        current.onNavigateBack()
+        return
+      }
+      case 'navigate-forward': {
+        current.onNavigateForward()
+        return
+      }
       case 'reopen-closed-tab': {
         current.onReopenClosedTab()
         return
@@ -92,6 +103,8 @@ export function useWorkbenchKeyboardShortcuts({
   isQuickOpenOpen,
   keymap,
   onCloseRightTool,
+  onNavigateBack,
+  onNavigateForward,
   onOpenQuickOpen,
   onReopenClosedTab,
   onRunLastCommand,
@@ -106,6 +119,8 @@ export function useWorkbenchKeyboardShortcuts({
     isQuickOpenOpen,
     keymap,
     onCloseRightTool,
+    onNavigateBack,
+    onNavigateForward,
     onOpenQuickOpen,
     onReopenClosedTab,
     onRunLastCommand,
@@ -120,6 +135,8 @@ export function useWorkbenchKeyboardShortcuts({
     isQuickOpenOpen,
     keymap,
     onCloseRightTool,
+    onNavigateBack,
+    onNavigateForward,
     onOpenQuickOpen,
     onReopenClosedTab,
     onRunLastCommand,

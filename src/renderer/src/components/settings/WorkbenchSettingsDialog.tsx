@@ -118,6 +118,8 @@ interface WorkbenchSettingsDialogProps {
 }
 const ShortcutLabelKeys: Record<WorkbenchKeyboardShortcutAction, WorkbenchMessageKey> = {
   'close-right-tool': 'workbench.settingsShortcutCloseRightTool',
+  'navigate-back': 'workbench.settingsShortcutNavigateBack',
+  'navigate-forward': 'workbench.settingsShortcutNavigateForward',
   'quick-open': 'workbench.settingsShortcutQuickOpen',
   'reopen-closed-tab': 'workbench.settingsShortcutReopenClosedTab',
   'run-last-command': 'workbench.settingsShortcutRunLastCommand',
@@ -130,6 +132,8 @@ const ShortcutLabelKeys: Record<WorkbenchKeyboardShortcutAction, WorkbenchMessag
 
 const ShortcutDescriptionKeys: Record<WorkbenchKeyboardShortcutAction, WorkbenchMessageKey> = {
   'close-right-tool': 'workbench.settingsShortcutCloseRightToolDescription',
+  'navigate-back': 'workbench.settingsShortcutNavigateBackDescription',
+  'navigate-forward': 'workbench.settingsShortcutNavigateForwardDescription',
   'quick-open': 'workbench.settingsShortcutQuickOpenDescription',
   'reopen-closed-tab': 'workbench.settingsShortcutReopenClosedTabDescription',
   'run-last-command': 'workbench.settingsShortcutRunLastCommandDescription',

@@ -20,6 +20,7 @@ const Linux = 'Linux x86_64'
 
 interface KeydownInit {
   altKey?: boolean
+  code?: string
   ctrlKey?: boolean
   defaultPrevented?: boolean
   metaKey?: boolean
@@ -31,7 +32,7 @@ function keydown(key: string, init: KeydownInit = {}) {
   let prevented = init.defaultPrevented ?? false
   return {
     key,
-    code: key.length === 1 ? `Key${key.toUpperCase()}` : key,
+    code: init.code ?? (key.length === 1 ? `Key${key.toUpperCase()}` : key),
     metaKey: init.metaKey ?? false,
     ctrlKey: init.ctrlKey ?? false,
     shiftKey: init.shiftKey ?? false,
@@ -54,6 +55,8 @@ function createHandler(platform = Mac) {
     isQuickOpenOpen: false,
     platform,
     onCloseRightTool: () => calls.push('close-right-tool'),
+    onNavigateBack: () => calls.push('navigate-back'),
+    onNavigateForward: () => calls.push('navigate-forward'),
     onOpenQuickOpen: () => calls.push('quick-open'),
     onReopenClosedTab: () => calls.push('reopen-closed-tab'),
     onRunLastCommand: async () => calls.push('run-last-command'),
@@ -66,6 +69,36 @@ function createHandler(platform = Mac) {
 }
 
 void describe('Workbench keyboard shortcuts', () => {
+  void test('go back and forward: ⌃- / ⌃⇧- on macOS, Alt+← / Alt+→ elsewhere', () => {
+    const mac = {
+      ...DEFAULT_WORKBENCH_KEYBOARD_SHORTCUT_MAP,
+      'navigate-back': 'Ctrl+Minus',
+      'navigate-forward': 'Ctrl+Shift+Minus',
+    }
+    assert.equal(
+      getWorkbenchKeyboardShortcut(keydown('-', { ctrlKey: true, code: 'Minus' }), mac, Mac),
+      'navigate-back'
+    )
+    // ⇧- 打出来是 _：按物理键认。
+    assert.equal(
+      getWorkbenchKeyboardShortcut(keydown('_', { ctrlKey: true, shiftKey: true, code: 'Minus' }), mac, Mac),
+      'navigate-forward'
+    )
+    // ⌘- 是编辑区缩小（原生菜单），不是后退。
+    assert.equal(getWorkbenchKeyboardShortcut(keydown('-', { metaKey: true, code: 'Minus' }), mac, Mac), null)
+    assert.equal(formatWorkbenchShortcutHint('Ctrl+Shift+Minus', Mac), '⌃⇧-')
+
+    const other = {
+      ...DEFAULT_WORKBENCH_KEYBOARD_SHORTCUT_MAP,
+      'navigate-back': 'Alt+ArrowLeft',
+      'navigate-forward': 'Alt+ArrowRight',
+    }
+    assert.equal(getWorkbenchKeyboardShortcut(keydown('ArrowLeft', { altKey: true }), other, Windows), 'navigate-back')
+    assert.equal(getWorkbenchKeyboardShortcut(keydown('ArrowRight', { altKey: true }), other, Linux), 'navigate-forward')
+    assert.equal(formatWorkbenchShortcutHint('Ctrl+Minus', Windows), 'Ctrl+-')
+  })
+
+
   void test('Escape closes the right panel only when no focused control used it first', () => {
     const { calls, handle } = createHandler()
 

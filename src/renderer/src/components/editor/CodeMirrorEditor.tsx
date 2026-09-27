@@ -324,6 +324,9 @@ interface CodeMirrorEditorProps {
   find?: Nullable<WorkbenchEditorFindRequest>
   onFindStatusChange?: (status: WorkbenchEditorFindStatus) => void
   onOpenGoToLine: () => void
+  /** 编辑区的后退 / 前进：Windows / Linux 上 Alt+← / Alt+→ 在编辑器里也走它（CodeMirror 本来拿这两个键按语法跳）。 */
+  onNavigateBack?: () => void
+  onNavigateForward?: () => void
   onGoToDefinition: (path: string, line: number, column?: number) => void
   symbolLocations?: Nullable<WorkbenchSymbolLocationsState>
   onOpenSymbolLocations?: (request: WorkbenchSymbolLocationsRequest, visible?: boolean) => void
@@ -1231,6 +1234,8 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       find = null,
       onFindStatusChange,
       onOpenGoToLine,
+      onNavigateBack,
+      onNavigateForward,
       onGoToDefinition,
       symbolLocations = null,
       onOpenSymbolLocations,
@@ -1267,6 +1272,8 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       onCloseFind,
       onFindStatusChange,
       onOpenGoToLine,
+      onNavigateBack,
+      onNavigateForward,
       onGoToDefinition,
       onOpenSymbolLocations,
       onCloseSymbolLocations,
@@ -2413,6 +2420,25 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
           preventDefault: true,
           run: () => {
             callbacksRef.current.onOpenGoToLine()
+            return true
+          },
+        },
+        {
+          // macOS 上的后退 / 前进是 ⌃- / ⌃⇧-，编辑器不占，交给全局快捷键。
+          win: 'Alt-ArrowLeft',
+          linux: 'Alt-ArrowLeft',
+          preventDefault: true,
+          run: () => {
+            callbacksRef.current.onNavigateBack?.()
+            return true
+          },
+        },
+        {
+          win: 'Alt-ArrowRight',
+          linux: 'Alt-ArrowRight',
+          preventDefault: true,
+          run: () => {
+            callbacksRef.current.onNavigateForward?.()
             return true
           },
         },

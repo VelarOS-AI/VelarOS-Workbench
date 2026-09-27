@@ -912,6 +912,10 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     settingsShortcutReset: '重置快捷键',
     settingsShortcutQuickOpen: '搜索内容',
     settingsShortcutQuickOpenDescription: '打开项目级内容搜索弹窗。',
+    settingsShortcutNavigateBack: '后退',
+    settingsShortcutNavigateBackDescription: '回到切换文件、跳到定义或某一行之前的位置（鼠标后退键也可以）。',
+    settingsShortcutNavigateForward: '前进',
+    settingsShortcutNavigateForwardDescription: '撤销一次后退，回到刚才的位置（鼠标前进键也可以）。',
     settingsShortcutReopenClosedTab: '重新打开关闭的标签',
     settingsShortcutReopenClosedTabDescription:
       '按关闭顺序倒着重新打开最近关掉的文件标签，回到上次的光标位置。',

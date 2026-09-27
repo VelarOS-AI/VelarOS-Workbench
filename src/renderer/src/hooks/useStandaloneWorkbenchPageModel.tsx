@@ -444,6 +444,8 @@ export function useStandaloneWorkbenchPageModel(
     isQuickOpenOpen: surface.isQuickOpenOpen,
     keymap: workbenchKeymap.keymap,
     onCloseRightTool: surface.closeRightTool,
+    onNavigateBack: () => void editorNavigation.goBack(),
+    onNavigateForward: () => void editorNavigation.goForward(),
     onOpenQuickOpen: surface.openQuickOpen,
     onReopenClosedTab: () => void reopenClosedEditorTab(),
     onRunLastCommand: workbench.rerunLastCommand,
@@ -460,6 +462,21 @@ export function useStandaloneWorkbenchPageModel(
     updateDocumentTitle: surfaceMode === 'standalone',
     onOpenProject: workbench.openProject,
   })
+
+  // 鼠标侧键：后退键（按钮 3）、前进键（按钮 4）与快捷键一样走编辑区的后退 / 前进。
+  const navigateBackLatest = useLatest(editorNavigation.goBack)
+  const navigateForwardLatest = useLatest(editorNavigation.goForward)
+  useEffect(() => {
+    if (surfaceMode !== 'standalone' || !workbench.activeProject) return undefined
+
+    const handleMouseUp = (event: MouseEvent): void => {
+      if (event.button !== 3 && event.button !== 4) return
+      event.preventDefault()
+      void (event.button === 3 ? navigateBackLatest : navigateForwardLatest).current()
+    }
+    window.addEventListener('mouseup', handleMouseUp)
+    return () => window.removeEventListener('mouseup', handleMouseUp)
+  }, [navigateBackLatest, navigateForwardLatest, surfaceMode, workbench.activeProject])
 
   const zoomEditor = useMemoizedFn((action: WorkbenchEditorZoomAction): void => {
     workbenchPreferences.updatePreferences({

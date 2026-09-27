@@ -1,4 +1,8 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  WorkbenchNavigationHistory,
+  type WorkbenchNavigationPoint,
+} from '@renderer/models/editor/workbenchNavigationHistory'
 import type {
   WorkbenchGitChangeItem,
   WorkbenchOpenDiffOptions,
@@ -74,7 +78,25 @@ export function useWorkbenchEditorNavigationState({
     setActiveProblemId(null)
   }, [selectedFilePath, setActiveProblemId])
 
+  // 后退 / 前进：切文件、跳到定义或某一行之前记下当前的文件和光标。
+  const navigationHistoryRef = useRef(new WorkbenchNavigationHistory())
+  const selectedFilePathLatest = useLatest(selectedFilePath)
+  const cursorPositionLatest = useLatest(cursorPosition)
+  const currentNavigationPoint = (): Nullable<WorkbenchNavigationPoint> => {
+    const path = selectedFilePathLatest.current
+    if (!path) return null
+    const { line, column } = cursorPositionLatest.current
+    return { path, line, column }
+  }
+  const recordNavigationPoint = useCallback((): void => {
+    const path = selectedFilePathLatest.current
+    if (!path) return
+    const { line, column } = cursorPositionLatest.current
+    navigationHistoryRef.current.record({ path, line, column })
+  }, [cursorPositionLatest, selectedFilePathLatest])
+
   async function selectFile(path: string): Promise<void> {
+    if (path !== selectedFilePathLatest.current) recordNavigationPoint()
     setDiffItem(null)
     setDiffFocusFirstChangeRequestId(0)
     setLightTab(null)
@@ -83,6 +105,24 @@ export function useWorkbenchEditorNavigationState({
   }
 
   async function goToLocation(
+    path: string,
+    line: number,
+    column?: number,
+    options?: Pick<EditorNavigationRequest, 'endLine' | 'focus'>
+  ): Promise<void> {
+    recordNavigationPoint()
+    await openLocation(path, line, column, options)
+  }
+
+  /** 后退或前进到历史里的位置（这一步本身不再记进历史）。 */
+  async function goThroughHistory(direction: 'back' | 'forward'): Promise<void> {
+    const history = navigationHistoryRef.current
+    const current = currentNavigationPoint()
+    const target = direction === 'back' ? history.back(current) : history.forward(current)
+    if (target) await openLocation(target.path, target.line, target.column)
+  }
+
+  async function openLocation(
     path: string,
     line: number,
     column?: number,
@@ -248,6 +288,9 @@ export function useWorkbenchEditorNavigationState({
     diffItem,
     diffFocusFirstChangeRequestId,
     goToLocation,
+    goBack: () => goThroughHistory('back'),
+    goForward: () => goThroughHistory('forward'),
+    recordNavigationPoint,
     lightTab,
     navigationRequest,
     openDiff,

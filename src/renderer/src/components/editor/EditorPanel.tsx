@@ -198,6 +198,11 @@ export interface WorkbenchEditorPanelWorkspaceProps {
   onToggleProblems: () => void
   /** 当前快捷键设置：空编辑区里的快捷键提示按它现算。 */
   keymap?: WorkbenchKeyboardShortcutMap
+  /** 编辑区的后退 / 前进（Windows / Linux 上编辑器里的 Alt+← / Alt+→ 也走这里）。 */
+  onNavigateBack?: () => void
+  onNavigateForward?: () => void
+  /** 要在当前文件里跳到别处（跳到行）：先把当前位置记进后退历史。 */
+  onNavigationPoint?: () => void
   onCursorPositionChange?: (position: {
     line: number
     column: number
@@ -273,6 +278,9 @@ export function EditorPanel({
     onAddFilesToChat,
     onToggleProblems,
     keymap = DEFAULT_WORKBENCH_KEYBOARD_SHORTCUT_MAP,
+    onNavigateBack,
+    onNavigateForward,
+    onNavigationPoint,
     onCursorPositionChange,
     onActiveProblemIdChange,
     navigationRequest = null,
@@ -589,6 +597,7 @@ export function EditorPanel({
 
     const target = goToLineTarget
     closeGoToLineBar()
+    onNavigationPoint?.()
     timers.nextFrame(() => editorRef.current?.moveToLine(target.line, target.column), {
       label: 'workbench.editor.goToLine',
     })
@@ -1018,6 +1027,8 @@ export function EditorPanel({
                         find={findRequest}
                         onFindStatusChange={setFindStatus}
                         onOpenGoToLine={openGoToLineBar}
+                        onNavigateBack={onNavigateBack}
+                        onNavigateForward={onNavigateForward}
                         onGoToDefinition={onGoToDefinition}
                         symbolLocations={symbolLocationsVisible ? symbolLocations : null}
                         onOpenSymbolLocations={openSymbolLocations}

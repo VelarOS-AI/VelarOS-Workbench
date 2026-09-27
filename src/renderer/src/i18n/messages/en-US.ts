@@ -948,6 +948,12 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     settingsShortcutReset: 'Reset shortcut',
     settingsShortcutQuickOpen: 'Search content',
     settingsShortcutQuickOpenDescription: 'Open the project-wide content search popup.',
+    settingsShortcutNavigateBack: 'Go back',
+    settingsShortcutNavigateBackDescription:
+      'Return to where you were before switching files or jumping to a definition or line (also the mouse back button).',
+    settingsShortcutNavigateForward: 'Go forward',
+    settingsShortcutNavigateForwardDescription:
+      'Undo a Go back and return to the later position (also the mouse forward button).',
     settingsShortcutReopenClosedTab: 'Reopen closed tab',
     settingsShortcutReopenClosedTabDescription:
       'Reopen the most recently closed file tab at its last cursor position.',

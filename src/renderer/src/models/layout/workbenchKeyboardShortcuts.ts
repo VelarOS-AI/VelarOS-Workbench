@@ -23,6 +23,8 @@ const log = Log.tag('workbench-keyboard-shortcuts')
 
 export type WorkbenchKeyboardShortcutAction =
   | 'close-right-tool'
+  | 'navigate-back'
+  | 'navigate-forward'
   | 'quick-open'
   | 'reopen-closed-tab'
   | 'run-last-command'
@@ -48,6 +50,8 @@ interface WorkbenchKeyboardEventLike {
   altKey: boolean
   ctrlKey: boolean
   key: string
+  /** 物理键位（`Minus`、`KeyP`）：`key` 随 ⇧、⌥ 变了的键靠它认。 */
+  code?: string
   metaKey: boolean
   shiftKey: boolean
 }
@@ -70,10 +74,21 @@ const SUPPORTED_NAMED_SHORTCUT_KEYS = new Set([
   'ArrowLeft',
   'ArrowRight',
   'ArrowUp',
+  // 按物理键认的减号（⌃⇧- 打出来是 _，只能认键位）。
+  'Minus',
 ])
 
 export const WORKBENCH_KEYBOARD_SHORTCUT_DEFINITIONS: WorkbenchKeyboardShortcutDefinition[] = [
   { action: 'quick-open', defaultShortcut: 'Mod+P' },
+  // 后退 / 前进与 VS Code 一致：macOS 上 ⌃- / ⌃⇧-（按物理键认，⇧- 打出来是 _），其它平台 Alt+← / Alt+→。
+  {
+    action: 'navigate-back',
+    defaultShortcut: isAppleWorkbenchPlatform() ? 'Ctrl+Minus' : 'Alt+ArrowLeft',
+  },
+  {
+    action: 'navigate-forward',
+    defaultShortcut: isAppleWorkbenchPlatform() ? 'Ctrl+Shift+Minus' : 'Alt+ArrowRight',
+  },
   { action: 'reopen-closed-tab', defaultShortcut: 'Mod+Shift+T' },
   { action: 'save-current', defaultShortcut: 'Mod+S' },
   { action: 'save-all', defaultShortcut: 'Mod+Shift+S' },
@@ -176,7 +191,7 @@ function toMatchableEvent(event: WorkbenchKeyboardEventLike): KeyboardEvent {
     key: event.key,
     metaKey: event.metaKey,
     shiftKey: event.shiftKey,
-    code: '',
+    code: event.code ?? '',
     getModifierState(name: string): boolean {
       if (name === 'Alt' || name === 'AltGraph') return event.altKey
       switch (name) {
@@ -309,6 +324,7 @@ const AppleShortcutModifierGlyphs: ReadonlyArray<readonly [string, string]> = [
 ]
 
 const AppleShortcutKeyGlyphs: Readonly<Record<string, string>> = {
+  Minus: '-',
   ArrowDown: '↓',
   ArrowLeft: '←',
   ArrowRight: '→',
@@ -345,7 +361,7 @@ export function formatWorkbenchShortcutHint(
     modifiers.has('Meta') ? metaLabel : null,
     modifiers.has('Alt') ? 'Alt' : null,
     modifiers.has('Shift') ? 'Shift' : null,
-    key === 'Escape' ? 'Esc' : key,
+    key === 'Escape' ? 'Esc' : key === 'Minus' ? '-' : key,
   ]
   return labels.filter(isString).join('+')
 }
