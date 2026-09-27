@@ -11,9 +11,12 @@ import type { InteractionAnswer } from '@velaros-ai/ui/conversation/contracts'
 
 import {
   ConversationScriptNotice,
+  type WorkbenchAgentEngineId,
+  WorkbenchAgentEngineIds,
   type WorkbenchConversationAnswerRequest,
   type WorkbenchConversationBackupRequest,
   WorkbenchConversationChannels,
+  type WorkbenchConversationEngineSelection,
   type WorkbenchConversationEventEnvelope,
   type WorkbenchConversationGuidanceRequest,
   type WorkbenchConversationImage,
@@ -29,10 +32,10 @@ import {
 import type { WorkbenchProjectHub } from '../projects/ProjectHub'
 import { callWithEnvelope } from '../workspace/ipcBoundary'
 
+import type { WorkbenchConversationDispatcherApi } from './WorkbenchConversationDispatcher'
 import { goalArtifact } from './WorkbenchConversationRules'
 import type {
   WorkbenchConversationRef,
-  WorkbenchConversationRuntimeApi,
   WorkbenchConversationSink,
 } from './WorkbenchConversationRuntime'
 
@@ -44,6 +47,8 @@ const ExecutionModes = new Set<WorkbenchExecutionMode>(['goal', 'plan'])
 const GoalActions = new Set(['resume', 'pause', 'block', 'complete', 'cancel', 'remove'])
 /** 一条消息最多带这么多张图。 */
 const MaxImages = 16
+/** 外部引擎的模型名最长这么多字。 */
+const MaxEngineModelChars = 200
 
 /** 窗口 → 它当前打开的项目。 */
 export interface WorkbenchConversationWindows {
@@ -63,7 +68,7 @@ interface WorkbenchConversationAnalytics {
 }
 
 interface WorkbenchConversationIpcOptions {
-  runtime: WorkbenchConversationRuntimeApi
+  runtime: WorkbenchConversationDispatcherApi
   windows: WorkbenchConversationWindows
   /** 聊天历史落盘备份的目录。 */
   backupDir(): string
@@ -127,7 +132,9 @@ export function registerWorkbenchConversationIpc(options: WorkbenchConversationI
         executionId,
         sessionId: ref.sessionId,
         projectRoot: ref.projectRoot,
-        modelSelection: { provider: request.model.provider, model: request.model.model },
+        modelSelection: request.engine
+          ? { provider: request.engine.id, model: request.engine.model ?? '' }
+          : { provider: request.model.provider, model: request.model.model },
       })
       trackRun(event.sender, ref, completed)
       await accepted
@@ -177,6 +184,9 @@ export function registerWorkbenchConversationIpc(options: WorkbenchConversationI
   ipcMain.handle(WorkbenchConversationChannels.backupHistory, (_event, raw: unknown) =>
     callWithEnvelope(() => writeHistoryBackup(options.backupDir(), parseBackupRequest(raw)))
   )
+  ipcMain.handle(WorkbenchConversationChannels.engines, (_event, raw: unknown) =>
+    callWithEnvelope(() => runtime.engines(isPlainObject(raw) && raw.refresh === true))
+  )
 
   return () => {
     for (const channel of [
@@ -189,6 +199,7 @@ export function registerWorkbenchConversationIpc(options: WorkbenchConversationI
       WorkbenchConversationChannels.updateGoal,
       WorkbenchConversationChannels.deleteSession,
       WorkbenchConversationChannels.backupHistory,
+      WorkbenchConversationChannels.engines,
     ])
       ipcMain.removeHandler(channel)
   }
@@ -345,7 +356,19 @@ function parseSendRequest(raw: unknown): WorkbenchConversationSendRequest {
     webSearchEngine: input.webSearchEngine as WorkbenchConversationSendRequest['webSearchEngine'],
   }
   if (input.images !== undefined) request.images = parseImages(input.images)
+  if (input.engine !== undefined) request.engine = parseEngine(input.engine)
   return request
+}
+
+function parseEngine(raw: unknown): WorkbenchConversationEngineSelection {
+  if (!isPlainObject(raw) || !WorkbenchAgentEngineIds.includes(raw.id as WorkbenchAgentEngineId))
+    return invalid()
+  const engine: WorkbenchConversationEngineSelection = { id: raw.id as WorkbenchAgentEngineId }
+  if (raw.model !== undefined) {
+    if (!isNonBlankString(raw.model) || raw.model.length > MaxEngineModelChars) return invalid()
+    engine.model = raw.model
+  }
+  return engine
 }
 
 function parseImages(raw: unknown): WorkbenchConversationImage[] {

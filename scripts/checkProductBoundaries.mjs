@@ -76,7 +76,7 @@ for (const section of [
 ]) {
   if (rootManifest[section]?.['@anthropic-ai/claude-agent-sdk']) {
     failures.push(
-      `package.json ${section} bundles Claude Agent SDK; Workbench runs only the built-in VelarOS agent.`,
+      `package.json ${section} bundles Claude Agent SDK; Workbench drives the user's installed claude CLI over its stream-json protocol instead.`,
     )
   }
 }

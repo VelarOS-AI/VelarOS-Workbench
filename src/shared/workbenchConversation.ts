@@ -27,6 +27,7 @@ export const WorkbenchConversationChannels = {
   updateGoal: 'workbench-app:conversation:update-goal',
   deleteSession: 'workbench-app:conversation:delete-session',
   backupHistory: 'workbench-app:conversation:backup-history',
+  engines: 'workbench-app:conversation:engines',
   event: 'workbench-app:conversation:event',
 } as const
 
@@ -59,6 +60,47 @@ export type WorkbenchWebSearchEngine = 'google' | 'bing'
 
 export const WorkbenchWebSearchEngines: readonly WorkbenchWebSearchEngine[] = ['google', 'bing']
 
+/**
+ * 外部 Agent 引擎：本机装好的 Claude Code 与 Codex 命令行。会话交给它们时，模型、登录、工具与上下文都是
+ * 引擎自己的；Workbench 只把输入交过去，把它的回答、工具调用和请求确认画进对话。
+ */
+export type WorkbenchAgentEngineId = 'claude-code' | 'codex'
+
+export const WorkbenchAgentEngineIds: readonly WorkbenchAgentEngineId[] = ['claude-code', 'codex']
+
+/** 这一轮交给哪个外部引擎、用它的哪个模型；不给模型就用引擎自己的默认。 */
+export interface WorkbenchConversationEngineSelection {
+  id: WorkbenchAgentEngineId
+  model?: string
+}
+
+/** 外部引擎报上来的一个模型。 */
+export interface WorkbenchAgentEngineModel {
+  value: string
+  label: string
+  description?: string
+  isDefault?: boolean
+}
+
+/** 外部引擎为什么不能用：没装、没登录，或探的时候出了别的错。 */
+export type WorkbenchAgentEngineProblem = 'missing' | 'signed-out' | 'error'
+
+/** 一个外部引擎在本机的情况：能不能用（装了、登录了）、为什么不能用、有哪些模型。 */
+export interface WorkbenchAgentEngineStatus {
+  id: WorkbenchAgentEngineId
+  available: boolean
+  problem?: WorkbenchAgentEngineProblem
+  /** 不能用的原因，原样给用户看。 */
+  reason?: string
+  version?: string
+  models: WorkbenchAgentEngineModel[]
+}
+
+export interface WorkbenchAgentEngineStatusRequest {
+  /** 丢掉上次探到的结果重新探（装好或登录之后）。 */
+  refresh?: boolean
+}
+
 export interface WorkbenchConversationSendRequest {
   sessionId: string
   projectRoot: string
@@ -74,6 +116,8 @@ export interface WorkbenchConversationSendRequest {
   /** 长期记忆（设置里的总开关）：关着时这一轮不接记忆，已存的留在盘上。 */
   memory: boolean
   webSearchEngine: WorkbenchWebSearchEngine
+  /** 这个会话交给外部引擎执行；不给就是 VelarOS 自己的 Agent（上面的模型、记忆、搜索引擎只对它有效）。 */
+  engine?: WorkbenchConversationEngineSelection
 }
 
 /** 会话按 (项目根, 会话) 认：窗口只能动自己打开的项目里的会话。 */
@@ -214,6 +258,34 @@ export interface ConversationProjectActivityProjection {
   runId: Nullable<string>
 }
 
+export const ConversationToolCallNotice = 'conversation-tool-call'
+/**
+ * 外部引擎的一次工具调用（Claude Code、Codex 自己的读写文件、跑命令、搜索……）：运行消息里的一张工具卡。
+ * 工具名用界面认得的那套（`project:run`、`project:edit`……），标题写这一次做什么；同一次调用的开始、
+ * 进度与结果按 id 原位替换。
+ */
+export interface ConversationToolCallProjection {
+  /** `conversation:tool:${runId}:${引擎给的调用身份}` */
+  id: string
+  runId: string
+  toolName: string
+  title: string
+  args: Record<string, unknown>
+  isRunning: boolean
+  /** 跑着时的输出末尾。 */
+  progress?: string
+  result?: unknown
+  error?: string
+  startedAt: number
+  finishedAt?: number
+}
+export const ConversationToolCallLimits = Object.freeze({
+  titleChars: 200,
+  /** 参数、结果各自序列化后的上限；超出的截断成文本。 */
+  payloadChars: 20_000,
+  progressChars: 4_000,
+})
+
 export const ConversationCommandOutputNotice = 'conversation-command-output'
 /** 脚本卡上在跑的命令的末尾输出；id 是脚本卡的 id，空串表示没有在跑的输出了。 */
 export interface ConversationCommandOutputProjection {
@@ -277,5 +349,7 @@ export interface WorkbenchConversationBridge {
   updateGoal(request: WorkbenchConversationUpdateGoalRequest): Promise<WorkbenchFsCallResult<WorkbenchConversationGoalResult>>
   deleteSession(request: WorkbenchConversationSessionRequest): Promise<WorkbenchFsCallResult<void>>
   backupHistory(request: WorkbenchConversationBackupRequest): Promise<WorkbenchFsCallResult<{ path: string }>>
+  /** 外部引擎（Claude Code、Codex）在本机的情况；探一次要起一回命令行，结果在主进程里缓存。 */
+  engines(request: WorkbenchAgentEngineStatusRequest): Promise<WorkbenchFsCallResult<WorkbenchAgentEngineStatus[]>>
   onEvent(listener: (envelope: WorkbenchConversationEventEnvelope) => void): () => void
 }

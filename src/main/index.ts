@@ -27,6 +27,7 @@ import { WorkbenchBrowserService } from './browser/WorkbenchBrowserService'
 import { WorkbenchBrowserWebviewGate } from './browser/WorkbenchBrowserWebviewGate'
 import workbenchScriptWorkerPath from './conversation/workbench-script-worker.ts?modulePath'
 import { createWorkbenchConversationConfiguration } from './conversation/WorkbenchConversationConfiguration'
+import { createWorkbenchConversationDispatcher } from './conversation/WorkbenchConversationDispatcher'
 import { registerWorkbenchConversationIpc } from './conversation/WorkbenchConversationIpc'
 import { createWorkbenchConversationRuntime } from './conversation/WorkbenchConversationRuntime'
 import { registerWorkbenchMemoryIpc } from './conversation/WorkbenchMemoryIpc'
@@ -35,6 +36,10 @@ import { createWorkbenchScriptRunner } from './conversation/WorkbenchScriptRunne
 import { WorkbenchShellHostRegistry } from './conversation/WorkbenchShellHostRegistry'
 import { loadWorkbenchShellTerminal } from './conversation/WorkbenchShellTerminal'
 import { WorkbenchWebSearchPages } from './conversation/WorkbenchWebSearchPages'
+import { ClaudeCodeEngine } from './engines/ClaudeCodeEngine'
+import { CodexEngine } from './engines/CodexEngine'
+import { WorkbenchEngineConversationRuntime } from './engines/WorkbenchEngineConversationRuntime'
+import { WorkbenchEngineSessionStore } from './engines/WorkbenchEngineSessionStore'
 import { registerWorkbenchModelIpc } from './model/WorkbenchModelIpc'
 import type { WorkbenchProjectHub } from './projects/ProjectHub'
 import { registerProjectHubIpc } from './projects/ProjectHubIpc'
@@ -293,11 +298,10 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
     dataRootDir,
     accountService
   )
+  // 登录 shell 的环境全应用共用一份：Agent 的命令与外部引擎的命令行都起在它里面。
+  const shellEnvironment = createShellEnvironment()
   // 本机 shell 宿主全应用共用：Agent 起的后台任务才能活过一轮运行；交互式命令跑在 node-pty 的真终端里。
-  const shellHosts = new WorkbenchShellHostRegistry(
-    createShellEnvironment(),
-    loadWorkbenchShellTerminal
-  )
+  const shellHosts = new WorkbenchShellHostRegistry(shellEnvironment, loadWorkbenchShellTerminal)
   const syncAgentEdits = languageSyncOnAgentEdits(providers.language)
   // 长期记忆与网上查资料（与 Desktop 同一套）：记忆按项目各一份，查资料跑在不显示的页面里。
   const memory = new WorkbenchMemoryService(providers.parts.storagePaths.getMemoryDir())
@@ -318,7 +322,7 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
     backgroundPages: new WorkbenchBrowserBackgroundPages(),
     resolveGuest: (webContentsId) => webContents.fromId(webContentsId) ?? null,
   })
-  const conversationRuntime = createWorkbenchConversationRuntime({
+  const platformConversationRuntime = createWorkbenchConversationRuntime({
     runner: createWorkbenchScriptRunner({ workerPath: workbenchScriptWorkerPath }),
     shells: shellHosts,
     dataDir: providers.parts.storagePaths.getConversationRuntimeDir(),
@@ -334,6 +338,20 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
     webPages,
     browser: browserService,
   })
+  // 外部引擎（本机装好的 Claude Code 与 Codex 命令行）：会话选了它们时由它们执行。
+  const engineConversationRuntime = new WorkbenchEngineConversationRuntime({
+    engines: [
+      new ClaudeCodeEngine(shellEnvironment),
+      new CodexEngine(shellEnvironment, app.getVersion()),
+    ],
+    sessions: new WorkbenchEngineSessionStore(dataRootDir),
+    activity: (ref) => providers.chatRunAttribution.activityFor(ref),
+    projectFilesEdited: (ref, paths) => syncAgentEdits(ref.projectRoot, paths),
+  })
+  const conversationRuntime = createWorkbenchConversationDispatcher(
+    platformConversationRuntime,
+    engineConversationRuntime
+  )
   registerWorkbenchTerminalIpc(providers.parts.terminal)
   registerWorkbenchGitIpc(providers.git, providers.chatCheckpoints, providers.chatRunChanges)
   const watchIpc = registerWorkbenchWatchIpc(providers.watch)

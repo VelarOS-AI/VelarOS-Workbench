@@ -188,6 +188,7 @@ const conversationBridge: WorkbenchConversationBridge = {
     ipcRenderer.invoke(WorkbenchConversationChannels.deleteSession, request),
   backupHistory: (request) =>
     ipcRenderer.invoke(WorkbenchConversationChannels.backupHistory, request),
+  engines: (request) => ipcRenderer.invoke(WorkbenchConversationChannels.engines, request),
   onEvent: (listener) => subscribe(WorkbenchConversationChannels.event, listener),
 }
 
