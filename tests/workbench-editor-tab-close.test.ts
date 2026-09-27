@@ -6,7 +6,10 @@ import { describe, test } from 'bun:test'
 
 import {
   collectWorkbenchEditorTabsToRight,
+  popWorkbenchClosedEditorTab,
+  pushWorkbenchClosedEditorTabs,
   resolveWorkbenchEditorSelectionAfterClose,
+  WORKBENCH_CLOSED_EDITOR_TAB_LIMIT,
   workbenchEditorTabFileName,
 } from '../src/renderer/src/models/editor/workbenchEditorTabClose'
 
@@ -41,6 +44,61 @@ void describe('closing editor tabs', () => {
     assert.deepEqual(collectWorkbenchEditorTabsToRight(tabs, 'd.ts'), [])
     assert.deepEqual(collectWorkbenchEditorTabsToRight(tabs, 'missing.ts'), [])
     assert.equal(workbenchEditorTabFileName('src/app/index.ts'), 'index.ts')
+  })
+
+  void test('remembers the last 20 closed tabs and reopens the latest one that is not open', () => {
+    let stack = pushWorkbenchClosedEditorTabs([], ['a.ts'])
+    stack = pushWorkbenchClosedEditorTabs(stack, ['b.ts', 'c.ts'])
+    // 同一个文件再关一次：只留最近一次。
+    stack = pushWorkbenchClosedEditorTabs(stack, ['a.ts'])
+    assert.deepEqual(stack, ['b.ts', 'c.ts', 'a.ts'])
+
+    const first = popWorkbenchClosedEditorTab(stack, new Set())
+    assert.equal(first.path, 'a.ts')
+    // 已经又打开着的跳过，取再往前的那个。
+    const second = popWorkbenchClosedEditorTab(first.stack, new Set(['c.ts']))
+    assert.deepEqual(second, { path: 'b.ts', stack: [] })
+    assert.deepEqual(popWorkbenchClosedEditorTab([], new Set()), { path: null, stack: [] })
+
+    const many = pushWorkbenchClosedEditorTabs(
+      [],
+      Array.from({ length: 30 }, (_, index) => `file-${index}.ts`)
+    )
+    assert.equal(many.length, WORKBENCH_CLOSED_EDITOR_TAB_LIMIT)
+    assert.equal(many.at(-1), 'file-29.ts')
+    assert.equal(many[0], 'file-10.ts')
+  })
+
+  void test('reopening, closing to the right and middle-click are wired to the tabs', () => {
+    const controller = readSource('src/renderer/src/hooks/useWorkbenchEditorController.ts')
+    const pageModel = readSource('src/renderer/src/hooks/useStandaloneWorkbenchPageModel.tsx')
+    const tabBar = readSource('src/renderer/src/components/editor/EditorTabBar.tsx')
+    const shortcuts = readSource('src/renderer/src/models/layout/workbenchKeyboardShortcuts.ts')
+
+    // 用户关掉的每个标签都记下（文件树里删掉 / 挪走的不算），换项目时清空。
+    const commitClose = sliceBetween(controller, 'const commitCloseOpenFiles', 'const requestCloseOpenFiles')
+    assert.match(commitClose, /pushWorkbenchClosedEditorTabs\(/u)
+    assert.doesNotMatch(
+      sliceBetween(controller, 'const closeOpenEntryPath', 'const commitCloseOpenFiles'),
+      /closedTabPathsRef/u
+    )
+    assert.match(
+      sliceBetween(controller, 'const resetSelectedFile', 'const toggleSelectedFileEditMode'),
+      /closedTabPathsRef\.current = \[\]/u
+    )
+    assert.match(shortcuts, /action: 'reopen-closed-tab', defaultShortcut: 'Mod\+Shift\+T'/u)
+    // 重新打开时回到上次的光标位置（记得的话）。
+    const reopen = sliceBetween(pageModel, 'const reopenClosedEditorTab', '})\n')
+    assert.match(reopen, /takeRecentlyClosedTabPath\(\)/u)
+    assert.match(reopen, /sessionCursorByPathRef\.current\[path\]/u)
+    assert.match(reopen, /line: cursor\.line, column: cursor\.column/u)
+    assert.match(pageModel, /onReopenClosedTab: \(\) => void reopenClosedEditorTab\(\)/u)
+
+    assert.match(tabBar, /onCloseOpenFilesToRight\(tabContextMenu\.path\)/u)
+    assert.match(tabBar, /disabled=\{!contextTabHasTabsToRight\}/u)
+    // 文件、差异、轻量预览、辅助标签都能中键关。
+    assert.equal(tabBar.match(/\{\.\.\.middleClickCloseHandlers\(/gu)?.length, 4)
+    assert.match(tabBar, /event\.button !== 1 \|\| !onClose/u)
   })
 
   void test('dirty tabs ask save / discard / cancel instead of refusing to close', () => {

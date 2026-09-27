@@ -24,6 +24,7 @@ const log = Log.tag('workbench-keyboard-shortcuts')
 export type WorkbenchKeyboardShortcutAction =
   | 'close-right-tool'
   | 'quick-open'
+  | 'reopen-closed-tab'
   | 'run-last-command'
   | 'save-all'
   | 'save-current'
@@ -73,6 +74,7 @@ const SUPPORTED_NAMED_SHORTCUT_KEYS = new Set([
 
 export const WORKBENCH_KEYBOARD_SHORTCUT_DEFINITIONS: WorkbenchKeyboardShortcutDefinition[] = [
   { action: 'quick-open', defaultShortcut: 'Mod+P' },
+  { action: 'reopen-closed-tab', defaultShortcut: 'Mod+Shift+T' },
   { action: 'save-current', defaultShortcut: 'Mod+S' },
   { action: 'save-all', defaultShortcut: 'Mod+Shift+S' },
   { action: 'run-last-command', defaultShortcut: 'Mod+Enter' },

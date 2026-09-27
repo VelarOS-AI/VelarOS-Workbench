@@ -445,6 +445,7 @@ export function useStandaloneWorkbenchPageModel(
     keymap: workbenchKeymap.keymap,
     onCloseRightTool: surface.closeRightTool,
     onOpenQuickOpen: surface.openQuickOpen,
+    onReopenClosedTab: () => void reopenClosedEditorTab(),
     onRunLastCommand: workbench.rerunLastCommand,
     onSaveAll: () => workbench.saveAllOpenFiles(),
     onSaveCurrent: () => workbench.saveSelectedFile(),
@@ -655,6 +656,19 @@ export function useStandaloneWorkbenchPageModel(
       case 'ai-changes':
         await aiChanges.openRound(request.round)
     }
+  })
+
+  /** 重新打开最近关掉的文件标签；记得上次的光标位置就回到那里。 */
+  const reopenClosedEditorTab = useMemoizedFn(async (): Promise<void> => {
+    const path = workbench.takeRecentlyClosedTabPath()
+    if (!path) return
+
+    const cursor = toNullable(sessionCursorByPathRef.current[path])
+    await navigate(
+      cursor
+        ? { target: 'file', path, line: cursor.line, column: cursor.column }
+        : { target: 'file', path }
+    )
   })
 
   // 左右两侧说的是同一件事，不跨域显示。与 `navigate` 分工：`navigate` 在同一次提交里把两侧一起定好，

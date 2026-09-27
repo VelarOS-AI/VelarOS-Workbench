@@ -119,6 +119,7 @@ interface WorkbenchSettingsDialogProps {
 const ShortcutLabelKeys: Record<WorkbenchKeyboardShortcutAction, WorkbenchMessageKey> = {
   'close-right-tool': 'workbench.settingsShortcutCloseRightTool',
   'quick-open': 'workbench.settingsShortcutQuickOpen',
+  'reopen-closed-tab': 'workbench.settingsShortcutReopenClosedTab',
   'run-last-command': 'workbench.settingsShortcutRunLastCommand',
   'save-all': 'workbench.settingsShortcutSaveAll',
   'save-current': 'workbench.settingsShortcutSaveCurrent',
@@ -130,6 +131,7 @@ const ShortcutLabelKeys: Record<WorkbenchKeyboardShortcutAction, WorkbenchMessag
 const ShortcutDescriptionKeys: Record<WorkbenchKeyboardShortcutAction, WorkbenchMessageKey> = {
   'close-right-tool': 'workbench.settingsShortcutCloseRightToolDescription',
   'quick-open': 'workbench.settingsShortcutQuickOpenDescription',
+  'reopen-closed-tab': 'workbench.settingsShortcutReopenClosedTabDescription',
   'run-last-command': 'workbench.settingsShortcutRunLastCommandDescription',
   'save-all': 'workbench.settingsShortcutSaveAllDescription',
   'save-current': 'workbench.settingsShortcutSaveCurrentDescription',

@@ -18,7 +18,10 @@ import {
   type WorkbenchEditorSaveSummary,
 } from '@renderer/models/editor/workbenchEditorSaving'
 import {
+  collectWorkbenchEditorTabsToRight,
   collectWorkbenchEditorUnsavedAfterFlush,
+  popWorkbenchClosedEditorTab,
+  pushWorkbenchClosedEditorTabs,
   resolveWorkbenchEditorSelectionAfterClose,
   type WorkbenchEditorCloseChoice,
   type WorkbenchEditorCloseRequest,
@@ -162,6 +165,8 @@ export function useWorkbenchEditorController({
   // 关窗确认的答复要交回主进程：用户答了（或替他存好了）就用它把结果送出去。
   const windowCloseSettleRef = useRef<Nullable<(proceed: boolean) => void>>(null)
   const windowCloseDecisionRef = useRef<Nullable<Promise<boolean>>>(null)
+  // 最近关掉的标签（最近关的在末尾），「重新打开关闭的标签」从这里取。
+  const closedTabPathsRef = useRef<string[]>([])
 
   const hasUnsavedChanges =
     !!selectedFile
@@ -373,6 +378,7 @@ export function useWorkbenchEditorController({
     setOpenTabsByPath(new Map())
     setChosenEditModes(new Map())
     pendingFilePathRef.current = null
+    closedTabPathsRef.current = []
   })
 
   /** 在只读与编辑之间切换当前文件；没有完整文本的文件（图片、截断的大文件）不能切到编辑。 */
@@ -624,6 +630,10 @@ export function useWorkbenchEditorController({
       return next
     })
     closingPaths.forEach((path) => savedSnapshotTrailsRef.current.delete(path))
+    closedTabPathsRef.current = pushWorkbenchClosedEditorTabs(
+      closedTabPathsRef.current,
+      [...openTabsByPath.keys()].filter((path) => closingPaths.has(path))
+    )
 
     if (nextSelectedPath === selectedFilePath) return
 
@@ -681,6 +691,20 @@ export function useWorkbenchEditorController({
     if (!openTabsByPath.has(path)) return
 
     requestCloseOpenFiles([...openTabsByPath.keys()].filter((openPath) => openPath !== path))
+  })
+
+  const closeOpenFilesToRight = useMemoizedFn((path: string): void => {
+    requestCloseOpenFiles(collectWorkbenchEditorTabsToRight([...openTabsByPath.keys()], path))
+  })
+
+  /** 取出最近关掉、此刻没打开着的那个标签的路径（取出就不再记着）；没有返回 null。 */
+  const takeRecentlyClosedTabPath = useMemoizedFn((): Nullable<string> => {
+    const { path, stack } = popWorkbenchClosedEditorTab(
+      closedTabPathsRef.current,
+      new Set(openTabsByPathLatest.current.keys())
+    )
+    closedTabPathsRef.current = stack
+    return path
   })
 
   const reorderOpenTabs = useMemoizedFn((fromPath: string, toPath: string): void => {
@@ -1557,6 +1581,8 @@ export function useWorkbenchEditorController({
     closeOtherOpenFiles,
     closeAllOpenFiles,
     closeUnmodifiedOpenFiles,
+    closeOpenFilesToRight,
+    takeRecentlyClosedTabPath,
     /** 等用户回答「保存 / 不保存 / 取消」的关闭；null 表示没有。 */
     closeRequest,
     isResolvingCloseRequest,

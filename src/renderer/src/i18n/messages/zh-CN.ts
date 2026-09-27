@@ -226,6 +226,7 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     openProjectMemoryTitle: '打开当前项目的记忆管理',
     closeEditorTab: '关闭标签',
     closeOtherEditorTabs: '关闭其他',
+    closeEditorTabsToRight: '关闭右侧标签',
     closeAllEditorTabs: '关闭全部',
     closeUnmodifiedEditorTabs: '关闭未修改的文件',
     revertEditorTab: '放弃修改',
@@ -881,6 +882,9 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     settingsShortcutReset: '重置快捷键',
     settingsShortcutQuickOpen: '搜索内容',
     settingsShortcutQuickOpenDescription: '打开项目级内容搜索弹窗。',
+    settingsShortcutReopenClosedTab: '重新打开关闭的标签',
+    settingsShortcutReopenClosedTabDescription:
+      '按关闭顺序倒着重新打开最近关掉的文件标签，回到上次的光标位置。',
     settingsShortcutSaveCurrent: '保存当前文件',
     settingsShortcutSaveCurrentDescription: '把当前编辑器标签写入磁盘。',
     settingsShortcutSaveAll: '保存全部文件',

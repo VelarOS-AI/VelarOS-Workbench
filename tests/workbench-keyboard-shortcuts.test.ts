@@ -55,6 +55,7 @@ function createHandler(platform = Mac) {
     platform,
     onCloseRightTool: () => calls.push('close-right-tool'),
     onOpenQuickOpen: () => calls.push('quick-open'),
+    onReopenClosedTab: () => calls.push('reopen-closed-tab'),
     onRunLastCommand: async () => calls.push('run-last-command'),
     onSaveAll: async () => calls.push('save-all'),
     onSaveCurrent: async () => calls.push('save-current'),
@@ -118,6 +119,14 @@ void describe('Workbench keyboard shortcuts', () => {
 
     handle(keydown('Enter', { metaKey: true, target: { tagName: 'BUTTON' } }))
     assert.deepEqual(calls, ['run-last-command'])
+  })
+
+  void test('Mod+Shift+T reopens the last closed tab', () => {
+    const { calls, handle } = createHandler(Mac)
+    handle(keydown('t', { metaKey: true, shiftKey: true }))
+    const { calls: linuxCalls, handle: handleOnLinux } = createHandler(Linux)
+    handleOnLinux(keydown('T', { ctrlKey: true, shiftKey: true }))
+    assert.deepEqual([...calls, ...linuxCalls], ['reopen-closed-tab', 'reopen-closed-tab'])
   })
 
   void test('panel shortcuts toggle their tool windows instead of only opening them', () => {

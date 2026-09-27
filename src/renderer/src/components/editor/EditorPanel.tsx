@@ -137,6 +137,8 @@ export interface WorkbenchEditorPanelTabsProps {
   onCloseOtherOpenFiles: (path: string) => void
   onCloseAllOpenFiles: () => void
   onCloseUnmodifiedOpenFiles: () => void
+  /** 关掉这个标签右边的所有标签。 */
+  onCloseOpenFilesToRight: (path: string) => void
   /** 放弃这个标签里没保存的改动，回到磁盘上的版本。 */
   onRevertOpenFile: (path: string) => void
   onReorderOpenTabs: (fromPath: string, toPath: string) => void
@@ -239,6 +241,7 @@ export function EditorPanel({
     onCloseOtherOpenFiles,
     onCloseAllOpenFiles,
     onCloseUnmodifiedOpenFiles,
+    onCloseOpenFilesToRight,
     onRevertOpenFile,
     onReorderOpenTabs,
     closeActiveTabRequestId = 0,
@@ -758,6 +761,7 @@ export function EditorPanel({
           onCloseOtherOpenFiles={onCloseOtherOpenFiles}
           onCloseAllOpenFiles={onCloseAllOpenFiles}
           onCloseUnmodifiedOpenFiles={onCloseUnmodifiedOpenFiles}
+          onCloseOpenFilesToRight={onCloseOpenFilesToRight}
           onRevertOpenFile={onRevertOpenFile}
           onAddFileToChat={onAddFilesToChat ? (path) => onAddFilesToChat([path]) : undefined}
           onReorderOpenTabs={onReorderOpenTabs}

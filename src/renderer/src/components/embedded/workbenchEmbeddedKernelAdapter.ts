@@ -193,6 +193,7 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
         onCloseOtherOpenFiles: workbench.closeOtherOpenFiles,
         onCloseAllOpenFiles: workbench.closeAllOpenFiles,
         onCloseUnmodifiedOpenFiles: workbench.closeUnmodifiedOpenFiles,
+        onCloseOpenFilesToRight: workbench.closeOpenFilesToRight,
         onRevertOpenFile: (path) => workbench.revertOpenFiles([path]),
         onReorderOpenTabs: workbench.reorderOpenTabs,
         closeActiveTabRequestId: model.closeActiveEditorTabRequestId,

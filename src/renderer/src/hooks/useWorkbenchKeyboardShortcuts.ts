@@ -17,6 +17,8 @@ export interface UseWorkbenchKeyboardShortcutsOptions {
   keymap?: WorkbenchKeyboardShortcutMap
   onCloseRightTool: () => void
   onOpenQuickOpen: () => void
+  /** 重新打开最近关掉的文件标签（回到上次的光标位置）。 */
+  onReopenClosedTab: () => void
   onRunLastCommand: () => Promise<unknown>
   onSaveAll: () => Promise<unknown>
   onSaveCurrent: () => Promise<unknown>
@@ -53,6 +55,10 @@ export function createWorkbenchShortcutKeydownHandler(
         current.onOpenQuickOpen()
         return
       }
+      case 'reopen-closed-tab': {
+        current.onReopenClosedTab()
+        return
+      }
       case 'save-current': {
         void current.onSaveCurrent()
         return
@@ -87,6 +93,7 @@ export function useWorkbenchKeyboardShortcuts({
   keymap,
   onCloseRightTool,
   onOpenQuickOpen,
+  onReopenClosedTab,
   onRunLastCommand,
   onSaveAll,
   onSaveCurrent,
@@ -100,6 +107,7 @@ export function useWorkbenchKeyboardShortcuts({
     keymap,
     onCloseRightTool,
     onOpenQuickOpen,
+    onReopenClosedTab,
     onRunLastCommand,
     onSaveAll,
     onSaveCurrent,
@@ -113,6 +121,7 @@ export function useWorkbenchKeyboardShortcuts({
     keymap,
     onCloseRightTool,
     onOpenQuickOpen,
+    onReopenClosedTab,
     onRunLastCommand,
     onSaveAll,
     onSaveCurrent,

@@ -101,6 +101,8 @@ interface EditorTabBarProps {
   onCloseOtherOpenFiles: (path: string) => void
   onCloseAllOpenFiles: () => void
   onCloseUnmodifiedOpenFiles: () => void
+  /** 标签右键「关闭右侧标签」。 */
+  onCloseOpenFilesToRight?: (path: string) => void
   /** 标签右键「放弃修改」：丢掉这个标签里没保存的改动，回到磁盘上的版本。 */
   onRevertOpenFile?: (path: string) => void
   /** 标签右键「添加到聊天」：把这个文件作为引用挂到聊天输入框（只挂路径）。 */
@@ -120,6 +122,26 @@ interface EditorTabBarProps {
 
 function fileNameFromPath(path: string): string {
   return path.split('/').findLast((value) => !!value) ?? path
+}
+
+/**
+ * 中键点标签就关掉它（同浏览器与 VS Code）。按下时先挡住中键的自动滚动；
+ * 没有关闭动作的标签（结构图总览）不接。
+ */
+function middleClickCloseHandlers(onClose: LooseOptional<() => void>): {
+  onMouseDown: (event: MouseEvent) => void
+  onAuxClick: (event: MouseEvent) => void
+} {
+  return {
+    onMouseDown: (event) => {
+      if (event.button === 1 && onClose) event.preventDefault()
+    },
+    onAuxClick: (event) => {
+      if (event.button !== 1 || !onClose) return
+      event.preventDefault()
+      onClose()
+    },
+  }
 }
 
 export function EditorTabBar({
@@ -143,6 +165,7 @@ export function EditorTabBar({
   onCloseOtherOpenFiles,
   onCloseAllOpenFiles,
   onCloseUnmodifiedOpenFiles,
+  onCloseOpenFilesToRight,
   onRevertOpenFile,
   onAddFileToChat,
   onReorderOpenTabs,
@@ -267,6 +290,8 @@ export function EditorTabBar({
     : undefined
   const contextTabIsDirty =
     !!contextTab && !contextTab.file.imagePreview && contextTab.content !== contextTab.file.content
+  const contextTabHasTabsToRight =
+    !!contextTab && openTabs.indexOf(contextTab) < openTabs.length - 1
 
   return (
     <>
@@ -301,6 +326,7 @@ export function EditorTabBar({
                 data-dragging={tab.path === draggingTabPath}
                 data-drop-target={tab.path === dragOverTabPath && tab.path !== draggingTabPath}
                 draggable
+                {...middleClickCloseHandlers(() => onCloseOpenFile(tab.path))}
                 onContextMenu={(event) => onOpenTabContextMenu(tab.path, event)}
                 onDragStart={(event) => handleTabDragStart(tab.path, event)}
                 onDragOver={(event) => handleTabDragOver(tab.path, event)}
@@ -349,7 +375,12 @@ export function EditorTabBar({
             )
           })}
           {!!diffTabItem && (
-            <div className={styles.editorTab} data-active={!hasActiveAuxiliaryTab} data-kind="diff">
+            <div
+              className={styles.editorTab}
+              data-active={!hasActiveAuxiliaryTab}
+              data-kind="diff"
+              {...middleClickCloseHandlers(onCloseDiffTab)}
+            >
               <Button
                 variant="ghost"
                 size="block"
@@ -380,6 +411,7 @@ export function EditorTabBar({
               className={styles.editorTab}
               data-active={!hasActiveAuxiliaryTab}
               data-kind="light"
+              {...middleClickCloseHandlers(onCloseLightTab)}
             >
               <Button
                 variant="ghost"
@@ -412,6 +444,7 @@ export function EditorTabBar({
               className={styles.editorTab}
               data-active={tab.active}
               data-kind={tab.kind ?? 'auxiliary'}
+              {...middleClickCloseHandlers(tab.onClose)}
             >
               <Button
                 variant="ghost"
@@ -732,6 +765,19 @@ export function EditorTabBar({
             <XIcon size={14} />
             <Text truncate>{t('workbench.closeOtherEditorTabs')}</Text>
           </Button>
+          {!!onCloseOpenFilesToRight && (
+            <Button
+              variant="ghost"
+              size="block"
+              disabled={!contextTabHasTabsToRight}
+              onClick={() =>
+                onRunTabContextAction(() => onCloseOpenFilesToRight(tabContextMenu.path))
+              }
+            >
+              <XIcon size={14} />
+              <Text truncate>{t('workbench.closeEditorTabsToRight')}</Text>
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="block"

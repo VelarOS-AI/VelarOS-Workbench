@@ -238,6 +238,7 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     openProjectMemoryTitle: 'Open memory management for the current project',
     closeEditorTab: 'Close tab',
     closeOtherEditorTabs: 'Close others',
+    closeEditorTabsToRight: 'Close tabs to the right',
     closeAllEditorTabs: 'Close all',
     closeUnmodifiedEditorTabs: 'Close unmodified files',
     revertEditorTab: 'Discard changes',
@@ -916,6 +917,9 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     settingsShortcutReset: 'Reset shortcut',
     settingsShortcutQuickOpen: 'Search content',
     settingsShortcutQuickOpenDescription: 'Open the project-wide content search popup.',
+    settingsShortcutReopenClosedTab: 'Reopen closed tab',
+    settingsShortcutReopenClosedTabDescription:
+      'Reopen the most recently closed file tab at its last cursor position.',
     settingsShortcutSaveCurrent: 'Save current file',
     settingsShortcutSaveCurrentDescription: 'Write the selected editor tab to disk.',
     settingsShortcutSaveAll: 'Save all files',

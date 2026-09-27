@@ -63,6 +63,35 @@ export function collectWorkbenchEditorUnsavedAfterFlush(
   })
 }
 
+/** 「重新打开关闭的标签」最多记住多少个。 */
+export const WORKBENCH_CLOSED_EDITOR_TAB_LIMIT = 20
+
+/**
+ * 记下刚关掉的标签（按标签栏顺序，最近关的在末尾）：同一个文件只留最近一次，最多留 20 个。
+ */
+export function pushWorkbenchClosedEditorTabs(
+  stack: readonly string[],
+  closedPaths: readonly string[]
+): string[] {
+  const closing = new Set(closedPaths)
+  return [...stack.filter((path) => !closing.has(path)), ...closedPaths].slice(
+    -WORKBENCH_CLOSED_EDITOR_TAB_LIMIT
+  )
+}
+
+/** 取出最近关掉、此刻又没打开着的那个标签；返回它与剩下的记录。 */
+export function popWorkbenchClosedEditorTab(
+  stack: readonly string[],
+  openPaths: ReadonlySet<string>
+): { path: Nullable<string>; stack: string[] } {
+  const remaining = [...stack]
+  while (remaining.length > 0) {
+    const path = remaining.pop()
+    if (path && !openPaths.has(path)) return { path, stack: remaining }
+  }
+  return { path: null, stack: [] }
+}
+
 /** 某个标签右边的所有标签。 */
 export function collectWorkbenchEditorTabsToRight(
   orderedPaths: readonly string[],

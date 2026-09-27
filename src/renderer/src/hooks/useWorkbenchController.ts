@@ -374,6 +374,9 @@ export function useWorkbenchController(options: UseWorkbenchControllerOptions = 
     closeOtherOpenFiles: editor.closeOtherOpenFiles,
     closeAllOpenFiles: editor.closeAllOpenFiles,
     closeUnmodifiedOpenFiles: editor.closeUnmodifiedOpenFiles,
+    closeOpenFilesToRight: editor.closeOpenFilesToRight,
+    /** 取出最近关掉、此刻没打开着的标签路径，供「重新打开关闭的标签」用。 */
+    takeRecentlyClosedTabPath: editor.takeRecentlyClosedTabPath,
     closeRequest: editor.closeRequest,
     isResolvingCloseRequest: editor.isResolvingCloseRequest,
     resolveCloseRequest: editor.resolveCloseRequest,
