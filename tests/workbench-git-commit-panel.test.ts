@@ -5,17 +5,20 @@ import path from 'node:path'
 import { describe, test } from 'bun:test'
 
 import { translateWorkbenchAppMessage } from '../src/renderer/src/i18n/useStandaloneWorkbenchLocalization'
+import { isSameWorkbenchGitLog } from '../src/renderer/src/models/git/changesPanel.model'
 import {
   buildCommitPanelGroups,
   deriveRollbackTargetItems,
   isCommitPanelRollbackDeletion,
   summarizeCommitPanelCommitAll,
 } from '../src/renderer/src/models/git/commitPanel.model'
+import { isWorkbenchGitDiffAffectedByChange } from '../src/renderer/src/models/git/workbenchGitDiffModel'
 import {
   buildWorkbenchGitChangeItems,
   buildWorkbenchGitDecorationMap,
   getWorkbenchGitChangeItemTone,
 } from '../src/renderer/src/models/git/workbenchGitModel'
+import type { WorkspaceGitLogEntry } from '../src/shared/contracts'
 
 function readSource(relativePath: string): string {
   return readFileSync(path.resolve(process.cwd(), relativePath), 'utf8')
@@ -116,5 +119,32 @@ void describe('Workbench commit panel', () => {
     assert.match(panel, /setCommitAllRequest\(\[\.\.\.changeItems\]\)/)
     assert.match(panel, /<Dialog[\s\S]*open=\{!!commitAllRequest\}/)
     assert.match(panel, /performWorkspaceGitFileAction\([\s\S]*'resolve'/)
+  })
+
+  void test('reloads an open diff when the file or HEAD changes', () => {
+    const renamed = { path: 'src/new.ts', originalPath: 'src/old.ts' }
+    assert.equal(isWorkbenchGitDiffAffectedByChange(renamed, { paths: ['src/new.ts'] }), true)
+    assert.equal(isWorkbenchGitDiffAffectedByChange(renamed, { paths: ['src/old.ts'] }), true)
+    assert.equal(isWorkbenchGitDiffAffectedByChange(renamed, { paths: ['.git/HEAD'] }), true)
+    assert.equal(isWorkbenchGitDiffAffectedByChange(renamed, { paths: ['src/other.ts'] }), false)
+  })
+
+  void test('refreshes the Git log in place instead of flashing a loading state', () => {
+    const commit: WorkspaceGitLogEntry = {
+      sha: 'a'.repeat(40),
+      shortSha: 'aaaaaaa',
+      subject: 'Initial',
+      authorName: 't',
+      authorEmail: null,
+      authoredAt: 1,
+      refs: ['HEAD -> main'],
+    }
+    assert.equal(isSameWorkbenchGitLog([commit], [{ ...commit }]), true)
+    assert.equal(isSameWorkbenchGitLog([commit], [{ ...commit, refs: ['main'] }]), false)
+    assert.equal(isSameWorkbenchGitLog([commit], []), false)
+
+    const panel = readSource('src/renderer/src/components/git/WorkbenchGitToolPanel.tsx')
+    assert.doesNotMatch(panel, /setLogLoading\(true\)/)
+    assert.match(panel, /const logLoading = !currentLog/)
   })
 })

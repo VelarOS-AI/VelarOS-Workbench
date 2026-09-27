@@ -2,7 +2,22 @@ import { applyPatch, parsePatch, reversePatch, structuredPatch } from 'diff'
 
 import { isEmpty,isString, Log } from '@velaros-ai/core'
 
+import type { SystemWorkspaceFilesChangedEvent, WorkspaceGitFileStatusEntry } from '@shared/contracts'
+
 const log = Log.tag('workbench-git-diff-model')
+
+/**
+ * 打开着的差异标签要不要重读：这批文件改动碰到了差异的两侧——文件本身（含改名前的路径），或者
+ * HEAD、索引、分支（提交、切分支之后对照的基准变了）。
+ */
+export function isWorkbenchGitDiffAffectedByChange(
+  item: Pick<WorkspaceGitFileStatusEntry, 'path' | 'originalPath'>,
+  event: Pick<SystemWorkspaceFilesChangedEvent, 'paths'>
+): boolean {
+  return event.paths.some(
+    (path) => path === item.path || path === item.originalPath || path.startsWith('.git/')
+  )
+}
 
 export interface WorkbenchUnifiedDiffRow {
   id: string

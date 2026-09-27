@@ -13,6 +13,7 @@ import {
   filterWorkbenchGitLogCommits,
   formatWorkbenchGitCommitDate,
   formatWorkbenchGitCommitRelativeDate,
+  isSameWorkbenchGitLog,
   parseWorkbenchGitCommitDiff,
 } from '@renderer/models/git/changesPanel.model'
 
@@ -36,6 +37,13 @@ interface WorkbenchGitToolPanelProps {
   onInitialize: () => Promise<void>
 }
 
+/** 读到的提交日志属于哪个项目、哪个分支；换了才显示「读取中」，同一份刷新时原地更新。 */
+interface WorkbenchGitLogState {
+  key: string
+  commits: WorkspaceGitLogEntry[]
+  error: Nullable<string>
+}
+
 /** 拆分前 Workbench 底部 Git 工具：查看分支与提交历史，不承担提交操作。 */
 export function WorkbenchGitToolPanel({
   workspaceRoot,
@@ -48,12 +56,17 @@ export function WorkbenchGitToolPanel({
   const [logBranch, setLogBranch] = useState('')
   const [branchSearch, setBranchSearch] = useState('')
   const [logSearch, setLogSearch] = useState('')
-  const [commits, setCommits] = useState<WorkspaceGitLogEntry[]>([])
+  const [logState, setLogState] = useState<Nullable<WorkbenchGitLogState>>(null)
   const [selectedCommitSha, setSelectedCommitSha] = useState<Nullable<string>>(null)
   const [commitDiff, setCommitDiff] = useState('')
   const [selectedDiffPath, setSelectedDiffPath] = useState<Nullable<string>>(null)
-  const [logLoading, setLogLoading] = useState(false)
-  const [logError, setLogError] = useState<Nullable<string>>(null)
+
+  const logKey = `${workspaceRoot}\0${logBranch}`
+  const currentLog = logState?.key === logKey ? logState : null
+  const commits = useMemo(() => currentLog?.commits ?? [], [currentLog])
+  const logLoading = !currentLog
+  // 刷新失败时已经列着的提交照旧显示，只有什么都没读到时才显示错误。
+  const logError = currentLog && !currentLog.commits.length ? currentLog.error : null
 
   const branches = summary?.branches ?? []
   const branchQuery = branchSearch.trim().toLocaleLowerCase(locale)
@@ -113,16 +126,17 @@ export function WorkbenchGitToolPanel({
     setLogBranch((current) => current || summary.status?.branch || '')
   }, [summary?.repository, summary?.status?.branch])
 
+  // 工作区一有改动 summary 就刷新一次：日志跟着重读，但原地更新——不闪「读取中」，列表不卸载，
+  // 滚动位置和选中的提交都留着。只有换了项目或分支才从「读取中」开始。
   useEffect(() => {
     if (!summary?.repository) {
-      setCommits([])
+      setLogState(null)
       setSelectedCommitSha(null)
       setCommitDiff('')
       return
     }
     let active = true
-    setLogLoading(true)
-    setLogError(null)
+    const key = `${workspaceRoot}\0${logBranch}`
     void runBackground(async () => {
       const result = Result.unwrap(
         await workbenchHost.kernel.workspace.getWorkspaceGitLog(workspaceRoot, {
@@ -131,16 +145,24 @@ export function WorkbenchGitToolPanel({
         })
       )
       if (!active) return
-      setCommits(result.commits)
+      setLogState((current) =>
+        current?.key === key && !current.error && isSameWorkbenchGitLog(current.commits, result.commits)
+          ? current
+          : { key, commits: result.commits, error: null }
+      )
       setSelectedCommitSha((current) =>
         current && result.commits.some((commit) => commit.sha === current)
           ? current
           : (result.commits[0]?.sha ?? null)
       )
     }).catch((loadError) => {
-      if (active) setLogError(AppError.getMessage(loadError))
-    }).finally(() => {
-      if (active) setLogLoading(false)
+      if (!active) return
+      const message = AppError.getMessage(loadError)
+      setLogState((current) => ({
+        key,
+        commits: current?.key === key ? current.commits : [],
+        error: message,
+      }))
     })
     return () => {
       active = false

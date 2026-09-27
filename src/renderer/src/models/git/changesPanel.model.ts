@@ -80,6 +80,25 @@ export function filterWorkbenchGitLogCommits(
   )
 }
 
+/** 两次读到的提交日志一样（同样的提交、主题与引用）：刷新时沿用原来的列表，界面不必重画。 */
+export function isSameWorkbenchGitLog(
+  left: readonly WorkspaceGitLogEntry[],
+  right: readonly WorkspaceGitLogEntry[]
+): boolean {
+  return (
+    left.length === right.length &&
+    left.every((commit, index) => {
+      const other = right[index]
+      return (
+        !!other &&
+        commit.sha === other.sha &&
+        commit.subject === other.subject &&
+        commit.refs.join('\0') === other.refs.join('\0')
+      )
+    })
+  )
+}
+
 export function formatWorkbenchGitCommitDate(locale: string, commit: WorkspaceGitLogEntry): string {
   if (!commit.authoredAt) return '-'
 
