@@ -49,6 +49,24 @@ edits). The agent's write windows come from the runtime's effect metrics; projec
 the language service immediately. Rewind, Mods, resource plugins and CodeGraph were retired with the
 Platform migration, matching Desktop.
 
+A chat session can also be handed to an external agent engine: the Claude Code and Codex command-line
+tools installed on the machine. The composer's model menu lists each engine the user has installed,
+with the models it reports (an installed engine that is signed out shows as disabled, with the
+reason); the choice belongs to the session and is fixed once it has messages, and new sessions start
+with the last choice. Workbench bundles neither engine. It starts the user's `claude` with its
+stream-json protocol (the one the Agent SDK uses), one process per turn resumed with `--resume`, and
+keeps one `codex app-server` (JSON-RPC over stdio) for all Codex sessions, stopped after five idle
+minutes. Sign-in, models, tools, rule files and conversation history stay with the engine; Workbench
+remembers which engine session belongs to which chat session (`agent-engines/sessions.json` in the
+data directory), draws the engine's answer, thinking, tool calls and plan in the conversation, and
+answers its permission requests with the same Settings mode: Claude Code asks through the control
+channel and Workbench decides (standard mode asks only for dangerous commands and writes outside the
+project); Codex runs sandboxed to the project with `on-request` (standard), `untrusted` (ask every
+time) or full access (never ask). Questions an engine asks become question cards. Engine turns get the
+same checkpoint, AI changes card and language-service refresh; messages sent while an engine runs are
+queued rather than injected, and Velar's memory, web search, browser and goal auto-continue do not
+apply to engine sessions.
+
 ## Development
 
 与 Desktop 一样，Workbench 经 `bun link` 消费本机兄弟仓的 Platform 与 UI（`package.json` 里是

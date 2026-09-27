@@ -20,7 +20,9 @@ host instructions and user-message context. `bun run test` runs the integration 
 | Goal auto-continue | `workbench.goalAutoContinueInstruction` (i18n) sent as guidance or a system notice | Tells the agent to finish with `done("…")` or record blockers with `goal.update`. |
 | Permission confirmations | `WorkbenchConversationSession` `authorize` hook and the shell module's approval port | Not model input; shown as interaction cards. The integration test answers a `git reset --hard` confirmation. |
 | Inline completion | `WorkbenchInlineCompletion.ts` → model text generation | Separate bounded insertion prompt; `workbench-inline-completion.test.ts` checks it carries no agent module or tool contract. |
+| External engine instructions | `engineInstructions` in `src/main/engines/WorkbenchEngineInstructions.ts` → Claude Code `--append-system-prompt`, Codex `developerInstructions` | Only where the engine runs (Workbench), the reply language and the plan / goal mode lines. The engine keeps its own system prompt, tools and rule files; Workbench's project rules and memory are not injected. `workbench-agent-engines.test.ts` drives both engines against fake CLIs. |
+| External engine user message | the same composed input text and images as a Platform run (`standaloneWorkbenchChatAdapter.tsx`) | Sent as the engine's user message: Claude Code content blocks, Codex `UserInput` items. |
 
 Retired with the Platform migration: the in-process Agent execution stack, `tooling:map` discovery,
-`workbench:*` UI tools, sub-agent type definitions, Mod tool surfaces, and the Codex / Claude engine
-instructions. Their prompt-audit helper and captures were removed with them.
+`workbench:*` UI tools, sub-agent type definitions and Mod tool surfaces. Their prompt-audit helper and
+captures were removed with them.

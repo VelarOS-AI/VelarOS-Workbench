@@ -51,11 +51,28 @@ Workbench 是单体仓库：根 `package.json` 是唯一清单，全部产品源
   未提交改动、切分支或写到项目外的命令（`CommandExecutionPolicy.resolveWorkspaceIntegrityConfirmation`，
   确认卡与平台的危险命令同一套选项）；「从不询问」档全部放行。
 - **IPC**：`workbench-app:conversation:*`（send / cancel / guidance / input / answer / get-goal / update-goal /
-  delete-session / backup-history / event），只认发起窗口当前打开的项目；窗口销毁时取消它的运行。
+  delete-session / backup-history / engines / event），只认发起窗口当前打开的项目；窗口销毁时取消它的运行。
+- **外部引擎**（`src/main/engines/`）：会话可以交给本机装好的 Claude Code 或 Codex 命令行。请求带 `engine`
+  时 `WorkbenchConversationDispatcher` 交给 `WorkbenchEngineConversationRuntime`，其余走 Platform；运行中的
+  回答、停止跟着正在跑的那一边，删会话、停项目、关闭两边都做。不打包任何 SDK：Claude Code 直接起用户的
+  `claude`，走 stream-json（与 Agent SDK 同一套：`-p --input-format/--output-format stream-json
+  --permission-prompt-tool stdio`），一轮一个进程，下一轮 `--resume`；工具权限一律 `--permission-mode default`
+  经控制通道问 Workbench，按设置的权限档答（`WorkbenchEnginePermissions`：标准只问危险命令与项目外写入，危险
+  判定与 Platform 会话同一个 `analyzeWorkbenchCommandExecution`）；`AskUserQuestion`、计划审批画成提问卡。
+  Codex 常驻一个 `codex app-server`（JSON-RPC，所有会话共用，每个会话一条 thread，闲置 5 分钟停下），沙箱限在
+  项目里：标准 `on-request`、每次都问 `untrusted`、从不询问全权限；审批请求按同一套权限档答，
+  `request_user_input` 画成提问卡。引擎的正文、思考、工具调用经 `EngineRunSurface` 变成与 Platform 运行同一套
+  通知，工具调用是新通知 `conversation-tool-call`（renderer 画成 `tool-call` 块，工具名用界面认得的
+  `project:run` / `project:edit` …，计划更新成计划卡）；写文件、跑命令的时间窗同样报给改动归属账本。Workbench
+  会话 → 引擎会话的对照在 `userData/agent-engines/sessions.json`，接不上时另开一段。引擎在本机的情况（装没装、
+  登没登录、模型目录）经 `engines` 通道探，主进程缓存一分钟；登录与模型都归引擎自己。
 
-renderer 侧 `standaloneWorkbenchChatAdapter.tsx` 把主进程推来的通知（正文、思考、脚本卡、子任务、小部件、交互卡、
-命令输出、改项目）归并进消息（`workbenchConversationNotices.ts`，一次运行的块都在 `conversation:run:<runId>`
-这条消息里），状态经 `applyStandaloneConversationState` 落到运行态。停止等主进程收尾最多 15 秒。
+renderer 侧 `standaloneWorkbenchChatAdapter.tsx` 把主进程推来的通知（正文、思考、脚本卡、工具卡、子任务、小部件、
+交互卡、命令输出、改项目）归并进消息（`workbenchConversationNotices.ts`，一次运行的块都在 `conversation:run:<runId>`
+这条消息里），状态经 `applyStandaloneConversationState` 落到运行态。停止等主进程收尾最多 15 秒。执行体是会话的
+属性（`StandaloneChatState.engine`，随会话落盘）：输入框的模型菜单里列 VelarOS 的模型与本机能用的引擎
+（`workbenchAgentEngines.ts`），会话有了消息就只留这一侧；新会话沿用上一次的选择。引擎会话不收运行中的引导
+（跑着时发的消息进排队），也不做目标自动续跑、不显示上下文用量与约价；运行状态行换成引擎的品牌图标。
 
 ### AI 改动审阅
 
