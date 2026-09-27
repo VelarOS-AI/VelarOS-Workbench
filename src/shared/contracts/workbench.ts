@@ -1,4 +1,9 @@
 import type { WorkbenchImageMediaType } from '../workbenchImage'
+import type {
+  WorkbenchTextEncoding,
+  WorkbenchTextEol,
+  WorkbenchTextIssue,
+} from '../workbenchTextFormat'
 
 export interface WorkbenchDirectoryEntry {
   name: string
@@ -44,7 +49,14 @@ export interface WorkbenchImagePreview {
 export interface WorkbenchReadFileResult {
   projectRoot: string
   path: string
+  /** 去掉 BOM、换行统一为 LF 的正文。 */
   content: string
+  /** 磁盘上的编码（含 BOM）；保存时按它写回。 */
+  encoding: WorkbenchTextEncoding
+  /** 磁盘上占多数的换行符；编辑器里是 LF，保存时换回它。 */
+  eol: WorkbenchTextEol
+  /** 磁盘字节不能按 encoding + eol 逐字节写回的原因；有值时只读，用户明确转换后才能改。 */
+  textIssue?: WorkbenchTextIssue
   size: number
   modifiedAt: number
   totalLines: number
@@ -605,7 +617,14 @@ export interface WorkbenchLanguageServiceCodeActionsResult {
 export interface WorkbenchSaveFileRequest {
   projectRoot: string
   path: string
+  /** 正文里的 `\r\n` / `\r` / `\n` 都按一次换行处理，写盘时换成 `eol`。 */
   content: string
+  /**
+   * 写回的编码与换行符。省略时沿用磁盘上现有的格式；现有字节本身不能原样写回
+   * （认不出的编码、混用的换行符……）时拒绝保存，不猜。
+   */
+  encoding?: WorkbenchTextEncoding
+  eol?: WorkbenchTextEol
   expectedModifiedAt?: number
   expectedSize?: number
   /** 本地历史快照节流窗口（ms）：距上一份不足该间隔则不新增快照。0/省略=每次都存。 */
@@ -617,6 +636,9 @@ export interface WorkbenchRestoreMissingFileRequest {
   projectRoot: string
   path: string
   content: string
+  /** 文件被删前的编码与换行符；省略时按新文件处理（UTF-8、LF）。 */
+  encoding?: WorkbenchTextEncoding
+  eol?: WorkbenchTextEol
 }
 
 export type WorkbenchSaveFileResult = WorkbenchReadFileResult

@@ -25,6 +25,7 @@ import type {
 
 import type { DirectoryEntries } from './FileEntries'
 import type { PathResolver } from './PathResolver'
+import { countWorkbenchTextLines, decodeWorkbenchTextContent } from './TextCodec'
 import { isLikelyTextFile } from './TextFile'
 
 const DEFAULT_SEARCH_LIMIT = 50
@@ -438,7 +439,8 @@ class SearchIndex {
     const buffer = await readFile(options.realPath).catch(() => null)
     if (!buffer || !isLikelyTextFile(buffer)) return null
 
-    const fullContent = buffer.toString('utf8')
+    // 与编辑器读到的正文一致（认编码、去 BOM、换行统一为 LF），搜索结果的行列才对得上。
+    const fullContent = decodeWorkbenchTextContent(buffer)
     const truncated = fullContent.length > options.maxCharsPerFile
     const content = truncated ? fullContent.slice(0, options.maxCharsPerFile) : fullContent
 
@@ -447,7 +449,7 @@ class SearchIndex {
       content,
       size: options.size,
       modifiedAt: options.modifiedAt,
-      totalLines: fullContent.split(/\r?\n/).length,
+      totalLines: countWorkbenchTextLines(fullContent),
       truncated,
     }
   }

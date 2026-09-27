@@ -5,7 +5,7 @@
  * PathResolver，可考古 `cf62413e4^`），契约形状单源于 `@shared/contracts`：
  * - 目录列表：projectRoot 越界防护（realpath 收束）、`.git` 恒隐藏、点号项默认隐藏、
  *   目录优先 + localeCompare 排序、hasChildren 可见子项探针、limit 钳制 + truncated。
- * - 读文本：文本似然门（NUL + 控制字节占比）、maxChars 钳制截断、totalLines 全文行数。
+ * - 读文本：文本似然门（NUL + 控制字节占比）、认编码与换行符（`TextCodec`）、maxChars 钳制截断。
  * - 读图片：PNG / SVG / WebP 白名单、格式头校验、读取体积上限和同句柄变更检测。
  *
  * Git 排除装饰沿用 Desktop 语义：每次目录读取批量调用一次 `git check-ignore`，
@@ -14,7 +14,7 @@
  * 错误一律抛 Error，由 IPC 装配层降为 `WorkbenchFsCallResult` 信封。
  */
 import type { Stats } from 'node:fs'
-import { open, opendir, readdir, readFile, realpath, stat } from 'node:fs/promises'
+import { open, opendir, readdir, realpath, stat } from 'node:fs/promises'
 import { isAbsolute, relative, resolve, sep } from 'node:path'
 
 import { execa } from 'execa'
@@ -34,13 +34,14 @@ import {
   resolveWorkbenchImageMediaType,
   type WorkbenchImageMediaType,
 } from '@shared/workbenchImage'
+import { DefaultWorkbenchTextFormat } from '@shared/workbenchTextFormat'
+
+import { readWorkbenchTextFile } from './TextFile'
 
 const DefaultDirectoryLimit = 1000
 const MaxDirectoryLimit = 5000
 const DefaultReadMaxChars = 300_000
 const MaxReadChars = 1_000_000
-const TextProbeSampleBytes = 4096
-const TextProbeSuspiciousRatio = 0.08
 const MaxImageReadBytes = 10 * 1024 * 1024
 const SvgProbeMaxBytes = 64 * 1024
 const PngSignature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
@@ -142,19 +143,7 @@ export class WorkbenchProjectFileSystem {
     try {
       const projectRoot = await this.resolveProjectRoot(request.projectRoot)
       const filePath = await this.resolveInsideProject(projectRoot, request.path)
-      const fileStats = await stat(filePath)
-      if (!fileStats.isFile()) {
-        throw new AppError('VALIDATION', '工作台文件读取目标必须是文件。')
-      }
-
-      const buffer = await readFile(filePath)
-      if (!this.isLikelyTextFile(buffer)) {
-        throw new AppError('VALIDATION', '当前文件不是可预览的文本文件。')
-      }
-
-      const maxChars = this.clampReadMaxChars(request.maxChars)
-      const fullContent = buffer.toString('utf8')
-      const truncated = fullContent.length > maxChars
+      const file = await readWorkbenchTextFile(filePath, this.clampReadMaxChars(request.maxChars))
       const relativePath = this.toProjectRelativePath(projectRoot, filePath)
       const gitIgnored = (await this.getGitIgnoredPaths(projectRoot, [relativePath])).has(
         relativePath
@@ -163,11 +152,7 @@ export class WorkbenchProjectFileSystem {
       return {
         projectRoot,
         path: relativePath,
-        content: truncated ? fullContent.slice(0, maxChars) : fullContent,
-        size: fileStats.size,
-        modifiedAt: fileStats.mtimeMs,
-        totalLines: fullContent.split(/\r?\n/).length,
-        truncated,
+        ...file,
         gitIgnored,
       }
     } catch (error) {
@@ -233,6 +218,8 @@ export class WorkbenchProjectFileSystem {
         projectRoot,
         path: relativePath,
         content: '',
+        // 图片不进文本保存链路；编码字段只为与文本结果同形。
+        ...DefaultWorkbenchTextFormat,
         size: fileStats.size,
         modifiedAt: fileStats.mtimeMs,
         totalLines: 1,
@@ -353,21 +340,6 @@ export class WorkbenchProjectFileSystem {
     } catch {
       return new Set()
     }
-  }
-
-  private isLikelyTextFile(buffer: Buffer): boolean {
-    if (buffer.length === 0) return true
-
-    const sample = buffer.subarray(0, Math.min(buffer.length, TextProbeSampleBytes))
-    if (sample.includes(0)) return false
-
-    let suspicious = 0
-    for (const byte of sample) {
-      const isAllowedControl = byte === 9 || byte === 10 || byte === 13
-      if (byte < 32 && !isAllowedControl) suspicious += 1
-    }
-
-    return suspicious / sample.length < TextProbeSuspiciousRatio
   }
 
   private clampLimit(value: number | undefined): number {

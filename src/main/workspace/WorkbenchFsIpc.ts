@@ -33,6 +33,11 @@ import type {
   WorkbenchSearchContentRequest,
   WorkbenchSearchEntriesRequest,
 } from '@shared/contracts'
+import {
+  isWorkbenchTextEncoding,
+  isWorkbenchTextEol,
+  type WorkbenchTextFormat,
+} from '@shared/workbenchTextFormat'
 
 import { WorkbenchFsChannels } from '../../shared/workbenchFs'
 import type { WorkbenchWindowManager } from '../projects/WorkbenchWindowManager'
@@ -296,10 +301,14 @@ function parseReadImageFileRequest(input: unknown): Nullable<WorkbenchReadImageF
 function parseSaveFileRequest(input: unknown): Nullable<WorkbenchSaveFileRequest> {
   if (!hasStringFields(input, ['projectRoot', 'path', 'content'])) return null
 
+  const textFormat = parseTextFormat(input)
+  if (!textFormat) return null
+
   return {
     projectRoot: input['projectRoot'] as string,
     path: input['path'] as string,
     content: input['content'] as string,
+    ...textFormat,
     ...optionalNumber(input, 'expectedModifiedAt'),
     ...optionalNumber(input, 'expectedSize'),
     ...optionalNumber(input, 'localHistoryMinIntervalMs'),
@@ -378,11 +387,25 @@ function parseRestoreMissingFileRequest(
 ): Nullable<WorkbenchRestoreMissingFileRequest> {
   if (!hasStringFields(input, ['projectRoot', 'path', 'content'])) return null
 
+  const textFormat = parseTextFormat(input)
+  if (!textFormat) return null
+
   return {
     projectRoot: input['projectRoot'] as string,
     path: input['path'] as string,
     content: input['content'] as string,
+    ...textFormat,
   }
+}
+
+/** 保存格式可以省略（沿用磁盘上的），但给了就必须是认识的取值。 */
+function parseTextFormat(input: Record<string, unknown>): Nullable<Partial<WorkbenchTextFormat>> {
+  const encoding = input['encoding']
+  const eol = input['eol']
+  if (encoding !== undefined && !isWorkbenchTextEncoding(encoding)) return null
+  if (eol !== undefined && !isWorkbenchTextEol(eol)) return null
+
+  return { encoding, eol }
 }
 
 function parseListLocalHistoryRequest(input: unknown): Nullable<WorkbenchListLocalHistoryRequest> {

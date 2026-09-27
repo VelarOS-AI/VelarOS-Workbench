@@ -18,7 +18,6 @@ import {
   lstat,
   mkdir,
   readdir,
-  readFile,
   rename,
   rm,
   stat,
@@ -52,13 +51,15 @@ import type {
   WorkbenchSaveFileRequest,
   WorkbenchSaveFileResult,
 } from '@shared/contracts'
+import { DefaultWorkbenchTextFormat, type WorkbenchTextFormat } from '@shared/workbenchTextFormat'
 
 import type { DirectoryEntries } from './FileEntries'
 import type { GitNewFileTracker } from './GitNewFileTracker'
 import type { WorkbenchLocalHistoryStore } from './LocalHistoryStore'
 import type { PathResolver, ResolvedPath } from './PathResolver'
 import type { WorkbenchAppStoragePaths } from './StoragePaths'
-import { isLikelyTextFile } from './TextFile'
+import { countWorkbenchTextLines, decodeWorkbenchText, encodeWorkbenchText } from './TextCodec'
+import { isLikelyTextFile, readWorkbenchTextFile } from './TextFile'
 
 const DEFAULT_READ_MAX_CHARS = 300_000
 const MAX_READ_CHARS = 1_000_000
@@ -116,12 +117,17 @@ class FileOperations {
     }
 
     this.assertContentIsWritable(request.content)
+    // 按文件被删前的格式写回；编辑器没带格式时按新文件处理。
+    const bytes = encodeWorkbenchText(request.content, {
+      encoding: request.encoding ?? DefaultWorkbenchTextFormat.encoding,
+      eol: request.eol ?? DefaultWorkbenchTextFormat.eol,
+    })
     const targetPath = this.pathResolver.resolveChildPath(projectRoot, parent.requestedPath, name)
     return this.runWorkbenchMutation(async () => {
       const existing = await lstat(targetPath).catch(() => null)
       if (existing) throw new AppError('CONFLICT', '文件已经重新出现，请改用磁盘版本。')
 
-      await writeFile(targetPath, request.content, { flag: 'wx' })
+      await writeFile(targetPath, bytes, { flag: 'wx' })
       await this.gitNewFileTracker.trackNewFiles(projectRoot, [targetPath])
       const realPath = await this.pathResolver.resolveInsideProject(projectRoot, relativePath)
       return this.readResolvedTextFile(projectRoot, realPath, MAX_READ_CHARS)
@@ -150,15 +156,16 @@ class FileOperations {
         throw new AppError('VALIDATION', '当前文件不是可编辑的文本文件。')
       }
 
-      writeFileSync(filePath.realPath, request.content, 'utf8')
-      this.localHistoryStore.capture(projectRoot, request.path, request.content, {
+      const bytes = encodeWorkbenchText(
+        request.content,
+        this.resolveSaveTextFormat(request, currentBuffer)
+      )
+      writeFileSync(filePath.realPath, bytes)
+      const saved = this.toSavedTextFile(projectRoot, filePath, bytes, statSync(filePath.realPath))
+      this.localHistoryStore.capture(projectRoot, request.path, saved.content, {
         minIntervalMs: request.localHistoryMinIntervalMs,
       })
-      return this.readResolvedTextFileSync(
-        projectRoot,
-        filePath,
-        Math.max(DEFAULT_READ_MAX_CHARS, request.content.length)
-      )
+      return saved
     })
   }
 
@@ -534,62 +541,56 @@ class FileOperations {
     filePath: ResolvedPath,
     maxCharsInput?: number
   ): Promise<WorkbenchReadFileResult> {
-    const fileStats = await stat(filePath.realPath)
-
-    if (!fileStats.isFile()) {
-      throw new AppError('VALIDATION', '工作台文件读取目标必须是文件。')
-    }
-
-    const buffer = await readFile(filePath.realPath)
-    if (!isLikelyTextFile(buffer)) {
-      throw new AppError('VALIDATION', '当前文件不是可预览的文本文件。')
-    }
-
-    const maxChars = this.normalizeReadMaxChars(maxCharsInput)
-    const fullContent = buffer.toString('utf8')
-    const truncated = fullContent.length > maxChars
-    const content = truncated ? fullContent.slice(0, maxChars) : fullContent
+    const file = await readWorkbenchTextFile(
+      filePath.realPath,
+      this.normalizeReadMaxChars(maxCharsInput)
+    )
 
     return {
       projectRoot,
       path: this.pathResolver.toProjectRelativePath(projectRoot, filePath.requestedPath),
-      content,
-      size: fileStats.size,
-      modifiedAt: fileStats.mtimeMs,
-      totalLines: fullContent.split(/\r?\n/).length,
-      truncated,
+      ...file,
     }
   }
 
-  private readResolvedTextFileSync(
+  /**
+   * 保存用的格式：请求带齐了就按请求（编辑器里的格式，含用户明确选的转换）；没带齐时沿用
+   * 磁盘上现有的格式，现有字节本身不能原样写回时拒绝保存，不猜。
+   */
+  private resolveSaveTextFormat(
+    request: WorkbenchSaveFileRequest,
+    currentBuffer: Uint8Array
+  ): WorkbenchTextFormat {
+    if (request.encoding && request.eol) return { encoding: request.encoding, eol: request.eol }
+
+    const current = decodeWorkbenchText(currentBuffer)
+    if (current.textIssue) {
+      throw new AppError(
+        'VALIDATION',
+        '文件现有的编码或换行符不能原样写回，请在编辑器中打开它、确认转换后再保存。'
+      )
+    }
+
+    return { encoding: request.encoding ?? current.encoding, eol: request.eol ?? current.eol }
+  }
+
+  /** 由刚写下的字节得出保存结果（与之后重新读盘得到的一致），不再回读磁盘。 */
+  private toSavedTextFile(
     projectRoot: string,
     filePath: ResolvedPath,
-    maxCharsInput?: number
-  ): WorkbenchReadFileResult {
-    const fileStats = statSync(filePath.realPath)
-
-    if (!fileStats.isFile()) {
-      throw new AppError('VALIDATION', '工作台文件读取目标必须是文件。')
-    }
-
-    const buffer = readFileSync(filePath.realPath)
-    if (!isLikelyTextFile(buffer)) {
-      throw new AppError('VALIDATION', '当前文件不是可预览的文本文件。')
-    }
-
-    const maxChars = this.normalizeReadMaxChars(maxCharsInput)
-    const fullContent = buffer.toString('utf8')
-    const truncated = fullContent.length > maxChars
-    const content = truncated ? fullContent.slice(0, maxChars) : fullContent
+    bytes: Uint8Array,
+    fileStats: { size: number; mtimeMs: number }
+  ): WorkbenchSaveFileResult {
+    const decoded = decodeWorkbenchText(bytes)
 
     return {
       projectRoot,
       path: this.pathResolver.toProjectRelativePath(projectRoot, filePath.requestedPath),
-      content,
+      ...decoded,
       size: fileStats.size,
       modifiedAt: fileStats.mtimeMs,
-      totalLines: fullContent.split(/\r?\n/).length,
-      truncated,
+      totalLines: countWorkbenchTextLines(decoded.content),
+      truncated: false,
     }
   }
 
