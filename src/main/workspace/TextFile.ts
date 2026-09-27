@@ -1,4 +1,4 @@
-import { readFile, stat } from 'node:fs/promises'
+import { type FileHandle, open, stat } from 'node:fs/promises'
 
 import { AppError } from '@velaros-ai/core/error'
 
@@ -9,7 +9,10 @@ import {
   detectWorkbenchTextBom,
 } from './TextCodec'
 
-/** 读到的文本文件：正文已去掉 BOM、换行统一为 LF，超过 maxChars 的部分截掉（截断的只读）。 */
+/**
+ * 读到的文本文件：正文已去掉 BOM、换行统一为 LF，超过 maxChars 的部分截掉（截断的只读）。
+ * 截断时 `totalLines` 只数读到的这一段。
+ */
 interface WorkbenchTextFileSnapshot extends DecodedWorkbenchText {
   size: number
   modifiedAt: number
@@ -19,6 +22,12 @@ interface WorkbenchTextFileSnapshot extends DecodedWorkbenchText {
 
 const TextProbeSampleBytes = 4096
 const TextProbeSuspiciousRatio = 0.08
+/**
+ * 一个正文字符最多占这么多字节：GB18030 的四字节字符、UTF-16 的 CRLF（换行统一后算一个字符）。
+ * 文件比 maxChars × 4 还大时正文一定超过 maxChars，只读开头这么多字节就够截断视图用。
+ */
+const MaxBytesPerChar = 4
+const BomAndSplitCharBytes = 8
 
 /**
  * 文本似然门（照搬 desktop `workspace/workbench/TextFile.ts`）：NUL 立拒 + 控制字节占比 <8%。
@@ -64,7 +73,10 @@ function isSuspiciousControl(code: number): boolean {
   return code < 32 && code !== 9 && code !== 10 && code !== 13
 }
 
-/** 读项目里的一个文本文件：认出编码与换行符并核对能否原样写回。 */
+/**
+ * 读项目里的一个文本文件：认出编码与换行符，完整读到的还要核对能否原样写回。先看体积，
+ * 大文件只读截断视图用得到的开头一段，不把整个文件读进内存再切。
+ */
 async function readWorkbenchTextFile(
   path: string,
   maxChars: number
@@ -74,21 +86,48 @@ async function readWorkbenchTextFile(
     throw new AppError('VALIDATION', '工作台文件读取目标必须是文件。')
   }
 
-  const buffer = await readFile(path)
-  if (!isLikelyTextFile(buffer)) {
+  const byteLimit = maxChars * MaxBytesPerChar + BomAndSplitCharBytes
+  const handle = await open(path, 'r')
+  let head: Buffer
+  try {
+    head = await readHead(handle, Math.min(fileStats.size, byteLimit))
+  } finally {
+    await handle.close()
+  }
+  if (!isLikelyTextFile(head)) {
     throw new AppError('VALIDATION', '当前文件不是可预览的文本文件。')
   }
 
-  const decoded = decodeWorkbenchText(buffer)
-  const truncated = decoded.content.length > maxChars
+  const complete = fileStats.size <= byteLimit
+  const decoded = decodeWorkbenchText(head, complete)
+  const truncated = !complete || decoded.content.length > maxChars
+  const content = truncated ? cutAtCharBoundary(decoded.content, maxChars) : decoded.content
   return {
     ...decoded,
-    content: truncated ? decoded.content.slice(0, maxChars) : decoded.content,
+    content,
     size: fileStats.size,
     modifiedAt: fileStats.mtimeMs,
-    totalLines: countWorkbenchTextLines(decoded.content),
+    totalLines: countWorkbenchTextLines(content),
     truncated,
   }
+}
+
+async function readHead(handle: FileHandle, length: number): Promise<Buffer> {
+  const buffer = Buffer.alloc(length)
+  let offset = 0
+  while (offset < length) {
+    const { bytesRead } = await handle.read(buffer, offset, length - offset, offset)
+    if (bytesRead === 0) break
+    offset += bytesRead
+  }
+  return buffer.subarray(0, offset)
+}
+
+/** 截到 maxChars，不把代理对切成半个。 */
+function cutAtCharBoundary(content: string, maxChars: number): string {
+  const end = Math.min(content.length, maxChars)
+  const last = content.charCodeAt(end - 1)
+  return content.slice(0, last >= 0xd800 && last <= 0xdbff ? end - 1 : end)
 }
 
 export {

@@ -87,10 +87,13 @@ function detectWorkbenchTextBom(bytes: Uint8Array): Nullable<WorkbenchTextBom> {
  */
 function decodeWorkbenchText(bytes: Uint8Array, complete = true): DecodedWorkbenchText {
   const detected = detectAndDecode(bytes, complete)
-  const eols = countEols(detected.text)
+  // 只读到开头一段时，末尾的 \r 可能是被切开的 CRLF 的前半：不算它，免得误判成混用换行。
+  const text =
+    !complete && detected.text.endsWith('\r') ? detected.text.slice(0, -1) : detected.text
+  const eols = countEols(text)
 
   return {
-    content: normalizeWorkbenchTextEol(detected.text),
+    content: normalizeWorkbenchTextEol(text),
     encoding: detected.encoding,
     eol: dominantEol(eols),
     textIssue: resolveTextIssue(bytes, detected, eols, complete),

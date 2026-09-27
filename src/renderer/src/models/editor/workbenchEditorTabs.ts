@@ -9,6 +9,8 @@ import { fileLanguage } from '../shared/workbenchUtils'
 
 export const WORKBENCH_EDITOR_FILES_CHANGED_DEBOUNCE_MS = 800
 export const WORKBENCH_EDITOR_TRANSACTION_FILES_CHANGED_DEBOUNCE_MS = 0
+/** 打开文件时读取的字符上限：超过的截断、只读。 */
+export const WORKBENCH_EDITOR_READ_MAX_CHARS = 300_000
 
 /**
  * 编辑器标签纯逻辑模型。
@@ -65,6 +67,19 @@ function sameImagePreview(
     return false
 
   return left.data.every((byte, index) => byte === right.data[index])
+}
+
+/**
+ * 重读一个打开的文件时的字符上限：至少是打开时的上限；标签握着完整正文（没截断）时至少读到它的
+ * 长度——在编辑器里写到上限以上、保存过的文件，按打开时的上限重读回来是截断的，会被当成外部修改，
+ * 或者变成只读。
+ */
+export function resolveWorkbenchEditorRereadMaxChars(
+  file: LooseOptional<Pick<WorkbenchReadFileResult, 'content' | 'imagePreview' | 'truncated'>>
+): number {
+  if (!file || file.imagePreview || file.truncated) return WORKBENCH_EDITOR_READ_MAX_CHARS
+
+  return Math.max(WORKBENCH_EDITOR_READ_MAX_CHARS, file.content.length)
 }
 
 /** 在重命名 / 移动场景下，把一条受影响路径映射到新前缀下。 */

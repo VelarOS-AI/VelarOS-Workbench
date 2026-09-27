@@ -16,6 +16,7 @@ import {
   mayAffectWorkbenchDiagnostics,
   movePath,
   resolveExternalFileUnavailableStatus,
+  resolveWorkbenchEditorRereadMaxChars,
   reuseWorkbenchOpenFileSnapshots,
   WORKBENCH_EDITOR_FILES_CHANGED_DEBOUNCE_MS,
 } from '@renderer/models/editor/workbenchEditorTabs'
@@ -674,7 +675,7 @@ export function useWorkbenchEditorController({
               const diskFile = await readWorkbenchEditorFile(
                 project.rootPath,
                 tab.path,
-                EXTERNAL_FILE_READ_MAX_CHARS
+                resolveWorkbenchEditorRereadMaxChars(tab.file)
               )
               return {
                 path: tab.path,
@@ -826,7 +827,7 @@ export function useWorkbenchEditorController({
       const diskFile = await readWorkbenchEditorFile(
         project.rootPath,
         path,
-        EXTERNAL_FILE_READ_MAX_CHARS
+        resolveWorkbenchEditorRereadMaxChars(openTabsByPathLatest.current.get(path)?.file)
       )
       if (activeProjectRef.current?.id !== owningProjectId) return
 
