@@ -1,9 +1,10 @@
-import { isAbsolute, relative, resolve } from 'node:path'
+import { relative, resolve } from 'node:path'
 
 import type { AppLocale } from '@velaros-ai/ui/conversation/contracts'
 
 import type { WorkbenchPermissionConfirmationMode } from '../../shared/workbenchConversation'
 import { analyzeWorkbenchCommandExecution } from '../workspace/CommandExecutionPolicy'
+import { isRelativePathInsideRoot } from '../workspace/PathContainmentHelper'
 
 import type { EngineConfirmation } from './WorkbenchEngineRunSurface'
 
@@ -78,7 +79,7 @@ export function engineConfirmation(
 export function displayPath(projectRoot: string, path: string): string {
   const absolute = resolve(projectRoot, path)
   const inside = relative(resolve(projectRoot), absolute)
-  return inside && !inside.startsWith('..') && !isAbsolute(inside) ? inside : absolute
+  return inside && isRelativePathInsideRoot(inside) ? inside : absolute
 }
 
 /** 项目里的文件相对项目根的路径；项目外的不要。 */
@@ -87,15 +88,14 @@ export function projectRelativePaths(projectRoot: string, paths: readonly string
     ...new Set(
       paths.flatMap((path) => {
         const inside = relative(resolve(projectRoot), resolve(projectRoot, path))
-        return inside && !inside.startsWith('..') && !isAbsolute(inside) ? [inside] : []
+        return inside && isRelativePathInsideRoot(inside) ? [inside] : []
       })
     ),
   ]
 }
 
 function isInside(projectRoot: string, path: string): boolean {
-  const inside = relative(resolve(projectRoot), resolve(projectRoot, path))
-  return !inside.startsWith('..') && !isAbsolute(inside)
+  return isRelativePathInsideRoot(relative(resolve(projectRoot), resolve(projectRoot, path)))
 }
 
 /** 压成一行并截短（确认卡标题、工具卡标题用）。 */

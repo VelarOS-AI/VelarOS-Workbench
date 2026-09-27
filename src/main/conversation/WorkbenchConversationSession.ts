@@ -1,4 +1,4 @@
-import { isAbsolute, relative, resolve } from 'node:path'
+import { relative, resolve } from 'node:path'
 
 import { isArray, isBoolean, isNonBlankString, isPlainObject, isTrue } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
@@ -35,6 +35,7 @@ import { VelarWebModule } from '@velaros-ai/velaros/web/contracts'
 
 import { resolveWorkspaceIntegrityConfirmation } from '../workspace/CommandExecutionPolicy'
 import type { WorkbenchAgentProjectActivityPort } from '../workspace/git/WorkbenchChatRunAttribution'
+import { isRelativePathInsideRoot } from '../workspace/PathContainmentHelper'
 
 import { LoginConfirmation } from './ConversationInteractions'
 import type {
@@ -407,7 +408,7 @@ function readEditPaths(input: unknown, root: string): string[] {
     ...new Set(
       paths
         .map((path) => relative(root, resolve(root, path)))
-        .filter((path) => path !== '' && !path.startsWith('..') && !isAbsolute(path))
+        .filter((path) => path !== '' && isRelativePathInsideRoot(path))
     ),
   ]
 }

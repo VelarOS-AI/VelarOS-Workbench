@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs'
 import { readdir, readFile, stat } from 'node:fs/promises'
-import { extname, isAbsolute, relative, resolve } from 'node:path'
+import { extname, relative, resolve } from 'node:path'
 
 import MarkdownIt from 'markdown-it'
 import { TextDocument } from 'vscode-languageserver-textdocument'
@@ -15,6 +15,8 @@ import {
   type Token,
 } from 'vscode-markdown-languageservice'
 import { URI } from 'vscode-uri'
+
+import { isRelativePathInsideRoot } from '../PathContainmentHelper'
 
 const MarkdownExtensions = new Set(['.md', '.markdown', '.mdown'])
 const IgnoredWorkspaceDirectories = new Set([
@@ -43,8 +45,7 @@ function isMarkdownPath(path: string): boolean {
 }
 
 function isInsideRoot(root: string, path: string): boolean {
-  const child = relative(root, path)
-  return child === '' || (!child.startsWith('..') && !isAbsolute(child))
+  return isRelativePathInsideRoot(relative(root, path))
 }
 
 class WorkbenchMarkdownWorkspace implements IWorkspace {
