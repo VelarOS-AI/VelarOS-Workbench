@@ -1162,7 +1162,7 @@ void describe('focused Workbench language surface', () => {
 
     assert.match(
       editor,
-      /languageHoverCompartment\.reconfigure\(languageServiceHoverExtension\)/u
+      /reconfigureCompartment\(viewRef\.current, languageHoverCompartment, languageServiceHoverExtension\)/u
     )
     assert.doesNotMatch(editor, /languageHoverCompartment\.reconfigure\(\s*active\s*\?\s*\[\]/u)
     assert.match(

@@ -1,10 +1,9 @@
-import { Language, LanguageSupport } from '@codemirror/language'
-import type { Extension } from '@codemirror/state'
+import type { Language } from '@codemirror/language'
 import { highlightCode, type Highlighter, tagHighlighter } from '@lezer/highlight'
 
 import type { WorkbenchThemeId } from '../settings/workbenchPreferences'
 
-import { resolveWorkbenchCodeMirrorLanguage } from './workbenchCodeMirrorLanguage'
+import { findWorkbenchCodeMirrorLanguage, resolveWorkbenchCodeMirrorLanguage } from './workbenchCodeMirrorLanguage'
 import { getWorkbenchCodeHighlightSpecs } from './workbenchCodeMirrorTheme'
 
 /** 一段着色后的代码：颜色与字形取自编辑器的着色规则；`match` 表示这段落在查询词里。 */
@@ -140,7 +139,7 @@ function languageFor(path: string): Nullable<Language> {
   const key = languageKey(path)
   if (languageCache.has(key)) return languageCache.get(key) ?? null
   const support = resolveWorkbenchCodeMirrorLanguage(path, '')
-  const language = support.mode === 'builtin' ? findLanguage(support.extension) : null
+  const language = support.mode === 'builtin' ? findWorkbenchCodeMirrorLanguage(support.extension) : null
   languageCache.set(key, language)
   return language
 }
@@ -149,15 +148,4 @@ function languageKey(path: string): string {
   const name = (path.split(/[\\/]/u).at(-1) ?? path).toLowerCase()
   const dot = name.lastIndexOf('.')
   return dot > 0 ? name.slice(dot + 1) : name
-}
-
-function findLanguage(extension: Extension): Nullable<Language> {
-  if (extension instanceof LanguageSupport) return extension.language
-  if (extension instanceof Language) return extension
-  if (Array.isArray(extension))
-    for (const item of extension) {
-      const found = findLanguage(item as Extension)
-      if (found) return found
-    }
-  return null
 }

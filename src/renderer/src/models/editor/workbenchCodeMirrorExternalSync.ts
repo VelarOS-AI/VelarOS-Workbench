@@ -1,46 +1,21 @@
-import { setDiagnostics } from '@codemirror/lint'
-import { EditorSelection, type EditorState, type TransactionSpec } from '@codemirror/state'
+import { isolateHistory } from '@codemirror/commands'
+import type { Annotation, EditorState, TransactionSpec } from '@codemirror/state'
 
-interface BuildWorkbenchExternalValueSyncTransactionOptions {
-  state: EditorState
-  value: string
-  selection: EditorSelection
-  annotations?: TransactionSpec['annotations']
-}
+import { buildWorkbenchMinimalTextChanges } from './workbenchMinimalTextChanges'
 
-function clampExternalSelectionPosition(position: number, docLength: number): number {
-  return Math.min(Math.max(0, position), docLength)
-}
-
-export function resolveWorkbenchExternalValueSyncSelection(
+/**
+ * 正在编辑的文件，正文在编辑器之外被换掉了（磁盘改动重新载入、别的文件里的重命名改到它、放弃改动）。
+ *
+ * 按最小改动套进来：没改的地方光标、折叠、评论都留在原处。这一步单独算一次撤销，⌘Z 能退回外部改动之前，
+ * 跟 VS Code 重新载入文件一样。
+ */
+export function buildWorkbenchExternalValueSyncTransaction(
   state: EditorState,
-  nextDocLength: number,
-  fileChanged: boolean
-): EditorSelection {
-  if (fileChanged) return EditorSelection.create([EditorSelection.cursor(0)])
-
-  const selection = state.selection.main
-  return EditorSelection.create([
-    EditorSelection.range(
-      clampExternalSelectionPosition(selection.anchor, nextDocLength),
-      clampExternalSelectionPosition(selection.head, nextDocLength)
-    ),
-  ])
-}
-
-export function buildWorkbenchExternalValueSyncTransaction({
-  state,
-  value,
-  selection,
-  annotations,
-}: BuildWorkbenchExternalValueSyncTransactionOptions): TransactionSpec {
-  const currentValue = state.doc.toString()
-  const clearDiagnostics = setDiagnostics(state, [])
-
+  value: string,
+  annotation: Annotation<unknown>
+): TransactionSpec {
   return {
-    changes: { from: 0, to: currentValue.length, insert: value },
-    selection,
-    annotations,
-    effects: clearDiagnostics.effects,
+    changes: buildWorkbenchMinimalTextChanges(state.doc.toString(), value),
+    annotations: [isolateHistory.of('full'), annotation],
   }
 }

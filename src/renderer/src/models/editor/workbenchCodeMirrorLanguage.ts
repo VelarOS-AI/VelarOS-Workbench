@@ -7,7 +7,7 @@ import { python } from '@codemirror/lang-python'
 import { sql } from '@codemirror/lang-sql'
 import { xml } from '@codemirror/lang-xml'
 import { yaml } from '@codemirror/lang-yaml'
-import { LanguageDescription, StreamLanguage } from '@codemirror/language'
+import { Language, LanguageDescription, LanguageSupport, StreamLanguage } from '@codemirror/language'
 import { dockerFile } from '@codemirror/legacy-modes/mode/dockerfile'
 import { properties } from '@codemirror/legacy-modes/mode/properties'
 import { shell } from '@codemirror/legacy-modes/mode/shell'
@@ -61,6 +61,13 @@ const MarkdownCodeLanguages = [
   LanguageDescription.of({ name: 'YAML', alias: ['yml'], extensions: ['yaml', 'yml'], support: yaml() }),
 ]
 
+// 同一种语言共用一份实例：换回一个看过的文件时，它的语法树还能接着用（语言没变就不必重新解析）。
+const MarkdownSupport = markdown({ codeLanguages: MarkdownCodeLanguages })
+const TomlLanguage = StreamLanguage.define(toml)
+const ShellLanguage = StreamLanguage.define(shell)
+const DockerfileLanguage = StreamLanguage.define(dockerFile)
+const PropertiesLanguage = StreamLanguage.define(properties)
+
 function getSpecialFileLanguageToken(path: Nullable<string>): string {
   const fileName = path?.split(/[\\/]/).at(-1)?.toLowerCase() ?? ''
   if (fileName === 'dockerfile' || fileName === 'containerfile') return 'dockerfile'
@@ -111,7 +118,7 @@ export function resolveWorkbenchCodeMirrorLanguage(
 
   if (token === 'markdown' || token === 'md' || token === 'mdown' || token === 'mdx')
     return {
-      extension: markdown({ codeLanguages: MarkdownCodeLanguages }),
+      extension: MarkdownSupport,
       languageId: 'markdown',
       mode: 'builtin',
     }
@@ -130,31 +137,43 @@ export function resolveWorkbenchCodeMirrorLanguage(
 
   if (token === 'toml')
     return {
-      extension: StreamLanguage.define(toml),
+      extension: TomlLanguage,
       languageId: 'toml',
       mode: 'builtin',
     }
 
   if (ShellTokens.has(token))
     return {
-      extension: StreamLanguage.define(shell),
+      extension: ShellLanguage,
       languageId: 'shell',
       mode: 'builtin',
     }
 
   if (token === 'dockerfile')
     return {
-      extension: StreamLanguage.define(dockerFile),
+      extension: DockerfileLanguage,
       languageId: 'dockerfile',
       mode: 'builtin',
     }
 
   if (PropertiesTokens.has(token))
     return {
-      extension: StreamLanguage.define(properties),
+      extension: PropertiesLanguage,
       languageId: 'properties',
       mode: 'builtin',
     }
 
   return { extension: [], languageId: token || 'text', mode: 'plain-text' }
+}
+
+/** 语言扩展里的语言本身（`LanguageSupport` 或 `Language`，可能包在数组里）；纯文本没有。 */
+export function findWorkbenchCodeMirrorLanguage(extension: Extension): Nullable<Language> {
+  if (extension instanceof LanguageSupport) return extension.language
+  if (extension instanceof Language) return extension
+  if (Array.isArray(extension))
+    for (const item of extension) {
+      const found = findWorkbenchCodeMirrorLanguage(item as Extension)
+      if (found) return found
+    }
+  return null
 }

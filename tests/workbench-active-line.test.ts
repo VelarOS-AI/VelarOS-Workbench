@@ -10,7 +10,6 @@ import {
   revealWorkbenchActiveLine,
   suppressWorkbenchActiveLine,
 } from '../src/renderer/src/models/editor/workbenchCodeMirrorActiveLine'
-import { resolveWorkbenchExternalValueSyncSelection } from '../src/renderer/src/models/editor/workbenchCodeMirrorExternalSync'
 
 function stateWithSelection(anchor: number, head: number): EditorState {
   return EditorState.create({
@@ -41,19 +40,6 @@ void describe('Workbench active-line visibility', () => {
     })
 
     assert.equal(hasWorkbenchMultilineTextSelection(state), true)
-  })
-
-  void test('resets the cursor for a different file but preserves it for same-file updates', () => {
-    const state = stateWithSelection(14, 18)
-
-    assert.deepEqual(
-      resolveWorkbenchExternalValueSyncSelection(state, 40, true).main,
-      EditorSelection.cursor(0)
-    )
-    assert.deepEqual(
-      resolveWorkbenchExternalValueSyncSelection(state, 16, false).main,
-      EditorSelection.range(14, 16)
-    )
   })
 
   void test('keeps a newly switched file visually idle until the editor is used', () => {

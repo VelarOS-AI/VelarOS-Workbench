@@ -21,6 +21,10 @@ import {
   sortWorkbenchFileDiagnostics,
 } from '@renderer/models/editor/workbenchCodeInsightModel'
 import {
+  workbenchEditorFileStateKey,
+  WorkbenchEditorFileStates,
+} from '@renderer/models/editor/workbenchEditorFileStates'
+import {
   buildWorkbenchEditorFindMatches,
   getWorkbenchEditorLineCount,
   parseWorkbenchGoToLineInput,
@@ -291,6 +295,12 @@ export function EditorPanel({
   const [activeDiagnosticIndex, setActiveDiagnosticIndex] = useState(-1)
   const onActiveProblemIdChangeLatest = useLatest(onActiveProblemIdChange)
   const lastSyncedProblemIdRef = useRef<Nullable<string>>(null)
+  // 各打开文件的编辑器状态（撤销历史、光标、折叠、滚动位置）放在这里：编辑器切到预览、对比视图时会卸载，
+  // 挂回来接着用；标签关掉就丢。
+  const [editorFileStates] = useState(() => new WorkbenchEditorFileStates())
+  useEffect(() => {
+    editorFileStates.retain(openTabs.map((tab) => workbenchEditorFileStateKey(projectRoot, tab.path)))
+  }, [editorFileStates, openTabs, projectRoot])
 
   // 编辑器 chunk 较大：让空闲期预热承担解析成本；若用户立刻点文件，lazy 仍会立即复用同一请求。
   useEffect(() => {
@@ -369,9 +379,6 @@ export function EditorPanel({
   )
   useEffect(() => {
     lastSyncedProblemIdRef.current = null
-    setCursorPosition((current) =>
-      current.line === 1 && current.column === 1 ? current : { line: 1, column: 1 }
-    )
     setActiveDiagnosticIndex((current) => (current === -1 ? current : -1))
     onActiveProblemIdChangeLatest.current?.(null)
   }, [onActiveProblemIdChangeLatest, selectedFilePath])
@@ -597,7 +604,13 @@ export function EditorPanel({
   }
 
   useEffect(() => {
-    onCursorPositionLatest.current?.({ line: 1, column: 1 })
+    // 代码编辑器换文件时自己报光标（换回来的文件回到上次的位置）；图片、Markdown 预览没有光标，从头算。
+    if (!selectedFile || selectedImagePreview || markdownPreviewActive) {
+      setCursorPosition((current) =>
+        current.line === 1 && current.column === 1 ? current : { line: 1, column: 1 }
+      )
+      onCursorPositionLatest.current?.({ line: 1, column: 1 })
+    }
     setIsFindOpen(false)
     setFindQuery('')
     setIsGoToLineOpen(false)
@@ -936,6 +949,7 @@ export function EditorPanel({
                         workbenchTheme={workbenchTheme}
                         externalRevision={externalRevision}
                         gitHeadContent={gitHeadContent}
+                        fileStates={editorFileStates}
                         onChange={onEditorContentChange}
                         onCursorPositionChange={handleCursorPositionChange}
                         onOpenFind={openFindBar}

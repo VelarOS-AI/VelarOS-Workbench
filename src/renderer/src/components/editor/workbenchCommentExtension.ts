@@ -53,10 +53,10 @@ export interface WorkbenchCommentExtensionOptions {
   /** 删除按钮文案解析器（i18n 由上层注入，widget 在 React 之外，惰性读取避免 stale）。 */
   resolveDeleteLabel: () => string
   /**
-   * 判断某个事务是否「外部整篇替换文档」（切换文件 / 外部改动同步）。
-   * 这类事务不应把旧锚点当作「块被删除」——上层会随后按行号重新锚定。
+   * 判断某个事务是不是编辑器之外来的改动（磁盘改动重新载入、放弃改动）。锚点照样跟着改动挪，但被这类改动
+   * 整块删掉的锚点不算「用户删了评论」——评论留在存储里，下次按行号重新锚定。
    */
-  isExternalDocReplace: (tr: Transaction) => boolean
+  isExternalChange: (tr: Transaction) => boolean
 }
 
 interface WorkbenchCommentFieldValue {
@@ -259,18 +259,13 @@ export function createWorkbenchCommentExtension(
       let anchors = value.anchors
 
       if (tr.docChanged) {
-        if (options.isExternalDocReplace(tr)) {
-          // 切换文件/外部整篇替换：旧偏移全作废，清空等上层按行号重锚（不算「块被删」）。
-          anchors = []
-        } else {
-          anchors = anchors
-            .map((anchor) => ({
-              id: anchor.id,
-              from: tr.changes.mapPos(anchor.from, 1),
-              to: tr.changes.mapPos(anchor.to, -1),
-            }))
-            .filter((anchor) => anchor.to > anchor.from)
-        }
+        anchors = anchors
+          .map((anchor) => ({
+            id: anchor.id,
+            from: tr.changes.mapPos(anchor.from, 1),
+            to: tr.changes.mapPos(anchor.to, -1),
+          }))
+          .filter((anchor) => anchor.to > anchor.from)
       }
 
       for (const effect of tr.effects) {
@@ -298,15 +293,19 @@ export function createWorkbenchCommentExtension(
     const after = update.state.field(commentField, false)
     if (!before || !after || before.anchors === after.anchors) return
 
-    // 外部整篇替换清空的锚点不是「删除评论」，跳过移除/行号回写通知。
-    const isExternalReplace = update.transactions.some((tr) => options.isExternalDocReplace(tr))
-    if (isExternalReplace) return
-
-    const afterIds = new Set(after.anchors.map((anchor) => anchor.id))
-    const removed = before.anchors
-      .filter((anchor) => !afterIds.has(anchor.id))
-      .map((anchor) => anchor.id)
-    if (!isEmpty(removed)) options.onAnchorsRemoved(removed)
+    // 外部改动删掉的、按行号重新锚定时落不下的锚点都不是「删除评论」：不通知移除，只回写还在的锚点的行号。
+    const userRemoval = !update.transactions.some(
+      (tr) =>
+        options.isExternalChange(tr)
+        || tr.effects.some((effect) => effect.is(setWorkbenchCommentAnchorsEffect))
+    )
+    if (userRemoval) {
+      const afterIds = new Set(after.anchors.map((anchor) => anchor.id))
+      const removed = before.anchors
+        .filter((anchor) => !afterIds.has(anchor.id))
+        .map((anchor) => anchor.id)
+      if (!isEmpty(removed)) options.onAnchorsRemoved(removed)
+    }
 
     if (update.docChanged) {
       const lineUpdates = after.anchors.map((anchor) => ({
