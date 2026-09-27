@@ -398,7 +398,6 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     gitDiffSelectChange: 'Select a change to preview its diff.',
     gitDiffTruncated: 'Diff truncated',
     gitDiffWorking: 'Working tree',
-    gitDiffStaged: 'Index',
     gitDiffUntracked: 'Untracked preview',
     gitDiffTabTitle: 'Commit: {file}',
     lightPreviewTabTitle: 'Preview: {file}',

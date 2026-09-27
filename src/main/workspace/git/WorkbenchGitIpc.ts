@@ -137,7 +137,6 @@ function parseDiff(input: unknown): WorkbenchGitDiffRequest {
   return {
     ...root,
     commitSha: optionalWhen(isString, record['commitSha']),
-    staged: optionalWhen(isBoolean, record['staged']),
     path: optionalWhen(isString, record['path']),
     originalPath: optionalWhen(isString, record['originalPath']),
     maxChars: optionalWhen(isNumber, record['maxChars']),

@@ -6,7 +6,7 @@ import { promisify } from 'node:util'
 
 import { execa } from 'execa'
 
-import { optionalWhen } from '@velaros-ai/core'
+import { optionalWhen, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type {
@@ -79,6 +79,8 @@ const GitOutputConfig = [
 
 interface GitRunOptions extends WorkspaceGitRemoteActionOptions {
   allowFailure?: boolean
+  /** 写进标准输入的内容（`--pathspec-from-file=-`）。 */
+  input?: string
   /** 输出上限，默认 GitOutputMaxBytes。 */
   maxBuffer?: number
   /** 输出超过上限时不报错，结果标成 truncated，调用方换个问法。 */
@@ -93,6 +95,16 @@ interface GitRunResult {
   failed: boolean
   /** 输出超过上限，git 进程已被结束，stdout 不完整。 */
   truncated: boolean
+}
+
+/**
+ * 项目所在的仓库。项目可以是仓库里的一个子目录：git 命令都在项目根下跑，pathspec 相对项目根；
+ * status、log 列出的路径却相对仓库根，要去掉前缀才是项目里的路径。
+ */
+interface GitRepository {
+  rootPath: string
+  /** 项目根相对仓库根的前缀，如 `packages/app/`；项目就是仓库根时为空串。 */
+  prefix: string
 }
 
 const EmptyLineStats: WorkspaceGitLineStats = {
@@ -125,10 +137,11 @@ export class WorkbenchGitService {
   public async getSummary(workspaceRoot: string): Promise<SystemWorkspaceGitSummary> {
     const rootPath = await this.resolveRoot(workspaceRoot)
     try {
+      const repository = await this.openRepository(rootPath)
       const [status, branches, lineStats] = await Promise.all([
-        this.getStatus(rootPath),
+        this.getStatus(repository),
         this.listBranches(rootPath),
-        this.getLineStatsForRoot(rootPath),
+        this.getLineStatsForRoot(repository),
       ])
       return {
         rootPath,
@@ -149,8 +162,9 @@ export class WorkbenchGitService {
   ): Promise<SystemWorkspaceGitLineStatsSnapshot> {
     const rootPath = await this.resolveRoot(workspaceRoot)
     try {
+      const repository = await this.openRepository(rootPath)
       const [lineStats, branch] = await Promise.all([
-        this.getLineStatsForRoot(rootPath),
+        this.getLineStatsForRoot(repository),
         this.getCurrentBranch(rootPath),
       ])
       return { rootPath, repository: true, checkedAt: Date.now(), lineStats, branch }
@@ -175,7 +189,7 @@ export class WorkbenchGitService {
     const pathspecs = this.normalizePathspecs(rootPath, [
       options.originalPath,
       options.path,
-    ])
+    ]).map((path) => this.toLiteralPathspec(path))
     const args = options.commitSha
       ? [
           'show',
@@ -185,7 +199,17 @@ export class WorkbenchGitService {
           '--no-color',
           this.assertRevision(options.commitSha),
         ]
-      : ['diff', '--no-ext-diff', '--no-color', ...(options.staged ? ['--cached'] : [])]
+      : [
+          // 工作区相对 HEAD：提交带走的是工作区里的文件（暂存了一半的也按整份），差异要跟它一致。
+          // `--relative`：路径相对项目根，项目外面的改动不列。
+          'diff',
+          '--no-ext-diff',
+          '--no-color',
+          '--no-textconv',
+          '--find-renames',
+          '--relative',
+          await this.resolveDiffBase(rootPath),
+        ]
     if (pathspecs.length > 0) args.push('--', ...pathspecs)
     const output = (await this.runGit(rootPath, args)).stdout
     const maxChars = Math.min(
@@ -194,7 +218,7 @@ export class WorkbenchGitService {
     )
     return {
       rootPath,
-      scope: options.commitSha ? 'commit' : options.staged ? 'staged' : 'working',
+      scope: options.commitSha ? 'commit' : 'working',
       path: optionalWhen(!!options.path, options.path),
       diff: output.slice(0, maxChars),
       truncated: output.length > maxChars,
@@ -231,7 +255,12 @@ export class WorkbenchGitService {
     ]
     if (options.branch) args.push(this.assertRevision(options.branch))
     else if (!options.path) args.push('--all')
-    if (options.path) args.push('--follow', '--', this.normalizePathspec(rootPath, options.path))
+    if (options.path)
+      args.push(
+        '--follow',
+        '--',
+        this.toLiteralPathspec(this.normalizePathspec(rootPath, options.path))
+      )
 
     const result = await this.runGit(rootPath, args, { allowFailure: true })
     const output = `${result.stderr}\n${result.stdout}`.toLowerCase()
@@ -256,13 +285,21 @@ export class WorkbenchGitService {
     paths?: readonly string[]
   ): Promise<SystemWorkspaceGitCommitMessageResult> {
     const rootPath = await this.resolveRoot(workspaceRoot)
-    const status = this.scopeStatus(await this.getStatus(rootPath), paths)
+    const repository = await this.openRepository(rootPath)
+    const status = this.scopeStatus(
+      await this.getStatus(repository),
+      paths?.length ? this.normalizePathspecs(rootPath, paths) : undefined
+    )
     return {
       rootPath,
       message: status.isClean ? null : this.createCommitMessage(status, locale),
     }
   }
 
+  /**
+   * 提交。给了路径就只提交这些文件在工作区里的样子，暂存区里别的文件原样留着；没给就是项目里的全部改动
+   * （项目是仓库的子目录时不碰项目外面的文件）。
+   */
   public async commit(
     workspaceRoot: string,
     locale: AppLocale = 'zh-CN',
@@ -270,40 +307,51 @@ export class WorkbenchGitService {
     paths?: readonly string[]
   ): Promise<SystemWorkspaceGitCommitResult> {
     const rootPath = await this.resolveRoot(workspaceRoot)
-    const beforeStatus = await this.getStatus(rootPath)
-    if (beforeStatus.isClean) throw new AppError('VALIDATION', '当前工作区没有可提交的改动。')
+    const repository = await this.openRepository(rootPath)
+    const status = await this.getStatus(repository)
+    if (status.isClean) throw new AppError('VALIDATION', '当前项目没有可提交的改动。')
+    const selection = paths?.length
+      ? this.scopeStatus(status, this.normalizePathspecs(rootPath, paths))
+      : status
+    if (selection.isClean) throw new AppError('VALIDATION', '当前选择没有可提交的改动。')
 
-    const commitPaths = this.normalizePathspecs(rootPath, paths ?? [])
-    if (commitPaths.length > 0) {
-      await this.runGit(rootPath, ['add', '-A', '--', ...commitPaths])
-    } else {
-      await this.runGit(rootPath, ['add', '-A', '--'])
-    }
-    const stagedStatus = this.scopeStatus(await this.getStatus(rootPath), commitPaths)
-    if (stagedStatus.stagedFiles === 0)
-      throw new AppError('VALIDATION', '当前选择没有可提交的改动。')
+    const parent = await this.readHeadCommit(rootPath)
+    const commitMessage = message?.trim() || this.createCommitMessage(selection, locale)
+    // `commit --only` 提交的是这些路径在工作区里的样子，不看暂存区；它只认 git 已知的路径，未跟踪的先加进去。
+    await this.stagePaths(
+      rootPath,
+      selection.entries.filter((entry) => entry.indexStatus === '?').map((entry) => entry.path)
+    )
+    await this.runCommit(
+      rootPath,
+      ['commit', '-m', commitMessage, '--only', '--pathspec-from-file=-', '--pathspec-file-nul'],
+      this.entryPaths(selection.entries)
+    )
 
+    const commitSha = (
+      await this.runGit(rootPath, ['rev-parse', '--verify', 'HEAD'])
+    ).stdout.trim()
+    // 行数按提交实际带走的算：提交钩子可能又改了文件。
     const lineStats = this.parseNumstat(
       (
         await this.runGit(
           rootPath,
-          ['diff', '--cached', '--numstat', '-z', '--no-ext-diff', '--', ...commitPaths],
+          [
+            'diff',
+            '--numstat',
+            '-z',
+            '--no-ext-diff',
+            parent ?? (await this.getEmptyTree(rootPath)),
+            commitSha,
+          ],
           { maxBuffer: GitListingMaxBytes }
         )
       ).stdout
     )
-    const commitMessage =
-      message?.trim() || this.createCommitMessage(stagedStatus, locale)
-    const commitArgs = ['commit', '-m', commitMessage]
-    if (commitPaths.length > 0) commitArgs.push('--only', '--', ...commitPaths)
-    await this.runGit(rootPath, commitArgs)
-    const commitSha = (
-      await this.runGit(rootPath, ['rev-parse', '--verify', 'HEAD'])
-    ).stdout.trim()
     const commit: WorkspaceGitCommitResult = {
       commitSha,
       message: commitMessage,
-      changedFiles: stagedStatus.stagedFiles,
+      changedFiles: lineStats.changedFiles,
       lineStats,
     }
     return { rootPath, commit, summary: await this.getSummary(rootPath) }
@@ -315,25 +363,22 @@ export class WorkbenchGitService {
     action: WorkspaceGitFileAction
   ): Promise<SystemWorkspaceGitFileActionResult> {
     const rootPath = await this.resolveRoot(workspaceRoot)
+    const repository = await this.openRepository(rootPath)
     const relativePath = this.normalizePathspec(rootPath, path)
-    const before = await this.getStatus(rootPath)
+    const before = await this.getStatus(repository)
     const entry = before.entries.find((candidate) => candidate.path === relativePath)
-    const pathspecs = [
-      ...(entry?.originalPath ? [entry.originalPath] : []),
-      relativePath,
-    ]
 
     if (action === 'stage') {
-      await this.runGit(rootPath, ['add', '-A', '--', ...pathspecs])
+      if (entry && entry.workTreeStatus !== ' ') await this.stagePaths(rootPath, [entry.path])
     } else if (action === 'unstage') {
-      await this.unstage(rootPath, pathspecs)
+      if (entry) await this.unstage(rootPath, this.entryPaths([entry]))
     } else if (action === 'discard') {
-      await this.discard(rootPath, entry, pathspecs)
+      await this.discard(repository, entry)
     } else {
       throw new AppError('VALIDATION', '不支持的 Git 文件操作。')
     }
 
-    const status = await this.getStatus(rootPath)
+    const status = await this.getStatus(repository)
     return {
       rootPath,
       fileAction: { action, path: relativePath, status },
@@ -356,7 +401,7 @@ export class WorkbenchGitService {
   ): Promise<SystemWorkspaceGitSwitchBranchResult> {
     const rootPath = await this.resolveRoot(workspaceRoot)
     const targetBranch = this.assertBranch(branch)
-    const status = await this.getStatus(rootPath)
+    const status = await this.getStatus(await this.openRepository(rootPath))
     if (!status.isClean)
       throw new AppError('VALIDATION', '切换分支前请先提交或丢弃当前改动。')
     const previousBranch = status.branch
@@ -398,7 +443,7 @@ export class WorkbenchGitService {
     options: WorkspaceGitRemoteActionOptions = {}
   ): Promise<SystemWorkspaceGitActionResult> {
     const rootPath = await this.resolveRoot(workspaceRoot)
-    const status = await this.getStatus(rootPath)
+    const status = await this.getStatus(await this.openRepository(rootPath))
     if (!status.branch)
       throw new AppError('VALIDATION', '当前 Git 工作区没有可识别的本地分支。')
     const actionBranch =
@@ -469,13 +514,13 @@ export class WorkbenchGitService {
   }
 
   /**
-   * 工作区里的改动。未跟踪文件逐个列出；太多（多半是没被忽略的 node_modules、venv）时改按目录列，
+   * 项目里的改动。未跟踪文件逐个列出；太多（多半是没被忽略的 node_modules、venv）时改按目录列，
    * 一个目录一行。
    */
-  private async getStatus(rootPath: string): Promise<WorkspaceGitStatusResult> {
-    const expanded = await this.readStatus(rootPath, '--untracked-files=all')
+  private async getStatus(repository: GitRepository): Promise<WorkspaceGitStatusResult> {
+    const expanded = await this.readStatus(repository, '--untracked-files=all')
     if (expanded && expanded.untrackedFiles <= MaxExpandedUntrackedFiles) return expanded
-    const collapsed = await this.readStatus(rootPath, '--untracked-files=normal')
+    const collapsed = await this.readStatus(repository, '--untracked-files=normal')
     if (collapsed) return collapsed
     throw new AppError(
       'LIMIT',
@@ -485,18 +530,28 @@ export class WorkbenchGitService {
 
   /** 输出超过上限时为 null。 */
   private async readStatus(
-    rootPath: string,
+    repository: GitRepository,
     untrackedFiles: '--untracked-files=all' | '--untracked-files=normal'
   ): Promise<Nullable<WorkspaceGitStatusResult>> {
     // `--no-optional-locks`：只读的 status 不顺手刷新并重写 .git/index。否则工作区每改一次，这次刷新
     // 写下的 .git/index 又被文件监听报回来（监听要放行它：终端里 git add / commit 之后面板得跟上），
     // 平白多一次全量刷新。用户自己的 git 命令照常写 index，照常被监听到。
+    // `-- .`：只看项目里的改动（项目可能是仓库里的一个子目录）。
     const result = await this.runGit(
-      rootPath,
-      ['--no-optional-locks', 'status', '--porcelain=v1', '--branch', untrackedFiles, '-z'],
+      repository.rootPath,
+      [
+        '--no-optional-locks',
+        'status',
+        '--porcelain=v1',
+        '--branch',
+        untrackedFiles,
+        '-z',
+        '--',
+        '.',
+      ],
       { maxBuffer: GitListingMaxBytes, allowTruncated: true }
     )
-    return result.truncated ? null : this.parseStatus(result.stdout)
+    return result.truncated ? null : this.parseStatus(result.stdout, repository.prefix)
   }
 
   private async listBranches(rootPath: string): Promise<WorkspaceGitBranch[]> {
@@ -528,22 +583,25 @@ export class WorkbenchGitService {
       .map(({ symbolic: _symbolic, ...branch }) => branch)
   }
 
-  private async getLineStatsForRoot(rootPath: string): Promise<WorkspaceGitLineStats> {
-    await this.runGit(rootPath, ['rev-parse', '--is-inside-work-tree'])
-    const head = await this.runGit(rootPath, ['rev-parse', '--verify', 'HEAD'], {
-      allowFailure: true,
-    })
-    const readNumstat = async (args: string[]): Promise<WorkspaceGitLineStats> =>
-      this.parseNumstat(
-        (
-          await this.runGit(rootPath, ['diff', '--numstat', '-z', '--no-ext-diff', ...args], {
-            maxBuffer: GitListingMaxBytes,
-          })
-        ).stdout
-      )
-    const tracked = head.failed
-      ? this.mergeLineStats(await readNumstat(['--cached', '--']), await readNumstat(['--']))
-      : await readNumstat(['HEAD', '--'])
+  private async getLineStatsForRoot(repository: GitRepository): Promise<WorkspaceGitLineStats> {
+    const { rootPath } = repository
+    const tracked = this.parseNumstat(
+      (
+        await this.runGit(
+          rootPath,
+          [
+            'diff',
+            '--numstat',
+            '-z',
+            '--no-ext-diff',
+            await this.resolveDiffBase(rootPath),
+            '--',
+            '.',
+          ],
+          { maxBuffer: GitListingMaxBytes }
+        )
+      ).stdout
+    )
     const untrackedPaths = await this.listUntrackedPaths(rootPath)
     const counted = await Promise.all(
       untrackedPaths
@@ -560,7 +618,7 @@ export class WorkbenchGitService {
     )
   }
 
-  /** 未跟踪文件（相对项目根）；太多时跟状态一样按目录算。 */
+  /** 项目里的未跟踪文件（相对项目根）；太多时跟状态一样按目录算。 */
   private async listUntrackedPaths(rootPath: string): Promise<string[]> {
     const expanded = await this.runGit(
       rootPath,
@@ -609,11 +667,56 @@ export class WorkbenchGitService {
     return result.failed || !result.stdout.trim() ? null : result.stdout.trim()
   }
 
-  private async unstage(rootPath: string, pathspecs: string[]): Promise<void> {
-    const head = await this.runGit(rootPath, ['rev-parse', '--verify', 'HEAD'], {
+  private async readHeadCommit(rootPath: string): Promise<Nullable<string>> {
+    const result = await this.runGit(rootPath, ['rev-parse', '-q', '--verify', 'HEAD'], {
       allowFailure: true,
     })
-    if (head.failed) {
+    return (!result.failed && result.stdout.trim()) || null
+  }
+
+  /** 工作区改动的对照基准：HEAD；还没有任何提交时是空树（第一次提交带上的就是全部内容）。 */
+  private async resolveDiffBase(rootPath: string): Promise<string> {
+    return (await this.readHeadCommit(rootPath)) ?? (await this.getEmptyTree(rootPath))
+  }
+
+  /** 空树的对象名，随仓库的哈希算法（SHA-1 与 SHA-256 不同）。 */
+  private async getEmptyTree(rootPath: string): Promise<string> {
+    return (
+      await this.runGit(rootPath, ['hash-object', '-t', 'tree', '--stdin'], { input: '' })
+    ).stdout.trim()
+  }
+
+  /** `git add -A` 这些路径：逐字匹配，路径从标准输入给，文件再多也不会超出命令行长度。 */
+  private async stagePaths(rootPath: string, paths: readonly string[]): Promise<void> {
+    if (paths.length === 0) return
+    await this.runGit(rootPath, ['add', '-A', '--pathspec-from-file=-', '--pathspec-file-nul'], {
+      input: paths.map((path) => this.toLiteralPathspec(path)).join('\0'),
+    })
+  }
+
+  private async runCommit(
+    rootPath: string,
+    args: string[],
+    paths?: readonly string[]
+  ): Promise<void> {
+    const result = await this.runGit(rootPath, args, {
+      allowFailure: true,
+      input: paths?.map((path) => this.toLiteralPathspec(path)).join('\0'),
+    })
+    if (!result.failed) return
+    const output = `${result.stdout}\n${result.stderr}`.toLowerCase()
+    if (
+      output.includes('nothing to commit') ||
+      output.includes('nothing added to commit') ||
+      output.includes('no changes added to commit')
+    )
+      throw new AppError('VALIDATION', '当前选择没有可提交的改动。')
+    this.throwGitFailure(args, result)
+  }
+
+  private async unstage(rootPath: string, paths: readonly string[]): Promise<void> {
+    const pathspecs = paths.map((path) => this.toLiteralPathspec(path))
+    if (!(await this.readHeadCommit(rootPath))) {
       await this.runGit(rootPath, ['rm', '--cached', '--ignore-unmatch', '--', ...pathspecs])
       return
     }
@@ -621,56 +724,72 @@ export class WorkbenchGitService {
   }
 
   private async discard(
-    rootPath: string,
-    entry: WorkspaceGitFileStatusEntry | undefined,
-    pathspecs: string[]
+    repository: GitRepository,
+    entry: WorkspaceGitFileStatusEntry | undefined
   ): Promise<void> {
     if (!entry) return
+    const { rootPath } = repository
+    const paths = this.entryPaths([entry])
     if (entry.indexStatus !== '?' && entry.indexStatus !== ' ') {
-      await this.unstage(rootPath, pathspecs)
+      await this.unstage(rootPath, paths)
     }
     if (entry.originalPath) {
-      await this.runGit(rootPath, ['clean', '-fd', '--', entry.path])
-      await this.runGit(rootPath, ['restore', '--worktree', '--', entry.originalPath])
+      await this.runGit(rootPath, ['clean', '-fd', '--', this.toLiteralPathspec(entry.path)])
+      await this.runGit(rootPath, [
+        'restore',
+        '--worktree',
+        '--',
+        this.toLiteralPathspec(entry.originalPath),
+      ])
       return
     }
-    const nextStatus = await this.getStatus(rootPath)
+    const nextStatus = await this.getStatus(repository)
     const nextEntry = nextStatus.entries.find((candidate) => candidate.path === entry.path)
     if (!nextEntry) return
     if (nextEntry.indexStatus === '?' && nextEntry.workTreeStatus === '?') {
-      await this.runGit(rootPath, ['clean', '-fd', '--', entry.path])
+      await this.runGit(rootPath, ['clean', '-fd', '--', this.toLiteralPathspec(entry.path)])
       return
     }
-    await this.runGit(rootPath, ['restore', '--worktree', '--', ...pathspecs])
+    await this.runGit(rootPath, [
+      'restore',
+      '--worktree',
+      '--',
+      ...paths.map((path) => this.toLiteralPathspec(path)),
+    ])
   }
 
-  private parseStatus(raw: string): WorkspaceGitStatusResult {
+  private parseStatus(raw: string, prefix: string): WorkspaceGitStatusResult {
     const tokens = raw.split('\0')
     const header = tokens.shift() ?? ''
-    const { branch, upstream, ahead, behind } = this.parseBranchHeader(
-      header.startsWith('## ') ? header.slice(3) : ''
-    )
+    const branchInfo = this.parseBranchHeader(header.startsWith('## ') ? header.slice(3) : '')
     const entries: WorkspaceGitFileStatusEntry[] = []
     for (let index = 0; index < tokens.length; index += 1) {
       const token = tokens[index]
       if (!token) continue
       const indexStatus = token[0] ?? ' '
       const workTreeStatus = token[1] ?? ' '
-      const path = token.slice(3)
       const renamed = ['R', 'C'].includes(indexStatus) || ['R', 'C'].includes(workTreeStatus)
-      const originalPath = renamed ? tokens[++index] : undefined
+      const originalToken = renamed ? tokens[++index] : undefined
+      const path = this.toProjectPath(prefix, token.slice(3))
+      if (!path) continue
       entries.push({
         path,
         indexStatus,
         workTreeStatus,
-        originalPath: optionalWhen(!!originalPath, originalPath),
+        originalPath: toOptional(
+          originalToken ? this.toProjectPath(prefix, originalToken) : null
+        ),
       })
     }
+    return this.summarizeStatus(branchInfo, entries)
+  }
+
+  private summarizeStatus(
+    branchInfo: Pick<WorkspaceGitStatusResult, 'branch' | 'upstream' | 'ahead' | 'behind'>,
+    entries: WorkspaceGitFileStatusEntry[]
+  ): WorkspaceGitStatusResult {
     return {
-      branch,
-      upstream,
-      ahead,
-      behind,
+      ...branchInfo,
       isClean: entries.length === 0,
       changedFiles: entries.length,
       stagedFiles: entries.filter(
@@ -750,49 +869,26 @@ export class WorkbenchGitService {
     return stats
   }
 
-  private mergeLineStats(
-    left: WorkspaceGitLineStats,
-    right: WorkspaceGitLineStats
-  ): WorkspaceGitLineStats {
-    return {
-      additions: left.additions + right.additions,
-      deletions: left.deletions + right.deletions,
-      changedFiles: left.changedFiles + right.changedFiles,
-      binaryFiles: left.binaryFiles + right.binaryFiles,
-    }
-  }
-
   private scopeStatus(
     status: WorkspaceGitStatusResult,
     paths?: readonly string[]
   ): WorkspaceGitStatusResult {
     if (!paths?.length) return status
     const pathSet = new Set(paths)
-    const entries = status.entries.filter(
-      (entry) => pathSet.has(entry.path) || (!!entry.originalPath && pathSet.has(entry.originalPath))
+    return this.summarizeStatus(
+      status,
+      status.entries.filter(
+        (entry) =>
+          pathSet.has(entry.path) || (!!entry.originalPath && pathSet.has(entry.originalPath))
+      )
     )
-    return {
-      ...status,
-      entries,
-      isClean: entries.length === 0,
-      changedFiles: entries.length,
-      stagedFiles: entries.filter(
-        (entry) => entry.indexStatus !== ' ' && entry.indexStatus !== '?'
-      ).length,
-      unstagedFiles: entries.filter(
-        (entry) => entry.workTreeStatus !== ' ' && entry.workTreeStatus !== '?'
-      ).length,
-      untrackedFiles: entries.filter(
-        (entry) => entry.indexStatus === '?' && entry.workTreeStatus === '?'
-      ).length,
-    }
   }
 
   private createCommitMessage(status: WorkspaceGitStatusResult, locale: AppLocale): string {
     const entry = status.entries[0]
     const target =
       status.entries.length === 1
-        ? entry?.path.split('/').at(-1) ?? 'workspace'
+        ? entry?.path.split('/').findLast(Boolean) ?? 'workspace'
         : locale === 'zh-CN'
           ? `${status.entries.length} 个文件`
           : `${status.entries.length} files`
@@ -801,7 +897,7 @@ export class WorkbenchGitService {
         ? locale === 'zh-CN'
           ? '新增'
           : 'Add'
-        : entry?.indexStatus === 'D'
+        : entry?.indexStatus === 'D' || entry?.workTreeStatus === 'D'
           ? locale === 'zh-CN'
             ? '删除'
             : 'Remove'
@@ -823,6 +919,29 @@ export class WorkbenchGitService {
       branches: [],
       lineStats: { ...EmptyLineStats },
     }
+  }
+
+  /** 这些改动涉及的路径：改名的新旧路径都算。 */
+  private entryPaths(entries: readonly WorkspaceGitFileStatusEntry[]): string[] {
+    return [
+      ...new Set(
+        entries.flatMap((entry) =>
+          entry.originalPath ? [entry.originalPath, entry.path] : [entry.path]
+        )
+      ),
+    ]
+  }
+
+  /** git 列出的路径（相对仓库根）换成相对项目根；不在项目里为 null。 */
+  private toProjectPath(prefix: string, repositoryPath: string): Nullable<string> {
+    if (!prefix) return repositoryPath || null
+    if (!repositoryPath.startsWith(prefix)) return null
+    return repositoryPath.slice(prefix.length) || null
+  }
+
+  /** 逐字匹配的 pathspec：文件名里的 `*`、`?`、`[id]` 不当通配符，不会顺带匹配上别的文件。 */
+  private toLiteralPathspec(path: string): string {
+    return `:(literal)${path}`
   }
 
   private normalizePathspecs(
@@ -874,6 +993,12 @@ export class WorkbenchGitService {
     return rootPath
   }
 
+  /** 项目在仓库里的位置；不是 Git 仓库时抛「不是 Git 仓库」。 */
+  private async openRepository(rootPath: string): Promise<GitRepository> {
+    const prefix = (await this.runGit(rootPath, ['rev-parse', '--show-prefix'])).stdout
+    return { rootPath, prefix }
+  }
+
   private async runGit(
     rootPath: string,
     args: string[],
@@ -885,6 +1010,7 @@ export class WorkbenchGitService {
     const subprocess = execa('git', [...GitOutputConfig, ...args], {
       cwd: rootPath,
       env: await this.buildGitEnvironment(options),
+      input: options.input,
       maxBuffer,
       timeout: options.timeoutMs,
       detached: ownProcessGroup,

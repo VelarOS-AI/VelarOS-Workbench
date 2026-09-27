@@ -39,8 +39,6 @@ function diffScopeLabel(
   switch (scope) {
     case 'commit':
       return t('workbench.gitDiffCommit')
-    case 'staged':
-      return t('workbench.gitDiffStaged')
     case 'untracked':
       return t('workbench.gitDiffUntracked')
     default:

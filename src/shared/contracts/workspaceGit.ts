@@ -5,6 +5,7 @@
  */
 
 export interface WorkspaceGitFileStatusEntry {
+  /** 相对项目根（项目可能是仓库里的一个子目录）。 */
   path: string
   originalPath?: string
   indexStatus: string
@@ -96,15 +97,18 @@ export interface WorkspaceGitRestoreResult {
 }
 
 export interface WorkspaceGitDiffOptions {
+  /**
+   * 给了是这个提交的改动；不给是工作区相对 HEAD 的改动——提交面板提交的就是工作区里的文件，
+   * 暂存了一半的文件也按整份算，差异要跟提交的内容一致。
+   */
   commitSha?: string
-  staged?: boolean
   path?: string
   originalPath?: string
   maxChars?: number
 }
 
 export interface WorkspaceGitDiffResult {
-  scope: 'commit' | 'working' | 'staged'
+  scope: 'commit' | 'working'
   path?: string
   diff: string
   truncated: boolean

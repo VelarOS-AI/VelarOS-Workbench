@@ -72,6 +72,16 @@ function entryCodes(summary: SystemWorkspaceGitSummary): string[] {
   )
 }
 
+async function porcelain(root: string): Promise<string[]> {
+  return (await git(root, ['status', '--porcelain=v1'])).split('\n').filter(Boolean)
+}
+
+async function filesInCommit(root: string, revision: string): Promise<string[]> {
+  return (await git(root, ['-c', 'core.quotePath=false', 'show', '--name-only', '--format=', revision]))
+    .split('\n')
+    .filter(Boolean)
+}
+
 function isAppError(code: string, pattern: RegExp): (error: unknown) => boolean {
   return (error) => {
     assert.ok(error instanceof AppError, String(error))
@@ -82,6 +92,139 @@ function isAppError(code: string, pattern: RegExp): (error: unknown) => boolean 
 }
 
 void describe('Workbench Git service', () => {
+  void test('a project nested in a repository only sees, rolls back and commits its own files', async () => {
+    await withRepository(async (repository) => {
+      const project = join(repository, 'packages', 'app')
+      await mkdir(join(project, 'src'), { recursive: true })
+      await mkdir(join(repository, 'other'))
+      await writeFile(join(project, 'src', 'a.ts'), 'a\n')
+      await writeFile(join(project, 'src', 'b.ts'), 'b\n')
+      await writeFile(join(repository, 'other', 'o.ts'), 'o\n')
+      await writeFile(join(repository, 'root.ts'), 'root\n')
+      await commitAll(repository, 'base')
+
+      await writeFile(join(project, 'src', 'a.ts'), 'a\nchanged\n')
+      await writeFile(join(project, 'src', 'b.ts'), 'b\nchanged\n')
+      await writeFile(join(project, 'new.ts'), 'new\n')
+      await writeFile(join(repository, 'other', 'o.ts'), 'o\nchanged\n')
+      // 项目外面已经暂存的改动：「提交全部」也不能把它带走。
+      await writeFile(join(repository, 'root.ts'), 'root\nstaged\n')
+      await git(repository, ['add', 'root.ts'])
+
+      const service = createService()
+      const summary = await service.getSummary(project)
+      assert.deepEqual(entryCodes(summary), [' M src/a.ts', ' M src/b.ts', '?? new.ts'])
+      assert.equal(summary.lineStats.changedFiles, 3)
+      assert.equal(summary.lineStats.additions, 3)
+
+      const diff = await service.getDiff(project, { path: 'src/a.ts' })
+      assert.match(diff.diff, /^\+\+\+ b\/src\/a\.ts$/m)
+      assert.match(diff.diff, /^\+changed$/m)
+
+      await service.performFileAction(project, 'src/b.ts', 'discard')
+      assert.equal(await readFile(join(project, 'src', 'b.ts'), 'utf8'), 'b\n')
+
+      const committed = await service.commit(project, 'en-US', 'project only')
+      assert.equal(committed.commit.changedFiles, 2)
+      assert.deepEqual(await filesInCommit(repository, 'HEAD'), [
+        'packages/app/new.ts',
+        'packages/app/src/a.ts',
+      ])
+      assert.deepEqual(await porcelain(repository), [' M other/o.ts', 'M  root.ts'])
+      assert.equal(committed.summary.status?.isClean, true)
+    })
+  })
+
+  void test('commits exactly the chosen files as they are in the working tree', async () => {
+    await withRepository(async (root) => {
+      await mkdir(join(root, 'app'))
+      await writeFile(join(root, 'app', '[id].tsx'), 'one\n')
+      await writeFile(join(root, 'app', 'i.tsx'), 'one\n')
+      await writeFile(join(root, 'partly.ts'), 'head\n')
+      await writeFile(join(root, 'other.ts'), 'head\n')
+      await writeFile(join(root, 'gone.ts'), 'gone\n')
+      await writeFile(join(root, 'removed.ts'), 'removed\n')
+      await commitAll(root, 'base')
+
+      await writeFile(join(root, 'app', '[id].tsx'), 'two\n')
+      // `[id]` 当通配符时会匹配上 i.tsx：没选它，不能被顺带提交。
+      await writeFile(join(root, 'app', 'i.tsx'), 'two\n')
+      await writeFile(join(root, 'partly.ts'), 'staged\n')
+      await git(root, ['add', 'partly.ts'])
+      await writeFile(join(root, 'partly.ts'), 'working\n')
+      await writeFile(join(root, 'other.ts'), 'staged\n')
+      await git(root, ['add', 'other.ts'])
+      // 已暂存的删除，和只在工作区里删掉、没暂存的删除。
+      await git(root, ['rm', '-q', 'gone.ts'])
+      await rm(join(root, 'removed.ts'))
+      await writeFile(join(root, 'added.ts'), 'added\n')
+
+      const service = createService()
+      const committed = await service.commit(root, 'en-US', 'chosen', [
+        'app/[id].tsx',
+        'partly.ts',
+        'gone.ts',
+        'removed.ts',
+        'added.ts',
+      ])
+      assert.equal(committed.commit.changedFiles, 5)
+      assert.deepEqual(await filesInCommit(root, 'HEAD'), [
+        'added.ts',
+        'app/[id].tsx',
+        'gone.ts',
+        'partly.ts',
+        'removed.ts',
+      ])
+      assert.equal(await git(root, ['show', 'HEAD:partly.ts']), 'working\n')
+      // 没选的：暂存的仍是暂存，没暂存的仍没暂存。
+      assert.deepEqual(await porcelain(root), [' M app/i.tsx', 'M  other.ts'])
+    })
+  })
+
+  void test('rolls back only the file it names, even when the name looks like a wildcard', async () => {
+    await withRepository(async (root) => {
+      await writeFile(join(root, 'base.txt'), 'base\n')
+      await commitAll(root, 'base')
+      await writeFile(join(root, '[id].ts'), 'new\n')
+      await writeFile(join(root, 'i.ts'), 'keep me\n')
+
+      await createService().performFileAction(root, '[id].ts', 'discard')
+      assert.equal(existsSync(join(root, '[id].ts')), false)
+      assert.equal(await readFile(join(root, 'i.ts'), 'utf8'), 'keep me\n')
+    })
+  })
+
+  void test('the diff of a partly staged file is what the commit will contain', async () => {
+    await withRepository(async (root) => {
+      await writeFile(join(root, 'a.txt'), 'head\n')
+      await commitAll(root, 'base')
+      await writeFile(join(root, 'a.txt'), 'staged\n')
+      await git(root, ['add', 'a.txt'])
+      await writeFile(join(root, 'a.txt'), 'working\n')
+
+      const diff = await createService().getDiff(root, { path: 'a.txt' })
+      assert.equal(diff.scope, 'working')
+      assert.match(diff.diff, /^-head$/m)
+      assert.match(diff.diff, /^\+working$/m)
+      assert.doesNotMatch(diff.diff, /staged/)
+    })
+  })
+
+  void test('before the first commit the diff and line counts start from an empty tree', async () => {
+    await withRepository(async (root) => {
+      await writeFile(join(root, 'a.txt'), 'one\n')
+      await git(root, ['add', 'a.txt'])
+      await writeFile(join(root, 'a.txt'), 'one\ntwo\n')
+
+      const service = createService()
+      const diff = await service.getDiff(root, { path: 'a.txt' })
+      assert.match(diff.diff, /^new file mode/m)
+      assert.match(diff.diff, /^\+one$/m)
+      assert.match(diff.diff, /^\+two$/m)
+      assert.equal((await service.getLineStats(root)).lineStats.additions, 2)
+    })
+  })
+
   void test('git and its hooks run in the injected login-shell environment', async () => {
     await withRepository(async (root) => {
       const output = join(root, '.git', 'hook-environment.txt')
@@ -116,6 +259,7 @@ void describe('Workbench Git service', () => {
       for (const [key, value] of [
         ['diff.noprefix', 'true'],
         ['diff.mnemonicPrefix', 'true'],
+        ['diff.relative', 'true'],
         ['diff.external', 'false'],
         ['color.ui', 'always'],
         ['core.quotePath', 'true'],
@@ -124,19 +268,20 @@ void describe('Workbench Git service', () => {
       await writeFile(join(root, 'docs', '说明.md'), '新\n')
 
       const service = createService()
-      assert.deepEqual(entryCodes(await service.getSummary(root)), [' M docs/说明.md'])
-      const working = await service.getDiff(root, { path: 'docs/说明.md' })
-      assert.match(working.diff, /^diff --git a\/docs\/说明\.md b\/docs\/说明\.md$/m)
+      const project = join(root, 'docs')
+      assert.deepEqual(entryCodes(await service.getSummary(project)), [' M 说明.md'])
+      const working = await service.getDiff(project, { path: '说明.md' })
+      assert.match(working.diff, /^diff --git a\/说明\.md b\/说明\.md$/m)
       assert.equal(working.diff.includes('\u001b['), false, 'diff 里不能夹着颜色控制符')
 
-      const committed = await service.commit(root, 'en-US', 'edit')
-      const shown = await service.getDiff(root, { commitSha: committed.commit.commitSha })
+      const committed = await service.commit(project, 'en-US', 'edit')
+      const shown = await service.getDiff(project, { commitSha: committed.commit.commitSha })
       assert.match(shown.diff, /^\+\+\+ b\/docs\/说明\.md$/m)
       assert.deepEqual(
         parseWorkbenchGitCommitDiff(shown.diff).map((file) => file.path),
         ['docs/说明.md']
       )
-      assert.equal((await service.getLog(root)).commits[0]?.subject, 'edit')
+      assert.equal((await service.getLog(project)).commits[0]?.subject, 'edit')
     })
   })
 

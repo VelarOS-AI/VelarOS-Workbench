@@ -93,11 +93,12 @@ export function useWorkbenchGitDiffPreview({
           return
         }
 
+        // HEAD 里的样子 → 工作区里的样子，也就是提交会带走的内容：提交面板提交的是工作区里的文件，
+        // 暂存了一半的文件也按整份算。
         const result = Result.unwrap(
           await workbenchHost.kernel.workspace.getWorkspaceGitDiff(projectRoot, {
             path: item.path,
             originalPath: item.originalPath,
-            staged: item.group === 'staged',
             maxChars: FullFileMaxChars,
           })
         )
@@ -114,7 +115,7 @@ export function useWorkbenchGitDiffPreview({
         ])
         const fullContents = resolveWorkbenchFullFileDiffContents({
           diff: result.diff,
-          scope: result.scope === 'staged' ? 'staged' : 'working',
+          scope: 'working',
           baseContent,
           currentContent: currentFile.content,
         }) ?? {
