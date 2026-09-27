@@ -47,12 +47,14 @@ export function EditorUnsavedChangesDialog({
   const singlePath = request?.kind === 'tabs' && dirtyPaths.length === 1 ? dirtyPaths[0] : null
 
   function describeUnsavedReason(path: string): Nullable<string> {
-    const change = openTabs.find((tab) => tab.path === path)?.externalChange
+    const tab = openTabs.find((openTab) => openTab.path === path)
+    const change = tab?.externalChange
     if (change?.status === 'deleted') return t('workbench.externalFileDeletedTitle')
     if (change?.status === 'modified') return t('workbench.externalFileChangedTitle')
     if (change) return t('workbench.externalFileUnavailableTitle')
 
-    const saveFailure = request?.reasons?.[path]
+    // 这次写盘失败的原因，或者上次保存因为文件编码写不出里面的字符被拒。
+    const saveFailure = request?.reasons?.[path] ?? tab?.unencodableSaveError
     if (saveFailure) return t('workbench.unsavedCloseSaveFailed', { reason: saveFailure })
 
     const failure = autosaveFailures?.get(path)

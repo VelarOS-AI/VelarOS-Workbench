@@ -151,5 +151,8 @@ void describe('closing editor tabs', () => {
     assert.doesNotMatch(editorPanel, /onRevertSelectedFile/u)
     assert.match(tabBar, /onRevertOpenFile\(tabContextMenu\.path\)/u)
     assert.match(tabBar, /disabled=\{!contextTabIsDirty\}/u)
+    // 选了还没存下去的格式转换也算改动；因为编码写不出字符被拒的，确认框里写明原因。
+    assert.match(tabBar, /contextTabIsDirty = !!contextTab && isDirtyTab\(contextTab\)/u)
+    assert.match(dialog, /request\?\.reasons\?\.\[path\] \?\? tab\?\.unencodableSaveError/u)
   })
 })

@@ -295,8 +295,7 @@ export function EditorTabBar({
   const contextTab = tabContextMenu
     ? openTabs.find((tab) => tab.path === tabContextMenu.path)
     : undefined
-  const contextTabIsDirty =
-    !!contextTab && !contextTab.file.imagePreview && contextTab.content !== contextTab.file.content
+  const contextTabIsDirty = !!contextTab && isDirtyTab(contextTab)
   const contextTabHasTabsToRight =
     !!contextTab && openTabs.indexOf(contextTab) < openTabs.length - 1
 
