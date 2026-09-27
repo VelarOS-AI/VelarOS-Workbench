@@ -282,9 +282,13 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
   // 界面里的调试浏览器（用户自己开的网页标签）：闸门只负责记下挂上来的页面，退出时一并关掉。
   workbenchBrowserWebviewGate = new WorkbenchBrowserWebviewGate()
   productAnalytics?.start()
-  const providers = createDefaultWorkbenchMainCapabilityProviders(dataRootDir, {
-    moveToTrash: (path) => shell.trashItem(path),
-  })
+  // 登录 shell 的环境全应用共用一份：Agent 的命令、外部引擎的命令行和 Git（连同提交钩子）都起在它里面。
+  const shellEnvironment = createShellEnvironment()
+  const providers = createDefaultWorkbenchMainCapabilityProviders(
+    dataRootDir,
+    { moveToTrash: (path) => shell.trashItem(path) },
+    () => shellEnvironment.getEnvironment()
+  )
   // 上次运行留下的删除撤销副本：撤销记录只在内存里，重启后已对不上；删掉的东西在系统废纸篓里。
   void providers.parts.files.purgePreviousDeleteUndoCopies()
   const modelComposition = createModelRuntimeComposition({
@@ -307,8 +311,6 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
     dataRootDir,
     accountService
   )
-  // 登录 shell 的环境全应用共用一份：Agent 的命令与外部引擎的命令行都起在它里面。
-  const shellEnvironment = createShellEnvironment()
   // 本机 shell 宿主全应用共用：Agent 起的后台任务才能活过一轮运行；交互式命令跑在 node-pty 的真终端里。
   const shellHosts = new WorkbenchShellHostRegistry(shellEnvironment, loadWorkbenchShellTerminal)
   const syncAgentEdits = languageSyncOnAgentEdits(providers.language)

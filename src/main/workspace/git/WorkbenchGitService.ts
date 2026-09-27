@@ -52,15 +52,47 @@ const MaxUntrackedStatFiles = 100
 const CommitSubjectMaxChars = 72
 const GitOutputMaxBytes = 4 * 1024 * 1024
 const execFileAsync = promisify(execFile)
+/**
+ * 逐个文件列出的输出（status、numstat、未跟踪文件）的上限：项目里有没被忽略的 node_modules、venv 时，
+ * 一个个文件列出来远不止 4 MB。
+ */
+const GitListingMaxBytes = 32 * 1024 * 1024
+/** 未跟踪文件多过这个数时按目录列（一个目录一行），面板不用逐行渲染几万个文件。 */
+const MaxExpandedUntrackedFiles = 5_000
+/** 获取远端、推送的时限：网络卡住、远端等着输入凭据时不一直挂着。 */
+const RemoteActionTimeoutMs = 120_000
+
+/**
+ * 每条 git 命令都带上的配置。输出要拿来解析，不能跟着用户的 git 配置变：中文文件名被转成八进制转义、
+ * diff 头不带 a/ b/ 前缀或换成别的前缀、只列当前目录下的改动、log 里夹着签名校验结果……
+ */
+const GitOutputConfig = [
+  'core.quotePath=false',
+  'color.ui=false',
+  'diff.noprefix=false',
+  'diff.mnemonicPrefix=false',
+  'diff.srcPrefix=a/',
+  'diff.dstPrefix=b/',
+  'diff.relative=false',
+  'log.showSignature=false',
+].flatMap((setting) => ['-c', setting])
 
 interface GitRunOptions extends WorkspaceGitRemoteActionOptions {
   allowFailure?: boolean
+  /** 输出上限，默认 GitOutputMaxBytes。 */
+  maxBuffer?: number
+  /** 输出超过上限时不报错，结果标成 truncated，调用方换个问法。 */
+  allowTruncated?: boolean
+  /** 超过这么久就结束 git 进程，报超时。 */
+  timeoutMs?: number
 }
 
 interface GitRunResult {
   stdout: string
   stderr: string
   failed: boolean
+  /** 输出超过上限，git 进程已被结束，stdout 不完整。 */
+  truncated: boolean
 }
 
 const EmptyLineStats: WorkspaceGitLineStats = {
@@ -70,7 +102,26 @@ const EmptyLineStats: WorkspaceGitLineStats = {
   binaryFiles: 0,
 }
 
+export interface WorkbenchGitServiceOptions {
+  /**
+   * git 命令的基础环境，提交钩子（husky、lint-staged）和 git-lfs 也跑在里面。应用给的是登录 shell 的
+   * 环境：从程序坞启动时应用自己的环境只有系统默认的 PATH，钩子找不到 node，git-lfs 也找不到。
+   * 不给时用应用自己的环境。
+   */
+  environment?: () => Promise<NodeJS.ProcessEnv>
+  /** 获取远端、推送的时限，默认 RemoteActionTimeoutMs。 */
+  remoteActionTimeoutMs?: number
+}
+
 export class WorkbenchGitService {
+  private readonly readEnvironment: () => Promise<NodeJS.ProcessEnv>
+  private readonly remoteActionTimeoutMs: number
+
+  constructor(options: WorkbenchGitServiceOptions = {}) {
+    this.readEnvironment = options.environment ?? (() => Promise.resolve(process.env))
+    this.remoteActionTimeoutMs = options.remoteActionTimeoutMs ?? RemoteActionTimeoutMs
+  }
+
   public async getSummary(workspaceRoot: string): Promise<SystemWorkspaceGitSummary> {
     const rootPath = await this.resolveRoot(workspaceRoot)
     try {
@@ -126,8 +177,15 @@ export class WorkbenchGitService {
       options.path,
     ])
     const args = options.commitSha
-      ? ['show', '--format=', '--patch', this.assertRevision(options.commitSha)]
-      : ['diff', ...(options.staged ? ['--cached'] : [])]
+      ? [
+          'show',
+          '--format=',
+          '--patch',
+          '--no-ext-diff',
+          '--no-color',
+          this.assertRevision(options.commitSha),
+        ]
+      : ['diff', '--no-ext-diff', '--no-color', ...(options.staged ? ['--cached'] : [])]
     if (pathspecs.length > 0) args.push('--', ...pathspecs)
     const output = (await this.runGit(rootPath, args)).stdout
     const maxChars = Math.min(
@@ -168,6 +226,7 @@ export class WorkbenchGitService {
       'log',
       `--max-count=${limit}`,
       '--date-order',
+      '--no-color',
       '--format=%H%x1f%h%x1f%s%x1f%an%x1f%ae%x1f%ct%x1f%D%x1e',
     ]
     if (options.branch) args.push(this.assertRevision(options.branch))
@@ -226,13 +285,11 @@ export class WorkbenchGitService {
 
     const lineStats = this.parseNumstat(
       (
-        await this.runGit(rootPath, [
-          'diff',
-          '--cached',
-          '--numstat',
-          '--',
-          ...commitPaths,
-        ])
+        await this.runGit(
+          rootPath,
+          ['diff', '--cached', '--numstat', '-z', '--no-ext-diff', '--', ...commitPaths],
+          { maxBuffer: GitListingMaxBytes }
+        )
       ).stdout
     )
     const commitMessage =
@@ -370,7 +427,14 @@ export class WorkbenchGitService {
               ]
     if (action === 'update' && !status.upstream)
       throw new AppError('VALIDATION', `当前分支 ${status.branch} 没有关联的远程跟踪分支。`)
-    const output = (await this.runGit(rootPath, args, options)).stdout.trim()
+    // 获取与推送有时限，中途结束不伤本地；拉取带着 --autostash，中途结束可能把本地改动留在储藏（stash）
+    // 里，不设时限。
+    const output = (
+      await this.runGit(rootPath, args, {
+        ...options,
+        timeoutMs: optionalWhen(action !== 'update', this.remoteActionTimeoutMs),
+      })
+    ).stdout.trim()
     const remoteAction: WorkspaceGitRemoteActionResult = {
       action,
       branch: actionBranch,
@@ -404,21 +468,35 @@ export class WorkbenchGitService {
     return output || null
   }
 
+  /**
+   * 工作区里的改动。未跟踪文件逐个列出；太多（多半是没被忽略的 node_modules、venv）时改按目录列，
+   * 一个目录一行。
+   */
   private async getStatus(rootPath: string): Promise<WorkspaceGitStatusResult> {
+    const expanded = await this.readStatus(rootPath, '--untracked-files=all')
+    if (expanded && expanded.untrackedFiles <= MaxExpandedUntrackedFiles) return expanded
+    const collapsed = await this.readStatus(rootPath, '--untracked-files=normal')
+    if (collapsed) return collapsed
+    throw new AppError(
+      'LIMIT',
+      `项目里的改动太多，Git 状态超过 ${GitListingMaxBytes / 1024 / 1024} MB，无法显示。请检查 .gitignore 是否漏掉了 node_modules、构建产物这类目录。`
+    )
+  }
+
+  /** 输出超过上限时为 null。 */
+  private async readStatus(
+    rootPath: string,
+    untrackedFiles: '--untracked-files=all' | '--untracked-files=normal'
+  ): Promise<Nullable<WorkspaceGitStatusResult>> {
     // `--no-optional-locks`：只读的 status 不顺手刷新并重写 .git/index。否则工作区每改一次，这次刷新
     // 写下的 .git/index 又被文件监听报回来（监听要放行它：终端里 git add / commit 之后面板得跟上），
     // 平白多一次全量刷新。用户自己的 git 命令照常写 index，照常被监听到。
-    const output = (
-      await this.runGit(rootPath, [
-        '--no-optional-locks',
-        'status',
-        '--porcelain=v1',
-        '--branch',
-        '--untracked-files=all',
-        '-z',
-      ])
-    ).stdout
-    return this.parseStatus(output)
+    const result = await this.runGit(
+      rootPath,
+      ['--no-optional-locks', 'status', '--porcelain=v1', '--branch', untrackedFiles, '-z'],
+      { maxBuffer: GitListingMaxBytes, allowTruncated: true }
+    )
+    return result.truncated ? null : this.parseStatus(result.stdout)
   }
 
   private async listBranches(rootPath: string): Promise<WorkspaceGitBranch[]> {
@@ -455,53 +533,72 @@ export class WorkbenchGitService {
     const head = await this.runGit(rootPath, ['rev-parse', '--verify', 'HEAD'], {
       allowFailure: true,
     })
+    const readNumstat = async (args: string[]): Promise<WorkspaceGitLineStats> =>
+      this.parseNumstat(
+        (
+          await this.runGit(rootPath, ['diff', '--numstat', '-z', '--no-ext-diff', ...args], {
+            maxBuffer: GitListingMaxBytes,
+          })
+        ).stdout
+      )
     const tracked = head.failed
-      ? this.mergeLineStats(
-          this.parseNumstat(
-            (await this.runGit(rootPath, ['diff', '--cached', '--numstat', '--'])).stdout
-          ),
-          this.parseNumstat(
-            (await this.runGit(rootPath, ['diff', '--numstat', '--'])).stdout
-          )
-        )
-      : this.parseNumstat(
-          (await this.runGit(rootPath, ['diff', '--numstat', 'HEAD', '--'])).stdout
-        )
-    const untrackedOutput = (
-      await this.runGit(rootPath, ['ls-files', '--others', '--exclude-standard', '-z'])
-    ).stdout
-    const untracked = await Promise.all(
-      untrackedOutput
-        .split('\0')
-        .filter(Boolean)
+      ? this.mergeLineStats(await readNumstat(['--cached', '--']), await readNumstat(['--']))
+      : await readNumstat(['HEAD', '--'])
+    const untrackedPaths = await this.listUntrackedPaths(rootPath)
+    const counted = await Promise.all(
+      untrackedPaths
         .slice(0, MaxUntrackedStatFiles)
-        .map((path) => this.getUntrackedLineStats(rootPath, path))
+        .map((path) => this.readUntrackedFileLines(rootPath, path))
     )
-    return untracked.reduce(
-      (stats, current) => this.mergeLineStats(stats, current),
-      tracked
+    return counted.reduce(
+      (stats, current) => ({
+        ...stats,
+        additions: stats.additions + current.additions,
+        binaryFiles: stats.binaryFiles + (current.binary ? 1 : 0),
+      }),
+      { ...tracked, changedFiles: tracked.changedFiles + untrackedPaths.length }
     )
   }
 
-  private async getUntrackedLineStats(
+  /** 未跟踪文件（相对项目根）；太多时跟状态一样按目录算。 */
+  private async listUntrackedPaths(rootPath: string): Promise<string[]> {
+    const expanded = await this.runGit(
+      rootPath,
+      ['ls-files', '--others', '--exclude-standard', '-z'],
+      { maxBuffer: GitListingMaxBytes, allowTruncated: true }
+    )
+    if (!expanded.truncated) {
+      const paths = expanded.stdout.split('\0').filter(Boolean)
+      if (paths.length <= MaxExpandedUntrackedFiles) return paths
+    }
+    return (
+      await this.runGit(
+        rootPath,
+        ['ls-files', '--others', '--exclude-standard', '--directory', '--no-empty-directory', '-z'],
+        { maxBuffer: GitListingMaxBytes }
+      )
+    ).stdout
+      .split('\0')
+      .filter(Boolean)
+  }
+
+  /** 一个未跟踪文件的行数；二进制、太大的文件只记作二进制，目录不计行。 */
+  private async readUntrackedFileLines(
     rootPath: string,
     path: string
-  ): Promise<WorkspaceGitLineStats> {
+  ): Promise<{ additions: number; binary: boolean }> {
     try {
-      const relativePath = this.normalizePathspec(rootPath, path)
-      const absolutePath = resolve(rootPath, relativePath)
+      const absolutePath = resolve(rootPath, this.normalizePathspec(rootPath, path))
       const fileStat = await stat(absolutePath)
-      if (!fileStat.isFile()) return { ...EmptyLineStats }
-      if (fileStat.size > MaxUntrackedStatBytes)
-        return { ...EmptyLineStats, changedFiles: 1, binaryFiles: 1 }
+      if (!fileStat.isFile()) return { additions: 0, binary: false }
+      if (fileStat.size > MaxUntrackedStatBytes) return { additions: 0, binary: true }
       const content = await readFile(absolutePath)
-      if (content.includes(0))
-        return { ...EmptyLineStats, changedFiles: 1, binaryFiles: 1 }
+      if (content.includes(0)) return { additions: 0, binary: true }
       const text = content.toString('utf8')
       const lines = text ? text.split(/\r\n|\r|\n/).length - (text.endsWith('\n') ? 1 : 0) : 0
-      return { ...EmptyLineStats, additions: lines, changedFiles: 1 }
+      return { additions: lines, binary: false }
     } catch {
-      return { ...EmptyLineStats }
+      return { additions: 0, binary: false }
     }
   }
 
@@ -635,20 +732,22 @@ export class WorkbenchGitService {
       })
   }
 
+  /** `--numstat -z`：`增\t删\t路径\0`；改名是 `增\t删\t\0旧路径\0新路径\0`；二进制文件的增删是 `-`。 */
   private parseNumstat(raw: string): WorkspaceGitLineStats {
-    return raw
-      .split(/\r?\n/)
-      .filter(Boolean)
-      .reduce<WorkspaceGitLineStats>((stats, line) => {
-        const [additions = '0', deletions = '0'] = line.split(/\s+/, 3)
-        const binary = additions === '-' || deletions === '-'
-        return {
-          additions: stats.additions + (binary ? 0 : Number(additions) || 0),
-          deletions: stats.deletions + (binary ? 0 : Number(deletions) || 0),
-          changedFiles: stats.changedFiles + 1,
-          binaryFiles: stats.binaryFiles + (binary ? 1 : 0),
-        }
-      }, { ...EmptyLineStats })
+    const stats = { ...EmptyLineStats }
+    const fields = raw.split('\0')
+    for (let index = 0; index < fields.length; index += 1) {
+      const field = fields[index]
+      if (!field?.trim()) continue
+      const [additions = '', deletions = '', path = ''] = field.split('\t')
+      if (!path) index += 2
+      const binary = additions === '-' || deletions === '-'
+      stats.additions += binary ? 0 : Number(additions) || 0
+      stats.deletions += binary ? 0 : Number(deletions) || 0
+      stats.changedFiles += 1
+      stats.binaryFiles += binary ? 1 : 0
+    }
+    return stats
   }
 
   private mergeLineStats(
@@ -742,7 +841,9 @@ export class WorkbenchGitService {
     const relativePath = getRelativePathInsideRoot(rootPath, absolutePath)
     if (!relativePath || relativePath === '.')
       throw new AppError('PERMISSION', 'Git 文件路径超出项目根目录。')
-    return toPortableRelativePath(relativePath)
+    const portablePath = toPortableRelativePath(relativePath)
+    // 未跟踪文件太多时按目录列（`dir/`），结尾的 `/` 要留着才对得上那一行。
+    return /[/\\]$/.test(path) ? `${portablePath}/` : portablePath
   }
 
   private assertRevision(revision: string): string {
@@ -778,16 +879,43 @@ export class WorkbenchGitService {
     args: string[],
     options: GitRunOptions = {}
   ): Promise<GitRunResult> {
-    const result = await execa('git', args, {
+    const maxBuffer = options.maxBuffer ?? GitOutputMaxBytes
+    // 有时限的命令单独成一个进程组：超时时连同 git 起的 ssh 一起结束，不留下还连着远端的进程。
+    const ownProcessGroup = !!options.timeoutMs && process.platform !== 'win32'
+    const subprocess = execa('git', [...GitOutputConfig, ...args], {
       cwd: rootPath,
-      env: this.buildGitEnvironment(options),
-      maxBuffer: GitOutputMaxBytes,
+      env: await this.buildGitEnvironment(options),
+      maxBuffer,
+      timeout: options.timeoutMs,
+      detached: ownProcessGroup,
       reject: false,
     })
-    const output = {
+    const result = await subprocess
+    const output: GitRunResult = {
       stdout: result.stdout,
       stderr: result.stderr,
       failed: result.failed,
+      truncated: result.isMaxBuffer,
+    }
+    if (result.timedOut) {
+      if (ownProcessGroup && subprocess.pid) {
+        try {
+          process.kill(-subprocess.pid, 'SIGKILL')
+        } catch {
+          // 进程组里已经没有进程了。
+        }
+      }
+      throw new AppError(
+        'TIMEOUT',
+        `git ${this.describeCommand(args)} 超过 ${Math.round((options.timeoutMs ?? 0) / 1000)} 秒没有完成，已停止。请检查网络连接和远端凭据后重试。`
+      )
+    }
+    if (result.isMaxBuffer) {
+      if (options.allowTruncated) return output
+      throw new AppError(
+        'LIMIT',
+        `git ${this.describeCommand(args)} 的输出超过 ${Math.round(maxBuffer / 1024 / 1024)} MB，已停止读取。`
+      )
     }
     if (result.failed && !options.allowFailure)
       this.throwGitFailure(args, output, options.githubToken)
@@ -801,21 +929,27 @@ export class WorkbenchGitService {
   private async showGitBlob(rootPath: string, spec: string): Promise<Uint8Array> {
     const args = ['show', spec]
     try {
-      const { stdout } = await execFileAsync('git', args, {
+      const { stdout } = await execFileAsync('git', [...GitOutputConfig, ...args], {
         cwd: rootPath,
-        env: this.buildGitEnvironment({}),
+        env: await this.buildGitEnvironment({}),
         encoding: 'buffer',
         maxBuffer: GitOutputMaxBytes,
       })
       return stdout
     } catch (error) {
-      const stderr = (error as { stderr?: unknown }).stderr
+      const { stderr, code } = error as { stderr?: unknown; code?: unknown }
       return this.throwGitFailure(args, {
         stdout: '',
         stderr: Buffer.isBuffer(stderr) ? stderr.toString('utf8') : AppError.getMessage(error),
         failed: true,
+        truncated: code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER',
       })
     }
+  }
+
+  /** 报错里说的是哪条 git 命令：第一个不是选项的参数。 */
+  private describeCommand(args: readonly string[]): string {
+    return args.find((arg) => !arg.startsWith('-')) ?? ''
   }
 
   private throwGitFailure(
@@ -823,16 +957,20 @@ export class WorkbenchGitService {
     result: GitRunResult,
     githubToken?: string
   ): never {
-    const output = this.redactGitOutput(
-      (result.stderr || result.stdout).trim(),
-      githubToken
-    )
+    const output = this.redactGitOutput(this.readableGitOutput(result), githubToken)
     if (output.toLowerCase().includes('not a git repository'))
       throw new AppError('VALIDATION', '当前工作区不是 Git 仓库。')
     throw new AppError(
       'PLATFORM',
-      output ? `Git 命令执行失败：${output.slice(0, 500)}` : `Git 命令执行失败：git ${args[0]}`
+      output
+        ? `Git 命令执行失败：${output.slice(0, 500)}`
+        : `Git 命令执行失败：git ${this.describeCommand(args)}`
     )
+  }
+
+  /** git 的报错正文：优先 stderr；`-z` 输出里的 NUL 换成换行。 */
+  private readableGitOutput(result: GitRunResult): string {
+    return (result.stderr.trim() || result.stdout.trim()).replaceAll('\0', '\n')
   }
 
   private redactGitOutput(output: string, githubToken?: string): string {
@@ -852,12 +990,14 @@ export class WorkbenchGitService {
     )
   }
 
-  private buildGitEnvironment(options: WorkspaceGitRemoteActionOptions): NodeJS.ProcessEnv {
+  private async buildGitEnvironment(
+    options: WorkspaceGitRemoteActionOptions
+  ): Promise<NodeJS.ProcessEnv> {
     // git 的 porcelain 输出与错误正文都吃 locale：宿主装了中文 gettext 目录时
     // "not a git repository" 会变成「不是 Git 仓库」，把 VALIDATION 误判成 PLATFORM。
     // 解析 git 输出必须钉死 C locale，这是解析方的责任，不是用户环境的责任。
     const env: NodeJS.ProcessEnv = {
-      ...process.env,
+      ...(await this.readBaseEnvironment()),
       GIT_TERMINAL_PROMPT: '0',
       LC_ALL: 'C',
       LANG: 'C',
@@ -883,5 +1023,14 @@ export class WorkbenchGitService {
       env.GIT_SSH_COMMAND = `ssh -i '${normalized.replaceAll("'", "'\\''")}' -o IdentitiesOnly=yes`
     }
     return env
+  }
+
+  private async readBaseEnvironment(): Promise<NodeJS.ProcessEnv> {
+    try {
+      return await this.readEnvironment()
+    } catch {
+      // 登录环境读不出来（比如应用正在退出）时退回应用自己的环境：git 照样能跑，只是钩子可能缺 PATH。
+      return process.env
+    }
   }
 }

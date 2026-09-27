@@ -42,7 +42,9 @@ export interface WorkbenchMainCapabilityProviders {
  */
 export function createDefaultWorkbenchMainCapabilityProviders(
   dataRootDir: string,
-  dependencies: WorkbenchAppPartsDependencies
+  dependencies: WorkbenchAppPartsDependencies,
+  /** 登录 shell 的环境：Git 命令连同它跑的提交钩子、git-lfs 都跑在里面。 */
+  loginEnvironment: () => Promise<NodeJS.ProcessEnv>
 ): WorkbenchMainCapabilityProviders {
   const language = new WorkbenchLanguageServiceWorkerClient()
   const parts = createWorkbenchAppParts(dataRootDir, dependencies)
@@ -63,7 +65,7 @@ export function createDefaultWorkbenchMainCapabilityProviders(
   return {
     parts,
     fileSystem: new WorkbenchProjectFileSystem(),
-    git: new WorkbenchGitService(),
+    git: new WorkbenchGitService({ environment: loginEnvironment }),
     chatCheckpoints,
     chatRunChanges: new WorkbenchChatRunChangeStore(
       chatCheckpoints,
