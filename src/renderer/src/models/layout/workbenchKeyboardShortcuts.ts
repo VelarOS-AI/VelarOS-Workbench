@@ -94,6 +94,20 @@ function eventHasPrimaryModifier(event: WorkbenchKeyboardEventLike): boolean {
   return event.metaKey || event.ctrlKey
 }
 
+interface WorkbenchKeyboardTargetLike {
+  isContentEditable?: boolean
+  tagName?: string
+}
+
+/** 按键落在输入框、文本域或可编辑区（编辑器正文、富文本输入）里：这类按键先归那段文字。 */
+export function isWorkbenchTextEntryTarget(target: Nullable<EventTarget>): boolean {
+  if (!target) return false
+
+  const element = target as WorkbenchKeyboardTargetLike
+  const tagName = element.tagName?.toUpperCase()
+  return tagName === 'INPUT' || tagName === 'TEXTAREA' || element.isContentEditable === true
+}
+
 /**
  * 把外部统一写法 `"Mod+P"` 翻译为 tinykeys 的 `"$mod+P"`，让 `parseKeybinding` 直接消费。
  *

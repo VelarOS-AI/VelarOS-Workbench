@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 
 import {
   getWorkbenchKeyboardShortcut,
+  isWorkbenchTextEntryTarget,
   type WorkbenchKeyboardShortcutMap,
 } from '../models/layout/workbenchKeyboardShortcuts'
 import type {
@@ -15,11 +16,12 @@ export interface UseWorkbenchKeyboardShortcutsOptions {
   isQuickOpenOpen: boolean
   keymap?: WorkbenchKeyboardShortcutMap
   onCloseRightTool: () => void
-  onOpenBottomTool: (tool: WorkbenchBottomTool) => void
   onOpenQuickOpen: () => void
   onRunLastCommand: () => Promise<unknown>
   onSaveAll: () => Promise<unknown>
   onSaveCurrent: () => Promise<unknown>
+  /** 底部工具窗开关：同一个工具开着就收起，没开或开着别的就切到它。 */
+  onToggleBottomTool: (tool: WorkbenchBottomTool) => void
   onToggleRightTool: (tool: WorkbenchRightToolWindow) => void
 }
 
@@ -28,12 +30,15 @@ export function createWorkbenchShortcutKeydownHandler(
   readOptions: () => UseWorkbenchKeyboardShortcutsOptions
 ): (event: KeyboardEvent) => void {
   return (event) => {
+    // 焦点里的控件已经用掉了这次按键（编辑器插了空行或存了盘、提交框提交了、行内重命名取消了、
+    // 补全收起了）：全局动作一律让路，同一次按键只做一件事。
+    if (event.defaultPrevented) return
+
     const current = readOptions()
     const action = getWorkbenchKeyboardShortcut(event, current.keymap)
     if (!action) return
-    // 焦点里的控件已经用掉了这次关闭键（取消行内重命名、收起搜索框、关掉补全）：只做那件事，
-    // 不连带收起右侧面板。
-    if (action === 'close-right-tool' && event.defaultPrevented) return
+    // 在输入框、文本域、可编辑区里按下的「运行上次命令」是冲着那段文字去的（换行、发送），不去跑命令。
+    if (action === 'run-last-command' && isWorkbenchTextEntryTarget(event.target)) return
 
     event.preventDefault()
 
@@ -55,11 +60,11 @@ export function createWorkbenchShortcutKeydownHandler(
         return
       }
       case 'toggle-problems': {
-        current.onOpenBottomTool('problems')
+        current.onToggleBottomTool('problems')
         return
       }
       case 'toggle-changes': {
-        current.onOpenBottomTool('git')
+        current.onToggleBottomTool('git')
         return
       }
       case 'toggle-actions': {
@@ -79,11 +84,11 @@ export function useWorkbenchKeyboardShortcuts({
   isQuickOpenOpen,
   keymap,
   onCloseRightTool,
-  onOpenBottomTool,
   onOpenQuickOpen,
   onRunLastCommand,
   onSaveAll,
   onSaveCurrent,
+  onToggleBottomTool,
   onToggleRightTool,
 }: UseWorkbenchKeyboardShortcutsOptions): void {
   const optionsRef = useRef<UseWorkbenchKeyboardShortcutsOptions>({
@@ -92,11 +97,11 @@ export function useWorkbenchKeyboardShortcuts({
     isQuickOpenOpen,
     keymap,
     onCloseRightTool,
-    onOpenBottomTool,
     onOpenQuickOpen,
     onRunLastCommand,
     onSaveAll,
     onSaveCurrent,
+    onToggleBottomTool,
     onToggleRightTool,
   })
   optionsRef.current = {
@@ -105,11 +110,11 @@ export function useWorkbenchKeyboardShortcuts({
     isQuickOpenOpen,
     keymap,
     onCloseRightTool,
-    onOpenBottomTool,
     onOpenQuickOpen,
     onRunLastCommand,
     onSaveAll,
     onSaveCurrent,
+    onToggleBottomTool,
     onToggleRightTool,
   }
 

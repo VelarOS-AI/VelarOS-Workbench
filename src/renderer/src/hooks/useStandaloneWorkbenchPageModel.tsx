@@ -442,11 +442,11 @@ export function useStandaloneWorkbenchPageModel(
     isQuickOpenOpen: surface.isQuickOpenOpen,
     keymap: workbenchKeymap.keymap,
     onCloseRightTool: surface.closeRightTool,
-    onOpenBottomTool: surface.openBottomTool,
     onOpenQuickOpen: surface.openQuickOpen,
     onRunLastCommand: workbench.rerunLastCommand,
     onSaveAll: () => workbench.saveAllOpenFiles(),
     onSaveCurrent: () => workbench.saveSelectedFile(),
+    onToggleBottomTool: toggleBottomTool,
     onToggleRightTool: surface.toggleRightTool,
   })
   useWorkbenchStandaloneProjectSync({
