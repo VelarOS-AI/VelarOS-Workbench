@@ -301,6 +301,19 @@
   overflow: visible;
 }
 
+/* 符号链接：名字后面一个小箭头；目标在工程外或已不存在的只显示链接本身，淡一些、斜体。 */
+.treeSymlinkBadge {
+  flex-shrink: 0;
+  margin-left: 2px;
+  color: var(--workbench-tree-ignored-fg);
+}
+
+.treeRow[data-symlink='outside']:not(.treeRowSelected) .treeName,
+.treeRow[data-symlink='missing']:not(.treeRowSelected) .treeName {
+  color: var(--workbench-tree-ignored-fg);
+  font-style: italic;
+}
+
 .treeTestFileBadge {
   position: absolute;
   right: -3px;

@@ -5,14 +5,29 @@ import type {
   WorkbenchTextIssue,
 } from '../workbenchTextFormat'
 
+/**
+ * 符号链接的目标在哪：`inside` 在工程里（照常展开、打开）；`outside` 在工程外、`missing` 已不存在——
+ * 这两种只显示链接本身，不跟进去列举、读取。
+ */
+export type WorkbenchSymlinkTargetState = 'inside' | 'outside' | 'missing'
+
+export interface WorkbenchDirectoryEntrySymlink {
+  /** 链接里写的目标（readlink 原文，可能是相对路径）。 */
+  target: string
+  targetState: WorkbenchSymlinkTargetState
+}
+
 export interface WorkbenchDirectoryEntry {
   name: string
   path: string
+  /** 链接按目标算；目标在工程外或已不存在的链接算 `file`，不能展开。 */
   type: 'directory' | 'file'
   size: Nullable<number>
   modifiedAt: Nullable<number>
   hasChildren: boolean
   gitIgnored?: boolean
+  /** 这一项是符号链接时才有。改名、移动、删除都只作用于链接本身，不动它指向的东西。 */
+  symlink?: WorkbenchDirectoryEntrySymlink
 }
 
 export interface WorkbenchListDirectoryRequest {

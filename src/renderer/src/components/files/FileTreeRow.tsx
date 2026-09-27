@@ -10,6 +10,7 @@ import {
   useRef,
 } from 'react'
 import {
+  ArrowBendUpRightIcon,
   CaretDownIcon,
   CaretRightIcon,
   FolderIcon,
@@ -30,7 +31,7 @@ import { AppError } from '@velaros-ai/core/error'
 import { StyleUtils } from '@velaros-ai/ui'
 import { Input } from '@velaros-ai/ui/primitives/forms/Input'
 
-import type { WorkbenchDirectoryEntry } from '@shared/contracts'
+import type { WorkbenchDirectoryEntry, WorkbenchDirectoryEntrySymlink } from '@shared/contracts'
 
 import styles from '../../styles/workbenchPageStyles'
 
@@ -66,6 +67,8 @@ function arboristTreeRowOuterStyle(
 export interface FileTreeRowRuntime {
   collapseDirectoryLabel: string
   expandDirectoryLabel: string
+  /** 符号链接行的提示：指向哪、在不在工程里。 */
+  describeSymlink: (symlink: WorkbenchDirectoryEntrySymlink) => string
   gitDecorations: WorkbenchGitDecorationMap
   isMutatingTree: boolean
   onContextMenuEntry: (entry: WorkbenchDirectoryEntry, event: MouseEvent) => void
@@ -84,6 +87,7 @@ export const FileTreeRow = memo(function FileTreeRow({
   const {
     collapseDirectoryLabel,
     expandDirectoryLabel,
+    describeSymlink,
     gitDecorations,
     isMutatingTree,
     onContextMenuEntry,
@@ -144,6 +148,8 @@ export const FileTreeRow = memo(function FileTreeRow({
       data-test-directory={isTestDirectory || undefined}
       data-git-tone={entry.type === 'file' ? gitDecoration?.tone : undefined}
       data-excluded={isGitIgnored || undefined}
+      data-symlink={entry.symlink?.targetState}
+      title={entry.symlink ? describeSymlink(entry.symlink) : undefined}
       style={arboristTreeRowOuterStyle(style, entry)}
       onContextMenu={(event) => onContextMenuEntry(entry, event)}
     >
@@ -209,6 +215,9 @@ export const FileTreeRow = memo(function FileTreeRow({
         />
       ) : (
         <span className={styles.treeName}>{entry.name}</span>
+      )}
+      {entry.symlink && !node.isEditing && (
+        <ArrowBendUpRightIcon size={11} className={styles.treeSymlinkBadge} aria-hidden="true" />
       )}
     </div>
   )

@@ -5,9 +5,9 @@
  * 文件树里看得到的都能管：点号开头的名字（`.env`）、`dist` / `node_modules` 这类目录照样能新建、
  * 改名、移动；真正要挡的只有越出工程与版本库内部（任何一段是 `.git`）。
  */
-import { realpathSync, statSync } from 'node:fs'
-import { realpath, stat } from 'node:fs/promises'
-import { basename, resolve } from 'node:path'
+import { realpathSync, type Stats, statSync } from 'node:fs'
+import { lstat, realpath, stat } from 'node:fs/promises'
+import { basename, dirname, join, resolve } from 'node:path'
 
 import { AppError } from '@velaros-ai/core/error'
 import { LoggerFactory } from '@velaros-ai/core/logger'
@@ -20,6 +20,16 @@ import {
 interface ResolvedPath {
   requestedPath: string
   realPath: string
+}
+
+/** 条目本身：末段不跟链接。改名、移动、删除都用它，对符号链接动的是链接本身。 */
+interface ResolvedEntryPath {
+  /** 按请求拼出的路径：报给界面的相对路径从它算。 */
+  requestedPath: string
+  /** 父目录换成真实路径、末段原样：文件系统操作都在它上面做。 */
+  entryPath: string
+  /** 末段本身的信息（lstat，不跟链接）。 */
+  stats: Stats
 }
 
 const log = LoggerFactory.create('WorkbenchPathResolver')
@@ -75,6 +85,32 @@ class PathResolver {
       requestedPath: resolvedPath,
       realPath,
     }
+  }
+
+  /**
+   * 解析「条目本身」：父目录解析成真实路径（必须在工程里），末段原样保留、不跟链接——目标在工程外
+   * 或已不存在的链接也能改名、移动、删除，而动的永远是链接，不是它指向的东西。
+   */
+  public async resolveEntryInsideProject(
+    projectRoot: string,
+    inputPath: string
+  ): Promise<ResolvedEntryPath> {
+    const requestedPath = resolve(projectRoot, inputPath.trim() || '.')
+    this.assertAllowedProjectPath(projectRoot, requestedPath, inputPath)
+
+    const isProjectRoot = getRelativePathInsideRoot(projectRoot, requestedPath) === '.'
+    const parentPath = isProjectRoot
+      ? projectRoot
+      : await realpath(dirname(requestedPath)).catch((error: unknown) => {
+          throw this.normalizeResolveError(error, inputPath)
+        })
+    this.assertAllowedProjectPath(projectRoot, parentPath, inputPath)
+
+    const entryPath = isProjectRoot ? projectRoot : join(parentPath, basename(requestedPath))
+    const stats = await lstat(entryPath).catch((error: unknown) => {
+      throw this.normalizeResolveError(error, inputPath)
+    })
+    return { requestedPath, entryPath, stats }
   }
 
   public resolveInsideProjectSync(projectRoot: string, inputPath: string): ResolvedPath {
@@ -189,4 +225,4 @@ class PathResolver {
 }
 
 export { PathResolver, PathResolver as WorkbenchPathResolver }
-export type { ResolvedPath, ResolvedPath as ResolvedWorkbenchPath }
+export type { ResolvedEntryPath, ResolvedPath, ResolvedPath as ResolvedWorkbenchPath }

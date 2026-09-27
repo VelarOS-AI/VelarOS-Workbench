@@ -1,5 +1,9 @@
 import { type MouseEvent,type MutableRefObject, useCallback, useEffect, useState,  } from 'react'
-import { DEFAULT_TREE_WIDTH, type FileTreeNodeData } from '@renderer/models/files/fileTree.model'
+import {
+  DEFAULT_TREE_WIDTH,
+  type FileTreeNodeData,
+  isUnresolvedTreeSymlink,
+} from '@renderer/models/files/fileTree.model'
 import { isWorkbenchTreeRoot,ROOT_PATH } from '@renderer/models/shared/workbenchUtils'
 import type { NodeApi, TreeApi } from 'react-arborist'
 
@@ -125,6 +129,12 @@ export function useFileTreeActions({
   )
 
   const handleTreeActivate = useMemoizedFn((node: NodeApi<FileTreeNodeData>): void => {
+    // 链接的目标在工程外或已不存在：只选中链接本身（还能改名、移动、删除），不去打开。
+    if (isUnresolvedTreeSymlink(node.data.entry)) {
+      onSelectEntryPathLatest.current(node.data.entry.path)
+      return
+    }
+
     if (node.data.entry.type === 'directory') {
       if (isWorkbenchTreeRoot(node.data.entry)) {
         onSelectEntryPathLatest.current(ROOT_PATH)

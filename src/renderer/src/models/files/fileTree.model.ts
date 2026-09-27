@@ -17,6 +17,11 @@ export interface FileTreeNodeData {
   children?: FileTreeNodeData[]
 }
 
+/** 目标在工程外或已不存在的符号链接：树里只显示链接本身，不展开、不打开、不挂到聊天里。 */
+export function isUnresolvedTreeSymlink(entry: Pick<WorkbenchDirectoryEntry, 'symlink'>): boolean {
+  return !!entry.symlink && entry.symlink.targetState !== 'inside'
+}
+
 export const TREE_INDENT = 16
 export const TREE_OVERSCAN_COUNT = 8
 export const DEFAULT_TREE_WIDTH = 280

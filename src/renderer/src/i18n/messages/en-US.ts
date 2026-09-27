@@ -560,6 +560,10 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     treeCollapseAll: 'Collapse folders',
     treeExpandFolder: 'Expand folder',
     treeCollapseFolder: 'Collapse folder',
+    treeSymlinkInside: 'Symbolic link to {target}',
+    treeSymlinkOutside:
+      'Symbolic link to {target}, outside the project: only the link itself can be renamed, moved or deleted',
+    treeSymlinkMissing: 'Broken symbolic link: {target} no longer exists',
     treeSelectAll: 'Select all loaded entries',
     treeRenameSelected: 'Rename selected entry',
     treeDeleteSelected: 'Delete selected entries',

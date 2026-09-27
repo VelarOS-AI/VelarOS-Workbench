@@ -55,6 +55,7 @@ import type { WorkbenchDeleteUndoStore } from './DeleteUndoStore'
 import type { DirectoryEntries } from './FileEntries'
 import type { GitNewFileTracker } from './GitNewFileTracker'
 import type { WorkbenchLocalHistoryStore } from './LocalHistoryStore'
+import { isPathInsideRoot } from './PathContainmentHelper'
 import type { PathResolver, ResolvedPath } from './PathResolver'
 import { countWorkbenchTextLines, decodeWorkbenchText, encodeWorkbenchText } from './TextCodec'
 import { isLikelyTextFile, readWorkbenchTextFile } from './TextFile'
@@ -256,28 +257,25 @@ class FileOperations {
     request: WorkbenchRenameEntryRequest
   ): Promise<WorkbenchEntryMutationResult> {
     const projectRoot = await this.pathResolver.resolveProjectRoot(request.projectRoot)
-    const sourcePath = await this.pathResolver.resolveInsideProject(projectRoot, request.path)
-    const sourceLinkStats = await lstat(sourcePath.requestedPath)
+    // 条目本身：符号链接改的是链接的名字，不动它指向的东西（目标在工程外也能改）。
+    const source = await this.pathResolver.resolveEntryInsideProject(projectRoot, request.path)
 
-    if (sourceLinkStats.isSymbolicLink()) {
-      throw new AppError('VALIDATION', '工作台暂不直接重命名符号链接。')
-    }
-
-    if (this.pathResolver.toProjectRelativePath(projectRoot, sourcePath.requestedPath) === '.') {
+    if (this.pathResolver.toProjectRelativePath(projectRoot, source.requestedPath) === '.') {
       throw new AppError('VALIDATION', '不能重命名工程根目录。')
     }
 
     const name = this.pathResolver.normalizeEntryName(request.newName)
-    const parentPath = dirname(sourcePath.requestedPath)
+    const parentPath = dirname(source.requestedPath)
     const targetPath = this.pathResolver.resolveChildPath(projectRoot, parentPath, name)
+    const physicalTargetPath = join(dirname(source.entryPath), name)
     this.assertOutsideGitInternals(
       projectRoot,
-      [sourcePath.requestedPath, sourcePath.realPath, targetPath],
+      [source.requestedPath, source.entryPath, targetPath, physicalTargetPath],
       request.path
     )
 
     return this.runWorkbenchMutation(async () => {
-      await this.renameEntryPath(sourcePath.requestedPath, targetPath)
+      await this.renameEntryPath(source.entryPath, physicalTargetPath)
       const entry = await this.entryHelper.toDirectoryEntry(projectRoot, targetPath, false)
       return {
         projectRoot,
@@ -289,14 +287,10 @@ class FileOperations {
 
   public async moveEntry(request: WorkbenchMoveEntryRequest): Promise<WorkbenchMoveEntryResult> {
     const projectRoot = await this.pathResolver.resolveProjectRoot(request.projectRoot)
-    const sourcePath = await this.pathResolver.resolveInsideProject(projectRoot, request.path)
+    // 条目本身：挪的是符号链接自己（目标在工程外也能挪），不是它指向的东西。
+    const source = await this.pathResolver.resolveEntryInsideProject(projectRoot, request.path)
     const parentPath = await this.pathResolver.resolveInsideProject(projectRoot, request.parentPath)
-    const sourceLinkStats = await lstat(sourcePath.requestedPath)
     const parentLinkStats = await lstat(parentPath.requestedPath)
-
-    if (sourceLinkStats.isSymbolicLink()) {
-      throw new AppError('VALIDATION', '工作台暂不直接移动符号链接。')
-    }
 
     if (parentLinkStats.isSymbolicLink()) {
       throw new AppError('VALIDATION', '工作台暂不移动内容到符号链接目录。')
@@ -304,7 +298,7 @@ class FileOperations {
 
     const sourceRelativePath = this.pathResolver.toProjectRelativePath(
       projectRoot,
-      sourcePath.requestedPath
+      source.requestedPath
     )
     if (sourceRelativePath === '.') {
       throw new AppError('VALIDATION', '不能移动工程根目录。')
@@ -315,30 +309,23 @@ class FileOperations {
       throw new AppError('VALIDATION', '工作台移动目标必须是目录。')
     }
 
-    const sourceStats = await stat(sourcePath.realPath)
-    const parentRelativePath = this.pathResolver.toProjectRelativePath(
-      projectRoot,
-      parentPath.requestedPath
-    )
-    if (
-      sourceStats.isDirectory() &&
-      (parentRelativePath === sourceRelativePath ||
-        parentRelativePath.startsWith(`${sourceRelativePath}/`))
-    ) {
+    // 按真实路径比，经由链接起的别名也拦得住；链接本身不是目录，挪到哪里都行。
+    if (source.stats.isDirectory() && isPathInsideRoot(source.entryPath, parentPath.realPath)) {
       throw new AppError('VALIDATION', '不能把目录移动到自身或子目录内。')
     }
 
     const name = this.pathResolver.normalizeEntryName(
-      request.name ?? basename(sourcePath.requestedPath)
+      request.name ?? basename(source.requestedPath)
     )
     const targetPath = this.pathResolver.resolveChildPath(
       projectRoot,
       parentPath.requestedPath,
       name
     )
+    const physicalTargetPath = join(parentPath.realPath, name)
     const previousParentPath = this.pathResolver.toProjectRelativePath(
       projectRoot,
-      dirname(sourcePath.requestedPath)
+      dirname(source.requestedPath)
     )
     const targetParentPath = this.pathResolver.toProjectRelativePath(
       projectRoot,
@@ -346,12 +333,12 @@ class FileOperations {
     )
     this.assertOutsideGitInternals(
       projectRoot,
-      [sourcePath.requestedPath, sourcePath.realPath, targetPath, join(parentPath.realPath, name)],
+      [source.requestedPath, source.entryPath, targetPath, physicalTargetPath],
       request.path
     )
 
     return this.runWorkbenchMutation(async () => {
-      await this.renameEntryPath(sourcePath.requestedPath, targetPath)
+      await this.renameEntryPath(source.entryPath, physicalTargetPath)
 
       const entry = await this.entryHelper.toDirectoryEntry(projectRoot, targetPath, false)
       return {
@@ -368,10 +355,11 @@ class FileOperations {
     request: WorkbenchDeleteEntryRequest
   ): Promise<WorkbenchDeleteEntryResult> {
     const projectRoot = await this.pathResolver.resolveProjectRoot(request.projectRoot)
-    const targetPath = await this.pathResolver.resolveInsideProject(projectRoot, request.path)
+    // 条目本身：删符号链接删的是链接，不跟进去，也就不管它指向的目录里有没有东西。
+    const target = await this.pathResolver.resolveEntryInsideProject(projectRoot, request.path)
     const relativePath = this.pathResolver.toProjectRelativePath(
       projectRoot,
-      targetPath.requestedPath
+      target.requestedPath
     )
 
     if (relativePath === '.') {
@@ -379,19 +367,14 @@ class FileOperations {
     }
     this.assertOutsideGitInternals(
       projectRoot,
-      [targetPath.requestedPath, targetPath.realPath],
+      [target.requestedPath, target.entryPath],
       request.path
     )
 
     return this.runWorkbenchMutation(async () => {
-      const targetLinkStats = await lstat(targetPath.requestedPath)
-      if (targetLinkStats.isSymbolicLink()) {
-        throw new AppError('VALIDATION', '工作台暂不直接删除符号链接。')
-      }
-
-      const targetStats = await stat(targetPath.realPath)
+      const targetStats = await lstat(target.entryPath)
       if (targetStats.isDirectory()) {
-        const entries = await readdir(targetPath.realPath)
+        const entries = await readdir(target.entryPath)
         if (entries.length > 0 && !request.recursive) {
           throw new AppError('VALIDATION', '目录包含内容，需要确认后才能删除。')
         }
@@ -399,13 +382,13 @@ class FileOperations {
 
       const parentPath = this.pathResolver.toProjectRelativePath(
         projectRoot,
-        dirname(targetPath.requestedPath)
+        dirname(target.requestedPath)
       )
       const restoreId = await this.deleteUndo.trash({
         projectRoot,
         deletedPath: relativePath,
         parentPath,
-        entryPath: targetPath.requestedPath,
+        entryPath: target.entryPath,
       })
 
       return {
@@ -421,10 +404,10 @@ class FileOperations {
     request: WorkbenchInspectDeleteEntryRequest
   ): Promise<WorkbenchInspectDeleteEntryResult> {
     const projectRoot = await this.pathResolver.resolveProjectRoot(request.projectRoot)
-    const targetPath = await this.pathResolver.resolveInsideProject(projectRoot, request.path)
+    const target = await this.pathResolver.resolveEntryInsideProject(projectRoot, request.path)
     const relativePath = this.pathResolver.toProjectRelativePath(
       projectRoot,
-      targetPath.requestedPath
+      target.requestedPath
     )
 
     if (relativePath === '.') {
@@ -432,19 +415,13 @@ class FileOperations {
     }
     this.assertOutsideGitInternals(
       projectRoot,
-      [targetPath.requestedPath, targetPath.realPath],
+      [target.requestedPath, target.entryPath],
       request.path
     )
 
-    const targetLinkStats = await lstat(targetPath.requestedPath)
-    if (targetLinkStats.isSymbolicLink()) {
-      throw new AppError('VALIDATION', '工作台暂不直接删除符号链接。')
-    }
-
-    const targetStats = await stat(targetPath.realPath)
-    const type = targetStats.isDirectory() ? 'directory' : 'file'
-    const requiresConfirmation =
-      type === 'file' || (await readdir(targetPath.realPath)).length > 0
+    // 符号链接按一项叶子算（删的只是链接），即使它指向目录。
+    const type = target.stats.isDirectory() ? 'directory' : 'file'
+    const requiresConfirmation = type === 'file' || (await readdir(target.entryPath)).length > 0
 
     return {
       projectRoot,

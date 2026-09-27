@@ -10,7 +10,8 @@
  *
  * Git 排除装饰沿用 Desktop 语义：每次目录读取批量调用一次 `git check-ignore`，
  * 已排除目录的子树继承弱化状态；非 Git 工程或 Git 不可用时安全退化为普通目录。
- * 符号链接实体仍只允许留在项目边界内。
+ * 符号链接总是列出来：目标在工程里的按目标算，在工程外或已不存在的只显示链接本身（不能展开，
+ * 不跟进去）。经由工程里的目录链接展开时，子项路径挂在链接下面。
  * 错误一律抛 Error，由 IPC 装配层降为 `WorkbenchFsCallResult` 信封。
  */
 import type { Stats } from 'node:fs'
@@ -23,6 +24,7 @@ import { AppError } from '@velaros-ai/core/error'
 
 import type {
   WorkbenchDirectoryEntry,
+  WorkbenchDirectoryEntrySymlink,
   WorkbenchListDirectoryRequest,
   WorkbenchListDirectoryResult,
   WorkbenchReadFileRequest,
@@ -38,6 +40,7 @@ import { DefaultWorkbenchTextFormat } from '@shared/workbenchTextFormat'
 
 import { isPathInsideRoot } from './PathContainmentHelper'
 import { readWorkbenchTextFile } from './TextFile'
+import { describeWorkbenchSymlink } from './WorkbenchSymlinks'
 
 const DefaultDirectoryLimit = 1000
 const MaxDirectoryLimit = 5000
@@ -79,15 +82,22 @@ export class WorkbenchProjectFileSystem {
       this.shouldIncludeEntry(entry.name, entry.isDirectory(), includeHidden)
     )
     const limitedDirents = visibleDirents.slice(0, limit)
-    const directoryRelativePath = this.toProjectRelativePath(projectRoot, directoryPath)
+    // 条目路径按请求的路径拼：经由工程里的目录链接展开时，子项挂在链接下面（`linkdir/a.ts`），
+    // 不换成链接指向的目录——否则同一个文件在树里出现两次、ID 撞车，链接下面也永远是空的。
+    // 读目录、查 Git 排除仍按真实路径（Git 不认经过链接的路径）。
+    const logicalDirectoryPath = resolve(projectRoot, requestedPath.trim() || '.')
+    const realDirectoryRelativePath = this.toProjectRelativePath(projectRoot, directoryPath)
     const entryRelativePaths = limitedDirents.map((entry) =>
+      this.toProjectRelativePath(projectRoot, resolve(logicalDirectoryPath, entry.name))
+    )
+    const realEntryRelativePaths = limitedDirents.map((entry) =>
       this.toProjectRelativePath(projectRoot, resolve(directoryPath, entry.name))
     )
     const gitIgnoredPaths = await this.getGitIgnoredPaths(projectRoot, [
-      ...(directoryRelativePath === '.' ? [] : [directoryRelativePath]),
-      ...entryRelativePaths,
+      ...(realDirectoryRelativePath === '.' ? [] : [realDirectoryRelativePath]),
+      ...realEntryRelativePaths,
     ])
-    const isDirectoryGitIgnored = gitIgnoredPaths.has(directoryRelativePath)
+    const isDirectoryGitIgnored = gitIgnoredPaths.has(realDirectoryRelativePath)
 
     const entries: WorkbenchDirectoryEntry[] = []
     for (const [index, dirent] of limitedDirents.entries()) {
@@ -98,19 +108,18 @@ export class WorkbenchProjectFileSystem {
       let isFile = dirent.isFile()
       let size: Nullable<number> = null
       let modifiedAt: Nullable<number> = null
-      if (!isDirectory && !isFile) {
-        // 符号链接等特殊项：解析实体并要求仍在项目内，越界一律剔除。
-        const resolved = await realpath(entryAbsolutePath).catch(() => null)
-        if (!resolved || !this.isInsideProject(projectRoot, resolved)) continue
-
-        const resolvedStats = await stat(resolved).catch(() => null)
-        if (!resolvedStats) continue
-
-        isDirectory = resolvedStats.isDirectory()
-        isFile = resolvedStats.isFile()
-        size = isFile ? resolvedStats.size : null
-        modifiedAt = resolvedStats.mtimeMs
+      let symlink: WorkbenchDirectoryEntrySymlink | undefined
+      if (dirent.isSymbolicLink()) {
+        // 目标在工程里按目标算；在工程外或已不存在就只是链接本身，一项不能展开的叶子。
+        const link = await describeWorkbenchSymlink(projectRoot, entryAbsolutePath)
+        const targetStats = link.resolved?.stats
+        symlink = link.symlink
+        isDirectory = !!targetStats?.isDirectory()
+        isFile = targetStats ? targetStats.isFile() : true
+        size = targetStats?.isFile() ? targetStats.size : null
+        modifiedAt = targetStats?.mtimeMs ?? null
       }
+      // 套接字、管道、设备文件（以及指向它们的链接）不进文件树。
       if (!isDirectory && !isFile) continue
 
       entries.push({
@@ -119,10 +128,11 @@ export class WorkbenchProjectFileSystem {
         type: isDirectory ? 'directory' : 'file',
         size,
         modifiedAt,
-        gitIgnored: isDirectoryGitIgnored || gitIgnoredPaths.has(entryRelativePaths[index]!),
+        gitIgnored: isDirectoryGitIgnored || gitIgnoredPaths.has(realEntryRelativePaths[index]!),
         hasChildren: isDirectory
           ? await this.hasVisibleChildren(entryAbsolutePath, includeHidden)
           : false,
+        symlink,
       })
     }
 
@@ -134,7 +144,7 @@ export class WorkbenchProjectFileSystem {
 
     return {
       projectRoot,
-      path: this.toProjectRelativePath(projectRoot, directoryPath),
+      path: this.toProjectRelativePath(projectRoot, logicalDirectoryPath),
       entries,
       truncated: visibleDirents.length > limit,
     }

@@ -15,6 +15,7 @@ import {
   createOpenState,
   type FileTreeNodeData,
   getDefaultCreateName,
+  isUnresolvedTreeSymlink,
   resolveTreeCreateDirectoryPath,
   TREE_INDENT,
   TREE_OVERSCAN_COUNT,
@@ -27,7 +28,7 @@ import { Tree } from 'react-arborist'
 
 import { isBlank, isEmpty } from '@velaros-ai/core'
 
-import type { WorkbenchDirectoryEntry } from '@shared/contracts'
+import type { WorkbenchDirectoryEntry, WorkbenchDirectoryEntrySymlink } from '@shared/contracts'
 
 import { useFileTreeActions } from '../../hooks/useFileTreeActions'
 import styles from '../../styles/workbenchPageStyles'
@@ -141,6 +142,15 @@ export function FileTree({
     () => ({
       collapseDirectoryLabel: t('workbench.treeCollapseFolder'),
       expandDirectoryLabel: t('workbench.treeExpandFolder'),
+      describeSymlink: (symlink: WorkbenchDirectoryEntrySymlink) =>
+        t(
+          symlink.targetState === 'inside'
+            ? 'workbench.treeSymlinkInside'
+            : symlink.targetState === 'outside'
+              ? 'workbench.treeSymlinkOutside'
+              : 'workbench.treeSymlinkMissing',
+          { target: symlink.target }
+        ),
       gitDecorations,
       isMutatingTree,
       onContextMenuEntry: handleTreeContextMenuEntry,
@@ -325,17 +335,23 @@ export function isTreeEntryInMultiSelection(tree: Nullable<FileTreeApi>, path: s
   return !!tree && tree.selectedIds.size > 1 && tree.selectedIds.has(path)
 }
 
-/** 右键「添加到聊天」要挂的文件：点在多选里取整组里的文件，否则只取右键的那个；目录不挂。 */
+/**
+ * 右键「添加到聊天」要挂的文件：点在多选里取整组里的文件，否则只取右键的那个；目录不挂，
+ * 目标在工程外或已不存在的链接也不挂（读不到）。
+ */
 export function resolveTreeChatFilePaths(
   tree: Nullable<FileTreeApi>,
   entry: WorkbenchDirectoryEntry
 ): string[] {
+  const isChatFile = (candidate: WorkbenchDirectoryEntry): boolean =>
+    candidate.type === 'file' && !isUnresolvedTreeSymlink(candidate)
   if (tree && isTreeEntryInMultiSelection(tree, entry.path))
     return tree.selectedNodes
-      .filter((node) => node.data.entry.type === 'file')
-      .map((node) => node.data.entry.path)
+      .map((node) => node.data.entry)
+      .filter(isChatFile)
+      .map((candidate) => candidate.path)
 
-  return entry.type === 'file' ? [entry.path] : []
+  return isChatFile(entry) ? [entry.path] : []
 }
 
 export function deleteSelectedTreeEntries(tree: Nullable<FileTreeApi>): void {
