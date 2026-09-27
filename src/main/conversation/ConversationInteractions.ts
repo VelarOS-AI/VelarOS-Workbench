@@ -21,9 +21,13 @@ import type { ConversationSessionEvent } from './WorkbenchConversationTypes'
 
 type Interaction = Extract<ConversationSessionEvent, { type: 'interaction' }>['request']
 
+/** 登录墙确认的补充（与 Desktop 相同）：界面据此画成登录卡，用户在页面里登录好了点「继续」。 */
+export const LoginConfirmation = Object.freeze({ purpose: 'login' as const })
+
 /**
  * 卡的种类（与 Desktop 相同）：能力申请（只剩旧记录里还没答的）、提问（按有没有选项或表单分三种）、确认。
- * 确认里带操作身份的是危险命令，其余是普通确认（模型的 confirm、每次都问的写入）。
+ * 确认里带操作身份的是危险命令，带 {@link LoginConfirmation} 的是登录墙，其余是普通确认（模型的 confirm、
+ * 每次都问的写入）。
  */
 export function interactionKind(request: Interaction): InteractionKind {
   if (request.kind === 'capability') return 'capability'
@@ -32,6 +36,7 @@ export function interactionKind(request: Interaction): InteractionKind {
     return question?.options ? 'choice' : question?.fields ? 'form' : 'input'
   }
   const detail = request.detail
+  if (isPlainObject(detail) && detail.purpose === LoginConfirmation.purpose) return 'login'
   if (isPlainObject(detail) && isPlainObject(detail.operation)) {
     if (isNonBlankString(detail.operation.label)) return 'danger'
   }

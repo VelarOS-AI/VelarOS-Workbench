@@ -29,7 +29,10 @@ short scripts against resident modules (`velaros:project`, `velaros:code`, `vela
 `velaros:interaction`, `velaros:widget`), and the scripts execute in an isolated utility process.
 Sub-agents, web search and long-term memory are on, as in Desktop: `velaros:web` searches and reads pages
 in hidden windows (Google or Bing, set in Settings → AI), and memories are kept per project and can be
-reviewed or deleted in Settings → AI. Workbench adds its host
+reviewed or deleted in Settings → AI. The agent also drives a browser (`velaros:browser`, with
+`velaros:devtools` and `velaros:cdp`): each chat session gets a controlled page that opens as an
+"Agent" tab in the editor area, the same Platform browser runtime Desktop uses; capabilities an IDE
+does not need (office documents, system-wide files, computer use) are not mounted. Workbench adds its host
 instructions (reply language, plan and goal modes) and the project's AI rule files (`.velar/rules.md`,
 `AGENTS.md`, `CLAUDE.md`, `.cursorrules`, `.cursor/rules/`, `.github/copilot-instructions.md`).
 Conversation state lives in the Platform's session store outside the project.
@@ -43,8 +46,8 @@ everything.
 Every run captures a Git checkpoint first. When the run's writes settle, the AI changes card lists
 the files the agent changed, with diffs and per-file attribution (agent-only or mixed with other
 edits). The agent's write windows come from the runtime's effect metrics; project edits also refresh
-the language service immediately. Rewind, external engines (Claude Code, Codex), Mods, resource
-plugins and CodeGraph were retired with the Platform migration, matching Desktop.
+the language service immediately. Rewind, Mods, resource plugins and CodeGraph were retired with the
+Platform migration, matching Desktop.
 
 ## Development
 

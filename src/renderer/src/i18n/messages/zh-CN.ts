@@ -545,6 +545,7 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     runInputPlaceholder: '输入发送到进程（Ctrl+C 中断）',
     runOpenInternal: '在内置浏览器打开',
     runOpenExternal: '在外部浏览器打开',
+    agentBrowserTabTitle: 'Agent · {host}',
     debugBack: '后退',
     debugForward: '前进',
     debugReload: '刷新',

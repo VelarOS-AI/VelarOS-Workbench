@@ -1,10 +1,11 @@
 import { statSync } from 'node:fs'
 import { basename, join, resolve } from 'node:path'
 
-import { app, BrowserWindow, session, shell } from 'electron'
+import { app, BrowserWindow, session, shell, webContents } from 'electron'
 
 import { Log } from '@velaros-ai/core'
 import { createModelRuntimeComposition } from '@velaros-ai/model'
+import { createElectronBrowserRuntime } from '@velaros-ai/velaros/browser/electron'
 import { createShellEnvironment } from '@velaros-ai/velaros/shell/local'
 
 import productionAppIconPath from '../../build/icon.png?asset'
@@ -16,7 +17,13 @@ import { WorkbenchAccountService } from './account/WorkbenchAccountService'
 import { WorkbenchSharedAccountStore } from './account/WorkbenchSharedAccountStore'
 import { WorkbenchProductAnalyticsReporter } from './analytics/WorkbenchProductAnalyticsReporter'
 import { installWorkbenchProductAnalyticsRuntime } from './analytics/WorkbenchProductAnalyticsRuntime'
-import { installWorkbenchBrowserDefaultPermissionPolicy } from './browser/WorkbenchBrowserPermissionPolicy'
+import { WorkbenchBrowserBackgroundPages } from './browser/WorkbenchBrowserBackgroundPages'
+import { registerWorkbenchBrowserIpc } from './browser/WorkbenchBrowserIpc'
+import {
+  installWorkbenchBrowserDefaultPermissionPolicy,
+  registerWorkbenchBrowserRuntimePermissionHandler,
+} from './browser/WorkbenchBrowserPermissionPolicy'
+import { WorkbenchBrowserService } from './browser/WorkbenchBrowserService'
 import { WorkbenchBrowserWebviewGate } from './browser/WorkbenchBrowserWebviewGate'
 import workbenchScriptWorkerPath from './conversation/workbench-script-worker.ts?modulePath'
 import { createWorkbenchConversationConfiguration } from './conversation/WorkbenchConversationConfiguration'
@@ -295,6 +302,22 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
   // 长期记忆与网上查资料（与 Desktop 同一套）：记忆按项目各一份，查资料跑在不显示的页面里。
   const memory = new WorkbenchMemoryService(providers.parts.storagePaths.getMemoryDir())
   const webPages = new WorkbenchWebSearchPages()
+  // Agent 浏览器（与 Desktop 同一套运行时）：运行时一个进程一份；页面发起的权限请求交给运行时变成模型处理的待办，
+  // 无人管理的一律拒绝。
+  const browserService = new WorkbenchBrowserService({
+    createRuntime: (callbacks) =>
+      createElectronBrowserRuntime({
+        ...callbacks,
+        registerPermissionRequestHandler: (electronSession, handler) =>
+          registerWorkbenchBrowserRuntimePermissionHandler(electronSession, handler),
+        resolvePermissionRequest: () => false,
+        resolveUnmanagedPermissionRequest: () => false,
+        selectWebAuthnAccount: async () => null,
+      }),
+    siteWorkspaceRoot: providers.parts.storagePaths.getBrowserSitesDir(),
+    backgroundPages: new WorkbenchBrowserBackgroundPages(),
+    resolveGuest: (webContentsId) => webContents.fromId(webContentsId) ?? null,
+  })
   const conversationRuntime = createWorkbenchConversationRuntime({
     runner: createWorkbenchScriptRunner({ workerPath: workbenchScriptWorkerPath }),
     shells: shellHosts,
@@ -309,6 +332,7 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
       (await providers.workspace.projectRules(projectRoot)).files,
     memory: (workspace) => memory.forRun(workspace),
     webPages,
+    browser: browserService,
   })
   registerWorkbenchTerminalIpc(providers.parts.terminal)
   registerWorkbenchGitIpc(providers.git, providers.chatCheckpoints, providers.chatRunChanges)
@@ -327,8 +351,9 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
       await Promise.all([
         providers.parts.terminal.closeSessionsForOwner(ownerId),
         providers.language.invalidateProject({ projectRoot }),
-        // 窗口关掉或切走项目：这个项目里还在跑的对话一并停下。
+        // 窗口关掉或切走项目：这个项目里还在跑的对话一并停下，浏览器页面一并离站。
         conversationRuntime.cancelProject(projectRoot),
+        browserService.releaseProject(projectRoot),
       ])
     },
   })
@@ -339,6 +364,7 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
     analytics: productAnalytics,
   })
   const disposeMemoryIpc = registerWorkbenchMemoryIpc({ memory, windows: windowManager })
+  const disposeBrowserIpc = registerWorkbenchBrowserIpc({ browser: browserService, windows: windowManager })
   registerWorkbenchFsIpc(
     providers.fileSystem,
     providers.parts,
@@ -362,6 +388,8 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
     disposeModelIpc()
     disposeConversationIpc()
     disposeMemoryIpc()
+    disposeBrowserIpc()
+    browserService.close()
     disposeWorkspaceIpc()
     disposeProductAnalyticsRuntime()
     void Promise.allSettled([

@@ -3,6 +3,7 @@ import type { Session, WebContents } from 'electron'
 
 import {
   installWorkbenchBrowserDefaultPermissionPolicy,
+  registerWorkbenchBrowserRuntimePermissionHandler,
   type WorkbenchBrowserPermissionSession,
 } from '../src/main/browser/WorkbenchBrowserPermissionPolicy'
 
@@ -104,5 +105,27 @@ describe('Workbench browser interactive permissions', () => {
     expect(rig.request('pointerLock')).toEqual([true])
     expect(rig.request('geolocation')).toEqual([false])
     expect(rig.check('geolocation')).toBe(false)
+  })
+
+  test('hands page permission requests to the browser runtime while it is registered', () => {
+    // Agent 接管的页面发起的权限请求交给浏览器运行时，变成模型用 handlePermission 处理的待办；
+    // 注销之后回到默认拒绝，指针锁定始终按宿主登记放行。
+    const rig = createRig()
+    const delegated: string[] = []
+    const unregister = registerWorkbenchBrowserRuntimePermissionHandler(rig.session,
+      (_guest, permission, callback) => {
+        delegated.push(permission)
+        callback(permission === 'geolocation')
+      })
+    expect(rig.request('pointerLock')).toEqual([true])
+    expect(rig.request('geolocation')).toEqual([true])
+    expect(delegated).toEqual(['geolocation'])
+    rig.state.owned = false
+    expect(rig.request('pointerLock')).toEqual([false])
+    expect(delegated).toEqual(['geolocation'])
+    rig.state.owned = true
+    unregister()
+    expect(rig.request('pointerLock')).toEqual([true])
+    expect(rig.request('geolocation')).toEqual([false])
   })
 })

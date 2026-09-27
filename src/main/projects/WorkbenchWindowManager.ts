@@ -112,6 +112,17 @@ export class WorkbenchWindowManager {
       : emptyProjectHubState()
   }
 
+  /** 打开着这个项目的窗口的 WebContents：项目路径全局去重，最多一个。 */
+  public getWebContentsForProject(projectRoot: string): Nullable<WebContents> {
+    const target = resolve(projectRoot)
+    for (const record of this.records.values()) {
+      const path = record.hub.getState().currentProject?.path
+      if (path && resolve(path) === target && !record.window.isDestroyed())
+        return record.window.webContents
+    }
+    return null
+  }
+
   public getOpenProjectPaths(): string[] {
     return [...this.records.values()].flatMap((record) => {
       const path = record.hub.getState().currentProject?.path

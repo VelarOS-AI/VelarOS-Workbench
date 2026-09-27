@@ -12,6 +12,7 @@ import type {
   WorkbenchConversationSendRequest,
   WorkbenchPermissionConfirmationMode,
 } from '../../shared/workbenchConversation'
+import type { ConversationBrowser } from '../browser/WorkbenchBrowserService'
 import type { WorkbenchAgentProjectActivityPort } from '../workspace/git/WorkbenchChatRunAttribution'
 
 /** 当前模型驱动。 */
@@ -76,6 +77,8 @@ export interface ConversationWorkspaceOptions {
   memory?: MemoryScopeApi
   /** 网上查资料（`velaros:web`）的无头页面与搜索引擎；没有就不挂这个模块。 */
   web?: WebSpacePort
+  /** 这个会话的 Agent 浏览器（velaros:browser / devtools / cdp 操作编辑区里的受控页面）；没有就不挂。 */
+  browser?: ConversationBrowser
   model: ConversationModel
   confirmationMode: WorkbenchPermissionConfirmationMode
   signal: AbortSignal

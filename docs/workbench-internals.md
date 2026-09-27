@@ -35,7 +35,11 @@ Workbench 是单体仓库：根 `package.json` 是唯一清单，全部产品源
   interaction、widget；子任务开。网上查资料（`velaros:web`，与 Desktop 同一套）每个会话都挂、不常驻：搜索与
   读网页跑在不显示的窗口里（`WorkbenchWebSearchPages`，独立分区 `persist:velaros-workbench-web`，不带内置浏览器的
   登录），搜索引擎跟设置走。长期记忆（`WorkbenchMemoryService`，记忆库在 `userData/memory`）按项目根的真实路径
-  各一份作用域，这一轮开始时的索引附在宿主说明末尾；设置里能关、能看、能删。模型写的脚本在 `utilityProcess` 起的隔离进程里跑
+  各一份作用域，这一轮开始时的索引附在宿主说明末尾；设置里能关、能看、能删。Agent 浏览器（velaros:browser /
+  devtools / cdp，与 Desktop 同一个 Electron 浏览器运行时）每个聊天会话一个受控页面：模型进站点时编辑区开出
+  「Agent · 站点」标签，webview 交给运行时接管（`WorkbenchBrowserService`，运行时会话 id 由项目根与会话 id 算出），
+  导航也经运行时走；标签切走时把页面交还，这一轮要用网页时由后台页面顶上；只认 http 与 https；标签关掉、会话删掉、
+  窗口放下项目时离站。办公文档、全机文件、电脑操作这类 IDE 用不上的能力不挂。模型写的脚本在 `utilityProcess` 起的隔离进程里跑
   （`workbench-script-worker.ts`）。
 - **状态**：会话数据在 `userData/conversation-runtime/<sha256(项目根 \0 会话 id)>`，任何项目之外；
   空闲时读、改目标用无模型的控制会话。旧的 Kernel 会话历史不迁移，老会话下一轮从 Platform 的新上下文开始。

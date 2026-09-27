@@ -13,6 +13,7 @@ import { browserAddress } from '@velaros-ai/velaros/browser/renderer'
 
 import {
   normalizeWorkbenchBrowserPageUrl,
+  type WorkbenchBrowserNavigationAction,
   WorkbenchBrowserPartition,
 } from '@shared/workbenchBrowser'
 
@@ -55,29 +56,36 @@ export function normalizeWorkbenchBrowserAddress(input: string): string {
   return candidate ? normalizeWorkbenchBrowserPageUrl(candidate) ?? '' : ''
 }
 
+/** Agent 浏览器：页面由主进程的浏览器运行时接管，导航也经运行时走。 */
+export interface WorkbenchControlledBrowserPage {
+  /** 把这个 webview 的 guest 交给运行时接管；页面每次就绪都会再交一次，由调用方去重。 */
+  attach: (webContentsId: number) => void
+  navigate: (action: WorkbenchBrowserNavigationAction, url?: string) => void
+}
+
 interface WorkbenchWebviewDebugPanelProps {
   url: string
   partition?: string
   /** webview 内部导航后回填地址/标题给上层选项卡。 */
   onNavigate?: (url: string, title?: string) => void
-  /** Agent 浏览器用此回调把同一份 guest WebContents 交给 main runtime 接管。 */
-  onWebContentsReady?: (webContentsId: number, url: string) => void
+  /** 给了就是 Agent 浏览器：面板不自己 loadURL，地址栏与前进、后退、刷新都交给它。 */
+  controlled?: WorkbenchControlledBrowserPage
 }
 
 export function WorkbenchWebviewDebugPanel({
   url,
   partition = WorkbenchBrowserPartition,
   onNavigate,
-  onWebContentsReady,
+  controlled,
 }: WorkbenchWebviewDebugPanelProps): ReactElement {
   const { t } = useWorkbenchI18n()
   const webviewRef = useRef<Nullable<DebugWebviewElement>>(null)
   const readyRef = useRef(false)
   const lastLoadedRef = useRef('')
   const onNavigateRef = useRef(onNavigate)
-  const onWebContentsReadyRef = useRef(onWebContentsReady)
+  const controlledRef = useRef(controlled)
   onNavigateRef.current = onNavigate
-  onWebContentsReadyRef.current = onWebContentsReady
+  controlledRef.current = controlled
 
   const [addressDraft, setAddressDraft] = useState(url)
   const [currentUrl, setCurrentUrl] = useState(url)
@@ -91,7 +99,19 @@ export function WorkbenchWebviewDebugPanel({
     if (!webview || !readyRef.current || !normalized) return
 
     lastLoadedRef.current = normalized
-    void webview.loadURL(normalized).catch(() => undefined)
+    // Agent 浏览器的页面归运行时：两处各自导航会互相打断，界面只把去向交给它。
+    const page = controlledRef.current
+    if (page) page.navigate('goto', normalized)
+    else void webview.loadURL(normalized).catch(() => undefined)
+  }, [])
+  const navigateHistory = useCallback((action: 'back' | 'forward' | 'reload'): void => {
+    const webview = webviewRef.current
+    if (!webview || !readyRef.current) return
+    const page = controlledRef.current
+    if (page) page.navigate(action)
+    else if (action === 'back') webview.goBack()
+    else if (action === 'forward') webview.goForward()
+    else webview.reload()
   }, [])
 
   useEffect(() => {
@@ -110,8 +130,12 @@ export function WorkbenchWebviewDebugPanel({
     const handleDomReady = (): void => {
       readyRef.current = true
       syncNavState()
+      const page = controlledRef.current
+      if (page) {
+        page.attach(webview.getWebContentsId())
+        return
+      }
       const normalized = normalizeWorkbenchBrowserAddress(url)
-      onWebContentsReadyRef.current?.(webview.getWebContentsId(), normalized)
       if (lastLoadedRef.current !== normalized) loadUrl(url)
     }
 
@@ -164,17 +188,23 @@ export function WorkbenchWebviewDebugPanel({
   }, [loadUrl, url])
 
   useEffect(() => {
-    if (readyRef.current && normalizeWorkbenchBrowserAddress(url) !== lastLoadedRef.current) {
-      setAddressDraft(url)
-      loadUrl(url)
+    if (!readyRef.current || normalizeWorkbenchBrowserAddress(url) === lastLoadedRef.current) return
+    setAddressDraft(url)
+    // Agent 浏览器的地址来自运行时（页面已经在那儿了），只更新地址栏。
+    if (controlledRef.current) {
+      lastLoadedRef.current = normalizeWorkbenchBrowserAddress(url)
+      setCurrentUrl(url)
+      return
     }
+    loadUrl(url)
   }, [url, loadUrl])
 
   const handleRetry = useCallback((): void => {
     const target = failedLoad?.url || currentUrl || addressDraft
     setFailedLoad(null)
-    loadUrl(target)
-  }, [addressDraft, currentUrl, failedLoad, loadUrl])
+    if (controlledRef.current) navigateHistory('reload')
+    else loadUrl(target)
+  }, [addressDraft, currentUrl, failedLoad, loadUrl, navigateHistory])
 
   const handleOpenExternal = useCallback((): void => {
     const target = normalizeWorkbenchBrowserAddress(
@@ -193,7 +223,7 @@ export function WorkbenchWebviewDebugPanel({
           title={t('workbench.debugBack')}
           disabled={!canGoBack}
           onClick={() => {
-            if (readyRef.current && webviewRef.current?.canGoBack()) webviewRef.current.goBack()
+            if (readyRef.current && webviewRef.current?.canGoBack()) navigateHistory('back')
           }}
         >
           <ArrowLeftIcon size={15} />
@@ -205,7 +235,7 @@ export function WorkbenchWebviewDebugPanel({
           title={t('workbench.debugForward')}
           disabled={!canGoForward}
           onClick={() => {
-            if (readyRef.current && webviewRef.current?.canGoForward()) webviewRef.current.goForward()
+            if (readyRef.current && webviewRef.current?.canGoForward()) navigateHistory('forward')
           }}
         >
           <ArrowRightIcon size={15} />
@@ -215,9 +245,7 @@ export function WorkbenchWebviewDebugPanel({
           size="icon-sm"
           label={t('workbench.debugReload')}
           title={t('workbench.debugReload')}
-          onClick={() => {
-            if (readyRef.current) webviewRef.current?.reload()
-          }}
+          onClick={() => navigateHistory('reload')}
         >
           <ArrowClockwiseIcon size={15} />
         </IconButton>

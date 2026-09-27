@@ -9,6 +9,7 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent, webUtils } from 'ele
 
 import { type WorkbenchProjectHubBridge, WorkbenchProjectHubChannels } from '../shared/projectHub'
 import { type WorkbenchAccountBridge, WorkbenchAccountChannels } from '../shared/workbenchAccount'
+import { type WorkbenchBrowserBridge, WorkbenchBrowserChannels } from '../shared/workbenchBrowser'
 import {
   type WorkbenchConversationBridge,
   WorkbenchConversationChannels,
@@ -190,6 +191,15 @@ const conversationBridge: WorkbenchConversationBridge = {
   onEvent: (listener) => subscribe(WorkbenchConversationChannels.event, listener),
 }
 
+const browserBridge: WorkbenchBrowserBridge = {
+  getState: (request) => ipcRenderer.invoke(WorkbenchBrowserChannels.getState, request),
+  attachPage: (request) => ipcRenderer.invoke(WorkbenchBrowserChannels.attachPage, request),
+  detachPage: (request) => ipcRenderer.invoke(WorkbenchBrowserChannels.detachPage, request),
+  navigate: (request) => ipcRenderer.invoke(WorkbenchBrowserChannels.navigate, request),
+  leaveSite: (request) => ipcRenderer.invoke(WorkbenchBrowserChannels.leaveSite, request),
+  onChanged: (listener) => subscribe(WorkbenchBrowserChannels.changed, listener),
+}
+
 const memoryBridge: WorkbenchMemoryBridge = {
   listEntries: (request) => ipcRenderer.invoke(WorkbenchMemoryChannels.listEntries, request),
   removeEntry: (request) => ipcRenderer.invoke(WorkbenchMemoryChannels.removeEntry, request),
@@ -246,6 +256,7 @@ contextBridge.exposeInMainWorld('velarosWorkbenchWatch', watchBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchGit', gitBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchConversation', conversationBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchMemory', memoryBridge)
+contextBridge.exposeInMainWorld('velarosWorkbenchBrowser', browserBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchModel', modelBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchWorkspace', workspaceBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchUpdate', updateBridge)

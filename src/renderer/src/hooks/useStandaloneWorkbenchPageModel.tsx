@@ -54,6 +54,7 @@ import type {
 } from '@shared/contracts'
 
 import { useStableWorkbenchMessageTranslate } from '../runtime/useStableWorkbenchMessaging'
+import { useWorkbenchAgentBrowserSite } from '../runtime/workbenchAgentBrowserSite'
 import { SystemDefaultEditorLightId } from '../support/defaultEditor'
 import { useLatest, useMemoizedFn } from '../support/genericHooks'
 import { useWorkspaceFilesChangedRefresh } from '../support/useWorkspaceFilesChangedRefresh'
@@ -363,6 +364,21 @@ export function useStandaloneWorkbenchPageModel(
     selectedFilePath: workbench.selectedFilePath,
     onSelectFile: workbench.selectFile,
   })
+  // Agent 浏览器：当前会话的浏览器进了站点就在编辑区开出（切到）它的标签，离站或换会话就收起。
+  const agentBrowserSite = useWorkbenchAgentBrowserSite(
+    toNullable(workbench.activeProject?.rootPath),
+    currentSession.id
+  )
+  const agentBrowserBindingSessionId = agentBrowserSite ? currentSession.id : null
+  const openAgentBrowserTab = editorNavigation.debug.agentBrowser.open
+  const closeAgentBrowserTab = editorNavigation.debug.agentBrowser.close
+  useEffect(() => {
+    if (agentBrowserBindingSessionId) {
+      openAgentBrowserTab(agentBrowserBindingSessionId)
+      return
+    }
+    closeAgentBrowserTab()
+  }, [agentBrowserBindingSessionId, closeAgentBrowserTab, openAgentBrowserTab])
   useWorkbenchProjectSessionPersistence({
     enabled: shouldUseProjectSession,
     projectId: toNullable(workbench.activeProject?.id),
@@ -903,6 +919,8 @@ export function useStandaloneWorkbenchPageModel(
     gitState,
     topRunControl,
     editorNavigation,
+    /** 当前会话的 Agent 浏览器此刻进的站点；没进为 null。 */
+    agentBrowser: { sessionId: currentSession.id, site: agentBrowserSite },
     pendingBrowserElementSelections,
     pendingChatFileReferences,
     aiChanges,

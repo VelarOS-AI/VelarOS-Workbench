@@ -28,6 +28,8 @@ export interface WorkbenchDebugTab {
   title: string
 }
 
+const WorkbenchAgentBrowserTabPrefix = 'agent-browser:'
+
 /** 用 host（含端口）作为调试选项卡标题，取不到就退回原始 URL。 */
 function deriveDebugTabTitle(url: string): string {
   try {
@@ -58,6 +60,9 @@ export function useWorkbenchEditorNavigationState({
   const [lightTab, setLightTab] = useState<Nullable<WorkbenchLightEditorTab>>(null)
   const [debugTabs, setDebugTabs] = useState<WorkbenchDebugTab[]>([])
   const [activeDebugTabId, setActiveDebugTabId] = useState<Nullable<string>>(null)
+  /** Agent 浏览器标签属于哪个聊天会话；会话的浏览器没进站点时为 null。 */
+  const [agentBrowserTabSessionId, setAgentBrowserTabSessionId] =
+    useState<Nullable<string>>(null)
   const debugTabsRef = useLatest(debugTabs)
   const [navigationRequest, setNavigationRequest] = useState<Nullable<EditorNavigationRequest>>(null)
   const [activeProblemId, setActiveProblemIdState] = useState<Nullable<string>>(null)
@@ -181,6 +186,44 @@ export function useWorkbenchEditorNavigationState({
     )
   }, [])
 
+  const agentBrowserTabId = agentBrowserTabSessionId
+    ? `${WorkbenchAgentBrowserTabPrefix}${agentBrowserTabSessionId}`
+    : null
+  /** Agent 进了站点：打开（或切到）这个会话的浏览器标签。 */
+  const openAgentBrowserTab = useCallback((sessionId: string): void => {
+    const normalizedSessionId = sessionId.trim()
+    if (!normalizedSessionId) return
+
+    setAgentBrowserTabSessionId(normalizedSessionId)
+    setDiffItem(null)
+    setLightTab(null)
+    setActiveDebugTabId(`${WorkbenchAgentBrowserTabPrefix}${normalizedSessionId}`)
+  }, [])
+  const selectAgentBrowserTab = useCallback((): void => {
+    if (!agentBrowserTabSessionId) return
+
+    setDiffItem(null)
+    setLightTab(null)
+    setActiveDebugTabId(`${WorkbenchAgentBrowserTabPrefix}${agentBrowserTabSessionId}`)
+  }, [agentBrowserTabSessionId])
+  /** 会话的浏览器离站（或换了会话）：收起标签；给了会话就只收那个会话的。 */
+  const closeAgentBrowserTab = useCallback((expectedSessionId?: string): void => {
+    setAgentBrowserTabSessionId((sessionId) => {
+      if (expectedSessionId && sessionId !== expectedSessionId) return sessionId
+      if (sessionId) {
+        const id = `${WorkbenchAgentBrowserTabPrefix}${sessionId}`
+        setActiveDebugTabId((active) => (active === id ? null : active))
+      }
+      return null
+    })
+  }, [])
+  const agentBrowser = {
+    tabId: agentBrowserTabId,
+    sessionId: agentBrowserTabSessionId,
+    open: openAgentBrowserTab,
+    select: selectAgentBrowserTab,
+    close: closeAgentBrowserTab,
+  }
   const debug = {
     tabs: debugTabs,
     activeTabId: activeDebugTabId,
@@ -188,6 +231,7 @@ export function useWorkbenchEditorNavigationState({
     selectTab: selectDebugTab,
     closeTab: closeDebugTab,
     navigateTab: navigateDebugTab,
+    agentBrowser,
   }
 
   function updateLightTabContent(content: string): void {

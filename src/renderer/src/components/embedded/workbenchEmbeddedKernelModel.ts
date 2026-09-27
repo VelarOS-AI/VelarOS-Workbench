@@ -46,6 +46,17 @@ export interface WorkbenchEmbeddedDebugTabsModel {
   onSelect: (id: string) => void
   onClose: (id: string) => void
   onNavigate: (id: string, url: string, title?: string) => void
+  /** 当前会话的 Agent 浏览器标签；浏览器没进站点时没有。 */
+  agentBrowser?: LooseOptional<{
+    id: string
+    projectRoot: string
+    sessionId: string
+    url: string
+    title: string
+    active: boolean
+    onSelect: () => void
+    onClose: () => void
+  }>
 }
 
 export interface WorkbenchEmbeddedEditorPanelModel {

@@ -10,7 +10,10 @@ import { AppError } from '@velaros-ai/core/error'
 import type { StandaloneWorkbenchPageModel } from '../../hooks/useStandaloneWorkbenchPageModel'
 import type { TopToolbarProps } from '../chrome/TopToolbar'
 
-import type { WorkbenchEmbeddedKernelModel } from './workbenchEmbeddedKernelModel'
+import type {
+  WorkbenchEmbeddedDebugTabsModel,
+  WorkbenchEmbeddedKernelModel,
+} from './workbenchEmbeddedKernelModel'
 
 export interface BuildStandaloneWorkbenchEmbeddedKernelModelOptions {
   showEditorTopBar?: boolean
@@ -212,6 +215,7 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
         onSelect: editorNavigation.debug.selectTab,
         onClose: editorNavigation.debug.closeTab,
         onNavigate: editorNavigation.debug.navigateTab,
+        agentBrowser: buildAgentBrowserTab(model, activeProject.rootPath),
       },
       workspace: {
         onRevertSelectedFile: workbench.revertSelectedFile,
@@ -245,5 +249,39 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
         navigationRequest: editorNavigation.navigationRequest,
       },
     },
+  }
+}
+
+/** 当前会话的 Agent 浏览器标签：浏览器进了站点、标签开着时才有；关掉标签就是让浏览器离站。 */
+function buildAgentBrowserTab(
+  model: StandaloneWorkbenchPageModel,
+  projectRoot: string
+): WorkbenchEmbeddedDebugTabsModel['agentBrowser'] {
+  const { site, sessionId } = model.agentBrowser
+  const tab = model.editorNavigation.debug.agentBrowser
+  if (!site || !tab.tabId || tab.sessionId !== sessionId) return null
+  const tabId = tab.tabId
+  return {
+    id: tabId,
+    projectRoot,
+    sessionId,
+    url: site.url,
+    title: model.chrome.t('workbench.agentBrowserTabTitle', { host: siteHost(site.url) }),
+    active: model.editorNavigation.debug.activeTabId === tabId,
+    onSelect: tab.select,
+    onClose: () => {
+      void window.velarosWorkbenchBrowser
+        .leaveSite({ projectRoot, sessionId })
+        .catch(() => undefined)
+        .finally(() => tab.close(sessionId))
+    },
+  }
+}
+
+function siteHost(url: string): string {
+  try {
+    return new URL(url).host || url
+  } catch {
+    return url
   }
 }

@@ -18,6 +18,7 @@ interface WorkbenchBrowserPermissionOptions {
 }
 
 interface PermissionPolicyState {
+  delegate: PermissionRequestHandler | null
   installed: boolean
   isInteractiveGuest: WorkbenchBrowserPermissionOptions['isInteractiveGuest']
   readonly check: PermissionCheckHandler
@@ -49,6 +50,7 @@ function getOrCreatePolicyState(
   if (current) return current
 
   const state: PermissionPolicyState = {
+    delegate: null,
     installed: false,
     isInteractiveGuest: () => false,
     check: (webContents, permission, requestingOrigin, details) =>
@@ -56,12 +58,29 @@ function getOrCreatePolicyState(
       && allowsInteractivePointerLock(state, webContents, requestingOrigin)
       && (details.requestingUrl === undefined
         || allowsInteractivePointerLock(state, webContents, details.requestingUrl)),
-    // 调试页只放行指针锁定（用户手势约束和 Esc 释放由 Chromium 执行），其余权限一律拒绝。
     gateway: (webContents, permission, callback, details) => {
-      callback(
-        permission === 'pointerLock'
-        && allowsInteractivePointerLock(state, webContents, details.requestingUrl)
-      )
+      if (permission === 'pointerLock') {
+        // 人工预览与已呈现的 Agent 页面共用交互策略；用户手势约束和 Esc 释放由 Chromium 执行。
+        callback(allowsInteractivePointerLock(state, webContents, details.requestingUrl))
+        return
+      }
+      const delegate = state.delegate
+      if (!delegate) {
+        callback(false)
+        return
+      }
+
+      let settled = false
+      const settle = (granted: boolean): void => {
+        if (settled) return
+        settled = true
+        callback(granted === true)
+      }
+      try {
+        delegate(webContents, permission, settle, details)
+      } catch {
+        settle(false)
+      }
     },
   }
   permissionPolicies.set(electronSession, state)
@@ -80,7 +99,8 @@ function applyStableGateway(
 }
 
 /**
- * Browser partition 创建后立即安装。已由宿主验证的交互页面可使用指针锁定，其余权限默认拒绝。
+ * Browser partition 创建后立即安装。已由宿主验证的交互页面可使用指针锁定，
+ * 其余权限沿用默认拒绝与 runtime 授权链，不受人工页是否接入 Agent 会话影响。
  */
 export function installWorkbenchBrowserDefaultPermissionPolicy(
   electronSession: WorkbenchBrowserPermissionSession,
@@ -91,6 +111,26 @@ export function installWorkbenchBrowserDefaultPermissionPolicy(
   applyStableGateway(electronSession, state)
   // Electron Session 与应用同寿命；清理函数故意不撤掉 fail-closed gateway。
   return () => undefined
+}
+
+/**
+ * Runtime 接管页面时临时安装 pending-event handler。注销只移除该委托，
+ * 交互页面的指针锁定仍由稳定 gateway 处理。
+ */
+export function registerWorkbenchBrowserRuntimePermissionHandler(
+  electronSession: WorkbenchBrowserPermissionSession,
+  handler: PermissionRequestHandler
+): () => void {
+  const state = getOrCreatePolicyState(electronSession)
+  applyStableGateway(electronSession, state)
+  state.delegate = handler
+
+  let disposed = false
+  return () => {
+    if (disposed) return
+    disposed = true
+    if (state.delegate === handler) state.delegate = null
+  }
 }
 
 export type { WorkbenchBrowserPermissionSession }

@@ -4,6 +4,7 @@ import { isArray, isBoolean, isNonBlankString, isPlainObject, isTrue } from '@ve
 import { AppError } from '@velaros-ai/core/error'
 import type {
   ApprovalDecision,
+  OperationContext,
   PreparedInvocation,
   ToolConfirmationDecisionOptions,
 } from '@velaros-ai/kernel'
@@ -14,6 +15,18 @@ import {
   createRuntime,
   createShellCapabilityModule,
 } from '@velaros-ai/velaros'
+import {
+  type BrowserOperationContext,
+  browserOperations,
+  cdpOperations,
+  createBrowserLoginGate,
+  devtoolsOperations,
+} from '@velaros-ai/velaros/browser'
+import {
+  VelarBrowserModule,
+  VelarCdpModule,
+  VelarDevtoolsModule,
+} from '@velaros-ai/velaros/browser/contracts'
 import { projectCapabilityPorts } from '@velaros-ai/velaros/project'
 import type { ShellSpacePort } from '@velaros-ai/velaros/shell'
 import { shellCommandApproval } from '@velaros-ai/velaros/shell'
@@ -23,6 +36,7 @@ import { VelarWebModule } from '@velaros-ai/velaros/web/contracts'
 import { resolveWorkspaceIntegrityConfirmation } from '../workspace/CommandExecutionPolicy'
 import type { WorkbenchAgentProjectActivityPort } from '../workspace/git/WorkbenchChatRunAttribution'
 
+import { LoginConfirmation } from './ConversationInteractions'
 import type {
   ConversationControlOptions,
   ConversationWorkspaceHandle,
@@ -78,15 +92,52 @@ export class WorkbenchConversationSession implements WorkbenchConversationSessio
     let session: VelarosSession | undefined
     let runtime: VelarosRuntime | undefined
     const windows = new ProjectActivityWindows(root, options.activity, options.projectFilesEdited)
-    const { memory, web } = options
+    const { memory, web, browser } = options
+    // 浏览器、开发者工具与 CDP 三件能力操作编辑区里这个会话的受控页面（与 Desktop 同一套装配）。登录墙门控一轮
+    // 一份：同一个站点这一轮最多问一次，问过之后批准还是拒绝都不再拦。
+    const browserModules = browser
+      ? (() => {
+          const gate = createBrowserLoginGate({
+            requestLoginCompletion: ({ message }) =>
+              decide(message, options.signal, LoginConfirmation),
+          })
+          const mount = (call: OperationContext): BrowserOperationContext => ({
+            abortSignal: call.signal,
+            browser: gate.wrap(browser.port(call.signal)),
+            attachImage: (image) => call.attach({ type: 'image-data', ...image }),
+          })
+          const instanceId = options.sessionId
+          return [
+            createCapabilityModule({
+              surface: VelarBrowserModule,
+              implementation: browserOperations,
+              instanceId,
+              context: mount,
+            }),
+            createCapabilityModule({
+              surface: VelarDevtoolsModule,
+              implementation: devtoolsOperations,
+              instanceId,
+              context: mount,
+            }),
+            createCapabilityModule({
+              surface: VelarCdpModule,
+              implementation: cdpOperations,
+              instanceId,
+              context: mount,
+            }),
+          ]
+        })()
+      : []
     // 审批选项（危险命令的操作身份与风险）随请求交给交互卡；回答是卡上给的 { approved, reason }
     const decide = async (
       message: string,
       signal: AbortSignal,
-      detail?: ToolConfirmationDecisionOptions
+      detail?: ToolConfirmationDecisionOptions | typeof LoginConfirmation
     ): Promise<ApprovalDecision> => {
-      // 「从不询问」档连危险命令也直接放行
-      if (options.confirmationMode === 'never-ask') return { approved: true, message: null }
+      // 「从不询问」档连危险命令也直接放行；登录墙要用户自己去登录，照常弹卡（与 Desktop 相同）
+      if (options.confirmationMode === 'never-ask' && detail !== LoginConfirmation)
+        return { approved: true, message: null }
       if (!session) throw new AppError('UNAVAILABLE', '会话尚未就绪。')
       const answer = await session.request('confirmation', message, signal, detail)
       const approved = isBoolean(answer) ? answer : isPlainObject(answer) && isTrue(answer.approved)
@@ -118,7 +169,10 @@ export class WorkbenchConversationSession implements WorkbenchConversationSessio
         project: { code: true, images: true },
         instructions: options.instructions,
         residentModules: ResidentModules,
-        environment: options.environment,
+        // 每帧带上浏览器当前页面，模型不用先查就知道页面翻到了哪里（与 Desktop 相同）。
+        environment: browser
+          ? () => ({ ...options.environment?.(), ...browser.environment() })
+          : options.environment,
         dataDir: options.dataDir,
         model: options.model,
         modules: [
@@ -134,6 +188,7 @@ export class WorkbenchConversationSession implements WorkbenchConversationSessio
                 decide(message, signal, detail),
             },
           }),
+          ...browserModules,
           // 网上查资料（与 Desktop 一样每个会话都挂、不常驻，要用时 import）：搜索与读网页跑在不显示的页面里。
           ...(web
             ? [

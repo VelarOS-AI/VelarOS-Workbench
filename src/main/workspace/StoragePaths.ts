@@ -29,6 +29,8 @@ const WorkbenchStorageDirectory = {
   conversationRuntime: 'conversation-runtime',
   /** 长期记忆（Platform 的记忆库）：一个作用域一个目录的 Markdown，项目按项目根的真实路径各一份。 */
   memory: 'memory',
+  /** Agent 浏览器的站点工作区（截图、下载、PDF）：按站点分格，在任何项目之外。 */
+  browserSites: 'browser-sites',
 } as const
 
 class WorkbenchAppStoragePaths {
@@ -60,6 +62,11 @@ class WorkbenchAppStoragePaths {
   /** Platform 会话数据区（见 {@link WorkbenchStorageDirectory.conversationRuntime}）。 */
   public getConversationRuntimeDir(): string {
     return this.ensureDir(join(this.dataRootDir, WorkbenchStorageDirectory.conversationRuntime))
+  }
+
+  /** Agent 浏览器的站点工作区根（见 {@link WorkbenchStorageDirectory.browserSites}）。 */
+  public getBrowserSitesDir(): string {
+    return this.ensureDir(join(this.dataRootDir, WorkbenchStorageDirectory.browserSites))
   }
 
   /** 长期记忆库根目录（见 {@link WorkbenchStorageDirectory.memory}）。 */

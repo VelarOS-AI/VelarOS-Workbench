@@ -82,6 +82,23 @@ async function fixture(t, generate, options = {}) {
       throw new Error('测试不开网页')
     },
   }
+  // Agent 浏览器：测试里只看模块挂没挂上、每帧带不带页面，不真的开页面。
+  const browserCalls = []
+  const browser = {
+    conversation: (ref) => {
+      browserCalls.push(['conversation', ref.sessionId])
+      return {
+        port: () => {
+          throw new Error('测试不开页面')
+        },
+        environment: () => ({ browser: '还没进站点' }),
+      }
+    },
+    settleRun: (ref) => browserCalls.push(['settleRun', ref.sessionId]),
+    leaveSite: async (ref) => {
+      browserCalls.push(['leaveSite', ref.sessionId])
+    },
+  }
   const runtime = createWorkbenchConversationRuntime({
     runner: nodeSubprocessCodeRunner,
     shells,
@@ -102,6 +119,7 @@ async function fixture(t, generate, options = {}) {
     projectRules: async () => options.rules ?? [],
     memory: (workspace) => memory.forRun(workspace),
     webPages,
+    browser,
   })
   t.after(async () => {
     await runtime.close()
@@ -126,7 +144,20 @@ async function fixture(t, generate, options = {}) {
     ...overrides,
   })
   const lastState = () => events.filter((event) => event.type === 'state').at(-1)?.payload ?? null
-  return { runtime, workspace, directory, events, frames, windows, edits, memory, sink, request, lastState }
+  return {
+    runtime,
+    workspace,
+    directory,
+    events,
+    frames,
+    windows,
+    edits,
+    memory,
+    browserCalls,
+    sink,
+    request,
+    lastState,
+  }
 }
 
 test(
@@ -275,6 +306,45 @@ test(
     const off = f.runtime.submit(f.sink, f.request('再问一次', { memory: false, sessionId: 'session-2' }))
     await off.completed
     assert.doesNotMatch(JSON.stringify(f.frames.at(-1)), /跨会话长期记忆的索引/u)
+  }
+)
+
+test(
+  'mounts the browser for the session and only the capabilities an IDE uses',
+  { timeout: 30_000 },
+  async (t) => {
+    const f = await fixture(t, async function* (frame, _signal, call) {
+      if (call === 1)
+        yield {
+          type: 'text',
+          text: execute(
+            frame,
+            "// 看看挂了哪些模块\nimport {open} from 'velaros:browser';import {list} from 'velaros:modules';const page = await list({limit: 100});console.log('browser-module:' + typeof open);console.log('mounted:' + JSON.stringify(page));"
+          ),
+        }
+      else yield { type: 'text', text: done(frame, '好了') }
+      yield { type: 'finish', reason: 'stop' }
+    })
+    const run = f.runtime.submit(f.sink, f.request('有哪些模块'))
+    await run.completed
+    assert.equal(f.lastState()?.kind, 'done', JSON.stringify(f.events.slice(-3)))
+    // 每帧的环境报告里带着浏览器现在在哪一页
+    assert.match(JSON.stringify(f.frames[0]), /还没进站点/u)
+    const observed = JSON.stringify(f.frames[1])
+    assert.match(observed, /browser-module:function/u)
+    for (const moduleId of ['velaros:browser', 'velaros:devtools', 'velaros:cdp', 'velaros:web', 'velaros:shell'])
+      assert.match(observed, new RegExp(moduleId, 'u'), moduleId)
+    // Workbench 用不上的能力不挂（与 Desktop 的系统空间不同）
+    for (const moduleId of ['velaros:office', 'velaros:files', 'velaros:computer', 'velaros:sandbox', 'velaros:sessions'])
+      assert.doesNotMatch(observed, new RegExp(`"${moduleId}"`, 'u'), moduleId)
+    // 一轮结束：浏览器不再给这个会话开后台页面
+    assert.deepEqual(f.browserCalls, [
+      ['conversation', 'session-1'],
+      ['settleRun', 'session-1'],
+    ])
+    // 会话删了：浏览器离站
+    await f.runtime.deleteSession({ projectRoot: f.workspace, sessionId: 'session-1' })
+    assert.deepEqual(f.browserCalls.at(-1), ['leaveSite', 'session-1'])
   }
 )
 

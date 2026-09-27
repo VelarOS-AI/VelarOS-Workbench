@@ -22,6 +22,7 @@ import {
   type WorkbenchConversationSendRequest,
   type WorkbenchConversationState,
 } from '../../shared/workbenchConversation'
+import type { ConversationBrowser } from '../browser/WorkbenchBrowserService'
 import type { WorkbenchAgentProjectActivityPort } from '../workspace/git/WorkbenchChatRunAttribution'
 
 import { ConversationAgentBoard } from './ConversationAgents'
@@ -105,6 +106,15 @@ interface WorkbenchConversationRuntimeOptions {
   memory?(workspace: string): Promise<ConversationMemory>
   /** 网上查资料（`velaros:web`）的无头页面；搜索引擎按这一轮请求里的设置。不给就不挂这个模块。 */
   webPages?: Pick<WebSpacePort, 'openPage' | 'resolveRedirect'>
+  /**
+   * Agent 浏览器：每一轮交给模型这个会话的受控页面，一轮结束（不论成败）不再给它开后台页面，会话删了就离站。
+   * 不给就不挂浏览器模块。
+   */
+  browser?: {
+    conversation(ref: WorkbenchConversationRef): ConversationBrowser
+    settleRun(ref: WorkbenchConversationRef): void
+    leaveSite(ref: WorkbenchConversationRef): Promise<void>
+  }
   /** 项目里的 AI 规则文件（AGENTS.md 等），每轮附进宿主说明；读不到就不附。 */
   projectRules?(projectRoot: string): Promise<readonly ConversationProjectRule[]>
   /** 注入执行会话的资源所有者（测试用）。 */
@@ -264,6 +274,10 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
       await this.cancel(ref)
       // 会话删掉后，它起的后台进程就没人看得到、停得了：一并强杀；没停下的记日志，不拦删除。
       await this.options.shells.terminateSessionBackgroundTasks(ref.sessionId)
+      // 它的浏览器页面也没人看了：离站，关掉页面。
+      await this.options.browser?.leaveSite(ref).catch((error: unknown) =>
+        log.warn('删除会话时浏览器没能离站', { error: AppError.getMessage(error) })
+      )
       await Promise.allSettled([this.controlOperations.get(key)])
       await this.storage.delete(ref.projectRoot, ref.sessionId)
     } finally {
@@ -450,6 +464,7 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
         },
         projectFilesEdited: (paths) => this.options.projectFilesEdited?.(request, paths),
         memory: memory?.scope,
+        browser: this.options.browser?.conversation(request),
         web: webPages && {
           openPage: (pageSignal) => webPages.openPage(pageSignal),
           resolveRedirect: webPages.resolveRedirect
@@ -543,6 +558,7 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
         failure ??= AppError.from(error)
       } finally {
         run.handle = undefined
+        this.options.browser?.settleRun(request)
       }
     }
     const status = run.presentation?.status

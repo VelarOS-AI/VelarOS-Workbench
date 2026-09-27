@@ -10,7 +10,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactElement,
 } from 'react'
-import { GlobeSimpleIcon } from '@phosphor-icons/react'
+import { GlobeSimpleIcon, RobotIcon } from '@phosphor-icons/react'
 import { useWorkbenchI18n } from '@renderer/i18n'
 import type { WorkbenchDensity } from '@renderer/models/settings/workbenchPreferences'
 
@@ -21,6 +21,7 @@ import {
   EditorPanel,
   type WorkbenchEditorPanelAuxiliaryTab,
 } from '../editor/EditorPanel'
+import { WorkbenchAgentBrowserPanel } from '../editor/WorkbenchAgentBrowserPanel'
 import { WorkbenchWebviewDebugPanel } from '../editor/WorkbenchWebviewDebugPanel'
 import { FilePanel } from '../files/FilePanel'
 import { WorkbenchCommitPanel } from '../git/WorkbenchCommitPanel'
@@ -70,8 +71,21 @@ export function WorkbenchEmbeddedKernel({
       onSelect: () => debug.onSelect(tab.id),
       onClose: () => debug.onClose(tab.id),
     })),
+    ...(debug.agentBrowser
+      ? [{
+          id: debug.agentBrowser.id,
+          title: debug.agentBrowser.title,
+          label: debug.agentBrowser.title,
+          icon: <RobotIcon size={13} />,
+          active: debug.agentBrowser.active,
+          kind: 'agent-browser',
+          content: null,
+          onSelect: debug.agentBrowser.onSelect,
+          onClose: debug.agentBrowser.onClose,
+        }]
+      : []),
   ]
-  const hasDebugTabsLayer = debug.tabs.length > 0
+  const hasDebugTabsLayer = debug.tabs.length > 0 || !!debug.agentBrowser
   const debugTabsLayer = hasDebugTabsLayer ? (
     <div className={styles.webviewDebugLayer}>
       {debug.tabs.map((tab) => (
@@ -86,6 +100,20 @@ export function WorkbenchEmbeddedKernel({
           />
         </div>
       ))}
+      {!!debug.agentBrowser && (
+        <div
+          key={debug.agentBrowser.id}
+          className={styles.webviewDebugLayerItem}
+          data-active={debug.agentBrowser.active}
+        >
+          <WorkbenchAgentBrowserPanel
+            projectRoot={debug.agentBrowser.projectRoot}
+            sessionId={debug.agentBrowser.sessionId}
+            url={debug.agentBrowser.url}
+            active={debug.agentBrowser.active}
+          />
+        </div>
+      )}
     </div>
   ) : null
   const editorDiff = {

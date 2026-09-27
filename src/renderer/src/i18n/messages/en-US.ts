@@ -563,6 +563,7 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     runInputPlaceholder: 'Send input to the process (Ctrl+C to interrupt)',
     runOpenInternal: 'Open in built-in browser',
     runOpenExternal: 'Open in external browser',
+    agentBrowserTabTitle: 'Agent · {host}',
     debugBack: 'Back',
     debugForward: 'Forward',
     debugReload: 'Reload',
