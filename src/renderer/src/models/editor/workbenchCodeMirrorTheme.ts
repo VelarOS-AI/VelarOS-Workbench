@@ -1,4 +1,4 @@
-import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
+import { HighlightStyle, syntaxHighlighting, type TagStyle } from '@codemirror/language'
 import type { Extension } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import { tags } from '@lezer/highlight'
@@ -108,9 +108,27 @@ export function getWorkbenchCodeTokenPalette(theme: WorkbenchThemeId): Workbench
   }
 }
 
+const highlightSpecsByTheme = new Map<WorkbenchThemeId, readonly TagStyle[]>()
+
+/**
+ * 语法着色规则（标签 → 颜色、粗细、斜体、下划线）：编辑器按它生成 HighlightStyle，搜索结果里的代码片段也按它
+ * 着色，两边颜色一致。
+ */
+export function getWorkbenchCodeHighlightSpecs(theme: WorkbenchThemeId): readonly TagStyle[] {
+  const cached = highlightSpecsByTheme.get(theme)
+  if (cached) return cached
+  const specs = createWorkbenchHighlightSpecs(theme)
+  highlightSpecsByTheme.set(theme, specs)
+  return specs
+}
+
 function createWorkbenchHighlightStyle(theme: WorkbenchThemeId): HighlightStyle {
+  return HighlightStyle.define([...getWorkbenchCodeHighlightSpecs(theme)])
+}
+
+function createWorkbenchHighlightSpecs(theme: WorkbenchThemeId): TagStyle[] {
   const palette = getWorkbenchCodeTokenPalette(theme)
-  return HighlightStyle.define([
+  return [
     {
       tag: [
         tags.keyword,
@@ -192,7 +210,7 @@ function createWorkbenchHighlightStyle(theme: WorkbenchThemeId): HighlightStyle 
       color: palette.invalid,
       textDecoration: `underline wavy ${palette.invalid}`,
     },
-  ])
+  ]
 }
 
 export const workbenchCodeMirrorRiderTheme: Extension = syntaxHighlighting(

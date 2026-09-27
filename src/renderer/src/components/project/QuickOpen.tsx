@@ -13,6 +13,7 @@ import { SearchField } from '@velaros-ai/ui/primitives/forms/SearchField'
 import { useWorkbenchContentSearchController } from '../../hooks/useWorkbenchContentSearchController'
 import styles from '../../styles/workbenchPageStyles'
 import { useTimerScope } from '../../support/genericHooks'
+import { WorkbenchCodeSnippet } from '../editor/WorkbenchCodeSnippet'
 import { WorkbenchFileTypeIcon } from '../files/WorkbenchFileTypeIcon'
 
 const QUICK_OPEN_CONTENT_SEARCH_LIMIT = 60
@@ -190,25 +191,26 @@ export function QuickOpen({
                   <WorkbenchFileTypeIcon fileName={match.fileName} size={15} />
                 </span>
                 <span className={styles.quickOpenItemCopy}>
-                  <Text truncate className={styles.quickOpenItemName}>
-                    {match.fileName}
-                  </Text>
-                  <Text truncate tone="caption" className={styles.quickOpenItemPath}>
-                    {match.path}:{match.line}
-                  </Text>
-                  <Text truncate className={styles.searchContentExcerpt}>
-                    {match.excerpt}
-                  </Text>
+                  <span className={styles.quickOpenItemHeading}>
+                    <Text truncate className={styles.quickOpenItemName}>
+                      {match.fileName}
+                    </Text>
+                    <Text truncate tone="caption" className={styles.quickOpenItemPath}>
+                      {match.path}:{match.line}
+                    </Text>
+                    {match.isOpen && (
+                      <Text tone="caption" className={styles.quickOpenItemMeta}>
+                        {t('workbench.quickOpenAlreadyOpen')}
+                      </Text>
+                    )}
+                  </span>
+                  <WorkbenchCodeSnippet
+                    path={match.path}
+                    text={match.excerpt}
+                    query={normalizedQuery}
+                    className={styles.searchContentExcerpt}
+                  />
                 </span>
-                {match.isOpen ? (
-                  <Text truncate tone="caption" className={styles.quickOpenItemMeta}>
-                    {t('workbench.quickOpenAlreadyOpen')}
-                  </Text>
-                ) : (
-                  <Text truncate tone="caption" className={styles.quickOpenItemMeta}>
-                    {match.line}
-                  </Text>
-                )}
               </Button>
             ))
           ) : (

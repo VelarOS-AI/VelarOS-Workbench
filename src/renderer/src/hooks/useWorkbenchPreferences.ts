@@ -11,6 +11,7 @@ import {
   type WorkbenchDensity,
   type WorkbenchEditorMetrics,
   type WorkbenchPreferences,
+  type WorkbenchThemeId,
 } from '../models/settings/workbenchPreferences'
 
 export interface WorkbenchPreferencesController {
@@ -115,6 +116,31 @@ export function useWorkbenchEditorMetrics(): WorkbenchEditorMetrics {
   }, [])
 
   return metrics
+}
+
+/** 只订阅主题：编辑器之外的代码片段（搜索结果）按它着色。 */
+export function useWorkbenchCodeTheme(): WorkbenchThemeId {
+  const [theme, setTheme] = useState<WorkbenchThemeId>(() => readWorkbenchPreferences().theme)
+
+  useEffect(() => {
+    const refresh = (): void => {
+      setTheme(readWorkbenchPreferences().theme)
+    }
+
+    const handleStorageChanged = (event: StorageEvent): void => {
+      if (event.key === 'velaros.workbench.preferences.v1') refresh()
+    }
+
+    window.addEventListener(WORKBENCH_PREFERENCES_CHANGED_EVENT, refresh)
+    window.addEventListener('storage', handleStorageChanged)
+
+    return () => {
+      window.removeEventListener(WORKBENCH_PREFERENCES_CHANGED_EVENT, refresh)
+      window.removeEventListener('storage', handleStorageChanged)
+    }
+  }, [])
+
+  return theme
 }
 
 /** 只订阅会改变文件树虚拟行高的密度值。 */

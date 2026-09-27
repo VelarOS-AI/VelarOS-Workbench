@@ -58,7 +58,8 @@
  */
 .quickOpenItem {
   @apply flex min-w-0 items-center bg-transparent text-left;
-  padding: 6px 8px;
+  gap: 8px;
+  padding: 4px 8px;
 }
 
 .quickOpenItem[data-active='true']:where(:not(:hover)) {
@@ -68,17 +69,24 @@
 
 .quickOpenItemCopy {
   @apply flex min-w-0 flex-1 flex-col;
-  gap: 2px;
+  gap: 1px;
+}
+
+/* 第一行：文件名、路径:行号与「已打开」排在一行，路径放不下时截断。 */
+.quickOpenItemHeading {
+  @apply flex min-w-0 items-baseline;
+  gap: 8px;
 }
 
 .quickOpenItemName {
-  @apply truncate font-medium text-foreground;
+  @apply shrink-0 truncate font-medium text-foreground;
+  max-width: 55%;
   font-size: 12px;
 }
 
 /* 路径与标注是 caption 色阶的 Text，字号与配色随原语（已打开的标注仍转绿）。 */
 .quickOpenItemPath {
-  @apply truncate;
+  @apply min-w-0 flex-1 truncate;
 }
 
 .quickOpenItemMeta {

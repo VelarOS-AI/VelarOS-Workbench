@@ -412,6 +412,7 @@ export function FilePanel({
               isSearchingEntries={isSearchingEntries}
               searchEntries={searchEntries}
               searchResult={searchResult}
+              searchQuery={searchQuery}
               selectedEntryPath={selectedEntryPath}
               onActivateSearchResult={setActiveSearchResultIndex}
               onContextMenuEntry={openContextMenu}

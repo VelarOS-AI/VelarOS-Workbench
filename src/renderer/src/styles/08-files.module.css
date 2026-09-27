@@ -541,13 +541,35 @@
   @apply truncate font-medium;
 }
 
+/* 内容命中的第一行：文件名、路径:行号与「已打开」排在一行，路径放不下时截断。 */
+.searchResultHeading {
+  @apply flex min-w-0 items-baseline;
+  gap: 6px;
+}
+
+.searchResultHeading .searchResultName {
+  @apply shrink-0;
+  max-width: 55%;
+}
+
 /* 下面三处都是共享 Text 原语，字号、行高与配色随它的色阶（caption / default）。 */
 .searchResultPath {
   @apply truncate;
 }
 
+.searchResultHeading .searchResultPath {
+  @apply min-w-0 flex-1;
+}
+
 .searchContentExcerpt {
   @apply truncate font-mono;
+}
+
+/* 代码片段里的查询词：与历史代码查看器的命中同一种琥珀底色。 */
+.codeSnippetMatch {
+  border-radius: 2px;
+  background: color-mix(in oklab, var(--status-amber, #e3a008) 38%, transparent);
+  color: inherit;
 }
 
 .searchContentBadge {

@@ -17,6 +17,7 @@ import {
 } from '@shared/contracts'
 
 import styles from '../../styles/workbenchPageStyles'
+import { WorkbenchCodeSnippet } from '../editor/WorkbenchCodeSnippet'
 
 import { WorkbenchFileTypeIcon } from './WorkbenchFileTypeIcon'
 
@@ -30,6 +31,8 @@ interface FileSearchResultsProps {
   isSearchingEntries: boolean
   searchEntries: WorkbenchDirectoryEntry[]
   searchResult: Nullable<WorkbenchSearchEntriesResult>
+  /** 当前的搜索词：代码片段里把它标出来。 */
+  searchQuery: string
   selectedEntryPath: Nullable<string>
   onActivateSearchResult: (index: number) => void
   onContextMenuEntry: (entry: WorkbenchDirectoryEntry, event: MouseEvent) => void
@@ -45,6 +48,7 @@ export function FileSearchResults({
   isSearchingEntries,
   searchEntries,
   searchResult,
+  searchQuery,
   selectedEntryPath,
   onActivateSearchResult,
   onContextMenuEntry,
@@ -159,21 +163,26 @@ export function FileSearchResults({
                       )}
                     </span>
                     <span className={styles.searchResultCopy}>
-                      <Text truncate className={styles.searchResultName}>
-                        {match.fileName}
-                      </Text>
-                      <Text truncate tone="caption" className={styles.searchResultPath}>
-                        {match.path}:{match.line}
-                      </Text>
-                      <Text truncate className={styles.searchContentExcerpt}>
-                        {match.excerpt}
-                      </Text>
+                      <span className={styles.searchResultHeading}>
+                        <Text truncate className={styles.searchResultName}>
+                          {match.fileName}
+                        </Text>
+                        <Text truncate tone="caption" className={styles.searchResultPath}>
+                          {match.path}:{match.line}
+                        </Text>
+                        {match.isOpen && (
+                          <Text className={styles.searchContentBadge} tone="caption">
+                            {t('workbench.quickOpenAlreadyOpen')}
+                          </Text>
+                        )}
+                      </span>
+                      <WorkbenchCodeSnippet
+                        path={match.path}
+                        text={match.excerpt}
+                        query={searchQuery}
+                        className={styles.searchContentExcerpt}
+                      />
                     </span>
-                    {match.isOpen && (
-                      <Text className={styles.searchContentBadge} tone="caption">
-                        {t('workbench.quickOpenAlreadyOpen')}
-                      </Text>
-                    )}
                   </Button>
                 </li>
               )
