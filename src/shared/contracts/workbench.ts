@@ -783,6 +783,21 @@ export interface WorkbenchSearchEntriesResult {
   truncated: boolean
 }
 
+/** 快速打开按文件名找文件用的整份文件清单（跳过规则与文件搜索相同）。 */
+export interface WorkbenchListProjectFilesRequest {
+  projectRoot: string
+  /** 最多列多少个文件；不给按默认上限。 */
+  limit?: number
+}
+
+export interface WorkbenchListProjectFilesResult {
+  projectRoot: string
+  /** 相对项目根、`/` 分隔；离根近的在前。 */
+  files: string[]
+  /** 超出上限，只列了离根近的那一部分。 */
+  truncated: boolean
+}
+
 export interface WorkbenchContentSearchMatchResult {
   path: string
   line: number

@@ -1,5 +1,6 @@
 /**
- * 项目工作区 IPC 装配：handle 纯读/写族/双搜索/命令/本地历史通道，异常降为错误信封。
+ * 项目工作区 IPC 装配：handle 纯读/写族/双搜索（含快速打开的文件清单）/命令/本地历史通道，异常降为
+ * 错误信封。
  *
  * IPC 入参是边界外来数据，在此解析一次（形状不符按无效请求处理），服务内部只见类型。
  * `saveFileSync` 走 `ipcMain.on` + `event.returnValue`（renderer sendSync 的 beforeunload
@@ -22,6 +23,7 @@ import type {
   WorkbenchInspectDeleteEntryRequest,
   WorkbenchListDirectoryRequest,
   WorkbenchListLocalHistoryRequest,
+  WorkbenchListProjectFilesRequest,
   WorkbenchMoveEntryRequest,
   WorkbenchReadFileRequest,
   WorkbenchReadImageFileRequest,
@@ -259,6 +261,15 @@ export function registerWorkbenchFsIpc(
     })
   )
 
+  ipcMain.handle(WorkbenchFsChannels.listProjectFiles, (_event, request: unknown) =>
+    callWithEnvelope(() => {
+      const parsed = parseListProjectFilesRequest(request)
+      if (!parsed) return invalidRequest()
+
+      return parts.search.listProjectFiles(parsed)
+    })
+  )
+
   ipcMain.handle(WorkbenchFsChannels.runCommand, (event, request: unknown) =>
     callWithEnvelope(() => {
       const parsed = parseRunCommandRequest(request)
@@ -473,6 +484,17 @@ function parseSearchContentRequest(input: unknown): Nullable<WorkbenchSearchCont
     ...optionalNumber(input, 'limit'),
     ...optionalNumber(input, 'maxDepth'),
     ...optionalNumber(input, 'maxResultsPerFile'),
+  }
+}
+
+function parseListProjectFilesRequest(
+  input: unknown
+): Nullable<WorkbenchListProjectFilesRequest> {
+  if (!hasStringFields(input, ['projectRoot'])) return null
+
+  return {
+    projectRoot: input['projectRoot'] as string,
+    ...optionalNumber(input, 'limit'),
   }
 }
 

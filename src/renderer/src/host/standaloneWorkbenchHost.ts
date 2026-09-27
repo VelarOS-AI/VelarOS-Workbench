@@ -225,6 +225,8 @@ const standaloneWorkbenchHost: WorkbenchHost = {
         toHostResult(await window.velarosWorkbenchFs.searchEntries(request)),
       searchWorkbenchContent: async (request) =>
         toHostResult(await window.velarosWorkbenchFs.searchContent(request)),
+      listWorkbenchProjectFiles: async (request) =>
+        toHostResult(await window.velarosWorkbenchFs.listProjectFiles(request)),
       getWorkbenchLanguageServiceDefinition: async (request) =>
         toHostResult(await window.velarosWorkbenchLanguage.getDefinition(request)),
       getWorkbenchLanguageServiceCompletions: async (request) =>

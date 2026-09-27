@@ -6,9 +6,12 @@
  * materializeIndexFiles 及 PROFILE_* 优先级机制），那一族属 kernel/codegraph 域
  * （ProjectMemoryLifecycle 消费），独立应用 Phase3 经 kernel-protocol 接入，不在本地
  * 复制——故未随迁。readIndexedTextFile / normalizeIndexFileBytes 因内容搜索复用而保留。
+ *
+ * listProjectFiles 是快速打开的整份文件清单：只列路径、不打分，匹配与排序在 renderer 里按输入现算。
  */
+import type { Dirent } from 'node:fs'
 import { readdir, readFile, realpath, stat } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import { join, resolve } from 'node:path'
 
 import { isPresent } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
@@ -17,6 +20,8 @@ import type {
   WorkbenchContentSearchMatchResult,
   WorkbenchDirectoryEntry,
   WorkbenchIndexedTextFile,
+  WorkbenchListProjectFilesRequest,
+  WorkbenchListProjectFilesResult,
   WorkbenchSearchContentRequest,
   WorkbenchSearchContentResult,
   WorkbenchSearchEntriesRequest,
@@ -24,6 +29,7 @@ import type {
 } from '@shared/contracts'
 
 import type { DirectoryEntries } from './FileEntries'
+import { isPathInsideRoot } from './PathContainmentHelper'
 import type { PathResolver } from './PathResolver'
 import { countWorkbenchTextLines, decodeWorkbenchTextContent } from './TextCodec'
 import { isLikelyTextFile } from './TextFile'
@@ -40,6 +46,13 @@ const DEFAULT_CONTENT_SEARCH_MAX_DEPTH = 8
 const DEFAULT_CONTENT_SEARCH_MAX_RESULTS_PER_FILE = 3
 const MAX_CONTENT_SEARCH_MAX_RESULTS_PER_FILE = 20
 
+const DEFAULT_PROJECT_FILE_LIST_LIMIT = 50_000
+const MAX_PROJECT_FILE_LIST_LIMIT = 100_000
+/** 只有普通目录会往下走（链接到的目录不跟），不会绕圈；层数上限只是兜底。 */
+const PROJECT_FILE_LIST_MAX_DEPTH = 64
+/** 同一层同时读几个目录。 */
+const PROJECT_FILE_LIST_READ_CONCURRENCY = 16
+
 interface WorkbenchSearchCandidate {
   entry: WorkbenchDirectoryEntry
   score: number
@@ -49,6 +62,17 @@ interface WorkbenchContentSearchCollectionState {
   matches: WorkbenchContentSearchMatchResult[]
   truncated: boolean
   visitedRealPaths: Set<string>
+}
+
+/** 文件清单遍历中的一个目录：`relativePath` 相对项目根（根目录是空串），`realPath` 是磁盘上的路径。 */
+interface WorkbenchProjectFileListDirectory {
+  relativePath: string
+  realPath: string
+}
+
+interface WorkbenchProjectFileListListing {
+  files: string[]
+  directories: WorkbenchProjectFileListDirectory[]
 }
 
 class SearchIndex {
@@ -161,6 +185,95 @@ class SearchIndex {
       matches: state.matches,
       truncated: state.truncated,
     }
+  }
+
+  /**
+   * 项目里所有文件的相对路径，跳过规则与文件搜索相同（`.git`、`node_modules`、根目录下的构建产物），
+   * 点号开头的文件照列（文件树里也看得到）。一层一层读：超出上限时留下的是离根近的那部分。
+   *
+   * 符号链接：指向工程里文件的照列（链接自己的路径，打开读的是目标）；指向工程外、已失效的不列（打开
+   * 也读不了）；链接到的目录不跟——目标在工程里的话它的文件已经按真实位置列过，跟进去只会重复一份。
+   */
+  public async listProjectFiles(
+    request: WorkbenchListProjectFilesRequest
+  ): Promise<WorkbenchListProjectFilesResult> {
+    const projectRoot = await this.pathResolver.resolveProjectRoot(request.projectRoot)
+    const limit = this.normalizeProjectFileListLimit(request.limit)
+    const files: string[] = []
+    let truncated = false
+    let level: WorkbenchProjectFileListDirectory[] = [{ relativePath: '', realPath: projectRoot }]
+
+    for (let depth = 0; level.length > 0 && !truncated; depth += 1) {
+      const nextLevel: WorkbenchProjectFileListDirectory[] = []
+      for (let start = 0; start < level.length && !truncated; start += PROJECT_FILE_LIST_READ_CONCURRENCY) {
+        const listings = await Promise.all(
+          level
+            .slice(start, start + PROJECT_FILE_LIST_READ_CONCURRENCY)
+            .map((directory) => this.readProjectFileListDirectory(projectRoot, directory))
+        )
+        for (const listing of listings) {
+          const room = limit - files.length
+          files.push(...listing.files.slice(0, room))
+          if (listing.files.length > room) {
+            truncated = true
+            break
+          }
+          if (depth < PROJECT_FILE_LIST_MAX_DEPTH) nextLevel.push(...listing.directories)
+          else if (listing.directories.length > 0) truncated = true
+        }
+      }
+      level = nextLevel
+    }
+
+    return { projectRoot, files, truncated }
+  }
+
+  private async readProjectFileListDirectory(
+    projectRoot: string,
+    directory: WorkbenchProjectFileListDirectory
+  ): Promise<WorkbenchProjectFileListListing> {
+    const entries = await readdir(directory.realPath, { withFileTypes: true }).catch(
+      (): Dirent[] => []
+    )
+    // 目录读出来的顺序随文件系统，按名字排好，截断时留下哪些才确定。
+    entries.sort((left, right) => compareCodeUnits(left.name, right.name))
+
+    const atProjectRoot = !directory.relativePath
+    const listing: WorkbenchProjectFileListListing = { files: [], directories: [] }
+    for (const entry of entries) {
+      const isDirectory = entry.isDirectory()
+      if (!this.entryHelper.shouldIncludeEntry(entry.name, isDirectory, true, atProjectRoot)) continue
+
+      const relativePath = directory.relativePath
+        ? `${directory.relativePath}/${entry.name}`
+        : entry.name
+      if (isDirectory) {
+        listing.directories.push({ relativePath, realPath: join(directory.realPath, entry.name) })
+      } else if (entry.isFile()) {
+        listing.files.push(relativePath)
+      } else if (
+        entry.isSymbolicLink() &&
+        (await this.isProjectFileLink(projectRoot, join(directory.realPath, entry.name)))
+      ) {
+        listing.files.push(relativePath)
+      }
+    }
+    return listing
+  }
+
+  /** 链接解析到底（可能一环套一环、也可能经别的链接绕出工程）后，是不是工程里的一个文件。 */
+  private async isProjectFileLink(projectRoot: string, linkPath: string): Promise<boolean> {
+    const targetPath = await realpath(linkPath).catch(() => null)
+    if (!targetPath || !isPathInsideRoot(projectRoot, targetPath)) return false
+
+    const targetStats = await stat(targetPath).catch(() => null)
+    return !!targetStats?.isFile()
+  }
+
+  private normalizeProjectFileListLimit(value: number | undefined): number {
+    if (!value || !Number.isFinite(value)) return DEFAULT_PROJECT_FILE_LIST_LIMIT
+
+    return Math.min(MAX_PROJECT_FILE_LIST_LIMIT, Math.max(1, Math.round(value)))
   }
 
   private normalizeContentSearchPerFileLimit(value: number | undefined): number {
@@ -495,6 +608,13 @@ class SearchIndex {
 
     return score + entry.path.length / 1000
   }
+}
+
+/** 按 UTF-16 码元比较：与区域设置无关，大目录里也快。 */
+function compareCodeUnits(left: string, right: string): number {
+  if (left < right) return -1
+  if (left > right) return 1
+  return 0
 }
 
 export { SearchIndex, SearchIndex as WorkbenchSearchIndexService }

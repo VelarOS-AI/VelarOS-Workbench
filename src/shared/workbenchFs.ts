@@ -6,7 +6,8 @@
  * 只补通道名与跨进程错误信封。镜像 projectHub 契约的模式：main 侧服务是唯一权威，
  * renderer 经 preload 桥调用；kernel-protocol 客户端接入后本传输面整体替换，端口面不动。
  *
- * 片1 起覆盖四簇：文件系统（纯读 + 写族）/ 双搜索 / 一次性命令运行 / 本地历史读。
+ * 片1 起覆盖四簇：文件系统（纯读 + 写族）/ 双搜索（外加快速打开用的整份文件清单）/ 一次性命令运行 /
+ * 本地历史读。
  * `saveFileSync` 是 beforeunload 兜底路径，走 `ipcRenderer.sendSync` 同步信封。
  */
 import type { ErrorCode } from '@velaros-ai/core/error'
@@ -24,6 +25,8 @@ import type {
   WorkbenchListDirectoryResult,
   WorkbenchListLocalHistoryRequest,
   WorkbenchListLocalHistoryResult,
+  WorkbenchListProjectFilesRequest,
+  WorkbenchListProjectFilesResult,
   WorkbenchMoveEntryRequest,
   WorkbenchMoveEntryResult,
   WorkbenchReadFileRequest,
@@ -65,6 +68,7 @@ export const WorkbenchFsChannels = {
   readLocalHistorySnapshot: 'workbench-app:history:read-snapshot',
   searchEntries: 'workbench-app:search:entries',
   searchContent: 'workbench-app:search:content',
+  listProjectFiles: 'workbench-app:search:files',
   runCommand: 'workbench-app:command:run',
   runCommandOutput: 'workbench-app:command:output',
 } as const
@@ -131,6 +135,9 @@ export interface WorkbenchFsBridge {
   searchContent: (
     request: WorkbenchSearchContentRequest
   ) => Promise<WorkbenchFsCallResult<WorkbenchSearchContentResult>>
+  listProjectFiles: (
+    request: WorkbenchListProjectFilesRequest
+  ) => Promise<WorkbenchFsCallResult<WorkbenchListProjectFilesResult>>
   runCommand: (
     request: WorkbenchRunCommandRequest
   ) => Promise<WorkbenchFsCallResult<WorkbenchRunCommandResult>>

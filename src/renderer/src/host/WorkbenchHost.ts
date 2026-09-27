@@ -64,6 +64,8 @@ import type {
   WorkbenchListDirectoryResult,
   WorkbenchListLocalHistoryRequest,
   WorkbenchListLocalHistoryResult,
+  WorkbenchListProjectFilesRequest,
+  WorkbenchListProjectFilesResult,
   WorkbenchMoveEntryRequest,
   WorkbenchMoveEntryResult,
   WorkbenchProjectAiRulesRequest,
@@ -149,6 +151,10 @@ export interface WorkbenchProjectKernelPort {
   searchWorkbenchContent(
     request: WorkbenchSearchContentRequest
   ): Promise<Result<WorkbenchSearchContentResult>>
+  /** 快速打开按文件名找文件用的整份文件清单。 */
+  listWorkbenchProjectFiles(
+    request: WorkbenchListProjectFilesRequest
+  ): Promise<Result<WorkbenchListProjectFilesResult>>
   getWorkbenchLanguageServiceDefinition(
     request: WorkbenchLanguageServicePositionRequest
   ): Promise<Result<WorkbenchLanguageServiceDefinitionResult>>

@@ -114,6 +114,8 @@ const fsBridge: WorkbenchFsBridge = {
     ipcRenderer.invoke(WorkbenchFsChannels.readLocalHistorySnapshot, request),
   searchEntries: (request) => ipcRenderer.invoke(WorkbenchFsChannels.searchEntries, request),
   searchContent: (request) => ipcRenderer.invoke(WorkbenchFsChannels.searchContent, request),
+  listProjectFiles: (request) =>
+    ipcRenderer.invoke(WorkbenchFsChannels.listProjectFiles, request),
   runCommand: (request) => ipcRenderer.invoke(WorkbenchFsChannels.runCommand, request),
   onRunCommandOutput: (listener) => subscribe(WorkbenchFsChannels.runCommandOutput, listener),
 }
