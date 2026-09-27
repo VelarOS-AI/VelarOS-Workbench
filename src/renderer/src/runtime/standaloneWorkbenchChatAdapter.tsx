@@ -285,13 +285,10 @@ function createState(projectRoot: string, restoreStored = true): StandaloneChatS
   if (!restoreStored || !projectRoot || typeof window === 'undefined') return empty
   try {
     const raw = window.localStorage.getItem(chatStorageKey(projectRoot))
-      ?? window.localStorage.getItem(legacyChatStorageKey(projectRoot))
     if (!raw) return empty
     const stored = JSON.parse(raw) as Record<string, unknown>
-    const storedSessions = stored.version === 2 && Array.isArray(stored.sessions)
-      ? stored.sessions
-      : [stored]
-    const restored = storedSessions
+    if (stored.version !== 2 || !Array.isArray(stored.sessions)) return empty
+    const restored = stored.sessions
       .map((candidate) => restoreStoredState(candidate, empty))
       .filter((candidate): candidate is StandaloneChatState => candidate !== null)
     if (restored.length === 0) return empty
@@ -1974,18 +1971,18 @@ function isTextAttachment(file: File): boolean {
 
 /**
  * 思考力度的本地档位（与 Desktop 同五档）：按**产品**记忆（跨会话保留），换项目、换会话不会把用户刚调好的档
- * 悄悄打回默认。旧版的「关」「超强」按最近的档迁过来。
+ * 悄悄打回默认。存的不是这五档之一就用默认档。
  */
 const WorkbenchReasoningLevels = new Set<ReasoningLevel>(['low', 'medium', 'high', 'xhigh', 'max'])
-const LegacyReasoningLevels: Readonly<Record<string, ReasoningLevel>> = { off: 'low', ultra: 'max' }
 const DefaultWorkbenchReasoningLevel: ReasoningLevel = 'medium'
 const ReasoningLevelStorageKey = 'velaros.workbench.thinking-depth'
 
 function readStoredReasoningLevel(): ReasoningLevel {
   if (typeof window === 'undefined') return DefaultWorkbenchReasoningLevel
   const stored = window.localStorage.getItem(ReasoningLevelStorageKey) ?? ''
-  if (WorkbenchReasoningLevels.has(stored as ReasoningLevel)) return stored as ReasoningLevel
-  return LegacyReasoningLevels[stored] ?? DefaultWorkbenchReasoningLevel
+  return WorkbenchReasoningLevels.has(stored as ReasoningLevel)
+    ? (stored as ReasoningLevel)
+    : DefaultWorkbenchReasoningLevel
 }
 
 function storeReasoningLevel(level: ReasoningLevel): void {
@@ -1995,10 +1992,6 @@ function storeReasoningLevel(level: ReasoningLevel): void {
 
 function chatStorageKey(projectRoot: string): string {
   return `velaros.workbench.chat:workbench:${encodeURIComponent(projectRoot)}`
-}
-
-function legacyChatStorageKey(projectRoot: string): string {
-  return `velaros.workbench.chat:${encodeURIComponent(projectRoot)}`
 }
 
 /** 已就「历史存不下」提示过的项目根；同一次运行只打扰用户一次。 */
@@ -2204,8 +2197,8 @@ function releaseRunChangeRecords(
  * 把同一份历史镜像到主进程数据区。
  *
  * localStorage 会被「清除浏览数据」或配额回收整片抹掉，那时这份磁盘副本是唯一残存物。刻意 fire-and-forget：
- * 备份失败只记日志，不弹提示、不影响聊天——它是兜底，不是主路径。分片键沿用旧版（服务商 + 项目根），同一个
- * 项目的备份原位覆盖。
+ * 备份失败只记日志，不弹提示、不影响聊天——它是兜底，不是主路径。分片键按项目根，同一个项目的备份原位
+ * 覆盖。
  */
 function backupChatHistoryToDisk(key: string, payload: string): void {
   void window.velarosWorkbenchConversation

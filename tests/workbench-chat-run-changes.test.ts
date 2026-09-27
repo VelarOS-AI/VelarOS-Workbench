@@ -476,17 +476,6 @@ void describe('Workbench chat run changes attributed to the agent', () => {
       assert.deepEqual(stored.attribution, { watcher: 'observed' })
       assert.equal(stored.baseCommitId, round.commitId)
 
-      // 带回溯的旧版本在每个文件上多记了前后快照条目：照样读得出来，只交公开字段。
-      stored.changes = stored.changes.map((change: object) => ({
-        ...change,
-        before: null,
-        after: { mode: '100644', oid: 'a'.repeat(40) },
-      }))
-      await writeFile(recordFile, JSON.stringify(stored), 'utf8')
-      const legacy = await attributed.read(round.request)
-      assert.deepEqual(legacy?.changes, record.changes)
-      assert.equal(legacy?.changes.some((change) => 'before' in change || 'after' in change), false)
-
       // 最终采集之后账本关掉：再采认不出谁改的，不把用户后来的改动记成这一轮的，也不动已经落定的记录。
       await editOutside(fixture, { 'after-run.ts': 'later\n' })
       const late = await attributed.capture(round.request)

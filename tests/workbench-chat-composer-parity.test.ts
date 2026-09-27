@@ -71,15 +71,17 @@ void describe('Workbench chat composer parity', () => {
     )
   })
 
-  void test('offers the Desktop thinking depths, migrates the legacy ones and has no voice input', () => {
+  void test('offers the Desktop thinking depths, defaults anything else to medium and has no voice input', () => {
     const adapter = readFileSync(
       path.resolve(process.cwd(), 'src/renderer/src/runtime/standaloneWorkbenchChatAdapter.tsx'),
       'utf8'
     )
 
     assert.match(adapter, /new Set<ReasoningLevel>\(\['low', 'medium', 'high', 'xhigh', 'max'\]\)/)
-    assert.match(adapter, /LegacyReasoningLevels: Readonly<Record<string, ReasoningLevel>> = \{ off: 'low', ultra: 'max' \}/)
     assert.match(adapter, /DefaultWorkbenchReasoningLevel: ReasoningLevel = 'medium'/)
+    // 没有旧档位的迁移：存的不是这五档之一就用默认档。
+    assert.doesNotMatch(adapter, /off: 'low'|ultra: 'max'/)
+    assert.match(adapter, /\? \(stored as ReasoningLevel\)\n\s*: DefaultWorkbenchReasoningLevel/)
     // 思考力度按产品记忆，随每一轮与执行模式一起发给主进程。
     assert.match(adapter, /reasoningLevel,\n\s*executionModes,/)
     // Electron 里没有语音识别服务（与 Desktop 相同）。

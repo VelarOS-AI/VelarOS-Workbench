@@ -5,7 +5,6 @@ import type { ChatProviderId } from '@velaros-ai/model/contracts'
 import { isStandaloneWorkbenchModelProviderSelectable } from './standaloneWorkbenchManagedModels'
 import {
   getStandaloneWorkbenchModelProviderPreset,
-  normalizeStandaloneWorkbenchModelId,
   resolveStandaloneWorkbenchProviderModel,
 } from './standaloneWorkbenchModelCatalog'
 
@@ -56,13 +55,15 @@ function readInitialModelConfig(): StandaloneWorkbenchModelConfig {
     const provider = getStandaloneWorkbenchModelProviderPreset(
       typeof stored.provider === 'string' ? stored.provider : DefaultModelConfig.provider
     )
+    // 存下的服务商已经不在目录里时退回默认服务商，它的模型也一并不认，用默认服务商自己的默认模型。
+    const storedForProvider = stored.provider === provider.id
     const storedCompletionModel =
-      typeof stored.completionModel === 'string' ? stored.completionModel : undefined
+      storedForProvider && typeof stored.completionModel === 'string' ? stored.completionModel : undefined
     const config = {
       provider: provider.id,
       model: resolveStandaloneWorkbenchProviderModel(
         provider.id,
-        typeof stored.model === 'string' ? normalizeStandaloneWorkbenchModelId(stored.model) : undefined,
+        storedForProvider && typeof stored.model === 'string' ? stored.model : undefined,
         'agent'
       ),
       completionModel:

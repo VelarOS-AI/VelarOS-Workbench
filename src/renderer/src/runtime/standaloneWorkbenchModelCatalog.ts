@@ -43,17 +43,6 @@ const OperationalManifests: readonly ModelProviderOperationalManifest[] =
   ModelProviderOperationalManifests
 const ProviderDefaultModels: Readonly<Partial<Record<ChatProviderId, string>>> = DefaultProviderModels
 
-/**
- * 旧版本存下的 provider id：VelarOS 托管模型原先叫 `velar`（默认模型 `velar/auto`），Platform 与 Cloud
- * 都已改叫 `velaros`。读到旧 id 时按新 id 解析，用户选过的托管模型不会退回到默认 provider。
- */
-const LegacyProviderIds: Readonly<Record<string, ChatProviderId>> = { velar: 'velaros' }
-const LegacyModelIds: Readonly<Record<string, string>> = { 'velar/auto': 'velaros/auto' }
-
-export function normalizeStandaloneWorkbenchModelId(model: string): string {
-  return LegacyModelIds[model] ?? model
-}
-
 const AllStandaloneWorkbenchModelProviderPresets: readonly StandaloneWorkbenchModelProviderPreset[] =
   OperationalManifests
     .filter((manifest) =>
@@ -93,9 +82,8 @@ const DefaultProviderId: ChatProviderId = 'openrouter'
 export function getStandaloneWorkbenchModelProviderPreset(
   provider: string
 ): StandaloneWorkbenchModelProviderPreset {
-  const providerId = LegacyProviderIds[provider] ?? provider
   return (
-    AllStandaloneWorkbenchModelProviderPresets.find((preset) => preset.id === providerId)
+    AllStandaloneWorkbenchModelProviderPresets.find((preset) => preset.id === provider)
     ?? StandaloneWorkbenchModelProviderPresets.find((preset) => preset.id === DefaultProviderId)
     ?? StandaloneWorkbenchModelProviderPresets[0]!
   )

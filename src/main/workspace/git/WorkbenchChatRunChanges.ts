@@ -125,7 +125,7 @@ export class WorkbenchChatRunChangeStore {
       recordId: record.recordId,
       capturedAt: record.capturedAt,
       baseCommitId: record.baseCommitId,
-      changes: record.changes.map(toPublicChange),
+      changes: record.changes,
     }
   }
 
@@ -293,19 +293,6 @@ function summarize(
   }
 }
 
-function toPublicChange(change: WorkbenchChatRunFileChange): WorkbenchChatRunFileChange {
-  return {
-    path: change.path,
-    status: change.status,
-    additions: change.additions,
-    deletions: change.deletions,
-    binary: change.binary,
-    patch: change.patch,
-    patchOmitted: change.patchOmitted,
-    attribution: change.attribution,
-  }
-}
-
 function readSegment(value: string): string {
   if (!RecordSegmentPattern.test(value)) throw new AppError('VALIDATION', '无效的会话或记录 id。')
   return value
@@ -333,8 +320,7 @@ function parseStoredRecord(text: string, recordId: string): StoredRunChangesReco
     version,
     recordId,
     capturedAt,
-    // 旧记录里每个文件还带着回溯用的前后快照条目：只取公开字段。
-    changes: changes.filter(isStoredFileChange).map(toPublicChange),
+    changes: changes.filter(isStoredFileChange),
   }
   // 两个可选字段都要先认形状再收：在 if 里收窄，不必把外来值强转成字段类型。
   if (typeof baseCommitId === 'string' && ObjectIdPattern.test(baseCommitId)) record.baseCommitId = baseCommitId
