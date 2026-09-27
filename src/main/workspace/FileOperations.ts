@@ -11,6 +11,7 @@
  *   restore 记录仅存内存（应用重启即失效），与 desktop 一致。
  */
 import { randomUUID } from 'node:crypto'
+import type { BigIntStats } from 'node:fs'
 import { lstatSync, readFileSync, type Stats, statSync } from 'node:fs'
 import {
   copyFile,
@@ -77,6 +78,32 @@ interface DeletedEntryRestoreRecord {
   originalPath: string
   trashPath: string
   type: 'directory' | 'file'
+}
+
+/**
+ * 比较条目名时抹掉大小写与 Unicode 组合形式的差别
+ * （大小写不敏感、规范化不敏感的文件系统都这么比）。
+ */
+function toComparableEntryName(name: string): string {
+  return name.normalize('NFC').toLowerCase()
+}
+
+/**
+ * 目标路径查到的是不是源自己：同一个文件系统对象（设备号 + inode 相同），在同一个目录里，
+ * 名字只差大小写或组合形式。硬链接也是同一个 inode，但名字不同，仍算「目标已存在」。
+ */
+function isSameEntrySpelledDifferently(
+  sourcePath: string,
+  source: BigIntStats,
+  targetPath: string,
+  target: BigIntStats
+): boolean {
+  return (
+    source.dev === target.dev &&
+    source.ino === target.ino &&
+    dirname(sourcePath) === dirname(targetPath) &&
+    toComparableEntryName(basename(sourcePath)) === toComparableEntryName(basename(targetPath))
+  )
 }
 
 class FileOperations {
@@ -213,6 +240,11 @@ class FileOperations {
       parentPath.requestedPath,
       name
     )
+    this.assertOutsideGitInternals(
+      projectRoot,
+      [targetPath, join(parentPath.realPath, name)],
+      request.parentPath ?? '.'
+    )
 
     return this.runWorkbenchMutation(async () => {
       const existing = await lstat(targetPath).catch(() => null)
@@ -256,14 +288,14 @@ class FileOperations {
     const name = this.pathResolver.normalizeEntryName(request.newName)
     const parentPath = dirname(sourcePath.requestedPath)
     const targetPath = this.pathResolver.resolveChildPath(projectRoot, parentPath, name)
+    this.assertOutsideGitInternals(
+      projectRoot,
+      [sourcePath.requestedPath, sourcePath.realPath, targetPath],
+      request.path
+    )
 
     return this.runWorkbenchMutation(async () => {
-      const existing = await lstat(targetPath).catch(() => null)
-      if (existing) {
-        throw new AppError('VALIDATION', '目标已存在。')
-      }
-
-      await rename(sourcePath.requestedPath, targetPath)
+      await this.renameEntryPath(sourcePath.requestedPath, targetPath)
       const entry = await this.entryHelper.toDirectoryEntry(projectRoot, targetPath, false)
       return {
         projectRoot,
@@ -330,16 +362,14 @@ class FileOperations {
       projectRoot,
       parentPath.requestedPath
     )
+    this.assertOutsideGitInternals(
+      projectRoot,
+      [sourcePath.requestedPath, sourcePath.realPath, targetPath, join(parentPath.realPath, name)],
+      request.path
+    )
 
     return this.runWorkbenchMutation(async () => {
-      if (sourcePath.requestedPath !== targetPath) {
-        const existing = await lstat(targetPath).catch(() => null)
-        if (existing) {
-          throw new AppError('VALIDATION', '目标已存在。')
-        }
-
-        await rename(sourcePath.requestedPath, targetPath)
-      }
+      await this.renameEntryPath(sourcePath.requestedPath, targetPath)
 
       const entry = await this.entryHelper.toDirectoryEntry(projectRoot, targetPath, false)
       return {
@@ -365,6 +395,11 @@ class FileOperations {
     if (relativePath === '.') {
       throw new AppError('VALIDATION', '不能删除工程根目录。')
     }
+    this.assertOutsideGitInternals(
+      projectRoot,
+      [targetPath.requestedPath, targetPath.realPath],
+      request.path
+    )
 
     return this.runWorkbenchMutation(async () => {
       const targetLinkStats = await lstat(targetPath.requestedPath)
@@ -425,6 +460,11 @@ class FileOperations {
     if (relativePath === '.') {
       throw new AppError('VALIDATION', '不能删除工程根目录。')
     }
+    this.assertOutsideGitInternals(
+      projectRoot,
+      [targetPath.requestedPath, targetPath.realPath],
+      request.path
+    )
 
     const targetLinkStats = await lstat(targetPath.requestedPath)
     if (targetLinkStats.isSymbolicLink()) {
@@ -494,6 +534,45 @@ class FileOperations {
         entry,
       }
     })
+  }
+
+  private assertOutsideGitInternals(
+    projectRoot: string,
+    absolutePaths: readonly string[],
+    inputPath: string
+  ): void {
+    for (const absolutePath of absolutePaths) {
+      this.pathResolver.assertOutsideGitInternals(projectRoot, absolutePath, inputPath)
+    }
+  }
+
+  /**
+   * 把条目改名或挪到 targetPath。目标已存在就拒绝——除非按新名字查到的就是源本身：大小写不敏感的
+   * 文件系统（macOS、Windows 的默认格式）上只改大小写（或只改 Unicode 组合形式）时正是这样。
+   * 这时经同目录下的临时名分两步改，不依赖文件系统怎么处理「改成只差大小写的名字」。
+   */
+  private async renameEntryPath(sourcePath: string, targetPath: string): Promise<void> {
+    if (sourcePath === targetPath) return
+
+    const existing = await lstat(targetPath, { bigint: true }).catch(() => null)
+    if (!existing) {
+      await rename(sourcePath, targetPath)
+      return
+    }
+
+    const source = await lstat(sourcePath, { bigint: true })
+    if (!isSameEntrySpelledDifferently(sourcePath, source, targetPath, existing)) {
+      throw new AppError('VALIDATION', '目标已存在。')
+    }
+
+    const temporaryPath = join(dirname(sourcePath), `.velaros-rename-${randomUUID()}`)
+    await rename(sourcePath, temporaryPath)
+    try {
+      await rename(temporaryPath, targetPath)
+    } catch (error) {
+      await rename(temporaryPath, sourcePath).catch(() => undefined)
+      throw error
+    }
   }
 
   private getDeleteUndoPath(restoreId: string, originalPath: string): string {
