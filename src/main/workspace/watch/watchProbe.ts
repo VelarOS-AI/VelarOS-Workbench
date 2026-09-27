@@ -113,10 +113,16 @@ try {
   ])
   assert(gitEvent.paths.includes('.git/HEAD'), 'Git state changes must refresh Git surfaces')
 
-  const beforeIgnoredWrite = secondEvents.length
+  // 依赖目录里的写入只报目录本身：展开着的 node_modules 会刷新，但不把成千上万个文件路径灌给订阅方。
+  const beforeDependencyWrite = secondEvents.length
   await writeFile(join(root, 'node_modules', 'ignored.js'), 'ignored')
   await new Promise((resolve) => setTimeout(resolve, 80))
-  assert(secondEvents.length === beforeIgnoredWrite, 'heavy tool directories must be ignored')
+  assert(
+    secondEvents
+      .slice(beforeDependencyWrite)
+      .every((candidate) => candidate.paths.every((path) => path === 'node_modules')),
+    'writes in dependency directories must be reported as the directory itself'
+  )
 
   // 改动归属账本听原始事件：生成目录里的写入照样交出（可能正是 Agent 命令的产物），renderer 订阅仍滤掉。
   const rawPaths = new Set<string>()
