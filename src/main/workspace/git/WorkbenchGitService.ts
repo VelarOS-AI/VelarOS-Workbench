@@ -1,6 +1,8 @@
+import { execFile } from 'node:child_process'
 import { readFile, realpath, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { isAbsolute, join, resolve } from 'node:path'
+import { promisify } from 'node:util'
 
 import { execa } from 'execa'
 
@@ -39,6 +41,7 @@ import {
   getRelativePathInsideRoot,
   toPortableRelativePath,
 } from '../PathContainmentHelper'
+import { decodeWorkbenchTextContent } from '../TextCodec'
 
 const DefaultDiffMaxChars = 20_000
 const MaxDiffChars = 1_000_000
@@ -48,11 +51,10 @@ const MaxUntrackedStatBytes = 1024 * 1024
 const MaxUntrackedStatFiles = 100
 const CommitSubjectMaxChars = 72
 const GitOutputMaxBytes = 4 * 1024 * 1024
+const execFileAsync = promisify(execFile)
 
 interface GitRunOptions extends WorkspaceGitRemoteActionOptions {
   allowFailure?: boolean
-  /** 默认去掉输出末尾的换行；读文件内容时要原样保留。 */
-  stripFinalNewline?: boolean
 }
 
 interface GitRunResult {
@@ -149,14 +151,11 @@ export class WorkbenchGitService {
     const rootPath = await this.resolveRoot(workspaceRoot)
     const revision = this.assertRevision(commitSha)
     const relativePath = this.normalizePathspec(rootPath, path)
-    // `./`：路径相对项目根而不是仓库根（项目可能是仓库里的一个子目录）。原样保留文件末尾的换行，
-    // 拿它跟磁盘上的当前版本比时，最后一行才不会平白算作改动。
-    const content = (
-      await this.runGit(rootPath, ['show', `${revision}:./${relativePath}`], {
-        stripFinalNewline: false,
-      })
-    ).stdout
-    return { rootPath, content }
+    // `./`：路径相对项目根而不是仓库根（项目可能是仓库里的一个子目录）。
+    const blob = await this.showGitBlob(rootPath, `${revision}:./${relativePath}`)
+    // 按编辑器读盘的方式解码（认 GB18030 / UTF-16、去 BOM、换行统一为 LF）：拿它跟编辑器里的
+    // 正文比时，编码与换行符的差别才不会被算成改动。
+    return { rootPath, content: decodeWorkbenchTextContent(blob) }
   }
 
   public async getLog(
@@ -784,7 +783,6 @@ export class WorkbenchGitService {
       env: this.buildGitEnvironment(options),
       maxBuffer: GitOutputMaxBytes,
       reject: false,
-      stripFinalNewline: options.stripFinalNewline ?? true,
     })
     const output = {
       stdout: result.stdout,
@@ -794,6 +792,30 @@ export class WorkbenchGitService {
     if (result.failed && !options.allowFailure)
       this.throwGitFailure(args, output, options.githubToken)
     return output
+  }
+
+  /**
+   * 原样读出一个 blob 的字节：不按 UTF-8 解码，也不去掉末尾的换行。用 execFile 而不是 execa：
+   * execa 的 `encoding: 'buffer'` 在 bun 下（测试、probe）起不来子进程。
+   */
+  private async showGitBlob(rootPath: string, spec: string): Promise<Uint8Array> {
+    const args = ['show', spec]
+    try {
+      const { stdout } = await execFileAsync('git', args, {
+        cwd: rootPath,
+        env: this.buildGitEnvironment({}),
+        encoding: 'buffer',
+        maxBuffer: GitOutputMaxBytes,
+      })
+      return stdout
+    } catch (error) {
+      const stderr = (error as { stderr?: unknown }).stderr
+      return this.throwGitFailure(args, {
+        stdout: '',
+        stderr: Buffer.isBuffer(stderr) ? stderr.toString('utf8') : AppError.getMessage(error),
+        failed: true,
+      })
+    }
   }
 
   private throwGitFailure(

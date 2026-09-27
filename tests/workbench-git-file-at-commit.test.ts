@@ -49,4 +49,36 @@ void describe('Workbench Git file at commit', () => {
       await rm(repository, { recursive: true, force: true })
     }
   })
+
+  void test('decodes the committed bytes the way the editor decodes the file on disk', async () => {
+    const repository = await mkdtemp(join(tmpdir(), 'workbench-git-file-encoding-'))
+    try {
+      await git(repository, ['init', '-q'])
+      // 「中文测试」的 GBK 字节 + CRLF，以及带 BOM 的 UTF-16 LE：编辑器里是解码后的 LF 正文，
+      // HEAD 版本也得这样解，Git 改动标记才不会把每一行都算成改过。
+      const gbk = Buffer.from([0xd6, 0xd0, 0xce, 0xc4, 0xb2, 0xe2, 0xca, 0xd4, 0x0d, 0x0a])
+      await writeFile(join(repository, 'legacy.txt'), gbk)
+      await writeFile(
+        join(repository, 'wide.txt'),
+        Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from('a\r\nb\r\n', 'utf16le')])
+      )
+      await git(repository, ['add', '-A'])
+      await git(repository, [
+        '-c',
+        'user.name=t',
+        '-c',
+        'user.email=t@t',
+        'commit',
+        '-q',
+        '-m',
+        'base',
+      ])
+
+      const service = new WorkbenchGitService()
+      assert.equal((await service.getFileAtCommit(repository, 'HEAD', 'legacy.txt')).content, '中文测试\n')
+      assert.equal((await service.getFileAtCommit(repository, 'HEAD', 'wide.txt')).content, 'a\nb\n')
+    } finally {
+      await rm(repository, { recursive: true, force: true })
+    }
+  })
 })
