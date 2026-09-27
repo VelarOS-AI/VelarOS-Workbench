@@ -1,9 +1,5 @@
 import { type MouseEvent,type MutableRefObject, useCallback, useEffect, useState,  } from 'react'
-import {
-  DEFAULT_TREE_WIDTH,
-  type FileTreeNodeData,
-  getDefaultCreateName,
-} from '@renderer/models/files/fileTree.model'
+import { DEFAULT_TREE_WIDTH, type FileTreeNodeData } from '@renderer/models/files/fileTree.model'
 import { isWorkbenchTreeRoot,ROOT_PATH } from '@renderer/models/shared/workbenchUtils'
 import type { NodeApi, TreeApi } from 'react-arborist'
 
@@ -57,7 +53,6 @@ function useElementSize(): [(node: Nullable<HTMLDivElement>) => void, FileTreeSi
 }
 
 export interface UseFileTreeActionsParams {
-  childrenByPath: Map<string, WorkbenchDirectoryEntry[]>
   treeRef: MutableRefObject<Nullable<TreeApi<FileTreeNodeData>>>
   syncingOpenStateRef: MutableRefObject<boolean>
   onTreeApiChange?: (api: Nullable<TreeApi<FileTreeNodeData>>) => void
@@ -65,11 +60,6 @@ export interface UseFileTreeActionsParams {
   onSelectEntryPath: (path: Nullable<string>) => void
   onSelectFile: (path: string) => void
   onContextMenuEntry: (entry: WorkbenchDirectoryEntry, event: MouseEvent) => void
-  onCreateEntry: (
-    type: WorkbenchDirectoryEntry['type'],
-    parentEntry: Nullable<WorkbenchDirectoryEntry>,
-    name: string
-  ) => Promise<Nullable<WorkbenchDirectoryEntry>>
   onRenameEntry: (
     entry: WorkbenchDirectoryEntry,
     name: string
@@ -83,7 +73,6 @@ export interface UseFileTreeActionsParams {
 }
 
 export function useFileTreeActions({
-  childrenByPath,
   treeRef,
   syncingOpenStateRef,
   onTreeApiChange,
@@ -91,7 +80,6 @@ export function useFileTreeActions({
   onSelectEntryPath,
   onSelectFile,
   onContextMenuEntry,
-  onCreateEntry,
   onRenameEntry,
   onDeleteEntries,
   onMoveEntries,
@@ -103,10 +91,6 @@ export function useFileTreeActions({
   handleTreeActivate: (node: NodeApi<FileTreeNodeData>) => void
   handleTreeSelect: (nodes: Array<NodeApi<FileTreeNodeData>>) => void
   handleTreeToggle: (id: string) => void
-  handleTreeCreate: (args: {
-    parentNode?: LooseOptional<NodeApi<FileTreeNodeData>>
-    type: 'internal' | 'leaf'
-  }) => Promise<Nullable<{ id: string }>>
   handleTreeRename: (args: {
     node: NodeApi<FileTreeNodeData>
     name: string
@@ -125,11 +109,9 @@ export function useFileTreeActions({
   const onSelectEntryPathLatest = useLatest(onSelectEntryPath)
   const onSelectFileLatest = useLatest(onSelectFile)
   const onContextMenuEntryLatest = useLatest(onContextMenuEntry)
-  const onCreateEntryLatest = useLatest(onCreateEntry)
   const onRenameEntryLatest = useLatest(onRenameEntry)
   const onDeleteEntriesLatest = useLatest(onDeleteEntries)
   const onMoveEntriesLatest = useLatest(onMoveEntries)
-  const childrenByPathLatest = useLatest(childrenByPath)
 
   const setTreeRef = useCallback((api: LooseOptional<TreeApi<FileTreeNodeData>>): void => {
     treeRef.current = (toNullable(api))
@@ -179,26 +161,6 @@ export function useFileTreeActions({
     onSetDirectoryOpenLatest.current(id, node.isOpen)
   })
 
-  const handleTreeCreate = useMemoizedFn(
-    async ({
-      parentNode,
-      type,
-    }: {
-      parentNode?: LooseOptional<NodeApi<FileTreeNodeData>>
-      type: 'internal' | 'leaf'
-    }): Promise<Nullable<{ id: string }>> => {
-      const parentEntry = (toNullable(parentNode?.data.entry))
-      const entryType = type === 'internal' ? 'directory' : 'file'
-      const createdEntry = await onCreateEntryLatest.current(
-        entryType,
-        parentEntry,
-        getDefaultCreateName(entryType, parentEntry, childrenByPathLatest.current)
-      )
-
-      return createdEntry ? { id: createdEntry.path } : null
-    }
-  )
-
   const handleTreeRename = useMemoizedFn(
     async ({
       node,
@@ -243,7 +205,6 @@ export function useFileTreeActions({
     handleTreeActivate,
     handleTreeSelect,
     handleTreeToggle,
-    handleTreeCreate,
     handleTreeRename,
     handleTreeDelete,
     handleTreeMove,

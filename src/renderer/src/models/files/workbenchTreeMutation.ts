@@ -38,6 +38,16 @@ export function resolveTreeActionBasePathForEntry(
 }
 
 /**
+ * 显式的新建请求（右键菜单这类指明了位置的动作）落在哪个目录：给了条目按条目算，没给就是工程根。
+ * 不回退到当前选中项——点在根目录或空白处的「新建」不能跑到别的目录里去。
+ */
+export function resolveTreeCreateParentPath(
+  parentEntry: Nullable<WorkbenchDirectoryEntry>
+): string {
+  return resolveTreeActionBasePathForEntry(parentEntry, ROOT_PATH)
+}
+
+/**
  * 过滤出可移动的条目：排除根，并剔除「已被同批次祖先目录覆盖」的冗余子项，
  * 避免父子同时移动产生的重复操作。
  */
@@ -53,6 +63,16 @@ export function selectMovableTreeEntries(
             candidate.path !== entry.path && isSameOrChildPath(entry.path, candidate.path)
         )
     )
+}
+
+/** 真要移动的条目：在可移动的条目里再去掉本来就在目标目录里的——对它们来说移动什么也不会改变。 */
+export function selectTreeEntriesToMove(
+  entries: readonly WorkbenchDirectoryEntry[],
+  targetParentPath: string
+): WorkbenchDirectoryEntry[] {
+  return selectMovableTreeEntries(entries).filter(
+    (entry) => getParentPath(entry.path) !== targetParentPath
+  )
 }
 
 export type WorkbenchFileTreeShortcutAction = 'delete-selected' | 'undo-delete'

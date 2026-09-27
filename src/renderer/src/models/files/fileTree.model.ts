@@ -2,7 +2,7 @@ import { optionalWhenLazy } from '@velaros-ai/core'
 
 import type { WorkbenchDirectoryEntry } from '@shared/contracts'
 
-import { ROOT_PATH } from '../shared/workbenchUtils'
+import { getParentPath, isSameOrChildPath, ROOT_PATH } from '../shared/workbenchUtils'
 
 import {
   getWorkbenchFilePresentationVariant,
@@ -54,12 +54,19 @@ export function createOpenState(expandedPaths: Set<string>): Record<string, bool
   return openState
 }
 
+/**
+ * 右键菜单里「新建」落在哪个目录：点在目录上建在它里面，点在文件上建在它旁边，
+ * 工程根（`.`）建在根目录。
+ */
+export function resolveTreeCreateDirectoryPath(anchorEntry: WorkbenchDirectoryEntry): string {
+  return anchorEntry.type === 'directory' ? anchorEntry.path : getParentPath(anchorEntry.path)
+}
+
 export function getDefaultCreateName(
   type: WorkbenchDirectoryEntry['type'],
-  parentEntry: Nullable<WorkbenchDirectoryEntry>,
+  parentPath: string,
   childrenByPath: Map<string, WorkbenchDirectoryEntry[]>
 ): string {
-  const parentPath = parentEntry?.path ?? ROOT_PATH
   const siblingNames = new Set((childrenByPath.get(parentPath) ?? []).map((entry) => entry.name))
   const baseName = type === 'file' ? 'untitled' : 'new-folder'
   const extension = type === 'file' ? '.txt' : ''
@@ -73,4 +80,45 @@ export function getDefaultCreateName(
   }
 
   return `${baseName}-${Date.now()}${extension}`
+}
+
+/**
+ * Arborist 放下时给的父节点。拖到顶层条目之间或列表空白处时，它是 Arborist 自己的内部根节点：
+ * `isRoot` 为 true，数据里没有条目。
+ */
+export interface FileTreeDropNode {
+  isRoot: boolean
+  data: { entry?: WorkbenchDirectoryEntry }
+}
+
+/** 放下的目标目录：内部根节点就是工程根目录；落点不是目录时为 null。 */
+export function resolveTreeDropDirectoryPath(
+  parentNode: Nullable<FileTreeDropNode>
+): Nullable<string> {
+  if (!parentNode) return null
+  if (parentNode.isRoot) return ROOT_PATH
+
+  const entry = parentNode.data.entry
+  return entry?.type === 'directory' ? entry.path : null
+}
+
+/**
+ * 能不能放在这里：目标得是目录，目录不能放进它自己或它的子目录；拖的全都本来就在这个目录里时，
+ * 放下去什么也不会发生（树按名字排序，同一目录里挪位置没有意义），也不接。
+ */
+export function canDropTreeEntries(
+  parentNode: Nullable<FileTreeDropNode>,
+  dragNodes: readonly FileTreeDropNode[]
+): boolean {
+  const targetPath = resolveTreeDropDirectoryPath(parentNode)
+  if (targetPath === null || dragNodes.length === 0) return false
+
+  const draggedPaths: string[] = []
+  for (const node of dragNodes) {
+    const path = node.data.entry?.path
+    if (!path || path === ROOT_PATH || isSameOrChildPath(targetPath, path)) return false
+    draggedPaths.push(path)
+  }
+
+  return draggedPaths.some((path) => getParentPath(path) !== targetPath)
 }

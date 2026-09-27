@@ -4,7 +4,9 @@ import { useWorkbenchCommentStore } from '@renderer/models/comments/workbenchCom
 import {
   resolveTreeActionBasePath,
   resolveTreeActionBasePathForEntry,
+  resolveTreeCreateParentPath,
   selectMovableTreeEntries,
+  selectTreeEntriesToMove,
 } from '@renderer/models/files/workbenchTreeMutation'
 import type { WorkbenchProject } from '@renderer/models/project/workbenchProjects'
 import { getParentPath, ROOT_PATH } from '@renderer/models/shared/workbenchUtils'
@@ -147,6 +149,7 @@ export function useWorkbenchMutationController({
     return null
   }
 
+  /** 在指明的位置新建：`parentEntry` 为 null 就是工程根目录，不跟当前选中项走。 */
   async function createTreeEntry(
     type: WorkbenchDirectoryEntry['type'],
     parentEntry: Nullable<WorkbenchDirectoryEntry>,
@@ -170,7 +173,7 @@ export function useWorkbenchMutationController({
       const result = Result.unwrap(
         await workbenchHost.kernel.project.createWorkbenchEntry({
           projectRoot: owningProject.rootPath,
-          parentPath: getTreeActionBasePathForEntry(parentEntry),
+          parentPath: resolveTreeCreateParentPath(parentEntry),
           name: normalizedName,
           type,
         })
@@ -265,7 +268,8 @@ export function useWorkbenchMutationController({
     const owningProject = activeProject
     const owningProjectId = owningProject.id
 
-    const movableEntries = selectMovableTreeEntries(entries)
+    const targetParentPath = parentEntry?.path ?? ROOT_PATH
+    const movableEntries = selectTreeEntriesToMove(entries, targetParentPath)
     if (isEmpty(movableEntries)) return
 
     for (const entry of movableEntries) {
@@ -283,7 +287,7 @@ export function useWorkbenchMutationController({
           await workbenchHost.kernel.project.moveWorkbenchEntry({
             projectRoot: owningProject.rootPath,
             path: entry.path,
-            parentPath: parentEntry?.path ?? ROOT_PATH,
+            parentPath: targetParentPath,
             name: entry.name,
           })
         )

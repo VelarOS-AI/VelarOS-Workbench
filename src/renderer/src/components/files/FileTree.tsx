@@ -11,8 +11,11 @@ import { useWorkbenchDensity } from '@renderer/hooks/useWorkbenchPreferences'
 import { useWorkbenchI18n } from '@renderer/i18n'
 import {
   buildTreeNodes,
+  canDropTreeEntries,
   createOpenState,
   type FileTreeNodeData,
+  getDefaultCreateName,
+  resolveTreeCreateDirectoryPath,
   TREE_INDENT,
   TREE_OVERSCAN_COUNT,
 } from '@renderer/models/files/fileTree.model'
@@ -53,11 +56,6 @@ interface FileTreeProps {
   onSelectEntryPath: (path: Nullable<string>) => void
   onSelectFile: (path: string) => void
   onContextMenuEntry: (entry: WorkbenchDirectoryEntry, event: MouseEvent) => void
-  onCreateEntry: (
-    type: WorkbenchDirectoryEntry['type'],
-    parentEntry: Nullable<WorkbenchDirectoryEntry>,
-    name: string
-  ) => Promise<Nullable<WorkbenchDirectoryEntry>>
   onRenameEntry: (
     entry: WorkbenchDirectoryEntry,
     name: string
@@ -97,7 +95,6 @@ export function FileTree({
   onSelectEntryPath,
   onSelectFile,
   onContextMenuEntry,
-  onCreateEntry,
   onRenameEntry,
   onDeleteEntries,
   onMoveEntries,
@@ -117,12 +114,10 @@ export function FileTree({
     handleTreeActivate,
     handleTreeSelect,
     handleTreeToggle,
-    handleTreeCreate,
     handleTreeRename,
     handleTreeDelete,
     handleTreeMove,
   } = useFileTreeActions({
-    childrenByPath,
     treeRef,
     syncingOpenStateRef,
     onTreeApiChange,
@@ -130,7 +125,6 @@ export function FileTree({
     onSelectEntryPath,
     onSelectFile,
     onContextMenuEntry,
-    onCreateEntry,
     onRenameEntry,
     onDeleteEntries,
     onMoveEntries,
@@ -157,6 +151,8 @@ export function FileTree({
     (data: FileTreeNodeData) => isMutatingTree || data.entry.path === ROOT_PATH,
     [isMutatingTree]
   )
+  // 拖到顶层条目之间或列表空白处时，Arborist 给的父节点是它自己的内部根节点（没有条目数据），
+  // 那就是工程根目录。
   const disableTreeDrop = useCallback(
     ({
       parentNode,
@@ -164,13 +160,7 @@ export function FileTree({
     }: {
       parentNode: NodeApi<FileTreeNodeData>
       dragNodes: Array<NodeApi<FileTreeNodeData>>
-    }): boolean => {
-      if (isMutatingTree || !parentNode || parentNode.data.entry.type !== 'directory') return true
-
-      return dragNodes.some(
-        (dragNode) => parentNode.id === dragNode.id || parentNode.id.startsWith(`${dragNode.id}/`)
-      )
-    },
+    }): boolean => isMutatingTree || !canDropTreeEntries(parentNode, dragNodes),
     [isMutatingTree]
   )
   const handleTreeToggleFromTree = useCallback(
@@ -250,7 +240,6 @@ export function FileTree({
             onActivate={handleTreeActivate}
             onSelect={handleTreeSelect}
             onToggle={handleTreeToggleFromTree}
-            onCreate={handleTreeCreate}
             onRename={handleTreeRename}
             onDelete={handleTreeDelete}
             onMove={handleTreeMove}
@@ -265,16 +254,63 @@ export function FileTree({
   )
 }
 
-export function createTreeEntry(
-  tree: Nullable<FileTreeApi>,
+/** 新建之后等新行出现在树里（父目录刚展开、刚读完）的最多帧数。 */
+const CREATED_TREE_ENTRY_EDIT_MAX_FRAMES = 30
+
+interface CreateTreeEntryOptions {
+  treeRef: { readonly current: Nullable<FileTreeApi> }
   type: WorkbenchDirectoryEntry['type']
+  /** 右键的那一项：目录建在它里面，文件建在它旁边，工程根（`.`）建在根目录。 */
+  anchorEntry: WorkbenchDirectoryEntry
+  childrenByPath: Map<string, WorkbenchDirectoryEntry[]>
+  onCreateEntry: (
+    type: WorkbenchDirectoryEntry['type'],
+    parentEntry: Nullable<WorkbenchDirectoryEntry>,
+    name: string
+  ) => Promise<Nullable<WorkbenchDirectoryEntry>>
+}
+
+/**
+ * 新建条目只走显式的命令（右键菜单）：`<Tree>` 不带 `onCreate`，Arborist 的默认快捷键（`a` 建文件、
+ * `Shift+A` 建目录）因此什么也不做，打字跳转与方向键导航照旧。建好之后等新行出现，进入行内改名。
+ */
+export async function createTreeEntry({
+  treeRef,
+  type,
+  anchorEntry,
+  childrenByPath,
+  onCreateEntry,
+}: CreateTreeEntryOptions): Promise<void> {
+  const parentPath = resolveTreeCreateDirectoryPath(anchorEntry)
+  const createdEntry = await onCreateEntry(
+    type,
+    anchorEntry,
+    getDefaultCreateName(type, parentPath, childrenByPath)
+  )
+  if (createdEntry) editTreeEntryWhenVisible(treeRef, createdEntry.path)
+}
+
+/**
+ * 新行要等父目录重新读完才进树：逐帧等它出现，出现后聚焦并进入改名，改完选中并打开
+ * （与 Arborist 自带的新建流程一致）。
+ */
+function editTreeEntryWhenVisible(
+  treeRef: { readonly current: Nullable<FileTreeApi> },
+  path: string,
+  remainingFrames = CREATED_TREE_ENTRY_EDIT_MAX_FRAMES
 ): void {
-  if (type === 'directory') {
-    void tree?.create({ type: 'internal' })
+  const tree = treeRef.current
+  if (tree?.get(path)) {
+    tree.focus(path)
+    void tree.edit(path).then(() => {
+      tree.select(path)
+      tree.activate(path)
+    })
     return
   }
 
-  void tree?.create({ type: 'leaf' })
+  if (remainingFrames <= 0) return
+  requestAnimationFrame(() => editTreeEntryWhenVisible(treeRef, path, remainingFrames - 1))
 }
 
 export function renameSelectedTreeEntry(tree: Nullable<FileTreeApi>): void {

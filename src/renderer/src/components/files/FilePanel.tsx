@@ -31,7 +31,7 @@ import {
 import { getWorkbenchFileTreeShortcutAction } from '@renderer/models/files/workbenchTreeMutation'
 import type { WorkbenchGitDecorationMap } from '@renderer/models/git/workbenchGitModel'
 import type { WorkbenchProject } from '@renderer/models/project/workbenchProjects'
-import { getParentPath, ROOT_PATH } from '@renderer/models/shared/workbenchUtils'
+import { ROOT_PATH } from '@renderer/models/shared/workbenchUtils'
 
 import { toNullable } from '@velaros-ai/core'
 import { currentPlatform as systemPlatformCompatibility } from '@velaros-ai/core/platform'
@@ -286,23 +286,16 @@ export function FilePanel({
     })
   }
 
+  // 右键的那一项决定落在哪个目录（根目录与空白处的菜单对应工程根），不看树里当前聚焦或选中的是谁。
   function createEntryFromContext(type: WorkbenchDirectoryEntry['type']): void {
-    const treeApi = treeApiRef.current
-    if (!treeApi || !contextMenu) return
+    if (!contextMenu) return
 
-    const parentPath =
-      contextMenu.entry.type === 'directory'
-        ? contextMenu.entry.path
-        : getParentPath(contextMenu.entry.path)
-
-    if (parentPath === ROOT_PATH) {
-      createTreeEntry(treeApi, type)
-      return
-    }
-
-    void treeApi.create({
-      type: type === 'directory' ? 'internal' : 'leaf',
-      parentId: parentPath,
+    void createTreeEntry({
+      treeRef: treeApiRef,
+      type,
+      anchorEntry: contextMenu.entry,
+      childrenByPath,
+      onCreateEntry,
     })
   }
 
@@ -435,7 +428,6 @@ export function FilePanel({
                 onSelectEntryPath={onSelectEntryPath}
                 onSelectFile={onSelectFile}
                 onContextMenuEntry={openContextMenu}
-                onCreateEntry={onCreateEntry}
                 onRenameEntry={onRenameEntry}
                 onDeleteEntries={onDeleteEntries}
                 onMoveEntries={onMoveEntries}
