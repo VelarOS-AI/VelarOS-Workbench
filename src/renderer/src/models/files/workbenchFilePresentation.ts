@@ -89,7 +89,8 @@ function resolveBuiltinFilePresentation(
     || name.startsWith('.env')
     || name.startsWith('.eslintrc')
     || name.startsWith('.prettierrc')
-  ) return { variant: name === 'package.json' ? 'json' : 'config' }
+    // tsconfig.json 这类 JSON 写的配置用 JSON 图标，只有 .editorconfig、.npmrc 这类键值格式的用配置（INI）图标。
+  ) return { variant: extension === 'json' || extension === 'jsonc' ? 'json' : 'config' }
 
   switch (extension) {
     case 'css':
@@ -124,8 +125,9 @@ function resolveBuiltinFilePresentation(
     case 'config':
     case 'ini':
     case 'toml':
-    case 'xml':
       return { variant: 'config' }
+    case 'xml':
+      return { variant: 'code' }
     default:
       return { variant: getFilePresentationKind(input) }
   }

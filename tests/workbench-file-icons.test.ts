@@ -18,6 +18,10 @@ void describe('Workbench file icon surface', () => {
   void test('uses product icons for current languages and common project files', () => {
     assert.equal(getWorkbenchFilePresentationVariant({ fileName: '.gitignore' }), 'gitignore')
     assert.equal(getWorkbenchFilePresentationVariant({ fileName: '.npmrc' }), 'config')
+    // JSON 写的配置用 JSON 图标，不显示成 INI。
+    assert.equal(getWorkbenchFilePresentationVariant({ fileName: 'tsconfig.json' }), 'json')
+    assert.equal(getWorkbenchFilePresentationVariant({ fileName: '.eslintrc.json' }), 'json')
+    assert.equal(getWorkbenchFilePresentationVariant({ fileName: 'pom.xml' }), 'code')
     assert.equal(getWorkbenchFilePresentationVariant({ fileName: 'bun.lock' }), 'lock')
     assert.equal(getWorkbenchFilePresentationVariant({ fileName: 'package.json' }), 'json')
     assert.equal(getWorkbenchFilePresentationVariant({ fileName: 'change.patch' }), 'patch')
