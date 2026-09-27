@@ -7,11 +7,11 @@ import { AppError } from '@velaros-ai/core/error'
 
 import type { SystemWorkspaceFilesChangedEvent } from '@shared/contracts'
 
-import { isWorkbenchSaveTemporaryName } from '../AtomicFileWrite'
 import {
   type WorkbenchWatchStatus,
   WorkbenchWatchWholeRootPath,
 } from '../../../shared/workbenchWatch'
+import { isWorkbenchSaveTemporaryName } from '../AtomicFileWrite'
 import {
   isGeneratedProjectDirectory,
   isInternalProjectDirectory,

@@ -14,6 +14,8 @@ import {
 import { createWorkbenchAppParts } from '../src/main/workspace/Parts'
 import { WorkbenchFileWatcher } from '../src/main/workspace/watch/WorkbenchFileWatcher'
 
+import { refuseTrash } from './helpers/fakeTrash'
+
 /**
  * 编辑器保存是原子的：同目录写临时文件、刷盘、rename 盖过目标，权限位不变；硬链接与别人的文件退回
  * 原地写，只读文件照旧拒绝；失败时不留临时文件。
@@ -41,7 +43,7 @@ void describe('Workbench atomic save', () => {
       await chmod(filePath, 0o750)
       const before = await stat(filePath)
 
-      const saved = await createWorkbenchAppParts(data).files.saveFile({
+      const saved = await createWorkbenchAppParts(data, { moveToTrash: refuseTrash }).files.saveFile({
         projectRoot: root,
         path: 'script.sh',
         content: 'echo new\n',
@@ -56,7 +58,7 @@ void describe('Workbench atomic save', () => {
       assert.equal(saved.size, after.size)
       assert.deepEqual(await readdir(root), ['script.sh'])
 
-      createWorkbenchAppParts(data).files.saveFileSync({
+      createWorkbenchAppParts(data, { moveToTrash: refuseTrash }).files.saveFileSync({
         projectRoot: root,
         path: 'script.sh',
         content: 'echo sync\n',

@@ -14,6 +14,8 @@ import {
   WORKBENCH_EDITOR_READ_MAX_CHARS,
 } from '../src/renderer/src/models/editor/workbenchEditorTabs'
 
+import { refuseTrash } from './helpers/fakeTrash'
+
 /**
  * 大文件：先看体积、只读截断视图需要的开头；编辑到上限以上、保存过的文件重读时不能被截断——否则会
  * 变成只读，或者报一次假的外部修改。
@@ -68,7 +70,7 @@ void describe('Workbench large text files', () => {
       assert.equal(opened.truncated, false)
 
       const before = await stat(filePath)
-      const saved = await createWorkbenchAppParts(data).files.saveFile({
+      const saved = await createWorkbenchAppParts(data, { moveToTrash: refuseTrash }).files.saveFile({
         projectRoot: root,
         path: 'grown.ts',
         content: `${original}${'y'.repeat(20_000)}\n`,

@@ -13,6 +13,8 @@ import {
   WorkbenchUnencodableTextErrorCode,
 } from '../src/shared/workbenchTextFormat'
 
+import { refuseTrash } from './helpers/fakeTrash'
+
 /**
  * 工作台不改用户没编辑过的字节：读盘认出编码、BOM 与换行符，能逐字节还原的才可编辑，
  * 保存按同一格式写回；写不出的字符拒绝保存，绝不写有损字节。
@@ -194,7 +196,7 @@ void describe('Workbench file reads and saves keep the file format', () => {
       assert.equal(read.encoding, 'gb18030')
       assert.equal(read.textIssue, undefined)
 
-      const saved = await createWorkbenchAppParts(data).files.saveFile({
+      const saved = await createWorkbenchAppParts(data, { moveToTrash: refuseTrash }).files.saveFile({
         projectRoot: root,
         path: 'legacy.txt',
         content: `${read.content}!`,
@@ -217,7 +219,7 @@ void describe('Workbench file reads and saves keep the file format', () => {
       assert.equal(read.content, 'one\ntwo\nthree\n')
       assert.equal(read.eol, 'crlf')
 
-      await createWorkbenchAppParts(data).files.saveFile({
+      await createWorkbenchAppParts(data, { moveToTrash: refuseTrash }).files.saveFile({
         projectRoot: root,
         path: 'windows.ts',
         content: read.content.replace('two', 'TWO'),
@@ -231,7 +233,7 @@ void describe('Workbench file reads and saves keep the file format', () => {
 
   void test('a save without a format keeps the disk format and refuses one that cannot round-trip', async () => {
     await withProject(async ({ root, data }) => {
-      const files = createWorkbenchAppParts(data).files
+      const files = createWorkbenchAppParts(data, { moveToTrash: refuseTrash }).files
       const bomPath = join(root, 'bom.txt')
       await writeFile(bomPath, bytes([0xef, 0xbb, 0xbf], 'a\r\nb\r\n'))
       await files.saveFile({ projectRoot: root, path: 'bom.txt', content: 'a\nb\nc\n' })
@@ -254,7 +256,7 @@ void describe('Workbench file reads and saves keep the file format', () => {
       await writeFile(filePath, GbkSample)
       await assert.rejects(
         async () =>
-          createWorkbenchAppParts(data).files.saveFile({
+          createWorkbenchAppParts(data, { moveToTrash: refuseTrash }).files.saveFile({
             projectRoot: root,
             path: 'legacy.txt',
             content: '中文测试😀',
@@ -271,7 +273,7 @@ void describe('Workbench file reads and saves keep the file format', () => {
 
   void test('converting to UTF-8 and changing line endings rewrite the file only when asked', async () => {
     await withProject(async ({ root, data }) => {
-      const files = createWorkbenchAppParts(data).files
+      const files = createWorkbenchAppParts(data, { moveToTrash: refuseTrash }).files
       const filePath = join(root, 'legacy.txt')
       await writeFile(filePath, bytes(GbkSample, '\r\n'))
       const converted = await files.saveFile({
@@ -304,7 +306,7 @@ void describe('Workbench file reads and saves keep the file format', () => {
 
   void test('a restored deleted file keeps its original format; local history keeps text', async () => {
     await withProject(async ({ root, data }) => {
-      const files = createWorkbenchAppParts(data).files
+      const files = createWorkbenchAppParts(data, { moveToTrash: refuseTrash }).files
       const restored = await files.restoreMissingFile({
         projectRoot: root,
         path: 'restored.txt',
@@ -335,7 +337,7 @@ void describe('Workbench file reads and saves keep the file format', () => {
   void test('the save IPC rejects unknown formats instead of guessing', async () => {
     await withProject(async ({ root, data }) => {
       await writeFile(join(root, 'a.txt'), 'a\n')
-      registerWorkbenchFsIpc({} as never, createWorkbenchAppParts(data), {} as never)
+      registerWorkbenchFsIpc({} as never, createWorkbenchAppParts(data, { moveToTrash: refuseTrash }), {} as never)
       const handler = ipcHandlers.get(WorkbenchFsChannels.saveFile)
       assert.ok(handler)
       const save = async (request: Record<string, unknown>) =>
