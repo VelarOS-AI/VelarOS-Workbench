@@ -69,7 +69,7 @@ export function WorkbenchLightFilePanel({
             path={languagePath}
             language={language}
             value={tab.content}
-            readOnly={readOnly || tab.truncated}
+            readOnly={readOnly || tab.truncated || !!tab.textIssue}
             disabled={false}
             projectContextIndex={EMPTY_LIGHT_EDITOR_PROJECT_CONTEXT_INDEX}
             workbenchTheme={workbenchTheme}

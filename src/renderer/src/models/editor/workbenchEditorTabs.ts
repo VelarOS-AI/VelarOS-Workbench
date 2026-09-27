@@ -35,9 +35,11 @@ export function mayAffectWorkbenchDiagnostics(event: SystemWorkspaceFilesChanged
   return event.paths.some((path) => path !== '.git' && !path.startsWith('.git/'))
 }
 
-/** 标签内容与磁盘版本不一致即视为脏（未保存）。 */
-export function isDirtyTab(tab: WorkbenchOpenEditorTab): boolean {
-  return !tab.file.imagePreview && tab.content !== tab.file.content
+/** 标签内容与磁盘版本不一致、或选了还没存下去的格式转换，即视为脏（未保存）。 */
+export function isDirtyTab(
+  tab: Pick<WorkbenchOpenEditorTab, 'content' | 'file' | 'textConversion'>
+): boolean {
+  return !tab.file.imagePreview && (tab.content !== tab.file.content || !!tab.textConversion)
 }
 
 /** 标签是否带有外部变更标记。 */
@@ -45,7 +47,7 @@ export function hasExternalChange(tab: WorkbenchOpenEditorTab): boolean {
   return !!tab.externalChange
 }
 
-/** 比较内存快照与磁盘快照是否发生变化（时间戳 / 大小 / 内容任一不同）。 */
+/** 比较内存快照与磁盘快照是否发生变化（时间戳 / 大小 / 内容 / 编码与换行符任一不同）。 */
 export function hasFileSnapshotChanged(
   currentFile: WorkbenchReadFileResult,
   diskFile: WorkbenchReadFileResult
@@ -54,6 +56,9 @@ export function hasFileSnapshotChanged(
     currentFile.modifiedAt !== diskFile.modifiedAt ||
     currentFile.size !== diskFile.size ||
     currentFile.content !== diskFile.content ||
+    currentFile.encoding !== diskFile.encoding ||
+    currentFile.eol !== diskFile.eol ||
+    currentFile.textIssue !== diskFile.textIssue ||
     !sameImagePreview(currentFile.imagePreview, diskFile.imagePreview)
   )
 }

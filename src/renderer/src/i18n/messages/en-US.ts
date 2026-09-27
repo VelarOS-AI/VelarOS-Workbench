@@ -498,6 +498,24 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     closeDeletedFileTab: 'Close tab',
     restoreDeletedFileSucceeded: 'File restored',
     restoreDeletedFileFailed: 'Failed to restore file',
+    textIssueUndecodableTitle: 'Unknown encoding, opened read-only',
+    textIssueUndecodableDescription:
+      'This file is not valid UTF-8, UTF-16 or GB18030. Editing is off so its original bytes cannot be damaged.',
+    textIssueIrreversibleTitle: 'Cannot write this file back as {encoding}, opened read-only',
+    textIssueIrreversibleDescription:
+      'Decoding and re-encoding it as {encoding} does not reproduce its bytes (for example four-byte characters). Convert it to UTF-8 to edit it.',
+    textIssueMixedEolTitle: 'Mixed line endings, opened read-only',
+    textIssueMixedEolDescription:
+      'Saving would turn every line ending into {eol}, changing lines you did not edit. Choose the line ending to use and the file becomes editable.',
+    textUnencodableSaveTitle: 'Not saved: some characters cannot be written as {encoding}',
+    textConvertToUtf8: 'Convert to UTF-8',
+    textNormalizeEol: 'Use {eol} everywhere',
+    textConvertToUtf8DialogTitle: 'Convert this file to UTF-8?',
+    textConvertToUtf8DialogDescription:
+      'The file is rewritten as UTF-8 and saved right away. The text stays the same, but all of its {encoding} bytes change.',
+    textConvertToUtf8LossyDialogDescription:
+      'The file is rewritten as UTF-8 and saved right away. Bytes that could not be decoded become the replacement character �, and the original bytes cannot be recovered.',
+    textConvertToUtf8Confirm: 'Convert and save',
     imagePreviewLabel: 'Image preview for {name}',
     imagePreviewFailed: 'Unable to display this image.',
     imagePreviewToolbar: 'Image viewing tools',

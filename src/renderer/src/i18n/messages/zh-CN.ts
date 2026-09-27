@@ -480,6 +480,24 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     closeDeletedFileTab: '关闭标签页',
     restoreDeletedFileSucceeded: '文件已恢复',
     restoreDeletedFileFailed: '恢复文件失败',
+    textIssueUndecodableTitle: '认不出这个文件的编码，已只读打开',
+    textIssueUndecodableDescription:
+      '它不是有效的 UTF-8、UTF-16 或 GB18030。为免写坏原来的字节，编辑已关闭。',
+    textIssueIrreversibleTitle: '这个文件无法按 {encoding} 原样写回，已只读打开',
+    textIssueIrreversibleDescription:
+      '按 {encoding} 解码后再编码得不到原来的字节（例如四字节字符）。转换为 UTF-8 后可以编辑。',
+    textIssueMixedEolTitle: '这个文件混用了多种换行符，已只读打开',
+    textIssueMixedEolDescription:
+      '直接保存会把所有换行统一成 {eol}，改到你没编辑的行。选定统一成哪种换行符后即可编辑。',
+    textUnencodableSaveTitle: '没有保存：有字符无法用 {encoding} 表示',
+    textConvertToUtf8: '转换为 UTF-8',
+    textNormalizeEol: '统一为 {eol}',
+    textConvertToUtf8DialogTitle: '把这个文件转换为 UTF-8？',
+    textConvertToUtf8DialogDescription:
+      '文件会用 UTF-8 重新写入并立即保存：文字不变，但原来的 {encoding} 字节会全部改写。',
+    textConvertToUtf8LossyDialogDescription:
+      '文件会用 UTF-8 重新写入并立即保存。认不出的字节会变成替换字符 �，原来的字节无法恢复。',
+    textConvertToUtf8Confirm: '转换并保存',
     imagePreviewLabel: '{name} 图片预览',
     imagePreviewFailed: '无法显示这张图片。',
     imagePreviewToolbar: '图片查看工具',

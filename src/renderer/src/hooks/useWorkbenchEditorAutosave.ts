@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { workbenchHost } from '@renderer/host'
 import { isDirtyTab } from '@renderer/models/editor/workbenchEditorTabs'
+import { resolveWorkbenchTabTextFormat } from '@renderer/models/editor/workbenchEditorTextFormat'
 import type { WorkbenchProject } from '@renderer/models/project/workbenchProjects'
 import type { WorkbenchOpenEditorTab } from '@renderer/types/workbenchTypes'
 
@@ -52,7 +53,12 @@ export function useWorkbenchEditorAutosave({
     if (!project) return
 
     for (const tab of openTabsByPathLatest.current.values()) {
-      if (tab.file.truncated || tab.externalChange || !isDirtyTab(tab)) {
+      if (
+        tab.file.truncated
+        || tab.externalChange
+        || tab.unencodableSaveError
+        || !isDirtyTab(tab)
+      ) {
         continue
       }
 
@@ -67,6 +73,7 @@ export function useWorkbenchEditorAutosave({
           projectRoot: project.rootPath,
           path: tab.path,
           content: tab.content,
+          ...resolveWorkbenchTabTextFormat(tab),
           expectedModifiedAt: tab.file.modifiedAt,
           expectedSize: tab.file.size,
         })
@@ -85,8 +92,10 @@ export function useWorkbenchEditorAutosave({
 
     if (!activeProject || isSavingFile) return undefined
 
+    // 有编码写不出的字符、上次被拒的标签不排队：改之前结果只会一样，也别挡住后面的标签。
     const dirtyTab = [...openTabsByPath.values()].find(
-      (tab) => !tab.file.truncated && !tab.externalChange && isDirtyTab(tab)
+      (tab) =>
+        !tab.file.truncated && !tab.externalChange && !tab.unencodableSaveError && isDirtyTab(tab)
     )
     if (!dirtyTab) return undefined
 

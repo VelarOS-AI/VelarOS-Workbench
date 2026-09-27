@@ -142,6 +142,9 @@ function buildLightTabFromReadFile(file: WorkbenchReadFileResult): WorkbenchLigh
     modifiedAt: file.modifiedAt,
     totalLines: file.totalLines,
     truncated: file.truncated,
+    encoding: file.encoding,
+    eol: file.eol,
+    textIssue: file.textIssue,
     imagePreview: file.imagePreview,
   }
 }
@@ -652,7 +655,7 @@ export function useStandaloneWorkbenchPageModel(
 
   async function saveEmbeddedLightTab(): Promise<void> {
     const tab = editorNavigation.lightTab
-    if (!tab || tab.truncated) return
+    if (!tab || tab.truncated || tab.textIssue) return
 
     try {
       const saved = await saveLightEditorTab(tab, {

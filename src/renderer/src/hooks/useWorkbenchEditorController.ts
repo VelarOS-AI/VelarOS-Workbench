@@ -3,6 +3,7 @@ import { workbenchHost } from '@renderer/host'
 import { applyWorkbenchLanguageServiceEditsToContent } from '@renderer/models/editor/workbenchCodeMirrorLanguageService'
 import {
   canEditWorkbenchFileContent,
+  canSaveWorkbenchTabContent,
   isWorkbenchFileEditable,
   resolveWorkbenchEditorEditMode,
   type WorkbenchEditorEditMode,
@@ -20,6 +21,10 @@ import {
   reuseWorkbenchOpenFileSnapshots,
   WORKBENCH_EDITOR_FILES_CHANGED_DEBOUNCE_MS,
 } from '@renderer/models/editor/workbenchEditorTabs'
+import {
+  resolveWorkbenchTabTextFormat,
+  resolveWorkbenchTextConversion,
+} from '@renderer/models/editor/workbenchEditorTextFormat'
 import type { WorkbenchOpenFileSnapshot } from '@renderer/models/project/workbenchProjectContextIndex'
 import type { WorkbenchProject } from '@renderer/models/project/workbenchProjects'
 import { readWorkbenchLocalHistoryThrottleMs } from '@renderer/models/settings/workbenchPreferences'
@@ -39,6 +44,10 @@ import type {
   WorkbenchReadFileResult,
 } from '@shared/contracts'
 import { isWorkbenchImagePreviewPath } from '@shared/workbenchImage'
+import {
+  type WorkbenchTextFormat,
+  WorkbenchUnencodableTextErrorCode,
+} from '@shared/workbenchTextFormat'
 
 import { useStableWorkbenchMessageTranslate } from '../runtime/useStableWorkbenchMessaging'
 import { subscribeWorkbenchAgentProjectWrites } from '../runtime/workbenchAgentProjectWrites'
@@ -128,7 +137,12 @@ export function useWorkbenchEditorController({
   const silentSaveInFlightPathsRef = useRef(new Set<string>())
 
   const hasUnsavedChanges =
-    !!selectedFile && !selectedFile.imagePreview && editorContent !== selectedFile.content
+    !!selectedFile
+    && !selectedFile.imagePreview
+    && (
+      editorContent !== selectedFile.content
+      || !!openTabsByPath.get(selectedFile.path)?.textConversion
+    )
   const hasUnsavedOpenTabs = useMemo(
     () => [...openTabsByPath.values()].some(isDirtyTab),
     [openTabsByPath]
@@ -149,18 +163,26 @@ export function useWorkbenchEditorController({
     return snapshots
   }, [openTabs])
 
-  function rememberOpenFile(file: WorkbenchReadFileResult, content: string): void {
+  function rememberOpenFile(
+    file: WorkbenchReadFileResult,
+    content: string,
+    { keepTextConversion = true }: { keepTextConversion?: boolean } = {}
+  ): void {
     setOpenTabsByPath((current) => {
       const next = new Map(current)
       const currentTab = current.get(file.path)
-      const externalChange = optionalWhenLazy(
-        currentTab && !hasFileSnapshotChanged(currentTab.file, file),
-        () => currentTab!.externalChange
+      const sameSnapshot = !!currentTab && !hasFileSnapshotChanged(currentTab.file, file)
+      const externalChange = optionalWhenLazy(sameSnapshot, () => currentTab!.externalChange)
+      // 选过的格式转换跟着编辑缓冲走，直到存下去或还原；上次保存被拒的说明内容一改就作废。
+      const textConversion = optionalWhenLazy(
+        sameSnapshot && keepTextConversion,
+        () => currentTab!.textConversion
       )
       next.set(file.path, {
         path: file.path,
         file,
         content,
+        textConversion,
         externalChange,
       })
       return next
@@ -245,6 +267,16 @@ export function useWorkbenchEditorController({
     })
   }
 
+  function rememberUnencodableSaveError(tab: WorkbenchOpenEditorTab, message: string): void {
+    setOpenTabsByPath((current) => {
+      const currentTab = current.get(tab.path)
+      // 保存期间用户又改了内容：说明针对的是旧内容，不再挂到标签上。
+      if (!currentTab || currentTab.content !== tab.content) return current
+
+      return new Map(current).set(tab.path, { ...currentTab, unencodableSaveError: message })
+    })
+  }
+
   function notifyExternalFileChangedOnce(
     path: string,
     change: WorkbenchOpenEditorExternalChange,
@@ -315,7 +347,7 @@ export function useWorkbenchEditorController({
     if (!selectedFile) return
 
     setEditorContent(selectedFile.content)
-    rememberOpenFile(selectedFile, selectedFile.content)
+    rememberOpenFile(selectedFile, selectedFile.content, { keepTextConversion: false })
   })
 
   const selectFile = useMemoizedFn(
@@ -612,6 +644,7 @@ export function useWorkbenchEditorController({
         projectRoot: project.rootPath,
         path: tab.path,
         content: tab.content,
+        ...resolveWorkbenchTabTextFormat(tab),
         expectedModifiedAt: tab.file.modifiedAt,
         expectedSize: tab.file.size,
         // 静默自动保存（用户手打）走节流，减少本地历史快照；手动保存始终留快照。
@@ -873,6 +906,7 @@ export function useWorkbenchEditorController({
           projectRoot: project.rootPath,
           path,
           content: tab.content,
+          ...resolveWorkbenchTabTextFormat(tab),
         })
       )
       if (activeProjectRef.current?.id !== owningProjectId) return
@@ -908,6 +942,11 @@ export function useWorkbenchEditorController({
       next.set(path, {
         ...currentTab,
         file: diskFile,
+        // 保留本地草稿也保留它的格式：外部改了编码或换行符时，下一次保存按草稿的格式写回。
+        textConversion: resolveWorkbenchTextConversion(
+          diskFile,
+          resolveWorkbenchTabTextFormat(currentTab)
+        ),
         externalChange: undefined,
       })
       return next
@@ -1010,14 +1049,16 @@ export function useWorkbenchEditorController({
       // 只读只挡输入：切到只读之前已经改下的内容照样能保存。
       if (
         !activeProject
-        || !canEditWorkbenchFileContent(tab.file)
-        || tab.content === tab.file.content
+        || !canSaveWorkbenchTabContent(tab)
+        || !isDirtyTab(tab)
         || isSavingFile
       )
         return
       if (options.silent && silentSaveInFlightPathsRef.current.has(tab.path)) return
 
       const latestTab = openTabsByPathLatest.current.get(tab.path)
+      // 内容里有文件编码写不出的字符：改之前不再自动保存（结果只会一样）。
+      if (options.silent && latestTab?.unencodableSaveError) return
       const externalChange = latestTab?.externalChange ?? tab.externalChange
       if (externalChange) {
         if (!options.silent) {
@@ -1051,6 +1092,10 @@ export function useWorkbenchEditorController({
         if (activeProjectRef.current?.id !== owningProjectId) return
 
         const appError = AppError.from(error)
+        if (appError.code === WorkbenchUnencodableTextErrorCode) {
+          // 编辑区据此提示并提供「转换为 UTF-8」；自动保存失败时也要让用户看到。
+          rememberUnencodableSaveError(tab, appError.message)
+        }
         if (options.silent) {
           log.debug('工作台编辑器静默自动保存失败', {
             path: tab.path,
@@ -1087,11 +1132,40 @@ export function useWorkbenchEditorController({
         path: selectedFile.path,
         file: selectedFile,
         content: editorContent,
+        textConversion: openTabsByPath.get(selectedFile.path)?.textConversion,
         externalChange: openTabsByPath.get(selectedFile.path)?.externalChange,
       },
       { notify: true }
     )
   })
+
+  /**
+   * 用户明确选的格式转换（转换为 UTF-8、换换行符）：记到当前标签上（算未保存）并立即保存。
+   * 与磁盘上的格式一样又能原样写回时只是撤掉之前没存下去的转换。
+   */
+  const convertSelectedFileTextFormat = useMemoizedFn(
+    async (format: WorkbenchTextFormat): Promise<void> => {
+      const path = selectedFilePathRef.current
+      const tab = path ? openTabsByPathLatest.current.get(path) : undefined
+      if (!tab || tab.file.imagePreview || tab.file.truncated) return
+
+      const textConversion = resolveWorkbenchTextConversion(tab.file, format)
+      setOpenTabsByPath((current) => {
+        const currentTab = current.get(tab.path)
+        return currentTab
+          ? new Map(current).set(tab.path, {
+              ...currentTab,
+              textConversion,
+              unencodableSaveError: undefined,
+            })
+          : current
+      })
+      await saveEditorTab(
+        { ...tab, textConversion, unencodableSaveError: undefined },
+        { notify: true }
+      )
+    }
+  )
 
   const saveAllOpenFiles = useMemoizedFn(async (): Promise<void> => {
     if (!activeProject || isSavingFile) return
@@ -1099,7 +1173,7 @@ export function useWorkbenchEditorController({
     const owningProject = activeProject
     const owningProjectId = owningProject.id
     const dirtyTabs = [...openTabsByPath.values()].filter(
-      (tab) => canEditWorkbenchFileContent(tab.file) && isDirtyTab(tab)
+      (tab) => canSaveWorkbenchTabContent(tab) && isDirtyTab(tab)
     )
     if (isEmpty(dirtyTabs)) return
 
@@ -1188,6 +1262,7 @@ export function useWorkbenchEditorController({
     closeOpenEntryPath,
     saveSelectedFile,
     saveAllOpenFiles,
+    convertSelectedFileTextFormat,
     resolveSelectedExternalFileConflict,
   }
 }

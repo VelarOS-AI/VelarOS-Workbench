@@ -222,6 +222,8 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
         onSaveSelectedFile: () => void workbench.saveSelectedFile(),
         onToggleSelectedFileEditMode: workbench.toggleSelectedFileEditMode,
         onSaveAllOpenFiles: () => void workbench.saveAllOpenFiles(),
+        onConvertSelectedFileTextFormat: (format) =>
+          void workbench.convertSelectedFileTextFormat(format),
         onResolveExternalFileConflict: (resolution) =>
           void workbench.resolveSelectedExternalFileConflict(resolution),
         onEditorContentChange: workbench.setEditorContent,

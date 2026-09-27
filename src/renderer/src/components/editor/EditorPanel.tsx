@@ -29,6 +29,7 @@ import {
   getWorkbenchEditorLineCount,
   parseWorkbenchGoToLineInput,
 } from '@renderer/models/editor/workbenchEditorModel'
+import { isDirtyTab } from '@renderer/models/editor/workbenchEditorTabs'
 import { isWorkbenchMarkdownPreviewPath } from '@renderer/models/editor/workbenchMarkdownPreview'
 import {
   navigateWorkbenchSymbolLocations,
@@ -62,6 +63,7 @@ import type {
   WorkbenchLanguageServiceFileEdit,
   WorkbenchLanguageServiceLocation,
 } from '@shared/contracts'
+import { normalizeWorkbenchTextEol, type WorkbenchTextFormat } from '@shared/workbenchTextFormat'
 
 import { useWorkbenchGitHeadContent } from '../../hooks/useWorkbenchGitHeadContent'
 import styles from '../../styles/workbenchPageStyles'
@@ -88,6 +90,7 @@ import {
   IsolatedWorkbenchEditorTabGroups,
   type WorkbenchEditorAuxiliaryTabItem,
 } from './EditorTabBar'
+import { EditorTextFormatNotice } from './EditorTextFormatNotice'
 import { type FileHistoryMode,FileHistoryView } from './FileHistoryView'
 import { WorkbenchImagePreview } from './WorkbenchImagePreview'
 import { WorkbenchLightFilePanel } from './WorkbenchLightFilePanel'
@@ -162,6 +165,8 @@ export interface WorkbenchEditorPanelWorkspaceProps {
   /** 当前文件在只读与编辑之间切换（只挡用户在编辑器里输入，AI 经内核写盘不受影响）。 */
   onToggleSelectedFileEditMode: () => void
   onSaveAllOpenFiles: () => void
+  /** 用户明确选的格式转换（转换为 UTF-8、换换行符）：记为未保存并立即保存。 */
+  onConvertSelectedFileTextFormat?: (format: WorkbenchTextFormat) => void
   onResolveExternalFileConflict: (resolution: 'external' | 'local') => void
   onEditorContentChange: (content: string) => void
   onOpenDirectory: (path: string) => void
@@ -237,6 +242,7 @@ export function EditorPanel({
     onSaveSelectedFile,
     onToggleSelectedFileEditMode,
     onSaveAllOpenFiles,
+    onConvertSelectedFileTextFormat,
     onResolveExternalFileConflict,
     onEditorContentChange,
     onGoToDefinition,
@@ -470,14 +476,12 @@ export function EditorPanel({
     () => parseWorkbenchGoToLineInput(goToLineInput, editorLineCount),
     [editorLineCount, goToLineInput]
   )
-  const dirtyTabCount = useMemo(
-    () => openTabs.filter((tab) => !tab.file.imagePreview && tab.content !== tab.file.content).length,
-    [openTabs]
-  )
-  const selectedExternalChange = useMemo(
-    () => toNullable(openTabs.find((tab) => tab.path === selectedFilePath)?.externalChange),
+  const dirtyTabCount = useMemo(() => openTabs.filter(isDirtyTab).length, [openTabs])
+  const selectedTab = useMemo(
+    () => toNullable(openTabs.find((tab) => tab.path === selectedFilePath)),
     [openTabs, selectedFilePath]
   )
+  const selectedExternalChange = toNullable(selectedTab?.externalChange)
   const activeAuxiliaryTab = useMemo(
     () => toNullable(auxiliaryTabs.find((tab) => tab.active)),
     [auxiliaryTabs]
@@ -799,7 +803,8 @@ export function EditorPanel({
               initialMode={fileHistoryMode}
               currentContent={editorContent}
               onRestore={(content) => {
-                onEditorContentChange(content)
+                // 历史快照可能带着 CRLF：编辑缓冲一律是 LF，保存时再换回文件的换行符。
+                onEditorContentChange(normalizeWorkbenchTextEol(content))
                 setFileHistoryMode(null)
               }}
               onClose={() => setFileHistoryMode(null)}
@@ -908,6 +913,13 @@ export function EditorPanel({
                     </Button>
                   )}
                 </div>
+              )}
+              {!!selectedTab && (
+                <EditorTextFormatNotice
+                  tab={selectedTab}
+                  disabled={isSavingFile}
+                  onConvert={onConvertSelectedFileTextFormat}
+                />
               )}
               {!!selectedFile && !selectedImagePreview && (
                 <EditorFileDiagnosticSummary

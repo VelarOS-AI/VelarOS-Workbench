@@ -1,8 +1,10 @@
+import { toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { Result } from '@velaros-ai/core/result'
 
 import type { SystemLocalAttachmentFileResult } from '@shared/contracts'
 import { resolveWorkbenchImageMediaType } from '@shared/workbenchImage'
+import type { WorkbenchTextEncoding, WorkbenchTextEol } from '@shared/workbenchTextFormat'
 
 import type {
   WorkbenchLightEditorTab,
@@ -162,6 +164,8 @@ export async function saveLightEditorTab(
       projectRoot: string
       path: string
       content: string
+      encoding?: WorkbenchTextEncoding
+      eol?: WorkbenchTextEol
       expectedModifiedAt?: number
       expectedSize?: number
     }) => Promise<Result<{ size: number; modifiedAt: number }>>
@@ -174,7 +178,7 @@ export async function saveLightEditorTab(
     }) => Promise<Result<{ size: number; lastModified: number }>>
   }
 ): Promise<{ size: number; modifiedAt: number }> {
-  if (tab.officePreview || tab.imagePreview)
+  if (tab.officePreview || tab.imagePreview || tab.textIssue)
     throw new AppError('VALIDATION', '只读预览不能作为纯文本保存。')
 
   const target = resolveLightEditorSaveTarget(tab)
@@ -185,6 +189,9 @@ export async function saveLightEditorTab(
         projectRoot: target.projectRoot,
         path: target.path,
         content: tab.content,
+        // 从磁盘读来的标签按读到的格式写回；改动卡里的正文没带格式，主进程沿用磁盘上的。
+        encoding: toOptional(tab.encoding),
+        eol: toOptional(tab.eol),
         expectedModifiedAt: tab.modifiedAt ?? undefined,
         expectedSize: tab.size,
       })

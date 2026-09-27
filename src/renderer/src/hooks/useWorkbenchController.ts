@@ -389,6 +389,7 @@ export function useWorkbenchController(options: UseWorkbenchControllerOptions = 
     saveSelectedFile: editor.saveSelectedFile,
     toggleSelectedFileEditMode: editor.toggleSelectedFileEditMode,
     saveAllOpenFiles: editor.saveAllOpenFiles,
+    convertSelectedFileTextFormat: editor.convertSelectedFileTextFormat,
     resolveSelectedExternalFileConflict: editor.resolveSelectedExternalFileConflict,
     runCommand: commandActions.command.runCommand,
     rerunLastCommand: commandActions.command.rerunLastCommand,

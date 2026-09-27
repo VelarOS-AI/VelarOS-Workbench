@@ -24,6 +24,7 @@ import {
 import { useWorkbenchEditorTabOverflow } from '@renderer/hooks/useWorkbenchEditorTabOverflow'
 import { useWorkbenchI18n } from '@renderer/i18n'
 import type { WorkbenchEditorEditMode } from '@renderer/models/editor/workbenchEditorEditMode'
+import { isDirtyTab } from '@renderer/models/editor/workbenchEditorTabs'
 import {
   getWorkbenchGitChangeDisplayPath,
   type WorkbenchGitChangeItem,
@@ -162,7 +163,7 @@ export function EditorTabBar({
     openTabs
       .map(
         (tab) =>
-          `${tab.path}:${tab.content === tab.file.content}:${tab.externalChange?.status ?? ''}`
+          `${tab.path}:${isDirtyTab(tab)}:${tab.externalChange?.status ?? ''}`
       )
       .join('\u001f'),
     diffTabItem ? getWorkbenchGitChangeDisplayPath(diffTabItem) : '',
@@ -263,7 +264,7 @@ export function EditorTabBar({
       >
         <div ref={tabScrollerRef} className={styles.editorTabScroller}>
           {openTabs.map((tab) => {
-            const isDirty = tab.content !== tab.file.content
+            const isDirty = isDirtyTab(tab)
             const isActive =
               !diffTabItem &&
               !lightTabItem &&
@@ -414,7 +415,8 @@ export function EditorTabBar({
           {!!selectedFileEditMode
             && !!onToggleSelectedFileEditMode
             && !selectedFile?.imagePreview
-            && !selectedFile?.truncated && (
+            && !selectedFile?.truncated
+            && !selectedFile?.textIssue && (
             <IconButton
               size="icon-sm"
               className={styles.editorTabActionButton}

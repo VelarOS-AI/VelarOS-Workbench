@@ -35,6 +35,8 @@ function createFile(
     projectRoot: '/workspace/project',
     path,
     content,
+    encoding: 'utf-8',
+    eol: 'lf',
     size: content.length,
     modifiedAt: 123,
     totalLines: 1,
