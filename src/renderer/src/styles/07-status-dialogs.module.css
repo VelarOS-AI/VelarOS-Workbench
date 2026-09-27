@@ -90,6 +90,18 @@ button.statusBarItem:hover {
   background: var(--workbench-hover);
 }
 
+.statusEolMenuItem:disabled {
+  @apply cursor-default;
+  opacity: 0.5;
+  background: transparent;
+}
+
+.statusMenuSeparator {
+  height: 1px;
+  margin: 4px 2px;
+  background: var(--workbench-border);
+}
+
 .statusPathTrail {
   @apply flex min-w-0 items-center;
   max-width: min(56vw, 980px);

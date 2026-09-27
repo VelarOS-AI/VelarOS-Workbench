@@ -254,6 +254,8 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
         onNavigateBack: () => void editorNavigation.goBack(),
         onNavigateForward: () => void editorNavigation.goForward(),
         onNavigationPoint: editorNavigation.recordNavigationPoint,
+        onIndentationChange: editorNavigation.setIndentation,
+        indentationRequest: editorNavigation.indentationRequest,
         onActiveProblemIdChange: editorNavigation.setActiveProblemId,
         navigationRequest: editorNavigation.navigationRequest,
       },

@@ -1,3 +1,4 @@
+import { EditorState } from '@codemirror/state'
 import { describe, expect, test } from 'bun:test'
 
 import {
@@ -7,6 +8,7 @@ import {
   type WorkbenchEditorConfigLocation,
 } from '../src/renderer/src/models/editor/workbenchEditorConfig'
 import {
+  buildWorkbenchIndentationConversion,
   detectWorkbenchIndentation,
   resolveWorkbenchIndentation,
   workbenchIndentUnit,
@@ -125,5 +127,28 @@ describe('indentation detection', () => {
     expect(workbenchIndentUnit(resolveWorkbenchIndentation({ path: 'a.ts', detected: null, editorConfig: null }))).toBe(
       '  '
     )
+  })
+})
+
+describe('indentation chosen in the status bar', () => {
+  test('overrides .editorconfig and the detected style', () => {
+    expect(
+      resolveWorkbenchIndentation({
+        path: 'a.ts',
+        detected: { style: 'space', size: 2 },
+        editorConfig: { indentStyle: 'space', indentSize: 4 },
+        override: { style: 'tab', size: 8 },
+      })
+    ).toEqual({ style: 'tab', size: 8, tabSize: 8, source: 'override' })
+  })
+
+  test('converts leading whitespace between spaces and tabs, keeping the columns', () => {
+    const convert = (doc: string, style: 'space' | 'tab', size: number, tabSize: number) => {
+      const state = EditorState.create({ doc })
+      return state.update({ changes: buildWorkbenchIndentationConversion(state, { style, size }, tabSize) }).state.doc.toString()
+    }
+    expect(convert('a\n    b\n        c\n     d', 'tab', 4, 4)).toBe('a\n\tb\n\t\tc\n\t d')
+    expect(convert('a\n\tb\n\t\tc\n\t  d', 'space', 4, 4)).toBe('a\n    b\n        c\n      d')
+    expect(convert('x\n  y', 'space', 2, 2)).toBe('x\n  y')
   })
 })

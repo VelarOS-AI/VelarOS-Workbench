@@ -196,8 +196,12 @@ import {
   workbenchGitChangeGutterExtension,
 } from '@renderer/models/editor/workbenchGitChangeGutter'
 import {
+  buildWorkbenchIndentationConversion,
   detectWorkbenchIndentation,
   resolveWorkbenchIndentation,
+  type WorkbenchIndentation,
+  type WorkbenchIndentationOverride,
+  type WorkbenchIndentationRequest,
   workbenchIndentUnit,
 } from '@renderer/models/editor/workbenchIndentation'
 import { buildWorkbenchIdeaIndentGuideColumnsForLineRange } from '@renderer/models/editor/workbenchIndentGuides'
@@ -326,6 +330,10 @@ interface CodeMirrorEditorProps {
   find?: Nullable<WorkbenchEditorFindRequest>
   onFindStatusChange?: (status: WorkbenchEditorFindStatus) => void
   onOpenGoToLine: () => void
+  /** 当前文件实际用的缩进（报给状态栏）；编辑器卸载时报 null。 */
+  onIndentationChange?: (indentation: Nullable<WorkbenchIndentation>) => void
+  /** 状态栏缩进菜单的操作：改用某种缩进、转换现有缩进、按内容重新识别。 */
+  indentationRequest?: Nullable<WorkbenchIndentationRequest>
   /** 编辑区的后退 / 前进：Windows / Linux 上 Alt+← / Alt+→ 在编辑器里也走它（CodeMirror 本来拿这两个键按语法跳）。 */
   onNavigateBack?: () => void
   onNavigateForward?: () => void
@@ -1239,6 +1247,8 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       onOpenGoToLine,
       onNavigateBack,
       onNavigateForward,
+      onIndentationChange,
+      indentationRequest = null,
       onGoToDefinition,
       symbolLocations = null,
       onOpenSymbolLocations,
@@ -1277,6 +1287,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       onOpenGoToLine,
       onNavigateBack,
       onNavigateForward,
+      onIndentationChange,
       onGoToDefinition,
       onOpenSymbolLocations,
       onCloseSymbolLocations,
@@ -1427,12 +1438,19 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       () => [languageServiceLinter, lintTheme, diagnosticForegroundExtension],
       [diagnosticForegroundExtension, languageServiceLinter, lintTheme]
     )
-    // 缩进按切到这个文件那一刻的正文识别（不随每次输入重算），`.editorconfig` 写了的优先。
+    // 缩进按切到这个文件那一刻的正文识别（不随每次输入重算）；状态栏为这个文件选过的最优先，其次 `.editorconfig`。
     const valueRef = useLatest(value)
+    /** 「按内容重新识别」一次就加一，让识别结果按当前正文重算。 */
+    const [indentationDetectionRevision, setIndentationDetectionRevision] = useState(0)
     const detectedIndentation = useMemo(
       () => detectWorkbenchIndentation(valueRef.current),
-      [path, valueRef]
+      [indentationDetectionRevision, path, valueRef]
     )
+    const [indentationOverrides, setIndentationOverrides] = useState<
+      ReadonlyMap<string, WorkbenchIndentationOverride>
+    >(() => new Map())
+    const fileKey = path ? workbenchEditorFileStateKey(projectRoot, path) : null
+    const indentationOverride = fileKey ? (indentationOverrides.get(fileKey) ?? null) : null
     const editorConfig = useWorkbenchEditorConfig({
       projectRoot,
       path,
@@ -1441,8 +1459,14 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
     })
     const editorConfigRef = useLatest(editorConfig)
     const indentation = useMemo(
-      () => resolveWorkbenchIndentation({ path, detected: detectedIndentation, editorConfig }),
-      [detectedIndentation, editorConfig, path]
+      () =>
+        resolveWorkbenchIndentation({
+          path,
+          detected: detectedIndentation,
+          editorConfig,
+          override: indentationOverride,
+        }),
+      [detectedIndentation, editorConfig, indentationOverride, path]
     )
     const indentationExtension = useMemo(
       () => [
@@ -2932,6 +2956,45 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
     useEffect(() => {
       reconfigureCompartment(viewRef.current, indentationCompartment, indentationExtension)
     }, [indentationCompartment, indentationExtension])
+
+    useEffect(() => {
+      callbacksRef.current.onIndentationChange?.(indentation)
+    }, [callbacksRef, indentation])
+    useEffect(() => () => callbacksRef.current.onIndentationChange?.(null), [callbacksRef])
+
+    // 状态栏缩进菜单的操作，每个请求只做一次。
+    const appliedIndentationRequestRef = useRef<Nullable<number>>(null)
+    useEffect(() => {
+      const view = viewRef.current
+      if (!view || !fileKey || !indentationRequest) return
+      if (appliedIndentationRequestRef.current === indentationRequest.id) return
+      appliedIndentationRequestRef.current = indentationRequest.id
+
+      const setOverride = (override: Nullable<WorkbenchIndentationOverride>): void =>
+        setIndentationOverrides((current) => {
+          const next = new Map(current)
+          if (override) next.set(fileKey, override)
+          else next.delete(fileKey)
+          return next
+        })
+      const { change } = indentationRequest
+      if (change.kind === 'detect') {
+        setOverride(null)
+        setIndentationDetectionRevision((revision) => revision + 1)
+        return
+      }
+      if (change.kind === 'use') {
+        setOverride({ style: change.style, size: change.size })
+        return
+      }
+      // 转换现有缩进：一级缩进的宽度不变（制表符的显示宽度就等于原来一级几格），一次改完、一步撤销。
+      const target = { style: change.style, size: indentation.size }
+      if (!view.state.readOnly) {
+        const changes = buildWorkbenchIndentationConversion(view.state, target, indentation.tabSize)
+        if (!isEmpty(changes)) view.dispatch({ changes })
+      }
+      setOverride(target)
+    }, [fileKey, indentation, indentationRequest])
 
     useEffect(() => {
       reconfigureCompartment(viewRef.current, wordWrapCompartment, wordWrapExtension)

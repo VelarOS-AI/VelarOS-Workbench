@@ -35,6 +35,10 @@ import {
   parseWorkbenchGoToLineInput,
 } from '@renderer/models/editor/workbenchEditorModel'
 import { isDirtyTab } from '@renderer/models/editor/workbenchEditorTabs'
+import type {
+  WorkbenchIndentation,
+  WorkbenchIndentationRequest,
+} from '@renderer/models/editor/workbenchIndentation'
 import { isWorkbenchMarkdownPreviewPath } from '@renderer/models/editor/workbenchMarkdownPreview'
 import {
   navigateWorkbenchSymbolLocations,
@@ -204,6 +208,9 @@ export interface WorkbenchEditorPanelWorkspaceProps {
   onNavigateForward?: () => void
   /** 要在当前文件里跳到别处（跳到行）：先把当前位置记进后退历史。 */
   onNavigationPoint?: () => void
+  /** 当前文件实际用的缩进（给状态栏）；状态栏缩进菜单的操作经 `indentationRequest` 交回编辑器。 */
+  onIndentationChange?: (indentation: Nullable<WorkbenchIndentation>) => void
+  indentationRequest?: Nullable<WorkbenchIndentationRequest>
   onCursorPositionChange?: (position: {
     line: number
     column: number
@@ -282,6 +289,8 @@ export function EditorPanel({
     onNavigateBack,
     onNavigateForward,
     onNavigationPoint,
+    onIndentationChange,
+    indentationRequest = null,
     onCursorPositionChange,
     onActiveProblemIdChange,
     navigationRequest = null,
@@ -1030,6 +1039,8 @@ export function EditorPanel({
                         onOpenGoToLine={openGoToLineBar}
                         onNavigateBack={onNavigateBack}
                         onNavigateForward={onNavigateForward}
+                        onIndentationChange={onIndentationChange}
+                        indentationRequest={indentationRequest}
                         onGoToDefinition={onGoToDefinition}
                         symbolLocations={symbolLocationsVisible ? symbolLocations : null}
                         onOpenSymbolLocations={openSymbolLocations}

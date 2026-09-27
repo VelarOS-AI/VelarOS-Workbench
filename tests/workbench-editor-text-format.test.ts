@@ -210,9 +210,10 @@ void describe('Workbench editor text format', () => {
   void test('the status bar shows the format next to the cursor position', () => {
     const statusBar = readSource('src/renderer/src/components/chrome/StatusBar.tsx')
     const presentation = readSource('src/renderer/src/StandaloneWorkbenchPagePresentation.tsx')
+    // 与 VS Code 同序：行列、缩进、编码、换行符。
     assert.match(
       statusBar,
-      /\{t\('workbench\.cursorPosition', cursorPosition\)\}\n\s*<\/Text>\n\s*\{!!textFormat && <StatusBarTextFormat/u
+      /\{t\('workbench\.cursorPosition', cursorPosition\)\}\n\s*<\/Text>\n\s*\{!!indentation && \(\n\s*<StatusBarIndentation[\s\S]*?\/>\n\s*\)\}\n\s*\{!!textFormat && <StatusBarTextFormat/u
     )
     assert.match(statusBar, /const StatusBarEolOptions: readonly WorkbenchTextEol\[\] = \['lf', 'crlf'\]/u)
     assert.match(

@@ -1,4 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type {
+  WorkbenchIndentation,
+  WorkbenchIndentationChange,
+  WorkbenchIndentationRequest,
+} from '@renderer/models/editor/workbenchIndentation'
 import {
   WorkbenchNavigationHistory,
   type WorkbenchNavigationPoint,
@@ -69,6 +74,13 @@ export function useWorkbenchEditorNavigationState({
     useState<Nullable<string>>(null)
   const debugTabsRef = useLatest(debugTabs)
   const [navigationRequest, setNavigationRequest] = useState<Nullable<EditorNavigationRequest>>(null)
+  // 状态栏显示的缩进（编辑器报上来），以及状态栏缩进菜单交回编辑器的操作。
+  const [indentation, setIndentation] = useState<Nullable<WorkbenchIndentation>>(null)
+  const [indentationRequest, setIndentationRequest] =
+    useState<Nullable<WorkbenchIndentationRequest>>(null)
+  const requestIndentationChange = useCallback((change: WorkbenchIndentationChange): void => {
+    setIndentationRequest((current) => ({ id: (current?.id ?? 0) + 1, change }))
+  }, [])
   const [activeProblemId, setActiveProblemIdState] = useState<Nullable<string>>(null)
   const setActiveProblemId = useCallback((problemId: Nullable<string>) => {
     setActiveProblemIdState((current) => (current === problemId ? current : problemId))
@@ -291,6 +303,10 @@ export function useWorkbenchEditorNavigationState({
     goBack: () => goThroughHistory('back'),
     goForward: () => goThroughHistory('forward'),
     recordNavigationPoint,
+    indentation,
+    setIndentation,
+    indentationRequest,
+    requestIndentationChange,
     lightTab,
     navigationRequest,
     openDiff,

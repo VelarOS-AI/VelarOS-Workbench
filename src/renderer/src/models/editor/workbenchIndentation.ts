@@ -1,3 +1,5 @@
+import type { ChangeSpec, EditorState } from '@codemirror/state'
+
 import type { WorkbenchEditorConfigProperties } from './workbenchEditorConfig'
 
 /** 一个文件的缩进：用空格还是制表符、一级几格，以及制表符显示多宽。 */
@@ -6,8 +8,25 @@ export interface WorkbenchIndentation {
   /** 一级缩进的宽度（用制表符时就是制表符宽度）。 */
   size: number
   tabSize: number
-  /** 从哪来的：`.editorconfig`、按正文识别，还是语言默认。 */
-  source: 'editorconfig' | 'detected' | 'default'
+  /** 从哪来的：用户在状态栏选的、`.editorconfig`、按正文识别，还是语言默认。 */
+  source: 'override' | 'editorconfig' | 'detected' | 'default'
+}
+
+/** 用户在状态栏为一个文件选的缩进：压过 `.editorconfig` 和识别结果（空格时是一级几格，制表符时是显示宽度）。 */
+export interface WorkbenchIndentationOverride {
+  style: 'space' | 'tab'
+  size: number
+}
+
+/** 状态栏缩进菜单交给编辑器的操作：改用某种缩进、把现有缩进转换过去、回到按内容识别。 */
+export type WorkbenchIndentationChange =
+  | { kind: 'use'; style: 'space' | 'tab'; size: number }
+  | { kind: 'convert'; style: 'space' | 'tab' }
+  | { kind: 'detect' }
+
+export interface WorkbenchIndentationRequest {
+  id: number
+  change: WorkbenchIndentationChange
 }
 
 /** 从正文里识别出的缩进（识别不出来就没有）。 */
@@ -76,16 +95,19 @@ export function defaultWorkbenchIndentation(path: Nullable<string>): WorkbenchIn
   return { style: 'space', size: 2, tabSize: 2, source: 'default' }
 }
 
-/** `.editorconfig` 写了的优先，其次按正文识别，最后用语言默认。 */
+/** 用户在状态栏选的优先，其次 `.editorconfig` 写了的，再次按正文识别，最后用语言默认。 */
 export function resolveWorkbenchIndentation({
   path,
   detected,
   editorConfig,
+  override = null,
 }: {
   path: Nullable<string>
   detected: Nullable<WorkbenchDetectedIndentation>
   editorConfig: Nullable<WorkbenchEditorConfigProperties>
+  override?: Nullable<WorkbenchIndentationOverride>
 }): WorkbenchIndentation {
+  if (override) return { style: override.style, size: override.size, tabSize: override.size, source: 'override' }
   const fallback = defaultWorkbenchIndentation(path)
   const configured = !!editorConfig && (!!editorConfig.indentStyle || !!editorConfig.indentSize)
   const style = editorConfig?.indentStyle ?? detected?.style ?? fallback.style
@@ -104,4 +126,30 @@ export function resolveWorkbenchIndentation({
 /** 按一次 Tab、回车自动缩进时插入的文本。 */
 export function workbenchIndentUnit(indentation: WorkbenchIndentation): string {
   return indentation.style === 'tab' ? '\t' : ' '.repeat(indentation.size)
+}
+
+/**
+ * 把每行开头的缩进换成新的写法（制表符按原来的显示宽度折算成列）：转成空格时每列一个空格，转成制表符时每
+ * `target.size` 列一个制表符、零头补空格。只改确实变了的行。
+ */
+export function buildWorkbenchIndentationConversion(
+  state: EditorState,
+  target: WorkbenchIndentationOverride,
+  currentTabSize: number
+): ChangeSpec[] {
+  const changes: ChangeSpec[] = []
+  for (let number = 1; number <= state.doc.lines; number += 1) {
+    const line = state.doc.line(number)
+    const indent = /^[ \t]*/u.exec(line.text)![0]
+    if (!indent) continue
+    let columns = 0
+    for (const char of indent)
+      columns = char === '\t' ? (Math.floor(columns / currentTabSize) + 1) * currentTabSize : columns + 1
+    const next =
+      target.style === 'tab'
+        ? '\t'.repeat(Math.floor(columns / target.size)) + ' '.repeat(columns % target.size)
+        : ' '.repeat(columns)
+    if (next !== indent) changes.push({ from: line.from, to: line.from + indent.length, insert: next })
+  }
+  return changes
 }

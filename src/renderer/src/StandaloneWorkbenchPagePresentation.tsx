@@ -836,6 +836,10 @@ export function StandaloneWorkbenchPagePresentation({
           openFileCount={workbench.openTabs.length}
           commandStatusLabel={commandStatusLabel}
           textFormat={selectedTextFormat}
+          indentation={
+            editorNavigation.diffItem || editorNavigation.lightTab ? null : editorNavigation.indentation
+          }
+          onChangeIndentation={editorNavigation.requestIndentationChange}
           onChangeEol={(eol) => {
             if (!selectedTextFormat) return
             void workbench.convertSelectedFileTextFormat({
