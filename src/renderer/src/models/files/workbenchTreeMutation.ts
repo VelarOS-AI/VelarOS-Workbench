@@ -1,3 +1,5 @@
+import { AppError } from '@velaros-ai/core/error'
+
 import type { WorkbenchDeleteEntryResult, WorkbenchDirectoryEntry } from '@shared/contracts'
 
 import {
@@ -94,6 +96,82 @@ export function partitionDeleteResultsByUndo(results: readonly WorkbenchDeleteEn
     else trashOnly.push(result)
   }
   return { undoable, trashOnly }
+}
+
+/** 多项操作里没成的一项。 */
+export interface WorkbenchTreeMutationFailure {
+  /** 相对工程根的路径。 */
+  path: string
+  code: string
+  message: string
+}
+
+export interface WorkbenchTreeMutationOutcome<TItem, TResult> {
+  succeeded: Array<{ item: TItem; result: TResult }>
+  failed: Array<{ item: TItem; failure: WorkbenchTreeMutationFailure }>
+}
+
+/**
+ * 多项移动 / 删除 / 撤销一项一项地做：某一项失败不影响其余的，做成的与没成的分开交回，
+ * 调用方据此只更新做成了的那些（标签、撤销栈……），再把没成的报出来。按顺序一项接一项，不并发。
+ */
+export async function runTreeMutationPerEntry<TItem, TResult>(
+  items: readonly TItem[],
+  getPath: (item: TItem) => string,
+  run: (item: TItem) => Promise<TResult>
+): Promise<WorkbenchTreeMutationOutcome<TItem, TResult>> {
+  const outcome: WorkbenchTreeMutationOutcome<TItem, TResult> = { succeeded: [], failed: [] }
+  for (const item of items) {
+    try {
+      outcome.succeeded.push({ item, result: await run(item) })
+    } catch (error) {
+      const appError = AppError.from(error)
+      outcome.failed.push({
+        item,
+        failure: { path: getPath(item), code: appError.code, message: appError.message },
+      })
+    }
+  }
+  return outcome
+}
+
+type WorkbenchTreeMutationTranslate = (
+  key: string,
+  params?: Record<string, string | number>
+) => string
+
+/** 没成的几项拼成提示正文：列出前几项的路径与原因，其余只报个数。 */
+export function describeTreeMutationFailures(
+  failures: readonly WorkbenchTreeMutationFailure[],
+  translate: WorkbenchTreeMutationTranslate,
+  listLimit = 3
+): string {
+  const items = failures.slice(0, listLimit).map((failure) =>
+    translate('workbench.treeMutationFailureItem', {
+      path: failure.path,
+      message: failure.message.trim().replace(/[。.]+$/u, ''),
+    })
+  )
+  if (failures.length > listLimit) {
+    items.push(
+      translate('workbench.treeMutationMoreFailures', { count: failures.length - listLimit })
+    )
+  }
+  return items.join(translate('workbench.treeMutationFailureSeparator'))
+}
+
+/**
+ * 一批撤销删除做完之后还要留在撤销栈里的（按原来的先后）：没放回去、而记录还在的——比如原处又有了
+ * 同名的东西，挪开之后还能再撤销。记录已失效（NOT_FOUND）的不留：东西在系统废纸篓里。
+ */
+export function selectDeleteUndoResultsToKeep<TResult extends WorkbenchDeleteEntryResult>(
+  batchResults: readonly TResult[],
+  failed: ReadonlyArray<{ item: TResult; failure: WorkbenchTreeMutationFailure }>
+): TResult[] {
+  const keep = new Set(
+    failed.filter(({ failure }) => failure.code !== 'NOT_FOUND').map(({ item }) => item)
+  )
+  return batchResults.filter((result) => keep.has(result))
 }
 
 export type WorkbenchFileTreeShortcutAction = 'delete-selected' | 'undo-delete'

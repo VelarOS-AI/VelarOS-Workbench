@@ -527,6 +527,12 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     moveSucceeded: '已移动',
     deleteSucceeded: '已删除',
     treeMutationFailed: '文件树操作失败',
+    moveFailedEntries: '{count} 项没能移动',
+    deleteFailedEntries: '{count} 项没能删除',
+    undoDeleteFailedEntries: '{count} 项没能撤销删除',
+    treeMutationFailureItem: '{path}：{message}',
+    treeMutationFailureSeparator: '；',
+    treeMutationMoreFailures: '另有 {count} 项',
     deleteConfirm:
       '确定删除“{name}”吗？它会被移到系统废纸篓（回收站），较小的项目还可以用 ⌘Z / Ctrl+Z 撤销。',
     deleteDirectoryConfirm:

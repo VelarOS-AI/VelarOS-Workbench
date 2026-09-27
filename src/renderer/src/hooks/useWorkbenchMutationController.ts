@@ -2,12 +2,16 @@ import { useRef, useState } from 'react'
 import { workbenchHost } from '@renderer/host'
 import { useWorkbenchCommentStore } from '@renderer/models/comments/workbenchCommentStore'
 import {
+  describeTreeMutationFailures,
   partitionDeleteResultsByUndo,
   resolveTreeActionBasePath,
   resolveTreeActionBasePathForEntry,
   resolveTreeCreateParentPath,
+  runTreeMutationPerEntry,
+  selectDeleteUndoResultsToKeep,
   selectMovableTreeEntries,
   selectTreeEntriesToMove,
+  type WorkbenchTreeMutationFailure,
   type WorkbenchUndoableDeleteResult,
 } from '@renderer/models/files/workbenchTreeMutation'
 import type { WorkbenchProject } from '@renderer/models/project/workbenchProjects'
@@ -18,8 +22,7 @@ import { isEmpty, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { Result } from '@velaros-ai/core/result'
 
-import type {
-  WorkbenchDeleteEntryResult, WorkbenchDirectoryEntry, WorkbenchMoveEntryResult, WorkbenchRestoreDeletedEntryResult, } from '@shared/contracts'
+import type { WorkbenchDeleteEntryResult, WorkbenchDirectoryEntry } from '@shared/contracts'
 
 import { useStableWorkbenchMessageTranslate } from '../runtime/useStableWorkbenchMessaging'
 import { useLatest } from '../support/genericHooks'
@@ -133,6 +136,33 @@ export function useWorkbenchMutationController({
         results,
       },
     ].slice(-20)
+  }
+
+  /**
+   * 多项操作里有没成的：只做了一项时照旧报那一项的原因；多项时报没成几项，
+   * 并列出前几项的路径与原因。
+   * 做成了的那些已经各自更新过了。
+   */
+  function notifyTreeMutationFailures(
+    titleKey: string,
+    failures: readonly WorkbenchTreeMutationFailure[],
+    attemptedCount: number
+  ): void {
+    const first = failures[0]
+    if (!first) return
+
+    if (attemptedCount === 1) {
+      messageLatest.current.error({
+        title: tLatest.current('workbench.treeMutationFailed'),
+        description: first.message,
+      })
+      return
+    }
+
+    messageLatest.current.error({
+      title: tLatest.current(titleKey, { count: failures.length }),
+      description: describeTreeMutationFailures(failures, tLatest.current),
+    })
   }
 
   /** 没留私有副本的删除（太大）：不能在这里撤销，告诉用户到系统废纸篓里找回。 */
@@ -298,46 +328,59 @@ export function useWorkbenchMutationController({
 
     try {
       setIsMutatingTree(true)
-      const movedResults: Array<{
-        source: WorkbenchDirectoryEntry
-        result: WorkbenchMoveEntryResult
-      }> = []
-      for (const entry of movableEntries) {
-        const result = Result.unwrap(
-          await workbenchHost.kernel.project.moveWorkbenchEntry({
-            projectRoot: owningProject.rootPath,
-            path: entry.path,
-            parentPath: targetParentPath,
-            name: entry.name,
-          })
-        )
-        movedResults.push({ source: entry, result })
-      }
+      // 一项一项地挪：某一项没成（重名之类）不挡住其余的，挪成了的都要跟着换标签与评论的路径。
+      const { succeeded, failed } = await runTreeMutationPerEntry(
+        movableEntries,
+        (entry) => entry.path,
+        async (entry) =>
+          Result.unwrap(
+            await workbenchHost.kernel.project.moveWorkbenchEntry({
+              projectRoot: owningProject.rootPath,
+              path: entry.path,
+              parentPath: targetParentPath,
+              name: entry.name,
+            })
+          )
+      )
 
       if (activeProjectRef.current?.id !== owningProjectId) return
 
-      onTreeChangedLatest.current()
-      const parentsToRefresh = new Set<string>()
-      for (const { source, result } of movedResults) {
-        parentsToRefresh.add(result.previousParentPath)
-        parentsToRefresh.add(result.parentPath)
-        if (source.type === 'directory') {
-          pruneTreeCacheLatest.current(result.previousPath)
+      if (!isEmpty(succeeded)) {
+        onTreeChangedLatest.current()
+        const parentsToRefresh = new Set<string>()
+        for (const { item: source, result } of succeeded) {
+          parentsToRefresh.add(result.previousParentPath)
+          parentsToRefresh.add(result.parentPath)
+          if (source.type === 'directory') {
+            pruneTreeCacheLatest.current(result.previousPath)
+          }
+          moveOpenEntryPathLatest.current(
+            result.previousPath,
+            result.entry.path,
+            result.entry.modifiedAt
+          )
+          commentStore.renamePath(owningProject.rootPath, result.previousPath, result.entry.path)
         }
-        moveOpenEntryPathLatest.current(result.previousPath, result.entry.path, result.entry.modifiedAt)
-        commentStore.renamePath(owningProject.rootPath, result.previousPath, result.entry.path)
+
+        await Promise.all(
+          [...parentsToRefresh].map((parentPath) => refreshMutationParentLatest.current(parentPath))
+        )
+        setSelectedEntryPathLatest.current(toNullable(succeeded.at(-1)?.result.entry.path))
+        resetTreeAction()
+        resetSearchLatest.current()
       }
 
-      await Promise.all(
-        [...parentsToRefresh].map((parentPath) => refreshMutationParentLatest.current(parentPath))
+      if (isEmpty(failed)) {
+        messageLatest.current.success({
+          title: tLatest.current('workbench.moveSucceeded'),
+        })
+        return
+      }
+      notifyTreeMutationFailures(
+        'workbench.moveFailedEntries',
+        failed.map(({ failure }) => failure),
+        movableEntries.length
       )
-      const lastMovedEntry = movedResults.at(-1)?.result.entry
-      setSelectedEntryPathLatest.current((toNullable(lastMovedEntry?.path)))
-      resetTreeAction()
-      resetSearchLatest.current()
-      messageLatest.current.success({
-        title: tLatest.current('workbench.moveSucceeded'),
-      })
     } catch (error) {
       if (activeProjectRef.current?.id !== owningProjectId) return
 
@@ -362,23 +405,38 @@ export function useWorkbenchMutationController({
 
     try {
       setIsMutatingTree(true)
-      const deletePreviews = await Promise.all(
-        deletableEntries.map(async (entry) => ({
-          entry,
-          preview: Result.unwrap(
+      // 先逐项看一眼要不要确认：看不了的（已经被别处删掉之类）记下来最后报，不挡住其余的。
+      const inspected = await runTreeMutationPerEntry(
+        deletableEntries,
+        (entry) => entry.path,
+        async (entry) =>
+          Result.unwrap(
             await workbenchHost.kernel.project.inspectWorkbenchDeleteEntry({
               projectRoot: owningProject.rootPath,
               path: entry.path,
             })
-          ),
-        }))
+          )
       )
+      const failures = inspected.failed.map(({ failure }) => failure)
+      const deletePreviews = inspected.succeeded.map(({ item, result }) => ({
+        entry: item,
+        preview: result,
+      }))
+      if (isEmpty(deletePreviews)) {
+        notifyTreeMutationFailures(
+          'workbench.deleteFailedEntries',
+          failures,
+          deletableEntries.length
+        )
+        return
+      }
+
       const confirmationEntries = deletePreviews.filter(
         ({ preview }) => preview.requiresConfirmation
       )
       if (!isEmpty(confirmationEntries)) {
         const confirmationMessage =
-          deletableEntries.length === 1
+          deletePreviews.length === 1
             ? tLatest.current(
                 confirmationEntries[0]!.preview.type === 'directory'
                   ? 'workbench.deleteDirectoryConfirm'
@@ -386,45 +444,53 @@ export function useWorkbenchMutationController({
                 { name: confirmationEntries[0]!.entry.name }
               )
             : tLatest.current('workbench.deleteManyConfirm', {
-                count: deletableEntries.length,
+                count: deletePreviews.length,
               })
         if (!window.confirm(confirmationMessage)) return
       }
 
       if (activeProjectRef.current?.id !== owningProjectId) return
 
-      const deletedResults: WorkbenchDeleteEntryResult[] = []
-      for (const { entry, preview } of deletePreviews) {
-        const result = Result.unwrap(
-          await workbenchHost.kernel.project.deleteWorkbenchEntry({
-            projectRoot: owningProject.rootPath,
-            path: entry.path,
-            recursive: preview.type === 'directory' && preview.requiresConfirmation,
-          })
-        )
-        deletedResults.push(result)
-      }
+      // 一项一项地移到废纸篓：某一项没成不挡住其余的；移走了的都要关掉标签、进撤销栈。
+      const deleted = await runTreeMutationPerEntry(
+        deletePreviews,
+        ({ entry }) => entry.path,
+        async ({ entry, preview }) =>
+          Result.unwrap(
+            await workbenchHost.kernel.project.deleteWorkbenchEntry({
+              projectRoot: owningProject.rootPath,
+              path: entry.path,
+              recursive: preview.type === 'directory' && preview.requiresConfirmation,
+            })
+          )
+      )
+      failures.push(...deleted.failed.map(({ failure }) => failure))
+      const deletedResults = deleted.succeeded.map(({ result }) => result)
+      // 移走了的都记进撤销栈：不管有没有别的没成、项目有没有切走（撤销栈按项目记）。
+      const { undoable, trashOnly } = partitionDeleteResultsByUndo(deletedResults)
+      rememberDeletedEntries(owningProject, undoable)
 
       if (activeProjectRef.current?.id !== owningProjectId) return
 
-      onTreeChangedLatest.current()
-      const parentsToRefresh = new Set<string>()
-      for (const result of deletedResults) {
-        parentsToRefresh.add(result.parentPath)
-        pruneTreeCacheLatest.current(result.deletedPath)
-        closeOpenEntryPathLatest.current(result.deletedPath)
-        commentStore.removeUnderPath(owningProject.rootPath, result.deletedPath)
-      }
+      if (!isEmpty(deletedResults)) {
+        onTreeChangedLatest.current()
+        const parentsToRefresh = new Set<string>()
+        for (const result of deletedResults) {
+          parentsToRefresh.add(result.parentPath)
+          pruneTreeCacheLatest.current(result.deletedPath)
+          closeOpenEntryPathLatest.current(result.deletedPath)
+          commentStore.removeUnderPath(owningProject.rootPath, result.deletedPath)
+        }
 
-      await Promise.all(
-        [...parentsToRefresh].map((parentPath) => refreshMutationParentLatest.current(parentPath))
-      )
-      setSelectedEntryPathLatest.current(null)
-      resetTreeAction()
-      resetSearchLatest.current()
-      const { undoable, trashOnly } = partitionDeleteResultsByUndo(deletedResults)
-      rememberDeletedEntries(owningProject, undoable)
+        await Promise.all(
+          [...parentsToRefresh].map((parentPath) => refreshMutationParentLatest.current(parentPath))
+        )
+        setSelectedEntryPathLatest.current(null)
+        resetTreeAction()
+        resetSearchLatest.current()
+      }
       notifyTrashOnlyDeletes(trashOnly)
+      notifyTreeMutationFailures('workbench.deleteFailedEntries', failures, deletableEntries.length)
     } catch (error) {
       if (activeProjectRef.current?.id !== owningProjectId) return
 
@@ -529,31 +595,38 @@ export function useWorkbenchMutationController({
 
     try {
       setIsMutatingTree(true)
-      const restoredResults: WorkbenchRestoreDeletedEntryResult[] = []
-      for (const result of [...batch.results].reverse()) {
-        const restored = Result.unwrap(
-          await workbenchHost.kernel.project.restoreDeletedWorkbenchEntry({
-            projectRoot: batch.projectRoot,
-            restoreId: result.restoreId,
-          })
-        )
-        restoredResults.push(restored)
-      }
+      // 倒着一项一项放回：某一项放不回（原处又有了同名的东西之类）不挡住其余的。放不回而记录还在的
+      // 重新放回撤销栈，挪开冲突之后还能再撤销。
+      const { succeeded, failed } = await runTreeMutationPerEntry(
+        [...batch.results].reverse(),
+        (result) => result.deletedPath,
+        async (result) =>
+          Result.unwrap(
+            await workbenchHost.kernel.project.restoreDeletedWorkbenchEntry({
+              projectRoot: batch.projectRoot,
+              restoreId: result.restoreId,
+            })
+          )
+      )
+      rememberDeletedEntries(owningProject, selectDeleteUndoResultsToKeep(batch.results, failed))
 
       if (activeProjectRef.current?.id !== owningProject.id) return
 
-      onTreeChangedLatest.current()
-      const parentsToRefresh = new Set<string>()
-      for (const result of restoredResults) {
-        parentsToRefresh.add(result.parentPath)
+      if (!isEmpty(succeeded)) {
+        onTreeChangedLatest.current()
+        const parentsToRefresh = new Set(succeeded.map(({ result }) => result.parentPath))
+        await Promise.all(
+          [...parentsToRefresh].map((parentPath) => refreshMutationParentLatest.current(parentPath))
+        )
+        setSelectedEntryPathLatest.current(toNullable(succeeded.at(-1)?.result.entry.path))
+        resetTreeAction()
+        resetSearchLatest.current()
       }
-
-      await Promise.all(
-        [...parentsToRefresh].map((parentPath) => refreshMutationParentLatest.current(parentPath))
+      notifyTreeMutationFailures(
+        'workbench.undoDeleteFailedEntries',
+        failed.map(({ failure }) => failure),
+        batch.results.length
       )
-      setSelectedEntryPathLatest.current(toNullable(restoredResults.at(-1)?.entry.path))
-      resetTreeAction()
-      resetSearchLatest.current()
     } catch (error) {
       if (activeProjectRef.current?.id !== owningProject.id) return
 

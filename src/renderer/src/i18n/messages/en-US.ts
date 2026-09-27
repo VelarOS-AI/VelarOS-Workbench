@@ -545,6 +545,12 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     moveSucceeded: 'Moved',
     deleteSucceeded: 'Deleted',
     treeMutationFailed: 'File tree operation failed',
+    moveFailedEntries: 'Could not move {count} items',
+    deleteFailedEntries: 'Could not delete {count} items',
+    undoDeleteFailedEntries: 'Could not restore {count} deleted items',
+    treeMutationFailureItem: '{path}: {message}',
+    treeMutationFailureSeparator: '; ',
+    treeMutationMoreFailures: 'and {count} more',
     deleteConfirm:
       'Delete “{name}”? It moves to the system Trash (Recycle Bin); small items can also be undone with Cmd+Z / Ctrl+Z.',
     deleteDirectoryConfirm:
