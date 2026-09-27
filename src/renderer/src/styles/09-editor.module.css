@@ -782,6 +782,14 @@
   color: var(--status-amber);
 }
 
+/* 同名文件：名字后面补的上级目录，淡一点、小一点。 */
+.editorTabDescription {
+  @apply shrink-0 whitespace-nowrap;
+  margin-left: 2px;
+  color: var(--foreground-tertiary);
+  font-size: 11px;
+}
+
 /* 自动保存存不下这个文件：标签名后一个红点，悬停看原因。 */
 .editorTabAutosaveFailed {
   @apply shrink-0 rounded-full;

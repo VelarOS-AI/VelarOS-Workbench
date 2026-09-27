@@ -4,6 +4,7 @@ import {
   type ReactElement,
   type ReactNode,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react'
@@ -26,6 +27,7 @@ import { useWorkbenchEditorTabOverflow } from '@renderer/hooks/useWorkbenchEdito
 import { useWorkbenchI18n } from '@renderer/i18n'
 import type { WorkbenchEditorAutosaveFailures } from '@renderer/models/editor/workbenchEditorAutosave'
 import type { WorkbenchEditorEditMode } from '@renderer/models/editor/workbenchEditorEditMode'
+import { buildWorkbenchEditorTabLabels } from '@renderer/models/editor/workbenchEditorTabLabels'
 import { isDirtyTab } from '@renderer/models/editor/workbenchEditorTabs'
 import {
   getWorkbenchGitChangeDisplayPath,
@@ -259,6 +261,11 @@ export function EditorTabBar({
 
   const menuOpenKind = isPresent(openMenu)
   useBlockWheelScroll(tabContextMenuRef, isPresent(tabContextMenu))
+  // 同名文件在名字后面补上分得开它们的上级目录。
+  const tabLabels = useMemo(
+    () => buildWorkbenchEditorTabLabels(openTabs.map((tab) => tab.path)),
+    [openTabs]
+  )
 
   useEffect(() => {
     if (!tabScrollerOverflow && openMenu === 'tabs') {
@@ -310,6 +317,7 @@ export function EditorTabBar({
               tab.path === selectedFilePath
             const gitDecoration = gitDecorations.get(tab.path)
             const hasExternalChange = !!tab.externalChange
+            const tabLabel = tabLabels.get(tab.path)
             const autosaveFailure = autosaveFailures?.get(tab.path)
             const autosaveFailureLabel = autosaveFailure
               ? t('workbench.autosaveFailedTooltip', { reason: autosaveFailure.message })
@@ -350,8 +358,11 @@ export function EditorTabBar({
                 >
                   <WorkbenchFileTypeIcon fileName={tab.path} size={13} />
                   <span className={styles.editorTabName} data-git-tone={gitDecoration?.tone}>
-                    {fileNameFromPath(tab.path)}
+                    {tabLabel?.name ?? fileNameFromPath(tab.path)}
                   </span>
+                  {!!tabLabel?.description && (
+                    <span className={styles.editorTabDescription}>{tabLabel.description}</span>
+                  )}
                   {hasExternalChange && <WarningCircleIcon size={12} weight="fill" />}
                   {!!autosaveFailureLabel && (
                     <span
@@ -565,6 +576,7 @@ export function EditorTabBar({
               tab.path === selectedFilePath
             const gitDecoration = gitDecorations.get(tab.path)
             const hasExternalChange = !!tab.externalChange
+            const tabLabel = tabLabels.get(tab.path)
             const autosaveFailure = autosaveFailures?.get(tab.path)
             const autosaveFailureLabel = autosaveFailure
               ? t('workbench.autosaveFailedTooltip', { reason: autosaveFailure.message })
@@ -586,8 +598,11 @@ export function EditorTabBar({
                 >
                   <WorkbenchFileTypeIcon fileName={tab.path} size={14} />
                   <span className={styles.editorTabName} data-git-tone={gitDecoration?.tone}>
-                    {fileNameFromPath(tab.path)}
+                    {tabLabel?.name ?? fileNameFromPath(tab.path)}
                   </span>
+                  {!!tabLabel?.description && (
+                    <span className={styles.editorTabDescription}>{tabLabel.description}</span>
+                  )}
                   {hasExternalChange && <WarningCircleIcon size={12} weight="fill" />}
                   {!!autosaveFailureLabel && (
                     <span
