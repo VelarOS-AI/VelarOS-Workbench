@@ -25,7 +25,12 @@ import {
   WorkbenchEditorFileStates,
 } from '@renderer/models/editor/workbenchEditorFileStates'
 import {
-  buildWorkbenchEditorFindMatches,
+  DefaultWorkbenchEditorFindOptions,
+  EmptyWorkbenchEditorFindStatus,
+  type WorkbenchEditorFindOptions,
+  type WorkbenchEditorFindRequest,
+} from '@renderer/models/editor/workbenchEditorFindState'
+import {
   getWorkbenchEditorLineCount,
   parseWorkbenchGoToLineInput,
 } from '@renderer/models/editor/workbenchEditorModel'
@@ -293,8 +298,12 @@ export function EditorPanel({
   const appliedNavigationRequestIdRef = useRef<Nullable<number>>(null)
   const [isFindOpen, setIsFindOpen] = useState(false)
   const [findQuery, setFindQuery] = useState('')
-  const [activeFindIndex, setActiveFindIndex] = useState(0)
-  const [hasActiveFindSelection, setHasActiveFindSelection] = useState(false)
+  const [findReplace, setFindReplace] = useState('')
+  const [isFindReplaceOpen, setIsFindReplaceOpen] = useState(false)
+  const [findOptions, setFindOptions] = useState(DefaultWorkbenchEditorFindOptions)
+  const [findStatus, setFindStatus] = useState(EmptyWorkbenchEditorFindStatus)
+  /** 每次要求查找框拿焦点并全选就加一。 */
+  const [findFocusRequest, setFindFocusRequest] = useState(0)
   const [isGoToLineOpen, setIsGoToLineOpen] = useState(false)
   const [markdownPreviewPaths, setMarkdownPreviewPaths] = useState<ReadonlySet<string>>(
     () => new Set()
@@ -359,9 +368,10 @@ export function EditorPanel({
     [packageManager, projectContextIndex.files, selectedFilePath]
   )
   const editorLineCount = useMemo(() => getWorkbenchEditorLineCount(editorContent), [editorContent])
-  const findMatches = useMemo(
-    () => buildWorkbenchEditorFindMatches(editorContent, findQuery),
-    [editorContent, findQuery]
+  // 查找栏开着才交给编辑器；同一组值保持同一个对象，编辑器据此判断查找词或开关项有没有变。
+  const findRequest = useMemo<Nullable<WorkbenchEditorFindRequest>>(
+    () => (isFindOpen ? { query: findQuery, replace: findReplace, ...findOptions } : null),
+    [findOptions, findQuery, findReplace, isFindOpen]
   )
   const sortedFileDiagnostics = useMemo(
     () => sortWorkbenchFileDiagnostics(selectedFileDiagnostics),
@@ -539,38 +549,25 @@ export function EditorPanel({
   const problemsShortcut = formatWorkbenchShortcutHint(keymap['toggle-problems'])
   const gitShortcut = formatWorkbenchShortcutHint(keymap['toggle-changes'])
 
-  function selectFindMatch(index: number): void {
-    if (!findMatches.length) return
-
-    const nextIndex = (index + findMatches.length) % findMatches.length
-    const match = findMatches[nextIndex]
-    setActiveFindIndex(nextIndex)
-    setHasActiveFindSelection(true)
-    editorRef.current?.selectRange(match.start, match.end)
-    onCursorPositionLatest.current?.({ line: match.line, column: match.column })
-  }
-
-  function openFindBar(): void {
-    if (!selectedFile || selectedImagePreview) return
+  /** 打开查找栏：`seed` 是预填的查找词，`withReplace` 连替换行一起展开。已经开着就把焦点放回查找框。 */
+  function openFindBar(seed?: string, withReplace = false): void {
+    if (!selectedFile || selectedImagePreview || markdownPreviewActive) return
 
     setIsGoToLineOpen(false)
+    if (seed) setFindQuery(seed)
+    if (withReplace) setIsFindReplaceOpen(true)
     setIsFindOpen(true)
-    setActiveFindIndex(0)
-    setHasActiveFindSelection(false)
+    setFindFocusRequest((request) => request + 1)
   }
 
   function closeFindBar(): void {
     setIsFindOpen(false)
-    setFindQuery('')
-    setActiveFindIndex(0)
-    setHasActiveFindSelection(false)
+    setFindStatus(EmptyWorkbenchEditorFindStatus)
     editorRef.current?.focus()
   }
 
-  function updateFindQuery(query: string): void {
-    setFindQuery(query)
-    setActiveFindIndex(0)
-    setHasActiveFindSelection(false)
+  function toggleFindOption(option: keyof WorkbenchEditorFindOptions): void {
+    setFindOptions((current) => ({ ...current, [option]: !current[option] }))
   }
 
   function openGoToLineBar(): void {
@@ -632,12 +629,10 @@ export function EditorPanel({
       )
       onCursorPositionLatest.current?.({ line: 1, column: 1 })
     }
-    setIsFindOpen(false)
-    setFindQuery('')
+    // 查找栏跟着换过去的文件接着找（与 VS Code 一样不关）；「在选区中查找」的范围属于上一个文件，关掉。
+    setFindOptions((current) => (current.inSelection ? { ...current, inSelection: false } : current))
     setIsGoToLineOpen(false)
     setGoToLineInput('')
-    setActiveFindIndex(0)
-    setHasActiveFindSelection(false)
     setFileHistoryMode(null)
   }, [selectedFilePath])
 
@@ -645,11 +640,6 @@ export function EditorPanel({
     setFileHistoryMode(null)
   }, [activeDiffItem, activeAuxiliaryTab, lightTab])
 
-  useEffect(() => {
-    if (activeFindIndex >= findMatches.length) {
-      setActiveFindIndex(0)
-    }
-  }, [activeFindIndex, findMatches.length])
 
   useEffect(() => {
     if (!navigationRequest || !selectedFile) return
@@ -877,15 +867,24 @@ export function EditorPanel({
             />
           ) : (
             <>
-              {!!(isFindOpen && selectedFile && !selectedImagePreview) && (
+              {!!(isFindOpen && selectedFile && !selectedImagePreview && !markdownPreviewActive) && (
                 <EditorFindBar
-                  findQuery={findQuery}
-                  findMatches={findMatches}
-                  activeFindIndex={activeFindIndex}
-                  hasActiveFindSelection={hasActiveFindSelection}
-                  onFindQueryChange={updateFindQuery}
+                  query={findQuery}
+                  replace={findReplace}
+                  options={findOptions}
+                  status={findStatus}
+                  replaceOpen={isFindReplaceOpen}
+                  readOnly={!canEditSelectedFile || !!selectedFile.truncated}
+                  focusRequest={findFocusRequest}
+                  onQueryChange={setFindQuery}
+                  onReplaceChange={setFindReplace}
+                  onToggleOption={toggleFindOption}
+                  onToggleReplace={() => setIsFindReplaceOpen((open) => !open)}
+                  onFindNext={() => editorRef.current?.findNext()}
+                  onFindPrevious={() => editorRef.current?.findPrevious()}
+                  onReplace={() => editorRef.current?.replaceNext()}
+                  onReplaceAll={() => editorRef.current?.replaceAll()}
                   onClose={closeFindBar}
-                  onSelectMatch={selectFindMatch}
                 />
               )}
               {!!(isGoToLineOpen && selectedFile && !selectedImagePreview) && (
@@ -970,15 +969,16 @@ export function EditorPanel({
                   onConvert={onConvertSelectedFileTextFormat}
                 />
               )}
-              {!!selectedFile && !selectedImagePreview && (
-                <EditorFileDiagnosticSummary
-                  diagnostics={selectedFileDiagnostics}
-                  onOpenProblems={onToggleProblems}
-                  onNavigatePrevious={() => navigateToDiagnostic('previous')}
-                  onNavigateNext={() => navigateToDiagnostic('next')}
-                />
-              )}
               <div className={styles.editorScroll}>
+                {/* 问题计数浮在代码区右上角：放在滚动区里，不压住上面的查找栏、跳行栏和提示条。 */}
+                {!!selectedFile && !selectedImagePreview && (
+                  <EditorFileDiagnosticSummary
+                    diagnostics={selectedFileDiagnostics}
+                    onOpenProblems={onToggleProblems}
+                    onNavigatePrevious={() => navigateToDiagnostic('previous')}
+                    onNavigateNext={() => navigateToDiagnostic('next')}
+                  />
+                )}
                 {selectedFile ? (
                   selectedImagePreview ? (
                     <WorkbenchImagePreview
@@ -1014,6 +1014,9 @@ export function EditorPanel({
                         onChange={onEditorContentChange}
                         onCursorPositionChange={handleCursorPositionChange}
                         onOpenFind={openFindBar}
+                        onCloseFind={closeFindBar}
+                        find={findRequest}
+                        onFindStatusChange={setFindStatus}
                         onOpenGoToLine={openGoToLineBar}
                         onGoToDefinition={onGoToDefinition}
                         symbolLocations={symbolLocationsVisible ? symbolLocations : null}

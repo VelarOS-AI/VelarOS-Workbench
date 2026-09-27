@@ -976,25 +976,71 @@
 }
 
 .editorFindBar {
-  @apply flex shrink-0 items-center gap-1 border-b text-muted-foreground;
+  @apply flex shrink-0 items-start gap-1 border-b text-muted-foreground;
   min-height: 34px;
-  padding: 4px 8px;
+  padding: 4px 8px 4px 4px;
   border-color: var(--workbench-border);
   background: var(--workbench-toolbar);
+}
+
+/* 左侧的展开箭头：替换行展开时转向下。 */
+.editorFindReplaceToggle svg {
+  transition: transform 120ms ease;
+}
+
+.editorFindBar[data-replace-open] .editorFindReplaceToggle svg {
+  transform: rotate(90deg);
+}
+
+.editorFindRows {
+  @apply flex min-w-0 flex-1 flex-col;
+  gap: 4px;
+}
+
+.editorFindRow {
+  @apply flex min-w-0 items-center gap-1;
 }
 
 .editorFindSearchField {
   @apply min-w-0 flex-1;
 }
 
-.editorFindSearchField [data-slot='input'] {
+.editorFindSearchField [data-slot='input'],
+.editorFindReplaceInput {
   height: 26px;
   font-size: 12px;
 }
 
-/* 计数是 caption 色阶的 Text，最小宽度、字号与配色随原语。 */
+.editorFindReplaceInput {
+  @apply min-w-0 flex-1;
+}
+
+/* 区分大小写、全字、正则、选区内：按下时用强调色底。 */
+.editorFindOption[data-active] {
+  background: color-mix(in srgb, var(--workbench-theme-color) 16%, transparent);
+  color: var(--workbench-theme-color);
+}
+
+.editorFindOptionGlyph {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.editorFindOptionGlyph[data-underline] {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* 计数是 caption 色阶的 Text，最小宽度、字号与配色随原语；没有匹配或正则写错时标红。 */
 .editorFindMeta {
   @apply shrink-0 text-right;
+  min-width: 48px;
+}
+
+.editorFindMeta[data-error] {
+  color: var(--status-red);
 }
 
 .editorExternalChangeBanner {

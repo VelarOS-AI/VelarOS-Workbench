@@ -39,7 +39,15 @@ import {
   language as languageFacet,
 } from '@codemirror/language'
 import { type Diagnostic, linter, lintKeymap } from '@codemirror/lint'
-import { selectNextOccurrence, selectSelectionMatches } from '@codemirror/search'
+import {
+  findNext,
+  findPrevious,
+  getSearchQuery,
+  replaceAll,
+  replaceNext,
+  selectNextOccurrence,
+  selectSelectionMatches,
+} from '@codemirror/search'
 import type { Extension } from '@codemirror/state'
 import {
   Annotation,
@@ -169,6 +177,21 @@ import {
   WorkbenchEditorFileStates,
 } from '@renderer/models/editor/workbenchEditorFileStates'
 import {
+  applyWorkbenchEditorFind,
+  closeWorkbenchEditorFind,
+  isWorkbenchEditorFindOpen,
+  readWorkbenchEditorFindSeed,
+  readWorkbenchEditorFindStatus,
+  selectWorkbenchEditorFindMatchFrom,
+  setWorkbenchEditorFindScope,
+  workbenchEditorFindExtension,
+} from '@renderer/models/editor/workbenchEditorFind'
+import {
+  EmptyWorkbenchEditorFindStatus,
+  type WorkbenchEditorFindRequest,
+  type WorkbenchEditorFindStatus,
+} from '@renderer/models/editor/workbenchEditorFindState'
+import {
   setWorkbenchGitChangeBaseEffect,
   workbenchGitChangeGutterExtension,
 } from '@renderer/models/editor/workbenchGitChangeGutter'
@@ -252,6 +275,11 @@ export interface CodeMirrorEditorHandle {
   ) => void
   openCompletion: () => void
   selectRange: (from: number, to: number) => void
+  /** 查找栏的动作：下一处、上一处、替换当前一处（并跳到下一处）、全部替换。 */
+  findNext: () => void
+  findPrevious: () => void
+  replaceNext: () => void
+  replaceAll: () => void
 }
 
 interface CodeMirrorEditorProps {
@@ -285,7 +313,16 @@ interface CodeMirrorEditorProps {
       endColumn: number
     }
   }) => void
-  onOpenFind: () => void
+  /**
+   * 打开查找栏。`seed` 是预填的查找词（选中的文字或光标处的词），`withReplace` 表示连替换行一起展开
+   * （⌥⌘F / Ctrl+H）。
+   */
+  onOpenFind: (seed?: string, withReplace?: boolean) => void
+  /** 在编辑区里按 Esc 关掉查找栏。 */
+  onCloseFind?: () => void
+  /** 查找栏开着时的查找：查找词、替换文本与开关项；null 表示查找栏关着。 */
+  find?: Nullable<WorkbenchEditorFindRequest>
+  onFindStatusChange?: (status: WorkbenchEditorFindStatus) => void
   onOpenGoToLine: () => void
   onGoToDefinition: (path: string, line: number, column?: number) => void
   symbolLocations?: Nullable<WorkbenchSymbolLocationsState>
@@ -310,6 +347,7 @@ interface WorkbenchEditorInstanceExtensions {
   mouseHandlers: Extension
   updateListener: Extension
   inlineCompletion: Extension
+  findStatus: Extension
 }
 
 type GetWorkbenchOpenTabs = () => readonly WorkbenchOpenEditorTab[]
@@ -324,6 +362,8 @@ const INDENT_GUIDE_STROKE_PX = 0.75
 const INDENT_GUIDE_COLOR = 'rgba(105, 118, 142, 0.26)'
 const IDENTIFIER_PATTERN = /[A-Za-z_$][\w$]*/g
 const FullSyntaxActivationDelayMs = 90
+/** 查找计数合并这么久再报：连续打字、连按下一处只重数一次。 */
+const FindStatusDelayMs = 30
 const SemanticFeaturesActivationDelayMs = 220
 const EditorIdleActivationTimeoutMs = 800
 
@@ -420,6 +460,7 @@ const workbenchCodeMirrorBaseExtensions: Extension[] = [
   rectangularSelection(),
   crosshairCursor(),
   workbenchDefinitionHoverExtension,
+  workbenchEditorFindExtension,
   keymap.of([
     ...closeBracketsKeymap,
     ...defaultKeymap,
@@ -1186,6 +1227,9 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       onChange,
       onCursorPositionChange,
       onOpenFind,
+      onCloseFind,
+      find = null,
+      onFindStatusChange,
       onOpenGoToLine,
       onGoToDefinition,
       symbolLocations = null,
@@ -1220,6 +1264,8 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       onChange,
       onCursorPositionChange,
       onOpenFind,
+      onCloseFind,
+      onFindStatusChange,
       onOpenGoToLine,
       onGoToDefinition,
       onOpenSymbolLocations,
@@ -2122,6 +2168,14 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         event.target instanceof Node && !!contextMenuRef.current?.contains(event.target),
     })
     useBlockWheelScroll(contextMenuRef, isPresent(contextMenu))
+    /** 查找栏按钮触发的查找命令：焦点留在查找栏，当前行照常高亮。 */
+    const runFindCommand = (command: (view: EditorView) => boolean): void => {
+      const view = viewRef.current
+      if (!view) return
+      command(view)
+      revealWorkbenchActiveLine(view)
+    }
+
     useImperativeHandle(ref, () => ({
       focus: () => {
         viewRef.current?.focus()
@@ -2180,6 +2234,10 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         view.focus()
         emitCursorPosition(view, callbacksRef.current.onCursorPositionChange)
       },
+      findNext: () => runFindCommand(findNext),
+      findPrevious: () => runFindCommand(findPrevious),
+      replaceNext: () => runFindCommand(replaceNext),
+      replaceAll: () => runFindCommand(replaceAll),
     }))
 
     // 按键、鼠标这些处理函数挂在编辑器实例上、一直不换，经这个 ref 调到最近一次渲染的版本（项目、路径、语言都是当前的）。
@@ -2222,6 +2280,13 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
           emitCursorPosition(update.view, callbacksRef.current.onCursorPositionChange)
         }
       })
+
+      /** 有查找词就找下一处，还没有就打开查找栏。 */
+      const findNextOrOpen = (view: EditorView): boolean => {
+        if (getSearchQuery(view.state).valid) findNext(view)
+        else callbacksRef.current.onOpenFind(readWorkbenchEditorFindSeed(view.state))
+        return true
+      }
 
       const customKeymap = keymap.of([
         {
@@ -2307,13 +2372,44 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         {
           key: 'Mod-f',
           preventDefault: true,
-          run: () => {
-            callbacksRef.current.onOpenFind()
+          run: (view) => {
+            callbacksRef.current.onOpenFind(readWorkbenchEditorFindSeed(view.state))
             return true
           },
         },
         {
-          key: 'Mod-g',
+          // 查找并替换：macOS 上 ⌥⌘F（⌘H 是系统的隐藏窗口），其它平台 Ctrl+H，与 VS Code 一致。
+          key: 'Mod-h',
+          mac: 'Mod-Alt-f',
+          preventDefault: true,
+          run: (view) => {
+            callbacksRef.current.onOpenFind(readWorkbenchEditorFindSeed(view.state), true)
+            return true
+          },
+        },
+        // 查找下一处：各平台 F3（⇧F3 上一处），macOS 上还有 ⌘G。⇧⌘G 不占：它是打开 Git 面板的全局快捷键。
+        { key: 'F3', preventDefault: true, run: findNextOrOpen },
+        { mac: 'Mod-g', preventDefault: true, run: findNextOrOpen },
+        {
+          key: 'Shift-F3',
+          preventDefault: true,
+          run: (view) => {
+            if (!getSearchQuery(view.state).valid) return false
+            findPrevious(view)
+            return true
+          },
+        },
+        {
+          key: 'Escape',
+          run: (view) => {
+            if (!isWorkbenchEditorFindOpen(view.state)) return false
+            callbacksRef.current.onCloseFind?.()
+            return true
+          },
+        },
+        {
+          // 跳到行：各平台 Ctrl+G（macOS 上是 ⌃G，⌘G 留给查找下一处），外加 JetBrains 的 ⌘L / Ctrl+L。
+          key: 'Ctrl-g',
           preventDefault: true,
           run: () => {
             callbacksRef.current.onOpenGoToLine()
@@ -2407,8 +2503,49 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         },
       })
 
+      // 查找栏开着时，匹配数和当前是第几处随查找词、正文、选区变化报给查找栏（连续变化合并成一次）。
+      const findStatus = ViewPlugin.fromClass(
+        class {
+          private timer: Nullable<number> = null
+
+          public constructor(private readonly view: EditorView) {
+            if (isWorkbenchEditorFindOpen(view.state)) this.schedule()
+          }
+
+          public update(update: ViewUpdate): void {
+            const open = isWorkbenchEditorFindOpen(update.state)
+            if (
+              open !== isWorkbenchEditorFindOpen(update.startState)
+              || (open
+                && (update.docChanged
+                  || update.selectionSet
+                  || getSearchQuery(update.state) !== getSearchQuery(update.startState)))
+            )
+              this.schedule()
+          }
+
+          public destroy(): void {
+            if (this.timer !== null) window.clearTimeout(this.timer)
+          }
+
+          private schedule(): void {
+            if (this.timer !== null) return
+            this.timer = window.setTimeout(() => {
+              this.timer = null
+              const state = this.view.state
+              callbacksRef.current.onFindStatusChange?.(
+                isWorkbenchEditorFindOpen(state)
+                  ? readWorkbenchEditorFindStatus(state)
+                  : EmptyWorkbenchEditorFindStatus
+              )
+            }, FindStatusDelayMs)
+          }
+        }
+      )
+
       return {
         module: EditorModule,
+        findStatus,
         keymap: customKeymap,
         tooltips: tooltips({
           parent: toOptional(container),
@@ -2460,6 +2597,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         completionCompartment.of(current.completion),
         lintCompartment.of(current.lint),
         instance.inlineCompletion,
+        instance.findStatus,
         workbenchEditorChromeTheme,
       ]
     }
@@ -2494,6 +2632,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       if (!key || !instance) return
 
       closeCompletion(view)
+      closeWorkbenchEditorFind(view)
       view.dispatch({ effects: closeHoverTooltips })
       fileStatesRef.current.save(key, {
         state: view.state,
@@ -2608,6 +2747,45 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       view.dispatch(sync)
       emitCursorPosition(view, callbacksRef.current.onCursorPositionChange)
     }, [path, projectRoot, value])
+
+    // 查找栏的查找词与开关项交给 CodeMirror 的搜索状态（高亮全部匹配、下一处、替换都靠它）；查找栏关了就收起。
+    const appliedFindRef = useRef<Nullable<WorkbenchEditorFindRequest>>(null)
+    /** 查找用在了哪个文件上：换了文件（查找栏开着）要在新文件的状态上重新打开查找。 */
+    const appliedFindFileKeyRef = useRef<Nullable<string>>(null)
+    /** 边打边找的起点：打开查找栏（或换到这个文件）时光标所在处（选区开头）。 */
+    const findAnchorRef = useRef(0)
+    useEffect(() => {
+      const view = viewRef.current
+      if (!view) return
+
+      const previous = appliedFindRef.current
+      const fileChanged = appliedFindFileKeyRef.current !== activeFileKeyRef.current
+      appliedFindRef.current = find
+      appliedFindFileKeyRef.current = activeFileKeyRef.current
+      if (!find) {
+        if (previous) closeWorkbenchEditorFind(view)
+        return
+      }
+      if (!previous || fileChanged) {
+        // 光标停在一个词里（⌘F 拿这个词预填）时从词首找起，当前匹配就是它自己。
+        const selection = view.state.selection.main
+        const word = selection.empty ? view.state.wordAt(selection.head) : null
+        findAnchorRef.current = word?.from ?? selection.from
+      }
+      if (find.inSelection !== (previous?.inSelection ?? false) || (fileChanged && find.inSelection))
+        setWorkbenchEditorFindScope(view, find.inSelection)
+      applyWorkbenchEditorFind(view, find)
+      // 查找词或开关项变了才边打边找、挪选区；只是换到另一个文件时不动它的光标，只高亮匹配。
+      const searchChanged =
+        !previous
+        || previous.query !== find.query
+        || previous.caseSensitive !== find.caseSensitive
+        || previous.wholeWord !== find.wholeWord
+        || previous.regexp !== find.regexp
+        || previous.inSelection !== find.inSelection
+      if (searchChanged && !(fileChanged && previous))
+        selectWorkbenchEditorFindMatchFrom(view, findAnchorRef.current)
+    }, [find, path, projectRoot])
 
     useLayoutEffect(() => {
       const view = viewRef.current

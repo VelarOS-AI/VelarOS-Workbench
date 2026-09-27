@@ -1,20 +1,7 @@
-export interface WorkbenchEditorCursorPosition {
-  line: number
-  column: number
-}
-
 export interface WorkbenchEditorTextEdit {
   content: string
   selectionStart: number
   selectionEnd: number
-}
-
-export interface WorkbenchEditorFindMatch {
-  id: string
-  start: number
-  end: number
-  line: number
-  column: number
 }
 
 export interface WorkbenchEditorGoToLineTarget {
@@ -55,7 +42,6 @@ export interface WorkbenchEditorProblemItem {
 const DEFAULT_INDENT = '  '
 const MAX_EDITOR_OUTLINE_ITEMS = 120
 const MAX_EDITOR_PROBLEMS = 120
-const MAX_EDITOR_FIND_MATCHES = 500
 const SYMBOL_LINE_PATTERNS: Array<{
   kind: WorkbenchEditorOutlineKind
   pattern: RegExp
@@ -95,19 +81,6 @@ export function buildWorkbenchEditorLineNumbers(lineCount: number): number[] {
   return Array.from({ length: Math.max(lineCount, 1) }, (_, index) => index + 1)
 }
 
-export function getWorkbenchEditorCursorPosition(
-  content: string,
-  selectionStart: number
-): WorkbenchEditorCursorPosition {
-  const cursor = clampSelection(selectionStart, content)
-  const beforeCursor = content.slice(0, cursor)
-  const lines = beforeCursor.split('\n')
-  return {
-    line: lines.length,
-    column: (lines.at(-1) ?? '').length + 1,
-  }
-}
-
 export function getWorkbenchEditorLineStartOffset(content: string, line: number): number {
   const targetLine = Math.max(1, Math.floor(line))
   if (targetLine === 1) return 0
@@ -141,39 +114,6 @@ export function parseWorkbenchGoToLineInput(
     line: Math.min(Math.max(1, Math.floor(maxLine)), line),
     column,
   }
-}
-
-export function buildWorkbenchEditorFindMatches(
-  content: string,
-  query: string,
-  limit = MAX_EDITOR_FIND_MATCHES
-): WorkbenchEditorFindMatch[] {
-  if (!query) return []
-
-  const normalizedContent = content.toLocaleLowerCase()
-  const normalizedQuery = query.toLocaleLowerCase()
-  const matches: WorkbenchEditorFindMatch[] = []
-  let searchFrom = 0
-
-  while (matches.length < limit) {
-    const start = normalizedContent.indexOf(normalizedQuery, searchFrom)
-    if (start === -1) {
-      break
-    }
-
-    const position = getWorkbenchEditorCursorPosition(content, start)
-    const end = start + query.length
-    matches.push({
-      id: `${start}:${end}`,
-      start,
-      end,
-      line: position.line,
-      column: position.column,
-    })
-    searchFrom = Math.max(start + query.length, start + 1)
-  }
-
-  return matches
 }
 
 function matchMarkdownHeading(line: string): Nullable<{ label: string; column: number }> {

@@ -4,12 +4,14 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
+import { EditorState } from '@codemirror/state'
 import { describe, test } from 'bun:test'
 
 import type { WorkbenchReadFileResult } from '@shared/contracts'
 
 import { readWorkbenchTextFile } from '../src/main/workspace/TextFile'
-import { buildWorkbenchEditorFindMatches } from '../src/renderer/src/models/editor/workbenchEditorModel'
+import { buildWorkbenchEditorSearchQuery } from '../src/renderer/src/models/editor/workbenchEditorFind'
+import { DefaultWorkbenchEditorFindOptions } from '../src/renderer/src/models/editor/workbenchEditorFindState'
 import {
   hasFileSnapshotChanged,
   isDirtyTab,
@@ -227,11 +229,18 @@ void describe('Workbench editor text format', () => {
       const read = await readWorkbenchTextFile(filePath, 1_000)
       // 编辑缓冲从一开始就是 LF（CodeMirror 的文档也是），偏移不会随行号累积偏出 (line - 1) 个字符。
       assert.equal(read.content, 'alpha\nbeta\ngamma target\n')
-      const [match] = buildWorkbenchEditorFindMatches(read.content, 'target')
-      assert.ok(match)
-      assert.equal(read.content.slice(match.start, match.end), 'target')
-      assert.equal(match.start, 'alpha\nbeta\ngamma '.length)
-      assert.equal(match.line, 3)
+      const state = EditorState.create({ doc: read.content })
+      const match = buildWorkbenchEditorSearchQuery({
+        ...DefaultWorkbenchEditorFindOptions,
+        query: 'target',
+        replace: '',
+      })
+        .getCursor(state)
+        .next()
+      assert.ok(!match.done)
+      assert.equal(state.sliceDoc(match.value.from, match.value.to), 'target')
+      assert.equal(match.value.from, 'alpha\nbeta\ngamma '.length)
+      assert.equal(state.doc.lineAt(match.value.from).number, 3)
     } finally {
       await rm(root, { recursive: true, force: true })
     }
