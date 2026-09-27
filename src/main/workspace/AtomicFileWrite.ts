@@ -5,7 +5,8 @@
  * rename 换掉的是整个 inode，下面几种情况会因此改掉文件的身份，只能退回原地写（不原子）：
  * - 有多个硬链接：其它链接会继续指向旧内容；
  * - 文件不属于当前用户：新文件的属主会变成当前用户；
- * - 目录里建不了临时文件（目录没有写权限）：文件本身可写时照样要能存。
+ * - 目录里建不了临时文件（目录没有写权限）：文件本身可写时照样要能存；
+ * - rename 盖不过去（Windows 上别的进程开着目标又没允许删除）：原地写往往还行。
  * 目标本身不可写时照旧报错，不借 rename 绕过只读。
  */
 import { randomUUID } from 'node:crypto'
@@ -69,10 +70,17 @@ async function writeFileAtomically(
     } finally {
       await handle.close()
     }
-    await rename(temporaryPath, path)
   } catch (error) {
     await rm(temporaryPath, { force: true })
     throw error
+  }
+
+  try {
+    await rename(temporaryPath, path)
+  } catch (error) {
+    await rm(temporaryPath, { force: true })
+    if (!isPermissionError(error) && !isBusyError(error)) throw error
+    await writeFile(path, bytes)
   }
 }
 
@@ -102,10 +110,17 @@ function writeFileAtomicallySync(path: string, bytes: Uint8Array, target: Atomic
     } finally {
       closeSync(descriptor)
     }
-    renameSync(temporaryPath, path)
   } catch (error) {
     rmSync(temporaryPath, { force: true })
     throw error
+  }
+
+  try {
+    renameSync(temporaryPath, path)
+  } catch (error) {
+    rmSync(temporaryPath, { force: true })
+    if (!isPermissionError(error) && !isBusyError(error)) throw error
+    writeFileSync(path, bytes)
   }
 }
 
@@ -125,6 +140,10 @@ function permissionBits(target: AtomicWriteTarget): number {
 function isPermissionError(error: unknown): boolean {
   const code = (error as NodeJS.ErrnoException | undefined)?.code
   return code === 'EACCES' || code === 'EPERM'
+}
+
+function isBusyError(error: unknown): boolean {
+  return (error as NodeJS.ErrnoException | undefined)?.code === 'EBUSY'
 }
 
 export { isWorkbenchSaveTemporaryName, writeFileAtomically, writeFileAtomicallySync }
