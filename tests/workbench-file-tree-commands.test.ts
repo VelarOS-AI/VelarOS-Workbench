@@ -8,6 +8,7 @@ import {
   canDropTreeEntries,
   type FileTreeDropNode,
   getDefaultCreateName,
+  resolveEditedTreeEntryPath,
   resolveTreeCreateDirectoryPath,
   resolveTreeDropDirectoryPath,
 } from '../src/renderer/src/models/files/fileTree.model'
@@ -129,6 +130,33 @@ void describe('Workbench file tree commands', () => {
     assert.equal(canDropTreeEntries(arboristRoot, [arboristRoot]), false)
     // `src-old` 只是名字以 `src` 开头，不是 `src` 的子目录。
     assert.equal(canDropTreeEntries(node('src-old', 'directory'), [node('src', 'directory')]), true)
+  })
+
+  void test('a new entry is selected and opened under the name it was given', () => {
+    assert.equal(
+      resolveEditedTreeEntryPath('src/untitled.txt', { cancelled: false, value: ' main.ts ' }),
+      'src/main.ts'
+    )
+    assert.equal(
+      resolveEditedTreeEntryPath('untitled.txt', { cancelled: false, value: 'README.md' }),
+      'README.md'
+    )
+    // 取消、空名字、带路径分隔符的名字：还是原来那一项。
+    assert.equal(
+      resolveEditedTreeEntryPath('src/untitled.txt', { cancelled: true }),
+      'src/untitled.txt'
+    )
+    assert.equal(
+      resolveEditedTreeEntryPath('src/untitled.txt', { cancelled: false, value: '  ' }),
+      'src/untitled.txt'
+    )
+    assert.equal(
+      resolveEditedTreeEntryPath('src/untitled.txt', { cancelled: false, value: 'a/b.ts' }),
+      'src/untitled.txt'
+    )
+    const tree = readSource('src/renderer/src/components/files/FileTree.tsx')
+    assert.match(tree, /const editedPath = resolveEditedTreeEntryPath\(path, result\)/u)
+    assert.match(tree, /current\.select\(editedPath\)\n\s+current\.activate\(editedPath\)/u)
   })
 
   void test('moves skip entries that already sit in the target directory', () => {

@@ -67,6 +67,23 @@ export function resolveTreeCreateDirectoryPath(anchorEntry: WorkbenchDirectoryEn
   return anchorEntry.type === 'directory' ? anchorEntry.path : getParentPath(anchorEntry.path)
 }
 
+/** Arborist 行内改名的结果（与它的 `EditResult` 同形）。 */
+export type FileTreeEditResult = { cancelled: true } | { cancelled: false; value: string }
+
+/**
+ * 行内改名之后这一项的路径：提交了新名字就是同目录下的新名字，
+ * 取消了或名字不能用（空、带路径分隔符）就还是原来的路径。
+ */
+export function resolveEditedTreeEntryPath(path: string, result: FileTreeEditResult): string {
+  if (result.cancelled) return path
+
+  const name = result.value.trim()
+  if (!name || /[\\/]/u.test(name)) return path
+
+  const parentPath = getParentPath(path)
+  return parentPath === ROOT_PATH ? name : `${parentPath}/${name}`
+}
+
 export function getDefaultCreateName(
   type: WorkbenchDirectoryEntry['type'],
   parentPath: string,

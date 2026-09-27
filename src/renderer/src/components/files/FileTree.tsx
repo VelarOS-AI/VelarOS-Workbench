@@ -16,6 +16,7 @@ import {
   type FileTreeNodeData,
   getDefaultCreateName,
   isUnresolvedTreeSymlink,
+  resolveEditedTreeEntryPath,
   resolveTreeCreateDirectoryPath,
   TREE_INDENT,
   TREE_OVERSCAN_COUNT,
@@ -301,26 +302,41 @@ export async function createTreeEntry({
 }
 
 /**
- * 新行要等父目录重新读完才进树：逐帧等它出现，出现后聚焦并进入改名，改完选中并打开
- * （与 Arborist 自带的新建流程一致）。
+ * 新行要等父目录重新读完才进树：出现后聚焦并进入改名。改完按改后的名字选中并打开（取消改名就是原来
+ * 那一项）——改了名，原来的路径就不在树里了，选它会把选择清空、打开也落空。
  */
 function editTreeEntryWhenVisible(
   treeRef: { readonly current: Nullable<FileTreeApi> },
+  path: string
+): void {
+  whenTreeEntryVisible(treeRef, path, (tree) => {
+    tree.focus(path)
+    void tree.edit(path).then((result) => {
+      const editedPath = resolveEditedTreeEntryPath(path, result)
+      // 改名没成（重名之类）时新名字不会出现：什么也不做，报错已经给过了。
+      whenTreeEntryVisible(treeRef, editedPath, (current) => {
+        current.select(editedPath)
+        current.activate(editedPath)
+      })
+    })
+  })
+}
+
+/** 逐帧等这一项出现在树里（父目录刚展开、刚读完），出现了再做；等不到就算了。 */
+function whenTreeEntryVisible(
+  treeRef: { readonly current: Nullable<FileTreeApi> },
   path: string,
+  run: (tree: FileTreeApi) => void,
   remainingFrames = CREATED_TREE_ENTRY_EDIT_MAX_FRAMES
 ): void {
   const tree = treeRef.current
   if (tree?.get(path)) {
-    tree.focus(path)
-    void tree.edit(path).then(() => {
-      tree.select(path)
-      tree.activate(path)
-    })
+    run(tree)
     return
   }
 
   if (remainingFrames <= 0) return
-  requestAnimationFrame(() => editTreeEntryWhenVisible(treeRef, path, remainingFrames - 1))
+  requestAnimationFrame(() => whenTreeEntryVisible(treeRef, path, run, remainingFrames - 1))
 }
 
 export function renameSelectedTreeEntry(tree: Nullable<FileTreeApi>): void {
