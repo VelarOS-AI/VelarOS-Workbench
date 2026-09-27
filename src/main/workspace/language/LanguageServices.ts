@@ -33,7 +33,6 @@ import type {
   WorkbenchLanguageServiceExtensionResult,
   WorkbenchLanguageServiceFileEdit,
   WorkbenchLanguageServiceFormatResult,
-  WorkbenchLanguageServiceHoverDocumentationBlock,
   WorkbenchLanguageServiceHoverResult,
   WorkbenchLanguageServiceInlayHintsRequest,
   WorkbenchLanguageServiceInlayHintsResult,
@@ -78,6 +77,10 @@ import {
   getWorkbenchJavaScriptLintDiagnostics,
   releaseWorkbenchProjectEslint,
 } from './JavaScriptLinting'
+import {
+  hoverBlockPlainText,
+  parseLanguageServiceHoverMarkdown,
+} from './LanguageServiceHoverMarkdown'
 import type {
   WorkbenchLanguageServiceProjectFileRequest,
   WorkbenchLanguageServiceProjectRequest,
@@ -140,46 +143,19 @@ function textFromLspContent(value: unknown): string {
   return ''
 }
 
-function cleanHoverInlineMarkdown(value: string, stripInlineCode = true): string {
-  const cleaned = value
-    .replace(/\x5b([^\x5d]+)\x5d\([^\s)]+\)/gu, '$1')
-    .replace(/\*\*([^*]+)\*\*/gu, '$1')
-  return (stripInlineCode ? cleaned.replace(/`([^`]+)`/gu, '$1') : cleaned).trim()
+/** `{ kind: 'plaintext' }` 的内容按原文显示，不当 Markdown 解析。 */
+function isPlainTextLspContent(value: unknown): value is { value: string } {
+  const content = typeof value === 'object' && value !== null ? value as Record<string, unknown> : null
+  return content?.['kind'] === 'plaintext' && typeof content['value'] === 'string'
 }
 
-function appendHoverParagraphBlocks(
-  value: string,
-  blocks: WorkbenchLanguageServiceHoverDocumentationBlock[]
-): void {
-  const normalized = value.trim()
-  if (!normalized) return
-
-  for (const paragraph of normalized.split(/\n\s*\n/gu)) {
-    const text = cleanHoverInlineMarkdown(paragraph.replace(/[ \t]*\n[ \t]*/gu, ' '), false)
-    if (text) blocks.push({ kind: 'paragraph', text })
-  }
-}
-
-function parseHoverDocumentationBlocks(
-  value: string
-): WorkbenchLanguageServiceHoverDocumentationBlock[] {
-  const blocks: WorkbenchLanguageServiceHoverDocumentationBlock[] = []
-  const codeBlockPattern = /```([^\n`]*)\n([\s\S]*?)\n```/gu
-  let cursor = 0
-
-  for (const match of value.matchAll(codeBlockPattern)) {
-    const start = match.index ?? 0
-    appendHoverParagraphBlocks(value.slice(cursor, start), blocks)
-    const text = (match[2] ?? '').trim()
-    if (text) {
-      const language = (match[1] ?? '').trim()
-      blocks.push({ kind: 'code', text, language: optionalWhen(!!language, language) })
-    }
-    cursor = start + match[0].length
-  }
-
-  appendHoverParagraphBlocks(value.slice(cursor), blocks)
-  return blocks
+/** 补全、签名说明只能显示一段文字：Markdown 标记去掉，代码块与段落之间空一行。 */
+function plainTextFromLspContent(value: unknown): string | undefined {
+  if (isPlainTextLspContent(value)) return value.value.trim() || undefined
+  const text = parseLanguageServiceHoverMarkdown(textFromLspContent(value))
+    .map(hoverBlockPlainText)
+    .join('\n\n')
+  return text || undefined
 }
 
 function sourceIndentWidth(line: string): number {
@@ -223,28 +199,32 @@ export function buildExternalDefinitionPreview(content: string, line: number): s
   return target ? `${declaration}\n\n${target}` : declaration
 }
 
+/**
+ * 语言服务器的悬浮说明：开头的代码（围栏代码块，或整段只是一个行内代码）是签名标题，其余按段落与代码块
+ * 排成说明。Pyright 的「```python 签名```、`---`、说明」这类写法也按块拆开，不再把反引号、分隔线、
+ * `&nbsp;`、转义符原样显示出来。
+ */
 export function buildExternalHoverResult(contents: unknown): Nullable<WorkbenchLanguageServiceHoverResult> {
-  const text = textFromLspContent(contents).trim()
-  if (!text) return null
+  if (isPlainTextLspContent(contents)) {
+    const text = contents.value.trim()
+    return text ? { displayText: text } : null
+  }
 
-  const codeAndDocumentation = text.match(
-    /^(?:```[^\n]*\n([\s\S]*?)\n```|``([\s\S]*?)``|`([^`\n]+)`)(?:\s*\n\s*\n([\s\S]*))?$/u
-  )
-  if (!codeAndDocumentation) return { displayText: cleanHoverInlineMarkdown(text) }
+  const blocks = parseLanguageServiceHoverMarkdown(textFromLspContent(contents))
+  const [first, ...rest] = blocks
+  if (!first) return null
 
-  const displayText = (codeAndDocumentation[1]
-    ?? codeAndDocumentation[2]
-    ?? codeAndDocumentation[3]
-    ?? '').trim()
-  const documentationBlocks = parseHoverDocumentationBlocks(codeAndDocumentation[4] ?? '')
-  const documentation = documentationBlocks
-    .map((block) => cleanHoverInlineMarkdown(block.text))
-    .join('\n\n')
+  const headingCode = first.kind === 'code' ? first.text : /^`([^`]+)`$/u.exec(first.text)?.[1]
+  // 没有签名、只有文字：整段文字就是标题。
+  if (headingCode === undefined) return { displayText: blocks.map(hoverBlockPlainText).join('\n\n') }
+
+  const displayText = headingCode.trim()
+  const documentation = rest.map(hoverBlockPlainText).join('\n\n')
   if (!displayText && !documentation) return null
   return {
     displayText: displayText || documentation,
     documentation: optionalWhen(!!displayText && !!documentation, documentation),
-    documentationBlocks: optionalWhen(!!displayText && documentationBlocks.length > 0, documentationBlocks),
+    documentationBlocks: optionalWhen(!!displayText && rest.length > 0, rest),
   }
 }
 
@@ -523,7 +503,7 @@ class WorkbenchLanguageServices {
             label: item.label,
             kind: isNumber(item.kind) ? String(item.kind) : undefined,
             detail: item.detail,
-            documentation: textFromLspContent(item.documentation) || undefined,
+            documentation: plainTextFromLspContent(item.documentation),
             insertText:
               item.textEdit && 'newText' in item.textEdit
                 ? item.textEdit.newText
@@ -1364,7 +1344,7 @@ class WorkbenchLanguageServices {
       label: item.label,
       kind: mapExternalCompletionKind(item.kind),
       detail: item.detail,
-      documentation: textFromLspContent(item.documentation) || undefined,
+      documentation: plainTextFromLspContent(item.documentation),
       insertText: item.textEdit?.newText ?? item.insertText,
       sortText: item.sortText,
       filterText: item.filterText,
@@ -1453,12 +1433,12 @@ class WorkbenchLanguageServices {
       activeParameter: value.activeParameter ?? 0,
       signatures: value.signatures.map((signature) => ({
         label: signature.label,
-        documentation: textFromLspContent(signature.documentation) || undefined,
+        documentation: plainTextFromLspContent(signature.documentation),
         parameters: (signature.parameters ?? []).map((parameter) => ({
           label: Array.isArray(parameter.label)
             ? signature.label.slice(parameter.label[0], parameter.label[1])
             : parameter.label,
-          documentation: textFromLspContent(parameter.documentation) || undefined,
+          documentation: plainTextFromLspContent(parameter.documentation),
         })),
       })),
     }

@@ -1157,6 +1157,48 @@ void describe('focused Workbench language surface', () => {
     )
   })
 
+  void test('renders Pyright hover markdown as a signature and plain documentation', () => {
+    assert.deepEqual(
+      buildExternalHoverResult({
+        kind: 'markdown',
+        value: [
+          '```python',
+          '(function) def greet(',
+          '    name: str,',
+          '    times: int = 1',
+          ') -> str',
+          '```',
+          '---',
+          'Greet **someone**. See [docs](https://example.com).',
+          '',
+          'Args:  ',
+          '&nbsp;&nbsp;&nbsp;&nbsp;name: the \\*name\\* to greet  ',
+          '&nbsp;&nbsp;&nbsp;&nbsp;times: how many `times` &lt;= 3',
+        ].join('\n'),
+      }),
+      {
+        displayText: '(function) def greet(\n    name: str,\n    times: int = 1\n) -> str',
+        documentation: 'Greet someone. See docs.\n\n'
+          + 'Args:\n    name: the *name* to greet\n'
+          + '    times: how many times <= 3',
+        documentationBlocks: [
+          { kind: 'paragraph', text: 'Greet someone. See docs.' },
+          {
+            kind: 'paragraph',
+            text: 'Args:\n    name: the *name* to greet\n'
+              + '    times: how many `times` <= 3',
+          },
+        ],
+      }
+    )
+    assert.deepEqual(buildExternalHoverResult({ kind: 'plaintext', value: 'a *b*\nc' }), {
+      displayText: 'a *b*\nc',
+    })
+    assert.deepEqual(buildExternalHoverResult({ kind: 'markdown', value: '# Title\n\n- `one`\n- two' }), {
+      displayText: 'Title\n\n• one\n• two',
+    })
+  })
+
   void test('expands a nearby type alias target into the definition preview', () => {
     assert.equal(
       buildExternalDefinitionPreview([
@@ -2259,6 +2301,27 @@ void describe('shared external LSP client', () => {
       && /not assignable to declared type "str"/iu.test(item.message)
     ))
     assert.match(JSON.stringify(hover), /str/u)
+
+    // Pyright 的悬浮说明是「```python 签名```、---、说明」：签名与说明分开画，不漏出 Markdown 标记。
+    const documented = [
+      'def greet(name: str) -> str:',
+      '    """Say *hello*.',
+      '',
+      '    Args:',
+      '        name: who to greet',
+      '    """',
+      '    return name',
+      '',
+    ].join('\n')
+    const functionHover = await services.getHover({
+      projectRoot,
+      path: 'pyright-hover-probe.py',
+      content: documented,
+      position: { line: 1, column: 6 },
+    })
+    assert.match(functionHover.hover?.displayText ?? '', /^\(function\) def greet\(name: str\) -> str$/u)
+    assert.doesNotMatch(JSON.stringify(functionHover.hover?.documentationBlocks), /```|---|&nbsp;|\\\\\*/u)
+    assert.match(functionHover.hover?.documentation ?? '', /Say \*hello\*\./u)
     await services.dispose()
   })
 })

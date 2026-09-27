@@ -225,6 +225,14 @@ function createHighlightedHoverSection(
   return section
 }
 
+/** 段落里的 `\n` 是说明里的硬换行（参数表、列表逐行排），画成换行。 */
+function appendHoverDocumentationLines(container: HTMLElement, text: string): void {
+  text.split('\n').forEach((line, index) => {
+    if (index > 0) container.append(document.createElement('br'))
+    container.append(document.createTextNode(line))
+  })
+}
+
 function appendHoverDocumentationText(
   container: HTMLElement,
   text: string,
@@ -234,23 +242,26 @@ function appendHoverDocumentationText(
   let cursor = 0
   for (const match of text.matchAll(inlineCodePattern)) {
     const start = match.index ?? 0
-    container.append(document.createTextNode(text.slice(cursor, start)))
+    appendHoverDocumentationLines(container, text.slice(cursor, start))
     const code = document.createElement('code')
     code.className = classes.editorSymbolTooltipInlineCode
     code.textContent = match[1] ?? ''
     container.append(code)
     cursor = start + match[0].length
   }
-  container.append(document.createTextNode(text.slice(cursor)))
+  appendHoverDocumentationLines(container, text.slice(cursor))
 }
 
 function hoverDocumentationBlocks(
   hover: WorkbenchLanguageServiceHoverResult
 ): readonly WorkbenchLanguageServiceHoverDocumentationBlock[] {
   if (hover.documentationBlocks?.length) return hover.documentationBlocks
-  const text = hover.documentation
+  // 没有分块的说明（TypeScript 的 JSDoc）按一段连排：注释里的折行只是源码折行。
+  const text = (
+    hover.documentation
     ?? hover.documentationParts?.map((part) => part.text).join('')
     ?? ''
+  ).replace(/[ \t]*\n[ \t]*/gu, ' ')
   return text ? [{ kind: 'paragraph', text }] : []
 }
 
