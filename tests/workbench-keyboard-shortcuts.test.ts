@@ -6,9 +6,21 @@ import {
   createWorkbenchShortcutKeydownHandler,
   type UseWorkbenchKeyboardShortcutsOptions,
 } from '../src/renderer/src/hooks/useWorkbenchKeyboardShortcuts'
-import { isWorkbenchTextEntryTarget } from '../src/renderer/src/models/layout/workbenchKeyboardShortcuts'
+import {
+  DEFAULT_WORKBENCH_KEYBOARD_SHORTCUT_MAP,
+  formatWorkbenchShortcutHint,
+  getWorkbenchKeyboardShortcut,
+  isWorkbenchTextEntryTarget,
+  shortcutFromWorkbenchKeyboardEvent,
+} from '../src/renderer/src/models/layout/workbenchKeyboardShortcuts'
+
+const Mac = 'MacIntel'
+const Windows = 'Win32'
+const Linux = 'Linux x86_64'
 
 interface KeydownInit {
+  altKey?: boolean
+  ctrlKey?: boolean
   defaultPrevented?: boolean
   metaKey?: boolean
   shiftKey?: boolean
@@ -21,9 +33,9 @@ function keydown(key: string, init: KeydownInit = {}) {
     key,
     code: key.length === 1 ? `Key${key.toUpperCase()}` : key,
     metaKey: init.metaKey ?? false,
-    ctrlKey: false,
+    ctrlKey: init.ctrlKey ?? false,
     shiftKey: init.shiftKey ?? false,
-    altKey: false,
+    altKey: init.altKey ?? false,
     target: init.target ?? { tagName: 'BODY', isContentEditable: false },
     get defaultPrevented() {
       return prevented
@@ -34,12 +46,13 @@ function keydown(key: string, init: KeydownInit = {}) {
   } as unknown as KeyboardEvent
 }
 
-function createHandler() {
+function createHandler(platform = Mac) {
   const calls: string[] = []
   const options: UseWorkbenchKeyboardShortcutsOptions = {
     activeRightTool: 'chat',
     enabled: true,
     isQuickOpenOpen: false,
+    platform,
     onCloseRightTool: () => calls.push('close-right-tool'),
     onOpenQuickOpen: () => calls.push('quick-open'),
     onRunLastCommand: async () => calls.push('run-last-command'),
@@ -125,5 +138,57 @@ void describe('Workbench keyboard shortcuts', () => {
       true
     )
     assert.equal(isWorkbenchTextEntryTarget({ tagName: 'BUTTON' } as unknown as EventTarget), false)
+  })
+
+  void test('Mod is the primary modifier of each platform', () => {
+    const { calls: macCalls, handle: handleOnMac } = createHandler(Mac)
+    handleOnMac(keydown('Enter', { metaKey: true }))
+    handleOnMac(keydown('Enter', { ctrlKey: true }))
+    assert.deepEqual(macCalls, ['run-last-command'])
+
+    const { calls: windowsCalls, handle: handleOnWindows } = createHandler(Windows)
+    handleOnWindows(keydown('Enter', { ctrlKey: true }))
+    handleOnWindows(keydown('Enter', { metaKey: true }))
+    assert.deepEqual(windowsCalls, ['run-last-command'])
+  })
+
+  void test('recording on macOS keeps Control apart from Command', () => {
+    assert.equal(shortcutFromWorkbenchKeyboardEvent(keydown('p', { metaKey: true }), Mac), 'Mod+P')
+    assert.equal(shortcutFromWorkbenchKeyboardEvent(keydown('p', { ctrlKey: true }), Mac), 'Ctrl+P')
+    assert.equal(
+      shortcutFromWorkbenchKeyboardEvent(
+        keydown('k', { ctrlKey: true, metaKey: true, shiftKey: true }),
+        Mac
+      ),
+      'Mod+Ctrl+Shift+K'
+    )
+    // 其它平台上 Ctrl 就是主修饰键；Win / Super 键单独记。
+    assert.equal(shortcutFromWorkbenchKeyboardEvent(keydown('p', { ctrlKey: true }), Windows), 'Mod+P')
+    assert.equal(shortcutFromWorkbenchKeyboardEvent(keydown('p', { metaKey: true }), Linux), 'Meta+P')
+  })
+
+  void test('a Control shortcut recorded on macOS fires on Control, not on Command', () => {
+    const keymap = { ...DEFAULT_WORKBENCH_KEYBOARD_SHORTCUT_MAP, 'quick-open': 'Ctrl+P' }
+
+    assert.equal(getWorkbenchKeyboardShortcut(keydown('p', { ctrlKey: true }), keymap, Mac), 'quick-open')
+    assert.equal(getWorkbenchKeyboardShortcut(keydown('p', { metaKey: true }), keymap, Mac), null)
+    assert.equal(
+      getWorkbenchKeyboardShortcut(keydown('p', { metaKey: true }), DEFAULT_WORKBENCH_KEYBOARD_SHORTCUT_MAP, Mac),
+      'quick-open'
+    )
+    assert.equal(
+      getWorkbenchKeyboardShortcut(keydown('p', { ctrlKey: true }), DEFAULT_WORKBENCH_KEYBOARD_SHORTCUT_MAP, Linux),
+      'quick-open'
+    )
+  })
+
+  void test('shortcut hints follow the keymap and the platform', () => {
+    assert.equal(formatWorkbenchShortcutHint('Mod+P', Mac), '⌘P')
+    assert.equal(formatWorkbenchShortcutHint('Mod+Shift+I', Mac), '⇧⌘I')
+    assert.equal(formatWorkbenchShortcutHint('Ctrl+Alt+Enter', Mac), '⌃⌥↩')
+    assert.equal(formatWorkbenchShortcutHint('Mod+Shift+G', Windows), 'Ctrl+Shift+G')
+    assert.equal(formatWorkbenchShortcutHint('Meta+Alt+Escape', Windows), 'Win+Alt+Esc')
+    assert.equal(formatWorkbenchShortcutHint('Meta+K', Linux), 'Super+K')
+    assert.equal(formatWorkbenchShortcutHint('Mod++', Linux), 'Ctrl++')
   })
 })

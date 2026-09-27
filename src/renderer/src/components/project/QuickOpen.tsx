@@ -1,6 +1,11 @@
 import { type ReactElement, useEffect, useRef, useState } from 'react'
 import { useWorkbenchI18n } from '@renderer/i18n'
 import { getWorkbenchFilePresentationVariant } from '@renderer/models/files/workbenchFilePresentation'
+import {
+  DEFAULT_WORKBENCH_KEYBOARD_SHORTCUT_MAP,
+  formatWorkbenchShortcutHint,
+  type WorkbenchKeyboardShortcutMap,
+} from '@renderer/models/layout/workbenchKeyboardShortcuts'
 import type { WorkbenchProject } from '@renderer/models/project/workbenchProjects'
 import type { WorkbenchOpenEditorTab } from '@renderer/types/workbenchTypes'
 
@@ -22,6 +27,8 @@ interface QuickOpenProps {
   isOpen: boolean
   activeProject: Nullable<WorkbenchProject>
   openTabs: WorkbenchOpenEditorTab[]
+  /** 当前快捷键设置：标题栏上的快捷键提示按它现算。 */
+  keymap?: WorkbenchKeyboardShortcutMap
   onClose: () => void
   onOpenLocation: (path: string, line: number, column: number) => void
 }
@@ -30,6 +37,7 @@ export function QuickOpen({
   isOpen,
   activeProject,
   openTabs,
+  keymap = DEFAULT_WORKBENCH_KEYBOARD_SHORTCUT_MAP,
   onClose,
   onOpenLocation,
 }: QuickOpenProps): Nullable<ReactElement> {
@@ -39,7 +47,6 @@ export function QuickOpen({
   const timers = useTimerScope('QuickOpen')
   const [query, setQuery] = useState('')
   const [activeIndex, setActiveIndex] = useState(0)
-  const shortcutModifier = /Mac|iPhone|iPad/.test(navigator.platform) ? 'Cmd' : 'Ctrl'
   const normalizedQuery = query.trim()
   const { contentSearchMatches, isSearchingContent } = useWorkbenchContentSearchController({
     activeProject,
@@ -106,7 +113,7 @@ export function QuickOpen({
               {t('workbench.globalSearchFiles')}
             </Text>
           </div>
-          <kbd>{shortcutModifier} P</kbd>
+          <kbd>{formatWorkbenchShortcutHint(keymap['quick-open'])}</kbd>
         </header>
         <div className={styles.quickOpenInputRow}>
           <div className={styles.quickOpenInput}>

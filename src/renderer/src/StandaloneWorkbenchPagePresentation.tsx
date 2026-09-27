@@ -867,6 +867,7 @@ export function StandaloneWorkbenchPagePresentation({
         isOpen={surface.isQuickOpenOpen}
         activeProject={workbench.activeProject}
         openTabs={workbench.openTabs}
+        keymap={workbenchKeymap.keymap}
         onClose={surface.closeQuickOpen}
         onOpenLocation={(path, line, column) =>
           void model.actions.navigate({ target: 'file', path, line, column })

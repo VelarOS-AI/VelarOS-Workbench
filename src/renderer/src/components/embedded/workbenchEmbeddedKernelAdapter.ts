@@ -246,6 +246,7 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
         onOpenQuickOpen: model.surface.openQuickOpen,
         onToggleGitTool: () => model.surface.openBottomTool('git'),
         onToggleProblems: () => model.surface.openBottomTool('problems'),
+        keymap: model.workbenchKeymap.keymap,
         onCursorPositionChange: editorNavigation.setCursorPosition,
         onActiveProblemIdChange: editorNavigation.setActiveProblemId,
         navigationRequest: editorNavigation.navigationRequest,

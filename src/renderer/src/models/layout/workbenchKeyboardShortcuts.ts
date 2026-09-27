@@ -2,8 +2,9 @@
  * 工作台键盘快捷键模型。
  *
  * 解析与匹配两步原本是约 50 行自研逻辑，本版本改用快捷键库：
- *  - 我们把外部统一写法 `"Mod+P"` 翻译成库内部写法；库会按平台把主修饰键解析成
- *    Mac 上的 Meta、其它平台上的 Control，比历史"任意一个主修饰键都算 Mod"的实现更贴近原生体验。
+ *  - 我们把外部统一写法 `"Mod+P"` 翻译成库内部写法：主修饰键按平台落到 Mac 上的 Meta、
+ *    其它平台上的 Control，比历史"任意一个主修饰键都算 Mod"的实现更贴近原生体验；Mac 上的
+ *    Control 另写作 `Ctrl`。
  *  - 测试可能直接传裸字段键盘事件对象，用一层适配包装补齐标准事件方法。
  *
  * 显示格式、持久化、捕获（事件到短串）是应用特化逻辑，仍由本文件内部实现。
@@ -90,8 +91,14 @@ export const DEFAULT_WORKBENCH_KEYBOARD_SHORTCUT_MAP =
     {} as WorkbenchKeyboardShortcutMap
   )
 
-function eventHasPrimaryModifier(event: WorkbenchKeyboardEventLike): boolean {
-  return event.metaKey || event.ctrlKey
+/** 当前宿主平台串（renderer 里是 navigator.platform）；拿不到时按非 Apple 平台处理。 */
+function currentWorkbenchPlatform(): string {
+  return typeof navigator === 'undefined' ? '' : navigator.platform
+}
+
+/** Apple 平台上主修饰键 `Mod` 是 ⌘，Control 是另一颗键；其它平台上 `Mod` 就是 Ctrl。 */
+export function isAppleWorkbenchPlatform(platform: string = currentWorkbenchPlatform()): boolean {
+  return /Mac|iPhone|iPad/i.test(platform)
 }
 
 interface WorkbenchKeyboardTargetLike {
@@ -109,40 +116,47 @@ export function isWorkbenchTextEntryTarget(target: Nullable<EventTarget>): boole
 }
 
 /**
- * 把外部统一写法 `"Mod+P"` 翻译为 tinykeys 的 `"$mod+P"`，让 `parseKeybinding` 直接消费。
+ * 把外部统一写法翻译为 tinykeys 的修饰键名，让 `parseKeybinding` 直接消费：`Mod` 按平台落到
+ * `Meta`（Apple）或 `Control`，`Ctrl` 是字面的 Control 键。平台由调用方给出，不用 tinykeys 在模块
+ * 加载时读到的那一份，测试才能在任何系统上按指定平台匹配。
  *
  * 单词边界匹配避免误伤 `"Modify"` / `"Mode"` 这类合法 key 名（虽然 keymap 不会出现，但保险起见）。
  */
-function toTinykeysSyntax(shortcut: string): string {
-  return shortcut.replace(/\bMod\b/g, '$mod')
+function toTinykeysSyntax(shortcut: string, isApple: boolean): string {
+  return shortcut.replace(/\bMod\b/g, isApple ? 'Meta' : 'Control').replace(/\bCtrl\b/g, 'Control')
 }
 
 const parsedShortcutCache = new Map<string, Nullable<KeyBindingPress>>()
 
-function parseTinykeysShortcut(shortcut: string): Nullable<KeyBindingPress> {
-  if (parsedShortcutCache.has(shortcut)) return toNullable(parsedShortcutCache.get(shortcut))
+function parseTinykeysShortcut(
+  shortcut: string,
+  platform: string = currentWorkbenchPlatform()
+): Nullable<KeyBindingPress> {
+  const isApple = isAppleWorkbenchPlatform(platform)
+  const cacheKey = `${isApple ? 'apple' : 'other'}\u0000${shortcut}`
+  if (parsedShortcutCache.has(cacheKey)) return toNullable(parsedShortcutCache.get(cacheKey))
   try {
-    const presses = parseKeybinding(toTinykeysSyntax(shortcut))
+    const presses = parseKeybinding(toTinykeysSyntax(shortcut, isApple))
     // 当前只支持单 press（"Mod+P"），不接受多键序列（"g g"）。
     if (presses.length !== 1) {
-      parsedShortcutCache.set(shortcut, null)
+      parsedShortcutCache.set(cacheKey, null)
       return null
     }
     const press = presses[0]
     if (!press) {
-      parsedShortcutCache.set(shortcut, null)
+      parsedShortcutCache.set(cacheKey, null)
       return null
     }
     const [, key] = press
     if (isString(key) && !isSupportedShortcutKey(normalizeShortcutKey(key))) {
-      parsedShortcutCache.set(shortcut, null)
+      parsedShortcutCache.set(cacheKey, null)
       return null
     }
-    parsedShortcutCache.set(shortcut, press)
+    parsedShortcutCache.set(cacheKey, press)
     return press
   } catch (error) {
     log.debug('快捷键解析失败', { shortcut, error })
-    parsedShortcutCache.set(shortcut, null)
+    parsedShortcutCache.set(cacheKey, null)
     return null
   }
 }
@@ -227,14 +241,24 @@ function isSupportedShortcutKey(key: string): boolean {
   return functionKeyNumber >= 1 && functionKeyNumber <= 24
 }
 
-function shortcutMatchesEvent(shortcut: string, event: WorkbenchKeyboardEventLike): boolean {
-  const press = parseTinykeysShortcut(shortcut)
+function shortcutMatchesEvent(
+  shortcut: string,
+  event: WorkbenchKeyboardEventLike,
+  platform: string
+): boolean {
+  const press = parseTinykeysShortcut(shortcut, platform)
   if (!press) return false
   return matchKeyBindingPress(toMatchableEvent(event), press)
 }
 
+/**
+ * 把一次按键录成快捷键写法。`Mod` 只代表各平台的主修饰键（Apple 的 ⌘、其它平台的 Ctrl）；
+ * Apple 平台上的 Control 是另一颗键，录成 `Ctrl`——并进 `Mod` 的话，录下的 ⌃P 实际要按 ⌘P 才触发。
+ * 其它平台上的 Win / Super 键同理录成 `Meta`。
+ */
 export function shortcutFromWorkbenchKeyboardEvent(
-  event: WorkbenchKeyboardEventLike
+  event: WorkbenchKeyboardEventLike,
+  platform: string = currentWorkbenchPlatform()
 ): Nullable<string> {
   const key = normalizeShortcutKey(event.key)
   if (
@@ -247,9 +271,13 @@ export function shortcutFromWorkbenchKeyboardEvent(
     key === 'Dead'
   ) return null
 
+  const isApple = isAppleWorkbenchPlatform(platform)
   const parts: string[] = []
-  if (eventHasPrimaryModifier(event)) {
+  if (isApple ? event.metaKey : event.ctrlKey) {
     parts.push('Mod')
+  }
+  if (isApple ? event.ctrlKey : event.metaKey) {
+    parts.push(isApple ? 'Ctrl' : 'Meta')
   }
   if (event.altKey) {
     parts.push('Alt')
@@ -264,10 +292,60 @@ export function shortcutFromWorkbenchKeyboardEvent(
 
 export function formatWorkbenchShortcutForPlatform(
   shortcut: string,
-  platform: string = navigator.platform
+  platform: string = currentWorkbenchPlatform()
 ): string {
-  const isMac = /Mac|iPhone|iPad/i.test(platform)
-  return shortcut.replace(/\bMod\b/g, isMac ? 'Cmd' : 'Ctrl')
+  return shortcut.replace(/\bMod\b/g, isAppleWorkbenchPlatform(platform) ? 'Cmd' : 'Ctrl')
+}
+
+/** Apple 菜单的修饰键顺序与符号：⌃ ⌥ ⇧ ⌘。 */
+const AppleShortcutModifierGlyphs: ReadonlyArray<readonly [string, string]> = [
+  ['Ctrl', '⌃'],
+  ['Alt', '⌥'],
+  ['Shift', '⇧'],
+  ['Mod', '⌘'],
+  ['Meta', '⌘'],
+]
+
+const AppleShortcutKeyGlyphs: Readonly<Record<string, string>> = {
+  ArrowDown: '↓',
+  ArrowLeft: '←',
+  ArrowRight: '→',
+  ArrowUp: '↑',
+  Backspace: '⌫',
+  Delete: '⌦',
+  Enter: '↩',
+  Escape: 'Esc',
+  Tab: '⇥',
+}
+
+/**
+ * 界面上的快捷键提示（空编辑区、快速打开标题等）：按当前 keymap 与平台现算，不写死。
+ * Apple 平台用菜单符号（`⌘⇧I`），其它平台用 `Ctrl+Shift+I`。
+ */
+export function formatWorkbenchShortcutHint(
+  shortcut: string,
+  platform: string = currentWorkbenchPlatform()
+): string {
+  const parts = shortcut.split(/\b\+/)
+  const key = parts.pop() ?? ''
+  const modifiers = new Set(parts)
+
+  if (isAppleWorkbenchPlatform(platform)) {
+    const glyphs = AppleShortcutModifierGlyphs.flatMap(([name, glyph]) =>
+      modifiers.has(name) ? [glyph] : []
+    )
+    return [...new Set(glyphs)].join('') + (AppleShortcutKeyGlyphs[key] ?? key)
+  }
+
+  const metaLabel = /Win/i.test(platform) ? 'Win' : 'Super'
+  const labels = [
+    modifiers.has('Mod') || modifiers.has('Ctrl') ? 'Ctrl' : null,
+    modifiers.has('Meta') ? metaLabel : null,
+    modifiers.has('Alt') ? 'Alt' : null,
+    modifiers.has('Shift') ? 'Shift' : null,
+    key === 'Escape' ? 'Esc' : key,
+  ]
+  return labels.filter(isString).join('+')
 }
 
 export function normalizeWorkbenchKeyboardShortcutMap(
@@ -340,10 +418,11 @@ export function saveWorkbenchKeyboardShortcutMap(
 
 export function getWorkbenchKeyboardShortcut(
   event: WorkbenchKeyboardEventLike,
-  keymap: WorkbenchKeyboardShortcutMap = DEFAULT_WORKBENCH_KEYBOARD_SHORTCUT_MAP
+  keymap: WorkbenchKeyboardShortcutMap = DEFAULT_WORKBENCH_KEYBOARD_SHORTCUT_MAP,
+  platform: string = currentWorkbenchPlatform()
 ): Nullable<WorkbenchKeyboardShortcutAction> {
   const action = WORKBENCH_KEYBOARD_SHORTCUT_DEFINITIONS.find((definition) =>
-    shortcutMatchesEvent(keymap[definition.action], event)
+    shortcutMatchesEvent(keymap[definition.action], event, platform)
   )?.action
 
   return toNullable(action)

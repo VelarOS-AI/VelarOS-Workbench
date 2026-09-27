@@ -23,6 +23,8 @@ export interface UseWorkbenchKeyboardShortcutsOptions {
   /** 底部工具窗开关：同一个工具开着就收起，没开或开着别的就切到它。 */
   onToggleBottomTool: (tool: WorkbenchBottomTool) => void
   onToggleRightTool: (tool: WorkbenchRightToolWindow) => void
+  /** 按哪个平台解析 `Mod`；不给用当前宿主平台（测试里指定，结果不随跑测试的系统变）。 */
+  platform?: string
 }
 
 /** 全局快捷键的 keydown 处理：按当前选项把按键分发成动作（独立出来，不挂 DOM 也能测）。 */
@@ -35,7 +37,7 @@ export function createWorkbenchShortcutKeydownHandler(
     if (event.defaultPrevented) return
 
     const current = readOptions()
-    const action = getWorkbenchKeyboardShortcut(event, current.keymap)
+    const action = getWorkbenchKeyboardShortcut(event, current.keymap, current.platform)
     if (!action) return
     // 在输入框、文本域、可编辑区里按下的「运行上次命令」是冲着那段文字去的（换行、发送），不去跑命令。
     if (action === 'run-last-command' && isWorkbenchTextEntryTarget(event.target)) return

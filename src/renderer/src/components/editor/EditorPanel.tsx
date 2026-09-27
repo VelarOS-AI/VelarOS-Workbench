@@ -42,6 +42,11 @@ import {
   type WorkbenchGitChangeItem,
   type WorkbenchGitDecorationMap,
 } from '@renderer/models/git/workbenchGitModel'
+import {
+  DEFAULT_WORKBENCH_KEYBOARD_SHORTCUT_MAP,
+  formatWorkbenchShortcutHint,
+  type WorkbenchKeyboardShortcutMap,
+} from '@renderer/models/layout/workbenchKeyboardShortcuts'
 import type { WorkbenchThemeId } from '@renderer/models/settings/workbenchPreferences'
 import { fileLanguage } from '@renderer/models/shared/workbenchUtils'
 import type { WorkbenchLightEditorTab } from '@renderer/types/workbenchTypes'
@@ -180,6 +185,8 @@ export interface WorkbenchEditorPanelWorkspaceProps {
   onOpenQuickOpen: () => void
   onToggleGitTool: () => void
   onToggleProblems: () => void
+  /** 当前快捷键设置：空编辑区里的快捷键提示按它现算。 */
+  keymap?: WorkbenchKeyboardShortcutMap
   onCursorPositionChange?: (position: {
     line: number
     column: number
@@ -251,6 +258,7 @@ export function EditorPanel({
     onRunPackageScript,
     onAddFilesToChat,
     onToggleProblems,
+    keymap = DEFAULT_WORKBENCH_KEYBOARD_SHORTCUT_MAP,
     onCursorPositionChange,
     onActiveProblemIdChange,
     navigationRequest = null,
@@ -517,10 +525,9 @@ export function EditorPanel({
   const canKeepLocalExternalConflict =
     selectedExternalChange?.status === 'modified' && !!selectedExternalChange.diskFile
   const shouldShowExternalConflictDialog = selectedExternalChange?.status === 'modified'
-  const isApplePlatform = /Mac|iPhone|iPad/.test(navigator.platform)
-  const quickOpenShortcut = isApplePlatform ? '⌘P' : 'Ctrl+P'
-  const problemsShortcut = isApplePlatform ? '⌘⇧I' : 'Ctrl+Shift+I'
-  const gitShortcut = isApplePlatform ? '⌘⇧G' : 'Ctrl+Shift+G'
+  const quickOpenShortcut = formatWorkbenchShortcutHint(keymap['quick-open'])
+  const problemsShortcut = formatWorkbenchShortcutHint(keymap['toggle-problems'])
+  const gitShortcut = formatWorkbenchShortcutHint(keymap['toggle-changes'])
 
   function selectFindMatch(index: number): void {
     if (!findMatches.length) return
