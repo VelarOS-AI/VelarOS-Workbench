@@ -42,6 +42,7 @@ import { WorkbenchGitToolPanel } from './components/git/WorkbenchGitToolPanel'
 import { QuickOpen } from './components/project/QuickOpen'
 import { WorkbenchSettingsDialog } from './components/settings/WorkbenchSettingsDialog'
 import { type BottomTool, CommandPanel } from './components/terminal/CommandPanel'
+import { useWorkbenchTerminalFileLinks } from './hooks/useWorkbenchTerminalFileLinks'
 import { useWorkbenchWindowFullScreen } from './hooks/useWorkbenchWindowFullScreen'
 import {
   discoverWorkbenchVelarProjectRoots,
@@ -109,6 +110,7 @@ export function StandaloneWorkbenchPagePresentation({
   const pendingFileOpenPath = projectHubState.pendingFileOpen?.path
   const activeProjectId = workbench.activeProject?.id
   const activeProjectRoot = workbench.activeProject?.rootPath
+  const resolveTerminalFileLinks = useWorkbenchTerminalFileLinks(activeProjectRoot)
   // 状态栏：当前文本文件的编码与换行符（差异、预览标签不显示）。
   const selectedEditorTab = workbench.openTabs.find(
     (tab) => tab.path === workbench.selectedFilePath
@@ -810,6 +812,10 @@ export function StandaloneWorkbenchPagePresentation({
               onRestartRunSession={(sessionId) => void workbench.restartRunSession(sessionId)}
               onStopRunSession={(sessionId) => void workbench.stopRunSession(sessionId)}
               onOpenConsoleLink={editorNavigation.debug.openTab}
+              onResolveTerminalFileLinks={resolveTerminalFileLinks}
+              onOpenTerminalFileLink={(path, line, column) =>
+                void model.actions.navigate({ target: 'file', path, line, column })
+              }
             />
           </section>
         )}

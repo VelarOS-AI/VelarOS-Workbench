@@ -93,6 +93,8 @@ const fsBridge: WorkbenchFsBridge = {
   listDirectory: (request) => ipcRenderer.invoke(WorkbenchFsChannels.listDirectory, request),
   readFile: (request) => ipcRenderer.invoke(WorkbenchFsChannels.readFile, request),
   readImageFile: (request) => ipcRenderer.invoke(WorkbenchFsChannels.readImageFile, request),
+  findExistingFiles: (request) =>
+    ipcRenderer.invoke(WorkbenchFsChannels.findExistingFiles, request),
   saveFile: (request) => ipcRenderer.invoke(WorkbenchFsChannels.saveFile, request),
   // beforeunload 兜底：同步落盘，走 sendSync（main 侧 event.returnValue 信封）。
   saveFileSync: (request) => ipcRenderer.sendSync(WorkbenchFsChannels.saveFileSync, request),

@@ -18,6 +18,7 @@ import { AppError } from '@velaros-ai/core/error'
 import type {
   WorkbenchCreateEntryRequest,
   WorkbenchDeleteEntryRequest,
+  WorkbenchFindExistingFilesRequest,
   WorkbenchInspectDeleteEntryRequest,
   WorkbenchListDirectoryRequest,
   WorkbenchListLocalHistoryRequest,
@@ -86,6 +87,15 @@ export function registerWorkbenchFsIpc(
       if (!parsed) return invalidRequest()
 
       return fileSystem.readTextFile(parsed)
+    })
+  )
+
+  ipcMain.handle(WorkbenchFsChannels.findExistingFiles, (_event, request: unknown) =>
+    callWithEnvelope(() => {
+      const parsed = parseFindExistingFilesRequest(request)
+      if (!parsed) return invalidRequest()
+
+      return fileSystem.findExistingFiles(parsed)
     })
   )
 
@@ -286,6 +296,16 @@ function parseReadFileRequest(input: unknown): Nullable<WorkbenchReadFileRequest
     path: input['path'] as string,
     ...optionalNumber(input, 'maxChars'),
   }
+}
+
+function parseFindExistingFilesRequest(
+  input: unknown
+): Nullable<WorkbenchFindExistingFilesRequest> {
+  if (!hasStringFields(input, ['projectRoot'])) return null
+  const paths = input['paths']
+  if (!Array.isArray(paths) || !paths.every((path) => typeof path === 'string')) return null
+
+  return { projectRoot: input['projectRoot'] as string, paths: paths as string[] }
 }
 
 function parseReadImageFileRequest(input: unknown): Nullable<WorkbenchReadImageFileRequest> {

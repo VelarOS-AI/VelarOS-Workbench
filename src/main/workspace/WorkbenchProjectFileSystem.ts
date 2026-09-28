@@ -25,6 +25,8 @@ import { AppError } from '@velaros-ai/core/error'
 import type {
   WorkbenchDirectoryEntry,
   WorkbenchDirectoryEntrySymlink,
+  WorkbenchFindExistingFilesRequest,
+  WorkbenchFindExistingFilesResult,
   WorkbenchListDirectoryRequest,
   WorkbenchListDirectoryResult,
   WorkbenchReadFileRequest,
@@ -48,6 +50,8 @@ const DefaultReadMaxChars = 300_000
 const MaxReadChars = 1_000_000
 const MaxImageReadBytes = 10 * 1024 * 1024
 const SvgProbeMaxBytes = 64 * 1024
+/** 一次最多核对这么多路径（终端一屏里的路径也用不了这么多）。 */
+const MaxExistingFileChecks = 64
 const PngSignature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
 
 export class WorkbenchProjectFileSystem {
@@ -169,6 +173,25 @@ export class WorkbenchProjectFileSystem {
     } catch (error) {
       throw this.normalizeReadError(error, request.path)
     }
+  }
+
+  /** 一组路径里哪些是项目里的文件：只 `realpath` + `stat`，不读内容、不问 Git。越界或不存在的不算。 */
+  public async findExistingFiles(
+    request: WorkbenchFindExistingFilesRequest
+  ): Promise<WorkbenchFindExistingFilesResult> {
+    const projectRoot = await this.resolveProjectRoot(request.projectRoot)
+    const found = await Promise.all(
+      request.paths.slice(0, MaxExistingFileChecks).map(async (path) => {
+        try {
+          const filePath = await this.resolveInsideProject(projectRoot, path)
+          return (await stat(filePath)).isFile() ? path : null
+        } catch {
+          // arch-guard:silent-catch-ok 不存在、越界或没有权限的路径就是「不是项目里的文件」。
+          return null
+        }
+      })
+    )
+    return { paths: found.filter((path) => path !== null) }
   }
 
   public async readImageFile(

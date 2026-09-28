@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import { promisify } from 'node:util'
 
 import { describe, test } from 'bun:test'
@@ -341,6 +341,38 @@ void describe('Workbench project file tree', () => {
     } finally {
       await rm(projectRoot, { recursive: true, force: true })
       await rm(dataRoot, { recursive: true, force: true })
+    }
+  })
+
+  void test('tells which terminal paths are files inside the project, without reading them', async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), 'workbench-existing-files-'))
+    const outside = await mkdtemp(join(tmpdir(), 'workbench-existing-outside-'))
+    const service = new WorkbenchProjectFileSystem()
+    try {
+      await mkdir(join(projectRoot, 'src'))
+      await writeFile(join(projectRoot, 'src', 'a.ts'), 'export {}\n')
+      await writeFile(join(projectRoot, 'blob.bin'), Uint8Array.from([0, 1, 2]))
+      await writeFile(join(outside, 'secret.ts'), 'secret\n')
+      await symlink(join(outside, 'secret.ts'), join(projectRoot, 'escape.ts'))
+      await symlink(join(projectRoot, 'src', 'a.ts'), join(projectRoot, 'alias.ts'))
+
+      const result = await service.findExistingFiles({
+        projectRoot,
+        paths: [
+          'src/a.ts',
+          'src',
+          'missing.ts',
+          `../${basename(outside)}/secret.ts`,
+          'escape.ts',
+          'alias.ts',
+          'blob.bin',
+        ],
+      })
+      // 目录、不存在的、越出项目的（包括指向项目外的链接）都不算；二进制文件也是文件。
+      assert.deepEqual(result.paths, ['src/a.ts', 'alias.ts', 'blob.bin'])
+    } finally {
+      await rm(projectRoot, { recursive: true, force: true })
+      await rm(outside, { recursive: true, force: true })
     }
   })
 

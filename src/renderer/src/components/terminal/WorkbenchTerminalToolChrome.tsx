@@ -28,6 +28,9 @@ export interface WorkbenchTerminalSurfaceHandlers {
   onTerminalData: (sessionId: string, data: string) => void
   onTerminalResize: (sessionId: string, cols: number, rows: number) => void
   onOpenLink?: (url: string) => void
+  /** 输出里的路径各是项目里的哪个文件（不是的给 null）；是文件的才能点开。 */
+  onResolveFileLinks?: (paths: readonly string[], cwd: string) => Promise<Array<Nullable<string>>>
+  onOpenFileLink?: (path: string, line?: number, column?: number) => void
 }
 
 function WorkbenchTerminalSurface({
@@ -36,6 +39,8 @@ function WorkbenchTerminalSurface({
   onTerminalData,
   onTerminalResize,
   onOpenLink,
+  onResolveFileLinks,
+  onOpenFileLink,
 }: WorkbenchTerminalSurfaceHandlers & { session: WorkbenchTerminalSessionView }): ReactElement {
   return (
     <div className={styles.terminalToolPane}>
@@ -43,11 +48,14 @@ function WorkbenchTerminalSurface({
         <LazyWorkbenchTerminalView
           key={session.id}
           sessionId={session.id}
+          cwd={session.cwd}
           isRunning={session.isRunning}
           workbenchTheme={workbenchTheme}
           onData={onTerminalData}
           onResize={onTerminalResize}
           onOpenLink={onOpenLink}
+          onResolveFileLinks={onResolveFileLinks}
+          onOpenFileLink={onOpenFileLink}
         />
       </Suspense>
     </div>

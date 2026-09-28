@@ -193,6 +193,8 @@ const standaloneWorkbenchHost: WorkbenchHost = {
         toHostResult(await window.velarosWorkbenchFs.readFile(request)),
       readWorkbenchImageFile: async (request) =>
         toHostResult(await window.velarosWorkbenchFs.readImageFile(request)),
+      findExistingWorkbenchFiles: async (request) =>
+        toHostResult(await window.velarosWorkbenchFs.findExistingFiles(request)),
       indexWorkbenchProject: indexProjectWithWorkspace,
       // 设置页「AI 规则」列的就是每轮交给 Agent 的那一份（主进程按同一套约定去找）。
       getWorkbenchProjectAiRules: (request) =>

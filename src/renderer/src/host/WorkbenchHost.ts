@@ -32,6 +32,8 @@ import type {
   WorkbenchDeleteEntryRequest,
   WorkbenchDeleteEntryResult,
   WorkbenchEntryMutationResult,
+  WorkbenchFindExistingFilesRequest,
+  WorkbenchFindExistingFilesResult,
   WorkbenchIndexProjectRequest,
   WorkbenchIndexProjectResult,
   WorkbenchInlineCompletionRequest,
@@ -105,6 +107,9 @@ export interface WorkbenchProjectKernelPort {
   readWorkbenchImageFile(
     request: WorkbenchReadImageFileRequest
   ): Promise<Result<WorkbenchReadImageFileResult>>
+  findExistingWorkbenchFiles(
+    request: WorkbenchFindExistingFilesRequest
+  ): Promise<Result<WorkbenchFindExistingFilesResult>>
   indexWorkbenchProject(
     request: WorkbenchIndexProjectRequest
   ): Promise<Result<WorkbenchIndexProjectResult>>

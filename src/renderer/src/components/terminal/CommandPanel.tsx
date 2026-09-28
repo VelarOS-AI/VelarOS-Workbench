@@ -15,6 +15,7 @@ import type {
 import {
   WorkbenchRunToolHeader,
   WorkbenchRunToolPane,
+  type WorkbenchTerminalSurfaceHandlers,
   WorkbenchTerminalToolHeader,
   WorkbenchTerminalToolPane,
 } from './WorkbenchTerminalToolChrome'
@@ -41,6 +42,8 @@ interface CommandPanelProps {
   onRestartRunSession: (sessionId: string) => void
   onStopRunSession: (sessionId: string) => void
   onOpenConsoleLink?: (url: string) => void
+  onResolveTerminalFileLinks?: WorkbenchTerminalSurfaceHandlers['onResolveFileLinks']
+  onOpenTerminalFileLink?: WorkbenchTerminalSurfaceHandlers['onOpenFileLink']
 }
 export function CommandPanel({
   activeTool,
@@ -61,6 +64,8 @@ export function CommandPanel({
   onRestartRunSession,
   onStopRunSession,
   onOpenConsoleLink,
+  onResolveTerminalFileLinks,
+  onOpenTerminalFileLink,
 }: CommandPanelProps): ReactElement {
   const { t } = useWorkbenchI18n()
 
@@ -131,6 +136,8 @@ export function CommandPanel({
                 onTerminalData={onTerminalData}
                 onTerminalResize={onTerminalResize}
                 onOpenLink={onOpenConsoleLink}
+                onResolveFileLinks={onResolveTerminalFileLinks}
+                onOpenFileLink={onOpenTerminalFileLink}
               />
             )}
 
@@ -146,6 +153,8 @@ export function CommandPanel({
                 onTerminalData={onTerminalData}
                 onTerminalResize={onTerminalResize}
                 onOpenLink={onOpenConsoleLink}
+                onResolveFileLinks={onResolveTerminalFileLinks}
+                onOpenFileLink={onOpenTerminalFileLink}
               />
             )}
 

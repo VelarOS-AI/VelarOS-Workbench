@@ -56,6 +56,17 @@ export interface WorkbenchReadImageFileRequest {
   maxBytes?: number
 }
 
+/** 问一组项目相对路径里哪些是项目里的文件（只看文件系统，不读内容）。终端输出里的路径据此决定能不能点。 */
+export interface WorkbenchFindExistingFilesRequest {
+  projectRoot: string
+  paths: string[]
+}
+
+export interface WorkbenchFindExistingFilesResult {
+  /** 请求里确实是文件（链接按目标算）、且真实位置仍在项目里的那些路径，原样返回。 */
+  paths: string[]
+}
+
 export interface WorkbenchImagePreview {
   mediaType: WorkbenchImageMediaType
   data: Uint8Array

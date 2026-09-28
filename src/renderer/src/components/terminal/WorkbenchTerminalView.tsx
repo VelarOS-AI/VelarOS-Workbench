@@ -9,16 +9,21 @@ import {
   findWorkbenchTerminal,
   mountWorkbenchTerminal,
   unmountWorkbenchTerminal,
+  type WorkbenchTerminalInstanceHandlers,
 } from './workbenchTerminalInstances'
 import { buildWorkbenchTerminalTheme, readWorkbenchTerminalFontFamily } from './workbenchTerminalTheme'
 
 interface WorkbenchTerminalViewProps {
   sessionId: string
+  /** 会话的起始目录：输出里的相对路径按它解析（shell 用 OSC 7 报了新目录就按新的）。 */
+  cwd: string
   isRunning: boolean
   workbenchTheme: WorkbenchThemeId
   onData: (sessionId: string, data: string) => void
   onResize: (sessionId: string, cols: number, rows: number) => void
   onOpenLink?: (url: string) => void
+  onResolveFileLinks?: WorkbenchTerminalInstanceHandlers['resolveFileLinks']
+  onOpenFileLink?: WorkbenchTerminalInstanceHandlers['onOpenFileLink']
 }
 
 /**
@@ -27,16 +32,22 @@ interface WorkbenchTerminalViewProps {
  */
 export function WorkbenchTerminalView({
   sessionId,
+  cwd,
   isRunning,
   workbenchTheme,
   onData,
   onResize,
   onOpenLink,
+  onResolveFileLinks,
+  onOpenFileLink,
 }: WorkbenchTerminalViewProps): ReactElement {
   const containerRef = useRef<HTMLDivElement>(null)
+  const cwdLatest = useLatest(cwd)
   const onDataLatest = useLatest(onData)
   const onResizeLatest = useLatest(onResize)
   const onOpenLinkLatest = useLatest(onOpenLink)
+  const onResolveFileLinksLatest = useLatest(onResolveFileLinks)
+  const onOpenFileLinkLatest = useLatest(onOpenFileLink)
 
   useEffect(() => {
     const container = containerRef.current
@@ -51,8 +62,11 @@ export function WorkbenchTerminalView({
           if (open) open(url)
           else window.open(url, '_blank', 'noopener,noreferrer')
         },
+        resolveFileLinks: async (paths, directory) =>
+          (await onResolveFileLinksLatest.current?.(paths, directory)) ?? paths.map(() => null),
+        onOpenFileLink: (path, line, column) => onOpenFileLinkLatest.current?.(path, line, column),
       },
-      { fontFamily: readWorkbenchTerminalFontFamily(container) }
+      { fontFamily: readWorkbenchTerminalFontFamily(container), cwd: cwdLatest.current }
     )
     mountWorkbenchTerminal(sessionId, container)
 
@@ -83,7 +97,15 @@ export function WorkbenchTerminalView({
       if (frame !== null) cancelAnimationFrame(frame)
       unmountWorkbenchTerminal(sessionId)
     }
-  }, [onDataLatest, onOpenLinkLatest, onResizeLatest, sessionId])
+  }, [
+    cwdLatest,
+    onDataLatest,
+    onOpenFileLinkLatest,
+    onOpenLinkLatest,
+    onResizeLatest,
+    onResolveFileLinksLatest,
+    sessionId,
+  ])
 
   useEffect(() => {
     const container = containerRef.current

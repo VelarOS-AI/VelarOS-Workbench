@@ -16,6 +16,8 @@ import type {
   WorkbenchDeleteEntryRequest,
   WorkbenchDeleteEntryResult,
   WorkbenchEntryMutationResult,
+  WorkbenchFindExistingFilesRequest,
+  WorkbenchFindExistingFilesResult,
   WorkbenchInspectDeleteEntryRequest,
   WorkbenchInspectDeleteEntryResult,
   WorkbenchListDirectoryRequest,
@@ -49,6 +51,7 @@ export const WorkbenchFsChannels = {
   listDirectory: 'workbench-app:fs:list-directory',
   readFile: 'workbench-app:fs:read-file',
   readImageFile: 'workbench-app:fs:read-image-file',
+  findExistingFiles: 'workbench-app:fs:find-existing-files',
   saveFile: 'workbench-app:fs:save-file',
   saveFileSync: 'workbench-app:fs:save-file-sync',
   createEntry: 'workbench-app:fs:create-entry',
@@ -86,6 +89,9 @@ export interface WorkbenchFsBridge {
   readImageFile: (
     request: WorkbenchReadImageFileRequest
   ) => Promise<WorkbenchFsCallResult<WorkbenchReadImageFileResult>>
+  findExistingFiles: (
+    request: WorkbenchFindExistingFilesRequest
+  ) => Promise<WorkbenchFsCallResult<WorkbenchFindExistingFilesResult>>
   saveFile: (
     request: WorkbenchSaveFileRequest
   ) => Promise<WorkbenchFsCallResult<WorkbenchSaveFileResult>>
