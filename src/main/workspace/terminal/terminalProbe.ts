@@ -24,6 +24,16 @@ function equal<T>(actual: T, expected: T, message: string): void {
   assertionCount += 1
 }
 
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch {
+    // arch-guard:silent-catch-ok ESRCH：进程已经不在了。
+    return false
+  }
+}
+
 async function waitFor(predicate: () => boolean, message: string, timeoutMs = 8_000): Promise<void> {
   const deadline = Date.now() + timeoutMs
   while (!predicate()) {
@@ -87,9 +97,27 @@ try {
   terminal.writeTerminalInput({ sessionId: shell.sessionId, input: 'echo 探针_中文_OK\r' }, 101)
   await waitFor(() => shellOutput.split('探针_中文_OK').length >= 3, '交互 shell 必须回显输入并打印中文结果')
   terminal.resizeTerminalSession({ sessionId: shell.sessionId, cols: 60, rows: 20 }, 101)
-  terminal.stopTerminalSession({ sessionId: shell.sessionId, signal: 'SIGINT' }, 101)
+  await terminal.stopTerminalSession({ sessionId: shell.sessionId, signal: 'SIGINT' }, 101)
   await new Promise((resolve) => setTimeout(resolve, 300))
   check(!shellClosed, 'Ctrl+C 只打断前台程序，shell 会话不能结束')
+
+  // 停止运行卡要连它放到后台的任务一起结束：nohup 忽略伪终端关闭时的 SIGHUP，只有整棵进程树都收到信号才会退。
+  if (process.platform !== 'win32') {
+    const marker = `VELAROS_TERMINAL_PROBE_BG_${process.pid}`
+    let backgroundOutput = ''
+    const background = await terminal.startTerminalSession(
+      { projectRoot, initialCommand: `nohup sleep 300 >/dev/null 2>&1 & echo ${marker} $!; wait` },
+      (event) => {
+        backgroundOutput += event.chunk
+      },
+      303
+    )
+    await waitFor(() => new RegExp(`${marker} \\d+`).test(backgroundOutput), '运行卡必须打印后台任务的 pid')
+    const sleepPid = Number(new RegExp(`${marker} (\\d+)`).exec(backgroundOutput)?.[1])
+    check(isProcessAlive(sleepPid), '后台任务在停止前必须还活着')
+    await terminal.stopTerminalSession({ sessionId: background.sessionId, waitForExit: true }, 303)
+    await waitFor(() => !isProcessAlive(sleepPid), '停止运行卡必须连它放到后台的任务一起结束')
+  }
 
   const other = await terminal.startTerminalSession({ projectRoot }, () => undefined, 202)
   assert.throws(

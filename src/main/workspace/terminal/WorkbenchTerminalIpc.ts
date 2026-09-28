@@ -68,9 +68,24 @@ export function registerWorkbenchTerminalIpc(terminal: TerminalSessions): void {
       const parsed = parseStopRequest(request)
       if (!parsed) return invalidRequest()
 
-      terminal.stopTerminalSession(parsed, event.sender.id)
+      await terminal.stopTerminalSession(parsed, event.sender.id)
     })
   )
+
+  // 单向消息，不回复：会话已经结束、请求不对都直接忽略。
+  ipcMain.on(WorkbenchTerminalChannels.acknowledge, (event, request: unknown) => {
+    if (!hasStringFields(request, ['sessionId']) || !isRecord(request)) return
+    const chars = request['chars']
+    if (typeof chars !== 'number' || !Number.isFinite(chars) || chars <= 0) return
+    try {
+      terminal.acknowledgeTerminalOutput(
+        { sessionId: request['sessionId'] as string, chars },
+        event.sender.id
+      )
+    } catch {
+      // arch-guard:silent-catch-ok 别的窗口的会话：确认不属于它，丢掉即可。
+    }
+  })
 }
 
 function parseStartRequest(input: unknown): Nullable<WorkbenchTerminalStartRequest> {
@@ -114,6 +129,7 @@ function parseStopRequest(input: unknown): Nullable<WorkbenchTerminalStopRequest
     sessionId: input['sessionId'] as string,
     signal: toOptional(signal),
     ...optionalBoolean(input, 'skipForceKill'),
+    ...optionalBoolean(input, 'waitForExit'),
   }
 }
 

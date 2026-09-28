@@ -866,6 +866,14 @@ export interface WorkbenchTerminalStopRequest {
   signal?: 'SIGINT' | 'SIGTERM'
   /** 跳过延迟 SIGKILL 兜底强杀。 */
   skipForceKill?: boolean
+  /** 等进程真的退出（或强杀后再等一会儿）才返回：重新运行要等旧进程让出端口。 */
+  waitForExit?: boolean
+}
+
+/** renderer 确认把一个会话的一段输出写进了 xterm（流控用）。 */
+export interface WorkbenchTerminalAcknowledgeRequest {
+  sessionId: string
+  chars: number
 }
 
 /** 伪终端的输出：`stdout` 是 PTY 原始字节（含控制序列，直接喂 xterm），`system` 是宿主自己的提示。 */

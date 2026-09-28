@@ -151,6 +151,7 @@ const terminalBridge: WorkbenchTerminalBridge = {
   resizeSession: (request) => ipcRenderer.invoke(WorkbenchTerminalChannels.resize, request),
   stopSession: (request) => ipcRenderer.invoke(WorkbenchTerminalChannels.stop, request),
   onOutput: (listener) => subscribe(WorkbenchTerminalChannels.output, listener),
+  acknowledgeOutput: (request) => ipcRenderer.send(WorkbenchTerminalChannels.acknowledge, request),
 }
 
 const gitBridge: WorkbenchGitBridge = {

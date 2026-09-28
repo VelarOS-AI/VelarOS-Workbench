@@ -7,7 +7,10 @@ import {
   type WorkbenchRunOutputLine,
   type WorkbenchTerminalSessionView,
 } from '../../models/commands/workbenchCommandLines'
-import { publishWorkbenchTerminalOutput } from '../../models/commands/workbenchTerminalOutputBus'
+import {
+  publishWorkbenchTerminalOutput,
+  setWorkbenchTerminalOutputAcknowledger,
+} from '../../models/commands/workbenchTerminalOutputBus'
 
 export function markWorkbenchTerminalSessionClosed(
   sessions: WorkbenchTerminalSessionView[],
@@ -45,7 +48,10 @@ export function useWorkbenchCommandIpcSubscriptions(
       )
     })
 
-    // 伪终端输出直送 xterm，不经 React；只有收口状态走 React。
+    // 伪终端输出直送 xterm，不经 React；只有收口状态走 React。处理完的输出确认回主进程（流控）。
+    setWorkbenchTerminalOutputAcknowledger((sessionId, chars) =>
+      hostRuntime.kernel.project.acknowledgeWorkbenchTerminalOutput({ sessionId, chars })
+    )
     const unsubscribe = hostRuntime.kernel.project.onWorkbenchTerminalOutput((event) => {
       publishWorkbenchTerminalOutput(event.sessionId, event.chunk)
       if (!event.closed) return
@@ -56,6 +62,7 @@ export function useWorkbenchCommandIpcSubscriptions(
     return () => {
       unsubscribeRunOutput()
       unsubscribe()
+      setWorkbenchTerminalOutputAcknowledger(null)
     }
   }, [
     activeRunIdRef,

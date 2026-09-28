@@ -85,7 +85,10 @@ export function acquireWorkbenchTerminal(
   terminal.loadAddon(new WebLinksAddon((_event, uri) => entry.handlers.onOpenLink(uri)))
   terminal.onData((data) => entry.handlers.onData(data))
   terminal.onBinary((data) => entry.handlers.onData(data))
-  entry.detachOutput = attachWorkbenchTerminalOutput(sessionId, (chunk) => terminal.write(chunk))
+  // 写完再确认（xterm 解析完这段才回调），主进程据此决定暂停还是继续读伪终端。
+  entry.detachOutput = attachWorkbenchTerminalOutput(sessionId, (chunk, done) =>
+    terminal.write(chunk, done)
+  )
   entries.set(sessionId, entry)
   return entry
 }

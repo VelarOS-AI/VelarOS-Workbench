@@ -17,6 +17,7 @@ import { currentPlatform as systemPlatformCompatibility } from '@velaros-ai/core
 import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import type {
+  WorkbenchTerminalAcknowledgeRequest,
   WorkbenchTerminalInputRequest,
   WorkbenchTerminalOutputEvent,
   WorkbenchTerminalResizeRequest,
@@ -40,6 +41,14 @@ const MaxTerminalRows = 500
  */
 const OutputFlushDelayMs = 8
 const OutputFlushChars = 64 * 1024
+/**
+ * 流控（与 VS Code 同值）：发出去、renderer 还没确认写进 xterm 的字符超过高水位就暂停读伪终端，程序写满缓冲区后
+ * 阻塞；确认回来降到低水位以下再继续。`yes` 这类一秒刷几十 MB 的命令不会再把界面淹死。
+ */
+const FlowControlHighWatermarkChars = 100_000
+const FlowControlLowWatermarkChars = 5_000
+/** 等进程退出最多再多等这么久（强杀之后）。 */
+const ExitWaitGraceMs = 1_000
 const DefaultUtf8Locale = 'en_US.UTF-8'
 const TerminalName = 'xterm-256color'
 /** Ctrl+C（ETX）：写进伪终端后行规程给前台进程组发 SIGINT。 */
@@ -56,6 +65,12 @@ interface WorkbenchTerminalSession {
   exited: boolean
   pendingOutput: string
   flushLease: Nullable<TimerLease>
+  /** 发给 renderer、还没被确认处理完的字符数。 */
+  unackedChars: number
+  /** 因为 renderer 跟不上，暂停读伪终端了。 */
+  paused: boolean
+  /** 进程退出时通知等待者（停止时要等它真的退出）。 */
+  exitWaiters: Array<() => void>
 }
 
 /** 交给 shell 的环境：告诉它这是个真终端，并保证有 UTF-8 locale。 */
@@ -138,6 +153,9 @@ class TerminalSessions {
       exited: false,
       pendingOutput: '',
       flushLease: null,
+      unackedChars: 0,
+      paused: false,
+      exitWaiters: [],
     }
     this.terminalSessions.set(sessionId, session)
 
@@ -155,6 +173,7 @@ class TerminalSessions {
         signal: signal === undefined ? undefined : String(signal),
       })
       this.dropSession(sessionId, session)
+      for (const waiter of session.exitWaiters.splice(0)) waiter()
     })
 
     return {
@@ -188,17 +207,34 @@ class TerminalSessions {
     )
   }
 
+  /** renderer 确认把一段输出写进了 xterm：降到低水位以下就接着读伪终端。 */
+  public acknowledgeTerminalOutput(
+    request: WorkbenchTerminalAcknowledgeRequest,
+    ownerId: Nullable<number> = null
+  ): void {
+    const session = this.terminalSessions.get(request.sessionId)
+    if (!session || session.exited) return
+    assertSessionOwner(session, ownerId)
+
+    session.unackedChars = Math.max(0, session.unackedChars - request.chars)
+    if (session.paused && session.unackedChars < FlowControlLowWatermarkChars) {
+      session.paused = false
+      session.pty.resume()
+    }
+  }
+
   /**
    * 停止终端会话。
    *
    * `SIGINT` 是「打断」：往伪终端里写 Ctrl+C，行规程把 SIGINT 送给前台进程组，与在真终端里按 Ctrl+C 完全
-   * 一样，shell 本身活着。默认硬停走 SIGTERM，延迟后仍未退出再 SIGKILL；伪终端关闭时，它上面的进程组会收到
-   * SIGHUP，shell 起的子进程不会成为孤儿。
+   * 一样，shell 本身活着。默认硬停给整棵进程树发 SIGTERM——shell 起的前台任务、放到后台的任务都在里面，
+   * 不只是 shell；延迟后仍没退出的再 SIGKILL。`waitForExit` 时等到进程真的退出（或强杀后再等一会儿）才返回：
+   * 重新运行要等旧进程让出端口。
    */
-  public stopTerminalSession(
+  public async stopTerminalSession(
     request: WorkbenchTerminalStopRequest,
     ownerId: Nullable<number> = null
-  ): void {
+  ): Promise<void> {
     const session = this.terminalSessions.get(request.sessionId)
     if (!session) return
     assertSessionOwner(session, ownerId)
@@ -208,15 +244,21 @@ class TerminalSessions {
       return
     }
 
-    session.pty.kill('SIGTERM')
-    if (request.skipForceKill) return
+    const exited = request.waitForExit ? this.waitForExit(session) : null
+    // 趁 shell 还在时列出整棵树：它一退，子孙就被 init 收养、顺不到了。
+    const tree = await this.listSessionProcessTree(session)
+    this.ptyFactory.processTree?.signal(tree, 'SIGTERM')
+    if (!session.exited) session.pty.kill('SIGTERM')
 
-    session.timers.after(this.commandHelper.getForceKillDelayMs(), () => {
-      // sessionId 不会复用：仍在表里且还没退出，才是同一个进程。
-      if (this.terminalSessions.get(request.sessionId) === session && !session.exited) {
-        session.pty.kill('SIGKILL')
-      }
-    })
+    if (!request.skipForceKill) {
+      // 不挂在会话的计时器上：shell 先退出、会话被收掉之后，树上剩下的进程照样要强杀。
+      const forceKill = setTimeout(() => {
+        this.ptyFactory.processTree?.signal(tree, 'SIGKILL')
+        if (!session.exited) session.pty.kill('SIGKILL')
+      }, this.commandHelper.getForceKillDelayMs())
+      forceKill.unref?.()
+    }
+    if (exited) await exited
   }
 
   /** 关闭所有持久终端会话；进程退出前调用。 */
@@ -229,6 +271,23 @@ class TerminalSessions {
     await this.closeSessions(
       [...this.terminalSessions.entries()].filter(([, session]) => session.ownerId === ownerId)
     )
+  }
+
+  private async listSessionProcessTree(session: WorkbenchTerminalSession): Promise<number[]> {
+    return (await this.ptyFactory.processTree?.list(session.pty.pid)) ?? [session.pty.pid]
+  }
+
+  /** 等会话的进程退出；强杀的延迟过后再多等一会儿，还没退也返回。 */
+  private waitForExit(session: WorkbenchTerminalSession): Promise<void> {
+    if (session.exited) return Promise.resolve()
+    return new Promise((resolve) => {
+      const timeout = setTimeout(resolve, this.commandHelper.getForceKillDelayMs() + ExitWaitGraceMs)
+      timeout.unref?.()
+      session.exitWaiters.push(() => {
+        clearTimeout(timeout)
+        resolve()
+      })
+    })
   }
 
   private liveSession(sessionId: string): WorkbenchTerminalSession {
@@ -257,6 +316,11 @@ class TerminalSessions {
     const chunk = session.pendingOutput
     session.pendingOutput = ''
     session.onOutput({ sessionId, stream: 'stdout', chunk })
+    session.unackedChars += chunk.length
+    if (!session.paused && !session.exited && session.unackedChars > FlowControlHighWatermarkChars) {
+      session.paused = true
+      session.pty.pause()
+    }
   }
 
   private dropSession(sessionId: string, session: WorkbenchTerminalSession): void {
@@ -293,6 +357,15 @@ class TerminalSessions {
             }
 
             session.pty.onExit(finish)
+            // 列进程表是异步的，回来时 shell 可能已经退出、会话的计时器已释放：强杀用独立的计时器。
+            void this.listSessionProcessTree(session).then((tree) => {
+              this.ptyFactory.processTree?.signal(tree, 'SIGTERM')
+              const forceKill = setTimeout(
+                () => this.ptyFactory.processTree?.signal(tree, 'SIGKILL'),
+                forceKillDelayMs
+              )
+              forceKill.unref?.()
+            })
             session.pty.kill('SIGTERM')
             session.timers.after(
               forceKillDelayMs,

@@ -85,6 +85,7 @@ import type {
   WorkbenchSearchContentResult,
   WorkbenchSearchEntriesRequest,
   WorkbenchSearchEntriesResult,
+  WorkbenchTerminalAcknowledgeRequest,
   WorkbenchTerminalInputRequest,
   WorkbenchTerminalOutputEvent,
   WorkbenchTerminalResizeRequest,
@@ -199,6 +200,8 @@ export interface WorkbenchProjectKernelPort {
     request: WorkbenchInlineCompletionRequest
   ): Promise<Result<WorkbenchInlineCompletionResult>>
   onWorkbenchTerminalOutput(listener: (event: WorkbenchTerminalOutputEvent) => void): () => void
+  /** 一段伪终端输出已经写进 xterm（流控：主进程据此决定暂停还是继续读伪终端）。 */
+  acknowledgeWorkbenchTerminalOutput(request: WorkbenchTerminalAcknowledgeRequest): void
 }
 
 /** Workbench 使用的 Kernel 会话与附件能力。 */

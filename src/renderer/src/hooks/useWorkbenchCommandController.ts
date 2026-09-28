@@ -380,7 +380,8 @@ export function useWorkbenchCommandController({
     const project = activeProjectRef.current
     if (!session?.command || !project) return
 
-    void workbenchHost.kernel.project.stopWorkbenchTerminalSession({ sessionId })
+    // 等旧进程真的退出（让出端口、释放文件）再起新的，否则新进程一起来就撞上「端口已被占用」。
+    await workbenchHost.kernel.project.stopWorkbenchTerminalSession({ sessionId, waitForExit: true })
     discardWorkbenchTerminalOutput(sessionId)
 
     const command = session.command

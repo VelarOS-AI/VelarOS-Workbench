@@ -13,7 +13,9 @@ import {
   clampTerminalDimension,
   TerminalSessions,
 } from '../src/main/workspace/terminal/TerminalSessions'
+import { collectWorkbenchProcessTree } from '../src/main/workspace/terminal/WorkbenchProcessTree'
 import type {
+  WorkbenchProcessTreeOps,
   WorkbenchPtyExit,
   WorkbenchPtyFactory,
   WorkbenchPtyProcess,
@@ -27,6 +29,7 @@ import {
   onWorkbenchTerminalOutputDiscarded,
   publishWorkbenchTerminalOutput,
   readWorkbenchTerminalOutputBacklog,
+  setWorkbenchTerminalOutputAcknowledger,
 } from '../src/renderer/src/models/commands/workbenchTerminalOutputBus'
 import type { WorkbenchTerminalOutputEvent } from '../src/shared/contracts'
 
@@ -70,6 +73,16 @@ class FakePty implements WorkbenchPtyProcess {
     this.signals.push(signal ?? 'default')
   }
 
+  public readonly flow: string[] = []
+
+  public pause(): void {
+    this.flow.push('pause')
+  }
+
+  public resume(): void {
+    this.flow.push('resume')
+  }
+
   public emit(data: string): void {
     for (const listener of this.dataListeners) listener(data)
   }
@@ -79,7 +92,10 @@ class FakePty implements WorkbenchPtyProcess {
   }
 }
 
-function createFakeFactory(): { factory: WorkbenchPtyFactory; spawned: FakePty[] } {
+function createFakeFactory(processTree?: WorkbenchProcessTreeOps): {
+  factory: WorkbenchPtyFactory
+  spawned: FakePty[]
+} {
   const spawned: FakePty[] = []
   return {
     spawned,
@@ -89,6 +105,7 @@ function createFakeFactory(): { factory: WorkbenchPtyFactory; spawned: FakePty[]
         spawned.push(pty)
         return pty
       },
+      processTree,
     },
   }
 }
@@ -131,7 +148,7 @@ void describe('terminal sessions on a pseudo-terminal', () => {
       assert.deepEqual(pty.sizes, [[80, 24]])
 
       // Ctrl+C 是往终端里写 ETX，不是杀进程。
-      terminal.stopTerminalSession({ sessionId: session.sessionId, signal: 'SIGINT' }, 7)
+      await terminal.stopTerminalSession({ sessionId: session.sessionId, signal: 'SIGINT' }, 7)
       assert.equal(pty.written.at(-1), String.fromCharCode(3))
       assert.deepEqual(pty.signals, [])
 
@@ -171,7 +188,7 @@ void describe('terminal sessions on a pseudo-terminal', () => {
         /不属于当前项目窗口/u
       )
 
-      terminal.stopTerminalSession({ sessionId: run.sessionId }, 1)
+      await terminal.stopTerminalSession({ sessionId: run.sessionId }, 1)
       assert.deepEqual(pty.signals, ['SIGTERM'])
       await settle(helper.getForceKillDelayMs() + 50)
       assert.deepEqual(pty.signals, ['SIGTERM', 'SIGKILL'])
@@ -182,6 +199,73 @@ void describe('terminal sessions on a pseudo-terminal', () => {
       await terminal.closeAllSessions()
       await rm(projectRoot, { recursive: true, force: true })
     }
+  })
+
+  void test('stops the whole process tree and can wait until the process has exited', async () => {
+    const projectRoot = await realpath(await mkdtemp(join(tmpdir(), 'workbench-terminal-tree-')))
+    const signalled: string[] = []
+    const { factory, spawned } = createFakeFactory({
+      list: async (rootPid) => [rootPid, 5001, 5002],
+      signal: (pids, signal) => signalled.push(`${signal}:${pids.join(',')}`),
+    })
+    const helper = new CommandHelper()
+    const terminal = new TerminalSessions(new PathResolver(), helper, factory)
+    try {
+      const run = await terminal.startTerminalSession({ projectRoot, initialCommand: 'bun run dev' }, () => undefined, 1)
+      const pty = spawned[0]!
+      let stopped = false
+      const stopping = terminal
+        .stopTerminalSession({ sessionId: run.sessionId, waitForExit: true }, 1)
+        .then(() => (stopped = true))
+      await settle(10)
+      assert.deepEqual(signalled, ['SIGTERM:4242,5001,5002'])
+      assert.deepEqual(pty.signals, ['SIGTERM'])
+      assert.equal(stopped, false)
+      pty.exit(143, 15)
+      await stopping
+      assert.equal(stopped, true)
+      await settle(helper.getForceKillDelayMs() + 50)
+      // shell 先退了，树上剩下的进程照样被强杀；伪终端本身不再重复强杀。
+      assert.deepEqual(signalled, ['SIGTERM:4242,5001,5002', 'SIGKILL:4242,5001,5002'])
+      assert.deepEqual(pty.signals, ['SIGTERM'])
+    } finally {
+      await terminal.closeAllSessions()
+      await rm(projectRoot, { recursive: true, force: true })
+    }
+  })
+
+  void test('pauses reading when the renderer falls behind and resumes once it catches up', async () => {
+    const projectRoot = await realpath(await mkdtemp(join(tmpdir(), 'workbench-terminal-flow-')))
+    const { factory, spawned } = createFakeFactory()
+    const terminal = new TerminalSessions(new PathResolver(), new CommandHelper(), factory)
+    try {
+      const session = await terminal.startTerminalSession({ projectRoot }, () => undefined, 3)
+      const pty = spawned[0]!
+      pty.emit('y\n'.repeat(40_000))
+      await settle()
+      assert.deepEqual(pty.flow, [])
+      pty.emit('y\n'.repeat(40_000))
+      await settle()
+      assert.deepEqual(pty.flow, ['pause'])
+
+      terminal.acknowledgeTerminalOutput({ sessionId: session.sessionId, chars: 120_000 }, 3)
+      assert.deepEqual(pty.flow, ['pause'])
+      terminal.acknowledgeTerminalOutput({ sessionId: session.sessionId, chars: 40_000 }, 3)
+      assert.deepEqual(pty.flow, ['pause', 'resume'])
+      assert.throws(
+        () => terminal.acknowledgeTerminalOutput({ sessionId: session.sessionId, chars: 1 }, 4),
+        /不属于当前项目窗口/u
+      )
+    } finally {
+      await terminal.closeAllSessions()
+      await rm(projectRoot, { recursive: true, force: true })
+    }
+  })
+
+  void test('finds every descendant of the shell in the process table', () => {
+    const table = ['  1     0', ' 100     1', ' 200   100', ' 201   100', ' 300   200', ' 999     1', ''].join('\n')
+    assert.deepEqual(collectWorkbenchProcessTree(table, 100), [100, 200, 201, 300])
+    assert.deepEqual(collectWorkbenchProcessTree(table, 4242), [4242])
   })
 
   void test('surfaces a missing terminal backend as a platform error instead of crashing', async () => {
@@ -238,6 +322,29 @@ void describe('terminal output on the renderer side', () => {
     assert.deepEqual(discarded, ['s1'])
     assert.equal(readWorkbenchTerminalOutputBacklog('s1'), 0)
     stop()
+  })
+
+  void test('acknowledges output after xterm writes it, right away while nothing shows it, in batches', async () => {
+    const acknowledged: Array<[string, number]> = []
+    setWorkbenchTerminalOutputAcknowledger((sessionId, chars) => acknowledged.push([sessionId, chars]))
+    try {
+      publishWorkbenchTerminalOutput('s3', 'x'.repeat(6_000))
+      assert.deepEqual(acknowledged, [['s3', 6_000]])
+
+      const writes: Array<() => void> = []
+      attachWorkbenchTerminalOutput('s3', (_chunk, done) => writes.push(done))
+      // 回放攒下的输出不再重复确认。
+      writes.shift()!()
+      publishWorkbenchTerminalOutput('s3', 'y'.repeat(100))
+      assert.deepEqual(acknowledged, [['s3', 6_000]])
+      writes.shift()!()
+      assert.deepEqual(acknowledged, [['s3', 6_000]])
+      await new Promise((resolve) => setTimeout(resolve, 40))
+      assert.deepEqual(acknowledged, [['s3', 6_000], ['s3', 100]])
+    } finally {
+      discardWorkbenchTerminalOutput('s3')
+      setWorkbenchTerminalOutputAcknowledger(null)
+    }
   })
 
   void test('caps the backlog so a chatty process cannot grow memory unbounded', () => {

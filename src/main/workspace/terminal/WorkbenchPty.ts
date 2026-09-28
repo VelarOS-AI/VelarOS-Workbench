@@ -10,6 +10,8 @@ import { createRequire } from 'node:module'
 
 import { AppError } from '@velaros-ai/core/error'
 
+import { listWorkbenchProcessTree, signalWorkbenchProcesses } from './WorkbenchProcessTree'
+
 export interface WorkbenchPtyExit {
   exitCode: number
   signal?: number
@@ -23,6 +25,9 @@ export interface WorkbenchPtyProcess {
   write(data: string): void
   resize(cols: number, rows: number): void
   kill(signal?: string): void
+  /** 暂停 / 继续读伪终端：不读，程序写满缓冲区后就会阻塞在写上（流控）。 */
+  pause(): void
+  resume(): void
 }
 
 export interface WorkbenchPtySpawnOptions {
@@ -34,8 +39,16 @@ export interface WorkbenchPtySpawnOptions {
   name: string
 }
 
+/** 伪终端上的整棵进程树：列出来、发信号（真实实现走系统进程表）。 */
+export interface WorkbenchProcessTreeOps {
+  list(rootPid: number): Promise<number[]>
+  signal(pids: readonly number[], signal: NodeJS.Signals): void
+}
+
 export interface WorkbenchPtyFactory {
   spawn(file: string, args: string[], options: WorkbenchPtySpawnOptions): WorkbenchPtyProcess
+  /** 结束会话时对整棵进程树下手的办法；测试里的假工厂不给，就只对伪终端本身发信号，不会碰到真实进程。 */
+  readonly processTree?: WorkbenchProcessTreeOps
 }
 
 type NodePtyModule = typeof import('@lydell/node-pty')
@@ -63,6 +76,7 @@ function loadNodePty(): NodePtyModule {
 
 /** 生产用的工厂：真正的 node-pty。 */
 export const nodePtyFactory: WorkbenchPtyFactory = {
+  processTree: { list: listWorkbenchProcessTree, signal: signalWorkbenchProcesses },
   spawn: (file, args, options) => {
     const env: Record<string, string> = {}
     for (const [key, value] of Object.entries(options.env)) if (value !== undefined) env[key] = value

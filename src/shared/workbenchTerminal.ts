@@ -11,6 +11,7 @@
  * 输出都靠 `event.sender.send(...output 通道...)` 回发给发起窗口，renderer 按 sessionId 路由。
  */
 import type {
+  WorkbenchTerminalAcknowledgeRequest,
   WorkbenchTerminalInputRequest,
   WorkbenchTerminalOutputEvent,
   WorkbenchTerminalResizeRequest,
@@ -27,6 +28,8 @@ export const WorkbenchTerminalChannels = {
   resize: 'workbench-app:terminal:resize',
   stop: 'workbench-app:terminal:stop',
   output: 'workbench-app:terminal:output',
+  /** renderer → main 的单向消息：一段输出已经写进 xterm（流控用，不等回复）。 */
+  acknowledge: 'workbench-app:terminal:acknowledge',
 } as const
 
 /** preload 通过 contextBridge 暴露给 renderer 的终端会话桥面（4 动词 + 输出订阅）。 */
@@ -44,4 +47,5 @@ export interface WorkbenchTerminalBridge {
     request: WorkbenchTerminalStopRequest
   ) => Promise<WorkbenchFsCallResult<void>>
   onOutput: (listener: (event: WorkbenchTerminalOutputEvent) => void) => () => void
+  acknowledgeOutput: (request: WorkbenchTerminalAcknowledgeRequest) => void
 }

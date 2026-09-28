@@ -277,6 +277,8 @@ const standaloneWorkbenchHost: WorkbenchHost = {
       },
       onWorkbenchTerminalOutput: (listener) =>
         window.velarosWorkbenchTerminal.onOutput(listener),
+      acknowledgeWorkbenchTerminalOutput: (request) =>
+        window.velarosWorkbenchTerminal.acknowledgeOutput(request),
     },
     sessions: {
       readLocalAttachmentFile: async (request) => {
