@@ -6,6 +6,7 @@ import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'electron-vite'
 
+import { isolateLinkedPackageWatcher, linkedPackageWatchIgnore } from './build-config/linkedPackageWatchPolicy'
 import mainExternalEsmPlatformPackages from './scripts/release/mainExternalEsmPlatformPackages.json'
 
 /**
@@ -14,6 +15,7 @@ import mainExternalEsmPlatformPackages from './scripts/release/mainExternalEsmPl
  * 全部产品源码直接归根 src；跨仓 Platform 依赖只经 GitHub Packages 的正式包入口解析。
  */
 const repoRoot = dirname(fileURLToPath(import.meta.url))
+const linkedPackageIgnore = linkedPackageWatchIgnore(repoRoot)
 const workbenchRendererRoot = resolve(repoRoot, 'src/renderer/src')
 const sharedWorkbenchStyleRoot = resolve(workbenchRendererRoot, 'styles')
 const standaloneWorkbenchChatStyle = resolve(
@@ -53,6 +55,7 @@ const rendererAliases = [
 
 export default defineConfig(({ mode }) => ({
   main: {
+    plugins: [isolateLinkedPackageWatcher(linkedPackageIgnore)],
     build: {
       outDir: resolve(repoRoot, 'build/electron/main'),
       externalizeDeps: false,
@@ -100,6 +103,7 @@ export default defineConfig(({ mode }) => ({
     },
   },
   preload: {
+    plugins: [isolateLinkedPackageWatcher(linkedPackageIgnore)],
     build: {
       outDir: resolve(repoRoot, 'build/electron/preload'),
       rollupOptions: {
@@ -120,6 +124,7 @@ export default defineConfig(({ mode }) => ({
     },
     server: {
       fs: { allow: [repoRoot] },
+      watch: { ignored: [linkedPackageIgnore] },
     },
     css: {
       modules: {
