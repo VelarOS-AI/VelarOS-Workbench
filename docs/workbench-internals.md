@@ -144,6 +144,18 @@ renderer 侧对应两件事：编辑器控制器订阅 Agent 写入通知（`wor
 改这条链路时用 `bun --conditions=source` 跑一个直接调用 `WorkbenchLanguageServices` 的探针脚本
 （拿本仓库当被测项目，请求 `CodeMirrorEditor.tsx` 这种两三千行的文件）看每一步的耗时，别凭感觉。
 
+### 超时、取消与重启
+
+- 一个请求超时只让它自己失败（`TIMEOUT`），并通知 worker 丢掉 / 放弃它；TypeScript 的项目状态与外部 LSP
+  会话都留着。超时后给 worker 发 `ping`（控制消息不进请求队列），20 秒内不回 `pong` 才判定卡死、换 worker；
+  worker 崩溃同样换。接连失败时重建间隔从 1 秒翻倍到 30 秒（平稳跑满一分钟清零），期间的请求排队等新 worker。
+- 补全、悬浮、签名、高亮、内联提示、语义着色按「窗口 + 文件」互相顶替：新请求一到，旧的立即以 `CANCELLED`
+  结束；排队中的直接丢掉，正在算的 TypeScript 从与 worker 共享的取消缓冲读到取消、在检查点停下，外部 LSP 收到
+  `$/cancelRequest`。诊断从不中途取消（TypeScript 会因此丢掉整个类型检查器）。
+- 问题面板：打开的文件用各自的实时诊断；另有整项目检查（`getProjectDiagnostics`，像 `tsc --noEmit`），按打开的
+  TypeScript 文件找 tsconfig 项目（最多两个），后台优先级、每批约 150ms 分批查，结果逐批并入面板。打开的 TS
+  文件、项目或磁盘内容变了 1.5 秒后查一轮，打字不触发；一轮没查完又有改动就查完再来一轮。
+
 ### worker 的内存边界
 
 2026-09-16 的闪退：跑了 39 小时后语言服务 worker 的 V8 堆（默认 = 物理内存 / 4，16GB 机器 4GB）耗尽，
