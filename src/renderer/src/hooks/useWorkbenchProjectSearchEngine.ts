@@ -8,7 +8,7 @@
  * - 替换一处、一个文件或全部（全部先确认）：开着的文件在编辑器里换，能撤销、不写盘；其余的交给 main 写盘，
  *   写完刷新那几个文件的结果（全部替换后整个重搜）。
  */
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { workbenchHost } from '@renderer/host'
 import {
   formatWorkbenchProjectSearchCount,
@@ -28,6 +28,7 @@ import type {
   WorkbenchSearchContentBatch,
   WorkbenchSearchContentRequest,
 } from '@shared/contracts'
+import { normalizeWorkbenchTextEol } from '@shared/workbenchTextFormat'
 import {
   compileWorkbenchTextSearch,
   previewWorkbenchTextSearchReplacement,
@@ -85,7 +86,10 @@ interface ProjectSearchResultsState {
   /** 这份结果属于哪一次搜索；推送、刷新按它认。 */
   generation: number
   spec: Nullable<ProjectSearchSpec>
-  /** 还在推送结果的那次搜索。 */
+  /**
+   * 这份结果的搜索 id：推送按它认。搜完了也留着——推送与最后的返回走的不一定是同一条通道，晚到的一批照样
+   * 并进来（每个文件只在一批里出现）。
+   */
   searchId: Nullable<string>
   diskFiles: ReadonlyMap<string, WorkbenchContentSearchFileResult>
   /** 确认落在搜索范围里的路径：搜到的文件，加上报回来的开着的文件（它们以编辑器正文为准）。 */
@@ -166,8 +170,9 @@ export function useWorkbenchProjectSearchEngine(options: WorkbenchProjectSearchE
   const resultsCurrent = !!spec && results.spec?.key === spec.key && results.status === 'done'
 
   const cancelRunningSearch = useMemoizedFn((): void => {
-    const searchId = resultsRef.current.searchId
-    if (searchId) void workbenchHost.kernel.project.cancelWorkbenchContentSearch({ searchId })
+    const { searchId, status } = resultsRef.current
+    if (searchId && status === 'searching')
+      void workbenchHost.kernel.project.cancelWorkbenchContentSearch({ searchId })
   })
 
   /** 按磁盘重搜几个文件（替换之后、开着的文件关掉之后），结果并回当前这份结果。 */
@@ -253,7 +258,6 @@ export function useWorkbenchProjectSearchEngine(options: WorkbenchProjectSearchE
           ? current
           : {
               ...current,
-              searchId: null,
               status: 'done',
               truncated: result.truncated,
               skippedLargeFileCount: result.skippedLargeFileCount,
@@ -262,7 +266,7 @@ export function useWorkbenchProjectSearchEngine(options: WorkbenchProjectSearchE
     } catch (error) {
       if (generationRef.current !== generation) return
       setResults((current) =>
-        current.generation !== generation ? current : { ...current, searchId: null, status: 'done' }
+        current.generation !== generation ? current : { ...current, status: 'done' }
       )
       messageLatest.current.error({
         title: tLatest.current('workbench.searchFailed'),
@@ -306,8 +310,10 @@ export function useWorkbenchProjectSearchEngine(options: WorkbenchProjectSearchE
     if (closed.length > 0) void refreshPaths(closed)
   }, [options.openTabs, refreshPaths, resultsRef])
 
-  // 开着的、在范围里的文件按这份结果的条件在编辑器正文上搜；正文没变的沿用上次的结果。
+  // 开着的、在范围里的文件按这份结果的条件在编辑器正文上搜；正文没变的沿用上次的结果。按推迟的标签算：
+  // 在大文件里打字时先让编辑器跟手，结果稍后跟上。
   const resultsMatcher = results.spec?.matcher ?? null
+  const deferredOpenTabs = useDeferredValue(options.openTabs)
   const editorFiles = useMemo(() => {
     const files = new Map<string, WorkbenchContentSearchFileResult>()
     const cache = editorResultCacheRef.current
@@ -316,7 +322,7 @@ export function useWorkbenchProjectSearchEngine(options: WorkbenchProjectSearchE
       return files
     }
 
-    for (const tab of options.openTabs) {
+    for (const tab of deferredOpenTabs) {
       if (!isSearchableOpenTab(tab) || !results.scopePaths.has(tab.path)) continue
       const cached = cache.get(tab.path)
       const result =
@@ -335,7 +341,7 @@ export function useWorkbenchProjectSearchEngine(options: WorkbenchProjectSearchE
     }
     for (const path of [...cache.keys()]) if (!files.has(path)) cache.delete(path)
     return files
-  }, [options.openTabs, results.scopePaths, resultsMatcher])
+  }, [deferredOpenTabs, results.scopePaths, resultsMatcher])
 
   const files = useMemo(
     () => mergeWorkbenchProjectSearchFiles(results.diskFiles, editorFiles),
@@ -373,7 +379,8 @@ export function useWorkbenchProjectSearchEngine(options: WorkbenchProjectSearchE
                 selected ? (hit) => selected.has(workbenchTextSearchRangeKey(hit)) : undefined
               )
               replacedCounts.set(target.file.path, replaced.count)
-              return replaced.content
+              // 替换文字里的 `\r` 与编辑器一样当换行：编辑缓冲一律是 LF。
+              return normalizeWorkbenchTextEol(replaced.content)
             },
           }))
         )
@@ -411,8 +418,9 @@ export function useWorkbenchProjectSearchEngine(options: WorkbenchProjectSearchE
         }
 
         reportReplacement(replacedCounts, replacedPaths.length, readOnlyPaths.length, failures)
+        // 替换过的文件等刷新拿回新版本再放开替换按钮：不然紧接着再点一次会拿旧版本去换，被当成外部改过。
         if (refresh === 'all') void runSearch()
-        else void refreshPaths([...diskTargets.map((target) => target.file.path), ...vanishedPaths])
+        else await refreshPaths([...diskTargets.map((target) => target.file.path), ...vanishedPaths])
       } catch (error) {
         messageLatest.current.error({
           title: tLatest.current('workbench.projectSearchReplaceFailed'),
