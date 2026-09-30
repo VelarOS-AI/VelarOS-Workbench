@@ -10,6 +10,8 @@
  * 遍历时还跳过根目录下的构建产物（`build` / `dist` / `out`）与点号开头的目录（`.venv`、`.next` 之类常常
  * 很大，又没有忽略规则可依）；Git 仓库里这些交给 .gitignore 决定。点号开头的文件（`.env`）都搜。
  * 符号链接不跟：它指向的文件在工程里的话，按那个文件自己的路径列出来。
+ *
+ * 快速打开按文件名找文件用的是另一份清单（SearchIndex.listProjectFiles）：那份不看 .gitignore。
  */
 import { readdir } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -29,7 +31,7 @@ import {
   shouldSkipProjectDirectory,
 } from './WorkbenchSkippedDirectories'
 
-interface WorkbenchProjectFileListingOptions {
+interface WorkbenchContentSearchFileListingOptions {
   filter: WorkbenchSearchPathFilter
   signal?: AbortSignal
 }
@@ -41,9 +43,9 @@ const GitListingMaxBytes = 256 * 1024 * 1024
 const GitSymlinkMode = '120000'
 const GitSubmoduleMode = '160000'
 
-export async function listWorkbenchProjectFiles(
+export async function listWorkbenchContentSearchFiles(
   projectRoot: string,
-  options: WorkbenchProjectFileListingOptions
+  options: WorkbenchContentSearchFileListingOptions
 ): Promise<string[]> {
   const paths: string[] = []
   await listDirectory(projectRoot, '', options, paths, 0)
@@ -75,7 +77,7 @@ export function isInsideUnsearchedDirectory(path: string): boolean {
 async function listDirectory(
   projectRoot: string,
   directory: string,
-  options: WorkbenchProjectFileListingOptions,
+  options: WorkbenchContentSearchFileListingOptions,
   paths: string[],
   depth: number
 ): Promise<void> {
@@ -111,7 +113,7 @@ interface GitFileListing {
 async function listGitFiles(
   projectRoot: string,
   directory: string,
-  options: WorkbenchProjectFileListingOptions
+  options: WorkbenchContentSearchFileListingOptions
 ): Promise<Nullable<GitFileListing>> {
   const cwd = directory ? join(projectRoot, directory) : projectRoot
   const prefix = directory ? `${directory}/` : ''
@@ -166,7 +168,7 @@ async function runGitListing(
 async function walkDirectory(
   projectRoot: string,
   directory: string,
-  options: WorkbenchProjectFileListingOptions,
+  options: WorkbenchContentSearchFileListingOptions,
   paths: string[]
 ): Promise<void> {
   if (options.signal?.aborted) return

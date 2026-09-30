@@ -44,7 +44,7 @@ import { isPathInsideRoot } from './PathContainmentHelper'
 import type { PathResolver } from './PathResolver'
 import {
   isInsideUnsearchedDirectory,
-  listWorkbenchProjectFiles,
+  listWorkbenchContentSearchFiles,
   sortWorkbenchSearchPaths,
 } from './ProjectFileListing'
 
@@ -178,7 +178,7 @@ class SearchIndex {
     const filter = compileWorkbenchSearchPathFilter(request.include ?? '', request.exclude ?? '')
     const paths = request.paths
       ? await this.resolveContentSearchPaths(projectRoot, request.paths, filter)
-      : await listWorkbenchProjectFiles(projectRoot, { filter, signal })
+      : await listWorkbenchContentSearchFiles(projectRoot, { filter, signal })
     if (signal?.aborted) return { ...result, cancelled: true }
 
     const session = this.openSearchSession()
