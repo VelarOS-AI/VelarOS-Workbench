@@ -6,8 +6,6 @@ import {
   getWorkbenchGitOperationName,
 } from '@renderer/models/git/workbenchGitOperationModel'
 
-import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
-
 import type { WorkspaceGitOperationAction, WorkspaceGitOperationState } from '@shared/contracts'
 
 import styles from '../../styles/workbenchPageStyles'
@@ -24,8 +22,10 @@ interface WorkbenchGitOperationBannerProps {
 }
 
 /**
- * 合并、变基、拣选、撤销进行到一半时的提示条：是什么操作、停在哪、接下来该做什么，和继续、跳过、放弃。
- * 提交面板和 Git 工具窗上方各放一个。在终端里起了头的操作同样显示（看的是仓库里的标记）。
+ * 合并、变基、拣选、撤销进行到一半时的提示：是什么操作、停在哪、接下来该做什么，和继续、跳过、放弃。
+ * 提交面板和 Git 工具窗上方各放一张。在终端里起了头的操作同样显示（看的是仓库里的标记）。
+ *
+ * 按钮是这张卡片自己的小号按钮（24px）：共享 Button 最小一档是 32px，放在两行字的提示里比字还抢眼。
  */
 export function WorkbenchGitOperationBanner({
   operation,
@@ -46,51 +46,54 @@ export function WorkbenchGitOperationBanner({
       role="status"
       data-conflicts={conflictCount > 0 ? 'true' : undefined}
     >
-      <div className={styles.gitOperationBannerText}>
+      <div className={styles.gitOperationBannerCard}>
+        <GitMergeIcon size={14} weight="bold" className={styles.gitOperationBannerIcon} />
         <span className={styles.gitOperationBannerTitle}>
-          <GitMergeIcon size={13} />
           <strong>{banner.title}</strong>
           {!!banner.detail && <small title={banner.detail}>{banner.detail}</small>}
         </span>
         <span className={styles.gitOperationBannerHint}>{banner.hint}</span>
-      </div>
-      <div className={styles.gitOperationBannerActions}>
-        <Button
-          size="sm"
-          disabled={blocked || !banner.canContinue}
-          title={
-            unsavedHint ??
-            (banner.canContinue
-              ? t('workbench.gitOperationContinueHint', { operation: name })
-              : t('workbench.gitOperationContinueBlockedHint'))
-          }
-          onClick={() => onAction('continue')}
-        >
-          {pending === 'continue' && <SpinnerGapIcon size={12} className={styles.spinIcon} />}
-          {t('workbench.gitOperationContinue')}
-        </Button>
-        {banner.canSkip && (
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={blocked}
-            title={unsavedHint ?? t('workbench.gitOperationSkipHint')}
-            onClick={() => onAction('skip')}
+        <div className={styles.gitOperationBannerActions}>
+          <button
+            type="button"
+            className={styles.gitOperationBannerButton}
+            data-variant="primary"
+            disabled={blocked || !banner.canContinue}
+            title={
+              unsavedHint ??
+              (banner.canContinue
+                ? t('workbench.gitOperationContinueHint', { operation: name })
+                : t('workbench.gitOperationContinueBlockedHint'))
+            }
+            onClick={() => onAction('continue')}
           >
-            {pending === 'skip' && <SpinnerGapIcon size={12} className={styles.spinIcon} />}
-            {t('workbench.gitOperationSkip')}
-          </Button>
-        )}
-        <Button
-          size="sm"
-          variant="destructiveOutline"
-          disabled={blocked}
-          title={unsavedHint ?? t('workbench.gitOperationAbortHint', { operation: name })}
-          onClick={() => onAction('abort')}
-        >
-          {pending === 'abort' && <SpinnerGapIcon size={12} className={styles.spinIcon} />}
-          {t('workbench.gitOperationAbort')}
-        </Button>
+            {pending === 'continue' && <SpinnerGapIcon size={12} className={styles.spinIcon} />}
+            {t('workbench.gitOperationContinue')}
+          </button>
+          {banner.canSkip && (
+            <button
+              type="button"
+              className={styles.gitOperationBannerButton}
+              disabled={blocked}
+              title={unsavedHint ?? t('workbench.gitOperationSkipHint')}
+              onClick={() => onAction('skip')}
+            >
+              {pending === 'skip' && <SpinnerGapIcon size={12} className={styles.spinIcon} />}
+              {t('workbench.gitOperationSkip')}
+            </button>
+          )}
+          <button
+            type="button"
+            className={styles.gitOperationBannerButton}
+            data-variant="danger"
+            disabled={blocked}
+            title={unsavedHint ?? t('workbench.gitOperationAbortHint', { operation: name })}
+            onClick={() => onAction('abort')}
+          >
+            {pending === 'abort' && <SpinnerGapIcon size={12} className={styles.spinIcon} />}
+            {t('workbench.gitOperationAbort')}
+          </button>
+        </div>
       </div>
     </div>
   )

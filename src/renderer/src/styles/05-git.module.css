@@ -925,33 +925,52 @@
 }
 
 /*
- * 合并、变基、拣选、撤销进行到一半时的提示条，提交面板和 Git 工具窗上方各一个。窄的地方（提交面板）
- * 按钮折到文字下面。
+ * 合并、变基、拣选、撤销进行到一半时的提示，提交面板和 Git 工具窗上方各一张卡片。外层只管留白和量宽度
+ * （容器查询），里层是卡片本身：窄的地方（提交面板）标题、说明、按钮各占一行；宽的地方（工具窗）排成
+ * 一行，按钮靠右。
  */
 .gitOperationBanner {
-  @apply flex min-w-0 shrink-0 flex-wrap items-center border-b;
-  gap: 6px 12px;
-  padding: 6px 10px;
-  border-color: color-mix(in oklab, var(--status-amber) 22%, transparent);
-  background: var(--status-amber-soft);
+  @apply min-w-0 shrink-0;
+  container: workbench-git-operation / inline-size;
+  padding: 8px 10px;
+}
+
+.gitOperationBannerCard {
+  @apply grid min-w-0 items-center border;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas:
+    'icon title'
+    '. hint'
+    '. actions';
+  gap: 3px 8px;
+  padding: 8px 10px;
+  border-color: var(--workbench-border);
+  border-radius: var(--ui-radius-control, 8px);
+  background: var(--workbench-toolbar);
   font-size: 12px;
 }
 
-.gitOperationBannerText {
-  @apply flex min-w-0 flex-col;
-  flex: 1 1 200px;
-  gap: 2px;
+/* 还有冲突等着人动手：一层很淡的琥珀色。字仍是正文的颜色，只有图标带色。 */
+.gitOperationBanner[data-conflicts='true'] .gitOperationBannerCard {
+  border-color: color-mix(in oklab, var(--status-amber) 28%, var(--workbench-border));
+  background: color-mix(in oklab, var(--status-amber) 6%, var(--workbench-surface));
+}
+
+.gitOperationBannerIcon {
+  grid-area: icon;
+  color: var(--status-green);
+}
+
+.gitOperationBanner[data-conflicts='true'] .gitOperationBannerIcon {
+  color: var(--status-amber);
 }
 
 .gitOperationBannerTitle {
-  @apply flex min-w-0 items-center;
-  gap: 6px;
+  @apply flex min-w-0 items-baseline;
+  grid-area: title;
+  gap: 8px;
   color: var(--workbench-text);
-}
-
-.gitOperationBannerTitle > svg {
-  @apply shrink-0;
-  color: var(--status-amber);
+  line-height: 18px;
 }
 
 .gitOperationBannerTitle > strong {
@@ -965,18 +984,84 @@
 }
 
 .gitOperationBannerHint {
-  @apply text-muted-foreground;
+  @apply min-w-0 text-muted-foreground;
+  grid-area: hint;
   font-size: 11px;
-  line-height: 1.35;
-}
-
-.gitOperationBanner[data-conflicts='true'] .gitOperationBannerHint {
-  color: var(--status-amber);
+  line-height: 16px;
+  text-wrap: pretty;
 }
 
 .gitOperationBannerActions {
-  @apply flex shrink-0 flex-wrap items-center;
+  @apply flex min-w-0 flex-wrap items-center;
+  grid-area: actions;
   gap: 6px;
+  margin-top: 5px;
+}
+
+.gitOperationBannerButton {
+  @apply inline-flex shrink-0 items-center justify-center border;
+  gap: 4px;
+  height: 24px;
+  padding-inline: 10px;
+  border-color: var(--border-strong, var(--workbench-border));
+  border-radius: var(--ui-radius-control-sm, 6px);
+  background: var(--workbench-surface);
+  color: var(--workbench-text);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.gitOperationBannerButton:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--foreground) 5%, var(--workbench-surface));
+}
+
+.gitOperationBannerButton:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+
+.gitOperationBannerButton:disabled {
+  border-color: var(--workbench-border);
+  background: transparent;
+  color: color-mix(in oklab, var(--muted-foreground) 70%, transparent);
+  cursor: default;
+}
+
+.gitOperationBannerButton[data-variant='primary']:not(:disabled) {
+  border-color: transparent;
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+
+.gitOperationBannerButton[data-variant='primary']:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--primary) 88%, var(--workbench-surface));
+}
+
+.gitOperationBannerButton[data-variant='danger']:not(:disabled) {
+  color: var(--status-red);
+}
+
+.gitOperationBannerButton[data-variant='danger']:hover:not(:disabled) {
+  border-color: color-mix(in oklab, var(--status-red) 32%, var(--workbench-border));
+  background: color-mix(in oklab, var(--status-red) 7%, var(--workbench-surface));
+}
+
+@container workbench-git-operation (min-width: 640px) {
+  .gitOperationBannerCard {
+    grid-template-columns: auto fit-content(42%) minmax(0, 1fr) auto;
+    grid-template-areas: 'icon title hint actions';
+    column-gap: 10px;
+    padding-block: 6px;
+    padding-right: 6px;
+  }
+
+  .gitOperationBannerActions {
+    @apply flex-nowrap;
+    margin-top: 0;
+    margin-left: 6px;
+  }
 }
 
 .gitStashDialogForm {
