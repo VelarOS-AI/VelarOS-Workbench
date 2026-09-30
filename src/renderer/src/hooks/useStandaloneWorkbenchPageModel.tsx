@@ -433,15 +433,17 @@ export function useStandaloneWorkbenchPageModel(
   }, [editorGroupCount, editorLayoutLatest])
 
   /**
-   * 把标签挪到另一组并切过去（标签右键「拆分并右移」/「移到另一侧」、拖到另一组的标签栏上）：右边那组
-   * 还不存在就新开出来；键盘焦点跟着标签走。
+   * 把标签挪到另一组并切过去（标签右键「拆分并右移」/「移到另一侧」、拖到另一组上）：右边那组还不存在就
+   * 新开出来；键盘焦点跟着标签走。落在左边那组时，盖在那组编辑器上的 Git 对比、只读预览让开——挪过去的
+   * 标签就在眼前，与在那一组里打开文件一样。
    */
   const moveEditorTabToGroup = useMemoizedFn(
     (path: string, groupIndex: number, beforePath?: Nullable<string>): void => {
       const layout = workbench.moveOpenFileToGroup(path, groupIndex, beforePath)
       const landedIndex = findWorkbenchEditorGroupIndex(layout, path)
-      if (landedIndex >= 0)
-        setEditorGroupFocusRequest((request) => ({ id: request.id + 1, groupIndex: landedIndex }))
+      if (landedIndex < 0) return
+      if (landedIndex === 0) editorNavigation.uncoverPrimaryGroup()
+      setEditorGroupFocusRequest((request) => ({ id: request.id + 1, groupIndex: landedIndex }))
     }
   )
   // Agent 浏览器：当前会话的浏览器进了站点就在编辑区开出（切到）它的标签，离站或换会话就收起。

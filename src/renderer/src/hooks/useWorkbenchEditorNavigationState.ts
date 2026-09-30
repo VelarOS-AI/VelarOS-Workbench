@@ -141,17 +141,20 @@ export function useWorkbenchEditorNavigationState({
     })
   }, [cursorPositionLatest, focusedGroupIndexLatest, selectedFilePathLatest])
 
-  /**
-   * 要在编辑区里显示一个文件了：它落在左边那组时，把盖在那组编辑器上的 Git 对比、只读预览收掉、网页调试
-   * 标签放到后面。落在右边那组时不动它们——那些标签只在左边那组里。
-   */
-  function revealFileGroup(path: string, groupIndex?: number): void {
-    if ((resolveFileGroupIndexLatest.current?.(path, groupIndex) ?? 0) !== 0) return
-
+  /** 左边那组要显示文件了：把盖在那组编辑器上的 Git 对比、只读预览收掉，网页调试标签放到后面。 */
+  const uncoverPrimaryGroup = useCallback((): void => {
     setDiffItem(null)
     setDiffFocusFirstChangeRequestId(0)
     setLightTab(null)
     setActiveDebugTabId(null)
+  }, [])
+
+  /**
+   * 要在编辑区里显示一个文件了：它落在左边那组时，把盖在那组编辑器上的标签让开。落在右边那组时不动它们——
+   * 那些标签只在左边那组里。
+   */
+  function revealFileGroup(path: string, groupIndex?: number): void {
+    if ((resolveFileGroupIndexLatest.current?.(path, groupIndex) ?? 0) === 0) uncoverPrimaryGroup()
   }
 
   async function selectFile(path: string, intent?: WorkbenchEditorOpenTabRequest): Promise<void> {
@@ -387,5 +390,7 @@ export function useWorkbenchEditorNavigationState({
       setDiffFocusFirstChangeRequestId(0)
     },
     closeLightTab: () => setLightTab(null),
+    /** 左边那组要显示文件了（标签从右边那组挪了过来）：把盖在那组编辑器上的标签让开。 */
+    uncoverPrimaryGroup,
   }
 }

@@ -34,6 +34,7 @@ import {
   canDropWorkbenchEditorTabOn,
   endWorkbenchEditorTabDrag,
   readWorkbenchEditorTabDrag,
+  WorkbenchEditorTabDragType,
 } from '@renderer/models/editor/workbenchEditorTabDrag'
 import { buildWorkbenchEditorTabLabels } from '@renderer/models/editor/workbenchEditorTabLabels'
 import { isDirtyTab } from '@renderer/models/editor/workbenchEditorTabs'
@@ -85,9 +86,6 @@ export interface WorkbenchEditorAuxiliaryTabItem {
   onSelect: () => void
   onClose?: () => void
 }
-
-/** 拖的是编辑器标签时拖放数据里带的类型：别的拖放（文件树里的文件、文字）标签栏不接。 */
-const EditorTabDragType = 'application/x-velaros-workbench-editor-tab'
 
 interface EditorTabBarProps {
   /** 这条标签栏上的标签（编辑区并排两组时是这一组的）。 */
@@ -283,13 +281,13 @@ export function EditorTabBar({
     setDraggingTabPath(path)
     beginWorkbenchEditorTabDrag({ path, groupIndex, pinned: isPinnedTabPath(path) })
     event.dataTransfer.effectAllowed = 'move'
-    event.dataTransfer.setData(EditorTabDragType, path)
+    event.dataTransfer.setData(WorkbenchEditorTabDragType, path)
     event.dataTransfer.setData('text/plain', path)
   }
 
   /** 正在进行的这次拖放拖的是哪个编辑器标签；拖的是别的东西（文件树里的文件、文字）为 null。 */
   function readTabDrag(event: DragEvent<HTMLElement>): ReturnType<typeof readWorkbenchEditorTabDrag> {
-    return event.dataTransfer.types.includes(EditorTabDragType) ? readWorkbenchEditorTabDrag() : null
+    return readWorkbenchEditorTabDrag(event.dataTransfer.types)
   }
 
   /**

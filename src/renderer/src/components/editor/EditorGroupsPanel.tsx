@@ -9,6 +9,7 @@
  *   独占标签组激活时占整个编辑区，右边那组先收起来，离开之后回来。
  */
 import {
+  type DragEvent as ReactDragEvent,
   Fragment,
   type PointerEvent as ReactPointerEvent,
   type ReactElement,
@@ -26,6 +27,12 @@ import {
   DefaultWorkbenchEditorSplitRatio,
   MinWorkbenchEditorGroupShare,
 } from '@renderer/models/editor/workbenchEditorGroups'
+import {
+  canDropWorkbenchEditorTabOnGroup,
+  endWorkbenchEditorTabDrag,
+  readWorkbenchEditorTabDrag,
+  type WorkbenchEditorTabDrag,
+} from '@renderer/models/editor/workbenchEditorTabDrag'
 import type { WorkbenchIndentationRequest } from '@renderer/models/editor/workbenchIndentation'
 import type { WorkbenchGitDecorationMap } from '@renderer/models/git/workbenchGitModel'
 import type { WorkbenchThemeId } from '@renderer/models/settings/workbenchPreferences'
@@ -230,11 +237,59 @@ export function EditorGroupsPanel({
     handle.addEventListener('pointercancel', end)
   }
 
-  // 分隔条拖到一半右边那组没了（它的最后一个标签被关掉）：分隔条连同上面的指针事件一起消失，收尾没机会跑，
-  // 在这里把「正在拖」的标记撤掉——留着的话网页调试的 webview 一直不吃指针。
+  // 另一组拖过来的标签正停在哪一组标签栏以外的地方（编辑器、预览）：那一组亮起来，松手挪进去。
+  const [tabDropGroup, setTabDropGroup] = useState<Nullable<number>>(null)
+
+  // 拖到一半右边那组没了（它的最后一个标签被别处关掉）：分隔条连同上面的指针事件一起消失，收尾没机会跑，
+  // 在这里把「正在拖分隔条」的标记撤掉——留着的话网页调试的 webview 一直不吃指针；标签的落点提示也收起。
   useEffect(() => {
-    if (!isSplit) containerRef.current?.removeAttribute('data-resizing')
+    if (isSplit) return
+    containerRef.current?.removeAttribute('data-resizing')
+    setTabDropGroup(null)
   }, [isSplit])
+
+  /**
+   * 另一组的标签拖到了这一组标签栏以外的地方：拖的是谁；不归这里接的为 null。标签栏上的落点（落在哪个标签
+   * 前面、空白处）由标签栏自己接。
+   */
+  function readTabDragOverGroupBody(
+    index: number,
+    event: ReactDragEvent<HTMLDivElement>
+  ): Nullable<WorkbenchEditorTabDrag> {
+    const drag = readWorkbenchEditorTabDrag(event.dataTransfer.types)
+    if (!canDropWorkbenchEditorTabOnGroup(drag, index)) return null
+    const { target } = event
+    const element = target instanceof Element ? target : target instanceof Node ? target.parentElement : null
+    return element?.closest('[role="tablist"]') ? null : drag
+  }
+
+  // 这两个在捕获阶段接、不再往里传：编辑器收不到这次拖放——否则它会把标签带着的路径当文字插进正文里。
+  function handleGroupDragOver(index: number, event: ReactDragEvent<HTMLDivElement>): void {
+    if (!readTabDragOverGroupBody(index, event)) {
+      if (tabDropGroup === index) setTabDropGroup(null)
+      return
+    }
+    event.preventDefault()
+    event.stopPropagation()
+    event.dataTransfer.dropEffect = 'move'
+    if (tabDropGroup !== index) setTabDropGroup(index)
+  }
+
+  function handleGroupDrop(index: number, event: ReactDragEvent<HTMLDivElement>): void {
+    const drag = readTabDragOverGroupBody(index, event)
+    if (!drag) return
+    event.preventDefault()
+    event.stopPropagation()
+    setTabDropGroup(null)
+    endWorkbenchEditorTabDrag()
+    onMoveTabToGroup(drag.path, index)
+  }
+
+  function handleGroupDragLeave(index: number, event: ReactDragEvent<HTMLDivElement>): void {
+    if (tabDropGroup !== index) return
+    if (event.currentTarget.contains(event.relatedTarget as Nullable<Node>)) return
+    setTabDropGroup(null)
+  }
 
   return (
     <div className={styles.editorGroupsPanel}>
@@ -256,6 +311,7 @@ export function EditorGroupsPanel({
               className={styles.editorGroup}
               data-editor-group={index}
               data-focused={isSplit ? index === focusedGroup : undefined}
+              data-drop-target={tabDropGroup === index ? true : undefined}
               aria-label={
                 isSplit
                   ? t(index === 0 ? 'workbench.editorGroupLeft' : 'workbench.editorGroupRight')
@@ -270,6 +326,9 @@ export function EditorGroupsPanel({
               onMouseDownCapture={() => focusGroup(index)}
               onFocusCapture={() => focusGroup(index)}
               onKeyDownCapture={() => focusGroup(index)}
+              onDragOverCapture={(event) => handleGroupDragOver(index, event)}
+              onDropCapture={(event) => handleGroupDrop(index, event)}
+              onDragLeave={(event) => handleGroupDragLeave(index, event)}
             >
               <EditorPanel
                 chrome={chrome}

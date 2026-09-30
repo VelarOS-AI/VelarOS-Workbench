@@ -29,7 +29,14 @@ import {
   type WorkbenchEditorGroupsLayout,
 } from '../src/renderer/src/models/editor/workbenchEditorGroups'
 import { buildWorkbenchEditorGroupViews } from '../src/renderer/src/models/editor/workbenchEditorGroupViews'
-import { canDropWorkbenchEditorTabOn } from '../src/renderer/src/models/editor/workbenchEditorTabDrag'
+import {
+  beginWorkbenchEditorTabDrag,
+  canDropWorkbenchEditorTabOn,
+  canDropWorkbenchEditorTabOnGroup,
+  endWorkbenchEditorTabDrag,
+  readWorkbenchEditorTabDrag,
+  WorkbenchEditorTabDragType,
+} from '../src/renderer/src/models/editor/workbenchEditorTabDrag'
 import { WorkbenchNavigationHistory } from '../src/renderer/src/models/editor/workbenchNavigationHistory'
 import {
   isWorkbenchPaletteCommandAvailable,
@@ -629,6 +636,29 @@ void describe('two editor groups side by side', () => {
     assert.equal(canDropWorkbenchEditorTabOn(drag, { path: 'e', groupIndex: 1, pinned: false }), true)
   })
 
+  void test('a group takes a tab dropped on its editor only from the other group', () => {
+    const drag = { path: 'b', groupIndex: 0, pinned: false }
+    assert.equal(canDropWorkbenchEditorTabOnGroup(drag, 1), true)
+    // 自己这一组的标签不接：在一组里换位置只在标签栏上做。
+    assert.equal(canDropWorkbenchEditorTabOnGroup(drag, 0), false)
+    assert.equal(canDropWorkbenchEditorTabOnGroup(null, 1), false)
+  })
+
+  void test('only a drag that carries the editor tab type is read as a tab drag', () => {
+    const drag = { path: 'b', groupIndex: 0, pinned: false }
+    beginWorkbenchEditorTabDrag(drag)
+    try {
+      assert.deepEqual(readWorkbenchEditorTabDrag([WorkbenchEditorTabDragType, 'text/plain']), drag)
+      // 文件树里的文件、选中的文字：带的不是标签的类型，标签栏与各组都不接。
+      assert.equal(readWorkbenchEditorTabDrag(['text/plain']), null)
+      assert.equal(readWorkbenchEditorTabDrag(['Files']), null)
+    } finally {
+      endWorkbenchEditorTabDrag()
+    }
+    // 拖放结束之后不再认：上一次拖的标签不会被下一次别的拖放带出来。
+    assert.equal(readWorkbenchEditorTabDrag([WorkbenchEditorTabDragType]), null)
+  })
+
   void test('each group is rendered from its own tabs and its own current file', () => {
     const layout = pin(toRight(open(empty, 'a', 'b', 'c'), 'c'), 'a')
     const tabsByPath = new Map([
@@ -904,7 +934,24 @@ void describe('split editor wiring', () => {
       /if \(drag\.groupIndex === groupIndex\) onReorderOpenTabs\(drag\.path, path\)\s*else onMoveTabToGroup\?\.\(drag\.path, groupIndex, path\)/u
     )
     assert.match(tabBar, /onMoveTabToGroup\(drag\.path, groupIndex, null\)/u)
-    assert.match(tabBar, /event\.dataTransfer\.types\.includes\(EditorTabDragType\)/u)
+    // 只认带着标签类型的拖放：文件树里的文件、文字拖过来不接。
+    assert.match(tabBar, /return readWorkbenchEditorTabDrag\(event\.dataTransfer\.types\)/u)
+    assert.match(tabBar, /event\.dataTransfer\.setData\(WorkbenchEditorTabDragType, path\)/u)
+    // 落在另一组标签栏以外的地方（编辑器上）：那一组在捕获阶段接下来、挪进去，编辑器收不到这次拖放
+    // （否则会把标签带着的路径当文字插进正文）。标签栏上的落点还是标签栏自己接。
+    assert.match(
+      groupsPanel,
+      /if \(!canDropWorkbenchEditorTabOnGroup\(drag, index\)\) return null/u
+    )
+    assert.match(groupsPanel, /return element\?\.closest\('\[role="tablist"\]'\) \? null : drag/u)
+    assert.match(groupsPanel, /onDragOverCapture=\{\(event\) => handleGroupDragOver\(index, event\)\}/u)
+    assert.match(groupsPanel, /onDropCapture=\{\(event\) => handleGroupDrop\(index, event\)\}/u)
+    assert.match(
+      groupsPanel,
+      /event\.preventDefault\(\)\s*event\.stopPropagation\(\)\s*setTabDropGroup\(null\)\s*endWorkbenchEditorTabDrag\(\)\s*onMoveTabToGroup\(drag\.path, index\)/u
+    )
+    // 挪进左边那组：盖在那组编辑器上的 Git 对比、只读预览让开，挪过去的标签就在眼前。
+    assert.match(pageModel, /if \(landedIndex === 0\) editorNavigation\.uncoverPrimaryGroup\(\)/u)
   })
 })
 

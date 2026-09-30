@@ -692,6 +692,18 @@
   pointer-events: none;
 }
 
+/* 另一组拖过来的标签停在这一组的编辑器上：整组亮起来，松手把标签挪进这一组（加到末尾）。 */
+.editorGroup[data-drop-target='true']::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  /* 盖在编辑器自己的层（光标 150、粘住的行号栏 200）上面。 */
+  z-index: 250;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--workbench-tab-accent-line) 10%, transparent);
+  box-shadow: inset 0 0 0 2px var(--workbench-tab-accent-line);
+}
+
 /* 并排两组时，不是当前组的那一组：当前标签下面的线淡下去，看得出保存、查找这些动作落在哪一组。 */
 .editorGroup[data-focused='false'] .editorTab[data-active='true']::after {
   background: color-mix(in srgb, var(--workbench-tab-accent-line) 35%, transparent);

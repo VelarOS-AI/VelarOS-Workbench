@@ -11,18 +11,38 @@ export interface WorkbenchEditorTabDrag {
   pinned: boolean
 }
 
+/** 拖的是编辑器标签时拖放数据里带的类型：别的拖放（文件树里的文件、文字）标签栏与编辑区的各组不接。 */
+export const WorkbenchEditorTabDragType = 'application/x-velaros-workbench-editor-tab'
+
 let activeTabDrag: Nullable<WorkbenchEditorTabDrag> = null
 
 export function beginWorkbenchEditorTabDrag(drag: WorkbenchEditorTabDrag): void {
   activeTabDrag = drag
 }
 
-export function readWorkbenchEditorTabDrag(): Nullable<WorkbenchEditorTabDrag> {
-  return activeTabDrag
+/**
+ * 正在进行的这次拖放拖的是哪个编辑器标签。`types` 是拖放数据里带的类型（dragover 时只读得到类型）：拖的是
+ * 别的东西（文件树里的文件、文字）为 null。
+ */
+export function readWorkbenchEditorTabDrag(
+  types: readonly string[]
+): Nullable<WorkbenchEditorTabDrag> {
+  return types.includes(WorkbenchEditorTabDragType) ? activeTabDrag : null
 }
 
 export function endWorkbenchEditorTabDrag(): void {
   activeTabDrag = null
+}
+
+/**
+ * 另一组拖过来的标签能不能落在这一组标签栏以外的地方（编辑器、预览）：松手挪进这一组、加到末尾。同一组的
+ * 标签不接——在自己这一组里换位置只在标签栏上做。
+ */
+export function canDropWorkbenchEditorTabOnGroup(
+  drag: Nullable<WorkbenchEditorTabDrag>,
+  groupIndex: number
+): boolean {
+  return !!drag && drag.groupIndex !== groupIndex
 }
 
 /**
