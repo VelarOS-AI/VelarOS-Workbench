@@ -4,6 +4,7 @@
  * `commandPalette`），此刻跑不了的（没打开文件时的保存、格式化……）不列出来。
  */
 import { workbenchTerminalSplitShortcut } from '../commands/workbenchTerminalSplits'
+import type { WorkbenchEditorActionId } from '../editor/workbenchEditorActions'
 import { scoreWorkbenchFuzzy } from '../shared/workbenchFuzzyScore'
 
 import {
@@ -37,6 +38,8 @@ export type WorkbenchPaletteCommandId =
   | 'reopen-closed-tab'
   | 'reveal-active-file'
   | 'run-last-command'
+  | 'run-test-at-cursor'
+  | 'run-test-file'
   | 'save-all'
   | 'save-current'
   | 'split-editor-right'
@@ -162,6 +165,9 @@ export const WORKBENCH_PALETTE_COMMANDS: readonly WorkbenchPaletteCommandDefinit
   },
   // ▶ 菜单里的「编辑运行配置…」：用户自己建的运行配置（名称、命令、工作目录、环境变量）。
   { id: 'edit-run-configurations', labelKey: 'workbench.commandEditRunConfigurations' },
+  // 测试文件里行号旁的 ▶：光标所在的那个测试（或那一组），以及整个文件。
+  { id: 'run-test-at-cursor', labelKey: 'workbench.commandRunTestAtCursor' },
+  { id: 'run-test-file', labelKey: 'workbench.commandRunTestFile' },
   // 应用菜单「视图」里的放大、缩小、重置编辑器。
   { id: 'zoom-in', labelKey: 'workbench.commandZoomIn', shortcut: { fixed: 'Mod++' } },
   { id: 'zoom-out', labelKey: 'workbench.commandZoomOut', shortcut: { fixed: 'Mod+-' } },
@@ -189,6 +195,8 @@ export interface WorkbenchPaletteCommandContext {
   editorGroupCount: number
   /** 当前文件归哪种语言服务照看（决定有没有快速修复这类代码动作）；没有语言服务为 null。 */
   activeFileLanguageService: Nullable<WorkbenchPaletteLanguageService>
+  /** 当前文件的编辑器此刻做得了的动作（它是测试文件、认出了运行器，才有「运行测试」）。 */
+  editorActions: readonly WorkbenchEditorActionId[]
 }
 
 /** 内置的 TypeScript / JavaScript 服务，或项目自己的外部语言服务器。 */
@@ -244,6 +252,9 @@ export function isWorkbenchPaletteCommandAvailable(
     case 'focus-left-editor-group':
     case 'focus-right-editor-group':
       return context.editorGroupCount > 1
+    case 'run-test-at-cursor':
+    case 'run-test-file':
+      return textEditorInFront && context.editorActions.includes(id)
     default:
       return true
   }

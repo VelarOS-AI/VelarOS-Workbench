@@ -1704,6 +1704,36 @@
   border-left: calc(var(--workbench-editor-font-size) * 0.64) solid currentColor;
 }
 
+/*
+ * 测试的 ▶：跑过之后换成上一次的结果（✓ 通过、✕ 没通过），正在跑的 ▶ 一明一暗。点它总是再跑一次。
+ */
+.codeMirrorEditor :global(.cm-workbenchTestResultIcon) {
+  font-family: var(--font-sans, system-ui, sans-serif);
+  font-size: calc(var(--workbench-editor-font-size) * 0.92);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.codeMirrorEditor :global(.cm-workbenchTestRunButton[data-test-status='failed']) {
+  color: var(--status-red);
+}
+
+.codeMirrorEditor :global(.cm-workbenchTestRunButton[data-test-status='failed']:hover),
+.codeMirrorEditor :global(.cm-workbenchTestRunButton[data-test-status='failed']:focus-visible) {
+  background: var(--status-red-soft);
+  color: var(--status-red);
+}
+
+.codeMirrorEditor :global(.cm-workbenchTestRunButton[data-test-status='running']) {
+  animation: workbenchTestRunning 1.1s ease-in-out infinite;
+}
+
+@keyframes workbenchTestRunning {
+  50% {
+    opacity: 0.35;
+  }
+}
+
 .codeMirrorEditor :global(.cm-lineNumbers .cm-gutterElement) {
   position: relative;
   min-width: calc(var(--workbench-editor-font-size) * 2.88);

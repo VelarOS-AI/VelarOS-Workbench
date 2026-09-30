@@ -58,6 +58,7 @@ const FileInFront: WorkbenchPaletteCommandContext = {
   editorCovered: false,
   openTabCount: 2,
   activeFileLanguageService: 'typescript',
+  editorActions: [],
 }
 
 void describe('Workbench command palette registry', () => {
@@ -285,6 +286,19 @@ void describe('Workbench command palette availability', () => {
       assert.equal(isWorkbenchPaletteCommandAvailable('call-hierarchy', context), false)
   })
 
+  void test('test commands appear when the editor in front can run tests', () => {
+    const testFile: WorkbenchPaletteCommandContext = {
+      ...FileInFront,
+      editorActions: ['run-test-at-cursor', 'run-test-file'],
+    }
+    for (const id of ['run-test-at-cursor', 'run-test-file'] as const) {
+      assert.equal(isWorkbenchPaletteCommandAvailable(id, testFile), true, id)
+      // 不是测试文件、没认出运行器：编辑器没登记这个动作。
+      assert.equal(isWorkbenchPaletteCommandAvailable(id, FileInFront), false, id)
+      assert.equal(isWorkbenchPaletteCommandAvailable(id, { ...testFile, editorCovered: true }), false, id)
+    }
+  })
+
   void test('go to line brings a covered text file back, but needs one', () => {
     assert.equal(isWorkbenchPaletteCommandAvailable('go-to-line', { ...FileInFront, editorCovered: true }), true)
     assert.equal(isWorkbenchPaletteCommandAvailable('go-to-line', { ...FileInFront, activeFileIsText: false }), false)
@@ -305,6 +319,7 @@ void describe('Workbench command palette availability', () => {
       editorCovered: false,
       openTabCount: 0,
       activeFileLanguageService: null,
+      editorActions: [],
     }
     for (const id of ['save-current', 'save-all', 'close-editor', 'close-all-editors', 'reveal-active-file'] as const)
       assert.equal(isWorkbenchPaletteCommandAvailable(id, empty), false, id)

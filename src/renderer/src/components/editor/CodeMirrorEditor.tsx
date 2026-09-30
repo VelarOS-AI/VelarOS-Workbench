@@ -270,6 +270,7 @@ import type {
   WorkbenchLanguageServiceLocation,
 } from '@shared/contracts'
 
+import { useWorkbenchEditorRunDebugExtension } from '../../hooks/useWorkbenchEditorRunDebug'
 import type { WorkbenchEditorGitBlame } from '../../hooks/useWorkbenchGitBlame'
 import type { WorkbenchGitHeadContent } from '../../hooks/useWorkbenchGitHeadContent'
 import styles from '../../styles/workbenchPageStyles'
@@ -1277,6 +1278,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
     const packageScriptRunCompartment = useMemo(() => new Compartment(), [])
     const velarMainRunCompartment = useMemo(() => new Compartment(), [])
     const velarTestRunCompartment = useMemo(() => new Compartment(), [])
+    const runDebugCompartment = useMemo(() => new Compartment(), [])
     const autocompleteThemeCompartment = useMemo(() => new Compartment(), [])
     const languageHoverCompartment = useMemo(() => new Compartment(), [])
     const languageServiceCompartment = useMemo(() => new Compartment(), [])
@@ -1381,6 +1383,14 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         }),
       [disabled, onRunPackageScript, packageManager, path, velarTestRunContent]
     )
+    // JS / TS 测试文件的 ▶（认运行器、拼命令、记结果都在这个 hook 里）。
+    const runDebugExtension = useWorkbenchEditorRunDebugExtension({
+      projectRoot,
+      path,
+      disabled: disabled || !onRunPackageScript,
+      externalRevision,
+      hostRuntime,
+    })
     const diagnosticForegroundExtension = useMemo(
       () => createWorkbenchDiagnosticForegroundExtension(),
       []
@@ -2340,6 +2350,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       packageScriptRun: packageScriptRunExtension,
       velarMainRun: velarMainRunExtension,
       velarTestRun: velarTestRunExtension,
+      runDebug: runDebugExtension,
       basicLanguage: basicLanguageExtension,
       readOnly: readOnlyExtension,
       completion: completionExtension,
@@ -2718,6 +2729,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         packageScriptRunCompartment.of(current.packageScriptRun),
         velarMainRunCompartment.of(current.velarMainRun),
         velarTestRunCompartment.of(current.velarTestRun),
+        runDebugCompartment.of(current.runDebug),
         instance.updateListener,
         languageCompartment.of(current.basicLanguage),
         readOnlyCompartment.of(current.readOnly),
@@ -2740,6 +2752,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         [packageScriptRunCompartment, current.packageScriptRun],
         [velarMainRunCompartment, current.velarMainRun],
         [velarTestRunCompartment, current.velarTestRun],
+        [runDebugCompartment, current.runDebug],
         [readOnlyCompartment, current.readOnly],
         [completionCompartment, current.completion],
         [lintCompartment, current.lint],
@@ -3159,6 +3172,10 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
     useEffect(() => {
       reconfigureCompartment(viewRef.current, velarTestRunCompartment, velarTestRunExtension)
     }, [velarTestRunCompartment, velarTestRunExtension])
+
+    useEffect(() => {
+      reconfigureCompartment(viewRef.current, runDebugCompartment, runDebugExtension)
+    }, [runDebugCompartment, runDebugExtension])
 
     useEffect(() => {
       reconfigureCompartment(viewRef.current, syntaxThemeCompartment, syntaxThemeExtension)

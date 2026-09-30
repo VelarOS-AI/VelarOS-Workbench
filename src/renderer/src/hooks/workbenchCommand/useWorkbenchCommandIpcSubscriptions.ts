@@ -7,6 +7,7 @@ import {
   type WorkbenchRunOutputLine,
   type WorkbenchTerminalSessionView,
 } from '../../models/commands/workbenchCommandLines'
+import { publishWorkbenchRunSessionExit } from '../../models/commands/workbenchRunSessionBridge'
 import {
   publishWorkbenchTerminalOutput,
   setWorkbenchTerminalOutputAcknowledger,
@@ -63,6 +64,12 @@ export function useWorkbenchCommandIpcSubscriptions(
     const unsubscribe = hostRuntime.kernel.project.onWorkbenchTerminalOutput((event) => {
       publishWorkbenchTerminalOutput(event.sessionId, event.chunk)
       if (!event.closed) return
+      // 会话是怎么结束的报出去：从编辑器里起的测试据此标通过 / 没通过。被信号结束的（停止、关卡）没有结论。
+      publishWorkbenchRunSessionExit({
+        sessionId: event.sessionId,
+        exitCode: event.exitCode ?? null,
+        interrupted: !!event.signal && event.signal !== '0',
+      })
       // 在终端里敲 exit（shell 正常退出，焦点就在这个终端里）：终端跟着关掉。其余的留着，能看到它是怎么结束的。
       if (
         event.exitCode === 0 &&

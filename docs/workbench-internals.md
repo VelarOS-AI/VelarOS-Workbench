@@ -582,6 +582,36 @@ Node 的 OOM 处理直接 `abort()` 主进程。实测 VelarOS-Platform：每个
 - **界面**：▶ 菜单里点一行让 ▶ 指着它，行尾的小 ▶ 直接跑；「编辑运行配置…」（命令面板里也有）打开
   `WorkbenchRunConfigurationsDialog`，改动留在对话框的草稿里，点保存才整份写回。对话框按需加载，不进外壳包。
 
+### 从编辑器运行测试（Vitest / Jest）
+
+JS / TS 的测试文件（`*.test.*`、`*.spec.*`、`__tests__/` 里的）在行号旁多一栏 ▶：第一行的跑整个文件，每个
+`describe` / `it` / `test` 旁边的只跑它自己；跑完标记换成上一次的结果（✓ / ✕）。命令面板里有「运行光标处的测试」
+「运行当前文件的测试」。
+
+- **认运行器**（`workbenchTestRunner.ts`）：从测试文件所在的目录往上到项目根，一层问一次文件系统（`package.json`、
+  `vitest.config.*` / `vitest.workspace.*` / `jest.config.*`、各包管理器的锁文件）。第一个有依据的目录定下运行器
+  和工作目录：配置文件或 `package.json` 的 `jest` 段 > 依赖（`vitest`；`jest`、`jest-cli`、`@jest/core`、`ts-jest`、
+  `babel-jest`）> 脚本里提到。两个都有依据时，看测试文件自己引的是 `vitest` 还是 `@jest/globals`，再看谁的依据
+  硬，一样硬选 Vitest。包管理器取一路上最先说清楚的（`packageManager` 字段，其次锁文件），没人说就是 npm。
+  只读文件，不执行项目里的代码；结果按「项目根 + 目录」缓存，工作区在编辑器之外变了（`externalRevision`）重认。
+- **找测试块**（`workbenchTestBlocks.ts`）：遍历编辑器已有的语法树里可见区那一段的 `CallExpression`，认
+  `describe` / `suite` / `it` / `test`（及 `fdescribe`、`xit` 这些别名）和 `.only` / `.skip` / `.each(表)` /
+  `.skipIf(条件)` 等写法；`test.extend({…})` 这类不是声明测试的不认。语法树还没到（刚打开文件先用基础着色）时
+  没有标记，解析到了自动补上。
+- **全名正则**：`-t` 的参数是「外层 describe + 自己」的全名。Jest 和老版本 Vitest 用空格连接各级名字，新版本
+  Vitest 用 ` > `，所以各级之间写成 ` (?:> )?`，一条正则两边都能用。测试以 `$` 收尾；`describe` 只匹配开头并跟
+  一个空格。模板字符串里的 `${…}`、`each` / `for` 标题里的 `%s`、`$name` 换成 `.*`；标题不是字面量的整段是 `.*`。
+- **命令**：Vitest `<exec> vitest run <文件> -t '<正则>'`，Jest `<exec> jest --runTestsByPath <文件> -t '<正则>'`；
+  `<exec>` 是 `npx --no-install` / `pnpm exec` / `yarn run` / `bunx --no-install`。在认出运行器的那个目录里跑
+  （运行卡的 `cwd`），文件路径相对它。参数在 POSIX shell 下用单引号，Windows 的 cmd 下用双引号并把 `"`、`%` 换成
+  `.`（对正则而言就是任意字符）。
+- **结果**（`workbenchTestRunResults.ts`）：只看运行卡的退出码，0 是通过。终端事件那一层把每个会话的收口报到
+  `workbenchRunSessionBridge`，被信号结束的（停止、关卡）没有结论，标记回到 ▶；卡被重启时改跟新会话。结果只在
+  这次打开应用期间留着。
+- **跟编辑器的接线**：编辑器组件只多一个 compartment，挂 `useWorkbenchEditorRunDebugExtension` 给的扩展。起运行卡
+  经 `workbenchRunSessionBridge`（页面装上「先存盘再起卡」），命令面板经 `workbenchEditorActions`（编辑器挂着时
+  登记它做得了的动作）。这两个小模块在外壳包里，其余都跟着编辑器按需加载。
+
 ## 生产启动与体积预算
 
 生产构建的 main 与 renderer 都开启压缩（electron-vite 给 renderer 的默认值是不压，要在配置里自己打开；

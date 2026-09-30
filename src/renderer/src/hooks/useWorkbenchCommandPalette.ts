@@ -1,3 +1,5 @@
+import { useSyncExternalStore } from 'react'
+
 import { isEmpty, Log } from '@velaros-ai/core'
 import { Result } from '@velaros-ai/core/result'
 
@@ -5,6 +7,12 @@ import {
   buildWorkbenchLanguageServiceRequestBase,
   resolveWorkbenchBuiltinLanguageServiceRuntime,
 } from '../models/editor/workbenchCodeMirrorLanguageService'
+import {
+  getWorkbenchEditorActionsSnapshot,
+  runWorkbenchEditorAction,
+  subscribeWorkbenchEditorActions,
+  type WorkbenchEditorActionId,
+} from '../models/editor/workbenchEditorActions'
 import type { WorkbenchEditorCommandId } from '../models/editor/workbenchEditorCommands'
 import { canEditWorkbenchFileContent } from '../models/editor/workbenchEditorEditMode'
 import { moveWorkbenchEditorTabToGroup } from '../models/editor/workbenchEditorGroups'
@@ -136,6 +144,11 @@ export function useWorkbenchCommandPalette({
     content: workbench.editorContent,
   })
   const { selectedFile } = workbench
+  // 编辑器此刻做得了的动作（按需加载的编辑器自己登记，见 workbenchEditorActions）。
+  const editorActions = useSyncExternalStore(
+    subscribeWorkbenchEditorActions,
+    getWorkbenchEditorActionsSnapshot
+  )
   const context: WorkbenchPaletteCommandContext = {
     hasActiveFile: !!workbench.selectedFilePath,
     activeFileIsText: !selectedFile?.imagePreview,
@@ -149,6 +162,7 @@ export function useWorkbenchCommandPalette({
         workbench.editorLayout,
     editorGroupCount: workbench.editorLayout.groups.length,
     activeFileLanguageService: resolveActiveFileLanguageService(workbench.selectedFilePath),
+    editorActions: editorActions ? (editorActions.split(' ') as WorkbenchEditorActionId[]) : [],
   }
 
   /**
@@ -325,6 +339,11 @@ export function useWorkbenchCommandPalette({
       }
       case 'edit-run-configurations': {
         editRunConfigurations()
+        return
+      }
+      case 'run-test-at-cursor':
+      case 'run-test-file': {
+        runWorkbenchEditorAction(id)
         return
       }
       case 'zoom-in': {

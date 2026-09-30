@@ -29,6 +29,7 @@ import { resolveWorkbenchChatWorkspacePath } from '@renderer/models/chat/workben
 import { getWorkbenchCommandStatusLabel } from '@renderer/models/commands/workbenchCommandStatusModel'
 import { inferPackageManagerCommand } from '@renderer/models/commands/workbenchCommandSuggestions'
 import { inferWorkbenchPackageManagerForPackageJsonPath } from '@renderer/models/commands/workbenchPackageScriptCommand'
+import { installWorkbenchRunSessionLauncher } from '@renderer/models/commands/workbenchRunSessionBridge'
 import {
   findWorkbenchEditorGroupIndex,
   resolveWorkbenchEditorTabGroupIndex,
@@ -365,6 +366,17 @@ export function useStandaloneWorkbenchPageModel(
     onSelectConfiguration: projectRunSettings.setConfigurationId,
     onEditConfigurations: () => setRunConfigurationsOpen(true),
   })
+  // 编辑区里起的运行（测试的 ▶）：先把没存的改动存盘——运行器读的是磁盘上的文件——再起运行卡。
+  const launchRunSessionFromEditor = useMemoizedFn(
+    async (...launch: Parameters<typeof workbench.launchRunSession>): Promise<Nullable<string>> => {
+      await workbench.saveAllOpenFiles()
+      return workbench.launchRunSession(...launch)
+    }
+  )
+  useEffect(() => {
+    installWorkbenchRunSessionLauncher(launchRunSessionFromEditor)
+    return () => installWorkbenchRunSessionLauncher(null)
+  }, [launchRunSessionFromEditor])
   const runSessionIds = workbench.runSessions.map((session) => session.id).join('\0')
   const knownRunSessionIdsRef = useRef(new Set<string>())
 

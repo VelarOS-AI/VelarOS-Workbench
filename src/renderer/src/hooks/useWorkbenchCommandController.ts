@@ -16,6 +16,7 @@ import {
 } from '@renderer/models/commands/workbenchCommandLines'
 import type { WorkbenchCommandSuggestion } from '@renderer/models/commands/workbenchCommandSuggestions'
 import { buildWorkbenchRunConfigurations } from '@renderer/models/commands/workbenchRunConfigurations'
+import { publishWorkbenchRunSessionRestart } from '@renderer/models/commands/workbenchRunSessionBridge'
 import { discardWorkbenchTerminalOutput } from '@renderer/models/commands/workbenchTerminalOutputBus'
 import { buildWorkbenchTerminalSessionTitle } from '@renderer/models/commands/workbenchTerminalPresentation'
 import {
@@ -481,6 +482,7 @@ export function useWorkbenchCommandController({
       // 就地替换该卡（保持标签位置），旧 sessionId 的收口事件因 id 已不在集合而自然忽略。
       setRunSessions((current) => current.map((item) => (item.id === sessionId ? fresh : item)))
       setActiveRunSessionId(result.sessionId)
+      publishWorkbenchRunSessionRestart(sessionId, result.sessionId)
     } catch (error) {
       const appError = AppError.from(error)
       messageLatest.current.error({
