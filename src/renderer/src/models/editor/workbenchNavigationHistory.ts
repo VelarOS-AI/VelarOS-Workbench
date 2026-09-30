@@ -1,8 +1,10 @@
-/** 导航历史里的一个位置：文件和光标。 */
+/** 导航历史里的一个位置：文件和光标，以及当时在编辑区的哪一组（0 左，1 右）。 */
 export interface WorkbenchNavigationPoint {
   path: string
   line: number
   column: number
+  /** 回到这个位置时，文件的标签已经关掉了就在这一组里重新打开。 */
+  group?: number
 }
 
 /** 最多记这么多步，再往前的丢掉。 */

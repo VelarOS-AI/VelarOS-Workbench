@@ -39,6 +39,8 @@ interface CodeInsightPanelProps {
 
 export interface EditorNavigationRequest {
   id: number
+  /** 定位到哪个文件里：编辑区并排两组时，只有正在显示它的那一组执行。 */
+  path?: string
   line: number
   column?: number
   /**

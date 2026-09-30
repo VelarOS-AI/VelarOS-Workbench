@@ -89,10 +89,10 @@ export function useWorkbenchController(options: UseWorkbenchControllerOptions = 
     },
   })
 
+  /** 打开文件并切过去；返回标签的路径（规范化后的），没打开返回 null。 */
   const selectFile = useMemoizedFn(
-    async (path: string, options: WorkbenchSelectFileOptions = {}): Promise<void> => {
-      await editor.selectFile(path, options)
-    }
+    (path: string, options: WorkbenchSelectFileOptions = {}): Promise<Nullable<string>> =>
+      editor.selectFile(path, options)
   )
 
   // 文件视图只有一个当前态：编辑器 selectedFilePath 是文件选择的 owner，文件树只做投影。
@@ -116,7 +116,9 @@ export function useWorkbenchController(options: UseWorkbenchControllerOptions = 
     selectedEntry: tree.selectedEntry,
     selectedEntryPath: tree.selectedEntryPath,
     ensureNoUnsavedFilesInPath: editor.ensureNoUnsavedFilesInPath,
-    selectFile,
+    selectFile: async (path) => {
+      await selectFile(path)
+    },
     moveOpenEntryPath,
     closeOpenEntryPath: editor.closeOpenEntryPath,
     setSelectedEntryPath: tree.setSelectedEntryPath,
@@ -307,6 +309,7 @@ export function useWorkbenchController(options: UseWorkbenchControllerOptions = 
     editorContent: editor.editorContent,
     openTabs: editor.openTabs,
     editorLayout: editor.editorLayout,
+    editorGroups: editor.editorGroups,
     expandedPaths: tree.expandedPaths,
     childrenByPath: tree.childrenByPath,
     pendingTreeAction: mutation.pendingTreeAction,
@@ -388,6 +391,10 @@ export function useWorkbenchController(options: UseWorkbenchControllerOptions = 
     keepOpenFile: editor.keepOpenFile,
     pinOpenFile: editor.pinOpenFile,
     unpinOpenFile: editor.unpinOpenFile,
+    focusEditorGroup: editor.focusEditorGroup,
+    /** 把标签挪到另一组并切过去；右边那组还不存在就新开出来。 */
+    moveOpenFileToGroup: editor.moveOpenFileToGroup,
+    setEditorSplitRatio: editor.setEditorSplitRatio,
     revertOpenFiles: editor.revertOpenFiles,
     beginCreateEntry: mutation.beginCreateEntry,
     beginRenameEntry: mutation.beginRenameEntry,

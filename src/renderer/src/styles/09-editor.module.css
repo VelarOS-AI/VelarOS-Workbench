@@ -667,6 +667,36 @@
   min-width: 0;
 }
 
+/* 编辑区：一组，或左右并排的两组（各自的标签栏与编辑器），中间一条可以拖的分隔条。 */
+.editorGroupsPanel {
+  @apply flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden;
+  background: var(--workbench-surface);
+}
+
+.editorGroups {
+  @apply flex min-h-0 min-w-0 flex-1 flex-row overflow-hidden;
+}
+
+.editorGroup {
+  @apply relative flex min-h-0 min-w-0 flex-col overflow-hidden;
+  flex: 1 1 0;
+}
+
+.editorGroupResizeHandle {
+  flex: none;
+}
+
+/* 拖分隔条期间网页调试的 webview / iframe 不吃指针，拖过去也不断。 */
+.editorGroups[data-resizing='true'] webview,
+.editorGroups[data-resizing='true'] iframe {
+  pointer-events: none;
+}
+
+/* 并排两组时，不是当前组的那一组：当前标签下面的线淡下去，看得出保存、查找这些动作落在哪一组。 */
+.editorGroup[data-focused='false'] .editorTab[data-active='true']::after {
+  background: color-mix(in srgb, var(--workbench-tab-accent-line) 35%, transparent);
+}
+
 .editorTabBar {
   @apply flex shrink-0 items-center gap-1 overflow-hidden border-b;
   min-height: var(--workbench-tab-height);
@@ -684,6 +714,11 @@
 
 .editorTabScroller::-webkit-scrollbar {
   display: none;
+}
+
+/* 另一组拖过来的标签停在这条标签栏的空白处：松手加到这一组的末尾。 */
+.editorTabScroller[data-drop-target='true'] {
+  box-shadow: inset 0 -2px 0 0 var(--workbench-tab-accent-line);
 }
 
 .editorTabActions {

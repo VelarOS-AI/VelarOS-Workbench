@@ -199,7 +199,7 @@ void describe('Workbench editor text format', () => {
     // 手动保存当前文件时带上标签上选过的转换。
     assert.match(
       controller,
-      /const tab = openTabsByPath\.get\(selectedFile\.path\)[\s\S]*?textConversion: tab\?\.textConversion,/u
+      /const saveSelectedFile = [\s\S]*?const tab = targetPath \? openTabsByPath\.get\(targetPath\) : undefined[\s\S]*?textConversion: tab\.textConversion,/u
     )
     // 从磁盘读来的预览标签带着格式保存；本地历史取回的正文先统一成 LF。
     assert.match(pageModel, /encoding: file\.encoding,\n\s*eol: file\.eol,\n\s*textIssue: file\.textIssue,/u)

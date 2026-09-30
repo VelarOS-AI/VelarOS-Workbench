@@ -3,6 +3,7 @@ import { Result } from '@velaros-ai/core/result'
 
 import { buildWorkbenchLanguageServiceRequestBase } from '../models/editor/workbenchCodeMirrorLanguageService'
 import { canEditWorkbenchFileContent } from '../models/editor/workbenchEditorEditMode'
+import { moveWorkbenchEditorTabToGroup } from '../models/editor/workbenchEditorGroups'
 import { toggleWorkbenchGitBlameVisible } from '../models/editor/workbenchGitBlameVisibility'
 import { getWorkbenchLanguageServiceFormat } from '../models/editor/workbenchLanguageServiceIpc'
 import type {
@@ -43,6 +44,7 @@ interface UseWorkbenchCommandPaletteOptions {
     | 'closeAllOpenFiles'
     | 'createTerminalSession'
     | 'editorContent'
+    | 'editorLayout'
     | 'openTabs'
     | 'rerunLastCommand'
     | 'revealEntryPath'
@@ -60,6 +62,10 @@ interface UseWorkbenchCommandPaletteOptions {
   exitCurrentProject: () => Promise<boolean>
   /** 打开侧栏的项目搜索（与 ⇧⌘F 同一个动作）。 */
   findInFiles: () => void
+  /** 把键盘焦点放进编辑区的左边（0）或右边（1）那组（与 ⌘1 / ⌘2 同一个动作）。 */
+  focusEditorGroup: (groupIndex: number) => void
+  /** 把当前标签挪到右边那组（与 ⌘\ 同一个动作）。 */
+  splitEditorRight: () => void
   navigateBack: () => Promise<void>
   navigateForward: () => Promise<void>
   openSettings: () => void
@@ -80,6 +86,8 @@ export function useWorkbenchCommandPalette({
   closeActiveEditor,
   exitCurrentProject,
   findInFiles,
+  focusEditorGroup,
+  splitEditorRight,
   navigateBack,
   navigateForward,
   openSettings,
@@ -100,6 +108,11 @@ export function useWorkbenchCommandPalette({
     canToggleReadOnly: !!selectedFile && canEditWorkbenchFileContent(selectedFile),
     editorCovered,
     openTabCount: workbench.openTabs.length,
+    canSplitEditorRight:
+      !!workbench.selectedFilePath &&
+      moveWorkbenchEditorTabToGroup(workbench.editorLayout, workbench.selectedFilePath, 1) !==
+        workbench.editorLayout,
+    editorGroupCount: workbench.editorLayout.groups.length,
   }
 
   /**
@@ -160,6 +173,18 @@ export function useWorkbenchCommandPalette({
     switch (id) {
       case 'find-in-files': {
         findInFiles()
+        return
+      }
+      case 'split-editor-right': {
+        splitEditorRight()
+        return
+      }
+      case 'focus-left-editor-group': {
+        focusEditorGroup(0)
+        return
+      }
+      case 'focus-right-editor-group': {
+        focusEditorGroup(1)
         return
       }
       case 'navigate-back': {

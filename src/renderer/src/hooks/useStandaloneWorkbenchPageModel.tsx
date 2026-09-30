@@ -28,7 +28,11 @@ import { resolveWorkbenchChatWorkspacePath } from '@renderer/models/chat/workben
 import { getWorkbenchCommandStatusLabel } from '@renderer/models/commands/workbenchCommandStatusModel'
 import { inferPackageManagerCommand } from '@renderer/models/commands/workbenchCommandSuggestions'
 import { inferWorkbenchPackageManagerForPackageJsonPath } from '@renderer/models/commands/workbenchPackageScriptCommand'
-import type { WorkbenchEditorOpenTabIntent } from '@renderer/models/editor/workbenchEditorGroups'
+import {
+  findWorkbenchEditorGroupIndex,
+  resolveWorkbenchEditorTabGroupIndex,
+  type WorkbenchEditorOpenTabIntent,
+} from '@renderer/models/editor/workbenchEditorGroups'
 import { buildWorkbenchPackageScriptRunActions } from '@renderer/models/editor/workbenchPackageScriptRunGutter'
 import { resolveWorkbenchGitSurfacesActive } from '@renderer/models/git/workbenchGitSurfaceActivation'
 import { resolveWorkbenchNavigationSurface } from '@renderer/models/layout/workbenchSurfaceModel'
@@ -384,11 +388,62 @@ export function useStandaloneWorkbenchPageModel(
     surface.openBottomTool,
     workbench.runSessions,
   ])
+  const editorLayoutLatest = useLatest(workbench.editorLayout)
   const editorNavigation = useWorkbenchEditorNavigationState({
     gitChangeItems: gitState.changeItems,
     selectedFilePath: workbench.selectedFilePath,
+    focusedGroupIndex: workbench.editorLayout.focusedGroup,
+    resolveFileGroupIndex: (path, preferredGroupIndex) =>
+      resolveWorkbenchEditorTabGroupIndex(editorLayoutLatest.current, path, preferredGroupIndex),
     onSelectFile: workbench.selectFile,
+    // Git 对比、只读预览、网页调试这些标签只在左边那组里：用户打开或切到它们，全局动作就交给左边那组。
+    onPrimaryGroupTabShown: () => workbench.focusEditorGroup(0),
   })
+  // 要求把键盘焦点放进编辑区某一组的编辑器（⌘1 / ⌘2、把标签挪到另一组之后）：每要求一次 id 加一。
+  const [editorGroupFocusRequest, setEditorGroupFocusRequest] = useState({ id: 0, groupIndex: 0 })
+
+  /**
+   * 把全局动作（保存、查找、跳行、状态栏……）交给编辑区的某一组：点进那一组、焦点落进去，或 ⌘1 / ⌘2。
+   * 先记下现在的位置，后退能回到原来那一组。`takeKeyboardFocus` 时把键盘焦点也放进那一组的编辑器。
+   */
+  const focusEditorGroup = useMemoizedFn(
+    (groupIndex: number, options: { takeKeyboardFocus?: boolean } = {}): void => {
+      const layout = editorLayoutLatest.current
+      if (!layout.groups[groupIndex]) return
+      if (groupIndex !== layout.focusedGroup) {
+        editorNavigation.recordNavigationPoint()
+        workbench.focusEditorGroup(groupIndex)
+      }
+      if (options.takeKeyboardFocus)
+        setEditorGroupFocusRequest((request) => ({ id: request.id + 1, groupIndex }))
+    }
+  )
+
+  // 一组关空、收掉了（关掉了它的最后一个标签）：键盘焦点原来在那一组里的话，交给留下来的那一组。
+  const editorGroupCount = workbench.editorLayout.groups.length
+  const previousEditorGroupCountRef = useRef(editorGroupCount)
+  useEffect(() => {
+    const previousCount = previousEditorGroupCountRef.current
+    previousEditorGroupCountRef.current = editorGroupCount
+    if (editorGroupCount >= previousCount || document.activeElement !== document.body) return
+    setEditorGroupFocusRequest((request) => ({
+      id: request.id + 1,
+      groupIndex: editorLayoutLatest.current.focusedGroup,
+    }))
+  }, [editorGroupCount, editorLayoutLatest])
+
+  /**
+   * 把标签挪到另一组并切过去（标签右键「拆分并右移」/「移到另一侧」、拖到另一组的标签栏上）：右边那组
+   * 还不存在就新开出来；键盘焦点跟着标签走。
+   */
+  const moveEditorTabToGroup = useMemoizedFn(
+    (path: string, groupIndex: number, beforePath?: Nullable<string>): void => {
+      const layout = workbench.moveOpenFileToGroup(path, groupIndex, beforePath)
+      const landedIndex = findWorkbenchEditorGroupIndex(layout, path)
+      if (landedIndex >= 0)
+        setEditorGroupFocusRequest((request) => ({ id: request.id + 1, groupIndex: landedIndex }))
+    }
+  )
   // Agent 浏览器：当前会话的浏览器进了站点就在编辑区开出（切到）它的标签，离站或换会话就收起。
   const agentBrowserSite = useWorkbenchAgentBrowserSite(
     toNullable(workbench.activeProject?.rootPath),
@@ -491,6 +546,8 @@ export function useStandaloneWorkbenchPageModel(
     keymap: workbenchKeymap.keymap,
     onCloseRightTool: surface.closeRightTool,
     onFindInFiles: () => void navigate({ target: 'search', seed: readProjectSearchSeed() }),
+    onFocusEditorGroup: (groupIndex) => focusEditorGroup(groupIndex, { takeKeyboardFocus: true }),
+    onSplitEditorRight: () => splitEditorRight(),
     onNavigateBack: () => void editorNavigation.goBack(),
     onNavigateForward: () => void editorNavigation.goForward(),
     onOpenQuickOpen: surface.openQuickOpen,
@@ -751,13 +808,23 @@ export function useStandaloneWorkbenchPageModel(
     }
   )
 
-  /** 编辑区前面盖着别的（Git 对比、只读预览、调试页、结构图、AI 改动），看到的不是当前文件的编辑器。 */
+  /**
+   * 当前文件的编辑器前面盖着别的，看到的不是它：结构图、AI 改动占着整个编辑区；Git 对比、只读预览、
+   * 调试页只盖在左边那组上，当前组是右边那组时不算。
+   */
   const editorCovered =
-    !!editorNavigation.diffItem ||
-    !!editorNavigation.lightTab ||
-    !!editorNavigation.debug.activeTabId ||
     aiChanges.active ||
-    velarLogicGraphActive
+    velarLogicGraphActive ||
+    (workbench.editorLayout.focusedGroup === 0 &&
+      (!!editorNavigation.diffItem ||
+        !!editorNavigation.lightTab ||
+        !!editorNavigation.debug.activeTabId))
+
+  /** ⌘\ / Ctrl+\：把当前标签挪到右边那组（没有就新开）；已经在右边、或眼前不是它的编辑器时什么也不做。 */
+  const splitEditorRight = useMemoizedFn((): void => {
+    const path = workbench.selectedFilePath
+    if (path && !editorCovered) moveEditorTabToGroup(path, 1)
+  })
 
   /**
    * ⇧⌘F 的查找词：眼前是当前文件的编辑器、里面选中了一行以内的文字时才有（被别的盖住时选区看不见，不取）。
@@ -1115,6 +1182,8 @@ export function useStandaloneWorkbenchPageModel(
     closeActiveEditor: () => setCloseActiveEditorTabRequestId((requestId) => requestId + 1),
     exitCurrentProject,
     findInFiles: () => void navigate({ target: 'search', seed: readProjectSearchSeed() }),
+    focusEditorGroup: (groupIndex) => focusEditorGroup(groupIndex, { takeKeyboardFocus: true }),
+    splitEditorRight,
     navigateBack: editorNavigation.goBack,
     navigateForward: editorNavigation.goForward,
     openSettings: () => setSettingsOpen(true),
@@ -1150,6 +1219,8 @@ export function useStandaloneWorkbenchPageModel(
     editorNavigation,
     /** ⌘W / Ctrl+W 的请求序号：变了就关掉编辑区当前的标签。 */
     closeActiveEditorTabRequestId,
+    /** 要求把键盘焦点放进编辑区的哪一组（⌘1 / ⌘2、标签挪到另一组之后）。 */
+    editorGroupFocusRequest,
     /** 当前会话的 Agent 浏览器此刻进的站点；没进为 null。 */
     agentBrowser: { sessionId: currentSession.id, site: agentBrowserSite },
     pendingBrowserElementSelections,
@@ -1199,6 +1270,8 @@ export function useStandaloneWorkbenchPageModel(
       navigate,
       openQuickOpenFile,
       openProjectSearchMatch,
+      focusEditorGroup,
+      moveEditorTabToGroup,
       showEditorSurface,
       handleWorkbenchChatWorkspacePathOpen: openChatWorkspacePath,
       handleWorkbenchBrowserElementPicked,

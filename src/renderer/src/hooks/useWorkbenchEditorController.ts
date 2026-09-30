@@ -13,7 +13,6 @@ import {
   closeWorkbenchEditorTabs,
   createWorkbenchEditorGroupsLayout,
   findWorkbenchEditorGroupIndex,
-  getWorkbenchEditorFocusedGroup,
   getWorkbenchEditorFocusedPath,
   keepWorkbenchEditorPreviewTabs,
   keepWorkbenchEditorTab,
@@ -26,6 +25,7 @@ import {
   type WorkbenchEditorGroupsLayout,
   type WorkbenchEditorOpenTabIntent,
 } from '@renderer/models/editor/workbenchEditorGroups'
+import { buildWorkbenchEditorGroupViews } from '@renderer/models/editor/workbenchEditorGroupViews'
 import {
   appendWorkbenchEditorSavedSnapshot,
   resolveWorkbenchEditorSaveBase,
@@ -147,6 +147,8 @@ interface UseWorkbenchEditorControllerOptions {
 
 export interface WorkbenchFileOpenOptions extends WorkbenchEditorOpenTabIntent {
   quiet?: boolean
+  /** 文件还没开着时标签开在哪一组（后退 / 前进回到原来那一组）；不给就是当前组。已经开着的文件在哪组就去哪组。 */
+  groupIndex?: number
 }
 
 interface WorkbenchSaveEditorTabOptions {
@@ -167,8 +169,18 @@ export function useWorkbenchEditorController({
   const [openTabsByPath, setOpenTabsByPath] = useState<Map<string, WorkbenchOpenEditorTab>>(
     () => new Map()
   )
-  const { layout, layoutRef, commitLayout, reorderOpenTabs, keepOpenFile, pinOpenFile, unpinOpenFile } =
-    useWorkbenchEditorTabLayout()
+  const {
+    layout,
+    layoutRef,
+    commitLayout,
+    reorderOpenTabs,
+    keepOpenFile,
+    pinOpenFile,
+    unpinOpenFile,
+    focusEditorGroup,
+    moveOpenFileToGroup,
+    setEditorSplitRatio,
+  } = useWorkbenchEditorTabLayout()
   const previewTabsEnabledLatest = useLatest(previewTabsEnabled)
   // 「当前文件」就是当前组正在显示的那个标签：它的磁盘快照与正文取自标签本身，不另存一份。
   const selectedFilePath = getWorkbenchEditorFocusedPath(layout)
@@ -235,6 +247,11 @@ export function useWorkbenchEditorController({
       }),
     [layout, openTabsByPath]
   )
+  // 每一组的样子（标签、正在显示的文件、能不能编辑），给各组的面板渲染。
+  const editorGroups = useMemo(
+    () => buildWorkbenchEditorGroupViews(layout, openTabsByPath, chosenEditModes),
+    [chosenEditModes, layout, openTabsByPath]
+  )
   const openedFileSnapshots = useMemo(() => {
     const snapshots = reuseWorkbenchOpenFileSnapshots(openedFileSnapshotsRef.current, openTabs)
     openedFileSnapshotsRef.current = snapshots
@@ -279,11 +296,12 @@ export function useWorkbenchEditorController({
     })
   }
 
-  const updateEditorContent = useMemoizedFn((content: string): void => {
-    if (!selectedFile || !isWorkbenchFileEditable(selectedFile, chosenEditModes.get(selectedFile.path)))
-      return
+  /** 编辑器里的输入：改的是那个编辑器正在显示的文件（`path`，另一组的编辑器也经这里）；不给就是当前文件。 */
+  const updateEditorContent = useMemoizedFn((content: string, path?: string): void => {
+    const file = path ? openTabsByPath.get(path)?.file : selectedFile
+    if (!file || !isWorkbenchFileEditable(file, chosenEditModes.get(file.path))) return
 
-    updateOpenTabContent(selectedFile, content)
+    updateOpenTabContent(file, content)
   })
 
   /** 把一组语言服务的改动套到文件上（格式化这类），不报告结果；见 applyLanguageServiceEditsToFiles。 */
@@ -503,12 +521,17 @@ export function useWorkbenchEditorController({
     closedTabPathsRef.current = []
   })
 
-  /** 在只读与编辑之间切换当前文件；没有完整文本的文件（图片、截断的大文件）不能切到编辑。 */
-  const toggleSelectedFileEditMode = useMemoizedFn((): void => {
-    if (!selectedFile || !selectedFileEditMode || !canEditWorkbenchFileContent(selectedFile)) return
+  /**
+   * 在只读与编辑之间切换一个文件（不给路径就是当前文件）；没有完整文本的文件（图片、截断的大文件）不能
+   * 切到编辑。
+   */
+  const toggleSelectedFileEditMode = useMemoizedFn((path?: string): void => {
+    const file = path ? openTabsByPath.get(path)?.file : selectedFile
+    if (!file || !canEditWorkbenchFileContent(file)) return
 
-    const nextMode: WorkbenchEditorEditMode = selectedFileEditMode === 'edit' ? 'read-only' : 'edit'
-    setChosenEditModes((current) => new Map(current).set(selectedFile.path, nextMode))
+    const mode = resolveWorkbenchEditorEditMode(file, chosenEditModes.get(file.path))
+    const nextMode: WorkbenchEditorEditMode = mode === 'edit' ? 'read-only' : 'edit'
+    setChosenEditModes((current) => new Map(current).set(file.path, nextMode))
   })
 
   /**
@@ -559,21 +582,27 @@ export function useWorkbenchEditorController({
     if (options.keepSource && sourcePath && sourcePath !== path)
       current = keepWorkbenchEditorTab(current, sourcePath)
     // 兜底：预览标签万一带着没保存的改动，先留下，不让它被顶替掉。
-    const { previewPath } = getWorkbenchEditorFocusedGroup(current)
-    const previewTab = previewPath ? openTabsByPathLatest.current.get(previewPath) : undefined
-    if (previewPath && previewTab && isDirtyTab(previewTab))
-      current = keepWorkbenchEditorTab(current, previewPath)
+    for (const { previewPath } of current.groups) {
+      const previewTab = previewPath ? openTabsByPathLatest.current.get(previewPath) : undefined
+      if (previewPath && previewTab && isDirtyTab(previewTab))
+        current = keepWorkbenchEditorTab(current, previewPath)
+    }
 
     const opened = openWorkbenchEditorTab(current, path, {
       preview: !!options.preview && previewTabsEnabledLatest.current,
+      groupIndex: options.groupIndex,
     })
     commitLayout(opened.layout)
     if (opened.replacedPath) forgetOpenTabs([opened.replacedPath])
   }
 
+  /**
+   * 打开一个文件并切过去。返回标签的路径（主进程按规范化后的路径回报，可能与传进来的写法不同）；没打开
+   * （读不出来、被后来的打开顶掉、同一个文件还在读）返回 null。
+   */
   const selectFile = useMemoizedFn(
-    async (path: string, options: WorkbenchFileOpenOptions = {}): Promise<void> => {
-      if (!activeProject) return
+    async (path: string, options: WorkbenchFileOpenOptions = {}): Promise<Nullable<string>> => {
+      if (!activeProject) return null
 
       // 已经开着（包括就是当前文件）：放下还在读的那个文件，切过去。
       if (findWorkbenchEditorGroupIndex(layoutRef.current, path) >= 0) {
@@ -582,11 +611,11 @@ export function useWorkbenchEditorController({
           pendingFilePathRef.current = null
         }
         showOpenTab(path, options)
-        return
+        return path
       }
       if (path === pendingFilePathRef.current) {
         if (!options.preview) pendingOpenKeepsTabRef.current = true
-        return
+        return null
       }
 
       const owningProjectId = activeProject.id
@@ -596,7 +625,7 @@ export function useWorkbenchEditorController({
 
       try {
         const result = await readWorkbenchEditorFile(activeProject.rootPath, path, 300_000)
-        if (!isActive(generation) || activeProjectRef.current?.id !== owningProjectId) return
+        if (!isActive(generation) || activeProjectRef.current?.id !== owningProjectId) return null
 
         // JetBrains 式提交：读取完成前保留当前编辑器；就绪后同一批次提交
         // 选项卡和正文，避免半成品 tab 与“正在读取文件”占位来回闪烁。
@@ -607,9 +636,10 @@ export function useWorkbenchEditorController({
           result.path,
           pendingOpenKeepsTabRef.current ? { ...options, preview: false } : options
         )
+        return result.path
       } catch (error) {
         const appError = AppError.from(error)
-        if (!isActive(generation) || activeProjectRef.current?.id !== owningProjectId) return
+        if (!isActive(generation) || activeProjectRef.current?.id !== owningProjectId) return null
 
         if (!options.quiet) {
           messageLatest.current.error({
@@ -617,6 +647,7 @@ export function useWorkbenchEditorController({
             description: appError.message,
           })
         }
+        return null
       } finally {
         completeIfActive(generation, () => {
           if (pendingFilePathRef.current === path) pendingFilePathRef.current = null
@@ -785,13 +816,14 @@ export function useWorkbenchEditorController({
   })
 
   // 「关闭全部 / 未修改 / 其他 / 右侧」都跳过固定标签：固定标签只能逐个关（先取消固定，或文件被删掉）。
-  const closeAllOpenFiles = useMemoizedFn((): void => {
-    requestCloseOpenFiles(listWorkbenchEditorUnpinnedTabs(layoutRef.current))
+  // 标签栏上的「关闭全部 / 未修改」只管自己那一组（`groupIndex`）；不给组就是所有组。
+  const closeAllOpenFiles = useMemoizedFn((groupIndex?: number): void => {
+    requestCloseOpenFiles(listWorkbenchEditorUnpinnedTabs(layoutRef.current, groupIndex))
   })
 
-  const closeUnmodifiedOpenFiles = useMemoizedFn((): void => {
+  const closeUnmodifiedOpenFiles = useMemoizedFn((groupIndex?: number): void => {
     commitCloseOpenFiles(
-      listWorkbenchEditorUnpinnedTabs(layoutRef.current).filter((path) => {
+      listWorkbenchEditorUnpinnedTabs(layoutRef.current, groupIndex).filter((path) => {
         const tab = openTabsByPath.get(path)
         return !!tab && !isDirtyTab(tab)
       })
@@ -1116,9 +1148,10 @@ export function useWorkbenchEditorController({
     onExternalFilesChangedLatest.current()
   })
 
+  /** 处理一个文件的外部改动冲突（不给路径就是当前文件）。 */
   const resolveSelectedExternalFileConflict = useMemoizedFn(
-    async (resolution: 'external' | 'local'): Promise<void> => {
-      const path = selectedFilePathRef.current
+    async (resolution: 'external' | 'local', targetPath?: string): Promise<void> => {
+      const path = targetPath ?? selectedFilePathRef.current
       if (!path) return
 
       if (resolution === 'external') {
@@ -1399,37 +1432,39 @@ export function useWorkbenchEditorController({
   })
 
   /**
-   * 保存当前文件。`content` 是编辑器这一刻的正文：在编辑区里按 ⌘S 时刚格式化、收拾过空白，标签里的正文要等
-   * 下一次渲染才跟上；不给就用标签里的。
+   * 保存一个文件：不给路径就是当前文件；在某一组的编辑器里按 ⌘S 时是那个编辑器正在显示的文件。`content` 是
+   * 编辑器这一刻的正文：在编辑区里按 ⌘S 时刚格式化、收拾过空白，标签里的正文要等下一次渲染才跟上；不给就用
+   * 标签里的。
    */
-  const saveSelectedFile = useMemoizedFn(async (content?: string): Promise<void> => {
-    if (!selectedFile) return
+  const saveSelectedFile = useMemoizedFn(async (content?: string, path?: string): Promise<void> => {
+    const targetPath = path ?? selectedFilePath
+    const tab = targetPath ? openTabsByPath.get(targetPath) : undefined
+    if (!tab) return
     // 明确按了保存：预览标签就此留下，哪怕没有要存的改动（与 VS Code 一致）。
-    keepOpenFile(selectedFile.path)
-    const tab = openTabsByPath.get(selectedFile.path)
-    const nextContent = content ?? editorContent
-    if (!isDirtyTab({ file: selectedFile, content: nextContent, textConversion: tab?.textConversion }))
+    keepOpenFile(tab.path)
+    const nextContent = content ?? tab.content
+    if (!isDirtyTab({ file: tab.file, content: nextContent, textConversion: tab.textConversion }))
       return
 
     await saveEditorTab(
       {
-        path: selectedFile.path,
-        file: selectedFile,
+        path: tab.path,
+        file: tab.file,
         content: nextContent,
-        textConversion: tab?.textConversion,
-        externalChange: tab?.externalChange,
+        textConversion: tab.textConversion,
+        externalChange: tab.externalChange,
       },
       { notify: true }
     )
   })
 
   /**
-   * 用户明确选的格式转换（转换为 UTF-8、换换行符）：记到当前标签上（算未保存）并立即保存。
-   * 与磁盘上的格式一样又能原样写回时只是撤掉之前没存下去的转换。
+   * 用户明确选的格式转换（转换为 UTF-8、换换行符）：记到标签上（算未保存）并立即保存；不给路径就是
+   * 当前文件。与磁盘上的格式一样又能原样写回时只是撤掉之前没存下去的转换。
    */
   const convertSelectedFileTextFormat = useMemoizedFn(
-    async (format: WorkbenchTextFormat): Promise<void> => {
-      const path = selectedFilePathRef.current
+    async (format: WorkbenchTextFormat, targetPath?: string): Promise<void> => {
+      const path = targetPath ?? selectedFilePathRef.current
       const tab = path ? openTabsByPathLatest.current.get(path) : undefined
       if (!tab || tab.file.imagePreview || tab.file.truncated) return
 
@@ -1651,8 +1686,10 @@ export function useWorkbenchEditorController({
     selectedFileEditMode,
     toggleSelectedFileEditMode,
     openTabs,
-    /** 标签布局：标签栏顺序、每组的当前标签、当前组；随项目会话存盘。 */
+    /** 标签布局：左右两组的标签栏顺序与当前标签、当前组、分隔条位置；随项目会话存盘。 */
     editorLayout: layout,
+    /** 每一组的样子：标签、正在显示的文件、能不能编辑。 */
+    editorGroups,
     openedFileSnapshots,
     isSavingFile,
     /** 自动保存存不下的文件与原因（按路径）；存好、撤回或关掉标签后撤销。 */
@@ -1686,6 +1723,10 @@ export function useWorkbenchEditorController({
     /** 固定 / 取消固定标签：固定标签排在标签栏左边，批量关闭与 ⌘W 都不关它。 */
     pinOpenFile,
     unpinOpenFile,
+    /** 把全局动作交给另一组；把标签挪到另一组（右边那组不存在就新开）；拖分隔条。 */
+    focusEditorGroup,
+    moveOpenFileToGroup,
+    setEditorSplitRatio,
     moveOpenEntryPath,
     closeOpenEntryPath,
     saveSelectedFile,

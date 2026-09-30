@@ -25,6 +25,8 @@ export type WorkbenchKeyboardShortcutAction =
   | 'close-right-tool'
   | 'command-palette'
   | 'find-in-files'
+  | 'focus-left-editor-group'
+  | 'focus-right-editor-group'
   | 'navigate-back'
   | 'navigate-forward'
   | 'quick-open'
@@ -32,6 +34,7 @@ export type WorkbenchKeyboardShortcutAction =
   | 'run-last-command'
   | 'save-all'
   | 'save-current'
+  | 'split-editor-right'
   | 'toggle-actions'
   | 'toggle-changes'
   | 'toggle-problems'
@@ -78,6 +81,8 @@ const SUPPORTED_NAMED_SHORTCUT_KEYS = new Set([
   'ArrowUp',
   // 按物理键认的减号（⌃⇧- 打出来是 _，只能认键位）。
   'Minus',
+  // 按物理键认的反斜杠（中文输入法下这个键打出来是顿号）。
+  'Backslash',
 ])
 
 export const WORKBENCH_KEYBOARD_SHORTCUT_DEFINITIONS: WorkbenchKeyboardShortcutDefinition[] = [
@@ -96,6 +101,11 @@ export const WORKBENCH_KEYBOARD_SHORTCUT_DEFINITIONS: WorkbenchKeyboardShortcutD
     defaultShortcut: isAppleWorkbenchPlatform() ? 'Ctrl+Shift+Minus' : 'Alt+ArrowRight',
   },
   { action: 'reopen-closed-tab', defaultShortcut: 'Mod+Shift+T' },
+  // 把当前标签挪到右边那组（没有就新开），与 VS Code 拆分编辑器同一个键：⌘\ / Ctrl+\。
+  { action: 'split-editor-right', defaultShortcut: 'Mod+Backslash' },
+  // 编辑区并排两组时把焦点放到左边 / 右边那组，与 VS Code 一致：⌘1 / ⌘2，其它平台 Ctrl+1 / Ctrl+2。
+  { action: 'focus-left-editor-group', defaultShortcut: 'Mod+1' },
+  { action: 'focus-right-editor-group', defaultShortcut: 'Mod+2' },
   { action: 'save-current', defaultShortcut: 'Mod+S' },
   { action: 'save-all', defaultShortcut: 'Mod+Shift+S' },
   { action: 'run-last-command', defaultShortcut: 'Mod+Enter' },
@@ -331,6 +341,7 @@ const AppleShortcutModifierGlyphs: ReadonlyArray<readonly [string, string]> = [
 
 const AppleShortcutKeyGlyphs: Readonly<Record<string, string>> = {
   Minus: '-',
+  Backslash: '\\',
   ArrowDown: '↓',
   ArrowLeft: '←',
   ArrowRight: '→',
@@ -367,7 +378,7 @@ export function formatWorkbenchShortcutHint(
     modifiers.has('Meta') ? metaLabel : null,
     modifiers.has('Alt') ? 'Alt' : null,
     modifiers.has('Shift') ? 'Shift' : null,
-    key === 'Escape' ? 'Esc' : key === 'Minus' ? '-' : key,
+    key === 'Escape' ? 'Esc' : key === 'Minus' ? '-' : key === 'Backslash' ? '\\' : key,
   ]
   return labels.filter(isString).join('+')
 }

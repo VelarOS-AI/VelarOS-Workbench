@@ -3,13 +3,16 @@ import {
   buildWorkbenchVelarBuildCommand,
   buildWorkbenchVelarRunCommand,
 } from '@renderer/models/commands/workbenchVelarFileCommand'
-import { getWorkbenchEditorFocusedGroup } from '@renderer/models/editor/workbenchEditorGroups'
+import type { WorkbenchEditorGroupView } from '@renderer/models/editor/workbenchEditorGroupViews'
+import { isDirtyTab } from '@renderer/models/editor/workbenchEditorTabs'
 import { getWorkbenchFileDiagnosticView } from '@renderer/models/editor/workbenchLanguageServiceInsightsModel'
 
+import { toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type { StandaloneWorkbenchPageModel } from '../../hooks/useStandaloneWorkbenchPageModel'
 import type { TopToolbarProps } from '../chrome/TopToolbar'
+import type { WorkbenchEditorGroupPanelModel } from '../editor/EditorGroupsPanel'
 
 import type {
   WorkbenchEmbeddedDebugTabsModel,
@@ -75,13 +78,108 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
     )
   }
 
-  const selectedFileDiagnosticView = getWorkbenchFileDiagnosticView({
-    path: workbench.selectedFilePath,
-    diagnosticsByPath: workbench.languageServiceInsights.diagnosticsByPath,
-    diagnosticsPendingPaths: workbench.languageServiceInsights.diagnosticsPendingPaths,
-  })
   const packageManager = inferPackageManagerCommand(workbench.rootEntries)
-  const editorGroup = getWorkbenchEditorFocusedGroup(workbench.editorLayout)
+
+  /**
+   * 编辑区里一组的面板输入。动作都落在这一组正在显示的文件上（带着它的路径）：在哪一组的编辑器里按的
+   * ⌘S、改的字，就是哪一组的文件，不看此刻的当前组。
+   */
+  const buildEditorGroup = (group: WorkbenchEditorGroupView): WorkbenchEditorGroupPanelModel => {
+    const activePath = toNullable(group.activeTab?.path)
+    const diagnosticView = getWorkbenchFileDiagnosticView({
+      path: activePath,
+      diagnosticsByPath: workbench.languageServiceInsights.diagnosticsByPath,
+      diagnosticsPendingPaths: workbench.languageServiceInsights.diagnosticsPendingPaths,
+    })
+    return {
+      workbenchEditor: {
+        editorContent: group.activeTab?.content ?? '',
+        openTabs: workbench.openTabs,
+        groupTabs: group.tabs,
+        previewTabPath: group.previewPath,
+        pinnedTabCount: group.pinnedCount,
+        hasUnsavedChanges: !!group.activeTab && isDirtyTab(group.activeTab),
+        selectedFilePath: activePath,
+        selectedFile: toNullable(group.activeTab?.file),
+        canEditSelectedFile: group.canEdit,
+        selectedFileEditMode: group.editMode,
+        projectContextIndex: workbench.projectContextIndex,
+        isSavingFile: workbench.isSavingFile,
+        autosaveFailures: workbench.autosaveFailures,
+        externalRevision: workbench.externalRevision,
+      },
+      selectedFileDiagnostics: diagnosticView.diagnostics,
+      isSelectedFileDiagnosticsPending: diagnosticView.isPending,
+      tabs: {
+        // 点标签只是切过去：预览标签还是预览标签（双击才留下）。
+        onSelectOpenFile: (path) => {
+          model.actions.showEditorSurface()
+          void editorNavigation.selectFile(path, { preview: true })
+        },
+        onKeepOpenFile: workbench.keepOpenFile,
+        onPinOpenFile: workbench.pinOpenFile,
+        onUnpinOpenFile: workbench.unpinOpenFile,
+        onCloseOpenFile: workbench.closeOpenFile,
+        onCloseOtherOpenFiles: workbench.closeOtherOpenFiles,
+        // 标签栏上的「关闭全部 / 未修改」只管自己这一组。
+        onCloseAllOpenFiles: () => workbench.closeAllOpenFiles(group.index),
+        onCloseUnmodifiedOpenFiles: () => workbench.closeUnmodifiedOpenFiles(group.index),
+        onCloseOpenFilesToRight: workbench.closeOpenFilesToRight,
+        onRevertOpenFile: (path) => workbench.revertOpenFiles([path]),
+        onReorderOpenTabs: workbench.reorderOpenTabs,
+        closeActiveTabRequestId: model.closeActiveEditorTabRequestId,
+      },
+      workspace: {
+        onSaveSelectedFile: (content) => {
+          if (activePath) void workbench.saveSelectedFile(content, activePath)
+        },
+        onToggleSelectedFileEditMode: () => {
+          if (activePath) workbench.toggleSelectedFileEditMode(activePath)
+        },
+        onSaveAllOpenFiles: () => void workbench.saveAllOpenFiles(),
+        onConvertSelectedFileTextFormat: (format) => {
+          if (activePath) void workbench.convertSelectedFileTextFormat(format, activePath)
+        },
+        onResolveExternalFileConflict: (resolution) => {
+          if (activePath) void workbench.resolveSelectedExternalFileConflict(resolution, activePath)
+        },
+        onEditorContentChange: (content) => {
+          if (activePath) workbench.setEditorContent(content, activePath)
+        },
+        onOpenDirectory: (path) => void workbench.openDirectory(path),
+        onRevealSelectedFile: () => {
+          if (activePath) void workbench.revealEntryPath(activePath)
+        },
+        // 跳到定义、引用：目标以预览标签打开；出发的文件是预览标签的话先留下（与 VS Code 一致）。
+        onGoToDefinition: (path, line, column) =>
+          void editorNavigation.goToLocation(path, line, column, {
+            preview: true,
+            keepSource: true,
+          }),
+        onApplyLanguageServiceRename: workbench.applyLanguageServiceRename,
+        packageManager,
+        onRunPackageScript: (command) => {
+          // 走可交互的运行卡（PTY），而不是只读一次性 runner；顺带记为「上次运行」，
+          // 让右侧 ▶ 记住并可右键切换；会话创建后由页面 model 自动打开运行面板。
+          void workbench.launchRunSession(command)
+        },
+        onAddFilesToChat: model.actions.addWorkbenchFilesToChat,
+        onOpenQuickOpen: model.surface.openQuickOpen,
+        onToggleGitTool: () => model.surface.openBottomTool('git'),
+        onToggleProblems: () => model.surface.openBottomTool('problems'),
+        keymap: model.workbenchKeymap.keymap,
+        // 光标、缩进、当前问题各组都报，EditorGroupsPanel 只把当前组的交到这里。
+        onCursorPositionChange: editorNavigation.setCursorPosition,
+        onNavigateBack: () => void editorNavigation.goBack(),
+        onNavigateForward: () => void editorNavigation.goForward(),
+        onNavigationPoint: editorNavigation.recordNavigationPoint,
+        onIndentationChange: editorNavigation.setIndentation,
+        indentationRequest: editorNavigation.indentationRequest,
+        onActiveProblemIdChange: editorNavigation.setActiveProblemId,
+        navigationRequest: editorNavigation.navigationRequest,
+      },
+    }
+  }
 
   return {
     activeProject,
@@ -171,45 +269,19 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
         name: activeProject.name,
         rootPath: activeProject.rootPath,
       },
-      workbenchEditor: {
-        editorContent: workbench.editorContent,
-        openTabs: workbench.openTabs,
-        previewTabPath: editorGroup.previewPath,
-        pinnedTabCount: editorGroup.pinnedCount,
-        hasUnsavedChanges: workbench.hasUnsavedChanges,
-        selectedFilePath: workbench.selectedFilePath,
-        selectedFile: workbench.selectedFile,
-        canEditSelectedFile: workbench.canEditSelectedFile,
-        selectedFileEditMode: workbench.selectedFileEditMode,
-        projectContextIndex: workbench.projectContextIndex,
-        isSavingFile: workbench.isSavingFile,
-        autosaveFailures: workbench.autosaveFailures,
-        externalRevision: workbench.externalRevision,
-      },
       gitDecorations: gitState.decorations,
       // 顶栏 +/- 的轻量快照在工作区一有改动（包括 .git 里的提交、切分支）就会重拉，拿它的时刻当序号。
       gitStateRevision: gitState.lineStatsSnapshot?.repository
         ? gitState.lineStatsSnapshot.checkedAt
         : null,
-      selectedFileDiagnostics: selectedFileDiagnosticView.diagnostics,
-      isSelectedFileDiagnosticsPending: selectedFileDiagnosticView.isPending,
-      tabs: {
-        // 点标签只是切过去：预览标签还是预览标签（双击才留下）。
-        onSelectOpenFile: (path) => {
-          model.actions.showEditorSurface()
-          void editorNavigation.selectFile(path, { preview: true })
-        },
-        onKeepOpenFile: workbench.keepOpenFile,
-        onPinOpenFile: workbench.pinOpenFile,
-        onUnpinOpenFile: workbench.unpinOpenFile,
-        onCloseOpenFile: workbench.closeOpenFile,
-        onCloseOtherOpenFiles: workbench.closeOtherOpenFiles,
-        onCloseAllOpenFiles: workbench.closeAllOpenFiles,
-        onCloseUnmodifiedOpenFiles: workbench.closeUnmodifiedOpenFiles,
-        onCloseOpenFilesToRight: workbench.closeOpenFilesToRight,
-        onRevertOpenFile: (path) => workbench.revertOpenFiles([path]),
-        onReorderOpenTabs: workbench.reorderOpenTabs,
-        closeActiveTabRequestId: model.closeActiveEditorTabRequestId,
+      groups: workbench.editorGroups.map(buildEditorGroup),
+      layout: {
+        focusedGroup: workbench.editorLayout.focusedGroup,
+        splitRatio: workbench.editorLayout.splitRatio,
+        focusRequest: model.editorGroupFocusRequest,
+        onFocusGroup: model.actions.focusEditorGroup,
+        onSplitRatioChange: workbench.setEditorSplitRatio,
+        onMoveTabToGroup: model.actions.moveEditorTabToGroup,
       },
       diff: {
         diffWorkspaceRoot: activeProject.rootPath,
@@ -234,48 +306,6 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
         onClose: editorNavigation.debug.closeTab,
         onNavigate: editorNavigation.debug.navigateTab,
         agentBrowser: buildAgentBrowserTab(model, activeProject.rootPath),
-      },
-      workspace: {
-        onSaveSelectedFile: (content) => void workbench.saveSelectedFile(content),
-        onToggleSelectedFileEditMode: workbench.toggleSelectedFileEditMode,
-        onSaveAllOpenFiles: () => void workbench.saveAllOpenFiles(),
-        onConvertSelectedFileTextFormat: (format) =>
-          void workbench.convertSelectedFileTextFormat(format),
-        onResolveExternalFileConflict: (resolution) =>
-          void workbench.resolveSelectedExternalFileConflict(resolution),
-        onEditorContentChange: workbench.setEditorContent,
-        onOpenDirectory: (path) => void workbench.openDirectory(path),
-        onRevealSelectedFile: () => {
-          if (workbench.selectedFilePath) {
-            void workbench.revealEntryPath(workbench.selectedFilePath)
-          }
-        },
-        // 跳到定义、引用：目标以预览标签打开；出发的文件是预览标签的话先留下（与 VS Code 一致）。
-        onGoToDefinition: (path, line, column) =>
-          void editorNavigation.goToLocation(path, line, column, {
-            preview: true,
-            keepSource: true,
-          }),
-        onApplyLanguageServiceRename: workbench.applyLanguageServiceRename,
-        packageManager,
-        onRunPackageScript: (command) => {
-          // 走可交互的运行卡（PTY），而不是只读一次性 runner；顺带记为「上次运行」，
-          // 让右侧 ▶ 记住并可右键切换；会话创建后由页面 model 自动打开运行面板。
-          void workbench.launchRunSession(command)
-        },
-        onAddFilesToChat: model.actions.addWorkbenchFilesToChat,
-        onOpenQuickOpen: model.surface.openQuickOpen,
-        onToggleGitTool: () => model.surface.openBottomTool('git'),
-        onToggleProblems: () => model.surface.openBottomTool('problems'),
-        keymap: model.workbenchKeymap.keymap,
-        onCursorPositionChange: editorNavigation.setCursorPosition,
-        onNavigateBack: () => void editorNavigation.goBack(),
-        onNavigateForward: () => void editorNavigation.goForward(),
-        onNavigationPoint: editorNavigation.recordNavigationPoint,
-        onIndentationChange: editorNavigation.setIndentation,
-        indentationRequest: editorNavigation.indentationRequest,
-        onActiveProblemIdChange: editorNavigation.setActiveProblemId,
-        navigationRequest: editorNavigation.navigationRequest,
       },
     },
   }

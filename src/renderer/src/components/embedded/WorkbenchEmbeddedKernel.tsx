@@ -19,10 +19,8 @@ import type { WorkbenchDensity } from '@renderer/models/settings/workbenchPrefer
 import styles from '../../styles/workbenchPageStyles'
 import { lazyWithPreload, preloadWhenIdle } from '../../support/lazyWithPreload'
 import { WorkbenchLogicGraphSidebar } from '../codeGraph/WorkbenchLogicGraphSidebar'
-import {
-  EditorPanel,
-  type WorkbenchEditorPanelAuxiliaryTab,
-} from '../editor/EditorPanel'
+import { EditorGroupsPanel } from '../editor/EditorGroupsPanel'
+import type { WorkbenchEditorPanelAuxiliaryTab } from '../editor/EditorPanel'
 import { FilePanel } from '../files/FilePanel'
 
 import type {
@@ -174,19 +172,16 @@ export function WorkbenchEmbeddedKernel({
   )
   const editorPanel = (
     <section className={styles.ideMainPane} data-tour-id="workbench-editor">
-      <EditorPanel
+      <EditorGroupsPanel
         chrome={editor.chrome}
         showTopBar={editor.showTopBar}
         workbenchTheme={editor.workbenchTheme}
         workbenchProject={editor.workbenchProject}
-        workbenchEditor={editor.workbenchEditor}
         gitDecorations={editor.gitDecorations}
         gitStateRevision={editor.gitStateRevision}
-        selectedFileDiagnostics={editor.selectedFileDiagnostics}
-        isSelectedFileDiagnosticsPending={editor.isSelectedFileDiagnosticsPending}
-        tabs={editor.tabs}
+        groups={editor.groups}
+        layout={editor.layout}
         diff={editorDiff}
-        workspace={editor.workspace}
       />
     </section>
   )

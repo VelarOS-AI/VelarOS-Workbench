@@ -13,9 +13,13 @@ import {
 /**
  * 编辑区的标签布局：哪些文件开着标签、在标签栏上怎么排、每一组显示哪个、全局动作落在哪一组。
  *
+ * 编辑区最多左右并排两组，每组一条标签栏；组按位置认（下标 0 是左边那组，1 是右边那组）。没有标签的组
+ * 不留着：右边关空了就只剩左边，左边关空了右边那组就成为唯一的一组。
+ *
  * 这里只认路径：文件的正文与磁盘快照在 `useWorkbenchEditorController` 的 `openTabsByPath` 里，两边的路径
- * 始终是同一批。都是纯函数，返回新的布局；没有变化时返回原来那个对象。一个文件同一时刻只在一组里有标签。
- * 这份布局原样随项目会话存盘（见 workbenchProjectSessionModel）。
+ * 始终是同一批。都是纯函数，返回新的布局；没有变化时返回原来那个对象。一个文件同一时刻只在一组里有标签
+ * ——打开已经在另一组里开着的文件就是切到那一组去。这份布局原样随项目会话存盘（见
+ * workbenchProjectSessionModel）。
  */
 
 /** 一个编辑器组的标签栏。 */
@@ -38,10 +42,16 @@ export interface WorkbenchEditorGroupsLayout {
   readonly groups: readonly WorkbenchEditorGroup[]
   /** 全局动作（保存、查找、跳行……）作用的那一组在 `groups` 里的下标。 */
   readonly focusedGroup: number
+  /** 两组并排时左边那组占编辑区宽度的比例（只有一组时留着，下次拆分接着用）。 */
+  readonly splitRatio: number
 }
 
 /** 编辑区里最多有几组。 */
-const MaxWorkbenchEditorGroups = 1
+export const MaxWorkbenchEditorGroups = 2
+
+export const DefaultWorkbenchEditorSplitRatio = 0.5
+/** 拖分隔条时一组至少占这么大的比例，不会被挤没。 */
+export const MinWorkbenchEditorGroupShare = 0.2
 
 const EmptyWorkbenchEditorGroup: WorkbenchEditorGroup = {
   paths: [],
@@ -51,7 +61,11 @@ const EmptyWorkbenchEditorGroup: WorkbenchEditorGroup = {
 }
 
 export function createWorkbenchEditorGroupsLayout(): WorkbenchEditorGroupsLayout {
-  return { groups: [EmptyWorkbenchEditorGroup], focusedGroup: 0 }
+  return {
+    groups: [EmptyWorkbenchEditorGroup],
+    focusedGroup: 0,
+    splitRatio: DefaultWorkbenchEditorSplitRatio,
+  }
 }
 
 /** 所有开着的标签：按组从左到右，组内按标签栏顺序。 */
@@ -137,6 +151,20 @@ export interface WorkbenchEditorOpenTabOptions {
   groupIndex?: number
 }
 
+/**
+ * 这个文件的标签在哪一组、或者打开它时会落在哪一组：已经开着就是它所在的那一组；没开着就是 `preferred`
+ * （不给是当前组），那一组不存在时落到最靠右的一组。
+ */
+export function resolveWorkbenchEditorTabGroupIndex(
+  layout: WorkbenchEditorGroupsLayout,
+  path: string,
+  preferredGroupIndex?: number
+): number {
+  const existingIndex = findWorkbenchEditorGroupIndex(layout, path)
+  if (existingIndex >= 0) return existingIndex
+  return Math.min(Math.max(0, preferredGroupIndex ?? layout.focusedGroup), layout.groups.length - 1)
+}
+
 export interface WorkbenchEditorOpenTabResult {
   layout: WorkbenchEditorGroupsLayout
   /** 被这次预览顶替掉的那个预览标签：它已经不在布局里，调用方要把它的文件一起关掉。没有为 null。 */
@@ -166,10 +194,7 @@ export function openWorkbenchEditorTab(
     }
   }
 
-  const targetIndex = Math.min(
-    Math.max(0, options.groupIndex ?? layout.focusedGroup),
-    layout.groups.length - 1
-  )
+  const targetIndex = resolveWorkbenchEditorTabGroupIndex(layout, path, options.groupIndex)
   const group = layout.groups[targetIndex] ?? EmptyWorkbenchEditorGroup
   const replacedPath = options.preview ? group.previewPath : null
   const nextGroup: WorkbenchEditorGroup = {
@@ -259,9 +284,95 @@ export function listWorkbenchEditorTabsToCloseToRight(
     : []
 }
 
-/** 「关闭全部」「关闭未修改的文件」的范围：没固定的标签。 */
-export function listWorkbenchEditorUnpinnedTabs(layout: WorkbenchEditorGroupsLayout): string[] {
-  return layout.groups.flatMap((group) => group.paths.slice(group.pinnedCount))
+/** 「关闭全部」「关闭未修改的文件」的范围：没固定的标签；给了组就只算那一组的。 */
+export function listWorkbenchEditorUnpinnedTabs(
+  layout: WorkbenchEditorGroupsLayout,
+  groupIndex?: number
+): string[] {
+  const groups = groupIndex === undefined ? layout.groups : layout.groups.slice(groupIndex, groupIndex + 1)
+  return groups.flatMap((group) => group.paths.slice(group.pinnedCount))
+}
+
+/** 把全局动作交给另一组（点进那一组、⌘1 / ⌘2）；那一组不存在就不变。 */
+export function focusWorkbenchEditorGroup(
+  layout: WorkbenchEditorGroupsLayout,
+  groupIndex: number
+): WorkbenchEditorGroupsLayout {
+  if (groupIndex === layout.focusedGroup || !layout.groups[groupIndex]) return layout
+  return { ...layout, focusedGroup: groupIndex }
+}
+
+/**
+ * 把一个标签挪到另一组（「拆分并右移」、「移到另一侧」、拖到另一组的标签栏上），并切到它上面。
+ *
+ * - 目标是右边那组而它还不存在：新开出来。原来那组改显示相邻的标签；挪空了的组不留着。
+ * - 固定标签挪过去还是固定的（排在目标组固定标签的末尾，或 `beforePath` 前面）；普通标签落在普通标签里
+ *   （末尾，或 `beforePath` 前面）——跨组也进不了对方的固定区。预览标签挪过去就留下。
+ * - 挪了等于没挪的（唯一一组里只有这一个标签）原样返回；同一组里给了 `beforePath` 就是换位置。
+ */
+export function moveWorkbenchEditorTabToGroup(
+  layout: WorkbenchEditorGroupsLayout,
+  path: string,
+  targetIndex: number,
+  beforePath: Nullable<string> = null
+): WorkbenchEditorGroupsLayout {
+  const sourceIndex = findWorkbenchEditorGroupIndex(layout, path)
+  const source = layout.groups[sourceIndex]
+  if (!source || targetIndex < 0 || targetIndex >= MaxWorkbenchEditorGroups) return layout
+  if (targetIndex > layout.groups.length) return layout
+  if (sourceIndex === targetIndex)
+    return beforePath ? reorderWorkbenchEditorTab(layout, path, beforePath) : layout
+  const target = layout.groups[targetIndex]
+  if (!target && source.paths.length === 1) return layout
+
+  const pinned = isPinnedInGroup(source, path)
+  const nextSource: WorkbenchEditorGroup = {
+    paths: source.paths.filter((current) => current !== path),
+    pinnedCount: source.pinnedCount - (pinned ? 1 : 0),
+    previewPath: source.previewPath === path ? null : source.previewPath,
+    activePath: resolveWorkbenchEditorSelectionAfterClose(
+      source.paths,
+      new Set([path]),
+      source.activePath
+    ),
+  }
+  const targetGroup = target ?? EmptyWorkbenchEditorGroup
+  const beforeIndex = beforePath ? targetGroup.paths.indexOf(beforePath) : -1
+  const insertAt = pinned
+    ? beforeIndex >= 0
+      ? Math.min(beforeIndex, targetGroup.pinnedCount)
+      : targetGroup.pinnedCount
+    : beforeIndex >= 0
+      ? Math.max(beforeIndex, targetGroup.pinnedCount)
+      : targetGroup.paths.length
+  const targetPaths = [...targetGroup.paths]
+  targetPaths.splice(insertAt, 0, path)
+  const nextTarget: WorkbenchEditorGroup = {
+    paths: targetPaths,
+    pinnedCount: targetGroup.pinnedCount + (pinned ? 1 : 0),
+    previewPath: targetGroup.previewPath,
+    activePath: path,
+  }
+
+  const groups = layout.groups.map((group, index) =>
+    index === sourceIndex ? nextSource : index === targetIndex ? nextTarget : group
+  )
+  if (!target) groups.push(nextTarget)
+  return collapseEmptyGroups({ ...layout, groups, focusedGroup: targetIndex })
+}
+
+/** 拖分隔条：左边那组占多大比例；两组都不会小于 {@link MinWorkbenchEditorGroupShare}。 */
+export function setWorkbenchEditorSplitRatio(
+  layout: WorkbenchEditorGroupsLayout,
+  ratio: number
+): WorkbenchEditorGroupsLayout {
+  const splitRatio = clampSplitRatio(ratio)
+  return splitRatio === layout.splitRatio ? layout : { ...layout, splitRatio }
+}
+
+function clampSplitRatio(ratio: number): number {
+  if (!Number.isFinite(ratio)) return DefaultWorkbenchEditorSplitRatio
+  return Math.min(1 - MinWorkbenchEditorGroupShare, Math.max(MinWorkbenchEditorGroupShare, ratio))
 }
 
 /**
@@ -389,8 +500,9 @@ function normalizeGroup(
 }
 
 /**
- * 校验存下来的布局：认不出的整体当成没有标签；重复的路径、超出 `maxTabs` 的标签、不在标签栏里的当前
- * 标签与预览标签、对不上的固定个数都按缺省值收拾好。
+ * 校验存下来的布局：认不出的整体当成没有标签；重复的路径（同一个文件只能在一组里）、超出 `maxTabs` 的
+ * 标签、不在标签栏里的当前标签与预览标签、对不上的固定个数、多出来的组、越界的分隔条位置都按缺省值
+ * 收拾好。
  */
 export function normalizeWorkbenchEditorGroupsLayout(
   value: unknown,
@@ -414,5 +526,6 @@ export function normalizeWorkbenchEditorGroupsLayout(
       focusedGroup !== null && Number.isInteger(focusedGroup) && focusedGroup >= 0 && focusedGroup < groups.length
         ? focusedGroup
         : 0,
+    splitRatio: clampSplitRatio(readNumber(value.splitRatio) ?? DefaultWorkbenchEditorSplitRatio),
   }
 }

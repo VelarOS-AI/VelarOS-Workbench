@@ -105,7 +105,7 @@ void describe('editor saving', () => {
       controller.indexOf('const applyLanguageServiceFileChanges')
     )
 
-    assert.match(typing, /updateOpenTabContent\(selectedFile, content\)/u)
+    assert.match(typing, /updateOpenTabContent\(file, content\)/u)
     assert.doesNotMatch(typing, /rememberOpenFile/u)
     // 选过的格式转换跟着正文走；上次保存被拒的说明一改就作废。
     assert.match(controller, /\{ \.\.\.currentTab, content, unencodableSaveError: undefined \}/u)

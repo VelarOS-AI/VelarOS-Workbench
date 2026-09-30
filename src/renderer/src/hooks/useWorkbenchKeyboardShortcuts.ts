@@ -18,6 +18,10 @@ export interface UseWorkbenchKeyboardShortcutsOptions {
   onCloseRightTool: () => void
   /** 打开侧栏的项目搜索（编辑器里选中了一行以内的文字就拿它当查找词）。 */
   onFindInFiles: () => void
+  /** 把键盘焦点放进编辑区的左边（0）或右边（1）那组。 */
+  onFocusEditorGroup: (groupIndex: number) => void
+  /** 把当前标签挪到右边那组（没有就新开）。 */
+  onSplitEditorRight: () => void
   /** 编辑区的后退 / 前进：回到切文件、跳转之前的位置。 */
   onNavigateBack: () => void
   onNavigateForward: () => void
@@ -70,6 +74,18 @@ export function createWorkbenchShortcutKeydownHandler(
         current.onFindInFiles()
         return
       }
+      case 'split-editor-right': {
+        current.onSplitEditorRight()
+        return
+      }
+      case 'focus-left-editor-group': {
+        current.onFocusEditorGroup(0)
+        return
+      }
+      case 'focus-right-editor-group': {
+        current.onFocusEditorGroup(1)
+        return
+      }
       case 'navigate-back': {
         current.onNavigateBack()
         return
@@ -116,6 +132,8 @@ export function useWorkbenchKeyboardShortcuts({
   keymap,
   onCloseRightTool,
   onFindInFiles,
+  onFocusEditorGroup,
+  onSplitEditorRight,
   onNavigateBack,
   onNavigateForward,
   onOpenQuickOpen,
@@ -134,6 +152,8 @@ export function useWorkbenchKeyboardShortcuts({
     keymap,
     onCloseRightTool,
     onFindInFiles,
+    onFocusEditorGroup,
+    onSplitEditorRight,
     onNavigateBack,
     onNavigateForward,
     onOpenQuickOpen,
@@ -152,6 +172,8 @@ export function useWorkbenchKeyboardShortcuts({
     keymap,
     onCloseRightTool,
     onFindInFiles,
+    onFocusEditorGroup,
+    onSplitEditorRight,
     onNavigateBack,
     onNavigateForward,
     onOpenQuickOpen,

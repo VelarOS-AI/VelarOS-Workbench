@@ -121,12 +121,17 @@ export function StandaloneWorkbenchPagePresentation({
   const activeProjectId = workbench.activeProject?.id
   const activeProjectRoot = workbench.activeProject?.rootPath
   const resolveTerminalFileLinks = useWorkbenchTerminalFileLinks(activeProjectRoot)
+  // Git 对比、只读预览这两种标签只盖在编辑区左边那组上：当前组是左边那组时状态栏才说它们，当前组是右边
+  // 那组时说的是右边正在显示的文件。
+  const primaryEditorGroupFocused = workbench.editorLayout.focusedGroup === 0
+  const coveringDiffItem = primaryEditorGroupFocused ? editorNavigation.diffItem : null
+  const coveringLightTab = primaryEditorGroupFocused ? editorNavigation.lightTab : null
   // 状态栏：当前文本文件的编码与换行符（差异、预览标签不显示）。
   const selectedEditorTab = workbench.openTabs.find(
     (tab) => tab.path === workbench.selectedFilePath
   )
   const selectedTextFormat =
-    selectedEditorTab && !editorNavigation.diffItem && !editorNavigation.lightTab
+    selectedEditorTab && !coveringDiffItem && !coveringLightTab
       ? buildWorkbenchStatusBarTextFormat(selectedEditorTab, workbench.selectedFileEditMode)
       : null
   const [velarManifestPaths, setVelarManifestPaths] = useState<readonly string[]>([])
@@ -845,19 +850,15 @@ export function StandaloneWorkbenchPagePresentation({
         <StatusBar
           projectName={workbench.activeProject.name}
           selectedFilePath={
-            editorNavigation.diffItem?.path ??
-            editorNavigation.lightTab?.path ??
-            workbench.selectedFilePath
+            coveringDiffItem?.path ?? coveringLightTab?.path ?? workbench.selectedFilePath
           }
           cursorPosition={editorNavigation.cursorPosition}
           hasUnsavedChanges={
-            editorNavigation.diffItem || editorNavigation.lightTab
-              ? false
-              : workbench.hasUnsavedChanges
+            coveringDiffItem || coveringLightTab ? false : workbench.hasUnsavedChanges
           }
           readOnly={
-            !editorNavigation.diffItem
-            && !editorNavigation.lightTab
+            !coveringDiffItem
+            && !coveringLightTab
             && !!workbench.selectedFile
             && !workbench.canEditSelectedFile
           }
@@ -865,9 +866,7 @@ export function StandaloneWorkbenchPagePresentation({
           openFileCount={workbench.openTabs.length}
           commandStatusLabel={commandStatusLabel}
           textFormat={selectedTextFormat}
-          indentation={
-            editorNavigation.diffItem || editorNavigation.lightTab ? null : editorNavigation.indentation
-          }
+          indentation={coveringDiffItem || coveringLightTab ? null : editorNavigation.indentation}
           onChangeIndentation={editorNavigation.requestIndentationChange}
           onChangeEol={(eol) => {
             if (!selectedTextFormat) return

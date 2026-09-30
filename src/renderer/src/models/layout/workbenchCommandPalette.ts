@@ -18,6 +18,8 @@ export type WorkbenchPaletteCommandId =
   | 'close-editor'
   | 'close-project'
   | 'find-in-files'
+  | 'focus-left-editor-group'
+  | 'focus-right-editor-group'
   | 'format-document'
   | 'go-to-file'
   | 'go-to-line'
@@ -30,6 +32,7 @@ export type WorkbenchPaletteCommandId =
   | 'run-last-command'
   | 'save-all'
   | 'save-current'
+  | 'split-editor-right'
   | 'split-terminal'
   | 'toggle-chat'
   | 'toggle-git'
@@ -81,6 +84,22 @@ export const WORKBENCH_PALETTE_COMMANDS: readonly WorkbenchPaletteCommandDefinit
     labelKey: 'workbench.commandReopenClosedEditor',
     shortcut: { action: 'reopen-closed-tab' },
   },
+  // 把当前标签挪到右边那组（没有就新开）；并排两组时把焦点放到左边 / 右边那组。
+  {
+    id: 'split-editor-right',
+    labelKey: 'workbench.commandSplitEditorRight',
+    shortcut: { action: 'split-editor-right' },
+  },
+  {
+    id: 'focus-left-editor-group',
+    labelKey: 'workbench.commandFocusLeftEditorGroup',
+    shortcut: { action: 'focus-left-editor-group' },
+  },
+  {
+    id: 'focus-right-editor-group',
+    labelKey: 'workbench.commandFocusRightEditorGroup',
+    shortcut: { action: 'focus-right-editor-group' },
+  },
   // 编辑器里的 ⌥⌘L / Ctrl+Alt+L。
   { id: 'format-document', labelKey: 'workbench.commandFormatDocument', shortcut: { fixed: 'Mod+Alt+L' } },
   // 编辑器里的 ⌥Z / Alt+Z。
@@ -127,6 +146,10 @@ export interface WorkbenchPaletteCommandContext {
   /** 编辑区前面盖着别的（对比、只读预览、调试页、结构图、AI 改动），不是当前文件的编辑器。 */
   editorCovered: boolean
   openTabCount: number
+  /** 当前标签能挪到右边那组：它不在右边那组里，挪过去也不是白挪（唯一一组里只有它一个）。 */
+  canSplitEditorRight: boolean
+  /** 编辑区里有几组（1 或 2）。 */
+  editorGroupCount: number
 }
 
 /**
@@ -156,6 +179,11 @@ export function isWorkbenchPaletteCommandAvailable(
       return textEditorInFront && context.canToggleReadOnly
     case 'toggle-git-blame':
       return textEditorInFront
+    case 'split-editor-right':
+      return context.hasActiveFile && !context.editorCovered && context.canSplitEditorRight
+    case 'focus-left-editor-group':
+    case 'focus-right-editor-group':
+      return context.editorGroupCount > 1
     default:
       return true
   }

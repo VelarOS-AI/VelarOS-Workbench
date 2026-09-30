@@ -31,12 +31,17 @@ export interface WorkbenchEditorCursorSnapshot {
   }
 }
 
-/** 跳到某个位置时的选项：选中的范围、要不要抢焦点、标签怎么开。 */
+/** 打开文件时带给编辑器控制器的：标签怎么开、没开着时开在哪一组。 */
+export interface WorkbenchEditorOpenTabRequest extends WorkbenchEditorOpenTabIntent {
+  groupIndex?: number
+}
+
+/** 跳到某个位置时的选项：选中的范围、要不要抢焦点、标签怎么开、没开着时开在哪一组。 */
 export type WorkbenchEditorLocationOptions = Pick<
   EditorNavigationRequest,
   'endLine' | 'endColumn' | 'focus'
 > &
-  WorkbenchEditorOpenTabIntent
+  WorkbenchEditorOpenTabRequest
 
 /** 编辑器区里的一个内置 webview 调试选项卡。 */
 export interface WorkbenchDebugTab {
@@ -59,15 +64,31 @@ function deriveDebugTabTitle(url: string): string {
 interface UseWorkbenchEditorNavigationStateOptions {
   gitChangeItems: WorkbenchGitChangeItem[]
   selectedFilePath: Nullable<string>
-  onSelectFile: (path: string, options?: WorkbenchEditorOpenTabIntent) => Promise<any>
+  /** 全局动作所在的编辑器组（0 左，1 右）：后退 / 前进记下它。 */
+  focusedGroupIndex?: number
+  /** 这个文件的标签在哪一组、或者打开它时会落在哪一组（见 resolveWorkbenchEditorTabGroupIndex）。 */
+  resolveFileGroupIndex?: (path: string, preferredGroupIndex?: number) => number
+  /** 打开文件并切过去；给出标签的路径（规范化后的，可能与传进去的写法不同），没打开给 null。 */
+  onSelectFile: (
+    path: string,
+    options?: WorkbenchEditorOpenTabRequest
+  ) => Promise<LooseOptional<string>>
+  /** 左边那组上盖的标签（Git 对比、只读预览、网页调试）被用户打开或切到：全局动作交给左边那组。 */
+  onPrimaryGroupTabShown?: () => void
 }
 
 export function useWorkbenchEditorNavigationState({
   gitChangeItems,
   selectedFilePath,
+  focusedGroupIndex = 0,
+  resolveFileGroupIndex,
   onSelectFile,
+  onPrimaryGroupTabShown,
 }: UseWorkbenchEditorNavigationStateOptions) {
   const onSelectFileLatest = useLatest(onSelectFile)
+  const onPrimaryGroupTabShownLatest = useLatest(onPrimaryGroupTabShown)
+  const resolveFileGroupIndexLatest = useLatest(resolveFileGroupIndex)
+  const focusedGroupIndexLatest = useLatest(focusedGroupIndex)
   const [cursorPosition, setCursorPosition] = useState<WorkbenchEditorCursorSnapshot>({
     line: 1,
     column: 1,
@@ -106,21 +127,36 @@ export function useWorkbenchEditorNavigationState({
     const path = selectedFilePathLatest.current
     if (!path) return null
     const { line, column } = cursorPositionLatest.current
-    return { path, line, column }
+    return { path, line, column, group: focusedGroupIndexLatest.current }
   }
   const recordNavigationPoint = useCallback((): void => {
     const path = selectedFilePathLatest.current
     if (!path) return
     const { line, column } = cursorPositionLatest.current
-    navigationHistoryRef.current.record({ path, line, column })
-  }, [cursorPositionLatest, selectedFilePathLatest])
+    navigationHistoryRef.current.record({
+      path,
+      line,
+      column,
+      group: focusedGroupIndexLatest.current,
+    })
+  }, [cursorPositionLatest, focusedGroupIndexLatest, selectedFilePathLatest])
 
-  async function selectFile(path: string, intent?: WorkbenchEditorOpenTabIntent): Promise<void> {
-    if (path !== selectedFilePathLatest.current) recordNavigationPoint()
+  /**
+   * 要在编辑区里显示一个文件了：它落在左边那组时，把盖在那组编辑器上的 Git 对比、只读预览收掉、网页调试
+   * 标签放到后面。落在右边那组时不动它们——那些标签只在左边那组里。
+   */
+  function revealFileGroup(path: string, groupIndex?: number): void {
+    if ((resolveFileGroupIndexLatest.current?.(path, groupIndex) ?? 0) !== 0) return
+
     setDiffItem(null)
     setDiffFocusFirstChangeRequestId(0)
     setLightTab(null)
     setActiveDebugTabId(null)
+  }
+
+  async function selectFile(path: string, intent?: WorkbenchEditorOpenTabRequest): Promise<void> {
+    if (path !== selectedFilePathLatest.current) recordNavigationPoint()
+    revealFileGroup(path, intent?.groupIndex)
     await onSelectFileLatest.current(path, intent)
   }
 
@@ -135,14 +171,18 @@ export function useWorkbenchEditorNavigationState({
   }
 
   /**
-   * 后退或前进到历史里的位置（这一步本身不再记进历史）。那个文件的标签已经关掉时以预览标签重新打开
-   * （与 VS Code 一致）。
+   * 后退或前进到历史里的位置（这一步本身不再记进历史）：文件还开着就去它所在的那一组；标签已经关掉时在
+   * 当时那一组里以预览标签重新打开（与 VS Code 一致）。
    */
   async function goThroughHistory(direction: 'back' | 'forward'): Promise<void> {
     const history = navigationHistoryRef.current
     const current = currentNavigationPoint()
     const target = direction === 'back' ? history.back(current) : history.forward(current)
-    if (target) await openLocation(target.path, target.line, target.column, { preview: true })
+    if (target)
+      await openLocation(target.path, target.line, target.column, {
+        preview: true,
+        groupIndex: target.group,
+      })
   }
 
   async function openLocation(
@@ -151,18 +191,18 @@ export function useWorkbenchEditorNavigationState({
     column?: number,
     options?: WorkbenchEditorLocationOptions
   ): Promise<void> {
-    setDiffItem(null)
-    setDiffFocusFirstChangeRequestId(0)
-    setLightTab(null)
-    setActiveDebugTabId(null)
+    revealFileGroup(path, options?.groupIndex)
     // 已经是当前文件时也过一遍：普通打开要把预览标签留下。
-    await onSelectFileLatest.current(path, {
+    const openedPath = await onSelectFileLatest.current(path, {
       preview: options?.preview,
       keepSource: options?.keepSource,
+      groupIndex: options?.groupIndex,
     })
 
     setNavigationRequest((request) => ({
       id: (request?.id ?? 0) + 1,
+      // 定位请求按标签的路径找编辑器：用打开之后的那个写法（还在读的文件先按传进来的，读完补跳）。
+      path: openedPath ?? path,
       line,
       column,
       endLine: optionalWhen(isPositiveNumber, options?.endLine),
@@ -196,6 +236,7 @@ export function useWorkbenchEditorNavigationState({
   }, [diffItem, gitChangeItems])
 
   function openDiff(item: WorkbenchGitChangeItem, options?: WorkbenchOpenDiffOptions): void {
+    onPrimaryGroupTabShownLatest.current?.()
     setLightTab(null)
     setActiveDebugTabId(null)
     setDiffFocusFirstChangeRequestId((requestId) =>
@@ -205,6 +246,7 @@ export function useWorkbenchEditorNavigationState({
   }
 
   function openLightTab(tab: WorkbenchLightEditorTab): void {
+    onPrimaryGroupTabShownLatest.current?.()
     setDiffItem(null)
     setActiveDebugTabId(null)
     setLightTab(tab)
@@ -214,6 +256,7 @@ export function useWorkbenchEditorNavigationState({
     const url = rawUrl.trim()
     if (!url) return
 
+    onPrimaryGroupTabShownLatest.current?.()
     // webview 调试页与 diff/light 互斥（都占编辑区）。
     setDiffItem(null)
     setLightTab(null)
@@ -227,13 +270,17 @@ export function useWorkbenchEditorNavigationState({
     const id = `debug-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
     setDebugTabs((current) => [...current, { id, url, title: deriveDebugTabTitle(url) }])
     setActiveDebugTabId(id)
-  }, [debugTabsRef])
+  }, [debugTabsRef, onPrimaryGroupTabShownLatest])
 
-  const selectDebugTab = useCallback((id: string): void => {
-    setDiffItem(null)
-    setLightTab(null)
-    setActiveDebugTabId(id)
-  }, [])
+  const selectDebugTab = useCallback(
+    (id: string): void => {
+      onPrimaryGroupTabShownLatest.current?.()
+      setDiffItem(null)
+      setLightTab(null)
+      setActiveDebugTabId(id)
+    },
+    [onPrimaryGroupTabShownLatest]
+  )
 
   const closeDebugTab = useCallback((id: string): void => {
     setDebugTabs((current) => {
@@ -271,10 +318,11 @@ export function useWorkbenchEditorNavigationState({
   const selectAgentBrowserTab = useCallback((): void => {
     if (!agentBrowserTabSessionId) return
 
+    onPrimaryGroupTabShownLatest.current?.()
     setDiffItem(null)
     setLightTab(null)
     setActiveDebugTabId(`${WorkbenchAgentBrowserTabPrefix}${agentBrowserTabSessionId}`)
-  }, [agentBrowserTabSessionId])
+  }, [agentBrowserTabSessionId, onPrimaryGroupTabShownLatest])
   /** 会话的浏览器离站（或换了会话）：收起标签；给了会话就只收那个会话的。 */
   const closeAgentBrowserTab = useCallback((expectedSessionId?: string): void => {
     setAgentBrowserTabSessionId((sessionId) => {

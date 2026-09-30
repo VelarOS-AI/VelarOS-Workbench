@@ -40,8 +40,13 @@ export interface WorkbenchEditorDocumentBundle {
   pinnedTabCount?: number
 }
 
-/** 完整编辑器面板状态，包括保存状态和项目索引。 */
+/**
+ * 完整编辑器面板状态，包括保存状态和项目索引。编辑区并排两组时每组一份：`selectedFile*`、`editorContent`
+ * 是这一组正在显示的文件，`openTabs` 仍是所有组里开着的标签。
+ */
 export interface WorkbenchEditorSurfaceBundle extends WorkbenchEditorDocumentBundle {
+  /** 这一组标签栏上的标签（标签栏顺序）；不给就是 `openTabs`（编辑区只有一组）。 */
+  groupTabs?: WorkbenchOpenEditorTab[]
   selectedFilePath: Nullable<string>
   selectedFile: Nullable<WorkbenchReadFileResult>
   canEditSelectedFile: boolean

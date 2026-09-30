@@ -3,20 +3,15 @@ import type { WorkbenchGitDecorationMap } from '@renderer/models/git/workbenchGi
 import type { WorkbenchProject } from '@renderer/models/project/workbenchProjects'
 import type { WorkbenchThemeId } from '@renderer/models/settings/workbenchPreferences'
 
-import type { WorkbenchLanguageServiceDiagnostic } from '@shared/contracts'
-
 import type { WorkbenchDebugTab } from '../../hooks/useWorkbenchEditorNavigationState'
-import type {
-  WorkbenchEditorProjectBundle,
-  WorkbenchEditorSurfaceBundle,
-} from '../../types/workbenchSurfaceBundles'
+import type { WorkbenchEditorProjectBundle } from '../../types/workbenchSurfaceBundles'
 import type { TopToolbarProps } from '../chrome/TopToolbar'
 import type { WorkbenchLogicGraphSidebarProps } from '../codeGraph/WorkbenchLogicGraphSidebar'
 import type {
-  WorkbenchEditorPanelDiffProps,
-  WorkbenchEditorPanelTabsProps,
-  WorkbenchEditorPanelWorkspaceProps,
-} from '../editor/EditorPanel'
+  WorkbenchEditorGroupPanelModel,
+  WorkbenchEditorGroupsLayoutProps,
+} from '../editor/EditorGroupsPanel'
+import type { WorkbenchEditorPanelDiffProps } from '../editor/EditorPanel'
 import type {
   WorkbenchFilePanelHandlersProps,
   WorkbenchFilePanelSearchProps,
@@ -64,16 +59,16 @@ export interface WorkbenchEmbeddedEditorPanelModel {
   showTopBar?: boolean
   workbenchTheme: WorkbenchThemeId
   workbenchProject: WorkbenchEditorProjectBundle
-  workbenchEditor: WorkbenchEditorSurfaceBundle
   gitDecorations: WorkbenchGitDecorationMap
   /** 版本库状态的刷新序号，编辑区据此重读 HEAD 来标行的 Git 改动；null：项目不是 Git 仓库。 */
   gitStateRevision: Nullable<number>
-  selectedFileDiagnostics: readonly WorkbenchLanguageServiceDiagnostic[]
-  isSelectedFileDiagnosticsPending: boolean
-  tabs: WorkbenchEditorPanelTabsProps
+  /** 从左到右的编辑器组（一组，或并排的两组）：各自正在显示的文件、标签栏与动作。 */
+  groups: WorkbenchEditorGroupPanelModel[]
+  /** 当前组、分隔条位置，以及换当前组、把标签挪到另一组的动作。 */
+  layout: WorkbenchEditorGroupsLayoutProps
+  /** 盖在左边那组编辑器上的标签：Git 对比、只读预览（网页调试、结构图、AI 改动由页面与装配件补进来）。 */
   diff: WorkbenchEditorPanelDiffProps
   debug: WorkbenchEmbeddedDebugTabsModel
-  workspace: WorkbenchEditorPanelWorkspaceProps
 }
 
 /**

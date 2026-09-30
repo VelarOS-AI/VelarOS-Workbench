@@ -60,7 +60,7 @@ describe('editor read-only / edit mode', () => {
   test('read-only only blocks typing and refactors: saving keeps working, AI writes never pass through it', () => {
     const controller = readSource('src/renderer/src/hooks/useWorkbenchEditorController.ts')
     // 输入与跨文件改名看模式；保存只看文本是否完整——切到只读之前改下的内容照样能保存。
-    assert.match(controller, /isWorkbenchFileEditable\(selectedFile, chosenEditModes\.get\(selectedFile\.path\)\)\)\s*return/u)
+    assert.match(controller, /isWorkbenchFileEditable\(file, chosenEditModes\.get\(file\.path\)\)\) return/u)
     assert.match(controller, /!isWorkbenchFileEditable\(tab\.file, chosenEditModes\.get\(tab\.path\)\)/u)
     assert.match(controller, /!canSaveWorkbenchTabContent\(tab\)\s*\|\| !isDirtyTab\(tab\)/u)
     assert.doesNotMatch(controller, /gitIgnored/u)

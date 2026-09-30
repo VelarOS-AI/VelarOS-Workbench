@@ -266,6 +266,11 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     closeEditorTab: 'Close tab',
     pinEditorTab: 'Pin',
     unpinEditorTab: 'Unpin',
+    splitEditorTabRight: 'Split and move right',
+    moveEditorTabToOtherGroup: 'Move to other side',
+    resizeEditorGroups: 'Resize the left and right editors',
+    editorGroupLeft: 'Left editor',
+    editorGroupRight: 'Right editor',
     closeOtherEditorTabs: 'Close others',
     closeEditorTabsToRight: 'Close tabs to the right',
     closeAllEditorTabs: 'Close all',
@@ -384,6 +389,9 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     commandCloseEditor: 'Close Editor',
     commandCloseAllEditors: 'Close All Editors',
     commandReopenClosedEditor: 'Reopen Closed Editor',
+    commandSplitEditorRight: 'Split and Move Editor Right',
+    commandFocusLeftEditorGroup: 'Focus Left Editor',
+    commandFocusRightEditorGroup: 'Focus Right Editor',
     commandFormatDocument: 'Format Document',
     commandToggleWordWrap: 'Toggle Word Wrap',
     commandToggleReadOnly: 'Toggle Read-Only',
@@ -1145,6 +1153,15 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     settingsShortcutReopenClosedTab: 'Reopen closed tab',
     settingsShortcutReopenClosedTabDescription:
       'Reopen the most recently closed file tab at its last cursor position.',
+    settingsShortcutSplitEditorRight: 'Split and move right',
+    settingsShortcutSplitEditorRightDescription:
+      'Move the current tab into the editor on the right (opening it if needed); the left side shows the tab next to it. A file is open on one side only.',
+    settingsShortcutFocusLeftEditorGroup: 'Focus left editor',
+    settingsShortcutFocusLeftEditorGroupDescription:
+      'With two editors side by side, put the focus in the left one. Save, find and go to line act on the side that has the focus.',
+    settingsShortcutFocusRightEditorGroup: 'Focus right editor',
+    settingsShortcutFocusRightEditorGroupDescription:
+      'With two editors side by side, put the focus in the right one.',
     settingsShortcutSaveCurrent: 'Save current file',
     settingsShortcutSaveCurrentDescription: 'Write the selected editor tab to disk.',
     settingsShortcutSaveAll: 'Save all files',

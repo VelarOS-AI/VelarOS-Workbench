@@ -1,6 +1,7 @@
 import {
   lazy,
   type MouseEvent,
+  type MutableRefObject,
   type ReactElement,
   type ReactNode,
   Suspense,
@@ -21,10 +22,7 @@ import {
   resolveWorkbenchDiagnosticNavigationIndex,
   sortWorkbenchFileDiagnostics,
 } from '@renderer/models/editor/workbenchCodeInsightModel'
-import {
-  workbenchEditorFileStateKey,
-  WorkbenchEditorFileStates,
-} from '@renderer/models/editor/workbenchEditorFileStates'
+import type { WorkbenchEditorFileStates } from '@renderer/models/editor/workbenchEditorFileStates'
 import {
   DefaultWorkbenchEditorFindOptions,
   EmptyWorkbenchEditorFindStatus,
@@ -97,7 +95,6 @@ import type {
   WorkbenchEditorSurfaceBundle,
 } from '../../types/workbenchSurfaceBundles'
 import { type TopToolbarProps } from '../chrome/TopToolbar'
-import { WorkbenchTopBar } from '../chrome/WorkbenchTopBar'
 import { GitDiffEditorPanel } from '../git/GitDiffEditorPanel'
 
 import type { EditorNavigationRequest } from './CodeInsightPanel'
@@ -111,6 +108,7 @@ import { EditorGoToLineBar } from './EditorGoToLineBar'
 import {
   EditorTabBar,
   IsolatedWorkbenchEditorTabGroups,
+  type WorkbenchEditorAuxiliaryTabGroup,
   type WorkbenchEditorAuxiliaryTabItem,
 } from './EditorTabBar'
 import { EditorTextFormatNotice } from './EditorTextFormatNotice'
@@ -171,6 +169,36 @@ export interface WorkbenchEditorPanelTabsProps {
 
 export interface WorkbenchEditorPanelAuxiliaryTab extends WorkbenchEditorAuxiliaryTabItem {
   content: ReactNode
+}
+
+/**
+ * 激活着的独占标签组（结构图、AI 改动）：有的话整个编辑区只显示这一组，普通文件标签（并排时的两组）都
+ * 让出来；没有为 null。
+ */
+export function resolveIsolatedWorkbenchEditorTabGroup(
+  auxiliaryTabs: readonly WorkbenchEditorAuxiliaryTabItem[]
+): Nullable<WorkbenchEditorAuxiliaryTabGroup> {
+  const group = auxiliaryTabs.find((tab) => tab.active)?.group
+  return group && IsolatedWorkbenchEditorTabGroups.has(group) ? group : null
+}
+
+/** 这个面板是编辑区里的哪一组，以及并排的两组共用的东西（由 EditorGroupsPanel 给）。 */
+export interface WorkbenchEditorPanelGroupProps {
+  /** 0 是左边那组，1 是右边那组。 */
+  index: number
+  /** 编辑区里一共几组。 */
+  count: number
+  /** 全局动作（保存、查找、跳行、⌘W……）此刻作用在这一组上。 */
+  focused: boolean
+  /** 两组的编辑器共用的、按文件记的编辑器状态：标签从一组挪到另一组，撤销历史、光标、折叠跟着走。 */
+  fileStates: WorkbenchEditorFileStates
+  /** 已经执行过的定位请求：两组共用，文件的标签后来挪到另一组时不会再执行一遍。 */
+  appliedNavigationRequestIdRef: MutableRefObject<Nullable<number>>
+  /** 要求把键盘焦点放进某一组的编辑器（⌘1 / ⌘2、拆分之后）；已经照办过的记在 `handledFocusRequestIdRef`。 */
+  focusRequest: { id: number; groupIndex: number }
+  handledFocusRequestIdRef: MutableRefObject<number>
+  /** 把标签挪到另一组；`beforePath` 是拖放时落在哪个标签前面。 */
+  onMoveTabToGroup: (path: string, groupIndex: number, beforePath?: Nullable<string>) => void
 }
 
 export interface WorkbenchEditorPanelDiffProps {
@@ -247,6 +275,7 @@ export interface WorkbenchEditorPanelWorkspaceProps {
 interface EditorPanelProps {
   chrome: TopToolbarProps
   showTopBar?: boolean
+  group: WorkbenchEditorPanelGroupProps
   workbenchTheme: WorkbenchThemeId
   workbenchProject: WorkbenchEditorProjectBundle
   workbenchEditor: WorkbenchEditorSurfaceBundle
@@ -263,9 +292,14 @@ interface EditorPanelProps {
   workspace: WorkbenchEditorPanelWorkspaceProps
 }
 
+/**
+ * 编辑区里的一组：自己的标签栏、查找栏、跳行栏、外部改动提示与编辑器。编辑区并排两组时左右各一个；
+ * Git 对比、只读预览、网页调试与 Agent 浏览器这些盖在编辑器上的标签只在左边那组里（`diff`）。
+ */
 export function EditorPanel({
   chrome,
   showTopBar = true,
+  group,
   workbenchTheme,
   workbenchProject,
   workbenchEditor,
@@ -324,7 +358,10 @@ export function EditorPanel({
     selectedFilePath,
     selectedFile,
     editorContent,
-    openTabs,
+    // 所有组里开着的标签：语言服务要看它们没保存的正文，「保存全部」也按它们算。
+    openTabs: allOpenTabs,
+    // 这一组标签栏上的标签。
+    groupTabs: openTabs = allOpenTabs,
     previewTabPath = null,
     pinnedTabCount = 0,
     hasUnsavedChanges,
@@ -339,7 +376,7 @@ export function EditorPanel({
   const onCursorPositionLatest = useLatest(onCursorPositionChange)
   const editorContentLatest = useLatest(editorContent)
   const editorRef = useRef<CodeMirrorEditorHandle>(null)
-  const appliedNavigationRequestIdRef = useRef<Nullable<number>>(null)
+  const { appliedNavigationRequestIdRef, handledFocusRequestIdRef } = group
   const [isFindOpen, setIsFindOpen] = useState(false)
   const [findQuery, setFindQuery] = useState('')
   const [findReplace, setFindReplace] = useState('')
@@ -372,12 +409,6 @@ export function EditorPanel({
   const [activeDiagnosticIndex, setActiveDiagnosticIndex] = useState(-1)
   const onActiveProblemIdChangeLatest = useLatest(onActiveProblemIdChange)
   const lastSyncedProblemIdRef = useRef<Nullable<string>>(null)
-  // 各打开文件的编辑器状态（撤销历史、光标、折叠、滚动位置）放在这里：编辑器切到预览、对比视图时会卸载，
-  // 挂回来接着用；标签关掉就丢。
-  const [editorFileStates] = useState(() => new WorkbenchEditorFileStates())
-  useEffect(() => {
-    editorFileStates.retain(openTabs.map((tab) => workbenchEditorFileStateKey(projectRoot, tab.path)))
-  }, [editorFileStates, openTabs, projectRoot])
 
   // 编辑器 chunk 较大：让空闲期预热承担解析成本；若用户立刻点文件，lazy 仍会立即复用同一请求。
   useEffect(() => {
@@ -548,7 +579,7 @@ export function EditorPanel({
     () => parseWorkbenchGoToLineInput(goToLineInput, editorLineCount),
     [editorLineCount, goToLineInput]
   )
-  const dirtyTabCount = useMemo(() => openTabs.filter(isDirtyTab).length, [openTabs])
+  const dirtyTabCount = useMemo(() => allOpenTabs.filter(isDirtyTab).length, [allOpenTabs])
   const selectedTab = useMemo(
     () => toNullable(openTabs.find((tab) => tab.path === selectedFilePath)),
     [openTabs, selectedFilePath]
@@ -579,10 +610,7 @@ export function EditorPanel({
     [auxiliaryTabs]
   )
   // 独占组（结构图、AI 改动）激活时标签栏只显示这一组；否则独占组的标签都不在普通标签栏里。
-  const isolatedTabGroup =
-    activeAuxiliaryTab?.group && IsolatedWorkbenchEditorTabGroups.has(activeAuxiliaryTab.group)
-      ? activeAuxiliaryTab.group
-      : null
+  const isolatedTabGroup = resolveIsolatedWorkbenchEditorTabGroup(auxiliaryTabs)
   const visibleAuxiliaryTabs = useMemo(
     () => auxiliaryTabs.filter((tab) =>
       isolatedTabGroup
@@ -608,7 +636,9 @@ export function EditorPanel({
   }, [selectedExternalChange, selectedFilePath])
   const canKeepLocalExternalConflict =
     selectedExternalChange?.status === 'modified' && !!selectedExternalChange.diskFile
-  const shouldShowExternalConflictDialog = selectedExternalChange?.status === 'modified'
+  // 并排两组时只有当前组弹确认框（另一组照样有提示条），不会同时叠出两个。
+  const shouldShowExternalConflictDialog =
+    group.focused && selectedExternalChange?.status === 'modified'
   const quickOpenShortcut = formatWorkbenchShortcutHint(keymap['quick-open'])
   const problemsShortcut = formatWorkbenchShortcutHint(keymap['toggle-problems'])
   const gitShortcut = formatWorkbenchShortcutHint(keymap['toggle-changes'])
@@ -708,7 +738,9 @@ export function EditorPanel({
 
   useEffect(() => {
     if (!navigationRequest || !selectedFile) return
-    // 每个导航请求只应用一次（按单调 id 去重）。selectedFile 仍在依赖里，
+    // 请求是给某个文件的：并排两组时只有正在显示它的那一组执行。
+    if (navigationRequest.path && navigationRequest.path !== selectedFile.path) return
+    // 每个导航请求只应用一次（按单调 id 去重，两组共用这份记录）。selectedFile 仍在依赖里，
     // 以便文件在请求之后才加载完成时能补跳；但保存等操作只是刷新 selectedFile 身份，
     // 不能因此把光标重新拽回上一次导航位置、顺带关掉补全面板。
     if (appliedNavigationRequestIdRef.current === navigationRequest.id) return
@@ -732,7 +764,16 @@ export function EditorPanel({
       },
       { label: 'workbench.editor.navigationRequest' }
     )
-  }, [editorContentLatest, navigationRequest, selectedFile, timers])
+  }, [appliedNavigationRequestIdRef, editorContentLatest, navigationRequest, selectedFile, timers])
+
+  // ⌘1 / ⌘2、拆分之后：把键盘焦点放进这一组的编辑器（这一组显示的是图片或 Markdown 预览时没有编辑器可给）。
+  const { id: focusRequestId, groupIndex: focusRequestGroupIndex } = group.focusRequest
+  useEffect(() => {
+    if (focusRequestGroupIndex !== group.index) return
+    if (handledFocusRequestIdRef.current === focusRequestId) return
+    handledFocusRequestIdRef.current = focusRequestId
+    editorRef.current?.focus()
+  }, [focusRequestGroupIndex, focusRequestId, group.index, handledFocusRequestIdRef])
 
   useEffect(() => {
     if (
@@ -790,20 +831,25 @@ export function EditorPanel({
     if (selectedFilePath && !selectedTabPinned) onCloseOpenFile(selectedFilePath)
   }
 
+  // 两组都记下每一次请求，只有当前组去关：换了当前组之后，另一组不会把旧请求再执行一遍。独占组（结构图、
+  // AI 改动）占着整个编辑区时，它们的标签在左边那组里，由左边那组关。
+  const closesActiveTab = group.focused || !!isolatedTabGroup
   const handledCloseActiveTabRequestIdRef = useRef(closeActiveTabRequestId)
   useEffect(() => {
     if (handledCloseActiveTabRequestIdRef.current === closeActiveTabRequestId) return
 
     handledCloseActiveTabRequestIdRef.current = closeActiveTabRequestId
-    closeActiveEditorTab()
+    if (closesActiveTab) closeActiveEditorTab()
   })
 
   return (
     <section className={styles.editorPanel}>
-      {showTopBar && <WorkbenchTopBar {...chrome} />}
       <div className={styles.editorMain}>
         <EditorTabBar
           openTabs={isolatedTabGroup ? [] : openTabs}
+          groupIndex={group.index}
+          groupCount={group.count}
+          onMoveTabToGroup={group.onMoveTabToGroup}
           previewTabPath={previewTabPath}
           pinnedTabCount={isolatedTabGroup ? 0 : pinnedTabCount}
           selectedFilePath={isolatedTabGroup ? null : selectedFilePath}
@@ -1086,14 +1132,14 @@ export function EditorPanel({
                         readOnly={!canEditSelectedFile || selectedFile.truncated}
                         disabled={false}
                         projectContextIndex={projectContextIndex}
-                        openTabs={openTabs}
+                        openTabs={allOpenTabs}
                         packageManager={selectedPackageManager}
                         workbenchTheme={workbenchTheme}
                         externalRevision={externalRevision}
                         gitHeadContent={gitHeadContent}
                         gitBlame={gitBlame}
                         onToggleGitBlame={toggleWorkbenchGitBlameVisible}
-                        fileStates={editorFileStates}
+                        fileStates={group.fileStates}
                         onChange={onEditorContentChange}
                         onCursorPositionChange={handleCursorPositionChange}
                         onOpenFind={openFindBar}

@@ -20,8 +20,8 @@ import {
   GitDiffIcon,
   LockSimpleIcon,
   PencilSimpleIcon,
-  PushPinIcon,
-  PushPinSlashIcon,
+  PushPinSimpleIcon,
+  SquareSplitHorizontalIcon,
   WarningCircleIcon,
   XIcon,
 } from '@phosphor-icons/react'
@@ -29,6 +29,12 @@ import { useWorkbenchEditorTabOverflow } from '@renderer/hooks/useWorkbenchEdito
 import { useWorkbenchI18n } from '@renderer/i18n'
 import type { WorkbenchEditorAutosaveFailures } from '@renderer/models/editor/workbenchEditorAutosave'
 import type { WorkbenchEditorEditMode } from '@renderer/models/editor/workbenchEditorEditMode'
+import {
+  beginWorkbenchEditorTabDrag,
+  canDropWorkbenchEditorTabOn,
+  endWorkbenchEditorTabDrag,
+  readWorkbenchEditorTabDrag,
+} from '@renderer/models/editor/workbenchEditorTabDrag'
 import { buildWorkbenchEditorTabLabels } from '@renderer/models/editor/workbenchEditorTabLabels'
 import { isDirtyTab } from '@renderer/models/editor/workbenchEditorTabs'
 import {
@@ -80,8 +86,15 @@ export interface WorkbenchEditorAuxiliaryTabItem {
   onClose?: () => void
 }
 
+/** 拖的是编辑器标签时拖放数据里带的类型：别的拖放（文件树里的文件、文字）标签栏不接。 */
+const EditorTabDragType = 'application/x-velaros-workbench-editor-tab'
+
 interface EditorTabBarProps {
+  /** 这条标签栏上的标签（编辑区并排两组时是这一组的）。 */
   openTabs: WorkbenchOpenEditorTab[]
+  /** 这条标签栏属于编辑区里的哪一组（0 左，1 右），以及一共几组。 */
+  groupIndex?: number
+  groupCount?: number
   /** 预览标签：名字是斜体，双击留下。 */
   previewTabPath?: Nullable<string>
   /** `openTabs` 最前面这么多个是固定标签：关闭按钮换成图钉，拖动出不了固定区。 */
@@ -110,6 +123,11 @@ interface EditorTabBarProps {
   /** 标签右键「固定」/「取消固定」；点固定标签上的图钉也是取消固定。 */
   onPinOpenFile?: (path: string) => void
   onUnpinOpenFile?: (path: string) => void
+  /**
+   * 把标签挪到另一组并切过去：右键「拆分并右移」（只有一组时，右边那组新开出来）/「移到另一侧」，或者拖到
+   * 另一组的标签栏上（`beforePath` 是落在哪个标签前面，落在空白处为 null）。
+   */
+  onMoveTabToGroup?: (path: string, groupIndex: number, beforePath?: Nullable<string>) => void
   onCloseOpenFile: (path: string) => void
   onCloseOtherOpenFiles: (path: string) => void
   onCloseAllOpenFiles: () => void
@@ -159,6 +177,8 @@ function middleClickCloseHandlers(onClose: LooseOptional<() => void>): {
 
 export function EditorTabBar({
   openTabs,
+  groupIndex = 0,
+  groupCount = 1,
   previewTabPath = null,
   pinnedTabCount = 0,
   selectedFilePath,
@@ -179,6 +199,7 @@ export function EditorTabBar({
   onKeepOpenFile,
   onPinOpenFile,
   onUnpinOpenFile,
+  onMoveTabToGroup,
   onCloseOpenFile,
   onCloseOtherOpenFiles,
   onCloseAllOpenFiles,
@@ -202,6 +223,8 @@ export function EditorTabBar({
   const [openMenu, setOpenMenu] = useState<Nullable<'tabs' | 'actions'>>(null)
   const [draggingTabPath, setDraggingTabPath] = useState<Nullable<string>>(null)
   const [dragOverTabPath, setDragOverTabPath] = useState<Nullable<string>>(null)
+  // 另一组拖过来的标签停在这条标签栏的空白处：松手加到末尾。
+  const [stripDropTarget, setStripDropTarget] = useState(false)
   const tabListButtonRef = useRef<HTMLButtonElement>(null)
   const actionsButtonRef = useRef<HTMLButtonElement>(null)
   const tabListMenuRef = useRef<HTMLDivElement>(null)
@@ -258,34 +281,79 @@ export function EditorTabBar({
 
   function handleTabDragStart(path: string, event: DragEvent<HTMLDivElement>): void {
     setDraggingTabPath(path)
+    beginWorkbenchEditorTabDrag({ path, groupIndex, pinned: isPinnedTabPath(path) })
     event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData(EditorTabDragType, path)
     event.dataTransfer.setData('text/plain', path)
   }
 
-  /** 固定标签只能在固定标签之间挪，普通标签只能在普通标签之间挪：别的位置不接这次拖放。 */
-  function canDropTabOn(path: string): boolean {
-    return !!draggingTabPath && isPinnedTabPath(draggingTabPath) === isPinnedTabPath(path)
+  /** 正在进行的这次拖放拖的是哪个编辑器标签；拖的是别的东西（文件树里的文件、文字）为 null。 */
+  function readTabDrag(event: DragEvent<HTMLElement>): ReturnType<typeof readWorkbenchEditorTabDrag> {
+    return event.dataTransfer.types.includes(EditorTabDragType) ? readWorkbenchEditorTabDrag() : null
+  }
+
+  /**
+   * 同一组里固定标签只能在固定标签之间挪、普通标签只能在普通标签之间挪，别的位置不接这次拖放；另一组拖过来
+   * 的标签落在哪个标签上都行（布局把它收进对应的区里）。
+   */
+  function canDropTabOn(path: string, event: DragEvent<HTMLElement>): boolean {
+    return canDropWorkbenchEditorTabOn(readTabDrag(event), {
+      path,
+      groupIndex,
+      pinned: isPinnedTabPath(path),
+    })
   }
 
   function handleTabDragOver(path: string, event: DragEvent<HTMLDivElement>): void {
-    if (!canDropTabOn(path)) return
+    if (!canDropTabOn(path, event)) return
     event.preventDefault()
+    // 落在标签上：不再算作落在标签栏的空白处。
+    event.stopPropagation()
     event.dataTransfer.dropEffect = 'move'
     if (path !== dragOverTabPath) setDragOverTabPath(path)
+    if (stripDropTarget) setStripDropTarget(false)
   }
 
   function handleTabDrop(path: string, event: DragEvent<HTMLDivElement>): void {
     event.preventDefault()
-    if (draggingTabPath && draggingTabPath !== path && canDropTabOn(path)) {
-      onReorderOpenTabs(draggingTabPath, path)
+    event.stopPropagation()
+    const drag = readTabDrag(event)
+    if (drag && canDropTabOn(path, event)) {
+      if (drag.groupIndex === groupIndex) onReorderOpenTabs(drag.path, path)
+      else onMoveTabToGroup?.(drag.path, groupIndex, path)
     }
-    setDraggingTabPath(null)
+    finishTabDrag()
+  }
+
+  function handleStripDragOver(event: DragEvent<HTMLDivElement>): void {
+    const drag = readTabDrag(event)
+    if (!drag || drag.groupIndex === groupIndex || !onMoveTabToGroup) return
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'move'
+    if (!stripDropTarget) setStripDropTarget(true)
+    if (dragOverTabPath) setDragOverTabPath(null)
+  }
+
+  function handleStripDrop(event: DragEvent<HTMLDivElement>): void {
+    const drag = readTabDrag(event)
+    if (!drag || drag.groupIndex === groupIndex || !onMoveTabToGroup) return
+    event.preventDefault()
+    onMoveTabToGroup(drag.path, groupIndex, null)
+    finishTabDrag()
+  }
+
+  function handleStripDragLeave(event: DragEvent<HTMLDivElement>): void {
+    if (event.currentTarget.contains(event.relatedTarget as Nullable<Node>)) return
+    setStripDropTarget(false)
     setDragOverTabPath(null)
   }
 
-  function handleTabDragEnd(): void {
+  /** 拖放结束（松手、取消）：收起落点提示。标签挪去了另一组时原来那个元素已经不在，dragend 到不了这里。 */
+  function finishTabDrag(): void {
     setDraggingTabPath(null)
     setDragOverTabPath(null)
+    setStripDropTarget(false)
+    endWorkbenchEditorTabDrag()
   }
 
   const menuOpenKind = isPresent(openMenu)
@@ -301,6 +369,13 @@ export function EditorTabBar({
       setOpenMenu(null)
     }
   }, [openMenu, tabScrollerOverflow])
+
+  // 拖着的标签挪去了另一组：它在这条标签栏上的元素没了，dragend 到不了这里，自己收起「正在拖」的样子
+  // （否则这个文件以后再回到这一组，标签会一直是半透明的）。
+  useEffect(() => {
+    if (draggingTabPath && !openTabs.some((tab) => tab.path === draggingTabPath))
+      setDraggingTabPath(null)
+  }, [draggingTabPath, openTabs])
 
   useDismissOnWindowInteract({
     enabled: menuOpenKind,
@@ -337,7 +412,14 @@ export function EditorTabBar({
         role="tablist"
         aria-label={ariaLabel ?? t('workbench.openFiles')}
       >
-        <div ref={tabScrollerRef} className={styles.editorTabScroller}>
+        <div
+          ref={tabScrollerRef}
+          className={styles.editorTabScroller}
+          data-drop-target={stripDropTarget}
+          onDragOver={handleStripDragOver}
+          onDragLeave={handleStripDragLeave}
+          onDrop={handleStripDrop}
+        >
           {openTabs.map((tab, tabIndex) => {
             const isDirty = isDirtyTab(tab)
             const isPinned = tabIndex < pinnedTabCount
@@ -375,7 +457,7 @@ export function EditorTabBar({
                 onDragStart={(event) => handleTabDragStart(tab.path, event)}
                 onDragOver={(event) => handleTabDragOver(tab.path, event)}
                 onDrop={(event) => handleTabDrop(tab.path, event)}
-                onDragEnd={handleTabDragEnd}
+                onDragEnd={finishTabDrag}
               >
                 <Button
                   variant="ghost"
@@ -419,7 +501,7 @@ export function EditorTabBar({
                     label={t('workbench.unpinEditorTab')}
                     onClick={() => onUnpinOpenFile?.(tab.path)}
                   >
-                    <PushPinIcon size={12} weight="fill" />
+                    <PushPinSimpleIcon size={12} weight="fill" />
                   </IconButton>
                 ) : (
                   <IconButton
@@ -673,7 +755,7 @@ export function EditorTabBar({
                     label={t('workbench.unpinEditorTab')}
                     onClick={() => onUnpinOpenFile?.(tab.path)}
                   >
-                    <PushPinIcon size={13} weight="fill" />
+                    <PushPinSimpleIcon size={13} weight="fill" />
                   </IconButton>
                 ) : (
                   <IconButton
@@ -846,12 +928,36 @@ export function EditorTabBar({
                 )
               }
             >
-              {contextTabIsPinned ? <PushPinSlashIcon size={14} /> : <PushPinIcon size={14} />}
+              <PushPinSimpleIcon size={14} />
               <Text truncate>
                 {t(contextTabIsPinned ? 'workbench.unpinEditorTab' : 'workbench.pinEditorTab')}
               </Text>
             </Button>
           )}
+          {!!onMoveTabToGroup &&
+            (groupCount < 2 ? (
+              // 只有一组：把这个标签挪进新开的右边那组。组里只有它一个时挪过去等于没挪。
+              <Button
+                variant="ghost"
+                size="block"
+                disabled={openTabs.length < 2}
+                onClick={() => onRunTabContextAction(() => onMoveTabToGroup(tabContextMenu.path, 1))}
+              >
+                <SquareSplitHorizontalIcon size={14} />
+                <Text truncate>{t('workbench.splitEditorTabRight')}</Text>
+              </Button>
+            ) : (
+              <Button
+                variant="ghost"
+                size="block"
+                onClick={() =>
+                  onRunTabContextAction(() => onMoveTabToGroup(tabContextMenu.path, 1 - groupIndex))
+                }
+              >
+                <SquareSplitHorizontalIcon size={14} />
+                <Text truncate>{t('workbench.moveEditorTabToOtherGroup')}</Text>
+              </Button>
+            ))}
           <Button
             variant="ghost"
             size="block"
