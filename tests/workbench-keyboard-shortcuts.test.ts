@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 
 import { describe, test } from 'bun:test'
 
@@ -168,6 +170,22 @@ void describe('Workbench keyboard shortcuts', () => {
     assert.deepEqual([...calls, ...linuxCalls], ['find-in-files', 'find-in-files', 'find-in-files'])
     assert.equal(DEFAULT_WORKBENCH_KEYBOARD_SHORTCUT_MAP['find-in-files'], 'Mod+Shift+F')
     assert.equal(formatWorkbenchShortcutHint('Mod+Shift+F', Mac), '⇧⌘F')
+  })
+
+  void test('the find bars keep ⌘F for themselves and leave ⇧⌘F to the project search', () => {
+    // 查找栏里按 ⌘F 是选中查找词（按键被它用掉）；⇧⌘F 不归它，要一路传到全局快捷键去开项目搜索。
+    for (const file of [
+      'src/renderer/src/components/editor/EditorFindBar.tsx',
+      'src/renderer/src/components/terminal/WorkbenchTerminalFindBar.tsx',
+    ]) {
+      const source = readFileSync(resolve(process.cwd(), file), 'utf8')
+      assert.match(source, /primary && !event\.altKey && !event\.shiftKey && event\.code === 'KeyF'/u, file)
+    }
+    const instances = readFileSync(
+      resolve(process.cwd(), 'src/renderer/src/components/terminal/workbenchTerminalInstances.ts'),
+      'utf8'
+    )
+    assert.match(instances, /!event\.altKey && !event\.shiftKey && event\.code === 'KeyF'/u)
   })
 
   void test('Mod+Shift+P opens the command palette, Mod+P still opens Quick Open', () => {

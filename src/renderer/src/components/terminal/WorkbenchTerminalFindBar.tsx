@@ -88,7 +88,7 @@ export function WorkbenchTerminalFindBar({
             } else if (event.key === 'Enter' || event.key === 'F3') {
               if (event.shiftKey) onFindPrevious()
               else onFindNext()
-            } else if (primary && !event.altKey && event.code === 'KeyF') {
+            } else if (primary && !event.altKey && !event.shiftKey && event.code === 'KeyF') {
               queryInputRef.current?.select()
             } else if (optionShortcut && OptionShortcutCodes[event.code]) {
               onToggleOption(OptionShortcutCodes[event.code]!)

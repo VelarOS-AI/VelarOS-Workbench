@@ -99,7 +99,7 @@ export function EditorFindBar({
     const optionShortcut = isApplePlatform ? event.altKey && event.metaKey : event.altKey && !event.ctrlKey
     if (event.key === 'Escape') {
       onClose()
-    } else if (primary && !event.altKey && event.code === 'KeyF') {
+    } else if (primary && !event.altKey && !event.shiftKey && event.code === 'KeyF') {
       queryInputRef.current?.focus()
       queryInputRef.current?.select()
     } else if (
