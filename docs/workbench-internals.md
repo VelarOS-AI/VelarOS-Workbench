@@ -184,6 +184,23 @@ GB18030、混用的换行符），编辑器据此只读打开，用户明确选�
 - **存盘**：哪些标签在哪一组、每组正在显示的标签、当前组、分隔条位置（`splitRatio`）都在 `editorLayout` 里。
   恢复会话时只把当前组的当前文件带回上次的光标位置。
 
+## 焦点与按键的几条约定
+
+- **底部工具窗盖着编辑区**：终端、运行、Git、问题、调试那一块（`.bottomToolWindowSlot`）是绝对定位盖在
+  左侧面板、编辑区、右侧面板上面的，不把它们挤矮。编辑器并不知道下面那一截看不见，所以文件编辑器把被
+  盖住的高度报给 CodeMirror 的 `scrollMargins`（`workbenchEditorCoveredScrollMargins.ts`，工具窗带
+  `data-workbench-editor-overlay`）：跳转、点问题、调试停下、跟着光标滚，目标都落在工具窗上面。文件最后
+  几行仍然滚不出工具窗（滚动到底了），左侧面板的底部（提交框）和聊天输入框照样被盖住——要改就得把工具
+  窗改成挤占式的布局。
+- **自己画的菜单里的 Esc**：右键菜单、标签栏的菜单靠 `useDismissOnWindowInteract` 在 window 上听 Esc。
+  全局快捷键（Esc 关右侧面板）也挂在 window 上，而且挂得更早，所以关菜单的监听在捕获阶段接，并
+  `preventDefault`：全局快捷键见到已经用掉的按键就让路，同一下 Esc 只关菜单。
+- **项目树里的改名框**：失去焦点就取消改名。react-arborist 取消之后会把焦点还给那一行；焦点是被树外面
+  拿走的（点进编辑器、打开快速打开）时，`keepFocusOutsideTreeAfterRename` 在树拿回焦点的那一刻把它交
+  回去，不然之后敲的字都进了树。
+- **顶栏 ▶ 菜单**：打开时焦点给命令输入框，由浮层的 `onOpenAutoFocus` 给——浮层先挂出来、摆好位置才
+  可见，输入框上的 `autoFocus` 赶在那之前，落不上。菜单开着时 ▶ 的悬停说明不出。
+
 ## 项目搜索与替换
 
 侧栏的搜索（⇧⌘F）。匹配规则只有一份：`src/shared/workbenchTextSearch.ts`（查找词、区分大小写 / 全字 /
@@ -245,7 +262,9 @@ GB18030、混用的换行符），编辑器据此只读打开，用户明确选�
   「推送」；远端分支签出成同名的本地分支，本地没有就新建），新建分支。外框和面板的尺寸用 UI 包的顶栏
   控件（`TopBarControlFrame`、`--topbar-panel-*`），和项目菜单同一套；面板里的内容是 Workbench 自己
   的，不再用 UI 包的 `WorkspaceGitCommitControl`（它没有放远端操作的位置）。哪些操作按得了、为什么
-  按不了、树怎么排，都在 `workbenchGitBranchMenuModel.ts`。
+  按不了、树怎么排，都在 `workbenchGitBranchMenuModel.ts`。合并、变基、拣选、撤销进行到一半时
+  （`summary.operation`）：变基会把 HEAD 从分支上摘下来，按钮上写「feature（变基中）」而不是「分离的
+  HEAD」；拉取、推送、同步、切换和新建分支都按不了，原因写的是「先在提交面板里继续或放弃」，只留获取远端。
 - **模块**：`WorkbenchGitService` 是对外的唯一入口（IPC、测试、探针都找它）。成块的新功能另放文件，
   经 `WorkbenchGitAccess` 借服务的内部能力（跑 git、项目在仓库里的位置、状态、报错口径），不各起各的
   git：贮藏在 `WorkbenchGitStashes.ts`，合并、变基、拣选、撤销在 `WorkbenchGitOperations.ts`。
