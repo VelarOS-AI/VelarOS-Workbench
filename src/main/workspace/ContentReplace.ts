@@ -3,7 +3,8 @@
  *
  * 每个文件：
  * - 重新读盘、按编辑器同一套规则解码，用同样的查找词与开关重新找匹配（匹配规则见 `@shared/workbenchTextSearch`）；
- *   点名了哪几处就只换那几处，找不齐说明文件变了，不换。
+ *   点名了哪几处就只换那几处，找不齐说明文件变了，不换。跑正则的那一步在搜索 worker 里（见
+ *   ContentSearchWorkerHost），卡住就停下，这个文件与后面的文件都不换。
  * - 经编辑器保存同一条管线写回（FileOperations.saveFile）：不带编码与换行符，按磁盘上现有的写，BOM 照留；
  *   带着搜索时的版本（修改时间与大小），之后被改过就拒绝；原子写。
  * - 替换前的内容先记进本地历史，保存再记下替换后的：没有撤销可按的文件，也能从本地历史找回。
@@ -22,11 +23,14 @@ import type {
 } from '@shared/contracts'
 import {
   compileWorkbenchTextSearch,
-  replaceWorkbenchTextSearchMatches,
-  type WorkbenchTextSearchMatcher,
+  type WorkbenchTextSearchQuery,
   workbenchTextSearchRangeKey,
 } from '@shared/workbenchTextSearch'
 
+import type {
+  OpenWorkbenchContentSearchSession,
+  WorkbenchContentSearchWorkerSession,
+} from './ContentSearchWorkerHost'
 import type { FileOperations } from './FileOperations'
 import type { WorkbenchLocalHistoryStore } from './LocalHistoryStore'
 import type { PathResolver } from './PathResolver'
@@ -40,42 +44,55 @@ class ContentReplace {
   constructor(
     private readonly pathResolver: PathResolver,
     private readonly files: FileOperations,
-    private readonly localHistoryStore: WorkbenchLocalHistoryStore
+    private readonly localHistoryStore: WorkbenchLocalHistoryStore,
+    private readonly openSearchSession: OpenWorkbenchContentSearchSession
   ) {}
 
   public async replaceContent(
     request: WorkbenchReplaceContentRequest
   ): Promise<WorkbenchReplaceContentResult> {
     const projectRoot = await this.pathResolver.resolveProjectRoot(request.projectRoot)
-    const compiled = compileWorkbenchTextSearch({
+    const query: WorkbenchTextSearchQuery = {
       query: request.query,
       matchCase: !!request.matchCase,
       wholeWord: !!request.wholeWord,
       regex: !!request.regex,
-    })
+    }
+    // 只编译不执行：正则写错了在这里就说，不用开 worker。
+    const compiled = compileWorkbenchTextSearch(query)
     if (compiled.status === 'empty') throw new AppError('VALIDATION', '没有要替换的查找词。')
     if (compiled.status === 'invalid')
       throw new AppError('VALIDATION', `正则表达式有误：${compiled.message}`)
 
+    const session = this.openSearchSession()
     const files: WorkbenchReplaceContentFileResult[] = []
-    for (const file of request.files) {
-      try {
-        files.push(await this.replaceInFile(projectRoot, compiled.matcher, request.replacement, file))
-      } catch (error) {
-        const appError = AppError.from(error)
-        files.push({
-          path: file.path,
-          replacedCount: 0,
-          error: { message: appError.message, code: appError.code },
-        })
+    // 正则在某个文件上跑不完：后面的文件多半也一样，都不换了。
+    let stopped: Nullable<AppError> = null
+    try {
+      for (const file of request.files) {
+        try {
+          if (stopped) throw stopped
+          files.push(await this.replaceInFile(projectRoot, session, query, request.replacement, file))
+        } catch (error) {
+          const appError = AppError.from(error)
+          if (appError.code === 'TIMEOUT') stopped = appError
+          files.push({
+            path: file.path,
+            replacedCount: 0,
+            error: { message: appError.message, code: appError.code },
+          })
+        }
       }
+    } finally {
+      session.close()
     }
     return { projectRoot, files }
   }
 
   private async replaceInFile(
     projectRoot: string,
-    matcher: WorkbenchTextSearchMatcher,
+    session: WorkbenchContentSearchWorkerSession,
+    query: WorkbenchTextSearchQuery,
     replacement: string,
     file: WorkbenchReplaceContentFileRequest
   ): Promise<WorkbenchReplaceContentFileResult> {
@@ -97,14 +114,14 @@ class ContentReplace {
         '文件现有的编码或换行符不能原样写回，请在编辑器中打开它、确认转换后再替换。'
       )
 
-    const selected = file.matches ? new Set(file.matches.map(workbenchTextSearchRangeKey)) : null
-    const replaced = replaceWorkbenchTextSearchMatches(
-      current.content,
-      matcher,
-      replacement,
-      selected ? (hit) => selected.has(workbenchTextSearchRangeKey(hit)) : undefined
+    const selectedKeys = file.matches
+      ? [...new Set(file.matches.map(workbenchTextSearchRangeKey))]
+      : undefined
+    const replaced = await session.replace(
+      { content: current.content, query, replacement, selectedKeys },
+      file.path
     )
-    if (selected && replaced.count !== selected.size) throw changedSinceSearch()
+    if (selectedKeys && replaced.count !== selectedKeys.length) throw changedSinceSearch()
     if (replaced.count === 0 || replaced.content === current.content)
       return { path: file.path, replacedCount: 0 }
 

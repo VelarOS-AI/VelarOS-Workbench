@@ -5,6 +5,7 @@ import { join } from 'node:path'
 
 import { describe, mock, test } from 'bun:test'
 
+import type { WorkbenchContentSearchWorkerOptions } from '../src/main/workspace/ContentSearchWorkerHost'
 import type {
   WorkbenchReplaceContentFileRequest,
   WorkbenchReplaceContentRequest,
@@ -14,10 +15,11 @@ import type { WorkbenchFsCallResult } from '../src/shared/workbenchFs'
 import { WorkbenchFsChannels } from '../src/shared/workbenchFs'
 
 import { refuseTrash } from './helpers/fakeTrash'
+import { RunawayRegex, RunawayText, sourceSearchWorker } from './helpers/searchWorker'
 
 /**
  * 项目搜索的替换（没在编辑器里开着的文件）：重新找匹配、经保存管线写回——编码、BOM 与换行符照磁盘上的来，
- * 搜索之后被改过的文件不动，替换前后都记进本地历史。
+ * 搜索之后被改过的文件不动，替换前后都记进本地历史；跑不完的正则在 worker 里被停下，文件不动。
  */
 
 const ipcHandlers = new Map<string, (...args: unknown[]) => unknown>()
@@ -47,13 +49,18 @@ type Parts = ReturnType<typeof createWorkbenchAppParts>
 
 async function withProject(
   files: Record<string, string | Uint8Array>,
-  run: (context: { root: string; parts: Parts }) => Promise<void>
+  run: (context: { root: string; parts: Parts }) => Promise<void>,
+  searchWorker: WorkbenchContentSearchWorkerOptions = {}
 ): Promise<void> {
   const root = await realpath(await mkdtemp(join(tmpdir(), 'workbench-project-replace-')))
   const data = await mkdtemp(join(tmpdir(), 'workbench-project-replace-data-'))
   try {
     for (const [path, content] of Object.entries(files)) await writeFile(join(root, path), content)
-    await run({ root, parts: createWorkbenchAppParts(data, { moveToTrash: refuseTrash }) })
+    const parts = createWorkbenchAppParts(data, {
+      moveToTrash: refuseTrash,
+      searchWorker: { ...sourceSearchWorker, ...searchWorker },
+    })
+    await run({ root, parts })
   } finally {
     await rm(root, { recursive: true, force: true })
     await rm(data, { recursive: true, force: true })
@@ -191,6 +198,33 @@ void describe('project replace in files that are not open', () => {
         assert.ok(unencodable.files[0]?.error)
         assert.deepEqual(new Uint8Array(await readFile(join(root, 'gbk.txt'))), GbkCrlf)
       }
+    )
+  })
+
+  void test('a regex that runs away is stopped: that file and the ones after it are left alone', async () => {
+    const quick = RunawayText.replace('\n', ';\n')
+    await withProject(
+      { 'a.ts': RunawayText, 'b.ts': quick },
+      async ({ root, parts }) => {
+        const result = await replace(parts, root, {
+          query: RunawayRegex,
+          regex: true,
+          replacement: 'x',
+          files: [{ path: 'a.ts' }, { path: 'b.ts' }],
+        })
+        // 在 a.ts 上回溯停不下来；b.ts 上本来很快，但同一个正则多半还会卡，不再试。
+        assert.deepEqual(
+          result.files.map((file) => [file.path, file.replacedCount, file.error?.code]),
+          [
+            ['a.ts', 0, 'TIMEOUT'],
+            ['b.ts', 0, 'TIMEOUT'],
+          ]
+        )
+        assert.match(result.files[0]?.error?.message ?? '', /a\.ts/u)
+        assert.equal(await readFile(join(root, 'a.ts'), 'utf8'), RunawayText)
+        assert.equal(await readFile(join(root, 'b.ts'), 'utf8'), quick)
+      },
+      { stallTimeoutMs: 250 }
     )
   })
 

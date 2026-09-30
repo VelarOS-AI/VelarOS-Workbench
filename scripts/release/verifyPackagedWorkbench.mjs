@@ -155,6 +155,7 @@ async function verifyPackagedWorkbench({ appOutDir, platformName, projectDir = p
     'node_modules/pyright/package.json',
     'node_modules/pyright/langserver.index.js',
     'build/electron/main/workbench-language-worker.js',
+    'build/electron/main/workbench-search-worker.js',
   ]) {
     const contents = extractFile(paths.appArchive, archivePath(...bundledRuntimeFile.split('/')))
     if (contents.length === 0)

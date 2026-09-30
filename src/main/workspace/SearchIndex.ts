@@ -2,27 +2,20 @@
  * 工作台双搜索：searchEntries 按文件名与路径找条目（照搬 desktop `workspace/workbench/SearchIndex.ts`，
  * 遍历上限与评分保形），searchContent 搜文件内容。
  *
- * 内容搜索：
- * - 文件清单见 ProjectFileListing（Git 仓库按 .gitignore 列，其它工程遍历目录）；二进制文件与超过 1 MB 的
- *   文件不搜。
- * - 读盘后按编辑器同一套规则解码（认编码、去 BOM、换行统一为 LF），GB18030 / UTF-16 文件照样搜得到，行列号
- *   与编辑器对得上。匹配规则见 `@shared/workbenchTextSearch`。
- * - 边读边搜：往前预读几个文件，按路径顺序出结果；给了 onBatch 就隔一小段时间交出一批，前面的结果先显示。
- * - 列到 limit 处匹配就停（结果标成 truncated）；每个文件的匹配总数照样数全，替换时说得清换几处。
- * - 调用方开着的文件（openPaths）不读，只报它们在不在搜索范围里：编辑器里的正文由调用方自己搜。
+ * 内容搜索：主进程这里列出要搜的文件（见 ProjectFileListing：Git 仓库按 .gitignore 列，其它工程遍历目录），
+ * 读、解码、跑用户的正则都交给搜索 worker（见 ContentSearchTask、ContentSearchWorkerHost）：正则回溯得再久
+ * 也不卡主进程，取消就结束 worker。给了 onBatch 就把 worker 边搜边交出的结果转出去。
  *
  * listProjectFiles 是快速打开的整份文件清单：只列路径、不打分，匹配与排序在 renderer 里按输入现算。
  */
 import type { Dirent } from 'node:fs'
-import { lstat, readdir, readFile, realpath, stat } from 'node:fs/promises'
+import { readdir, realpath, stat } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 
 import { isPresent } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type {
-  WorkbenchContentSearchFileResult,
-  WorkbenchContentSearchMatchResult,
   WorkbenchDirectoryEntry,
   WorkbenchListProjectFilesRequest,
   WorkbenchListProjectFilesResult,
@@ -38,15 +31,12 @@ import {
   type WorkbenchSearchPathFilter,
 } from '@shared/workbenchSearchGlob'
 import {
-  buildWorkbenchTextSearchPreview,
   compileWorkbenchTextSearch,
-  scanWorkbenchTextSearch,
   WorkbenchContentSearchDefaultLimit,
-  WorkbenchContentSearchMaxFileBytes,
   WorkbenchContentSearchMaxLimit,
-  type WorkbenchTextSearchMatcher,
 } from '@shared/workbenchTextSearch'
 
+import type { OpenWorkbenchContentSearchSession } from './ContentSearchWorkerHost'
 import type { DirectoryEntries } from './FileEntries'
 import { isPathInsideRoot } from './PathContainmentHelper'
 import type { PathResolver } from './PathResolver'
@@ -55,18 +45,11 @@ import {
   listWorkbenchProjectFiles,
   sortWorkbenchSearchPaths,
 } from './ProjectFileListing'
-import { decodeWorkbenchTextContent } from './TextCodec'
-import { isLikelyTextFile } from './TextFile'
 
 const DEFAULT_SEARCH_LIMIT = 50
 const MAX_SEARCH_LIMIT = 200
 const DEFAULT_SEARCH_MAX_DEPTH = 8
 const MAX_SEARCH_MAX_DEPTH = 12
-
-/** 内容搜索往前预读的文件数。 */
-const ContentSearchReadAhead = 8
-/** 边搜边交出结果时，隔这么久交一批。 */
-const ContentSearchBatchIntervalMs = 80
 
 const DEFAULT_PROJECT_FILE_LIST_LIMIT = 50_000
 const MAX_PROJECT_FILE_LIST_LIMIT = 100_000
@@ -97,20 +80,11 @@ interface WorkbenchProjectFileListListing {
   directories: WorkbenchProjectFileListDirectory[]
 }
 
-interface LoadedSearchTextFile {
-  kind: 'text'
-  path: string
-  content: string
-  modifiedAt: number
-  size: number
-}
-
-type LoadedSearchFile = LoadedSearchTextFile | { kind: 'large' } | { kind: 'skipped' }
-
 class SearchIndex {
   constructor(
     private readonly pathResolver: PathResolver,
-    private readonly entryHelper: DirectoryEntries
+    private readonly entryHelper: DirectoryEntries,
+    private readonly openSearchSession: OpenWorkbenchContentSearchSession
   ) {}
 
   public async searchEntries(
@@ -202,51 +176,23 @@ class SearchIndex {
       : await listWorkbenchProjectFiles(projectRoot, { filter, signal })
     if (signal?.aborted) return { ...result, cancelled: true }
 
-    const openPaths = new Set(request.openPaths ?? [])
-    const perFileLimit = this.normalizeContentSearchPerFileLimit(request.maxResultsPerFile)
-    const budget = { remaining: this.normalizeContentSearchLimit(request.limit) }
-    const pending = new Map<string, Promise<LoadedSearchFile>>()
-    let batch: WorkbenchSearchContentBatch = { files: [], openPathsInScope: [] }
-    let batchStartedAt = Date.now()
-
-    for (let index = 0; index < paths.length; index += 1) {
-      if (signal?.aborted) {
-        result.cancelled = true
-        break
-      }
-      const readAheadEnd = Math.min(paths.length, index + ContentSearchReadAhead)
-      for (let ahead = index; ahead < readAheadEnd; ahead += 1) {
-        const path = paths[ahead]!
-        if (!openPaths.has(path) && !pending.has(path))
-          pending.set(path, this.loadContentSearchFile(projectRoot, path))
-      }
-
-      const path = paths[index]!
-      if (openPaths.has(path)) {
-        batch.openPathsInScope.push(path)
-        continue
-      }
-      const loaded = await pending.get(path)!
-      pending.delete(path)
-      if (loaded.kind === 'large') result.skippedLargeFileCount += 1
-      if (loaded.kind !== 'text') continue
-
-      const { file, cut } = this.collectContentMatches(loaded, compiled.matcher, perFileLimit, budget)
-      if (file.matchCount > 0) batch.files.push(file)
-      if (budget.remaining <= 0) {
-        result.truncated = cut || index < paths.length - 1
-        break
-      }
-      if (onBatch && Date.now() - batchStartedAt >= ContentSearchBatchIntervalMs) {
-        if (batch.files.length > 0 || batch.openPathsInScope.length > 0) onBatch(batch)
-        batch = { files: [], openPathsInScope: [] }
-        batchStartedAt = Date.now()
-      }
+    const session = this.openSearchSession()
+    try {
+      const outcome = await session.search(
+        {
+          projectRoot,
+          paths,
+          openPaths: request.openPaths ?? [],
+          query: compiled.matcher.query,
+          limit: this.normalizeContentSearchLimit(request.limit),
+          maxResultsPerFile: this.normalizeContentSearchPerFileLimit(request.maxResultsPerFile),
+        },
+        { signal, onBatch }
+      )
+      return outcome ? { ...result, ...outcome } : { ...result, cancelled: true }
+    } finally {
+      session.close()
     }
-
-    result.files = batch.files
-    result.openPathsInScope = batch.openPathsInScope
-    return result
   }
 
   private normalizeContentSearchLimit(value: number | undefined): number {
@@ -372,63 +318,6 @@ class SearchIndex {
         paths.add(path)
     }
     return sortWorkbenchSearchPaths([...paths])
-  }
-
-  /** 读一个要搜的文件：不是普通文件（目录、符号链接）或不像文本的跳过，太大的记一笔。 */
-  private async loadContentSearchFile(projectRoot: string, path: string): Promise<LoadedSearchFile> {
-    const absolutePath = join(projectRoot, path)
-    const fileStats = await lstat(absolutePath).catch(() => null)
-    if (!fileStats?.isFile()) return { kind: 'skipped' }
-    if (fileStats.size > WorkbenchContentSearchMaxFileBytes) return { kind: 'large' }
-
-    const buffer = await readFile(absolutePath).catch(() => null)
-    if (!buffer || !isLikelyTextFile(buffer)) return { kind: 'skipped' }
-
-    return {
-      kind: 'text',
-      path,
-      // 与编辑器读到的正文一致（认编码、去 BOM、换行统一为 LF），结果的行列才对得上。
-      content: decodeWorkbenchTextContent(buffer),
-      modifiedAt: fileStats.mtimeMs,
-      size: fileStats.size,
-    }
-  }
-
-  /** 一个文件的匹配：总数数全；列出的受每个文件的上限与剩下的总额度限制，`cut` 表示总额度用完少列了。 */
-  private collectContentMatches(
-    file: LoadedSearchTextFile,
-    matcher: WorkbenchTextSearchMatcher,
-    perFileLimit: number,
-    budget: { remaining: number }
-  ): { file: WorkbenchContentSearchFileResult; cut: boolean } {
-    const matches: WorkbenchContentSearchMatchResult[] = []
-    let matchCount = 0
-    let cut = false
-    scanWorkbenchTextSearch(file.content, matcher, (hit) => {
-      matchCount += 1
-      if (matches.length >= perFileLimit) return
-      if (budget.remaining <= 0) {
-        cut = true
-        return
-      }
-
-      const preview = buildWorkbenchTextSearchPreview(file.content, hit)
-      matches.push({
-        line: hit.line,
-        column: hit.column,
-        endLine: hit.endLine,
-        endColumn: hit.endColumn,
-        excerpt: preview.text,
-        excerptMatchStart: preview.matchStart,
-        excerptMatchEnd: preview.matchEnd,
-      })
-      budget.remaining -= 1
-    })
-
-    return {
-      file: { path: file.path, modifiedAt: file.modifiedAt, size: file.size, matchCount, matches },
-      cut,
-    }
   }
 
   private normalizeSearchQuery(query: string): string {

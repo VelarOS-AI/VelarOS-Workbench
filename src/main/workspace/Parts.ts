@@ -8,6 +8,10 @@ import { TerminalSessions } from './terminal/TerminalSessions'
 import { CommandHelper } from './CommandHelper'
 import { CommandRunner } from './CommandRunner'
 import { ContentReplace } from './ContentReplace'
+import {
+  createWorkbenchContentSearchSessionOpener,
+  type WorkbenchContentSearchWorkerOptions,
+} from './ContentSearchWorkerHost'
 import { WorkbenchDeleteUndoStore, type WorkbenchMoveToTrash } from './DeleteUndoStore'
 import { DirectoryEntries } from './FileEntries'
 import { FileOperations } from './FileOperations'
@@ -30,6 +34,11 @@ interface WorkbenchAppParts {
 interface WorkbenchAppPartsDependencies {
   /** 删除时把条目移到系统废纸篓：应用里是 Electron 的 `shell.trashItem`，测试换成假的。 */
   moveToTrash: WorkbenchMoveToTrash
+  /**
+   * 内容搜索 worker（跑用户正则的地方，见 ContentSearchWorkerHost）：默认起构建产物里的
+   * `workbench-search-worker.js`；测试从源码起 worker，也可以把判定卡住的时限调短。
+   */
+  searchWorker?: WorkbenchContentSearchWorkerOptions
 }
 
 function createWorkbenchAppParts(
@@ -48,11 +57,12 @@ function createWorkbenchAppParts(
   )
 
   const files = new FileOperations(paths, entries, gitNewFileTracker, localHistoryStore, deleteUndo)
+  const openSearchSession = createWorkbenchContentSearchSessionOpener(dependencies.searchWorker)
 
   return {
     files,
-    search: new SearchIndex(paths, entries),
-    replace: new ContentReplace(paths, files, localHistoryStore),
+    search: new SearchIndex(paths, entries, openSearchSession),
+    replace: new ContentReplace(paths, files, localHistoryStore, openSearchSession),
     commands: new CommandRunner(paths, commandHelper),
     terminal: new TerminalSessions(paths, commandHelper),
     storagePaths,

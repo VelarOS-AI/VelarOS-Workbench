@@ -73,6 +73,9 @@ export default defineConfig(({ mode }) => ({
             repoRoot,
             'src/main/workspace/language/LanguageServiceWorker.ts'
           ),
+          // 内容搜索 worker：用户写的正则可能回溯很久，放在 worker 里跑，卡住就结束它，不卡主进程
+          // （见 ContentSearchWorkerHost，同样按 `resolve(__dirname, 'workbench-search-worker.js')` 拉起）。
+          'workbench-search-worker': resolve(repoRoot, 'src/main/workspace/ContentSearchWorker.ts'),
         },
         external: [
           'electron',

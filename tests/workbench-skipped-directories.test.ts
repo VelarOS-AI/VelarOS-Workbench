@@ -12,6 +12,7 @@ import { shouldSkipProjectDirectory } from '../src/main/workspace/WorkbenchSkipp
 import type { SystemWorkspaceFilesChangedEvent } from '../src/shared/contracts'
 
 import { refuseTrash } from './helpers/fakeTrash'
+import { sourceSearchWorker } from './helpers/searchWorker'
 
 /**
  * 搜索与监听只在该跳的地方跳：`.git`、`node_modules` 任何层级；`build` / `dist` / `out`
@@ -57,7 +58,10 @@ void describe('Workbench skipped directories', () => {
         'packages/app/dist/index.js': 'const needle = 5\n',
       },
       async (projectRoot) => {
-        const parts = createWorkbenchAppParts(`${projectRoot}-data`, { moveToTrash: refuseTrash })
+        const parts = createWorkbenchAppParts(`${projectRoot}-data`, {
+          moveToTrash: refuseTrash,
+          searchWorker: sourceSearchWorker,
+        })
         try {
           const content = await parts.search.searchContent({ projectRoot, query: 'needle' })
           assert.deepEqual(

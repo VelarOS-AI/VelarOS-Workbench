@@ -7,6 +7,8 @@ import { promisify } from 'node:util'
 
 import { describe, mock, test } from 'bun:test'
 
+import { runWorkbenchContentSearchTask } from '../src/main/workspace/ContentSearchTask'
+import type { WorkbenchContentSearchWorkerOptions } from '../src/main/workspace/ContentSearchWorkerHost'
 import type {
   WorkbenchContentSearchFileResult,
   WorkbenchSearchContentBatch,
@@ -18,10 +20,12 @@ import type { WorkbenchFsCallResult } from '../src/shared/workbenchFs'
 import { WorkbenchFsChannels } from '../src/shared/workbenchFs'
 
 import { refuseTrash } from './helpers/fakeTrash'
+import { RunawayRegex, RunawayText, sourceSearchWorker } from './helpers/searchWorker'
 
 /**
  * 项目内容搜索（main 侧）：Git 仓库按 .gitignore 列文件，其它工程遍历目录；点号开头的文件照样搜；认文件编码，
- * 行列号与编辑器一致；列到上限就停并说明；边搜边推送、能取消；编辑器里开着的文件只报在不在范围里。
+ * 行列号与编辑器一致；列到上限就停并说明；边搜边推送、能取消；编辑器里开着的文件只报在不在范围里；
+ * 正则在 worker 里跑，跑不完的被停下，主进程不卡。
  */
 
 // 不受开发机上全局 git 配置（全局忽略文件、默认分支名……）影响。
@@ -69,13 +73,17 @@ async function withProject(
       request: Omit<WorkbenchSearchContentRequest, 'projectRoot'>,
       options?: Parameters<ReturnType<typeof createWorkbenchAppParts>['search']['searchContent']>[1]
     ) => Promise<WorkbenchSearchContentResult>
-  }) => Promise<void>
+  }) => Promise<void>,
+  searchWorker: WorkbenchContentSearchWorkerOptions = {}
 ): Promise<void> {
   const root = await realpath(await mkdtemp(join(tmpdir(), 'workbench-project-search-')))
   const data = await mkdtemp(join(tmpdir(), 'workbench-project-search-data-'))
   try {
     await writeProjectFiles(root, files)
-    const parts = createWorkbenchAppParts(data, { moveToTrash: refuseTrash })
+    const parts = createWorkbenchAppParts(data, {
+      moveToTrash: refuseTrash,
+      searchWorker: { ...sourceSearchWorker, ...searchWorker },
+    })
     await run({
       root,
       search: (request, options) => parts.search.searchContent({ projectRoot: root, ...request }, options),
@@ -89,6 +97,7 @@ async function withProject(
 function pathsOf(result: WorkbenchSearchContentBatch): string[] {
   return result.files.map((file) => file.path)
 }
+
 
 void describe('project content search: which files', () => {
   void test('a Git project is listed by Git: ignored files are skipped, untracked ones searched', async () => {
@@ -144,7 +153,10 @@ void describe('project content search: which files', () => {
 
         const data = await mkdtemp(join(tmpdir(), 'workbench-project-search-nested-'))
         try {
-          const parts = createWorkbenchAppParts(data, { moveToTrash: refuseTrash })
+          const parts = createWorkbenchAppParts(data, {
+            moveToTrash: refuseTrash,
+            searchWorker: sourceSearchWorker,
+          })
           const result = await parts.search.searchContent({ projectRoot: join(root, 'app'), query: 'needle' })
           assert.deepEqual(pathsOf(result), ['a.ts', 'new.ts'])
         } finally {
@@ -320,20 +332,52 @@ void describe('project content search: streaming, cancelling and open files', ()
     for (let index = 0; index < 40; index += 1) files[`src/file-${String(index).padStart(2, '0')}.ts`] = 'needle\n'
     await withProject(files, async ({ search }) => {
       const batches: WorkbenchSearchContentBatch[] = []
-      const originalNow = Date.now
-      let clock = originalNow()
-      // 每次问时间都过去 100 ms：每个文件后都交一批。
-      Date.now = () => (clock += 100)
-      let result: WorkbenchSearchContentResult
-      try {
-        result = await search({ query: 'needle' }, { onBatch: (batch) => batches.push(batch) })
-      } finally {
-        Date.now = originalNow
-      }
-      assert.ok(batches.length > 1)
+      const result = await search({ query: 'needle' }, { onBatch: (batch) => batches.push(batch) })
+      // 第一批一有结果就交出。
+      assert.deepEqual(pathsOf(batches[0]!), ['src/file-00.ts'])
       const all = [...batches.flatMap(pathsOf), ...pathsOf(result)]
       assert.equal(all.length, 40)
       assert.deepEqual(all, [...all].sort())
+    })
+  })
+
+  void test('after the first batch, one batch goes out per interval', async () => {
+    // worker 里跑的就是这段；在本线程跑，好拨时钟。
+    const files: ProjectFiles = {}
+    for (let index = 0; index < 5; index += 1) files[`f-${index}.ts`] = 'needle\n'
+    await withProject(files, async ({ root }) => {
+      const run = async (step: number) => {
+        const batches: string[][] = []
+        const originalNow = Date.now
+        let clock = originalNow()
+        Date.now = () => (clock += step)
+        try {
+          const result = await runWorkbenchContentSearchTask(
+            {
+              projectRoot: root,
+              paths: Object.keys(files),
+              openPaths: [],
+              query: { query: 'needle', matchCase: false, wholeWord: false, regex: false },
+              limit: 100,
+              maxResultsPerFile: 100,
+            },
+            { onBatch: (batch) => batches.push(pathsOf(batch)) }
+          )
+          return { batches, rest: pathsOf(result) }
+        } finally {
+          Date.now = originalNow
+        }
+      }
+      // 时间不走：只有第一批，其余留在结果里。
+      assert.deepEqual(await run(0), {
+        batches: [['f-0.ts']],
+        rest: ['f-1.ts', 'f-2.ts', 'f-3.ts', 'f-4.ts'],
+      })
+      // 每次问时间都过去 100 ms：每个文件后都交一批。
+      assert.deepEqual(await run(100), {
+        batches: [['f-0.ts'], ['f-1.ts'], ['f-2.ts'], ['f-3.ts'], ['f-4.ts']],
+        rest: [],
+      })
     })
   })
 
@@ -370,7 +414,11 @@ void describe('project content search IPC', () => {
     await withProject(files, async ({ root }) => {
       const data = await mkdtemp(join(tmpdir(), 'workbench-project-search-ipc-'))
       try {
-        registerWorkbenchFsIpc({} as never, createWorkbenchAppParts(data, { moveToTrash: refuseTrash }), {} as never)
+        registerWorkbenchFsIpc(
+          {} as never,
+          createWorkbenchAppParts(data, { moveToTrash: refuseTrash, searchWorker: sourceSearchWorker }),
+          {} as never
+        )
         const searchHandler = ipcHandlers.get(WorkbenchFsChannels.searchContent)!
         const cancelHandler = ipcHandlers.get(WorkbenchFsChannels.cancelSearchContent)!
         const sent: WorkbenchSearchContentProgressEvent[] = []
@@ -387,15 +435,10 @@ void describe('project content search IPC', () => {
           },
         }
 
-        const originalNow = Date.now
-        let clock = originalNow()
-        Date.now = () => (clock += 100)
-        let envelope: WorkbenchFsCallResult<WorkbenchSearchContentResult>
-        try {
-          envelope = (await searchHandler({ sender }, { projectRoot: root, query: 'needle', searchId: 's1' })) as never
-        } finally {
-          Date.now = originalNow
-        }
+        const envelope = (await searchHandler(
+          { sender },
+          { projectRoot: root, query: 'needle', searchId: 's1' }
+        )) as WorkbenchFsCallResult<WorkbenchSearchContentResult>
         assert.ok(envelope.ok)
         assert.ok(sent.length > 0)
         assert.ok(sent.every((event) => event.searchId === 's1'))
@@ -409,13 +452,10 @@ void describe('project content search IPC', () => {
             cancelled = cancelHandler({ sender: slowSender }, { searchId: 's2' }) as Promise<unknown>
           },
         }
-        Date.now = () => (clock += 100)
-        let second: WorkbenchFsCallResult<WorkbenchSearchContentResult>
-        try {
-          second = (await searchHandler({ sender: slowSender }, { projectRoot: root, query: 'needle', searchId: 's2' })) as never
-        } finally {
-          Date.now = originalNow
-        }
+        const second = (await searchHandler(
+          { sender: slowSender },
+          { projectRoot: root, query: 'needle', searchId: 's2' }
+        )) as WorkbenchFsCallResult<WorkbenchSearchContentResult>
         await cancelled
         assert.ok(second.ok)
         assert.equal(second.value.cancelled, true)
@@ -428,6 +468,32 @@ void describe('project content search IPC', () => {
         await rm(data, { recursive: true, force: true })
       }
     })
+  })
+})
+
+void describe('project content search: runaway regexes', () => {
+  void test('a regex that runs away is stopped in the worker, naming the file; the main process keeps running', async () => {
+    await withProject(
+      { 'fine.ts': 'let x = 1;\n', 'slow.ts': RunawayText },
+      async ({ search }) => {
+        let ticks = 0
+        const ticker = setInterval(() => (ticks += 1), 20)
+        const searching = search({ query: RunawayRegex, regex: true })
+        try {
+          await assert.rejects(searching, (error: unknown) => {
+            const { code, message } = error as { code?: string; message?: string }
+            assert.equal(code, 'TIMEOUT')
+            assert.match(message ?? '', /slow\.ts/u)
+            return true
+          })
+        } finally {
+          clearInterval(ticker)
+        }
+        // 等 worker 被判定卡住的这段时间里，主进程的定时器照常走。
+        assert.ok(ticks >= 5, `ticks: ${ticks}`)
+      },
+      { stallTimeoutMs: 250 }
+    )
   })
 })
 
