@@ -689,32 +689,47 @@ export class ExternalLspClient {
     })
   }
 
-  public async completion(path: string, content: string, position: LspPosition): Promise<ExternalLspCompletionItem[]> {
+  public async completion(
+    path: string,
+    content: string,
+    position: LspPosition,
+    signal?: AbortSignal
+  ): Promise<ExternalLspCompletionItem[]> {
     const document = await this.synchronize(path, content)
     const result = await this.request('textDocument/completion', {
       textDocument: { uri: document.uri },
       position,
-    })
+    }, signal)
     if (Array.isArray(result)) return result as ExternalLspCompletionItem[]
     const object = objectValue(result)
     return Array.isArray(object?.['items']) ? object['items'] as ExternalLspCompletionItem[] : []
   }
 
-  public async hover(path: string, content: string, position: LspPosition): Promise<Nullable<ExternalLspHover>> {
+  public async hover(
+    path: string,
+    content: string,
+    position: LspPosition,
+    signal?: AbortSignal
+  ): Promise<Nullable<ExternalLspHover>> {
     const document = await this.synchronize(path, content)
     const result = await this.request('textDocument/hover', {
       textDocument: { uri: document.uri },
       position,
-    })
+    }, signal)
     return objectValue(result) as Nullable<ExternalLspHover>
   }
 
-  public async definition(path: string, content: string, position: LspPosition): Promise<ExternalLspLocation[]> {
+  public async definition(
+    path: string,
+    content: string,
+    position: LspPosition,
+    signal?: AbortSignal
+  ): Promise<ExternalLspLocation[]> {
     const document = await this.synchronize(path, content)
     const result = await this.request('textDocument/definition', {
       textDocument: { uri: document.uri },
       position,
-    })
+    }, signal)
     return normalizeLocations(result)
   }
 
@@ -731,7 +746,8 @@ export class ExternalLspClient {
   public async documentHighlights(
     path: string,
     content: string,
-    position: LspPosition
+    position: LspPosition,
+    signal?: AbortSignal
   ): Promise<ExternalLspDocumentHighlight[]> {
     const document = await this.synchronize(path, content)
     const provider = this.serverCapabilities['documentHighlightProvider']
@@ -739,7 +755,7 @@ export class ExternalLspClient {
     const result = await this.request('textDocument/documentHighlight', {
       textDocument: { uri: document.uri },
       position,
-    })
+    }, signal)
     return Array.isArray(result) ? result as ExternalLspDocumentHighlight[] : []
   }
 
@@ -774,20 +790,22 @@ export class ExternalLspClient {
   public async signatureHelp(
     path: string,
     content: string,
-    position: LspPosition
+    position: LspPosition,
+    signal?: AbortSignal
   ): Promise<Nullable<ExternalLspSignatureHelp>> {
     const document = await this.synchronize(path, content)
     const result = await this.request('textDocument/signatureHelp', {
       textDocument: { uri: document.uri },
       position,
-    })
+    }, signal)
     return objectValue(result) as Nullable<ExternalLspSignatureHelp>
   }
 
   public async inlayHints(
     path: string,
     content: string,
-    range: LspRange
+    range: LspRange,
+    signal?: AbortSignal
   ): Promise<ExternalLspInlayHint[]> {
     const document = await this.synchronize(path, content)
     const provider = this.serverCapabilities['inlayHintProvider']
@@ -795,11 +813,15 @@ export class ExternalLspClient {
     const result = await this.request('textDocument/inlayHint', {
       textDocument: { uri: document.uri },
       range,
-    })
+    }, signal)
     return Array.isArray(result) ? result as ExternalLspInlayHint[] : []
   }
 
-  public async semanticTokens(path: string, content: string): Promise<ExternalLspSemanticTokens> {
+  public async semanticTokens(
+    path: string,
+    content: string,
+    signal?: AbortSignal
+  ): Promise<ExternalLspSemanticTokens> {
     const document = await this.synchronize(path, content)
     const provider = objectValue(this.serverCapabilities['semanticTokensProvider'])
     const legend = objectValue(provider?.['legend'])
@@ -812,7 +834,7 @@ export class ExternalLspClient {
     if (!provider || tokenTypes.length === 0) return { data: [], tokenTypes, tokenModifiers }
     const result = objectValue(await this.request('textDocument/semanticTokens/full', {
       textDocument: { uri: document.uri },
-    }))
+    }, signal))
     const rawData = result?.['data']
     const data = Array.isArray(rawData)
       && rawData.every((item) => Number.isSafeInteger(item) && (item as number) >= 0)
@@ -1009,24 +1031,46 @@ export class ExternalLspClient {
     }
   }
 
-  private request(method: string, params: unknown): Promise<unknown> {
+  /** `signal` 中止（请求被新请求顶掉）时告诉服务器不必再算，并立刻以取消结束。 */
+  private request(method: string, params: unknown, signal?: AbortSignal): Promise<unknown> {
+    if (signal?.aborted)
+      return Promise.reject(new AppError('CANCELLED', `${this.descriptor.label} 语言服务器请求已取消：${method}。`))
     const id = this.nextRequestId++
     return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        if (!this.pending.delete(id)) return
+      const abandon = (error: AppError): void => {
+        const pending = this.pending.get(id)
+        if (!pending) return
+        this.pending.delete(id)
+        clearTimeout(pending.timeout)
         try { this.notify('$/cancelRequest', { id }) } catch { /* the request still rejects */ }
-        reject(new AppError(
-          'INTERNAL',
-          `${this.descriptor.label} 语言服务器请求超时：${method}。`
-        ))
-      }, Math.max(1, this.requestTimeoutMs))
-      this.pending.set(id, { resolve, reject, timeout })
+        pending.reject(error)
+      }
+      const onAbort = (): void => abandon(
+        new AppError('CANCELLED', `${this.descriptor.label} 语言服务器请求已取消：${method}。`)
+      )
+      const timeout = setTimeout(() => abandon(new AppError(
+        'INTERNAL',
+        `${this.descriptor.label} 语言服务器请求超时：${method}。`
+      )), Math.max(1, this.requestTimeoutMs))
+      this.pending.set(id, {
+        resolve: (value) => {
+          signal?.removeEventListener('abort', onAbort)
+          resolve(value)
+        },
+        reject: (error) => {
+          signal?.removeEventListener('abort', onAbort)
+          reject(error)
+        },
+        timeout,
+      })
+      signal?.addEventListener('abort', onAbort, { once: true })
       try {
         this.send({ jsonrpc: '2.0', id, method, params })
       } catch (error) {
         const pending = this.pending.get(id)
         if (pending) clearTimeout(pending.timeout)
         this.pending.delete(id)
+        signal?.removeEventListener('abort', onAbort)
         reject(error instanceof Error ? error : new Error(String(error)))
       }
     })

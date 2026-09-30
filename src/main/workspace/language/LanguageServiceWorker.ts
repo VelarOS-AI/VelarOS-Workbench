@@ -1,5 +1,5 @@
 import * as v8 from 'node:v8'
-import { parentPort } from 'node:worker_threads'
+import { parentPort, workerData } from 'node:worker_threads'
 
 import { AppError } from '@velaros-ai/core/error'
 
@@ -14,12 +14,13 @@ import {
   type WorkbenchLanguageMemoryNotification,
 } from './LanguageServiceMemoryGuard'
 import { WorkbenchLanguageServices } from './LanguageServices'
-import type {
-  WorkbenchLanguageServiceWorkerRequest,
-  WorkbenchLanguageServiceWorkerResponse,
+import {
+  isWorkbenchLanguageServiceWorkerControl,
+  type WorkbenchLanguageServiceWorkerMessage,
+  type WorkbenchLanguageServiceWorkerRequest,
 } from './LanguageServiceWorkerProtocol'
-import { getWorkbenchLanguageServiceWorkerPriority } from './LanguageServiceWorkerProtocol'
-import { configureTypeScriptProjectPool } from './TypeScriptProjectHost'
+import { WorkbenchLanguageServiceWorkerScheduler } from './LanguageServiceWorkerScheduler'
+import { configureTypeScriptCancellation, configureTypeScriptProjectPool } from './TypeScriptProjectHost'
 
 const port = (() => {
   if (!parentPort) throw new AppError('INVARIANT', 'Workbench 语言服务 worker 缺少消息端口。')
@@ -30,7 +31,10 @@ registerWorkbenchLanguageService(VelarWorkbenchLanguageService)
 configureTypeScriptProjectPool(v8.getHeapStatistics().heap_size_limit)
 const languageServices = new WorkbenchLanguageServices(new PathResolver())
 
-async function dispatch(request: WorkbenchLanguageServiceWorkerRequest): Promise<unknown> {
+async function dispatch(
+  request: WorkbenchLanguageServiceWorkerRequest,
+  signal: AbortSignal
+): Promise<unknown> {
   switch (request.operation) {
     case 'shutdown':
       return languageServices.dispose()
@@ -47,86 +51,49 @@ async function dispatch(request: WorkbenchLanguageServiceWorkerRequest): Promise
     case 'getDefinition':
       return languageServices.getDefinition(request.request)
     case 'getCompletions':
-      return languageServices.getCompletions(request.request)
+      return languageServices.getCompletions(request.request, signal)
     case 'getDiagnostics':
       return languageServices.getDiagnostics(request.request)
     case 'getRename':
       return languageServices.getRename(request.request)
     case 'getHover':
-      return languageServices.getHover(request.request)
+      return languageServices.getHover(request.request, signal)
     case 'getReferences':
       return languageServices.getReferences(request.request)
     case 'getSignatureHelp':
-      return languageServices.getSignatureHelp(request.request)
+      return languageServices.getSignatureHelp(request.request, signal)
     case 'getFormat':
       return languageServices.getFormat(request.request)
     case 'getDocumentSymbols':
       return languageServices.getDocumentSymbols(request.request)
     case 'getDocumentHighlights':
-      return languageServices.getDocumentHighlights(request.request)
+      return languageServices.getDocumentHighlights(request.request, signal)
     case 'getInlayHints':
-      return languageServices.getInlayHints(request.request)
+      return languageServices.getInlayHints(request.request, signal)
     case 'getSemanticTokens':
-      return languageServices.getSemanticTokens(request.request)
+      return languageServices.getSemanticTokens(request.request, signal)
     case 'getCodeActions':
       return languageServices.getCodeActions(request.request)
   }
 }
 
-async function handleRequest(request: WorkbenchLanguageServiceWorkerRequest): Promise<void> {
-  let response: WorkbenchLanguageServiceWorkerResponse
-  try {
-    response = { id: request.id, result: await dispatch(request) }
-  } catch (error) {
-    response = { id: request.id, error: AppError.from(error).toJSON() }
+const cancellation = workerData?.cancellation instanceof SharedArrayBuffer
+  ? new Int32Array(workerData.cancellation)
+  : undefined
+const scheduler = new WorkbenchLanguageServiceWorkerScheduler({
+  dispatch,
+  post: (message) => port.postMessage(message),
+  cancellation,
+})
+// 被新请求顶掉的补全、悬浮、语义着色：TypeScript 在自己的检查点抛出取消，不再算完。
+configureTypeScriptCancellation(() => scheduler.isRunningRequestCancelled())
+
+port.on('message', (message: WorkbenchLanguageServiceWorkerMessage) => {
+  if (!isWorkbenchLanguageServiceWorkerControl(message)) {
+    lastRequestAt = Date.now()
+    idleTrimDone = 'none'
   }
-  port.postMessage(response)
-}
-
-// 单 worker 仍然串行执行：TypeScript LanguageService 的 overlay/cache 是可变状态。
-// 但生命周期与交互请求必须越过诊断/语义着色等后台积压，否则恢复大量标签或缩放触发
-// 后台刷新时，悬浮说明和补全会看起来一起“失效”。
-const lifecycleRequests: WorkbenchLanguageServiceWorkerRequest[] = []
-const interactiveRequests: WorkbenchLanguageServiceWorkerRequest[] = []
-const backgroundRequests: WorkbenchLanguageServiceWorkerRequest[] = []
-let drainingRequests = false
-
-function enqueueRequest(request: WorkbenchLanguageServiceWorkerRequest): void {
-  const priority = getWorkbenchLanguageServiceWorkerPriority(request.operation)
-  if (priority === 'lifecycle') lifecycleRequests.push(request)
-  else if (priority === 'interactive') interactiveRequests.push(request)
-  else backgroundRequests.push(request)
-  void drainRequests()
-}
-
-async function drainRequests(): Promise<void> {
-  if (drainingRequests) return
-  drainingRequests = true
-  try {
-    while (
-      lifecycleRequests.length > 0 ||
-      interactiveRequests.length > 0 ||
-      backgroundRequests.length > 0
-    ) {
-      const request = lifecycleRequests.shift()
-        ?? interactiveRequests.shift()
-        ?? backgroundRequests.shift()
-      if (request) await handleRequest(request)
-    }
-  } finally {
-    drainingRequests = false
-    if (
-      lifecycleRequests.length > 0 ||
-      interactiveRequests.length > 0 ||
-      backgroundRequests.length > 0
-    ) void drainRequests()
-  }
-}
-
-port.on('message', (request: WorkbenchLanguageServiceWorkerRequest) => {
-  lastRequestAt = Date.now()
-  idleTrimDone = 'none'
-  enqueueRequest(request)
+  scheduler.receive(message)
 })
 
 // ── 内存看守：逼近堆上限先自己减负，长时间空闲把大块缓存放掉；每次动作与定期心跳报给主进程记日志。
@@ -158,7 +125,7 @@ function reportMemory(
 
 function guardMemory(): void {
   // 正在处理请求时不动手：服务正在用。
-  if (drainingRequests) return
+  if (scheduler.busy) return
   const heap = v8.getHeapStatistics()
   const idleMs = Date.now() - lastRequestAt
   const action = decideWorkbenchLanguageMemoryAction({

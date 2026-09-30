@@ -5,7 +5,7 @@
  * 所有请求最终落在 tsserver 项目托管上（projectRoot 键控，无 session 轴）；worker 首个请求
  * 时惰性拉起。异常经 `callWithEnvelope` 降为错误信封，renderer 据此展示启动错误并回落。
  */
-import { ipcMain } from 'electron'
+import { ipcMain, type IpcMainInvokeEvent } from 'electron'
 
 import type { ModelSelection } from '@velaros-ai/model/contracts'
 
@@ -52,12 +52,12 @@ export function registerWorkbenchLanguageServiceIpc(
     })
   )
 
-  ipcMain.handle(WorkbenchLanguageChannels.completions, (_event, request: unknown) =>
+  ipcMain.handle(WorkbenchLanguageChannels.completions, (event, request: unknown) =>
     callWithEnvelope(() => {
       const parsed = parsePositionRequest(request)
       if (!parsed) return invalidRequest()
 
-      return client.getCompletions(parsed)
+      return client.getCompletions(parsed, supersedeScope(event))
     })
   )
 
@@ -79,12 +79,12 @@ export function registerWorkbenchLanguageServiceIpc(
     })
   )
 
-  ipcMain.handle(WorkbenchLanguageChannels.hover, (_event, request: unknown) =>
+  ipcMain.handle(WorkbenchLanguageChannels.hover, (event, request: unknown) =>
     callWithEnvelope(() => {
       const parsed = parsePositionRequest(request)
       if (!parsed) return invalidRequest()
 
-      return client.getHover(parsed)
+      return client.getHover(parsed, supersedeScope(event))
     })
   )
 
@@ -97,12 +97,12 @@ export function registerWorkbenchLanguageServiceIpc(
     })
   )
 
-  ipcMain.handle(WorkbenchLanguageChannels.signatureHelp, (_event, request: unknown) =>
+  ipcMain.handle(WorkbenchLanguageChannels.signatureHelp, (event, request: unknown) =>
     callWithEnvelope(() => {
       const parsed = parsePositionRequest(request)
       if (!parsed) return invalidRequest()
 
-      return client.getSignatureHelp(parsed)
+      return client.getSignatureHelp(parsed, supersedeScope(event))
     })
   )
 
@@ -124,30 +124,30 @@ export function registerWorkbenchLanguageServiceIpc(
     })
   )
 
-  ipcMain.handle(WorkbenchLanguageChannels.documentHighlights, (_event, request: unknown) =>
+  ipcMain.handle(WorkbenchLanguageChannels.documentHighlights, (event, request: unknown) =>
     callWithEnvelope(() => {
       const parsed = parsePositionRequest(request)
       if (!parsed) return invalidRequest()
 
-      return client.getDocumentHighlights(parsed)
+      return client.getDocumentHighlights(parsed, supersedeScope(event))
     })
   )
 
-  ipcMain.handle(WorkbenchLanguageChannels.inlayHints, (_event, request: unknown) =>
+  ipcMain.handle(WorkbenchLanguageChannels.inlayHints, (event, request: unknown) =>
     callWithEnvelope(() => {
       const parsed = parseInlayHintsRequest(request)
       if (!parsed) return invalidRequest()
 
-      return client.getInlayHints(parsed)
+      return client.getInlayHints(parsed, supersedeScope(event))
     })
   )
 
-  ipcMain.handle(WorkbenchLanguageChannels.semanticTokens, (_event, request: unknown) =>
+  ipcMain.handle(WorkbenchLanguageChannels.semanticTokens, (event, request: unknown) =>
     callWithEnvelope(() => {
       const parsed = parseRequest(request)
       if (!parsed) return invalidRequest()
 
-      return client.getSemanticTokens(parsed)
+      return client.getSemanticTokens(parsed, supersedeScope(event))
     })
   )
 
@@ -177,6 +177,11 @@ export function registerWorkbenchLanguageServiceIpc(
       return inlineCompletion.generate(parsed)
     })
   )
+}
+
+/** 同一窗口里同一文件的新请求顶掉旧的（见 isWorkbenchLanguageServiceOperationSuperseded）。 */
+function supersedeScope(event: IpcMainInvokeEvent): { scope: string } {
+  return { scope: String(event.sender.id) }
 }
 
 function parseInlineCompletionRequest(

@@ -471,7 +471,8 @@ class WorkbenchLanguageServices {
   }
 
   public async getCompletions(
-    request: WorkbenchLanguageServicePositionRequest
+    request: WorkbenchLanguageServicePositionRequest,
+    signal?: AbortSignal
   ): Promise<WorkbenchLanguageServiceCompletionResult> {
     const resolved = await this.resolveLanguageService(request)
     if (this.isExternalRuntime(resolved.service?.runtime)) {
@@ -479,7 +480,8 @@ class WorkbenchLanguageServices {
       const items = await external.client.completion(
         external.absolutePath,
         external.content,
-        this.languageServicePosition(request.position)
+        this.languageServicePosition(request.position),
+        signal
       )
       return {
         projectRoot: resolved.projectRoot,
@@ -712,7 +714,7 @@ class WorkbenchLanguageServices {
     }
   }
 
-  public async getHover(request: WorkbenchLanguageServicePositionRequest): Promise<{
+  public async getHover(request: WorkbenchLanguageServicePositionRequest, signal?: AbortSignal): Promise<{
     projectRoot: string
     path: string
     hover: Nullable<WorkbenchLanguageServiceHoverResult>
@@ -730,14 +732,16 @@ class WorkbenchLanguageServices {
       const hover = await external.client.hover(
         external.absolutePath,
         external.content,
-        this.languageServicePosition(request.position)
+        this.languageServicePosition(request.position),
+        signal
       )
       const result = hover ? buildExternalHoverResult(hover.contents) : null
       if (result) {
         const definitions = await external.client.definition(
           external.absolutePath,
           external.content,
-          this.languageServicePosition(request.position)
+          this.languageServicePosition(request.position),
+          signal
         )
         const definition = definitions
           .map((location) => this.mapExternalLocation(resolved.projectRoot, location))
@@ -853,7 +857,10 @@ class WorkbenchLanguageServices {
     }
   }
 
-  public async getSignatureHelp(request: WorkbenchLanguageServicePositionRequest): Promise<{
+  public async getSignatureHelp(
+    request: WorkbenchLanguageServicePositionRequest,
+    signal?: AbortSignal
+  ): Promise<{
     projectRoot: string
     path: string
     signatureHelp: Nullable<WorkbenchLanguageServiceSignatureHelpResult>
@@ -864,7 +871,8 @@ class WorkbenchLanguageServices {
       const signatureHelp = await external.client.signatureHelp(
         external.absolutePath,
         external.content,
-        this.languageServicePosition(request.position)
+        this.languageServicePosition(request.position),
+        signal
       )
       return {
         projectRoot: resolved.projectRoot,
@@ -1018,7 +1026,8 @@ class WorkbenchLanguageServices {
   }
 
   public async getDocumentHighlights(
-    request: WorkbenchLanguageServicePositionRequest
+    request: WorkbenchLanguageServicePositionRequest,
+    signal?: AbortSignal
   ): Promise<WorkbenchLanguageServiceDocumentHighlightsResult> {
     const resolved = await this.resolveLanguageService(request)
     if (this.isExternalRuntime(resolved.service?.runtime)) {
@@ -1026,7 +1035,8 @@ class WorkbenchLanguageServices {
       const highlights = await external.client.documentHighlights(
         external.absolutePath,
         external.content,
-        this.languageServicePosition(request.position)
+        this.languageServicePosition(request.position),
+        signal
       )
       return {
         projectRoot: resolved.projectRoot,
@@ -1067,7 +1077,8 @@ class WorkbenchLanguageServices {
   }
 
   public async getInlayHints(
-    request: WorkbenchLanguageServiceInlayHintsRequest
+    request: WorkbenchLanguageServiceInlayHintsRequest,
+    signal?: AbortSignal
   ): Promise<WorkbenchLanguageServiceInlayHintsResult> {
     const resolved = await this.resolveLanguageService(request)
     if (this.isExternalRuntime(resolved.service?.runtime)) {
@@ -1087,7 +1098,7 @@ class WorkbenchLanguageServices {
       const hints = await external.client.inlayHints(external.absolutePath, external.content, {
         start: this.lspPositionFromOffset(external.content, start),
         end: this.lspPositionFromOffset(external.content, end),
-      })
+      }, signal)
       return {
         projectRoot: resolved.projectRoot,
         path: request.path,
@@ -1112,7 +1123,8 @@ class WorkbenchLanguageServices {
   }
 
   public async getSemanticTokens(
-    request: WorkbenchLanguageServiceRequest
+    request: WorkbenchLanguageServiceRequest,
+    signal?: AbortSignal
   ): Promise<WorkbenchLanguageServiceSemanticTokensResult> {
     const resolved = await this.resolveLanguageService(request)
     if (resolved.service?.runtime === 'typescript-language-service') {
@@ -1131,7 +1143,7 @@ class WorkbenchLanguageServices {
     if (!this.isExternalRuntime(resolved.service?.runtime))
       return { projectRoot: resolved.projectRoot, path: request.path, tokens: [] }
     const external = await this.prepareExternal(request, resolved.projectRoot)
-    const tokens = await external.client.semanticTokens(external.absolutePath, external.content)
+    const tokens = await external.client.semanticTokens(external.absolutePath, external.content, signal)
     return {
       projectRoot: resolved.projectRoot,
       path: request.path,

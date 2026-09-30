@@ -683,8 +683,20 @@ function setPooledFile(project: PooledTypeScriptProject, fileName: string, conte
   project.fileVersions.set(fileName, (project.fileVersions.get(fileName) ?? 0) + 1)
 }
 
+let isTypeScriptRequestCancelled: () => boolean = () => false
+/** TypeScript 只在建服务时取一次取消令牌：令牌本身不变，每次检查时再问当前请求是否已被顶掉。 */
+const typeScriptCancellationToken: ts.HostCancellationToken = {
+  isCancellationRequested: () => isTypeScriptRequestCancelled(),
+}
+
+/** worker 注入「正在算的请求是否已被取消」；TypeScript 在补全、语义着色等计算的检查点问它。 */
+export function configureTypeScriptCancellation(isCancelled: () => boolean): void {
+  isTypeScriptRequestCancelled = isCancelled
+}
+
 function createLanguageServiceHost(project: PooledTypeScriptProject): ts.LanguageServiceHost {
   return {
+    getCancellationToken: () => typeScriptCancellationToken,
     getCompilationSettings: () => project.compilerOptions,
     getScriptFileNames: () => [...project.liveFiles.keys()],
     getScriptVersion: (fileName) => String(project.fileVersions.get(fileName) ?? 0),
