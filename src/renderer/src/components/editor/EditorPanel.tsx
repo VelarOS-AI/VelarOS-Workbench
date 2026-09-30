@@ -152,6 +152,9 @@ export interface WorkbenchEditorPanelTabsProps {
   onSelectOpenFile: (path: string) => void
   /** 双击标签：预览标签留下，变成普通标签。 */
   onKeepOpenFile?: (path: string) => void
+  /** 标签右键「固定」/「取消固定」（点固定标签上的图钉也是取消固定）。 */
+  onPinOpenFile?: (path: string) => void
+  onUnpinOpenFile?: (path: string) => void
   /** 关标签；有未保存改动的先问「保存 / 不保存 / 取消」。 */
   onCloseOpenFile: (path: string) => void
   onCloseOtherOpenFiles: (path: string) => void
@@ -272,6 +275,8 @@ export function EditorPanel({
   tabs: {
     onSelectOpenFile,
     onKeepOpenFile,
+    onPinOpenFile,
+    onUnpinOpenFile,
     onCloseOpenFile,
     onCloseOtherOpenFiles,
     onCloseAllOpenFiles,
@@ -321,6 +326,7 @@ export function EditorPanel({
     editorContent,
     openTabs,
     previewTabPath = null,
+    pinnedTabCount = 0,
     hasUnsavedChanges,
     canEditSelectedFile,
     selectedFileEditMode,
@@ -548,6 +554,7 @@ export function EditorPanel({
     [openTabs, selectedFilePath]
   )
   const selectedExternalChange = toNullable(selectedTab?.externalChange)
+  const selectedTabPinned = !!selectedTab && openTabs.indexOf(selectedTab) < pinnedTabCount
   // Git 追溯栏：开着就一直开着，换文件时查新文件的（截断打开的文件行号对不上，不查）。
   const gitBlameVisible = useSyncExternalStore(
     subscribeWorkbenchGitBlameVisible,
@@ -779,7 +786,8 @@ export function EditorPanel({
       lightTab.onClose()
       return
     }
-    if (selectedFilePath) onCloseOpenFile(selectedFilePath)
+    // 固定标签不随 ⌘W 关掉（什么也不做）：要关先取消固定。
+    if (selectedFilePath && !selectedTabPinned) onCloseOpenFile(selectedFilePath)
   }
 
   const handledCloseActiveTabRequestIdRef = useRef(closeActiveTabRequestId)
@@ -797,6 +805,7 @@ export function EditorPanel({
         <EditorTabBar
           openTabs={isolatedTabGroup ? [] : openTabs}
           previewTabPath={previewTabPath}
+          pinnedTabCount={isolatedTabGroup ? 0 : pinnedTabCount}
           selectedFilePath={isolatedTabGroup ? null : selectedFilePath}
           selectedFile={hasEditorOverlayTab ? null : selectedFile}
           hasUnsavedChanges={hasEditorOverlayTab ? false : hasUnsavedChanges}
@@ -815,6 +824,8 @@ export function EditorPanel({
           onRunTabContextAction={runTabContextAction}
           onSelectOpenFile={onSelectOpenFile}
           onKeepOpenFile={onKeepOpenFile}
+          onPinOpenFile={onPinOpenFile}
+          onUnpinOpenFile={onUnpinOpenFile}
           onCloseOpenFile={onCloseOpenFile}
           onCloseOtherOpenFiles={onCloseOtherOpenFiles}
           onCloseAllOpenFiles={onCloseAllOpenFiles}

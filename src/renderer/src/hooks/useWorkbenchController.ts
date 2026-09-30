@@ -386,6 +386,8 @@ export function useWorkbenchController(options: UseWorkbenchControllerOptions = 
     reorderOpenTabs: editor.reorderOpenTabs,
     /** 把预览标签留下，变成普通标签。 */
     keepOpenFile: editor.keepOpenFile,
+    pinOpenFile: editor.pinOpenFile,
+    unpinOpenFile: editor.unpinOpenFile,
     revertOpenFiles: editor.revertOpenFiles,
     beginCreateEntry: mutation.beginCreateEntry,
     beginRenameEntry: mutation.beginRenameEntry,

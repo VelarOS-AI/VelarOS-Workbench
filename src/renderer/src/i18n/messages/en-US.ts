@@ -264,6 +264,8 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     openProjectMemory: 'Project memory',
     openProjectMemoryTitle: 'Open memory management for the current project',
     closeEditorTab: 'Close tab',
+    pinEditorTab: 'Pin',
+    unpinEditorTab: 'Unpin',
     closeOtherEditorTabs: 'Close others',
     closeEditorTabsToRight: 'Close tabs to the right',
     closeAllEditorTabs: 'Close all',

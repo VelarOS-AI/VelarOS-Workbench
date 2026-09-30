@@ -5,7 +5,10 @@ import {
   readStringScalar as readString,
 } from '@velaros-ai/core/utils/unknownJsonRecord'
 
-import { resolveWorkbenchEditorSelectionAfterClose } from './workbenchEditorTabClose'
+import {
+  collectWorkbenchEditorTabsToRight,
+  resolveWorkbenchEditorSelectionAfterClose,
+} from './workbenchEditorTabClose'
 
 /**
  * 编辑区的标签布局：哪些文件开着标签、在标签栏上怎么排、每一组显示哪个、全局动作落在哪一组。
@@ -17,11 +20,13 @@ import { resolveWorkbenchEditorSelectionAfterClose } from './workbenchEditorTabC
 
 /** 一个编辑器组的标签栏。 */
 export interface WorkbenchEditorGroup {
-  /** 标签栏顺序的文件路径。 */
+  /** 标签栏顺序的文件路径：前 `pinnedCount` 个是固定标签（按固定的先后），后面是其余的标签。 */
   readonly paths: readonly string[]
+  /** 固定标签的个数。固定标签排在标签栏最左边，「关闭其他 / 全部 / 右侧 / 未修改」与 ⌘W 都不关它。 */
+  readonly pinnedCount: number
   /**
    * 预览标签（名字是斜体）：下一次以预览方式打开别的文件时，新文件顶替它而不是再加一个标签。一组最多
-   * 一个；没有为 null。
+   * 一个，不会是固定标签；没有为 null。
    */
   readonly previewPath: Nullable<string>
   /** 这一组当前显示的标签；组里没有标签时为 null。 */
@@ -40,6 +45,7 @@ const MaxWorkbenchEditorGroups = 1
 
 const EmptyWorkbenchEditorGroup: WorkbenchEditorGroup = {
   paths: [],
+  pinnedCount: 0,
   previewPath: null,
   activePath: null,
 }
@@ -70,6 +76,19 @@ export function getWorkbenchEditorFocusedGroup(
 /** 「当前文件」：全局动作所在那一组正在显示的标签。 */
 export function getWorkbenchEditorFocusedPath(layout: WorkbenchEditorGroupsLayout): Nullable<string> {
   return getWorkbenchEditorFocusedGroup(layout).activePath
+}
+
+function isPinnedInGroup(group: WorkbenchEditorGroup, path: string): boolean {
+  const index = group.paths.indexOf(path)
+  return index >= 0 && index < group.pinnedCount
+}
+
+/** 这个文件的标签是不是固定的。 */
+export function isWorkbenchEditorTabPinned(
+  layout: WorkbenchEditorGroupsLayout,
+  path: string
+): boolean {
+  return layout.groups.some((group) => isPinnedInGroup(group, path))
 }
 
 function replaceGroup(
@@ -154,6 +173,7 @@ export function openWorkbenchEditorTab(
   const group = layout.groups[targetIndex] ?? EmptyWorkbenchEditorGroup
   const replacedPath = options.preview ? group.previewPath : null
   const nextGroup: WorkbenchEditorGroup = {
+    ...group,
     paths: replacedPath
       ? group.paths.map((current) => (current === replacedPath ? path : current))
       : [...group.paths, path],
@@ -184,9 +204,69 @@ export function keepWorkbenchEditorPreviewTabs(
   return { ...layout, groups: layout.groups.map((group) => ({ ...group, previewPath: null })) }
 }
 
+/** 固定一个标签：挪到固定标签的最后一个后面（固定的先后就是它们的顺序）；预览标签就此留下。 */
+export function pinWorkbenchEditorTab(
+  layout: WorkbenchEditorGroupsLayout,
+  path: string
+): WorkbenchEditorGroupsLayout {
+  const groupIndex = findWorkbenchEditorGroupIndex(layout, path)
+  const group = layout.groups[groupIndex]
+  if (!group || isPinnedInGroup(group, path)) return layout
+
+  const paths = group.paths.filter((current) => current !== path)
+  paths.splice(group.pinnedCount, 0, path)
+  return replaceGroup(layout, groupIndex, {
+    ...group,
+    paths,
+    pinnedCount: group.pinnedCount + 1,
+    previewPath: group.previewPath === path ? null : group.previewPath,
+  })
+}
+
+/** 取消固定：挪到剩下的固定标签后面，成为第一个普通标签。 */
+export function unpinWorkbenchEditorTab(
+  layout: WorkbenchEditorGroupsLayout,
+  path: string
+): WorkbenchEditorGroupsLayout {
+  const groupIndex = findWorkbenchEditorGroupIndex(layout, path)
+  const group = layout.groups[groupIndex]
+  if (!group || !isPinnedInGroup(group, path)) return layout
+
+  const paths = group.paths.filter((current) => current !== path)
+  paths.splice(group.pinnedCount - 1, 0, path)
+  return replaceGroup(layout, groupIndex, { ...group, paths, pinnedCount: group.pinnedCount - 1 })
+}
+
+/** 「关闭其他」要关的标签：同一组里除它以外、没固定的。 */
+export function listWorkbenchEditorTabsToCloseOthers(
+  layout: WorkbenchEditorGroupsLayout,
+  path: string
+): string[] {
+  const group = layout.groups[findWorkbenchEditorGroupIndex(layout, path)]
+  return group ? group.paths.slice(group.pinnedCount).filter((current) => current !== path) : []
+}
+
+/** 「关闭右侧标签」要关的标签：同一组里在它右边、没固定的。 */
+export function listWorkbenchEditorTabsToCloseToRight(
+  layout: WorkbenchEditorGroupsLayout,
+  path: string
+): string[] {
+  const group = layout.groups[findWorkbenchEditorGroupIndex(layout, path)]
+  return group
+    ? collectWorkbenchEditorTabsToRight(group.paths, path).filter(
+        (current) => !isPinnedInGroup(group, current)
+      )
+    : []
+}
+
+/** 「关闭全部」「关闭未修改的文件」的范围：没固定的标签。 */
+export function listWorkbenchEditorUnpinnedTabs(layout: WorkbenchEditorGroupsLayout): string[] {
+  return layout.groups.flatMap((group) => group.paths.slice(group.pinnedCount))
+}
+
 /**
- * 关掉一批标签。每一组各自按 `resolveWorkbenchEditorSelectionAfterClose` 选好接下来显示哪个；关空了的组
- * 不留着。
+ * 关掉一批标签（固定的也照关：要不要跳过固定标签由调用方定）。每一组各自按
+ * `resolveWorkbenchEditorSelectionAfterClose` 选好接下来显示哪个；关空了的组不留着。
  */
 export function closeWorkbenchEditorTabs(
   layout: WorkbenchEditorGroupsLayout,
@@ -201,6 +281,8 @@ export function closeWorkbenchEditorTabs(
       group.paths.some((path) => closing.has(path))
         ? {
             paths: group.paths.filter((path) => !closing.has(path)),
+            pinnedCount: group.paths.slice(0, group.pinnedCount).filter((path) => !closing.has(path))
+              .length,
             previewPath:
               group.previewPath && closing.has(group.previewPath) ? null : group.previewPath,
             activePath: resolveWorkbenchEditorSelectionAfterClose(
@@ -214,7 +296,10 @@ export function closeWorkbenchEditorTabs(
   })
 }
 
-/** 拖动标签：把 `fromPath` 挪到同一组里 `toPath` 现在的位置上；拖的是预览标签就把它留下。 */
+/**
+ * 拖动标签：把 `fromPath` 挪到同一组里 `toPath` 现在的位置上；拖的是预览标签就把它留下。固定标签只能在
+ * 固定标签之间挪，普通标签只能在普通标签之间挪。
+ */
 export function reorderWorkbenchEditorTab(
   layout: WorkbenchEditorGroupsLayout,
   fromPath: string,
@@ -228,6 +313,7 @@ export function reorderWorkbenchEditorTab(
   const fromIndex = group.paths.indexOf(fromPath)
   const toIndex = group.paths.indexOf(toPath)
   if (toIndex < 0 || fromIndex === toIndex) return layout
+  if (fromIndex < group.pinnedCount !== toIndex < group.pinnedCount) return layout
 
   const paths = group.paths.filter((path) => path !== fromPath)
   paths.splice(toIndex, 0, fromPath)
@@ -250,17 +336,20 @@ export function renameWorkbenchEditorLayoutPaths(
   let changed = false
   const groups = layout.groups.map((group) => {
     const paths: string[] = []
-    for (const path of group.paths) {
+    let pinnedCount = 0
+    group.paths.forEach((path, index) => {
       const renamed = rename(path)
       if (renamed !== path) changed = true
-      if (seen.has(renamed)) continue
+      if (seen.has(renamed)) return
       seen.add(renamed)
       paths.push(renamed)
-    }
+      if (index < group.pinnedCount) pinnedCount += 1
+    })
     const previewPath = group.previewPath ? rename(group.previewPath) : null
     const activePath = group.activePath ? rename(group.activePath) : null
     return {
       paths,
+      pinnedCount,
       previewPath: previewPath && paths.includes(previewPath) ? previewPath : null,
       activePath: activePath && paths.includes(activePath) ? activePath : (paths[0] ?? null),
     }
@@ -275,28 +364,33 @@ function normalizeGroup(
 ): Nullable<WorkbenchEditorGroup> {
   if (!isRecord(value) || !isArray(value.paths)) return null
 
+  const savedPinnedCount = readNumber(value.pinnedCount) ?? 0
   const paths: string[] = []
-  for (const item of value.paths) {
-    if (paths.length >= remaining) break
+  let pinnedCount = 0
+  value.paths.forEach((item, index) => {
+    if (paths.length >= remaining) return
     const path = readString(item)
-    if (!path || seen.has(path)) continue
+    if (!path || seen.has(path)) return
     seen.add(path)
     paths.push(path)
-  }
+    // 按存下来时的位置算：前面丢掉了坏条目，后面的普通标签也不会顶上来变成固定的。
+    if (index < savedPinnedCount) pinnedCount += 1
+  })
   if (paths.length === 0) return null
 
   const previewPath = readString(value.previewPath)
   const activePath = readString(value.activePath)
   return {
     paths,
-    previewPath: previewPath && paths.includes(previewPath) ? previewPath : null,
+    pinnedCount,
+    previewPath: previewPath && paths.indexOf(previewPath) >= pinnedCount ? previewPath : null,
     activePath: activePath && paths.includes(activePath) ? activePath : paths[0]!,
   }
 }
 
 /**
  * 校验存下来的布局：认不出的整体当成没有标签；重复的路径、超出 `maxTabs` 的标签、不在标签栏里的当前
- * 标签与预览标签都按缺省值收拾好。
+ * 标签与预览标签、对不上的固定个数都按缺省值收拾好。
  */
 export function normalizeWorkbenchEditorGroupsLayout(
   value: unknown,

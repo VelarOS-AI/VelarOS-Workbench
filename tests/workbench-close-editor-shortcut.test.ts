@@ -103,7 +103,8 @@ void describe('Cmd/Ctrl+W closes the editor tab, Shift closes the window', () =>
       'activeAuxiliaryTab.onClose?.()',
       'onCloseDiffTab?.()',
       'lightTab.onClose()',
-      'if (selectedFilePath) onCloseOpenFile(selectedFilePath)',
+      // 固定标签不随 ⌘W 关掉。
+      'if (selectedFilePath && !selectedTabPinned) onCloseOpenFile(selectedFilePath)',
     ].map((snippet) => closeActive.indexOf(snippet))
     assert.ok(order.every((index) => index >= 0), String(order))
     assert.deepEqual([...order].sort((left, right) => left - right), order)

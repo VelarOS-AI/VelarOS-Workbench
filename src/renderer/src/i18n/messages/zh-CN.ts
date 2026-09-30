@@ -251,6 +251,8 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     openProjectMemory: '项目记忆',
     openProjectMemoryTitle: '打开当前项目的记忆管理',
     closeEditorTab: '关闭标签',
+    pinEditorTab: '固定',
+    unpinEditorTab: '取消固定',
     closeOtherEditorTabs: '关闭其他',
     closeEditorTabsToRight: '关闭右侧标签',
     closeAllEditorTabs: '关闭全部',

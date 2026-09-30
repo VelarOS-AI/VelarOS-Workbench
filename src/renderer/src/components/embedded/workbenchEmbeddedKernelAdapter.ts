@@ -81,6 +81,7 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
     diagnosticsPendingPaths: workbench.languageServiceInsights.diagnosticsPendingPaths,
   })
   const packageManager = inferPackageManagerCommand(workbench.rootEntries)
+  const editorGroup = getWorkbenchEditorFocusedGroup(workbench.editorLayout)
 
   return {
     activeProject,
@@ -173,7 +174,8 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
       workbenchEditor: {
         editorContent: workbench.editorContent,
         openTabs: workbench.openTabs,
-        previewTabPath: getWorkbenchEditorFocusedGroup(workbench.editorLayout).previewPath,
+        previewTabPath: editorGroup.previewPath,
+        pinnedTabCount: editorGroup.pinnedCount,
         hasUnsavedChanges: workbench.hasUnsavedChanges,
         selectedFilePath: workbench.selectedFilePath,
         selectedFile: workbench.selectedFile,
@@ -198,6 +200,8 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
           void editorNavigation.selectFile(path, { preview: true })
         },
         onKeepOpenFile: workbench.keepOpenFile,
+        onPinOpenFile: workbench.pinOpenFile,
+        onUnpinOpenFile: workbench.unpinOpenFile,
         onCloseOpenFile: workbench.closeOpenFile,
         onCloseOtherOpenFiles: workbench.closeOtherOpenFiles,
         onCloseAllOpenFiles: workbench.closeAllOpenFiles,

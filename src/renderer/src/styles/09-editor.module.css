@@ -843,6 +843,16 @@
   background: var(--workbench-hover);
 }
 
+/* 固定标签：关闭按钮的位置上是图钉（点它取消固定），一直显示。 */
+.editorTabPin {
+  opacity: 1;
+  color: var(--foreground-tertiary);
+}
+
+.editorTab[data-active='true'] .editorTabPin {
+  color: var(--workbench-text);
+}
+
 .editorTabListMenu {
   @apply fixed z-50 flex flex-col border bg-card shadow-lg;
   width: min(288px, calc(100vw - 16px));

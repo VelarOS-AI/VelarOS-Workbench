@@ -18,6 +18,9 @@ import {
   keepWorkbenchEditorPreviewTabs,
   keepWorkbenchEditorTab,
   listWorkbenchEditorLayoutPaths,
+  listWorkbenchEditorTabsToCloseOthers,
+  listWorkbenchEditorTabsToCloseToRight,
+  listWorkbenchEditorUnpinnedTabs,
   openWorkbenchEditorTab,
   renameWorkbenchEditorLayoutPaths,
   type WorkbenchEditorGroupsLayout,
@@ -32,7 +35,6 @@ import {
   type WorkbenchEditorSaveSummary,
 } from '@renderer/models/editor/workbenchEditorSaving'
 import {
-  collectWorkbenchEditorTabsToRight,
   collectWorkbenchEditorUnsavedAfterFlush,
   popWorkbenchClosedEditorTab,
   pushWorkbenchClosedEditorTabs,
@@ -165,7 +167,7 @@ export function useWorkbenchEditorController({
   const [openTabsByPath, setOpenTabsByPath] = useState<Map<string, WorkbenchOpenEditorTab>>(
     () => new Map()
   )
-  const { layout, layoutRef, commitLayout, reorderOpenTabs, keepOpenFile } =
+  const { layout, layoutRef, commitLayout, reorderOpenTabs, keepOpenFile, pinOpenFile, unpinOpenFile } =
     useWorkbenchEditorTabLayout()
   const previewTabsEnabledLatest = useLatest(previewTabsEnabled)
   // 「当前文件」就是当前组正在显示的那个标签：它的磁盘快照与正文取自标签本身，不另存一份。
@@ -782,26 +784,26 @@ export function useWorkbenchEditorController({
     requestCloseOpenFiles([path])
   })
 
+  // 「关闭全部 / 未修改 / 其他 / 右侧」都跳过固定标签：固定标签只能逐个关（先取消固定，或文件被删掉）。
   const closeAllOpenFiles = useMemoizedFn((): void => {
-    requestCloseOpenFiles(listWorkbenchEditorLayoutPaths(layoutRef.current))
+    requestCloseOpenFiles(listWorkbenchEditorUnpinnedTabs(layoutRef.current))
   })
 
   const closeUnmodifiedOpenFiles = useMemoizedFn((): void => {
-    commitCloseOpenFiles(openTabs.filter((tab) => !isDirtyTab(tab)).map((tab) => tab.path))
+    commitCloseOpenFiles(
+      listWorkbenchEditorUnpinnedTabs(layoutRef.current).filter((path) => {
+        const tab = openTabsByPath.get(path)
+        return !!tab && !isDirtyTab(tab)
+      })
+    )
   })
 
   const closeOtherOpenFiles = useMemoizedFn((path: string): void => {
-    if (!openTabsByPath.has(path)) return
-
-    requestCloseOpenFiles(
-      listWorkbenchEditorLayoutPaths(layoutRef.current).filter((openPath) => openPath !== path)
-    )
+    requestCloseOpenFiles(listWorkbenchEditorTabsToCloseOthers(layoutRef.current, path))
   })
 
   const closeOpenFilesToRight = useMemoizedFn((path: string): void => {
-    requestCloseOpenFiles(
-      collectWorkbenchEditorTabsToRight(listWorkbenchEditorLayoutPaths(layoutRef.current), path)
-    )
+    requestCloseOpenFiles(listWorkbenchEditorTabsToCloseToRight(layoutRef.current, path))
   })
 
   /** 取出最近关掉、此刻没打开着的那个标签的路径（取出就不再记着）；没有返回 null。 */
@@ -1681,6 +1683,9 @@ export function useWorkbenchEditorController({
     reorderOpenTabs,
     /** 把预览标签留下，变成普通标签；不是预览标签时什么也不做。 */
     keepOpenFile,
+    /** 固定 / 取消固定标签：固定标签排在标签栏左边，批量关闭与 ⌘W 都不关它。 */
+    pinOpenFile,
+    unpinOpenFile,
     moveOpenEntryPath,
     closeOpenEntryPath,
     saveSelectedFile,

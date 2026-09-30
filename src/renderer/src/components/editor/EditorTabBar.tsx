@@ -20,6 +20,8 @@ import {
   GitDiffIcon,
   LockSimpleIcon,
   PencilSimpleIcon,
+  PushPinIcon,
+  PushPinSlashIcon,
   WarningCircleIcon,
   XIcon,
 } from '@phosphor-icons/react'
@@ -82,6 +84,8 @@ interface EditorTabBarProps {
   openTabs: WorkbenchOpenEditorTab[]
   /** 预览标签：名字是斜体，双击留下。 */
   previewTabPath?: Nullable<string>
+  /** `openTabs` 最前面这么多个是固定标签：关闭按钮换成图钉，拖动出不了固定区。 */
+  pinnedTabCount?: number
   selectedFilePath: Nullable<string>
   selectedFile: Nullable<WorkbenchReadFileResult>
   hasUnsavedChanges: boolean
@@ -103,6 +107,9 @@ interface EditorTabBarProps {
   onSelectOpenFile: (path: string) => void
   /** 双击标签：预览标签留下，变成普通标签。 */
   onKeepOpenFile?: (path: string) => void
+  /** 标签右键「固定」/「取消固定」；点固定标签上的图钉也是取消固定。 */
+  onPinOpenFile?: (path: string) => void
+  onUnpinOpenFile?: (path: string) => void
   onCloseOpenFile: (path: string) => void
   onCloseOtherOpenFiles: (path: string) => void
   onCloseAllOpenFiles: () => void
@@ -153,6 +160,7 @@ function middleClickCloseHandlers(onClose: LooseOptional<() => void>): {
 export function EditorTabBar({
   openTabs,
   previewTabPath = null,
+  pinnedTabCount = 0,
   selectedFilePath,
   selectedFile,
   selectedFileEditMode = null,
@@ -169,6 +177,8 @@ export function EditorTabBar({
   onRunTabContextAction,
   onSelectOpenFile,
   onKeepOpenFile,
+  onPinOpenFile,
+  onUnpinOpenFile,
   onCloseOpenFile,
   onCloseOtherOpenFiles,
   onCloseAllOpenFiles,
@@ -207,6 +217,7 @@ export function EditorTabBar({
       .join('\u001f'),
     // 斜体的名字宽一点、窄一点：预览标签换了要重新量。
     previewTabPath ?? '',
+    pinnedTabCount,
     diffTabItem ? getWorkbenchGitChangeDisplayPath(diffTabItem) : '',
     lightTabItem?.id ?? '',
     auxiliaryTabItems.map((tab) => `${tab.id}:${tab.title}:${tab.active}`).join('\u001f'),
@@ -240,14 +251,24 @@ export function EditorTabBar({
     action()
   }
 
+  function isPinnedTabPath(path: string): boolean {
+    const index = openTabs.findIndex((tab) => tab.path === path)
+    return index >= 0 && index < pinnedTabCount
+  }
+
   function handleTabDragStart(path: string, event: DragEvent<HTMLDivElement>): void {
     setDraggingTabPath(path)
     event.dataTransfer.effectAllowed = 'move'
     event.dataTransfer.setData('text/plain', path)
   }
 
+  /** 固定标签只能在固定标签之间挪，普通标签只能在普通标签之间挪：别的位置不接这次拖放。 */
+  function canDropTabOn(path: string): boolean {
+    return !!draggingTabPath && isPinnedTabPath(draggingTabPath) === isPinnedTabPath(path)
+  }
+
   function handleTabDragOver(path: string, event: DragEvent<HTMLDivElement>): void {
-    if (!draggingTabPath) return
+    if (!canDropTabOn(path)) return
     event.preventDefault()
     event.dataTransfer.dropEffect = 'move'
     if (path !== dragOverTabPath) setDragOverTabPath(path)
@@ -255,7 +276,7 @@ export function EditorTabBar({
 
   function handleTabDrop(path: string, event: DragEvent<HTMLDivElement>): void {
     event.preventDefault()
-    if (draggingTabPath && draggingTabPath !== path) {
+    if (draggingTabPath && draggingTabPath !== path && canDropTabOn(path)) {
       onReorderOpenTabs(draggingTabPath, path)
     }
     setDraggingTabPath(null)
@@ -304,8 +325,10 @@ export function EditorTabBar({
     ? openTabs.find((tab) => tab.path === tabContextMenu.path)
     : undefined
   const contextTabIsDirty = !!contextTab && isDirtyTab(contextTab)
+  const contextTabIsPinned = !!contextTab && openTabs.indexOf(contextTab) < pinnedTabCount
+  // 右边还有没固定的标签才有得关（固定的不随「关闭右侧标签」关掉）。
   const contextTabHasTabsToRight =
-    !!contextTab && openTabs.indexOf(contextTab) < openTabs.length - 1
+    !!contextTab && Math.max(openTabs.indexOf(contextTab) + 1, pinnedTabCount) < openTabs.length
 
   return (
     <>
@@ -315,8 +338,9 @@ export function EditorTabBar({
         aria-label={ariaLabel ?? t('workbench.openFiles')}
       >
         <div ref={tabScrollerRef} className={styles.editorTabScroller}>
-          {openTabs.map((tab) => {
+          {openTabs.map((tab, tabIndex) => {
             const isDirty = isDirtyTab(tab)
+            const isPinned = tabIndex < pinnedTabCount
             const isActive =
               !diffTabItem &&
               !lightTabItem &&
@@ -337,12 +361,16 @@ export function EditorTabBar({
                 data-active={isActive}
                 data-dirty={isDirty}
                 data-preview={tab.path === previewTabPath}
+                data-pinned={isPinned}
                 data-external-change={hasExternalChange}
                 data-autosave-failed={!!autosaveFailure}
                 data-dragging={tab.path === draggingTabPath}
                 data-drop-target={tab.path === dragOverTabPath && tab.path !== draggingTabPath}
                 draggable
-                {...middleClickCloseHandlers(() => onCloseOpenFile(tab.path))}
+                // 中键不关固定标签（与 VS Code 的默认一致），但照样挡住中键的自动滚动。
+                {...middleClickCloseHandlers(() => {
+                  if (!isPinned) onCloseOpenFile(tab.path)
+                })}
                 onContextMenu={(event) => onOpenTabContextMenu(tab.path, event)}
                 onDragStart={(event) => handleTabDragStart(tab.path, event)}
                 onDragOver={(event) => handleTabDragOver(tab.path, event)}
@@ -382,15 +410,28 @@ export function EditorTabBar({
                     />
                   )}
                 </Button>
-                <IconButton
-                  size="icon-sm"
-                  className={styles.editorTabClose}
-                  title={t('workbench.closeEditorTab')}
-                  label={t('workbench.closeEditorTab')}
-                  onClick={() => onCloseOpenFile(tab.path)}
-                >
-                  <XIcon size={12} />
-                </IconButton>
+                {isPinned ? (
+                  // 固定标签没有关闭按钮：这里是图钉，点它取消固定。
+                  <IconButton
+                    size="icon-sm"
+                    className={`${styles.editorTabClose} ${styles.editorTabPin}`}
+                    title={t('workbench.unpinEditorTab')}
+                    label={t('workbench.unpinEditorTab')}
+                    onClick={() => onUnpinOpenFile?.(tab.path)}
+                  >
+                    <PushPinIcon size={12} weight="fill" />
+                  </IconButton>
+                ) : (
+                  <IconButton
+                    size="icon-sm"
+                    className={styles.editorTabClose}
+                    title={t('workbench.closeEditorTab')}
+                    label={t('workbench.closeEditorTab')}
+                    onClick={() => onCloseOpenFile(tab.path)}
+                  >
+                    <XIcon size={12} />
+                  </IconButton>
+                )}
               </div>
             )
           })}
@@ -577,7 +618,8 @@ export function EditorTabBar({
           style={getMenuStyle('tabs')}
           onMouseDown={(event) => event.stopPropagation()}
         >
-          {openTabs.map((tab) => {
+          {openTabs.map((tab, tabIndex) => {
+            const isPinned = tabIndex < pinnedTabCount
             const isActive =
               !diffTabItem &&
               !lightTabItem &&
@@ -623,15 +665,27 @@ export function EditorTabBar({
                     />
                   )}
                 </Button>
-                <IconButton
-                  size="icon-sm"
-                  className={styles.editorTabListClose}
-                  title={t('workbench.closeEditorTab')}
-                  label={t('workbench.closeEditorTab')}
-                  onClick={() => runToolbarAction(() => onCloseOpenFile(tab.path))}
-                >
-                  <XIcon size={13} />
-                </IconButton>
+                {isPinned ? (
+                  <IconButton
+                    size="icon-sm"
+                    className={styles.editorTabListClose}
+                    title={t('workbench.unpinEditorTab')}
+                    label={t('workbench.unpinEditorTab')}
+                    onClick={() => onUnpinOpenFile?.(tab.path)}
+                  >
+                    <PushPinIcon size={13} weight="fill" />
+                  </IconButton>
+                ) : (
+                  <IconButton
+                    size="icon-sm"
+                    className={styles.editorTabListClose}
+                    title={t('workbench.closeEditorTab')}
+                    label={t('workbench.closeEditorTab')}
+                    onClick={() => runToolbarAction(() => onCloseOpenFile(tab.path))}
+                  >
+                    <XIcon size={13} />
+                  </IconButton>
+                )}
               </div>
             )
           })}
@@ -780,6 +834,22 @@ export function EditorTabBar({
             >
               <ArrowCounterClockwiseIcon size={14} />
               <Text truncate>{t('workbench.revertEditorTab')}</Text>
+            </Button>
+          )}
+          {!!onPinOpenFile && !!onUnpinOpenFile && (
+            <Button
+              variant="ghost"
+              size="block"
+              onClick={() =>
+                onRunTabContextAction(() =>
+                  (contextTabIsPinned ? onUnpinOpenFile : onPinOpenFile)(tabContextMenu.path)
+                )
+              }
+            >
+              {contextTabIsPinned ? <PushPinSlashIcon size={14} /> : <PushPinIcon size={14} />}
+              <Text truncate>
+                {t(contextTabIsPinned ? 'workbench.unpinEditorTab' : 'workbench.pinEditorTab')}
+              </Text>
             </Button>
           )}
           <Button

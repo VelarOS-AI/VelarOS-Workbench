@@ -2,7 +2,9 @@ import { useRef, useState } from 'react'
 import {
   createWorkbenchEditorGroupsLayout,
   keepWorkbenchEditorTab,
+  pinWorkbenchEditorTab,
   reorderWorkbenchEditorTab,
+  unpinWorkbenchEditorTab,
   type WorkbenchEditorGroupsLayout,
 } from '@renderer/models/editor/workbenchEditorGroups'
 
@@ -11,8 +13,8 @@ import { useMemoizedFn } from '../support/genericHooks'
 /**
  * 编辑区标签布局的状态：标签栏顺序、每组的当前标签、当前组（见 workbenchEditorGroups）。
  *
- * 只动布局的操作（拖动标签、把预览标签留下）在这里接好；要同时动文件正文的（打开、关闭、改名、恢复会话）由
- * useWorkbenchEditorController 拿 `layoutRef` 与 `commitLayout` 自己算。
+ * 只动布局的操作（拖动标签、把预览标签留下、固定与取消固定）在这里接好；要同时动文件正文的（打开、关闭、
+ * 改名、恢复会话）由 useWorkbenchEditorController 拿 `layoutRef` 与 `commitLayout` 自己算。
  */
 export function useWorkbenchEditorTabLayout() {
   const [layout, setLayout] = useState(createWorkbenchEditorGroupsLayout)
@@ -35,5 +37,22 @@ export function useWorkbenchEditorTabLayout() {
     commitLayout(keepWorkbenchEditorTab(layoutRef.current, path))
   })
 
-  return { layout, layoutRef, commitLayout, reorderOpenTabs, keepOpenFile }
+  /** 固定标签：挪到标签栏左边的固定区里。 */
+  const pinOpenFile = useMemoizedFn((path: string): void => {
+    commitLayout(pinWorkbenchEditorTab(layoutRef.current, path))
+  })
+
+  const unpinOpenFile = useMemoizedFn((path: string): void => {
+    commitLayout(unpinWorkbenchEditorTab(layoutRef.current, path))
+  })
+
+  return {
+    layout,
+    layoutRef,
+    commitLayout,
+    reorderOpenTabs,
+    keepOpenFile,
+    pinOpenFile,
+    unpinOpenFile,
+  }
 }

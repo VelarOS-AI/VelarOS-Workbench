@@ -9,13 +9,19 @@ import {
   createWorkbenchEditorGroupsLayout,
   findWorkbenchEditorGroupIndex,
   getWorkbenchEditorFocusedPath,
+  isWorkbenchEditorTabPinned,
   keepWorkbenchEditorPreviewTabs,
   keepWorkbenchEditorTab,
   listWorkbenchEditorLayoutPaths,
+  listWorkbenchEditorTabsToCloseOthers,
+  listWorkbenchEditorTabsToCloseToRight,
+  listWorkbenchEditorUnpinnedTabs,
   normalizeWorkbenchEditorGroupsLayout,
   openWorkbenchEditorTab,
+  pinWorkbenchEditorTab,
   renameWorkbenchEditorLayoutPaths,
   reorderWorkbenchEditorTab,
+  unpinWorkbenchEditorTab,
   type WorkbenchEditorGroupsLayout,
 } from '../src/renderer/src/models/editor/workbenchEditorGroups'
 import {
@@ -24,14 +30,15 @@ import {
 } from '../src/renderer/src/models/project/workbenchProjectSessionModel'
 
 /**
- * 布局的样子：组之间用 ` | ` 隔开，当前组前面有 `*`，每组里当前标签用 `[]` 括起来，预览标签前面有 `~`，
- * 如 `*a [~b] c`。
+ * 布局的样子：组之间用 ` | ` 隔开，当前组前面有 `*`，每组里当前标签用 `[]` 括起来，固定标签前面有 `!`，
+ * 预览标签前面有 `~`，如 `*!a [~b] c`。
  */
 function show(layout: WorkbenchEditorGroupsLayout): string {
   return layout.groups
     .map((group, index) => {
-      const tabs = group.paths.map((path) => {
-        const name = `${path === group.previewPath ? '~' : ''}${path}`
+      const tabs = group.paths.map((path, tabIndex) => {
+        const mark = tabIndex < group.pinnedCount ? '!' : path === group.previewPath ? '~' : ''
+        const name = `${mark}${path}`
         return path === group.activePath ? `[${name}]` : name
       })
       return `${index === layout.focusedGroup ? '*' : ''}${tabs.join(' ')}`
@@ -47,6 +54,11 @@ function open(layout: WorkbenchEditorGroupsLayout, ...paths: string[]): Workbenc
 /** 以预览标签打开一个文件。 */
 function preview(layout: WorkbenchEditorGroupsLayout, path: string): WorkbenchEditorGroupsLayout {
   return openWorkbenchEditorTab(layout, path, { preview: true }).layout
+}
+
+/** 依次固定。 */
+function pin(layout: WorkbenchEditorGroupsLayout, ...paths: string[]): WorkbenchEditorGroupsLayout {
+  return paths.reduce((current, path) => pinWorkbenchEditorTab(current, path), layout)
 }
 
 function readSource(relativePath: string): string {
@@ -182,6 +194,88 @@ void describe('preview tabs', () => {
   })
 })
 
+void describe('pinned tabs', () => {
+  void test('pinned tabs sit at the left in the order they were pinned', () => {
+    const layout = open(empty, 'a', 'b', 'c', 'd')
+    const pinned = pin(layout, 'c', 'a')
+    assert.equal(show(pinned), '*!c !a b [d]')
+    assert.equal(isWorkbenchEditorTabPinned(pinned, 'a'), true)
+    assert.equal(isWorkbenchEditorTabPinned(pinned, 'b'), false)
+    assert.equal(isWorkbenchEditorTabPinned(pinned, 'missing'), false)
+    // 已经固定的再固定、没开着的：不变。
+    assert.equal(pinWorkbenchEditorTab(pinned, 'c'), pinned)
+    assert.equal(pinWorkbenchEditorTab(pinned, 'missing'), pinned)
+  })
+
+  void test('unpinning puts the tab first among the regular tabs', () => {
+    const pinned = pin(open(empty, 'a', 'b', 'c', 'd'), 'a', 'b', 'c')
+    assert.equal(show(unpinWorkbenchEditorTab(pinned, 'a')), '*!b !c a [d]')
+    assert.equal(show(unpinWorkbenchEditorTab(pinned, 'c')), '*!a !b c [d]')
+    assert.equal(unpinWorkbenchEditorTab(pinned, 'd'), pinned)
+    assert.equal(unpinWorkbenchEditorTab(pinned, 'missing'), pinned)
+  })
+
+  void test('pinning the preview keeps it; new tabs and previews open after the pinned ones', () => {
+    const layout = preview(open(empty, 'a'), 'p')
+    const pinned = pinWorkbenchEditorTab(layout, 'p')
+    assert.equal(show(pinned), '*[!p] a')
+    // 固定标签不是预览标签：下一次预览另开一个，不顶替它。
+    assert.equal(show(preview(pinned, 'q')), '*!p a [~q]')
+    assert.equal(show(open(pinned, 'b')), '*!p a [b]')
+  })
+
+  void test('close others, close to the right and close all skip pinned tabs', () => {
+    const layout = pin(open(empty, 'a', 'b', 'c', 'd', 'e'), 'b', 'd')
+    assert.equal(show(layout), '*!b !d a c [e]')
+    assert.deepEqual(listWorkbenchEditorTabsToCloseOthers(layout, 'c'), ['a', 'e'])
+    // 从固定标签上点「关闭其他」：别的固定标签照样留着。
+    assert.deepEqual(listWorkbenchEditorTabsToCloseOthers(layout, 'b'), ['a', 'c', 'e'])
+    assert.deepEqual(listWorkbenchEditorTabsToCloseToRight(layout, 'a'), ['c', 'e'])
+    assert.deepEqual(listWorkbenchEditorTabsToCloseToRight(layout, 'b'), ['a', 'c', 'e'])
+    assert.deepEqual(listWorkbenchEditorTabsToCloseToRight(layout, 'e'), [])
+    assert.deepEqual(listWorkbenchEditorUnpinnedTabs(layout), ['a', 'c', 'e'])
+    assert.deepEqual(listWorkbenchEditorTabsToCloseOthers(layout, 'missing'), [])
+    assert.deepEqual(listWorkbenchEditorTabsToCloseToRight(layout, 'missing'), [])
+
+    // 关完之后固定标签还在，当前标签落到最近的那个上。
+    assert.equal(
+      show(closeWorkbenchEditorTabs(layout, listWorkbenchEditorUnpinnedTabs(layout))),
+      '*!b [!d]'
+    )
+  })
+
+  void test('a pinned tab can still be closed on its own (its file was deleted)', () => {
+    const layout = pin(open(empty, 'a', 'b', 'c'), 'a', 'b')
+    const closed = closeWorkbenchEditorTabs(layout, ['a'])
+    assert.equal(show(closed), '*!b [c]')
+    assert.equal(closed.groups[0]?.pinnedCount, 1)
+  })
+
+  void test('dragging never crosses between the pinned and the regular tabs', () => {
+    const layout = pin(open(empty, 'a', 'b', 'c', 'd'), 'a', 'b')
+    assert.equal(show(layout), '*!a !b c [d]')
+    // 固定标签之间、普通标签之间可以换位置。
+    assert.equal(show(reorderWorkbenchEditorTab(layout, 'b', 'a')), '*!b !a c [d]')
+    assert.equal(show(reorderWorkbenchEditorTab(layout, 'd', 'c')), '*!a !b [d] c')
+    // 普通标签拖不进固定区，固定标签也拖不出来。
+    assert.equal(reorderWorkbenchEditorTab(layout, 'c', 'a'), layout)
+    assert.equal(reorderWorkbenchEditorTab(layout, 'a', 'd'), layout)
+  })
+
+  void test('renaming keeps a tab pinned', () => {
+    const layout = pin(open(empty, 'a', 'b', 'c'), 'b')
+    assert.equal(
+      show(renameWorkbenchEditorLayoutPaths(layout, (path) => (path === 'b' ? 'renamed' : path))),
+      '*!renamed a [c]'
+    )
+    // 固定标签改名后撞上后面一个开着的文件：留下固定的那个。
+    assert.equal(
+      show(renameWorkbenchEditorLayoutPaths(layout, (path) => (path === 'c' ? 'b' : path))),
+      '*[!b] a'
+    )
+  })
+})
+
 void describe('preview tab wiring', () => {
   const controller = readSource('src/renderer/src/hooks/useWorkbenchEditorController.ts')
   const adapter = readSource('src/renderer/src/components/embedded/workbenchEmbeddedKernelAdapter.ts')
@@ -278,9 +372,54 @@ void describe('preview tab wiring', () => {
   })
 })
 
+void describe('pinned tab wiring', () => {
+  void test('the pin replaces the close button, and Cmd/Ctrl+W and middle click leave it alone', () => {
+    const tabBar = readSource('src/renderer/src/components/editor/EditorTabBar.tsx')
+    const editorPanel = readSource('src/renderer/src/components/editor/EditorPanel.tsx')
+    const controller = readSource('src/renderer/src/hooks/useWorkbenchEditorController.ts')
+
+    // 固定标签上是图钉（点它取消固定），不是关闭按钮。
+    assert.match(
+      tabBar,
+      /\{isPinned \? \([\s\S]*?onClick=\{\(\) => onUnpinOpenFile\?\.\(tab\.path\)\}[\s\S]*?<PushPinIcon[\s\S]*?\) : \([\s\S]*?onClick=\{\(\) => onCloseOpenFile\(tab\.path\)\}/u
+    )
+    assert.match(tabBar, /if \(!isPinned\) onCloseOpenFile\(tab\.path\)/u)
+    assert.match(
+      tabBar,
+      /\(contextTabIsPinned \? onUnpinOpenFile : onPinOpenFile\)\(tabContextMenu\.path\)/u
+    )
+    assert.match(tabBar, /t\(contextTabIsPinned \? 'workbench\.unpinEditorTab' : 'workbench\.pinEditorTab'\)/u)
+    // 拖放：落点与被拖的标签不在同一个区（固定 / 普通）就不接。
+    assert.match(
+      tabBar,
+      /isPinnedTabPath\(draggingTabPath\) === isPinnedTabPath\(path\)/u
+    )
+    assert.match(tabBar, /if \(!canDropTabOn\(path\)\) return\s*event\.preventDefault\(\)/u)
+    assert.match(editorPanel, /selectedTabPinned = !!selectedTab && openTabs\.indexOf\(selectedTab\) < pinnedTabCount/u)
+
+    // 批量关闭只关没固定的。
+    assert.match(
+      controller,
+      /const closeAllOpenFiles = [\s\S]*?requestCloseOpenFiles\(listWorkbenchEditorUnpinnedTabs\(layoutRef\.current\)\)/u
+    )
+    assert.match(
+      controller,
+      /const closeUnmodifiedOpenFiles = [\s\S]*?listWorkbenchEditorUnpinnedTabs\(layoutRef\.current\)\.filter\(/u
+    )
+    assert.match(
+      controller,
+      /requestCloseOpenFiles\(listWorkbenchEditorTabsToCloseOthers\(layoutRef\.current, path\)\)/u
+    )
+    assert.match(
+      controller,
+      /requestCloseOpenFiles\(listWorkbenchEditorTabsToCloseToRight\(layoutRef\.current, path\)\)/u
+    )
+  })
+})
+
 void describe('saved editor tab layout', () => {
   void test('a saved layout round-trips through the project session', () => {
-    const layout = preview(open(empty, 'a', 'b', 'c', 'b'), 'd')
+    const layout = preview(pin(open(empty, 'a', 'b', 'c', 'b'), 'c'), 'd')
     const session = buildWorkbenchProjectSessionSnapshot({
       expandedPaths: ['.'],
       selectedEntryPath: 'b',
@@ -288,8 +427,8 @@ void describe('saved editor tab layout', () => {
       cursorByPath: { b: { line: 3, column: 7 } },
     })
     const restored = normalizeWorkbenchProjectSession(JSON.parse(JSON.stringify(session)))
-    // 预览标签重启之后还是预览标签。
-    assert.equal(show(restored.editorLayout), '*a b c [~d]')
+    // 固定标签重启之后还是固定的，预览标签还是预览标签。
+    assert.equal(show(restored.editorLayout), '*!c a b [~d]')
     assert.deepEqual(restored.cursorByPath, { b: { line: 3, column: 7 } })
   })
 
@@ -326,6 +465,28 @@ void describe('saved editor tab layout', () => {
     // 重复的、空的、不是字符串的路径去掉；当前标签不在标签栏里时取第一个，预览标签不在就没有；空组不留；
     // 当前组越界回到第一组。
     assert.equal(show(restored), '*[a] b')
+  })
+
+  void test('the pinned count is checked against the tabs that survive', () => {
+    const restore = (group: Record<string, unknown>): string =>
+      show(normalizeWorkbenchEditorGroupsLayout({ groups: [group], focusedGroup: 0 }, 32))
+
+    assert.equal(restore({ paths: ['a', 'b', 'c'], pinnedCount: 2, activePath: 'c' }), '*!a !b [c]')
+    // 个数不对（负数、不是数、比标签还多）：按没有固定或全部固定收住，不报错。
+    assert.equal(restore({ paths: ['a', 'b'], pinnedCount: -3, activePath: 'a' }), '*[a] b')
+    assert.equal(restore({ paths: ['a', 'b'], pinnedCount: 'two', activePath: 'a' }), '*[a] b')
+    assert.equal(restore({ paths: ['a', 'b'], pinnedCount: 9, activePath: 'a' }), '*[!a] !b')
+    // 固定区里有坏条目：丢掉它，后面的普通标签不会顶上来变成固定的。
+    assert.equal(restore({ paths: ['a', '', 'b', 'c'], pinnedCount: 2, activePath: 'c' }), '*!a b [c]')
+    // 预览标签不能是固定标签。
+    assert.equal(
+      restore({ paths: ['a', 'b'], pinnedCount: 1, previewPath: 'a', activePath: 'b' }),
+      '*!a [b]'
+    )
+    assert.equal(
+      restore({ paths: ['a', 'b'], pinnedCount: 1, previewPath: 'b', activePath: 'b' }),
+      '*!a [~b]'
+    )
   })
 
   void test('no more than the allowed number of tabs is restored', () => {
