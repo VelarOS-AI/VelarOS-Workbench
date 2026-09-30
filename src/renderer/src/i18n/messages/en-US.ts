@@ -345,7 +345,7 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     editorTestRunSuite: 'Run this group of tests: {title}',
     editorTestDebugFile: 'Debug all tests in this file',
     editorTestDebug: 'Debug test: {title}',
-    editorTestDebugSuite: 'Debug tests in: {title}',
+    editorTestDebugSuite: 'Debug this group of tests: {title}',
     editorTestStatusRunning: 'Running',
     editorTestStatusPassed: 'Passed on the last run',
     editorTestStatusFailed: 'Failed on the last run',
