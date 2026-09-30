@@ -3,6 +3,8 @@ import type { SerializedError } from '@velaros-ai/core/error'
 import type {
   WorkbenchLanguageServiceCodeActionsRequest,
   WorkbenchLanguageServiceCodeActionsResult,
+  WorkbenchLanguageServiceCompletionResolveRequest,
+  WorkbenchLanguageServiceCompletionResolveResult,
   WorkbenchLanguageServiceCompletionResult,
   WorkbenchLanguageServiceDefinitionResult,
   WorkbenchLanguageServiceDiagnosticsResult,
@@ -70,6 +72,10 @@ export interface WorkbenchLanguageServiceWorkerOperationMap {
   getCompletions: {
     request: WorkbenchLanguageServicePositionRequest
     result: WorkbenchLanguageServiceCompletionResult
+  }
+  resolveCompletion: {
+    request: WorkbenchLanguageServiceCompletionResolveRequest
+    result: WorkbenchLanguageServiceCompletionResolveResult
   }
   getDiagnostics: {
     request: WorkbenchLanguageServiceRequest

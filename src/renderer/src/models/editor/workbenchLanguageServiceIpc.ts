@@ -4,6 +4,9 @@ import { workbenchHost,type WorkbenchHostRuntime } from '../../host'
 type WorkbenchLanguageServiceCompletionsPayload = Parameters<
   WorkbenchProjectKernelPort['getWorkbenchLanguageServiceCompletions']
 >[0]
+type WorkbenchLanguageServiceCompletionResolvePayload = Parameters<
+  WorkbenchProjectKernelPort['resolveWorkbenchLanguageServiceCompletion']
+>[0]
 type WorkbenchLanguageServiceDefinitionPayload = Parameters<
   WorkbenchProjectKernelPort['getWorkbenchLanguageServiceDefinition']
 >[0]
@@ -50,6 +53,13 @@ export function getWorkbenchLanguageServiceCompletions(
   runtime: WorkbenchHostRuntime = workbenchHost
 ): ReturnType<WorkbenchProjectKernelPort['getWorkbenchLanguageServiceCompletions']> {
   return runtime.kernel.project.getWorkbenchLanguageServiceCompletions(payload)
+}
+
+export function resolveWorkbenchLanguageServiceCompletion(
+  payload: WorkbenchLanguageServiceCompletionResolvePayload,
+  runtime: WorkbenchHostRuntime = workbenchHost
+): ReturnType<WorkbenchProjectKernelPort['resolveWorkbenchLanguageServiceCompletion']> {
+  return runtime.kernel.project.resolveWorkbenchLanguageServiceCompletion(payload)
 }
 
 export function getWorkbenchInlineCompletion(

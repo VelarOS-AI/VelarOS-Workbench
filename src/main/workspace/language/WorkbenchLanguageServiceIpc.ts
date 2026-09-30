@@ -1,5 +1,5 @@
 /**
- * 语言智能 IPC 装配：handle 13 个语言服务动词通道，转发给串行执行的语言服务 worker。
+ * 语言智能 IPC 装配：handle 各个语言服务动词通道，转发给串行执行的语言服务 worker。
  *
  * IPC 入参是边界外来数据，在此解析一次（形状不符按无效请求处理），worker 内部只见类型。
  * 所有请求最终落在 tsserver 项目托管上（projectRoot 键控，无 session 轴）；worker 首个请求
@@ -11,6 +11,7 @@ import type { ModelSelection } from '@velaros-ai/model/contracts'
 
 import type {
   WorkbenchLanguageServiceCodeActionsRequest,
+  WorkbenchLanguageServiceCompletionResolveRequest,
   WorkbenchLanguageServiceDiagnostic,
   WorkbenchLanguageServiceExtensionRequest,
   WorkbenchLanguageServiceInlayHintsRequest,
@@ -58,6 +59,15 @@ export function registerWorkbenchLanguageServiceIpc(
       if (!parsed) return invalidRequest()
 
       return client.getCompletions(parsed, supersedeScope(event))
+    })
+  )
+
+  ipcMain.handle(WorkbenchLanguageChannels.completionResolve, (_event, request: unknown) =>
+    callWithEnvelope(() => {
+      const parsed = parseCompletionResolveRequest(request)
+      if (!parsed) return invalidRequest()
+
+      return client.resolveCompletion(parsed)
     })
   )
 
@@ -226,6 +236,33 @@ function parsePositionRequest(input: unknown): Nullable<WorkbenchLanguageService
   if (!position) return null
 
   return { ...base, position }
+}
+
+function parseCompletionResolveRequest(
+  input: unknown
+): Nullable<WorkbenchLanguageServiceCompletionResolveRequest> {
+  const base = parsePositionRequest(input)
+  if (!base || !isRecord(input)) return null
+  const item = input['item']
+  if (!hasStringFields(item, ['name'])) return null
+  const data = item['data']
+  if (data !== undefined && (!isRecord(data) || Array.isArray(data))) return null
+  if (data !== undefined) {
+    try {
+      if (JSON.stringify(data).length > 64 * 1024) return null
+    } catch {
+      return null
+    }
+  }
+
+  return {
+    ...base,
+    item: {
+      name: item['name'] as string,
+      ...optionalString(item, 'source'),
+      data: data as Record<string, unknown> | undefined,
+    },
+  }
 }
 
 function parseRenameRequest(input: unknown): Nullable<WorkbenchLanguageServiceRenameRequest> {

@@ -52,6 +52,8 @@ async function dispatch(
       return languageServices.getDefinition(request.request)
     case 'getCompletions':
       return languageServices.getCompletions(request.request, signal)
+    case 'resolveCompletion':
+      return languageServices.resolveCompletion(request.request)
     case 'getDiagnostics':
       return languageServices.getDiagnostics(request.request)
     case 'getRename':

@@ -423,16 +423,50 @@ export interface WorkbenchLanguageServiceCompletionItem {
   returnType?: string
   documentation?: string
   insertText?: string
+  /**
+   * 接受后被替换掉的范围（按请求时的正文算）：可选链补全要换掉前面的 `.`，`import` 语句补全要换掉整句开头。
+   * 省略时替换光标前正在输入的那个词。
+   */
+  range?: WorkbenchLanguageServiceRange
   sortText?: string
   filterText?: string
+  /** `insertText` 是片段语法（`$1`、`${2:默认}`、`$0`）。 */
   isSnippet?: boolean
+  /** 同时要做的别处改动（外部语言服务器的自动导入），按请求时的正文算。 */
   additionalTextEdits?: WorkbenchLanguageServiceCompletionTextEdit[]
+  /** 接受时还要再问语言服务才知道的改动（TypeScript 的自动导入）：原样交回 resolve。 */
+  resolve?: WorkbenchLanguageServiceCompletionResolveData
+  /** 接受后接着再弹一次补全（CSS 属性名补完，接着给属性值）。 */
+  retrigger?: boolean
+}
+
+export interface WorkbenchLanguageServiceCompletionResolveData {
+  name: string
+  source?: string
+  /** 语言服务给这一项的原始数据（TypeScript 的 CompletionEntryData），可 JSON 序列化。 */
+  data?: Record<string, unknown>
 }
 
 export interface WorkbenchLanguageServiceCompletionResult {
   projectRoot: string
   path: string
   items: WorkbenchLanguageServiceCompletionItem[]
+  /** 列表不完整（服务端按已输入的前缀截过）：继续输入要重新请求，不能只在这份里筛。 */
+  isIncomplete?: boolean
+}
+
+/** 补全项接受前后的细节：位置与正文取发起补全时的那一份。 */
+export interface WorkbenchLanguageServiceCompletionResolveRequest
+  extends WorkbenchLanguageServicePositionRequest {
+  item: WorkbenchLanguageServiceCompletionResolveData
+}
+
+export interface WorkbenchLanguageServiceCompletionResolveResult {
+  projectRoot: string
+  path: string
+  /** 按发起补全时的正文算的附加改动（自动导入语句）。 */
+  additionalTextEdits: WorkbenchLanguageServiceCompletionTextEdit[]
+  documentation?: string
 }
 
 export interface WorkbenchLanguageServiceDiagnostic {

@@ -123,6 +123,8 @@ const fsBridge: WorkbenchFsBridge = {
 const languageBridge: WorkbenchLanguageBridge = {
   getDefinition: (request) => ipcRenderer.invoke(WorkbenchLanguageChannels.definition, request),
   getCompletions: (request) => ipcRenderer.invoke(WorkbenchLanguageChannels.completions, request),
+  resolveCompletion: (request) =>
+    ipcRenderer.invoke(WorkbenchLanguageChannels.completionResolve, request),
   getDiagnostics: (request) => ipcRenderer.invoke(WorkbenchLanguageChannels.diagnostics, request),
   getRename: (request) => ipcRenderer.invoke(WorkbenchLanguageChannels.rename, request),
   getHover: (request) => ipcRenderer.invoke(WorkbenchLanguageChannels.hover, request),

@@ -62,13 +62,22 @@ export interface ExternalLspCompletionItem {
   label: string
   kind?: number
   detail?: string
+  labelDetails?: { detail?: string; description?: string }
   documentation?: unknown
   insertText?: string
   insertTextFormat?: number
   sortText?: string
   filterText?: string
-  textEdit?: { range: LspRange; newText: string }
+  /** `range` 是普通替换；声明了插入 / 替换支持的服务器会给 `insert` 与 `replace`。 */
+  textEdit?: { newText: string; range?: LspRange; insert?: LspRange; replace?: LspRange }
   additionalTextEdits?: Array<{ range: LspRange; newText: string }>
+  command?: { command?: string }
+}
+
+export interface ExternalLspCompletionList {
+  items: ExternalLspCompletionItem[]
+  /** 服务器按前缀截过的列表：继续输入要重新请求。 */
+  isIncomplete: boolean
 }
 
 export interface ExternalLspHover {
@@ -694,15 +703,18 @@ export class ExternalLspClient {
     content: string,
     position: LspPosition,
     signal?: AbortSignal
-  ): Promise<ExternalLspCompletionItem[]> {
+  ): Promise<ExternalLspCompletionList> {
     const document = await this.synchronize(path, content)
     const result = await this.request('textDocument/completion', {
       textDocument: { uri: document.uri },
       position,
     }, signal)
-    if (Array.isArray(result)) return result as ExternalLspCompletionItem[]
+    if (Array.isArray(result)) return { items: result as ExternalLspCompletionItem[], isIncomplete: false }
     const object = objectValue(result)
-    return Array.isArray(object?.['items']) ? object['items'] as ExternalLspCompletionItem[] : []
+    return {
+      items: Array.isArray(object?.['items']) ? object['items'] as ExternalLspCompletionItem[] : [],
+      isIncomplete: object?.['isIncomplete'] === true,
+    }
   }
 
   public async hover(
@@ -990,7 +1002,13 @@ export class ExternalLspClient {
         // 对应的 workspace/workspaceFolders 请求由 handleServerRequest 回复。
         workspace: { workspaceFolders: true },
         textDocument: {
-          completion: { completionItem: { snippetSupport: true, documentationFormat: ['markdown', 'plaintext'] } },
+          completion: {
+            completionItem: {
+              snippetSupport: true,
+              labelDetailsSupport: true,
+              documentationFormat: ['markdown', 'plaintext'],
+            },
+          },
           hover: { contentFormat: ['markdown', 'plaintext'] },
           definition: { linkSupport: true },
           documentHighlight: { dynamicRegistration: false },

@@ -17,6 +17,8 @@ import type {
   WorkbenchInlineCompletionResult,
   WorkbenchLanguageServiceCodeActionsRequest,
   WorkbenchLanguageServiceCodeActionsResult,
+  WorkbenchLanguageServiceCompletionResolveRequest,
+  WorkbenchLanguageServiceCompletionResolveResult,
   WorkbenchLanguageServiceCompletionResult,
   WorkbenchLanguageServiceDefinitionResult,
   WorkbenchLanguageServiceDiagnosticsResult,
@@ -42,6 +44,7 @@ import type { WorkbenchFsCallResult } from './workbenchFs'
 export const WorkbenchLanguageChannels = {
   definition: 'workbench-app:ls:definition',
   completions: 'workbench-app:ls:completions',
+  completionResolve: 'workbench-app:ls:completion-resolve',
   diagnostics: 'workbench-app:ls:diagnostics',
   rename: 'workbench-app:ls:rename',
   hover: 'workbench-app:ls:hover',
@@ -69,6 +72,9 @@ export interface WorkbenchLanguageBridge {
   getCompletions: (
     request: WorkbenchLanguageServicePositionRequest
   ) => Promise<WorkbenchFsCallResult<WorkbenchLanguageServiceCompletionResult>>
+  resolveCompletion: (
+    request: WorkbenchLanguageServiceCompletionResolveRequest
+  ) => Promise<WorkbenchFsCallResult<WorkbenchLanguageServiceCompletionResolveResult>>
   getDiagnostics: (
     request: WorkbenchLanguageServiceRequest
   ) => Promise<WorkbenchFsCallResult<WorkbenchLanguageServiceDiagnosticsResult>>

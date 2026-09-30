@@ -21,6 +21,9 @@ import type {
   WorkbenchLanguageServiceCapability,
   WorkbenchLanguageServiceCodeActionsRequest,
   WorkbenchLanguageServiceCodeActionsResult,
+  WorkbenchLanguageServiceCompletionItem,
+  WorkbenchLanguageServiceCompletionResolveRequest,
+  WorkbenchLanguageServiceCompletionResolveResult,
   WorkbenchLanguageServiceCompletionResult,
   WorkbenchLanguageServiceDefinitionResult,
   WorkbenchLanguageServiceDescriptorSnapshot,
@@ -57,7 +60,6 @@ import {
 
 import {
   type ExternalLspCodeAction,
-  type ExternalLspCompletionItem,
   type ExternalLspDiagnostic,
   type ExternalLspDocumentHighlight,
   type ExternalLspDocumentSymbol,
@@ -89,7 +91,10 @@ import {
   withWorkbenchMarkdownLanguageService,
   type WorkbenchMarkdownLanguageServiceContext,
 } from './MarkdownLanguageService'
-import { buildTypeScriptCompletionItems } from './TypeScriptCompletions'
+import {
+  buildTypeScriptCompletionItems,
+  resolveTypeScriptCompletionItem,
+} from './TypeScriptCompletions'
 import {
   buildTypeScriptDocumentHighlights,
   buildTypeScriptDocumentSymbols,
@@ -288,6 +293,72 @@ function mapCssCompletionKind(kind: number | undefined): string {
   }
 }
 
+interface LspCompletionPosition {
+  line: number
+  character: number
+}
+
+interface LspCompletionRange {
+  start: LspCompletionPosition
+  end: LspCompletionPosition
+}
+
+/** 内置的 HTML / CSS / Markdown 服务与外部语言服务器共用的 LSP 补全项形状。 */
+interface LspCompletionItemLike {
+  label: string
+  detail?: string
+  documentation?: unknown
+  insertText?: string
+  insertTextFormat?: number
+  sortText?: string
+  filterText?: string
+  textEdit?: { newText: string; range?: LspCompletionRange; insert?: LspCompletionRange }
+  additionalTextEdits?: ReadonlyArray<{ range: LspCompletionRange; newText: string }>
+  command?: { command?: string }
+  labelDetails?: { detail?: string; description?: string }
+}
+
+function rangeFromLspCompletionRange(range: LspCompletionRange): WorkbenchLanguageServiceRange {
+  return {
+    startLine: range.start.line + 1,
+    startColumn: range.start.character + 1,
+    endLine: range.end.line + 1,
+    endColumn: range.end.character + 1,
+  }
+}
+
+/**
+ * LSP 补全项换成编辑器的补全项：`textEdit` 的范围照原样交出去（编辑器按它替换，而不是只换光标前的词），
+ * 片段格式、附加改动（自动导入）一并保留。插入 / 替换两种范围都给了时取插入范围。
+ */
+function mapLspCompletionItem(
+  path: string,
+  item: LspCompletionItemLike,
+  kind: string | undefined
+): WorkbenchLanguageServiceCompletionItem {
+  const editRange = item.textEdit?.range ?? item.textEdit?.insert
+  return {
+    label: item.label,
+    kind,
+    detail: item.detail ?? item.labelDetails?.detail,
+    returnType: item.labelDetails?.description,
+    documentation: plainTextFromLspContent(item.documentation),
+    insertText: item.textEdit?.newText ?? item.insertText,
+    range: editRange ? rangeFromLspCompletionRange(editRange) : undefined,
+    sortText: item.sortText,
+    filterText: item.filterText,
+    isSnippet: item.insertTextFormat === 2,
+    additionalTextEdits: item.additionalTextEdits?.length
+      ? item.additionalTextEdits.map((edit) => ({
+          path,
+          range: rangeFromLspCompletionRange(edit.range),
+          newText: edit.newText,
+        }))
+      : undefined,
+    retrigger: item.command?.command === 'editor.action.triggerSuggest' || undefined,
+  }
+}
+
 interface TypeScriptProjectSnapshot {
   projectRoot: string
   requestPath: string
@@ -477,7 +548,7 @@ class WorkbenchLanguageServices {
     const resolved = await this.resolveLanguageService(request)
     if (this.isExternalRuntime(resolved.service?.runtime)) {
       const external = await this.prepareExternal(request, resolved.projectRoot)
-      const items = await external.client.completion(
+      const list = await external.client.completion(
         external.absolutePath,
         external.content,
         this.languageServicePosition(request.position),
@@ -486,9 +557,11 @@ class WorkbenchLanguageServices {
       return {
         projectRoot: resolved.projectRoot,
         path: request.path,
-        items: items
+        items: list.items
           .slice(0, MaximumExternalLspCompletionItems)
-          .map((item) => this.mapExternalCompletion(request.path, item)),
+          .map((item) => mapLspCompletionItem(request.path, item, mapExternalCompletionKind(item.kind))),
+        // 截掉了一部分：继续输入时重新请求，服务端按更长的前缀再筛。
+        isIncomplete: list.isIncomplete || list.items.length > MaximumExternalLspCompletionItems,
       }
     }
     if (resolved.service?.runtime === 'markdown-language-service') return this.withMarkdownLanguageService(request, resolved.projectRoot, async (markdown) => {
@@ -501,19 +574,9 @@ class WorkbenchLanguageServices {
         return {
           projectRoot: resolved.projectRoot,
           path: request.path,
-          items: items.slice(0, 160).map((item) => ({
-            label: item.label,
-            kind: isNumber(item.kind) ? String(item.kind) : undefined,
-            detail: item.detail,
-            documentation: plainTextFromLspContent(item.documentation),
-            insertText:
-              item.textEdit && 'newText' in item.textEdit
-                ? item.textEdit.newText
-                : item.insertText,
-            sortText: item.sortText,
-            filterText: item.filterText,
-            isSnippet: item.insertTextFormat === 2,
-          })),
+          items: items.map((item) =>
+            mapLspCompletionItem(request.path, item, isNumber(item.kind) ? String(item.kind) : undefined)
+          ),
         }
       })
     if (resolved.service?.runtime !== 'typescript-language-service')
@@ -528,20 +591,42 @@ class WorkbenchLanguageServices {
       }
 
     const snapshot = await this.createTypeScriptProjectSnapshot(request)
-    const offset = this.offsetFromPosition(
-      snapshot.files.get(snapshot.requestAbsolutePath) ?? '',
-      request.position
-    )
+    const content = snapshot.files.get(snapshot.requestAbsolutePath) ?? ''
+    const { items, isIncomplete } = buildTypeScriptCompletionItems({
+      service: snapshot.service,
+      fileName: snapshot.requestAbsolutePath,
+      offset: this.offsetFromPosition(content, request.position),
+      content,
+    })
 
     return {
       projectRoot: snapshot.projectRoot,
       path: snapshot.requestPath,
-      items: buildTypeScriptCompletionItems({
+      items,
+      isIncomplete,
+    }
+  }
+
+  /** 补全项接受（或在列表里选中）时才算的细节：TypeScript 自动导入要加的 import 语句与说明。 */
+  public async resolveCompletion(
+    request: WorkbenchLanguageServiceCompletionResolveRequest
+  ): Promise<WorkbenchLanguageServiceCompletionResolveResult> {
+    const resolved = await this.resolveLanguageService(request)
+    if (resolved.service?.runtime !== 'typescript-language-service')
+      return { projectRoot: resolved.projectRoot, path: request.path, additionalTextEdits: [] }
+
+    const snapshot = await this.createTypeScriptProjectSnapshot(request)
+    const content = snapshot.files.get(snapshot.requestAbsolutePath) ?? ''
+    return {
+      projectRoot: snapshot.projectRoot,
+      path: snapshot.requestPath,
+      ...resolveTypeScriptCompletionItem({
         service: snapshot.service,
         fileName: snapshot.requestAbsolutePath,
-        offset,
-        files: snapshot.files,
-        toRelativePath: (absolutePath) => this.relativePathFor(snapshot.projectRoot, absolutePath),
+        offset: this.offsetFromPosition(content, request.position),
+        content,
+        relativePath: snapshot.requestPath,
+        item: request.item,
       }),
     }
   }
@@ -1348,27 +1433,6 @@ class WorkbenchLanguageServices {
     }
   }
 
-  private mapExternalCompletion(
-    path: string,
-    item: ExternalLspCompletionItem
-  ): WorkbenchLanguageServiceCompletionResult['items'][number] {
-    return {
-      label: item.label,
-      kind: mapExternalCompletionKind(item.kind),
-      detail: item.detail,
-      documentation: plainTextFromLspContent(item.documentation),
-      insertText: item.textEdit?.newText ?? item.insertText,
-      sortText: item.sortText,
-      filterText: item.filterText,
-      isSnippet: item.insertTextFormat === 2,
-      additionalTextEdits: item.additionalTextEdits?.map((edit) => ({
-        path,
-        range: this.rangeFromLanguageServiceRange(edit.range),
-        newText: edit.newText,
-      })),
-    }
-  }
-
   private mapExternalDiagnostic(
     path: string,
     diagnostic: ExternalLspDiagnostic
@@ -1613,12 +1677,9 @@ class WorkbenchLanguageServices {
         this.languageServicePosition(request.position),
         service.parseHTMLDocument(document)
       )
-      return completions.items.slice(0, 120).map((item) => ({
-        label: item.label,
-        kind: mapHtmlCompletionKind(item.kind),
-        detail: item.detail,
-        insertText: item.textEdit ? item.textEdit.newText : item.insertText,
-      }))
+      return completions.items.map((item) =>
+        mapLspCompletionItem(request.path, item, mapHtmlCompletionKind(item.kind))
+      )
     }
 
     if (runtime === 'css-language-service') {
@@ -1630,12 +1691,9 @@ class WorkbenchLanguageServices {
         this.languageServicePosition(request.position),
         service.parseStylesheet(document)
       )
-      return completions.items.slice(0, 120).map((item) => ({
-        label: item.label,
-        kind: mapCssCompletionKind(item.kind),
-        detail: item.detail,
-        insertText: item.textEdit ? item.textEdit.newText : item.insertText,
-      }))
+      return completions.items.map((item) =>
+        mapLspCompletionItem(request.path, item, mapCssCompletionKind(item.kind))
+      )
     }
 
     return []

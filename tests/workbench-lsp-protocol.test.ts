@@ -56,7 +56,7 @@ void describe('external LSP protocol boundaries', () => {
     const projectRoot = await mkdtemp(join(tmpdir(), 'workbench-lsp-protocol-'))
     const client = protocolClient(projectRoot, 'server-request')
     try {
-      const completions = await client.completion(
+      const { items: completions } = await client.completion(
         join(projectRoot, 'probe.protocol'),
         'comp',
         { line: 0, character: 4 }
@@ -82,7 +82,7 @@ void describe('external LSP protocol boundaries', () => {
     const projectRoot = await mkdtemp(join(tmpdir(), 'workbench-lsp-chunked-'))
     const client = protocolClient(projectRoot, 'chunked')
     try {
-      const completions = await client.completion(
+      const { items: completions } = await client.completion(
         join(projectRoot, 'probe.protocol'),
         'comp',
         { line: 0, character: 4 }

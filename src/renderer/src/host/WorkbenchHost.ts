@@ -42,6 +42,8 @@ import type {
   WorkbenchInspectDeleteEntryResult,
   WorkbenchLanguageServiceCodeActionsRequest,
   WorkbenchLanguageServiceCodeActionsResult,
+  WorkbenchLanguageServiceCompletionResolveRequest,
+  WorkbenchLanguageServiceCompletionResolveResult,
   WorkbenchLanguageServiceCompletionResult,
   WorkbenchLanguageServiceDefinitionResult,
   WorkbenchLanguageServiceDiagnosticsResult,
@@ -161,6 +163,9 @@ export interface WorkbenchProjectKernelPort {
   getWorkbenchLanguageServiceCompletions(
     request: WorkbenchLanguageServicePositionRequest
   ): Promise<Result<WorkbenchLanguageServiceCompletionResult>>
+  resolveWorkbenchLanguageServiceCompletion(
+    request: WorkbenchLanguageServiceCompletionResolveRequest
+  ): Promise<Result<WorkbenchLanguageServiceCompletionResolveResult>>
   getWorkbenchLanguageServiceDiagnostics(
     request: WorkbenchLanguageServiceRequest
   ): Promise<Result<WorkbenchLanguageServiceDiagnosticsResult>>

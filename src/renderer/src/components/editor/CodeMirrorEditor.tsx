@@ -17,7 +17,6 @@ import {
   closeBracketsKeymap,
   closeCompletion,
   type CompletionContext,
-  type CompletionResult,
   type CompletionSource,
   startCompletion,
 } from '@codemirror/autocomplete'
@@ -150,14 +149,15 @@ import {
   applyWorkbenchLanguageServiceEditsToContent,
   buildWorkbenchLanguageServiceRequestBase,
   languageServiceRangeToOffsets,
-  mergeWorkbenchLanguageServiceCompletions,
   usesWorkbenchBuiltinLanguageService,
-  usesWorkbenchExternalLspLanguageService,
   usesWorkbenchExternalSemanticLanguageService,
-  usesWorkbenchHtmlLanguageService,
   usesWorkbenchInlayHintLanguageService,
   usesWorkbenchSemanticLanguageService,
 } from '@renderer/models/editor/workbenchCodeMirrorLanguageService'
+import {
+  requestWorkbenchLanguageServiceCompletions,
+  shouldRequestWorkbenchLanguageServiceCompletions,
+} from '@renderer/models/editor/workbenchCodeMirrorLanguageServiceCompletions'
 import { workbenchLineNumbersExtension } from '@renderer/models/editor/workbenchCodeMirrorLineNumberSelection'
 import { createWorkbenchCodeMirrorMetricsExtension } from '@renderer/models/editor/workbenchCodeMirrorMetrics'
 import { buildWorkbenchReadOnlyExtensions } from '@renderer/models/editor/workbenchCodeMirrorReadOnly'
@@ -217,6 +217,7 @@ import {
   getWorkbenchLanguageServiceReferences,
   getWorkbenchLanguageServiceRename,
   getWorkbenchLanguageServiceSemanticTokens,
+  resolveWorkbenchLanguageServiceCompletion,
 } from '@renderer/models/editor/workbenchLanguageServiceIpc'
 import { buildWorkbenchMinimalTextChanges } from '@renderer/models/editor/workbenchMinimalTextChanges'
 import {
@@ -676,14 +677,6 @@ function createWorkbenchCompletionSource({
   getProjectContextIndex: GetWorkbenchProjectContextIndex
   hostRuntime: WorkbenchHostRuntime
 }): CompletionSource {
-  let requestGeneration = 0
-  let pendingLanguageRequest: Nullable<{ content: string; position: number }> = null
-  let cachedLanguageResult: Nullable<{
-    content: string
-    position: number
-    result: CompletionResult
-  }> = null
-
   return (context: CompletionContext) => {
     const selection = context.state.selection.main
     const content = context.state.doc.toString()
@@ -698,86 +691,26 @@ function createWorkbenchCompletionSource({
     })
 
     if (!path || !usesWorkbenchBuiltinLanguageService(path)) return localResult || null
-    if (
-      cachedLanguageResult?.content === content
-      && cachedLanguageResult.position === selection.head
-    ) return cachedLanguageResult.result
+    if (!shouldRequestWorkbenchLanguageServiceCompletions(context, path)) return localResult || null
 
-    const before =
-      context.matchBefore(/<[\w-]*|[A-Za-z_$][\w$./@-]*/) ??
-      context.matchBefore(/[A-Za-z_$][\w$./@-]*/)
-    const prefix = before?.text ?? ''
-    const triggerIndex = (before?.from ?? selection.head) - 1
-    const triggerChar = triggerIndex >= 0 ? content[triggerIndex] : ''
-    const externalLspStructuralTrigger =
-      usesWorkbenchExternalLspLanguageService(path) && [' ', '{', ',', ':'].includes(triggerChar)
-    const shouldQueryLanguageService =
-      context.explicit ||
-      ['.', '@', '/', '<'].includes(triggerChar) ||
-      externalLspStructuralTrigger ||
-      prefix.length >= 1
-
-    if (!shouldQueryLanguageService || context.aborted) return localResult || null
-    if (
-      pendingLanguageRequest?.content === content
-      && pendingLanguageRequest.position === selection.head
-    ) return localResult || null
-
-    const generation = ++requestGeneration
-    const requestPosition = selection.head
-    pendingLanguageRequest = { content, position: requestPosition }
-    const view = context.view
-    void getWorkbenchLanguageServiceCompletions({
-      ...buildWorkbenchLanguageServiceRequestBase({
-        projectRoot,
-        path,
-        language,
-        content,
-        openTabs: getOpenTabs(),
-      }),
-      position: positionLineColumnFromState(context.state, selection.head),
-    }, hostRuntime).then((lspResult) => {
-      if (generation !== requestGeneration) return
-      pendingLanguageRequest = null
-      if (!lspResult.ok || isEmpty(lspResult.data.items)) return
-
-      const from = localResult?.from ?? before?.from ?? requestPosition
-      const to = localResult?.to ?? requestPosition
-      const suppressLocalOptions = usesWorkbenchHtmlLanguageService(path)
-      const localOptions = suppressLocalOptions
-        ? []
-        : ((localResult?.options ?? []) as Array<{
-            label: string
-            apply?: string
-            type?: string
-            detail?: string
-            boost?: number
-          }>)
-      const result: CompletionResult = {
-        from,
-        to,
-        validFor: /^[\w$.<>\-:]*$/,
-        options: mergeWorkbenchLanguageServiceCompletions({
-          path,
-          localOptions,
-          items: lspResult.data.items,
-          from,
-          to,
-        }),
-      }
-      cachedLanguageResult = { content, position: requestPosition, result }
-
-      if (
-        view
-        && view.state.doc.toString() === content
-        && view.state.selection.main.head === requestPosition
-      ) startCompletion(view)
-    }).catch(() => {
-      if (generation === requestGeneration) pendingLanguageRequest = null
+    // 交给 CodeMirror 的异步补全：结果回来之前接着打的字由它记着，回来时前缀仍对得上就直接用，不必重新请求。
+    const requestBase = buildWorkbenchLanguageServiceRequestBase({
+      projectRoot,
+      path,
+      language,
+      content,
+      openTabs: getOpenTabs(),
     })
-
-    // 本地项目索引的候选先同步显示；语言服务结果返回后再无闪烁地刷新同一列表。
-    return localResult || null
+    const position = positionLineColumnFromState(context.state, context.pos)
+    return requestWorkbenchLanguageServiceCompletions({
+      state: context.state,
+      position: context.pos,
+      path,
+      localResult,
+      request: () => getWorkbenchLanguageServiceCompletions({ ...requestBase, position }, hostRuntime),
+      resolve: (item) =>
+        resolveWorkbenchLanguageServiceCompletion({ ...requestBase, position, item }, hostRuntime),
+    })
   }
 }
 

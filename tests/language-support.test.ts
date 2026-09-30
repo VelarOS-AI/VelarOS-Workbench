@@ -64,13 +64,13 @@ import {
   shouldUseWorkbenchSingleCodeHoverLayout,
 } from '../src/renderer/src/models/editor/workbenchCodeMirrorLanguageFeatures'
 import {
-  mapWorkbenchLanguageServiceCompletionToCodeMirror,
   usesWorkbenchBuiltinLanguageService,
   usesWorkbenchExternalLspLanguageService,
   usesWorkbenchExternalSemanticLanguageService,
   usesWorkbenchInlayHintLanguageService,
   usesWorkbenchSemanticLanguageService,
 } from '../src/renderer/src/models/editor/workbenchCodeMirrorLanguageService'
+import { mapWorkbenchLanguageServiceCompletionToCodeMirror } from '../src/renderer/src/models/editor/workbenchCodeMirrorLanguageServiceCompletions'
 import { buildWorkbenchSemanticTokenDecorations } from '../src/renderer/src/models/editor/workbenchCodeMirrorSemanticTokens'
 import { workbenchCodeMirrorRiderTheme } from '../src/renderer/src/models/editor/workbenchCodeMirrorTheme'
 import { buildWorkbenchSemanticOccurrenceDecorations } from '../src/renderer/src/models/editor/workbenchCodeMirrorTokenOccurrenceHighlight'
@@ -634,6 +634,7 @@ void describe('focused Workbench language surface', () => {
 
   void test('filters contextual LSP values by their source text while preserving the visible label', () => {
     const completion = mapWorkbenchLanguageServiceCompletionToCodeMirror({
+      state: EditorState.create({ doc: 'cursor: no', selection: { anchor: 10 } }),
       path: 'src/main.vel',
       item: {
         label: '"no-drop"',
@@ -644,7 +645,8 @@ void describe('focused Workbench language surface', () => {
     })
     assert.equal(completion.label, 'no-drop')
     assert.equal(completion.displayLabel, '"no-drop"')
-    assert.equal(typeof completion.apply, 'function')
+    // 写入的是源码里的值，不是列表里带引号的显示文字。
+    assert.equal(completion.apply, 'no-drop')
   })
 
   void test('parses common data, configuration, shell, and database files', () => {
@@ -1453,7 +1455,7 @@ void describe('shared external LSP client', () => {
       savedUris: string[]
       watchedUris: string[]
     }> => {
-      const detail = (await client.completion(path, 'comp', { line: 0, character: 4 }))[0]?.detail
+      const detail = (await client.completion(path, 'comp', { line: 0, character: 4 })).items[0]?.detail
       assert.ok(detail)
       return JSON.parse(detail) as {
         cwd: string
@@ -1592,7 +1594,7 @@ void describe('shared external LSP client', () => {
       pid: number
       closedUris: string[]
     }> => {
-      const detail = (await client.completion(path, 'comp', { line: 0, character: 4 }))[0]?.detail
+      const detail = (await client.completion(path, 'comp', { line: 0, character: 4 })).items[0]?.detail
       assert.ok(detail)
       return JSON.parse(detail) as { pid: number; closedUris: string[] }
     }
@@ -1736,7 +1738,7 @@ void describe('shared external LSP client', () => {
 
       const freshClient = await invalidatedManager.client(workspaceRoot, descriptor, documentPath)
       assert.equal(
-        (await freshClient.completion(documentPath, 'comp', { line: 0, character: 4 }))[0]?.label,
+        (await freshClient.completion(documentPath, 'comp', { line: 0, character: 4 })).items[0]?.label,
         'component'
       )
     } finally {
@@ -1778,7 +1780,7 @@ void describe('shared external LSP client', () => {
           movingDocument,
           'comp',
           { line: 0, character: 4 }
-        ))[0]?.label,
+        )).items[0]?.label,
         'component'
       )
 
@@ -1817,7 +1819,7 @@ void describe('shared external LSP client', () => {
           stableDocument,
           'comp',
           { line: 0, character: 4 }
-        ))[0]?.label,
+        )).items[0]?.label,
         'component',
         'reconciliation must not dispose the replacement after its key regains an owner'
       )
@@ -2013,7 +2015,7 @@ void describe('shared external LSP client', () => {
       await writeFile(join(projectRoot, 'package.json'), '{"dependencies":{}}\n', 'utf8')
       const first = await manager.client(projectRoot, descriptor)
       assert.equal(
-        (await first.completion(join(projectRoot, 'main.refresh'), 'comp', { line: 0, character: 4 }))[0]?.label,
+        (await first.completion(join(projectRoot, 'main.refresh'), 'comp', { line: 0, character: 4 })).items[0]?.label,
         'component'
       )
 
@@ -2025,7 +2027,7 @@ void describe('shared external LSP client', () => {
       const refreshed = await manager.client(projectRoot, descriptor)
       assert.notEqual(refreshed, first)
       assert.equal(
-        (await refreshed.completion(join(projectRoot, 'main.refresh'), 'comp', { line: 0, character: 4 }))[0]?.label,
+        (await refreshed.completion(join(projectRoot, 'main.refresh'), 'comp', { line: 0, character: 4 })).items[0]?.label,
         'component'
       )
     } finally {
@@ -2070,7 +2072,7 @@ void describe('shared external LSP client', () => {
     const edits = await client.format(path, 'component App:\n')
 
     assert.deepEqual(diagnostics.map((item) => item.code), ['VEL5001'])
-    assert.equal(completions[0]?.label, 'component')
+    assert.equal(completions.items[0]?.label, 'component')
     assert.deepEqual(hover?.contents, { kind: 'markdown', value: 'Velar hover' })
     assert.equal(definitions[0]?.range.start.character, 10)
     assert.equal(references[0]?.range.start.line, 1)
@@ -2243,7 +2245,7 @@ void describe('shared external LSP client', () => {
       'comp',
       { line: 0, character: 4 }
     )
-    assert.equal(recoveredCompletions[0]?.label, 'component')
+    assert.equal(recoveredCompletions.items[0]?.label, 'component')
     await retriable.dispose()
     await rm(retryRoot, { recursive: true, force: true })
 

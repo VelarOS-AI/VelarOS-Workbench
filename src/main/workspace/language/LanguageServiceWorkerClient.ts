@@ -7,6 +7,7 @@ import { AppError } from '@velaros-ai/core/error'
 
 import type {
   WorkbenchLanguageServiceCodeActionsRequest,
+  WorkbenchLanguageServiceCompletionResolveRequest,
   WorkbenchLanguageServiceExtensionRequest,
   WorkbenchLanguageServiceInlayHintsRequest,
   WorkbenchLanguageServicePositionRequest,
@@ -235,6 +236,11 @@ export class WorkbenchLanguageServiceWorkerClient {
     options: WorkbenchLanguageServiceSupersedeScope = {}
   ) {
     return this.call('getCompletions', request, this.supersedeKey('getCompletions', request, options))
+  }
+
+  /** 接受补全时要的附加改动：不参与顶替（选中另一项的预取不能把已接受那一项的导入取消掉）。 */
+  public resolveCompletion(request: WorkbenchLanguageServiceCompletionResolveRequest) {
+    return this.call('resolveCompletion', request)
   }
 
   public getDiagnostics(request: WorkbenchLanguageServiceRequest) {

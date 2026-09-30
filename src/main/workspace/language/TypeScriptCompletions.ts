@@ -1,10 +1,9 @@
 import * as ts from 'typescript'
 
-import { isEmpty, isPresent } from '@velaros-ai/core'
-
 import type {
   WorkbenchLanguageServiceCompletionItem,
-  WorkbenchLanguageServiceRange,
+  WorkbenchLanguageServiceCompletionResolveData,
+  WorkbenchLanguageServiceCompletionTextEdit,
 } from '@shared/contracts'
 
 import {
@@ -12,87 +11,55 @@ import {
   WorkbenchTypeScriptFormatCodeSettings,
 } from './TypeScriptLanguageFeatures'
 
-const MaxCompletionItems = 120
-const MaxCompletionDetailResolutions = 16
+/**
+ * 一次交给编辑器的补全项上限。TypeScript 不按已输入的前缀预先过滤（过滤与排序是编辑器的事），全局补全连同
+ * 自动导入通常一两千项；超过上限的截掉并标记「不完整」，编辑器继续输入时重新请求，不会永久丢项。
+ */
+const MaxCompletionItems = 5_000
 const CompletionPreferences: ts.UserPreferences = {
   quotePreference: 'single',
   importModuleSpecifierPreference: 'relative',
   includePackageJsonAutoImports: 'auto',
 }
 
-/** 提取光标前的标识符前缀，用于像 VSCode 那样按输入过滤补全项。 */
-function completionPrefixAt(content: string, offset: number): string {
-  let start = Math.min(Math.max(offset, 0), content.length)
-  while (start > 0 && /[A-Za-z0-9_$]/.test(content[start - 1] ?? '')) {
-    start -= 1
-  }
-  return content.slice(start, offset)
-}
-
-/**
- * TypeScript 会一次性返回整套(约上千条)补全项且不按输入前缀预过滤——过滤是编辑器的职责。
- * 若在裁剪到上限前不先按前缀过滤，像 `export`/`function`/`return` 这类排在原始列表靠后的
- * 关键字会被直接截掉。这里先按前缀过滤并排序(startsWith 优先，再按 TS 的 sortText)，再裁剪。
- */
-function prioritizeCompletionEntries(
-  entries: readonly ts.CompletionEntry[],
-  prefix: string
-): ts.CompletionEntry[] {
-  if (!prefix) return entries.slice(0, MaxCompletionItems)
-
-  const loweredPrefix = prefix.toLowerCase()
-  const scored = entries
-    .map((entry) => {
-      const candidate = (entry.filterText ?? entry.name).toLowerCase()
-      const startsWith = candidate.startsWith(loweredPrefix)
-      const matches = startsWith || candidate.includes(loweredPrefix)
-      return { entry, matches, startsWith }
-    })
-    .filter((scored) => scored.matches)
-
-  if (isEmpty(scored)) return entries.slice(0, MaxCompletionItems)
-
-  scored.sort((left, right) => {
-    if (left.startsWith !== right.startsWith) return left.startsWith ? -1 : 1
-    const sortDelta = (left.entry.sortText ?? '').localeCompare(right.entry.sortText ?? '')
-    if (sortDelta !== 0) return sortDelta
-    return left.entry.name.localeCompare(right.entry.name)
-  })
-
-  return scored.slice(0, MaxCompletionItems).map((scored) => scored.entry)
-}
-
 export function mapTypeScriptCompletionKind(kind: ts.ScriptElementKind): string {
   switch (kind) {
-    case ts.ScriptElementKind.memberVariableElement:
     case ts.ScriptElementKind.variableElement:
     case ts.ScriptElementKind.localVariableElement:
+    case ts.ScriptElementKind.parameterElement:
       return 'variable'
-    case ts.ScriptElementKind.memberFunctionElement:
-    case ts.ScriptElementKind.functionElement:
-    case ts.ScriptElementKind.localFunctionElement:
-      return 'function'
+    case ts.ScriptElementKind.memberVariableElement:
     case ts.ScriptElementKind.memberGetAccessorElement:
     case ts.ScriptElementKind.memberSetAccessorElement:
     case ts.ScriptElementKind.memberAccessorVariableElement:
       return 'property'
+    case ts.ScriptElementKind.memberFunctionElement:
     case ts.ScriptElementKind.constructSignatureElement:
     case ts.ScriptElementKind.callSignatureElement:
     case ts.ScriptElementKind.indexSignatureElement:
       return 'method'
+    case ts.ScriptElementKind.functionElement:
+    case ts.ScriptElementKind.localFunctionElement:
+      return 'function'
     case ts.ScriptElementKind.classElement:
+    case ts.ScriptElementKind.localClassElement:
       return 'class'
     case ts.ScriptElementKind.interfaceElement:
       return 'interface'
     case ts.ScriptElementKind.typeElement:
+    case ts.ScriptElementKind.typeParameterElement:
       return 'type'
     case ts.ScriptElementKind.enumElement:
       return 'enum'
+    case ts.ScriptElementKind.enumMemberElement:
+      return 'constant'
     case ts.ScriptElementKind.moduleElement:
     case ts.ScriptElementKind.externalModuleName:
       return 'namespace'
     case ts.ScriptElementKind.keyword:
       return 'keyword'
+    case ts.ScriptElementKind.letElement:
+      return 'variable'
     case ts.ScriptElementKind.alias:
     case ts.ScriptElementKind.constElement:
       return 'constant'
@@ -110,24 +77,11 @@ function displayPartsToText(
   return parts.map((part) => part.text).join('')
 }
 
-function rangeFromTextSpan(
-  content: string,
-  fileName: string,
-  textSpan: ts.TextSpan
-): Nullable<WorkbenchLanguageServiceRange> {
-  return rangeFromTextSpanInContent(content, fileName, textSpan)
-}
-
 function buildCompletionDetail(entry: ts.CompletionEntry): string | undefined {
   const source = displayPartsToText(entry.sourceDisplay)
   const modifiers = entry.kindModifiers?.trim()
   if (source && modifiers) return `${source} · ${modifiers}`
   return source ?? modifiers
-}
-
-function shouldResolveCompletionDetails(entry: ts.CompletionEntry, resolvedCount: number): boolean {
-  if (resolvedCount >= MaxCompletionDetailResolutions) return false
-  return Boolean(entry.source || entry.isSnippet)
 }
 
 function normalizeCommonJsAutoImport(fileName: string, newText: string): string {
@@ -157,20 +111,23 @@ function normalizeCommonJsAutoImport(fileName: string, newText: string): string 
   return newText
 }
 
+/** 自动导入的改动只落在当前文件（导入语句）；别的文件的改动不在补全里做。 */
 function collectAdditionalTextEdits(
   details: ts.CompletionEntryDetails,
-  files: Map<string, string>
-): WorkbenchLanguageServiceCompletionItem['additionalTextEdits'] {
-  const edits: NonNullable<WorkbenchLanguageServiceCompletionItem['additionalTextEdits']> = []
+  fileName: string,
+  content: string,
+  relativePath: string
+): WorkbenchLanguageServiceCompletionTextEdit[] {
+  const edits: WorkbenchLanguageServiceCompletionTextEdit[] = []
 
   for (const action of details.codeActions ?? []) {
     for (const change of action.changes) {
-      const content = files.get(change.fileName) ?? ''
+      if (change.fileName !== fileName) continue
       for (const textChange of change.textChanges) {
-        const range = rangeFromTextSpan(content, change.fileName, textChange.span)
+        const range = rangeFromTextSpanInContent(content, change.fileName, textChange.span)
         if (!range) continue
         edits.push({
-          path: change.fileName,
+          path: relativePath,
           range,
           newText: normalizeCommonJsAutoImport(change.fileName, textChange.newText),
         })
@@ -178,22 +135,24 @@ function collectAdditionalTextEdits(
     }
   }
 
-  return isEmpty(edits) ? undefined : edits
+  return edits
+}
+
+function isJsonRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 export function buildTypeScriptCompletionItems({
   service,
   fileName,
   offset,
-  files,
-  toRelativePath,
+  content,
 }: {
   service: ts.LanguageService
   fileName: string
   offset: number
-  files: Map<string, string>
-  toRelativePath: (absolutePath: string) => Nullable<string>
-}): WorkbenchLanguageServiceCompletionItem[] {
+  content: string
+}): { items: WorkbenchLanguageServiceCompletionItem[]; isIncomplete: boolean } {
   const completions = service.getCompletionsAtPosition(
     fileName,
     offset,
@@ -211,68 +170,70 @@ export function buildTypeScriptCompletionItems({
     WorkbenchTypeScriptFormatCodeSettings
   )
 
-  if (!completions?.entries.length) return []
+  if (!completions?.entries.length) return { items: [], isIncomplete: false }
 
-  const prefix = completionPrefixAt(files.get(fileName) ?? '', offset)
-  const prioritizedEntries = prioritizeCompletionEntries(completions.entries, prefix)
-
-  let resolvedCount = 0
-  const items: WorkbenchLanguageServiceCompletionItem[] = []
-
-  for (const entry of prioritizedEntries) {
-    const insertText = entry.insertText ?? entry.name
-    let documentation: string | undefined
-    let additionalTextEdits: WorkbenchLanguageServiceCompletionItem['additionalTextEdits']
-    const isSnippet = entry.isSnippet
-
-    if (shouldResolveCompletionDetails(entry, resolvedCount)) {
-      resolvedCount += 1
-      let details: ts.CompletionEntryDetails | undefined
-      try {
-        details =
-          service.getCompletionEntryDetails(
-            fileName,
-            offset,
-            entry.name,
-            WorkbenchTypeScriptFormatCodeSettings,
-            entry.source,
-            CompletionPreferences,
-            entry.data
-          ) ?? undefined
-      } catch {
-        details = undefined
-      }
-
-      if (details) {
-        if (entry.source) {
-          documentation = displayPartsToText(details.documentation)
-        }
-        additionalTextEdits = collectAdditionalTextEdits(details, files)
-          ?.map((edit) => {
-            const relativePath = toRelativePath(edit.path)
-            if (!relativePath) return null
-            return {
-              ...edit,
-              path: relativePath,
-            }
-          })
-          .filter((edit): edit is NonNullable<typeof edit> => isPresent(edit))
-      }
-    }
-
-    items.push({
+  const entries = completions.entries.slice(0, MaxCompletionItems)
+  const items = entries.map((entry): WorkbenchLanguageServiceCompletionItem => {
+    const range = entry.replacementSpan
+      ? rangeFromTextSpanInContent(content, fileName, entry.replacementSpan)
+      : null
+    return {
       label: entry.name,
       kind: mapTypeScriptCompletionKind(entry.kind),
       detail: entry.labelDetails?.detail ?? buildCompletionDetail(entry),
       returnType: entry.labelDetails?.description,
-      documentation,
-      insertText,
-      sortText: entry.sortText,
+      insertText: entry.insertText ?? entry.name,
+      range: range ?? undefined,
+      // TypeScript 的 sortText 只分优先级（本地、全局、自动导入……），同级再按名字排；空格排在数字、字母之前。
+      sortText: `${entry.sortText} ${entry.name}`,
       filterText: entry.filterText,
-      isSnippet,
-      additionalTextEdits,
-    })
-  }
+      isSnippet: entry.isSnippet,
+      // 自动导入的 import 语句要在接受时再算（一次补全可能有上千个候选，不能每项都先算好）。
+      resolve: entry.hasAction
+        ? {
+            name: entry.name,
+            source: entry.source,
+            data: isJsonRecord(entry.data) ? { ...entry.data } : undefined,
+          }
+        : undefined,
+    }
+  })
 
-  return items
+  return {
+    items,
+    isIncomplete: completions.entries.length > entries.length || !!completions.isIncomplete,
+  }
+}
+
+/** 接受（或选中）一个自动导入候选时，算出要加的 import 语句与说明。 */
+export function resolveTypeScriptCompletionItem({
+  service,
+  fileName,
+  offset,
+  content,
+  relativePath,
+  item,
+}: {
+  service: ts.LanguageService
+  fileName: string
+  offset: number
+  content: string
+  relativePath: string
+  item: WorkbenchLanguageServiceCompletionResolveData
+}): { additionalTextEdits: WorkbenchLanguageServiceCompletionTextEdit[]; documentation?: string } {
+  const details = service.getCompletionEntryDetails(
+    fileName,
+    offset,
+    item.name,
+    WorkbenchTypeScriptFormatCodeSettings,
+    item.source,
+    CompletionPreferences,
+    item.data as ts.CompletionEntryData | undefined
+  )
+  if (!details) return { additionalTextEdits: [] }
+
+  return {
+    additionalTextEdits: collectAdditionalTextEdits(details, fileName, content, relativePath),
+    documentation: displayPartsToText(details.documentation),
+  }
 }

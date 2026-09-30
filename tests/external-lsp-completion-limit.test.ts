@@ -62,6 +62,8 @@ void test('retains large contextual completion rosters within a safe external LS
     })
 
     assert.equal(result.items.length, 512)
+    // 截掉了一部分：编辑器继续输入时要重新请求，不能只在这 512 项里筛。
+    assert.equal(result.isIncomplete, true)
     assert.equal(result.items[0]?.label, 'lookProperty000')
     assert.equal(result.items[224]?.label, 'lookProperty224')
     assert.equal(result.items[511]?.label, 'lookProperty511')
