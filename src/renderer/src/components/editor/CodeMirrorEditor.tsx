@@ -176,6 +176,7 @@ import {
   isWorkbenchEditorNavigationCommand,
   type WorkbenchEditorCommandId,
 } from '@renderer/models/editor/workbenchEditorCommands'
+import { workbenchEditorCoveredScrollMargins } from '@renderer/models/editor/workbenchEditorCoveredScrollMargins'
 import { rebuildWorkbenchEditorFileState } from '@renderer/models/editor/workbenchEditorFileStateRebuild'
 import {
   type WorkbenchEditorFileState,
@@ -508,6 +509,8 @@ const workbenchCodeMirrorBaseExtensions: Extension[] = [
   crosshairCursor(),
   workbenchDefinitionHoverExtension,
   workbenchEditorFindExtension,
+  // 底部工具窗盖住的那一截不算视野：滚到某一行时让它落在工具窗上面。
+  workbenchEditorCoveredScrollMargins(),
   keymap.of([
     ...closeBracketsKeymap,
     ...defaultKeymap,

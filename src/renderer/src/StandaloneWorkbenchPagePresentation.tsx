@@ -821,7 +821,7 @@ export function StandaloneWorkbenchPagePresentation({
           </aside>
         </section>
         {!surface.isCommandPanelCollapsed && (
-          <section className={styles.bottomToolWindowSlot}>
+          <section className={styles.bottomToolWindowSlot} data-workbench-editor-overlay>
             <div
               className={styles.horizontalResizeHandle}
               role="separator"
