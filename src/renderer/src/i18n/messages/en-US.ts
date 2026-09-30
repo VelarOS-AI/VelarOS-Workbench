@@ -190,6 +190,7 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     editorEmptyGit: 'View Git log',
     lineCount: '{count} lines',
     cursorPosition: 'Ln {line}, Col {column}',
+    vimModeTitle: 'Vim mode (change the keymap preset in settings)',
     previewTruncated: 'Truncated',
     largeFileReadonly: 'Large file read-only',
     saveFile: 'Save',

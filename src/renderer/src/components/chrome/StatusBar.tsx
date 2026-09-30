@@ -1,7 +1,12 @@
-import { type ReactElement, useState } from 'react'
+import { type ReactElement, useState, useSyncExternalStore } from 'react'
 import { CaretRightIcon, CheckIcon } from '@phosphor-icons/react'
 import { useWorkbenchI18n } from '@renderer/i18n'
 import type { WorkbenchStatusBarTextFormat } from '@renderer/models/editor/workbenchEditorTextFormat'
+import {
+  formatWorkbenchEditorVimMode,
+  getWorkbenchEditorVimModeSnapshot,
+  subscribeWorkbenchEditorVimMode,
+} from '@renderer/models/editor/workbenchEditorVim'
 import type {
   WorkbenchIndentation,
   WorkbenchIndentationChange,
@@ -70,6 +75,12 @@ export function StatusBar({
   onChangeIndentation,
 }: StatusBarProps): ReactElement {
   const { t } = useWorkbenchI18n()
+  // Vim 键位方案下眼前那个编辑器的模式；没有编辑器开着 Vim 就不显示。
+  const vimMode = useSyncExternalStore(
+    subscribeWorkbenchEditorVimMode,
+    getWorkbenchEditorVimModeSnapshot,
+    () => null
+  )
   const pathSegments = selectedFilePath?.split('/').filter((value) => !!value) ?? []
   const fileName = pathSegments.at(-1) ?? ''
 
@@ -101,6 +112,17 @@ export function StatusBar({
       ) : (
         <Text truncate tone="caption" className={styles.statusBarItem}>
           {t('workbench.noFileSelected')}
+        </Text>
+      )}
+      {!!vimMode && (
+        <Text
+          truncate
+          tone="caption"
+          className={styles.statusBarItem}
+          title={t('workbench.vimModeTitle')}
+          data-vim-mode={vimMode}
+        >
+          {formatWorkbenchEditorVimMode(vimMode)}
         </Text>
       )}
       <Text truncate tone="caption" className={styles.statusBarItem}>

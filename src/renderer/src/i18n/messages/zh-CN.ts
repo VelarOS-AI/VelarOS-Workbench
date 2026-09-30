@@ -178,6 +178,7 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     editorEmptyGit: '查看 Git 日志',
     lineCount: '{count} 行',
     cursorPosition: '第 {line} 行，第 {column} 列',
+    vimModeTitle: 'Vim 模式（键位方案在设置里换）',
     previewTruncated: '已截断',
     largeFileReadonly: '大文件只读',
     saveFile: '保存',

@@ -8,6 +8,7 @@ import { join, resolve as resolvePath } from 'node:path'
 
 import { describe, test } from 'bun:test'
 
+import { translateWorkbenchAppMessage } from '../src/renderer/src/i18n/useStandaloneWorkbenchLocalization'
 import {
   focusWorkbenchEditorVimMode,
   formatWorkbenchEditorVimMode,
@@ -463,6 +464,24 @@ void describe('vim: the mode in the status bar', () => {
     assert.equal(notifications, 3)
     unsubscribe()
   })
+
+  void test('the status bar reads the mode from the store and shows it before the cursor position', () => {
+    const statusBar = readSource('src/renderer/src/components/chrome/StatusBar.tsx')
+    assert.match(
+      statusBar,
+      /const vimMode = useSyncExternalStore\(\s*subscribeWorkbenchEditorVimMode,\s*getWorkbenchEditorVimModeSnapshot,\s*\(\) => null\s*\)/u
+    )
+    // 用的是状态栏别的项同一个样式；排在行列前面（行列、缩进、编码、换行符那一串的顺序不动）。
+    assert.match(
+      statusBar,
+      /\{!!vimMode && \(\s*<Text\s+truncate\s+tone="caption"\s+className=\{styles\.statusBarItem\}\s+title=\{t\('workbench\.vimModeTitle'\)\}[\s\S]*?\{formatWorkbenchEditorVimMode\(vimMode\)\}\s*<\/Text>\s*\)\}\s*<Text truncate tone="caption" className=\{styles\.statusBarItem\}>\s*\{t\('workbench\.cursorPosition', cursorPosition\)\}/u
+    )
+    for (const locale of ['zh-CN', 'en-US'] as const)
+      assert.notEqual(
+        translateWorkbenchAppMessage(locale, 'workbench.vimModeTitle'),
+        'workbench.vimModeTitle'
+      )
+  })
 })
 
 void describe('vim: loaded only for the Vim preset, only in the file editor', () => {
@@ -540,6 +559,7 @@ void describe('vim: loaded only for the Vim preset, only in the file editor', ()
 
   void test('the parts that load at startup only know the mode store', () => {
     for (const path of [
+      'src/renderer/src/components/chrome/StatusBar.tsx',
       'src/renderer/src/components/editor/EditorPanel.tsx',
       'src/renderer/src/components/editor/WorkbenchLightFilePanel.tsx',
     ]) {
