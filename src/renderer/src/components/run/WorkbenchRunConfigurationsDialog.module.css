@@ -92,9 +92,26 @@
   gap: 4px;
 }
 
+/*
+ * 标签、分段项和输入框（sm 档，12px）用同一个字号：共享的标签、分段项默认是 14px，压在 12px 的输入框上
+ * 头重脚轻，也比设置里的表单大一号。
+ */
+.field :global(.velar-label) {
+  color: var(--workbench-text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
 /* 种类的分段控件：只占自己内容那么宽，不拉满一行。 */
 .type {
   align-self: flex-start;
+}
+
+.type :global(.velar-segmented-control-item) {
+  height: 28px;
+  min-height: 28px;
+  padding-inline: 12px;
+  font-size: 12px;
 }
 
 .mono {

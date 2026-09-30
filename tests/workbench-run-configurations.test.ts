@@ -430,4 +430,18 @@ void describe('named run configurations', () => {
     ])
       assert.doesNotMatch(readSource(shellModule), /from '[^']*workbenchRunConfigurationDrafts'/u)
   })
+
+  void test('the run menu opens with the command field focused and without the tooltip over it', () => {
+    const toolbar = readSource('src/renderer/src/components/chrome/TopToolbar.tsx')
+    // autoFocus 赶在浮层摆好位置之前，落不上：焦点在浮层就位之后再给。
+    assert.match(
+      toolbar,
+      /onOpenAutoFocus=\{\(\) => commandInputRef\.current\?\.focus\(\{ preventScroll: true \}\)\}/u
+    )
+    assert.match(toolbar, /<Input\s+ref=\{commandInputRef\}/u)
+    assert.doesNotMatch(toolbar, /^\s+autoFocus$/mu)
+    // 指针还停在 ▶ 上：菜单开着时悬停说明不出来，免得盖住最上面的运行配置。
+    assert.match(toolbar, /<BubbleTooltip[\s\S]{0,200}disabled=\{menuOpen\}/u)
+  })
+
 })

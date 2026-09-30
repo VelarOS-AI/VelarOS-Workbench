@@ -304,6 +304,7 @@ function WorkbenchRunAction({
 
   // 菜单收起时焦点还在菜单里（它马上要卸掉）或者已经没了着落，就还给打开之前的地方；焦点已经到了别处的不动它。
   const menuPanelRef = useRef<HTMLDivElement>(null)
+  const commandInputRef = useRef<HTMLInputElement>(null)
   useEffect(() => {
     if (!menuOpen) return undefined
     const previous = document.activeElement
@@ -323,6 +324,8 @@ function WorkbenchRunAction({
       <AnchoredPopover
         open={menuOpen}
         onOpenChange={setMenuOpen}
+        // 焦点给命令输入框：浮层先挂出来、摆好位置才看得见，输入框上的 autoFocus 赶在那之前，落不上。
+        onOpenAutoFocus={() => commandInputRef.current?.focus({ preventScroll: true })}
         className={styles.runActionPopover}
         side="left"
         align="start"
@@ -330,6 +333,8 @@ function WorkbenchRunAction({
         widthStrategy="content"
         anchor={({ getAnchorProps }) => (
           <BubbleTooltip
+          // 菜单开着时不出悬停说明：指针还停在 ▶ 上，说明会盖住菜单最上面的几行。
+          disabled={menuOpen}
           content={
             <span className={styles.runActionTooltip}>
               <span className={styles.runActionTooltipTitle}>{tooltipTitle}</span>
@@ -432,7 +437,7 @@ function WorkbenchRunAction({
           <span className={styles.runActionConfigLabel}>{t('workbench.runConfigureCommand')}</span>
           <div className={styles.runActionConfigRow}>
             <Input
-              autoFocus
+              ref={commandInputRef}
               size="sm"
               className={styles.runActionConfigInput}
               value={draftCommand}
