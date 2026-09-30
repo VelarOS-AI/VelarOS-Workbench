@@ -110,6 +110,37 @@ void describe('language service IPC: code actions', () => {
   })
 })
 
+void describe('language service IPC: call hierarchy', () => {
+  void test('needs a position and one of the two directions', async () => {
+    const calls = await registerWithRecorder()
+    const channel = WorkbenchLanguageChannels.callHierarchy
+    const position = { line: 3, column: 7 }
+
+    assert.equal(await invoke(channel, { ...Base, position, direction: 'incoming', extra: 1 }), true)
+    assert.equal(await invoke(channel, { ...Base, position, direction: 'outgoing' }), true)
+    assert.deepEqual(
+      calls['getCallHierarchy']?.map((call) => {
+        const { direction, position: parsed } = call as { direction: string; position: unknown }
+        return [direction, parsed]
+      }),
+      [
+        ['incoming', position],
+        ['outgoing', position],
+      ]
+    )
+
+    for (const request of [
+      { ...Base, position },
+      { ...Base, position, direction: 'both' },
+      { ...Base, direction: 'incoming' },
+      { ...Base, position: { line: '3', column: 7 }, direction: 'incoming' },
+      { position, direction: 'incoming' },
+    ])
+      assert.equal(await invoke(channel, request), false, JSON.stringify(request))
+    assert.equal(calls['getCallHierarchy']?.length, 2)
+  })
+})
+
 void describe('language service IPC: imports after a file rename', () => {
   void test('takes the renames and the open buffers, and refuses anything malformed', async () => {
     const calls = await registerWithRecorder()

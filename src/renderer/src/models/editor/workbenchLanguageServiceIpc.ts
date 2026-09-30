@@ -55,6 +55,9 @@ type WorkbenchLanguageServiceOrganizeImportsPayload = Parameters<
 type WorkbenchLanguageServiceFileRenameEditsPayload = Parameters<
   WorkbenchProjectKernelPort['getWorkbenchLanguageServiceFileRenameEdits']
 >[0]
+type WorkbenchLanguageServiceCallHierarchyPayload = Parameters<
+  WorkbenchProjectKernelPort['getWorkbenchLanguageServiceCallHierarchy']
+>[0]
 
 type WorkbenchInlineCompletionPayload = Parameters<
   WorkbenchProjectKernelPort['getWorkbenchInlineCompletion']
@@ -191,4 +194,11 @@ export function getWorkbenchLanguageServiceFileRenameEdits(
   runtime: WorkbenchHostRuntime = workbenchHost
 ): ReturnType<WorkbenchProjectKernelPort['getWorkbenchLanguageServiceFileRenameEdits']> {
   return runtime.kernel.project.getWorkbenchLanguageServiceFileRenameEdits(payload)
+}
+
+export function getWorkbenchLanguageServiceCallHierarchy(
+  payload: WorkbenchLanguageServiceCallHierarchyPayload,
+  runtime: WorkbenchHostRuntime = workbenchHost
+): ReturnType<WorkbenchProjectKernelPort['getWorkbenchLanguageServiceCallHierarchy']> {
+  return runtime.kernel.project.getWorkbenchLanguageServiceCallHierarchy(payload)
 }

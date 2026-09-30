@@ -7,6 +7,7 @@ import { AppError } from '@velaros-ai/core/error'
 
 import type {
   AppLocale,
+  WorkbenchLanguageServiceCallHierarchyRequest,
   WorkbenchLanguageServiceCodeActionResolveRequest,
   WorkbenchLanguageServiceCodeActionsRequest,
   WorkbenchLanguageServiceCompletionResolveRequest,
@@ -342,6 +343,10 @@ export class WorkbenchLanguageServiceWorkerClient {
 
   public getFileRenameEdits(request: WorkbenchLanguageServiceFileRenameEditsRequest) {
     return this.call('getFileRenameEdits', request)
+  }
+
+  public getCallHierarchy(request: WorkbenchLanguageServiceCallHierarchyRequest) {
+    return this.call('getCallHierarchy', request)
   }
 
   public async dispose(): Promise<void> {

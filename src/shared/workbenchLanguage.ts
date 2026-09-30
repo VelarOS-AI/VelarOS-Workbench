@@ -15,6 +15,8 @@ import type { ModelSelection } from '@velaros-ai/model/contracts'
 import type {
   WorkbenchInlineCompletionRequest,
   WorkbenchInlineCompletionResult,
+  WorkbenchLanguageServiceCallHierarchyRequest,
+  WorkbenchLanguageServiceCallHierarchyResult,
   WorkbenchLanguageServiceCodeActionResolveRequest,
   WorkbenchLanguageServiceCodeActionResolveResult,
   WorkbenchLanguageServiceCodeActionsRequest,
@@ -67,6 +69,7 @@ export const WorkbenchLanguageChannels = {
   codeActionResolve: 'workbench-app:ls:code-action-resolve',
   organizeImports: 'workbench-app:ls:organize-imports',
   fileRenameEdits: 'workbench-app:ls:file-rename-edits',
+  callHierarchy: 'workbench-app:ls:call-hierarchy',
   extension: 'workbench-app:ls:extension',
   inlineCompletion: 'workbench-app:ls:inline-completion',
 } as const
@@ -131,6 +134,9 @@ export interface WorkbenchLanguageBridge {
   getFileRenameEdits: (
     request: WorkbenchLanguageServiceFileRenameEditsRequest
   ) => Promise<WorkbenchFsCallResult<WorkbenchLanguageServiceFileRenameEditsResult>>
+  getCallHierarchy: (
+    request: WorkbenchLanguageServiceCallHierarchyRequest
+  ) => Promise<WorkbenchFsCallResult<WorkbenchLanguageServiceCallHierarchyResult>>
   requestExtension: (
     request: WorkbenchLanguageServiceExtensionRequest
   ) => Promise<WorkbenchFsCallResult<WorkbenchLanguageServiceExtensionResult>>

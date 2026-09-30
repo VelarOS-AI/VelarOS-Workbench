@@ -10,6 +10,7 @@ import { ipcMain, type IpcMainInvokeEvent } from 'electron'
 import type { ModelSelection } from '@velaros-ai/model/contracts'
 
 import type {
+  WorkbenchLanguageServiceCallHierarchyRequest,
   WorkbenchLanguageServiceCodeActionResolveRequest,
   WorkbenchLanguageServiceCodeActionsRequest,
   WorkbenchLanguageServiceCompletionResolveRequest,
@@ -208,6 +209,15 @@ export function registerWorkbenchLanguageServiceIpc(
       if (!parsed) return invalidRequest()
 
       return client.getFileRenameEdits(parsed)
+    })
+  )
+
+  ipcMain.handle(WorkbenchLanguageChannels.callHierarchy, (_event, request: unknown) =>
+    callWithEnvelope(() => {
+      const parsed = parseCallHierarchyRequest(request)
+      if (!parsed) return invalidRequest()
+
+      return client.getCallHierarchy(parsed)
     })
   )
 
@@ -439,6 +449,17 @@ function parseCodeActionResolveRequest(
     return { ...base, range, resolve: { kind: 'refactor', refactor, action } }
   }
   return null
+}
+
+function parseCallHierarchyRequest(
+  input: unknown
+): Nullable<WorkbenchLanguageServiceCallHierarchyRequest> {
+  const base = parsePositionRequest(input)
+  if (!base || !isRecord(input)) return null
+  const direction = input['direction']
+  if (direction !== 'incoming' && direction !== 'outgoing') return null
+
+  return { ...base, direction }
 }
 
 /** 一次文件树操作挪不了比这更多的项；再多就不是界面发来的请求。 */

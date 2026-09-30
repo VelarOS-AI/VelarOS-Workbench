@@ -8,7 +8,7 @@ import { isAppleWorkbenchPlatform } from '../layout/workbenchKeyboardShortcuts'
 export type WorkbenchEditorCodeActionCommandId = 'organize-imports' | 'quick-fix' | 'refactor'
 
 /** 跟着光标处的符号走的导航：不改代码，只读的文件也能用。 */
-export type WorkbenchEditorNavigationCommandId = 'find-references'
+export type WorkbenchEditorNavigationCommandId = 'call-hierarchy' | 'find-references'
 
 export type WorkbenchEditorCommandId =
   | WorkbenchEditorCodeActionCommandId
@@ -17,7 +17,7 @@ export type WorkbenchEditorCommandId =
 export function isWorkbenchEditorNavigationCommand(
   command: WorkbenchEditorCommandId
 ): command is WorkbenchEditorNavigationCommandId {
-  return command === 'find-references'
+  return command === 'find-references' || command === 'call-hierarchy'
 }
 
 /** 页面（命令面板）交给编辑器去做的一次命令；每次序号加一，同一个命令连做两次也分得开。 */
@@ -69,6 +69,8 @@ const WorkbenchEditorKeyBindings: readonly WorkbenchEditorKeyBinding[] = [
   },
   // 整理 import：VS Code 的 ⇧⌥O / Shift+Alt+O。
   { command: 'organize-imports', chords: () => [{ code: 'KeyO', key: 'o', alt: true, shift: true }] },
+  // 调用层次：JetBrains 的 ⌃⌥H / Ctrl+Alt+H。带 ⌥ 的字符键只认键位。
+  { command: 'call-hierarchy', chords: () => [{ code: 'KeyH', key: 'h', ctrl: true, alt: true }] },
   // 查找引用：VS Code 的 ⇧F12，JetBrains 的 ⌥F7 / Alt+F7。
   {
     command: 'find-references',

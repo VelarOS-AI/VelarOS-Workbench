@@ -111,6 +111,7 @@ void describe('Workbench command palette registry', () => {
     assert.equal(command(mac, 'refactor').shortcut, '⌃T')
     assert.equal(command(mac, 'organize-imports').shortcut, '⌥⇧O')
     assert.equal(command(mac, 'find-references').shortcut, '⇧F12')
+    assert.equal(command(mac, 'call-hierarchy').shortcut, '⌃⌥H')
     assert.equal(command(mac, 'toggle-word-wrap').shortcut, '⌥Z')
     assert.equal(command(mac, 'go-to-line').shortcut, '⌃G')
     assert.equal(command(mac, 'close-editor').shortcut, '⌘W')
@@ -130,6 +131,7 @@ void describe('Workbench command palette registry', () => {
     assert.equal(command(linux, 'refactor').shortcut, 'Ctrl+Alt+Shift+T')
     assert.equal(command(linux, 'organize-imports').shortcut, 'Alt+Shift+O')
     assert.equal(command(linux, 'find-references').shortcut, 'Shift+F12')
+    assert.equal(command(linux, 'call-hierarchy').shortcut, 'Ctrl+Alt+H')
     assert.equal(command(linux, 'zoom-out').shortcut, 'Ctrl+-')
 
     // 改过的快捷键照改过的显示。
@@ -266,6 +268,21 @@ void describe('Workbench command palette availability', () => {
       { ...FileInFront, hasActiveFile: false },
     ])
       assert.equal(isWorkbenchPaletteCommandAvailable('find-references', context), false)
+  })
+
+  void test('the call hierarchy needs the TypeScript service but not an editable file', () => {
+    assert.equal(isWorkbenchPaletteCommandAvailable('call-hierarchy', FileInFront), true)
+    assert.equal(
+      isWorkbenchPaletteCommandAvailable('call-hierarchy', { ...FileInFront, canEditActiveFile: false }),
+      true
+    )
+    for (const context of [
+      { ...FileInFront, activeFileLanguageService: 'external' as const },
+      { ...FileInFront, activeFileLanguageService: null },
+      { ...FileInFront, editorCovered: true },
+      { ...FileInFront, hasActiveFile: false },
+    ])
+      assert.equal(isWorkbenchPaletteCommandAvailable('call-hierarchy', context), false)
   })
 
   void test('go to line brings a covered text file back, but needs one', () => {

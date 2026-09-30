@@ -300,6 +300,7 @@ export type WorkbenchLanguageServiceCapability =
   | 'code-actions'
   | 'refactor'
   | 'organize-imports'
+  | 'call-hierarchy'
 
 export interface WorkbenchLanguageServicePosition {
   line: number
@@ -777,6 +778,47 @@ export interface WorkbenchLanguageServiceOrganizeImportsResult {
   projectRoot: string
   path: string
   changes: WorkbenchLanguageServiceFileEdit[]
+}
+
+/** 调用层次看哪个方向：谁调用它，还是它调用谁。 */
+export type WorkbenchLanguageServiceCallHierarchyDirection = 'incoming' | 'outgoing'
+
+/**
+ * 某个位置上的函数的一层调用关系。界面先拿光标的位置问，再拿某个调用方（被调用方）名字的位置问它的下一层，
+ * 一层一层展开。
+ */
+export interface WorkbenchLanguageServiceCallHierarchyRequest
+  extends WorkbenchLanguageServicePositionRequest {
+  direction: WorkbenchLanguageServiceCallHierarchyDirection
+}
+
+/** 调用层次里的一个函数（方法、构造函数、类……）。 */
+export interface WorkbenchLanguageServiceCallHierarchyItem {
+  name: string
+  kind: WorkbenchLanguageServiceDocumentSymbolKind
+  /** 它外层的名字（类、命名空间）；顶层的省略。 */
+  containerName?: string
+  path: string
+  /** 名字的位置：跳过去落在这里，问它的下一层也拿这个位置。 */
+  line: number
+  column: number
+}
+
+export interface WorkbenchLanguageServiceCallHierarchyCall {
+  /** 调用方（`incoming`）或被调用方（`outgoing`）。 */
+  item: WorkbenchLanguageServiceCallHierarchyItem
+  /**
+   * 调用发生的地方，各带那一行的文字。`incoming` 时在调用方的文件里，`outgoing` 时在被问的那个函数的文件里。
+   */
+  sites: WorkbenchLanguageServiceLocation[]
+}
+
+export interface WorkbenchLanguageServiceCallHierarchyResult {
+  projectRoot: string
+  path: string
+  /** 那个位置上的函数（停在调用处时是被调用的那个声明）；不在可以看调用层次的东西上为 null。 */
+  item: Nullable<WorkbenchLanguageServiceCallHierarchyItem>
+  calls: WorkbenchLanguageServiceCallHierarchyCall[]
 }
 
 /** 文件树里改了名、挪了位置的一项（文件或目录），项目内相对路径。 */

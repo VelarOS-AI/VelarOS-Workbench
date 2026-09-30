@@ -416,7 +416,8 @@ function locationFromFileSpan(
   }
 }
 
-function mapNavigationTreeKind(
+/** TypeScript 的符号种类 → 界面认的那几种（大纲、调用层次共用）。 */
+export function mapTypeScriptSymbolKind(
   kind: ts.ScriptElementKind
 ): WorkbenchLanguageServiceDocumentSymbol['kind'] {
   switch (kind) {
@@ -493,7 +494,7 @@ function flattenNavigationTree(
   const index = bucket.length
   bucket.push({
     name: node.text,
-    kind: mapNavigationTreeKind(node.kind),
+    kind: mapTypeScriptSymbolKind(node.kind),
     depth,
     line: (nameRange ?? range).startLine,
     column: (nameRange ?? range).startColumn,

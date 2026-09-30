@@ -1646,6 +1646,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       hostRuntime,
       getIdentifier: getCurrentIdentifier,
       onOpenSymbolLocations,
+      onGoToLocation: onGoToDefinition,
     })
     /** 按键、右键菜单、命令面板交来的编辑器命令：改代码的与导航的各归各的 hook。 */
     const runEditorCommand = (command: WorkbenchEditorCommandId): void => {
@@ -3227,6 +3228,14 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
             <button
               type="button"
               role="menuitem"
+              disabled={!contextMenu.word || !symbolNavigation.canRun('call-hierarchy')}
+              onClick={() => runCommandFromContextMenu('call-hierarchy')}
+            >
+              {t('workbench.editorContextCallHierarchy')}
+            </button>
+            <button
+              type="button"
+              role="menuitem"
               disabled={!codeActions.canRun('quick-fix')}
               onClick={() => runCommandFromContextMenu('quick-fix')}
             >
@@ -3351,6 +3360,8 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
           </div>
         )}
         {codeActions.overlay}
+        {!!symbolNavigation.overlay && !!containerRef.current
+          && createPortal(symbolNavigation.overlay, containerRef.current)}
         {!!renamePopup && (
           <RenameInputPopup
             initial={renamePopup.identifier.text}

@@ -2,6 +2,8 @@ import type { SerializedError } from '@velaros-ai/core/error'
 
 import type { AppLocale } from '@shared/contracts'
 import type {
+  WorkbenchLanguageServiceCallHierarchyRequest,
+  WorkbenchLanguageServiceCallHierarchyResult,
   WorkbenchLanguageServiceCodeActionResolveRequest,
   WorkbenchLanguageServiceCodeActionResolveResult,
   WorkbenchLanguageServiceCodeActionsRequest,
@@ -144,6 +146,10 @@ export interface WorkbenchLanguageServiceWorkerOperationMap {
   getFileRenameEdits: {
     request: WorkbenchLanguageServiceFileRenameEditsRequest
     result: WorkbenchLanguageServiceFileRenameEditsResult
+  }
+  getCallHierarchy: {
+    request: WorkbenchLanguageServiceCallHierarchyRequest
+    result: WorkbenchLanguageServiceCallHierarchyResult
   }
 }
 

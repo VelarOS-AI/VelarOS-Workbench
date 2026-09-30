@@ -14,6 +14,7 @@ import {
 } from './workbenchKeyboardShortcuts'
 
 export type WorkbenchPaletteCommandId =
+  | 'call-hierarchy'
   | 'close-all-editors'
   | 'close-editor'
   | 'close-project'
@@ -114,6 +115,12 @@ export const WORKBENCH_PALETTE_COMMANDS: readonly WorkbenchPaletteCommandDefinit
     id: 'find-references',
     labelKey: 'workbench.commandFindReferences',
     shortcut: { fixed: 'Shift+F12' },
+  },
+  // 光标处函数的调用层次（谁调用它、它调用谁），编辑器右上角的面板：⌃⌥H / Ctrl+Alt+H。
+  {
+    id: 'call-hierarchy',
+    labelKey: 'workbench.commandCallHierarchy',
+    shortcut: { fixed: 'Ctrl+Alt+H' },
   },
   // 编辑器里光标处的动作菜单：⌥↩ / Alt+Enter（另有 ⌘. / Ctrl+.）。
   { id: 'quick-fix', labelKey: 'workbench.commandQuickFix', shortcut: { fixed: 'Alt+Enter' } },
@@ -222,6 +229,9 @@ export function isWorkbenchPaletteCommandAvailable(
     // 引用是语言服务给的；只读的文件照样能查。
     case 'find-references':
       return textEditorInFront && !!context.activeFileLanguageService
+    // 调用层次是内置 TypeScript 服务给的。
+    case 'call-hierarchy':
+      return textEditorInFront && context.activeFileLanguageService === 'typescript'
     case 'toggle-read-only':
       return textEditorInFront && context.canToggleReadOnly
     case 'toggle-git-blame':

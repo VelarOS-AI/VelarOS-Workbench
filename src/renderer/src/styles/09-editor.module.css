@@ -1276,6 +1276,96 @@
   font-variant-numeric: tabular-nums;
 }
 
+/*
+ * 调用层次面板：样子沿用上面的定义 / 引用面板，位置不跟着光标——停在编辑器右上角，在树里点来点去它不动。
+ */
+.editorCallHierarchyPanel {
+  top: 8px;
+  right: 14px;
+  width: min(520px, calc(100% - 28px));
+  max-height: min(62%, 460px);
+}
+
+.editorCallHierarchyDirections {
+  @apply flex shrink-0 items-center;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.editorCallHierarchyDirections button {
+  @apply rounded;
+  padding: 2px 8px;
+  color: var(--workbench-muted);
+  font-size: 11px;
+}
+
+.editorCallHierarchyDirections button:hover {
+  background: var(--workbench-hover);
+  color: var(--workbench-text);
+}
+
+.editorCallHierarchyDirections button[data-active='true'] {
+  background: var(--status-blue-soft);
+  color: var(--status-blue-strong);
+  font-weight: 600;
+}
+
+.editorCallHierarchyRow {
+  @apply flex w-full cursor-pointer items-center rounded text-left;
+  gap: 6px;
+  min-height: 26px;
+  padding: 3px 8px 3px 6px;
+  color: var(--workbench-text);
+  font-size: 11.5px;
+}
+
+.editorCallHierarchyRow:hover,
+.editorCallHierarchyRow[data-active='true'] {
+  background: var(--workbench-hover);
+}
+
+.editorCallHierarchyRow:focus-visible {
+  outline: 1px solid var(--status-blue);
+  outline-offset: -1px;
+}
+
+.editorCallHierarchyTwisty {
+  @apply grid shrink-0 place-items-center rounded;
+  width: 16px;
+  height: 16px;
+  color: var(--workbench-muted);
+}
+
+.editorCallHierarchyTwisty:not(:disabled):hover {
+  background: var(--workbench-border);
+  color: var(--workbench-text);
+}
+
+/* 正在问下一层：小三角的位置上转一个圈。 */
+.editorCallHierarchyTwisty[data-loading='true']::after {
+  @apply animate-spin rounded-full;
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid var(--workbench-border);
+  border-top-color: var(--workbench-muted);
+  content: '';
+}
+
+.editorCallHierarchyTwisty[data-loading='true'] svg {
+  display: none;
+}
+
+.editorCallHierarchyName {
+  @apply shrink-0 truncate;
+  max-width: 60%;
+  font-family: var(--font-mono);
+}
+
+.editorCallHierarchyMeta {
+  @apply min-w-0 flex-1 truncate text-muted-foreground;
+  font-size: 11px;
+}
+
 .editorSymbolLocationsEmpty {
   @apply px-2 py-3 text-muted-foreground;
   font-size: 11.5px;

@@ -48,6 +48,8 @@ import type {
   WorkbenchInlineCompletionResult,
   WorkbenchInspectDeleteEntryRequest,
   WorkbenchInspectDeleteEntryResult,
+  WorkbenchLanguageServiceCallHierarchyRequest,
+  WorkbenchLanguageServiceCallHierarchyResult,
   WorkbenchLanguageServiceCodeActionResolveRequest,
   WorkbenchLanguageServiceCodeActionResolveResult,
   WorkbenchLanguageServiceCodeActionsRequest,
@@ -250,6 +252,9 @@ export interface WorkbenchProjectKernelPort {
   getWorkbenchLanguageServiceFileRenameEdits(
     request: WorkbenchLanguageServiceFileRenameEditsRequest
   ): Promise<Result<WorkbenchLanguageServiceFileRenameEditsResult>>
+  getWorkbenchLanguageServiceCallHierarchy(
+    request: WorkbenchLanguageServiceCallHierarchyRequest
+  ): Promise<Result<WorkbenchLanguageServiceCallHierarchyResult>>
   requestWorkbenchLanguageServiceExtension(
     request: WorkbenchLanguageServiceExtensionRequest
   ): Promise<Result<WorkbenchLanguageServiceExtensionResult>>

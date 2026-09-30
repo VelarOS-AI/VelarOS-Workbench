@@ -154,6 +154,8 @@ const languageBridge: WorkbenchLanguageBridge = {
     ipcRenderer.invoke(WorkbenchLanguageChannels.organizeImports, request),
   getFileRenameEdits: (request) =>
     ipcRenderer.invoke(WorkbenchLanguageChannels.fileRenameEdits, request),
+  getCallHierarchy: (request) =>
+    ipcRenderer.invoke(WorkbenchLanguageChannels.callHierarchy, request),
   requestExtension: (request) => ipcRenderer.invoke(WorkbenchLanguageChannels.extension, request),
   getInlineCompletion: (request) =>
     ipcRenderer.invoke(WorkbenchLanguageChannels.inlineCompletion, request),

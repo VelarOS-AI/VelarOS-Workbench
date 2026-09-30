@@ -18,6 +18,8 @@ import { URI } from 'vscode-uri'
 import { isNumber,isPresent, optionalWhen, toNullable, toOptional } from '@velaros-ai/core'
 
 import type {
+  WorkbenchLanguageServiceCallHierarchyRequest,
+  WorkbenchLanguageServiceCallHierarchyResult,
   WorkbenchLanguageServiceCapability,
   WorkbenchLanguageServiceCodeActionResolveRequest,
   WorkbenchLanguageServiceCodeActionResolveResult,
@@ -98,6 +100,7 @@ import {
   withWorkbenchMarkdownLanguageService,
   type WorkbenchMarkdownLanguageServiceContext,
 } from './MarkdownLanguageService'
+import { buildTypeScriptCallHierarchy } from './TypeScriptCallHierarchy'
 import {
   buildTypeScriptOrganizeImportsEdits,
   buildTypeScriptQuickFixes,
@@ -1584,6 +1587,35 @@ class WorkbenchLanguageServices {
     return { projectRoot, changes: [...merged.values()] }
   }
 
+  /**
+   * 请求位置上的函数的一层调用关系（谁调用它，或它调用谁）；只有内置 TypeScript 服务照看的文件有。
+   * 往下一层由界面拿某个调用方 / 被调用方的位置再问一次。
+   */
+  public async getCallHierarchy(
+    request: WorkbenchLanguageServiceCallHierarchyRequest
+  ): Promise<WorkbenchLanguageServiceCallHierarchyResult> {
+    const resolved = await this.resolveLanguageService(request)
+    if (resolved.service?.runtime !== 'typescript-language-service')
+      return { projectRoot: resolved.projectRoot, path: request.path, item: null, calls: [] }
+
+    const snapshot = await this.createTypeScriptProjectSnapshot(request)
+    const content = snapshot.files.get(snapshot.requestAbsolutePath) ?? ''
+    return {
+      projectRoot: snapshot.projectRoot,
+      path: snapshot.requestPath,
+      ...buildTypeScriptCallHierarchy(
+        {
+          service: snapshot.service,
+          fileName: snapshot.requestAbsolutePath,
+          offset: this.offsetFromPosition(content, request.position),
+          readFile: (fileName) => snapshot.files.get(fileName) ?? safeReadFile(fileName),
+          toRelativePath: (fileName) => this.relativePathFor(snapshot.projectRoot, fileName),
+        },
+        request.direction
+      ),
+    }
+  }
+
   private typeScriptEditContext(
     snapshot: TypeScriptProjectSnapshot,
     request: WorkbenchLanguageServiceRequest
@@ -1654,6 +1686,7 @@ class WorkbenchLanguageServices {
         'code-actions',
         'refactor',
         'organize-imports',
+        'call-hierarchy',
       ]
 
     if (service.runtime === 'markdown-language-service')
