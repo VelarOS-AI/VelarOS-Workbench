@@ -115,6 +115,11 @@ async function runGitProbe(): Promise<void> {
     const log = await service.getLog(projectRoot)
     equal(log.commits.length, 1, '提交历史应返回一条')
     equal(log.commits[0]?.subject, 'Add alpha file.txt', '提交历史主题')
+    equal(log.hasMore, false, '只有一个提交时后面没有更多')
+    check(
+      log.commits[0]?.refs.some((ref) => ref.kind === 'branch' && ref.current),
+      '提交上应标出指着它的当前分支'
+    )
     const historical = await service.getFileAtCommit(
       projectRoot,
       committed.commit.commitSha,
@@ -278,6 +283,6 @@ async function configureIdentity(rootPath: string): Promise<void> {
 
 await runGitProbe()
 // Windows 上没有进程组可结束，不跑「卡住的远端」那一段（4 条断言）。
-const expectedAssertions = process.platform === 'win32' ? 48 : 52
+const expectedAssertions = process.platform === 'win32' ? 50 : 54
 assert.equal(assertionCount, expectedAssertions, 'Git 探针断言数变化必须显式复核')
 console.info(`workbench git probe: ${assertionCount}/${expectedAssertions} assertions passed`)

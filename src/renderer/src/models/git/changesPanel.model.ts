@@ -1,4 +1,8 @@
-import type { SystemWorkspaceGitDiffResult, WorkspaceGitLogEntry } from '@shared/contracts'
+import type {
+  SystemWorkspaceGitDiffResult,
+  WorkspaceGitLogEntry,
+  WorkspaceGitRef,
+} from '@shared/contracts'
 
 import type { WorkbenchI18nContextValue } from '../../i18n'
 
@@ -78,11 +82,29 @@ export function filterWorkbenchGitLogCommits(
       commit.subject,
       commit.authorName,
       commit.authorEmail ?? '',
-      commit.refs.join(' '),
+      commit.refs.map((ref) => ref.name).join(' '),
     ]
       .join(' ')
       .toLowerCase()
       .includes(query)
+  )
+}
+
+function isSameWorkbenchGitLogEntry(
+  commit: WorkspaceGitLogEntry,
+  other: LooseOptional<WorkspaceGitLogEntry>
+): boolean {
+  return (
+    !!other &&
+    commit.sha === other.sha &&
+    commit.subject === other.subject &&
+    commit.refs.length === other.refs.length &&
+    commit.refs.every((ref, index) => {
+      const otherRef = other.refs[index]
+      return (
+        ref.kind === otherRef?.kind && ref.name === otherRef.name && !ref.current === !otherRef.current
+      )
+    })
   )
 }
 
@@ -93,16 +115,52 @@ export function isSameWorkbenchGitLog(
 ): boolean {
   return (
     left.length === right.length &&
-    left.every((commit, index) => {
-      const other = right[index]
-      return (
-        !!other &&
-        commit.sha === other.sha &&
-        commit.subject === other.subject &&
-        commit.refs.join('\0') === other.refs.join('\0')
-      )
-    })
+    left.every((commit, index) => isSameWorkbenchGitLogEntry(commit, right[index]))
   )
+}
+
+/**
+ * 重读来的第一页，与已经读到的日志的开头一样（日志比一页长时只比这一页）：仓库没有新提交、引用也没动，
+ * 后面读过的那些页照旧作数，不用跟着重读。
+ */
+export function isSameWorkbenchGitLogHead(
+  loaded: readonly WorkspaceGitLogEntry[],
+  firstPage: readonly WorkspaceGitLogEntry[]
+): boolean {
+  return (
+    firstPage.length <= loaded.length &&
+    firstPage.every((commit, index) => isSameWorkbenchGitLogEntry(commit, loaded[index]))
+  )
+}
+
+/** 往后接一页：仓库在两次读取之间变了的话新的一页可能带着已经有的提交，接上去的时候去掉。 */
+export function appendWorkbenchGitLogPage(
+  loaded: readonly WorkspaceGitLogEntry[],
+  page: readonly WorkspaceGitLogEntry[]
+): WorkspaceGitLogEntry[] {
+  const known = new Set(loaded.map((commit) => commit.sha))
+  return [...loaded, ...page.filter((commit) => !known.has(commit.sha))]
+}
+
+/**
+ * 提交行上引用标签的先后：当前分支（或分离的 HEAD）最前，然后别的本地分支、标签、远端分支；同一类里
+ * 照 git 给的顺序。
+ */
+export function sortWorkbenchGitRefs(refs: readonly WorkspaceGitRef[]): WorkspaceGitRef[] {
+  const rank = (ref: WorkspaceGitRef): number =>
+    ref.current || ref.kind === 'head'
+      ? 0
+      : ref.kind === 'branch'
+        ? 1
+        : ref.kind === 'tag'
+          ? 2
+          : 3
+  return [...refs].sort((left, right) => rank(left) - rank(right))
+}
+
+/** HEAD 在这个提交上：当前分支指着它，或者分离的 HEAD 停在它上面。 */
+export function isWorkbenchGitHeadCommit(commit: Pick<WorkspaceGitLogEntry, 'refs'>): boolean {
+  return commit.refs.some((ref) => ref.current || ref.kind === 'head')
 }
 
 export function formatWorkbenchGitCommitDate(

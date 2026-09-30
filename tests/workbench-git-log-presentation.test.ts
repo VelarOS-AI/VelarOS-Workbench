@@ -19,6 +19,7 @@ describe('Workbench Git log presentation', () => {
           authorName: 'VelarOS',
           authorEmail: null,
           authoredAt: now - 4 * 60_000,
+          parents: [],
           refs: [],
         },
         now

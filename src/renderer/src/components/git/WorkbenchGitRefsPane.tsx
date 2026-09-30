@@ -1,5 +1,5 @@
 import { type ReactElement, useState } from 'react'
-import { GitBranchIcon, StackIcon } from '@phosphor-icons/react'
+import { GitBranchIcon, GitForkIcon, StackIcon } from '@phosphor-icons/react'
 import { useWorkbenchI18n } from '@renderer/i18n'
 import { formatWorkbenchGitCommitRelativeDate } from '@renderer/models/git/changesPanel.model'
 import {
@@ -16,7 +16,7 @@ import styles from '../../styles/workbenchPageStyles'
 
 interface WorkbenchGitRefsPaneProps {
   branches: SystemWorkspaceGitSummary['branches']
-  /** 日志此刻看的分支；没在看某个分支时为空串。 */
+  /** 日志此刻只看的那个分支；空串是全部分支。 */
   logBranch: string
   onSelectBranch: (branch: string) => void
   stashes: readonly WorkspaceGitStash[]
@@ -26,7 +26,9 @@ interface WorkbenchGitRefsPaneProps {
   onSelectStash: (stash: WorkspaceGitStash) => void
 }
 
-/** Git 工具窗左侧：分支（点一个看它的日志）和贮藏（点一条在右侧看它里面的改动）。 */
+/**
+ * Git 工具窗左侧：日志看哪些分支（全部，或者点一个分支只看它），和贮藏（点一条在右侧看它里面的改动）。
+ */
 export function WorkbenchGitRefsPane({
   branches,
   logBranch,
@@ -66,6 +68,15 @@ export function WorkbenchGitRefsPane({
       </div>
       <ScrollArea className={styles.gitBranchScroll}>
         <div className={styles.gitBranchList}>
+          <button
+            type="button"
+            className={styles.gitBranchRow}
+            data-active={logBranch === ''}
+            onClick={() => onSelectBranch('')}
+          >
+            <GitForkIcon size={13} />
+            <span className={styles.gitBranchName}>{t('workbench.gitLogAllBranches')}</span>
+          </button>
           <BranchGroup
             label={t('workbench.gitBranchLocal')}
             branches={localBranches}

@@ -39,6 +39,7 @@ import type {
   WorkspaceGitLineStats,
   WorkspaceGitLogEntry,
   WorkspaceGitLogOptions,
+  WorkspaceGitRef,
   WorkspaceGitRemoteAction,
   WorkspaceGitRemoteActionOptions,
   WorkspaceGitRemoteActionResult,
@@ -83,7 +84,11 @@ import { WorkbenchGitStashes } from './WorkbenchGitStashes'
 const DefaultDiffMaxChars = 20_000
 const MaxDiffChars = 1_000_000
 const DefaultLogLimit = 60
-const MaxLogLimit = 200
+/**
+ * 一次最多读这么多个提交。提交图一页一页往下读（每页几百个），仓库有了新提交时要把已经读过的那一段
+ * 整个重读一遍，所以上限给到整段的长度。
+ */
+const MaxLogLimit = 10_000
 const MaxUntrackedStatBytes = 1024 * 1024
 const MaxUntrackedStatFiles = 100
 const CommitSubjectMaxChars = 72
@@ -112,8 +117,8 @@ const GitProgressLinePattern =
   /^(?:remote: )?(?:(?:Enumerating|Counting|Compressing|Receiving|Resolving|Writing|Unpacking|Updating|Checking out|Filtering) \w+:|Delta compression using |Total \d+ \(delta )/u
 /** 标记冲突已解决前检查冲突标记，最多读这么大的文件；更大的不查。 */
 const MaxConflictMarkerScanBytes = 16 * 1024 * 1024
-/** 日志的每个提交以 \x1e 开头，字段之间是 \x1f。 */
-const LogFormat = '--format=%x1e%H%x1f%h%x1f%s%x1f%an%x1f%ae%x1f%ct%x1f%D'
+/** 日志的每个提交以 \x1e 开头，字段之间是 \x1f；最后两个字段是父提交（空格隔开）和指着它的引用。 */
+const LogFormat = '--format=%x1e%H%x1f%h%x1f%s%x1f%an%x1f%ae%x1f%ct%x1f%P%x1f%D'
 /** git 的输出按 UTF-8 读，读不懂的字节变成它。 */
 const ReplacementCharacter = String.fromCodePoint(0xfffd)
 
@@ -420,9 +425,25 @@ export class WorkbenchGitService {
   ): Promise<SystemWorkspaceGitLogResult> {
     const rootPath = await this.resolveRoot(workspaceRoot)
     const limit = Math.min(Math.max(Math.floor(options.limit ?? DefaultLogLimit), 1), MaxLogLimit)
-    const args = ['log', `--max-count=${limit}`, '--date-order', '--no-color', LogFormat]
+    const skip = Math.max(Math.floor(options.skip ?? 0), 0)
+    // 多要一个：要到了就是后面还有。`--date-order`：子提交一定排在父提交前面（提交图靠这个顺序），
+    // 其余按时间。`--decorate=full`：引用写全名，分得清分支、远端分支和标签。
+    const args = [
+      'log',
+      `--max-count=${limit + 1}`,
+      `--skip=${skip}`,
+      '--date-order',
+      '--no-color',
+      '--decorate=full',
+      LogFormat,
+    ]
     if (options.branch) args.push(this.assertRevision(options.branch))
-    else if (!options.path) args.push('--all')
+    else if (!options.path) {
+      // 全部本地分支和远端分支。不用 `--all`：它连贮藏、AI 改动的影子检查点这些内部引用也算上。
+      args.push('--branches', '--remotes')
+      // 分离的 HEAD 可能停在哪个分支都到不了的提交上；还没有提交时 HEAD 解析不出来，不能带。
+      if (await this.readHeadCommit(rootPath)) args.push('HEAD')
+    }
     let file: Nullable<{ path: string; prefix: string }> = null
     if (options.path) {
       file = {
@@ -433,7 +454,10 @@ export class WorkbenchGitService {
       args.push('--follow', '--name-status', '-z', '--', this.toLiteralPathspec(file.path))
     }
 
-    const result = await this.runGit(rootPath, args, { allowFailure: true })
+    const result = await this.runGit(rootPath, args, {
+      allowFailure: true,
+      maxBuffer: GitListingMaxBytes,
+    })
     const output = `${result.stderr}\n${result.stdout}`.toLowerCase()
     if (
       result.failed &&
@@ -448,7 +472,12 @@ export class WorkbenchGitService {
       : file
         ? this.parseFileLog(result.stdout, file.prefix, `${file.prefix}${file.path}`)
         : this.parseLog(result.stdout)
-    return { rootPath, checkedAt: Date.now(), commits }
+    return {
+      rootPath,
+      checkedAt: Date.now(),
+      commits: commits.slice(0, limit),
+      hasMore: commits.length > limit,
+    }
   }
 
   public async generateCommitMessage(
@@ -1679,6 +1708,7 @@ export class WorkbenchGitService {
       authorName = '',
       authorEmail = '',
       timestamp = '',
+      parents = '',
       refs = '',
     ] = header.split('\x1f')
     return {
@@ -1688,8 +1718,34 @@ export class WorkbenchGitService {
       authorName,
       authorEmail: authorEmail || null,
       authoredAt: Number(timestamp) * 1000 || 0,
-      refs: refs.split(',').map((ref) => ref.trim()).filter(Boolean),
+      parents: parents.split(' ').filter(Boolean),
+      refs: this.parseLogRefs(refs),
     }
+  }
+
+  /**
+   * `%D` 在 `--decorate=full` 下的样子：`HEAD -> refs/heads/main, tag: refs/tags/v1, refs/remotes/origin/main`。
+   * 引用名里不能有空格，所以按「逗号加空格」拆不会拆错带逗号的名字。只认分支、远端分支、标签和 HEAD：
+   * 贮藏、`origin/HEAD` 这种指向别的分支的符号引用、内部引用都不算。
+   */
+  private parseLogRefs(raw: string): WorkspaceGitRef[] {
+    const refs: WorkspaceGitRef[] = []
+    for (const token of raw.split(', ')) {
+      const current = token.startsWith('HEAD -> ')
+      const name = (current ? token.slice('HEAD -> '.length) : token).replace(/^tag: /u, '').trim()
+      if (name === 'HEAD') refs.push({ kind: 'head', name })
+      else if (name.startsWith('refs/heads/'))
+        refs.push({
+          kind: 'branch',
+          name: name.slice('refs/heads/'.length),
+          current: optionalWhen(current, true),
+        })
+      else if (name.startsWith('refs/remotes/') && !name.endsWith('/HEAD'))
+        refs.push({ kind: 'remote', name: name.slice('refs/remotes/'.length) })
+      else if (name.startsWith('refs/tags/'))
+        refs.push({ kind: 'tag', name: name.slice('refs/tags/'.length) })
+    }
+    return refs
   }
 
   /** `--numstat -z`：`增\t删\t路径\0`；改名是 `增\t删\t\0旧路径\0新路径\0`；二进制文件的增删是 `-`。 */

@@ -214,6 +214,7 @@ function parseLog(input: unknown): WorkbenchGitLogRequest {
     ...root,
     branch: optionalWhen(isString, record['branch']),
     limit: optionalWhen(isNumber, record['limit']),
+    skip: optionalWhen(isNumber, record['skip']),
     path: optionalWhen(isString, record['path']),
   }
 }

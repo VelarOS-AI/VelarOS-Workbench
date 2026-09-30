@@ -49,6 +49,22 @@ export interface WorkspaceGitBranch {
   lastCommitAt?: number
 }
 
+/**
+ * 指着一个提交的引用：
+ * - `branch`：本地分支，`name` 如 `feature/login`；`current` 是 HEAD 指着的那个。
+ * - `remote`：远端分支，`name` 如 `origin/main`。
+ * - `tag`：标签。
+ * - `head`：分离的 HEAD（HEAD 直接指着这个提交，不经过分支），`name` 就是 `HEAD`。
+ */
+export type WorkspaceGitRefKind = 'branch' | 'remote' | 'tag' | 'head'
+
+export interface WorkspaceGitRef {
+  kind: WorkspaceGitRefKind
+  name: string
+  /** 当前分支（只有 `branch` 有）。 */
+  current?: boolean
+}
+
 export interface WorkspaceGitLogEntry {
   sha: string
   shortSha: string
@@ -56,7 +72,9 @@ export interface WorkspaceGitLogEntry {
   authorName: string
   authorEmail: Nullable<string>
   authoredAt: number
-  refs: string[]
+  /** 父提交，主线（第一个父提交）在前；根提交为空，合并提交有两个以上。提交图按它连线。 */
+  parents: string[]
+  refs: WorkspaceGitRef[]
   /**
    * 按文件查历史时，文件在这个提交里的路径（相对项目根）：改名之前的提交是旧路径，读那时的内容要用它。
    * 不按文件查时没有。
@@ -65,8 +83,14 @@ export interface WorkspaceGitLogEntry {
 }
 
 export interface WorkspaceGitLogOptions {
+  /**
+   * 只看这个分支（或别的引用、提交）到得了的提交。不给时是全部本地分支和远端分支，加上 HEAD（分离的
+   * HEAD 停在哪个分支都到不了的提交上时也列得出）；贮藏、内部引用不算。
+   */
   branch?: string
   limit?: number
+  /** 跳过最前面的这么多个提交：接着上一页往下读。 */
+  skip?: number
   /** 限定为某个文件的历史（`git log --follow -- <path>`），用于「查看 Git 历史」。 */
   path?: string
 }

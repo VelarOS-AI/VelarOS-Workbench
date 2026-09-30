@@ -437,49 +437,160 @@
   font-size: 10.5px;
 }
 
+/* 日志的范围：全部分支，或者只看的那个分支；点一下在全部分支与当前分支之间切换。 */
 .gitLogScope {
-  max-width: 150px;
+  max-width: 170px;
   padding: 4px 7px;
+  border: 0;
   border-radius: var(--workbench-radius);
   color: var(--workbench-active-fg);
   background: var(--workbench-active-soft);
+  cursor: pointer;
 }
 
-.gitLogScroll {
+.gitLogScope > span {
+  @apply min-w-0 truncate;
+}
+
+.gitLogScope:disabled {
+  cursor: default;
+}
+
+/*
+ * 提交图列表：行高固定（与 WorkbenchGitLogRowHeight 一致），只画视口附近的行。每行是提交图、引用标签加
+ * 提交说明、作者、时间。
+ */
+.gitGraphScroll {
   @apply min-h-0 flex-1;
+  --git-graph-lane-0: var(--workbench-theme-color);
+  --git-graph-lane-1: var(--status-green);
+  --git-graph-lane-2: var(--status-amber);
+  --git-graph-lane-3: var(--status-violet);
+  --git-graph-lane-4: var(--status-teal);
+  --git-graph-lane-5: var(--status-red);
 }
 
-.gitLogScroll .historyTimeline {
-  padding-block: 2px;
+.gitGraphScroll:focus-visible {
+  outline: none;
 }
 
-.gitLogScroll .historyTimelineRow {
-  min-height: 44px;
-  padding: 2px 10px 2px 6px;
+.gitGraphList {
+  @apply relative min-w-0;
+  overflow: hidden;
 }
 
-.gitLogScroll .historyTimelineRail {
-  width: 24px;
+.gitGraphRow {
+  @apply flex min-w-0 items-center;
+  height: 26px;
+  gap: 8px;
+  padding-right: 10px;
+  font-size: 12px;
+  cursor: default;
 }
 
-.gitLogScroll .historyTimelineRail::before {
-  width: 2px;
-  background: color-mix(in oklab, var(--workbench-theme-color) 52%, transparent);
+.gitGraphRow:hover {
+  background: var(--workbench-hover);
 }
 
-.gitLogScroll .historyTimelineDot {
-  box-shadow: 0 0 0 3px var(--workbench-surface);
+.gitGraphRow[data-active='true'] {
+  background: var(--workbench-selection-bg);
 }
 
-.gitLogScroll .historyTimelineRow[data-active='true'] .historyTimelineDot {
-  box-shadow:
-    0 0 0 3px var(--workbench-surface),
-    0 0 0 5px color-mix(in oklab, var(--workbench-theme-color) 20%, transparent);
+.gitGraphScroll:not(:focus-within) .gitGraphRow[data-active='true'] {
+  background: var(--workbench-selection-inactive);
 }
 
-.gitLogScroll .historyTimelineBody {
-  @apply flex-1;
-  padding-block: 5px;
+.gitGraphCell {
+  @apply shrink-0;
+  fill: none;
+  stroke-width: 1.6;
+}
+
+.gitGraphCell circle {
+  stroke-width: 0;
+}
+
+/* HEAD 所在的提交：空心圆点。 */
+.gitGraphCell circle[data-head='true'] {
+  fill: var(--workbench-surface);
+  stroke-width: 2;
+}
+
+.gitGraphSummary {
+  @apply flex min-w-0 flex-1 items-center;
+  gap: 5px;
+}
+
+/* 没有提交图的行（搜索时）左边补上图那一栏平时占的留白。 */
+.gitGraphRow > .gitGraphSummary:first-child {
+  padding-left: 10px;
+}
+
+.gitGraphSubject {
+  @apply min-w-0 flex-1 truncate;
+  color: var(--workbench-text);
+}
+
+.gitGraphRef {
+  @apply inline-flex shrink-0 items-center;
+  max-width: 150px;
+  gap: 3px;
+  padding: 1px 5px;
+  border-radius: var(--workbench-radius-xs);
+  color: var(--status-green);
+  background: color-mix(in oklab, var(--status-green) 12%, transparent);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.gitGraphRef > span {
+  @apply min-w-0 truncate;
+}
+
+.gitGraphRef[data-current='true'],
+.gitGraphRef[data-kind='head'] {
+  color: var(--workbench-active-fg);
+  background: var(--workbench-active-soft);
+  font-weight: 600;
+}
+
+.gitGraphRef[data-kind='remote'],
+.gitGraphRef[data-kind='more'] {
+  color: var(--workbench-text-muted);
+  background: color-mix(in oklab, var(--workbench-text-muted) 12%, transparent);
+}
+
+.gitGraphRef[data-kind='tag'] {
+  color: var(--status-amber);
+  background: color-mix(in oklab, var(--status-amber) 13%, transparent);
+}
+
+.gitGraphAuthor,
+.gitGraphDate {
+  @apply shrink-0 truncate text-muted-foreground;
+  font-size: 11px;
+}
+
+.gitGraphAuthor {
+  width: 110px;
+}
+
+.gitGraphDate {
+  width: 84px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.gitGraphLoadMore {
+  @apply block w-full border-0 bg-transparent text-center text-muted-foreground;
+  padding: 7px 10px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.gitGraphLoadMore:hover {
+  color: var(--workbench-text);
+  background: var(--workbench-hover);
 }
 
 .gitCommitDetail {

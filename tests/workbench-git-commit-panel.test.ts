@@ -145,14 +145,26 @@ void describe('Workbench commit panel', () => {
       authorName: 't',
       authorEmail: null,
       authoredAt: 1,
-      refs: ['HEAD -> main'],
+      parents: [],
+      refs: [{ kind: 'branch', name: 'main', current: true }],
     }
     assert.equal(isSameWorkbenchGitLog([commit], [{ ...commit }]), true)
-    assert.equal(isSameWorkbenchGitLog([commit], [{ ...commit, refs: ['main'] }]), false)
+    assert.equal(
+      isSameWorkbenchGitLog([commit], [{ ...commit, refs: [{ kind: 'branch', name: 'main' }] }]),
+      false
+    )
     assert.equal(isSameWorkbenchGitLog([commit], []), false)
 
+    // 日志归 useWorkbenchGitLog 管：「读取中」只在这个项目、这个范围一页都没读到时显示；同一份重读时
+    // 原地更新，内容没变就连状态都不换。
     const panel = readSource('src/renderer/src/components/git/WorkbenchGitToolPanel.tsx')
-    assert.doesNotMatch(panel, /setLogLoading\(true\)/)
-    assert.match(panel, /const logLoading = !currentLog/)
+    const hook = readSource('src/renderer/src/hooks/useWorkbenchGitLog.ts')
+    assert.match(panel, /useWorkbenchGitLog\(\{ workspaceRoot, branch: logBranch, enabled: isRepository, revision \}\)/)
+    assert.doesNotMatch(`${panel}\n${hook}`, /setLogLoading\(true\)|setIsLoading\(true\)/)
+    assert.match(hook, /isLoading: enabled && !current,/)
+    assert.match(
+      hook,
+      /if \(latest && !latest\.error && isSameWorkbenchGitLog\(latest\.commits, result\.commits\)\) return/
+    )
   })
 })

@@ -13,6 +13,7 @@ import { useWorkbenchI18n } from '@renderer/i18n'
 import {
   formatWorkbenchGitCommitDate,
   parseWorkbenchGitCommitDiff,
+  sortWorkbenchGitRefs,
 } from '@renderer/models/git/changesPanel.model'
 import {
   getWorkbenchGitStashSubtitle,
@@ -123,8 +124,10 @@ export function WorkbenchGitDetailsPane({
             <h5 className={styles.gitCommitDetailTitle}>{target.commit.subject}</h5>
             {!!target.commit.refs.length && (
               <div className={styles.gitCommitRefs}>
-                {target.commit.refs.map((ref) => (
-                  <span key={ref}>{ref}</span>
+                {sortWorkbenchGitRefs(target.commit.refs).map((ref) => (
+                  <span key={`${ref.kind}:${ref.name}`} data-kind={ref.kind}>
+                    {ref.current ? `HEAD → ${ref.name}` : ref.name}
+                  </span>
                 ))}
               </div>
             )}

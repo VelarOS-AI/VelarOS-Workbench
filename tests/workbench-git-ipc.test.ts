@@ -152,6 +152,45 @@ void describe('Workbench Git IPC requests', () => {
     assert.deepEqual(cancelRequests, ['op-1', 'gone'])
   })
 
+  void test('a log request carries its scope and the page to read', async () => {
+    const logs: unknown[] = []
+    const { registerWorkbenchGitIpc } = await import('../src/main/workspace/git/WorkbenchGitIpc')
+    registerWorkbenchGitIpc(
+      {
+        getLog: async (workspaceRoot: string, options: unknown) => {
+          logs.push({ workspaceRoot, options })
+          return {}
+        },
+      } as never,
+      {} as never,
+      {} as never
+    )
+
+    assert.equal((await invoke(WorkbenchGitChannels.log, { workspaceRoot: '/p' })).ok, true)
+    assert.equal(
+      (
+        await invoke(WorkbenchGitChannels.log, {
+          workspaceRoot: '/p',
+          branch: 'main',
+          limit: 200,
+          skip: 400,
+        })
+      ).ok,
+      true
+    )
+    assert.deepEqual(logs, [
+      {
+        workspaceRoot: '/p',
+        options: { branch: undefined, limit: undefined, skip: undefined, path: undefined },
+      },
+      {
+        workspaceRoot: '/p',
+        options: { branch: 'main', limit: 200, skip: 400, path: undefined },
+      },
+    ])
+    assert.equal((await invoke(WorkbenchGitChannels.log, { limit: 10 })).ok, false)
+  })
+
   void test('stash requests reach the service with their options, and a stash is named by its object name', async () => {
     const calls: unknown[] = []
     const { registerWorkbenchGitIpc } = await import('../src/main/workspace/git/WorkbenchGitIpc')

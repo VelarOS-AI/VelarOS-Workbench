@@ -143,7 +143,10 @@ export interface SystemWorkspaceGitInitializeRepositoryResult {
 export interface SystemWorkspaceGitLogResult {
   rootPath: string
   checkedAt: number
+  /** 子提交排在父提交前面。 */
   commits: WorkspaceGitLogEntry[]
+  /** 这一页后面还有提交（按 `skip` 接着读）。 */
+  hasMore: boolean
 }
 
 export interface SystemWorkspaceGitFileActionRequest {
