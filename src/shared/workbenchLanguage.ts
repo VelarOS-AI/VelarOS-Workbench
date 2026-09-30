@@ -28,6 +28,8 @@ import type {
   WorkbenchLanguageServiceDocumentSymbolsResult,
   WorkbenchLanguageServiceExtensionRequest,
   WorkbenchLanguageServiceExtensionResult,
+  WorkbenchLanguageServiceFileRenameEditsRequest,
+  WorkbenchLanguageServiceFileRenameEditsResult,
   WorkbenchLanguageServiceFormatResult,
   WorkbenchLanguageServiceHoverQueryResult,
   WorkbenchLanguageServiceInlayHintsRequest,
@@ -64,6 +66,7 @@ export const WorkbenchLanguageChannels = {
   codeActions: 'workbench-app:ls:code-actions',
   codeActionResolve: 'workbench-app:ls:code-action-resolve',
   organizeImports: 'workbench-app:ls:organize-imports',
+  fileRenameEdits: 'workbench-app:ls:file-rename-edits',
   extension: 'workbench-app:ls:extension',
   inlineCompletion: 'workbench-app:ls:inline-completion',
 } as const
@@ -125,6 +128,9 @@ export interface WorkbenchLanguageBridge {
   getOrganizeImports: (
     request: WorkbenchLanguageServiceRequest
   ) => Promise<WorkbenchFsCallResult<WorkbenchLanguageServiceOrganizeImportsResult>>
+  getFileRenameEdits: (
+    request: WorkbenchLanguageServiceFileRenameEditsRequest
+  ) => Promise<WorkbenchFsCallResult<WorkbenchLanguageServiceFileRenameEditsResult>>
   requestExtension: (
     request: WorkbenchLanguageServiceExtensionRequest
   ) => Promise<WorkbenchFsCallResult<WorkbenchLanguageServiceExtensionResult>>

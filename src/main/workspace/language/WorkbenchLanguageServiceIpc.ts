@@ -16,6 +16,8 @@ import type {
   WorkbenchLanguageServiceDiagnostic,
   WorkbenchLanguageServiceEditFormat,
   WorkbenchLanguageServiceExtensionRequest,
+  WorkbenchLanguageServiceFileRename,
+  WorkbenchLanguageServiceFileRenameEditsRequest,
   WorkbenchLanguageServiceInlayHintsRequest,
   WorkbenchLanguageServiceOffsetRange,
   WorkbenchLanguageServiceOpenFile,
@@ -197,6 +199,15 @@ export function registerWorkbenchLanguageServiceIpc(
       if (!parsed) return invalidRequest()
 
       return client.getOrganizeImports(parsed)
+    })
+  )
+
+  ipcMain.handle(WorkbenchLanguageChannels.fileRenameEdits, (_event, request: unknown) =>
+    callWithEnvelope(() => {
+      const parsed = parseFileRenameEditsRequest(request)
+      if (!parsed) return invalidRequest()
+
+      return client.getFileRenameEdits(parsed)
     })
   )
 
@@ -428,6 +439,33 @@ function parseCodeActionResolveRequest(
     return { ...base, range, resolve: { kind: 'refactor', refactor, action } }
   }
   return null
+}
+
+/** 一次文件树操作挪不了比这更多的项；再多就不是界面发来的请求。 */
+const MaxFileRenames = 512
+
+function parseFileRenameEditsRequest(
+  input: unknown
+): Nullable<WorkbenchLanguageServiceFileRenameEditsRequest> {
+  if (!hasStringFields(input, ['projectRoot'])) return null
+  const rawRenames = input['renames']
+  if (!Array.isArray(rawRenames) || rawRenames.length === 0 || rawRenames.length > MaxFileRenames)
+    return null
+
+  const renames: WorkbenchLanguageServiceFileRename[] = []
+  for (const rawRename of rawRenames) {
+    if (!hasStringFields(rawRename, ['previousPath', 'path'])) return null
+    const previousPath = rawRename['previousPath'] as string
+    const path = rawRename['path'] as string
+    if (!previousPath || !path || previousPath === path) return null
+    renames.push({ previousPath, path })
+  }
+
+  return {
+    projectRoot: input['projectRoot'] as string,
+    renames,
+    ...parseOpenFiles(input['openFiles']),
+  }
 }
 
 /** 语言服务给动作的标识：原样交回去的短字符串。 */

@@ -85,6 +85,8 @@ async function dispatch(
       return languageServices.resolveCodeAction(request.request)
     case 'getOrganizeImports':
       return languageServices.getOrganizeImports(request.request)
+    case 'getFileRenameEdits':
+      return languageServices.getFileRenameEdits(request.request)
   }
 }
 

@@ -37,6 +37,8 @@ import type {
   WorkbenchLanguageServiceExtensionRequest,
   WorkbenchLanguageServiceExtensionResult,
   WorkbenchLanguageServiceFileEdit,
+  WorkbenchLanguageServiceFileRenameEditsRequest,
+  WorkbenchLanguageServiceFileRenameEditsResult,
   WorkbenchLanguageServiceFormatResult,
   WorkbenchLanguageServiceHoverResult,
   WorkbenchLanguageServiceInlayHintsRequest,
@@ -108,6 +110,10 @@ import {
   resolveTypeScriptCompletionItem,
 } from './TypeScriptCompletions'
 import {
+  buildTypeScriptFileRenameEdits,
+  mergeTypeScriptFileRenameEdits,
+} from './TypeScriptFileRenameEdits'
+import {
   buildTypeScriptDocumentHighlights,
   buildTypeScriptDocumentSymbols,
   buildTypeScriptFormatEdits,
@@ -123,6 +129,11 @@ import {
   acquireTypeScriptLanguageService,
   clearTypeScriptProjectCache,
   describeTypeScriptProjects,
+  forgetMovedTypeScriptProjectPath,
+  freezeTypeScriptProgramWhile,
+  isPathInside,
+  planTypeScriptFileRenameProjects,
+  readMovedTypeScriptFiles,
   refreshTypeScriptProjectFilesFromDisk,
   resolveTypeScriptProjectKey,
   safeReadFile,
@@ -1448,6 +1459,68 @@ class WorkbenchLanguageServices {
       path: snapshot.requestPath,
       changes: buildTypeScriptOrganizeImportsEdits(this.typeScriptEditContext(snapshot, request)),
     }
+  }
+
+  /**
+   * 文件或目录在文件树里改了名 / 挪了位置（磁盘上已经改完）：引用它们的 import 该怎么改。只有挪的是
+   * JavaScript / TypeScript 文件或含有它们的目录才有改动，别的直接答「没有」，连项目都不建。
+   *
+   * 问的不止被挪文件所在的那个项目（见 planTypeScriptFileRenameProjects）；每个项目都把挪到新位置的文件
+   * 当作在场的文件带上——TypeScript 要在程序里找得到新位置的文件，才肯把指向旧位置的 import 改过去。
+   */
+  public async getFileRenameEdits(
+    request: WorkbenchLanguageServiceFileRenameEditsRequest
+  ): Promise<WorkbenchLanguageServiceFileRenameEditsResult> {
+    const projectRoot = await this.pathResolver.resolveProjectRoot(request.projectRoot)
+    const renames = request.renames.map((rename) => ({
+      previousFileName: this.resolveAbsoluteProjectPath(projectRoot, rename.previousPath),
+      fileName: this.resolveAbsoluteProjectPath(projectRoot, rename.path),
+    }))
+    // 旧位置的文件先退出项目，不然程序里新旧两份并存。
+    for (const rename of renames) forgetMovedTypeScriptProjectPath(projectRoot, rename.previousFileName)
+
+    const movedFileGroups = renames.map((rename) => readMovedTypeScriptFiles(projectRoot, rename.fileName))
+    const overlayFiles = new Map<string, string>()
+    for (const group of movedFileGroups) for (const [path, content] of group) overlayFiles.set(path, content)
+    if (overlayFiles.size === 0) return { projectRoot, changes: [] }
+
+    // 开着的标签按编辑缓冲里此刻的正文算。还挂在旧位置上的（标签没来得及跟着挪）不算数：那里已经没有文件了。
+    for (const openFile of request.openFiles ?? []) {
+      const absolutePath = this.resolveAbsoluteProjectPath(projectRoot, openFile.path)
+      if (!TypeScriptExtensions.has(this.extensionWithDot(absolutePath))) continue
+      if (renames.some((rename) => isPathInside(rename.previousFileName, absolutePath))) continue
+      overlayFiles.set(absolutePath, openFile.content)
+    }
+
+    const merged = new Map<string, WorkbenchLanguageServiceFileEdit>()
+    const requestFileNames = planTypeScriptFileRenameProjects(
+      projectRoot,
+      movedFileGroups.map((group) => [...group.keys()])
+    )
+    for (const requestFileName of requestFileNames) {
+      const { service, files } = acquireTypeScriptLanguageService(
+        projectRoot,
+        requestFileName,
+        [requestFileName],
+        overlayFiles
+      )
+      mergeTypeScriptFileRenameEdits(
+        merged,
+        freezeTypeScriptProgramWhile(service, () =>
+          buildTypeScriptFileRenameEdits(
+            {
+              service,
+              fileName: requestFileName,
+              content: files.get(requestFileName) ?? safeReadFile(requestFileName) ?? '',
+              readFile: (fileName) => files.get(fileName) ?? safeReadFile(fileName),
+              toRelativePath: (fileName) => this.relativePathFor(projectRoot, fileName),
+            },
+            renames
+          )
+        )
+      )
+    }
+    return { projectRoot, changes: [...merged.values()] }
   }
 
   private typeScriptEditContext(

@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { workbenchHost } from '@renderer/host'
 import { useWorkbenchCommentStore } from '@renderer/models/comments/workbenchCommentStore'
+import type { WorkbenchEntryMove } from '@renderer/models/editor/workbenchImportUpdates'
 import {
   createWorkbenchLanguageServiceFiles,
   type WorkbenchLanguageServiceFileCreationResult,
@@ -48,6 +49,8 @@ interface UseWorkbenchMutationControllerOptions {
   pruneTreeCache: (path: string) => void
   resetSearch: () => void
   onTreeChanged: () => void
+  /** 改名 / 移动做成了的项：跟着要做的事（更新引用它们的 import）从这里接，不挡住这次操作。 */
+  onEntriesMoved: (moves: readonly WorkbenchEntryMove[]) => void
 }
 
 interface WorkbenchDeleteUndoBatch {
@@ -69,6 +72,7 @@ export function useWorkbenchMutationController({
   pruneTreeCache,
   resetSearch,
   onTreeChanged,
+  onEntriesMoved,
 }: UseWorkbenchMutationControllerOptions) {
   const commentStore = useWorkbenchCommentStore()
   const { messageLatest, tLatest } = useStableWorkbenchMessageTranslate()
@@ -76,6 +80,7 @@ export function useWorkbenchMutationController({
   const closeOpenEntryPathLatest = useLatest(closeOpenEntryPath)
   const moveOpenEntryPathLatest = useLatest(moveOpenEntryPath)
   const onTreeChangedLatest = useLatest(onTreeChanged)
+  const onEntriesMovedLatest = useLatest(onEntriesMoved)
   const pruneTreeCacheLatest = useLatest(pruneTreeCache)
   const refreshMutationParentLatest = useLatest(refreshMutationParent)
   const resetSearchLatest = useLatest(resetSearch)
@@ -328,6 +333,9 @@ export function useWorkbenchMutationController({
 
       moveOpenEntryPathLatest.current(entry.path, result.entry.path, result.entry.modifiedAt)
       commentStore.renamePath(owningProject.rootPath, entry.path, result.entry.path)
+      onEntriesMovedLatest.current([
+        { previousPath: entry.path, path: result.entry.path, type: result.entry.type },
+      ])
       messageLatest.current.success({
         title: tLatest.current('workbench.renameSucceeded'),
       })
@@ -455,6 +463,13 @@ export function useWorkbenchMutationController({
           )
           commentStore.renamePath(owningProject.rootPath, result.previousPath, result.entry.path)
         }
+        onEntriesMovedLatest.current(
+          succeeded.map(({ result }) => ({
+            previousPath: result.previousPath,
+            path: result.entry.path,
+            type: result.entry.type,
+          }))
+        )
 
         await Promise.all(
           [...parentsToRefresh].map((parentPath) => refreshMutationParentLatest.current(parentPath))
@@ -654,6 +669,9 @@ export function useWorkbenchMutationController({
         if (previousPath) {
           moveOpenEntryPathLatest.current(previousPath, result.entry.path, result.entry.modifiedAt)
           commentStore.renamePath(owningProject.rootPath, previousPath, result.entry.path)
+          onEntriesMovedLatest.current([
+            { previousPath, path: result.entry.path, type: result.entry.type },
+          ])
         }
       }
 

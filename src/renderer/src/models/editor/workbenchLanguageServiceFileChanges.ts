@@ -19,6 +19,8 @@ export type WorkbenchLanguageServiceFileChangeFailureReason =
   | 'read-only'
   | 'unsupported-text'
   | 'changed-on-disk'
+  /** 算改动的工夫里，编辑器里的正文又变了，改动对不上了。 */
+  | 'changed-in-editor'
   | 'error'
 
 export interface WorkbenchLanguageServiceFileChangeFailure {

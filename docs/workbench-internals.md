@@ -409,6 +409,37 @@ Ctrl+Alt+Shift+T，右键、命令面板）只列重构，按「提取、内联�
   在 macOS 上认不出带 ⌥ 的字符键（打出来的是别的字符）。命令面板里的代码动作经 `editorCommandRequest` 交给眼前的
   编辑器，因为光标在哪只有它知道。
 
+### 文件改名之后更新 import
+
+在文件树里给 JavaScript / TypeScript 文件（或含有它们的目录）改名、挪位置，做成之后引用它们的 import 跟着改，
+被挪走的文件自己的相对 import 也改；完了报一次改了几个文件，没有要改的不出声。改名本身不等这件事：
+`useWorkbenchMutationController` 做成之后把「哪些项从哪到哪」交给 `onEntriesMoved`，后面的事都在
+`createWorkbenchImportUpdater`（`models/editor/workbenchImportUpdates.ts`）里慢慢做，语言服务慢了、出错了只是
+出一条「没能更新 import」的提示。
+
+- **renderer**：一轮一轮地做。请求带上所有开着的 JS/TS 标签的正文（改动最后套在编辑缓冲上，行列得照缓冲算；
+  标签还没跟着挪到新路径的按新路径带）。答复回来时哪个引用方的正文已经变了，就按新正文重算，连着三轮都赶不上的
+  那个文件不改、报出来。上一轮还没答复又有新的改名，旧的作废，两批改名合成一份重新问：先 a → b 再 b → c，引用方
+  手里写的还是 a，要问的是 a → c（`composeWorkbenchImportUpdateRenames`）。改动经 `applyLanguageServiceEdits`
+  落下去，与跨文件改名同一套：开着的改编辑缓冲，没开着的写盘。
+- **worker**（`getFileRenameEdits`）：请求到的时候磁盘上已经是新位置。先让旧位置的文件退出项目
+  （`forgetMovedTypeScriptProjectPath`——目录改名的磁盘通知里只有目录自己的路径，它下面的文件没人清），再对每个
+  该问的项目调 TypeScript 的 `getEditsForFileRename`。挪到新位置的文件以覆盖层的身份带进每个项目：TypeScript 要在
+  程序里找得到新位置的文件，才肯把经别名指向旧位置的 import 改过去。
+- **问哪些项目**（`planTypeScriptFileRenameProjects`）：被挪文件现在归的项目；文件清单里有它的别的配置
+  （`tsconfig.json` 只管 `src`、另一份配置连 `tests` 一起管是常见布局，只问前者测试里的 import 就没人改——这类
+  项目池子里有空位才新建，不为它挤掉正在用的）；以及其余已经建着的项目。一个文件的改动只认最先给出的那个项目。
+  没建着、清单里又没有被挪文件的项目（monorepo 里经别名引用它的别的包）问不到，那里的 import 不会改。
+- **别让 TypeScript 反复核对程序**：`getEditsForFileRename` 对程序里每个文件、每条 import 都经它的 source mapper
+  问一次「这个声明文件在不在程序里」，每问一次取一次程序；宿主不给项目版本时，每次取程序都把全部源文件核对一遍。
+  带着依赖有八千多个源文件的项目（本仓库就是）里，一次改名因此要算十几分钟。计算期间给一个不变的项目版本
+  （`freezeTypeScriptProgramWhile`），出来就撤掉——平时照旧让 TypeScript 每次核对，缺过的文件出现了它自己能发现。
+  宿主还挡掉了声明映射（`getDocumentPositionMapper` 返回空）：不然程序里每个依赖包的 `.d.ts.map` 都要读一遍、解码
+  一遍。两样都做了之后，本仓库改一个被几十处引用的文件名约两秒（两个项目各八千多个源文件），挪一个一百七十个
+  文件引用着的目录约四秒。
+- TypeScript 只换引号里的模块路径，别的字不动，所以这里不涉及缩进、分号、引号，请求也不带 `format`。tsconfig 里
+  写死的路径（`files`、`paths`）不改。不是 JS/TS 的文件（JSON、样式、图片）改名不更新引用。
+
 ### 超时、取消与重启
 
 - 一个请求超时只让它自己失败（`TIMEOUT`），并通知 worker 丢掉 / 放弃它；TypeScript 的项目状态与外部 LSP

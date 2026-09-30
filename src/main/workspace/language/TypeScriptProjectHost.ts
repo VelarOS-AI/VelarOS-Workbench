@@ -44,6 +44,13 @@ interface TypeScriptProjectCacheEntry {
 interface PooledTypeScriptProject {
   projectRoot: string
   projectDirectory: string
+  /** 最近一次落到这个项目头上的请求文件：要再取这个项目时拿它当请求文件。 */
+  requestFileName: string
+  /**
+   * 不为空时 TypeScript 把它当项目版本：版本没变就不再核对程序是不是最新的。只在一段同步计算当中设上
+   * （见 freezeTypeScriptProgramWhile）；平时为空，每次调用照旧核对。
+   */
+  frozenVersion: string
   compilerOptions: ts.CompilerOptions
   projectReferences?: readonly ts.ProjectReference[]
   diskFiles: Map<string, string>
@@ -130,6 +137,7 @@ function safeReadFile(path: string): Nullable<string> {
   }
 }
 
+/** `childPath` 就是 `parentPath`，或者在它下面。 */
 function isPathInside(parentPath: string, childPath: string): boolean {
   const childRelativePath = relative(parentPath, childPath)
   return (
@@ -140,12 +148,14 @@ function isPathInside(parentPath: string, childPath: string): boolean {
   )
 }
 
+/** 同一个文件的两种写法（斜杠方向、大小写不敏感的文件系统上的大小写）归成一种，好拿来比较、当键。 */
+function canonicalTypeScriptPath(path: string): string {
+  const absolutePath = resolve(path).replaceAll('\\', '/')
+  return ts.sys.useCaseSensitiveFileNames ? absolutePath : absolutePath.toLowerCase()
+}
+
 function typeScriptPathsEqual(left: string, right: string): boolean {
-  const normalize = (path: string): string => {
-    const absolutePath = resolve(path).replaceAll('\\', '/')
-    return ts.sys.useCaseSensitiveFileNames ? absolutePath : absolutePath.toLowerCase()
-  }
-  return normalize(left) === normalize(right)
+  return canonicalTypeScriptPath(left) === canonicalTypeScriptPath(right)
 }
 
 function findNearestPackageJsonPath(
@@ -704,10 +714,25 @@ export function configureTypeScriptCancellation(isCancelled: () => boolean): voi
   isTypeScriptRequestCancelled = isCancelled
 }
 
-function createLanguageServiceHost(project: PooledTypeScriptProject): ts.LanguageServiceHost {
+/**
+ * TypeScript 的语言服务宿主上有、公开类型里没有的一个口子（tsserver 自己的项目实现了它）：声明文件的位置映射
+ * 由宿主给。TypeScript 换了名字的话这一项只是不再生效，它照旧自己去读映射。
+ */
+interface TypeScriptLanguageServiceHostInternals {
+  getDocumentPositionMapper?: (generatedFileName: string, sourceFileName?: string) => undefined
+}
+
+function createLanguageServiceHost(
+  project: PooledTypeScriptProject
+): ts.LanguageServiceHost & TypeScriptLanguageServiceHostInternals {
   return {
     getCancellationToken: () => typeScriptCancellationToken,
     getCompilationSettings: () => project.compilerOptions,
+    getProjectVersion: () => project.frozenVersion,
+    // 不读依赖包里的声明映射（`.d.ts.map`）。语言服务里只有「文件改名后更新 import」会用它：把指向别的项目
+    // 构建产物的 import 对回源文件。这里没有这种用法，而不挡掉的话每次改名都要把程序里几千个声明文件的映射
+    // 逐个找出来、读进来、解码一遍。
+    getDocumentPositionMapper: () => undefined,
     getScriptFileNames: () => [...project.liveFiles.keys()],
     getScriptVersion: (fileName) => String(project.fileVersions.get(fileName) ?? 0),
     getScriptSnapshot: (fileName) => {
@@ -913,6 +938,168 @@ export function refreshTypeScriptProjectFilesFromDisk(
   if (fileListMayHaveChanged) invalidateTypeScriptProjectConfigs(projectRoot)
 }
 
+/**
+ * 一个文件或目录被改名 / 挪走了：项目里记着的、在旧位置（或它下面）而磁盘上已经没有的文件退出项目，并忘掉记住
+ * 的配置，下一次请求按新清单对齐根文件。目录改名时通知里只有目录自己的路径，
+ * {@link refreshTypeScriptProjectFilesFromDisk} 认不出它下面是哪些文件；没有 tsconfig 的项目又不会靠重新解析
+ * 配置把它们清出去，它们就一直留在程序里当根文件，「整项目检查」接着查这些已经不存在的文件。
+ *
+ * 连自己的目录（tsconfig 所在）都被挪走了的项目整个丢掉：它的键是旧路径，再不会有请求落到它头上。
+ */
+export function forgetMovedTypeScriptProjectPath(
+  projectRoot: string,
+  previousAbsolutePath: string
+): void {
+  const prefix = `${projectRoot}\0`
+  for (const key of [...pooledProjects.keys()]) {
+    if (!key.startsWith(prefix)) continue
+    const projectDirectory = pooledProjects.get(key)?.projectDirectory
+    if (projectDirectory && !existsSync(projectDirectory)) disposePooledProject(key)
+  }
+
+  const moved = new Set<string>()
+  for (const [key, cacheEntry] of projectCache) {
+    if (!key.startsWith(prefix)) continue
+    for (const fileName of cacheEntry.diskFiles.keys())
+      if (isPathInside(previousAbsolutePath, fileName)) moved.add(fileName)
+  }
+  for (const [key, project] of pooledProjects) {
+    if (!key.startsWith(prefix)) continue
+    for (const fileName of project.liveFiles.keys())
+      if (isPathInside(previousAbsolutePath, fileName)) moved.add(fileName)
+  }
+  for (const fileName of moved)
+    if (!existsSync(fileName)) applyDiskFileToProjects(projectRoot, fileName, null, false)
+  invalidateTypeScriptProjectConfigs(projectRoot)
+}
+
+/**
+ * 挪到这个位置的 JS/TS 文件与它们的磁盘正文：路径是文件就是它自己，是目录就是它下面的（node_modules、构建
+ * 产物这类目录不看，自己就在这类目录里的也不看）。一个都没有说明这次移动与 TypeScript 无关。
+ */
+export function readMovedTypeScriptFiles(projectRoot: string, absolutePath: string): Map<string, string> {
+  if (!isPathInside(projectRoot, absolutePath)) return new Map()
+  if (relative(projectRoot, absolutePath).split(sep).some((segment) => SkippedDirectoryNames.has(segment)))
+    return new Map()
+
+  const content = safeReadFile(absolutePath)
+  if (content != null)
+    return TypeScriptExtensions.has(extensionWithDot(absolutePath))
+      ? new Map([[absolutePath, content]])
+      : new Map()
+  return collectTypeScriptFilesFromDisk(absolutePath)
+}
+
+/** 为一个项目找请求文件时最多试这么多个：每试一个都要重新解析一遍配置。 */
+const MaxProjectAnchorProbes = 8
+
+/**
+ * 文件挪了位置以后，该去问哪些项目「引用它们的 import 要怎么改」。每个项目给一个落在它头上的请求文件，
+ * 按该问的先后排：
+ *
+ * 1. 被挪文件现在归的项目（每组第一个文件说了算）；
+ * 2. 文件清单里有被挪文件的别的配置。一个文件常常同时归几个配置管——`tsconfig.json` 只管 `src`，
+ *    `tsconfig.eslint.json` / `tsconfig.test.json` 连测试一起管——只问第一种的话，测试里的 import 没人改。
+ *    这些项目多半还没建；池子里有空位才为此新建，不为它们挤掉正在用的项目；
+ * 3. 其余已经建着的项目（别的包可能经相对路径、别名引用着被挪的文件），从最久没用的排到最近用的：
+ *    挨个取用之后，它们在池子里的先后不变。
+ */
+export function planTypeScriptFileRenameProjects(
+  projectRoot: string,
+  movedFileGroups: ReadonlyArray<readonly string[]>
+): string[] {
+  const prefix = `${projectRoot}\0`
+  const keyOf = (fileName: string): string =>
+    getProjectCacheKey(resolveProjectConfig(projectRoot, fileName))
+  const isCandidateAnchor = (fileName: string): boolean =>
+    TypeScriptExtensions.has(extensionWithDot(fileName))
+    && !/[\\/]node_modules[\\/]/u.test(fileName)
+    && existsSync(fileName)
+  const findAnchor = (key: string, fileNames: Iterable<string>): string | undefined => {
+    let probes = 0
+    for (const fileName of fileNames) {
+      if (!isCandidateAnchor(fileName)) continue
+      if (keyOf(fileName) === key) return fileName
+      probes += 1
+      if (probes >= MaxProjectAnchorProbes) return undefined
+    }
+    return undefined
+  }
+
+  const toBuild = new Map<string, string>()
+  const owners = new Map<string, string>()
+  for (const group of movedFileGroups) {
+    const anchor = group[0]
+    if (!anchor) continue
+    const key = keyOf(anchor)
+    if (owners.has(key)) continue
+    owners.set(key, anchor)
+    if (!pooledProjects.has(key)) toBuild.set(key, anchor)
+  }
+
+  const moved = new Set(movedFileGroups.flat().map(canonicalTypeScriptPath))
+  const candidates = collectProjectTypeScriptConfigCandidates(projectRoot)
+  const listing = candidates.filter(({ parsed }) =>
+    parsed.fileNames.some((fileName) => moved.has(canonicalTypeScriptPath(fileName)))
+  )
+  if (listing.length > 0) {
+    // 只归一个配置管的文件一定落到它头上，先试它们。
+    const listedBy = new Map<string, number>()
+    for (const { parsed } of candidates)
+      for (const fileName of parsed.fileNames) {
+        const canonical = canonicalTypeScriptPath(fileName)
+        listedBy.set(canonical, (listedBy.get(canonical) ?? 0) + 1)
+      }
+    for (const { configPath, parsed } of listing) {
+      if (pooledProjects.size + toBuild.size >= pooledProjectLimit) break
+      const key = `${prefix}${configPath}`
+      if (owners.has(key) || pooledProjects.has(key)) continue
+      const anchor = findAnchor(key, [
+        ...parsed.fileNames.filter((fileName) => listedBy.get(canonicalTypeScriptPath(fileName)) === 1),
+        ...parsed.fileNames,
+      ])
+      if (anchor) toBuild.set(key, anchor)
+    }
+  }
+
+  const built: string[] = []
+  for (const [key, project] of pooledProjects) {
+    if (!key.startsWith(prefix)) continue
+    const anchor = owners.get(key)
+      ?? findAnchor(key, [
+        project.requestFileName,
+        ...(projectCache.get(key)?.config.fileNames ?? []),
+        ...project.diskFiles.keys(),
+      ])
+    if (anchor) built.push(anchor)
+  }
+  return [...toBuild.values(), ...built]
+}
+
+let frozenVersionSerial = 0
+
+/**
+ * 一段同步计算当中项目的文件不会变：告诉 TypeScript 这期间不必每次要程序都重新核对一遍（根文件清单、每个源文件
+ * 的版本、缺过的文件又有了没有）。
+ *
+ * 为 getEditsForFileRename 而设：它对程序里每个文件、每条 import 都要经 source mapper 问一次「这个声明文件在不在
+ * 程序里」，每问一次就取一次程序。带着依赖有八千多个文件的项目里，不这样做一次改名要算十几分钟；这样做是几秒。
+ * 平时不给项目版本：TypeScript 每次调用核对一遍，缺过的文件出现了它自己能发现，这里不改这个行为。
+ */
+export function freezeTypeScriptProgramWhile<T>(service: ts.LanguageService, run: () => T): T {
+  const project = [...pooledProjects.values()].find((candidate) => candidate.service === service)
+  if (!project) return run()
+
+  // 每次用一个新的版本号：进来的第一次取程序照常核对，之后的才跳过。
+  frozenVersionSerial += 1
+  project.frozenVersion = `frozen-${frozenVersionSerial}`
+  try {
+    return run()
+  } finally {
+    project.frozenVersion = ''
+  }
+}
+
 function currentTypeScriptProgram(project: PooledTypeScriptProject): ts.Program | undefined {
   try {
     return project.service.getProgram()
@@ -948,6 +1135,8 @@ export function acquireTypeScriptLanguageService(
     const draft: PooledTypeScriptProject = {
       projectRoot,
       projectDirectory: cacheEntry.config.projectDirectory,
+      requestFileName: requestAbsolutePath,
+      frozenVersion: '',
       compilerOptions: cacheEntry.config.compilerOptions,
       projectReferences: cacheEntry.config.projectReferences,
       diskFiles: cacheEntry.diskFiles,
@@ -963,6 +1152,7 @@ export function acquireTypeScriptLanguageService(
   } else {
     pooledProjects.delete(poolKey)
     pooledProjects.set(poolKey, project)
+    project.requestFileName = requestAbsolutePath
   }
 
   // Reconcile only the dirty (overlay) files against the previous request. Disk files
@@ -1007,6 +1197,7 @@ export function acquireTypeScriptLanguageService(
 
 export {
   extensionWithDot,
+  isPathInside,
   resolveTypeScriptDefaultLibFilePath,
   safeReadFile,
   TypeScriptExtensions,

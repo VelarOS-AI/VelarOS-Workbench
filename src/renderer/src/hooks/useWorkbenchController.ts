@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { WorkbenchLanguageServiceWorkspaceEditRequest } from '@renderer/models/editor/workbenchCodeActions'
 import { getWorkbenchEditorFocusedPath } from '@renderer/models/editor/workbenchEditorGroups'
+import {
+  createWorkbenchImportUpdater,
+  type WorkbenchEntryMove,
+  type WorkbenchImportUpdater,
+} from '@renderer/models/editor/workbenchImportUpdates'
 import { buildWorkbenchLanguageServiceEditReport } from '@renderer/models/editor/workbenchLanguageServiceEditReport'
+import { getWorkbenchLanguageServiceFileRenameEdits } from '@renderer/models/editor/workbenchLanguageServiceIpc'
 import { buildWorkbenchProjectContextIndex } from '@renderer/models/project/workbenchProjectContextIndex'
 import type { WorkbenchProject } from '@renderer/models/project/workbenchProjects'
 import {
@@ -16,7 +22,7 @@ import type { WorkbenchDirectoryEntry } from '@shared/contracts'
 
 import type { EditorNavigationRequest } from '../components/editor/CodeInsightPanel'
 import { useStableWorkbenchMessageTranslate } from '../runtime/useStableWorkbenchMessaging'
-import { useMemoizedFn } from '../support/genericHooks'
+import { useLatest, useMemoizedFn } from '../support/genericHooks'
 
 import { useWorkbenchCommandController } from './useWorkbenchCommandController'
 import {
@@ -115,6 +121,42 @@ export function useWorkbenchController(options: UseWorkbenchControllerOptions = 
     }
   )
 
+  const importUpdateStateLatest = useLatest({
+    projectRoot: toNullable(project.activeProject?.rootPath),
+    openTabs: editor.openTabs,
+  })
+  const importUpdaterRef = useRef<Nullable<WorkbenchImportUpdater>>(null)
+  /**
+   * 文件树里改名 / 移动做成之后，在后面更新引用它们的 import（只有 JS/TS 文件与目录才去问语言服务）。
+   * 改名已经成了：这里不挡它，语言服务慢了、出错了也不回头动它；有文件改了才说一声改了几个。
+   */
+  const updateImportsAfterEntriesMoved = useMemoizedFn((moves: readonly WorkbenchEntryMove[]): void => {
+    const projectRoot = importUpdateStateLatest.current.projectRoot
+    if (!projectRoot) return
+
+    importUpdaterRef.current ??= createWorkbenchImportUpdater({
+      getProjectRoot: () => importUpdateStateLatest.current.projectRoot,
+      getOpenTabs: () => importUpdateStateLatest.current.openTabs,
+      requestEdits: (request) => getWorkbenchLanguageServiceFileRenameEdits(request),
+      applyEdits: (changes) => editor.applyLanguageServiceEdits(changes),
+      report: (outcome) => {
+        if (outcome.kind === 'failed') {
+          messageLatest.current.warning({
+            title: tLatest.current('workbench.languageServiceImportsFailed'),
+            description: outcome.message,
+          })
+          return
+        }
+        const report = buildWorkbenchLanguageServiceEditReport(outcome, {
+          kind: 'import-update',
+          translate: tLatest.current,
+        })
+        if (report) messageLatest.current[report.tone](report)
+      },
+    })
+    void importUpdaterRef.current.entriesMoved(projectRoot, moves)
+  })
+
   const mutation = useWorkbenchMutationController({
     activeProject: project.activeProject,
     selectedEntry: tree.selectedEntry,
@@ -133,6 +175,7 @@ export function useWorkbenchController(options: UseWorkbenchControllerOptions = 
       commandActions.command.markValidationStale()
       void projectIndex.refreshProjectIndex()
     },
+    onEntriesMoved: updateImportsAfterEntriesMoved,
   })
   /**
    * 语言服务的一份动到编辑器之外的改动（快速修复、重构）：先建要新建的文件，建成了让编辑器套上当前文件的那部分，

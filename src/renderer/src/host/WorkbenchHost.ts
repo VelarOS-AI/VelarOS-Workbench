@@ -61,6 +61,8 @@ import type {
   WorkbenchLanguageServiceDocumentSymbolsResult,
   WorkbenchLanguageServiceExtensionRequest,
   WorkbenchLanguageServiceExtensionResult,
+  WorkbenchLanguageServiceFileRenameEditsRequest,
+  WorkbenchLanguageServiceFileRenameEditsResult,
   WorkbenchLanguageServiceFormatResult,
   WorkbenchLanguageServiceHoverQueryResult,
   WorkbenchLanguageServiceInlayHintsRequest,
@@ -245,6 +247,9 @@ export interface WorkbenchProjectKernelPort {
   getWorkbenchLanguageServiceOrganizeImports(
     request: WorkbenchLanguageServiceRequest
   ): Promise<Result<WorkbenchLanguageServiceOrganizeImportsResult>>
+  getWorkbenchLanguageServiceFileRenameEdits(
+    request: WorkbenchLanguageServiceFileRenameEditsRequest
+  ): Promise<Result<WorkbenchLanguageServiceFileRenameEditsResult>>
   requestWorkbenchLanguageServiceExtension(
     request: WorkbenchLanguageServiceExtensionRequest
   ): Promise<Result<WorkbenchLanguageServiceExtensionResult>>

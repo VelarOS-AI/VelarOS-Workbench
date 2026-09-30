@@ -15,6 +15,8 @@ import type {
   WorkbenchLanguageServiceDocumentSymbolsResult,
   WorkbenchLanguageServiceExtensionRequest,
   WorkbenchLanguageServiceExtensionResult,
+  WorkbenchLanguageServiceFileRenameEditsRequest,
+  WorkbenchLanguageServiceFileRenameEditsResult,
   WorkbenchLanguageServiceFormatResult,
   WorkbenchLanguageServiceHoverQueryResult,
   WorkbenchLanguageServiceInlayHintsRequest,
@@ -138,6 +140,10 @@ export interface WorkbenchLanguageServiceWorkerOperationMap {
   getOrganizeImports: {
     request: WorkbenchLanguageServiceRequest
     result: WorkbenchLanguageServiceOrganizeImportsResult
+  }
+  getFileRenameEdits: {
+    request: WorkbenchLanguageServiceFileRenameEditsRequest
+    result: WorkbenchLanguageServiceFileRenameEditsResult
   }
 }
 

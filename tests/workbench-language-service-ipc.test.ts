@@ -109,3 +109,38 @@ void describe('language service IPC: code actions', () => {
     assert.equal(calls['getOrganizeImports']?.length, 1)
   })
 })
+
+void describe('language service IPC: imports after a file rename', () => {
+  void test('takes the renames and the open buffers, and refuses anything malformed', async () => {
+    const calls = await registerWithRecorder()
+    const channel = WorkbenchLanguageChannels.fileRenameEdits
+    const renames = [
+      { previousPath: 'src/a.ts', path: 'src/b.ts' },
+      { previousPath: 'src/util', path: 'src/shared' },
+    ]
+    const openFiles = [{ path: 'src/main.ts', content: "import './a'\n" }]
+
+    assert.equal(await invoke(channel, { projectRoot: '/project', renames, openFiles, extra: 1 }), true)
+    assert.deepEqual(calls['getFileRenameEdits'], [{ projectRoot: '/project', renames, openFiles }])
+    assert.equal(
+      await invoke(channel, { projectRoot: '/project', renames: [{ ...renames[0], kind: 'file' }] }),
+      true
+    )
+    assert.deepEqual(calls['getFileRenameEdits']?.[1], { projectRoot: '/project', renames: [renames[0]] })
+
+    for (const request of [
+      null,
+      { renames },
+      { projectRoot: '/project' },
+      { projectRoot: '/project', renames: [] },
+      { projectRoot: '/project', renames: 'src/a.ts' },
+      { projectRoot: '/project', renames: [{ previousPath: 'src/a.ts' }] },
+      { projectRoot: '/project', renames: [{ previousPath: 'src/a.ts', path: 42 }] },
+      { projectRoot: '/project', renames: [{ previousPath: '', path: 'src/b.ts' }] },
+      { projectRoot: '/project', renames: [{ previousPath: 'src/a.ts', path: 'src/a.ts' }] },
+      { projectRoot: '/project', renames: Array.from({ length: 513 }, () => renames[0]) },
+    ])
+      assert.equal(await invoke(channel, request), false, JSON.stringify(request)?.slice(0, 120))
+    assert.equal(calls['getFileRenameEdits']?.length, 2)
+  })
+})

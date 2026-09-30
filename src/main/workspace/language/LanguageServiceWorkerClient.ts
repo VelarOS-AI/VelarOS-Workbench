@@ -11,6 +11,7 @@ import type {
   WorkbenchLanguageServiceCodeActionsRequest,
   WorkbenchLanguageServiceCompletionResolveRequest,
   WorkbenchLanguageServiceExtensionRequest,
+  WorkbenchLanguageServiceFileRenameEditsRequest,
   WorkbenchLanguageServiceInlayHintsRequest,
   WorkbenchLanguageServicePositionRequest,
   WorkbenchLanguageServiceProjectDiagnosticsRequest,
@@ -337,6 +338,10 @@ export class WorkbenchLanguageServiceWorkerClient {
 
   public getOrganizeImports(request: WorkbenchLanguageServiceRequest) {
     return this.call('getOrganizeImports', request)
+  }
+
+  public getFileRenameEdits(request: WorkbenchLanguageServiceFileRenameEditsRequest) {
+    return this.call('getFileRenameEdits', request)
   }
 
   public async dispose(): Promise<void> {

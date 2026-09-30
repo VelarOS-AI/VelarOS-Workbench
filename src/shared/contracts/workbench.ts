@@ -767,6 +767,28 @@ export interface WorkbenchLanguageServiceOrganizeImportsResult {
   changes: WorkbenchLanguageServiceFileEdit[]
 }
 
+/** 文件树里改了名、挪了位置的一项（文件或目录），项目内相对路径。 */
+export interface WorkbenchLanguageServiceFileRename {
+  previousPath: string
+  path: string
+}
+
+/**
+ * 文件或目录改名、移动之后，引用它们的 import 该怎么改。请求发出时磁盘上已经是新位置；`openFiles` 是开着的
+ * JavaScript / TypeScript 标签与编辑缓冲里的正文，改动按它算（最后也是套在缓冲上）。只有 JavaScript / TypeScript
+ * 文件（与含有它们的目录）会有改动。
+ */
+export interface WorkbenchLanguageServiceFileRenameEditsRequest {
+  projectRoot: string
+  renames: WorkbenchLanguageServiceFileRename[]
+  openFiles?: WorkbenchLanguageServiceOpenFile[]
+}
+
+export interface WorkbenchLanguageServiceFileRenameEditsResult {
+  projectRoot: string
+  changes: WorkbenchLanguageServiceFileEdit[]
+}
+
 export interface WorkbenchSaveFileRequest {
   projectRoot: string
   path: string
