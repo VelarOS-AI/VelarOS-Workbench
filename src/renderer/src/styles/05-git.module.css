@@ -1179,14 +1179,16 @@
   line-height: 1.35;
 }
 
+/* 提交框上面那行「现在不能提交，因为……」：和进行到一半的操作那张提示同一套淡琥珀色，字是正文的颜色。 */
 .gitCommitWarning {
-  @apply m-0 border-t text-muted-foreground;
-  padding: 4px 10px;
-  border-color: color-mix(in oklab, var(--status-amber) 16%, transparent);
-  background: var(--status-amber-soft);
-  color: var(--status-amber);
-  font-size: 10px;
-  line-height: 1.35;
+  @apply m-0 border-t;
+  padding: 5px 10px;
+  border-color: color-mix(in oklab, var(--status-amber) 24%, var(--workbench-border));
+  background: color-mix(in oklab, var(--status-amber) 6%, var(--workbench-surface));
+  color: var(--workbench-text);
+  font-size: 11px;
+  line-height: 1.4;
+  text-wrap: pretty;
 }
 
 .gitCommitFooter {

@@ -2,9 +2,9 @@
 
 .aiChangesDiffFallbackNotice {
   @apply shrink-0 border-b px-3 py-1.5;
-  border-color: var(--workbench-border);
-  background: var(--status-amber-soft);
-  color: var(--status-amber);
+  border-color: color-mix(in oklab, var(--status-amber) 24%, var(--workbench-border));
+  background: color-mix(in oklab, var(--status-amber) 6%, var(--workbench-surface));
+  color: var(--workbench-text);
   font-size: 11px;
 }
 
