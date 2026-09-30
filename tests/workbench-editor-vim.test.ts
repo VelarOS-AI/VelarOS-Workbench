@@ -10,6 +10,10 @@ import { describe, test } from 'bun:test'
 
 import { translateWorkbenchAppMessage } from '../src/renderer/src/i18n/useStandaloneWorkbenchLocalization'
 import {
+  getWorkbenchEditorCommandChords,
+  WORKBENCH_EDITOR_KEYMAP_COMMANDS,
+} from '../src/renderer/src/models/editor/workbenchEditorKeymap'
+import {
   focusWorkbenchEditorVimMode,
   formatWorkbenchEditorVimMode,
   getWorkbenchEditorVimModeSnapshot,
@@ -268,6 +272,52 @@ void describe('vim: who gets a key', () => {
       for (const chord of ['Alt+Q', 'Alt+8', 'Shift+Alt+K'])
         assert.equal(owner(chord, Mac, context), 'vim', `${context} ${chord}`)
     }
+  })
+
+  void test('the editor commands whose keys Vim takes: what is lost in normal mode, and in every mode', () => {
+    /** 这组键在这个模式下是 Vim 的命令（不只是先给 Vim 看一眼）。 */
+    const taken = (chord: string, platform: KeymapTestPlatform, context: WorkbenchVimKeyContext): boolean => {
+      const vimKey = vimPackage.Vim.vimKeyFromEvent(
+        keymapTestEventFor(chord, platform) as unknown as KeyboardEvent
+      )
+      const keys = context === 'insert' ? WorkbenchVimInsertModeKeys : WorkbenchVimNormalModeKeys
+      return !!vimKey && keys.includes(vimKey) && owner(chord, platform, context) === 'vim'
+    }
+    /** 每一组键在这些模式下都被 Vim 占着的命令。 */
+    const lost = (platform: KeymapTestPlatform, contexts: readonly WorkbenchVimKeyContext[]): string[] =>
+      WORKBENCH_EDITOR_KEYMAP_COMMANDS.filter((command) => {
+        const chords = getWorkbenchEditorCommandChords(command, 'vim', platform)
+        return (
+          chords.length > 0
+          && chords.every((chord) => contexts.every((context) => taken(chord, platform, context)))
+        )
+      })
+
+    // Windows / Linux 的普通模式：补全、查找、选中下一处、撤销选区变化按不到（查找用 `/`，重做在 Linux 上还有
+    // Ctrl+Shift+Z，Windows 上用 Vim 的 Ctrl+R）。
+    assert.deepEqual(lost(Windows, ['normal']), [
+      'trigger-completion',
+      'find',
+      'redo',
+      'select-next-occurrence',
+      'undo-selection',
+    ])
+    assert.deepEqual(lost(Linux, ['normal']), [
+      'trigger-completion',
+      'find',
+      'select-next-occurrence',
+      'undo-selection',
+    ])
+    // 插入模式也被占着的只有这两个：它们在 Windows / Linux 的 Vim 方案下没有键可按。
+    for (const platform of NonApple)
+      assert.deepEqual(lost(platform, ['normal', 'visual', 'insert']), [
+        'select-next-occurrence',
+        'undo-selection',
+      ])
+    // macOS：普通模式里按不到的只有补全的 ⌃Space（⌘I 还在）——没有哪个命令丢了全部的键。
+    assert.deepEqual(lost(Mac, ['normal']), [])
+    assert.deepEqual(lost(Mac, ['insert']), ['refactor'])
+    assert.deepEqual(lost(Mac, ['normal', 'visual', 'insert']), [])
   })
 
   void test('a key the user recorded for an app-wide action wins over Vim in every mode', () => {
