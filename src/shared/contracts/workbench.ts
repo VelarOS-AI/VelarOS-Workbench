@@ -1174,6 +1174,11 @@ export interface WorkbenchTerminalStartRequest {
   inheritCwdFrom?: string
   /** 以一次性 shell 进程执行的命令（运行卡用，例如 `bun run dev`）；命令退出即关闭会话。 */
   initialCommand?: string
+  /**
+   * 额外的环境变量（运行配置里写的）：盖在终端环境之上，同名的以这里为准。名字与值的规则见
+   * `workbenchRunEnvironment.ts`；不合规的整份请求按无效处理。
+   */
+  env?: Record<string, string>
   /** 伪终端初始尺寸（字符格）；不给按 80×24，xterm 挂上后会按真实尺寸再调一次。 */
   cols?: number
   rows?: number

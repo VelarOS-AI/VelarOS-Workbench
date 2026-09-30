@@ -76,10 +76,14 @@ interface WorkbenchTerminalSession {
   exitWaiters: Array<() => void>
 }
 
-/** 交给 shell 的环境：告诉它这是个真终端，并保证有 UTF-8 locale。 */
+/**
+ * 交给 shell 的环境：告诉它这是个真终端，并保证有 UTF-8 locale。`overrides` 是运行配置里写的变量，最后盖上去——
+ * 用户明确写的值优先，`TERM`、`LANG` 这些也不例外。
+ */
 export function buildTerminalEnvironment(
   base: NodeJS.ProcessEnv,
-  platform: NodeJS.Platform = process.platform
+  platform: NodeJS.Platform = process.platform,
+  overrides: Readonly<Record<string, string>> = {}
 ): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {
     ...base,
@@ -90,6 +94,17 @@ export function buildTerminalEnvironment(
   }
   // 从 Finder / Dock 启动的 Electron 没有 LANG：zsh 会按 C locale 处理输入，中文成了乱码或问号。
   if (platform !== 'win32' && !env.LANG && !env.LC_ALL && !env.LC_CTYPE) env.LANG = DefaultUtf8Locale
+
+  for (const [name, value] of Object.entries(overrides)) {
+    // Windows 的变量名不分大小写：`Path` 和 `PATH` 是同一个，留着两份进程拿到哪个说不准。
+    if (platform === 'win32') {
+      const upperName = name.toUpperCase()
+      for (const existing of Object.keys(env)) {
+        if (existing !== name && existing.toUpperCase() === upperName) delete env[existing]
+      }
+    }
+    env[name] = value
+  }
   return env
 }
 
@@ -138,14 +153,16 @@ class TerminalSessions {
     const rows = clampTerminalDimension(request.rows, DefaultTerminalRows, MaxTerminalRows)
     const sessionId = `terminal-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
+    const env = buildTerminalEnvironment(process.env, process.platform, request.env)
     let pty: WorkbenchPtyProcess
     try {
       pty = this.ptyFactory.spawn(shellSpec.file, shellSpec.args, {
         cwd: cwdPath.realPath,
-        env: buildTerminalEnvironment(process.env),
+        env,
         cols,
         rows,
-        name: TerminalName,
+        // node-pty 拿这个名字去设进程的 TERM：运行配置里写了 TERM 的照它来，否则写了也到不了进程手里。
+        name: env.TERM || TerminalName,
       })
     } catch (error) {
       throw AppError.from(error, 'PLATFORM')

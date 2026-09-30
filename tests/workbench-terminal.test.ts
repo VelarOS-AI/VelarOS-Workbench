@@ -224,6 +224,48 @@ void describe('terminal sessions on a pseudo-terminal', () => {
     }
   })
 
+  void test('a run configuration reaches the process with its working directory and variables', async () => {
+    const projectRoot = await realpath(await mkdtemp(join(tmpdir(), 'workbench-terminal-env-')))
+    await mkdir(join(projectRoot, 'packages', 'api'), { recursive: true })
+    const { factory, spawned } = createFakeFactory()
+    const terminal = new TerminalSessions(new PathResolver(), new CommandHelper(), factory)
+    try {
+      const run = await terminal.startTerminalSession(
+        {
+          projectRoot,
+          initialCommand: 'bun run dev',
+          cwd: 'packages/api',
+          env: { PORT: '4100', TERM: 'dumb', EMPTY: '' },
+        },
+        () => undefined,
+        1
+      )
+      const pty = spawned[0]!
+      assert.equal(run.cwd, join(projectRoot, 'packages', 'api'))
+      assert.equal(pty.options.cwd, join(projectRoot, 'packages', 'api'))
+      assert.equal(pty.options.env.PORT, '4100')
+      assert.equal(pty.options.env.EMPTY, '')
+      // 用户明确写的值盖过终端自己设的；没写的照旧。
+      assert.equal(pty.options.env.TERM, 'dumb')
+      assert.equal(pty.options.name, 'dumb')
+      assert.equal(pty.options.env.COLORTERM, 'truecolor')
+      assert.equal(pty.options.env.PATH, process.env.PATH)
+
+      // 不带变量的会话不受前一个会话影响。
+      await terminal.startTerminalSession({ projectRoot }, () => undefined, 1)
+      assert.equal(spawned[1]!.options.env.PORT, process.env.PORT)
+      assert.equal(spawned[1]!.options.env.TERM, 'xterm-256color')
+
+      await assert.rejects(
+        terminal.startTerminalSession({ projectRoot, cwd: '../outside', env: { A: '1' } }, () => undefined, 1),
+        /超出工程范围/u
+      )
+    } finally {
+      await terminal.closeAllSessions()
+      await rm(projectRoot, { recursive: true, force: true })
+    }
+  })
+
   void test('stops the whole process tree and can wait until the process has exited', async () => {
     const projectRoot = await realpath(await mkdtemp(join(tmpdir(), 'workbench-terminal-tree-')))
     const signalled: string[] = []
@@ -395,6 +437,20 @@ void describe('terminal sessions on a pseudo-terminal', () => {
     assert.equal(buildTerminalEnvironment({ LC_ALL: 'C.UTF-8' }, 'linux').LANG, undefined)
     assert.equal(buildTerminalEnvironment({}, 'win32').LANG, undefined)
     assert.equal(buildTerminalEnvironment({}, 'darwin').COLORTERM, 'truecolor')
+    // 运行配置的变量最后盖上去；Windows 上变量名不分大小写，不留下两份。
+    assert.equal(buildTerminalEnvironment({ LANG: 'C' }, 'darwin', { LANG: 'zh_CN.UTF-8' }).LANG, 'zh_CN.UTF-8')
+    assert.deepEqual(
+      Object.entries(buildTerminalEnvironment({ Path: 'C:\\old' }, 'win32', { PATH: 'C:\\new' })).filter(
+        ([name]) => name.toUpperCase() === 'PATH'
+      ),
+      [['PATH', 'C:\\new']]
+    )
+    assert.deepEqual(
+      Object.entries(buildTerminalEnvironment({ Path: '/old' }, 'linux', { PATH: '/new' })).filter(
+        ([name]) => name.toUpperCase() === 'PATH'
+      ),
+      [['Path', '/old'], ['PATH', '/new']]
+    )
     assert.equal(clampTerminalDimension(Number.NaN, 80, 1000), 80)
     assert.equal(clampTerminalDimension(12.7, 80, 1000), 12)
     assert.equal(clampTerminalDimension(-3, 80, 1000), 1)

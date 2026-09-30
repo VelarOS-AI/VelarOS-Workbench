@@ -17,6 +17,7 @@ import type {
   WorkbenchTerminalStopRequest,
 } from '@shared/contracts'
 
+import { readWorkbenchRunEnvironment } from '../../../shared/workbenchRunEnvironment'
 import { WorkbenchTerminalChannels } from '../../../shared/workbenchTerminal'
 import {
   callWithEnvelope,
@@ -98,8 +99,11 @@ export function registerWorkbenchTerminalIpc(terminal: TerminalSessions): void {
 
 function parseStartRequest(input: unknown): Nullable<WorkbenchTerminalStartRequest> {
   if (!hasStringFields(input, ['projectRoot'])) return null
+  // 环境变量有一项不合规（名字不对、值不是字符串）就整份拒绝：悄悄丢掉一个变量，程序会带着错的配置跑起来。
+  const env = readWorkbenchRunEnvironment(input['env'])
+  if (!env) return null
 
-  return {
+  const request: WorkbenchTerminalStartRequest = {
     projectRoot: input['projectRoot'] as string,
     ...optionalString(input, 'cwd'),
     ...optionalString(input, 'inheritCwdFrom'),
@@ -107,6 +111,8 @@ function parseStartRequest(input: unknown): Nullable<WorkbenchTerminalStartReque
     ...optionalNumber(input, 'cols'),
     ...optionalNumber(input, 'rows'),
   }
+  if (Object.keys(env).length > 0) request.env = env
+  return request
 }
 
 function parseInputRequest(input: unknown): Nullable<WorkbenchTerminalInputRequest> {

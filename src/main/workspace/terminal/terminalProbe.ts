@@ -3,7 +3,7 @@
  * 经 `scripts/probe/runTerminalProbe.mjs` 在 Electron 运行时里跑（node-pty 在 bun 下收不到数据）。
  */
 import { strict as assert } from 'node:assert'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -82,6 +82,32 @@ try {
   await waitFor(() => commandClosed, '一次性命令必须在 8 秒内退出并收口')
   check(commandOutput.includes('VELAROS_TERMINAL_PROBE_OK'), '命令输出必须回传给 renderer 订阅面')
   check(commandOutput.includes('进程已结束'), '收口事件必须带宿主提示')
+
+  // 运行配置：工作目录和环境变量要真的到进程手里，用户写的值盖过终端自己设的。
+  if (process.platform !== 'win32') {
+    mkdirSync(join(projectRoot, 'packages', 'api'), { recursive: true })
+    let configuredOutput = ''
+    let configuredClosed = false
+    await terminal.startTerminalSession(
+      {
+        projectRoot,
+        cwd: 'packages/api',
+        env: { VELAROS_PROBE_VARIABLE: '变量 with spaces', TERM: 'dumb' },
+        initialCommand: 'printf \'%s|%s|%s\\n\' "$VELAROS_PROBE_VARIABLE" "$TERM" "$PWD"',
+      },
+      (event) => {
+        configuredOutput += event.chunk
+        if (event.closed) configuredClosed = true
+      }
+    )
+    await waitFor(() => configuredClosed, '带工作目录和环境变量的运行卡必须在 8 秒内退出')
+    check(
+      configuredOutput.includes(
+        `变量 with spaces|dumb|${join(await pathResolver.resolveProjectRoot(projectRoot), 'packages', 'api')}`
+      ),
+      '运行配置的环境变量和工作目录必须到进程手里'
+    )
+  }
 
   // 交互 shell：真终端有回显；中文原样进出；尺寸可调；Ctrl+C 只打断不退出。
   let shellOutput = ''
