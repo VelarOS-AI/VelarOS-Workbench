@@ -121,6 +121,9 @@ export default defineConfig(({ mode }) => ({
     root: source('renderer'),
     build: {
       outDir: resolve(repoRoot, 'build/electron/renderer'),
+      // electron-vite 给 renderer 的默认值是不压缩；生产构建要自己打开，否则发出去的是 25 MB 的原样代码
+      // （压缩后约一半），工作区外壳每次打开项目都要多解析近 2 MB。开发构建照旧不压，报错好读。
+      minify: mode === 'production',
       rollupOptions: {
         input: source('renderer/index.html'),
       },

@@ -5,14 +5,15 @@ import { readFile, readdir, stat } from 'node:fs/promises'
 import { extname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+// renderer 的几项是压缩后的体积（生产构建对 renderer 开了 minify，见 electron.vite.config.ts）。
 const limits = Object.freeze({
   mainEntry: 3_750_000,
   mainJavaScript: 6_500_000,
-  rendererStartup: 4_750_000,
-  // 按需加载的块也算在内：其中约 19 MB 是聊天里代码高亮的语法包与 Mermaid 图表（来自 UI 包），启动时都不加载。
-  rendererJavaScript: 26_000_000,
-  rendererStyles: 1_000_000,
-  rendererLargestAsset: 3_750_000,
+  rendererStartup: 2_000_000,
+  // 按需加载的块也算在内：其中约 13 MB 是聊天里代码高亮的语法包与 Mermaid 图表（来自 UI 包），启动时都不加载。
+  rendererJavaScript: 19_000_000,
+  rendererStyles: 850_000,
+  rendererLargestAsset: 2_300_000,
 })
 
 async function listFiles(root) {

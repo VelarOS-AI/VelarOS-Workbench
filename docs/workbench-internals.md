@@ -334,7 +334,8 @@ Node 的 OOM 处理直接 `abort()` 主进程。实测 VelarOS-Platform：每个
 
 ## 生产启动与体积预算
 
-生产 main 入口开启压缩，完整 IDE 工作区在项目打开后按需加载；无项目的起手页不再静态
+生产构建的 main 与 renderer 都开启压缩（electron-vite 给 renderer 的默认值是不压，要在配置里自己打开；
+开发构建不压），完整 IDE 工作区在项目打开后按需加载；无项目的起手页不再静态
 加载编辑器、终端和聊天（聊天的 Provider 装在按需加载的工作区外壳里）。Platform 的
 `@velaros-ai/{model,script,velaros}` 不进 main bundle，运行时从 `node_modules` 以原生 ESM 加载
 （清单 `scripts/release/mainExternalEsmPlatformPackages.json`，打包后逐个核对 asar 里的 import 闭包）。`bun run build` 会在输出完成后执行
@@ -344,11 +345,11 @@ main、renderer 总体积与最大功能块。
 | 指标 | 当前基线 | 上限 |
 | --- | ---: | ---: |
 | main 入口 | 0.52 MB | 3.75 MB |
-| main JavaScript | 1.01 MB | 6.50 MB |
-| renderer 启动依赖 | 2.65 MB | 4.75 MB |
-| renderer JavaScript | 25.23 MB | 26.00 MB |
-| renderer CSS | 0.90 MB | 1.00 MB |
-| renderer 最大功能块 | 3.67 MB | 3.75 MB |
+| main JavaScript | 1.02 MB | 6.50 MB |
+| renderer 启动依赖 | 1.52 MB | 2.00 MB |
+| renderer JavaScript | 17.65 MB | 19.00 MB |
+| renderer CSS | 0.72 MB | 0.85 MB |
+| renderer 最大功能块 | 1.98 MB | 2.30 MB |
 
 单独复核已有生产产物时运行 `bun run check:bundle-budget`。预算留有小幅构建波动空间；
 业务增长需要突破上限时，应先给出加载链数据并调整分包，再更新基线。
@@ -358,7 +359,8 @@ main、renderer 总体积与最大功能块。
 Phosphor 图标带六种字重；消息 Markdown 的代码高亮由 UI 包静态引入约 0.3 MB）。renderer 总量贴近上限，
 增量主要是 UI 0.2.54 的 Markdown 图表（mermaid 各类图）按需分块；它们不进启动包，但计入总量。
 
-2026-09-30：renderer 总量的上限从 25 MB 调到 26 MB——其中约 19 MB 是 UI 包带来的按需分块（代码高亮的
-各语言语法与 mermaid），本仓改不了；启动依赖与最大功能块的上限没有动。快速打开、设置对话框、Git 工具窗、
-提交面板、AI 改动、浏览器面板和项目搜索都从工作区外壳里拆成了按需加载的块（`lazyWithPreload.ts`，空闲
-时预取），外壳因此还有约 0.13 MB 的余量；新的面板照这个办法加，不要直接进外壳。
+2026-09-30：renderer 的生产构建此前一直没有压缩（旧的基线 25 MB、外壳 3.67 MB 都是原样代码）。打开压缩
+后总量 17.65 MB、工作区外壳 1.98 MB、启动依赖 1.52 MB，各项上限按压缩后的体积重新定了。快速打开、设置
+对话框、Git 工具窗、提交面板、AI 改动、浏览器面板和项目搜索都是从工作区外壳里拆出来按需加载的块
+（`lazyWithPreload.ts`，空闲时预取）；新的面板照这个办法加，不要直接进外壳。总量里约 13 MB 是 UI 包带来
+的按需分块（代码高亮的各语言语法与 mermaid），本仓改不了。
