@@ -3,14 +3,12 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   buildWorkbenchKeymapConflicts,
   getWorkbenchKeymapPresetShortcuts,
-  normalizeWorkbenchKeymapSettings,
   readWorkbenchKeymapSettings,
   resetWorkbenchKeymapShortcut,
   resolveWorkbenchKeyboardShortcutMap,
   saveWorkbenchKeymapSettings,
   setWorkbenchKeymapShortcut,
-  WORKBENCH_KEYMAP_CHANGED_EVENT,
-  WORKBENCH_KEYMAP_STORAGE_KEY,
+  subscribeWorkbenchKeymapSettings,
   type WorkbenchKeyboardShortcutAction,
   type WorkbenchKeyboardShortcutMap,
   type WorkbenchKeymapConflict,
@@ -38,27 +36,10 @@ export interface WorkbenchKeymapController {
 function useStoredWorkbenchKeymap<T>(select: (settings: WorkbenchKeymapSettings) => T): T {
   const [value, setValue] = useState<T>(() => select(readWorkbenchKeymapSettings()))
 
-  useEffect(() => {
-    // 本窗口里改的：事件带着新设置，存储写不进去（满了）时这一次运行里照样生效。
-    const handleChanged = (event: Event): void => {
-      const { detail } = event as CustomEvent<unknown>
-      setValue(
-        select(detail ? normalizeWorkbenchKeymapSettings(detail) : readWorkbenchKeymapSettings())
-      )
-    }
-
-    const handleStorageChanged = (event: StorageEvent): void => {
-      if (event.key === WORKBENCH_KEYMAP_STORAGE_KEY) setValue(select(readWorkbenchKeymapSettings()))
-    }
-
-    window.addEventListener(WORKBENCH_KEYMAP_CHANGED_EVENT, handleChanged)
-    window.addEventListener('storage', handleStorageChanged)
-
-    return () => {
-      window.removeEventListener(WORKBENCH_KEYMAP_CHANGED_EVENT, handleChanged)
-      window.removeEventListener('storage', handleStorageChanged)
-    }
-  }, [select])
+  useEffect(
+    () => subscribeWorkbenchKeymapSettings((settings) => setValue(select(settings))),
+    [select]
+  )
 
   return value
 }

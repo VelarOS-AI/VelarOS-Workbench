@@ -666,6 +666,33 @@ export function saveWorkbenchKeymapSettings(
   )
 }
 
+/**
+ * 订阅键位设置的变化：本窗口里改的（事件带着新设置，存储写不进去时这一次运行里照样生效）、别的窗口改的
+ * （存储事件）都报。返回退订的函数。
+ */
+export function subscribeWorkbenchKeymapSettings(
+  listener: (settings: WorkbenchKeymapSettings) => void,
+  target: Window = window,
+  storage?: StorageLike
+): () => void {
+  const handleChanged = (event: Event): void => {
+    const { detail } = event as CustomEvent<unknown>
+    listener(
+      detail ? normalizeWorkbenchKeymapSettings(detail) : readWorkbenchKeymapSettings(storage)
+    )
+  }
+  const handleStorageChanged = (event: StorageEvent): void => {
+    if (event.key === WORKBENCH_KEYMAP_STORAGE_KEY) listener(readWorkbenchKeymapSettings(storage))
+  }
+
+  target.addEventListener(WORKBENCH_KEYMAP_CHANGED_EVENT, handleChanged)
+  target.addEventListener('storage', handleStorageChanged)
+  return () => {
+    target.removeEventListener(WORKBENCH_KEYMAP_CHANGED_EVENT, handleChanged)
+    target.removeEventListener('storage', handleStorageChanged)
+  }
+}
+
 /** 此刻生效的键位（读存储）。 */
 export function readWorkbenchKeyboardShortcutMap(
   storage?: StorageLike

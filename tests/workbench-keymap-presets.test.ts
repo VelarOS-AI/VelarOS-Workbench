@@ -22,11 +22,13 @@ import {
   saveWorkbenchKeymapSettings,
   setWorkbenchKeymapShortcut,
   shortcutFromWorkbenchKeyboardEvent,
+  subscribeWorkbenchKeymapSettings,
   WORKBENCH_KEYBOARD_SHORTCUT_DEFINITIONS,
   WORKBENCH_KEYMAP_CHANGED_EVENT,
   WORKBENCH_KEYMAP_STORAGE_KEY,
   type WorkbenchKeyboardShortcutAction,
   type WorkbenchKeyboardShortcutMap,
+  type WorkbenchKeymapSettings,
 } from '../src/renderer/src/models/layout/workbenchKeyboardShortcuts'
 import {
   normalizeWorkbenchKeymapPreset,
@@ -345,6 +347,36 @@ void describe('keymap presets: stored settings', () => {
     assert.deepEqual(readWorkbenchKeymapSettings(storage), stored)
     assert.equal(readWorkbenchKeyboardShortcutMap(storage)['quick-open'], 'Mod+E')
     assert.equal(readWorkbenchKeyboardShortcutMap(storage)['toggle-problems'], 'Mod+Shift+M')
+  })
+
+  void test('subscribers hear a change made in this window, and one made in another window', () => {
+    const storage = createMemoryStorage()
+    const target = new EventTarget() as unknown as Window
+    const heard: WorkbenchKeymapSettings[] = []
+    const unsubscribe = subscribeWorkbenchKeymapSettings(
+      (settings) => heard.push(settings),
+      target,
+      storage
+    )
+
+    // 本窗口里存的：事件带着新设置。
+    saveWorkbenchKeymapSettings({ preset: 'vim', overrides: {} }, storage, target)
+    assert.deepEqual(heard, [{ preset: 'vim', overrides: {} }])
+
+    // 别的窗口存的：只有存储事件，设置从存储里读（照样逐项校验）。
+    storage.setItem(
+      WORKBENCH_KEYMAP_STORAGE_KEY,
+      JSON.stringify({ preset: 'jetbrains', overrides: { 'quick-open': 'Mod+E', nonsense: 'Mod+X' } })
+    )
+    target.dispatchEvent(Object.assign(new Event('storage'), { key: WORKBENCH_KEYMAP_STORAGE_KEY }))
+    assert.deepEqual(heard.at(-1), { preset: 'jetbrains', overrides: { 'quick-open': 'Mod+E' } })
+    // 存储里别的键变了不理。
+    target.dispatchEvent(Object.assign(new Event('storage'), { key: 'something-else' }))
+    assert.equal(heard.length, 2)
+
+    unsubscribe()
+    saveWorkbenchKeymapSettings({ preset: 'vscode', overrides: {} }, storage, target)
+    assert.equal(heard.length, 2)
   })
 })
 
