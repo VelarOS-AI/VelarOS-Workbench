@@ -9,6 +9,7 @@ import {
   isWorkbenchSearchPathIncluded,
   splitWorkbenchSearchGlobs,
 } from '../src/shared/workbenchSearchGlob'
+import { resolveWorkbenchTextOffset } from '../src/shared/workbenchSearchText'
 import {
   buildWorkbenchTextSearchPreview,
   compileWorkbenchTextSearch,
@@ -16,7 +17,6 @@ import {
   expandWorkbenchTextSearchReplacement,
   previewWorkbenchTextSearchReplacement,
   replaceWorkbenchTextSearchMatches,
-  resolveWorkbenchTextOffset,
   scanWorkbenchTextSearch,
   type WorkbenchTextSearchHit,
   type WorkbenchTextSearchMatcher,

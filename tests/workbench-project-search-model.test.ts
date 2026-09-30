@@ -1,12 +1,12 @@
 import { describe, expect, test } from 'bun:test'
 
+import { readWorkbenchProjectSearchSeed } from '../src/renderer/src/hooks/useWorkbenchProjectSearchPanel'
 import { highlightWorkbenchCodeSnippet } from '../src/renderer/src/models/editor/workbenchCodeSnippetHighlight'
 import {
   buildWorkbenchProjectSearchRows,
   formatWorkbenchProjectSearchCount,
   isOpenableWorkbenchProjectSearchRow,
   mergeWorkbenchProjectSearchFiles,
-  readWorkbenchProjectSearchSeed,
   searchWorkbenchEditorText,
 } from '../src/renderer/src/models/files/workbenchProjectSearchModel'
 import type { WorkbenchContentSearchFileResult, WorkbenchDirectoryEntry } from '../src/shared/contracts'

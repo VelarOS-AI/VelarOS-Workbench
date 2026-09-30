@@ -1,7 +1,7 @@
 import {
-  type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent,
   type ReactElement,
+  Suspense,
   useCallback,
   useEffect,
   useMemo,
@@ -25,23 +25,16 @@ import {
   ScissorsIcon,
   TrashIcon,
 } from '@phosphor-icons/react'
-import { useWorkbenchDensity } from '@renderer/hooks/useWorkbenchPreferences'
-import type { WorkbenchProjectSearchModel } from '@renderer/hooks/useWorkbenchProjectSearchController'
+import type { WorkbenchProjectSearchEngineOptions } from '@renderer/hooks/useWorkbenchProjectSearchEngine'
+import type { WorkbenchProjectSearchPanelModel } from '@renderer/hooks/useWorkbenchProjectSearchPanel'
 import { useWorkbenchI18n } from '@renderer/i18n'
 import { isWorkbenchVelarFilePath } from '@renderer/models/commands/workbenchVelarFileCommand'
-import { getWorkbenchFileSearchKeyboardAction } from '@renderer/models/files/workbenchFileSearchNavigationModel'
-import {
-  buildWorkbenchProjectSearchRows,
-  isOpenableWorkbenchProjectSearchRow,
-  type WorkbenchProjectSearchRow,
-} from '@renderer/models/files/workbenchProjectSearchModel'
 import {
   getWorkbenchFileTreeShortcutAction,
   selectTopLevelTreeEntries,
 } from '@renderer/models/files/workbenchTreeMutation'
 import type { WorkbenchGitDecorationMap } from '@renderer/models/git/workbenchGitModel'
 import type { WorkbenchProject } from '@renderer/models/project/workbenchProjects'
-import { getWorkbenchFileTreeRowHeight } from '@renderer/models/settings/workbenchPreferences'
 import { ROOT_PATH } from '@renderer/models/shared/workbenchUtils'
 
 import { currentPlatform as systemPlatformCompatibility } from '@velaros-ai/core/platform'
@@ -50,13 +43,12 @@ import { Paragraph } from '@velaros-ai/ui/primitives/display/Paragraph'
 import { ScrollArea } from '@velaros-ai/ui/primitives/layout/ScrollArea'
 
 import type { WorkbenchDirectoryEntry, WorkbenchSearchEntriesResult } from '@shared/contracts'
-import { isWorkbenchSearchPathIncluded } from '@shared/workbenchSearchGlob'
 
 import styles from '../../styles/workbenchPageStyles'
 import { useLatest } from '../../support/genericHooks'
+import { lazyWithPreload, preloadWhenIdle } from '../../support/lazyWithPreload'
 import { WorkbenchContextMenu } from '../chrome/WorkbenchContextMenu'
 
-import { FileSearchResults } from './FileSearchResults'
 import {
   createTreeEntry,
   deleteSelectedTreeEntries,
@@ -65,7 +57,11 @@ import {
   isTreeEntryInMultiSelection,
   resolveTreeChatFilePaths,
 } from './FileTree'
-import { ProjectSearchForm, ProjectSearchSummary } from './ProjectSearchForm'
+
+// 搜索面板（搜索、替换与结果列表）不进工作区外壳包：空闲时预先加载，第一次打开搜索时一般已经就绪。
+const LazyProjectSearchView = lazyWithPreload(
+  async () => (await import('./ProjectSearchView')).ProjectSearchView
+)
 
 export interface WorkbenchFilePanelTreeProps {
   project: WorkbenchProject
@@ -80,14 +76,18 @@ export interface WorkbenchFilePanelTreeProps {
   gitDecorations: WorkbenchGitDecorationMap
 }
 
-export interface WorkbenchFilePanelSearchProps {
+export interface WorkbenchFilePanelSearchProps
+  extends Pick<
+    WorkbenchProjectSearchEngineOptions,
+    'openTabs' | 'replaceOpenTabContents' | 'onOpenMatch'
+  > {
   /** 输入框里的查找词：按文件名找（searchResult）与项目内容搜索共用。 */
   searchQuery: string
   searchResult: Nullable<WorkbenchSearchEntriesResult>
   /** 查找词不是空白：结果盖住文件树。 */
   searchActive: boolean
-  /** 项目内容搜索与替换：开关、替换、结果都在它这里。 */
-  projectSearch: WorkbenchProjectSearchModel
+  /** 搜索面板开没开、表单里的条件（跟着页面走，切面板不丢）。 */
+  projectSearch: WorkbenchProjectSearchPanelModel
 }
 
 export interface WorkbenchFilePanelHandlersProps {
@@ -165,7 +165,15 @@ export function FilePanel({
     isMutatingTree,
     gitDecorations,
   },
-  search: { searchQuery, searchResult, searchActive, projectSearch },
+  search: {
+    searchQuery,
+    searchResult,
+    searchActive,
+    projectSearch,
+    openTabs,
+    replaceOpenTabContents,
+    onOpenMatch,
+  },
   handlers: {
     onSelectEntryPath,
     onCreateEntry,
@@ -198,9 +206,8 @@ export function FilePanel({
       chatFilePaths: string[]
     }>
   >(null)
-  const [activeSearchRowKey, setActiveSearchRowKey] = useState<Nullable<string>>(null)
   const [treeClipboard, setTreeClipboard] = useState<Nullable<FileTreeClipboard>>(null)
-  const searchRowHeight = getWorkbenchFileTreeRowHeight(useWorkbenchDensity())
+  useEffect(() => preloadWhenIdle([LazyProjectSearchView]), [])
   const rootTreeEntry = useMemo(
     () =>
       ({
@@ -213,38 +220,6 @@ export function FilePanel({
       }) satisfies WorkbenchDirectoryEntry,
     [project.name]
   )
-  // 按文件名找到的条目也按「包含 / 排除的文件」筛。
-  const searchEntries = useMemo(
-    () =>
-      (searchResult?.entries ?? []).filter((entry) =>
-        isWorkbenchSearchPathIncluded(projectSearch.pathFilter, entry.path)
-      ),
-    [projectSearch.pathFilter, searchResult]
-  )
-  const searchRows = useMemo(
-    () =>
-      buildWorkbenchProjectSearchRows({
-        entries: searchEntries,
-        entriesCollapsed: projectSearch.entriesCollapsed,
-        files: projectSearch.files,
-        collapsedPaths: projectSearch.collapsedPaths,
-      }),
-    [projectSearch.collapsedPaths, projectSearch.entriesCollapsed, projectSearch.files, searchEntries]
-  )
-  const openableSearchRows = useMemo(
-    () => searchRows.filter(isOpenableWorkbenchProjectSearchRow),
-    [searchRows]
-  )
-  // 挑中的行不在了（新的结果、收起了文件）就回到第一行。
-  const activeSearchRow =
-    openableSearchRows.find((row) => row.key === activeSearchRowKey) ?? openableSearchRows[0]
-
-  // 换了一份搜索结果：列表回到顶上，挑中的行回到第一行。
-  useEffect(() => {
-    if (treeScrollRef.current) treeScrollRef.current.scrollTop = 0
-    setActiveSearchRowKey(null)
-  }, [projectSearch.resultsGeneration])
-
   /**
    * 右键或快捷键作用的一组项：右键点在多选里（或用快捷键）是整组，否则是右键的那一项；不含项目根，已经在选中的
    * 目录里面的子项去掉（复制目录本来就带着它们）。
@@ -380,10 +355,6 @@ export function FilePanel({
     })
   }
 
-  function toggleSearch(): void {
-    setActiveSearchRowKey(null)
-    projectSearch.togglePanel()
-  }
 
   // 右键的那一项决定落在哪个目录（根目录与空白处的菜单对应工程根），不看树里当前聚焦或选中的是谁。
   function createEntryFromContext(type: WorkbenchDirectoryEntry['type']): void {
@@ -398,41 +369,44 @@ export function FilePanel({
     })
   }
 
-  /** 结果只渲染视野里的行：键盘挑中的行在视野外时把滚动条挪过去。 */
-  function scrollSearchRowIntoView(key: string): void {
-    const scroll = treeScrollRef.current
-    const index = searchRows.findIndex((row) => row.key === key)
-    if (!scroll || index === -1) return
-
-    const top = index * searchRowHeight
-    if (top < scroll.scrollTop) scroll.scrollTop = top
-    else if (top + searchRowHeight > scroll.scrollTop + scroll.clientHeight)
-      scroll.scrollTop = top + searchRowHeight - scroll.clientHeight
-  }
-
-  function openSearchRow(row: WorkbenchProjectSearchRow): void {
-    if (row.kind === 'entry') onOpenSearchEntry(row.entry)
-    else if (row.kind === 'match') projectSearch.openMatch(row.file, row.match)
-  }
-
-  /** 查找框里的上下键在结果里挑行，回车打开挑中的那一行；用掉了按键返回 true。 */
-  function handleSearchNavigationKey(event: ReactKeyboardEvent<HTMLInputElement>): boolean {
-    const activeIndex = activeSearchRow ? openableSearchRows.indexOf(activeSearchRow) : 0
-    const action = getWorkbenchFileSearchKeyboardAction(event.key, activeIndex, openableSearchRows.length)
-    if (!action) return false
-
-    if (action.kind === 'set-active') {
-      const row = openableSearchRows[action.index]
-      if (row) {
-        setActiveSearchRowKey(row.key)
-        scrollSearchRowIntoView(row.key)
-      }
-      return true
-    }
-
-    if (activeSearchRow) openSearchRow(activeSearchRow)
-    return true
-  }
+  const treeContent = (
+    <>
+      <FileTree
+        entries={rootEntries}
+        selectedPath={selectedEntryPath}
+        revealRevision={revealRevision}
+        expandedPaths={expandedPaths}
+        childrenByPath={childrenByPath}
+        gitDecorations={gitDecorations}
+        isMutatingTree={isMutatingTree}
+        onTreeApiChange={handleTreeApiChange}
+        onSetDirectoryOpen={onSetDirectoryOpen}
+        onSelectEntryPath={onSelectEntryPath}
+        onSelectFile={onSelectFile}
+        onContextMenuEntry={openContextMenu}
+        onRenameEntry={onRenameEntry}
+        onDeleteEntries={onDeleteEntries}
+        onMoveEntries={onMoveEntries}
+      />
+      {!rootEntries.length && !isLoadingTree && (
+        <Paragraph spacing="none" tone="secondary" className={styles.panelEmpty}>
+          {t('workbench.noFiles')}
+        </Paragraph>
+      )}
+    </>
+  )
+  const treeBody = (
+    <div className={styles.filePanelBody}>
+      <ScrollArea
+        ref={treeScrollRef}
+        className={styles.treeScroll}
+        aria-label={t('workbench.files')}
+        onContextMenu={openRootContextMenu}
+      >
+        {treeContent}
+      </ScrollArea>
+    </div>
+  )
 
   return (
     <aside ref={filePanelRef} className={styles.filePanel}>
@@ -449,77 +423,36 @@ export function FilePanel({
           title={t('workbench.searchFiles')}
           label={t('workbench.searchFiles')}
           data-active={projectSearch.isOpen || undefined}
-          onClick={toggleSearch}
+          onClick={projectSearch.togglePanel}
         >
           <MagnifyingGlassIcon size={14} />
         </IconButton>
       </div>
-      {projectSearch.isOpen && (
-        <ProjectSearchForm
-          query={searchQuery}
-          search={projectSearch}
-          onQueryChange={(query) => {
-            setActiveSearchRowKey(null)
-            onSearchQueryChange(query)
-          }}
-          onQueryNavigationKey={handleSearchNavigationKey}
-        />
+      {projectSearch.isOpen ? (
+        // 面板还没加载好（刚开窗口就按了 ⇧⌘F）：先照常显示文件树。
+        <Suspense fallback={treeBody}>
+          <LazyProjectSearchView
+            panel={projectSearch}
+            query={searchQuery}
+            onQueryChange={onSearchQueryChange}
+            searchActive={searchActive}
+            searchResult={searchResult}
+            projectRoot={project.rootPath}
+            openTabs={openTabs}
+            replaceOpenTabContents={replaceOpenTabContents}
+            onOpenMatch={onOpenMatch}
+            gitDecorations={gitDecorations}
+            selectedEntryPath={selectedEntryPath}
+            onOpenEntry={onOpenSearchEntry}
+            tree={treeContent}
+            scrollRef={treeScrollRef}
+            onRootContextMenu={openRootContextMenu}
+            onEntryContextMenu={openContextMenu}
+          />
+        </Suspense>
+      ) : (
+        treeBody
       )}
-      {searchActive && <ProjectSearchSummary search={projectSearch} />}
-      <div className={styles.filePanelBody}>
-        <ScrollArea
-          ref={treeScrollRef}
-          className={styles.treeScroll}
-          aria-label={t('workbench.files')}
-          onContextMenu={openRootContextMenu}
-        >
-          {searchActive ? (
-            <FileSearchResults
-              rows={searchRows}
-              rowHeight={searchRowHeight}
-              scrollRef={treeScrollRef}
-              activeRowKey={activeSearchRow?.key ?? null}
-              gitDecorations={gitDecorations}
-              selectedEntryPath={selectedEntryPath}
-              previewReplacement={projectSearch.replaceOpen ? projectSearch.previewReplacement : null}
-              replaceDisabled={!projectSearch.canReplace}
-              onActivateRow={setActiveSearchRowKey}
-              onToggleEntries={projectSearch.toggleEntriesCollapsed}
-              onToggleFile={projectSearch.toggleFileCollapsed}
-              onOpenEntry={onOpenSearchEntry}
-              onOpenMatch={projectSearch.openMatch}
-              onReplaceFile={projectSearch.replaceFile}
-              onReplaceMatch={projectSearch.replaceMatch}
-              onContextMenuEntry={openContextMenu}
-            />
-          ) : (
-            <>
-              <FileTree
-                entries={rootEntries}
-                selectedPath={selectedEntryPath}
-                revealRevision={revealRevision}
-                expandedPaths={expandedPaths}
-                childrenByPath={childrenByPath}
-                gitDecorations={gitDecorations}
-                isMutatingTree={isMutatingTree}
-                onTreeApiChange={handleTreeApiChange}
-                onSetDirectoryOpen={onSetDirectoryOpen}
-                onSelectEntryPath={onSelectEntryPath}
-                onSelectFile={onSelectFile}
-                onContextMenuEntry={openContextMenu}
-                onRenameEntry={onRenameEntry}
-                onDeleteEntries={onDeleteEntries}
-                onMoveEntries={onMoveEntries}
-              />
-              {!rootEntries.length && !isLoadingTree && (
-                <Paragraph spacing="none" tone="secondary" className={styles.panelEmpty}>
-                  {t('workbench.noFiles')}
-                </Paragraph>
-              )}
-            </>
-          )}
-        </ScrollArea>
-      </div>
       {!!contextMenu && (
         <WorkbenchContextMenu
           x={contextMenu.x}
@@ -598,10 +531,7 @@ export function FilePanel({
               label: t('workbench.searchFiles'),
               icon: <MagnifyingGlassIcon size={14} />,
               separatorBefore: true,
-              onSelect: () => {
-                setActiveSearchRowKey(null)
-                projectSearch.openPanel()
-              },
+              onSelect: () => projectSearch.openPanel(),
             },
             {
               id: 'refresh-project',

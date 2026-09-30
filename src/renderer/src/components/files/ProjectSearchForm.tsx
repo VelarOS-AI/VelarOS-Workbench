@@ -10,10 +10,12 @@ import {
   ArrowsInLineVerticalIcon,
   ArrowsOutLineVerticalIcon,
   CaretRightIcon,
-  DotsThreeIcon,
 } from '@phosphor-icons/react'
-import type { WorkbenchProjectSearchModel } from '@renderer/hooks/useWorkbenchProjectSearchController'
-import { WorkbenchProjectSearchLimit } from '@renderer/hooks/useWorkbenchProjectSearchController'
+import {
+  type WorkbenchProjectSearchEngine,
+  WorkbenchProjectSearchLimit,
+} from '@renderer/hooks/useWorkbenchProjectSearchEngine'
+import type { WorkbenchProjectSearchPanelModel } from '@renderer/hooks/useWorkbenchProjectSearchPanel'
 import { useWorkbenchI18n } from '@renderer/i18n'
 import { formatWorkbenchProjectSearchCount } from '@renderer/models/files/workbenchProjectSearchModel'
 
@@ -41,9 +43,12 @@ const OptionShortcutCodes: Readonly<Record<string, keyof WorkbenchTextSearchOpti
 
 interface ProjectSearchFormProps {
   query: string
-  search: WorkbenchProjectSearchModel
+  /** 表单里的条件与开关（跟着页面走）。 */
+  panel: WorkbenchProjectSearchPanelModel
+  /** 搜索与替换本身：正则写错的说明、能不能全部替换。 */
+  engine: WorkbenchProjectSearchEngine
   onQueryChange: (query: string) => void
-  /** 查找框里的上下、回车：交给结果列表挑行、打开（见 FilePanel）；用掉了返回 true。 */
+  /** 查找框里的上下、回车：交给结果列表挑行、打开（见 ProjectSearchView）；用掉了返回 true。 */
   onQueryNavigationKey: (event: ReactKeyboardEvent<HTMLInputElement>) => boolean
 }
 
@@ -53,16 +58,17 @@ interface ProjectSearchFormProps {
  */
 export function ProjectSearchForm({
   query,
-  search,
+  panel,
+  engine,
   onQueryChange,
   onQueryNavigationKey,
 }: ProjectSearchFormProps): ReactElement {
   const { t } = useWorkbenchI18n()
   const queryInputRef = useRef<HTMLInputElement>(null)
   const replaceInputRef = useRef<HTMLInputElement>(null)
-  const hasFilters = !!search.include.trim() || !!search.exclude.trim()
-  const canReplaceAll = search.files.length > 0 && search.canReplace
-  const { focusPending, acknowledgeFocus } = search
+  const hasFilters = !!panel.include.trim() || !!panel.exclude.trim()
+  const canReplaceAll = engine.files.length > 0 && engine.canReplace
+  const { focusPending, acknowledgeFocus } = panel
 
   useEffect(() => {
     if (!focusPending) return
@@ -72,11 +78,11 @@ export function ProjectSearchForm({
   }, [acknowledgeFocus, focusPending])
 
   // 刚展开替换行就把焦点给它。
-  const replaceOpenedRef = useRef(search.replaceOpen)
+  const replaceOpenedRef = useRef(panel.replaceOpen)
   useEffect(() => {
-    if (search.replaceOpen && !replaceOpenedRef.current) replaceInputRef.current?.focus()
-    replaceOpenedRef.current = search.replaceOpen
-  }, [search.replaceOpen])
+    if (panel.replaceOpen && !replaceOpenedRef.current) replaceInputRef.current?.focus()
+    replaceOpenedRef.current = panel.replaceOpen
+  }, [panel.replaceOpen])
 
   /** 几个输入框共用的按键：开关项的快捷键；Esc 在别的框里回到查找框。用掉了返回 true。 */
   function handleSharedKeys(event: ReactKeyboardEvent<HTMLInputElement>, inQuery: boolean): boolean {
@@ -84,9 +90,9 @@ export function ProjectSearchForm({
       ? event.altKey && event.metaKey
       : event.altKey && !event.ctrlKey
     if (optionShortcut && OptionShortcutCodes[event.code]) {
-      search.toggleOption(OptionShortcutCodes[event.code]!)
+      panel.toggleOption(OptionShortcutCodes[event.code]!)
     } else if (event.key === 'Escape') {
-      if (inQuery) search.closePanel()
+      if (inQuery) panel.closePanel()
       else queryInputRef.current?.focus()
     } else {
       return false
@@ -96,14 +102,18 @@ export function ProjectSearchForm({
   }
 
   return (
-    <div className={styles.projectSearchForm} data-replace-open={search.replaceOpen || undefined}>
+    <div
+      className={styles.projectSearchForm}
+      data-project-search-form
+      data-replace-open={panel.replaceOpen || undefined}
+    >
       <IconButton
         variant="ghost"
         size="icon-sm"
         label={t('workbench.findToggleReplace')}
-        aria-expanded={search.replaceOpen}
+        aria-expanded={panel.replaceOpen}
         className={styles.projectSearchReplaceToggle}
-        onClick={search.toggleReplace}
+        onClick={panel.toggleReplace}
       >
         <CaretRightIcon size={12} />
       </IconButton>
@@ -115,7 +125,7 @@ export function ProjectSearchForm({
               size="sm"
               value={query}
               placeholder={t('workbench.projectSearchPlaceholder')}
-              aria-invalid={!!search.regexError || undefined}
+              aria-invalid={!!engine.regexError || undefined}
               onChange={(event) => onQueryChange(event.target.value)}
               onKeyDown={(event) => {
                 if (handleSharedKeys(event, true)) return
@@ -125,15 +135,15 @@ export function ProjectSearchForm({
           </div>
           <OptionToggle
             label={t('workbench.findMatchCase')}
-            active={search.options.matchCase}
-            onToggle={() => search.toggleOption('matchCase')}
+            active={panel.options.matchCase}
+            onToggle={() => panel.toggleOption('matchCase')}
           >
             <span className={styles.editorFindOptionGlyph}>Aa</span>
           </OptionToggle>
           <OptionToggle
             label={t('workbench.findWholeWord')}
-            active={search.options.wholeWord}
-            onToggle={() => search.toggleOption('wholeWord')}
+            active={panel.options.wholeWord}
+            onToggle={() => panel.toggleOption('wholeWord')}
           >
             <span className={styles.editorFindOptionGlyph} data-underline>
               ab
@@ -141,65 +151,65 @@ export function ProjectSearchForm({
           </OptionToggle>
           <OptionToggle
             label={t('workbench.findRegex')}
-            active={search.options.regex}
-            onToggle={() => search.toggleOption('regex')}
+            active={panel.options.regex}
+            onToggle={() => panel.toggleOption('regex')}
           >
             <span className={styles.editorFindOptionGlyph}>.*</span>
           </OptionToggle>
           <OptionToggle
             label={t('workbench.projectSearchToggleDetails')}
-            active={search.detailsOpen || hasFilters}
-            expanded={search.detailsOpen}
-            onToggle={search.toggleDetails}
+            active={panel.detailsOpen || hasFilters}
+            expanded={panel.detailsOpen}
+            onToggle={panel.toggleDetails}
           >
-            <DotsThreeIcon size={14} weight="bold" />
+            <span className={styles.editorFindOptionGlyph}>⋯</span>
           </OptionToggle>
         </div>
-        {!!search.regexError && (
+        {!!engine.regexError && (
           <Text tone="caption" className={styles.projectSearchError}>
-            {t('workbench.findInvalidRegex')}: {search.regexError}
+            {t('workbench.findInvalidRegex')}: {engine.regexError}
           </Text>
         )}
-        {search.replaceOpen && (
+        {panel.replaceOpen && (
           <div className={styles.projectSearchInputRow}>
             <Input
               ref={replaceInputRef}
               size="sm"
-              value={search.replacement}
+              value={panel.replacement}
               placeholder={t('workbench.findReplacePlaceholder')}
               className={styles.projectSearchInput}
-              onChange={(event) => search.setReplacement(event.target.value)}
+              onChange={(event) => panel.setReplacement(event.target.value)}
               onKeyDown={(event) => {
                 if (handleSharedKeys(event, false)) return
                 if (event.key !== 'Enter' || !(isApplePlatform ? event.metaKey : event.ctrlKey)) return
                 // ⌘Enter / Ctrl+Enter 全部替换（先确认）；焦点在输入框里，全局的「运行上次命令」不跟着跑。
                 event.preventDefault()
-                if (canReplaceAll) search.replaceAll()
+                if (canReplaceAll) engine.replaceAll()
               }}
             />
-            <Button size="sm" variant="ghost" disabled={!canReplaceAll} onClick={search.replaceAll}>
+            <Button size="sm" variant="ghost" disabled={!canReplaceAll} onClick={engine.replaceAll}>
               {t('workbench.findReplaceAll')}
             </Button>
           </div>
         )}
-        {search.detailsOpen && (
+        {panel.detailsOpen && (
           <>
             <Input
               size="sm"
-              value={search.include}
+              value={panel.include}
               placeholder={t('workbench.projectSearchInclude')}
               aria-label={t('workbench.projectSearchInclude')}
               className={styles.projectSearchInput}
-              onChange={(event) => search.setInclude(event.target.value)}
+              onChange={(event) => panel.setInclude(event.target.value)}
               onKeyDown={(event) => void handleSharedKeys(event, false)}
             />
             <Input
               size="sm"
-              value={search.exclude}
+              value={panel.exclude}
               placeholder={t('workbench.projectSearchExclude')}
               aria-label={t('workbench.projectSearchExclude')}
               className={styles.projectSearchInput}
-              onChange={(event) => search.setExclude(event.target.value)}
+              onChange={(event) => panel.setExclude(event.target.value)}
               onKeyDown={(event) => void handleSharedKeys(event, false)}
             />
           </>
@@ -210,12 +220,12 @@ export function ProjectSearchForm({
 }
 
 /** 结果上方的一行：共几处、在几个文件里（或「正在搜索」）、截断与跳过的说明，以及重搜、全部收起 / 展开。 */
-export function ProjectSearchSummary({ search }: { search: WorkbenchProjectSearchModel }): ReactElement {
+export function ProjectSearchSummary({ engine }: { engine: WorkbenchProjectSearchEngine }): ReactElement {
   const { t } = useWorkbenchI18n()
-  const { summary } = search
+  const { summary } = engine
   const allCollapsed =
-    search.files.length > 0 && search.files.every((file) => search.collapsedPaths.has(file.path))
-  const status = search.isSearching
+    engine.files.length > 0 && engine.files.every((file) => engine.collapsedPaths.has(file.path))
+  const status = engine.isSearching
     ? t('workbench.searching')
     : summary.matchCount > 0
       ? t('workbench.projectSearchSummary', {
@@ -234,7 +244,7 @@ export function ProjectSearchSummary({ search }: { search: WorkbenchProjectSearc
           variant="ghost"
           size="icon-sm"
           label={t('workbench.projectSearchRefresh')}
-          onClick={search.refresh}
+          onClick={engine.refresh}
         >
           <ArrowsClockwiseIcon size={13} />
         </IconButton>
@@ -242,21 +252,21 @@ export function ProjectSearchSummary({ search }: { search: WorkbenchProjectSearc
           variant="ghost"
           size="icon-sm"
           label={allCollapsed ? t('workbench.projectSearchExpandAll') : t('workbench.projectSearchCollapseAll')}
-          disabled={search.files.length === 0}
-          onClick={() => search.setAllFilesCollapsed(!allCollapsed)}
+          disabled={engine.files.length === 0}
+          onClick={() => engine.setAllFilesCollapsed(!allCollapsed)}
         >
           {allCollapsed ? <ArrowsOutLineVerticalIcon size={13} /> : <ArrowsInLineVerticalIcon size={13} />}
         </IconButton>
       </div>
-      {search.truncated && (
+      {engine.truncated && (
         <Text tone="caption" className={styles.projectSearchNotice} data-tone="warning">
           {t('workbench.projectSearchTruncated', { limit: WorkbenchProjectSearchLimit })}
         </Text>
       )}
-      {search.skippedLargeFileCount > 0 && (
+      {engine.skippedLargeFileCount > 0 && (
         <Text tone="caption" className={styles.projectSearchNotice}>
           {t('workbench.projectSearchSkippedLarge', {
-            files: formatWorkbenchProjectSearchCount(t, 'file', search.skippedLargeFileCount),
+            files: formatWorkbenchProjectSearchCount(t, 'file', engine.skippedLargeFileCount),
           })}
         </Text>
       )}

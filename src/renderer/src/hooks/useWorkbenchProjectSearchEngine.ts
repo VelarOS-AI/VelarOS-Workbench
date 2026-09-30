@@ -1,10 +1,9 @@
 /**
- * 项目搜索面板（侧栏的搜索，⇧⌘F）：查找词之外的开关、包含 / 排除的文件、替换，以及结果。
+ * 项目搜索与替换本身（随搜索面板 `ProjectSearchView` 按需加载）：按面板表单里的条件搜，收结果，替换。
  *
- * - 查找词与按文件名找共用一个输入框（useWorkbenchSearchController 管着）；这里在它上面搜内容。
- * - 输入停一小会儿再搜；新的搜索开始时取消还没搜完的旧搜索；结果边搜边显示。
+ * - 输入停一小会儿再搜；新的搜索开始时取消还没搜完的旧搜索；结果边搜边显示。面板卸下时取消。
  * - 每份结果记着搜它的条件（查找词、开关、范围）：编辑器里开着的文件按它在正文上算（正文一改结果跟着变），
- *   替换也按它——换的就是列出来的那些。改了条件、新结果还没出来之前，替换先不让点。
+ *   替换也按它——换的就是列出来的那些。条件改了、新结果还没出来之前，替换先不让点。
  * - 开着的文件以编辑器里的正文为准（见 workbenchProjectSearchModel）；开着的文件关掉了，就按磁盘重新搜它。
  * - 替换一处、一个文件或全部（全部先确认）：开着的文件在编辑器里换，能撤销、不写盘；其余的交给 main 写盘，
  *   写完刷新那几个文件的结果（全部替换后整个重搜）。
@@ -18,7 +17,6 @@ import {
   summarizeWorkbenchProjectSearch,
   type WorkbenchProjectSearchFile,
 } from '@renderer/models/files/workbenchProjectSearchModel'
-import type { WorkbenchProject } from '@renderer/models/project/workbenchProjects'
 import type { WorkbenchOpenEditorTab } from '@renderer/types/workbenchTypes'
 
 import { AppError } from '@velaros-ai/core/error'
@@ -30,11 +28,8 @@ import type {
   WorkbenchSearchContentBatch,
   WorkbenchSearchContentRequest,
 } from '@shared/contracts'
-import { compileWorkbenchSearchPathFilter } from '@shared/workbenchSearchGlob'
 import {
   compileWorkbenchTextSearch,
-  DefaultWorkbenchTextSearchOptions,
-  escapeWorkbenchTextSearchRegExp,
   previewWorkbenchTextSearchReplacement,
   replaceWorkbenchTextSearchMatches,
   WorkbenchContentSearchDefaultLimit,
@@ -45,6 +40,8 @@ import {
 
 import { useStableWorkbenchMessageTranslate } from '../runtime/useStableWorkbenchMessaging'
 import { useLatest, useMemoizedFn } from '../support/genericHooks'
+
+import type { WorkbenchProjectSearchPanelModel } from './useWorkbenchProjectSearchPanel'
 
 /** 输入停这么久再搜。 */
 const SearchDebounceMs = 200
@@ -57,14 +54,13 @@ export interface WorkbenchProjectSearchReplaceTarget {
   matches?: readonly WorkbenchContentSearchMatchResult[]
 }
 
-interface UseWorkbenchProjectSearchControllerOptions {
-  activeProject: Nullable<WorkbenchProject>
-  openTabs: readonly WorkbenchOpenEditorTab[]
+export interface WorkbenchProjectSearchEngineOptions {
+  /** 面板表单里的条件与替换文字。 */
+  panel: Pick<WorkbenchProjectSearchPanelModel, 'options' | 'include' | 'exclude' | 'replacement'>
   /** 输入框里的查找词（原样，不去空白）。 */
   query: string
-  onQueryChange: (query: string) => void
-  /** 收起搜索：清掉查找词，文件树回来。 */
-  onResetQuery: () => void
+  projectRoot: string
+  openTabs: readonly WorkbenchOpenEditorTab[]
   /** 在开着的标签上替换（见 useWorkbenchEditorController.replaceOpenTabContents）。 */
   replaceOpenTabContents: (
     changes: ReadonlyArray<{ path: string; replace: (content: string) => string }>
@@ -134,18 +130,9 @@ function specRequest(spec: ProjectSearchSpec): WorkbenchSearchContentRequest {
   }
 }
 
-export function useWorkbenchProjectSearchController(options: UseWorkbenchProjectSearchControllerOptions) {
+export function useWorkbenchProjectSearchEngine(options: WorkbenchProjectSearchEngineOptions) {
   const { messageLatest, tLatest } = useStableWorkbenchMessageTranslate()
-  const [isOpen, setIsOpen] = useState(false)
-  const [focusPending, setFocusPending] = useState(false)
-  const [searchOptions, setSearchOptions] = useState<WorkbenchTextSearchOptions>(
-    DefaultWorkbenchTextSearchOptions
-  )
-  const [replaceOpen, setReplaceOpen] = useState(false)
-  const [replacement, setReplacement] = useState('')
-  const [detailsOpen, setDetailsOpen] = useState(false)
-  const [include, setInclude] = useState('')
-  const [exclude, setExclude] = useState('')
+  const { panel, query, projectRoot } = options
   const [results, setResults] = useState<ProjectSearchResultsState>(() => emptyResults(0))
   const [collapsedPaths, setCollapsedPaths] = useState<ReadonlySet<string>>(() => new Set())
   const [entriesCollapsed, setEntriesCollapsed] = useState(false)
@@ -157,25 +144,23 @@ export function useWorkbenchProjectSearchController(options: UseWorkbenchProject
   const editorResultCacheRef = useRef(new Map<string, EditorResultCacheEntry>())
 
   const compiled = useMemo(
-    () => compileWorkbenchTextSearch({ query: options.query, ...searchOptions }),
-    [options.query, searchOptions]
+    () => compileWorkbenchTextSearch({ query, ...panel.options }),
+    [panel.options, query]
   )
   const regexError = compiled.status === 'invalid' ? compiled.message : null
-  const pathFilter = useMemo(() => compileWorkbenchSearchPathFilter(include, exclude), [exclude, include])
-  const projectRoot = options.activeProject?.rootPath ?? null
-  /** 输入框里的条件；查找词是空白、正则写错或没有项目时为 null（不搜）。 */
+  /** 输入框里的条件；查找词是空白、正则写错时为 null（不搜）。 */
   const spec = useMemo((): Nullable<ProjectSearchSpec> => {
-    if (compiled.status !== 'ready' || !options.query.trim() || !projectRoot) return null
+    if (compiled.status !== 'ready' || !query.trim()) return null
     return {
-      key: JSON.stringify([projectRoot, options.query, searchOptions, include, exclude]),
+      key: JSON.stringify([projectRoot, query, panel.options, panel.include, panel.exclude]),
       projectRoot,
-      query: options.query,
-      options: searchOptions,
-      include,
-      exclude,
+      query,
+      options: panel.options,
+      include: panel.include,
+      exclude: panel.exclude,
       matcher: compiled.matcher,
     }
-  }, [compiled, exclude, include, options.query, projectRoot, searchOptions])
+  }, [compiled, panel.exclude, panel.include, panel.options, projectRoot, query])
   const specKey = spec?.key ?? null
   /** 列着的结果就是按输入框里的条件搜的，而且已经搜完：这时才能替换。 */
   const resultsCurrent = !!spec && results.spec?.key === spec.key && results.status === 'done'
@@ -368,7 +353,7 @@ export function useWorkbenchProjectSearchController(options: UseWorkbenchProject
 
       isReplacingRef.current = true
       setIsReplacing(true)
-      const text = replacement
+      const text = panel.replacement
       const { matcher } = resultsSpec
       const replacedCounts = new Map<string, number>()
       const failures: string[] = []
@@ -488,7 +473,7 @@ export function useWorkbenchProjectSearchController(options: UseWorkbenchProject
       t('workbench.projectSearchReplaceAllConfirm', {
         matches: formatWorkbenchProjectSearchCount(t, 'match', summary.matchCount),
         files: formatWorkbenchProjectSearchCount(t, 'file', summary.fileCount),
-        replacement,
+        replacement: panel.replacement,
       }),
     ]
     if (files.some((file) => file.source === 'editor'))
@@ -502,41 +487,18 @@ export function useWorkbenchProjectSearchController(options: UseWorkbenchProject
     )
   })
 
-  /** 打开搜索（⇧⌘F、放大镜、右键菜单）：给了 seed 就拿它当查找词（正则模式下按字面转义）。 */
-  const openPanel = useMemoizedFn((seed?: string): void => {
-    if (seed) options.onQueryChange(searchOptions.regex ? escapeWorkbenchTextSearchRegExp(seed) : seed)
-    setIsOpen(true)
-    setFocusPending(true)
-  })
-
-  const closePanel = useMemoizedFn((): void => {
-    setIsOpen(false)
-    setFocusPending(false)
-    options.onResetQuery()
-  })
-
-  const toggleOption = useMemoizedFn((option: keyof WorkbenchTextSearchOptions): void => {
-    setSearchOptions((current) => ({ ...current, [option]: !current[option] }))
-  })
-
-  const toggleFileCollapsed = useMemoizedFn((path: string): void => {
-    setCollapsedPaths((current) => {
-      const next = new Set(current)
-      if (!next.delete(path)) next.add(path)
-      return next
-    })
-  })
-
-  const setAllFilesCollapsed = useMemoizedFn((collapsed: boolean): void => {
-    setCollapsedPaths(collapsed ? new Set(files.map((file) => file.path)) : new Set())
-  })
-
   // 交给界面的动作都是稳定的引用：结果行、表单按引用比较，不因为别的状态变了就整片重画。
   const actions = {
-    acknowledgeFocus: useMemoizedFn((): void => setFocusPending(false)),
-    togglePanel: useMemoizedFn((): void => (isOpen ? closePanel() : openPanel())),
-    toggleReplace: useMemoizedFn((): void => setReplaceOpen((open) => !open)),
-    toggleDetails: useMemoizedFn((): void => setDetailsOpen((open) => !open)),
+    toggleFileCollapsed: useMemoizedFn((path: string): void => {
+      setCollapsedPaths((current) => {
+        const next = new Set(current)
+        if (!next.delete(path)) next.add(path)
+        return next
+      })
+    }),
+    setAllFilesCollapsed: useMemoizedFn((collapsed: boolean): void => {
+      setCollapsedPaths(collapsed ? new Set(files.map((file) => file.path)) : new Set())
+    }),
     toggleEntriesCollapsed: useMemoizedFn((): void => setEntriesCollapsed((collapsed) => !collapsed)),
     refresh: useMemoizedFn((): void => void runSearch()),
     openMatch: useMemoizedFn(
@@ -546,8 +508,8 @@ export function useWorkbenchProjectSearchController(options: UseWorkbenchProject
     /** 结果行里预览的替换文字（正则按匹配本身算捕获组）。 */
     previewReplacement: useMemoizedFn((matchedText: string): string =>
       resultsMatcher
-        ? previewWorkbenchTextSearchReplacement(resultsMatcher, replacement, matchedText)
-        : replacement
+        ? previewWorkbenchTextSearchReplacement(resultsMatcher, panel.replacement, matchedText)
+        : panel.replacement
     ),
     replaceMatch: useMemoizedFn(
       (file: WorkbenchProjectSearchFile, match: WorkbenchContentSearchMatchResult): void =>
@@ -561,24 +523,8 @@ export function useWorkbenchProjectSearchController(options: UseWorkbenchProject
 
   return {
     ...actions,
-    isOpen,
-    /** 刚打开（或再按了一次 ⇧⌘F）：查找框要拿到焦点并全选。 */
-    focusPending,
-    openPanel,
-    closePanel,
-    options: searchOptions,
-    toggleOption,
+    /** 正则写错时的说明。 */
     regexError,
-    replaceOpen,
-    replacement,
-    setReplacement,
-    detailsOpen,
-    include,
-    setInclude,
-    exclude,
-    setExclude,
-    /** 包含 / 排除的文件（也用来筛按文件名找到的条目）。 */
-    pathFilter,
     files,
     summary,
     /** 第几份结果：每次重新搜加一（换了一份结果，列表回到顶上）。 */
@@ -588,12 +534,10 @@ export function useWorkbenchProjectSearchController(options: UseWorkbenchProject
     truncated: results.truncated,
     skippedLargeFileCount: results.skippedLargeFileCount,
     collapsedPaths,
-    toggleFileCollapsed,
-    setAllFilesCollapsed,
     entriesCollapsed,
     /** 能不能替换：结果就是输入框里的条件搜出来的、已经搜完，也没有替换在进行。 */
     canReplace: resultsCurrent && !isReplacing,
   }
 }
 
-export type WorkbenchProjectSearchModel = ReturnType<typeof useWorkbenchProjectSearchController>
+export type WorkbenchProjectSearchEngine = ReturnType<typeof useWorkbenchProjectSearchEngine>

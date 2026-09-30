@@ -29,7 +29,6 @@ import { getWorkbenchCommandStatusLabel } from '@renderer/models/commands/workbe
 import { inferPackageManagerCommand } from '@renderer/models/commands/workbenchCommandSuggestions'
 import { inferWorkbenchPackageManagerForPackageJsonPath } from '@renderer/models/commands/workbenchPackageScriptCommand'
 import { buildWorkbenchPackageScriptRunActions } from '@renderer/models/editor/workbenchPackageScriptRunGutter'
-import { readWorkbenchProjectSearchSeed } from '@renderer/models/files/workbenchProjectSearchModel'
 import { resolveWorkbenchGitSurfacesActive } from '@renderer/models/git/workbenchGitSurfaceActivation'
 import { resolveWorkbenchNavigationSurface } from '@renderer/models/layout/workbenchSurfaceModel'
 import { saveLightEditorTab } from '@renderer/models/lightEditorModel'
@@ -54,6 +53,7 @@ import { Result } from '@velaros-ai/core/result'
 import type {
   BrowserElementSelection,
   SystemFileChangePreviewResult,
+  WorkbenchContentSearchMatchResult,
   WorkbenchReadFileResult,
 } from '@shared/contracts'
 import type { WorkbenchWatchStatus } from '@shared/workbenchWatch'
@@ -69,7 +69,10 @@ import { useWorkbenchEditorNavigationState } from './useWorkbenchEditorNavigatio
 import { useWorkbenchGitChangeActions } from './useWorkbenchGitChangeActions'
 import { useWorkbenchGitState } from './useWorkbenchGitState'
 import { useWorkbenchMergeResolutionOffer } from './useWorkbenchMergeResolutionOffer'
-import { useWorkbenchProjectSearchController } from './useWorkbenchProjectSearchController'
+import {
+  readWorkbenchProjectSearchSeed,
+  useWorkbenchProjectSearchPanel,
+} from './useWorkbenchProjectSearchPanel'
 import { useWorkbenchProjectSessionPersistence } from './useWorkbenchProjectSessionPersistence'
 import { useWorkbenchTopRunControl } from './useWorkbenchTopRunControl'
 
@@ -434,15 +437,14 @@ export function useStandaloneWorkbenchPageModel(
     workbench.selectedFilePath,
   ])
 
-  // 侧栏的项目搜索（⇧⌘F）：查找词与按文件名找共用，结果里的匹配经 `navigate` 打开并选中。
-  const projectSearch = useWorkbenchProjectSearchController({
-    activeProject: workbench.activeProject,
-    openTabs: workbench.openTabs,
-    query: workbench.searchQuery,
+  // 侧栏的项目搜索（⇧⌘F）：面板开关与表单跟着页面走；查找词与按文件名找共用。
+  const projectSearch = useWorkbenchProjectSearchPanel({
     onQueryChange: workbench.setSearchQuery,
     onResetQuery: workbench.resetSearch,
-    replaceOpenTabContents: workbench.replaceOpenTabContents,
-    onOpenMatch: (path, match) =>
+  })
+  /** 打开搜索结果里的一处匹配：经 `navigate` 打开文件并选中匹配。 */
+  const openProjectSearchMatch = useMemoizedFn(
+    (path: string, match: WorkbenchContentSearchMatchResult): void =>
       void navigate({
         target: 'file',
         path,
@@ -450,8 +452,8 @@ export function useStandaloneWorkbenchPageModel(
         column: match.column,
         endLine: match.endLine,
         endColumn: match.endColumn,
-      }),
-  })
+      })
+  )
   const effectiveGitSshKeyPath =
     projectGitSettings.settings.gitSshKeyPath.trim() ||
     globalGitConfig.privateKeyPath ||
@@ -735,8 +737,12 @@ export function useStandaloneWorkbenchPageModel(
     }
   )
 
-  /** ⇧⌘F 的查找词：编辑区显示的是普通文件、里面选中了一行以内的文字时才有。 */
+  /**
+   * ⇧⌘F 的查找词：编辑区显示的是普通文件、里面选中了一行以内的文字时才有。焦点已经在搜索表单里（再按一次
+   * ⇧⌘F）时不取：只把焦点交回查找框，不拿编辑器的选区盖掉正在输入的查找词。
+   */
   function readProjectSearchSeed(): string | undefined {
+    if (document.activeElement?.closest('[data-project-search-form]')) return undefined
     if (!workbench.selectedFilePath || editorNavigation.diffItem || editorNavigation.lightTab)
       return undefined
     return readWorkbenchProjectSearchSeed(
@@ -1176,6 +1182,7 @@ export function useStandaloneWorkbenchPageModel(
       handleWorkbenchChatRunChangesReview: reviewChatRunChanges,
       navigate,
       openQuickOpenFile,
+      openProjectSearchMatch,
       showEditorSurface,
       handleWorkbenchChatWorkspacePathOpen: openChatWorkspacePath,
       handleWorkbenchBrowserElementPicked,

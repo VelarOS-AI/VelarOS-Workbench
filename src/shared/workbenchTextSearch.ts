@@ -13,6 +13,8 @@
  * 正文是去掉 BOM、换行统一为 LF 的文本；行列号从 1 起，列按 UTF-16 码元算，与编辑器一致。
  */
 
+import { escapeWorkbenchTextSearchRegExp } from './workbenchSearchText'
+
 /** 查找的三个开关。 */
 export interface WorkbenchTextSearchOptions {
   matchCase: boolean
@@ -84,7 +86,6 @@ export interface WorkbenchTextReplaceResult {
   count: number
 }
 
-const RegExpSyntaxCharacters = /[$()*+.?[\\\]^{|}]/gu
 const WordCharacter = /[\p{Alphabetic}\p{Number}_]/u
 /** 预览里匹配前面最多留这么多字符（窄的侧栏里也要看得到匹配本身），整行最多这么长。 */
 const PreviewContextBefore = 30
@@ -98,7 +99,7 @@ export function compileWorkbenchTextSearch(
 ): WorkbenchTextSearchCompileResult {
   if (!query.query) return { status: 'empty' }
 
-  const source = query.regex ? query.query : query.query.replace(RegExpSyntaxCharacters, '\\$&')
+  const source = query.regex ? query.query : escapeWorkbenchTextSearchRegExp(query.query)
   try {
     return {
       status: 'ready',
@@ -258,24 +259,6 @@ export function replaceWorkbenchTextSearchMatches(
 /** 一处匹配的标识：起止行列。 */
 export function workbenchTextSearchRangeKey(range: WorkbenchTextSearchRange): string {
   return `${range.line}:${range.column}-${range.endLine}:${range.endColumn}`
-}
-
-/** 行列（从 1 起）在正文里的偏移；超出行尾的列落在行尾，超出的行落在正文末尾。 */
-export function resolveWorkbenchTextOffset(content: string, line: number, column: number): number {
-  let lineStart = 0
-  for (let current = 1; current < line; current += 1) {
-    const lineBreak = content.indexOf('\n', lineStart)
-    if (lineBreak === -1) return content.length
-    lineStart = lineBreak + 1
-  }
-  const lineBreak = content.indexOf('\n', lineStart)
-  const lineEnd = lineBreak === -1 ? content.length : lineBreak
-  return Math.min(lineStart + Math.max(0, column - 1), lineEnd)
-}
-
-/** 查找词原样当字面文字用时的正则写法（打开「正则」后用选中的文字预填查找词）。 */
-export function escapeWorkbenchTextSearchRegExp(text: string): string {
-  return text.replace(RegExpSyntaxCharacters, '\\$&')
 }
 
 interface LineCursor {

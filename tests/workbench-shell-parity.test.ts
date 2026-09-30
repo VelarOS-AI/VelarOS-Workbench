@@ -47,8 +47,10 @@ void describe('pre-split Workbench shell parity', () => {
     assert.match(styles, /\.filePanelProjectHeader[\s\S]*flex:\s*0 0 35px[\s\S]*height:\s*35px/)
     assert.match(shellStyles, /--workbench-tab-height:\s*35px/)
     assert.equal(shellStyles.match(/--workbench-tab-height:/g)?.length, 1)
-    // 搜索表单就在项目面板里、标题栏下面，不挪进标题栏。
-    assert.match(panel, /<\/div>\n\s*\{projectSearch\.isOpen && \(\n\s*<ProjectSearchForm/)
+    // 搜索表单就在项目面板里、标题栏下面，不挪进标题栏；表单随搜索面板按需加载。
+    const searchView = readSource('src/renderer/src/components/files/ProjectSearchView.tsx')
+    assert.match(panel, /<\/div>\n\s*\{projectSearch\.isOpen \? \([\s\S]*<LazyProjectSearchView/)
+    assert.match(searchView, /<>\n\s*<ProjectSearchForm/)
     assert.match(searchForm, /className=\{styles\.searchInputShell\}[\s\S]*<SearchField/)
     assert.doesNotMatch(searchForm, /searchInputClearButton/)
   })

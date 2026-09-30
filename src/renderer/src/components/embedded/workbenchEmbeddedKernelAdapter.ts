@@ -101,6 +101,9 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
         searchResult: workbench.searchResult,
         searchActive: workbench.searchActive,
         projectSearch: model.projectSearch,
+        openTabs: workbench.openTabs,
+        replaceOpenTabContents: workbench.replaceOpenTabContents,
+        onOpenMatch: model.actions.openProjectSearchMatch,
       },
       handlers: {
         onSelectEntryPath: workbench.selectEntryPath,

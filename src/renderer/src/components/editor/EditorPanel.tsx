@@ -77,9 +77,9 @@ import type {
   WorkbenchLanguageServiceFileEdit,
   WorkbenchLanguageServiceLocation,
 } from '@shared/contracts'
+import { resolveWorkbenchTextOffset } from '@shared/workbenchSearchText'
 import { normalizeWorkbenchTextEol, type WorkbenchTextFormat } from '@shared/workbenchTextFormat'
 import { DefaultWorkbenchTextFormat } from '@shared/workbenchTextFormat'
-import { resolveWorkbenchTextOffset } from '@shared/workbenchTextSearch'
 
 import { useWorkbenchGitBlame } from '../../hooks/useWorkbenchGitBlame'
 import { useWorkbenchGitHeadContent } from '../../hooks/useWorkbenchGitHeadContent'

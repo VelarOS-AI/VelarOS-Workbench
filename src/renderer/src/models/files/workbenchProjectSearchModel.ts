@@ -15,7 +15,6 @@ import type {
 import { compareWorkbenchSearchPaths } from '@shared/workbenchSearchGlob'
 import {
   buildWorkbenchTextSearchPreview,
-  resolveWorkbenchTextOffset,
   scanWorkbenchTextSearch,
   type WorkbenchTextSearchMatcher,
   workbenchTextSearchRangeKey,
@@ -47,9 +46,6 @@ export interface WorkbenchProjectSearchSummary {
   matchCount: number
   fileCount: number
 }
-
-/** 拿选中的文字当查找词时最长取这么多字符（与编辑器查找栏一致）。 */
-const MaxSeedChars = 200
 
 const CountMessageKeys = {
   match: ['workbench.projectSearchMatchCountOne', 'workbench.projectSearchMatchCountOther'],
@@ -155,21 +151,6 @@ export function buildWorkbenchProjectSearchRows(options: {
     if (hidden > 0) rows.push({ kind: 'more', key: `more:${file.path}`, file, hidden })
   }
   return rows
-}
-
-/**
- * ⇧⌘F 预填的查找词：编辑器里选中了一行以内的文字就用它（最长 200 个字符）；没选中或跨了行不预填。
- * 选区的行列从 1 起，按编辑器里的正文算。
- */
-export function readWorkbenchProjectSearchSeed(
-  content: string,
-  selection: LooseOptional<{ startLine: number; startColumn: number; endLine: number; endColumn: number }>
-): string | undefined {
-  if (!selection || selection.startLine !== selection.endLine) return undefined
-
-  const from = resolveWorkbenchTextOffset(content, selection.startLine, selection.startColumn)
-  const to = resolveWorkbenchTextOffset(content, selection.endLine, selection.endColumn)
-  return content.slice(from, Math.min(to, from + MaxSeedChars)) || undefined
 }
 
 /** 键盘上下挑的、回车打开的行：命中的文件名与每一处匹配。 */

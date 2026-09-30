@@ -7,7 +7,13 @@ import {
   useEffect,
   useState,
 } from 'react'
-import { CaretDownIcon, CaretRightIcon, FolderIcon, PlayCircleIcon, SwapIcon } from '@phosphor-icons/react'
+import {
+  ArrowsLeftRightIcon,
+  CaretDownIcon,
+  CaretRightIcon,
+  FolderIcon,
+  PlayCircleIcon,
+} from '@phosphor-icons/react'
 import { useWorkbenchI18n } from '@renderer/i18n'
 import { getWorkbenchFilePresentationVariant } from '@renderer/models/files/workbenchFilePresentation'
 import {
@@ -282,7 +288,7 @@ function RowAction({
         onClick()
       }}
     >
-      <SwapIcon size={13} />
+      <ArrowsLeftRightIcon size={13} />
     </IconButton>
   )
 }
