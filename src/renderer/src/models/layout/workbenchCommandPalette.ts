@@ -3,10 +3,12 @@
  * 按名字模糊找。只登记工作台里已有、真能跑的动作；哪条此刻能跑、怎么跑由页面给（见页面 model 的
  * `commandPalette`），此刻跑不了的（没打开文件时的保存、格式化……）不列出来。
  */
+import { workbenchTerminalSplitShortcut } from '../commands/workbenchTerminalSplits'
 import { scoreWorkbenchFuzzy } from '../shared/workbenchFuzzyScore'
 
 import {
   formatWorkbenchShortcutHint,
+  isAppleWorkbenchPlatform,
   type WorkbenchKeyboardShortcutAction,
   type WorkbenchKeyboardShortcutMap,
 } from './workbenchKeyboardShortcuts'
@@ -28,8 +30,10 @@ export type WorkbenchPaletteCommandId =
   | 'run-last-command'
   | 'save-all'
   | 'save-current'
+  | 'split-terminal'
   | 'toggle-chat'
   | 'toggle-git'
+  | 'toggle-git-blame'
   | 'toggle-problems'
   | 'toggle-project-panel'
   | 'toggle-read-only'
@@ -41,11 +45,12 @@ export type WorkbenchPaletteCommandId =
 
 /**
  * 快捷键提示从哪来：`action` 是设置里可改的全局快捷键，按当前 keymap 现算；`fixed` 是编辑器或应用菜单里
- * 写死的按键（`Mod` 照样按平台落到 ⌘ / Ctrl）。
+ * 写死的按键（`Mod` 照样按平台落到 ⌘ / Ctrl）；`platform` 是两类平台上按键不一样的（终端里的那几个）。
  */
 type WorkbenchPaletteCommandShortcut =
   | { action: WorkbenchKeyboardShortcutAction }
   | { fixed: string }
+  | { platform: (isApple: boolean) => string }
 
 export interface WorkbenchPaletteCommandDefinition {
   id: WorkbenchPaletteCommandId
@@ -81,12 +86,20 @@ export const WORKBENCH_PALETTE_COMMANDS: readonly WorkbenchPaletteCommandDefinit
   // 编辑器里的 ⌥Z / Alt+Z。
   { id: 'toggle-word-wrap', labelKey: 'workbench.commandToggleWordWrap', shortcut: { fixed: 'Alt+Z' } },
   { id: 'toggle-read-only', labelKey: 'workbench.commandToggleReadOnly' },
+  // 行号左边的追溯栏；编辑器右键菜单里也有。
+  { id: 'toggle-git-blame', labelKey: 'workbench.commandToggleGitBlame' },
   { id: 'reveal-active-file', labelKey: 'workbench.commandRevealActiveFile' },
   { id: 'toggle-project-panel', labelKey: 'workbench.commandToggleProjectPanel' },
   { id: 'toggle-problems', labelKey: 'workbench.commandToggleProblems', shortcut: { action: 'toggle-problems' } },
   { id: 'toggle-git', labelKey: 'workbench.commandToggleGit', shortcut: { action: 'toggle-changes' } },
   { id: 'toggle-terminal', labelKey: 'workbench.commandToggleTerminal' },
   { id: 'new-terminal', labelKey: 'workbench.commandNewTerminal' },
+  // 在当前终端右边并排再开一个；焦点在终端里时的 ⌘D / Ctrl+Shift+5。
+  {
+    id: 'split-terminal',
+    labelKey: 'workbench.commandSplitTerminal',
+    shortcut: { platform: workbenchTerminalSplitShortcut },
+  },
   { id: 'toggle-chat', labelKey: 'workbench.commandToggleChat', shortcut: { action: 'toggle-actions' } },
   {
     id: 'run-last-command',
@@ -141,6 +154,8 @@ export function isWorkbenchPaletteCommandAvailable(
       return textEditorInFront && context.canEditActiveFile
     case 'toggle-read-only':
       return textEditorInFront && context.canToggleReadOnly
+    case 'toggle-git-blame':
+      return textEditorInFront
     default:
       return true
   }
@@ -172,10 +187,13 @@ function formatCommandShortcut(
 ): Nullable<string> {
   if (!shortcut) return null
 
-  return formatWorkbenchShortcutHint(
-    'action' in shortcut ? keymap[shortcut.action] : shortcut.fixed,
-    platform
-  )
+  const keys =
+    'action' in shortcut
+      ? keymap[shortcut.action]
+      : 'fixed' in shortcut
+        ? shortcut.fixed
+        : shortcut.platform(isAppleWorkbenchPlatform(platform))
+  return formatWorkbenchShortcutHint(keys, platform)
 }
 
 /** 此刻能跑的命令，按登记顺序，名字与快捷键提示按当前语言、keymap 与平台现算。 */

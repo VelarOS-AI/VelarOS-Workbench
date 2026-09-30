@@ -3,6 +3,7 @@ import { Result } from '@velaros-ai/core/result'
 
 import { buildWorkbenchLanguageServiceRequestBase } from '../models/editor/workbenchCodeMirrorLanguageService'
 import { canEditWorkbenchFileContent } from '../models/editor/workbenchEditorEditMode'
+import { toggleWorkbenchGitBlameVisible } from '../models/editor/workbenchGitBlameVisibility'
 import { getWorkbenchLanguageServiceFormat } from '../models/editor/workbenchLanguageServiceIpc'
 import type {
   WorkbenchPaletteCommandContext,
@@ -49,6 +50,7 @@ interface UseWorkbenchCommandPaletteOptions {
     | 'saveSelectedFile'
     | 'selectedFile'
     | 'selectedFilePath'
+    | 'splitTerminalSession'
     | 'toggleSelectedFileEditMode'
   >
   surface: WorkbenchSurfaceState
@@ -200,6 +202,10 @@ export function useWorkbenchCommandPalette({
         workbench.toggleSelectedFileEditMode()
         return
       }
+      case 'toggle-git-blame': {
+        toggleWorkbenchGitBlameVisible()
+        return
+      }
       case 'reveal-active-file': {
         revealActiveFile()
         return
@@ -223,6 +229,11 @@ export function useWorkbenchCommandPalette({
       case 'new-terminal': {
         surface.openBottomTool('terminal')
         void workbench.createTerminalSession()
+        return
+      }
+      case 'split-terminal': {
+        surface.openBottomTool('terminal')
+        void workbench.splitTerminalSession()
         return
       }
       case 'toggle-chat': {

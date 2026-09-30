@@ -9,6 +9,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from 'react'
 import { WarningCircleIcon } from '@phosphor-icons/react'
 import { useWorkbenchI18n } from '@renderer/i18n'
@@ -35,6 +36,11 @@ import {
   parseWorkbenchGoToLineInput,
 } from '@renderer/models/editor/workbenchEditorModel'
 import { isDirtyTab } from '@renderer/models/editor/workbenchEditorTabs'
+import {
+  isWorkbenchGitBlameVisible,
+  subscribeWorkbenchGitBlameVisible,
+  toggleWorkbenchGitBlameVisible,
+} from '@renderer/models/editor/workbenchGitBlameVisibility'
 import type {
   WorkbenchIndentation,
   WorkbenchIndentationRequest,
@@ -539,7 +545,10 @@ export function EditorPanel({
   )
   const selectedExternalChange = toNullable(selectedTab?.externalChange)
   // Git 追溯栏：开着就一直开着，换文件时查新文件的（截断打开的文件行号对不上，不查）。
-  const [gitBlameVisible, setGitBlameVisible] = useState(false)
+  const gitBlameVisible = useSyncExternalStore(
+    subscribeWorkbenchGitBlameVisible,
+    isWorkbenchGitBlameVisible
+  )
   const gitBlame = useWorkbenchGitBlame({
     projectRoot,
     path:
@@ -1066,7 +1075,7 @@ export function EditorPanel({
                         externalRevision={externalRevision}
                         gitHeadContent={gitHeadContent}
                         gitBlame={gitBlame}
-                        onToggleGitBlame={() => setGitBlameVisible((visible) => !visible)}
+                        onToggleGitBlame={toggleWorkbenchGitBlameVisible}
                         fileStates={editorFileStates}
                         onChange={onEditorContentChange}
                         onCursorPositionChange={handleCursorPositionChange}

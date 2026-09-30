@@ -111,7 +111,12 @@ void describe('Workbench command palette registry', () => {
     assert.equal(command(mac, 'zoom-in').shortcut, '⌘+')
     assert.equal(command(mac, 'open-settings').shortcut, null)
 
+    // 终端里的拆分键两类平台不一样。
+    assert.equal(command(mac, 'split-terminal').shortcut, '⌘D')
+    assert.equal(command(mac, 'toggle-git-blame').shortcut, null)
+
     const linux = buildCommands('en-US', { platform: Linux })
+    assert.equal(command(linux, 'split-terminal').shortcut, 'Ctrl+Shift+5')
     assert.equal(command(linux, 'go-to-file').shortcut, 'Ctrl+P')
     assert.equal(command(linux, 'format-document').shortcut, 'Ctrl+Alt+L')
     assert.equal(command(linux, 'zoom-out').shortcut, 'Ctrl+-')
@@ -191,6 +196,7 @@ void describe('Workbench command palette availability', () => {
   void test('editor commands need the current file editor in front', () => {
     assert.equal(isWorkbenchPaletteCommandAvailable('format-document', FileInFront), true)
     assert.equal(isWorkbenchPaletteCommandAvailable('toggle-read-only', FileInFront), true)
+    assert.equal(isWorkbenchPaletteCommandAvailable('toggle-git-blame', FileInFront), true)
     for (const context of [
       { ...FileInFront, editorCovered: true },
       { ...FileInFront, activeFileIsText: false },
@@ -198,6 +204,7 @@ void describe('Workbench command palette availability', () => {
     ]) {
       assert.equal(isWorkbenchPaletteCommandAvailable('format-document', context), false)
       assert.equal(isWorkbenchPaletteCommandAvailable('toggle-read-only', context), false)
+      assert.equal(isWorkbenchPaletteCommandAvailable('toggle-git-blame', context), false)
     }
     // 只读文件不格式化，但能切回编辑。
     const readOnly = { ...FileInFront, canEditActiveFile: false }
