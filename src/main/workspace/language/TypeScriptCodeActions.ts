@@ -240,7 +240,11 @@ export function mapTypeScriptFileChanges(
     if (fileChange.isNewFile) {
       createFiles.push({
         path,
-        content: fileChange.textChanges.map((change) => change.newText).join(''),
+        // 挪过去的东西不带 import 时 TypeScript 给的内容以一个空行开头：新文件不从空行开始。
+        content: fileChange.textChanges
+          .map((change) => change.newText)
+          .join('')
+          .replace(/^(?:[ \t]*\r?\n)+/u, ''),
       })
       continue
     }

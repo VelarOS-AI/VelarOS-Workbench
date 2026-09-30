@@ -34,6 +34,11 @@ const ComputeFunction = [
   '  return doubled + alpha',
   '}',
 ].join('\n')
+const DescribeFunction = [
+  'export function describe(point: { x: number; y: number }): string {',
+  '  return String(point.x + point.y)',
+  '}',
+].join('\n')
 const Files = {
   'tsconfig.json': StrictTsconfig,
   'src/main.ts': Main,
@@ -234,6 +239,18 @@ void describe('TypeScript refactorings', () => {
         moved.createFiles[0]?.content,
         ["import { alpha } from './util/alpha';", '', '', computeWithSemicolons, ''].join('\n')
       )
+
+      // 挪走的函数什么都不用 import：新文件直接从它开始，不以空行开头。
+      const plain = await resolveRefactor(
+        project,
+        Main,
+        rangeOf(Main, DescribeFunction),
+        /^Move to a new file$/u
+      )
+      assert.equal(plain.createFiles.length, 1)
+      assert.equal(plain.createFiles[0]?.path, 'src/describe.ts')
+      // （函数体里的排版由 TypeScript 重新写过，这里只看开头。）
+      assert.match(plain.createFiles[0]?.content ?? '', /^export function describe\(/u)
     } finally {
       await project.dispose()
     }
