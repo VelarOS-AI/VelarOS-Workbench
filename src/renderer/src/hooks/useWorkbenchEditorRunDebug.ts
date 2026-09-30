@@ -188,7 +188,11 @@ function useWorkbenchTestRunExtension({
 
     const resultKey = (target: WorkbenchTestRunTarget): string =>
       workbenchTestRunResultKey(projectRoot, path, target.pattern ?? '')
-    /** 起一张卡跑（或调试）这个目标；标记跟着这张卡的结果走。 */
+    /**
+     * 起一张卡跑（或调试）这个目标。跑的那张卡的结果记到标记上；调试的不记——在断点上停久了，运行器自己
+     * 会报超时（Vitest 的 worker 调用 60 秒超时），测试明明过了退出码却是 1，半路结束调试也一样不算数，
+     * 所以调试完标记还是上一次正常运行的结论。
+     */
     const launch = (target: WorkbenchTestRunTarget, view: EditorView, debug: boolean): void => {
       // 两个运行器都有依据时，看这个文件自己引的是哪个。
       const runner = pickWorkbenchTestRunner(
@@ -213,7 +217,7 @@ function useWorkbenchTestRunExtension({
         debug ? t('workbench.debuggerRunCardTitle', { name }) : name,
         options
       ).then((sessionId) => {
-        if (sessionId) trackWorkbenchTestRun(resultKey(target), sessionId)
+        if (sessionId && !debug) trackWorkbenchTestRun(resultKey(target), sessionId)
       })
     }
 

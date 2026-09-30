@@ -87,6 +87,15 @@ void describe('run markers of a test file', () => {
 })
 
 void describe('results of tests run from the editor', () => {
+  void test('a debugged run gives no verdict: only a normal run is followed', () => {
+    // 在断点上停久了 Vitest 会报 worker 调用超时，测试过了退出码也是 1：调试的那张卡不记到标记上。
+    const hook = readSource('src/renderer/src/hooks/useWorkbenchEditorRunDebug.ts')
+    assert.match(
+      hook,
+      /if \(sessionId && !debug\) trackWorkbenchTestRun\(resultKey\(target\), sessionId\)/u
+    )
+  })
+
   void test('follows the run card: running, then passed or failed by its exit code', () => {
     const key = workbenchTestRunResultKey('/project', 'src/a.test.ts', '^suite (?:> )?one$')
     const other = workbenchTestRunResultKey('/project', 'src/a.test.ts', '')
