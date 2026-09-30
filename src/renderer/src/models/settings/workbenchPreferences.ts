@@ -31,6 +31,8 @@ export type WorkbenchAccent =
   | 'rose'
   | 'violet'
   | 'slate'
+/** 差异查看器怎么排：改动前后上下合在一栏（unified），或者左右并排（split）。 */
+export type WorkbenchDiffLayout = 'unified' | 'split'
 
 export interface WorkbenchPreferences {
   accent: WorkbenchAccent
@@ -48,6 +50,8 @@ export interface WorkbenchPreferences {
    * 都开普通标签。
    */
   editorPreviewTabs: boolean
+  /** 差异查看器的排法（Git 改动、本地历史、AI 改动共用），在查看器的工具栏上切换。 */
+  diffLayout: WorkbenchDiffLayout
   theme: WorkbenchThemeId
   /**
    * 用户手动编辑的本地历史快照节流窗口（秒）：自动保存时距上一份快照不足该间隔就不新增，
@@ -87,6 +91,7 @@ export const DEFAULT_WORKBENCH_PREFERENCES: WorkbenchPreferences = {
   editorWordWrap: false,
   editorFormatOnSave: false,
   editorPreviewTabs: true,
+  diffLayout: 'unified',
   theme: 'light-modern',
   localHistoryThrottleSeconds: 60,
   permissionConfirmationMode: 'standard-open',
@@ -154,6 +159,7 @@ export function isWorkbenchDarkTheme(theme: WorkbenchThemeId): boolean {
   return WorkbenchDarkThemes.has(theme)
 }
 const WorkbenchDensities = new Set<WorkbenchDensity>(['compact', 'balanced', 'comfortable'])
+const WorkbenchDiffLayouts = new Set<WorkbenchDiffLayout>(['unified', 'split'])
 
 export function getWorkbenchFileTreeRowHeight(density: WorkbenchDensity): number {
   switch (density) {
@@ -299,6 +305,11 @@ export function normalizeWorkbenchPreferences(
       typeof preferences?.editorPreviewTabs === 'boolean'
         ? preferences.editorPreviewTabs
         : DEFAULT_WORKBENCH_PREFERENCES.editorPreviewTabs,
+    diffLayout: normalizeChoice(
+      preferences?.diffLayout,
+      WorkbenchDiffLayouts,
+      DEFAULT_WORKBENCH_PREFERENCES.diffLayout
+    ),
     theme: normalizeWorkbenchThemeChoice(preferences?.theme),
     localHistoryThrottleSeconds: clampNumber(
       preferences?.localHistoryThrottleSeconds,
@@ -345,6 +356,11 @@ export function readWorkbenchConversationRunPreferences(): Pick<
 export function toggleWorkbenchEditorWordWrap(): void {
   const preferences = readWorkbenchPreferences()
   saveWorkbenchPreferences({ ...preferences, editorWordWrap: !preferences.editorWordWrap })
+}
+
+/** 差异查看器工具栏上的切换：换一种排法，存进偏好，下次打开还是它。 */
+export function saveWorkbenchDiffLayout(diffLayout: WorkbenchDiffLayout): void {
+  saveWorkbenchPreferences({ ...readWorkbenchPreferences(), diffLayout })
 }
 
 /** 用户手动保存时应用的本地历史节流窗口（毫秒）。 */

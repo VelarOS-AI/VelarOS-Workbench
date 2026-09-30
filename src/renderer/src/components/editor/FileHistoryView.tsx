@@ -25,6 +25,7 @@ import { SegmentedControl } from '@velaros-ai/ui/primitives/forms/SegmentedContr
 import { ScrollArea } from '@velaros-ai/ui/primitives/layout/ScrollArea'
 
 import styles from '../../styles/workbenchPageStyles'
+import { WorkbenchDiffLayoutToggle } from '../git/WorkbenchDiffLayoutToggle'
 import type { WorkbenchUnifiedDiffRowsHandle } from '../git/WorkbenchUnifiedDiffRows'
 import { WorkbenchUnifiedDiffRows } from '../git/WorkbenchUnifiedDiffRows'
 
@@ -264,6 +265,7 @@ export function FileHistoryView({
             <span className={styles.editorHistoryDiffCount}>
               {t('workbench.fileHistoryDiffCount', { count: changeCount })}
             </span>
+            <WorkbenchDiffLayoutToggle />
             <IconButton
               variant="ghost"
               size="icon-sm"

@@ -9,6 +9,7 @@ import {
   saveWorkbenchPreferences,
   WORKBENCH_PREFERENCES_CHANGED_EVENT,
   type WorkbenchDensity,
+  type WorkbenchDiffLayout,
   type WorkbenchEditorMetrics,
   type WorkbenchPreferences,
   type WorkbenchThemeId,
@@ -122,6 +123,8 @@ function useWorkbenchPreferenceValue<T>(
 const selectTheme = (preferences: WorkbenchPreferences): WorkbenchThemeId => preferences.theme
 const selectDensity = (preferences: WorkbenchPreferences): WorkbenchDensity => preferences.density
 const selectWordWrap = (preferences: WorkbenchPreferences): boolean => preferences.editorWordWrap
+const selectDiffLayout = (preferences: WorkbenchPreferences): WorkbenchDiffLayout =>
+  preferences.diffLayout
 const sameEditorMetrics = (current: WorkbenchEditorMetrics, next: WorkbenchEditorMetrics): boolean =>
   current.key === next.key
 
@@ -146,4 +149,9 @@ export function useWorkbenchDensity(): WorkbenchDensity {
 /** 只订阅编辑区的自动换行开关。 */
 export function useWorkbenchEditorWordWrap(): boolean {
   return useWorkbenchPreferenceValue(selectWordWrap)
+}
+
+/** 只订阅差异查看器的排法（上下合在一栏，或者左右并排）。 */
+export function useWorkbenchDiffLayout(): WorkbenchDiffLayout {
+  return useWorkbenchPreferenceValue(selectDiffLayout)
 }

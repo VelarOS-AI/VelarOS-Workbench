@@ -696,6 +696,8 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     lightOpenFailedTitle: 'Failed to open file',
     gitDiffPrevious: 'Previous difference',
     gitDiffNext: 'Next difference',
+    gitDiffShowSideBySide: 'Show before and after side by side',
+    gitDiffShowUnified: 'Show the changes in one column',
     gitDiffChangeSummary: '{count} differences',
     goalAutoContinueNotice: 'Goal not finished yet, continuing automatically',
     goalAutoContinueInstruction:

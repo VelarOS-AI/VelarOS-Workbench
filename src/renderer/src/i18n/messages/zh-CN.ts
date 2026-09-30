@@ -669,6 +669,8 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     lightOpenFailedTitle: '打开文件失败',
     gitDiffPrevious: '上一处差异',
     gitDiffNext: '下一处差异',
+    gitDiffShowSideBySide: '左右并排显示改动前后',
+    gitDiffShowUnified: '改回合在一栏显示',
     gitDiffChangeSummary: '{count} 个差异',
     goalAutoContinueNotice: '目标还没完成，自动继续推进',
     goalAutoContinueInstruction:

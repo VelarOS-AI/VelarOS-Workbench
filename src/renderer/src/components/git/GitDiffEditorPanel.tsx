@@ -42,10 +42,13 @@ import {
 } from '../../hooks/useWorkbenchGitDiffPreview'
 import styles from '../../styles/workbenchPageStyles'
 import { useMemoizedFn } from '../../support/genericHooks'
+import { preloadWhenIdle } from '../../support/lazyWithPreload'
 import type { ReadOnlyDiffHunkActions } from '../editor/ReadOnlyDiffCodeMirror'
 import { WorkbenchFileTypeIcon } from '../files/WorkbenchFileTypeIcon'
 
+import { WorkbenchDiffLayoutToggle } from './WorkbenchDiffLayoutToggle'
 import {
+  WorkbenchDiffViewerCode,
   WorkbenchUnifiedDiffRows,
   type WorkbenchUnifiedDiffRowsHandle,
 } from './WorkbenchUnifiedDiffRows'
@@ -91,6 +94,8 @@ export function GitDiffEditorPanel({
   const diffViewRef = useRef<WorkbenchUnifiedDiffRowsHandle>(null)
   const displayPath = getWorkbenchGitChangeDisplayPath(item)
   const { preview, isLoading, error, reload } = useWorkbenchGitDiffPreview({ item, projectRoot })
+  // 差异还在读的时候先把查看器本体的代码拉下来，读完就能画。
+  useEffect(() => preloadWhenIdle([WorkbenchDiffViewerCode]), [])
   const patch = useMemo(() => (preview ? readPreviewPatch(preview) : null), [preview])
   const diffRows = useMemo(
     () => (preview ? buildPreviewRows(preview, patch) : []),
@@ -197,6 +202,7 @@ export function GitDiffEditorPanel({
         </div>
         <div className={styles.diffViewerSummaryGroup}>
           <div className={styles.diffViewerNav}>
+            <WorkbenchDiffLayoutToggle />
             <IconButton
               variant="ghost"
               size="icon-sm"

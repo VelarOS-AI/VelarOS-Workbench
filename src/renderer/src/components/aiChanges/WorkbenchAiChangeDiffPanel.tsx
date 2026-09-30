@@ -17,6 +17,7 @@ import {
 } from '../../runtime/workbenchRunChangeRecords'
 import pageStyles from '../../styles/workbenchPageStyles'
 import { WorkbenchFileTypeIcon } from '../files/WorkbenchFileTypeIcon'
+import { WorkbenchDiffLayoutToggle } from '../git/WorkbenchDiffLayoutToggle'
 import {
   WorkbenchUnifiedDiffRows,
   type WorkbenchUnifiedDiffRowsHandle,
@@ -143,6 +144,7 @@ export function WorkbenchAiChangeDiffPanel({
             </span>
           )}
           <div className={pageStyles.diffViewerNav}>
+            <WorkbenchDiffLayoutToggle />
             <IconButton
               variant="ghost"
               size="icon-sm"

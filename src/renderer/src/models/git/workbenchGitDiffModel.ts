@@ -37,7 +37,9 @@ export interface WorkbenchFullFileDiffContents {
 }
 
 /** Change-block start rows (1-indexed document lines) used by initial and arrow navigation. */
-export function collectWorkbenchDiffChangeAnchors(rows: WorkbenchUnifiedDiffRow[]): number[] {
+export function collectWorkbenchDiffChangeAnchors(
+  rows: readonly WorkbenchUnifiedDiffRow[]
+): number[] {
   const anchors: number[] = []
   rows.forEach((row, index) => {
     const isChange = row.kind === 'addition' || row.kind === 'deletion'

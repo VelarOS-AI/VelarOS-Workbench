@@ -662,7 +662,7 @@
   background: var(--workbench-editor-bg, var(--card));
 }
 
-.workbenchUnifiedDiffViewer > .editorHistoryCodeViewer {
+.workbenchUnifiedDiffViewer > .workbenchDiffPanes {
   height: 100%;
   min-width: 0;
 }

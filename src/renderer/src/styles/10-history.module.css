@@ -179,6 +179,56 @@
   background: var(--status-red-soft);
 }
 
+/* 改过的行里变了的那几个词：在整行的底色上再深一层。 */
+.workbenchUnifiedDiffCode :global(.cm-diffWordAdd) {
+  border-radius: 2px;
+  background: color-mix(in oklab, var(--status-green) 40%, transparent);
+}
+
+.workbenchUnifiedDiffCode :global(.cm-diffWordDel) {
+  border-radius: 2px;
+  background: color-mix(in oklab, var(--status-red) 38%, transparent);
+}
+
+/* 并排时一侧多出来的行，在另一侧是空的占位行：斜纹，一眼看得出这里没有内容。 */
+.workbenchUnifiedDiffCode :global(.cm-diffLineFiller),
+.workbenchUnifiedDiffCode :global(.cm-diffGutterFiller) {
+  background: repeating-linear-gradient(
+    -45deg,
+    transparent 0 5px,
+    color-mix(in oklab, var(--muted-foreground) 9%, transparent) 5px 6px
+  );
+}
+
+/*
+ * 差异查看器的两栏。上下排（unified）时只有主栏，第二栏藏着；并排（split）时第二栏在左（改动前），
+ * 主栏在右（改动后），各占一半。
+ */
+.workbenchDiffPanes {
+  @apply flex min-h-0 min-w-0 flex-1;
+  height: 100%;
+}
+
+.workbenchDiffPanes > .editorHistoryCodeViewer {
+  min-width: 0;
+  height: 100%;
+  flex: 1 1 0;
+}
+
+.workbenchDiffPanes[data-layout='unified'] > [data-pane='secondary'] {
+  display: none;
+}
+
+.workbenchDiffPanes[data-layout='split'] > [data-pane='secondary'] {
+  border-right: 1px solid var(--workbench-border);
+}
+
+/* 工具栏上的并排开关：并排开着时按钮是按下去的样子。 */
+.diffLayoutToggle[aria-pressed='true'] {
+  background: var(--workbench-hover);
+  color: var(--workbench-theme-color);
+}
+
 /* Git 差异里每块改动上方的「暂存此块 / 回滚此块」：像 CodeLens 一样的一行小字按钮。 */
 .workbenchUnifiedDiffCode :global(.cm-diffHunkActions) {
   display: flex;
