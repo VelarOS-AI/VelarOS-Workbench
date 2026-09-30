@@ -193,19 +193,22 @@ void describe('Workbench Git remote actions: what the interface tracks', () => {
 
   void test('every control runs remote actions through the shared runner and offers cancel', () => {
     const hook = readSource('src/renderer/src/hooks/useWorkbenchGitRemoteAction.ts')
-    const sync = readSource('src/renderer/src/components/git/WorkbenchGitSyncControl.tsx')
+    const control = readSource('src/renderer/src/components/git/WorkbenchGitBranchControl.tsx')
+    const menu = readSource('src/renderer/src/components/git/WorkbenchGitBranchMenu.tsx')
     const commitPanel = readSource('src/renderer/src/components/git/WorkbenchCommitPanel.tsx')
-    const branchMenu = readSource('src/renderer/src/components/git/WorkbenchGitCommitControl.tsx')
 
     assert.match(hook, /performWorkspaceGitAction\(workspaceRoot, action, \{[\s\S]*?operationId: operation\.id/u)
     assert.match(hook, /cancelWorkspaceGitAction\(operation\.id\)/u)
-    for (const source of [sync, commitPanel, branchMenu]) {
+    for (const source of [control, commitPanel]) {
       assert.match(source, /useWorkbenchGitRemoteAction\(workspaceRoot\)/u)
       assert.doesNotMatch(source, /performWorkspaceGitAction\(/u)
     }
-    // 顶栏的同步按钮、提交面板的推送按钮：操作进行中换成取消。
-    assert.match(sync, /remoteAction\.cancel\(\)/u)
+    // 顶栏的分支菜单、提交面板的推送按钮：操作进行中换成取消；已经点过取消的不再点第二次。
+    assert.match(control, /onCancelRemoteAction=\{\(\) => remoteAction\.cancel\(\)\}/u)
+    assert.match(menu, /disabled=\{running\.cancelling\}\s*onClick=\{onCancelRemoteAction\}/u)
     assert.match(commitPanel, /remoteAction\.cancel\(\)/u)
+    // 远端操作跑着时不切分支、不新建分支。
+    assert.match(control, /const locked = !!running \|\| !!pendingBranch/u)
     for (const key of [
       'workbench.gitCancelRemoteAction',
       'workbench.gitRemoteActionCancelling',

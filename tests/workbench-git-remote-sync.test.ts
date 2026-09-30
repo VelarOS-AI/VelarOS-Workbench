@@ -196,24 +196,26 @@ void describe('Workbench Git pull, fetch and sync', () => {
     })
   })
 
-  void test('the toolbar control syncs with an upstream, publishes without one, and shows conflicts', () => {
+  void test('the toolbar control pulls, pushes and syncs the current branch, and shows conflicts', () => {
     const control = readFileSync(
-      path.resolve(process.cwd(), 'src/renderer/src/components/git/WorkbenchGitSyncControl.tsx'),
+      path.resolve(process.cwd(), 'src/renderer/src/components/git/WorkbenchGitBranchControl.tsx'),
       'utf8'
     )
-    assert.match(control, /const mainAction: WorkspaceGitRemoteAction = upstream \? 'sync' : 'upload'/)
+    // 拉取、同步、推送、获取远端都在分支菜单里；同步和推送先确认，获取远端不问。
+    assert.match(control, /remoteActions=\{describeWorkbenchGitRemoteActions\(status, t\)\}/)
+    assert.match(control, /if \(action === 'sync'\)\s*return window\.confirm\(tLatest\.current\('workbench\.gitSyncConfirm'/)
+    assert.match(control, /action !== 'fetch' && warnUnsavedOpenTabs\(\)/)
     assert.match(control, /result\.action\.conflicts\.length > 0[\s\S]*showConflicts/)
     assert.match(control, /onOpenCommitTool\(\)/)
-    assert.match(
-      readFileSync(path.resolve(process.cwd(), 'src/renderer/src/components/chrome/TopToolbar.tsx'), 'utf8'),
-      /<WorkbenchGitCommitControl[\s\S]*<WorkbenchGitSyncControl/
-    )
     for (const key of [
       'workbench.gitPull',
       'workbench.gitSync',
       'workbench.gitPullFailedTitle',
       'workbench.gitSyncConfirm',
-      'workbench.gitSyncTooltip',
+      'workbench.gitBranchAheadBehind',
+      'workbench.gitNoUpstreamNote',
+      'workbench.gitPushBranchConfirm',
+      'workbench.gitRemoteActionRunning',
       'workbench.gitPullConflictsDescription',
       'workbench.gitPullRebaseConflictsDescription',
       'workbench.gitNoUpstreamHint',

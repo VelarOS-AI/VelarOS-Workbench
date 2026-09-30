@@ -87,97 +87,533 @@
   @apply text-muted-foreground;
 }
 
-/* 分支旁边的同步按钮：图标加落后（↓）、领先（↑）的提交数；右边的小三角展开拉取、推送、同步、获取远端。 */
-.gitSyncControl {
-  @apply flex shrink-0 items-center;
-  height: 26px;
+/*
+ * 顶栏上唯一的 Git 控件：按钮上是当前分支和落后（↓）、领先（↑）上游的提交数，点开是一块面板——当前分支
+ * 的远端操作、分支列表、新建分支。外框、面板的尺寸与圆角归共享的顶栏控件（velar-topbar-control-*）；
+ * 面板里行高、间距、字号用它给的 --topbar-panel-* 变量，和旁边的项目菜单是同一套。
+ */
+.gitBranchControl {
+  min-width: 0;
+  -webkit-app-region: no-drag;
+}
+
+.gitBranchControlButton {
+  max-width: 100%;
+}
+
+.gitBranchControlButton > svg {
+  flex: 0 0 auto;
   color: var(--workbench-text-muted);
 }
 
-.gitSyncTooltipTrigger {
-  @apply inline-flex h-full;
-}
-
-.gitSyncButton,
-.gitSyncMenuButton {
-  @apply flex h-full items-center border-0 bg-transparent;
-  color: inherit;
-  cursor: pointer;
-}
-
-.gitSyncButton {
-  gap: 4px;
-  padding: 0 4px 0 7px;
-  border-radius: var(--workbench-radius) 0 0 var(--workbench-radius);
-}
-
-.gitSyncMenuButton {
-  padding: 0 5px;
-  border-radius: 0 var(--workbench-radius) var(--workbench-radius) 0;
-}
-
-.gitSyncButton:hover:not(:disabled),
-.gitSyncMenuButton:hover:not(:disabled),
-.gitSyncMenuButton[data-state='open'] {
-  background: var(--workbench-hover);
+.gitBranchControlName {
+  min-width: 0;
+  max-width: 160px;
+  overflow: hidden;
   color: var(--workbench-text);
+  font-size: 13px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.gitSyncButton:disabled,
-.gitSyncMenuButton:disabled {
-  cursor: default;
-  opacity: 0.6;
-}
-
-.gitSyncCounts {
-  @apply flex items-center;
+.gitBranchControlCounts {
+  display: inline-flex;
+  flex: 0 0 auto;
   gap: 4px;
+  color: var(--workbench-text-muted);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
   line-height: 1;
 }
 
-.gitSyncMenuPopover {
-  width: min(260px, calc(100vw - 24px));
+.gitBranchControlCaret {
+  opacity: 0.72;
+}
+
+.gitBranchMenuPanel {
   border: 1px solid var(--workbench-border);
   background: var(--workbench-surface);
+  color: var(--workbench-text);
 }
 
-.gitSyncMenu {
-  @apply flex flex-col;
-  gap: 2px;
+.gitBranchMenu {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
 }
 
-.gitSyncMenuItem {
-  @apply flex w-full flex-col items-start border-0 bg-transparent text-left;
-  gap: 1px;
-  padding: 6px 7px;
+/* 当前分支的远端操作：两列四格。 */
+.gitBranchMenuRemote {
+  display: flex;
+  flex-shrink: 0;
+  flex-direction: column;
+  gap: var(--topbar-panel-gap);
+  padding: var(--topbar-panel-gap);
+  border-bottom: 1px solid var(--workbench-border);
+}
+
+.gitBranchMenuActions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--topbar-panel-gap);
+}
+
+.gitBranchMenuAction,
+.gitBranchMenuCreate {
+  display: flex;
+  min-width: 0;
+  height: var(--topbar-panel-row-height);
+  align-items: center;
+  gap: var(--topbar-panel-icon-gap);
+  padding: 0 var(--topbar-panel-item-padding);
+  border: 0;
   border-radius: 6px;
   color: var(--workbench-text);
+  background: transparent;
+  font: inherit;
+  font-size: var(--topbar-panel-font-size);
+  font-weight: 500;
+  text-align: left;
   cursor: pointer;
 }
 
-.gitSyncMenuItem:hover:not(:disabled),
-.gitSyncMenuItem:focus-visible {
-  outline: none;
-  background: var(--workbench-hover);
+.gitBranchMenuAction > svg,
+.gitBranchMenuCreate > svg {
+  flex: 0 0 auto;
+  color: var(--workbench-text-muted);
 }
 
-.gitSyncMenuItem:disabled {
+.gitBranchMenuAction > span,
+.gitBranchMenuCreate > span {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 落后、领先的提交数。 */
+.gitBranchMenuAction > small {
+  display: inline-flex;
+  min-width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  padding: 0 5px;
+  border-radius: 999px;
+  color: var(--workbench-theme-color);
+  background: color-mix(in srgb, var(--workbench-theme-color) 13%, transparent);
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.gitBranchMenuAction:hover:not([aria-disabled='true']),
+.gitBranchMenuAction:focus-visible:not([aria-disabled='true']),
+.gitBranchMenuCreate:hover:not(:disabled),
+.gitBranchMenuCreate:focus-visible {
+  outline: none;
+  color: var(--workbench-theme-color);
+  background: color-mix(in srgb, var(--workbench-theme-color) 10%, transparent);
+}
+
+.gitBranchMenuAction:hover:not([aria-disabled='true']) > svg,
+.gitBranchMenuAction:focus-visible:not([aria-disabled='true']) > svg,
+.gitBranchMenuCreate:hover:not(:disabled) > svg,
+.gitBranchMenuCreate:focus-visible > svg {
+  color: inherit;
+}
+
+.gitBranchMenuAction[aria-disabled='true'] {
   cursor: default;
   opacity: 0.45;
 }
 
-.gitSyncMenuLabel {
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1.25;
+/* 按不了的项也能走到（说明在 title 里）：给一圈淡的焦点框，不染主题色。 */
+.gitBranchMenuAction[aria-disabled='true']:focus-visible {
+  outline: 1px solid var(--workbench-border);
+  outline-offset: -1px;
 }
 
-.gitSyncMenuHint {
+.gitBranchMenuCreate:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.gitBranchMenuNote {
+  margin: 0;
+  padding: 1px var(--topbar-panel-item-padding) 3px;
   color: var(--workbench-text-muted);
-  font-size: 11px;
-  line-height: 1.3;
+  font-size: var(--topbar-panel-detail-font-size);
+  line-height: 1.4;
+  text-wrap: pretty;
+}
+
+/* 远端操作在跑：四格换成一行进度，右边是取消。 */
+.gitBranchMenuRunning {
+  display: flex;
+  min-width: 0;
+  height: var(--topbar-panel-row-height);
+  align-items: center;
+  gap: var(--topbar-panel-icon-gap);
+  padding: 0 2px 0 var(--topbar-panel-item-padding);
+  color: var(--workbench-text);
+  font-size: var(--topbar-panel-font-size);
+  font-weight: 500;
+}
+
+.gitBranchMenuRunning > svg {
+  flex: 0 0 auto;
+  color: var(--workbench-theme-color);
+}
+
+.gitBranchMenuRunning > span {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gitBranchMenuCancel {
+  flex: 0 0 auto;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--workbench-border);
+  border-radius: 5px;
+  color: var(--workbench-text);
+  background: transparent;
+  font: inherit;
+  font-size: var(--topbar-panel-font-size);
+  cursor: pointer;
+}
+
+.gitBranchMenuCancel:hover:not(:disabled),
+.gitBranchMenuCancel:focus-visible {
+  outline: none;
+  border-color: color-mix(in srgb, var(--status-red) 36%, var(--workbench-border));
+  color: var(--status-red);
+  background: color-mix(in srgb, var(--status-red) 8%, transparent);
+}
+
+.gitBranchMenuCancel:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.gitBranchMenuSearch {
+  display: flex;
+  flex-shrink: 0;
+  height: calc(var(--topbar-panel-row-height) + 2 * var(--topbar-panel-padding));
+  padding: var(--topbar-panel-padding) var(--topbar-panel-gap);
+}
+
+.gitBranchMenuSearch > * {
+  min-width: 0;
+  flex: 1;
+  height: 100%;
+}
+
+.gitBranchMenuSearch :global(.velar-search-field-input) {
+  font-size: var(--topbar-panel-font-size);
+  font-weight: 500;
+}
+
+.gitBranchMenuList {
+  min-height: 64px;
+  max-height: var(--topbar-panel-list-max-height);
+  overflow-y: auto;
+  padding-bottom: var(--topbar-panel-gap);
+}
+
+.gitBranchMenuGroup,
+.gitBranchMenuFolder {
+  display: flex;
+  flex-direction: column;
+}
+
+.gitBranchMenuGroup + .gitBranchMenuGroup {
+  margin-top: var(--topbar-panel-gap);
+}
+
+.gitBranchMenuGroupTitle {
+  display: flex;
+  height: var(--topbar-panel-section-height);
+  align-items: center;
+  padding: 0 calc(var(--topbar-panel-item-padding) + var(--topbar-panel-gap));
+  color: var(--workbench-text-muted);
+  font-size: var(--topbar-panel-font-size);
+  font-weight: 600;
+}
+
+.gitBranchMenuFolderHeader,
+.gitBranchMenuRow {
+  width: calc(100% - 2 * var(--topbar-panel-gap));
+  height: var(--topbar-panel-row-height);
+  flex-shrink: 0;
+  margin-inline: var(--topbar-panel-gap);
+  border-radius: 6px;
+  color: var(--workbench-text);
+}
+
+.gitBranchMenuFolderHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--topbar-panel-icon-gap);
+  padding-right: var(--topbar-panel-item-padding);
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: var(--topbar-panel-font-size);
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+
+.gitBranchMenuFolderHeader:hover,
+.gitBranchMenuFolderHeader:focus-visible {
+  outline: none;
+  background: var(--workbench-hover);
+}
+
+.gitBranchMenuFolderHeader > svg {
+  flex: 0 0 auto;
+  color: var(--workbench-text-muted);
+}
+
+.gitBranchMenuFolderHeader > span {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gitBranchMenuFolderCaret {
+  transition: transform 150ms ease;
+}
+
+.gitBranchMenuFolderCaret[data-collapsed='true'] {
+  transform: rotate(-90deg);
+}
+
+.gitBranchMenuRow {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  align-items: stretch;
+}
+
+.gitBranchMenuRow:hover,
+.gitBranchMenuRow:has(:focus-visible) {
+  background: var(--workbench-hover);
+}
+
+.gitBranchMenuRow[data-current='true'] {
+  background: color-mix(in srgb, var(--workbench-theme-color) 12%, transparent);
+}
+
+.gitBranchMenuRowMain {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: var(--topbar-panel-icon-gap);
+  padding-right: var(--topbar-panel-item-padding);
+  border: 0;
+  border-radius: inherit;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  font-size: var(--topbar-panel-font-size);
+  text-align: left;
+  cursor: pointer;
+}
+
+.gitBranchMenuRowMain:disabled {
+  cursor: default;
+}
+
+/* 有操作在跑、暂时切不了的分支淡一些；当前分支那一行本来就点不了，不算。 */
+.gitBranchMenuRow:not([data-current='true']) .gitBranchMenuRowMain:disabled {
+  opacity: 0.55;
+}
+
+.gitBranchMenuRowMain:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--workbench-theme-color) 48%, transparent);
+  outline-offset: -1px;
+}
+
+.gitBranchMenuRowMain > svg {
+  flex: 0 0 auto;
+  color: var(--workbench-text-muted);
+}
+
+.gitBranchMenuRow[data-current='true'] .gitBranchMenuRowMain > svg {
+  color: var(--workbench-theme-color);
+}
+
+.gitBranchMenuRow[data-current='true'] .gitBranchMenuRowMain > span {
+  font-weight: 600;
+}
+
+.gitBranchMenuRowMain > span {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 当前分支跟踪的远端分支。 */
+.gitBranchMenuRowMain > small {
+  min-width: 0;
+  max-width: 50%;
+  flex: 0 1 auto;
+  overflow: hidden;
+  color: var(--workbench-text-muted);
+  font-size: var(--topbar-panel-detail-font-size);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 悬停或焦点在这一行时右边浮出来的「签出」「推送」；名字让出它们的位置。 */
+.gitBranchMenuRow:hover .gitBranchMenuRowMain:not(:disabled) > span,
+.gitBranchMenuRow:has(:focus-visible) .gitBranchMenuRowMain:not(:disabled) > span {
+  padding-right: 88px;
+}
+
+.gitBranchMenuRowActions {
+  position: absolute;
+  z-index: 1;
+  top: 4px;
+  right: 4px;
+  display: flex;
+  height: 22px;
+  align-items: center;
+  gap: 1px;
+  padding: 1px;
+  border: 1px solid var(--workbench-border);
+  border-radius: 5px;
+  opacity: 0;
+  background: var(--workbench-surface);
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+
+.gitBranchMenuRow:hover .gitBranchMenuRowActions,
+.gitBranchMenuRow:has(:focus-visible) .gitBranchMenuRowActions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.gitBranchMenuRowActions > button {
+  display: inline-flex;
+  height: 18px;
+  align-items: center;
+  gap: 3px;
+  padding: 0 5px;
+  border: 0;
+  border-radius: 3px;
+  color: var(--workbench-text-muted);
+  background: transparent;
+  font: inherit;
+  font-size: var(--topbar-panel-detail-font-size);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.gitBranchMenuRowActions > button:hover:not(:disabled),
+.gitBranchMenuRowActions > button:focus-visible {
+  outline: none;
+  color: var(--workbench-theme-color);
+  background: color-mix(in srgb, var(--workbench-theme-color) 12%, transparent);
+}
+
+.gitBranchMenuRowActions > button:disabled {
+  cursor: default;
+  opacity: 0.42;
+}
+
+.gitBranchMenuEmpty {
+  padding: 14px var(--topbar-panel-item-padding);
+  color: var(--workbench-text-muted);
+  font-size: var(--topbar-panel-font-size);
+  text-align: center;
+}
+
+.gitBranchMenuFooter {
+  display: flex;
+  flex-shrink: 0;
+  flex-direction: column;
+  padding: var(--topbar-panel-gap);
+  border-top: 1px solid var(--workbench-border);
+}
+
+.gitBranchMenuCreate > svg {
+  color: var(--workbench-theme-color);
+}
+
+/* 新建分支的对话框：主按钮、勾选框跟主题色。 */
+.gitBranchCreateDialog {
+  --primary: var(--workbench-theme-color);
+  --primary-rgb: var(--workbench-theme-color-rgb);
+  --primary-foreground: #ffffff;
+  --foreground: var(--workbench-text);
+  --muted-foreground: var(--workbench-text-muted);
+  --control-themed-bg: var(--workbench-control-bg);
+  --control-themed-hover-bg: var(--workbench-control-bg);
+  --control-themed-open-bg: var(--workbench-control-bg);
+
+  width: min(340px, calc(100vw - 24px));
+  max-width: min(340px, calc(100vw - 24px));
+  background: var(--workbench-surface);
+  color: var(--workbench-text);
+}
+
+.gitBranchCreateForm {
+  display: flex;
+  flex-direction: column;
+  margin-top: 14px;
+}
+
+.gitBranchCreateFooter {
+  justify-content: space-between;
+  margin-top: 16px;
+}
+
+.gitBranchCreateCheckout {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--workbench-text-muted);
+  font-size: 12px;
+  line-height: 1;
+  user-select: none;
+}
+
+.gitBranchCreateCheckout > input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--workbench-theme-color);
+}
+
+.gitBranchCreateActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.gitBranchCreateSubmit,
+.gitBranchCreateSubmit:hover:not(:disabled) {
+  background: var(--workbench-theme-color);
+  color: var(--primary-foreground);
 }
 
 .topGitPlaceholder {

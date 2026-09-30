@@ -34,11 +34,7 @@ import type { SystemWorkspaceGitSummary } from '@shared/contracts'
 
 import { type WorkbenchTopRunControl } from '../../hooks/useWorkbenchTopRunControl'
 import styles from '../../styles/workbenchPageStyles'
-import {
-  WorkbenchGitCommitControl,
-  type WorkbenchGitCommitControlVariant,
-} from '../git/WorkbenchGitCommitControl'
-import { WorkbenchGitSyncControl } from '../git/WorkbenchGitSyncControl'
+import { WorkbenchGitBranchControl } from '../git/WorkbenchGitBranchControl'
 
 export interface TopToolbarProps {
   gitWorkspaceRoot: string
@@ -47,7 +43,6 @@ export interface TopToolbarProps {
   gitSshKeyPath?: string
   hasGitRepository: boolean
   hasUnsavedOpenTabs: boolean
-  gitControlVariant?: WorkbenchGitCommitControlVariant
   onRepositoryChanged: () => void | Promise<void>
   onOpenGitCommitTool: () => void
   onOpenGitBottomTool: () => void
@@ -64,7 +59,6 @@ export function WorkbenchTopLeading({
   onGitRefresh,
   gitSshKeyPath,
   hasUnsavedOpenTabs,
-  gitControlVariant,
   onRepositoryChanged,
   onOpenGitCommitTool,
 }: Pick<
@@ -75,7 +69,6 @@ export function WorkbenchTopLeading({
   | 'gitSshKeyPath'
   | 'hasGitRepository'
   | 'hasUnsavedOpenTabs'
-  | 'gitControlVariant'
   | 'onRepositoryChanged'
   | 'onOpenGitCommitTool'
 >): Nullable<ReactElement> {
@@ -85,23 +78,14 @@ export function WorkbenchTopLeading({
 
   return (
     <div className={styles.topGitControl}>
-      <WorkbenchGitCommitControl
+      {/* 分支、拉取、推送、同步都在这一个控件里：按钮上是分支和落后 / 领先的提交数，点开是面板。 */}
+      <WorkbenchGitBranchControl
         workspaceRoot={gitWorkspaceRoot}
         summary={gitSummary}
-        onRefresh={onGitRefresh}
         gitSshKeyPath={gitSshKeyPath}
         hasUnsavedOpenTabs={hasUnsavedOpenTabs}
-        variant={gitControlVariant ?? 'branch-menu-actions'}
-        layout="pill"
+        onRefresh={onGitRefresh}
         onRepositoryChanged={onRepositoryChanged}
-        onOpenCommitTool={onOpenGitCommitTool}
-      />
-      <WorkbenchGitSyncControl
-        workspaceRoot={gitWorkspaceRoot}
-        summary={gitSummary}
-        gitSshKeyPath={gitSshKeyPath}
-        hasUnsavedOpenTabs={hasUnsavedOpenTabs}
-        onRefresh={onGitRefresh}
         onOpenCommitTool={onOpenGitCommitTool}
       />
     </div>

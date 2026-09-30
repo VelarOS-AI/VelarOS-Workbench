@@ -153,20 +153,22 @@ void describe('Workbench Git on a detached HEAD', () => {
 
   void test('controls that need a branch stay visible, disabled, with the reason', () => {
     const toolbar = readSource('src/renderer/src/components/chrome/TopToolbar.tsx')
-    const branchMenu = readSource('src/renderer/src/components/git/WorkbenchGitCommitControl.tsx')
-    const sync = readSource('src/renderer/src/components/git/WorkbenchGitSyncControl.tsx')
+    const control = readSource('src/renderer/src/components/git/WorkbenchGitBranchControl.tsx')
+    const model = readSource('src/renderer/src/models/git/workbenchGitBranchMenuModel.ts')
     const commitPanel = readSource('src/renderer/src/components/git/WorkbenchCommitPanel.tsx')
 
     // 控件出不出现看的是「有没有 HEAD 可显示」，不再只认分支。
     assert.doesNotMatch(toolbar, /gitSummary\.status\?\.branch/u)
     assert.match(toolbar, /hasWorkbenchGitHead\(gitSummary\.status\)/u)
-    assert.match(branchMenu, /describeWorkbenchGitHead\(status, t\)/u)
-    assert.match(branchMenu, /branch: headLabel/u)
-    assert.match(branchMenu, /workbench\.gitBranchCreateFromDetachedDescription/u)
-    // 同步按钮：分离的 HEAD 上不隐藏，禁用并说明原因；菜单里只有获取远端还能点。
-    assert.doesNotMatch(sync, /!status\?\.branch\) return null/u)
-    assert.match(sync, /workbench\.gitDetachedHeadReason/u)
-    assert.match(sync, /disabled: detached \|\| !upstream/u)
+    assert.match(control, /describeWorkbenchGitHead\(status, t\)/u)
+    assert.match(control, /className=\{styles\.gitBranchControlName\}>\{headLabel\}/u)
+    assert.match(control, /workbench\.gitBranchCreateFromDetachedDescription/u)
+    // 分离的 HEAD 上没有哪个分支算当前的：交给列表的是 status.branch（null），不是按钮上那句说明。
+    assert.match(control, /const branchName = status\?\.branch \?\? null/u)
+    assert.match(control, /currentBranch=\{branchName\}/u)
+    // 远端操作：分离的 HEAD 上不藏，按不了并写明原因（见下面的行为测试）；只有获取远端还能点。
+    assert.doesNotMatch(control, /!status\?\.branch\) return null/u)
+    assert.match(model, /workbench\.gitDetachedHeadReason/u)
     assert.match(commitPanel, /workbench\.gitDetachedHeadReason/u)
     for (const key of [
       'workbench.gitDetachedHead',

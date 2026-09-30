@@ -237,8 +237,15 @@ GB18030、混用的换行符），编辑器据此只读打开，用户明确选�
 - **分离的 HEAD**：状态（`WorkspaceGitStatusResult`）与顶栏的轻量快照里，`branch` 为 null 时
   `detachedHead` 给出 HEAD 停在的提交（`sha`、`shortSha`）。顶栏的 Git 控件看的是「HEAD 有得显示」
   （`hasWorkbenchGitHead`），不只认分支：分离的 HEAD 上按钮写「分离的 HEAD · 1a2b3c4」
-  （`describeWorkbenchGitHead`，这句话当作分支名交给 UI 包的分支菜单），菜单里照常切回分支、新建分支；
-  同步按钮、提交面板的推送禁用并写明原因，获取远端和分支菜单里点名分支的推送照常能用。
+  （`describeWorkbenchGitHead`），菜单里没有哪个分支算当前的，照常切回分支、新建分支；菜单里的拉取、
+  同步、推送和提交面板的推送按不了并写明原因，获取远端和点名某个分支的推送照常能用。
+- **顶栏的 Git 控件只有一个**（`WorkbenchGitBranchControl`，面板是 `WorkbenchGitBranchMenu`）：按钮上
+  是当前分支和落后（↓）、领先（↑）上游的提交数；点开的面板从上到下是当前分支的拉取、推送、同步、获取
+  远端（跑着的时候换成进度和取消），搜索，分支列表（按名字里的 `/` 排成树；点一下签出，悬停出「签出」
+  「推送」；远端分支签出成同名的本地分支，本地没有就新建），新建分支。外框和面板的尺寸用 UI 包的顶栏
+  控件（`TopBarControlFrame`、`--topbar-panel-*`），和项目菜单同一套；面板里的内容是 Workbench 自己
+  的，不再用 UI 包的 `WorkspaceGitCommitControl`（它没有放远端操作的位置）。哪些操作按得了、为什么
+  按不了、树怎么排，都在 `workbenchGitBranchMenuModel.ts`。
 - **模块**：`WorkbenchGitService` 是对外的唯一入口（IPC、测试、探针都找它）。成块的新功能另放文件，
   经 `WorkbenchGitAccess` 借服务的内部能力（跑 git、项目在仓库里的位置、状态、报错口径），不各起各的
   git：贮藏在 `WorkbenchGitStashes.ts`，合并、变基、拣选、撤销在 `WorkbenchGitOperations.ts`。
@@ -307,7 +314,8 @@ GB18030、混用的换行符），编辑器据此只读打开，用户明确选�
   git 起的 ssh 一并带走。renderer 给每次操作起一个 `operationId`，凭它经
   `workbench-app:git:cancel-remote-action` 取消，那次操作以 `CANCELLED` 收场。renderer 这边一个项目同一
   时刻只跑一个远端操作（`workbenchGitRemoteOperation.ts` 登记，`useWorkbenchGitRemoteAction` 是顶栏
-  同步按钮、分支菜单、提交面板推送按钮的统一入口），所以不管谁发起的，同步按钮都转圈、旁边都有取消。
+  分支菜单、提交面板推送按钮的统一入口），所以不管谁发起的，顶栏的分支按钮都转圈，点开就能取消；跑着
+  的时候不切分支、不新建分支。
   给用户看的失败说明里去掉了 git 的进度行。Windows 上没有进程组，取消只结束 git 进程本身。
 
 ## 语言服务与磁盘的同步

@@ -59,26 +59,24 @@ void describe('pre-split Workbench shell parity', () => {
     assert.doesNotMatch(searchForm, /searchInputClearButton|<SearchField/)
   })
 
-  void test('places the project and compact Git controls together in the title row', () => {
+  void test('places the project and one Git control together in the title row', () => {
     const presentation = readSource('src/renderer/src/StandaloneWorkbenchPagePresentation.tsx')
     const toolbar = readSource('src/renderer/src/components/chrome/TopToolbar.tsx')
     const adapter = readSource(
       'src/renderer/src/components/embedded/workbenchEmbeddedKernelAdapter.ts'
     )
-    const control = readSource('src/renderer/src/components/git/WorkbenchGitCommitControl.tsx')
-    const sharedControl = readSource(
-      'node_modules/@velaros-ai/ui/dist/product/git/WorkspaceGitCommitControl.js'
-    )
-    const sharedGitStyles = readSource(
-      'node_modules/@velaros-ai/ui/dist/product/git/WorkspaceGitCommitControl.module.css'
-    )
+    const control = readSource('src/renderer/src/components/git/WorkbenchGitBranchControl.tsx')
+    const menu = readSource('src/renderer/src/components/git/WorkbenchGitBranchMenu.tsx')
+    const topStyles = readSource('src/renderer/src/styles/02-chrome-top.module.css')
     const shortcuts = readSource('src/renderer/src/models/layout/workbenchKeyboardShortcuts.ts')
 
     assert.match(presentation, /<WorkbenchProjectControl/)
     assert.match(presentation, /<WorkbenchTopLeading \{\.\.\.editorChrome\} \/>/)
     assert.match(presentation, /<WorkbenchTopTrailing \{\.\.\.editorChrome\} \/>/)
     assert.doesNotMatch(presentation, /placement="rail"|rightToolActionGroup/)
-    assert.match(toolbar, /<WorkbenchGitCommitControl/)
+    // 顶栏上只有一个 Git 控件：分支、拉取、推送、同步、获取远端都在它的面板里，旁边不再另放同步按钮。
+    assert.equal(toolbar.match(/<WorkbenchGit\w+Control\b/g)?.length, 1)
+    assert.match(toolbar, /<WorkbenchGitBranchControl/)
     const runButton = toolbar.indexOf('<WorkbenchRunAction')
     const settingsButton = toolbar.indexOf('tooltip={settingsLabel}')
     assert.ok(runButton >= 0)
@@ -88,45 +86,29 @@ void describe('pre-split Workbench shell parity', () => {
     assert.match(adapter, /onOpenGitBottomTool:[\s\S]*openBottomTool\('git'\)/)
     assert.match(control, /switchWorkspaceGitBranch/)
     assert.match(control, /createWorkspaceGitBranch/)
-    // 分支菜单里的获取、推送走远端操作的统一入口（顶栏同步按钮上看得到、能取消）。
+    assert.match(control, /switchWorkspaceGitBranch\([\s\S]*\{ create: true \}/)
+    // 远端操作走统一入口（别处发起的这里也看得到、能取消）；列表里点的分支连名字一起交过去。
     assert.match(control, /useWorkbenchGitRemoteAction\(workspaceRoot\)/)
     assert.match(control, /remoteAction\.run\(action, \{ branch, privateKeyPath: gitSshKeyPath \}\)/)
-    assert.match(control, /workbench\.gitCommitAction/)
-    assert.match(control, /<WorkspaceGitCommitControl/)
-    assert.doesNotMatch(control, /<Dialog|<FolderIcon/)
-    assert.match(sharedGitStyles, /\.gitCompactMenu[\s\S]*background-color:[^;]+!important/)
+    assert.match(control, /onPushBranch=\{\(branch\) => void runRemoteAction\('upload', branch\.name\)\}/)
+    // 外框与面板用共享的顶栏控件，和旁边的项目菜单同一套尺寸；按钮上写分支和落后、领先的提交数。
+    assert.match(control, /<TopBarControlFrame[\s\S]*<AnchoredPopover/)
+    assert.match(control, /getTopBarControlPanelClassName\(styles\.gitBranchMenuPanel\)/)
+    assert.match(control, /data-topbar-panel="picker"/)
+    assert.match(control, /gitBranchControlName[\s\S]*gitBranchControlCounts[\s\S]*↓\{behind\}[\s\S]*↑\{ahead\}/)
+    assert.doesNotMatch(control, /<FolderIcon/)
+    // 面板从上到下：远端操作（跑着时换成进度和取消）、搜索、分支列表、新建分支。
     assert.match(
-      sharedGitStyles,
-      /\.gitCompactMenuHeader[\s\S]*padding:\s*var\(--topbar-panel-padding\)/,
+      menu,
+      /gitBranchMenuRemote[\s\S]*gitBranchMenuSearch[\s\S]*<SearchField[\s\S]*gitBranchMenuList[\s\S]*gitBranchMenuFooter[\s\S]*onOpenCreateBranch/
     )
-    assert.match(
-      sharedGitStyles,
-      /(?:\.gitCompactInput:focus-visible[\s\S]*background-color:\s*transparent|\.gitCompactSearchSlot :global\(\.velar-search-field-input\)[\s\S]*font-size:\s*11px)/
-    )
-    assert.match(
-      sharedGitStyles,
-      /\.gitCreateBranchInput:focus-visible[\s\S]*git-create-branch-input-bg/
-    )
-    assert.match(sharedControl, /FolderIcon[\s\S]*gitCompactBranchTreeFolder/)
-    assert.match(sharedControl, /buildBranchTrie\(branches, namespace\)/)
-    assert.match(sharedGitStyles, /\.gitCreateBranchDialog[\s\S]*max-width:\s*min\(320px/)
-    assert.match(sharedControl, /Dialog[\s\S]*createDialogTitle/)
-    assert.match(sharedControl, /DialogFooter[\s\S]*gitCreateBranchDialogFooter/)
-    assert.match(sharedControl, /checked(?:=\{|:\s*)checkoutCreatedBranch/)
-    assert.match(
-      sharedControl,
-      /(?:gitCompactSearchField|gitCompactSearchSlot)[\s\S]*gitCompactFetchButton/
-    )
-    assert.match(
-      sharedControl,
-      /gitCompactBranchList[\s\S]*gitCompactFooter[\s\S]*openCreateBranchDialog/
-    )
-    assert.match(
-      sharedControl,
-      /gitCompactBranchHoverActions[\s\S]*checkoutAction[\s\S]*uploadAction/
-    )
-    assert.match(control, /themeColor="var\(--workbench-theme-color\)"/)
-    assert.match(control, /switchWorkspaceGitBranch\([\s\S]*\{ create: true \}/)
+    assert.match(menu, /running \? \([\s\S]*gitBranchMenuRunning[\s\S]*onCancelRemoteAction/)
+    assert.match(menu, /gitBranchMenuRowActions[\s\S]*onSwitchBranch\(branch\)[\s\S]*onPushBranch\(branch\)/)
+    assert.match(menu, /FolderIcon[\s\S]*renderNode\(child, depth \+ 1\)/)
+    assert.match(topStyles, /\.gitBranchMenuSearch[\s\S]*var\(--topbar-panel-row-height\)/)
+    assert.match(topStyles, /\.gitBranchMenuList[\s\S]*max-height:\s*var\(--topbar-panel-list-max-height\)/)
+    assert.match(topStyles, /\.gitBranchCreateDialog[\s\S]*max-width:\s*min\(340px/)
+    assert.doesNotMatch(topStyles, /\.gitSync/)
     assert.match(shortcuts, /toggle-changes', defaultShortcut: 'Mod\+Shift\+G'/)
   })
 
