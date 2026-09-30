@@ -610,6 +610,12 @@ export function QuickOpen({
                   return
                 }
 
+                // 结果行不是 Tab 停靠点（上下键移动）：Tab 不把焦点带出弹窗、落到后面的页面上。
+                if (event.key === 'Tab') {
+                  event.preventDefault()
+                  return
+                }
+
                 if (event.key === 'ArrowDown') {
                   event.preventDefault()
                   moveActiveIndex(1)
