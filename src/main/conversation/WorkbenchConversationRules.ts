@@ -8,6 +8,7 @@ import type {
   WorkbenchConversationSendRequest,
   WorkbenchConversationState,
 } from '../../shared/workbenchConversation'
+import { workbenchMainText } from '../i18n/workbenchMainMessages'
 
 import type {
   ConversationHostInstructionOptions,
@@ -28,7 +29,7 @@ export function toConversationInput(
     label: image.label?.trim() || `image-${index + 1}`,
   }))
   if (!request.text.trim() && !images?.length)
-    throw new AppError('VALIDATION', '消息不能为空。')
+    throw new AppError('VALIDATION', workbenchMainText('conversation.emptyMessage'))
   return { text: request.text, images, inputId: request.inputId }
 }
 

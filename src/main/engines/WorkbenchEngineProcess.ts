@@ -10,9 +10,20 @@ import type {
   WorkbenchAgentEngineId,
   WorkbenchAgentEngineStatus,
 } from '../../shared/workbenchConversation'
+import { workbenchMainText } from '../i18n/workbenchMainMessages'
 import { WorkbenchCommandHelper } from '../workspace/CommandHelper'
 
 const log = Log.tag('WorkbenchEngineProcess')
+
+/** 进程是怎么结束的（「被信号 SIGTERM 结束」「退出码 1」），拼进「已退出」的提示里。 */
+export function describeEngineExitStatus(
+  code: Nullable<number>,
+  signal: Nullable<NodeJS.Signals>
+): string {
+  return signal
+    ? workbenchMainText('engines.exitedBySignal', { signal })
+    : workbenchMainText('engines.exitedWithCode', { code: String(code) })
+}
 
 /** 引擎命令行起在登录 shell 的环境里：从 Finder 打开的应用只有最小的 PATH，找不到用户装的命令行。 */
 export interface WorkbenchEngineEnvironmentSource {
@@ -60,7 +71,7 @@ export async function resolveEngineCommand(
   env.PATH = path
   const executable = await findExecutable(name, env)
   if (!executable)
-    throw new AppError('NOT_FOUND', `没有找到 ${label} 命令行（${name}）。装好后重新打开这个菜单。`)
+    throw new AppError('NOT_FOUND', workbenchMainText('engines.commandNotFound', { label, name }))
   return { executable, env }
 }
 
@@ -178,7 +189,7 @@ export async function withTimeout<T>(
       promise,
       new Promise<never>((_, reject) => {
         timer = setTimeout(() => reject(new AppError('TIMEOUT', message)), timeoutMs)
-        abort = () => reject(signal?.reason ?? new AppError('CANCELLED', '已取消。'))
+        abort = () => reject(signal?.reason ?? new AppError('CANCELLED', workbenchMainText('engines.cancelled')))
         signal?.addEventListener('abort', abort, { once: true })
       }),
     ])

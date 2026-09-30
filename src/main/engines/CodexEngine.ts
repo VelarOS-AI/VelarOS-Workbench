@@ -16,6 +16,7 @@ import type {
   WorkbenchConversationImage,
   WorkbenchPermissionConfirmationMode,
 } from '../../shared/workbenchConversation'
+import { workbenchMainText } from '../i18n/workbenchMainMessages'
 
 import { CodexAppServerClient, type CodexServerRequest } from './CodexAppServerClient'
 import { engineInstructions } from './WorkbenchEngineInstructions'
@@ -88,13 +89,13 @@ export class CodexEngine implements WorkbenchAgentEngine {
       const client = await withTimeout(
         this.connect(),
         StatusTimeoutMs,
-        'Codex 没有及时回应。',
+        workbenchMainText('engines.codexNoResponse'),
         signal
       )
       const [account, models] = await withTimeout(
         Promise.all([client.request('account/read', {}), this.listModels(client)]),
         StatusTimeoutMs,
-        'Codex 没有及时回应。',
+        workbenchMainText('engines.codexNoResponse'),
         signal
       )
       if (
@@ -106,7 +107,7 @@ export class CodexEngine implements WorkbenchAgentEngine {
           id: this.id,
           available: false,
           problem: 'signed-out',
-          reason: 'Codex 还没有登录：在终端里运行 codex login 登录后，再打开这个菜单。',
+          reason: workbenchMainText('engines.codexSignedOut'),
           models,
         }
       if (models.length === 0)
@@ -114,7 +115,7 @@ export class CodexEngine implements WorkbenchAgentEngine {
           id: this.id,
           available: false,
           problem: 'error',
-          reason: 'Codex 没有报上可用的模型。',
+          reason: workbenchMainText('engines.codexNoModels'),
           models,
         }
       return { id: this.id, available: true, models }
@@ -130,7 +131,7 @@ export class CodexEngine implements WorkbenchAgentEngine {
     const client = await withTimeout(
       this.connect(),
       StatusTimeoutMs,
-      'Codex 没有及时回应。',
+      workbenchMainText('engines.codexNoResponse'),
       signal
     )
     const permissions = codexPermissions(input.permissionMode, ref.projectRoot)
@@ -157,7 +158,7 @@ export class CodexEngine implements WorkbenchAgentEngine {
     threadId ??= readThreadId(
       await client.request('thread/start', { ...settings, ephemeral: false })
     )
-    if (!threadId) throw new AppError('PROTOCOL', 'Codex 没有给出 thread。')
+    if (!threadId) throw new AppError('PROTOCOL', workbenchMainText('engines.codexNoThread'))
     input.sessionStarted(threadId)
     signal.throwIfAborted()
     await this.applyGoal(client, threadId, input)
@@ -328,7 +329,7 @@ export class CodexEngine implements WorkbenchAgentEngine {
     const threadId = isString(params.threadId) ? params.threadId : undefined
     if (method === 'serverRequest/resolved') {
       const key = `${String(threadId)}\0${String(params.requestId)}`
-      this.requests.get(key)?.abort(new AppError('CANCELLED', 'Codex 撤回了请求。'))
+      this.requests.get(key)?.abort(new AppError('CANCELLED', workbenchMainText('engines.codexRequestWithdrawn')))
       return
     }
     const run = threadId ? this.runs.get(threadId) : undefined
@@ -346,7 +347,7 @@ export class CodexEngine implements WorkbenchAgentEngine {
             isPlainObject(turn.error) && isNonBlankString(turn.error.message)
               ? turn.error.message
               : run.lastError
-          run.settle({ error: new AppError('UNAVAILABLE', error ?? 'Codex 没有跑完这一轮。') })
+          run.settle({ error: new AppError('UNAVAILABLE', error ?? workbenchMainText('engines.codexRunIncomplete')) })
         } else run.settle({ status: turn.status === 'interrupted' ? 'aborted' : 'completed' })
         return
       }
@@ -355,7 +356,7 @@ export class CodexEngine implements WorkbenchAgentEngine {
           isPlainObject(params.error) && isNonBlankString(params.error.message)
             ? params.error.message
             : undefined
-        if (params.willRetry === true) run.input.surface.reconnecting(message ?? 'Codex 正在重试。')
+        if (params.willRetry === true) run.input.surface.reconnecting(message ?? workbenchMainText('engines.codexRetrying'))
         else if (message) run.lastError = message
         return
       }
@@ -383,7 +384,10 @@ export class CodexEngine implements WorkbenchAgentEngine {
     if (!run) {
       if (isApproval(request.method) || legacy || request.method === 'item/tool/requestUserInput')
         return refuse()
-      throw new AppError('PROTOCOL', `Workbench 不处理这种请求：${request.method}`)
+      throw new AppError(
+        'PROTOCOL',
+        workbenchMainText('engines.unhandledRequest', { request: request.method })
+      )
     }
     const key = `${threadId}\0${String(request.id)}`
     const controller = new AbortController()

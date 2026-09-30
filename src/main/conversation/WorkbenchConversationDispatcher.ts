@@ -2,6 +2,7 @@ import { AppError } from '@velaros-ai/core/error'
 
 import type { WorkbenchAgentEngineStatus } from '../../shared/workbenchConversation'
 import type { WorkbenchEngineConversationRuntime } from '../engines/WorkbenchEngineConversationRuntime'
+import { workbenchMainText } from '../i18n/workbenchMainMessages'
 
 import type { WorkbenchConversationRuntimeApi } from './WorkbenchConversationRuntime'
 
@@ -24,10 +25,7 @@ export function createWorkbenchConversationDispatcher(
     cancel: (ref) => (engines.has(ref) ? engines.cancel(ref) : platform.cancel(ref)),
     guidance: async (ref, input) => {
       if (engines.has(ref))
-        throw new AppError(
-          'VALIDATION',
-          '外部引擎的会话不支持运行中引导，这条消息会在这一轮结束后发出。'
-        )
+        throw new AppError('VALIDATION', workbenchMainText('conversation.engineGuidanceUnsupported'))
       await platform.guidance(ref, input)
     },
     input: (ref, answer) =>

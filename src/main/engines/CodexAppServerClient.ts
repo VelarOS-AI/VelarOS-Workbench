@@ -5,7 +5,10 @@ import { createInterface } from 'node:readline'
 import { isNonBlankString, isNumber, isPlainObject, isString, Log } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
+import { workbenchMainText } from '../i18n/workbenchMainMessages'
+
 import {
+  describeEngineExitStatus,
   spawnEngineProcess,
   terminateEngineProcess,
   type WorkbenchEngineCommand,
@@ -70,15 +73,17 @@ export class CodexAppServerClient {
       log.debug('写不进 Codex app-server 了', { error: AppError.getMessage(error) })
     )
     child.once('error', (error) =>
-      this.fail(new AppError('UNAVAILABLE', `Codex 起不来：${error.message}`))
+      this.fail(new AppError('UNAVAILABLE', workbenchMainText('engines.codexStartFailed', { reason: error.message })))
     )
     child.once('close', (code, signal) => {
-      const status = signal ? `被信号 ${signal} 结束` : `退出码 ${String(code)}`
+      const status = describeEngineExitStatus(code, signal)
       const stderr = this.stderrTail.trim()
       this.fail(
         new AppError(
           'CLOSED',
-          stderr ? `Codex 已退出（${status}）：${stderr}` : `Codex 已退出（${status}）。`
+          stderr
+            ? workbenchMainText('engines.exitedWithOutput', { engine: 'Codex', status, stderr })
+            : workbenchMainText('engines.exited', { engine: 'Codex', status })
         )
       )
     })
@@ -116,7 +121,7 @@ export class CodexAppServerClient {
   }
 
   public request(method: string, params?: unknown): Promise<unknown> {
-    if (this.closed) return Promise.reject(new AppError('CLOSED', 'Codex 已经退出。'))
+    if (this.closed) return Promise.reject(new AppError('CLOSED', workbenchMainText('engines.codexExited')))
     const id = this.nextId++
     return new Promise((resolve, reject) => {
       this.pending.set(id, { resolve, reject })
@@ -131,7 +136,7 @@ export class CodexAppServerClient {
   public close(): void {
     if (this.closed) return
     terminateEngineProcess(this.child)
-    this.fail(new AppError('CLOSED', 'Codex 已关闭。'))
+    this.fail(new AppError('CLOSED', workbenchMainText('engines.codexClosed')))
   }
 
   private write(message: CodexRpcMessage & { jsonrpc?: never }): void {
@@ -189,5 +194,5 @@ function isRpcId(value: unknown): value is CodexRpcId {
 
 function rpcErrorMessage(error: unknown): string {
   if (isPlainObject(error) && isNonBlankString(error.message)) return error.message
-  return isString(error) ? error : 'Codex 拒绝了请求。'
+  return isString(error) ? error : workbenchMainText('engines.codexRequestRejected')
 }

@@ -140,7 +140,7 @@ export class WorkbenchConversationSession implements WorkbenchConversationSessio
       // 「从不询问」档连危险命令也直接放行；登录墙要用户自己去登录，照常弹卡（与 Desktop 相同）
       if (options.confirmationMode === 'never-ask' && detail !== LoginConfirmation)
         return { approved: true, message: null }
-      if (!session) throw new AppError('UNAVAILABLE', '会话尚未就绪。')
+      if (!session) throw new AppError('UNAVAILABLE', workbenchMainText('conversation.notReady'))
       const answer = await session.request('confirmation', message, signal, detail)
       const approved = isBoolean(answer) ? answer : isPlainObject(answer) && isTrue(answer.approved)
       const reason = isPlainObject(answer) && isNonBlankString(answer.reason) ? answer.reason : null

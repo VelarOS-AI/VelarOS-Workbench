@@ -15,6 +15,7 @@ import type {
   WorkbenchConversationRef,
   WorkbenchConversationSink,
 } from '../conversation/WorkbenchConversationRuntime'
+import { workbenchMainText } from '../i18n/workbenchMainMessages'
 import type { WorkbenchAgentProjectActivityPort } from '../workspace/git/WorkbenchChatRunAttribution'
 
 import { EngineRunSurface } from './WorkbenchEngineRunSurface'
@@ -69,11 +70,11 @@ export class WorkbenchEngineConversationRuntime {
   ): { accepted: Promise<void>; completed: Promise<void> } {
     const selection = request.engine
     const engine = selection && this.engines.get(selection.id)
-    if (!selection || !engine) throw new AppError('VALIDATION', '没有这个外部引擎。')
+    if (!selection || !engine) throw new AppError('VALIDATION', workbenchMainText('engines.unknownEngine'))
     const key = runKey(request)
-    if (this.closing) throw new AppError('VALIDATION', '会话正在关闭。')
+    if (this.closing) throw new AppError('VALIDATION', workbenchMainText('conversation.closing'))
     if (this.active.has(key))
-      throw new AppError('VALIDATION', '当前会话正在运行，请等它结束或先停止。')
+      throw new AppError('VALIDATION', workbenchMainText('engines.conversationBusy'))
     const ref: WorkbenchConversationRef = {
       projectRoot: request.projectRoot,
       sessionId: request.sessionId,
@@ -112,7 +113,7 @@ export class WorkbenchEngineConversationRuntime {
   public async cancel(ref: WorkbenchConversationRef): Promise<WorkbenchConversationCancelResult> {
     const run = this.active.get(runKey(ref))
     if (!run) return { aborted: false }
-    run.controller.abort(new AppError('CANCELLED', '运行已停止。'))
+    run.controller.abort(new AppError('CANCELLED', workbenchMainText('conversation.runStopped')))
     await Promise.allSettled([run.completed])
     return { aborted: true }
   }
@@ -140,7 +141,7 @@ export class WorkbenchEngineConversationRuntime {
     const runs = [...this.active.entries()]
       .filter(([key]) => key.startsWith(prefix))
       .map(([, run]) => run)
-    for (const run of runs) run.controller.abort(new AppError('CANCELLED', '运行已停止。'))
+    for (const run of runs) run.controller.abort(new AppError('CANCELLED', workbenchMainText('conversation.runStopped')))
     await Promise.allSettled(runs.map((run) => run.completed))
   }
 
@@ -161,7 +162,7 @@ export class WorkbenchEngineConversationRuntime {
   public close(): Promise<void> {
     this.closing ??= (async () => {
       const runs = [...this.active.values()]
-      for (const run of runs) run.controller.abort(new AppError('CANCELLED', '运行已停止。'))
+      for (const run of runs) run.controller.abort(new AppError('CANCELLED', workbenchMainText('conversation.runStopped')))
       await Promise.allSettled(runs.map((run) => run.completed))
       await Promise.allSettled([...this.engines.values()].map((engine) => engine.close()))
     })()
@@ -170,7 +171,7 @@ export class WorkbenchEngineConversationRuntime {
 
   private require(ref: WorkbenchConversationRef): EngineActiveRun {
     const run = this.active.get(runKey(ref))
-    if (!run) throw new AppError('VALIDATION', '当前会话没有活动运行。')
+    if (!run) throw new AppError('VALIDATION', workbenchMainText('conversation.noActiveRun'))
     return run
   }
 
@@ -230,8 +231,8 @@ export class WorkbenchEngineConversationRuntime {
       run.surface.settle({ aborted: signal.aborted || status === 'aborted' })
     }
     if (signal.aborted || (!failure && status === 'aborted')) {
-      sink.state({ kind: 'aborted', message: '运行已停止。' })
-      if (!admitted) throw new AppError('CANCELLED', '运行已停止。')
+      sink.state({ kind: 'aborted', message: workbenchMainText('conversation.runStopped') })
+      if (!admitted) throw new AppError('CANCELLED', workbenchMainText('conversation.runStopped'))
       return
     }
     if (failure) {

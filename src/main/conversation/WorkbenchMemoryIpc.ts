@@ -12,6 +12,7 @@ import {
   type WorkbenchMemoryProjectRequest,
   type WorkbenchMemoryRemoveRequest,
 } from '../../shared/workbenchMemory'
+import { workbenchMainText } from '../i18n/workbenchMainMessages'
 import { callWithEnvelope } from '../workspace/ipcBoundary'
 
 import type { WorkbenchConversationWindows } from './WorkbenchConversationIpc'
@@ -31,7 +32,7 @@ export function registerWorkbenchMemoryIpc(options: {
   ): Promise<string> => {
     const project = options.windows.getHubForWebContents(event.sender)?.getState().currentProject
     if (!project || resolve(project.path) !== resolve(request.projectRoot))
-      throw new AppError('PERMISSION', '当前窗口不能查看这个项目的记忆。')
+      throw new AppError('PERMISSION', workbenchMainText('conversation.memoryNotInWindow'))
     return realpath(project.path)
   }
 
@@ -58,13 +59,13 @@ export function registerWorkbenchMemoryIpc(options: {
 
 function parseProjectRequest(raw: unknown): WorkbenchMemoryProjectRequest {
   if (!isPlainObject(raw) || !isNonBlankString(raw.projectRoot))
-    throw new AppError('VALIDATION', '无效的记忆请求。')
+    throw new AppError('VALIDATION', workbenchMainText('conversation.invalidMemoryRequest'))
   return { projectRoot: raw.projectRoot }
 }
 
 function parseRemoveRequest(raw: unknown): WorkbenchMemoryRemoveRequest {
   const request = parseProjectRequest(raw)
   if (!isPlainObject(raw) || !isNonBlankString(raw.id))
-    throw new AppError('VALIDATION', '无效的记忆请求。')
+    throw new AppError('VALIDATION', workbenchMainText('conversation.invalidMemoryRequest'))
   return { ...request, id: raw.id }
 }

@@ -5,7 +5,10 @@ import { createInterface } from 'node:readline'
 import { isNonBlankString, isPlainObject, isString, Log } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
+import { workbenchMainText } from '../i18n/workbenchMainMessages'
+
 import {
+  describeEngineExitStatus,
   spawnEngineProcess,
   terminateEngineProcess,
   type WorkbenchEngineCommand,
@@ -111,7 +114,10 @@ export class ClaudeCodeTransport {
     args: readonly string[],
     cwd: string,
     onControlRequest: ClaudeCodeControlHandler = async (request) => {
-      throw new AppError('PROTOCOL', `不支持的控制请求：${request.subtype}`)
+      throw new AppError(
+        'PROTOCOL',
+        workbenchMainText('engines.unsupportedControlRequest', { request: String(request.subtype) })
+      )
     }
   ): ClaudeCodeTransport {
     return new ClaudeCodeTransport(spawnEngineProcess(command, args, cwd), onControlRequest)
@@ -170,7 +176,7 @@ export class ClaudeCodeTransport {
   }
 
   private request(request: Record<string, unknown>): Promise<Record<string, unknown>> {
-    if (this.finished) return Promise.reject(new AppError('UNAVAILABLE', 'Claude Code 已经退出。'))
+    if (this.finished) return Promise.reject(new AppError('UNAVAILABLE', workbenchMainText('engines.claudeExited')))
     const requestId = randomUUID()
     return new Promise<Record<string, unknown>>((resolve, reject) => {
       this.pending.set(requestId, { resolve, reject })
@@ -179,7 +185,7 @@ export class ClaudeCodeTransport {
   }
 
   private write(message: Record<string, unknown>): void {
-    if (!this.writable) throw new AppError('UNAVAILABLE', 'Claude Code 已经不再接收输入。')
+    if (!this.writable) throw new AppError('UNAVAILABLE', workbenchMainText('engines.claudeInputClosed'))
     this.child.stdin.write(`${JSON.stringify(message)}\n`)
   }
 
@@ -204,7 +210,7 @@ export class ClaudeCodeTransport {
         if (isString(message.request_id))
           this.inbound
             .get(message.request_id)
-            ?.abort(new AppError('CANCELLED', 'Claude Code 撤回了请求。'))
+            ?.abort(new AppError('CANCELLED', workbenchMainText('engines.claudeRequestWithdrawn')))
         return
       case 'keep_alive':
         return
@@ -225,7 +231,9 @@ export class ClaudeCodeTransport {
       pending.reject(
         new AppError(
           'UNAVAILABLE',
-          isNonBlankString(response.error) ? response.error : 'Claude Code 拒绝了请求。'
+          isNonBlankString(response.error)
+            ? response.error
+            : workbenchMainText('engines.claudeRequestRejected')
         )
       )
   }
@@ -280,6 +288,8 @@ function describeExit(
   signal: Nullable<NodeJS.Signals>,
   stderr: string
 ): string {
-  const status = signal ? `被信号 ${signal} 结束` : `退出码 ${String(code)}`
-  return stderr ? `Claude Code 已退出（${status}）：${stderr}` : `Claude Code 已退出（${status}）。`
+  const status = describeEngineExitStatus(code, signal)
+  return stderr
+    ? workbenchMainText('engines.exitedWithOutput', { engine: 'Claude Code', status, stderr })
+    : workbenchMainText('engines.exited', { engine: 'Claude Code', status })
 }

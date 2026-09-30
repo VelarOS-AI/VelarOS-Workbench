@@ -29,6 +29,7 @@ import {
   WorkbenchPermissionConfirmationModes,
   WorkbenchWebSearchEngines,
 } from '../../shared/workbenchConversation'
+import { workbenchMainText } from '../i18n/workbenchMainMessages'
 import type { WorkbenchProjectHub } from '../projects/ProjectHub'
 import { callWithEnvelope } from '../workspace/ipcBoundary'
 
@@ -89,7 +90,7 @@ export function registerWorkbenchConversationIpc(options: WorkbenchConversationI
   const ownedRef = (event: IpcMainInvokeEvent, request: WorkbenchConversationSessionRequest) => {
     const project = options.windows.getHubForWebContents(event.sender)?.getState().currentProject
     if (!project || resolve(project.path) !== resolve(request.projectRoot))
-      throw new AppError('PERMISSION', '当前窗口不能操作这个项目里的会话。')
+      throw new AppError('PERMISSION', workbenchMainText('conversation.notInWindow'))
     return { projectRoot: project.path, sessionId: request.sessionId }
   }
 
@@ -299,7 +300,7 @@ async function writeHistoryBackup(
 // ---------------------------------------------------------------------------------------------
 
 function invalid(): never {
-  throw new AppError('VALIDATION', '无效的会话请求。')
+  throw new AppError('VALIDATION', workbenchMainText('conversation.invalidRequest'))
 }
 
 function parseSessionRequest(raw: unknown): WorkbenchConversationSessionRequest {

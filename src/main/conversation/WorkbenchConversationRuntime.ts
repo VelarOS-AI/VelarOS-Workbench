@@ -23,6 +23,7 @@ import {
   type WorkbenchConversationState,
 } from '../../shared/workbenchConversation'
 import type { ConversationBrowser } from '../browser/WorkbenchBrowserService'
+import { workbenchMainText } from '../i18n/workbenchMainMessages'
 import type { WorkbenchAgentProjectActivityPort } from '../workspace/git/WorkbenchChatRunAttribution'
 
 import { ConversationAgentBoard } from './ConversationAgents'
@@ -175,9 +176,9 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
   ): { accepted: Promise<void>; completed: Promise<void> } {
     const key = runKey(request)
     if (this.closing || this.deleting.has(key))
-      throw new AppError('VALIDATION', '会话正在关闭。')
+      throw new AppError('VALIDATION', workbenchMainText('conversation.closing'))
     if (this.active.has(key))
-      throw new AppError('VALIDATION', '当前会话正在运行，请追加引导或先停止。')
+      throw new AppError('VALIDATION', workbenchMainText('conversation.busy'))
     const input = toConversationInput(request)
     let accept!: () => void
     let reject!: (error: unknown) => void
@@ -226,7 +227,7 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
     const request = (await session.inspect()).pending.find(
       (item) => interactionKind(item) === 'input'
     )
-    if (!request) throw new AppError('VALIDATION', '当前会话没有等待回答的问题。')
+    if (!request) throw new AppError('VALIDATION', workbenchMainText('conversation.noPendingQuestion'))
     await session.answer({ id: request.id, runId: request.runId, value: answer })
     // 卡片上照样写上这句回答
     this.interactionBoard(ref)?.answer(request.id, { text: answer })
@@ -239,7 +240,7 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
   ): Promise<void> {
     const session = this.requireSession(ref)
     const request = (await session.inspect()).pending.find((item) => item.id === requestId)
-    if (!request) throw new AppError('VALIDATION', '这个请求已经过期。')
+    if (!request) throw new AppError('VALIDATION', workbenchMainText('conversation.requestExpired'))
     await session.answer({
       id: request.id,
       runId: request.runId,
@@ -257,9 +258,9 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
       ref,
       async (session) => {
         const goal = await session.getGoal()
-        if (!goal) throw new AppError('NOT_FOUND', '当前会话没有目标。')
+        if (!goal) throw new AppError('NOT_FOUND', workbenchMainText('conversation.noGoal'))
         if (input.baseRevision !== goal.revision)
-          throw new AppError('VALIDATION', '目标已变化，请刷新后重试。')
+          throw new AppError('VALIDATION', workbenchMainText('conversation.goalChanged'))
         return session.controlGoal({ ...input, baseRevision: goal.revision })
       },
       undefined,
@@ -318,7 +319,7 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
 
   private requireSession(ref: WorkbenchConversationRef): ConversationWorkspaceHandle['session'] {
     const session = this.active.get(runKey(ref))?.handle?.session
-    if (!session) throw new AppError('VALIDATION', '当前会话没有活动运行。')
+    if (!session) throw new AppError('VALIDATION', workbenchMainText('conversation.noActiveRun'))
     return session
   }
 
@@ -330,15 +331,15 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
   ): Promise<T> {
     const key = runKey(ref)
     if (!ref.sessionId.trim() || this.closing || this.deleting.has(key))
-      throw new AppError('UNAVAILABLE', '会话正在关闭或身份无效。')
+      throw new AppError('UNAVAILABLE', workbenchMainText('conversation.closingOrInvalid'))
     const previous = this.controlOperations.get(key)
     // 队列等待前一操作结算；各操作的成功或失败仍由各自调用者接收。
     const pending = Promise.allSettled(previous ? [previous] : []).then(async () => {
       if (this.closing || this.deleting.has(key))
-        throw new AppError('UNAVAILABLE', '会话正在关闭。')
+        throw new AppError('UNAVAILABLE', workbenchMainText('conversation.closing'))
       const active = this.active.get(key)
       if (options.controlActive && active) {
-        if (!active.handle) throw new AppError('UNAVAILABLE', '会话正在准备，请稍后再操作目标。')
+        if (!active.handle) throw new AppError('UNAVAILABLE', workbenchMainText('conversation.preparing'))
         const result = await operation(active.handle.session)
         if (options.stopAfter) await this.cancel(ref)
         return result
@@ -347,7 +348,7 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
         return active.handle ? operation(active.handle.session) : (missing as T)
       if (!(await this.storage.exists(ref.projectRoot, ref.sessionId))) {
         if (isNotUndefined(missing)) return missing
-        throw new AppError('NOT_FOUND', '当前会话还没有运行过。')
+        throw new AppError('NOT_FOUND', workbenchMainText('conversation.neverRan'))
       }
       const handle = await (this.options.control ?? ((control) => this.session.openControl(control)))({
         sessionId: ref.sessionId,
@@ -524,7 +525,7 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
       if (!admitted) {
         // Platform 给了具体原因就原样透出；没有时才用通用文案。
         const reason = run.presentation?.failure
-        throw new AppError('VALIDATION', reason ?? '会话未接纳本次输入。')
+        throw new AppError('VALIDATION', reason ?? workbenchMainText('conversation.inputNotAccepted'))
       }
     } catch (error) {
       // 错误统一留到资源关闭后通过同一流发出终态。
@@ -573,13 +574,15 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
             run.presentation?.verification?.reason
           )
       sink.state(
-        signal.aborted ? { kind: 'aborted', message: '运行已停止。' } : { kind: 'error', message }
+        signal.aborted
+          ? { kind: 'aborted', message: workbenchMainText('conversation.runStopped') }
+          : { kind: 'error', message }
       )
       if (!admitted) throw failure ?? new AppError('VALIDATION', message)
       return
     }
     if (signal.aborted || status === 'cancelled')
-      sink.state({ kind: 'aborted', message: '运行已停止。' })
+      sink.state({ kind: 'aborted', message: workbenchMainText('conversation.runStopped') })
     else if (status === 'completed') sink.state(conversationDone({ goal, startedAt }))
     else {
       const notice = run.presentation?.notice
@@ -588,7 +591,7 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
         message:
           notice?.kind === 'stalled'
             ? stalledMessage(notice.repeatedSteps, run.locale)
-            : '任务等待新的输入。',
+            : workbenchMainText('conversation.waitingForInput'),
       })
     }
   }
@@ -621,7 +624,7 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
           runId,
           turnId,
           phase: 'accepted',
-          text: '部分执行证据缺失，当前记录可能不完整。',
+          text: workbenchMainText('conversation.traceGaps'),
         })
       scripts.trace(trace)
       agents.trace(trace, (executionId) => scripts.cardOf(executionId))
@@ -634,7 +637,7 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
           runId,
           turnId,
           phase: 'accepted',
-          text: '部分执行记录暂时无法读取。',
+          text: workbenchMainText('conversation.traceUnreadable'),
         })
     }
   }

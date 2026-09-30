@@ -17,6 +17,7 @@ import type {
   WorkbenchAgentEngineStatus,
   WorkbenchConversationImage,
 } from '../../shared/workbenchConversation'
+import { workbenchMainText } from '../i18n/workbenchMainMessages'
 
 import {
   type ClaudeCodeControlRequest,
@@ -88,7 +89,7 @@ export class ClaudeCodeEngine implements WorkbenchAgentEngine {
           id: this.id,
           available: false,
           problem: 'signed-out',
-          reason: 'Claude Code 还没有登录：在终端里运行 claude 登录后，再打开这个菜单。',
+          reason: workbenchMainText('engines.claudeSignedOut'),
           models,
         }
       if (models.length === 0)
@@ -96,7 +97,7 @@ export class ClaudeCodeEngine implements WorkbenchAgentEngine {
           id: this.id,
           available: false,
           problem: 'error',
-          reason: 'Claude Code 没有报上可用的模型。',
+          reason: workbenchMainText('engines.claudeNoModels'),
           models,
         }
       return { id: this.id, available: true, models }
@@ -131,7 +132,7 @@ export class ClaudeCodeEngine implements WorkbenchAgentEngine {
       const init = await withTimeout(
         transport.initialize(),
         StatusTimeoutMs,
-        'Claude Code 没有及时回应。',
+        workbenchMainText('engines.claudeNoResponse'),
         signal
       )
       const { models, effort } = readClaudeModels(init.models)
@@ -204,8 +205,8 @@ export class ClaudeCodeEngine implements WorkbenchAgentEngine {
         throw new AppError(
           'UNAVAILABLE',
           exit.stderr
-            ? `Claude Code 没有跑完这一轮：${exit.stderr}`
-            : 'Claude Code 没有跑完这一轮。'
+            ? workbenchMainText('engines.claudeRunIncompleteWithReason', { reason: exit.stderr })
+            : workbenchMainText('engines.claudeRunIncomplete')
         )
       }
       if (
@@ -232,7 +233,10 @@ export class ClaudeCodeEngine implements WorkbenchAgentEngine {
     control: ClaudeCodeControlRequest
   ): Promise<Record<string, unknown>> {
     if (control.subtype !== 'can_use_tool')
-      throw new AppError('PROTOCOL', `Workbench 不处理这种请求：${control.subtype}`)
+      throw new AppError(
+        'PROTOCOL',
+        workbenchMainText('engines.unhandledRequest', { request: String(control.subtype) })
+      )
     const toolName = isString(control.request.tool_name) ? control.request.tool_name : ''
     const toolInput = isPlainObject(control.request.input) ? control.request.input : {}
     const toolUseID = isString(control.request.tool_use_id)
@@ -429,7 +433,7 @@ class ClaudeCodeTranslator {
       else
         this.surface.finishTool(
           id,
-          block.is_error === true ? { error: text || '工具调用失败。' } : { result: text }
+          block.is_error === true ? { error: text || workbenchMainText('engines.toolCallFailed') } : { result: text }
         )
       const edited =
         tool && EditTools.has(tool.name) && block.is_error !== true
@@ -702,7 +706,7 @@ async function readLoginState(
 function resultError(result: ClaudeCodeMessage): string {
   if (isNonBlankString(result.result)) return result.result
   const errors = isArray(result.errors) ? result.errors.filter(isNonBlankString) : []
-  return errors.join('\n') || 'Claude Code 没有跑完这一轮。'
+  return errors.join('\n') || workbenchMainText('engines.claudeRunIncomplete')
 }
 
 /** 工具结果的文字：字符串原样，内容块取文字、图片记一句。 */
