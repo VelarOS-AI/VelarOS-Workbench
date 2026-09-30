@@ -4,6 +4,8 @@
  * 片0 的纯读服务（WorkbenchProjectFileSystem）自带路径收束逻辑、独立存在；本装配承载
  * 片1 起照搬的写族 / 双搜索 / 命令运行 / 本地历史簇，以及项目搜索的替换，全部共享同一 PathResolver 防线。
  */
+import { createTerminalDebugLauncher } from './debug/WorkbenchDebugLaunch'
+import { WorkbenchDebugSessions } from './debug/WorkbenchDebugSessions'
 import { TerminalSessions } from './terminal/TerminalSessions'
 import { CommandHelper } from './CommandHelper'
 import { CommandRunner } from './CommandRunner'
@@ -28,6 +30,8 @@ interface WorkbenchAppParts {
   replace: ContentReplace
   commands: CommandRunner
   terminal: TerminalSessions
+  /** Node.js 调试会话：被调试的程序跑在 `terminal` 的会话里（界面上是一张运行卡）。 */
+  debug: WorkbenchDebugSessions
   storagePaths: WorkbenchAppStoragePaths
 }
 
@@ -58,13 +62,15 @@ function createWorkbenchAppParts(
 
   const files = new FileOperations(paths, entries, gitNewFileTracker, localHistoryStore, deleteUndo)
   const openSearchSession = createWorkbenchContentSearchSessionOpener(dependencies.searchWorker)
+  const terminal = new TerminalSessions(paths, commandHelper)
 
   return {
     files,
     search: new SearchIndex(paths, entries, openSearchSession),
     replace: new ContentReplace(paths, files, localHistoryStore, openSearchSession),
     commands: new CommandRunner(paths, commandHelper),
-    terminal: new TerminalSessions(paths, commandHelper),
+    terminal,
+    debug: new WorkbenchDebugSessions(paths, createTerminalDebugLauncher(terminal)),
     storagePaths,
   }
 }

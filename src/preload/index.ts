@@ -14,6 +14,10 @@ import {
   type WorkbenchConversationBridge,
   WorkbenchConversationChannels,
 } from '../shared/workbenchConversation'
+import {
+  type WorkbenchDebuggerBridge,
+  WorkbenchDebuggerChannels,
+} from '../shared/workbenchDebugger'
 import { type WorkbenchFsBridge, WorkbenchFsChannels } from '../shared/workbenchFs'
 import { type WorkbenchGitBridge, WorkbenchGitChannels } from '../shared/workbenchGit'
 import {
@@ -178,6 +182,19 @@ const terminalBridge: WorkbenchTerminalBridge = {
   acknowledgeOutput: (request) => ipcRenderer.send(WorkbenchTerminalChannels.acknowledge, request),
 }
 
+const debuggerBridge: WorkbenchDebuggerBridge = {
+  start: (request) => ipcRenderer.invoke(WorkbenchDebuggerChannels.start, request),
+  stop: (request) => ipcRenderer.invoke(WorkbenchDebuggerChannels.stop, request),
+  control: (request) => ipcRenderer.invoke(WorkbenchDebuggerChannels.control, request),
+  setBreakpoints: (request) =>
+    ipcRenderer.invoke(WorkbenchDebuggerChannels.setBreakpoints, request),
+  setExceptionPause: (request) =>
+    ipcRenderer.invoke(WorkbenchDebuggerChannels.setExceptionPause, request),
+  getVariables: (request) => ipcRenderer.invoke(WorkbenchDebuggerChannels.variables, request),
+  evaluate: (request) => ipcRenderer.invoke(WorkbenchDebuggerChannels.evaluate, request),
+  onEvent: (listener) => subscribe(WorkbenchDebuggerChannels.event, listener),
+}
+
 const gitBridge: WorkbenchGitBridge = {
   getSummary: (request) => ipcRenderer.invoke(WorkbenchGitChannels.summary, request),
   getLineStats: (request) => ipcRenderer.invoke(WorkbenchGitChannels.lineStats, request),
@@ -299,6 +316,7 @@ contextBridge.exposeInMainWorld('velarosWorkbenchAccount', accountBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchFs', fsBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchLanguage', languageBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchTerminal', terminalBridge)
+contextBridge.exposeInMainWorld('velarosWorkbenchDebugger', debuggerBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchWatch', watchBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchGit', gitBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchConversation', conversationBridge)

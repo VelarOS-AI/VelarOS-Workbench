@@ -57,6 +57,7 @@ import { WorkbenchWindowManager } from './projects/WorkbenchWindowManager'
 import { installWorkbenchWindowState } from './projects/WorkbenchWindowState'
 import { registerWorkbenchWindowStateIpc } from './projects/WorkbenchWindowStateIpc'
 import { installWorkbenchUpdateRuntime } from './updates/WorkbenchUpdateRuntime'
+import { registerWorkbenchDebugIpc } from './workspace/debug/WorkbenchDebugIpc'
 import { registerWorkbenchGitIpc } from './workspace/git/WorkbenchGitIpc'
 import { WorkbenchInlineCompletionGenerator } from './workspace/language/WorkbenchInlineCompletion'
 import { registerWorkbenchLanguageServiceIpc } from './workspace/language/WorkbenchLanguageServiceIpc'
@@ -365,6 +366,7 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
     engineConversationRuntime
   )
   registerWorkbenchTerminalIpc(providers.parts.terminal)
+  const disposeDebugIpc = registerWorkbenchDebugIpc(providers.parts.debug)
   registerWorkbenchGitIpc(providers.git, providers.chatCheckpoints, providers.chatRunChanges)
   const watchIpc = registerWorkbenchWatchIpc(providers.watch)
   const disposeWorkspaceIpc = registerWorkbenchWorkspaceIpc(providers.workspace)
@@ -378,6 +380,8 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
     onLastProjectClosed: () => app.quit(),
     releaseProjectResources: async (ownerId, projectRoot) => {
       watchIpc.closeSubscriptionsForSender(ownerId)
+      // 先断开这个窗口的调试会话，再结束它的终端会话（被调试的程序跑在里面）。
+      providers.parts.debug.closeSessionsForOwner(ownerId)
       await Promise.all([
         providers.parts.terminal.closeSessionsForOwner(ownerId),
         providers.language.invalidateProject({ projectRoot }),
@@ -429,6 +433,8 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
     browserService.close()
     disposeWorkspaceIpc()
     disposeProductAnalyticsRuntime()
+    disposeDebugIpc()
+    providers.parts.debug.closeAllSessions()
     void Promise.allSettled([
       providers.parts.terminal.closeAllSessions(),
       providers.language.dispose(),

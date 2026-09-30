@@ -2,6 +2,7 @@ import type { WorkbenchProjectHubBridge } from './projectHub'
 import type { WorkbenchAccountBridge } from './workbenchAccount'
 import type { WorkbenchBrowserBridge } from './workbenchBrowser'
 import type { WorkbenchConversationBridge } from './workbenchConversation'
+import type { WorkbenchDebuggerBridge } from './workbenchDebugger'
 import type { WorkbenchFsBridge } from './workbenchFs'
 import type { WorkbenchGitBridge } from './workbenchGit'
 import type { WorkbenchLanguageBridge } from './workbenchLanguage'
@@ -20,6 +21,7 @@ declare global {
     velarosWorkbenchAccount: WorkbenchAccountBridge
     velarosWorkbenchBrowser: WorkbenchBrowserBridge
     velarosWorkbenchConversation: WorkbenchConversationBridge
+    velarosWorkbenchDebugger: WorkbenchDebuggerBridge
     velarosWorkbenchProjectHub: WorkbenchProjectHubBridge
     velarosWorkbenchFs: WorkbenchFsBridge
     velarosWorkbenchGit: WorkbenchGitBridge
