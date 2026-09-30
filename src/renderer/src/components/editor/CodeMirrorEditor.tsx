@@ -1383,7 +1383,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         }),
       [disabled, onRunPackageScript, packageManager, path, velarTestRunContent]
     )
-    // JS / TS 测试文件的 ▶（认运行器、拼命令、记结果都在这个 hook 里）。
+    // 测试文件的 ▶、JS / TS 文件行号上的断点、调试停下时的那一行与悬停看值（都在这个 hook 里）。
     const runDebugExtension = useWorkbenchEditorRunDebugExtension({
       projectRoot,
       path,
