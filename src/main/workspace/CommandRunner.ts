@@ -13,6 +13,8 @@ import type {
   WorkbenchRunCommandResult,
 } from '@shared/contracts'
 
+import { workbenchMainText } from '../i18n/workbenchMainMessages'
+
 import type { CommandHelper } from './CommandHelper'
 import { getRelativePathInsideRoot } from './PathContainmentHelper'
 import type { PathResolver } from './PathResolver'
@@ -45,7 +47,7 @@ class CommandRunner {
     const cwdPath = await this.pathResolver.resolveInsideProject(projectRoot, cwd)
     const cwdStats = await stat(cwdPath.realPath)
     if (!cwdStats.isDirectory()) {
-      throw new AppError('VALIDATION', '工作台命令运行目录必须是目录。')
+      throw new AppError('VALIDATION', workbenchMainText('commands.cwdNotFolder'))
     }
 
     // 工作区边界用调用方给的原始根：与它问用户前的判定同一个输入，两层结论才不会因符号链接而分叉。
@@ -131,7 +133,7 @@ class CommandRunner {
         if (settled) return
         settled = true
         cleanup()
-        reject(new AppError('PLATFORM', `工作台命令启动失败：${error.message}`, error))
+        reject(new AppError('PLATFORM', workbenchMainText('commands.startFailed', { reason: error.message }), error))
       })
 
       child.on('close', (exitCode, signal) => {

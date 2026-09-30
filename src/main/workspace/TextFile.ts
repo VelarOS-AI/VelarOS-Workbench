@@ -2,6 +2,8 @@ import { type FileHandle, open, stat } from 'node:fs/promises'
 
 import { AppError } from '@velaros-ai/core/error'
 
+import { workbenchMainText } from '../i18n/workbenchMainMessages'
+
 import {
   countWorkbenchTextLines,
   type DecodedWorkbenchText,
@@ -83,7 +85,7 @@ async function readWorkbenchTextFile(
 ): Promise<WorkbenchTextFileSnapshot> {
   const fileStats = await stat(path)
   if (!fileStats.isFile()) {
-    throw new AppError('VALIDATION', '工作台文件读取目标必须是文件。')
+    throw new AppError('VALIDATION', workbenchMainText('files.readTargetNotFile'))
   }
 
   const byteLimit = maxChars * MaxBytesPerChar + BomAndSplitCharBytes
@@ -95,7 +97,7 @@ async function readWorkbenchTextFile(
     await handle.close()
   }
   if (!isLikelyTextFile(head)) {
-    throw new AppError('VALIDATION', '当前文件不是可预览的文本文件。')
+    throw new AppError('VALIDATION', workbenchMainText('files.notPreviewableText'))
   }
 
   const complete = fileStats.size <= byteLimit

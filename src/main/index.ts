@@ -40,6 +40,7 @@ import { ClaudeCodeEngine } from './engines/ClaudeCodeEngine'
 import { CodexEngine } from './engines/CodexEngine'
 import { WorkbenchEngineConversationRuntime } from './engines/WorkbenchEngineConversationRuntime'
 import { WorkbenchEngineSessionStore } from './engines/WorkbenchEngineSessionStore'
+import { setWorkbenchSystemLanguageSource } from './i18n/workbenchMainLocale'
 import { registerWorkbenchModelIpc } from './model/WorkbenchModelIpc'
 import type { WorkbenchProjectHub } from './projects/ProjectHub'
 import { registerProjectHubIpc } from './projects/ProjectHubIpc'
@@ -451,6 +452,7 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
   })
 
   installWorkbenchUpdateRuntime()
+  setWorkbenchSystemLanguageSource(() => app.getPreferredSystemLanguages()[0] ?? app.getLocale())
   installProjectHubMenu(windowManager)
   if (pendingExternalPaths.length > 0) {
     const paths = pendingExternalPaths.splice(0)

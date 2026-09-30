@@ -22,6 +22,8 @@ import type {
   WorkbenchReadLocalHistorySnapshotResult,
 } from '@shared/contracts'
 
+import { workbenchMainText } from '../i18n/workbenchMainMessages'
+
 import type { WorkbenchAppStoragePaths } from './StoragePaths'
 
 const MAX_SNAPSHOTS_PER_FILE = 50
@@ -128,12 +130,12 @@ class WorkbenchLocalHistoryStore {
     id: string
   ): WorkbenchReadLocalHistorySnapshotResult {
     if (!SNAPSHOT_ID_PATTERN.test(id)) {
-      throw new AppError('VALIDATION', '无效的本地历史快照标识。')
+      throw new AppError('VALIDATION', workbenchMainText('history.snapshotIdInvalid'))
     }
 
     const snapshotPath = join(this.bucketDir(projectRoot, path), `${id}.snap`)
     if (!existsSync(snapshotPath)) {
-      throw new AppError('NOT_FOUND', '本地历史快照不存在或已被清理。')
+      throw new AppError('NOT_FOUND', workbenchMainText('history.snapshotGone'))
     }
 
     return { path, id, content: readFileSync(snapshotPath, 'utf8') }

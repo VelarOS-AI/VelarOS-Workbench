@@ -26,6 +26,7 @@ import type {
   WorkbenchTerminalStopRequest,
 } from '@shared/contracts'
 
+import { workbenchMainText } from '../../i18n/workbenchMainMessages'
 import type { CommandHelper } from '../CommandHelper'
 import type { PathResolver } from '../PathResolver'
 
@@ -118,7 +119,7 @@ class TerminalSessions {
     const cwdPath = await this.pathResolver.resolveInsideProject(projectRoot, request.cwd ?? '.')
     const cwdStats = await stat(cwdPath.realPath)
     if (!cwdStats.isDirectory()) {
-      throw new AppError('VALIDATION', '工作台终端启动目录必须是目录。')
+      throw new AppError('VALIDATION', workbenchMainText('terminal.cwdNotFolder'))
     }
 
     const initialCommand = request.initialCommand?.trim()
@@ -167,7 +168,10 @@ class TerminalSessions {
       onOutput({
         sessionId,
         stream: 'system',
-        chunk: `\r\n进程已结束（exit=${exitCode} signal=${signal ?? '-'}）\r\n`,
+        chunk: `\r\n${workbenchMainText('terminal.processExited', {
+          code: exitCode,
+          signal: signal ?? '-',
+        })}\r\n`,
         closed: true,
         exitCode,
         signal: signal === undefined ? undefined : String(signal),
@@ -292,7 +296,8 @@ class TerminalSessions {
 
   private liveSession(sessionId: string): WorkbenchTerminalSession {
     const session = this.terminalSessions.get(sessionId)
-    if (!session || session.exited) throw new AppError('VALIDATION', '终端会话已结束。')
+    if (!session || session.exited)
+      throw new AppError('VALIDATION', workbenchMainText('terminal.sessionEnded'))
     return session
   }
 
@@ -385,7 +390,7 @@ class TerminalSessions {
 function assertSessionOwner(session: WorkbenchTerminalSession, ownerId: Nullable<number>): void {
   if (ownerId === null || session.ownerId === null || ownerId === session.ownerId) return
 
-  throw new AppError('PERMISSION', '终端会话不属于当前项目窗口。')
+  throw new AppError('PERMISSION', workbenchMainText('terminal.sessionNotInWindow'))
 }
 
 export { TerminalSessions, TerminalSessions as WorkbenchTerminalService }

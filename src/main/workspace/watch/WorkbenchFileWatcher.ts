@@ -11,6 +11,7 @@ import {
   type WorkbenchWatchStatus,
   WorkbenchWatchWholeRootPath,
 } from '../../../shared/workbenchWatch'
+import { workbenchMainText } from '../../i18n/workbenchMainMessages'
 import { isWorkbenchSaveTemporaryName } from '../AtomicFileWrite'
 import {
   isGeneratedProjectDirectory,
@@ -330,11 +331,11 @@ export class WorkbenchFileWatcher implements WorkbenchRawPathSource {
   }
 
   private async resolveRoot(input: string): Promise<string> {
-    if (!input.trim()) throw new AppError('VALIDATION', '需要选择一个工程目录。')
+    if (!input.trim()) throw new AppError('VALIDATION', workbenchMainText('paths.projectRequired'))
 
     const candidate = resolve(input)
     const info = await stat(candidate).catch(() => null)
-    if (!info?.isDirectory()) throw new AppError('VALIDATION', '需要选择一个工程目录。')
+    if (!info?.isDirectory()) throw new AppError('VALIDATION', workbenchMainText('paths.projectRequired'))
 
     return realpath(candidate)
   }

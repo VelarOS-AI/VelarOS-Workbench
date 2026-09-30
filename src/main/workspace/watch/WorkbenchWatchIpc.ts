@@ -9,6 +9,7 @@ import {
   type WorkbenchWatchStatusPayload,
   type WorkbenchWatchStopRequest,
 } from '../../../shared/workbenchWatch'
+import { workbenchMainText } from '../../i18n/workbenchMainMessages'
 import { callWithEnvelope, hasStringFields, invalidRequest } from '../ipcBoundary'
 
 import type { WorkbenchFileWatcher } from './WorkbenchFileWatcher'
@@ -78,7 +79,7 @@ export function registerWorkbenchWatchIpc(
       const subscription = owned.get(parsed.subscriptionId)
       if (!subscription) return
       if (subscription.senderId !== event.sender.id) {
-        throw new AppError('PERMISSION', '文件监听订阅不属于当前窗口。')
+        throw new AppError('PERMISSION', workbenchMainText('watch.subscriptionNotInWindow'))
       }
       subscription.unsubscribe()
       owned.delete(parsed.subscriptionId)

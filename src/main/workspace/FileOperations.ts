@@ -50,6 +50,8 @@ import type {
 } from '@shared/contracts'
 import { DefaultWorkbenchTextFormat, type WorkbenchTextFormat } from '@shared/workbenchTextFormat'
 
+import { workbenchMainText } from '../i18n/workbenchMainMessages'
+
 import { writeFileAtomically, writeFileAtomicallySync } from './AtomicFileWrite'
 import type { WorkbenchDeleteUndoStore } from './DeleteUndoStore'
 import type { DirectoryEntries } from './FileEntries'
@@ -133,14 +135,14 @@ class FileOperations {
     const relativePath = request.path.trim()
     const name = basename(relativePath)
     if (!relativePath || name === '.' || name === '..') {
-      throw new AppError('VALIDATION', '恢复文件路径无效。')
+      throw new AppError('VALIDATION', workbenchMainText('files.restorePathInvalid'))
     }
 
     const parent = await this.pathResolver.resolveInsideProject(projectRoot, dirname(relativePath))
     const parentStats = await stat(parent.realPath)
     const parentLinkStats = await lstat(parent.requestedPath)
     if (!parentStats.isDirectory() || parentLinkStats.isSymbolicLink()) {
-      throw new AppError('VALIDATION', '恢复文件目标必须位于普通目录内。')
+      throw new AppError('VALIDATION', workbenchMainText('files.restoreTargetNotInFolder'))
     }
 
     this.assertContentIsWritable(request.content)
@@ -152,7 +154,7 @@ class FileOperations {
     const targetPath = this.pathResolver.resolveChildPath(projectRoot, parent.requestedPath, name)
     return this.runWorkbenchMutation(async () => {
       const existing = await lstat(targetPath).catch(() => null)
-      if (existing) throw new AppError('CONFLICT', '文件已经重新出现，请改用磁盘版本。')
+      if (existing) throw new AppError('CONFLICT', workbenchMainText('files.restoreFileReappeared'))
 
       await writeFile(targetPath, bytes, { flag: 'wx' })
       await this.gitNewFileTracker.trackNewFiles(projectRoot, [targetPath])
@@ -206,15 +208,15 @@ class FileOperations {
     const parentLinkStats = await lstat(parentPath.requestedPath)
 
     if (!parentStats.isDirectory()) {
-      throw new AppError('VALIDATION', '工作台新建目标必须位于目录内。')
+      throw new AppError('VALIDATION', workbenchMainText('files.createTargetNotFolder'))
     }
 
     if (parentLinkStats.isSymbolicLink()) {
-      throw new AppError('VALIDATION', '工作台暂不在符号链接目录中新建内容。')
+      throw new AppError('VALIDATION', workbenchMainText('files.createInLinkedFolder'))
     }
 
     if (request.type !== 'directory' && request.type !== 'file') {
-      throw new AppError('VALIDATION', '新建类型无效。')
+      throw new AppError('VALIDATION', workbenchMainText('files.createTypeInvalid'))
     }
 
     const name = this.pathResolver.normalizeEntryName(request.name)
@@ -232,7 +234,7 @@ class FileOperations {
     return this.runWorkbenchMutation(async () => {
       const existing = await lstat(targetPath).catch(() => null)
       if (existing) {
-        throw new AppError('VALIDATION', '目标已存在。')
+        throw new AppError('VALIDATION', workbenchMainText('files.targetExists'))
       }
 
       if (request.type === 'directory') {
@@ -265,7 +267,7 @@ class FileOperations {
       source.requestedPath
     )
     if (sourceRelativePath === '.') {
-      throw new AppError('VALIDATION', '不能重命名工程根目录。')
+      throw new AppError('VALIDATION', workbenchMainText('files.renameProjectRoot'))
     }
 
     const name = this.pathResolver.normalizeEntryName(request.newName)
@@ -303,7 +305,7 @@ class FileOperations {
     const parentLinkStats = await lstat(parentPath.requestedPath)
 
     if (parentLinkStats.isSymbolicLink()) {
-      throw new AppError('VALIDATION', '工作台暂不移动内容到符号链接目录。')
+      throw new AppError('VALIDATION', workbenchMainText('files.moveIntoLinkedFolder'))
     }
 
     const sourceRelativePath = this.pathResolver.toProjectRelativePath(
@@ -311,17 +313,17 @@ class FileOperations {
       source.requestedPath
     )
     if (sourceRelativePath === '.') {
-      throw new AppError('VALIDATION', '不能移动工程根目录。')
+      throw new AppError('VALIDATION', workbenchMainText('files.moveProjectRoot'))
     }
 
     const parentStats = await stat(parentPath.realPath)
     if (!parentStats.isDirectory()) {
-      throw new AppError('VALIDATION', '工作台移动目标必须是目录。')
+      throw new AppError('VALIDATION', workbenchMainText('files.moveTargetNotFolder'))
     }
 
     // 按真实路径比，经由链接起的别名也拦得住；链接本身不是目录，挪到哪里都行。
     if (source.stats.isDirectory() && isPathInsideRoot(source.entryPath, parentPath.realPath)) {
-      throw new AppError('VALIDATION', '不能把目录移动到自身或子目录内。')
+      throw new AppError('VALIDATION', workbenchMainText('files.moveIntoItself'))
     }
 
     const name = this.pathResolver.normalizeEntryName(
@@ -379,7 +381,7 @@ class FileOperations {
     )
 
     if (relativePath === '.') {
-      throw new AppError('VALIDATION', '不能删除工程根目录。')
+      throw new AppError('VALIDATION', workbenchMainText('files.deleteProjectRoot'))
     }
     this.assertOutsideGitInternals(
       projectRoot,
@@ -392,7 +394,7 @@ class FileOperations {
       if (targetStats.isDirectory()) {
         const entries = await readdir(target.entryPath)
         if (entries.length > 0 && !request.recursive) {
-          throw new AppError('VALIDATION', '目录包含内容，需要确认后才能删除。')
+          throw new AppError('VALIDATION', workbenchMainText('files.deleteNeedsConfirmation'))
         }
       }
 
@@ -427,7 +429,7 @@ class FileOperations {
     )
 
     if (relativePath === '.') {
-      throw new AppError('VALIDATION', '不能删除工程根目录。')
+      throw new AppError('VALIDATION', workbenchMainText('files.deleteProjectRoot'))
     }
     this.assertOutsideGitInternals(
       projectRoot,
@@ -453,10 +455,7 @@ class FileOperations {
     const projectRoot = await this.pathResolver.resolveProjectRoot(request.projectRoot)
     const restore = this.deleteUndo.find(projectRoot, request.restoreId)
     if (!restore) {
-      throw new AppError(
-        'NOT_FOUND',
-        '删除撤销记录不存在或已失效，删掉的内容可以到系统废纸篓里找回。'
-      )
+      throw new AppError('NOT_FOUND', workbenchMainText('files.undoDeleteExpired'))
     }
 
     this.assertOutsideGitInternals(projectRoot, [restore.entryPath], restore.deletedPath)
@@ -464,7 +463,10 @@ class FileOperations {
     return this.runWorkbenchMutation(async () => {
       const existing = await lstat(restore.entryPath).catch(() => null)
       if (existing) {
-        throw new AppError('CONFLICT', `还原目标已存在，无法撤销删除：${restore.deletedPath}`)
+        throw new AppError(
+          'CONFLICT',
+          workbenchMainText('files.undoDeleteTargetExists', { path: restore.deletedPath })
+        )
       }
 
       const parentPath = dirname(restore.entryPath)
@@ -473,11 +475,11 @@ class FileOperations {
       if (!parentStats?.isDirectory() || !parentLinkStats) {
         throw new AppError(
           'CONFLICT',
-          `原来所在的目录已不存在，无法撤销删除：${restore.deletedPath}`
+          workbenchMainText('files.undoDeleteParentMissing', { path: restore.deletedPath })
         )
       }
       if (parentLinkStats.isSymbolicLink()) {
-        throw new AppError('VALIDATION', '工作台暂不还原内容到符号链接目录。')
+        throw new AppError('VALIDATION', workbenchMainText('files.undoDeleteIntoLinkedFolder'))
       }
 
       await this.deleteUndo.restore(restore)
@@ -527,7 +529,7 @@ class FileOperations {
 
     const source = await lstat(sourcePath, { bigint: true })
     if (!isSameEntrySpelledDifferently(sourcePath, source, targetPath, existing)) {
-      throw new AppError('VALIDATION', '目标已存在。')
+      throw new AppError('VALIDATION', workbenchMainText('files.targetExists'))
     }
 
     const temporaryPath = join(dirname(sourcePath), `.velaros-rename-${randomUUID()}`)
@@ -570,11 +572,11 @@ class FileOperations {
     request: WorkbenchSaveFileRequest
   ): void {
     if (linkStats.isSymbolicLink()) {
-      throw new AppError('VALIDATION', '工作台暂不直接编辑符号链接。')
+      throw new AppError('VALIDATION', workbenchMainText('files.editSymlink'))
     }
 
     if (!fileStats.isFile()) {
-      throw new AppError('VALIDATION', '工作台文件保存目标必须是文件。')
+      throw new AppError('VALIDATION', workbenchMainText('files.saveTargetNotFile'))
     }
 
     this.assertContentIsWritable(request.content)
@@ -584,7 +586,7 @@ class FileOperations {
   /** 磁盘上的现有字节必须是文本；按请求的格式（没带齐时沿用磁盘上的）编码要写的内容。 */
   private encodeSaveContent(request: WorkbenchSaveFileRequest, currentBytes: Uint8Array): Buffer {
     if (!isLikelyTextFile(currentBytes)) {
-      throw new AppError('VALIDATION', '当前文件不是可编辑的文本文件。')
+      throw new AppError('VALIDATION', workbenchMainText('files.notEditableText'))
     }
 
     return encodeWorkbenchText(request.content, this.resolveSaveTextFormat(request, currentBytes))
@@ -617,10 +619,7 @@ class FileOperations {
 
     const current = decodeWorkbenchText(currentBuffer)
     if (current.textIssue) {
-      throw new AppError(
-        'VALIDATION',
-        '文件现有的编码或换行符不能原样写回，请在编辑器中打开它、确认转换后再保存。'
-      )
+      throw new AppError('VALIDATION', workbenchMainText('files.formatNotRoundTrip'))
     }
 
     return { encoding: request.encoding ?? current.encoding, eol: request.eol ?? current.eol }
@@ -648,7 +647,7 @@ class FileOperations {
 
   private assertContentIsWritable(content: string): void {
     if (content.length > MAX_WRITE_CHARS) {
-      throw new AppError('VALIDATION', '当前文件内容超过工作台轻量编辑器的保存上限。')
+      throw new AppError('VALIDATION', workbenchMainText('files.saveTooLarge'))
     }
   }
 
@@ -667,7 +666,7 @@ class FileOperations {
     const sizeChanged = isPresent(expectedSize) && fileStats.size !== expectedSize
 
     if (modifiedAtChanged || sizeChanged) {
-      throw new AppError('CONFLICT', '文件已在外部修改，请重新加载后再保存。')
+      throw new AppError('CONFLICT', workbenchMainText('files.changedOnDisk'))
     }
   }
 

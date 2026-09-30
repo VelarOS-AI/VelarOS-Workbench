@@ -12,6 +12,8 @@ import { basename, dirname, join, resolve } from 'node:path'
 import { AppError } from '@velaros-ai/core/error'
 import { LoggerFactory } from '@velaros-ai/core/logger'
 
+import { workbenchMainText } from '../i18n/workbenchMainMessages'
+
 import {
   getRelativePathInsideRoot,
   toPortableRelativePath,
@@ -45,13 +47,13 @@ function isGitDirectoryName(name: string): boolean {
 class PathResolver {
   public async resolveProjectRoot(input: string): Promise<string> {
     if (!input.trim()) {
-      throw new AppError('VALIDATION', '需要选择一个工程目录。')
+      throw new AppError('VALIDATION', workbenchMainText('paths.projectRequired'))
     }
 
     const projectRoot = resolve(input)
     const projectStats = await stat(projectRoot)
     if (!projectStats.isDirectory()) {
-      throw new AppError('VALIDATION', '需要选择一个工程目录。')
+      throw new AppError('VALIDATION', workbenchMainText('paths.projectRequired'))
     }
 
     return realpath(projectRoot)
@@ -59,13 +61,13 @@ class PathResolver {
 
   public resolveProjectRootSync(input: string): string {
     if (!input.trim()) {
-      throw new AppError('VALIDATION', '需要选择一个工程目录。')
+      throw new AppError('VALIDATION', workbenchMainText('paths.projectRequired'))
     }
 
     const projectRoot = resolve(input)
     const projectStats = statSync(projectRoot)
     if (!projectStats.isDirectory()) {
-      throw new AppError('VALIDATION', '需要选择一个工程目录。')
+      throw new AppError('VALIDATION', workbenchMainText('paths.projectRequired'))
     }
 
     return realpathSync(projectRoot)
@@ -139,7 +141,7 @@ class PathResolver {
   ): void {
     const relativePath = getRelativePathInsideRoot(projectRoot, absolutePath)
     if (!relativePath) {
-      throw new AppError('PERMISSION', `路径超出工程范围：${inputPath}`)
+      throw new AppError('PERMISSION', workbenchMainText('paths.outsideProject', { path: inputPath }))
     }
   }
 
@@ -167,11 +169,11 @@ class PathResolver {
   public normalizeEntryName(name: string): string {
     const trimmedName = name.trim()
     if (!trimmedName) {
-      throw new AppError('VALIDATION', '名称不能为空。')
+      throw new AppError('VALIDATION', workbenchMainText('paths.nameEmpty'))
     }
 
     if (trimmedName === '.' || trimmedName === '..') {
-      throw new AppError('VALIDATION', '名称不能是 . 或 ..。')
+      throw new AppError('VALIDATION', workbenchMainText('paths.nameDots'))
     }
 
     if (
@@ -179,11 +181,11 @@ class PathResolver {
       trimmedName.includes('\\') ||
       basename(trimmedName) !== trimmedName
     ) {
-      throw new AppError('VALIDATION', '名称不能包含路径分隔符。')
+      throw new AppError('VALIDATION', workbenchMainText('paths.nameSeparator'))
     }
 
     if (isGitDirectoryName(trimmedName)) {
-      throw new AppError('VALIDATION', '.git 是版本库的内部目录，不能在工作台中直接管理。')
+      throw new AppError('VALIDATION', workbenchMainText('paths.gitInternalName'))
     }
 
     return trimmedName
@@ -200,11 +202,11 @@ class PathResolver {
   ): void {
     const relativePath = getRelativePathInsideRoot(projectRoot, absolutePath)
     if (!relativePath) {
-      throw new AppError('PERMISSION', `路径超出工程范围：${inputPath}`)
+      throw new AppError('PERMISSION', workbenchMainText('paths.outsideProject', { path: inputPath }))
     }
 
     if (relativePath.split(/[\\/]/u).some(isGitDirectoryName)) {
-      throw new AppError('VALIDATION', `不能在工作台中直接改动版本库内部：${inputPath}`)
+      throw new AppError('VALIDATION', workbenchMainText('paths.gitInternals', { path: inputPath }))
     }
   }
 
@@ -216,9 +218,9 @@ class PathResolver {
 
   private normalizeResolveError(error: unknown, path: string): AppError {
     const code = (error as NodeJS.ErrnoException | undefined)?.code
-    if (code === 'ENOENT') return new AppError('NOT_FOUND', `文件或目录已被删除或移动：${path}`)
+    if (code === 'ENOENT') return new AppError('NOT_FOUND', workbenchMainText('paths.entryGone', { path }))
     if (code === 'EACCES' || code === 'EPERM')
-      return new AppError('PERMISSION', `没有权限访问文件或目录：${path}`)
+      return new AppError('PERMISSION', workbenchMainText('paths.entryNoPermission', { path }))
 
     return AppError.from(error)
   }

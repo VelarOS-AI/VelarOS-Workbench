@@ -40,6 +40,8 @@ import {
 } from '@shared/workbenchImage'
 import { DefaultWorkbenchTextFormat } from '@shared/workbenchTextFormat'
 
+import { workbenchMainText } from '../i18n/workbenchMainMessages'
+
 import { isPathInsideRoot } from './PathContainmentHelper'
 import { readWorkbenchTextFile } from './TextFile'
 import { describeWorkbenchSymlink } from './WorkbenchSymlinks'
@@ -72,7 +74,7 @@ export class WorkbenchProjectFileSystem {
       throw this.normalizeDirectoryReadError(error, requestedPath)
     })
     if (!directoryStats.isDirectory()) {
-      throw new Error('工作台目录读取目标必须是目录。')
+      throw new Error(workbenchMainText('files.listTargetNotFolder'))
     }
 
     const includeHidden = !!request.includeHidden
@@ -202,7 +204,7 @@ export class WorkbenchProjectFileSystem {
       const filePath = await this.resolveInsideProject(projectRoot, request.path)
       const mediaType = resolveWorkbenchImageMediaType(filePath)
       if (!mediaType) {
-        throw new AppError('VALIDATION', '当前文件不是受支持的图片格式。')
+        throw new AppError('VALIDATION', workbenchMainText('files.imageUnsupported'))
       }
 
       const maxBytes = this.clampImageReadMaxBytes(request.maxBytes)
@@ -212,12 +214,12 @@ export class WorkbenchProjectFileSystem {
       try {
         fileStats = await handle.stat()
         if (!fileStats.isFile()) {
-          throw new AppError('VALIDATION', '工作台图片读取目标必须是文件。')
+          throw new AppError('VALIDATION', workbenchMainText('files.imageTargetNotFile'))
         }
         if (fileStats.size > maxBytes) {
           throw new AppError(
             'VALIDATION',
-            `图片超过 ${this.formatByteLimit(maxBytes)} 的预览上限。`
+            workbenchMainText('files.imageTooLarge', { limit: this.formatByteLimit(maxBytes) })
           )
         }
 
@@ -234,14 +236,14 @@ export class WorkbenchProjectFileSystem {
           || finalStats.size !== fileStats.size
           || finalStats.mtimeMs !== fileStats.mtimeMs
         ) {
-          throw new AppError('CONFLICT', '图片在读取过程中发生变化，请重新打开。')
+          throw new AppError('CONFLICT', workbenchMainText('files.imageChangedWhileReading'))
         }
       } finally {
         await handle.close()
       }
 
       if (!this.matchesImageFormat(buffer, mediaType)) {
-        throw new AppError('VALIDATION', '图片内容与文件格式不匹配。')
+        throw new AppError('VALIDATION', workbenchMainText('files.imageContentMismatch'))
       }
 
       const relativePath = this.toProjectRelativePath(projectRoot, filePath)
@@ -273,9 +275,9 @@ export class WorkbenchProjectFileSystem {
     if (error instanceof AppError) return error
 
     const code = (error as NodeJS.ErrnoException | undefined)?.code
-    if (code === 'ENOENT') return new AppError('NOT_FOUND', `文件已被删除或移动：${path}`)
+    if (code === 'ENOENT') return new AppError('NOT_FOUND', workbenchMainText('files.fileGone', { path }))
     if (code === 'EACCES' || code === 'EPERM')
-      return new AppError('PERMISSION', `没有权限读取文件：${path}`)
+      return new AppError('PERMISSION', workbenchMainText('files.fileNoPermission', { path }))
 
     return AppError.from(error)
   }
@@ -284,22 +286,22 @@ export class WorkbenchProjectFileSystem {
     if (error instanceof AppError) return error
 
     const code = (error as NodeJS.ErrnoException | undefined)?.code
-    if (code === 'ENOENT') return new AppError('NOT_FOUND', `目录已被删除或移动：${path}`)
+    if (code === 'ENOENT') return new AppError('NOT_FOUND', workbenchMainText('files.folderGone', { path }))
     if (code === 'EACCES' || code === 'EPERM')
-      return new AppError('PERMISSION', `没有权限读取目录：${path}`)
+      return new AppError('PERMISSION', workbenchMainText('files.folderNoPermission', { path }))
 
     return AppError.from(error)
   }
 
   private async resolveProjectRoot(input: string): Promise<string> {
     if (!input.trim()) {
-      throw new Error('需要选择一个工程目录。')
+      throw new Error(workbenchMainText('paths.projectRequired'))
     }
 
     const projectRoot = resolve(input)
     const projectStats = await stat(projectRoot)
     if (!projectStats.isDirectory()) {
-      throw new Error('需要选择一个工程目录。')
+      throw new Error(workbenchMainText('paths.projectRequired'))
     }
 
     return realpath(projectRoot)
@@ -316,7 +318,7 @@ export class WorkbenchProjectFileSystem {
 
   private assertInsideProject(projectRoot: string, absolutePath: string, inputPath: string): void {
     if (!this.isInsideProject(projectRoot, absolutePath)) {
-      throw new Error(`路径超出工程范围：${inputPath}`)
+      throw new Error(workbenchMainText('paths.outsideProject', { path: inputPath }))
     }
   }
 

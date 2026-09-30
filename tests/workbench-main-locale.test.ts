@@ -5,11 +5,7 @@ import type { MenuItemConstructorOptions } from 'electron'
 const builtTemplates: MenuItemConstructorOptions[][] = []
 
 mock.module('electron', () => ({
-  app: {
-    getPreferredSystemLanguages: () => ['en-GB'],
-    getLocale: () => 'en-GB',
-    dock: { setMenu: () => undefined },
-  },
+  app: { dock: { setMenu: () => undefined } },
   Menu: {
     buildFromTemplate: (template: MenuItemConstructorOptions[]) => {
       builtTemplates.push(template)
@@ -31,15 +27,16 @@ function labelsSince(start: number): string[] {
 describe('main-process text follows the interface language', () => {
   test('the application menu starts in the system language and switches with the interface', async () => {
     const { installProjectHubMenu } = await import('../src/main/projects/ProjectHubMenu')
-    const { getWorkbenchMainLocale, setWorkbenchMainLocale } = await import(
-      '../src/main/i18n/workbenchMainLocale'
-    )
+    const { getWorkbenchMainLocale, setWorkbenchMainLocale, setWorkbenchSystemLanguageSource } =
+      await import('../src/main/i18n/workbenchMainLocale')
     const windows = {
       onChanged: () => () => undefined,
       getFocusedState: () => ({ currentProject: null, recentProjects: [] }),
     }
 
-    // 还没有窗口报过界面语言：按系统语言（英语）。
+    // 没接系统语言（单元测试里的 main 服务）时按中文；接上以后、还没有窗口报过界面语言时按系统语言。
+    expect(getWorkbenchMainLocale()).toBe('zh-CN')
+    setWorkbenchSystemLanguageSource(() => 'en-GB')
     expect(getWorkbenchMainLocale()).toBe('en-US')
     installProjectHubMenu(windows as never)
     expect(labelsSince(0)).toEqual(
@@ -57,5 +54,25 @@ describe('main-process text follows the interface language', () => {
     const afterSwitch = builtTemplates.length
     setWorkbenchMainLocale('zh-CN')
     expect(builtTemplates.length).toBe(afterSwitch)
+  })
+
+  test('file operation errors are written in the interface language', async () => {
+    const { PathResolver } = await import('../src/main/workspace/PathResolver')
+    const { setWorkbenchMainLocale } = await import('../src/main/i18n/workbenchMainLocale')
+    const paths = new PathResolver()
+    const messageOf = (run: () => unknown): string => {
+      try {
+        run()
+      } catch (error) {
+        return (error as Error).message
+      }
+      throw new Error('expected an error')
+    }
+
+    setWorkbenchMainLocale('en-US')
+    expect(messageOf(() => paths.normalizeEntryName(''))).toBe('Enter a name.')
+    expect(messageOf(() => paths.resolveProjectRootSync(' '))).toBe('Choose a project folder first.')
+    setWorkbenchMainLocale('zh-CN')
+    expect(messageOf(() => paths.normalizeEntryName(''))).toBe('名称不能为空。')
   })
 })

@@ -11,6 +11,8 @@ import { Log } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { currentPlatform as systemPlatformCompatibility } from '@velaros-ai/core/platform'
 
+import { workbenchMainText } from '../i18n/workbenchMainMessages'
+
 import { analyzeWorkbenchCommandExecution } from './CommandExecutionPolicy'
 
 const DEFAULT_COMMAND_TIMEOUT_MS = 60_000
@@ -61,12 +63,18 @@ class CommandHelper {
   public validateCommand(command: string, projectRoot: string, allowDangerous = false): string {
     const trimmed = command.trim()
     if (!trimmed) {
-      throw new AppError('VALIDATION', '命令不能为空')
+      throw new AppError('VALIDATION', workbenchMainText('commands.empty'))
     }
 
     const plan = analyzeWorkbenchCommandExecution(trimmed, projectRoot)
     if (!allowDangerous && plan.isDangerous) {
-      throw new AppError('PERMISSION', `命令未经用户确认，未执行：${trimmed}（${plan.dangerousReason}）`)
+      throw new AppError(
+        'PERMISSION',
+        workbenchMainText('commands.notConfirmed', {
+          command: trimmed,
+          reason: plan.dangerousReason ?? '',
+        })
+      )
     }
 
     return trimmed

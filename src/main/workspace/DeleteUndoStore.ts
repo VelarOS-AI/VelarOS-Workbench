@@ -14,6 +14,8 @@ import { basename, dirname, join } from 'node:path'
 
 import { AppError } from '@velaros-ai/core/error'
 
+import { workbenchMainText } from '../i18n/workbenchMainMessages'
+
 /** 把一项移到系统废纸篓：应用里是 Electron 的 `shell.trashItem`，测试换成假的。 */
 export type WorkbenchMoveToTrash = (absolutePath: string) => Promise<void>
 
@@ -123,7 +125,7 @@ export class WorkbenchDeleteUndoStore {
       if (copy) await rm(dirname(copy.copyPath), { recursive: true, force: true })
       throw new AppError(
         'PLATFORM',
-        `没能移到系统废纸篓，文件原样保留：${AppError.getMessage(error)}`,
+        workbenchMainText('files.moveToTrashFailed', { reason: AppError.getMessage(error) }),
         error
       )
     }
