@@ -241,7 +241,7 @@ void describe('pre-split Workbench shell parity', () => {
     assert.match(presentation, /onClick=\{\(\) => toggleLeftTool\('commit'\)\}/)
     assert.match(presentation, /<GitBranchIcon size=\{18\}/)
     assert.match(presentation, /surface\.activeLeftTool === 'commit'[\s\S]*\? 'changes'/)
-    assert.match(kernel, /<WorkbenchCommitPanel/)
+    assert.match(kernel, /<LazyWorkbenchCommitPanel/)
     assert.match(commitPanel, /commitWorkspaceGitChanges/)
     assert.doesNotMatch(commitPanel, /commitPanelCountBadge/)
     assert.match(gitPanel, /查看分支与提交历史，不承担提交操作/)

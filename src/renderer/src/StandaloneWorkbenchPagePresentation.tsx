@@ -38,7 +38,6 @@ import {
   buildStandaloneWorkbenchEmbeddedKernelModel,
 } from './components/embedded/workbenchEmbeddedKernelAdapter'
 import { WorkbenchFileTypeIcon } from './components/files/WorkbenchFileTypeIcon'
-import { WorkbenchGitToolPanel } from './components/git/WorkbenchGitToolPanel'
 import { type BottomTool, CommandPanel } from './components/terminal/CommandPanel'
 import { useWorkbenchTerminalFileLinks } from './hooks/useWorkbenchTerminalFileLinks'
 import { useWorkbenchWindowFullScreen } from './hooks/useWorkbenchWindowFullScreen'
@@ -51,6 +50,7 @@ import {
 } from './models/codeGraph/workbenchVelarProjectGraph'
 import { buildWorkbenchStatusBarTextFormat } from './models/editor/workbenchEditorTextFormat'
 import styles from './styles/workbenchPageStyles'
+import { lazyWithPreload, preloadWhenIdle } from './support/lazyWithPreload'
 import { useWorkbenchPageContext } from './WorkbenchPageModelContext'
 
 // VelarScript 结构图只在打开结构标签时才加载，不进工作区外壳。
@@ -59,43 +59,17 @@ const LazyWorkbenchLogicGraphEditor = lazy(async () => {
   return { default: module.WorkbenchLogicGraphEditor }
 })
 
-type QuickOpenModule = typeof import('./components/project/QuickOpen')
-
-let quickOpenModulePromise: Nullable<Promise<QuickOpenModule>> = null
-
-// 快速打开与命令面板（文件名打分、命令登记表）也不进工作区外壳：空闲时预先加载，第一次打开不用等。
-function loadQuickOpenModule(): Promise<QuickOpenModule> {
-  quickOpenModulePromise ??= import('./components/project/QuickOpen').catch((error: unknown) => {
-    quickOpenModulePromise = null
-    throw error
-  })
-  return quickOpenModulePromise
-}
-
-const LazyQuickOpen = lazy(async () => {
-  const module = await loadQuickOpenModule()
-  return { default: module.QuickOpen }
-})
-
-type SettingsDialogModule = typeof import('./components/settings/WorkbenchSettingsDialog')
-
-let settingsDialogModulePromise: Nullable<Promise<SettingsDialogModule>> = null
-
-// 设置对话框很少打开，也不进工作区外壳：空闲时预先加载，第一次打开不用等。
-function loadSettingsDialogModule(): Promise<SettingsDialogModule> {
-  settingsDialogModulePromise ??= import('./components/settings/WorkbenchSettingsDialog').catch(
-    (error: unknown) => {
-      settingsDialogModulePromise = null
-      throw error
-    }
-  )
-  return settingsDialogModulePromise
-}
-
-const LazyWorkbenchSettingsDialog = lazy(async () => {
-  const module = await loadSettingsDialogModule()
-  return { default: module.WorkbenchSettingsDialog }
-})
+// 快速打开与命令面板（文件名打分、命令登记表）、设置对话框、底部 Git 工具窗都不进工作区外壳包：空闲时预先加载，
+// 第一次打开不用等。
+const LazyQuickOpen = lazyWithPreload(
+  async () => (await import('./components/project/QuickOpen')).QuickOpen
+)
+const LazyWorkbenchSettingsDialog = lazyWithPreload(
+  async () => (await import('./components/settings/WorkbenchSettingsDialog')).WorkbenchSettingsDialog
+)
+const LazyWorkbenchGitToolPanel = lazyWithPreload(
+  async () => (await import('./components/git/WorkbenchGitToolPanel')).WorkbenchGitToolPanel
+)
 
 interface StandaloneWorkbenchPagePresentationProps {
   projectHubState: WorkbenchProjectHubState
@@ -322,15 +296,10 @@ export function StandaloneWorkbenchPagePresentation({
     setVelarSourcePreview(null)
   }, [activeProjectId])
 
-  useEffect(() => {
-    if (!window.requestIdleCallback) return undefined
-
-    const handle = window.requestIdleCallback(() => {
-      void loadQuickOpenModule().catch(() => undefined)
-      void loadSettingsDialogModule().catch(() => undefined)
-    })
-    return () => window.cancelIdleCallback(handle)
-  }, [])
+  useEffect(
+    () => preloadWhenIdle([LazyQuickOpen, LazyWorkbenchSettingsDialog, LazyWorkbenchGitToolPanel]),
+    []
+  )
 
   useEffect(() => {
     if (!pendingFileOpenId || !pendingFileOpenPath || !activeProjectId) return
@@ -821,13 +790,15 @@ export function StandaloneWorkbenchPagePresentation({
               workbenchTheme={workbenchPreferences.preferences.theme}
               isCollapsed={false}
               gitPanel={
-                <WorkbenchGitToolPanel
-                  workspaceRoot={workbench.activeProject.rootPath}
-                  summary={model.gitState.summary}
-                  isLoading={model.gitState.isLoading}
-                  error={model.gitState.error}
-                  onInitialize={model.actions.initializeRepository}
-                />
+                <Suspense fallback={null}>
+                  <LazyWorkbenchGitToolPanel
+                    workspaceRoot={workbench.activeProject.rootPath}
+                    summary={model.gitState.summary}
+                    isLoading={model.gitState.isLoading}
+                    error={model.gitState.error}
+                    onInitialize={model.actions.initializeRepository}
+                  />
+                </Suspense>
               }
               problemsPanel={
                 <CodeInsightPanel

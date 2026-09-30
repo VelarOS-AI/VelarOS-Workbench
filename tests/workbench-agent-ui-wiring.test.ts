@@ -27,7 +27,7 @@ void describe('Workbench AI changes wiring', () => {
     assert.match(presentation, /group: 'ai-changes' as const/u)
     assert.match(presentation, /<WorkbenchAiChangeDiffPanel/u)
     assert.match(presentation, /onReviewRunChanges=\{model\.actions\.handleWorkbenchChatRunChangesReview\}/u)
-    assert.match(kernel, /leftMode === 'ai-changes' \? \(\n\s*<WorkbenchAiChangesPanel/u)
+    assert.match(kernel, /leftMode === 'ai-changes' \? \(\n\s*<LazyWorkbenchAiChangesPanel/u)
     // 独占组激活时标签栏只显示这一组，普通文件标签隐藏。
     assert.match(tabBar, /new Set\(\['structure', 'ai-changes'\]\)/u)
     assert.match(editorPanel, /openTabs=\{isolatedTabGroup \? \[\] : openTabs\}/u)

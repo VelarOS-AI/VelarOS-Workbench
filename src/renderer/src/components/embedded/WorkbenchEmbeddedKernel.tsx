@@ -9,27 +9,40 @@ import {
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
   type ReactElement,
+  Suspense,
+  useEffect,
 } from 'react'
 import { GlobeSimpleIcon, RobotIcon } from '@phosphor-icons/react'
 import { useWorkbenchI18n } from '@renderer/i18n'
 import type { WorkbenchDensity } from '@renderer/models/settings/workbenchPreferences'
 
 import styles from '../../styles/workbenchPageStyles'
-import { WorkbenchAiChangesPanel } from '../aiChanges/WorkbenchAiChangesPanel'
+import { lazyWithPreload, preloadWhenIdle } from '../../support/lazyWithPreload'
 import { WorkbenchLogicGraphSidebar } from '../codeGraph/WorkbenchLogicGraphSidebar'
 import {
   EditorPanel,
   type WorkbenchEditorPanelAuxiliaryTab,
 } from '../editor/EditorPanel'
-import { WorkbenchAgentBrowserPanel } from '../editor/WorkbenchAgentBrowserPanel'
-import { WorkbenchWebviewDebugPanel } from '../editor/WorkbenchWebviewDebugPanel'
 import { FilePanel } from '../files/FilePanel'
-import { WorkbenchCommitPanel } from '../git/WorkbenchCommitPanel'
 
 import type {
   WorkbenchEmbeddedKernelLeftMode,
   WorkbenchEmbeddedKernelModel,
 } from './workbenchEmbeddedKernelModel'
+
+// 提交、AI 改动、网页调试与 Agent 浏览器面板不进工作区外壳包：空闲时预先加载，切过去时一般已经就绪。
+const LazyWorkbenchCommitPanel = lazyWithPreload(
+  async () => (await import('../git/WorkbenchCommitPanel')).WorkbenchCommitPanel
+)
+const LazyWorkbenchAiChangesPanel = lazyWithPreload(
+  async () => (await import('../aiChanges/WorkbenchAiChangesPanel')).WorkbenchAiChangesPanel
+)
+const LazyWorkbenchWebviewDebugPanel = lazyWithPreload(
+  async () => (await import('../editor/WorkbenchWebviewDebugPanel')).WorkbenchWebviewDebugPanel
+)
+const LazyWorkbenchAgentBrowserPanel = lazyWithPreload(
+  async () => (await import('../editor/WorkbenchAgentBrowserPanel')).WorkbenchAgentBrowserPanel
+)
 
 interface WorkbenchEmbeddedKernelProps {
   model: WorkbenchEmbeddedKernelModel
@@ -58,6 +71,16 @@ export function WorkbenchEmbeddedKernel({
 }: WorkbenchEmbeddedKernelProps): ReactElement {
   const { t } = useWorkbenchI18n()
   const { files, editor } = model
+  useEffect(
+    () =>
+      preloadWhenIdle([
+        LazyWorkbenchCommitPanel,
+        LazyWorkbenchAiChangesPanel,
+        LazyWorkbenchWebviewDebugPanel,
+        LazyWorkbenchAgentBrowserPanel,
+      ]),
+    []
+  )
   const { debug } = editor
   const debugAuxiliaryTabs: WorkbenchEditorPanelAuxiliaryTab[] = [
     ...debug.tabs.map((tab) => ({
@@ -87,34 +110,36 @@ export function WorkbenchEmbeddedKernel({
   ]
   const hasDebugTabsLayer = debug.tabs.length > 0 || !!debug.agentBrowser
   const debugTabsLayer = hasDebugTabsLayer ? (
-    <div className={styles.webviewDebugLayer}>
-      {debug.tabs.map((tab) => (
-        <div
-          key={tab.id}
-          className={styles.webviewDebugLayerItem}
-          data-active={debug.activeTabId === tab.id}
-        >
-          <WorkbenchWebviewDebugPanel
-            url={tab.url}
-            onNavigate={(url, title) => debug.onNavigate(tab.id, url, title)}
-          />
-        </div>
-      ))}
-      {!!debug.agentBrowser && (
-        <div
-          key={debug.agentBrowser.id}
-          className={styles.webviewDebugLayerItem}
-          data-active={debug.agentBrowser.active}
-        >
-          <WorkbenchAgentBrowserPanel
-            projectRoot={debug.agentBrowser.projectRoot}
-            sessionId={debug.agentBrowser.sessionId}
-            url={debug.agentBrowser.url}
-            active={debug.agentBrowser.active}
-          />
-        </div>
-      )}
-    </div>
+    <Suspense fallback={null}>
+      <div className={styles.webviewDebugLayer}>
+        {debug.tabs.map((tab) => (
+          <div
+            key={tab.id}
+            className={styles.webviewDebugLayerItem}
+            data-active={debug.activeTabId === tab.id}
+          >
+            <LazyWorkbenchWebviewDebugPanel
+              url={tab.url}
+              onNavigate={(url, title) => debug.onNavigate(tab.id, url, title)}
+            />
+          </div>
+        ))}
+        {!!debug.agentBrowser && (
+          <div
+            key={debug.agentBrowser.id}
+            className={styles.webviewDebugLayerItem}
+            data-active={debug.agentBrowser.active}
+          >
+            <LazyWorkbenchAgentBrowserPanel
+              projectRoot={debug.agentBrowser.projectRoot}
+              sessionId={debug.agentBrowser.sessionId}
+              url={debug.agentBrowser.url}
+              active={debug.agentBrowser.active}
+            />
+          </div>
+        )}
+      </div>
+    </Suspense>
   ) : null
   const editorDiff = {
     ...editor.diff,
@@ -123,26 +148,28 @@ export function WorkbenchEmbeddedKernel({
   }
   const leftPanel = (
     <div className={styles.leftToolContent}>
-      {leftMode === 'ai-changes' ? (
-        <WorkbenchAiChangesPanel
-          projectRoot={model.activeProject.rootPath}
-          aiChanges={model.aiChanges}
-        />
-      ) : leftMode === 'changes' ? (
-        <WorkbenchCommitPanel
-          git={model.changes.git}
-          onOpenDiff={model.changes.onOpenDiff}
-          onOpenFile={model.changes.onOpenFile}
-        />
-      ) : leftMode === 'velar-structure' && model.velarStructure ? (
-        <WorkbenchLogicGraphSidebar {...model.velarStructure} />
-      ) : (
-        <FilePanel
-          tree={files.tree}
-          search={files.search}
-          handlers={files.handlers}
-        />
-      )}
+      <Suspense fallback={null}>
+        {leftMode === 'ai-changes' ? (
+          <LazyWorkbenchAiChangesPanel
+            projectRoot={model.activeProject.rootPath}
+            aiChanges={model.aiChanges}
+          />
+        ) : leftMode === 'changes' ? (
+          <LazyWorkbenchCommitPanel
+            git={model.changes.git}
+            onOpenDiff={model.changes.onOpenDiff}
+            onOpenFile={model.changes.onOpenFile}
+          />
+        ) : leftMode === 'velar-structure' && model.velarStructure ? (
+          <WorkbenchLogicGraphSidebar {...model.velarStructure} />
+        ) : (
+          <FilePanel
+            tree={files.tree}
+            search={files.search}
+            handlers={files.handlers}
+          />
+        )}
+      </Suspense>
     </div>
   )
   const editorPanel = (
