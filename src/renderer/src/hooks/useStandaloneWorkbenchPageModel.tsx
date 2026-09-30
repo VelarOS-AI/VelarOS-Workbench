@@ -415,7 +415,7 @@ export function useStandaloneWorkbenchPageModel(
     projectId: toNullable(workbench.activeProject?.id),
     expandedPaths: workbench.expandedPaths,
     selectedEntryPath: workbench.selectedEntryPath,
-    openTabs: workbench.openTabs,
+    editorLayout: workbench.editorLayout,
     selectedFilePath: workbench.selectedFilePath,
     cursorPosition: editorNavigation.cursorPosition,
     cursorByPathRef: sessionCursorByPathRef,

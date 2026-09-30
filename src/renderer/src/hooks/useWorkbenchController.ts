@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { getWorkbenchEditorFocusedPath } from '@renderer/models/editor/workbenchEditorGroups'
 import { buildWorkbenchProjectContextIndex } from '@renderer/models/project/workbenchProjectContextIndex'
 import type { WorkbenchProject } from '@renderer/models/project/workbenchProjects'
 import {
@@ -148,8 +149,7 @@ export function useWorkbenchController(options: UseWorkbenchControllerOptions = 
     saveWorkbenchProjectSessionSnapshot(projectId, {
       expandedPaths: tree.expandedPaths,
       selectedEntryPath: tree.selectedEntryPath,
-      openTabPaths: editor.openTabs.map((tab) => tab.path),
-      selectedFilePath: editor.selectedFilePath,
+      editorLayout: editor.editorLayout,
       cursorByPath: sessionCursorByPathRef.current,
     })
   })
@@ -202,17 +202,10 @@ export function useWorkbenchController(options: UseWorkbenchControllerOptions = 
             tree.setSelectedEntryPath(session.selectedEntryPath)
           }
 
-          const hasOpenTabs = !isEmpty(session.openTabPaths)
-          const hasSelectedFile = !!session.selectedFilePath
-          if (hasOpenTabs || hasSelectedFile) {
-            await editor.restoreEditorSession({
-              openTabPaths: session.openTabPaths,
-              options: { quiet: true },
-              selectedFilePath: session.selectedFilePath,
-            })
-          }
+          await editor.restoreEditorSession(session.editorLayout)
 
-          const cursorPath = session.selectedFilePath ?? toNullable(session.openTabPaths[0])
+          // 回到当前文件上次的光标位置（读不出来的标签已经丢掉，当前文件以恢复出来的为准）。
+          const cursorPath = getWorkbenchEditorFocusedPath(session.editorLayout)
           const cursor = cursorPath ? session.cursorByPath[cursorPath] : null
           if (cursorPath && cursor) {
             sessionNavigationIdRef.current += 1
@@ -307,6 +300,7 @@ export function useWorkbenchController(options: UseWorkbenchControllerOptions = 
     selectedFile: editor.selectedFile,
     editorContent: editor.editorContent,
     openTabs: editor.openTabs,
+    editorLayout: editor.editorLayout,
     expandedPaths: tree.expandedPaths,
     childrenByPath: tree.childrenByPath,
     pendingTreeAction: mutation.pendingTreeAction,
@@ -371,8 +365,6 @@ export function useWorkbenchController(options: UseWorkbenchControllerOptions = 
     revealEntryPath: tree.revealEntryPath,
     openSearchEntry,
     selectFile,
-    /** 在后台开出一个标签，不切换当前文件；读不出来时返回 false。 */
-    preloadOpenTab: editor.preloadOpenTab,
     closeOpenFile: editor.closeOpenFile,
     closeOtherOpenFiles: editor.closeOtherOpenFiles,
     closeAllOpenFiles: editor.closeAllOpenFiles,

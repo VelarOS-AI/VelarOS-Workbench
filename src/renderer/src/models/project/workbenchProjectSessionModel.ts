@@ -9,6 +9,11 @@ import {
   createLocalStorageJsonStore,
   type StorageLike,
 } from '../../persistence/localStorageJsonStore'
+import {
+  createWorkbenchEditorGroupsLayout,
+  normalizeWorkbenchEditorGroupsLayout,
+  type WorkbenchEditorGroupsLayout,
+} from '../editor/workbenchEditorGroups'
 import { ROOT_PATH } from '../shared/workbenchUtils'
 
 const STORAGE_KEY = 'velaros.workbench.project-session.v1'
@@ -25,16 +30,15 @@ export interface PersistedWorkbenchProjectSession {
   version: 1
   expandedPaths: string[]
   selectedEntryPath: Nullable<string>
-  openTabPaths: string[]
-  selectedFilePath: Nullable<string>
+  /** 编辑区的标签布局：开着哪些标签、标签栏顺序、每组的当前标签、当前组。 */
+  editorLayout: WorkbenchEditorGroupsLayout
   cursorByPath: Record<string, PersistedWorkbenchEditorCursor>
 }
 
 export interface WorkbenchProjectSessionSnapshot {
   expandedPaths: Iterable<string>
   selectedEntryPath: Nullable<string>
-  openTabPaths: readonly string[]
-  selectedFilePath: Nullable<string>
+  editorLayout: WorkbenchEditorGroupsLayout
   cursorByPath: Record<string, PersistedWorkbenchEditorCursor>
 }
 
@@ -42,8 +46,7 @@ const EMPTY_SESSION: PersistedWorkbenchProjectSession = {
   version: 1,
   expandedPaths: [ROOT_PATH],
   selectedEntryPath: null,
-  openTabPaths: [],
-  selectedFilePath: null,
+  editorLayout: createWorkbenchEditorGroupsLayout(),
   cursorByPath: {},
 }
 
@@ -97,17 +100,15 @@ export function normalizeWorkbenchProjectSession(
   if (!isRecord(value)) return EMPTY_SESSION
 
   const expandedPaths = normalizeStringList(value.expandedPaths, MAX_PERSISTED_EXPANDED_PATHS)
-  const openTabPaths = normalizeStringList(value.openTabPaths, MAX_PERSISTED_OPEN_TABS)
   const selectedEntryPath = readString(value.selectedEntryPath)
-  const selectedFilePath = readString(value.selectedFilePath)
   const cursorByPath = normalizeCursorByPath(value.cursorByPath)
 
   return {
     version: 1,
     expandedPaths: expandedPaths.length > 0 ? expandedPaths : [ROOT_PATH],
     selectedEntryPath: selectedEntryPath || null,
-    openTabPaths,
-    selectedFilePath: selectedFilePath || null,
+    // 存的不是这个形状（包括只有一列标签路径的旧会话）：按没有标签处理，不去换算。
+    editorLayout: normalizeWorkbenchEditorGroupsLayout(value.editorLayout, MAX_PERSISTED_OPEN_TABS),
     cursorByPath,
   }
 }
@@ -116,14 +117,12 @@ export function buildWorkbenchProjectSessionSnapshot(
   snapshot: WorkbenchProjectSessionSnapshot
 ): PersistedWorkbenchProjectSession {
   const expandedPaths = normalizeStringList([...snapshot.expandedPaths], MAX_PERSISTED_EXPANDED_PATHS)
-  const openTabPaths = normalizeStringList(snapshot.openTabPaths, MAX_PERSISTED_OPEN_TABS)
 
   return normalizeWorkbenchProjectSession({
     version: 1,
     expandedPaths: expandedPaths.length > 0 ? expandedPaths : [ROOT_PATH],
     selectedEntryPath: snapshot.selectedEntryPath,
-    openTabPaths,
-    selectedFilePath: snapshot.selectedFilePath,
+    editorLayout: snapshot.editorLayout,
     cursorByPath: snapshot.cursorByPath,
   })
 }

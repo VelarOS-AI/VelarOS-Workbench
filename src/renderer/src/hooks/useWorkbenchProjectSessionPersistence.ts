@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef } from 'react'
+import type { WorkbenchEditorGroupsLayout } from '@renderer/models/editor/workbenchEditorGroups'
 import {
   type PersistedWorkbenchEditorCursor,
   saveWorkbenchProjectSessionSnapshot,
 } from '@renderer/models/project/workbenchProjectSessionModel'
-import type { WorkbenchOpenEditorTab } from '@renderer/types/workbenchTypes'
 
 import { useLatest, useTimerScope } from '../support/genericHooks'
 
@@ -16,7 +16,9 @@ interface UseWorkbenchProjectSessionPersistenceOptions {
   projectId: Nullable<string>
   expandedPaths: ReadonlySet<string>
   selectedEntryPath: Nullable<string>
-  openTabs: readonly WorkbenchOpenEditorTab[]
+  /** 编辑区的标签布局：变了就存。 */
+  editorLayout: WorkbenchEditorGroupsLayout
+  /** 当前文件：光标位置记在它名下。 */
   selectedFilePath: Nullable<string>
   cursorPosition: WorkbenchEditorCursorSnapshot
   cursorByPathRef?: React.MutableRefObject<Record<string, PersistedWorkbenchEditorCursor>>
@@ -27,7 +29,7 @@ export function useWorkbenchProjectSessionPersistence({
   projectId,
   expandedPaths,
   selectedEntryPath,
-  openTabs,
+  editorLayout,
   selectedFilePath,
   cursorPosition,
   cursorByPathRef: externalCursorByPathRef,
@@ -39,8 +41,7 @@ export function useWorkbenchProjectSessionPersistence({
     projectId,
     expandedPaths,
     selectedEntryPath,
-    openTabs,
-    selectedFilePath,
+    editorLayout,
     cursorPosition,
   })
 
@@ -48,7 +49,6 @@ export function useWorkbenchProjectSessionPersistence({
     () => [...expandedPaths].sort((left, right) => left.localeCompare(right)),
     [expandedPaths]
   )
-  const openTabPaths = useMemo(() => openTabs.map((tab) => tab.path), [openTabs])
 
   useEffect(() => {
     if (!enabled || !selectedFilePath) return
@@ -71,8 +71,7 @@ export function useWorkbenchProjectSessionPersistence({
         saveWorkbenchProjectSessionSnapshot(snapshot.projectId, {
           expandedPaths: snapshot.expandedPaths,
           selectedEntryPath: snapshot.selectedEntryPath,
-          openTabPaths: snapshot.openTabs.map((tab) => tab.path),
-          selectedFilePath: snapshot.selectedFilePath,
+          editorLayout: snapshot.editorLayout,
           cursorByPath: cursorByPathRef.current,
         })
       },
@@ -85,10 +84,9 @@ export function useWorkbenchProjectSessionPersistence({
   }, [
     expandedPathList,
     enabled,
-    openTabPaths,
+    editorLayout,
     projectId,
     selectedEntryPath,
-    selectedFilePath,
     cursorPosition.column,
     cursorPosition.line,
     snapshotRef,
@@ -105,8 +103,7 @@ export function flushWorkbenchProjectSessionPersistence(
   saveWorkbenchProjectSessionSnapshot(options.projectId, {
     expandedPaths: options.expandedPaths,
     selectedEntryPath: options.selectedEntryPath,
-    openTabPaths: options.openTabs.map((tab) => tab.path),
-    selectedFilePath: options.selectedFilePath,
+    editorLayout: options.editorLayout,
     cursorByPath,
   })
 }

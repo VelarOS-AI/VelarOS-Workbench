@@ -100,6 +100,23 @@ GB18030、混用的换行符），编辑器据此只读打开，用户明确选�
 - 项目搜索的替换写没开着的文件时也走保存管线（`ContentReplace` → `FileOperations.saveFile`，不带格式），
   开着的文件只改编辑缓冲、不写盘。
 
+## 编辑区的标签
+
+开着的文件分两处记，两边的路径始终是同一批：
+
+- **正文与磁盘快照**在 `useWorkbenchEditorController` 的 `openTabsByPath`（按路径）：保存、自动保存、外部改动、
+  关闭前的确认都只认它。
+- **标签布局**（`models/editor/workbenchEditorGroups.ts`，纯函数）记标签栏顺序、每一组正在显示的标签、当前组。
+  状态在 `useWorkbenchEditorTabLayout`；最新的布局另记在 ref 里，同一轮事件里接连两次改动（文件读完紧接着又关掉
+  别的标签）接在前一次的结果上。
+
+「当前文件」（`selectedFilePath` / `selectedFile` / `editorContent`）不是单独的状态：它就是当前组正在显示的那个
+标签，磁盘快照与正文取自标签本身。打开、关闭、改名、恢复会话这些要同时动两处的操作在控制器里同一轮提交；只动
+布局的（拖动标签）在布局 hook 里。
+
+布局原样随项目会话存盘（`workbenchProjectSessionModel` 的 `editorLayout`，最多 32 个标签）。读回来先校验：形状
+不对的（包括以前只存一列路径的会话）按没有标签处理，不做换算；恢复时读不出来的文件，它的标签丢掉。
+
 ## 项目搜索与替换
 
 侧栏的搜索（⇧⌘F）。匹配规则只有一份：`src/shared/workbenchTextSearch.ts`（查找词、区分大小写 / 全字 /

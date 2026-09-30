@@ -103,7 +103,7 @@ void describe('closing editor tabs', () => {
 
   void test('dirty tabs ask save / discard / cancel instead of refusing to close', () => {
     const controller = readSource('src/renderer/src/hooks/useWorkbenchEditorController.ts')
-    const closing = sliceBetween(controller, 'const commitCloseOpenFiles', 'const reorderOpenTabs')
+    const closing = sliceBetween(controller, 'const commitCloseOpenFiles', 'async function saveTab')
 
     // 关单个、关其他、关全部都先经过同一个确认；不再只弹「有未保存改动」的警告。
     assert.doesNotMatch(closing, /warnUnsavedChanges\(\)/u)
