@@ -14,23 +14,19 @@ import {
   DownloadSimpleIcon,
   FileTextIcon,
   SignOutIcon,
-  WarningCircleIcon,
   XIcon,
 } from '@phosphor-icons/react'
 import { useWorkbenchProductAnalytics } from '@renderer/hooks/useWorkbenchProductAnalytics'
 import { useWorkbenchUpdate } from '@renderer/hooks/useWorkbenchUpdate'
 import { useWorkbenchHostRuntime } from '@renderer/host'
-import type { WorkbenchMessageKey } from '@renderer/i18n'
 import { useWorkbenchI18n } from '@renderer/i18n'
-import type { WorkbenchKeymapConflict } from '@renderer/models/layout/workbenchKeyboardShortcuts'
-import {
-  DEFAULT_WORKBENCH_KEYBOARD_SHORTCUT_MAP,
-  formatWorkbenchShortcutForPlatform,
-  shortcutFromWorkbenchKeyboardEvent,
-  WORKBENCH_KEYBOARD_SHORTCUT_DEFINITIONS,
-  type WorkbenchKeyboardShortcutAction,
-  type WorkbenchKeyboardShortcutMap,
+import { formatWorkbenchEditorCommandHint } from '@renderer/models/editor/workbenchEditorKeymap'
+import type {
+  WorkbenchKeyboardShortcutAction,
+  WorkbenchKeyboardShortcutMap,
+  WorkbenchKeymapConflict,
 } from '@renderer/models/layout/workbenchKeyboardShortcuts'
+import type { WorkbenchKeymapPresetId } from '@renderer/models/layout/workbenchKeymapPresets'
 import {
   WORKBENCH_EDITOR_FONT_SIZE_MAX,
   WORKBENCH_EDITOR_FONT_SIZE_MIN,
@@ -87,7 +83,13 @@ import type { WorkbenchUpdateChannel } from '@shared/workbenchUpdate'
 import styles from '../../styles/workbenchPageStyles'
 import { useTimerScope } from '../../support/genericHooks'
 
+import {
+  WorkbenchEditorKeysDescriptionKeys,
+  WorkbenchEditorKeysSettings,
+  WorkbenchKeymapSettings,
+} from './WorkbenchKeymapSettings'
 import { WorkbenchMemorySettings } from './WorkbenchMemorySettings'
+import { SettingRow, WorkbenchSettingsPill } from './WorkbenchSettingsParts'
 
 type WorkbenchSettingsSectionId =
   | 'general'
@@ -98,6 +100,9 @@ type WorkbenchSettingsSectionId =
 interface WorkbenchSettingsDialogProps {
   conflicts: WorkbenchKeymapConflict[]
   keymap: WorkbenchKeyboardShortcutMap
+  /** 选的键位方案，和它的默认键（哪一项改过、「重置」回到哪里都看它）。 */
+  keymapPreset: WorkbenchKeymapPresetId
+  presetShortcuts: WorkbenchKeyboardShortcutMap
   locale: AppLocale
   open: boolean
   preferences: WorkbenchPreferences
@@ -107,6 +112,7 @@ interface WorkbenchSettingsDialogProps {
   }>
   onCreateProjectAiRulesFile?: () => Promise<void>
   onExitProject?: () => Promise<boolean>
+  onKeymapPresetChange: (preset: WorkbenchKeymapPresetId) => void
   onLocaleChange: (locale: AppLocale) => void | Promise<void>
   onOpenProjectFile?: (path: string) => void | Promise<void>
   onOpenChange: (open: boolean) => void
@@ -115,92 +121,6 @@ interface WorkbenchSettingsDialogProps {
   onResetPreferences: () => void
   onResetShortcut: (action: WorkbenchKeyboardShortcutAction) => void
   onSetShortcut: (action: WorkbenchKeyboardShortcutAction, shortcut: string) => void
-}
-const ShortcutLabelKeys: Record<WorkbenchKeyboardShortcutAction, WorkbenchMessageKey> = {
-  'close-right-tool': 'workbench.settingsShortcutCloseRightTool',
-  'command-palette': 'workbench.settingsShortcutCommandPalette',
-  'debug-continue': 'workbench.settingsShortcutDebugContinue',
-  'debug-step-into': 'workbench.settingsShortcutDebugStepInto',
-  'debug-step-out': 'workbench.settingsShortcutDebugStepOut',
-  'debug-step-over': 'workbench.settingsShortcutDebugStepOver',
-  'debug-stop': 'workbench.settingsShortcutDebugStop',
-  'find-in-files': 'workbench.settingsShortcutFindInFiles',
-  'focus-left-editor-group': 'workbench.settingsShortcutFocusLeftEditorGroup',
-  'focus-right-editor-group': 'workbench.settingsShortcutFocusRightEditorGroup',
-  'go-to-symbol': 'workbench.settingsShortcutGoToSymbol',
-  'navigate-back': 'workbench.settingsShortcutNavigateBack',
-  'navigate-forward': 'workbench.settingsShortcutNavigateForward',
-  'quick-open': 'workbench.settingsShortcutQuickOpen',
-  'reopen-closed-tab': 'workbench.settingsShortcutReopenClosedTab',
-  'run-last-command': 'workbench.settingsShortcutRunLastCommand',
-  'save-all': 'workbench.settingsShortcutSaveAll',
-  'save-current': 'workbench.settingsShortcutSaveCurrent',
-  'split-editor-right': 'workbench.settingsShortcutSplitEditorRight',
-  'toggle-actions': 'workbench.settingsShortcutToggleActions',
-  'toggle-changes': 'workbench.settingsShortcutToggleChanges',
-  'toggle-problems': 'workbench.settingsShortcutToggleProblems',
-}
-
-const ShortcutDescriptionKeys: Record<WorkbenchKeyboardShortcutAction, WorkbenchMessageKey> = {
-  'close-right-tool': 'workbench.settingsShortcutCloseRightToolDescription',
-  'command-palette': 'workbench.settingsShortcutCommandPaletteDescription',
-  'debug-continue': 'workbench.settingsShortcutDebugContinueDescription',
-  'debug-step-into': 'workbench.settingsShortcutDebugStepIntoDescription',
-  'debug-step-out': 'workbench.settingsShortcutDebugStepOutDescription',
-  'debug-step-over': 'workbench.settingsShortcutDebugStepOverDescription',
-  'debug-stop': 'workbench.settingsShortcutDebugStopDescription',
-  'find-in-files': 'workbench.settingsShortcutFindInFilesDescription',
-  'focus-left-editor-group': 'workbench.settingsShortcutFocusLeftEditorGroupDescription',
-  'focus-right-editor-group': 'workbench.settingsShortcutFocusRightEditorGroupDescription',
-  'go-to-symbol': 'workbench.settingsShortcutGoToSymbolDescription',
-  'navigate-back': 'workbench.settingsShortcutNavigateBackDescription',
-  'navigate-forward': 'workbench.settingsShortcutNavigateForwardDescription',
-  'quick-open': 'workbench.settingsShortcutQuickOpenDescription',
-  'reopen-closed-tab': 'workbench.settingsShortcutReopenClosedTabDescription',
-  'run-last-command': 'workbench.settingsShortcutRunLastCommandDescription',
-  'save-all': 'workbench.settingsShortcutSaveAllDescription',
-  'save-current': 'workbench.settingsShortcutSaveCurrentDescription',
-  'split-editor-right': 'workbench.settingsShortcutSplitEditorRightDescription',
-  'toggle-actions': 'workbench.settingsShortcutToggleActionsDescription',
-  'toggle-changes': 'workbench.settingsShortcutToggleChangesDescription',
-  'toggle-problems': 'workbench.settingsShortcutToggleProblemsDescription',
-}
-
-function SettingRow({
-  title,
-  description,
-  children,
-}: {
-  title: string
-  description?: string
-  children: ReactNode
-}): ReactElement {
-  return (
-    <div className={styles.workbenchSettingsRow}>
-      <div className={styles.workbenchSettingsRowMeta}>
-        <Text className={styles.workbenchSettingsRowTitle}>{title}</Text>
-        {!!description && (
-          <Text tone="caption" className={styles.workbenchSettingsRowDescription}>
-            {description}
-          </Text>
-        )}
-      </div>
-      <div className={styles.workbenchSettingsRowControl}>{children}</div>
-    </div>
-  )
-}
-function WorkbenchSettingsPill({
-  children,
-  tone = 'default',
-}: {
-  children: ReactNode
-  tone?: 'default' | 'success' | 'warning'
-}): ReactElement {
-  return (
-    <span className={styles.workbenchSettingsPill} data-tone={tone}>
-      {children}
-    </span>
-  )
 }
 
 function SettingsSubsection({
@@ -231,11 +151,14 @@ function SettingsSubsection({
 export function WorkbenchSettingsDialog({
   conflicts,
   keymap,
+  keymapPreset,
+  presetShortcuts,
   locale,
   open,
   preferences,
   project = null,
   onExitProject,
+  onKeymapPresetChange,
   onLocaleChange,
   onOpenChange,
   onPreferencesChange,
@@ -375,11 +298,6 @@ export function WorkbenchSettingsDialog({
       setIsLoadingProjectAiRules(false)
     }
   }, [hostRuntime, project?.rootPath])
-
-  const conflictedActions = useMemo(
-    () => new Set(conflicts.flatMap((conflict) => conflict.actions)),
-    [conflicts]
-  )
 
   useEffect(() => {
     if (!open) {
@@ -566,25 +484,6 @@ export function WorkbenchSettingsDialog({
       event.preventDefault()
       closeDialog()
     }
-  }
-
-  function handleShortcutCapture(
-    action: WorkbenchKeyboardShortcutAction,
-    event: KeyboardEvent<HTMLButtonElement>
-  ): void {
-    event.preventDefault()
-    event.stopPropagation()
-
-    if (event.key === 'Escape') {
-      setCapturingAction(null)
-      return
-    }
-
-    const shortcut = shortcutFromWorkbenchKeyboardEvent(event.nativeEvent)
-    if (!shortcut) return
-
-    onSetShortcut(action, shortcut)
-    setCapturingAction(null)
   }
 
   function renderProjectAiRuleRow(file: WorkbenchProjectAiRuleFile): ReactElement {
@@ -843,7 +742,7 @@ export function WorkbenchSettingsDialog({
         <SettingRow
           title={t('workbench.settingsEditorWordWrap')}
           description={t('workbench.settingsEditorWordWrapHint', {
-            shortcut: /Mac|iPhone|iPad/.test(navigator.platform) ? '⌥Z' : 'Alt+Z',
+            shortcut: formatWorkbenchEditorCommandHint('toggle-word-wrap', keymapPreset),
           })}
         >
           <Switch
@@ -1036,63 +935,17 @@ export function WorkbenchSettingsDialog({
 
   function renderKeymapSection(): ReactElement {
     return (
-      <div className={styles.workbenchSettingsSectionPanel}>
-        {!!conflicts.length && (
-          <div className={styles.workbenchSettingsWarning}>
-            <WarningCircleIcon size={15} />
-            <Text>{t('workbench.settingsShortcutConflict')}</Text>
-          </div>
-        )}
-        <div className={styles.workbenchSettingsShortcutList}>
-          {WORKBENCH_KEYBOARD_SHORTCUT_DEFINITIONS.map((definition) => {
-            const shortcut = keymap[definition.action]
-            const isCapturing = capturingAction === definition.action
-            const isDefault =
-              shortcut === DEFAULT_WORKBENCH_KEYBOARD_SHORTCUT_MAP[definition.action]
-            const hasConflict = conflictedActions.has(definition.action)
-
-            return (
-              <div
-                key={definition.action}
-                className={styles.workbenchSettingsShortcutRow}
-                data-conflict={hasConflict}
-              >
-                <div className={styles.workbenchSettingsShortcutMeta}>
-                  <Text className={styles.workbenchSettingsShortcutTitle}>
-                    {t(ShortcutLabelKeys[definition.action])}
-                  </Text>
-                  <Text tone="caption" className={styles.workbenchSettingsShortcutDescription}>
-                    {t(ShortcutDescriptionKeys[definition.action])}
-                  </Text>
-                </div>
-                <div className={styles.workbenchSettingsShortcutControls}>
-                  <button
-                    type="button"
-                    className={styles.workbenchSettingsShortcutCapture}
-                    data-capturing={isCapturing}
-                    onClick={() => setCapturingAction(definition.action)}
-                    onKeyDown={(event) => handleShortcutCapture(definition.action, event)}
-                  >
-                    {isCapturing
-                      ? t('workbench.settingsShortcutRecording')
-                      : formatWorkbenchShortcutForPlatform(shortcut)}
-                  </button>
-                  <IconButton
-                    variant="ghost"
-                    size="icon-sm"
-                    disabled={isDefault}
-                    label={t('workbench.settingsShortcutReset')}
-                    title={t('workbench.settingsShortcutReset')}
-                    onClick={() => onResetShortcut(definition.action)}
-                  >
-                    <ArrowCounterClockwiseIcon size={14} />
-                  </IconButton>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </div>
+      <WorkbenchKeymapSettings
+        capturingAction={capturingAction}
+        conflicts={conflicts}
+        keymap={keymap}
+        preset={keymapPreset}
+        presetShortcuts={presetShortcuts}
+        onCapturingActionChange={setCapturingAction}
+        onPresetChange={onKeymapPresetChange}
+        onResetShortcut={onResetShortcut}
+        onSetShortcut={onSetShortcut}
+      />
     )
   }
 
@@ -1328,6 +1181,12 @@ export function WorkbenchSettingsDialog({
           )}
         >
           {renderKeymapSection()}
+        </SettingsSubsection>
+        <SettingsSubsection
+          title={t('workbench.settingsEditorKeys')}
+          description={t(WorkbenchEditorKeysDescriptionKeys[keymapPreset])}
+        >
+          <WorkbenchEditorKeysSettings preset={keymapPreset} />
         </SettingsSubsection>
       </div>
     )

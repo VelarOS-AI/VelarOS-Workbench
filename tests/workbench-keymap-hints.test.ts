@@ -1,5 +1,6 @@
 /**
- * 界面上的快捷键提示跟着键位方案走：命令面板、编辑器的右键菜单里的键，都是所选方案在这个平台上的那一组。
+ * 界面上的快捷键提示跟着键位方案走：命令面板、编辑器的右键菜单、设置里提到的键，都是所选方案在这个平台上
+ * 的那一组。
  */
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
@@ -116,6 +117,14 @@ void describe('editor command hints', () => {
             getWorkbenchEditorCommandChords(command, preset, platform).length > 0,
             `${preset} ${platform} ${command}`
           )
+  })
+
+  void test('the word wrap hint in settings always has a key to name', () => {
+    for (const preset of WORKBENCH_KEYMAP_PRESET_IDS) {
+      assert.equal(formatWorkbenchEditorCommandHint('toggle-word-wrap', preset, Mac), '⌥Z')
+      assert.equal(formatWorkbenchEditorCommandHint('toggle-word-wrap', preset, Windows), 'Alt+Z')
+      assert.equal(formatWorkbenchEditorCommandHint('toggle-word-wrap', preset, Linux), 'Alt+Z')
+    }
   })
 })
 
@@ -254,16 +263,28 @@ void describe('where the hints are wired', () => {
     assert.match(editor, /rect\.bottom - \(window\.innerHeight - 8\)/u)
   })
 
-  void test('the palette is given the chosen preset', () => {
+  void test('the palette and the settings dialog are given the chosen preset', () => {
     const presentation = readSource('src/renderer/src/StandaloneWorkbenchPagePresentation.tsx')
     const quickOpen = readSource('src/renderer/src/components/project/QuickOpen.tsx')
+    const settings = readSource('src/renderer/src/components/settings/WorkbenchSettingsDialog.tsx')
 
     assert.match(presentation, /<LazyQuickOpen[\s\S]*?keymapPreset=\{workbenchKeymap\.preset\}/u)
     assert.match(quickOpen, /keymap,\s*preset: keymapPreset,/u)
+    assert.match(
+      presentation,
+      /<LazyWorkbenchSettingsDialog[\s\S]*?keymapPreset=\{workbenchKeymap\.preset\}\s*presetShortcuts=\{workbenchKeymap\.presetShortcuts\}/u
+    )
+    assert.match(presentation, /onKeymapPresetChange=\{workbenchKeymap\.setPreset\}/u)
+    assert.match(
+      settings,
+      /shortcut: formatWorkbenchEditorCommandHint\('toggle-word-wrap', keymapPreset\)/u
+    )
   })
 
   void test('no component spells out an editor key by hand', () => {
     for (const path of [
+      'src/renderer/src/components/settings/WorkbenchSettingsDialog.tsx',
+      'src/renderer/src/components/settings/WorkbenchKeymapSettings.tsx',
       'src/renderer/src/components/project/QuickOpen.tsx',
       'src/renderer/src/components/editor/EditorPanel.tsx',
     ]) {

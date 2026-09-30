@@ -950,6 +950,8 @@ export function StandaloneWorkbenchPagePresentation({
               open={dialogs.settingsOpen}
               preferences={workbenchPreferences.preferences}
               keymap={workbenchKeymap.keymap}
+              keymapPreset={workbenchKeymap.preset}
+              presetShortcuts={workbenchKeymap.presetShortcuts}
               conflicts={workbenchKeymap.conflicts}
               locale={locale}
               project={{
@@ -960,6 +962,7 @@ export function StandaloneWorkbenchPagePresentation({
               onOpenChange={dialogs.setSettingsOpen}
               onPreferencesChange={workbenchPreferences.updatePreferences}
               onResetPreferences={workbenchPreferences.resetPreferences}
+              onKeymapPresetChange={workbenchKeymap.setPreset}
               onSetShortcut={workbenchKeymap.setShortcut}
               onResetShortcut={workbenchKeymap.resetShortcut}
               onResetAllShortcuts={workbenchKeymap.resetAllShortcuts}
