@@ -219,7 +219,10 @@ export function ProjectSearchForm({
   )
 }
 
-/** 结果上方的一行：共几处、在几个文件里（或「正在搜索」）、截断与跳过的说明，以及重搜、全部收起 / 展开。 */
+/**
+ * 结果上方的一行：共几处、在几个文件里（或「正在搜索」）、没搜完 / 截断 / 跳过的说明，以及重搜、
+ * 全部收起 / 展开。
+ */
 export function ProjectSearchSummary({ engine }: { engine: WorkbenchProjectSearchEngine }): ReactElement {
   const { t } = useWorkbenchI18n()
   const { summary } = engine
@@ -232,7 +235,9 @@ export function ProjectSearchSummary({ engine }: { engine: WorkbenchProjectSearc
           matches: formatWorkbenchProjectSearchCount(t, 'match', summary.matchCount),
           files: formatWorkbenchProjectSearchCount(t, 'file', summary.fileCount),
         })
-      : t('workbench.projectSearchNoContentMatches')
+      : engine.failure
+        ? t('workbench.searchFailed')
+        : t('workbench.projectSearchNoContentMatches')
 
   return (
     <div className={styles.projectSearchSummary}>
@@ -258,6 +263,11 @@ export function ProjectSearchSummary({ engine }: { engine: WorkbenchProjectSearc
           {allCollapsed ? <ArrowsOutLineVerticalIcon size={13} /> : <ArrowsInLineVerticalIcon size={13} />}
         </IconButton>
       </div>
+      {!!engine.failure && (
+        <Text tone="caption" className={styles.projectSearchNotice} data-tone="warning">
+          {t('workbench.projectSearchIncomplete', { message: engine.failure })}
+        </Text>
+      )}
       {engine.truncated && (
         <Text tone="caption" className={styles.projectSearchNotice} data-tone="warning">
           {t('workbench.projectSearchTruncated', { limit: WorkbenchProjectSearchLimit })}

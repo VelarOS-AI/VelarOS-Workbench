@@ -395,6 +395,7 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     projectSearchFileCountOther: '{count} 个文件',
     projectSearchSummary: '{files}里有 {matches}匹配',
     projectSearchNoContentMatches: '文件内容里没有匹配',
+    projectSearchIncomplete: '没有搜完，这时不能替换：{message}',
     projectSearchTruncated: '只列出了前 {limit} 处匹配，缩小搜索范围才能看到其余的。',
     projectSearchSkippedLarge: '有 {files}超过 1 MB，没有搜。',
     projectSearchMoreMatches: '……还有 {matches}没有列出',

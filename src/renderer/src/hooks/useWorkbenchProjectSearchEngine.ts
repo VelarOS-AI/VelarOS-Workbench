@@ -4,6 +4,7 @@
  * - 输入停一小会儿再搜；新的搜索开始时取消还没搜完的旧搜索；结果边搜边显示。面板卸下时取消。
  * - 每份结果记着搜它的条件（查找词、开关、范围）：编辑器里开着的文件按它在正文上算（正文一改结果跟着变），
  *   替换也按它——换的就是列出来的那些。条件改了、新结果还没出来之前，替换先不让点。
+ * - 搜索中途失败（正则跑不完被 main 停下、出错）：已经到的结果留着，原因写在结果上方，结果不全、不让替换。
  * - 开着的文件以编辑器里的正文为准（见 workbenchProjectSearchModel）；开着的文件关掉了，就按磁盘重新搜它。
  * - 替换一处、一个文件或全部（全部先确认）：开着的文件在编辑器里换，能撤销、不写盘；其余的交给 main 写盘，
  *   写完刷新那几个文件的结果（全部替换后整个重搜）。
@@ -97,6 +98,8 @@ interface ProjectSearchResultsState {
   status: 'idle' | 'searching' | 'done'
   truncated: boolean
   skippedLargeFileCount: number
+  /** 没搜完的原因（出错、正则跑不完被停下）：结果不全，界面上说明，也不让替换。 */
+  failure: Nullable<string>
 }
 
 interface EditorResultCacheEntry {
@@ -115,6 +118,7 @@ function emptyResults(generation: number): ProjectSearchResultsState {
     status: 'idle',
     truncated: false,
     skippedLargeFileCount: 0,
+    failure: null,
   }
 }
 
@@ -166,8 +170,10 @@ export function useWorkbenchProjectSearchEngine(options: WorkbenchProjectSearchE
     }
   }, [compiled, panel.exclude, panel.include, panel.options, projectRoot, query])
   const specKey = spec?.key ?? null
-  /** 列着的结果就是按输入框里的条件搜的，而且已经搜完：这时才能替换。 */
+  /** 列着的结果就是按输入框里的条件搜的，而且已经搜完。 */
   const resultsCurrent = !!spec && results.spec?.key === spec.key && results.status === 'done'
+  /** 能替换的结果：搜完了，而且是搜全的（中途失败、正则跑不完被停下的不算）。 */
+  const resultsReplaceable = resultsCurrent && !results.failure
 
   const cancelRunningSearch = useMemoizedFn((): void => {
     const { searchId, status } = resultsRef.current
@@ -265,13 +271,11 @@ export function useWorkbenchProjectSearchEngine(options: WorkbenchProjectSearchE
       )
     } catch (error) {
       if (generationRef.current !== generation) return
+      // 已经到的结果留着，原因写在结果上方（见 ProjectSearchSummary）。
+      const failure = AppError.from(error).message
       setResults((current) =>
-        current.generation !== generation ? current : { ...current, status: 'done' }
+        current.generation !== generation ? current : { ...current, status: 'done', failure }
       )
-      messageLatest.current.error({
-        title: tLatest.current('workbench.searchFailed'),
-        description: AppError.from(error).message,
-      })
     }
   })
 
@@ -355,7 +359,8 @@ export function useWorkbenchProjectSearchEngine(options: WorkbenchProjectSearchE
       refresh: 'files' | 'all'
     ): Promise<void> => {
       const resultsSpec = resultsRef.current.spec
-      if (!resultsSpec || !resultsCurrent || targets.length === 0 || isReplacingRef.current) return
+      if (!resultsSpec || !resultsReplaceable || targets.length === 0 || isReplacingRef.current)
+        return
 
       isReplacingRef.current = true
       setIsReplacing(true)
@@ -474,7 +479,7 @@ export function useWorkbenchProjectSearchEngine(options: WorkbenchProjectSearchE
   }
 
   const confirmReplaceAll = useMemoizedFn(async (): Promise<void> => {
-    if (files.length === 0 || !resultsCurrent) return
+    if (files.length === 0 || !resultsReplaceable) return
 
     const t = tLatest.current
     const lines = [
@@ -541,10 +546,12 @@ export function useWorkbenchProjectSearchEngine(options: WorkbenchProjectSearchE
     isSearching: !!spec && !resultsCurrent,
     truncated: results.truncated,
     skippedLargeFileCount: results.skippedLargeFileCount,
+    /** 这次搜索没搜完的原因；列着的是出事之前搜到的。 */
+    failure: resultsCurrent ? results.failure : null,
     collapsedPaths,
     entriesCollapsed,
-    /** 能不能替换：结果就是输入框里的条件搜出来的、已经搜完，也没有替换在进行。 */
-    canReplace: resultsCurrent && !isReplacing,
+    /** 能不能替换：结果就是输入框里的条件搜出来的、搜完也搜全了，也没有替换在进行。 */
+    canReplace: resultsReplaceable && !isReplacing,
   }
 }
 
