@@ -115,9 +115,11 @@ GB18030、混用的换行符），编辑器据此只读打开，用户明确选�
   （`ContentSearchTask`，构建产物 `workbench-search-worker.js`，一次搜索或一次替换一个 worker）。
   `(\w+)+;` 这类回溯停不下来的正则会让线程一直占着，收不到取消，所以 `ContentSearchWorkerHost` 取消时
   直接结束 worker；worker 接下请求以后 10 秒没有动静（每个文件开搜前报一声、等读盘时每秒一次心跳）就
-  判定卡住，结束它并报出卡在哪个文件上，替换则停在那个文件、后面的不再换。V8（Electron）能在正则执行中途结束线程；bun 的
-  正则停不下来，测试里的回溯正则因此只跑两三秒。搜索中途失败时，面板留着已经到的结果、在结果上方写明
-  原因，结果不全所以不让替换。
+  判定卡住，结束它并报出卡在哪个文件上，替换则停在那个文件、后面的不再换。V8（Electron）能在正则执行
+  中途结束线程；bun 的正则停不下来，测试里的回溯正则因此只跑两三秒。搜索中途失败时，面板留着已经到的
+  结果、在结果上方写明原因，结果不全所以不让替换。
+- main 这边给用户看的搜索、替换提示都从 main 的文案表出（`workbenchMainMessages` 的 `search.*`），跟着界面
+  语言走；worker 与主进程不共用模块状态，界面语言随每个请求带过去。
 - 编辑器里开着的文件以编辑缓冲为准：renderer 把它们的路径交给 main，main 不出它们的结果、只报在不在范围
   里，由 renderer 在正文上搜（与编辑器里的查找一样跑在窗口自己的线程上）；替换也在编辑缓冲上做（一次
   外部改动，⌘Z 能撤回）。用正则搜时，worker 报一个开着的文件在范围里之前，先拿它磁盘上的版本试跑一遍：
@@ -127,8 +129,11 @@ GB18030、混用的换行符），编辑器据此只读打开，用户明确选�
 - 没开着的文件交给 `ContentReplace`：重读、按同样的条件重新找匹配（点名的那几处对不上就不换），带着搜索
   时的修改时间与大小保存，替换前的内容先记进本地历史。
 - 页面只留面板的开关与表单（`useWorkbenchProjectSearchPanel`）；搜索、结果与替换（`ProjectSearchView` 与
-  `useWorkbenchProjectSearchEngine`）打开搜索时才加载，不进工作区外壳（外壳 chunk 有体积预算）。编辑区、
-  页面只用得到的行列换算与正则转义在 `src/shared/workbenchSearchText.ts`，免得把整套匹配规则带进外壳。
+  `useWorkbenchProjectSearchEngine`）是单独的一块，不进工作区外壳（外壳 chunk 有体积预算），与 Git、AI
+  改动面板一样在窗口空闲时预先加载（`lazyWithPreload`）。编辑区、页面只用得到的行列换算与正则转义在
+  `src/shared/workbenchSearchText.ts`，免得把整套匹配规则带进外壳。
+- 快速打开按文件名找文件用的是另一份清单（`SearchIndex.listProjectFiles`）：不看 .gitignore，文件树里看得到
+  的都列；内容搜索的清单听 .gitignore 的。
 
 ## 语言服务与磁盘的同步
 
