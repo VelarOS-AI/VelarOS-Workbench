@@ -128,6 +128,32 @@ void describe('project content search: which files', () => {
     )
   })
 
+  void test('a project inside a larger repository gets its own files, with the repository’s ignore rules', async () => {
+    await withProject(
+      {
+        '.gitignore': '*.gen.ts\n',
+        'app/a.ts': 'needle\n',
+        'app/b.gen.ts': 'needle\n',
+        'other/c.ts': 'needle\n',
+      },
+      async ({ root }) => {
+        await git(root, ['init', '-q'])
+        await git(root, ['add', '.gitignore', 'app/a.ts'])
+        await git(root, ['commit', '-qm', 'init'])
+        await writeProjectFiles(root, { 'app/new.ts': 'needle\n' })
+
+        const data = await mkdtemp(join(tmpdir(), 'workbench-project-search-nested-'))
+        try {
+          const parts = createWorkbenchAppParts(data, { moveToTrash: refuseTrash })
+          const result = await parts.search.searchContent({ projectRoot: join(root, 'app'), query: 'needle' })
+          assert.deepEqual(pathsOf(result), ['a.ts', 'new.ts'])
+        } finally {
+          await rm(data, { recursive: true, force: true })
+        }
+      }
+    )
+  })
+
   void test('nested repositories are listed with their own ignore rules; symlinks are not followed', async () => {
     await withProject(
       {
