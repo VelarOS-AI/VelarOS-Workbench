@@ -821,9 +821,11 @@ export function StandaloneWorkbenchPagePresentation({
                   workbenchEditor={{ openTabs: workbench.openTabs }}
                   workbenchCommand={{ commandResult: workbench.commandResult }}
                   languageServiceInsights={workbench.languageServiceInsights}
-                  // 点一条问题：以预览标签打开（与 VS Code 的问题面板一样）。
-                  onGoToLocation={(path, line, column) =>
-                    void editorNavigation.goToLocation(path, line, column, { preview: true })
+                  // 点一条问题：以预览标签打开，双击留下成普通标签（与 VS Code 的问题面板一样）。
+                  onGoToLocation={(path, line, column, intent) =>
+                    void editorNavigation.goToLocation(path, line, column, {
+                      preview: intent?.preview,
+                    })
                   }
                 />
               }

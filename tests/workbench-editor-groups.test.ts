@@ -354,8 +354,15 @@ void describe('preview tab wiring', () => {
       searchView,
       /function openRow[\s\S]*?onOpenEntry\(row\.entry\)\s*else if \(row\.kind === 'match'\) engine\.openMatch\(row\.file, row\.match\)\s*\}/u
     )
-    // 问题面板点一条、跳到定义：预览；跳到定义时出发的预览标签先留下。
-    assert.match(presentation, /editorNavigation\.goToLocation\(path, line, column, \{ preview: true \}\)/u)
+    // 问题面板：单击一条预览，双击普通。
+    const problems = readSource('src/renderer/src/components/editor/CodeInsightPanel.tsx')
+    assert.match(problems, /onClick=\{\(\) => handleProblemSelect\(problem, \{ preview: true \}\)\}/u)
+    assert.match(problems, /onDoubleClick=\{\(\) => handleProblemSelect\(problem\)\}/u)
+    assert.match(
+      presentation,
+      /editorNavigation\.goToLocation\(path, line, column, \{\s*preview: intent\?\.preview,\s*\}\)/u
+    )
+    // 跳到定义：预览；出发的预览标签先留下。
     assert.match(
       adapter,
       /onGoToDefinition: \(path, line, column\) =>\s*void editorNavigation\.goToLocation\(path, line, column, \{\s*preview: true,\s*keepSource: true,\s*\}\)/u

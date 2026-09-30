@@ -10,6 +10,7 @@ import {
   type WorkbenchProblemLocationKind,
   type WorkbenchProblemLocationSeverity,
 } from '@renderer/models/editor/workbenchCodeInsightModel'
+import type { WorkbenchEditorOpenTabIntent } from '@renderer/models/editor/workbenchEditorGroups'
 
 import { Paragraph } from '@velaros-ai/ui/primitives/display/Paragraph'
 import { Text } from '@velaros-ai/ui/primitives/display/Text'
@@ -34,7 +35,13 @@ interface CodeInsightPanelProps {
   hideHeader?: boolean
   activeProblemId?: LooseOptional<string>
   onActiveProblemChange?: (problem: WorkbenchProblemLocation) => void
-  onGoToLocation: (path: string, line: number, column?: number) => void
+  /** 跳到一条问题的位置。单击带 `preview`（以预览标签打开），双击不带（普通标签，预览标签就此留下）。 */
+  onGoToLocation: (
+    path: string,
+    line: number,
+    column?: number,
+    intent?: WorkbenchEditorOpenTabIntent
+  ) => void
 }
 
 export interface EditorNavigationRequest {
@@ -147,9 +154,12 @@ export function CodeInsightPanel({
     })
   }
 
-  function handleProblemSelect(problem: WorkbenchProblemLocation): void {
+  function handleProblemSelect(
+    problem: WorkbenchProblemLocation,
+    intent?: WorkbenchEditorOpenTabIntent
+  ): void {
     onActiveProblemChange?.(problem)
-    onGoToLocation(problem.path, problem.line, problem.column)
+    onGoToLocation(problem.path, problem.line, problem.column, intent)
   }
 
   return (
@@ -211,7 +221,8 @@ export function CodeInsightPanel({
                           data-selected={activeProblemId === problem.id ? 'true' : undefined}
                           data-muted={problem.isUnused ? 'true' : undefined}
                           title={problemTooltip(problem)}
-                          onClick={() => handleProblemSelect(problem)}
+                          onClick={() => handleProblemSelect(problem, { preview: true })}
+                          onDoubleClick={() => handleProblemSelect(problem)}
                         >
                           {problemSeverityIcon(problem)}
                           <span className={styles.problemItemMessage}>
