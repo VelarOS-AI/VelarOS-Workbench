@@ -24,6 +24,11 @@ const log = Log.tag('workbench-keyboard-shortcuts')
 export type WorkbenchKeyboardShortcutAction =
   | 'close-right-tool'
   | 'command-palette'
+  | 'debug-continue'
+  | 'debug-step-into'
+  | 'debug-step-out'
+  | 'debug-step-over'
+  | 'debug-stop'
   | 'find-in-files'
   | 'focus-left-editor-group'
   | 'focus-right-editor-group'
@@ -112,6 +117,13 @@ export const WORKBENCH_KEYBOARD_SHORTCUT_DEFINITIONS: WorkbenchKeyboardShortcutD
   { action: 'save-current', defaultShortcut: 'Mod+S' },
   { action: 'save-all', defaultShortcut: 'Mod+Shift+S' },
   { action: 'run-last-command', defaultShortcut: 'Mod+Enter' },
+  // 调试的控制键，与 Chrome 开发者工具、VS Code 同一组。只在调试中生效（见 useWorkbenchDebugShortcuts）：
+  // 没在调试时 F8 仍是编辑器里的「下一个问题」，F11 仍归系统与菜单。
+  { action: 'debug-continue', defaultShortcut: 'F8' },
+  { action: 'debug-step-over', defaultShortcut: 'F10' },
+  { action: 'debug-step-into', defaultShortcut: 'F11' },
+  { action: 'debug-step-out', defaultShortcut: 'Shift+F11' },
+  { action: 'debug-stop', defaultShortcut: 'Shift+F5' },
   { action: 'toggle-problems', defaultShortcut: 'Mod+Shift+I' },
   { action: 'toggle-changes', defaultShortcut: 'Mod+Shift+G' },
   { action: 'toggle-actions', defaultShortcut: 'Mod+Shift+A' },

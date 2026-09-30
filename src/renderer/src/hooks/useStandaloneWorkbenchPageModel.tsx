@@ -2,7 +2,15 @@
  * 独立工作台页面的编排 model：集中所有控制器 hook、派生值与交互 handler，
  * 供 `StandaloneWorkbenchPagePresentation` 通过 context 消费。从 WorkbenchPage 抽出，逻辑逐字保留。
  */
-import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  type CSSProperties,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react'
 import {
   useWorkbenchChatProjectRuntime,
   useWorkbenchProductRuntime,
@@ -13,6 +21,7 @@ import {
 } from '@renderer/composition'
 import { useWorkbenchAiChanges } from '@renderer/hooks/useWorkbenchAiChanges'
 import { useWorkbenchCommandPalette } from '@renderer/hooks/useWorkbenchCommandPalette'
+import { useWorkbenchDebugShortcuts } from '@renderer/hooks/useWorkbenchDebugShortcuts'
 import { useWorkbenchKeyboardShortcuts } from '@renderer/hooks/useWorkbenchKeyboardShortcuts'
 import { useWorkbenchKeymapController } from '@renderer/hooks/useWorkbenchKeymapController'
 import { useWorkbenchLayoutController } from '@renderer/hooks/useWorkbenchLayoutController'
@@ -30,6 +39,11 @@ import { getWorkbenchCommandStatusLabel } from '@renderer/models/commands/workbe
 import { inferPackageManagerCommand } from '@renderer/models/commands/workbenchCommandSuggestions'
 import { inferWorkbenchPackageManagerForPackageJsonPath } from '@renderer/models/commands/workbenchPackageScriptCommand'
 import { installWorkbenchRunSessionLauncher } from '@renderer/models/commands/workbenchRunSessionBridge'
+import {
+  getWorkbenchDebugStatus,
+  installWorkbenchDebugPageHooks,
+  subscribeWorkbenchDebugStatus,
+} from '@renderer/models/debug/workbenchDebugBridge'
 import {
   findWorkbenchEditorGroupIndex,
   resolveWorkbenchEditorTabGroupIndex,
@@ -351,21 +365,6 @@ export function useStandaloneWorkbenchPageModel(
     workbench.rootEntries,
     workbench.selectedFilePath,
   ])
-  const topRunControl = useWorkbenchTopRunControl({
-    commandHistory: workbench.commandHistory,
-    runConfigurations: [...activePackageScriptRunConfigurations, ...workbench.runConfigurations],
-    namedConfigurations: namedRunConfigurations.configurations,
-    runningSessions: workbench.runSessions,
-    configuredCommand: projectRunSettings.settings.command,
-    configuredConfigurationId: projectRunSettings.settings.configurationId,
-    lastLaunchedCommand: workbench.lastLaunchedCommand,
-    onLaunchCommand: (command, label, launch) =>
-      void workbench.launchRunSession(command, label, launch),
-    onRestartRunSession: (sessionId) => void workbench.restartRunSession(sessionId),
-    onConfigureCommand: projectRunSettings.setCommand,
-    onSelectConfiguration: projectRunSettings.setConfigurationId,
-    onEditConfigurations: () => setRunConfigurationsOpen(true),
-  })
   // 编辑区里起的运行（测试的 ▶）：先把没存的改动存盘——运行器读的是磁盘上的文件——再起运行卡。
   const launchRunSessionFromEditor = useMemoizedFn(
     async (...launch: Parameters<typeof workbench.launchRunSession>): Promise<Nullable<string>> => {
@@ -377,6 +376,28 @@ export function useStandaloneWorkbenchPageModel(
     installWorkbenchRunSessionLauncher(launchRunSessionFromEditor)
     return () => installWorkbenchRunSessionLauncher(null)
   }, [launchRunSessionFromEditor])
+  const topRunControl = useWorkbenchTopRunControl({
+    commandHistory: workbench.commandHistory,
+    runConfigurations: [...activePackageScriptRunConfigurations, ...workbench.runConfigurations],
+    namedConfigurations: namedRunConfigurations.configurations,
+    runningSessions: workbench.runSessions,
+    configuredCommand: projectRunSettings.settings.command,
+    configuredConfigurationId: projectRunSettings.settings.configurationId,
+    lastLaunchedCommand: workbench.lastLaunchedCommand,
+    onLaunchCommand: (command, label, launch) =>
+      // 调试也先存盘：程序跑的是磁盘上的文件，断点的行号要与它对得上。
+      void (launch?.debug ? launchRunSessionFromEditor : workbench.launchRunSession)(
+        command,
+        label,
+        launch
+      ),
+    onRestartRunSession: (sessionId) => void workbench.restartRunSession(sessionId),
+    onConfigureCommand: projectRunSettings.setCommand,
+    onSelectConfiguration: projectRunSettings.setConfigurationId,
+    onEditConfigurations: () => setRunConfigurationsOpen(true),
+  })
+  // 此刻有没有在调试、是不是停着：快捷键、命令面板、左下角的工具按钮都看它。
+  const debugStatus = useSyncExternalStore(subscribeWorkbenchDebugStatus, getWorkbenchDebugStatus)
   const runSessionIds = workbench.runSessions.map((session) => session.id).join('\0')
   const knownRunSessionIdsRef = useRef(new Set<string>())
 
@@ -582,6 +603,10 @@ export function useStandaloneWorkbenchPageModel(
     onSaveCurrent: () => workbench.saveSelectedFile(),
     onToggleBottomTool: toggleBottomTool,
     onToggleRightTool: surface.toggleRightTool,
+  })
+  useWorkbenchDebugShortcuts({
+    enabled: surfaceMode === 'standalone' && !!workbench.activeProject && !settingsOpen,
+    keymap: workbenchKeymap.keymap,
   })
   useWorkbenchStandaloneProjectSync({
     activeProject: workbench.activeProject,
@@ -820,6 +845,17 @@ export function useStandaloneWorkbenchPageModel(
         projectSearch.openPanel(request.seed)
     }
   })
+
+  // 调试停下时：把程序停在的位置带到眼前（还没开着的文件开成预览标签，已经开着的在它所在的那组里切过去），
+  // 并打开底部的调试面板。
+  const openBottomToolLatest = useLatest(surface.openBottomTool)
+  useEffect(() => {
+    installWorkbenchDebugPageHooks({
+      revealLocation: (location) => void navigate({ target: 'file', ...location, preview: true }),
+      openPanel: () => openBottomToolLatest.current('debug'),
+    })
+    return () => installWorkbenchDebugPageHooks(null)
+  }, [navigate, openBottomToolLatest])
 
   /**
    * 快速打开里选中的文件：给了位置跳到那里；没给就回到上次在这个文件里的光标（没有记录是开头）。
@@ -1213,6 +1249,9 @@ export function useStandaloneWorkbenchPageModel(
     navigateForward: editorNavigation.goForward,
     openSettings: () => setSettingsOpen(true),
     editRunConfigurations: () => setRunConfigurationsOpen(true),
+    debugStatus,
+    canDebugConfiguration: topRunControl.canDebugActiveConfiguration,
+    debugConfiguration: topRunControl.debug,
     reopenClosedEditorTab,
     runEditorCommand: editorNavigation.requestEditorCommand,
     showEditorSurface,
@@ -1243,6 +1282,8 @@ export function useStandaloneWorkbenchPageModel(
     workbenchKeymap,
     gitState,
     topRunControl,
+    /** 此刻有没有在调试、是不是停着。 */
+    debugStatus,
     /** 当前项目里用户建的运行配置。 */
     namedRunConfigurations,
     editorNavigation,

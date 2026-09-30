@@ -54,6 +54,9 @@ export function createWorkbenchShortcutKeydownHandler(
     const current = readOptions()
     const action = getWorkbenchKeyboardShortcut(event, current.keymap, current.platform)
     if (!action) return
+    // 调试的那几个键归 useWorkbenchDebugShortcuts（调试中才生效，抢在编辑器前面）：这里不碰，没在调试时
+    // 按键照常归编辑器、菜单和系统。
+    if (action.startsWith('debug-')) return
     // 在输入框、文本域、可编辑区里按下的「运行上次命令」是冲着那段文字去的（换行、发送），不去跑命令。
     if (action === 'run-last-command' && isWorkbenchTextEntryTarget(event.target)) return
 

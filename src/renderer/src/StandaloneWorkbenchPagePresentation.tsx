@@ -7,6 +7,7 @@
  */
 import { lazy, type ReactElement, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import {
+  BugIcon,
   ChatCircleTextIcon,
   FolderIcon,
   GitBranchIcon,
@@ -49,6 +50,7 @@ import {
   type WorkbenchVelarProjectSnapshotIndex,
 } from './models/codeGraph/workbenchVelarProjectGraph'
 import { buildWorkbenchStatusBarTextFormat } from './models/editor/workbenchEditorTextFormat'
+import { formatWorkbenchShortcutHint } from './models/layout/workbenchKeyboardShortcuts'
 import styles from './styles/workbenchPageStyles'
 import { lazyWithPreload, preloadWhenIdle } from './support/lazyWithPreload'
 import { useWorkbenchPageContext } from './WorkbenchPageModelContext'
@@ -71,10 +73,14 @@ const LazyWorkbenchGitToolPanel = lazyWithPreload(
   async () => (await import('./components/git/WorkbenchGitToolPanel')).WorkbenchGitToolPanel
 )
 // 「编辑运行配置」对话框用得少，第一次打开时才加载。
-const LazyWorkbenchRunConfigurationsDialog = lazy(async () => {
-  const module = await import('./components/run/WorkbenchRunConfigurationsDialog')
-  return { default: module.WorkbenchRunConfigurationsDialog }
-})
+const LazyWorkbenchRunConfigurationsDialog = lazyWithPreload(
+  async () =>
+    (await import('./components/run/WorkbenchRunConfigurationsDialog')).WorkbenchRunConfigurationsDialog
+)
+// 底部的调试面板：起了调试才预先加载（程序停下时面板已经在了），不进工作区外壳包。
+const LazyWorkbenchDebugPanel = lazyWithPreload(
+  async () => (await import('./components/debug/WorkbenchDebugPanel')).WorkbenchDebugPanel
+)
 
 interface StandaloneWorkbenchPagePresentationProps {
   projectHubState: WorkbenchProjectHubState
@@ -328,6 +334,23 @@ export function StandaloneWorkbenchPagePresentation({
     }
   }, [activeProjectId, model.actions.navigate, pendingFileOpenId, pendingFileOpenPath])
 
+  const debugging = model.debugStatus !== 'idle'
+  useEffect(() => {
+    if (debugging) void LazyWorkbenchDebugPanel.preload().catch(() => undefined)
+  }, [debugging])
+  // 调试面板按钮上写的快捷键：按当前键位现算。
+  const debugKeymap = workbenchKeymap.keymap
+  const debugShortcutHints = useMemo(
+    () => ({
+      continue: formatWorkbenchShortcutHint(debugKeymap['debug-continue']),
+      'step-over': formatWorkbenchShortcutHint(debugKeymap['debug-step-over']),
+      'step-into': formatWorkbenchShortcutHint(debugKeymap['debug-step-into']),
+      'step-out': formatWorkbenchShortcutHint(debugKeymap['debug-step-out']),
+      stop: formatWorkbenchShortcutHint(debugKeymap['debug-stop']),
+    }),
+    [debugKeymap]
+  )
+
   if (!workbench.activeProject) return <main className={styles.root} />
   const projectRoot = workbench.activeProject.rootPath
   const hasRunningRunSession = workbench.runSessions.some((session) => session.isRunning)
@@ -345,6 +368,17 @@ export function StandaloneWorkbenchPagePresentation({
             label: t('workbench.commandTabRuns'),
             icon: <PlayIcon size={18} weight="regular" />,
             isRunning: hasRunningRunSession,
+          },
+        ]
+      : []),
+    // 调试面板的按钮：在调试时出现，面板开着时也留着（调试结束之后还能看一眼是怎么结束的）。
+    ...(debugging || surface.activeBottomTool === 'debug'
+      ? [
+          {
+            id: 'debug' as const,
+            label: t('workbench.debuggerToolWindow'),
+            icon: <BugIcon size={18} />,
+            isRunning: debugging,
           },
         ]
       : []),
@@ -808,6 +842,14 @@ export function StandaloneWorkbenchPagePresentation({
               }}
               workbenchTheme={workbenchPreferences.preferences.theme}
               isCollapsed={false}
+              debugPanel={
+                <Suspense fallback={null}>
+                  <LazyWorkbenchDebugPanel
+                    projectRoot={projectRoot}
+                    shortcutHints={debugShortcutHints}
+                  />
+                </Suspense>
+              }
               gitPanel={
                 <Suspense fallback={null}>
                   <LazyWorkbenchGitToolPanel

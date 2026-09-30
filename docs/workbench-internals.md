@@ -612,7 +612,8 @@ JS / TS 的测试文件（`*.test.*`、`*.spec.*`、`__tests__/` 里的）在行
   这次打开应用期间留着。
 - **跟编辑器的接线**：编辑器组件只多一个 compartment，挂 `useWorkbenchEditorRunDebugExtension` 给的扩展。起运行卡
   经 `workbenchRunSessionBridge`（页面装上「先存盘再起卡」），命令面板经 `workbenchEditorActions`（编辑器挂着时
-  登记它做得了的动作）。这两个小模块在外壳包里，其余都跟着编辑器按需加载。
+  登记它做得了的动作；编辑区拆成左右两组时，算最近得到焦点的那个编辑器）。这两个小模块在外壳包里，其余都跟着
+  编辑器按需加载。▶ 右边的调试按钮见下面的「调试器的界面」。
 
 ## Node.js 调试器
 
@@ -663,6 +664,42 @@ JS / TS 的测试文件（`*.test.*`、`*.spec.*`、`__tests__/` 里的）在行
 - **验证**：`tests/workbench-debugger*.test.ts` 调试真的 Node 程序（断点、单步、变量、求值、异常、三种起法、
   编译产物带 `.map`、加载器就地转换、压成一行的 ES 模块）；测试里用普通子进程起程序，伪终端那条路由
   `probe:debug`（`src/main/workspace/debug/debugProbe.ts`）在 Electron 运行时里验。Windows 上没有验过。
+
+### 调试器的界面
+
+- **断点**：JavaScript / TypeScript 文件里点行号下一个，再点摘掉；命令面板有「切换断点」。存在 renderer 的
+  localStorage（键 `velaros.workbench.breakpoints.v1`，按项目根路径分，连同「未捕获的异常时暂停」这个开关；
+  `models/debug/workbenchBreakpoints.ts`），读出来的每一项重新校验，只留最近动过的 64 个项目。编辑器里断点是
+  一组跟着文档挪动的位置（`models/editor/workbenchBreakpointGutter.ts`）：上面插了行，断点跟着走，新的行号写回
+  存储；行号上的点击经 `workbenchLineNumberClickFacet` 让给它（别的文件类型还是原来那个只在本地的标记）。调试中
+  对不上代码的断点画成空心。
+- **会话（界面这一侧）**（`models/debug/workbenchDebugSession.ts`）：一个窗口一次只调试一个程序，新的一次开始
+  之前先结束上一次。它收主进程推来的事件，变成一份快照（正在调试的会话、停下时的调用栈与选中的帧、各断点对
+  没对上、上一次怎么结束的），面板和编辑器都订阅；断点或异常开关变了就同步给正在跑的程序。「起好了」的回复
+  到之前先到的事件攒着，回复到了再处理。
+- **运行卡**：调试也是一张运行卡——`launch.debug` 带着要调试的目标，`useWorkbenchCommandController` 起卡与重启时
+  据此改走调试器（`startWorkbenchDebugRunSession`），拿回来的 `terminalSessionId` 就是这张卡的会话；输出、停止、
+  重启都照旧。调试之前先把没存的改动存盘（断点的行号要与磁盘上的文件对得上）。
+- **从哪起**：▶ 指着一个 Node 程序配置时旁边多一个调试按钮（▶ 菜单里那一行也有）；测试的 ▶ 右边是调试按钮，
+  命令面板有「调试光标处的测试」「调试当前运行配置」。调试测试时的起法：Vitest
+  `<exec> vitest run <文件> -t '<正则>' --no-file-parallelism --testTimeout=0`（它自己认 `--inspect-brk`，关掉
+  文件并行后测试就在那一个带检查器的进程里跑）；Jest 由 node 带着检查器起 `jest` 包的可执行入口，参数
+  `--runInBand --runTestsByPath <文件> -t '<正则>' --testTimeout=100000000`。
+- **停下时**：页面把选中的那一帧的位置带到眼前（`navigate`，没开着的文件开成预览标签，已经开着的在它所在的
+  那组里切过去），那一行铺底色（`workbenchDebugPausedLine.ts`，用视图插件直接给装饰）；除了单步走出来的停顿，
+  底部换到调试面板。最里层是 Node 内部代码时选中最靠里的、项目里有文件的那一帧。
+- **调试面板**（`components/debug/WorkbenchDebugPanel.tsx`，按需加载）：控制按钮、调用栈、按作用域分的变量
+  （点开才取属性，换了一次停下或换了一帧就整块重来）、表达式输入框（在选中的帧里求值；程序继续跑过之后求过的
+  对象不能再展开）。左下角的调试按钮在调试中出现。
+- **按键**：继续 F8、单步跳过 F10、单步进入 F11、单步跳出 ⇧F11、结束 ⇧F5，登记在键位表里（设置里能改）。它们
+  由 `useWorkbenchDebugShortcuts` 在捕获阶段处理，而且只在调试中、这个动作此刻做得了时才拿走按键——没在调试时
+  F8 仍是编辑器里的「下一个问题」。F11 在 Windows / Linux 上是「视图 › 全屏」的菜单快捷键（菜单先拿到），在
+  macOS 上默认是系统的「显示桌面」；F10 在 Windows 上会先激活菜单栏。这几处改不了键位的话，面板上的按钮和
+  命令面板里的命令照样能用。
+- **悬停看值**（`workbenchDebugHover.ts`）：停着时鼠标停在变量或 `a.b.c` 这样的属性上，在上方显示它的值（类型
+  提示在下方）。只在选中那一帧所在的文件里求，求值带 `sideEffectFree`；有调用、有下标的不求。
+- **外壳包里只有**：`workbenchDebugBridge.ts`（状态、动作、页面钩子、起调试时动态加载会话那一包）、
+  `useWorkbenchDebugShortcuts.ts`、按钮与命令登记。会话、断点存储、面板和编辑器里的扩展都按需加载。
 
 ## 生产启动与体积预算
 

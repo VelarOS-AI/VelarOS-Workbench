@@ -7,6 +7,7 @@ import {
   useState,
 } from 'react'
 import {
+  BugIcon,
   CheckIcon,
   GearSixIcon,
   PlayIcon,
@@ -108,6 +109,11 @@ export function WorkbenchTopTrailing({
   const { t } = useWorkbenchI18n()
   const runCommandLabel = t('workbench.runCommand')
   const settingsLabel = t('workbench.settingsTitle')
+  // ▶ 指着一个 Node 程序时旁边多一个「调试」。
+  const debugLabel =
+    topRun.canDebugActiveConfiguration && topRun.activeConfiguration
+      ? t('workbench.debuggerDebugConfiguration', { name: topRun.activeConfiguration.name })
+      : null
 
   return (
     <>
@@ -120,6 +126,16 @@ export function WorkbenchTopTrailing({
         isRunningCommand={isRunningCommand}
         hasActiveRunCommand={hasActiveRunCommand}
       />
+      {!!debugLabel && (
+        <WorkbenchTopIconAction
+          tooltip={debugLabel}
+          label={debugLabel}
+          tooltipSide="top"
+          onClick={topRun.debug}
+        >
+          <BugIcon size={17} />
+        </WorkbenchTopIconAction>
+      )}
       <WorkbenchTopIconAction
         tooltip={settingsLabel}
         label={settingsLabel}
@@ -244,6 +260,11 @@ function WorkbenchRunAction({
     topRun.runConfiguration(configurationId)
   }
 
+  function handleDebugConfiguration(configurationId: string): void {
+    setMenuOpen(false)
+    topRun.debugConfiguration(configurationId)
+  }
+
   function handleEditConfigurations(): void {
     setMenuOpen(false)
     topRun.editConfigurations()
@@ -294,7 +315,7 @@ function WorkbenchRunAction({
         )}
       >
         <div className={styles.runActionPanel} role="menu" aria-label={placeholder}>
-        {/* 用户自己建的运行配置排在最前面：点一行让 ▶ 指着它，行尾的 ▶ 直接跑这一份。 */}
+        {/* 用户自己建的运行配置排在最前面：点一行让 ▶ 指着它，行尾的 ▶ 直接跑这一份；Node 程序还有一个调试。 */}
         {!isEmpty(topRun.namedConfigurations) && (
           <div className={styles.runActionSectionLabel}>{t('workbench.runConfigurations')}</div>
         )}
@@ -329,6 +350,17 @@ function WorkbenchRunAction({
               >
                 <PlayIcon size={12} weight="fill" />
               </button>
+              {configuration.type === 'node' && (
+                <button
+                  type="button"
+                  className={`${styles.runActionRowButton} ${styles.runActionRowDebugButton}`}
+                  title={t('workbench.runConfigurationDebugNow')}
+                  aria-label={t('workbench.runConfigurationDebugNow')}
+                  onClick={() => handleDebugConfiguration(configuration.id)}
+                >
+                  <BugIcon size={13} />
+                </button>
+              )}
             </div>
           )
         })}

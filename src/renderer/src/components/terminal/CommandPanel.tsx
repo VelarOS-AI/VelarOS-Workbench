@@ -28,6 +28,8 @@ interface CommandPanelProps {
   workbenchTerminal: WorkbenchTerminalToolBundle
   workbenchTheme: WorkbenchThemeId
   isCollapsed: boolean
+  /** 调试面板（按需加载，由页面给）。 */
+  debugPanel: ReactElement
   gitPanel: ReactElement
   problemsPanel: ReactElement
   onToggleCollapsed: () => void
@@ -54,6 +56,7 @@ export function CommandPanel({
   workbenchTerminal: { terminalSessions, activeTerminalSessionId },
   workbenchTheme,
   isCollapsed,
+  debugPanel,
   gitPanel,
   problemsPanel,
   onToggleCollapsed,
@@ -81,7 +84,9 @@ export function CommandPanel({
         ? t('workbench.commandTabTerminal')
         : activeTool === 'git'
           ? t('workbench.gitToolWindow')
-          : t('workbench.commandTabRuns')
+          : activeTool === 'debug'
+            ? t('workbench.debuggerToolWindow')
+            : t('workbench.commandTabRuns')
 
   return (
     <section className={styles.commandPanel} data-collapsed={isCollapsed}>
@@ -169,6 +174,8 @@ export function CommandPanel({
             )}
 
             {activeTool === 'git' && <div className={styles.gitBottomPane}>{gitPanel}</div>}
+
+            {activeTool === 'debug' && debugPanel}
           </div>
         )}
       </div>

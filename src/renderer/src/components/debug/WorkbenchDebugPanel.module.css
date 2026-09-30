@@ -1,0 +1,257 @@
+/* 底部的调试面板。只用 Workbench 令牌，原生 CSS（模块里的 @apply 不认间距工具类）。 */
+
+.panel {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  background: var(--workbench-surface);
+  color: var(--workbench-text);
+  font-size: 12px;
+}
+
+.toolbar {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+  min-height: 30px;
+  padding-inline: 6px 10px;
+  border-bottom: 1px solid var(--workbench-border);
+}
+
+.status {
+  overflow: hidden;
+  min-width: 0;
+  flex: 1 1 auto;
+  margin-left: 8px;
+  color: var(--workbench-text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status[data-paused='true'] {
+  color: var(--status-amber);
+}
+
+.exceptions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  color: var(--workbench-text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+/* 停在异常上：抛出来的那个值，一行，放不下的省略（悬停看全）。 */
+.exception {
+  overflow: hidden;
+  flex: 0 0 auto;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--workbench-border);
+  background: color-mix(in srgb, var(--status-red) 8%, transparent);
+  color: var(--status-red);
+  font-family: var(--font-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.columns {
+  display: grid;
+  min-height: 0;
+  flex: 1 1 auto;
+  grid-template-columns: minmax(12rem, 1fr) minmax(14rem, 1.4fr) minmax(12rem, 1.1fr);
+}
+
+.column {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  border-right: 1px solid var(--workbench-border);
+}
+
+.column:last-child {
+  border-right: 0;
+}
+
+.columnTitle {
+  flex: 0 0 auto;
+  padding: 5px 10px 3px;
+  color: var(--workbench-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.columnBody {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
+  padding-bottom: 6px;
+}
+
+.empty {
+  padding: 4px 10px;
+  color: var(--workbench-text-muted);
+  line-height: 1.5;
+}
+
+/* 调用栈里的一帧：函数名在左，文件名:行 在右。 */
+.frame {
+  display: flex;
+  width: 100%;
+  align-items: baseline;
+  gap: 10px;
+  padding: 2px 10px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: left;
+  cursor: pointer;
+}
+
+.frame:hover,
+.frame:focus-visible {
+  outline: none;
+  background: var(--workbench-hover);
+}
+
+.frame[data-active='true'] {
+  background: var(--workbench-active);
+  color: var(--workbench-active-fg);
+}
+
+.frame[data-external='true'] {
+  opacity: 0.55;
+}
+
+.frameName {
+  overflow: hidden;
+  min-width: 0;
+  flex: 1 1 auto;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.framePlace {
+  flex: 0 0 auto;
+  color: var(--workbench-text-muted);
+}
+
+.frame[data-active='true'] .framePlace {
+  color: inherit;
+}
+
+.scope {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 8px 2px;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+}
+
+.row {
+  display: flex;
+  overflow: hidden;
+  align-items: baseline;
+  gap: 2px;
+  padding-right: 10px;
+  font-family: var(--font-mono);
+  line-height: 1.55;
+  white-space: nowrap;
+}
+
+.row[data-expandable='true'] {
+  cursor: pointer;
+}
+
+.row[data-expandable='true']:hover {
+  background: var(--workbench-hover);
+}
+
+.caret {
+  display: inline-flex;
+  width: 12px;
+  flex: 0 0 12px;
+  align-self: center;
+  justify-content: center;
+  color: var(--workbench-text-muted);
+}
+
+.name {
+  flex: 0 0 auto;
+  color: var(--status-violet);
+}
+
+.separator {
+  flex: 0 0 auto;
+  margin-right: 4px;
+  color: var(--workbench-text-muted);
+}
+
+.value {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+}
+
+.value[data-type='string'] {
+  color: var(--status-green);
+}
+
+.value[data-type='number'],
+.value[data-type='bigint'],
+.value[data-type='boolean'] {
+  color: var(--status-blue);
+}
+
+.value[data-type='undefined'],
+.value[data-type='null'],
+.value[data-type='accessor'],
+.value[data-type='unavailable'] {
+  color: var(--workbench-text-muted);
+}
+
+.note {
+  padding-right: 10px;
+  color: var(--workbench-text-muted);
+  line-height: 1.55;
+}
+
+.expression {
+  flex: 0 0 auto;
+  padding: 2px 8px 6px;
+}
+
+.expressionInput {
+  width: 100%;
+  font-family: var(--font-mono);
+}
+
+.evaluation {
+  padding-block: 2px;
+}
+
+.evaluationExpression {
+  overflow: hidden;
+  padding-inline: 10px;
+  color: var(--workbench-text-muted);
+  font-family: var(--font-mono);
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.evaluationError {
+  padding-inline: 22px 10px;
+  color: var(--status-red);
+  font-family: var(--font-mono);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}

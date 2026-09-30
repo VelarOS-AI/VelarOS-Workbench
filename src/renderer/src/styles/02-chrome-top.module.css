@@ -1004,6 +1004,17 @@
   background: var(--status-green-soft);
 }
 
+/* Node 程序那一行的「调试」：与 ▶ 并排，不用运行的绿色。 */
+.runActionRowDebugButton {
+  color: var(--workbench-text-muted);
+}
+
+.runActionRowDebugButton:hover,
+.runActionRowDebugButton:focus-visible {
+  background: var(--workbench-hover);
+  color: var(--workbench-text);
+}
+
 .runActionEdit {
   width: 100%;
   padding: 6px 7px;

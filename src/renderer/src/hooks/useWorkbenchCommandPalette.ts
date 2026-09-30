@@ -4,6 +4,10 @@ import { isEmpty, Log } from '@velaros-ai/core'
 import { Result } from '@velaros-ai/core/result'
 
 import {
+  runWorkbenchDebugAction,
+  type WorkbenchDebugStatus,
+} from '../models/debug/workbenchDebugBridge'
+import {
   buildWorkbenchLanguageServiceRequestBase,
   resolveWorkbenchBuiltinLanguageServiceRuntime,
 } from '../models/editor/workbenchCodeMirrorLanguageService'
@@ -24,10 +28,11 @@ import {
   type WorkbenchIndentation,
 } from '../models/editor/workbenchIndentation'
 import { getWorkbenchLanguageServiceFormat } from '../models/editor/workbenchLanguageServiceIpc'
-import type {
-  WorkbenchPaletteCommandContext,
-  WorkbenchPaletteCommandId,
-  WorkbenchPaletteLanguageService,
+import {
+  type WorkbenchPaletteCommandContext,
+  type WorkbenchPaletteCommandId,
+  WorkbenchPaletteDebugActions,
+  type WorkbenchPaletteLanguageService,
 } from '../models/layout/workbenchCommandPalette'
 import { toggleWorkbenchEditorWordWrap } from '../models/settings/workbenchPreferences'
 import { fileLanguage } from '../models/shared/workbenchUtils'
@@ -92,11 +97,17 @@ interface UseWorkbenchCommandPaletteOptions {
   openSettings: () => void
   /** 打开「编辑运行配置」对话框。 */
   editRunConfigurations: () => void
+  /** 此刻有没有在调试、是不是停着。 */
+  debugStatus: WorkbenchDebugStatus
+  /** ▶ 指着的运行配置是一个 Node 程序，能调试。 */
+  canDebugConfiguration: boolean
+  /** 调试 ▶ 指着的那份运行配置（与 ▶ 旁边的调试按钮同一个动作）。 */
+  debugConfiguration: () => void
   reopenClosedEditorTab: () => Promise<void>
   /** 作用在光标处的代码动作（快速修复……）：交给眼前的编辑器去做。 */
   runEditorCommand: (command: WorkbenchEditorCommandId) => void
   showEditorSurface: () => void
-  toggleBottomTool: (tool: 'git' | 'problems' | 'terminal') => void
+  toggleBottomTool: (tool: 'debug' | 'git' | 'problems' | 'terminal') => void
   zoomEditor: (action: 'decrease' | 'increase' | 'reset') => void
 }
 
@@ -133,6 +144,9 @@ export function useWorkbenchCommandPalette({
   navigateForward,
   openSettings,
   editRunConfigurations,
+  debugStatus,
+  canDebugConfiguration,
+  debugConfiguration,
   reopenClosedEditorTab,
   runEditorCommand,
   showEditorSurface,
@@ -163,6 +177,8 @@ export function useWorkbenchCommandPalette({
     editorGroupCount: workbench.editorLayout.groups.length,
     activeFileLanguageService: resolveActiveFileLanguageService(workbench.selectedFilePath),
     editorActions: editorActions ? (editorActions.split(' ') as WorkbenchEditorActionId[]) : [],
+    debugStatus,
+    canDebugConfiguration,
   }
 
   /**
@@ -342,8 +358,28 @@ export function useWorkbenchCommandPalette({
         return
       }
       case 'run-test-at-cursor':
-      case 'run-test-file': {
+      case 'run-test-file':
+      case 'debug-test-at-cursor':
+      case 'toggle-breakpoint': {
         runWorkbenchEditorAction(id)
+        return
+      }
+      case 'debug-configuration': {
+        debugConfiguration()
+        return
+      }
+      case 'toggle-debug-panel': {
+        toggleBottomTool('debug')
+        return
+      }
+      case 'debug-continue':
+      case 'debug-pause':
+      case 'debug-step-into':
+      case 'debug-step-out':
+      case 'debug-step-over':
+      case 'debug-stop': {
+        const action = WorkbenchPaletteDebugActions[id]
+        if (action) runWorkbenchDebugAction(action)
         return
       }
       case 'zoom-in': {

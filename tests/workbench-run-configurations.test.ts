@@ -409,7 +409,7 @@ void describe('named run configurations', () => {
     // 对话框不进工作区外壳包，只有它用的草稿编辑也不进：外壳里的模块不引它。
     assert.match(
       presentation,
-      /lazy\(async \(\) => \{\s+const module = await import\('\.\/components\/run\/WorkbenchRunConfigurationsDialog'\)/u
+      /const LazyWorkbenchRunConfigurationsDialog = lazyWithPreload\(\s+async \(\) =>\s+\(await import\('\.\/components\/run\/WorkbenchRunConfigurationsDialog'\)\)/u
     )
     for (const shellModule of [
       'src/renderer/src/models/commands/workbenchNamedRunConfigurations.ts',

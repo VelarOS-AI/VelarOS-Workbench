@@ -58,7 +58,11 @@ const FileInFront: WorkbenchPaletteCommandContext = {
   editorCovered: false,
   openTabCount: 2,
   activeFileLanguageService: 'typescript',
+  canSplitEditorRight: true,
+  editorGroupCount: 1,
   editorActions: [],
+  debugStatus: 'idle',
+  canDebugConfiguration: false,
 }
 
 void describe('Workbench command palette registry', () => {
@@ -299,6 +303,53 @@ void describe('Workbench command palette availability', () => {
     }
   })
 
+  void test('debug commands appear only when they can do something', () => {
+    // 调试光标处的测试、切换断点：眼前的编辑器做得了才有（测试文件 / JS、TS 文件）。
+    const testFile: WorkbenchPaletteCommandContext = {
+      ...FileInFront,
+      editorActions: ['debug-test-at-cursor', 'toggle-breakpoint'],
+    }
+    for (const id of ['debug-test-at-cursor', 'toggle-breakpoint'] as const) {
+      assert.equal(isWorkbenchPaletteCommandAvailable(id, testFile), true, id)
+      assert.equal(isWorkbenchPaletteCommandAvailable(id, FileInFront), false, id)
+      assert.equal(isWorkbenchPaletteCommandAvailable(id, { ...testFile, editorCovered: true }), false, id)
+    }
+    // 调试当前运行配置：▶ 指着一个 Node 程序才有。
+    assert.equal(isWorkbenchPaletteCommandAvailable('debug-configuration', FileInFront), false)
+    assert.equal(
+      isWorkbenchPaletteCommandAvailable('debug-configuration', { ...FileInFront, canDebugConfiguration: true }),
+      true
+    )
+    // 面板随时能开。
+    assert.equal(isWorkbenchPaletteCommandAvailable('toggle-debug-panel', FileInFront), true)
+
+    // 控制命令：继续与单步要程序停着，暂停要它在跑，结束只要在调试。
+    const available = (debugStatus: WorkbenchPaletteCommandContext['debugStatus']): string[] =>
+      (
+        ['debug-continue', 'debug-pause', 'debug-step-over', 'debug-step-into', 'debug-step-out', 'debug-stop'] as const
+      ).filter((id) => isWorkbenchPaletteCommandAvailable(id, { ...FileInFront, debugStatus }))
+    assert.deepEqual(available('idle'), [])
+    assert.deepEqual(available('running'), ['debug-pause', 'debug-stop'])
+    assert.deepEqual(available('paused'), [
+      'debug-continue',
+      'debug-step-over',
+      'debug-step-into',
+      'debug-step-out',
+      'debug-stop',
+    ])
+
+    // 右侧写着此刻的按键。
+    const commands = buildCommands('zh-CN')
+    assert.deepEqual(
+      (['debug-continue', 'debug-step-over', 'debug-step-into', 'debug-step-out', 'debug-stop'] as const).map(
+        (id) => `${command(commands, id).label} ${command(commands, id).shortcut}`
+      ),
+      ['调试：继续 F8', '调试：单步跳过 F10', '调试：单步进入 F11', '调试：单步跳出 ⇧F11', '调试：结束调试 ⇧F5']
+    )
+    assert.equal(command(buildCommands('en-US', { platform: Linux }), 'debug-step-out').shortcut, 'Shift+F11')
+    assert.equal(command(commands, 'debug-pause').shortcut, null)
+  })
+
   void test('go to line brings a covered text file back, but needs one', () => {
     assert.equal(isWorkbenchPaletteCommandAvailable('go-to-line', { ...FileInFront, editorCovered: true }), true)
     assert.equal(isWorkbenchPaletteCommandAvailable('go-to-line', { ...FileInFront, activeFileIsText: false }), false)
@@ -319,7 +370,11 @@ void describe('Workbench command palette availability', () => {
       editorCovered: false,
       openTabCount: 0,
       activeFileLanguageService: null,
+      canSplitEditorRight: false,
+      editorGroupCount: 1,
       editorActions: [],
+      debugStatus: 'idle',
+      canDebugConfiguration: false,
     }
     for (const id of ['save-current', 'save-all', 'close-editor', 'close-all-editors', 'reveal-active-file'] as const)
       assert.equal(isWorkbenchPaletteCommandAvailable(id, empty), false, id)

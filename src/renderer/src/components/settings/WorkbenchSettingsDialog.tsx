@@ -119,6 +119,11 @@ interface WorkbenchSettingsDialogProps {
 const ShortcutLabelKeys: Record<WorkbenchKeyboardShortcutAction, WorkbenchMessageKey> = {
   'close-right-tool': 'workbench.settingsShortcutCloseRightTool',
   'command-palette': 'workbench.settingsShortcutCommandPalette',
+  'debug-continue': 'workbench.settingsShortcutDebugContinue',
+  'debug-step-into': 'workbench.settingsShortcutDebugStepInto',
+  'debug-step-out': 'workbench.settingsShortcutDebugStepOut',
+  'debug-step-over': 'workbench.settingsShortcutDebugStepOver',
+  'debug-stop': 'workbench.settingsShortcutDebugStop',
   'find-in-files': 'workbench.settingsShortcutFindInFiles',
   'focus-left-editor-group': 'workbench.settingsShortcutFocusLeftEditorGroup',
   'focus-right-editor-group': 'workbench.settingsShortcutFocusRightEditorGroup',
@@ -139,6 +144,11 @@ const ShortcutLabelKeys: Record<WorkbenchKeyboardShortcutAction, WorkbenchMessag
 const ShortcutDescriptionKeys: Record<WorkbenchKeyboardShortcutAction, WorkbenchMessageKey> = {
   'close-right-tool': 'workbench.settingsShortcutCloseRightToolDescription',
   'command-palette': 'workbench.settingsShortcutCommandPaletteDescription',
+  'debug-continue': 'workbench.settingsShortcutDebugContinueDescription',
+  'debug-step-into': 'workbench.settingsShortcutDebugStepIntoDescription',
+  'debug-step-out': 'workbench.settingsShortcutDebugStepOutDescription',
+  'debug-step-over': 'workbench.settingsShortcutDebugStepOverDescription',
+  'debug-stop': 'workbench.settingsShortcutDebugStopDescription',
   'find-in-files': 'workbench.settingsShortcutFindInFilesDescription',
   'focus-left-editor-group': 'workbench.settingsShortcutFocusLeftEditorGroupDescription',
   'focus-right-editor-group': 'workbench.settingsShortcutFocusRightEditorGroupDescription',

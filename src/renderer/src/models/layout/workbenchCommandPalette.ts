@@ -4,6 +4,11 @@
  * `commandPalette`），此刻跑不了的（没打开文件时的保存、格式化……）不列出来。
  */
 import { workbenchTerminalSplitShortcut } from '../commands/workbenchTerminalSplits'
+import {
+  isWorkbenchDebugActionAvailable,
+  type WorkbenchDebugAction,
+  type WorkbenchDebugStatus,
+} from '../debug/workbenchDebugBridge'
 import type { WorkbenchEditorActionId } from '../editor/workbenchEditorActions'
 import { scoreWorkbenchFuzzy } from '../shared/workbenchFuzzyScore'
 
@@ -19,6 +24,14 @@ export type WorkbenchPaletteCommandId =
   | 'close-all-editors'
   | 'close-editor'
   | 'close-project'
+  | 'debug-configuration'
+  | 'debug-continue'
+  | 'debug-pause'
+  | 'debug-step-into'
+  | 'debug-step-out'
+  | 'debug-step-over'
+  | 'debug-stop'
+  | 'debug-test-at-cursor'
   | 'edit-run-configurations'
   | 'find-in-files'
   | 'find-references'
@@ -44,7 +57,9 @@ export type WorkbenchPaletteCommandId =
   | 'save-current'
   | 'split-editor-right'
   | 'split-terminal'
+  | 'toggle-breakpoint'
   | 'toggle-chat'
+  | 'toggle-debug-panel'
   | 'toggle-git'
   | 'toggle-git-blame'
   | 'toggle-problems'
@@ -168,6 +183,17 @@ export const WORKBENCH_PALETTE_COMMANDS: readonly WorkbenchPaletteCommandDefinit
   // 测试文件里行号旁的 ▶：光标所在的那个测试（或那一组），以及整个文件。
   { id: 'run-test-at-cursor', labelKey: 'workbench.commandRunTestAtCursor' },
   { id: 'run-test-file', labelKey: 'workbench.commandRunTestFile' },
+  // 调试：测试 ▶ 旁边的调试按钮、▶ 旁边的调试按钮、行号上的断点、底部的调试面板和它那一排控制按钮。
+  { id: 'debug-test-at-cursor', labelKey: 'workbench.commandDebugTestAtCursor' },
+  { id: 'debug-configuration', labelKey: 'workbench.commandDebugConfiguration' },
+  { id: 'toggle-breakpoint', labelKey: 'workbench.commandToggleBreakpoint' },
+  { id: 'toggle-debug-panel', labelKey: 'workbench.commandToggleDebugPanel' },
+  { id: 'debug-continue', labelKey: 'workbench.commandDebugContinue', shortcut: { action: 'debug-continue' } },
+  { id: 'debug-pause', labelKey: 'workbench.commandDebugPause' },
+  { id: 'debug-step-over', labelKey: 'workbench.commandDebugStepOver', shortcut: { action: 'debug-step-over' } },
+  { id: 'debug-step-into', labelKey: 'workbench.commandDebugStepInto', shortcut: { action: 'debug-step-into' } },
+  { id: 'debug-step-out', labelKey: 'workbench.commandDebugStepOut', shortcut: { action: 'debug-step-out' } },
+  { id: 'debug-stop', labelKey: 'workbench.commandDebugStop', shortcut: { action: 'debug-stop' } },
   // 应用菜单「视图」里的放大、缩小、重置编辑器。
   { id: 'zoom-in', labelKey: 'workbench.commandZoomIn', shortcut: { fixed: 'Mod++' } },
   { id: 'zoom-out', labelKey: 'workbench.commandZoomOut', shortcut: { fixed: 'Mod+-' } },
@@ -197,6 +223,22 @@ export interface WorkbenchPaletteCommandContext {
   activeFileLanguageService: Nullable<WorkbenchPaletteLanguageService>
   /** 当前文件的编辑器此刻做得了的动作（它是测试文件、认出了运行器，才有「运行测试」）。 */
   editorActions: readonly WorkbenchEditorActionId[]
+  /** 此刻有没有在调试、是不是停着（继续与单步要停着，暂停要在跑）。 */
+  debugStatus: WorkbenchDebugStatus
+  /** ▶ 指着的运行配置是一个 Node 程序，能调试。 */
+  canDebugConfiguration: boolean
+}
+
+/** 面板里调试的那几条命令各是哪个调试动作。 */
+export const WorkbenchPaletteDebugActions: Partial<
+  Record<WorkbenchPaletteCommandId, WorkbenchDebugAction>
+> = {
+  'debug-continue': 'continue',
+  'debug-pause': 'pause',
+  'debug-step-into': 'step-into',
+  'debug-step-out': 'step-out',
+  'debug-step-over': 'step-over',
+  'debug-stop': 'stop',
 }
 
 /** 内置的 TypeScript / JavaScript 服务，或项目自己的外部语言服务器。 */
@@ -254,9 +296,15 @@ export function isWorkbenchPaletteCommandAvailable(
       return context.editorGroupCount > 1
     case 'run-test-at-cursor':
     case 'run-test-file':
+    case 'debug-test-at-cursor':
+    case 'toggle-breakpoint':
       return textEditorInFront && context.editorActions.includes(id)
-    default:
-      return true
+    case 'debug-configuration':
+      return context.canDebugConfiguration
+    default: {
+      const debugAction = WorkbenchPaletteDebugActions[id]
+      return debugAction ? isWorkbenchDebugActionAvailable(debugAction, context.debugStatus) : true
+    }
   }
 }
 
