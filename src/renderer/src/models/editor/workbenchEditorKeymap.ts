@@ -10,6 +10,7 @@
  *
  * 一个方案里同一组键只归一个命令；与全局快捷键同键的只有 `WorkbenchEditorKeymapSharedChords` 列的那几处。
  */
+import { formatWorkbenchShortcutHint } from '../layout/workbenchKeyboardShortcuts'
 import {
   currentWorkbenchPlatform,
   DEFAULT_WORKBENCH_KEYMAP_PRESET,
@@ -388,6 +389,19 @@ export function getWorkbenchEditorCommandShortcut(
   platform: string = currentWorkbenchPlatform()
 ): Nullable<string> {
   return getWorkbenchEditorCommandChords(command, preset, platform)[0] ?? null
+}
+
+/**
+ * 界面上提示这个命令的键（命令面板、右键菜单、设置里的说明）：Apple 平台用菜单符号（`⌥⌘L`），别处
+ * `Ctrl+Alt+L`。这个方案、这个平台上它没有键是空串。
+ */
+export function formatWorkbenchEditorCommandHint(
+  command: WorkbenchEditorKeymapCommandId,
+  preset: WorkbenchKeymapPresetId = DEFAULT_WORKBENCH_KEYMAP_PRESET,
+  platform: string = currentWorkbenchPlatform()
+): string {
+  const shortcut = getWorkbenchEditorCommandShortcut(command, preset, platform)
+  return shortcut ? formatWorkbenchShortcutHint(shortcut, platform) : ''
 }
 
 export interface WorkbenchEditorKeymapBinding {

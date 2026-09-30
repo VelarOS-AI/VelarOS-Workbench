@@ -26,6 +26,10 @@ import {
   type WorkbenchKeyboardShortcutMap,
 } from '@renderer/models/layout/workbenchKeyboardShortcuts'
 import {
+  DEFAULT_WORKBENCH_KEYMAP_PRESET,
+  type WorkbenchKeymapPresetId,
+} from '@renderer/models/layout/workbenchKeymapPresets'
+import {
   buildWorkbenchQuickOpenFileItems,
   buildWorkbenchQuickOpenRecentItems,
   parseWorkbenchQuickOpenQuery,
@@ -105,6 +109,8 @@ interface QuickOpenProps {
   commandPalette: WorkbenchCommandPaletteController
   /** 当前快捷键设置：标题栏与命令右侧的快捷键提示按它现算。 */
   keymap?: WorkbenchKeyboardShortcutMap
+  /** 设置里选的键位方案：编辑器里的命令（格式化、查找引用……）右侧提示的键按它查。 */
+  keymapPreset?: WorkbenchKeymapPresetId
   onClose: () => void
   /** 打开文件；给了位置就跳到那一行（列）。 */
   onOpenFile: (path: string, position?: WorkbenchQuickOpenPosition) => void
@@ -184,6 +190,7 @@ export function QuickOpen({
   projectFiles,
   commandPalette,
   keymap = DEFAULT_WORKBENCH_KEYBOARD_SHORTCUT_MAP,
+  keymapPreset = DEFAULT_WORKBENCH_KEYMAP_PRESET,
   onClose,
   onOpenFile,
 }: QuickOpenProps): Nullable<ReactElement> {
@@ -237,6 +244,7 @@ export function QuickOpen({
     return buildWorkbenchPaletteCommands({
       isAvailable: (id) => isWorkbenchPaletteCommandAvailable(id, commandPalette.context),
       keymap,
+      preset: keymapPreset,
       translate: (key) => t(key),
       translateAlias: (key) => translateWorkbenchAppMessage('en-US', key),
     })
@@ -351,8 +359,8 @@ export function QuickOpen({
 
   const commandItems = useMemo(
     () => (isOpen && parsedQuery.mode === 'commands' ? buildCommandItems() : NoCommands),
-    // 能跑哪些命令随页面状态变（context 每次渲染都新建），名字随语言、快捷键提示随 keymap。
-    [commandPalette.context, isOpen, keymap, parsedQuery.mode, t]
+    // 能跑哪些命令随页面状态变（context 每次渲染都新建），名字随语言、快捷键提示随 keymap 与键位方案。
+    [commandPalette.context, isOpen, keymap, keymapPreset, parsedQuery.mode, t]
   )
   const sections = useMemo(
     () =>

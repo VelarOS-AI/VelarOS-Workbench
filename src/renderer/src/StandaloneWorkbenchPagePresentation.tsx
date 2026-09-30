@@ -994,6 +994,7 @@ export function StandaloneWorkbenchPagePresentation({
             projectFiles={model.projectFiles}
             commandPalette={model.commandPalette}
             keymap={workbenchKeymap.keymap}
+            keymapPreset={workbenchKeymap.preset}
             onClose={surface.closeQuickOpen}
             onOpenFile={(path, position) => void model.actions.openQuickOpenFile(path, position)}
           />

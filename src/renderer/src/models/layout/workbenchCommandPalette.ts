@@ -10,6 +10,10 @@ import {
   type WorkbenchDebugStatus,
 } from '../debug/workbenchDebugBridge'
 import type { WorkbenchEditorActionId } from '../editor/workbenchEditorActions'
+import {
+  formatWorkbenchEditorCommandHint,
+  type WorkbenchEditorKeymapCommandId,
+} from '../editor/workbenchEditorKeymap'
 import { scoreWorkbenchFuzzy } from '../shared/workbenchFuzzyScore'
 
 import {
@@ -18,6 +22,7 @@ import {
   type WorkbenchKeyboardShortcutAction,
   type WorkbenchKeyboardShortcutMap,
 } from './workbenchKeyboardShortcuts'
+import { DEFAULT_WORKBENCH_KEYMAP_PRESET, type WorkbenchKeymapPresetId } from './workbenchKeymapPresets'
 
 export type WorkbenchPaletteCommandId =
   | 'call-hierarchy'
@@ -72,11 +77,13 @@ export type WorkbenchPaletteCommandId =
   | 'zoom-reset'
 
 /**
- * 快捷键提示从哪来：`action` 是设置里可改的全局快捷键，按当前 keymap 现算；`fixed` 是编辑器或应用菜单里
- * 写死的按键（`Mod` 照样按平台落到 ⌘ / Ctrl）；`platform` 是两类平台上按键不一样的（终端里的那几个）。
+ * 快捷键提示从哪来：`action` 是设置里可改的全局快捷键，按当前 keymap 现算；`editor` 是编辑器里的命令，按所选
+ * 键位方案查编辑器命令的键位表；`fixed` 是应用菜单里写死的按键（`Mod` 照样按平台落到 ⌘ / Ctrl）；`platform`
+ * 是两类平台上按键不一样的（终端里的那几个）。
  */
 type WorkbenchPaletteCommandShortcut =
   | { action: WorkbenchKeyboardShortcutAction }
+  | { editor: WorkbenchEditorKeymapCommandId }
   | { fixed: string }
   | { platform: (isApple: boolean) => string }
 
@@ -89,8 +96,8 @@ export interface WorkbenchPaletteCommandDefinition {
 /** 输入为空时按这个顺序列：先打开与跳转，再编辑，再各个面板，最后应用级的。 */
 export const WORKBENCH_PALETTE_COMMANDS: readonly WorkbenchPaletteCommandDefinition[] = [
   { id: 'go-to-file', labelKey: 'workbench.commandGoToFile', shortcut: { action: 'quick-open' } },
-  // 编辑器里的跳到行（⌃G / Ctrl+G）；面板里是快速打开的 `:` 模式。
-  { id: 'go-to-line', labelKey: 'workbench.commandGoToLine', shortcut: { fixed: 'Ctrl+G' } },
+  // 编辑器里的跳到行；面板里是快速打开的 `:` 模式。
+  { id: 'go-to-line', labelKey: 'workbench.commandGoToLine', shortcut: { editor: 'go-to-line' } },
   // 当前文件里的符号（大纲）；面板里是快速打开的 `@` 模式。
   { id: 'go-to-symbol', labelKey: 'workbench.commandGoToSymbol', shortcut: { action: 'go-to-symbol' } },
   // 侧栏的项目搜索与替换；编辑器里选中了一行以内的文字就拿它当查找词。
@@ -127,36 +134,39 @@ export const WORKBENCH_PALETTE_COMMANDS: readonly WorkbenchPaletteCommandDefinit
     labelKey: 'workbench.commandFocusRightEditorGroup',
     shortcut: { action: 'focus-right-editor-group' },
   },
-  // 编辑器里的 ⌥⌘L / Ctrl+Alt+L。
-  { id: 'format-document', labelKey: 'workbench.commandFormatDocument', shortcut: { fixed: 'Mod+Alt+L' } },
-  // 光标处符号的全部引用，列在编辑器里的面板上：⇧F12（另有 ⌥F7 / Alt+F7）。
+  // 下面这几条是编辑器里的命令：提示的键随键位方案变（见编辑器命令的键位表）。
+  {
+    id: 'format-document',
+    labelKey: 'workbench.commandFormatDocument',
+    shortcut: { editor: 'format-document' },
+  },
+  // 光标处符号的全部引用，列在编辑器里的面板上。
   {
     id: 'find-references',
     labelKey: 'workbench.commandFindReferences',
-    shortcut: { fixed: 'Shift+F12' },
+    shortcut: { editor: 'find-references' },
   },
-  // 光标处函数的调用层次（谁调用它、它调用谁），编辑器右上角的面板：⌃⌥H / Ctrl+Alt+H。
+  // 光标处函数的调用层次（谁调用它、它调用谁），编辑器右上角的面板。
   {
     id: 'call-hierarchy',
     labelKey: 'workbench.commandCallHierarchy',
-    shortcut: { fixed: 'Ctrl+Alt+H' },
+    shortcut: { editor: 'call-hierarchy' },
   },
-  // 编辑器里光标处的动作菜单：⌥↩ / Alt+Enter（另有 ⌘. / Ctrl+.）。
-  { id: 'quick-fix', labelKey: 'workbench.commandQuickFix', shortcut: { fixed: 'Alt+Enter' } },
-  // 选中的代码（或光标处）能做的重构：macOS 上 ⌃T，其它平台 Ctrl+Alt+Shift+T。
-  {
-    id: 'refactor',
-    labelKey: 'workbench.commandRefactor',
-    shortcut: { platform: (isApple) => (isApple ? 'Ctrl+T' : 'Ctrl+Alt+Shift+T') },
-  },
-  // 编辑器里的 ⇧⌥O / Shift+Alt+O：排序、合并、去掉没用到的 import。
+  // 编辑器里光标处的动作菜单。
+  { id: 'quick-fix', labelKey: 'workbench.commandQuickFix', shortcut: { editor: 'quick-fix' } },
+  // 选中的代码（或光标处）能做的重构。
+  { id: 'refactor', labelKey: 'workbench.commandRefactor', shortcut: { editor: 'refactor' } },
+  // 排序、合并、去掉没用到的 import。
   {
     id: 'organize-imports',
     labelKey: 'workbench.commandOrganizeImports',
-    shortcut: { fixed: 'Alt+Shift+O' },
+    shortcut: { editor: 'organize-imports' },
   },
-  // 编辑器里的 ⌥Z / Alt+Z。
-  { id: 'toggle-word-wrap', labelKey: 'workbench.commandToggleWordWrap', shortcut: { fixed: 'Alt+Z' } },
+  {
+    id: 'toggle-word-wrap',
+    labelKey: 'workbench.commandToggleWordWrap',
+    shortcut: { editor: 'toggle-word-wrap' },
+  },
   { id: 'toggle-read-only', labelKey: 'workbench.commandToggleReadOnly' },
   // 行号左边的追溯栏；编辑器右键菜单里也有。
   { id: 'toggle-git-blame', labelKey: 'workbench.commandToggleGitBlame' },
@@ -330,9 +340,12 @@ export interface WorkbenchPaletteCommandMatch {
 function formatCommandShortcut(
   shortcut: LooseOptional<WorkbenchPaletteCommandShortcut>,
   keymap: WorkbenchKeyboardShortcutMap,
+  preset: WorkbenchKeymapPresetId,
   platform: string | undefined
 ): Nullable<string> {
   if (!shortcut) return null
+  if ('editor' in shortcut)
+    return formatWorkbenchEditorCommandHint(shortcut.editor, preset, platform) || null
 
   const keys =
     'action' in shortcut
@@ -340,19 +353,23 @@ function formatCommandShortcut(
       : 'fixed' in shortcut
         ? shortcut.fixed
         : shortcut.platform(isAppleWorkbenchPlatform(platform))
-  return formatWorkbenchShortcutHint(keys, platform)
+  // 这个动作在所选方案里没有键（用户也没录）：不提示。
+  return keys ? formatWorkbenchShortcutHint(keys, platform) : null
 }
 
-/** 此刻能跑的命令，按登记顺序，名字与快捷键提示按当前语言、keymap 与平台现算。 */
+/** 此刻能跑的命令，按登记顺序，名字与快捷键提示按当前语言、keymap、键位方案与平台现算。 */
 export function buildWorkbenchPaletteCommands({
   isAvailable,
   keymap,
+  preset = DEFAULT_WORKBENCH_KEYMAP_PRESET,
   translate,
   translateAlias,
   platform,
 }: {
   isAvailable: (id: WorkbenchPaletteCommandId) => boolean
   keymap: WorkbenchKeyboardShortcutMap
+  /** 设置里选的键位方案：编辑器命令的提示按它查；不给是 Workbench 方案。 */
+  preset?: WorkbenchKeymapPresetId
   /** 当前界面语言的文案。 */
   translate: (key: string) => string
   /** 英文文案（给别名用）。 */
@@ -368,7 +385,7 @@ export function buildWorkbenchPaletteCommands({
         id: definition.id,
         label,
         alias: alias === label ? null : alias,
-        shortcut: formatCommandShortcut(definition.shortcut, keymap, platform),
+        shortcut: formatCommandShortcut(definition.shortcut, keymap, preset, platform),
       }
     }
   )

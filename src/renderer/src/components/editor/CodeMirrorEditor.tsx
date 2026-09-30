@@ -2,6 +2,7 @@ import {
   forwardRef,
   type MouseEvent as ReactMouseEvent,
   type ReactElement,
+  type ReactNode,
   type RefObject,
   useEffect,
   useImperativeHandle,
@@ -192,6 +193,10 @@ import {
   type WorkbenchEditorFindRequest,
   type WorkbenchEditorFindStatus,
 } from '@renderer/models/editor/workbenchEditorFindState'
+import {
+  formatWorkbenchEditorCommandHint,
+  type WorkbenchEditorKeymapCommandId,
+} from '@renderer/models/editor/workbenchEditorKeymap'
 import {
   setWorkbenchGitBlame,
   workbenchGitBlameGutter,
@@ -2227,7 +2232,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       event.preventDefault()
       const position = view.posAtCoords({ x: event.clientX, y: event.clientY })
       const word = !isPresent(position) ? null : getIdentifierAt(view.state, position)
-      const x = Math.min(event.clientX, window.innerWidth - 188)
+      const x = Math.min(event.clientX, window.innerWidth - 236)
       const y = Math.min(event.clientY, window.innerHeight - 380)
       const selection = view.state.selection.main
       setContextMenu({
@@ -2239,14 +2244,27 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       })
     }
 
-    // 菜单有哪些条目随文件而变，高度先按估的放；画出来以后量一下，伸到窗口下沿外面就往上收。
+    // 菜单有哪些条目随文件而变、多宽随语言和键位方案（右侧提示的键）而变，先按估的放；画出来以后量一下，
+    // 伸到窗口下沿、右沿外面就往回收。
     useLayoutEffect(() => {
       const menu = contextMenuRef.current
       if (!menu || !contextMenu) return
-      const overflow = menu.getBoundingClientRect().bottom - (window.innerHeight - 8)
-      const y = Math.max(8, contextMenu.y - overflow)
-      if (overflow > 0 && y !== contextMenu.y) setContextMenu({ ...contextMenu, y })
+      const rect = menu.getBoundingClientRect()
+      const x = Math.max(8, contextMenu.x - Math.max(0, rect.right - (window.innerWidth - 8)))
+      const y = Math.max(8, contextMenu.y - Math.max(0, rect.bottom - (window.innerHeight - 8)))
+      if (x !== contextMenu.x || y !== contextMenu.y) setContextMenu({ ...contextMenu, x, y })
     }, [contextMenu])
+
+    /** 右键菜单里编辑器命令的一项：名字在左，所选键位方案下这个命令的键在右（没有键就只有名字）。 */
+    const commandMenuLabel = (command: WorkbenchEditorKeymapCommandId, label: string): ReactNode => {
+      const hint = formatWorkbenchEditorCommandHint(command, keymapPreset)
+      return (
+        <>
+          <span className={styles.workbenchContextMenuLabel}>{label}</span>
+          {!!hint && <span className={styles.workbenchContextMenuShortcut}>{hint}</span>}
+        </>
+      )
+    }
 
     useDismissOnWindowInteract({
       enabled: isPresent(contextMenu),
@@ -3123,7 +3141,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
               disabled={!contextMenu.word || readOnly || disabled}
               onClick={() => renameIdentifier(contextMenu.word)}
             >
-              {t('workbench.editorContextRenameSymbol')}
+              {commandMenuLabel('rename-symbol', t('workbench.editorContextRenameSymbol'))}
             </button>
             <button
               type="button"
@@ -3131,7 +3149,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
               disabled={!contextMenu.canGoToDefinition}
               onClick={() => void goToDefinitionForWord(contextMenu.word)}
             >
-              {t('workbench.editorContextGoToDefinition')}
+              {commandMenuLabel('go-to-definition', t('workbench.editorContextGoToDefinition'))}
             </button>
             <button
               type="button"
@@ -3139,7 +3157,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
               disabled={!contextMenu.word || !symbolNavigation.canRun('find-references')}
               onClick={() => runCommandFromContextMenu('find-references')}
             >
-              {t('workbench.editorContextFindReferences')}
+              {commandMenuLabel('find-references', t('workbench.editorContextFindReferences'))}
             </button>
             <button
               type="button"
@@ -3147,7 +3165,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
               disabled={!contextMenu.word || !symbolNavigation.canRun('call-hierarchy')}
               onClick={() => runCommandFromContextMenu('call-hierarchy')}
             >
-              {t('workbench.editorContextCallHierarchy')}
+              {commandMenuLabel('call-hierarchy', t('workbench.editorContextCallHierarchy'))}
             </button>
             <button
               type="button"
@@ -3155,7 +3173,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
               disabled={!codeActions.canRun('quick-fix')}
               onClick={() => runCommandFromContextMenu('quick-fix')}
             >
-              {t('workbench.editorContextQuickFix')}
+              {commandMenuLabel('quick-fix', t('workbench.editorContextQuickFix'))}
             </button>
             <button
               type="button"
@@ -3163,7 +3181,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
               disabled={!codeActions.canRun('refactor')}
               onClick={() => runCommandFromContextMenu('refactor')}
             >
-              {t('workbench.editorContextRefactor')}
+              {commandMenuLabel('refactor', t('workbench.editorContextRefactor'))}
             </button>
             <div className={styles.editorContextMenuDivider} />
             <button
@@ -3188,7 +3206,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
               disabled={readOnly || disabled}
               onClick={() => void formatDocument()}
             >
-              {t('workbench.editorContextFormatDocument')}
+              {commandMenuLabel('format-document', t('workbench.editorContextFormatDocument'))}
             </button>
             <button
               type="button"
@@ -3196,7 +3214,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
               disabled={!codeActions.canRun('organize-imports')}
               onClick={() => runCommandFromContextMenu('organize-imports')}
             >
-              {t('workbench.editorContextOrganizeImports')}
+              {commandMenuLabel('organize-imports', t('workbench.editorContextOrganizeImports'))}
             </button>
             {isRunnableEditorPath(path) && (
               <button
