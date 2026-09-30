@@ -1,20 +1,27 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useWorkbenchHostRuntime } from '@renderer/host'
 import {
+  buildWorkbenchLanguageServiceOpenFiles,
   buildWorkbenchLanguageServiceRequestBase,
   usesWorkbenchBuiltinLanguageService,
   usesWorkbenchTypeScriptLanguageService,
 } from '@renderer/models/editor/workbenchCodeMirrorLanguageService'
-import { omitWorkbenchPendingDiagnostics } from '@renderer/models/editor/workbenchLanguageServiceInsightsModel'
+import {
+  applyWorkbenchProjectDiagnosticsBatch,
+  mergeWorkbenchDiagnosticsByPath,
+  omitWorkbenchPendingDiagnostics,
+  retainWorkbenchProjectDiagnostics,
+} from '@renderer/models/editor/workbenchLanguageServiceInsightsModel'
 import {
   getWorkbenchLanguageServiceDiagnostics,
   getWorkbenchLanguageServiceDocumentSymbols,
+  getWorkbenchLanguageServiceProjectDiagnostics,
 } from '@renderer/models/editor/workbenchLanguageServiceIpc'
 import { fileLanguage } from '@renderer/models/shared/workbenchUtils'
 import { useStableWorkbenchMessageTranslate } from '@renderer/runtime/useStableWorkbenchMessaging'
 import type { WorkbenchOpenEditorTab } from '@renderer/types/workbenchTypes'
 
-import { isEmpty } from '@velaros-ai/core'
+import { isEmpty, Log } from '@velaros-ai/core'
 
 import type {
   WorkbenchLanguageServiceDiagnostic,
@@ -23,11 +30,13 @@ import type {
 
 import { useLatest } from '../support/genericHooks'
 
-const MAX_DIAGNOSTIC_TABS = 8
 /** 内容变了的文件（正在编辑的那个）多久后重算。 */
 const DIAGNOSTIC_DEBOUNCE_MS = 700
 /** 别的打开文件多久后跟着复核：它们的内容没变，只是当前文件的改动或磁盘上的改动可能影响它们。 */
 const SIBLING_DIAGNOSTIC_DEBOUNCE_MS = 1_800
+/** 整项目检查：打开的 TypeScript 文件变了、工作区在外面变了（保存、Agent 写文件）之后等这么久再查一轮。 */
+const PROJECT_DIAGNOSTIC_DEBOUNCE_MS = 1_500
+const log = Log.tag('workbench-language-service-insights')
 
 export interface WorkbenchLanguageServiceInsights {
   diagnosticsByPath: ReadonlyMap<string, readonly WorkbenchLanguageServiceDiagnostic[]>
@@ -60,6 +69,9 @@ export function useWorkbenchLanguageServiceInsights({
   const [documentSymbols, setDocumentSymbols] = useState<
     readonly WorkbenchLanguageServiceDocumentSymbol[]
   >([])
+  const [projectDiagnosticsByPath, setProjectDiagnosticsByPath] = useState<
+    ReadonlyMap<string, readonly WorkbenchLanguageServiceDiagnostic[]>
+  >(() => new Map())
   const diagnosticGenerationRef = useRef(0)
   const symbolGenerationRef = useRef(0)
   const announcedErrorRef = useRef<Nullable<string>>(null)
@@ -70,7 +82,6 @@ export function useWorkbenchLanguageServiceInsights({
     () =>
       openTabs
         .filter((tab) => usesWorkbenchBuiltinLanguageService(tab.path))
-        .slice(0, MAX_DIAGNOSTIC_TABS)
         .map((tab) => {
           const content = tab.path === selectedFilePath ? editorContent : tab.content
 
@@ -84,14 +95,12 @@ export function useWorkbenchLanguageServiceInsights({
 
   // 内容变了的文件（正在编辑的那个）700ms 后重算；别的打开文件的内容没变，只是可能受它影响（导出改了）
   // 或者工作区在外面变了（externalRevision），等手停下来再复核，旧结论在此之前继续显示、面板不闪。
-  // 连续输入时不必每一波都把 8 个标签全算一遍：语言服务 worker 是串行的，一个大文件的类型检查就要几百毫秒。
+  // 连续输入时不必每一波都把所有标签全算一遍：语言服务 worker 是串行的，一个大文件的类型检查就要几百毫秒。
   useEffect(() => {
     const root = contextRef.current.projectRoot
     const { openTabs: currentTabs, selectedFilePath: activePath, editorContent: activeContent } =
       contextRef.current
-    const targets = currentTabs
-      .filter((tab) => usesWorkbenchBuiltinLanguageService(tab.path))
-      .slice(0, MAX_DIAGNOSTIC_TABS)
+    const targets = currentTabs.filter((tab) => usesWorkbenchBuiltinLanguageService(tab.path))
     if (!root || isEmpty(targets)) {
       announcedErrorRef.current = null
       scheduledContentByPathRef.current = new Map()
@@ -191,6 +200,99 @@ export function useWorkbenchLanguageServiceInsights({
     }
   }, [contextRef, diagnosticContentKey, externalRevision, hostRuntime, messageLatest, tLatest])
 
+  // 整项目检查的锚点：打开着的 TypeScript 文件，当前文件在前（它所在的项目先查）。
+  const projectAnchorKey = useMemo(
+    () =>
+      openTabs
+        .map((tab) => tab.path)
+        .filter((path) => usesWorkbenchTypeScriptLanguageService(path))
+        .sort((left, right) => Number(right === selectedFilePath) - Number(left === selectedFilePath))
+        .join('\n'),
+    [openTabs, selectedFilePath]
+  )
+  const projectPassRef = useRef({
+    root: null as Nullable<string>,
+    anchors: [] as string[],
+    running: false,
+    rerun: false,
+    generation: 0,
+    timer: null as Nullable<ReturnType<typeof setTimeout>>,
+  })
+
+  // 整项目检查：像 `tsc --noEmit` 一样把项目里没打开的文件也查一遍，问题面板才看得到它们。在 worker 里分批查，
+  // 一轮查完之前又有改动就查完这轮再来一轮（不打断、不并发）；只在打开的 TS 文件、项目或磁盘内容变了时才查，
+  // 打字不触发（打开的文件由上面的实时诊断负责）。
+  useEffect(() => {
+    const pass = projectPassRef.current
+    const root = contextRef.current.projectRoot
+    const anchors = projectAnchorKey ? projectAnchorKey.split('\n') : []
+    if (pass.root !== root) {
+      pass.generation += 1
+      pass.root = root
+      setProjectDiagnosticsByPath(new Map())
+    }
+    // 关掉所有 TypeScript 标签后仍按上次的锚点查，问题面板里已经发现的问题不因此消失。
+    if (!isEmpty(anchors)) pass.anchors = anchors
+    if (!root || isEmpty(pass.anchors)) return undefined
+
+    const runPass = async (): Promise<void> => {
+      if (pass.running) {
+        pass.rerun = true
+        return
+      }
+      pass.running = true
+      const generation = pass.generation
+      const checked = new Set<string>()
+      let cursor: string | undefined
+      try {
+        do {
+          const result = await getWorkbenchLanguageServiceProjectDiagnostics({
+            projectRoot: root,
+            anchorPaths: pass.anchors,
+            cursor,
+            openFiles: buildWorkbenchLanguageServiceOpenFiles(contextRef.current.openTabs),
+          }, hostRuntime)
+          if (generation !== pass.generation) return
+          if (!result.ok) {
+            log.debug('project diagnostics pass failed', { root, error: result.error })
+            return
+          }
+          for (const path of result.data.checkedPaths) checked.add(path)
+          setProjectDiagnosticsByPath((current) => applyWorkbenchProjectDiagnosticsBatch(current, result.data))
+          cursor = result.data.cursor ?? undefined
+        } while (cursor)
+        setProjectDiagnosticsByPath((current) => retainWorkbenchProjectDiagnostics(current, checked))
+      } finally {
+        pass.running = false
+        if (pass.rerun && generation === pass.generation) {
+          pass.rerun = false
+          pass.timer = setTimeout(() => void runPass(), PROJECT_DIAGNOSTIC_DEBOUNCE_MS)
+        }
+      }
+    }
+
+    if (pass.timer) clearTimeout(pass.timer)
+    pass.timer = setTimeout(() => void runPass(), PROJECT_DIAGNOSTIC_DEBOUNCE_MS)
+    return () => {
+      if (pass.timer) clearTimeout(pass.timer)
+      pass.timer = null
+    }
+  }, [contextRef, externalRevision, hostRuntime, projectAnchorKey, projectRoot])
+
+  const openLanguageServicePaths = useMemo(
+    () => new Set(openTabs.map((tab) => tab.path).filter((path) => usesWorkbenchBuiltinLanguageService(path))),
+    [openTabs]
+  )
+  const mergedDiagnosticsByPath = useMemo(
+    () =>
+      mergeWorkbenchDiagnosticsByPath({
+        openDiagnosticsByPath: diagnosticsByPath,
+        projectDiagnosticsByPath,
+        openPaths: openLanguageServicePaths,
+      }),
+    [diagnosticsByPath, openLanguageServicePaths, projectDiagnosticsByPath]
+  )
+
   useEffect(() => {
     const root = contextRef.current.projectRoot
     const path = contextRef.current.selectedFilePath
@@ -220,5 +322,5 @@ export function useWorkbenchLanguageServiceInsights({
     return () => clearTimeout(timer)
   }, [contextRef, editorContent, hostRuntime, selectedFilePath])
 
-  return { diagnosticsByPath, diagnosticsPendingPaths, documentSymbols }
+  return { diagnosticsByPath: mergedDiagnosticsByPath, diagnosticsPendingPaths, documentSymbols }
 }

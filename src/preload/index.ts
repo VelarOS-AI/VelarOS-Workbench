@@ -126,6 +126,8 @@ const languageBridge: WorkbenchLanguageBridge = {
   resolveCompletion: (request) =>
     ipcRenderer.invoke(WorkbenchLanguageChannels.completionResolve, request),
   getDiagnostics: (request) => ipcRenderer.invoke(WorkbenchLanguageChannels.diagnostics, request),
+  getProjectDiagnostics: (request) =>
+    ipcRenderer.invoke(WorkbenchLanguageChannels.projectDiagnostics, request),
   getRename: (request) => ipcRenderer.invoke(WorkbenchLanguageChannels.rename, request),
   getHover: (request) => ipcRenderer.invoke(WorkbenchLanguageChannels.hover, request),
   getReferences: (request) => ipcRenderer.invoke(WorkbenchLanguageChannels.references, request),

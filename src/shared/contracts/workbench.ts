@@ -487,6 +487,28 @@ export interface WorkbenchLanguageServiceDiagnosticsResult {
   diagnostics: WorkbenchLanguageServiceDiagnostic[]
 }
 
+/**
+ * 整个 TypeScript 项目的问题（像 `tsc --noEmit -p` 那样把项目里每个文件都查一遍），分批查：一批只占 worker
+ * 一小段时间，中间让补全、悬浮这些交互请求先走。
+ */
+export interface WorkbenchLanguageServiceProjectDiagnosticsRequest {
+  projectRoot: string
+  /** 决定查哪些 tsconfig 项目：打开着的 TypeScript 文件，当前文件在前。 */
+  anchorPaths: string[]
+  /** 上一批给出的接续位置；省略时从头查。 */
+  cursor?: string
+  openFiles?: WorkbenchLanguageServiceOpenFile[]
+}
+
+export interface WorkbenchLanguageServiceProjectDiagnosticsResult {
+  projectRoot: string
+  /** 这一批查过的文件，没有问题的也在内。 */
+  checkedPaths: string[]
+  diagnostics: WorkbenchLanguageServiceDiagnostic[]
+  /** 接着查下一批时带上；null 表示整个项目查完了。 */
+  cursor: Nullable<string>
+}
+
 export interface WorkbenchLanguageServiceTextEdit {
   range: WorkbenchLanguageServiceRange
   newText: string

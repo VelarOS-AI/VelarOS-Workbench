@@ -31,6 +31,8 @@ import type {
   WorkbenchLanguageServiceInlayHintsRequest,
   WorkbenchLanguageServiceInlayHintsResult,
   WorkbenchLanguageServicePositionRequest,
+  WorkbenchLanguageServiceProjectDiagnosticsRequest,
+  WorkbenchLanguageServiceProjectDiagnosticsResult,
   WorkbenchLanguageServiceReferencesResult,
   WorkbenchLanguageServiceRenameRequest,
   WorkbenchLanguageServiceRenameResult,
@@ -46,6 +48,7 @@ export const WorkbenchLanguageChannels = {
   completions: 'workbench-app:ls:completions',
   completionResolve: 'workbench-app:ls:completion-resolve',
   diagnostics: 'workbench-app:ls:diagnostics',
+  projectDiagnostics: 'workbench-app:ls:project-diagnostics',
   rename: 'workbench-app:ls:rename',
   hover: 'workbench-app:ls:hover',
   references: 'workbench-app:ls:references',
@@ -78,6 +81,9 @@ export interface WorkbenchLanguageBridge {
   getDiagnostics: (
     request: WorkbenchLanguageServiceRequest
   ) => Promise<WorkbenchFsCallResult<WorkbenchLanguageServiceDiagnosticsResult>>
+  getProjectDiagnostics: (
+    request: WorkbenchLanguageServiceProjectDiagnosticsRequest
+  ) => Promise<WorkbenchFsCallResult<WorkbenchLanguageServiceProjectDiagnosticsResult>>
   getRename: (
     request: WorkbenchLanguageServiceRenameRequest
   ) => Promise<WorkbenchFsCallResult<WorkbenchLanguageServiceRenameResult>>

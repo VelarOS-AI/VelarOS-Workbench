@@ -19,6 +19,7 @@ import type {
   WorkbenchLanguageServiceOpenFile,
   WorkbenchLanguageServicePosition,
   WorkbenchLanguageServicePositionRequest,
+  WorkbenchLanguageServiceProjectDiagnosticsRequest,
   WorkbenchLanguageServiceRange,
   WorkbenchLanguageServiceRenameRequest,
   WorkbenchLanguageServiceRequest,
@@ -77,6 +78,15 @@ export function registerWorkbenchLanguageServiceIpc(
       if (!parsed) return invalidRequest()
 
       return client.getDiagnostics(parsed)
+    })
+  )
+
+  ipcMain.handle(WorkbenchLanguageChannels.projectDiagnostics, (_event, request: unknown) =>
+    callWithEnvelope(() => {
+      const parsed = parseProjectDiagnosticsRequest(request)
+      if (!parsed) return invalidRequest()
+
+      return client.getProjectDiagnostics(parsed)
     })
   )
 
@@ -236,6 +246,24 @@ function parsePositionRequest(input: unknown): Nullable<WorkbenchLanguageService
   if (!position) return null
 
   return { ...base, position }
+}
+
+function parseProjectDiagnosticsRequest(
+  input: unknown
+): Nullable<WorkbenchLanguageServiceProjectDiagnosticsRequest> {
+  if (!hasStringFields(input, ['projectRoot'])) return null
+  const anchorPaths = input['anchorPaths']
+  if (!Array.isArray(anchorPaths) || anchorPaths.length > 256) return null
+  if (!anchorPaths.every((path) => typeof path === 'string')) return null
+  const cursor = input['cursor']
+  if (cursor !== undefined && (typeof cursor !== 'string' || cursor.length > 4096)) return null
+
+  return {
+    projectRoot: input['projectRoot'] as string,
+    anchorPaths: anchorPaths as string[],
+    cursor: cursor as string | undefined,
+    ...parseOpenFiles(input['openFiles']),
+  }
 }
 
 function parseCompletionResolveRequest(

@@ -42,6 +42,8 @@ import type {
   WorkbenchLanguageServiceLocation,
   WorkbenchLanguageServicePosition,
   WorkbenchLanguageServicePositionRequest,
+  WorkbenchLanguageServiceProjectDiagnosticsRequest,
+  WorkbenchLanguageServiceProjectDiagnosticsResult,
   WorkbenchLanguageServiceRange,
   WorkbenchLanguageServiceReferencesResult,
   WorkbenchLanguageServiceRenameRequest,
@@ -112,6 +114,7 @@ import {
   clearTypeScriptProjectCache,
   describeTypeScriptProjects,
   refreshTypeScriptProjectFilesFromDisk,
+  resolveTypeScriptProjectKey,
   safeReadFile,
   synchronizeTypeScriptProjectFile,
   trimTypeScriptProjects,
@@ -291,6 +294,28 @@ function mapCssCompletionKind(kind: number | undefined): string {
     default:
       return 'property'
   }
+}
+
+/** 一次整项目检查最多照顾这么多个 tsconfig 项目（当前文件的项目在前）；多了会把语言服务的项目缓存挤来挤去。 */
+const MaxProjectDiagnosticsProjects = 2
+/** 整项目检查一批占用 worker 的时间上限（至少查完一个文件）。 */
+const ProjectDiagnosticsBatchBudgetMs = 150
+
+/** 接续位置：第几个项目、上一批查到的最后一个文件（项目内相对路径）。认不出的从头查。 */
+function parseProjectDiagnosticsCursor(cursor: string | undefined): { project: number; after: string } {
+  if (!cursor) return { project: 0, after: '' }
+  try {
+    const value = JSON.parse(cursor) as unknown
+    if (
+      Array.isArray(value)
+      && Number.isSafeInteger(value[0])
+      && (value[0] as number) >= 0
+      && typeof value[1] === 'string'
+    ) return { project: value[0] as number, after: value[1] }
+  } catch {
+    // 认不出的接续位置按从头查处理。
+  }
+  return { project: 0, after: '' }
 }
 
 interface LspCompletionPosition {
@@ -629,6 +654,92 @@ class WorkbenchLanguageServices {
         item: request.item,
       }),
     }
+  }
+
+  /**
+   * 整个 TypeScript 项目的问题，像 `tsc --noEmit -p` 那样：项目里每个源文件的语法与类型错误（不含建议、ESLint）。
+   * 按打开的文件找到它们所在的 tsconfig 项目（最多两个），一批只查一小段时间，返回接续位置；诊断之类的后台请求
+   * 在 worker 里排在交互请求后面，一批查完就轮到补全、悬浮先走。
+   */
+  public async getProjectDiagnostics(
+    request: WorkbenchLanguageServiceProjectDiagnosticsRequest
+  ): Promise<WorkbenchLanguageServiceProjectDiagnosticsResult> {
+    const projectRoot = await this.pathResolver.resolveProjectRoot(request.projectRoot)
+    const projects: Array<{ anchorPath: string; key: string }> = []
+    for (const anchorPath of request.anchorPaths) {
+      if (projects.length >= MaxProjectDiagnosticsProjects) break
+      const absolutePath = resolve(projectRoot, anchorPath)
+      if (
+        !this.pathResolver.isAllowedProjectPath(projectRoot, absolutePath)
+        || resolveBuiltinWorkbenchLanguageService(getWorkbenchPathExtension(anchorPath))?.runtime
+          !== 'typescript-language-service'
+      ) continue
+      const key = resolveTypeScriptProjectKey(projectRoot, absolutePath)
+      if (!projects.some((project) => project.key === key)) projects.push({ anchorPath, key })
+    }
+
+    const cursor = parseProjectDiagnosticsCursor(request.cursor)
+    const deadline = performance.now() + ProjectDiagnosticsBatchBudgetMs
+    const checkedPaths: string[] = []
+    const diagnostics: WorkbenchLanguageServiceDiagnostic[] = []
+    for (let index = cursor.project; index < projects.length; index += 1) {
+      const anchorPath = projects[index]!.anchorPath
+      const snapshot = await this.createTypeScriptProjectSnapshot({
+        projectRoot,
+        path: anchorPath,
+        content: request.openFiles?.find((file) => file.path === anchorPath)?.content,
+        openFiles: request.openFiles,
+      })
+      const program = snapshot.service.getProgram()
+      if (!program) continue
+
+      const files = this.projectDiagnosticsFiles(program, snapshot.projectRoot)
+      const start = index === cursor.project
+        ? files.findIndex((file) => file.path > cursor.after)
+        : 0
+      if (start < 0) continue
+      for (let fileIndex = start; fileIndex < files.length; fileIndex += 1) {
+        if (checkedPaths.length > 0 && performance.now() > deadline)
+          return {
+            projectRoot,
+            checkedPaths,
+            diagnostics,
+            cursor: JSON.stringify([index, files[fileIndex - 1]!.path]),
+          }
+        const file = files[fileIndex]!
+        checkedPaths.push(file.path)
+        for (const diagnostic of [
+          ...snapshot.service.getSyntacticDiagnostics(file.fileName),
+          ...snapshot.service.getSemanticDiagnostics(file.fileName),
+        ]) {
+          const mapped = this.diagnosticFromTypeScript(snapshot, diagnostic)
+          if (mapped?.path === file.path) diagnostics.push(mapped)
+        }
+      }
+    }
+    return { projectRoot, checkedPaths, diagnostics, cursor: null }
+  }
+
+  /** 项目自己的源文件（按项目内相对路径排序）：不含默认库、依赖包，跳过库检查时也不含声明文件。 */
+  private projectDiagnosticsFiles(
+    program: ts.Program,
+    projectRoot: string
+  ): Array<{ fileName: string; path: string }> {
+    const skipDeclarations = program.getCompilerOptions().skipLibCheck !== false
+    return program
+      .getSourceFiles()
+      .filter((sourceFile) =>
+        !program.isSourceFileDefaultLibrary(sourceFile)
+        && !program.isSourceFileFromExternalLibrary(sourceFile)
+        && !(skipDeclarations && sourceFile.isDeclarationFile)
+        && TypeScriptExtensions.has(this.extensionWithDot(sourceFile.fileName))
+        && !/[\\/]node_modules[\\/]/u.test(sourceFile.fileName)
+      )
+      .flatMap((sourceFile) => {
+        const path = this.relativePathFor(projectRoot, sourceFile.fileName)
+        return path ? [{ fileName: sourceFile.fileName, path }] : []
+      })
+      .sort((left, right) => (left.path < right.path ? -1 : left.path > right.path ? 1 : 0))
   }
 
   public async getDiagnostics(

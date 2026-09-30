@@ -11,6 +11,7 @@ import type {
   WorkbenchLanguageServiceExtensionRequest,
   WorkbenchLanguageServiceInlayHintsRequest,
   WorkbenchLanguageServicePositionRequest,
+  WorkbenchLanguageServiceProjectDiagnosticsRequest,
   WorkbenchLanguageServiceRenameRequest,
   WorkbenchLanguageServiceRequest,
 } from '@shared/contracts'
@@ -245,6 +246,11 @@ export class WorkbenchLanguageServiceWorkerClient {
 
   public getDiagnostics(request: WorkbenchLanguageServiceRequest) {
     return this.call('getDiagnostics', request)
+  }
+
+  /** 整项目检查的一批（见 LanguageServices.getProjectDiagnostics）。 */
+  public getProjectDiagnostics(request: WorkbenchLanguageServiceProjectDiagnosticsRequest) {
+    return this.call('getProjectDiagnostics', request)
   }
 
   public getRename(request: WorkbenchLanguageServiceRenameRequest) {

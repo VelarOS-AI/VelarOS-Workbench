@@ -604,6 +604,11 @@ function resolveProjectConfig(
   return config
 }
 
+/** 这个文件归哪个 TypeScript 项目（tsconfig，或没有配置时推断的目录）；同一项目的文件得到同一个键。 */
+export function resolveTypeScriptProjectKey(projectRoot: string, requestAbsolutePath: string): string {
+  return getProjectCacheKey(resolveProjectConfig(projectRoot, requestAbsolutePath))
+}
+
 function forgetProjectConfigs(projectRoot?: string): void {
   if (!projectRoot) {
     projectConfigMemo.clear()

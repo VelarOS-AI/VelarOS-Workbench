@@ -17,6 +17,8 @@ import type {
   WorkbenchLanguageServiceInlayHintsRequest,
   WorkbenchLanguageServiceInlayHintsResult,
   WorkbenchLanguageServicePositionRequest,
+  WorkbenchLanguageServiceProjectDiagnosticsRequest,
+  WorkbenchLanguageServiceProjectDiagnosticsResult,
   WorkbenchLanguageServiceReferencesResult,
   WorkbenchLanguageServiceRenameRequest,
   WorkbenchLanguageServiceRenameResult,
@@ -81,6 +83,10 @@ export interface WorkbenchLanguageServiceWorkerOperationMap {
     request: WorkbenchLanguageServiceRequest
     result: WorkbenchLanguageServiceDiagnosticsResult
   }
+  getProjectDiagnostics: {
+    request: WorkbenchLanguageServiceProjectDiagnosticsRequest
+    result: WorkbenchLanguageServiceProjectDiagnosticsResult
+  }
   getRename: {
     request: WorkbenchLanguageServiceRenameRequest
     result: WorkbenchLanguageServiceRenameResult
@@ -133,6 +139,7 @@ export type WorkbenchLanguageServiceWorkerPriority =
 
 const BackgroundLanguageServiceOperations = new Set<WorkbenchLanguageServiceWorkerOperation>([
   'getDiagnostics',
+  'getProjectDiagnostics',
   'getDocumentSymbols',
   'getDocumentHighlights',
   'getInlayHints',

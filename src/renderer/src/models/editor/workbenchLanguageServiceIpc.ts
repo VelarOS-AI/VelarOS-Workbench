@@ -13,6 +13,9 @@ type WorkbenchLanguageServiceDefinitionPayload = Parameters<
 type WorkbenchLanguageServiceDiagnosticsPayload = Parameters<
   WorkbenchProjectKernelPort['getWorkbenchLanguageServiceDiagnostics']
 >[0]
+type WorkbenchLanguageServiceProjectDiagnosticsPayload = Parameters<
+  WorkbenchProjectKernelPort['getWorkbenchLanguageServiceProjectDiagnostics']
+>[0]
 type WorkbenchLanguageServiceRenamePayload = Parameters<
   WorkbenchProjectKernelPort['getWorkbenchLanguageServiceRename']
 >[0]
@@ -81,6 +84,13 @@ export function getWorkbenchLanguageServiceDiagnostics(
   runtime: WorkbenchHostRuntime = workbenchHost
 ): ReturnType<WorkbenchProjectKernelPort['getWorkbenchLanguageServiceDiagnostics']> {
   return runtime.kernel.project.getWorkbenchLanguageServiceDiagnostics(payload)
+}
+
+export function getWorkbenchLanguageServiceProjectDiagnostics(
+  payload: WorkbenchLanguageServiceProjectDiagnosticsPayload,
+  runtime: WorkbenchHostRuntime = workbenchHost
+): ReturnType<WorkbenchProjectKernelPort['getWorkbenchLanguageServiceProjectDiagnostics']> {
+  return runtime.kernel.project.getWorkbenchLanguageServiceProjectDiagnostics(payload)
 }
 
 export function getWorkbenchLanguageServiceRename(
