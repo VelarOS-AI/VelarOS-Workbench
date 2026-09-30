@@ -80,6 +80,7 @@
     "@lezer/highlight": "^1.2.3",
     "@lezer/lr": "^1.4.10",
     "@phosphor-icons/react": "^2.1.10",
+    "@replit/codemirror-vim": "^6.4.0",
     "@tailwindcss/vite": "^4.0.0",
     "@types/node": "^22.19.17",
     "@types/react": "^19.0.0",
