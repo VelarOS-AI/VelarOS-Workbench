@@ -213,6 +213,23 @@ export function expandWorkbenchTextSearchReplacement(
   })
 }
 
+/**
+ * 结果里预览的替换文字：只看得到匹配本身（matchedText），正则按它重新匹配一次取捕获组；前后文决定的写法
+ * （环视）对不上时退回整个匹配，`$1` 之类原样显示。真正替换时按全文算（见 replaceWorkbenchTextSearchMatches）。
+ */
+export function previewWorkbenchTextSearchReplacement(
+  matcher: WorkbenchTextSearchMatcher,
+  replacement: string,
+  matchedText: string
+): string {
+  if (!matcher.query.regex) return replacement
+
+  matcher.pattern.lastIndex = 0
+  const match = matcher.pattern.exec(matchedText)
+  const groups = match && match.index === 0 && match[0].length === matchedText.length ? match : [matchedText]
+  return expandWorkbenchTextSearchReplacement(matcher.query, replacement, groups)
+}
+
 /** 换掉正文里的匹配：给了 select 就只换它挑中的，不给就全换。 */
 export function replaceWorkbenchTextSearchMatches(
   content: string,

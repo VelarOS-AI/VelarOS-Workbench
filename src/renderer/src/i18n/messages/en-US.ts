@@ -408,6 +408,7 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     projectSearchFileCountOne: '{count} file',
     projectSearchFileCountOther: '{count} files',
     projectSearchSummary: '{matches} in {files}',
+    projectSearchNoContentMatches: 'No matches in file contents',
     projectSearchTruncated: 'Only the first {limit} matches are listed. Refine the search to see the rest.',
     projectSearchSkippedLarge: 'Skipped because larger than 1 MB: {files}.',
     projectSearchMoreMatches: '…and {matches} not listed',

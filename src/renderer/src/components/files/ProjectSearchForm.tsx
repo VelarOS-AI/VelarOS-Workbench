@@ -61,7 +61,7 @@ export function ProjectSearchForm({
   const queryInputRef = useRef<HTMLInputElement>(null)
   const replaceInputRef = useRef<HTMLInputElement>(null)
   const hasFilters = !!search.include.trim() || !!search.exclude.trim()
-  const canReplaceAll = search.files.length > 0 && !search.isSearching && !search.isReplacing
+  const canReplaceAll = search.files.length > 0 && search.canReplace
   const { focusPending, acknowledgeFocus } = search
 
   useEffect(() => {
@@ -222,7 +222,7 @@ export function ProjectSearchSummary({ search }: { search: WorkbenchProjectSearc
           matches: formatWorkbenchProjectSearchCount(t, 'match', summary.matchCount),
           files: formatWorkbenchProjectSearchCount(t, 'file', summary.fileCount),
         })
-      : t('workbench.noSearchResults')
+      : t('workbench.projectSearchNoContentMatches')
 
   return (
     <div className={styles.projectSearchSummary}>
@@ -234,7 +234,6 @@ export function ProjectSearchSummary({ search }: { search: WorkbenchProjectSearc
           variant="ghost"
           size="icon-sm"
           label={t('workbench.projectSearchRefresh')}
-          title={t('workbench.projectSearchRefresh')}
           onClick={search.refresh}
         >
           <ArrowsClockwiseIcon size={13} />
@@ -243,7 +242,6 @@ export function ProjectSearchSummary({ search }: { search: WorkbenchProjectSearc
           variant="ghost"
           size="icon-sm"
           label={allCollapsed ? t('workbench.projectSearchExpandAll') : t('workbench.projectSearchCollapseAll')}
-          title={allCollapsed ? t('workbench.projectSearchExpandAll') : t('workbench.projectSearchCollapseAll')}
           disabled={search.files.length === 0}
           onClick={() => search.setAllFilesCollapsed(!allCollapsed)}
         >
@@ -285,7 +283,6 @@ function OptionToggle({
       variant="ghost"
       size="icon-sm"
       label={label}
-      title={label}
       aria-pressed={expanded === undefined ? active : undefined}
       aria-expanded={expanded}
       data-active={active || undefined}

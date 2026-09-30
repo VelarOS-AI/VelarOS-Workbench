@@ -44,9 +44,13 @@ interface FileSearchResultsProps {
   activeRowKey: Nullable<string>
   gitDecorations: WorkbenchGitDecorationMap
   selectedEntryPath: Nullable<string>
-  /** 替换行展开着时是要换成的文字：行尾给出替换按钮，匹配预览替换后的样子。没展开为 null。 */
-  replacement: Nullable<string>
-  isReplacing: boolean
+  /**
+   * 替换行展开着时给出：一处匹配（传入匹配本身的文字）要换成什么，行里据此预览，行尾给出替换按钮。
+   * 没展开为 null。
+   */
+  previewReplacement: Nullable<(matchedText: string) => string>
+  /** 替换按钮点不了：结果还在搜、条件变了还没重搜完，或者正在替换。 */
+  replaceDisabled: boolean
   onActivateRow: (key: string) => void
   onToggleEntries: () => void
   onToggleFile: (path: string) => void
@@ -68,8 +72,8 @@ export function FileSearchResults({
   activeRowKey,
   gitDecorations,
   selectedEntryPath,
-  replacement,
-  isReplacing,
+  previewReplacement,
+  replaceDisabled,
   onActivateRow,
   onToggleEntries,
   onToggleFile,
@@ -123,10 +127,10 @@ export function FileSearchResults({
             <Text truncate tone="caption" className={styles.projectSearchDirectory}>
               {row.file.directory}
             </Text>
-            {replacement !== null && (
+            {previewReplacement && (
               <RowAction
                 label={t('workbench.projectSearchReplaceFile')}
-                disabled={isReplacing}
+                disabled={replaceDisabled}
                 onClick={() => onReplaceFile(row.file)}
               />
             )}
@@ -141,13 +145,19 @@ export function FileSearchResults({
               path={row.file.path}
               text={row.match.excerpt}
               match={{ start: row.match.excerptMatchStart, end: row.match.excerptMatchEnd }}
-              replacement={replacement ?? undefined}
+              replacement={
+                previewReplacement
+                  ? previewReplacement(
+                      row.match.excerpt.slice(row.match.excerptMatchStart, row.match.excerptMatchEnd)
+                    )
+                  : undefined
+              }
               className={styles.projectSearchExcerpt}
             />
-            {replacement !== null && (
+            {previewReplacement && (
               <RowAction
                 label={t('workbench.findReplace')}
-                disabled={isReplacing}
+                disabled={replaceDisabled}
                 onClick={() => onReplaceMatch(row.file, row.match)}
               />
             )}
@@ -209,6 +219,7 @@ export function FileSearchResults({
               } as CSSProperties
             }
             data-kind={row.kind}
+            data-search-row
             data-git-tone={path ? gitDecorations.get(path)?.tone : undefined}
             title={row.kind === 'match' ? `${row.file.path}:${row.match.line}:${row.match.column}` : undefined}
             onClick={() => handleClick(row)}
@@ -262,9 +273,8 @@ function RowAction({
   return (
     <IconButton
       variant="ghost"
-      size="icon-sm"
+      size={20}
       label={label}
-      title={label}
       disabled={disabled}
       className={styles.projectSearchRowAction}
       onClick={(event) => {

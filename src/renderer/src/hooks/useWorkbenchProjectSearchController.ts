@@ -3,8 +3,9 @@
  *
  * - 查找词与按文件名找共用一个输入框（useWorkbenchSearchController 管着）；这里在它上面搜内容。
  * - 输入停一小会儿再搜；新的搜索开始时取消还没搜完的旧搜索；结果边搜边显示。
- * - 编辑器里开着的文件以编辑器里的正文为准（见 workbenchProjectSearchModel），正文一改结果跟着变；开着的文件
- *   关掉了，就按磁盘重新搜它。
+ * - 每份结果记着搜它的条件（查找词、开关、范围）：编辑器里开着的文件按它在正文上算（正文一改结果跟着变），
+ *   替换也按它——换的就是列出来的那些。改了条件、新结果还没出来之前，替换先不让点。
+ * - 开着的文件以编辑器里的正文为准（见 workbenchProjectSearchModel）；开着的文件关掉了，就按磁盘重新搜它。
  * - 替换一处、一个文件或全部（全部先确认）：开着的文件在编辑器里换，能撤销、不写盘；其余的交给 main 写盘，
  *   写完刷新那几个文件的结果（全部替换后整个重搜）。
  */
@@ -27,12 +28,14 @@ import type {
   WorkbenchContentSearchFileResult,
   WorkbenchContentSearchMatchResult,
   WorkbenchSearchContentBatch,
+  WorkbenchSearchContentRequest,
 } from '@shared/contracts'
 import { compileWorkbenchSearchPathFilter } from '@shared/workbenchSearchGlob'
 import {
   compileWorkbenchTextSearch,
   DefaultWorkbenchTextSearchOptions,
   escapeWorkbenchTextSearchRegExp,
+  previewWorkbenchTextSearchReplacement,
   replaceWorkbenchTextSearchMatches,
   WorkbenchContentSearchDefaultLimit,
   type WorkbenchTextSearchMatcher,
@@ -70,9 +73,22 @@ interface UseWorkbenchProjectSearchControllerOptions {
   onOpenMatch: (path: string, match: WorkbenchContentSearchMatchResult) => void
 }
 
+/** 一次搜索的条件：结果按它算，替换也按它。 */
+interface ProjectSearchSpec {
+  /** 条件的指纹：输入框里的条件变了就对不上。 */
+  key: string
+  projectRoot: string
+  query: string
+  options: WorkbenchTextSearchOptions
+  include: string
+  exclude: string
+  matcher: WorkbenchTextSearchMatcher
+}
+
 interface ProjectSearchResultsState {
-  /** 这份结果属于哪一次搜索；搜索之间的推送、刷新按它认。 */
+  /** 这份结果属于哪一次搜索；推送、刷新按它认。 */
   generation: number
+  spec: Nullable<ProjectSearchSpec>
   /** 还在推送结果的那次搜索。 */
   searchId: Nullable<string>
   diskFiles: ReadonlyMap<string, WorkbenchContentSearchFileResult>
@@ -89,14 +105,17 @@ interface EditorResultCacheEntry {
   result: WorkbenchContentSearchFileResult
 }
 
-const EmptyResults: ProjectSearchResultsState = {
-  generation: 0,
-  searchId: null,
-  diskFiles: new Map(),
-  scopePaths: new Set(),
-  status: 'idle',
-  truncated: false,
-  skippedLargeFileCount: 0,
+function emptyResults(generation: number): ProjectSearchResultsState {
+  return {
+    generation,
+    spec: null,
+    searchId: null,
+    diskFiles: new Map(),
+    scopePaths: new Set(),
+    status: 'idle',
+    truncated: false,
+    skippedLargeFileCount: 0,
+  }
 }
 
 /** 开着的文件里能在编辑器正文上搜的：完整的文本（截断的大文件与图片交给磁盘搜索）。 */
@@ -104,8 +123,15 @@ function isSearchableOpenTab(tab: WorkbenchOpenEditorTab): boolean {
   return !tab.file.imagePreview && !tab.file.truncated
 }
 
-function createSearchId(): string {
-  return globalThis.crypto.randomUUID()
+function specRequest(spec: ProjectSearchSpec): WorkbenchSearchContentRequest {
+  return {
+    projectRoot: spec.projectRoot,
+    query: spec.query,
+    ...spec.options,
+    include: spec.include,
+    exclude: spec.exclude,
+    limit: WorkbenchProjectSearchLimit,
+  }
 }
 
 export function useWorkbenchProjectSearchController(options: UseWorkbenchProjectSearchControllerOptions) {
@@ -120,11 +146,10 @@ export function useWorkbenchProjectSearchController(options: UseWorkbenchProject
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [include, setInclude] = useState('')
   const [exclude, setExclude] = useState('')
-  const [results, setResults] = useState<ProjectSearchResultsState>(EmptyResults)
+  const [results, setResults] = useState<ProjectSearchResultsState>(() => emptyResults(0))
   const [collapsedPaths, setCollapsedPaths] = useState<ReadonlySet<string>>(() => new Set())
   const [entriesCollapsed, setEntriesCollapsed] = useState(false)
   const [isReplacing, setIsReplacing] = useState(false)
-  const activeProjectRef = useLatest(options.activeProject)
   const openTabsRef = useLatest(options.openTabs)
   const resultsRef = useLatest(results)
   const generationRef = useRef(0)
@@ -135,28 +160,57 @@ export function useWorkbenchProjectSearchController(options: UseWorkbenchProject
     () => compileWorkbenchTextSearch({ query: options.query, ...searchOptions }),
     [options.query, searchOptions]
   )
-  const matcher = compiled.status === 'ready' && options.query.trim() ? compiled.matcher : null
   const regexError = compiled.status === 'invalid' ? compiled.message : null
   const pathFilter = useMemo(() => compileWorkbenchSearchPathFilter(include, exclude), [exclude, include])
   const projectRoot = options.activeProject?.rootPath ?? null
-  /** 这些一变就重搜。 */
-  const searchKey = matcher && projectRoot
-    ? JSON.stringify([projectRoot, options.query, searchOptions, include, exclude])
-    : null
-
-  /** 按当前的查找词、开关与范围发一次搜索请求。 */
-  const buildRequest = () => ({
-    projectRoot: activeProjectRef.current?.rootPath ?? '',
-    query: options.query,
-    ...searchOptions,
-    include,
-    exclude,
-    limit: WorkbenchProjectSearchLimit,
-  })
+  /** 输入框里的条件；查找词是空白、正则写错或没有项目时为 null（不搜）。 */
+  const spec = useMemo((): Nullable<ProjectSearchSpec> => {
+    if (compiled.status !== 'ready' || !options.query.trim() || !projectRoot) return null
+    return {
+      key: JSON.stringify([projectRoot, options.query, searchOptions, include, exclude]),
+      projectRoot,
+      query: options.query,
+      options: searchOptions,
+      include,
+      exclude,
+      matcher: compiled.matcher,
+    }
+  }, [compiled, exclude, include, options.query, projectRoot, searchOptions])
+  const specKey = spec?.key ?? null
+  /** 列着的结果就是按输入框里的条件搜的，而且已经搜完：这时才能替换。 */
+  const resultsCurrent = !!spec && results.spec?.key === spec.key && results.status === 'done'
 
   const cancelRunningSearch = useMemoizedFn((): void => {
     const searchId = resultsRef.current.searchId
     if (searchId) void workbenchHost.kernel.project.cancelWorkbenchContentSearch({ searchId })
+  })
+
+  /** 按磁盘重搜几个文件（替换之后、开着的文件关掉之后），结果并回当前这份结果。 */
+  const refreshPaths = useMemoizedFn(async (paths: readonly string[]): Promise<void> => {
+    const { generation, spec: resultsSpec } = resultsRef.current
+    if (!resultsSpec || paths.length === 0) return
+
+    try {
+      const result = Result.unwrap(
+        await workbenchHost.kernel.project.searchWorkbenchContent({
+          ...specRequest(resultsSpec),
+          paths: [...paths],
+        })
+      )
+      setResults((current) => {
+        if (current.generation !== generation) return current
+        const diskFiles = new Map(current.diskFiles)
+        for (const path of paths) diskFiles.delete(path)
+        for (const file of result.files) diskFiles.set(file.path, file)
+        return { ...current, diskFiles, scopePaths: new Set([...current.scopePaths, ...paths]) }
+      })
+    } catch (error) {
+      if (resultsRef.current.generation !== generation) return
+      messageLatest.current.error({
+        title: tLatest.current('workbench.searchFailed'),
+        description: AppError.from(error).message,
+      })
+    }
   })
 
   /** 收一批结果：搜到的文件与确认在范围里的开着的文件。已经关掉的开着的文件按磁盘重搜。 */
@@ -165,10 +219,12 @@ export function useWorkbenchProjectSearchController(options: UseWorkbenchProject
     setResults((current) => {
       if (current.generation !== generation) return current
       const diskFiles = new Map(current.diskFiles)
-      for (const file of batch.files) diskFiles.set(file.path, file)
       const scopePaths = new Set(current.scopePaths)
+      for (const file of batch.files) {
+        diskFiles.set(file.path, file)
+        scopePaths.add(file.path)
+      }
       for (const path of batch.openPathsInScope) scopePaths.add(path)
-      for (const file of batch.files) scopePaths.add(file.path)
       return { ...current, diskFiles, scopePaths }
     })
 
@@ -177,23 +233,31 @@ export function useWorkbenchProjectSearchController(options: UseWorkbenchProject
     if (closed.length > 0) void refreshPaths(closed)
   })
 
+  /** 按输入框里的条件重新搜。 */
   const runSearch = useMemoizedFn(async (): Promise<void> => {
     cancelRunningSearch()
     generationRef.current += 1
     const generation = generationRef.current
-    if (!matcher || !activeProjectRef.current) {
-      setResults({ ...EmptyResults, generation })
+    if (!spec) {
+      setResults(emptyResults(generation))
       return
     }
 
-    const searchId = createSearchId()
-    setResults({ ...EmptyResults, generation, searchId, status: 'searching' })
+    const searchId = crypto.randomUUID()
+    const started: ProjectSearchResultsState = {
+      ...emptyResults(generation),
+      spec,
+      searchId,
+      status: 'searching',
+    }
+    // 推送可能在下一次渲染之前就到：先让 ref 认出这次搜索。
+    resultsRef.current = started
+    setResults(started)
     setCollapsedPaths(new Set())
-    resultsRef.current = { ...EmptyResults, generation, searchId, status: 'searching' }
     try {
       const result = Result.unwrap(
         await workbenchHost.kernel.project.searchWorkbenchContent({
-          ...buildRequest(),
+          ...specRequest(spec),
           openPaths: openTabsRef.current.filter(isSearchableOpenTab).map((tab) => tab.path),
           searchId,
         })
@@ -222,31 +286,6 @@ export function useWorkbenchProjectSearchController(options: UseWorkbenchProject
     }
   })
 
-  /** 按磁盘重搜几个文件（替换之后、开着的文件关掉之后），结果并回当前这次搜索。 */
-  const refreshPaths = useMemoizedFn(async (paths: readonly string[]): Promise<void> => {
-    const generation = resultsRef.current.generation
-    if (!matcher || !activeProjectRef.current || paths.length === 0) return
-
-    try {
-      const result = Result.unwrap(
-        await workbenchHost.kernel.project.searchWorkbenchContent({ ...buildRequest(), paths: [...paths] })
-      )
-      setResults((current) => {
-        if (current.generation !== generation) return current
-        const diskFiles = new Map(current.diskFiles)
-        for (const path of paths) diskFiles.delete(path)
-        for (const file of result.files) diskFiles.set(file.path, file)
-        return { ...current, diskFiles, scopePaths: new Set([...current.scopePaths, ...paths]) }
-      })
-    } catch (error) {
-      if (resultsRef.current.generation !== generation) return
-      messageLatest.current.error({
-        title: tLatest.current('workbench.searchFailed'),
-        description: AppError.from(error).message,
-      })
-    }
-  })
-
   useEffect(
     () =>
       workbenchHost.kernel.project.onWorkbenchContentSearchProgress((event) => {
@@ -256,17 +295,18 @@ export function useWorkbenchProjectSearchController(options: UseWorkbenchProject
     [applyBatch, resultsRef]
   )
 
+  // 条件一变就重搜（停一小会儿，打字时不每个键都搜）；条件没了（清空、正则写错）就收起结果。
   useEffect(() => {
-    if (!searchKey) {
+    if (!specKey) {
       cancelRunningSearch()
       generationRef.current += 1
-      setResults({ ...EmptyResults, generation: generationRef.current })
+      setResults(emptyResults(generationRef.current))
       return undefined
     }
 
     const timer = setTimeout(() => void runSearch(), SearchDebounceMs)
     return () => clearTimeout(timer)
-  }, [cancelRunningSearch, runSearch, searchKey])
+  }, [cancelRunningSearch, runSearch, specKey])
 
   useEffect(() => () => cancelRunningSearch(), [cancelRunningSearch])
 
@@ -281,11 +321,12 @@ export function useWorkbenchProjectSearchController(options: UseWorkbenchProject
     if (closed.length > 0) void refreshPaths(closed)
   }, [options.openTabs, refreshPaths, resultsRef])
 
-  // 开着的、在范围里的文件按编辑器里的正文搜；正文没变的沿用上次的结果。
+  // 开着的、在范围里的文件按这份结果的条件在编辑器正文上搜；正文没变的沿用上次的结果。
+  const resultsMatcher = results.spec?.matcher ?? null
   const editorFiles = useMemo(() => {
     const files = new Map<string, WorkbenchContentSearchFileResult>()
     const cache = editorResultCacheRef.current
-    if (!matcher) {
+    if (!resultsMatcher) {
       cache.clear()
       return files
     }
@@ -294,22 +335,22 @@ export function useWorkbenchProjectSearchController(options: UseWorkbenchProject
       if (!isSearchableOpenTab(tab) || !results.scopePaths.has(tab.path)) continue
       const cached = cache.get(tab.path)
       const result =
-        cached && cached.content === tab.content && cached.matcher === matcher
+        cached && cached.content === tab.content && cached.matcher === resultsMatcher
           ? cached.result
           : searchWorkbenchEditorText({
               path: tab.path,
               content: tab.content,
               modifiedAt: tab.file.modifiedAt,
               size: tab.file.size,
-              matcher,
+              matcher: resultsMatcher,
               limit: WorkbenchProjectSearchLimit,
             })
-      cache.set(tab.path, { content: tab.content, matcher, result })
+      cache.set(tab.path, { content: tab.content, matcher: resultsMatcher, result })
       files.set(tab.path, result)
     }
     for (const path of [...cache.keys()]) if (!files.has(path)) cache.delete(path)
     return files
-  }, [matcher, options.openTabs, results.scopePaths])
+  }, [options.openTabs, results.scopePaths, resultsMatcher])
 
   const files = useMemo(
     () => mergeWorkbenchProjectSearchFiles(results.diskFiles, editorFiles),
@@ -322,12 +363,13 @@ export function useWorkbenchProjectSearchController(options: UseWorkbenchProject
       targets: readonly WorkbenchProjectSearchReplaceTarget[],
       refresh: 'files' | 'all'
     ): Promise<void> => {
-      const project = activeProjectRef.current
-      if (!project || !matcher || targets.length === 0 || isReplacingRef.current) return
+      const resultsSpec = resultsRef.current.spec
+      if (!resultsSpec || !resultsCurrent || targets.length === 0 || isReplacingRef.current) return
 
       isReplacingRef.current = true
       setIsReplacing(true)
       const text = replacement
+      const { matcher } = resultsSpec
       const replacedCounts = new Map<string, number>()
       const failures: string[] = []
       try {
@@ -360,9 +402,9 @@ export function useWorkbenchProjectSearchController(options: UseWorkbenchProject
         if (diskTargets.length > 0) {
           const result = Result.unwrap(
             await workbenchHost.kernel.project.replaceWorkbenchContent({
-              projectRoot: project.rootPath,
-              query: options.query,
-              ...searchOptions,
+              projectRoot: resultsSpec.projectRoot,
+              query: resultsSpec.query,
+              ...resultsSpec.options,
               replacement: text,
               files: diskTargets.map((target) => ({
                 path: target.file.path,
@@ -438,8 +480,8 @@ export function useWorkbenchProjectSearchController(options: UseWorkbenchProject
       })
   }
 
-  const replaceAll = useMemoizedFn(async (): Promise<void> => {
-    if (files.length === 0 || results.status !== 'done') return
+  const confirmReplaceAll = useMemoizedFn(async (): Promise<void> => {
+    if (files.length === 0 || !resultsCurrent) return
 
     const t = tLatest.current
     const lines = [
@@ -449,7 +491,8 @@ export function useWorkbenchProjectSearchController(options: UseWorkbenchProject
         replacement,
       }),
     ]
-    if (files.some((file) => file.source === 'editor')) lines.push(t('workbench.projectSearchReplaceAllOpenFiles'))
+    if (files.some((file) => file.source === 'editor'))
+      lines.push(t('workbench.projectSearchReplaceAllOpenFiles'))
     if (results.truncated) lines.push(t('workbench.projectSearchReplaceAllTruncated'))
     if (!window.confirm(lines.join('\n\n'))) return
 
@@ -500,6 +543,12 @@ export function useWorkbenchProjectSearchController(options: UseWorkbenchProject
       (file: WorkbenchProjectSearchFile, match: WorkbenchContentSearchMatchResult): void =>
         options.onOpenMatch(file.path, match)
     ),
+    /** 结果行里预览的替换文字（正则按匹配本身算捕获组）。 */
+    previewReplacement: useMemoizedFn((matchedText: string): string =>
+      resultsMatcher
+        ? previewWorkbenchTextSearchReplacement(resultsMatcher, replacement, matchedText)
+        : replacement
+    ),
     replaceMatch: useMemoizedFn(
       (file: WorkbenchProjectSearchFile, match: WorkbenchContentSearchMatchResult): void =>
         void replaceTargets([{ file, matches: [match] }], 'files')
@@ -507,7 +556,7 @@ export function useWorkbenchProjectSearchController(options: UseWorkbenchProject
     replaceFile: useMemoizedFn(
       (file: WorkbenchProjectSearchFile): void => void replaceTargets([{ file }], 'files')
     ),
-    replaceAll: useMemoizedFn((): void => void replaceAll()),
+    replaceAll: useMemoizedFn((): void => void confirmReplaceAll()),
   }
 
   return {
@@ -532,14 +581,18 @@ export function useWorkbenchProjectSearchController(options: UseWorkbenchProject
     pathFilter,
     files,
     summary,
-    isSearching: results.status === 'searching' || (!!searchKey && results.status === 'idle'),
+    /** 第几份结果：每次重新搜加一（换了一份结果，列表回到顶上）。 */
+    resultsGeneration: results.generation,
+    /** 正在搜，或者条件变了、新结果还没出来。 */
+    isSearching: !!spec && !resultsCurrent,
     truncated: results.truncated,
     skippedLargeFileCount: results.skippedLargeFileCount,
     collapsedPaths,
     toggleFileCollapsed,
     setAllFilesCollapsed,
     entriesCollapsed,
-    isReplacing,
+    /** 能不能替换：结果就是输入框里的条件搜出来的、已经搜完，也没有替换在进行。 */
+    canReplace: resultsCurrent && !isReplacing,
   }
 }
 

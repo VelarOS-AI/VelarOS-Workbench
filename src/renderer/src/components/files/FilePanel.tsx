@@ -239,6 +239,12 @@ export function FilePanel({
   const activeSearchRow =
     openableSearchRows.find((row) => row.key === activeSearchRowKey) ?? openableSearchRows[0]
 
+  // 换了一份搜索结果：列表回到顶上，挑中的行回到第一行。
+  useEffect(() => {
+    if (treeScrollRef.current) treeScrollRef.current.scrollTop = 0
+    setActiveSearchRowKey(null)
+  }, [projectSearch.resultsGeneration])
+
   /**
    * 右键或快捷键作用的一组项：右键点在多选里（或用快捷键）是整组，否则是右键的那一项；不含项目根，已经在选中的
    * 目录里面的子项去掉（复制目录本来就带着它们）。
@@ -358,7 +364,11 @@ export function FilePanel({
   }
 
   function openRootContextMenu(event: MouseEvent): void {
-    if (event.target instanceof HTMLElement && event.target.closest('button, [data-tree-path]'))
+    // 文件树与搜索结果里的行各有各的菜单（或者没有），不弹工程根目录的菜单。
+    if (
+      event.target instanceof HTMLElement
+      && event.target.closest('button, [data-tree-path], [data-search-row]')
+    )
       return
 
     event.preventDefault()
@@ -471,8 +481,8 @@ export function FilePanel({
               activeRowKey={activeSearchRow?.key ?? null}
               gitDecorations={gitDecorations}
               selectedEntryPath={selectedEntryPath}
-              replacement={projectSearch.replaceOpen ? projectSearch.replacement : null}
-              isReplacing={projectSearch.isReplacing}
+              previewReplacement={projectSearch.replaceOpen ? projectSearch.previewReplacement : null}
+              replaceDisabled={!projectSearch.canReplace}
               onActivateRow={setActiveSearchRowKey}
               onToggleEntries={projectSearch.toggleEntriesCollapsed}
               onToggleFile={projectSearch.toggleFileCollapsed}

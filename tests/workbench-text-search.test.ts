@@ -14,6 +14,7 @@ import {
   compileWorkbenchTextSearch,
   DefaultWorkbenchTextSearchOptions,
   expandWorkbenchTextSearchReplacement,
+  previewWorkbenchTextSearchReplacement,
   replaceWorkbenchTextSearchMatches,
   resolveWorkbenchTextOffset,
   scanWorkbenchTextSearch,
@@ -182,6 +183,15 @@ describe('project search replacement', () => {
       'a',
       'b',
     ])).toBe('a2\n\t\\')
+  })
+
+  test('previews a regex replacement from the matched text alone', () => {
+    const regex = matcher('(\\w+)@(\\w+)', { regex: true })
+    expect(previewWorkbenchTextSearchReplacement(regex, '$2.$1', 'alice@home')).toBe('home.alice')
+    // 只凭匹配本身对不上（环视依赖前后文）时退回整个匹配，捕获组原样显示。
+    const lookbehind = matcher('(?<=x)(a)', { regex: true })
+    expect(previewWorkbenchTextSearchReplacement(lookbehind, '[$1]', 'a')).toBe('[$1]')
+    expect(previewWorkbenchTextSearchReplacement(matcher('a'), '$1', 'a')).toBe('$1')
   })
 
   test('replaces only the selected matches', () => {
