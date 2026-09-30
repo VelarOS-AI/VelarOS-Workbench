@@ -18,6 +18,7 @@ export type WorkbenchPaletteCommandId =
   | 'close-all-editors'
   | 'close-editor'
   | 'close-project'
+  | 'edit-run-configurations'
   | 'find-in-files'
   | 'find-references'
   | 'focus-left-editor-group'
@@ -159,6 +160,8 @@ export const WORKBENCH_PALETTE_COMMANDS: readonly WorkbenchPaletteCommandDefinit
     labelKey: 'workbench.commandRunLastCommand',
     shortcut: { action: 'run-last-command' },
   },
+  // ▶ 菜单里的「编辑运行配置…」：用户自己建的运行配置（名称、命令、工作目录、环境变量）。
+  { id: 'edit-run-configurations', labelKey: 'workbench.commandEditRunConfigurations' },
   // 应用菜单「视图」里的放大、缩小、重置编辑器。
   { id: 'zoom-in', labelKey: 'workbench.commandZoomIn', shortcut: { fixed: 'Mod++' } },
   { id: 'zoom-out', labelKey: 'workbench.commandZoomOut', shortcut: { fixed: 'Mod+-' } },

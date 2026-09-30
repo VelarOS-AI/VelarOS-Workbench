@@ -9,10 +9,22 @@ export interface WorkbenchTerminalSessionView {
   isRunning: boolean
   /** 运行卡才有：启动该会话的命令，用于「重启」；普通终端会话为 undefined。 */
   command?: string
+  /** 运行卡才有：命令之外的启动条件（工作目录、环境变量、出自哪份运行配置），「重启」时照旧。 */
+  launch?: WorkbenchRunSessionLaunchOptions
   /** 拆分出来的终端才有：同一个标签里并排的几个共用一个组号。没有就是自己一组（组号即自己的 id）。 */
   groupId?: string
   /** 并排时占的宽度份额（同组里按比例分）；没有就是 1。 */
   paneWeight?: number
+}
+
+/** 起一张运行卡时命令之外的条件；都不给就是在项目根、用终端自己的环境跑。 */
+export interface WorkbenchRunSessionLaunchOptions {
+  /** 工作目录：项目里的相对路径。 */
+  cwd?: string
+  /** 盖在终端环境之上的环境变量。 */
+  env?: Record<string, string>
+  /** 由用户建的哪份运行配置起的（▶ 据此认出「这份配置正在跑」）。 */
+  configurationId?: string
 }
 
 export interface WorkbenchRunOutputLine {

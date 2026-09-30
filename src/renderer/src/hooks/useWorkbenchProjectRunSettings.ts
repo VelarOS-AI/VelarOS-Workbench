@@ -10,8 +10,10 @@ import {
 
 export interface WorkbenchProjectRunSettingsController {
   settings: WorkbenchProjectRunSettings
-  /** 保存启动命令；传入空串（或纯空白）即清除，回退到自动探测。 */
+  /** 保存启动命令（▶ 不再指着运行配置）；传入空串（或纯空白）即清除，回退到自动探测。 */
   setCommand: (command: string) => void
+  /** 把 ▶ 指到用户建的一份运行配置上。 */
+  setConfigurationId: (configurationId: string) => void
 }
 
 export function useWorkbenchProjectRunSettings(
@@ -45,19 +47,29 @@ export function useWorkbenchProjectRunSettings(
     }
   }, [projectRoot])
 
-  const setCommand = useCallback(
-    (command: string): void => {
+  const save = useCallback(
+    (nextSettings: WorkbenchProjectRunSettings): void => {
       if (!projectRoot) return
 
-      const nextSettings: WorkbenchProjectRunSettings = { command: command.trim() }
       setSettings(nextSettings)
       saveWorkbenchProjectRunSettings(projectRoot, nextSettings)
     },
     [projectRoot]
   )
 
+  const setCommand = useCallback(
+    (command: string): void => save({ command: command.trim(), configurationId: '' }),
+    [save]
+  )
+
+  const setConfigurationId = useCallback(
+    (configurationId: string): void => save({ command: '', configurationId: configurationId.trim() }),
+    [save]
+  )
+
   return {
     settings,
     setCommand,
+    setConfigurationId,
   }
 }

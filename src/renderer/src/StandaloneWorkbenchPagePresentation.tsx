@@ -70,6 +70,11 @@ const LazyWorkbenchSettingsDialog = lazyWithPreload(
 const LazyWorkbenchGitToolPanel = lazyWithPreload(
   async () => (await import('./components/git/WorkbenchGitToolPanel')).WorkbenchGitToolPanel
 )
+// 「编辑运行配置」对话框用得少，第一次打开时才加载。
+const LazyWorkbenchRunConfigurationsDialog = lazy(async () => {
+  const module = await import('./components/run/WorkbenchRunConfigurationsDialog')
+  return { default: module.WorkbenchRunConfigurationsDialog }
+})
 
 interface StandaloneWorkbenchPagePresentationProps {
   projectHubState: WorkbenchProjectHubState
@@ -138,6 +143,9 @@ export function StandaloneWorkbenchPagePresentation({
   // 设置对话框第一次打开时才挂上，之后一直挂着（关的时候还要播退场动画）。
   const [settingsMounted, setSettingsMounted] = useState(false)
   if (dialogs.settingsOpen && !settingsMounted) setSettingsMounted(true)
+  // 「编辑运行配置」对话框同样：打开过才挂着。
+  const [runConfigurationsMounted, setRunConfigurationsMounted] = useState(false)
+  if (dialogs.runConfigurationsOpen && !runConfigurationsMounted) setRunConfigurationsMounted(true)
   /** 全项目扫出来的 VelarScript 源文件；结构树的完整性靠它，不靠「你打开过什么」。 */
   const [velarSourcePaths, setVelarSourcePaths] = useState<readonly string[]>([])
   const [velarStructureScopeTabs, setVelarStructureScopeTabs] =
@@ -914,6 +922,17 @@ export function StandaloneWorkbenchPagePresentation({
               onResetShortcut={workbenchKeymap.resetShortcut}
               onResetAllShortcuts={workbenchKeymap.resetAllShortcuts}
               onLocaleChange={(nextLocale) => void translate.setLocale(nextLocale)}
+            />
+          </Suspense>
+        )}
+        {runConfigurationsMounted && (
+          <Suspense fallback={null}>
+            <LazyWorkbenchRunConfigurationsDialog
+              open={dialogs.runConfigurationsOpen}
+              configurations={model.namedRunConfigurations.configurations}
+              initialConfigurationId={model.topRunControl.activeConfiguration?.id}
+              onOpenChange={dialogs.setRunConfigurationsOpen}
+              onSave={model.namedRunConfigurations.saveConfigurations}
             />
           </Suspense>
         )}

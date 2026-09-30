@@ -130,13 +130,18 @@ export const DEFAULT_WORKBENCH_PROJECT_GIT_SETTINGS: WorkbenchProjectGitSettings
   gitSshKeyPath: '',
 }
 
-/** 用户为某个项目手动配置的启动/运行命令。为空则回退到包管理器自动探测。 */
+/**
+ * ▶ 在某个项目里指着什么：用户建的一份运行配置（`configurationId`），或者手动写的一条命令（`command`）。
+ * 两个都为空则回退到包管理器自动探测；两个都有时以运行配置为准（它已经不在了就看命令）。
+ */
 export interface WorkbenchProjectRunSettings {
   command: string
+  configurationId: string
 }
 
 export const DEFAULT_WORKBENCH_PROJECT_RUN_SETTINGS: WorkbenchProjectRunSettings = {
   command: '',
+  configurationId: '',
 }
 
 const WorkbenchThemes = new Set<WorkbenchThemeId>([
@@ -470,7 +475,8 @@ export function normalizeWorkbenchProjectRunSettings(
   settings: Partial<WorkbenchProjectRunSettings> | undefined
 ): WorkbenchProjectRunSettings {
   return {
-    command: settings?.command?.trim() ?? '',
+    command: isString(settings?.command) ? settings.command.trim() : '',
+    configurationId: isString(settings?.configurationId) ? settings.configurationId.trim() : '',
   }
 }
 

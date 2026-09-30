@@ -564,6 +564,24 @@ Node 的 OOM 处理直接 `abort()` 主进程。实测 VelarOS-Platform：每个
 - 退出：shell 正常退出（退出码 0）且焦点就在这个终端里——也就是用户在里面敲了 `exit`——这个终端跟着
   关掉；在后台自己结束的、异常退出的留着，能看到最后的输出和「进程已结束」那一行。
 
+### 运行配置
+
+▶ 菜单里的条目有两种来源：推出来的（`package.json` 脚本、最近跑过的命令，`workbenchRunConfigurations.ts`）和用户
+自己建的（`workbenchNamedRunConfigurations.ts`）。用户建的排在最前面，每份有名称、命令、工作目录（项目里的相对
+路径，空是项目根）和环境变量。
+
+- **存在哪**：renderer 的 localStorage，键 `velaros.workbench.run-configurations.v1`，按项目 id 分（与命令历史同一种
+  存法），不往用户的仓库里写文件。读出来的每一项重新校验：认不出的丢掉，工作目录不在项目里的退回项目根，环境
+  变量不合规的清空。▶ 指着哪一份记在项目运行设置的 `configurationId` 里（`workbenchPreferences.ts`）。
+- **怎么跑**：就是一张运行卡。`launchRunSession(command, label, launch)` 的 `launch` 带着 `cwd`、`env` 和
+  `configurationId`，记在会话上，重启时照旧；▶ 判断「这份配置正在跑」按 `configurationId` 认，不按命令文本。
+- **环境变量**：终端 start 请求的 `env`。主进程在 IPC 边界再校验一遍（`shared/workbenchRunEnvironment.ts`，名字
+  只认字母、数字、下划线；有一项不对整份请求拒绝），然后盖在终端环境之上（`buildTerminalEnvironment` 的第三个
+  参数）。node-pty 用 `name` 选项去设进程的 `TERM`，所以用户写了 `TERM` 时 `name` 也跟着它。值是明文存、明文
+  显示的，不是密钥管理；日志里不写值。
+- **界面**：▶ 菜单里点一行让 ▶ 指着它，行尾的小 ▶ 直接跑；「编辑运行配置…」（命令面板里也有）打开
+  `WorkbenchRunConfigurationsDialog`，改动留在对话框的草稿里，点保存才整份写回。对话框按需加载，不进外壳包。
+
 ## 生产启动与体积预算
 
 生产构建的 main 与 renderer 都开启压缩（electron-vite 给 renderer 的默认值是不压，要在配置里自己打开；

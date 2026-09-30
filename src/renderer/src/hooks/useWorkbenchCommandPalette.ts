@@ -82,6 +82,8 @@ interface UseWorkbenchCommandPaletteOptions {
   navigateBack: () => Promise<void>
   navigateForward: () => Promise<void>
   openSettings: () => void
+  /** 打开「编辑运行配置」对话框。 */
+  editRunConfigurations: () => void
   reopenClosedEditorTab: () => Promise<void>
   /** 作用在光标处的代码动作（快速修复……）：交给眼前的编辑器去做。 */
   runEditorCommand: (command: WorkbenchEditorCommandId) => void
@@ -122,6 +124,7 @@ export function useWorkbenchCommandPalette({
   navigateBack,
   navigateForward,
   openSettings,
+  editRunConfigurations,
   reopenClosedEditorTab,
   runEditorCommand,
   showEditorSurface,
@@ -318,6 +321,10 @@ export function useWorkbenchCommandPalette({
       }
       case 'run-last-command': {
         void workbench.rerunLastCommand()
+        return
+      }
+      case 'edit-run-configurations': {
+        editRunConfigurations()
         return
       }
       case 'zoom-in': {

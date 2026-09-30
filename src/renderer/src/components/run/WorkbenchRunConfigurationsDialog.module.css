@@ -1,0 +1,121 @@
+/* 「编辑运行配置」对话框。只用 Workbench 令牌，原生 CSS（模块里的 @apply 不认间距工具类）。 */
+
+.dialog {
+  display: flex;
+  width: min(92vw, 46rem);
+  max-height: min(86vh, 40rem);
+  flex-direction: column;
+  gap: 12px;
+}
+
+.body {
+  display: grid;
+  min-height: 0;
+  flex: 1 1 auto;
+  grid-template-columns: 12.5rem minmax(0, 1fr);
+  gap: 14px;
+}
+
+.sidebar {
+  display: flex;
+  min-height: 16rem;
+  flex-direction: column;
+  border: 1px solid var(--workbench-border);
+  border-radius: var(--workbench-radius, 6px);
+  background: var(--workbench-surface-muted);
+  overflow: hidden;
+}
+
+.sidebarActions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 4px;
+  border-bottom: 1px solid var(--workbench-border);
+}
+
+.list {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 1px;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.listItem {
+  overflow: hidden;
+  flex: 0 0 auto;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--workbench-text);
+  font-size: 12px;
+  line-height: 1.35;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.listItem:hover,
+.listItem:focus-visible {
+  outline: none;
+  background: var(--workbench-hover);
+}
+
+.listItem[data-active='true'] {
+  background: var(--workbench-active);
+  color: var(--workbench-active-fg);
+}
+
+.listItem[data-invalid='true'] {
+  color: var(--status-red);
+}
+
+.form {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+.environment {
+  min-height: 6.5rem;
+  resize: vertical;
+  white-space: pre;
+}
+
+.hint {
+  color: var(--workbench-text-muted);
+}
+
+.issue {
+  color: var(--status-red);
+  overflow-wrap: anywhere;
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--workbench-text-muted);
+}

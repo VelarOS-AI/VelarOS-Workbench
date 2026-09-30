@@ -13,6 +13,7 @@ import {
   SpinnerGapIcon,
 } from '@phosphor-icons/react'
 import { useWorkbenchI18n } from '@renderer/i18n'
+import { describeWorkbenchRunConfiguration } from '@renderer/models/commands/workbenchNamedRunConfigurations'
 import { hasWorkbenchGitHead } from '@renderer/models/git/workbenchGitTopBarModel'
 
 import { isEmpty,toNullable } from '@velaros-ai/core'
@@ -159,12 +160,17 @@ function WorkbenchRunAction({
   // 一次性 runner（程序化/agent）占用只影响转圈图标，不禁用侧边栏按钮；
   // 用户命令走可并行的 PTY 运行卡，相同命令由确认框裁决重新运行还是新开。
   const oneShotBusy = isRunningCommand || hasActiveRunCommand
-  const activeLabel = topRun.isConfigured
-    ? topRun.configuredCommand
-    : (activeOption?.label ?? topRun.activeCommand)
-  const activeDescription = topRun.isConfigured
-    ? t('workbench.runConfiguredCommand')
-    : activeOption?.description?.trim()
+  const { activeConfiguration } = topRun
+  const activeLabel = activeConfiguration
+    ? activeConfiguration.name
+    : topRun.isConfigured
+      ? topRun.configuredCommand
+      : (activeOption?.label ?? topRun.activeCommand)
+  const activeDescription = activeConfiguration
+    ? describeWorkbenchRunConfiguration(activeConfiguration)
+    : topRun.isConfigured
+      ? t('workbench.runConfiguredCommand')
+      : activeOption?.description?.trim()
   const configureHint = t('workbench.runRightClickToConfigure')
   const tooltipTitle = activeLabel || placeholder
   const actionLabel = [
@@ -228,6 +234,21 @@ function WorkbenchRunAction({
     setMenuOpen(false)
   }
 
+  function handlePickConfiguration(configurationId: string): void {
+    topRun.selectConfiguration(configurationId)
+    setMenuOpen(false)
+  }
+
+  function handleRunConfiguration(configurationId: string): void {
+    setMenuOpen(false)
+    topRun.runConfiguration(configurationId)
+  }
+
+  function handleEditConfigurations(): void {
+    setMenuOpen(false)
+    topRun.editConfigurations()
+  }
+
   return (
     <>
       <AnchoredPopover
@@ -273,6 +294,52 @@ function WorkbenchRunAction({
         )}
       >
         <div className={styles.runActionPanel} role="menu" aria-label={placeholder}>
+        {/* 用户自己建的运行配置排在最前面：点一行让 ▶ 指着它，行尾的 ▶ 直接跑这一份。 */}
+        {!isEmpty(topRun.namedConfigurations) && (
+          <div className={styles.runActionSectionLabel}>{t('workbench.runConfigurations')}</div>
+        )}
+        {topRun.namedConfigurations.map((configuration) => {
+          const active = configuration.id === activeConfiguration?.id
+          const description = describeWorkbenchRunConfiguration(configuration)
+          return (
+            <div key={configuration.id} className={styles.runActionNamedRow}>
+              <button
+                type="button"
+                className={`${styles.runActionOption} ${active ? styles.runActionOptionActive : ''}`}
+                data-active={active}
+                role="menuitemradio"
+                aria-checked={active}
+                title={description}
+                onClick={() => handlePickConfiguration(configuration.id)}
+              >
+                <span className={styles.runActionOptionMeta}>
+                  <span className={styles.runActionOptionLabel}>{configuration.name}</span>
+                  <span className={styles.runActionOptionDescription}>{description}</span>
+                </span>
+                {active && (
+                  <CheckIcon size={13} weight="bold" className={styles.runActionOptionCheck} />
+                )}
+              </button>
+              <button
+                type="button"
+                className={styles.runActionRowButton}
+                title={t('workbench.runConfigurationRunNow')}
+                aria-label={t('workbench.runConfigurationRunNow')}
+                onClick={() => handleRunConfiguration(configuration.id)}
+              >
+                <PlayIcon size={12} weight="fill" />
+              </button>
+            </div>
+          )
+        })}
+        <button
+          type="button"
+          className={styles.runActionEdit}
+          role="menuitem"
+          onClick={handleEditConfigurations}
+        >
+          {t('workbench.runConfigurationsEdit')}
+        </button>
         <form className={styles.runActionConfig} onSubmit={handleConfigSubmit}>
           <span className={styles.runActionConfigLabel}>{t('workbench.runConfigureCommand')}</span>
           <div className={styles.runActionConfigRow}>
@@ -298,7 +365,8 @@ function WorkbenchRunAction({
           <div className={styles.runActionSectionLabel}>{t('workbench.runDetectedCommands')}</div>
         )}
         {topRun.options.map((option) => {
-          const active = option.value === topRun.activeCommand
+          // ▶ 指着一份运行配置时，命令文本碰巧一样的这一行不算选中。
+          const active = !activeConfiguration && option.value === topRun.activeCommand
           return (
             <button
               key={option.value}
@@ -322,7 +390,7 @@ function WorkbenchRunAction({
             </button>
           )
         })}
-        {topRun.isConfigured && (
+        {(topRun.isConfigured || !!activeConfiguration) && (
           <button type="button" className={styles.runActionReset} onClick={handleResetAuto}>
             {t('workbench.runResetToAuto')}
           </button>
@@ -334,7 +402,9 @@ function WorkbenchRunAction({
           <DialogHeader>
             <DialogTitle>{t('workbench.runDuplicateTitle')}</DialogTitle>
             <DialogDescription>
-              {t('workbench.runDuplicateDescription', { command: topRun.activeCommand })}
+              {t('workbench.runDuplicateDescription', {
+                command: activeConfiguration?.name ?? topRun.activeCommand,
+              })}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

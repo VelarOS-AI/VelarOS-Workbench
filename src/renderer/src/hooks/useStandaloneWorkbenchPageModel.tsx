@@ -16,6 +16,7 @@ import { useWorkbenchCommandPalette } from '@renderer/hooks/useWorkbenchCommandP
 import { useWorkbenchKeyboardShortcuts } from '@renderer/hooks/useWorkbenchKeyboardShortcuts'
 import { useWorkbenchKeymapController } from '@renderer/hooks/useWorkbenchKeymapController'
 import { useWorkbenchLayoutController } from '@renderer/hooks/useWorkbenchLayoutController'
+import { useWorkbenchNamedRunConfigurations } from '@renderer/hooks/useWorkbenchNamedRunConfigurations'
 import { useWorkbenchPreferences } from '@renderer/hooks/useWorkbenchPreferences'
 import { useWorkbenchProjectFileList } from '@renderer/hooks/useWorkbenchProjectFileList'
 import { useWorkbenchProjectGitSettings } from '@renderer/hooks/useWorkbenchProjectGitSettings'
@@ -265,6 +266,9 @@ export function useStandaloneWorkbenchPageModel(
   })
   const projectGitSettings = useWorkbenchProjectGitSettings(workbench.activeProject?.rootPath)
   const projectRunSettings = useWorkbenchProjectRunSettings(workbench.activeProject?.rootPath)
+  // 用户建的运行配置（按项目存在应用里）与「编辑运行配置」对话框的开关。
+  const namedRunConfigurations = useWorkbenchNamedRunConfigurations(workbench.activeProject?.id)
+  const [runConfigurationsOpen, setRunConfigurationsOpen] = useState(false)
   const workbenchKeymap = useWorkbenchKeymapController()
   const [settingsOpen, setSettingsOpen] = useState(false)
   // ⌘W / Ctrl+W 菜单命令的序号：编辑区看到它变了就关掉当前那个标签（它才知道哪个标签在前台）。
@@ -349,12 +353,17 @@ export function useStandaloneWorkbenchPageModel(
   const topRunControl = useWorkbenchTopRunControl({
     commandHistory: workbench.commandHistory,
     runConfigurations: [...activePackageScriptRunConfigurations, ...workbench.runConfigurations],
+    namedConfigurations: namedRunConfigurations.configurations,
     runningSessions: workbench.runSessions,
     configuredCommand: projectRunSettings.settings.command,
+    configuredConfigurationId: projectRunSettings.settings.configurationId,
     lastLaunchedCommand: workbench.lastLaunchedCommand,
-    onLaunchCommand: (command, label) => void workbench.launchRunSession(command, label),
+    onLaunchCommand: (command, label, launch) =>
+      void workbench.launchRunSession(command, label, launch),
     onRestartRunSession: (sessionId) => void workbench.restartRunSession(sessionId),
     onConfigureCommand: projectRunSettings.setCommand,
+    onSelectConfiguration: projectRunSettings.setConfigurationId,
+    onEditConfigurations: () => setRunConfigurationsOpen(true),
   })
   const runSessionIds = workbench.runSessions.map((session) => session.id).join('\0')
   const knownRunSessionIdsRef = useRef(new Set<string>())
@@ -1191,6 +1200,7 @@ export function useStandaloneWorkbenchPageModel(
     navigateBack: editorNavigation.goBack,
     navigateForward: editorNavigation.goForward,
     openSettings: () => setSettingsOpen(true),
+    editRunConfigurations: () => setRunConfigurationsOpen(true),
     reopenClosedEditorTab,
     runEditorCommand: editorNavigation.requestEditorCommand,
     showEditorSurface,
@@ -1221,6 +1231,8 @@ export function useStandaloneWorkbenchPageModel(
     workbenchKeymap,
     gitState,
     topRunControl,
+    /** 当前项目里用户建的运行配置。 */
+    namedRunConfigurations,
     editorNavigation,
     /** ⌘W / Ctrl+W 的请求序号：变了就关掉编辑区当前的标签。 */
     closeActiveEditorTabRequestId,
@@ -1257,6 +1269,8 @@ export function useStandaloneWorkbenchPageModel(
     dialogs: {
       settingsOpen,
       setSettingsOpen,
+      runConfigurationsOpen,
+      setRunConfigurationsOpen,
       velarLogicGraphOpen,
       setVelarLogicGraphOpen,
       velarLogicGraphActive,
