@@ -27,6 +27,7 @@ export type WorkbenchPaletteCommandId =
   | 'navigate-forward'
   | 'new-terminal'
   | 'open-settings'
+  | 'quick-fix'
   | 'reopen-closed-tab'
   | 'reveal-active-file'
   | 'run-last-command'
@@ -102,6 +103,8 @@ export const WORKBENCH_PALETTE_COMMANDS: readonly WorkbenchPaletteCommandDefinit
   },
   // 编辑器里的 ⌥⌘L / Ctrl+Alt+L。
   { id: 'format-document', labelKey: 'workbench.commandFormatDocument', shortcut: { fixed: 'Mod+Alt+L' } },
+  // 编辑器里光标处的动作菜单：⌥↩ / Alt+Enter（另有 ⌘. / Ctrl+.）。
+  { id: 'quick-fix', labelKey: 'workbench.commandQuickFix', shortcut: { fixed: 'Alt+Enter' } },
   // 编辑器里的 ⌥Z / Alt+Z。
   { id: 'toggle-word-wrap', labelKey: 'workbench.commandToggleWordWrap', shortcut: { fixed: 'Alt+Z' } },
   { id: 'toggle-read-only', labelKey: 'workbench.commandToggleReadOnly' },
@@ -150,11 +153,16 @@ export interface WorkbenchPaletteCommandContext {
   canSplitEditorRight: boolean
   /** 编辑区里有几组（1 或 2）。 */
   editorGroupCount: number
+  /** 当前文件归哪种语言服务照看（决定有没有快速修复这类代码动作）；没有语言服务为 null。 */
+  activeFileLanguageService: Nullable<WorkbenchPaletteLanguageService>
 }
 
+/** 内置的 TypeScript / JavaScript 服务，或项目自己的外部语言服务器。 */
+export type WorkbenchPaletteLanguageService = 'typescript' | 'external'
+
 /**
- * 命令此刻能不能跑。作用在眼前编辑器上的（格式化、切只读）要当前文件的编辑器在前面；跳行会先把当前文件
- * 带到前面，有文本文件就行；关编辑器关的是前面那个，标签或盖在前面的都算。其余随时能跑。
+ * 命令此刻能不能跑。作用在眼前编辑器上的（格式化、切只读、快速修复）要当前文件的编辑器在前面；跳行会先把
+ * 当前文件带到前面，有文本文件就行；关编辑器关的是前面那个，标签或盖在前面的都算。其余随时能跑。
  */
 export function isWorkbenchPaletteCommandAvailable(
   id: WorkbenchPaletteCommandId,
@@ -175,6 +183,9 @@ export function isWorkbenchPaletteCommandAvailable(
       return context.openTabCount > 0 || context.editorCovered
     case 'format-document':
       return textEditorInFront && context.canEditActiveFile
+    // 修复要改代码：只读的文件不给；没有语言服务的文件没有修复可给。
+    case 'quick-fix':
+      return textEditorInFront && context.canEditActiveFile && !!context.activeFileLanguageService
     case 'toggle-read-only':
       return textEditorInFront && context.canToggleReadOnly
     case 'toggle-git-blame':

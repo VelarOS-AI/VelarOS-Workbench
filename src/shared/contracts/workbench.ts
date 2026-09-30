@@ -320,7 +320,7 @@ export interface WorkbenchLanguageServiceOpenFile {
 
 /**
  * 编辑器里这个文件实际用的缩进（用户在状态栏选的、`.editorconfig`，或按正文识别的）。要语言服务替用户写代码的
- * 请求（格式化、补全里插入的代码）带上它，写出来的代码才按这个文件的缩进排；不带时语言服务用两格空格。
+ * 请求（格式化、补全里插入的代码、快速修复）带上它，写出来的代码才按这个文件的缩进排；不带时语言服务用两格空格。
  */
 export interface WorkbenchLanguageServiceEditFormat {
   /** 制表符显示多宽。 */
@@ -694,20 +694,55 @@ export interface WorkbenchLanguageServiceSemanticTokensResult {
 
 export interface WorkbenchLanguageServiceCodeActionsRequest extends WorkbenchLanguageServiceRequest {
   range: WorkbenchLanguageServiceRange
+  /**
+   * 编辑器里落在这段范围上的诊断，外部语言服务器按它们给修复。内置 TypeScript 不看这份：它自己按当前正文
+   * 重新算范围内的诊断，编辑器里的诊断刚改完字还没刷新时也对得上。
+   */
   diagnostics: WorkbenchLanguageServiceDiagnostic[]
+}
+
+/** 选中动作时才算改动要交回语言服务的数据：同一类问题在整个文件里一起修。 */
+export interface WorkbenchLanguageServiceCodeActionResolveData {
+  kind: 'fix-all'
+  /** TypeScript 给这类修复的标识。 */
+  fixId: string
+}
+
+/** 要新建的文件（整份内容），项目内相对路径。 */
+export interface WorkbenchLanguageServiceNewFile {
+  path: string
+  content: string
 }
 
 export interface WorkbenchLanguageServiceCodeAction {
   title: string
   kind?: string
   preferred?: boolean
+  /** 直接可用的改动；选中时才算的（带 `resolve`）为空。 */
   changes: WorkbenchLanguageServiceFileEdit[]
+  /** 连带要新建的文件。 */
+  createFiles?: WorkbenchLanguageServiceNewFile[]
+  resolve?: WorkbenchLanguageServiceCodeActionResolveData
 }
 
 export interface WorkbenchLanguageServiceCodeActionsResult {
   projectRoot: string
   path: string
   actions: WorkbenchLanguageServiceCodeAction[]
+}
+
+/** 选中了一个带 `resolve` 的动作：按发起时的正文与范围算出它的改动。 */
+export interface WorkbenchLanguageServiceCodeActionResolveRequest
+  extends WorkbenchLanguageServiceRequest {
+  range: WorkbenchLanguageServiceRange
+  resolve: WorkbenchLanguageServiceCodeActionResolveData
+}
+
+export interface WorkbenchLanguageServiceCodeActionResolveResult {
+  projectRoot: string
+  path: string
+  changes: WorkbenchLanguageServiceFileEdit[]
+  createFiles: WorkbenchLanguageServiceNewFile[]
 }
 
 export interface WorkbenchSaveFileRequest {

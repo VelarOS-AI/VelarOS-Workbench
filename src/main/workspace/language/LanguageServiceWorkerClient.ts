@@ -7,6 +7,7 @@ import { AppError } from '@velaros-ai/core/error'
 
 import type {
   AppLocale,
+  WorkbenchLanguageServiceCodeActionResolveRequest,
   WorkbenchLanguageServiceCodeActionsRequest,
   WorkbenchLanguageServiceCompletionResolveRequest,
   WorkbenchLanguageServiceExtensionRequest,
@@ -328,6 +329,10 @@ export class WorkbenchLanguageServiceWorkerClient {
 
   public getCodeActions(request: WorkbenchLanguageServiceCodeActionsRequest) {
     return this.call('getCodeActions', request)
+  }
+
+  public resolveCodeAction(request: WorkbenchLanguageServiceCodeActionResolveRequest) {
+    return this.call('resolveCodeAction', request)
   }
 
   public async dispose(): Promise<void> {

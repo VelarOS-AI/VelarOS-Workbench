@@ -59,8 +59,11 @@ import {
   resolveWorkbenchTextConversion,
 } from '@renderer/models/editor/workbenchEditorTextFormat'
 import {
+  buildWorkbenchLanguageServiceEditReport,
+  type WorkbenchLanguageServiceEditOutcome,
+} from '@renderer/models/editor/workbenchLanguageServiceEditReport'
+import {
   type WorkbenchLanguageServiceFileChangeFailure,
-  type WorkbenchLanguageServiceFileChangeFailureReason,
   writeWorkbenchLanguageServiceFileChange,
 } from '@renderer/models/editor/workbenchLanguageServiceFileChanges'
 import type { WorkbenchOpenFileSnapshot } from '@renderer/models/project/workbenchProjectContextIndex'
@@ -98,14 +101,6 @@ import { useWorkbenchEditorTabLayout } from './useWorkbenchEditorTabLayout'
 const EXTERNAL_FILE_READ_MAX_CHARS = 300_000
 /** 跨文件改动写回没打开的文件时最多读这么多字（与主进程的保存上限一致；更大的文件读回来是截断的，不能改）。 */
 const LANGUAGE_SERVICE_EDIT_MAX_CHARS = 1_000_000
-const LanguageServiceEditFailureMessageKeys: Readonly<Record<
-  Exclude<WorkbenchLanguageServiceFileChangeFailureReason, 'error'>,
-  string
->> = {
-  'read-only': 'workbench.languageServiceEditReadOnly',
-  'unsupported-text': 'workbench.languageServiceEditUnsupportedText',
-  'changed-on-disk': 'workbench.languageServiceEditChangedOnDisk',
-}
 const IMAGE_PREVIEW_MAX_BYTES = 10 * 1024 * 1024
 const EXTERNAL_FILE_REFRESH_CONCURRENCY = 4
 const log = Log.tag('workbench-editor-controller')
@@ -320,26 +315,21 @@ export function useWorkbenchEditorController({
       changes: readonly WorkbenchLanguageServiceFileEdit[],
       { editedInEditor = 0 }: { editedInEditor?: number } = {}
     ): void => {
-      void applyLanguageServiceEditsToFiles(changes).then(({ changedFiles, failures }) => {
-        const t = tLatest.current
-        const count = changedFiles + editedInEditor
-        if (isEmpty(failures)) {
-          messageLatest.current.success({ title: t('workbench.languageServiceEditsApplied', { count }) })
-          return
-        }
-        messageLatest.current.warning({
-          title: t('workbench.languageServiceEditsPartial', { count }),
-          description: failures
-            .map((failure) => t('workbench.languageServiceEditFailedFile', {
-              path: failure.path,
-              reason: failure.reason === 'error'
-                ? (failure.message ?? '')
-                : t(LanguageServiceEditFailureMessageKeys[failure.reason]),
-            }))
-            .join(t('workbench.languageServiceEditFailureSeparator')),
+      void applyLanguageServiceEditsToFiles(changes).then((outcome) => {
+        const report = buildWorkbenchLanguageServiceEditReport(outcome, {
+          kind: 'rename',
+          editedInEditor,
+          translate: tLatest.current,
         })
+        if (report) messageLatest.current[report.tone](report)
       })
     }
+  )
+
+  /** 语言服务的一组跨文件改动（快速修复、重构）：套上，结果交回调用方去报告。 */
+  const applyLanguageServiceEdits = useMemoizedFn(
+    (changes: readonly WorkbenchLanguageServiceFileEdit[]): Promise<WorkbenchLanguageServiceEditOutcome> =>
+      applyLanguageServiceEditsToFiles(changes)
   )
 
   /**
@@ -1699,6 +1689,7 @@ export function useWorkbenchEditorController({
     setEditorContent: updateEditorContent,
     applyLanguageServiceFileChanges,
     applyLanguageServiceRename,
+    applyLanguageServiceEdits,
     replaceOpenTabContents,
     ensureNoUnsavedChanges,
     ensureNoUnsavedFilesInPath,

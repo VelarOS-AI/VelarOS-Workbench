@@ -81,6 +81,8 @@ async function dispatch(
       return languageServices.getSemanticTokens(request.request, signal)
     case 'getCodeActions':
       return languageServices.getCodeActions(request.request)
+    case 'resolveCodeAction':
+      return languageServices.resolveCodeAction(request.request)
   }
 }
 

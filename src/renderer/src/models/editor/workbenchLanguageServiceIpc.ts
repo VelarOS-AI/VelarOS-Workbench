@@ -46,6 +46,9 @@ type WorkbenchLanguageServiceSemanticTokensPayload = Parameters<
 type WorkbenchLanguageServiceCodeActionsPayload = Parameters<
   WorkbenchProjectKernelPort['getWorkbenchLanguageServiceCodeActions']
 >[0]
+type WorkbenchLanguageServiceCodeActionResolvePayload = Parameters<
+  WorkbenchProjectKernelPort['resolveWorkbenchLanguageServiceCodeAction']
+>[0]
 
 type WorkbenchInlineCompletionPayload = Parameters<
   WorkbenchProjectKernelPort['getWorkbenchInlineCompletion']
@@ -161,4 +164,11 @@ export function getWorkbenchLanguageServiceCodeActions(
   runtime: WorkbenchHostRuntime = workbenchHost
 ): ReturnType<WorkbenchProjectKernelPort['getWorkbenchLanguageServiceCodeActions']> {
   return runtime.kernel.project.getWorkbenchLanguageServiceCodeActions(payload)
+}
+
+export function resolveWorkbenchLanguageServiceCodeAction(
+  payload: WorkbenchLanguageServiceCodeActionResolvePayload,
+  runtime: WorkbenchHostRuntime = workbenchHost
+): ReturnType<WorkbenchProjectKernelPort['resolveWorkbenchLanguageServiceCodeAction']> {
+  return runtime.kernel.project.resolveWorkbenchLanguageServiceCodeAction(payload)
 }

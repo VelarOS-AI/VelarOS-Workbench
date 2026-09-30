@@ -17,11 +17,13 @@ import {
  * 自动导入通常一两千项；超过上限的截掉并标记「不完整」，编辑器继续输入时重新请求，不会永久丢项。
  */
 const MaxCompletionItems = 5_000
-const CompletionPreferences: ts.UserPreferences = {
+/** 语言服务替用户写 import 时的偏好：补全的自动导入、快速修复、重构共用一份，写出来的样子才一致。 */
+export const WorkbenchTypeScriptUserPreferences: ts.UserPreferences = {
   quotePreference: 'single',
   importModuleSpecifierPreference: 'relative',
   includePackageJsonAutoImports: 'auto',
 }
+const CompletionPreferences = WorkbenchTypeScriptUserPreferences
 
 export function mapTypeScriptCompletionKind(kind: ts.ScriptElementKind): string {
   switch (kind) {
@@ -85,7 +87,7 @@ function buildCompletionDetail(entry: ts.CompletionEntry): string | undefined {
   return source ?? modifiers
 }
 
-function normalizeCommonJsAutoImport(fileName: string, newText: string): string {
+export function normalizeCommonJsAutoImport(fileName: string, newText: string): string {
   if (!fileName.toLowerCase().endsWith('.cjs')) return newText
 
   const lineBreakIndex = newText.indexOf('\n')

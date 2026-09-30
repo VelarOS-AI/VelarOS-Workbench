@@ -1,8 +1,15 @@
 import type { ChangeSpec, EditorState } from '@codemirror/state'
 
 import type { WorkbenchLanguageServiceEditFormat } from '@shared/contracts'
+import {
+  DefaultWorkbenchTabSize as DefaultTabSize,
+  type WorkbenchDetectedIndentation,
+} from '@shared/workbenchIndentation'
 
 import type { WorkbenchEditorConfigProperties } from './workbenchEditorConfig'
+
+// 识别逻辑在 shared：语言服务的 worker 也用它看别的文件的缩进。
+export { detectWorkbenchIndentation, type WorkbenchDetectedIndentation } from '@shared/workbenchIndentation'
 
 /** 一个文件的缩进：用空格还是制表符、一级几格，以及制表符显示多宽。 */
 export interface WorkbenchIndentation {
@@ -29,61 +36,6 @@ export type WorkbenchIndentationChange =
 export interface WorkbenchIndentationRequest {
   id: number
   change: WorkbenchIndentationChange
-}
-
-/** 从正文里识别出的缩进（识别不出来就没有）。 */
-export interface WorkbenchDetectedIndentation {
-  style: 'space' | 'tab'
-  /** 空格缩进一级几格；制表符缩进时不看。 */
-  size: number
-}
-
-/** 识别只看开头这么多行，大文件也不卡。 */
-const MaxDetectionLines = 10_000
-/** 空格缩进只认这些宽度（1 格多半是对齐，比如 JSDoc 的 ` *`）。 */
-const DetectableSpaceSizes = [2, 3, 4, 6, 8]
-const DefaultTabSize = 4
-
-/**
- * 按正文识别缩进：缩进用制表符的行多就是制表符；否则看相邻两行缩进「加深」了几格，出现最多的那个宽度就是一级缩进
- * （退格可能一次退好几级，只看加深）。没有缩进过的行时识别不出来。
- */
-export function detectWorkbenchIndentation(content: string): Nullable<WorkbenchDetectedIndentation> {
-  let tabLines = 0
-  let spaceLines = 0
-  let previousSpaces: Nullable<number> = 0
-  const increases = new Map<number, number>()
-  let lineStart = 0
-  for (let line = 0; line < MaxDetectionLines && lineStart <= content.length; line += 1) {
-    const newline = content.indexOf('\n', lineStart)
-    const lineEnd = newline < 0 ? content.length : newline
-    const text = content.slice(lineStart, lineEnd)
-    lineStart = lineEnd + 1
-    const indent = /^[ \t]*/u.exec(text)![0]
-    if (indent.length === text.trimEnd().length) {
-      if (newline < 0) break
-      continue
-    }
-    if (indent.startsWith('\t')) {
-      tabLines += 1
-      previousSpaces = null
-    } else {
-      const spaces = indent.includes('\t') ? null : indent.length
-      if (spaces) spaceLines += 1
-      if (spaces !== null && previousSpaces !== null && spaces > previousSpaces) {
-        const increase = spaces - previousSpaces
-        if (DetectableSpaceSizes.includes(increase)) increases.set(increase, (increases.get(increase) ?? 0) + 1)
-      }
-      previousSpaces = spaces
-    }
-    if (newline < 0) break
-  }
-
-  if (tabLines > 0 && tabLines >= spaceLines) return { style: 'tab', size: DefaultTabSize }
-  let best: Nullable<[number, number]> = null
-  for (const [size, count] of increases)
-    if (!best || count > best[1] || (count === best[1] && size < best[0])) best = [size, count]
-  return best ? { style: 'space', size: best[0] } : null
 }
 
 /** 语言的默认缩进：Python 四个空格，Makefile、Go 用制表符，其余两个空格。 */

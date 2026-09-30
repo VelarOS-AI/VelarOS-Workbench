@@ -16,12 +16,14 @@ import { WarningCircleIcon } from '@phosphor-icons/react'
 import { useWorkbenchI18n } from '@renderer/i18n'
 import type { PackageManagerCommand } from '@renderer/models/commands/workbenchPackageScriptCommand'
 import { inferWorkbenchPackageManagerForPackageJsonPath } from '@renderer/models/commands/workbenchPackageScriptCommand'
+import type { WorkbenchLanguageServiceWorkspaceEditRequest } from '@renderer/models/editor/workbenchCodeActions'
 import {
   buildWorkbenchDiagnosticProblemId,
   findWorkbenchDiagnosticIndexAtPosition,
   resolveWorkbenchDiagnosticNavigationIndex,
   sortWorkbenchFileDiagnostics,
 } from '@renderer/models/editor/workbenchCodeInsightModel'
+import type { WorkbenchEditorCommandRequest } from '@renderer/models/editor/workbenchEditorCommands'
 import type { WorkbenchEditorFileStates } from '@renderer/models/editor/workbenchEditorFileStates'
 import {
   DefaultWorkbenchEditorFindOptions,
@@ -241,6 +243,10 @@ export interface WorkbenchEditorPanelWorkspaceProps {
     changes: WorkbenchLanguageServiceFileEdit[],
     options?: { editedInEditor?: number }
   ) => void
+  /** 快速修复动到了别的文件、要新建文件：交给页面去落。 */
+  onApplyLanguageServiceEdit?: (request: WorkbenchLanguageServiceWorkspaceEditRequest) => void
+  /** 命令面板交给编辑器去做的代码动作（快速修复……）：每个请求只做一次。 */
+  editorCommandRequest?: Nullable<WorkbenchEditorCommandRequest>
   packageManager: PackageManagerCommand
   onRunPackageScript: (command: string) => void
   /** 右键「添加到聊天」（编辑器与标签页）：把文件作为引用挂到聊天输入框，只挂路径。 */
@@ -338,6 +344,8 @@ export function EditorPanel({
     onEditorContentChange,
     onGoToDefinition,
     onApplyLanguageServiceRename,
+    onApplyLanguageServiceEdit,
+    editorCommandRequest = null,
     packageManager,
     onRunPackageScript,
     onAddFilesToChat,
@@ -778,6 +786,17 @@ export function EditorPanel({
     else if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
   }, [focusRequestGroupIndex, focusRequestId, group.index, handledFocusRequestIdRef])
 
+  // 命令面板里的代码动作交给当前组的编辑器；编辑区挂上之前发出的请求不补做。每一组都把请求记成看过的，
+  // 只有当时的当前组去做：之后换了当前组，不会把这个旧请求在另一组里再做一遍。
+  const handledEditorCommandRequestIdRef = useRef(editorCommandRequest?.id ?? null)
+  const isFocusedGroup = group.focused
+  useEffect(() => {
+    if (!editorCommandRequest || handledEditorCommandRequestIdRef.current === editorCommandRequest.id)
+      return
+    handledEditorCommandRequestIdRef.current = editorCommandRequest.id
+    if (isFocusedGroup) editorRef.current?.runCommand(editorCommandRequest.command)
+  }, [editorCommandRequest, isFocusedGroup])
+
   useEffect(() => {
     if (
       !shouldShowExternalConflictDialog ||
@@ -1160,6 +1179,7 @@ export function EditorPanel({
                         onCloseSymbolLocations={() => setSymbolLocationsVisible(false)}
                         onNavigateSymbolLocation={navigateSymbolLocation}
                         onApplyLanguageServiceRename={onApplyLanguageServiceRename}
+                        onApplyLanguageServiceEdit={onApplyLanguageServiceEdit}
                         onRunPackageScript={onRunPackageScript}
                         onOpenFileHistory={setFileHistoryMode}
                         onAddToChat={

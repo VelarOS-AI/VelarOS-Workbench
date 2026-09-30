@@ -10,6 +10,7 @@ import { ipcMain, type IpcMainInvokeEvent } from 'electron'
 import type { ModelSelection } from '@velaros-ai/model/contracts'
 
 import type {
+  WorkbenchLanguageServiceCodeActionResolveRequest,
   WorkbenchLanguageServiceCodeActionsRequest,
   WorkbenchLanguageServiceCompletionResolveRequest,
   WorkbenchLanguageServiceDiagnostic,
@@ -178,6 +179,15 @@ export function registerWorkbenchLanguageServiceIpc(
       if (!parsed) return invalidRequest()
 
       return client.getCodeActions(parsed)
+    })
+  )
+
+  ipcMain.handle(WorkbenchLanguageChannels.codeActionResolve, (_event, request: unknown) =>
+    callWithEnvelope(() => {
+      const parsed = parseCodeActionResolveRequest(request)
+      if (!parsed) return invalidRequest()
+
+      return client.resolveCodeAction(parsed)
     })
   )
 
@@ -381,6 +391,20 @@ function parseCodeActionsRequest(input: unknown): Nullable<WorkbenchLanguageServ
     })
   }
   return { ...base, range, diagnostics }
+}
+
+function parseCodeActionResolveRequest(
+  input: unknown
+): Nullable<WorkbenchLanguageServiceCodeActionResolveRequest> {
+  const base = parseRequest(input)
+  if (!base || !isRecord(input)) return null
+  const range = parseRange(input['range'])
+  const resolve = input['resolve']
+  if (!range || !isRecord(resolve) || resolve['kind'] !== 'fix-all') return null
+  const fixId = resolve['fixId']
+  if (typeof fixId !== 'string' || !fixId || fixId.length > 256) return null
+
+  return { ...base, range, resolve: { kind: 'fix-all', fixId } }
 }
 
 function parseRange(input: unknown): Nullable<WorkbenchLanguageServiceRange> {

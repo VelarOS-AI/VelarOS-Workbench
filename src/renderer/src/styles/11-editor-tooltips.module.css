@@ -304,6 +304,34 @@
   padding-inline-start: 6px;
 }
 
+/* 诊断下面的修复按钮：一行放不下就折行。 */
+.editorSymbolTooltipActions {
+  @apply flex flex-wrap;
+  margin-top: 3px;
+  gap: 4px 6px;
+}
+
+.editorSymbolTooltipAction {
+  max-width: 100%;
+  padding: 1px 7px;
+  border: 1px solid var(--workbench-border);
+  border-radius: 5px;
+  background: var(--workbench-surface-muted);
+  color: var(--workbench-editor-hover-link, #2456b3);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 1.6;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.editorSymbolTooltipAction:hover {
+  background: var(--workbench-hover);
+}
+
 .editorSymbolTooltipDivider {
   height: 1px;
   margin: 6px 0;

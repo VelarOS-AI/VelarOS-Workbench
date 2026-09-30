@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import type { WorkbenchLanguageServiceWorkspaceEditRequest } from '@renderer/models/editor/workbenchCodeActions'
 import { getWorkbenchEditorFocusedPath } from '@renderer/models/editor/workbenchEditorGroups'
+import { buildWorkbenchLanguageServiceEditReport } from '@renderer/models/editor/workbenchLanguageServiceEditReport'
 import { buildWorkbenchProjectContextIndex } from '@renderer/models/project/workbenchProjectContextIndex'
 import type { WorkbenchProject } from '@renderer/models/project/workbenchProjects'
 import {
@@ -7,7 +9,7 @@ import {
   saveWorkbenchProjectSessionSnapshot,
 } from '@renderer/models/project/workbenchProjectSessionModel'
 
-import { isEmpty,toNullable } from '@velaros-ai/core'
+import { isEmpty, Log, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type { WorkbenchDirectoryEntry } from '@shared/contracts'
@@ -43,6 +45,8 @@ interface UseWorkbenchControllerOptions {
 }
 
 export type WorkbenchSelectFileOptions = WorkbenchFileOpenOptions
+
+const log = Log.tag('workbench-controller')
 
 export function useWorkbenchController(options: UseWorkbenchControllerOptions = {}) {
   const { messageLatest, tLatest } = useStableWorkbenchMessageTranslate()
@@ -130,6 +134,45 @@ export function useWorkbenchController(options: UseWorkbenchControllerOptions = 
       void projectIndex.refreshProjectIndex()
     },
   })
+  /**
+   * 语言服务的一份动到编辑器之外的改动（快速修复、重构）：先建要新建的文件，建成了让编辑器套上当前文件的那部分，
+   * 再改别的文件，最后报告一共改了几个文件。新文件没建成就整份作废，原处的代码不动。
+   */
+  const applyLanguageServiceWorkspaceEdit = useMemoizedFn(
+    (request: WorkbenchLanguageServiceWorkspaceEditRequest): void => {
+      void (async () => {
+        const created = await mutation.createFilesWithContent(request.createFiles)
+        const failures = created.failures.map((failure) => ({
+          path: failure.path,
+          reason: 'error' as const,
+          message: failure.message,
+        }))
+        const editedInEditor = isEmpty(failures) ? request.applyToEditor() : null
+        const outcome =
+          editedInEditor === null
+            ? { changedFiles: 0, failures: [] }
+            : await editor.applyLanguageServiceEdits(request.changes)
+        if (editedInEditor === null && isEmpty(failures)) {
+          messageLatest.current.warning({
+            title: tLatest.current('workbench.languageServiceActionStale'),
+          })
+          return
+        }
+
+        const report = buildWorkbenchLanguageServiceEditReport(
+          {
+            changedFiles: outcome.changedFiles,
+            createdPaths: created.createdPaths,
+            failures: [...failures, ...outcome.failures],
+          },
+          { kind: 'code-action', editedInEditor: editedInEditor ?? 0, translate: tLatest.current }
+        )
+        if (report) messageLatest.current[report.tone](report)
+      })().catch((error: unknown) => {
+        log.error('套用语言服务的跨文件改动失败', { error })
+      })
+    }
+  )
   const projectContextIndex = useMemo(
     () =>
       buildWorkbenchProjectContextIndex({
@@ -353,6 +396,7 @@ export function useWorkbenchController(options: UseWorkbenchControllerOptions = 
     clearPendingSessionNavigation,
     applyLanguageServiceFileChanges: editor.applyLanguageServiceFileChanges,
     applyLanguageServiceRename: editor.applyLanguageServiceRename,
+    applyLanguageServiceWorkspaceEdit,
     /** 项目搜索的替换落到开着的文件上（在标签正文上换，能撤销，不写盘）。 */
     replaceOpenTabContents: editor.replaceOpenTabContents,
     setEditorContent: editor.setEditorContent,

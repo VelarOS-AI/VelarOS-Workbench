@@ -100,6 +100,7 @@ import {
   useWorkbenchComments,
   useWorkbenchCommentStore,
 } from '@renderer/models/comments/workbenchCommentStore'
+import type { WorkbenchLanguageServiceWorkspaceEditRequest } from '@renderer/models/editor/workbenchCodeActions'
 import {
   isWorkbenchActiveLineSuppressed,
   revealWorkbenchActiveLine,
@@ -124,6 +125,7 @@ import {
   createWorkbenchDiagnosticForegroundExtension,
   mapWorkbenchDiagnosticToCodeMirror,
 } from '@renderer/models/editor/workbenchCodeMirrorDiagnostics'
+import { workbenchEditorCommandKeys } from '@renderer/models/editor/workbenchCodeMirrorEditorCommands'
 import { buildWorkbenchExternalValueSyncTransaction } from '@renderer/models/editor/workbenchCodeMirrorExternalSync'
 import {
   foldWorkbenchImportBlock,
@@ -170,6 +172,7 @@ import {
   getWorkbenchCodeMirrorTheme,
 } from '@renderer/models/editor/workbenchCodeMirrorTheme'
 import { createWorkbenchTokenOccurrenceHighlightExtension } from '@renderer/models/editor/workbenchCodeMirrorTokenOccurrenceHighlight'
+import type { WorkbenchEditorCommandId } from '@renderer/models/editor/workbenchEditorCommands'
 import { rebuildWorkbenchEditorFileState } from '@renderer/models/editor/workbenchEditorFileStateRebuild'
 import {
   type WorkbenchEditorFileState,
@@ -272,6 +275,7 @@ import { useBlockWheelScroll } from '../../support/useBlockWheelScroll'
 import { useDismissOnWindowInteract } from '../../support/useDismissOnWindowInteract'
 
 import { EditorSymbolLocationsPanel } from './EditorSymbolLocationsPanel'
+import { useEditorCodeActions } from './useEditorCodeActions'
 import { workbenchEditorLanguageFeatureClasses } from './workbenchEditorLanguageFeatureClasses'
 
 /** Agent 带用户看代码时不抢焦点：用户可能正在输入框里打字。 */
@@ -289,6 +293,8 @@ export interface CodeMirrorEditorHandle {
     options?: CodeMirrorEditorNavigationOptions
   ) => void
   openCompletion: () => void
+  /** 在光标处做一个代码动作（命令面板里的「快速修复」……）。 */
+  runCommand: (command: WorkbenchEditorCommandId) => void
   selectRange: (from: number, to: number) => void
   /** 查找栏的动作：下一处、上一处、替换当前一处（并跳到下一处）、全部替换。 */
   findNext: () => void
@@ -363,6 +369,8 @@ interface CodeMirrorEditorProps {
     changes: WorkbenchLanguageServiceFileEdit[],
     options?: { editedInEditor?: number }
   ) => void
+  /** 快速修复动到了别的文件、要新建文件：交给页面去落（当前文件的那部分页面会回头让编辑器自己套）。 */
+  onApplyLanguageServiceEdit?: (request: WorkbenchLanguageServiceWorkspaceEditRequest) => void
   onRunPackageScript?: (command: string) => void
   onOpenFileHistory?: (mode: 'local' | 'git') => void
   /** 右键「添加到聊天」：把当前文件作为引用挂到聊天输入框（只挂路径）。 */
@@ -1213,6 +1221,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       onCloseSymbolLocations,
       onNavigateSymbolLocation,
       onApplyLanguageServiceRename,
+      onApplyLanguageServiceEdit,
       onRunPackageScript,
       onOpenFileHistory,
       onAddToChat,
@@ -1431,6 +1440,18 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
     )
     // 语言服务替用户写代码（格式化、补全插入的整段代码）时按这个文件的缩进排。
     const editFormatRef = useLatest(toWorkbenchLanguageServiceEditFormat(indentation))
+    // 快速修复：光标菜单、诊断浮层上的按钮都在这个 hook 里问语言服务、套改动。
+    const codeActions = useEditorCodeActions({
+      viewRef,
+      projectRoot,
+      path,
+      language,
+      readOnly: readOnly || disabled,
+      getOpenTabs: () => openTabsLatest.current,
+      getEditFormat: () => editFormatRef.current,
+      hostRuntime,
+      onApplyWorkspaceEdit: onApplyLanguageServiceEdit,
+    })
     const indentationExtension = useMemo(
       () => [
         indentUnit.of(workbenchIndentUnit(indentation)),
@@ -1613,8 +1634,9 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         hostRuntime,
         hoverDefinitionLabel: t('workbench.editorHoverDefinition'),
         hoverDefinitionPreviewLabel: t('workbench.editorHoverDefinitionPreview'),
+        codeActions: codeActions.hover,
       }),
-      [hostRuntime, language, openTabsLatest, path, projectRoot, t]
+      [codeActions.hover, hostRuntime, language, openTabsLatest, path, projectRoot, t]
     )
 
     const semanticLanguageService = path && usesWorkbenchSemanticLanguageService(path)
@@ -2149,6 +2171,22 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       }
     }
 
+    /**
+     * 右键菜单里的代码动作作用在点的那个词上：选区不在那个词上（有的平台右键不挪光标）就先把光标放过去，
+     * 动作菜单才贴着点的地方出来。
+     */
+    const runCommandFromContextMenu = (command: WorkbenchEditorCommandId): void => {
+      const view = viewRef.current
+      const word = contextMenu?.word
+      setContextMenu(null)
+      if (view && word) {
+        const selection = view.state.selection.main
+        if (selection.to < word.from || selection.from > word.to)
+          view.dispatch({ selection: { anchor: word.from } })
+      }
+      codeActions.run(command)
+    }
+
     const openEditorContextMenu = (event: ReactMouseEvent<HTMLDivElement>): void => {
       const view = viewRef.current
       if (!view) return
@@ -2227,6 +2265,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         view.focus()
         startCompletion(view)
       },
+      runCommand: (command) => codeActions.run(command),
       selectRange: (from, to) => {
         const view = viewRef.current
         if (!view) return
@@ -2253,6 +2292,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       renameIdentifier,
       selectReferenceOccurrences,
       formatDocument,
+      runCommand: codeActions.run,
     })
     const compartmentValuesRef = useLatest({
       editorMetrics: editorMetricsExtension,
@@ -2586,7 +2626,10 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       return {
         module: EditorModule,
         findStatus,
-        keymap: customKeymap,
+        keymap: [
+          workbenchEditorCommandKeys((command) => editorActionsRef.current.runCommand(command)),
+          customKeymap,
+        ],
         tooltips: tooltips({
           parent: toOptional(container),
           // The container clips with overflow:hidden, but CodeMirror defaults its
@@ -3132,6 +3175,14 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
             >
               {t('workbench.editorContextGoToDefinition')}
             </button>
+            <button
+              type="button"
+              role="menuitem"
+              disabled={!codeActions.canRun('quick-fix')}
+              onClick={() => runCommandFromContextMenu('quick-fix')}
+            >
+              {t('workbench.editorContextQuickFix')}
+            </button>
             <div className={styles.editorContextMenuDivider} />
             <button
               type="button"
@@ -3234,6 +3285,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
             )}
           </div>
         )}
+        {codeActions.overlay}
         {!!renamePopup && (
           <RenameInputPopup
             initial={renamePopup.identifier.text}

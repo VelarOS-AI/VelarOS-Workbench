@@ -374,6 +374,30 @@ renderer 侧对应两件事：编辑器控制器订阅 Agent 写入通知（`wor
 请求没带时两格空格。IPC 边界只收 1–16 的整数宽度，别的当没给（宽度为 0 会让 TypeScript 排缩进时除以零）。
 项目装了 Prettier 时照旧以 Prettier 为准。
 
+TypeScript 一次只收一套排版，而一份修复可能动到别的文件。`mapTypeScriptFileChanges` 对落在请求文件之外的那部分
+按那个文件自己的缩进（`detectWorkbenchIndentation`，在 `src/shared`，识别不出来用请求文件的）再算一遍后换上；
+已有的文件写不写分号由 TypeScript 自己看，只有新建的文件要替它看原文件、明说出来。
+
+### 代码动作（快速修复）
+
+光标处的动作菜单（⌥↩ / Alt+Enter、⌘. / Ctrl+.、右键「快速修复…」、命令面板）与诊断浮层上的修复按钮走同一条路：
+`useEditorCodeActions` 问 `getCodeActions`，把改动套上。
+
+- **worker**：TypeScript 的修复在 `TypeScriptCodeActions.ts`。诊断按请求里的正文现算（不靠编辑器里那份，它可能
+  还没刷新），只对 TypeScript 登记了修复的诊断码去问 `getCodeFixesAtPosition`，一次最多 12 条诊断。TypeScript 给了
+  「同类问题一起修」（`fixId`）且文件里确实还有同类诊断时多列一项，它的改动在选中时才算（`resolveCodeAction` →
+  `getCombinedCodeFix`）。外部语言服务器仍按请求里带的诊断给修复（编辑器里的诊断上挂着语言服务当初给的那一条，
+  诊断码、来源才交得回去）。
+- **改动怎么落**：当前文件的由编辑器自己 `dispatch`（一步撤销）。动到别的文件、要新建文件的交给页面
+  （`applyLanguageServiceWorkspaceEdit`）：先建新文件（`createWorkbenchEntry` 再经保存管线写正文，与文件树里新建
+  走同一条路），建成了才让编辑器套当前文件的那部分，再改别的文件（开着的改编辑缓冲，没开着的写盘，与跨文件改名
+  同一套），最后只在碰了编辑器之外的文件时报告改了几个。
+- **过期的结果**：每次请求记下当时的文档对象，结果回来、动作被选中、页面回头让编辑器套改动时，编辑器不在那份
+  文档上（又打了字、换了文件）就作废。只读的编辑器不给任何会改代码的动作。
+- **按键**：这些组合不走 CodeMirror 的键位表，而是排在它前面直接接 keydown（`workbenchEditorCommandKeys`）：键位表
+  在 macOS 上认不出带 ⌥ 的字符键（打出来的是别的字符）。命令面板里的代码动作经 `editorCommandRequest` 交给眼前的
+  编辑器，因为光标在哪只有它知道。
+
 ### 超时、取消与重启
 
 - 一个请求超时只让它自己失败（`TIMEOUT`），并通知 worker 丢掉 / 放弃它；TypeScript 的项目状态与外部 LSP

@@ -1191,6 +1191,7 @@ export function useStandaloneWorkbenchPageModel(
     navigateForward: editorNavigation.goForward,
     openSettings: () => setSettingsOpen(true),
     reopenClosedEditorTab,
+    runEditorCommand: editorNavigation.requestEditorCommand,
     showEditorSurface,
     toggleBottomTool,
     zoomEditor,

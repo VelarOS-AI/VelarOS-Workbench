@@ -9,6 +9,8 @@ export const workbenchEditorLanguageFeatureClasses: WorkbenchEditorLanguageFeatu
   editorSignatureTooltipParameter: styles.editorSignatureTooltipParameter,
   editorSignatureTooltipSignature: styles.editorSignatureTooltipSignature,
   editorSymbolTooltip: styles.editorSymbolTooltip,
+  editorSymbolTooltipAction: styles.editorSymbolTooltipAction,
+  editorSymbolTooltipActions: styles.editorSymbolTooltipActions,
   editorSymbolTooltipCode: styles.editorSymbolTooltipCode,
   editorSymbolTooltipDiagnostic: styles.editorSymbolTooltipDiagnostic,
   editorSymbolTooltipDiagnostics: styles.editorSymbolTooltipDiagnostics,

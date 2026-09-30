@@ -15,6 +15,8 @@ import type { ModelSelection } from '@velaros-ai/model/contracts'
 import type {
   WorkbenchInlineCompletionRequest,
   WorkbenchInlineCompletionResult,
+  WorkbenchLanguageServiceCodeActionResolveRequest,
+  WorkbenchLanguageServiceCodeActionResolveResult,
   WorkbenchLanguageServiceCodeActionsRequest,
   WorkbenchLanguageServiceCodeActionsResult,
   WorkbenchLanguageServiceCompletionResolveRequest,
@@ -59,6 +61,7 @@ export const WorkbenchLanguageChannels = {
   inlayHints: 'workbench-app:ls:inlay-hints',
   semanticTokens: 'workbench-app:ls:semantic-tokens',
   codeActions: 'workbench-app:ls:code-actions',
+  codeActionResolve: 'workbench-app:ls:code-action-resolve',
   extension: 'workbench-app:ls:extension',
   inlineCompletion: 'workbench-app:ls:inline-completion',
 } as const
@@ -114,6 +117,9 @@ export interface WorkbenchLanguageBridge {
   getCodeActions: (
     request: WorkbenchLanguageServiceCodeActionsRequest
   ) => Promise<WorkbenchFsCallResult<WorkbenchLanguageServiceCodeActionsResult>>
+  resolveCodeAction: (
+    request: WorkbenchLanguageServiceCodeActionResolveRequest
+  ) => Promise<WorkbenchFsCallResult<WorkbenchLanguageServiceCodeActionResolveResult>>
   requestExtension: (
     request: WorkbenchLanguageServiceExtensionRequest
   ) => Promise<WorkbenchFsCallResult<WorkbenchLanguageServiceExtensionResult>>

@@ -57,6 +57,7 @@ const FileInFront: WorkbenchPaletteCommandContext = {
   canToggleReadOnly: true,
   editorCovered: false,
   openTabCount: 2,
+  activeFileLanguageService: 'typescript',
 }
 
 void describe('Workbench command palette registry', () => {
@@ -105,6 +106,7 @@ void describe('Workbench command palette registry', () => {
     assert.equal(command(mac, 'navigate-back').shortcut, '⌃-')
     // 编辑器与应用菜单里写死的按键。
     assert.equal(command(mac, 'format-document').shortcut, '⌥⌘L')
+    assert.equal(command(mac, 'quick-fix').shortcut, '⌥↩')
     assert.equal(command(mac, 'toggle-word-wrap').shortcut, '⌥Z')
     assert.equal(command(mac, 'go-to-line').shortcut, '⌃G')
     assert.equal(command(mac, 'close-editor').shortcut, '⌘W')
@@ -119,6 +121,7 @@ void describe('Workbench command palette registry', () => {
     assert.equal(command(linux, 'split-terminal').shortcut, 'Ctrl+Shift+5')
     assert.equal(command(linux, 'go-to-file').shortcut, 'Ctrl+P')
     assert.equal(command(linux, 'format-document').shortcut, 'Ctrl+Alt+L')
+    assert.equal(command(linux, 'quick-fix').shortcut, 'Alt+Enter')
     assert.equal(command(linux, 'zoom-out').shortcut, 'Ctrl+-')
 
     // 改过的快捷键照改过的显示。
@@ -216,6 +219,21 @@ void describe('Workbench command palette availability', () => {
     )
   })
 
+  void test('code actions need an editable file that a language service looks after', () => {
+    assert.equal(isWorkbenchPaletteCommandAvailable('quick-fix', FileInFront), true)
+    assert.equal(
+      isWorkbenchPaletteCommandAvailable('quick-fix', { ...FileInFront, activeFileLanguageService: 'external' }),
+      true
+    )
+    for (const context of [
+      { ...FileInFront, activeFileLanguageService: null },
+      { ...FileInFront, canEditActiveFile: false },
+      { ...FileInFront, editorCovered: true },
+      { ...FileInFront, hasActiveFile: false },
+    ])
+      assert.equal(isWorkbenchPaletteCommandAvailable('quick-fix', context), false)
+  })
+
   void test('go to line brings a covered text file back, but needs one', () => {
     assert.equal(isWorkbenchPaletteCommandAvailable('go-to-line', { ...FileInFront, editorCovered: true }), true)
     assert.equal(isWorkbenchPaletteCommandAvailable('go-to-line', { ...FileInFront, activeFileIsText: false }), false)
@@ -230,6 +248,7 @@ void describe('Workbench command palette availability', () => {
       canToggleReadOnly: false,
       editorCovered: false,
       openTabCount: 0,
+      activeFileLanguageService: null,
     }
     for (const id of ['save-current', 'save-all', 'close-editor', 'close-all-editors', 'reveal-active-file'] as const)
       assert.equal(isWorkbenchPaletteCommandAvailable(id, empty), false, id)

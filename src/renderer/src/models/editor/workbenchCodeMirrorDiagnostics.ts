@@ -64,10 +64,18 @@ export function isWorkbenchDeprecatedDiagnostic(
   )
 }
 
+/**
+ * 编辑器里的一条诊断，带着语言服务当初给的那一条（诊断码、来源）：问外部语言服务器要修复时得原样交回去，
+ * CodeMirror 自己的诊断里没有这些。
+ */
+export type WorkbenchCodeMirrorDiagnostic = Diagnostic & {
+  workbenchDiagnostic?: WorkbenchLanguageServiceDiagnostic
+}
+
 export function mapWorkbenchDiagnosticToCodeMirror(
   state: EditorState,
   diagnostic: WorkbenchLanguageServiceDiagnostic
-): Nullable<Diagnostic> {
+): Nullable<WorkbenchCodeMirrorDiagnostic> {
   const range = diagnosticToCodeMirrorLintRange(state, diagnostic)
   if (!range) return null
 
@@ -79,6 +87,7 @@ export function mapWorkbenchDiagnosticToCodeMirror(
       markClass: ' cm-workbenchDeprecated',
       message: range.message,
       source: diagnostic.source ?? 'typescript',
+      workbenchDiagnostic: diagnostic,
     }
 
   if (isWorkbenchUnusedVariableDiagnosticCode(diagnostic.code))
@@ -89,6 +98,7 @@ export function mapWorkbenchDiagnosticToCodeMirror(
       markClass: ' cm-workbenchUnusedVariable',
       message: range.message,
       source: diagnostic.source ?? 'typescript',
+      workbenchDiagnostic: diagnostic,
     }
 
   if (isWorkbenchUnresolvedNameDiagnostic(diagnostic))
@@ -99,6 +109,7 @@ export function mapWorkbenchDiagnosticToCodeMirror(
       markClass: ' cm-workbenchErrorIdentifier',
       message: range.message,
       source: diagnostic.source ?? 'typescript',
+      workbenchDiagnostic: diagnostic,
     }
 
   return {
@@ -107,6 +118,7 @@ export function mapWorkbenchDiagnosticToCodeMirror(
     severity: range.severity,
     message: range.message,
     source: diagnostic.source,
+    workbenchDiagnostic: diagnostic,
   }
 }
 

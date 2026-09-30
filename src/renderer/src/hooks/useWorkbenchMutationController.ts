@@ -250,6 +250,55 @@ export function useWorkbenchMutationController({
     }
   }
 
+  /**
+   * 语言服务要新建的文件（重构「移到新文件」）。与文件树里新建文件走同一条路：先建空文件（主进程记下它是新文件），
+   * 再经保存管线写入正文，建好刷新所在目录，它就和手动新建的一样出现在树里。不改树的选中项、不弹「创建成功」，
+   * 由发起的动作统一报告；没建成的逐个返回原因。
+   */
+  async function createFilesWithContent(
+    files: ReadonlyArray<{ path: string; content: string }>
+  ): Promise<{ createdPaths: string[]; failures: Array<{ path: string; message: string }> }> {
+    const owningProject = activeProjectRef.current
+    const createdPaths: string[] = []
+    const failures: Array<{ path: string; message: string }> = []
+    if (!owningProject || isEmpty(files)) return { createdPaths, failures }
+
+    const parentsToRefresh = new Set<string>()
+    for (const file of files) {
+      const parentPath = getParentPath(file.path)
+      try {
+        const created = Result.unwrap(
+          await workbenchHost.kernel.project.createWorkbenchEntry({
+            projectRoot: owningProject.rootPath,
+            parentPath,
+            name: file.path.slice(file.path.lastIndexOf('/') + 1),
+            type: 'file',
+          })
+        )
+        parentsToRefresh.add(created.parentPath)
+        createdPaths.push(created.entry.path)
+        if (file.content)
+          Result.unwrap(
+            await workbenchHost.kernel.project.saveWorkbenchFile({
+              projectRoot: owningProject.rootPath,
+              path: created.entry.path,
+              content: file.content,
+            })
+          )
+      } catch (error) {
+        failures.push({ path: file.path, message: AppError.from(error).message })
+      }
+    }
+
+    if (activeProjectRef.current?.id === owningProject.id && parentsToRefresh.size > 0) {
+      onTreeChangedLatest.current()
+      await Promise.all(
+        [...parentsToRefresh].map((parentPath) => refreshMutationParentLatest.current(parentPath))
+      )
+    }
+    return { createdPaths, failures }
+  }
+
   async function renameTreeEntry(
     entry: WorkbenchDirectoryEntry,
     name: string
@@ -705,6 +754,7 @@ export function useWorkbenchMutationController({
     beginCreateEntry,
     beginRenameEntry,
     createTreeEntry,
+    createFilesWithContent,
     renameTreeEntry,
     moveTreeEntries,
     copyTreeEntries,

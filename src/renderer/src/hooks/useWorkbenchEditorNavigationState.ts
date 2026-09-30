@@ -1,4 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type {
+  WorkbenchEditorCommandId,
+  WorkbenchEditorCommandRequest,
+} from '@renderer/models/editor/workbenchEditorCommands'
 import type { WorkbenchEditorOpenTabIntent } from '@renderer/models/editor/workbenchEditorGroups'
 import type {
   WorkbenchIndentation,
@@ -109,6 +113,12 @@ export function useWorkbenchEditorNavigationState({
     useState<Nullable<WorkbenchIndentationRequest>>(null)
   const requestIndentationChange = useCallback((change: WorkbenchIndentationChange): void => {
     setIndentationRequest((current) => ({ id: (current?.id ?? 0) + 1, change }))
+  }, [])
+  // 命令面板交给编辑器去做的代码动作（快速修复……）：作用在光标处，只有编辑器自己知道光标在哪。
+  const [editorCommandRequest, setEditorCommandRequest] =
+    useState<Nullable<WorkbenchEditorCommandRequest>>(null)
+  const requestEditorCommand = useCallback((command: WorkbenchEditorCommandId): void => {
+    setEditorCommandRequest((current) => ({ id: (current?.id ?? 0) + 1, command }))
   }, [])
   const [activeProblemId, setActiveProblemIdState] = useState<Nullable<string>>(null)
   const setActiveProblemId = useCallback((problemId: Nullable<string>) => {
@@ -375,6 +385,8 @@ export function useWorkbenchEditorNavigationState({
     setIndentation,
     indentationRequest,
     requestIndentationChange,
+    editorCommandRequest,
+    requestEditorCommand,
     lightTab,
     navigationRequest,
     openDiff,

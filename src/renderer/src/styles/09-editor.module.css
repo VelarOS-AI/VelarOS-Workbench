@@ -1866,6 +1866,58 @@
   background: var(--workbench-border);
 }
 
+/* 光标处的动作菜单（快速修复）：动作多的时候自己滚，不带着背后的编辑器一起滚。 */
+.editorCodeActionMenu {
+  @apply fixed z-50 flex flex-col border bg-card;
+  min-width: 220px;
+  max-width: min(520px, calc(100vw - 16px));
+  max-height: min(320px, calc(100vh - 16px));
+  padding: 4px;
+  border-color: var(--workbench-border);
+  border-radius: var(--workbench-radius-lg);
+  box-shadow: 0 14px 36px color-mix(in oklab, var(--foreground) 16%, transparent);
+  outline: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.editorCodeActionMenuItem {
+  @apply block w-full shrink-0 truncate border-0 bg-transparent text-left;
+  min-height: 28px;
+  padding: 4px 10px;
+  border-radius: var(--workbench-radius-sm);
+  color: var(--workbench-text);
+  font-size: var(--ui-font-body-sm);
+}
+
+.editorCodeActionMenuItem[data-active='true'] {
+  background: var(--workbench-hover);
+}
+
+.editorCodeActionMenuItem:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.editorCodeActionMenuHeader {
+  @apply shrink-0 truncate;
+  padding: 5px 10px 2px;
+  color: var(--workbench-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.editorCodeActionMenuStatus {
+  padding: 5px 10px;
+  color: var(--workbench-text-muted);
+  font-size: var(--ui-font-body-sm);
+}
+
+.editorCodeActionMenuStatus[data-tone='error'] {
+  color: var(--status-red);
+  overflow-wrap: anywhere;
+}
+
 .editorRenamePopup {
   @apply fixed z-50 border bg-card;
   padding: 3px;

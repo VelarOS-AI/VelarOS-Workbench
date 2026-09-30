@@ -157,6 +157,9 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
             keepSource: true,
           }),
         onApplyLanguageServiceRename: workbench.applyLanguageServiceRename,
+        onApplyLanguageServiceEdit: workbench.applyLanguageServiceWorkspaceEdit,
+        // 命令面板交给编辑器的代码动作：每一组都拿到，只有当前组的编辑器去做（见 EditorPanel）。
+        editorCommandRequest: editorNavigation.editorCommandRequest,
         packageManager,
         onRunPackageScript: (command) => {
           // 走可交互的运行卡（PTY），而不是只读一次性 runner；顺带记为「上次运行」，

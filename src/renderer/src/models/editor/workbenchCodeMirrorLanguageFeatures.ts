@@ -2,6 +2,7 @@ import type { Diagnostic } from '@codemirror/lint'
 import { forEachDiagnostic } from '@codemirror/lint'
 import type { EditorState, Extension, Transaction } from '@codemirror/state'
 import {
+  closeHoverTooltips,
   type EditorView,
   hoverTooltip,
   type Tooltip,
@@ -37,6 +38,17 @@ import {
   getWorkbenchLanguageServiceSignatureHelp,
 } from './workbenchLanguageServiceIpc'
 
+/** 诊断浮层上的一个修复按钮。 */
+export interface WorkbenchEditorHoverAction {
+  title: string
+  run: () => void
+}
+
+/** 诊断浮层向编辑器要修复：这段范围上的诊断此刻有哪些能直接套的修复（只读、没有修复时为空）。 */
+export interface WorkbenchEditorHoverCodeActions {
+  request: (view: EditorView, from: number, to: number) => Promise<readonly WorkbenchEditorHoverAction[]>
+}
+
 export interface WorkbenchLanguageServiceEditorContext {
   projectRoot: string
   path: Nullable<string>
@@ -45,6 +57,8 @@ export interface WorkbenchLanguageServiceEditorContext {
   hostRuntime?: WorkbenchHostRuntime
   hoverDefinitionLabel?: string
   hoverDefinitionPreviewLabel?: string
+  /** 给了就在诊断浮层上列出修复按钮。 */
+  codeActions?: WorkbenchEditorHoverCodeActions
 }
 
 /** 由产品 UI 注入的语言服务浮层样式；模型不依赖任何宿主 CSS Module。 */
@@ -54,6 +68,8 @@ export interface WorkbenchEditorLanguageFeatureClasses {
   editorSignatureTooltipParameter: string
   editorSignatureTooltipSignature: string
   editorSymbolTooltip: string
+  editorSymbolTooltipAction: string
+  editorSymbolTooltipActions: string
   editorSymbolTooltipDiagnostic: string
   editorSymbolTooltipDiagnostics: string
   editorSymbolTooltipCode: string
@@ -359,6 +375,7 @@ function replaceHoverTooltipDom(target: HTMLElement, source: HTMLElement): void 
 export function buildWorkbenchEditorHoverDom({
   hover = null,
   diagnostics = [],
+  diagnosticActions = [],
   symbolFallback = null,
   definitionLabel = 'Definition',
   definitionPreviewLabel = 'Definition',
@@ -366,6 +383,8 @@ export function buildWorkbenchEditorHoverDom({
 }: {
   hover?: Nullable<WorkbenchLanguageServiceHoverResult>
   diagnostics?: readonly Diagnostic[]
+  /** 这些诊断的修复，列成按钮排在诊断下面。 */
+  diagnosticActions?: readonly WorkbenchEditorHoverAction[]
   symbolFallback?: Nullable<WorkbenchEditorHoverSymbolFallback>
   definitionLabel?: string
   definitionPreviewLabel?: string
@@ -384,6 +403,23 @@ export function buildWorkbenchEditorHoverDom({
       item.dataset.severity = diagnostic.severity
       item.textContent = diagnostic.message
       diagnosticSection.append(item)
+    }
+
+    if (diagnosticActions.length > 0) {
+      const actions = document.createElement('div')
+      actions.className = classes.editorSymbolTooltipActions
+      for (const action of diagnosticActions) {
+        const button = document.createElement('button')
+        button.type = 'button'
+        button.className = classes.editorSymbolTooltipAction
+        button.textContent = action.title
+        button.title = action.title
+        // 按下时不把焦点从编辑器里拿走：点完接着就能敲。
+        button.addEventListener('mousedown', (event) => event.preventDefault())
+        button.addEventListener('click', () => action.run())
+        actions.append(button)
+      }
+      diagnosticSection.append(actions)
     }
 
     wrapper.append(diagnosticSection)
@@ -533,6 +569,20 @@ export function hasWorkbenchPointerSelection(
   return transactions.some((transaction) => transaction.isUserEvent('select.pointer'))
 }
 
+/** 点了浮层上的修复按钮：先收起浮层（它指着的代码就要变了），再套修复。 */
+function closeHoverOnRun(
+  view: EditorView,
+  actions: readonly WorkbenchEditorHoverAction[]
+): WorkbenchEditorHoverAction[] {
+  return actions.map((action) => ({
+    title: action.title,
+    run: () => {
+      view.dispatch({ effects: closeHoverTooltips })
+      action.run()
+    },
+  }))
+}
+
 export function createWorkbenchLanguageServiceHoverTooltip(
   context: WorkbenchLanguageServiceEditorContext,
   classes: WorkbenchEditorLanguageFeatureClasses,
@@ -551,6 +601,14 @@ export function createWorkbenchLanguageServiceHoverTooltip(
       )
       if (keywordRange && !diagnosticRange) return null
 
+      // 诊断的修复与悬浮说明一起问：浮层不等修复，先显示诊断，修复回来再把按钮补上。
+      const actionsRequest = diagnosticRange && context.codeActions
+        ? context.codeActions
+            .request(view, diagnosticRange.from, diagnosticRange.to)
+            .then((actions) => closeHoverOnRun(view, actions))
+            .catch((): readonly WorkbenchEditorHoverAction[] => [])
+        : null
+
       const request = !keywordRange
         && context.path
         && usesWorkbenchSemanticLanguageService(context.path)
@@ -563,9 +621,25 @@ export function createWorkbenchLanguageServiceHoverTooltip(
           pos: diagnosticRange.from,
           end: diagnosticRange.to,
           above: false,
-          create: () => ({
-            dom: buildWorkbenchEditorHoverDom({ diagnostics: diagnosticRange.diagnostics }, classes),
-          }),
+          create: () => {
+            const { diagnostics } = diagnosticRange
+            const dom = buildWorkbenchEditorHoverDom({ diagnostics }, classes)
+            let destroyed = false
+            void actionsRequest?.then((diagnosticActions) => {
+              if (destroyed || isEmpty(diagnosticActions)) return
+              replaceHoverTooltipDom(
+                dom,
+                buildWorkbenchEditorHoverDom({ diagnostics, diagnosticActions }, classes)
+              )
+              view.requestMeasure()
+            })
+            return {
+              dom,
+              destroy: () => {
+                destroyed = true
+              },
+            }
+          },
         }
       }
 
@@ -588,6 +662,7 @@ export function createWorkbenchLanguageServiceHoverTooltip(
         create: () => {
           let definitionPreviewExpanded = false
           const diagnostics = diagnosticRange?.diagnostics ?? []
+          let diagnosticActions: readonly WorkbenchEditorHoverAction[] = []
           const dom = buildWorkbenchEditorHoverDom({
             hover: resolvedHover,
             diagnostics,
@@ -629,6 +704,7 @@ export function createWorkbenchLanguageServiceHoverTooltip(
             replaceHoverTooltipDom(dom, buildWorkbenchEditorHoverDom({
               hover: resolvedHover,
               diagnostics,
+              diagnosticActions,
               definitionLabel: context.hoverDefinitionLabel,
               definitionPreviewLabel: context.hoverDefinitionPreviewLabel,
               showDefinitionPreview: definitionPreviewExpanded,
@@ -677,6 +753,11 @@ export function createWorkbenchLanguageServiceHoverTooltip(
           window.addEventListener('keydown', handleWindowKeyDown, true)
           window.addEventListener('keyup', handleWindowKeyUp, true)
           window.addEventListener('blur', handleWindowBlur)
+          void actionsRequest?.then((actions) => {
+            if (destroyed || isEmpty(actions)) return
+            diagnosticActions = actions
+            scheduleResolvedHoverRender()
+          })
 
           return {
             dom,

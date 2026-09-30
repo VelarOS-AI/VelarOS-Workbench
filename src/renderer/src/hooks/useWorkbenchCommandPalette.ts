@@ -1,7 +1,11 @@
 import { isEmpty, Log } from '@velaros-ai/core'
 import { Result } from '@velaros-ai/core/result'
 
-import { buildWorkbenchLanguageServiceRequestBase } from '../models/editor/workbenchCodeMirrorLanguageService'
+import {
+  buildWorkbenchLanguageServiceRequestBase,
+  resolveWorkbenchBuiltinLanguageServiceRuntime,
+} from '../models/editor/workbenchCodeMirrorLanguageService'
+import type { WorkbenchEditorCommandId } from '../models/editor/workbenchEditorCommands'
 import { canEditWorkbenchFileContent } from '../models/editor/workbenchEditorEditMode'
 import { moveWorkbenchEditorTabToGroup } from '../models/editor/workbenchEditorGroups'
 import { toggleWorkbenchGitBlameVisible } from '../models/editor/workbenchGitBlameVisibility'
@@ -15,6 +19,7 @@ import { getWorkbenchLanguageServiceFormat } from '../models/editor/workbenchLan
 import type {
   WorkbenchPaletteCommandContext,
   WorkbenchPaletteCommandId,
+  WorkbenchPaletteLanguageService,
 } from '../models/layout/workbenchCommandPalette'
 import { toggleWorkbenchEditorWordWrap } from '../models/settings/workbenchPreferences'
 import { fileLanguage } from '../models/shared/workbenchUtils'
@@ -78,9 +83,26 @@ interface UseWorkbenchCommandPaletteOptions {
   navigateForward: () => Promise<void>
   openSettings: () => void
   reopenClosedEditorTab: () => Promise<void>
+  /** 作用在光标处的代码动作（快速修复……）：交给眼前的编辑器去做。 */
+  runEditorCommand: (command: WorkbenchEditorCommandId) => void
   showEditorSurface: () => void
   toggleBottomTool: (tool: 'git' | 'problems' | 'terminal') => void
   zoomEditor: (action: 'decrease' | 'increase' | 'reset') => void
+}
+
+/** 当前文件归哪种语言服务照看；没有（纯文本、CSS……）为 null。 */
+function resolveActiveFileLanguageService(
+  path: Nullable<string>
+): Nullable<WorkbenchPaletteLanguageService> {
+  switch (resolveWorkbenchBuiltinLanguageServiceRuntime(path)) {
+    case 'typescript-language-service':
+      return 'typescript'
+    case 'lsp-server':
+    case 'python-language-server':
+      return 'external'
+    default:
+      return null
+  }
 }
 
 /**
@@ -101,6 +123,7 @@ export function useWorkbenchCommandPalette({
   navigateForward,
   openSettings,
   reopenClosedEditorTab,
+  runEditorCommand,
   showEditorSurface,
   toggleBottomTool,
   zoomEditor,
@@ -122,6 +145,7 @@ export function useWorkbenchCommandPalette({
       moveWorkbenchEditorTabToGroup(workbench.editorLayout, workbench.selectedFilePath, 1) !==
         workbench.editorLayout,
     editorGroupCount: workbench.editorLayout.groups.length,
+    activeFileLanguageService: resolveActiveFileLanguageService(workbench.selectedFilePath),
   }
 
   /**
@@ -236,6 +260,10 @@ export function useWorkbenchCommandPalette({
       }
       case 'format-document': {
         void formatDocument()
+        return
+      }
+      case 'quick-fix': {
+        runEditorCommand(id)
         return
       }
       case 'toggle-word-wrap': {

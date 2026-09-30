@@ -2,6 +2,8 @@ import type { SerializedError } from '@velaros-ai/core/error'
 
 import type { AppLocale } from '@shared/contracts'
 import type {
+  WorkbenchLanguageServiceCodeActionResolveRequest,
+  WorkbenchLanguageServiceCodeActionResolveResult,
   WorkbenchLanguageServiceCodeActionsRequest,
   WorkbenchLanguageServiceCodeActionsResult,
   WorkbenchLanguageServiceCompletionResolveRequest,
@@ -127,6 +129,10 @@ export interface WorkbenchLanguageServiceWorkerOperationMap {
   getCodeActions: {
     request: WorkbenchLanguageServiceCodeActionsRequest
     result: WorkbenchLanguageServiceCodeActionsResult
+  }
+  resolveCodeAction: {
+    request: WorkbenchLanguageServiceCodeActionResolveRequest
+    result: WorkbenchLanguageServiceCodeActionResolveResult
   }
 }
 

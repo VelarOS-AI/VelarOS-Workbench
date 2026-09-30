@@ -1281,8 +1281,10 @@ void describe('focused Workbench language surface', () => {
     )
     assert.match(
       hoverFeatures,
-      /hoverTooltip\(\s*async[\s\S]{0,1400}await getWorkbenchLanguageServiceHover[\s\S]{0,420}if \(!diagnosticRange && !resolvedHover\) return null/u
+      /hoverTooltip\(\s*async[\s\S]{0,2600}await getWorkbenchLanguageServiceHover[\s\S]{0,420}if \(!diagnosticRange && !resolvedHover\) return null/u
     )
+    // 诊断的修复另外问、回来再补按钮：不排在悬浮说明的请求前面等。
+    assert.doesNotMatch(hoverFeatures, /await context\.codeActions/u)
     assert.doesNotMatch(hoverFeatures, /buildWorkbenchEditorHoverStatusDom/u)
     assert.match(
       hoverFeatures,

@@ -19,6 +19,8 @@ import { isNumber,isPresent, optionalWhen, toNullable, toOptional } from '@velar
 
 import type {
   WorkbenchLanguageServiceCapability,
+  WorkbenchLanguageServiceCodeActionResolveRequest,
+  WorkbenchLanguageServiceCodeActionResolveResult,
   WorkbenchLanguageServiceCodeActionsRequest,
   WorkbenchLanguageServiceCodeActionsResult,
   WorkbenchLanguageServiceCompletionItem,
@@ -93,6 +95,11 @@ import {
   withWorkbenchMarkdownLanguageService,
   type WorkbenchMarkdownLanguageServiceContext,
 } from './MarkdownLanguageService'
+import {
+  buildTypeScriptQuickFixes,
+  resolveTypeScriptCodeAction,
+  type TypeScriptEditContext,
+} from './TypeScriptCodeActions'
 import {
   buildTypeScriptCompletionItems,
   resolveTypeScriptCompletionItem,
@@ -1361,6 +1368,15 @@ class WorkbenchLanguageServices {
     request: WorkbenchLanguageServiceCodeActionsRequest
   ): Promise<WorkbenchLanguageServiceCodeActionsResult> {
     const resolved = await this.resolveLanguageService(request)
+    if (resolved.service?.runtime === 'typescript-language-service') {
+      const snapshot = await this.createTypeScriptProjectSnapshot(request)
+      const context = this.typeScriptEditContext(snapshot, request)
+      return {
+        projectRoot: snapshot.projectRoot,
+        path: snapshot.requestPath,
+        actions: buildTypeScriptQuickFixes(context, this.offsetsFromRange(context.content, request.range)),
+      }
+    }
     if (!this.isExternalRuntime(resolved.service?.runtime))
       return { projectRoot: resolved.projectRoot, path: request.path, actions: [] }
     const external = await this.prepareExternal(request, resolved.projectRoot)
@@ -1381,6 +1397,50 @@ class WorkbenchLanguageServices {
       path: request.path,
       actions: this.mapExternalCodeActions(resolved.projectRoot, actions),
     }
+  }
+
+  /** 选中了一个要现算的动作（TypeScript 的「同类问题一起修」）：按请求里的正文算出它的改动。 */
+  public async resolveCodeAction(
+    request: WorkbenchLanguageServiceCodeActionResolveRequest
+  ): Promise<WorkbenchLanguageServiceCodeActionResolveResult> {
+    const resolved = await this.resolveLanguageService(request)
+    if (resolved.service?.runtime !== 'typescript-language-service')
+      return { projectRoot: resolved.projectRoot, path: request.path, changes: [], createFiles: [] }
+
+    const snapshot = await this.createTypeScriptProjectSnapshot(request)
+    const edit = resolveTypeScriptCodeAction(
+      this.typeScriptEditContext(snapshot, request),
+      request.resolve
+    )
+    return {
+      projectRoot: snapshot.projectRoot,
+      path: snapshot.requestPath,
+      changes: edit?.changes ?? [],
+      createFiles: edit?.createFiles ?? [],
+    }
+  }
+
+  private typeScriptEditContext(
+    snapshot: TypeScriptProjectSnapshot,
+    request: WorkbenchLanguageServiceRequest
+  ): TypeScriptEditContext {
+    return {
+      service: snapshot.service,
+      fileName: snapshot.requestAbsolutePath,
+      content: snapshot.files.get(snapshot.requestAbsolutePath) ?? '',
+      readFile: (fileName) => snapshot.files.get(fileName) ?? safeReadFile(fileName),
+      toRelativePath: (fileName) => this.relativePathFor(snapshot.projectRoot, fileName),
+      format: request.format,
+    }
+  }
+
+  private offsetsFromRange(
+    content: string,
+    range: WorkbenchLanguageServiceRange
+  ): { start: number; end: number } {
+    const start = this.offsetFromPosition(content, { line: range.startLine, column: range.startColumn })
+    const end = this.offsetFromPosition(content, { line: range.endLine, column: range.endColumn })
+    return { start: Math.min(start, end), end: Math.max(start, end) }
   }
 
   private resolveToken(request: WorkbenchLanguageServiceRequest): string {
@@ -1427,6 +1487,7 @@ class WorkbenchLanguageServices {
         'document-highlights',
         'inlay-hints',
         'semantic-tokens',
+        'code-actions',
       ]
 
     if (service.runtime === 'markdown-language-service')
