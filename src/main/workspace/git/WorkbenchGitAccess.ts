@@ -44,10 +44,12 @@ export interface GitRepository {
   rootPath: string
   /** 项目根相对仓库根的前缀，如 `packages/app/`；项目就是仓库根时为空串。 */
   prefix: string
+  /** 这个工作区的 git 目录（绝对路径）：合并、变基进行到一半的标记都在里面。 */
+  gitDirectory: string
 }
 
 /**
- * Git 服务交给各功能模块（贮藏……）的内部能力。模块只经它碰仓库：环境、输出配置、报错口径、
+ * Git 服务交给各功能模块（贮藏、合并与变基……）的内部能力。模块只经它碰仓库：环境、输出配置、报错口径、
  * 「项目是仓库里的子目录」的处理都跟服务本体同一套，不各起各的 git。
  */
 export interface WorkbenchGitAccess {
@@ -68,6 +70,8 @@ export interface WorkbenchGitAccess {
   toProjectPath(prefix: string, repositoryPath: string): Nullable<string>
   /** 报错时点名的文件：最多列 5 个，其余说个数。 */
   describePaths(entries: readonly WorkspaceGitFileStatusEntry[]): string
-  /** 进行到一半的操作（合并、拣选、变基）在文案表里的名字；没有为 null。 */
-  readOperationInProgress(rootPath: string): Promise<Nullable<WorkbenchMainMessageKey>>
+  /** 进行到一半的操作（合并、变基、拣选、撤销）在文案表里的名字；没有为 null。 */
+  readOperationInProgress(repository: GitRepository): Promise<Nullable<WorkbenchMainMessageKey>>
+  /** 能当作引用、提交交给 git 的名字：空的、带空白的、以 `-` 开头的（会被当成选项）抛错。 */
+  assertRevision(revision: string): string
 }

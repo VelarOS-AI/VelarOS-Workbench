@@ -457,6 +457,10 @@ const standaloneWorkbenchHost: WorkbenchHost = {
         toHostResult(
           await window.velarosWorkbenchGit.performStashAction({ workspaceRoot, sha, action })
         ),
+      performWorkspaceGitOperation: async (workspaceRoot, request) =>
+        toHostResult(
+          await window.velarosWorkbenchGit.performOperation({ workspaceRoot, ...request })
+        ),
     },
   },
   shell: {

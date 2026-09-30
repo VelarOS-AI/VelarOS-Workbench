@@ -12,6 +12,8 @@ import type {
   WorkspaceGitLineStats,
   WorkspaceGitLogEntry,
   WorkspaceGitLogOptions,
+  WorkspaceGitOperationResult,
+  WorkspaceGitOperationState,
   WorkspaceGitRemoteAction,
   WorkspaceGitRemoteActionResult,
   WorkspaceGitRestoreResult,
@@ -82,6 +84,8 @@ export interface SystemWorkspaceGitSummary {
   status: Nullable<WorkspaceGitStatusResult>
   branches: WorkspaceGitBranch[]
   lineStats: WorkspaceGitLineStats
+  /** 进行到一半的合并、变基、拣选或撤销；没有为 null。 */
+  operation: Nullable<WorkspaceGitOperationState>
 }
 
 export interface SystemWorkspaceGitLineStatsSnapshot {
@@ -163,6 +167,12 @@ export interface SystemWorkspaceGitFileActionResult {
 
 export interface SystemWorkspaceGitHunkActionResult {
   rootPath: string
+  summary: SystemWorkspaceGitSummary
+}
+
+export interface SystemWorkspaceGitOperationResult {
+  rootPath: string
+  operation: WorkspaceGitOperationResult
   summary: SystemWorkspaceGitSummary
 }
 

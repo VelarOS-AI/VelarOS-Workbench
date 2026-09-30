@@ -178,6 +178,8 @@ async function runGitProbe(): Promise<void> {
     const reattached = await service.switchBranch(projectRoot, 'feature/probe')
     equal(reattached.summary.status?.detachedHead ?? null, null, '切回分支后不再是分离的 HEAD')
 
+    await probeOperations(service, projectRoot, initial.status?.branch ?? '')
+
     await expectCode(
       'PERMISSION',
       () => service.performFileAction(projectRoot, ['../escape.txt'], 'stage'),
@@ -233,6 +235,62 @@ async function probeStuckRemote(projectRoot: string): Promise<void> {
   await expectCode('CANCELLED', () => running, '取消应结束正在跑的远端命令')
 }
 
+/**
+ * 合并出了冲突 → 放弃，回到原样 → 再合并，解决，继续 → 撤销这个合并提交。进来时当前分支是 feature/probe，
+ * 它和 `baseBranch` 指着同一个提交，工作区是干净的；出去时当前分支是 `baseBranch`。
+ */
+async function probeOperations(
+  service: WorkbenchGitService,
+  projectRoot: string,
+  baseBranch: string
+): Promise<void> {
+  const filePath = join(projectRoot, 'alpha file.txt')
+  writeFileSync(filePath, 'alpha\nfeature\n')
+  await service.commit(projectRoot, 'en-US', 'feature edit')
+  await service.switchBranch(projectRoot, baseBranch)
+  writeFileSync(filePath, 'alpha\nbase\n')
+  const baseTip = (await service.commit(projectRoot, 'en-US', 'base edit')).commit.commitSha
+
+  const merge = { action: 'merge', target: 'feature/probe' } as const
+  const stopped = await service.performOperation(projectRoot, merge)
+  equal(stopped.operation.conflicts.join(), 'alpha file.txt', '合并冲突应列出冲突文件')
+  equal(stopped.summary.operation?.kind, 'merge', '冲突后摘要应说明合并停在半路')
+  const aborted = await service.performOperation(projectRoot, { action: 'abort' })
+  equal(aborted.summary.operation, null, '放弃后不应再有进行到一半的操作')
+  check(aborted.summary.status?.isClean, '放弃合并应回到合并之前')
+
+  await service.performOperation(projectRoot, merge)
+  await expectCode(
+    'VALIDATION',
+    () => service.performOperation(projectRoot, { action: 'continue' }),
+    '冲突没解决完不能继续'
+  )
+  writeFileSync(filePath, 'alpha\nboth\n')
+  await service.performFileAction(projectRoot, ['alpha file.txt'], 'resolve')
+  const merged = await service.performOperation(projectRoot, { action: 'continue' })
+  equal(merged.summary.operation, null, '继续之后合并应完成')
+  const mergeCommit = (await service.getLog(projectRoot, { branch: baseBranch, limit: 1 }))
+    .commits[0]
+  equal(mergeCommit?.parents.length, 2, '合并提交应有两个父提交')
+  equal(mergeCommit?.parents[0], baseTip, '合并提交的主线应是合并前的当前分支')
+
+  const reverted = await service.performOperation(projectRoot, {
+    action: 'revert',
+    target: mergeCommit?.sha,
+  })
+  equal(reverted.operation.conflicts.length, 0, '撤销合并提交不应冲突')
+  equal(
+    (await service.getFileAtCommit(projectRoot, 'HEAD', 'alpha file.txt')).content,
+    'alpha\nbase\n',
+    '撤销合并提交应回到主线的内容'
+  )
+  await expectCode(
+    'VALIDATION',
+    () => service.performOperation(projectRoot, { action: 'skip' }),
+    '没有进行到一半的操作时不能跳过'
+  )
+}
+
 async function equalRootIdentity(
   actual: string | null,
   expected: string,
@@ -283,6 +341,6 @@ async function configureIdentity(rootPath: string): Promise<void> {
 
 await runGitProbe()
 // Windows 上没有进程组可结束，不跑「卡住的远端」那一段（4 条断言）。
-const expectedAssertions = process.platform === 'win32' ? 50 : 54
+const expectedAssertions = process.platform === 'win32' ? 63 : 67
 assert.equal(assertionCount, expectedAssertions, 'Git 探针断言数变化必须显式复核')
 console.info(`workbench git probe: ${assertionCount}/${expectedAssertions} assertions passed`)

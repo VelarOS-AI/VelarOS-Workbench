@@ -24,6 +24,7 @@ import type {
   SystemWorkspaceGitInitializeRepositoryResult,
   SystemWorkspaceGitLineStatsSnapshot,
   SystemWorkspaceGitLogResult,
+  SystemWorkspaceGitOperationResult,
   SystemWorkspaceGitStashActionResult,
   SystemWorkspaceGitStashListResult,
   SystemWorkspaceGitStashResult,
@@ -39,6 +40,7 @@ import type {
   WorkspaceGitLineStats,
   WorkspaceGitLogEntry,
   WorkspaceGitLogOptions,
+  WorkspaceGitOperationRequest,
   WorkspaceGitRef,
   WorkspaceGitRemoteAction,
   WorkspaceGitRemoteActionOptions,
@@ -79,6 +81,7 @@ import type {
   GitRunResult,
   WorkbenchGitAccess,
 } from './WorkbenchGitAccess'
+import { WorkbenchGitOperationLabels, WorkbenchGitOperations } from './WorkbenchGitOperations'
 import { WorkbenchGitStashes } from './WorkbenchGitStashes'
 
 const DefaultDiffMaxChars = 20_000
@@ -136,12 +139,6 @@ const GitOutputConfig = [
   'diff.relative=false',
   'log.showSignature=false',
 ].flatMap((setting) => ['-c', setting])
-
-/** 要带上一起完成的操作：进行中时 git 不许只提交一部分文件。 */
-const InProgressOperations = [
-  { ref: 'MERGE_HEAD', label: 'git.operationMerge' },
-  { ref: 'CHERRY_PICK_HEAD', label: 'git.operationCherryPick' },
-] as const satisfies ReadonlyArray<{ ref: string; label: WorkbenchMainMessageKey }>
 
 /** 「不是 Git 仓库」：调用方据此把项目当作还没初始化 Git，而不是出错（按类型认，不看提示文字）。 */
 class WorkbenchGitNotRepositoryError extends AppError {
@@ -209,8 +206,13 @@ export class WorkbenchGitService {
     getEmptyTree: (rootPath) => this.getEmptyTree(rootPath),
     toProjectPath: (prefix, repositoryPath) => this.toProjectPath(prefix, repositoryPath),
     describePaths: (entries) => this.describePaths(entries),
-    readOperationInProgress: (rootPath) => this.readOperationInProgress(rootPath),
+    readOperationInProgress: async (repository) => {
+      const operation = await this.operations.readState(repository)
+      return operation ? WorkbenchGitOperationLabels[operation.kind] : null
+    },
+    assertRevision: (revision) => this.assertRevision(revision),
   }
+  private readonly operations = new WorkbenchGitOperations(this.access)
   private readonly stashes = new WorkbenchGitStashes(this.access)
 
   constructor(options: WorkbenchGitServiceOptions = {}) {
@@ -240,14 +242,26 @@ export class WorkbenchGitService {
     return this.stashes.performAction(workspaceRoot, sha, action)
   }
 
+  /**
+   * 合并、变基、拣选、撤销，以及进行到一半之后的继续、放弃、跳过，见 {@link WorkbenchGitOperations}。
+   * 停在冲突上不算失败：冲突文件列在结果里，摘要里的 `operation` 说明停在哪个操作上。
+   */
+  public performOperation(
+    workspaceRoot: string,
+    request: WorkspaceGitOperationRequest
+  ): Promise<SystemWorkspaceGitOperationResult> {
+    return this.operations.perform(workspaceRoot, request)
+  }
+
   public async getSummary(workspaceRoot: string): Promise<SystemWorkspaceGitSummary> {
     const rootPath = await this.resolveRoot(workspaceRoot)
     try {
       const repository = await this.openRepository(rootPath)
-      const [status, branches, lineStats] = await Promise.all([
+      const [status, branches, lineStats, operation] = await Promise.all([
         this.getStatus(repository),
         this.listBranches(rootPath),
         this.getLineStatsForRoot(repository),
+        this.operations.readState(repository),
       ])
       return {
         rootPath,
@@ -256,6 +270,7 @@ export class WorkbenchGitService {
         status,
         branches,
         lineStats,
+        operation,
       }
     } catch (error) {
       if (this.isNotRepositoryError(error)) return this.emptySummary(rootPath)
@@ -514,7 +529,7 @@ export class WorkbenchGitService {
       ? this.scopeStatus(status, this.normalizePathspecs(rootPath, paths))
       : status
     if (selection.isClean) throw new AppError('VALIDATION', workbenchMainText('git.nothingSelectedToCommit'))
-    const operation = await this.getInProgressOperation(rootPath)
+    const operation = await this.readOperationToCommit(repository)
     if (operation && selection.changedFiles < status.changedFiles)
       throw new AppError(
         'VALIDATION',
@@ -568,8 +583,8 @@ export class WorkbenchGitService {
 
     const parent = await this.readHeadCommit(rootPath)
     let commitMessage: Nullable<string> = message?.trim() || null
-    if (await this.getInProgressOperation(rootPath)) {
-      // 合并、拣选只能整个暂存区一起提交；没写说明就用 git 备好的那条。
+    if (await this.readOperationToCommit(repository)) {
+      // 合并、拣选、撤销只能整个暂存区一起提交；没写说明就用 git 备好的那条。
       await this.runCommit(
         rootPath,
         commitMessage ? ['commit', '-m', commitMessage] : ['commit', '--no-edit']
@@ -980,12 +995,16 @@ export class WorkbenchGitService {
 
     // 这次合入冲突了（git 报了 CONFLICT）：不当失败，把冲突文件交给提交面板的「合并冲突」。
     if (/^CONFLICT \(|could not apply/im.test(output)) {
-      const status = await this.getStatus(await this.openRepository(rootPath))
-      const conflicts = status.entries
+      const repository = await this.openRepository(rootPath)
+      const conflicts = (await this.getStatus(repository)).entries
         .filter((entry) => isWorkspaceGitConflictEntry(entry))
         .map((entry) => entry.path)
       if (conflicts.length > 0)
-        return { output, conflicts, rebasing: await this.isRebaseInProgress(rootPath) }
+        return {
+          output,
+          conflicts,
+          rebasing: (await this.operations.readState(repository))?.kind === 'rebase',
+        }
     }
     throw this.describeRemoteFailure('pull', run, options.githubToken)
   }
@@ -1087,17 +1106,6 @@ export class WorkbenchGitService {
         ? workbenchMainText('git.commandFailedDetail', { detail })
         : workbenchMainText('git.commandFailed', { command: action === 'upload' ? 'push' : action })
     )
-  }
-
-  /** 正在变基（拉取按变基方式合入、停在了冲突处）。 */
-  private async isRebaseInProgress(rootPath: string): Promise<boolean> {
-    for (const name of ['rebase-merge', 'rebase-apply']) {
-      const path = (
-        await this.runGit(rootPath, ['rev-parse', '--git-path', name])
-      ).stdout.trim()
-      if (path && (await stat(resolve(rootPath, path)).catch(() => null))) return true
-    }
-    return false
   }
 
   /**
@@ -1340,33 +1348,25 @@ export class WorkbenchGitService {
     ).stdout.trim()
   }
 
-  /** 进行到一半的操作（变基、合并、拣选）在文案表里的名字；没有为 null。 */
-  private async readOperationInProgress(
-    rootPath: string
+  /**
+   * 进行到一半、这次提交要一并完成的操作（合并、拣选、撤销）在文案表里的名字：进行中时 git 不许只提交
+   * 一部分文件，提交就是把它做完。没有为 null；变基不在这里，变基中不提交（见 readCommittableStatus）。
+   */
+  private async readOperationToCommit(
+    repository: GitRepository
   ): Promise<Nullable<WorkbenchMainMessageKey>> {
-    if (await this.isRebaseInProgress(rootPath)) return 'git.operationRebase'
-    return this.getInProgressOperation(rootPath)
-  }
-
-  /** 进行中、这次提交要一并完成的操作（合并、拣选）；没有为 null。 */
-  private async getInProgressOperation(
-    rootPath: string
-  ): Promise<Nullable<WorkbenchMainMessageKey>> {
-    for (const operation of InProgressOperations) {
-      const result = await this.runGit(rootPath, ['rev-parse', '-q', '--verify', operation.ref], {
-        allowFailure: true,
-      })
-      if (!result.failed) return operation.label
-    }
-    return null
+    const operation = await this.operations.readState(repository)
+    return operation && operation.kind !== 'rebase'
+      ? WorkbenchGitOperationLabels[operation.kind]
+      : null
   }
 
   /** 要提交时的项目状态：没有改动、还有没解决的冲突、正在变基时拒绝。 */
   private async readCommittableStatus(
     repository: GitRepository
   ): Promise<WorkspaceGitStatusResult> {
-    // 变基停在冲突处时提交会把这一步的改动提交到分离的 HEAD 上，打乱变基；要在终端里继续或放弃变基。
-    if (await this.isRebaseInProgress(repository.rootPath))
+    // 变基停在冲突处时提交会把这一步的改动提交到分离的 HEAD 上，打乱变基；要用「继续」接着变基，或者放弃它。
+    if ((await this.operations.readState(repository))?.kind === 'rebase')
       throw new AppError(
         'VALIDATION',
         workbenchMainText('git.rebaseInProgress')
@@ -1808,6 +1808,7 @@ export class WorkbenchGitService {
       status: null,
       branches: [],
       lineStats: { ...EmptyLineStats },
+      operation: null,
     }
   }
 
@@ -1896,8 +1897,11 @@ export class WorkbenchGitService {
 
   /** 项目在仓库里的位置；不是 Git 仓库时抛「不是 Git 仓库」。 */
   private async openRepository(rootPath: string): Promise<GitRepository> {
-    const prefix = (await this.runGit(rootPath, ['rev-parse', '--show-prefix'])).stdout
-    return { rootPath, prefix }
+    // 一条命令问两样，各占一行：项目在仓库里的前缀（项目就是仓库根时是空行）、这个工作区的 git 目录。
+    const [prefix = '', gitDirectory = ''] = (
+      await this.runGit(rootPath, ['rev-parse', '--show-prefix', '--absolute-git-dir'])
+    ).stdout.split(/\r?\n/u)
+    return { rootPath, prefix, gitDirectory }
   }
 
   private async runGit(

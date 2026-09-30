@@ -191,6 +191,7 @@ const gitBridge: WorkbenchGitBridge = {
   listStashes: (request) => ipcRenderer.invoke(WorkbenchGitChannels.stashList, request),
   stash: (request) => ipcRenderer.invoke(WorkbenchGitChannels.stash, request),
   performStashAction: (request) => ipcRenderer.invoke(WorkbenchGitChannels.stashAction, request),
+  performOperation: (request) => ipcRenderer.invoke(WorkbenchGitChannels.operation, request),
   captureChatCheckpoint: (request) =>
     ipcRenderer.invoke(WorkbenchGitChannels.captureChatCheckpoint, request),
   deleteChatCheckpoints: (request) =>

@@ -12,6 +12,7 @@ import type {
   SystemWorkspaceGitInitializeRepositoryResult,
   SystemWorkspaceGitLineStatsSnapshot,
   SystemWorkspaceGitLogResult,
+  SystemWorkspaceGitOperationResult,
   SystemWorkspaceGitStashActionResult,
   SystemWorkspaceGitStashListResult,
   SystemWorkspaceGitStashResult,
@@ -22,6 +23,9 @@ import type {
   WorkspaceGitFileStatusEntry,
   WorkspaceGitHunkActionOptions,
   WorkspaceGitLogOptions,
+  WorkspaceGitOperationAction,
+  WorkspaceGitOperationKind,
+  WorkspaceGitOperationRequest,
   WorkspaceGitRemoteAction,
   WorkspaceGitRemoteActionOptions,
   WorkspaceGitStashAction,
@@ -50,6 +54,7 @@ export const WorkbenchGitChannels = {
   stashList: 'workbench-app:git:stash-list',
   stash: 'workbench-app:git:stash',
   stashAction: 'workbench-app:git:stash-action',
+  operation: 'workbench-app:git:operation',
   captureChatCheckpoint: 'workbench-app:git:capture-chat-checkpoint',
   deleteChatCheckpoints: 'workbench-app:git:delete-chat-checkpoints',
   captureChatRunChanges: 'workbench-app:git:capture-chat-run-changes',
@@ -156,6 +161,28 @@ export interface WorkbenchGitStashRequest
 export interface WorkbenchGitStashActionRequest extends WorkbenchGitRootRequest {
   sha: string
   action: WorkspaceGitStashAction
+}
+
+/** 合并、变基、拣选、撤销，或者继续、放弃、跳过进行到一半的那个。 */
+export interface WorkbenchGitOperationRequest
+  extends WorkbenchGitRootRequest,
+    WorkspaceGitOperationRequest {}
+
+const GitOperationKinds: ReadonlySet<string> = new Set(['merge', 'rebase', 'cherry-pick', 'revert'])
+const GitOperationSteps: ReadonlySet<string> = new Set(['continue', 'abort', 'skip'])
+
+/**
+ * 操作的种类，也就是「开始一个操作」的那几个动作（要给出对象）；其余的动作（继续、放弃、跳过）是对
+ * 进行到一半的那个操作说的。
+ */
+export function isWorkspaceGitOperationKind(value: unknown): value is WorkspaceGitOperationKind {
+  return typeof value === 'string' && GitOperationKinds.has(value)
+}
+
+export function isWorkspaceGitOperationAction(value: unknown): value is WorkspaceGitOperationAction {
+  return (
+    isWorkspaceGitOperationKind(value) || (typeof value === 'string' && GitOperationSteps.has(value))
+  )
 }
 
 /**
@@ -324,6 +351,9 @@ export interface WorkbenchGitBridge {
   performStashAction(
     request: WorkbenchGitStashActionRequest
   ): Promise<WorkbenchFsCallResult<SystemWorkspaceGitStashActionResult>>
+  performOperation(
+    request: WorkbenchGitOperationRequest
+  ): Promise<WorkbenchFsCallResult<SystemWorkspaceGitOperationResult>>
   captureChatCheckpoint(
     request: WorkbenchChatCheckpointCaptureRequest
   ): Promise<WorkbenchFsCallResult<WorkbenchChatCheckpointCaptureResult>>

@@ -5,6 +5,8 @@ import { isBoolean, isNumber, isString, isTrue, optionalWhen } from '@velaros-ai
 import { isWorkbenchTextEncoding, isWorkbenchTextEol } from '@shared/workbenchTextFormat'
 
 import {
+  isWorkspaceGitOperationAction,
+  isWorkspaceGitOperationKind,
   type WorkbenchChatCheckpointCaptureRequest,
   type WorkbenchChatCheckpointDeleteRequest,
   type WorkbenchChatRunChangeBaseFileRequest,
@@ -22,6 +24,7 @@ import {
   type WorkbenchGitFileAtCommitRequest,
   type WorkbenchGitHunkActionRequest,
   type WorkbenchGitLogRequest,
+  type WorkbenchGitOperationRequest,
   type WorkbenchGitRemoteActionRequest,
   type WorkbenchGitRootRequest,
   type WorkbenchGitStashActionRequest,
@@ -139,6 +142,12 @@ export function registerWorkbenchGitIpc(
     callWithEnvelope(() => {
       const request = parseStashAction(input)
       return service.performStashAction(request.workspaceRoot, request.sha, request.action)
+    })
+  )
+  ipcMain.handle(WorkbenchGitChannels.operation, (_event, input: unknown) =>
+    callWithEnvelope(() => {
+      const { workspaceRoot, ...request } = parseOperation(input)
+      return service.performOperation(workspaceRoot, request)
     })
   )
   // 检查点经由改动记录区拍：拍的同时为这一轮开改动归属账本。
@@ -371,6 +380,21 @@ function parseStashAction(input: unknown): WorkbenchGitStashActionRequest {
     workspaceRoot: input['workspaceRoot'] as string,
     sha: input['sha'] as string,
     action,
+  }
+}
+
+function parseOperation(input: unknown): WorkbenchGitOperationRequest {
+  if (!hasStringFields(input, ['workspaceRoot', 'action'])) return invalidRequest()
+  const action = input['action']
+  const target = input['target']
+  if (!isWorkspaceGitOperationAction(action)) return invalidRequest()
+  // 开始一个操作要说对象；继续、放弃、跳过说的是进行到一半的那个，带了对象就是发错了请求。
+  if (isWorkspaceGitOperationKind(action) ? !isString(target) || !target.trim() : target !== undefined)
+    return invalidRequest()
+  return {
+    workspaceRoot: input['workspaceRoot'] as string,
+    action,
+    target: optionalWhen(isString, target),
   }
 }
 

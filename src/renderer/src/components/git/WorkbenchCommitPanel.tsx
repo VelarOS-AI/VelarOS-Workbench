@@ -20,6 +20,7 @@ import {
   StopCircleIcon,
   TrayArrowDownIcon,
 } from '@phosphor-icons/react'
+import { useWorkbenchGitOperation } from '@renderer/hooks/useWorkbenchGitOperation'
 import {
   describeWorkbenchGitRemoteActionCancel,
   reportWorkbenchGitRemoteActionFailure,
@@ -67,6 +68,7 @@ import type { WorkspaceGitFileAction, WorkspaceGitStashOptions } from '@shared/c
 import styles from '../../styles/workbenchPageStyles'
 import { WorkbenchFileTypeIcon } from '../files/WorkbenchFileTypeIcon'
 
+import { WorkbenchGitOperationBanner } from './WorkbenchGitOperationBanner'
 import type { WorkbenchGitPanelSessionProps } from './workbenchGitPanelProps'
 import { WorkbenchGitStashDialog } from './WorkbenchGitStashDialog'
 
@@ -131,6 +133,16 @@ export function WorkbenchCommitPanel({
   const status = summary?.status ?? null
   /** 分离的 HEAD：没有当前分支可推送，推送按钮禁用并写明原因。提交照常能做。 */
   const detachedHead = status?.detachedHead ?? null
+  /** 进行到一半的合并、变基、拣选或撤销：列表上方的提示条给出继续、跳过、放弃。 */
+  const operation = summary?.operation ?? null
+  const gitOperation = useWorkbenchGitOperation({
+    workspaceRoot,
+    summary,
+    hasUnsavedOpenTabs,
+    onRefresh,
+  })
+  /** 变基停在半路时提交会打乱它（主进程也会拒绝）：提交按钮禁用并写明原因，用提示条上的「继续」。 */
+  const rebasing = operation?.kind === 'rebase'
   const commitMode = resolveCommitPanelCommitMode(changeItems)
   const selectable = commitMode === 'selection'
   const groups = useMemo(
@@ -374,6 +386,7 @@ export function WorkbenchCommitPanel({
    */
   function commitChanges(): void {
     if (!summary?.repository || !changeItems.length || busyAction || pulling) return
+    if (rebasing || gitOperation.pending) return
     if (warnUnsavedOpenTabs()) return
     if (conflictItems.length) {
       messageLatest.current.warning({
@@ -612,6 +625,15 @@ export function WorkbenchCommitPanel({
         </p>
       ) : (
         <>
+          {!!operation && (
+            <WorkbenchGitOperationBanner
+              operation={operation}
+              conflictCount={conflictItems.length}
+              pending={gitOperation.pending}
+              hasUnsavedOpenTabs={hasUnsavedOpenTabs}
+              onAction={(action) => void gitOperation.run({ action })}
+            />
+          )}
           <div className={styles.commitListPane} tabIndex={0}>
             <ScrollArea className={styles.commitChangeScroll}>
               <div className={styles.commitChangeContent}>
@@ -841,13 +863,17 @@ export function WorkbenchCommitPanel({
                 </CommitIconButton>
                 <CommitIconButton
                   label={t(
-                    commitMode === 'staged'
-                      ? 'workbench.gitCommitStagedAction'
-                      : 'workbench.gitCommitAction'
+                    rebasing
+                      ? 'workbench.gitCommitBlockedByRebase'
+                      : commitMode === 'staged'
+                        ? 'workbench.gitCommitStagedAction'
+                        : 'workbench.gitCommitAction'
                   )}
                   disabled={
                     !!busyAction ||
                     pulling ||
+                    rebasing ||
+                    !!gitOperation.pending ||
                     !changeItems.length ||
                     !!conflictItems.length ||
                     hasUnsavedOpenTabs

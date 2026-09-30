@@ -482,7 +482,7 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     gitPullConflictsDescription:
       '{count} files conflict; they are listed under Merge Conflicts in the commit panel. Resolve them, mark each as resolved, then commit to finish the merge.',
     gitPullRebaseConflictsDescription:
-      '{count} files conflict while rebasing; they are listed under Merge Conflicts in the commit panel. Resolve them, mark each as resolved, then continue the rebase in the terminal (git rebase --continue).',
+      '{count} files conflict while rebasing; they are listed under Merge Conflicts in the commit panel. Resolve them, mark each as resolved, then press Continue at the top of the panel to carry on with the rebase. Abort goes back to before the pull.',
     gitRemoteActionSuccessDescription: '{branch} is up to date.',
     gitRemoteActionFailedFallback: 'The Git action failed. Please try again.',
     gitCancelRemoteAction: 'Cancel {action}',
@@ -609,6 +609,63 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     gitStashConflictsTitle: 'The stash has conflicts',
     gitStashConflictsDescription:
       '{count} files conflict; they are listed under Merge Conflicts in the commit panel. Resolve them, mark each as resolved, then commit as usual. The stash has been kept; drop it once you are done.',
+    gitOperationMerge: 'merge',
+    gitOperationRebase: 'rebase',
+    gitOperationCherryPick: 'cherry-pick',
+    gitOperationRevert: 'revert',
+    gitMergeIntoCurrent: 'Merge into Current Branch',
+    gitRebaseCurrentOnto: 'Rebase Current Branch onto This',
+    gitCherryPickCommit: 'Cherry-Pick This Commit',
+    gitRevertCommit: 'Revert This Commit',
+    gitMergeConfirm: 'Merge {source} into {current}?',
+    gitRebaseConfirm:
+      'Rebase {current} onto {target}? The commits on {current} that {target} does not have are re-created on top of it. Do not rebase commits that were already pushed: the remote would reject the next push.',
+    gitCherryPickConfirm: 'Cherry-pick commit {sha} “{subject}” onto {current}?',
+    gitRevertConfirm: 'Add a commit to {current} that undoes commit {sha} “{subject}”?',
+    gitMergeSuccessTitle: 'Merged',
+    gitRebaseSuccessTitle: 'Rebased',
+    gitCherryPickSuccessTitle: 'Cherry-picked',
+    gitRevertSuccessTitle: 'Reverted',
+    gitMergeSuccessDescription: '{source} is merged into {current}.',
+    gitRebaseSuccessDescription: '{current} now sits on top of {target}.',
+    gitCherryPickSuccessDescription: 'A new commit on {current} carries the changes of {sha}.',
+    gitRevertSuccessDescription: 'A new commit on {current} undoes the changes of {sha}.',
+    gitOperationUpToDateTitle: 'Already up to date',
+    gitMergeUpToDateDescription:
+      '{current} already contains everything in {branch}; there is nothing to merge.',
+    gitRebaseUpToDateDescription:
+      '{current} already sits on top of {branch}; there is nothing to rebase.',
+    gitOperationConflictsTitle: 'The {operation} stopped on conflicts',
+    gitOperationConflictsDescription:
+      '{count} files conflict; they are listed under Merge Conflicts in the commit panel. Resolve them, mark each as resolved, then press Continue at the top of the panel. Abort goes back to where it started.',
+    gitOperationFailedTitle: 'The {operation} did not go through',
+    gitOperationFailedFallback: 'Git could not do this. Please try again.',
+    gitOperationNeedsBranch:
+      'Commit {sha} is checked out, not a branch (detached HEAD), so there is no current branch to merge into or rebase. Switch to a branch, or create one from this commit.',
+    gitOperationInProgress: 'A {operation} is in progress',
+    gitOperationCommit: 'commit {sha}',
+    gitOperationStep: 'commit {step} of {total}',
+    gitOperationConflictsHint:
+      '{count} files still conflict. Resolve each one and mark it as resolved, then continue.',
+    gitOperationReadyHint: 'No conflicts are left. Press Continue to carry on with the {operation}.',
+    gitOperationContinue: 'Continue',
+    gitOperationSkip: 'Skip',
+    gitOperationAbort: 'Abort',
+    gitOperationContinueHint: 'Carry on with the {operation} now that the conflicts are resolved',
+    gitOperationContinueBlockedHint:
+      'Resolve the remaining conflicts and mark them as resolved first',
+    gitOperationSkipHint: 'Leave out the commit it stopped at and carry on with the rest',
+    gitOperationAbortHint: 'Give up the {operation} and go back to where it started',
+    gitOperationAbortConfirm:
+      'Abort the {operation}? Everything it has done so far, including the conflicts you already resolved, is discarded and the branch goes back to where it was. Untracked files are left alone.',
+    gitOperationSkipConfirm:
+      'Skip this commit? Its changes are left out of the result, and what you resolved for it is discarded.',
+    gitOperationAbortedTitle: 'The {operation} was aborted',
+    gitOperationSkippedTitle: 'Commit skipped',
+    gitOperationFinishedDescription: 'The {operation} is finished.',
+    gitOperationStillInProgressTitle: 'The {operation} is still in progress',
+    gitCommitBlockedByRebase:
+      'A rebase is in progress: use Continue at the top of this panel instead of committing',
     gitLoading: 'Reading Git status…',
     gitNoRepository: 'This project is not a Git repository.',
     gitInitializeRepository: 'Initialize Git repository',

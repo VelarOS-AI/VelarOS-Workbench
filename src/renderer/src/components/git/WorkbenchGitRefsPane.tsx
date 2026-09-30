@@ -1,4 +1,4 @@
-import { type ReactElement, useState } from 'react'
+import { type MouseEvent, type ReactElement, useState } from 'react'
 import { GitBranchIcon, GitForkIcon, StackIcon } from '@phosphor-icons/react'
 import { useWorkbenchI18n } from '@renderer/i18n'
 import { formatWorkbenchGitCommitRelativeDate } from '@renderer/models/git/changesPanel.model'
@@ -10,15 +10,17 @@ import {
 import { SearchField } from '@velaros-ai/ui/primitives/forms/SearchField'
 import { ScrollArea } from '@velaros-ai/ui/primitives/layout/ScrollArea'
 
-import type { SystemWorkspaceGitSummary, WorkspaceGitStash } from '@shared/contracts'
+import type { WorkspaceGitBranch, WorkspaceGitStash } from '@shared/contracts'
 
 import styles from '../../styles/workbenchPageStyles'
 
 interface WorkbenchGitRefsPaneProps {
-  branches: SystemWorkspaceGitSummary['branches']
+  branches: readonly WorkspaceGitBranch[]
   /** 日志此刻只看的那个分支；空串是全部分支。 */
   logBranch: string
   onSelectBranch: (branch: string) => void
+  /** 在一个分支上点右键（合并它、变基到它上面）。 */
+  onBranchContextMenu: (branch: WorkspaceGitBranch, event: MouseEvent) => void
   stashes: readonly WorkspaceGitStash[]
   /** 贮藏列表读不出来的原因。 */
   stashesError: Nullable<string>
@@ -28,11 +30,13 @@ interface WorkbenchGitRefsPaneProps {
 
 /**
  * Git 工具窗左侧：日志看哪些分支（全部，或者点一个分支只看它），和贮藏（点一条在右侧看它里面的改动）。
+ * 在分支上点右键是对它的操作（合并、变基），菜单由工具窗给。
  */
 export function WorkbenchGitRefsPane({
   branches,
   logBranch,
   onSelectBranch,
+  onBranchContextMenu,
   stashes,
   stashesError,
   selectedStashSha,
@@ -82,6 +86,7 @@ export function WorkbenchGitRefsPane({
             branches={localBranches}
             logBranch={logBranch}
             onSelect={onSelectBranch}
+            onContextMenu={onBranchContextMenu}
             currentLabel={t('workbench.gitBranchCurrent')}
           />
           {!!remoteBranches.length && (
@@ -90,6 +95,7 @@ export function WorkbenchGitRefsPane({
               branches={remoteBranches}
               logBranch={logBranch}
               onSelect={onSelectBranch}
+              onContextMenu={onBranchContextMenu}
               currentLabel={t('workbench.gitBranchCurrent')}
             />
           )}
@@ -136,10 +142,11 @@ export function WorkbenchGitRefsPane({
 
 interface BranchGroupProps {
   label: string
-  branches: SystemWorkspaceGitSummary['branches']
+  branches: readonly WorkspaceGitBranch[]
   logBranch: string
   currentLabel: string
   onSelect: (branch: string) => void
+  onContextMenu: (branch: WorkspaceGitBranch, event: MouseEvent) => void
 }
 
 function BranchGroup({
@@ -148,6 +155,7 @@ function BranchGroup({
   logBranch,
   currentLabel,
   onSelect,
+  onContextMenu,
 }: BranchGroupProps): ReactElement {
   return (
     <section className={styles.gitBranchGroup}>
@@ -159,6 +167,10 @@ function BranchGroup({
           className={styles.gitBranchRow}
           data-active={logBranch === branch.name}
           onClick={() => onSelect(branch.name)}
+          onContextMenu={(event) => {
+            event.preventDefault()
+            onContextMenu(branch, event)
+          }}
         >
           <GitBranchIcon size={13} />
           <span className={styles.gitBranchName}>{branch.name}</span>

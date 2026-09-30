@@ -147,7 +147,7 @@ export interface WorkspaceGitRemoteActionResult {
    * 别的情况为空。
    */
   conflicts: string[]
-  /** 冲突出在变基里（`pull.rebase`）：解决后要在终端里 `git rebase --continue`，不是提交。 */
+  /** 冲突出在变基里（`pull.rebase`）：解决后要「继续」变基（提交面板上方的提示条），不是提交。 */
   rebasing: boolean
 }
 
@@ -177,6 +177,59 @@ export interface WorkspaceGitFileActionResult {
 export interface WorkspaceGitRestoreResult {
   commitSha: string
   changedFiles: number
+}
+
+/** 会停在半路等用户接着处理的操作：合并、变基、拣选提交、撤销提交。 */
+export type WorkspaceGitOperationKind = 'merge' | 'rebase' | 'cherry-pick' | 'revert'
+
+/**
+ * 进行到一半的操作（出了冲突停下来的，或者在终端里起了头的）。冲突解决完之后「继续」，不想要了「放弃」，
+ * 变基、拣选、撤销还能「跳过」停在的那个提交。
+ */
+export interface WorkspaceGitOperationState {
+  kind: WorkspaceGitOperationKind
+  /** 变基：停在第几个提交上、一共几个；别的操作为 null。 */
+  step: Nullable<number>
+  total: Nullable<number>
+  /**
+   * 操作的对象，给界面上看的：合并是 git 备好的合并说明（`Merge branch 'feature'`），变基是正在被
+   * 变基的分支名，拣选、撤销是那个提交的短号。读不出来为 null。
+   */
+  detail: Nullable<string>
+}
+
+/**
+ * - `merge`：把 `target`（分支或提交）合并到当前分支。
+ * - `rebase`：把当前分支变基到 `target` 上。
+ * - `cherry-pick`：把提交 `target` 的改动拣选到当前分支。
+ * - `revert`：新做一个提交，撤销提交 `target` 的改动。
+ * - `continue` / `abort` / `skip`：接着做、放弃、跳过进行到一半的那个操作（`skip` 对合并没有意义）。
+ */
+export type WorkspaceGitOperationAction =
+  | 'merge'
+  | 'rebase'
+  | 'cherry-pick'
+  | 'revert'
+  | 'continue'
+  | 'abort'
+  | 'skip'
+
+export interface WorkspaceGitOperationRequest {
+  action: WorkspaceGitOperationAction
+  /** 开始一个操作时的对象（分支名、提交）；`continue` / `abort` / `skip` 不用给。 */
+  target?: string
+}
+
+export interface WorkspaceGitOperationResult {
+  action: WorkspaceGitOperationAction
+  /**
+   * 这一步之后还没解决的冲突文件（相对项目根）：操作停在那里，等用户解决后继续。别的情况为空。
+   * 操作还在不在进行看摘要里的 `operation`。
+   */
+  conflicts: string[]
+  /** 什么都没变：要合并、变基的对象当前分支里已经有了。 */
+  upToDate: boolean
+  output: string
 }
 
 /** 一条贮藏（`git stash`）。贮藏是整个仓库的：项目是仓库里的子目录时，列出的也是仓库里全部的贮藏。 */

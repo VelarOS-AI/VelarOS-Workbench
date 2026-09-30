@@ -26,6 +26,7 @@ import type {
   SystemWorkspaceGitInitializeRepositoryResult,
   SystemWorkspaceGitLineStatsSnapshot,
   SystemWorkspaceGitLogResult,
+  SystemWorkspaceGitOperationResult,
   SystemWorkspaceGitStashActionResult,
   SystemWorkspaceGitStashListResult,
   SystemWorkspaceGitStashResult,
@@ -115,6 +116,7 @@ import type {
   WorkspaceGitDiffOptions,
   WorkspaceGitHunkActionOptions,
   WorkspaceGitLogOptions,
+  WorkspaceGitOperationRequest,
   WorkspaceGitStashAction,
   WorkspaceGitStashOptions,
 } from '@shared/contracts'
@@ -378,6 +380,14 @@ export interface WorkbenchWorkspaceKernelPort {
     sha: string,
     action: WorkspaceGitStashAction
   ): Promise<Result<SystemWorkspaceGitStashActionResult>>
+  /**
+   * 合并、变基、拣选、撤销，或者继续、放弃、跳过进行到一半的那个。出了冲突不算失败：结果里列出冲突
+   * 文件，操作停在那里（摘要里的 `operation`）。
+   */
+  performWorkspaceGitOperation(
+    workspaceRoot: string,
+    request: WorkspaceGitOperationRequest
+  ): Promise<Result<SystemWorkspaceGitOperationResult>>
 }
 
 export interface WorkbenchKernelPort {

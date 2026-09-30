@@ -924,6 +924,61 @@
   grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
 }
 
+/*
+ * 合并、变基、拣选、撤销进行到一半时的提示条，提交面板和 Git 工具窗上方各一个。窄的地方（提交面板）
+ * 按钮折到文字下面。
+ */
+.gitOperationBanner {
+  @apply flex min-w-0 shrink-0 flex-wrap items-center border-b;
+  gap: 6px 12px;
+  padding: 6px 10px;
+  border-color: color-mix(in oklab, var(--status-amber) 22%, transparent);
+  background: var(--status-amber-soft);
+  font-size: 12px;
+}
+
+.gitOperationBannerText {
+  @apply flex min-w-0 flex-col;
+  flex: 1 1 200px;
+  gap: 2px;
+}
+
+.gitOperationBannerTitle {
+  @apply flex min-w-0 items-center;
+  gap: 6px;
+  color: var(--workbench-text);
+}
+
+.gitOperationBannerTitle > svg {
+  @apply shrink-0;
+  color: var(--status-amber);
+}
+
+.gitOperationBannerTitle > strong {
+  @apply shrink-0;
+  font-weight: 600;
+}
+
+.gitOperationBannerTitle > small {
+  @apply min-w-0 truncate text-muted-foreground;
+  font-size: 11px;
+}
+
+.gitOperationBannerHint {
+  @apply text-muted-foreground;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.gitOperationBanner[data-conflicts='true'] .gitOperationBannerHint {
+  color: var(--status-amber);
+}
+
+.gitOperationBannerActions {
+  @apply flex shrink-0 flex-wrap items-center;
+  gap: 6px;
+}
+
 .gitStashDialogForm {
   @apply flex min-w-0 flex-col;
   gap: 12px;

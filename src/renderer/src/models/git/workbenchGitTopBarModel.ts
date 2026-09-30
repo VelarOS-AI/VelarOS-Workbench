@@ -84,6 +84,8 @@ export function buildWorkbenchGitTopBarSummary(
     lineStats: lineStatsSnapshot.lineStats,
     branches: branch ? [{ name: branch, current: true, upstream: null }] : [],
     status,
+    // 轻量快照不知道有没有进行到一半的操作：等完整快照来了才有。
+    operation: null,
   }
 }
 

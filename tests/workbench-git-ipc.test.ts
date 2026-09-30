@@ -278,6 +278,57 @@ void describe('Workbench Git IPC requests', () => {
     )
   })
 
+  void test('starting an operation names its target; continue, abort and skip carry none', async () => {
+    const calls: unknown[] = []
+    const { registerWorkbenchGitIpc } = await import('../src/main/workspace/git/WorkbenchGitIpc')
+    registerWorkbenchGitIpc(
+      {
+        performOperation: async (workspaceRoot: string, request: unknown) => {
+          calls.push([workspaceRoot, request])
+          return {}
+        },
+      } as never,
+      {} as never,
+      {} as never
+    )
+    const sha = 'b'.repeat(40)
+
+    for (const request of [
+      { workspaceRoot: '/p', action: 'merge', target: 'feature/x' },
+      { workspaceRoot: '/p', action: 'rebase', target: 'origin/main' },
+      { workspaceRoot: '/p', action: 'cherry-pick', target: sha },
+      { workspaceRoot: '/p', action: 'revert', target: sha },
+      { workspaceRoot: '/p', action: 'continue' },
+      { workspaceRoot: '/p', action: 'abort' },
+      { workspaceRoot: '/p', action: 'skip' },
+    ])
+      assert.equal((await invoke(WorkbenchGitChannels.operation, request)).ok, true)
+    assert.deepEqual(calls, [
+      ['/p', { action: 'merge', target: 'feature/x' }],
+      ['/p', { action: 'rebase', target: 'origin/main' }],
+      ['/p', { action: 'cherry-pick', target: sha }],
+      ['/p', { action: 'revert', target: sha }],
+      ['/p', { action: 'continue', target: undefined }],
+      ['/p', { action: 'abort', target: undefined }],
+      ['/p', { action: 'skip', target: undefined }],
+    ])
+
+    for (const request of [
+      { workspaceRoot: '/p', action: 'merge' },
+      { workspaceRoot: '/p', action: 'merge', target: '  ' },
+      { workspaceRoot: '/p', action: 'rebase', target: 7 },
+      // 继续、放弃、跳过说的是进行到一半的那个操作：带了对象的请求是发错了。
+      { workspaceRoot: '/p', action: 'abort', target: 'feature/x' },
+      { workspaceRoot: '/p', action: 'reset', target: sha },
+      { workspaceRoot: '/p', action: 'rebase --interactive', target: 'main' },
+      { action: 'continue' },
+      { workspaceRoot: '/p' },
+      null,
+    ])
+      assert.equal((await invoke(WorkbenchGitChannels.operation, request)).ok, false)
+    assert.equal(calls.length, 7)
+  })
+
   void test('a blame request carries the editor text and the file format to the service', async () => {
     const blames: unknown[] = []
     const { registerWorkbenchGitIpc } = await import('../src/main/workspace/git/WorkbenchGitIpc')

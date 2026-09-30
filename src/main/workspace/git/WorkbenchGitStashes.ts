@@ -178,7 +178,7 @@ export class WorkbenchGitStashes {
           paths: this.git.describePaths(conflicts),
         })
       )
-    const operation = await this.git.readOperationInProgress(repository.rootPath)
+    const operation = await this.git.readOperationInProgress(repository)
     if (operation)
       throw new AppError(
         'VALIDATION',
