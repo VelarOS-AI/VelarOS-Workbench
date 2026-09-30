@@ -612,6 +612,56 @@ JS / TS 的测试文件（`*.test.*`、`*.spec.*`、`__tests__/` 里的）在行
   经 `workbenchRunSessionBridge`（页面装上「先存盘再起卡」），命令面板经 `workbenchEditorActions`（编辑器挂着时
   登记它做得了的动作）。这两个小模块在外壳包里，其余都跟着编辑器按需加载。
 
+## Node.js 调试器
+
+调试的是 Node.js 上跑的 JavaScript / TypeScript；别的语言、别的运行时以后由插件来。主进程这一半在
+`src/main/workspace/debug/`，main ↔ renderer 的契约在 `src/shared/workbenchDebugger.ts`（行号、列号从 1 起，
+与编辑器一致）。没有引入第三方依赖：协议走运行时自带的 `WebSocket`，source map 自己读。
+
+- **怎么起**（`WorkbenchDebugLaunch.ts`）：向操作系统要一个空闲的本机端口，拼出带
+  `--inspect-brk=127.0.0.1:端口` 的命令行，在一个终端会话里跑——界面上就是一张运行卡，输出、按键、尺寸、
+  结束整棵进程树都沿用终端那一套，start 的结果里带着 `terminalSessionId`。三种目标：
+  - `node-script`：项目里的脚本，`node --inspect-brk=… <脚本> <参数>`；
+  - `node-package-bin`：依赖包的可执行入口（从工作目录往上找 `node_modules/<包>/package.json` 的 `bin`），同样由
+    node 直接带着检查器起——Jest 这类自己不认检查器开关的工具；
+  - `inspect-command`：自己认 `--inspect-brk=主机:端口` 的命令，开关追加在命令末尾——Vitest。这类工具连上之后
+    自己先停的那一下不给用户看。
+
+  检查器只听 127.0.0.1。轮询 `/json/list` 等它就绪（默认最多 30 秒，等不到就结束程序、报 `failed`），WebSocket
+  地址按端口自己拼，不用对方回的那个。需要 PATH 上有 `node`。
+- **会话**（`WorkbenchDebugSession.ts`）：一条 Chrome DevTools 协议连接（`WorkbenchInspectorConnection.ts`）。检查器
+  的事件和界面来的命令排成一条队，一件做完再做下一件——处理「脚本已解析」时要读 source map，排在它后面的
+  「已暂停」得等它。程序的主上下文销毁时主动断开（否则 Node 一直等着调试器断开，进程不退出）。
+- **断点怎么落到代码上**：
+  - 没有 source map 的脚本（普通 JS、Node 自己去掉类型的 TS）：按文件地址下（`setBreakpointByUrl`，正则同时认
+    `file://` 地址和原样路径）。脚本还没加载时先挂着，V8 编译时自己落好。
+  - 带 source map 的脚本（`WorkbenchSourceMap.ts`，只读 v3 的 `mappings`；依赖包里的脚本不读）：脚本一加载就把
+    源码行换成生成代码里的位置，按脚本下（`setBreakpoint`）。这得抢在脚本开始执行之前，靠三个停顿点：
+    `--inspect-brk` 的「启动即停」、V8 的「带 source map 的脚本执行前」停顿、以及给每个有断点的文件在第一行
+    预先挂的入口断点。这些停顿不给用户看，放行之后照常跑；停的那一处正好是用户断点所在（同一个脚本、同一行
+    同一列）时才算作一次断点命中。
+  - 就地转换的脚本（tsx、Jest、Vitest：脚本地址就是源文件自己）里按地址下的断点行号是生成代码的，认出来之后
+    摘掉，只留按映射下的。tsx 交给 Node 的代码压成了一行，映射全靠列号；转换器自己加的代码（辅助函数、外面
+    包的一层函数）映射不回源码，不放进调用栈。
+  - 已知的空档：编译到别处的**非主**模块（`dist/lib.js` ← `src/lib.ts`）没有可靠的停顿点，它顶层代码里的断点
+    可能在绑上之前就跑过去了；函数里的断点不受影响。
+  - 每个断点回报 `verified` 与 `resolvedLine`：这一行没有可执行的代码时顺延到后面最近的一行；文件没被加载、
+    这一行之后再没有代码，就对不上。
+- **暂停的原因**：`breakpoint`、`exception`（只停未捕获的，开关可以随时改）、`pause`（用户按的；落在 Node 内部
+  代码里时接着走到下一句程序自己的代码）、`step`、其余 `other`（`debugger` 语句）。Node 内部代码（`node:` 开头的
+  脚本）设为黑盒，单步不进去；调用栈里仍然列出，`path` 为 null。
+- **值**（`WorkbenchDebugValues.ts`）：写法照浏览器的开发者工具——字符串带引号，对象、数组是一行预览并带着
+  `objectId`，展开时才去取属性（一次最多 500 个）；只有 getter 的属性不替用户去调（`accessor`），还没初始化的
+  `let` / `const` 是 `unavailable`。在选中的帧里求值走 `evaluateOnCallFrame`；`sideEffectFree` 让有副作用的表达式
+  直接失败（悬停看值用）。
+- **归属与收尾**（`WorkbenchDebugSessions.ts`、`WorkbenchDebugIpc.ts`）：会话归发起它的窗口（`sender.id`），别的
+  窗口的命令以 `PERMISSION` 拒绝；状态变化只推给那个窗口，程序输出走那个窗口的终端输出通道。结束调试
+  （`stop`）= 断开检查器 + 结束终端会话的整棵进程树。窗口关闭、切走项目、应用退出时先断开调试会话，再由终端
+  那边把进程收掉。
+- **验证**：`tests/workbench-debugger*.test.ts` 调试真的 Node 程序（断点、单步、变量、求值、异常、三种起法、
+  编译产物带 `.map`、加载器就地转换、压成一行的 ES 模块）；测试里用普通子进程起程序，伪终端那条路由
+  `probe:debug`（`src/main/workspace/debug/debugProbe.ts`）在 Electron 运行时里验。Windows 上没有验过。
+
 ## 生产启动与体积预算
 
 生产构建的 main 与 renderer 都开启压缩（electron-vite 给 renderer 的默认值是不压，要在配置里自己打开；
