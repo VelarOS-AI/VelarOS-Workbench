@@ -97,6 +97,28 @@ GB18030、混用的换行符），编辑器据此只读打开，用户明确选�
   存过的大于打开上限的文件不会被读成截断的。
 - 与编辑器正文比较的文本（Git 的 HEAD 版本、内容搜索）用同一个解码（`decodeWorkbenchTextContent`）。
   Agent 经 Platform 内核的读写不走这里。
+- 项目搜索的替换写没开着的文件时也走保存管线（`ContentReplace` → `FileOperations.saveFile`，不带格式），
+  开着的文件只改编辑缓冲、不写盘。
+
+## 项目搜索与替换
+
+侧栏的搜索（⇧⌘F）。匹配规则只有一份：`src/shared/workbenchTextSearch.ts`（查找词、区分大小写 / 全字 /
+正则、替换时的 `$1`，与编辑器里的查找一致，`tests/workbench-text-search.test.ts` 拿两者对照）与
+`src/shared/workbenchSearchGlob.ts`（包含 / 排除的文件）。main 与 renderer 都用它们，行列号与编辑器一致。
+
+- 文件清单（`ProjectFileListing`）：Git 仓库用两次 `git ls-files`（被跟踪的 + 没被忽略的新文件），子模块与
+  嵌套仓库在里面再列；其它工程逐目录遍历，跳过点号开头的目录与根目录下的构建产物。内部目录与依赖目录
+  （`WorkbenchSkippedDirectories`）两种方式都不进；符号链接不跟。二进制文件与超过 1 MB 的不搜。
+- `searchContent` 带 `searchId` 时边搜边把结果推回发起的窗口，可以取消，窗口关了一并取消；最多列 5000 处
+  （每个文件的匹配数照样数全），列到上限就标 `truncated`。
+- 编辑器里开着的文件以编辑缓冲为准：renderer 把它们的路径交给 main，main 不读、只报在不在范围里，由
+  renderer 在正文上搜；替换也在编辑缓冲上做（一次外部改动，⌘Z 能撤回）。每份结果记着搜它的条件，
+  替换按它算，条件改了、新结果出来之前不让替换。
+- 没开着的文件交给 `ContentReplace`：重读、按同样的条件重新找匹配（点名的那几处对不上就不换），带着搜索
+  时的修改时间与大小保存，替换前的内容先记进本地历史。
+- 页面只留面板的开关与表单（`useWorkbenchProjectSearchPanel`）；搜索、结果与替换（`ProjectSearchView` 与
+  `useWorkbenchProjectSearchEngine`）打开搜索时才加载，不进工作区外壳（外壳 chunk 有体积预算）。编辑区、
+  页面只用得到的行列换算与正则转义在 `src/shared/workbenchSearchText.ts`，免得把整套匹配规则带进外壳。
 
 ## 语言服务与磁盘的同步
 
