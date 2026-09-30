@@ -197,6 +197,7 @@ import {
   formatWorkbenchEditorCommandHint,
   type WorkbenchEditorKeymapCommandId,
 } from '@renderer/models/editor/workbenchEditorKeymap'
+import type { WorkbenchEditorVimHostCommand } from '@renderer/models/editor/workbenchEditorVim'
 import {
   setWorkbenchGitBlame,
   workbenchGitBlameGutter,
@@ -270,6 +271,7 @@ import type {
 } from '@shared/contracts'
 
 import { useWorkbenchEditorRunDebugExtension } from '../../hooks/useWorkbenchEditorRunDebug'
+import { useWorkbenchEditorVimExtension } from '../../hooks/useWorkbenchEditorVim'
 import type { WorkbenchEditorGitBlame } from '../../hooks/useWorkbenchGitBlame'
 import type { WorkbenchGitHeadContent } from '../../hooks/useWorkbenchGitHeadContent'
 import styles from '../../styles/workbenchPageStyles'
@@ -381,6 +383,11 @@ interface CodeMirrorEditorProps {
   onAddToChat?: () => void
   /** 保存；`content` 是这一刻的正文（⌘S 时按设置格式化、按 `.editorconfig` 收拾过空白）。 */
   onSave: (content?: string) => void
+  /**
+   * Vim 键位方案下 `:q`、`:wq`、`:wa` 要页面做的事（`:w` 走 `onSave`；`:wq` 是先走完保存再报过来）。不给的话
+   * 这几个命令在这个编辑器里不起作用。
+   */
+  onVimCommand?: (command: WorkbenchEditorVimHostCommand) => void
 }
 
 /** 编辑器实例建一次、各文件状态共用的扩展（按键、鼠标、更新监听……），它们只通过 ref 读当前的值。 */
@@ -1227,6 +1234,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       onOpenFileHistory,
       onAddToChat,
       onSave,
+      onVimCommand,
     },
     ref
   ): ReactElement {
@@ -1266,6 +1274,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       onOpenFileHistory,
       onAddToChat,
       onSave,
+      onVimCommand,
     })
     const languageCompartment = useMemo(() => new Compartment(), [])
     const readOnlyCompartment = useMemo(() => new Compartment(), [])
@@ -1283,6 +1292,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
     const indentationCompartment = useMemo(() => new Compartment(), [])
     const wordWrapCompartment = useMemo(() => new Compartment(), [])
     const gitBlameCompartment = useMemo(() => new Compartment(), [])
+    const vimCompartment = useMemo(() => new Compartment(), [])
     const editorMetrics = useWorkbenchEditorMetrics()
     const progressiveLoadTimers = useTimerScope('WorkbenchEditorProgressiveLoad')
     const languageSupport = useMemo(
@@ -2354,7 +2364,35 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       formatDocument,
       runCommand: runEditorCommand,
     })
+
+    /**
+     * ⌘S：打开了「保存时格式化」就先格式化，再按 `.editorconfig` 去掉行尾空白、补上结尾换行，最后把这一刻的正文
+     * 交去保存（不等标签里的正文随渲染跟上）。只读文件原样保存。
+     */
+    const saveFromEditor = async (view: EditorView): Promise<void> => {
+      if (!view.state.readOnly) {
+        if (readWorkbenchPreferences().editorFormatOnSave) await editorActionsRef.current.formatDocument()
+        const whitespace = buildWorkbenchSaveWhitespaceChanges(view.state, editorConfigRef.current)
+        if (whitespace.length > 0) view.dispatch({ changes: whitespace })
+      }
+      callbacksRef.current.onSave(view.state.doc.toString())
+    }
+
+    // Vim 键位方案：模式编辑那一层选了才加载（见 useWorkbenchEditorVim）。`:w` 就是上面的保存，其余交给页面。
+    const vimExtension = useWorkbenchEditorVimExtension(keymapPreset === 'vim', {
+      save: (view) => void saveFromEditor(view),
+      quit: () => callbacksRef.current.onVimCommand?.('quit'),
+      saveAndQuit: (view) => {
+        // 保存时格式化要等一下：等的时候换了文件，就只存不关。
+        const savedPath = pathRef.current
+        void saveFromEditor(view).then(() => {
+          if (pathRef.current === savedPath) callbacksRef.current.onVimCommand?.('write-quit')
+        })
+      },
+      saveAll: () => callbacksRef.current.onVimCommand?.('write-all'),
+    })
     const compartmentValuesRef = useLatest({
+      vim: vimExtension,
       editorMetrics: editorMetricsExtension,
       syntaxTheme: syntaxThemeExtension,
       autocompleteTheme,
@@ -2389,19 +2427,6 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
           emitCursorPosition(update.view, callbacksRef.current.onCursorPositionChange)
         }
       })
-
-      /**
-       * ⌘S：打开了「保存时格式化」就先格式化，再按 `.editorconfig` 去掉行尾空白、补上结尾换行，最后把这一刻的正文
-       * 交去保存（不等标签里的正文随渲染跟上）。只读文件原样保存。
-       */
-      const saveFromEditor = async (view: EditorView): Promise<void> => {
-        if (!view.state.readOnly) {
-          if (readWorkbenchPreferences().editorFormatOnSave) await editorActionsRef.current.formatDocument()
-          const whitespace = buildWorkbenchSaveWhitespaceChanges(view.state, editorConfigRef.current)
-          if (whitespace.length > 0) view.dispatch({ changes: whitespace })
-        }
-        callbacksRef.current.onSave(view.state.doc.toString())
-      }
 
       /** 有查找词就找下一处，还没有就打开查找栏。 */
       const findNextOrOpen = (view: EditorView): boolean => {
@@ -2627,6 +2652,8 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
     const buildFileExtensions = (instance: WorkbenchEditorInstanceExtensions): Extension[] => {
       const current = compartmentValuesRef.current
       return [
+        // Vim 的按键处理要在编辑器别的按键处理之前：排在最前面（没选 Vim 方案时是空的）。
+        vimCompartment.of(current.vim),
         instance.keymap,
         // 追溯栏排在行号左边：要在带行号栏的基础扩展之前。
         gitBlameCompartment.of(current.gitBlame),
@@ -2662,6 +2689,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
     const syncFileCompartments = (view: EditorView): void => {
       const current = compartmentValuesRef.current
       const wanted: Array<[Compartment, Extension]> = [
+        [vimCompartment, current.vim],
         [editorMetricsCompartment, current.editorMetrics],
         [syntaxThemeCompartment, current.syntaxTheme],
         [autocompleteThemeCompartment, current.autocompleteTheme],
@@ -3093,6 +3121,10 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
     useEffect(() => {
       reconfigureCompartment(viewRef.current, runDebugCompartment, runDebugExtension)
     }, [runDebugCompartment, runDebugExtension])
+
+    useEffect(() => {
+      reconfigureCompartment(viewRef.current, vimCompartment, vimExtension)
+    }, [vimCompartment, vimExtension])
 
     useEffect(() => {
       reconfigureCompartment(viewRef.current, syntaxThemeCompartment, syntaxThemeExtension)
