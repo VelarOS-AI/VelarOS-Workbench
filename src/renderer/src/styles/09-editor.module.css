@@ -761,6 +761,12 @@
   font-style: italic;
 }
 
+/* 预览标签：名字是斜体，下一次预览会顶替它；双击、编辑、保存之后变回正体。 */
+.editorTab[data-preview='true'] .editorTabName,
+.editorTabListItem[data-preview='true'] .editorTabName {
+  font-style: italic;
+}
+
 .editorTab[data-kind='light'] svg {
   color: var(--status-blue);
 }

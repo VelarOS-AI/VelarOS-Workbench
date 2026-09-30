@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
 
 import { describe, test } from 'bun:test'
 
@@ -7,6 +9,8 @@ import {
   createWorkbenchEditorGroupsLayout,
   findWorkbenchEditorGroupIndex,
   getWorkbenchEditorFocusedPath,
+  keepWorkbenchEditorPreviewTabs,
+  keepWorkbenchEditorTab,
   listWorkbenchEditorLayoutPaths,
   normalizeWorkbenchEditorGroupsLayout,
   openWorkbenchEditorTab,
@@ -20,20 +24,33 @@ import {
 } from '../src/renderer/src/models/project/workbenchProjectSessionModel'
 
 /**
- * 布局的样子：组之间用 ` | ` 隔开，当前组前面有 `*`，每组里当前标签用 `[]` 括起来，
- * 如 `*a [b] c`。
+ * 布局的样子：组之间用 ` | ` 隔开，当前组前面有 `*`，每组里当前标签用 `[]` 括起来，预览标签前面有 `~`，
+ * 如 `*a [~b] c`。
  */
 function show(layout: WorkbenchEditorGroupsLayout): string {
   return layout.groups
     .map((group, index) => {
-      const tabs = group.paths.map((path) => (path === group.activePath ? `[${path}]` : path))
+      const tabs = group.paths.map((path) => {
+        const name = `${path === group.previewPath ? '~' : ''}${path}`
+        return path === group.activePath ? `[${name}]` : name
+      })
       return `${index === layout.focusedGroup ? '*' : ''}${tabs.join(' ')}`
     })
     .join(' | ')
 }
 
+/** 依次以普通标签打开。 */
 function open(layout: WorkbenchEditorGroupsLayout, ...paths: string[]): WorkbenchEditorGroupsLayout {
-  return paths.reduce((current, path) => openWorkbenchEditorTab(current, path), layout)
+  return paths.reduce((current, path) => openWorkbenchEditorTab(current, path).layout, layout)
+}
+
+/** 以预览标签打开一个文件。 */
+function preview(layout: WorkbenchEditorGroupsLayout, path: string): WorkbenchEditorGroupsLayout {
+  return openWorkbenchEditorTab(layout, path, { preview: true }).layout
+}
+
+function readSource(relativePath: string): string {
+  return readFileSync(path.resolve(process.cwd(), relativePath), 'utf8')
 }
 
 const empty = createWorkbenchEditorGroupsLayout()
@@ -56,14 +73,14 @@ void describe('editor tab layout', () => {
 
   void test('opening a file that already has a tab only switches to it', () => {
     const layout = open(empty, 'a', 'b', 'c')
-    const switched = openWorkbenchEditorTab(layout, 'a')
+    const switched = open(layout, 'a')
     assert.equal(show(switched), '*[a] b c')
     // 已经是当前文件：布局对象原样返回，调用方据此不重新渲染。
-    assert.equal(openWorkbenchEditorTab(switched, 'a'), switched)
+    assert.equal(open(switched, 'a'), switched)
   })
 
   void test('closing the current tab shows its left neighbour, else the right one', () => {
-    const layout = openWorkbenchEditorTab(open(empty, 'a', 'b', 'c', 'd'), 'c')
+    const layout = open(empty, 'a', 'b', 'c', 'd', 'c')
     assert.equal(show(closeWorkbenchEditorTabs(layout, ['c'])), '*a [b] d')
     assert.equal(show(closeWorkbenchEditorTabs(layout, ['a'])), '*b [c] d')
     assert.equal(show(closeWorkbenchEditorTabs(layout, ['a', 'b', 'c'])), '*[d]')
@@ -83,7 +100,7 @@ void describe('editor tab layout', () => {
   })
 
   void test('renaming a file or its folder keeps the tab where it is', () => {
-    const layout = openWorkbenchEditorTab(open(empty, 'src/a.ts', 'src/b.ts', 'c.ts'), 'src/b.ts')
+    const layout = open(empty, 'src/a.ts', 'src/b.ts', 'c.ts', 'src/b.ts')
     const moved = renameWorkbenchEditorLayoutPaths(layout, (path) =>
       path.startsWith('src/') ? `lib/${path.slice(4)}` : path
     )
@@ -97,9 +114,173 @@ void describe('editor tab layout', () => {
   })
 })
 
+void describe('preview tabs', () => {
+  void test('the next preview takes the place of the current one instead of adding a tab', () => {
+    const first = openWorkbenchEditorTab(open(empty, 'a', 'b'), 'p1', { preview: true })
+    assert.equal(show(first.layout), '*a b [~p1]')
+    assert.equal(first.replacedPath, null)
+
+    // 预览标签不在末尾时，新的预览占它原来的位置；被顶替的那个交给调用方关掉。
+    const moved = open(first.layout, 'c')
+    assert.equal(show(moved), '*a b ~p1 [c]')
+    const second = openWorkbenchEditorTab(moved, 'p2', { preview: true })
+    assert.equal(show(second.layout), '*a b [~p2] c')
+    assert.equal(second.replacedPath, 'p1')
+    assert.deepEqual(listWorkbenchEditorLayoutPaths(second.layout), ['a', 'b', 'p2', 'c'])
+  })
+
+  void test('a tab that is already open is only switched to', () => {
+    const layout = preview(open(empty, 'a', 'b'), 'p')
+    // 普通标签不会变回预览，预览标签也不会被它自己顶替。
+    const onNormal = openWorkbenchEditorTab(layout, 'a', { preview: true })
+    assert.equal(show(onNormal.layout), '*[a] b ~p')
+    assert.equal(onNormal.replacedPath, null)
+    assert.equal(show(preview(onNormal.layout, 'p')), '*a b [~p]')
+    assert.equal(preview(layout, 'p'), layout)
+  })
+
+  void test('opening the preview normally keeps it, and so does asking to keep it', () => {
+    const layout = preview(open(empty, 'a'), 'p')
+    // 双击文件、快速打开里回车：普通打开，预览标签就此留下（哪怕它已经是当前文件）。
+    assert.equal(show(open(layout, 'p')), '*a [p]')
+    // 双击标签、编辑、保存。
+    assert.equal(show(keepWorkbenchEditorTab(layout, 'p')), '*a [p]')
+    assert.equal(keepWorkbenchEditorTab(layout, 'a'), layout)
+    assert.equal(keepWorkbenchEditorTab(layout, 'missing'), layout)
+    // 留下之后，下一次预览另开一个标签。
+    assert.equal(show(preview(keepWorkbenchEditorTab(layout, 'p'), 'q')), '*a p [~q]')
+  })
+
+  void test('a normal open never replaces the preview', () => {
+    const layout = open(preview(open(empty, 'a'), 'p'), 'b')
+    assert.equal(show(layout), '*a ~p [b]')
+  })
+
+  void test('closing, dragging and renaming keep track of the preview', () => {
+    const layout = preview(open(empty, 'a', 'b'), 'p')
+    // 关掉预览标签：这一组不再有预览，下一次预览新开一个。
+    const closed = closeWorkbenchEditorTabs(layout, ['p'])
+    assert.equal(show(closed), '*a [b]')
+    assert.equal(show(preview(closed, 'q')), '*a b [~q]')
+    // 关别的标签不影响它。
+    assert.equal(show(closeWorkbenchEditorTabs(layout, ['a'])), '*b [~p]')
+    // 拖动预览标签就留下它（与 VS Code 一致）；拖别的标签不影响它。
+    assert.equal(show(reorderWorkbenchEditorTab(layout, 'p', 'a')), '*[p] a b')
+    assert.equal(show(reorderWorkbenchEditorTab(layout, 'a', 'b')), '*b a [~p]')
+    // 改名之后还是预览。
+    assert.equal(
+      show(renameWorkbenchEditorLayoutPaths(layout, (path) => (path === 'p' ? 'renamed' : path))),
+      '*a b [~renamed]'
+    )
+  })
+
+  void test('turning the setting off keeps every preview', () => {
+    const layout = preview(open(empty, 'a'), 'p')
+    assert.equal(show(keepWorkbenchEditorPreviewTabs(layout)), '*a [p]')
+    const none = open(empty, 'a')
+    assert.equal(keepWorkbenchEditorPreviewTabs(none), none)
+  })
+})
+
+void describe('preview tab wiring', () => {
+  const controller = readSource('src/renderer/src/hooks/useWorkbenchEditorController.ts')
+  const adapter = readSource('src/renderer/src/components/embedded/workbenchEmbeddedKernelAdapter.ts')
+
+  void test('a single click previews, a double click or Enter opens a normal tab', () => {
+    const row = readSource('src/renderer/src/components/files/FileTreeRow.tsx')
+    const results = readSource('src/renderer/src/components/files/FileSearchResults.tsx')
+    const searchView = readSource('src/renderer/src/components/files/ProjectSearchView.tsx')
+    const presentation = readSource('src/renderer/src/StandaloneWorkbenchPagePresentation.tsx')
+
+    // 文件树：单击（onActivate）预览，双击普通；改名输入框里的双击不算。
+    assert.match(
+      adapter,
+      /onSelectFile: \(path\) => \{\s*model\.actions\.showEditorSurface\(\)\s*void editorNavigation\.selectFile\(path, \{ preview: true \}\)/u
+    )
+    assert.match(
+      adapter,
+      /onOpenFile: \(path\) => \{\s*model\.actions\.showEditorSurface\(\)\s*void editorNavigation\.selectFile\(path\)\s*\}/u
+    )
+    assert.match(
+      row,
+      /onDoubleClick=\{\s*entry\.type === 'file' && !node\.isEditing \? \(\) => onOpenFile\(entry\) : undefined\s*\}/u
+    )
+    // 搜索结果：单击预览；双击与查找框里的回车不带预览。
+    assert.match(results, /onOpenEntry\(row\.entry, \{ preview: true \}\)/u)
+    assert.match(results, /onOpenMatch\(row\.file, row\.match, \{ preview: true \}\)/u)
+    assert.match(results, /onDoubleClick=\{\(\) => handleDoubleClick\(row\)\}/u)
+    assert.match(
+      searchView,
+      /function openRow[\s\S]*?onOpenEntry\(row\.entry\)\s*else if \(row\.kind === 'match'\) engine\.openMatch\(row\.file, row\.match\)\s*\}/u
+    )
+    // 问题面板点一条、跳到定义：预览；跳到定义时出发的预览标签先留下。
+    assert.match(presentation, /editorNavigation\.goToLocation\(path, line, column, \{ preview: true \}\)/u)
+    assert.match(
+      adapter,
+      /onGoToDefinition: \(path, line, column\) =>\s*void editorNavigation\.goToLocation\(path, line, column, \{\s*preview: true,\s*keepSource: true,\s*\}\)/u
+    )
+    // 终端里的路径、快速打开：普通标签（不带 preview）。
+    assert.match(presentation, /navigate\(\{ target: 'file', path, line, column \}\)/u)
+    const pageModel = readSource('src/renderer/src/hooks/useStandaloneWorkbenchPageModel.tsx')
+    assert.match(
+      pageModel,
+      /const openQuickOpenFile[\s\S]*?navigate\(\{ target: 'file', path, line: cursor\.line, column: cursor\.column \}\)/u
+    )
+  })
+
+  void test('clicking a tab only switches to it, double-clicking keeps it', () => {
+    const tabBar = readSource('src/renderer/src/components/editor/EditorTabBar.tsx')
+    const styles = readSource('src/renderer/src/styles/09-editor.module.css')
+
+    assert.match(
+      adapter,
+      /onSelectOpenFile: \(path\) => \{\s*model\.actions\.showEditorSurface\(\)\s*void editorNavigation\.selectFile\(path, \{ preview: true \}\)/u
+    )
+    assert.match(adapter, /onKeepOpenFile: workbench\.keepOpenFile/u)
+    assert.match(tabBar, /onDoubleClick=\{\(\) => onKeepOpenFile\?\.\(tab\.path\)\}/u)
+    assert.match(tabBar, /data-preview=\{tab\.path === previewTabPath\}/u)
+    assert.match(styles, /\.editorTab\[data-preview='true'\] \.editorTabName,[\s\S]*?font-style: italic;/u)
+  })
+
+  void test('editing, saving and the setting keep the preview; a replaced preview is closed', () => {
+    // 正文一改就留下（输入、格式化、跨文件改名、项目替换都经过这里）。
+    assert.match(
+      controller,
+      /function updateOpenTabContent\(file: WorkbenchReadFileResult, content: string\): void \{\s*keepOpenFile\(file\.path\)/u
+    )
+    // 明确保存：没有改动也留下。
+    assert.match(
+      controller,
+      /const saveSelectedFile = [\s\S]*?if \(!selectedFile\) return[\s\S]*?keepOpenFile\(selectedFile\.path\)[\s\S]*?if \(!isDirtyTab\(/u
+    )
+    // 被顶替的预览标签：文件随之关掉，不进「重新打开关闭的标签」。
+    const show = controller.slice(
+      controller.indexOf('function showOpenTab'),
+      controller.indexOf('const selectFile')
+    )
+    assert.match(show, /if \(opened\.replacedPath\) forgetOpenTabs\(\[opened\.replacedPath\]\)/u)
+    assert.doesNotMatch(show, /closedTabPathsRef/u)
+    assert.match(show, /preview: !!options\.preview && previewTabsEnabledLatest\.current/u)
+    assert.match(show, /options\.keepSource && sourcePath && sourcePath !== path/u)
+    // 文件还在读的时候又被普通打开（双击的第二下）：读完开成普通标签。
+    assert.match(controller, /if \(!options\.preview\) pendingOpenKeepsTabRef\.current = true/u)
+    // 设置关掉：已有的预览标签留下。
+    assert.match(
+      controller,
+      /if \(!previewTabsEnabled\) commitLayout\(keepWorkbenchEditorPreviewTabs\(layoutRef\.current\)\)/u
+    )
+    const pageModel = readSource('src/renderer/src/hooks/useStandaloneWorkbenchPageModel.tsx')
+    assert.match(pageModel, /previewTabsEnabled: workbenchPreferences\.preferences\.editorPreviewTabs/u)
+    const settings = readSource('src/renderer/src/components/settings/WorkbenchSettingsDialog.tsx')
+    assert.match(settings, /checked=\{preferences\.editorPreviewTabs\}/u)
+    const preferences = readSource('src/renderer/src/models/settings/workbenchPreferences.ts')
+    assert.match(preferences, /editorPreviewTabs: true,/u)
+  })
+})
+
 void describe('saved editor tab layout', () => {
   void test('a saved layout round-trips through the project session', () => {
-    const layout = openWorkbenchEditorTab(open(empty, 'a', 'b', 'c'), 'b')
+    const layout = preview(open(empty, 'a', 'b', 'c', 'b'), 'd')
     const session = buildWorkbenchProjectSessionSnapshot({
       expandedPaths: ['.'],
       selectedEntryPath: 'b',
@@ -107,7 +288,8 @@ void describe('saved editor tab layout', () => {
       cursorByPath: { b: { line: 3, column: 7 } },
     })
     const restored = normalizeWorkbenchProjectSession(JSON.parse(JSON.stringify(session)))
-    assert.equal(show(restored.editorLayout), '*a [b] c')
+    // 预览标签重启之后还是预览标签。
+    assert.equal(show(restored.editorLayout), '*a b c [~d]')
     assert.deepEqual(restored.cursorByPath, { b: { line: 3, column: 7 } })
   })
 
@@ -133,7 +315,7 @@ void describe('saved editor tab layout', () => {
     const restored = normalizeWorkbenchEditorGroupsLayout(
       {
         groups: [
-          { paths: ['a', '', 7, 'a', ' b '], activePath: 'gone' },
+          { paths: ['a', '', 7, 'a', ' b '], activePath: 'gone', previewPath: 'gone too' },
           { paths: [] },
           'not a group',
         ],
@@ -141,7 +323,8 @@ void describe('saved editor tab layout', () => {
       },
       32
     )
-    // 重复的、空的、不是字符串的路径去掉；当前标签不在标签栏里时取第一个；空组不留；当前组越界回到第一组。
+    // 重复的、空的、不是字符串的路径去掉；当前标签不在标签栏里时取第一个，预览标签不在就没有；空组不留；
+    // 当前组越界回到第一组。
     assert.equal(show(restored), '*[a] b')
   })
 

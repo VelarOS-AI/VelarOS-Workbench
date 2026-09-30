@@ -11,6 +11,7 @@
  */
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { workbenchHost } from '@renderer/host'
+import type { WorkbenchEditorOpenTabIntent } from '@renderer/models/editor/workbenchEditorGroups'
 import {
   formatWorkbenchProjectSearchCount,
   mergeWorkbenchProjectSearchFiles,
@@ -67,8 +68,12 @@ export interface WorkbenchProjectSearchEngineOptions {
   replaceOpenTabContents: (
     changes: ReadonlyArray<{ path: string; replace: (content: string) => string }>
   ) => { replacedPaths: string[]; readOnlyPaths: string[] }
-  /** 打开一处匹配：跳到那个文件，选中匹配。 */
-  onOpenMatch: (path: string, match: WorkbenchContentSearchMatchResult) => void
+  /** 打开一处匹配：跳到那个文件，选中匹配。单击是预览标签，双击、回车是普通标签。 */
+  onOpenMatch: (
+    path: string,
+    match: WorkbenchContentSearchMatchResult,
+    intent?: WorkbenchEditorOpenTabIntent
+  ) => void
 }
 
 /** 一次搜索的条件：结果按它算，替换也按它。 */
@@ -515,8 +520,11 @@ export function useWorkbenchProjectSearchEngine(options: WorkbenchProjectSearchE
     toggleEntriesCollapsed: useMemoizedFn((): void => setEntriesCollapsed((collapsed) => !collapsed)),
     refresh: useMemoizedFn((): void => void runSearch()),
     openMatch: useMemoizedFn(
-      (file: WorkbenchProjectSearchFile, match: WorkbenchContentSearchMatchResult): void =>
-        options.onOpenMatch(file.path, match)
+      (
+        file: WorkbenchProjectSearchFile,
+        match: WorkbenchContentSearchMatchResult,
+        intent?: WorkbenchEditorOpenTabIntent
+      ): void => options.onOpenMatch(file.path, match, intent)
     ),
     /** 结果行里预览的替换文字（正则按匹配本身算捕获组）。 */
     previewReplacement: useMemoizedFn((matchedText: string): string =>

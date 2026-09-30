@@ -3,6 +3,7 @@ import {
   buildWorkbenchVelarBuildCommand,
   buildWorkbenchVelarRunCommand,
 } from '@renderer/models/commands/workbenchVelarFileCommand'
+import { getWorkbenchEditorFocusedGroup } from '@renderer/models/editor/workbenchEditorGroups'
 import { getWorkbenchFileDiagnosticView } from '@renderer/models/editor/workbenchLanguageServiceInsightsModel'
 
 import { AppError } from '@velaros-ai/core/error'
@@ -120,9 +121,14 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
         onSearchQueryChange: workbench.setSearchQuery,
         onRefreshProject: () => void model.actions.refreshProjectAndGit(),
         onCloseProject: undefined,
-        onOpenSearchEntry: (entry) => void workbench.openSearchEntry(entry),
+        onOpenSearchEntry: (entry, intent) => void workbench.openSearchEntry(entry, intent),
         onSetDirectoryOpen: (path, open) => void workbench.setDirectoryOpen(path, open),
+        // 单击文件开预览标签，双击（和新建的文件）开普通标签。
         onSelectFile: (path) => {
+          model.actions.showEditorSurface()
+          void editorNavigation.selectFile(path, { preview: true })
+        },
+        onOpenFile: (path) => {
           model.actions.showEditorSurface()
           void editorNavigation.selectFile(path)
         },
@@ -167,6 +173,7 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
       workbenchEditor: {
         editorContent: workbench.editorContent,
         openTabs: workbench.openTabs,
+        previewTabPath: getWorkbenchEditorFocusedGroup(workbench.editorLayout).previewPath,
         hasUnsavedChanges: workbench.hasUnsavedChanges,
         selectedFilePath: workbench.selectedFilePath,
         selectedFile: workbench.selectedFile,
@@ -185,10 +192,12 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
       selectedFileDiagnostics: selectedFileDiagnosticView.diagnostics,
       isSelectedFileDiagnosticsPending: selectedFileDiagnosticView.isPending,
       tabs: {
+        // 点标签只是切过去：预览标签还是预览标签（双击才留下）。
         onSelectOpenFile: (path) => {
           model.actions.showEditorSurface()
-          void editorNavigation.selectFile(path)
+          void editorNavigation.selectFile(path, { preview: true })
         },
+        onKeepOpenFile: workbench.keepOpenFile,
         onCloseOpenFile: workbench.closeOpenFile,
         onCloseOtherOpenFiles: workbench.closeOtherOpenFiles,
         onCloseAllOpenFiles: workbench.closeAllOpenFiles,
@@ -237,8 +246,12 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
             void workbench.revealEntryPath(workbench.selectedFilePath)
           }
         },
+        // 跳到定义、引用：目标以预览标签打开；出发的文件是预览标签的话先留下（与 VS Code 一致）。
         onGoToDefinition: (path, line, column) =>
-          void editorNavigation.goToLocation(path, line, column),
+          void editorNavigation.goToLocation(path, line, column, {
+            preview: true,
+            keepSource: true,
+          }),
         onApplyLanguageServiceRename: workbench.applyLanguageServiceRename,
         packageManager,
         onRunPackageScript: (command) => {

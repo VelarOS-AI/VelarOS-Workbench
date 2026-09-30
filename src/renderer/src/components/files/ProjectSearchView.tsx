@@ -20,6 +20,7 @@ import {
 } from '@renderer/hooks/useWorkbenchProjectSearchEngine'
 import type { WorkbenchProjectSearchPanelModel } from '@renderer/hooks/useWorkbenchProjectSearchPanel'
 import { useWorkbenchI18n } from '@renderer/i18n'
+import type { WorkbenchEditorOpenTabIntent } from '@renderer/models/editor/workbenchEditorGroups'
 import { getWorkbenchFileSearchKeyboardAction } from '@renderer/models/files/workbenchFileSearchNavigationModel'
 import {
   buildWorkbenchProjectSearchRows,
@@ -54,7 +55,7 @@ export interface ProjectSearchViewProps
   searchResult: Nullable<WorkbenchSearchEntriesResult>
   gitDecorations: WorkbenchGitDecorationMap
   selectedEntryPath: Nullable<string>
-  onOpenEntry: (entry: WorkbenchDirectoryEntry) => void
+  onOpenEntry: (entry: WorkbenchDirectoryEntry, intent?: WorkbenchEditorOpenTabIntent) => void
   /** 查找词是空白时显示的文件树。 */
   tree: ReactNode
   /** 结果与文件树共用的滚动容器（FilePanel 靠它认焦点在不在树里）。 */
@@ -126,6 +127,7 @@ export function ProjectSearchView({
       scroll.scrollTop = top + rowHeight - scroll.clientHeight
   }
 
+  /** 回车打开挑中的那一行：开成普通标签（单击才是预览）。 */
   function openRow(row: WorkbenchProjectSearchRow): void {
     if (row.kind === 'entry') onOpenEntry(row.entry)
     else if (row.kind === 'match') engine.openMatch(row.file, row.match)

@@ -29,6 +29,7 @@ import type { WorkbenchProjectSearchEngineOptions } from '@renderer/hooks/useWor
 import type { WorkbenchProjectSearchPanelModel } from '@renderer/hooks/useWorkbenchProjectSearchPanel'
 import { useWorkbenchI18n } from '@renderer/i18n'
 import { isWorkbenchVelarFilePath } from '@renderer/models/commands/workbenchVelarFileCommand'
+import type { WorkbenchEditorOpenTabIntent } from '@renderer/models/editor/workbenchEditorGroups'
 import {
   getWorkbenchFileTreeShortcutAction,
   selectTopLevelTreeEntries,
@@ -111,9 +112,13 @@ export interface WorkbenchFilePanelHandlersProps {
   onSearchQueryChange: (query: string) => void
   onRefreshProject: () => void
   onCloseProject?: () => void
-  onOpenSearchEntry: (entry: WorkbenchDirectoryEntry) => void
+  /** 打开按文件名找到的条目：单击是预览标签，双击、回车是普通标签。 */
+  onOpenSearchEntry: (entry: WorkbenchDirectoryEntry, intent?: WorkbenchEditorOpenTabIntent) => void
   onSetDirectoryOpen: (path: string, open: boolean) => void
+  /** 单击文件树里的文件：以预览标签打开。 */
   onSelectFile: (path: string) => void
+  /** 双击文件、新建文件：打开成普通标签。 */
+  onOpenFile: (path: string) => void
   onRunFile?: (path: string) => void
   onBuildFile?: (path: string) => void
   /** 右键「添加到聊天」：把文件作为引用挂到聊天输入框（只挂路径，一次可以挂一组多选的文件）。 */
@@ -186,6 +191,7 @@ export function FilePanel({
     onOpenSearchEntry,
     onSetDirectoryOpen,
     onSelectFile,
+    onOpenFile,
     onRunFile,
     onBuildFile,
     onAddFilesToChat,
@@ -365,6 +371,7 @@ export function FilePanel({
       anchorEntry: contextMenu.entry,
       childrenByPath,
       onCreateEntry,
+      onOpenFile,
     })
   }
 
@@ -382,6 +389,7 @@ export function FilePanel({
         onSetDirectoryOpen={onSetDirectoryOpen}
         onSelectEntryPath={onSelectEntryPath}
         onSelectFile={onSelectFile}
+        onOpenFile={onOpenFile}
         onContextMenuEntry={openContextMenu}
         onRenameEntry={onRenameEntry}
         onDeleteEntries={onDeleteEntries}

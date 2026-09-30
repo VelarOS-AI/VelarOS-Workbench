@@ -33,6 +33,7 @@ import type { WorkbenchDirectoryEntry, WorkbenchDirectoryEntrySymlink } from '@s
 
 import { useFileTreeActions } from '../../hooks/useFileTreeActions'
 import styles from '../../styles/workbenchPageStyles'
+import { useLatest } from '../../support/genericHooks'
 
 import {
   FileTreeRow,
@@ -56,7 +57,10 @@ interface FileTreeProps {
   onTreeApiChange?: (api: Nullable<FileTreeApi>) => void
   onSetDirectoryOpen: (path: string, open: boolean) => void
   onSelectEntryPath: (path: Nullable<string>) => void
+  /** 单击（或用键盘激活）文件：以预览标签打开。 */
   onSelectFile: (path: string) => void
+  /** 双击文件：打开成普通标签。 */
+  onOpenFile: (path: string) => void
   onContextMenuEntry: (entry: WorkbenchDirectoryEntry, event: MouseEvent) => void
   onRenameEntry: (
     entry: WorkbenchDirectoryEntry,
@@ -96,6 +100,7 @@ export function FileTree({
   onSetDirectoryOpen,
   onSelectEntryPath,
   onSelectFile,
+  onOpenFile,
   onContextMenuEntry,
   onRenameEntry,
   onDeleteEntries,
@@ -138,6 +143,14 @@ export function FileTree({
   )
   const [initialOpenState] = useState(() => createOpenState(expandedPaths))
   const normalizedSearchTerm = useMemo(() => searchTerm.trim().toLowerCase(), [searchTerm])
+  const onOpenFileLatest = useLatest(onOpenFile)
+  // 链接的目标在工程外或已不存在：打不开（单击也只是选中它）。
+  const handleTreeOpenFile = useCallback(
+    (entry: WorkbenchDirectoryEntry): void => {
+      if (!isUnresolvedTreeSymlink(entry)) onOpenFileLatest.current(entry.path)
+    },
+    [onOpenFileLatest]
+  )
   // @arch-guard:suspend velaros/code-style/prefer-meaningful-use-memo 理由：Context value 的引用稳定性用于阻止文件选择时刷新全部可见树行。
   const rowRuntime = useMemo(
     () => ({
@@ -155,8 +168,9 @@ export function FileTree({
       gitDecorations,
       isMutatingTree,
       onContextMenuEntry: handleTreeContextMenuEntry,
+      onOpenFile: handleTreeOpenFile,
     }),
-    [gitDecorations, handleTreeContextMenuEntry, isMutatingTree, t]
+    [gitDecorations, handleTreeContextMenuEntry, handleTreeOpenFile, isMutatingTree, t]
   )
   const disableTreeEntryMutation = useCallback(
     (data: FileTreeNodeData) => isMutatingTree || data.entry.path === ROOT_PATH,
@@ -279,6 +293,8 @@ interface CreateTreeEntryOptions {
     parentEntry: Nullable<WorkbenchDirectoryEntry>,
     name: string
   ) => Promise<Nullable<WorkbenchDirectoryEntry>>
+  /** 新建的文件起好名字之后打开它（普通标签）。 */
+  onOpenFile: (path: string) => void
 }
 
 /**
@@ -291,6 +307,7 @@ export async function createTreeEntry({
   anchorEntry,
   childrenByPath,
   onCreateEntry,
+  onOpenFile,
 }: CreateTreeEntryOptions): Promise<void> {
   const parentPath = resolveTreeCreateDirectoryPath(anchorEntry)
   const createdEntry = await onCreateEntry(
@@ -298,16 +315,19 @@ export async function createTreeEntry({
     anchorEntry,
     getDefaultCreateName(type, parentPath, childrenByPath)
   )
-  if (createdEntry) editTreeEntryWhenVisible(treeRef, createdEntry.path)
+  if (createdEntry)
+    editTreeEntryWhenVisible(treeRef, createdEntry.path, type === 'file' ? onOpenFile : null)
 }
 
 /**
  * 新行要等父目录重新读完才进树：出现后聚焦并进入改名。改完按改后的名字选中并打开（取消改名就是原来
- * 那一项）——改了名，原来的路径就不在树里了，选它会把选择清空、打开也落空。
+ * 那一项）——改了名，原来的路径就不在树里了，选它会把选择清空、打开也落空。新建的文件开成普通标签
+ * （`onOpenFile`），不是单击那样的预览标签：用户接着就要往里写；目录照常展开。
  */
 function editTreeEntryWhenVisible(
   treeRef: { readonly current: Nullable<FileTreeApi> },
-  path: string
+  path: string,
+  onOpenFile: Nullable<(path: string) => void>
 ): void {
   whenTreeEntryVisible(treeRef, path, (tree) => {
     tree.focus(path)
@@ -316,7 +336,8 @@ function editTreeEntryWhenVisible(
       // 改名没成（重名之类）时新名字不会出现：什么也不做，报错已经给过了。
       whenTreeEntryVisible(treeRef, editedPath, (current) => {
         current.select(editedPath)
-        current.activate(editedPath)
+        if (onOpenFile) onOpenFile(editedPath)
+        else current.activate(editedPath)
       })
     })
   })

@@ -80,6 +80,8 @@ export interface WorkbenchEditorAuxiliaryTabItem {
 
 interface EditorTabBarProps {
   openTabs: WorkbenchOpenEditorTab[]
+  /** 预览标签：名字是斜体，双击留下。 */
+  previewTabPath?: Nullable<string>
   selectedFilePath: Nullable<string>
   selectedFile: Nullable<WorkbenchReadFileResult>
   hasUnsavedChanges: boolean
@@ -99,6 +101,8 @@ interface EditorTabBarProps {
   onOpenTabContextMenu: (path: string, event: MouseEvent) => void
   onRunTabContextAction: (action: () => void) => void
   onSelectOpenFile: (path: string) => void
+  /** 双击标签：预览标签留下，变成普通标签。 */
+  onKeepOpenFile?: (path: string) => void
   onCloseOpenFile: (path: string) => void
   onCloseOtherOpenFiles: (path: string) => void
   onCloseAllOpenFiles: () => void
@@ -148,6 +152,7 @@ function middleClickCloseHandlers(onClose: LooseOptional<() => void>): {
 
 export function EditorTabBar({
   openTabs,
+  previewTabPath = null,
   selectedFilePath,
   selectedFile,
   selectedFileEditMode = null,
@@ -163,6 +168,7 @@ export function EditorTabBar({
   onOpenTabContextMenu,
   onRunTabContextAction,
   onSelectOpenFile,
+  onKeepOpenFile,
   onCloseOpenFile,
   onCloseOtherOpenFiles,
   onCloseAllOpenFiles,
@@ -199,6 +205,8 @@ export function EditorTabBar({
           `${tab.path}:${isDirtyTab(tab)}:${tab.externalChange?.status ?? ''}`
       )
       .join('\u001f'),
+    // 斜体的名字宽一点、窄一点：预览标签换了要重新量。
+    previewTabPath ?? '',
     diffTabItem ? getWorkbenchGitChangeDisplayPath(diffTabItem) : '',
     lightTabItem?.id ?? '',
     auxiliaryTabItems.map((tab) => `${tab.id}:${tab.title}:${tab.active}`).join('\u001f'),
@@ -328,6 +336,7 @@ export function EditorTabBar({
                 className={styles.editorTab}
                 data-active={isActive}
                 data-dirty={isDirty}
+                data-preview={tab.path === previewTabPath}
                 data-external-change={hasExternalChange}
                 data-autosave-failed={!!autosaveFailure}
                 data-dragging={tab.path === draggingTabPath}
@@ -354,6 +363,7 @@ export function EditorTabBar({
                         : tab.path
                   }
                   onClick={() => onSelectOpenFile(tab.path)}
+                  onDoubleClick={() => onKeepOpenFile?.(tab.path)}
                 >
                   <WorkbenchFileTypeIcon fileName={tab.path} size={13} />
                   <span className={styles.editorTabName} data-git-tone={gitDecoration?.tone}>
@@ -586,6 +596,7 @@ export function EditorTabBar({
                 key={tab.path}
                 className={styles.editorTabListItem}
                 data-active={isActive}
+                data-preview={tab.path === previewTabPath}
                 data-external-change={hasExternalChange}
               >
                 <Button

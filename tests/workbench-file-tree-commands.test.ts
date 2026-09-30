@@ -156,7 +156,11 @@ void describe('Workbench file tree commands', () => {
     )
     const tree = readSource('src/renderer/src/components/files/FileTree.tsx')
     assert.match(tree, /const editedPath = resolveEditedTreeEntryPath\(path, result\)/u)
-    assert.match(tree, /current\.select\(editedPath\)\n\s+current\.activate\(editedPath\)/u)
+    // 新建的文件开成普通标签（不走单击的预览），目录照常展开。
+    assert.match(
+      tree,
+      /current\.select\(editedPath\)\n\s+if \(onOpenFile\) onOpenFile\(editedPath\)\n\s+else current\.activate\(editedPath\)/u
+    )
   })
 
   void test('moves skip entries that already sit in the target directory', () => {

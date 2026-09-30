@@ -1084,6 +1084,9 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     settingsEditorFormatOnSaveHint:
       "Format the file when you save it with ⌘S / Ctrl+S in the editor, using the project's Prettier if it has one and the built-in rules otherwise. Autosave doesn't format.",
     settingsEditorWordWrapHint: 'Wrap long lines at the editor width. Press {shortcut} in the editor to toggle.',
+    settingsEditorPreviewTabs: 'Preview tabs',
+    settingsEditorPreviewTabsHint:
+      'A single click on a file, a search result or a problem, or a jump to a definition opens an italic preview tab that the next preview replaces. Editing, saving, or double-clicking the tab or the file keeps it. When off, these open regular tabs.',
     settingsLocalHistoryThrottle: 'Local history throttle',
     settingsLocalHistoryThrottleHint:
       'While you type, skip a new local-history snapshot if the last one is within this interval — lighter, less memory. AI edits are always recorded.',

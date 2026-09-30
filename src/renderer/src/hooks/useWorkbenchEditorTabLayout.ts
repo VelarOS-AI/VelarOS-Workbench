@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import {
   createWorkbenchEditorGroupsLayout,
+  keepWorkbenchEditorTab,
   reorderWorkbenchEditorTab,
   type WorkbenchEditorGroupsLayout,
 } from '@renderer/models/editor/workbenchEditorGroups'
@@ -10,7 +11,7 @@ import { useMemoizedFn } from '../support/genericHooks'
 /**
  * 编辑区标签布局的状态：标签栏顺序、每组的当前标签、当前组（见 workbenchEditorGroups）。
  *
- * 只动布局的操作（拖动标签）在这里接好；要同时动文件正文的（打开、关闭、改名、恢复会话）由
+ * 只动布局的操作（拖动标签、把预览标签留下）在这里接好；要同时动文件正文的（打开、关闭、改名、恢复会话）由
  * useWorkbenchEditorController 拿 `layoutRef` 与 `commitLayout` 自己算。
  */
 export function useWorkbenchEditorTabLayout() {
@@ -29,5 +30,10 @@ export function useWorkbenchEditorTabLayout() {
     commitLayout(reorderWorkbenchEditorTab(layoutRef.current, fromPath, toPath))
   })
 
-  return { layout, layoutRef, commitLayout, reorderOpenTabs }
+  /** 把预览标签留下（双击标签、编辑、保存）；不是预览标签时什么也不做。 */
+  const keepOpenFile = useMemoizedFn((path: string): void => {
+    commitLayout(keepWorkbenchEditorTab(layoutRef.current, path))
+  })
+
+  return { layout, layoutRef, commitLayout, reorderOpenTabs, keepOpenFile }
 }

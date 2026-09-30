@@ -816,8 +816,9 @@ export function StandaloneWorkbenchPagePresentation({
                   workbenchEditor={{ openTabs: workbench.openTabs }}
                   workbenchCommand={{ commandResult: workbench.commandResult }}
                   languageServiceInsights={workbench.languageServiceInsights}
+                  // 点一条问题：以预览标签打开（与 VS Code 的问题面板一样）。
                   onGoToLocation={(path, line, column) =>
-                    void editorNavigation.goToLocation(path, line, column)
+                    void editorNavigation.goToLocation(path, line, column, { preview: true })
                   }
                 />
               }

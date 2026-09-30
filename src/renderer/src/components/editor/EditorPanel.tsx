@@ -150,6 +150,8 @@ const LazyWorkbenchMarkdownPreview = lazy(async () => {
 
 export interface WorkbenchEditorPanelTabsProps {
   onSelectOpenFile: (path: string) => void
+  /** 双击标签：预览标签留下，变成普通标签。 */
+  onKeepOpenFile?: (path: string) => void
   /** 关标签；有未保存改动的先问「保存 / 不保存 / 取消」。 */
   onCloseOpenFile: (path: string) => void
   onCloseOtherOpenFiles: (path: string) => void
@@ -269,6 +271,7 @@ export function EditorPanel({
   selectedFileDiagnostics = [],
   tabs: {
     onSelectOpenFile,
+    onKeepOpenFile,
     onCloseOpenFile,
     onCloseOtherOpenFiles,
     onCloseAllOpenFiles,
@@ -317,6 +320,7 @@ export function EditorPanel({
     selectedFile,
     editorContent,
     openTabs,
+    previewTabPath = null,
     hasUnsavedChanges,
     canEditSelectedFile,
     selectedFileEditMode,
@@ -792,6 +796,7 @@ export function EditorPanel({
       <div className={styles.editorMain}>
         <EditorTabBar
           openTabs={isolatedTabGroup ? [] : openTabs}
+          previewTabPath={previewTabPath}
           selectedFilePath={isolatedTabGroup ? null : selectedFilePath}
           selectedFile={hasEditorOverlayTab ? null : selectedFile}
           hasUnsavedChanges={hasEditorOverlayTab ? false : hasUnsavedChanges}
@@ -809,6 +814,7 @@ export function EditorPanel({
           onOpenTabContextMenu={openTabContextMenu}
           onRunTabContextAction={runTabContextAction}
           onSelectOpenFile={onSelectOpenFile}
+          onKeepOpenFile={onKeepOpenFile}
           onCloseOpenFile={onCloseOpenFile}
           onCloseOtherOpenFiles={onCloseOtherOpenFiles}
           onCloseAllOpenFiles={onCloseAllOpenFiles}

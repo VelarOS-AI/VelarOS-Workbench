@@ -17,7 +17,10 @@ import { useStableWorkbenchMessageTranslate } from '../runtime/useStableWorkbenc
 import { useMemoizedFn } from '../support/genericHooks'
 
 import { useWorkbenchCommandController } from './useWorkbenchCommandController'
-import { useWorkbenchEditorController } from './useWorkbenchEditorController'
+import {
+  useWorkbenchEditorController,
+  type WorkbenchFileOpenOptions,
+} from './useWorkbenchEditorController'
 import { useWorkbenchLanguageServiceInsights } from './useWorkbenchLanguageServiceInsights'
 import { useWorkbenchMutationController } from './useWorkbenchMutationController'
 import { useWorkbenchProjectController } from './useWorkbenchProjectController'
@@ -32,14 +35,14 @@ interface UseWorkbenchControllerOptions {
   persistProjectSession?: boolean
   restoreProjectSession?: boolean
   projectIndexEnabled?: boolean
+  /** 「预览标签」这项设置：关着时单击文件、点搜索结果都开普通标签。 */
+  previewTabsEnabled?: boolean
   sessionCursorByPathRef?: React.MutableRefObject<Record<string, { line: number; column: number }>>
   /** 打开着的文件（或它所在的目录）被改名 / 移动：跟着文件走的状态（如 AI 选区）换到新路径。 */
   onOpenEntryPathMoved?: (projectRoot: string, previousPath: string, nextPath: string) => void
 }
 
-export interface WorkbenchSelectFileOptions {
-  quiet?: boolean
-}
+export type WorkbenchSelectFileOptions = WorkbenchFileOpenOptions
 
 export function useWorkbenchController(options: UseWorkbenchControllerOptions = {}) {
   const { messageLatest, tLatest } = useStableWorkbenchMessageTranslate()
@@ -73,6 +76,7 @@ export function useWorkbenchController(options: UseWorkbenchControllerOptions = 
   })
   const editor = useWorkbenchEditorController({
     activeProject: project.activeProject,
+    previewTabsEnabled: options.previewTabsEnabled,
     onFileMetadataSaved: tree.refreshTreeFileMetadata,
     onFileSaved: () => {
       commandActions.command.markValidationStale()
@@ -279,14 +283,16 @@ export function useWorkbenchController(options: UseWorkbenchControllerOptions = 
     await tree.toggleDirectory(path)
   })
 
-  const openSearchEntry = useMemoizedFn(async (entry: WorkbenchDirectoryEntry): Promise<void> => {
-    if (entry.type === 'file') {
-      await selectFile(entry.path)
-      return
-    }
+  const openSearchEntry = useMemoizedFn(
+    async (entry: WorkbenchDirectoryEntry, options?: WorkbenchSelectFileOptions): Promise<void> => {
+      if (entry.type === 'file') {
+        await selectFile(entry.path, options)
+        return
+      }
 
-    await tree.openDirectory(entry.path)
-  })
+      await tree.openDirectory(entry.path)
+    }
+  )
 
   return {
     sortedProjects: project.sortedProjects,
@@ -378,6 +384,8 @@ export function useWorkbenchController(options: UseWorkbenchControllerOptions = 
     /** 主进程要关窗 / 退出：先存能存的，存不下的问用户；true 表示可以关。 */
     confirmWindowClose: editor.confirmWindowClose,
     reorderOpenTabs: editor.reorderOpenTabs,
+    /** 把预览标签留下，变成普通标签。 */
+    keepOpenFile: editor.keepOpenFile,
     revertOpenFiles: editor.revertOpenFiles,
     beginCreateEntry: mutation.beginCreateEntry,
     beginRenameEntry: mutation.beginRenameEntry,

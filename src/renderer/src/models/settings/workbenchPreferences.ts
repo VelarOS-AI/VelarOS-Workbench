@@ -43,6 +43,11 @@ export interface WorkbenchPreferences {
   editorWordWrap: boolean
   /** 在编辑区里按 ⌘S 保存时先格式化（项目的 Prettier 优先，没有就用内置规则）。 */
   editorFormatOnSave: boolean
+  /**
+   * 预览标签：单击文件、点搜索结果、跳到定义时用斜体的预览标签打开，下一次预览顶替它。关掉后这些
+   * 都开普通标签。
+   */
+  editorPreviewTabs: boolean
   theme: WorkbenchThemeId
   /**
    * 用户手动编辑的本地历史快照节流窗口（秒）：自动保存时距上一份快照不足该间隔就不新增，
@@ -81,6 +86,7 @@ export const DEFAULT_WORKBENCH_PREFERENCES: WorkbenchPreferences = {
   editorZoomLevel: 0,
   editorWordWrap: false,
   editorFormatOnSave: false,
+  editorPreviewTabs: true,
   theme: 'light-modern',
   localHistoryThrottleSeconds: 60,
   permissionConfirmationMode: 'standard-open',
@@ -289,6 +295,10 @@ export function normalizeWorkbenchPreferences(
       typeof preferences?.editorFormatOnSave === 'boolean'
         ? preferences.editorFormatOnSave
         : DEFAULT_WORKBENCH_PREFERENCES.editorFormatOnSave,
+    editorPreviewTabs:
+      typeof preferences?.editorPreviewTabs === 'boolean'
+        ? preferences.editorPreviewTabs
+        : DEFAULT_WORKBENCH_PREFERENCES.editorPreviewTabs,
     theme: normalizeWorkbenchThemeChoice(preferences?.theme),
     localHistoryThrottleSeconds: clampNumber(
       preferences?.localHistoryThrottleSeconds,

@@ -19,6 +19,11 @@ import { resolveWorkbenchEditorSelectionAfterClose } from './workbenchEditorTabC
 export interface WorkbenchEditorGroup {
   /** 标签栏顺序的文件路径。 */
   readonly paths: readonly string[]
+  /**
+   * 预览标签（名字是斜体）：下一次以预览方式打开别的文件时，新文件顶替它而不是再加一个标签。一组最多
+   * 一个；没有为 null。
+   */
+  readonly previewPath: Nullable<string>
   /** 这一组当前显示的标签；组里没有标签时为 null。 */
   readonly activePath: Nullable<string>
 }
@@ -33,7 +38,11 @@ export interface WorkbenchEditorGroupsLayout {
 /** 编辑区里最多有几组。 */
 const MaxWorkbenchEditorGroups = 1
 
-const EmptyWorkbenchEditorGroup: WorkbenchEditorGroup = { paths: [], activePath: null }
+const EmptyWorkbenchEditorGroup: WorkbenchEditorGroup = {
+  paths: [],
+  previewPath: null,
+  activePath: null,
+}
 
 export function createWorkbenchEditorGroupsLayout(): WorkbenchEditorGroupsLayout {
   return { groups: [EmptyWorkbenchEditorGroup], focusedGroup: 0 }
@@ -88,25 +97,54 @@ function collapseEmptyGroups(layout: WorkbenchEditorGroupsLayout): WorkbenchEdit
   }
 }
 
+/** 从界面上打开一个文件时，它的标签怎么开。 */
+export interface WorkbenchEditorOpenTabIntent {
+  /**
+   * 以预览标签打开（单击文件、点搜索结果、跳到定义）。文件已经开着时只是切过去，它是不是预览都不变——点
+   * 标签也是这样切的。不给就是普通打开（双击、回车、快速打开）：开着的预览标签就此留下。
+   */
+  preview?: boolean
+  /** 这次打开是从当前文件跳过去的（跳到定义、引用）：当前文件是预览标签的话先留下，不让目标顶替它。 */
+  keepSource?: boolean
+}
+
 export interface WorkbenchEditorOpenTabOptions {
+  /**
+   * 以预览标签打开：新文件顶替这一组已有的预览标签（没有就在末尾加一个）。文件已经开着时只是切过去，它是
+   * 不是预览都不变——普通标签不会变回预览。不给（普通打开）时，已经开着的预览标签就此留下。
+   */
+  preview?: boolean
   /** 新标签放进哪一组；不给就是当前组。文件已经在某一组里开着时不看它。 */
   groupIndex?: number
 }
 
+export interface WorkbenchEditorOpenTabResult {
+  layout: WorkbenchEditorGroupsLayout
+  /** 被这次预览顶替掉的那个预览标签：它已经不在布局里，调用方要把它的文件一起关掉。没有为 null。 */
+  replacedPath: Nullable<string>
+}
+
 /**
- * 打开一个文件的标签并切过去。已经开着的就在它所在的那一组切过去（那一组成为当前组）；没开着的在目标组的
- * 标签栏末尾加一个。
+ * 打开一个文件的标签并切过去。已经开着的就在它所在的那一组切过去（那一组成为当前组）；没开着的在目标组里
+ * 加一个标签：普通标签加在标签栏末尾，预览标签顶替原来的预览标签、占它的位置。
  */
 export function openWorkbenchEditorTab(
   layout: WorkbenchEditorGroupsLayout,
   path: string,
   options: WorkbenchEditorOpenTabOptions = {}
-): WorkbenchEditorGroupsLayout {
+): WorkbenchEditorOpenTabResult {
   const existingIndex = findWorkbenchEditorGroupIndex(layout, path)
   if (existingIndex >= 0) {
     const group = layout.groups[existingIndex]!
-    if (group.activePath === path && layout.focusedGroup === existingIndex) return layout
-    return { ...replaceGroup(layout, existingIndex, { ...group, activePath: path }), focusedGroup: existingIndex }
+    const keeps = !options.preview && group.previewPath === path
+    if (group.activePath === path && layout.focusedGroup === existingIndex && !keeps)
+      return { layout, replacedPath: null }
+
+    const nextGroup = { ...group, activePath: path, previewPath: keeps ? null : group.previewPath }
+    return {
+      layout: { ...replaceGroup(layout, existingIndex, nextGroup), focusedGroup: existingIndex },
+      replacedPath: null,
+    }
   }
 
   const targetIndex = Math.min(
@@ -114,10 +152,36 @@ export function openWorkbenchEditorTab(
     layout.groups.length - 1
   )
   const group = layout.groups[targetIndex] ?? EmptyWorkbenchEditorGroup
-  return {
-    ...replaceGroup(layout, targetIndex, { paths: [...group.paths, path], activePath: path }),
-    focusedGroup: targetIndex,
+  const replacedPath = options.preview ? group.previewPath : null
+  const nextGroup: WorkbenchEditorGroup = {
+    paths: replacedPath
+      ? group.paths.map((current) => (current === replacedPath ? path : current))
+      : [...group.paths, path],
+    previewPath: options.preview ? path : group.previewPath,
+    activePath: path,
   }
+  return {
+    layout: { ...replaceGroup(layout, targetIndex, nextGroup), focusedGroup: targetIndex },
+    replacedPath,
+  }
+}
+
+/** 把预览标签留下，变成普通标签（编辑、保存、双击标签、拖动之后）；本来就不是预览的不变。 */
+export function keepWorkbenchEditorTab(
+  layout: WorkbenchEditorGroupsLayout,
+  path: string
+): WorkbenchEditorGroupsLayout {
+  const groupIndex = layout.groups.findIndex((group) => group.previewPath === path)
+  const group = layout.groups[groupIndex]
+  return group ? replaceGroup(layout, groupIndex, { ...group, previewPath: null }) : layout
+}
+
+/** 所有预览标签都留下（关掉预览标签这项设置的时候）。 */
+export function keepWorkbenchEditorPreviewTabs(
+  layout: WorkbenchEditorGroupsLayout
+): WorkbenchEditorGroupsLayout {
+  if (!layout.groups.some((group) => group.previewPath)) return layout
+  return { ...layout, groups: layout.groups.map((group) => ({ ...group, previewPath: null })) }
 }
 
 /**
@@ -137,6 +201,8 @@ export function closeWorkbenchEditorTabs(
       group.paths.some((path) => closing.has(path))
         ? {
             paths: group.paths.filter((path) => !closing.has(path)),
+            previewPath:
+              group.previewPath && closing.has(group.previewPath) ? null : group.previewPath,
             activePath: resolveWorkbenchEditorSelectionAfterClose(
               group.paths,
               closing,
@@ -148,7 +214,7 @@ export function closeWorkbenchEditorTabs(
   })
 }
 
-/** 拖动标签：把 `fromPath` 挪到同一组里 `toPath` 现在的位置上。 */
+/** 拖动标签：把 `fromPath` 挪到同一组里 `toPath` 现在的位置上；拖的是预览标签就把它留下。 */
 export function reorderWorkbenchEditorTab(
   layout: WorkbenchEditorGroupsLayout,
   fromPath: string,
@@ -165,7 +231,11 @@ export function reorderWorkbenchEditorTab(
 
   const paths = group.paths.filter((path) => path !== fromPath)
   paths.splice(toIndex, 0, fromPath)
-  return replaceGroup(layout, groupIndex, { ...group, paths })
+  return replaceGroup(layout, groupIndex, {
+    ...group,
+    paths,
+    previewPath: group.previewPath === fromPath ? null : group.previewPath,
+  })
 }
 
 /**
@@ -187,9 +257,11 @@ export function renameWorkbenchEditorLayoutPaths(
       seen.add(renamed)
       paths.push(renamed)
     }
+    const previewPath = group.previewPath ? rename(group.previewPath) : null
     const activePath = group.activePath ? rename(group.activePath) : null
     return {
       paths,
+      previewPath: previewPath && paths.includes(previewPath) ? previewPath : null,
       activePath: activePath && paths.includes(activePath) ? activePath : (paths[0] ?? null),
     }
   })
@@ -213,13 +285,18 @@ function normalizeGroup(
   }
   if (paths.length === 0) return null
 
+  const previewPath = readString(value.previewPath)
   const activePath = readString(value.activePath)
-  return { paths, activePath: activePath && paths.includes(activePath) ? activePath : paths[0]! }
+  return {
+    paths,
+    previewPath: previewPath && paths.includes(previewPath) ? previewPath : null,
+    activePath: activePath && paths.includes(activePath) ? activePath : paths[0]!,
+  }
 }
 
 /**
  * 校验存下来的布局：认不出的整体当成没有标签；重复的路径、超出 `maxTabs` 的标签、不在标签栏里的当前
- * 标签都按缺省值收拾好。
+ * 标签与预览标签都按缺省值收拾好。
  */
 export function normalizeWorkbenchEditorGroupsLayout(
   value: unknown,

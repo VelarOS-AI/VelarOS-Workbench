@@ -72,6 +72,8 @@ export interface FileTreeRowRuntime {
   gitDecorations: WorkbenchGitDecorationMap
   isMutatingTree: boolean
   onContextMenuEntry: (entry: WorkbenchDirectoryEntry, event: MouseEvent) => void
+  /** 双击文件：打开成普通标签（单击开出来的预览标签就此留下）。 */
+  onOpenFile: (entry: WorkbenchDirectoryEntry) => void
 }
 
 export const FileTreeRowRuntimeContext = createContext<Nullable<FileTreeRowRuntime>>(null)
@@ -91,6 +93,7 @@ export const FileTreeRow = memo(function FileTreeRow({
     gitDecorations,
     isMutatingTree,
     onContextMenuEntry,
+    onOpenFile,
   } = runtime
   const inputRef = useRef<HTMLInputElement>(null)
   const entry = node.data.entry
@@ -152,6 +155,9 @@ export const FileTreeRow = memo(function FileTreeRow({
       title={entry.symlink ? describeSymlink(entry.symlink) : undefined}
       style={arboristTreeRowOuterStyle(style, entry)}
       onContextMenu={(event) => onContextMenuEntry(entry, event)}
+      onDoubleClick={
+        entry.type === 'file' && !node.isEditing ? () => onOpenFile(entry) : undefined
+      }
     >
       {entry.type === 'directory' ? (
         <>

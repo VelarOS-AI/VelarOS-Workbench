@@ -843,6 +843,15 @@ export function WorkbenchSettingsDialog({
           />
         </SettingRow>
         <SettingRow
+          title={t('workbench.settingsEditorPreviewTabs')}
+          description={t('workbench.settingsEditorPreviewTabsHint')}
+        >
+          <Switch
+            checked={preferences.editorPreviewTabs}
+            onCheckedChange={(editorPreviewTabs) => onPreferencesChange({ editorPreviewTabs })}
+          />
+        </SettingRow>
+        <SettingRow
           title={t('workbench.settingsLocalHistoryThrottle')}
           description={t('workbench.settingsLocalHistoryThrottleHint')}
         >

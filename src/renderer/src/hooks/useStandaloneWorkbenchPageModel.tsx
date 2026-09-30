@@ -28,6 +28,7 @@ import { resolveWorkbenchChatWorkspacePath } from '@renderer/models/chat/workben
 import { getWorkbenchCommandStatusLabel } from '@renderer/models/commands/workbenchCommandStatusModel'
 import { inferPackageManagerCommand } from '@renderer/models/commands/workbenchCommandSuggestions'
 import { inferWorkbenchPackageManagerForPackageJsonPath } from '@renderer/models/commands/workbenchPackageScriptCommand'
+import type { WorkbenchEditorOpenTabIntent } from '@renderer/models/editor/workbenchEditorGroups'
 import { buildWorkbenchPackageScriptRunActions } from '@renderer/models/editor/workbenchPackageScriptRunGutter'
 import { resolveWorkbenchGitSurfacesActive } from '@renderer/models/git/workbenchGitSurfaceActivation'
 import { resolveWorkbenchNavigationSurface } from '@renderer/models/layout/workbenchSurfaceModel'
@@ -104,6 +105,8 @@ type WorkbenchNavigationRequest =
       /** 给出时选中 line:column 到 endLine:endColumn 这一段（项目搜索的一处匹配）。 */
       endLine?: number
       endColumn?: number
+      /** 以预览标签打开（单击搜索结果）；不给就是普通标签。文件已经开着时只是切过去。 */
+      preview?: boolean
     }
   | { target: 'file-preview'; tab: WorkbenchLightEditorTab }
   | { target: 'ai-changes'; round: WorkbenchChatRunChangesTarget }
@@ -237,6 +240,7 @@ export function useStandaloneWorkbenchPageModel(
   } = useWorkbenchProductRuntime()
   const sessionCursorByPathRef = useRef<Record<string, PersistedWorkbenchEditorCursor>>({})
   const shouldUseProjectSession = surfaceMode === 'standalone'
+  const workbenchPreferences = useWorkbenchPreferences()
   const workbench = useWorkbenchController({
     bootstrapProjects,
     lockedProjectId,
@@ -245,6 +249,7 @@ export function useStandaloneWorkbenchPageModel(
     restoreProjectSession: shouldUseProjectSession,
     // Project 基础索引是内置能力；CodeGraph 只决定增强图谱入口是否点亮。
     projectIndexEnabled: true,
+    previewTabsEnabled: workbenchPreferences.preferences.editorPreviewTabs,
     sessionCursorByPathRef,
   })
   const chat = useWorkbenchChatProjectRuntime(toNullable(workbench.activeProject?.rootPath))
@@ -256,7 +261,6 @@ export function useStandaloneWorkbenchPageModel(
   })
   const projectGitSettings = useWorkbenchProjectGitSettings(workbench.activeProject?.rootPath)
   const projectRunSettings = useWorkbenchProjectRunSettings(workbench.activeProject?.rootPath)
-  const workbenchPreferences = useWorkbenchPreferences()
   const workbenchKeymap = useWorkbenchKeymapController()
   const [settingsOpen, setSettingsOpen] = useState(false)
   // ⌘W / Ctrl+W 菜单命令的序号：编辑区看到它变了就关掉当前那个标签（它才知道哪个标签在前台）。
@@ -427,9 +431,12 @@ export function useStandaloneWorkbenchPageModel(
     const selectedFilePath = workbench.selectedFilePath
     if (!pending || !selectedFilePath) return
 
-    void goToLocationLatest.current(selectedFilePath, pending.line, pending.column).finally(() => {
-      workbench.clearPendingSessionNavigation()
-    })
+    // 恢复会话时回到上次的光标：当前文件是预览标签的话照旧是预览标签（普通打开会把它留下）。
+    void goToLocationLatest
+      .current(selectedFilePath, pending.line, pending.column, { preview: true })
+      .finally(() => {
+        workbench.clearPendingSessionNavigation()
+      })
   }, [
     goToLocationLatest,
     workbench.clearPendingSessionNavigation,
@@ -442,9 +449,13 @@ export function useStandaloneWorkbenchPageModel(
     onQueryChange: workbench.setSearchQuery,
     onResetQuery: workbench.resetSearch,
   })
-  /** 打开搜索结果里的一处匹配：经 `navigate` 打开文件并选中匹配。 */
+  /** 打开搜索结果里的一处匹配：经 `navigate` 打开文件并选中匹配。单击是预览标签，双击、回车是普通标签。 */
   const openProjectSearchMatch = useMemoizedFn(
-    (path: string, match: WorkbenchContentSearchMatchResult): void =>
+    (
+      path: string,
+      match: WorkbenchContentSearchMatchResult,
+      intent?: WorkbenchEditorOpenTabIntent
+    ): void =>
       void navigate({
         target: 'file',
         path,
@@ -452,6 +463,7 @@ export function useStandaloneWorkbenchPageModel(
         column: match.column,
         endLine: match.endLine,
         endColumn: match.endColumn,
+        preview: intent?.preview,
       })
   )
   const effectiveGitSshKeyPath =
@@ -705,11 +717,13 @@ export function useStandaloneWorkbenchPageModel(
 
     switch (request.target) {
       case 'file':
-        if (request.line === undefined) await editorNavigation.selectFile(request.path)
+        if (request.line === undefined)
+          await editorNavigation.selectFile(request.path, { preview: request.preview })
         else
           await editorNavigation.goToLocation(request.path, request.line, request.column, {
             endLine: request.endLine,
             endColumn: request.endColumn,
+            preview: request.preview,
           })
         // 文件树平时跟着编辑器的当前文件自己定位（见 useWorkbenchController），但文件本来就是当前文件时
         // 当前文件不变、那边不会动；导航是「把它带到眼前」，左侧也要定位到它。

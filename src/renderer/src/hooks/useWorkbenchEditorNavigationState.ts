@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { WorkbenchEditorOpenTabIntent } from '@renderer/models/editor/workbenchEditorGroups'
 import type {
   WorkbenchIndentation,
   WorkbenchIndentationChange,
@@ -30,6 +31,13 @@ export interface WorkbenchEditorCursorSnapshot {
   }
 }
 
+/** 跳到某个位置时的选项：选中的范围、要不要抢焦点、标签怎么开。 */
+export type WorkbenchEditorLocationOptions = Pick<
+  EditorNavigationRequest,
+  'endLine' | 'endColumn' | 'focus'
+> &
+  WorkbenchEditorOpenTabIntent
+
 /** 编辑器区里的一个内置 webview 调试选项卡。 */
 export interface WorkbenchDebugTab {
   id: string
@@ -51,7 +59,7 @@ function deriveDebugTabTitle(url: string): string {
 interface UseWorkbenchEditorNavigationStateOptions {
   gitChangeItems: WorkbenchGitChangeItem[]
   selectedFilePath: Nullable<string>
-  onSelectFile: (path: string) => Promise<any>
+  onSelectFile: (path: string, options?: WorkbenchEditorOpenTabIntent) => Promise<any>
 }
 
 export function useWorkbenchEditorNavigationState({
@@ -107,46 +115,51 @@ export function useWorkbenchEditorNavigationState({
     navigationHistoryRef.current.record({ path, line, column })
   }, [cursorPositionLatest, selectedFilePathLatest])
 
-  async function selectFile(path: string): Promise<void> {
+  async function selectFile(path: string, intent?: WorkbenchEditorOpenTabIntent): Promise<void> {
     if (path !== selectedFilePathLatest.current) recordNavigationPoint()
     setDiffItem(null)
     setDiffFocusFirstChangeRequestId(0)
     setLightTab(null)
     setActiveDebugTabId(null)
-    await onSelectFileLatest.current(path)
+    await onSelectFileLatest.current(path, intent)
   }
 
   async function goToLocation(
     path: string,
     line: number,
     column?: number,
-    options?: Pick<EditorNavigationRequest, 'endLine' | 'endColumn' | 'focus'>
+    options?: WorkbenchEditorLocationOptions
   ): Promise<void> {
     recordNavigationPoint()
     await openLocation(path, line, column, options)
   }
 
-  /** 后退或前进到历史里的位置（这一步本身不再记进历史）。 */
+  /**
+   * 后退或前进到历史里的位置（这一步本身不再记进历史）。那个文件的标签已经关掉时以预览标签重新打开
+   * （与 VS Code 一致）。
+   */
   async function goThroughHistory(direction: 'back' | 'forward'): Promise<void> {
     const history = navigationHistoryRef.current
     const current = currentNavigationPoint()
     const target = direction === 'back' ? history.back(current) : history.forward(current)
-    if (target) await openLocation(target.path, target.line, target.column)
+    if (target) await openLocation(target.path, target.line, target.column, { preview: true })
   }
 
   async function openLocation(
     path: string,
     line: number,
     column?: number,
-    options?: Pick<EditorNavigationRequest, 'endLine' | 'endColumn' | 'focus'>
+    options?: WorkbenchEditorLocationOptions
   ): Promise<void> {
     setDiffItem(null)
     setDiffFocusFirstChangeRequestId(0)
     setLightTab(null)
     setActiveDebugTabId(null)
-    if (path !== selectedFilePath) {
-      await onSelectFileLatest.current(path)
-    }
+    // 已经是当前文件时也过一遍：普通打开要把预览标签留下。
+    await onSelectFileLatest.current(path, {
+      preview: options?.preview,
+      keepSource: options?.keepSource,
+    })
 
     setNavigationRequest((request) => ({
       id: (request?.id ?? 0) + 1,

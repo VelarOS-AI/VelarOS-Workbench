@@ -15,6 +15,7 @@ import {
   PlayCircleIcon,
 } from '@phosphor-icons/react'
 import { useWorkbenchI18n } from '@renderer/i18n'
+import type { WorkbenchEditorOpenTabIntent } from '@renderer/models/editor/workbenchEditorGroups'
 import { getWorkbenchFilePresentationVariant } from '@renderer/models/files/workbenchFilePresentation'
 import {
   formatWorkbenchProjectSearchCount,
@@ -60,8 +61,12 @@ interface FileSearchResultsProps {
   onActivateRow: (key: string) => void
   onToggleEntries: () => void
   onToggleFile: (path: string) => void
-  onOpenEntry: (entry: WorkbenchDirectoryEntry) => void
-  onOpenMatch: (file: WorkbenchProjectSearchFile, match: WorkbenchContentSearchMatchResult) => void
+  onOpenEntry: (entry: WorkbenchDirectoryEntry, intent?: WorkbenchEditorOpenTabIntent) => void
+  onOpenMatch: (
+    file: WorkbenchProjectSearchFile,
+    match: WorkbenchContentSearchMatchResult,
+    intent?: WorkbenchEditorOpenTabIntent
+  ) => void
   onReplaceFile: (file: WorkbenchProjectSearchFile) => void
   onReplaceMatch: (file: WorkbenchProjectSearchFile, match: WorkbenchContentSearchMatchResult) => void
   onContextMenuEntry: (entry: WorkbenchDirectoryEntry, event: MouseEvent) => void
@@ -180,20 +185,27 @@ export function FileSearchResults({
     }
   }
 
+  /** 单击：文件名条目与匹配以预览标签打开（与 VS Code 的搜索结果一样），分组行展开或收起。 */
   function handleClick(row: WorkbenchProjectSearchRow): void {
     switch (row.kind) {
       case 'entries':
         onToggleEntries()
         return
       case 'entry':
-        onOpenEntry(row.entry)
+        onOpenEntry(row.entry, { preview: true })
         return
       case 'file':
         onToggleFile(row.file.path)
         return
       case 'match':
-        onOpenMatch(row.file, row.match)
+        onOpenMatch(row.file, row.match, { preview: true })
     }
+  }
+
+  /** 双击：打开成普通标签（第一下单击开出来的预览标签就此留下）。 */
+  function handleDoubleClick(row: WorkbenchProjectSearchRow): void {
+    if (row.kind === 'entry') onOpenEntry(row.entry)
+    else if (row.kind === 'match') onOpenMatch(row.file, row.match)
   }
 
   return (
@@ -229,6 +241,7 @@ export function FileSearchResults({
             data-git-tone={path ? gitDecorations.get(path)?.tone : undefined}
             title={row.kind === 'match' ? `${row.file.path}:${row.match.line}:${row.match.column}` : undefined}
             onClick={() => handleClick(row)}
+            onDoubleClick={() => handleDoubleClick(row)}
             onMouseEnter={
               row.kind === 'entry' || row.kind === 'match' ? () => onActivateRow(row.key) : undefined
             }
@@ -266,7 +279,7 @@ function FileIcon({ path, name }: { path: string; name: string }): ReactElement 
   )
 }
 
-/** 行尾的替换按钮：指针停在行上时才显示，点它不触发行本身的点击。 */
+/** 行尾的替换按钮：指针停在行上时才显示，点它（连点两下也一样）不触发行本身的打开。 */
 function RowAction({
   label,
   disabled,
@@ -287,6 +300,7 @@ function RowAction({
         event.stopPropagation()
         onClick()
       }}
+      onDoubleClick={(event) => event.stopPropagation()}
     >
       <ArrowsLeftRightIcon size={13} />
     </IconButton>

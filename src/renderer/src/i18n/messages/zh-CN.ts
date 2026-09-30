@@ -1044,6 +1044,9 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     settingsEditorFormatOnSaveHint:
       '在编辑区里按 ⌘S / Ctrl+S 保存时先格式化当前文件：项目里有 Prettier 就用它，没有就用内置规则。自动保存不格式化。',
     settingsEditorWordWrapHint: '长行在编辑区宽度处折行显示；在编辑区里按 {shortcut} 也能切换。',
+    settingsEditorPreviewTabs: '预览标签',
+    settingsEditorPreviewTabsHint:
+      '单击文件、点搜索结果或问题、跳到定义时用斜体的预览标签打开，下一次预览会顶替它；编辑、保存、双击标签或双击文件之后留下。关掉后都开普通标签。',
     settingsLocalHistoryThrottle: '本地历史节流',
     settingsLocalHistoryThrottleHint:
       '手动编辑时，距上一份快照不足该间隔就不新增本地历史，省内存、更轻量。AI 改动不受此限，每次都会记录。',

@@ -34,6 +34,8 @@ export interface WorkbenchEditorDocumentBundle {
   editorContent: string
   openTabs: WorkbenchOpenEditorTab[]
   hasUnsavedChanges: boolean
+  /** 预览标签（名字是斜体，下一次预览会顶替它）；没有为 null。 */
+  previewTabPath?: Nullable<string>
 }
 
 /** 完整编辑器面板状态，包括保存状态和项目索引。 */
