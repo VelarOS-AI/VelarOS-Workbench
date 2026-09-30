@@ -24,6 +24,9 @@ import type {
   SystemWorkspaceGitInitializeRepositoryResult,
   SystemWorkspaceGitLineStatsSnapshot,
   SystemWorkspaceGitLogResult,
+  SystemWorkspaceGitStashActionResult,
+  SystemWorkspaceGitStashListResult,
+  SystemWorkspaceGitStashResult,
   SystemWorkspaceGitSummary,
   SystemWorkspaceGitSwitchBranchResult,
   WorkspaceGitBranch,
@@ -39,6 +42,8 @@ import type {
   WorkspaceGitRemoteAction,
   WorkspaceGitRemoteActionOptions,
   WorkspaceGitRemoteActionResult,
+  WorkspaceGitStashAction,
+  WorkspaceGitStashOptions,
   WorkspaceGitStatusResult,
 } from '@shared/contracts'
 import {
@@ -66,6 +71,14 @@ import {
   toPortableRelativePath,
 } from '../PathContainmentHelper'
 import { decodeWorkbenchTextContent, encodeWorkbenchText } from '../TextCodec'
+
+import type {
+  GitRepository,
+  GitRunOptions,
+  GitRunResult,
+  WorkbenchGitAccess,
+} from './WorkbenchGitAccess'
+import { WorkbenchGitStashes } from './WorkbenchGitStashes'
 
 const DefaultDiffMaxChars = 20_000
 const MaxDiffChars = 1_000_000
@@ -132,27 +145,6 @@ class WorkbenchGitNotRepositoryError extends AppError {
   }
 }
 
-interface GitRunOptions extends WorkspaceGitRemoteActionOptions {
-  allowFailure?: boolean
-  /** 写进标准输入的内容（`--pathspec-from-file=-`、`blame --contents -`）。 */
-  input?: string | Uint8Array
-  /** 这条命令额外的环境变量（临时索引 GIT_INDEX_FILE 之类）；盖不过安全设置。 */
-  env?: NodeJS.ProcessEnv
-  /**
-   * 保留输出末尾的换行。补丁要原样拼回去交给 `git apply`：默认会连 `\r\n` 一起去掉，CRLF 文件的
-   * 最后一行就对不上了。
-   */
-  keepFinalNewline?: boolean
-  /** 输出上限，默认 GitOutputMaxBytes。 */
-  maxBuffer?: number
-  /** 输出超过上限时不报错，结果标成 truncated，调用方换个问法。 */
-  allowTruncated?: boolean
-  /** 这么久没有任何输出（进度也算）就结束 git 进程，报超时。 */
-  inactivityTimeoutMs?: number
-  /** 取消：结束 git 进程（连同它起的 ssh），报已取消。 */
-  signal?: AbortSignal
-}
-
 /** 被中途结束的原因：`inactive` 太久没动静，`cancelled` 用户取消。 */
 type GitStopReason = 'inactive' | 'cancelled'
 
@@ -166,24 +158,6 @@ interface StoppableGitProcess {
   stderr?: Nullable<NodeJS.ReadableStream>
   kill: (signal: NodeJS.Signals) => boolean
   then: (onSettled: () => void, onFailed: () => void) => unknown
-}
-
-interface GitRunResult {
-  stdout: string
-  stderr: string
-  failed: boolean
-  /** 输出超过上限，git 进程已被结束，stdout 不完整。 */
-  truncated: boolean
-}
-
-/**
- * 项目所在的仓库。项目可以是仓库里的一个子目录：git 命令都在项目根下跑，pathspec 相对项目根；
- * status、log 列出的路径却相对仓库根，要去掉前缀才是项目里的路径。
- */
-interface GitRepository {
-  rootPath: string
-  /** 项目根相对仓库根的前缀，如 `packages/app/`；项目就是仓库根时为空串。 */
-  prefix: string
 }
 
 interface GitBranchUpstream {
@@ -218,9 +192,47 @@ export class WorkbenchGitService {
   /** 正在跑的远端操作（发起方给了编号的）：凭编号取消。 */
   private readonly remoteOperations = new Map<string, AbortController>()
 
+  /** 交给各功能模块的内部能力：它们跑的 git 与这里同一套环境、输出配置和报错口径。 */
+  private readonly access: WorkbenchGitAccess = {
+    run: (rootPath, args, options) => this.runGit(rootPath, args, options),
+    resolveRoot: (workspaceRoot) => this.resolveRoot(workspaceRoot),
+    openRepository: (rootPath) => this.openRepository(rootPath),
+    getStatus: (repository) => this.getStatus(repository),
+    getSummary: (workspaceRoot) => this.getSummary(workspaceRoot),
+    readOutput: (result) => this.readableGitOutput(result),
+    fail: (args, result) => this.throwGitFailure(args, result),
+    getEmptyTree: (rootPath) => this.getEmptyTree(rootPath),
+    toProjectPath: (prefix, repositoryPath) => this.toProjectPath(prefix, repositoryPath),
+    describePaths: (entries) => this.describePaths(entries),
+    readOperationInProgress: (rootPath) => this.readOperationInProgress(rootPath),
+  }
+  private readonly stashes = new WorkbenchGitStashes(this.access)
+
   constructor(options: WorkbenchGitServiceOptions = {}) {
     this.readEnvironment = options.environment ?? (() => Promise.resolve(process.env))
     this.remoteInactivityTimeoutMs = options.remoteInactivityTimeoutMs ?? RemoteInactivityTimeoutMs
+  }
+
+  /** 仓库里的贮藏，最新的在前。 */
+  public listStashes(workspaceRoot: string): Promise<SystemWorkspaceGitStashListResult> {
+    return this.stashes.list(workspaceRoot)
+  }
+
+  /** 贮藏项目里没提交的改动，见 {@link WorkbenchGitStashes}。 */
+  public stash(
+    workspaceRoot: string,
+    options: WorkspaceGitStashOptions = {}
+  ): Promise<SystemWorkspaceGitStashResult> {
+    return this.stashes.stash(workspaceRoot, options)
+  }
+
+  /** 取回（`apply` 留着贮藏、`pop` 取回后删掉）或删掉（`drop`）一条贮藏，凭贮藏提交的对象名。 */
+  public performStashAction(
+    workspaceRoot: string,
+    sha: string,
+    action: WorkspaceGitStashAction
+  ): Promise<SystemWorkspaceGitStashActionResult> {
+    return this.stashes.performAction(workspaceRoot, sha, action)
   }
 
   public async getSummary(workspaceRoot: string): Promise<SystemWorkspaceGitSummary> {
@@ -298,14 +310,24 @@ export class WorkbenchGitService {
               : []),
           ])
         ).stdout
-      : await this.readWorkingDiff(rootPath, options.side, paths)
+      : options.stashSha
+        ? await this.stashes.readDiff(
+            rootPath,
+            options.stashSha,
+            paths.map((path) => this.toLiteralPathspec(path))
+          )
+        : await this.readWorkingDiff(rootPath, options.side, paths)
     const maxChars = Math.min(
       Math.max(options.maxChars ?? DefaultDiffMaxChars, 500),
       MaxDiffChars
     )
     return {
       rootPath,
-      scope: options.commitSha ? 'commit' : (options.side ?? 'working'),
+      scope: options.commitSha
+        ? 'commit'
+        : options.stashSha
+          ? 'stash'
+          : (options.side ?? 'working'),
       path: optionalWhen(!!options.path, options.path),
       diff: output.slice(0, maxChars),
       truncated: output.length > maxChars,
@@ -1287,6 +1309,14 @@ export class WorkbenchGitService {
     return (
       await this.runGit(rootPath, ['hash-object', '-t', 'tree', '--stdin'], { input: '' })
     ).stdout.trim()
+  }
+
+  /** 进行到一半的操作（变基、合并、拣选）在文案表里的名字；没有为 null。 */
+  private async readOperationInProgress(
+    rootPath: string
+  ): Promise<Nullable<WorkbenchMainMessageKey>> {
+    if (await this.isRebaseInProgress(rootPath)) return 'git.operationRebase'
+    return this.getInProgressOperation(rootPath)
   }
 
   /** 进行中、这次提交要一并完成的操作（合并、拣选）；没有为 null。 */

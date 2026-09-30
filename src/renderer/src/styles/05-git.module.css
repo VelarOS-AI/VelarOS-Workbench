@@ -763,6 +763,79 @@
   font-size: 10.5px;
 }
 
+/* 贮藏：左侧分支下面的一组，一条两行（说明；分支 · 时间）。 */
+.gitStashRow {
+  @apply flex min-w-0 items-start gap-2 border bg-transparent text-left text-foreground;
+  padding: 4px 6px;
+  border-color: transparent;
+  border-radius: var(--workbench-radius);
+  font-size: 12px;
+}
+
+.gitStashRow > svg {
+  @apply shrink-0;
+  margin-top: 3px;
+}
+
+.gitStashRow:hover,
+.gitStashRow[data-active='true'] {
+  background: var(--workbench-selection-bg);
+}
+
+.gitLogView:not(:focus-within) .gitStashRow[data-active='true'] {
+  background: var(--workbench-selection-inactive);
+  color: var(--workbench-text);
+}
+
+.gitStashRowText {
+  @apply flex min-w-0 flex-1 flex-col;
+  gap: 1px;
+}
+
+.gitStashRowText > small {
+  @apply truncate text-muted-foreground;
+  font-size: 10.5px;
+}
+
+.gitStashEmpty {
+  @apply text-muted-foreground;
+  padding: 3px 6px;
+  font-size: 11px;
+}
+
+/* 详情标题下面的一排操作（贮藏的应用、弹出、删除）。 */
+.gitDetailActions {
+  @apply flex flex-wrap items-center;
+  gap: 6px;
+}
+
+.gitCommitMetaGrid[data-columns='2'] {
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+}
+
+.gitStashDialogForm {
+  @apply flex min-w-0 flex-col;
+  gap: 12px;
+}
+
+.gitStashOption {
+  @apply flex min-w-0 items-start;
+  gap: 8px;
+}
+
+.gitStashOption > label:last-child {
+  @apply flex min-w-0 flex-col;
+  gap: 2px;
+  font-size: 12px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.gitStashOption small {
+  @apply text-muted-foreground;
+  font-size: 11px;
+}
+
 .gitBranchSummary {
   @apply flex min-w-0 items-center gap-2 border text-foreground;
   min-height: 32px;

@@ -18,6 +18,7 @@ import {
   SparkleIcon,
   SpinnerGapIcon,
   StopCircleIcon,
+  TrayArrowDownIcon,
 } from '@phosphor-icons/react'
 import {
   describeWorkbenchGitRemoteActionCancel,
@@ -61,17 +62,20 @@ import {
 } from '@velaros-ai/ui/primitives/overlays/Dialog'
 import { BubbleTooltip } from '@velaros-ai/ui/primitives/overlays/Tooltip'
 
-import type { WorkspaceGitFileAction } from '@shared/contracts'
+import type { WorkspaceGitFileAction, WorkspaceGitStashOptions } from '@shared/contracts'
 
 import styles from '../../styles/workbenchPageStyles'
 import { WorkbenchFileTypeIcon } from '../files/WorkbenchFileTypeIcon'
 
 import type { WorkbenchGitPanelSessionProps } from './workbenchGitPanelProps'
+import { WorkbenchGitStashDialog } from './WorkbenchGitStashDialog'
 
 export interface WorkbenchCommitPanelProps {
   git: WorkbenchGitPanelSessionProps
   onOpenDiff: (item: WorkbenchGitChangeItem, options?: WorkbenchOpenDiffOptions) => void
   onOpenFile: (path: string) => Promise<void> | void
+  /** 打开底部的 Git 工具窗（贮藏列在那里）。 */
+  onOpenGitTool: () => void
 }
 
 /** 报冲突时点名的文件：最多列 3 个，其余说个数。 */
@@ -99,10 +103,12 @@ export function WorkbenchCommitPanel({
   },
   onOpenDiff,
   onOpenFile,
+  onOpenGitTool,
 }: WorkbenchCommitPanelProps): ReactElement {
   const { t, locale, messageLatest, tLatest } = useStableWorkbenchMessageTranslate()
   const [commitMessage, setCommitMessage] = useState('')
-  const [busyAction, setBusyAction] = useState<Nullable<'commit' | 'generate'>>(null)
+  const [busyAction, setBusyAction] = useState<Nullable<'commit' | 'generate' | 'stash'>>(null)
+  const [stashDialogOpen, setStashDialogOpen] = useState(false)
   // 这个项目正在跑的远端操作（这里的推送，或顶栏发起的拉取、同步）：跑着的时候推送按钮换成取消。
   const remoteAction = useWorkbenchGitRemoteAction(workspaceRoot)
   /** 拉取、同步正在改工作区里的文件：等它跑完再提交。 */
@@ -186,6 +192,14 @@ export function WorkbenchCommitPanel({
       ),
     [changeItems, commitMode, selectedItems, stagedItems, t]
   )
+  // 贮藏对话框要知道有没有未跟踪的文件可带、不带它们还有没有别的可贮藏（按文件算，暂存了一部分的算一个）。
+  const stashCounts = useMemo(() => {
+    const untracked = changeItems.filter((item) => item.group === 'untracked').length
+    const tracked = new Set(
+      changeItems.filter((item) => item.group !== 'untracked').map((item) => item.path)
+    ).size
+    return { tracked, untracked }
+  }, [changeItems])
   const conflictNames = describeConflictNames(conflictItems)
   const rollbackDeletions = rollbackRequest?.filter(isCommitPanelRollbackDeletion) ?? []
   const rollbackKeepsStaged = !!rollbackRequest?.some((item) =>
@@ -434,6 +448,40 @@ export function WorkbenchCommitPanel({
       reportWorkbenchGitRemoteActionSuccess(result.action, { messageLatest, tLatest })
     } catch (actionError) {
       reportWorkbenchGitRemoteActionFailure(actionError, 'upload', { messageLatest, tLatest })
+    }
+  }
+
+  /** 贮藏读的是磁盘上的文件：编辑器里还有没保存的内容时先提醒保存。冲突没解决完时贮藏不了。 */
+  function requestStash(): void {
+    if (!summary?.repository || !changeItems.length || busyAction || pulling) return
+    if (warnUnsavedOpenTabs()) return
+    setStashDialogOpen(true)
+  }
+
+  async function stashChanges(options: WorkspaceGitStashOptions): Promise<void> {
+    if (busyAction) return
+    try {
+      setBusyAction('stash')
+      Result.unwrap(
+        await workbenchHost.kernel.workspace.stashWorkspaceGitChanges(workspaceRoot, options)
+      )
+      setStashDialogOpen(false)
+      setSelectedCommitPaths(new Set())
+      await onRefresh()
+      messageLatest.current.success({
+        title: tLatest.current('workbench.gitStashSuccessTitle'),
+        description: tLatest.current('workbench.gitStashSuccessDescription'),
+        action: { label: tLatest.current('workbench.gitStashView'), onClick: onOpenGitTool },
+      })
+    } catch (actionError) {
+      showActionError(
+        actionError,
+        tLatest.current('workbench.gitStashFailedTitle'),
+        tLatest.current('workbench.gitStashFailedFallback')
+      )
+      await onRefresh()
+    } finally {
+      setBusyAction(null)
     }
   }
 
@@ -761,6 +809,23 @@ export function WorkbenchCommitPanel({
                     <SparkleIcon size={15} />
                   )}
                 </CommitIconButton>
+                <CommitIconButton
+                  label={t('workbench.gitStashChanges')}
+                  disabled={
+                    !!busyAction ||
+                    pulling ||
+                    !changeItems.length ||
+                    !!conflictItems.length ||
+                    hasUnsavedOpenTabs
+                  }
+                  onClick={requestStash}
+                >
+                  {busyAction === 'stash' ? (
+                    <SpinnerGapIcon size={14} className={styles.spinIcon} />
+                  ) : (
+                    <TrayArrowDownIcon size={15} />
+                  )}
+                </CommitIconButton>
               </div>
               <div className={styles.commitButtonRow}>
                 <CommitIconButton
@@ -910,6 +975,14 @@ export function WorkbenchCommitPanel({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <WorkbenchGitStashDialog
+        open={stashDialogOpen}
+        trackedCount={stashCounts.tracked}
+        untrackedCount={stashCounts.untracked}
+        pending={busyAction === 'stash'}
+        onOpenChange={setStashDialogOpen}
+        onSubmit={(options) => void stashChanges(options)}
+      />
     </>
   )
 }

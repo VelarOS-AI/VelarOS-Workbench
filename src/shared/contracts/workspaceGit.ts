@@ -155,6 +155,48 @@ export interface WorkspaceGitRestoreResult {
   changedFiles: number
 }
 
+/** 一条贮藏（`git stash`）。贮藏是整个仓库的：项目是仓库里的子目录时，列出的也是仓库里全部的贮藏。 */
+export interface WorkspaceGitStash {
+  /** 贮藏提交的对象名。它是这条贮藏的身份，操作都凭它：`stash@{n}` 的序号每来一条新贮藏就往后挪。 */
+  sha: string
+  /** 此刻的序号（`stash@{index}`），最新的是 0。 */
+  index: number
+  /** 贮藏时写的说明；没写时是它基于的提交（`1a2b3c4 提交主题`），见 `autoMessage`。 */
+  message: string
+  /** 说明是 git 自己拟的（贮藏时没写）。 */
+  autoMessage: boolean
+  /** 贮藏时所在的分支；分离的 HEAD 上贮藏的为 null。 */
+  branch: Nullable<string>
+  createdAt: number
+  /** 连未跟踪的文件一起贮藏了。 */
+  includesUntracked: boolean
+}
+
+export interface WorkspaceGitStashOptions {
+  message?: string
+  /** 连未跟踪的文件一起贮藏（被 .gitignore 忽略的不算）：它们会从工作区里拿走，收在这条贮藏里。 */
+  includeUntracked?: boolean
+}
+
+/**
+ * - `apply`：把贮藏的改动取回工作区，贮藏留着。
+ * - `pop`：取回之后删掉这条贮藏；取回时冲突了就不删。
+ * - `drop`：直接删掉这条贮藏，里面的改动不再能取回。
+ */
+export type WorkspaceGitStashAction = 'apply' | 'pop' | 'drop'
+
+export interface WorkspaceGitStashActionResult {
+  action: WorkspaceGitStashAction
+  stash: WorkspaceGitStash
+  /**
+   * 取回时与工作区里现有内容冲突了的文件（相对项目根）：文件里留着冲突标记，等用户解决后标记为已解决。
+   * 别的情况为空。
+   */
+  conflicts: string[]
+  /** 这条贮藏还在（`apply` 之后，或 `pop` 冲突了没删）。 */
+  kept: boolean
+}
+
 /** 看哪一侧的改动：`staged` 暂存区相对 HEAD，`unstaged` 工作区相对暂存区。 */
 export type WorkspaceGitDiffSide = 'staged' | 'unstaged'
 
@@ -164,6 +206,11 @@ export interface WorkspaceGitDiffOptions {
    * HEAD 那一版对照工作区里带冲突标记的那一版）。
    */
   commitSha?: string
+  /**
+   * 给了是这条贮藏里的改动（贮藏提交的对象名）：相对它基于的提交改了什么，连同贮藏进去的未跟踪文件。
+   * 不能与 `commitSha` 同时给。
+   */
+  stashSha?: string
   side?: WorkspaceGitDiffSide
   path?: string
   originalPath?: string
@@ -171,7 +218,7 @@ export interface WorkspaceGitDiffOptions {
 }
 
 export interface WorkspaceGitDiffResult {
-  scope: 'commit' | 'working' | WorkspaceGitDiffSide
+  scope: 'commit' | 'stash' | 'working' | WorkspaceGitDiffSide
   path?: string
   diff: string
   truncated: boolean

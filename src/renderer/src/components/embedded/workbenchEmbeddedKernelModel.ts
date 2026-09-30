@@ -32,6 +32,7 @@ export interface WorkbenchEmbeddedCommitPanelModel {
   git: WorkbenchGitPanelSessionProps
   onOpenDiff: WorkbenchCommitPanelProps['onOpenDiff']
   onOpenFile: WorkbenchCommitPanelProps['onOpenFile']
+  onOpenGitTool: WorkbenchCommitPanelProps['onOpenGitTool']
 }
 
 /** 编辑区内置 webview 调试选项卡的原始数据，JSX 由 kernel 组件构建。 */

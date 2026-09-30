@@ -15,6 +15,8 @@ import type {
   WorkspaceGitRemoteAction,
   WorkspaceGitRemoteActionResult,
   WorkspaceGitRestoreResult,
+  WorkspaceGitStash,
+  WorkspaceGitStashActionResult,
   WorkspaceGitStatusResult,
 } from './workspaceGit'
 
@@ -158,6 +160,27 @@ export interface SystemWorkspaceGitFileActionResult {
 
 export interface SystemWorkspaceGitHunkActionResult {
   rootPath: string
+  summary: SystemWorkspaceGitSummary
+}
+
+export interface SystemWorkspaceGitStashListResult {
+  rootPath: string
+  /** 最新的在前（`stash@{0}`）。 */
+  stashes: WorkspaceGitStash[]
+}
+
+/** 贮藏了改动：新贮藏、贮藏之后的全部贮藏和工作区状态。 */
+export interface SystemWorkspaceGitStashResult {
+  rootPath: string
+  stash: WorkspaceGitStash
+  stashes: WorkspaceGitStash[]
+  summary: SystemWorkspaceGitSummary
+}
+
+export interface SystemWorkspaceGitStashActionResult {
+  rootPath: string
+  stashAction: WorkspaceGitStashActionResult
+  stashes: WorkspaceGitStash[]
   summary: SystemWorkspaceGitSummary
 }
 

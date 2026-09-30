@@ -1,21 +1,14 @@
 import { type ReactElement, useEffect, useMemo, useState } from 'react'
-import {
-  CalendarBlankIcon,
-  FileCodeIcon,
-  FilesIcon,
-  GitBranchIcon,
-  HashStraightIcon,
-  UserCircleIcon,
-} from '@phosphor-icons/react'
+import { GitBranchIcon, SpinnerGapIcon } from '@phosphor-icons/react'
+import { useWorkbenchGitStashes } from '@renderer/hooks/useWorkbenchGitStashes'
 import { workbenchHost } from '@renderer/host'
-import { useWorkbenchI18n } from '@renderer/i18n'
 import {
   filterWorkbenchGitLogCommits,
-  formatWorkbenchGitCommitDate,
   formatWorkbenchGitCommitRelativeDate,
   isSameWorkbenchGitLog,
-  parseWorkbenchGitCommitDiff,
 } from '@renderer/models/git/changesPanel.model'
+import { getWorkbenchGitStashTitle } from '@renderer/models/git/workbenchGitStashModel'
+import { useStableWorkbenchMessageTranslate } from '@renderer/runtime/useStableWorkbenchMessaging'
 
 import { AppError } from '@velaros-ai/core'
 import { Result } from '@velaros-ai/core/result'
@@ -24,17 +17,34 @@ import { Paragraph } from '@velaros-ai/ui/primitives/display/Paragraph'
 import { SearchField } from '@velaros-ai/ui/primitives/forms/SearchField'
 import { ScrollArea } from '@velaros-ai/ui/primitives/layout/ScrollArea'
 
-import type { SystemWorkspaceGitSummary, WorkspaceGitLogEntry } from '@shared/contracts'
+import type {
+  SystemWorkspaceGitSummary,
+  WorkspaceGitLogEntry,
+  WorkspaceGitStash,
+  WorkspaceGitStashAction,
+} from '@shared/contracts'
 
 import styles from '../../styles/workbenchPageStyles'
 import { HistoryTimeline, type HistoryTimelineItem } from '../editor/HistoryTimeline'
+
+import {
+  WorkbenchGitDetailsPane,
+  type WorkbenchGitDetailsTarget,
+} from './WorkbenchGitDetailsPane'
+import { WorkbenchGitRefsPane } from './WorkbenchGitRefsPane'
 
 interface WorkbenchGitToolPanelProps {
   workspaceRoot: string
   summary: Nullable<SystemWorkspaceGitSummary>
   isLoading: boolean
   error: Nullable<string>
+  /** 编辑器里有没保存的内容：取回贮藏会改写磁盘上的文件，先提醒保存。 */
+  hasUnsavedOpenTabs: boolean
   onInitialize: () => Promise<void>
+  /** 动过工作区之后（取回贮藏）刷新文件树与 Git 状态。 */
+  onRefresh: () => Promise<void>
+  /** 取回贮藏出了冲突：打开提交面板，冲突文件列在「合并冲突」里。 */
+  onOpenCommitTool: () => void
 }
 
 /** 读到的提交日志属于哪个项目、哪个分支；换了才显示「读取中」，同一份刷新时原地更新。 */
@@ -44,22 +54,58 @@ interface WorkbenchGitLogState {
   error: Nullable<string>
 }
 
-/** 拆分前 Workbench 底部 Git 工具：查看分支与提交历史，不承担提交操作。 */
+/** 冲突提示挂得久一点：要照着它去解决。 */
+const ConflictNoticeDurationMs = 12_000
+
+const StashActions = ['apply', 'pop', 'drop'] as const satisfies readonly WorkspaceGitStashAction[]
+
+const StashActionLabelKeys: Record<WorkspaceGitStashAction, string> = {
+  apply: 'workbench.gitStashApply',
+  pop: 'workbench.gitStashPop',
+  drop: 'workbench.gitStashDrop',
+}
+
+const StashActionHintKeys: Record<WorkspaceGitStashAction, string> = {
+  apply: 'workbench.gitStashApplyHint',
+  pop: 'workbench.gitStashPopHint',
+  drop: 'workbench.gitStashDropHint',
+}
+
+const StashActionSuccessTitleKeys: Record<WorkspaceGitStashAction, string> = {
+  apply: 'workbench.gitStashApplySuccessTitle',
+  pop: 'workbench.gitStashPopSuccessTitle',
+  drop: 'workbench.gitStashDropSuccessTitle',
+}
+
+/**
+ * 拆分前 Workbench 底部 Git 工具：查看分支与提交历史，不承担提交操作。贮藏也列在这里（左侧分支下面）：
+ * 点一条看它里面的改动，应用、弹出或删除。
+ */
 export function WorkbenchGitToolPanel({
   workspaceRoot,
   summary,
   isLoading,
   error,
+  hasUnsavedOpenTabs,
   onInitialize,
+  onRefresh,
+  onOpenCommitTool,
 }: WorkbenchGitToolPanelProps): ReactElement {
-  const { locale, t } = useWorkbenchI18n()
+  const { locale, t, messageLatest, tLatest } = useStableWorkbenchMessageTranslate()
   const [logBranch, setLogBranch] = useState('')
-  const [branchSearch, setBranchSearch] = useState('')
   const [logSearch, setLogSearch] = useState('')
   const [logState, setLogState] = useState<Nullable<WorkbenchGitLogState>>(null)
   const [selectedCommitSha, setSelectedCommitSha] = useState<Nullable<string>>(null)
-  const [commitDiff, setCommitDiff] = useState('')
-  const [selectedDiffPath, setSelectedDiffPath] = useState<Nullable<string>>(null)
+  /** 选中的贮藏：选着它时右侧看的是它，不是日志里选中的提交。 */
+  const [selectedStashSha, setSelectedStashSha] = useState<Nullable<string>>(null)
+  const [pendingStashAction, setPendingStashAction] =
+    useState<Nullable<WorkspaceGitStashAction>>(null)
+  const isRepository = !!summary?.repository
+  const stashList = useWorkbenchGitStashes({
+    workspaceRoot,
+    enabled: isRepository,
+    revision: summary?.checkedAt ?? null,
+  })
 
   const logKey = `${workspaceRoot}\0${logBranch}`
   const currentLog = logState?.key === logKey ? logState : null
@@ -69,25 +115,19 @@ export function WorkbenchGitToolPanel({
   const logError = currentLog && !currentLog.commits.length ? currentLog.error : null
 
   const branches = summary?.branches ?? []
-  const branchQuery = branchSearch.trim().toLocaleLowerCase(locale)
-  const localBranches = branches.filter(
-    (branch) =>
-      branch.kind !== 'remote'
-      && (!branchQuery || branch.name.toLocaleLowerCase(locale).includes(branchQuery))
-  )
-  const remoteBranches = branches.filter(
-    (branch) =>
-      branch.kind === 'remote'
-      && (!branchQuery || branch.name.toLocaleLowerCase(locale).includes(branchQuery))
-  )
   const filteredCommits = useMemo(
     () => filterWorkbenchGitLogCommits(commits, logSearch),
     [commits, logSearch]
   )
-  const selectedCommit = useMemo(
-    () => commits.find((commit) => commit.sha === selectedCommitSha) ?? null,
-    [commits, selectedCommitSha]
+  const selectedStash = useMemo(
+    () => stashList.stashes.find((stash) => stash.sha === selectedStashSha) ?? null,
+    [selectedStashSha, stashList.stashes]
   )
+  const detailsTarget = useMemo<Nullable<WorkbenchGitDetailsTarget>>(() => {
+    if (selectedStash) return { kind: 'stash', stash: selectedStash }
+    const commit = commits.find((candidate) => candidate.sha === selectedCommitSha)
+    return commit ? { kind: 'commit', commit } : null
+  }, [commits, selectedCommitSha, selectedStash])
   const timelineItems = useMemo<HistoryTimelineItem[]>(
     () =>
       filteredCommits.map((commit) => ({
@@ -100,22 +140,6 @@ export function WorkbenchGitToolPanel({
         badges: commit.refs.slice(0, 2),
       })),
     [filteredCommits, locale]
-  )
-  const diffFiles = useMemo(() => parseWorkbenchGitCommitDiff(commitDiff), [commitDiff])
-  const selectedDiffFile = useMemo(
-    () => diffFiles.find((file) => file.path === selectedDiffPath) ?? diffFiles[0] ?? null,
-    [diffFiles, selectedDiffPath]
-  )
-  const diffStats = useMemo(
-    () =>
-      diffFiles.reduce(
-        (stats, file) => ({
-          additions: stats.additions + file.additions,
-          deletions: stats.deletions + file.deletions,
-        }),
-        { additions: 0, deletions: 0 }
-      ),
-    [diffFiles]
   )
 
   useEffect(() => {
@@ -132,7 +156,6 @@ export function WorkbenchGitToolPanel({
     if (!summary?.repository) {
       setLogState(null)
       setSelectedCommitSha(null)
-      setCommitDiff('')
       return
     }
     let active = true
@@ -169,35 +192,76 @@ export function WorkbenchGitToolPanel({
     }
   }, [logBranch, summary?.checkedAt, summary?.repository, workspaceRoot])
 
-  useEffect(() => {
-    if (!selectedCommitSha) {
-      setCommitDiff('')
+  /**
+   * 应用、弹出会改写工作区里的文件（编辑器里有没保存的内容时先提醒保存）；删除之后里面的改动取不回来，
+   * 先问。取回时冲突了不算失败：冲突文件交给提交面板的「合并冲突」，贮藏留着。
+   */
+  async function runStashAction(
+    stash: WorkspaceGitStash,
+    action: WorkspaceGitStashAction
+  ): Promise<void> {
+    if (pendingStashAction) return
+    if (action !== 'drop' && hasUnsavedOpenTabs) {
+      messageLatest.current.warning({
+        title: tLatest.current('workbench.gitUnsavedBlockedTitle'),
+        description: tLatest.current('workbench.gitUnsavedBlockedDescription'),
+      })
       return
     }
-    let active = true
-    void runBackground(async () => {
-      const result = Result.unwrap(
-        await workbenchHost.kernel.workspace.getWorkspaceGitDiff(workspaceRoot, {
-          commitSha: selectedCommitSha,
-          maxChars: 120_000,
-        })
+    const name = getWorkbenchGitStashTitle(stash, tLatest.current)
+    if (
+      action === 'drop' &&
+      !window.confirm(
+        tLatest.current(
+          stash.includesUntracked
+            ? 'workbench.gitStashDropUntrackedConfirm'
+            : 'workbench.gitStashDropConfirm',
+          { name }
+        )
       )
-      if (active) setCommitDiff(result.diff)
-    }).catch(() => {
-      if (active) setCommitDiff('')
-    })
-    return () => {
-      active = false
-    }
-  }, [selectedCommitSha, workspaceRoot])
-
-  useEffect(() => {
-    setSelectedDiffPath((current) =>
-      current && diffFiles.some((file) => file.path === current)
-        ? current
-        : (diffFiles[0]?.path ?? null)
     )
-  }, [diffFiles])
+      return
+
+    try {
+      setPendingStashAction(action)
+      const result = Result.unwrap(
+        await workbenchHost.kernel.workspace.performWorkspaceGitStashAction(
+          workspaceRoot,
+          stash.sha,
+          action
+        )
+      )
+      stashList.replace(result.stashes)
+      await onRefresh()
+      if (result.stashAction.conflicts.length > 0) {
+        messageLatest.current.warning({
+          title: tLatest.current('workbench.gitStashConflictsTitle'),
+          description: tLatest.current('workbench.gitStashConflictsDescription', {
+            count: result.stashAction.conflicts.length,
+          }),
+          duration: ConflictNoticeDurationMs,
+        })
+        onOpenCommitTool()
+        return
+      }
+      messageLatest.current.success({
+        title: tLatest.current(StashActionSuccessTitleKeys[action]),
+        description: name,
+      })
+    } catch (actionError) {
+      const appError = AppError.from(actionError)
+      messageLatest.current.open({
+        title: tLatest.current('workbench.gitStashActionFailedTitle'),
+        description:
+          appError.message.trim() || tLatest.current('workbench.gitStashFailedFallback'),
+        tone: appError.code === 'VALIDATION' ? 'warning' : 'error',
+        showClose: true,
+      })
+      await onRefresh()
+    } finally {
+      setPendingStashAction(null)
+    }
+  }
 
   if (!summary?.repository)
     return (
@@ -214,40 +278,15 @@ export function WorkbenchGitToolPanel({
       <div className={styles.gitIdeShell}>
         <div className={styles.gitIdeContent}>
           <div className={styles.gitLogView}>
-            <aside className={styles.gitLogBranchPane}>
-              <div className={styles.gitBranchPaneHeader}>
-                <p className={styles.gitPaneSectionTitle}>{t('workbench.gitBranches')}</p>
-                <span>{branches.length}</span>
-              </div>
-              <div className={styles.gitBranchSearch}>
-                <SearchField
-                  size="sm"
-                  value={branchSearch}
-                  placeholder={t('workbench.gitBranchSearchPlaceholder')}
-                  onChange={(event) => setBranchSearch(event.target.value)}
-                />
-              </div>
-              <ScrollArea className={styles.gitBranchScroll}>
-                <div className={styles.gitBranchList}>
-                  <BranchGroup
-                    label={t('workbench.gitBranchLocal')}
-                    branches={localBranches}
-                    logBranch={logBranch}
-                    onSelect={setLogBranch}
-                    currentLabel={t('workbench.gitBranchCurrent')}
-                  />
-                  {!!remoteBranches.length && (
-                    <BranchGroup
-                      label={t('workbench.gitBranchRemoteGroup')}
-                      branches={remoteBranches}
-                      logBranch={logBranch}
-                      onSelect={setLogBranch}
-                      currentLabel={t('workbench.gitBranchCurrent')}
-                    />
-                  )}
-                </div>
-              </ScrollArea>
-            </aside>
+            <WorkbenchGitRefsPane
+              branches={branches}
+              logBranch={logBranch}
+              onSelectBranch={setLogBranch}
+              stashes={stashList.stashes}
+              stashesError={stashList.error}
+              selectedStashSha={selectedStash?.sha ?? null}
+              onSelectStash={(stash) => setSelectedStashSha(stash.sha)}
+            />
             <section className={styles.gitLogListPane}>
               <div className={styles.gitLogSearchBar}>
                 <div className={styles.gitLogSearchField}>
@@ -278,8 +317,11 @@ export function WorkbenchGitToolPanel({
                 ) : timelineItems.length ? (
                   <HistoryTimeline
                     items={timelineItems}
-                    selectedId={selectedCommitSha}
-                    onSelect={setSelectedCommitSha}
+                    selectedId={selectedStash ? null : selectedCommitSha}
+                    onSelect={(sha) => {
+                      setSelectedStashSha(null)
+                      setSelectedCommitSha(sha)
+                    }}
                     palette={{
                       today: 'var(--workbench-theme-color)',
                       week: 'var(--workbench-theme-color)',
@@ -295,137 +337,37 @@ export function WorkbenchGitToolPanel({
               </ScrollArea>
             </section>
             <aside className={styles.gitCommitDetailPane}>
-              {selectedCommit ? (
-                <div className={styles.gitCommitDetail}>
-                  <header className={styles.gitCommitHeader}>
-                    <h5 className={styles.gitCommitDetailTitle}>{selectedCommit.subject}</h5>
-                    {!!selectedCommit.refs.length && (
-                      <div className={styles.gitCommitRefs}>
-                        {selectedCommit.refs.map((ref) => <span key={ref}>{ref}</span>)}
-                      </div>
-                    )}
-                  </header>
-                  <dl className={styles.gitCommitMetaGrid}>
-                    <div>
-                      <span className={styles.gitCommitMetaLabel}>
-                        <HashStraightIcon size={14} />
-                        <dt>{t('workbench.gitCommitSha')}</dt>
-                      </span>
-                      <dd>{selectedCommit.shortSha}</dd>
+              <WorkbenchGitDetailsPane
+                workspaceRoot={workspaceRoot}
+                target={detailsTarget}
+                actions={
+                  selectedStash && (
+                    <div className={styles.gitDetailActions}>
+                      {StashActions.map((action) => (
+                        <Button
+                          key={action}
+                          size="sm"
+                          variant={action === 'drop' ? 'destructiveOutline' : 'outline'}
+                          disabled={
+                            !!pendingStashAction || (action !== 'drop' && hasUnsavedOpenTabs)
+                          }
+                          title={t(StashActionHintKeys[action])}
+                          onClick={() => void runStashAction(selectedStash, action)}
+                        >
+                          {pendingStashAction === action && (
+                            <SpinnerGapIcon size={12} className={styles.spinIcon} />
+                          )}
+                          {t(StashActionLabelKeys[action])}
+                        </Button>
+                      ))}
                     </div>
-                    <div>
-                      <span className={styles.gitCommitMetaLabel}>
-                        <UserCircleIcon size={14} />
-                        <dt>{t('workbench.gitCommitAuthor')}</dt>
-                      </span>
-                      <dd>{selectedCommit.authorName}</dd>
-                    </div>
-                    <div>
-                      <span className={styles.gitCommitMetaLabel}>
-                        <CalendarBlankIcon size={14} />
-                        <dt>{t('workbench.gitCommitDate')}</dt>
-                      </span>
-                      <dd>{formatWorkbenchGitCommitDate(locale, selectedCommit)}</dd>
-                    </div>
-                  </dl>
-                  <section className={styles.gitCommitChanges}>
-                    <header className={styles.gitCommitChangesHeader}>
-                      <span>
-                        <FilesIcon size={14} />
-                        {t('workbench.gitChangedFiles', { count: diffFiles.length })}
-                      </span>
-                      <span className={styles.gitCommitStats}>
-                        <strong>+{diffStats.additions}</strong>
-                        <em>-{diffStats.deletions}</em>
-                      </span>
-                    </header>
-                    {!!diffFiles.length && (
-                      <div className={styles.gitCommitFileList}>
-                        {diffFiles.map((file) => (
-                          <button
-                            key={file.path}
-                            type="button"
-                            data-active={selectedDiffFile?.path === file.path}
-                            onClick={() => setSelectedDiffPath(file.path)}
-                          >
-                            <FileCodeIcon size={13} />
-                            <span>{file.path}</span>
-                            <small>
-                              <strong>+{file.additions}</strong>
-                              <em>-{file.deletions}</em>
-                            </small>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    <div className={styles.gitCommitPatch}>
-                      <p className={styles.gitPaneSectionTitle}>
-                        {selectedDiffFile?.path || t('workbench.gitDiffPreview')}
-                      </p>
-                      {selectedDiffFile ? (
-                        <pre className={styles.gitToolCommitDiff}>
-                          {selectedDiffFile.lines.slice(0, 320).map((line, index) => (
-                            <span
-                              key={`${index}-${line.text}`}
-                              className={styles.gitCommitPatchLine}
-                              data-kind={line.kind}
-                            >
-                              {line.text || ' '}
-                            </span>
-                          ))}
-                        </pre>
-                      ) : (
-                        <Paragraph spacing="none" tone="muted" className={styles.gitDiffEmpty}>
-                          {t('workbench.gitDiffEmpty')}
-                        </Paragraph>
-                      )}
-                    </div>
-                  </section>
-                </div>
-              ) : (
-                <Paragraph spacing="none" tone="muted" className={styles.gitDiffEmpty}>
-                  {t('workbench.gitCommitSelect')}
-                </Paragraph>
-              )}
+                  )
+                }
+              />
             </aside>
           </div>
         </div>
       </div>
-    </section>
-  )
-}
-
-interface BranchGroupProps {
-  label: string
-  branches: SystemWorkspaceGitSummary['branches']
-  logBranch: string
-  currentLabel: string
-  onSelect: (branch: string) => void
-}
-
-function BranchGroup({
-  label,
-  branches,
-  logBranch,
-  currentLabel,
-  onSelect,
-}: BranchGroupProps): ReactElement {
-  return (
-    <section className={styles.gitBranchGroup}>
-      <p>{label}</p>
-      {branches.map((branch) => (
-        <button
-          key={branch.name}
-          type="button"
-          className={styles.gitBranchRow}
-          data-active={logBranch === branch.name}
-          onClick={() => onSelect(branch.name)}
-        >
-          <GitBranchIcon size={13} />
-          <span className={styles.gitBranchName}>{branch.name}</span>
-          {branch.current && <span className={styles.gitBranchMark}>{currentLabel}</span>}
-        </button>
-      ))}
     </section>
   )
 }

@@ -152,6 +152,93 @@ void describe('Workbench Git IPC requests', () => {
     assert.deepEqual(cancelRequests, ['op-1', 'gone'])
   })
 
+  void test('stash requests reach the service with their options, and a stash is named by its object name', async () => {
+    const calls: unknown[] = []
+    const { registerWorkbenchGitIpc } = await import('../src/main/workspace/git/WorkbenchGitIpc')
+    registerWorkbenchGitIpc(
+      {
+        listStashes: async (workspaceRoot: string) => {
+          calls.push(['list', workspaceRoot])
+          return {}
+        },
+        stash: async (workspaceRoot: string, options: unknown) => {
+          calls.push(['stash', workspaceRoot, options])
+          return {}
+        },
+        performStashAction: async (workspaceRoot: string, sha: string, action: string) => {
+          calls.push(['action', workspaceRoot, sha, action])
+          return {}
+        },
+        getDiff: async (workspaceRoot: string, options: unknown) => {
+          calls.push(['diff', workspaceRoot, options])
+          return {}
+        },
+      } as never,
+      {} as never,
+      {} as never
+    )
+    const sha = 'a'.repeat(40)
+
+    assert.equal((await invoke(WorkbenchGitChannels.stashList, { workspaceRoot: '/p' })).ok, true)
+    assert.equal(
+      (
+        await invoke(WorkbenchGitChannels.stash, {
+          workspaceRoot: '/p',
+          message: 'wip',
+          includeUntracked: true,
+        })
+      ).ok,
+      true
+    )
+    assert.equal((await invoke(WorkbenchGitChannels.stash, { workspaceRoot: '/p' })).ok, true)
+    assert.equal(
+      (await invoke(WorkbenchGitChannels.stashAction, { workspaceRoot: '/p', sha, action: 'pop' }))
+        .ok,
+      true
+    )
+    assert.equal(
+      (await invoke(WorkbenchGitChannels.diff, { workspaceRoot: '/p', stashSha: sha })).ok,
+      true
+    )
+    assert.deepEqual(calls, [
+      ['list', '/p'],
+      ['stash', '/p', { message: 'wip', includeUntracked: true }],
+      ['stash', '/p', { message: undefined, includeUntracked: undefined }],
+      ['action', '/p', sha, 'pop'],
+      [
+        'diff',
+        '/p',
+        {
+          commitSha: undefined,
+          stashSha: sha,
+          side: undefined,
+          path: undefined,
+          originalPath: undefined,
+          maxChars: undefined,
+        },
+      ],
+    ])
+
+    for (const request of [
+      { workspaceRoot: '/p', message: 7 },
+      { workspaceRoot: '/p', includeUntracked: 'yes' },
+      { message: 'no root' },
+    ])
+      assert.equal((await invoke(WorkbenchGitChannels.stash, request)).ok, false)
+    for (const request of [
+      { workspaceRoot: '/p', sha, action: 'clear' },
+      { workspaceRoot: '/p', action: 'drop' },
+      { workspaceRoot: '/p', sha: 3, action: 'drop' },
+    ])
+      assert.equal((await invoke(WorkbenchGitChannels.stashAction, request)).ok, false)
+    // 差异看的是一个提交，或者一条贮藏，不能两样都给。
+    assert.equal(
+      (await invoke(WorkbenchGitChannels.diff, { workspaceRoot: '/p', stashSha: sha, commitSha: sha }))
+        .ok,
+      false
+    )
+  })
+
   void test('a blame request carries the editor text and the file format to the service', async () => {
     const blames: unknown[] = []
     const { registerWorkbenchGitIpc } = await import('../src/main/workspace/git/WorkbenchGitIpc')

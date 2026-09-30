@@ -157,6 +157,7 @@ export function WorkbenchEmbeddedKernel({
             git={model.changes.git}
             onOpenDiff={model.changes.onOpenDiff}
             onOpenFile={model.changes.onOpenFile}
+            onOpenGitTool={model.changes.onOpenGitTool}
           />
         ) : leftMode === 'velar-structure' && model.velarStructure ? (
           <WorkbenchLogicGraphSidebar {...model.velarStructure} />

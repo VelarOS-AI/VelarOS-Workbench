@@ -130,6 +130,14 @@ async function runGitProbe(): Promise<void> {
     equal(lineStats.lineStats.additions, 1, '已跟踪文件修改应计行数')
     equal(lineStats.branch, initial.status?.branch ?? null, '轻量快照应返回当前分支')
 
+    // 贮藏：改动收起来、列得出、按对象名取得回。
+    const stashed = await service.stash(projectRoot, { message: 'probe stash' })
+    check(stashed.summary.status?.isClean, '贮藏后工作区应 clean')
+    equal((await service.listStashes(projectRoot)).stashes[0]?.message, 'probe stash', '贮藏应列得出')
+    const popped = await service.performStashAction(projectRoot, stashed.stash.sha, 'pop')
+    equal(popped.summary.status?.changedFiles, 1, '弹出贮藏应取回改动')
+    equal(popped.stashes.length, 0, '弹出后这条贮藏应删除')
+
     const feature = await service.createBranch(projectRoot, 'feature/probe')
     equal(feature.branch, 'feature/probe', '创建分支结果')
     // 没提交的改动不预先拦：两个分支指向同一个提交，git 把改动原样带过去。
@@ -270,6 +278,6 @@ async function configureIdentity(rootPath: string): Promise<void> {
 
 await runGitProbe()
 // Windows 上没有进程组可结束，不跑「卡住的远端」那一段（4 条断言）。
-const expectedAssertions = process.platform === 'win32' ? 44 : 48
+const expectedAssertions = process.platform === 'win32' ? 48 : 52
 assert.equal(assertionCount, expectedAssertions, 'Git 探针断言数变化必须显式复核')
 console.info(`workbench git probe: ${assertionCount}/${expectedAssertions} assertions passed`)

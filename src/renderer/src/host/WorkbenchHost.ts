@@ -26,6 +26,9 @@ import type {
   SystemWorkspaceGitInitializeRepositoryResult,
   SystemWorkspaceGitLineStatsSnapshot,
   SystemWorkspaceGitLogResult,
+  SystemWorkspaceGitStashActionResult,
+  SystemWorkspaceGitStashListResult,
+  SystemWorkspaceGitStashResult,
   SystemWorkspaceGitSummary,
   SystemWorkspaceGitSwitchBranchResult,
   SystemWorkspaceRootAddOptions,
@@ -112,6 +115,8 @@ import type {
   WorkspaceGitDiffOptions,
   WorkspaceGitHunkActionOptions,
   WorkspaceGitLogOptions,
+  WorkspaceGitStashAction,
+  WorkspaceGitStashOptions,
 } from '@shared/contracts'
 import type {
   WorkbenchGitBlameRequest,
@@ -358,6 +363,21 @@ export interface WorkbenchWorkspaceKernelPort {
   cancelWorkspaceGitAction(
     operationId: string
   ): Promise<Result<WorkbenchGitCancelRemoteActionResult>>
+  /** 仓库里的贮藏，最新的在前。 */
+  listWorkspaceGitStashes(
+    workspaceRoot: string
+  ): Promise<Result<SystemWorkspaceGitStashListResult>>
+  /** 把项目里没提交的改动贮藏起来。 */
+  stashWorkspaceGitChanges(
+    workspaceRoot: string,
+    options?: WorkspaceGitStashOptions
+  ): Promise<Result<SystemWorkspaceGitStashResult>>
+  /** 取回（apply / pop）或删掉（drop）一条贮藏，凭贮藏提交的对象名。 */
+  performWorkspaceGitStashAction(
+    workspaceRoot: string,
+    sha: string,
+    action: WorkspaceGitStashAction
+  ): Promise<Result<SystemWorkspaceGitStashActionResult>>
 }
 
 export interface WorkbenchKernelPort {

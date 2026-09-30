@@ -508,6 +508,12 @@ export function StandaloneWorkbenchPagePresentation({
     if (!surface.isFilePanelOpen) surface.toggleFilePanel()
   }
 
+  /** Git 工具窗里的操作出了冲突：把提交面板打开，冲突文件列在那里的「合并冲突」里。 */
+  function openCommitTool(): void {
+    surface.setActiveLeftTool('commit')
+    if (!surface.isFilePanelOpen) surface.toggleFilePanel()
+  }
+
   /**
    * 左侧「AI 改动」图标：开关面板。打开时编辑区也换成改动——左右说的是同一件事：有打开过的改动标签就
    * 把它们带回来，一个都没有就像改动卡的「审核」那样打开最新一轮改过的文件。
@@ -801,7 +807,10 @@ export function StandaloneWorkbenchPagePresentation({
                     summary={model.gitState.summary}
                     isLoading={model.gitState.isLoading}
                     error={model.gitState.error}
+                    hasUnsavedOpenTabs={workbench.hasUnsavedOpenTabs}
                     onInitialize={model.actions.initializeRepository}
+                    onRefresh={model.actions.refreshProjectAndGit}
+                    onOpenCommitTool={openCommitTool}
                   />
                 </Suspense>
               }

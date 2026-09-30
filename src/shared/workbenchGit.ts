@@ -12,6 +12,9 @@ import type {
   SystemWorkspaceGitInitializeRepositoryResult,
   SystemWorkspaceGitLineStatsSnapshot,
   SystemWorkspaceGitLogResult,
+  SystemWorkspaceGitStashActionResult,
+  SystemWorkspaceGitStashListResult,
+  SystemWorkspaceGitStashResult,
   SystemWorkspaceGitSummary,
   SystemWorkspaceGitSwitchBranchResult,
   WorkspaceGitDiffOptions,
@@ -21,6 +24,8 @@ import type {
   WorkspaceGitLogOptions,
   WorkspaceGitRemoteAction,
   WorkspaceGitRemoteActionOptions,
+  WorkspaceGitStashAction,
+  WorkspaceGitStashOptions,
 } from '@shared/contracts'
 
 import type { WorkbenchFsCallResult } from './workbenchFs'
@@ -42,6 +47,9 @@ export const WorkbenchGitChannels = {
   createBranch: 'workbench-app:git:create-branch',
   remoteAction: 'workbench-app:git:remote-action',
   cancelRemoteAction: 'workbench-app:git:cancel-remote-action',
+  stashList: 'workbench-app:git:stash-list',
+  stash: 'workbench-app:git:stash',
+  stashAction: 'workbench-app:git:stash-action',
   captureChatCheckpoint: 'workbench-app:git:capture-chat-checkpoint',
   deleteChatCheckpoints: 'workbench-app:git:delete-chat-checkpoints',
   captureChatRunChanges: 'workbench-app:git:capture-chat-run-changes',
@@ -138,6 +146,16 @@ export interface WorkbenchGitCancelRemoteActionRequest {
 export interface WorkbenchGitCancelRemoteActionResult {
   /** false：没有这个编号的操作在跑（已经结束了）。 */
   cancelled: boolean
+}
+
+export interface WorkbenchGitStashRequest
+  extends WorkbenchGitRootRequest,
+    WorkspaceGitStashOptions {}
+
+/** 取回或删掉一条贮藏，凭贮藏提交的对象名（不是 `stash@{n}`：序号会变）。 */
+export interface WorkbenchGitStashActionRequest extends WorkbenchGitRootRequest {
+  sha: string
+  action: WorkspaceGitStashAction
 }
 
 /**
@@ -297,6 +315,15 @@ export interface WorkbenchGitBridge {
   cancelRemoteAction(
     request: WorkbenchGitCancelRemoteActionRequest
   ): Promise<WorkbenchFsCallResult<WorkbenchGitCancelRemoteActionResult>>
+  listStashes(
+    request: WorkbenchGitRootRequest
+  ): Promise<WorkbenchFsCallResult<SystemWorkspaceGitStashListResult>>
+  stash(
+    request: WorkbenchGitStashRequest
+  ): Promise<WorkbenchFsCallResult<SystemWorkspaceGitStashResult>>
+  performStashAction(
+    request: WorkbenchGitStashActionRequest
+  ): Promise<WorkbenchFsCallResult<SystemWorkspaceGitStashActionResult>>
   captureChatCheckpoint(
     request: WorkbenchChatCheckpointCaptureRequest
   ): Promise<WorkbenchFsCallResult<WorkbenchChatCheckpointCaptureResult>>

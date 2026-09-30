@@ -49,6 +49,9 @@ export function workbenchGitDiffScopeLabel(
     case 'commit': {
       return t('workbench.gitDiffCommit')
     }
+    case 'stash': {
+      return t('workbench.gitDiffStash')
+    }
     case 'untracked': {
       return t('workbench.gitDiffUntracked')
     }
@@ -102,7 +105,10 @@ export function isSameWorkbenchGitLog(
   )
 }
 
-export function formatWorkbenchGitCommitDate(locale: string, commit: WorkspaceGitLogEntry): string {
+export function formatWorkbenchGitCommitDate(
+  locale: string,
+  commit: Pick<WorkspaceGitLogEntry, 'authoredAt'>
+): string {
   if (!commit.authoredAt) return '-'
 
   return new Intl.DateTimeFormat(locale, {
@@ -115,7 +121,7 @@ export function formatWorkbenchGitCommitDate(locale: string, commit: WorkspaceGi
 
 export function formatWorkbenchGitCommitRelativeDate(
   locale: string,
-  commit: WorkspaceGitLogEntry,
+  commit: Pick<WorkspaceGitLogEntry, 'authoredAt'>,
   now = Date.now()
 ): string {
   if (!commit.authoredAt) return '-'

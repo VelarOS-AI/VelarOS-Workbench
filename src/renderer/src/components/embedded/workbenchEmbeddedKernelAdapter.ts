@@ -260,6 +260,7 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
         editorNavigation.openDiff(item, options)
       },
       onOpenFile: (path) => void editorNavigation.selectFile(path),
+      onOpenGitTool: () => model.surface.openBottomTool('git'),
     },
     editor: {
       chrome: editorChrome,

@@ -449,6 +449,14 @@ const standaloneWorkbenchHost: WorkbenchHost = {
         ),
       cancelWorkspaceGitAction: async (operationId) =>
         toHostResult(await window.velarosWorkbenchGit.cancelRemoteAction({ operationId })),
+      listWorkspaceGitStashes: async (workspaceRoot) =>
+        toHostResult(await window.velarosWorkbenchGit.listStashes({ workspaceRoot })),
+      stashWorkspaceGitChanges: async (workspaceRoot, options) =>
+        toHostResult(await window.velarosWorkbenchGit.stash({ workspaceRoot, ...options })),
+      performWorkspaceGitStashAction: async (workspaceRoot, sha, action) =>
+        toHostResult(
+          await window.velarosWorkbenchGit.performStashAction({ workspaceRoot, sha, action })
+        ),
     },
   },
   shell: {

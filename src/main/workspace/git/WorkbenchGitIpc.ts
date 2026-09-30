@@ -24,6 +24,8 @@ import {
   type WorkbenchGitLogRequest,
   type WorkbenchGitRemoteActionRequest,
   type WorkbenchGitRootRequest,
+  type WorkbenchGitStashActionRequest,
+  type WorkbenchGitStashRequest,
   type WorkbenchGitSwitchBranchRequest,
 } from '../../../shared/workbenchGit'
 import { callWithEnvelope, hasStringFields, invalidRequest } from '../ipcBoundary'
@@ -124,6 +126,21 @@ export function registerWorkbenchGitIpc(
       cancelled: service.cancelRemoteAction(parseCancelRemoteAction(input).operationId),
     }))
   )
+  ipcMain.handle(WorkbenchGitChannels.stashList, (_event, input: unknown) =>
+    callWithEnvelope(() => service.listStashes(parseRoot(input).workspaceRoot))
+  )
+  ipcMain.handle(WorkbenchGitChannels.stash, (_event, input: unknown) =>
+    callWithEnvelope(() => {
+      const { workspaceRoot, ...options } = parseStash(input)
+      return service.stash(workspaceRoot, options)
+    })
+  )
+  ipcMain.handle(WorkbenchGitChannels.stashAction, (_event, input: unknown) =>
+    callWithEnvelope(() => {
+      const request = parseStashAction(input)
+      return service.performStashAction(request.workspaceRoot, request.sha, request.action)
+    })
+  )
   // 检查点经由改动记录区拍：拍的同时为这一轮开改动归属账本。
   ipcMain.handle(WorkbenchGitChannels.captureChatCheckpoint, (_event, input: unknown) =>
     callWithEnvelope(() => runChanges.captureCheckpoint(parseCheckpointCapture(input)))
@@ -155,9 +172,12 @@ function parseDiff(input: unknown): WorkbenchGitDiffRequest {
   const record = input as Record<string, unknown>
   const side = record['side']
   if (side !== undefined && side !== 'staged' && side !== 'unstaged') return invalidRequest()
+  // 看的是一个提交，或者一条贮藏：不能两样都给。
+  if (isString(record['commitSha']) && isString(record['stashSha'])) return invalidRequest()
   return {
     ...root,
     commitSha: optionalWhen(isString, record['commitSha']),
+    stashSha: optionalWhen(isString, record['stashSha']),
     side,
     path: optionalWhen(isString, record['path']),
     originalPath: optionalWhen(isString, record['originalPath']),
@@ -330,6 +350,27 @@ function parseCancelRemoteAction(input: unknown): WorkbenchGitCancelRemoteAction
   if (!hasStringFields(input, ['operationId']) || !isOperationId(input['operationId']))
     return invalidRequest()
   return { operationId: input['operationId'] }
+}
+
+function parseStash(input: unknown): WorkbenchGitStashRequest {
+  const root = parseRoot(input)
+  const record = input as Record<string, unknown>
+  const message = record['message']
+  const includeUntracked = record['includeUntracked']
+  if (message !== undefined && !isString(message)) return invalidRequest()
+  if (includeUntracked !== undefined && !isBoolean(includeUntracked)) return invalidRequest()
+  return { ...root, message, includeUntracked: optionalWhen(isTrue, includeUntracked) }
+}
+
+function parseStashAction(input: unknown): WorkbenchGitStashActionRequest {
+  if (!hasStringFields(input, ['workspaceRoot', 'sha', 'action'])) return invalidRequest()
+  const action = input['action']
+  if (action !== 'apply' && action !== 'pop' && action !== 'drop') return invalidRequest()
+  return {
+    workspaceRoot: input['workspaceRoot'] as string,
+    sha: input['sha'] as string,
+    action,
+  }
 }
 
 function parseCheckpointCapture(input: unknown): WorkbenchChatCheckpointCaptureRequest {
