@@ -774,6 +774,14 @@ export interface WorkbenchMoveEntryRequest {
   name?: string
 }
 
+/** 把一项复制到 `parentPath` 下；`name` 省略时用原名，已被占用时自动取「名字 copy」。 */
+export interface WorkbenchCopyEntryRequest {
+  projectRoot: string
+  path: string
+  parentPath: string
+  name?: string
+}
+
 export interface WorkbenchDeleteEntryRequest {
   projectRoot: string
   path: string

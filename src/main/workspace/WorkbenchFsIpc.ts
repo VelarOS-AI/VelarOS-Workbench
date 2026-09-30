@@ -17,6 +17,7 @@ import { ipcMain } from 'electron'
 import { AppError } from '@velaros-ai/core/error'
 
 import type {
+  WorkbenchCopyEntryRequest,
   WorkbenchCreateEntryRequest,
   WorkbenchDeleteEntryRequest,
   WorkbenchFindExistingFilesRequest,
@@ -160,6 +161,19 @@ export function registerWorkbenchFsIpc(
         await parts.files.renameEntry(parsed),
         parsed.projectRoot,
         (result) => [parsed.path, result.entry.path]
+      )
+    })
+  )
+
+  ipcMain.handle(WorkbenchFsChannels.copyEntry, (_event, request: unknown) =>
+    callWithEnvelope(async () => {
+      const parsed = parseCopyEntryRequest(request)
+      if (!parsed) return invalidRequest()
+
+      return recordUserWrites(
+        await parts.files.copyEntry(parsed),
+        parsed.projectRoot,
+        (result) => [result.entry.path]
       )
     })
   )
@@ -367,6 +381,17 @@ function parseRenameEntryRequest(input: unknown): Nullable<WorkbenchRenameEntryR
     projectRoot: input['projectRoot'] as string,
     path: input['path'] as string,
     newName: input['newName'] as string,
+  }
+}
+
+function parseCopyEntryRequest(input: unknown): Nullable<WorkbenchCopyEntryRequest> {
+  if (!hasStringFields(input, ['projectRoot', 'path', 'parentPath'])) return null
+
+  return {
+    projectRoot: input['projectRoot'] as string,
+    path: input['path'] as string,
+    parentPath: input['parentPath'] as string,
+    ...optionalString(input, 'name'),
   }
 }
 

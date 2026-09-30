@@ -11,13 +11,18 @@ import {
 import {
   ArrowClockwiseIcon,
   ChatCircleTextIcon,
+  ClipboardTextIcon,
   CopyIcon,
+  CopySimpleIcon,
   FilePlusIcon,
+  FilesIcon,
+  FolderOpenIcon,
   FolderPlusIcon,
   HammerIcon,
   MagnifyingGlassIcon,
   PencilSimpleIcon,
   PlayIcon,
+  ScissorsIcon,
   TrashIcon,
 } from '@phosphor-icons/react'
 import { useWorkbenchI18n } from '@renderer/i18n'
@@ -28,7 +33,10 @@ import {
   getWorkbenchFileSearchKeyboardAction,
   type WorkbenchFileSearchNavigationItem,
 } from '@renderer/models/files/workbenchFileSearchNavigationModel'
-import { getWorkbenchFileTreeShortcutAction } from '@renderer/models/files/workbenchTreeMutation'
+import {
+  getWorkbenchFileTreeShortcutAction,
+  selectTopLevelTreeEntries,
+} from '@renderer/models/files/workbenchTreeMutation'
 import type { WorkbenchGitDecorationMap } from '@renderer/models/git/workbenchGitModel'
 import type { WorkbenchProject } from '@renderer/models/project/workbenchProjects'
 import { ROOT_PATH } from '@renderer/models/shared/workbenchUtils'
@@ -43,6 +51,7 @@ import { ScrollArea } from '@velaros-ai/ui/primitives/layout/ScrollArea'
 import type { WorkbenchDirectoryEntry, WorkbenchSearchEntriesResult } from '@shared/contracts'
 
 import styles from '../../styles/workbenchPageStyles'
+import { useLatest } from '../../support/genericHooks'
 import { requestScrollIntoView } from '../../support/scrollUtils'
 import { WorkbenchContextMenu } from '../chrome/WorkbenchContextMenu'
 
@@ -109,7 +118,28 @@ export interface WorkbenchFilePanelHandlersProps {
   onBuildFile?: (path: string) => void
   /** 右键「添加到聊天」：把文件作为引用挂到聊天输入框（只挂路径，一次可以挂一组多选的文件）。 */
   onAddFilesToChat?: (paths: readonly string[]) => void
+  /** 复制（粘贴、创建副本）到 `parentEntry` 里，null 是项目根。 */
+  onCopyEntries?: (
+    entries: WorkbenchDirectoryEntry[],
+    parentEntry: Nullable<WorkbenchDirectoryEntry>
+  ) => Promise<void>
+  /** 在访达（资源管理器）里显示这个绝对路径。 */
+  onRevealEntry?: (absolutePath: string) => void
 }
+
+/** 文件树的剪贴板：复制或剪切了哪些项，粘贴时复制或移动过去。只在工作台里用，不碰系统剪贴板。 */
+interface FileTreeClipboard {
+  mode: 'copy' | 'cut'
+  entries: WorkbenchDirectoryEntry[]
+}
+
+const isApplePlatform = /Mac|iPhone|iPad/u.test(navigator.platform)
+const PrimaryKeyLabel = isApplePlatform ? '⌘' : 'Ctrl+'
+const RevealInSystemLabelKey = isApplePlatform
+  ? 'workbench.revealInFinder'
+  : navigator.platform.startsWith('Win')
+    ? 'workbench.revealInExplorer'
+    : 'workbench.openContainingFolder'
 
 export function resolveWorkbenchEntryAbsolutePath(projectRoot: string, entryPath: string): string {
   return entryPath === ROOT_PATH
@@ -161,6 +191,8 @@ export function FilePanel({
     onRunFile,
     onBuildFile,
     onAddFilesToChat,
+    onCopyEntries,
+    onRevealEntry,
   },
 }: FilePanelProps): ReactElement {
   const { t } = useWorkbenchI18n()
@@ -178,6 +210,7 @@ export function FilePanel({
     }>
   >(null)
   const [activeSearchResultIndex, setActiveSearchResultIndex] = useState(0)
+  const [treeClipboard, setTreeClipboard] = useState<Nullable<FileTreeClipboard>>(null)
   const searchEntries = searchResult?.entries ?? []
   const rootTreeEntry = useMemo(
     () =>
@@ -196,6 +229,60 @@ export function FilePanel({
     [contentSearchMatches, searchEntries]
   )
   const activeSearchResultId = toNullable(searchNavigationItems[activeSearchResultIndex]?.id)
+
+  /**
+   * 右键或快捷键作用的一组项：右键点在多选里（或用快捷键）是整组，否则是右键的那一项；不含项目根，已经在选中的
+   * 目录里面的子项去掉（复制目录本来就带着它们）。
+   */
+  const resolveActionEntries = (entry?: WorkbenchDirectoryEntry): WorkbenchDirectoryEntry[] => {
+    const tree = treeApiRef.current
+    const entries =
+      entry && !isTreeEntryInMultiSelection(tree, entry.path)
+        ? [entry]
+        : (tree?.selectedNodes.map((node) => node.data.entry) ?? [])
+    return selectTopLevelTreeEntries(entries.filter((candidate) => candidate.path !== ROOT_PATH))
+  }
+  const parentDirectoryOf = (entry: WorkbenchDirectoryEntry): WorkbenchDirectoryEntry => {
+    const cut = entry.path.lastIndexOf('/')
+    if (cut < 0) return rootTreeEntry
+    const path = entry.path.slice(0, cut)
+    return (
+      treeApiRef.current?.get(path)?.data.entry ?? {
+        ...rootTreeEntry,
+        name: path.slice(path.lastIndexOf('/') + 1),
+        path,
+      }
+    )
+  }
+  /** 粘贴到哪：目录就是它自己，文件是它所在的目录，什么都没选时是项目根。 */
+  const pasteTargetOf = (entry: Nullable<WorkbenchDirectoryEntry>): WorkbenchDirectoryEntry =>
+    !entry ? rootTreeEntry : entry.type === 'directory' ? entry : parentDirectoryOf(entry)
+  const toParentArgument = (target: WorkbenchDirectoryEntry): Nullable<WorkbenchDirectoryEntry> =>
+    target.path === ROOT_PATH ? null : target
+
+  const clipEntries = (mode: FileTreeClipboard['mode'], entries: WorkbenchDirectoryEntry[]): void => {
+    if (entries.length > 0) setTreeClipboard({ mode, entries })
+  }
+  const pasteInto = async (target: WorkbenchDirectoryEntry): Promise<void> => {
+    if (!treeClipboard) return
+    if (treeClipboard.mode === 'cut') {
+      setTreeClipboard(null)
+      await onMoveEntries(treeClipboard.entries, toParentArgument(target), 0)
+    } else {
+      await onCopyEntries?.(treeClipboard.entries, toParentArgument(target))
+    }
+  }
+  /** 每一项复制一份放在它自己所在的目录里（重名时主进程取「名字 copy」）。 */
+  const duplicateEntries = async (entries: WorkbenchDirectoryEntry[]): Promise<void> => {
+    for (const entry of entries)
+      await onCopyEntries?.([entry], toParentArgument(parentDirectoryOf(entry)))
+  }
+  const treeClipboardActionsLatest = useLatest({
+    copy: () => clipEntries('copy', resolveActionEntries()),
+    cut: () => clipEntries('cut', resolveActionEntries()),
+    paste: () => pasteInto(pasteTargetOf(treeApiRef.current?.mostRecentNode?.data.entry ?? null)),
+    duplicate: () => duplicateEntries(resolveActionEntries()),
+  })
 
   const handleTreeApiChange = useCallback((api: Nullable<FileTreeApi>): void => {
     treeApiRef.current = api || null
@@ -233,22 +320,26 @@ export function FilePanel({
       event.preventDefault()
       event.stopPropagation()
 
+      const treePanel = treeScrollRef.current
+      const treeTargetInside = !!(targetNode && treePanel?.contains(targetNode))
+      const treeFocusInside = !!(activeElement && treePanel?.contains(activeElement))
+      const inTree = !searchActive && (treeTargetInside || treeFocusInside)
+      const clipboardActions = treeClipboardActionsLatest.current
       if (action === 'delete-selected') {
-        const treePanel = treeScrollRef.current
-        const treeTargetInside = !!(targetNode && treePanel?.contains(targetNode))
-        const treeFocusInside = !!(activeElement && treePanel?.contains(activeElement))
-        if (!searchActive && (treeTargetInside || treeFocusInside)) {
-          deleteSelectedTreeEntries(treeApiRef.current)
-        }
-        return
+        if (inTree) deleteSelectedTreeEntries(treeApiRef.current)
+      } else if (action === 'undo-delete') {
+        void onUndoDeleteEntries()
+      } else if (inTree) {
+        if (action === 'copy-selected') clipboardActions.copy()
+        else if (action === 'cut-selected') clipboardActions.cut()
+        else if (action === 'paste') void clipboardActions.paste()
+        else void clipboardActions.duplicate()
       }
-
-      void onUndoDeleteEntries()
     }
 
     window.addEventListener('keydown', handleFilePanelKeyDown, true)
     return () => window.removeEventListener('keydown', handleFilePanelKeyDown, true)
-  }, [onUndoDeleteEntries, searchActive])
+  }, [onUndoDeleteEntries, searchActive, treeClipboardActionsLatest])
 
   function openContextMenu(entry: WorkbenchDirectoryEntry, event: MouseEvent): void {
     event.preventDefault()
@@ -501,6 +592,19 @@ export function FilePanel({
               disabled: isMutatingTree,
               onSelect: () => createEntryFromContext('directory'),
             },
+            ...(onRevealEntry
+              ? [
+                  {
+                    id: 'reveal-in-system',
+                    label: t(RevealInSystemLabelKey),
+                    icon: <FolderOpenIcon size={14} />,
+                    onSelect: () =>
+                      onRevealEntry(
+                        resolveWorkbenchEntryAbsolutePath(project.rootPath, contextMenu.entry.path)
+                      ),
+                  },
+                ]
+              : []),
             {
               id: 'search-project',
               label: t('workbench.searchFiles'),
@@ -518,6 +622,43 @@ export function FilePanel({
               disabled: isLoadingTree || isMutatingTree,
               onSelect: onRefreshProject,
             },
+            ...(onCopyEntries
+              ? [
+                  {
+                    id: 'cut-entry',
+                    label: t('workbench.cutEntry'),
+                    icon: <ScissorsIcon size={14} />,
+                    shortcut: `${PrimaryKeyLabel}X`,
+                    separatorBefore: true,
+                    disabled: isMutatingTree || contextMenu.entry.path === ROOT_PATH,
+                    onSelect: () => clipEntries('cut', resolveActionEntries(contextMenu.entry)),
+                  },
+                  {
+                    id: 'copy-entry',
+                    label: t('workbench.copyEntry'),
+                    icon: <CopySimpleIcon size={14} />,
+                    shortcut: `${PrimaryKeyLabel}C`,
+                    disabled: contextMenu.entry.path === ROOT_PATH,
+                    onSelect: () => clipEntries('copy', resolveActionEntries(contextMenu.entry)),
+                  },
+                  {
+                    id: 'paste-entry',
+                    label: t('workbench.pasteEntry'),
+                    icon: <ClipboardTextIcon size={14} />,
+                    shortcut: `${PrimaryKeyLabel}V`,
+                    disabled: isMutatingTree || !treeClipboard,
+                    onSelect: () => pasteInto(pasteTargetOf(contextMenu.entry)),
+                  },
+                  {
+                    id: 'duplicate-entry',
+                    label: t('workbench.duplicateEntry'),
+                    icon: <FilesIcon size={14} />,
+                    shortcut: `${PrimaryKeyLabel}D`,
+                    disabled: isMutatingTree || contextMenu.entry.path === ROOT_PATH,
+                    onSelect: () => duplicateEntries(resolveActionEntries(contextMenu.entry)),
+                  },
+                ]
+              : []),
             {
               id: 'copy-relative-path',
               label: t('workbench.copyRelativePath'),

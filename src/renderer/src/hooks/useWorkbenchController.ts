@@ -390,6 +390,7 @@ export function useWorkbenchController(options: UseWorkbenchControllerOptions = 
     createTreeEntry: mutation.createTreeEntry,
     renameTreeEntry: mutation.renameTreeEntry,
     moveTreeEntries: mutation.moveTreeEntries,
+    copyTreeEntries: mutation.copyTreeEntries,
     deleteTreeEntries: mutation.deleteTreeEntries,
     undoLastDeletedEntries: mutation.undoLastDeletedEntries,
     resetTreeAction: mutation.resetTreeAction,

@@ -663,6 +663,12 @@
   @apply min-w-0 flex-1 truncate;
 }
 
+.workbenchContextMenuShortcut {
+  @apply shrink-0 text-muted-foreground;
+  padding-left: 16px;
+  font-size: 11px;
+}
+
 .treeOptionsMenu {
   @apply absolute right-2 top-9 z-30 flex flex-col border bg-card shadow-lg;
   width: 204px;

@@ -157,8 +157,8 @@ void describe('Workbench tree partial failures', () => {
 
   void test('the tree controller handles every entry and keeps undo for what was deleted', () => {
     const controller = readSource('src/renderer/src/hooks/useWorkbenchMutationController.ts')
-    // 移动、检查、删除、撤销都一项一项地做，没有一项失败就整批放弃的 Result.unwrap 循环。
-    assert.equal(controller.match(/await runTreeMutationPerEntry\(/gu)?.length, 4)
+    // 复制、移动、检查、删除、撤销都一项一项地做，没有一项失败就整批放弃的 Result.unwrap 循环。
+    assert.equal(controller.match(/await runTreeMutationPerEntry\(/gu)?.length, 5)
     assert.doesNotMatch(controller, /for \(const [^)]+\) \{\n\s+const \w+ = Result\.unwrap\(/u)
     // 删掉了的先进撤销栈，再看项目有没有切走。
     const rememberThenCheckProject = new RegExp(

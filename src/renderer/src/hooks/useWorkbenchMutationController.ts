@@ -309,6 +309,67 @@ export function useWorkbenchMutationController({
     }
   }
 
+  /**
+   * 把这些项复制到 `parentEntry` 里（null 是项目根）；复制到原来的目录就是「创建副本」，重名时主进程自动取
+   * 「名字 copy」。一项一项地复制，某一项没成不挡住其余的。复制的是磁盘上的内容。
+   */
+  async function copyTreeEntries(
+    entries: WorkbenchDirectoryEntry[],
+    parentEntry: Nullable<WorkbenchDirectoryEntry>
+  ): Promise<void> {
+    if (!activeProject || isMutatingTree || isEmpty(entries)) return
+
+    const owningProject = activeProject
+    const owningProjectId = owningProject.id
+    const targetParentPath = parentEntry?.path ?? ROOT_PATH
+
+    try {
+      setIsMutatingTree(true)
+      const { succeeded, failed } = await runTreeMutationPerEntry(
+        entries,
+        (entry) => entry.path,
+        async (entry) =>
+          Result.unwrap(
+            await workbenchHost.kernel.project.copyWorkbenchEntry({
+              projectRoot: owningProject.rootPath,
+              path: entry.path,
+              parentPath: targetParentPath,
+            })
+          )
+      )
+
+      if (activeProjectRef.current?.id !== owningProjectId) return
+
+      if (!isEmpty(succeeded)) {
+        onTreeChangedLatest.current()
+        await refreshMutationParentLatest.current(
+          succeeded.at(-1)?.result.parentPath ?? targetParentPath
+        )
+        setSelectedEntryPathLatest.current(toNullable(succeeded.at(-1)?.result.entry.path))
+        resetTreeAction()
+        resetSearchLatest.current()
+      }
+
+      if (isEmpty(failed)) {
+        messageLatest.current.success({
+          title: tLatest.current('workbench.copySucceeded'),
+        })
+        return
+      }
+      notifyTreeMutationFailures(
+        'workbench.copyFailedEntries',
+        failed.map(({ failure }) => failure),
+        entries.length
+      )
+    } catch (error) {
+      if (activeProjectRef.current?.id !== owningProjectId) return
+
+      notifyTreeMutationError(error)
+    } finally {
+      setIsMutatingTree(false)
+    }
+  }
+
   async function moveTreeEntries(
     entries: WorkbenchDirectoryEntry[],
     parentEntry: Nullable<WorkbenchDirectoryEntry>
@@ -646,6 +707,7 @@ export function useWorkbenchMutationController({
     createTreeEntry,
     renameTreeEntry,
     moveTreeEntries,
+    copyTreeEntries,
     deleteTreeEntries,
     resetTreeAction,
     submitTreeAction,

@@ -29,6 +29,7 @@ import type {
   SystemWorkspaceGitSwitchBranchResult,
   SystemWorkspaceRootAddOptions,
   SystemWorkspaceRootScope,
+  WorkbenchCopyEntryRequest,
   WorkbenchCreateEntryRequest,
   WorkbenchDeleteEntryRequest,
   WorkbenchDeleteEntryResult,
@@ -139,6 +140,9 @@ export interface WorkbenchProjectKernelPort {
     request: WorkbenchRenameEntryRequest
   ): Promise<Result<WorkbenchEntryMutationResult>>
   moveWorkbenchEntry(request: WorkbenchMoveEntryRequest): Promise<Result<WorkbenchMoveEntryResult>>
+  copyWorkbenchEntry(
+    request: WorkbenchCopyEntryRequest
+  ): Promise<Result<WorkbenchEntryMutationResult>>
   inspectWorkbenchDeleteEntry(
     request: WorkbenchInspectDeleteEntryRequest
   ): Promise<Result<WorkbenchInspectDeleteEntryResult>>

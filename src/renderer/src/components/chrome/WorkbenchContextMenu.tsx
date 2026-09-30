@@ -19,6 +19,8 @@ export interface WorkbenchContextMenuItem {
   icon: ReactNode
   disabled?: boolean
   separatorBefore?: boolean
+  /** 右侧淡色的快捷键提示（如 ⌘C）。 */
+  shortcut?: string
   onSelect: () => void | Promise<void>
 }
 
@@ -122,6 +124,9 @@ export function WorkbenchContextMenu({
               {item.icon}
             </span>
             <span className={styles.workbenchContextMenuLabel}>{item.label}</span>
+            {!!item.shortcut && (
+              <span className={styles.workbenchContextMenuShortcut}>{item.shortcut}</span>
+            )}
           </button>
         </div>
       ))}

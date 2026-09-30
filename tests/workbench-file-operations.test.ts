@@ -8,6 +8,7 @@ import {
   readFile,
   realpath,
   rm,
+  symlink,
   writeFile,
 } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -187,6 +188,48 @@ void describe('Workbench file operations', () => {
       assert.deepEqual((await readdir(projectRoot)).sort(), ['a.txt', 'b.txt', 'c.txt'])
       assert.equal((await lstat(join(projectRoot, 'b.txt'))).nlink, 2)
       assert.equal(await readFile(join(projectRoot, 'c.txt'), 'utf8'), 'other\n')
+    })
+  })
+
+  void test('copies files and folders, naming duplicates like Finder and keeping links as links', async () => {
+    await withWorkspace(async ({ projectRoot, parts }) => {
+      const files = parts.files
+      await mkdir(join(projectRoot, 'src', 'util'), { recursive: true })
+      await mkdir(join(projectRoot, 'lib'))
+      await writeFile(join(projectRoot, 'src', 'a.ts'), 'export const a = 1\n')
+      await writeFile(join(projectRoot, 'src', 'util', 'b.ts'), 'export const b = 2\n')
+      await writeFile(join(projectRoot, '.env'), 'KEY=1\n')
+      await symlink('../a.ts', join(projectRoot, 'src', 'util', 'a-link.ts'))
+
+      const copied = await files.copyEntry({ projectRoot, path: 'src/a.ts', parentPath: 'lib' })
+      assert.equal(copied.entry.path, 'lib/a.ts')
+      assert.equal(await readFile(join(projectRoot, 'lib', 'a.ts'), 'utf8'), 'export const a = 1\n')
+
+      // 复制到原来的目录（创建副本）：名字被占用就依次取 copy、copy 2。
+      const first = await files.copyEntry({ projectRoot, path: 'src/a.ts', parentPath: 'src' })
+      const second = await files.copyEntry({ projectRoot, path: 'src/a.ts', parentPath: 'src' })
+      assert.deepEqual([first.entry.path, second.entry.path], ['src/a copy.ts', 'src/a copy 2.ts'])
+      const env = await files.copyEntry({ projectRoot, path: '.env', parentPath: '.' })
+      assert.equal(env.entry.path, '.env copy')
+
+      // 目录连同里面的一切；链接照原样复制成链接。
+      const folder = await files.copyEntry({ projectRoot, path: 'src/util', parentPath: 'lib' })
+      assert.equal(folder.entry.path, 'lib/util')
+      assert.equal(await readFile(join(projectRoot, 'lib', 'util', 'b.ts'), 'utf8'), 'export const b = 2\n')
+      assert.ok((await lstat(join(projectRoot, 'lib', 'util', 'a-link.ts'))).isSymbolicLink())
+
+      await assert.rejects(
+        () => files.copyEntry({ projectRoot, path: 'src', parentPath: 'src/util' }),
+        isValidationError(/不能把目录复制到自身或子目录内/u)
+      )
+      await assert.rejects(
+        () => files.copyEntry({ projectRoot, path: '.', parentPath: 'lib' }),
+        isValidationError(/不能复制工程根目录/u)
+      )
+      await assert.rejects(
+        () => files.copyEntry({ projectRoot, path: 'src/a.ts', parentPath: 'src/a.ts' }),
+        isValidationError(/只能复制到目录里/u)
+      )
     })
   })
 

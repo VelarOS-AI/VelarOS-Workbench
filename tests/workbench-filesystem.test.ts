@@ -12,7 +12,10 @@ import { AppError } from '@velaros-ai/core/error'
 import { createWorkbenchAppParts } from '../src/main/workspace/Parts'
 import { WorkbenchProjectFileSystem } from '../src/main/workspace/WorkbenchProjectFileSystem'
 import { resolveExternalFileUnavailableStatus } from '../src/renderer/src/models/editor/workbenchEditorTabs'
-import { getWorkbenchFileTreeShortcutAction } from '../src/renderer/src/models/files/workbenchTreeMutation'
+import {
+  getWorkbenchFileTreeShortcutAction,
+  selectTopLevelTreeEntries,
+} from '../src/renderer/src/models/files/workbenchTreeMutation'
 
 import { createFakeTrash, refuseTrash } from './helpers/fakeTrash'
 
@@ -394,6 +397,43 @@ void describe('Workbench project file tree', () => {
     assert.equal(
       getWorkbenchFileTreeShortcutAction({ ...plain, key: 'Backspace', metaKey: true }),
       null
+    )
+    // 复制、剪切、粘贴、创建副本：⌘ / Ctrl 加 C、X、V、D；带 Shift 或 Alt 的不算。
+    for (const [key, action] of [
+      ['c', 'copy-selected'],
+      ['x', 'cut-selected'],
+      ['v', 'paste'],
+      ['d', 'duplicate-selected'],
+    ] as const) {
+      assert.equal(getWorkbenchFileTreeShortcutAction({ ...plain, key, metaKey: true }), action)
+      assert.equal(getWorkbenchFileTreeShortcutAction({ ...plain, key, ctrlKey: true }), action)
+      assert.equal(
+        getWorkbenchFileTreeShortcutAction({ ...plain, key, metaKey: true, shiftKey: true }),
+        null
+      )
+    }
+    assert.equal(getWorkbenchFileTreeShortcutAction({ ...plain, key: 'c' }), null)
+  })
+
+  void test('copying a folder together with files inside it copies the folder once', () => {
+    const entry = (path: string, type: 'file' | 'directory') => ({
+      name: path.split('/').at(-1)!,
+      path,
+      type,
+      size: null,
+      modifiedAt: null,
+      hasChildren: type === 'directory',
+    })
+    const picked = selectTopLevelTreeEntries([
+      entry('src', 'directory'),
+      entry('src/a.ts', 'file'),
+      entry('src/util/b.ts', 'file'),
+      entry('srcx.ts', 'file'),
+      entry('lib/c.ts', 'file'),
+    ])
+    assert.deepEqual(
+      picked.map((item) => item.path),
+      ['src', 'srcx.ts', 'lib/c.ts']
     )
   })
 })

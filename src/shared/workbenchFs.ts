@@ -13,6 +13,7 @@
 import type { ErrorCode } from '@velaros-ai/core/error'
 
 import type {
+  WorkbenchCopyEntryRequest,
   WorkbenchCreateEntryRequest,
   WorkbenchDeleteEntryRequest,
   WorkbenchDeleteEntryResult,
@@ -60,6 +61,7 @@ export const WorkbenchFsChannels = {
   createEntry: 'workbench-app:fs:create-entry',
   renameEntry: 'workbench-app:fs:rename-entry',
   moveEntry: 'workbench-app:fs:move-entry',
+  copyEntry: 'workbench-app:fs:copy-entry',
   inspectDeleteEntry: 'workbench-app:fs:inspect-delete-entry',
   deleteEntry: 'workbench-app:fs:delete-entry',
   restoreDeletedEntry: 'workbench-app:fs:restore-deleted-entry',
@@ -111,6 +113,9 @@ export interface WorkbenchFsBridge {
   moveEntry: (
     request: WorkbenchMoveEntryRequest
   ) => Promise<WorkbenchFsCallResult<WorkbenchMoveEntryResult>>
+  copyEntry: (
+    request: WorkbenchCopyEntryRequest
+  ) => Promise<WorkbenchFsCallResult<WorkbenchEntryMutationResult>>
   inspectDeleteEntry: (
     request: WorkbenchInspectDeleteEntryRequest
   ) => Promise<WorkbenchFsCallResult<WorkbenchInspectDeleteEntryResult>>

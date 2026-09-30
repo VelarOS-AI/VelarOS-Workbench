@@ -213,6 +213,8 @@ const standaloneWorkbenchHost: WorkbenchHost = {
         toHostResult(await window.velarosWorkbenchFs.renameEntry(request)),
       moveWorkbenchEntry: async (request) =>
         toHostResult(await window.velarosWorkbenchFs.moveEntry(request)),
+      copyWorkbenchEntry: async (request) =>
+        toHostResult(await window.velarosWorkbenchFs.copyEntry(request)),
       inspectWorkbenchDeleteEntry: async (request) =>
         toHostResult(await window.velarosWorkbenchFs.inspectDeleteEntry(request)),
       deleteWorkbenchEntry: async (request) =>

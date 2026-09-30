@@ -136,6 +136,9 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
           void workbench.launchRunSession(buildWorkbenchVelarBuildCommand(path, packageManager))
         },
         onAddFilesToChat: model.actions.addWorkbenchFilesToChat,
+        onCopyEntries: (entries, parentEntry) =>
+          model.actions.runTreeMutation(() => workbench.copyTreeEntries(entries, parentEntry)),
+        onRevealEntry: model.actions.revealPathInSystem,
       },
     },
     changes: {

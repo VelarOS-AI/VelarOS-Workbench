@@ -13,6 +13,7 @@ import { randomUUID } from 'node:crypto'
 import type { BigIntStats } from 'node:fs'
 import { lstatSync, readFileSync, type Stats, statSync } from 'node:fs'
 import {
+  cp,
   lstat,
   mkdir,
   readdir,
@@ -21,12 +22,13 @@ import {
   stat,
   writeFile,
 } from 'node:fs/promises'
-import { basename, dirname, join, resolve } from 'node:path'
+import { basename, dirname, extname, join, resolve } from 'node:path'
 
 import { isPresent } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type {
+  WorkbenchCopyEntryRequest,
   WorkbenchCreateEntryRequest,
   WorkbenchDeleteEntryRequest,
   WorkbenchDeleteEntryResult,
@@ -66,6 +68,10 @@ const DEFAULT_READ_MAX_CHARS = 300_000
 const MAX_READ_CHARS = 1_000_000
 const MAX_WRITE_CHARS = 1_000_000
 const FILE_CONFLICT_MTIME_TOLERANCE_MS = 1
+/** 「名字 copy N」最多试到这里。 */
+const MAX_COPY_NAME_ATTEMPTS = 1000
+/** 复制目录时交给 Git 新文件追踪的文件数上限。 */
+const MAX_TRACKED_COPIED_FILES = 500
 
 /**
  * 比较条目名时抹掉大小写与 Unicode 组合形式的差别
@@ -295,6 +301,85 @@ class FileOperations {
         entry,
       }
     })
+  }
+
+  /**
+   * 把文件或目录复制到 `parentPath` 下（目录连同里面的一切；链接复制成链接，不跟进去）。目标名字已被占用时
+   * 取一个空着的「名字 copy.扩展名」「名字 copy 2.扩展名」……，与访达、VS Code 一样。
+   */
+  public async copyEntry(request: WorkbenchCopyEntryRequest): Promise<WorkbenchEntryMutationResult> {
+    const projectRoot = await this.pathResolver.resolveProjectRoot(request.projectRoot)
+    const source = await this.pathResolver.resolveEntryInsideProject(projectRoot, request.path)
+    const parentPath = await this.pathResolver.resolveInsideProject(projectRoot, request.parentPath)
+    if (this.pathResolver.toProjectRelativePath(projectRoot, source.requestedPath) === '.') {
+      throw new AppError('VALIDATION', workbenchMainText('files.copyProjectRoot'))
+    }
+    if (!(await stat(parentPath.realPath)).isDirectory()) {
+      throw new AppError('VALIDATION', workbenchMainText('files.copyTargetNotFolder'))
+    }
+    if ((await lstat(parentPath.requestedPath)).isSymbolicLink()) {
+      throw new AppError('VALIDATION', workbenchMainText('files.copyIntoLinkedFolder'))
+    }
+    if (source.stats.isDirectory() && isPathInsideRoot(source.entryPath, parentPath.realPath)) {
+      throw new AppError('VALIDATION', workbenchMainText('files.copyIntoItself'))
+    }
+
+    return this.runWorkbenchMutation(async () => {
+      const name = await this.findFreeCopyName(
+        parentPath.realPath,
+        this.pathResolver.normalizeEntryName(request.name ?? basename(source.requestedPath))
+      )
+      const targetPath = this.pathResolver.resolveChildPath(
+        projectRoot,
+        parentPath.requestedPath,
+        name
+      )
+      const physicalTargetPath = join(parentPath.realPath, name)
+      this.assertOutsideGitInternals(
+        projectRoot,
+        [source.requestedPath, source.entryPath, targetPath, physicalTargetPath],
+        request.path
+      )
+      await cp(source.entryPath, physicalTargetPath, {
+        recursive: true,
+        errorOnExist: true,
+        force: false,
+        verbatimSymlinks: true,
+      })
+      const copiedFiles = source.stats.isDirectory()
+        ? await this.listCopiedFiles(physicalTargetPath)
+        : [physicalTargetPath]
+      await this.gitNewFileTracker.trackNewFiles(projectRoot, copiedFiles)
+      const entry = await this.entryHelper.toDirectoryEntry(projectRoot, targetPath, false)
+      return {
+        projectRoot,
+        parentPath: this.pathResolver.toProjectRelativePath(projectRoot, parentPath.requestedPath),
+        entry,
+      }
+    })
+  }
+
+  /** `name` 在目录里空着就用它，否则依次试「名字 copy.扩展名」「名字 copy 2.扩展名」……（`.gitignore` 这类整名算名字）。 */
+  private async findFreeCopyName(directory: string, name: string): Promise<string> {
+    if (!(await lstat(join(directory, name)).catch(() => null))) return name
+    const extension = name.startsWith('.') && !name.includes('.', 1) ? '' : extname(name)
+    const stem = name.slice(0, name.length - extension.length)
+    for (let attempt = 1; attempt < MAX_COPY_NAME_ATTEMPTS; attempt += 1) {
+      const candidate = `${stem} copy${attempt === 1 ? '' : ` ${attempt}`}${extension}`
+      if (!(await lstat(join(directory, candidate)).catch(() => null))) return candidate
+    }
+    throw new AppError('VALIDATION', workbenchMainText('files.targetExists'))
+  }
+
+  /** 复制出来的目录里的文件（交给 Git 新文件追踪），最多这么多个。 */
+  private async listCopiedFiles(directory: string): Promise<string[]> {
+    const files: string[] = []
+    const entries = await readdir(directory, { recursive: true, withFileTypes: true })
+    for (const entry of entries) {
+      if (files.length >= MAX_TRACKED_COPIED_FILES) break
+      if (entry.isFile()) files.push(join(entry.parentPath, entry.name))
+    }
+    return files
   }
 
   public async moveEntry(request: WorkbenchMoveEntryRequest): Promise<WorkbenchMoveEntryResult> {

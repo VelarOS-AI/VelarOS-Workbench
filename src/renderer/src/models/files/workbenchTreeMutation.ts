@@ -174,7 +174,21 @@ export function selectDeleteUndoResultsToKeep<TResult extends WorkbenchDeleteEnt
   return batchResults.filter((result) => keep.has(result))
 }
 
-export type WorkbenchFileTreeShortcutAction = 'delete-selected' | 'undo-delete'
+export type WorkbenchFileTreeShortcutAction =
+  | 'delete-selected'
+  | 'undo-delete'
+  | 'copy-selected'
+  | 'cut-selected'
+  | 'paste'
+  | 'duplicate-selected'
+
+/** ⌘ / Ctrl 加这些键：复制、剪切、粘贴、创建副本（与 VS Code 资源管理器一致）。 */
+const ClipboardShortcutActions: Readonly<Record<string, WorkbenchFileTreeShortcutAction>> = {
+  c: 'copy-selected',
+  x: 'cut-selected',
+  v: 'paste',
+  d: 'duplicate-selected',
+}
 
 interface WorkbenchFileTreeShortcutEventLike {
   altKey: boolean
@@ -202,5 +216,23 @@ export function getWorkbenchFileTreeShortcutAction(
     !event.shiftKey
   ) return 'undo-delete'
 
+  if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey)
+    return ClipboardShortcutActions[event.key.toLowerCase()] ?? null
+
   return null
+}
+
+/**
+ * 一组要复制、剪切的项里，已经包含在另一项（选中的目录）里面的去掉：复制目录本来就带着它们。
+ */
+export function selectTopLevelTreeEntries(
+  entries: readonly WorkbenchDirectoryEntry[]
+): WorkbenchDirectoryEntry[] {
+  return entries.filter(
+    (entry) =>
+      !entries.some(
+        (other) =>
+          other !== entry && other.type === 'directory' && entry.path.startsWith(`${other.path}/`)
+      )
+  )
 }

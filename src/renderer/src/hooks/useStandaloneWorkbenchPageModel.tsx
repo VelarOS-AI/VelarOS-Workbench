@@ -919,6 +919,25 @@ export function useStandaloneWorkbenchPageModel(
     },
     []
   )
+  /** 文件树右键「在访达中显示」：打不开时说明原因。 */
+  const revealPathInSystem = useCallback(
+    (absolutePath: string): void => {
+      void window.velarosWorkbenchProjectHub
+        .revealSystemPath(absolutePath)
+        .catch((error: unknown) => ({
+          opened: false,
+          error: error instanceof Error ? error.message : String(error),
+        }))
+        .then((result) => {
+          if (result.opened) return
+          translate.messageLatest.current.error({
+            title: translate.tLatest.current('workbench.revealInSystemFailed'),
+            description: result.error,
+          })
+        })
+    },
+    [translate.messageLatest, translate.tLatest]
+  )
   /**
    * 右键「添加到聊天」：把文件作为引用挂到聊天输入框上——只挂路径，内容由 Agent 自己去读。聊天面板收着就
    * 打开它；已经开着的留在用户正在用的那个聊天里，不替他换 Agent。
@@ -1126,6 +1145,7 @@ export function useStandaloneWorkbenchPageModel(
       handleWorkbenchBrowserElementPicked,
       consumeWorkbenchBrowserElementSelections,
       addWorkbenchFilesToChat,
+      revealPathInSystem,
       consumeWorkbenchChatFileReferences,
       saveEmbeddedLightTab,
       toggleBottomTool,
