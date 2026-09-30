@@ -5,14 +5,15 @@ import { ensureSyntaxTree } from '@codemirror/language'
 import { EditorState } from '@codemirror/state'
 import { describe, test } from 'bun:test'
 
+import { quoteWorkbenchShellArgument } from '../src/renderer/src/models/commands/workbenchShellQuote'
 import {
+  buildWorkbenchTestDebugTarget,
   buildWorkbenchTestRunCommand,
   detectWorkbenchTestRunner,
   isWorkbenchJavaScriptTestFilePath,
   listWorkbenchTestRunnerLookupDirectories,
   listWorkbenchTestRunnerProbePaths,
   pickWorkbenchTestRunner,
-  quoteWorkbenchShellArgument,
   readWorkbenchTestPackageManager,
   readWorkbenchTestRunnerEvidence,
   readWorkbenchTestRunnerImport,
@@ -326,12 +327,13 @@ void describe('test runner of a project', () => {
     assert.equal(readWorkbenchTestPackageManager(['package.json'], '{}'), null)
   })
 
+  const project = (
+    runner: WorkbenchTestRunnerProject['runner'],
+    packageManager: WorkbenchTestRunnerProject['packageManager'],
+    packageDir = ''
+  ): WorkbenchTestRunnerProject => ({ runner, packageManager, packageDir })
+
   void test('builds a one-shot command for the runner and the package manager', () => {
-    const project = (
-      runner: WorkbenchTestRunnerProject['runner'],
-      packageManager: WorkbenchTestRunnerProject['packageManager'],
-      packageDir = ''
-    ): WorkbenchTestRunnerProject => ({ runner, packageManager, packageDir })
     const pattern = '^math \\(basic\\) (?:> )?adds 1 \\+ 2$'
 
     assert.equal(
@@ -382,6 +384,50 @@ void describe('test runner of a project', () => {
     assert.equal(quoteWorkbenchShellArgument('plain-path_1/a.b:c=d@e', false), 'plain-path_1/a.b:c=d@e')
     assert.equal(quoteWorkbenchShellArgument('', false), "''")
     assert.equal(quoteWorkbenchShellArgument('$(rm -rf ~); `x`', false), "'$(rm -rf ~); `x`'")
+  })
+
+  void test('starts the runner so that the test runs in one process the debugger can attach to', () => {
+    // Vitest 自己认检查器开关（主进程接在命令末尾）：关掉文件并行，测试就在那个带检查器的进程里跑。
+    assert.deepEqual(
+      buildWorkbenchTestDebugTarget({
+        project: project('vitest', 'pnpm', 'packages/core'),
+        filePath: 'packages/core/src/math.test.ts',
+        pattern: '^math (?:> )?adds$',
+        windows: false,
+      }),
+      {
+        kind: 'inspect-command',
+        command:
+          "pnpm exec vitest run src/math.test.ts -t '^math (?:> )?adds$' --no-file-parallelism --testTimeout=0",
+      }
+    )
+    // Jest 不认：由 node 带着检查器起它的可执行入口，--runInBand 让测试留在这个进程里。包管理器不参与。
+    assert.deepEqual(
+      buildWorkbenchTestDebugTarget({
+        project: project('jest', 'yarn'),
+        filePath: 'src/my file.test.js',
+        pattern: "^it's here$",
+        windows: false,
+      }),
+      {
+        kind: 'node-package-bin',
+        packageName: 'jest',
+        args: "--runInBand --runTestsByPath 'src/my file.test.js' -t '^it'\\''s here$' --testTimeout=100000000",
+      }
+    )
+    // 整个文件：不带 -t。
+    assert.deepEqual(
+      buildWorkbenchTestDebugTarget({
+        project: project('jest', 'npm'),
+        filePath: 'math.test.js',
+        windows: false,
+      }),
+      {
+        kind: 'node-package-bin',
+        packageName: 'jest',
+        args: '--runInBand --runTestsByPath math.test.js --testTimeout=100000000',
+      }
+    )
   })
 })
 

@@ -1,6 +1,7 @@
 /**
- * 「编辑运行配置」对话框：左边是这个项目里用户建的配置（新建、复制、删除），右边改选中那一份的名称、命令、
- * 工作目录与环境变量。改动先留在对话框里，点「保存」才整份写进应用存储；取消或关掉就都不算数。
+ * 「编辑运行配置」对话框：左边是这个项目里用户建的配置（新建、复制、删除），右边改选中那一份的名称、种类
+ * （一条命令，或者一个 Node 程序的脚本与参数）、工作目录与环境变量。改动先留在对话框里，点「保存」才整份写进
+ * 应用存储；取消或关掉就都不算数。
  *
  * 只在打开时加载（见页面里的 lazy），不进工作区外壳包。
  */
@@ -26,6 +27,7 @@ import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 import { Label } from '@velaros-ai/ui/primitives/display/Label'
 import { Text } from '@velaros-ai/ui/primitives/display/Text'
 import { Input } from '@velaros-ai/ui/primitives/forms/Input'
+import { SegmentedControl } from '@velaros-ai/ui/primitives/forms/SegmentedControl'
 import { Textarea } from '@velaros-ai/ui/primitives/forms/Textarea'
 import {
   Dialog,
@@ -233,7 +235,10 @@ interface WorkbenchRunConfigurationFormProps {
   onChange: (patch: Partial<WorkbenchRunConfigurationDraft>) => void
 }
 
-/** 一份运行配置的表单：名称、命令、工作目录、环境变量，没填好的地方在字段下面写明。 */
+/**
+ * 一份运行配置的表单：名称、种类、命令（或 Node 程序的脚本与参数）、工作目录、环境变量，没填好的地方在字段
+ * 下面写明。
+ */
 export function WorkbenchRunConfigurationForm({
   draft,
   issues,
@@ -279,24 +284,76 @@ export function WorkbenchRunConfigurationForm({
         )}
       </div>
       <div className={styles.field}>
-        <Label htmlFor={`${fieldId}-command`}>{t('workbench.runConfigurationCommand')}</Label>
-        <Input
-          id={`${fieldId}-command`}
-          size="sm"
-          className={styles.mono}
-          value={draft.command}
-          maxLength={8000}
-          placeholder={t('workbench.runConfigureCommandPlaceholder')}
-          spellCheck={false}
-          aria-invalid={!!issues?.command}
-          onChange={(event) => onChange({ command: event.target.value })}
+        <Label>{t('workbench.runConfigurationType')}</Label>
+        <SegmentedControl
+          ariaLabel={t('workbench.runConfigurationType')}
+          className={styles.type}
+          value={draft.type}
+          options={[
+            { value: 'command', label: t('workbench.runConfigurationTypeCommand') },
+            { value: 'node', label: t('workbench.runConfigurationTypeNode') },
+          ]}
+          onChange={(type) => onChange({ type })}
         />
-        {!!issues?.command && (
-          <Text tone="caption" className={styles.issue}>
-            {t('workbench.runConfigurationCommandRequired')}
-          </Text>
-        )}
       </div>
+      {draft.type === 'node' ? (
+        <>
+          <div className={styles.field}>
+            <Label htmlFor={`${fieldId}-script`}>{t('workbench.runConfigurationScript')}</Label>
+            <Input
+              id={`${fieldId}-script`}
+              size="sm"
+              className={styles.mono}
+              value={draft.script}
+              maxLength={1000}
+              placeholder="src/server.js"
+              spellCheck={false}
+              aria-invalid={!!issues?.script}
+              onChange={(event) => onChange({ script: event.target.value })}
+            />
+            <Text tone="caption" className={issues?.script ? styles.issue : styles.hint}>
+              {issues?.script === 'required'
+                ? t('workbench.runConfigurationScriptRequired')
+                : issues?.script
+                  ? t('workbench.runConfigurationScriptOutsideProject')
+                  : t('workbench.runConfigurationScriptHint')}
+            </Text>
+          </div>
+          <div className={styles.field}>
+            <Label htmlFor={`${fieldId}-args`}>{t('workbench.runConfigurationArgs')}</Label>
+            <Input
+              id={`${fieldId}-args`}
+              size="sm"
+              className={styles.mono}
+              value={draft.args}
+              maxLength={8000}
+              placeholder="--port 3000"
+              spellCheck={false}
+              onChange={(event) => onChange({ args: event.target.value })}
+            />
+          </div>
+        </>
+      ) : (
+        <div className={styles.field}>
+          <Label htmlFor={`${fieldId}-command`}>{t('workbench.runConfigurationCommand')}</Label>
+          <Input
+            id={`${fieldId}-command`}
+            size="sm"
+            className={styles.mono}
+            value={draft.command}
+            maxLength={8000}
+            placeholder={t('workbench.runConfigureCommandPlaceholder')}
+            spellCheck={false}
+            aria-invalid={!!issues?.command}
+            onChange={(event) => onChange({ command: event.target.value })}
+          />
+          {!!issues?.command && (
+            <Text tone="caption" className={styles.issue}>
+              {t('workbench.runConfigurationCommandRequired')}
+            </Text>
+          )}
+        </div>
+      )}
       <div className={styles.field}>
         <Label htmlFor={`${fieldId}-cwd`}>{t('workbench.runConfigurationCwd')}</Label>
         <Input

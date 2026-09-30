@@ -1007,7 +1007,7 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     runConfigurationRunNow: 'Run this configuration',
     runConfigurationsDialogTitle: 'Run configurations',
     runConfigurationsDialogDescription:
-      'Name the ways you run this project: a command, a working directory and environment variables. They are stored in the app data on this computer, not in the project.',
+      'Name the ways you run this project: a command or a Node program, with a working directory and environment variables. They are stored in the app data on this computer, not in the project.',
     runConfigurationsEmpty: 'No run configurations yet.',
     runConfigurationAdd: 'New configuration',
     runConfigurationDuplicate: 'Duplicate this configuration',
@@ -1015,7 +1015,16 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     runConfigurationNewName: 'Untitled',
     runConfigurationCopyName: '{name} copy',
     runConfigurationName: 'Name',
+    runConfigurationType: 'Type',
+    runConfigurationTypeCommand: 'Command',
+    runConfigurationTypeNode: 'Node program',
     runConfigurationCommand: 'Command',
+    runConfigurationScript: 'Script',
+    runConfigurationScriptHint:
+      'A JavaScript or TypeScript file in the project, run by node. This kind of configuration can be debugged.',
+    runConfigurationScriptRequired: 'Enter a script.',
+    runConfigurationScriptOutsideProject: 'The script must be a relative path inside the project.',
+    runConfigurationArgs: 'Arguments',
     runConfigurationCwd: 'Working directory',
     runConfigurationCwdPlaceholder: 'Project root',
     runConfigurationCwdHint: 'A path relative to the project root. Leave empty to run in the project root.',
@@ -1030,6 +1039,7 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     runConfigurationEnvInvalidName:
       'Line {line}: a variable name can only contain letters, digits and underscores, and cannot start with a digit: {text}',
     runConfigurationEnvTooMany: 'Too many environment variables. The limit is {count}.',
+    debuggerRunCardTitle: 'Debug: {name}',
     agentBrowserTabTitle: 'Agent · {host}',
     debugBack: 'Back',
     debugForward: 'Forward',

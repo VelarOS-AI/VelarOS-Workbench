@@ -15,12 +15,18 @@ import {
   normalizeWorkbenchRunConfigurationCwd,
   type WorkbenchNamedRunConfiguration,
   WorkbenchRunConfigurationNameMaxLength,
+  type WorkbenchRunConfigurationType,
 } from './workbenchNamedRunConfigurations'
 
 export interface WorkbenchRunConfigurationDraft {
   id: string
   name: string
+  type: WorkbenchRunConfigurationType
+  /** 命令型用的；换成 Node 程序时输入框里的字留着，换回来还在，存的时候才丢。 */
   command: string
+  /** Node 程序用的：脚本与参数。 */
+  script: string
+  args: string
   cwd: string
   envText: string
 }
@@ -36,6 +42,8 @@ export interface WorkbenchRunEnvironmentTextIssue {
 export interface WorkbenchRunConfigurationDraftIssues {
   name?: 'required'
   command?: 'required'
+  /** Node 程序的脚本：没填，或者写成了绝对路径、带着 `..` 要往项目外面走。 */
+  script?: 'required' | 'outside-project'
   /** 工作目录写成了绝对路径，或者带着 `..` 要往项目外面走。 */
   cwd?: 'outside-project'
   env?: WorkbenchRunEnvironmentTextIssue[]
@@ -118,14 +126,26 @@ export function toWorkbenchRunConfigurationDraft(
   return {
     id: configuration.id,
     name: configuration.name,
+    type: configuration.type,
     command: configuration.command,
+    script: configuration.script,
+    args: configuration.args,
     cwd: configuration.cwd,
     envText: formatWorkbenchRunEnvironmentText(configuration.env),
   }
 }
 
 export function createWorkbenchRunConfigurationDraft(name: string): WorkbenchRunConfigurationDraft {
-  return { id: createWorkbenchRunConfigurationId(), name, command: '', cwd: '', envText: '' }
+  return {
+    id: createWorkbenchRunConfigurationId(),
+    name,
+    type: 'command',
+    command: '',
+    script: '',
+    args: '',
+    cwd: '',
+    envText: '',
+  }
 }
 
 /** 复制一份：字段照搬，换一个新 id 和不重名的名字。 */
@@ -142,7 +162,11 @@ export function validateWorkbenchRunConfigurationDraft(
 ): Nullable<WorkbenchRunConfigurationDraftIssues> {
   const issues: WorkbenchRunConfigurationDraftIssues = {}
   if (!draft.name.trim()) issues.name = 'required'
-  if (!draft.command.trim()) issues.command = 'required'
+  if (draft.type === 'node') {
+    const script = normalizeWorkbenchRunConfigurationCwd(draft.script)
+    if (script === null) issues.script = 'outside-project'
+    else if (!script) issues.script = 'required'
+  } else if (!draft.command.trim()) issues.command = 'required'
   if (normalizeWorkbenchRunConfigurationCwd(draft.cwd) === null) issues.cwd = 'outside-project'
   const environment = parseWorkbenchRunEnvironmentText(draft.envText)
   if (environment.issues.length > 0) issues.env = environment.issues
@@ -159,7 +183,10 @@ export function buildWorkbenchRunConfigurationFromDraft(
   return normalizeWorkbenchNamedRunConfiguration({
     id: draft.id,
     name: draft.name.trim().slice(0, WorkbenchRunConfigurationNameMaxLength),
+    type: draft.type,
     command: draft.command,
+    script: draft.script,
+    args: draft.args,
     cwd: draft.cwd,
     env: parseWorkbenchRunEnvironmentText(draft.envText).environment,
   })

@@ -21,7 +21,10 @@ const { WorkbenchRunConfigurationForm } = await import(
 const Draft: WorkbenchRunConfigurationDraft = {
   id: 'run-configuration-dev',
   name: 'API server',
+  type: 'command',
   command: 'bun run dev',
+  script: '',
+  args: '',
   cwd: 'packages/api',
   envText: 'PORT=4100',
 }
@@ -79,5 +82,34 @@ void describe('run configuration form', () => {
     assert.match(html, /workbench\.runConfigurationEnvInvalidName\{&quot;line&quot;:2/u)
     assert.doesNotMatch(html, /workbench\.runConfigurationCwdHint|workbench\.runConfigurationEnvHint/u)
     assert.equal(html.match(/aria-invalid="true"/gu)?.length, 4)
+  })
+
+  void test('a Node program has a script and arguments instead of a command', () => {
+    const node: WorkbenchRunConfigurationDraft = {
+      ...Draft,
+      type: 'node',
+      script: 'src/server.js',
+      args: '--port 4100',
+    }
+    const html = renderForm(node, null)
+    // 两个种类都列着，选中的是 Node 程序。
+    assert.match(html, /aria-pressed="false"[^>]*>workbench\.runConfigurationTypeCommand/u)
+    assert.match(html, /aria-pressed="true"[^>]*>workbench\.runConfigurationTypeNode/u)
+    assert.match(html, /value="src\/server\.js"/u)
+    assert.match(html, /value="--port 4100"/u)
+    assert.match(html, /workbench\.runConfigurationScriptHint/u)
+    // 命令那一栏不出现（输入框里的字还留在草稿里，换回命令型时还在）。
+    assert.doesNotMatch(html, /value="bun run dev"/u)
+    assert.match(renderForm(Draft, null), /value="bun run dev"/u)
+    assert.doesNotMatch(renderForm(Draft, null), /runConfigurationScript/u)
+
+    assert.match(
+      renderForm({ ...node, script: '' }, { script: 'required' }),
+      /workbench\.runConfigurationScriptRequired/u
+    )
+    assert.match(
+      renderForm({ ...node, script: '../up.js' }, { script: 'outside-project' }),
+      /workbench\.runConfigurationScriptOutsideProject/u
+    )
   })
 })

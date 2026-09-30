@@ -6,7 +6,10 @@
  */
 import { isPlainObject, isString } from '@velaros-ai/core'
 
+import type { WorkbenchDebuggerLaunchTarget } from '@shared/workbenchDebugger'
+
 import type { PackageManagerCommand } from './workbenchPackageScriptCommand'
+import { quoteWorkbenchShellArgument } from './workbenchShellQuote'
 
 export type WorkbenchTestRunnerKind = 'vitest' | 'jest'
 
@@ -225,16 +228,6 @@ export async function detectWorkbenchTestRunner(
   return found ? { ...found, packageManager: packageManager ?? 'npm' } : null
 }
 
-/**
- * 把一个参数写进命令行。POSIX shell 用单引号包起来，里面的字符全都原样；Windows 的 cmd 用双引号，双引号里
- * 仍然特殊的 `"` 和 `%` 换成 `.`——这里引的是文件路径和正则，路径里极少有它们，正则里 `.` 正好匹配任意字符。
- */
-export function quoteWorkbenchShellArgument(value: string, windows: boolean): string {
-  if (/^[\w./:=@-]+$/u.test(value)) return value
-  if (windows) return `"${value.replace(/["%]/gu, '.')}"`
-  return `'${value.replace(/'/gu, `'\\''`)}'`
-}
-
 /** 各包管理器怎么起项目里装的可执行文件（不去网上装）。 */
 export function getWorkbenchTestRunnerExecutable(
   runner: WorkbenchTestRunnerKind,
@@ -289,4 +282,36 @@ export function buildWorkbenchTestRunCommand({
   return project.runner === 'vitest'
     ? `${executable} run ${file}${filter}`
     : `${executable} --runTestsByPath ${file}${filter}`
+}
+
+/**
+ * 调试一个测试时怎么起运行器：测试代码得跑在一个连得上检查器的进程里。
+ * - Vitest 自己认 `--inspect-brk`（主进程把开关接在命令末尾）；关掉文件并行，测试就在那一个带检查器的进程里跑。
+ * - Jest 不认：由 node 带着检查器直接起它的可执行入口，`--runInBand` 让测试留在这个进程里。
+ *
+ * 停在断点上的时间不能算超时，两边都把单个测试的超时放开。
+ */
+export function buildWorkbenchTestDebugTarget({
+  project,
+  filePath,
+  pattern,
+  windows,
+}: WorkbenchTestRunCommandOptions): WorkbenchDebuggerLaunchTarget {
+  const file = quoteWorkbenchShellArgument(
+    relativeWorkbenchTestFilePath(filePath, project.packageDir),
+    windows
+  )
+  const filter = pattern ? ` -t ${quoteWorkbenchShellArgument(pattern, windows)}` : ''
+  if (project.runner === 'vitest') {
+    const executable = getWorkbenchTestRunnerExecutable('vitest', project.packageManager)
+    return {
+      kind: 'inspect-command',
+      command: `${executable} run ${file}${filter} --no-file-parallelism --testTimeout=0`,
+    }
+  }
+  return {
+    kind: 'node-package-bin',
+    packageName: 'jest',
+    args: `--runInBand --runTestsByPath ${file}${filter} --testTimeout=100000000`,
+  }
 }

@@ -92,6 +92,11 @@
   gap: 4px;
 }
 
+/* 种类的分段控件：只占自己内容那么宽，不拉满一行。 */
+.type {
+  align-self: flex-start;
+}
+
 .mono {
   font-family: var(--font-mono);
 }

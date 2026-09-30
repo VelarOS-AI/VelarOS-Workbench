@@ -6,8 +6,10 @@ import { describe, test } from 'bun:test'
 
 import { findLastRunningWorkbenchRunSession } from '../src/renderer/src/hooks/useWorkbenchTopRunControl'
 import {
+  buildWorkbenchRunConfigurationCommand,
   buildWorkbenchRunConfigurationLaunch,
   describeWorkbenchRunConfiguration,
+  normalizeWorkbenchNamedRunConfiguration,
   normalizeWorkbenchRunConfigurationCwd,
   readWorkbenchNamedRunConfigurations,
   RUN_CONFIGURATIONS_STORAGE_KEY,
@@ -47,9 +49,24 @@ function createStorage(initial: Record<string, string> = {}): StorageLike & {
 const Dev: WorkbenchNamedRunConfiguration = {
   id: 'run-configuration-dev',
   name: 'API server',
+  type: 'command',
   command: 'bun run dev',
+  script: '',
+  args: '',
   cwd: 'packages/api',
   env: { PORT: '4100', NODE_ENV: 'development' },
+}
+
+/** 一个 Node 程序：脚本在工作目录里。 */
+const Server: WorkbenchNamedRunConfiguration = {
+  id: 'run-configuration-server',
+  name: 'Server',
+  type: 'node',
+  command: '',
+  script: 'packages/api/src/server.js',
+  args: '--port 4100',
+  cwd: 'packages/api',
+  env: { NODE_ENV: 'development' },
 }
 
 void describe('run configuration environment variables', () => {
@@ -140,6 +157,13 @@ void describe('named run configurations', () => {
           { name: 'no id', command: 'ls' },
           'not an object',
           null,
+          // Node 程序：脚本必须在项目里；命令那一栏不算数。
+          { ...Server, command: 'ignored', script: './packages/api//src/server.js', args: '  --port 4100 ' },
+          { ...Server, id: 'outside', script: '../outside.js' },
+          { ...Server, id: 'no-script', script: ' ' },
+          // 认不出的种类当命令型：有命令就留下，没有就丢掉。
+          { ...Dev, id: 'unknown-type', type: 'python', script: 'main.py' },
+          { ...Server, id: 'unknown-type-without-command', type: 'python' },
         ],
         'project-b': 'not a list',
         'project-c': [],
@@ -147,8 +171,15 @@ void describe('named run configurations', () => {
     )
     assert.deepEqual(readWorkbenchNamedRunConfigurations('project-a', storage), [
       { ...Dev, cwd: '', env: {} },
-      { id: 'second', name: 'Trimmed', command: 'npm test', cwd: '', env: {} },
+      { ...Dev, id: 'second', name: 'Trimmed', command: 'npm test', cwd: '', env: {} },
+      Server,
+      { ...Dev, id: 'unknown-type' },
     ])
+    // 存着的配置没有「种类」这一栏（更早存的）：就是命令型。
+    assert.deepEqual(
+      normalizeWorkbenchNamedRunConfiguration({ id: 'old', name: 'Old', command: 'make', cwd: '', env: {} }),
+      { id: 'old', name: 'Old', type: 'command', command: 'make', script: '', args: '', cwd: '', env: {} }
+    )
     assert.deepEqual(readWorkbenchNamedRunConfigurations('project-b', storage), [])
 
     storage.values.set(RUN_CONFIGURATIONS_STORAGE_KEY, '{ broken json')
@@ -176,7 +207,10 @@ void describe('named run configurations', () => {
     assert.deepEqual(draft, {
       id: Dev.id,
       name: 'API server',
+      type: 'command',
       command: 'bun run dev',
+      script: '',
+      args: '',
       cwd: 'packages/api',
       envText: 'PORT=4100\nNODE_ENV=development',
     })
@@ -185,9 +219,8 @@ void describe('named run configurations', () => {
 
     const edited = { ...draft, name: '  Web  ', cwd: './apps/web/', envText: 'PORT=5173\n\n# note\n' }
     assert.deepEqual(buildWorkbenchRunConfigurationFromDraft(edited), {
-      id: Dev.id,
+      ...Dev,
       name: 'Web',
-      command: 'bun run dev',
       cwd: 'apps/web',
       env: { PORT: '5173' },
     })
@@ -202,10 +235,43 @@ void describe('named run configurations', () => {
     assert.equal(buildWorkbenchRunConfigurationFromDraft(broken), null)
   })
 
+  void test('a Node program needs a script inside the project instead of a command', () => {
+    const draft = toWorkbenchRunConfigurationDraft(Server)
+    assert.deepEqual(
+      [draft.type, draft.script, draft.args, draft.command],
+      ['node', 'packages/api/src/server.js', '--port 4100', '']
+    )
+    assert.equal(validateWorkbenchRunConfigurationDraft(draft), null)
+    assert.deepEqual(buildWorkbenchRunConfigurationFromDraft(draft), Server)
+
+    // 换种类时另一边输入框里的字留在草稿里（换回来还在），存的时候只留这个种类用得上的。
+    const switched = { ...toWorkbenchRunConfigurationDraft(Dev), type: 'node' as const, script: 'src/main.ts' }
+    assert.equal(validateWorkbenchRunConfigurationDraft(switched), null)
+    assert.deepEqual(buildWorkbenchRunConfigurationFromDraft(switched), {
+      ...Dev,
+      type: 'node',
+      command: '',
+      script: 'src/main.ts',
+    })
+
+    assert.deepEqual(validateWorkbenchRunConfigurationDraft({ ...draft, script: '  ', command: '' }), {
+      script: 'required',
+    })
+    assert.deepEqual(validateWorkbenchRunConfigurationDraft({ ...draft, script: '/etc/passwd' }), {
+      script: 'outside-project',
+    })
+    assert.deepEqual(validateWorkbenchRunConfigurationDraft({ ...draft, script: '../up.js' }), {
+      script: 'outside-project',
+    })
+  })
+
   void test('creates and duplicates drafts with their own ids and names that are not taken', () => {
     const created = createWorkbenchRunConfigurationDraft('Untitled')
     assert.match(created.id, /^run-configuration-/u)
-    assert.deepEqual({ ...created, id: '' }, { id: '', name: 'Untitled', command: '', cwd: '', envText: '' })
+    assert.deepEqual(
+      { ...created, id: '' },
+      { id: '', name: 'Untitled', type: 'command', command: '', script: '', args: '', cwd: '', envText: '' }
+    )
 
     const copy = duplicateWorkbenchRunConfigurationDraft(
       toWorkbenchRunConfigurationDraft(Dev),
@@ -234,6 +300,49 @@ void describe('named run configurations', () => {
     })
     assert.equal(describeWorkbenchRunConfiguration(Dev), 'bun run dev · packages/api')
     assert.equal(describeWorkbenchRunConfiguration({ ...Dev, cwd: '' }), 'bun run dev')
+    // 调试只对 Node 程序有意义：命令型配置要求调试也照常运行。
+    assert.deepEqual(buildWorkbenchRunConfigurationLaunch(Dev, true), buildWorkbenchRunConfigurationLaunch(Dev))
+  })
+
+  void test('a Node program runs as `node script args` and can be debugged', () => {
+    // 命令在工作目录里跑：脚本写成相对工作目录的路径。
+    assert.equal(buildWorkbenchRunConfigurationCommand(Server, false), 'node src/server.js --port 4100')
+    assert.equal(
+      buildWorkbenchRunConfigurationCommand({ ...Server, cwd: '', args: '' }, false),
+      'node packages/api/src/server.js'
+    )
+    assert.equal(
+      buildWorkbenchRunConfigurationCommand({ ...Server, cwd: 'packages/web/app' }, false),
+      'node ../../api/src/server.js --port 4100'
+    )
+    assert.equal(
+      buildWorkbenchRunConfigurationCommand({ ...Server, script: 'my scripts/run it.js', cwd: '' }, false),
+      "node 'my scripts/run it.js' --port 4100"
+    )
+    assert.equal(
+      buildWorkbenchRunConfigurationCommand({ ...Server, script: 'my scripts/run it.js', cwd: '' }, true),
+      'node "my scripts/run it.js" --port 4100'
+    )
+    assert.equal(buildWorkbenchRunConfigurationCommand(Dev, false), 'bun run dev')
+
+    // 运行：一张普通的运行卡。调试：同样的目录与变量，另带着「调试哪个脚本」——脚本是项目里的路径，主进程自己
+    // 按工作目录去拼命令。
+    assert.deepEqual(buildWorkbenchRunConfigurationLaunch(Server), {
+      configurationId: Server.id,
+      cwd: 'packages/api',
+      env: { NODE_ENV: 'development' },
+    })
+    assert.deepEqual(buildWorkbenchRunConfigurationLaunch(Server, true), {
+      configurationId: Server.id,
+      cwd: 'packages/api',
+      env: { NODE_ENV: 'development' },
+      debug: {
+        target: { kind: 'node-script', script: 'packages/api/src/server.js', args: '--port 4100' },
+      },
+    })
+    assert.deepEqual(buildWorkbenchRunConfigurationLaunch({ ...Server, args: '' }, true).debug, {
+      target: { kind: 'node-script', script: 'packages/api/src/server.js' },
+    })
   })
 
   void test('a running card belongs to the configuration that started it, not to its command', () => {
@@ -246,6 +355,20 @@ void describe('named run configurations', () => {
     assert.equal(findLastRunningWorkbenchRunSession('bun run dev', sessions, Dev.id)?.id, 'configured')
     assert.equal(findLastRunningWorkbenchRunSession('bun run dev', sessions)?.id, 'plain')
     assert.equal(findLastRunningWorkbenchRunSession('bun run dev', sessions, 'missing'), undefined)
+
+    // 运行与调试分开认：调试卡不算「这份配置正在运行」，反过来也一样。
+    const debugging = [
+      ...sessions,
+      {
+        id: 'debugging',
+        command: 'node src/server.js',
+        isRunning: true,
+        launch: { configurationId: Dev.id, debug: { target: { kind: 'node-script' as const, script: 'a.js' } } },
+      },
+    ]
+    assert.equal(findLastRunningWorkbenchRunSession('bun run dev', debugging, Dev.id)?.id, 'configured')
+    assert.equal(findLastRunningWorkbenchRunSession('', debugging, Dev.id, true)?.id, 'debugging')
+    assert.equal(findLastRunningWorkbenchRunSession('', sessions, Dev.id, true), undefined)
   })
 
   void test('the run button remembers which configuration it points at', () => {

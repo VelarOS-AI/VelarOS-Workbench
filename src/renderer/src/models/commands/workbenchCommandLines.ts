@@ -1,4 +1,5 @@
 import type { WorkbenchRunCommandOutputEvent } from '@shared/contracts'
+import type { WorkbenchDebuggerLaunchTarget } from '@shared/workbenchDebugger'
 
 export interface WorkbenchTerminalSessionView {
   id: string
@@ -25,6 +26,11 @@ export interface WorkbenchRunSessionLaunchOptions {
   env?: Record<string, string>
   /** 由用户建的哪份运行配置起的（▶ 据此认出「这份配置正在跑」）。 */
   configurationId?: string
+  /**
+   * 这张卡是一次调试：程序由调试器带着检查器起（起什么见 `target`），不是直接在终端里跑命令。卡片照旧是
+   * 一个终端会话，输出、停止、重启都一样；重启时重新起一次调试。
+   */
+  debug?: { target: WorkbenchDebuggerLaunchTarget }
 }
 
 export interface WorkbenchRunOutputLine {

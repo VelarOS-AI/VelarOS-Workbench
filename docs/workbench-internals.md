@@ -568,7 +568,9 @@ Node 的 OOM 处理直接 `abort()` 主进程。实测 VelarOS-Platform：每个
 
 ▶ 菜单里的条目有两种来源：推出来的（`package.json` 脚本、最近跑过的命令，`workbenchRunConfigurations.ts`）和用户
 自己建的（`workbenchNamedRunConfigurations.ts`）。用户建的排在最前面，每份有名称、命令、工作目录（项目里的相对
-路径，空是项目根）和环境变量。
+路径，空是项目根）和环境变量。配置有两种（`type`）：一条 shell 命令；或者一个 Node 程序——脚本（项目里的相对
+路径）加参数，跑起来是 `node <脚本> <参数>`，脚本按工作目录写成相对路径。Node 程序还能调试（见下面的
+「Node.js 调试器」）。存着的配置里种类认不出来的当命令型。
 
 - **存在哪**：renderer 的 localStorage，键 `velaros.workbench.run-configurations.v1`，按项目 id 分（与命令历史同一种
   存法），不往用户的仓库里写文件。读出来的每一项重新校验：认不出的丢掉，工作目录不在项目里的退回项目根，环境

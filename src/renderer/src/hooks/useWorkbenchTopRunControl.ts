@@ -2,6 +2,7 @@ import { useCallback, useMemo } from 'react'
 import { useWorkbenchI18n } from '@renderer/i18n'
 import type { WorkbenchRunSessionLaunchOptions } from '@renderer/models/commands/workbenchCommandLines'
 import {
+  buildWorkbenchRunConfigurationCommand,
   buildWorkbenchRunConfigurationLaunch,
   type WorkbenchNamedRunConfiguration,
 } from '@renderer/models/commands/workbenchNamedRunConfigurations'
@@ -24,7 +25,7 @@ export interface WorkbenchRunSessionLike {
   command?: string
   id: string
   isRunning: boolean
-  launch?: Pick<WorkbenchRunSessionLaunchOptions, 'configurationId'>
+  launch?: Pick<WorkbenchRunSessionLaunchOptions, 'configurationId' | 'debug'>
 }
 
 interface UseWorkbenchTopRunControlOptions {
@@ -77,6 +78,12 @@ export interface WorkbenchTopRunControl {
   selectConfiguration: (configurationId: string) => void
   /** 直接跑一份运行配置，▶ 指着什么不变。 */
   runConfiguration: (configurationId: string) => void
+  /** ▶ 指着的是一个 Node 程序：旁边多一个「调试」。 */
+  canDebugActiveConfiguration: boolean
+  /** 调试 ▶ 指着的那份配置；它已经有一张调试卡在跑，就地重新开始。 */
+  debug: () => void
+  /** 调试一份运行配置（Node 程序），▶ 指着什么不变。 */
+  debugConfiguration: (configurationId: string) => void
   /** 打开「编辑运行配置」对话框。 */
   editConfigurations: () => void
 }
@@ -88,16 +95,18 @@ function isLaunchCommand(text: string): boolean {
 
 /**
  * 这条命令（或这份运行配置）最近一张还在跑的运行卡。给了 `configurationId` 就只认这份配置起的卡；不给则只认
- * 直接跑命令起的——同一条命令换了目录、变量是另一回事，不能互相顶替。
+ * 直接跑命令起的——同一条命令换了目录、变量是另一回事，不能互相顶替。运行与调试也分开认：`debug` 为真只找
+ * 调试卡，否则只找普通的运行卡。
  */
 export function findLastRunningWorkbenchRunSession(
   activeCommand: string,
   sessions: readonly WorkbenchRunSessionLike[],
-  configurationId?: string
+  configurationId?: string,
+  debug = false
 ): WorkbenchRunSessionLike | undefined {
   for (let index = sessions.length - 1; index >= 0; index -= 1) {
     const session = sessions[index]
-    if (!session?.isRunning) continue
+    if (!session?.isRunning || !!session.launch?.debug !== debug) continue
 
     const matches = configurationId
       ? session.launch?.configurationId === configurationId
@@ -128,6 +137,7 @@ export function useWorkbenchTopRunControl({
   const onSelectConfigurationLatest = useLatest(onSelectConfiguration)
   const onEditConfigurationsLatest = useLatest(onEditConfigurations)
   const namedConfigurationsLatest = useLatest(namedConfigurations)
+  const runningSessionsLatest = useLatest(runningSessions)
   const normalizedConfiguredCommand = configuredCommand.trim()
   const normalizedLastLaunched = lastLaunchedCommand.trim()
   const activeConfiguration = useMemo(
@@ -181,8 +191,12 @@ export function useWorkbenchTopRunControl({
     return launchOption?.value ?? options[0]?.value ?? ''
   }, [options])
   // 优先级：指着的运行配置 > 手动配置 > 最近运行 > 自动探测。让侧边栏 ▶ 记住上次跑过的命令。
+  const activeConfigurationCommand = useMemo(
+    () => (activeConfiguration ? buildWorkbenchRunConfigurationCommand(activeConfiguration) : ''),
+    [activeConfiguration]
+  )
   const activeCommand =
-    activeConfiguration?.command || normalizedConfiguredCommand || normalizedLastLaunched || autoCommand
+    activeConfigurationCommand || normalizedConfiguredCommand || normalizedLastLaunched || autoCommand
   const activeLabel = useMemo(
     () => options.find((option) => option.value === activeCommand)?.label,
     [activeCommand, options]
@@ -192,13 +206,16 @@ export function useWorkbenchTopRunControl({
     [activeCommand, activeConfiguration?.id, runningSessions]
   )
 
-  const launchConfiguration = useCallback((configuration: WorkbenchNamedRunConfiguration): void => {
-    onLaunchCommandLatest.current(
-      configuration.command,
-      configuration.name,
-      buildWorkbenchRunConfigurationLaunch(configuration)
-    )
-  }, [])
+  const launchConfiguration = useCallback(
+    (configuration: WorkbenchNamedRunConfiguration, debug = false): void => {
+      onLaunchCommandLatest.current(
+        buildWorkbenchRunConfigurationCommand(configuration),
+        debug ? t('workbench.debuggerRunCardTitle', { name: configuration.name }) : configuration.name,
+        buildWorkbenchRunConfigurationLaunch(configuration, debug)
+      )
+    },
+    [t]
+  )
 
   const run = useCallback((): void => {
     if (activeConfiguration) {
@@ -234,6 +251,30 @@ export function useWorkbenchTopRunControl({
     [launchConfiguration]
   )
 
+  const debugConfiguration = useCallback(
+    (configurationId: string): void => {
+      const configuration = namedConfigurationsLatest.current.find(
+        (candidate) => candidate.id === configurationId
+      )
+      if (configuration?.type !== 'node') return
+
+      // 这份配置已经有一张调试卡在跑：就地重新开始，不另开一张。
+      const running = findLastRunningWorkbenchRunSession(
+        '',
+        runningSessionsLatest.current,
+        configuration.id,
+        true
+      )
+      if (running) onRestartRunSessionLatest.current(running.id)
+      else launchConfiguration(configuration, true)
+    },
+    [launchConfiguration]
+  )
+
+  const debug = useCallback((): void => {
+    if (activeConfiguration) debugConfiguration(activeConfiguration.id)
+  }, [activeConfiguration, debugConfiguration])
+
   const editConfigurations = useCallback((): void => {
     onEditConfigurationsLatest.current()
   }, [])
@@ -252,6 +293,9 @@ export function useWorkbenchTopRunControl({
     configureCommand,
     selectConfiguration,
     runConfiguration,
+    canDebugActiveConfiguration: activeConfiguration?.type === 'node',
+    debug,
+    debugConfiguration,
     editConfigurations,
   }
 }
