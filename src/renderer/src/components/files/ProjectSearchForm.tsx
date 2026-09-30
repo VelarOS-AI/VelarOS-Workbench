@@ -194,24 +194,29 @@ export function ProjectSearchForm({
         )}
         {panel.detailsOpen && (
           <>
-            <Input
-              size="sm"
-              value={panel.include}
-              placeholder={t('workbench.projectSearchInclude')}
-              aria-label={t('workbench.projectSearchInclude')}
-              className={styles.projectSearchInput}
-              onChange={(event) => panel.setInclude(event.target.value)}
-              onKeyDown={(event) => void handleSharedKeys(event, false)}
-            />
-            <Input
-              size="sm"
-              value={panel.exclude}
-              placeholder={t('workbench.projectSearchExclude')}
-              aria-label={t('workbench.projectSearchExclude')}
-              className={styles.projectSearchInput}
-              onChange={(event) => panel.setExclude(event.target.value)}
-              onKeyDown={(event) => void handleSharedKeys(event, false)}
-            />
+            {/* 各占一行：输入框的宽度是按「一行里撑满」写的，直接放进这一列会被压扁。 */}
+            <div className={styles.projectSearchInputRow}>
+              <Input
+                size="sm"
+                value={panel.include}
+                placeholder={t('workbench.projectSearchInclude')}
+                aria-label={t('workbench.projectSearchInclude')}
+                className={styles.projectSearchInput}
+                onChange={(event) => panel.setInclude(event.target.value)}
+                onKeyDown={(event) => void handleSharedKeys(event, false)}
+              />
+            </div>
+            <div className={styles.projectSearchInputRow}>
+              <Input
+                size="sm"
+                value={panel.exclude}
+                placeholder={t('workbench.projectSearchExclude')}
+                aria-label={t('workbench.projectSearchExclude')}
+                className={styles.projectSearchInput}
+                onChange={(event) => panel.setExclude(event.target.value)}
+                onKeyDown={(event) => void handleSharedKeys(event, false)}
+              />
+            </div>
           </>
         )}
       </div>
