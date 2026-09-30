@@ -6,7 +6,7 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { realpath, stat } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { devNull, tmpdir } from 'node:os'
 import { isAbsolute, join } from 'node:path'
 
 import { execa } from 'execa'
@@ -14,6 +14,16 @@ import { execa } from 'execa'
 import { AppError } from '@velaros-ai/core/error'
 
 import { WorkbenchGitService } from './WorkbenchGitService'
+
+/**
+ * 探针给 Git 服务一份固定的环境，与应用注入登录 shell 环境走同一个口子：结果不看这台机器的 shell 配置，
+ * 也不受全局 git 配置影响（签名提交、别的默认分支名、别名……）。
+ */
+const ProbeGitEnvironment: NodeJS.ProcessEnv = {
+  ...process.env,
+  GIT_CONFIG_GLOBAL: devNull,
+  GIT_CONFIG_NOSYSTEM: '1',
+}
 
 let assertionCount = 0
 
@@ -49,7 +59,7 @@ async function runGitProbe(): Promise<void> {
   mkdirSync(projectRoot)
   mkdirSync(secondRoot)
   const canonicalProjectRoot = await realpath(projectRoot)
-  const service = new WorkbenchGitService()
+  const service = new WorkbenchGitService({ environment: async () => ProbeGitEnvironment })
   try {
     const empty = await service.getSummary(projectRoot)
     check(!empty.repository, '非 Git 目录应返回 repository=false')
@@ -132,6 +142,7 @@ async function runGitProbe(): Promise<void> {
 
     await execa('git', ['mv', 'alpha file.txt', 'renamed file.txt'], {
       cwd: projectRoot,
+      env: ProbeGitEnvironment,
     })
     const renamed = await service.getSummary(projectRoot)
     equal(renamed.status?.entries[0]?.path, 'renamed file.txt', 'rename 目标路径')
@@ -203,9 +214,11 @@ async function removeProbeDirectory(rootPath: string): Promise<void> {
 async function configureIdentity(rootPath: string): Promise<void> {
   await execa('git', ['config', 'user.email', 'workbench-probe@velaros.local'], {
     cwd: rootPath,
+    env: ProbeGitEnvironment,
   })
   await execa('git', ['config', 'user.name', 'VelarOS Workbench Probe'], {
     cwd: rootPath,
+    env: ProbeGitEnvironment,
   })
 }
 

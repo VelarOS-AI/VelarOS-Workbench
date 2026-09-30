@@ -79,7 +79,16 @@ function sanitizeRefSegment(value: string): string {
 export class WorkbenchChatCheckpointService {
   private readonly rootQueues = new Map<string, Promise<unknown>>()
 
-  constructor(private readonly indexRootDir: () => string) {}
+  /**
+   * `environment`：git 命令的基础环境。应用给的是登录 shell 的环境（与 Git 服务同一份）：`git add` 要跑
+   * 仓库配置的 clean 过滤器（git-lfs 之类），从程序坞启动时应用自己的 PATH 里找不到它们，整次捕获就失败、
+   * 这一轮没有改动卡。不给时用应用自己的环境。
+   */
+  constructor(
+    private readonly indexRootDir: () => string,
+    private readonly environment: () => Promise<NodeJS.ProcessEnv> = () =>
+      Promise.resolve(process.env)
+  ) {}
 
   public async capture(
     request: WorkbenchChatCheckpointCaptureRequest
@@ -246,7 +255,13 @@ export class WorkbenchChatCheckpointService {
     const result = await execa('git', args, {
       cwd: root,
       // 解析 git 输出必须钉死 C locale；也不允许任何交互式凭据提示把进程挂住。
-      env: { ...process.env, GIT_TERMINAL_PROMPT: '0', LC_ALL: 'C', LANG: 'C', ...extraEnv },
+      env: {
+        ...(await this.readBaseEnvironment()),
+        GIT_TERMINAL_PROMPT: '0',
+        LC_ALL: 'C',
+        LANG: 'C',
+        ...extraEnv,
+      },
       maxBuffer: GitOutputMaxBytes,
       reject: false,
       stripFinalNewline: !options.keepFinalNewline,
@@ -264,6 +279,15 @@ export class WorkbenchChatCheckpointService {
       )
     }
     return result.stdout
+  }
+
+  private async readBaseEnvironment(): Promise<NodeJS.ProcessEnv> {
+    try {
+      return await this.environment()
+    } catch {
+      // arch-guard:silent-catch-ok 登录环境读不出来（比如应用正在退出）时退回应用自己的环境：git 照样能跑，只是过滤器可能缺 PATH。
+      return process.env
+    }
   }
 }
 

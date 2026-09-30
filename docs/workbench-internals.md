@@ -219,6 +219,22 @@ GB18030、混用的换行符），编辑器据此只读打开，用户明确选�
 - 快速打开按文件名找文件用的是另一份清单（`SearchIndex.listProjectFiles`）：不看 .gitignore，文件树里看得到
   的都列；内容搜索的清单听 .gitignore 的。
 
+## Git
+
+提交面板、底部的 Git 工具窗、编辑区里的差异与改动标记都走主进程的 `WorkbenchGitService`
+（`src/main/workspace/git/`）：每个操作起 `git` 子进程、解析它的输出。数据形状在
+`src/shared/contracts/workspaceGit.ts`，IPC 通道与请求在 `src/shared/workbenchGit.ts`
+（`workbench-app:git:*`，入参在 `WorkbenchGitIpc.ts` 里逐项校验）。
+
+- **环境**：登录 shell 的环境全应用只解析一次（`src/main/index.ts` 的 `createShellEnvironment()`，第一次
+  用到才起登录 shell，不拖慢启动；读不出来退回应用自己的环境），Agent 的命令、外部引擎和 Git 共用这一个
+  实例。`WorkbenchGitService` 与拍检查点的 `WorkbenchChatCheckpointService` 都从构造参数拿它
+  （`environment`），所以从程序坞启动时提交钩子（husky）、git-lfs 这类过滤器、nvm 装的 node 也找得到；
+  测试与探针（`gitProbe.ts`）给的是一份固定的环境，不看这台机器的 shell 配置。
+- **输出**：每条命令带 `GitOutputConfig`（`core.quotePath=false`、固定的 diff 前缀、不着色……）并钉死
+  C locale，解析不跟着用户的 git 配置和界面语言变；列路径的命令一律 `-z`，中文文件名不会被转义。
+- **范围**：项目可以是仓库里的一个子目录。命令在项目根下跑，状态、差异、提交只看项目里的文件。
+
 ## 语言服务与磁盘的同步
 
 编辑器的诊断由主进程的语言服务 worker 计算（内置 TypeScript 项目、ESLint、外部 LSP）。

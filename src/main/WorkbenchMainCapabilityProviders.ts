@@ -43,13 +43,17 @@ export interface WorkbenchMainCapabilityProviders {
 export function createDefaultWorkbenchMainCapabilityProviders(
   dataRootDir: string,
   dependencies: WorkbenchAppPartsDependencies,
-  /** 登录 shell 的环境：Git 命令连同它跑的提交钩子、git-lfs 都跑在里面。 */
+  /**
+   * 登录 shell 的环境：Git 命令连同它跑的提交钩子、git-lfs 都跑在里面；拍检查点的 `git add` 要跑仓库配置的
+   * 过滤器，也用这一份。
+   */
   loginEnvironment: () => Promise<NodeJS.ProcessEnv>
 ): WorkbenchMainCapabilityProviders {
   const language = new WorkbenchLanguageServiceWorkerClient()
   const parts = createWorkbenchAppParts(dataRootDir, dependencies)
-  const chatCheckpoints = new WorkbenchChatCheckpointService(() =>
-    parts.storagePaths.getChatCheckpointIndexesDir()
+  const chatCheckpoints = new WorkbenchChatCheckpointService(
+    () => parts.storagePaths.getChatCheckpointIndexesDir(),
+    loginEnvironment
   )
   const watch = new WorkbenchFileWatcher({
     onFilesChanged: (event) => {
