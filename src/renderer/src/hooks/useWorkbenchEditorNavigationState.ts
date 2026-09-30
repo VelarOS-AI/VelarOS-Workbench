@@ -120,7 +120,7 @@ export function useWorkbenchEditorNavigationState({
     path: string,
     line: number,
     column?: number,
-    options?: Pick<EditorNavigationRequest, 'endLine' | 'focus'>
+    options?: Pick<EditorNavigationRequest, 'endLine' | 'endColumn' | 'focus'>
   ): Promise<void> {
     recordNavigationPoint()
     await openLocation(path, line, column, options)
@@ -138,7 +138,7 @@ export function useWorkbenchEditorNavigationState({
     path: string,
     line: number,
     column?: number,
-    options?: Pick<EditorNavigationRequest, 'endLine' | 'focus'>
+    options?: Pick<EditorNavigationRequest, 'endLine' | 'endColumn' | 'focus'>
   ): Promise<void> {
     setDiffItem(null)
     setDiffFocusFirstChangeRequestId(0)
@@ -153,6 +153,7 @@ export function useWorkbenchEditorNavigationState({
       line,
       column,
       endLine: optionalWhen(isPositiveNumber, options?.endLine),
+      endColumn: optionalWhen(isPositiveNumber, options?.endColumn),
       focus: optionalWhen(isFalse, options?.focus),
     }))
   }

@@ -333,6 +333,35 @@ export function useWorkbenchEditorController({
     return { changedFiles, failures }
   }
 
+  /**
+   * 项目搜索的替换落到开着的文件上：在标签的正文上换，不写盘。当前文件由编辑器按一次外部改动套进来，别的标签
+   * 切回来时同样套进来，都能 ⌘Z 撤回；没保存的改动还在，替换是在它们上面做的。只读的标签不换。
+   * 返回换了的与只读没换的路径；没开着的路径两边都不在，调用方交给磁盘替换。
+   */
+  const replaceOpenTabContents = useMemoizedFn(
+    (
+      changes: ReadonlyArray<{ path: string; replace: (content: string) => string }>
+    ): { replacedPaths: string[]; readOnlyPaths: string[] } => {
+      const replacedPaths: string[] = []
+      const readOnlyPaths: string[] = []
+      for (const change of changes) {
+        const tab = openTabsByPathLatest.current.get(change.path)
+        if (!tab) continue
+        if (!isWorkbenchFileEditable(tab.file, chosenEditModes.get(tab.path))) {
+          readOnlyPaths.push(change.path)
+          continue
+        }
+
+        const nextContent = change.replace(tab.content)
+        if (nextContent === tab.content) continue
+        updateOpenTabContent(tab.file, nextContent)
+        if (selectedFilePathRef.current === change.path) setEditorContent(nextContent)
+        replacedPaths.push(change.path)
+      }
+      return { replacedPaths, readOnlyPaths }
+    }
+  )
+
   function warnUnsavedChanges(): void {
     messageLatest.current.warning({
       title: tLatest.current('workbench.unsavedChangesTitle'),
@@ -1651,6 +1680,7 @@ export function useWorkbenchEditorController({
     setEditorContent: updateEditorContent,
     applyLanguageServiceFileChanges,
     applyLanguageServiceRename,
+    replaceOpenTabContents,
     ensureNoUnsavedChanges,
     ensureNoUnsavedFilesInPath,
     resetSelectedFile,

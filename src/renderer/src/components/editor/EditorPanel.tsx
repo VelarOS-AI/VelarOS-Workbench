@@ -79,6 +79,7 @@ import type {
 } from '@shared/contracts'
 import { normalizeWorkbenchTextEol, type WorkbenchTextFormat } from '@shared/workbenchTextFormat'
 import { DefaultWorkbenchTextFormat } from '@shared/workbenchTextFormat'
+import { resolveWorkbenchTextOffset } from '@shared/workbenchTextSearch'
 
 import { useWorkbenchGitBlame } from '../../hooks/useWorkbenchGitBlame'
 import { useWorkbenchGitHeadContent } from '../../hooks/useWorkbenchGitHeadContent'
@@ -320,6 +321,7 @@ export function EditorPanel({
   } = workbenchEditor
   const { t } = useWorkbenchI18n()
   const onCursorPositionLatest = useLatest(onCursorPositionChange)
+  const editorContentLatest = useLatest(editorContent)
   const editorRef = useRef<CodeMirrorEditorHandle>(null)
   const appliedNavigationRequestIdRef = useRef<Nullable<number>>(null)
   const [isFindOpen, setIsFindOpen] = useState(false)
@@ -538,7 +540,6 @@ export function EditorPanel({
   const selectedExternalChange = toNullable(selectedTab?.externalChange)
   // Git 追溯栏：开着就一直开着，换文件时查新文件的（截断打开的文件行号对不上，不查）。
   const [gitBlameVisible, setGitBlameVisible] = useState(false)
-  const editorContentLatest = useLatest(editorContent)
   const gitBlame = useWorkbenchGitBlame({
     projectRoot,
     path:
@@ -696,14 +697,22 @@ export function EditorPanel({
     timers.nextFrame(
       () => {
         const options = { focus: navigationRequest.focus }
-        if (navigationRequest.endLine)
+        if (navigationRequest.endColumn) {
+          // 行列按编辑器里的正文换成偏移（与编辑器同样的 LF 正文）。
+          const content = editorContentLatest.current
+          const endLine = navigationRequest.endLine ?? navigationRequest.line
+          editorRef.current?.selectRange(
+            resolveWorkbenchTextOffset(content, navigationRequest.line, navigationRequest.column ?? 1),
+            resolveWorkbenchTextOffset(content, endLine, navigationRequest.endColumn)
+          )
+        } else if (navigationRequest.endLine)
           editorRef.current?.selectLines(navigationRequest.line, navigationRequest.endLine, options)
         else
           editorRef.current?.moveToLine(navigationRequest.line, navigationRequest.column, options)
       },
       { label: 'workbench.editor.navigationRequest' }
     )
-  }, [navigationRequest, selectedFile, timers])
+  }, [editorContentLatest, navigationRequest, selectedFile, timers])
 
   useEffect(() => {
     if (

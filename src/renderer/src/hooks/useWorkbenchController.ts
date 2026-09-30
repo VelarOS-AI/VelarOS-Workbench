@@ -350,6 +350,8 @@ export function useWorkbenchController(options: UseWorkbenchControllerOptions = 
     clearPendingSessionNavigation,
     applyLanguageServiceFileChanges: editor.applyLanguageServiceFileChanges,
     applyLanguageServiceRename: editor.applyLanguageServiceRename,
+    /** 项目搜索的替换落到开着的文件上（在标签正文上换，能撤销，不写盘）。 */
+    replaceOpenTabContents: editor.replaceOpenTabContents,
     setEditorContent: editor.setEditorContent,
     setTreeActionName: mutation.setTreeActionName,
     setSearchQuery: search.setSearchQuery,
