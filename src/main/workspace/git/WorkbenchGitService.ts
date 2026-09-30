@@ -58,6 +58,7 @@ import { DefaultWorkbenchTextFormat, type WorkbenchTextFormat } from '@shared/wo
 import {
   type WorkbenchMainMessageKey,
   workbenchMainText,
+  workbenchMainTextIn,
 } from '../../i18n/workbenchMainMessages'
 import {
   getRelativePathInsideRoot,
@@ -1659,27 +1660,20 @@ export class WorkbenchGitService {
     )
   }
 
+  /** 没写说明时代拟的提交说明，按请求带来的界面语言写（它要写进仓库，不跟 main 此刻的界面语言走）。 */
   private createCommitMessage(status: WorkspaceGitStatusResult, locale: AppLocale): string {
     const entry = status.entries[0]
     const target =
       status.entries.length === 1
         ? entry?.path.split('/').findLast(Boolean) ?? 'workspace'
-        : locale === 'zh-CN'
-          ? `${status.entries.length} 个文件`
-          : `${status.entries.length} files`
-    const action =
+        : workbenchMainTextIn(locale, 'git.commitMessageFiles', { count: status.entries.length })
+    const key: WorkbenchMainMessageKey =
       entry?.indexStatus === 'A' || entry?.indexStatus === '?'
-        ? locale === 'zh-CN'
-          ? '新增'
-          : 'Add'
+        ? 'git.commitMessageAdd'
         : entry?.indexStatus === 'D' || entry?.workTreeStatus === 'D'
-          ? locale === 'zh-CN'
-            ? '删除'
-            : 'Remove'
-          : locale === 'zh-CN'
-            ? '更新'
-            : 'Update'
-    const subject = `${action} ${target}`
+          ? 'git.commitMessageRemove'
+          : 'git.commitMessageUpdate'
+    const subject = workbenchMainTextIn(locale, key, { target })
     return subject.length <= CommitSubjectMaxChars
       ? subject
       : `${subject.slice(0, CommitSubjectMaxChars - 3).trimEnd()}...`

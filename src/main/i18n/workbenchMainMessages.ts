@@ -272,6 +272,10 @@ const zhCN = {
   'git.statusTooLarge': '项目里的改动太多，Git 状态超过 {size} MB，无法显示。请检查 .gitignore 是否漏掉了 node_modules、构建产物这类目录。',
   'git.rebaseInProgress': '正在变基：解决冲突并标记为已解决后，请在终端里继续变基（git rebase --continue），或放弃这次变基（git rebase --abort），不要在这里提交。',
   'git.nothingToCommit': '当前项目没有可提交的改动。',
+  'git.commitMessageAdd': '新增 {target}',
+  'git.commitMessageRemove': '删除 {target}',
+  'git.commitMessageUpdate': '更新 {target}',
+  'git.commitMessageFiles': '{count} 个文件',
   'git.conflictsBlockCommit': '{paths}还有未解决的合并冲突。请先解决冲突并标记为已解决，再提交。',
   'git.repositoryLocationUnknown': '读不到项目所在仓库的位置。',
   'git.conflictMarkersLeft': '“{path}”里还有冲突标记（<<<<<<< 或 >>>>>>>），请先解决冲突再标记为已解决。',
@@ -582,6 +586,10 @@ const enUS: Record<WorkbenchMainMessageKey, string> = {
   'git.statusTooLarge': 'The project has too many changes: its Git status is over {size} MB and cannot be shown. Check whether .gitignore misses folders such as node_modules or build output.',
   'git.rebaseInProgress': 'A rebase is in progress. After resolving the conflicts and marking them resolved, continue it in the terminal (git rebase --continue) or abort it (git rebase --abort). Don\'t commit here.',
   'git.nothingToCommit': 'The project has no changes to commit.',
+  'git.commitMessageAdd': 'Add {target}',
+  'git.commitMessageRemove': 'Remove {target}',
+  'git.commitMessageUpdate': 'Update {target}',
+  'git.commitMessageFiles': '{count} files',
   'git.conflictsBlockCommit': '{paths} still have unresolved merge conflicts. Resolve them and mark them resolved before committing.',
   'git.repositoryLocationUnknown': 'Could not find the repository that contains the project.',
   'git.conflictMarkersLeft': '"{path}" still contains conflict markers (<<<<<<< or >>>>>>>). Resolve the conflict before marking it resolved.',
@@ -638,7 +646,19 @@ export function workbenchMainText(
   key: WorkbenchMainMessageKey,
   params?: Readonly<Record<string, string | number>>
 ): string {
-  const template = messages[getWorkbenchMainLocale()][key]
+  return workbenchMainTextIn(getWorkbenchMainLocale(), key, params)
+}
+
+/**
+ * 按指定的语言出文字，不看 main 进程此刻的界面语言。给写进用户仓库里的内容用（没写说明时代拟的提交说明）：
+ * 它按发起请求的界面带来的语言写。
+ */
+export function workbenchMainTextIn(
+  locale: AppLocale,
+  key: WorkbenchMainMessageKey,
+  params?: Readonly<Record<string, string | number>>
+): string {
+  const template = messages[locale][key]
   return params
     ? template.replace(/\{(\w+)\}/gu, (placeholder, name: string) =>
         params[name] === undefined ? placeholder : String(params[name])

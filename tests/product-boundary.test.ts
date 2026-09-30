@@ -11,6 +11,7 @@ import {
   workbenchHost,
   WorkbenchHostRuntime,
 } from '../src/renderer/src/host/WorkbenchHost'
+import { translateWorkbenchAppMessage } from '../src/renderer/src/i18n/useStandaloneWorkbenchLocalization'
 import { WorkbenchCommentStore } from '../src/renderer/src/models/comments/workbenchCommentStore'
 import {
   buildWorkbenchGitChangeItems,
@@ -236,7 +237,12 @@ void describe('Workbench product boundary', () => {
     const decoration = buildWorkbenchGitDecorationMap(items).get('src')
     assert.equal(decoration?.isDirectory, true)
     assert.equal(decoration?.tone, 'modified')
-    assert.equal(buildWorkbenchGitCommitDraft([items[1]], 'zh-CN'), '添加 README.md')
+    assert.equal(
+      buildWorkbenchGitCommitDraft([items[1]], (key, params) =>
+        translateWorkbenchAppMessage('zh-CN', key, params)
+      ),
+      '添加 README.md'
+    )
   })
 
   void test('Office files remain read-only binary previews', async () => {

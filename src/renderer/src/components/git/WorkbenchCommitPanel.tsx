@@ -179,9 +179,9 @@ export function WorkbenchCommitPanel({
           : selectedItems.length > 0
             ? selectedItems
             : changeItems,
-        locale
+        t
       ),
-    [changeItems, commitMode, locale, selectedItems, stagedItems]
+    [changeItems, commitMode, selectedItems, stagedItems, t]
   )
   const conflictNames = describeConflictNames(conflictItems)
   const rollbackDeletions = rollbackRequest?.filter(isCommitPanelRollbackDeletion) ?? []

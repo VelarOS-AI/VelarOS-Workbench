@@ -1,5 +1,7 @@
-import type { AppLocale, WorkspaceGitFileStatusEntry } from '@shared/contracts'
+import type { WorkspaceGitFileStatusEntry } from '@shared/contracts'
 import { isWorkspaceGitConflictEntry } from '@shared/workbenchGit'
+
+import type { WorkbenchI18nContextValue } from '../../i18n'
 
 /**
  * 一个文件的改动落在哪一侧：`staged` 暂存区相对 HEAD，`unstaged` 工作区相对暂存区，`untracked` 未跟踪，
@@ -156,11 +158,13 @@ export function buildWorkbenchGitChangeItems(
     )
 }
 
+/**
+ * 提交说明输入框里的草稿（占位文字），按这次会提交的文件拟。字从文案表出（`t`），跟着界面语言走。
+ */
 export function buildWorkbenchGitCommitDraft(
   changeItems: WorkbenchGitChangeItem[],
-  locale: AppLocale
+  t: WorkbenchI18nContextValue['t']
 ): string {
-  const isChinese = locale.startsWith('zh')
   // 暂存了一部分的文件两侧各一条，按文件算。
   const seenPaths = new Set<string>()
   const items: WorkbenchGitChangeItem[] = []
@@ -173,17 +177,17 @@ export function buildWorkbenchGitCommitDraft(
 
   if (items.length === 1) {
     const [item] = items
-    if (item.group === 'untracked')
-      return isChinese ? `添加 ${item.fileName}` : `Add ${item.fileName}`
+    const file = item.fileName
+    if (item.group === 'untracked') return t('workbench.gitCommitDraftAdd', { file })
 
     if (item.indexStatus === 'D' || item.workTreeStatus === 'D')
-      return isChinese ? `删除 ${item.fileName}` : `Remove ${item.fileName}`
+      return t('workbench.gitCommitDraftRemove', { file })
 
-    return isChinese ? `更新 ${item.fileName}` : `Update ${item.fileName}`
+    return t('workbench.gitCommitDraftUpdate', { file })
   }
 
   if (hasOnlyGroup(items, 'untracked'))
-    return isChinese ? `添加 ${items.length} 个文件` : `Add ${items.length} files`
+    return t('workbench.gitCommitDraftAddFiles', { count: items.length })
 
   const firstDirectory = items[0]?.path.split('/')[0] ?? ''
   const sharedDirectory =
@@ -192,9 +196,9 @@ export function buildWorkbenchGitCommitDraft(
       : null
 
   if (sharedDirectory)
-    return isChinese ? `更新 ${sharedDirectory} 相关改动` : `Update ${sharedDirectory} changes`
+    return t('workbench.gitCommitDraftUpdateDirectory', { directory: sharedDirectory })
 
-  return isChinese ? `更新 ${items.length} 个文件` : `Update ${items.length} files`
+  return t('workbench.gitCommitDraftUpdateFiles', { count: items.length })
 }
 
 export function buildWorkbenchGitDecorationMap(
