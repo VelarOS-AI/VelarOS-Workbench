@@ -39,7 +39,6 @@ import {
 } from './components/embedded/workbenchEmbeddedKernelAdapter'
 import { WorkbenchFileTypeIcon } from './components/files/WorkbenchFileTypeIcon'
 import { WorkbenchGitToolPanel } from './components/git/WorkbenchGitToolPanel'
-import { WorkbenchSettingsDialog } from './components/settings/WorkbenchSettingsDialog'
 import { type BottomTool, CommandPanel } from './components/terminal/CommandPanel'
 import { useWorkbenchTerminalFileLinks } from './hooks/useWorkbenchTerminalFileLinks'
 import { useWorkbenchWindowFullScreen } from './hooks/useWorkbenchWindowFullScreen'
@@ -76,6 +75,26 @@ function loadQuickOpenModule(): Promise<QuickOpenModule> {
 const LazyQuickOpen = lazy(async () => {
   const module = await loadQuickOpenModule()
   return { default: module.QuickOpen }
+})
+
+type SettingsDialogModule = typeof import('./components/settings/WorkbenchSettingsDialog')
+
+let settingsDialogModulePromise: Nullable<Promise<SettingsDialogModule>> = null
+
+// 设置对话框很少打开，也不进工作区外壳：空闲时预先加载，第一次打开不用等。
+function loadSettingsDialogModule(): Promise<SettingsDialogModule> {
+  settingsDialogModulePromise ??= import('./components/settings/WorkbenchSettingsDialog').catch(
+    (error: unknown) => {
+      settingsDialogModulePromise = null
+      throw error
+    }
+  )
+  return settingsDialogModulePromise
+}
+
+const LazyWorkbenchSettingsDialog = lazy(async () => {
+  const module = await loadSettingsDialogModule()
+  return { default: module.WorkbenchSettingsDialog }
 })
 
 interface StandaloneWorkbenchPagePresentationProps {
@@ -137,6 +156,9 @@ export function StandaloneWorkbenchPagePresentation({
       ? buildWorkbenchStatusBarTextFormat(selectedEditorTab, workbench.selectedFileEditMode)
       : null
   const [velarManifestPaths, setVelarManifestPaths] = useState<readonly string[]>([])
+  // 设置对话框第一次打开时才挂上，之后一直挂着（关的时候还要播退场动画）。
+  const [settingsMounted, setSettingsMounted] = useState(false)
+  if (dialogs.settingsOpen && !settingsMounted) setSettingsMounted(true)
   /** 全项目扫出来的 VelarScript 源文件；结构树的完整性靠它，不靠「你打开过什么」。 */
   const [velarSourcePaths, setVelarSourcePaths] = useState<readonly string[]>([])
   const [velarStructureScopeTabs, setVelarStructureScopeTabs] =
@@ -305,6 +327,7 @@ export function StandaloneWorkbenchPagePresentation({
 
     const handle = window.requestIdleCallback(() => {
       void loadQuickOpenModule().catch(() => undefined)
+      void loadSettingsDialogModule().catch(() => undefined)
     })
     return () => window.cancelIdleCallback(handle)
   }, [])
@@ -887,25 +910,29 @@ export function StandaloneWorkbenchPagePresentation({
           saving={workbench.isResolvingCloseRequest}
           onResolve={(choice) => void workbench.resolveCloseRequest(choice)}
         />
-        <WorkbenchSettingsDialog
-          open={dialogs.settingsOpen}
-          preferences={workbenchPreferences.preferences}
-          keymap={workbenchKeymap.keymap}
-          conflicts={workbenchKeymap.conflicts}
-          locale={locale}
-          project={{
-            name: workbench.activeProject.name,
-            rootPath: workbench.activeProject.rootPath,
-          }}
-          onExitProject={model.actions.exitCurrentProject}
-          onOpenChange={dialogs.setSettingsOpen}
-          onPreferencesChange={workbenchPreferences.updatePreferences}
-          onResetPreferences={workbenchPreferences.resetPreferences}
-          onSetShortcut={workbenchKeymap.setShortcut}
-          onResetShortcut={workbenchKeymap.resetShortcut}
-          onResetAllShortcuts={workbenchKeymap.resetAllShortcuts}
-          onLocaleChange={(nextLocale) => void translate.setLocale(nextLocale)}
-        />
+        {settingsMounted && (
+          <Suspense fallback={null}>
+            <LazyWorkbenchSettingsDialog
+              open={dialogs.settingsOpen}
+              preferences={workbenchPreferences.preferences}
+              keymap={workbenchKeymap.keymap}
+              conflicts={workbenchKeymap.conflicts}
+              locale={locale}
+              project={{
+                name: workbench.activeProject.name,
+                rootPath: workbench.activeProject.rootPath,
+              }}
+              onExitProject={model.actions.exitCurrentProject}
+              onOpenChange={dialogs.setSettingsOpen}
+              onPreferencesChange={workbenchPreferences.updatePreferences}
+              onResetPreferences={workbenchPreferences.resetPreferences}
+              onSetShortcut={workbenchKeymap.setShortcut}
+              onResetShortcut={workbenchKeymap.resetShortcut}
+              onResetAllShortcuts={workbenchKeymap.resetAllShortcuts}
+              onLocaleChange={(nextLocale) => void translate.setLocale(nextLocale)}
+            />
+          </Suspense>
+        )}
       </div>
       {/* 第一次要打开时才挂上（请求序号从 1 起），之后一直挂着：关着时渲染为空，输入与状态留到下次。 */}
       {surface.quickOpenRequest.id > 0 && (
