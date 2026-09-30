@@ -1,15 +1,19 @@
 /**
- * 编辑器里「运行 / 调试」相关的扩展：测试文件的 ▶ 栏。编辑器组件只管把这里给的扩展挂进一个 compartment，
- * 认运行器、拼命令、记结果都不在组件里。
+ * 编辑器里「运行 / 调试」相关的扩展：测试文件的 ▶ 栏（运行与调试），JavaScript / TypeScript 文件行号上的断点，
+ * 调试停下时高亮的那一行和悬停看值。编辑器组件只管把这里给的扩展挂进一个 compartment，认运行器、拼命令、
+ * 记结果、存断点、问调试会话都不在组件里。
  */
 import { useEffect, useMemo, useState } from 'react'
 import type { Extension } from '@codemirror/state'
-import type { EditorView } from '@codemirror/view'
+import { type EditorView, ViewPlugin } from '@codemirror/view'
 
 import type { WorkbenchHostRuntime } from '../host'
 import { useWorkbenchI18n } from '../i18n'
+import type { WorkbenchRunSessionLaunchOptions } from '../models/commands/workbenchCommandLines'
 import { launchWorkbenchRunSession } from '../models/commands/workbenchRunSessionBridge'
+import { isWorkbenchWindowsHost } from '../models/commands/workbenchShellQuote'
 import {
+  buildWorkbenchTestDebugTarget,
   buildWorkbenchTestRunCommand,
   detectWorkbenchTestRunner,
   isWorkbenchJavaScriptTestFilePath,
@@ -17,6 +21,21 @@ import {
   readWorkbenchTestRunnerImport,
   type WorkbenchTestRunnerDetection,
 } from '../models/commands/workbenchTestRunner'
+import {
+  isWorkbenchDebuggableFilePath,
+  readWorkbenchBreakpointLines,
+  setWorkbenchBreakpointLines,
+  subscribeWorkbenchBreakpoints,
+} from '../models/debug/workbenchBreakpoints'
+import {
+  getWorkbenchDebugSession,
+  readWorkbenchDebugPausedLine,
+  workbenchBreakpointKey,
+} from '../models/debug/workbenchDebugSession'
+import { createWorkbenchBreakpointGutterExtension } from '../models/editor/workbenchBreakpointGutter'
+import { createWorkbenchDebugHoverExtension } from '../models/editor/workbenchDebugHover'
+import { createWorkbenchDebugPausedLineExtension } from '../models/editor/workbenchDebugPausedLine'
+import { focusWorkbenchEditorActions } from '../models/editor/workbenchEditorActions'
 import {
   createWorkbenchTestRunGutterExtension,
   type WorkbenchTestRunTarget,
@@ -130,7 +149,26 @@ function useWorkbenchTestRunnerDetection({
   )
 }
 
-export function useWorkbenchEditorRunDebugExtension({
+/**
+ * 命令面板里「眼前这个编辑器」的动作归最近得到焦点的编辑器（编辑区可以拆成左右两组）：焦点进来就登记一下。
+ */
+const focusedEditorTracker = ViewPlugin.fromClass(
+  class {
+    public constructor(view: EditorView) {
+      if (view.hasFocus) focusWorkbenchEditorActions(view)
+    }
+  },
+  {
+    eventHandlers: {
+      focus(_event, view) {
+        focusWorkbenchEditorActions(view)
+      },
+    },
+  }
+)
+
+/** 测试文件的 ▶ 栏：认出了运行器才有。 */
+function useWorkbenchTestRunExtension({
   projectRoot,
   path,
   disabled,
@@ -150,7 +188,8 @@ export function useWorkbenchEditorRunDebugExtension({
 
     const resultKey = (target: WorkbenchTestRunTarget): string =>
       workbenchTestRunResultKey(projectRoot, path, target.pattern ?? '')
-    const run = (target: WorkbenchTestRunTarget, view: EditorView): void => {
+    /** 起一张卡跑（或调试）这个目标；标记跟着这张卡的结果走。 */
+    const launch = (target: WorkbenchTestRunTarget, view: EditorView, debug: boolean): void => {
       // 两个运行器都有依据时，看这个文件自己引的是哪个。
       const runner = pickWorkbenchTestRunner(
         detection.evidence,
@@ -158,16 +197,21 @@ export function useWorkbenchEditorRunDebugExtension({
       )
       if (!runner) return
 
-      const command = buildWorkbenchTestRunCommand({
+      const test = {
         project: { ...detection, runner },
         filePath: path,
         pattern: target.pattern,
-        windows: /\bWindows\b/iu.test(navigator.userAgent),
-      })
+        windows: isWorkbenchWindowsHost(),
+      }
+      const name = target.title || fileNameOf(path)
+      const options: WorkbenchRunSessionLaunchOptions = {}
+      if (detection.packageDir) options.cwd = detection.packageDir
+      if (debug) options.debug = { target: buildWorkbenchTestDebugTarget(test) }
       void launchWorkbenchRunSession(
-        command,
-        target.title || fileNameOf(path),
-        detection.packageDir ? { cwd: detection.packageDir } : undefined
+        // 调试时这条命令只是卡片上写的那一行：真正执行的由调试器带着检查器去起。
+        buildWorkbenchTestRunCommand(test),
+        debug ? t('workbench.debuggerRunCardTitle', { name }) : name,
+        options
       ).then((sessionId) => {
         if (sessionId) trackWorkbenchTestRun(resultKey(target), sessionId)
       })
@@ -178,6 +222,9 @@ export function useWorkbenchEditorRunDebugExtension({
         runFile: t('workbench.editorTestRunFile'),
         runTest: (title) => t('workbench.editorTestRun', { title }),
         runSuite: (title) => t('workbench.editorTestRunSuite', { title }),
+        debugFile: t('workbench.editorTestDebugFile'),
+        debugTest: (title) => t('workbench.editorTestDebug', { title }),
+        debugSuite: (title) => t('workbench.editorTestDebugSuite', { title }),
         status: {
           running: t('workbench.editorTestStatusRunning'),
           passed: t('workbench.editorTestStatusPassed'),
@@ -186,7 +233,60 @@ export function useWorkbenchEditorRunDebugExtension({
       },
       readStatus: (target) => readWorkbenchTestRunStatus(resultKey(target)),
       subscribeStatus: subscribeWorkbenchTestRunResults,
-      onRun: run,
+      onRun: (target, view) => launch(target, view, false),
+      onDebug: (target, view) => launch(target, view, true),
     })
   }, [detection, disabled, path, projectRoot, t])
+}
+
+/** 断点、停下时的那一行、悬停看值：JavaScript / TypeScript 文件才有。 */
+function useWorkbenchDebugEditorExtension({
+  projectRoot,
+  path,
+  disabled,
+}: Pick<UseWorkbenchEditorRunDebugOptions, 'projectRoot' | 'path' | 'disabled'>): Extension {
+  return useMemo(() => {
+    if (!path || disabled || !isWorkbenchDebuggableFilePath(path)) return []
+
+    const session = getWorkbenchDebugSession()
+    const pausedLine = (): ReturnType<typeof readWorkbenchDebugPausedLine> =>
+      readWorkbenchDebugPausedLine(session.getSnapshot(), projectRoot, path)
+    return [
+      createWorkbenchBreakpointGutterExtension({
+        readLines: () => readWorkbenchBreakpointLines(projectRoot, path),
+        writeLines: (lines) => setWorkbenchBreakpointLines(projectRoot, path, lines),
+        subscribeLines: subscribeWorkbenchBreakpoints,
+        readVerified: (line) => {
+          const snapshot = session.getSnapshot()
+          if (snapshot.session?.projectRoot !== projectRoot) return null
+          return snapshot.breakpointStatuses.get(workbenchBreakpointKey(path, line))?.verified ?? null
+        },
+        subscribeVerified: session.subscribe,
+      }),
+      createWorkbenchDebugPausedLineExtension({
+        readPausedLine: pausedLine,
+        subscribe: session.subscribe,
+      }),
+      createWorkbenchDebugHoverExtension({
+        // 只在选中的那一帧所在的文件里求值：别的文件里同名的变量不是一回事。
+        isActive: () => pausedLine() !== null,
+        evaluate: async (expression) => {
+          const { value } = await session.evaluate(expression, { sideEffectFree: true })
+          return value && value.text ? value.text : null
+        },
+      }),
+    ]
+  }, [disabled, path, projectRoot])
+}
+
+export function useWorkbenchEditorRunDebugExtension(
+  options: UseWorkbenchEditorRunDebugOptions
+): Extension {
+  const testRun = useWorkbenchTestRunExtension(options)
+  const debug = useWorkbenchDebugEditorExtension(options)
+  const tracked = !!options.path && !options.disabled
+  return useMemo(
+    () => (tracked ? [focusedEditorTracker, testRun, debug] : []),
+    [debug, testRun, tracked]
+  )
 }

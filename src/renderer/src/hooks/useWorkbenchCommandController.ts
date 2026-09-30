@@ -24,6 +24,7 @@ import {
   insertWorkbenchTerminalSplit,
   pickWorkbenchTerminalTitle,
 } from '@renderer/models/commands/workbenchTerminalSplits'
+import { startWorkbenchDebugRunSession } from '@renderer/models/debug/workbenchDebugBridge'
 import type { WorkbenchProject } from '@renderer/models/project/workbenchProjects'
 
 import { isPresent, toNullable, toOptional } from '@velaros-ai/core'
@@ -363,6 +364,34 @@ export function useWorkbenchCommandController({
 
   // ── 运行卡（PTY 支持的运行会话，走终端会话基础设施）─────────────────────────
 
+  /**
+   * 起运行卡背后的那个终端会话（启动与重启共用）：平常是在终端里跑命令；`launch.debug` 是一次调试——程序由
+   * 调试器带着检查器起，同样跑在一个终端会话里，输出、停止都照旧。工作目录和环境变量两种都交过去。
+   */
+  const startRunSessionProcess = async (
+    project: WorkbenchProject,
+    command: string,
+    launch: LooseOptional<WorkbenchRunSessionLaunchOptions>
+  ): Promise<{ sessionId: string; shell: string; cwd: string }> => {
+    if (launch?.debug) {
+      const started = await startWorkbenchDebugRunSession({
+        projectRoot: project.rootPath,
+        target: launch.debug.target,
+        cwd: launch.cwd,
+        env: launch.env,
+      })
+      return { sessionId: started.terminalSessionId, shell: started.shell, cwd: started.cwd }
+    }
+    return Result.unwrap(
+      await workbenchHost.kernel.project.startWorkbenchTerminalSession({
+        projectRoot: project.rootPath,
+        initialCommand: command,
+        cwd: launch?.cwd,
+        env: launch?.env,
+      })
+    )
+  }
+
   /** 启动一张运行卡；返回会话 id（期间切走了项目时为 null，进程随即停掉）。 */
   const startRunSessionForProject = useMemoizedFn(
     async (
@@ -372,14 +401,7 @@ export function useWorkbenchCommandController({
       launch?: WorkbenchRunSessionLaunchOptions
     ): Promise<string | null> => {
       const owningProjectId = project.id
-      const result = Result.unwrap(
-        await workbenchHost.kernel.project.startWorkbenchTerminalSession({
-          projectRoot: project.rootPath,
-          initialCommand: command,
-          cwd: launch?.cwd,
-          env: launch?.env,
-        })
-      )
+      const result = await startRunSessionProcess(project, command, launch)
 
       if (activeProjectRef.current?.id !== owningProjectId) {
         void workbenchHost.kernel.project.stopWorkbenchTerminalSession({ sessionId: result.sessionId })
@@ -416,8 +438,8 @@ export function useWorkbenchCommandController({
       if (!project || !command) return null
 
       // 记住最近一次运行的命令：侧边栏 ▶ 默认指向它，并进入右键切换列表。运行配置起的不算——同一条命令换了
-      // 目录、变量就是另一回事，它们在菜单里有自己的一行。
-      if (!launch?.configurationId) setLastLaunchedCommand(command)
+      // 目录、变量就是另一回事，它们在菜单里有自己的一行。调试也不算：▶ 是运行。
+      if (!launch?.configurationId && !launch?.debug) setLastLaunchedCommand(command)
 
       try {
         return await startRunSessionForProject(project, command, label?.trim() || command, launch)
@@ -462,14 +484,7 @@ export function useWorkbenchCommandController({
     const label = session.title
     const launch = session.launch
     try {
-      const result = Result.unwrap(
-        await workbenchHost.kernel.project.startWorkbenchTerminalSession({
-          projectRoot: project.rootPath,
-          initialCommand: command,
-          cwd: launch?.cwd,
-          env: launch?.env,
-        })
-      )
+      const result = await startRunSessionProcess(project, command, launch)
       const fresh: WorkbenchTerminalSessionView = {
         id: result.sessionId,
         title: label,

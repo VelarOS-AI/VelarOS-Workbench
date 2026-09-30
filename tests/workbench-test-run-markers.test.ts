@@ -14,6 +14,7 @@ import {
   publishWorkbenchRunSessionRestart,
 } from '../src/renderer/src/models/commands/workbenchRunSessionBridge'
 import {
+  focusWorkbenchEditorActions,
   getWorkbenchEditorActionsSnapshot,
   registerWorkbenchEditorActions,
   runWorkbenchEditorAction,
@@ -158,7 +159,10 @@ void describe('results of tests run from the editor', () => {
 })
 
 void describe('actions of the editor in front', () => {
-  void test('the command palette sees and runs what the mounted editor registered', () => {
+  void test('the command palette sees and runs what the editor in front registered', () => {
+    // 编辑区左右两组各有一个编辑器。
+    const left = {}
+    const right = {}
     const changes: string[] = []
     const unsubscribe = subscribeWorkbenchEditorActions(() =>
       changes.push(getWorkbenchEditorActionsSnapshot())
@@ -168,14 +172,14 @@ void describe('actions of the editor in front', () => {
       assert.equal(getWorkbenchEditorActionsSnapshot(), '')
       assert.equal(runWorkbenchEditorAction('run-test-file'), false)
 
-      const unregisterFirst = registerWorkbenchEditorActions({
+      const unregisterFirst = registerWorkbenchEditorActions(left, {
         'run-test-file': () => ran.push('first file'),
         'run-test-at-cursor': () => ran.push('first cursor'),
       })
       assert.equal(getWorkbenchEditorActionsSnapshot(), 'run-test-at-cursor run-test-file')
 
-      // 换文件时新旧两份短暂同时在：以后登记的为准，动作集合没变就不通知。
-      const unregisterSecond = registerWorkbenchEditorActions({
+      // 换文件时同一个编辑器的新旧两份短暂同时在：以后登记的为准，动作集合没变就不通知。
+      const unregisterSecond = registerWorkbenchEditorActions(left, {
         'run-test-file': () => ran.push('second file'),
       })
       assert.equal(runWorkbenchEditorAction('run-test-file'), true)
@@ -183,11 +187,36 @@ void describe('actions of the editor in front', () => {
       unregisterFirst()
       assert.equal(getWorkbenchEditorActionsSnapshot(), 'run-test-file')
       assert.equal(runWorkbenchEditorAction('run-test-at-cursor'), false)
+
+      // 另一组的编辑器挂上了，它做得了别的：还没有谁得到过焦点时，算最近登记的那个。
+      const unregisterRight = registerWorkbenchEditorActions(right, {
+        'toggle-breakpoint': () => ran.push('right breakpoint'),
+      })
+      assert.equal(getWorkbenchEditorActionsSnapshot(), 'toggle-breakpoint')
+      assert.equal(runWorkbenchEditorAction('run-test-file'), false)
+      // 焦点进了左边的编辑器：动作归它，另一组的不算。
+      focusWorkbenchEditorActions(left)
+      assert.equal(getWorkbenchEditorActionsSnapshot(), 'run-test-file')
+      assert.equal(runWorkbenchEditorAction('toggle-breakpoint'), false)
+      assert.equal(runWorkbenchEditorAction('run-test-file'), true)
+      focusWorkbenchEditorActions(right)
+      assert.equal(runWorkbenchEditorAction('toggle-breakpoint'), true)
+      // 得到焦点的那个编辑器卸载了：退回还在的那个。
+      unregisterRight()
+      assert.equal(getWorkbenchEditorActionsSnapshot(), 'run-test-file')
       unregisterSecond()
       assert.equal(getWorkbenchEditorActionsSnapshot(), '')
 
-      assert.deepEqual(ran, ['second file', 'first cursor'])
-      assert.deepEqual(changes, ['run-test-at-cursor run-test-file', 'run-test-file', ''])
+      assert.deepEqual(ran, ['second file', 'first cursor', 'second file', 'right breakpoint'])
+      assert.deepEqual(changes, [
+        'run-test-at-cursor run-test-file',
+        'run-test-file',
+        'toggle-breakpoint',
+        'run-test-file',
+        'toggle-breakpoint',
+        'run-test-file',
+        '',
+      ])
     } finally {
       unsubscribe()
     }

@@ -397,8 +397,13 @@ void describe('named run configurations', () => {
     assert.match(toolbar, /topRun\.runConfiguration\(configurationId\)/u)
 
     const controller = readSource('src/renderer/src/hooks/useWorkbenchCommandController.ts')
-    // 起卡与重启都把工作目录和环境变量交给主进程。
-    assert.equal(controller.match(/cwd: launch\?\.cwd,\n\s+env: launch\?\.env,/gu)?.length, 2)
+    // 起卡与重启走同一个函数，它把工作目录和环境变量交给主进程（运行走终端，调试走调试器，两条路都交）。
+    assert.match(controller, /initialCommand: command,\n\s+cwd: launch\?\.cwd,\n\s+env: launch\?\.env,/u)
+    assert.match(controller, /target: launch\.debug\.target,\n\s+cwd: launch\.cwd,\n\s+env: launch\.env,/u)
+    assert.equal(
+      controller.match(/await startRunSessionProcess\(project, command, launch\)/gu)?.length,
+      2
+    )
 
     const presentation = readSource('src/renderer/src/StandaloneWorkbenchPagePresentation.tsx')
     // 对话框不进工作区外壳包，只有它用的草稿编辑也不进：外壳里的模块不引它。

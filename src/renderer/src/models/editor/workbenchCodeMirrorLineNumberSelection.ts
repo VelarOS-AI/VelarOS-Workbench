@@ -1,6 +1,7 @@
 import {
   type EditorState,
   type Extension,
+  Facet,
   RangeSet,
   RangeSetBuilder,
   StateEffect,
@@ -29,6 +30,14 @@ const workbenchLineNumberMarkerLine = Decoration.line({
 })
 
 export const toggleWorkbenchLineNumberMarker = StateEffect.define<number>()
+
+/**
+ * 别的扩展接管行号上的点击：JavaScript / TypeScript 文件里点行号是下断点（见 `workbenchBreakpointGutter.ts`）。
+ * 有人接了（返回 true）就不再打这里的标记。`line` 是行号，从 1 起。
+ */
+export const workbenchLineNumberClickFacet = Facet.define<
+  (view: EditorView, line: number) => boolean
+>()
 
 export function workbenchLineNumberToDocumentPosition(
   state: EditorState,
@@ -178,10 +187,16 @@ function handleLineNumberPointerDown(
   if (event.button !== 0 || event.defaultPrevented) return false
   if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return false
 
-  view.dispatch({
-    effects: toggleWorkbenchLineNumberMarker.of(lineNumberFromGutterLine(view, line)),
-    userEvent: 'gutter.marker.toggle',
-  })
+  const lineNumber = lineNumberFromGutterLine(view, line)
+  const handled = view.state
+    .facet(workbenchLineNumberClickFacet)
+    .some((handler) => handler(view, lineNumber))
+  if (!handled) {
+    view.dispatch({
+      effects: toggleWorkbenchLineNumberMarker.of(lineNumber),
+      userEvent: 'gutter.marker.toggle',
+    })
+  }
   view.focus()
   event.preventDefault()
   return true

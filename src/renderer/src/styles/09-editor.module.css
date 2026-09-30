@@ -1734,6 +1734,37 @@
   }
 }
 
+/*
+ * 测试 ▶ 右边的「调试」：平时很淡，鼠标到这一格上才显出来，不跟 ▶ 抢眼。
+ */
+.codeMirrorEditor :global(.cm-workbenchTestRunCell) {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  padding-inline: 2px;
+}
+
+.codeMirrorEditor :global(.cm-workbenchTestDebugButton) {
+  color: var(--workbench-text-muted);
+  opacity: 0.35;
+}
+
+.codeMirrorEditor :global(.cm-gutterElement:hover .cm-workbenchTestDebugButton),
+.codeMirrorEditor :global(.cm-workbenchTestDebugButton:focus-visible) {
+  opacity: 1;
+}
+
+.codeMirrorEditor :global(.cm-workbenchTestDebugButton:hover),
+.codeMirrorEditor :global(.cm-workbenchTestDebugButton:focus-visible) {
+  background: var(--workbench-hover);
+  color: var(--workbench-text);
+}
+
+.codeMirrorEditor :global(.cm-workbenchTestDebugIcon) {
+  width: calc(var(--workbench-editor-font-size) * 0.98);
+  height: calc(var(--workbench-editor-font-size) * 0.98);
+}
+
 .codeMirrorEditor :global(.cm-lineNumbers .cm-gutterElement) {
   position: relative;
   min-width: calc(var(--workbench-editor-font-size) * 2.88);
@@ -1747,7 +1778,9 @@
 }
 
 .codeMirrorEditor
-  :global(.cm-lineNumbers .cm-gutterElement.cm-workbenchLineNumberMarkedGutterLine)::before {
+  :global(.cm-lineNumbers .cm-gutterElement.cm-workbenchLineNumberMarkedGutterLine)::before,
+.codeMirrorEditor
+  :global(.cm-lineNumbers .cm-gutterElement.cm-workbenchBreakpointGutterLine)::before {
   content: '';
   position: absolute;
   top: 50%;
@@ -1760,6 +1793,13 @@
     inset 0 0 0 1px color-mix(in srgb, var(--status-red) 88%, #000000),
     0 0 0 2px color-mix(in srgb, var(--status-red) 10%, transparent);
   transform: translateY(-50%);
+}
+
+/* 调试中，正在跑的程序里对不上代码的断点：空心的灰点。 */
+.codeMirrorEditor
+  :global(.cm-lineNumbers .cm-workbenchBreakpointGutterLine.cm-workbenchBreakpointUnverified)::before {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--workbench-text-muted);
 }
 
 /*
@@ -1873,7 +1913,8 @@
   background: var(--workbench-editor-active-line);
 }
 
-.codeMirrorEditor :global(.cm-line.cm-workbenchLineNumberMarkerLine) {
+.codeMirrorEditor :global(.cm-line.cm-workbenchLineNumberMarkerLine),
+.codeMirrorEditor :global(.cm-line.cm-workbenchBreakpointLine) {
   background: color-mix(in srgb, var(--status-red) 10%, transparent);
 }
 
@@ -1881,8 +1922,29 @@
   :global(
     .cm-editor:not(.cm-workbenchActiveLineSuppressed)
       .cm-line.cm-workbenchLineNumberMarkerLine.cm-activeLine
+  ),
+.codeMirrorEditor
+  :global(
+    .cm-editor:not(.cm-workbenchActiveLineSuppressed)
+      .cm-line.cm-workbenchBreakpointLine.cm-activeLine
   ) {
   background: color-mix(in srgb, var(--status-red) 12%, var(--workbench-editor-active-line));
+}
+
+/*
+ * 调试停下的那一行：琥珀色的底加行首一道竖线，盖过当前行和断点的底色。在调用栈里选了外层的一帧时，
+ * 那一帧所在的行是绿色的（程序并不停在这里，只是从这里调进去的）。
+ */
+.codeMirrorEditor :global(.cm-editor .cm-line.cm-workbenchDebugPausedLine),
+.codeMirrorEditor :global(.cm-editor .cm-line.cm-workbenchDebugPausedLine.cm-activeLine) {
+  background: color-mix(in srgb, var(--status-amber) 24%, transparent);
+  box-shadow: inset 2px 0 0 var(--status-amber);
+}
+
+.codeMirrorEditor :global(.cm-editor .cm-line.cm-workbenchDebugPausedFrameLine),
+.codeMirrorEditor :global(.cm-editor .cm-line.cm-workbenchDebugPausedFrameLine.cm-activeLine) {
+  background: color-mix(in srgb, var(--status-green) 16%, transparent);
+  box-shadow: inset 2px 0 0 var(--status-green);
 }
 
 .codeMirrorEditor
@@ -1960,6 +2022,21 @@
 
 .codeMirrorEditor :global(.cm-tooltip-lint) {
   display: none;
+}
+
+/* 调试停着时悬停在变量上：上方一行「名字 = 值」。 */
+.codeMirrorEditor :global(.cm-workbenchDebugHover) {
+  max-width: min(64ch, 80vw);
+  padding: 4px 8px;
+  font-family: var(--font-mono);
+  font-size: calc(var(--workbench-editor-font-size) * 0.92);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.codeMirrorEditor :global(.cm-workbenchDebugHoverName) {
+  color: var(--workbench-text-muted);
 }
 
 .codeMirrorEditor :global(.cm-lintPoint) {
