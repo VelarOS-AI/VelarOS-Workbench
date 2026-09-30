@@ -63,6 +63,7 @@ function createHandler(platform = Mac) {
     onNavigateForward: () => calls.push('navigate-forward'),
     onOpenQuickOpen: () => calls.push('quick-open'),
     onOpenCommandPalette: () => calls.push('command-palette'),
+    onOpenSymbolOutline: () => calls.push('go-to-symbol'),
     onReopenClosedTab: () => calls.push('reopen-closed-tab'),
     onRunLastCommand: async () => calls.push('run-last-command'),
     onSaveAll: async () => calls.push('save-all'),
@@ -201,6 +202,22 @@ void describe('Workbench keyboard shortcuts', () => {
     assert.equal(
       formatWorkbenchShortcutHint(DEFAULT_WORKBENCH_KEYBOARD_SHORTCUT_MAP['command-palette'], Linux),
       'Ctrl+Shift+P'
+    )
+  })
+
+  void test('Mod+Shift+O opens the symbols of the current file', () => {
+    const { calls, handle } = createHandler(Mac)
+    handle(keydown('O', { metaKey: true, shiftKey: true }))
+    // ⌘O 是应用菜单的「打开项目」，⌃⇧O 在 macOS 上不是这个键。
+    handle(keydown('o', { metaKey: true }))
+    handle(keydown('O', { ctrlKey: true, shiftKey: true }))
+    const { calls: linuxCalls, handle: handleOnLinux } = createHandler(Linux)
+    handleOnLinux(keydown('O', { ctrlKey: true, shiftKey: true }))
+    assert.deepEqual([...calls, ...linuxCalls], ['go-to-symbol', 'go-to-symbol'])
+    assert.equal(formatWorkbenchShortcutHint(DEFAULT_WORKBENCH_KEYBOARD_SHORTCUT_MAP['go-to-symbol'], Mac), '⇧⌘O')
+    assert.equal(
+      formatWorkbenchShortcutHint(DEFAULT_WORKBENCH_KEYBOARD_SHORTCUT_MAP['go-to-symbol'], Linux),
+      'Ctrl+Shift+O'
     )
   })
 

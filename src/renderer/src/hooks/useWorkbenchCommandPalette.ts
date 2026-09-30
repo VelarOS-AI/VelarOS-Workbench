@@ -30,10 +30,10 @@ import type { WorkbenchSurfaceState } from './useWorkbenchSurfaceState'
 
 const log = Log.tag('workbench-command-palette')
 
-/** 面板自己处理的命令（切到按文件名找、`:` 跳行），不经页面。 */
+/** 面板自己处理的命令（切到按文件名找、`:` 跳行、`@` 找符号），不经页面。 */
 export type WorkbenchPaletteInternalCommandId = Extract<
   WorkbenchPaletteCommandId,
-  'go-to-file' | 'go-to-line'
+  'go-to-file' | 'go-to-line' | 'go-to-symbol'
 >
 export type WorkbenchPalettePageCommandId = Exclude<
   WorkbenchPaletteCommandId,

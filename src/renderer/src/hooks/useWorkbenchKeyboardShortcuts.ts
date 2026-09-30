@@ -28,6 +28,8 @@ export interface UseWorkbenchKeyboardShortcutsOptions {
   onOpenQuickOpen: () => void
   /** 打开命令面板（快速打开的 `>` 模式）。 */
   onOpenCommandPalette: () => void
+  /** 打开「转到文件中的符号」（快速打开的 `@` 模式）。 */
+  onOpenSymbolOutline: () => void
   /** 重新打开最近关掉的文件标签（回到上次的光标位置）。 */
   onReopenClosedTab: () => void
   onRunLastCommand: () => Promise<unknown>
@@ -68,6 +70,10 @@ export function createWorkbenchShortcutKeydownHandler(
       }
       case 'command-palette': {
         current.onOpenCommandPalette()
+        return
+      }
+      case 'go-to-symbol': {
+        current.onOpenSymbolOutline()
         return
       }
       case 'find-in-files': {
@@ -138,6 +144,7 @@ export function useWorkbenchKeyboardShortcuts({
   onNavigateForward,
   onOpenQuickOpen,
   onOpenCommandPalette,
+  onOpenSymbolOutline,
   onReopenClosedTab,
   onRunLastCommand,
   onSaveAll,
@@ -158,6 +165,7 @@ export function useWorkbenchKeyboardShortcuts({
     onNavigateForward,
     onOpenQuickOpen,
     onOpenCommandPalette,
+    onOpenSymbolOutline,
     onReopenClosedTab,
     onRunLastCommand,
     onSaveAll,
@@ -178,6 +186,7 @@ export function useWorkbenchKeyboardShortcuts({
     onNavigateForward,
     onOpenQuickOpen,
     onOpenCommandPalette,
+    onOpenSymbolOutline,
     onReopenClosedTab,
     onRunLastCommand,
     onSaveAll,

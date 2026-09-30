@@ -10,6 +10,7 @@ import {
 } from 'react'
 import { useWorkbenchI18n } from '@renderer/i18n'
 import { getWorkbenchEditorLineCount } from '@renderer/models/editor/workbenchEditorModel'
+import { workbenchDocumentSymbolGlyphMask } from '@renderer/models/editor/workbenchSymbolKindGlyphs'
 import type { WorkbenchContentSearchMatch } from '@renderer/models/files/workbenchContentSearchModel'
 import { getWorkbenchFilePresentationVariant } from '@renderer/models/files/workbenchFilePresentation'
 import {
@@ -31,8 +32,15 @@ import {
   WorkbenchQuickOpenCommandPrefix,
   type WorkbenchQuickOpenFileItem,
   WorkbenchQuickOpenLinePrefix,
+  type WorkbenchQuickOpenMode,
   type WorkbenchQuickOpenQuery,
+  WorkbenchQuickOpenSymbolPrefix,
 } from '@renderer/models/layout/workbenchQuickOpenModel'
+import {
+  buildWorkbenchQuickOpenSymbolItems,
+  findWorkbenchSymbolIndexAtPosition,
+  type WorkbenchQuickOpenSymbolItem,
+} from '@renderer/models/layout/workbenchQuickOpenSymbols'
 import type { WorkbenchProject } from '@renderer/models/project/workbenchProjects'
 import type { WorkbenchOpenEditorTab } from '@renderer/types/workbenchTypes'
 
@@ -45,6 +53,7 @@ import { SearchField } from '@velaros-ai/ui/primitives/forms/SearchField'
 import type { WorkbenchCommandPaletteController } from '../../hooks/useWorkbenchCommandPalette'
 import { useWorkbenchContentSearchController } from '../../hooks/useWorkbenchContentSearchController'
 import type { WorkbenchProjectFileListState } from '../../hooks/useWorkbenchProjectFileList'
+import { useWorkbenchQuickOpenSymbols } from '../../hooks/useWorkbenchQuickOpenSymbols'
 import type { WorkbenchQuickOpenRequest } from '../../hooks/useWorkbenchSurfaceState'
 import { translateWorkbenchAppMessage } from '../../i18n/useStandaloneWorkbenchLocalization'
 import styles from '../../styles/workbenchPageStyles'
@@ -64,16 +73,30 @@ export interface WorkbenchQuickOpenPosition {
   column?: number
 }
 
+/** 每种打开方式预填什么、对应输入的哪种读法。 */
+const RequestInput: Readonly<
+  Record<WorkbenchQuickOpenRequest['mode'], { prefix: string; mode: WorkbenchQuickOpenMode }>
+> = {
+  files: { prefix: '', mode: 'files' },
+  commands: { prefix: WorkbenchQuickOpenCommandPrefix, mode: 'commands' },
+  symbols: { prefix: WorkbenchQuickOpenSymbolPrefix, mode: 'symbols' },
+}
+
 interface QuickOpenProps {
   isOpen: boolean
-  /** 最近一次要求打开：⌘P 是按文件名找，⇧⌘P 是命令面板（输入框里预填 `>`）。 */
+  /**
+   * 最近一次要求打开：⌘P 是按文件名找，⇧⌘P 是命令面板（输入框里预填 `>`），⇧⌘O 是当前文件里的符号
+   * （预填 `@`）。
+   */
   request: WorkbenchQuickOpenRequest
   activeProject: Nullable<WorkbenchProject>
   openTabs: WorkbenchOpenEditorTab[]
   /** 编辑器的当前文件：最近打开的列表把它放到最后，`:行号` 在它里面跳。 */
   activeFilePath: Nullable<string>
-  /** 当前文件的正文（`:行号` 按它的行数收住）。 */
+  /** 当前文件的正文（`:行号` 按它的行数收住，`@` 照它问符号）。 */
   activeFileContent: string
+  /** 光标在当前文件里的位置：`@` 一打开先选中光标所在的那个符号。 */
+  activeFileCursor?: Nullable<{ line: number; column: number }>
   /** 最近打开过的文件，最近的在前。 */
   recentFilePaths: readonly string[]
   /** 整个项目的文件清单（页面按项目缓存，文件有增删时重读）。 */
@@ -97,6 +120,7 @@ type QuickOpenRow =
     }
   | { kind: 'content'; key: string; match: WorkbenchContentSearchMatch }
   | { kind: 'line'; key: string; path: string; position: Required<WorkbenchQuickOpenPosition> }
+  | { kind: 'symbol'; key: string; path: string; item: WorkbenchQuickOpenSymbolItem }
   | { kind: 'command'; key: string; match: WorkbenchPaletteCommandMatch }
 
 interface QuickOpenSection {
@@ -155,6 +179,7 @@ export function QuickOpen({
   openTabs,
   activeFilePath,
   activeFileContent,
+  activeFileCursor = null,
   recentFilePaths,
   projectFiles,
   commandPalette,
@@ -197,6 +222,15 @@ export function QuickOpen({
       isOpen && parsedQuery.mode === 'line' ? getWorkbenchEditorLineCount(activeFileContent) : 0,
     [activeFileContent, isOpen, parsedQuery.mode]
   )
+  // `@`：当前文件的符号，进到这个模式时才问语言服务。
+  const symbolsMode = isOpen && parsedQuery.mode === 'symbols'
+  const { symbols: activeFileSymbols } = useWorkbenchQuickOpenSymbols({
+    enabled: symbolsMode,
+    projectRoot: activeProject?.rootPath ?? null,
+    path: activeFilePath,
+    content: activeFileContent,
+    openTabs,
+  })
 
   /** 此刻能跑的命令（名字按当前语言，另带英文名）。只有命令模式用得着，每次现算——就二十几条。 */
   function buildCommandItems(): readonly WorkbenchPaletteCommandItem[] {
@@ -225,6 +259,32 @@ export function QuickOpen({
             kind: 'command',
             key: `command:${match.command.id}`,
             match,
+          })),
+        },
+      ]
+    }
+
+    if (parsed.mode === 'symbols') {
+      if (!activeFilePath || !activeFileSymbols) return []
+
+      const { items, truncated } = buildWorkbenchQuickOpenSymbolItems({
+        symbols: activeFileSymbols,
+        query: parsed.text,
+      })
+      if (items.length === 0) return []
+
+      return [
+        {
+          key: 'symbols',
+          note: truncated
+            ? t('workbench.quickOpenSymbolsTruncated', { count: items.length })
+            : undefined,
+          title: truncated ? activeFilePath.slice(activeFilePath.lastIndexOf('/') + 1) : undefined,
+          rows: items.map((item) => ({
+            kind: 'symbol',
+            key: `symbol:${item.index}`,
+            path: activeFilePath,
+            item,
           })),
         },
       ]
@@ -303,10 +363,12 @@ export function QuickOpen({
             commandItems
           )
         : [],
-    // buildSections 读的都在下面：输入、文件清单、最近打开、标签、当前文件、内容结果与命令（函数本身每次渲染都新建）。
+    // buildSections 读的都在下面：输入、文件清单、最近打开、标签、当前文件、它的符号、内容结果与命令（函数本身
+    // 每次渲染都新建）。
     [
       activeFileContent,
       activeFilePath,
+      activeFileSymbols,
       commandItems,
       contentSearchEnabled,
       contentSearchMatches,
@@ -331,10 +393,10 @@ export function QuickOpen({
 
     const alreadyOpen = handledRequestIdRef.current !== null
     handledRequestIdRef.current = request.id
-    const wantsCommands = request.mode === 'commands'
-    // 开着时又按了同一个快捷键：选中下一项（同 VS Code）；按的是另一个就换过去。
-    const showsCommands = parseWorkbenchQuickOpenQuery(queryLatest.current).mode === 'commands'
-    if (alreadyOpen && showsCommands === wantsCommands) {
+    const wanted = RequestInput[request.mode]
+    // 开着时又按了同一个快捷键：选中下一项（同 VS Code）；按的是另一个就换过去。（`:行` 算在按文件名找里。）
+    const shownMode = parseWorkbenchQuickOpenQuery(queryLatest.current).mode
+    if (alreadyOpen && (shownMode === 'line' ? 'files' : shownMode) === wanted.mode) {
       setActiveIndex((index) => index + 1)
       return undefined
     }
@@ -346,7 +408,7 @@ export function QuickOpen({
           ? previousFocus
           : null
     }
-    setQuery(wantsCommands ? WorkbenchQuickOpenCommandPrefix : '')
+    setQuery(wanted.prefix)
     setActiveIndex(0)
     const frame = timers.nextFrame(
       () => {
@@ -361,6 +423,25 @@ export function QuickOpen({
     }
   }, [isOpen, queryLatest, request.id, request.mode, timers])
 
+  // `@` 刚列出来（还没输入名字）：先选中光标所在的那个符号，大纲从眼下的位置看起。每份符号只跟一次，之后
+  // 选中哪一行归用户。
+  const followedSymbolsRef = useRef<Nullable<typeof activeFileSymbols>>(null)
+  const centerSelectedRowRef = useRef(false)
+  useEffect(() => {
+    if (!symbolsMode || !activeFileSymbols) {
+      followedSymbolsRef.current = null
+      return
+    }
+    if (followedSymbolsRef.current === activeFileSymbols || parsedQuery.text) return
+    followedSymbolsRef.current = activeFileSymbols
+    if (!activeFileCursor) return
+    const index = findWorkbenchSymbolIndexAtPosition(activeFileSymbols, activeFileCursor)
+    if (index <= 0) return
+    // 这一行摆到列表中间：上下文（它前后的符号）都看得见。
+    centerSelectedRowRef.current = true
+    setActiveIndex(index)
+  }, [activeFileCursor, activeFileSymbols, parsedQuery.text, symbolsMode])
+
   // 换了输入，列表回到顶上；键盘移动选中项时让它露在视野里。
   useEffect(() => {
     listRef.current?.scrollTo({ top: 0 })
@@ -370,7 +451,8 @@ export function QuickOpen({
     const row = listRef.current?.querySelector<HTMLButtonElement>(
       `[data-quick-open-index="${selectedIndex}"]`
     )
-    row?.scrollIntoView({ block: 'nearest' })
+    row?.scrollIntoView({ block: centerSelectedRowRef.current ? 'center' : 'nearest' })
+    centerSelectedRowRef.current = false
   }, [selectedIndex])
 
   if (!isOpen) return null
@@ -406,6 +488,11 @@ export function QuickOpen({
         onOpenFile(row.path, row.position)
         return
       }
+      case 'symbol': {
+        close(false)
+        onOpenFile(row.path, { line: row.item.line, column: row.item.column })
+        return
+      }
       case 'command': {
         const { id } = row.match.command
         if (id === 'go-to-file') {
@@ -414,6 +501,10 @@ export function QuickOpen({
         }
         if (id === 'go-to-line') {
           switchInput(WorkbenchQuickOpenLinePrefix)
+          return
+        }
+        if (id === 'go-to-symbol') {
+          switchInput(WorkbenchQuickOpenSymbolPrefix)
           return
         }
         // 先把焦点还回去再跑：命令作用在打开面板前的地方（编辑器），自己要焦点的（设置、终端）再拿走。
@@ -446,6 +537,16 @@ export function QuickOpen({
 
   function emptyMessage(): string {
     if (parsedQuery.mode === 'commands') return t('workbench.commandPaletteEmpty')
+    if (parsedQuery.mode === 'symbols') {
+      if (!activeFilePath) return t('workbench.quickOpenSymbolsNoFile')
+      if (!activeFileSymbols) return t('workbench.quickOpenSymbolsLoading')
+
+      return t(
+        activeFileSymbols.length === 0
+          ? 'workbench.quickOpenSymbolsNone'
+          : 'workbench.quickOpenSymbolsEmpty'
+      )
+    }
     if (parsedQuery.mode === 'line') {
       if (!activeFilePath) return t('workbench.quickOpenGoToLineNoFile')
 
@@ -537,6 +638,37 @@ export function QuickOpen({
           </>
         )
       }
+      case 'symbol': {
+        const { item } = row
+        const mask = workbenchDocumentSymbolGlyphMask(item.kind)
+        return (
+          <>
+            <span
+              className={styles.quickOpenSymbolIcon}
+              data-kind={item.kind}
+              style={{
+                marginLeft: item.depth * 14,
+                maskImage: mask,
+                WebkitMaskImage: mask,
+              }}
+              aria-hidden="true"
+            />
+            <span className={styles.quickOpenItemCopy}>
+              <span className={styles.quickOpenItemHeading}>
+                <Text truncate className={styles.quickOpenItemName}>
+                  {renderMatchedText(item.name, item.nameMatches)}
+                </Text>
+                <Text truncate tone="caption" className={styles.quickOpenItemPath}>
+                  {renderMatchedText(item.container, item.containerMatches)}
+                </Text>
+                <Text tone="caption" className={styles.quickOpenItemMeta}>
+                  {item.line}
+                </Text>
+              </span>
+            </span>
+          </>
+        )
+      }
       case 'command': {
         const { command, labelMatches, aliasMatches } = row.match
         return (
@@ -562,8 +694,13 @@ export function QuickOpen({
     }
   }
 
-  const commandsMode = parseWorkbenchQuickOpenQuery(query).mode === 'commands'
-  const title = commandsMode ? t('workbench.commandPaletteTitle') : t('workbench.quickOpenTitle')
+  const inputMode = parseWorkbenchQuickOpenQuery(query).mode
+  const commandsMode = inputMode === 'commands'
+  const title = commandsMode
+    ? t('workbench.commandPaletteTitle')
+    : inputMode === 'symbols'
+      ? t('workbench.quickOpenSymbolsTitle')
+      : t('workbench.quickOpenTitle')
   let rowIndex = 0
   const optionId = (index: number): string => `${idPrefix}-option-${index}`
 
@@ -580,11 +717,19 @@ export function QuickOpen({
           <div>
             <Title level={5}>{title}</Title>
             <Text tone="caption" truncate>
-              {commandsMode ? t('workbench.commandPaletteCaption') : t('workbench.globalSearchFiles')}
+              {commandsMode
+                ? t('workbench.commandPaletteCaption')
+                : inputMode === 'symbols'
+                  ? (activeFilePath ?? t('workbench.quickOpenSymbolsNoFile'))
+                  : t('workbench.globalSearchFiles')}
             </Text>
           </div>
           <kbd>
-            {formatWorkbenchShortcutHint(keymap[commandsMode ? 'command-palette' : 'quick-open'])}
+            {formatWorkbenchShortcutHint(
+              keymap[
+                commandsMode ? 'command-palette' : inputMode === 'symbols' ? 'go-to-symbol' : 'quick-open'
+              ]
+            )}
           </kbd>
         </header>
         <div className={styles.quickOpenInputRow}>

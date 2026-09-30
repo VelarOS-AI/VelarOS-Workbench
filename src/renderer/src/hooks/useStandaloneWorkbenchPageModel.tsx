@@ -554,6 +554,7 @@ export function useStandaloneWorkbenchPageModel(
     onNavigateForward: () => void editorNavigation.goForward(),
     onOpenQuickOpen: surface.openQuickOpen,
     onOpenCommandPalette: surface.openCommandPalette,
+    onOpenSymbolOutline: surface.openSymbolOutline,
     onReopenClosedTab: () => void reopenClosedEditorTab(),
     onRunLastCommand: workbench.rerunLastCommand,
     onSaveAll: () => workbench.saveAllOpenFiles(),

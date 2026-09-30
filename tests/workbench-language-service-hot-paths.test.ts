@@ -61,7 +61,8 @@ void describe('language service hot paths', () => {
       const started = performance.now()
       const symbols = buildTypeScriptDocumentSymbols({ service, fileName, content })
       const elapsed = performance.now() - started
-      // 导航栏树里同一个函数会以顶层项和子项各出现一次；按名字去重后正好是 2000 个，行号与声明行一致。
+      // 每个函数只列一次，行号与声明行一致。
+      assert.equal(symbols.length, 2_000)
       const lineByName = new Map(symbols.map((symbol) => [symbol.name, symbol.line]))
       assert.equal([...lineByName.keys()].filter((name) => name.startsWith('fn')).length, 2_000)
       assert.deepEqual([0, 1, 2, 3, 4].map((index) => lineByName.get(`fn${index}`)), [1, 2, 3, 4, 5])

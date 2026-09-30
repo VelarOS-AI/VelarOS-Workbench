@@ -5,6 +5,7 @@
  * - `名字`：按文件名模糊匹配整个项目的文件，空格隔开的几段要都命中；
  * - `名字:行` / `名字:行:列`（列也可以用逗号隔开）：打开选中的文件并跳到那里；
  * - `:行` / `:行:列`：在当前文件里跳到那一行；
+ * - `@名字`：当前文件里的符号（见 workbenchQuickOpenSymbols）；
  * - `>命令`：命令面板。
  *
  * 文件排序：整条路径一字不差 > 文件名以输入开头 > 文件名模糊命中 > 路径模糊命中（多段输入分数相加）；
@@ -15,7 +16,7 @@ import {
   scoreWorkbenchFuzzy,
 } from '../shared/workbenchFuzzyScore'
 
-export type WorkbenchQuickOpenMode = 'files' | 'line' | 'commands'
+export type WorkbenchQuickOpenMode = 'files' | 'line' | 'commands' | 'symbols'
 
 export interface WorkbenchQuickOpenQuery {
   mode: WorkbenchQuickOpenMode
@@ -46,6 +47,7 @@ export interface WorkbenchQuickOpenPathScore {
 
 export const WorkbenchQuickOpenCommandPrefix = '>'
 export const WorkbenchQuickOpenLinePrefix = ':'
+export const WorkbenchQuickOpenSymbolPrefix = '@'
 
 const DefaultFileResultLimit = 50
 /** 整条路径一字不差。 */
@@ -72,6 +74,9 @@ export function parseWorkbenchQuickOpenQuery(input: string): WorkbenchQuickOpenQ
   const trimmed = input.trim()
   if (trimmed.startsWith(WorkbenchQuickOpenCommandPrefix))
     return { mode: 'commands', text: trimmed.slice(1).trim(), line: null, column: null }
+
+  if (trimmed.startsWith(WorkbenchQuickOpenSymbolPrefix))
+    return { mode: 'symbols', text: trimmed.slice(1).trim(), line: null, column: null }
 
   if (trimmed.startsWith(WorkbenchQuickOpenLinePrefix)) {
     const text = trimmed.slice(1).trim()

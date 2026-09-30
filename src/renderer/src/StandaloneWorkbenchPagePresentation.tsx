@@ -928,6 +928,7 @@ export function StandaloneWorkbenchPagePresentation({
             openTabs={workbench.openTabs}
             activeFilePath={workbench.selectedFilePath}
             activeFileContent={workbench.editorContent}
+            activeFileCursor={editorNavigation.cursorPosition}
             recentFilePaths={model.recentFilePaths}
             projectFiles={model.projectFiles}
             commandPalette={model.commandPalette}

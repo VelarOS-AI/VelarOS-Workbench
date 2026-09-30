@@ -126,6 +126,43 @@
   color: var(--status-green);
 }
 
+/*
+ * `@` 模式一行前面的符号图标：形状是遮罩（与补全列表同一套），颜色按种类分几档——类型一档、可调用的一档、
+ * 值一档，其余用次要文字色。
+ */
+.quickOpenSymbolIcon {
+  @apply shrink-0;
+  width: 15px;
+  height: 15px;
+  background-color: var(--workbench-muted);
+  mask-position: center;
+  mask-repeat: no-repeat;
+  mask-size: 15px 15px;
+}
+
+.quickOpenSymbolIcon[data-kind='class'],
+.quickOpenSymbolIcon[data-kind='interface'],
+.quickOpenSymbolIcon[data-kind='enum'],
+.quickOpenSymbolIcon[data-kind='type'] {
+  background-color: var(--status-teal);
+}
+
+.quickOpenSymbolIcon[data-kind='function'],
+.quickOpenSymbolIcon[data-kind='method'],
+.quickOpenSymbolIcon[data-kind='constructor'] {
+  background-color: var(--status-violet);
+}
+
+.quickOpenSymbolIcon[data-kind='variable'],
+.quickOpenSymbolIcon[data-kind='property'],
+.quickOpenSymbolIcon[data-kind='enum-member'] {
+  background-color: var(--status-blue);
+}
+
+.quickOpenSymbolIcon[data-kind='constant'] {
+  background-color: var(--status-amber);
+}
+
 /* 命令面板的一行：命令名占满左侧（按英文名命中时英文名跟在后面），快捷键靠右。 */
 .quickOpenCommandLabel {
   @apply min-w-0 truncate text-foreground;

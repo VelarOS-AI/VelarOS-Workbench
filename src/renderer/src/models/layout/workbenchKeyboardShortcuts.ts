@@ -27,6 +27,7 @@ export type WorkbenchKeyboardShortcutAction =
   | 'find-in-files'
   | 'focus-left-editor-group'
   | 'focus-right-editor-group'
+  | 'go-to-symbol'
   | 'navigate-back'
   | 'navigate-forward'
   | 'quick-open'
@@ -89,6 +90,8 @@ export const WORKBENCH_KEYBOARD_SHORTCUT_DEFINITIONS: WorkbenchKeyboardShortcutD
   { action: 'quick-open', defaultShortcut: 'Mod+P' },
   // 命令面板与 VS Code 一致：⇧⌘P / Ctrl+Shift+P。
   { action: 'command-palette', defaultShortcut: 'Mod+Shift+P' },
+  // 转到文件中的符号（快速打开的 `@` 模式），与 VS Code 一致：⇧⌘O，其它平台 Ctrl+Shift+O。
+  { action: 'go-to-symbol', defaultShortcut: 'Mod+Shift+O' },
   // 在项目里搜索（侧栏的搜索面板），与 VS Code 一致：⇧⌘F，其它平台 Ctrl+Shift+F。
   { action: 'find-in-files', defaultShortcut: 'Mod+Shift+F' },
   // 后退 / 前进与 VS Code 一致：macOS 上 ⌃- / ⌃⇧-（按物理键认，⇧- 打出来是 _），其它平台 Alt+← / Alt+→。

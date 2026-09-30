@@ -15,12 +15,13 @@ export type {
 } from '../models/layout/workbenchSurfaceModel'
 
 /**
- * 最近一次要求打开快速打开：`files` 是 ⌘P（按文件名找），`commands` 是 ⇧⌘P（命令面板）。
+ * 最近一次要求打开快速打开：`files` 是 ⌘P（按文件名找），`commands` 是 ⇧⌘P（命令面板），`symbols` 是 ⇧⌘O
+ * （当前文件里的符号）。
  * 每次要求序号都加一，开着时再按一次也看得出来。
  */
 export interface WorkbenchQuickOpenRequest {
   id: number
-  mode: 'files' | 'commands'
+  mode: 'files' | 'commands' | 'symbols'
 }
 
 export interface WorkbenchSurfaceState {
@@ -38,6 +39,8 @@ export interface WorkbenchSurfaceState {
   openBottomTool: (tool: WorkbenchBottomTool) => void
   openQuickOpen: () => void
   openCommandPalette: () => void
+  /** 打开「转到文件中的符号」（快速打开的 `@` 模式）。 */
+  openSymbolOutline: () => void
   openRightTool: (tool: WorkbenchRightToolWindow) => void
   setActiveLeftTool: (tool: WorkbenchLeftTool) => void
   setActiveBottomTool: (tool: WorkbenchBottomTool) => void
@@ -70,6 +73,10 @@ export function useWorkbenchSurfaceState(): WorkbenchSurfaceState {
 
   function openCommandPalette(): void {
     requestQuickOpen('commands')
+  }
+
+  function openSymbolOutline(): void {
+    requestQuickOpen('symbols')
   }
 
   function closeQuickOpen(): void {
@@ -125,6 +132,7 @@ export function useWorkbenchSurfaceState(): WorkbenchSurfaceState {
     openBottomTool,
     openQuickOpen,
     openCommandPalette,
+    openSymbolOutline,
     openRightTool,
     setActiveLeftTool,
     setActiveBottomTool,

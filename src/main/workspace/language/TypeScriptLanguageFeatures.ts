@@ -416,23 +416,39 @@ function locationFromFileSpan(
   }
 }
 
-function mapNavigationBarKind(
+function mapNavigationTreeKind(
   kind: ts.ScriptElementKind
 ): WorkbenchLanguageServiceDocumentSymbol['kind'] {
   switch (kind) {
     case ts.ScriptElementKind.classElement:
+    case ts.ScriptElementKind.localClassElement:
       return 'class'
     case ts.ScriptElementKind.interfaceElement:
       return 'interface'
     case ts.ScriptElementKind.enumElement:
       return 'enum'
-    case ts.ScriptElementKind.memberFunctionElement:
+    case ts.ScriptElementKind.enumMemberElement:
+      return 'enum-member'
+    case ts.ScriptElementKind.moduleElement:
+      return 'module'
     case ts.ScriptElementKind.functionElement:
+    case ts.ScriptElementKind.localFunctionElement:
       return 'function'
+    case ts.ScriptElementKind.memberFunctionElement:
+      return 'method'
+    case ts.ScriptElementKind.constructorImplementationElement:
+      return 'constructor'
     case ts.ScriptElementKind.memberVariableElement:
+    case ts.ScriptElementKind.memberGetAccessorElement:
+    case ts.ScriptElementKind.memberSetAccessorElement:
+    case ts.ScriptElementKind.memberAccessorVariableElement:
+      return 'property'
     case ts.ScriptElementKind.variableElement:
+    case ts.ScriptElementKind.localVariableElement:
+    case ts.ScriptElementKind.letElement:
       return 'variable'
     case ts.ScriptElementKind.typeElement:
+    case ts.ScriptElementKind.typeParameterElement:
       return 'type'
     case ts.ScriptElementKind.constElement:
       return 'constant'
@@ -441,33 +457,55 @@ function mapNavigationBarKind(
   }
 }
 
-function flattenNavigationBarItems(
-  items: readonly ts.NavigationBarItem[],
+/** 大纲里不单列的：import 进来的名字，以及没有名字的函数、类（它们里面有东西要列时才留着当外层）。 */
+function isOutlineNoise(node: ts.NavigationTree): boolean {
+  return (
+    node.kind === ts.ScriptElementKind.alias
+    || !node.text
+    || node.text === '<function>'
+    || node.text === '<class>'
+  )
+}
+
+/** 一个节点下面的，按文件里的先后排（TypeScript 给的是按名字排的）。 */
+function navigationTreeChildren(node: ts.NavigationTree): ts.NavigationTree[] {
+  return [...(node.childItems ?? [])].sort(
+    (left, right) => (left.spans[0]?.start ?? 0) - (right.spans[0]?.start ?? 0)
+  )
+}
+
+/**
+ * 导航树的一个节点（连同它下面的）→ 按文件里的先后排的符号，返回这一支有没有列出东西。
+ * 名字的位置取 `nameSpan`（跳过去落在名字上），范围取整个声明。
+ */
+function flattenNavigationTree(
+  node: ts.NavigationTree,
   content: string,
   fileName: string,
   depth: number,
   bucket: WorkbenchLanguageServiceDocumentSymbol[]
-): void {
-  for (const item of items) {
-    const span = item.spans[0]
-    if (span) {
-      const range = rangeFromTextSpan(content, fileName, span)
-      if (range) {
-        bucket.push({
-          name: item.text,
-          kind: mapNavigationBarKind(item.kind),
-          depth,
-          line: range.startLine,
-          column: range.startColumn,
-          range,
-        })
-      }
-    }
+): boolean {
+  const span = node.spans[0]
+  const range = span ? rangeFromTextSpan(content, fileName, span) : null
+  const nameRange = node.nameSpan ? rangeFromTextSpan(content, fileName, node.nameSpan) : null
+  if (!range) return false
 
-    if (item.childItems?.length) {
-      flattenNavigationBarItems(item.childItems, content, fileName, depth + 1, bucket)
-    }
-  }
+  const index = bucket.length
+  bucket.push({
+    name: node.text,
+    kind: mapNavigationTreeKind(node.kind),
+    depth,
+    line: (nameRange ?? range).startLine,
+    column: (nameRange ?? range).startColumn,
+    range,
+  })
+  let listedChildren = false
+  for (const child of navigationTreeChildren(node))
+    listedChildren = flattenNavigationTree(child, content, fileName, depth + 1, bucket) || listedChildren
+
+  if (!isOutlineNoise(node) || listedChildren) return true
+  bucket.length = index
+  return false
 }
 
 export function buildTypeScriptHoverResult({
@@ -732,9 +770,10 @@ export function buildTypeScriptDocumentSymbols({
   fileName: string
   content: string
 }): WorkbenchLanguageServiceDocumentSymbol[] {
-  const items = service.getNavigationBarItems(fileName) ?? []
+  // 导航树（不是导航栏条目：那份把每个类、函数在顶层又列一遍）。根节点是文件本身，不列。
   const symbols: WorkbenchLanguageServiceDocumentSymbol[] = []
-  flattenNavigationBarItems(items, content, fileName, 0, symbols)
+  for (const child of navigationTreeChildren(service.getNavigationTree(fileName)))
+    flattenNavigationTree(child, content, fileName, 0, symbols)
   return symbols
 }
 

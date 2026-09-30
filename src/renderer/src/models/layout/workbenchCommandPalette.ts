@@ -24,6 +24,7 @@ export type WorkbenchPaletteCommandId =
   | 'format-document'
   | 'go-to-file'
   | 'go-to-line'
+  | 'go-to-symbol'
   | 'navigate-back'
   | 'navigate-forward'
   | 'new-terminal'
@@ -70,6 +71,8 @@ export const WORKBENCH_PALETTE_COMMANDS: readonly WorkbenchPaletteCommandDefinit
   { id: 'go-to-file', labelKey: 'workbench.commandGoToFile', shortcut: { action: 'quick-open' } },
   // 编辑器里的跳到行（⌃G / Ctrl+G）；面板里是快速打开的 `:` 模式。
   { id: 'go-to-line', labelKey: 'workbench.commandGoToLine', shortcut: { fixed: 'Ctrl+G' } },
+  // 当前文件里的符号（大纲）；面板里是快速打开的 `@` 模式。
+  { id: 'go-to-symbol', labelKey: 'workbench.commandGoToSymbol', shortcut: { action: 'go-to-symbol' } },
   // 侧栏的项目搜索与替换；编辑器里选中了一行以内的文字就拿它当查找词。
   { id: 'find-in-files', labelKey: 'workbench.commandFindInFiles', shortcut: { action: 'find-in-files' } },
   { id: 'navigate-back', labelKey: 'workbench.commandNavigateBack', shortcut: { action: 'navigate-back' } },
@@ -182,8 +185,8 @@ export interface WorkbenchPaletteCommandContext {
 export type WorkbenchPaletteLanguageService = 'typescript' | 'external'
 
 /**
- * 命令此刻能不能跑。作用在眼前编辑器上的（格式化、切只读、快速修复）要当前文件的编辑器在前面；跳行会先把
- * 当前文件带到前面，有文本文件就行；关编辑器关的是前面那个，标签或盖在前面的都算。其余随时能跑。
+ * 命令此刻能不能跑。作用在眼前编辑器上的（格式化、切只读、快速修复）要当前文件的编辑器在前面；跳行、转到
+ * 符号会先把当前文件带到前面，有文本文件就行；关编辑器关的是前面那个，标签或盖在前面的都算。其余随时能跑。
  */
 export function isWorkbenchPaletteCommandAvailable(
   id: WorkbenchPaletteCommandId,
@@ -193,6 +196,7 @@ export function isWorkbenchPaletteCommandAvailable(
     context.hasActiveFile && context.activeFileIsText && !context.editorCovered
   switch (id) {
     case 'go-to-line':
+    case 'go-to-symbol':
       return context.hasActiveFile && context.activeFileIsText
     case 'save-current':
     case 'reveal-active-file':

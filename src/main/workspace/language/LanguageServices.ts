@@ -280,13 +280,21 @@ function mapExternalCompletionKind(kind: number | undefined): string | undefined
 
 function mapExternalDocumentSymbolKind(kind: number): WorkbenchLanguageServiceDocumentSymbol['kind'] {
   switch (kind) {
-    case 5: return 'class'
+    case 2:
+    case 3:
+    case 4: return 'module'
+    case 5:
+    case 23: return 'class'
     case 6: return 'method'
+    case 7:
+    case 8: return 'property'
+    case 9: return 'constructor'
     case 10: return 'enum'
     case 11: return 'interface'
     case 12: return 'function'
     case 13: return 'variable'
     case 14: return 'constant'
+    case 22: return 'enum-member'
     case 26: return 'type'
     default: return 'symbol'
   }

@@ -101,6 +101,7 @@ void describe('Workbench command palette registry', () => {
   void test('shows each command shortcut from the current keymap and platform', () => {
     const mac = buildCommands('en-US')
     assert.equal(command(mac, 'go-to-file').shortcut, '⌘P')
+    assert.equal(command(mac, 'go-to-symbol').shortcut, '⇧⌘O')
     assert.equal(command(mac, 'save-all').shortcut, '⇧⌘S')
     assert.equal(command(mac, 'toggle-git').shortcut, '⇧⌘G')
     assert.equal(command(mac, 'navigate-back').shortcut, '⌃-')
@@ -123,6 +124,7 @@ void describe('Workbench command palette registry', () => {
     const linux = buildCommands('en-US', { platform: Linux })
     assert.equal(command(linux, 'split-terminal').shortcut, 'Ctrl+Shift+5')
     assert.equal(command(linux, 'go-to-file').shortcut, 'Ctrl+P')
+    assert.equal(command(linux, 'go-to-symbol').shortcut, 'Ctrl+Shift+O')
     assert.equal(command(linux, 'format-document').shortcut, 'Ctrl+Alt+L')
     assert.equal(command(linux, 'quick-fix').shortcut, 'Alt+Enter')
     assert.equal(command(linux, 'refactor').shortcut, 'Ctrl+Alt+Shift+T')
@@ -270,6 +272,11 @@ void describe('Workbench command palette availability', () => {
     assert.equal(isWorkbenchPaletteCommandAvailable('go-to-line', { ...FileInFront, editorCovered: true }), true)
     assert.equal(isWorkbenchPaletteCommandAvailable('go-to-line', { ...FileInFront, activeFileIsText: false }), false)
     assert.equal(isWorkbenchPaletteCommandAvailable('go-to-line', { ...FileInFront, hasActiveFile: false }), false)
+    // 转到文件中的符号同样是对着当前文件：盖着别的也能用，没有文本文件不给。
+    assert.equal(isWorkbenchPaletteCommandAvailable('go-to-symbol', FileInFront), true)
+    assert.equal(isWorkbenchPaletteCommandAvailable('go-to-symbol', { ...FileInFront, editorCovered: true }), true)
+    assert.equal(isWorkbenchPaletteCommandAvailable('go-to-symbol', { ...FileInFront, activeFileIsText: false }), false)
+    assert.equal(isWorkbenchPaletteCommandAvailable('go-to-symbol', { ...FileInFront, hasActiveFile: false }), false)
   })
 
   void test('tab commands need something to act on', () => {

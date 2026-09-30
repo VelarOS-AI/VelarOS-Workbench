@@ -636,20 +636,30 @@ export interface WorkbenchLanguageServiceFormatResult {
 export type WorkbenchLanguageServiceDocumentSymbolKind =
   | 'class'
   | 'constant'
+  | 'constructor'
   | 'enum'
+  | 'enum-member'
   | 'function'
   | 'interface'
   | 'method'
+  | 'module'
+  | 'property'
   | 'symbol'
   | 'type'
   | 'variable'
 
+/**
+ * 文件里的一个符号。整份结果按文件里的先后排，嵌套靠 `depth` 表达：一个符号的外层是它前面最近的、`depth`
+ * 少一的那个。
+ */
 export interface WorkbenchLanguageServiceDocumentSymbol {
   name: string
   kind: WorkbenchLanguageServiceDocumentSymbolKind
   depth: number
+  /** 名字所在的位置：跳过去时光标落在这里。 */
   line: number
   column: number
+  /** 整个声明（连同它的体）的范围：光标在不在这个符号里看它。 */
   range: WorkbenchLanguageServiceRange
 }
 
