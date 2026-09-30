@@ -134,7 +134,7 @@
   @apply shrink-0;
   width: 15px;
   height: 15px;
-  background-color: var(--workbench-muted);
+  background-color: var(--workbench-text-muted);
   mask-position: center;
   mask-repeat: no-repeat;
   mask-size: 15px 15px;

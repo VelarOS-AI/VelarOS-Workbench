@@ -1178,7 +1178,7 @@
   @apply grid shrink-0 place-items-center rounded;
   width: 24px;
   height: 24px;
-  color: var(--workbench-muted);
+  color: var(--workbench-text-muted);
 }
 
 .editorSymbolLocationsClose:hover {
@@ -1215,7 +1215,7 @@
   @apply flex items-center justify-between gap-2;
   min-height: 24px;
   padding: 4px 8px 2px;
-  color: var(--workbench-muted);
+  color: var(--workbench-text-muted);
   font-size: 11px;
   font-weight: 600;
 }
@@ -1256,7 +1256,7 @@
 
 .editorSymbolLocationKind {
   @apply truncate font-semibold;
-  color: var(--workbench-muted);
+  color: var(--workbench-text-muted);
   font-size: 10px;
   letter-spacing: 0.02em;
 }
@@ -1295,7 +1295,7 @@
 .editorCallHierarchyDirections button {
   @apply rounded;
   padding: 2px 8px;
-  color: var(--workbench-muted);
+  color: var(--workbench-text-muted);
   font-size: 11px;
 }
 
@@ -1333,7 +1333,7 @@
   @apply grid shrink-0 place-items-center rounded;
   width: 16px;
   height: 16px;
-  color: var(--workbench-muted);
+  color: var(--workbench-text-muted);
 }
 
 .editorCallHierarchyTwisty:not(:disabled):hover {
@@ -1347,7 +1347,7 @@
   width: 9px;
   height: 9px;
   border: 1.5px solid var(--workbench-border);
-  border-top-color: var(--workbench-muted);
+  border-top-color: var(--workbench-text-muted);
   content: '';
 }
 
