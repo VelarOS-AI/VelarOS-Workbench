@@ -58,6 +58,10 @@ import type { WorkbenchReadFileResult } from '@shared/contracts'
 import styles from '../../styles/workbenchPageStyles'
 import { useBlockWheelScroll } from '../../support/useBlockWheelScroll'
 import { useDismissOnWindowInteract } from '../../support/useDismissOnWindowInteract'
+import {
+  focusFirstWorkbenchMenuItem,
+  handleWorkbenchMenuKeyDown,
+} from '../chrome/WorkbenchContextMenu'
 import { WorkbenchFileTypeIcon } from '../files/WorkbenchFileTypeIcon'
 
 interface WorkbenchEditorTabContextMenuState {
@@ -356,6 +360,23 @@ export function EditorTabBar({
 
   const menuOpenKind = isPresent(openMenu)
   useBlockWheelScroll(tabContextMenuRef, isPresent(tabContextMenu))
+  // 右键菜单、「标签操作」菜单打开时焦点进菜单（方向键、回车马上能用）；关掉后回到原来的地方。
+  const tabContextMenuOpen = isPresent(tabContextMenu)
+  const actionsMenuOpen = openMenu === 'actions'
+  useEffect(() => {
+    if (!tabContextMenuOpen && !actionsMenuOpen) return undefined
+    const previous = document.activeElement
+    focusFirstWorkbenchMenuItem(
+      tabContextMenuOpen ? tabContextMenuRef.current : actionsMenuRef.current
+    )
+    return () => {
+      // 菜单里的项跑完、菜单收起之后焦点没了着落（还在菜单里，或者落到了 body 上）才还回去；
+      // 动作自己把焦点带到了别处（打开标签、进了编辑器）就不动它。
+      const focused = document.activeElement
+      const lost = !focused || focused === document.body || !focused.isConnected
+      if (lost && previous instanceof HTMLElement && previous.isConnected) previous.focus()
+    }
+  }, [actionsMenuOpen, tabContextMenuOpen])
   // 同名文件在名字后面补上分得开它们的上级目录。
   const tabLabels = useMemo(
     () => buildWorkbenchEditorTabLabels(openTabs.map((tab) => tab.path)),
@@ -849,11 +870,15 @@ export function EditorTabBar({
       {openMenu === 'actions' && (
         <div
           ref={actionsMenuRef}
+          role="menu"
+          aria-label={t('workbench.editorTabActions')}
           className={styles.editorTabContextMenu}
           style={getMenuStyle('actions')}
+          onKeyDown={handleWorkbenchMenuKeyDown}
           onMouseDown={(event) => event.stopPropagation()}
         >
           <Button
+            role="menuitem"
             variant="ghost"
             size="block"
             onClick={() => runToolbarAction(onCloseUnmodifiedOpenFiles)}
@@ -862,6 +887,7 @@ export function EditorTabBar({
             <Text truncate>{t('workbench.closeUnmodifiedEditorTabs')}</Text>
           </Button>
           <Button
+            role="menuitem"
             variant="ghost"
             size="block"
             onClick={() => runToolbarAction(onCloseAllOpenFiles)}
@@ -874,11 +900,15 @@ export function EditorTabBar({
       {!!tabContextMenu && (
         <div
           ref={tabContextMenuRef}
+          role="menu"
+          aria-label={t('workbench.editorTabActions')}
           className={styles.editorTabContextMenu}
           style={{ left: tabContextMenu.x, top: tabContextMenu.y }}
+          onKeyDown={handleWorkbenchMenuKeyDown}
           onMouseDown={(event) => event.stopPropagation()}
         >
           <Button
+            role="menuitem"
             variant="ghost"
             size="block"
             onClick={() => onRunTabContextAction(() => onSelectOpenFile(tabContextMenu.path))}
@@ -888,6 +918,7 @@ export function EditorTabBar({
           </Button>
           {!!onAddFileToChat && (
             <Button
+              role="menuitem"
               variant="ghost"
               size="block"
               onClick={() => onRunTabContextAction(() => onAddFileToChat(tabContextMenu.path))}
@@ -897,6 +928,7 @@ export function EditorTabBar({
             </Button>
           )}
           <Button
+            role="menuitem"
             variant="ghost"
             size="block"
             disabled={isSavingFile || !dirtyTabCount}
@@ -907,6 +939,7 @@ export function EditorTabBar({
           </Button>
           {!!onRevertOpenFile && (
             <Button
+              role="menuitem"
               variant="ghost"
               size="block"
               disabled={!contextTabIsDirty}
@@ -918,6 +951,7 @@ export function EditorTabBar({
           )}
           {!!onPinOpenFile && !!onUnpinOpenFile && (
             <Button
+              role="menuitem"
               variant="ghost"
               size="block"
               onClick={() =>
@@ -936,6 +970,7 @@ export function EditorTabBar({
             (groupCount < 2 ? (
               // 只有一组：把这个标签挪进新开的右边那组。组里只有它一个时挪过去等于没挪。
               <Button
+                role="menuitem"
                 variant="ghost"
                 size="block"
                 disabled={openTabs.length < 2}
@@ -946,6 +981,7 @@ export function EditorTabBar({
               </Button>
             ) : (
               <Button
+                role="menuitem"
                 variant="ghost"
                 size="block"
                 onClick={() =>
@@ -957,6 +993,7 @@ export function EditorTabBar({
               </Button>
             ))}
           <Button
+            role="menuitem"
             variant="ghost"
             size="block"
             onClick={() => onRunTabContextAction(() => onCloseOtherOpenFiles(tabContextMenu.path))}
@@ -966,6 +1003,7 @@ export function EditorTabBar({
           </Button>
           {!!onCloseOpenFilesToRight && (
             <Button
+              role="menuitem"
               variant="ghost"
               size="block"
               disabled={!contextTabHasTabsToRight}
@@ -978,6 +1016,7 @@ export function EditorTabBar({
             </Button>
           )}
           <Button
+            role="menuitem"
             variant="ghost"
             size="block"
             onClick={() => onRunTabContextAction(onCloseAllOpenFiles)}

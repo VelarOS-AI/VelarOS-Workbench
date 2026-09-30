@@ -35,6 +35,39 @@ interface WorkbenchContextMenuProps {
 
 const ViewportPadding = 8
 
+function enabledMenuButtons(menu: HTMLElement): HTMLButtonElement[] {
+  return [...menu.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')]
+}
+
+/**
+ * 菜单里的方向键：↑ ↓ 在能点的项之间走（到头绕回），Home / End 到第一项、最后一项。按键不再往外传，
+ * 免得菜单开着时触发编辑器或全局的快捷键；Esc 除外，它要传到窗口上把菜单关掉。工作台里自己画的菜单
+ * （右键菜单、标签栏的菜单）共用。
+ */
+export function handleWorkbenchMenuKeyDown(event: KeyboardEvent<HTMLElement>): void {
+  if (event.key !== 'Escape') event.stopPropagation()
+  const buttons = enabledMenuButtons(event.currentTarget)
+  if (isEmpty(buttons)) return
+
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    event.preventDefault()
+    const direction = event.key === 'ArrowDown' ? 1 : -1
+    const currentIndex = buttons.findIndex((button) => button === document.activeElement)
+    const nextIndex =
+      currentIndex < 0 ? 0 : (currentIndex + direction + buttons.length) % buttons.length
+    buttons[nextIndex]?.focus()
+  } else if (event.key === 'Home' || event.key === 'End') {
+    event.preventDefault()
+    const target = event.key === 'Home' ? buttons[0] : buttons.at(-1)
+    target?.focus()
+  }
+}
+
+/** 菜单打开时把焦点放到第一个能点的项上，方向键和回车马上能用。 */
+export function focusFirstWorkbenchMenuItem(menu: Nullable<HTMLElement>): void {
+  if (menu) enabledMenuButtons(menu)[0]?.focus()
+}
+
 export function WorkbenchContextMenu({
   x,
   y,
@@ -63,38 +96,8 @@ export function WorkbenchContextMenu({
       x: Math.max(ViewportPadding, Math.min(x, window.innerWidth - rect.width - ViewportPadding)),
       y: Math.max(ViewportPadding, Math.min(y, window.innerHeight - rect.height - ViewportPadding)),
     })
-    menu.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus()
+    focusFirstWorkbenchMenuItem(menu)
   }, [x, y, items])
-
-  function moveFocus(event: KeyboardEvent<HTMLDivElement>, direction: 1 | -1): void {
-    const buttons = [
-      ...event.currentTarget.querySelectorAll<HTMLButtonElement>('button:not(:disabled)'),
-    ]
-    if (isEmpty(buttons)) return
-
-    const currentIndex = buttons.findIndex((button) => button === document.activeElement)
-    const nextIndex =
-      currentIndex < 0 ? 0 : (currentIndex + direction + buttons.length) % buttons.length
-    buttons[nextIndex]?.focus()
-  }
-
-  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
-    event.stopPropagation()
-    if (event.key === 'ArrowDown') {
-      event.preventDefault()
-      moveFocus(event, 1)
-    } else if (event.key === 'ArrowUp') {
-      event.preventDefault()
-      moveFocus(event, -1)
-    } else if (event.key === 'Home' || event.key === 'End') {
-      event.preventDefault()
-      const buttons = [
-        ...event.currentTarget.querySelectorAll<HTMLButtonElement>('button:not(:disabled)'),
-      ]
-      const target = event.key === 'Home' ? buttons[0] : buttons.at(-1)
-      target?.focus()
-    }
-  }
 
   return (
     <div
@@ -104,7 +107,7 @@ export function WorkbenchContextMenu({
       className={styles.workbenchContextMenu}
       data-compact={compact ? 'true' : undefined}
       style={{ left: position.x, top: position.y }}
-      onKeyDown={handleKeyDown}
+      onKeyDown={handleWorkbenchMenuKeyDown}
       onMouseDown={(event) => event.stopPropagation()}
     >
       {items.map((item) => (

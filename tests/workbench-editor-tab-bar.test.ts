@@ -81,9 +81,9 @@ function tabElements(markup: string): string[] {
   )
 }
 
-/** 右键菜单那一段标记：唯一一个按坐标定位的浮层。 */
+/** 右键菜单那一段标记：标签栏里最后一个菜单（`role="menu"`）。 */
 function contextMenu(markup: string): string {
-  const start = markup.lastIndexOf('<div style="left:')
+  const start = markup.lastIndexOf('<div role="menu"')
   assert.ok(start >= 0, 'no context menu')
   return markup.slice(start)
 }
@@ -145,6 +145,16 @@ void describe('editor tab bar', () => {
     )
     assert.match(split, /workbench\.moveEditorTabToOtherGroup/u)
     assert.doesNotMatch(split, /workbench\.splitEditorTabRight/u)
+  })
+
+  void test('the tab menu is a menu: it has the role and its entries are menu items', () => {
+    const menu = contextMenu(
+      render({ openTabs: tabs, tabContextMenu: { path: 'src/b.ts', x: 10, y: 10 } })
+    )
+    assert.match(menu, /^<div role="menu" aria-label="workbench\.editorTabActions"/u)
+    const buttons = [...menu.matchAll(/<button[^>]*>/gu)].map((match) => match[0])
+    assert.ok(buttons.length >= 5)
+    for (const button of buttons) assert.match(button, /role="menuitem"/u)
   })
 
   void test('close to the right is only offered when an unpinned tab sits to the right', () => {
