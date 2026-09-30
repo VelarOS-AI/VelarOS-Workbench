@@ -10,7 +10,9 @@
  * - 往前预读几个文件，按路径顺序出结果；第一批一有结果就交出，之后隔一小段时间交一批，前面的结果先显示。
  * - 搜索途中每秒报一声心跳：等读盘时事件循环照转、报得出来，卡在正则里就报不出来，主进程据此判断卡住。
  * - 列到 limit 处匹配就停（truncated）；每个文件的匹配总数照样数全，替换时说得清换几处。
- * - 调用方开着的文件（openPaths）不读，只报它们在不在搜索范围里：编辑器里的正文由调用方自己搜。
+ * - 调用方开着的文件（openPaths）只报在不在搜索范围里：结果由调用方在编辑器正文上算。用正则搜时先拿磁盘上
+ *   的版本试跑一遍：正则要是在它上面跑不完，卡住的是这个 worker（会被结束，报出这个文件），调用方收不到这个
+ *   路径，也就不会在自己的线程（窗口）里再跑一遍把界面卡死。字面查找不会回溯，不读它们。
  */
 import { lstat, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -48,7 +50,7 @@ export interface WorkbenchContentSearchTask {
   projectRoot: string
   /** 要搜的文件（工程相对路径），已经筛过范围、按顺序排好。 */
   paths: string[]
-  /** 调用方开着的文件：不读，只报在不在范围里。 */
+  /** 调用方开着的文件：只报在不在范围里（用正则时先在磁盘版本上试跑，见文件头）。 */
   openPaths: string[]
   query: WorkbenchTextSearchQuery
   /** 最多列出多少处匹配。 */
@@ -146,6 +148,8 @@ export async function runWorkbenchContentSearchTask(
     skippedLargeFileCount: 0,
   }
   const openPaths = new Set(task.openPaths)
+  /** 开着的文件要不要先在磁盘版本上试跑（只有正则会回溯）。 */
+  const probeOpenFiles = task.query.regex
   const budget = { remaining: task.limit }
   const pending = new Map<string, Promise<LoadedSearchFile>>()
   let batch: WorkbenchSearchContentBatch = { files: [], openPathsInScope: [] }
@@ -155,12 +159,20 @@ export async function runWorkbenchContentSearchTask(
     const readAheadEnd = Math.min(task.paths.length, index + ReadAhead)
     for (let ahead = index; ahead < readAheadEnd; ahead += 1) {
       const path = task.paths[ahead]!
-      if (!openPaths.has(path) && !pending.has(path))
+      if ((probeOpenFiles || !openPaths.has(path)) && !pending.has(path))
         pending.set(path, loadSearchFile(task.projectRoot, path))
     }
 
     const path = task.paths[index]!
     if (openPaths.has(path)) {
+      if (probeOpenFiles) {
+        const onDisk = await pending.get(path)!
+        pending.delete(path)
+        if (onDisk.kind === 'text') {
+          hooks.onFile?.(path)
+          scanWorkbenchTextSearch(onDisk.content, matcher, () => undefined)
+        }
+      }
       batch.openPathsInScope.push(path)
       continue
     }

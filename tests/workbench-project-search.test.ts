@@ -394,7 +394,7 @@ void describe('project content search: streaming, cancelling and open files', ()
   void test('open files are left to the caller: only reported when they are in scope', async () => {
     await withProject(
       { 'src/open.ts': 'needle\n', 'src/closed.ts': 'needle\n', 'docs/open.md': 'needle\n' },
-      async ({ search }) => {
+      async ({ root, search }) => {
         const result = await search({
           query: 'needle',
           exclude: 'docs',
@@ -402,6 +402,27 @@ void describe('project content search: streaming, cancelling and open files', ()
         })
         assert.deepEqual(pathsOf(result), ['src/closed.ts'])
         assert.deepEqual(result.openPathsInScope, ['src/open.ts'])
+
+        // 字面查找不读开着的文件；用正则时先在磁盘版本上试跑一遍（结果照样不出），再报它在范围里。
+        const scanned = async (regex: boolean): Promise<string[]> => {
+          const files: string[] = []
+          const outcome = await runWorkbenchContentSearchTask(
+            {
+              projectRoot: root,
+              paths: ['src/closed.ts', 'src/open.ts'],
+              openPaths: ['src/open.ts'],
+              query: { query: 'needle', matchCase: false, wholeWord: false, regex },
+              limit: 100,
+              maxResultsPerFile: 100,
+            },
+            { onFile: (path) => files.push(path) }
+          )
+          assert.deepEqual(pathsOf(outcome), ['src/closed.ts'])
+          assert.deepEqual(outcome.openPathsInScope, ['src/open.ts'])
+          return files
+        }
+        assert.deepEqual(await scanned(false), ['src/closed.ts'])
+        assert.deepEqual(await scanned(true), ['src/closed.ts', 'src/open.ts'])
       }
     )
   })
@@ -529,7 +550,8 @@ void describe('project content search: runaway regexes', () => {
       async ({ search }) => {
         let ticks = 0
         const ticker = setInterval(() => (ticks += 1), 20)
-        const searching = search({ query: RunawayRegex, regex: true })
+        // slow.ts 在编辑器里开着：worker 先在磁盘版本上试跑、卡住，调用方就不会在自己的线程里再跑它。
+        const searching = search({ query: RunawayRegex, regex: true, openPaths: ['slow.ts'] })
         try {
           await assert.rejects(searching, (error: unknown) => {
             const { code, message } = error as { code?: string; message?: string }
