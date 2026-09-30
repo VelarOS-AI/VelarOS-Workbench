@@ -96,4 +96,16 @@ void describe('language service IPC: code actions', () => {
     assert.equal(await invoke(channel, { ...request, categories: 'refactor' }), false)
     assert.equal(calls['getCodeActions']?.length, 3)
   })
+
+  void test('organize imports takes the file, its text and its indentation', async () => {
+    const calls = await registerWithRecorder()
+    const channel = WorkbenchLanguageChannels.organizeImports
+    const format = { tabSize: 4, indentSize: 4, insertSpaces: true }
+
+    assert.equal(await invoke(channel, { ...Base, format, unknown: true }), true)
+    assert.deepEqual(calls['getOrganizeImports'], [{ ...Base, format }])
+    assert.equal(await invoke(channel, { projectRoot: '/project' }), false)
+    assert.equal(await invoke(channel, null), false)
+    assert.equal(calls['getOrganizeImports']?.length, 1)
+  })
 })

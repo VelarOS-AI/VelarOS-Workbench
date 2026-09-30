@@ -23,6 +23,7 @@ import { buildWorkbenchLanguageServiceRequestBase } from '@renderer/models/edito
 import type { WorkbenchEditorCommandId } from '@renderer/models/editor/workbenchEditorCommands'
 import {
   getWorkbenchLanguageServiceCodeActions,
+  getWorkbenchLanguageServiceOrganizeImports,
   resolveWorkbenchLanguageServiceCodeAction,
 } from '@renderer/models/editor/workbenchLanguageServiceIpc'
 import { useStableWorkbenchMessageTranslate } from '@renderer/runtime/useStableWorkbenchMessaging'
@@ -315,6 +316,31 @@ export function useEditorCodeActions({
     })
   })
 
+  /** 整理当前文件的 import：一步撤销；已经整理好就什么也不做。 */
+  const organizeImports = useMemoizedFn(async (): Promise<void> => {
+    const view = viewRef.current
+    if (!view || !canEdit(view)) return
+    if (!resolveWorkbenchCodeActionSupport(latest.current.path).organizeImports) return
+    const source = captureSource(view, 0, 0)
+    if (!source) return
+
+    const { range: _range, ...request } = requestBase(source)
+    const result = await getWorkbenchLanguageServiceOrganizeImports(request, latest.current.hostRuntime)
+    if (!isCurrent(source) || !canEdit(view)) return
+    if (!result.ok) {
+      messageLatest.current.error({
+        title: tLatest.current('workbench.languageServiceActionFailed'),
+        description: result.error.message,
+      })
+      return
+    }
+    const changes = buildWorkbenchCodeMirrorChanges(
+      view.state,
+      partitionWorkbenchCodeActionChanges(source.path, result.data.changes).current
+    )
+    if (changes && !isEmpty(changes)) view.dispatch({ changes })
+  })
+
   const requestHoverActions = useMemoizedFn(
     async (view: EditorView, from: number, to: number): Promise<WorkbenchEditorHoverAction[]> => {
       if (!canEdit(view) || !resolveWorkbenchCodeActionSupport(latest.current.path).quickFix)
@@ -346,6 +372,8 @@ export function useEditorCodeActions({
         return !readOnly && (support.quickFix || support.refactor)
       case 'refactor':
         return !readOnly && support.refactor
+      case 'organize-imports':
+        return !readOnly && support.organizeImports
     }
   }
 
@@ -356,6 +384,9 @@ export function useEditorCodeActions({
         return
       case 'refactor':
         void openMenu('refactor')
+        return
+      case 'organize-imports':
+        void organizeImports()
     }
   })
 

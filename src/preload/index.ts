@@ -150,6 +150,8 @@ const languageBridge: WorkbenchLanguageBridge = {
   getCodeActions: (request) => ipcRenderer.invoke(WorkbenchLanguageChannels.codeActions, request),
   resolveCodeAction: (request) =>
     ipcRenderer.invoke(WorkbenchLanguageChannels.codeActionResolve, request),
+  getOrganizeImports: (request) =>
+    ipcRenderer.invoke(WorkbenchLanguageChannels.organizeImports, request),
   requestExtension: (request) => ipcRenderer.invoke(WorkbenchLanguageChannels.extension, request),
   getInlineCompletion: (request) =>
     ipcRenderer.invoke(WorkbenchLanguageChannels.inlineCompletion, request),

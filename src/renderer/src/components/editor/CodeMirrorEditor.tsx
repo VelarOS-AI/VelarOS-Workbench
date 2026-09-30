@@ -2213,6 +2213,15 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       })
     }
 
+    // 菜单有哪些条目随文件而变，高度先按估的放；画出来以后量一下，伸到窗口下沿外面就往上收。
+    useLayoutEffect(() => {
+      const menu = contextMenuRef.current
+      if (!menu || !contextMenu) return
+      const overflow = menu.getBoundingClientRect().bottom - (window.innerHeight - 8)
+      const y = Math.max(8, contextMenu.y - overflow)
+      if (overflow > 0 && y !== contextMenu.y) setContextMenu({ ...contextMenu, y })
+    }, [contextMenu])
+
     useDismissOnWindowInteract({
       enabled: isPresent(contextMenu),
       onDismiss: () => setContextMenu(null),
@@ -3222,6 +3231,14 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
               onClick={() => void formatDocument()}
             >
               {t('workbench.editorContextFormatDocument')}
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              disabled={!codeActions.canRun('organize-imports')}
+              onClick={() => runCommandFromContextMenu('organize-imports')}
+            >
+              {t('workbench.editorContextOrganizeImports')}
             </button>
             {isRunnableEditorPath(path) && (
               <button

@@ -403,6 +403,30 @@ export function buildTypeScriptQuickFixes(
   return [...actions, ...fixAllActions].slice(0, MaxCodeActions)
 }
 
+/**
+ * 整理 import：排序、把同一个模块的导入并成一句、去掉没用到的（TypeScript 的 organizeImports）。
+ * 已经整理好的文件没有改动。
+ */
+export function buildTypeScriptOrganizeImportsEdits(
+  context: TypeScriptEditContext
+): WorkbenchLanguageServiceFileEdit[] {
+  const { formatOptions, preferences } = typeScriptWriteSettings(context)
+  const fileChanges = context.service.organizeImports(
+    { type: 'file', fileName: context.fileName },
+    formatOptions,
+    preferences
+  )
+  // 已经整理好的文件 TypeScript 照样把 import 那一段原样重写一遍：套上去正文不变，却多出一步撤销。
+  const after = applyTextChanges(
+    context.content,
+    fileChanges
+      .filter((change) => change.fileName === context.fileName)
+      .flatMap((change) => change.textChanges)
+  )
+  if (after === context.content) return []
+  return mapTypeScriptFileChanges(context, fileChanges)?.changes ?? []
+}
+
 /** TypeScript 认的「光标处」或「选区」。 */
 function positionOrRange(range: { start: number; end: number }): number | ts.TextRange {
   return range.start === range.end ? range.start : { pos: range.start, end: range.end }

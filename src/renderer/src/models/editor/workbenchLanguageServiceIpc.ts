@@ -49,6 +49,9 @@ type WorkbenchLanguageServiceCodeActionsPayload = Parameters<
 type WorkbenchLanguageServiceCodeActionResolvePayload = Parameters<
   WorkbenchProjectKernelPort['resolveWorkbenchLanguageServiceCodeAction']
 >[0]
+type WorkbenchLanguageServiceOrganizeImportsPayload = Parameters<
+  WorkbenchProjectKernelPort['getWorkbenchLanguageServiceOrganizeImports']
+>[0]
 
 type WorkbenchInlineCompletionPayload = Parameters<
   WorkbenchProjectKernelPort['getWorkbenchInlineCompletion']
@@ -171,4 +174,11 @@ export function resolveWorkbenchLanguageServiceCodeAction(
   runtime: WorkbenchHostRuntime = workbenchHost
 ): ReturnType<WorkbenchProjectKernelPort['resolveWorkbenchLanguageServiceCodeAction']> {
   return runtime.kernel.project.resolveWorkbenchLanguageServiceCodeAction(payload)
+}
+
+export function getWorkbenchLanguageServiceOrganizeImports(
+  payload: WorkbenchLanguageServiceOrganizeImportsPayload,
+  runtime: WorkbenchHostRuntime = workbenchHost
+): ReturnType<WorkbenchProjectKernelPort['getWorkbenchLanguageServiceOrganizeImports']> {
+  return runtime.kernel.project.getWorkbenchLanguageServiceOrganizeImports(payload)
 }

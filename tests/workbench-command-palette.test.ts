@@ -108,6 +108,7 @@ void describe('Workbench command palette registry', () => {
     assert.equal(command(mac, 'format-document').shortcut, '⌥⌘L')
     assert.equal(command(mac, 'quick-fix').shortcut, '⌥↩')
     assert.equal(command(mac, 'refactor').shortcut, '⌃T')
+    assert.equal(command(mac, 'organize-imports').shortcut, '⌥⇧O')
     assert.equal(command(mac, 'toggle-word-wrap').shortcut, '⌥Z')
     assert.equal(command(mac, 'go-to-line').shortcut, '⌃G')
     assert.equal(command(mac, 'close-editor').shortcut, '⌘W')
@@ -124,6 +125,7 @@ void describe('Workbench command palette registry', () => {
     assert.equal(command(linux, 'format-document').shortcut, 'Ctrl+Alt+L')
     assert.equal(command(linux, 'quick-fix').shortcut, 'Alt+Enter')
     assert.equal(command(linux, 'refactor').shortcut, 'Ctrl+Alt+Shift+T')
+    assert.equal(command(linux, 'organize-imports').shortcut, 'Alt+Shift+O')
     assert.equal(command(linux, 'zoom-out').shortcut, 'Ctrl+-')
 
     // 改过的快捷键照改过的显示。
@@ -227,20 +229,23 @@ void describe('Workbench command palette availability', () => {
       isWorkbenchPaletteCommandAvailable('quick-fix', { ...FileInFront, activeFileLanguageService: 'external' }),
       true
     )
-    assert.equal(isWorkbenchPaletteCommandAvailable('refactor', FileInFront), true)
-    // 重构只有内置 TypeScript 服务给。
-    assert.equal(
-      isWorkbenchPaletteCommandAvailable('refactor', { ...FileInFront, activeFileLanguageService: 'external' }),
-      false
-    )
+    // 重构、整理 import 只有内置 TypeScript 服务给。
+    for (const id of ['refactor', 'organize-imports'] as const) {
+      assert.equal(isWorkbenchPaletteCommandAvailable(id, FileInFront), true, id)
+      assert.equal(
+        isWorkbenchPaletteCommandAvailable(id, { ...FileInFront, activeFileLanguageService: 'external' }),
+        false,
+        id
+      )
+    }
     for (const context of [
       { ...FileInFront, activeFileLanguageService: null },
       { ...FileInFront, canEditActiveFile: false },
       { ...FileInFront, editorCovered: true },
       { ...FileInFront, hasActiveFile: false },
     ]) {
-      assert.equal(isWorkbenchPaletteCommandAvailable('quick-fix', context), false)
-      assert.equal(isWorkbenchPaletteCommandAvailable('refactor', context), false)
+      for (const id of ['quick-fix', 'refactor', 'organize-imports'] as const)
+        assert.equal(isWorkbenchPaletteCommandAvailable(id, context), false, id)
     }
   })
 

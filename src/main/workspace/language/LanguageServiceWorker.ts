@@ -83,6 +83,8 @@ async function dispatch(
       return languageServices.getCodeActions(request.request)
     case 'resolveCodeAction':
       return languageServices.resolveCodeAction(request.request)
+    case 'getOrganizeImports':
+      return languageServices.getOrganizeImports(request.request)
   }
 }
 

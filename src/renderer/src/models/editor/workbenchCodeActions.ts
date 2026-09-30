@@ -18,10 +18,11 @@ import type {
 import type { WorkbenchCodeMirrorDiagnostic } from './workbenchCodeMirrorDiagnostics'
 import { resolveWorkbenchBuiltinLanguageServiceRuntime } from './workbenchCodeMirrorLanguageService'
 
-/** 一个文件能用哪几样：快速修复内置 TypeScript 与外部语言服务器都有，重构只有内置 TypeScript 有。 */
+/** 一个文件能用哪几样：快速修复内置 TypeScript 与外部语言服务器都有，重构、整理 import 只有内置 TypeScript 有。 */
 export interface WorkbenchCodeActionSupport {
   quickFix: boolean
   refactor: boolean
+  organizeImports: boolean
 }
 
 export function resolveWorkbenchCodeActionSupport(path: Nullable<string>): WorkbenchCodeActionSupport {
@@ -32,6 +33,7 @@ export function resolveWorkbenchCodeActionSupport(path: Nullable<string>): Workb
       || runtime === 'lsp-server'
       || runtime === 'python-language-server',
     refactor: runtime === 'typescript-language-service',
+    organizeImports: runtime === 'typescript-language-service',
   }
 }
 

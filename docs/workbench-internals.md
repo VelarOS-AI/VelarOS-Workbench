@@ -391,6 +391,9 @@ Ctrl+Alt+Shift+T，右键、命令面板）只列重构，按「提取、内联�
   （抽出来的 `newFunction`、`newLocal`）时，worker 按套完改动之后的正文把它换成行列与偏移交回来，编辑器套完改动
   就在那里开行内改名。「移到新文件」的新文件在结果的 `createFiles` 里。
 
+- **整理 import**（⇧⌥O / Shift+Alt+O、右键、命令面板）：`getOrganizeImports` → TypeScript 的 `organizeImports`（排序、
+  合并同一个模块的导入、去掉没用到的），只改当前文件、一步撤销。已经整理好的文件 TypeScript 照样把 import 段原样
+  重写一遍，worker 发现套上去正文不变就不给改动，免得平白多出一步撤销。
 - **worker**：TypeScript 的修复在 `TypeScriptCodeActions.ts`。诊断按请求里的正文现算（不靠编辑器里那份，它可能
   还没刷新），只对 TypeScript 登记了修复的诊断码去问 `getCodeFixesAtPosition`，一次最多 12 条诊断。TypeScript 给了
   「同类问题一起修」（`fixId`）且文件里确实还有同类诊断时多列一项，它的改动在选中时才算（`resolveCodeAction` →

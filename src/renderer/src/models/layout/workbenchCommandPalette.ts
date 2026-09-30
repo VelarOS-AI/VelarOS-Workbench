@@ -27,6 +27,7 @@ export type WorkbenchPaletteCommandId =
   | 'navigate-forward'
   | 'new-terminal'
   | 'open-settings'
+  | 'organize-imports'
   | 'quick-fix'
   | 'refactor'
   | 'reopen-closed-tab'
@@ -112,6 +113,12 @@ export const WORKBENCH_PALETTE_COMMANDS: readonly WorkbenchPaletteCommandDefinit
     labelKey: 'workbench.commandRefactor',
     shortcut: { platform: (isApple) => (isApple ? 'Ctrl+T' : 'Ctrl+Alt+Shift+T') },
   },
+  // 编辑器里的 ⇧⌥O / Shift+Alt+O：排序、合并、去掉没用到的 import。
+  {
+    id: 'organize-imports',
+    labelKey: 'workbench.commandOrganizeImports',
+    shortcut: { fixed: 'Alt+Shift+O' },
+  },
   // 编辑器里的 ⌥Z / Alt+Z。
   { id: 'toggle-word-wrap', labelKey: 'workbench.commandToggleWordWrap', shortcut: { fixed: 'Alt+Z' } },
   { id: 'toggle-read-only', labelKey: 'workbench.commandToggleReadOnly' },
@@ -193,8 +200,9 @@ export function isWorkbenchPaletteCommandAvailable(
     // 修复要改代码：只读的文件不给；没有语言服务的文件没有修复可给。
     case 'quick-fix':
       return textEditorInFront && context.canEditActiveFile && !!context.activeFileLanguageService
-    // 重构是内置 TypeScript 服务给的。
+    // 重构、整理 import 是内置 TypeScript 服务给的。
     case 'refactor':
+    case 'organize-imports':
       return (
         textEditorInFront
         && context.canEditActiveFile

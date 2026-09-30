@@ -191,6 +191,15 @@ export function registerWorkbenchLanguageServiceIpc(
     })
   )
 
+  ipcMain.handle(WorkbenchLanguageChannels.organizeImports, (_event, request: unknown) =>
+    callWithEnvelope(() => {
+      const parsed = parseRequest(request)
+      if (!parsed) return invalidRequest()
+
+      return client.getOrganizeImports(parsed)
+    })
+  )
+
   ipcMain.handle(WorkbenchLanguageChannels.extension, (_event, request: unknown) =>
     callWithEnvelope(() => {
       const parsed = parseExtensionRequest(request)

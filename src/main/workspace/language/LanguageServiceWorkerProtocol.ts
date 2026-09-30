@@ -19,6 +19,7 @@ import type {
   WorkbenchLanguageServiceHoverQueryResult,
   WorkbenchLanguageServiceInlayHintsRequest,
   WorkbenchLanguageServiceInlayHintsResult,
+  WorkbenchLanguageServiceOrganizeImportsResult,
   WorkbenchLanguageServicePositionRequest,
   WorkbenchLanguageServiceProjectDiagnosticsRequest,
   WorkbenchLanguageServiceProjectDiagnosticsResult,
@@ -133,6 +134,10 @@ export interface WorkbenchLanguageServiceWorkerOperationMap {
   resolveCodeAction: {
     request: WorkbenchLanguageServiceCodeActionResolveRequest
     result: WorkbenchLanguageServiceCodeActionResolveResult
+  }
+  getOrganizeImports: {
+    request: WorkbenchLanguageServiceRequest
+    result: WorkbenchLanguageServiceOrganizeImportsResult
   }
 }
 

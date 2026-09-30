@@ -267,6 +267,8 @@ const standaloneWorkbenchHost: WorkbenchHost = {
         toHostResult(await window.velarosWorkbenchLanguage.getCodeActions(request)),
       resolveWorkbenchLanguageServiceCodeAction: async (request) =>
         toHostResult(await window.velarosWorkbenchLanguage.resolveCodeAction(request)),
+      getWorkbenchLanguageServiceOrganizeImports: async (request) =>
+        toHostResult(await window.velarosWorkbenchLanguage.getOrganizeImports(request)),
       requestWorkbenchLanguageServiceExtension: async (request) =>
         toHostResult(await window.velarosWorkbenchLanguage.requestExtension(request)),
       runWorkbenchCommand: async (request) =>

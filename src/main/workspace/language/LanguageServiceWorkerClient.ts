@@ -335,6 +335,10 @@ export class WorkbenchLanguageServiceWorkerClient {
     return this.call('resolveCodeAction', request)
   }
 
+  public getOrganizeImports(request: WorkbenchLanguageServiceRequest) {
+    return this.call('getOrganizeImports', request)
+  }
+
   public async dispose(): Promise<void> {
     if (this.disposed) return
     this.disposed = true

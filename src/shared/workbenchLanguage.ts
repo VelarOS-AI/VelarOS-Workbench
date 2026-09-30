@@ -32,6 +32,7 @@ import type {
   WorkbenchLanguageServiceHoverQueryResult,
   WorkbenchLanguageServiceInlayHintsRequest,
   WorkbenchLanguageServiceInlayHintsResult,
+  WorkbenchLanguageServiceOrganizeImportsResult,
   WorkbenchLanguageServicePositionRequest,
   WorkbenchLanguageServiceProjectDiagnosticsRequest,
   WorkbenchLanguageServiceProjectDiagnosticsResult,
@@ -62,6 +63,7 @@ export const WorkbenchLanguageChannels = {
   semanticTokens: 'workbench-app:ls:semantic-tokens',
   codeActions: 'workbench-app:ls:code-actions',
   codeActionResolve: 'workbench-app:ls:code-action-resolve',
+  organizeImports: 'workbench-app:ls:organize-imports',
   extension: 'workbench-app:ls:extension',
   inlineCompletion: 'workbench-app:ls:inline-completion',
 } as const
@@ -120,6 +122,9 @@ export interface WorkbenchLanguageBridge {
   resolveCodeAction: (
     request: WorkbenchLanguageServiceCodeActionResolveRequest
   ) => Promise<WorkbenchFsCallResult<WorkbenchLanguageServiceCodeActionResolveResult>>
+  getOrganizeImports: (
+    request: WorkbenchLanguageServiceRequest
+  ) => Promise<WorkbenchFsCallResult<WorkbenchLanguageServiceOrganizeImportsResult>>
   requestExtension: (
     request: WorkbenchLanguageServiceExtensionRequest
   ) => Promise<WorkbenchFsCallResult<WorkbenchLanguageServiceExtensionResult>>

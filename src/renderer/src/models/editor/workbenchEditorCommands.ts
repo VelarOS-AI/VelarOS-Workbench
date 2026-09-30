@@ -4,7 +4,7 @@
  */
 import { isAppleWorkbenchPlatform } from '../layout/workbenchKeyboardShortcuts'
 
-export type WorkbenchEditorCommandId = 'quick-fix' | 'refactor'
+export type WorkbenchEditorCommandId = 'organize-imports' | 'quick-fix' | 'refactor'
 
 /** 页面（命令面板）交给编辑器去做的一次命令；每次序号加一，同一个命令连做两次也分得开。 */
 export interface WorkbenchEditorCommandRequest {
@@ -53,6 +53,8 @@ const WorkbenchEditorKeyBindings: readonly WorkbenchEditorKeyBinding[] = [
         : { code: 'KeyT', key: 't', ctrl: true, alt: true, shift: true },
     ],
   },
+  // 整理 import：VS Code 的 ⇧⌥O / Shift+Alt+O。
+  { command: 'organize-imports', chords: () => [{ code: 'KeyO', key: 'o', alt: true, shift: true }] },
 ]
 
 export interface WorkbenchEditorKeyEventLike {

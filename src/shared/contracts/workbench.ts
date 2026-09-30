@@ -299,6 +299,7 @@ export type WorkbenchLanguageServiceCapability =
   | 'semantic-tokens'
   | 'code-actions'
   | 'refactor'
+  | 'organize-imports'
 
 export interface WorkbenchLanguageServicePosition {
   line: number
@@ -757,6 +758,13 @@ export interface WorkbenchLanguageServiceCodeActionResolveResult {
    * 正文算。
    */
   renameLocation?: WorkbenchLanguageServicePosition
+}
+
+/** 整理 import：排序、合并同一个模块的导入、去掉没用到的。只改请求的这个文件。 */
+export interface WorkbenchLanguageServiceOrganizeImportsResult {
+  projectRoot: string
+  path: string
+  changes: WorkbenchLanguageServiceFileEdit[]
 }
 
 export interface WorkbenchSaveFileRequest {

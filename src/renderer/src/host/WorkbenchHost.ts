@@ -65,6 +65,7 @@ import type {
   WorkbenchLanguageServiceHoverQueryResult,
   WorkbenchLanguageServiceInlayHintsRequest,
   WorkbenchLanguageServiceInlayHintsResult,
+  WorkbenchLanguageServiceOrganizeImportsResult,
   WorkbenchLanguageServicePositionRequest,
   WorkbenchLanguageServiceProjectDiagnosticsRequest,
   WorkbenchLanguageServiceProjectDiagnosticsResult,
@@ -241,6 +242,9 @@ export interface WorkbenchProjectKernelPort {
   resolveWorkbenchLanguageServiceCodeAction(
     request: WorkbenchLanguageServiceCodeActionResolveRequest
   ): Promise<Result<WorkbenchLanguageServiceCodeActionResolveResult>>
+  getWorkbenchLanguageServiceOrganizeImports(
+    request: WorkbenchLanguageServiceRequest
+  ): Promise<Result<WorkbenchLanguageServiceOrganizeImportsResult>>
   requestWorkbenchLanguageServiceExtension(
     request: WorkbenchLanguageServiceExtensionRequest
   ): Promise<Result<WorkbenchLanguageServiceExtensionResult>>

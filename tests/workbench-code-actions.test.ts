@@ -87,6 +87,23 @@ void describe('editor code action keys', () => {
       null
     )
   })
+
+  void test('Shift+Alt+O organizes imports, whatever character the layout types for it', () => {
+    // macOS 上 ⇧⌥O 打出来的是 Ø：按键位认。
+    assert.equal(
+      resolveWorkbenchEditorCommandFromKey(key('KeyO', 'Ø', { alt: true, shift: true }), Mac),
+      'organize-imports'
+    )
+    assert.equal(
+      resolveWorkbenchEditorCommandFromKey(key('KeyO', 'O', { alt: true, shift: true }), Linux),
+      'organize-imports'
+    )
+    assert.equal(resolveWorkbenchEditorCommandFromKey(key('KeyO', 'ø', { alt: true }), Mac), null)
+    assert.equal(
+      resolveWorkbenchEditorCommandFromKey(key('KeyO', 'O', { alt: true, shift: true, meta: true }), Mac),
+      null
+    )
+  })
 })
 
 void describe('code action menu model', () => {
@@ -121,13 +138,15 @@ void describe('code action menu model', () => {
   })
 
   void test('knows which files have quick fixes and which have refactorings', () => {
-    assert.deepEqual(resolveWorkbenchCodeActionSupport('src/a.ts'), { quickFix: true, refactor: true })
-    assert.deepEqual(resolveWorkbenchCodeActionSupport('src/a.jsx'), { quickFix: true, refactor: true })
+    const typescript = { quickFix: true, refactor: true, organizeImports: true }
+    const none = { quickFix: false, refactor: false, organizeImports: false }
+    assert.deepEqual(resolveWorkbenchCodeActionSupport('src/a.ts'), typescript)
+    assert.deepEqual(resolveWorkbenchCodeActionSupport('src/a.jsx'), typescript)
     // 外部语言服务器只给修复。
-    assert.deepEqual(resolveWorkbenchCodeActionSupport('src/a.py'), { quickFix: true, refactor: false })
-    assert.deepEqual(resolveWorkbenchCodeActionSupport('src/a.css'), { quickFix: false, refactor: false })
-    assert.deepEqual(resolveWorkbenchCodeActionSupport('README.md'), { quickFix: false, refactor: false })
-    assert.deepEqual(resolveWorkbenchCodeActionSupport(null), { quickFix: false, refactor: false })
+    assert.deepEqual(resolveWorkbenchCodeActionSupport('src/a.py'), { ...none, quickFix: true })
+    assert.deepEqual(resolveWorkbenchCodeActionSupport('src/a.css'), none)
+    assert.deepEqual(resolveWorkbenchCodeActionSupport('README.md'), none)
+    assert.deepEqual(resolveWorkbenchCodeActionSupport(null), none)
   })
 
   void test('asks the language service only for what the menu and the file can show', () => {
@@ -418,6 +437,7 @@ void describe('reporting language service edits', () => {
       'workbench.languageServiceActionStale',
       'workbench.languageServiceActionFailed',
       'workbench.editorContextRefactor',
+      'workbench.editorContextOrganizeImports',
       'workbench.editorCodeActionsQuickFixGroup',
       'workbench.editorCodeActionsRefactorGroup',
       'workbench.editorRefactorsLoading',

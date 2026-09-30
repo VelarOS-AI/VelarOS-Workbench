@@ -42,6 +42,7 @@ import type {
   WorkbenchLanguageServiceInlayHintsRequest,
   WorkbenchLanguageServiceInlayHintsResult,
   WorkbenchLanguageServiceLocation,
+  WorkbenchLanguageServiceOrganizeImportsResult,
   WorkbenchLanguageServicePosition,
   WorkbenchLanguageServicePositionRequest,
   WorkbenchLanguageServiceProjectDiagnosticsRequest,
@@ -96,6 +97,7 @@ import {
   type WorkbenchMarkdownLanguageServiceContext,
 } from './MarkdownLanguageService'
 import {
+  buildTypeScriptOrganizeImportsEdits,
   buildTypeScriptQuickFixes,
   buildTypeScriptRefactors,
   resolveTypeScriptCodeAction,
@@ -1432,6 +1434,22 @@ class WorkbenchLanguageServices {
     }
   }
 
+  /** 整理请求文件的 import；只有内置 TypeScript 服务照看的文件有。 */
+  public async getOrganizeImports(
+    request: WorkbenchLanguageServiceRequest
+  ): Promise<WorkbenchLanguageServiceOrganizeImportsResult> {
+    const resolved = await this.resolveLanguageService(request)
+    if (resolved.service?.runtime !== 'typescript-language-service')
+      return { projectRoot: resolved.projectRoot, path: request.path, changes: [] }
+
+    const snapshot = await this.createTypeScriptProjectSnapshot(request)
+    return {
+      projectRoot: snapshot.projectRoot,
+      path: snapshot.requestPath,
+      changes: buildTypeScriptOrganizeImportsEdits(this.typeScriptEditContext(snapshot, request)),
+    }
+  }
+
   private typeScriptEditContext(
     snapshot: TypeScriptProjectSnapshot,
     request: WorkbenchLanguageServiceRequest
@@ -1501,6 +1519,7 @@ class WorkbenchLanguageServices {
         'semantic-tokens',
         'code-actions',
         'refactor',
+        'organize-imports',
       ]
 
     if (service.runtime === 'markdown-language-service')

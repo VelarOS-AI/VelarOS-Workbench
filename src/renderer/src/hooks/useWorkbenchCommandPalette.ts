@@ -263,7 +263,8 @@ export function useWorkbenchCommandPalette({
         return
       }
       case 'quick-fix':
-      case 'refactor': {
+      case 'refactor':
+      case 'organize-imports': {
         runEditorCommand(id)
         return
       }
