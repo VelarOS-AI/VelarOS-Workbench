@@ -1106,12 +1106,22 @@
   color: var(--status-red);
 }
 
+/*
+ * 编辑器上方的一条提示（文件在外面被改了、删了，编码或换行符要先选定）。与 Git 面板里进行到一半的操作那张
+ * 提示同一套样子：很淡的琥珀色底，字是正文的颜色，只有图标带色，按钮是不抢眼的小号按钮。
+ */
 .editorExternalChangeBanner {
-  @apply flex shrink-0 items-center gap-2 border-b;
-  min-height: 40px;
-  padding: 6px 10px;
-  border-color: color-mix(in oklab, var(--status-amber) 20%, transparent);
-  background: var(--status-amber-soft);
+  @apply flex shrink-0 items-center border-b;
+  gap: 8px;
+  min-height: 36px;
+  padding: 5px 8px 5px 10px;
+  border-color: color-mix(in oklab, var(--status-amber) 24%, var(--workbench-border));
+  background: color-mix(in oklab, var(--status-amber) 6%, var(--workbench-surface));
+  color: var(--workbench-text);
+}
+
+.editorExternalChangeBanner > svg {
+  @apply shrink-0;
   color: var(--status-amber);
 }
 
@@ -1122,14 +1132,18 @@
 
 .editorExternalChangeBanner [data-slot='button'] {
   @apply shrink-0;
-  height: 26px;
-  border-color: color-mix(in oklab, var(--status-amber) 28%, transparent);
-  background: var(--background-elevated);
-  color: var(--status-amber);
+  height: 24px;
+  padding-inline: 10px;
+  border-color: var(--border-strong, var(--workbench-border));
+  border-radius: var(--ui-radius-control-sm, 6px);
+  background: var(--workbench-surface);
+  color: var(--workbench-text);
+  font-size: 12px;
+  font-weight: 500;
 }
 
-.editorExternalChangeBanner [data-slot='button']:hover {
-  background: var(--card);
+.editorExternalChangeBanner [data-slot='button']:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--foreground) 5%, var(--workbench-surface));
 }
 
 .editorExternalChangeTitle {
