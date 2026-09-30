@@ -18,6 +18,7 @@ import {
   type WorkbenchChatRunChangesSummary,
   type WorkbenchChatRunFileChange,
 } from '../../../shared/workbenchGit'
+import { workbenchMainText } from '../../i18n/workbenchMainMessages'
 
 import type { WorkbenchChatCheckpointService } from './WorkbenchChatCheckpoints'
 import type {
@@ -243,7 +244,7 @@ export class WorkbenchChatRunChangeStore {
 
   private sessionDir(request: { workspaceRoot: string; sessionId: string }): string {
     if (!request.workspaceRoot.trim() || !isAbsolute(request.workspaceRoot))
-      throw new AppError('VALIDATION', '工作区根目录无效。')
+      throw new AppError('VALIDATION', workbenchMainText('git.rootInvalid'))
     // 按规范化后的路径字符串分目录，不解析符号链接：项目挪走、删掉之后照样能清理。
     const rootDigest = createHash('sha1')
       .update(resolve(request.workspaceRoot))
@@ -294,7 +295,7 @@ function summarize(
 }
 
 function readSegment(value: string): string {
-  if (!RecordSegmentPattern.test(value)) throw new AppError('VALIDATION', '无效的会话或记录 id。')
+  if (!RecordSegmentPattern.test(value)) throw new AppError('VALIDATION', workbenchMainText('git.invalidRecordId'))
   return value
 }
 

@@ -6,6 +6,7 @@ import { AppError } from '@velaros-ai/core/error'
 import { VelarWorkbenchLanguageService } from '@shared/contributions/velar/service'
 import { registerWorkbenchLanguageService } from '@shared/language/workbenchLanguageServices'
 
+import { isWorkbenchAppLocale, setWorkbenchMainLocale } from '../../i18n/workbenchMainLocale'
 import { PathResolver } from '../PathResolver'
 
 import {
@@ -16,6 +17,8 @@ import {
 import { WorkbenchLanguageServices } from './LanguageServices'
 import {
   isWorkbenchLanguageServiceWorkerControl,
+  isWorkbenchLanguageServiceWorkerLocale,
+  type WorkbenchLanguageServiceWorkerLocale,
   type WorkbenchLanguageServiceWorkerMessage,
   type WorkbenchLanguageServiceWorkerRequest,
 } from './LanguageServiceWorkerProtocol'
@@ -92,7 +95,13 @@ const scheduler = new WorkbenchLanguageServiceWorkerScheduler({
 // 被新请求顶掉的补全、悬浮、语义着色：TypeScript 在自己的检查点抛出取消，不再算完。
 configureTypeScriptCancellation(() => scheduler.isRunningRequestCancelled())
 
-port.on('message', (message: WorkbenchLanguageServiceWorkerMessage) => {
+if (isWorkbenchAppLocale(workerData?.locale)) setWorkbenchMainLocale(workerData.locale)
+
+port.on('message', (message: WorkbenchLanguageServiceWorkerMessage | WorkbenchLanguageServiceWorkerLocale) => {
+  if (isWorkbenchLanguageServiceWorkerLocale(message)) {
+    if (isWorkbenchAppLocale(message.locale)) setWorkbenchMainLocale(message.locale)
+    return
+  }
   if (!isWorkbenchLanguageServiceWorkerControl(message)) {
     lastRequestAt = Date.now()
     idleTrimDone = 'none'

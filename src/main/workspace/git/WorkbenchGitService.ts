@@ -52,6 +52,10 @@ import {
 } from '@shared/workbenchGitPatch'
 
 import {
+  type WorkbenchMainMessageKey,
+  workbenchMainText,
+} from '../../i18n/workbenchMainMessages'
+import {
   getRelativePathInsideRoot,
   toPortableRelativePath,
 } from '../PathContainmentHelper'
@@ -99,9 +103,16 @@ const GitOutputConfig = [
 
 /** 要带上一起完成的操作：进行中时 git 不许只提交一部分文件。 */
 const InProgressOperations = [
-  { ref: 'MERGE_HEAD', label: '合并' },
-  { ref: 'CHERRY_PICK_HEAD', label: '拣选提交' },
-] as const
+  { ref: 'MERGE_HEAD', label: 'git.operationMerge' },
+  { ref: 'CHERRY_PICK_HEAD', label: 'git.operationCherryPick' },
+] as const satisfies ReadonlyArray<{ ref: string; label: WorkbenchMainMessageKey }>
+
+/** 「不是 Git 仓库」：调用方据此把项目当作还没初始化 Git，而不是出错（按类型认，不看提示文字）。 */
+class WorkbenchGitNotRepositoryError extends AppError {
+  constructor() {
+    super('VALIDATION', workbenchMainText('git.notRepository'))
+  }
+}
 
 interface GitRunOptions extends WorkspaceGitRemoteActionOptions {
   allowFailure?: boolean
@@ -365,12 +376,12 @@ export class WorkbenchGitService {
     const selection = paths?.length
       ? this.scopeStatus(status, this.normalizePathspecs(rootPath, paths))
       : status
-    if (selection.isClean) throw new AppError('VALIDATION', '当前选择没有可提交的改动。')
+    if (selection.isClean) throw new AppError('VALIDATION', workbenchMainText('git.nothingSelectedToCommit'))
     const operation = await this.getInProgressOperation(rootPath)
     if (operation && selection.changedFiles < status.changedFiles)
       throw new AppError(
         'VALIDATION',
-        `正在${operation}：这次提交会一并完成${operation}，必须包含全部改动。请不勾选文件直接提交全部，或勾选全部文件。`
+        workbenchMainText('git.partialCommitDuringOperation', { operation: workbenchMainText(operation) })
       )
 
     const parent = await this.readHeadCommit(rootPath)
@@ -416,7 +427,7 @@ export class WorkbenchGitService {
     const status = await this.readCommittableStatus(repository)
     const staged = status.entries.filter((entry) => this.isStagedEntry(entry))
     if (staged.length === 0)
-      throw new AppError('VALIDATION', '暂存区里没有可提交的改动。请先暂存要提交的文件。')
+      throw new AppError('VALIDATION', workbenchMainText('git.nothingStaged'))
 
     const parent = await this.readHeadCommit(rootPath)
     let commitMessage: Nullable<string> = message?.trim() || null
@@ -479,7 +490,7 @@ export class WorkbenchGitService {
     const rootPath = await this.resolveRoot(workspaceRoot)
     const repository = await this.openRepository(rootPath)
     const relativePaths = this.normalizePathspecs(rootPath, paths)
-    if (relativePaths.length === 0) throw new AppError('VALIDATION', '没有要操作的文件。')
+    if (relativePaths.length === 0) throw new AppError('VALIDATION', workbenchMainText('git.noFilesGiven'))
     const before = await this.getStatus(repository)
     const entries = relativePaths.flatMap(
       (path) => before.entries.find((candidate) => candidate.path === path) ?? []
@@ -492,7 +503,10 @@ export class WorkbenchGitService {
         (path) => !conflicts.some((entry) => entry.path === path)
       )
       if (unresolvable)
-        throw new AppError('VALIDATION', `“${unresolvable}”没有待解决的合并冲突。`)
+        throw new AppError(
+          'VALIDATION',
+          workbenchMainText('git.noConflictToResolve', { path: unresolvable })
+        )
       for (const entry of conflicts) await this.markResolved(rootPath, entry)
     } else if (action === 'stage') {
       // 冲突文件暂存就是标记为已解决（还有冲突标记时拒绝）。
@@ -505,7 +519,10 @@ export class WorkbenchGitService {
       if (conflicts.length > 0)
         throw new AppError(
           'VALIDATION',
-          `${this.describePaths(conflicts)}还有未解决的合并冲突，不能${action === 'discard' ? '回滚' : '取消暂存'}。请先解决冲突并标记为已解决，或在终端里中止这次合并（git merge --abort）。`
+          workbenchMainText(
+            action === 'discard' ? 'git.conflictsBlockDiscard' : 'git.conflictsBlockUnstage',
+            { paths: this.describePaths(conflicts) }
+          )
         )
       if (action === 'unstage')
         await this.unstage(
@@ -514,7 +531,7 @@ export class WorkbenchGitService {
         )
       else for (const entry of entries) await this.discard(repository, entry)
     } else {
-      throw new AppError('VALIDATION', '不支持的 Git 文件操作。')
+      throw new AppError('VALIDATION', workbenchMainText('git.unsupportedFileAction'))
     }
 
     const status = await this.getStatus(repository)
@@ -537,15 +554,15 @@ export class WorkbenchGitService {
     const rootPath = await this.resolveRoot(workspaceRoot)
     const repository = await this.openRepository(rootPath)
     const path = this.normalizePathspec(rootPath, options.path)
-    if (options.hunks.length === 0) throw new AppError('VALIDATION', '没有要操作的改动块。')
+    if (options.hunks.length === 0) throw new AppError('VALIDATION', workbenchMainText('git.noHunksGiven'))
     const entry = (await this.getStatus(repository)).entries.find(
       (candidate) => candidate.path === path
     )
-    if (!entry) throw new AppError('VALIDATION', `“${path}”已经没有改动了。`)
+    if (!entry) throw new AppError('VALIDATION', workbenchMainText('git.fileHasNoChanges', { path }))
     if (isWorkspaceGitConflictEntry(entry))
       throw new AppError(
         'VALIDATION',
-        `“${path}”还有未解决的合并冲突，不能按块操作。请先解决冲突并标记为已解决。`
+        workbenchMainText('git.hunkConflict', { path })
       )
 
     const side = options.action === 'unstage' ? 'staged' : 'unstaged'
@@ -562,13 +579,13 @@ export class WorkbenchGitService {
     if (isWorkbenchGitWholeFilePatch(patch))
       throw new AppError(
         'VALIDATION',
-        `“${path}”是新建、删除或二进制的改动，只能整个文件暂存、取消暂存或回滚。`
+        workbenchMainText('git.hunkWholeFileOnly', { path })
       )
     // 输出里有替换字符：文件不是 UTF-8，照读到的文字拼回补丁会改坏内容。
     if (diff.includes(ReplacementCharacter))
       throw new AppError(
         'VALIDATION',
-        `“${path}”不是 UTF-8 编码，不能按块操作，请整个文件暂存、取消暂存或回滚。`
+        workbenchMainText('git.hunkNotUtf8', { path })
       )
     const hunks = options.hunks.map((selector) =>
       patch.hunks.find((hunk) => isSameWorkbenchGitHunk(hunk, selector))
@@ -599,7 +616,7 @@ export class WorkbenchGitService {
   private hunksChangedError(path: string): AppError {
     return new AppError(
       'VALIDATION',
-      `“${path}”的这段改动已经变了（文件在别处被改过），请在刷新后的差异里重新操作。`
+      workbenchMainText('git.hunkChanged', { path })
     )
   }
 
@@ -632,7 +649,10 @@ export class WorkbenchGitService {
     if (result.failed) {
       const output = this.readableGitOutput(result)
       if (/would be overwritten|untracked working tree files/i.test(output))
-        throw new AppError('VALIDATION', `Git 拒绝切换分支：${output.slice(0, 800)}`)
+        throw new AppError(
+          'VALIDATION',
+          workbenchMainText('git.switchRefused', { output: output.slice(0, 800) })
+        )
       this.throwGitFailure(args, result)
     }
     return {
@@ -674,7 +694,7 @@ export class WorkbenchGitService {
     const rootPath = await this.resolveRoot(workspaceRoot)
     const currentBranch = await this.getCurrentBranch(rootPath)
     if (!currentBranch)
-      throw new AppError('VALIDATION', '当前 Git 工作区没有可识别的本地分支。')
+      throw new AppError('VALIDATION', workbenchMainText('git.noLocalBranch'))
     const actionBranch =
       action === 'upload' && options.branch ? this.assertBranch(options.branch) : currentBranch
     if (actionBranch !== currentBranch) {
@@ -683,7 +703,10 @@ export class WorkbenchGitService {
         ['rev-parse', '-q', '--verify', `refs/heads/${actionBranch}`],
         { allowFailure: true }
       )
-      if (exists.failed) throw new AppError('VALIDATION', `本地没有分支 ${actionBranch}。`)
+      if (exists.failed) throw new AppError(
+          'VALIDATION',
+          workbenchMainText('git.branchMissing', { branch: actionBranch })
+        )
     }
     const upstream = await this.getBranchUpstream(rootPath, actionBranch)
     const result: WorkspaceGitRemoteActionResult = {
@@ -701,7 +724,9 @@ export class WorkbenchGitService {
       if (!upstream)
         throw new AppError(
           'VALIDATION',
-          `当前分支 ${actionBranch} 还没有关联远端分支，无法${action === 'pull' ? '拉取' : '同步'}。请先推送一次（推送会建立关联），或在终端里设置上游（git branch --set-upstream-to=<远端>/<分支>）。`
+          workbenchMainText(action === 'pull' ? 'git.noUpstreamPull' : 'git.noUpstreamSync', {
+            branch: actionBranch,
+          })
         )
       const pulled = await this.pullBranch(rootPath, actionBranch, options)
       Object.assign(result, pulled)
@@ -802,23 +827,23 @@ export class WorkbenchGitService {
     )
       return new AppError(
         'PERMISSION',
-        `远端拒绝了身份验证：请检查 SSH 密钥或访问令牌（设置 › Git），或先在终端里确认能访问这个远端。\n${detail}`
+        workbenchMainText('git.authFailed', { detail })
       )
     if (
       /could not resolve host|failed to connect|connection (?:timed out|refused|reset)|network is unreachable|operation timed out|could not read from remote repository/i.test(
         output
       )
     )
-      return new AppError('NETWORK', `连不上远端，请检查网络和远端地址。\n${detail}`)
+      return new AppError('NETWORK', workbenchMainText('git.networkFailed', { detail }))
     if (/\[rejected\]|non-fast-forward|\(fetch first\)|updates were rejected/i.test(output))
       return new AppError(
         'VALIDATION',
-        '远端有本地还没有的提交，推送被拒绝。请先拉取（或同步），合入之后再推送。'
+        workbenchMainText('git.pushRejected')
       )
     if (/not possible to fast-forward|diverging branches can't be fast-forwarded/i.test(output))
       return new AppError(
         'VALIDATION',
-        '本地和远端的提交分叉了，而 pull.ff=only 只允许快进。请在终端里合并或变基，或修改 pull.ff 设置。'
+        workbenchMainText('git.pullDiverged')
       )
     const overwritten = /would be overwritten by (?:merge|checkout)/i.test(output)
     if (overwritten) {
@@ -829,24 +854,28 @@ export class WorkbenchGitService {
         .slice(0, 5)
       return new AppError(
         'VALIDATION',
-        `本地还没提交的改动（或未跟踪的文件）会被这次拉取覆盖${files.length ? `：${files.join('、')}` : ''}。请先提交或回滚它们，再拉取。`
+        files.length
+          ? workbenchMainText('git.pullWouldOverwriteFiles', {
+              files: files.join(workbenchMainText('git.listSeparator')),
+            })
+          : workbenchMainText('git.pullWouldOverwrite')
       )
     }
     if (/cannot (?:pull with rebase|rebase)|your index contains uncommitted changes/i.test(output))
       return new AppError(
         'VALIDATION',
-        '按变基方式拉取（pull.rebase）时，工作区里不能有没提交的改动。请先提交或回滚它们，再拉取。'
+        workbenchMainText('git.rebasePullDirty')
       )
     if (/unmerged files|not concluded your merge|merge_head exists/i.test(output))
       return new AppError(
         'VALIDATION',
-        '还有没完成的合并，不能拉取。请先解决冲突、标记为已解决并提交，完成这次合并。'
+        workbenchMainText('git.mergeUnfinished')
       )
     return new AppError(
       'PLATFORM',
       detail
-        ? `Git 命令执行失败：${detail}`
-        : `Git 命令执行失败：git ${action === 'upload' ? 'push' : action}`
+        ? workbenchMainText('git.commandFailedDetail', { detail })
+        : workbenchMainText('git.commandFailed', { command: action === 'upload' ? 'push' : action })
     )
   }
 
@@ -882,11 +911,15 @@ export class WorkbenchGitService {
     if (remotes.length === 0)
       throw new AppError(
         'VALIDATION',
-        '当前仓库还没有配置远端，无法推送。请先添加远端（git remote add origin <地址>）。'
+        workbenchMainText('git.noRemote')
       )
     throw new AppError(
       'VALIDATION',
-      `仓库有 ${remotes.length} 个远端（${remotes.join('、')}），无法确定把分支 ${branch} 推送到哪一个。请在终端里推送一次并指定远端（git push -u <远端> ${branch}），或设置默认推送远端（git config remote.pushDefault <远端>）。`
+      workbenchMainText('git.ambiguousRemote', {
+        count: remotes.length,
+        remotes: remotes.join(workbenchMainText('git.listSeparator')),
+        branch,
+      })
     )
   }
 
@@ -922,7 +955,7 @@ export class WorkbenchGitService {
     if (collapsed) return collapsed
     throw new AppError(
       'LIMIT',
-      `项目里的改动太多，Git 状态超过 ${GitListingMaxBytes / 1024 / 1024} MB，无法显示。请检查 .gitignore 是否漏掉了 node_modules、构建产物这类目录。`
+      workbenchMainText('git.statusTooLarge', { size: GitListingMaxBytes / 1024 / 1024 })
     )
   }
 
@@ -1085,7 +1118,9 @@ export class WorkbenchGitService {
   }
 
   /** 进行中、这次提交要一并完成的操作（合并、拣选）；没有为 null。 */
-  private async getInProgressOperation(rootPath: string): Promise<Nullable<string>> {
+  private async getInProgressOperation(
+    rootPath: string
+  ): Promise<Nullable<WorkbenchMainMessageKey>> {
     for (const operation of InProgressOperations) {
       const result = await this.runGit(rootPath, ['rev-parse', '-q', '--verify', operation.ref], {
         allowFailure: true,
@@ -1103,15 +1138,15 @@ export class WorkbenchGitService {
     if (await this.isRebaseInProgress(repository.rootPath))
       throw new AppError(
         'VALIDATION',
-        '正在变基：解决冲突并标记为已解决后，请在终端里继续变基（git rebase --continue），或放弃这次变基（git rebase --abort），不要在这里提交。'
+        workbenchMainText('git.rebaseInProgress')
       )
     const status = await this.getStatus(repository)
-    if (status.isClean) throw new AppError('VALIDATION', '当前项目没有可提交的改动。')
+    if (status.isClean) throw new AppError('VALIDATION', workbenchMainText('git.nothingToCommit'))
     const conflicts = status.entries.filter((entry) => isWorkspaceGitConflictEntry(entry))
     if (conflicts.length > 0)
       throw new AppError(
         'VALIDATION',
-        `${this.describePaths(conflicts)}还有未解决的合并冲突。请先解决冲突并标记为已解决，再提交。`
+        workbenchMainText('git.conflictsBlockCommit', { paths: this.describePaths(conflicts) })
       )
     return status
   }
@@ -1165,7 +1200,7 @@ export class WorkbenchGitService {
     ).stdout
       .split(/\r?\n/)
       .map((line) => line.trim())
-    if (!topLevel || !gitDirectory) throw new AppError('PLATFORM', '读不到项目所在仓库的位置。')
+    if (!topLevel || !gitDirectory) throw new AppError('PLATFORM', workbenchMainText('git.repositoryLocationUnknown'))
     const env = { GIT_INDEX_FILE: join(gitDirectory, `velaros-commit-${randomUUID()}.index`) }
     try {
       await this.runGit(topLevel, ['read-tree', parent ?? '--empty'], { env })
@@ -1240,7 +1275,7 @@ export class WorkbenchGitService {
       output.includes('nothing added to commit') ||
       output.includes('no changes added to commit')
     )
-      throw new AppError('VALIDATION', '当前选择没有可提交的改动。')
+      throw new AppError('VALIDATION', workbenchMainText('git.nothingSelectedToCommit'))
     this.throwGitFailure(args, result)
   }
 
@@ -1300,7 +1335,7 @@ export class WorkbenchGitService {
     if (await this.hasConflictMarkers(resolve(rootPath, entry.path)))
       throw new AppError(
         'VALIDATION',
-        `“${entry.path}”里还有冲突标记（<<<<<<< 或 >>>>>>>），请先解决冲突再标记为已解决。`
+        workbenchMainText('git.conflictMarkersLeft', { path: entry.path })
       )
     // `-A`：两边都删掉了、或解决成删除时文件已经不在，同样记作已解决（删除）。
     await this.stagePaths(rootPath, [entry.path])
@@ -1524,9 +1559,11 @@ export class WorkbenchGitService {
   private describePaths(entries: readonly WorkspaceGitFileStatusEntry[]): string {
     const names = entries
       .slice(0, 5)
-      .map((entry) => `“${entry.path}”`)
-      .join('、')
-    return entries.length > 5 ? `${names} 等 ${entries.length} 个文件` : names
+      .map((entry) => workbenchMainText('git.quotedPath', { path: entry.path }))
+      .join(workbenchMainText('git.listSeparator'))
+    return entries.length > 5
+      ? workbenchMainText('git.pathsMore', { names, count: entries.length, rest: entries.length - 5 })
+      : names
   }
 
   /** 这些改动涉及的路径：改名的新旧路径都算。 */
@@ -1563,11 +1600,11 @@ export class WorkbenchGitService {
 
   private normalizePathspec(rootPath: string, path: string): string {
     if (!path.trim() || path.includes('\0'))
-      throw new AppError('VALIDATION', 'Git 文件路径无效。')
+      throw new AppError('VALIDATION', workbenchMainText('git.invalidPath'))
     const absolutePath = isAbsolute(path) ? resolve(path) : resolve(rootPath, path)
     const relativePath = getRelativePathInsideRoot(rootPath, absolutePath)
     if (!relativePath || relativePath === '.')
-      throw new AppError('PERMISSION', 'Git 文件路径超出项目根目录。')
+      throw new AppError('PERMISSION', workbenchMainText('git.pathOutsideProject'))
     const portablePath = toPortableRelativePath(relativePath)
     // 未跟踪文件太多时按目录列（`dir/`），结尾的 `/` 要留着才对得上那一行。
     return /[/\\]$/.test(path) ? `${portablePath}/` : portablePath
@@ -1581,7 +1618,7 @@ export class WorkbenchGitService {
       normalized.startsWith('-') ||
       /[\0-\x20\x7f]/.test(normalized)
     ) {
-      throw new AppError('VALIDATION', 'Git 引用名称无效。')
+      throw new AppError('VALIDATION', workbenchMainText('git.invalidRef'))
     }
     return normalized
   }
@@ -1589,15 +1626,15 @@ export class WorkbenchGitService {
   private assertBranch(branch: string): string {
     const normalized = this.assertRevision(branch)
     if (normalized.includes('..') || normalized.endsWith('.') || normalized.endsWith('/'))
-      throw new AppError('VALIDATION', '目标分支名称无效。')
+      throw new AppError('VALIDATION', workbenchMainText('git.invalidBranch'))
     return normalized
   }
 
   private async resolveRoot(workspaceRoot: string): Promise<string> {
-    if (!workspaceRoot.trim()) throw new AppError('VALIDATION', '工作区根目录不能为空。')
+    if (!workspaceRoot.trim()) throw new AppError('VALIDATION', workbenchMainText('git.rootRequired'))
     const rootPath = await realpath(resolve(workspaceRoot))
     const rootStat = await stat(rootPath)
-    if (!rootStat.isDirectory()) throw new AppError('VALIDATION', '工作区根目录不存在。')
+    if (!rootStat.isDirectory()) throw new AppError('VALIDATION', workbenchMainText('git.rootMissing'))
     return rootPath
   }
 
@@ -1642,14 +1679,20 @@ export class WorkbenchGitService {
       }
       throw new AppError(
         'TIMEOUT',
-        `git ${this.describeCommand(args)} 超过 ${Math.round((options.timeoutMs ?? 0) / 1000)} 秒没有完成，已停止。请检查网络连接和远端凭据后重试。`
+        workbenchMainText('git.timedOut', {
+          command: this.describeCommand(args),
+          seconds: Math.round((options.timeoutMs ?? 0) / 1000),
+        })
       )
     }
     if (result.isMaxBuffer) {
       if (options.allowTruncated) return output
       throw new AppError(
         'LIMIT',
-        `git ${this.describeCommand(args)} 的输出超过 ${Math.round(maxBuffer / 1024 / 1024)} MB，已停止读取。`
+        workbenchMainText('git.outputTooLarge', {
+          command: this.describeCommand(args),
+          size: Math.round(maxBuffer / 1024 / 1024),
+        })
       )
     }
     if (result.failed && !options.allowFailure)
@@ -1694,12 +1737,12 @@ export class WorkbenchGitService {
   ): never {
     const output = this.redactGitOutput(this.readableGitOutput(result), githubToken)
     if (output.toLowerCase().includes('not a git repository'))
-      throw new AppError('VALIDATION', '当前工作区不是 Git 仓库。')
+      throw new WorkbenchGitNotRepositoryError()
     throw new AppError(
       'PLATFORM',
       output
-        ? `Git 命令执行失败：${output.slice(0, 500)}`
-        : `Git 命令执行失败：git ${this.describeCommand(args)}`
+        ? workbenchMainText('git.commandFailedDetail', { detail: output.slice(0, 500) })
+        : workbenchMainText('git.commandFailed', { command: this.describeCommand(args) })
     )
   }
 
@@ -1718,11 +1761,7 @@ export class WorkbenchGitService {
   }
 
   private isNotRepositoryError(error: unknown): boolean {
-    return (
-      error instanceof AppError &&
-      error.code === 'VALIDATION' &&
-      error.message.includes('不是 Git 仓库')
-    )
+    return error instanceof WorkbenchGitNotRepositoryError
   }
 
   private async buildGitEnvironment(options: GitRunOptions): Promise<NodeJS.ProcessEnv> {

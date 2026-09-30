@@ -1,5 +1,6 @@
 import type { SerializedError } from '@velaros-ai/core/error'
 
+import type { AppLocale } from '@shared/contracts'
 import type {
   WorkbenchLanguageServiceCodeActionsRequest,
   WorkbenchLanguageServiceCodeActionsResult,
@@ -189,9 +190,23 @@ export interface WorkbenchLanguageServiceWorkerControl {
   id: number
 }
 
+/**
+ * 界面语言：worker 与主进程不共用模块状态，worker 里给用户看的提示（语言服务器不可用、超时……）要靠这条跟着换。
+ * 创建 worker 时经 workerData 带上当时的语言，之后每次切换发一条。
+ */
+export interface WorkbenchLanguageServiceWorkerLocale {
+  locale: AppLocale
+}
+
 export type WorkbenchLanguageServiceWorkerMessage =
   | WorkbenchLanguageServiceWorkerRequest
   | WorkbenchLanguageServiceWorkerControl
+
+export function isWorkbenchLanguageServiceWorkerLocale(
+  message: unknown
+): message is WorkbenchLanguageServiceWorkerLocale {
+  return typeof message === 'object' && message !== null && 'locale' in message
+}
 
 export interface WorkbenchLanguageServiceWorkerPong {
   control: 'pong'

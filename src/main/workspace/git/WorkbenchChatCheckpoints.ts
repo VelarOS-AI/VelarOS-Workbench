@@ -14,6 +14,7 @@ import type {
   WorkbenchChatRunFileChange,
   WorkbenchChatRunFileChangeStatus,
 } from '../../../shared/workbenchGit'
+import { workbenchMainText } from '../../i18n/workbenchMainMessages'
 
 /**
  * 私有 ref 命名空间，与 Desktop 的会话检查点同一处：每个检查点单独成一个 ref（指向一个无父提交），
@@ -142,7 +143,7 @@ export class WorkbenchChatCheckpointService {
       await this.runGit(root, ['add', '-A'], env)
       return (await this.runGit(root, ['write-tree'], env)).trim()
     })
-    if (!ObjectIdPattern.test(tree)) throw new AppError('PLATFORM', 'git write-tree 未返回 tree 对象。')
+    if (!ObjectIdPattern.test(tree)) throw new AppError('PLATFORM', workbenchMainText('git.checkpointTreeMissing'))
     return tree
   }
 
@@ -160,7 +161,7 @@ export class WorkbenchChatCheckpointService {
     ) => WorkbenchChatRunFileChange[] | Promise<WorkbenchChatRunFileChange[]>
   }): Promise<WorkbenchChatRunFileChange[]> {
     if (!ObjectIdPattern.test(request.baseCommitId) || !ObjectIdPattern.test(request.tree))
-      throw new AppError('VALIDATION', '无效的检查点提交。')
+      throw new AppError('VALIDATION', workbenchMainText('git.checkpointInvalid'))
     const root = await this.resolveRoot(request.workspaceRoot)
 
     const range = [request.baseCommitId, request.tree]
@@ -187,7 +188,7 @@ export class WorkbenchChatCheckpointService {
     maxBytes: number
   }): Promise<string | null> {
     if (!ObjectIdPattern.test(request.commitId))
-      throw new AppError('VALIDATION', '无效的检查点提交。')
+      throw new AppError('VALIDATION', workbenchMainText('git.checkpointInvalid'))
     const path = readRelativePath(request.path)
     const root = await this.resolveRoot(request.workspaceRoot)
     const object = `${request.commitId}:./${path}`
@@ -230,9 +231,9 @@ export class WorkbenchChatCheckpointService {
 
   private async resolveRoot(workspaceRoot: string): Promise<string> {
     if (!workspaceRoot.trim() || !isAbsolute(workspaceRoot))
-      throw new AppError('VALIDATION', '工作区根目录无效。')
+      throw new AppError('VALIDATION', workbenchMainText('git.rootInvalid'))
     const root = await realpath(resolve(workspaceRoot))
-    if (!(await stat(root)).isDirectory()) throw new AppError('VALIDATION', '工作区根目录不存在。')
+    if (!(await stat(root)).isDirectory()) throw new AppError('VALIDATION', workbenchMainText('git.rootMissing'))
     return root
   }
 
@@ -254,7 +255,12 @@ export class WorkbenchChatCheckpointService {
       const detail = (result.stderr || result.stdout).trim()
       throw new AppError(
         'PLATFORM',
-        detail ? `git ${args[0]} 执行失败：${detail.slice(0, 260)}` : `git ${args[0]} 执行失败`
+        detail
+          ? workbenchMainText('git.checkpointCommandFailedDetail', {
+              command: args[0] ?? '',
+              detail: detail.slice(0, 260),
+            })
+          : workbenchMainText('git.checkpointCommandFailed', { command: args[0] ?? '' })
       )
     }
     return result.stdout
@@ -270,7 +276,7 @@ function readRelativePath(value: string): string {
     path.startsWith('/') ||
     path.split('/').some((segment) => segment === '..' || segment === '')
   )
-    throw new AppError('VALIDATION', '无效的文件路径。')
+    throw new AppError('VALIDATION', workbenchMainText('git.invalidFilePath'))
   return path
 }
 

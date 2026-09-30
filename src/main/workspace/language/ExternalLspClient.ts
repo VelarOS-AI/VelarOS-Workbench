@@ -13,6 +13,7 @@ import type {
   WorkbenchLanguageServiceDescriptor,
 } from '@shared/language/workbenchLanguageServices'
 
+import { workbenchMainText } from '../../i18n/workbenchMainMessages'
 import { isPathInsideRoot } from '../PathContainmentHelper'
 
 import {
@@ -436,7 +437,7 @@ function hasProjectRootMarker(
     if (!isExistingPathInside(workspaceRoot, markerPath))
       throw new AppError(
         'PERMISSION',
-        `${descriptor.label} 项目根标记的真实路径超出工作区。`
+        workbenchMainText('language.rootMarkerOutsideWorkspace', { server: descriptor.label })
       )
     return true
   }
@@ -546,8 +547,12 @@ function launchFor(
       args: descriptor.args ?? [],
       electronRunAsNode: !!process.versions['electron'],
       unavailableMessage: packageName
-        ? `${descriptor.label} 语言服务器不可用：项目内 ${packageName} 未提供 '${descriptor.projectNodePackageBin}'。请安装或更新项目工具链。`
-        : `${descriptor.label} 语言服务器配置缺少项目工具链包名。`,
+        ? workbenchMainText('language.serverMissingBin', {
+            server: descriptor.label,
+            package: packageName,
+            bin: descriptor.projectNodePackageBin ?? '',
+          })
+        : workbenchMainText('language.serverMissingPackageName', { server: descriptor.label }),
     }
   }
 
@@ -558,7 +563,7 @@ function launchFor(
     electronRunAsNode: false,
     unavailableMessage: optionalWhen(
       executable.rejectedProjectPath,
-      `${descriptor.label} 语言服务器不可用：项目命令的真实路径超出工作区。`
+      workbenchMainText('language.serverCommandOutsideWorkspace', { server: descriptor.label })
     ),
   }
 }
@@ -666,7 +671,7 @@ export class ExternalLspClient {
     if (!declaration) {
       throw new AppError(
         'INVARIANT',
-        `${this.descriptor.label} 没有声明语言扩展请求 '${requestId}'。`
+        workbenchMainText('language.extensionRequestUndeclared', { server: this.descriptor.label, request: requestId })
       )
     }
     await this.initialize()
@@ -679,7 +684,7 @@ export class ExternalLspClient {
     if (capability !== true && !objectValue(capability)) {
       throw new AppError(
         'INVARIANT',
-        `${this.descriptor.label} 语言服务器不支持 '${requestId}'。`
+        workbenchMainText('language.extensionRequestUnsupported', { server: this.descriptor.label, request: requestId })
       )
     }
     return this.request(declaration.method, {
@@ -956,11 +961,15 @@ export class ExternalLspClient {
       throw new AppError('INVARIANT', launch.unavailableMessage)
     if (!launch.electronRunAsNode && !executableExists(launch.command, pathValue)) {
       const installHint = this.descriptor.packageName
-        ? `请在项目中安装 ${this.descriptor.packageName}，或将命令加入 PATH。`
-        : '请安装对应项目工具链，或将命令加入 PATH。'
+        ? workbenchMainText('language.installPackageHint', { package: this.descriptor.packageName })
+        : workbenchMainText('language.installToolchainHint')
       throw new AppError(
         'INVARIANT',
-        `${this.descriptor.label} 语言服务器不可用：未找到 '${launch.command}'。 ${installHint}`
+        workbenchMainText('language.serverNotFound', {
+          server: this.descriptor.label,
+          command: launch.command,
+          hint: installHint,
+        })
       )
     }
     // 不走 Electron 运行时时一个键也不写：继承来的 ELECTRON_RUN_AS_NODE 要原样留给子进程。
@@ -989,7 +998,11 @@ export class ExternalLspClient {
       if (this.disposed || this.process !== child) return
       this.fail(new AppError(
         'INTERNAL',
-        `${this.descriptor.label} 语言服务器已退出（${signal ?? code ?? 'unknown'}）。${this.stderr ? ` ${this.stderr.trim()}` : ''}`
+        workbenchMainText('language.serverExited', {
+          server: this.descriptor.label,
+          reason: signal ?? code ?? 'unknown',
+          stderr: this.stderr ? ` ${this.stderr.trim()}` : '',
+        })
       ))
     })
 
@@ -1036,7 +1049,11 @@ export class ExternalLspClient {
       if (actual !== this.descriptor.protocol.version)
         throw new AppError(
           'INVARIANT',
-          `${this.descriptor.label} 语言协议不兼容：Workbench 需要 v${this.descriptor.protocol.version}，服务器返回 ${actual === null ? 'unknown' : `v${actual}`}。`
+          workbenchMainText('language.protocolMismatch', {
+            server: this.descriptor.label,
+            expected: this.descriptor.protocol.version,
+            actual: actual === null ? 'unknown' : `v${actual}`,
+          })
         )
     }
     this.notify('initialized', {})
@@ -1068,7 +1085,7 @@ export class ExternalLspClient {
       )
       const timeout = setTimeout(() => abandon(new AppError(
         'INTERNAL',
-        `${this.descriptor.label} 语言服务器请求超时：${method}。`
+        workbenchMainText('language.requestTimedOut', { server: this.descriptor.label, method })
       )), Math.max(1, this.requestTimeoutMs))
       this.pending.set(id, {
         resolve: (value) => {
@@ -1101,7 +1118,10 @@ export class ExternalLspClient {
   private send(message: JsonRpcMessage): void {
     const child = this.process
     if (!child || child.stdin.destroyed)
-      throw new AppError('INTERNAL', `${this.descriptor.label} 语言服务器尚未运行。`)
+      throw new AppError(
+        'INTERNAL',
+        workbenchMainText('language.serverNotRunning', { server: this.descriptor.label })
+      )
     const json = JSON.stringify(message)
     const size = Buffer.byteLength(json, 'utf8')
     if (size > MaxLspMessageBytes)
@@ -1261,7 +1281,7 @@ export class ExternalLspClient {
     this.pending.delete(message.id)
     clearTimeout(pending.timeout)
     if (message.error)
-      pending.reject(new AppError('INTERNAL', `${this.descriptor.label}: ${message.error.message ?? '语言服务器请求失败。'}`))
+      pending.reject(new AppError('INTERNAL', `${this.descriptor.label}: ${message.error.message ?? workbenchMainText('language.requestFailed')}`))
     else pending.resolve(message.result)
   }
 

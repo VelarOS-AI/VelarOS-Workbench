@@ -6,6 +6,7 @@ import { Log } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
 import type {
+  AppLocale,
   WorkbenchLanguageServiceCodeActionsRequest,
   WorkbenchLanguageServiceCompletionResolveRequest,
   WorkbenchLanguageServiceExtensionRequest,
@@ -15,6 +16,12 @@ import type {
   WorkbenchLanguageServiceRenameRequest,
   WorkbenchLanguageServiceRequest,
 } from '@shared/contracts'
+
+import {
+  getWorkbenchMainLocale,
+  onWorkbenchMainLocaleChanged,
+} from '../../i18n/workbenchMainLocale'
+import { workbenchMainText } from '../../i18n/workbenchMainMessages'
 
 import {
   computeWorkbenchLanguageWorkerHeapLimitMb,
@@ -27,6 +34,7 @@ import {
   type WorkbenchLanguageServiceProjectFileRequest,
   type WorkbenchLanguageServiceProjectFilesChangedRequest,
   type WorkbenchLanguageServiceProjectRequest,
+  type WorkbenchLanguageServiceWorkerLocale,
   type WorkbenchLanguageServiceWorkerMessage,
   type WorkbenchLanguageServiceWorkerOperation,
   type WorkbenchLanguageServiceWorkerOperationMap,
@@ -34,7 +42,9 @@ import {
 } from './LanguageServiceWorkerProtocol'
 
 export interface WorkbenchLanguageServiceWorkerPort {
-  postMessage(message: WorkbenchLanguageServiceWorkerMessage): void
+  postMessage(
+    message: WorkbenchLanguageServiceWorkerMessage | WorkbenchLanguageServiceWorkerLocale
+  ): void
   on(event: 'message', listener: (message: unknown) => void): this
   on(event: 'error', listener: (error: Error) => void): this
   on(event: 'exit', listener: (exitCode: number) => void): this
@@ -44,6 +54,8 @@ export interface WorkbenchLanguageServiceWorkerPort {
 export interface WorkbenchLanguageServiceWorkerFactoryOptions {
   /** 取消缓冲：worker 陷在同步计算里收不到消息时，也能从这里读到自己的请求已被取消。 */
   cancellation: SharedArrayBuffer
+  /** 创建时的界面语言，worker 里给用户看的提示按它出。 */
+  locale: AppLocale
 }
 
 type WorkbenchLanguageServiceWorkerFactory = (
@@ -161,11 +173,12 @@ const WorkerOutOfMemoryCode = 'ERR_WORKER_OUT_OF_MEMORY'
 
 function createDefaultLanguageServiceWorker({
   cancellation,
+  locale,
 }: WorkbenchLanguageServiceWorkerFactoryOptions): WorkbenchLanguageServiceWorkerPort {
   // 显式的堆上限让 OOM 变成可恢复的 worker 终止（error 事件），而不是 Node 直接 abort 整个主进程。
   return new Worker(resolve(__dirname, 'workbench-language-worker.js'), {
     resourceLimits: { maxOldGenerationSizeMb: computeWorkbenchLanguageWorkerHeapLimitMb(totalmem()) },
-    workerData: { cancellation },
+    workerData: { cancellation, locale },
   })
 }
 
@@ -188,6 +201,8 @@ export class WorkbenchLanguageServiceWorkerClient {
   private readonly supersedable = new Map<string, number>()
   private readonly inFlightDiagnostics: InFlightDiagnosticsRequest[] = []
   private readonly health: WorkbenchLanguageServiceWorkerHealthOptions
+  /** 界面语言换了就告诉 worker；关闭时取消。 */
+  private readonly stopFollowingLocale: () => void
   private consecutiveFailures = 0
   private restartNotBefore = 0
   private restartTimer: Nullable<ReturnType<typeof setTimeout>> = null
@@ -199,6 +214,9 @@ export class WorkbenchLanguageServiceWorkerClient {
     health: Partial<WorkbenchLanguageServiceWorkerHealthOptions> = {}
   ) {
     this.health = { ...DefaultWorkerHealth, ...health }
+    this.stopFollowingLocale = onWorkbenchMainLocaleChanged(() =>
+      this.worker?.port.postMessage({ locale: getWorkbenchMainLocale() })
+    )
   }
 
   public synchronizeProjectFile(
@@ -315,11 +333,12 @@ export class WorkbenchLanguageServiceWorkerClient {
   public async dispose(): Promise<void> {
     if (this.disposed) return
     this.disposed = true
+    this.stopFollowingLocale()
     if (this.restartTimer) clearTimeout(this.restartTimer)
     this.restartTimer = null
     const worker = this.worker
     if (!worker) {
-      this.rejectPending(new AppError('CLOSED', 'Workbench 语言服务已关闭。'))
+      this.rejectPending(new AppError('CLOSED', workbenchMainText('language.serviceClosed')))
       return
     }
 
@@ -332,7 +351,7 @@ export class WorkbenchLanguageServiceWorkerClient {
         gracefulShutdown,
         new Promise<void>((_resolve, reject) => {
           timeout = setTimeout(() => {
-            reject(new AppError('TIMEOUT', 'Workbench 语言服务关闭超时。'))
+            reject(new AppError('TIMEOUT', workbenchMainText('language.serviceCloseTimedOut')))
           }, GracefulWorkerShutdownTimeoutMs)
         }),
       ])
@@ -342,7 +361,7 @@ export class WorkbenchLanguageServiceWorkerClient {
       if (timeout) clearTimeout(timeout)
       this.clearProbe(worker)
       if (this.worker === worker) this.worker = null
-      this.rejectPending(new AppError('CLOSED', 'Workbench 语言服务已关闭。'))
+      this.rejectPending(new AppError('CLOSED', workbenchMainText('language.serviceClosed')))
       await worker.port.terminate().catch(() => 0)
     }
   }
@@ -402,7 +421,7 @@ export class WorkbenchLanguageServiceWorkerClient {
     request: WorkbenchLanguageServiceWorkerOperationMap[TOperation]['request'],
     supersedeKey?: string
   ): Promise<WorkbenchLanguageServiceWorkerOperationMap[TOperation]['result']> {
-    if (this.disposed) return Promise.reject(new AppError('CLOSED', 'Workbench 语言服务已关闭。'))
+    if (this.disposed) return Promise.reject(new AppError('CLOSED', workbenchMainText('language.serviceClosed')))
 
     return new Promise((resolvePromise, reject) => {
       const pending = this.createPending(
@@ -493,7 +512,10 @@ export class WorkbenchLanguageServiceWorkerClient {
     const worker = pending.worker
     this.cancel(
       pending.id,
-      new AppError('TIMEOUT', `Workbench 语言服务请求超时（${pending.operation}）。`)
+      new AppError(
+          'TIMEOUT',
+          workbenchMainText('language.serviceRequestTimedOut', { operation: pending.operation })
+        )
     )
     // 请求慢不等于 worker 死了：先探活，答不上来才重启。
     if (worker && worker === this.worker) this.probe(worker)
@@ -510,7 +532,7 @@ export class WorkbenchLanguageServiceWorkerClient {
         log.warn('language_worker_unresponsive', { hangTimeoutMs: this.health.hangTimeoutMs })
         this.replaceWorker(
           worker,
-          new AppError('TIMEOUT', 'Workbench 语言服务无响应，已重启。')
+          new AppError('TIMEOUT', workbenchMainText('language.serviceRestartedUnresponsive'))
         )
       }, Math.max(1, this.health.hangTimeoutMs)),
     }
@@ -527,11 +549,11 @@ export class WorkbenchLanguageServiceWorkerClient {
   }
 
   private ensureWorker(): LanguageServiceWorkerInstance {
-    if (this.disposed) throw new AppError('CLOSED', 'Workbench 语言服务已关闭。')
+    if (this.disposed) throw new AppError('CLOSED', workbenchMainText('language.serviceClosed'))
     if (this.worker) return this.worker
 
     const buffer = createWorkbenchLanguageServiceCancellationBuffer()
-    const port = this.createWorker({ cancellation: buffer })
+    const port = this.createWorker({ cancellation: buffer, locale: getWorkbenchMainLocale() })
     const worker: LanguageServiceWorkerInstance = {
       port,
       cancellation: new Int32Array(buffer),
@@ -545,7 +567,7 @@ export class WorkbenchLanguageServiceWorkerClient {
       if (this.worker !== worker) return
       this.handleWorkerFailure(
         worker,
-        new AppError('IPC', `Workbench 语言服务 worker 已退出（${exitCode}）。`)
+        new AppError('IPC', workbenchMainText('language.serviceWorkerExited', { code: exitCode }))
       )
     })
     return worker
@@ -584,7 +606,7 @@ export class WorkbenchLanguageServiceWorkerClient {
     if (isWorkerOutOfMemory(error)) {
       // 项目太大把语言服务的堆用满了：只丢语言服务，编辑器与 Agent 都不受影响，下一次请求重建。
       log.warn('language_worker_out_of_memory', { message: String((error as Error).message) })
-      this.replaceWorker(worker, new AppError('PLATFORM', '语言服务内存不足（项目过大），已自动重启。'))
+      this.replaceWorker(worker, new AppError('PLATFORM', workbenchMainText('language.serviceOutOfMemory')))
       return
     }
     this.replaceWorker(worker, AppError.from(error, 'IPC'))
