@@ -1,5 +1,7 @@
+import { EditorState } from '@codemirror/state'
 import { describe, expect, test } from 'bun:test'
 
+import { buildWorkbenchEditorSearchQuery } from '../src/renderer/src/models/editor/workbenchEditorFind'
 import {
   compareWorkbenchSearchPaths,
   compileWorkbenchSearchPathFilter,
@@ -108,6 +110,58 @@ describe('project search matching', () => {
     const [spanningHit] = hits(spanning, '1\\s+let', { regex: true })
     const spanningPreview = buildWorkbenchTextSearchPreview(spanning, spanningHit!)
     expect(spanningPreview.text.slice(spanningPreview.matchStart, spanningPreview.matchEnd)).toBe('1')
+  })
+})
+
+describe('project search agrees with the in-file find', () => {
+  // 在编辑器里查找与在整个项目里查找，同样的查找词与开关找到同样的地方（项目搜索不报空匹配）。
+  const documents = [
+    source,
+    'foo_bar foo-bar Foo\tfoo\nfoobar é foo\n  foo()\n',
+    '中文 测试 test_测试 测试a\n😀test😀 test\r\n$1 a.b a*b\n',
+    'alpha\n\nbeta  gamma\nALPHA beta\n',
+  ]
+  const queries: Array<Partial<WorkbenchTextSearchQuery> & { query: string }> = [
+    { query: 'foo' },
+    { query: 'foo', matchCase: true },
+    { query: 'foo', wholeWord: true },
+    { query: 'test', wholeWord: true },
+    { query: '测试', wholeWord: true },
+    { query: 'a.b' },
+    { query: 'a*b' },
+    { query: '$1' },
+    { query: 'foo\\w*', regex: true },
+    { query: '^\\s*\\w+', regex: true },
+    { query: 'beta\\s+\\w+', regex: true },
+    { query: '[^a-z ]+', regex: true, matchCase: true },
+    { query: 'alpha$', regex: true },
+    { query: '\\bfoo\\b', regex: true, wholeWord: true },
+    { query: 'a*', regex: true },
+  ]
+
+  test('finds the same ranges for every query and option', () => {
+    for (const doc of documents) {
+      const state = EditorState.create({ doc })
+      for (const spec of queries) {
+        const query = { ...DefaultWorkbenchTextSearchOptions, ...spec }
+        const expected: string[] = []
+        const cursor = buildWorkbenchEditorSearchQuery({
+          query: query.query,
+          replace: '',
+          caseSensitive: query.matchCase,
+          wholeWord: query.wholeWord,
+          regexp: query.regex,
+          inSelection: false,
+        }).getCursor(state)
+        for (let next = cursor.next(); !next.done; next = cursor.next())
+          if (next.value.to > next.value.from) expected.push(`${next.value.from}-${next.value.to}`)
+
+        // 编辑器的正文把 \r\n 当成一次换行；项目搜索拿到的正文已经统一成 LF，这里也按编辑器的正文比。
+        const content = state.doc.toString()
+        const actual = hits(content, query.query, query).map((hit) => `${hit.from}-${hit.to}`)
+        expect({ doc: content, spec, ranges: actual }).toEqual({ doc: content, spec, ranges: expected })
+      }
+    }
   })
 })
 
