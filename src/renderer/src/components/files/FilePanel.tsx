@@ -355,7 +355,6 @@ export function FilePanel({
     })
   }
 
-
   // 右键的那一项决定落在哪个目录（根目录与空白处的菜单对应工程根），不看树里当前聚焦或选中的是谁。
   function createEntryFromContext(type: WorkbenchDirectoryEntry['type']): void {
     if (!contextMenu) return

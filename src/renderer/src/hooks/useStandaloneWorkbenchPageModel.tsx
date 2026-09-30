@@ -737,14 +737,21 @@ export function useStandaloneWorkbenchPageModel(
     }
   )
 
+  /** 编辑区前面盖着别的（Git 对比、只读预览、调试页、结构图、AI 改动），看到的不是当前文件的编辑器。 */
+  const editorCovered =
+    !!editorNavigation.diffItem ||
+    !!editorNavigation.lightTab ||
+    !!editorNavigation.debug.activeTabId ||
+    aiChanges.active ||
+    velarLogicGraphActive
+
   /**
-   * ⇧⌘F 的查找词：编辑区显示的是普通文件、里面选中了一行以内的文字时才有。焦点已经在搜索表单里（再按一次
-   * ⇧⌘F）时不取：只把焦点交回查找框，不拿编辑器的选区盖掉正在输入的查找词。
+   * ⇧⌘F 的查找词：眼前是当前文件的编辑器、里面选中了一行以内的文字时才有（被别的盖住时选区看不见，不取）。
+   * 焦点已经在搜索表单里（再按一次 ⇧⌘F）时也不取：只把焦点交回查找框，不拿编辑器的选区盖掉正在输入的查找词。
    */
   function readProjectSearchSeed(): string | undefined {
     if (document.activeElement?.closest('[data-project-search-form]')) return undefined
-    if (!workbench.selectedFilePath || editorNavigation.diffItem || editorNavigation.lightTab)
-      return undefined
+    if (!workbench.selectedFilePath || editorCovered) return undefined
     return readWorkbenchProjectSearchSeed(
       workbench.editorContent,
       editorNavigation.cursorPosition.selection
@@ -1090,12 +1097,7 @@ export function useStandaloneWorkbenchPageModel(
   const commandPalette = useWorkbenchCommandPalette({
     workbench,
     surface,
-    editorCovered:
-      !!editorNavigation.diffItem ||
-      !!editorNavigation.lightTab ||
-      !!editorNavigation.debug.activeTabId ||
-      aiChanges.active ||
-      velarLogicGraphActive,
+    editorCovered,
     closeActiveEditor: () => setCloseActiveEditorTabRequestId((requestId) => requestId + 1),
     exitCurrentProject,
     findInFiles: () => void navigate({ target: 'search', seed: readProjectSearchSeed() }),
