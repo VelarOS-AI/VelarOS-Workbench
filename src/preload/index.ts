@@ -78,6 +78,7 @@ const projectHubBridge: WorkbenchProjectHubBridge = {
   returnToEntry: () => ipcRenderer.invoke(WorkbenchProjectHubChannels.returnToEntry),
   onStateChanged: (listener) => subscribe(WorkbenchProjectHubChannels.stateChanged, listener),
   onMenuCommand: (listener) => subscribe(WorkbenchProjectHubChannels.menuCommand, listener),
+  setLocale: (locale) => ipcRenderer.send(WorkbenchProjectHubChannels.setLocale, locale),
 }
 
 const accountBridge: WorkbenchAccountBridge = {

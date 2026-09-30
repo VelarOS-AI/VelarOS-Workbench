@@ -5,6 +5,7 @@
  * 挂在应用顶层（起手页与工作台都能经菜单「新建项目…」唤起）。
  */
 import { type ReactElement, useState } from 'react'
+import { useWorkbenchI18n } from '@renderer/i18n'
 
 import {
   Button,
@@ -26,14 +27,15 @@ interface NewProjectDialogProps {
   onOpenChange: (open: boolean) => void
 }
 
-const CreateFailureMessages: Record<WorkbenchProjectCreateFailureReason, string> = {
-  'invalid-name': '项目名不可为空，且不能包含 \\ / : * ? " < > | 或以点开头。',
-  'location-missing': '所选位置不存在或不是目录，请重新选择。',
-  'already-exists': '该位置下已存在同名目录，换一个名称或位置。',
-  'io-error': '目录创建失败，请检查磁盘权限后重试。',
+const CreateFailureMessageKeys: Record<WorkbenchProjectCreateFailureReason, string> = {
+  'invalid-name': 'welcome.newProjectInvalidName',
+  'location-missing': 'welcome.newProjectLocationMissing',
+  'already-exists': 'welcome.newProjectAlreadyExists',
+  'io-error': 'welcome.newProjectIoError',
 }
 
 export function NewProjectDialog({ open, onOpenChange }: NewProjectDialogProps): ReactElement {
+  const { t } = useWorkbenchI18n()
   const [name, setName] = useState('')
   const [locationPath, setLocationPath] = useState('')
   const [failure, setFailure] = useState<Nullable<WorkbenchProjectCreateFailureReason>>(null)
@@ -76,11 +78,11 @@ export function NewProjectDialog({ open, onOpenChange }: NewProjectDialogProps):
     <Dialog open={open} onOpenChange={resetAndClose}>
       <DialogContent className="workbench-new-project-dialog">
         <DialogHeader>
-          <DialogTitle>新建项目</DialogTitle>
+          <DialogTitle>{t('welcome.newProjectTitle')}</DialogTitle>
         </DialogHeader>
         <Stack gap="md">
           <Stack gap="xs">
-            <Label htmlFor="workbench-new-project-name">项目名称</Label>
+            <Label htmlFor="workbench-new-project-name">{t('welcome.newProjectName')}</Label>
             <Input
               id="workbench-new-project-name"
               value={name}
@@ -93,31 +95,33 @@ export function NewProjectDialog({ open, onOpenChange }: NewProjectDialogProps):
             />
           </Stack>
           <Stack gap="xs">
-            <Label htmlFor="workbench-new-project-location">位置</Label>
+            <Label htmlFor="workbench-new-project-location">
+              {t('welcome.newProjectLocation')}
+            </Label>
             <div className="workbench-new-project-dialog__location">
               <Input
                 id="workbench-new-project-location"
                 value={locationPath}
                 readOnly
-                placeholder="选择项目所在目录…"
+                placeholder={t('welcome.newProjectLocationPlaceholder')}
               />
               <Button variant="outline" onClick={() => void pickLocation()}>
-                浏览…
+                {t('welcome.newProjectBrowse')}
               </Button>
             </div>
           </Stack>
           {failure !== null && (
             <Text tone="caption" className="workbench-new-project-dialog__error">
-              {CreateFailureMessages[failure]}
+              {t(CreateFailureMessageKeys[failure])}
             </Text>
           )}
         </Stack>
         <DialogFooter>
           <Button variant="ghost" onClick={() => resetAndClose(false)}>
-            取消
+            {t('common.cancel')}
           </Button>
           <Button disabled={!canSubmit} onClick={() => void submit()}>
-            创建并打开
+            {t('welcome.newProjectCreate')}
           </Button>
         </DialogFooter>
       </DialogContent>

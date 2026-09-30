@@ -8,6 +8,8 @@
 import { app, Menu, type MenuItemConstructorOptions } from 'electron'
 
 import { type WorkbenchRecentProject } from '../../shared/projectHub'
+import { onWorkbenchMainLocaleChanged } from '../i18n/workbenchMainLocale'
+import { workbenchMainText } from '../i18n/workbenchMainMessages'
 
 import type { WorkbenchWindowManager } from './WorkbenchWindowManager'
 
@@ -20,6 +22,7 @@ export function installProjectHubMenu(windows: WorkbenchWindowManager): void {
   }
 
   windows.onChanged(rebuild)
+  onWorkbenchMainLocaleChanged(rebuild)
   rebuild()
 }
 
@@ -27,12 +30,12 @@ function buildDockMenu(windows: WorkbenchWindowManager): Menu {
   const recentProjects = windows.getFocusedState().recentProjects
   return Menu.buildFromTemplate([
     {
-      label: '最近项目',
+      label: workbenchMainText('menu.recentProjects'),
       submenu: buildRecentProjectItems(windows, recentProjects, 'new-window'),
     },
     { type: 'separator' },
     {
-      label: '在新窗口打开项目…',
+      label: workbenchMainText('menu.openProjectInNewWindow'),
       click: () => {
         void windows.openProjectInNewWindowViaDialog(windows.getFocusedWindow())
       },
@@ -48,30 +51,30 @@ function buildApplicationMenu(windows: WorkbenchWindowManager): Menu {
 
   template.push(
     {
-      label: '文件',
+      label: workbenchMainText('menu.file'),
       submenu: [
         {
-          label: '新建项目…',
+          label: workbenchMainText('menu.newProject'),
           accelerator: 'CmdOrCtrl+Shift+N',
           click: () => {
             windows.sendMenuCommand('new-project')
           },
         },
         {
-          label: '打开项目…',
+          label: workbenchMainText('menu.openProject'),
           accelerator: 'CmdOrCtrl+O',
           click: () => {
             void windows.openProjectViaDialog(windows.getFocusedWindow())
           },
         },
         {
-          label: '最近项目',
+          label: workbenchMainText('menu.recentProjects'),
           submenu: buildRecentProjectItems(windows, state.recentProjects),
         },
         { type: 'separator' },
         {
           // 同 VS Code：⌘W / Ctrl+W 关编辑区当前的标签，没有标签时什么也不做，不会把项目窗口关掉。
-          label: '关闭编辑器',
+          label: workbenchMainText('menu.closeEditor'),
           accelerator: 'CmdOrCtrl+W',
           enabled: state.currentProject !== null,
           click: (_item, window) => {
@@ -80,14 +83,14 @@ function buildApplicationMenu(windows: WorkbenchWindowManager): Menu {
         },
         {
           // 关窗走窗口的 close：有未保存改动时先确认（见 WorkbenchWindowCloseGuard）。
-          label: '关闭窗口',
+          label: workbenchMainText('menu.closeWindow'),
           accelerator: 'CmdOrCtrl+Shift+W',
           click: (_item, window) => {
             window?.close()
           },
         },
         {
-          label: '关闭项目',
+          label: workbenchMainText('menu.closeProject'),
           enabled: state.currentProject !== null,
           click: () => {
             windows.sendMenuCommand('close-project')
@@ -97,14 +100,14 @@ function buildApplicationMenu(windows: WorkbenchWindowManager): Menu {
     },
     { role: 'editMenu' },
     {
-      label: '视图',
+      label: workbenchMainText('menu.view'),
       submenu: [
         { role: 'reload' },
         { role: 'forceReload' },
         { role: 'toggleDevTools' },
         { type: 'separator' },
         {
-          label: '放大编辑器',
+          label: workbenchMainText('menu.zoomEditorIn'),
           accelerator: 'CmdOrCtrl+Plus',
           enabled: state.currentProject !== null,
           click: () => {
@@ -112,7 +115,7 @@ function buildApplicationMenu(windows: WorkbenchWindowManager): Menu {
           },
         },
         {
-          label: '缩小编辑器',
+          label: workbenchMainText('menu.zoomEditorOut'),
           accelerator: 'CmdOrCtrl+-',
           enabled: state.currentProject !== null,
           click: () => {
@@ -120,7 +123,7 @@ function buildApplicationMenu(windows: WorkbenchWindowManager): Menu {
           },
         },
         {
-          label: '重置编辑器缩放',
+          label: workbenchMainText('menu.zoomEditorReset'),
           accelerator: 'CmdOrCtrl+0',
           enabled: state.currentProject !== null,
           click: () => {
@@ -152,7 +155,8 @@ function buildRecentProjectItems(
   recentProjects: WorkbenchRecentProject[],
   disposition: 'focused-window' | 'new-window' = 'focused-window'
 ): MenuItemConstructorOptions[] {
-  if (recentProjects.length === 0) return [{ label: '暂无最近项目', enabled: false }]
+  if (recentProjects.length === 0)
+    return [{ label: workbenchMainText('menu.noRecentProjects'), enabled: false }]
 
   return recentProjects.map((project) => ({
     label: project.name,

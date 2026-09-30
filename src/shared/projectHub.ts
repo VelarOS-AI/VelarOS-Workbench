@@ -6,6 +6,7 @@
  * 产品核心——它是独立宿主入口形态，没有第二个消费者；
  * kernel-protocol 客户端接入后，项目打开链路若上移到 kernel 会话面，本契约随之重审。
  */
+import type { AppLocale } from '@shared/contracts'
 
 export const WorkbenchProjectHubChannels = {
   getState: 'workbench-app:project-hub:get-state',
@@ -28,6 +29,7 @@ export const WorkbenchProjectHubChannels = {
   returnToEntry: 'workbench-app:project-hub:return-to-entry',
   stateChanged: 'workbench-app:project-hub:state-changed',
   menuCommand: 'workbench-app:project-hub:menu-command',
+  setLocale: 'workbench-app:project-hub:set-locale',
 } as const
 
 export interface WorkbenchOpenedProject {
@@ -135,4 +137,6 @@ export interface WorkbenchProjectHubBridge {
   returnToEntry: () => Promise<WorkbenchProjectHubState>
   onStateChanged: (listener: (state: WorkbenchProjectHubState) => void) => () => void
   onMenuCommand: (listener: (command: WorkbenchProjectHubMenuCommand) => void) => () => void
+  /** 界面语言：窗口打开和用户切换语言时报给 main，应用菜单等 main 侧文字跟着换。 */
+  setLocale: (locale: AppLocale) => void
 }

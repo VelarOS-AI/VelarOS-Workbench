@@ -27,6 +27,9 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     seeErrorInContent: 'See the error details in the conversation.',
   },
   chat: {
+    historySaveFailedTitle: 'Chat history was not saved',
+    historySaveFailedDescription:
+      'Browser storage could not be written (it may be full). You can keep chatting, but this history may be lost after a restart; a local backup was attempted.',
     fileChangeOpenErrorTitle: 'Failed to open file',
     fileChangeSummaryFilesChanged: '{count} files changed',
     fileChangeSummaryReview: 'Review',
@@ -47,6 +50,28 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     voiceInputPermissionError: 'Microphone permission is blocked. Allow it and try again.',
     voiceInputMicrophoneUnavailable: 'No microphone is available. Check your input device.',
     voiceInputNetworkError: 'Speech recognition is unavailable. Check your connection.',
+  },
+  welcome: {
+    tagline: 'Build your next project.',
+    newProject: 'New Project…',
+    openProject: 'Open Project…',
+    recentProjects: 'Recent Projects',
+    noRecentProjects: 'No recent projects',
+    noRecentProjectsDescription: 'Projects you create or open will show up here.',
+    pathMissing: 'Path not found',
+    removeRecentProject: 'Remove from recent projects',
+    justNow: 'Just now',
+    newProjectTitle: 'New Project',
+    newProjectName: 'Project name',
+    newProjectLocation: 'Location',
+    newProjectLocationPlaceholder: 'Choose where to create the project…',
+    newProjectBrowse: 'Browse…',
+    newProjectCreate: 'Create and Open',
+    newProjectInvalidName:
+      'Enter a project name that does not start with a dot or contain \\ / : * ? " < > |.',
+    newProjectLocationMissing: 'The chosen location does not exist or is not a folder. Choose another.',
+    newProjectAlreadyExists: 'A folder with this name already exists there. Pick another name or location.',
+    newProjectIoError: 'Could not create the folder. Check disk permissions and try again.',
   },
   workbench: {
     title: 'Workbench',

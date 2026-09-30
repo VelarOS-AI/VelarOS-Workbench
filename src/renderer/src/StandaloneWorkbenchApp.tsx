@@ -40,6 +40,11 @@ export function StandaloneWorkbenchApp(): ReactElement {
     []
   )
 
+  // 应用菜单等 main 侧的文字跟着界面语言走。
+  useEffect(() => {
+    window.velarosWorkbenchProjectHub.setLocale(localization.locale)
+  }, [localization.locale])
+
   useEffect(() => {
     function hasExternalPaths(event: DragEvent): boolean {
       return Array.from(event.dataTransfer?.types ?? []).includes('Files')

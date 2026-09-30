@@ -474,11 +474,14 @@ void describe('pre-split Workbench shell parity', () => {
 
   void test('keeps the welcome page product-focused without exposing Kernel plumbing', () => {
     const welcome = readSource('src/renderer/src/welcome/WorkbenchWelcomePage.tsx')
+    const welcomeCopy = readSource('src/renderer/src/i18n/messages/zh-CN.ts')
     const styles = readSource('src/renderer/src/welcome/welcome.css')
 
-    assert.match(welcome, /构建你的下一个项目。/)
-    assert.doesNotMatch(welcome, /打开一个项目，开始开发。/)
-    assert.doesNotMatch(welcome, /Kernel：内置宿主/)
+    // 文案在语言包里（中英两份），页面按键取。
+    assert.match(welcome, /t\('welcome\.tagline'\)/)
+    assert.match(welcomeCopy, /tagline: '构建你的下一个项目。'/)
+    assert.doesNotMatch(welcome + welcomeCopy, /打开一个项目，开始开发。/)
+    assert.doesNotMatch(welcome + welcomeCopy, /Kernel：内置宿主/)
     assert.doesNotMatch(styles, /workbench-welcome__kernel-status/)
     assert.match(styles, /\.workbench-welcome__hero[\s\S]*min-height:\s*211px/)
     // 左侧在竖直方向居中；最近项目有上限，超出的在列表里滚动。

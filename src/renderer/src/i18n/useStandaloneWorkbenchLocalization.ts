@@ -29,7 +29,8 @@ function isAppLocale(value: unknown): value is AppLocale {
   return value === 'en-US' || value === 'zh-CN'
 }
 
-function readInitialLocale(): AppLocale {
+/** 当前界面语言（已保存的选择，没选过就跟系统）。给 React 之外的代码用；切换语言时会立刻写回这里。 */
+export function readWorkbenchAppLocale(): AppLocale {
   try {
     const stored = window.localStorage.getItem(LOCALE_STORAGE_KEY)
     if (isAppLocale(stored)) return stored
@@ -66,7 +67,7 @@ export function translateWorkbenchAppMessage(
 }
 
 export function useStandaloneWorkbenchLocalization(): WorkbenchI18nContextValue {
-  const [locale, setLocale] = useState<AppLocale>(readInitialLocale)
+  const [locale, setLocale] = useState<AppLocale>(readWorkbenchAppLocale)
 
   return useMemo<WorkbenchI18nContextValue>(
     () => ({

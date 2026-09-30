@@ -8,11 +8,16 @@ import { stat } from 'node:fs/promises'
 import { BrowserWindow, ipcMain, shell } from 'electron'
 
 import { WorkbenchProjectHubChannels } from '../../shared/projectHub'
+import { isWorkbenchAppLocale, setWorkbenchMainLocale } from '../i18n/workbenchMainLocale'
 
 import { pickDirectory } from './ProjectPicker'
 import type { WorkbenchWindowManager } from './WorkbenchWindowManager'
 
 export function registerProjectHubIpc(windows: WorkbenchWindowManager): void {
+  ipcMain.on(WorkbenchProjectHubChannels.setLocale, (_event, locale: unknown) => {
+    if (isWorkbenchAppLocale(locale)) setWorkbenchMainLocale(locale)
+  })
+
   ipcMain.handle(
     WorkbenchProjectHubChannels.getState,
     (event) => windows.getHubForWebContents(event.sender)?.getState() ?? emptyState()

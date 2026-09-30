@@ -56,6 +56,10 @@ import {
 import type { WorkbenchChatRunChangesSummary } from '@shared/workbenchGit'
 
 import workbenchAppIconUrl from '../../../../build/icon.svg?url'
+import {
+  readWorkbenchAppLocale,
+  translateWorkbenchAppMessage,
+} from '../i18n/useStandaloneWorkbenchLocalization'
 import { resolveWorkbenchChatComposerPlaceholder } from '../models/chat/workbenchChatComposerPlaceholder'
 import {
   appendWorkbenchChatFileReferences,
@@ -2203,10 +2207,10 @@ function writePersistedChatHistory(projectRoot: string): void {
     })
     if (!persistFailureNotified.has(key)) {
       persistFailureNotified.add(key)
+      const locale = readWorkbenchAppLocale()
       workbenchMessage.error({
-        title: '聊天历史未能保存',
-        description:
-          '浏览器存储写入失败(可能已满)。当前对话仍可继续,但重启后可能丢失;已尝试写入本地备份。',
+        title: translateWorkbenchAppMessage(locale, 'chat.historySaveFailedTitle'),
+        description: translateWorkbenchAppMessage(locale, 'chat.historySaveFailedDescription'),
       })
     }
   }

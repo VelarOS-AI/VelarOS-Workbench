@@ -7,6 +7,7 @@
  */
 import { type ReactElement } from 'react'
 import { FolderOpenIcon, FolderPlusIcon, XIcon } from '@phosphor-icons/react'
+import { useWorkbenchI18n } from '@renderer/i18n'
 
 import { Button, Empty, IconButton, Stack, Tag, Text, Title } from '@velaros-ai/ui'
 
@@ -27,6 +28,7 @@ export function WorkbenchWelcomePage({
   onNewProject,
 }: WorkbenchWelcomePageProps): ReactElement {
   const { preferences } = useWorkbenchPreferences()
+  const { t } = useWorkbenchI18n()
 
   return (
     <div className="workbench-welcome" data-workbench-accent={preferences.accent}>
@@ -34,12 +36,12 @@ export function WorkbenchWelcomePage({
         <section className="workbench-welcome__hero">
           <Stack gap="xs">
             <Title level={1}>VelarOS Workbench</Title>
-            <Text tone="secondary">构建你的下一个项目。</Text>
+            <Text tone="secondary">{t('welcome.tagline')}</Text>
           </Stack>
           <Stack gap="sm" className="workbench-welcome__actions">
             <Button size="lg" onClick={onNewProject}>
               <FolderPlusIcon size={18} />
-              新建项目…
+              {t('welcome.newProject')}
             </Button>
             <Button
               variant="outline"
@@ -47,16 +49,16 @@ export function WorkbenchWelcomePage({
               onClick={() => void window.velarosWorkbenchProjectHub.openProjectDialog()}
             >
               <FolderOpenIcon size={18} />
-              打开项目…
+              {t('welcome.openProject')}
             </Button>
           </Stack>
         </section>
         <section className="workbench-welcome__recents">
-          <Title level={5}>最近项目</Title>
+          <Title level={5}>{t('welcome.recentProjects')}</Title>
           {state.recentProjects.length === 0 ? (
             <Empty
-              title="暂无最近项目"
-              description="新建或打开一个项目后，会在这里出现。"
+              title={t('welcome.noRecentProjects')}
+              description={t('welcome.noRecentProjectsDescription')}
               imageSize="sm"
             />
           ) : (
@@ -73,6 +75,7 @@ export function WorkbenchWelcomePage({
 }
 
 function RecentProjectRow({ project }: { project: WorkbenchRecentProject }): ReactElement {
+  const { t, locale } = useWorkbenchI18n()
   return (
     <li className="workbench-welcome__recent-row" data-missing={project.missing}>
       <button
@@ -85,16 +88,18 @@ function RecentProjectRow({ project }: { project: WorkbenchRecentProject }): Rea
           <Text tone="strong" truncate>
             {project.name}
           </Text>
-          {project.missing && <Tag variant="warning">路径不存在</Tag>}
+          {project.missing && <Tag variant="warning">{t('welcome.pathMissing')}</Tag>}
         </span>
         <Text tone="caption" truncate>
           {project.path}
         </Text>
       </button>
       <span className="workbench-welcome__recent-meta">
-        <Text tone="caption">{lastOpenedLabel(project.lastOpenedAt)}</Text>
+        <Text tone="caption">
+          {lastOpenedLabel(project.lastOpenedAt, locale, t('welcome.justNow'))}
+        </Text>
         <IconButton
-          label="从最近项目移除"
+          label={t('welcome.removeRecentProject')}
           size="icon-sm"
           className="workbench-welcome__recent-remove"
           onClick={() => void window.velarosWorkbenchProjectHub.removeRecentProject(project.path)}
