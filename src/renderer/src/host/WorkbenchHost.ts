@@ -85,6 +85,8 @@ import type {
   WorkbenchReadLocalHistorySnapshotRequest,
   WorkbenchReadLocalHistorySnapshotResult,
   WorkbenchRenameEntryRequest,
+  WorkbenchReplaceContentRequest,
+  WorkbenchReplaceContentResult,
   WorkbenchRestoreDeletedEntryRequest,
   WorkbenchRestoreDeletedEntryResult,
   WorkbenchRestoreMissingFileRequest,
@@ -166,6 +168,9 @@ export interface WorkbenchProjectKernelPort {
     request: WorkbenchSearchContentRequest
   ): Promise<Result<WorkbenchSearchContentResult>>
   cancelWorkbenchContentSearch(request: WorkbenchCancelSearchContentRequest): Promise<Result<void>>
+  replaceWorkbenchContent(
+    request: WorkbenchReplaceContentRequest
+  ): Promise<Result<WorkbenchReplaceContentResult>>
   /** 带 searchId 的内容搜索边搜边推送的结果。 */
   onWorkbenchContentSearchProgress(
     listener: (event: WorkbenchSearchContentProgressEvent) => void

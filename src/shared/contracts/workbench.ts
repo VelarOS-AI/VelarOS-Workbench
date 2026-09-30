@@ -946,6 +946,42 @@ export interface WorkbenchCancelSearchContentRequest {
   searchId: string
 }
 
+/** 要替换的一个文件（没在编辑器里开着的：开着的由编辑器在自己的正文里换，能撤销）。 */
+export interface WorkbenchReplaceContentFileRequest {
+  path: string
+  /** 搜索时磁盘上的版本（见 WorkbenchContentSearchFileResult）：之后被改过就不换，结果已经过期了。 */
+  expectedModifiedAt: number
+  expectedSize: number
+  /** 只换这几处（按匹配的起止行列认）；不给就换这个文件里的全部匹配。 */
+  matches?: Array<{ line: number; column: number; endLine: number; endColumn: number }>
+}
+
+/**
+ * 按内容搜索的查找词与开关，把文件里的匹配换掉。每个文件重新读盘、重新找匹配，经保存管线写回：编码、
+ * BOM 与换行符照磁盘上的来，替换前后的内容都记进本地历史。
+ */
+export interface WorkbenchReplaceContentRequest {
+  projectRoot: string
+  query: string
+  matchCase?: boolean
+  wholeWord?: boolean
+  regex?: boolean
+  replacement: string
+  files: WorkbenchReplaceContentFileRequest[]
+}
+
+export interface WorkbenchReplaceContentFileResult {
+  path: string
+  replacedCount: number
+  /** 没换成的原因（文件在搜索之后被改过、编码写不出替换进去的字符……）；这个文件没有动。 */
+  error?: { message: string; code?: string }
+}
+
+export interface WorkbenchReplaceContentResult {
+  projectRoot: string
+  files: WorkbenchReplaceContentFileResult[]
+}
+
 export interface WorkbenchRunCommandRequest {
   projectRoot: string
   command: string

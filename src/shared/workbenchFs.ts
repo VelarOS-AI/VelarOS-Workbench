@@ -7,7 +7,7 @@
  * renderer 经 preload 桥调用；kernel-protocol 客户端接入后本传输面整体替换，端口面不动。
  *
  * 片1 起覆盖四簇：文件系统（纯读 + 写族）/ 双搜索（内容搜索可边搜边推送、可取消；外加快速打开用的整份
- * 文件清单）/ 一次性命令运行 /
+ * 文件清单）与替换 / 一次性命令运行 /
  * 本地历史读。
  * `saveFileSync` 是 beforeunload 兜底路径，走 `ipcRenderer.sendSync` 同步信封。
  */
@@ -39,6 +39,8 @@ import type {
   WorkbenchReadLocalHistorySnapshotRequest,
   WorkbenchReadLocalHistorySnapshotResult,
   WorkbenchRenameEntryRequest,
+  WorkbenchReplaceContentRequest,
+  WorkbenchReplaceContentResult,
   WorkbenchRestoreDeletedEntryRequest,
   WorkbenchRestoreDeletedEntryResult,
   WorkbenchRestoreMissingFileRequest,
@@ -75,6 +77,7 @@ export const WorkbenchFsChannels = {
   searchContent: 'workbench-app:search:content',
   searchContentProgress: 'workbench-app:search:content-progress',
   cancelSearchContent: 'workbench-app:search:cancel-content',
+  replaceContent: 'workbench-app:search:replace-content',
   listProjectFiles: 'workbench-app:search:files',
   runCommand: 'workbench-app:command:run',
   runCommandOutput: 'workbench-app:command:output',
@@ -148,6 +151,9 @@ export interface WorkbenchFsBridge {
   cancelSearchContent: (
     request: WorkbenchCancelSearchContentRequest
   ) => Promise<WorkbenchFsCallResult<void>>
+  replaceContent: (
+    request: WorkbenchReplaceContentRequest
+  ) => Promise<WorkbenchFsCallResult<WorkbenchReplaceContentResult>>
   /** 带 searchId 的内容搜索边搜边推送的结果（只推给发起搜索的窗口）。 */
   onSearchContentProgress: (
     listener: (event: WorkbenchSearchContentProgressEvent) => void

@@ -117,6 +117,7 @@ const fsBridge: WorkbenchFsBridge = {
   searchContent: (request) => ipcRenderer.invoke(WorkbenchFsChannels.searchContent, request),
   cancelSearchContent: (request) =>
     ipcRenderer.invoke(WorkbenchFsChannels.cancelSearchContent, request),
+  replaceContent: (request) => ipcRenderer.invoke(WorkbenchFsChannels.replaceContent, request),
   onSearchContentProgress: (listener) =>
     subscribe(WorkbenchFsChannels.searchContentProgress, listener),
   listProjectFiles: (request) =>

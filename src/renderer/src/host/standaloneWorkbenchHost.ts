@@ -229,6 +229,8 @@ const standaloneWorkbenchHost: WorkbenchHost = {
         toHostResult(await window.velarosWorkbenchFs.searchContent(request)),
       cancelWorkbenchContentSearch: async (request) =>
         toHostResult(await window.velarosWorkbenchFs.cancelSearchContent(request)),
+      replaceWorkbenchContent: async (request) =>
+        toHostResult(await window.velarosWorkbenchFs.replaceContent(request)),
       onWorkbenchContentSearchProgress: (listener) =>
         window.velarosWorkbenchFs.onSearchContentProgress(listener),
       listWorkbenchProjectFiles: async (request) =>

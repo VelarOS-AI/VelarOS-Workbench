@@ -33,6 +33,8 @@ import type {
   WorkbenchReadImageFileRequest,
   WorkbenchReadLocalHistorySnapshotRequest,
   WorkbenchRenameEntryRequest,
+  WorkbenchReplaceContentFileRequest,
+  WorkbenchReplaceContentRequest,
   WorkbenchRestoreDeletedEntryRequest,
   WorkbenchRestoreMissingFileRequest,
   WorkbenchRunCommandRequest,
@@ -55,6 +57,7 @@ import {
   callWithEnvelopeSync,
   hasStringFields,
   invalidRequest,
+  isRecord,
   optionalBoolean,
   optionalNumber,
   optionalString,
@@ -293,6 +296,19 @@ export function registerWorkbenchFsIpc(
       } finally {
         contentSearches.end(sender, searchId, search)
       }
+    })
+  )
+
+  ipcMain.handle(WorkbenchFsChannels.replaceContent, (_event, request: unknown) =>
+    callWithEnvelope(async () => {
+      const parsed = parseReplaceContentRequest(request)
+      if (!parsed) return invalidRequest()
+
+      return recordUserWrites(
+        await parts.replace.replaceContent(parsed),
+        parsed.projectRoot,
+        (result) => result.files.filter((file) => file.replacedCount > 0).map((file) => file.path)
+      )
     })
   )
 
@@ -549,6 +565,65 @@ function parseSearchContentRequest(input: unknown): Nullable<WorkbenchSearchCont
     ...optionalNumber(input, 'maxResultsPerFile'),
     ...optionalString(input, 'searchId'),
   }
+}
+
+function parseReplaceContentRequest(input: unknown): Nullable<WorkbenchReplaceContentRequest> {
+  if (!hasStringFields(input, ['projectRoot', 'query', 'replacement'])) return null
+  const files = input['files']
+  if (!Array.isArray(files)) return null
+
+  const parsedFiles: WorkbenchReplaceContentFileRequest[] = []
+  for (const file of files) {
+    const parsed = parseReplaceContentFileRequest(file)
+    if (!parsed) return null
+    parsedFiles.push(parsed)
+  }
+
+  return {
+    projectRoot: input['projectRoot'] as string,
+    query: input['query'] as string,
+    replacement: input['replacement'] as string,
+    ...optionalBoolean(input, 'matchCase'),
+    ...optionalBoolean(input, 'wholeWord'),
+    ...optionalBoolean(input, 'regex'),
+    files: parsedFiles,
+  }
+}
+
+function parseReplaceContentFileRequest(input: unknown): Nullable<WorkbenchReplaceContentFileRequest> {
+  if (
+    !hasStringFields(input, ['path'])
+    || !isFiniteNumber(input['expectedModifiedAt'])
+    || !isFiniteNumber(input['expectedSize'])
+  )
+    return null
+
+  const file: WorkbenchReplaceContentFileRequest = {
+    path: input['path'] as string,
+    expectedModifiedAt: input['expectedModifiedAt'],
+    expectedSize: input['expectedSize'],
+  }
+  const matches = input['matches']
+  if (matches === undefined) return file
+  if (!Array.isArray(matches)) return null
+
+  const ranges: NonNullable<WorkbenchReplaceContentFileRequest['matches']> = []
+  for (const match of matches) {
+    if (!isRecord(match)) return null
+    const { line, column, endLine, endColumn } = match
+    if (![line, column, endLine, endColumn].every(isFiniteNumber)) return null
+    ranges.push({
+      line: line as number,
+      column: column as number,
+      endLine: endLine as number,
+      endColumn: endColumn as number,
+    })
+  }
+  return { ...file, matches: ranges }
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value)
 }
 
 interface ContentSearchRegistry {
