@@ -788,6 +788,45 @@
   background: var(--workbench-surface);
 }
 
+/* 并排的终端：一组从左到右排开，宽度按份额分，中间的分隔条可以拖。 */
+.terminalSplitGroup {
+  @apply flex min-h-0 min-w-0 flex-1 flex-row;
+  background: var(--workbench-surface);
+}
+
+.terminalSplitPane {
+  @apply relative flex min-h-0 min-w-0 flex-col;
+  flex: 1 1 0;
+}
+
+.terminalSplitResizeHandle {
+  flex: none;
+}
+
+/* 并排里单个终端的关闭按钮：鼠标移到这个终端上才出现，压在查找栏下面。 */
+.terminalSplitPaneClose {
+  @apply absolute flex items-center justify-center rounded-sm border-0 text-muted-foreground;
+  top: 4px;
+  right: 16px;
+  z-index: 9;
+  width: 18px;
+  height: 18px;
+  background: var(--workbench-toolbar);
+  opacity: 0;
+  transition: opacity 120ms ease;
+  -webkit-app-region: no-drag;
+}
+
+.terminalSplitPane:hover > .terminalSplitPaneClose,
+.terminalSplitPaneClose:focus-visible {
+  opacity: 1;
+}
+
+.terminalSplitPaneClose:hover {
+  color: var(--workbench-text);
+  background: var(--workbench-hover);
+}
+
 /* 终端查找栏浮在右上角（避开滚动条），不占终端的行。 */
 .terminalFindBar {
   @apply absolute flex items-center gap-1 rounded-md border text-muted-foreground;

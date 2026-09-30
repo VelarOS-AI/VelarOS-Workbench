@@ -17,6 +17,10 @@ import {
   attachWorkbenchTerminalOutput,
   onWorkbenchTerminalOutputDiscarded,
 } from '../../models/commands/workbenchTerminalOutputBus'
+import {
+  matchWorkbenchTerminalPaneKey,
+  type WorkbenchTerminalPaneAction,
+} from '../../models/commands/workbenchTerminalSplits'
 import type { WorkbenchEditorFindStatus } from '../../models/editor/workbenchEditorFindState'
 
 import {
@@ -45,6 +49,11 @@ export interface WorkbenchTerminalInstanceHandlers {
   onFind?: (selection: string) => void
   /** 查找栏开着时输出变了，匹配数跟着变。 */
   onFindStatusChange?: (status: WorkbenchEditorFindStatus) => void
+  /**
+   * 在终端里按了拆分、换到旁边那个终端的键。返回 true 是接下了（这个键不再交给 shell）；没给、返回 false
+   * （没有旁边的终端可换）就照常交给 shell。
+   */
+  onPaneAction?: (action: WorkbenchTerminalPaneAction) => boolean
 }
 
 export interface WorkbenchTerminalInstance {
@@ -144,20 +153,22 @@ export function acquireWorkbenchTerminal(
     entry.cwd = parseWorkbenchTerminalCwdReport(data) ?? entry.cwd
     return true
   })
-  // ⌘F（其它平台 Ctrl+F）打开终端的查找栏，不再交给 shell。
+  // ⌘F（其它平台 Ctrl+F）打开终端的查找栏，拆分、换到旁边的终端也在这里接下，都不再交给 shell。
   terminal.attachCustomKeyEventHandler((event) => {
-    if (event.type !== 'keydown' || !isFindShortcut(event) || !entry.handlers.onFind) return true
-    event.preventDefault()
-    entry.handlers.onFind(terminal.getSelection())
-    // 查找栏接走了焦点，xterm 等不到这个键的 keyup（macOS 上按着 ⌘ 时 F 本来也没有 keyup），会一直当有键按着，
-    // 回到终端后吞掉 insertText 送来的输入（听写、表情面板）。补一个 Shift 的 keyup 让它复位；只有修饰键的
-    // keyup 不会让 xterm 把焦点抢回去。
-    queueMicrotask(() =>
-      terminal.textarea?.dispatchEvent(
-        new KeyboardEvent('keyup', { key: 'Shift', code: 'ShiftLeft', keyCode: 16, bubbles: true })
-      )
-    )
-    return false
+    if (event.type !== 'keydown') return true
+    if (isFindShortcut(event) && entry.handlers.onFind) {
+      event.preventDefault()
+      entry.handlers.onFind(terminal.getSelection())
+      releaseHeldKey(terminal)
+      return false
+    }
+    const paneAction = matchWorkbenchTerminalPaneKey(event, isApplePlatform)
+    if (paneAction && entry.handlers.onPaneAction?.(paneAction)) {
+      event.preventDefault()
+      releaseHeldKey(terminal)
+      return false
+    }
+    return true
   })
   terminal.onWriteParsed(() => scheduleSearchRefresh(entry))
   terminal.onScroll(() => scheduleSearchDecorate(entry))
@@ -256,6 +267,19 @@ function toBufferRange(cells: readonly TerminalTextCell[], link: WorkbenchTermin
     start: { x: first.x + 1, y: first.y + 1 },
     end: { x: last.x + last.width, y: last.y + 1 },
   }
+}
+
+/**
+ * 一个键把焦点带走了（查找栏、旁边的终端），xterm 等不到它的 keyup（macOS 上按着 ⌘ 时字母键本来也没有 keyup），
+ * 会一直当有键按着，回到这个终端后吞掉 insertText 送来的输入（听写、表情面板）。补一个 Shift 的 keyup 让它
+ * 复位；只有修饰键的 keyup 不会让 xterm 把焦点抢回去。
+ */
+function releaseHeldKey(terminal: Terminal): void {
+  queueMicrotask(() =>
+    terminal.textarea?.dispatchEvent(
+      new KeyboardEvent('keyup', { key: 'Shift', code: 'ShiftLeft', keyCode: 16, bubbles: true })
+    )
+  )
 }
 
 function isFindShortcut(event: KeyboardEvent): boolean {

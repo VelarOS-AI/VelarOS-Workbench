@@ -23,12 +23,20 @@ export function markWorkbenchTerminalSessionClosed(
     : sessions
 }
 
+/** 焦点此刻是不是在这个会话的终端里（用户正在里面打字）。 */
+function isWorkbenchTerminalFocused(sessionId: string): boolean {
+  const frame = document.activeElement?.closest('[data-terminal-session]')
+  return frame?.getAttribute('data-terminal-session') === sessionId
+}
+
 export function useWorkbenchCommandIpcSubscriptions(
   activeRunIdRef: MutableRefObject<Nullable<string>>,
   setRunOutputLines: Dispatch<SetStateAction<WorkbenchRunOutputLine[]>>,
   setTerminalSessions: Dispatch<SetStateAction<WorkbenchTerminalSessionView[]>>,
   setRunSessions: Dispatch<SetStateAction<WorkbenchTerminalSessionView[]>>,
-  setIsRunningCommand: Dispatch<SetStateAction<boolean>>
+  setIsRunningCommand: Dispatch<SetStateAction<boolean>>,
+  /** 用户在终端里退出了 shell：关掉这个终端，返回 true；不是终端（运行卡）返回 false。 */
+  closeExitedTerminalSession: (sessionId: string) => boolean
 ): void {
   const hostRuntime = useWorkbenchHostRuntime()
   useEffect(() => {
@@ -55,6 +63,13 @@ export function useWorkbenchCommandIpcSubscriptions(
     const unsubscribe = hostRuntime.kernel.project.onWorkbenchTerminalOutput((event) => {
       publishWorkbenchTerminalOutput(event.sessionId, event.chunk)
       if (!event.closed) return
+      // 在终端里敲 exit（shell 正常退出，焦点就在这个终端里）：终端跟着关掉。其余的留着，能看到它是怎么结束的。
+      if (
+        event.exitCode === 0 &&
+        isWorkbenchTerminalFocused(event.sessionId) &&
+        closeExitedTerminalSession(event.sessionId)
+      )
+        return
       setTerminalSessions((current) => markWorkbenchTerminalSessionClosed(current, event.sessionId))
       setRunSessions((current) => markWorkbenchTerminalSessionClosed(current, event.sessionId))
     })
@@ -66,6 +81,7 @@ export function useWorkbenchCommandIpcSubscriptions(
     }
   }, [
     activeRunIdRef,
+    closeExitedTerminalSession,
     hostRuntime,
     setIsRunningCommand,
     setRunOutputLines,

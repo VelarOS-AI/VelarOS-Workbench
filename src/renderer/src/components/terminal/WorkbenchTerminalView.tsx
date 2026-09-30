@@ -51,6 +51,13 @@ interface WorkbenchTerminalViewProps {
   onOpenLink?: (url: string) => void
   onResolveFileLinks?: WorkbenchTerminalInstanceHandlers['resolveFileLinks']
   onOpenFileLink?: WorkbenchTerminalInstanceHandlers['onOpenFileLink']
+  /** 并排的几个终端里，这个是不是当前的那个：是才在挂上时拿焦点，变成当前的时也把焦点拿过来。不给按是。 */
+  isActive?: boolean
+  /** 终端一共有几个：别的终端关掉之后（点了它的关闭按钮，焦点没了着落），当前的这个把焦点接过来。 */
+  sessionCount?: number
+  /** 焦点进了这个终端（点了它、它的查找栏）。 */
+  onActivate?: () => void
+  onPaneAction?: WorkbenchTerminalInstanceHandlers['onPaneAction']
 }
 
 /**
@@ -67,9 +74,16 @@ export function WorkbenchTerminalView({
   onOpenLink,
   onResolveFileLinks,
   onOpenFileLink,
+  isActive = true,
+  sessionCount,
+  onActivate,
+  onPaneAction,
 }: WorkbenchTerminalViewProps): ReactElement {
+  const frameRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const cwdLatest = useLatest(cwd)
+  const isActiveLatest = useLatest(isActive)
+  const onPaneActionLatest = useLatest(onPaneAction)
   const onDataLatest = useLatest(onData)
   const onResizeLatest = useLatest(onResize)
   const onOpenLinkLatest = useLatest(onOpenLink)
@@ -104,6 +118,7 @@ export function WorkbenchTerminalView({
             focusRequest: (current?.focusRequest ?? 0) + 1,
           })),
         onFindStatusChange: setFindStatus,
+        onPaneAction: (action) => onPaneActionLatest.current?.(action) ?? false,
       },
       { fontFamily: readWorkbenchTerminalFontFamily(container), cwd: cwdLatest.current }
     )
@@ -129,7 +144,7 @@ export function WorkbenchTerminalView({
     const observer = new ResizeObserver(scheduleFit)
     observer.observe(container)
     scheduleFit()
-    instance.terminal.focus()
+    if (isActiveLatest.current) instance.terminal.focus()
 
     return () => {
       observer.disconnect()
@@ -138,13 +153,25 @@ export function WorkbenchTerminalView({
     }
   }, [
     cwdLatest,
+    isActiveLatest,
     onDataLatest,
     onOpenFileLinkLatest,
     onOpenLinkLatest,
+    onPaneActionLatest,
     onResizeLatest,
     onResolveFileLinksLatest,
     sessionId,
   ])
+
+  // 成了当前的那个终端（换到旁边的终端），或者别的终端关掉了：把焦点拿过来。焦点在别处（编辑器、输入框）时不抢。
+  useEffect(() => {
+    const frame = frameRef.current
+    const focused = document.activeElement
+    if (!isActive || !frame || frame.contains(focused)) return
+    const besidePanes = frame.closest('[data-terminal-split-group]')
+    if (focused && focused !== document.body && !besidePanes?.contains(focused)) return
+    findWorkbenchTerminal(sessionId)?.terminal.focus()
+  }, [isActive, sessionCount, sessionId])
 
   useEffect(() => {
     const container = containerRef.current
@@ -197,7 +224,12 @@ export function WorkbenchTerminalView({
   }
 
   return (
-    <div className={styles.terminalViewFrame}>
+    <div
+      ref={frameRef}
+      className={styles.terminalViewFrame}
+      data-terminal-session={sessionId}
+      onFocusCapture={onActivate}
+    >
       <div ref={containerRef} className={styles.terminalViewHost} data-running={isRunning} />
       {find && (
         <WorkbenchTerminalFindBar

@@ -823,8 +823,10 @@ export function StandaloneWorkbenchPagePresentation({
               }
               onToggleCollapsed={surface.toggleCommandPanelCollapsed}
               onCreateTerminalSession={() => void workbench.createTerminalSession()}
+              onSplitTerminalSession={(sessionId) => void workbench.splitTerminalSession(sessionId)}
               onActiveTerminalSessionChange={workbench.setActiveTerminalSessionId}
-              onCloseTerminalSession={workbench.closeTerminalSession}
+              onCloseTerminalSessions={workbench.closeTerminalSessions}
+              onTerminalPaneWeightsChange={workbench.setTerminalPaneWeights}
               onTerminalData={workbench.writeTerminalData}
               onTerminalResize={workbench.resizeTerminalSession}
               onActiveRunSessionChange={workbench.setActiveRunSessionId}

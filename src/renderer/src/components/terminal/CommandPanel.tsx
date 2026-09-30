@@ -32,8 +32,11 @@ interface CommandPanelProps {
   problemsPanel: ReactElement
   onToggleCollapsed: () => void
   onCreateTerminalSession: () => void
+  /** 在一个终端右边并排再开一个；不指明就是当前那个。 */
+  onSplitTerminalSession: (sessionId?: string) => void
   onActiveTerminalSessionChange: (sessionId: string) => void
-  onCloseTerminalSession: (sessionId: string) => void
+  onCloseTerminalSessions: (sessionIds: readonly string[]) => void
+  onTerminalPaneWeightsChange: (weights: Readonly<Record<string, number>>) => void
   /** xterm 收齐的按键原样送进伪终端（终端与运行卡同一条路）。 */
   onTerminalData: (sessionId: string, data: string) => void
   onTerminalResize: (sessionId: string, cols: number, rows: number) => void
@@ -55,8 +58,10 @@ export function CommandPanel({
   problemsPanel,
   onToggleCollapsed,
   onCreateTerminalSession,
+  onSplitTerminalSession,
   onActiveTerminalSessionChange,
-  onCloseTerminalSession,
+  onCloseTerminalSessions,
+  onTerminalPaneWeightsChange,
   onTerminalData,
   onTerminalResize,
   onActiveRunSessionChange,
@@ -87,8 +92,9 @@ export function CommandPanel({
             activeTerminalSessionId={activeTerminalSessionId}
             isCollapsed={isCollapsed}
             onCreateTerminalSession={onCreateTerminalSession}
+            onSplitTerminalSession={() => onSplitTerminalSession()}
             onActiveTerminalSessionChange={onActiveTerminalSessionChange}
-            onCloseTerminalSession={onCloseTerminalSession}
+            onCloseTerminalSessions={onCloseTerminalSessions}
             onToggleCollapsed={onToggleCollapsed}
           />
         ) : activeTool === 'run' && runSessions.length ? (
@@ -149,6 +155,10 @@ export function CommandPanel({
               <WorkbenchTerminalToolPane
                 terminalSessions={terminalSessions}
                 activeTerminalSessionId={activeTerminalSessionId}
+                onActiveTerminalSessionChange={onActiveTerminalSessionChange}
+                onSplitTerminalSession={onSplitTerminalSession}
+                onCloseTerminalSessions={onCloseTerminalSessions}
+                onTerminalPaneWeightsChange={onTerminalPaneWeightsChange}
                 workbenchTheme={workbenchTheme}
                 onTerminalData={onTerminalData}
                 onTerminalResize={onTerminalResize}

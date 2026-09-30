@@ -17,9 +17,14 @@ import type { WorkbenchCommandSuggestion } from '@renderer/models/commands/workb
 import { buildWorkbenchRunConfigurations } from '@renderer/models/commands/workbenchRunConfigurations'
 import { discardWorkbenchTerminalOutput } from '@renderer/models/commands/workbenchTerminalOutputBus'
 import { buildWorkbenchTerminalSessionTitle } from '@renderer/models/commands/workbenchTerminalPresentation'
+import {
+  closeWorkbenchTerminalSessions,
+  insertWorkbenchTerminalSplit,
+  pickWorkbenchTerminalTitle,
+} from '@renderer/models/commands/workbenchTerminalSplits'
 import type { WorkbenchProject } from '@renderer/models/project/workbenchProjects'
 
-import { isPresent,toNullable } from '@velaros-ai/core'
+import { isPresent, toNullable, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { Result } from '@velaros-ai/core/result'
 
@@ -56,6 +61,7 @@ export function useWorkbenchCommandController({
   const [terminalSessions, setTerminalSessions] = useState<WorkbenchTerminalSessionView[]>([])
   const [activeTerminalSessionId, setActiveTerminalSessionId] = useState<Nullable<string>>(null)
   const terminalSessionsRef = useLatest(terminalSessions)
+  const activeTerminalSessionIdRef = useLatest(activeTerminalSessionId)
   const [runSessions, setRunSessions] = useState<WorkbenchTerminalSessionView[]>([])
   const [activeRunSessionId, setActiveRunSessionId] = useState<Nullable<string>>(null)
   const [lastLaunchedCommand, setLastLaunchedCommand] = useState('')
@@ -83,16 +89,43 @@ export function useWorkbenchCommandController({
     })
   })
 
+  /** 关掉几个终端：关标签是它那一组全部，关并排里的一个就是那一个。 */
+  const closeTerminalSessions = useMemoizedFn((sessionIds: readonly string[]): void => {
+    for (const sessionId of sessionIds) {
+      void workbenchHost.kernel.project.stopWorkbenchTerminalSession({ sessionId })
+      discardWorkbenchTerminalOutput(sessionId)
+    }
+    setTerminalSessions((current) => {
+      setActiveTerminalSessionId(
+        (currentActive) =>
+          closeWorkbenchTerminalSessions(current, currentActive, sessionIds).activeSessionId
+      )
+      return closeWorkbenchTerminalSessions(current, null, sessionIds).sessions
+    })
+  })
+
+  /** 用户在终端里退出了 shell：是终端（不是运行卡）就把它关掉，返回 true。 */
+  const closeExitedTerminalSession = useMemoizedFn((sessionId: string): boolean => {
+    if (!terminalSessionsRef.current.some((session) => session.id === sessionId)) return false
+    closeTerminalSessions([sessionId])
+    return true
+  })
+
   useWorkbenchCommandIpcSubscriptions(
     activeRunIdRef,
     setRunOutputLines,
     setTerminalSessions,
     setRunSessions,
-    setIsRunningCommand
+    setIsRunningCommand,
+    closeExitedTerminalSession
   )
 
+  /**
+   * 开一个终端。给了 `besideSessionId` 是拆分：新终端排在那个终端右边、同一个标签里，从它的 shell 此刻所在的
+   * 目录开始；不给就是一个新标签，从项目根开始。
+   */
   const createTerminalSessionForProject = useMemoizedFn(
-    async (project: WorkbenchProject): Promise<void> => {
+    async (project: WorkbenchProject, besideSessionId: Nullable<string> = null): Promise<void> => {
       const owningProject = project
       const owningProjectId = owningProject.id
 
@@ -100,6 +133,7 @@ export function useWorkbenchCommandController({
         const result = Result.unwrap(
           await workbenchHost.kernel.project.startWorkbenchTerminalSession({
             projectRoot: owningProject.rootPath,
+            inheritCwdFrom: toOptional(besideSessionId),
           })
         )
 
@@ -108,12 +142,18 @@ export function useWorkbenchCommandController({
           return
         }
 
-        const sessionIndex = terminalSessionsRef.current.length
-        const title = buildWorkbenchTerminalSessionTitle(sessionIndex, {
-          local: tLatest.current('workbench.terminalLocalTab'),
-          localIndexed: (index) =>
-            tLatest.current('workbench.terminalLocalTabIndexed', { index }),
-        })
+        const sessions = terminalSessionsRef.current
+        const beside = sessions.find((candidate) => candidate.id === besideSessionId)
+        // 拆分出来的跟原来那个同一个标签、同一个名字；新标签取第一个没人用的名字。
+        const title =
+          beside?.title ??
+          pickWorkbenchTerminalTitle(sessions, (sessionIndex) =>
+            buildWorkbenchTerminalSessionTitle(sessionIndex, {
+              local: tLatest.current('workbench.terminalLocalTab'),
+              localIndexed: (index) =>
+                tLatest.current('workbench.terminalLocalTabIndexed', { index }),
+            })
+          )
         const session: WorkbenchTerminalSessionView = {
           id: result.sessionId,
           title,
@@ -122,7 +162,11 @@ export function useWorkbenchCommandController({
           isRunning: true,
         }
 
-        setTerminalSessions((current) => [...current, session])
+        setTerminalSessions((current) =>
+          besideSessionId
+            ? insertWorkbenchTerminalSplit(current, besideSessionId, session)
+            : [...current, session]
+        )
         setActiveTerminalSessionId(result.sessionId)
       } catch (error) {
         if (activeProjectRef.current?.id !== owningProjectId) return
@@ -140,6 +184,17 @@ export function useWorkbenchCommandController({
     const project = activeProjectRef.current
     if (project) {
       await createTerminalSessionForProject(project)
+    }
+  })
+
+  /** 在一个终端右边并排再开一个（不指明就是当前那个）；一个终端都没有时等于新开一个。 */
+  const splitTerminalSession = useMemoizedFn(async (sessionId?: string): Promise<void> => {
+    const project = activeProjectRef.current
+    if (project) {
+      await createTerminalSessionForProject(
+        project,
+        sessionId ?? activeTerminalSessionIdRef.current
+      )
     }
   })
 
@@ -291,17 +346,17 @@ export function useWorkbenchCommandController({
     }
   })
 
-  const closeTerminalSession = useMemoizedFn((sessionId: string): void => {
-    void workbenchHost.kernel.project.stopWorkbenchTerminalSession({ sessionId })
-    discardWorkbenchTerminalOutput(sessionId)
-    setTerminalSessions((current) => {
-      const next = current.filter((session) => session.id !== sessionId)
-      setActiveTerminalSessionId((currentActive) =>
-        currentActive === sessionId ? (toNullable(next.at(-1)?.id)) : currentActive
+  /** 拖完并排终端之间的分隔条：记下各自的宽度份额。 */
+  const setTerminalPaneWeights = useMemoizedFn(
+    (weights: Readonly<Record<string, number>>): void => {
+      setTerminalSessions((current) =>
+        current.map((session) => {
+          const paneWeight = weights[session.id]
+          return paneWeight === undefined ? session : { ...session, paneWeight }
+        })
       )
-      return next
-    })
-  })
+    }
+  )
 
   // ── 运行卡（PTY 支持的运行会话，走终端会话基础设施）─────────────────────────
 
@@ -459,10 +514,12 @@ export function useWorkbenchCommandController({
       terminal: {
         setActiveTerminalSessionId,
         createTerminalSession,
+        splitTerminalSession,
         writeTerminalData,
         resizeTerminalSession,
         stopTerminalSession,
-        closeTerminalSession,
+        closeTerminalSessions,
+        setTerminalPaneWeights,
       },
       run: {
         setActiveRunSessionId,

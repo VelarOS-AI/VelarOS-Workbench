@@ -1,14 +1,37 @@
-import { lazy, type ReactElement, Suspense } from 'react'
+import {
+  Fragment,
+  lazy,
+  type PointerEvent as ReactPointerEvent,
+  type ReactElement,
+  Suspense,
+  useEffect,
+  useRef,
+} from 'react'
 import {
   ArrowClockwiseIcon,
   BrowsersIcon,
   MinusIcon,
   PlusIcon,
+  SquareSplitHorizontalIcon,
   StopIcon,
   XIcon,
 } from '@phosphor-icons/react'
 import { useWorkbenchI18n } from '@renderer/i18n'
 import type { WorkbenchTerminalSessionView } from '@renderer/models/commands/workbenchCommandLines'
+import {
+  adjacentWorkbenchTerminalPane,
+  findActiveWorkbenchTerminalGroup,
+  groupWorkbenchTerminalSessions,
+  resizeWorkbenchTerminalPanes,
+  type WorkbenchTerminalGroup,
+  type WorkbenchTerminalPaneAction,
+  workbenchTerminalPaneShares,
+  workbenchTerminalSplitShortcut,
+} from '@renderer/models/commands/workbenchTerminalSplits'
+import {
+  formatWorkbenchShortcutHint,
+  isAppleWorkbenchPlatform,
+} from '@renderer/models/layout/workbenchKeyboardShortcuts'
 import type { WorkbenchThemeId } from '@renderer/models/settings/workbenchPreferences'
 
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
@@ -67,51 +90,73 @@ interface WorkbenchTerminalToolHeaderProps {
   activeTerminalSessionId: Nullable<string>
   isCollapsed: boolean
   onCreateTerminalSession: () => void
+  /** 在当前终端右边并排再开一个。 */
+  onSplitTerminalSession: () => void
   onActiveTerminalSessionChange: (sessionId: string) => void
-  onCloseTerminalSession: (sessionId: string) => void
+  onCloseTerminalSessions: (sessionIds: readonly string[]) => void
   onToggleCollapsed: () => void
 }
+
+/** 终端的标签栏：一个标签是并排的一组终端（没拆分过就一个），关标签把这一组都关掉。 */
 export function WorkbenchTerminalToolHeader({
   terminalSessions,
   activeTerminalSessionId,
   isCollapsed,
   onCreateTerminalSession,
+  onSplitTerminalSession,
   onActiveTerminalSessionChange,
-  onCloseTerminalSession,
+  onCloseTerminalSessions,
   onToggleCollapsed,
 }: WorkbenchTerminalToolHeaderProps): ReactElement {
   const { t } = useWorkbenchI18n()
-  const activeTerminalSession =
-    terminalSessions.find((session) => session.id === activeTerminalSessionId) ??
-    terminalSessions[0]
+  const groups = groupWorkbenchTerminalSessions(terminalSessions)
+  const activeGroup = findActiveWorkbenchTerminalGroup(terminalSessions, activeTerminalSessionId)
+  // 每个标签里上次停在并排的哪一个：切回这个标签时回到那一个。
+  const lastActiveByGroup = useRef(new Map<string, string>())
+  const activeGroupId = activeGroup?.id
+  useEffect(() => {
+    if (activeGroupId && activeTerminalSessionId)
+      lastActiveByGroup.current.set(activeGroupId, activeTerminalSessionId)
+  }, [activeGroupId, activeTerminalSessionId])
+  const splitLabel = `${t('workbench.terminalSplit')} (${formatWorkbenchShortcutHint(
+    workbenchTerminalSplitShortcut(isAppleWorkbenchPlatform())
+  )})`
 
   return (
     <div className={styles.terminalToolHeader} data-terminal-chrome="true">
       <div className={styles.terminalToolHeaderLeading}>
         <span className={styles.terminalToolHeaderLabel}>{t('workbench.commandTabTerminal')}</span>
         <div className={styles.terminalSessionTabStrip} role="tablist">
-          {terminalSessions.map((session) => {
-            const isActive = session.id === activeTerminalSession?.id
+          {groups.map((group) => {
+            const isActive = group.id === activeGroupId
+            const first = group.sessions[0]!
 
             return (
               <button
-                key={session.id}
+                key={group.id}
                 type="button"
                 className={styles.terminalSessionTab}
                 data-active={isActive}
-                data-running={session.isRunning}
-                title={session.title}
+                data-running={group.sessions.some((session) => session.isRunning)}
+                title={first.title}
                 role="tab"
                 aria-selected={isActive}
-                onClick={() => onActiveTerminalSessionChange(session.id)}
+                onClick={() => {
+                  // 已经在这一组里就不动：当前是并排里的哪一个保持原样。
+                  if (isActive) return
+                  const last = lastActiveByGroup.current.get(group.id)
+                  onActiveTerminalSessionChange(
+                    group.sessions.some((session) => session.id === last) && last ? last : first.id
+                  )
+                }}
               >
-                <span className={styles.terminalSessionTabLabel}>{session.title}</span>
+                <span className={styles.terminalSessionTabLabel}>{first.title}</span>
                 <span
                   className={styles.terminalSessionTabClose}
                   aria-label={t('common.close')}
                   onClick={(event) => {
                     event.stopPropagation()
-                    onCloseTerminalSession(session.id)
+                    onCloseTerminalSessions(group.sessions.map((session) => session.id))
                   }}
                 >
                   <XIcon size={11} />
@@ -131,6 +176,17 @@ export function WorkbenchTerminalToolHeader({
           >
             <PlusIcon size={13} />
           </IconButton>
+          <IconButton
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            title={splitLabel}
+            label={splitLabel}
+            disabled={!activeGroup}
+            onClick={onSplitTerminalSession}
+          >
+            <SquareSplitHorizontalIcon size={13} />
+          </IconButton>
         </div>
       </div>
       <div className={styles.terminalToolHeaderTrailing}>
@@ -149,7 +205,17 @@ export function WorkbenchTerminalToolHeader({
   )
 }
 
-interface WorkbenchTerminalToolPaneProps extends WorkbenchTerminalSurfaceHandlers {
+interface WorkbenchTerminalSplitHandlers {
+  onActiveTerminalSessionChange: (sessionId: string) => void
+  /** 在这个终端右边并排再开一个。 */
+  onSplitTerminalSession: (sessionId: string) => void
+  onCloseTerminalSessions: (sessionIds: readonly string[]) => void
+  /** 拖完分隔条：各个终端占的宽度份额。 */
+  onTerminalPaneWeightsChange: (weights: Readonly<Record<string, number>>) => void
+}
+
+interface WorkbenchTerminalToolPaneProps
+  extends WorkbenchTerminalSurfaceHandlers, WorkbenchTerminalSplitHandlers {
   terminalSessions: WorkbenchTerminalSessionView[]
   activeTerminalSessionId: Nullable<string>
 }
@@ -157,21 +223,169 @@ interface WorkbenchTerminalToolPaneProps extends WorkbenchTerminalSurfaceHandler
 export function WorkbenchTerminalToolPane({
   terminalSessions,
   activeTerminalSessionId,
-  ...surface
+  ...handlers
 }: WorkbenchTerminalToolPaneProps): ReactElement {
   const { t } = useWorkbenchI18n()
-  const activeTerminalSession =
-    terminalSessions.find((session) => session.id === activeTerminalSessionId) ??
-    terminalSessions[0]
+  const group = findActiveWorkbenchTerminalGroup(terminalSessions, activeTerminalSessionId)
 
-  if (!activeTerminalSession)
+  if (!group)
     return (
       <Paragraph spacing="none" className={styles.commandEmpty}>
         {t('workbench.terminalEmpty')}
       </Paragraph>
     )
 
-  return <WorkbenchTerminalSurface session={activeTerminalSession} {...surface} />
+  return (
+    <WorkbenchTerminalSplitGroup
+      key={group.id}
+      group={group}
+      activeSessionId={activeTerminalSessionId}
+      sessionCount={terminalSessions.length}
+      {...handlers}
+    />
+  )
+}
+
+/**
+ * 一个标签里并排的终端：从左到右排开，中间的分隔条可以拖（双击恢复成一样宽）。只有当前那个拿焦点；
+ * 并排不止一个时每个右上角有自己的关闭按钮。
+ */
+function WorkbenchTerminalSplitGroup({
+  group,
+  activeSessionId,
+  sessionCount,
+  onActiveTerminalSessionChange,
+  onSplitTerminalSession,
+  onCloseTerminalSessions,
+  onTerminalPaneWeightsChange,
+  workbenchTheme,
+  onTerminalData,
+  onTerminalResize,
+  onOpenLink,
+  onResolveFileLinks,
+  onOpenFileLink,
+}: WorkbenchTerminalSurfaceHandlers &
+  WorkbenchTerminalSplitHandlers & {
+    group: WorkbenchTerminalGroup
+    activeSessionId: Nullable<string>
+    /** 所有标签里的终端一共几个。 */
+    sessionCount: number
+  }): ReactElement {
+  const { t } = useWorkbenchI18n()
+  const groupRef = useRef<HTMLDivElement>(null)
+  const sessions = group.sessions
+  const shares = workbenchTerminalPaneShares(sessions)
+  const isSplit = sessions.length > 1
+  const activeId = sessions.some((session) => session.id === activeSessionId)
+    ? activeSessionId
+    : sessions[0]!.id
+
+  const handlePaneAction = (sessionId: string, action: WorkbenchTerminalPaneAction): boolean => {
+    if (action === 'split') {
+      onSplitTerminalSession(sessionId)
+      return true
+    }
+    const beside = adjacentWorkbenchTerminalPane(
+      sessions,
+      sessionId,
+      action === 'focus-next' ? 1 : -1
+    )
+    if (!beside) return false
+    onActiveTerminalSessionChange(beside)
+    return true
+  }
+
+  const commitShares = (next: readonly number[]): void =>
+    onTerminalPaneWeightsChange(
+      Object.fromEntries(sessions.map((session, index) => [session.id, next[index] ?? 1]))
+    )
+
+  const beginResize = (divider: number, event: ReactPointerEvent<HTMLDivElement>): void => {
+    const container = groupRef.current
+    if (!container || event.button !== 0) return
+    event.preventDefault()
+
+    const handle = event.currentTarget
+    const panes = [...container.querySelectorAll<HTMLElement>(':scope > [data-terminal-pane]')]
+    const width = container.clientWidth
+    const startX = event.clientX
+    let next: readonly number[] = shares
+    handle.setPointerCapture(event.pointerId)
+
+    // 拖的时候直接改样式，不逐帧过 React；松手再把份额记下来。
+    const move = (moveEvent: PointerEvent): void => {
+      if (width <= 0) return
+      next = resizeWorkbenchTerminalPanes(shares, divider, (moveEvent.clientX - startX) / width)
+      panes.forEach((pane, index) => {
+        pane.style.flexGrow = String(next[index] ?? 1)
+      })
+    }
+    const end = (): void => {
+      handle.removeEventListener('pointermove', move)
+      handle.removeEventListener('pointerup', end)
+      handle.removeEventListener('pointercancel', end)
+      commitShares(next)
+    }
+    handle.addEventListener('pointermove', move)
+    handle.addEventListener('pointerup', end)
+    handle.addEventListener('pointercancel', end)
+  }
+
+  return (
+    <div ref={groupRef} className={styles.terminalSplitGroup} data-terminal-split-group="true">
+      {sessions.map((session, index) => (
+        <Fragment key={session.id}>
+          {index > 0 && (
+            <div
+              className={`${styles.verticalResizeHandle} ${styles.terminalSplitResizeHandle}`}
+              role="separator"
+              aria-orientation="vertical"
+              aria-label={t('workbench.terminalResizeSplit')}
+              onPointerDown={(event) => beginResize(index - 1, event)}
+              onDoubleClick={() => commitShares(sessions.map(() => 1))}
+            />
+          )}
+          <div
+            className={styles.terminalSplitPane}
+            data-terminal-pane="true"
+            data-active={session.id === activeId}
+            style={{ flexGrow: shares[index] }}
+          >
+            <Suspense fallback={null}>
+              <LazyWorkbenchTerminalView
+                sessionId={session.id}
+                cwd={session.cwd}
+                isRunning={session.isRunning}
+                workbenchTheme={workbenchTheme}
+                onData={onTerminalData}
+                onResize={onTerminalResize}
+                onOpenLink={onOpenLink}
+                onResolveFileLinks={onResolveFileLinks}
+                onOpenFileLink={onOpenFileLink}
+                isActive={session.id === activeId}
+                sessionCount={sessionCount}
+                onActivate={() => {
+                  if (session.id !== activeId) onActiveTerminalSessionChange(session.id)
+                }}
+                onPaneAction={(action) => handlePaneAction(session.id, action)}
+              />
+            </Suspense>
+            {isSplit && (
+              <button
+                type="button"
+                className={styles.terminalSplitPaneClose}
+                title={t('workbench.terminalClosePane')}
+                aria-label={t('workbench.terminalClosePane')}
+                onClick={() => onCloseTerminalSessions([session.id])}
+              >
+                <XIcon size={12} />
+              </button>
+            )}
+          </div>
+        </Fragment>
+      ))}
+    </div>
+  )
 }
 
 interface WorkbenchRunToolHeaderProps {

@@ -10,6 +10,7 @@ import { createRequire } from 'node:module'
 
 import { AppError } from '@velaros-ai/core/error'
 
+import { readWorkbenchProcessCwd } from './WorkbenchProcessCwd'
 import { listWorkbenchProcessTree, signalWorkbenchProcesses } from './WorkbenchProcessTree'
 
 export interface WorkbenchPtyExit {
@@ -49,6 +50,8 @@ export interface WorkbenchPtyFactory {
   spawn(file: string, args: string[], options: WorkbenchPtySpawnOptions): WorkbenchPtyProcess
   /** 结束会话时对整棵进程树下手的办法；测试里的假工厂不给，就只对伪终端本身发信号，不会碰到真实进程。 */
   readonly processTree?: WorkbenchProcessTreeOps
+  /** 一个进程此刻所在的目录（问操作系统）；问不到给 null，假工厂不给就一律当作问不到。 */
+  readonly readCwd?: (pid: number) => Promise<Nullable<string>>
 }
 
 type NodePtyModule = typeof import('@lydell/node-pty')
@@ -77,6 +80,7 @@ function loadNodePty(): NodePtyModule {
 /** 生产用的工厂：真正的 node-pty。 */
 export const nodePtyFactory: WorkbenchPtyFactory = {
   processTree: { list: listWorkbenchProcessTree, signal: signalWorkbenchProcesses },
+  readCwd: readWorkbenchProcessCwd,
   spawn: (file, args, options) => {
     const env: Record<string, string> = {}
     for (const [key, value] of Object.entries(options.env)) if (value !== undefined) env[key] = value

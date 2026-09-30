@@ -116,7 +116,10 @@ class TerminalSessions {
     ownerId: Nullable<number> = null
   ): Promise<WorkbenchTerminalStartResult> {
     const projectRoot = await this.pathResolver.resolveProjectRoot(request.projectRoot)
-    const cwdPath = await this.pathResolver.resolveInsideProject(projectRoot, request.cwd ?? '.')
+    const cwdPath = await this.pathResolver.resolveInsideProject(
+      projectRoot,
+      request.cwd ?? (await this.readInheritedCwd(projectRoot, request.inheritCwdFrom, ownerId)) ?? '.'
+    )
     const cwdStats = await stat(cwdPath.realPath)
     if (!cwdStats.isDirectory()) {
       throw new AppError('VALIDATION', workbenchMainText('terminal.cwdNotFolder'))
@@ -275,6 +278,26 @@ class TerminalSessions {
     await this.closeSessions(
       [...this.terminalSessions.entries()].filter(([, session]) => session.ownerId === ownerId)
     )
+  }
+
+  /**
+   * 拆分终端时跟着原来那个会话走：它的 shell 此刻所在的目录，仍在项目里才算数。会话不在了、不是这个窗口的、
+   * 问不到、目录已经到项目外面了，都给 null（调用方从项目根开始）。
+   */
+  private async readInheritedCwd(
+    projectRoot: string,
+    sessionId: LooseOptional<string>,
+    ownerId: Nullable<number>
+  ): Promise<Nullable<string>> {
+    const session = sessionId ? this.terminalSessions.get(sessionId) : undefined
+    if (!session || session.exited) return null
+    if (ownerId !== null && session.ownerId !== null && ownerId !== session.ownerId) return null
+
+    const cwd = await this.ptyFactory.readCwd?.(session.pty.pid)
+    if (!cwd || !this.pathResolver.isAllowedProjectPath(projectRoot, cwd)) return null
+    // shell 还待在一个已经被删掉的目录里：那里开不了新的 shell。
+    const stats = await stat(cwd).catch(() => null)
+    return stats?.isDirectory() ? cwd : null
   }
 
   private async listSessionProcessTree(session: WorkbenchTerminalSession): Promise<number[]> {

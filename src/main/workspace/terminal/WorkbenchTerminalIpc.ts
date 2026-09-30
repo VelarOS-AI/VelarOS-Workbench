@@ -94,6 +94,7 @@ function parseStartRequest(input: unknown): Nullable<WorkbenchTerminalStartReque
   return {
     projectRoot: input['projectRoot'] as string,
     ...optionalString(input, 'cwd'),
+    ...optionalString(input, 'inheritCwdFrom'),
     ...optionalString(input, 'initialCommand'),
     ...optionalNumber(input, 'cols'),
     ...optionalNumber(input, 'rows'),

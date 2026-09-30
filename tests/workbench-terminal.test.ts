@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { mkdtemp, realpath, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, realpath, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path, { join } from 'node:path'
 
@@ -13,6 +13,10 @@ import {
   clampTerminalDimension,
   TerminalSessions,
 } from '../src/main/workspace/terminal/TerminalSessions'
+import {
+  parseLsofCwd,
+  readWorkbenchProcessCwd,
+} from '../src/main/workspace/terminal/WorkbenchProcessCwd'
 import { collectWorkbenchProcessTree } from '../src/main/workspace/terminal/WorkbenchProcessTree'
 import type {
   WorkbenchProcessTreeOps,
@@ -92,7 +96,10 @@ class FakePty implements WorkbenchPtyProcess {
   }
 }
 
-function createFakeFactory(processTree?: WorkbenchProcessTreeOps): {
+function createFakeFactory(
+  processTree?: WorkbenchProcessTreeOps,
+  readCwd?: WorkbenchPtyFactory['readCwd']
+): {
   factory: WorkbenchPtyFactory
   spawned: FakePty[]
 } {
@@ -106,6 +113,7 @@ function createFakeFactory(processTree?: WorkbenchProcessTreeOps): {
         return pty
       },
       processTree,
+      readCwd,
     },
   }
 }
@@ -232,6 +240,75 @@ void describe('terminal sessions on a pseudo-terminal', () => {
       await terminal.closeAllSessions()
       await rm(projectRoot, { recursive: true, force: true })
     }
+  })
+
+  void test('a split terminal starts where the shell it was split from is', async () => {
+    const projectRoot = await realpath(await mkdtemp(join(tmpdir(), 'workbench-terminal-split-')))
+    const outside = await realpath(await mkdtemp(join(tmpdir(), 'workbench-terminal-outside-')))
+    const nested = join(projectRoot, 'packages', '应用')
+    await mkdir(nested, { recursive: true })
+    let shellCwd: Nullable<string> = nested
+    const asked: number[] = []
+    const { factory, spawned } = createFakeFactory(undefined, async (pid) => {
+      asked.push(pid)
+      return shellCwd
+    })
+    const terminal = new TerminalSessions(new PathResolver(), new CommandHelper(), factory)
+    const start = (request: { cwd?: string; inheritCwdFrom?: string }, ownerId = 1) =>
+      terminal.startTerminalSession({ projectRoot, ...request }, () => undefined, ownerId)
+    try {
+      const first = await start({})
+      assert.equal(first.cwd, projectRoot)
+      assert.deepEqual(asked, [])
+
+      // shell 已经 cd 到子目录：拆分出来的终端也从那里开始。
+      const split = await start({ inheritCwdFrom: first.sessionId })
+      assert.equal(split.cwd, nested)
+      assert.equal(spawned[1]!.options.cwd, nested)
+      assert.deepEqual(asked, [4242])
+
+      // 指明了目录就用指明的，不去问。
+      assert.equal((await start({ cwd: 'packages', inheritCwdFrom: first.sessionId })).cwd, join(projectRoot, 'packages'))
+      assert.deepEqual(asked, [4242])
+
+      // shell 到了项目外面、待在已经删掉的目录里、问不到：都从项目根开始。
+      shellCwd = outside
+      assert.equal((await start({ inheritCwdFrom: first.sessionId })).cwd, projectRoot)
+      shellCwd = join(projectRoot, 'gone')
+      assert.equal((await start({ inheritCwdFrom: first.sessionId })).cwd, projectRoot)
+      shellCwd = null
+      assert.equal((await start({ inheritCwdFrom: first.sessionId })).cwd, projectRoot)
+
+      // 别的窗口的会话、已经不在的会话：不去问，从项目根开始。
+      shellCwd = nested
+      const before = asked.length
+      assert.equal((await start({ inheritCwdFrom: first.sessionId }, 2)).cwd, projectRoot)
+      assert.equal((await start({ inheritCwdFrom: 'terminal-missing' })).cwd, projectRoot)
+      assert.equal(asked.length, before)
+    } finally {
+      await terminal.closeAllSessions()
+      await rm(projectRoot, { recursive: true, force: true })
+      await rm(outside, { recursive: true, force: true })
+    }
+  })
+
+  void test('reads the directory a process is in from the operating system', async () => {
+    // lsof 在认不出字符集时把非 ASCII 字节写成 \xNN，反斜杠写成两个。
+    assert.equal(
+      parseLsofCwd('p4242\nfcwd\nn/tmp/\\xe4\\xb8\\xad\\xe6\\x96\\x87 dir/back\\\\slash^caret\n'),
+      '/tmp/中文 dir/back\\slash^caret'
+    )
+    assert.equal(parseLsofCwd('p4242\nfcwd\nn/Users/me/项目\n'), '/Users/me/项目')
+    assert.equal(parseLsofCwd('p4242\n'), null)
+    assert.equal(parseLsofCwd(''), null)
+
+    if (process.platform === 'win32') {
+      assert.equal(await readWorkbenchProcessCwd(process.pid), null)
+      return
+    }
+    assert.equal(await readWorkbenchProcessCwd(process.pid), await realpath(process.cwd()))
+    // 不存在的进程问不到，不报错。
+    assert.equal(await readWorkbenchProcessCwd(2 ** 22 + 12_345), null)
   })
 
   void test('pauses reading when the renderer falls behind and resumes once it catches up', async () => {
