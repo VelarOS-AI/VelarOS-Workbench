@@ -78,7 +78,9 @@ import type {
   WorkbenchLanguageServiceLocation,
 } from '@shared/contracts'
 import { normalizeWorkbenchTextEol, type WorkbenchTextFormat } from '@shared/workbenchTextFormat'
+import { DefaultWorkbenchTextFormat } from '@shared/workbenchTextFormat'
 
+import { useWorkbenchGitBlame } from '../../hooks/useWorkbenchGitBlame'
 import { useWorkbenchGitHeadContent } from '../../hooks/useWorkbenchGitHeadContent'
 import styles from '../../styles/workbenchPageStyles'
 import { useLatest, useTimerScope } from '../../support/genericHooks'
@@ -534,6 +536,23 @@ export function EditorPanel({
     [openTabs, selectedFilePath]
   )
   const selectedExternalChange = toNullable(selectedTab?.externalChange)
+  // Git 追溯栏：开着就一直开着，换文件时查新文件的（截断打开的文件行号对不上，不查）。
+  const [gitBlameVisible, setGitBlameVisible] = useState(false)
+  const editorContentLatest = useLatest(editorContent)
+  const gitBlame = useWorkbenchGitBlame({
+    projectRoot,
+    path:
+      gitBlameVisible && selectedFile && !selectedFile.truncated && !selectedImagePreview
+        ? selectedFile.path
+        : null,
+    revision: gitStateRevision,
+    savedAt: toNullable(selectedFile?.modifiedAt),
+    // 按磁盘上的编码与换行符（Git 比的是提交里的字节），不按还没存下去的转换。
+    format: selectedFile
+      ? { encoding: selectedFile.encoding, eol: selectedFile.eol }
+      : DefaultWorkbenchTextFormat,
+    readContent: () => editorContentLatest.current,
+  })
   const activeAuxiliaryTab = useMemo(
     () => toNullable(auxiliaryTabs.find((tab) => tab.active)),
     [auxiliaryTabs]
@@ -1037,6 +1056,8 @@ export function EditorPanel({
                         workbenchTheme={workbenchTheme}
                         externalRevision={externalRevision}
                         gitHeadContent={gitHeadContent}
+                        gitBlame={gitBlame}
+                        onToggleGitBlame={() => setGitBlameVisible((visible) => !visible)}
                         fileStates={editorFileStates}
                         onChange={onEditorContentChange}
                         onCursorPositionChange={handleCursorPositionChange}

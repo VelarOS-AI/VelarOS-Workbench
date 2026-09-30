@@ -372,6 +372,8 @@ const standaloneWorkbenchHost: WorkbenchHost = {
         toHostResult(
           await window.velarosWorkbenchGit.getFileAtCommit({ workspaceRoot, ...options })
         ),
+      getWorkspaceGitBlame: async (workspaceRoot, options) =>
+        toHostResult(await window.velarosWorkbenchGit.getBlame({ ...options, workspaceRoot })),
       getWorkspaceGitLog: async (workspaceRoot, options) =>
         toHostResult(
           await window.velarosWorkbenchGit.getLog({ workspaceRoot, ...options })

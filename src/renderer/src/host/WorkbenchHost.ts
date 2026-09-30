@@ -14,6 +14,7 @@ import type {
   SystemOverview,
   SystemWorkspaceGitActionRequest,
   SystemWorkspaceGitActionResult,
+  SystemWorkspaceGitBlameResult,
   SystemWorkspaceGitCommitMessageResult,
   SystemWorkspaceGitCommitResult,
   SystemWorkspaceGitCreateBranchResult,
@@ -106,6 +107,7 @@ import type {
   WorkspaceGitHunkActionOptions,
   WorkspaceGitLogOptions,
 } from '@shared/contracts'
+import type { WorkbenchGitBlameRequest } from '@shared/workbenchGit'
 
 /** Workbench 所需的项目、编辑器、终端与代码智能 Kernel 能力。 */
 export interface WorkbenchProjectKernelPort {
@@ -275,6 +277,10 @@ export interface WorkbenchWorkspaceKernelPort {
     workspaceRoot: string,
     options: { commitSha: string; path: string }
   ): Promise<Result<SystemWorkspaceGitFileAtCommitResult>>
+  getWorkspaceGitBlame(
+    workspaceRoot: string,
+    options: Omit<WorkbenchGitBlameRequest, 'workspaceRoot'>
+  ): Promise<Result<SystemWorkspaceGitBlameResult>>
   getWorkspaceGitLog(
     workspaceRoot: string,
     options?: WorkspaceGitLogOptions

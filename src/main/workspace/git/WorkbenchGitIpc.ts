@@ -2,6 +2,8 @@ import { ipcMain } from 'electron'
 
 import { isBoolean, isNumber, isString, isTrue, optionalWhen } from '@velaros-ai/core'
 
+import { isWorkbenchTextEncoding, isWorkbenchTextEol } from '@shared/workbenchTextFormat'
+
 import {
   type WorkbenchChatCheckpointCaptureRequest,
   type WorkbenchChatCheckpointDeleteRequest,
@@ -9,6 +11,7 @@ import {
   type WorkbenchChatRunChangesCaptureRequest,
   type WorkbenchChatRunChangesDeleteRequest,
   type WorkbenchChatRunChangesReadRequest,
+  type WorkbenchGitBlameRequest,
   WorkbenchGitChannels,
   type WorkbenchGitCommitMessageRequest,
   type WorkbenchGitCommitRequest,
@@ -50,6 +53,12 @@ export function registerWorkbenchGitIpc(
     callWithEnvelope(() => {
       const request = parseFileAtCommit(input)
       return service.getFileAtCommit(request.workspaceRoot, request.commitSha, request.path)
+    })
+  )
+  ipcMain.handle(WorkbenchGitChannels.blame, (_event, input: unknown) =>
+    callWithEnvelope(() => {
+      const { workspaceRoot, ...options } = parseBlame(input)
+      return service.getBlame(workspaceRoot, options)
     })
   )
   ipcMain.handle(WorkbenchGitChannels.log, (_event, input: unknown) =>
@@ -157,6 +166,18 @@ function parseFileAtCommit(input: unknown): WorkbenchGitFileAtCommitRequest {
     workspaceRoot: input['workspaceRoot'] as string,
     commitSha: input['commitSha'] as string,
     path: input['path'] as string,
+  }
+}
+
+function parseBlame(input: unknown): WorkbenchGitBlameRequest {
+  if (!hasStringFields(input, ['workspaceRoot', 'path'])) return invalidRequest()
+  const { encoding, eol } = input
+  return {
+    workspaceRoot: input['workspaceRoot'] as string,
+    path: input['path'] as string,
+    content: optionalWhen(isString, input['content']),
+    encoding: isWorkbenchTextEncoding(encoding) ? encoding : undefined,
+    eol: isWorkbenchTextEol(eol) ? eol : undefined,
   }
 }
 

@@ -13,6 +13,7 @@ import { AppError } from '@velaros-ai/core/error'
 import type {
   AppLocale,
   SystemWorkspaceGitActionResult,
+  SystemWorkspaceGitBlameResult,
   SystemWorkspaceGitCommitMessageResult,
   SystemWorkspaceGitCommitResult,
   SystemWorkspaceGitCreateBranchResult,
@@ -42,7 +43,9 @@ import type {
 import {
   hasWorkspaceGitConflictMarkers,
   isWorkspaceGitConflictEntry,
+  type WorkbenchGitBlameRequest,
 } from '@shared/workbenchGit'
+import { parseWorkbenchGitBlame } from '@shared/workbenchGitBlame'
 import {
   buildWorkbenchGitHunkPatch,
   isSameWorkbenchGitHunk,
@@ -50,6 +53,7 @@ import {
   parseWorkbenchGitFilePatches,
   type WorkbenchGitPatchHunk,
 } from '@shared/workbenchGitPatch'
+import { DefaultWorkbenchTextFormat, type WorkbenchTextFormat } from '@shared/workbenchTextFormat'
 
 import {
   type WorkbenchMainMessageKey,
@@ -59,7 +63,7 @@ import {
   getRelativePathInsideRoot,
   toPortableRelativePath,
 } from '../PathContainmentHelper'
-import { decodeWorkbenchTextContent } from '../TextCodec'
+import { decodeWorkbenchTextContent, encodeWorkbenchText } from '../TextCodec'
 
 const DefaultDiffMaxChars = 20_000
 const MaxDiffChars = 1_000_000
@@ -116,8 +120,8 @@ class WorkbenchGitNotRepositoryError extends AppError {
 
 interface GitRunOptions extends WorkspaceGitRemoteActionOptions {
   allowFailure?: boolean
-  /** 写进标准输入的内容（`--pathspec-from-file=-`）。 */
-  input?: string
+  /** 写进标准输入的内容（`--pathspec-from-file=-`、`blame --contents -`）。 */
+  input?: string | Uint8Array
   /** 这条命令额外的环境变量（临时索引 GIT_INDEX_FILE 之类）；盖不过安全设置。 */
   env?: NodeJS.ProcessEnv
   /**
@@ -304,6 +308,47 @@ export class WorkbenchGitService {
     // 按编辑器读盘的方式解码（认 GB18030 / UTF-16、去 BOM、换行统一为 LF）：拿它跟编辑器里的
     // 正文比时，编码与换行符的差别才不会被算成改动。
     return { rootPath, content: decodeWorkbenchTextContent(blob) }
+  }
+
+  /**
+   * 每一行最后是哪个提交改的（`git blame`）。给了 `content` 就按这份正文算（编辑器里还没保存的内容也对得上行），
+   * 正文先按文件自己的编码与换行符编码再交给 git，CRLF、GBK 文件才不会整篇都算成改过；没给就按磁盘上的文件。
+   * 文件还没纳入版本管理、仓库还没有提交时一行都没有。
+   */
+  public async getBlame(
+    workspaceRoot: string,
+    options: Omit<WorkbenchGitBlameRequest, 'workspaceRoot'>
+  ): Promise<SystemWorkspaceGitBlameResult> {
+    const rootPath = await this.resolveRoot(workspaceRoot)
+    const path = this.normalizePathspec(rootPath, options.path)
+    const args = ['blame', '--incremental']
+    let input: Uint8Array | undefined
+    if (options.content !== undefined) {
+      input = this.encodeBlameContents(options.content, {
+        encoding: options.encoding ?? DefaultWorkbenchTextFormat.encoding,
+        eol: options.eol ?? DefaultWorkbenchTextFormat.eol,
+      })
+      args.push('--contents', '-')
+    }
+    args.push('--', path)
+    const result = await this.runGit(rootPath, args, { allowFailure: true, input })
+    if (result.failed) {
+      const output = this.readableGitOutput(result)
+      if (/no such path|no such ref|does not have any commits|bad revision 'HEAD'/i.test(output))
+        return { rootPath, commits: [], lines: [] }
+      this.throwGitFailure(args, result)
+    }
+    return { rootPath, ...parseWorkbenchGitBlame(result.stdout) }
+  }
+
+  /** 正文里有这种编码写不出的字符（保存时也会被拦下）时按 UTF-8 给 git：那些行本来也算没提交的改动。 */
+  private encodeBlameContents(content: string, format: WorkbenchTextFormat): Uint8Array {
+    try {
+      return encodeWorkbenchText(content, format)
+    } catch {
+      // arch-guard:silent-catch-ok 见上：编码不了就退回 UTF-8，不让追溯整个失败。
+      return encodeWorkbenchText(content, { encoding: 'utf-8', eol: format.eol })
+    }
   }
 
   public async getLog(

@@ -1,6 +1,7 @@
 import type {
   AppLocale,
   SystemWorkspaceGitActionResult,
+  SystemWorkspaceGitBlameResult,
   SystemWorkspaceGitCommitMessageResult,
   SystemWorkspaceGitCommitResult,
   SystemWorkspaceGitCreateBranchResult,
@@ -23,12 +24,14 @@ import type {
 } from '@shared/contracts'
 
 import type { WorkbenchFsCallResult } from './workbenchFs'
+import type { WorkbenchTextEncoding, WorkbenchTextEol } from './workbenchTextFormat'
 
 export const WorkbenchGitChannels = {
   summary: 'workbench-app:git:summary',
   lineStats: 'workbench-app:git:line-stats',
   diff: 'workbench-app:git:diff',
   fileAtCommit: 'workbench-app:git:file-at-commit',
+  blame: 'workbench-app:git:blame',
   log: 'workbench-app:git:log',
   generateCommitMessage: 'workbench-app:git:generate-commit-message',
   commit: 'workbench-app:git:commit',
@@ -73,6 +76,17 @@ export interface WorkbenchGitDiffRequest extends WorkbenchGitRootRequest, Worksp
 export interface WorkbenchGitFileAtCommitRequest extends WorkbenchGitRootRequest {
   commitSha: string
   path: string
+}
+
+/**
+ * 查每一行最后是哪个提交改的。给了 `content`（编辑器里此刻的正文）就按它算，连同文件自己的编码与换行符一起给，
+ * 这样没保存的改动、CRLF 或 GBK 文件都对得上行；没给就按磁盘上的文件。
+ */
+export interface WorkbenchGitBlameRequest extends WorkbenchGitRootRequest {
+  path: string
+  content?: string
+  encoding?: WorkbenchTextEncoding
+  eol?: WorkbenchTextEol
 }
 
 export interface WorkbenchGitLogRequest extends WorkbenchGitRootRequest, WorkspaceGitLogOptions {}
@@ -239,6 +253,9 @@ export interface WorkbenchGitBridge {
   getFileAtCommit(
     request: WorkbenchGitFileAtCommitRequest
   ): Promise<WorkbenchFsCallResult<SystemWorkspaceGitFileAtCommitResult>>
+  getBlame(
+    request: WorkbenchGitBlameRequest
+  ): Promise<WorkbenchFsCallResult<SystemWorkspaceGitBlameResult>>
   getLog(
     request: WorkbenchGitLogRequest
   ): Promise<WorkbenchFsCallResult<SystemWorkspaceGitLogResult>>

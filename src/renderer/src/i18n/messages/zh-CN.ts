@@ -293,6 +293,8 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     editorContextGitHistory: 'Git 历史',
     editorContextAddToChat: '添加到聊天',
     addFilesToChat: '添加 {count} 个文件到聊天',
+    editorContextShowGitBlame: '显示 Git 追溯',
+    editorContextHideGitBlame: '隐藏 Git 追溯',
     editorContextComment: '@ 评论',
     editorCommentPlaceholder: '写下对这段代码的评论…（⌘/Ctrl + Enter 提交）',
     editorCommentSubmit: '添加评论',

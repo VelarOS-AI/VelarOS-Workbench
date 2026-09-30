@@ -1,3 +1,5 @@
+import type { WorkbenchGitBlame } from '../workbenchGitBlame'
+
 import type {
   WorkspaceGitBranch,
   WorkspaceGitCommitResult,
@@ -105,6 +107,11 @@ export interface SystemWorkspaceGitDiffResult extends WorkspaceGitDiffResult {
 export interface SystemWorkspaceGitFileAtCommitResult {
   rootPath: string
   content: string
+}
+
+/** 每一行最后是哪个提交改的。文件还没纳入版本管理时 `lines` 是空的。 */
+export interface SystemWorkspaceGitBlameResult extends WorkbenchGitBlame {
+  rootPath: string
 }
 
 export interface SystemWorkspaceGitSwitchBranchResult {

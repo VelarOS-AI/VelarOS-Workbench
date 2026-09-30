@@ -1553,6 +1553,29 @@
 }
 
 /*
+ * Git 追溯栏在最左边（行号之前）：每段连着的同一个提交只在第一行写「日期 作者」，淡色小字，悬停看提交说明。
+ */
+.codeMirrorEditor :global(.cm-workbenchBlameGutter) {
+  /* 固定宽度：容得下「日期 + 十来个字的作者名」，更长的名字省略；结果回来前后栏宽不跳。 */
+  width: calc(var(--workbench-editor-font-size) * 12.5);
+  border-right: 1px solid var(--workbench-border);
+}
+
+.codeMirrorEditor :global(.cm-workbenchBlameGutter .cm-gutterElement) {
+  padding-inline: 10px 8px;
+  cursor: default;
+}
+
+.codeMirrorEditor :global(.cm-workbenchBlameLine) {
+  overflow: hidden;
+  color: var(--muted-foreground);
+  font-family: var(--font-sans, system-ui, sans-serif);
+  font-size: calc(var(--workbench-editor-font-size) * 0.85);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/*
  * Git 改动标记是最右边的一栏，紧挨着代码：新增 / 修改是一条贴右的细竖线（相邻行连成一段），删除是压在
  * 行边沿、指向代码的小三角。
  */

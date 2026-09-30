@@ -169,6 +169,7 @@ const gitBridge: WorkbenchGitBridge = {
   getLineStats: (request) => ipcRenderer.invoke(WorkbenchGitChannels.lineStats, request),
   getDiff: (request) => ipcRenderer.invoke(WorkbenchGitChannels.diff, request),
   getFileAtCommit: (request) => ipcRenderer.invoke(WorkbenchGitChannels.fileAtCommit, request),
+  getBlame: (request) => ipcRenderer.invoke(WorkbenchGitChannels.blame, request),
   getLog: (request) => ipcRenderer.invoke(WorkbenchGitChannels.log, request),
   generateCommitMessage: (request) =>
     ipcRenderer.invoke(WorkbenchGitChannels.generateCommitMessage, request),

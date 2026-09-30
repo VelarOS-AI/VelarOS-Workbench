@@ -102,6 +102,57 @@ void describe('Workbench Git IPC requests', () => {
       )
   })
 
+  void test('a blame request carries the editor text and the file format to the service', async () => {
+    const blames: unknown[] = []
+    const { registerWorkbenchGitIpc } = await import('../src/main/workspace/git/WorkbenchGitIpc')
+    registerWorkbenchGitIpc(
+      {
+        getBlame: async (workspaceRoot: string, options: unknown) => {
+          blames.push({ workspaceRoot, options })
+          return { rootPath: workspaceRoot, commits: [], lines: [] }
+        },
+      } as never,
+      {} as never,
+      {} as never
+    )
+
+    assert.equal(
+      (
+        await invoke(WorkbenchGitChannels.blame, {
+          workspaceRoot: '/project',
+          path: 'src/a.ts',
+          content: 'one\n',
+          encoding: 'gb18030',
+          eol: 'crlf',
+        })
+      ).ok,
+      true
+    )
+    // 认不出的编码、换行符不往下传（按磁盘上的默认格式处理）；没给正文就按磁盘上的文件查。
+    assert.equal(
+      (
+        await invoke(WorkbenchGitChannels.blame, {
+          workspaceRoot: '/project',
+          path: 'src/b.ts',
+          encoding: 'klingon',
+          eol: 7,
+        })
+      ).ok,
+      true
+    )
+    assert.deepEqual(blames, [
+      {
+        workspaceRoot: '/project',
+        options: { path: 'src/a.ts', content: 'one\n', encoding: 'gb18030', eol: 'crlf' },
+      },
+      {
+        workspaceRoot: '/project',
+        options: { path: 'src/b.ts', content: undefined, encoding: undefined, eol: undefined },
+      },
+    ])
+    assert.equal((await invoke(WorkbenchGitChannels.blame, { workspaceRoot: '/project' })).ok, false)
+  })
+
   void test('passes hunk actions through with the hunks as they were shown', async () => {
     const hunkActions: unknown[] = []
     const { registerWorkbenchGitIpc } = await import('../src/main/workspace/git/WorkbenchGitIpc')

@@ -192,6 +192,10 @@ import {
   type WorkbenchEditorFindStatus,
 } from '@renderer/models/editor/workbenchEditorFindState'
 import {
+  setWorkbenchGitBlame,
+  workbenchGitBlameGutter,
+} from '@renderer/models/editor/workbenchGitBlame'
+import {
   setWorkbenchGitChangeBaseEffect,
   workbenchGitChangeGutterExtension,
 } from '@renderer/models/editor/workbenchGitChangeGutter'
@@ -258,6 +262,7 @@ import type {
   WorkbenchLanguageServiceLocation,
 } from '@shared/contracts'
 
+import type { WorkbenchEditorGitBlame } from '../../hooks/useWorkbenchGitBlame'
 import type { WorkbenchGitHeadContent } from '../../hooks/useWorkbenchGitHeadContent'
 import styles from '../../styles/workbenchPageStyles'
 import { useLatest, useTimerScope } from '../../support/genericHooks'
@@ -305,6 +310,13 @@ interface CodeMirrorEditorProps {
   externalRevision?: number
   /** 当前文件在 HEAD 里的全文，行号旁的 Git 改动标记拿它对照；不属于当前文件时不用。 */
   gitHeadContent?: Nullable<WorkbenchGitHeadContent>
+  /**
+   * Git 追溯（blame）。不为 null 就在行号左边显示追溯栏；`blame` 是结果（还在查、文件没纳入版本管理时为 null），
+   * 只有属于当前文件的才用。
+   */
+  gitBlame?: Nullable<WorkbenchEditorGitBlame>
+  /** 右键菜单里开关追溯栏；不给就没有这一项。 */
+  onToggleGitBlame?: () => void
   /**
    * 各个打开文件的编辑器状态（撤销历史、光标、折叠、滚动位置）。由宿主持有，编辑器卸载再挂载也不丢；
    * 不传时只在这个编辑器实例里记着。
@@ -1175,6 +1187,8 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       workbenchTheme,
       externalRevision = 0,
       gitHeadContent = null,
+      gitBlame = null,
+      onToggleGitBlame,
       fileStates,
       onChange,
       onCursorPositionChange,
@@ -1200,7 +1214,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
     },
     ref
   ): ReactElement {
-    const { t } = useWorkbenchI18n()
+    const { t, locale } = useWorkbenchI18n()
     const tLatest = useLatest(t)
     const hostRuntime = useWorkbenchHostRuntime()
     const commentStore = useWorkbenchCommentStore()
@@ -1251,6 +1265,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
     const editorMetricsCompartment = useMemo(() => new Compartment(), [])
     const indentationCompartment = useMemo(() => new Compartment(), [])
     const wordWrapCompartment = useMemo(() => new Compartment(), [])
+    const gitBlameCompartment = useMemo(() => new Compartment(), [])
     const editorMetrics = useWorkbenchEditorMetrics()
     const progressiveLoadTimers = useTimerScope('WorkbenchEditorProgressiveLoad')
     const languageSupport = useMemo(
@@ -1416,6 +1431,11 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
     )
     const wordWrap = useWorkbenchEditorWordWrap()
     const wordWrapExtension = useMemo(() => (wordWrap ? EditorView.lineWrapping : []), [wordWrap])
+    const gitBlameVisible = gitBlame !== null
+    const gitBlameExtension = useMemo(
+      () => (gitBlameVisible ? workbenchGitBlameGutter(locale) : []),
+      [gitBlameVisible, locale]
+    )
     const [contextMenu, setContextMenu] = useState<Nullable<EditorContextMenuState>>(null)
     const [symbolLocationsAnchor, setSymbolLocationsAnchor] =
       useState<Nullable<WorkbenchSymbolLocationsAnchor>>(null)
@@ -2238,6 +2258,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       lint: lintExtension,
       indentation: indentationExtension,
       wordWrap: wordWrapExtension,
+      gitBlame: gitBlameExtension,
     })
 
     const createInstanceExtensions = (
@@ -2585,6 +2606,8 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       const current = compartmentValuesRef.current
       return [
         instance.keymap,
+        // 追溯栏排在行号左边：要在带行号栏的基础扩展之前。
+        gitBlameCompartment.of(current.gitBlame),
         ...workbenchCodeMirrorBaseExtensions,
         instance.tooltips,
         editorMetricsCompartment.of(current.editorMetrics),
@@ -2628,6 +2651,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         [lintCompartment, current.lint],
         [indentationCompartment, current.indentation],
         [wordWrapCompartment, current.wordWrap],
+        [gitBlameCompartment, current.gitBlame],
       ]
       const effects = wanted.flatMap(([compartment, extension]) =>
         compartment.get(view.state) === extension ? [] : [compartment.reconfigure(extension)]
@@ -2868,6 +2892,15 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       if (gitBase)
         viewRef.current?.dispatch({ effects: setWorkbenchGitChangeBaseEffect.of(gitBase.content) })
     }, [gitBase, path])
+
+    // 追溯栏先按开关挂上或撤掉，再换上属于当前文件的结果（别的文件的、还没查回来的都先清空）。
+    useEffect(() => {
+      reconfigureCompartment(viewRef.current, gitBlameCompartment, gitBlameExtension)
+    }, [gitBlameCompartment, gitBlameExtension])
+    const gitBlameForFile = gitBlame?.path === path ? gitBlame.blame : null
+    useEffect(() => {
+      viewRef.current?.dispatch({ effects: setWorkbenchGitBlame.of(gitBlameForFile) })
+    }, [gitBlameExtension, gitBlameForFile, path])
 
     // 存储侧评论被删除/消费时，回收对应的编辑器锚点装饰。
     const workbenchComments = useWorkbenchComments(projectRoot)
@@ -3158,6 +3191,24 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
             >
               {t('workbench.editorContextComment')}
             </button>
+            {!!onToggleGitBlame && (
+              <>
+                <div className={styles.editorContextMenuDivider} />
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!path}
+                  onClick={() => {
+                    setContextMenu(null)
+                    onToggleGitBlame()
+                  }}
+                >
+                  {gitBlameVisible
+                    ? t('workbench.editorContextHideGitBlame')
+                    : t('workbench.editorContextShowGitBlame')}
+                </button>
+              </>
+            )}
           </div>
         )}
         {!!renamePopup && (

@@ -307,6 +307,8 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     editorContextGitHistory: 'Git history',
     editorContextAddToChat: 'Add to Chat',
     addFilesToChat: 'Add {count} Files to Chat',
+    editorContextShowGitBlame: 'Show Git Blame',
+    editorContextHideGitBlame: 'Hide Git Blame',
     editorContextComment: '@ Comment',
     editorCommentPlaceholder: 'Write a comment on this code… (⌘/Ctrl + Enter to submit)',
     editorCommentSubmit: 'Add comment',
