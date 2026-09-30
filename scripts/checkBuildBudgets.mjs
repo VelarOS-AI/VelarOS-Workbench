@@ -9,7 +9,8 @@ const limits = Object.freeze({
   mainEntry: 3_750_000,
   mainJavaScript: 6_500_000,
   rendererStartup: 4_750_000,
-  rendererJavaScript: 25_000_000,
+  // 按需加载的块也算在内：其中约 19 MB 是聊天里代码高亮的语法包与 Mermaid 图表（来自 UI 包），启动时都不加载。
+  rendererJavaScript: 26_000_000,
   rendererStyles: 1_000_000,
   rendererLargestAsset: 3_750_000,
 })
