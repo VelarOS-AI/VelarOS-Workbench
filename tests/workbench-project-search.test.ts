@@ -471,6 +471,57 @@ void describe('project content search IPC', () => {
   })
 })
 
+void describe('project content search IPC: closing the window', () => {
+  void test('a window closed mid-search stops its searches; the destroyed window is not touched', async () => {
+    const files: ProjectFiles = {}
+    for (let index = 0; index < 30; index += 1) files[`f-${String(index).padStart(2, '0')}.ts`] = 'needle\n'
+    await withProject(files, async ({ root }) => {
+      const data = await mkdtemp(join(tmpdir(), 'workbench-project-search-ipc-'))
+      try {
+        registerWorkbenchFsIpc(
+          {} as never,
+          createWorkbenchAppParts(data, { moveToTrash: refuseTrash, searchWorker: sourceSearchWorker }),
+          {} as never
+        )
+        const searchHandler = ipcHandlers.get(WorkbenchFsChannels.searchContent)!
+        let destroyed = false
+        let sentAfterDestroyed = 0
+        const destroyedListeners: Array<() => void> = []
+        const sender = {
+          // 与 Electron 一样：WebContents 销毁以后（`destroyed` 触发时已经是）再读 id 会抛错。
+          get id(): number {
+            if (destroyed) throw new TypeError('Object has been destroyed')
+            return 11
+          },
+          isDestroyed: () => destroyed,
+          send: () => {
+            if (destroyed) {
+              sentAfterDestroyed += 1
+              return
+            }
+            // 第一批送到时窗口关了。
+            destroyed = true
+            for (const listener of destroyedListeners) listener()
+          },
+          once: (event: string, listener: () => void) => {
+            if (event === 'destroyed') destroyedListeners.push(listener)
+          },
+        }
+
+        const envelope = (await searchHandler(
+          { sender },
+          { projectRoot: root, query: 'needle', searchId: 's1' }
+        )) as WorkbenchFsCallResult<WorkbenchSearchContentResult>
+        assert.ok(envelope.ok, envelope.ok ? '' : envelope.message)
+        assert.equal(envelope.value.cancelled, true)
+        assert.equal(sentAfterDestroyed, 0)
+      } finally {
+        await rm(data, { recursive: true, force: true })
+      }
+    })
+  })
+})
+
 void describe('project content search: runaway regexes', () => {
   void test('a regex that runs away is stopped in the worker, naming the file; the main process keeps running', async () => {
     await withProject(

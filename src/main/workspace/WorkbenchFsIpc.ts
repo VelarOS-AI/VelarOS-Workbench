@@ -284,7 +284,7 @@ export function registerWorkbenchFsIpc(
       if (!searchId) return parts.search.searchContent(parsed)
 
       const sender = event.sender
-      const search = contentSearches.begin(sender, searchId)
+      const { senderId, search } = contentSearches.begin(sender, searchId)
       try {
         return await parts.search.searchContent(parsed, {
           signal: search.signal,
@@ -294,7 +294,7 @@ export function registerWorkbenchFsIpc(
           },
         })
       } finally {
-        contentSearches.end(sender, searchId, search)
+        contentSearches.end(senderId, searchId, search)
       }
     })
   )
@@ -316,7 +316,7 @@ export function registerWorkbenchFsIpc(
     callWithEnvelope(() => {
       if (!hasStringFields(request, ['searchId'])) return invalidRequest()
 
-      contentSearches.cancel(event.sender, request['searchId'] as string)
+      contentSearches.cancel(event.sender.id, request['searchId'] as string)
       return Promise.resolve()
     })
   )
@@ -627,44 +627,43 @@ function isFiniteNumber(value: unknown): value is number {
 }
 
 interface ContentSearchRegistry {
-  /** 开始一次搜索；同一窗口同一 id 还在搜的那次先取消。 */
-  begin: (sender: WebContents, searchId: string) => AbortController
-  end: (sender: WebContents, searchId: string, search: AbortController) => void
-  cancel: (sender: WebContents, searchId: string) => void
+  /** 开始一次搜索；同一窗口同一 id 还在搜的那次先取消。返回窗口的 id（窗口关了以后就读不到了）。 */
+  begin: (sender: WebContents, searchId: string) => { senderId: number; search: AbortController }
+  end: (senderId: number, searchId: string, search: AbortController) => void
+  cancel: (senderId: number, searchId: string) => void
 }
 
-/** 进行中的内容搜索，按窗口与 searchId 记下；窗口关了，它的搜索一并取消。 */
+/**
+ * 进行中的内容搜索，按窗口与 searchId 记下；窗口关了，它的搜索一并取消。窗口的 id 在开始时记下：
+ * `destroyed` 触发时 WebContents 已经销毁，再读 `sender.id` 会抛错。
+ */
 function createContentSearchRegistry(): ContentSearchRegistry {
   const searches = new Map<number, Map<string, AbortController>>()
 
-  const searchesOf = (sender: WebContents): Map<string, AbortController> => {
-    let bySearchId = searches.get(sender.id)
-    if (!bySearchId) {
-      const created = new Map<string, AbortController>()
-      bySearchId = created
-      searches.set(sender.id, created)
-      sender.once('destroyed', () => {
-        for (const search of created.values()) search.abort()
-        searches.delete(sender.id)
-      })
-    }
-    return bySearchId
-  }
-
   return {
     begin: (sender, searchId) => {
-      const bySearchId = searchesOf(sender)
+      const senderId = sender.id
+      let bySearchId = searches.get(senderId)
+      if (!bySearchId) {
+        const created = new Map<string, AbortController>()
+        bySearchId = created
+        searches.set(senderId, created)
+        sender.once('destroyed', () => {
+          for (const search of created.values()) search.abort()
+          searches.delete(senderId)
+        })
+      }
       bySearchId.get(searchId)?.abort()
       const search = new AbortController()
       bySearchId.set(searchId, search)
-      return search
+      return { senderId, search }
     },
-    end: (sender, searchId, search) => {
-      const bySearchId = searches.get(sender.id)
+    end: (senderId, searchId, search) => {
+      const bySearchId = searches.get(senderId)
       if (bySearchId?.get(searchId) === search) bySearchId.delete(searchId)
     },
-    cancel: (sender, searchId) => {
-      searches.get(sender.id)?.get(searchId)?.abort()
+    cancel: (senderId, searchId) => {
+      searches.get(senderId)?.get(searchId)?.abort()
     },
   }
 }
