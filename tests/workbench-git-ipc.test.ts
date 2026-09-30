@@ -31,8 +31,8 @@ void describe('Workbench Git IPC requests', () => {
           remoteActions.push({ workspaceRoot, action, options })
           return {}
         },
-        performFileAction: async (workspaceRoot: string, path: string, action: string) => {
-          fileActions.push({ workspaceRoot, path, action })
+        performFileAction: async (workspaceRoot: string, paths: string[], action: string) => {
+          fileActions.push({ workspaceRoot, paths, action })
           return {}
         },
       } as never,
@@ -80,14 +80,68 @@ void describe('Workbench Git IPC requests', () => {
       (
         await invoke(WorkbenchGitChannels.fileAction, {
           workspaceRoot: '/project',
-          path: 'conflicted.ts',
+          paths: ['conflicted.ts', 'other.ts'],
           action: 'resolve',
         })
       ).ok,
       true
     )
     assert.deepEqual(fileActions, [
-      { workspaceRoot: '/project', path: 'conflicted.ts', action: 'resolve' },
+      { workspaceRoot: '/project', paths: ['conflicted.ts', 'other.ts'], action: 'resolve' },
     ])
+    for (const paths of [[], 'conflicted.ts', [42]])
+      assert.equal(
+        (
+          await invoke(WorkbenchGitChannels.fileAction, {
+            workspaceRoot: '/project',
+            paths,
+            action: 'stage',
+          })
+        ).ok,
+        false
+      )
+  })
+
+  void test('commits the index only when asked, and never together with chosen paths', async () => {
+    const commits: unknown[] = []
+    const { registerWorkbenchGitIpc } = await import('../src/main/workspace/git/WorkbenchGitIpc')
+    registerWorkbenchGitIpc(
+      {
+        commit: async (...args: unknown[]) => {
+          commits.push(['commit', ...args])
+          return {}
+        },
+        commitStaged: async (...args: unknown[]) => {
+          commits.push(['commitStaged', ...args])
+          return {}
+        },
+      } as never,
+      {} as never,
+      {} as never
+    )
+
+    assert.equal(
+      (await invoke(WorkbenchGitChannels.commit, { workspaceRoot: '/p', staged: true, message: 'm' }))
+        .ok,
+      true
+    )
+    assert.equal(
+      (await invoke(WorkbenchGitChannels.commit, { workspaceRoot: '/p', paths: ['a.ts'] })).ok,
+      true
+    )
+    assert.deepEqual(commits, [
+      ['commitStaged', '/p', undefined, 'm'],
+      ['commit', '/p', undefined, undefined, ['a.ts']],
+    ])
+    assert.equal(
+      (
+        await invoke(WorkbenchGitChannels.commit, {
+          workspaceRoot: '/p',
+          staged: true,
+          paths: ['a.ts'],
+        })
+      ).ok,
+      false
+    )
   })
 })

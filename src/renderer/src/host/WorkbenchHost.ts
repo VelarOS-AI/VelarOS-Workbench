@@ -284,9 +284,15 @@ export interface WorkbenchWorkspaceKernelPort {
     message?: string,
     paths?: string[]
   ): Promise<Result<SystemWorkspaceGitCommitResult>>
+  /** 提交暂存区里的改动（它们在暂存区里的样子）。 */
+  commitWorkspaceGitStagedChanges(
+    workspaceRoot: string,
+    locale?: AppLocale,
+    message?: string
+  ): Promise<Result<SystemWorkspaceGitCommitResult>>
   performWorkspaceGitFileAction(
     workspaceRoot: string,
-    path: string,
+    paths: string[],
     action: SystemWorkspaceGitFileActionRequest['action']
   ): Promise<Result<SystemWorkspaceGitFileActionResult>>
   initializeWorkspaceGitRepository(

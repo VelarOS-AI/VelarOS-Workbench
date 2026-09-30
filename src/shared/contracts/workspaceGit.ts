@@ -76,7 +76,12 @@ export interface WorkspaceGitCommitResult {
 
 export type WorkspaceGitRemoteAction = 'fetch' | 'update' | 'upload'
 
-/** `resolve`：把一个合并冲突文件标记为已解决（文件里还有冲突标记时拒绝）。 */
+/**
+ * - `stage` / `unstage`：暂存、取消暂存（冲突文件暂存即标记为已解决）。
+ * - `discard`：回滚。工作区里有没暂存的改动时只回滚它们（回到暂存区里的样子，已暂存的留着），
+ *   未跟踪的文件删掉；改动全都暂存了时连暂存的一起回滚到 HEAD。
+ * - `resolve`：把合并冲突文件标记为已解决（文件里还有冲突标记时拒绝）。
+ */
 export type WorkspaceGitFileAction = 'discard' | 'stage' | 'unstage' | 'resolve'
 
 export interface WorkspaceGitRemoteActionOptions {
@@ -96,7 +101,8 @@ export interface WorkspaceGitRemoteActionResult {
 
 export interface WorkspaceGitFileActionResult {
   action: WorkspaceGitFileAction
-  path: string
+  /** 相对项目根。 */
+  paths: string[]
   status: WorkspaceGitStatusResult
 }
 

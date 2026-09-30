@@ -137,7 +137,7 @@ export interface SystemWorkspaceGitLogResult {
 export interface SystemWorkspaceGitFileActionRequest {
   sessionId: string
   action: WorkspaceGitFileAction
-  path: string
+  paths: string[]
 }
 
 export interface SystemWorkspaceGitFileActionResult {

@@ -76,7 +76,7 @@ export function useWorkbenchGitChangeActions({
       Result.unwrap(
         await workbenchHost.kernel.workspace.performWorkspaceGitFileAction(
           workspaceRoot,
-          item.path,
+          [item.path],
           action
         )
       )

@@ -440,6 +440,8 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     gitAddToVersionControl: 'Add to version control',
     gitStageFile: 'Stage file',
     gitUnstageFile: 'Unstage file',
+    gitStageAll: 'Stage all',
+    gitUnstageAll: 'Unstage all',
     gitDiscardFile: 'Discard changes',
     gitDiscardConfirm: 'Discard local changes in “{path}”? This cannot be undone.',
     gitDiscardSelectedConfirm: 'Roll back the changes in these {count} files? This cannot be undone.',
@@ -448,6 +450,7 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
       'This is an untracked new file: rolling back deletes it from disk permanently. It does not go to the Trash and cannot be recovered.',
     gitDiscardDeletesUntrackedFiles:
       '{count} of them are untracked new files and will be deleted permanently. They do not go to the Trash and cannot be recovered.',
+    gitDiscardKeepsStaged: 'Staged changes are kept; only the unstaged changes are rolled back.',
     gitMarkResolved: 'Mark as resolved',
     gitMarkResolvedSuccessTitle: 'Marked as resolved',
     gitConflictStatus: 'Merge conflict: {kind}',
@@ -516,6 +519,9 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     gitGenerateCommitMessageFailedFallback:
       'Unable to generate a commit message. Please write one manually.',
     gitCommitAction: 'Commit',
+    gitCommitStagedAction: 'Commit staged changes',
+    gitCommitStagedHint:
+      'Commits the {count} staged files; unstaged changes stay in the working tree.',
     gitCommitButton: 'Commit',
     gitCommitAll: 'Commit All',
     gitCommitAllConfirmTitle: 'Commit all changes',

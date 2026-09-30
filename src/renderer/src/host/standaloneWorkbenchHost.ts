@@ -391,11 +391,20 @@ const standaloneWorkbenchHost: WorkbenchHost = {
             paths,
           })
         ),
-      performWorkspaceGitFileAction: async (workspaceRoot, path, action) =>
+      commitWorkspaceGitStagedChanges: async (workspaceRoot, locale, message) =>
+        toHostResult(
+          await window.velarosWorkbenchGit.commit({
+            workspaceRoot,
+            locale,
+            message,
+            staged: true,
+          })
+        ),
+      performWorkspaceGitFileAction: async (workspaceRoot, paths, action) =>
         toHostResult(
           await window.velarosWorkbenchGit.performFileAction({
             workspaceRoot,
-            path,
+            paths,
             action,
           })
         ),

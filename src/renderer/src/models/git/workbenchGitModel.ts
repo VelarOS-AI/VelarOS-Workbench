@@ -1,13 +1,17 @@
 import type { AppLocale, WorkspaceGitFileStatusEntry } from '@shared/contracts'
 import { isWorkspaceGitConflictEntry } from '@shared/workbenchGit'
 
-/** `conflicted`：还没解决的合并冲突。 */
+/**
+ * 一个文件的改动落在哪一侧：`staged` 暂存区相对 HEAD，`unstaged` 工作区相对暂存区，`untracked` 未跟踪，
+ * `conflicted` 还没解决的合并冲突。暂存了一部分的文件两侧各有一条。
+ */
 export type WorkbenchGitChangeGroupId = 'conflicted' | 'staged' | 'unstaged' | 'untracked'
 export type WorkbenchGitDecorationTone = 'added' | 'modified' | 'untracked' | 'conflicted'
 
 export interface WorkbenchGitChangeItem extends WorkspaceGitFileStatusEntry {
   fileName: string
   group: WorkbenchGitChangeGroupId
+  /** 这一侧的状态字母（暂存区一侧看 indexStatus，工作区一侧看 workTreeStatus）。 */
   statusCode: string
 }
 
@@ -75,14 +79,25 @@ function readStatusCode(entry: WorkspaceGitFileStatusEntry): string {
   return `${index}${workTree}` || 'M'
 }
 
-function getChangeGroup(entry: WorkspaceGitFileStatusEntry): WorkbenchGitChangeGroupId {
-  if (isWorkspaceGitConflictEntry(entry)) return 'conflicted'
+/** 一条状态落在哪几侧：冲突、未跟踪各一条；暂存区与工作区都有改动时两侧各一条。 */
+function buildEntryChangeItems(entry: WorkspaceGitFileStatusEntry): WorkbenchGitChangeItem[] {
+  const fileName = fileNameFromPath(entry.path)
+  if (isWorkspaceGitConflictEntry(entry))
+    return [{ ...entry, fileName, group: 'conflicted', statusCode: readStatusCode(entry) }]
+  if (entry.indexStatus === '?' || entry.workTreeStatus === '?')
+    return [{ ...entry, fileName, group: 'untracked', statusCode: readStatusCode(entry) }]
 
-  if (entry.indexStatus === '?' || entry.workTreeStatus === '?') return 'untracked'
-
-  if (entry.indexStatus.trim()) return 'staged'
-
-  return 'unstaged'
+  const items: WorkbenchGitChangeItem[] = []
+  if (entry.indexStatus.trim())
+    items.push({ ...entry, fileName, group: 'staged', statusCode: entry.indexStatus })
+  if (entry.workTreeStatus.trim() || items.length === 0)
+    items.push({
+      ...entry,
+      fileName,
+      group: 'unstaged',
+      statusCode: entry.workTreeStatus.trim() || 'M',
+    })
+  return items
 }
 
 function getPathAncestors(path: string): string[] {
@@ -130,12 +145,7 @@ export function buildWorkbenchGitChangeItems(
   entries: WorkspaceGitFileStatusEntry[]
 ): WorkbenchGitChangeItem[] {
   return entries
-    .map((entry) => ({
-      ...entry,
-      fileName: fileNameFromPath(entry.path),
-      group: getChangeGroup(entry),
-      statusCode: readStatusCode(entry),
-    }))
+    .flatMap((entry) => buildEntryChangeItems(entry))
     .sort(
       (left, right) =>
         StatusOrder[left.group] - StatusOrder[right.group] ||
@@ -144,10 +154,18 @@ export function buildWorkbenchGitChangeItems(
 }
 
 export function buildWorkbenchGitCommitDraft(
-  items: WorkbenchGitChangeItem[],
+  changeItems: WorkbenchGitChangeItem[],
   locale: AppLocale
 ): string {
   const isChinese = locale.startsWith('zh')
+  // 暂存了一部分的文件两侧各一条，按文件算。
+  const seenPaths = new Set<string>()
+  const items: WorkbenchGitChangeItem[] = []
+  for (const item of changeItems) {
+    if (seenPaths.has(item.path)) continue
+    seenPaths.add(item.path)
+    items.push(item)
+  }
   if (items.length === 0) return ''
 
   if (items.length === 1) {
@@ -183,11 +201,13 @@ export function buildWorkbenchGitDecorationMap(
 
   for (const item of items) {
     const tone = getWorkbenchGitChangeItemTone(item)
+    // 暂存了一部分的文件两侧各一条：文件本身只记一次，取两侧里更要紧的颜色。
+    const existing = decorations.get(item.path)
     decorations.set(item.path, {
-      group: item.group,
-      statusCode: item.statusCode,
+      group: existing ? mergeGroup(existing.group, item.group) : item.group,
+      statusCode: readStatusCode(item),
       isDirectory: false,
-      tone,
+      tone: existing ? mergeTone(existing.tone, tone) : tone,
     })
 
     for (const ancestor of getPathAncestors(item.path)) {

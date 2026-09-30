@@ -1,95 +1,25 @@
 import assert from 'node:assert/strict'
-import { execFile } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { chmod, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
-import { devNull, tmpdir } from 'node:os'
+import { chmod, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { promisify } from 'node:util'
 
 import { describe, test } from 'bun:test'
 
-import { AppError } from '@velaros-ai/core/error'
-
 import { WorkbenchGitService } from '../src/main/workspace/git/WorkbenchGitService'
 import { parseWorkbenchGitCommitDiff } from '../src/renderer/src/models/git/changesPanel.model'
-import type { SystemWorkspaceGitSummary } from '../src/shared/contracts'
 
-const execFileAsync = promisify(execFile)
-
-/** 测试不受开发机上全局 git 配置影响（签名提交、别的默认分支名……）。 */
-const HermeticEnvironment: NodeJS.ProcessEnv = {
-  ...process.env,
-  GIT_CONFIG_GLOBAL: devNull,
-  GIT_CONFIG_NOSYSTEM: '1',
-  LC_ALL: 'C',
-}
-
-async function git(root: string, args: string[]): Promise<string> {
-  const { stdout } = await execFileAsync('git', args, { cwd: root, env: HermeticEnvironment })
-  return stdout
-}
-
-function createService(
-  environment: NodeJS.ProcessEnv = {},
-  remoteActionTimeoutMs?: number
-): WorkbenchGitService {
-  return new WorkbenchGitService({
-    environment: async () => ({ ...HermeticEnvironment, ...environment }),
-    remoteActionTimeoutMs,
-  })
-}
-
-async function initRepository(root: string): Promise<void> {
-  await git(root, ['init', '-q', '-b', 'main'])
-  await git(root, ['config', 'user.name', 't'])
-  await git(root, ['config', 'user.email', 't@t'])
-}
-
-async function withTempDirectory(run: (base: string) => Promise<void>): Promise<void> {
-  const base = await realpath(await mkdtemp(join(tmpdir(), 'workbench-git-service-')))
-  try {
-    await run(base)
-  } finally {
-    await rm(base, { recursive: true, force: true })
-  }
-}
-
-async function withRepository(run: (root: string) => Promise<void>): Promise<void> {
-  await withTempDirectory(async (root) => {
-    await initRepository(root)
-    await run(root)
-  })
-}
-
-async function commitAll(root: string, message: string): Promise<void> {
-  await git(root, ['add', '-A'])
-  await git(root, ['commit', '-q', '-m', message])
-}
-
-function entryCodes(summary: SystemWorkspaceGitSummary): string[] {
-  return (summary.status?.entries ?? []).map(
-    (entry) => `${entry.indexStatus}${entry.workTreeStatus} ${entry.path}`
-  )
-}
-
-async function porcelain(root: string): Promise<string[]> {
-  return (await git(root, ['status', '--porcelain=v1'])).split('\n').filter(Boolean)
-}
-
-async function filesInCommit(root: string, revision: string): Promise<string[]> {
-  return (await git(root, ['-c', 'core.quotePath=false', 'show', '--name-only', '--format=', revision]))
-    .split('\n')
-    .filter(Boolean)
-}
-
-function isAppError(code: string, pattern: RegExp): (error: unknown) => boolean {
-  return (error) => {
-    assert.ok(error instanceof AppError, String(error))
-    assert.equal(error.code, code)
-    assert.match(error.message, pattern)
-    return true
-  }
-}
+import {
+  commitAll,
+  createGitService as createService,
+  entryCodes,
+  filesInCommit,
+  git,
+  initRepository,
+  isAppError,
+  porcelain,
+  withRepository,
+  withTempDirectory,
+} from './helpers/gitRepository'
 
 void describe('Workbench Git service', () => {
   void test('a project nested in a repository only sees, rolls back and commits its own files', async () => {
@@ -121,7 +51,7 @@ void describe('Workbench Git service', () => {
       assert.match(diff.diff, /^\+\+\+ b\/src\/a\.ts$/m)
       assert.match(diff.diff, /^\+changed$/m)
 
-      await service.performFileAction(project, 'src/b.ts', 'discard')
+      await service.performFileAction(project, ['src/b.ts'], 'discard')
       assert.equal(await readFile(join(project, 'src', 'b.ts'), 'utf8'), 'b\n')
 
       const committed = await service.commit(project, 'en-US', 'project only')
@@ -188,7 +118,7 @@ void describe('Workbench Git service', () => {
       await writeFile(join(root, '[id].ts'), 'new\n')
       await writeFile(join(root, 'i.ts'), 'keep me\n')
 
-      await createService().performFileAction(root, '[id].ts', 'discard')
+      await createService().performFileAction(root, ['[id].ts'], 'discard')
       assert.equal(existsSync(join(root, '[id].ts')), false)
       assert.equal(await readFile(join(root, 'i.ts'), 'utf8'), 'keep me\n')
     })
@@ -253,20 +183,20 @@ void describe('Workbench Git service', () => {
         isAppError('VALIDATION', /“both\.txt”还有未解决的合并冲突/)
       )
       await assert.rejects(
-        service.performFileAction(root, 'both.txt', 'discard'),
+        service.performFileAction(root, ['both.txt'], 'discard'),
         isAppError('VALIDATION', /合并冲突，不能回滚/)
       )
       await assert.rejects(
-        service.performFileAction(root, 'both.txt', 'resolve'),
+        service.performFileAction(root, ['both.txt'], 'resolve'),
         isAppError('VALIDATION', /还有冲突标记/)
       )
       await assert.rejects(
-        service.performFileAction(root, 'clean.txt', 'resolve'),
+        service.performFileAction(root, ['clean.txt'], 'resolve'),
         isAppError('VALIDATION', /没有待解决的合并冲突/)
       )
 
       await writeFile(join(root, 'both.txt'), 'resolved\n')
-      const resolved = await service.performFileAction(root, 'both.txt', 'resolve')
+      const resolved = await service.performFileAction(root, ['both.txt'], 'resolve')
       assert.equal(resolved.fileAction.status.conflictedFiles, 0)
       assert.deepEqual(entryCodes(resolved.summary), ['M  both.txt'])
 
@@ -503,7 +433,7 @@ void describe('Workbench Git service', () => {
       assert.deepEqual(entryCodes(summary), [' M a.txt', '?? node_modules/'])
       assert.equal(summary.lineStats.changedFiles, 2)
 
-      await service.performFileAction(root, 'node_modules/', 'discard')
+      await service.performFileAction(root, ['node_modules/'], 'discard')
       assert.equal(existsSync(join(root, 'node_modules')), false)
     })
   })

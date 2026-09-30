@@ -67,18 +67,15 @@ export function registerWorkbenchGitIpc(
   ipcMain.handle(WorkbenchGitChannels.commit, (_event, input: unknown) =>
     callWithEnvelope(() => {
       const request = parseCommit(input)
-      return service.commit(
-        request.workspaceRoot,
-        request.locale,
-        request.message,
-        request.paths
-      )
+      return request.staged
+        ? service.commitStaged(request.workspaceRoot, request.locale, request.message)
+        : service.commit(request.workspaceRoot, request.locale, request.message, request.paths)
     })
   )
   ipcMain.handle(WorkbenchGitChannels.fileAction, (_event, input: unknown) =>
     callWithEnvelope(() => {
       const request = parseFileAction(input)
-      return service.performFileAction(request.workspaceRoot, request.path, request.action)
+      return service.performFileAction(request.workspaceRoot, request.paths, request.action)
     })
   )
   ipcMain.handle(WorkbenchGitChannels.initialize, (_event, input: unknown) =>
@@ -184,20 +181,27 @@ function parseCommitMessage(input: unknown): WorkbenchGitCommitMessageRequest {
 
 function parseCommit(input: unknown): WorkbenchGitCommitRequest {
   const request = parseCommitMessage(input)
-  const message = (input as Record<string, unknown>)['message']
+  const record = input as Record<string, unknown>
+  const message = record['message']
+  const staged = record['staged']
   if (message !== undefined && typeof message !== 'string') return invalidRequest()
-  return { ...request, message }
+  if (staged !== undefined && typeof staged !== 'boolean') return invalidRequest()
+  // 提交暂存区时提交的就是暂存区，不能再挑路径。
+  if (staged && request.paths !== undefined) return invalidRequest()
+  return { ...request, message, staged: optionalWhen(isTrue, staged) }
 }
 
 function parseFileAction(input: unknown): WorkbenchGitFileActionRequest {
-  if (!hasStringFields(input, ['workspaceRoot', 'path', 'action']))
-    return invalidRequest()
+  if (!hasStringFields(input, ['workspaceRoot', 'action'])) return invalidRequest()
   const action = input['action']
+  const paths = input['paths']
   if (action !== 'discard' && action !== 'stage' && action !== 'unstage' && action !== 'resolve')
+    return invalidRequest()
+  if (!Array.isArray(paths) || paths.length === 0 || !paths.every((path) => isString(path)))
     return invalidRequest()
   return {
     workspaceRoot: input['workspaceRoot'] as string,
-    path: input['path'] as string,
+    paths,
     action,
   }
 }

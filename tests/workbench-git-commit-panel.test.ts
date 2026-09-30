@@ -49,7 +49,8 @@ void describe('Workbench commit panel', () => {
       buildCommitPanelGroups(items).map((group) => [group.id, group.items.map((entry) => entry.path)]),
       [
         ['conflicted', ['src/both.ts', 'src/theirs.ts']],
-        ['changed', ['src/added.ts', 'src/moved.ts', 'src/partly.ts', 'src/edited.ts']],
+        ['staged', ['src/added.ts', 'src/moved.ts', 'src/partly.ts']],
+        ['changed', ['src/edited.ts', 'src/partly.ts']],
         ['untracked', ['notes.md']],
       ]
     )
@@ -70,6 +71,13 @@ void describe('Workbench commit panel', () => {
         item('notes.md')
       ).map((entry) => entry.path),
       ['src/edited.ts']
+    )
+    // 已暂存的那一侧不回滚（要先取消暂存）：暂存了一部分的文件只回滚没暂存的那部分。
+    assert.deepEqual(
+      deriveRollbackTargetItems(items, new Set(['src/added.ts', 'src/partly.ts']), null).map(
+        (entry) => `${entry.group} ${entry.path}`
+      ),
+      ['unstaged src/partly.ts']
     )
   })
 

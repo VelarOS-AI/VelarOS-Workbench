@@ -84,9 +84,9 @@ async function runGitProbe(): Promise<void> {
     equal(untracked.status?.entries[0]?.path, 'alpha file.txt', '状态路径不应保留 Git 引号')
     equal(untracked.lineStats.additions, 2, '未跟踪文本应计入新增行')
 
-    const staged = await service.performFileAction(projectRoot, 'alpha file.txt', 'stage')
+    const staged = await service.performFileAction(projectRoot, ['alpha file.txt'], 'stage')
     equal(staged.fileAction.status.stagedFiles, 1, 'stage 应进入暂存区')
-    const unstaged = await service.performFileAction(projectRoot, 'alpha file.txt', 'unstage')
+    const unstaged = await service.performFileAction(projectRoot, ['alpha file.txt'], 'unstage')
     equal(unstaged.fileAction.status.untrackedFiles, 1, 'unborn 仓库 unstage 应恢复未跟踪态')
 
     const draft = await service.generateCommitMessage(projectRoot, 'en-US', ['alpha file.txt'])
@@ -127,7 +127,7 @@ async function runGitProbe(): Promise<void> {
     equal(switched.branch, 'feature/probe', '改动不冲突时应照常切分支')
     equal(switched.previousBranch, initial.status?.branch ?? null, '切分支应返回来源分支')
     equal(switched.summary.status?.changedFiles, 1, '切分支应把没提交的改动带过去')
-    await service.performFileAction(projectRoot, 'alpha file.txt', 'discard')
+    await service.performFileAction(projectRoot, ['alpha file.txt'], 'discard')
     check((await service.getSummary(projectRoot)).status?.isClean, '丢弃改动后应 clean')
 
     await execa('git', ['mv', 'alpha file.txt', 'renamed file.txt'], {
@@ -136,12 +136,12 @@ async function runGitProbe(): Promise<void> {
     const renamed = await service.getSummary(projectRoot)
     equal(renamed.status?.entries[0]?.path, 'renamed file.txt', 'rename 目标路径')
     equal(renamed.status?.entries[0]?.originalPath, 'alpha file.txt', 'rename 来源路径')
-    await service.performFileAction(projectRoot, 'renamed file.txt', 'discard')
+    await service.performFileAction(projectRoot, ['renamed file.txt'], 'discard')
     check((await service.getSummary(projectRoot)).status?.isClean, '丢弃 rename 应完整恢复')
 
     await expectCode(
       'PERMISSION',
-      () => service.performFileAction(projectRoot, '../escape.txt', 'stage'),
+      () => service.performFileAction(projectRoot, ['../escape.txt'], 'stage'),
       'Git pathspec 不得越出项目根'
     )
     await expectCode(

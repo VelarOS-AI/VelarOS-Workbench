@@ -19,6 +19,7 @@
 
 .commitDisclosureButton,
 .commitFileCheckbox,
+.commitGroupActionButton,
 .commitFileRollbackButton,
 .commitFileLocateButton {
   @apply flex shrink-0 items-center justify-center border bg-transparent text-muted-foreground;
@@ -27,6 +28,7 @@
 
 .commitDisclosureButton:hover,
 .commitFileCheckbox:hover,
+.commitGroupActionButton:hover:not(:disabled),
 .commitFileRollbackButton:hover:not(:disabled),
 .commitFileLocateButton:hover:not(:disabled) {
   color: var(--workbench-text);
@@ -35,6 +37,7 @@
 
 .commitDisclosureButton:disabled,
 .commitGroupCheckbox:disabled,
+.commitGroupActionButton:disabled,
 .commitFileRollbackButton:disabled,
 .commitFileLocateButton:disabled {
   opacity: 0.45;
@@ -60,11 +63,23 @@
 
 .commitGroupRow {
   @apply grid min-w-0 items-center;
-  grid-template-columns: 16px 18px minmax(0, 1fr);
+  grid-template-columns: 16px 18px minmax(0, 1fr) 22px;
   min-height: 26px;
-  padding-inline: 3px 7px;
+  padding-inline: 3px 4px;
   border-radius: var(--workbench-radius-xs);
   color: var(--workbench-text);
+}
+
+/* 暂存区里有改动时提交的是暂存区，不勾选文件：没有勾选框那一列。 */
+.commitGroupRow[data-selectable='false'] {
+  grid-template-columns: 16px minmax(0, 1fr) 22px;
+}
+
+/* 分组标题右边的「全部暂存 / 全部取消暂存」，跟文件行上的按钮一样一直显示。 */
+.commitGroupActionButton {
+  width: 20px;
+  height: 20px;
+  border-radius: var(--workbench-radius);
 }
 
 /*
@@ -143,13 +158,18 @@
   padding-block: 2px 5px;
 }
 
+/* 勾选框 | 文件 | 状态 | 暂存 / 取消暂存 / 标记已解决 | 回滚 | 定位 */
 .commitFileRow {
   @apply grid min-w-0 items-center;
-  grid-template-columns: 18px minmax(0, 1fr) 24px 22px 22px;
+  grid-template-columns: 18px minmax(0, 1fr) 24px 22px 22px 22px;
   min-height: 24px;
   padding-inline: 4px;
   border-radius: var(--workbench-radius-xs);
   color: var(--status-blue-strong);
+}
+
+.commitFileRow[data-selectable='false'] {
+  grid-template-columns: minmax(0, 1fr) 24px 22px 22px 22px;
 }
 
 /* 同 .commitGroupRow：选中态交给复选框，行只在悬浮时用主题色着色。 */
@@ -241,6 +261,13 @@
   border-radius: var(--workbench-radius-xs);
   background: var(--status-red-soft);
   color: var(--status-red);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+/* 回滚一个暂存了一部分的文件：说一句已暂存的那部分留着。 */
+.commitConfirmNote {
+  @apply m-0 text-muted-foreground;
   font-size: 11.5px;
   line-height: 1.45;
 }

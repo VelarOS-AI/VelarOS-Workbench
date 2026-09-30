@@ -3,8 +3,17 @@ import {
   type WorkbenchGitChangeItem,
 } from './workbenchGitModel'
 
-/** `conflicted`：还没解决的合并冲突，排在最前。 */
-export type CommitPanelGroupId = 'conflicted' | 'changed' | 'untracked'
+/**
+ * 提交面板的分组，自上而下：还没解决的合并冲突、已暂存、更改（工作区里没暂存的）、未跟踪的文件。
+ * 暂存了一部分的文件在「已暂存」和「更改」里各出现一次。
+ */
+export type CommitPanelGroupId = 'conflicted' | 'staged' | 'changed' | 'untracked'
+
+/**
+ * 提交按钮提交什么：暂存区里有改动时提交暂存区（`staged`，同 VS Code，未暂存的留在工作区）；
+ * 暂存区是空的时照勾选的文件提交它们在工作区里的样子（`selection`），一个都没勾时先问要不要提交全部。
+ */
+export type CommitPanelCommitMode = 'staged' | 'selection'
 
 export type CommitPanelPrimaryAction = 'commit' | 'push'
 
@@ -27,28 +36,26 @@ export function commitPanelStatusTitle(item: WorkbenchGitChangeItem): string {
   return `${item.indexStatus}${item.workTreeStatus} ${getWorkbenchGitChangeDisplayPath(item)}`.trim()
 }
 
-export interface CommitPanelItemPartition {
-  conflicted: WorkbenchGitChangeItem[]
-  tracked: WorkbenchGitChangeItem[]
-  untracked: WorkbenchGitChangeItem[]
+/** 面板里一行的身份：同一个文件暂存区、工作区两侧各一行，路径相同，分组不同。 */
+export function getCommitPanelItemKey(item: Pick<WorkbenchGitChangeItem, 'group' | 'path'>): string {
+  return `${item.group}\0${item.path}`
 }
 
-export function partitionCommitPanelChangeItems(
+export function resolveCommitPanelCommitMode(
   items: readonly WorkbenchGitChangeItem[]
-): CommitPanelItemPartition {
-  const conflicted: WorkbenchGitChangeItem[] = []
-  const tracked: WorkbenchGitChangeItem[] = []
-  const untracked: WorkbenchGitChangeItem[] = []
-  for (const item of items) {
-    if (item.group === 'conflicted') {
-      conflicted.push(item)
-    } else if (item.group === 'untracked') {
-      untracked.push(item)
-    } else {
-      tracked.push(item)
-    }
-  }
-  return { conflicted, tracked, untracked }
+): CommitPanelCommitMode {
+  return items.some((item) => item.group === 'staged') ? 'staged' : 'selection'
+}
+
+const CommitPanelGroupOrder: readonly CommitPanelGroupId[] = [
+  'conflicted',
+  'staged',
+  'changed',
+  'untracked',
+]
+
+function commitPanelGroupOf(item: WorkbenchGitChangeItem): CommitPanelGroupId {
+  return item.group === 'unstaged' ? 'changed' : item.group
 }
 
 export interface CommitPanelGroupItems {
@@ -59,18 +66,10 @@ export interface CommitPanelGroupItems {
 export function buildCommitPanelGroups(
   items: readonly WorkbenchGitChangeItem[]
 ): CommitPanelGroupItems[] {
-  const { conflicted, tracked, untracked } = partitionCommitPanelChangeItems(items)
-  const groups: CommitPanelGroupItems[] = []
-  if (conflicted.length > 0) {
-    groups.push({ id: 'conflicted', items: conflicted })
-  }
-  if (tracked.length > 0) {
-    groups.push({ id: 'changed', items: tracked })
-  }
-  if (untracked.length > 0) {
-    groups.push({ id: 'untracked', items: untracked })
-  }
-  return groups
+  return CommitPanelGroupOrder.map((id) => ({
+    id,
+    items: items.filter((item) => commitPanelGroupOf(item) === id),
+  })).filter((group) => group.items.length > 0)
 }
 
 export function deriveCommitPanelSelectedItem(
@@ -90,7 +89,8 @@ export function deriveCommitPanelSelectedItem(
 
 /**
  * 回滚的对象只能是用户明确选的：勾选了的文件；一个都没勾时是在列表里点中的那一行（`clickedItem`，
- * 不是默认高亮的那一行）；都没有就什么也不回滚。冲突文件不回滚，要先解决。
+ * 不是默认高亮的那一行）；都没有就什么也不回滚。冲突文件不回滚，要先解决；已暂存的一侧不回滚，
+ * 要先取消暂存（回滚只丢工作区里没暂存的改动）。
  */
 export function deriveRollbackTargetItems(
   changeItems: readonly WorkbenchGitChangeItem[],
@@ -102,19 +102,18 @@ export function deriveRollbackTargetItems(
     : clickedItem
       ? [clickedItem]
       : []
-  return targets.filter((item) => item.group !== 'conflicted')
+  return targets.filter((item) => item.group === 'unstaged' || item.group === 'untracked')
 }
 
 /**
- * 回滚会把它从磁盘上删掉（`git clean`，不进废纸篓）：未跟踪的文件，以及只在暂存区里新增或复制出来、
- * HEAD 里没有的文件。
+ * 回滚会把它从磁盘上删掉（`git clean`，不进废纸篓）：未跟踪的文件，以及改动全在暂存区里、HEAD 里
+ * 又没有的文件（新增、复制出来的）。
  */
 export function isCommitPanelRollbackDeletion(item: WorkbenchGitChangeItem): boolean {
   return (
     item.group === 'untracked' ||
-    item.indexStatus === 'A' ||
-    item.indexStatus === 'C' ||
-    item.workTreeStatus === 'A'
+    item.workTreeStatus === 'A' ||
+    (item.workTreeStatus === ' ' && (item.indexStatus === 'A' || item.indexStatus === 'C'))
   )
 }
 
@@ -123,12 +122,12 @@ export interface CommitPanelCommitAllSummary {
   untracked: number
 }
 
-/** 一个都没勾就点提交时先问一句：一共几个改动，其中几个是未跟踪的新文件。 */
+/** 一个都没勾就点提交时先问一句：一共几个文件有改动，其中几个是未跟踪的新文件。 */
 export function summarizeCommitPanelCommitAll(
   items: readonly WorkbenchGitChangeItem[]
 ): CommitPanelCommitAllSummary {
   return {
-    count: items.length,
+    count: new Set(items.map((item) => item.path)).size,
     untracked: items.filter((item) => item.group === 'untracked').length,
   }
 }

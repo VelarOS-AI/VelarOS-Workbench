@@ -13,6 +13,8 @@ import {
   CheckIcon,
   ClockCounterClockwiseIcon,
   CrosshairIcon,
+  MinusIcon,
+  PlusIcon,
   SparkleIcon,
   SpinnerGapIcon,
 } from '@phosphor-icons/react'
@@ -23,7 +25,9 @@ import {
   type CommitPanelGroupId,
   deriveCommitPanelGitPaths,
   deriveRollbackTargetItems,
+  getCommitPanelItemKey,
   isCommitPanelRollbackDeletion,
+  resolveCommitPanelCommitMode,
   summarizeCommitPanelCommitAll,
 } from '@renderer/models/git/commitPanel.model'
 import {
@@ -50,6 +54,8 @@ import {
 } from '@velaros-ai/ui/primitives/overlays/Dialog'
 import { BubbleTooltip } from '@velaros-ai/ui/primitives/overlays/Tooltip'
 
+import type { WorkspaceGitFileAction } from '@shared/contracts'
+
 import styles from '../../styles/workbenchPageStyles'
 import { WorkbenchFileTypeIcon } from '../files/WorkbenchFileTypeIcon'
 
@@ -64,7 +70,14 @@ export interface WorkbenchCommitPanelProps {
 /** 报冲突时点名的文件：最多列 3 个，其余说个数。 */
 const ConflictNamesShown = 3
 
-/** 拆分前 Workbench 左上角“提交”工具：只负责本次提交，不承载 Git 历史。 */
+const NoCommitPaths: ReadonlySet<string> = new Set()
+
+/**
+ * 拆分前 Workbench 左上角“提交”工具：只负责本次提交，不承载 Git 历史。
+ *
+ * 暂存区里有改动时提交按钮提交暂存区（同 VS Code，没暂存的留在工作区），这时不显示勾选框；暂存区是空的
+ * 时照勾选的文件提交它们在工作区里的样子（`git commit --only`），一个都没勾时先问要不要提交全部。
+ */
 export function WorkbenchCommitPanel({
   git: {
     workspaceRoot,
@@ -88,15 +101,18 @@ export function WorkbenchCommitPanel({
     useState<Nullable<WorkbenchGitChangeItem[]>>(null)
   const [commitAllRequest, setCommitAllRequest] =
     useState<Nullable<WorkbenchGitChangeItem[]>>(null)
-  const [selectedChangePath, setSelectedChangePath] = useState<Nullable<string>>(null)
+  /** 在列表里点中的那一行（分组 + 路径：暂存了一部分的文件两侧各一行）。 */
+  const [selectedChangeKey, setSelectedChangeKey] = useState<Nullable<string>>(null)
   const [selectedCommitPaths, setSelectedCommitPaths] = useState<ReadonlySet<string>>(
     () => new Set()
   )
   const [expandedGroups, setExpandedGroups] = useState<ReadonlySet<CommitPanelGroupId>>(
-    () => new Set(['conflicted', 'changed', 'untracked'])
+    () => new Set(['conflicted', 'staged', 'changed', 'untracked'])
   )
 
   const status = summary?.status ?? null
+  const commitMode = resolveCommitPanelCommitMode(changeItems)
+  const selectable = commitMode === 'selection'
   const groups = useMemo(
     () =>
       buildCommitPanelGroups(changeItems).map((group) => ({
@@ -104,9 +120,11 @@ export function WorkbenchCommitPanel({
         label:
           group.id === 'conflicted'
             ? t('workbench.commitGroupConflicted')
-            : group.id === 'changed'
-              ? t('workbench.commitGroupChanged')
-              : t('workbench.commitGroupUnversioned'),
+            : group.id === 'staged'
+              ? t('workbench.gitGroupStaged')
+              : group.id === 'changed'
+                ? t('workbench.commitGroupChanged')
+                : t('workbench.commitGroupUnversioned'),
       })),
     [changeItems, t]
   )
@@ -114,35 +132,51 @@ export function WorkbenchCommitPanel({
     () => changeItems.filter((item) => item.group === 'conflicted'),
     [changeItems]
   )
-  const selectedItem = useMemo(
-    () =>
-      changeItems.find((item) => item.path === selectedChangePath) ??
-      changeItems.find((item) => item.path === selectedFilePath) ??
-      changeItems[0] ??
-      null,
-    [changeItems, selectedChangePath, selectedFilePath]
+  const stagedItems = useMemo(
+    () => changeItems.filter((item) => item.group === 'staged'),
+    [changeItems]
   )
+  const clickedItem = useMemo(
+    () => changeItems.find((item) => getCommitPanelItemKey(item) === selectedChangeKey) ?? null,
+    [changeItems, selectedChangeKey]
+  )
+  const selectedItem =
+    clickedItem ??
+    changeItems.find((item) => item.path === selectedFilePath) ??
+    changeItems[0] ??
+    null
   const selectedItems = useMemo(
-    () => changeItems.filter((item) => selectedCommitPaths.has(item.path)),
-    [changeItems, selectedCommitPaths]
+    () => (selectable ? changeItems.filter((item) => selectedCommitPaths.has(item.path)) : []),
+    [changeItems, selectable, selectedCommitPaths]
   )
   // 回滚只对用户明确选的文件：勾选的，或者点中的那一行；默认高亮的那一行不算。
   const rollbackTargets = useMemo(
     () =>
       deriveRollbackTargetItems(
         changeItems,
-        selectedCommitPaths,
-        changeItems.find((item) => item.path === selectedChangePath) ?? null
+        selectable ? selectedCommitPaths : NoCommitPaths,
+        clickedItem
       ),
-    [changeItems, selectedChangePath, selectedCommitPaths]
+    [changeItems, clickedItem, selectable, selectedCommitPaths]
   )
-  const actionPaths = useMemo(() => deriveCommitPanelGitPaths(selectedItems), [selectedItems])
+  // 输入框里的提交说明草稿，按这次会提交的文件拟：暂存区；或勾选的；一个都没勾时是全部。
   const commitDraft = useMemo(
-    () => buildWorkbenchGitCommitDraft(selectedItems.length ? selectedItems : changeItems, locale),
-    [changeItems, locale, selectedItems]
+    () =>
+      buildWorkbenchGitCommitDraft(
+        commitMode === 'staged'
+          ? stagedItems
+          : selectedItems.length > 0
+            ? selectedItems
+            : changeItems,
+        locale
+      ),
+    [changeItems, commitMode, locale, selectedItems, stagedItems]
   )
   const conflictNames = describeConflictNames(conflictItems)
   const rollbackDeletions = rollbackRequest?.filter(isCommitPanelRollbackDeletion) ?? []
+  const rollbackKeepsStaged = !!rollbackRequest?.some((item) =>
+    stagedItems.some((staged) => staged.path === item.path)
+  )
   const commitAllSummary = commitAllRequest
     ? summarizeCommitPanelCommitAll(commitAllRequest)
     : null
@@ -154,6 +188,11 @@ export function WorkbenchCommitPanel({
       return next.size === current.size ? current : next
     })
   }, [changeItems])
+
+  // 暂存区里一有改动，提交的就是暂存区：之前勾选的不再作数，清掉，免得以为勾选的会被提交。
+  useEffect(() => {
+    if (!selectable) setSelectedCommitPaths((current) => (current.size ? new Set() : current))
+  }, [selectable])
 
   function warnUnsavedOpenTabs(): boolean {
     if (!hasUnsavedOpenTabs) return false
@@ -174,7 +213,7 @@ export function WorkbenchCommitPanel({
   }
 
   function toggleItem(item: WorkbenchGitChangeItem): void {
-    setSelectedChangePath(item.path)
+    setSelectedChangeKey(getCommitPanelItemKey(item))
     setSelectedCommitPaths((current) => {
       const next = new Set(current)
       if (next.has(item.path)) next.delete(item.path)
@@ -193,36 +232,27 @@ export function WorkbenchCommitPanel({
       }
       return next
     })
-    if (!shouldDeselect && items[0]) setSelectedChangePath(items[0].path)
+    if (!shouldDeselect && items[0]) setSelectedChangeKey(getCommitPanelItemKey(items[0]))
   }
 
-  async function rollbackItems(items: WorkbenchGitChangeItem[]): Promise<void> {
-    if (!items.length || pendingFileAction || warnUnsavedOpenTabs()) return
+  /** 一批文件做同一个 Git 操作：一次请求，失败时照原话提示；成功与否都刷新列表。 */
+  async function runFileAction(
+    items: readonly WorkbenchGitChangeItem[],
+    action: WorkspaceGitFileAction,
+    pendingKey: string
+  ): Promise<boolean> {
+    if (!items.length || pendingFileAction) return false
     try {
-      setRollbackRequest(null)
-      setPendingFileAction(items.length === 1 ? `discard:${items[0].path}` : 'discard:selected')
-      for (const item of items) {
-        Result.unwrap(
-          await workbenchHost.kernel.workspace.performWorkspaceGitFileAction(
-            workspaceRoot,
-            item.path,
-            'discard'
-          )
+      setPendingFileAction(pendingKey)
+      Result.unwrap(
+        await workbenchHost.kernel.workspace.performWorkspaceGitFileAction(
+          workspaceRoot,
+          [...new Set(items.map((item) => item.path))],
+          action
         )
-      }
-      setSelectedCommitPaths((current) => {
-        const next = new Set(current)
-        for (const item of items) next.delete(item.path)
-        return next
-      })
+      )
       await onRefresh()
-      messageLatest.current.success({
-        title: tLatest.current('workbench.gitDiscardSuccessTitle'),
-        description:
-          items.length === 1
-            ? items[0].path
-            : tLatest.current('workbench.commitGroupFileCount', { count: items.length }),
-      })
+      return true
     } catch (actionError) {
       showActionError(
         actionError,
@@ -230,9 +260,44 @@ export function WorkbenchCommitPanel({
         tLatest.current('workbench.gitFileActionFailedFallback')
       )
       await onRefresh()
+      return false
     } finally {
       setPendingFileAction(null)
     }
+  }
+
+  /** 暂存读的是磁盘上的文件：编辑器里还有没保存的内容时先提醒保存，免得暂存了旧的。 */
+  function stageItems(items: readonly WorkbenchGitChangeItem[], pendingKey: string): void {
+    if (!items.length || pendingFileAction || warnUnsavedOpenTabs()) return
+    void runFileAction(items, 'stage', pendingKey)
+  }
+
+  /** 取消暂存只动暂存区，不碰工作区里的文件。 */
+  function unstageItems(items: readonly WorkbenchGitChangeItem[], pendingKey: string): void {
+    void runFileAction(items, 'unstage', pendingKey)
+  }
+
+  async function rollbackItems(items: WorkbenchGitChangeItem[]): Promise<void> {
+    if (!items.length || pendingFileAction || warnUnsavedOpenTabs()) return
+    setRollbackRequest(null)
+    const done = await runFileAction(
+      items,
+      'discard',
+      items.length === 1 ? `discard:${getCommitPanelItemKey(items[0])}` : 'discard:selected'
+    )
+    if (!done) return
+    setSelectedCommitPaths((current) => {
+      const next = new Set(current)
+      for (const item of items) next.delete(item.path)
+      return next
+    })
+    messageLatest.current.success({
+      title: tLatest.current('workbench.gitDiscardSuccessTitle'),
+      description:
+        items.length === 1
+          ? items[0].path
+          : tLatest.current('workbench.commitGroupFileCount', { count: items.length }),
+    })
   }
 
   function requestRollback(items: WorkbenchGitChangeItem[]): void {
@@ -242,40 +307,25 @@ export function WorkbenchCommitPanel({
 
   async function resolveConflict(item: WorkbenchGitChangeItem): Promise<void> {
     if (pendingFileAction || warnUnsavedOpenTabs()) return
-    try {
-      setPendingFileAction(`resolve:${item.path}`)
-      Result.unwrap(
-        await workbenchHost.kernel.workspace.performWorkspaceGitFileAction(
-          workspaceRoot,
-          item.path,
-          'resolve'
-        )
-      )
-      await onRefresh()
-      messageLatest.current.success({
-        title: tLatest.current('workbench.gitMarkResolvedSuccessTitle'),
-        description: item.path,
-      })
-    } catch (actionError) {
-      showActionError(
-        actionError,
-        tLatest.current('workbench.gitFileActionFailedTitle'),
-        tLatest.current('workbench.gitFileActionFailedFallback')
-      )
-    } finally {
-      setPendingFileAction(null)
-    }
+    const done = await runFileAction([item], 'resolve', `resolve:${getCommitPanelItemKey(item)}`)
+    if (!done) return
+    messageLatest.current.success({
+      title: tLatest.current('workbench.gitMarkResolvedSuccessTitle'),
+      description: item.path,
+    })
   }
 
   async function generateCommitMessage(): Promise<void> {
     if (!summary?.repository || !changeItems.length || busyAction) return
+    // 暂存模式按暂存区里的文件生成；勾选模式按勾选的，一个都没勾时按全部。
+    const paths = deriveCommitPanelGitPaths(commitMode === 'staged' ? stagedItems : selectedItems)
     try {
       setBusyAction('generate')
       const result = Result.unwrap(
         await workbenchHost.kernel.workspace.generateWorkspaceGitCommitMessage(
           workspaceRoot,
           locale,
-          actionPaths.length ? actionPaths : undefined
+          paths.length ? paths : undefined
         )
       )
       setCommitMessage(result.message?.trim() || commitDraft)
@@ -290,7 +340,10 @@ export function WorkbenchCommitPanel({
     }
   }
 
-  /** 勾了文件就只提交它们；一个都没勾时先问要不要提交全部，不默默全提交。 */
+  /**
+   * 暂存区里有改动时提交暂存区；否则勾了文件就只提交它们，一个都没勾时先问要不要提交全部，
+   * 不默默全提交。
+   */
   function commitChanges(): void {
     if (!summary?.repository || !changeItems.length || busyAction || warnUnsavedOpenTabs()) return
     if (conflictItems.length) {
@@ -302,6 +355,10 @@ export function WorkbenchCommitPanel({
       })
       return
     }
+    if (commitMode === 'staged') {
+      void submitCommit(null)
+      return
+    }
     if (!selectedItems.length) {
       setCommitAllRequest([...changeItems])
       return
@@ -309,18 +366,26 @@ export function WorkbenchCommitPanel({
     void submitCommit(selectedItems)
   }
 
-  async function submitCommit(items: WorkbenchGitChangeItem[]): Promise<void> {
-    if (!items.length || busyAction) return
+  /** `items` 为 null：提交暂存区。 */
+  async function submitCommit(items: Nullable<WorkbenchGitChangeItem[]>): Promise<void> {
+    if ((items && !items.length) || busyAction) return
     try {
       setCommitAllRequest(null)
       setBusyAction('commit')
+      const message = commitMessage.trim() || undefined
       const result = Result.unwrap(
-        await workbenchHost.kernel.workspace.commitWorkspaceGitChanges(
-          workspaceRoot,
-          locale,
-          commitMessage.trim() || undefined,
-          deriveCommitPanelGitPaths(items)
-        )
+        items
+          ? await workbenchHost.kernel.workspace.commitWorkspaceGitChanges(
+              workspaceRoot,
+              locale,
+              message,
+              deriveCommitPanelGitPaths(items)
+            )
+          : await workbenchHost.kernel.workspace.commitWorkspaceGitStagedChanges(
+              workspaceRoot,
+              locale,
+              message
+            )
       )
       setCommitMessage('')
       setSelectedCommitPaths(new Set())
@@ -401,9 +466,86 @@ export function WorkbenchCommitPanel({
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'a') {
       if (event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLInputElement)
         return
+      if (!selectable) return
       event.preventDefault()
       setSelectedCommitPaths(new Set(changeItems.map((item) => item.path)))
     }
+  }
+
+  /** 分组标题右边的操作：已暂存的全部取消暂存，更改、未跟踪的全部暂存；冲突逐个标记，没有。 */
+  function renderGroupAction(
+    groupId: CommitPanelGroupId,
+    items: WorkbenchGitChangeItem[]
+  ): ReactElement {
+    if (groupId === 'conflicted') return <span aria-hidden="true" />
+    const pendingKey = `${groupId === 'staged' ? 'unstage' : 'stage'}:group:${groupId}`
+    const label = t(groupId === 'staged' ? 'workbench.gitUnstageAll' : 'workbench.gitStageAll')
+    return (
+      <button
+        type="button"
+        className={styles.commitGroupActionButton}
+        title={label}
+        aria-label={label}
+        disabled={!!pendingFileAction || (groupId !== 'staged' && hasUnsavedOpenTabs)}
+        onClick={() =>
+          groupId === 'staged' ? unstageItems(items, pendingKey) : stageItems(items, pendingKey)
+        }
+      >
+        {pendingFileAction === pendingKey ? (
+          <SpinnerGapIcon size={12} className={styles.spinIcon} />
+        ) : groupId === 'staged' ? (
+          <MinusIcon size={12} />
+        ) : (
+          <PlusIcon size={12} />
+        )}
+      </button>
+    )
+  }
+
+  /** 行上第一个操作：冲突是标记为已解决，已暂存的是取消暂存，其余是暂存。 */
+  function renderStageAction(item: WorkbenchGitChangeItem, itemKey: string): ReactElement {
+    if (item.group === 'conflicted') {
+      const pendingKey = `resolve:${itemKey}`
+      return (
+        <button
+          type="button"
+          className={styles.commitFileRollbackButton}
+          title={t('workbench.gitMarkResolved')}
+          aria-label={t('workbench.gitMarkResolved')}
+          disabled={!!pendingFileAction || hasUnsavedOpenTabs}
+          onClick={() => void resolveConflict(item)}
+        >
+          {pendingFileAction === pendingKey ? (
+            <SpinnerGapIcon size={12} className={styles.spinIcon} />
+          ) : (
+            <CheckCircleIcon size={12} />
+          )}
+        </button>
+      )
+    }
+    const staged = item.group === 'staged'
+    const pendingKey = `${staged ? 'unstage' : 'stage'}:${itemKey}`
+    const label = t(staged ? 'workbench.gitUnstageFile' : 'workbench.gitStageFile')
+    return (
+      <button
+        type="button"
+        className={styles.commitFileRollbackButton}
+        title={label}
+        aria-label={label}
+        disabled={!!pendingFileAction || (!staged && hasUnsavedOpenTabs)}
+        onClick={() =>
+          staged ? unstageItems([item], pendingKey) : stageItems([item], pendingKey)
+        }
+      >
+        {pendingFileAction === pendingKey ? (
+          <SpinnerGapIcon size={12} className={styles.spinIcon} />
+        ) : staged ? (
+          <MinusIcon size={12} />
+        ) : (
+          <PlusIcon size={12} />
+        )}
+      </button>
+    )
   }
 
   return (
@@ -437,7 +579,11 @@ export function WorkbenchCommitPanel({
                       const allSelected = selectedCount === group.items.length
                       return (
                         <section key={group.id} className={styles.commitGroup}>
-                          <div className={styles.commitGroupRow}>
+                          <div
+                            className={styles.commitGroupRow}
+                            data-selectable={selectable}
+                            data-group={group.id}
+                          >
                             <button
                               type="button"
                               className={styles.commitDisclosureButton}
@@ -445,15 +591,17 @@ export function WorkbenchCommitPanel({
                             >
                               {isExpanded ? <CaretDownIcon size={11} /> : <CaretRightIcon size={11} />}
                             </button>
-                            <button
-                              type="button"
-                              className={styles.commitGroupCheckbox}
-                              data-checked={allSelected}
-                              data-partial={selectedCount > 0 && !allSelected}
-                              onClick={() => toggleGroupItems(group.items)}
-                            >
-                              {allSelected && <CheckIcon size={9} weight="bold" />}
-                            </button>
+                            {selectable && (
+                              <button
+                                type="button"
+                                className={styles.commitGroupCheckbox}
+                                data-checked={allSelected}
+                                data-partial={selectedCount > 0 && !allSelected}
+                                onClick={() => toggleGroupItems(group.items)}
+                              >
+                                {allSelected && <CheckIcon size={9} weight="bold" />}
+                              </button>
+                            )}
                             <button
                               type="button"
                               className={styles.commitGroupMain}
@@ -464,13 +612,17 @@ export function WorkbenchCommitPanel({
                                 {t('workbench.commitGroupFileCount', { count: group.items.length })}
                               </span>
                             </button>
+                            {renderGroupAction(group.id, group.items)}
                           </div>
                           {isExpanded && (
                             <div className={styles.commitFileList}>
                               {group.items.map((item) => {
-                                const checked = selectedCommitPaths.has(item.path)
+                                const itemKey = getCommitPanelItemKey(item)
+                                const checked = selectable && selectedCommitPaths.has(item.path)
                                 const displayPath = getWorkbenchGitChangeDisplayPath(item)
                                 const conflicted = item.group === 'conflicted'
+                                const rollbackable =
+                                  item.group === 'unstaged' || item.group === 'untracked'
                                 const conflictTitle = conflicted
                                   ? t('workbench.gitConflictStatus', {
                                       kind: t(
@@ -480,25 +632,31 @@ export function WorkbenchCommitPanel({
                                   : undefined
                                 return (
                                   <div
-                                    key={`${item.group}:${item.path}:${item.statusCode}`}
+                                    key={`${itemKey}:${item.statusCode}`}
                                     className={styles.commitFileRow}
+                                    data-selectable={selectable}
                                     data-git-tone={getWorkbenchGitChangeItemTone(item)}
-                                    data-active={selectedItem?.path === item.path}
+                                    data-active={
+                                      !!selectedItem &&
+                                      getCommitPanelItemKey(selectedItem) === itemKey
+                                    }
                                     data-selected={checked}
                                   >
-                                    <button
-                                      type="button"
-                                      className={styles.commitFileCheckbox}
-                                      data-checked={checked}
-                                      aria-label={displayPath}
-                                      onClick={() => toggleItem(item)}
-                                    >
-                                      {checked && <CheckIcon size={9} weight="bold" />}
-                                    </button>
+                                    {selectable && (
+                                      <button
+                                        type="button"
+                                        className={styles.commitFileCheckbox}
+                                        data-checked={checked}
+                                        aria-label={displayPath}
+                                        onClick={() => toggleItem(item)}
+                                      >
+                                        {checked && <CheckIcon size={9} weight="bold" />}
+                                      </button>
+                                    )}
                                     <button
                                       type="button"
                                       className={styles.commitFileMain}
-                                      onClick={() => setSelectedChangePath(item.path)}
+                                      onClick={() => setSelectedChangeKey(itemKey)}
                                       onDoubleClick={() =>
                                         onOpenDiff(item, { focusFirstChange: true })
                                       }
@@ -521,35 +679,24 @@ export function WorkbenchCommitPanel({
                                     >
                                       {conflicted ? '!' : item.statusCode}
                                     </span>
-                                    {conflicted ? (
-                                      <button
-                                        type="button"
-                                        className={styles.commitFileRollbackButton}
-                                        title={t('workbench.gitMarkResolved')}
-                                        aria-label={t('workbench.gitMarkResolved')}
-                                        disabled={!!pendingFileAction || hasUnsavedOpenTabs}
-                                        onClick={() => void resolveConflict(item)}
-                                      >
-                                        {pendingFileAction === `resolve:${item.path}` ? (
-                                          <SpinnerGapIcon size={12} className={styles.spinIcon} />
-                                        ) : (
-                                          <CheckCircleIcon size={12} />
-                                        )}
-                                      </button>
-                                    ) : (
+                                    {renderStageAction(item, itemKey)}
+                                    {rollbackable ? (
                                       <button
                                         type="button"
                                         className={styles.commitFileRollbackButton}
                                         title={t('workbench.gitRollback')}
+                                        aria-label={t('workbench.gitRollback')}
                                         disabled={!!pendingFileAction || hasUnsavedOpenTabs}
                                         onClick={() => requestRollback([item])}
                                       >
-                                        {pendingFileAction === `discard:${item.path}` ? (
+                                        {pendingFileAction === `discard:${itemKey}` ? (
                                           <SpinnerGapIcon size={12} className={styles.spinIcon} />
                                         ) : (
                                           <ClockCounterClockwiseIcon size={12} />
                                         )}
                                       </button>
+                                    ) : (
+                                      <span aria-hidden="true" />
                                     )}
                                     <button
                                       type="button"
@@ -586,6 +733,11 @@ export function WorkbenchCommitPanel({
               disabled={!!busyAction}
               onChange={(event) => setCommitMessage(event.target.value)}
             />
+            {commitMode === 'staged' && (
+              <p className={styles.gitCommitHint}>
+                {t('workbench.gitCommitStagedHint', { count: stagedItems.length })}
+              </p>
+            )}
             {hasUnsavedOpenTabs && (
               <p className={styles.gitCommitWarning}>
                 {t('workbench.gitUnsavedBlockedDescription')}
@@ -623,7 +775,11 @@ export function WorkbenchCommitPanel({
                   )}
                 </CommitIconButton>
                 <CommitIconButton
-                  label={t('workbench.gitCommitAction')}
+                  label={t(
+                    commitMode === 'staged'
+                      ? 'workbench.gitCommitStagedAction'
+                      : 'workbench.gitCommitAction'
+                  )}
                   disabled={
                     !!busyAction ||
                     !changeItems.length ||
@@ -685,6 +841,9 @@ export function WorkbenchCommitPanel({
                 </li>
               ))}
             </ul>
+          )}
+          {rollbackKeepsStaged && (
+            <p className={styles.commitConfirmNote}>{t('workbench.gitDiscardKeepsStaged')}</p>
           )}
           {!!rollbackDeletions.length && (
             <p className={styles.commitConfirmWarning}>

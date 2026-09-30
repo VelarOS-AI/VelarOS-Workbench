@@ -160,7 +160,10 @@ export function useWorkbenchEditorNavigationState({
   useEffect(() => {
     if (!diffItem) return
 
-    const next = gitChangeItems.find((item) => item.path === diffItem.path)
+    // 暂存了一部分的文件两侧各一条：先找同一侧；这一侧的改动没了（全暂存了、全取消暂存了）就跟到另一侧。
+    const next =
+      gitChangeItems.find((item) => item.path === diffItem.path && item.group === diffItem.group) ??
+      gitChangeItems.find((item) => item.path === diffItem.path)
     if (!next) {
       setDiffItem(null)
       return

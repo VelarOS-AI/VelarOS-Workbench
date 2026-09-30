@@ -73,10 +73,13 @@ export interface WorkbenchGitCommitMessageRequest extends WorkbenchGitRootReques
 
 export interface WorkbenchGitCommitRequest extends WorkbenchGitCommitMessageRequest {
   message?: string
+  /** 提交暂存区里的改动（它们在暂存区里的样子），不看工作区；这时不能再给 `paths`。 */
+  staged?: boolean
 }
 
 export interface WorkbenchGitFileActionRequest extends WorkbenchGitRootRequest {
-  path: string
+  /** 至少一个，相对项目根。 */
+  paths: string[]
   action: WorkspaceGitFileAction
 }
 

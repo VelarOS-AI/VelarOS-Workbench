@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process'
-import { readFile, realpath, stat } from 'node:fs/promises'
+import { randomUUID } from 'node:crypto'
+import { readFile, realpath, rm, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { isAbsolute, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
@@ -94,6 +95,8 @@ interface GitRunOptions extends WorkspaceGitRemoteActionOptions {
   allowFailure?: boolean
   /** 写进标准输入的内容（`--pathspec-from-file=-`）。 */
   input?: string
+  /** 这条命令额外的环境变量（临时索引 GIT_INDEX_FILE 之类）；盖不过安全设置。 */
+  env?: NodeJS.ProcessEnv
   /** 输出上限，默认 GitOutputMaxBytes。 */
   maxBuffer?: number
   /** 输出超过上限时不报错，结果标成 truncated，调用方换个问法。 */
@@ -327,14 +330,7 @@ export class WorkbenchGitService {
   ): Promise<SystemWorkspaceGitCommitResult> {
     const rootPath = await this.resolveRoot(workspaceRoot)
     const repository = await this.openRepository(rootPath)
-    const status = await this.getStatus(repository)
-    if (status.isClean) throw new AppError('VALIDATION', '当前项目没有可提交的改动。')
-    const conflicts = status.entries.filter((entry) => isWorkspaceGitConflictEntry(entry))
-    if (conflicts.length > 0)
-      throw new AppError(
-        'VALIDATION',
-        `${this.describePaths(conflicts)}还有未解决的合并冲突。请先解决冲突并标记为已解决，再提交。`
-      )
+    const status = await this.readCommittableStatus(repository)
     const selection = paths?.length
       ? this.scopeStatus(status, this.normalizePathspecs(rootPath, paths))
       : status
@@ -369,10 +365,49 @@ export class WorkbenchGitService {
       await this.runCommit(
         rootPath,
         ['commit', '-m', commitMessage, '--only', '--pathspec-from-file=-', '--pathspec-file-nul'],
-        this.entryPaths(selection.entries)
+        { paths: this.entryPaths(selection.entries) }
       )
     }
+    return this.finishCommit(rootPath, parent, commitMessage)
+  }
 
+  /**
+   * 提交暂存区：提交的是改动在暂存区里的样子，工作区里没暂存的改动留在工作区。项目是仓库的子目录时只提交
+   * 项目里暂存的，项目外面暂存的留在暂存区。还有没解决的冲突时拒绝。
+   */
+  public async commitStaged(
+    workspaceRoot: string,
+    locale: AppLocale = 'zh-CN',
+    message?: string
+  ): Promise<SystemWorkspaceGitCommitResult> {
+    const rootPath = await this.resolveRoot(workspaceRoot)
+    const repository = await this.openRepository(rootPath)
+    const status = await this.readCommittableStatus(repository)
+    const staged = status.entries.filter((entry) => this.isStagedEntry(entry))
+    if (staged.length === 0)
+      throw new AppError('VALIDATION', '暂存区里没有可提交的改动。请先暂存要提交的文件。')
+
+    const parent = await this.readHeadCommit(rootPath)
+    let commitMessage: Nullable<string> = message?.trim() || null
+    if (await this.getInProgressOperation(rootPath)) {
+      // 合并、拣选只能整个暂存区一起提交；没写说明就用 git 备好的那条。
+      await this.runCommit(
+        rootPath,
+        commitMessage ? ['commit', '-m', commitMessage] : ['commit', '--no-edit']
+      )
+    } else {
+      commitMessage ??= this.createCommitMessage(this.summarizeStatus(status, staged), locale)
+      await this.commitProjectIndex(repository, parent, commitMessage)
+    }
+    return this.finishCommit(rootPath, parent, commitMessage)
+  }
+
+  /** 提交完：读出新提交和它带走的行数，附上最新的摘要。 */
+  private async finishCommit(
+    rootPath: string,
+    parent: Nullable<string>,
+    commitMessage: Nullable<string>
+  ): Promise<SystemWorkspaceGitCommitResult> {
     const commitSha = (
       await this.runGit(rootPath, ['rev-parse', '--verify', 'HEAD'])
     ).stdout.trim()
@@ -404,32 +439,49 @@ export class WorkbenchGitService {
     return { rootPath, commit, summary: await this.getSummary(rootPath) }
   }
 
+  /** 对一批文件做同一个操作（暂存、取消暂存、回滚、标记冲突已解决）。已经没有改动的路径跳过。 */
   public async performFileAction(
     workspaceRoot: string,
-    path: string,
+    paths: readonly string[],
     action: WorkspaceGitFileAction
   ): Promise<SystemWorkspaceGitFileActionResult> {
     const rootPath = await this.resolveRoot(workspaceRoot)
     const repository = await this.openRepository(rootPath)
-    const relativePath = this.normalizePathspec(rootPath, path)
+    const relativePaths = this.normalizePathspecs(rootPath, paths)
+    if (relativePaths.length === 0) throw new AppError('VALIDATION', '没有要操作的文件。')
     const before = await this.getStatus(repository)
-    const entry = before.entries.find((candidate) => candidate.path === relativePath)
-    const conflicted = !!entry && isWorkspaceGitConflictEntry(entry)
+    const entries = relativePaths.flatMap(
+      (path) => before.entries.find((candidate) => candidate.path === path) ?? []
+    )
+    const conflicts = entries.filter((entry) => isWorkspaceGitConflictEntry(entry))
+    const settled = entries.filter((entry) => !isWorkspaceGitConflictEntry(entry))
 
-    if (action === 'resolve' || (action === 'stage' && conflicted)) {
-      if (!entry || !conflicted)
-        throw new AppError('VALIDATION', `“${relativePath}”没有待解决的合并冲突。`)
-      await this.markResolved(rootPath, entry)
+    if (action === 'resolve') {
+      const unresolvable = relativePaths.find(
+        (path) => !conflicts.some((entry) => entry.path === path)
+      )
+      if (unresolvable)
+        throw new AppError('VALIDATION', `“${unresolvable}”没有待解决的合并冲突。`)
+      for (const entry of conflicts) await this.markResolved(rootPath, entry)
     } else if (action === 'stage') {
-      if (entry && entry.workTreeStatus !== ' ') await this.stagePaths(rootPath, [entry.path])
+      // 冲突文件暂存就是标记为已解决（还有冲突标记时拒绝）。
+      for (const entry of conflicts) await this.markResolved(rootPath, entry)
+      await this.stagePaths(
+        rootPath,
+        settled.filter((entry) => entry.workTreeStatus !== ' ').map((entry) => entry.path)
+      )
     } else if (action === 'unstage' || action === 'discard') {
-      if (entry && conflicted)
+      if (conflicts.length > 0)
         throw new AppError(
           'VALIDATION',
-          `“${entry.path}”还有未解决的合并冲突，不能${action === 'discard' ? '回滚' : '取消暂存'}。请先解决冲突并标记为已解决，或在终端里中止这次合并（git merge --abort）。`
+          `${this.describePaths(conflicts)}还有未解决的合并冲突，不能${action === 'discard' ? '回滚' : '取消暂存'}。请先解决冲突并标记为已解决，或在终端里中止这次合并（git merge --abort）。`
         )
-      if (action === 'unstage' && entry) await this.unstage(rootPath, this.entryPaths([entry]))
-      if (action === 'discard') await this.discard(repository, entry)
+      if (action === 'unstage')
+        await this.unstage(
+          rootPath,
+          this.entryPaths(entries.filter((entry) => this.isStagedEntry(entry)))
+        )
+      else for (const entry of entries) await this.discard(repository, entry)
     } else {
       throw new AppError('VALIDATION', '不支持的 Git 文件操作。')
     }
@@ -437,7 +489,7 @@ export class WorkbenchGitService {
     const status = await this.getStatus(repository)
     return {
       rootPath,
-      fileAction: { action, path: relativePath, status },
+      fileAction: { action, paths: relativePaths, status },
       summary: await this.getSummary(rootPath),
     }
   }
@@ -792,6 +844,119 @@ export class WorkbenchGitService {
     return null
   }
 
+  /** 要提交时的项目状态：没有改动、还有没解决的冲突时拒绝。 */
+  private async readCommittableStatus(
+    repository: GitRepository
+  ): Promise<WorkspaceGitStatusResult> {
+    const status = await this.getStatus(repository)
+    if (status.isClean) throw new AppError('VALIDATION', '当前项目没有可提交的改动。')
+    const conflicts = status.entries.filter((entry) => isWorkspaceGitConflictEntry(entry))
+    if (conflicts.length > 0)
+      throw new AppError(
+        'VALIDATION',
+        `${this.describePaths(conflicts)}还有未解决的合并冲突。请先解决冲突并标记为已解决，再提交。`
+      )
+    return status
+  }
+
+  /** 暂存区里有这个文件的改动（冲突文件不算）。 */
+  private isStagedEntry(entry: WorkspaceGitFileStatusEntry): boolean {
+    return (
+      !isWorkspaceGitConflictEntry(entry) && entry.indexStatus !== ' ' && entry.indexStatus !== '?'
+    )
+  }
+
+  /**
+   * 提交暂存区里项目的那部分。项目就是仓库根、或项目外面没有暂存的改动时就是 `git commit`；项目外面还有
+   * 暂存的改动时用一份临时索引提交（HEAD，换上项目里暂存了的那些文件），项目外面暂存的原样留在暂存区。
+   * 提交钩子看到的是这份临时索引，跟 `git commit --only` 一样。
+   */
+  private async commitProjectIndex(
+    repository: GitRepository,
+    parent: Nullable<string>,
+    message: string
+  ): Promise<void> {
+    const { rootPath, prefix } = repository
+    const base = parent ?? (await this.getEmptyTree(rootPath))
+    if (!prefix || !(await this.hasStagedChangesOutsideProject(rootPath, prefix, base))) {
+      await this.runCommit(rootPath, ['commit', '-m', message])
+      return
+    }
+
+    // 项目里暂存了的改动（路径相对仓库根）。只照这张单子搬：`git add -N` 记下的空条目不算暂存，不能搬。
+    const staged = this.parseNameStatus(
+      (
+        await this.runGit(
+          rootPath,
+          ['diff', '--cached', '--name-status', '-z', '--no-renames', base, '--', '.'],
+          { maxBuffer: GitListingMaxBytes }
+        )
+      ).stdout
+    )
+    const kept = new Set(staged.filter((change) => change.status !== 'D').map((change) => change.path))
+    const indexEntries = (
+      await this.runGit(rootPath, ['ls-files', '--stage', '--full-name', '-z', '--', '.'], {
+        maxBuffer: GitListingMaxBytes,
+      })
+    ).stdout
+      .split('\0')
+      .filter((line) => kept.has(line.slice(line.indexOf('\t') + 1)))
+    const removed = staged.filter((change) => change.status === 'D').map((change) => change.path)
+
+    const [topLevel, gitDirectory] = (
+      await this.runGit(rootPath, ['rev-parse', '--show-toplevel', '--absolute-git-dir'])
+    ).stdout
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+    if (!topLevel || !gitDirectory) throw new AppError('PLATFORM', '读不到项目所在仓库的位置。')
+    const env = { GIT_INDEX_FILE: join(gitDirectory, `velaros-commit-${randomUUID()}.index`) }
+    try {
+      await this.runGit(topLevel, ['read-tree', parent ?? '--empty'], { env })
+      // 在仓库根下跑：`--stdin`、`--index-info` 读到的路径都按仓库根算。
+      if (removed.length > 0)
+        await this.runGit(topLevel, ['update-index', '-z', '--force-remove', '--stdin'], {
+          env,
+          input: removed.join('\0'),
+        })
+      if (indexEntries.length > 0)
+        await this.runGit(topLevel, ['update-index', '-z', '--index-info'], {
+          env,
+          input: `${indexEntries.join('\0')}\0`,
+        })
+      await this.runCommit(rootPath, ['commit', '-m', message], { env })
+    } finally {
+      await rm(env.GIT_INDEX_FILE, { force: true })
+    }
+  }
+
+  /** 仓库里项目外面有没有暂存的改动（`prefix` 是项目相对仓库根的前缀，非空）。 */
+  private async hasStagedChangesOutsideProject(
+    rootPath: string,
+    prefix: string,
+    base: string
+  ): Promise<boolean> {
+    const names = (
+      await this.runGit(
+        rootPath,
+        ['diff', '--cached', '--name-only', '-z', '--no-renames', base],
+        { maxBuffer: GitListingMaxBytes }
+      )
+    ).stdout
+    return names.split('\0').some((path) => !!path && !path.startsWith(prefix))
+  }
+
+  /** `--name-status -z` 的输出：`状态\0路径\0` 一对一对（不找改名时没有第二个路径）。 */
+  private parseNameStatus(raw: string): Array<{ status: string; path: string }> {
+    const fields = raw.split('\0')
+    const changes: Array<{ status: string; path: string }> = []
+    for (let index = 0; index + 1 < fields.length; index += 2) {
+      const status = fields[index]
+      const path = fields[index + 1]
+      if (status && path) changes.push({ status: status.charAt(0), path })
+    }
+    return changes
+  }
+
   /** `git add -A` 这些路径：逐字匹配，路径从标准输入给，文件再多也不会超出命令行长度。 */
   private async stagePaths(rootPath: string, paths: readonly string[]): Promise<void> {
     if (paths.length === 0) return
@@ -800,14 +965,16 @@ export class WorkbenchGitService {
     })
   }
 
+  /** 跑一次 `git commit`；`paths` 从标准输入给 `--pathspec-from-file`，`env` 是临时索引之类。 */
   private async runCommit(
     rootPath: string,
     args: string[],
-    paths?: readonly string[]
+    options: { paths?: readonly string[]; env?: NodeJS.ProcessEnv } = {}
   ): Promise<void> {
     const result = await this.runGit(rootPath, args, {
       allowFailure: true,
-      input: paths?.map((path) => this.toLiteralPathspec(path)).join('\0'),
+      input: options.paths?.map((path) => this.toLiteralPathspec(path)).join('\0'),
+      env: options.env,
     })
     if (!result.failed) return
     const output = `${result.stdout}\n${result.stderr}`.toLowerCase()
@@ -821,6 +988,7 @@ export class WorkbenchGitService {
   }
 
   private async unstage(rootPath: string, paths: readonly string[]): Promise<void> {
+    if (paths.length === 0) return
     const pathspecs = paths.map((path) => this.toLiteralPathspec(path))
     if (!(await this.readHeadCommit(rootPath))) {
       await this.runGit(rootPath, ['rm', '--cached', '--ignore-unmatch', '--', ...pathspecs])
@@ -829,18 +997,28 @@ export class WorkbenchGitService {
     await this.runGit(rootPath, ['restore', '--staged', '--', ...pathspecs])
   }
 
+  /**
+   * 回滚一个文件。未跟踪的删掉；工作区里有没暂存的改动时只把工作区恢复成暂存区里的样子，已暂存的留着；
+   * 改动全都暂存了时连暂存的一起回滚到 HEAD（新增的删掉，改名的改回去）。
+   */
   private async discard(
     repository: GitRepository,
-    entry: WorkspaceGitFileStatusEntry | undefined
+    entry: WorkspaceGitFileStatusEntry
   ): Promise<void> {
-    if (!entry) return
     const { rootPath } = repository
-    const paths = this.entryPaths([entry])
-    if (entry.indexStatus !== '?' && entry.indexStatus !== ' ') {
-      await this.unstage(rootPath, paths)
+    const literalPath = this.toLiteralPathspec(entry.path)
+    if (entry.indexStatus === '?' && entry.workTreeStatus === '?') {
+      await this.runGit(rootPath, ['clean', '-fd', '--', literalPath])
+      return
     }
+    if (entry.workTreeStatus !== ' ') {
+      await this.runGit(rootPath, ['restore', '--worktree', '--', literalPath])
+      return
+    }
+    // 改动全都暂存了：取消暂存，再把工作区恢复成 HEAD 里的样子；HEAD 里没有的（新增的）删掉。
+    await this.unstage(rootPath, this.entryPaths([entry]))
     if (entry.originalPath) {
-      await this.runGit(rootPath, ['clean', '-fd', '--', this.toLiteralPathspec(entry.path)])
+      await this.runGit(rootPath, ['clean', '-fd', '--', literalPath])
       await this.runGit(rootPath, [
         'restore',
         '--worktree',
@@ -852,16 +1030,12 @@ export class WorkbenchGitService {
     const nextStatus = await this.getStatus(repository)
     const nextEntry = nextStatus.entries.find((candidate) => candidate.path === entry.path)
     if (!nextEntry) return
-    if (nextEntry.indexStatus === '?' && nextEntry.workTreeStatus === '?') {
-      await this.runGit(rootPath, ['clean', '-fd', '--', this.toLiteralPathspec(entry.path)])
-      return
-    }
-    await this.runGit(rootPath, [
-      'restore',
-      '--worktree',
-      '--',
-      ...paths.map((path) => this.toLiteralPathspec(path)),
-    ])
+    await this.runGit(
+      rootPath,
+      nextEntry.indexStatus === '?' && nextEntry.workTreeStatus === '?'
+        ? ['clean', '-fd', '--', literalPath]
+        : ['restore', '--worktree', '--', literalPath]
+    )
   }
 
   /** 把冲突文件标记为已解决（`git add`）；文件里还留着冲突标记时拒绝。 */
@@ -1293,14 +1467,13 @@ export class WorkbenchGitService {
     )
   }
 
-  private async buildGitEnvironment(
-    options: WorkspaceGitRemoteActionOptions
-  ): Promise<NodeJS.ProcessEnv> {
+  private async buildGitEnvironment(options: GitRunOptions): Promise<NodeJS.ProcessEnv> {
     // git 的 porcelain 输出与错误正文都吃 locale：宿主装了中文 gettext 目录时
     // "not a git repository" 会变成「不是 Git 仓库」，把 VALIDATION 误判成 PLATFORM。
     // 解析 git 输出必须钉死 C locale，这是解析方的责任，不是用户环境的责任。
     const env: NodeJS.ProcessEnv = {
       ...(await this.readBaseEnvironment()),
+      ...options.env,
       GIT_TERMINAL_PROMPT: '0',
       LC_ALL: 'C',
       LANG: 'C',
