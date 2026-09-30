@@ -872,12 +872,12 @@ main、renderer 总体积与最大功能块。
 
 | 指标 | 当前基线 | 上限 |
 | --- | ---: | ---: |
-| main 入口 | 0.52 MB | 3.75 MB |
-| main JavaScript | 1.02 MB | 6.50 MB |
-| renderer 启动依赖 | 1.52 MB | 2.00 MB |
-| renderer JavaScript | 17.65 MB | 19.00 MB |
-| renderer CSS | 0.72 MB | 0.85 MB |
-| renderer 最大功能块 | 1.98 MB | 2.30 MB |
+| main 入口 | 0.56 MB | 3.75 MB |
+| main JavaScript | 1.10 MB | 6.50 MB |
+| renderer 启动依赖 | 1.60 MB | 2.00 MB |
+| renderer JavaScript | 17.99 MB | 19.00 MB |
+| renderer CSS | 0.75 MB | 0.85 MB |
+| renderer 最大功能块 | 2.03 MB | 2.30 MB |
 
 单独复核已有生产产物时运行 `bun run check:bundle-budget`。预算留有小幅构建波动空间；
 业务增长需要突破上限时，应先给出加载链数据并调整分包，再更新基线。
@@ -892,3 +892,8 @@ Phosphor 图标带六种字重；消息 Markdown 的代码高亮由 UI 包静态
 对话框、Git 工具窗、提交面板、AI 改动、浏览器面板和项目搜索都是从工作区外壳里拆出来按需加载的块
 （`lazyWithPreload.ts`，空闲时预取）；新的面板照这个办法加，不要直接进外壳。总量里约 13 MB 是 UI 包带来
 的按需分块（代码高亮的各语言语法与 mermaid），本仓改不了。
+
+2026-10-01：编辑器的 P1 功能（Git 的 stash、提交图、merge / rebase / cherry-pick 与并排 diff，TS 代码操作，
+运行配置、测试行内运行与调试器，键位方案）都并入之后重量了一次，就是上表：main 入口多 0.04 MB、总量多
+0.08 MB；renderer 启动依赖多 0.08 MB（约一半是新功能的界面文案，两种语言的文案都随启动入口加载），总量多
+0.34 MB，工作区外壳多 0.05 MB。上限没动，外壳离上限还有约 0.27 MB。
