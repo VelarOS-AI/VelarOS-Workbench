@@ -116,10 +116,15 @@ function extensionWithDot(path: string): string {
   return index === -1 ? '' : path.slice(index).toLowerCase()
 }
 
+/**
+ * 读磁盘上的源文件。开头的 BOM 去掉（与 TypeScript 自己的 `sys.readFile`、编辑器里的正文一致），否则第一行的
+ * 行列会比编辑器里多一格，改名、诊断落到没打开的文件上时就错位了。
+ */
 function safeReadFile(path: string): Nullable<string> {
   try {
     if (!existsSync(path) || !statSync(path).isFile()) return null
-    return readFileSync(path, 'utf8')
+    const content = readFileSync(path, 'utf8')
+    return content.charCodeAt(0) === 0xfeff ? content.slice(1) : content
   } catch {
     return null
   }

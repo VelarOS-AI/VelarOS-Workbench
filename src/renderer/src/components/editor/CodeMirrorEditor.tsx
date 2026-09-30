@@ -343,7 +343,11 @@ interface CodeMirrorEditorProps {
   onOpenSymbolLocations?: (request: WorkbenchSymbolLocationsRequest, visible?: boolean) => void
   onCloseSymbolLocations?: () => void
   onNavigateSymbolLocation?: (location: WorkbenchLanguageServiceLocation) => void
-  onApplyLanguageServiceFileChanges?: (changes: WorkbenchLanguageServiceFileEdit[]) => void
+  /** 跨文件的改名改动；`editedInEditor` 是编辑器自己已经改好的文件数（当前文件），用来报总共改了几个文件。 */
+  onApplyLanguageServiceRename?: (
+    changes: WorkbenchLanguageServiceFileEdit[],
+    options?: { editedInEditor?: number }
+  ) => void
   onRunPackageScript?: (command: string) => void
   onOpenFileHistory?: (mode: 'local' | 'git') => void
   /** 右键「添加到聊天」：把当前文件作为引用挂到聊天输入框（只挂路径）。 */
@@ -1187,7 +1191,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       onOpenSymbolLocations,
       onCloseSymbolLocations,
       onNavigateSymbolLocation,
-      onApplyLanguageServiceFileChanges,
+      onApplyLanguageServiceRename,
       onRunPackageScript,
       onOpenFileHistory,
       onAddToChat,
@@ -1225,7 +1229,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       onOpenSymbolLocations,
       onCloseSymbolLocations,
       onNavigateSymbolLocation,
-      onApplyLanguageServiceFileChanges,
+      onApplyLanguageServiceRename,
       onRunPackageScript,
       onOpenFileHistory,
       onAddToChat,
@@ -1955,8 +1959,11 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
               (change) => change.path !== pathRef.current && !isEmpty(change.edits)
             )
 
+            // 没打开的文件也要改（经主进程写回），否则跨文件改名改一半、项目就编不过了。
             if (!isEmpty(otherFileChanges)) {
-              callbacksRef.current.onApplyLanguageServiceFileChanges?.(otherFileChanges)
+              callbacksRef.current.onApplyLanguageServiceRename?.(otherFileChanges, {
+                editedInEditor: isEmpty(currentFileEdits) ? 0 : 1,
+              })
             }
 
             if (!isEmpty(currentFileEdits)) {

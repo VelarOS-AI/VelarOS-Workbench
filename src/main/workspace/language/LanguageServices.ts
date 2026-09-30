@@ -769,6 +769,12 @@ class WorkbenchLanguageServices {
       snapshot.files.get(snapshot.requestAbsolutePath) ?? '',
       request.position
     )
+    // 标准库、node_modules 里声明的符号不能改名：改了只会把依赖的声明文件与本项目的引用一起改坏。
+    const renameInfo = snapshot.service.getRenameInfo(snapshot.requestAbsolutePath, offset, {
+      allowRenameOfImportPath: false,
+    })
+    if (!renameInfo.canRename)
+      return { projectRoot: snapshot.projectRoot, path: snapshot.requestPath, changes: [] }
     const renameLocations =
       snapshot.service.findRenameLocations(snapshot.requestAbsolutePath, offset, false, false, {
         providePrefixAndSuffixTextForRename: false,

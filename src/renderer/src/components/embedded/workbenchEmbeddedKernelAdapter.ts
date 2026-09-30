@@ -238,7 +238,7 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
         },
         onGoToDefinition: (path, line, column) =>
           void editorNavigation.goToLocation(path, line, column),
-        onApplyLanguageServiceFileChanges: workbench.applyLanguageServiceFileChanges,
+        onApplyLanguageServiceRename: workbench.applyLanguageServiceRename,
         packageManager,
         onRunPackageScript: (command) => {
           // 走可交互的运行卡（PTY），而不是只读一次性 runner；顺带记为「上次运行」，

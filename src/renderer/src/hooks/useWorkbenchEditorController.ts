@@ -43,6 +43,11 @@ import {
   resolveWorkbenchTabTextFormat,
   resolveWorkbenchTextConversion,
 } from '@renderer/models/editor/workbenchEditorTextFormat'
+import {
+  type WorkbenchLanguageServiceFileChangeFailure,
+  type WorkbenchLanguageServiceFileChangeFailureReason,
+  writeWorkbenchLanguageServiceFileChange,
+} from '@renderer/models/editor/workbenchLanguageServiceFileChanges'
 import type { WorkbenchOpenFileSnapshot } from '@renderer/models/project/workbenchProjectContextIndex'
 import type { WorkbenchProject } from '@renderer/models/project/workbenchProjects'
 import { readWorkbenchLocalHistoryThrottleMs } from '@renderer/models/settings/workbenchPreferences'
@@ -75,6 +80,16 @@ import { useWorkspaceFilesChangedRefresh } from '../support/useWorkspaceFilesCha
 import { useWorkbenchEditorAutosave } from './useWorkbenchEditorAutosave'
 
 const EXTERNAL_FILE_READ_MAX_CHARS = 300_000
+/** 跨文件改动写回没打开的文件时最多读这么多字（与主进程的保存上限一致；更大的文件读回来是截断的，不能改）。 */
+const LANGUAGE_SERVICE_EDIT_MAX_CHARS = 1_000_000
+const LanguageServiceEditFailureMessageKeys: Readonly<Record<
+  Exclude<WorkbenchLanguageServiceFileChangeFailureReason, 'error'>,
+  string
+>> = {
+  'read-only': 'workbench.languageServiceEditReadOnly',
+  'unsupported-text': 'workbench.languageServiceEditUnsupportedText',
+  'changed-on-disk': 'workbench.languageServiceEditChangedOnDisk',
+}
 const IMAGE_PREVIEW_MAX_BYTES = 10 * 1024 * 1024
 const EXTERNAL_FILE_REFRESH_CONCURRENCY = 4
 const log = Log.tag('workbench-editor-controller')
@@ -243,27 +258,80 @@ export function useWorkbenchEditorController({
     updateOpenTabContent(selectedFile, content)
   })
 
+  /** 把一组语言服务的改动套到文件上（格式化这类），不报告结果；见 applyLanguageServiceEditsToFiles。 */
   const applyLanguageServiceFileChanges = useMemoizedFn(
     (changes: readonly WorkbenchLanguageServiceFileEdit[]): void => {
-      if (isEmpty(changes)) return
-
-      for (const change of changes) {
-        const tab = openTabsByPathLatest.current.get(change.path)
-        // 只读的文件不接跨文件改名重构的改动。
-        if (
-          !tab
-          || !isWorkbenchFileEditable(tab.file, chosenEditModes.get(tab.path))
-          || isEmpty(change.edits)
-        ) continue
-
-        const nextContent = applyWorkbenchLanguageServiceEditsToContent(tab.content, change.edits)
-        updateOpenTabContent(tab.file, nextContent)
-        if (selectedFilePathRef.current === change.path) {
-          setEditorContent(nextContent)
-        }
-      }
+      void applyLanguageServiceEditsToFiles(changes)
     }
   )
+
+  /**
+   * 跨文件改名：套上改动，报告一共改了几个文件；有落不下去的，逐个说明是哪个文件、为什么。
+   * `editedInEditor` 是编辑器自己已经改好的文件数（发起重命名的当前文件）。
+   */
+  const applyLanguageServiceRename = useMemoizedFn(
+    (
+      changes: readonly WorkbenchLanguageServiceFileEdit[],
+      { editedInEditor = 0 }: { editedInEditor?: number } = {}
+    ): void => {
+      void applyLanguageServiceEditsToFiles(changes).then(({ changedFiles, failures }) => {
+        const t = tLatest.current
+        const count = changedFiles + editedInEditor
+        if (isEmpty(failures)) {
+          messageLatest.current.success({ title: t('workbench.languageServiceEditsApplied', { count }) })
+          return
+        }
+        messageLatest.current.warning({
+          title: t('workbench.languageServiceEditsPartial', { count }),
+          description: failures
+            .map((failure) => t('workbench.languageServiceEditFailedFile', {
+              path: failure.path,
+              reason: failure.reason === 'error'
+                ? (failure.message ?? '')
+                : t(LanguageServiceEditFailureMessageKeys[failure.reason]),
+            }))
+            .join(t('workbench.languageServiceEditFailureSeparator')),
+        })
+      })
+    }
+  )
+
+  /**
+   * 语言服务的跨文件改动：打开着的文件改编辑缓冲（留作未保存、可以看过再存），没打开的文件经主进程的保存管线直接
+   * 写回（编码与换行符照旧）。只读的标签不接这些改动。返回改了几个文件、哪些没改成。
+   */
+  async function applyLanguageServiceEditsToFiles(
+    changes: readonly WorkbenchLanguageServiceFileEdit[]
+  ): Promise<{ changedFiles: number; failures: WorkbenchLanguageServiceFileChangeFailure[] }> {
+    const projectRoot = activeProjectRef.current?.rootPath
+    const failures: WorkbenchLanguageServiceFileChangeFailure[] = []
+    let changedFiles = 0
+    if (!projectRoot) return { changedFiles, failures }
+
+    for (const change of changes) {
+      if (isEmpty(change.edits)) continue
+      const tab = openTabsByPathLatest.current.get(change.path)
+      if (tab) {
+        if (!isWorkbenchFileEditable(tab.file, chosenEditModes.get(tab.path))) {
+          failures.push({ path: change.path, reason: 'read-only' })
+          continue
+        }
+        const nextContent = applyWorkbenchLanguageServiceEditsToContent(tab.content, change.edits)
+        updateOpenTabContent(tab.file, nextContent)
+        if (selectedFilePathRef.current === change.path) setEditorContent(nextContent)
+        changedFiles += 1
+        continue
+      }
+
+      const failure = await writeWorkbenchLanguageServiceFileChange(change, {
+        readFile: (path) => readWorkbenchEditorFile(projectRoot, path, LANGUAGE_SERVICE_EDIT_MAX_CHARS),
+        saveFile: (request) => workbenchHost.kernel.project.saveWorkbenchFile({ projectRoot, ...request }),
+      })
+      if (failure) failures.push(failure)
+      else changedFiles += 1
+    }
+    return { changedFiles, failures }
+  }
 
   function warnUnsavedChanges(): void {
     messageLatest.current.warning({
@@ -1582,6 +1650,7 @@ export function useWorkbenchEditorController({
     externalRevision,
     setEditorContent: updateEditorContent,
     applyLanguageServiceFileChanges,
+    applyLanguageServiceRename,
     ensureNoUnsavedChanges,
     ensureNoUnsavedFilesInPath,
     resetSelectedFile,

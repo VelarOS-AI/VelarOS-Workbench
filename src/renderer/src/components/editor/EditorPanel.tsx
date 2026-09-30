@@ -193,7 +193,10 @@ export interface WorkbenchEditorPanelWorkspaceProps {
   onOpenDirectory: (path: string) => void
   onRevealSelectedFile: () => void
   onGoToDefinition: (path: string, line: number, column?: number) => void
-  onApplyLanguageServiceFileChanges?: (changes: WorkbenchLanguageServiceFileEdit[]) => void
+  onApplyLanguageServiceRename?: (
+    changes: WorkbenchLanguageServiceFileEdit[],
+    options?: { editedInEditor?: number }
+  ) => void
   packageManager: PackageManagerCommand
   onRunPackageScript: (command: string) => void
   /** 右键「添加到聊天」（编辑器与标签页）：把文件作为引用挂到聊天输入框，只挂路径。 */
@@ -280,7 +283,7 @@ export function EditorPanel({
     onResolveExternalFileConflict,
     onEditorContentChange,
     onGoToDefinition,
-    onApplyLanguageServiceFileChanges,
+    onApplyLanguageServiceRename,
     packageManager,
     onRunPackageScript,
     onAddFilesToChat,
@@ -1046,7 +1049,7 @@ export function EditorPanel({
                         onOpenSymbolLocations={openSymbolLocations}
                         onCloseSymbolLocations={() => setSymbolLocationsVisible(false)}
                         onNavigateSymbolLocation={navigateSymbolLocation}
-                        onApplyLanguageServiceFileChanges={onApplyLanguageServiceFileChanges}
+                        onApplyLanguageServiceRename={onApplyLanguageServiceRename}
                         onRunPackageScript={onRunPackageScript}
                         onOpenFileHistory={setFileHistoryMode}
                         onAddToChat={

@@ -349,6 +349,7 @@ export function useWorkbenchController(options: UseWorkbenchControllerOptions = 
     pendingSessionNavigation,
     clearPendingSessionNavigation,
     applyLanguageServiceFileChanges: editor.applyLanguageServiceFileChanges,
+    applyLanguageServiceRename: editor.applyLanguageServiceRename,
     setEditorContent: editor.setEditorContent,
     setTreeActionName: mutation.setTreeActionName,
     setSearchQuery: search.setSearchQuery,
