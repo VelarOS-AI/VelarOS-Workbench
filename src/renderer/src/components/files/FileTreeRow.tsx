@@ -1,6 +1,7 @@
 import {
   createContext,
   type CSSProperties,
+  type FocusEvent,
   type KeyboardEvent,
   memo,
   type MouseEvent,
@@ -22,6 +23,7 @@ import {
   isWorkbenchTestDirectoryPath,
   isWorkbenchTestFilePath,
 } from '@renderer/models/files/workbenchTestFile'
+import { keepFocusOutsideTreeAfterRename } from '@renderer/models/files/workbenchTreeRenameFocus'
 import type { WorkbenchGitDecorationMap } from '@renderer/models/git/workbenchGitModel'
 import { isWorkbenchTreeRoot } from '@renderer/models/shared/workbenchUtils'
 import type { NodeRendererProps } from 'react-arborist'
@@ -120,6 +122,15 @@ export const FileTreeRow = memo(function FileTreeRow({
     node.submit(nextName)
   }
 
+  /** 改名框失去焦点：取消改名。焦点是被树外面拿走的就留在那里，不让树抢回来。 */
+  function handleEditBlur(event: FocusEvent<HTMLInputElement>): void {
+    keepFocusOutsideTreeAfterRename(
+      event.currentTarget.closest<HTMLElement>('[role="tree"]'),
+      event.relatedTarget
+    )
+    node.reset()
+  }
+
   function handleEditKeyDown(event: KeyboardEvent<HTMLInputElement>): void {
     if (event.key === 'Escape') {
       event.preventDefault()
@@ -215,7 +226,7 @@ export const FileTreeRow = memo(function FileTreeRow({
           className={styles.treeInlineInput}
           defaultValue={entry.name}
           disabled={isMutatingTree}
-          onBlur={() => node.reset()}
+          onBlur={handleEditBlur}
           onKeyDown={handleEditKeyDown}
           onMouseDown={(event) => event.stopPropagation()}
         />
