@@ -338,6 +338,30 @@ void describe('debug session in the window', () => {
     assert.deepEqual(harness.statuses, ['running', 'paused'])
   })
 
+  void test('shows the panel when the debugger could not attach, so the reason is seen', async () => {
+    const harness = createHarness()
+    await harness.start()
+    harness.emit({
+      type: 'ended',
+      sessionId: 'debug-1',
+      reason: 'failed',
+      exitCode: null,
+      message: '没有等到程序的调试端口',
+    })
+    assert.deepEqual(harness.session.getSnapshot().lastEnd, {
+      reason: 'failed',
+      exitCode: null,
+      message: '没有等到程序的调试端口',
+    })
+    assert.equal(harness.panelOpened(), 1)
+    assert.deepEqual(harness.statuses, ['running', 'idle'])
+
+    // 程序自己退出、用户结束的：不去动底部的面板。
+    await harness.start()
+    harness.emit({ type: 'ended', sessionId: 'debug-2', reason: 'exited', exitCode: 0, message: null })
+    assert.equal(harness.panelOpened(), 1)
+  })
+
   void test('reports why a debug run could not start and stays idle', async () => {
     const harness = createHarness({ startResults: ['fail', 'ok'] })
     await assert.rejects(harness.start(), /要调试的脚本不是文件/u)

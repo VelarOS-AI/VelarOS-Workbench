@@ -296,6 +296,8 @@ export class WorkbenchDebugSessionController {
           lastEnd: { reason: event.reason, exitCode: event.exitCode, message: event.message },
         })
         this.dependencies.publishStatus('idle')
+        // 没连上检查器：程序也许照常跑着，但断点一个都不会停。把面板带出来，上面写着原因。
+        if (event.reason === 'failed') this.dependencies.openPanel()
     }
   }
 
