@@ -1,6 +1,6 @@
 import { type CSSProperties, type ReactElement } from 'react'
 
-import { isPresent } from '@velaros-ai/core'
+import { isPresent, toOptional } from '@velaros-ai/core'
 import { Text } from '@velaros-ai/ui/primitives/display/Text'
 
 import styles from '../../styles/workbenchPageStyles'
@@ -13,6 +13,8 @@ export interface HistoryTimelineItem {
   timestamp?: LooseOptional<number>
   special?: boolean
   badges?: LooseOptional<string[]>
+  /** 悬停在这一行上显示的全文（行里的字可能被截断）。 */
+  tooltip?: LooseOptional<string>
 }
 
 export type HistoryTimelineBucket = 'today' | 'week' | 'month' | 'older'
@@ -63,6 +65,7 @@ export function HistoryTimeline({
             <button
               type="button"
               className={styles.historyTimelineRow}
+              title={toOptional(item.tooltip)}
               data-active={selectedId === item.id}
               onClick={() => onSelect(item.id)}
             >

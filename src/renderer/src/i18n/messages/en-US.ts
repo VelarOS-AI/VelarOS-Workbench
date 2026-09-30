@@ -326,6 +326,7 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     editorCommentDelete: 'Delete',
     chatCommentMentionHint: 'Type @ to attach inline comments to your message…',
     fileHistoryTitle: 'History of {file}',
+    fileHistoryFormerPath: 'was {path}',
     fileHistoryClose: 'Close history',
     fileHistoryViewContent: 'Content',
     fileHistoryViewDiff: 'Diff',

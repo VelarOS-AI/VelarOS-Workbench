@@ -312,6 +312,7 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     editorCommentDelete: '删除',
     chatCommentMentionHint: '输入 @ 选择行内评论一起发送…',
     fileHistoryTitle: '{file} 的历史',
+    fileHistoryFormerPath: '当时是 {path}',
     fileHistoryClose: '关闭历史',
     fileHistoryViewContent: '内容',
     fileHistoryViewDiff: '差异',

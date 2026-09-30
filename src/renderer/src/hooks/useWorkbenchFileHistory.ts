@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { AppError } from '@velaros-ai/core'
+import { AppError, toOptional } from '@velaros-ai/core'
 import { Result } from '@velaros-ai/core/result'
 
 import type { AppLocale } from '@shared/contracts'
 
 import { useWorkbenchHostRuntime,type WorkbenchHostRuntime } from '../host'
 import { formatWorkbenchGitCommitDate } from '../models/git/changesPanel.model'
+import { resolveWorkbenchGitHistoryFormerPath } from '../models/git/workbenchGitFileHistory'
 
 export type WorkbenchFileHistoryMode = 'local' | 'git'
 
@@ -24,6 +25,8 @@ export interface WorkbenchFileHistoryRecord {
   timestamp?: LooseOptional<number>
   /** 定点特殊节点（最新版本 = 当前/HEAD），时间线渲染成靶心。 */
   special?: boolean
+  /** git：文件在这个提交里的路径，与现在的路径不同（改名、挪位置之前）才有。 */
+  formerPath?: string
 }
 
 export interface WorkbenchFileHistorySource {
@@ -153,6 +156,7 @@ async function loadGitRecords(
       meta: formatWorkbenchGitCommitDate(locale, commit),
       timestamp: commit.authoredAt,
       special: index === 0,
+      formerPath: toOptional(resolveWorkbenchGitHistoryFormerPath(commit, path)),
     })),
     paths: new Map(result.commits.map((commit) => [commit.sha, commit.path ?? path])),
   }

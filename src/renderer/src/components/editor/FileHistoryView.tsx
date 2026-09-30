@@ -86,6 +86,21 @@ export function FileHistoryView({
     )
   }, [searchActive, searchIndex.contents, source.records, trimmedQuery])
 
+  // 改名、挪位置之前的提交：作者后面写上文件当时的路径（太长被截断时悬停看全）。
+  const timelineItems = useMemo(
+    () =>
+      filteredRecords.map((record) => {
+        if (!record.formerPath) return record
+        const formerPath = t('workbench.fileHistoryFormerPath', { path: record.formerPath })
+        return {
+          ...record,
+          subtitle: record.subtitle ? `${record.subtitle} · ${formerPath}` : formerPath,
+          tooltip: formerPath,
+        }
+      }),
+    [filteredRecords, t]
+  )
+
   useEffect(() => {
     if (searchActive && searchIndex.isIndexing) return
     if (selectedId && filteredRecords.some((record) => record.id === selectedId)) return
@@ -199,7 +214,7 @@ export function FileHistoryView({
               </Paragraph>
             ) : (
               <HistoryTimeline
-                items={filteredRecords}
+                items={timelineItems}
                 selectedId={selectedId}
                 onSelect={setSelectedId}
               />
