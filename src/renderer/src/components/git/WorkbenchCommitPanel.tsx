@@ -17,7 +17,13 @@ import {
   PlusIcon,
   SparkleIcon,
   SpinnerGapIcon,
+  StopCircleIcon,
 } from '@phosphor-icons/react'
+import {
+  describeWorkbenchGitRemoteActionCancel,
+  reportWorkbenchGitRemoteActionFailure,
+  useWorkbenchGitRemoteAction,
+} from '@renderer/hooks/useWorkbenchGitRemoteAction'
 import { workbenchHost } from '@renderer/host'
 import { getWorkbenchFilePresentationVariant } from '@renderer/models/files/workbenchFilePresentation'
 import {
@@ -95,7 +101,12 @@ export function WorkbenchCommitPanel({
 }: WorkbenchCommitPanelProps): ReactElement {
   const { t, locale, messageLatest, tLatest } = useStableWorkbenchMessageTranslate()
   const [commitMessage, setCommitMessage] = useState('')
-  const [busyAction, setBusyAction] = useState<Nullable<'commit' | 'generate' | 'push'>>(null)
+  const [busyAction, setBusyAction] = useState<Nullable<'commit' | 'generate'>>(null)
+  // 这个项目正在跑的远端操作（这里的推送，或顶栏发起的拉取、同步）：跑着的时候推送按钮换成取消。
+  const remoteAction = useWorkbenchGitRemoteAction(workspaceRoot)
+  /** 拉取、同步正在改工作区里的文件：等它跑完再提交。 */
+  const pulling =
+    remoteAction.running?.action === 'pull' || remoteAction.running?.action === 'sync'
   const [pendingFileAction, setPendingFileAction] = useState<Nullable<string>>(null)
   const [rollbackRequest, setRollbackRequest] =
     useState<Nullable<WorkbenchGitChangeItem[]>>(null)
@@ -345,7 +356,8 @@ export function WorkbenchCommitPanel({
    * 不默默全提交。
    */
   function commitChanges(): void {
-    if (!summary?.repository || !changeItems.length || busyAction || warnUnsavedOpenTabs()) return
+    if (!summary?.repository || !changeItems.length || busyAction || pulling) return
+    if (warnUnsavedOpenTabs()) return
     if (conflictItems.length) {
       messageLatest.current.warning({
         title: tLatest.current('workbench.gitCommitConflictsTitle'),
@@ -410,15 +422,11 @@ export function WorkbenchCommitPanel({
   }
 
   async function pushChanges(): Promise<void> {
-    if (!summary?.repository || busyAction || warnUnsavedOpenTabs()) return
+    if (!summary?.repository || busyAction || remoteAction.running) return
+    if (warnUnsavedOpenTabs()) return
     if (!window.confirm(tLatest.current('workbench.gitPushConfirm'))) return
     try {
-      setBusyAction('push')
-      const result = Result.unwrap(
-        await workbenchHost.kernel.workspace.performWorkspaceGitAction(workspaceRoot, 'upload', {
-          privateKeyPath: gitSshKeyPath,
-        })
-      )
+      const result = await remoteAction.run('upload', { privateKeyPath: gitSshKeyPath })
       await onRefresh()
       messageLatest.current.success({
         title: tLatest.current('workbench.gitUploadSuccessTitle'),
@@ -427,13 +435,7 @@ export function WorkbenchCommitPanel({
         }),
       })
     } catch (actionError) {
-      showActionError(
-        actionError,
-        tLatest.current('workbench.gitUploadFailedTitle'),
-        tLatest.current('workbench.gitRemoteActionFailedFallback')
-      )
-    } finally {
-      setBusyAction(null)
+      reportWorkbenchGitRemoteActionFailure(actionError, 'upload', { messageLatest, tLatest })
     }
   }
 
@@ -782,6 +784,7 @@ export function WorkbenchCommitPanel({
                   )}
                   disabled={
                     !!busyAction ||
+                    pulling ||
                     !changeItems.length ||
                     !!conflictItems.length ||
                     hasUnsavedOpenTabs
@@ -794,17 +797,23 @@ export function WorkbenchCommitPanel({
                     <CheckIcon size={15} />
                   )}
                 </CommitIconButton>
-                <CommitIconButton
-                  label={t('workbench.gitUpload')}
-                  disabled={!!busyAction || hasUnsavedOpenTabs}
-                  onClick={() => void pushChanges()}
-                >
-                  {busyAction === 'push' ? (
-                    <SpinnerGapIcon size={14} className={styles.spinIcon} />
-                  ) : (
+                {remoteAction.running ? (
+                  <CommitIconButton
+                    label={describeWorkbenchGitRemoteActionCancel(remoteAction.running, t)}
+                    disabled={remoteAction.running.cancelling}
+                    onClick={() => remoteAction.cancel()}
+                  >
+                    <StopCircleIcon size={15} />
+                  </CommitIconButton>
+                ) : (
+                  <CommitIconButton
+                    label={t('workbench.gitUpload')}
+                    disabled={!!busyAction || hasUnsavedOpenTabs}
+                    onClick={() => void pushChanges()}
+                  >
                     <ArrowUpRightIcon size={15} />
-                  )}
-                </CommitIconButton>
+                  </CommitIconButton>
+                )}
               </div>
             </div>
           </form>

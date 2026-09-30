@@ -482,6 +482,11 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
       '{count} files conflict while rebasing; they are listed under Merge Conflicts in the commit panel. Resolve them, mark each as resolved, then continue the rebase in the terminal (git rebase --continue).',
     gitRemoteActionSuccessDescription: '{branch} is up to date.',
     gitRemoteActionFailedFallback: 'The Git action failed. Please try again.',
+    gitCancelRemoteAction: 'Cancel {action}',
+    gitRemoteActionCancelling: 'Cancelling…',
+    gitRemoteActionCancelledTitle: 'Cancelled',
+    gitRemoteActionBusy:
+      'Another remote action is still running for this project. Wait for it to finish, or cancel it from the sync button in the toolbar.',
     gitLogSearchPlaceholder: 'Search commits, authors, or refs',
     gitBranchSearchPlaceholder: 'Search branches',
     gitLogLoading: 'Reading commit log…',

@@ -84,7 +84,9 @@ void describe('pre-split Workbench shell parity', () => {
     assert.match(adapter, /onOpenGitBottomTool:[\s\S]*openBottomTool\('git'\)/)
     assert.match(control, /switchWorkspaceGitBranch/)
     assert.match(control, /createWorkspaceGitBranch/)
-    assert.match(control, /performWorkspaceGitAction/)
+    // 分支菜单里的获取、推送走远端操作的统一入口（顶栏同步按钮上看得到、能取消）。
+    assert.match(control, /useWorkbenchGitRemoteAction\(workspaceRoot\)/)
+    assert.match(control, /remoteAction\.run\(action, \{ branch, privateKeyPath: gitSshKeyPath \}\)/)
     assert.match(control, /workbench\.gitCommitAction/)
     assert.match(control, /<WorkspaceGitCommitControl/)
     assert.doesNotMatch(control, /<Dialog|<FolderIcon/)

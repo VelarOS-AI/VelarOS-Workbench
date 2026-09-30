@@ -236,6 +236,13 @@ GB18030、混用的换行符），编辑器据此只读打开，用户明确选�
 - **范围**：项目可以是仓库里的一个子目录。命令在项目根下跑，状态、差异、提交只看项目里的文件。
 - **文件历史**：`getLog({ path })` 用 `--follow` 跟着改名往回找，每个提交带着文件当时的路径（`path`），
   读那时的内容用它；与现在的路径不同时历史列表在作者后面写出来（`workbenchGitFileHistory.ts`）。
+- **远端操作**（获取、拉取、同步、推送）：连远端的命令带 `--progress`，只看有没有动静，不限总时长——
+  5 分钟没有任何输出才算卡住、结束它；结束的是整个进程组（先 SIGTERM 让 git 收拾锁文件，再强杀），
+  git 起的 ssh 一并带走。renderer 给每次操作起一个 `operationId`，凭它经
+  `workbench-app:git:cancel-remote-action` 取消，那次操作以 `CANCELLED` 收场。renderer 这边一个项目同一
+  时刻只跑一个远端操作（`workbenchGitRemoteOperation.ts` 登记，`useWorkbenchGitRemoteAction` 是顶栏
+  同步按钮、分支菜单、提交面板推送按钮的统一入口），所以不管谁发起的，同步按钮都转圈、旁边都有取消。
+  给用户看的失败说明里去掉了 git 的进度行。Windows 上没有进程组，取消只结束 git 进程本身。
 
 ## 语言服务与磁盘的同步
 

@@ -186,6 +186,8 @@ const gitBridge: WorkbenchGitBridge = {
   switchBranch: (request) => ipcRenderer.invoke(WorkbenchGitChannels.switchBranch, request),
   createBranch: (request) => ipcRenderer.invoke(WorkbenchGitChannels.createBranch, request),
   performRemoteAction: (request) => ipcRenderer.invoke(WorkbenchGitChannels.remoteAction, request),
+  cancelRemoteAction: (request) =>
+    ipcRenderer.invoke(WorkbenchGitChannels.cancelRemoteAction, request),
   captureChatCheckpoint: (request) =>
     ipcRenderer.invoke(WorkbenchGitChannels.captureChatCheckpoint, request),
   deleteChatCheckpoints: (request) =>

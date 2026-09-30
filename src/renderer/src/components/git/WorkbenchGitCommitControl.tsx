@@ -1,4 +1,8 @@
 import { type ReactElement } from 'react'
+import {
+  reportWorkbenchGitRemoteActionFailure,
+  useWorkbenchGitRemoteAction,
+} from '@renderer/hooks/useWorkbenchGitRemoteAction'
 import { workbenchHost } from '@renderer/host'
 import { useStableWorkbenchMessageTranslate } from '@renderer/runtime/useStableWorkbenchMessaging'
 
@@ -44,6 +48,7 @@ export function WorkbenchGitCommitControl({
   onOpenCommitTool,
 }: WorkbenchGitCommitControlProps): ReactElement | null {
   const { locale, messageLatest, t, tLatest } = useStableWorkbenchMessageTranslate()
+  const remoteAction = useWorkbenchGitRemoteAction(workspaceRoot)
   const status = summary.status
 
   if (!summary.repository || !status?.branch) return null
@@ -136,12 +141,8 @@ export function WorkbenchGitCommitControl({
     if (action !== 'fetch' && warnUnsavedOpenTabs()) return
     if (action === 'upload' && !window.confirm(tLatest.current('workbench.gitPushConfirm'))) return
 
-    const result = Result.unwrap(
-      await workbenchHost.kernel.workspace.performWorkspaceGitAction(workspaceRoot, action, {
-        branch,
-        privateKeyPath: gitSshKeyPath,
-      })
-    )
+    // 经统一入口跑：顶栏同步按钮上看得到它在跑，也能在那里取消。
+    const result = await remoteAction.run(action, { branch, privateKeyPath: gitSshKeyPath })
     await onRefresh()
     messageLatest.current.success({
       title: tLatest.current(
@@ -159,26 +160,18 @@ export function WorkbenchGitCommitControl({
     error: unknown,
     action: WorkspaceGitCommitControlAction
   ): Promise<void> {
-    const remoteAction = action === 'fetch' || action === 'upload'
-    const appError = AppError.from(error)
-    messageLatest.current.open({
-      title: remoteAction
-        ? tLatest.current(
-            action === 'fetch'
-              ? 'workbench.gitFetchFailedTitle'
-              : 'workbench.gitUploadFailedTitle'
-          )
-        : tLatest.current('workbench.gitBranchActionFailedTitle'),
-      description:
-        appError.message.trim() ||
-        tLatest.current(
-          remoteAction
-            ? 'workbench.gitRemoteActionFailedFallback'
-            : 'workbench.gitBranchActionFailedFallback'
-        ),
-      tone: appError.code === 'VALIDATION' ? 'warning' : 'error',
-      showClose: true,
-    })
+    if (action === 'fetch' || action === 'upload') {
+      reportWorkbenchGitRemoteActionFailure(error, action, { messageLatest, tLatest })
+    } else {
+      const appError = AppError.from(error)
+      messageLatest.current.open({
+        title: tLatest.current('workbench.gitBranchActionFailedTitle'),
+        description:
+          appError.message.trim() || tLatest.current('workbench.gitBranchActionFailedFallback'),
+        tone: appError.code === 'VALIDATION' ? 'warning' : 'error',
+        showClose: true,
+      })
+    }
     await onRefresh()
   }
 

@@ -27,11 +27,11 @@ export async function git(root: string, args: string[]): Promise<string> {
 
 export function createGitService(
   environment: NodeJS.ProcessEnv = {},
-  remoteActionTimeoutMs?: number
+  remoteInactivityTimeoutMs?: number
 ): WorkbenchGitService {
   return new WorkbenchGitService({
     environment: async () => ({ ...HermeticGitEnvironment, ...environment }),
-    remoteActionTimeoutMs,
+    remoteInactivityTimeoutMs,
   })
 }
 

@@ -1,15 +1,18 @@
-import { type ReactElement, useState } from 'react'
+import { type ReactElement, useEffect, useState } from 'react'
 import {
   ArrowsClockwiseIcon,
   CaretDownIcon,
   CloudArrowUpIcon,
   SpinnerGapIcon,
+  XIcon,
 } from '@phosphor-icons/react'
-import { workbenchHost } from '@renderer/host'
+import {
+  describeWorkbenchGitRemoteActionCancel,
+  reportWorkbenchGitRemoteActionFailure,
+  useWorkbenchGitRemoteAction,
+} from '@renderer/hooks/useWorkbenchGitRemoteAction'
 import { useStableWorkbenchMessageTranslate } from '@renderer/runtime/useStableWorkbenchMessaging'
 
-import { AppError } from '@velaros-ai/core/error'
-import { Result } from '@velaros-ai/core/result'
 import { AnchoredPopover } from '@velaros-ai/ui/primitives/overlays/AnchoredPopover'
 import { BubbleTooltip } from '@velaros-ai/ui/primitives/overlays/Tooltip'
 
@@ -41,16 +44,10 @@ const SuccessTitleKeys: Record<WorkspaceGitRemoteAction, string> = {
   upload: 'workbench.gitUploadSuccessTitle',
 }
 
-const FailedTitleKeys: Record<WorkspaceGitRemoteAction, string> = {
-  fetch: 'workbench.gitFetchFailedTitle',
-  pull: 'workbench.gitPullFailedTitle',
-  sync: 'workbench.gitSyncFailedTitle',
-  upload: 'workbench.gitUploadFailedTitle',
-}
-
 /**
  * 顶栏分支旁边的同步按钮：显示当前分支落后（↓）、领先（↑）上游几个提交，点一下同步（先拉取再推送）；
- * 还没有上游时点一下推送并关联远端。旁边的小三角展开拉取、推送、同步、获取远端。
+ * 还没有上游时点一下推送并关联远端。旁边的小三角展开拉取、推送、同步、获取远端。这个项目有远端操作在跑
+ * 时（不管是这里、分支菜单还是提交面板发起的）按钮转圈，小三角换成取消。
  */
 export function WorkbenchGitSyncControl({
   workspaceRoot,
@@ -61,14 +58,20 @@ export function WorkbenchGitSyncControl({
   onOpenCommitTool,
 }: WorkbenchGitSyncControlProps): Nullable<ReactElement> {
   const { t, messageLatest, tLatest } = useStableWorkbenchMessageTranslate()
-  const [busyAction, setBusyAction] = useState<Nullable<WorkspaceGitRemoteAction>>(null)
+  const remoteAction = useWorkbenchGitRemoteAction(workspaceRoot)
   const [menuOpen, setMenuOpen] = useState(false)
+  const running = remoteAction.running
+  const busy = !!running
+  // 别处（分支菜单、提交面板）发起了远端操作：展开着的菜单收起来，等它跑完不会自己再弹出来。
+  useEffect(() => {
+    if (busy) setMenuOpen(false)
+  }, [busy])
   const status = summary.status
   if (!summary.repository || !status?.branch) return null
 
   const upstream = status.upstream
   const { ahead, behind } = status
-  const busy = !!busyAction
+  const cancelLabel = running ? describeWorkbenchGitRemoteActionCancel(running, t) : ''
   const mainAction: WorkspaceGitRemoteAction = upstream ? 'sync' : 'upload'
   const mainLabel = upstream
     ? t('workbench.gitSyncTooltip', { upstream, behind, ahead })
@@ -138,12 +141,7 @@ export function WorkbenchGitSyncControl({
     setMenuOpen(false)
     if (busy || !confirmAction(action)) return
     try {
-      setBusyAction(action)
-      const result = Result.unwrap(
-        await workbenchHost.kernel.workspace.performWorkspaceGitAction(workspaceRoot, action, {
-          privateKeyPath: gitSshKeyPath,
-        })
-      )
+      const result = await remoteAction.run(action, { privateKeyPath: gitSshKeyPath })
       await onRefresh()
       if (result.action.conflicts.length > 0) {
         showConflicts(result.action)
@@ -156,17 +154,9 @@ export function WorkbenchGitSyncControl({
         }),
       })
     } catch (actionError) {
-      const appError = AppError.from(actionError)
-      messageLatest.current.open({
-        title: tLatest.current(FailedTitleKeys[action]),
-        description:
-          appError.message.trim() || tLatest.current('workbench.gitRemoteActionFailedFallback'),
-        tone: appError.code === 'VALIDATION' ? 'warning' : 'error',
-        showClose: true,
-      })
+      reportWorkbenchGitRemoteActionFailure(actionError, action, { messageLatest, tLatest })
+      // 取消、失败都可能已经动过仓库（拉取取到一半）：照样刷新。
       await onRefresh()
-    } finally {
-      setBusyAction(null)
     }
   }
 
@@ -195,43 +185,59 @@ export function WorkbenchGitSyncControl({
           )}
         </button>
       </BubbleTooltip>
-      <AnchoredPopover
-        open={menuOpen}
-        onOpenChange={setMenuOpen}
-        className={styles.gitSyncMenuPopover}
-        side="bottom"
-        align="start"
-        sideOffset={6}
-        widthStrategy="content"
-        anchor={({ getAnchorProps }) => (
-          <button
-            {...getAnchorProps<HTMLButtonElement>({ disabled: busy })}
-            type="button"
-            className={styles.gitSyncMenuButton}
-            aria-label={t('workbench.gitRemoteActionsMenu')}
-            title={t('workbench.gitRemoteActionsMenu')}
-            disabled={busy}
-          >
-            <CaretDownIcon size={10} />
-          </button>
-        )}
-      >
-        <div className={styles.gitSyncMenu} role="menu" aria-label={t('workbench.gitRemoteActionsMenu')}>
-          {menuItems.map((item) => (
+      {running ? (
+        <button
+          type="button"
+          className={styles.gitSyncMenuButton}
+          aria-label={cancelLabel}
+          title={cancelLabel}
+          disabled={running.cancelling}
+          onClick={() => remoteAction.cancel()}
+        >
+          <XIcon size={10} />
+        </button>
+      ) : (
+        <AnchoredPopover
+          open={menuOpen}
+          onOpenChange={setMenuOpen}
+          className={styles.gitSyncMenuPopover}
+          side="bottom"
+          align="start"
+          sideOffset={6}
+          widthStrategy="content"
+          anchor={({ getAnchorProps }) => (
             <button
-              key={item.action}
+              {...getAnchorProps<HTMLButtonElement>()}
               type="button"
-              role="menuitem"
-              className={styles.gitSyncMenuItem}
-              disabled={busy || item.disabled}
-              onClick={() => void runAction(item.action)}
+              className={styles.gitSyncMenuButton}
+              aria-label={t('workbench.gitRemoteActionsMenu')}
+              title={t('workbench.gitRemoteActionsMenu')}
             >
-              <span className={styles.gitSyncMenuLabel}>{item.label}</span>
-              <span className={styles.gitSyncMenuHint}>{item.hint}</span>
+              <CaretDownIcon size={10} />
             </button>
-          ))}
-        </div>
-      </AnchoredPopover>
+          )}
+        >
+          <div
+            className={styles.gitSyncMenu}
+            role="menu"
+            aria-label={t('workbench.gitRemoteActionsMenu')}
+          >
+            {menuItems.map((item) => (
+              <button
+                key={item.action}
+                type="button"
+                role="menuitem"
+                className={styles.gitSyncMenuItem}
+                disabled={item.disabled}
+                onClick={() => void runAction(item.action)}
+              >
+                <span className={styles.gitSyncMenuLabel}>{item.label}</span>
+                <span className={styles.gitSyncMenuHint}>{item.hint}</span>
+              </button>
+            ))}
+          </div>
+        </AnchoredPopover>
+      )}
     </div>
   )
 }

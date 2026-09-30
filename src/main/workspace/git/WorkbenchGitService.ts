@@ -81,8 +81,20 @@ const execFileAsync = promisify(execFile)
 const GitListingMaxBytes = 32 * 1024 * 1024
 /** 未跟踪文件多过这个数时按目录列（一个目录一行），面板不用逐行渲染几万个文件。 */
 const MaxExpandedUntrackedFiles = 5_000
-/** 获取远端、推送的时限：网络卡住、远端等着输入凭据时不一直挂着。 */
-const RemoteActionTimeoutMs = 120_000
+/**
+ * 连远端的命令（获取、拉取、推送）这么久没有任何输出就算卡住了，结束它：网络断在半路、远端不再应答时不
+ * 一直挂着。只看有没有动静，不限总时长——仓库大、网络慢的传输要多久都行，git 的进度（`--progress`）就是动静。
+ * 给得宽：推送之后远端跑钩子可以好一阵不出声，用户等不及还能自己取消。
+ */
+const RemoteInactivityTimeoutMs = 5 * 60_000
+/** 结束 git 进程时先发 SIGTERM（git 会收拾掉自己的锁文件），这么久还没退出再强杀。 */
+const GitTerminateGraceMs = 2_000
+/**
+ * git 的进度行：`Receiving objects:  45% (450/1000)`、`remote: Counting objects: 100% (5/5), done.`、
+ * `Total 3 (delta 0), reused 0`……加了 `--progress` 才有，给用户看的说明里不要它们。
+ */
+const GitProgressLinePattern =
+  /^(?:remote: )?(?:(?:Enumerating|Counting|Compressing|Receiving|Resolving|Writing|Unpacking|Updating|Checking out|Filtering) \w+:|Delta compression using |Total \d+ \(delta )/u
 /** 标记冲突已解决前检查冲突标记，最多读这么大的文件；更大的不查。 */
 const MaxConflictMarkerScanBytes = 16 * 1024 * 1024
 /** 日志的每个提交以 \x1e 开头，字段之间是 \x1f。 */
@@ -133,8 +145,25 @@ interface GitRunOptions extends WorkspaceGitRemoteActionOptions {
   maxBuffer?: number
   /** 输出超过上限时不报错，结果标成 truncated，调用方换个问法。 */
   allowTruncated?: boolean
-  /** 超过这么久就结束 git 进程，报超时。 */
-  timeoutMs?: number
+  /** 这么久没有任何输出（进度也算）就结束 git 进程，报超时。 */
+  inactivityTimeoutMs?: number
+  /** 取消：结束 git 进程（连同它起的 ssh），报已取消。 */
+  signal?: AbortSignal
+}
+
+/** 被中途结束的原因：`inactive` 太久没动静，`cancelled` 用户取消。 */
+type GitStopReason = 'inactive' | 'cancelled'
+
+/** 连远端的命令：凭据设置，加上取消它的信号。 */
+type RemoteCommandOptions = WorkspaceGitRemoteActionOptions & Pick<GitRunOptions, 'signal'>
+
+/** 能被中途结束的 git 子进程，只用得到这几样。 */
+interface StoppableGitProcess {
+  pid?: number
+  stdout?: Nullable<NodeJS.ReadableStream>
+  stderr?: Nullable<NodeJS.ReadableStream>
+  kill: (signal: NodeJS.Signals) => boolean
+  then: (onSettled: () => void, onFailed: () => void) => unknown
 }
 
 interface GitRunResult {
@@ -177,17 +206,19 @@ export interface WorkbenchGitServiceOptions {
    * 不给时用应用自己的环境。
    */
   environment?: () => Promise<NodeJS.ProcessEnv>
-  /** 获取远端、推送的时限，默认 RemoteActionTimeoutMs。 */
-  remoteActionTimeoutMs?: number
+  /** 连远端的命令多久没动静算卡住，默认 RemoteInactivityTimeoutMs。 */
+  remoteInactivityTimeoutMs?: number
 }
 
 export class WorkbenchGitService {
   private readonly readEnvironment: () => Promise<NodeJS.ProcessEnv>
-  private readonly remoteActionTimeoutMs: number
+  private readonly remoteInactivityTimeoutMs: number
+  /** 正在跑的远端操作（发起方给了编号的）：凭编号取消。 */
+  private readonly remoteOperations = new Map<string, AbortController>()
 
   constructor(options: WorkbenchGitServiceOptions = {}) {
     this.readEnvironment = options.environment ?? (() => Promise.resolve(process.env))
-    this.remoteActionTimeoutMs = options.remoteActionTimeoutMs ?? RemoteActionTimeoutMs
+    this.remoteInactivityTimeoutMs = options.remoteInactivityTimeoutMs ?? RemoteInactivityTimeoutMs
   }
 
   public async getSummary(workspaceRoot: string): Promise<SystemWorkspaceGitSummary> {
@@ -727,14 +758,43 @@ export class WorkbenchGitService {
   }
 
   /**
-   * 获取、拉取、同步（先拉取再推送）、推送。每条命令最多跑 RemoteActionTimeoutMs；失败时把 git 的话换成
-   * 能看懂的说明（凭据、网络、分叉、本地改动会被覆盖……）。拉取合入时冲突了不算失败：冲突文件列在结果里，
+   * 获取、拉取、同步（先拉取再推送）、推送。连远端的每条命令太久没动静（RemoteInactivityTimeoutMs）就结束，
+   * 只要还有进度就不限时；给了 `operationId` 的还能中途取消（{@link cancelRemoteAction}）。失败时把 git 的话
+   * 换成能看懂的说明（凭据、网络、分叉、本地改动会被覆盖……）。拉取合入时冲突了不算失败：冲突文件列在结果里，
    * 合并或变基停在那里等用户解决，同步这时不推送。
    */
   public async performRemoteAction(
     workspaceRoot: string,
     action: WorkspaceGitRemoteAction,
     options: WorkspaceGitRemoteActionOptions = {}
+  ): Promise<SystemWorkspaceGitActionResult> {
+    const controller = new AbortController()
+    const operationId = options.operationId
+    if (operationId) this.remoteOperations.set(operationId, controller)
+    try {
+      return await this.runRemoteAction(workspaceRoot, action, options, controller.signal)
+    } finally {
+      if (operationId && this.remoteOperations.get(operationId) === controller)
+        this.remoteOperations.delete(operationId)
+    }
+  }
+
+  /**
+   * 取消一个正在跑的远端操作：结束它的 git 进程（连同 ssh），那次 {@link performRemoteAction} 以「已取消」
+   * 收场。没有这个编号的操作（已经结束、没开始过）时返回 false。
+   */
+  public cancelRemoteAction(operationId: string): boolean {
+    const controller = this.remoteOperations.get(operationId)
+    if (!controller) return false
+    controller.abort()
+    return true
+  }
+
+  private async runRemoteAction(
+    workspaceRoot: string,
+    action: WorkspaceGitRemoteAction,
+    options: WorkspaceGitRemoteActionOptions,
+    signal: AbortSignal
   ): Promise<SystemWorkspaceGitActionResult> {
     const rootPath = await this.resolveRoot(workspaceRoot)
     const currentBranch = await this.getCurrentBranch(rootPath)
@@ -763,8 +823,15 @@ export class WorkbenchGitService {
       rebasing: false,
     }
 
+    // `--progress`：输出不是终端时 git 默认不报进度；报了才知道这条命令还在动。
+    const remote: RemoteCommandOptions = { ...options, signal }
     if (action === 'fetch') {
-      result.output = await this.runRemoteCommand(rootPath, action, ['fetch', '--prune'], options)
+      result.output = await this.runRemoteCommand(
+        rootPath,
+        action,
+        ['fetch', '--prune', '--progress'],
+        remote
+      )
     } else if (action === 'pull' || action === 'sync') {
       if (!upstream)
         throw new AppError(
@@ -773,14 +840,19 @@ export class WorkbenchGitService {
             branch: actionBranch,
           })
         )
-      const pulled = await this.pullBranch(rootPath, actionBranch, options)
+      const pulled = await this.pullBranch(rootPath, actionBranch, remote)
       Object.assign(result, pulled)
       if (action === 'sync' && pulled.conflicts.length === 0) {
         const pushed = await this.runRemoteCommand(
           rootPath,
           action,
-          ['push', upstream.remote, `refs/heads/${actionBranch}:${upstream.remoteRef}`],
-          options
+          [
+            'push',
+            '--progress',
+            upstream.remote,
+            `refs/heads/${actionBranch}:${upstream.remoteRef}`,
+          ],
+          remote
         )
         result.output = [pulled.output, pushed].filter(Boolean).join('\n')
       }
@@ -788,18 +860,24 @@ export class WorkbenchGitService {
       result.output = await this.runRemoteCommand(
         rootPath,
         action,
-        ['push', upstream.remote, `refs/heads/${actionBranch}:${upstream.remoteRef}`],
-        options
+        ['push', '--progress', upstream.remote, `refs/heads/${actionBranch}:${upstream.remoteRef}`],
+        remote
       )
     } else {
-      const remote = await this.resolvePushRemote(rootPath, actionBranch)
+      const pushRemote = await this.resolvePushRemote(rootPath, actionBranch)
       result.output = await this.runRemoteCommand(
         rootPath,
         action,
-        ['push', '--set-upstream', remote, `refs/heads/${actionBranch}:refs/heads/${actionBranch}`],
-        options
+        [
+          'push',
+          '--progress',
+          '--set-upstream',
+          pushRemote,
+          `refs/heads/${actionBranch}:refs/heads/${actionBranch}`,
+        ],
+        remote
       )
-      result.upstream = `${remote}/${actionBranch}`
+      result.upstream = `${pushRemote}/${actionBranch}`
     }
     return { rootPath, action: result, summary: await this.getSummary(rootPath) }
   }
@@ -812,21 +890,23 @@ export class WorkbenchGitService {
   private async pullBranch(
     rootPath: string,
     branch: string,
-    options: WorkspaceGitRemoteActionOptions
+    options: RemoteCommandOptions
   ): Promise<Pick<WorkspaceGitRemoteActionResult, 'output' | 'conflicts' | 'rebasing'>> {
     const configured = await Promise.all(
       [`branch.${branch}.rebase`, 'pull.rebase', 'pull.ff'].map((key) =>
         this.readConfig(rootPath, key)
       )
     )
-    const args = configured.some(Boolean) ? ['pull'] : ['pull', '--no-rebase']
+    const args = configured.some(Boolean)
+      ? ['pull', '--progress']
+      : ['pull', '--progress', '--no-rebase']
     const run = await this.runGit(rootPath, args, {
       ...options,
       allowFailure: true,
-      timeoutMs: this.remoteActionTimeoutMs,
+      inactivityTimeoutMs: this.remoteInactivityTimeoutMs,
       env: { GIT_MERGE_AUTOEDIT: 'no', GIT_EDITOR: ':', GIT_SEQUENCE_EDITOR: ':' },
     })
-    const output = `${run.stdout}\n${run.stderr}`.trim()
+    const output = this.withoutProgressLines(`${run.stdout}\n${run.stderr}`)
     if (!run.failed) return { output, conflicts: [], rebasing: false }
 
     // 这次合入冲突了（git 报了 CONFLICT）：不当失败，把冲突文件交给提交面板的「合并冲突」。
@@ -841,20 +921,33 @@ export class WorkbenchGitService {
     throw this.describeRemoteFailure('pull', run, options.githubToken)
   }
 
-  /** 跑一条连远端的命令（有时限），失败时换成能看懂的说明。 */
+  /** 跑一条连远端的命令（太久没动静就结束，能取消），失败时换成能看懂的说明。 */
   private async runRemoteCommand(
     rootPath: string,
     action: WorkspaceGitRemoteAction,
     args: string[],
-    options: WorkspaceGitRemoteActionOptions
+    options: RemoteCommandOptions
   ): Promise<string> {
     const run = await this.runGit(rootPath, args, {
       ...options,
       allowFailure: true,
-      timeoutMs: this.remoteActionTimeoutMs,
+      inactivityTimeoutMs: this.remoteInactivityTimeoutMs,
     })
     if (run.failed) throw this.describeRemoteFailure(action, run, options.githubToken)
-    return this.readableGitOutput(run)
+    return this.withoutProgressLines(this.readableGitOutput(run))
+  }
+
+  /**
+   * 去掉 git 的进度行。进度在终端里是原地刷新的（`\r`），收下来是一长串：每行只留最后刷出来的那一截，
+   * 再把进度行整行去掉，剩下的才是 git 真正说的话。
+   */
+  private withoutProgressLines(output: string): string {
+    return output
+      .split(/\r?\n/u)
+      .map((line) => line.slice(line.lastIndexOf('\r') + 1))
+      .filter((line) => !GitProgressLinePattern.test(line))
+      .join('\n')
+      .trim()
   }
 
   /** 连远端失败时的说明：认得出的情况说清楚怎么办，认不出的照 git 的原话。 */
@@ -864,7 +957,10 @@ export class WorkbenchGitService {
     githubToken?: string
   ): AppError {
     const output = this.redactGitOutput(`${run.stderr}\n${run.stdout}`.trim(), githubToken)
-    const detail = this.redactGitOutput(this.readableGitOutput(run), githubToken).slice(0, 500)
+    const detail = this.redactGitOutput(
+      this.withoutProgressLines(this.readableGitOutput(run)),
+      githubToken
+    ).slice(0, 500)
     if (
       /permission denied \(publickey|authentication failed|could not read (?:username|password)|terminal prompts disabled|invalid username or password|access denied|returned error: 40[13]/i.test(
         output
@@ -1695,18 +1791,25 @@ export class WorkbenchGitService {
     options: GitRunOptions = {}
   ): Promise<GitRunResult> {
     const maxBuffer = options.maxBuffer ?? GitOutputMaxBytes
-    // 有时限的命令单独成一个进程组：超时时连同 git 起的 ssh 一起结束，不留下还连着远端的进程。
-    const ownProcessGroup = !!options.timeoutMs && process.platform !== 'win32'
+    const env = await this.buildGitEnvironment(options)
+    // 还没起进程就已经取消了（同步时拉取完、推送前取消的）：不再起。
+    if (options.signal?.aborted) throw this.cancelledError(args)
+    // 会被中途结束的命令（太久没动静、用户取消）单独成一个进程组：结束时连同 git 起的 ssh 一起，不留下还
+    // 连着远端的进程。
+    const stoppable = !!options.inactivityTimeoutMs || !!options.signal
+    const ownProcessGroup = stoppable && process.platform !== 'win32'
     const subprocess = execa('git', [...GitOutputConfig, ...args], {
       cwd: rootPath,
-      env: await this.buildGitEnvironment(options),
+      env,
       input: options.input,
       maxBuffer,
       stripFinalNewline: !options.keepFinalNewline,
-      timeout: options.timeoutMs,
       detached: ownProcessGroup,
       reject: false,
     })
+    const readStopReason = stoppable
+      ? this.watchGitProcess(subprocess, ownProcessGroup, options)
+      : null
     const result = await subprocess
     const output: GitRunResult = {
       stdout: result.stdout,
@@ -1714,22 +1817,16 @@ export class WorkbenchGitService {
       failed: result.failed,
       truncated: result.isMaxBuffer,
     }
-    if (result.timedOut) {
-      if (ownProcessGroup && subprocess.pid) {
-        try {
-          process.kill(-subprocess.pid, 'SIGKILL')
-        } catch {
-          // 进程组里已经没有进程了。
-        }
-      }
+    const stopped = readStopReason?.() ?? null
+    if (stopped === 'cancelled') throw this.cancelledError(args)
+    if (stopped === 'inactive')
       throw new AppError(
         'TIMEOUT',
-        workbenchMainText('git.timedOut', {
+        workbenchMainText('git.noProgress', {
           command: this.describeCommand(args),
-          seconds: Math.round((options.timeoutMs ?? 0) / 1000),
+          seconds: Math.round((options.inactivityTimeoutMs ?? 0) / 1000),
         })
       )
-    }
     if (result.isMaxBuffer) {
       if (options.allowTruncated) return output
       throw new AppError(
@@ -1743,6 +1840,80 @@ export class WorkbenchGitService {
     if (result.failed && !options.allowFailure)
       this.throwGitFailure(args, output, options.githubToken)
     return output
+  }
+
+  /**
+   * 盯着一个会被中途结束的 git 进程：太久没有任何输出、或者取消信号来了，就结束它（连同它的进程组）。
+   * 返回的函数在进程收场后调用：撤掉计时与监听，说出它是不是被结束的、为什么。
+   */
+  private watchGitProcess(
+    subprocess: StoppableGitProcess,
+    ownProcessGroup: boolean,
+    options: Pick<GitRunOptions, 'inactivityTimeoutMs' | 'signal'>
+  ): () => Nullable<GitStopReason> {
+    const { inactivityTimeoutMs, signal } = options
+    let stopped: Nullable<GitStopReason> = null
+    let inactivityTimer: Nullable<ReturnType<typeof setTimeout>> = null
+    const stop = (reason: GitStopReason): void => {
+      if (stopped) return
+      stopped = reason
+      this.terminateGitProcess(subprocess, ownProcessGroup)
+    }
+    const armInactivityTimer = (): void => {
+      if (inactivityTimer) clearTimeout(inactivityTimer)
+      inactivityTimer = setTimeout(() => stop('inactive'), inactivityTimeoutMs)
+    }
+    const cancel = (): void => stop('cancelled')
+
+    if (inactivityTimeoutMs) {
+      armInactivityTimer()
+      // 进度（`--progress`）写在 stderr 上，结果写在 stdout 上：哪边有动静都重新计时。
+      subprocess.stdout?.on('data', armInactivityTimer)
+      subprocess.stderr?.on('data', armInactivityTimer)
+    }
+    if (signal?.aborted) cancel()
+    else signal?.addEventListener('abort', cancel, { once: true })
+
+    return () => {
+      if (inactivityTimer) clearTimeout(inactivityTimer)
+      signal?.removeEventListener('abort', cancel)
+      return stopped
+    }
+  }
+
+  /**
+   * 结束 git 进程：先 SIGTERM，git 收到会删掉自己的锁文件再退出；它退出了、或者过了 GitTerminateGraceMs
+   * 还没退出，再强杀整个进程组，把 git 起的 ssh 一并带走。
+   */
+  private terminateGitProcess(subprocess: StoppableGitProcess, ownProcessGroup: boolean): void {
+    const { pid } = subprocess
+    if (!pid) return
+    const send = (signal: NodeJS.Signals): void => {
+      try {
+        if (ownProcessGroup) process.kill(-pid, signal)
+        else subprocess.kill(signal)
+      } catch {
+        // arch-guard:silent-catch-ok 进程（组）已经不在了。
+      }
+    }
+    let graceTimer: Nullable<ReturnType<typeof setTimeout>> = null
+    let killed = false
+    const kill = (): void => {
+      if (killed) return
+      killed = true
+      if (graceTimer) clearTimeout(graceTimer)
+      send('SIGKILL')
+    }
+    send('SIGTERM')
+    graceTimer = setTimeout(kill, GitTerminateGraceMs)
+    subprocess.then(kill, kill)
+  }
+
+  private cancelledError(args: readonly string[]): AppError {
+    return new AppError(
+      'CANCELLED',
+      workbenchMainText('git.cancelled', { command: this.describeCommand(args) })
+    )
   }
 
   /**

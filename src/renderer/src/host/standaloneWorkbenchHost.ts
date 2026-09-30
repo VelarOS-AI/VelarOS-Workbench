@@ -447,6 +447,8 @@ const standaloneWorkbenchHost: WorkbenchHost = {
             ...options,
           })
         ),
+      cancelWorkspaceGitAction: async (operationId) =>
+        toHostResult(await window.velarosWorkbenchGit.cancelRemoteAction({ operationId })),
     },
   },
   shell: {

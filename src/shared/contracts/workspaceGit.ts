@@ -97,6 +97,8 @@ export interface WorkspaceGitRemoteActionOptions {
   sshKeyPath?: string
   /** 上传时指定本地分支；不给就是当前分支。 */
   branch?: string
+  /** 这次操作的编号，发起方自己起；给了之后凭它中途取消这次操作。 */
+  operationId?: string
 }
 
 export interface WorkspaceGitRemoteActionResult {

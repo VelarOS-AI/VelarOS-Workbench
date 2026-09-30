@@ -41,6 +41,7 @@ export const WorkbenchGitChannels = {
   switchBranch: 'workbench-app:git:switch-branch',
   createBranch: 'workbench-app:git:create-branch',
   remoteAction: 'workbench-app:git:remote-action',
+  cancelRemoteAction: 'workbench-app:git:cancel-remote-action',
   captureChatCheckpoint: 'workbench-app:git:capture-chat-checkpoint',
   deleteChatCheckpoints: 'workbench-app:git:delete-chat-checkpoints',
   captureChatRunChanges: 'workbench-app:git:capture-chat-run-changes',
@@ -127,6 +128,16 @@ export interface WorkbenchGitRemoteActionRequest
   extends WorkbenchGitRootRequest,
     WorkspaceGitRemoteActionOptions {
   action: WorkspaceGitRemoteAction
+}
+
+/** 取消一个正在跑的远端操作，凭发起时给的编号。 */
+export interface WorkbenchGitCancelRemoteActionRequest {
+  operationId: string
+}
+
+export interface WorkbenchGitCancelRemoteActionResult {
+  /** false：没有这个编号的操作在跑（已经结束了）。 */
+  cancelled: boolean
 }
 
 /**
@@ -283,6 +294,9 @@ export interface WorkbenchGitBridge {
   performRemoteAction(
     request: WorkbenchGitRemoteActionRequest
   ): Promise<WorkbenchFsCallResult<SystemWorkspaceGitActionResult>>
+  cancelRemoteAction(
+    request: WorkbenchGitCancelRemoteActionRequest
+  ): Promise<WorkbenchFsCallResult<WorkbenchGitCancelRemoteActionResult>>
   captureChatCheckpoint(
     request: WorkbenchChatCheckpointCaptureRequest
   ): Promise<WorkbenchFsCallResult<WorkbenchChatCheckpointCaptureResult>>

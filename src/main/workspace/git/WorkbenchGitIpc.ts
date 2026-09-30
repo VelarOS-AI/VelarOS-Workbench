@@ -12,6 +12,7 @@ import {
   type WorkbenchChatRunChangesDeleteRequest,
   type WorkbenchChatRunChangesReadRequest,
   type WorkbenchGitBlameRequest,
+  type WorkbenchGitCancelRemoteActionRequest,
   WorkbenchGitChannels,
   type WorkbenchGitCommitMessageRequest,
   type WorkbenchGitCommitRequest,
@@ -117,6 +118,11 @@ export function registerWorkbenchGitIpc(
       const request = parseRemoteAction(input)
       return service.performRemoteAction(request.workspaceRoot, request.action, request)
     })
+  )
+  ipcMain.handle(WorkbenchGitChannels.cancelRemoteAction, (_event, input: unknown) =>
+    callWithEnvelope(async () => ({
+      cancelled: service.cancelRemoteAction(parseCancelRemoteAction(input).operationId),
+    }))
   )
   // 检查点经由改动记录区拍：拍的同时为这一轮开改动归属账本。
   ipcMain.handle(WorkbenchGitChannels.captureChatCheckpoint, (_event, input: unknown) =>
@@ -296,10 +302,12 @@ function parseRemoteAction(input: unknown): WorkbenchGitRemoteActionRequest {
   if (action !== 'fetch' && action !== 'pull' && action !== 'sync' && action !== 'upload')
     return invalidRequest()
   const record = input as Record<string, unknown>
-  for (const key of ['branch', 'githubToken', 'privateKeyPath', 'sshKeyPath']) {
+  for (const key of ['branch', 'githubToken', 'privateKeyPath', 'sshKeyPath', 'operationId']) {
     if (record[key] !== undefined && typeof record[key] !== 'string')
       return invalidRequest()
   }
+  if (record['operationId'] !== undefined && !isOperationId(record['operationId']))
+    return invalidRequest()
   return {
     workspaceRoot: record['workspaceRoot'] as string,
     action,
@@ -308,7 +316,20 @@ function parseRemoteAction(input: unknown): WorkbenchGitRemoteActionRequest {
     githubToken: optionalWhen(isString, record['githubToken']),
     privateKeyPath: optionalWhen(isString, record['privateKeyPath']),
     sshKeyPath: optionalWhen(isString, record['sshKeyPath']),
+    // 没带编号的操作照常跑，只是取消不了。
+    operationId: optionalWhen(isString, record['operationId']),
   }
+}
+
+/** 操作编号是发起方起的，只拿来对号：不空、不太长就行。 */
+function isOperationId(value: unknown): value is string {
+  return isString(value) && value.length > 0 && value.length <= 128
+}
+
+function parseCancelRemoteAction(input: unknown): WorkbenchGitCancelRemoteActionRequest {
+  if (!hasStringFields(input, ['operationId']) || !isOperationId(input['operationId']))
+    return invalidRequest()
+  return { operationId: input['operationId'] }
 }
 
 function parseCheckpointCapture(input: unknown): WorkbenchChatCheckpointCaptureRequest {

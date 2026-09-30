@@ -165,6 +165,8 @@ export interface SystemWorkspaceGitActionRequest {
   githubToken?: string
   privateKeyPath?: string
   sshKeyPath?: string
+  /** 这次操作的编号：给了之后凭它中途取消。 */
+  operationId?: string
 }
 
 export interface SystemWorkspaceGitActionResult {

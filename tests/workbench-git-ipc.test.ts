@@ -62,6 +62,7 @@ void describe('Workbench Git IPC requests', () => {
           githubToken: undefined,
           privateKeyPath: '~/.ssh/id_ed25519',
           sshKeyPath: undefined,
+          operationId: undefined,
         },
       },
     ])
@@ -100,6 +101,55 @@ void describe('Workbench Git IPC requests', () => {
         ).ok,
         false
       )
+  })
+
+  void test('a remote action carries its operation id, and cancelling asks the service by that id', async () => {
+    const started: unknown[] = []
+    const cancelRequests: string[] = []
+    const { registerWorkbenchGitIpc } = await import('../src/main/workspace/git/WorkbenchGitIpc')
+    registerWorkbenchGitIpc(
+      {
+        performRemoteAction: async (
+          _workspaceRoot: string,
+          _action: string,
+          options: { operationId?: string }
+        ) => {
+          started.push(options.operationId)
+          return {}
+        },
+        cancelRemoteAction: (operationId: string) => {
+          cancelRequests.push(operationId)
+          return operationId === 'op-1'
+        },
+      } as never,
+      {} as never,
+      {} as never
+    )
+
+    const fetch = { workspaceRoot: '/project', action: 'fetch' }
+    assert.equal(
+      (await invoke(WorkbenchGitChannels.remoteAction, { ...fetch, operationId: 'op-1' })).ok,
+      true
+    )
+    for (const operationId of ['', 7, 'x'.repeat(129)])
+      assert.equal(
+        (await invoke(WorkbenchGitChannels.remoteAction, { ...fetch, operationId })).ok,
+        false
+      )
+    assert.deepEqual(started, ['op-1'])
+
+    assert.deepEqual(await invoke(WorkbenchGitChannels.cancelRemoteAction, { operationId: 'op-1' }), {
+      ok: true,
+      value: { cancelled: true },
+    })
+    // 已经结束的操作：没有可取消的，不算出错。
+    assert.deepEqual(await invoke(WorkbenchGitChannels.cancelRemoteAction, { operationId: 'gone' }), {
+      ok: true,
+      value: { cancelled: false },
+    })
+    for (const request of [{}, { operationId: 3 }, { operationId: '' }, null])
+      assert.equal((await invoke(WorkbenchGitChannels.cancelRemoteAction, request)).ok, false)
+    assert.deepEqual(cancelRequests, ['op-1', 'gone'])
   })
 
   void test('a blame request carries the editor text and the file format to the service', async () => {

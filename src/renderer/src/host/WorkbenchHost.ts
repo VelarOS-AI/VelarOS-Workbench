@@ -113,7 +113,10 @@ import type {
   WorkspaceGitHunkActionOptions,
   WorkspaceGitLogOptions,
 } from '@shared/contracts'
-import type { WorkbenchGitBlameRequest } from '@shared/workbenchGit'
+import type {
+  WorkbenchGitBlameRequest,
+  WorkbenchGitCancelRemoteActionResult,
+} from '@shared/workbenchGit'
 
 /** Workbench 所需的项目、编辑器、终端与代码智能 Kernel 能力。 */
 export interface WorkbenchProjectKernelPort {
@@ -348,9 +351,13 @@ export interface WorkbenchWorkspaceKernelPort {
     action: SystemWorkspaceGitActionRequest['action'],
     options?: Pick<
       SystemWorkspaceGitActionRequest,
-      'branch' | 'githubToken' | 'privateKeyPath' | 'sshKeyPath'
+      'branch' | 'githubToken' | 'privateKeyPath' | 'sshKeyPath' | 'operationId'
     >
   ): Promise<Result<SystemWorkspaceGitActionResult>>
+  /** 取消一个带着 `operationId` 发起的远端操作；它已经结束时 `cancelled` 为 false。 */
+  cancelWorkspaceGitAction(
+    operationId: string
+  ): Promise<Result<WorkbenchGitCancelRemoteActionResult>>
 }
 
 export interface WorkbenchKernelPort {

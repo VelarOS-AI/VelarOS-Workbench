@@ -398,23 +398,6 @@ void describe('Workbench Git service', () => {
     })
   })
 
-  void test.skipIf(process.platform === 'win32')(
-    'a fetch that hangs is stopped at the time limit with a clear error',
-    async () => {
-      await withRepository(async (root) => {
-        await git(root, ['remote', 'add', 'origin', 'ssh://example.invalid/repo.git'])
-        // ssh 一直不返回：模拟网络卡住。
-        const service = createService({ GIT_SSH_COMMAND: 'sleep 30 #' }, 500)
-        const startedAt = Date.now()
-        await assert.rejects(
-          service.performRemoteAction(root, 'fetch'),
-          isAppError('TIMEOUT', /git fetch 超过 1 秒没有完成/)
-        )
-        assert.ok(Date.now() - startedAt < 10_000)
-      })
-    }
-  )
-
   void test('an un-ignored dependency directory is listed as one entry instead of breaking the status', async () => {
     await withRepository(async (root) => {
       await writeFile(join(root, 'a.txt'), 'a\n')

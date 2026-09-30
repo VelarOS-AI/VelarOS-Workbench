@@ -161,6 +161,8 @@ async function runGitProbe(): Promise<void> {
       'Git revision 不得解释为参数'
     )
 
+    if (process.platform !== 'win32') await probeStuckRemote(projectRoot)
+
     const second = await service.initialize(secondRoot)
     check(second.summary.repository, '第二个 root 应独立初始化')
     equal(second.summary.status?.changedFiles, 0, '新 root 不得继承前一仓库状态')
@@ -172,6 +174,35 @@ async function runGitProbe(): Promise<void> {
   } finally {
     await removeProbeDirectory(tempRoot)
   }
+}
+
+/**
+ * 连不上的远端（`ssh` 换成一个一直不返回、不出声的命令）：太久没动静会自己停，跑着的时候能取消。
+ * 结束的是整个进程组，探针不会留下那条 `sleep`。
+ */
+async function probeStuckRemote(projectRoot: string): Promise<void> {
+  await execa('git', ['remote', 'add', 'origin', 'ssh://example.invalid/repo.git'], {
+    cwd: projectRoot,
+    env: ProbeGitEnvironment,
+  })
+  const stuck = new WorkbenchGitService({
+    environment: async () => ({ ...ProbeGitEnvironment, GIT_SSH_COMMAND: 'sleep 30 #' }),
+    remoteInactivityTimeoutMs: 1_000,
+  })
+  await expectCode(
+    'TIMEOUT',
+    () => stuck.performRemoteAction(projectRoot, 'fetch'),
+    '远端命令太久没动静应自己停下'
+  )
+
+  const patient = new WorkbenchGitService({
+    environment: async () => ({ ...ProbeGitEnvironment, GIT_SSH_COMMAND: 'sleep 30 #' }),
+  })
+  const running = patient.performRemoteAction(projectRoot, 'fetch', {
+    operationId: 'probe-cancel',
+  })
+  setTimeout(() => patient.cancelRemoteAction('probe-cancel'), 300)
+  await expectCode('CANCELLED', () => running, '取消应结束正在跑的远端命令')
 }
 
 async function equalRootIdentity(
@@ -223,5 +254,7 @@ async function configureIdentity(rootPath: string): Promise<void> {
 }
 
 await runGitProbe()
-assert.equal(assertionCount, 41, 'Git 探针断言数变化必须显式复核')
-console.info(`workbench git probe: ${assertionCount}/41 assertions passed`)
+// Windows 上没有进程组可结束，不跑「卡住的远端」那一段（4 条断言）。
+const expectedAssertions = process.platform === 'win32' ? 41 : 45
+assert.equal(assertionCount, expectedAssertions, 'Git 探针断言数变化必须显式复核')
+console.info(`workbench git probe: ${assertionCount}/${expectedAssertions} assertions passed`)
