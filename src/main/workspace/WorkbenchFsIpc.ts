@@ -6,13 +6,16 @@
  * `saveFileSync` 走 `ipcMain.on` + `event.returnValue`（renderer sendSync 的 beforeunload
  * 兜底路径）；`runCommand` 的流式输出只回发给发起请求的 webContents。
  *
+ * 带 searchId 的内容搜索边搜边把结果推回发起它的窗口（`searchContentProgress`），可以按 id 取消；窗口关了，
+ * 它还没搜完的都取消。
+ *
  * 写族通道只由用户在界面上的动作触发（编辑器保存、文件树里新建 / 改名 / 移动 / 删除 / 恢复）；Agent 的
  * 写入走项目内核，不经这里。写成功后把路径报给改动归属账本：这些改动是用户亲手做的，正在跑的那一轮
  * 不能把它们算成 Agent 的，回溯时也不能替用户撤掉。
  */
 import { resolve } from 'node:path'
 
-import { ipcMain } from 'electron'
+import { ipcMain, type WebContents } from 'electron'
 
 import { AppError } from '@velaros-ai/core/error'
 
@@ -55,6 +58,7 @@ import {
   optionalBoolean,
   optionalNumber,
   optionalString,
+  optionalStringArray,
 } from './ipcBoundary'
 import type { WorkbenchAppParts } from './Parts'
 import type { WorkbenchProjectFileSystem } from './WorkbenchProjectFileSystem'
@@ -266,12 +270,38 @@ export function registerWorkbenchFsIpc(
     })
   )
 
-  ipcMain.handle(WorkbenchFsChannels.searchContent, (_event, request: unknown) =>
-    callWithEnvelope(() => {
+  const contentSearches = createContentSearchRegistry()
+
+  ipcMain.handle(WorkbenchFsChannels.searchContent, (event, request: unknown) =>
+    callWithEnvelope(async () => {
       const parsed = parseSearchContentRequest(request)
       if (!parsed) return invalidRequest()
 
-      return parts.search.searchContent(parsed)
+      const searchId = parsed.searchId
+      if (!searchId) return parts.search.searchContent(parsed)
+
+      const sender = event.sender
+      const search = contentSearches.begin(sender, searchId)
+      try {
+        return await parts.search.searchContent(parsed, {
+          signal: search.signal,
+          onBatch: (batch) => {
+            if (!sender.isDestroyed())
+              sender.send(WorkbenchFsChannels.searchContentProgress, { searchId, ...batch })
+          },
+        })
+      } finally {
+        contentSearches.end(sender, searchId, search)
+      }
+    })
+  )
+
+  ipcMain.handle(WorkbenchFsChannels.cancelSearchContent, (event, request: unknown) =>
+    callWithEnvelope(() => {
+      if (!hasStringFields(request, ['searchId'])) return invalidRequest()
+
+      contentSearches.cancel(event.sender, request['searchId'] as string)
+      return Promise.resolve()
     })
   )
 
@@ -501,14 +531,66 @@ function parseSearchEntriesRequest(input: unknown): Nullable<WorkbenchSearchEntr
 function parseSearchContentRequest(input: unknown): Nullable<WorkbenchSearchContentRequest> {
   if (!hasStringFields(input, ['projectRoot', 'query'])) return null
 
+  const paths = optionalStringArray(input, 'paths')
+  const openPaths = optionalStringArray(input, 'openPaths')
+  if (!paths || !openPaths) return null
+
   return {
     projectRoot: input['projectRoot'] as string,
     query: input['query'] as string,
-    ...optionalString(input, 'path'),
-    ...optionalBoolean(input, 'includeHidden'),
+    ...optionalBoolean(input, 'matchCase'),
+    ...optionalBoolean(input, 'wholeWord'),
+    ...optionalBoolean(input, 'regex'),
+    ...optionalString(input, 'include'),
+    ...optionalString(input, 'exclude'),
+    ...paths,
+    ...openPaths,
     ...optionalNumber(input, 'limit'),
-    ...optionalNumber(input, 'maxDepth'),
     ...optionalNumber(input, 'maxResultsPerFile'),
+    ...optionalString(input, 'searchId'),
+  }
+}
+
+interface ContentSearchRegistry {
+  /** 开始一次搜索；同一窗口同一 id 还在搜的那次先取消。 */
+  begin: (sender: WebContents, searchId: string) => AbortController
+  end: (sender: WebContents, searchId: string, search: AbortController) => void
+  cancel: (sender: WebContents, searchId: string) => void
+}
+
+/** 进行中的内容搜索，按窗口与 searchId 记下；窗口关了，它的搜索一并取消。 */
+function createContentSearchRegistry(): ContentSearchRegistry {
+  const searches = new Map<number, Map<string, AbortController>>()
+
+  const searchesOf = (sender: WebContents): Map<string, AbortController> => {
+    let bySearchId = searches.get(sender.id)
+    if (!bySearchId) {
+      const created = new Map<string, AbortController>()
+      bySearchId = created
+      searches.set(sender.id, created)
+      sender.once('destroyed', () => {
+        for (const search of created.values()) search.abort()
+        searches.delete(sender.id)
+      })
+    }
+    return bySearchId
+  }
+
+  return {
+    begin: (sender, searchId) => {
+      const bySearchId = searchesOf(sender)
+      bySearchId.get(searchId)?.abort()
+      const search = new AbortController()
+      bySearchId.set(searchId, search)
+      return search
+    },
+    end: (sender, searchId, search) => {
+      const bySearchId = searches.get(sender.id)
+      if (bySearchId?.get(searchId) === search) bySearchId.delete(searchId)
+    },
+    cancel: (sender, searchId) => {
+      searches.get(sender.id)?.get(searchId)?.abort()
+    },
   }
 }
 

@@ -7,10 +7,11 @@
  *   只认工程根目录下的——更深处同名的目录常常就是源码（`src/build/`、`scripts/out/`），
  *   要搜得到、改了要听得到。它们不搜；改动收成那个目录本身报一次，展开着的 `dist/` 照样跟着刷新。
  *
- * 不按 .gitignore 来：不是每个工程都是 Git 仓库，搜索要在热路径上逐目录问 `git check-ignore`；
- * 忽略规则在文件树里已经以「弱化」的样子显示出来。原先借 Platform 项目包的名单范围更宽
- * （连 `.idea`、`coverage` 也跳），那是给模型遍历用的，IDE 里这些目录要看得到、搜得到，
- * 名单留在 Workbench 自己这里。
+ * 文件监听与按名字找文件不按 .gitignore 来：不是每个工程都是 Git 仓库，也不能在热路径上逐目录问
+ * `git check-ignore`；忽略规则在文件树里已经以「弱化」的样子显示出来。内容搜索在 Git 仓库里一次列出
+ * 没被忽略的文件（见 ProjectFileListing），构建产物交给 .gitignore 决定，内部目录与依赖目录仍按这里跳过。
+ * 原先借 Platform 项目包的名单范围更宽（连 `.idea`、`coverage` 也跳），那是给模型遍历用的，IDE 里这些
+ * 目录要看得到、搜得到，名单留在 Workbench 自己这里。
  */
 const InternalDirectoryNames: ReadonlySet<string> = new Set(['.codegraph', '.data', '.git'])
 const DependencyDirectoryNames: ReadonlySet<string> = new Set(['node_modules'])

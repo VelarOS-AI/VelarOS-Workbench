@@ -56,6 +56,18 @@ export function optionalBoolean(
   return typeof input[field] === 'boolean' ? { [field]: input[field] } : {}
 }
 
+/** 可选的字符串数组：没给是 `{}`；给了但不全是字符串返回 null（按无效请求处理）。 */
+export function optionalStringArray(
+  input: Record<string, unknown>,
+  field: string
+): Nullable<Record<string, string[]>> {
+  const value = input[field]
+  if (value === undefined) return {}
+  if (!Array.isArray(value) || !value.every((item) => typeof item === 'string')) return null
+
+  return { [field]: value as string[] }
+}
+
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
 }

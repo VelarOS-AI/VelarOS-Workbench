@@ -74,7 +74,7 @@ export function useWorkbenchContentSearchController({
             projectRoot: project.rootPath,
             query: normalizedQuery,
             limit,
-            maxDepth: 8,
+            maxResultsPerFile: 3,
           })
         )
 
@@ -82,10 +82,13 @@ export function useWorkbenchContentSearchController({
 
         const openPaths = new Set(openTabsRef.current.map((tab) => tab.path))
         setDiskMatches(
-          result.matches.map((match) =>
-            mapWorkbenchContentSearchMatchResult(match, {
-              isOpen: openPaths.has(match.path),
-            })
+          result.files.flatMap((file) =>
+            file.matches.map((match) =>
+              mapWorkbenchContentSearchMatchResult(
+                { ...match, path: file.path },
+                { isOpen: openPaths.has(file.path) }
+              )
+            )
           )
         )
         setContentSearchTruncated(result.truncated)

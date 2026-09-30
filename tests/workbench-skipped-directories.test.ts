@@ -61,7 +61,7 @@ void describe('Workbench skipped directories', () => {
         try {
           const content = await parts.search.searchContent({ projectRoot, query: 'needle' })
           assert.deepEqual(
-            content.matches.map((match) => match.path).sort(),
+            content.files.map((file) => file.path),
             ['packages/app/dist/index.js', 'scripts/out/report.ts', 'src/build/compile.ts']
           )
 
@@ -73,14 +73,14 @@ void describe('Workbench skipped directories', () => {
           const build = await parts.search.searchEntries({ projectRoot, query: 'compile' })
           assert.deepEqual(build.entries.map((entry) => entry.path), ['src/build/compile.ts'])
 
-          // 搜索从子目录开始时，那里的 `dist` 不是工程根目录下的构建产物。
+          // 只搜一个子目录时，那里的 `dist` 也不是工程根目录下的构建产物。
           const scoped = await parts.search.searchContent({
             projectRoot,
-            path: 'packages/app',
+            include: './packages/app',
             query: 'needle',
           })
           assert.deepEqual(
-            scoped.matches.map((match) => match.path),
+            scoped.files.map((file) => file.path),
             ['packages/app/dist/index.js']
           )
         } finally {

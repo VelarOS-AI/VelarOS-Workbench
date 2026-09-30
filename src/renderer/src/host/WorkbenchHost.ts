@@ -30,6 +30,7 @@ import type {
   SystemWorkspaceGitSwitchBranchResult,
   SystemWorkspaceRootAddOptions,
   SystemWorkspaceRootScope,
+  WorkbenchCancelSearchContentRequest,
   WorkbenchCopyEntryRequest,
   WorkbenchCreateEntryRequest,
   WorkbenchDeleteEntryRequest,
@@ -92,6 +93,7 @@ import type {
   WorkbenchRunCommandResult,
   WorkbenchSaveFileRequest,
   WorkbenchSaveFileResult,
+  WorkbenchSearchContentProgressEvent,
   WorkbenchSearchContentRequest,
   WorkbenchSearchContentResult,
   WorkbenchSearchEntriesRequest,
@@ -163,6 +165,11 @@ export interface WorkbenchProjectKernelPort {
   searchWorkbenchContent(
     request: WorkbenchSearchContentRequest
   ): Promise<Result<WorkbenchSearchContentResult>>
+  cancelWorkbenchContentSearch(request: WorkbenchCancelSearchContentRequest): Promise<Result<void>>
+  /** 带 searchId 的内容搜索边搜边推送的结果。 */
+  onWorkbenchContentSearchProgress(
+    listener: (event: WorkbenchSearchContentProgressEvent) => void
+  ): () => void
   /** 快速打开按文件名找文件用的整份文件清单。 */
   listWorkbenchProjectFiles(
     request: WorkbenchListProjectFilesRequest

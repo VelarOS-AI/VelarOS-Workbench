@@ -862,28 +862,88 @@ export interface WorkbenchListProjectFilesResult {
   truncated: boolean
 }
 
+/**
+ * 内容搜索里的一处匹配。行列从 1 起，列按 UTF-16 码元算（与编辑器一致）；end 是匹配末尾之后那个位置。
+ */
 export interface WorkbenchContentSearchMatchResult {
-  path: string
   line: number
   column: number
+  endLine: number
+  endColumn: number
+  /** 匹配所在的那一行：去掉缩进，太长时只留匹配附近一段，截掉的地方是 `...`。 */
   excerpt: string
+  /** 匹配在 excerpt 里的位置 [start, end)；跨行的匹配截到这一行末尾。 */
+  excerptMatchStart: number
+  excerptMatchEnd: number
 }
 
+/** 一个文件里的匹配。 */
+export interface WorkbenchContentSearchFileResult {
+  path: string
+  /** 搜索时磁盘上的版本：替换前核对文件在这之后没被改过。 */
+  modifiedAt: number
+  size: number
+  /** 文件里的匹配总数；到了列出的上限时 `matches` 比它少。 */
+  matchCount: number
+  matches: WorkbenchContentSearchMatchResult[]
+}
+
+/**
+ * 搜项目里文件的内容。Git 仓库按 .gitignore 列文件，其它工程逐目录遍历（跳过内部目录、依赖目录、
+ * 根目录下的构建产物与点号开头的目录）；二进制文件与太大的文件不搜。开关与匹配规则见
+ * `@shared/workbenchTextSearch`，包含 / 排除的写法见 `@shared/workbenchSearchGlob`。
+ */
 export interface WorkbenchSearchContentRequest {
   projectRoot: string
   query: string
-  path?: string
-  includeHidden?: boolean
+  matchCase?: boolean
+  wholeWord?: boolean
+  regex?: boolean
+  /** 只搜这些文件：逗号分隔的模式。 */
+  include?: string
+  /** 不搜这些文件：逗号分隔的模式。 */
+  exclude?: string
+  /** 只搜这几个文件（工程相对路径），不列整个工程：替换之后刷新这几个文件的结果。 */
+  paths?: string[]
+  /**
+   * 调用方编辑器里开着的文件：以编辑器里的正文为准（可能有没保存的改动），由调用方自己搜；这里不读它们，
+   * 只报其中哪些落在搜索范围里（`openPathsInScope`）。
+   */
+  openPaths?: string[]
+  /** 最多列出多少处匹配，默认 5000。 */
   limit?: number
-  maxDepth?: number
+  /** 每个文件最多列出几处，不给就不限。 */
   maxResultsPerFile?: number
+  /** 给了就边搜边推送结果（`searchContentProgress`），也能按它取消（`cancelSearchContent`）。 */
+  searchId?: string
 }
 
-export interface WorkbenchSearchContentResult {
+/** 一批搜索结果。 */
+export interface WorkbenchSearchContentBatch {
+  /** 这一批搜到的文件，按路径排好。 */
+  files: WorkbenchContentSearchFileResult[]
+  /** 这一批确认落在搜索范围里的开着的文件（见 `openPaths`）。 */
+  openPathsInScope: string[]
+}
+
+export interface WorkbenchSearchContentProgressEvent extends WorkbenchSearchContentBatch {
+  searchId: string
+}
+
+/** 搜索结束。推送过的批次不再重复：`files` 与 `openPathsInScope` 只有最后还没推送的那一批。 */
+export interface WorkbenchSearchContentResult extends WorkbenchSearchContentBatch {
   projectRoot: string
   query: string
-  matches: WorkbenchContentSearchMatchResult[]
+  /** 列到上限就停了：还有文件没搜，或者最后一个文件没列全。 */
   truncated: boolean
+  /** 太大、没有搜的文件数。 */
+  skippedLargeFileCount: number
+  /** 搜到一半被取消了。 */
+  cancelled: boolean
+}
+
+export interface WorkbenchCancelSearchContentRequest {
+  searchId: string
 }
 
 export interface WorkbenchRunCommandRequest {
