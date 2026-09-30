@@ -23,6 +23,8 @@ import {
   WorkbenchUnencodableTextErrorCode,
 } from '@shared/workbenchTextFormat'
 
+import { workbenchMainText } from '../i18n/workbenchMainMessages'
+
 interface DecodedWorkbenchText {
   /** 去掉 BOM、换行统一为 LF 的正文。 */
   content: string
@@ -330,17 +332,17 @@ function createUnencodableTextError(
   const next = text.charCodeAt(index + 1)
   const isPairStart = code >= 0xd800 && code <= 0xdbff && next >= 0xdc00 && next <= 0xdfff
   if (code >= 0xd800 && code <= 0xdfff && !isPairStart)
-    return new AppError(
-      'VALIDATION',
-      `第 ${line} 行第 ${column} 列有不成对的 UTF-16 代理项（多半是残缺的粘贴内容），任何编码都写不出。`
-        + '这次没有保存，删掉它后再保存。'
-    )
+    return new AppError('VALIDATION', workbenchMainText('codec.loneSurrogate', { line, column }))
 
   const char = text.slice(index, isPairStart ? index + 2 : index + 1)
   return new AppError(
     WorkbenchUnencodableTextErrorCode,
-    `第 ${line} 行第 ${column} 列的「${char}」无法用 ${formatWorkbenchTextEncoding(encoding)} 表示。`
-      + '为避免写坏文件，这次没有保存：删掉这类字符，或把文件转换为 UTF-8 后再保存。'
+    workbenchMainText('codec.unencodable', {
+      line,
+      column,
+      char,
+      encoding: formatWorkbenchTextEncoding(encoding),
+    })
   )
 }
 

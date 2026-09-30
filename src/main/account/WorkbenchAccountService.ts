@@ -17,6 +17,7 @@ import type {
   WorkbenchManagedModelProviderId,
 } from '../../shared/workbenchModel'
 import { getWorkbenchManagedModelProviderLabel } from '../../shared/workbenchModel'
+import { workbenchMainText } from '../i18n/workbenchMainMessages'
 
 import type { WorkbenchCloudSession } from './WorkbenchSharedAccountStore'
 import { type WorkbenchSharedAccountStore } from './WorkbenchSharedAccountStore'
@@ -123,7 +124,12 @@ export class WorkbenchAccountService {
       { method: 'GET', headers: { Accept: 'application/json' } }
     )
     if (!response.ok) {
-      throw new Error(`${access.displayName} 模型目录请求失败（${response.status}）。`)
+      throw new Error(
+        workbenchMainText('account.modelCatalogRequestFailed', {
+          provider: access.displayName,
+          status: response.status,
+        })
+      )
     }
     const allowedModels = new Set(
       access.models
@@ -158,7 +164,7 @@ export class WorkbenchAccountService {
       || target.password
       || target.hash
     ) {
-      throw new Error(`${providerId} 模型请求地址不受信任。`)
+      throw new Error(workbenchMainText('account.untrustedModelEndpoint', { provider: providerId }))
     }
 
     await this.#requireManagedProvider(providerId)
@@ -187,7 +193,7 @@ export class WorkbenchAccountService {
         headers: { Accept: 'application/json' },
         signal: AbortSignal.timeout(CloudRequestTimeoutMs),
       })
-      if (!response.ok) throw new Error(`VelarOS 模型价格目录请求失败（${response.status}）。`)
+      if (!response.ok) throw new Error(workbenchMainText('account.pricingRequestFailed', { status: response.status }))
       const catalog = parseModelPricingCatalog(await response.json())
       const serverExpiry = Date.parse(catalog.expiresAt)
       this.#publicModelPricing = {
@@ -207,11 +213,11 @@ export class WorkbenchAccountService {
   public async fetchPluginResource(input: URL): Promise<Response> {
     const base = new URL(this.getPluginArtifactBaseUrl())
     if (input.origin !== base.origin || !input.pathname.startsWith(base.pathname)) {
-      throw new Error('Workbench 拒绝访问不受信任的插件地址。')
+      throw new Error(workbenchMainText('account.untrustedPluginUrl'))
     }
     await this.ensureSignedIn()
     const session = await this.store.load()
-    if (!session) throw new Error('请先登录 VelarOS 再下载插件。')
+    if (!session) throw new Error(workbenchMainText('account.signInBeforePluginDownload'))
     return this.fetchImpl(input, {
       headers: {
         Authorization: `Bearer ${session.accessToken}`,
@@ -227,7 +233,7 @@ export class WorkbenchAccountService {
     })
     const authorizationUrl = new URL(started.authorizationUrl)
     if (authorizationUrl.protocol !== 'https:' || authorizationUrl.hostname !== 'accounts.google.com') {
-      throw new Error('VelarOS 返回了不受信任的登录地址。')
+      throw new Error(workbenchMainText('account.untrustedSignInUrl'))
     }
     await this.openExternal(authorizationUrl.toString())
     const deadline = Math.min(
@@ -255,7 +261,7 @@ export class WorkbenchAccountService {
       await this.store.save(result.session)
       return { status: 'signed-in', account: result.session.account }
     }
-    throw new Error('VelarOS 登录等待超时，请重新尝试。')
+    throw new Error(workbenchMainText('account.signInTimedOut'))
   }
 
   async #request<T = unknown>(
@@ -267,7 +273,7 @@ export class WorkbenchAccountService {
       headers: { 'Content-Type': 'application/json', ...input.headers },
       body: JSON.stringify(input.body ?? {}),
     })
-    if (!response.ok) throw new Error(`VelarOS 账户服务请求失败（${response.status}）。`)
+    if (!response.ok) throw new Error(workbenchMainText('account.serviceRequestFailed', { status: response.status }))
     return await response.json() as T
   }
 
@@ -277,12 +283,12 @@ export class WorkbenchAccountService {
       headers: { Accept: 'application/json' },
       signal: AbortSignal.timeout(CloudRequestTimeoutMs),
     })
-    if (!response.ok) throw new Error(`VelarOS 账户服务请求失败（${response.status}）。`)
+    if (!response.ok) throw new Error(workbenchMainText('account.serviceRequestFailed', { status: response.status }))
     return response.json()
   }
 
   async #authorizedFetch(path: string, init: RequestInit): Promise<Response> {
-    if (!path.startsWith('/v1/')) throw new Error('VelarOS Cloud 请求路径无效。')
+    if (!path.startsWith('/v1/')) throw new Error(workbenchMainText('account.invalidCloudPath'))
     const session = await this.#requireActiveSession()
     const headers = new Headers(init.headers)
     headers.set('Authorization', `Bearer ${session.accessToken}`)
@@ -294,7 +300,7 @@ export class WorkbenchAccountService {
     const session = await this.store.load()
     if (!session || Date.parse(session.refreshExpiresAt) <= Date.now()) {
       if (session) await this.store.disconnect()
-      throw new Error('请先登录 VelarOS。')
+      throw new Error(workbenchMainText('account.signInRequired'))
     }
     return session
   }
@@ -304,8 +310,14 @@ export class WorkbenchAccountService {
   ): Promise<WorkbenchManagedModelProvider> {
     const access = await this.getManagedModelAccess()
     const provider = access.managedModels.find((entry) => entry.providerId === providerId)
-    if (!provider) throw new Error(`当前账户尚未获得 ${getWorkbenchManagedModelProviderLabel(providerId)} 授权。`)
-    if (!provider.enabled) throw new Error(`${provider.displayName} 当前不可用。`)
+    if (!provider)
+      throw new Error(
+        workbenchMainText('account.providerNotGranted', {
+          provider: getWorkbenchManagedModelProviderLabel(providerId),
+        })
+      )
+    if (!provider.enabled)
+      throw new Error(workbenchMainText('account.providerUnavailable', { provider: provider.displayName }))
     return provider
   }
 }
@@ -318,7 +330,7 @@ export function parseWorkbenchManagedModelAccessSnapshot(
   const rawManagedModels = root['managedModels']
   if (rawManagedModels === undefined) return { managedModels: [], updatedAt }
   if (!Array.isArray(rawManagedModels)) {
-    throw new Error('VelarOS 托管模型授权格式无效。')
+    throw new Error(workbenchMainText('account.invalidGrantFormat'))
   }
 
   const managedModels: WorkbenchManagedModelProvider[] = []
@@ -337,7 +349,7 @@ function parseManagedProvider(value: unknown): WorkbenchManagedModelProvider | n
   const providerId = record['providerId']
   if (typeof providerId !== 'string' || !isManagedModelProviderId(providerId)) return null
   if (typeof record['enabled'] !== 'boolean') {
-    throw new Error(`${providerId} 托管模型启用状态无效。`)
+    throw new Error(workbenchMainText('account.invalidProviderEnabledState', { provider: providerId }))
   }
   readNonEmptyString(
     record['displayName'],
@@ -362,9 +374,9 @@ function parseManagedProviderOptions(sources: readonly unknown[]): WorkbenchMana
   const seen = new Set<string>()
   for (const source of sources) {
     if (source === undefined) continue
-    if (!Array.isArray(source)) throw new Error('VelarOS 托管模型目录格式无效。')
+    if (!Array.isArray(source)) throw new Error(workbenchMainText('account.invalidManagedCatalog'))
     for (const value of source) {
-      if (!isRecord(value)) throw new Error('VelarOS 托管模型条目格式无效。')
+      if (!isRecord(value)) throw new Error(workbenchMainText('account.invalidManagedEntry'))
       const id = readNonEmptyString(value['id'], 'managed model.id')
       if (id.length > 512 || seen.has(id)) continue
       const label = optionalNonEmptyString(value['label']) ?? id
@@ -375,7 +387,7 @@ function parseManagedProviderOptions(sources: readonly unknown[]): WorkbenchMana
           : rawStatus === 'disabled' || rawStatus === 'not-configured'
           ? rawStatus
           : null
-      if (!status) throw new Error('VelarOS 托管模型状态无效。')
+      if (!status) throw new Error(workbenchMainText('account.invalidManagedState'))
       seen.add(id)
       models.push({ id, label: label.slice(0, 256), status })
     }
@@ -385,7 +397,7 @@ function parseManagedProviderOptions(sources: readonly unknown[]): WorkbenchMana
 
 function parseManagedProviderModelList(value: unknown): ProviderModelCatalogEntry[] {
   const root = readRecord(value, 'model catalog')
-  if (!Array.isArray(root['data'])) throw new Error('VelarOS 模型目录格式无效。')
+  if (!Array.isArray(root['data'])) throw new Error(workbenchMainText('account.invalidCatalog'))
   const models: ProviderModelCatalogEntry[] = []
   const seen = new Set<string>()
   for (const value of root['data'].slice(0, 256)) {
@@ -410,9 +422,9 @@ function isManagedModelProviderId(value: string): value is WorkbenchManagedModel
 /** 价格目录来自网络：外壳不对就报错，单条价格不对就丢掉那一条。 */
 export function parseModelPricingCatalog(value: unknown): ModelPricingCatalog {
   const root = readRecord(value, 'model pricing')
-  if (root['currency'] !== 'USD') throw new Error('VelarOS 模型价格目录币种无效。')
+  if (root['currency'] !== 'USD') throw new Error(workbenchMainText('account.invalidPricingCurrency'))
   const entries = root['entries']
-  if (!Array.isArray(entries)) throw new Error('VelarOS 模型价格目录格式无效。')
+  if (!Array.isArray(entries)) throw new Error(workbenchMainText('account.invalidPricing'))
   return {
     currency: 'USD',
     version: readNonEmptyString(root['version'], 'model pricing.version'),
@@ -467,12 +479,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function readRecord(value: unknown, label: string): Record<string, unknown> {
-  if (!isRecord(value)) throw new Error(`${label} 必须是对象。`)
+  if (!isRecord(value)) throw new Error(workbenchMainText('account.mustBeObject', { label }))
   return value
 }
 
 function readNonEmptyString(value: unknown, label: string): string {
-  if (typeof value !== 'string' || !value.trim()) throw new Error(`${label} 必须是非空字符串。`)
+  if (typeof value !== 'string' || !value.trim()) throw new Error(workbenchMainText('account.mustBeNonEmptyString', { label }))
   return value.trim()
 }
 

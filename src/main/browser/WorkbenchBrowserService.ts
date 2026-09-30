@@ -21,6 +21,7 @@ import {
   type WorkbenchBrowserNavigationAction,
   type WorkbenchBrowserState,
 } from '../../shared/workbenchBrowser'
+import { workbenchMainText } from '../i18n/workbenchMainMessages'
 
 import type { WorkbenchBrowserBackgroundPagesApi } from './WorkbenchBrowserBackgroundPages'
 
@@ -101,7 +102,7 @@ export class WorkbenchBrowserService {
     const guest = this.options.resolveGuest(webContentsId)
     // 只接这个窗口自己的 webview：别的窗口、别的页面的 WebContents 不能被拿来当 Agent 的页面。
     if (!guest || guest.isDestroyed() || guest.hostWebContents?.id !== owner.id)
-      throw new AppError('PERMISSION', '这个页面不属于当前窗口。')
+      throw new AppError('PERMISSION', workbenchMainText('browser.pageNotInWindow'))
     const runtimeId = this.runtimeId(ref)
     await this.runtime.presentPage(runtimeId, this.requireSite(runtimeId), webContentsId)
     this.options.backgroundPages.close(runtimeId)
@@ -278,7 +279,7 @@ export class WorkbenchBrowserService {
       getPageState: () => withSite((site) => runtime.getPageState(runtimeId, site, signal)),
       // 用户脚本会在用户以后打开的页面里长期跑：Workbench 没有管理它们的界面，也就不让模型建。
       manageUserScripts: () =>
-        Promise.reject(new AppError('UNAVAILABLE', 'Workbench 的浏览器不支持用户脚本。')),
+        Promise.reject(new AppError('UNAVAILABLE', workbenchMainText('browser.userScriptsUnsupported'))),
     }
   }
 
@@ -306,7 +307,7 @@ export class WorkbenchBrowserService {
 
   private requireSite(runtimeId: string): BrowserSiteContext {
     const site = this.sites.get(runtimeId)
-    if (!site) throw new AppError('VALIDATION', '当前会话的浏览器还没有打开网页。')
+    if (!site) throw new AppError('VALIDATION', workbenchMainText('browser.noPageOpen'))
     return site
   }
 
@@ -331,7 +332,7 @@ function requireWebAddress(input: string): string {
     browserAddress.resolveSearchOrNavigationInput(input) ?? '',
     { allowAboutBlank: false }
   )
-  if (!address) throw new AppError('VALIDATION', `只能打开 http 或 https 网址：${input}`)
+  if (!address) throw new AppError('VALIDATION', workbenchMainText('browser.unsupportedAddress', { address: input }))
   return address
 }
 

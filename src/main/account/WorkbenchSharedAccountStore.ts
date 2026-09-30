@@ -20,6 +20,7 @@ import { promisify } from 'node:util'
 import { velarosSharedResources } from '@velaros-ai/core/platform/shared-resources'
 
 import type { WorkbenchAccountIdentity } from '../../shared/workbenchAccount'
+import { workbenchMainText } from '../i18n/workbenchMainMessages'
 
 const WorkbenchProductId = 'velaros.workbench'
 const RegistryFileName = 'account-sessions.local-v1.bin'
@@ -202,7 +203,7 @@ export class WorkbenchSharedAccountStore {
       return parseRegistry(JSON.parse(this.#decrypt(encrypted)))
     } catch (error) {
       if (error instanceof Error && (error as NodeJS.ErrnoException).code === 'ENOENT') return null
-      throw new Error('无法读取 VelarOS 共享账号状态。', { cause: error })
+      throw new Error(workbenchMainText('account.sharedStateUnreadable'), { cause: error })
     }
   }
 
@@ -243,7 +244,7 @@ export class WorkbenchSharedAccountStore {
   #loadOrCreateKey(): Buffer {
     try {
       const key = readFileSync(this.#keyPath)
-      if (key.length !== CredentialKeyBytes) throw new Error('共享账号密钥格式无效。')
+      if (key.length !== CredentialKeyBytes) throw new Error(workbenchMainText('account.sharedKeyInvalid'))
       return key
     } catch (error) {
       if (!(error instanceof Error) || (error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
@@ -282,7 +283,7 @@ export class WorkbenchSharedAccountStore {
         } catch {
           continue
         }
-        if (Date.now() >= deadline) throw new Error('共享账号状态正由另一个 VelarOS 产品更新。')
+        if (Date.now() >= deadline) throw new Error(workbenchMainText('account.sharedStateBusy'))
         await new Promise((resolve) => setTimeout(resolve, 40))
       }
     }
@@ -300,7 +301,7 @@ function decryptCredential(encrypted: Buffer, key: Buffer): string {
     key.length !== CredentialKeyBytes
     || encrypted.length < prefixLength + CredentialIvBytes + CredentialTagBytes
     || !encrypted.subarray(0, prefixLength).equals(CredentialPayloadPrefix)
-  ) throw new Error('共享账号密文格式无效。')
+  ) throw new Error(workbenchMainText('account.sharedCipherInvalid'))
   const iv = encrypted.subarray(prefixLength, prefixLength + CredentialIvBytes)
   const tagOffset = prefixLength + CredentialIvBytes
   const tag = encrypted.subarray(tagOffset, tagOffset + CredentialTagBytes)
@@ -314,9 +315,9 @@ function decryptCredential(encrypted: Buffer, key: Buffer): string {
 }
 
 function parseRegistry(value: unknown): SharedAccountRegistry {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('共享账号格式无效。')
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(workbenchMainText('account.sharedFormatInvalid'))
   const record = value as Record<string, unknown>
-  if (record.schemaVersion !== 1 || typeof record.deviceId !== 'string') throw new Error('共享账号版本无效。')
+  if (record.schemaVersion !== 1 || typeof record.deviceId !== 'string') throw new Error(workbenchMainText('account.sharedVersionInvalid'))
   const sessions: Record<string, WorkbenchCloudSession> = {}
   if (record.sessions && typeof record.sessions === 'object' && !Array.isArray(record.sessions)) {
     for (const [accountId, session] of Object.entries(record.sessions)) {

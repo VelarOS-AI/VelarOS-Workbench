@@ -8,9 +8,10 @@
 import { AppError, type ErrorCode } from '@velaros-ai/core/error'
 
 import type { WorkbenchFsCallResult } from '../../shared/workbenchFs'
+import { workbenchMainText } from '../i18n/workbenchMainMessages'
 
 export function invalidRequest(): never {
-  throw new AppError('VALIDATION', '无效的工作区请求。')
+  throw new AppError('VALIDATION', workbenchMainText('files.invalidRequest'))
 }
 
 export async function callWithEnvelope<TValue>(

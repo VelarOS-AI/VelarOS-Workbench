@@ -10,6 +10,8 @@ import { createRequire } from 'node:module'
 
 import { AppError } from '@velaros-ai/core/error'
 
+import { workbenchMainText } from '../../i18n/workbenchMainMessages'
+
 import { readWorkbenchProcessCwd } from './WorkbenchProcessCwd'
 import { listWorkbenchProcessTree, signalWorkbenchProcesses } from './WorkbenchProcessTree'
 
@@ -70,7 +72,10 @@ function loadNodePty(): NodePtyModule {
   } catch (error) {
     nodePtyLoadError = new AppError(
       'PLATFORM',
-      `当前平台没有可用的终端后端（${process.platform}-${process.arch}）：${(error as Error).message}`,
+      workbenchMainText('terminal.backendUnavailable', {
+        platform: `${process.platform}-${process.arch}`,
+        reason: (error as Error).message,
+      }),
       error
     )
     throw nodePtyLoadError

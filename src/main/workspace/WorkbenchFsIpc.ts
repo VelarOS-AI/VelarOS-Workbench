@@ -49,6 +49,7 @@ import {
 } from '@shared/workbenchTextFormat'
 
 import { WorkbenchFsChannels } from '../../shared/workbenchFs'
+import { workbenchMainText } from '../i18n/workbenchMainMessages'
 import type { WorkbenchWindowManager } from '../projects/WorkbenchWindowManager'
 
 import type { WorkbenchUserWriteSink } from './git/WorkbenchChatRunAttribution'
@@ -117,7 +118,7 @@ export function registerWorkbenchFsIpc(
       const currentProject = windowManager.getHubForWebContents(event.sender)
         ?.getState().currentProject
       if (!currentProject || resolve(parsed.projectRoot) !== resolve(currentProject.path)) {
-        throw new AppError('PERMISSION', '当前窗口不能读取这个项目中的图片。')
+        throw new AppError('PERMISSION', workbenchMainText('files.imageNotInWindow'))
       }
 
       return fileSystem.readImageFile({ ...parsed, projectRoot: currentProject.path })

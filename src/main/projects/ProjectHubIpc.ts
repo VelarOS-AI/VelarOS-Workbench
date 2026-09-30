@@ -9,6 +9,7 @@ import { BrowserWindow, ipcMain, shell } from 'electron'
 
 import { WorkbenchProjectHubChannels } from '../../shared/projectHub'
 import { isWorkbenchAppLocale, setWorkbenchMainLocale } from '../i18n/workbenchMainLocale'
+import { workbenchMainText } from '../i18n/workbenchMainMessages'
 
 import { pickDirectory } from './ProjectPicker'
 import type { WorkbenchWindowManager } from './WorkbenchWindowManager'
@@ -97,7 +98,7 @@ export function registerProjectHubIpc(windows: WorkbenchWindowManager): void {
   ipcMain.handle(WorkbenchProjectHubChannels.pickNewProjectLocation, async (event) => {
     const picked = await pickDirectory(
       BrowserWindow.fromWebContents(event.sender),
-      '选择项目位置'
+      workbenchMainText('projects.pickNewProjectLocation')
     )
     return picked
       ? { ok: true as const, path: picked }

@@ -2,6 +2,8 @@ import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto'
 import { mkdir, open, readFile, rename, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
+import { workbenchMainText } from '../i18n/workbenchMainMessages'
+
 const CredentialFileName = 'model-credentials.local-v1.bin'
 const CredentialKeyFileName = 'model-credentials.local-v1.key'
 const CredentialPayloadPrefix = Buffer.from('VELAROS-WORKBENCH-MODEL-CREDENTIAL-V1\0', 'utf8')
@@ -86,7 +88,7 @@ export class WorkbenchModelCredentialStore {
       || value.length < prefixLength + CredentialIvBytes + CredentialTagBytes
       || !value.subarray(0, prefixLength).equals(CredentialPayloadPrefix)
     ) {
-      throw new Error('模型凭据存储格式无效。')
+      throw new Error(workbenchMainText('account.modelCredentialStoreInvalid'))
     }
     const ivStart = prefixLength
     const tagStart = ivStart + CredentialIvBytes
@@ -144,6 +146,6 @@ function readApiKeys(value: unknown): Record<string, string> {
 }
 
 function validateKey(key: Buffer): Buffer {
-  if (key.length !== CredentialKeyBytes) throw new Error('模型凭据密钥格式无效。')
+  if (key.length !== CredentialKeyBytes) throw new Error(workbenchMainText('account.modelCredentialKeyInvalid'))
   return key
 }

@@ -12,6 +12,7 @@ import {
   type WorkbenchBrowserNavigationAction,
   type WorkbenchBrowserSessionRequest,
 } from '../../shared/workbenchBrowser'
+import { workbenchMainText } from '../i18n/workbenchMainMessages'
 import type { WorkbenchProjectHub } from '../projects/ProjectHub'
 import { callWithEnvelope } from '../workspace/ipcBoundary'
 
@@ -36,7 +37,7 @@ export function registerWorkbenchBrowserIpc(options: {
     const request = parseSessionRequest(raw)
     const project = windows.getHubForWebContents(event.sender)?.getState().currentProject
     if (!project || resolve(project.path) !== resolve(request.projectRoot))
-      throw new AppError('PERMISSION', '当前窗口不能操作这个项目里的浏览器。')
+      throw new AppError('PERMISSION', workbenchMainText('browser.notInWindow'))
     return { projectRoot: project.path, sessionId: request.sessionId }
   }
 
@@ -47,7 +48,7 @@ export function registerWorkbenchBrowserIpc(options: {
     callWithEnvelope(async () => {
       const ref = ownedRef(event, raw)
       const webContentsId = isPlainObject(raw) ? raw.webContentsId : undefined
-      if (!isFiniteNumber(webContentsId)) throw new AppError('VALIDATION', '无效的浏览器请求。')
+      if (!isFiniteNumber(webContentsId)) throw new AppError('VALIDATION', workbenchMainText('browser.invalidRequest'))
       await browser.attachPage(ref, webContentsId, event.sender)
     })
   )
@@ -83,7 +84,7 @@ export function registerWorkbenchBrowserIpc(options: {
 
 function parseSessionRequest(raw: unknown): WorkbenchBrowserSessionRequest {
   if (!isPlainObject(raw) || !isNonBlankString(raw.projectRoot) || !isNonBlankString(raw.sessionId))
-    throw new AppError('VALIDATION', '无效的浏览器请求。')
+    throw new AppError('VALIDATION', workbenchMainText('browser.invalidRequest'))
   return { projectRoot: raw.projectRoot, sessionId: raw.sessionId }
 }
 
@@ -91,9 +92,9 @@ function parseNavigateRequest(
   raw: unknown
 ): Pick<WorkbenchBrowserNavigateRequest, 'action' | 'url'> {
   if (!isPlainObject(raw) || !isString(raw.action) || !NavigationActions.has(raw.action as WorkbenchBrowserNavigationAction))
-    throw new AppError('VALIDATION', '无效的浏览器请求。')
+    throw new AppError('VALIDATION', workbenchMainText('browser.invalidRequest'))
   const action = raw.action as WorkbenchBrowserNavigationAction
   if (action !== 'goto') return { action }
-  if (!isNonBlankString(raw.url)) throw new AppError('VALIDATION', '无效的浏览器请求。')
+  if (!isNonBlankString(raw.url)) throw new AppError('VALIDATION', workbenchMainText('browser.invalidRequest'))
   return { action, url: raw.url }
 }

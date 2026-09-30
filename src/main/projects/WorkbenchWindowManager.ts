@@ -15,6 +15,7 @@ import {
   type WorkbenchProjectHubState,
   type WorkbenchProjectOpenResult,
 } from '../../shared/projectHub'
+import { workbenchMainText } from '../i18n/workbenchMainMessages'
 
 import { validateProjectDirectory, WorkbenchProjectHub } from './ProjectHub'
 import { pickDirectory } from './ProjectPicker'
@@ -146,7 +147,7 @@ export class WorkbenchWindowManager {
   public async openProjectViaDialog(
     targetWindow: Nullable<BrowserWindow>
   ): Promise<WorkbenchProjectOpenResult> {
-    const picked = await pickDirectory(targetWindow, '打开项目')
+    const picked = await pickDirectory(targetWindow, workbenchMainText('projects.pickOpen'))
     if (!picked) return { ok: false, reason: 'canceled' }
 
     return this.openProjectPath(targetWindow?.webContents ?? null, picked)
@@ -155,7 +156,10 @@ export class WorkbenchWindowManager {
   public async switchProjectViaDialog(
     sender: WebContents
   ): Promise<WorkbenchProjectOpenResult> {
-    const picked = await pickDirectory(this.getWindowForWebContents(sender), '切换项目')
+    const picked = await pickDirectory(
+      this.getWindowForWebContents(sender),
+      workbenchMainText('projects.pickSwitch')
+    )
     if (!picked) return { ok: false, reason: 'canceled' }
 
     return this.switchProjectPath(sender, picked)
@@ -164,7 +168,7 @@ export class WorkbenchWindowManager {
   public async openProjectInNewWindowViaDialog(
     targetWindow: Nullable<BrowserWindow>
   ): Promise<WorkbenchProjectOpenResult> {
-    const picked = await pickDirectory(targetWindow, '在新窗口打开项目')
+    const picked = await pickDirectory(targetWindow, workbenchMainText('projects.pickOpenInNewWindow'))
     if (!picked) return { ok: false, reason: 'canceled' }
 
     return this.openProjectPathInNewWindow(picked)
@@ -254,7 +258,7 @@ export class WorkbenchWindowManager {
 
     const parent = await pickDirectory(
       this.getWindowForWebContents(sender),
-      '选择 Git 项目的保存位置'
+      workbenchMainText('projects.pickCloneLocation')
     )
     if (!parent) return { ok: false, reason: 'canceled' }
 
