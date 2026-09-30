@@ -5,6 +5,7 @@ import { describe, test } from 'bun:test'
 
 import { shellCommandPolicy } from '@velaros-ai/velaros/shell'
 
+import { setWorkbenchMainLocale } from '../src/main/i18n/workbenchMainLocale'
 import {
   analyzeWorkbenchCommandExecution,
   resolveWorkspaceIntegrityConfirmation,
@@ -277,6 +278,27 @@ void describe('Workbench command execution policy', () => {
       resolveWorkspaceIntegrityConfirmation('mv src /usr/local/lib', projectRoot)?.title,
       '改动项目之外的路径'
     )
+  })
+
+  void test('the question and its reason follow the interface language', () => {
+    setWorkbenchMainLocale('en-US')
+    try {
+      const reset = resolveWorkspaceIntegrityConfirmation('git reset --hard', projectRoot)
+      assert.equal(reset?.title, 'Reset the Git working tree')
+      assert.match(reset?.reason ?? '', /uncommitted changes may be overwritten/u)
+      assert.match(
+        analyzeWorkbenchCommandExecution('mv src /usr/local/lib', projectRoot).dangerousReason ?? '',
+        /outside the current workspace: \/usr\/local\/lib/u
+      )
+      // 补充层的每一种判定都有英文的标题与理由，不留中文。
+      for (const command of workbenchDangerous) {
+        const confirmation = resolveWorkspaceIntegrityConfirmation(command, projectRoot)
+        if (!confirmation) continue
+        assert.doesNotMatch(`${confirmation.title}${confirmation.reason}`, /[\u4e00-\u9fff]/u, command)
+      }
+    } finally {
+      setWorkbenchMainLocale('zh-CN')
+    }
   })
 
   void test('leaves the platform verdict untouched when it already fired', () => {

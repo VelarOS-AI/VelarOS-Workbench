@@ -33,6 +33,7 @@ import { shellCommandApproval } from '@velaros-ai/velaros/shell'
 import { webOperations } from '@velaros-ai/velaros/web'
 import { VelarWebModule } from '@velaros-ai/velaros/web/contracts'
 
+import { workbenchMainText } from '../i18n/workbenchMainMessages'
 import { resolveWorkspaceIntegrityConfirmation } from '../workspace/CommandExecutionPolicy'
 import type { WorkbenchAgentProjectActivityPort } from '../workspace/git/WorkbenchChatRunAttribution'
 import { isRelativePathInsideRoot } from '../workspace/PathContainmentHelper'
@@ -314,7 +315,12 @@ async function workspaceIntegrityConfirmation(
   // 确认卡只摊开第一行：「在当前项目重置 Git 工作区：git reset --hard」；完整理由在第二行，回答之后点开回看。
   const head = input.command.trim().split('\n')[0]?.trim() ?? ''
   const shown = head.length > ConfirmationCommandChars ? `${head.slice(0, ConfirmationCommandChars)}…` : head
-  return { message: `在${scopeLabel}${integrity.title}：${shown}\n${integrity.reason}`, options }
+  const headline = workbenchMainText('policy.confirmation', {
+    scope: scopeLabel,
+    title: integrity.title,
+    command: shown,
+  })
+  return { message: `${headline}\n${integrity.reason}`, options }
 }
 
 /**

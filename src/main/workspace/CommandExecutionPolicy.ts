@@ -5,6 +5,8 @@ import { isEmpty } from '@velaros-ai/core'
 import { shellCommandPolicy } from '@velaros-ai/velaros/shell'
 import type { ShellCommandPlan } from '@velaros-ai/velaros/shell/contracts'
 
+import { workbenchMainText } from '../i18n/workbenchMainMessages'
+
 import { containsTokenSequence, tokenizeShellCommand } from './CommandParsingHelper'
 import { isPathInsideRoot } from './PathContainmentHelper'
 
@@ -110,9 +112,41 @@ interface WorkspaceIntegrityDanger {
   readonly reason: string
 }
 
+/** 补充判定的种类；给用户看的那两行（标题与理由）按界面语言出，文案在 main 的消息表 `policy.*` 里。 */
+type WorkspaceIntegrityDangerKind =
+  | 'gitReset'
+  | 'gitRestore'
+  | 'gitRm'
+  | 'gitClean'
+  | 'gitCheckout'
+  | 'gitSwitch'
+  | 'gitMerge'
+  | 'gitPull'
+  | 'gitRebase'
+  | 'gitRevert'
+  | 'gitForcePush'
+  | 'gitStashDrop'
+  | 'ghCheckout'
+  | 'chmodWorldWritable'
+  | 'outsideWorkspace'
+  | 'shutdown'
+  | 'eraseDisk'
+  | 'modifyPartitions'
+
+function describeDanger(
+  kind: WorkspaceIntegrityDangerKind,
+  params?: Readonly<Record<string, string>>
+): WorkspaceIntegrityDanger {
+  return {
+    title: workbenchMainText(`policy.${kind}.title`),
+    reason: workbenchMainText(`policy.${kind}.reason`, params),
+  }
+}
+
 /** 一条 Git 子命令的危险判定。 */
-interface GitInvocationRule extends WorkspaceIntegrityDanger {
+interface GitInvocationRule {
   readonly subcommand: string
+  readonly danger: WorkspaceIntegrityDangerKind
   /** 实参（子命令之后、`--` 之前）形态无害时返回 true；缺省表示这条子命令任何形态都要先问。 */
   readonly isHarmless?: (args: readonly string[]) => boolean
 }
@@ -131,15 +165,13 @@ const GitInvocationRules: readonly GitInvocationRule[] = [
     // 默认的 --mixed 与 --soft 只改索引和分支指针，工作区不动，撤下的提交还在 reflog 里；
     // 只有这三种模式会把工作区文件改写成目标提交的样子。
     subcommand: 'reset',
-    title: '重置 Git 工作区',
-    reason: '命令会重置 Git 工作区，未提交的改动可能被覆盖。',
+    danger: 'gitReset',
     isHarmless: (args) => !args.some((arg) => ['--hard', '--merge', '--keep'].includes(arg)),
   },
   {
     // restore 默认写工作区；只有纯 --staged（不带 --worktree）才是「取消暂存」，只动索引。
     subcommand: 'restore',
-    title: '用 Git 里的版本覆盖文件',
-    reason: '命令会用 Git 里的版本覆盖工作区文件，未提交的改动会丢失。',
+    danger: 'gitRestore',
     isHarmless: (args) =>
       hasGitOption(args, 'S', '--staged') && !hasGitOption(args, 'W', '--worktree'),
   },
@@ -147,40 +179,25 @@ const GitInvocationRules: readonly GitInvocationRule[] = [
     // --cached 只把文件移出索引、磁盘上原样保留；不带 --cached 时 Git 自己会拒绝删有本地改动的文件，
     // 只有 -f 会连未提交的改动一起删掉。
     subcommand: 'rm',
-    title: '强制删除工作区文件',
-    reason: '命令会强制删除工作区文件，未提交的改动会一起丢失。',
+    danger: 'gitRm',
     isHarmless: (args) => hasGitOption(args, null, '--cached') || !hasGitOption(args, 'f', '--force'),
   },
   {
     // -n / --dry-run 只列出将要删除的文件。
     subcommand: 'clean',
-    title: '删除未跟踪的文件',
-    reason: '命令会删除未跟踪的文件，尚未提交的新文件会一起消失。',
+    danger: 'gitClean',
     isHarmless: (args) => hasGitOption(args, 'n', '--dry-run'),
   },
-  {
-    subcommand: 'checkout',
-    title: '切换 Git 分支或覆盖文件',
-    reason: '命令会切换 Git 分支或用 Git 里的版本覆盖文件，可能丢掉当前工作区的改动。',
-  },
-  {
-    subcommand: 'switch',
-    title: '切换 Git 分支',
-    reason: '命令会切换 Git 分支，可能打断其他智能体或工作台正在进行的工作。',
-  },
-  { subcommand: 'merge', title: '合并 Git 历史', reason: '命令会合并 Git 历史，可能改写当前工作区内容。' },
-  {
-    subcommand: 'pull',
-    title: '拉取并更新 Git HEAD',
-    reason: '命令会更新当前 Git HEAD，可能与正在进行的文件修改冲突。',
-  },
-  { subcommand: 'rebase', title: '变基 Git 历史', reason: '命令会变基 Git 历史，可能改写提交或工作区内容。' },
-  { subcommand: 'revert', title: '回滚 Git 提交', reason: '命令会回滚已有提交，可能与当前工作区的改动冲突。' },
+  { subcommand: 'checkout', danger: 'gitCheckout' },
+  { subcommand: 'switch', danger: 'gitSwitch' },
+  { subcommand: 'merge', danger: 'gitMerge' },
+  { subcommand: 'pull', danger: 'gitPull' },
+  { subcommand: 'rebase', danger: 'gitRebase' },
+  { subcommand: 'revert', danger: 'gitRevert' },
   {
     // 普通推送只在远端追加提交；强推（-f / --force* / +refspec）会覆盖远端已有的历史。
     subcommand: 'push',
-    title: '强制推送 Git 分支',
-    reason: '命令会强制推送 Git 分支，可能覆盖远端历史。',
+    danger: 'gitForcePush',
     isHarmless: (args) =>
       !hasGitOption(args, 'f', '--force')
       && !args.some((arg) => arg.startsWith('--force-') || (arg.startsWith('+') && arg.length > 1)),
@@ -188,8 +205,7 @@ const GitInvocationRules: readonly GitInvocationRule[] = [
   {
     // stash push / pop / apply 不丢内容；drop / clear 会把暂存的改动永久扔掉。
     subcommand: 'stash',
-    title: '丢弃 Git stash',
-    reason: '命令会永久丢弃 Git stash 里暂存的改动。',
+    danger: 'gitStashDrop',
     isHarmless: (args) => {
       const action = args.find((arg) => !arg.startsWith('-'))
       return action !== 'drop' && action !== 'clear'
@@ -354,7 +370,7 @@ function resolveGitDanger(
     for (const subcommandIndex of gitSubcommandIndices(segment)) {
       const rule = GitInvocationRules.find((candidate) => candidate.subcommand === segment[subcommandIndex])
       if (rule && !rule.isHarmless?.(argsBeforePathspec(segment.slice(subcommandIndex + 1))))
-        return { title: rule.title, reason: rule.reason }
+        return describeDanger(rule.danger)
     }
   }
   return null
@@ -440,30 +456,22 @@ function resolveWorkspaceIntegrityDanger(
   const gitDanger = resolveGitDanger(segments)
   if (gitDanger) return gitDanger
 
-  if (containsTokenSequence(lowered, ['gh', 'pr', 'checkout']))
-    return { title: '经 GitHub CLI 切换分支', reason: '命令会通过 GitHub CLI 切换分支或修改当前工作区。' }
+  if (containsTokenSequence(lowered, ['gh', 'pr', 'checkout'])) return describeDanger('ghCheckout')
 
-  if (hasWorldWritableChmod(invocations))
-    return {
-      title: '放开文件的全局写权限',
-      reason: '命令会把文件权限改成 777 或全局可写，可能扩大写入和执行权限。',
-    }
+  if (hasWorldWritableChmod(invocations)) return describeDanger('chmodWorldWritable')
 
   const outsideTarget = findOutsideWorkspaceTarget(invocations, projectRoot)
-  if (outsideTarget)
-    return { title: '改动项目之外的路径', reason: `命令会改动当前工作区之外的路径 ${outsideTarget}。` }
+  if (outsideTarget) return describeDanger('outsideWorkspace', { path: outsideTarget })
 
-  if (lowered.includes('halt') || lowered.includes('poweroff'))
-    return { title: '关闭或重启系统', reason: '命令可能会关闭、重启或中断当前系统环境。' }
+  if (lowered.includes('halt') || lowered.includes('poweroff')) return describeDanger('shutdown')
 
   // `diskutil erase` 之外还要覆盖 eraseDisk / eraseVolume 这类拼接子命令。
   const erasesDisk =
     containsTokenSequence(lowered, ['diskutil', 'erase'])
     || invocations.some(({ name, args }) => name === 'diskutil' && !!args[0]?.toLowerCase().startsWith('erase'))
-  if (erasesDisk) return { title: '抹除磁盘', reason: '命令看起来会抹除磁盘或卷。' }
+  if (erasesDisk) return describeDanger('eraseDisk')
 
-  if (lowered.some((token) => UncoveredDiskCommands.has(token)))
-    return { title: '修改磁盘分区', reason: '命令可能会格式化、初始化或修改磁盘分区。' }
+  if (lowered.some((token) => UncoveredDiskCommands.has(token))) return describeDanger('modifyPartitions')
 
   return null
 }
