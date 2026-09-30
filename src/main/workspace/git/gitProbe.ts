@@ -150,6 +150,21 @@ async function runGitProbe(): Promise<void> {
     await service.performFileAction(projectRoot, ['renamed file.txt'], 'discard')
     check((await service.getSummary(projectRoot)).status?.isClean, '丢弃 rename 应完整恢复')
 
+    // 分离的 HEAD：状态说清停在哪个提交上，能从它切回分支。
+    await execa('git', ['checkout', '--quiet', '--detach'], {
+      cwd: projectRoot,
+      env: ProbeGitEnvironment,
+    })
+    const detached = await service.getSummary(projectRoot)
+    equal(detached.status?.branch ?? null, null, '分离的 HEAD 上没有当前分支')
+    equal(
+      detached.status?.detachedHead?.sha,
+      committed.commit.commitSha,
+      '状态应说明 HEAD 停在哪个提交'
+    )
+    const reattached = await service.switchBranch(projectRoot, 'feature/probe')
+    equal(reattached.summary.status?.detachedHead ?? null, null, '切回分支后不再是分离的 HEAD')
+
     await expectCode(
       'PERMISSION',
       () => service.performFileAction(projectRoot, ['../escape.txt'], 'stage'),
@@ -255,6 +270,6 @@ async function configureIdentity(rootPath: string): Promise<void> {
 
 await runGitProbe()
 // Windows 上没有进程组可结束，不跑「卡住的远端」那一段（4 条断言）。
-const expectedAssertions = process.platform === 'win32' ? 41 : 45
+const expectedAssertions = process.platform === 'win32' ? 44 : 48
 assert.equal(assertionCount, expectedAssertions, 'Git 探针断言数变化必须显式复核')
 console.info(`workbench git probe: ${assertionCount}/${expectedAssertions} assertions passed`)

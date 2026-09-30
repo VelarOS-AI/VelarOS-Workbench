@@ -12,8 +12,19 @@ export interface WorkspaceGitFileStatusEntry {
   workTreeStatus: string
 }
 
+/**
+ * 分离的 HEAD：HEAD 没有指着分支（检出的是某个提交或标签，或者变基停在半路），这是它指着的提交。
+ */
+export interface WorkspaceGitDetachedHead {
+  sha: string
+  shortSha: string
+}
+
 export interface WorkspaceGitStatusResult {
+  /** 当前分支；HEAD 是分离的时为 null，这时看 `detachedHead`。 */
   branch: Nullable<string>
+  /** HEAD 指着分支时为 null。 */
+  detachedHead: Nullable<WorkspaceGitDetachedHead>
   upstream: Nullable<string>
   ahead: number
   behind: number
@@ -103,7 +114,8 @@ export interface WorkspaceGitRemoteActionOptions {
 
 export interface WorkspaceGitRemoteActionResult {
   action: WorkspaceGitRemoteAction
-  branch: string
+  /** 这次操作的分支；在分离的 HEAD 上获取远端时没有分支，为 null。 */
+  branch: Nullable<string>
   upstream: Nullable<string>
   output: string
   /**

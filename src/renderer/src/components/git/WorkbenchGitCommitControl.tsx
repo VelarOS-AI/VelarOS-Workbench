@@ -1,9 +1,11 @@
 import { type ReactElement } from 'react'
 import {
   reportWorkbenchGitRemoteActionFailure,
+  reportWorkbenchGitRemoteActionSuccess,
   useWorkbenchGitRemoteAction,
 } from '@renderer/hooks/useWorkbenchGitRemoteAction'
 import { workbenchHost } from '@renderer/host'
+import { describeWorkbenchGitHead } from '@renderer/models/git/workbenchGitTopBarModel'
 import { useStableWorkbenchMessageTranslate } from '@renderer/runtime/useStableWorkbenchMessaging'
 
 import { AppError } from '@velaros-ai/core/error'
@@ -50,14 +52,18 @@ export function WorkbenchGitCommitControl({
   const { locale, messageLatest, t, tLatest } = useStableWorkbenchMessageTranslate()
   const remoteAction = useWorkbenchGitRemoteAction(workspaceRoot)
   const status = summary.status
+  // 分离的 HEAD 上控件照样在：按钮上写「分离的 HEAD · 1a2b3c4」，菜单里没有哪个分支算当前的，点哪个都能切过去。
+  const headLabel = status ? describeWorkbenchGitHead(status, t) : null
 
-  if (!summary.repository || !status?.branch) return null
+  if (!summary.repository || !status || !headLabel) return null
 
   const activeStatus = status
+  const detachedHead = status.detachedHead
   const controlSummary = {
     repository: summary.repository,
     status: {
-      branch: status.branch,
+      // 共享的分支菜单只认一个名字：分离的 HEAD 把这句说明当名字给它。
+      branch: headLabel,
       upstream: status.upstream,
       isClean: status.isClean,
       changedFiles: status.changedFiles,
@@ -94,7 +100,8 @@ export function WorkbenchGitCommitControl({
     messageLatest.current.success({
       title: tLatest.current('workbench.gitBranchSwitchSuccessTitle'),
       description: tLatest.current('workbench.gitBranchSwitchSuccessDescription', {
-        from: result.previousBranch ?? tLatest.current('common.unknown'),
+        // 从分离的 HEAD 切过来的：没有上一个分支，写它停在的提交。
+        from: result.previousBranch ?? headLabel ?? tLatest.current('common.unknown'),
         to: result.branch,
       }),
     })
@@ -144,16 +151,7 @@ export function WorkbenchGitCommitControl({
     // 经统一入口跑：顶栏同步按钮上看得到它在跑，也能在那里取消。
     const result = await remoteAction.run(action, { branch, privateKeyPath: gitSshKeyPath })
     await onRefresh()
-    messageLatest.current.success({
-      title: tLatest.current(
-        action === 'fetch'
-          ? 'workbench.gitFetchSuccessTitle'
-          : 'workbench.gitUploadSuccessTitle'
-      ),
-      description: tLatest.current('workbench.gitRemoteActionSuccessDescription', {
-        branch: result.action.branch,
-      }),
-    })
+    reportWorkbenchGitRemoteActionSuccess(result.action, { messageLatest, tLatest })
   }
 
   async function handleActionError(
@@ -186,7 +184,9 @@ export function WorkbenchGitCommitControl({
     remoteBranches: t('workbench.gitBranchRemoteGroup'),
     createDialogTitle: t('workbench.gitBranchCreateDialogTitle'),
     createDialogDescription: (branch) =>
-      t('workbench.gitBranchCreateDialogDescription', { branch }),
+      detachedHead
+        ? t('workbench.gitBranchCreateFromDetachedDescription', { sha: detachedHead.shortSha })
+        : t('workbench.gitBranchCreateDialogDescription', { branch }),
     createBranchPlaceholder: t('workbench.gitBranchCreatePlaceholder'),
     checkoutCreatedBranch: t('workbench.gitBranchCheckoutCreated'),
     cancel: t('common.cancel'),

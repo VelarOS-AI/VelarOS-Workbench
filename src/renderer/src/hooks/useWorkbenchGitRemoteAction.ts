@@ -9,6 +9,7 @@ import {
   type WorkbenchGitRemoteOperation,
 } from '@renderer/models/git/workbenchGitRemoteOperation'
 
+import { optionalWhenLazy } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { Result } from '@velaros-ai/core/result'
 
@@ -16,6 +17,7 @@ import type {
   SystemWorkspaceGitActionRequest,
   SystemWorkspaceGitActionResult,
   WorkspaceGitRemoteAction,
+  WorkspaceGitRemoteActionResult,
 } from '@shared/contracts'
 
 import type { WorkbenchI18nContextValue } from '../i18n'
@@ -39,6 +41,13 @@ export interface WorkbenchGitRemoteActionController {
   ) => Promise<SystemWorkspaceGitActionResult>
   /** 取消正在跑的那个；没有在跑的、已经在取消的不做事。 */
   cancel: () => void
+}
+
+const SuccessTitleKeys: Record<WorkspaceGitRemoteAction, string> = {
+  fetch: 'workbench.gitFetchSuccessTitle',
+  pull: 'workbench.gitPullSuccessTitle',
+  sync: 'workbench.gitSyncSuccessTitle',
+  upload: 'workbench.gitUploadSuccessTitle',
 }
 
 const FailedTitleKeys: Record<WorkspaceGitRemoteAction, string> = {
@@ -65,6 +74,25 @@ export function describeWorkbenchGitRemoteActionCancel(
     : t('workbench.gitCancelRemoteAction', { action: t(ActionLabelKeys[operation.action]) })
 }
 
+type WorkbenchGitRemoteActionMessaging = Pick<
+  ReturnType<typeof useStableWorkbenchMessageTranslate>,
+  'messageLatest' | 'tLatest'
+>
+
+/** 远端操作做完了的提示：哪个操作、哪个分支（分离的 HEAD 上获取远端时没有分支可说）。 */
+export function reportWorkbenchGitRemoteActionSuccess(
+  result: Pick<WorkspaceGitRemoteActionResult, 'action' | 'branch'>,
+  { messageLatest, tLatest }: WorkbenchGitRemoteActionMessaging
+): void {
+  const { branch } = result
+  messageLatest.current.success({
+    title: tLatest.current(SuccessTitleKeys[result.action]),
+    description: optionalWhenLazy(branch, () =>
+      tLatest.current('workbench.gitRemoteActionSuccessDescription', { branch: branch ?? '' })
+    ),
+  })
+}
+
 /**
  * 远端操作没成时的提示：用户自己取消的只说一声「已取消」；这个项目已经有一个在跑的，说等它跑完；其余照
  * git 的说明报出来。
@@ -72,10 +100,7 @@ export function describeWorkbenchGitRemoteActionCancel(
 export function reportWorkbenchGitRemoteActionFailure(
   error: unknown,
   action: WorkspaceGitRemoteAction,
-  {
-    messageLatest,
-    tLatest,
-  }: Pick<ReturnType<typeof useStableWorkbenchMessageTranslate>, 'messageLatest' | 'tLatest'>
+  { messageLatest, tLatest }: WorkbenchGitRemoteActionMessaging
 ): void {
   const appError = AppError.from(error)
   if (appError.code === 'CANCELLED') {

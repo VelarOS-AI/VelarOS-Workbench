@@ -234,6 +234,11 @@ GB18030、混用的换行符），编辑器据此只读打开，用户明确选�
 - **输出**：每条命令带 `GitOutputConfig`（`core.quotePath=false`、固定的 diff 前缀、不着色……）并钉死
   C locale，解析不跟着用户的 git 配置和界面语言变；列路径的命令一律 `-z`，中文文件名不会被转义。
 - **范围**：项目可以是仓库里的一个子目录。命令在项目根下跑，状态、差异、提交只看项目里的文件。
+- **分离的 HEAD**：状态（`WorkspaceGitStatusResult`）与顶栏的轻量快照里，`branch` 为 null 时
+  `detachedHead` 给出 HEAD 停在的提交（`sha`、`shortSha`）。顶栏的 Git 控件看的是「HEAD 有得显示」
+  （`hasWorkbenchGitHead`），不只认分支：分离的 HEAD 上按钮写「分离的 HEAD · 1a2b3c4」
+  （`describeWorkbenchGitHead`，这句话当作分支名交给 UI 包的分支菜单），菜单里照常切回分支、新建分支；
+  同步按钮、提交面板的推送禁用并写明原因，获取远端和分支菜单里点名分支的推送照常能用。
 - **文件历史**：`getLog({ path })` 用 `--follow` 跟着改名往回找，每个提交带着文件当时的路径（`path`），
   读那时的内容用它；与现在的路径不同时历史列表在作者后面写出来（`workbenchGitFileHistory.ts`）。
 - **远端操作**（获取、拉取、同步、推送）：连远端的命令带 `--progress`，只看有没有动静，不限总时长——

@@ -13,6 +13,7 @@ import {
   SpinnerGapIcon,
 } from '@phosphor-icons/react'
 import { useWorkbenchI18n } from '@renderer/i18n'
+import { hasWorkbenchGitHead } from '@renderer/models/git/workbenchGitTopBarModel'
 
 import { isEmpty,toNullable } from '@velaros-ai/core'
 import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
@@ -78,7 +79,8 @@ export function WorkbenchTopLeading({
   | 'onRepositoryChanged'
   | 'onOpenGitCommitTool'
 >): Nullable<ReactElement> {
-  const gitControlReady = !!gitSummary?.repository && !!gitSummary.status?.branch
+  // 分离的 HEAD 上控件照样在：从分支菜单才能切回分支。
+  const gitControlReady = !!gitSummary?.repository && hasWorkbenchGitHead(gitSummary.status)
   if (!gitControlReady) return null
 
   return (

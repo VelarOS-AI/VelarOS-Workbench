@@ -3,6 +3,7 @@ import type { WorkbenchGitBlame } from '../workbenchGitBlame'
 import type {
   WorkspaceGitBranch,
   WorkspaceGitCommitResult,
+  WorkspaceGitDetachedHead,
   WorkspaceGitDiffOptions,
   WorkspaceGitDiffResult,
   WorkspaceGitFileAction,
@@ -86,7 +87,9 @@ export interface SystemWorkspaceGitLineStatsSnapshot {
   repository: boolean
   checkedAt: number
   lineStats: WorkspaceGitLineStats
+  /** 当前分支；HEAD 是分离的时为 null，这时看 `detachedHead`。 */
   branch: Nullable<string>
+  detachedHead: Nullable<WorkspaceGitDetachedHead>
 }
 
 export interface SystemWorkspaceGitCommitResult {

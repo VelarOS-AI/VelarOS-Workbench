@@ -460,6 +460,9 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     gitSyncHint: '先拉取，再推送',
     gitFetchHint: '只更新远端分支的记录，不改动本地文件',
     gitNoUpstreamHint: '当前分支还没有关联远端分支',
+    gitDetachedHead: '分离的 HEAD · {sha}',
+    gitDetachedHeadReason:
+      '当前检出的是提交 {sha}，不在任何分支上（分离的 HEAD）。先切换到一个分支，或从这个提交新建分支，才能拉取、同步和推送。',
     gitPullConflictsTitle: '拉取时出现合并冲突',
     gitPullConflictsDescription:
       '{count} 个文件有冲突，已列在提交面板的「合并冲突」里。解决后逐个标记为已解决，再提交以完成合并。',
@@ -612,6 +615,7 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     gitBranchCreate: '新建',
     gitBranchCreateDialogTitle: '新建分支',
     gitBranchCreateDialogDescription: '基于当前分支 {branch} 新建分支。',
+    gitBranchCreateFromDetachedDescription: '从当前检出的提交 {sha} 新建分支。',
     gitBranchCheckoutCreated: '签出',
     gitBranchCurrent: '当前分支',
     gitBranchLocal: '本地分支',

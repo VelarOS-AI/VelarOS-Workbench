@@ -475,6 +475,9 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     gitSyncHint: 'Pull, then push',
     gitFetchHint: 'Update remote branches only; local files stay as they are',
     gitNoUpstreamHint: 'This branch does not track a remote branch yet',
+    gitDetachedHead: 'Detached HEAD · {sha}',
+    gitDetachedHeadReason:
+      'Commit {sha} is checked out, not a branch (detached HEAD). Switch to a branch, or create one from this commit, to pull, sync or push.',
     gitPullConflictsTitle: 'The pull has merge conflicts',
     gitPullConflictsDescription:
       '{count} files conflict; they are listed under Merge Conflicts in the commit panel. Resolve them, mark each as resolved, then commit to finish the merge.',
@@ -635,6 +638,7 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     gitBranchCreate: 'New',
     gitBranchCreateDialogTitle: 'New branch',
     gitBranchCreateDialogDescription: 'Create a branch from the current {branch} branch.',
+    gitBranchCreateFromDetachedDescription: 'Create a branch from the checked-out commit {sha}.',
     gitBranchCheckoutCreated: 'Check out',
     gitBranchCurrent: 'Current branch',
     gitBranchLocal: 'Local branch',

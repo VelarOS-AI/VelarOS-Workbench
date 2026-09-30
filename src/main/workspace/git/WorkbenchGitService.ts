@@ -28,6 +28,7 @@ import type {
   SystemWorkspaceGitSwitchBranchResult,
   WorkspaceGitBranch,
   WorkspaceGitCommitResult,
+  WorkspaceGitDetachedHead,
   WorkspaceGitDiffOptions,
   WorkspaceGitFileAction,
   WorkspaceGitFileStatusEntry,
@@ -255,7 +256,14 @@ export class WorkbenchGitService {
         this.getLineStatsForRoot(repository),
         this.getCurrentBranch(rootPath),
       ])
-      return { rootPath, repository: true, checkedAt: Date.now(), lineStats, branch }
+      return {
+        rootPath,
+        repository: true,
+        checkedAt: Date.now(),
+        lineStats,
+        branch,
+        detachedHead: branch ? null : await this.readDetachedHead(rootPath),
+      }
     } catch (error) {
       if (this.isNotRepositoryError(error))
         return {
@@ -264,6 +272,7 @@ export class WorkbenchGitService {
           checkedAt: Date.now(),
           lineStats: { ...EmptyLineStats },
           branch: null,
+          detachedHead: null,
         }
       throw error
     }
@@ -799,10 +808,34 @@ export class WorkbenchGitService {
   ): Promise<SystemWorkspaceGitActionResult> {
     const rootPath = await this.resolveRoot(workspaceRoot)
     const currentBranch = await this.getCurrentBranch(rootPath)
-    if (!currentBranch)
-      throw new AppError('VALIDATION', workbenchMainText('git.noLocalBranch'))
     const actionBranch =
       action === 'upload' && options.branch ? this.assertBranch(options.branch) : currentBranch
+    // `--progress`：输出不是终端时 git 默认不报进度；报了才知道这条命令还在动。
+    const remote: RemoteCommandOptions = { ...options, signal }
+    const result: WorkspaceGitRemoteActionResult = {
+      action,
+      branch: actionBranch,
+      upstream: null,
+      output: '',
+      conflicts: [],
+      rebasing: false,
+    }
+    // 获取远端不看分支，分离的 HEAD 上也能做。
+    if (action === 'fetch') {
+      result.upstream = actionBranch
+        ? ((await this.getBranchUpstream(rootPath, actionBranch))?.name ?? null)
+        : null
+      result.output = await this.runRemoteCommand(
+        rootPath,
+        action,
+        ['fetch', '--prune', '--progress'],
+        remote
+      )
+      return { rootPath, action: result, summary: await this.getSummary(rootPath) }
+    }
+
+    // 拉取、同步、推送都要落在一个分支上：分离的 HEAD 上没有当前分支，推送得点名一个分支。
+    if (!actionBranch) throw new AppError('VALIDATION', workbenchMainText('git.noLocalBranch'))
     if (actionBranch !== currentBranch) {
       const exists = await this.runGit(
         rootPath,
@@ -815,25 +848,9 @@ export class WorkbenchGitService {
         )
     }
     const upstream = await this.getBranchUpstream(rootPath, actionBranch)
-    const result: WorkspaceGitRemoteActionResult = {
-      action,
-      branch: actionBranch,
-      upstream: upstream?.name ?? null,
-      output: '',
-      conflicts: [],
-      rebasing: false,
-    }
+    result.upstream = upstream?.name ?? null
 
-    // `--progress`：输出不是终端时 git 默认不报进度；报了才知道这条命令还在动。
-    const remote: RemoteCommandOptions = { ...options, signal }
-    if (action === 'fetch') {
-      result.output = await this.runRemoteCommand(
-        rootPath,
-        action,
-        ['fetch', '--prune', '--progress'],
-        remote
-      )
-    } else if (action === 'pull' || action === 'sync') {
+    if (action === 'pull' || action === 'sync') {
       if (!upstream)
         throw new AppError(
           'VALIDATION',
@@ -1124,7 +1141,20 @@ export class WorkbenchGitService {
       ],
       { maxBuffer: GitListingMaxBytes, allowTruncated: true }
     )
-    return result.truncated ? null : this.parseStatus(result.stdout, repository.prefix)
+    if (result.truncated) return null
+    const status = this.parseStatus(result.stdout, repository.prefix)
+    // 状态头只说「HEAD (no branch)」，不说停在哪个提交上：分离的 HEAD 另问一句。
+    if (!status.branch) status.detachedHead = await this.readDetachedHead(repository.rootPath)
+    return status
+  }
+
+  /** 分离的 HEAD 指着的提交；HEAD 还没有提交可指（刚初始化的仓库）时为 null。 */
+  private async readDetachedHead(rootPath: string): Promise<Nullable<WorkspaceGitDetachedHead>> {
+    const result = await this.runGit(rootPath, ['log', '-1', '--format=%H%x1f%h', 'HEAD'], {
+      allowFailure: true,
+    })
+    const [sha = '', shortSha = ''] = result.stdout.trim().split('\x1f')
+    return !result.failed && sha && shortSha ? { sha, shortSha } : null
   }
 
   private async listBranches(rootPath: string): Promise<WorkspaceGitBranch[]> {
@@ -1519,7 +1549,10 @@ export class WorkbenchGitService {
   }
 
   private summarizeStatus(
-    branchInfo: Pick<WorkspaceGitStatusResult, 'branch' | 'upstream' | 'ahead' | 'behind'>,
+    branchInfo: Pick<
+      WorkspaceGitStatusResult,
+      'branch' | 'detachedHead' | 'upstream' | 'ahead' | 'behind'
+    >,
     entries: WorkspaceGitFileStatusEntry[]
   ): WorkspaceGitStatusResult {
     const settled = entries.filter((entry) => !isWorkspaceGitConflictEntry(entry))
@@ -1541,12 +1574,13 @@ export class WorkbenchGitService {
     }
   }
 
-  private parseBranchHeader(raw: string): {
-    branch: Nullable<string>
-    upstream: Nullable<string>
-    ahead: number
-    behind: number
-  } {
+  /**
+   * 状态头（`## main...origin/main [ahead 1]`）。分离的 HEAD 是 `HEAD (no branch)`：分支为 null，它指着的
+   * 提交由 {@link readStatus} 另外读出来补上。
+   */
+  private parseBranchHeader(
+    raw: string
+  ): Pick<WorkspaceGitStatusResult, 'branch' | 'detachedHead' | 'upstream' | 'ahead' | 'behind'> {
     const normalized = raw
       .replace(/^No commits yet on /i, '')
       .replace(/^Initial commit on /i, '')
@@ -1554,6 +1588,7 @@ export class WorkbenchGitService {
     const [branchName = '', upstream = ''] = branchPart.split('...', 2)
     return {
       branch: branchName && !branchName.startsWith('HEAD ') ? branchName : null,
+      detachedHead: null,
       upstream: upstream || null,
       ahead: Number(meta.match(/ahead\s+(\d+)/)?.[1] ?? 0),
       behind: Number(meta.match(/behind\s+(\d+)/)?.[1] ?? 0),

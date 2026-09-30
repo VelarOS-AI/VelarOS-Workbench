@@ -1,7 +1,31 @@
 import type {
   SystemWorkspaceGitLineStatsSnapshot,
   SystemWorkspaceGitSummary,
+  WorkspaceGitStatusResult,
 } from '@shared/contracts'
+
+import type { WorkbenchI18nContextValue } from '../../i18n'
+
+type WorkbenchGitHead = Pick<WorkspaceGitStatusResult, 'branch' | 'detachedHead'>
+
+/** HEAD 有得显示：在分支上，或者是分离的 HEAD。顶栏的 Git 控件出不出现看它，不只认分支。 */
+export function hasWorkbenchGitHead(head: LooseOptional<WorkbenchGitHead>): boolean {
+  return !!(head?.branch || head?.detachedHead)
+}
+
+/**
+ * 顶栏 Git 控件上写的 HEAD：在分支上是分支名；分离的 HEAD 是「分离的 HEAD · 1a2b3c4」（不带 `/`，
+ * 分支菜单只显示名字里最后一个 `/` 后面的部分）。两样都没有（还没读到、不是仓库）为 null。
+ */
+export function describeWorkbenchGitHead(
+  head: WorkbenchGitHead,
+  t: WorkbenchI18nContextValue['t']
+): Nullable<string> {
+  if (head.branch) return head.branch
+  return head.detachedHead
+    ? t('workbench.gitDetachedHead', { sha: head.detachedHead.shortSha })
+    : null
+}
 
 function buildPartialTopBarStatus(
   snapshot: SystemWorkspaceGitLineStatsSnapshot
@@ -10,6 +34,7 @@ function buildPartialTopBarStatus(
 
   return {
     branch: snapshot.branch,
+    detachedHead: snapshot.detachedHead,
     upstream: null,
     ahead: 0,
     behind: 0,
@@ -46,7 +71,8 @@ export function buildWorkbenchGitTopBarSummary(
   }
 
   if (!lineStatsSnapshot?.repository) return fullSummary
-  if (!lineStatsSnapshot.branch) return null
+  // HEAD 既不在分支上也读不出提交：还没有可显示的。
+  if (!hasWorkbenchGitHead(lineStatsSnapshot)) return null
 
   const status = buildPartialTopBarStatus(lineStatsSnapshot)
   const branch = status.branch
@@ -68,10 +94,11 @@ export function resolveWorkbenchHasGitRepository(
   return !!(fullSummary?.repository || lineStatsSnapshot?.repository)
 }
 
+/** 顶栏的 Git 控件出不出现：是仓库，并且 HEAD 有得显示（在分支上，或者是分离的 HEAD）。 */
 export function resolveWorkbenchCanShowGitBranchControl(
   fullSummary: Nullable<SystemWorkspaceGitSummary>,
   lineStatsSnapshot: Nullable<SystemWorkspaceGitLineStatsSnapshot>
 ): boolean {
   const summary = buildWorkbenchGitTopBarSummary(fullSummary, lineStatsSnapshot)
-  return !!(summary?.repository && summary.status?.branch)
+  return !!summary?.repository && hasWorkbenchGitHead(summary.status)
 }

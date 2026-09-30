@@ -9,8 +9,10 @@ import {
 import {
   describeWorkbenchGitRemoteActionCancel,
   reportWorkbenchGitRemoteActionFailure,
+  reportWorkbenchGitRemoteActionSuccess,
   useWorkbenchGitRemoteAction,
 } from '@renderer/hooks/useWorkbenchGitRemoteAction'
+import { hasWorkbenchGitHead } from '@renderer/models/git/workbenchGitTopBarModel'
 import { useStableWorkbenchMessageTranslate } from '@renderer/runtime/useStableWorkbenchMessaging'
 
 import { AnchoredPopover } from '@velaros-ai/ui/primitives/overlays/AnchoredPopover'
@@ -37,13 +39,6 @@ interface WorkbenchGitSyncControlProps {
 /** 冲突提示挂得久一点：要照着它去解决。 */
 const ConflictNoticeDurationMs = 12_000
 
-const SuccessTitleKeys: Record<WorkspaceGitRemoteAction, string> = {
-  fetch: 'workbench.gitFetchSuccessTitle',
-  pull: 'workbench.gitPullSuccessTitle',
-  sync: 'workbench.gitSyncSuccessTitle',
-  upload: 'workbench.gitUploadSuccessTitle',
-}
-
 /**
  * 顶栏分支旁边的同步按钮：显示当前分支落后（↓）、领先（↑）上游几个提交，点一下同步（先拉取再推送）；
  * 还没有上游时点一下推送并关联远端。旁边的小三角展开拉取、推送、同步、获取远端。这个项目有远端操作在跑
@@ -67,15 +62,22 @@ export function WorkbenchGitSyncControl({
     if (busy) setMenuOpen(false)
   }, [busy])
   const status = summary.status
-  if (!summary.repository || !status?.branch) return null
+  if (!summary.repository || !status || !hasWorkbenchGitHead(status)) return null
 
+  // 分离的 HEAD：没有当前分支可拉取、推送。按钮留着、禁用，写明原因；获取远端不看分支，照常能用。
+  const detached = !status.branch
+  const detachedReason = t('workbench.gitDetachedHeadReason', {
+    sha: status.detachedHead?.shortSha ?? '',
+  })
   const upstream = status.upstream
   const { ahead, behind } = status
   const cancelLabel = running ? describeWorkbenchGitRemoteActionCancel(running, t) : ''
   const mainAction: WorkspaceGitRemoteAction = upstream ? 'sync' : 'upload'
-  const mainLabel = upstream
-    ? t('workbench.gitSyncTooltip', { upstream, behind, ahead })
-    : t('workbench.gitPublishTooltip')
+  const mainLabel = detached
+    ? detachedReason
+    : upstream
+      ? t('workbench.gitSyncTooltip', { upstream, behind, ahead })
+      : t('workbench.gitPublishTooltip')
   const menuItems: Array<{
     action: WorkspaceGitRemoteAction
     label: string
@@ -85,20 +87,32 @@ export function WorkbenchGitSyncControl({
     {
       action: 'pull',
       label: t('workbench.gitPull'),
-      hint: upstream ? t('workbench.gitPullHint', { upstream }) : t('workbench.gitNoUpstreamHint'),
-      disabled: !upstream,
+      hint: detached
+        ? detachedReason
+        : upstream
+          ? t('workbench.gitPullHint', { upstream })
+          : t('workbench.gitNoUpstreamHint'),
+      disabled: detached || !upstream,
     },
     {
       action: 'upload',
       label: t('workbench.gitUpload'),
-      hint: upstream ? t('workbench.gitPushHint', { upstream }) : t('workbench.gitPublishHint'),
-      disabled: false,
+      hint: detached
+        ? detachedReason
+        : upstream
+          ? t('workbench.gitPushHint', { upstream })
+          : t('workbench.gitPublishHint'),
+      disabled: detached,
     },
     {
       action: 'sync',
       label: t('workbench.gitSync'),
-      hint: upstream ? t('workbench.gitSyncHint') : t('workbench.gitNoUpstreamHint'),
-      disabled: !upstream,
+      hint: detached
+        ? detachedReason
+        : upstream
+          ? t('workbench.gitSyncHint')
+          : t('workbench.gitNoUpstreamHint'),
+      disabled: detached || !upstream,
     },
     {
       action: 'fetch',
@@ -147,12 +161,7 @@ export function WorkbenchGitSyncControl({
         showConflicts(result.action)
         return
       }
-      messageLatest.current.success({
-        title: tLatest.current(SuccessTitleKeys[action]),
-        description: tLatest.current('workbench.gitRemoteActionSuccessDescription', {
-          branch: result.action.branch,
-        }),
-      })
+      reportWorkbenchGitRemoteActionSuccess(result.action, { messageLatest, tLatest })
     } catch (actionError) {
       reportWorkbenchGitRemoteActionFailure(actionError, action, { messageLatest, tLatest })
       // 取消、失败都可能已经动过仓库（拉取取到一半）：照样刷新。
@@ -162,28 +171,31 @@ export function WorkbenchGitSyncControl({
 
   return (
     <div className={styles.gitSyncControl}>
+      {/* 按钮外面包一层：禁用时（分离的 HEAD）悬停照样出说明。 */}
       <BubbleTooltip content={mainLabel} ariaLabel={mainLabel} delayDuration={80} sideOffset={6}>
-        <button
-          type="button"
-          className={styles.gitSyncButton}
-          aria-label={mainLabel}
-          disabled={busy}
-          onClick={() => void runAction(mainAction)}
-        >
-          {busy ? (
-            <SpinnerGapIcon size={13} className={styles.spinIcon} />
-          ) : upstream ? (
-            <ArrowsClockwiseIcon size={13} />
-          ) : (
-            <CloudArrowUpIcon size={13} />
-          )}
-          {!!upstream && (behind > 0 || ahead > 0) && (
-            <span className={styles.gitSyncCounts}>
-              {behind > 0 && <span data-direction="behind">↓{behind}</span>}
-              {ahead > 0 && <span data-direction="ahead">↑{ahead}</span>}
-            </span>
-          )}
-        </button>
+        <span className={styles.gitSyncTooltipTrigger}>
+          <button
+            type="button"
+            className={styles.gitSyncButton}
+            aria-label={mainLabel}
+            disabled={busy || detached}
+            onClick={() => void runAction(mainAction)}
+          >
+            {busy ? (
+              <SpinnerGapIcon size={13} className={styles.spinIcon} />
+            ) : upstream ? (
+              <ArrowsClockwiseIcon size={13} />
+            ) : (
+              <CloudArrowUpIcon size={13} />
+            )}
+            {!!upstream && (behind > 0 || ahead > 0) && (
+              <span className={styles.gitSyncCounts}>
+                {behind > 0 && <span data-direction="behind">↓{behind}</span>}
+                {ahead > 0 && <span data-direction="ahead">↑{ahead}</span>}
+              </span>
+            )}
+          </button>
+        </span>
       </BubbleTooltip>
       {running ? (
         <button

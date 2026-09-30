@@ -22,6 +22,7 @@ import {
 import {
   describeWorkbenchGitRemoteActionCancel,
   reportWorkbenchGitRemoteActionFailure,
+  reportWorkbenchGitRemoteActionSuccess,
   useWorkbenchGitRemoteAction,
 } from '@renderer/hooks/useWorkbenchGitRemoteAction'
 import { workbenchHost } from '@renderer/host'
@@ -122,6 +123,8 @@ export function WorkbenchCommitPanel({
   )
 
   const status = summary?.status ?? null
+  /** 分离的 HEAD：没有当前分支可推送，推送按钮禁用并写明原因。提交照常能做。 */
+  const detachedHead = status?.detachedHead ?? null
   const commitMode = resolveCommitPanelCommitMode(changeItems)
   const selectable = commitMode === 'selection'
   const groups = useMemo(
@@ -428,12 +431,7 @@ export function WorkbenchCommitPanel({
     try {
       const result = await remoteAction.run('upload', { privateKeyPath: gitSshKeyPath })
       await onRefresh()
-      messageLatest.current.success({
-        title: tLatest.current('workbench.gitUploadSuccessTitle'),
-        description: tLatest.current('workbench.gitRemoteActionSuccessDescription', {
-          branch: result.action.branch,
-        }),
-      })
+      reportWorkbenchGitRemoteActionSuccess(result.action, { messageLatest, tLatest })
     } catch (actionError) {
       reportWorkbenchGitRemoteActionFailure(actionError, 'upload', { messageLatest, tLatest })
     }
@@ -807,8 +805,12 @@ export function WorkbenchCommitPanel({
                   </CommitIconButton>
                 ) : (
                   <CommitIconButton
-                    label={t('workbench.gitUpload')}
-                    disabled={!!busyAction || hasUnsavedOpenTabs}
+                    label={
+                      detachedHead
+                        ? t('workbench.gitDetachedHeadReason', { sha: detachedHead.shortSha })
+                        : t('workbench.gitUpload')
+                    }
+                    disabled={!!busyAction || hasUnsavedOpenTabs || !!detachedHead}
                     onClick={() => void pushChanges()}
                   >
                     <ArrowUpRightIcon size={15} />
