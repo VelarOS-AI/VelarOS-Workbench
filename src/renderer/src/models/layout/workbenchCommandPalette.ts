@@ -28,6 +28,7 @@ export type WorkbenchPaletteCommandId =
   | 'new-terminal'
   | 'open-settings'
   | 'quick-fix'
+  | 'refactor'
   | 'reopen-closed-tab'
   | 'reveal-active-file'
   | 'run-last-command'
@@ -105,6 +106,12 @@ export const WORKBENCH_PALETTE_COMMANDS: readonly WorkbenchPaletteCommandDefinit
   { id: 'format-document', labelKey: 'workbench.commandFormatDocument', shortcut: { fixed: 'Mod+Alt+L' } },
   // 编辑器里光标处的动作菜单：⌥↩ / Alt+Enter（另有 ⌘. / Ctrl+.）。
   { id: 'quick-fix', labelKey: 'workbench.commandQuickFix', shortcut: { fixed: 'Alt+Enter' } },
+  // 选中的代码（或光标处）能做的重构：macOS 上 ⌃T，其它平台 Ctrl+Alt+Shift+T。
+  {
+    id: 'refactor',
+    labelKey: 'workbench.commandRefactor',
+    shortcut: { platform: (isApple) => (isApple ? 'Ctrl+T' : 'Ctrl+Alt+Shift+T') },
+  },
   // 编辑器里的 ⌥Z / Alt+Z。
   { id: 'toggle-word-wrap', labelKey: 'workbench.commandToggleWordWrap', shortcut: { fixed: 'Alt+Z' } },
   { id: 'toggle-read-only', labelKey: 'workbench.commandToggleReadOnly' },
@@ -186,6 +193,13 @@ export function isWorkbenchPaletteCommandAvailable(
     // 修复要改代码：只读的文件不给；没有语言服务的文件没有修复可给。
     case 'quick-fix':
       return textEditorInFront && context.canEditActiveFile && !!context.activeFileLanguageService
+    // 重构是内置 TypeScript 服务给的。
+    case 'refactor':
+      return (
+        textEditorInFront
+        && context.canEditActiveFile
+        && context.activeFileLanguageService === 'typescript'
+      )
     case 'toggle-read-only':
       return textEditorInFront && context.canToggleReadOnly
     case 'toggle-git-blame':

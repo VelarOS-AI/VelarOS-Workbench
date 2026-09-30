@@ -374,14 +374,22 @@ renderer 侧对应两件事：编辑器控制器订阅 Agent 写入通知（`wor
 请求没带时两格空格。IPC 边界只收 1–16 的整数宽度，别的当没给（宽度为 0 会让 TypeScript 排缩进时除以零）。
 项目装了 Prettier 时照旧以 Prettier 为准。
 
-TypeScript 一次只收一套排版，而一份修复可能动到别的文件。`mapTypeScriptFileChanges` 对落在请求文件之外的那部分
-按那个文件自己的缩进（`detectWorkbenchIndentation`，在 `src/shared`，识别不出来用请求文件的）再算一遍后换上；
-已有的文件写不写分号由 TypeScript 自己看，只有新建的文件要替它看原文件、明说出来。
+TypeScript 一次只收一套排版，而一份修复可能动到别的文件。`mapTypeScriptFileChanges` 对落在请求文件之外的那部分，
+在那个文件自己的缩进（`detectWorkbenchIndentation`，在 `src/shared`，识别不出来用请求文件的）或分号习惯不一样时
+按它的再算一遍后换上。写不写分号不交给 TypeScript 自己猜：它把类型字面量里的分隔符（`{ x: number; y: number }`）
+也算成「写了分号」，不写分号的文件里只要有一处这样的类型，抽出来的代码就带上分号；新建的文件更是一律带分号。
+这里只数语句，看准了不写分号才明说去掉（`omitsSemicolons`）。
 
-### 代码动作（快速修复）
+### 代码动作（快速修复与重构）
 
 光标处的动作菜单（⌥↩ / Alt+Enter、⌘. / Ctrl+.、右键「快速修复…」、命令面板）与诊断浮层上的修复按钮走同一条路：
-`useEditorCodeActions` 问 `getCodeActions`，把改动套上。
+`useEditorCodeActions` 问 `getCodeActions`，把改动套上。同一个菜单里修复在前、重构在后；「重构…」（⌃T，别的平台
+Ctrl+Alt+Shift+T，右键、命令面板）只列重构，按「提取、内联、移动、改写、其它」分组（取自 TypeScript 给的种类）。
+
+- **重构**：`getApplicableRefactors`（请求的 `categories` 里有 `refactor` 才问；诊断浮层不问）只列名字，此刻做不了的、
+  要再问用户一步的（「移到文件」要挑目标）不列；选中时 `getEditsForRefactor` 才算改动。TypeScript 给了改名位置
+  （抽出来的 `newFunction`、`newLocal`）时，worker 按套完改动之后的正文把它换成行列与偏移交回来，编辑器套完改动
+  就在那里开行内改名。「移到新文件」的新文件在结果的 `createFiles` 里。
 
 - **worker**：TypeScript 的修复在 `TypeScriptCodeActions.ts`。诊断按请求里的正文现算（不靠编辑器里那份，它可能
   还没刷新），只对 TypeScript 登记了修复的诊断码去问 `getCodeFixesAtPosition`，一次最多 12 条诊断。TypeScript 给了

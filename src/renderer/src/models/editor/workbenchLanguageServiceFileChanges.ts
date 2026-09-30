@@ -2,7 +2,10 @@ import { AppError } from '@velaros-ai/core/error'
 import type { Result } from '@velaros-ai/core/result'
 
 import type {
+  WorkbenchCreateEntryRequest,
+  WorkbenchEntryMutationResult,
   WorkbenchLanguageServiceFileEdit,
+  WorkbenchLanguageServiceNewFile,
   WorkbenchReadFileResult,
   WorkbenchSaveFileRequest,
   WorkbenchSaveFileResult,
@@ -63,4 +66,52 @@ export async function writeWorkbenchLanguageServiceFileChange(
   return saved.error.code === 'CONFLICT'
     ? { path: change.path, reason: 'changed-on-disk' }
     : { path: change.path, reason: 'error', message: saved.error.message }
+}
+
+export interface WorkbenchLanguageServiceFileCreationPorts {
+  createEntry(
+    request: Pick<WorkbenchCreateEntryRequest, 'parentPath' | 'name' | 'type'>
+  ): Promise<Result<WorkbenchEntryMutationResult>>
+  saveFile(request: Pick<WorkbenchSaveFileRequest, 'path' | 'content'>): Promise<Result<WorkbenchSaveFileResult>>
+}
+
+export interface WorkbenchLanguageServiceFileCreationResult {
+  /** 建成了的文件。 */
+  createdPaths: string[]
+  /** 多了文件的目录：文件树要重读它们。 */
+  parentPaths: string[]
+  failures: WorkbenchLanguageServiceFileChangeFailure[]
+}
+
+/**
+ * 语言服务要新建的文件（重构「移到新文件」）。与文件树里新建文件走同一条路：先建空文件（目标已存在就失败，
+ * 不覆盖；主进程把它记为新文件），再经保存管线写入正文。一个没建成不挡住其余的，逐个返回原因。
+ */
+export async function createWorkbenchLanguageServiceFiles(
+  files: readonly WorkbenchLanguageServiceNewFile[],
+  ports: WorkbenchLanguageServiceFileCreationPorts
+): Promise<WorkbenchLanguageServiceFileCreationResult> {
+  const createdPaths: string[] = []
+  const parentPaths = new Set<string>()
+  const failures: WorkbenchLanguageServiceFileChangeFailure[] = []
+
+  for (const file of files) {
+    const separator = file.path.lastIndexOf('/')
+    const created = await ports.createEntry({
+      parentPath: separator < 0 ? '.' : file.path.slice(0, separator),
+      name: file.path.slice(separator + 1),
+      type: 'file',
+    })
+    if (!created.ok) {
+      failures.push({ path: file.path, reason: 'error', message: created.error.message })
+      continue
+    }
+    createdPaths.push(created.data.entry.path)
+    parentPaths.add(created.data.parentPath)
+    if (!file.content) continue
+
+    const saved = await ports.saveFile({ path: created.data.entry.path, content: file.content })
+    if (!saved.ok) failures.push({ path: file.path, reason: 'error', message: saved.error.message })
+  }
+  return { createdPaths, parentPaths: [...parentPaths], failures }
 }

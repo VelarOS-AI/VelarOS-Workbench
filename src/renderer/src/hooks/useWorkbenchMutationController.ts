@@ -2,6 +2,10 @@ import { useRef, useState } from 'react'
 import { workbenchHost } from '@renderer/host'
 import { useWorkbenchCommentStore } from '@renderer/models/comments/workbenchCommentStore'
 import {
+  createWorkbenchLanguageServiceFiles,
+  type WorkbenchLanguageServiceFileCreationResult,
+} from '@renderer/models/editor/workbenchLanguageServiceFileChanges'
+import {
   describeTreeMutationFailures,
   partitionDeleteResultsByUndo,
   resolveTreeActionBasePath,
@@ -22,7 +26,11 @@ import { isEmpty, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { Result } from '@velaros-ai/core/result'
 
-import type { WorkbenchDeleteEntryResult, WorkbenchDirectoryEntry } from '@shared/contracts'
+import type {
+  WorkbenchDeleteEntryResult,
+  WorkbenchDirectoryEntry,
+  WorkbenchLanguageServiceNewFile,
+} from '@shared/contracts'
 
 import { useStableWorkbenchMessageTranslate } from '../runtime/useStableWorkbenchMessaging'
 import { useLatest } from '../support/genericHooks'
@@ -251,49 +259,25 @@ export function useWorkbenchMutationController({
   }
 
   /**
-   * 语言服务要新建的文件（重构「移到新文件」）。与文件树里新建文件走同一条路：先建空文件（主进程记下它是新文件），
-   * 再经保存管线写入正文，建好刷新所在目录，它就和手动新建的一样出现在树里。不改树的选中项、不弹「创建成功」，
-   * 由发起的动作统一报告；没建成的逐个返回原因。
+   * 语言服务要新建的文件（重构「移到新文件」）：经 createWorkbenchLanguageServiceFiles 建好，再刷新所在目录，
+   * 它就和手动新建的一样出现在树里。不改树的选中项、不弹「创建成功」，由发起的动作统一报告。
    */
   async function createFilesWithContent(
-    files: ReadonlyArray<{ path: string; content: string }>
-  ): Promise<{ createdPaths: string[]; failures: Array<{ path: string; message: string }> }> {
+    files: readonly WorkbenchLanguageServiceNewFile[]
+  ): Promise<Pick<WorkbenchLanguageServiceFileCreationResult, 'createdPaths' | 'failures'>> {
     const owningProject = activeProjectRef.current
-    const createdPaths: string[] = []
-    const failures: Array<{ path: string; message: string }> = []
-    if (!owningProject || isEmpty(files)) return { createdPaths, failures }
+    if (!owningProject || isEmpty(files)) return { createdPaths: [], failures: [] }
 
-    const parentsToRefresh = new Set<string>()
-    for (const file of files) {
-      const parentPath = getParentPath(file.path)
-      try {
-        const created = Result.unwrap(
-          await workbenchHost.kernel.project.createWorkbenchEntry({
-            projectRoot: owningProject.rootPath,
-            parentPath,
-            name: file.path.slice(file.path.lastIndexOf('/') + 1),
-            type: 'file',
-          })
-        )
-        parentsToRefresh.add(created.parentPath)
-        createdPaths.push(created.entry.path)
-        if (file.content)
-          Result.unwrap(
-            await workbenchHost.kernel.project.saveWorkbenchFile({
-              projectRoot: owningProject.rootPath,
-              path: created.entry.path,
-              content: file.content,
-            })
-          )
-      } catch (error) {
-        failures.push({ path: file.path, message: AppError.from(error).message })
-      }
-    }
-
-    if (activeProjectRef.current?.id === owningProject.id && parentsToRefresh.size > 0) {
+    const projectRoot = owningProject.rootPath
+    const { createdPaths, parentPaths, failures } = await createWorkbenchLanguageServiceFiles(files, {
+      createEntry: (request) =>
+        workbenchHost.kernel.project.createWorkbenchEntry({ projectRoot, ...request }),
+      saveFile: (request) => workbenchHost.kernel.project.saveWorkbenchFile({ projectRoot, ...request }),
+    })
+    if (activeProjectRef.current?.id === owningProject.id && !isEmpty(parentPaths)) {
       onTreeChangedLatest.current()
       await Promise.all(
-        [...parentsToRefresh].map((parentPath) => refreshMutationParentLatest.current(parentPath))
+        parentPaths.map((parentPath) => refreshMutationParentLatest.current(parentPath))
       )
     }
     return { createdPaths, failures }

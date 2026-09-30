@@ -262,7 +262,8 @@ export function useWorkbenchCommandPalette({
         void formatDocument()
         return
       }
-      case 'quick-fix': {
+      case 'quick-fix':
+      case 'refactor': {
         runEditorCommand(id)
         return
       }

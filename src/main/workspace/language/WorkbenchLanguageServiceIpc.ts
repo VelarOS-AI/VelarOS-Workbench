@@ -390,7 +390,13 @@ function parseCodeActionsRequest(input: unknown): Nullable<WorkbenchLanguageServ
       range: diagnosticRange,
     })
   }
-  return { ...base, range, diagnostics }
+  const rawCategories = input['categories']
+  if (rawCategories !== undefined
+    && (!Array.isArray(rawCategories)
+      || !rawCategories.every((category) => category === 'quickfix' || category === 'refactor')))
+    return null
+
+  return { ...base, range, diagnostics, categories: rawCategories }
 }
 
 function parseCodeActionResolveRequest(
@@ -400,11 +406,24 @@ function parseCodeActionResolveRequest(
   if (!base || !isRecord(input)) return null
   const range = parseRange(input['range'])
   const resolve = input['resolve']
-  if (!range || !isRecord(resolve) || resolve['kind'] !== 'fix-all') return null
-  const fixId = resolve['fixId']
-  if (typeof fixId !== 'string' || !fixId || fixId.length > 256) return null
+  if (!range || !isRecord(resolve)) return null
 
-  return { ...base, range, resolve: { kind: 'fix-all', fixId } }
+  if (resolve['kind'] === 'fix-all') {
+    const fixId = resolve['fixId']
+    if (!isResolveToken(fixId)) return null
+    return { ...base, range, resolve: { kind: 'fix-all', fixId } }
+  }
+  if (resolve['kind'] === 'refactor') {
+    const { refactor, action } = resolve
+    if (!isResolveToken(refactor) || !isResolveToken(action)) return null
+    return { ...base, range, resolve: { kind: 'refactor', refactor, action } }
+  }
+  return null
+}
+
+/** 语言服务给动作的标识：原样交回去的短字符串。 */
+function isResolveToken(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0 && value.length <= 256
 }
 
 function parseRange(input: unknown): Nullable<WorkbenchLanguageServiceRange> {

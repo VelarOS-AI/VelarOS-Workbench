@@ -7,6 +7,7 @@ import type { EditorState } from '@codemirror/state'
 
 import type {
   WorkbenchLanguageServiceCodeAction,
+  WorkbenchLanguageServiceCodeActionCategory,
   WorkbenchLanguageServiceDiagnostic,
   WorkbenchLanguageServiceFileEdit,
   WorkbenchLanguageServiceNewFile,
@@ -17,9 +18,10 @@ import type {
 import type { WorkbenchCodeMirrorDiagnostic } from './workbenchCodeMirrorDiagnostics'
 import { resolveWorkbenchBuiltinLanguageServiceRuntime } from './workbenchCodeMirrorLanguageService'
 
-/** 一个文件能用哪几样：快速修复内置 TypeScript 与外部语言服务器都有。 */
+/** 一个文件能用哪几样：快速修复内置 TypeScript 与外部语言服务器都有，重构只有内置 TypeScript 有。 */
 export interface WorkbenchCodeActionSupport {
   quickFix: boolean
+  refactor: boolean
 }
 
 export function resolveWorkbenchCodeActionSupport(path: Nullable<string>): WorkbenchCodeActionSupport {
@@ -29,7 +31,22 @@ export function resolveWorkbenchCodeActionSupport(path: Nullable<string>): Workb
       runtime === 'typescript-language-service'
       || runtime === 'lsp-server'
       || runtime === 'python-language-server',
+    refactor: runtime === 'typescript-language-service',
   }
+}
+
+/** 光标菜单列什么：修复连同重构（⌥↩ / ⌘.），还是只列重构（「重构…」）。 */
+export type WorkbenchCodeActionMenuMode = 'all' | 'refactor'
+
+/** 这种菜单在这个文件上该问语言服务要哪几类动作；一类都没有（这个文件没有这种动作）返回空。 */
+export function resolveWorkbenchCodeActionCategories(
+  mode: WorkbenchCodeActionMenuMode,
+  support: WorkbenchCodeActionSupport
+): WorkbenchLanguageServiceCodeActionCategory[] {
+  const categories: WorkbenchLanguageServiceCodeActionCategory[] = []
+  if (mode === 'all' && support.quickFix) categories.push('quickfix')
+  if (support.refactor) categories.push('refactor')
+  return categories
 }
 
 function positionOf(state: EditorState, offset: number): { line: number; column: number } {
@@ -92,9 +109,37 @@ export type WorkbenchCodeActionMenuRow =
   | { kind: 'header'; key: string; title: string }
   | { kind: 'action'; key: string; action: WorkbenchLanguageServiceCodeAction }
 
-/** 动作按语言服务给的顺序列；首选的（`preferred`）提到最前。标题与改动都一样的只留一个。 */
+/** 重构按做的是什么分的几组（取自语言服务给的种类，如 `refactor.extract.function`）。 */
+export type WorkbenchRefactorGroup = 'extract' | 'inline' | 'move' | 'rewrite' | 'other'
+
+const RefactorGroupOrder: readonly WorkbenchRefactorGroup[] = [
+  'extract',
+  'inline',
+  'move',
+  'rewrite',
+  'other',
+]
+
+export function resolveWorkbenchRefactorGroup(kind: string | undefined): WorkbenchRefactorGroup {
+  const group = /^refactor\.(extract|inline|move|rewrite)(?:\.|$)/u.exec(kind ?? '')?.[1]
+  return (group as WorkbenchRefactorGroup | undefined) ?? 'other'
+}
+
+export interface WorkbenchCodeActionMenuLabels {
+  quickFixes: string
+  refactors: string
+  refactorGroups: Readonly<Record<WorkbenchRefactorGroup, string>>
+}
+
+/**
+ * 菜单里的行。修复在前（首选的 `preferred` 提到最前），重构在后；标题与改动都一样的只留一个。
+ *
+ * 修复连同重构的菜单里，两类都有时各加一个标题，重构按「提取、内联、移动、改写、其它」的顺序排在一个
+ * 「重构」标题下；只列重构的菜单里每一组一个标题（只有一组就不加）。
+ */
 export function buildWorkbenchCodeActionMenuRows(
-  actions: readonly WorkbenchLanguageServiceCodeAction[]
+  actions: readonly WorkbenchLanguageServiceCodeAction[],
+  { mode = 'all', labels }: { mode?: WorkbenchCodeActionMenuMode; labels?: WorkbenchCodeActionMenuLabels } = {}
 ): WorkbenchCodeActionMenuRow[] {
   const seen = new Set<string>()
   const unique = actions.filter((action) => {
@@ -103,10 +148,39 @@ export function buildWorkbenchCodeActionMenuRows(
     seen.add(key)
     return true
   })
-  return [
-    ...unique.filter((action) => action.preferred),
-    ...unique.filter((action) => !action.preferred),
-  ].map((action, index) => ({ kind: 'action', key: `action:${index}`, action }))
+  const quickFixes = mode === 'all' ? unique.filter((action) => action.category !== 'refactor') : []
+  const refactors = RefactorGroupOrder.map((group) => ({
+    group,
+    actions: unique.filter(
+      (action) => action.category === 'refactor' && resolveWorkbenchRefactorGroup(action.kind) === group
+    ),
+  })).filter((entry) => entry.actions.length > 0)
+
+  const rows: WorkbenchCodeActionMenuRow[] = []
+  const header = (key: string, title: string | undefined): void => {
+    if (title) rows.push({ kind: 'header', key: `header:${key}`, title })
+  }
+  const append = (items: readonly WorkbenchLanguageServiceCodeAction[]): void => {
+    for (const action of items) rows.push({ kind: 'action', key: `action:${rows.length}`, action })
+  }
+
+  if (quickFixes.length > 0) {
+    if (refactors.length > 0) header('quickfix', labels?.quickFixes)
+    append([
+      ...quickFixes.filter((action) => action.preferred),
+      ...quickFixes.filter((action) => !action.preferred),
+    ])
+  }
+  if (mode === 'all') {
+    if (refactors.length > 0 && quickFixes.length > 0) header('refactor', labels?.refactors)
+    append(refactors.flatMap((entry) => entry.actions))
+  } else {
+    for (const entry of refactors) {
+      if (refactors.length > 1) header(entry.group, labels?.refactorGroups[entry.group])
+      append(entry.actions)
+    }
+  }
+  return rows
 }
 
 /** 菜单里上下移动时落到的行：跳过标题，到头绕回另一头；没有能选的行返回 -1。 */

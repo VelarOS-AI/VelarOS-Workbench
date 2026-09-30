@@ -1440,7 +1440,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
     )
     // 语言服务替用户写代码（格式化、补全插入的整段代码）时按这个文件的缩进排。
     const editFormatRef = useLatest(toWorkbenchLanguageServiceEditFormat(indentation))
-    // 快速修复：光标菜单、诊断浮层上的按钮都在这个 hook 里问语言服务、套改动。
+    // 快速修复与重构：光标菜单、诊断浮层上的按钮都在这个 hook 里问语言服务、套改动。
     const codeActions = useEditorCodeActions({
       viewRef,
       projectRoot,
@@ -1451,6 +1451,13 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       getEditFormat: () => editFormatRef.current,
       hostRuntime,
       onApplyWorkspaceEdit: onApplyLanguageServiceEdit,
+      // 重构抽出来的函数、常量先叫 newFunction、newLocal：光标放到名字上，接着走行内改名。
+      onStartRename: (position) => {
+        const view = viewRef.current
+        if (!view) return
+        view.dispatch({ selection: { anchor: position } })
+        renameIdentifier(getIdentifierAt(view.state, position))
+      },
     })
     const indentationExtension = useMemo(
       () => [
@@ -3182,6 +3189,14 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
               onClick={() => runCommandFromContextMenu('quick-fix')}
             >
               {t('workbench.editorContextQuickFix')}
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              disabled={!codeActions.canRun('refactor')}
+              onClick={() => runCommandFromContextMenu('refactor')}
+            >
+              {t('workbench.editorContextRefactor')}
             </button>
             <div className={styles.editorContextMenuDivider} />
             <button

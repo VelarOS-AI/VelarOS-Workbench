@@ -142,11 +142,7 @@ export function useWorkbenchController(options: UseWorkbenchControllerOptions = 
     (request: WorkbenchLanguageServiceWorkspaceEditRequest): void => {
       void (async () => {
         const created = await mutation.createFilesWithContent(request.createFiles)
-        const failures = created.failures.map((failure) => ({
-          path: failure.path,
-          reason: 'error' as const,
-          message: failure.message,
-        }))
+        const { failures } = created
         const editedInEditor = isEmpty(failures) ? request.applyToEditor() : null
         const outcome =
           editedInEditor === null

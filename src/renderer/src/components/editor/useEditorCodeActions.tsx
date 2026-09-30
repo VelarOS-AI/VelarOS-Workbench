@@ -7,7 +7,10 @@ import {
   buildWorkbenchCodeMirrorChanges,
   collectWorkbenchDiagnosticsInRange,
   partitionWorkbenchCodeActionChanges,
+  resolveWorkbenchCodeActionCategories,
   resolveWorkbenchCodeActionSupport,
+  type WorkbenchCodeActionMenuLabels,
+  type WorkbenchCodeActionMenuMode,
   type WorkbenchCodeActionMenuRow,
   type WorkbenchLanguageServiceWorkspaceEditRequest,
   workbenchRangeFromOffsets,
@@ -29,6 +32,7 @@ import { isEmpty } from '@velaros-ai/core'
 
 import type {
   WorkbenchLanguageServiceCodeAction,
+  WorkbenchLanguageServiceCodeActionCategory,
   WorkbenchLanguageServiceEditFormat,
   WorkbenchLanguageServiceRange,
 } from '@shared/contracts'
@@ -50,6 +54,7 @@ interface CodeActionSource {
 }
 
 interface CodeActionMenuState {
+  mode: WorkbenchCodeActionMenuMode
   anchor: EditorCodeActionMenuAnchor
   source: CodeActionSource
   /** null：还在问。 */
@@ -70,6 +75,8 @@ interface UseEditorCodeActionsOptions {
   hostRuntime: WorkbenchHostRuntime
   /** 动作动到了别的文件、要新建文件：交给页面去落。 */
   onApplyWorkspaceEdit?: (request: WorkbenchLanguageServiceWorkspaceEditRequest) => void
+  /** 重构抽出了新名字（newFunction、newLocal）：在那个位置接着改名。 */
+  onStartRename?: (position: number) => void
 }
 
 export interface EditorCodeActions {
@@ -83,7 +90,8 @@ export interface EditorCodeActions {
 }
 
 /**
- * 编辑器里的快速修复：光标菜单（⌥↩ / ⌘.、右键、命令面板）与诊断浮层上的按钮都从这里问语言服务、套改动。
+ * 编辑器里的快速修复与重构：光标菜单（⌥↩ / ⌘.、⌃T、右键、命令面板）与诊断浮层上的按钮都从这里问语言服务、
+ * 套改动。
  *
  * 每次请求记下当时的文档；结果回来时编辑器已经不在那份文档上（又打了字、换了文件）就作废。当前文件的改动由
  * 编辑器自己套（一步撤销），别的文件、要新建的文件交给页面。
@@ -98,6 +106,7 @@ export function useEditorCodeActions({
   getEditFormat,
   hostRuntime,
   onApplyWorkspaceEdit,
+  onStartRename,
 }: UseEditorCodeActionsOptions): EditorCodeActions {
   const { t, messageLatest, tLatest } = useStableWorkbenchMessageTranslate()
   const latest = useLatest({
@@ -109,6 +118,7 @@ export function useEditorCodeActions({
     getEditFormat,
     hostRuntime,
     onApplyWorkspaceEdit,
+    onStartRename,
   })
   const [menu, setMenu] = useState<Nullable<CodeActionMenuState>>(null)
   const menuGenerationRef = useRef(0)
@@ -146,14 +156,35 @@ export function useEditorCodeActions({
     }
   }
 
-  const requestActions = (source: CodeActionSource, from: number, to: number) =>
+  const requestActions = (
+    source: CodeActionSource,
+    from: number,
+    to: number,
+    categories?: WorkbenchLanguageServiceCodeActionCategory[]
+  ) =>
     getWorkbenchLanguageServiceCodeActions(
       {
         ...requestBase(source),
         diagnostics: collectWorkbenchDiagnosticsInRange(source.view.state, from, to),
+        categories,
       },
       latest.current.hostRuntime
     )
+
+  const menuLabels = useMemo<WorkbenchCodeActionMenuLabels>(
+    () => ({
+      quickFixes: t('workbench.editorCodeActionsQuickFixGroup'),
+      refactors: t('workbench.editorCodeActionsRefactorGroup'),
+      refactorGroups: {
+        extract: t('workbench.editorRefactorGroupExtract'),
+        inline: t('workbench.editorRefactorGroupInline'),
+        move: t('workbench.editorRefactorGroupMove'),
+        rewrite: t('workbench.editorRefactorGroupRewrite'),
+        other: t('workbench.editorRefactorGroupOther'),
+      },
+    }),
+    [t]
+  )
 
   const canEdit = (view: EditorView): boolean => !latest.current.readOnly && !view.state.readOnly
 
@@ -171,6 +202,7 @@ export function useEditorCodeActions({
 
       let changes = action.changes
       let createFiles = action.createFiles ?? []
+      let renameOffset: Nullable<number> = null
       if (action.resolve) {
         const resolved = await resolveWorkbenchLanguageServiceCodeAction(
           { ...requestBase(source), resolve: action.resolve },
@@ -186,6 +218,7 @@ export function useEditorCodeActions({
         }
         changes = resolved.data.changes
         createFiles = resolved.data.createFiles
+        renameOffset = resolved.data.renameLocation?.offset ?? null
       }
 
       const { current, others } = partitionWorkbenchCodeActionChanges(source.path, changes)
@@ -197,6 +230,9 @@ export function useEditorCodeActions({
         if (!isCurrent(source) || !canEdit(source.view)) return null
         if (isEmpty(editorChanges)) return 0
         source.view.dispatch({ changes: editorChanges, scrollIntoView: true })
+        // 改名的位置是按套完改动之后的正文给的。
+        if (renameOffset !== null && renameOffset <= source.view.state.doc.length)
+          latest.current.onStartRename?.(renameOffset)
         return 1
       }
       if (isEmpty(others) && isEmpty(createFiles)) {
@@ -219,11 +255,15 @@ export function useEditorCodeActions({
     setMenu(null)
   }, [path, projectRoot])
 
-  /** 在光标处打开菜单：选区（没有选区就是光标）上的诊断有哪些修复。 */
-  const openMenu = useMemoizedFn(async (): Promise<void> => {
+  /** 在光标处打开菜单：选区（没有选区就是光标）上的诊断有哪些修复、这段代码能做哪些重构。 */
+  const openMenu = useMemoizedFn(async (mode: WorkbenchCodeActionMenuMode): Promise<void> => {
     const view = viewRef.current
-    if (!view || !canEdit(view) || !resolveWorkbenchCodeActionSupport(latest.current.path).quickFix)
-      return
+    if (!view || !canEdit(view)) return
+    const categories = resolveWorkbenchCodeActionCategories(
+      mode,
+      resolveWorkbenchCodeActionSupport(latest.current.path)
+    )
+    if (isEmpty(categories)) return
 
     const selection = view.state.selection.main
     const source = captureSource(view, selection.from, selection.to)
@@ -234,6 +274,7 @@ export function useEditorCodeActions({
     const editorRect = view.dom.getBoundingClientRect()
     const generation = ++menuGenerationRef.current
     setMenu({
+      mode,
       anchor: coords
         ? { left: coords.left, top: coords.top, bottom: coords.bottom }
         : { left: editorRect.left + 48, top: editorRect.top + 8, bottom: editorRect.top + 8 },
@@ -243,7 +284,7 @@ export function useEditorCodeActions({
       busy: false,
     })
 
-    const result = await requestActions(source, selection.from, selection.to)
+    const result = await requestActions(source, selection.from, selection.to, categories)
     if (generation !== menuGenerationRef.current) return
     if (!isCurrent(source)) {
       closeMenu()
@@ -253,7 +294,9 @@ export function useEditorCodeActions({
       current?.source === source
         ? {
             ...current,
-            rows: result.ok ? buildWorkbenchCodeActionMenuRows(result.data.actions) : [],
+            rows: result.ok
+              ? buildWorkbenchCodeActionMenuRows(result.data.actions, { mode, labels: menuLabels })
+              : [],
             error: result.ok ? null : result.error.message,
           }
         : current
@@ -300,14 +343,19 @@ export function useEditorCodeActions({
   const canRun = (command: WorkbenchEditorCommandId): boolean => {
     switch (command) {
       case 'quick-fix':
-        return !readOnly && support.quickFix
+        return !readOnly && (support.quickFix || support.refactor)
+      case 'refactor':
+        return !readOnly && support.refactor
     }
   }
 
   const run = useMemoizedFn((command: WorkbenchEditorCommandId): void => {
     switch (command) {
       case 'quick-fix':
-        void openMenu()
+        void openMenu('all')
+        return
+      case 'refactor':
+        void openMenu('refactor')
     }
   })
 
@@ -322,8 +370,16 @@ export function useEditorCodeActions({
         error={menu.error}
         busy={menu.busy}
         label={t('workbench.editorCodeActionsTitle')}
-        loadingLabel={t('workbench.editorCodeActionsLoading')}
-        emptyLabel={t('workbench.editorCodeActionsEmpty')}
+        loadingLabel={t(
+          menu.mode === 'refactor'
+            ? 'workbench.editorRefactorsLoading'
+            : 'workbench.editorCodeActionsLoading'
+        )}
+        emptyLabel={t(
+          menu.mode === 'refactor'
+            ? 'workbench.editorRefactorsEmpty'
+            : 'workbench.editorCodeActionsEmpty'
+        )}
         onChoose={chooseAction}
         onClose={closeMenu}
       />

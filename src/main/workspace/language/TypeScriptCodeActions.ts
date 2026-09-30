@@ -6,6 +6,7 @@ import type {
   WorkbenchLanguageServiceEditFormat,
   WorkbenchLanguageServiceFileEdit,
   WorkbenchLanguageServiceNewFile,
+  WorkbenchLanguageServicePosition,
   WorkbenchLanguageServiceTextEdit,
 } from '@shared/contracts'
 import { DefaultWorkbenchTabSize, detectWorkbenchIndentation } from '@shared/workbenchIndentation'
@@ -62,6 +63,8 @@ export interface TypeScriptEditContext {
 export interface TypeScriptWorkspaceEdit {
   changes: WorkbenchLanguageServiceFileEdit[]
   createFiles: WorkbenchLanguageServiceNewFile[]
+  /** 重构之后可以接着改名的位置：请求文件里、套完改动之后的正文里的行列与偏移。 */
+  renameLocation?: WorkbenchLanguageServicePosition
 }
 
 /** 用另一套排版把同一份改动再算一遍；算不出来返回 null。 */
@@ -84,10 +87,14 @@ function isFixableDiagnosticCode(code: number): boolean {
 }
 
 /**
- * 这个文件写不写分号。TypeScript 往已有文件里插代码时自己会看；新建文件（「移到新文件」）没有正文可看，一律
- * 带分号，不写分号的项目里新文件就成了另一种风格。所以新建文件时先替它看好原文件，再明说出来。
+ * 这个文件写不写分号：看开头几条语句，绝大多数没写才算不写。
+ *
+ * TypeScript 往已有文件里插代码时自己也会看，但它把类型字面量里的分隔符（`{ x: number; y: number }`）也算作
+ * 「写了分号」，不写分号的文件里只要有一处这样的类型，抽出来的常量、函数就带上了分号；新建的文件（「移到新
+ * 文件」）没有正文可看，更是一律带分号。所以这里只数语句，看准了就明说。
  */
-function omitsSemicolons(sourceFile: ts.SourceFile): boolean {
+function omitsSemicolons(sourceFile: ts.SourceFile | undefined): boolean {
+  if (!sourceFile) return false
   let withSemicolon = 0
   let withoutSemicolon = 0
   const visit = (node: ts.Node): true | undefined => {
@@ -119,8 +126,16 @@ function quotePreferenceFor(sourceFile: ts.SourceFile | undefined): ts.UserPrefe
 function formatCodeSettingsFor(write: TypeScriptWriteFormat): ts.FormatCodeSettings {
   return {
     ...buildWorkbenchTypeScriptFormatCodeSettings(write.format),
-    // 已有的文件 TypeScript 自己看它写不写分号；只有新建文件要明说。
+    // 看准了不写分号才明说去掉；否则交给 TypeScript 自己看（写分号的文件、看不出来的文件都是这样）。
     semicolons: write.removeSemicolons ? ts.SemicolonPreference.Remove : ts.SemicolonPreference.Ignore,
+  }
+}
+
+/** 往请求文件（以及它新建的文件）里写代码时的排版。 */
+function requestWriteFormat(context: TypeScriptEditContext): TypeScriptWriteFormat {
+  return {
+    format: context.format,
+    removeSemicolons: omitsSemicolons(context.service.getProgram()?.getSourceFile(context.fileName)),
   }
 }
 
@@ -129,14 +144,14 @@ function writeFormatKey(write: TypeScriptWriteFormat): string {
   return [settings.convertTabsToSpaces, settings.indentSize, settings.tabSize, write.removeSemicolons].join(':')
 }
 
-/** 语言服务写代码时的排版与偏好：缩进跟编辑器里这个文件的，引号跟文件现有的写法。 */
+/** 语言服务写代码时的排版与偏好：缩进跟编辑器里这个文件的，分号、引号跟文件现有的写法。 */
 export function typeScriptWriteSettings(context: TypeScriptEditContext): {
   formatOptions: ts.FormatCodeSettings
   preferences: ts.UserPreferences
 } {
   const sourceFile = context.service.getProgram()?.getSourceFile(context.fileName)
   return {
-    formatOptions: formatCodeSettingsFor({ format: context.format, removeSemicolons: false }),
+    formatOptions: formatCodeSettingsFor(requestWriteFormat(context)),
     preferences: {
       ...WorkbenchTypeScriptUserPreferences,
       quotePreference: quotePreferenceFor(sourceFile),
@@ -187,8 +202,9 @@ function mergeTextChangesAtSameOffset(textChanges: readonly ts.TextChange[]): ts
  * TypeScript 的一组文件改动 → 编辑器认的改动（行列范围）与要新建的文件。有一处落不下去（文件在项目之外、
  * 读不到、范围越界）整组作废：只套上半套改动，比不改更糟。
  *
- * TypeScript 一次只收一套排版，整组改动都按请求文件的缩进写。落在别的文件上的那部分，按那个文件自己的缩进
- * 再算一遍（`recompute`）后换上；新建的文件在原文件不写分号时也照着不写。算不了第二遍的就用第一遍的。
+ * TypeScript 一次只收一套排版，整组改动都按请求文件的缩进、分号写（新建的文件也是）。落在别的文件上的那
+ * 部分，那个文件自己的缩进或分号习惯不一样时，按它的再算一遍（`recompute`）后换上；算不了第二遍的就用
+ * 第一遍的。
  */
 export function mapTypeScriptFileChanges(
   context: TypeScriptEditContext,
@@ -200,7 +216,7 @@ export function mapTypeScriptFileChanges(
 ): Nullable<TypeScriptWorkspaceEdit> {
   const editsByPath = new Map<string, WorkbenchLanguageServiceTextEdit[]>()
   const createFiles: WorkbenchLanguageServiceNewFile[] = []
-  const requestWrite: TypeScriptWriteFormat = { format: context.format, removeSemicolons: false }
+  const requestWrite = requestWriteFormat(context)
   const recomputed = new Map<string, Nullable<readonly ts.FileTextChanges[]>>()
   const changesFor = (
     write: TypeScriptWriteFormat,
@@ -222,14 +238,9 @@ export function mapTypeScriptFileChanges(
     if (!path) return null
 
     if (fileChange.isNewFile) {
-      const sourceFile = context.service.getProgram()?.getSourceFile(context.fileName)
-      const created = changesFor(
-        { format: context.format, removeSemicolons: !!sourceFile && omitsSemicolons(sourceFile) },
-        fileChange
-      )
       createFiles.push({
         path,
-        content: created.textChanges.map((change) => change.newText).join(''),
+        content: fileChange.textChanges.map((change) => change.newText).join(''),
       })
       continue
     }
@@ -243,7 +254,9 @@ export function mapTypeScriptFileChanges(
       : changesFor(
           {
             format: detectOwnEditFormat(content, context.format) ?? context.format,
-            removeSemicolons: false,
+            removeSemicolons: omitsSemicolons(
+              context.service.getProgram()?.getSourceFile(fileChange.fileName)
+            ),
           },
           fileChange
         )
@@ -390,21 +403,111 @@ export function buildTypeScriptQuickFixes(
   return [...actions, ...fixAllActions].slice(0, MaxCodeActions)
 }
 
+/** TypeScript 认的「光标处」或「选区」。 */
+function positionOrRange(range: { start: number; end: number }): number | ts.TextRange {
+  return range.start === range.end ? range.start : { pos: range.start, end: range.end }
+}
+
+/**
+ * 选中的代码（没有选区就是光标处）此刻能做哪些重构：抽取函数 / 常量 / 类型、移到新文件、内联变量，以及
+ * TypeScript 给的别的。只列名字，改动在选中时才算。此刻做不了的（TypeScript 给了原因）与要再问用户一步的
+ * （「移到文件」要挑目标文件）不列。
+ */
+export function buildTypeScriptRefactors(
+  context: TypeScriptEditContext,
+  range: { start: number; end: number }
+): WorkbenchLanguageServiceCodeAction[] {
+  const { preferences } = typeScriptWriteSettings(context)
+  const refactors = context.service.getApplicableRefactors(
+    context.fileName,
+    positionOrRange(range),
+    preferences,
+    // 用户明说要重构：光标停在表达式里没选中东西时，TypeScript 也替他找出能抽的那一段。
+    'invoked'
+  )
+
+  const actions: WorkbenchLanguageServiceCodeAction[] = []
+  const seen = new Set<string>()
+  for (const refactor of refactors) {
+    for (const action of refactor.actions) {
+      if (action.notApplicableReason || action.isInteractive) continue
+      const key = `${refactor.name}\u0000${action.name}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      actions.push({
+        title: action.description,
+        kind: action.kind ?? 'refactor',
+        category: 'refactor',
+        changes: [],
+        resolve: { kind: 'refactor', refactor: refactor.name, action: action.name },
+      })
+    }
+  }
+  return actions.slice(0, MaxCodeActions)
+}
+
+/** 把一组改动套到正文上（从后往前套，前面的偏移不受影响）。 */
+function applyTextChanges(content: string, textChanges: readonly ts.TextChange[]): string {
+  let next = content
+  for (const change of mergeTextChangesAtSameOffset(textChanges).reverse())
+    next =
+      next.slice(0, change.span.start) + change.newText + next.slice(change.span.start + change.span.length)
+  return next
+}
+
 /** 选中了一个要现算的动作：算出它的改动；算不出来（落到项目之外……）为 null。 */
 export function resolveTypeScriptCodeAction(
   context: TypeScriptEditContext,
-  resolve: WorkbenchLanguageServiceCodeActionResolveData
+  resolve: WorkbenchLanguageServiceCodeActionResolveData,
+  range: { start: number; end: number }
 ): Nullable<TypeScriptWorkspaceEdit> {
   const { formatOptions, preferences } = typeScriptWriteSettings(context)
-  const changesWith = (options: ts.FormatCodeSettings): readonly ts.FileTextChanges[] =>
-    context.service.getCombinedCodeFix(
-      { type: 'file', fileName: context.fileName },
-      resolve.fixId,
+  if (resolve.kind === 'fix-all') {
+    const changesWith = (options: ts.FormatCodeSettings): readonly ts.FileTextChanges[] =>
+      context.service.getCombinedCodeFix(
+        { type: 'file', fileName: context.fileName },
+        resolve.fixId,
+        options,
+        preferences
+      ).changes
+    return mapTypeScriptFileChanges(context, changesWith(formatOptions), {
+      normalizeImports: resolve.fixId === 'fixMissingImport',
+      recompute: changesWith,
+    })
+  }
+
+  const editsWith = (options: ts.FormatCodeSettings): ts.RefactorEditInfo | undefined =>
+    context.service.getEditsForRefactor(
+      context.fileName,
       options,
+      positionOrRange(range),
+      resolve.refactor,
+      resolve.action,
       preferences
-    ).changes
-  return mapTypeScriptFileChanges(context, changesWith(formatOptions), {
-    normalizeImports: resolve.fixId === 'fixMissingImport',
-    recompute: changesWith,
+    )
+  const info = editsWith(formatOptions)
+  if (!info || info.notApplicableReason) return null
+  const edit = mapTypeScriptFileChanges(context, info.edits, {
+    recompute: (options) => editsWith(options)?.edits,
   })
+  if (!edit) return null
+
+  // 抽出来的东西先叫 newFunction、newLocal：告诉编辑器名字在哪，套完改动接着改名。
+  if (info.renameLocation === undefined || info.renameFilename !== context.fileName) return edit
+  const after = applyTextChanges(
+    context.content,
+    info.edits
+      .filter((change) => change.fileName === context.fileName && !change.isNewFile)
+      .flatMap((change) => change.textChanges)
+  )
+  if (info.renameLocation < 0 || info.renameLocation > after.length) return edit
+  const before = after.slice(0, info.renameLocation)
+  return {
+    ...edit,
+    renameLocation: {
+      line: before.split('\n').length,
+      column: info.renameLocation - before.lastIndexOf('\n'),
+      offset: info.renameLocation,
+    },
+  }
 }

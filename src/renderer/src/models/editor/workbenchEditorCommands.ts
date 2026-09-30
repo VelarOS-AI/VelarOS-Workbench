@@ -1,10 +1,10 @@
 /**
- * 编辑器里作用在光标处的代码动作（快速修复……）。按键、右键菜单、命令面板都落到这里登记的命令上；
+ * 编辑器里作用在光标处的代码动作（快速修复、重构……）。按键、右键菜单、命令面板都落到这里登记的命令上；
  * 命令怎么做在编辑器组件里。
  */
 import { isAppleWorkbenchPlatform } from '../layout/workbenchKeyboardShortcuts'
 
-export type WorkbenchEditorCommandId = 'quick-fix'
+export type WorkbenchEditorCommandId = 'quick-fix' | 'refactor'
 
 /** 页面（命令面板）交给编辑器去做的一次命令；每次序号加一，同一个命令连做两次也分得开。 */
 export interface WorkbenchEditorCommandRequest {
@@ -42,6 +42,15 @@ const WorkbenchEditorKeyBindings: readonly WorkbenchEditorKeyBinding[] = [
     chords: (isApple) => [
       { code: 'Enter', key: 'Enter', alt: true },
       { code: 'Period', key: '.', ...mod(isApple) },
+    ],
+  },
+  // 重构：JetBrains 的 ⌃T；别的平台上 Ctrl+T 常被占着，用 Ctrl+Alt+Shift+T。
+  {
+    command: 'refactor',
+    chords: (isApple) => [
+      isApple
+        ? { code: 'KeyT', key: 't', ctrl: true }
+        : { code: 'KeyT', key: 't', ctrl: true, alt: true, shift: true },
     ],
   },
 ]

@@ -60,16 +60,40 @@ void describe('language service IPC: code actions', () => {
       },
     ])
 
+    const refactor = { kind: 'refactor', refactor: 'Extract Symbol', action: 'constant_scope_0' }
+    assert.equal(await invoke(channel, { ...Base, range: Range, resolve: { ...refactor, extra: true } }), true)
+    assert.deepEqual((calls['resolveCodeAction']?.[1] as { resolve: unknown }).resolve, refactor)
+
     for (const request of [
       { ...Base, resolve: { kind: 'fix-all', fixId: 'fixMissingImport' } },
       { ...Base, range: Range },
       { ...Base, range: Range, resolve: { kind: 'run-command', fixId: 'x' } },
       { ...Base, range: Range, resolve: { kind: 'fix-all', fixId: '' } },
       { ...Base, range: Range, resolve: { kind: 'fix-all', fixId: 42 } },
+      { ...Base, range: Range, resolve: { kind: 'refactor', refactor: 'Extract Symbol' } },
+      { ...Base, range: Range, resolve: { kind: 'refactor', refactor: 'x'.repeat(300), action: 'a' } },
       { ...Base, range: { ...Range, endColumn: 'six' }, resolve: { kind: 'fix-all', fixId: 'x' } },
       { range: Range, resolve: { kind: 'fix-all', fixId: 'x' } },
     ])
       assert.equal(await invoke(channel, request), false, JSON.stringify(request))
-    assert.equal(calls['resolveCodeAction']?.length, 1)
+    assert.equal(calls['resolveCodeAction']?.length, 2)
+  })
+
+  void test('a code actions request may say which kinds it wants, and nothing else', async () => {
+    const calls = await registerWithRecorder()
+    const channel = WorkbenchLanguageChannels.codeActions
+    const request = { ...Base, range: Range, diagnostics: [] }
+
+    assert.equal(await invoke(channel, request), true)
+    assert.equal(await invoke(channel, { ...request, categories: ['refactor'] }), true)
+    assert.equal(await invoke(channel, { ...request, categories: ['quickfix', 'refactor'] }), true)
+    assert.deepEqual(
+      calls['getCodeActions']?.map((call) => (call as { categories?: unknown }).categories),
+      [undefined, ['refactor'], ['quickfix', 'refactor']]
+    )
+
+    assert.equal(await invoke(channel, { ...request, categories: ['source'] }), false)
+    assert.equal(await invoke(channel, { ...request, categories: 'refactor' }), false)
+    assert.equal(calls['getCodeActions']?.length, 3)
   })
 })

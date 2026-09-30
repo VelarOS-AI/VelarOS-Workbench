@@ -97,6 +97,7 @@ import {
 } from './MarkdownLanguageService'
 import {
   buildTypeScriptQuickFixes,
+  buildTypeScriptRefactors,
   resolveTypeScriptCodeAction,
   type TypeScriptEditContext,
 } from './TypeScriptCodeActions'
@@ -1371,12 +1372,20 @@ class WorkbenchLanguageServices {
     if (resolved.service?.runtime === 'typescript-language-service') {
       const snapshot = await this.createTypeScriptProjectSnapshot(request)
       const context = this.typeScriptEditContext(snapshot, request)
+      const range = this.offsetsFromRange(context.content, request.range)
+      const categories = request.categories ?? ['quickfix']
       return {
         projectRoot: snapshot.projectRoot,
         path: snapshot.requestPath,
-        actions: buildTypeScriptQuickFixes(context, this.offsetsFromRange(context.content, request.range)),
+        actions: [
+          ...(categories.includes('quickfix') ? buildTypeScriptQuickFixes(context, range) : []),
+          ...(categories.includes('refactor') ? buildTypeScriptRefactors(context, range) : []),
+        ],
       }
     }
+    // 外部语言服务器只给修复：重构是内置 TypeScript 服务的。
+    if (request.categories && !request.categories.includes('quickfix'))
+      return { projectRoot: resolved.projectRoot, path: request.path, actions: [] }
     if (!this.isExternalRuntime(resolved.service?.runtime))
       return { projectRoot: resolved.projectRoot, path: request.path, actions: [] }
     const external = await this.prepareExternal(request, resolved.projectRoot)
@@ -1399,7 +1408,7 @@ class WorkbenchLanguageServices {
     }
   }
 
-  /** 选中了一个要现算的动作（TypeScript 的「同类问题一起修」）：按请求里的正文算出它的改动。 */
+  /** 选中了一个要现算的动作（TypeScript 的重构、「同类问题一起修」）：按请求里的正文算出它的改动。 */
   public async resolveCodeAction(
     request: WorkbenchLanguageServiceCodeActionResolveRequest
   ): Promise<WorkbenchLanguageServiceCodeActionResolveResult> {
@@ -1408,15 +1417,18 @@ class WorkbenchLanguageServices {
       return { projectRoot: resolved.projectRoot, path: request.path, changes: [], createFiles: [] }
 
     const snapshot = await this.createTypeScriptProjectSnapshot(request)
+    const context = this.typeScriptEditContext(snapshot, request)
     const edit = resolveTypeScriptCodeAction(
-      this.typeScriptEditContext(snapshot, request),
-      request.resolve
+      context,
+      request.resolve,
+      this.offsetsFromRange(context.content, request.range)
     )
     return {
       projectRoot: snapshot.projectRoot,
       path: snapshot.requestPath,
       changes: edit?.changes ?? [],
       createFiles: edit?.createFiles ?? [],
+      renameLocation: edit?.renameLocation,
     }
   }
 
@@ -1488,6 +1500,7 @@ class WorkbenchLanguageServices {
         'inlay-hints',
         'semantic-tokens',
         'code-actions',
+        'refactor',
       ]
 
     if (service.runtime === 'markdown-language-service')

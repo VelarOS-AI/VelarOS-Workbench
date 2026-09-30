@@ -11,7 +11,9 @@ import {
   collectWorkbenchDiagnosticsInRange,
   nextWorkbenchCodeActionRowIndex,
   partitionWorkbenchCodeActionChanges,
+  resolveWorkbenchCodeActionCategories,
   resolveWorkbenchCodeActionSupport,
+  resolveWorkbenchRefactorGroup,
   workbenchRangeFromOffsets,
 } from '../src/renderer/src/models/editor/workbenchCodeActions'
 import { mapWorkbenchDiagnosticToCodeMirror } from '../src/renderer/src/models/editor/workbenchCodeMirrorDiagnostics'
@@ -68,6 +70,23 @@ void describe('editor code action keys', () => {
     assert.equal(resolveWorkbenchEditorCommandFromKey(key('Period', '.', { meta: true }), Linux), null)
     assert.equal(resolveWorkbenchEditorCommandFromKey(key('Period', '.'), Linux), null)
   })
+
+  void test('Ctrl+T on macOS and Ctrl+Alt+Shift+T elsewhere open the refactor menu', () => {
+    assert.equal(resolveWorkbenchEditorCommandFromKey(key('KeyT', 't', { ctrl: true }), Mac), 'refactor')
+    // 带 Alt 的字符键只认键位：打出来的字随布局与 AltGr 变。
+    assert.equal(
+      resolveWorkbenchEditorCommandFromKey(key('KeyT', 'þ', { ctrl: true, alt: true, shift: true }), Linux),
+      'refactor'
+    )
+    // 别的平台上 Ctrl+T 不占；macOS 上 ⌘T、⇧⌃T 也不是。
+    assert.equal(resolveWorkbenchEditorCommandFromKey(key('KeyT', 't', { ctrl: true }), Linux), null)
+    assert.equal(resolveWorkbenchEditorCommandFromKey(key('KeyT', 't', { meta: true }), Mac), null)
+    assert.equal(resolveWorkbenchEditorCommandFromKey(key('KeyT', 'T', { ctrl: true, shift: true }), Mac), null)
+    assert.equal(
+      resolveWorkbenchEditorCommandFromKey(key('KeyY', 't', { ctrl: true, alt: true, shift: true }), Linux),
+      null
+    )
+  })
 })
 
 void describe('code action menu model', () => {
@@ -101,13 +120,90 @@ void describe('code action menu model', () => {
     assert.equal(nextWorkbenchCodeActionRowIndex([], -1, 1), -1)
   })
 
-  void test('knows which files have quick fixes', () => {
-    assert.equal(resolveWorkbenchCodeActionSupport('src/a.ts').quickFix, true)
-    assert.equal(resolveWorkbenchCodeActionSupport('src/a.jsx').quickFix, true)
-    assert.equal(resolveWorkbenchCodeActionSupport('src/a.py').quickFix, true)
-    assert.equal(resolveWorkbenchCodeActionSupport('src/a.css').quickFix, false)
-    assert.equal(resolveWorkbenchCodeActionSupport('README.md').quickFix, false)
-    assert.equal(resolveWorkbenchCodeActionSupport(null).quickFix, false)
+  void test('knows which files have quick fixes and which have refactorings', () => {
+    assert.deepEqual(resolveWorkbenchCodeActionSupport('src/a.ts'), { quickFix: true, refactor: true })
+    assert.deepEqual(resolveWorkbenchCodeActionSupport('src/a.jsx'), { quickFix: true, refactor: true })
+    // 外部语言服务器只给修复。
+    assert.deepEqual(resolveWorkbenchCodeActionSupport('src/a.py'), { quickFix: true, refactor: false })
+    assert.deepEqual(resolveWorkbenchCodeActionSupport('src/a.css'), { quickFix: false, refactor: false })
+    assert.deepEqual(resolveWorkbenchCodeActionSupport('README.md'), { quickFix: false, refactor: false })
+    assert.deepEqual(resolveWorkbenchCodeActionSupport(null), { quickFix: false, refactor: false })
+  })
+
+  void test('asks the language service only for what the menu and the file can show', () => {
+    const typescript = resolveWorkbenchCodeActionSupport('src/a.ts')
+    const python = resolveWorkbenchCodeActionSupport('src/a.py')
+    assert.deepEqual(resolveWorkbenchCodeActionCategories('all', typescript), ['quickfix', 'refactor'])
+    assert.deepEqual(resolveWorkbenchCodeActionCategories('refactor', typescript), ['refactor'])
+    assert.deepEqual(resolveWorkbenchCodeActionCategories('all', python), ['quickfix'])
+    // 没有可问的：菜单不打开。
+    assert.deepEqual(resolveWorkbenchCodeActionCategories('refactor', python), [])
+    assert.deepEqual(resolveWorkbenchCodeActionCategories('all', resolveWorkbenchCodeActionSupport('a.css')), [])
+  })
+
+  void test('puts refactorings after the fixes, grouped by what they do', () => {
+    const labels = {
+      quickFixes: 'Quick fixes',
+      refactors: 'Refactor',
+      refactorGroups: { extract: 'Extract', inline: 'Inline', move: 'Move', rewrite: 'Rewrite', other: 'Other' },
+    }
+    const refactor = (title: string, kind?: string) => action(title, { category: 'refactor', kind })
+    const actions = [
+      action('Add import'),
+      refactor('Move to a new file', 'refactor.move.newFile'),
+      refactor('Extract to constant', 'refactor.extract.constant'),
+      refactor('Convert to arrow function', 'refactor.rewrite.function.arrow'),
+      refactor('Extract to function', 'refactor.extract.function'),
+      refactor('Something else'),
+    ]
+    const describeRows = (rows: ReturnType<typeof buildWorkbenchCodeActionMenuRows>) =>
+      rows.map((row) => (row.kind === 'header' ? `# ${row.title}` : row.action.title))
+
+    assert.deepEqual(describeRows(buildWorkbenchCodeActionMenuRows(actions, { mode: 'all', labels })), [
+      '# Quick fixes',
+      'Add import',
+      '# Refactor',
+      'Extract to constant',
+      'Extract to function',
+      'Move to a new file',
+      'Convert to arrow function',
+      'Something else',
+    ])
+    // 只列重构：修复不列，每组一个标题。
+    assert.deepEqual(describeRows(buildWorkbenchCodeActionMenuRows(actions, { mode: 'refactor', labels })), [
+      '# Extract',
+      'Extract to constant',
+      'Extract to function',
+      '# Move',
+      'Move to a new file',
+      '# Rewrite',
+      'Convert to arrow function',
+      '# Other',
+      'Something else',
+    ])
+    // 只有一类、只有一组时不加标题。
+    assert.deepEqual(describeRows(buildWorkbenchCodeActionMenuRows(actions.slice(0, 1), { mode: 'all', labels })), [
+      'Add import',
+    ])
+    assert.deepEqual(describeRows(buildWorkbenchCodeActionMenuRows(actions.slice(1, 2), { mode: 'all', labels })), [
+      'Move to a new file',
+    ])
+    assert.deepEqual(
+      describeRows(buildWorkbenchCodeActionMenuRows(actions.slice(1, 2), { mode: 'refactor', labels })),
+      ['Move to a new file']
+    )
+    const keys = buildWorkbenchCodeActionMenuRows(actions, { mode: 'refactor', labels }).map((row) => row.key)
+    assert.equal(new Set(keys).size, keys.length)
+  })
+
+  void test('sorts refactoring kinds into groups', () => {
+    assert.equal(resolveWorkbenchRefactorGroup('refactor.extract.type'), 'extract')
+    assert.equal(resolveWorkbenchRefactorGroup('refactor.inline.variable'), 'inline')
+    assert.equal(resolveWorkbenchRefactorGroup('refactor.move.newFile'), 'move')
+    assert.equal(resolveWorkbenchRefactorGroup('refactor.rewrite.export.default'), 'rewrite')
+    assert.equal(resolveWorkbenchRefactorGroup('refactor'), 'other')
+    assert.equal(resolveWorkbenchRefactorGroup('refactor.extraction'), 'other')
+    assert.equal(resolveWorkbenchRefactorGroup(undefined), 'other')
   })
 })
 
@@ -321,6 +417,16 @@ void describe('reporting language service edits', () => {
       'workbench.languageServiceActionCreatedFile',
       'workbench.languageServiceActionStale',
       'workbench.languageServiceActionFailed',
+      'workbench.editorContextRefactor',
+      'workbench.editorCodeActionsQuickFixGroup',
+      'workbench.editorCodeActionsRefactorGroup',
+      'workbench.editorRefactorsLoading',
+      'workbench.editorRefactorsEmpty',
+      'workbench.editorRefactorGroupExtract',
+      'workbench.editorRefactorGroupInline',
+      'workbench.editorRefactorGroupMove',
+      'workbench.editorRefactorGroupRewrite',
+      'workbench.editorRefactorGroupOther',
     ]) {
       for (const locale of ['zh-CN', 'en-US'] as const)
         assert.notEqual(translateWorkbenchAppMessage(locale, messageKey), messageKey, `${locale} ${messageKey}`)

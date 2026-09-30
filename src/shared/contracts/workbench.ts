@@ -298,6 +298,7 @@ export type WorkbenchLanguageServiceCapability =
   | 'inlay-hints'
   | 'semantic-tokens'
   | 'code-actions'
+  | 'refactor'
 
 export interface WorkbenchLanguageServicePosition {
   line: number
@@ -699,14 +700,19 @@ export interface WorkbenchLanguageServiceCodeActionsRequest extends WorkbenchLan
    * 重新算范围内的诊断，编辑器里的诊断刚改完字还没刷新时也对得上。
    */
   diagnostics: WorkbenchLanguageServiceDiagnostic[]
+  /** 要哪几类动作；省略时只要快速修复。 */
+  categories?: WorkbenchLanguageServiceCodeActionCategory[]
 }
 
-/** 选中动作时才算改动要交回语言服务的数据：同一类问题在整个文件里一起修。 */
-export interface WorkbenchLanguageServiceCodeActionResolveData {
-  kind: 'fix-all'
-  /** TypeScript 给这类修复的标识。 */
-  fixId: string
-}
+/** 快速修复是冲着诊断去的；重构是对选中的代码（或光标处）能做的改写，没有诊断也有。 */
+export type WorkbenchLanguageServiceCodeActionCategory = 'quickfix' | 'refactor'
+
+/** 选中动作时才算改动要交回语言服务的数据。 */
+export type WorkbenchLanguageServiceCodeActionResolveData =
+  /** 同一类问题在整个文件里一起修；`fixId` 是 TypeScript 给这类修复的标识。 */
+  | { kind: 'fix-all'; fixId: string }
+  /** 一个重构：TypeScript 的重构名与其下的动作名。 */
+  | { kind: 'refactor'; refactor: string; action: string }
 
 /** 要新建的文件（整份内容），项目内相对路径。 */
 export interface WorkbenchLanguageServiceNewFile {
@@ -716,7 +722,10 @@ export interface WorkbenchLanguageServiceNewFile {
 
 export interface WorkbenchLanguageServiceCodeAction {
   title: string
+  /** 细分的种类：`quickfix`，或重构的 `refactor.extract.function`、`refactor.move.newFile`…… */
   kind?: string
+  /** 省略按快速修复算。 */
+  category?: WorkbenchLanguageServiceCodeActionCategory
   preferred?: boolean
   /** 直接可用的改动；选中时才算的（带 `resolve`）为空。 */
   changes: WorkbenchLanguageServiceFileEdit[]
@@ -743,6 +752,11 @@ export interface WorkbenchLanguageServiceCodeActionResolveResult {
   path: string
   changes: WorkbenchLanguageServiceFileEdit[]
   createFiles: WorkbenchLanguageServiceNewFile[]
+  /**
+   * 改动套完以后可以接着改名的地方（重构抽出来的函数、常量、类型的名字），在请求文件里、按套完改动之后的
+   * 正文算。
+   */
+  renameLocation?: WorkbenchLanguageServicePosition
 }
 
 export interface WorkbenchSaveFileRequest {
