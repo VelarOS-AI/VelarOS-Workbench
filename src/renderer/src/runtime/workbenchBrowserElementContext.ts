@@ -62,10 +62,16 @@ export function formatBrowserElementSelectionsForPrompt(
   ].join('\n')
 }
 
-/** 只选了元素、没打字时，用户气泡与会话标题显示这一句。 */
+/**
+ * 只选了元素、没打字时，用户气泡与会话标题显示这一句。怎么说（「已选择页面元素：…」）、元素之间用什么隔开，
+ * 由调用方按界面语言给。
+ */
 export function buildBrowserElementDisplayFallback(
-  selections: readonly BrowserElementSelection[]
+  selections: readonly BrowserElementSelection[],
+  wording: { separator: string; describe: (elements: string) => string }
 ): string {
   if (selections.length === 0) return ''
-  return `已选择页面元素：${truncate(selections.map((selection) => selection.label).join('、'), 120)}`
+  return wording.describe(
+    truncate(selections.map((selection) => selection.label).join(wording.separator), 120)
+  )
 }

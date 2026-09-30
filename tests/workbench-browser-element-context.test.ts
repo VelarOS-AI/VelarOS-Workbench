@@ -51,10 +51,12 @@ void describe('Workbench browser element context', () => {
   })
 
   void test('labels a message that only carries picked elements', () => {
-    assert.equal(
-      buildBrowserElementDisplayFallback([selection(), selection({ id: 'element-2', label: '搜索框' })]),
-      '已选择页面元素：登录按钮、搜索框'
-    )
-    assert.equal(buildBrowserElementDisplayFallback([]), '')
+    // 怎么说、用什么隔开按界面语言给。
+    const chinese = { separator: '、', describe: (elements: string) => `已选择页面元素：${elements}` }
+    const english = { separator: ', ', describe: (elements: string) => `Selected page elements: ${elements}` }
+    const picked = [selection(), selection({ id: 'element-2', label: '搜索框' })]
+    assert.equal(buildBrowserElementDisplayFallback(picked, chinese), '已选择页面元素：登录按钮、搜索框')
+    assert.equal(buildBrowserElementDisplayFallback(picked, english), 'Selected page elements: 登录按钮, 搜索框')
+    assert.equal(buildBrowserElementDisplayFallback([], chinese), '')
   })
 })

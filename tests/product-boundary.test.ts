@@ -259,7 +259,8 @@ void describe('Workbench product boundary', () => {
           throw new Error('unexpected save')
         },
       }),
-      /只读预览不能作为纯文本保存/
+      // 测试环境里读不到界面语言（没有 localStorage、navigator.language），按英文出。
+      /read-only preview cannot be saved as plain text|只读预览不能作为纯文本保存/
     )
     assert.equal(invoked, false)
   })
@@ -284,7 +285,8 @@ void describe('Workbench product boundary', () => {
           throw new Error('unexpected save')
         },
       }),
-      /只读预览不能作为纯文本保存/
+      // 测试环境里读不到界面语言（没有 localStorage、navigator.language），按英文出。
+      /read-only preview cannot be saved as plain text|只读预览不能作为纯文本保存/
     )
     assert.equal(invoked, false)
   })

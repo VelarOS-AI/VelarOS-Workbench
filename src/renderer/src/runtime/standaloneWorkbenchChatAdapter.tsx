@@ -353,7 +353,8 @@ function restoreStoredState(
           withoutConversationPreviews(
             sanitizeStandaloneChatMessages(stored.messages.filter(isStoredChatMessage))
           )
-        )
+        ),
+        runStoppedText()
       )
     ),
     { includePending: true }
@@ -608,12 +609,18 @@ function finishRun(run: ActiveConversationRun, runtime: WorkbenchConversationSta
   run.runChangeCapture?.finish()
 }
 
+/** 没跑完就收尾的工具卡上写的那一句，按此刻的界面语言。 */
+function runStoppedText(): string {
+  return translateWorkbenchAppMessage(readWorkbenchAppLocale(), 'chat.runStopped')
+}
+
 /** 一轮收尾时的消息整理：去掉预览与不可见占位，收掉没收尾的卡片，暂停没被读走的引导。 */
 function settleTerminalMessages(messages: readonly ChatMessage[]): ChatMessage[] {
   return pauseUnappliedRunGuidance(
     withExpiredInteractions(
       withSettledToolCalls(
-        withSettledScripts(withoutConversationPreviews(sanitizeStandaloneChatMessages(messages)))
+        withSettledScripts(withoutConversationPreviews(sanitizeStandaloneChatMessages(messages))),
+        runStoppedText()
       )
     )
   )
@@ -1132,6 +1139,13 @@ function StandaloneWorkbenchChatSessionSurface({
   }
 
   /** 只挂了文件、没写字就发出去的消息：气泡里写明问的是哪几个文件。 */
+  function describeBrowserElements(selections: readonly BrowserElementSelection[]): string {
+    return buildBrowserElementDisplayFallback(selections, {
+      separator: t('workbench.chatFileReferenceListSeparator'),
+      describe: (elements) => t('workbench.chatBrowserElementsMessageFallback', { elements }),
+    })
+  }
+
   function buildFileReferenceDisplayFallback(paths: readonly string[]): string {
     if (paths.length === 0) return ''
     return t('workbench.chatFileReferencesMessageFallback', {
@@ -1152,7 +1166,7 @@ function StandaloneWorkbenchChatSessionSurface({
       ...createTextMessage(
         'user',
         text
-          || buildBrowserElementDisplayFallback(selections)
+          || describeBrowserElements(selections)
           || buildFileReferenceDisplayFallback(referencedFilePaths)
       ),
       conversationKind: 'run-guidance',
@@ -1474,7 +1488,7 @@ function StandaloneWorkbenchChatSessionSurface({
             'user',
             text
               || draftFiles.map((file) => file.name).join(', ')
-              || buildBrowserElementDisplayFallback(selections)
+              || describeBrowserElements(selections)
               || buildFileReferenceDisplayFallback(referencedFilePaths)
           ),
           ...scope,

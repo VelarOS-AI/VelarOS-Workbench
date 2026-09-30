@@ -338,15 +338,21 @@ export function withSettledScripts(messages: readonly ChatMessage[]): ChatMessag
   )
 }
 
-/** 运行收尾（或上次停在运行中的会话恢复）时，还在跑的工具卡不会再有结果，按中断收掉。 */
-export function withSettledToolCalls(messages: readonly ChatMessage[]): ChatMessage[] {
+/**
+ * 运行收尾（或上次停在运行中的会话恢复）时，还在跑的工具卡不会再有结果，按中断收掉；`stoppedText` 是卡上
+ * 写的那句「运行已停止。」（按界面语言给）。
+ */
+export function withSettledToolCalls(
+  messages: readonly ChatMessage[],
+  stoppedText: string
+): ChatMessage[] {
   return messages.map((message) =>
     message.blocks.some(isRunningToolCall)
       ? {
           ...message,
           blocks: message.blocks.map((block): Block =>
             isRunningToolCall(block)
-              ? { ...block, isRunning: false, error: block.error ?? '运行已停止。' }
+              ? { ...block, isRunning: false, error: block.error ?? stoppedText }
               : block
           ),
         }

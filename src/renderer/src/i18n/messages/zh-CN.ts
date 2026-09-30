@@ -29,6 +29,7 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     historySaveFailedTitle: '聊天历史未能保存',
     historySaveFailedDescription:
       '浏览器存储写入失败（可能已满）。当前对话仍可继续，但重启后可能丢失；已尝试写入本地备份。',
+    runStopped: '运行已停止。',
     fileChangeOpenErrorTitle: '打开文件失败',
     fileChangeSummaryFilesChanged: '{count} 个文件已更改',
     fileChangeSummaryReview: '审核',
@@ -857,6 +858,8 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     chatFileReferenceForget: '从列表移除',
     chatFileReferencesMessageFallback: '询问 {files}',
     chatFileReferenceListSeparator: '、',
+    chatBrowserElementsMessageFallback: '已选择页面元素：{elements}',
+    previewNotSavableAsText: '只读预览不能作为纯文本保存。',
     chatPlaceholder: '向 Workbench Agent 提问…',
     chatEnginePlaceholder: '向 {engine} 提问…',
     chatEngineModelHint: '模型由 {engine} 提供，登录、用量与会话记录都在 {engine} 那边。',

@@ -236,7 +236,7 @@ describe('Workbench conversation notices', () => {
     expect(finished.messages[0]!.blocks).toHaveLength(2)
     expect(finished.messages[0]!.blocks[1]).toMatchObject({ isRunning: false, result: 'all passed', finishedAt: 2 })
     // 没跑完就收尾的：不再转圈，标成停止
-    expect(withSettledToolCalls(state.messages)[0]!.blocks[1]).toMatchObject({
+    expect(withSettledToolCalls(state.messages, '运行已停止。')[0]!.blocks[1]).toMatchObject({
       isRunning: false,
       error: '运行已停止。',
     })

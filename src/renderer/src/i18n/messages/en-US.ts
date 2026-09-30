@@ -30,6 +30,7 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     historySaveFailedTitle: 'Chat history was not saved',
     historySaveFailedDescription:
       'Browser storage could not be written (it may be full). You can keep chatting, but this history may be lost after a restart; a local backup was attempted.',
+    runStopped: 'The run was stopped.',
     fileChangeOpenErrorTitle: 'Failed to open file',
     fileChangeSummaryFilesChanged: '{count} files changed',
     fileChangeSummaryReview: 'Review',
@@ -886,6 +887,8 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     chatFileReferenceForget: 'Remove from list',
     chatFileReferencesMessageFallback: 'Ask about {files}',
     chatFileReferenceListSeparator: ', ',
+    chatBrowserElementsMessageFallback: 'Selected page elements: {elements}',
+    previewNotSavableAsText: 'A read-only preview cannot be saved as plain text.',
     chatPlaceholder: 'Ask Workbench Agent…',
     chatEnginePlaceholder: 'Ask {engine}…',
     chatEngineModelHint: 'Models come from {engine}; sign-in, usage and session history stay in {engine}.',

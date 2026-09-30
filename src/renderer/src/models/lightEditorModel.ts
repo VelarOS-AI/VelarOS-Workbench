@@ -6,6 +6,10 @@ import type { SystemLocalAttachmentFileResult } from '@shared/contracts'
 import { resolveWorkbenchImageMediaType } from '@shared/workbenchImage'
 import type { WorkbenchTextEncoding, WorkbenchTextEol } from '@shared/workbenchTextFormat'
 
+import {
+  readWorkbenchAppLocale,
+  translateWorkbenchAppMessage,
+} from '../i18n/useStandaloneWorkbenchLocalization'
 import type {
   WorkbenchLightEditorTab,
   WorkbenchOfficePreviewKind,
@@ -179,7 +183,10 @@ export async function saveLightEditorTab(
   }
 ): Promise<{ size: number; modifiedAt: number }> {
   if (tab.officePreview || tab.imagePreview || tab.textIssue)
-    throw new AppError('VALIDATION', '只读预览不能作为纯文本保存。')
+    throw new AppError(
+      'VALIDATION',
+      translateWorkbenchAppMessage(readWorkbenchAppLocale(), 'workbench.previewNotSavableAsText')
+    )
 
   const target = resolveLightEditorSaveTarget(tab)
 
