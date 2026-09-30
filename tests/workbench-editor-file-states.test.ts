@@ -75,6 +75,43 @@ describe('per-file editor states', () => {
     expect(store.take('f10')).toBeDefined()
   })
 
+  test('a file shown in one editor is handed over when another editor takes it', () => {
+    const store = new WorkbenchEditorFileStates()
+    const left = {}
+    const right = {}
+    // 右边的编辑器正在显示 x（取状态时登记下来）；此刻它里面有一步没存进来的改动。
+    const rightView = type(fileState('x'), 1, '!')
+    expect(store.take('x', { owner: right, snapshot: () => saved(rightView, right) })).toBeUndefined()
+
+    // 标签挪到左边那组：左边的编辑器先换文件，向还在显示它的右边要此刻的状态，撤销历史跟着走。
+    const taken = store.take('x', { owner: left, snapshot: () => null })
+    expect(taken?.owner).toBe(right)
+    expect(taken?.state.doc.toString()).toBe('x!')
+    expect(run(taken!.state, undo).doc.toString()).toBe('x')
+
+    // 右边随后离开 x 时存进来的那份不收：文件已经由左边接手。
+    store.save('x', saved(rightView, right))
+    expect(store.size).toBe(0)
+
+    // 左边离开时存下的照常收，之后谁来取都是它。
+    store.save('x', saved(fileState('x!?'), left))
+    expect(store.size).toBe(1)
+    expect(store.take('x', { owner: right, snapshot: () => null })?.state.doc.toString()).toBe('x!?')
+  })
+
+  test('an editor switching between its own files keeps using the stored states', () => {
+    const store = new WorkbenchEditorFileStates()
+    const editor = {}
+    const holder = { owner: editor, snapshot: () => saved(fileState('live'), editor) }
+    expect(store.take('a', holder)).toBeUndefined()
+    // 同一个编辑器离开 a 再回来：拿到的是存下的那份，不会去问自己要快照。
+    store.save('a', saved(fileState('stored'), editor))
+    expect(store.take('a', holder)?.state.doc.toString()).toBe('stored')
+    // 正在显示它的编辑器给不出快照（视图已经不在了）：接手的那个按正文新开。
+    expect(store.take('b', { owner: editor, snapshot: () => null })).toBeUndefined()
+    expect(store.take('b', { owner: {}, snapshot: () => null })).toBeUndefined()
+  })
+
   test('a state left by another editor instance is rebuilt with its undo history, selection and folds', () => {
     let state = type(fileState('import a from "a"\nimport b from "b"\n\nconst c = a + b\n'), 0, '// x\n')
     state = state.update({ effects: foldEffect.of({ from: 23, to: 40 }) }).state

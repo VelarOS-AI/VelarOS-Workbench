@@ -2659,6 +2659,17 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       if (!isEmpty(effects)) view.dispatch({ effects })
     }
 
+    /** 视图里此刻的文件状态，连同滚动位置。 */
+    const snapshotFileState = (
+      view: EditorView,
+      instance: WorkbenchEditorInstanceExtensions
+    ): WorkbenchEditorFileState => ({
+      state: view.state,
+      scroll: view.scrollSnapshot(),
+      activeLineSuppressed: isWorkbenchActiveLineSuppressed(view),
+      owner: instance,
+    })
+
     /** 离开当前文件：收起补全、悬浮提示，把它的状态连同滚动位置存起来。 */
     const saveActiveFileState = (view: EditorView): void => {
       const key = activeFileKeyRef.current
@@ -2668,12 +2679,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       closeCompletion(view)
       closeWorkbenchEditorFind(view)
       view.dispatch({ effects: closeHoverTooltips })
-      fileStatesRef.current.save(key, {
-        state: view.state,
-        scroll: view.scrollSnapshot(),
-        activeLineSuppressed: isWorkbenchActiveLineSuppressed(view),
-        owner: instance,
-      })
+      fileStatesRef.current.save(key, snapshotFileState(view, instance))
     }
 
     /** 要显示的文件的状态：存过的取回来（别的编辑器实例存的按 JSON 重建），没存过的按正文新建。 */
@@ -2682,7 +2688,14 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       content: string,
       instance: WorkbenchEditorInstanceExtensions
     ): { state: EditorState; saved: Nullable<WorkbenchEditorFileState> } => {
-      const saved = key ? fileStatesRef.current.take(key) : undefined
+      // 登记这个编辑器接下来显示它：标签挪到另一组的编辑器里时，那边向这里要此刻的状态（见 WorkbenchEditorFileStates）。
+      const saved = key
+        ? fileStatesRef.current.take(key, {
+            owner: instance,
+            snapshot: () =>
+              viewRef.current ? snapshotFileState(viewRef.current, instance) : null,
+          })
+        : undefined
       if (saved) {
         if (saved.owner === instance) return { state: saved.state, saved }
         try {
