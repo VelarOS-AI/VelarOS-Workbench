@@ -8,12 +8,13 @@ import {
 import { workbenchHost } from '@renderer/host'
 import {
   describeWorkbenchGitBranchControl,
+  describeWorkbenchGitBranchControlHead,
+  describeWorkbenchGitOperationBlock,
   describeWorkbenchGitRemoteActions,
   describeWorkbenchGitRemoteNote,
   listWorkbenchGitMenuBranches,
   resolveWorkbenchGitBranchSwitch,
 } from '@renderer/models/git/workbenchGitBranchMenuModel'
-import { describeWorkbenchGitHead } from '@renderer/models/git/workbenchGitTopBarModel'
 import { useStableWorkbenchMessageTranslate } from '@renderer/runtime/useStableWorkbenchMessaging'
 
 import { AppError } from '@velaros-ai/core/error'
@@ -99,14 +100,17 @@ export function WorkbenchGitBranchControl({
     () => listWorkbenchGitMenuBranches(summary.branches, { branch: branchName, upstream }),
     [branchName, summary.branches, upstream]
   )
-  // 分离的 HEAD 上控件照样在：按钮上写「分离的 HEAD · 1a2b3c4」，列表里没有哪个分支算当前的，点哪个都能切过去。
-  const headLabel = status ? describeWorkbenchGitHead(status, t) : null
+  // 分离的 HEAD 上控件照样在：按钮上写「分离的 HEAD · 1a2b3c4」（变基到一半是「feature（变基中）」），列表里
+  // 没有哪个分支算当前的，点哪个都能切过去。
+  const headLabel = status ? describeWorkbenchGitBranchControlHead(status, summary.operation, t) : null
   if (!summary.repository || !status || !headLabel) return null
 
   const running = remoteAction.running
   const creating = pendingBranch === CreatingBranch
   // 同一时刻只做一件事：远端操作跑着时不切分支，切分支时不起远端操作。
   const locked = !!running || !!pendingBranch
+  // 合并、变基、拣选、撤销进行到一半：先去提交面板继续或放弃。这时只有获取远端还能用。
+  const operationBlock = describeWorkbenchGitOperationBlock(summary.operation, t)
   const detachedHead = status.detachedHead
   const { ahead, behind } = status
   const tooltip = describeWorkbenchGitBranchControl(status, t)
@@ -143,7 +147,7 @@ export function WorkbenchGitBranchControl({
 
   /** 有没提交的改动也照样切：git 能带过去就带过去，会被覆盖时 git 自己拒绝，原因照它说的报出来。 */
   async function switchBranch(branch: WorkspaceGitBranch): Promise<void> {
-    if (locked || warnUnsavedOpenTabs()) return
+    if (locked || operationBlock || warnUnsavedOpenTabs()) return
     const target = resolveWorkbenchGitBranchSwitch(branch, branches)
     setPendingBranch(branch.name)
     try {
@@ -189,7 +193,7 @@ export function WorkbenchGitBranchControl({
   async function createBranch(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault()
     const name = newBranchName.trim()
-    if (!name || locked) return
+    if (!name || locked || operationBlock) return
     if (checkoutCreatedBranch && warnUnsavedOpenTabs()) return
     setPendingBranch(CreatingBranch)
     try {
@@ -321,11 +325,12 @@ export function WorkbenchGitBranchControl({
           currentBranch={branchName}
           search={search}
           searchRef={searchRef}
-          remoteActions={describeWorkbenchGitRemoteActions(status, t)}
-          remoteNote={describeWorkbenchGitRemoteNote(status, t)}
+          remoteActions={describeWorkbenchGitRemoteActions(status, t, operationBlock)}
+          remoteNote={describeWorkbenchGitRemoteNote(status, t, operationBlock)}
           running={running}
           switchingBranch={creating ? null : pendingBranch}
           locked={locked}
+          branchesBlocked={operationBlock}
           onSearchChange={setSearch}
           onRunRemoteAction={(action) => void runRemoteAction(action)}
           onCancelRemoteAction={() => remoteAction.cancel()}

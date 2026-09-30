@@ -202,7 +202,10 @@ void describe('Workbench Git pull, fetch and sync', () => {
       'utf8'
     )
     // 拉取、同步、推送、获取远端都在分支菜单里；同步和推送先确认，获取远端不问。
-    assert.match(control, /remoteActions=\{describeWorkbenchGitRemoteActions\(status, t\)\}/)
+    assert.match(
+      control,
+      /remoteActions=\{describeWorkbenchGitRemoteActions\(status, t, operationBlock\)\}/
+    )
     assert.match(control, /if \(action === 'sync'\)\s*return window\.confirm\(tLatest\.current\('workbench\.gitSyncConfirm'/)
     assert.match(control, /action !== 'fetch' && warnUnsavedOpenTabs\(\)/)
     assert.match(control, /result\.action\.conflicts\.length > 0[\s\S]*showConflicts/)

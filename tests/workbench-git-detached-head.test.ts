@@ -160,7 +160,8 @@ void describe('Workbench Git on a detached HEAD', () => {
     // 控件出不出现看的是「有没有 HEAD 可显示」，不再只认分支。
     assert.doesNotMatch(toolbar, /gitSummary\.status\?\.branch/u)
     assert.match(toolbar, /hasWorkbenchGitHead\(gitSummary\.status\)/u)
-    assert.match(control, /describeWorkbenchGitHead\(status, t\)/u)
+    assert.match(control, /describeWorkbenchGitBranchControlHead\(status, summary\.operation, t\)/u)
+    assert.match(model, /return describeWorkbenchGitHead\(status, t\)/u)
     assert.match(control, /className=\{styles\.gitBranchControlName\}>\{headLabel\}/u)
     assert.match(control, /workbench\.gitBranchCreateFromDetachedDescription/u)
     // 分离的 HEAD 上没有哪个分支算当前的：交给列表的是 status.branch（null），不是按钮上那句说明。

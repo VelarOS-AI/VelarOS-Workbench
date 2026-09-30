@@ -67,6 +67,8 @@ interface WorkbenchGitBranchMenuProps {
   switchingBranch: Nullable<string>
   /** 有远端操作或者分支操作在跑：别的都先按不了。 */
   locked: boolean
+  /** 合并、变基之类进行到一半：不能切分支、新建分支，这是原因（悬停时看得到）。 */
+  branchesBlocked: Nullable<string>
   onSearchChange: (search: string) => void
   onRunRemoteAction: (action: WorkspaceGitRemoteAction) => void
   onCancelRemoteAction: () => void
@@ -89,6 +91,7 @@ export function WorkbenchGitBranchMenu({
   running,
   switchingBranch,
   locked,
+  branchesBlocked,
   onSearchChange,
   onRunRemoteAction,
   onCancelRemoteAction,
@@ -99,6 +102,7 @@ export function WorkbenchGitBranchMenu({
   const { t } = useWorkbenchI18n()
   const [collapsedFolders, setCollapsedFolders] = useState<ReadonlySet<string>>(() => new Set())
   const searching = !!search.trim()
+  const branchesLocked = locked || !!branchesBlocked
   const trees = useMemo(() => {
     const matched = filterWorkbenchGitBranches(branches, search)
     return {
@@ -150,7 +154,7 @@ export function WorkbenchGitBranchMenu({
         key={`${remote ? 'remote' : 'local'}:${branch.name}`}
         className={styles.gitBranchMenuRow}
         data-current={current || undefined}
-        title={branch.name}
+        title={branchesBlocked && !current ? branchesBlocked : branch.name}
       >
         <button
           type="button"
@@ -158,7 +162,7 @@ export function WorkbenchGitBranchMenu({
           style={{ paddingLeft: BranchRowPaddingPx + depth * BranchIndentStepPx }}
           data-git-menu-item
           aria-current={current || undefined}
-          disabled={locked || current}
+          disabled={branchesLocked || current}
           onClick={() => onSwitchBranch(branch)}
         >
           {switchingBranch === branch.name ? (
@@ -173,7 +177,7 @@ export function WorkbenchGitBranchMenu({
           <div className={styles.gitBranchMenuRowActions} role="group">
             <button
               type="button"
-              disabled={locked}
+              disabled={branchesLocked}
               title={checkoutLabel}
               aria-label={`${checkoutLabel} ${branch.name}`}
               onClick={() => onSwitchBranch(branch)}
@@ -184,7 +188,7 @@ export function WorkbenchGitBranchMenu({
             {!remote && (
               <button
                 type="button"
-                disabled={locked}
+                disabled={branchesLocked}
                 title={pushLabel}
                 aria-label={`${pushLabel} ${branch.name}`}
                 onClick={() => onPushBranch(branch)}
@@ -315,7 +319,8 @@ export function WorkbenchGitBranchMenu({
           type="button"
           className={styles.gitBranchMenuCreate}
           data-git-menu-item
-          disabled={locked}
+          disabled={branchesLocked}
+          title={branchesBlocked ?? undefined}
           onClick={onOpenCreateBranch}
         >
           <PlusIcon size={14} />

@@ -1,10 +1,14 @@
 import type {
   WorkspaceGitBranch,
+  WorkspaceGitOperationState,
   WorkspaceGitRemoteAction,
   WorkspaceGitStatusResult,
 } from '@shared/contracts'
 
 import type { WorkbenchI18nContextValue } from '../../i18n'
+
+import { getWorkbenchGitOperationName } from './workbenchGitOperationModel'
+import { describeWorkbenchGitHead } from './workbenchGitTopBarModel'
 
 type Translate = WorkbenchI18nContextValue['t']
 
@@ -127,45 +131,77 @@ export function resolveWorkbenchGitBranchSwitch(
 }
 
 /**
+ * 合并、变基、拣选、撤销进行到一半时，分支菜单里为什么按不了：这时该去提交面板继续或放弃，不是切分支、
+ * 拉取、推送。没有进行到一半的操作为 null。
+ */
+export function describeWorkbenchGitOperationBlock(
+  operation: Nullable<Pick<WorkspaceGitOperationState, 'kind'>>,
+  t: Translate
+): Nullable<string> {
+  return operation
+    ? t('workbench.gitOperationBlocksBranchMenu', {
+        operation: getWorkbenchGitOperationName(operation.kind, t),
+      })
+    : null
+}
+
+/**
+ * 顶栏按钮上写的 HEAD。变基时 git 把 HEAD 从分支上摘下来，直接写「分离的 HEAD」会让人以为该去切分支：
+ * 写成「feature（变基中）」。其余照 {@link describeWorkbenchGitHead}。
+ */
+export function describeWorkbenchGitBranchControlHead(
+  status: Pick<WorkspaceGitStatusResult, 'branch' | 'detachedHead'>,
+  operation: Nullable<Pick<WorkspaceGitOperationState, 'kind' | 'detail'>>,
+  t: Translate
+): Nullable<string> {
+  if (!status.branch && operation?.kind === 'rebase' && operation.detail)
+    return t('workbench.gitHeadRebasing', { branch: operation.detail })
+  return describeWorkbenchGitHead(status, t)
+}
+
+/**
  * 分支菜单里的四个远端操作：拉取、推送、同步、获取远端。拉取、同步要有上游；还没有上游时推送会顺便关联
- * 远端分支；分离的 HEAD 上没有当前分支，只有获取远端（它不看分支）还能用，其余写明原因。
+ * 远端分支；分离的 HEAD 上没有当前分支，只有获取远端（它不看分支）还能用，其余写明原因。有操作进行到一半
+ * 时（`blocked` 是那句原因）同样只留获取远端。
  */
 export function describeWorkbenchGitRemoteActions(
   status: WorkbenchGitBranchControlStatus,
-  t: Translate
+  t: Translate,
+  blocked: Nullable<string> = null
 ): WorkbenchGitRemoteActionItem[] {
   const detached = !status.branch
-  const detachedReason = t('workbench.gitDetachedHeadReason', {
-    sha: status.detachedHead?.shortSha ?? '',
-  })
+  // 进行到一半的操作排在前面说：变基时 HEAD 也是分离的，这时讲「先切到一个分支」是错的。
+  const unavailable =
+    blocked ??
+    (detached
+      ? t('workbench.gitDetachedHeadReason', { sha: status.detachedHead?.shortSha ?? '' })
+      : null)
   const { upstream } = status
   const needsUpstream = (hint: string): string =>
-    detached ? detachedReason : upstream ? hint : t('workbench.gitNoUpstreamHint')
+    unavailable ?? (upstream ? hint : t('workbench.gitNoUpstreamHint'))
 
   return [
     {
       action: 'pull',
       label: t('workbench.gitPull'),
       hint: needsUpstream(t('workbench.gitPullHint', { upstream: upstream ?? '' })),
-      disabled: detached || !upstream,
+      disabled: !!unavailable || !upstream,
       count: upstream ? status.behind : 0,
     },
     {
       action: 'upload',
       label: t('workbench.gitUpload'),
-      hint: detached
-        ? detachedReason
-        : upstream
-          ? t('workbench.gitPushHint', { upstream })
-          : t('workbench.gitPublishHint'),
-      disabled: detached,
+      hint:
+        unavailable ??
+        (upstream ? t('workbench.gitPushHint', { upstream }) : t('workbench.gitPublishHint')),
+      disabled: !!unavailable,
       count: upstream ? status.ahead : 0,
     },
     {
       action: 'sync',
       label: t('workbench.gitSync'),
       hint: needsUpstream(t('workbench.gitSyncHint')),
-      disabled: detached || !upstream,
+      disabled: !!unavailable || !upstream,
       count: 0,
     },
     {
@@ -183,8 +219,10 @@ export function describeWorkbenchGitRemoteActions(
  */
 export function describeWorkbenchGitRemoteNote(
   status: WorkbenchGitBranchControlStatus,
-  t: Translate
+  t: Translate,
+  blocked: Nullable<string> = null
 ): Nullable<string> {
+  if (blocked) return blocked
   if (!status.branch)
     return t('workbench.gitDetachedHeadReason', { sha: status.detachedHead?.shortSha ?? '' })
   return status.upstream ? null : t('workbench.gitNoUpstreamNote')

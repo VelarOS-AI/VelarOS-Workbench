@@ -8,6 +8,8 @@ import type { WorkbenchI18nContextValue } from '../src/renderer/src/i18n'
 import {
   buildWorkbenchGitBranchTree,
   describeWorkbenchGitBranchControl,
+  describeWorkbenchGitBranchControlHead,
+  describeWorkbenchGitOperationBlock,
   describeWorkbenchGitRemoteActions,
   describeWorkbenchGitRemoteNote,
   filterWorkbenchGitBranches,
@@ -167,6 +169,56 @@ void describe('Workbench Git branch menu model', () => {
     assert.match(describeWorkbenchGitRemoteNote(detached, chinese) ?? '', /1a2b3c4/u)
   })
 
+  void test('an operation in progress blocks everything but fetch, and says to finish it first', () => {
+    const rebasing = { kind: 'rebase' as const, step: 1, total: 2, detail: 'feature' }
+    assert.equal(describeWorkbenchGitOperationBlock(null, english), null)
+    const block = describeWorkbenchGitOperationBlock(rebasing, english)
+    assert.match(block ?? '', /^A rebase is in progress\. Continue or abort it in the commit panel/u)
+    assert.match(describeWorkbenchGitOperationBlock({ kind: 'merge' }, chinese) ?? '', /^正在合并。/u)
+
+    // 变基时 HEAD 是分离的：原因说的是变基，不是「先切到一个分支」。
+    const actions = describeWorkbenchGitRemoteActions(detached, english, block)
+    assert.deepEqual(
+      actions.map((item) => item.disabled),
+      [true, true, true, false]
+    )
+    for (const item of actions.slice(0, 3)) assert.equal(item.hint, block)
+    assert.equal(describeWorkbenchGitRemoteNote(detached, english, block), block)
+    // 在分支上合并到一半也一样：有上游也不给拉取、推送。
+    assert.deepEqual(
+      describeWorkbenchGitRemoteActions(onBranch, english, block).map((item) => item.disabled),
+      [true, true, true, false]
+    )
+    assert.equal(describeWorkbenchGitRemoteNote(onBranch, english, block), block)
+  })
+
+  void test('the button names the branch being rebased instead of a detached HEAD', () => {
+    const rebasing = { kind: 'rebase' as const, detail: 'feature/login' }
+    assert.equal(
+      describeWorkbenchGitBranchControlHead(detached, rebasing, english),
+      'feature/login (rebasing)'
+    )
+    assert.equal(describeWorkbenchGitBranchControlHead(detached, rebasing, chinese), 'feature/login（变基中）')
+    // 读不出是哪个分支、或者不是变基：照旧。
+    assert.equal(
+      describeWorkbenchGitBranchControlHead(detached, { kind: 'rebase', detail: null }, english),
+      'Detached HEAD · 1a2b3c4'
+    )
+    assert.equal(
+      describeWorkbenchGitBranchControlHead(detached, { kind: 'cherry-pick', detail: 'abc1234' }, english),
+      'Detached HEAD · 1a2b3c4'
+    )
+    assert.equal(describeWorkbenchGitBranchControlHead(detached, null, english), 'Detached HEAD · 1a2b3c4')
+    assert.equal(
+      describeWorkbenchGitBranchControlHead(
+        { branch: 'main', detachedHead: null },
+        { kind: 'merge', detail: "Merge branch 'feature'" },
+        english
+      ),
+      'main'
+    )
+  })
+
   void test('the toolbar button says whether there are changes and how far the upstream is', () => {
     const clean = { ...onBranch, isClean: true, changedFiles: 0 }
     assert.equal(
@@ -203,6 +255,7 @@ void describe('Workbench Git branch menu', () => {
       running: null,
       switchingBranch: null,
       locked: false,
+      branchesBlocked: null,
       onSearchChange: noop,
       onRunRemoteAction: noop,
       onCancelRemoteAction: noop,
@@ -295,6 +348,30 @@ void describe('Workbench Git branch menu', () => {
       }),
       /data-current/u
     )
+  })
+
+  void test('with an operation in progress branches cannot be switched or created, fetch still works', () => {
+    const block = describeWorkbenchGitOperationBlock({ kind: 'merge' }, english)
+    const markup = render({
+      remoteActions: describeWorkbenchGitRemoteActions(onBranch, english, block),
+      remoteNote: block,
+      branchesBlocked: block,
+    })
+    const all = buttons(markup)
+    // 四个远端操作都在（没有在跑的远端操作），只有获取远端能按。
+    assert.deepEqual(
+      all.slice(0, 4).map((button) => /aria-disabled="true"/u.test(button.tag)),
+      [true, true, true, false]
+    )
+    assert.ok(markup.includes('A merge is in progress.'))
+    // 别的分支点不了，原因写在那一行的悬停说明里；新建分支也点不了。
+    const docs = /<div[^>]*title="([^"]*)"[^>]*>\s*<button[^>]*disabled=""[^>]*>(?:(?!<\/button>)[\s\S])*docs/u.exec(
+      markup
+    )
+    assert.ok(docs, 'the docs row should be disabled')
+    assert.match(docs[1] ?? '', /^A merge is in progress\./u)
+    assert.match(all.at(-1)?.tag ?? '', /\sdisabled=""/u)
+    assert.equal(all.at(-1)?.label, 'New branch')
   })
 
   void test('a search that matches nothing says so instead of showing an empty list', () => {

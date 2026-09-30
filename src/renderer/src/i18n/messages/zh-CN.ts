@@ -528,6 +528,9 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     gitBranchAheadBehind: '{upstream}：落后 {behind} 个提交，领先 {ahead} 个提交',
     gitBranchNoMatch: '没有匹配的分支',
     gitPushBranchConfirm: '确定要把分支 {branch} 推送到远端吗？',
+    gitOperationBlocksBranchMenu:
+      '正在{operation}。先在提交面板里继续或放弃，才能拉取、推送、切换或新建分支。',
+    gitHeadRebasing: '{branch}（变基中）',
     gitDetachedHead: '分离的 HEAD · {sha}',
     gitDetachedHeadReason:
       '当前检出的是提交 {sha}，不在任何分支上（分离的 HEAD）。先切换到一个分支，或从这个提交新建分支，才能拉取、同步和推送。',

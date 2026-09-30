@@ -543,6 +543,9 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     gitBranchAheadBehind: '{upstream}: {behind} behind, {ahead} ahead',
     gitBranchNoMatch: 'No matching branches',
     gitPushBranchConfirm: 'Push the {branch} branch to the remote?',
+    gitOperationBlocksBranchMenu:
+      'A {operation} is in progress. Continue or abort it in the commit panel before pulling, pushing, switching or creating branches.',
+    gitHeadRebasing: '{branch} (rebasing)',
     gitDetachedHead: 'Detached HEAD · {sha}',
     gitDetachedHeadReason:
       'Commit {sha} is checked out, not a branch (detached HEAD). Switch to a branch, or create one from this commit, to pull, sync or push.',
