@@ -99,6 +99,22 @@ export interface WorkspaceGitRemoteActionResult {
   output: string
 }
 
+/**
+ * 按块操作：`stage` 把工作区里的这几块放进暂存区，`unstage` 把暂存区里的这几块退回工作区，`discard` 丢掉
+ * 工作区里的这几块（回到暂存区里的样子）。
+ */
+export type WorkspaceGitHunkAction = 'stage' | 'unstage' | 'discard'
+
+export interface WorkspaceGitHunkActionOptions {
+  action: WorkspaceGitHunkAction
+  /** 相对项目根。 */
+  path: string
+  /** 暂存了的改名：改名前的路径（取消暂存时，暂存那一侧的补丁要带上它才认得出改名）。 */
+  originalPath?: string
+  /** 要操作的块，照差异里拆出来的原样给（块头与各行）：服务按它认出同一块，认不出就是文件已经变了。 */
+  hunks: Array<{ header: string; lines: string[] }>
+}
+
 export interface WorkspaceGitFileActionResult {
   action: WorkspaceGitFileAction
   /** 相对项目根。 */

@@ -212,6 +212,7 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
             }
           : null,
         onCloseDiffTab: editorNavigation.closeDiff,
+        onGitStateChanged: model.actions.refreshGitPanel,
       },
       debug: {
         tabs: editorNavigation.debug.tabs,

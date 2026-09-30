@@ -102,6 +102,51 @@ void describe('Workbench Git IPC requests', () => {
       )
   })
 
+  void test('passes hunk actions through with the hunks as they were shown', async () => {
+    const hunkActions: unknown[] = []
+    const { registerWorkbenchGitIpc } = await import('../src/main/workspace/git/WorkbenchGitIpc')
+    registerWorkbenchGitIpc(
+      {
+        applyHunks: async (workspaceRoot: string, options: unknown) => {
+          hunkActions.push({ workspaceRoot, options })
+          return {}
+        },
+      } as never,
+      {} as never,
+      {} as never
+    )
+
+    const hunk = { header: '@@ -1 +1 @@', lines: ['-a', '+b'] }
+    assert.equal(
+      (
+        await invoke(WorkbenchGitChannels.hunkAction, {
+          workspaceRoot: '/p',
+          action: 'unstage',
+          path: 'new.ts',
+          originalPath: 'old.ts',
+          hunks: [hunk],
+        })
+      ).ok,
+      true
+    )
+    assert.deepEqual(hunkActions, [
+      {
+        workspaceRoot: '/p',
+        options: { path: 'new.ts', originalPath: 'old.ts', action: 'unstage', hunks: [hunk] },
+      },
+    ])
+    for (const request of [
+      { action: 'commit', path: 'a.ts', hunks: [hunk] },
+      { action: 'stage', path: 'a.ts', hunks: [] },
+      { action: 'stage', path: 'a.ts', hunks: [{ header: '@@', lines: [1] }] },
+      { action: 'stage', path: 'a.ts', originalPath: 7, hunks: [hunk] },
+    ])
+      assert.equal(
+        (await invoke(WorkbenchGitChannels.hunkAction, { workspaceRoot: '/p', ...request })).ok,
+        false
+      )
+  })
+
   void test('commits the index only when asked, and never together with chosen paths', async () => {
     const commits: unknown[] = []
     const { registerWorkbenchGitIpc } = await import('../src/main/workspace/git/WorkbenchGitIpc')

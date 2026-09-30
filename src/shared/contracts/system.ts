@@ -146,6 +146,11 @@ export interface SystemWorkspaceGitFileActionResult {
   summary: SystemWorkspaceGitSummary
 }
 
+export interface SystemWorkspaceGitHunkActionResult {
+  rootPath: string
+  summary: SystemWorkspaceGitSummary
+}
+
 export interface SystemWorkspaceGitActionRequest {
   sessionId: string
   action: WorkspaceGitRemoteAction

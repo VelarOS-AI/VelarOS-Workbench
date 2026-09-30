@@ -179,6 +179,40 @@
   background: var(--status-red-soft);
 }
 
+/* Git 差异里每块改动上方的「暂存此块 / 回滚此块」：像 CodeLens 一样的一行小字按钮。 */
+.workbenchUnifiedDiffCode :global(.cm-diffHunkActions) {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 6px 1px;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.workbenchUnifiedDiffCode :global(.cm-diffHunkAction) {
+  padding: 0 5px;
+  border: 0;
+  border-radius: var(--workbench-radius-xs);
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+}
+
+.workbenchUnifiedDiffCode :global(.cm-diffHunkAction:hover:not(:disabled)) {
+  background: var(--workbench-hover);
+  color: var(--workbench-theme-color);
+}
+
+.workbenchUnifiedDiffCode :global(.cm-diffHunkAction-destructive:hover:not(:disabled)) {
+  color: var(--status-red);
+}
+
+.workbenchUnifiedDiffCode :global(.cm-diffHunkAction:disabled) {
+  opacity: 0.45;
+  cursor: default;
+}
+
 /* ── 左侧时间线组件 ── */
 .historyTimeline {
   @apply m-0 flex list-none flex-col p-0;

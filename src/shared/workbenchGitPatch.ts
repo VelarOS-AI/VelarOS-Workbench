@@ -119,3 +119,56 @@ export function isSameWorkbenchGitHunk(
     hunk.lines.every((line, index) => line === selector.lines[index])
   )
 }
+
+const QuotedPathEscapes: Record<string, string> = {
+  '"': '\\"',
+  '\\': '\\\\',
+  '\u0007': '\\a',
+  '\b': '\\b',
+  '\t': '\\t',
+  '\n': '\\n',
+  '\v': '\\v',
+  '\f': '\\f',
+  '\r': '\\r',
+}
+
+function isControlCharacter(char: string): boolean {
+  const code = char.charCodeAt(0)
+  return code < 0x20 || code === 0x7f
+}
+
+/** 补丁头里的路径：含引号、反斜杠、控制字符时按 git 的 C 风格加引号，别的（空格、中文）原样。 */
+function quotePatchPath(path: string): string {
+  const chars = [...path]
+  if (!chars.some((char) => char === '"' || char === '\\' || isControlCharacter(char)))
+    return path
+  const body = chars
+    .map((char) => {
+      const escaped = QuotedPathEscapes[char]
+      if (escaped) return escaped
+      return isControlCharacter(char)
+        ? `\\${char.charCodeAt(0).toString(8).padStart(3, '0')}`
+        : char
+    })
+    .join('')
+  return `"${body}"`
+}
+
+/**
+ * 只改一个文件内容的补丁，交给 `git apply`：`path` 相对仓库根，块照原样抄。不带改名、权限这些文件头：
+ * 按块操作只动内容，改名和权限留给整个文件的暂存、回滚。
+ */
+export function buildWorkbenchGitHunkPatch(
+  path: string,
+  hunks: readonly WorkbenchGitPatchHunk[]
+): string {
+  const oldName = quotePatchPath(`a/${path}`)
+  const newName = quotePatchPath(`b/${path}`)
+  return [
+    `diff --git ${oldName} ${newName}`,
+    `--- ${oldName}`,
+    `+++ ${newName}`,
+    ...hunks.flatMap((hunk) => [hunk.header, ...hunk.lines]),
+    '',
+  ].join('\n')
+}

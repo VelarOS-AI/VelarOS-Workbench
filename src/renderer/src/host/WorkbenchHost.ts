@@ -21,6 +21,7 @@ import type {
   SystemWorkspaceGitFileActionRequest,
   SystemWorkspaceGitFileActionResult,
   SystemWorkspaceGitFileAtCommitResult,
+  SystemWorkspaceGitHunkActionResult,
   SystemWorkspaceGitInitializeRepositoryResult,
   SystemWorkspaceGitLineStatsSnapshot,
   SystemWorkspaceGitLogResult,
@@ -101,6 +102,7 @@ import type {
   WorkbenchTerminalStartResult,
   WorkbenchTerminalStopRequest,
   WorkspaceGitDiffOptions,
+  WorkspaceGitHunkActionOptions,
   WorkspaceGitLogOptions,
 } from '@shared/contracts'
 
@@ -295,6 +297,11 @@ export interface WorkbenchWorkspaceKernelPort {
     paths: string[],
     action: SystemWorkspaceGitFileActionRequest['action']
   ): Promise<Result<SystemWorkspaceGitFileActionResult>>
+  /** 按块暂存、取消暂存、回滚一个文件里的几块改动。 */
+  performWorkspaceGitHunkAction(
+    workspaceRoot: string,
+    options: WorkspaceGitHunkActionOptions
+  ): Promise<Result<SystemWorkspaceGitHunkActionResult>>
   initializeWorkspaceGitRepository(
     workspaceRoot: string
   ): Promise<Result<SystemWorkspaceGitInitializeRepositoryResult>>

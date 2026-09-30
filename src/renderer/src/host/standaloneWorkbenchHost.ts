@@ -408,6 +408,10 @@ const standaloneWorkbenchHost: WorkbenchHost = {
             action,
           })
         ),
+      performWorkspaceGitHunkAction: async (workspaceRoot, options) =>
+        toHostResult(
+          await window.velarosWorkbenchGit.performHunkAction({ workspaceRoot, ...options })
+        ),
       initializeWorkspaceGitRepository: async (workspaceRoot) =>
         toHostResult(await window.velarosWorkbenchGit.initialize({ workspaceRoot })),
       switchWorkspaceGitBranch: async (workspaceRoot, branch, locale, options) =>

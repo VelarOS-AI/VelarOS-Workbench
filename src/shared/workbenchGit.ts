@@ -7,6 +7,7 @@ import type {
   SystemWorkspaceGitDiffResult,
   SystemWorkspaceGitFileActionResult,
   SystemWorkspaceGitFileAtCommitResult,
+  SystemWorkspaceGitHunkActionResult,
   SystemWorkspaceGitInitializeRepositoryResult,
   SystemWorkspaceGitLineStatsSnapshot,
   SystemWorkspaceGitLogResult,
@@ -15,6 +16,7 @@ import type {
   WorkspaceGitDiffOptions,
   WorkspaceGitFileAction,
   WorkspaceGitFileStatusEntry,
+  WorkspaceGitHunkActionOptions,
   WorkspaceGitLogOptions,
   WorkspaceGitRemoteAction,
   WorkspaceGitRemoteActionOptions,
@@ -31,6 +33,7 @@ export const WorkbenchGitChannels = {
   generateCommitMessage: 'workbench-app:git:generate-commit-message',
   commit: 'workbench-app:git:commit',
   fileAction: 'workbench-app:git:file-action',
+  hunkAction: 'workbench-app:git:hunk-action',
   initialize: 'workbench-app:git:initialize',
   switchBranch: 'workbench-app:git:switch-branch',
   createBranch: 'workbench-app:git:create-branch',
@@ -82,6 +85,10 @@ export interface WorkbenchGitFileActionRequest extends WorkbenchGitRootRequest {
   paths: string[]
   action: WorkspaceGitFileAction
 }
+
+export interface WorkbenchGitHunkActionRequest
+  extends WorkbenchGitRootRequest,
+    WorkspaceGitHunkActionOptions {}
 
 export interface WorkbenchGitSwitchBranchRequest extends WorkbenchGitRootRequest {
   branch: string
@@ -236,6 +243,9 @@ export interface WorkbenchGitBridge {
   performFileAction(
     request: WorkbenchGitFileActionRequest
   ): Promise<WorkbenchFsCallResult<SystemWorkspaceGitFileActionResult>>
+  performHunkAction(
+    request: WorkbenchGitHunkActionRequest
+  ): Promise<WorkbenchFsCallResult<SystemWorkspaceGitHunkActionResult>>
   initialize(
     request: WorkbenchGitRootRequest
   ): Promise<WorkbenchFsCallResult<SystemWorkspaceGitInitializeRepositoryResult>>

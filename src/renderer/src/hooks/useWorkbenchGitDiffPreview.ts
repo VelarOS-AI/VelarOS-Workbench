@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { workbenchHost } from '@renderer/host'
 import type { WorkbenchGitDiffPreviewScope } from '@renderer/models/git/changesPanel.model'
 import {
@@ -35,6 +35,8 @@ export interface WorkbenchGitDiffPreviewState {
   preview: Nullable<WorkbenchEditorDiffPreview>
   isLoading: boolean
   error: Nullable<string>
+  /** 不等文件监听，马上原地重读一次（按块暂存、回滚之后）。 */
+  reload: () => void
 }
 
 async function readWorkingFileContent(
@@ -205,5 +207,6 @@ export function useWorkbenchGitDiffPreview({
     start,
   ])
 
-  return { preview, isLoading, error }
+  const reload = useCallback(() => setContentRevision((revision) => revision + 1), [])
+  return { preview, isLoading, error, reload }
 }

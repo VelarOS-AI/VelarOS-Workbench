@@ -16,6 +16,7 @@ import {
   type WorkbenchGitDiffRequest,
   type WorkbenchGitFileActionRequest,
   type WorkbenchGitFileAtCommitRequest,
+  type WorkbenchGitHunkActionRequest,
   type WorkbenchGitLogRequest,
   type WorkbenchGitRemoteActionRequest,
   type WorkbenchGitRootRequest,
@@ -76,6 +77,12 @@ export function registerWorkbenchGitIpc(
     callWithEnvelope(() => {
       const request = parseFileAction(input)
       return service.performFileAction(request.workspaceRoot, request.paths, request.action)
+    })
+  )
+  ipcMain.handle(WorkbenchGitChannels.hunkAction, (_event, input: unknown) =>
+    callWithEnvelope(() => {
+      const { workspaceRoot, ...options } = parseHunkAction(input)
+      return service.applyHunks(workspaceRoot, options)
     })
   )
   ipcMain.handle(WorkbenchGitChannels.initialize, (_event, input: unknown) =>
@@ -206,6 +213,36 @@ function parseFileAction(input: unknown): WorkbenchGitFileActionRequest {
     workspaceRoot: input['workspaceRoot'] as string,
     paths,
     action,
+  }
+}
+
+function parseHunkAction(input: unknown): WorkbenchGitHunkActionRequest {
+  if (!hasStringFields(input, ['workspaceRoot', 'path', 'action'])) return invalidRequest()
+  const action = input['action']
+  const originalPath = input['originalPath']
+  const hunks = input['hunks']
+  if (action !== 'stage' && action !== 'unstage' && action !== 'discard') return invalidRequest()
+  if (originalPath !== undefined && !isString(originalPath)) return invalidRequest()
+  if (
+    !Array.isArray(hunks) ||
+    hunks.length === 0 ||
+    !hunks.every(
+      (hunk) =>
+        hasStringFields(hunk, ['header']) &&
+        Array.isArray(hunk['lines']) &&
+        hunk['lines'].every((line) => isString(line))
+    )
+  )
+    return invalidRequest()
+  return {
+    workspaceRoot: input['workspaceRoot'] as string,
+    path: input['path'] as string,
+    originalPath,
+    action,
+    hunks: hunks.map((hunk: Record<string, unknown>) => ({
+      header: hunk['header'] as string,
+      lines: hunk['lines'] as string[],
+    })),
   }
 }
 

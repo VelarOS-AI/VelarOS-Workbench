@@ -173,6 +173,7 @@ const gitBridge: WorkbenchGitBridge = {
     ipcRenderer.invoke(WorkbenchGitChannels.generateCommitMessage, request),
   commit: (request) => ipcRenderer.invoke(WorkbenchGitChannels.commit, request),
   performFileAction: (request) => ipcRenderer.invoke(WorkbenchGitChannels.fileAction, request),
+  performHunkAction: (request) => ipcRenderer.invoke(WorkbenchGitChannels.hunkAction, request),
   initialize: (request) => ipcRenderer.invoke(WorkbenchGitChannels.initialize, request),
   switchBranch: (request) => ipcRenderer.invoke(WorkbenchGitChannels.switchBranch, request),
   createBranch: (request) => ipcRenderer.invoke(WorkbenchGitChannels.createBranch, request),

@@ -19,6 +19,7 @@ import type {
   SystemWorkspaceGitDiffResult,
   SystemWorkspaceGitFileActionResult,
   SystemWorkspaceGitFileAtCommitResult,
+  SystemWorkspaceGitHunkActionResult,
   SystemWorkspaceGitInitializeRepositoryResult,
   SystemWorkspaceGitLineStatsSnapshot,
   SystemWorkspaceGitLogResult,
@@ -29,6 +30,7 @@ import type {
   WorkspaceGitDiffOptions,
   WorkspaceGitFileAction,
   WorkspaceGitFileStatusEntry,
+  WorkspaceGitHunkActionOptions,
   WorkspaceGitLineStats,
   WorkspaceGitLogEntry,
   WorkspaceGitLogOptions,
@@ -38,6 +40,13 @@ import type {
   WorkspaceGitStatusResult,
 } from '@shared/contracts'
 import { isWorkspaceGitConflictEntry } from '@shared/workbenchGit'
+import {
+  buildWorkbenchGitHunkPatch,
+  isSameWorkbenchGitHunk,
+  isWorkbenchGitWholeFilePatch,
+  parseWorkbenchGitFilePatches,
+  type WorkbenchGitPatchHunk,
+} from '@shared/workbenchGitPatch'
 
 import {
   getRelativePathInsideRoot,
@@ -69,6 +78,8 @@ const MaxConflictMarkerScanBytes = 16 * 1024 * 1024
 const ConflictMarkerPattern = /^(?:<{7}|>{7})(?: |\r?$)/m
 /** 日志的每个提交以 \x1e 开头，字段之间是 \x1f。 */
 const LogFormat = '--format=%x1e%H%x1f%h%x1f%s%x1f%an%x1f%ae%x1f%ct%x1f%D'
+/** git 的输出按 UTF-8 读，读不懂的字节变成它。 */
+const ReplacementCharacter = String.fromCodePoint(0xfffd)
 
 /**
  * 每条 git 命令都带上的配置。输出要拿来解析，不能跟着用户的 git 配置变：中文文件名被转成八进制转义、
@@ -97,6 +108,11 @@ interface GitRunOptions extends WorkspaceGitRemoteActionOptions {
   input?: string
   /** 这条命令额外的环境变量（临时索引 GIT_INDEX_FILE 之类）；盖不过安全设置。 */
   env?: NodeJS.ProcessEnv
+  /**
+   * 保留输出末尾的换行。补丁要原样拼回去交给 `git apply`：默认会连 `\r\n` 一起去掉，CRLF 文件的
+   * 最后一行就对不上了。
+   */
+  keepFinalNewline?: boolean
   /** 输出上限，默认 GitOutputMaxBytes。 */
   maxBuffer?: number
   /** 输出超过上限时不报错，结果标成 truncated，调用方换个问法。 */
@@ -259,7 +275,8 @@ export class WorkbenchGitService {
     if (side === 'staged') args.push('--cached', await this.resolveDiffBase(rootPath))
     else if (side !== 'unstaged') args.push(await this.resolveDiffBase(rootPath))
     if (paths.length > 0) args.push('--', ...paths.map((path) => this.toLiteralPathspec(path)))
-    return (await this.runGit(rootPath, args)).stdout
+    // 末尾的换行留着：编辑区按块操作时拿回来的块，要跟这里重读的一模一样。
+    return (await this.runGit(rootPath, args, { keepFinalNewline: true })).stdout
   }
 
   public async getFileAtCommit(
@@ -505,6 +522,84 @@ export class WorkbenchGitService {
       fileAction: { action, paths: relativePaths, status },
       summary: await this.getSummary(rootPath),
     }
+  }
+
+  /**
+   * 按块暂存、取消暂存、回滚。要的块从这一侧的补丁里重新读出来（暂存、回滚看工作区相对暂存区，取消暂存看暂存区
+   * 相对 HEAD），一块块原样认，认出来的拼成只改这个文件内容的补丁交给 `git apply`；认不出（显示之后文件又
+   * 变了）就拒绝，不拿显示的内容去猜。
+   */
+  public async applyHunks(
+    workspaceRoot: string,
+    options: WorkspaceGitHunkActionOptions
+  ): Promise<SystemWorkspaceGitHunkActionResult> {
+    const rootPath = await this.resolveRoot(workspaceRoot)
+    const repository = await this.openRepository(rootPath)
+    const path = this.normalizePathspec(rootPath, options.path)
+    if (options.hunks.length === 0) throw new AppError('VALIDATION', '没有要操作的改动块。')
+    const entry = (await this.getStatus(repository)).entries.find(
+      (candidate) => candidate.path === path
+    )
+    if (!entry) throw new AppError('VALIDATION', `“${path}”已经没有改动了。`)
+    if (isWorkspaceGitConflictEntry(entry))
+      throw new AppError(
+        'VALIDATION',
+        `“${path}”还有未解决的合并冲突，不能按块操作。请先解决冲突并标记为已解决。`
+      )
+
+    const side = options.action === 'unstage' ? 'staged' : 'unstaged'
+    const diff = await this.readWorkingDiff(
+      rootPath,
+      side,
+      side === 'staged'
+        ? this.normalizePathspecs(rootPath, [options.originalPath, options.path])
+        : [path]
+    )
+    const patches = parseWorkbenchGitFilePatches(diff)
+    const [patch] = patches
+    if (!patch || patches.length > 1) throw this.hunksChangedError(path)
+    if (isWorkbenchGitWholeFilePatch(patch))
+      throw new AppError(
+        'VALIDATION',
+        `“${path}”是新建、删除或二进制的改动，只能整个文件暂存、取消暂存或回滚。`
+      )
+    // 输出里有替换字符：文件不是 UTF-8，照读到的文字拼回补丁会改坏内容。
+    if (diff.includes(ReplacementCharacter))
+      throw new AppError(
+        'VALIDATION',
+        `“${path}”不是 UTF-8 编码，不能按块操作，请整个文件暂存、取消暂存或回滚。`
+      )
+    const hunks = options.hunks.map((selector) =>
+      patch.hunks.find((hunk) => isSameWorkbenchGitHunk(hunk, selector))
+    )
+    if (hunks.some((hunk) => !hunk)) throw this.hunksChangedError(path)
+
+    const args =
+      options.action === 'stage'
+        ? ['apply', '--cached', '--whitespace=nowarn', '-']
+        : options.action === 'unstage'
+          ? ['apply', '--cached', '--reverse', '--whitespace=nowarn', '-']
+          : ['apply', '--reverse', '--whitespace=nowarn', '-']
+    const result = await this.runGit(rootPath, args, {
+      allowFailure: true,
+      input: buildWorkbenchGitHunkPatch(
+        `${repository.prefix}${path}`,
+        hunks.filter((hunk): hunk is WorkbenchGitPatchHunk => !!hunk)
+      ),
+    })
+    if (result.failed) {
+      const output = this.readableGitOutput(result)
+      if (/patch does not apply|patch failed/i.test(output)) throw this.hunksChangedError(path)
+      this.throwGitFailure(args, result)
+    }
+    return { rootPath, summary: await this.getSummary(rootPath) }
+  }
+
+  private hunksChangedError(path: string): AppError {
+    return new AppError(
+      'VALIDATION',
+      `“${path}”的这段改动已经变了（文件在别处被改过），请在刷新后的差异里重新操作。`
+    )
   }
 
   public async initialize(
@@ -1376,6 +1471,7 @@ export class WorkbenchGitService {
       env: await this.buildGitEnvironment(options),
       input: options.input,
       maxBuffer,
+      stripFinalNewline: !options.keepFinalNewline,
       timeout: options.timeoutMs,
       detached: ownProcessGroup,
       reject: false,

@@ -178,6 +178,8 @@ export interface WorkbenchEditorPanelDiffProps {
     readOnly?: boolean
   }>
   onCloseDiffTab?: () => void
+  /** 在差异里按块暂存、回滚之后：刷新 Git 状态。 */
+  onGitStateChanged?: () => Promise<void> | void
 }
 
 export interface WorkbenchEditorPanelWorkspaceProps {
@@ -274,6 +276,7 @@ export function EditorPanel({
     debugTabsLayer = null,
     lightTab = null,
     onCloseDiffTab,
+    onGitStateChanged,
   },
   workspace: {
     onSaveSelectedFile,
@@ -878,6 +881,8 @@ export function EditorPanel({
               item={activeDiffItem}
               workbenchTheme={workbenchTheme}
               focusFirstChangeRequestId={focusFirstChangeRequestId}
+              hasUnsavedOpenTabs={chrome.hasUnsavedOpenTabs}
+              onGitStateChanged={onGitStateChanged}
             />
           ) : lightTab ? (
             <WorkbenchLightFilePanel

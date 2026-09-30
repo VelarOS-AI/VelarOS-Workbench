@@ -6,6 +6,7 @@ import styles from '../../styles/workbenchPageStyles'
 import {
   ReadOnlyDiffCodeMirror,
   type ReadOnlyDiffCodeMirrorHandle,
+  type ReadOnlyDiffHunkActions,
 } from '../editor/ReadOnlyDiffCodeMirror'
 
 export type WorkbenchUnifiedDiffRowsHandle = ReadOnlyDiffCodeMirrorHandle
@@ -15,6 +16,8 @@ interface WorkbenchUnifiedDiffRowsProps {
   path: Nullable<string>
   workbenchTheme: WorkbenchThemeId
   ariaLabel?: string
+  /** 每块改动上方的按钮（Git 差异里暂存、回滚这一块）。 */
+  hunkActions?: Nullable<ReadOnlyDiffHunkActions>
 }
 
 /**
@@ -24,10 +27,19 @@ interface WorkbenchUnifiedDiffRowsProps {
 export const WorkbenchUnifiedDiffRows = forwardRef<
   WorkbenchUnifiedDiffRowsHandle,
   WorkbenchUnifiedDiffRowsProps
->(function WorkbenchUnifiedDiffRows({ rows, path, workbenchTheme, ariaLabel }, ref): ReactElement {
+>(function WorkbenchUnifiedDiffRows(
+  { rows, path, workbenchTheme, ariaLabel, hunkActions },
+  ref
+): ReactElement {
   return (
     <div className={styles.workbenchUnifiedDiffViewer} aria-label={ariaLabel}>
-      <ReadOnlyDiffCodeMirror ref={ref} rows={rows} path={path} workbenchTheme={workbenchTheme} />
+      <ReadOnlyDiffCodeMirror
+        ref={ref}
+        rows={rows}
+        path={path}
+        workbenchTheme={workbenchTheme}
+        hunkActions={hunkActions}
+      />
     </div>
   )
 })
