@@ -27,6 +27,8 @@ import {
   workbenchTextSearchRangeKey,
 } from '@shared/workbenchTextSearch'
 
+import { workbenchMainText } from '../i18n/workbenchMainMessages'
+
 import type {
   OpenWorkbenchContentSearchSession,
   WorkbenchContentSearchWorkerSession,
@@ -60,9 +62,13 @@ class ContentReplace {
     }
     // 只编译不执行：正则写错了在这里就说，不用开 worker。
     const compiled = compileWorkbenchTextSearch(query)
-    if (compiled.status === 'empty') throw new AppError('VALIDATION', '没有要替换的查找词。')
+    if (compiled.status === 'empty')
+      throw new AppError('VALIDATION', workbenchMainText('search.replaceQueryEmpty'))
     if (compiled.status === 'invalid')
-      throw new AppError('VALIDATION', `正则表达式有误：${compiled.message}`)
+      throw new AppError(
+        'VALIDATION',
+        workbenchMainText('search.invalidRegex', { message: compiled.message })
+      )
 
     const session = this.openSearchSession()
     const files: WorkbenchReplaceContentFileResult[] = []
@@ -105,14 +111,12 @@ class ContentReplace {
       throw changedSinceSearch()
 
     const bytes = await readFile(resolved.realPath)
-    if (!isLikelyTextFile(bytes)) throw new AppError('VALIDATION', '不是文本文件。')
+    if (!isLikelyTextFile(bytes))
+      throw new AppError('VALIDATION', workbenchMainText('search.replaceNotText'))
 
     const current = decodeWorkbenchText(bytes)
     if (current.textIssue)
-      throw new AppError(
-        'VALIDATION',
-        '文件现有的编码或换行符不能原样写回，请在编辑器中打开它、确认转换后再替换。'
-      )
+      throw new AppError('VALIDATION', workbenchMainText('search.replaceFormatNotRoundTrip'))
 
     const selectedKeys = file.matches
       ? [...new Set(file.matches.map(workbenchTextSearchRangeKey))]
@@ -143,7 +147,7 @@ class ContentReplace {
 }
 
 function changedSinceSearch(): AppError {
-  return new AppError('CONFLICT', '文件在搜索之后被改过，请重新搜索后再替换。')
+  return new AppError('CONFLICT', workbenchMainText('search.changedSinceSearch'))
 }
 
 export { ContentReplace, ContentReplace as WorkbenchContentReplaceService }

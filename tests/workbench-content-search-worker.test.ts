@@ -4,6 +4,7 @@ import { setTimeout as delay } from 'node:timers/promises'
 
 import { describe, test } from 'bun:test'
 
+import { setWorkbenchMainLocale } from '../src/main/i18n/workbenchMainLocale'
 import type {
   WorkbenchContentSearchTask,
   WorkbenchContentSearchTaskResult,
@@ -161,7 +162,7 @@ void describe('content search worker session', () => {
     const crashed = openSession(60_000)
     const searching = crashed.session.search(Task)
     crashed.workers[0]!.emit('exit', 1)
-    await assert.rejects(searching, rejectsWith('CLOSED', /意外退出/u))
+    await assert.rejects(searching, rejectsWith('CLOSED', /意外中断/u))
 
     // 撞到堆上限：worker 出错退出，主进程没事，给出能看懂的说明。
     const exhausted = openSession(60_000)
@@ -174,5 +175,26 @@ void describe('content search worker session', () => {
     )
     await assert.rejects(heavy, rejectsWith('LIMIT', /内存太多/u))
     assert.equal(exhausted.workers[0]!.terminated, true)
+  })
+
+  void test('each request carries the interface language, and the session writes its errors in it', async () => {
+    setWorkbenchMainLocale('en-US')
+    try {
+      const { session, workers } = openSession(50)
+      const searching = session.search(Task)
+      const worker = workers[0]!
+      const request = worker.requests[0]!
+      assert.equal(request.locale, 'en-US')
+      worker.reply({ id: request.id, kind: 'file', path: 'slow.ts' })
+      await assert.rejects(searching, rejectsWith('TIMEOUT', /^Matching in slow\.ts took too long/u))
+
+      setWorkbenchMainLocale('zh-CN')
+      const replacing = session.replace({ content: 'a', query: Task.query, replacement: 'b' }, 'a.ts')
+      assert.equal(workers[1]!.requests[0]!.locale, 'zh-CN')
+      session.close()
+      await assert.rejects(replacing, rejectsWith('CANCELLED', /搜索已结束/u))
+    } finally {
+      setWorkbenchMainLocale('zh-CN')
+    }
   })
 })

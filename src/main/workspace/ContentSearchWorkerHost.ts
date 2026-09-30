@@ -6,6 +6,7 @@
  * - worker 接下请求以后久没有动静（进度、结果、心跳都没有，默认 10 秒）就算卡在正则里，结束它，报告卡在
  *   哪个文件上；等读盘时 worker 照样报心跳，不会被当成卡住。同一会话后面的请求再开新的 worker。
  * - worker 设了堆上限：真把内存吃光时是 worker 出错退出，不是整个主进程崩掉。
+ * - worker 与主进程不共用模块状态：界面语言随每个请求带过去，worker 里出的文字才跟着界面走。
  */
 import { resolve } from 'node:path'
 import { Worker } from 'node:worker_threads'
@@ -13,6 +14,9 @@ import { Worker } from 'node:worker_threads'
 import { AppError } from '@velaros-ai/core/error'
 
 import type { WorkbenchSearchContentBatch } from '@shared/contracts'
+
+import { getWorkbenchMainLocale } from '../i18n/workbenchMainLocale'
+import { workbenchMainText } from '../i18n/workbenchMainMessages'
 
 import type {
   WorkbenchContentReplaceTask,
@@ -95,7 +99,7 @@ export class WorkbenchContentSearchWorkerSession {
     let abort: () => void = () => undefined
     const aborted = new Promise<typeof cancelled>((resolveAborted) => {
       abort = () => {
-        this.discard(new AppError('CANCELLED', '搜索已取消。'))
+        this.discard(new AppError('CANCELLED', workbenchMainText('search.cancelled')))
         resolveAborted(cancelled)
       }
       signal?.addEventListener('abort', abort, { once: true })
@@ -128,13 +132,13 @@ export class WorkbenchContentSearchWorkerSession {
 
   /** 会话结束：结束 worker（还在跑的请求按取消处理）。 */
   public close(): void {
-    this.discard(new AppError('CANCELLED', '搜索已结束。'))
+    this.discard(new AppError('CANCELLED', workbenchMainText('search.ended')))
   }
 
   private request<T>(
     message:
-      | Omit<Extract<WorkbenchContentSearchWorkerRequest, { kind: 'search' }>, 'id'>
-      | Omit<Extract<WorkbenchContentSearchWorkerRequest, { kind: 'replace' }>, 'id'>,
+      | Omit<Extract<WorkbenchContentSearchWorkerRequest, { kind: 'search' }>, 'id' | 'locale'>
+      | Omit<Extract<WorkbenchContentSearchWorkerRequest, { kind: 'replace' }>, 'id' | 'locale'>,
     options: { onBatch?: (batch: WorkbenchSearchContentBatch) => void; currentPath?: string }
   ): Promise<T> {
     if (this.pending)
@@ -152,7 +156,11 @@ export class WorkbenchContentSearchWorkerSession {
         currentPath: options.currentPath ?? null,
         timer: setTimeout(() => this.stall(), StartTimeoutMs),
       }
-      worker.postMessage({ ...message, id } as WorkbenchContentSearchWorkerRequest)
+      worker.postMessage({
+        ...message,
+        id,
+        locale: getWorkbenchMainLocale(),
+      } as WorkbenchContentSearchWorkerRequest)
     })
   }
 
@@ -169,7 +177,7 @@ export class WorkbenchContentSearchWorkerSession {
     })
     worker.on('exit', () => {
       if (this.worker === worker)
-        this.discard(new AppError('CLOSED', '搜索 worker 意外退出了，请重新搜索。'))
+        this.discard(new AppError('CLOSED', workbenchMainText('search.workerExited')))
     })
     return worker
   }
@@ -210,8 +218,8 @@ export class WorkbenchContentSearchWorkerSession {
       new AppError(
         'TIMEOUT',
         path
-          ? `在 ${path} 上匹配了太久，已停止。正则表达式换个写法再试（避免嵌套的 + 或 *）。`
-          : '搜索太久没有进展，已停止。'
+          ? workbenchMainText('search.stalledOnFile', { path })
+          : workbenchMainText('search.stalled')
       )
     )
   }
@@ -235,6 +243,6 @@ export class WorkbenchContentSearchWorkerSession {
 /** worker 出错退出的原因；撞到堆上限的说成人话。 */
 function toWorkerFailure(error: Error): AppError {
   return (error as { code?: string }).code === 'ERR_WORKER_OUT_OF_MEMORY'
-    ? new AppError('LIMIT', '搜索用的内存太多，已停止。缩小搜索范围或换个查找词再试。', error)
+    ? new AppError('LIMIT', workbenchMainText('search.outOfMemory'), error)
     : AppError.from(error)
 }

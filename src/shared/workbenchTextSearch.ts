@@ -335,8 +335,11 @@ function isWhitespace(code: number): boolean {
     || code === 0xfeff || code === 0x3000
 }
 
-/** V8 的报错带着整个正则（`Invalid regular expression: /(/gmu: Unterminated group`），只留后面的原因。 */
+/**
+ * 只留原因：V8 的报错带着整个正则（`Invalid regular expression: /(/gmu: Unterminated group`），别的引擎只有
+ * 开头那句（`Invalid regular expression: missing )`）；界面上自己会说「正则表达式有误」。
+ */
 function describeRegExpError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error)
-  return message.replace(/^Invalid regular expression: \/.*\/[a-z]*: /su, '')
+  return message.replace(/^Invalid regular expression: (?:\/.*\/[a-z]*: )?/su, '')
 }

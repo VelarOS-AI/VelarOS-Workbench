@@ -1,5 +1,5 @@
 /**
- * main 进程给用户看的文字（应用菜单、文件操作与终端的提示……），按 {@link getWorkbenchMainLocale} 出中文或英文。英文表的键与
+ * main 进程给用户看的文字（应用菜单、文件操作、搜索与终端的提示……），按 {@link getWorkbenchMainLocale} 出中文或英文。英文表的键与
  * 中文表一一对应，少一个就编译不过。`{name}` 这样的占位按参数替换。
  */
 import type { AppLocale } from '@shared/contracts'
@@ -81,6 +81,19 @@ const zhCN = {
   'terminal.sessionEnded': '终端会话已结束。',
   'terminal.sessionNotInWindow': '终端会话不属于当前项目窗口。',
   'watch.subscriptionNotInWindow': '文件监听订阅不属于当前窗口。',
+  'search.targetNotFolder': '工作台搜索目标必须是目录。',
+  'search.invalidRegex': '正则表达式有误：{message}',
+  'search.queryEmpty': '没有要找的内容。',
+  'search.replaceQueryEmpty': '没有要替换的查找词。',
+  'search.replaceNotText': '不是文本文件。',
+  'search.replaceFormatNotRoundTrip': '文件现有的编码或换行符不能原样写回，请在编辑器中打开它、确认转换后再替换。',
+  'search.changedSinceSearch': '文件在搜索之后被改过，请重新搜索后再替换。',
+  'search.cancelled': '搜索已取消。',
+  'search.ended': '搜索已结束。',
+  'search.workerExited': '搜索意外中断了，请重新搜索。',
+  'search.stalledOnFile': '在 {path} 上匹配了太久，已停止。正则表达式换个写法再试（避免嵌套的 + 或 *）。',
+  'search.stalled': '搜索太久没有进展，已停止。',
+  'search.outOfMemory': '搜索用的内存太多，已停止。缩小搜索范围或换个查找词再试。',
   'git.operationMerge': '合并',
   'git.operationCherryPick': '拣选提交',
   'git.listSeparator': '、',
@@ -238,6 +251,19 @@ const enUS: Record<WorkbenchMainMessageKey, string> = {
   'terminal.sessionEnded': 'The terminal session has ended.',
   'terminal.sessionNotInWindow': 'The terminal session does not belong to this project window.',
   'watch.subscriptionNotInWindow': 'The file watch subscription does not belong to this window.',
+  'search.targetNotFolder': 'Only a folder can be searched.',
+  'search.invalidRegex': 'Invalid regular expression: {message}',
+  'search.queryEmpty': 'There is nothing to search for.',
+  'search.replaceQueryEmpty': 'There is no search text to replace.',
+  'search.replaceNotText': 'This is not a text file.',
+  'search.replaceFormatNotRoundTrip': 'This file\'s encoding or line endings cannot be written back as they are. Open it in the editor and confirm a conversion before replacing.',
+  'search.changedSinceSearch': 'The file was changed after the search. Search again before replacing.',
+  'search.cancelled': 'The search was cancelled.',
+  'search.ended': 'The search has ended.',
+  'search.workerExited': 'The search stopped unexpectedly. Search again.',
+  'search.stalledOnFile': 'Matching in {path} took too long and was stopped. Rewrite the regular expression (avoid nested + or *) and try again.',
+  'search.stalled': 'The search made no progress for too long and was stopped.',
+  'search.outOfMemory': 'The search used too much memory and was stopped. Narrow the search or change the search text and try again.',
   'git.operationMerge': 'merge',
   'git.operationCherryPick': 'cherry-pick',
   'git.listSeparator': ', ',

@@ -36,6 +36,8 @@ import {
   WorkbenchContentSearchMaxLimit,
 } from '@shared/workbenchTextSearch'
 
+import { workbenchMainText } from '../i18n/workbenchMainMessages'
+
 import type { OpenWorkbenchContentSearchSession } from './ContentSearchWorkerHost'
 import type { DirectoryEntries } from './FileEntries'
 import { isPathInsideRoot } from './PathContainmentHelper'
@@ -95,7 +97,7 @@ class SearchIndex {
     const searchRootStats = await stat(searchRoot.realPath)
 
     if (!searchRootStats.isDirectory()) {
-      throw new AppError('VALIDATION', '工作台搜索目标必须是目录。')
+      throw new AppError('VALIDATION', workbenchMainText('search.targetNotFolder'))
     }
 
     const query = this.normalizeSearchQuery(request.query)
@@ -167,7 +169,10 @@ class SearchIndex {
     })
     if (compiled.status === 'empty') return result
     if (compiled.status === 'invalid')
-      throw new AppError('VALIDATION', `正则表达式有误：${compiled.message}`)
+      throw new AppError(
+        'VALIDATION',
+        workbenchMainText('search.invalidRegex', { message: compiled.message })
+      )
 
     const { signal, onBatch } = options
     const filter = compileWorkbenchSearchPathFilter(request.include ?? '', request.exclude ?? '')

@@ -7,8 +7,12 @@ import { promisify } from 'node:util'
 
 import { describe, mock, test } from 'bun:test'
 
+import { setWorkbenchMainLocale } from '../src/main/i18n/workbenchMainLocale'
 import { runWorkbenchContentSearchTask } from '../src/main/workspace/ContentSearchTask'
-import type { WorkbenchContentSearchWorkerOptions } from '../src/main/workspace/ContentSearchWorkerHost'
+import {
+  type WorkbenchContentSearchWorkerOptions,
+  WorkbenchContentSearchWorkerSession,
+} from '../src/main/workspace/ContentSearchWorkerHost'
 import type {
   WorkbenchContentSearchFileResult,
   WorkbenchSearchContentBatch,
@@ -20,7 +24,12 @@ import type { WorkbenchFsCallResult } from '../src/shared/workbenchFs'
 import { WorkbenchFsChannels } from '../src/shared/workbenchFs'
 
 import { refuseTrash } from './helpers/fakeTrash'
-import { RunawayRegex, RunawayText, sourceSearchWorker } from './helpers/searchWorker'
+import {
+  createSourceSearchWorker,
+  RunawayRegex,
+  RunawayText,
+  sourceSearchWorker,
+} from './helpers/searchWorker'
 
 /**
  * 项目内容搜索（main 侧）：Git 仓库按 .gitignore 列文件，其它工程遍历目录；点号开头的文件照样搜；认文件编码，
@@ -268,6 +277,35 @@ void describe('project content search: matches', () => {
         await assert.rejects(search({ query: 'calc(', regex: true }), /正则表达式有误/u)
       }
     )
+  })
+
+  void test('errors are written in the interface language, in the worker too', async () => {
+    await withProject({ 'a.ts': 'calc(\n' }, async ({ root, search }) => {
+      setWorkbenchMainLocale('en-US')
+      const session = new WorkbenchContentSearchWorkerSession(createSourceSearchWorker)
+      const inEnglish = (error: unknown): boolean => {
+        assert.match((error as Error).message, /^Invalid regular expression: (?!Invalid)/u)
+        return true
+      }
+      try {
+        await assert.rejects(search({ query: 'calc(', regex: true }), inEnglish)
+        // main 先验过正则才交给 worker；直接把写错的正则交给 worker，它也按界面语言说。
+        await assert.rejects(
+          session.search({
+            projectRoot: root,
+            paths: ['a.ts'],
+            openPaths: [],
+            query: { query: 'calc(', matchCase: false, wholeWord: false, regex: true },
+            limit: 10,
+            maxResultsPerFile: 10,
+          }),
+          inEnglish
+        )
+      } finally {
+        session.close()
+        setWorkbenchMainLocale('zh-CN')
+      }
+    })
   })
 
   void test('GB18030 and UTF-16 files match with the line and column numbers the editor shows', async () => {

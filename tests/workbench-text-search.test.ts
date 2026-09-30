@@ -69,7 +69,9 @@ describe('project search matching', () => {
     expect(texts('a.b axb a\\nb', 'a\\nb')).toEqual(['1:9:a\\nb'])
     const invalid = compileWorkbenchTextSearch({ ...DefaultWorkbenchTextSearchOptions, query: 'foo(', regex: true })
     expect(invalid.status).toBe('invalid')
+    // 只有原因（引擎不同，说法不同），不带「Invalid regular expression」那句开头。
     expect(invalid.status === 'invalid' && invalid.message.length > 0).toBe(true)
+    expect(invalid.status === 'invalid' && invalid.message).not.toMatch(/^Invalid regular expression/u)
     expect(compileWorkbenchTextSearch({ ...DefaultWorkbenchTextSearchOptions, query: '' }).status).toBe('empty')
   })
 

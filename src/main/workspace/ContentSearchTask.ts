@@ -20,6 +20,7 @@ import { join } from 'node:path'
 import { AppError } from '@velaros-ai/core/error'
 
 import type {
+  AppLocale,
   WorkbenchContentSearchFileResult,
   WorkbenchContentSearchMatchResult,
   WorkbenchSearchContentBatch,
@@ -34,6 +35,9 @@ import {
   type WorkbenchTextSearchQuery,
   workbenchTextSearchRangeKey,
 } from '@shared/workbenchTextSearch'
+
+import { setWorkbenchMainLocale } from '../i18n/workbenchMainLocale'
+import { workbenchMainText } from '../i18n/workbenchMainMessages'
 
 import { decodeWorkbenchTextContent } from './TextCodec'
 import { isLikelyTextFile } from './TextFile'
@@ -80,10 +84,17 @@ export interface WorkbenchContentReplaceTaskResult {
   count: number
 }
 
+/** 每个请求都带着此刻的界面语言：worker 与主进程不共用模块状态，这里出的文字按它来。 */
 export type WorkbenchContentSearchWorkerRequest =
   /** stream：边搜边交出批次；不要的话结果全在最后的 result 里。 */
-  | { id: number; kind: 'search'; task: WorkbenchContentSearchTask; stream: boolean }
-  | { id: number; kind: 'replace'; task: WorkbenchContentReplaceTask }
+  | {
+      id: number
+      kind: 'search'
+      locale: AppLocale
+      task: WorkbenchContentSearchTask
+      stream: boolean
+    }
+  | { id: number; kind: 'replace'; locale: AppLocale; task: WorkbenchContentReplaceTask }
 
 export type WorkbenchContentSearchWorkerResponse =
   /** 接下这个请求、开始干活了：主进程从这时起才算它有没有动静（起 worker 花的时间不算）。 */
@@ -117,6 +128,7 @@ export async function handleWorkbenchContentSearchWorkerRequest(
   post: (response: WorkbenchContentSearchWorkerResponse) => void
 ): Promise<void> {
   const { id } = request
+  setWorkbenchMainLocale(request.locale)
   post({ id, kind: 'started' })
   const heartbeat = setInterval(() => post({ id, kind: 'heartbeat' }), HeartbeatIntervalMs)
   try {
@@ -223,7 +235,9 @@ function compileMatcher(query: WorkbenchTextSearchQuery): WorkbenchTextSearchMat
   if (compiled.status === 'ready') return compiled.matcher
   throw new AppError(
     'VALIDATION',
-    compiled.status === 'invalid' ? `正则表达式有误：${compiled.message}` : '没有要找的内容。'
+    compiled.status === 'invalid'
+      ? workbenchMainText('search.invalidRegex', { message: compiled.message })
+      : workbenchMainText('search.queryEmpty')
   )
 }
 
