@@ -81,3 +81,35 @@ export function readWorkbenchTerminalFontFamily(element: HTMLElement): string {
     || 'ui-monospace, "SF Mono", Menlo, Consolas, monospace'
   )
 }
+
+/**
+ * 查找匹配的底色，与编辑器同一对变量。xterm 的装饰只认不透明的 `#rrggbb`，半透明的颜色先叠到终端底色上。
+ */
+export function resolveWorkbenchTerminalFindColors(element: HTMLElement): {
+  match: string
+  activeMatch: string
+} {
+  const styles = getComputedStyle(element)
+  const resolve = createCssColorResolver()
+  const background = resolve(styles.getPropertyValue('--workbench-surface'), '#1f1f1f')
+  const color = (name: string, fallback: string): string =>
+    flattenColor(resolve(styles.getPropertyValue(name).trim() || fallback, '#e5c07b'), background)
+  return {
+    match: color('--workbench-editor-find-match', 'rgba(234, 179, 8, 0.26)'),
+    activeMatch: color('--workbench-editor-find-match-active', 'rgba(249, 115, 22, 0.42)'),
+  }
+}
+
+/** `#rrggbbaa` 按透明度叠到不透明的底色上，得到 `#rrggbb`。 */
+function flattenColor(color: string, background: string): string {
+  if (color.length !== 9) return color.slice(0, 7)
+  const alpha = Number.parseInt(color.slice(7, 9), 16) / 255
+  const channel = (hex: string, offset: number): number => Number.parseInt(hex.slice(offset, offset + 2), 16)
+  return `#${[1, 3, 5]
+    .map((offset) =>
+      Math.round(channel(color, offset) * alpha + channel(background, offset) * (1 - alpha))
+        .toString(16)
+        .padStart(2, '0')
+    )
+    .join('')}`
+}

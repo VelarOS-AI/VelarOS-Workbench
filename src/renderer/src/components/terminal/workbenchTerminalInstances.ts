@@ -17,6 +17,18 @@ import {
   attachWorkbenchTerminalOutput,
   onWorkbenchTerminalOutputDiscarded,
 } from '../../models/commands/workbenchTerminalOutputBus'
+import type { WorkbenchEditorFindStatus } from '../../models/editor/workbenchEditorFindState'
+
+import {
+  decorateWorkbenchTerminalSearch,
+  describeWorkbenchTerminalSearch,
+  disposeWorkbenchTerminalSearch,
+  refreshWorkbenchTerminalSearch,
+  startWorkbenchTerminalSearch,
+  stepWorkbenchTerminalSearch,
+  type WorkbenchTerminalFindColors,
+  type WorkbenchTerminalSearch,
+} from './workbenchTerminalSearch'
 
 import '@xterm/xterm/css/xterm.css'
 
@@ -29,6 +41,10 @@ export interface WorkbenchTerminalInstanceHandlers {
    */
   resolveFileLinks?: (paths: readonly string[], cwd: string) => Promise<Array<Nullable<string>>>
   onOpenFileLink?: (path: string, line?: number, column?: number) => void
+  /** 在终端里按了 ⌘F（其它平台 Ctrl+F）；`selection` 是此刻选中的文字。 */
+  onFind?: (selection: string) => void
+  /** 查找栏开着时输出变了，匹配数跟着变。 */
+  onFindStatusChange?: (status: WorkbenchEditorFindStatus) => void
 }
 
 export interface WorkbenchTerminalInstance {
@@ -43,7 +59,18 @@ interface WorkbenchTerminalEntry extends WorkbenchTerminalInstance {
   webgl: Nullable<WebglAddon>
   /** shell 当前所在的目录：起始目录，之后跟着 shell 用 OSC 7 报的走（不报的 shell 就一直是起始目录）。 */
   cwd: string
+  /** 查找栏开着时的查找状态。 */
+  search: Nullable<WorkbenchTerminalSearch>
+  /** 输出变了、视口滚了之后重找、补画的定时器（节流：一段连续输出里至多隔一会儿做一次）。 */
+  searchRefreshTimer: Nullable<ReturnType<typeof setTimeout>>
+  searchDecorateTimer: Nullable<ReturnType<typeof setTimeout>>
 }
+
+/** 查找栏开着时，输出变了之后隔这么久重找一次。 */
+const SearchRefreshDelayMs = 200
+/** 滚动之后隔这么久补画视口附近的匹配。 */
+const SearchDecorateDelayMs = 30
+const isApplePlatform = /Mac|iPhone|iPad/u.test(navigator.platform)
 
 /** 一段折行的输出最多往上、往下各拼这么多行来找路径。 */
 const MaxWrappedRows = 16
@@ -105,6 +132,9 @@ export function acquireWorkbenchTerminal(
     detachOutput: () => undefined,
     webgl: null,
     cwd: options.cwd,
+    search: null,
+    searchRefreshTimer: null,
+    searchDecorateTimer: null,
   }
   terminal.loadAddon(new WebLinksAddon((_event, uri) => entry.handlers.onOpenLink(uri)))
   terminal.registerLinkProvider({
@@ -114,6 +144,23 @@ export function acquireWorkbenchTerminal(
     entry.cwd = parseWorkbenchTerminalCwdReport(data) ?? entry.cwd
     return true
   })
+  // ⌘F（其它平台 Ctrl+F）打开终端的查找栏，不再交给 shell。
+  terminal.attachCustomKeyEventHandler((event) => {
+    if (event.type !== 'keydown' || !isFindShortcut(event) || !entry.handlers.onFind) return true
+    event.preventDefault()
+    entry.handlers.onFind(terminal.getSelection())
+    // 查找栏接走了焦点，xterm 等不到这个键的 keyup（macOS 上按着 ⌘ 时 F 本来也没有 keyup），会一直当有键按着，
+    // 回到终端后吞掉 insertText 送来的输入（听写、表情面板）。补一个 Shift 的 keyup 让它复位；只有修饰键的
+    // keyup 不会让 xterm 把焦点抢回去。
+    queueMicrotask(() =>
+      terminal.textarea?.dispatchEvent(
+        new KeyboardEvent('keyup', { key: 'Shift', code: 'ShiftLeft', keyCode: 16, bubbles: true })
+      )
+    )
+    return false
+  })
+  terminal.onWriteParsed(() => scheduleSearchRefresh(entry))
+  terminal.onScroll(() => scheduleSearchDecorate(entry))
   terminal.onData((data) => entry.handlers.onData(data))
   terminal.onBinary((data) => entry.handlers.onData(data))
   // 写完再确认（xterm 解析完这段才回调），主进程据此决定暂停还是继续读伪终端。
@@ -211,6 +258,75 @@ function toBufferRange(cells: readonly TerminalTextCell[], link: WorkbenchTermin
   }
 }
 
+function isFindShortcut(event: KeyboardEvent): boolean {
+  const primary = isApplePlatform ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey
+  return primary && !event.altKey && !event.shiftKey && event.code === 'KeyF'
+}
+
+/**
+ * 按查找词在终端里找，画出匹配并滚到当前那处；`pattern` 为 null（查找词为空、正则写错）时撤掉高亮。
+ * 终端不在了给 null。
+ */
+export function findInWorkbenchTerminal(
+  sessionId: string,
+  pattern: Nullable<RegExp>,
+  colors: WorkbenchTerminalFindColors
+): Nullable<WorkbenchEditorFindStatus> {
+  const entry = entries.get(sessionId)
+  if (!entry) return null
+  if (!pattern) {
+    closeWorkbenchTerminalFind(sessionId)
+    return null
+  }
+  entry.search = startWorkbenchTerminalSearch(entry.terminal, pattern, colors, entry.search)
+  return describeWorkbenchTerminalSearch(entry.search)
+}
+
+/** 到下一处（1）或上一处（-1）匹配。 */
+export function stepWorkbenchTerminalFind(
+  sessionId: string,
+  direction: 1 | -1
+): Nullable<WorkbenchEditorFindStatus> {
+  const entry = entries.get(sessionId)
+  if (!entry?.search) return null
+  entry.search = stepWorkbenchTerminalSearch(entry.terminal, entry.search, direction)
+  return describeWorkbenchTerminalSearch(entry.search)
+}
+
+/** 关掉查找：撤掉高亮，不再跟着输出重找。 */
+export function closeWorkbenchTerminalFind(sessionId: string): void {
+  const entry = entries.get(sessionId)
+  if (!entry) return
+  clearSearchTimers(entry)
+  disposeWorkbenchTerminalSearch(entry.search)
+  entry.search = null
+}
+
+function scheduleSearchRefresh(entry: WorkbenchTerminalEntry): void {
+  if (!entry.search || entry.searchRefreshTimer) return
+  entry.searchRefreshTimer = setTimeout(() => {
+    entry.searchRefreshTimer = null
+    if (!entry.search) return
+    entry.search = refreshWorkbenchTerminalSearch(entry.terminal, entry.search)
+    entry.handlers.onFindStatusChange?.(describeWorkbenchTerminalSearch(entry.search))
+  }, SearchRefreshDelayMs)
+}
+
+function scheduleSearchDecorate(entry: WorkbenchTerminalEntry): void {
+  if (!entry.search || entry.searchDecorateTimer) return
+  entry.searchDecorateTimer = setTimeout(() => {
+    entry.searchDecorateTimer = null
+    if (entry.search) decorateWorkbenchTerminalSearch(entry.terminal, entry.search)
+  }, SearchDecorateDelayMs)
+}
+
+function clearSearchTimers(entry: WorkbenchTerminalEntry): void {
+  if (entry.searchRefreshTimer) clearTimeout(entry.searchRefreshTimer)
+  if (entry.searchDecorateTimer) clearTimeout(entry.searchDecorateTimer)
+  entry.searchRefreshTimer = null
+  entry.searchDecorateTimer = null
+}
+
 /** 第一次挂进容器时打开 xterm；之后只是把已有 DOM 挂回去。 */
 export function mountWorkbenchTerminal(sessionId: string, container: HTMLElement): void {
   const entry = entries.get(sessionId)
@@ -243,6 +359,8 @@ export function releaseWorkbenchTerminal(sessionId: string): void {
   const entry = entries.get(sessionId)
   if (!entry) return
   entries.delete(sessionId)
+  clearSearchTimers(entry)
+  disposeWorkbenchTerminalSearch(entry.search)
   entry.detachOutput()
   entry.webgl?.dispose()
   entry.terminal.dispose()

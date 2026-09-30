@@ -1,17 +1,44 @@
-import { type ReactElement, useEffect, useRef } from 'react'
+import { type ReactElement, useCallback, useEffect, useRef, useState } from 'react'
+import {
+  buildWorkbenchTerminalFindPattern,
+  DefaultWorkbenchTerminalFindOptions,
+  type WorkbenchTerminalFindOptions,
+} from '@renderer/models/commands/workbenchTerminalFind'
+import {
+  EmptyWorkbenchEditorFindStatus,
+  type WorkbenchEditorFindStatus,
+} from '@renderer/models/editor/workbenchEditorFindState'
 import type { WorkbenchThemeId } from '@renderer/models/settings/workbenchPreferences'
 
 import styles from '../../styles/workbenchPageStyles'
 import { useLatest } from '../../support/genericHooks'
 
+import { WorkbenchTerminalFindBar } from './WorkbenchTerminalFindBar'
 import {
   acquireWorkbenchTerminal,
+  closeWorkbenchTerminalFind,
+  findInWorkbenchTerminal,
   findWorkbenchTerminal,
   mountWorkbenchTerminal,
+  stepWorkbenchTerminalFind,
   unmountWorkbenchTerminal,
   type WorkbenchTerminalInstanceHandlers,
 } from './workbenchTerminalInstances'
-import { buildWorkbenchTerminalTheme, readWorkbenchTerminalFontFamily } from './workbenchTerminalTheme'
+import {
+  buildWorkbenchTerminalTheme,
+  readWorkbenchTerminalFontFamily,
+  resolveWorkbenchTerminalFindColors,
+} from './workbenchTerminalTheme'
+
+/** 打字停下这么久再找（整个滚回历史找一遍要几毫秒到几十毫秒）。 */
+const FindDebounceMs = 80
+
+interface TerminalFindState {
+  query: string
+  options: WorkbenchTerminalFindOptions
+  /** 每要求一次聚焦查找框就加一。 */
+  focusRequest: number
+}
 
 interface WorkbenchTerminalViewProps {
   sessionId: string
@@ -48,6 +75,10 @@ export function WorkbenchTerminalView({
   const onOpenLinkLatest = useLatest(onOpenLink)
   const onResolveFileLinksLatest = useLatest(onResolveFileLinks)
   const onOpenFileLinkLatest = useLatest(onOpenFileLink)
+  const [find, setFind] = useState<Nullable<TerminalFindState>>(null)
+  const [findStatus, setFindStatus] = useState<WorkbenchEditorFindStatus>(
+    EmptyWorkbenchEditorFindStatus
+  )
 
   useEffect(() => {
     const container = containerRef.current
@@ -65,6 +96,14 @@ export function WorkbenchTerminalView({
         resolveFileLinks: async (paths, directory) =>
           (await onResolveFileLinksLatest.current?.(paths, directory)) ?? paths.map(() => null),
         onOpenFileLink: (path, line, column) => onOpenFileLinkLatest.current?.(path, line, column),
+        // 选中了一行里的文字就拿它当查找词（跨行的选中不算）。
+        onFind: (selection) =>
+          setFind((current) => ({
+            query: selection && !selection.includes('\n') ? selection : (current?.query ?? ''),
+            options: current?.options ?? DefaultWorkbenchTerminalFindOptions,
+            focusRequest: (current?.focusRequest ?? 0) + 1,
+          })),
+        onFindStatusChange: setFindStatus,
       },
       { fontFamily: readWorkbenchTerminalFontFamily(container), cwd: cwdLatest.current }
     )
@@ -119,5 +158,68 @@ export function WorkbenchTerminalView({
     if (instance) instance.terminal.options.disableStdin = !isRunning
   }, [isRunning, sessionId])
 
-  return <div ref={containerRef} className={styles.terminalViewHost} data-running={isRunning} />
+  const findQuery = find?.query
+  const findOptions = find?.options
+  useEffect(() => {
+    if (findQuery === undefined || !findOptions) return undefined
+    const timer = setTimeout(() => {
+      const container = containerRef.current
+      if (!container) return
+      const pattern = buildWorkbenchTerminalFindPattern(findQuery, findOptions)
+      const colors = resolveWorkbenchTerminalFindColors(container)
+      const status = findInWorkbenchTerminal(
+        sessionId,
+        pattern === 'invalid' ? null : pattern,
+        colors
+      )
+      setFindStatus(
+        pattern === 'invalid'
+          ? { ...EmptyWorkbenchEditorFindStatus, invalid: true }
+          : (status ?? EmptyWorkbenchEditorFindStatus)
+      )
+    }, FindDebounceMs)
+    return () => clearTimeout(timer)
+  }, [findOptions, findQuery, sessionId])
+
+  // 视图卸下（切走标签、收起面板）时查找栏跟着关，高亮也撤掉。
+  useEffect(() => () => closeWorkbenchTerminalFind(sessionId), [sessionId])
+
+  const closeFind = useCallback((): void => {
+    closeWorkbenchTerminalFind(sessionId)
+    setFind(null)
+    setFindStatus(EmptyWorkbenchEditorFindStatus)
+    findWorkbenchTerminal(sessionId)?.terminal.focus()
+  }, [sessionId])
+
+  const stepFind = (direction: 1 | -1): void => {
+    const status = stepWorkbenchTerminalFind(sessionId, direction)
+    if (status) setFindStatus(status)
+  }
+
+  return (
+    <div className={styles.terminalViewFrame}>
+      <div ref={containerRef} className={styles.terminalViewHost} data-running={isRunning} />
+      {find && (
+        <WorkbenchTerminalFindBar
+          query={find.query}
+          options={find.options}
+          status={findStatus}
+          focusRequest={find.focusRequest}
+          onQueryChange={(query) => setFind((current) => current && { ...current, query })}
+          onToggleOption={(option) =>
+            setFind(
+              (current) =>
+                current && {
+                  ...current,
+                  options: { ...current.options, [option]: !current.options[option] },
+                }
+            )
+          }
+          onFindNext={() => stepFind(1)}
+          onFindPrevious={() => stepFind(-1)}
+          onClose={closeFind}
+        />
+      )}
+    </div>
+  )
 }

@@ -295,6 +295,7 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     renameSymbolPrompt: '将 {symbol} 重命名为',
     revealInFiles: '在文件中定位',
     findInFile: '在当前文件中查找',
+    findInTerminal: '在终端中查找',
     findPrevious: '上一个匹配',
     findNext: '下一个匹配',
     findNoMatches: '无匹配',

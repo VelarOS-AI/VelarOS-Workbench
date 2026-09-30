@@ -308,6 +308,7 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     renameSymbolPrompt: 'Rename {symbol} to',
     revealInFiles: 'Reveal in files',
     findInFile: 'Find in current file',
+    findInTerminal: 'Find in terminal',
     findPrevious: 'Previous match',
     findNext: 'Next match',
     findNoMatches: 'No matches',

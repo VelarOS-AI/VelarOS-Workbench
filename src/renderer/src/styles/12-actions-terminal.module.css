@@ -778,10 +778,28 @@
 }
 
 /* xterm 宿主：撑满面板，配色由 workbenchTerminalTheme 按主题变量算出来喂给 xterm。 */
+.terminalViewFrame {
+  @apply relative flex min-h-0 flex-1 flex-col;
+}
+
 .terminalViewHost {
   @apply relative min-h-0 flex-1;
   padding: 6px 4px 6px 10px;
   background: var(--workbench-surface);
+}
+
+/* 终端查找栏浮在右上角（避开滚动条），不占终端的行。 */
+.terminalFindBar {
+  @apply absolute flex items-center gap-1 rounded-md border text-muted-foreground;
+  top: 6px;
+  right: 18px;
+  z-index: 10;
+  width: min(460px, calc(100% - 36px));
+  padding: 3px 4px 3px 6px;
+  border-color: var(--workbench-border);
+  background: var(--workbench-toolbar);
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.12);
+  -webkit-app-region: no-drag;
 }
 
 .terminalViewHost :global(.xterm) {

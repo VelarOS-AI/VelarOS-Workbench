@@ -248,7 +248,7 @@ export function EditorFindBar({
   )
 }
 
-function FindOptionToggle({
+export function FindOptionToggle({
   label,
   active,
   onToggle,
