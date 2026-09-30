@@ -185,21 +185,6 @@ export function buildWorkbenchCodeActionMenuRows(
   return rows
 }
 
-/** 菜单里上下移动时落到的行：跳过标题，到头绕回另一头；没有能选的行返回 -1。 */
-export function nextWorkbenchCodeActionRowIndex(
-  rows: readonly WorkbenchCodeActionMenuRow[],
-  current: number,
-  offset: 1 | -1
-): number {
-  if (!rows.some((row) => row.kind === 'action')) return -1
-  let index = current
-  for (let step = 0; step < rows.length; step += 1) {
-    index = (index + offset + rows.length) % rows.length
-    if (rows[index]?.kind === 'action') return index
-  }
-  return -1
-}
-
 /** 一个动作的改动分两份：当前文件的由编辑器自己套（一步撤销、光标留在原处），别的文件交给页面。 */
 export function partitionWorkbenchCodeActionChanges(
   path: string,

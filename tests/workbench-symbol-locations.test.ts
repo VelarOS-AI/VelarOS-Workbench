@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 
 import { test } from 'bun:test'
 
@@ -6,7 +8,6 @@ import {
   buildWorkbenchSymbolLocationsRequest,
   groupWorkbenchSymbolLocations,
   navigateWorkbenchSymbolLocations,
-  nextWorkbenchSymbolLocationIndex,
   openWorkbenchSymbolLocations,
   sameWorkbenchSymbolLocation,
   workbenchSymbolLocationDisplayPath,
@@ -118,17 +119,15 @@ void test('the definition row shows the line text that came with the references'
   )
 })
 
-void test('arrow keys walk the list without wrapping around', () => {
-  assert.equal(nextWorkbenchSymbolLocationIndex(3, 0, 1), 1)
-  assert.equal(nextWorkbenchSymbolLocationIndex(3, 2, 1), 2)
-  assert.equal(nextWorkbenchSymbolLocationIndex(3, 1, -1), 0)
-  assert.equal(nextWorkbenchSymbolLocationIndex(3, 0, -1), 0)
-  assert.equal(nextWorkbenchSymbolLocationIndex(3, 1, 'first'), 0)
-  assert.equal(nextWorkbenchSymbolLocationIndex(3, 1, 'last'), 2)
-  // 焦点还不在任何一行上：往下从头起，往上从尾起。
-  assert.equal(nextWorkbenchSymbolLocationIndex(3, -1, 1), 0)
-  assert.equal(nextWorkbenchSymbolLocationIndex(3, -1, -1), 2)
-  assert.equal(nextWorkbenchSymbolLocationIndex(0, -1, 1), -1)
+void test('the list moves with the shared menu keys', () => {
+  const panel = readFileSync(
+    resolve(process.cwd(), 'src/renderer/src/components/editor/EditorSymbolLocationsPanel.tsx'),
+    'utf8'
+  )
+  // 行是按钮，方向键、Home / End 交给工作台菜单共用的那个处理；文件标题不是按钮，自然被跳过。
+  assert.match(panel, /role="menu"[\s\S]{0,160}onKeyDown=\{handleWorkbenchMenuKeyDown\}/u)
+  assert.match(panel, /<button[\s\S]{0,120}role="menuitem"/u)
+  assert.match(panel, /<header className=\{styles\.editorSymbolLocationGroup\}/u)
 })
 
 void test('a references list takes the keyboard when it opens and gives it back after a jump', () => {

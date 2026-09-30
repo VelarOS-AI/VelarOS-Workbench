@@ -1,6 +1,5 @@
 import {
   type CSSProperties,
-  type KeyboardEvent as ReactKeyboardEvent,
   type RefObject,
   useEffect,
   useLayoutEffect,
@@ -12,7 +11,6 @@ import { ArrowLeftIcon, CodeIcon, XIcon } from '@phosphor-icons/react'
 import { useWorkbenchI18n } from '@renderer/i18n'
 import {
   groupWorkbenchSymbolLocations,
-  nextWorkbenchSymbolLocationIndex,
   sameWorkbenchSymbolLocation,
   workbenchSymbolLocationDisplayPath,
   type WorkbenchSymbolLocationsState,
@@ -22,6 +20,7 @@ import type { WorkbenchLanguageServiceLocation } from '@shared/contracts'
 
 import styles from '../../styles/workbenchPageStyles'
 import { useLatest } from '../../support/genericHooks'
+import { handleWorkbenchMenuKeyDown } from '../chrome/WorkbenchContextMenu'
 
 interface EditorSymbolLocationsPanelProps {
   anchor: { left: number; top: number; bottom: number }
@@ -61,46 +60,15 @@ export function EditorSymbolLocationsPanel({
     [state.items, state.origin.path]
   )
 
-  const rowButtons = (): HTMLButtonElement[] => [
-    ...(bodyRef.current?.querySelectorAll<HTMLButtonElement>('button[data-location-row]') ?? []),
-  ]
-
   // 「查找引用」打开的列表：键盘焦点直接放进去（眼下那一行，没有就第一行），上下键挑、回车跳过去。
   // 要等面板摆好位置显示出来：还藏着的时候接不了焦点。
   const { focusList } = state
   const placed = position.visibility === 'visible'
   useEffect(() => {
     if (!focusList || !placed) return
-    const rows = rowButtons()
+    const rows = [...(bodyRef.current?.querySelectorAll<HTMLButtonElement>('button') ?? [])]
     ;(rows.find((row) => row.dataset['active'] === 'true') ?? rows[0])?.focus({ preventScroll: true })
   }, [focusList, placed])
-
-  const handleListKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>): void => {
-    const move =
-      event.key === 'ArrowDown'
-        ? 1
-        : event.key === 'ArrowUp'
-          ? -1
-          : event.key === 'Home'
-            ? 'first'
-            : event.key === 'End'
-              ? 'last'
-              : null
-    if (move === null) return
-
-    const rows = rowButtons()
-    const next = rows[
-      nextWorkbenchSymbolLocationIndex(
-        rows.length,
-        rows.findIndex((row) => row === document.activeElement),
-        move
-      )
-    ]
-    if (!next) return
-    event.preventDefault()
-    next.focus()
-    next.scrollIntoView({ block: 'nearest' })
-  }
 
   useLayoutEffect(() => {
     const popup = popupRef.current
@@ -207,12 +175,19 @@ export function EditorSymbolLocationsPanel({
         </button>
       )}
 
-      <div ref={bodyRef} className={styles.editorSymbolLocationsBody} onKeyDown={handleListKeyDown}>
+      {/* 列表里的方向键、Home / End 与工作台的菜单同一套。 */}
+      <div
+        ref={bodyRef}
+        className={styles.editorSymbolLocationsBody}
+        role="menu"
+        aria-label={t('workbench.symbolLocationsTitle')}
+        onKeyDown={handleWorkbenchMenuKeyDown}
+      >
         {groups.length > 0 ? (
           groups.map((group) => {
             const displayPath = workbenchSymbolLocationDisplayPath(projectRoot, group.path)
             return (
-              <section key={group.path} aria-label={displayPath}>
+              <section key={group.path} role="group" aria-label={displayPath}>
                 <header className={styles.editorSymbolLocationGroup} title={displayPath}>
                   <span>{displayPath}</span>
                   <span>{group.items.length}</span>
@@ -223,8 +198,8 @@ export function EditorSymbolLocationsPanel({
                     <button
                       key={item.id}
                       type="button"
+                      role="menuitem"
                       className={styles.editorSymbolLocationRow}
-                      data-location-row
                       data-active={active ? 'true' : undefined}
                       title={locationLabel(projectRoot, item.location)}
                       onClick={() => onNavigate(item.location)}

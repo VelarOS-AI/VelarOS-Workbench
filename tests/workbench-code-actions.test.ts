@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 
 import { setDiagnostics } from '@codemirror/lint'
 import { EditorState } from '@codemirror/state'
@@ -9,7 +11,6 @@ import {
   buildWorkbenchCodeActionMenuRows,
   buildWorkbenchCodeMirrorChanges,
   collectWorkbenchDiagnosticsInRange,
-  nextWorkbenchCodeActionRowIndex,
   partitionWorkbenchCodeActionChanges,
   resolveWorkbenchCodeActionCategories,
   resolveWorkbenchCodeActionSupport,
@@ -147,20 +148,20 @@ void describe('code action menu model', () => {
     assert.equal(new Set(rows.map((row) => row.key)).size, rows.length)
   })
 
-  void test('moves the selection over actions only and wraps around', () => {
-    const rows = [
-      { kind: 'header' as const, key: 'h1', title: 'Quick fixes' },
-      { kind: 'action' as const, key: 'a1', action: action('one') },
-      { kind: 'header' as const, key: 'h2', title: 'Refactor' },
-      { kind: 'action' as const, key: 'a2', action: action('two') },
-    ]
-    assert.equal(nextWorkbenchCodeActionRowIndex(rows, -1, 1), 1)
-    assert.equal(nextWorkbenchCodeActionRowIndex(rows, 1, 1), 3)
-    assert.equal(nextWorkbenchCodeActionRowIndex(rows, 3, 1), 1)
-    assert.equal(nextWorkbenchCodeActionRowIndex(rows, 1, -1), 3)
-    assert.equal(nextWorkbenchCodeActionRowIndex(rows, rows.length, -1), 3)
-    assert.equal(nextWorkbenchCodeActionRowIndex([rows[0]!], -1, 1), -1)
-    assert.equal(nextWorkbenchCodeActionRowIndex([], -1, 1), -1)
+  void test('the menu moves with the shared menu keys: items are buttons, headers are not', () => {
+    const menu = readFileSync(
+      resolve(process.cwd(), 'src/renderer/src/components/editor/EditorCodeActionMenu.tsx'),
+      'utf8'
+    )
+    // 方向键、Home / End 与工作台别的菜单同一套；打开时焦点进第一项。
+    assert.match(menu, /handleWorkbenchMenuKeyDown\(event\)/u)
+    assert.match(menu, /focusFirstWorkbenchMenuItem\(menuRef\.current\)/u)
+    assert.match(menu, /role="menu"/u)
+    assert.match(menu, /<button[\s\S]{0,120}role="menuitem"/u)
+    // 分组标题不是按钮，方向键自然跳过它。
+    assert.match(menu, /row\.kind === 'header' \? \(\s*<div[^>]*role="presentation"/u)
+    // Esc 在菜单里收住，不再交给全局快捷键（那里 Esc 还管着收起右侧面板）。
+    assert.match(menu, /event\.key === 'Escape'[\s\S]{0,120}stopPropagation\(\)[\s\S]{0,40}onClose\(\)/u)
   })
 
   void test('knows which files have quick fixes and which have refactorings', () => {

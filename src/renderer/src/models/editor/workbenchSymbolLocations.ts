@@ -129,22 +129,6 @@ export function groupWorkbenchSymbolLocations(
     })
 }
 
-/**
- * 在列表里用方向键挪一格（`offset` 为 ±1），Home / End 到头尾（`'first'` / `'last'`）；到头不绕回去。
- * `current` 是眼下那一行在列表里的下标，焦点不在任何一行上为 -1。
- */
-export function nextWorkbenchSymbolLocationIndex(
-  count: number,
-  current: number,
-  move: -1 | 1 | 'first' | 'last'
-): number {
-  if (count <= 0) return -1
-  if (move === 'first') return 0
-  if (move === 'last') return count - 1
-  if (current < 0) return move === 1 ? 0 : count - 1
-  return Math.min(count - 1, Math.max(0, current + move))
-}
-
 export function openWorkbenchSymbolLocations(
   request: WorkbenchSymbolLocationsRequest
 ): WorkbenchSymbolLocationsState {

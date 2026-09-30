@@ -1,14 +1,15 @@
 import { type ReactElement, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import {
-  nextWorkbenchCodeActionRowIndex,
-  type WorkbenchCodeActionMenuRow,
-} from '@renderer/models/editor/workbenchCodeActions'
+import type { WorkbenchCodeActionMenuRow } from '@renderer/models/editor/workbenchCodeActions'
 
 import type { WorkbenchLanguageServiceCodeAction } from '@shared/contracts'
 
 import styles from '../../styles/workbenchPageStyles'
 import { useEventListener } from '../../support/genericHooks'
 import { useDismissOnWindowInteract } from '../../support/useDismissOnWindowInteract'
+import {
+  focusFirstWorkbenchMenuItem,
+  handleWorkbenchMenuKeyDown,
+} from '../chrome/WorkbenchContextMenu'
 
 const MenuEdgeInset = 8
 const MenuAnchorGap = 4
@@ -36,8 +37,9 @@ interface EditorCodeActionMenuProps {
 }
 
 /**
- * 光标处的动作菜单（⌥↩ / ⌘.）：上下键选、回车套用、Esc 或点别处收起。菜单开着时焦点在菜单上，
- * 编辑器收不到按键，正文不会在菜单底下被改掉。
+ * 光标处的动作菜单（⌥↩ / ⌘.）：上下键选、回车套用、Esc 或点别处收起。菜单开着时焦点在菜单里，
+ * 编辑器收不到按键，正文不会在菜单底下被改掉。方向键、Home / End 与工作台别的菜单是同一套
+ * （handleWorkbenchMenuKeyDown）；收起之后焦点由调用方还给编辑器。
  */
 export function EditorCodeActionMenu({
   anchor,
@@ -52,9 +54,7 @@ export function EditorCodeActionMenu({
 }: EditorCodeActionMenuProps): ReactElement {
   const menuRef = useRef<HTMLDivElement>(null)
   const [position, setPosition] = useState({ left: anchor.left, top: anchor.bottom + MenuAnchorGap })
-  const [activeIndex, setActiveIndex] = useState(-1)
-  const firstActionIndex = rows ? nextWorkbenchCodeActionRowIndex(rows, -1, 1) : -1
-  const selectedIndex = rows?.[activeIndex]?.kind === 'action' ? activeIndex : firstActionIndex
+  const hasActions = !!rows?.some((row) => row.kind === 'action')
 
   useDismissOnWindowInteract({
     enabled: true,
@@ -75,9 +75,11 @@ export function EditorCodeActionMenu({
     { capture: true }
   )
 
+  // 一打开焦点就进菜单：动作还没问到时先落在菜单本身上，问到了落到第一项上，方向键和回车马上能用。
   useEffect(() => {
-    menuRef.current?.focus()
-  }, [])
+    if (hasActions) focusFirstWorkbenchMenuItem(menuRef.current)
+    else menuRef.current?.focus()
+  }, [hasActions])
 
   // 行数变了（动作到了）菜单的高度跟着变：重新摆，别伸到窗口外面。
   useLayoutEffect(() => {
@@ -98,18 +100,6 @@ export function EditorCodeActionMenu({
     )
   }, [anchor.bottom, anchor.left, anchor.top, error, rows])
 
-  useEffect(() => {
-    menuRef.current
-      ?.querySelector<HTMLElement>(`[data-code-action-index="${selectedIndex}"]`)
-      ?.scrollIntoView({ block: 'nearest' })
-  }, [selectedIndex])
-
-  function choose(index: number): void {
-    const row = rows?.[index]
-    if (busy || row?.kind !== 'action') return
-    onChoose(row.action)
-  }
-
   return (
     <div
       ref={menuRef}
@@ -120,31 +110,14 @@ export function EditorCodeActionMenu({
       aria-busy={busy || rows === null}
       tabIndex={-1}
       onKeyDown={(event) => {
-        // 菜单开着时按键都归菜单：不漏给编辑器，也不触发全局快捷键。
-        event.stopPropagation()
+        // Esc 在这里收住，不往窗口上传：全局快捷键里 Esc 还管着收起右侧面板。
         if (event.key === 'Escape') {
           event.preventDefault()
+          event.stopPropagation()
           onClose()
           return
         }
-        if (!rows) return
-
-        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-          event.preventDefault()
-          setActiveIndex(
-            nextWorkbenchCodeActionRowIndex(rows, selectedIndex, event.key === 'ArrowDown' ? 1 : -1)
-          )
-        } else if (event.key === 'Home' || event.key === 'End') {
-          event.preventDefault()
-          setActiveIndex(
-            event.key === 'Home'
-              ? firstActionIndex
-              : nextWorkbenchCodeActionRowIndex(rows, rows.length, -1)
-          )
-        } else if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
-          event.preventDefault()
-          choose(selectedIndex)
-        }
+        handleWorkbenchMenuKeyDown(event)
       }}
     >
       {error ? (
@@ -153,10 +126,10 @@ export function EditorCodeActionMenu({
         </div>
       ) : !rows ? (
         <div className={styles.editorCodeActionMenuStatus}>{loadingLabel}</div>
-      ) : firstActionIndex < 0 ? (
+      ) : !hasActions ? (
         <div className={styles.editorCodeActionMenuStatus}>{emptyLabel}</div>
       ) : (
-        rows.map((row, index) =>
+        rows.map((row) =>
           row.kind === 'header' ? (
             <div key={row.key} className={styles.editorCodeActionMenuHeader} role="presentation">
               {row.title}
@@ -166,14 +139,13 @@ export function EditorCodeActionMenu({
               key={row.key}
               type="button"
               role="menuitem"
-              tabIndex={-1}
               className={styles.editorCodeActionMenuItem}
-              data-active={index === selectedIndex ? 'true' : undefined}
-              data-code-action-index={index}
               title={row.action.title}
-              disabled={busy}
-              onMouseEnter={() => setActiveIndex(index)}
-              onClick={() => choose(index)}
+              // 正在算改动时不收新的选择，但不真的禁用：禁用的按钮留不住焦点，按键就漏到菜单外面去了。
+              aria-disabled={busy}
+              onClick={() => {
+                if (!busy) onChoose(row.action)
+              }}
             >
               {row.action.title}
             </button>

@@ -2007,11 +2007,14 @@
   font-size: var(--ui-font-body-sm);
 }
 
-.editorCodeActionMenuItem[data-active='true'] {
+/* 选中的那一项就是键盘焦点所在的那一项（方向键挪的是焦点）。 */
+.editorCodeActionMenuItem:hover,
+.editorCodeActionMenuItem:focus {
   background: var(--workbench-hover);
+  outline: none;
 }
 
-.editorCodeActionMenuItem:disabled {
+.editorCodeActionMenuItem[aria-disabled='true'] {
   cursor: default;
   opacity: 0.6;
 }
