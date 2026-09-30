@@ -232,6 +232,22 @@ Node 的 OOM 处理直接 `abort()` 主进程。实测 VelarOS-Platform：每个
   （`WorkbenchShellTerminal.ts` 惰性加载）。探针 `probe:terminal` 经 `scripts/probe/runTerminalProbe.mjs`
   先用 bun 打包再在 Electron 运行时里跑（node-pty 在 bun 下收不到数据）。
 
+### 终端里的链接、查找与拆分
+
+- 文件链接：鼠标所在那一行（连同折行）里的路径经 `workbenchTerminalFileLinks.ts` 认出来，问主进程确实是
+  项目里的文件才画成链接，点一下在编辑器里打开（带行列的跳过去）。相对路径按 shell 此刻所在的目录解析：
+  主进程直接问操作系统（`WorkbenchProcessCwd.ts`，macOS 用 `lsof`，Linux 读 `/proc/<pid>/cwd`，每个会话
+  至多两秒问一次），不靠 shell 报；Windows 上问不到，退回 shell 用 OSC 7 报的目录或会话的起始目录。
+- 查找：⌘F（其它平台 Ctrl+F）在终端里开查找栏（`workbenchTerminalSearch.ts`），在整个滚回历史里找，
+  只给视口附近的匹配画高亮，输出变了隔一会儿重找。
+- 拆分：一个标签可以并排放几个终端（`workbenchTerminalSplits.ts`）。会话仍是一张平表，并排的几个挨在
+  一起、共用 `groupId`；标签栏一组一个标签。⌘D（其它平台 Ctrl+Shift+5）在当前终端右边再开一个，起始目录
+  跟着当前 shell 所在的目录（start 请求的 `inheritCwdFrom`，主进程去问；已经到项目外面、问不到就从项目
+  根开始）；⌥⌘← / ⌥⌘→（Alt+← / Alt+→）在并排的终端之间换焦点。宽度份额记在会话上，拖分隔条时直接改
+  样式，松手才进 React 状态。
+- 退出：shell 正常退出（退出码 0）且焦点就在这个终端里——也就是用户在里面敲了 `exit`——这个终端跟着
+  关掉；在后台自己结束的、异常退出的留着，能看到最后的输出和「进程已结束」那一行。
+
 ## 生产启动与体积预算
 
 生产 main 入口开启压缩，完整 IDE 工作区在项目打开后按需加载；无项目的起手页不再静态
@@ -243,12 +259,12 @@ main、renderer 总体积与最大功能块。
 
 | 指标 | 当前基线 | 上限 |
 | --- | ---: | ---: |
-| main 入口 | 0.41 MB | 3.75 MB |
-| main JavaScript | 0.84 MB | 6.50 MB |
-| renderer 启动依赖 | 2.19 MB | 4.75 MB |
-| renderer JavaScript | 24.71 MB | 25.00 MB |
-| renderer CSS | 0.88 MB | 1.00 MB |
-| renderer 最大功能块 | 3.66 MB | 3.75 MB |
+| main 入口 | 0.52 MB | 3.75 MB |
+| main JavaScript | 1.01 MB | 6.50 MB |
+| renderer 启动依赖 | 2.65 MB | 4.75 MB |
+| renderer JavaScript | 25.18 MB | 26.00 MB |
+| renderer CSS | 0.90 MB | 1.00 MB |
+| renderer 最大功能块 | 3.62 MB | 3.75 MB |
 
 单独复核已有生产产物时运行 `bun run check:bundle-budget`。预算留有小幅构建波动空间；
 业务增长需要突破上限时，应先给出加载链数据并调整分包，再更新基线。
@@ -257,3 +273,8 @@ main、renderer 总体积与最大功能块。
 启动依赖减半，因为聊天随工作区外壳按需加载。最大功能块就是工作区外壳（其中图标库约 0.55 MB：每个
 Phosphor 图标带六种字重；消息 Markdown 的代码高亮由 UI 包静态引入约 0.3 MB）。renderer 总量贴近上限，
 增量主要是 UI 0.2.54 的 Markdown 图表（mermaid 各类图）按需分块；它们不进启动包，但计入总量。
+
+2026-09-30：renderer 总量的上限从 25 MB 调到 26 MB——其中约 19 MB 是 UI 包带来的按需分块（代码高亮的
+各语言语法与 mermaid），本仓改不了；启动依赖与最大功能块的上限没有动。快速打开、设置对话框、Git 工具窗、
+提交面板、AI 改动、浏览器面板和项目搜索都从工作区外壳里拆成了按需加载的块（`lazyWithPreload.ts`，空闲
+时预取），外壳因此还有约 0.13 MB 的余量；新的面板照这个办法加，不要直接进外壳。
