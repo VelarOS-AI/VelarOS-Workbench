@@ -36,6 +36,7 @@ import {
   parseWorkbenchGoToLineInput,
 } from '@renderer/models/editor/workbenchEditorModel'
 import { isDirtyTab } from '@renderer/models/editor/workbenchEditorTabs'
+import type { WorkbenchEditorVimHostCommand } from '@renderer/models/editor/workbenchEditorVim'
 import {
   isWorkbenchGitBlameVisible,
   subscribeWorkbenchGitBlameVisible,
@@ -214,7 +215,8 @@ export interface WorkbenchEditorPanelDiffProps {
     onClose: () => void
     onSelect: () => void
     onContentChange: (content: string) => void
-    onSave: () => void
+    /** 保存；能报结果的话返回存下了没有（`:wq` 据此决定关不关）。 */
+    onSave: () => void | Promise<boolean>
     readOnly?: boolean
   }>
   onCloseDiffTab?: () => void
@@ -825,6 +827,44 @@ export function EditorPanel({
     if (selectedFilePath && !selectedTabPinned) onCloseOpenFile(selectedFilePath)
   }
 
+  /** `:wq` 等着关的文件：保存落定（不在保存中了）、而且确实存下了才关。 */
+  const [closeAfterSavePath, setCloseAfterSavePath] = useState<Nullable<string>>(null)
+  /** 轻量预览标签最近一次保存：`:wq` 等它的结果。 */
+  const lightTabSaveRef = useRef<Nullable<Promise<unknown>>>(null)
+  const lightTabLatest = useLatest(lightTab)
+
+  /**
+   * Vim 键位方案下在这一组的编辑器里敲的 `:q`、`:wq`、`:wa`。关标签走平常的关闭：固定的标签不关，没保存的
+   * 改动先问。`:wq` 到这里时编辑器已经走过保存了，等它落定、存下了才关；没存下（外部改过、写盘失败，保存那边
+   * 已经提示了）就留着。
+   */
+  function handleEditorVimCommand(command: WorkbenchEditorVimHostCommand): void {
+    if (command === 'write-all') {
+      onSaveAllOpenFiles()
+      return
+    }
+    if (command === 'quit') {
+      closeActiveEditorTab()
+      return
+    }
+    if (!lightTab) {
+      setCloseAfterSavePath(selectedFilePath)
+      return
+    }
+    const closingId = lightTab.item.id
+    void Promise.resolve(lightTabSaveRef.current).then((saved) => {
+      const current = lightTabLatest.current
+      if (saved !== false && current?.item.id === closingId) current.onClose()
+    })
+  }
+
+  useEffect(() => {
+    if (!closeAfterSavePath || isSavingFile) return
+
+    setCloseAfterSavePath(null)
+    if (closeAfterSavePath === selectedFilePath && !hasUnsavedChanges) closeActiveEditorTab()
+  })
+
   // 两组都记下每一次请求，只有当前组去关：换了当前组之后，另一组不会把旧请求再执行一遍。独占组（结构图、
   // AI 改动）占着整个编辑区时，它们的标签在左边那组里，由左边那组关。
   const closesActiveTab = group.focused || !!isolatedTabGroup
@@ -984,7 +1024,10 @@ export function EditorPanel({
               readOnly={lightTab.readOnly}
               workbenchTheme={workbenchTheme}
               onContentChange={lightTab.onContentChange}
-              onSave={lightTab.onSave}
+              onSave={() => {
+                lightTabSaveRef.current = Promise.resolve(lightTab.onSave())
+              }}
+              onVimCommand={handleEditorVimCommand}
             />
           ) : (
             <>
@@ -1158,6 +1201,7 @@ export function EditorPanel({
                           onAddFilesToChat ? () => onAddFilesToChat([selectedFile.path]) : undefined
                         }
                         onSave={onSaveSelectedFile}
+                        onVimCommand={handleEditorVimCommand}
                       />
                     </Suspense>
                   )

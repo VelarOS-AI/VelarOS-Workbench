@@ -1,5 +1,6 @@
 import { lazy, type ReactElement, Suspense } from 'react'
 import { useWorkbenchI18n } from '@renderer/i18n'
+import type { WorkbenchEditorVimHostCommand } from '@renderer/models/editor/workbenchEditorVim'
 import {
   EMPTY_LIGHT_EDITOR_PROJECT_CONTEXT_INDEX,
   resolveLightEditorLanguagePath,
@@ -28,6 +29,8 @@ interface WorkbenchLightFilePanelProps {
   workbenchTheme?: WorkbenchThemeId
   onContentChange?: (content: string) => void
   onSave?: () => void
+  /** Vim 键位方案下 `:q`、`:wq`、`:wa` 要页面做的事。 */
+  onVimCommand?: (command: WorkbenchEditorVimHostCommand) => void
   readOnly?: boolean
 }
 
@@ -37,6 +40,7 @@ export function WorkbenchLightFilePanel({
   workbenchTheme = 'light-modern',
   onContentChange,
   onSave,
+  onVimCommand,
 }: WorkbenchLightFilePanelProps): ReactElement {
   const { t } = useWorkbenchI18n()
   if (tab.imagePreview)
@@ -78,6 +82,7 @@ export function WorkbenchLightFilePanel({
             onOpenGoToLine={() => undefined}
             onGoToDefinition={() => undefined}
             onSave={() => onSave?.()}
+            onVimCommand={onVimCommand}
           />
         </Suspense>
         {!!tab.truncated && (

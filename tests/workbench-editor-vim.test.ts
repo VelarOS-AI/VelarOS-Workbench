@@ -537,6 +537,19 @@ void describe('vim: loaded only for the Vim preset, only in the file editor', ()
       ]
     )
   })
+
+  void test('the parts that load at startup only know the mode store', () => {
+    for (const path of [
+      'src/renderer/src/components/editor/EditorPanel.tsx',
+      'src/renderer/src/components/editor/WorkbenchLightFilePanel.tsx',
+    ]) {
+      const code = readCode(path)
+      assert.match(code, /from '@renderer\/models\/editor\/workbenchEditorVim'/u, path)
+      assert.doesNotMatch(code, /workbenchEditorVimLayer|workbenchEditorVimKeys|useWorkbenchEditorVim/u, path)
+    }
+    // 模式的那个文件自己不引别的。
+    assert.doesNotMatch(readCode('src/renderer/src/models/editor/workbenchEditorVim.ts'), /^import /mu)
+  })
 })
 
 void describe('vim: :w, :q, :wq and :wa in the editor', () => {
@@ -552,6 +565,33 @@ void describe('vim: :w, :q, :wq and :wa in the editor', () => {
     assert.match(
       editor,
       /saveAndQuit: \(view\) => \{[\s\S]*?const savedPath = pathRef\.current\s*void saveFromEditor\(view\)\.then\(\(\) => \{\s*if \(pathRef\.current === savedPath\) callbacksRef\.current\.onVimCommand\?\.\('write-quit'\)\s*\}\)/u
+    )
+  })
+
+  void test('the page closes through the normal close path, and :wq only after the save landed', () => {
+    const panel = readSource('src/renderer/src/components/editor/EditorPanel.tsx')
+    const handler = panel.slice(
+      panel.indexOf('function handleEditorVimCommand('),
+      panel.indexOf('// 两组都记下每一次请求')
+    )
+    assert.match(handler, /if \(command === 'write-all'\) \{\s*onSaveAllOpenFiles\(\)\s*return\s*\}/u)
+    // 关标签就是 ⌘W 走的那个函数：固定的标签不关，没保存的改动先问。
+    assert.match(handler, /if \(command === 'quit'\) \{\s*closeActiveEditorTab\(\)\s*return\s*\}/u)
+    assert.match(handler, /setCloseAfterSavePath\(selectedFilePath\)/u)
+    assert.match(
+      handler,
+      /if \(!closeAfterSavePath \|\| isSavingFile\) return\s*setCloseAfterSavePath\(null\)\s*if \(closeAfterSavePath === selectedFilePath && !hasUnsavedChanges\) closeActiveEditorTab\(\)/u
+    )
+    // 轻量预览标签：等它这次保存的结果，存下了才关。
+    assert.match(handler, /if \(saved !== false && current\?\.item\.id === closingId\) current\.onClose\(\)/u)
+    assert.match(panel, /lightTabSaveRef\.current = Promise\.resolve\(lightTab\.onSave\(\)\)/u)
+    assert.equal(panel.match(/onVimCommand=\{handleEditorVimCommand\}/gu)?.length, 2)
+
+    const model = readSource('src/renderer/src/hooks/useStandaloneWorkbenchPageModel.tsx')
+    assert.match(model, /async function saveEmbeddedLightTab\(\): Promise<boolean> \{/u)
+    assert.match(
+      readSource('src/renderer/src/components/embedded/workbenchEmbeddedKernelAdapter.ts'),
+      /onSave: \(\) => model\.actions\.saveEmbeddedLightTab\(\),/u
     )
   })
 })

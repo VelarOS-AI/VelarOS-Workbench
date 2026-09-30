@@ -297,7 +297,7 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
               onClose: editorNavigation.closeLightTab,
               onSelect: () => undefined,
               onContentChange: editorNavigation.updateLightTabContent,
-              onSave: () => void model.actions.saveEmbeddedLightTab(),
+              onSave: () => model.actions.saveEmbeddedLightTab(),
             }
           : null,
         onCloseDiffTab: editorNavigation.closeDiff,

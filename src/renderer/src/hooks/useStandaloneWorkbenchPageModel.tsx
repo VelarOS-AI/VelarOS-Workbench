@@ -970,9 +970,10 @@ export function useStandaloneWorkbenchPageModel(
     }
   }
 
-  async function saveEmbeddedLightTab(): Promise<void> {
+  /** 保存轻量预览标签里的文件；返回存下了没有（存不了的、写盘失败的是 false）。 */
+  async function saveEmbeddedLightTab(): Promise<boolean> {
     const tab = editorNavigation.lightTab
-    if (!tab || tab.truncated || tab.textIssue) return
+    if (!tab || tab.truncated || tab.textIssue) return false
 
     try {
       const saved = await saveLightEditorTab(tab, {
@@ -984,12 +985,14 @@ export function useStandaloneWorkbenchPageModel(
       translate.messageLatest.current.success({
         title: translate.tLatest.current('workbench.saveSucceeded'),
       })
+      return true
     } catch (error) {
       const appError = AppError.from(error)
       translate.messageLatest.current.error({
         title: translate.tLatest.current('workbench.saveFileFailed'),
         description: appError.message,
       })
+      return false
     }
   }
 
