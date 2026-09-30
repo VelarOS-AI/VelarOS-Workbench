@@ -944,18 +944,19 @@ void describe('split editor wiring', () => {
     // 只认带着标签类型的拖放：文件树里的文件、文字拖过来不接。
     assert.match(tabBar, /return readWorkbenchEditorTabDrag\(event\.dataTransfer\.types\)/u)
     assert.match(tabBar, /event\.dataTransfer\.setData\(WorkbenchEditorTabDragType, path\)/u)
-    // 落在另一组标签栏以外的地方（编辑器上）：那一组在捕获阶段接下来、挪进去，编辑器收不到这次拖放
-    // （否则会把标签带着的路径当文字插进正文）。标签栏上的落点还是标签栏自己接。
-    assert.match(
-      groupsPanel,
-      /if \(!canDropWorkbenchEditorTabOnGroup\(drag, index\)\) return null/u
-    )
+    // 落在标签栏以外的地方（编辑器上）：那一组在捕获阶段接下来，编辑器收不到这次拖放（否则会把标签带着
+    // 的路径当文字插进正文）。另一组拖来的挪进去；自己这一组的标签落在这里什么都不做。标签栏上的落点还是
+    // 标签栏自己接。
     assert.match(groupsPanel, /return element\?\.closest\('\[role="tablist"\]'\) \? null : drag/u)
     assert.match(groupsPanel, /onDragOverCapture=\{\(event\) => handleGroupDragOver\(index, event\)\}/u)
     assert.match(groupsPanel, /onDropCapture=\{\(event\) => handleGroupDrop\(index, event\)\}/u)
     assert.match(
       groupsPanel,
-      /event\.preventDefault\(\)\s*event\.stopPropagation\(\)\s*setTabDropGroup\(null\)\s*endWorkbenchEditorTabDrag\(\)\s*onMoveTabToGroup\(drag\.path, index\)/u
+      /const accepts = canDropWorkbenchEditorTabOnGroup\(drag, index\)\s*event\.dataTransfer\.dropEffect = accepts \? 'move' : 'none'/u
+    )
+    assert.match(
+      groupsPanel,
+      /event\.preventDefault\(\)\s*event\.stopPropagation\(\)\s*setTabDropGroup\(null\)\s*endWorkbenchEditorTabDrag\(\)\s*if \(canDropWorkbenchEditorTabOnGroup\(drag, index\)\) onMoveTabToGroup\(drag\.path, index\)/u
     )
     // 挪进左边那组：盖在那组编辑器上的 Git 对比、只读预览让开，挪过去的标签就在眼前。
     assert.match(pageModel, /if \(landedIndex === 0\) editorNavigation\.uncoverPrimaryGroup\(\)/u)

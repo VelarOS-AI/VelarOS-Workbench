@@ -249,40 +249,42 @@ export function EditorGroupsPanel({
   }, [isSplit])
 
   /**
-   * 另一组的标签拖到了这一组标签栏以外的地方：拖的是谁；不归这里接的为 null。标签栏上的落点（落在哪个标签
-   * 前面、空白处）由标签栏自己接。
+   * 标签拖到了这一组标签栏以外的地方（编辑器、预览）：拖的是谁；拖的不是标签、或者还在标签栏上（落在哪个
+   * 标签前面、空白处由标签栏自己接）为 null。
    */
   function readTabDragOverGroupBody(
-    index: number,
     event: ReactDragEvent<HTMLDivElement>
   ): Nullable<WorkbenchEditorTabDrag> {
     const drag = readWorkbenchEditorTabDrag(event.dataTransfer.types)
-    if (!canDropWorkbenchEditorTabOnGroup(drag, index)) return null
+    if (!drag) return null
     const { target } = event
     const element = target instanceof Element ? target : target instanceof Node ? target.parentElement : null
     return element?.closest('[role="tablist"]') ? null : drag
   }
 
   // 这两个在捕获阶段接、不再往里传：编辑器收不到这次拖放——否则它会把标签带着的路径当文字插进正文里。
+  // 另一组拖来的标签松手挪进这一组；自己这一组的标签落在这里什么都不做（换位置只在标签栏上做）。
   function handleGroupDragOver(index: number, event: ReactDragEvent<HTMLDivElement>): void {
-    if (!readTabDragOverGroupBody(index, event)) {
+    const drag = readTabDragOverGroupBody(event)
+    if (!drag) {
       if (tabDropGroup === index) setTabDropGroup(null)
       return
     }
     event.preventDefault()
     event.stopPropagation()
-    event.dataTransfer.dropEffect = 'move'
-    if (tabDropGroup !== index) setTabDropGroup(index)
+    const accepts = canDropWorkbenchEditorTabOnGroup(drag, index)
+    event.dataTransfer.dropEffect = accepts ? 'move' : 'none'
+    if (accepts && tabDropGroup !== index) setTabDropGroup(index)
   }
 
   function handleGroupDrop(index: number, event: ReactDragEvent<HTMLDivElement>): void {
-    const drag = readTabDragOverGroupBody(index, event)
+    const drag = readTabDragOverGroupBody(event)
     if (!drag) return
     event.preventDefault()
     event.stopPropagation()
     setTabDropGroup(null)
     endWorkbenchEditorTabDrag()
-    onMoveTabToGroup(drag.path, index)
+    if (canDropWorkbenchEditorTabOnGroup(drag, index)) onMoveTabToGroup(drag.path, index)
   }
 
   function handleGroupDragLeave(index: number, event: ReactDragEvent<HTMLDivElement>): void {
