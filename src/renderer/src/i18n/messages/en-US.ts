@@ -491,6 +491,18 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
       UU: 'both modified',
     },
     gitConflictMoreFiles: '{files} and others ({count} files)',
+    mergeConflict: {
+      acceptCurrent: 'Accept Current',
+      acceptIncoming: 'Accept Incoming',
+      acceptBoth: 'Accept Both',
+      compare: 'Compare',
+      stopCompare: 'Stop Comparing',
+      currentChange: '(Current Change)',
+      incomingChange: '(Incoming Change)',
+      resolvedTitle: 'Conflicts resolved',
+      resolvedDescription:
+        'Every conflict in “{path}” is resolved and saved. Mark it as resolved (git add)?',
+    },
     gitCommitConflictsTitle: 'Unresolved merge conflicts',
     gitCommitConflictsBlocked:
       '{files} still have merge conflicts. Resolve them and mark each one as resolved before committing.',

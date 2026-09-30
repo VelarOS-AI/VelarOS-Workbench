@@ -27,6 +27,8 @@ export interface WorkbenchMessageOptions {
   duration?: number
   showClose?: boolean
   onClose?: () => void
+  /** 提示上的一个按钮（比如「标记为已解决」）；点了就收起提示。 */
+  action?: { label: string; onClick: () => void }
 }
 
 export interface WorkbenchMessageApi {
@@ -53,6 +55,7 @@ function show(options: WorkbenchMessageOptions): void {
     duration: options.duration,
     closeButton: options.showClose ?? true,
     onDismiss: options.onClose,
+    action: options.action,
   }
 
   switch (tone) {

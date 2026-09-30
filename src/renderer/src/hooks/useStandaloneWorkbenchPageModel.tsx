@@ -68,6 +68,7 @@ import { useWorkbenchController } from './useWorkbenchController'
 import { useWorkbenchEditorNavigationState } from './useWorkbenchEditorNavigationState'
 import { useWorkbenchGitChangeActions } from './useWorkbenchGitChangeActions'
 import { useWorkbenchGitState } from './useWorkbenchGitState'
+import { useWorkbenchMergeResolutionOffer } from './useWorkbenchMergeResolutionOffer'
 import { useWorkbenchProjectSessionPersistence } from './useWorkbenchProjectSessionPersistence'
 import { useWorkbenchTopRunControl } from './useWorkbenchTopRunControl'
 
@@ -571,6 +572,14 @@ export function useStandaloneWorkbenchPageModel(
         editorNavigation.closeDiff()
       }
     },
+    translate,
+  })
+  // 冲突文件在编辑器里解决完、存了盘：问一句要不要标记为已解决。
+  useWorkbenchMergeResolutionOffer({
+    workspaceRoot: toNullable(workbench.activeProject?.rootPath),
+    changeItems: gitState.changeItems,
+    openTabs: workbench.openTabs,
+    onResolved: refreshGitPanelWithWorkspace,
     translate,
   })
 

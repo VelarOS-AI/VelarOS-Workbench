@@ -56,6 +56,14 @@ export function isWorkspaceGitConflictEntry(
   return UnmergedStatusPairs.has(`${entry.indexStatus}${entry.workTreeStatus}`)
 }
 
+/** 冲突标记：行首 7 个 `<` 或 `>`，后面是空格（分支名）或行尾。 */
+const ConflictMarkerPattern = /^(?:<{7}|>{7})(?: |\r?$)/m
+
+/** 正文里还留着冲突标记：这个文件的冲突还没解决完，不能标记为已解决。 */
+export function hasWorkspaceGitConflictMarkers(text: string): boolean {
+  return ConflictMarkerPattern.test(text)
+}
+
 export interface WorkbenchGitRootRequest {
   workspaceRoot: string
 }

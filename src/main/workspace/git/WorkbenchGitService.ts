@@ -39,7 +39,10 @@ import type {
   WorkspaceGitRemoteActionResult,
   WorkspaceGitStatusResult,
 } from '@shared/contracts'
-import { isWorkspaceGitConflictEntry } from '@shared/workbenchGit'
+import {
+  hasWorkspaceGitConflictMarkers,
+  isWorkspaceGitConflictEntry,
+} from '@shared/workbenchGit'
 import {
   buildWorkbenchGitHunkPatch,
   isSameWorkbenchGitHunk,
@@ -74,8 +77,6 @@ const MaxExpandedUntrackedFiles = 5_000
 const RemoteActionTimeoutMs = 120_000
 /** 标记冲突已解决前检查冲突标记，最多读这么大的文件；更大的不查。 */
 const MaxConflictMarkerScanBytes = 16 * 1024 * 1024
-/** 冲突标记：行首 7 个 `<` 或 `>`，后面是空格（分支名）或行尾。 */
-const ConflictMarkerPattern = /^(?:<{7}|>{7})(?: |\r?$)/m
 /** 日志的每个提交以 \x1e 开头，字段之间是 \x1f。 */
 const LogFormat = '--format=%x1e%H%x1f%h%x1f%s%x1f%an%x1f%ae%x1f%ct%x1f%D'
 /** git 的输出按 UTF-8 读，读不懂的字节变成它。 */
@@ -1311,7 +1312,7 @@ export class WorkbenchGitService {
     const content = await readFile(absolutePath)
     // 二进制文件里 git 不写冲突标记。
     if (content.includes(0)) return false
-    return ConflictMarkerPattern.test(content.toString('utf8'))
+    return hasWorkspaceGitConflictMarkers(content.toString('utf8'))
   }
 
   private parseStatus(raw: string, prefix: string): WorkspaceGitStatusResult {

@@ -219,6 +219,7 @@ import {
   getWorkbenchLanguageServiceSemanticTokens,
   resolveWorkbenchLanguageServiceCompletion,
 } from '@renderer/models/editor/workbenchLanguageServiceIpc'
+import { workbenchMergeConflictExtension } from '@renderer/models/editor/workbenchMergeConflicts'
 import { buildWorkbenchMinimalTextChanges } from '@renderer/models/editor/workbenchMinimalTextChanges'
 import {
   createWorkbenchPackageScriptRunGutterExtension,
@@ -1200,6 +1201,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
     ref
   ): ReactElement {
     const { t } = useWorkbenchI18n()
+    const tLatest = useLatest(t)
     const hostRuntime = useWorkbenchHostRuntime()
     const commentStore = useWorkbenchCommentStore()
     const containerRef = useRef<HTMLDivElement>(null)
@@ -2591,6 +2593,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         indentationCompartment.of(current.indentation),
         wordWrapCompartment.of(current.wordWrap),
         workbenchIndentGuideExtension,
+        workbenchMergeConflictExtension((key) => tLatest.current(key)),
         instance.comments,
         instance.mouseHandlers,
         languageHoverCompartment.of(current.languageHover),
