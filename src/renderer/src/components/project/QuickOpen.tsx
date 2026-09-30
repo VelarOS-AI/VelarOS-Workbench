@@ -13,6 +13,12 @@ import { getWorkbenchEditorLineCount } from '@renderer/models/editor/workbenchEd
 import type { WorkbenchContentSearchMatch } from '@renderer/models/files/workbenchContentSearchModel'
 import { getWorkbenchFilePresentationVariant } from '@renderer/models/files/workbenchFilePresentation'
 import {
+  buildWorkbenchPaletteCommands,
+  filterWorkbenchPaletteCommands,
+  type WorkbenchPaletteCommandItem,
+  type WorkbenchPaletteCommandMatch,
+} from '@renderer/models/layout/workbenchCommandPalette'
+import {
   DEFAULT_WORKBENCH_KEYBOARD_SHORTCUT_MAP,
   formatWorkbenchShortcutHint,
   type WorkbenchKeyboardShortcutMap,
@@ -21,7 +27,9 @@ import {
   buildWorkbenchQuickOpenFileItems,
   buildWorkbenchQuickOpenRecentItems,
   parseWorkbenchQuickOpenQuery,
+  WorkbenchQuickOpenCommandPrefix,
   type WorkbenchQuickOpenFileItem,
+  WorkbenchQuickOpenLinePrefix,
   type WorkbenchQuickOpenQuery,
 } from '@renderer/models/layout/workbenchQuickOpenModel'
 import type { WorkbenchProject } from '@renderer/models/project/workbenchProjects'
@@ -33,10 +41,13 @@ import { Text } from '@velaros-ai/ui/primitives/display/Text'
 import { Title } from '@velaros-ai/ui/primitives/display/Title'
 import { SearchField } from '@velaros-ai/ui/primitives/forms/SearchField'
 
+import type { WorkbenchCommandPaletteController } from '../../hooks/useWorkbenchCommandPalette'
 import { useWorkbenchContentSearchController } from '../../hooks/useWorkbenchContentSearchController'
 import { useWorkbenchProjectFileList } from '../../hooks/useWorkbenchProjectFileList'
+import type { WorkbenchQuickOpenRequest } from '../../hooks/useWorkbenchSurfaceState'
+import { translateWorkbenchAppMessage } from '../../i18n/useStandaloneWorkbenchLocalization'
 import styles from '../../styles/workbenchPageStyles'
-import { useTimerScope } from '../../support/genericHooks'
+import { useLatest, useTimerScope } from '../../support/genericHooks'
 import { WorkbenchCodeSnippet } from '../editor/WorkbenchCodeSnippet'
 import { WorkbenchFileTypeIcon } from '../files/WorkbenchFileTypeIcon'
 
@@ -44,6 +55,8 @@ const QUICK_OPEN_CONTENT_SEARCH_LIMIT = 60
 const QUICK_OPEN_FILE_RESULT_LIMIT = 50
 /** 内容搜索至少要几个字符：一个字母几乎每行都中，只会拖慢结果。 */
 const QUICK_OPEN_CONTENT_SEARCH_MIN_LENGTH = 2
+const NoCommands: readonly WorkbenchPaletteCommandItem[] = []
+const NoContentMatches: readonly WorkbenchContentSearchMatch[] = []
 
 export interface WorkbenchQuickOpenPosition {
   line: number
@@ -52,6 +65,8 @@ export interface WorkbenchQuickOpenPosition {
 
 interface QuickOpenProps {
   isOpen: boolean
+  /** 最近一次要求打开：⌘P 是按文件名找，⇧⌘P 是命令面板（输入框里预填 `>`）。 */
+  request: WorkbenchQuickOpenRequest
   activeProject: Nullable<WorkbenchProject>
   openTabs: WorkbenchOpenEditorTab[]
   /** 编辑器的当前文件：最近打开的列表把它放到最后，`:行号` 在它里面跳。 */
@@ -60,7 +75,9 @@ interface QuickOpenProps {
   activeFileContent: string
   /** 最近打开过的文件，最近的在前。 */
   recentFilePaths: readonly string[]
-  /** 当前快捷键设置：标题栏上的快捷键提示按它现算。 */
+  /** 命令面板里各条命令此刻能不能跑、怎么跑。 */
+  commandPalette: WorkbenchCommandPaletteController
+  /** 当前快捷键设置：标题栏与命令右侧的快捷键提示按它现算。 */
   keymap?: WorkbenchKeyboardShortcutMap
   onClose: () => void
   /** 打开文件；给了位置就跳到那一行（列）。 */
@@ -77,6 +94,7 @@ type QuickOpenRow =
     }
   | { kind: 'content'; key: string; match: WorkbenchContentSearchMatch }
   | { kind: 'line'; key: string; path: string; position: Required<WorkbenchQuickOpenPosition> }
+  | { kind: 'command'; key: string; match: WorkbenchPaletteCommandMatch }
 
 interface QuickOpenSection {
   key: string
@@ -129,11 +147,13 @@ function FileIcon({ fileName }: { fileName: string }): ReactElement {
 
 export function QuickOpen({
   isOpen,
+  request,
   activeProject,
   openTabs,
   activeFilePath,
   activeFileContent,
   recentFilePaths,
+  commandPalette,
   keymap = DEFAULT_WORKBENCH_KEYBOARD_SHORTCUT_MAP,
   onClose,
   onOpenFile,
@@ -143,10 +163,13 @@ export function QuickOpen({
   const listRef = useRef<HTMLDivElement>(null)
   /** 打开前焦点在哪：关掉（不去别处）时还回去。 */
   const returnFocusRef = useRef<Nullable<HTMLElement>>(null)
+  /** 已经照办的那次打开要求：开着时又来一次，就是又按了一次快捷键。 */
+  const handledRequestIdRef = useRef<Nullable<number>>(null)
   const timers = useTimerScope('QuickOpen')
   const idPrefix = useId()
   const listboxId = `${idPrefix}-results`
   const [query, setQuery] = useState('')
+  const queryLatest = useLatest(query)
   const [activeIndex, setActiveIndex] = useState(0)
   // 结果按「延后一步」的输入算：大项目里给几万个文件打分时，输入框照样跟手。
   const resultQuery = useDeferredValue(query)
@@ -154,9 +177,9 @@ export function QuickOpen({
   const openTabPaths = useMemo(() => openTabs.map((tab) => tab.path), [openTabs])
   const projectFiles = useWorkbenchProjectFileList({
     projectRoot: activeProject?.rootPath ?? null,
-    active: isOpen,
+    active: isOpen && parsedQuery.mode === 'files',
   })
-  // 内容结果排在文件后面：够长的文件名输入才顺带搜内容（有防抖），跳行模式不搜。
+  // 内容结果排在文件后面：够长的文件名输入才顺带搜内容（有防抖），跳行与命令模式不搜。
   const contentQuery = resultQuery.trim()
   const contentSearchEnabled =
     isOpen &&
@@ -175,11 +198,38 @@ export function QuickOpen({
     [activeFileContent, isOpen, parsedQuery.mode]
   )
 
+  /** 此刻能跑的命令（名字按当前语言，另带英文名）。只有命令模式用得着，每次现算——就二十几条。 */
+  function buildCommandItems(): readonly WorkbenchPaletteCommandItem[] {
+    return buildWorkbenchPaletteCommands({
+      isAvailable: commandPalette.isAvailable,
+      keymap,
+      translate: (key) => t(key),
+      translateAlias: (key) => translateWorkbenchAppMessage('en-US', key),
+    })
+  }
+
   /** 按一次输入排出结果分组；内容结果只有屏幕上那次输入才有（它是异步搜出来的）。 */
   function buildSections(
     parsed: WorkbenchQuickOpenQuery,
-    contentMatches: readonly WorkbenchContentSearchMatch[]
+    contentMatches: readonly WorkbenchContentSearchMatch[],
+    commands: readonly WorkbenchPaletteCommandItem[]
   ): QuickOpenSection[] {
+    if (parsed.mode === 'commands') {
+      const matches = filterWorkbenchPaletteCommands(commands, parsed.text)
+      if (matches.length === 0) return []
+
+      return [
+        {
+          key: 'commands',
+          rows: matches.map((match) => ({
+            kind: 'command',
+            key: `command:${match.command.id}`,
+            match,
+          })),
+        },
+      ]
+    }
+
     if (parsed.mode === 'line') {
       if (!activeFilePath || !parsed.line) return []
 
@@ -192,7 +242,6 @@ export function QuickOpen({
         },
       ]
     }
-    if (parsed.mode !== 'files') return []
 
     const sections: QuickOpenSection[] = []
     if (!parsed.text) {
@@ -240,12 +289,25 @@ export function QuickOpen({
     return sections
   }
 
+  const commandItems = useMemo(
+    () => (isOpen && parsedQuery.mode === 'commands' ? buildCommandItems() : NoCommands),
+    // 能跑哪些命令随页面状态变（isAvailable 每次渲染都新建），名字随语言、快捷键提示随 keymap。
+    [commandPalette.isAvailable, isOpen, keymap, parsedQuery.mode, t]
+  )
   const sections = useMemo(
-    () => (isOpen ? buildSections(parsedQuery, contentSearchEnabled ? contentSearchMatches : []) : []),
-    // buildSections 读的都在下面：输入、文件清单、最近打开、标签、当前文件与内容结果（函数本身每次渲染都新建）。
+    () =>
+      isOpen
+        ? buildSections(
+            parsedQuery,
+            contentSearchEnabled ? contentSearchMatches : NoContentMatches,
+            commandItems
+          )
+        : [],
+    // buildSections 读的都在下面：输入、文件清单、最近打开、标签、当前文件、内容结果与命令（函数本身每次渲染都新建）。
     [
       activeFileContent,
       activeFilePath,
+      commandItems,
       contentSearchEnabled,
       contentSearchMatches,
       isOpen,
@@ -261,27 +323,55 @@ export function QuickOpen({
   const selectedIndex = Math.min(activeIndex, Math.max(0, rows.length - 1))
 
   useEffect(() => {
-    if (!isOpen) return
+    if (!isOpen) {
+      handledRequestIdRef.current = null
+      return undefined
+    }
+    if (handledRequestIdRef.current === request.id) return undefined
 
-    const previousFocus = document.activeElement
-    returnFocusRef.current =
-      previousFocus instanceof HTMLElement && previousFocus !== document.body ? previousFocus : null
-    setQuery('')
+    const alreadyOpen = handledRequestIdRef.current !== null
+    handledRequestIdRef.current = request.id
+    const wantsCommands = request.mode === 'commands'
+    // 开着时又按了同一个快捷键：选中下一项（同 VS Code）；按的是另一个就换过去。
+    const showsCommands = parseWorkbenchQuickOpenQuery(queryLatest.current).mode === 'commands'
+    if (alreadyOpen && showsCommands === wantsCommands) {
+      setActiveIndex((index) => index + 1)
+      return undefined
+    }
+
+    if (!alreadyOpen) {
+      const previousFocus = document.activeElement
+      returnFocusRef.current =
+        previousFocus instanceof HTMLElement && previousFocus !== document.body
+          ? previousFocus
+          : null
+    }
+    setQuery(wantsCommands ? WorkbenchQuickOpenCommandPrefix : '')
     setActiveIndex(0)
-    const frame = timers.nextFrame(() => inputRef.current?.focus(), {
-      label: 'workbench.quickOpen.focus',
-    })
+    const frame = timers.nextFrame(
+      () => {
+        const input = inputRef.current
+        input?.focus()
+        input?.setSelectionRange(input.value.length, input.value.length)
+      },
+      { label: 'workbench.quickOpen.focus' }
+    )
     return () => {
       frame.cancel()
     }
-  }, [isOpen, timers])
+  }, [isOpen, queryLatest, request.id, request.mode, timers])
+
+  // 换了输入，列表回到顶上；键盘移动选中项时让它露在视野里。
+  useEffect(() => {
+    listRef.current?.scrollTo({ top: 0 })
+  }, [resultQuery])
 
   useEffect(() => {
     const row = listRef.current?.querySelector<HTMLButtonElement>(
       `[data-quick-open-index="${selectedIndex}"]`
     )
     row?.scrollIntoView({ block: 'nearest' })
-  }, [selectedIndex, rows])
+  }, [selectedIndex])
 
   if (!isOpen) return null
 
@@ -293,31 +383,59 @@ export function QuickOpen({
     if (returnFocus && target?.isConnected) target.focus()
   }
 
+  /** 换一种找法（命令「转到文件」「转到行」）：输入框换成那种写法，接着敲。 */
+  function switchInput(nextQuery: string): void {
+    setQuery(nextQuery)
+    setActiveIndex(0)
+  }
+
   function openRow(row: QuickOpenRow): void {
-    close(false)
     switch (row.kind) {
       case 'file': {
+        close(false)
         onOpenFile(row.item.path, row.position)
         return
       }
       case 'content': {
+        close(false)
         onOpenFile(row.match.path, { line: row.match.line, column: row.match.column })
         return
       }
       case 'line': {
+        close(false)
         onOpenFile(row.path, row.position)
+        return
+      }
+      case 'command': {
+        const { id } = row.match.command
+        if (id === 'go-to-file') {
+          switchInput('')
+          return
+        }
+        if (id === 'go-to-line') {
+          switchInput(WorkbenchQuickOpenLinePrefix)
+          return
+        }
+        // 先把焦点还回去再跑：命令作用在打开面板前的地方（编辑器），自己要焦点的（设置、终端）再拿走。
+        close(true)
+        commandPalette.run(id)
       }
     }
   }
 
   /** 回车：结果还停在上一步的输入上（刚粘贴、敲得快）时按现在的输入现算，打开排第一的那项。 */
   function openSelectedRow(): void {
-    const row =
-      query === resultQuery
-        ? rows[selectedIndex]
-        : buildSections(parseWorkbenchQuickOpenQuery(query), []).flatMap(
-            (section) => section.rows
-          )[0]
+    if (query === resultQuery) {
+      const row = rows[selectedIndex]
+      if (row) openRow(row)
+      return
+    }
+
+    const parsed = parseWorkbenchQuickOpenQuery(query)
+    const commands = parsed.mode === 'commands' ? buildCommandItems() : NoCommands
+    const [row] = buildSections(parsed, NoContentMatches, commands).flatMap(
+      (section) => section.rows
+    )
     if (row) openRow(row)
   }
 
@@ -327,6 +445,7 @@ export function QuickOpen({
   }
 
   function emptyMessage(): string {
+    if (parsedQuery.mode === 'commands') return t('workbench.commandPaletteEmpty')
     if (parsedQuery.mode === 'line') {
       if (!activeFilePath) return t('workbench.quickOpenGoToLineNoFile')
 
@@ -418,9 +537,33 @@ export function QuickOpen({
           </>
         )
       }
+      case 'command': {
+        const { command, labelMatches, aliasMatches } = row.match
+        return (
+          <>
+            <span className={styles.quickOpenItemCopy}>
+              <span className={styles.quickOpenItemHeading}>
+                <Text truncate className={styles.quickOpenCommandLabel}>
+                  {renderMatchedText(command.label, labelMatches)}
+                </Text>
+                {aliasMatches && command.alias && (
+                  <Text truncate tone="caption" className={styles.quickOpenItemPath}>
+                    {renderMatchedText(command.alias, aliasMatches)}
+                  </Text>
+                )}
+              </span>
+            </span>
+            {command.shortcut && (
+              <kbd className={styles.quickOpenItemShortcut}>{command.shortcut}</kbd>
+            )}
+          </>
+        )
+      }
     }
   }
 
+  const commandsMode = parseWorkbenchQuickOpenQuery(query).mode === 'commands'
+  const title = commandsMode ? t('workbench.commandPaletteTitle') : t('workbench.quickOpenTitle')
   let rowIndex = 0
   const optionId = (index: number): string => `${idPrefix}-option-${index}`
 
@@ -430,17 +573,19 @@ export function QuickOpen({
         className={styles.quickOpenDialog}
         role="dialog"
         aria-modal="true"
-        aria-label={t('workbench.quickOpenTitle')}
+        aria-label={title}
         onMouseDown={(event) => event.stopPropagation()}
       >
         <header className={styles.quickOpenHeader}>
           <div>
-            <Title level={5}>{t('workbench.quickOpenTitle')}</Title>
+            <Title level={5}>{title}</Title>
             <Text tone="caption" truncate>
-              {t('workbench.globalSearchFiles')}
+              {commandsMode ? t('workbench.commandPaletteCaption') : t('workbench.globalSearchFiles')}
             </Text>
           </div>
-          <kbd>{formatWorkbenchShortcutHint(keymap['quick-open'])}</kbd>
+          <kbd>
+            {formatWorkbenchShortcutHint(keymap[commandsMode ? 'command-palette' : 'quick-open'])}
+          </kbd>
         </header>
         <div className={styles.quickOpenInputRow}>
           <div className={styles.quickOpenInput}>
@@ -503,7 +648,7 @@ export function QuickOpen({
           id={listboxId}
           className={styles.quickOpenList}
           role="listbox"
-          aria-label={t('workbench.quickOpenTitle')}
+          aria-label={title}
         >
           {rows.length ? (
             sections.map((section) => {

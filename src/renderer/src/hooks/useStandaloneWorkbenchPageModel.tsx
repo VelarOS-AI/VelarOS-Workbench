@@ -12,6 +12,7 @@ import {
   type WorkbenchChatRunChangesTarget,
 } from '@renderer/composition'
 import { useWorkbenchAiChanges } from '@renderer/hooks/useWorkbenchAiChanges'
+import { useWorkbenchCommandPalette } from '@renderer/hooks/useWorkbenchCommandPalette'
 import { useWorkbenchKeyboardShortcuts } from '@renderer/hooks/useWorkbenchKeyboardShortcuts'
 import { useWorkbenchKeymapController } from '@renderer/hooks/useWorkbenchKeymapController'
 import { useWorkbenchLayoutController } from '@renderer/hooks/useWorkbenchLayoutController'
@@ -453,6 +454,7 @@ export function useStandaloneWorkbenchPageModel(
     onNavigateBack: () => void editorNavigation.goBack(),
     onNavigateForward: () => void editorNavigation.goForward(),
     onOpenQuickOpen: surface.openQuickOpen,
+    onOpenCommandPalette: surface.openCommandPalette,
     onReopenClosedTab: () => void reopenClosedEditorTab(),
     onRunLastCommand: workbench.rerunLastCommand,
     onSaveAll: () => workbench.saveAllOpenFiles(),
@@ -1008,6 +1010,27 @@ export function useStandaloneWorkbenchPageModel(
     await navigate({ target: 'file', path: WORKBENCH_NATIVE_AI_RULES_PATH })
   }
 
+  // 命令面板（⇧⌘P）：各条命令接到上面这些已有的动作上。
+  const commandPalette = useWorkbenchCommandPalette({
+    workbench,
+    surface,
+    editorCovered:
+      !!editorNavigation.diffItem ||
+      !!editorNavigation.lightTab ||
+      !!editorNavigation.debug.activeTabId ||
+      aiChanges.active ||
+      velarLogicGraphActive,
+    closeActiveEditor: () => setCloseActiveEditorTabRequestId((requestId) => requestId + 1),
+    exitCurrentProject,
+    navigateBack: editorNavigation.goBack,
+    navigateForward: editorNavigation.goForward,
+    openSettings: () => setSettingsOpen(true),
+    reopenClosedEditorTab,
+    showEditorSurface,
+    toggleBottomTool,
+    zoomEditor,
+  })
+
   const commandStatusLabel = getWorkbenchCommandStatusLabel(
     {
       commandResult: workbench.commandResult,
@@ -1042,6 +1065,8 @@ export function useStandaloneWorkbenchPageModel(
     gitChangeActions,
     /** 当前项目最近打开过的文件，最近的在前（快速打开用）。 */
     recentFilePaths,
+    /** 命令面板里各条命令此刻能不能跑、怎么跑。 */
+    commandPalette,
     /** 页面 chrome / i18n / 派生展示值。 */
     chrome: {
       lockedProjectId,

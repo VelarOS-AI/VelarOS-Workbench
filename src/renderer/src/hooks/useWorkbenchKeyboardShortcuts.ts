@@ -20,6 +20,8 @@ export interface UseWorkbenchKeyboardShortcutsOptions {
   onNavigateBack: () => void
   onNavigateForward: () => void
   onOpenQuickOpen: () => void
+  /** 打开命令面板（快速打开的 `>` 模式）。 */
+  onOpenCommandPalette: () => void
   /** 重新打开最近关掉的文件标签（回到上次的光标位置）。 */
   onReopenClosedTab: () => void
   onRunLastCommand: () => Promise<unknown>
@@ -56,6 +58,10 @@ export function createWorkbenchShortcutKeydownHandler(
       }
       case 'quick-open': {
         current.onOpenQuickOpen()
+        return
+      }
+      case 'command-palette': {
+        current.onOpenCommandPalette()
         return
       }
       case 'navigate-back': {
@@ -106,6 +112,7 @@ export function useWorkbenchKeyboardShortcuts({
   onNavigateBack,
   onNavigateForward,
   onOpenQuickOpen,
+  onOpenCommandPalette,
   onReopenClosedTab,
   onRunLastCommand,
   onSaveAll,
@@ -122,6 +129,7 @@ export function useWorkbenchKeyboardShortcuts({
     onNavigateBack,
     onNavigateForward,
     onOpenQuickOpen,
+    onOpenCommandPalette,
     onReopenClosedTab,
     onRunLastCommand,
     onSaveAll,
@@ -138,6 +146,7 @@ export function useWorkbenchKeyboardShortcuts({
     onNavigateBack,
     onNavigateForward,
     onOpenQuickOpen,
+    onOpenCommandPalette,
     onReopenClosedTab,
     onRunLastCommand,
     onSaveAll,

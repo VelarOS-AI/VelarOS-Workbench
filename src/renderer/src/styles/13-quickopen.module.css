@@ -126,6 +126,23 @@
   color: var(--status-green);
 }
 
+/* 命令面板的一行：命令名占满左侧（按英文名命中时英文名跟在后面），快捷键靠右。 */
+.quickOpenCommandLabel {
+  @apply min-w-0 truncate text-foreground;
+  font-size: 12px;
+}
+
+.quickOpenItemShortcut {
+  @apply ml-auto shrink-0 border text-muted-foreground;
+  padding: 0 5px;
+  border-color: var(--workbench-border);
+  border-radius: var(--workbench-radius-xs);
+  background: var(--workbench-control-bg);
+  font-family: inherit;
+  font-size: 10.5px;
+  line-height: 16px;
+}
+
 .quickOpenEmpty {
   @apply text-muted-foreground;
   padding: 14px;

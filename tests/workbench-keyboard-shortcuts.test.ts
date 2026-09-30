@@ -7,6 +7,7 @@ import {
   type UseWorkbenchKeyboardShortcutsOptions,
 } from '../src/renderer/src/hooks/useWorkbenchKeyboardShortcuts'
 import {
+  buildWorkbenchKeymapConflicts,
   DEFAULT_WORKBENCH_KEYBOARD_SHORTCUT_MAP,
   formatWorkbenchShortcutHint,
   getWorkbenchKeyboardShortcut,
@@ -58,6 +59,7 @@ function createHandler(platform = Mac) {
     onNavigateBack: () => calls.push('navigate-back'),
     onNavigateForward: () => calls.push('navigate-forward'),
     onOpenQuickOpen: () => calls.push('quick-open'),
+    onOpenCommandPalette: () => calls.push('command-palette'),
     onReopenClosedTab: () => calls.push('reopen-closed-tab'),
     onRunLastCommand: async () => calls.push('run-last-command'),
     onSaveAll: async () => calls.push('save-all'),
@@ -152,6 +154,26 @@ void describe('Workbench keyboard shortcuts', () => {
 
     handle(keydown('Enter', { metaKey: true, target: { tagName: 'BUTTON' } }))
     assert.deepEqual(calls, ['run-last-command'])
+  })
+
+  void test('Mod+Shift+P opens the command palette, Mod+P still opens Quick Open', () => {
+    const { calls, handle } = createHandler(Mac)
+    handle(keydown('P', { metaKey: true, shiftKey: true }))
+    handle(keydown('p', { metaKey: true }))
+    const { calls: windowsCalls, handle: handleOnWindows } = createHandler(Windows)
+    handleOnWindows(keydown('P', { ctrlKey: true, shiftKey: true }))
+    // ⌃⇧P 在 macOS 上不是命令面板：Mod 是 ⌘。
+    handle(keydown('P', { ctrlKey: true, shiftKey: true }))
+    assert.deepEqual([...calls, ...windowsCalls], ['command-palette', 'quick-open', 'command-palette'])
+    assert.equal(formatWorkbenchShortcutHint(DEFAULT_WORKBENCH_KEYBOARD_SHORTCUT_MAP['command-palette'], Mac), '⇧⌘P')
+    assert.equal(
+      formatWorkbenchShortcutHint(DEFAULT_WORKBENCH_KEYBOARD_SHORTCUT_MAP['command-palette'], Linux),
+      'Ctrl+Shift+P'
+    )
+  })
+
+  void test('no two default shortcuts share a key', () => {
+    assert.deepEqual(buildWorkbenchKeymapConflicts(DEFAULT_WORKBENCH_KEYBOARD_SHORTCUT_MAP), [])
   })
 
   void test('Mod+Shift+T reopens the last closed tab', () => {
