@@ -513,7 +513,7 @@ export class WorkbenchLanguageServiceWorkerClient {
   }
 
   /** 取消一个请求：调用方立刻得到取消错误，worker 丢掉还在排队的它、放弃正在算的它。 */
-  private cancel(id: number, error = new AppError('CANCELLED', 'Workbench 语言服务请求已被新请求取代。')): void {
+  private cancel(id: number, error = new AppError('CANCELLED', workbenchMainText('language.requestSuperseded'))): void {
     const pending = this.pending.get(id)
     if (!pending) return
     this.settle(pending, error)

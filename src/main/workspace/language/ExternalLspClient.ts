@@ -931,7 +931,10 @@ export class ExternalLspClient {
 
   private async initialize(): Promise<void> {
     if (this.disposed)
-      throw new AppError('INVARIANT', `${this.descriptor.label} 语言服务器客户端已关闭。`)
+      throw new AppError(
+        'INVARIANT',
+        workbenchMainText('language.clientClosed', { server: this.descriptor.label })
+      )
     if (this.initializePromise) return this.initializePromise
     const attempt = this.startAndInitialize()
     this.initializePromise = attempt
@@ -950,10 +953,16 @@ export class ExternalLspClient {
     await this.processTermination
     this.processTermination = null
     if (this.disposed)
-      throw new AppError('INVARIANT', `${this.descriptor.label} 语言服务器客户端已关闭。`)
+      throw new AppError(
+        'INVARIANT',
+        workbenchMainText('language.clientClosed', { server: this.descriptor.label })
+      )
     const command = this.descriptor.command
     if (!command)
-      throw new AppError('INVARIANT', `${this.descriptor.label} 缺少语言服务器命令。`)
+      throw new AppError(
+        'INVARIANT',
+        workbenchMainText('language.serverCommandMissing', { server: this.descriptor.label })
+      )
 
     const launch = launchFor(this.runtimeRoot, this.descriptor, this.workspaceRoot)
     const pathValue = extendPath(this.runtimeRoot, this.workspaceRoot)
@@ -1069,7 +1078,10 @@ export class ExternalLspClient {
   /** `signal` 中止（请求被新请求顶掉）时告诉服务器不必再算，并立刻以取消结束。 */
   private request(method: string, params: unknown, signal?: AbortSignal): Promise<unknown> {
     if (signal?.aborted)
-      return Promise.reject(new AppError('CANCELLED', `${this.descriptor.label} 语言服务器请求已取消：${method}。`))
+      return Promise.reject(new AppError(
+        'CANCELLED',
+        workbenchMainText('language.requestCancelled', { server: this.descriptor.label, method })
+      ))
     const id = this.nextRequestId++
     return new Promise((resolve, reject) => {
       const abandon = (error: AppError): void => {
@@ -1081,7 +1093,10 @@ export class ExternalLspClient {
         pending.reject(error)
       }
       const onAbort = (): void => abandon(
-        new AppError('CANCELLED', `${this.descriptor.label} 语言服务器请求已取消：${method}。`)
+        new AppError(
+        'CANCELLED',
+        workbenchMainText('language.requestCancelled', { server: this.descriptor.label, method })
+      )
       )
       const timeout = setTimeout(() => abandon(new AppError(
         'INTERNAL',
@@ -1125,7 +1140,10 @@ export class ExternalLspClient {
     const json = JSON.stringify(message)
     const size = Buffer.byteLength(json, 'utf8')
     if (size > MaxLspMessageBytes)
-      throw new AppError('INVARIANT', `${this.descriptor.label} LSP 消息超过 16 MiB 上限。`)
+      throw new AppError(
+        'INVARIANT',
+        workbenchMainText('language.messageTooLarge', { server: this.descriptor.label })
+      )
     this.write(child, Buffer.from(`Content-Length: ${size}\r\n\r\n${json}`, 'utf8'))
   }
 
@@ -1145,7 +1163,7 @@ export class ExternalLspClient {
     if (this.outboundLength + payload.length > MaxLspPendingWriteBytes) {
       this.fail(new AppError(
         'INTERNAL',
-        `${this.descriptor.label} 语言服务器停止读取输入，待写入数据超过 32 MiB 上限。`
+        workbenchMainText('language.inputBackedUp', { server: this.descriptor.label })
       ))
       return
     }
@@ -1189,7 +1207,10 @@ export class ExternalLspClient {
       try {
         message = JSON.parse(body) as JsonRpcMessage
       } catch {
-        this.fail(new AppError('INTERNAL', `${this.descriptor.label} LSP 返回了无效 JSON。`))
+        this.fail(new AppError(
+          'INTERNAL',
+          workbenchMainText('language.invalidJson', { server: this.descriptor.label })
+        ))
         return
       }
       this.handle(message)
@@ -1205,19 +1226,28 @@ export class ExternalLspClient {
     const boundary = headerWindow.indexOf(LspHeaderSeparator)
     if (boundary < 0) {
       if (this.inboundLength > MaxLspHeaderBytes)
-        this.fail(new AppError('INTERNAL', `${this.descriptor.label} LSP 响应头超过 8 KiB 上限。`))
+        this.fail(new AppError(
+          'INTERNAL',
+          workbenchMainText('language.headerTooLarge', { server: this.descriptor.label })
+        ))
       return false
     }
 
     const header = headerWindow.subarray(0, boundary).toString('ascii')
     const match = /(?:^|\r\n)Content-Length:\s*(\d+)/iu.exec(header)
     if (!match) {
-      this.fail(new AppError('INTERNAL', `${this.descriptor.label} LSP 响应缺少有效的 Content-Length。`))
+      this.fail(new AppError(
+        'INTERNAL',
+        workbenchMainText('language.missingContentLength', { server: this.descriptor.label })
+      ))
       return false
     }
     const size = Number(match[1])
     if (!Number.isSafeInteger(size) || size > MaxLspMessageBytes) {
-      this.fail(new AppError('INTERNAL', `${this.descriptor.label} LSP 响应超过 16 MiB 上限。`))
+      this.fail(new AppError(
+        'INTERNAL',
+        workbenchMainText('language.responseTooLarge', { server: this.descriptor.label })
+      ))
       return false
     }
     this.consumeInbound(boundary + LspHeaderSeparatorBytes)
@@ -1423,7 +1453,7 @@ export class ExternalLspManager {
   ): Promise<ExternalLspClient> {
     const boundary = canonicalPath(workspaceRoot)
     if (this.disposed)
-      throw new AppError('INVARIANT', '外部语言服务管理器已关闭。')
+      throw new AppError('INVARIANT', workbenchMainText('language.managerClosed'))
     const generation = this.workspaceGeneration(boundary)
     await this.waitForWorkspaceInvalidation(boundary)
     this.assertClientRequestActive(boundary, generation)
@@ -1586,9 +1616,9 @@ export class ExternalLspManager {
 
   private assertClientRequestActive(workspaceRoot: string, generation: number): void {
     if (this.disposed)
-      throw new AppError('INVARIANT', '外部语言服务管理器已关闭。')
+      throw new AppError('INVARIANT', workbenchMainText('language.managerClosed'))
     if (this.workspaceGeneration(workspaceRoot) !== generation)
-      throw new AppError('INVARIANT', '外部语言服务请求所属工作区已失效。')
+      throw new AppError('INVARIANT', workbenchMainText('language.workspaceGone'))
   }
 
   private closestClientsForPath(

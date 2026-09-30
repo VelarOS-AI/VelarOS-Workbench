@@ -1,5 +1,7 @@
 import { AppError } from '@velaros-ai/core/error'
 
+import { workbenchMainText } from '../../i18n/workbenchMainMessages'
+
 import {
   getWorkbenchLanguageServiceWorkerPriority,
   isWorkbenchLanguageServiceOperationSuperseded,
@@ -106,14 +108,17 @@ export class WorkbenchLanguageServiceWorkerScheduler {
     let response: WorkbenchLanguageServiceWorkerResponse
     try {
       // 排队时就被顶掉了（取消消息还没轮到处理，共享缓冲里已经有它）：不必再算。
-      if (this.isRunningRequestCancelled()) throw new AppError('CANCELLED', '请求已取消。')
+      if (this.isRunningRequestCancelled()) throw new AppError('CANCELLED', workbenchMainText('language.requestCancelledPlain'))
       response = { id: request.id, result: await this.options.dispatch(request, running.controller.signal) }
     } catch (error) {
       // 取消后抛出的任何东西（TypeScript 的取消异常、被中止的外部请求）都按取消答复。
       response = {
         id: request.id,
         error: (running.cancelled
-          ? new AppError('CANCELLED', `Workbench 语言服务请求已取消（${request.operation}）。`)
+          ? new AppError(
+              'CANCELLED',
+              workbenchMainText('language.serviceRequestCancelled', { operation: request.operation })
+            )
           : AppError.from(error)
         ).toJSON(),
       }

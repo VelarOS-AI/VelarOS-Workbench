@@ -7,6 +7,7 @@ import { VelarWorkbenchLanguageService } from '@shared/contributions/velar/servi
 import { registerWorkbenchLanguageService } from '@shared/language/workbenchLanguageServices'
 
 import { isWorkbenchAppLocale, setWorkbenchMainLocale } from '../../i18n/workbenchMainLocale'
+import { workbenchMainText } from '../../i18n/workbenchMainMessages'
 import { PathResolver } from '../PathResolver'
 
 import {
@@ -26,7 +27,7 @@ import { WorkbenchLanguageServiceWorkerScheduler } from './LanguageServiceWorker
 import { configureTypeScriptCancellation, configureTypeScriptProjectPool } from './TypeScriptProjectHost'
 
 const port = (() => {
-  if (!parentPort) throw new AppError('INVARIANT', 'Workbench 语言服务 worker 缺少消息端口。')
+  if (!parentPort) throw new AppError('INVARIANT', workbenchMainText('language.workerNoPort'))
   return parentPort
 })()
 
