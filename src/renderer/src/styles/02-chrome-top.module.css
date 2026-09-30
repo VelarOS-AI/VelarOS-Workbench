@@ -88,6 +88,95 @@
   @apply text-muted-foreground;
 }
 
+/* 分支旁边的同步按钮：图标加落后（↓）、领先（↑）的提交数；右边的小三角展开拉取、推送、同步、获取远端。 */
+.gitSyncControl {
+  @apply flex shrink-0 items-center;
+  height: 26px;
+  color: var(--workbench-text-muted);
+}
+
+.gitSyncButton,
+.gitSyncMenuButton {
+  @apply flex h-full items-center border-0 bg-transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.gitSyncButton {
+  gap: 4px;
+  padding: 0 4px 0 7px;
+  border-radius: var(--workbench-radius) 0 0 var(--workbench-radius);
+}
+
+.gitSyncMenuButton {
+  padding: 0 5px;
+  border-radius: 0 var(--workbench-radius) var(--workbench-radius) 0;
+}
+
+.gitSyncButton:hover:not(:disabled),
+.gitSyncMenuButton:hover:not(:disabled),
+.gitSyncMenuButton[data-state='open'] {
+  background: var(--workbench-hover);
+  color: var(--workbench-text);
+}
+
+.gitSyncButton:disabled,
+.gitSyncMenuButton:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.gitSyncCounts {
+  @apply flex items-center;
+  gap: 4px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.gitSyncMenuPopover {
+  width: min(260px, calc(100vw - 24px));
+  border: 1px solid var(--workbench-border);
+  background: var(--workbench-surface);
+}
+
+.gitSyncMenu {
+  @apply flex flex-col;
+  gap: 2px;
+}
+
+.gitSyncMenuItem {
+  @apply flex w-full flex-col items-start border-0 bg-transparent text-left;
+  gap: 1px;
+  padding: 6px 7px;
+  border-radius: 6px;
+  color: var(--workbench-text);
+  cursor: pointer;
+}
+
+.gitSyncMenuItem:hover:not(:disabled),
+.gitSyncMenuItem:focus-visible {
+  outline: none;
+  background: var(--workbench-hover);
+}
+
+.gitSyncMenuItem:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.gitSyncMenuLabel {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.gitSyncMenuHint {
+  color: var(--workbench-text-muted);
+  font-size: 11px;
+  line-height: 1.3;
+}
+
 .topGitPlaceholder {
   display: inline-flex;
   min-width: 0;

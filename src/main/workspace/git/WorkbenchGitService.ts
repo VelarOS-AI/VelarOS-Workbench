@@ -660,6 +660,11 @@ export class WorkbenchGitService {
     }
   }
 
+  /**
+   * 获取、拉取、同步（先拉取再推送）、推送。每条命令最多跑 RemoteActionTimeoutMs；失败时把 git 的话换成
+   * 能看懂的说明（凭据、网络、分叉、本地改动会被覆盖……）。拉取合入时冲突了不算失败：冲突文件列在结果里，
+   * 合并或变基停在那里等用户解决，同步这时不推送。
+   */
   public async performRemoteAction(
     workspaceRoot: string,
     action: WorkspaceGitRemoteAction,
@@ -680,42 +685,179 @@ export class WorkbenchGitService {
       if (exists.failed) throw new AppError('VALIDATION', `本地没有分支 ${actionBranch}。`)
     }
     const upstream = await this.getBranchUpstream(rootPath, actionBranch)
-    if (action === 'update' && !upstream)
-      throw new AppError('VALIDATION', `当前分支 ${actionBranch} 没有关联的远程跟踪分支。`)
-
-    let args: string[]
-    let resultUpstream = upstream?.name ?? null
-    if (action === 'fetch') {
-      args = ['fetch', '--prune']
-    } else if (action === 'update') {
-      args = ['pull', '--ff-only', '--autostash']
-    } else if (upstream) {
-      args = ['push', upstream.remote, `refs/heads/${actionBranch}:${upstream.remoteRef}`]
-    } else {
-      const remote = await this.resolvePushRemote(rootPath, actionBranch)
-      args = [
-        'push',
-        '--set-upstream',
-        remote,
-        `refs/heads/${actionBranch}:refs/heads/${actionBranch}`,
-      ]
-      resultUpstream = `${remote}/${actionBranch}`
-    }
-    // 获取与推送有时限，中途结束不伤本地；拉取带着 --autostash，中途结束可能把本地改动留在储藏（stash）
-    // 里，不设时限。
-    const output = (
-      await this.runGit(rootPath, args, {
-        ...options,
-        timeoutMs: optionalWhen(action !== 'update', this.remoteActionTimeoutMs),
-      })
-    ).stdout.trim()
-    const remoteAction: WorkspaceGitRemoteActionResult = {
+    const result: WorkspaceGitRemoteActionResult = {
       action,
       branch: actionBranch,
-      upstream: resultUpstream,
-      output,
+      upstream: upstream?.name ?? null,
+      output: '',
+      conflicts: [],
+      rebasing: false,
     }
-    return { rootPath, action: remoteAction, summary: await this.getSummary(rootPath) }
+
+    if (action === 'fetch') {
+      result.output = await this.runRemoteCommand(rootPath, action, ['fetch', '--prune'], options)
+    } else if (action === 'pull' || action === 'sync') {
+      if (!upstream)
+        throw new AppError(
+          'VALIDATION',
+          `当前分支 ${actionBranch} 还没有关联远端分支，无法${action === 'pull' ? '拉取' : '同步'}。请先推送一次（推送会建立关联），或在终端里设置上游（git branch --set-upstream-to=<远端>/<分支>）。`
+        )
+      const pulled = await this.pullBranch(rootPath, actionBranch, options)
+      Object.assign(result, pulled)
+      if (action === 'sync' && pulled.conflicts.length === 0) {
+        const pushed = await this.runRemoteCommand(
+          rootPath,
+          action,
+          ['push', upstream.remote, `refs/heads/${actionBranch}:${upstream.remoteRef}`],
+          options
+        )
+        result.output = [pulled.output, pushed].filter(Boolean).join('\n')
+      }
+    } else if (upstream) {
+      result.output = await this.runRemoteCommand(
+        rootPath,
+        action,
+        ['push', upstream.remote, `refs/heads/${actionBranch}:${upstream.remoteRef}`],
+        options
+      )
+    } else {
+      const remote = await this.resolvePushRemote(rootPath, actionBranch)
+      result.output = await this.runRemoteCommand(
+        rootPath,
+        action,
+        ['push', '--set-upstream', remote, `refs/heads/${actionBranch}:refs/heads/${actionBranch}`],
+        options
+      )
+      result.upstream = `${remote}/${actionBranch}`
+    }
+    return { rootPath, action: result, summary: await this.getSummary(rootPath) }
+  }
+
+  /**
+   * 拉取当前分支的上游。没配置过怎么合（`branch.<分支>.rebase`、`pull.rebase`、`pull.ff`）时合并
+   * （`--no-rebase`），配置了就不加参数，照用户的配置来：给了 `--no-rebase` 连 `pull.ff=only` 也会被盖掉。
+   * 合并说明不开编辑器，交互式变基按默认的步骤走。
+   */
+  private async pullBranch(
+    rootPath: string,
+    branch: string,
+    options: WorkspaceGitRemoteActionOptions
+  ): Promise<Pick<WorkspaceGitRemoteActionResult, 'output' | 'conflicts' | 'rebasing'>> {
+    const configured = await Promise.all(
+      [`branch.${branch}.rebase`, 'pull.rebase', 'pull.ff'].map((key) =>
+        this.readConfig(rootPath, key)
+      )
+    )
+    const args = configured.some(Boolean) ? ['pull'] : ['pull', '--no-rebase']
+    const run = await this.runGit(rootPath, args, {
+      ...options,
+      allowFailure: true,
+      timeoutMs: this.remoteActionTimeoutMs,
+      env: { GIT_MERGE_AUTOEDIT: 'no', GIT_EDITOR: ':', GIT_SEQUENCE_EDITOR: ':' },
+    })
+    const output = `${run.stdout}\n${run.stderr}`.trim()
+    if (!run.failed) return { output, conflicts: [], rebasing: false }
+
+    // 这次合入冲突了（git 报了 CONFLICT）：不当失败，把冲突文件交给提交面板的「合并冲突」。
+    if (/^CONFLICT \(|could not apply/im.test(output)) {
+      const status = await this.getStatus(await this.openRepository(rootPath))
+      const conflicts = status.entries
+        .filter((entry) => isWorkspaceGitConflictEntry(entry))
+        .map((entry) => entry.path)
+      if (conflicts.length > 0)
+        return { output, conflicts, rebasing: await this.isRebaseInProgress(rootPath) }
+    }
+    throw this.describeRemoteFailure('pull', run, options.githubToken)
+  }
+
+  /** 跑一条连远端的命令（有时限），失败时换成能看懂的说明。 */
+  private async runRemoteCommand(
+    rootPath: string,
+    action: WorkspaceGitRemoteAction,
+    args: string[],
+    options: WorkspaceGitRemoteActionOptions
+  ): Promise<string> {
+    const run = await this.runGit(rootPath, args, {
+      ...options,
+      allowFailure: true,
+      timeoutMs: this.remoteActionTimeoutMs,
+    })
+    if (run.failed) throw this.describeRemoteFailure(action, run, options.githubToken)
+    return this.readableGitOutput(run)
+  }
+
+  /** 连远端失败时的说明：认得出的情况说清楚怎么办，认不出的照 git 的原话。 */
+  private describeRemoteFailure(
+    action: WorkspaceGitRemoteAction,
+    run: GitRunResult,
+    githubToken?: string
+  ): AppError {
+    const output = this.redactGitOutput(`${run.stderr}\n${run.stdout}`.trim(), githubToken)
+    const detail = this.redactGitOutput(this.readableGitOutput(run), githubToken).slice(0, 500)
+    if (
+      /permission denied \(publickey|authentication failed|could not read (?:username|password)|terminal prompts disabled|invalid username or password|access denied|returned error: 40[13]/i.test(
+        output
+      )
+    )
+      return new AppError(
+        'PERMISSION',
+        `远端拒绝了身份验证：请检查 SSH 密钥或访问令牌（设置 › Git），或先在终端里确认能访问这个远端。\n${detail}`
+      )
+    if (
+      /could not resolve host|failed to connect|connection (?:timed out|refused|reset)|network is unreachable|operation timed out|could not read from remote repository/i.test(
+        output
+      )
+    )
+      return new AppError('NETWORK', `连不上远端，请检查网络和远端地址。\n${detail}`)
+    if (/\[rejected\]|non-fast-forward|\(fetch first\)|updates were rejected/i.test(output))
+      return new AppError(
+        'VALIDATION',
+        '远端有本地还没有的提交，推送被拒绝。请先拉取（或同步），合入之后再推送。'
+      )
+    if (/not possible to fast-forward|diverging branches can't be fast-forwarded/i.test(output))
+      return new AppError(
+        'VALIDATION',
+        '本地和远端的提交分叉了，而 pull.ff=only 只允许快进。请在终端里合并或变基，或修改 pull.ff 设置。'
+      )
+    const overwritten = /would be overwritten by (?:merge|checkout)/i.test(output)
+    if (overwritten) {
+      const files = output
+        .split('\n')
+        .filter((line) => line.startsWith('\t'))
+        .map((line) => line.trim())
+        .slice(0, 5)
+      return new AppError(
+        'VALIDATION',
+        `本地还没提交的改动（或未跟踪的文件）会被这次拉取覆盖${files.length ? `：${files.join('、')}` : ''}。请先提交或回滚它们，再拉取。`
+      )
+    }
+    if (/cannot (?:pull with rebase|rebase)|your index contains uncommitted changes/i.test(output))
+      return new AppError(
+        'VALIDATION',
+        '按变基方式拉取（pull.rebase）时，工作区里不能有没提交的改动。请先提交或回滚它们，再拉取。'
+      )
+    if (/unmerged files|not concluded your merge|merge_head exists/i.test(output))
+      return new AppError(
+        'VALIDATION',
+        '还有没完成的合并，不能拉取。请先解决冲突、标记为已解决并提交，完成这次合并。'
+      )
+    return new AppError(
+      'PLATFORM',
+      detail
+        ? `Git 命令执行失败：${detail}`
+        : `Git 命令执行失败：git ${action === 'upload' ? 'push' : action}`
+    )
+  }
+
+  /** 正在变基（拉取按变基方式合入、停在了冲突处）。 */
+  private async isRebaseInProgress(rootPath: string): Promise<boolean> {
+    for (const name of ['rebase-merge', 'rebase-apply']) {
+      const path = (
+        await this.runGit(rootPath, ['rev-parse', '--git-path', name])
+      ).stdout.trim()
+      if (path && (await stat(resolve(rootPath, path)).catch(() => null))) return true
+    }
+    return false
   }
 
   /**
@@ -952,10 +1094,16 @@ export class WorkbenchGitService {
     return null
   }
 
-  /** 要提交时的项目状态：没有改动、还有没解决的冲突时拒绝。 */
+  /** 要提交时的项目状态：没有改动、还有没解决的冲突、正在变基时拒绝。 */
   private async readCommittableStatus(
     repository: GitRepository
   ): Promise<WorkspaceGitStatusResult> {
+    // 变基停在冲突处时提交会把这一步的改动提交到分离的 HEAD 上，打乱变基；要在终端里继续或放弃变基。
+    if (await this.isRebaseInProgress(repository.rootPath))
+      throw new AppError(
+        'VALIDATION',
+        '正在变基：解决冲突并标记为已解决后，请在终端里继续变基（git rebase --continue），或放弃这次变基（git rebase --abort），不要在这里提交。'
+      )
     const status = await this.getStatus(repository)
     if (status.isClean) throw new AppError('VALIDATION', '当前项目没有可提交的改动。')
     const conflicts = status.entries.filter((entry) => isWorkspaceGitConflictEntry(entry))

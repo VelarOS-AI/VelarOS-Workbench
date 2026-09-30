@@ -37,6 +37,7 @@ import {
   WorkbenchGitCommitControl,
   type WorkbenchGitCommitControlVariant,
 } from '../git/WorkbenchGitCommitControl'
+import { WorkbenchGitSyncControl } from '../git/WorkbenchGitSyncControl'
 
 export interface TopToolbarProps {
   gitWorkspaceRoot: string
@@ -91,6 +92,14 @@ export function WorkbenchTopLeading({
         variant={gitControlVariant ?? 'branch-menu-actions'}
         layout="pill"
         onRepositoryChanged={onRepositoryChanged}
+        onOpenCommitTool={onOpenGitCommitTool}
+      />
+      <WorkbenchGitSyncControl
+        workspaceRoot={gitWorkspaceRoot}
+        summary={gitSummary}
+        gitSshKeyPath={gitSshKeyPath}
+        hasUnsavedOpenTabs={hasUnsavedOpenTabs}
+        onRefresh={onGitRefresh}
         onOpenCommitTool={onOpenGitCommitTool}
       />
     </div>

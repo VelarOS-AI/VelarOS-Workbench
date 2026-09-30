@@ -272,7 +272,7 @@ function parseCreateBranch(input: unknown): WorkbenchGitCreateBranchRequest {
 function parseRemoteAction(input: unknown): WorkbenchGitRemoteActionRequest {
   if (!hasStringFields(input, ['workspaceRoot', 'action'])) return invalidRequest()
   const action = input['action']
-  if (action !== 'fetch' && action !== 'update' && action !== 'upload')
+  if (action !== 'fetch' && action !== 'pull' && action !== 'sync' && action !== 'upload')
     return invalidRequest()
   const record = input as Record<string, unknown>
   for (const key of ['branch', 'githubToken', 'privateKeyPath', 'sshKeyPath']) {

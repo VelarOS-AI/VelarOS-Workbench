@@ -74,7 +74,14 @@ export interface WorkspaceGitCommitResult {
   lineStats: WorkspaceGitLineStats
 }
 
-export type WorkspaceGitRemoteAction = 'fetch' | 'update' | 'upload'
+/**
+ * - `fetch`：获取远端。
+ * - `pull`：拉取当前分支的上游并合入；没配置过 `pull.rebase`（及 `branch.<分支>.rebase`、`pull.ff`）时合并，
+ *   配置了就照配置来。
+ * - `sync`：同步，先拉取再推送；拉取出了冲突就不推送。
+ * - `upload`：推送。
+ */
+export type WorkspaceGitRemoteAction = 'fetch' | 'pull' | 'sync' | 'upload'
 
 /**
  * - `stage` / `unstage`：暂存、取消暂存（冲突文件暂存即标记为已解决）。
@@ -97,6 +104,13 @@ export interface WorkspaceGitRemoteActionResult {
   branch: string
   upstream: Nullable<string>
   output: string
+  /**
+   * 拉取（同步）合入时冲突了的文件（相对项目根）：合并或变基停在冲突处，等用户解决；这时不推送。
+   * 别的情况为空。
+   */
+  conflicts: string[]
+  /** 冲突出在变基里（`pull.rebase`）：解决后要在终端里 `git rebase --continue`，不是提交。 */
+  rebasing: boolean
 }
 
 /**
