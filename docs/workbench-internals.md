@@ -201,6 +201,128 @@ GB18030、混用的换行符），编辑器据此只读打开，用户明确选�
 - **顶栏 ▶ 菜单**：打开时焦点给命令输入框，由浮层的 `onOpenAutoFocus` 给——浮层先挂出来、摆好位置才
   可见，输入框上的 `autoFocus` 赶在那之前，落不上。菜单开着时 ▶ 的悬停说明不出。
 
+## 键位方案
+
+设置 → 编辑器 → 快捷键里选一种：Workbench（默认，就是以前的键）、VS Code、JetBrains、Vim。全局快捷键和
+编辑器里的按键一起跟着换，命令面板、编辑器右键菜单、设置里提示的键也跟着换。
+
+### 表在哪
+
+- `models/layout/workbenchKeymapPresets.ts`：方案的名字，平台分三类（mac / windows / linux；表里一格写
+  `{ mac, other, linux? }`，三类都一样就直接写），两张表共用。
+- `models/layout/workbenchKeyboardShortcuts.ts` 的 `WorkbenchKeyboardShortcutPresets`：设置里能改的那 22 个
+  全局动作在各方案里的默认键。空串是这个方案里它没有键（现在只有 JetBrains 方案的「切换 AI 聊天」：它的
+  ⇧⌘A / Ctrl+Shift+A 在那个方案里给了命令面板）。
+- `models/editor/workbenchEditorKeymap.ts`：53 个编辑器命令在各方案里的键。一个命令可以有几组键，第一组是
+  界面上提示的那一组；空数组是没有键。
+- 两张 IDE 表照它们自己的默认键位抄（VS Code 的 Default Keyboard Shortcuts 三个平台各一份；IntelliJ 的
+  macOS 键位表，Windows / Linux 是 `$default`）。对不上的留 Workbench 的键，并在那一行写明是哪一种：那个
+  IDE 没有对应的动作或没有默认键；它的键被应用菜单占着（菜单的键一律不去盖，见下）；要连按两下或分两步
+  按，这里按不出来；它的键在这个方案里已经给了别的命令（写明给了谁）。
+- 一个方案、一个平台上，同一组键只有一个意思：编辑器命令之间不重，编辑器命令与全局快捷键之间也不重。
+  有意同键的几处列在 `WorkbenchEditorKeymapSharedChords`（保存、后退 / 前进是同一件事；⌘↩ 在编辑器里是
+  插入空行；F8 调试停着时归调试）。这些都有测试钉着（`tests/workbench-editor-keymap.test.ts`、
+  `tests/workbench-keymap-presets.test.ts`）；Workbench 方案与改成键位方案之前逐键一致
+  （`tests/workbench-editor-keymap-pin.test.ts` 里留着当时那张表）。
+- 应用菜单的键（`src/main/projects/ProjectHubMenu.ts` 和它用的角色：重新加载、开发者工具、编辑器缩放、
+  关闭编辑器、撤销重做……）不随方案变，也不让任何方案的命令占。所以有些 IDE 的键在这里用不了：JetBrains
+  的替换（⌘R）、折叠（⌘- / ⌘+）、Windows / Linux 上的「转到文件」（Ctrl+Shift+N）和扩展选区（Ctrl+W），
+  VS Code 在 Windows / Linux 上的重构（Ctrl+Shift+R）、Linux 上的格式化（Ctrl+Shift+I）。
+
+### 一次按键怎么落到命令上
+
+焦点在文件编辑器里时，按先后：
+
+1. 调试停着时，调试的控制键先拿（window 的捕获阶段，`useWorkbenchDebugShortcuts`）。
+2. Vim 方案：Vim 那一层（见下）。
+3. 补全列表、行内建议开着时它们自己的键（↑ ↓、回车、Tab、Esc）。
+4. 编辑器命令：`workbenchEditorKeymap({ getPreset, host })` 是 CodeMirror 键位里的一条 `any` 处理，排在
+   编辑器别的键位之前。它用 `resolveWorkbenchEditorKeymapCommand(event, platform, preset)`
+   （`workbenchEditorKeymapResolver.ts`）查表，查到就做那个命令（`workbenchCodeMirrorEditorCommands.ts`；
+   要用到编辑器组件的十几个——跳到定义、保存、查找、代码动作——由组件给）。查到了就算用掉，哪怕命令此刻没
+   事可做，不会再漏给后面去做别的事；只有 Tab、⇧Tab、Esc 没事可做时放过去。方案每次按键现查，换方案不用
+   重建编辑器。
+5. CodeMirror 的 `standardKeymap`（方向键、Home / End、回车、退格、全选……各家都一样的键）和括号补全。
+6. 都没用掉：冒泡到 window，全局快捷键（`useWorkbenchKeyboardShortcuts`，见到已经用掉的按键就让路）。
+7. 还没人用，才轮到应用菜单的加速键。
+
+字符键怎么认（第 4 步）：修饰键要一个不多、一个不少；字符照打出来的字认（Dvorak、AZERTY 上按的是标着那
+个字母的键）。打出来的字靠不住时改看这个键本身是哪个：macOS 上按着 ⌥（⌥Z 打出来是 Ω），Windows / Linux
+上同时按着 Ctrl 与 Alt，非拉丁布局。Windows 上 AltGr 打出别的字符时算打字，不算快捷键。
+
+### 存的是什么
+
+`localStorage` 的 `velaros.workbench.keymap.v2`：`{ preset, overrides }`。`overrides` 只有用户自己改过、与
+所选方案默认键不一样的全局快捷键。读的时候逐项校验：方案名不认识用默认方案；动作不认识、键解析不了的
+那一项丢掉（那个动作用方案的默认键）。以前的 `velaros.workbench.keymap.v1` 存的是整张「动作 → 键」表，
+不读、不换算——升级之后以前改过的键回到默认。
+
+用户改的键叠在所选方案上，换方案时留着；设置里「重置」回到所选方案的默认键；冲突检查按此刻生效的键做
+（所以跟着方案走）。编辑器命令的键不能单独改，设置里只读地列出来，与 Workbench 方案不一样的标着
+Workbench 方案的键（`components/settings/WorkbenchKeymapSettings.tsx`）。
+
+提示的键：全局动作取此刻生效的键；编辑器命令用 `formatWorkbenchEditorCommandHint(command, preset)`——命令
+面板的登记里写 `{ editor: 命令 }`，编辑器右键菜单、设置里的说明也用它；应用菜单的键（关闭编辑器、缩放）
+仍是写死的。
+
+### Vim 方案
+
+键位与 Workbench 方案相同，另在文件编辑器里加模式编辑，用的是 `@replit/codemirror-vim`。
+
+- **范围**：只在文件编辑器（`CodeMirrorEditor`：编辑区里的文件，和轻量预览标签）。差异、文件历史、提交
+  信息框、各种输入框不是这个组件，没有 Vim。只读的文件里能移动、选择、搜索，改不了、进不了插入模式
+  （包自己看只读标记）。
+- **加载**：选了 Vim 方案才加载。`useWorkbenchEditorVim` 动态 import `workbenchEditorVimLayer.ts`，它再
+  动态 import 那个包——全仓只有这一处，别处不许静态引它（测试钉着）。扩展挂在文件扩展列表最前面的
+  compartment 里，因为 Vim 的按键处理要排在编辑器所有按键处理之前。
+- **按键归谁**是有意定的，规则在 `workbenchEditorVimKeys.ts`（包认按键的入口 `Vim.vimKeyFromEvent` 被包了
+  一层，不归 Vim 的键它当没按过）：
+  1. 不带 Ctrl / Alt / ⌘ 的键都先给 Vim。
+  2. 设置里那张全局快捷键表上的键，任何模式下都归工作台（用户录了什么就是什么）。
+  3. 其余的，Vim 在当前模式下有命令的 Ctrl 键归 Vim。
+  4. 再其余的，是编辑器命令的键就归编辑器命令（macOS 上普通模式会吞掉没用到的 ⌥+字符，不放行的话 ⌥Z
+     自动换行、⇧⌥A 块注释就按不到了）。
+  5. Ctrl+W：这个包的普通模式拿它当窗口命令的前缀，可这里没有窗口命令。Windows / Linux 上普通模式、可视
+     模式里放给应用菜单（关闭编辑器），插入模式里是 Vim 的「删除前一个词」；macOS 上 ⌃W 不是菜单的键，
+     留给 Vim。
+- **Windows / Linux 上工作台的 Ctrl 快捷键**（上面几条的结果）：
+  - 普通模式、可视模式里，这些键做的是 Vim 的事，工作台原来的功能按不到：Ctrl+A（全选 → 数字加一）、
+    Ctrl+F（查找 → 下翻一页；查找用 `/`）、Ctrl+D（选中下一处相同的文字 → 下翻半页）、Ctrl+I 与
+    Ctrl+Space（触发补全 → 跳转表前进 / 下一个词）、Ctrl+U（撤销选区变化 → 上翻半页）、Ctrl+Y（重做 →
+    向上滚一行；重做是 Ctrl+R）、Ctrl+[（减少缩进 → Esc；缩进用 `<<` `>>`）、Ctrl+C / Ctrl+X / Ctrl+V（复制
+    / 剪切 / 粘贴 → 回普通模式 / 数字减一 / 按块选择；选中了文字时 Ctrl+C 仍然复制），以及应用菜单的
+    Ctrl+O（打开项目 → 跳转表后退）、Ctrl+R（重新加载 → 重做）。
+  - 照常的：Ctrl+P（快速打开，Vim 的「上移」让给它）、Ctrl+Shift+P、Ctrl+S、Ctrl+Shift+F 这些全局快捷键；
+    Ctrl+G、Ctrl+H、Ctrl+L、Ctrl+Z、Ctrl+/、Ctrl+]、Alt+Z 这些 Vim 不用的编辑器命令；Ctrl+W 关标签。
+  - 插入模式里只有 Vim 的插入键归它：Ctrl+C、Ctrl+[（回普通模式）、Ctrl+W、Ctrl+U（删词、删到行首）、
+    Ctrl+T、Ctrl+D（缩进）、Ctrl+R（插入寄存器）、Ctrl+O（执行一条普通模式命令）。别的照常：Ctrl+F 查找、
+    Ctrl+A 全选、Ctrl+Space 补全、Ctrl+V 粘贴。
+  - 两种模式都被 Vim 占着的有两个键，所以这两个编辑器命令在 Windows / Linux 的 Vim 方案下没有键可按：
+    Ctrl+D「选中下一处相同的文字」、Ctrl+U「撤销选区变化」。
+  - macOS 上工作台的键用 ⌘，与 Vim 的 Ctrl 键不撞；受影响的只有插入模式里的 ⌃T（重构 → Vim 的缩进）。
+- **Esc**：Vim 方案下编辑器里的 Esc 不再漏到全局去关右侧面板（它按得太勤）。先后是：Vim（回普通模式）、
+  补全列表、查找栏、收起多个选区；都没事做也用掉。
+- **ex 命令**（全局登记一次，靠编辑器状态里的宿主落到敲命令的那个编辑器）：`:w` 就是编辑器平常的保存
+  （保存时格式化、收拾行尾空白照常）；`:q` 走 ⌘W 那条关闭（固定的标签不关，没保存的改动先问；`:q!` 与
+  `:q` 一样，不会不问就丢改动）；`:wq` 先保存，等保存落定、确实存下了才关（外部改过、写盘失败就留着）；
+  `:wa` 是「保存全部」。`:x`、`ZZ`、`:qa` 没有接。
+- **模式**显示在状态栏行列号前面（NORMAL / INSERT / REPLACE / VISUAL / VISUAL LINE / VISUAL BLOCK）。
+  `workbenchEditorVim.ts` 记着各编辑器的模式，两组并排时显示最近得到焦点的那个；状态栏只认这个文件，不
+  引 Vim 那一层。换文件时模式回到普通模式（Vim 的状态跟着视图里的插件走，换文件会重建）。
+- **配合的几处**（都在 `workbenchEditorVimLayer.ts`）：离开插入模式时收起补全列表；刚打开的文件按下第一个
+  键就亮出光标（那个处理排在 Vim 后面，改用「旁观」方式听）；换文件时把开着的提示条和它的定时器收掉，
+  换回来时把状态里记着的「命令行开着」对回去，不然会留一条空壳、下一次 `:` 出不来；命令行和块状光标用
+  工作台的颜色变量。
+- 这一层对包的几处假设（按键入口、默认键位表里 Vim 用的 Ctrl 键、提示条的开合方式）在
+  `tests/workbench-editor-vim.test.ts` 里对着包的源码钉着，升级包之后对不上会先在那里报。
+
+### 体积
+
+命令面板在工作区外壳里，要提示编辑器命令的键，所以两张表进外壳那一块（外壳约多 11 KB）；认按键的代码
+（`workbenchEditorKeymapResolver.ts`）跟着编辑器那一块；设置里的方案选择和按键列表在设置对话框那一块
+（约多 5 KB）；命令的名字在界面文案里，随启动入口加载（约多 8 KB）。Vim 是单独的两块，没选 Vim 方案不
+加载：接入层约 4 KB，包约 123 KB。
+
 ## 项目搜索与替换
 
 侧栏的搜索（⇧⌘F）。匹配规则只有一份：`src/shared/workbenchTextSearch.ts`（查找词、区分大小写 / 全字 /
