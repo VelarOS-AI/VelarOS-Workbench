@@ -86,7 +86,8 @@ void describe('closing editor tabs', () => {
       sliceBetween(controller, 'const resetSelectedFile', 'const toggleSelectedFileEditMode'),
       /closedTabPathsRef\.current = \[\]/u
     )
-    assert.match(shortcuts, /action: 'reopen-closed-tab', defaultShortcut: 'Mod\+Shift\+T'/u)
+    // Workbench 键位方案里的默认键。
+    assert.match(shortcuts, /workbench: \{[\s\S]*?'reopen-closed-tab': 'Mod\+Shift\+T',/u)
     // 重新打开时回到上次的光标位置（记得的话）。
     const reopen = sliceBetween(pageModel, 'const reopenClosedEditorTab', '})\n')
     assert.match(reopen, /takeRecentlyClosedTabPath\(\)/u)

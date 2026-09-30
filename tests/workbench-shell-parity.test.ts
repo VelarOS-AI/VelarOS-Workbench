@@ -109,7 +109,8 @@ void describe('pre-split Workbench shell parity', () => {
     assert.match(topStyles, /\.gitBranchMenuList[\s\S]*max-height:\s*var\(--topbar-panel-list-max-height\)/)
     assert.match(topStyles, /\.gitBranchCreateDialog[\s\S]*max-width:\s*min\(340px/)
     assert.doesNotMatch(topStyles, /\.gitSync/)
-    assert.match(shortcuts, /toggle-changes', defaultShortcut: 'Mod\+Shift\+G'/)
+    // Workbench 键位方案里的默认键。
+    assert.match(shortcuts, /workbench: \{[\s\S]*?'toggle-changes': 'Mod\+Shift\+G',/)
   })
 
   void test('opens the branch menu with a Git-only refresh', () => {
