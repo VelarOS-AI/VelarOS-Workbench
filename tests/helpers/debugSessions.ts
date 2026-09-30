@@ -100,6 +100,8 @@ export interface DebugTestProject {
     type: TType,
     timeoutMs?: number
   ) => Promise<DebuggerEventOf<TType>>
+  /** 等程序下一次停下或者结束，哪个先来算哪个。 */
+  nextStop: (timeoutMs?: number) => Promise<DebuggerEventOf<'paused'> | DebuggerEventOf<'ended'>>
   dispose: () => Promise<void>
 }
 
@@ -118,6 +120,27 @@ export async function createDebugTestProject(
   const sessions = new WorkbenchDebugSessions(new PathResolver(), launcher, options.attachTimeoutMs)
   const events: WorkbenchDebuggerEvent[] = []
   let cursor = 0
+  const waitForEvent = async (
+    types: ReadonlyArray<WorkbenchDebuggerEvent['type']>,
+    timeoutMs: number
+  ): Promise<WorkbenchDebuggerEvent> => {
+    const deadline = Date.now() + timeoutMs
+    for (;;) {
+      const index = events.findIndex(
+        (event, position) => position >= cursor && types.includes(event.type)
+      )
+      if (index !== -1) {
+        cursor = index + 1
+        return events[index]!
+      }
+      if (Date.now() > deadline)
+        throw new Error(
+          `no "${types.join('" / "')}" event within ${timeoutMs} ms; got ${JSON.stringify(events.slice(cursor))}\n` +
+            `output: ${launched.map((item) => item.output()).join('\n---\n')}`
+        )
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    }
+  }
 
   return {
     root,
@@ -130,22 +153,12 @@ export async function createDebugTestProject(
         { emit: (event) => events.push(event), terminalOutput: () => undefined },
         ownerId
       ),
-    next: async (type, timeoutMs = 15_000) => {
-      const deadline = Date.now() + timeoutMs
-      for (;;) {
-        const index = events.findIndex((event, position) => position >= cursor && event.type === type)
-        if (index !== -1) {
-          cursor = index + 1
-          return events[index] as DebuggerEventOf<typeof type>
-        }
-        if (Date.now() > deadline)
-          throw new Error(
-            `no "${type}" event within ${timeoutMs} ms; got ${JSON.stringify(events.slice(cursor))}\n` +
-              `output: ${launched.map((item) => item.output()).join('\n---\n')}`
-          )
-        await new Promise((resolve) => setTimeout(resolve, 10))
-      }
-    },
+    next: async (type, timeoutMs = 15_000) =>
+      (await waitForEvent([type], timeoutMs)) as DebuggerEventOf<typeof type>,
+    nextStop: async (timeoutMs = 15_000) =>
+      (await waitForEvent(['paused', 'ended'], timeoutMs)) as
+        | DebuggerEventOf<'paused'>
+        | DebuggerEventOf<'ended'>,
     dispose: async () => {
       sessions.closeAllSessions()
       for (const item of launched) {

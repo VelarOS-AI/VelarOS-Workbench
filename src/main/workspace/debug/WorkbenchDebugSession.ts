@@ -12,6 +12,10 @@
  *   它顶层代码里的断点可能在绑上之前就跑过去了；函数里的断点不受影响。
  * - 就地转换的脚本里，按地址下的断点用的是生成代码的行号，是错的：认出来之后摘掉，只留按映射下的。
  *
+ * 单步不停在不给用户看的代码里——Node 自己的内部代码、转换器加的代码、从项目代码走进去的依赖包。V8 的黑盒对
+ * Node 内部的脚本不起作用，单步照样停进去，由 `continueStep` 把那一步走完：回到用户的代码再停，没有用户的代码
+ * 可回就让程序跑下去。
+ *
  * 检查器的事件按到达顺序一件件处理（处理中可以等 source map 读完），界面来的命令也排在同一条队里。
  */
 import { readFile } from 'node:fs/promises'
@@ -62,6 +66,23 @@ const MaxFrames = 200
 const MaxSourceMapBytes = 32 * 1024 * 1024
 /** Node 自己的内部代码（`node:internal/…`、`node:fs`）：脚本地址以 `node:` 开头。 */
 const NodeInternalScriptPattern = '^node:'
+/** Node 加载模块的那部分内部代码（`require`、`import()` 都从这里过）。 */
+const NodeModuleLoaderScriptPrefix = 'node:internal/modules/'
+/**
+ * 「单步进入」走进了不给用户看的代码时，最多自动再往里走这么多步（看它会不会马上调回用户的代码，
+ * `emitter.emit` 到监听函数是十来步）；还没走到就放它跑，由临时断点接住。一步不到一毫秒。
+ */
+const MaxAutomaticSteps = 80
+/** 一次单步里自动走的步数总共不超过这么多（途中每进一个新脚本会重新数一轮）。 */
+const MaxAutomaticStepsPerStep = 400
+/** 为了在回到用户代码时停下，最多在那个函数里下这么多个临时断点。 */
+const MaxTemporaryBreakpoints = 120
+/**
+ * 磁盘上、不在依赖包里的任何脚本（`file://` 地址或绝对路径）：在它们的第一行挂一个临时断点，
+ * 「单步进入」一句 `require(…)` 时好停在被加载的那个模块的第一句。
+ */
+const ProjectModuleEntryPattern =
+  '^(?:file://|/|[A-Za-z]:[\\\\/])(?!.*[\\\\/]node_modules[\\\\/]).*$'
 /** 求值、展开变量拿到的对象都放在这一组里，程序继续跑时一起放掉。 */
 const ObjectGroup = 'workbench-debugger'
 const ScopeTypes = new Set<WorkbenchDebuggerScopeType>([
@@ -85,8 +106,18 @@ interface InspectorLocation {
 interface InspectorCallFrame {
   callFrameId: string
   functionName: string
+  /** 这一帧所在的函数从哪开始。 */
+  functionLocation?: InspectorLocation
   location: InspectorLocation
   scopeChain: Array<{ type: string; name?: string; object: InspectorRemoteObject }>
+}
+
+/** 函数里的一处：在哪、这个函数从哪开始。临时断点下在这个函数里。 */
+type FunctionPosition = Pick<InspectorCallFrame, 'location' | 'functionLocation'>
+
+/** 单步从哪出发：停着的那一帧，以及当时调用栈有几层。 */
+interface StepOrigin extends FunctionPosition {
+  depth: number
 }
 
 interface ScriptRecord {
@@ -203,6 +234,19 @@ export class WorkbenchDebugSession {
   private requestedPause: Nullable<'pause' | 'step'> = null
   /** 此刻停着，而且告诉过界面。 */
   private paused = false
+  /** 告诉界面的那次停顿停在哪（最里层那一帧）：单步从这里出发。 */
+  private pausedAt: Nullable<StepOrigin> = null
+  /** 这次单步是哪一种、从哪出发，以及它是不是从项目自己的代码出发的（是的话走进依赖包里的代码不停）。 */
+  private stepAction: Nullable<WorkbenchDebuggerControlAction> = null
+  private stepOrigin: Nullable<StepOrigin> = null
+  private skipDependenciesWhileStepping = false
+  /** 这次单步已经自动多走了几步：这一轮的，和总共的。 */
+  private automaticSteps = 0
+  private totalAutomaticSteps = 0
+  /** 为了把这次单步走完而临时下的断点（回到用户代码的那个函数里的、模块第一行的）。 */
+  private readonly temporaryBreakpointIds = new Set<string>()
+  /** 其中挂在「任何项目模块的第一行」上的那一个。 */
+  private moduleEntryBreakpointId: Nullable<string> = null
   private lastBreakpointStatus = ''
   private stopRequested = false
   private ended = false
@@ -239,6 +283,8 @@ export class WorkbenchDebugSession {
       const connection = this.requireConnection()
       if (action === 'pause') {
         if (this.paused) return
+        // 上一次单步留下的临时断点不再算数：这回是用户要它停。
+        await this.clearTemporaryBreakpoints()
         this.requestedPause = 'pause'
         await connection.send('Debugger.pause')
         return
@@ -251,6 +297,12 @@ export class WorkbenchDebugSession {
         return
       }
       this.requestedPause = 'step'
+      this.stepAction = action
+      this.stepOrigin = this.pausedAt
+      this.automaticSteps = 0
+      this.totalAutomaticSteps = 0
+      this.skipDependenciesWhileStepping =
+        !!this.pausedAt && !this.isDependencyScript(this.pausedAt.location.scriptId)
       await connection.send(
         action === 'step-over'
           ? 'Debugger.stepOver'
@@ -392,7 +444,8 @@ export class WorkbenchDebugSession {
       await this.enqueue(async () => {
         await connection.send('Runtime.enable')
         await connection.send('Debugger.enable')
-        // 单步不进 Node 自己的内部代码。
+        // 请 V8 单步时跳过 Node 自己的内部代码。实测（Node 24）它对这些脚本不起作用，单步照样停进去，
+        // 由 `continueStep` 接着走；留着这一句是为了它起作用的版本。
         await connection.send('Debugger.setBlackboxPatterns', {
           patterns: [NodeInternalScriptPattern],
         })
@@ -734,20 +787,54 @@ export class WorkbenchDebugSession {
     this.requestedPause = null
     const hitUser = hitIds.some((id) => this.breakpointsById.has(id))
     const top = frames[0]?.location ?? null
-    // 用户按的「暂停」落在 Node 自己的代码里（定时器、事件分发）：那里没什么可看的。接着走——单步不会停在
-    // Node 内部——到下一句程序自己的代码再停，仍然算这次暂停。
-    if (requested === 'pause' && !hitUser && top && this.isNodeInternalScript(top.scriptId)) {
+    // 用户按的「暂停」落在 Node 自己的代码里（定时器、事件分发）或转换器加的代码里：那里没什么可看的。
+    // 一步步往前走，到下一句程序自己的代码再停，仍然算这次暂停。
+    if (
+      requested === 'pause' &&
+      !hitUser &&
+      top &&
+      (this.isNodeInternalScript(top.scriptId) || this.isTransformGlue(top))
+    ) {
       this.requestedPause = 'pause'
       await connection.send('Debugger.stepInto')
       return
     }
-    const reason = this.classifyPause({ reasons, requested, hitEntry, hitUser, top })
+    // 调试器自己要的停顿：启动即停、脚本执行前、入口断点。单步途中撞上它们时 V8 会把「单步」也算作原因之一
+    // （ambiguous），那不是这一步走完了。
+    const causes = reasons.filter((item) => item !== 'step')
+    const internal =
+      causes.length > 0 &&
+      causes.every(
+        (item) =>
+          item === 'Break on start' || item === 'instrumentation' || (item === 'other' && hitEntry)
+      )
+    const reason = this.classifyPause({ reasons, requested, internal, hitEntry, hitUser, top })
     if (!reason) {
       await connection.send('Debugger.resume')
       return
     }
+    // 单步没有停在该停的地方：走进了不给用户看的代码（Node 内部、转换器加的代码、从项目代码走进去的
+    // 依赖包），或者被调试器自己要的停顿打断了（一个脚本正要开始执行）。接着把这一步走完。
+    if (reason === 'step' && top) {
+      const enteredScript =
+        internal ||
+        (this.moduleEntryBreakpointId !== null && hitIds.includes(this.moduleEntryBreakpointId))
+      if (
+        (enteredScript || this.isSkippedWhenStepping(top)) &&
+        (await this.continueStep(frames, enteredScript))
+      )
+        return
+    }
 
+    await this.clearTemporaryBreakpoints()
     this.paused = true
+    this.pausedAt = frames[0]
+      ? {
+          location: frames[0].location,
+          functionLocation: frames[0].functionLocation,
+          depth: frames.length,
+        }
+      : null
     this.emit({
       type: 'paused',
       sessionId: this.sessionId,
@@ -769,6 +856,8 @@ export class WorkbenchDebugSession {
   private classifyPause(pause: {
     reasons: string[]
     requested: Nullable<'pause' | 'step'>
+    /** 调试器自己要的停顿（启动即停、脚本执行前、入口断点）。 */
+    internal: boolean
     hitEntry: boolean
     hitUser: boolean
     top: Nullable<InspectorLocation>
@@ -776,26 +865,195 @@ export class WorkbenchDebugSession {
     if (pause.hitUser) return 'breakpoint'
     if (pause.reasons.some((reason) => reason === 'exception' || reason === 'promiseRejection'))
       return 'exception'
-    if (pause.requested) return pause.requested
-
-    const internal = pause.reasons.every(
-      (reason) =>
-        reason === 'Break on start' ||
-        reason === 'instrumentation' ||
-        (reason === 'other' && pause.hitEntry)
-    )
-    if (internal) {
+    if (pause.internal) {
       // 启动即停、入口断点停下的这一处，正好是刚按映射下的用户断点所在：放行之后 V8 不会再为它停一次，
       // 这一次就算它的。「带 source map 的脚本执行前」那次停顿在脚本开始之前，放行之后断点自己会停。
       const consumesBreakpoint = pause.hitEntry || pause.reasons.includes('Break on start')
-      return consumesBreakpoint && pause.top && this.hasBreakpointAt(pause.top) ? 'breakpoint' : null
+      if (consumesBreakpoint && pause.top && this.hasBreakpointAt(pause.top)) return 'breakpoint'
+      // 用户正在单步、刚按了暂停：算它的（单步的由调用方接着走完）；否则不给用户看。
+      return pause.requested
     }
+    if (pause.requested) return pause.requested
     // 工具自己在开头停的那一下（Vitest 的 `--inspect-brk`）。
     if (this.skipInitialPause) {
       this.skipInitialPause = false
       return null
     }
     return 'other'
+  }
+
+  /**
+   * 单步没有停在该停的地方：接着把这一步走完。V8 的黑盒（`setBlackboxPatterns`）对 Node 内部的脚本不起
+   * 作用，连着「步出」往回走也会在半路跟丢（从 `require` 那几层返回时），所以不靠单步往回走：
+   * - 调用栈里还有用户的代码：在最近的那一帧所在的函数里，每个可停的位置都下一个临时断点，放程序跑，回到
+   *   那个函数时停下，算这次单步。V8 自己「步出」到调用方用的也是这个办法。
+   * - 「单步进入」：先接着往里走几步——里面可能马上调回用户的代码（`emit` 的监听函数），那就停在那里。
+   *   正在加载模块（`require`、`import()`）的话，再给项目里任何模块的第一行挂一个临时断点：加载模块要走
+   *   上万步，走不到头，靠它停在被加载的模块的第一句。
+   * - 一个脚本正要开始执行（入口断点、「脚本执行前」停顿、上面那个模块第一行的断点）：「单步进入」就停在
+   *   它的第一句（转换器加在前面的代码再走几步）；「单步跳过」「步出」不停在里面，回到这一步出发的地方
+   *   （见 `findStepReturnPosition`）。
+   * - 调用栈里没有用户的代码了（主模块的最后一句之后、定时器回调的末尾）：让程序跑下去。
+   *
+   * 返回 false 是就停在这里、告诉用户。
+   */
+  private async continueStep(
+    frames: readonly InspectorCallFrame[],
+    enteredScript: boolean
+  ): Promise<boolean> {
+    const connection = this.requireConnection()
+    const top = frames[0]
+    if (!top) return false
+
+    if (this.stepAction === 'step-into') {
+      if (enteredScript) {
+        if (!this.isSkippedWhenStepping(top.location)) return false
+        this.automaticSteps = 0
+      }
+      if (
+        this.automaticSteps < MaxAutomaticSteps &&
+        this.totalAutomaticSteps < MaxAutomaticStepsPerStep
+      ) {
+        this.automaticSteps += 1
+        this.totalAutomaticSteps += 1
+        this.requestedPause = 'step'
+        await connection.send('Debugger.stepInto')
+        return true
+      }
+    }
+
+    const target =
+      enteredScript && this.stepAction !== 'step-into'
+        ? this.findStepReturnPosition(frames)
+        : (frames.slice(1).find((frame) => !this.isSkippedWhenStepping(frame.location)) ?? null)
+    if (this.temporaryBreakpointIds.size === 0) {
+      if (target) await this.setTemporaryBreakpointsIn(target)
+      if (this.stepAction === 'step-into' && frames.some((frame) => this.isModuleLoaderFrame(frame)))
+        await this.setModuleEntryBreakpoint()
+    }
+    const armed = this.temporaryBreakpointIds.size > 0
+    // 有用户的帧可回，却没能在那里下断点：照实停在这里，好过让程序一路跑下去。
+    if (target && !armed) return false
+
+    // 下一次停下（临时断点）算这次单步；一个也没下的就是继续运行。
+    this.requestedPause = armed ? 'step' : null
+    await connection.send('Debugger.resume')
+    return true
+  }
+
+  /**
+   * 「单步跳过」「步出」被一个正要开始执行的脚本打断了：这一步该回到哪个函数里停。
+   * - 跳过：出发的那个函数自己。它和正要执行的脚本之间可以隔着用户自己的代码（项目里写的加载钩子），
+   *   也可以已经不在调用栈上（`await import(…)`），所以按出发时记下的位置找，不按此刻的调用栈找。
+   * - 步出：调用栈上、出发的那一帧外面最近的用户代码。
+   */
+  private findStepReturnPosition(
+    frames: readonly InspectorCallFrame[]
+  ): Nullable<FunctionPosition> {
+    const origin = this.stepOrigin
+    if (!origin) return null
+    if (this.stepAction === 'step-over')
+      return this.isSkippedWhenStepping(origin.location) ? null : origin
+
+    // 调用栈只会在出发的那一帧上面长高：从底往上数，它还在原来那一层。
+    const originIndex = frames.length - origin.depth
+    if (originIndex < 1) return null
+    return (
+      frames.slice(originIndex + 1).find((frame) => !this.isSkippedWhenStepping(frame.location)) ??
+      null
+    )
+  }
+
+  /**
+   * 给这一处所在的函数里每个可停的位置下一个临时断点（不进嵌套的函数）。这一处之后的排在前面；之前的也要，
+   * 调用在循环里时返回之后先到的是循环头。
+   */
+  private async setTemporaryBreakpointsIn(frame: FunctionPosition): Promise<void> {
+    const connection = this.requireConnection()
+    const list = async (range: {
+      start: InspectorLocation
+      end?: InspectorLocation
+    }): Promise<InspectorLocation[]> => {
+      try {
+        const result = await connection.send<{ locations?: InspectorLocation[] }>(
+          'Debugger.getPossibleBreakpoints',
+          { ...range, restrictToFunction: true }
+        )
+        return result.locations ?? []
+      } catch {
+        // arch-guard:silent-catch-ok 脚本已经被回收、位置不在函数里：当作这一段没有可停的位置。
+        return []
+      }
+    }
+    const after = await list({ start: frame.location })
+    const before = frame.functionLocation
+      ? await list({ start: frame.functionLocation, end: frame.location })
+      : []
+
+    const seen = new Set<string>()
+    const candidates = [...after, ...before].filter((candidate) => {
+      const key = locationKeyOf(candidate)
+      // 转换器加的代码里不停。
+      if (seen.has(key) || this.isTransformGlue(candidate)) return false
+      seen.add(key)
+      return true
+    })
+    await Promise.all(
+      candidates.slice(0, MaxTemporaryBreakpoints).map(async (candidate) => {
+        try {
+          const { breakpointId } = await connection.send<{ breakpointId: string }>(
+            'Debugger.setBreakpoint',
+            {
+              location: {
+                scriptId: candidate.scriptId,
+                lineNumber: candidate.lineNumber,
+                columnNumber: candidate.columnNumber ?? 0,
+              },
+            }
+          )
+          this.temporaryBreakpointIds.add(breakpointId)
+        } catch {
+          // arch-guard:silent-catch-ok 这一处已经有用户的断点（同一处不能下两个）：它自己会停，不用临时的。
+        }
+      })
+    )
+  }
+
+  /** 项目里任何模块的第一行：下一个开始执行的模块会停在它的第一句。只在从项目代码出发的单步里用。 */
+  private async setModuleEntryBreakpoint(): Promise<void> {
+    if (!this.skipDependenciesWhileStepping || this.moduleEntryBreakpointId !== null) return
+
+    try {
+      const { breakpointId } = await this.requireConnection().send<{ breakpointId: string }>(
+        'Debugger.setBreakpointByUrl',
+        { urlRegex: ProjectModuleEntryPattern, lineNumber: 0, columnNumber: 0 }
+      )
+      this.moduleEntryBreakpointId = breakpointId
+      this.temporaryBreakpointIds.add(breakpointId)
+    } catch (error) {
+      log.debug('debug_module_entry_breakpoint_failed', { error })
+    }
+  }
+
+  private async clearTemporaryBreakpoints(): Promise<void> {
+    if (this.temporaryBreakpointIds.size === 0) return
+
+    const ids = [...this.temporaryBreakpointIds]
+    this.temporaryBreakpointIds.clear()
+    this.moduleEntryBreakpointId = null
+    await Promise.all(
+      ids.map((breakpointId) =>
+        this.connection?.send('Debugger.removeBreakpoint', { breakpointId }).catch(() => undefined)
+      )
+    )
+  }
+
+  /** 这一帧是不是在 Node 加载模块的那部分内部代码里。 */
+  private isModuleLoaderFrame(frame: InspectorCallFrame): boolean {
+    return (
+      this.scripts.get(frame.location.scriptId)?.url.startsWith(NodeModuleLoaderScriptPrefix) ===
+      true
+    )
   }
 
   /**
@@ -817,6 +1075,21 @@ export class WorkbenchDebugSession {
     return this.scripts.get(scriptId)?.url.startsWith('node:') === true
   }
 
+  /** 这个脚本是不是依赖包里的（路径里有 `node_modules`）。 */
+  private isDependencyScript(scriptId: string): boolean {
+    const path = this.scripts.get(scriptId)?.path
+    return !!path && isDependencyPath(path)
+  }
+
+  /** 单步时不停在这里：Node 内部、转换器加的代码，以及（从项目代码出发时）依赖包里的代码。 */
+  private isSkippedWhenStepping(location: InspectorLocation): boolean {
+    return (
+      this.isNodeInternalScript(location.scriptId) ||
+      this.isTransformGlue(location) ||
+      (this.skipDependenciesWhileStepping && this.isDependencyScript(location.scriptId))
+    )
+  }
+
   /** 有没有哪个按映射下的断点正好落在生成代码的这一处（同一个脚本、同一行同一列）。 */
   private hasBreakpointAt(location: InspectorLocation): boolean {
     const key = locationKeyOf(location)
@@ -833,6 +1106,7 @@ export class WorkbenchDebugSession {
       .catch(() => undefined)
     if (!this.paused) return
     this.paused = false
+    this.pausedAt = null
     this.emit({ type: 'resumed', sessionId: this.sessionId })
   }
 
