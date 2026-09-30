@@ -18,10 +18,9 @@ import {
   workbenchRangeFromOffsets,
 } from '../src/renderer/src/models/editor/workbenchCodeActions'
 import { mapWorkbenchDiagnosticToCodeMirror } from '../src/renderer/src/models/editor/workbenchCodeMirrorDiagnostics'
-import {
-  isWorkbenchEditorNavigationCommand,
-  resolveWorkbenchEditorCommandFromKey,
-} from '../src/renderer/src/models/editor/workbenchEditorCommands'
+import { isWorkbenchEditorNavigationCommand } from '../src/renderer/src/models/editor/workbenchEditorCommands'
+// 这几个键现在在编辑器命令的键位表里；下面查的是 Workbench 方案（不给方案时的默认）。
+import { resolveWorkbenchEditorKeymapCommand as resolveWorkbenchEditorCommandFromKey } from '../src/renderer/src/models/editor/workbenchEditorKeymap'
 import { buildWorkbenchLanguageServiceEditReport } from '../src/renderer/src/models/editor/workbenchLanguageServiceEditReport'
 import type {
   WorkbenchLanguageServiceCodeAction,
@@ -68,7 +67,11 @@ void describe('editor code action keys', () => {
   void test('needs exactly the modifiers of the binding', () => {
     assert.equal(resolveWorkbenchEditorCommandFromKey(key('Enter', 'Enter'), Mac), null)
     assert.equal(resolveWorkbenchEditorCommandFromKey(key('Enter', 'Enter', { alt: true, shift: true }), Mac), null)
-    assert.equal(resolveWorkbenchEditorCommandFromKey(key('Enter', 'Enter', { meta: true }), Mac), null)
+    // ⌘↩ 是同一张键位表里的另一个命令（在下面插入空行），不是快速修复。
+    assert.equal(
+      resolveWorkbenchEditorCommandFromKey(key('Enter', 'Enter', { meta: true }), Mac),
+      'insert-blank-line'
+    )
     // 主修饰键跟着平台：macOS 上的 ⌃. 、别处的 Win+. 都不是。
     assert.equal(resolveWorkbenchEditorCommandFromKey(key('Period', '.', { ctrl: true }), Mac), null)
     assert.equal(resolveWorkbenchEditorCommandFromKey(key('Period', '.', { meta: true }), Linux), null)
@@ -119,8 +122,8 @@ void describe('editor code action keys', () => {
         resolveWorkbenchEditorCommandFromKey(key('F7', 'F7', { alt: true }), platform),
         'find-references'
       )
-      // F12 本身是跳到定义（编辑器的键位表里），⌘⇧F12 之类不是。
-      assert.equal(resolveWorkbenchEditorCommandFromKey(key('F12', 'F12'), platform), null)
+      // F12 本身是跳到定义（同一张键位表里的另一个命令），⌘⇧F12 之类不是。
+      assert.equal(resolveWorkbenchEditorCommandFromKey(key('F12', 'F12'), platform), 'go-to-definition')
       assert.equal(resolveWorkbenchEditorCommandFromKey(key('F7', 'F7'), platform), null)
       assert.equal(
         resolveWorkbenchEditorCommandFromKey(key('F12', 'F12', { shift: true, alt: true }), platform),

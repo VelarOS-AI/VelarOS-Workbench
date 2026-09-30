@@ -13,10 +13,9 @@ import {
   toggleWorkbenchCallHierarchyNode,
   type WorkbenchCallHierarchyState,
 } from '../src/renderer/src/models/editor/workbenchCallHierarchy'
-import {
-  isWorkbenchEditorNavigationCommand,
-  resolveWorkbenchEditorCommandFromKey,
-} from '../src/renderer/src/models/editor/workbenchEditorCommands'
+import { isWorkbenchEditorNavigationCommand } from '../src/renderer/src/models/editor/workbenchEditorCommands'
+// 这个键现在在编辑器命令的键位表里；下面查的是 Workbench 方案（不给方案时的默认）。
+import { resolveWorkbenchEditorKeymapCommand as resolveWorkbenchEditorCommandFromKey } from '../src/renderer/src/models/editor/workbenchEditorKeymap'
 import type {
   WorkbenchLanguageServiceCallHierarchyCall,
   WorkbenchLanguageServiceCallHierarchyItem,

@@ -20,31 +20,21 @@ import {
   type CompletionSource,
   startCompletion,
 } from '@codemirror/autocomplete'
-import {
-  defaultKeymap,
-  history,
-  historyKeymap,
-  indentLess,
-  indentMore,
-  indentWithTab,
-  toggleComment,
-} from '@codemirror/commands'
+import { history, standardKeymap } from '@codemirror/commands'
 import {
   bracketMatching,
   foldGutter,
-  foldKeymap,
   indentOnInput,
   indentUnit,
   language as languageFacet,
 } from '@codemirror/language'
-import { type Diagnostic, linter, lintKeymap } from '@codemirror/lint'
+import { type Diagnostic, linter } from '@codemirror/lint'
 import {
   findNext,
   findPrevious,
   getSearchQuery,
   replaceAll,
   replaceNext,
-  selectNextOccurrence,
   selectSelectionMatches,
 } from '@codemirror/search'
 import type { Extension } from '@codemirror/state'
@@ -81,6 +71,7 @@ import {
   setWorkbenchCommentAnchorsEffect,
 } from '@renderer/components/editor/workbenchCommentExtension'
 import { useWorkbenchEditorConfig } from '@renderer/hooks/useWorkbenchEditorConfig'
+import { useWorkbenchKeymapPreset } from '@renderer/hooks/useWorkbenchKeymapController'
 import {
   useWorkbenchEditorMetrics,
   useWorkbenchEditorWordWrap,
@@ -125,7 +116,10 @@ import {
   createWorkbenchDiagnosticForegroundExtension,
   mapWorkbenchDiagnosticToCodeMirror,
 } from '@renderer/models/editor/workbenchCodeMirrorDiagnostics'
-import { workbenchEditorCommandKeys } from '@renderer/models/editor/workbenchCodeMirrorEditorCommands'
+import {
+  type WorkbenchEditorHostCommands,
+  workbenchEditorKeymap,
+} from '@renderer/models/editor/workbenchCodeMirrorEditorCommands'
 import { buildWorkbenchExternalValueSyncTransaction } from '@renderer/models/editor/workbenchCodeMirrorExternalSync'
 import {
   foldWorkbenchImportBlock,
@@ -255,7 +249,6 @@ import {
 import type { WorkbenchProjectContextIndex } from '@renderer/models/project/workbenchProjectContextIndex'
 import {
   readWorkbenchPreferences,
-  toggleWorkbenchEditorWordWrap,
   type WorkbenchThemeId,
 } from '@renderer/models/settings/workbenchPreferences'
 import { useStandaloneWorkbenchModelConfig } from '@renderer/runtime/standaloneWorkbenchModelConfig'
@@ -511,15 +504,10 @@ const workbenchCodeMirrorBaseExtensions: Extension[] = [
   workbenchEditorFindExtension,
   // 底部工具窗盖住的那一截不算视野：滚到某一行时让它落在工具窗上面。
   workbenchEditorCoveredScrollMargins(),
-  keymap.of([
-    ...closeBracketsKeymap,
-    ...defaultKeymap,
-    // CodeMirror 自带的查找面板、跳行框（F3、⌘G、⌥⌘G）不用：查找和跳行走编辑区自己的查找栏、跳行栏。
-    // ⇧⌘L 在实例的键位表里（选中了字选全部匹配，没选中就选光标处符号的全部出现）。
-    ...historyKeymap,
-    ...foldKeymap,
-    ...lintKeymap,
-  ]),
+  // 这里只留各家都一样的标准键（方向键、Home / End、回车、退格、全选……）。别的键——撤销重做、折叠、移动行、
+  // 注释，连同查找、跳行、代码动作——随键位方案变，都在编辑器命令的键位表里（`workbenchEditorKeymap.ts`），
+  // 排在这一张前面。
+  keymap.of([...closeBracketsKeymap, ...standardKeymap]),
 ]
 
 /** 覆盖编辑器挂载组件的视觉样式；几何尺寸由 metrics compartment 统一管理。 */
@@ -1485,6 +1473,9 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
     )
     const wordWrap = useWorkbenchEditorWordWrap()
     const wordWrapExtension = useMemo(() => (wordWrap ? EditorView.lineWrapping : []), [wordWrap])
+    // 设置里选的键位方案：按键每次现查（`workbenchEditorKeymap`），换方案不用重建编辑器的扩展。
+    const keymapPreset = useWorkbenchKeymapPreset()
+    const keymapPresetRef = useLatest(keymapPreset)
     const gitBlameVisible = gitBlame !== null
     const gitBlameExtension = useMemo(
       () => (gitBlameVisible ? workbenchGitBlameGutter(locale) : []),
@@ -2401,166 +2392,71 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         return true
       }
 
-      const customKeymap = keymap.of([
-        {
-          // ⌘Space 是系统的聚焦搜索，按不到；补全用 ⌃Space（CodeMirror 自带）或 ⌘I（VS Code 的另一个键）。
-          key: 'Mod-i',
-          preventDefault: true,
-          run: (view) => {
-            if (!view.state.readOnly) startCompletion(view)
-            return true
-          },
+      /** 交给光标处的代码动作、符号导航去做（快速修复、重构、查找引用……）。 */
+      const runCursorCommand = (command: WorkbenchEditorCommandId) => (): boolean => {
+        editorActionsRef.current.runCommand(command)
+        return true
+      }
+
+      // 编辑器命令里要用到这个组件的那些（别的在 workbenchCodeMirrorEditorCommands.ts 里）；哪个键是哪个命令
+      // 看键位表。
+      const hostCommands: WorkbenchEditorHostCommands = {
+        'go-to-definition': () => {
+          void editorActionsRef.current.goToDefinitionForWord(getCurrentIdentifier())
+          return true
         },
-        {
-          key: 'F12',
-          preventDefault: true,
-          run: () => {
-            void editorActionsRef.current.goToDefinitionForWord(getCurrentIdentifier())
-            return true
-          },
+        'rename-symbol': () => {
+          editorActionsRef.current.renameIdentifier(getCurrentIdentifier())
+          return true
         },
-        {
-          key: 'Shift-F6',
-          preventDefault: true,
-          run: () => {
-            editorActionsRef.current.renameIdentifier(getCurrentIdentifier())
-            return true
-          },
+        // 选中了字：选中全部一样的文字。只是光标停在一个符号上：选中它在这个文件里的全部出现（语言服务认的
+        // 那些；没有语言服务的文件按文字找）。
+        'select-all-occurrences': (view) => {
+          if (!selectSelectionMatches(view))
+            void editorActionsRef.current.selectReferenceOccurrences(getCurrentIdentifier())
+          return true
         },
-        {
-          // 选中了字：选中全部一样的文字（VS Code 的 ⇧⌘L）。只是光标停在一个符号上：选中它在这个文件里的
-          // 全部出现（语言服务认的那些；没有语言服务的文件按文字找）。
-          key: 'Mod-Shift-l',
-          preventDefault: true,
-          run: (view) => {
-            if (!selectSelectionMatches(view))
-              void editorActionsRef.current.selectReferenceOccurrences(getCurrentIdentifier())
-            return true
-          },
+        'format-document': () => {
+          void editorActionsRef.current.formatDocument()
+          return true
         },
-        {
-          key: 'Mod-d',
-          preventDefault: true,
-          run: (view) => {
-            selectNextOccurrence(view)
-            return true
-          },
+        save: (view) => {
+          void saveFromEditor(view)
+          return true
         },
-        {
-          key: 'Mod-/',
-          preventDefault: true,
-          run: (view) => toggleComment(view),
+        find: (view) => {
+          callbacksRef.current.onOpenFind(readWorkbenchEditorFindSeed(view.state))
+          return true
         },
-        {
-          key: 'Mod-Alt-l',
-          preventDefault: true,
-          run: () => {
-            void editorActionsRef.current.formatDocument()
-            return true
-          },
+        replace: (view) => {
+          callbacksRef.current.onOpenFind(readWorkbenchEditorFindSeed(view.state), true)
+          return true
         },
-        {
-          key: 'Alt-z',
-          preventDefault: true,
-          run: () => {
-            toggleWorkbenchEditorWordWrap()
-            return true
-          },
+        'find-next': findNextOrOpen,
+        // Esc：查找栏开着就关掉它（没开着的话由键位表那边去收多个选区）。
+        cancel: (view) => {
+          if (!isWorkbenchEditorFindOpen(view.state)) return false
+          callbacksRef.current.onCloseFind?.()
+          return true
         },
-        {
-          key: 'Mod-]',
-          preventDefault: true,
-          run: (view) => indentMore(view),
+        'go-to-line': () => {
+          callbacksRef.current.onOpenGoToLine()
+          return true
         },
-        {
-          key: 'Mod-[',
-          preventDefault: true,
-          run: (view) => indentLess(view),
+        'navigate-back': () => {
+          callbacksRef.current.onNavigateBack?.()
+          return true
         },
-        {
-          key: 'Mod-s',
-          preventDefault: true,
-          run: (view) => {
-            void saveFromEditor(view)
-            return true
-          },
+        'navigate-forward': () => {
+          callbacksRef.current.onNavigateForward?.()
+          return true
         },
-        {
-          key: 'Mod-f',
-          preventDefault: true,
-          run: (view) => {
-            callbacksRef.current.onOpenFind(readWorkbenchEditorFindSeed(view.state))
-            return true
-          },
-        },
-        {
-          // 查找并替换：macOS 上 ⌥⌘F（⌘H 是系统的隐藏窗口），其它平台 Ctrl+H，与 VS Code 一致。
-          key: 'Mod-h',
-          mac: 'Mod-Alt-f',
-          preventDefault: true,
-          run: (view) => {
-            callbacksRef.current.onOpenFind(readWorkbenchEditorFindSeed(view.state), true)
-            return true
-          },
-        },
-        // 查找下一处：各平台 F3（⇧F3 上一处），macOS 上还有 ⌘G。⇧⌘G 不占：它是打开 Git 面板的全局快捷键。
-        { key: 'F3', preventDefault: true, run: findNextOrOpen },
-        { mac: 'Mod-g', preventDefault: true, run: findNextOrOpen },
-        {
-          key: 'Shift-F3',
-          preventDefault: true,
-          run: (view) => {
-            if (!getSearchQuery(view.state).valid) return false
-            findPrevious(view)
-            return true
-          },
-        },
-        {
-          key: 'Escape',
-          run: (view) => {
-            if (!isWorkbenchEditorFindOpen(view.state)) return false
-            callbacksRef.current.onCloseFind?.()
-            return true
-          },
-        },
-        {
-          // 跳到行：各平台 Ctrl+G（macOS 上是 ⌃G，⌘G 留给查找下一处），外加 JetBrains 的 ⌘L / Ctrl+L。
-          key: 'Ctrl-g',
-          preventDefault: true,
-          run: () => {
-            callbacksRef.current.onOpenGoToLine()
-            return true
-          },
-        },
-        {
-          // macOS 上的后退 / 前进是 ⌃- / ⌃⇧-，编辑器不占，交给全局快捷键。
-          win: 'Alt-ArrowLeft',
-          linux: 'Alt-ArrowLeft',
-          preventDefault: true,
-          run: () => {
-            callbacksRef.current.onNavigateBack?.()
-            return true
-          },
-        },
-        {
-          win: 'Alt-ArrowRight',
-          linux: 'Alt-ArrowRight',
-          preventDefault: true,
-          run: () => {
-            callbacksRef.current.onNavigateForward?.()
-            return true
-          },
-        },
-        {
-          key: 'Mod-l',
-          preventDefault: true,
-          run: () => {
-            callbacksRef.current.onOpenGoToLine()
-            return true
-          },
-        },
-        indentWithTab,
-      ])
+        'quick-fix': runCursorCommand('quick-fix'),
+        refactor: runCursorCommand('refactor'),
+        'organize-imports': runCursorCommand('organize-imports'),
+        'call-hierarchy': runCursorCommand('call-hierarchy'),
+        'find-references': runCursorCommand('find-references'),
+      }
 
       let activeDefinitionHoverRange: Nullable<WorkbenchDefinitionHoverRange> = null
       let lastDefinitionHoverCoords: Nullable<{ x: number; y: number }> = null
@@ -2681,10 +2577,10 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       return {
         module: EditorModule,
         findStatus,
-        keymap: [
-          workbenchEditorCommandKeys((command) => editorActionsRef.current.runCommand(command)),
-          customKeymap,
-        ],
+        keymap: workbenchEditorKeymap({
+          getPreset: () => keymapPresetRef.current,
+          host: hostCommands,
+        }),
         tooltips: tooltips({
           parent: toOptional(container),
           // The container clips with overflow:hidden, but CodeMirror defaults its

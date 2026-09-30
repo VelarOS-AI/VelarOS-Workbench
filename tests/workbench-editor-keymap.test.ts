@@ -3,10 +3,19 @@
  * Workbench 方案与改成键位方案之前逐键一致，钉在 `workbench-editor-keymap-pin.test.ts`。
  */
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { resolve as resolvePath } from 'node:path'
 
 import { standardKeymap } from '@codemirror/commands'
+import { EditorSelection, EditorState, type Transaction } from '@codemirror/state'
+import type { EditorView } from '@codemirror/view'
 import { describe, test } from 'bun:test'
 
+import {
+  createWorkbenchEditorKeyHandler,
+  type WorkbenchEditorHostCommandId,
+  type WorkbenchEditorHostCommands,
+} from '../src/renderer/src/models/editor/workbenchCodeMirrorEditorCommands'
 import {
   getWorkbenchEditorCommandChords,
   getWorkbenchEditorCommandShortcut,
@@ -617,5 +626,157 @@ void describe('editor keymap: which key was pressed', () => {
     assert.equal(workbench(key('KeyQ', '@', { ctrl: true, alt: true, keyCode: 81 }), Windows), null)
     // Linux 上 AltGr 不是 Ctrl+Alt，按着这两个键打出来别的字符照样按键本身认。
     assert.equal(workbench(key('KeyT', 'þ', { ctrl: true, alt: true, shift: true }), Linux), 'refactor')
+  })
+})
+
+void describe('editor keymap: a key runs its command', () => {
+  const HostCommandIds: readonly WorkbenchEditorHostCommandId[] = [
+    'call-hierarchy',
+    'cancel',
+    'find',
+    'find-next',
+    'find-references',
+    'format-document',
+    'go-to-definition',
+    'go-to-line',
+    'navigate-back',
+    'navigate-forward',
+    'organize-imports',
+    'quick-fix',
+    'refactor',
+    'rename-symbol',
+    'replace',
+    'save',
+    'select-all-occurrences',
+  ]
+
+  /** 只有状态、没有界面的编辑器：CodeMirror 那些只动文档与选区的命令用它就够了。 */
+  function createView(state: EditorState): EditorView {
+    const view = {
+      state,
+      dispatch(transaction: Transaction) {
+        view.state = transaction.state
+      },
+    }
+    return view as unknown as EditorView
+  }
+
+  function createHandler(options: { preset?: WorkbenchKeymapPresetId; closesFind?: boolean } = {}) {
+    const calls: string[] = []
+    const current = { preset: options.preset ?? 'workbench' }
+    const host = Object.fromEntries(
+      HostCommandIds.map((command) => [
+        command,
+        () => {
+          calls.push(command)
+          return command === 'cancel' ? !!options.closesFind : true
+        },
+      ])
+    ) as WorkbenchEditorHostCommands
+    const handle = createWorkbenchEditorKeyHandler({
+      getPreset: () => current.preset,
+      host,
+      platform: Mac,
+    })
+    return {
+      calls,
+      current,
+      press: (view: EditorView, chord: string) => handle(view, keymapTestEventFor(chord, Mac)),
+    }
+  }
+
+  void test('the component commands get the keys of the chosen preset', () => {
+    const view = createView(EditorState.create({ doc: 'const a = 1\n' }))
+    const { calls, current, press } = createHandler()
+
+    assert.equal(press(view, 'F12'), true)
+    assert.equal(press(view, 'Mod+S'), true)
+    assert.equal(press(view, 'Alt+Enter'), true)
+    // F2、⌘B 在 Workbench 方案里不是哪个命令：不算用掉，按键接着往下走。
+    assert.equal(press(view, 'F2'), false)
+    assert.equal(press(view, 'Mod+B'), false)
+    assert.deepEqual(calls, ['go-to-definition', 'save', 'quick-fix'])
+
+    // 方案每次按键现读。
+    current.preset = 'vscode'
+    assert.equal(press(view, 'F2'), true)
+    current.preset = 'jetbrains'
+    assert.equal(press(view, 'Mod+B'), true)
+    assert.equal(press(view, 'F2'), true)
+    assert.equal(press(view, 'F12'), false)
+    assert.deepEqual(calls.slice(3), ['rename-symbol', 'go-to-definition'])
+  })
+
+  void test('a key that is a command is used up even when the command has nothing to do', () => {
+    const readOnly = createView(
+      EditorState.create({ doc: 'one\ntwo\n', selection: { anchor: 5 }, extensions: EditorState.readOnly.of(true) })
+    )
+    const { press } = createHandler()
+    // 只读文件里上移一行做不了；⌥↑ 仍然是这个命令，不漏给别处。
+    assert.equal(press(readOnly, 'Alt+ArrowUp'), true)
+    assert.equal(readOnly.state.doc.toString(), 'one\ntwo\n')
+
+    const editable = createView(EditorState.create({ doc: 'one\ntwo\n', selection: { anchor: 5 } }))
+    assert.equal(press(editable, 'Alt+ArrowUp'), true)
+    assert.equal(editable.state.doc.toString(), 'two\none\n')
+    assert.equal(press(editable, 'Shift+Alt+ArrowDown'), true)
+    assert.equal(editable.state.doc.toString(), 'two\ntwo\none\n')
+    assert.equal(press(editable, 'Mod+Z'), true)
+  })
+
+  void test('Tab and Escape pass through when they have nothing to do', () => {
+    const editable = createView(EditorState.create({ doc: 'one\n' }))
+    const { calls, press } = createHandler()
+    assert.equal(press(editable, 'Tab'), true)
+    assert.notEqual(editable.state.doc.toString(), 'one\n')
+    assert.equal(press(editable, 'Shift+Tab'), true)
+    assert.equal(editable.state.doc.toString(), 'one\n')
+
+    // 只读文件里 Tab 不缩进：不算用掉，浏览器照常把焦点挪走。
+    const readOnly = createView(EditorState.create({ doc: 'one\n', extensions: EditorState.readOnly.of(true) }))
+    assert.equal(press(readOnly, 'Tab'), false)
+    assert.equal(press(readOnly, 'Mod+]'), false)
+
+    // Esc：查找栏没开着、只有一个选区——没事可做，交给全局的 Esc。
+    assert.equal(press(editable, 'Escape'), false)
+    assert.deepEqual(calls, ['cancel'])
+    // 有多个选区：收成一个。
+    const multiple = createView(
+      EditorState.create({
+        doc: 'one two\n',
+        selection: EditorSelection.create([EditorSelection.cursor(1), EditorSelection.cursor(5)]),
+        extensions: EditorState.allowMultipleSelections.of(true),
+      })
+    )
+    assert.equal(press(multiple, 'Escape'), true)
+    assert.equal(multiple.state.selection.ranges.length, 1)
+    // 查找栏开着：组件关掉它，多个选区留着。
+    const closing = createHandler({ closesFind: true })
+    const selected = createView(
+      EditorState.create({
+        doc: 'one two\n',
+        selection: EditorSelection.create([EditorSelection.cursor(1), EditorSelection.cursor(5)]),
+        extensions: EditorState.allowMultipleSelections.of(true),
+      })
+    )
+    assert.equal(closing.press(selected, 'Escape'), true)
+    assert.equal(selected.state.selection.ranges.length, 2)
+  })
+
+  void test('the component provides exactly the commands that need it', () => {
+    const source = readFileSync(
+      resolvePath(process.cwd(), 'src/renderer/src/components/editor/CodeMirrorEditor.tsx'),
+      'utf8'
+    )
+    const start = source.indexOf('const hostCommands: WorkbenchEditorHostCommands = {')
+    const declared = [
+      ...source
+        .slice(start, source.indexOf('\n      }\n', start))
+        .matchAll(/^ {8}(?:'([a-z-]+)'|([a-z]+)): /gmu),
+    ].map(([, quoted, plain]) => quoted ?? plain)
+    assert.deepEqual([...declared].sort(), [...HostCommandIds].sort())
+    // 都是键位表里的命令。
+    for (const command of HostCommandIds)
+      assert.ok((WORKBENCH_EDITOR_KEYMAP_COMMANDS as readonly string[]).includes(command), command)
   })
 })

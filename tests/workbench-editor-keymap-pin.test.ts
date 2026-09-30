@@ -1,52 +1,19 @@
 /**
- * 编辑器今天的键位表，在改成「键位方案」之前先钉住：哪个按键做哪件事、各平台分别是什么。
+ * 编辑器在有「键位方案」之前的键位表，钉在这里：哪个按键做哪件事、各平台分别是什么。Workbench 方案要与它
+ * 逐键一致。
  *
- * 表照 CodeMirror 的写法记（`Mod-Shift-l`，`Mod` 在 macOS 上是 ⌘、别处是 Ctrl），按今天的先后顺序排：
- * 同一个键先登记的先得（`Mod-i` 在实例键位表里是触发补全，CodeMirror 自带的那条「扩大选区」就轮不到）。
- * 下面的测试拿它对照今天的三处来源：编辑器组件里的 `customKeymap`、代码动作的按键表、CodeMirror 自带的键位表。
+ * 表照 CodeMirror 的写法记（`Mod-Shift-l`，`Mod` 在 macOS 上是 ⌘、别处是 Ctrl），按当时的先后顺序排：
+ * 同一个键先登记的先得（`Mod-i` 在编辑器组件的键位表里是触发补全，CodeMirror 自带的那条「扩大选区」就轮不到）。
+ * 它当时来自三处：编辑器组件里的 `customKeymap`、代码动作的按键表、CodeMirror 自带的键位表；引入这个文件的
+ * 那次提交逐条对过这三处（组件里声明的键、旧的按键解析、`defaultKeymap` / `historyKeymap` / `foldKeymap` /
+ * `lintKeymap` 的内容）。现在这三处都并进了 `workbenchEditorKeymap.ts` 那张表，下面的测试对的是那张表。
  */
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-import { completionKeymap, startCompletion } from '@codemirror/autocomplete'
-import {
-  addCursorAbove,
-  addCursorBelow,
-  copyLineDown,
-  copyLineUp,
-  cursorMatchingBracket,
-  cursorSyntaxLeft,
-  cursorSyntaxRight,
-  defaultKeymap,
-  deleteLine,
-  historyKeymap,
-  indentLess,
-  indentMore,
-  indentSelection,
-  indentWithTab,
-  insertBlankLine,
-  moveLineDown,
-  moveLineUp,
-  redo,
-  redoSelection,
-  selectLine,
-  selectParentSyntax,
-  selectSyntaxLeft,
-  selectSyntaxRight,
-  simplifySelection,
-  toggleBlockComment,
-  toggleComment,
-  toggleTabFocusMode,
-  undo,
-  undoSelection,
-} from '@codemirror/commands'
-import { foldAll, foldCode, foldKeymap, unfoldAll, unfoldCode } from '@codemirror/language'
-import { lintKeymap, nextDiagnostic, openLintPanel } from '@codemirror/lint'
-import type { Command, KeyBinding } from '@codemirror/view'
 import { describe, test } from 'bun:test'
 
-import { resolveWorkbenchEditorCommandFromKey } from '../src/renderer/src/models/editor/workbenchEditorCommands'
 import {
   listWorkbenchEditorKeymapBindings,
   resolveWorkbenchEditorKeymapCommand,
@@ -55,7 +22,7 @@ import {
 
 type PinnedPlatform = 'mac' | 'win' | 'linux'
 
-/** 这条按键今天登记在哪：代码动作的按键表、补全自带的键位表、编辑器组件里的表，还是 CodeMirror 自带的几张表。 */
+/** 这条按键当时登记在哪：代码动作的按键表、补全自带的键位表、编辑器组件里的表，还是 CodeMirror 自带的几张表。 */
 type PinnedSource = 'chords' | 'completion' | 'custom' | 'default' | 'history' | 'fold' | 'lint'
 
 interface PinnedBinding {
@@ -70,7 +37,7 @@ interface PinnedBinding {
 
 const PinnedPlatforms: readonly PinnedPlatform[] = ['mac', 'win', 'linux']
 
-/** 今天的键位表，先登记的在前。 */
+/** 当时的键位表，先登记的在前。 */
 const PinnedWorkbenchEditorBindings: readonly PinnedBinding[] = [
   // 代码动作与跟着符号走的导航：直接接 keydown，排在所有键位表前面。
   { command: 'quick-fix', source: 'chords', key: 'Alt-Enter' },
@@ -160,7 +127,7 @@ const PinnedWorkbenchEditorBindings: readonly PinnedBinding[] = [
 ]
 
 /**
- * 每个平台上今天没有键的命令（同一个键先登记的先得）：
+ * 每个平台上当时没有键的命令（同一个键先登记的先得）：
  *  - `expand-selection`：它的 `Mod-i` 被触发补全占了，各平台都按不到；
  *  - `cursor-syntax-left` / `cursor-syntax-right`：Windows / Linux 上的 Alt+← / Alt+→ 被后退 / 前进占了，只有 macOS 上有键；
  *  - `navigate-back` / `navigate-forward`：macOS 上编辑器不占键（⌃- / ⌃⇧- 是全局快捷键）。
@@ -213,7 +180,7 @@ function chordSignature(chord: PinnedChord): string {
     .join('+')
 }
 
-function pinnedKeyFor(binding: PinnedBinding | KeyBinding, platform: PinnedPlatform): string | undefined {
+function pinnedKeyFor(binding: PinnedBinding, platform: PinnedPlatform): string | undefined {
   return binding[platform] || binding.key
 }
 
@@ -274,144 +241,7 @@ function readSource(relativePath: string): string {
   return readFileSync(resolve(process.cwd(), relativePath), 'utf8')
 }
 
-/** CodeMirror 自带的键位表里各条命令对应的名字（`shift` 是同一条绑定带 Shift 时的命令）。 */
-const StockCommands: ReadonlyArray<readonly [string, Command]> = [
-  ['trigger-completion', startCompletion],
-  ['cursor-syntax-left', cursorSyntaxLeft],
-  ['select-syntax-left', selectSyntaxLeft],
-  ['cursor-syntax-right', cursorSyntaxRight],
-  ['select-syntax-right', selectSyntaxRight],
-  ['move-line-up', moveLineUp],
-  ['copy-line-up', copyLineUp],
-  ['move-line-down', moveLineDown],
-  ['copy-line-down', copyLineDown],
-  ['add-cursor-above', addCursorAbove],
-  ['add-cursor-below', addCursorBelow],
-  ['cancel', simplifySelection],
-  ['insert-blank-line', insertBlankLine],
-  ['select-line', selectLine],
-  ['expand-selection', selectParentSyntax],
-  ['indent-less', indentLess],
-  ['indent-more', indentMore],
-  ['reindent-selection', indentSelection],
-  ['delete-line', deleteLine],
-  ['jump-to-bracket', cursorMatchingBracket],
-  ['toggle-line-comment', toggleComment],
-  ['toggle-block-comment', toggleBlockComment],
-  ['toggle-tab-focus-mode', toggleTabFocusMode],
-  ['undo', undo],
-  ['redo', redo],
-  ['undo-selection', undoSelection],
-  ['redo-selection', redoSelection],
-  ['fold', foldCode],
-  ['unfold', unfoldCode],
-  ['fold-all', foldAll],
-  ['unfold-all', unfoldAll],
-  ['open-lint-panel', openLintPanel],
-  ['next-problem', nextDiagnostic],
-]
-
-function stockCommandName(command: Command | undefined): string | undefined {
-  return StockCommands.find(([, stock]) => stock === command)?.[0]
-}
-
-/** 一张自带键位表在某个平台上的内容：「按键 → 命令」，带 Shift 的那一半单独算一条。 */
-function stockTable(bindings: readonly KeyBinding[], platform: PinnedPlatform): string[] {
-  return bindings.flatMap((binding) => {
-    const name = pinnedKeyFor(binding, platform)
-    if (!name) return []
-    const chord = parsePinnedKey(name, platform)
-    const rows: string[] = []
-    const run = stockCommandName(binding.run)
-    if (run) rows.push(`${chordSignature(chord)} → ${run}`)
-    const shifted = stockCommandName(binding.shift)
-    if (shifted) rows.push(`${chordSignature({ ...chord, shift: true })} → ${shifted}`)
-    return rows
-  })
-}
-
-function pinnedTable(source: PinnedSource, platform: PinnedPlatform): string[] {
-  return PinnedWorkbenchEditorBindings.flatMap((binding) => {
-    const name = binding.source === source ? pinnedKeyFor(binding, platform) : undefined
-    return name ? [`${chordSignature(parsePinnedKey(name, platform))} → ${binding.command}`] : []
-  })
-}
-
-void describe('the editor key bindings as they are today', () => {
-  void test('the keymap in the editor component binds these keys, in this order', () => {
-    const editor = readSource('src/renderer/src/components/editor/CodeMirrorEditor.tsx')
-    const start = editor.indexOf('const customKeymap = keymap.of([')
-    const end = editor.indexOf('indentWithTab,\n      ])', start)
-    assert.ok(start > 0 && end > start)
-
-    // 每条绑定写了哪些键（`key` 各平台通用，`mac` / `win` / `linux` 是那个平台的），照源码里的顺序。
-    const declared = [...editor.slice(start, end).matchAll(/\b(key|mac|win|linux): '([^']+)'/gu)].map(
-      ([, property, name]) => `${property}: ${name}`
-    )
-    const pinned = PinnedWorkbenchEditorBindings.filter(
-      (binding) => binding.source === 'custom' && binding.key !== 'Tab' && binding.key !== 'Shift-Tab'
-    ).flatMap((binding) =>
-      (['key', 'mac', 'win', 'linux'] as const).flatMap((property) =>
-        binding[property] ? [`${property}: ${binding[property]}`] : []
-      )
-    )
-    assert.deepEqual(declared, pinned)
-
-    // 表的最后是 CodeMirror 的 Tab / Shift-Tab（缩进、减少缩进）。
-    assert.equal(indentWithTab.key, 'Tab')
-    assert.equal(indentWithTab.run, indentMore)
-    assert.equal(indentWithTab.shift, indentLess)
-
-    // 代码动作的按键排在它前面，CodeMirror 自带的几张表排在它后面。
-    assert.match(
-      editor,
-      /keymap: \[\s*workbenchEditorCommandKeys\(\(command\) => editorActionsRef\.current\.runCommand\(command\)\),\s*customKeymap,\s*\]/u
-    )
-    assert.match(
-      editor,
-      /keymap\.of\(\[\s*\.\.\.closeBracketsKeymap,\s*\.\.\.defaultKeymap,[\s\S]*?\.\.\.historyKeymap,\s*\.\.\.foldKeymap,\s*\.\.\.lintKeymap,\s*\]\)/u
-    )
-    assert.match(editor, /autocompletion\(\{[\s\S]*?defaultKeymap: true,/u)
-  })
-
-  void test('the code action keys resolve to these commands', () => {
-    for (const platform of PinnedPlatforms) {
-      for (const binding of PinnedWorkbenchEditorBindings) {
-        const name = binding.source === 'chords' ? pinnedKeyFor(binding, platform) : undefined
-        if (!name) continue
-        assert.equal(
-          resolveWorkbenchEditorCommandFromKey(
-            pinnedKeyEvent(parsePinnedKey(name, platform), platform),
-            platformName(platform)
-          ),
-          binding.command,
-          `${platform} ${name}`
-        )
-      }
-    }
-  })
-
-  void test("CodeMirror's own keymaps bind the rest", () => {
-    // 标准键（方向键、Home / End、回车、退格、全选……）不在这张表里：它们不随键位方案变。
-    const extras = defaultKeymap.slice(0, defaultKeymap.findIndex((binding) => binding.key === 'ArrowLeft'))
-    for (const platform of PinnedPlatforms) {
-      assert.deepEqual(stockTable(extras, platform), pinnedTable('default', platform), platform)
-      assert.deepEqual(stockTable(historyKeymap, platform), pinnedTable('history', platform), platform)
-      assert.deepEqual(stockTable(foldKeymap, platform), pinnedTable('fold', platform), platform)
-      assert.deepEqual(stockTable(lintKeymap, platform), pinnedTable('lint', platform), platform)
-      // 补全那张表里别的键（方向键、回车、Esc）是补全列表开着时用的；macOS 上另有两个带 ⌥ 的键，
-      // 在美式键盘上是死键，按不出来。
-      assert.deepEqual(
-        stockTable(
-          completionKeymap.filter((binding) => binding.key === 'Ctrl-Space'),
-          platform
-        ),
-        pinnedTable('completion', platform),
-        platform
-      )
-    }
-  })
-
+void describe('the editor key bindings before keymap presets', () => {
   void test('on every platform each key means one command, and these commands have no key', () => {
     for (const platform of PinnedPlatforms) {
       const table = effectivePinnedTable(platform)
@@ -510,5 +340,44 @@ void describe('the Workbench keymap preset is that table', () => {
         'previous-problem',
       ].sort()
     )
+  })
+})
+
+void describe('the editor resolves its keys through that one table', () => {
+  void test('the editor component declares no keys of its own', () => {
+    const editor = readSource('src/renderer/src/components/editor/CodeMirrorEditor.tsx')
+    // 以前的两处（组件里的键位表、代码动作的按键表）和 CodeMirror 自带的几张非标准键位表都不在了。
+    assert.doesNotMatch(
+      editor,
+      /\b(?:key|mac|win|linux): '(?:(?:Mod|Cmd|Ctrl|Alt|Shift)-[^']+|F\d{1,2}|Escape|Tab|Enter)'/u
+    )
+    // （`defaultKeymap: true` 是补全的配置项，不是那张键位表。）
+    assert.doesNotMatch(
+      editor,
+      /\b(?:customKeymap|workbenchEditorCommandKeys|historyKeymap|foldKeymap|lintKeymap|searchKeymap|indentWithTab)\b|\.\.\.defaultKeymap\b/u
+    )
+    // 留下的只有各家都一样的标准键；补全列表自己的键（↑ ↓、回车、Esc、⌃Space）照旧。
+    assert.match(editor, /keymap\.of\(\[\.\.\.closeBracketsKeymap, \.\.\.standardKeymap\]\)/u)
+    assert.match(editor, /autocompletion\(\{[\s\S]*?defaultKeymap: true,/u)
+
+    // 按键按所选方案现查；这条绑定排在一个文件全部扩展的最前面（标准键之前），与以前组件里那张表同一个位置。
+    assert.match(
+      editor,
+      /keymap: workbenchEditorKeymap\(\{\s*getPreset: \(\) => keymapPresetRef\.current,\s*host: hostCommands,\s*\}\)/u
+    )
+    const fileExtensions = editor.slice(editor.indexOf('const buildFileExtensions = '))
+    assert.ok(fileExtensions.indexOf('instance.keymap,') > 0)
+    assert.ok(
+      fileExtensions.indexOf('instance.keymap,') < fileExtensions.indexOf('...workbenchCodeMirrorBaseExtensions')
+    )
+  })
+
+  void test('the keys are one CodeMirror binding that takes every key', () => {
+    const commands = readSource('src/renderer/src/models/editor/workbenchCodeMirrorEditorCommands.ts')
+    assert.match(
+      commands,
+      /return keymap\.of\(\[\{ any: \(view, event\) => !event\.isComposing && handleKey\(view, event\) \}\]\)/u
+    )
+    assert.doesNotMatch(commands, /Prec\./u)
   })
 })
