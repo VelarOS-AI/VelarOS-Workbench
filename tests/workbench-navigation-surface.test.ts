@@ -49,6 +49,12 @@ void describe('Workbench navigation surface', () => {
       leftTool: 'ai-changes',
       revealLeftPanel: true,
     })
+    // 项目搜索（⇧⌘F）：搜索在左侧项目面板里，面板收起着就展开；结果在普通文件区打开。
+    assert.deepEqual(resolveWorkbenchNavigationSurface('search'), {
+      editorGroup: 'primary',
+      leftTool: 'project',
+      revealLeftPanel: true,
+    })
   })
 
   void test('every entry that brings something into view goes through the one navigate entry', () => {

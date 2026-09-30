@@ -56,6 +56,8 @@ interface UseWorkbenchCommandPaletteOptions {
   editorCovered: boolean
   closeActiveEditor: () => void
   exitCurrentProject: () => Promise<boolean>
+  /** 打开侧栏的项目搜索（与 ⇧⌘F 同一个动作）。 */
+  findInFiles: () => void
   navigateBack: () => Promise<void>
   navigateForward: () => Promise<void>
   openSettings: () => void
@@ -75,6 +77,7 @@ export function useWorkbenchCommandPalette({
   editorCovered,
   closeActiveEditor,
   exitCurrentProject,
+  findInFiles,
   navigateBack,
   navigateForward,
   openSettings,
@@ -153,6 +156,10 @@ export function useWorkbenchCommandPalette({
 
   const run = (id: WorkbenchPalettePageCommandId): void => {
     switch (id) {
+      case 'find-in-files': {
+        findInFiles()
+        return
+      }
       case 'navigate-back': {
         void navigateBack()
         return

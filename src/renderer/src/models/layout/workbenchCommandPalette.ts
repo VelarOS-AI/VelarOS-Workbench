@@ -15,6 +15,7 @@ export type WorkbenchPaletteCommandId =
   | 'close-all-editors'
   | 'close-editor'
   | 'close-project'
+  | 'find-in-files'
   | 'format-document'
   | 'go-to-file'
   | 'go-to-line'
@@ -57,6 +58,8 @@ export const WORKBENCH_PALETTE_COMMANDS: readonly WorkbenchPaletteCommandDefinit
   { id: 'go-to-file', labelKey: 'workbench.commandGoToFile', shortcut: { action: 'quick-open' } },
   // 编辑器里的跳到行（⌃G / Ctrl+G）；面板里是快速打开的 `:` 模式。
   { id: 'go-to-line', labelKey: 'workbench.commandGoToLine', shortcut: { fixed: 'Ctrl+G' } },
+  // 侧栏的项目搜索与替换；编辑器里选中了一行以内的文字就拿它当查找词。
+  { id: 'find-in-files', labelKey: 'workbench.commandFindInFiles', shortcut: { action: 'find-in-files' } },
   { id: 'navigate-back', labelKey: 'workbench.commandNavigateBack', shortcut: { action: 'navigate-back' } },
   {
     id: 'navigate-forward',

@@ -29,6 +29,7 @@ import { getWorkbenchCommandStatusLabel } from '@renderer/models/commands/workbe
 import { inferPackageManagerCommand } from '@renderer/models/commands/workbenchCommandSuggestions'
 import { inferWorkbenchPackageManagerForPackageJsonPath } from '@renderer/models/commands/workbenchPackageScriptCommand'
 import { buildWorkbenchPackageScriptRunActions } from '@renderer/models/editor/workbenchPackageScriptRunGutter'
+import { readWorkbenchProjectSearchSeed } from '@renderer/models/files/workbenchProjectSearchModel'
 import { resolveWorkbenchGitSurfacesActive } from '@renderer/models/git/workbenchGitSurfaceActivation'
 import { resolveWorkbenchNavigationSurface } from '@renderer/models/layout/workbenchSurfaceModel'
 import { saveLightEditorTab } from '@renderer/models/lightEditorModel'
@@ -103,6 +104,8 @@ type WorkbenchNavigationRequest =
     }
   | { target: 'file-preview'; tab: WorkbenchLightEditorTab }
   | { target: 'ai-changes'; round: WorkbenchChatRunChangesTarget }
+  /** 打开项目搜索；给了 seed 就拿它当查找词。 */
+  | { target: 'search'; seed?: string }
 
 function normalizeWorkspaceRoot(root: LooseOptional<string>): string {
   return (root ?? '').replace(/[\\/]+$/, '')
@@ -473,6 +476,7 @@ export function useStandaloneWorkbenchPageModel(
     isQuickOpenOpen: surface.isQuickOpenOpen,
     keymap: workbenchKeymap.keymap,
     onCloseRightTool: surface.closeRightTool,
+    onFindInFiles: () => void navigate({ target: 'search', seed: readProjectSearchSeed() }),
     onNavigateBack: () => void editorNavigation.goBack(),
     onNavigateForward: () => void editorNavigation.goForward(),
     onOpenQuickOpen: surface.openQuickOpen,
@@ -714,6 +718,9 @@ export function useStandaloneWorkbenchPageModel(
         return
       case 'ai-changes':
         await aiChanges.openRound(request.round)
+        return
+      case 'search':
+        projectSearch.openPanel(request.seed)
     }
   })
 
@@ -727,6 +734,16 @@ export function useStandaloneWorkbenchPageModel(
       await navigate({ target: 'file', path, line: cursor.line, column: cursor.column })
     }
   )
+
+  /** ⇧⌘F 的查找词：编辑区显示的是普通文件、里面选中了一行以内的文字时才有。 */
+  function readProjectSearchSeed(): string | undefined {
+    if (!workbench.selectedFilePath || editorNavigation.diffItem || editorNavigation.lightTab)
+      return undefined
+    return readWorkbenchProjectSearchSeed(
+      workbench.editorContent,
+      editorNavigation.cursorPosition.selection
+    )
+  }
 
   /** 重新打开最近关掉的文件标签；记得上次的光标位置就回到那里。 */
   const reopenClosedEditorTab = useMemoizedFn(async (): Promise<void> => {
@@ -1075,6 +1092,7 @@ export function useStandaloneWorkbenchPageModel(
       velarLogicGraphActive,
     closeActiveEditor: () => setCloseActiveEditorTabRequestId((requestId) => requestId + 1),
     exitCurrentProject,
+    findInFiles: () => void navigate({ target: 'search', seed: readProjectSearchSeed() }),
     navigateBack: editorNavigation.goBack,
     navigateForward: editorNavigation.goForward,
     openSettings: () => setSettingsOpen(true),

@@ -373,6 +373,7 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     commandPaletteEmpty: 'No matching commands',
     commandGoToFile: 'Go to File…',
     commandGoToLine: 'Go to Line…',
+    commandFindInFiles: 'Find in Files',
     commandNavigateBack: 'Go Back',
     commandNavigateForward: 'Go Forward',
     commandSave: 'Save',
@@ -1120,6 +1121,9 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     settingsShortcutCommandPalette: 'Command palette',
     settingsShortcutCommandPaletteDescription:
       'Run Workbench commands by name; typing > in Quick Open switches to it too.',
+    settingsShortcutFindInFiles: 'Search in project',
+    settingsShortcutFindInFilesDescription:
+      'Open search and replace in the sidebar; a selection within one line becomes the query.',
     settingsShortcutNavigateBack: 'Go back',
     settingsShortcutNavigateBackDescription:
       'Return to where you were before switching files or jumping to a definition or line (also the mouse back button).',

@@ -6,6 +6,7 @@ import {
   formatWorkbenchProjectSearchCount,
   isOpenableWorkbenchProjectSearchRow,
   mergeWorkbenchProjectSearchFiles,
+  readWorkbenchProjectSearchSeed,
   searchWorkbenchEditorText,
 } from '../src/renderer/src/models/files/workbenchProjectSearchModel'
 import type { WorkbenchContentSearchFileResult, WorkbenchDirectoryEntry } from '../src/shared/contracts'
@@ -115,6 +116,18 @@ describe('project search results model', () => {
       collapsedPaths: new Set(),
     })
     expect(collapsedEntries.map((row) => row.kind)).toEqual(['entries'])
+  })
+
+  test('⇧⌘F takes a selection within one line as the query, nothing else', () => {
+    const content = 'const alpha = 1\nconst beta = alpha\n'
+    const on = (startLine: number, startColumn: number, endLine: number, endColumn: number) =>
+      readWorkbenchProjectSearchSeed(content, { startLine, startColumn, endLine, endColumn })
+    expect(on(2, 7, 2, 11)).toBe('beta')
+    expect(on(1, 7, 2, 5)).toBeUndefined()
+    expect(on(1, 3, 1, 3)).toBeUndefined()
+    expect(readWorkbenchProjectSearchSeed(content, undefined)).toBeUndefined()
+    expect(readWorkbenchProjectSearchSeed('x'.repeat(500), { startLine: 1, startColumn: 1, endLine: 1, endColumn: 501 }))
+      .toHaveLength(200)
   })
 
   test('counts read naturally in both languages', () => {

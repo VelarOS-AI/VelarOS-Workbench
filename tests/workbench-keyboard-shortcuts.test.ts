@@ -56,6 +56,7 @@ function createHandler(platform = Mac) {
     isQuickOpenOpen: false,
     platform,
     onCloseRightTool: () => calls.push('close-right-tool'),
+    onFindInFiles: () => calls.push('find-in-files'),
     onNavigateBack: () => calls.push('navigate-back'),
     onNavigateForward: () => calls.push('navigate-forward'),
     onOpenQuickOpen: () => calls.push('quick-open'),
@@ -154,6 +155,19 @@ void describe('Workbench keyboard shortcuts', () => {
 
     handle(keydown('Enter', { metaKey: true, target: { tagName: 'BUTTON' } }))
     assert.deepEqual(calls, ['run-last-command'])
+  })
+
+  void test('⇧⌘F / Ctrl+Shift+F opens the project search, also from a text field', () => {
+    const { calls, handle } = createHandler(Mac)
+    handle(keydown('f', { metaKey: true, shiftKey: true }))
+    handle(keydown('f', { metaKey: true, shiftKey: true, target: { tagName: 'INPUT' } }))
+    // ⌘F 是编辑器自己的查找，不是项目搜索。
+    handle(keydown('f', { metaKey: true }))
+    const { calls: linuxCalls, handle: handleOnLinux } = createHandler(Linux)
+    handleOnLinux(keydown('F', { ctrlKey: true, shiftKey: true }))
+    assert.deepEqual([...calls, ...linuxCalls], ['find-in-files', 'find-in-files', 'find-in-files'])
+    assert.equal(DEFAULT_WORKBENCH_KEYBOARD_SHORTCUT_MAP['find-in-files'], 'Mod+Shift+F')
+    assert.equal(formatWorkbenchShortcutHint('Mod+Shift+F', Mac), '⇧⌘F')
   })
 
   void test('Mod+Shift+P opens the command palette, Mod+P still opens Quick Open', () => {

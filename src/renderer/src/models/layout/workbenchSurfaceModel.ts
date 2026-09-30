@@ -15,9 +15,10 @@ export type WorkbenchRightToolWindow = 'chat'
  * - `file`：打开项目里的文件——回答里的路径、改动卡的逐文件打开、快速打开、结构图与「AI 改动」对比里的
  *   「打开文件」；
  * - `file-preview`：打开项目外文件的只读预览（跨项目的改动卡），同样落在普通文件区；
- * - `ai-changes`：审核一轮 AI 改动（改动卡的「审核」）。
+ * - `ai-changes`：审核一轮 AI 改动（改动卡的「审核」）；
+ * - `search`：打开项目搜索（⇧⌘F），在左侧项目面板里，面板收起着就展开。
  */
-export type WorkbenchNavigationTarget = 'file' | 'file-preview' | 'ai-changes'
+export type WorkbenchNavigationTarget = 'file' | 'file-preview' | 'ai-changes' | 'search'
 
 export interface WorkbenchNavigationSurface {
   /** 编辑区落在哪一组：`primary` 是普通文件区，进入前退出结构图、「AI 改动」这类独占组。 */
@@ -33,6 +34,7 @@ const WorkbenchNavigationSurfaces: Readonly<
   file: { editorGroup: 'primary', leftTool: 'project', revealLeftPanel: false },
   'file-preview': { editorGroup: 'primary', leftTool: 'project', revealLeftPanel: false },
   'ai-changes': { editorGroup: 'ai-changes', leftTool: 'ai-changes', revealLeftPanel: true },
+  search: { editorGroup: 'primary', leftTool: 'project', revealLeftPanel: true },
 }
 
 /** 左右两侧说的是同一件事：编辑区落在哪，左侧就切到对应的面板。 */

@@ -24,6 +24,7 @@ const log = Log.tag('workbench-keyboard-shortcuts')
 export type WorkbenchKeyboardShortcutAction =
   | 'close-right-tool'
   | 'command-palette'
+  | 'find-in-files'
   | 'navigate-back'
   | 'navigate-forward'
   | 'quick-open'
@@ -83,6 +84,8 @@ export const WORKBENCH_KEYBOARD_SHORTCUT_DEFINITIONS: WorkbenchKeyboardShortcutD
   { action: 'quick-open', defaultShortcut: 'Mod+P' },
   // 命令面板与 VS Code 一致：⇧⌘P / Ctrl+Shift+P。
   { action: 'command-palette', defaultShortcut: 'Mod+Shift+P' },
+  // 在项目里搜索（侧栏的搜索面板），与 VS Code 一致：⇧⌘F，其它平台 Ctrl+Shift+F。
+  { action: 'find-in-files', defaultShortcut: 'Mod+Shift+F' },
   // 后退 / 前进与 VS Code 一致：macOS 上 ⌃- / ⌃⇧-（按物理键认，⇧- 打出来是 _），其它平台 Alt+← / Alt+→。
   {
     action: 'navigate-back',

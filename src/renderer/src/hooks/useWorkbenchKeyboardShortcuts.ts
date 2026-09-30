@@ -16,6 +16,8 @@ export interface UseWorkbenchKeyboardShortcutsOptions {
   isQuickOpenOpen: boolean
   keymap?: WorkbenchKeyboardShortcutMap
   onCloseRightTool: () => void
+  /** 打开侧栏的项目搜索（编辑器里选中了一行以内的文字就拿它当查找词）。 */
+  onFindInFiles: () => void
   /** 编辑区的后退 / 前进：回到切文件、跳转之前的位置。 */
   onNavigateBack: () => void
   onNavigateForward: () => void
@@ -64,6 +66,10 @@ export function createWorkbenchShortcutKeydownHandler(
         current.onOpenCommandPalette()
         return
       }
+      case 'find-in-files': {
+        current.onFindInFiles()
+        return
+      }
       case 'navigate-back': {
         current.onNavigateBack()
         return
@@ -109,6 +115,7 @@ export function useWorkbenchKeyboardShortcuts({
   isQuickOpenOpen,
   keymap,
   onCloseRightTool,
+  onFindInFiles,
   onNavigateBack,
   onNavigateForward,
   onOpenQuickOpen,
@@ -126,6 +133,7 @@ export function useWorkbenchKeyboardShortcuts({
     isQuickOpenOpen,
     keymap,
     onCloseRightTool,
+    onFindInFiles,
     onNavigateBack,
     onNavigateForward,
     onOpenQuickOpen,
@@ -143,6 +151,7 @@ export function useWorkbenchKeyboardShortcuts({
     isQuickOpenOpen,
     keymap,
     onCloseRightTool,
+    onFindInFiles,
     onNavigateBack,
     onNavigateForward,
     onOpenQuickOpen,
