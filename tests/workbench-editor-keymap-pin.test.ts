@@ -16,9 +16,9 @@ import { describe, test } from 'bun:test'
 
 import {
   listWorkbenchEditorKeymapBindings,
-  resolveWorkbenchEditorKeymapCommand,
   WORKBENCH_EDITOR_KEYMAP_COMMANDS,
 } from '../src/renderer/src/models/editor/workbenchEditorKeymap'
+import { resolveWorkbenchEditorKeymapCommand } from '../src/renderer/src/models/editor/workbenchEditorKeymapResolver'
 
 type PinnedPlatform = 'mac' | 'win' | 'linux'
 

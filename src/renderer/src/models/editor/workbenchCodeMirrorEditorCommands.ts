@@ -36,11 +36,11 @@ import { type EditorView, keymap } from '@codemirror/view'
 import type { WorkbenchKeymapPresetId } from '../layout/workbenchKeymapPresets'
 import { toggleWorkbenchEditorWordWrap } from '../settings/workbenchPreferences'
 
+import type { WorkbenchEditorKeymapCommandId } from './workbenchEditorKeymap'
 import {
   resolveWorkbenchEditorKeymapCommand,
   type WorkbenchEditorKeyEventLike,
-  type WorkbenchEditorKeymapCommandId,
-} from './workbenchEditorKeymap'
+} from './workbenchEditorKeymapResolver'
 
 /** 一个命令怎么做；返回它做了没有。 */
 type WorkbenchEditorCommandHandler = (view: EditorView) => boolean

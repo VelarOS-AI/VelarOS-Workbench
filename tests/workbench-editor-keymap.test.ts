@@ -20,11 +20,11 @@ import {
   getWorkbenchEditorCommandChords,
   getWorkbenchEditorCommandShortcut,
   listWorkbenchEditorKeymapBindings,
-  resolveWorkbenchEditorKeymapCommand,
   WORKBENCH_EDITOR_KEYMAP_COMMANDS,
   type WorkbenchEditorKeymapCommandId,
   WorkbenchEditorKeymapSharedChords,
 } from '../src/renderer/src/models/editor/workbenchEditorKeymap'
+import { resolveWorkbenchEditorKeymapCommand } from '../src/renderer/src/models/editor/workbenchEditorKeymapResolver'
 import {
   getWorkbenchKeymapPresetShortcuts,
   WORKBENCH_KEYBOARD_SHORTCUT_DEFINITIONS,
@@ -778,5 +778,31 @@ void describe('editor keymap: a key runs its command', () => {
     // 都是键位表里的命令。
     for (const command of HostCommandIds)
       assert.ok((WORKBENCH_EDITOR_KEYMAP_COMMANDS as readonly string[]).includes(command), command)
+  })
+})
+
+void describe('editor keymap: what loads at startup', () => {
+  const read = (path: string): string => readFileSync(resolvePath(process.cwd(), path), 'utf8')
+  const imports = (path: string): string[] =>
+    [...read(path).matchAll(/^(?:import [^'"]*?|\} )from '([^']+)'$/gmu)].map((match) => match[1]!)
+
+  void test('the key table is separate from the code that matches key presses', () => {
+    // 命令面板在启动就加载的那一块里，它要的只是表（提示键）；认按键的那部分跟着编辑器按需加载。
+    assert.deepEqual(imports('src/renderer/src/models/editor/workbenchEditorKeymap.ts'), [
+      '../layout/workbenchKeyboardShortcuts',
+      '../layout/workbenchKeymapPresets',
+    ])
+    assert.deepEqual(imports('src/renderer/src/models/editor/workbenchEditorKeymapResolver.ts'), [
+      '../layout/workbenchKeymapPresets',
+      './workbenchEditorKeymap',
+    ])
+    const palette = imports('src/renderer/src/models/layout/workbenchCommandPalette.ts')
+    assert.ok(palette.includes('../editor/workbenchEditorKeymap'))
+    assert.ok(!palette.includes('../editor/workbenchEditorKeymapResolver'))
+    // 表里没有认按键的代码。
+    assert.doesNotMatch(
+      read('src/renderer/src/models/editor/workbenchEditorKeymap.ts'),
+      /KeyEventLike|keyCode|event\./u
+    )
   })
 })

@@ -20,7 +20,7 @@ import {
 import { mapWorkbenchDiagnosticToCodeMirror } from '../src/renderer/src/models/editor/workbenchCodeMirrorDiagnostics'
 import { isWorkbenchEditorNavigationCommand } from '../src/renderer/src/models/editor/workbenchEditorCommands'
 // 这几个键现在在编辑器命令的键位表里；下面查的是 Workbench 方案（不给方案时的默认）。
-import { resolveWorkbenchEditorKeymapCommand as resolveWorkbenchEditorCommandFromKey } from '../src/renderer/src/models/editor/workbenchEditorKeymap'
+import { resolveWorkbenchEditorKeymapCommand as resolveWorkbenchEditorCommandFromKey } from '../src/renderer/src/models/editor/workbenchEditorKeymapResolver'
 import { buildWorkbenchLanguageServiceEditReport } from '../src/renderer/src/models/editor/workbenchLanguageServiceEditReport'
 import type {
   WorkbenchLanguageServiceCodeAction,
