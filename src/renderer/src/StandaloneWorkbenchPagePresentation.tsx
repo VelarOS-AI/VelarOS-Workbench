@@ -885,11 +885,12 @@ export function StandaloneWorkbenchPagePresentation({
         isOpen={surface.isQuickOpenOpen}
         activeProject={workbench.activeProject}
         openTabs={workbench.openTabs}
+        activeFilePath={workbench.selectedFilePath}
+        activeFileContent={workbench.editorContent}
+        recentFilePaths={model.recentFilePaths}
         keymap={workbenchKeymap.keymap}
         onClose={surface.closeQuickOpen}
-        onOpenLocation={(path, line, column) =>
-          void model.actions.navigate({ target: 'file', path, line, column })
-        }
+        onOpenFile={(path, position) => void model.actions.openQuickOpenFile(path, position)}
       />
     </main>
   )

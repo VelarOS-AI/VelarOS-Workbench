@@ -52,6 +52,35 @@
   padding: 6px;
 }
 
+/* 一组结果（最近打开 / 文件 / 内容）：组名是 caption 色阶的小标题，不参与键盘选择。 */
+.quickOpenSection {
+  @apply flex min-w-0 flex-col;
+}
+
+.quickOpenSection + .quickOpenSection {
+  margin-top: 6px;
+}
+
+.quickOpenSectionTitle {
+  @apply flex min-w-0 items-baseline justify-between text-muted-foreground;
+  gap: 12px;
+  padding: 4px 8px 3px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.quickOpenSectionNote {
+  @apply min-w-0 truncate;
+  font-weight: 400;
+}
+
+/* 名字、路径里命中输入的字符：主题色加粗，不加底色（底色留给选中行）。 */
+.quickOpenMatch {
+  background: transparent;
+  color: var(--workbench-theme-color);
+  font-weight: 600;
+}
+
 /*
  * 结果项是 block 档的 ghost Button：行高、间距、边框、圆角与默认 / 悬停配色随原语。键盘移到的项染选中底色；
  * 指针停在上面时（悬停也会把它设为当前项）让位给按钮原语的悬停底色。

@@ -18,6 +18,7 @@ import { useWorkbenchLayoutController } from '@renderer/hooks/useWorkbenchLayout
 import { useWorkbenchPreferences } from '@renderer/hooks/useWorkbenchPreferences'
 import { useWorkbenchProjectGitSettings } from '@renderer/hooks/useWorkbenchProjectGitSettings'
 import { useWorkbenchProjectRunSettings } from '@renderer/hooks/useWorkbenchProjectRunSettings'
+import { useWorkbenchRecentFiles } from '@renderer/hooks/useWorkbenchRecentFiles'
 import { useWorkbenchStandaloneProjectSync } from '@renderer/hooks/useWorkbenchStandaloneProjectSync'
 import { useWorkbenchSurfaceState } from '@renderer/hooks/useWorkbenchSurfaceState'
 import { workbenchHost } from '@renderer/host'
@@ -387,6 +388,11 @@ export function useStandaloneWorkbenchPageModel(
     }
     closeAgentBrowserTab()
   }, [agentBrowserBindingSessionId, closeAgentBrowserTab, openAgentBrowserTab])
+  const recentFilePaths = useWorkbenchRecentFiles({
+    projectId: toNullable(workbench.activeProject?.id),
+    selectedFilePath: workbench.selectedFilePath,
+    persist: shouldUseProjectSession,
+  })
   useWorkbenchProjectSessionPersistence({
     enabled: shouldUseProjectSession,
     projectId: toNullable(workbench.activeProject?.id),
@@ -674,6 +680,17 @@ export function useStandaloneWorkbenchPageModel(
         await aiChanges.openRound(request.round)
     }
   })
+
+  /**
+   * 快速打开里选中的文件：给了位置跳到那里；没给就回到上次在这个文件里的光标（没有记录是开头）。
+   * 都按「跳到位置」走，焦点随之落进编辑器，回车之后接着就能敲。
+   */
+  const openQuickOpenFile = useMemoizedFn(
+    async (path: string, position?: { line: number; column?: number }): Promise<void> => {
+      const cursor = position ?? sessionCursorByPathRef.current[path] ?? { line: 1, column: 1 }
+      await navigate({ target: 'file', path, line: cursor.line, column: cursor.column })
+    }
+  )
 
   /** 重新打开最近关掉的文件标签；记得上次的光标位置就回到那里。 */
   const reopenClosedEditorTab = useMemoizedFn(async (): Promise<void> => {
@@ -1023,6 +1040,8 @@ export function useStandaloneWorkbenchPageModel(
     pendingChatFileReferences,
     aiChanges,
     gitChangeActions,
+    /** 当前项目最近打开过的文件，最近的在前（快速打开用）。 */
+    recentFilePaths,
     /** 页面 chrome / i18n / 派生展示值。 */
     chrome: {
       lockedProjectId,
@@ -1059,6 +1078,7 @@ export function useStandaloneWorkbenchPageModel(
       handleWorkbenchChatFileChangesReview: reviewChatFileChanges,
       handleWorkbenchChatRunChangesReview: reviewChatRunChanges,
       navigate,
+      openQuickOpenFile,
       showEditorSurface,
       handleWorkbenchChatWorkspacePathOpen: openChatWorkspacePath,
       handleWorkbenchBrowserElementPicked,
