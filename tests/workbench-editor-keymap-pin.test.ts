@@ -47,6 +47,11 @@ import type { Command, KeyBinding } from '@codemirror/view'
 import { describe, test } from 'bun:test'
 
 import { resolveWorkbenchEditorCommandFromKey } from '../src/renderer/src/models/editor/workbenchEditorCommands'
+import {
+  listWorkbenchEditorKeymapBindings,
+  resolveWorkbenchEditorKeymapCommand,
+  WORKBENCH_EDITOR_KEYMAP_COMMANDS,
+} from '../src/renderer/src/models/editor/workbenchEditorKeymap'
 
 type PinnedPlatform = 'mac' | 'win' | 'linux'
 
@@ -444,5 +449,66 @@ void describe('the editor key bindings as they are today', () => {
     assert.equal(mac.get('Ctrl+t'), 'refactor')
     assert.equal(win.get('Alt+Ctrl+Shift+t'), 'refactor')
     assert.equal(mac.get('Meta+i'), 'trigger-completion')
+  })
+})
+
+/** 键位表里的写法（`Mod+Shift+L`）换成与上面同一种写法的键。 */
+function presetChordSignature(chord: string, platform: PinnedPlatform): string {
+  const parts = chord.split(/\b\+/u)
+  const key = parts.pop() ?? ''
+  const modifiers = new Set(parts)
+  const mod = modifiers.has('Mod')
+  return chordSignature({
+    alt: modifiers.has('Alt'),
+    ctrl: modifiers.has('Ctrl') || (mod && platform !== 'mac'),
+    meta: mod && platform === 'mac',
+    shift: modifiers.has('Shift'),
+    key: key.length === 1 ? key.toLowerCase() : key,
+  })
+}
+
+void describe('the Workbench keymap preset is that table', () => {
+  void test('every key of the table resolves to the same command', () => {
+    for (const platform of PinnedPlatforms) {
+      for (const binding of PinnedWorkbenchEditorBindings) {
+        const name = pinnedKeyFor(binding, platform)
+        if (!name) continue
+        const chord = parsePinnedKey(name, platform)
+        // 被先登记的同一个键盖住的那几条（`Mod-i` 的扩大选区……）按实际生效的命令算。
+        const expected = effectivePinnedTable(platform).get(chordSignature(chord))
+        assert.equal(
+          resolveWorkbenchEditorKeymapCommand(pinnedKeyEvent(chord, platform), platformName(platform)),
+          expected,
+          `${platform} ${name}`
+        )
+      }
+    }
+  })
+
+  void test('and the preset binds no other key', () => {
+    for (const platform of PinnedPlatforms) {
+      const preset = new Map(
+        listWorkbenchEditorKeymapBindings('workbench', platformName(platform)).map((binding) => [
+          presetChordSignature(binding.chord, platform),
+          binding.command as string,
+        ])
+      )
+      assert.deepEqual(
+        [...preset].sort(([left], [right]) => left.localeCompare(right)),
+        [...effectivePinnedTable(platform)].sort(([left], [right]) => left.localeCompare(right)),
+        platform
+      )
+    }
+  })
+
+  void test('the commands of the table are the commands of the registry', () => {
+    // 「上一个问题」是新加的命令：Workbench 方案里没有键，VS Code、JetBrains 方案里有。
+    assert.deepEqual(
+      [...WORKBENCH_EDITOR_KEYMAP_COMMANDS].sort(),
+      [
+        ...new Set(PinnedWorkbenchEditorBindings.map((binding) => binding.command)),
+        'previous-problem',
+      ].sort()
+    )
   })
 })
