@@ -284,7 +284,9 @@ void describe('read-only editor key list', () => {
     assert.deepEqual(row(workbench, 'Find references').keys, ['Shift+F12', 'Alt+F7'])
     assert.deepEqual(row(workbench, 'Format document').keys, ['Cmd+Alt+L'])
     assert.deepEqual(row(workbench, 'Refactor').keys, ['Ctrl+T'])
-    assert.deepEqual(row(workbench, 'Move line up').keys, ['Alt+ArrowUp'])
+    // 方向键写成箭头。
+    assert.deepEqual(row(workbench, 'Move line up').keys, ['Alt+↑'])
+    assert.deepEqual(row(workbench, 'Add cursor below').keys, ['Cmd+Alt+↓'])
     assert.deepEqual(row(workbench, 'Expand selection').keys, ['Not set'])
 
     const windows = renderEditorKeys('workbench', Windows)
@@ -321,8 +323,8 @@ void describe('read-only editor key list', () => {
     assert.equal(row(vscode, 'Save').note, '')
 
     const jetbrains = renderEditorKeys('jetbrains', Windows, 'zh-CN')
-    assert.equal(row(jetbrains, '向下复制行').note, 'Workbench 方案：Shift+Alt+ArrowDown')
-    assert.equal(row(jetbrains, '向上复制行').note, 'Workbench 方案：Shift+Alt+ArrowUp')
+    assert.equal(row(jetbrains, '向下复制行').note, 'Workbench 方案：Shift+Alt+↓')
+    assert.equal(row(jetbrains, '向上复制行').note, 'Workbench 方案：Shift+Alt+↑')
     assert.deepEqual(row(jetbrains, '向上复制行').keys, ['未设置'])
 
     // Workbench 与 Vim 方案：没有哪一行标着「变了」。
@@ -335,8 +337,11 @@ void describe('read-only editor key list', () => {
   void test('is read-only and uses the row and tag styles the dialog already has', () => {
     const html = renderEditorKeys('jetbrains', Mac)
     assert.doesNotMatch(html, /<button|<input|<select|role="combobox"|tabindex/u)
-    // 按键是设置里已有的那种小标签（语言那一行用的同一个）。
-    assert.match(row(html, 'Go to definition').html, /<span data-tone="default">Cmd\+B<\/span>/u)
+    // 按键是设置里已有的那种小标签（语言那一行用的同一个），里面是 <kbd>：与录制按钮里的键同一种等宽字。
+    assert.match(
+      row(html, 'Go to definition').html,
+      /<span data-tone="default"><kbd>Cmd\+B<\/kbd><\/span>/u
+    )
 
     // 两个组件只用设置里已有的样式类，没有新加样式。
     const source = readSource('src/renderer/src/components/settings/WorkbenchKeymapSettings.tsx')

@@ -517,5 +517,9 @@ void describe('keymap presets: keys written by their physical position', () => {
     assert.equal(formatWorkbenchShortcutForPlatform('Mod+Backslash', Linux), 'Ctrl+\\')
     assert.equal(formatWorkbenchShortcutForPlatform('Mod++', Linux), 'Ctrl++')
     assert.equal(formatWorkbenchShortcutForPlatform('', Mac), '')
+    // 方向键写成箭头（后退 / 前进在 Windows 上是 Alt+← / Alt+→）。
+    assert.equal(formatWorkbenchShortcutForPlatform('Alt+ArrowLeft', Windows), 'Alt+←')
+    assert.equal(formatWorkbenchShortcutForPlatform('Mod+Alt+ArrowRight', Linux), 'Ctrl+Alt+→')
+    assert.equal(formatWorkbenchShortcutForPlatform('Shift+Alt+ArrowUp', Mac), 'Shift+Alt+↑')
   })
 })

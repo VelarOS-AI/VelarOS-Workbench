@@ -493,7 +493,14 @@ function physicalShortcutKeyLabel(key: string): string {
   return PhysicalShortcutKeyPattern.test(key) ? key.slice(-1) : key
 }
 
-/** 设置里录制按钮上的写法：`Cmd+Shift+P` / `Ctrl+Shift+P`。 */
+const ArrowShortcutKeyGlyphs: Readonly<Record<string, string>> = {
+  ArrowDown: '↓',
+  ArrowLeft: '←',
+  ArrowRight: '→',
+  ArrowUp: '↑',
+}
+
+/** 设置里的写法（录制按钮、编辑器按键列表）：`Cmd+Shift+P` / `Ctrl+Shift+P`，方向键写成箭头（`Alt+↑`）。 */
 export function formatWorkbenchShortcutForPlatform(
   shortcut: string,
   platform: string = currentWorkbenchPlatform()
@@ -501,7 +508,10 @@ export function formatWorkbenchShortcutForPlatform(
   const parts = shortcut.split(/\b\+/)
   const key = physicalShortcutKeyLabel(parts.pop() ?? '')
   const primary = isAppleWorkbenchPlatform(platform) ? 'Cmd' : 'Ctrl'
-  return [...parts.map((part) => (part === 'Mod' ? primary : part)), key].join('+')
+  return [
+    ...parts.map((part) => (part === 'Mod' ? primary : part)),
+    ArrowShortcutKeyGlyphs[key] ?? key,
+  ].join('+')
 }
 
 /** Apple 菜单的修饰键顺序与符号：⌃ ⌥ ⇧ ⌘。 */
@@ -512,13 +522,6 @@ const AppleShortcutModifierGlyphs: ReadonlyArray<readonly [string, string]> = [
   ['Mod', '⌘'],
   ['Meta', '⌘'],
 ]
-
-const ArrowShortcutKeyGlyphs: Readonly<Record<string, string>> = {
-  ArrowDown: '↓',
-  ArrowLeft: '←',
-  ArrowRight: '→',
-  ArrowUp: '↑',
-}
 
 const AppleShortcutKeyGlyphs: Readonly<Record<string, string>> = {
   ...ArrowShortcutKeyGlyphs,

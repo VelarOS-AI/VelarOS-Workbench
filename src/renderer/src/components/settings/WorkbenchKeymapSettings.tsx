@@ -338,8 +338,11 @@ export function WorkbenchEditorKeysSettings({
               </div>
               <div className={styles.workbenchSettingsShortcutControls}>
                 {chords.length > 0 ? (
+                  // 键用 <kbd>：与上面录制按钮里的键同一种等宽字。
                   chords.map((chord) => (
-                    <WorkbenchSettingsPill key={chord}>{formatChord(chord)}</WorkbenchSettingsPill>
+                    <WorkbenchSettingsPill key={chord}>
+                      <kbd>{formatChord(chord)}</kbd>
+                    </WorkbenchSettingsPill>
                   ))
                 ) : (
                   <Text tone="caption">{t('workbench.settingsShortcutUnassigned')}</Text>
