@@ -101,6 +101,8 @@ import type {
   WorkbenchSearchEntriesRequest,
   WorkbenchSearchEntriesResult,
   WorkbenchTerminalAcknowledgeRequest,
+  WorkbenchTerminalCwdRequest,
+  WorkbenchTerminalCwdResult,
   WorkbenchTerminalInputRequest,
   WorkbenchTerminalOutputEvent,
   WorkbenchTerminalResizeRequest,
@@ -237,6 +239,10 @@ export interface WorkbenchProjectKernelPort {
   writeWorkbenchTerminalInput(request: WorkbenchTerminalInputRequest): Promise<Result<void>>
   resizeWorkbenchTerminalSession(request: WorkbenchTerminalResizeRequest): Promise<Result<void>>
   stopWorkbenchTerminalSession(request: WorkbenchTerminalStopRequest): Promise<Result<void>>
+  /** 终端会话的 shell 此刻所在的目录；问不到时 `cwd` 为 null。 */
+  readWorkbenchTerminalCwd(
+    request: WorkbenchTerminalCwdRequest
+  ): Promise<Result<WorkbenchTerminalCwdResult>>
   getWorkbenchInlineCompletion(
     request: WorkbenchInlineCompletionRequest
   ): Promise<Result<WorkbenchInlineCompletionResult>>

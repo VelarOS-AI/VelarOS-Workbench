@@ -51,8 +51,15 @@ export interface WorkbenchTerminalSurfaceHandlers {
   onTerminalData: (sessionId: string, data: string) => void
   onTerminalResize: (sessionId: string, cols: number, rows: number) => void
   onOpenLink?: (url: string) => void
-  /** 输出里的路径各是项目里的哪个文件（不是的给 null）；是文件的才能点开。 */
-  onResolveFileLinks?: (paths: readonly string[], cwd: string) => Promise<Array<Nullable<string>>>
+  /**
+   * 输出里的路径各是项目里的哪个文件（不是的给 null）；是文件的才能点开。`cwd` 是终端自己知道的目录，
+   * `sessionId` 是哪个会话（解析时还会去问它的 shell 此刻在哪）。
+   */
+  onResolveFileLinks?: (
+    paths: readonly string[],
+    cwd: string,
+    sessionId: string
+  ) => Promise<Array<Nullable<string>>>
   onOpenFileLink?: (path: string, line?: number, column?: number) => void
 }
 

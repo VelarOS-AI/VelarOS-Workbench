@@ -1062,6 +1062,16 @@ export interface WorkbenchTerminalStopRequest {
   waitForExit?: boolean
 }
 
+/** 问一个终端会话的 shell 此刻在哪个目录（终端里的相对路径按它解析）。 */
+export interface WorkbenchTerminalCwdRequest {
+  sessionId: string
+}
+
+export interface WorkbenchTerminalCwdResult {
+  /** 绝对路径；问不到（Windows、会话已结束）为 null。 */
+  cwd: Nullable<string>
+}
+
 /** renderer 确认把一个会话的一段输出写进了 xterm（流控用）。 */
 export interface WorkbenchTerminalAcknowledgeRequest {
   sessionId: string

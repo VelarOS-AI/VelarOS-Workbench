@@ -18,6 +18,8 @@ import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
 import type {
   WorkbenchTerminalAcknowledgeRequest,
+  WorkbenchTerminalCwdRequest,
+  WorkbenchTerminalCwdResult,
   WorkbenchTerminalInputRequest,
   WorkbenchTerminalOutputEvent,
   WorkbenchTerminalResizeRequest,
@@ -212,6 +214,20 @@ class TerminalSessions {
       clampTerminalDimension(request.cols, DefaultTerminalColumns, MaxTerminalColumns),
       clampTerminalDimension(request.rows, DefaultTerminalRows, MaxTerminalRows)
     )
+  }
+
+  /**
+   * 会话的 shell 此刻所在的目录（问操作系统）：终端输出里的相对路径按它解析，`cd` 之后也对得上。
+   * 会话已经结束、平台问不到时是 null。
+   */
+  public async readTerminalCwd(
+    request: WorkbenchTerminalCwdRequest,
+    ownerId: Nullable<number> = null
+  ): Promise<WorkbenchTerminalCwdResult> {
+    const session = this.terminalSessions.get(request.sessionId)
+    if (!session || session.exited) return { cwd: null }
+    assertSessionOwner(session, ownerId)
+    return { cwd: (await this.ptyFactory.readCwd?.(session.pty.pid)) ?? null }
   }
 
   /** renderer 确认把一段输出写进了 xterm：降到低水位以下就接着读伪终端。 */

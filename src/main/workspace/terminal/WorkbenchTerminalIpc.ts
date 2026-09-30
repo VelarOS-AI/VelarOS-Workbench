@@ -72,6 +72,14 @@ export function registerWorkbenchTerminalIpc(terminal: TerminalSessions): void {
     })
   )
 
+  ipcMain.handle(WorkbenchTerminalChannels.cwd, (event, request: unknown) =>
+    callWithEnvelope(async () => {
+      if (!hasStringFields(request, ['sessionId'])) return invalidRequest()
+
+      return terminal.readTerminalCwd({ sessionId: request['sessionId'] as string }, event.sender.id)
+    })
+  )
+
   // 单向消息，不回复：会话已经结束、请求不对都直接忽略。
   ipcMain.on(WorkbenchTerminalChannels.acknowledge, (event, request: unknown) => {
     if (!hasStringFields(request, ['sessionId']) || !isRecord(request)) return

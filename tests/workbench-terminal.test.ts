@@ -285,6 +285,18 @@ void describe('terminal sessions on a pseudo-terminal', () => {
       assert.equal((await start({ inheritCwdFrom: first.sessionId }, 2)).cwd, projectRoot)
       assert.equal((await start({ inheritCwdFrom: 'terminal-missing' })).cwd, projectRoot)
       assert.equal(asked.length, before)
+
+      // 终端输出里的相对路径按 shell 此刻所在的目录解析：窗口问自己的会话问得到，项目外面的目录也照实给。
+      assert.deepEqual(await terminal.readTerminalCwd({ sessionId: first.sessionId }, 1), { cwd: nested })
+      shellCwd = outside
+      assert.deepEqual(await terminal.readTerminalCwd({ sessionId: first.sessionId }, 1), { cwd: outside })
+      shellCwd = null
+      assert.deepEqual(await terminal.readTerminalCwd({ sessionId: first.sessionId }, 1), { cwd: null })
+      await assert.rejects(
+        terminal.readTerminalCwd({ sessionId: first.sessionId }, 2),
+        /不属于当前项目窗口/u
+      )
+      assert.deepEqual(await terminal.readTerminalCwd({ sessionId: 'terminal-missing' }, 1), { cwd: null })
     } finally {
       await terminal.closeAllSessions()
       await rm(projectRoot, { recursive: true, force: true })

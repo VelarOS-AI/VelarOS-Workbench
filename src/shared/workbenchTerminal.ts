@@ -12,6 +12,8 @@
  */
 import type {
   WorkbenchTerminalAcknowledgeRequest,
+  WorkbenchTerminalCwdRequest,
+  WorkbenchTerminalCwdResult,
   WorkbenchTerminalInputRequest,
   WorkbenchTerminalOutputEvent,
   WorkbenchTerminalResizeRequest,
@@ -27,6 +29,7 @@ export const WorkbenchTerminalChannels = {
   write: 'workbench-app:terminal:write',
   resize: 'workbench-app:terminal:resize',
   stop: 'workbench-app:terminal:stop',
+  cwd: 'workbench-app:terminal:cwd',
   output: 'workbench-app:terminal:output',
   /** renderer → main 的单向消息：一段输出已经写进 xterm（流控用，不等回复）。 */
   acknowledge: 'workbench-app:terminal:acknowledge',
@@ -46,6 +49,9 @@ export interface WorkbenchTerminalBridge {
   stopSession: (
     request: WorkbenchTerminalStopRequest
   ) => Promise<WorkbenchFsCallResult<void>>
+  readCwd: (
+    request: WorkbenchTerminalCwdRequest
+  ) => Promise<WorkbenchFsCallResult<WorkbenchTerminalCwdResult>>
   onOutput: (listener: (event: WorkbenchTerminalOutputEvent) => void) => () => void
   acknowledgeOutput: (request: WorkbenchTerminalAcknowledgeRequest) => void
 }

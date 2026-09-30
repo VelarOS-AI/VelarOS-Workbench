@@ -49,7 +49,11 @@ interface WorkbenchTerminalViewProps {
   onData: (sessionId: string, data: string) => void
   onResize: (sessionId: string, cols: number, rows: number) => void
   onOpenLink?: (url: string) => void
-  onResolveFileLinks?: WorkbenchTerminalInstanceHandlers['resolveFileLinks']
+  onResolveFileLinks?: (
+    paths: readonly string[],
+    cwd: string,
+    sessionId: string
+  ) => Promise<Array<Nullable<string>>>
   onOpenFileLink?: WorkbenchTerminalInstanceHandlers['onOpenFileLink']
   /** 并排的几个终端里，这个是不是当前的那个：是才在挂上时拿焦点，变成当前的时也把焦点拿过来。不给按是。 */
   isActive?: boolean
@@ -108,7 +112,8 @@ export function WorkbenchTerminalView({
           else window.open(url, '_blank', 'noopener,noreferrer')
         },
         resolveFileLinks: async (paths, directory) =>
-          (await onResolveFileLinksLatest.current?.(paths, directory)) ?? paths.map(() => null),
+          (await onResolveFileLinksLatest.current?.(paths, directory, sessionId)) ??
+          paths.map(() => null),
         onOpenFileLink: (path, line, column) => onOpenFileLinkLatest.current?.(path, line, column),
         // 选中了一行里的文字就拿它当查找词（跨行的选中不算）。
         onFind: (selection) =>

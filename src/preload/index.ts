@@ -165,6 +165,7 @@ const terminalBridge: WorkbenchTerminalBridge = {
   writeInput: (request) => ipcRenderer.invoke(WorkbenchTerminalChannels.write, request),
   resizeSession: (request) => ipcRenderer.invoke(WorkbenchTerminalChannels.resize, request),
   stopSession: (request) => ipcRenderer.invoke(WorkbenchTerminalChannels.stop, request),
+  readCwd: (request) => ipcRenderer.invoke(WorkbenchTerminalChannels.cwd, request),
   onOutput: (listener) => subscribe(WorkbenchTerminalChannels.output, listener),
   acknowledgeOutput: (request) => ipcRenderer.send(WorkbenchTerminalChannels.acknowledge, request),
 }

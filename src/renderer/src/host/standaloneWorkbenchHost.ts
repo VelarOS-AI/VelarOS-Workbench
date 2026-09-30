@@ -279,6 +279,8 @@ const standaloneWorkbenchHost: WorkbenchHost = {
         toHostResult(await window.velarosWorkbenchTerminal.resizeSession(request)),
       stopWorkbenchTerminalSession: async (request) =>
         toHostResult(await window.velarosWorkbenchTerminal.stopSession(request)),
+      readWorkbenchTerminalCwd: async (request) =>
+        toHostResult(await window.velarosWorkbenchTerminal.readCwd(request)),
       getWorkbenchInlineCompletion: async (request) => {
         const modelConfig = getStandaloneWorkbenchModelConfig()
         return toHostResult(await window.velarosWorkbenchLanguage.getInlineCompletion({
