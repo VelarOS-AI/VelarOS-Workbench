@@ -172,7 +172,10 @@ import {
   getWorkbenchCodeMirrorTheme,
 } from '@renderer/models/editor/workbenchCodeMirrorTheme'
 import { createWorkbenchTokenOccurrenceHighlightExtension } from '@renderer/models/editor/workbenchCodeMirrorTokenOccurrenceHighlight'
-import type { WorkbenchEditorCommandId } from '@renderer/models/editor/workbenchEditorCommands'
+import {
+  isWorkbenchEditorNavigationCommand,
+  type WorkbenchEditorCommandId,
+} from '@renderer/models/editor/workbenchEditorCommands'
 import { rebuildWorkbenchEditorFileState } from '@renderer/models/editor/workbenchEditorFileStateRebuild'
 import {
   type WorkbenchEditorFileState,
@@ -276,6 +279,7 @@ import { useDismissOnWindowInteract } from '../../support/useDismissOnWindowInte
 
 import { EditorSymbolLocationsPanel } from './EditorSymbolLocationsPanel'
 import { useEditorCodeActions } from './useEditorCodeActions'
+import { useEditorSymbolNavigation } from './useEditorSymbolNavigation'
 import { workbenchEditorLanguageFeatureClasses } from './workbenchEditorLanguageFeatureClasses'
 
 /** Agent 带用户看代码时不抢焦点：用户可能正在输入框里打字。 */
@@ -507,7 +511,7 @@ const workbenchCodeMirrorBaseExtensions: Extension[] = [
     ...closeBracketsKeymap,
     ...defaultKeymap,
     // CodeMirror 自带的查找面板、跳行框（F3、⌘G、⌥⌘G）不用：查找和跳行走编辑区自己的查找栏、跳行栏。
-    { key: 'Mod-Shift-l', run: selectSelectionMatches, preventDefault: true },
+    // ⇧⌘L 在实例的键位表里（选中了字选全部匹配，没选中就选光标处符号的全部出现）。
     ...historyKeymap,
     ...foldKeymap,
     ...lintKeymap,
@@ -1632,6 +1636,23 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       return getIdentifierAt(view.state, view.state.selection.main.head)
     }
 
+    // 查找引用这类跟着光标处符号走的导航：问语言服务、把结果交给面板都在这个 hook 里。
+    const symbolNavigation = useEditorSymbolNavigation({
+      viewRef,
+      projectRoot,
+      path,
+      language,
+      getOpenTabs: () => openTabsLatest.current,
+      hostRuntime,
+      getIdentifier: getCurrentIdentifier,
+      onOpenSymbolLocations,
+    })
+    /** 按键、右键菜单、命令面板交来的编辑器命令：改代码的与导航的各归各的 hook。 */
+    const runEditorCommand = (command: WorkbenchEditorCommandId): void => {
+      if (isWorkbenchEditorNavigationCommand(command)) symbolNavigation.run(command)
+      else codeActions.run(command)
+    }
+
     const languageServiceContext = useMemo(
       () => ({
         projectRoot,
@@ -2191,7 +2212,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         if (selection.to < word.from || selection.from > word.to)
           view.dispatch({ selection: { anchor: word.from } })
       }
-      codeActions.run(command)
+      runEditorCommand(command)
     }
 
     const openEditorContextMenu = (event: ReactMouseEvent<HTMLDivElement>): void => {
@@ -2281,7 +2302,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         view.focus()
         startCompletion(view)
       },
-      runCommand: (command) => codeActions.run(command),
+      runCommand: (command) => runEditorCommand(command),
       selectRange: (from, to) => {
         const view = viewRef.current
         if (!view) return
@@ -2308,7 +2329,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       renameIdentifier,
       selectReferenceOccurrences,
       formatDocument,
-      runCommand: codeActions.run,
+      runCommand: runEditorCommand,
     })
     const compartmentValuesRef = useLatest({
       editorMetrics: editorMetricsExtension,
@@ -2392,10 +2413,13 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
           },
         },
         {
-          key: 'Shift-F12',
+          // 选中了字：选中全部一样的文字（VS Code 的 ⇧⌘L）。只是光标停在一个符号上：选中它在这个文件里的
+          // 全部出现（语言服务认的那些；没有语言服务的文件按文字找）。
+          key: 'Mod-Shift-l',
           preventDefault: true,
-          run: () => {
-            void editorActionsRef.current.selectReferenceOccurrences(getCurrentIdentifier())
+          run: (view) => {
+            if (!selectSelectionMatches(view))
+              void editorActionsRef.current.selectReferenceOccurrences(getCurrentIdentifier())
             return true
           },
         },
@@ -3165,6 +3189,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
             state={symbolLocations}
             onClose={onCloseSymbolLocations}
             onNavigate={onNavigateSymbolLocation}
+            onFocusEditor={() => viewRef.current?.focus()}
           />,
           containerRef.current
         )}
@@ -3190,6 +3215,14 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
               onClick={() => void goToDefinitionForWord(contextMenu.word)}
             >
               {t('workbench.editorContextGoToDefinition')}
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              disabled={!contextMenu.word || !symbolNavigation.canRun('find-references')}
+              onClick={() => runCommandFromContextMenu('find-references')}
+            >
+              {t('workbench.editorContextFindReferences')}
             </button>
             <button
               type="button"

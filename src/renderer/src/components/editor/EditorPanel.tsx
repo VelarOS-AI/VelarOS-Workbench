@@ -47,13 +47,6 @@ import type {
 } from '@renderer/models/editor/workbenchIndentation'
 import { isWorkbenchMarkdownPreviewPath } from '@renderer/models/editor/workbenchMarkdownPreview'
 import {
-  navigateWorkbenchSymbolLocations,
-  openWorkbenchSymbolLocations,
-  sameWorkbenchSymbolLocation,
-  type WorkbenchSymbolLocationsRequest,
-  type WorkbenchSymbolLocationsState,
-} from '@renderer/models/editor/workbenchSymbolLocations'
-import {
   type WorkbenchGitChangeItem,
   type WorkbenchGitDecorationMap,
 } from '@renderer/models/git/workbenchGitModel'
@@ -115,6 +108,7 @@ import {
 } from './EditorTabBar'
 import { EditorTextFormatNotice } from './EditorTextFormatNotice'
 import { type FileHistoryMode,FileHistoryView } from './FileHistoryView'
+import type { EditorSymbolLocations } from './useEditorSymbolLocations'
 import { WorkbenchImagePreview } from './WorkbenchImagePreview'
 import { WorkbenchLightFilePanel } from './WorkbenchLightFilePanel'
 
@@ -201,6 +195,8 @@ export interface WorkbenchEditorPanelGroupProps {
   handledFocusRequestIdRef: MutableRefObject<number>
   /** 把标签挪到另一组；`beforePath` 是拖放时落在哪个标签前面。 */
   onMoveTabToGroup: (path: string, groupIndex: number, beforePath?: Nullable<string>) => void
+  /** 定义 / 引用列表面板：两组共用一份，哪一组正显示着眼下那一处所在的文件就画在哪一组。 */
+  symbolLocations: EditorSymbolLocations
 }
 
 export interface WorkbenchEditorPanelDiffProps {
@@ -411,9 +407,7 @@ export function EditorPanel({
     }>
   >(null)
   const [cursorPosition, setCursorPosition] = useState({ line: 1, column: 1 })
-  const [symbolLocations, setSymbolLocations] =
-    useState<Nullable<WorkbenchSymbolLocationsState>>(null)
-  const [symbolLocationsVisible, setSymbolLocationsVisible] = useState(false)
+  const { symbolLocations } = group
   const [activeDiagnosticIndex, setActiveDiagnosticIndex] = useState(-1)
   const onActiveProblemIdChangeLatest = useLatest(onActiveProblemIdChange)
   const lastSyncedProblemIdRef = useRef<Nullable<string>>(null)
@@ -512,32 +506,10 @@ export function EditorPanel({
     },
     [onCursorPositionChange]
   )
-  const openSymbolLocations = useCallback((
-    request: WorkbenchSymbolLocationsRequest,
-    visible?: boolean
-  ) => {
-    setSymbolLocations((current) => {
-      const opened = openWorkbenchSymbolLocations(request)
-      if (
-        current?.returnLocation
-        && sameWorkbenchSymbolLocation(current.activeLocation, opened.activeLocation)
-      ) return { ...opened, returnLocation: current.returnLocation }
-      return opened
-    })
-    if (visible !== undefined) setSymbolLocationsVisible(visible)
-  }, [])
   const navigateSymbolLocation = useCallback(
     (location: WorkbenchLanguageServiceLocation) => {
-      if (
-        symbolLocations &&
-        sameWorkbenchSymbolLocation(symbolLocations.activeLocation, location)
-      )
-        return
-
-      setSymbolLocations((current) =>
-        current ? navigateWorkbenchSymbolLocations(current, location) : current
-      )
-      onGoToDefinition(location.path, location.line, location.column)
+      if (symbolLocations.navigate(location))
+        onGoToDefinition(location.path, location.line, location.column)
     },
     [onGoToDefinition, symbolLocations]
   )
@@ -1174,9 +1146,9 @@ export function EditorPanel({
                         onIndentationChange={onIndentationChange}
                         indentationRequest={indentationRequest}
                         onGoToDefinition={onGoToDefinition}
-                        symbolLocations={symbolLocationsVisible ? symbolLocations : null}
-                        onOpenSymbolLocations={openSymbolLocations}
-                        onCloseSymbolLocations={() => setSymbolLocationsVisible(false)}
+                        symbolLocations={symbolLocations.state}
+                        onOpenSymbolLocations={symbolLocations.open}
+                        onCloseSymbolLocations={symbolLocations.close}
                         onNavigateSymbolLocation={navigateSymbolLocation}
                         onApplyLanguageServiceRename={onApplyLanguageServiceRename}
                         onApplyLanguageServiceEdit={onApplyLanguageServiceEdit}

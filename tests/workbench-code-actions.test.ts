@@ -17,7 +17,10 @@ import {
   workbenchRangeFromOffsets,
 } from '../src/renderer/src/models/editor/workbenchCodeActions'
 import { mapWorkbenchDiagnosticToCodeMirror } from '../src/renderer/src/models/editor/workbenchCodeMirrorDiagnostics'
-import { resolveWorkbenchEditorCommandFromKey } from '../src/renderer/src/models/editor/workbenchEditorCommands'
+import {
+  isWorkbenchEditorNavigationCommand,
+  resolveWorkbenchEditorCommandFromKey,
+} from '../src/renderer/src/models/editor/workbenchEditorCommands'
 import { buildWorkbenchLanguageServiceEditReport } from '../src/renderer/src/models/editor/workbenchLanguageServiceEditReport'
 import type {
   WorkbenchLanguageServiceCodeAction,
@@ -103,6 +106,29 @@ void describe('editor code action keys', () => {
       resolveWorkbenchEditorCommandFromKey(key('KeyO', 'O', { alt: true, shift: true, meta: true }), Mac),
       null
     )
+  })
+
+  void test('Shift+F12 and Alt+F7 find references; they are navigation, not code actions', () => {
+    for (const platform of [Mac, Linux]) {
+      assert.equal(
+        resolveWorkbenchEditorCommandFromKey(key('F12', 'F12', { shift: true }), platform),
+        'find-references'
+      )
+      assert.equal(
+        resolveWorkbenchEditorCommandFromKey(key('F7', 'F7', { alt: true }), platform),
+        'find-references'
+      )
+      // F12 本身是跳到定义（编辑器的键位表里），⌘⇧F12 之类不是。
+      assert.equal(resolveWorkbenchEditorCommandFromKey(key('F12', 'F12'), platform), null)
+      assert.equal(resolveWorkbenchEditorCommandFromKey(key('F7', 'F7'), platform), null)
+      assert.equal(
+        resolveWorkbenchEditorCommandFromKey(key('F12', 'F12', { shift: true, alt: true }), platform),
+        null
+      )
+    }
+    assert.equal(isWorkbenchEditorNavigationCommand('find-references'), true)
+    for (const command of ['quick-fix', 'refactor', 'organize-imports'] as const)
+      assert.equal(isWorkbenchEditorNavigationCommand(command), false, command)
   })
 })
 

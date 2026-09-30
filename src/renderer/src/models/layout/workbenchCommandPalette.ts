@@ -18,6 +18,7 @@ export type WorkbenchPaletteCommandId =
   | 'close-editor'
   | 'close-project'
   | 'find-in-files'
+  | 'find-references'
   | 'focus-left-editor-group'
   | 'focus-right-editor-group'
   | 'format-document'
@@ -105,6 +106,12 @@ export const WORKBENCH_PALETTE_COMMANDS: readonly WorkbenchPaletteCommandDefinit
   },
   // 编辑器里的 ⌥⌘L / Ctrl+Alt+L。
   { id: 'format-document', labelKey: 'workbench.commandFormatDocument', shortcut: { fixed: 'Mod+Alt+L' } },
+  // 光标处符号的全部引用，列在编辑器里的面板上：⇧F12（另有 ⌥F7 / Alt+F7）。
+  {
+    id: 'find-references',
+    labelKey: 'workbench.commandFindReferences',
+    shortcut: { fixed: 'Shift+F12' },
+  },
   // 编辑器里光标处的动作菜单：⌥↩ / Alt+Enter（另有 ⌘. / Ctrl+.）。
   { id: 'quick-fix', labelKey: 'workbench.commandQuickFix', shortcut: { fixed: 'Alt+Enter' } },
   // 选中的代码（或光标处）能做的重构：macOS 上 ⌃T，其它平台 Ctrl+Alt+Shift+T。
@@ -208,6 +215,9 @@ export function isWorkbenchPaletteCommandAvailable(
         && context.canEditActiveFile
         && context.activeFileLanguageService === 'typescript'
       )
+    // 引用是语言服务给的；只读的文件照样能查。
+    case 'find-references':
+      return textEditorInFront && !!context.activeFileLanguageService
     case 'toggle-read-only':
       return textEditorInFront && context.canToggleReadOnly
     case 'toggle-git-blame':

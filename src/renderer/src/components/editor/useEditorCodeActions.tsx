@@ -20,7 +20,7 @@ import type {
   WorkbenchEditorHoverCodeActions,
 } from '@renderer/models/editor/workbenchCodeMirrorLanguageFeatures'
 import { buildWorkbenchLanguageServiceRequestBase } from '@renderer/models/editor/workbenchCodeMirrorLanguageService'
-import type { WorkbenchEditorCommandId } from '@renderer/models/editor/workbenchEditorCommands'
+import type { WorkbenchEditorCodeActionCommandId } from '@renderer/models/editor/workbenchEditorCommands'
 import {
   getWorkbenchLanguageServiceCodeActions,
   getWorkbenchLanguageServiceOrganizeImports,
@@ -82,8 +82,8 @@ interface UseEditorCodeActionsOptions {
 
 export interface EditorCodeActions {
   /** 这个文件此刻能不能用某个命令（右键菜单据此置灰）。 */
-  canRun: (command: WorkbenchEditorCommandId) => boolean
-  run: (command: WorkbenchEditorCommandId) => void
+  canRun: (command: WorkbenchEditorCodeActionCommandId) => boolean
+  run: (command: WorkbenchEditorCodeActionCommandId) => void
   /** 诊断浮层要修复按钮时用。 */
   hover: WorkbenchEditorHoverCodeActions
   /** 光标菜单；没开着为 null。 */
@@ -366,7 +366,7 @@ export function useEditorCodeActions({
     [requestHoverActions]
   )
 
-  const canRun = (command: WorkbenchEditorCommandId): boolean => {
+  const canRun = (command: WorkbenchEditorCodeActionCommandId): boolean => {
     switch (command) {
       case 'quick-fix':
         return !readOnly && (support.quickFix || support.refactor)
@@ -377,7 +377,7 @@ export function useEditorCodeActions({
     }
   }
 
-  const run = useMemoizedFn((command: WorkbenchEditorCommandId): void => {
+  const run = useMemoizedFn((command: WorkbenchEditorCodeActionCommandId): void => {
     switch (command) {
       case 'quick-fix':
         void openMenu('all')

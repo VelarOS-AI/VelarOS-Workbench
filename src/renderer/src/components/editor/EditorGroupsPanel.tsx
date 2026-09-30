@@ -55,6 +55,7 @@ import {
   type WorkbenchEditorPanelTabsProps,
   type WorkbenchEditorPanelWorkspaceProps,
 } from './EditorPanel'
+import { useEditorSymbolLocations } from './useEditorSymbolLocations'
 
 /** 编辑区里一组的面板输入：这一组正在显示的文件、标签栏与动作。 */
 export interface WorkbenchEditorGroupPanelModel {
@@ -133,6 +134,8 @@ export function EditorGroupsPanel({
 
   const appliedNavigationRequestIdRef = useRef<Nullable<number>>(null)
   const handledFocusRequestIdRef = useRef(focusRequest.id)
+  // 定义 / 引用列表面板两组共用一份：点列表里的一行跳进另一组里开着的文件，面板跟到那一组的编辑器上。
+  const symbolLocations = useEditorSymbolLocations()
 
   // 结构图、AI 改动占着整个编辑区时只留左边那组（它们的标签在那里），右边那组先收起来。
   const isolatedTabGroup = resolveIsolatedWorkbenchEditorTabGroup(diff.auxiliaryTabs ?? [])
@@ -344,6 +347,7 @@ export function EditorGroupsPanel({
                   focusRequest,
                   handledFocusRequestIdRef,
                   onMoveTabToGroup,
+                  symbolLocations,
                 }}
                 workbenchTheme={workbenchTheme}
                 workbenchProject={workbenchProject}

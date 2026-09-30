@@ -1,14 +1,18 @@
 import {
   type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
   type RefObject,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react'
 import { ArrowLeftIcon, CodeIcon, XIcon } from '@phosphor-icons/react'
 import { useWorkbenchI18n } from '@renderer/i18n'
 import {
+  groupWorkbenchSymbolLocations,
+  nextWorkbenchSymbolLocationIndex,
   sameWorkbenchSymbolLocation,
   workbenchSymbolLocationDisplayPath,
   type WorkbenchSymbolLocationsState,
@@ -17,6 +21,7 @@ import {
 import type { WorkbenchLanguageServiceLocation } from '@shared/contracts'
 
 import styles from '../../styles/workbenchPageStyles'
+import { useLatest } from '../../support/genericHooks'
 
 interface EditorSymbolLocationsPanelProps {
   anchor: { left: number; top: number; bottom: number }
@@ -25,6 +30,8 @@ interface EditorSymbolLocationsPanelProps {
   state: WorkbenchSymbolLocationsState
   onClose: () => void
   onNavigate: (location: WorkbenchLanguageServiceLocation) => void
+  /** 面板关掉时键盘焦点还在面板里（Esc、关闭按钮）：交还给编辑器，不让它落空。 */
+  onFocusEditor?: () => void
 }
 
 function locationLabel(projectRoot: string, location: WorkbenchLanguageServiceLocation): string {
@@ -38,6 +45,7 @@ export function EditorSymbolLocationsPanel({
   state,
   onClose,
   onNavigate,
+  onFocusEditor,
 }: EditorSymbolLocationsPanelProps) {
   const { t } = useWorkbenchI18n()
   const popupRef = useRef<HTMLElement>(null)
@@ -46,7 +54,53 @@ export function EditorSymbolLocationsPanel({
     top: anchor.bottom + 6,
     visibility: 'hidden',
   })
+  const bodyRef = useRef<HTMLDivElement>(null)
   const referenceCount = state.items.filter((item) => item.kind === 'reference').length
+  const groups = useMemo(
+    () => groupWorkbenchSymbolLocations(state.items, state.origin.path),
+    [state.items, state.origin.path]
+  )
+
+  const rowButtons = (): HTMLButtonElement[] => [
+    ...(bodyRef.current?.querySelectorAll<HTMLButtonElement>('button[data-location-row]') ?? []),
+  ]
+
+  // 「查找引用」打开的列表：键盘焦点直接放进去（眼下那一行，没有就第一行），上下键挑、回车跳过去。
+  // 要等面板摆好位置显示出来：还藏着的时候接不了焦点。
+  const { focusList } = state
+  const placed = position.visibility === 'visible'
+  useEffect(() => {
+    if (!focusList || !placed) return
+    const rows = rowButtons()
+    ;(rows.find((row) => row.dataset['active'] === 'true') ?? rows[0])?.focus({ preventScroll: true })
+  }, [focusList, placed])
+
+  const handleListKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>): void => {
+    const move =
+      event.key === 'ArrowDown'
+        ? 1
+        : event.key === 'ArrowUp'
+          ? -1
+          : event.key === 'Home'
+            ? 'first'
+            : event.key === 'End'
+              ? 'last'
+              : null
+    if (move === null) return
+
+    const rows = rowButtons()
+    const next = rows[
+      nextWorkbenchSymbolLocationIndex(
+        rows.length,
+        rows.findIndex((row) => row === document.activeElement),
+        move
+      )
+    ]
+    if (!next) return
+    event.preventDefault()
+    next.focus()
+    next.scrollIntoView({ block: 'nearest' })
+  }
 
   useLayoutEffect(() => {
     const popup = popupRef.current
@@ -86,6 +140,13 @@ export function EditorSymbolLocationsPanel({
     }
   }, [anchor.bottom, anchor.left, anchor.top, boundaryRef, state])
 
+  const closeFromInside = (): void => {
+    const hadFocus = !!popupRef.current?.contains(document.activeElement)
+    onClose()
+    if (hadFocus) onFocusEditor?.()
+  }
+  const closeFromInsideLatest = useLatest(closeFromInside)
+
   useEffect(() => {
     const handleMouseDown = (event: globalThis.MouseEvent): void => {
       if (event.target instanceof Node && popupRef.current?.contains(event.target)) return
@@ -94,7 +155,7 @@ export function EditorSymbolLocationsPanel({
     const handleKeyDown = (event: KeyboardEvent): void => {
       if (event.key !== 'Escape') return
       event.preventDefault()
-      onClose()
+      closeFromInsideLatest.current()
     }
     window.addEventListener('mousedown', handleMouseDown, true)
     window.addEventListener('keydown', handleKeyDown, true)
@@ -102,7 +163,7 @@ export function EditorSymbolLocationsPanel({
       window.removeEventListener('mousedown', handleMouseDown, true)
       window.removeEventListener('keydown', handleKeyDown, true)
     }
-  }, [onClose])
+  }, [closeFromInsideLatest, onClose])
 
   return (
     <section
@@ -117,6 +178,9 @@ export function EditorSymbolLocationsPanel({
           <CodeIcon size={14} />
           <strong>{state.symbol}</strong>
           <span>{t('workbench.symbolLocationsCount', { count: referenceCount })}</span>
+          {groups.length > 1 && (
+            <span>{t('workbench.symbolLocationsFileCount', { count: groups.length })}</span>
+          )}
           {state.truncated && <span>{t('workbench.symbolLocationsTruncated')}</span>}
         </div>
         <button
@@ -124,7 +188,7 @@ export function EditorSymbolLocationsPanel({
           className={styles.editorSymbolLocationsClose}
           aria-label={t('workbench.symbolLocationsClose')}
           title={t('workbench.symbolLocationsClose')}
-          onClick={onClose}
+          onClick={closeFromInside}
         >
           <XIcon size={14} />
         </button>
@@ -143,33 +207,43 @@ export function EditorSymbolLocationsPanel({
         </button>
       )}
 
-      <div className={styles.editorSymbolLocationsBody}>
-        {state.items.length > 0 ? (
-          state.items.map((item) => {
-            const active = sameWorkbenchSymbolLocation(state.activeLocation, item.location)
+      <div ref={bodyRef} className={styles.editorSymbolLocationsBody} onKeyDown={handleListKeyDown}>
+        {groups.length > 0 ? (
+          groups.map((group) => {
+            const displayPath = workbenchSymbolLocationDisplayPath(projectRoot, group.path)
             return (
-              <button
-                key={item.id}
-                type="button"
-                className={styles.editorSymbolLocationRow}
-                data-active={active ? 'true' : undefined}
-                title={locationLabel(projectRoot, item.location)}
-                onClick={() => onNavigate(item.location)}
-              >
-                <span className={styles.editorSymbolLocationKind} data-kind={item.kind}>
-                  {t(
-                    item.kind === 'definition'
-                      ? 'workbench.symbolLocationsDefinition'
-                      : 'workbench.symbolLocationsReference'
-                  )}
-                </span>
-                <span className={styles.editorSymbolLocationPath}>
-                  {workbenchSymbolLocationDisplayPath(projectRoot, item.location.path)}
-                </span>
-                <span className={styles.editorSymbolLocationPosition}>
-                  {item.location.line}:{item.location.column}
-                </span>
-              </button>
+              <section key={group.path} aria-label={displayPath}>
+                <header className={styles.editorSymbolLocationGroup} title={displayPath}>
+                  <span>{displayPath}</span>
+                  <span>{group.items.length}</span>
+                </header>
+                {group.items.map((item) => {
+                  const active = sameWorkbenchSymbolLocation(state.activeLocation, item.location)
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className={styles.editorSymbolLocationRow}
+                      data-location-row
+                      data-active={active ? 'true' : undefined}
+                      title={locationLabel(projectRoot, item.location)}
+                      onClick={() => onNavigate(item.location)}
+                    >
+                      <span className={styles.editorSymbolLocationPosition}>
+                        {item.location.line}:{item.location.column}
+                      </span>
+                      <span className={styles.editorSymbolLocationPreview}>
+                        {item.location.preview ?? state.symbol}
+                      </span>
+                      {item.kind === 'definition' && (
+                        <span className={styles.editorSymbolLocationKind} data-kind={item.kind}>
+                          {t('workbench.symbolLocationsDefinition')}
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
+              </section>
             )
           })
         ) : (

@@ -156,6 +156,9 @@ export interface WorkbenchLanguagePathResolver {
   toProjectRelativePath(projectRoot: string, absolutePath: string): string
 }
 
+/** 引用列表里一行预览最多这么长：再长的行（压缩过的代码）只看开头。 */
+const MaxLocationPreviewLength = 200
+
 // A complete Look property roster currently contains 225 entries. Keep the
 // external-language boundary bounded without dropping valid contextual
 // completions before CodeMirror can filter and rank them.
@@ -1041,9 +1044,13 @@ class WorkbenchLanguageServices {
       return {
         projectRoot: resolved.projectRoot,
         path: request.path,
-        locations: references
-          .map((location) => this.mapExternalLocation(resolved.projectRoot, location))
-          .filter((location): location is WorkbenchLanguageServiceLocation => isPresent(location)),
+        locations: this.withLocationPreviews(
+          resolved.projectRoot,
+          references
+            .map((location) => this.mapExternalLocation(resolved.projectRoot, location))
+            .filter((location): location is WorkbenchLanguageServiceLocation => isPresent(location)),
+          this.editorContentReader(request, resolved.projectRoot)
+        ),
       }
     }
     if (resolved.service?.runtime === 'markdown-language-service') return this.withMarkdownLanguageService(request, resolved.projectRoot, async (markdown) => {
@@ -1056,9 +1063,13 @@ class WorkbenchLanguageServices {
         return {
           projectRoot: resolved.projectRoot,
           path: request.path,
-          locations: references
-            .map((location) => this.mapMarkdownLocation(markdown, location))
-            .filter((location): location is WorkbenchLanguageServiceLocation => isPresent(location)),
+          locations: this.withLocationPreviews(
+            resolved.projectRoot,
+            references
+              .map((location) => this.mapMarkdownLocation(markdown, location))
+              .filter((location): location is WorkbenchLanguageServiceLocation => isPresent(location)),
+            this.editorContentReader(request, resolved.projectRoot)
+          ),
         }
       })
     if (resolved.service?.runtime !== 'typescript-language-service')
@@ -1066,20 +1077,62 @@ class WorkbenchLanguageServices {
 
     const snapshot = await this.createTypeScriptProjectSnapshot(request)
     const content = snapshot.files.get(snapshot.requestAbsolutePath) ?? ''
+    const readFile = (fileName: string): Nullable<string> =>
+      snapshot.files.get(fileName) ?? safeReadFile(fileName)
     const locations = buildTypeScriptReferences({
       service: snapshot.service,
       fileName: snapshot.requestAbsolutePath,
       content,
       position: request.position,
-      files: snapshot.files,
+      readFile,
       toRelativePath: (absolutePath) => this.relativePathFor(snapshot.projectRoot, absolutePath),
     })
 
     return {
       projectRoot: snapshot.projectRoot,
       path: snapshot.requestPath,
-      locations,
+      locations: this.withLocationPreviews(snapshot.projectRoot, locations, readFile),
     }
+  }
+
+  /**
+   * 给每个位置配上它那一行的文字（引用列表里挨着行号显示）。一个文件只读一次、只切一次行；读不到的、
+   * 行号对不上的原样交回。
+   */
+  private withLocationPreviews(
+    projectRoot: string,
+    locations: WorkbenchLanguageServiceLocation[],
+    readFile: (absolutePath: string) => Nullable<string>
+  ): WorkbenchLanguageServiceLocation[] {
+    const linesByPath = new Map<string, Nullable<string[]>>()
+    return locations.map((location) => {
+      let lines = linesByPath.get(location.path)
+      if (lines === undefined) {
+        const absolutePath = resolve(projectRoot, location.path)
+        const content = this.pathResolver.isAllowedProjectPath(projectRoot, absolutePath)
+          ? readFile(absolutePath)
+          : null
+        lines = isPresent(content) ? content.split('\n') : null
+        linesByPath.set(location.path, lines)
+      }
+      const line = lines?.[location.line - 1]
+      return line === undefined
+        ? location
+        : { ...location, preview: line.trim().slice(0, MaxLocationPreviewLength) }
+    })
+  }
+
+  /** 一个文件此刻的正文：请求里带着的（请求文件、有未保存改动的标签）优先，别的读盘。 */
+  private editorContentReader(
+    request: WorkbenchLanguageServiceRequest,
+    projectRoot: string
+  ): (absolutePath: string) => Nullable<string> {
+    const editorContents = new Map<string, string>()
+    for (const openFile of request.openFiles ?? [])
+      editorContents.set(resolve(projectRoot, openFile.path), openFile.content)
+    if (request.content !== undefined)
+      editorContents.set(resolve(projectRoot, request.path), request.content)
+    return (absolutePath) => editorContents.get(absolutePath) ?? safeReadFile(absolutePath)
   }
 
   public async getSignatureHelp(

@@ -613,29 +613,28 @@ export function buildTypeScriptReferences({
   fileName,
   content,
   position,
-  files,
+  readFile,
   toRelativePath,
 }: {
   service: ts.LanguageService
   fileName: string
   content: string
   position: WorkbenchLanguageServicePosition
-  files: Map<string, string>
+  /** 别的文件此刻的正文（项目里记着的，没有就读盘）；读不到为 null。 */
+  readFile: (fileName: string) => Nullable<string>
   toRelativePath: (absolutePath: string) => Nullable<string>
 }): WorkbenchLanguageServiceLocation[] {
   const offset = offsetFromPosition(content, position)
   const references = service.getReferencesAtPosition(fileName, offset) ?? []
 
   return references
-    .map((reference) =>
-      locationFromFileSpan(
-        '',
-        toRelativePath,
-        reference.fileName,
-        reference.textSpan,
-        files.get(reference.fileName) ?? content
-      )
-    )
+    .map((reference) => {
+      // 行列要照引用所在的那个文件的正文算：它不一定是项目的根文件（被 import 拉进来的、别的包里的）。
+      const referenceContent = reference.fileName === fileName ? content : readFile(reference.fileName)
+      return referenceContent == null
+        ? null
+        : locationFromFileSpan('', toRelativePath, reference.fileName, reference.textSpan, referenceContent)
+    })
     .filter((location): location is WorkbenchLanguageServiceLocation => location != null)
 }
 

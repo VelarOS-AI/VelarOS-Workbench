@@ -264,7 +264,8 @@ export function useWorkbenchCommandPalette({
       }
       case 'quick-fix':
       case 'refactor':
-      case 'organize-imports': {
+      case 'organize-imports':
+      case 'find-references': {
         runEditorCommand(id)
         return
       }

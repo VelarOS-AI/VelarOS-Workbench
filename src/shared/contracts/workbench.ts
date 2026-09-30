@@ -416,6 +416,8 @@ export interface WorkbenchLanguageServiceLocation {
   line: number
   column: number
   range?: WorkbenchLanguageServiceRange
+  /** 所在那一行的文字（去掉首尾空白，太长截断）。列成列表给人看的结果（查找引用）才带。 */
+  preview?: string
 }
 
 export interface WorkbenchLanguageServiceDefinitionResult {
