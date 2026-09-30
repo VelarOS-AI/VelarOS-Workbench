@@ -121,10 +121,6 @@
   background: var(--workbench-toolbar);
 }
 
-.searchInputShell {
-  @apply min-w-0 flex-1;
-}
-
 .treeScroll {
   @apply min-h-0 flex-1;
   height: 100%;
@@ -536,18 +532,22 @@
 }
 
 /*
- * 项目搜索的表单：左边的箭头展开替换行，右边一列输入框。开关按钮沿用编辑器查找栏的 editorFindOption
- * 与 editorFindOptionGlyph（样式在 09-editor）。
+ * 项目搜索的表单：左边的箭头展开替换行，右边一列输入框。几个输入框一样宽、一样高、同一种边框
+ * （与 UI 包的搜索框同一套描边与聚焦态）；开关与「全部替换」收在框里靠右。
  */
 .projectSearchForm {
-  @apply flex shrink-0 items-start gap-0.5 text-muted-foreground;
-  padding: 4px 6px 4px 2px;
+  @apply flex shrink-0 items-start text-muted-foreground;
+  gap: 2px;
+  padding: 8px 8px 8px 2px;
   border-bottom: 1px solid var(--workbench-border);
   background: var(--workbench-editor-bg);
 }
 
+/* 箭头与第一行的输入框一样高，居中对齐。 */
 .projectSearchReplaceToggle {
   flex: 0 0 auto;
+  width: 22px;
+  height: 28px;
 }
 
 .projectSearchReplaceToggle svg {
@@ -560,21 +560,129 @@
 
 .projectSearchRows {
   @apply flex min-w-0 flex-1 flex-col;
-  gap: 4px;
+  gap: 6px;
 }
 
-.projectSearchInputRow {
-  @apply flex min-w-0 items-center gap-0.5;
+.projectSearchField {
+  @apply flex min-w-0 items-center;
+  gap: 2px;
+  height: 28px;
+  padding-inline: 8px 3px;
+  border: 1px solid var(--border);
+  border-radius: var(--ui-radius-control-sm, 6px);
+  background: transparent;
+  color: var(--muted-foreground);
+  transition:
+    border-color var(--ui-transition-fast, 120ms ease),
+    box-shadow var(--ui-transition-fast, 120ms ease);
 }
 
-.projectSearchInputRow .searchInputShell [data-slot='input'],
-.projectSearchInput {
-  height: 26px;
+.projectSearchField:hover {
+  border-color: var(--border-strong);
+}
+
+.projectSearchField:focus-within {
+  border-color: var(--ring);
+  box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.08);
+}
+
+.projectSearchField[data-invalid] {
+  border-color: var(--status-red);
+}
+
+.projectSearchFieldIcon {
+  flex: none;
+  margin-right: 5px;
+}
+
+.projectSearchField .projectSearchInput {
+  @apply min-w-0 flex-1;
+  height: 24px;
+  padding: 0;
   font-size: 12px;
 }
 
-.projectSearchInput {
-  @apply min-w-0 flex-1;
+/* 边框、底色、聚焦态都由外面那一框表达：里面这格输入框自己什么都不画。 */
+.workbenchShell .projectSearchField .projectSearchInput,
+.workbenchShell .projectSearchField .projectSearchInput:hover,
+.workbenchShell .projectSearchField .projectSearchInput:focus,
+.workbenchShell .projectSearchField .projectSearchInput:focus-visible {
+  border: 0;
+  border-radius: 0;
+  outline: none;
+  background: transparent;
+  box-shadow: none;
+}
+
+/* type=search 自带的清除叉：框里已经有自己的开关，不要它。 */
+.projectSearchInput::-webkit-search-cancel-button {
+  display: none;
+}
+
+.projectSearchFieldToggle {
+  @apply flex shrink-0 items-center justify-center border-0 bg-transparent;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  color: var(--muted-foreground);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.01em;
+}
+
+.projectSearchFieldToggle [data-underline] {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.projectSearchFieldToggle:hover {
+  background: var(--workbench-hover);
+  color: var(--workbench-text);
+}
+
+.projectSearchFieldToggle:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1px var(--workbench-focus-inset-ring);
+}
+
+.projectSearchFieldToggle[data-active] {
+  background: color-mix(in srgb, var(--workbench-theme-color) 16%, transparent);
+  color: var(--workbench-theme-color);
+}
+
+.projectSearchFieldDivider {
+  flex: none;
+  width: 1px;
+  height: 14px;
+  margin-inline: 2px;
+  background: var(--border);
+}
+
+/* 框里靠右的文字按钮（全部替换）：能点时用强调色。 */
+.projectSearchFieldAction {
+  @apply shrink-0 border-0 bg-transparent;
+  height: 22px;
+  padding-inline: 7px;
+  border-radius: 4px;
+  color: var(--workbench-theme-color);
+  font-size: 11.5px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.projectSearchFieldAction:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--workbench-theme-color) 12%, transparent);
+}
+
+.projectSearchFieldAction:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1px var(--workbench-focus-inset-ring);
+}
+
+.projectSearchFieldAction:disabled {
+  color: var(--muted-foreground);
+  opacity: 0.55;
 }
 
 .projectSearchError {

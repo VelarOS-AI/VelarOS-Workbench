@@ -51,8 +51,12 @@ void describe('pre-split Workbench shell parity', () => {
     const searchView = readSource('src/renderer/src/components/files/ProjectSearchView.tsx')
     assert.match(panel, /<\/div>\n\s*\{projectSearch\.isOpen \? \([\s\S]*<LazyProjectSearchView/)
     assert.match(searchView, /<>\n\s*<ProjectSearchForm/)
-    assert.match(searchForm, /className=\{styles\.searchInputShell\}[\s\S]*<SearchField/)
-    assert.doesNotMatch(searchForm, /searchInputClearButton/)
+    // 查找框是表单自己的一框（开关收在框里），里面一格不画边框的搜索输入；没有另做的清除按钮。
+    assert.match(
+      searchForm,
+      /className=\{styles\.projectSearchField\}[\s\S]*?<Input[\s\S]*?variant="ghost"[\s\S]*?type="search"/
+    )
+    assert.doesNotMatch(searchForm, /searchInputClearButton|<SearchField/)
   })
 
   void test('places the project and compact Git controls together in the title row', () => {

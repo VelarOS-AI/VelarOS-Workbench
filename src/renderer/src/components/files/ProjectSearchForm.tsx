@@ -10,6 +10,8 @@ import {
   ArrowsInLineVerticalIcon,
   ArrowsOutLineVerticalIcon,
   CaretRightIcon,
+  FunnelSimpleIcon,
+  MagnifyingGlassIcon,
 } from '@phosphor-icons/react'
 import {
   type WorkbenchProjectSearchEngine,
@@ -19,11 +21,9 @@ import type { WorkbenchProjectSearchPanelModel } from '@renderer/hooks/useWorkbe
 import { useWorkbenchI18n } from '@renderer/i18n'
 import { formatWorkbenchProjectSearchCount } from '@renderer/models/files/workbenchProjectSearchModel'
 
-import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 import { Text } from '@velaros-ai/ui/primitives/display/Text'
 import { Input } from '@velaros-ai/ui/primitives/forms/Input'
-import { SearchField } from '@velaros-ai/ui/primitives/forms/SearchField'
 
 import type { WorkbenchTextSearchOptions } from '@shared/workbenchTextSearch'
 
@@ -53,8 +53,9 @@ interface ProjectSearchFormProps {
 }
 
 /**
- * 项目搜索的表单（VS Code 的样子）：左边的箭头展开替换行；查找框后面是区分大小写、全字匹配、正则三个开关
- * （与编辑器查找栏同一套样子与快捷键），「⋯」展开包含 / 排除的文件。
+ * 项目搜索的表单（VS Code 的样子）：左边的箭头展开替换行，右边一列输入框，全都一样宽、一样的边框。
+ * 区分大小写、全字匹配、正则三个开关收在查找框里靠右（与编辑器查找栏同一套快捷键），后面的漏斗展开
+ * 包含 / 排除的文件；「全部替换」收在替换框里靠右。
  */
 export function ProjectSearchForm({
   query,
@@ -118,52 +119,54 @@ export function ProjectSearchForm({
         <CaretRightIcon size={12} />
       </IconButton>
       <div className={styles.projectSearchRows}>
-        <div className={styles.projectSearchInputRow}>
-          <div className={styles.searchInputShell}>
-            <SearchField
-              ref={queryInputRef}
-              size="sm"
-              value={query}
-              placeholder={t('workbench.projectSearchPlaceholder')}
-              aria-invalid={!!engine.regexError || undefined}
-              onChange={(event) => onQueryChange(event.target.value)}
-              onKeyDown={(event) => {
-                if (handleSharedKeys(event, true)) return
-                if (onQueryNavigationKey(event)) event.preventDefault()
-              }}
-            />
-          </div>
-          <OptionToggle
+        <div className={styles.projectSearchField} data-invalid={!!engine.regexError || undefined}>
+          <MagnifyingGlassIcon size={14} className={styles.projectSearchFieldIcon} aria-hidden />
+          <Input
+            ref={queryInputRef}
+            variant="ghost"
+            size="sm"
+            type="search"
+            value={query}
+            placeholder={t('workbench.projectSearchPlaceholder')}
+            aria-label={t('workbench.projectSearchPlaceholder')}
+            aria-invalid={!!engine.regexError || undefined}
+            className={styles.projectSearchInput}
+            onChange={(event) => onQueryChange(event.target.value)}
+            onKeyDown={(event) => {
+              if (handleSharedKeys(event, true)) return
+              if (onQueryNavigationKey(event)) event.preventDefault()
+            }}
+          />
+          <FieldToggle
             label={t('workbench.findMatchCase')}
             active={panel.options.matchCase}
             onToggle={() => panel.toggleOption('matchCase')}
           >
-            <span className={styles.editorFindOptionGlyph}>Aa</span>
-          </OptionToggle>
-          <OptionToggle
+            Aa
+          </FieldToggle>
+          <FieldToggle
             label={t('workbench.findWholeWord')}
             active={panel.options.wholeWord}
             onToggle={() => panel.toggleOption('wholeWord')}
           >
-            <span className={styles.editorFindOptionGlyph} data-underline>
-              ab
-            </span>
-          </OptionToggle>
-          <OptionToggle
+            <span data-underline>ab</span>
+          </FieldToggle>
+          <FieldToggle
             label={t('workbench.findRegex')}
             active={panel.options.regex}
             onToggle={() => panel.toggleOption('regex')}
           >
-            <span className={styles.editorFindOptionGlyph}>.*</span>
-          </OptionToggle>
-          <OptionToggle
+            .*
+          </FieldToggle>
+          <span className={styles.projectSearchFieldDivider} aria-hidden />
+          <FieldToggle
             label={t('workbench.projectSearchToggleDetails')}
             active={panel.detailsOpen || hasFilters}
             expanded={panel.detailsOpen}
             onToggle={panel.toggleDetails}
           >
-            <span className={styles.editorFindOptionGlyph}>⋯</span>
-          </OptionToggle>
+            <FunnelSimpleIcon size={13} />
+          </FieldToggle>
         </div>
         {!!engine.regexError && (
           <Text tone="caption" className={styles.projectSearchError}>
@@ -171,12 +174,14 @@ export function ProjectSearchForm({
           </Text>
         )}
         {panel.replaceOpen && (
-          <div className={styles.projectSearchInputRow}>
+          <div className={styles.projectSearchField}>
             <Input
               ref={replaceInputRef}
+              variant="ghost"
               size="sm"
               value={panel.replacement}
               placeholder={t('workbench.findReplacePlaceholder')}
+              aria-label={t('workbench.findReplacePlaceholder')}
               className={styles.projectSearchInput}
               onChange={(event) => panel.setReplacement(event.target.value)}
               onKeyDown={(event) => {
@@ -187,16 +192,21 @@ export function ProjectSearchForm({
                 if (canReplaceAll) engine.replaceAll()
               }}
             />
-            <Button size="sm" variant="ghost" disabled={!canReplaceAll} onClick={engine.replaceAll}>
+            <button
+              type="button"
+              className={styles.projectSearchFieldAction}
+              disabled={!canReplaceAll}
+              onClick={engine.replaceAll}
+            >
               {t('workbench.findReplaceAll')}
-            </Button>
+            </button>
           </div>
         )}
         {panel.detailsOpen && (
           <>
-            {/* 各占一行：输入框的宽度是按「一行里撑满」写的，直接放进这一列会被压扁。 */}
-            <div className={styles.projectSearchInputRow}>
+            <div className={styles.projectSearchField}>
               <Input
+                variant="ghost"
                 size="sm"
                 value={panel.include}
                 placeholder={t('workbench.projectSearchInclude')}
@@ -206,8 +216,9 @@ export function ProjectSearchForm({
                 onKeyDown={(event) => void handleSharedKeys(event, false)}
               />
             </div>
-            <div className={styles.projectSearchInputRow}>
+            <div className={styles.projectSearchField}>
               <Input
+                variant="ghost"
                 size="sm"
                 value={panel.exclude}
                 placeholder={t('workbench.projectSearchExclude')}
@@ -289,7 +300,8 @@ export function ProjectSearchSummary({ engine }: { engine: WorkbenchProjectSearc
   )
 }
 
-function OptionToggle({
+/** 查找框里靠右的小开关：区分大小写、全字匹配、正则，以及展开包含 / 排除的那一个。 */
+function FieldToggle({
   label,
   active,
   expanded,
@@ -298,23 +310,23 @@ function OptionToggle({
 }: {
   label: string
   active: boolean
-  /** 展开 / 收起类的按钮（「⋯」）用 aria-expanded，开关类用 aria-pressed。 */
+  /** 展开 / 收起类的按钮（漏斗）用 aria-expanded，开关类用 aria-pressed。 */
   expanded?: boolean
   onToggle: () => void
   children: ReactNode
 }): ReactElement {
   return (
-    <IconButton
-      variant="ghost"
-      size="icon-sm"
-      label={label}
+    <button
+      type="button"
+      title={label}
+      aria-label={label}
       aria-pressed={expanded === undefined ? active : undefined}
       aria-expanded={expanded}
       data-active={active || undefined}
-      className={styles.editorFindOption}
+      className={styles.projectSearchFieldToggle}
       onClick={onToggle}
     >
       {children}
-    </IconButton>
+    </button>
   )
 }
