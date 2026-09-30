@@ -30,17 +30,21 @@ const languageCache = new Map<string, Nullable<Language>>()
 const highlighterCache = new Map<WorkbenchThemeId, Highlighter>()
 
 /**
- * 给搜索结果里的一行代码着色：按文件名认语言、用编辑器同一套着色规则，再把查询词标出来。认不出语言的按
- * 纯文本返回。只看这一行，跨行的字符串、注释中间截出来的片段着色可能不准，但不影响阅读。
+ * 给搜索结果里的一行代码着色：按文件名认语言、用编辑器同一套着色规则，再把匹配标出来——给了 `match`
+ * 就标它指的那一段（项目搜索知道匹配的确切位置，正则、全字匹配都对得上），否则标出查询词（不分大小写）。
+ * 认不出语言的按纯文本返回。只看这一行，跨行的字符串、注释中间截出来的片段着色可能不准，但不影响阅读。
  */
 export function highlightWorkbenchCodeSnippet(options: {
   path: string
   text: string
   theme: WorkbenchThemeId
   query?: string
+  /** 匹配在 text 里的位置 [start, end)。 */
+  match?: { start: number; end: number }
 }): WorkbenchCodeSnippetToken[] {
   const query = options.query?.trim() ?? ''
-  const key = `${options.theme}\0${languageKey(options.path)}\0${query}\0${options.text}`
+  const range = options.match ? `${options.match.start}-${options.match.end}` : ''
+  const key = `${options.theme}\0${languageKey(options.path)}\0${query}\0${range}\0${options.text}`
   const cached = snippetCache.get(key)
   if (cached) {
     // 最近用过的挪到最后，淘汰时先丢最久没用的。
@@ -48,7 +52,14 @@ export function highlightWorkbenchCodeSnippet(options: {
     snippetCache.set(key, cached)
     return cached
   }
-  const tokens = markQuery(highlight(options.path, options.text, options.theme), query)
+  const highlighted = highlight(options.path, options.text, options.theme)
+  const tokens = options.match
+    ? markRanges(
+        highlighted,
+        highlighted.map((token) => token.text).join(''),
+        [[options.match.start, options.match.end]]
+      )
+    : markQuery(highlighted, query)
   snippetCache.set(key, tokens)
   if (snippetCache.size > MaxCachedSnippets) {
     const oldest = snippetCache.keys().next().value
@@ -114,6 +125,15 @@ function markQuery(tokens: WorkbenchCodeSnippetToken[], query: string): Workbenc
   const ranges: Array<[number, number]> = []
   for (let from = haystack.indexOf(needle); from >= 0; from = haystack.indexOf(needle, from + needle.length))
     ranges.push([from, from + needle.length])
+  return markRanges(tokens, text, ranges)
+}
+
+/** 把 ranges（在整行文字里的位置，从前到后）切出来标上 `match`，着色不变。 */
+function markRanges(
+  tokens: WorkbenchCodeSnippetToken[],
+  text: string,
+  ranges: ReadonlyArray<readonly [number, number]>
+): WorkbenchCodeSnippetToken[] {
   if (ranges.length === 0) return tokens
   const marked: WorkbenchCodeSnippetToken[] = []
   let offset = 0

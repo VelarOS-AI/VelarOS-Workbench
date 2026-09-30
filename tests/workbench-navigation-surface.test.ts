@@ -61,7 +61,10 @@ void describe('Workbench navigation surface', () => {
     assert.match(navigate, /if \(editorGroup === 'primary'\) showEditorSurface\(\)/u)
     assert.match(navigate, /if \(surface\.activeLeftTool !== leftTool\) surface\.setActiveLeftTool\(leftTool\)/u)
     assert.match(navigate, /if \(revealLeftPanel && !surface\.isFilePanelOpen\) surface\.toggleFilePanel\(\)/u)
-    assert.match(navigate, /await editorNavigation\.goToLocation\(request\.path, request\.line, request\.column\)/u)
+    assert.match(
+      navigate,
+      /await editorNavigation\.goToLocation\(request\.path, request\.line, request\.column(?:, \{[^}]*\})?\)/u
+    )
 
     // 聊天：回答里的路径、改动卡的逐文件打开（项目外走只读预览）、「审核」本轮改动。
     const workspacePath = sliceSource(pageModel, 'async function handleWorkbenchChatWorkspacePathOpen', '\n  }\n')

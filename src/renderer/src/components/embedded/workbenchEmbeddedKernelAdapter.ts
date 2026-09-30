@@ -98,12 +98,9 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
       },
       search: {
         searchQuery: workbench.searchQuery,
-        normalizedSearchQuery: workbench.normalizedSearchQuery,
         searchResult: workbench.searchResult,
-        contentSearchMatches: model.chrome.contentSearchMatches,
         searchActive: workbench.searchActive,
-        isSearchingEntries: workbench.isSearchingEntries,
-        isIndexingProject: workbench.isIndexingProject,
+        projectSearch: model.projectSearch,
       },
       handlers: {
         onSelectEntryPath: workbench.selectEntryPath,
@@ -118,12 +115,9 @@ export function buildStandaloneWorkbenchEmbeddedKernelModel(
         onMoveEntries: (entries, parentEntry, _index) =>
           model.actions.runTreeMutation(() => workbench.moveTreeEntries(entries, parentEntry)),
         onSearchQueryChange: workbench.setSearchQuery,
-        onResetSearch: workbench.resetSearch,
         onRefreshProject: () => void model.actions.refreshProjectAndGit(),
         onCloseProject: undefined,
         onOpenSearchEntry: (entry) => void workbench.openSearchEntry(entry),
-        onOpenContentSearchMatch: (match) =>
-          void editorNavigation.goToLocation(match.path, match.line, match.column),
         onSetDirectoryOpen: (path, open) => void workbench.setDirectoryOpen(path, open),
         onSelectFile: (path) => {
           model.actions.showEditorSurface()

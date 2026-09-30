@@ -63,12 +63,12 @@ import { SystemDefaultEditorLightId } from '../support/defaultEditor'
 import { useLatest, useMemoizedFn } from '../support/genericHooks'
 import { useWorkspaceFilesChangedRefresh } from '../support/useWorkspaceFilesChangedRefresh'
 
-import { useWorkbenchContentSearchController } from './useWorkbenchContentSearchController'
 import { useWorkbenchController } from './useWorkbenchController'
 import { useWorkbenchEditorNavigationState } from './useWorkbenchEditorNavigationState'
 import { useWorkbenchGitChangeActions } from './useWorkbenchGitChangeActions'
 import { useWorkbenchGitState } from './useWorkbenchGitState'
 import { useWorkbenchMergeResolutionOffer } from './useWorkbenchMergeResolutionOffer'
+import { useWorkbenchProjectSearchController } from './useWorkbenchProjectSearchController'
 import { useWorkbenchProjectSessionPersistence } from './useWorkbenchProjectSessionPersistence'
 import { useWorkbenchTopRunControl } from './useWorkbenchTopRunControl'
 
@@ -97,6 +97,9 @@ type WorkbenchNavigationRequest =
       /** 给出时定位到这一行；不给只切到文件。 */
       line?: number
       column?: number
+      /** 给出时选中 line:column 到 endLine:endColumn 这一段（项目搜索的一处匹配）。 */
+      endLine?: number
+      endColumn?: number
     }
   | { target: 'file-preview'; tab: WorkbenchLightEditorTab }
   | { target: 'ai-changes'; round: WorkbenchChatRunChangesTarget }
@@ -428,11 +431,23 @@ export function useStandaloneWorkbenchPageModel(
     workbench.selectedFilePath,
   ])
 
-  const contentSearch = useWorkbenchContentSearchController({
+  // 侧栏的项目搜索（⇧⌘F）：查找词与按文件名找共用，结果里的匹配经 `navigate` 打开并选中。
+  const projectSearch = useWorkbenchProjectSearchController({
     activeProject: workbench.activeProject,
     openTabs: workbench.openTabs,
-    query: workbench.normalizedSearchQuery,
-    enabled: workbench.searchActive,
+    query: workbench.searchQuery,
+    onQueryChange: workbench.setSearchQuery,
+    onResetQuery: workbench.resetSearch,
+    replaceOpenTabContents: workbench.replaceOpenTabContents,
+    onOpenMatch: (path, match) =>
+      void navigate({
+        target: 'file',
+        path,
+        line: match.line,
+        column: match.column,
+        endLine: match.endLine,
+        endColumn: match.endColumn,
+      }),
   })
   const effectiveGitSshKeyPath =
     projectGitSettings.settings.gitSshKeyPath.trim() ||
@@ -685,7 +700,11 @@ export function useStandaloneWorkbenchPageModel(
     switch (request.target) {
       case 'file':
         if (request.line === undefined) await editorNavigation.selectFile(request.path)
-        else await editorNavigation.goToLocation(request.path, request.line, request.column)
+        else
+          await editorNavigation.goToLocation(request.path, request.line, request.column, {
+            endLine: request.endLine,
+            endColumn: request.endColumn,
+          })
         // 文件树平时跟着编辑器的当前文件自己定位（见 useWorkbenchController），但文件本来就是当前文件时
         // 当前文件不变、那边不会动；导航是「把它带到眼前」，左侧也要定位到它。
         await workbench.revealEntryPath(request.path, { quiet: true })
@@ -1103,15 +1122,14 @@ export function useStandaloneWorkbenchPageModel(
     projectFiles,
     /** 命令面板里各条命令此刻能不能跑、怎么跑。 */
     commandPalette,
+    /** 侧栏的项目搜索与替换。 */
+    projectSearch,
     /** 页面 chrome / i18n / 派生展示值。 */
     chrome: {
       lockedProjectId,
       translate,
       locale,
       t,
-      contentSearchMatches: contentSearch.contentSearchMatches,
-      isSearchingContent: contentSearch.isSearchingContent,
-      contentSearchTruncated: contentSearch.contentSearchTruncated,
       effectiveGitSshKeyPath,
       shellStyle,
       velarLogicGraphAvailable,

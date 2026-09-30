@@ -1,44 +1,7 @@
-import type { WorkbenchDirectoryEntry } from '@shared/contracts'
-
-import type { WorkbenchContentSearchMatch } from './workbenchContentSearchModel'
-
-export type WorkbenchFileSearchNavigationItem =
-  | {
-      id: string
-      kind: 'entry'
-      entry: WorkbenchDirectoryEntry
-    }
-  | {
-      id: string
-      kind: 'content'
-      match: WorkbenchContentSearchMatch
-    }
-
+/** 搜索框里按下的键对结果列表的作用：挪到第几项，或打开当前项。 */
 export type WorkbenchFileSearchKeyboardAction =
   | { kind: 'open-active' }
   | { kind: 'set-active'; index: number }
-
-export function buildWorkbenchFileSearchNavigationItems(
-  entries: WorkbenchDirectoryEntry[],
-  contentMatches: WorkbenchContentSearchMatch[]
-): WorkbenchFileSearchNavigationItem[] {
-  return [
-    ...entries.map(
-      (entry): WorkbenchFileSearchNavigationItem => ({
-        id: `entry:${entry.path}`,
-        kind: 'entry',
-        entry,
-      })
-    ),
-    ...contentMatches.map(
-      (match): WorkbenchFileSearchNavigationItem => ({
-        id: `content:${match.id}`,
-        kind: 'content',
-        match,
-      })
-    ),
-  ]
-}
 
 export function getWorkbenchFileSearchKeyboardAction(
   key: string,

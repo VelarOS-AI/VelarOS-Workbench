@@ -58,10 +58,6 @@
   background: var(--chrome-rail-hover-bg);
 }
 
-.filePanel > .searchBar {
-  padding: 4px;
-}
-
 .panelHeader {
   @apply relative flex shrink-0 items-center gap-1;
   min-height: var(--workbench-panel-header-height);
@@ -125,13 +121,6 @@
   background: var(--workbench-toolbar);
 }
 
-.searchBar {
-  @apply flex shrink-0 items-center gap-1.5 text-muted-foreground;
-  padding: 4px;
-  border-bottom: 1px solid var(--workbench-border);
-  background: var(--workbench-editor-bg);
-}
-
 .searchInputShell {
   @apply min-w-0 flex-1;
 }
@@ -172,26 +161,6 @@
   padding-block: 4px;
 }
 
-.searchResultList {
-  @apply m-0 list-none p-0;
-  padding-block: 6px;
-}
-
-.searchSection {
-  @apply min-w-0;
-}
-
-.searchSectionTitle {
-  @apply m-0 flex items-center justify-between gap-2;
-  padding: 7px 10px 2px;
-  font-weight: 500;
-}
-
-.searchSectionTitle span,
-.searchSectionTitle [data-slot='text'] {
-  @apply shrink-0;
-}
-
 .treeRow {
   @apply flex w-full items-center gap-1.5 border-0 bg-transparent text-left text-foreground;
   height: 100%;
@@ -211,39 +180,24 @@
   background: var(--chrome-rail-hover-bg);
 }
 
-/*
- * 搜索结果行是 block 档的 ghost Button：排版方式、边框、行高与悬停底色都随按钮原语。选中行与文件树共用下面
- * 那套选中底色——以前这条被同特异性的 ghost 原语盖住，点中的结果在列表还有焦点时一点底色都没有。
- */
-.searchResultRow {
-  @apply w-full items-center bg-transparent text-left text-foreground;
-  padding: 4px 10px;
-  font-size: 12px;
-}
-
 .treeRow:hover {
   background: var(--chrome-rail-hover-bg);
 }
 
 .treeRowSelected,
-.searchResultRowSelected {
+.projectSearchRowSelected {
   background: var(--workbench-selection-bg);
   color: var(--foreground);
   outline: none;
 }
 
 .treeRowSelected:hover,
-.searchResultRowSelected:hover {
+.projectSearchRowSelected:hover {
   background: var(--workbench-selection-bg);
 }
 
-.searchResultRowActive:not(.searchResultRowSelected) {
-  background: var(--chrome-rail-hover-bg);
-  color: var(--foreground);
-}
-
 .treeScroll:not(:focus-within) .treeRowSelected,
-.treeScroll:not(:focus-within) .searchResultRowSelected {
+.treeScroll:not(:focus-within) .projectSearchRowSelected {
   background: var(--workbench-selection-inactive);
   color: var(--workbench-text);
 }
@@ -462,32 +416,32 @@
 
 .treeRow[data-git-tone='added'] .treeName,
 .treeRow[data-git-tone='added'] .treeName [data-slot='text'],
-.searchResultRow[data-git-tone='added'] .searchResultName,
-.searchResultRow[data-git-tone='added'] .searchResultName [data-slot='text'],
+.projectSearchRow[data-git-tone='added'] .projectSearchName,
+.projectSearchRow[data-git-tone='added'] .projectSearchName [data-slot='text'],
 .editorTabName[data-git-tone='added'] {
   color: var(--status-green);
 }
 
 .treeRow[data-git-tone='modified'] .treeName,
 .treeRow[data-git-tone='modified'] .treeName [data-slot='text'],
-.searchResultRow[data-git-tone='modified'] .searchResultName,
-.searchResultRow[data-git-tone='modified'] .searchResultName [data-slot='text'],
+.projectSearchRow[data-git-tone='modified'] .projectSearchName,
+.projectSearchRow[data-git-tone='modified'] .projectSearchName [data-slot='text'],
 .editorTabName[data-git-tone='modified'] {
   color: var(--status-teal);
 }
 
 .treeRow[data-git-tone='untracked'] .treeName,
 .treeRow[data-git-tone='untracked'] .treeName [data-slot='text'],
-.searchResultRow[data-git-tone='untracked'] .searchResultName,
-.searchResultRow[data-git-tone='untracked'] .searchResultName [data-slot='text'],
+.projectSearchRow[data-git-tone='untracked'] .projectSearchName,
+.projectSearchRow[data-git-tone='untracked'] .projectSearchName [data-slot='text'],
 .editorTabName[data-git-tone='untracked'] {
   color: var(--workbench-git-untracked-fg);
 }
 
 .treeRow[data-git-tone='conflicted'] .treeName,
 .treeRow[data-git-tone='conflicted'] .treeName [data-slot='text'],
-.searchResultRow[data-git-tone='conflicted'] .searchResultName,
-.searchResultRow[data-git-tone='conflicted'] .searchResultName [data-slot='text'],
+.projectSearchRow[data-git-tone='conflicted'] .projectSearchName,
+.projectSearchRow[data-git-tone='conflicted'] .projectSearchName [data-slot='text'],
 .editorTabName[data-git-tone='conflicted'] {
   color: var(--status-red);
 }
@@ -553,58 +507,190 @@
   box-shadow: none;
 }
 
-.searchResultCopy {
-  @apply flex min-w-0 flex-1 flex-col;
-  gap: 1px;
-}
-
-.searchResultName {
-  @apply truncate font-medium;
-}
-
-/* 内容命中的第一行：文件名、路径:行号与「已打开」排在一行，路径放不下时截断。 */
-.searchResultHeading {
-  @apply flex min-w-0 items-baseline;
-  gap: 6px;
-}
-
-.searchResultHeading .searchResultName {
-  @apply shrink-0;
-  max-width: 55%;
-}
-
-/* 下面三处都是共享 Text 原语，字号、行高与配色随它的色阶（caption / default）。 */
-.searchResultPath {
-  @apply truncate;
-}
-
-.searchResultHeading .searchResultPath {
-  @apply min-w-0 flex-1;
-}
-
 .searchContentExcerpt {
   @apply truncate font-mono;
 }
 
-/* 代码片段里的查询词：与历史代码查看器的命中同一种琥珀底色。 */
+/* 代码片段里的匹配：与历史代码查看器的命中同一种琥珀底色。 */
 .codeSnippetMatch {
   border-radius: 2px;
   background: color-mix(in oklab, var(--status-amber, #e3a008) 38%, transparent);
   color: inherit;
 }
 
-.searchContentBadge {
-  @apply shrink-0;
+/* 替换预览：匹配划掉，后面跟着换成的文字。 */
+.codeSnippetMatch[data-replaced] {
+  background: color-mix(in oklab, var(--status-red) 22%, transparent);
+  text-decoration: line-through;
 }
 
-.panelEmpty,
-.panelHint {
+.codeSnippetReplacement {
+  border-radius: 2px;
+  background: color-mix(in oklab, var(--status-green) 26%, transparent);
+  color: inherit;
+  text-decoration: none;
+}
+
+.panelEmpty {
   padding: 14px;
 }
 
-.panelHint {
-  @apply text-muted-foreground;
+/*
+ * 项目搜索的表单：左边的箭头展开替换行，右边一列输入框。开关按钮沿用编辑器查找栏的 editorFindOption
+ * 与 editorFindOptionGlyph（样式在 09-editor）。
+ */
+.projectSearchForm {
+  @apply flex shrink-0 items-start gap-0.5 text-muted-foreground;
+  padding: 4px 6px 4px 2px;
+  border-bottom: 1px solid var(--workbench-border);
+  background: var(--workbench-editor-bg);
+}
+
+.projectSearchReplaceToggle {
+  flex: 0 0 auto;
+}
+
+.projectSearchReplaceToggle svg {
+  transition: transform 120ms ease;
+}
+
+.projectSearchForm[data-replace-open] .projectSearchReplaceToggle svg {
+  transform: rotate(90deg);
+}
+
+.projectSearchRows {
+  @apply flex min-w-0 flex-1 flex-col;
+  gap: 4px;
+}
+
+.projectSearchInputRow {
+  @apply flex min-w-0 items-center gap-0.5;
+}
+
+.projectSearchInputRow .searchInputShell [data-slot='input'],
+.projectSearchInput {
+  height: 26px;
   font-size: 12px;
+}
+
+.projectSearchInput {
+  @apply min-w-0 flex-1;
+}
+
+.projectSearchError {
+  color: var(--status-red);
+  overflow-wrap: anywhere;
+}
+
+/* 结果上方的一行：共几处、在几个文件里，右边是重搜与全部收起 / 展开。 */
+.projectSearchSummary {
+  @apply flex shrink-0 flex-col;
+  padding: 2px 6px 4px 10px;
+  gap: 2px;
+}
+
+.projectSearchSummaryRow {
+  @apply flex min-w-0 items-center gap-0.5;
+}
+
+.projectSearchSummaryText {
+  @apply min-w-0 flex-1;
+}
+
+.projectSearchNotice[data-tone='warning'] {
+  color: var(--status-amber);
+}
+
+/* 结果列表：只渲染视野里的行，每行绝对定位、一样高。 */
+.projectSearchList {
+  position: relative;
+  width: 100%;
+}
+
+.projectSearchRow {
+  @apply absolute flex min-w-0 items-center text-foreground;
+  top: 0;
+  right: 0;
+  left: 0;
+  gap: 5px;
+  padding: 0 6px 0 8px;
+  font-size: 12px;
+  cursor: default;
+}
+
+.projectSearchRow:hover {
+  background: var(--chrome-rail-hover-bg);
+}
+
+.projectSearchRowActive:not(.projectSearchRowSelected) {
+  background: var(--chrome-rail-hover-bg);
+  color: var(--foreground);
+}
+
+.projectSearchRow[data-kind='entry'] {
+  padding-left: 26px;
+}
+
+.projectSearchRow[data-kind='match'],
+.projectSearchRow[data-kind='more'] {
+  padding-left: 30px;
+}
+
+.projectSearchDisclosure {
+  @apply flex shrink-0 items-center justify-center text-muted-foreground;
+  width: 13px;
+}
+
+.projectSearchGroupTitle {
+  @apply min-w-0 flex-1 font-medium;
+}
+
+.projectSearchName {
+  @apply shrink-0 truncate font-medium;
+  max-width: 60%;
+}
+
+.projectSearchDirectory {
+  @apply min-w-0 flex-1 truncate;
+}
+
+.projectSearchCount {
+  @apply shrink-0 text-muted-foreground;
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--workbench-hover);
+  font-size: 10.5px;
+  line-height: 16px;
+  text-align: center;
+}
+
+.projectSearchLineNumber {
+  @apply shrink-0 text-right text-muted-foreground;
+  min-width: 22px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10.5px;
+}
+
+.projectSearchExcerpt {
+  @apply min-w-0 flex-1 truncate font-mono;
+}
+
+.projectSearchMore {
+  @apply min-w-0 flex-1 italic;
+}
+
+/* 行尾的替换按钮：指针停在行上（或键盘挑中这一行）时才出来。 */
+.projectSearchRowAction {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  visibility: hidden;
+}
+
+.projectSearchRow:hover .projectSearchRowAction,
+.projectSearchRowActive .projectSearchRowAction {
+  visibility: visible;
 }
 
 .workbenchContextMenu {

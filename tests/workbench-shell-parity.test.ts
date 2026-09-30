@@ -31,6 +31,7 @@ void describe('pre-split Workbench shell parity', () => {
 
   void test('keeps the project view header compact and leaves search in place', () => {
     const panel = readSource('src/renderer/src/components/files/FilePanel.tsx')
+    const searchForm = readSource('src/renderer/src/components/files/ProjectSearchForm.tsx')
     const row = readSource('src/renderer/src/components/files/FileTreeRow.tsx')
     const styles = readSource('src/renderer/src/styles/08-files.module.css')
     const shellStyles = readSource('src/renderer/src/styles/01-shell.module.css')
@@ -46,9 +47,10 @@ void describe('pre-split Workbench shell parity', () => {
     assert.match(styles, /\.filePanelProjectHeader[\s\S]*flex:\s*0 0 35px[\s\S]*height:\s*35px/)
     assert.match(shellStyles, /--workbench-tab-height:\s*35px/)
     assert.equal(shellStyles.match(/--workbench-tab-height:/g)?.length, 1)
-    assert.match(panel, /<SearchField/)
-    assert.match(panel, /className=\{styles\.searchInputShell\}[\s\S]*<SearchField/)
-    assert.doesNotMatch(panel, /searchInputClearButton/)
+    // 搜索表单就在项目面板里、标题栏下面，不挪进标题栏。
+    assert.match(panel, /<\/div>\n\s*\{projectSearch\.isOpen && \(\n\s*<ProjectSearchForm/)
+    assert.match(searchForm, /className=\{styles\.searchInputShell\}[\s\S]*<SearchField/)
+    assert.doesNotMatch(searchForm, /searchInputClearButton/)
   })
 
   void test('places the project and compact Git controls together in the title row', () => {

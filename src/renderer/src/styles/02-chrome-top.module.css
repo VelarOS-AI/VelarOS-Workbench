@@ -43,7 +43,6 @@
 .workbenchShell[data-standalone='true'] .panelHeader [data-slot='button'],
 .workbenchShell[data-standalone='true'] .panelTitleButton,
 .workbenchShell[data-standalone='true'] .leftToolButton,
-.workbenchShell[data-standalone='true'] .searchBar,
 .workbenchShell[data-standalone='true'] .treeActionForm {
   -webkit-app-region: no-drag;
 }

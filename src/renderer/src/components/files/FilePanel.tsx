@@ -25,34 +25,35 @@ import {
   ScissorsIcon,
   TrashIcon,
 } from '@phosphor-icons/react'
+import { useWorkbenchDensity } from '@renderer/hooks/useWorkbenchPreferences'
+import type { WorkbenchProjectSearchModel } from '@renderer/hooks/useWorkbenchProjectSearchController'
 import { useWorkbenchI18n } from '@renderer/i18n'
 import { isWorkbenchVelarFilePath } from '@renderer/models/commands/workbenchVelarFileCommand'
-import type { WorkbenchContentSearchMatch } from '@renderer/models/files/workbenchContentSearchModel'
+import { getWorkbenchFileSearchKeyboardAction } from '@renderer/models/files/workbenchFileSearchNavigationModel'
 import {
-  buildWorkbenchFileSearchNavigationItems,
-  getWorkbenchFileSearchKeyboardAction,
-  type WorkbenchFileSearchNavigationItem,
-} from '@renderer/models/files/workbenchFileSearchNavigationModel'
+  buildWorkbenchProjectSearchRows,
+  isOpenableWorkbenchProjectSearchRow,
+  type WorkbenchProjectSearchRow,
+} from '@renderer/models/files/workbenchProjectSearchModel'
 import {
   getWorkbenchFileTreeShortcutAction,
   selectTopLevelTreeEntries,
 } from '@renderer/models/files/workbenchTreeMutation'
 import type { WorkbenchGitDecorationMap } from '@renderer/models/git/workbenchGitModel'
 import type { WorkbenchProject } from '@renderer/models/project/workbenchProjects'
+import { getWorkbenchFileTreeRowHeight } from '@renderer/models/settings/workbenchPreferences'
 import { ROOT_PATH } from '@renderer/models/shared/workbenchUtils'
 
-import { toNullable } from '@velaros-ai/core'
 import { currentPlatform as systemPlatformCompatibility } from '@velaros-ai/core/platform'
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 import { Paragraph } from '@velaros-ai/ui/primitives/display/Paragraph'
-import { SearchField } from '@velaros-ai/ui/primitives/forms/SearchField'
 import { ScrollArea } from '@velaros-ai/ui/primitives/layout/ScrollArea'
 
 import type { WorkbenchDirectoryEntry, WorkbenchSearchEntriesResult } from '@shared/contracts'
+import { isWorkbenchSearchPathIncluded } from '@shared/workbenchSearchGlob'
 
 import styles from '../../styles/workbenchPageStyles'
 import { useLatest } from '../../support/genericHooks'
-import { requestScrollIntoView } from '../../support/scrollUtils'
 import { WorkbenchContextMenu } from '../chrome/WorkbenchContextMenu'
 
 import { FileSearchResults } from './FileSearchResults'
@@ -64,6 +65,7 @@ import {
   isTreeEntryInMultiSelection,
   resolveTreeChatFilePaths,
 } from './FileTree'
+import { ProjectSearchForm, ProjectSearchSummary } from './ProjectSearchForm'
 
 export interface WorkbenchFilePanelTreeProps {
   project: WorkbenchProject
@@ -79,13 +81,13 @@ export interface WorkbenchFilePanelTreeProps {
 }
 
 export interface WorkbenchFilePanelSearchProps {
+  /** 输入框里的查找词：按文件名找（searchResult）与项目内容搜索共用。 */
   searchQuery: string
-  normalizedSearchQuery: string
   searchResult: Nullable<WorkbenchSearchEntriesResult>
-  contentSearchMatches: WorkbenchContentSearchMatch[]
+  /** 查找词不是空白：结果盖住文件树。 */
   searchActive: boolean
-  isSearchingEntries: boolean
-  isIndexingProject: boolean
+  /** 项目内容搜索与替换：开关、替换、结果都在它这里。 */
+  projectSearch: WorkbenchProjectSearchModel
 }
 
 export interface WorkbenchFilePanelHandlersProps {
@@ -107,11 +109,9 @@ export interface WorkbenchFilePanelHandlersProps {
     index: number
   ) => Promise<void>
   onSearchQueryChange: (query: string) => void
-  onResetSearch: () => void
   onRefreshProject: () => void
   onCloseProject?: () => void
   onOpenSearchEntry: (entry: WorkbenchDirectoryEntry) => void
-  onOpenContentSearchMatch: (match: WorkbenchContentSearchMatch) => void
   onSetDirectoryOpen: (path: string, open: boolean) => void
   onSelectFile: (path: string) => void
   onRunFile?: (path: string) => void
@@ -165,15 +165,7 @@ export function FilePanel({
     isMutatingTree,
     gitDecorations,
   },
-  search: {
-    searchQuery,
-    normalizedSearchQuery,
-    searchResult,
-    contentSearchMatches,
-    searchActive,
-    isSearchingEntries,
-    isIndexingProject,
-  },
+  search: { searchQuery, searchResult, searchActive, projectSearch },
   handlers: {
     onSelectEntryPath,
     onCreateEntry,
@@ -182,10 +174,8 @@ export function FilePanel({
     onUndoDeleteEntries,
     onMoveEntries,
     onSearchQueryChange,
-    onResetSearch,
     onRefreshProject,
     onOpenSearchEntry,
-    onOpenContentSearchMatch,
     onSetDirectoryOpen,
     onSelectFile,
     onRunFile,
@@ -199,7 +189,6 @@ export function FilePanel({
   const filePanelRef = useRef<HTMLElement>(null)
   const treeScrollRef = useRef<HTMLDivElement>(null)
   const treeApiRef = useRef<FileTreeApi>(null)
-  const [isSearchVisible, setIsSearchVisible] = useState(false)
   const [contextMenu, setContextMenu] = useState<
     LooseOptional<{
       x: number
@@ -209,9 +198,9 @@ export function FilePanel({
       chatFilePaths: string[]
     }>
   >(null)
-  const [activeSearchResultIndex, setActiveSearchResultIndex] = useState(0)
+  const [activeSearchRowKey, setActiveSearchRowKey] = useState<Nullable<string>>(null)
   const [treeClipboard, setTreeClipboard] = useState<Nullable<FileTreeClipboard>>(null)
-  const searchEntries = searchResult?.entries ?? []
+  const searchRowHeight = getWorkbenchFileTreeRowHeight(useWorkbenchDensity())
   const rootTreeEntry = useMemo(
     () =>
       ({
@@ -224,11 +213,31 @@ export function FilePanel({
       }) satisfies WorkbenchDirectoryEntry,
     [project.name]
   )
-  const searchNavigationItems = useMemo(
-    () => buildWorkbenchFileSearchNavigationItems(searchEntries, contentSearchMatches),
-    [contentSearchMatches, searchEntries]
+  // 按文件名找到的条目也按「包含 / 排除的文件」筛。
+  const searchEntries = useMemo(
+    () =>
+      (searchResult?.entries ?? []).filter((entry) =>
+        isWorkbenchSearchPathIncluded(projectSearch.pathFilter, entry.path)
+      ),
+    [projectSearch.pathFilter, searchResult]
   )
-  const activeSearchResultId = toNullable(searchNavigationItems[activeSearchResultIndex]?.id)
+  const searchRows = useMemo(
+    () =>
+      buildWorkbenchProjectSearchRows({
+        entries: searchEntries,
+        entriesCollapsed: projectSearch.entriesCollapsed,
+        files: projectSearch.files,
+        collapsedPaths: projectSearch.collapsedPaths,
+      }),
+    [projectSearch.collapsedPaths, projectSearch.entriesCollapsed, projectSearch.files, searchEntries]
+  )
+  const openableSearchRows = useMemo(
+    () => searchRows.filter(isOpenableWorkbenchProjectSearchRow),
+    [searchRows]
+  )
+  // 挑中的行不在了（新的结果、收起了文件）就回到第一行。
+  const activeSearchRow =
+    openableSearchRows.find((row) => row.key === activeSearchRowKey) ?? openableSearchRows[0]
 
   /**
    * 右键或快捷键作用的一组项：右键点在多选里（或用快捷键）是整组，否则是右键的那一项；不含项目根，已经在选中的
@@ -287,12 +296,6 @@ export function FilePanel({
   const handleTreeApiChange = useCallback((api: Nullable<FileTreeApi>): void => {
     treeApiRef.current = api || null
   }, [])
-
-  useEffect(() => {
-    if (activeSearchResultIndex >= searchNavigationItems.length) {
-      setActiveSearchResultIndex(Math.max(0, searchNavigationItems.length - 1))
-    }
-  }, [activeSearchResultIndex, searchNavigationItems.length])
 
   useEffect(() => {
     function isEditableShortcutTarget(target: Nullable<EventTarget>): boolean {
@@ -368,13 +371,8 @@ export function FilePanel({
   }
 
   function toggleSearch(): void {
-    setIsSearchVisible((visible) => {
-      if (visible) {
-        onResetSearch()
-      }
-      setActiveSearchResultIndex(0)
-      return !visible
-    })
+    setActiveSearchRowKey(null)
+    projectSearch.togglePanel()
   }
 
   // 右键的那一项决定落在哪个目录（根目录与空白处的菜单对应工程根），不看树里当前聚焦或选中的是谁。
@@ -390,57 +388,40 @@ export function FilePanel({
     })
   }
 
-  function scrollSearchResultIntoView(id: string): void {
-    requestScrollIntoView(
-      () =>
-        treeScrollRef.current?.querySelector<HTMLButtonElement>(
-          `[data-search-result-id="${CSS.escape(id)}"]`
-        ),
-      { block: 'nearest', behavior: 'auto' }
-    )
+  /** 结果只渲染视野里的行：键盘挑中的行在视野外时把滚动条挪过去。 */
+  function scrollSearchRowIntoView(key: string): void {
+    const scroll = treeScrollRef.current
+    const index = searchRows.findIndex((row) => row.key === key)
+    if (!scroll || index === -1) return
+
+    const top = index * searchRowHeight
+    if (top < scroll.scrollTop) scroll.scrollTop = top
+    else if (top + searchRowHeight > scroll.scrollTop + scroll.clientHeight)
+      scroll.scrollTop = top + searchRowHeight - scroll.clientHeight
   }
 
-  function setActiveSearchResult(index: number): void {
-    setActiveSearchResultIndex(index)
-    const nextId = searchNavigationItems[index]?.id
-    if (nextId) {
-      scrollSearchResultIntoView(nextId)
-    }
+  function openSearchRow(row: WorkbenchProjectSearchRow): void {
+    if (row.kind === 'entry') onOpenSearchEntry(row.entry)
+    else if (row.kind === 'match') projectSearch.openMatch(row.file, row.match)
   }
 
-  function openSearchNavigationItem(item: WorkbenchFileSearchNavigationItem): void {
-    if (item.kind === 'entry') {
-      onOpenSearchEntry(item.entry)
-      return
-    }
+  /** 查找框里的上下键在结果里挑行，回车打开挑中的那一行；用掉了按键返回 true。 */
+  function handleSearchNavigationKey(event: ReactKeyboardEvent<HTMLInputElement>): boolean {
+    const activeIndex = activeSearchRow ? openableSearchRows.indexOf(activeSearchRow) : 0
+    const action = getWorkbenchFileSearchKeyboardAction(event.key, activeIndex, openableSearchRows.length)
+    if (!action) return false
 
-    onOpenContentSearchMatch(item.match)
-  }
-
-  function handleSearchInputKeyDown(event: ReactKeyboardEvent<HTMLInputElement>): void {
-    if (event.key === 'Escape') {
-      event.preventDefault()
-      toggleSearch()
-      return
-    }
-
-    const action = getWorkbenchFileSearchKeyboardAction(
-      event.key,
-      activeSearchResultIndex,
-      searchNavigationItems.length
-    )
-    if (!action) return
-
-    event.preventDefault()
     if (action.kind === 'set-active') {
-      setActiveSearchResult(action.index)
-      return
+      const row = openableSearchRows[action.index]
+      if (row) {
+        setActiveSearchRowKey(row.key)
+        scrollSearchRowIntoView(row.key)
+      }
+      return true
     }
 
-    const item = searchNavigationItems[activeSearchResultIndex]
-    if (item) {
-      openSearchNavigationItem(item)
-    }
+    if (activeSearchRow) openSearchRow(activeSearchRow)
+    return true
   }
 
   return (
@@ -457,29 +438,24 @@ export function FilePanel({
           className={styles.filePanelProjectAction}
           title={t('workbench.searchFiles')}
           label={t('workbench.searchFiles')}
-          data-active={isSearchVisible || undefined}
+          data-active={projectSearch.isOpen || undefined}
           onClick={toggleSearch}
         >
           <MagnifyingGlassIcon size={14} />
         </IconButton>
       </div>
-      {isSearchVisible && (
-        <div className={styles.searchBar}>
-          <div className={styles.searchInputShell}>
-            <SearchField
-              size="sm"
-              value={searchQuery}
-              autoFocus
-              placeholder={t('workbench.projectSearchPlaceholder')}
-              onChange={(event) => {
-                setActiveSearchResultIndex(0)
-                onSearchQueryChange(event.target.value)
-              }}
-              onKeyDown={handleSearchInputKeyDown}
-            />
-          </div>
-        </div>
+      {projectSearch.isOpen && (
+        <ProjectSearchForm
+          query={searchQuery}
+          search={projectSearch}
+          onQueryChange={(query) => {
+            setActiveSearchRowKey(null)
+            onSearchQueryChange(query)
+          }}
+          onQueryNavigationKey={handleSearchNavigationKey}
+        />
       )}
+      {searchActive && <ProjectSearchSummary search={projectSearch} />}
       <div className={styles.filePanelBody}>
         <ScrollArea
           ref={treeScrollRef}
@@ -489,19 +465,22 @@ export function FilePanel({
         >
           {searchActive ? (
             <FileSearchResults
-              activeSearchResultId={activeSearchResultId}
-              contentSearchMatches={contentSearchMatches}
+              rows={searchRows}
+              rowHeight={searchRowHeight}
+              scrollRef={treeScrollRef}
+              activeRowKey={activeSearchRow?.key ?? null}
               gitDecorations={gitDecorations}
-              isIndexingProject={isIndexingProject}
-              isSearchingEntries={isSearchingEntries}
-              searchEntries={searchEntries}
-              searchResult={searchResult}
-              searchQuery={searchQuery}
               selectedEntryPath={selectedEntryPath}
-              onActivateSearchResult={setActiveSearchResultIndex}
+              replacement={projectSearch.replaceOpen ? projectSearch.replacement : null}
+              isReplacing={projectSearch.isReplacing}
+              onActivateRow={setActiveSearchRowKey}
+              onToggleEntries={projectSearch.toggleEntriesCollapsed}
+              onToggleFile={projectSearch.toggleFileCollapsed}
+              onOpenEntry={onOpenSearchEntry}
+              onOpenMatch={projectSearch.openMatch}
+              onReplaceFile={projectSearch.replaceFile}
+              onReplaceMatch={projectSearch.replaceMatch}
               onContextMenuEntry={openContextMenu}
-              onOpenContentSearchMatch={onOpenContentSearchMatch}
-              onOpenSearchEntry={onOpenSearchEntry}
             />
           ) : (
             <>
@@ -512,7 +491,6 @@ export function FilePanel({
                 expandedPaths={expandedPaths}
                 childrenByPath={childrenByPath}
                 gitDecorations={gitDecorations}
-                searchTerm={!searchActive && isSearchVisible ? normalizedSearchQuery : ''}
                 isMutatingTree={isMutatingTree}
                 onTreeApiChange={handleTreeApiChange}
                 onSetDirectoryOpen={onSetDirectoryOpen}
@@ -611,8 +589,8 @@ export function FilePanel({
               icon: <MagnifyingGlassIcon size={14} />,
               separatorBefore: true,
               onSelect: () => {
-                setActiveSearchResultIndex(0)
-                setIsSearchVisible(true)
+                setActiveSearchRowKey(null)
+                projectSearch.openPanel()
               },
             },
             {
