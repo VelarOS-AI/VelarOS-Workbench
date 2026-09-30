@@ -810,6 +810,11 @@
   scrollbar-width: thin;
 }
 
+/* xterm 自带的样式给视口垫了黑底：整行数凑不满面板高度时，最后一行下面会露出一条黑边。 */
+.terminalViewHost :global(.xterm .xterm-viewport) {
+  background-color: transparent;
+}
+
 .terminalOutput pre,
 .terminalOutputLine {
   @apply m-0 whitespace-pre-wrap break-words font-mono text-foreground;
