@@ -847,6 +847,12 @@ void describe('split editor wiring', () => {
       /if \(navigationRequest\.path && navigationRequest\.path !== selectedFile\.path\) return/u
     )
     assert.match(editorPanel, /const \{ appliedNavigationRequestIdRef, handledFocusRequestIdRef \} = group/u)
+    // ⌘1 / ⌘2 落到眼前没有编辑器的一组（图片、Markdown 预览、Git 对比）：键盘焦点从原处拿走，下一次按键
+    // 不会落回另一组的编辑器里、把当前组又换回去。
+    assert.match(
+      editorPanel,
+      /if \(editor\) editor\.focus\(\)\s*else if \(document\.activeElement instanceof HTMLElement\) document\.activeElement\.blur\(\)/u
+    )
     // 光标、缩进只转发当前组的。
     assert.match(
       groupsPanel,
@@ -858,6 +864,11 @@ void describe('split editor wiring', () => {
       /diff=\{index === 0 \? diff : \{ diffWorkspaceRoot: diff\.diffWorkspaceRoot \}\}/u
     )
     assert.match(groupsPanel, /const visibleGroups = isolatedTabGroup \? groups\.slice\(0, 1\) : groups/u)
+    // 结构图、AI 改动占着编辑区时在它们里面点、敲不换当前组：离开之后当前组还是原来那一组。
+    assert.match(
+      groupsPanel,
+      /if \(isolatedTabGroup\) return\s*if \(index !== focusedGroup\) onFocusGroup\(index\)/u
+    )
     assert.match(
       pageModel,
       /const editorCovered =\s*aiChanges\.active \|\|\s*velarLogicGraphActive \|\|\s*\(workbench\.editorLayout\.focusedGroup === 0 &&/u

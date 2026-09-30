@@ -766,13 +766,16 @@ export function EditorPanel({
     )
   }, [appliedNavigationRequestIdRef, editorContentLatest, navigationRequest, selectedFile, timers])
 
-  // ⌘1 / ⌘2、拆分之后：把键盘焦点放进这一组的编辑器（这一组显示的是图片或 Markdown 预览时没有编辑器可给）。
+  // ⌘1 / ⌘2、拆分之后：把键盘焦点放进这一组的编辑器。这一组眼前没有编辑器（图片、Markdown 预览、Git 对比）
+  // 时把键盘焦点从原来的地方拿走：留在另一组的编辑器或终端里的话，下一次按键（包括 ⌘W）还是落在那边。
   const { id: focusRequestId, groupIndex: focusRequestGroupIndex } = group.focusRequest
   useEffect(() => {
     if (focusRequestGroupIndex !== group.index) return
     if (handledFocusRequestIdRef.current === focusRequestId) return
     handledFocusRequestIdRef.current = focusRequestId
-    editorRef.current?.focus()
+    const editor = editorRef.current
+    if (editor) editor.focus()
+    else if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
   }, [focusRequestGroupIndex, focusRequestId, group.index, handledFocusRequestIdRef])
 
   useEffect(() => {

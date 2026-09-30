@@ -188,6 +188,9 @@ export function EditorGroupsPanel({
   }, [indentationDelivery])
 
   function focusGroup(index: number): void {
+    // 结构图、AI 改动占着整个编辑区时，点的、敲的都是它们，不是左边那组的文件：当前组不动，离开之后还是
+    // 原来那一组。
+    if (isolatedTabGroup) return
     if (index !== focusedGroup) onFocusGroup(index)
   }
 
@@ -226,6 +229,12 @@ export function EditorGroupsPanel({
     handle.addEventListener('pointerup', end)
     handle.addEventListener('pointercancel', end)
   }
+
+  // 分隔条拖到一半右边那组没了（它的最后一个标签被关掉）：分隔条连同上面的指针事件一起消失，收尾没机会跑，
+  // 在这里把「正在拖」的标记撤掉——留着的话网页调试的 webview 一直不吃指针。
+  useEffect(() => {
+    if (!isSplit) containerRef.current?.removeAttribute('data-resizing')
+  }, [isSplit])
 
   return (
     <div className={styles.editorGroupsPanel}>
