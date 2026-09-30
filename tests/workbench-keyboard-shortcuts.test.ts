@@ -116,6 +116,26 @@ void describe('Workbench keyboard shortcuts', () => {
     assert.deepEqual(calls, ['close-right-tool'])
   })
 
+  void test('Escape that closes a floating menu is marked as used before the global shortcuts see it', () => {
+    // 右键菜单、标签栏的菜单开着时按 Esc：只关菜单，右侧面板不跟着收起。关菜单的监听和全局快捷键都挂在
+    // window 上，全局的挂得更早；所以关菜单的那个在捕获阶段接，并把这次按键标成已经用掉。
+    const dismiss = readFileSync(
+      resolve(process.cwd(), 'src/renderer/src/support/useDismissOnWindowInteract.ts'),
+      'utf8'
+    )
+    assert.match(dismiss, /if \(event\.key !== 'Escape'\) return[\s\S]*?event\.preventDefault\(\)\s*invokeDismiss\(\)/u)
+    assert.match(
+      dismiss,
+      /useEventListener\('keydown', handleDismissEscapeKey, \{\s*capture: true,\s*enable: enabled && escapeKey,/u
+    )
+    const shortcuts = readFileSync(
+      resolve(process.cwd(), 'src/renderer/src/hooks/useWorkbenchKeyboardShortcuts.ts'),
+      'utf8'
+    )
+    // 全局快捷键在冒泡阶段，轮到它时 Esc 已经被标过了（上一条测试：标过的它不理）。
+    assert.match(shortcuts, /window\.addEventListener\('keydown', handleKeydown\)\n/u)
+  })
+
   void test('no global shortcut fires for a key a focused control already handled', () => {
     const { calls, handle } = createHandler()
 

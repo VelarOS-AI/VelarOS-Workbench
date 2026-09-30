@@ -37,9 +37,10 @@ export function useDismissOnWindowInteract({
   })
 
   const handleDismissEscapeKey = useMemoizedFn((event: KeyboardEvent): void => {
-    if (event.key === 'Escape') {
-      invokeDismiss()
-    }
+    if (event.key !== 'Escape') return
+    // 这一下 Esc 是给这层浮层的：标成已经用掉，全局快捷键（Esc 关右侧面板）不再跟着动。
+    event.preventDefault()
+    invokeDismiss()
   })
 
   useEventListener('mousedown', handleDismissMouseDown, { enable: enabled && mouseDown })
@@ -49,5 +50,9 @@ export function useDismissOnWindowInteract({
     enable: enabled && scroll,
   })
 
-  useEventListener('keydown', handleDismissEscapeKey, { enable: enabled && escapeKey })
+  // 捕获阶段接：全局快捷键也挂在 window 上，而且挂得更早，冒泡阶段轮不到这里先说话。
+  useEventListener('keydown', handleDismissEscapeKey, {
+    capture: true,
+    enable: enabled && escapeKey,
+  })
 }
