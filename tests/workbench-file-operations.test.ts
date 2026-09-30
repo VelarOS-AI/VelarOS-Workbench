@@ -189,4 +189,46 @@ void describe('Workbench file operations', () => {
       assert.equal(await readFile(join(projectRoot, 'c.txt'), 'utf8'), 'other\n')
     })
   })
+
+  void test('local history follows files and folders that are renamed or moved', async () => {
+    await withWorkspace(async ({ projectRoot, parts }) => {
+      const files = parts.files
+      const otherRoot = await realpath(await mkdtemp(join(tmpdir(), 'workbench-file-ops-other-')))
+      try {
+        const save = async (root: string, path: string, content: string): Promise<void> => {
+          await mkdir(join(root, path, '..'), { recursive: true })
+          await writeFile(join(root, path), '')
+          await files.saveFile({ projectRoot: root, path, content, encoding: 'utf-8', eol: 'lf' })
+        }
+        const contents = (root: string, path: string): string[] =>
+          files
+            .listLocalHistory({ projectRoot: root, path })
+            .entries.map(({ id }) => files.readLocalHistorySnapshot({ projectRoot: root, path, id }).content)
+
+        await save(projectRoot, 'src/a.ts', 'a1\n')
+        await files.saveFile({ projectRoot, path: 'src/a.ts', content: 'a2\n', encoding: 'utf-8', eol: 'lf' })
+        await save(projectRoot, 'src/util/b.ts', 'b1\n')
+        // 另一个项目里同样的相对路径：挪这个项目的目录时不能把它的历史也带走。
+        await save(otherRoot, 'src/util/b.ts', 'other\n')
+
+        await files.renameEntry({ projectRoot, path: 'src/a.ts', newName: 'main.ts' })
+        assert.deepEqual(contents(projectRoot, 'src/main.ts'), ['a2\n', 'a1\n'])
+        assert.deepEqual(contents(projectRoot, 'src/a.ts'), [])
+
+        await files.createEntry({ projectRoot, name: 'lib', type: 'directory' })
+        await files.moveEntry({ projectRoot, path: 'src/util', parentPath: 'lib' })
+        assert.deepEqual(contents(projectRoot, 'lib/util/b.ts'), ['b1\n'])
+        assert.deepEqual(contents(projectRoot, 'src/util/b.ts'), [])
+        assert.deepEqual(contents(otherRoot, 'src/util/b.ts'), ['other\n'])
+
+        // 改成的名字本来就有历史（那个文件删掉了）：两份历史合在一起。
+        await save(projectRoot, 'src/old.ts', 'old\n')
+        await rm(join(projectRoot, 'src/old.ts'))
+        await files.renameEntry({ projectRoot, path: 'src/main.ts', newName: 'old.ts' })
+        assert.deepEqual(contents(projectRoot, 'src/old.ts').sort(), ['a1\n', 'a2\n', 'old\n'])
+      } finally {
+        await rm(otherRoot, { recursive: true, force: true })
+      }
+    })
+  })
 })

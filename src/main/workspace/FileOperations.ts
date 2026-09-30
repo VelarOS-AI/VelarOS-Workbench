@@ -260,7 +260,11 @@ class FileOperations {
     // 条目本身：符号链接改的是链接的名字，不动它指向的东西（目标在工程外也能改）。
     const source = await this.pathResolver.resolveEntryInsideProject(projectRoot, request.path)
 
-    if (this.pathResolver.toProjectRelativePath(projectRoot, source.requestedPath) === '.') {
+    const sourceRelativePath = this.pathResolver.toProjectRelativePath(
+      projectRoot,
+      source.requestedPath
+    )
+    if (sourceRelativePath === '.') {
       throw new AppError('VALIDATION', '不能重命名工程根目录。')
     }
 
@@ -276,6 +280,12 @@ class FileOperations {
 
     return this.runWorkbenchMutation(async () => {
       await this.renameEntryPath(source.entryPath, physicalTargetPath)
+      await this.localHistoryStore.relocate(
+        projectRoot,
+        sourceRelativePath,
+        this.pathResolver.toProjectRelativePath(projectRoot, targetPath),
+        { includeDescendants: mayContainHistory(source.stats) }
+      )
       const entry = await this.entryHelper.toDirectoryEntry(projectRoot, targetPath, false)
       return {
         projectRoot,
@@ -339,6 +349,12 @@ class FileOperations {
 
     return this.runWorkbenchMutation(async () => {
       await this.renameEntryPath(source.entryPath, physicalTargetPath)
+      await this.localHistoryStore.relocate(
+        projectRoot,
+        sourceRelativePath,
+        this.pathResolver.toProjectRelativePath(projectRoot, targetPath),
+        { includeDescendants: mayContainHistory(source.stats) }
+      )
 
       const entry = await this.entryHelper.toDirectoryEntry(projectRoot, targetPath, false)
       return {
@@ -666,6 +682,11 @@ class FileOperations {
   private runWorkbenchMutationSync<T>(action: () => T): T {
     return action()
   }
+}
+
+/** 目录和目录链接下面的文件可能有本地历史（经由链接打开的文件按链接下的路径记）。 */
+function mayContainHistory(stats: Stats): boolean {
+  return stats.isDirectory() || stats.isSymbolicLink()
 }
 
 export { FileOperations, FileOperations as WorkbenchFileOperationService }
