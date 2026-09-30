@@ -7,6 +7,7 @@ import type {
   WorkbenchLanguageServiceDisplayPartKind,
   WorkbenchLanguageServiceDocumentHighlight,
   WorkbenchLanguageServiceDocumentSymbol,
+  WorkbenchLanguageServiceEditFormat,
   WorkbenchLanguageServiceHoverResult,
   WorkbenchLanguageServiceInlayHint,
   WorkbenchLanguageServiceLocation,
@@ -670,27 +671,46 @@ export function buildTypeScriptSignatureHelp({
   }
 }
 
-/**
- * 内置 TS 格式化与补全插入代码共用的排版规则：以 TypeScript 自己的默认值为底（逗号后、二元运算符两侧、
- * 控制语句关键字后留空格），只把缩进改成两格。只给缩进那几项时，TypeScript 把没给的空格规则一律当成关，
- * 格式化出来是 `left+right`、`if(right===0)`。
- */
-export const WorkbenchTypeScriptFormatCodeSettings: Readonly<ts.FormatCodeSettings> = Object.freeze({
-  ...ts.getDefaultFormatCodeSettings('\n'),
+/** 请求里没带缩进时用的：两格空格。 */
+const DefaultWorkbenchEditFormat: WorkbenchLanguageServiceEditFormat = {
   tabSize: 2,
   indentSize: 2,
-})
+  insertSpaces: true,
+}
+
+/**
+ * 内置 TS 格式化与语言服务替用户写代码（补全插入的代码）共用的排版规则：以 TypeScript 自己的默认值为底
+ * （逗号后、二元运算符两侧、控制语句关键字后留空格），缩进取编辑器里这个文件实际用的。只给缩进那几项时，
+ * TypeScript 把没给的空格规则一律当成关，格式化出来是 `left+right`、`if(right===0)`。
+ *
+ * 缩进以前写死两格：四格或制表符缩进的文件一格式化就被改成两格，插进来的代码也和上下文对不齐。
+ */
+export function buildWorkbenchTypeScriptFormatCodeSettings(
+  format: WorkbenchLanguageServiceEditFormat = DefaultWorkbenchEditFormat
+): ts.FormatCodeSettings {
+  return {
+    ...ts.getDefaultFormatCodeSettings('\n'),
+    tabSize: format.tabSize,
+    indentSize: format.indentSize,
+    convertTabsToSpaces: format.insertSpaces,
+  }
+}
 
 export function buildTypeScriptFormatEdits({
   service,
   fileName,
   content,
+  format,
 }: {
   service: ts.LanguageService
   fileName: string
   content: string
+  format?: WorkbenchLanguageServiceEditFormat
 }): WorkbenchLanguageServiceTextEdit[] {
-  const edits = service.getFormattingEditsForDocument(fileName, WorkbenchTypeScriptFormatCodeSettings)
+  const edits = service.getFormattingEditsForDocument(
+    fileName,
+    buildWorkbenchTypeScriptFormatCodeSettings(format)
+  )
 
   return edits
     .map((edit) => {

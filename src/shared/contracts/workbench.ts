@@ -318,12 +318,26 @@ export interface WorkbenchLanguageServiceOpenFile {
   version?: number
 }
 
+/**
+ * 编辑器里这个文件实际用的缩进（用户在状态栏选的、`.editorconfig`，或按正文识别的）。要语言服务替用户写代码的
+ * 请求（格式化、补全里插入的代码）带上它，写出来的代码才按这个文件的缩进排；不带时语言服务用两格空格。
+ */
+export interface WorkbenchLanguageServiceEditFormat {
+  /** 制表符显示多宽。 */
+  tabSize: number
+  /** 一级缩进几格。 */
+  indentSize: number
+  /** 用空格缩进；false 是制表符。 */
+  insertSpaces: boolean
+}
+
 export interface WorkbenchLanguageServiceRequest {
   projectRoot: string
   path: string
   language?: string
   content?: string
   openFiles?: WorkbenchLanguageServiceOpenFile[]
+  format?: WorkbenchLanguageServiceEditFormat
 }
 
 export interface WorkbenchLanguageServiceExtensionRequest

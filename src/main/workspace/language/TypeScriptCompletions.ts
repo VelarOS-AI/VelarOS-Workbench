@@ -4,11 +4,12 @@ import type {
   WorkbenchLanguageServiceCompletionItem,
   WorkbenchLanguageServiceCompletionResolveData,
   WorkbenchLanguageServiceCompletionTextEdit,
+  WorkbenchLanguageServiceEditFormat,
 } from '@shared/contracts'
 
 import {
+  buildWorkbenchTypeScriptFormatCodeSettings,
   rangeFromTextSpanInContent,
-  WorkbenchTypeScriptFormatCodeSettings,
 } from './TypeScriptLanguageFeatures'
 
 /**
@@ -147,11 +148,14 @@ export function buildTypeScriptCompletionItems({
   fileName,
   offset,
   content,
+  format,
 }: {
   service: ts.LanguageService
   fileName: string
   offset: number
   content: string
+  /** 编辑器里这个文件的缩进：补全里带的整段代码（补全类成员、对象方法）按它排。 */
+  format?: WorkbenchLanguageServiceEditFormat
 }): { items: WorkbenchLanguageServiceCompletionItem[]; isIncomplete: boolean } {
   const completions = service.getCompletionsAtPosition(
     fileName,
@@ -167,7 +171,7 @@ export function buildTypeScriptCompletionItems({
       includeCompletionsWithSnippetText: true,
       useLabelDetailsInCompletionEntries: true,
     },
-    WorkbenchTypeScriptFormatCodeSettings
+    buildWorkbenchTypeScriptFormatCodeSettings(format)
   )
 
   if (!completions?.entries.length) return { items: [], isIncomplete: false }
@@ -213,6 +217,7 @@ export function resolveTypeScriptCompletionItem({
   content,
   relativePath,
   item,
+  format,
 }: {
   service: ts.LanguageService
   fileName: string
@@ -220,12 +225,13 @@ export function resolveTypeScriptCompletionItem({
   content: string
   relativePath: string
   item: WorkbenchLanguageServiceCompletionResolveData
+  format?: WorkbenchLanguageServiceEditFormat
 }): { additionalTextEdits: WorkbenchLanguageServiceCompletionTextEdit[]; documentation?: string } {
   const details = service.getCompletionEntryDetails(
     fileName,
     offset,
     item.name,
-    WorkbenchTypeScriptFormatCodeSettings,
+    buildWorkbenchTypeScriptFormatCodeSettings(format),
     item.source,
     CompletionPreferences,
     item.data as ts.CompletionEntryData | undefined

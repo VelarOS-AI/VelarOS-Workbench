@@ -2,7 +2,10 @@ import { existsSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, isAbsolute, join, relative, sep } from 'node:path'
 
-import type { WorkbenchLanguageServiceTextEdit } from '@shared/contracts'
+import type {
+  WorkbenchLanguageServiceEditFormat,
+  WorkbenchLanguageServiceTextEdit,
+} from '@shared/contracts'
 
 /**
  * 文档格式化：**项目 Prettier 优先，内置规则回退**。
@@ -116,12 +119,22 @@ export async function formatWorkbenchDocumentWithProjectPrettier(input: {
   }
 }
 
-/** 内置通用格式化：JSON 美化；其它按去行尾空白 + 结尾补换行。返回 `null` 表示无法处理。 */
+/**
+ * 内置通用格式化：JSON 美化（缩进取编辑器里这个文件实际用的，没给时两格）；其它按去行尾空白 + 结尾补换行。
+ * 返回 `null` 表示无法处理。
+ */
 export function formatWorkbenchDocumentBuiltin(input: {
   extension: string
   content: string
+  format?: WorkbenchLanguageServiceEditFormat
 }): Nullable<string> {
-  if (input.extension === 'json') return formatWorkbenchJson(input.content)
+  if (input.extension === 'json') {
+    const format = input.format
+    return formatWorkbenchJson(
+      input.content,
+      format ? (format.insertSpaces ? ' '.repeat(format.indentSize) : '\t') : undefined
+    )
+  }
 
   const trimmed = input.content
     .split('\n')
@@ -250,8 +263,9 @@ function isWellFormedWorkbenchJson(tokens: readonly WorkbenchJsonToken[]): boole
 }
 
 /**
- * 按记号重排 JSON（兼容注释与尾逗号），缩进两格、成员各占一行，与 `JSON.stringify(value, null, 2)` 的
- * 版式一致。不经 `JSON.parse`：大整数、`1.0`、字符串里的转义写法、重复的键都原样保留，注释跟着原来的位置走。
+ * 按记号重排 JSON（兼容注释与尾逗号），成员各占一行、每级缩进一个 `indentUnit`（默认两格，与
+ * `JSON.stringify(value, null, 2)` 的版式一致）。不经 `JSON.parse`：大整数、`1.0`、字符串里的转义写法、
+ * 重复的键都原样保留，注释跟着原来的位置走。
  * 不合法时返回 null。
  */
 export function formatWorkbenchJson(content: string, indentUnit = '  '): Nullable<string> {

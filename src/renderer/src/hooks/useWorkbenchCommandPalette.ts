@@ -5,6 +5,12 @@ import { buildWorkbenchLanguageServiceRequestBase } from '../models/editor/workb
 import { canEditWorkbenchFileContent } from '../models/editor/workbenchEditorEditMode'
 import { moveWorkbenchEditorTabToGroup } from '../models/editor/workbenchEditorGroups'
 import { toggleWorkbenchGitBlameVisible } from '../models/editor/workbenchGitBlameVisibility'
+import {
+  detectWorkbenchIndentation,
+  resolveWorkbenchIndentation,
+  toWorkbenchLanguageServiceEditFormat,
+  type WorkbenchIndentation,
+} from '../models/editor/workbenchIndentation'
 import { getWorkbenchLanguageServiceFormat } from '../models/editor/workbenchLanguageServiceIpc'
 import type {
   WorkbenchPaletteCommandContext,
@@ -58,6 +64,8 @@ interface UseWorkbenchCommandPaletteOptions {
   surface: WorkbenchSurfaceState
   /** 编辑区前面盖着别的（Git 对比、只读预览、调试页、结构图、AI 改动），不是当前文件的编辑器。 */
   editorCovered: boolean
+  /** 编辑器报上来的当前文件的缩进（状态栏显示的那个）；编辑器没挂着时为 null。 */
+  editorIndentation: Nullable<WorkbenchIndentation>
   closeActiveEditor: () => void
   exitCurrentProject: () => Promise<boolean>
   /** 打开侧栏的项目搜索（与 ⇧⌘F 同一个动作）。 */
@@ -83,6 +91,7 @@ export function useWorkbenchCommandPalette({
   workbench,
   surface,
   editorCovered,
+  editorIndentation,
   closeActiveEditor,
   exitCurrentProject,
   findInFiles,
@@ -116,8 +125,9 @@ export function useWorkbenchCommandPalette({
   }
 
   /**
-   * 格式化当前文件：与编辑器里 ⌥⌘L 同一个格式化服务（项目的 Prettier 优先，内置规则回退）。改动按标签的
-   * 外部改动套进编辑器（最小改动、单独一步撤销）；格式化期间正文又改了或换了文件，这份结果作废。
+   * 格式化当前文件：与编辑器里 ⌥⌘L 同一个格式化服务（项目的 Prettier 优先，内置规则回退，内置规则按这个
+   * 文件的缩进排）。改动按标签的外部改动套进编辑器（最小改动、单独一步撤销）；格式化期间正文又改了或换了
+   * 文件，这份结果作废。
    */
   const formatDocument = useMemoizedFn(async (): Promise<void> => {
     const project = workbench.activeProject
@@ -134,6 +144,15 @@ export function useWorkbenchCommandPalette({
             language: fileLanguage(path),
             content,
             openTabs: workbench.openTabs,
+            // 编辑器没报上来（刚挂上）时按正文识别，不退回语言服务自己的两格。
+            format: toWorkbenchLanguageServiceEditFormat(
+              editorIndentation
+                ?? resolveWorkbenchIndentation({
+                  path,
+                  detected: detectWorkbenchIndentation(content),
+                  editorConfig: null,
+                })
+            ),
           })
         )
       )

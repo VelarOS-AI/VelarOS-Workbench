@@ -2,6 +2,7 @@ import type { EditorState } from '@codemirror/state'
 
 import type {
   WorkbenchLanguageServiceDiagnostic,
+  WorkbenchLanguageServiceEditFormat,
   WorkbenchLanguageServiceOpenFile,
   WorkbenchLanguageServicePositionRequest,
   WorkbenchLanguageServiceRange,
@@ -91,15 +92,18 @@ export function buildWorkbenchLanguageServiceRequestBase({
   language,
   content,
   openTabs,
+  format,
 }: {
   projectRoot: string
   path: string
   language: string
   content: string
   openTabs: readonly WorkbenchOpenEditorTab[]
+  /** 这个文件的缩进：要语言服务写代码的请求（格式化、补全）带上，只是查询的不用带。 */
+  format?: WorkbenchLanguageServiceEditFormat
 }): Pick<
   WorkbenchLanguageServicePositionRequest,
-  'projectRoot' | 'path' | 'language' | 'content' | 'openFiles'
+  'projectRoot' | 'path' | 'language' | 'content' | 'openFiles' | 'format'
 > {
   return {
     projectRoot,
@@ -107,6 +111,7 @@ export function buildWorkbenchLanguageServiceRequestBase({
     language,
     content,
     openFiles: buildWorkbenchLanguageServiceOpenFiles(openTabs),
+    format,
   }
 }
 

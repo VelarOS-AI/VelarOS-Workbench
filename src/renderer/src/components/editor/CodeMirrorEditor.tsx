@@ -203,6 +203,7 @@ import {
   buildWorkbenchIndentationConversion,
   detectWorkbenchIndentation,
   resolveWorkbenchIndentation,
+  toWorkbenchLanguageServiceEditFormat,
   type WorkbenchIndentation,
   type WorkbenchIndentationOverride,
   type WorkbenchIndentationRequest,
@@ -258,6 +259,7 @@ import { isEmpty, isPresent, Log, optionalWhen, toNullable, toOptional } from '@
 import type {
   WorkbenchLanguageServiceCodeAction,
   WorkbenchLanguageServiceDiagnostic,
+  WorkbenchLanguageServiceEditFormat,
   WorkbenchLanguageServiceFileEdit,
   WorkbenchLanguageServiceLocation,
 } from '@shared/contracts'
@@ -685,6 +687,7 @@ function createWorkbenchCompletionSource({
   language,
   getOpenTabs,
   getProjectContextIndex,
+  getEditFormat,
   hostRuntime,
 }: {
   projectRoot: string
@@ -692,6 +695,8 @@ function createWorkbenchCompletionSource({
   language: string
   getOpenTabs: GetWorkbenchOpenTabs
   getProjectContextIndex: GetWorkbenchProjectContextIndex
+  /** 这个文件的缩进：补全里带的整段代码（类成员、对象方法）按它排。 */
+  getEditFormat: () => WorkbenchLanguageServiceEditFormat
   hostRuntime: WorkbenchHostRuntime
 }): CompletionSource {
   return (context: CompletionContext) => {
@@ -717,6 +722,7 @@ function createWorkbenchCompletionSource({
       language,
       content,
       openTabs: getOpenTabs(),
+      format: getEditFormat(),
     })
     const position = positionLineColumnFromState(context.state, context.pos)
     return requestWorkbenchLanguageServiceCompletions({
@@ -1309,6 +1315,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
           language,
           getOpenTabs: () => openTabsLatest.current,
           getProjectContextIndex: () => projectContextIndexRef.current,
+          getEditFormat: () => editFormatRef.current,
           hostRuntime,
         }),
       [hostRuntime, language, openTabsLatest, path, projectContextIndexRef, projectRoot]
@@ -1422,6 +1429,8 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         }),
       [detectedIndentation, editorConfig, indentationOverride, path]
     )
+    // 语言服务替用户写代码（格式化、补全插入的整段代码）时按这个文件的缩进排。
+    const editFormatRef = useLatest(toWorkbenchLanguageServiceEditFormat(indentation))
     const indentationExtension = useMemo(
       () => [
         indentUnit.of(workbenchIndentUnit(indentation)),
@@ -2111,6 +2120,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
             language,
             content,
             openTabs: openTabsLatest.current,
+            format: editFormatRef.current,
           }),
         }, hostRuntime)
         const currentFileChange =

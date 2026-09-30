@@ -13,6 +13,7 @@ import type {
   WorkbenchLanguageServiceCodeActionsRequest,
   WorkbenchLanguageServiceCompletionResolveRequest,
   WorkbenchLanguageServiceDiagnostic,
+  WorkbenchLanguageServiceEditFormat,
   WorkbenchLanguageServiceExtensionRequest,
   WorkbenchLanguageServiceInlayHintsRequest,
   WorkbenchLanguageServiceOffsetRange,
@@ -235,7 +236,22 @@ function parseRequest(input: unknown): Nullable<WorkbenchLanguageServiceRequest>
     ...optionalString(input, 'language'),
     ...optionalString(input, 'content'),
     ...parseOpenFiles(input['openFiles']),
+    format: parseEditFormat(input['format']),
   }
+}
+
+/** 缩进设置不对（不是整数、离谱的宽度）就当没给，语言服务用自己的默认值。 */
+function parseEditFormat(input: unknown): WorkbenchLanguageServiceEditFormat | undefined {
+  if (!isRecord(input)) return undefined
+  const { tabSize, indentSize, insertSpaces } = input
+  if (!isIndentWidth(tabSize) || !isIndentWidth(indentSize) || typeof insertSpaces !== 'boolean')
+    return undefined
+
+  return { tabSize, indentSize, insertSpaces }
+}
+
+function isIndentWidth(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 16
 }
 
 function parsePositionRequest(input: unknown): Nullable<WorkbenchLanguageServicePositionRequest> {

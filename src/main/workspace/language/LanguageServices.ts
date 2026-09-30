@@ -622,6 +622,7 @@ class WorkbenchLanguageServices {
       fileName: snapshot.requestAbsolutePath,
       offset: this.offsetFromPosition(content, request.position),
       content,
+      format: request.format,
     })
 
     return {
@@ -652,6 +653,7 @@ class WorkbenchLanguageServices {
         content,
         relativePath: snapshot.requestPath,
         item: request.item,
+        format: request.format,
       }),
     }
   }
@@ -1155,6 +1157,7 @@ class WorkbenchLanguageServices {
         service: snapshot.service,
         fileName: snapshot.requestAbsolutePath,
         content: snapshotContent,
+        format: request.format,
       })
       return {
         projectRoot: snapshot.projectRoot,
@@ -1167,6 +1170,7 @@ class WorkbenchLanguageServices {
     const builtinFormatted = formatWorkbenchDocumentBuiltin({
       extension: getWorkbenchPathExtension(request.path),
       content,
+      format: request.format,
     })
     return isPresent(builtinFormatted) ? wholeDocumentResult(builtinFormatted) : emptyResult
   }

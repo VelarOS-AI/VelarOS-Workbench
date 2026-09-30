@@ -1181,6 +1181,7 @@ export function useStandaloneWorkbenchPageModel(
     workbench,
     surface,
     editorCovered,
+    editorIndentation: editorNavigation.indentation,
     closeActiveEditor: () => setCloseActiveEditorTabRequestId((requestId) => requestId + 1),
     exitCurrentProject,
     findInFiles: () => void navigate({ target: 'search', seed: readProjectSearchSeed() }),

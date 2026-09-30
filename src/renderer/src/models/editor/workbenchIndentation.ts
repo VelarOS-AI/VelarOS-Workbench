@@ -1,5 +1,7 @@
 import type { ChangeSpec, EditorState } from '@codemirror/state'
 
+import type { WorkbenchLanguageServiceEditFormat } from '@shared/contracts'
+
 import type { WorkbenchEditorConfigProperties } from './workbenchEditorConfig'
 
 /** 一个文件的缩进：用空格还是制表符、一级几格，以及制表符显示多宽。 */
@@ -126,6 +128,20 @@ export function resolveWorkbenchIndentation({
 /** 按一次 Tab、回车自动缩进时插入的文本。 */
 export function workbenchIndentUnit(indentation: WorkbenchIndentation): string {
   return indentation.style === 'tab' ? '\t' : ' '.repeat(indentation.size)
+}
+
+/**
+ * 这个文件的缩进，交给语言服务：它替用户写的代码（格式化、补全插入的整段代码）照这个排，
+ * 而不是它自己的两格空格。
+ */
+export function toWorkbenchLanguageServiceEditFormat(
+  indentation: WorkbenchIndentation
+): WorkbenchLanguageServiceEditFormat {
+  return {
+    tabSize: indentation.tabSize,
+    indentSize: indentation.size,
+    insertSpaces: indentation.style === 'space',
+  }
 }
 
 /**

@@ -364,6 +364,16 @@ renderer 侧对应两件事：编辑器控制器订阅 Agent 写入通知（`wor
 改这条链路时用 `bun --conditions=source` 跑一个直接调用 `WorkbenchLanguageServices` 的探针脚本
 （拿本仓库当被测项目，请求 `CodeMirrorEditor.tsx` 这种两三千行的文件）看每一步的耗时，别凭感觉。
 
+### 语言服务替用户写代码时的缩进
+
+一个文件用什么缩进由 renderer 定（`resolveWorkbenchIndentation`：状态栏里选的 > `.editorconfig` > 按正文识别 >
+语言默认），状态栏显示的就是它。凡是要语言服务写出代码的请求都把它带上（请求的 `format`：制表符宽度、一级几格、
+空格还是制表符）：格式化文档（编辑器里的 ⌥⌘L、保存时格式化、命令面板）、补全（补全类成员、对象方法时整段插入的
+代码）与接受补全时的自动导入。worker 里 `buildWorkbenchTypeScriptFormatCodeSettings` 按它出 TypeScript 的
+`FormatCodeSettings`，其余排版规则仍是 TypeScript 的默认值；没有 Prettier 时内置的 JSON 格式化每级缩进也用它。
+请求没带时两格空格。IPC 边界只收 1–16 的整数宽度，别的当没给（宽度为 0 会让 TypeScript 排缩进时除以零）。
+项目装了 Prettier 时照旧以 Prettier 为准。
+
 ### 超时、取消与重启
 
 - 一个请求超时只让它自己失败（`TIMEOUT`），并通知 worker 丢掉 / 放弃它；TypeScript 的项目状态与外部 LSP
