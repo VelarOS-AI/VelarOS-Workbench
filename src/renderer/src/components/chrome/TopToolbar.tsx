@@ -1,9 +1,12 @@
 import {
   type FormEvent,
+  type KeyboardEvent,
   type MouseEvent,
   type ReactElement,
   type ReactNode,
+  useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react'
 import {
@@ -37,6 +40,8 @@ import type { SystemWorkspaceGitSummary } from '@shared/contracts'
 import { type WorkbenchTopRunControl } from '../../hooks/useWorkbenchTopRunControl'
 import styles from '../../styles/workbenchPageStyles'
 import { WorkbenchGitBranchControl } from '../git/WorkbenchGitBranchControl'
+
+import { handleWorkbenchMenuKeyDown } from './WorkbenchContextMenu'
 
 export interface TopToolbarProps {
   gitWorkspaceRoot: string
@@ -270,6 +275,49 @@ function WorkbenchRunAction({
     topRun.editConfigurations()
   }
 
+  /**
+   * 菜单里的方向键（与工作台里别的菜单同一套：↑ ↓ 在各项之间走，Home / End 到头尾）。菜单里还有一个输入框：
+   * 在它里面 Home / End 是在那段文字里走，↑ ↓ 从它出发到它前面、后面的那一项。
+   */
+  function handleMenuKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
+    const input = event.target instanceof HTMLInputElement ? event.target : null
+    if (!input) {
+      handleWorkbenchMenuKeyDown(event)
+      return
+    }
+
+    event.stopPropagation()
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return
+    const buttons = [
+      ...event.currentTarget.querySelectorAll<HTMLButtonElement>('button:not(:disabled)'),
+    ]
+    const after = (button: HTMLButtonElement): boolean =>
+      !!(input.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING)
+    const target =
+      event.key === 'ArrowDown'
+        ? buttons.find(after)
+        : buttons.findLast((button) => !after(button))
+    if (!target) return
+    event.preventDefault()
+    target.focus()
+  }
+
+  // 菜单收起时焦点还在菜单里（它马上要卸掉）或者已经没了着落，就还给打开之前的地方；焦点已经到了别处的不动它。
+  const menuPanelRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!menuOpen) return undefined
+    const previous = document.activeElement
+    return () => {
+      const focused = document.activeElement
+      const stranded =
+        !focused ||
+        focused === document.body ||
+        !focused.isConnected ||
+        !!menuPanelRef.current?.contains(focused)
+      if (stranded && previous instanceof HTMLElement && previous.isConnected) previous.focus()
+    }
+  }, [menuOpen])
+
   return (
     <>
       <AnchoredPopover
@@ -314,7 +362,13 @@ function WorkbenchRunAction({
           </BubbleTooltip>
         )}
       >
-        <div className={styles.runActionPanel} role="menu" aria-label={placeholder}>
+        <div
+          ref={menuPanelRef}
+          className={styles.runActionPanel}
+          role="menu"
+          aria-label={placeholder}
+          onKeyDown={handleMenuKeyDown}
+        >
         {/* 用户自己建的运行配置排在最前面：点一行让 ▶ 指着它，行尾的 ▶ 直接跑这一份；Node 程序还有一个调试。 */}
         {!isEmpty(topRun.namedConfigurations) && (
           <div className={styles.runActionSectionLabel}>{t('workbench.runConfigurations')}</div>
@@ -343,6 +397,7 @@ function WorkbenchRunAction({
               </button>
               <button
                 type="button"
+                role="menuitem"
                 className={styles.runActionRowButton}
                 title={t('workbench.runConfigurationRunNow')}
                 aria-label={t('workbench.runConfigurationRunNow')}
@@ -353,6 +408,7 @@ function WorkbenchRunAction({
               {configuration.type === 'node' && (
                 <button
                   type="button"
+                  role="menuitem"
                   className={`${styles.runActionRowButton} ${styles.runActionRowDebugButton}`}
                   title={t('workbench.runConfigurationDebugNow')}
                   aria-label={t('workbench.runConfigurationDebugNow')}
@@ -423,7 +479,12 @@ function WorkbenchRunAction({
           )
         })}
         {(topRun.isConfigured || !!activeConfiguration) && (
-          <button type="button" className={styles.runActionReset} onClick={handleResetAuto}>
+          <button
+            type="button"
+            role="menuitem"
+            className={styles.runActionReset}
+            onClick={handleResetAuto}
+          >
             {t('workbench.runResetToAuto')}
           </button>
         )}

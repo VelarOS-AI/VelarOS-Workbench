@@ -395,6 +395,17 @@ void describe('named run configurations', () => {
     assert.match(toolbar, /workbench\.runConfigurationsEdit/u)
     assert.match(toolbar, /topRun\.editConfigurations\(\)/u)
     assert.match(toolbar, /topRun\.runConfiguration\(configurationId\)/u)
+    // 菜单能用键盘走，与工作台里别的菜单同一套（↑ ↓ Home End）；输入框里的 Home / End 留给那段文字。
+    assert.match(toolbar, /role="menu"\s+aria-label=\{placeholder\}\s+onKeyDown=\{handleMenuKeyDown\}/u)
+    assert.match(toolbar, /if \(!input\) \{\s+handleWorkbenchMenuKeyDown\(event\)/u)
+    // 菜单里的每个按钮都是菜单项（输入框旁的「保存」是表单自己的提交按钮）。
+    const menu = toolbar.slice(toolbar.indexOf('ref={menuPanelRef}'), toolbar.indexOf('</AnchoredPopover>'))
+    const buttons = [...menu.matchAll(/<button\s[^>]*>/gu)].map((match) => match[0])
+    assert.equal(buttons.length, 7)
+    assert.deepEqual(
+      buttons.filter((button) => !/role="menuitem(?:radio)?"/u.test(button)).map((button) => /type="(\w+)"/u.exec(button)?.[1]),
+      ['submit']
+    )
 
     const controller = readSource('src/renderer/src/hooks/useWorkbenchCommandController.ts')
     // 起卡与重启走同一个函数，它把工作目录和环境变量交给主进程（运行走终端，调试走调试器，两条路都交）。
