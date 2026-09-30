@@ -210,43 +210,56 @@ export class WorkbenchGitService {
     options: WorkspaceGitDiffOptions = {}
   ): Promise<SystemWorkspaceGitDiffResult> {
     const rootPath = await this.resolveRoot(workspaceRoot)
-    const pathspecs = this.normalizePathspecs(rootPath, [
-      options.originalPath,
-      options.path,
-    ]).map((path) => this.toLiteralPathspec(path))
-    const args = options.commitSha
-      ? [
-          'show',
-          '--format=',
-          '--patch',
-          '--no-ext-diff',
-          '--no-color',
-          this.assertRevision(options.commitSha),
-        ]
-      : [
-          // 工作区相对 HEAD：提交带走的是工作区里的文件（暂存了一半的也按整份），差异要跟它一致。
-          // `--relative`：路径相对项目根，项目外面的改动不列。
-          'diff',
-          '--no-ext-diff',
-          '--no-color',
-          '--no-textconv',
-          '--find-renames',
-          '--relative',
-          await this.resolveDiffBase(rootPath),
-        ]
-    if (pathspecs.length > 0) args.push('--', ...pathspecs)
-    const output = (await this.runGit(rootPath, args)).stdout
+    const paths = this.normalizePathspecs(rootPath, [options.originalPath, options.path])
+    const output = options.commitSha
+      ? (
+          await this.runGit(rootPath, [
+            'show',
+            '--format=',
+            '--patch',
+            '--no-ext-diff',
+            '--no-color',
+            this.assertRevision(options.commitSha),
+            ...(paths.length > 0
+              ? ['--', ...paths.map((path) => this.toLiteralPathspec(path))]
+              : []),
+          ])
+        ).stdout
+      : await this.readWorkingDiff(rootPath, options.side, paths)
     const maxChars = Math.min(
       Math.max(options.maxChars ?? DefaultDiffMaxChars, 500),
       MaxDiffChars
     )
     return {
       rootPath,
-      scope: options.commitSha ? 'commit' : 'working',
+      scope: options.commitSha ? 'commit' : (options.side ?? 'working'),
       path: optionalWhen(!!options.path, options.path),
       diff: output.slice(0, maxChars),
       truncated: output.length > maxChars,
     }
+  }
+
+  /**
+   * 没提交的改动的补丁，路径相对项目根，项目外面的改动不列（`--relative`）。`staged`：暂存区相对 HEAD（还没有
+   * 提交时相对空树）；`unstaged`：工作区相对暂存区；都不是：工作区相对 HEAD。
+   */
+  private async readWorkingDiff(
+    rootPath: string,
+    side: WorkspaceGitDiffOptions['side'],
+    paths: readonly string[]
+  ): Promise<string> {
+    const args = [
+      'diff',
+      '--no-ext-diff',
+      '--no-color',
+      '--no-textconv',
+      '--find-renames',
+      '--relative',
+    ]
+    if (side === 'staged') args.push('--cached', await this.resolveDiffBase(rootPath))
+    else if (side !== 'unstaged') args.push(await this.resolveDiffBase(rootPath))
+    if (paths.length > 0) args.push('--', ...paths.map((path) => this.toLiteralPathspec(path)))
+    return (await this.runGit(rootPath, args)).stdout
   }
 
   public async getFileAtCommit(

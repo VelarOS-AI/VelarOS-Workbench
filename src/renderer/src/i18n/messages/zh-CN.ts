@@ -479,6 +479,7 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     gitDiffSelectChange: '选择一个变更查看 Diff。',
     gitDiffTruncated: 'Diff 已截断',
     gitDiffWorking: '工作区',
+    gitDiffStaged: '暂存区',
     gitDiffUntracked: '未跟踪预览',
     gitDiffTabTitle: '提交: {file}',
     lightPreviewTabTitle: '预览: {file}',

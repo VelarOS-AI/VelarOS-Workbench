@@ -1,31 +1,33 @@
 import { useEffect, useRef, useState } from 'react'
 import { workbenchHost } from '@renderer/host'
+import type { WorkbenchGitDiffPreviewScope } from '@renderer/models/git/changesPanel.model'
 import {
   isWorkbenchGitDiffAffectedByChange,
-  resolveWorkbenchFullFileDiffContents,
+  type WorkbenchGitPatchContent,
 } from '@renderer/models/git/workbenchGitDiffModel'
 import type { WorkbenchGitChangeItem } from '@renderer/models/git/workbenchGitModel'
 
 import { AppError } from '@velaros-ai/core'
 import { Result } from '@velaros-ai/core/result'
 
-import type { SystemWorkspaceGitDiffResult } from '@shared/contracts'
-
 import { useMonotonicAsyncRequest } from '../support/genericHooks'
 import { useWorkspaceFilesChangedRefresh } from '../support/useWorkspaceFilesChangedRefresh'
 
 const FullFileMaxChars = 1_000_000
 
-interface WorkbenchDiffFileContent {
-  content: string
-  truncated: boolean
-}
-
+/**
+ * 一个改动的差异：git 的补丁（这一侧的，未跟踪文件没有），加上补丁一侧的全文，用来把没变的行也铺开。
+ * - 已暂存：暂存区相对 HEAD，全文是 HEAD 里的那一版（改名的按改名前的路径读）。
+ * - 未暂存：工作区相对暂存区，全文是工作区里的文件。
+ * - 合并冲突：工作区相对 HEAD，全文是工作区里带冲突标记的那一版。
+ * - 未跟踪：没有补丁，全文就是整个文件。
+ */
 export interface WorkbenchEditorDiffPreview {
   path: string
-  scope: SystemWorkspaceGitDiffResult['scope'] | 'untracked'
-  beforeContent: string
-  afterContent: string
+  scope: WorkbenchGitDiffPreviewScope
+  diff: string
+  /** 读不到、或读到的被截断了时为 null：只显示各块改动。 */
+  content: Nullable<WorkbenchGitPatchContent>
   truncated: boolean
 }
 
@@ -35,10 +37,10 @@ export interface WorkbenchGitDiffPreviewState {
   error: Nullable<string>
 }
 
-async function readCurrentFileContent(
+async function readWorkingFileContent(
   projectRoot: string,
   path: string
-): Promise<WorkbenchDiffFileContent> {
+): Promise<Nullable<string>> {
   const result = Result.unwrap(
     await workbenchHost.kernel.project.readWorkbenchFile({
       projectRoot,
@@ -46,13 +48,10 @@ async function readCurrentFileContent(
       maxChars: FullFileMaxChars,
     })
   )
-  return { content: result.content, truncated: result.truncated }
+  return result.truncated ? null : result.content
 }
 
-async function readHeadFileContent(
-  projectRoot: string,
-  path: string
-): Promise<string> {
+async function readHeadFileContent(projectRoot: string, path: string): Promise<string> {
   const result = Result.unwrap(
     await workbenchHost.kernel.workspace.getWorkspaceGitFileAtCommit(projectRoot, {
       commitSha: 'HEAD',
@@ -62,64 +61,59 @@ async function readHeadFileContent(
   return result.content
 }
 
-/**
- * 差异两侧：HEAD 里的样子 → 工作区里的样子，也就是提交会带走的内容（提交面板提交的是工作区里的文件，
- * 暂存了一半的文件也按整份算）。冲突文件哪一侧都可能不在（一方删掉了），读不到的一侧按空文件算。
- */
+/** 补丁一侧的全文；这一侧没有这个文件（新增、删掉了）时是空的，读不到时为 null（只显示各块改动）。 */
+async function readPatchContent(
+  projectRoot: string,
+  item: WorkbenchGitChangeItem
+): Promise<Nullable<WorkbenchGitPatchContent>> {
+  try {
+    if (item.group === 'staged') {
+      const added = item.indexStatus === 'A'
+      return {
+        side: 'old',
+        text: added ? '' : await readHeadFileContent(projectRoot, item.originalPath ?? item.path),
+      }
+    }
+    const deleted = item.group === 'unstaged' && item.workTreeStatus === 'D'
+    const text = deleted ? '' : await readWorkingFileContent(projectRoot, item.path)
+    return text === null ? null : { side: 'new', text }
+  } catch {
+    // 冲突里一方删掉了这个文件、读的时候文件刚好被删：只显示各块改动。
+    return item.group === 'conflicted' ? { side: 'new', text: '' } : null
+  }
+}
+
 async function loadWorkbenchGitDiffPreview(
   projectRoot: string,
   item: WorkbenchGitChangeItem
 ): Promise<WorkbenchEditorDiffPreview> {
   if (item.group === 'untracked') {
-    const file = await readCurrentFileContent(projectRoot, item.path)
+    const text = await readWorkingFileContent(projectRoot, item.path)
     return {
       path: item.path,
       scope: 'untracked',
-      beforeContent: '',
-      afterContent: file.content,
-      truncated: file.truncated,
+      diff: '',
+      content: text === null ? null : { side: 'new', text },
+      truncated: text === null,
     }
   }
 
-  const result = Result.unwrap(
-    await workbenchHost.kernel.workspace.getWorkspaceGitDiff(projectRoot, {
+  const [result, content] = await Promise.all([
+    workbenchHost.kernel.workspace.getWorkspaceGitDiff(projectRoot, {
+      side: item.group === 'staged' || item.group === 'unstaged' ? item.group : undefined,
       path: item.path,
       originalPath: item.originalPath,
       maxChars: FullFileMaxChars,
-    })
-  )
-  const conflicted = item.group === 'conflicted'
-  const addedFile = !conflicted && (item.indexStatus === 'A' || item.workTreeStatus === 'A')
-  const deletedFile = !conflicted && (item.indexStatus === 'D' || item.workTreeStatus === 'D')
-  const [baseContent, currentFile] = await Promise.all([
-    addedFile
-      ? Promise.resolve('')
-      : readHeadFileContent(projectRoot, item.originalPath ?? item.path).catch((error) => {
-          if (conflicted) return ''
-          throw error
-        }),
-    deletedFile
-      ? Promise.resolve({ content: '', truncated: false })
-      : readCurrentFileContent(projectRoot, item.path).catch((error) => {
-          if (conflicted) return { content: '', truncated: false }
-          throw error
-        }),
+    }),
+    readPatchContent(projectRoot, item),
   ])
-  const fullContents = resolveWorkbenchFullFileDiffContents({
-    diff: result.diff,
-    scope: 'working',
-    baseContent,
-    currentContent: currentFile.content,
-  }) ?? {
-    beforeContent: baseContent,
-    afterContent: currentFile.content,
-  }
+  const diff = Result.unwrap(result)
   return {
     path: item.path,
-    scope: result.scope,
-    beforeContent: fullContents.beforeContent,
-    afterContent: fullContents.afterContent,
-    truncated: result.truncated || currentFile.truncated,
+    scope: diff.scope,
+    diff: diff.diff,
+    content,
+    truncated: diff.truncated,
   }
 }
 
@@ -131,8 +125,9 @@ function isSamePreview(
     !!left &&
     left.path === right.path &&
     left.scope === right.scope &&
-    left.beforeContent === right.beforeContent &&
-    left.afterContent === right.afterContent &&
+    left.diff === right.diff &&
+    left.content?.side === right.content?.side &&
+    left.content?.text === right.content?.text &&
     left.truncated === right.truncated
   )
 }

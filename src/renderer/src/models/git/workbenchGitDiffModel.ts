@@ -3,6 +3,7 @@ import { applyPatch, parsePatch, reversePatch, structuredPatch } from 'diff'
 import { isEmpty,isString, Log } from '@velaros-ai/core'
 
 import type { SystemWorkspaceFilesChangedEvent, WorkspaceGitFileStatusEntry } from '@shared/contracts'
+import type { WorkbenchGitFilePatch, WorkbenchGitPatchHunk } from '@shared/workbenchGitPatch'
 
 const log = Log.tag('workbench-git-diff-model')
 
@@ -26,6 +27,8 @@ export interface WorkbenchUnifiedDiffRow {
   newLine: Nullable<number>
   marker: string
   text: string
+  /** 按 git 的补丁铺的行：属于第几块改动（从 0 起）；块外面的行、别的来源的行没有。 */
+  hunk?: number
 }
 
 export interface WorkbenchFullFileDiffContents {
@@ -119,6 +122,145 @@ export function buildWorkbenchPatchDiffRows(diff: string): WorkbenchUnifiedDiffR
     log.debug('补丁无法解析为差异行', { error })
     return []
   }
+}
+
+/** 补丁一侧的全文，拿来铺开改动之间没变的行：`old` 是改动前那一侧，`new` 是改动后那一侧。 */
+export interface WorkbenchGitPatchContent {
+  text: string
+  side: 'old' | 'new'
+}
+
+export interface WorkbenchGitPatchRows {
+  rows: WorkbenchUnifiedDiffRow[]
+  /** 没变的行也铺开了（整份文件）；否则只有各块改动。 */
+  fullFile: boolean
+}
+
+/**
+ * 按 git 自己的补丁铺差异行，每一行记着属于哪一块，块上的按钮（暂存、回滚这一块）照它放。给了一侧的全文时
+ * 按行号把块与块之间没变的行也铺开；全文对不上补丁（读完之后文件又变了、编码不是 UTF-8）、补丁不完整、
+ * 或者太长时只铺各块改动。
+ */
+export function buildWorkbenchGitPatchRows(
+  patch: WorkbenchGitFilePatch,
+  content: Nullable<WorkbenchGitPatchContent>
+): WorkbenchGitPatchRows {
+  const rows = content && !patch.incomplete ? buildFullFilePatchRows(patch, content) : null
+  return rows
+    ? { rows, fullFile: true }
+    : { rows: buildHunkPatchRows(patch.hunks), fullFile: false }
+}
+
+/** 块头里这一侧从哪一行起：这一侧没有行（纯新增、纯删除）时块头给的是它前面那一行。 */
+function hunkSideStart(start: number, count: number): number {
+  return count === 0 ? start + 1 : start
+}
+
+const ByteOrderMark = String.fromCodePoint(0xfeff)
+
+/** 补丁里的一行去掉前缀；CRLF 文件的 `\r` 与第一行的 BOM 不算内容（编辑器读的全文已去掉它们）。 */
+function patchLineText(line: string, lineNumber: number): string {
+  const text = line.slice(1).replace(/\r$/u, '')
+  return lineNumber === 1 && text.startsWith(ByteOrderMark) ? text.slice(1) : text
+}
+
+function splitPatchContentLines(text: string): string[] {
+  if (!text) return []
+  const lines = text.split('\n')
+  if (lines.at(-1) === '') lines.pop()
+  return lines
+}
+
+/** 铺行时的位置：两侧各到了第几行，已经铺了几行。 */
+class PatchRowCursor {
+  public readonly rows: WorkbenchUnifiedDiffRow[] = []
+  public oldLine = 1
+  public newLine = 1
+
+  public get full(): boolean {
+    return this.rows.length >= FullFileMaxDiffLines
+  }
+
+  public start(hunk: WorkbenchGitPatchHunk): void {
+    this.oldLine = hunkSideStart(hunk.oldStart, hunk.oldLines)
+    this.newLine = hunkSideStart(hunk.newStart, hunk.newLines)
+  }
+
+  public push(kind: WorkbenchUnifiedDiffRow['kind'], text: string, hunk?: number): void {
+    const row: WorkbenchUnifiedDiffRow = {
+      id: `${this.rows.length}:${kind}`,
+      kind,
+      oldLine: kind === 'addition' || kind === 'hunk' ? null : this.oldLine,
+      newLine: kind === 'deletion' || kind === 'hunk' ? null : this.newLine,
+      marker: kind === 'addition' ? '+' : kind === 'deletion' ? '-' : '',
+      text,
+    }
+    if (hunk !== undefined) row.hunk = hunk
+    this.rows.push(row)
+    if (kind !== 'addition' && kind !== 'hunk') this.oldLine += 1
+    if (kind !== 'deletion' && kind !== 'hunk') this.newLine += 1
+  }
+}
+
+function patchLineKind(marker: string): 'addition' | 'deletion' | 'context' {
+  return marker === '+' ? 'addition' : marker === '-' ? 'deletion' : 'context'
+}
+
+function buildFullFilePatchRows(
+  patch: WorkbenchGitFilePatch,
+  content: WorkbenchGitPatchContent
+): Nullable<WorkbenchUnifiedDiffRow[]> {
+  const fileLines = splitPatchContentLines(content.text)
+  const cursor = new PatchRowCursor()
+  const sideLine = (): number => (content.side === 'old' ? cursor.oldLine : cursor.newLine)
+  /** 铺没变的行，铺到这一侧的第 `end` 行之前（不含）；全文不够长时返回 false。 */
+  const pushUnchanged = (end: number): boolean => {
+    while (sideLine() < end) {
+      const text = fileLines[sideLine() - 1]
+      if (text === undefined || cursor.full) return false
+      cursor.push('context', text)
+    }
+    return true
+  }
+
+  for (const [hunkIndex, hunk] of patch.hunks.entries()) {
+    const oldStart = hunkSideStart(hunk.oldStart, hunk.oldLines)
+    const newStart = hunkSideStart(hunk.newStart, hunk.newLines)
+    if (!pushUnchanged(content.side === 'old' ? oldStart : newStart)) return null
+    if (cursor.oldLine !== oldStart || cursor.newLine !== newStart) return null
+    for (const line of hunk.lines) {
+      if (line.startsWith('\\')) continue
+      if (cursor.full) return null
+      const kind = patchLineKind(line[0])
+      const text = patchLineText(line, kind === 'deletion' ? cursor.oldLine : cursor.newLine)
+      // 全文那一侧有的行（上下文，加上删掉的或新增的那些）要跟全文对得上。
+      const onContentSide =
+        kind === 'context' || (kind === 'deletion') === (content.side === 'old')
+      if (onContentSide && fileLines[sideLine() - 1] !== text) return null
+      cursor.push(kind, text, hunkIndex)
+    }
+  }
+  return pushUnchanged(fileLines.length + 1) ? cursor.rows : null
+}
+
+/** 只铺各块改动，块与块之间插一行块头当分隔。 */
+function buildHunkPatchRows(hunks: readonly WorkbenchGitPatchHunk[]): WorkbenchUnifiedDiffRow[] {
+  const cursor = new PatchRowCursor()
+  for (const [hunkIndex, hunk] of hunks.entries()) {
+    if (hunkIndex > 0) cursor.push('hunk', hunk.header)
+    cursor.start(hunk)
+    for (const line of hunk.lines) {
+      if (line.startsWith('\\')) continue
+      if (cursor.full) return cursor.rows
+      const kind = patchLineKind(line[0])
+      cursor.push(
+        kind,
+        patchLineText(line, kind === 'deletion' ? cursor.oldLine : cursor.newLine),
+        hunkIndex
+      )
+    }
+  }
+  return cursor.rows
 }
 
 function buildRowsFromHunks(

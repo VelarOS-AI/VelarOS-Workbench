@@ -111,19 +111,23 @@ export interface WorkspaceGitRestoreResult {
   changedFiles: number
 }
 
+/** 看哪一侧的改动：`staged` 暂存区相对 HEAD，`unstaged` 工作区相对暂存区。 */
+export type WorkspaceGitDiffSide = 'staged' | 'unstaged'
+
 export interface WorkspaceGitDiffOptions {
   /**
-   * 给了是这个提交的改动；不给是工作区相对 HEAD 的改动——提交面板提交的就是工作区里的文件，
-   * 暂存了一半的文件也按整份算，差异要跟提交的内容一致。
+   * 给了是这个提交的改动；不给时看 `side`，也没给 `side` 是工作区相对 HEAD 的改动（合并冲突看的就是它：
+   * HEAD 那一版对照工作区里带冲突标记的那一版）。
    */
   commitSha?: string
+  side?: WorkspaceGitDiffSide
   path?: string
   originalPath?: string
   maxChars?: number
 }
 
 export interface WorkspaceGitDiffResult {
-  scope: 'commit' | 'working'
+  scope: 'commit' | 'working' | WorkspaceGitDiffSide
   path?: string
   diff: string
   truncated: boolean

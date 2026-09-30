@@ -1,7 +1,12 @@
 import { type ReactElement, useEffect, useMemo, useRef } from 'react'
 import { ArrowLeftIcon, ArrowRightIcon } from '@phosphor-icons/react'
 import { useWorkbenchI18n } from '@renderer/i18n'
-import { buildWorkbenchContentDiffRows } from '@renderer/models/git/workbenchGitDiffModel'
+import { workbenchGitDiffScopeLabel } from '@renderer/models/git/changesPanel.model'
+import {
+  buildWorkbenchContentDiffRows,
+  buildWorkbenchGitPatchRows,
+  type WorkbenchUnifiedDiffRow,
+} from '@renderer/models/git/workbenchGitDiffModel'
 import {
   getWorkbenchGitChangeDisplayPath,
   type WorkbenchGitChangeItem,
@@ -12,6 +17,8 @@ import { isEmpty } from '@velaros-ai/core'
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 import { Paragraph } from '@velaros-ai/ui/primitives/display/Paragraph'
 import { Text } from '@velaros-ai/ui/primitives/display/Text'
+
+import { parseWorkbenchGitFilePatches } from '@shared/workbenchGitPatch'
 
 import {
   useWorkbenchGitDiffPreview,
@@ -32,18 +39,14 @@ interface GitDiffEditorPanelProps {
   focusFirstChangeRequestId?: number
 }
 
-function diffScopeLabel(
-  scope: WorkbenchEditorDiffPreview['scope'],
-  t: ReturnType<typeof useWorkbenchI18n>['t']
-): string {
-  switch (scope) {
-    case 'commit':
-      return t('workbench.gitDiffCommit')
-    case 'untracked':
-      return t('workbench.gitDiffUntracked')
-    default:
-      return t('workbench.gitDiffWorking')
-  }
+/** 差异行：未跟踪文件整份都是新增；别的按 git 的补丁铺，读到了一侧全文时没变的行也铺开。 */
+function buildPreviewRows(preview: WorkbenchEditorDiffPreview): WorkbenchUnifiedDiffRow[] {
+  if (preview.scope === 'untracked')
+    return buildWorkbenchContentDiffRows(preview.path, '', preview.content?.text ?? '', {
+      fullFile: true,
+    })
+  const [patch] = parseWorkbenchGitFilePatches(preview.diff)
+  return patch ? buildWorkbenchGitPatchRows(patch, preview.content).rows : []
 }
 
 export function GitDiffEditorPanel({
@@ -56,15 +59,7 @@ export function GitDiffEditorPanel({
   const diffViewRef = useRef<WorkbenchUnifiedDiffRowsHandle>(null)
   const displayPath = getWorkbenchGitChangeDisplayPath(item)
   const { preview, isLoading, error } = useWorkbenchGitDiffPreview({ item, projectRoot })
-  const diffRows = useMemo(() => {
-    if (!preview) return []
-    return buildWorkbenchContentDiffRows(
-      preview.path,
-      preview.beforeContent,
-      preview.afterContent,
-      { fullFile: true }
-    )
-  }, [preview])
+  const diffRows = useMemo(() => (preview ? buildPreviewRows(preview) : []), [preview])
   const changedLineCount = useMemo(
     () => diffRows.filter((row) => row.kind === 'addition' || row.kind === 'deletion').length,
     [diffRows]
@@ -90,7 +85,7 @@ export function GitDiffEditorPanel({
         <div className={styles.diffViewerFile}>
           <WorkbenchFileTypeIcon fileName={item.fileName} size={14} />
           <Text truncate>
-            {preview ? diffScopeLabel(preview.scope, t) : t('workbench.gitDiffPreview')}
+            {preview ? workbenchGitDiffScopeLabel(preview.scope, t) : t('workbench.gitDiffPreview')}
           </Text>
           <strong title={displayPath}>{displayPath}</strong>
         </div>

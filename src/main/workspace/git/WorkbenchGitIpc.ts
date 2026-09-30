@@ -131,9 +131,12 @@ function parseRoot(input: unknown): WorkbenchGitRootRequest {
 function parseDiff(input: unknown): WorkbenchGitDiffRequest {
   const root = parseRoot(input)
   const record = input as Record<string, unknown>
+  const side = record['side']
+  if (side !== undefined && side !== 'staged' && side !== 'unstaged') return invalidRequest()
   return {
     ...root,
     commitSha: optionalWhen(isString, record['commitSha']),
+    side,
     path: optionalWhen(isString, record['path']),
     originalPath: optionalWhen(isString, record['originalPath']),
     maxChars: optionalWhen(isNumber, record['maxChars']),

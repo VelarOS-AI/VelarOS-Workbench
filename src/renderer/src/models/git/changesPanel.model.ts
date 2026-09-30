@@ -52,6 +52,9 @@ export function workbenchGitDiffScopeLabel(
     case 'untracked': {
       return t('workbench.gitDiffUntracked')
     }
+    case 'staged': {
+      return t('workbench.gitDiffStaged')
+    }
     default: {
       return t('workbench.gitDiffWorking')
     }

@@ -90,13 +90,16 @@ function buildEntryChangeItems(entry: WorkspaceGitFileStatusEntry): WorkbenchGit
   const items: WorkbenchGitChangeItem[] = []
   if (entry.indexStatus.trim())
     items.push({ ...entry, fileName, group: 'staged', statusCode: entry.indexStatus })
-  if (entry.workTreeStatus.trim() || items.length === 0)
+  if (entry.workTreeStatus.trim() || items.length === 0) {
+    // 工作区这一侧对照的是暂存区里（改名之后）的路径，不再带改名前的路径。
+    const { originalPath: _originalPath, ...unstaged } = entry
     items.push({
-      ...entry,
+      ...unstaged,
       fileName,
       group: 'unstaged',
       statusCode: entry.workTreeStatus.trim() || 'M',
     })
+  }
   return items
 }
 

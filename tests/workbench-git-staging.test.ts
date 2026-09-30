@@ -10,10 +10,15 @@ import {
   resolveCommitPanelCommitMode,
   summarizeCommitPanelCommitAll,
 } from '../src/renderer/src/models/git/commitPanel.model'
+import { buildWorkbenchGitPatchRows } from '../src/renderer/src/models/git/workbenchGitDiffModel'
 import {
   buildWorkbenchGitChangeItems,
   buildWorkbenchGitDecorationMap,
 } from '../src/renderer/src/models/git/workbenchGitModel'
+import {
+  isWorkbenchGitWholeFilePatch,
+  parseWorkbenchGitFilePatches,
+} from '../src/shared/workbenchGitPatch'
 
 import {
   commitAll,
@@ -181,6 +186,40 @@ void describe('Workbench Git staging area', () => {
     })
   })
 
+  void test('the diff of each side: staged is HEAD to index, unstaged is index to working tree', async () => {
+    await withRepository(async (root) => {
+      await writeFile(join(root, 'a.txt'), 'head\n')
+      await commitAll(root, 'base')
+      await writeFile(join(root, 'a.txt'), 'staged\n')
+      await git(root, ['add', 'a.txt'])
+      await writeFile(join(root, 'a.txt'), 'working\n')
+
+      const service = createGitService()
+      const staged = await service.getDiff(root, { side: 'staged', path: 'a.txt' })
+      assert.equal(staged.scope, 'staged')
+      assert.match(staged.diff, /^-head$/m)
+      assert.match(staged.diff, /^\+staged$/m)
+      const unstaged = await service.getDiff(root, { side: 'unstaged', path: 'a.txt' })
+      assert.equal(unstaged.scope, 'unstaged')
+      assert.match(unstaged.diff, /^-staged$/m)
+      assert.match(unstaged.diff, /^\+working$/m)
+
+      // 改名暂存了、改名后又改了内容：暂存那一侧是改名，工作区那一侧只看新路径。
+      await writeFile(join(root, 'old.txt'), 'one\ntwo\nthree\n')
+      await commitAll(root, 'old')
+      await git(root, ['mv', 'old.txt', 'new.txt'])
+      await writeFile(join(root, 'new.txt'), 'one\ntwo\nthree\nfour\n')
+      const renamed = await service.getDiff(root, {
+        side: 'staged',
+        path: 'new.txt',
+        originalPath: 'old.txt',
+      })
+      assert.match(renamed.diff, /^rename from old\.txt$/m)
+      const edited = await service.getDiff(root, { side: 'unstaged', path: 'new.txt' })
+      assert.match(edited.diff, /^\+four$/m)
+      assert.doesNotMatch(edited.diff, /rename/)
+    })
+  })
 })
 
 void describe('Workbench commit panel staging groups', () => {
@@ -206,6 +245,15 @@ void describe('Workbench commit panel staging groups', () => {
         ['untracked', ['?? notes.md']],
       ]
     )
+    // 改名暂存了：暂存那一侧带着改名前的路径，工作区那一侧只对照暂存区里的新路径。
+    const moved = items.filter((item) => item.path === 'src/moved.ts')
+    assert.deepEqual(
+      moved.map((item) => [item.group, item.originalPath]),
+      [
+        ['staged', 'src/old.ts'],
+        ['unstaged', undefined],
+      ]
+    )
     // 文件树里一个文件只标一次。
     assert.equal(buildWorkbenchGitDecorationMap(items).get('src/partly.ts')?.statusCode, 'MM')
   })
@@ -220,5 +268,94 @@ void describe('Workbench commit panel staging groups', () => {
       count: 5,
       untracked: 1,
     })
+  })
+})
+
+void describe('Workbench Git patch rows', () => {
+  const diff = [
+    'diff --git a/a.txt b/a.txt',
+    'index 1111111..2222222 100644',
+    '--- a/a.txt',
+    '+++ b/a.txt',
+    '@@ -1,3 +1,3 @@',
+    ' one',
+    '-two',
+    '+TWO',
+    ' three',
+    '@@ -8,3 +8,4 @@',
+    ' eight',
+    ' nine',
+    ' ten',
+    '+eleven',
+    '',
+  ].join('\n')
+  const current = 'one\nTWO\nthree\nfour\nfive\nsix\nseven\neight\nnine\nten\neleven\n'
+
+  void test('parses the hunks git wrote', () => {
+    const [patch] = parseWorkbenchGitFilePatches(diff)
+    assert.ok(patch)
+    assert.equal(patch.hunks.length, 2)
+    assert.deepEqual(
+      patch.hunks.map((hunk) => [hunk.oldStart, hunk.oldLines, hunk.newStart, hunk.newLines]),
+      [
+        [1, 3, 1, 3],
+        [8, 3, 8, 4],
+      ]
+    )
+    assert.equal(isWorkbenchGitWholeFilePatch(patch), false)
+    assert.equal(
+      isWorkbenchGitWholeFilePatch(
+        parseWorkbenchGitFilePatches(
+          'diff --git a/n.txt b/n.txt\nnew file mode 100644\n--- /dev/null\n+++ b/n.txt\n@@ -0,0 +1 @@\n+n\n'
+        )[0]
+      ),
+      true
+    )
+    // 被截断的补丁：最后一块读不满。
+    const [cut] = parseWorkbenchGitFilePatches(diff.slice(0, diff.indexOf(' nine')))
+    assert.equal(cut?.incomplete, true)
+  })
+
+  void test('lays the hunks over the whole file, each row knowing its hunk', () => {
+    const [patch] = parseWorkbenchGitFilePatches(diff)
+    const { rows, fullFile } = buildWorkbenchGitPatchRows(patch, { side: 'new', text: current })
+    assert.equal(fullFile, true)
+    assert.deepEqual(
+      rows.map((row) => `${row.kind[0]}${row.hunk ?? '.'} ${row.oldLine ?? '-'}/${row.newLine ?? '-'} ${row.text}`),
+      [
+        'c0 1/1 one',
+        'd0 2/- two',
+        'a0 -/2 TWO',
+        'c0 3/3 three',
+        'c. 4/4 four',
+        'c. 5/5 five',
+        'c. 6/6 six',
+        'c. 7/7 seven',
+        'c1 8/8 eight',
+        'c1 9/9 nine',
+        'c1 10/10 ten',
+        'a1 -/11 eleven',
+      ]
+    )
+
+    // 全文对不上补丁（读完之后又改过）：只铺各块改动，块与块之间放一行块头。
+    const stale = buildWorkbenchGitPatchRows(patch, { side: 'new', text: 'something else\n' })
+    assert.equal(stale.fullFile, false)
+    assert.deepEqual(
+      stale.rows.map((row) => row.kind),
+      ['context', 'deletion', 'addition', 'context', 'hunk', 'context', 'context', 'context', 'addition']
+    )
+  })
+
+  void test('the old side works too, and CRLF line ends are not content', () => {
+    const [patch] = parseWorkbenchGitFilePatches(
+      'diff --git a/w.txt b/w.txt\n--- a/w.txt\n+++ b/w.txt\n@@ -2 +2 @@\n-b\r\n+B\r\n'
+    )
+    const { rows, fullFile } = buildWorkbenchGitPatchRows(patch, { side: 'old', text: 'a\nb\nc\n' })
+    assert.equal(fullFile, true)
+    assert.deepEqual(
+      rows.map((row) => `${row.kind[0]} ${row.text}`),
+      ['c a', 'd b', 'a B', 'c c']
+    )
   })
 })
