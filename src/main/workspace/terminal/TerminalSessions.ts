@@ -169,17 +169,19 @@ class TerminalSessions {
     pty.onExit(({ exitCode, signal }) => {
       session.exited = true
       this.flushOutput(sessionId, session)
+      // 正常退出时 node-pty 给的信号是 0：不是被信号结束的，按没有信号算。
+      const endedBySignal = signal ? signal : undefined
       // 终端里换行要 CR LF：xterm 不会替 LF 补回车。
       onOutput({
         sessionId,
         stream: 'system',
         chunk: `\r\n${workbenchMainText('terminal.processExited', {
           code: exitCode,
-          signal: signal ?? '-',
+          signal: endedBySignal ?? '-',
         })}\r\n`,
         closed: true,
         exitCode,
-        signal: signal === undefined ? undefined : String(signal),
+        signal: endedBySignal === undefined ? undefined : String(endedBySignal),
       })
       this.dropSession(sessionId, session)
       for (const waiter of session.exitWaiters.splice(0)) waiter()

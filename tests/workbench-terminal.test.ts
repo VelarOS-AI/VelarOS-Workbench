@@ -171,6 +171,21 @@ void describe('terminal sessions on a pseudo-terminal', () => {
         () => terminal.writeTerminalInput({ sessionId: session.sessionId, input: 'x' }, 7),
         /已结束/u
       )
+
+      // 真的伪终端正常退出时报的信号是 0，不是「被 0 号信号结束」；被信号结束的照实写。
+      const exits: WorkbenchTerminalOutputEvent[] = []
+      await terminal.startTerminalSession({ projectRoot }, (event) => exits.push(event), 7)
+      spawned[1]!.exit(0, 0)
+      await terminal.startTerminalSession({ projectRoot }, (event) => exits.push(event), 7)
+      spawned[2]!.exit(143, 15)
+      const closed = exits.filter((event) => event.closed)
+      assert.deepEqual(
+        closed.map((event) => [event.chunk.trim(), event.signal]),
+        [
+          ['进程已结束（exit=0 signal=-）', undefined],
+          ['进程已结束（exit=143 signal=15）', '15'],
+        ]
+      )
     } finally {
       await terminal.closeAllSessions()
       await rm(projectRoot, { recursive: true, force: true })
