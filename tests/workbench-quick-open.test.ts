@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 
 import { describe, test } from 'bun:test'
 
+import { isWorkbenchProjectFileListChange } from '../src/renderer/src/models/files/workbenchProjectFileList'
 import {
   MAX_WORKBENCH_RECENT_FILES,
   normalizeWorkbenchRecentFiles,
@@ -12,7 +13,6 @@ import {
 import {
   buildWorkbenchQuickOpenFileItems,
   buildWorkbenchQuickOpenRecentItems,
-  isWorkbenchProjectFileListChange,
   parseWorkbenchQuickOpenQuery,
   scoreWorkbenchQuickOpenPath,
 } from '../src/renderer/src/models/layout/workbenchQuickOpenModel'

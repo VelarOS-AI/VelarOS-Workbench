@@ -17,6 +17,7 @@ import { useWorkbenchKeyboardShortcuts } from '@renderer/hooks/useWorkbenchKeybo
 import { useWorkbenchKeymapController } from '@renderer/hooks/useWorkbenchKeymapController'
 import { useWorkbenchLayoutController } from '@renderer/hooks/useWorkbenchLayoutController'
 import { useWorkbenchPreferences } from '@renderer/hooks/useWorkbenchPreferences'
+import { useWorkbenchProjectFileList } from '@renderer/hooks/useWorkbenchProjectFileList'
 import { useWorkbenchProjectGitSettings } from '@renderer/hooks/useWorkbenchProjectGitSettings'
 import { useWorkbenchProjectRunSettings } from '@renderer/hooks/useWorkbenchProjectRunSettings'
 import { useWorkbenchRecentFiles } from '@renderer/hooks/useWorkbenchRecentFiles'
@@ -393,6 +394,11 @@ export function useStandaloneWorkbenchPageModel(
     projectId: toNullable(workbench.activeProject?.id),
     selectedFilePath: workbench.selectedFilePath,
     persist: shouldUseProjectSession,
+  })
+  // 快速打开按文件名找文件用的整份清单：项目打开后空闲时先读好，快速打开开着时过期了就重读。
+  const projectFiles = useWorkbenchProjectFileList({
+    projectRoot: toNullable(workbench.activeProject?.rootPath),
+    active: surface.isQuickOpenOpen,
   })
   useWorkbenchProjectSessionPersistence({
     enabled: shouldUseProjectSession,
@@ -1065,6 +1071,8 @@ export function useStandaloneWorkbenchPageModel(
     gitChangeActions,
     /** 当前项目最近打开过的文件，最近的在前（快速打开用）。 */
     recentFilePaths,
+    /** 当前项目的整份文件清单（快速打开用）。 */
+    projectFiles,
     /** 命令面板里各条命令此刻能不能跑、怎么跑。 */
     commandPalette,
     /** 页面 chrome / i18n / 派生展示值。 */

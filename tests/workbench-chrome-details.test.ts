@@ -134,7 +134,7 @@ void describe('Workbench window and chat chrome details', () => {
     // 设置页是外壳里的同窗浮层（不走 portal），外壳上的 data-mac-title-inset 管得到它的标题行。
     const shellStart = presentation.indexOf('data-mac-title-inset=')
     const settingsAt = presentation.indexOf('<WorkbenchSettingsDialog')
-    const quickOpenAt = presentation.indexOf('<QuickOpen')
+    const quickOpenAt = presentation.indexOf('<LazyQuickOpen')
     assert.ok(shellStart > 0 && shellStart < settingsAt && settingsAt < quickOpenAt)
     assert.doesNotMatch(settingsDialog, /createPortal/u)
     // 左侧常规留白与侧栏导航文字对齐；76px 只在外壳标记了红绿灯空位时才撑出来。

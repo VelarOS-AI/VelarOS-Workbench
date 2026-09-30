@@ -4,10 +4,9 @@ import { Result } from '@velaros-ai/core/result'
 import { buildWorkbenchLanguageServiceRequestBase } from '../models/editor/workbenchCodeMirrorLanguageService'
 import { canEditWorkbenchFileContent } from '../models/editor/workbenchEditorEditMode'
 import { getWorkbenchLanguageServiceFormat } from '../models/editor/workbenchLanguageServiceIpc'
-import {
-  isWorkbenchPaletteCommandAvailable,
-  type WorkbenchPaletteCommandContext,
-  type WorkbenchPaletteCommandId,
+import type {
+  WorkbenchPaletteCommandContext,
+  WorkbenchPaletteCommandId,
 } from '../models/layout/workbenchCommandPalette'
 import { toggleWorkbenchEditorWordWrap } from '../models/settings/workbenchPreferences'
 import { fileLanguage } from '../models/shared/workbenchUtils'
@@ -29,8 +28,8 @@ export type WorkbenchPalettePageCommandId = Exclude<
 >
 
 export interface WorkbenchCommandPaletteController {
-  /** 这条命令此刻能不能跑；不能跑的不列出来。 */
-  isAvailable: (id: WorkbenchPaletteCommandId) => boolean
+  /** 判断命令此刻能不能跑要看的页面状态（见 isWorkbenchPaletteCommandAvailable）；不能跑的不列出来。 */
+  context: WorkbenchPaletteCommandContext
   run: (id: WorkbenchPalettePageCommandId) => void
 }
 
@@ -152,9 +151,6 @@ export function useWorkbenchCommandPalette({
     if (!surface.isFilePanelOpen) surface.toggleFilePanel()
   }
 
-  const isAvailable = (id: WorkbenchPaletteCommandId): boolean =>
-    isWorkbenchPaletteCommandAvailable(id, context)
-
   const run = (id: WorkbenchPalettePageCommandId): void => {
     switch (id) {
       case 'navigate-back': {
@@ -252,5 +248,5 @@ export function useWorkbenchCommandPalette({
     }
   }
 
-  return { isAvailable, run }
+  return { context, run }
 }

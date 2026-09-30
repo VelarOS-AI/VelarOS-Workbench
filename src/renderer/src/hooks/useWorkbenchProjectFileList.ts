@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { workbenchHost } from '@renderer/host'
-import { isWorkbenchProjectFileListChange } from '@renderer/models/layout/workbenchQuickOpenModel'
+import { isWorkbenchProjectFileListChange } from '@renderer/models/files/workbenchProjectFileList'
 
 import { Log } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'

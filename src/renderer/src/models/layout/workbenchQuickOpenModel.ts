@@ -10,8 +10,6 @@
  * 文件排序：整条路径一字不差 > 文件名以输入开头 > 文件名模糊命中 > 路径模糊命中（多段输入分数相加）；
  * 最近打开过的文件在同一档里往前提。同分时文件名短的在前，再比路径长短。
  */
-import { WorkbenchWatchWholeRootPath } from '@shared/workbenchWatch'
-
 import {
   isWorkbenchFuzzySubsequence,
   scoreWorkbenchFuzzy,
@@ -93,19 +91,6 @@ export function parseWorkbenchQuickOpenQuery(input: string): WorkbenchQuickOpenQ
   // `名字:` 是正要敲行号：先照 `名字` 找，结果不因为多了个冒号一下子全没了。
   const text = trimmed.length > 1 && trimmed.endsWith(':') ? trimmed.slice(0, -1).trim() : trimmed
   return { mode: 'files', text, line: null, column: null }
-}
-
-/**
- * 文件变更事件里的这个路径会不会改变文件清单：版本库状态文件（`.git/HEAD` 之类）与收成目录本身报的
- * 依赖、构建产物（`node_modules`、根目录下的 `dist`）不会——清单本来就跳过它们。
- */
-export function isWorkbenchProjectFileListChange(path: string): boolean {
-  if (path === WorkbenchWatchWholeRootPath) return true
-
-  const segments = path.split('/').filter(Boolean)
-  if (segments[0] === '.git') return false
-  if (segments.at(-1) === 'node_modules') return false
-  return !(segments.length === 1 && ['build', 'dist', 'out'].includes(segments[0]))
 }
 
 interface PreparedFile {

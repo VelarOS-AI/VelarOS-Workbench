@@ -15,6 +15,7 @@ import { getWorkbenchFilePresentationVariant } from '@renderer/models/files/work
 import {
   buildWorkbenchPaletteCommands,
   filterWorkbenchPaletteCommands,
+  isWorkbenchPaletteCommandAvailable,
   type WorkbenchPaletteCommandItem,
   type WorkbenchPaletteCommandMatch,
 } from '@renderer/models/layout/workbenchCommandPalette'
@@ -43,7 +44,7 @@ import { SearchField } from '@velaros-ai/ui/primitives/forms/SearchField'
 
 import type { WorkbenchCommandPaletteController } from '../../hooks/useWorkbenchCommandPalette'
 import { useWorkbenchContentSearchController } from '../../hooks/useWorkbenchContentSearchController'
-import { useWorkbenchProjectFileList } from '../../hooks/useWorkbenchProjectFileList'
+import type { WorkbenchProjectFileListState } from '../../hooks/useWorkbenchProjectFileList'
 import type { WorkbenchQuickOpenRequest } from '../../hooks/useWorkbenchSurfaceState'
 import { translateWorkbenchAppMessage } from '../../i18n/useStandaloneWorkbenchLocalization'
 import styles from '../../styles/workbenchPageStyles'
@@ -75,6 +76,8 @@ interface QuickOpenProps {
   activeFileContent: string
   /** 最近打开过的文件，最近的在前。 */
   recentFilePaths: readonly string[]
+  /** 整个项目的文件清单（页面按项目缓存，文件有增删时重读）。 */
+  projectFiles: WorkbenchProjectFileListState
   /** 命令面板里各条命令此刻能不能跑、怎么跑。 */
   commandPalette: WorkbenchCommandPaletteController
   /** 当前快捷键设置：标题栏与命令右侧的快捷键提示按它现算。 */
@@ -153,6 +156,7 @@ export function QuickOpen({
   activeFilePath,
   activeFileContent,
   recentFilePaths,
+  projectFiles,
   commandPalette,
   keymap = DEFAULT_WORKBENCH_KEYBOARD_SHORTCUT_MAP,
   onClose,
@@ -175,10 +179,6 @@ export function QuickOpen({
   const resultQuery = useDeferredValue(query)
   const parsedQuery = useMemo(() => parseWorkbenchQuickOpenQuery(resultQuery), [resultQuery])
   const openTabPaths = useMemo(() => openTabs.map((tab) => tab.path), [openTabs])
-  const projectFiles = useWorkbenchProjectFileList({
-    projectRoot: activeProject?.rootPath ?? null,
-    active: isOpen && parsedQuery.mode === 'files',
-  })
   // 内容结果排在文件后面：够长的文件名输入才顺带搜内容（有防抖），跳行与命令模式不搜。
   const contentQuery = resultQuery.trim()
   const contentSearchEnabled =
@@ -201,7 +201,7 @@ export function QuickOpen({
   /** 此刻能跑的命令（名字按当前语言，另带英文名）。只有命令模式用得着，每次现算——就二十几条。 */
   function buildCommandItems(): readonly WorkbenchPaletteCommandItem[] {
     return buildWorkbenchPaletteCommands({
-      isAvailable: commandPalette.isAvailable,
+      isAvailable: (id) => isWorkbenchPaletteCommandAvailable(id, commandPalette.context),
       keymap,
       translate: (key) => t(key),
       translateAlias: (key) => translateWorkbenchAppMessage('en-US', key),
@@ -291,8 +291,8 @@ export function QuickOpen({
 
   const commandItems = useMemo(
     () => (isOpen && parsedQuery.mode === 'commands' ? buildCommandItems() : NoCommands),
-    // 能跑哪些命令随页面状态变（isAvailable 每次渲染都新建），名字随语言、快捷键提示随 keymap。
-    [commandPalette.isAvailable, isOpen, keymap, parsedQuery.mode, t]
+    // 能跑哪些命令随页面状态变（context 每次渲染都新建），名字随语言、快捷键提示随 keymap。
+    [commandPalette.context, isOpen, keymap, parsedQuery.mode, t]
   )
   const sections = useMemo(
     () =>

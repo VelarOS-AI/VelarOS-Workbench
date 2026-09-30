@@ -39,7 +39,6 @@ import {
 } from './components/embedded/workbenchEmbeddedKernelAdapter'
 import { WorkbenchFileTypeIcon } from './components/files/WorkbenchFileTypeIcon'
 import { WorkbenchGitToolPanel } from './components/git/WorkbenchGitToolPanel'
-import { QuickOpen } from './components/project/QuickOpen'
 import { WorkbenchSettingsDialog } from './components/settings/WorkbenchSettingsDialog'
 import { type BottomTool, CommandPanel } from './components/terminal/CommandPanel'
 import { useWorkbenchTerminalFileLinks } from './hooks/useWorkbenchTerminalFileLinks'
@@ -59,6 +58,24 @@ import { useWorkbenchPageContext } from './WorkbenchPageModelContext'
 const LazyWorkbenchLogicGraphEditor = lazy(async () => {
   const module = await import('./components/codeGraph/WorkbenchLogicGraphDialog')
   return { default: module.WorkbenchLogicGraphEditor }
+})
+
+type QuickOpenModule = typeof import('./components/project/QuickOpen')
+
+let quickOpenModulePromise: Nullable<Promise<QuickOpenModule>> = null
+
+// 快速打开与命令面板（文件名打分、命令登记表）也不进工作区外壳：空闲时预先加载，第一次打开不用等。
+function loadQuickOpenModule(): Promise<QuickOpenModule> {
+  quickOpenModulePromise ??= import('./components/project/QuickOpen').catch((error: unknown) => {
+    quickOpenModulePromise = null
+    throw error
+  })
+  return quickOpenModulePromise
+}
+
+const LazyQuickOpen = lazy(async () => {
+  const module = await loadQuickOpenModule()
+  return { default: module.QuickOpen }
 })
 
 interface StandaloneWorkbenchPagePresentationProps {
@@ -282,6 +299,15 @@ export function StandaloneWorkbenchPagePresentation({
     setVelarStructureActiveTab('structure')
     setVelarSourcePreview(null)
   }, [activeProjectId])
+
+  useEffect(() => {
+    if (!window.requestIdleCallback) return undefined
+
+    const handle = window.requestIdleCallback(() => {
+      void loadQuickOpenModule().catch(() => undefined)
+    })
+    return () => window.cancelIdleCallback(handle)
+  }, [])
 
   useEffect(() => {
     if (!pendingFileOpenId || !pendingFileOpenPath || !activeProjectId) return
@@ -881,19 +907,25 @@ export function StandaloneWorkbenchPagePresentation({
           onLocaleChange={(nextLocale) => void translate.setLocale(nextLocale)}
         />
       </div>
-      <QuickOpen
-        isOpen={surface.isQuickOpenOpen}
-        request={surface.quickOpenRequest}
-        activeProject={workbench.activeProject}
-        openTabs={workbench.openTabs}
-        activeFilePath={workbench.selectedFilePath}
-        activeFileContent={workbench.editorContent}
-        recentFilePaths={model.recentFilePaths}
-        commandPalette={model.commandPalette}
-        keymap={workbenchKeymap.keymap}
-        onClose={surface.closeQuickOpen}
-        onOpenFile={(path, position) => void model.actions.openQuickOpenFile(path, position)}
-      />
+      {/* 第一次要打开时才挂上（请求序号从 1 起），之后一直挂着：关着时渲染为空，输入与状态留到下次。 */}
+      {surface.quickOpenRequest.id > 0 && (
+        <Suspense fallback={null}>
+          <LazyQuickOpen
+            isOpen={surface.isQuickOpenOpen}
+            request={surface.quickOpenRequest}
+            activeProject={workbench.activeProject}
+            openTabs={workbench.openTabs}
+            activeFilePath={workbench.selectedFilePath}
+            activeFileContent={workbench.editorContent}
+            recentFilePaths={model.recentFilePaths}
+            projectFiles={model.projectFiles}
+            commandPalette={model.commandPalette}
+            keymap={workbenchKeymap.keymap}
+            onClose={surface.closeQuickOpen}
+            onOpenFile={(path, position) => void model.actions.openQuickOpenFile(path, position)}
+          />
+        </Suspense>
+      )}
     </main>
   )
 }
