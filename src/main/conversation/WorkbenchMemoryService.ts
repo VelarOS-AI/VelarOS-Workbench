@@ -6,15 +6,14 @@ import {
   type MemoryStoreApi,
 } from '@velaros-ai/velaros/memory'
 
-/** 一轮运行接的长期记忆：作用域本身，加这一轮开始时渲染好的索引（放进宿主说明末尾）。 */
+/** 一轮运行接的长期记忆作用域，由模型按需召回。 */
 export interface ConversationMemory {
   scope: MemoryScopeApi
-  index: string
 }
 
 /**
  * 长期记忆（与 Desktop 的记忆服务同一套，Platform ADR 0010）：一个作用域一个目录的 Markdown，模型在对话里用
- * memory.recall / save / remove 读写，每轮开始时在宿主说明里看到这个作用域的索引。
+ * memory.recall / save / remove 读写，按需召回这个作用域的内容。
  *
  * Workbench 只有项目会话：作用域按项目根的真实路径各一份（`project:<路径>`，与 Desktop 项目会话同一分格）。
  * 设置里关掉记忆时一轮都不接，已有的记忆留在盘上。
@@ -37,7 +36,7 @@ export class WorkbenchMemoryService implements WorkbenchMemoryServiceApi {
 
   public async forRun(workspace: string): Promise<ConversationMemory> {
     const scope = this.scope(workspace)
-    return { scope, index: await scope.renderIndex() }
+    return { scope }
   }
 
   public listEntries(workspace: string): Promise<MemoryEntry[]> {

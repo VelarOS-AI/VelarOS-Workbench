@@ -49,6 +49,35 @@ const TeamExecutionPhases = new Set<NonNullable<StandaloneConversationRuntime['t
 
 type StandaloneAgentTerminalKind = 'done' | 'aborted' | 'error'
 
+/** 重开会话时上次的执行已经结束；保留错误，未收尾的执行明确恢复成中断。 */
+function restoreStandaloneRunStatus(
+  stored: {
+    status?: unknown
+    lastError?: unknown
+    lastRunStartedAt?: unknown
+    lastRunFinishedAt?: unknown
+  },
+  interruptedMessage: string
+): Pick<StandaloneConversationRuntime, 'status' | 'lastError'> {
+  const { status, lastError } = stored
+  if (status === 'aborted' || status === 'failed')
+    return { status, lastError: readNonBlankString(lastError) }
+  // 旧历史只保存终止状态，运行中的身份从已开始、未结束的时间记录恢复。
+  const startedAt = readFiniteNumber(stored.lastRunStartedAt)
+  const finishedAt = readFiniteNumber(stored.lastRunFinishedAt)
+  const unfinishedLegacyRun =
+    status === undefined && startedAt !== null && (finishedAt === null || startedAt > finishedAt)
+  if (
+    status === 'running' ||
+    status === 'stopping' ||
+    status === 'awaiting-input' ||
+    status === 'awaiting-confirmation' ||
+    unfinishedLegacyRun
+  )
+    return { status: 'aborted', lastError: interruptedMessage }
+  return { status: 'idle', lastError: null }
+}
+
 /** 会话运行状态随主进程推来的运行状态变化（与 Desktop 的运行状态规约同一套规则）。 */
 function applyStandaloneConversationState<TState extends StandaloneConversationRuntime>(
   state: TState,
@@ -186,10 +215,11 @@ function beginStandaloneAgentStop<TState extends StandaloneConversationRuntime>(
   state: TState
 ): TState {
   if (
-    state.status !== 'running'
-    && state.status !== 'awaiting-input'
-    && state.status !== 'awaiting-confirmation'
-  ) return state
+    state.status !== 'running' &&
+    state.status !== 'awaiting-input' &&
+    state.status !== 'awaiting-confirmation'
+  )
+    return state
 
   return patchRuntime(state, {
     ...clearPendingRuntime(),
@@ -209,16 +239,19 @@ function patchRuntime<TState extends StandaloneConversationRuntime>(
   // 停止已受理后仍可能收到排队中的阶段、回合、等待交互事件；这些进度事件不能把 UI 从 stopping 拉回
   // running。只有明确终态才允许结束 stopping。
   if (
-    state.status === 'stopping'
-    && nextStatus !== 'completed'
-    && nextStatus !== 'aborted'
-    && nextStatus !== 'failed'
-  ) return { ...next, status: 'stopping', teamPhase: null } as TState
+    state.status === 'stopping' &&
+    nextStatus !== 'completed' &&
+    nextStatus !== 'aborted' &&
+    nextStatus !== 'failed'
+  )
+    return { ...next, status: 'stopping', teamPhase: null } as TState
 
   return next
 }
 
-function readStandaloneTerminalKind(runtime: WorkbenchConversationState): Nullable<StandaloneAgentTerminalKind> {
+function readStandaloneTerminalKind(
+  runtime: WorkbenchConversationState
+): Nullable<StandaloneAgentTerminalKind> {
   return runtime.kind === 'done' || runtime.kind === 'aborted' || runtime.kind === 'error'
     ? runtime.kind
     : null
@@ -227,8 +260,8 @@ function readStandaloneTerminalKind(runtime: WorkbenchConversationState): Nullab
 function sanitizeStandaloneChatMessages(messages: readonly ChatMessage[]): ChatMessage[] {
   return messages.flatMap((message) => {
     if (message.role !== 'assistant') return [message]
-    const blocks = message.blocks.filter((block) =>
-      block.type !== 'text' || isModelVisibleAssistantText(block.text, block.tone)
+    const blocks = message.blocks.filter(
+      (block) => block.type !== 'text' || isModelVisibleAssistantText(block.text, block.tone)
     )
     if (blocks.length === 0) return []
     return blocks.length === message.blocks.length ? [message] : [{ ...message, blocks }]
@@ -243,13 +276,16 @@ function sanitizeStandaloneChatMessages(messages: readonly ChatMessage[]): ChatM
  */
 function pauseUnappliedRunGuidance(
   messages: readonly ChatMessage[],
-  { includePending = false, inputIds }: { includePending?: boolean; inputIds?: readonly string[] } = {}
+  {
+    includePending = false,
+    inputIds,
+  }: { includePending?: boolean; inputIds?: readonly string[] } = {}
 ): ChatMessage[] {
   const only = inputIds ? new Set(inputIds) : null
   return messages.map((message) =>
-    (message.guidanceStatus === 'accepted'
-      || (includePending && message.guidanceStatus === 'pending'))
-    && (!only || only.has(message.id))
+    (message.guidanceStatus === 'accepted' ||
+      (includePending && message.guidanceStatus === 'pending')) &&
+    (!only || only.has(message.id))
       ? { ...message, guidanceStatus: 'paused' }
       : message
   )
@@ -336,12 +372,13 @@ function markStandaloneRun(
     timestamp,
   }
   if (
-    existing
-    && existing.status === marker.status
-    && existing.detail === marker.detail
-    && existing.turnCount === marker.turnCount
-    && existing.timestamp === marker.timestamp
-  ) return input.markers
+    existing &&
+    existing.status === marker.status &&
+    existing.detail === marker.detail &&
+    existing.turnCount === marker.turnCount &&
+    existing.timestamp === marker.timestamp
+  )
+    return input.markers
 
   return existing
     ? input.markers.map((entry) => (entry === existing ? marker : entry))
@@ -361,30 +398,34 @@ function restoreStandaloneRunMarkers(
     const record = asRecord(candidate)
     const { messageId, status, timestamp } = record
     if (
-      typeof messageId !== 'string'
-      || !messageIds.has(messageId)
-      || !isStandaloneTerminalRunStatus(status)
-      || typeof timestamp !== 'number'
-    ) return []
+      typeof messageId !== 'string' ||
+      !messageIds.has(messageId) ||
+      !isStandaloneTerminalRunStatus(status) ||
+      typeof timestamp !== 'number'
+    )
+      return []
     const startedAt = readFiniteNumber(record.startedAt)
     const durationMs = readFiniteNumber(record.durationMs)
     const turnCount = readPositiveInteger(record.turnCount)
     const runChanges = readStoredRunChanges(record.runChanges)
-    const goalStatus = typeof record.goalStatus === 'string' && GoalStatuses.has(record.goalStatus)
-      ? record.goalStatus as StandaloneRunMarker['goalStatus']
-      : undefined
-    return [{
-      messageId,
-      status,
-      detail: readNonBlankString(record.detail),
-      turnCount,
-      turnKind: turnCount !== null ? 'totalTurns' : null,
-      ...(startedAt !== null && durationMs !== null ? { startedAt, durationMs } : {}),
-      goalMode: optionalWhen(record.goalMode === true, true),
-      goalStatus,
-      runChanges: toOptional(runChanges),
-      timestamp,
-    }]
+    const goalStatus =
+      typeof record.goalStatus === 'string' && GoalStatuses.has(record.goalStatus)
+        ? (record.goalStatus as StandaloneRunMarker['goalStatus'])
+        : undefined
+    return [
+      {
+        messageId,
+        status,
+        detail: readNonBlankString(record.detail),
+        turnCount,
+        turnKind: turnCount !== null ? 'totalTurns' : null,
+        ...(startedAt !== null && durationMs !== null ? { startedAt, durationMs } : {}),
+        goalMode: optionalWhen(record.goalMode === true, true),
+        goalStatus,
+        runChanges: toOptional(runChanges),
+        timestamp,
+      },
+    ]
   })
 }
 
@@ -392,12 +433,13 @@ function readStoredRunChanges(value: unknown): WorkbenchChatRunChangesSummary | 
   const record = asRecord(value)
   const { recordId, capturedAt, fileCount, additions, deletions, error } = record
   if (
-    typeof recordId !== 'string'
-    || typeof capturedAt !== 'number'
-    || !isCount(fileCount)
-    || !isCount(additions)
-    || !isCount(deletions)
-  ) return null
+    typeof recordId !== 'string' ||
+    typeof capturedAt !== 'number' ||
+    !isCount(fileCount) ||
+    !isCount(additions) ||
+    !isCount(deletions)
+  )
+    return null
   return {
     recordId,
     capturedAt,
@@ -467,28 +509,33 @@ function readStandaloneLiveActivity(
   const thinkingStage = hasStreamingThinkingBlock ? getThinkingStageLabel(lastBlock.text) : null
   if (thinkingStage) return { liveTraceSummary: thinkingStage, hasStreamingThinkingBlock }
   const runningScript = message.blocks.findLast(
-    (block) => block.type === 'script-execution' && (block.status === 'running' || block.status === 'writing')
+    (block) =>
+      block.type === 'script-execution' &&
+      (block.status === 'running' || block.status === 'writing')
   )
-  const scriptActivity = runningScript?.type === 'script-execution' && runningScript.title
-    ? runningScript.title
-    : undefined
+  const scriptActivity =
+    runningScript?.type === 'script-execution' && runningScript.title
+      ? runningScript.title
+      : undefined
   // 外部引擎的会话没有脚本卡：状态行写正在跑的那张工具卡。
   const runningTool = scriptActivity
     ? undefined
     : message.blocks.findLast((block) => block.type === 'tool-call' && block.isRunning)
-  const toolActivity = runningTool?.type === 'tool-call'
-    ? runningTool.title?.trim() || runningTool.toolName
-    : undefined
+  const toolActivity =
+    runningTool?.type === 'tool-call'
+      ? runningTool.title?.trim() || runningTool.toolName
+      : undefined
   return { liveTraceSummary: scriptActivity ?? toolActivity, hasStreamingThinkingBlock }
 }
 
 function readStandaloneModelVisibleText(message: ChatMessage): string {
   return message.blocks
-    .filter((block) =>
-      block.type === 'text'
-      && (message.role !== 'assistant' || isModelVisibleAssistantText(block.text, block.tone))
+    .filter(
+      (block) =>
+        block.type === 'text' &&
+        (message.role !== 'assistant' || isModelVisibleAssistantText(block.text, block.tone))
     )
-    .map((block) => block.type === 'text' ? block.text : '')
+    .map((block) => (block.type === 'text' ? block.text : ''))
     .filter((text) => text.trim())
     .join('\n')
 }
@@ -498,12 +545,14 @@ function shouldBlockStandaloneRunSubmission(
   hasPendingExecution: boolean,
   accountSignInPending: boolean
 ): boolean {
-  return status === 'running'
-    || status === 'stopping'
-    || status === 'awaiting-input'
-    || status === 'awaiting-confirmation'
-    || hasPendingExecution
-    || accountSignInPending
+  return (
+    status === 'running' ||
+    status === 'stopping' ||
+    status === 'awaiting-input' ||
+    status === 'awaiting-confirmation' ||
+    hasPendingExecution ||
+    accountSignInPending
+  )
 }
 
 function isModelVisibleAssistantText(text: string, tone: 'default' | 'error' | undefined): boolean {
@@ -511,12 +560,10 @@ function isModelVisibleAssistantText(text: string, tone: 'default' | 'error' | u
   return tone !== 'error' && !!normalized && normalized !== LegacyNoTextResponse
 }
 
-function readTeamExecutionPhase(
-  value: unknown
-): StandaloneConversationRuntime['teamPhase'] {
-  return typeof value === 'string'
-    && TeamExecutionPhases.has(value as NonNullable<StandaloneConversationRuntime['teamPhase']>)
-    ? value as NonNullable<StandaloneConversationRuntime['teamPhase']>
+function readTeamExecutionPhase(value: unknown): StandaloneConversationRuntime['teamPhase'] {
+  return typeof value === 'string' &&
+    TeamExecutionPhases.has(value as NonNullable<StandaloneConversationRuntime['teamPhase']>)
+    ? (value as NonNullable<StandaloneConversationRuntime['teamPhase']>)
     : null
 }
 
@@ -551,16 +598,20 @@ function readStandaloneContextUsageEstimate(
   const estimatedTokens = payload.estimatedTokens
   const usableContextWindow = payload.usableContextWindow
   if (
-    typeof percent !== 'number' || !Number.isFinite(percent)
-    || typeof estimatedTokens !== 'number' || !Number.isFinite(estimatedTokens)
-    || typeof usableContextWindow !== 'number' || usableContextWindow <= 0
-  ) return null
+    typeof percent !== 'number' ||
+    !Number.isFinite(percent) ||
+    typeof estimatedTokens !== 'number' ||
+    !Number.isFinite(estimatedTokens) ||
+    typeof usableContextWindow !== 'number' ||
+    usableContextWindow <= 0
+  )
+    return null
   return { percent, estimatedTokens, usableContextWindow }
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
-    ? value as Record<string, unknown>
+    ? (value as Record<string, unknown>)
     : {}
 }
 
@@ -579,6 +630,7 @@ export {
   readStandaloneTerminalKind,
   resolveStandaloneRunChangesAnchor,
   restoreStandaloneRunMarkers,
+  restoreStandaloneRunStatus,
   sanitizeStandaloneChatMessages,
   shouldBlockStandaloneRunSubmission,
 }

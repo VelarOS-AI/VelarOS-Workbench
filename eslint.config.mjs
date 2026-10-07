@@ -271,6 +271,7 @@ export default [
       '**/artifacts/**',
       '**/node_modules/**',
       '**/build/electron/**',
+      '**/build/cache/**',
       'scripts/**',
       '**/*.config.cjs',
       'bun.lock',

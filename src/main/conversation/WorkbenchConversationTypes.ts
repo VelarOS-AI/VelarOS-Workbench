@@ -1,11 +1,13 @@
 import type {
-  ShellInvocationOutput,
+  NodeExecutionOutput,
   VelarosRuntimeOptions,
   VelarosSession,
 } from '@velaros-ai/velaros'
 import type { WidgetView } from '@velaros-ai/velaros/act/agents'
 import type { MemoryScopeApi } from '@velaros-ai/velaros/memory'
 import type { ActEventProjectorApi, ActPresentation } from '@velaros-ai/velaros/renderer'
+import type { SessionsSpacePort } from '@velaros-ai/velaros/sessions'
+import type { SessionAnswer } from '@velaros-ai/velaros/sessions/contracts'
 import type { WebSpacePort } from '@velaros-ai/velaros/web'
 
 import type {
@@ -29,13 +31,12 @@ export type ConversationSessionEvent = Awaited<
 /** Platform 用户输入。 */
 export type ConversationInput = Exclude<Parameters<VelarosSession['submit']>[0], string>
 
-/** 一轮提交的回复语言与执行模式，外加项目里的 AI 规则与这一轮开始时的记忆索引：宿主说明按它写。 */
+/** 一轮提交的回复语言与执行模式，外加项目里的 AI 规则：宿主说明按它写。 */
 export type ConversationHostInstructionOptions = Pick<
   WorkbenchConversationSendRequest,
   'locale' | 'executionModes'
 > & {
   projectRules?: readonly ConversationProjectRule[]
-  memoryIndex?: string
 }
 
 /** 项目里的一份 AI 规则文件（AGENTS.md、CLAUDE.md……）。 */
@@ -59,13 +60,14 @@ export interface ConversationWorkspaceOptions {
   dataDir: string
   /** 项目根：项目模块、代码查询与 shell 都在它里面跑。 */
   workspace: string
+  sandbox?: boolean
   instructions?: string
   /** 每帧随当地时间交给模型的宿主环境条目。 */
   environment?: () => Readonly<Record<string, string>>
   /** 把模型用 `velaros:widget` 交来的小部件显示到对话里。 */
   showWidget(widget: WidgetView): void
-  /** 把 `velaros:shell` 前台命令跑着时吐出的输出画到它所在的脚本卡上。 */
-  showCommandOutput(output: ShellInvocationOutput): void
+  /** 把 Node 执行进程跑着时吐出的输出画到它所在的脚本卡上。 */
+  showCommandOutput(output: NodeExecutionOutput): void
   /** 这一轮 Agent 改项目的时间窗报到这里：「本轮改动」据此认出哪些改动是 Agent 做的。 */
   activity?: WorkbenchAgentProjectActivityPort
   /**
@@ -79,6 +81,7 @@ export interface ConversationWorkspaceOptions {
   web?: WebSpacePort
   /** 这个会话的 Agent 浏览器（velaros:browser / devtools / cdp 操作编辑区里的受控页面）；没有就不挂。 */
   browser?: ConversationBrowser
+  sessions?: SessionsSpacePort
   model: ConversationModel
   confirmationMode: WorkbenchPermissionConfirmationMode
   signal: AbortSignal
@@ -99,6 +102,7 @@ export interface ConversationWorkspaceHandle {
 
 /** 单次运行的资源及当前展示快照。 */
 export interface ActiveConversationRun {
+  outcome?: SessionAnswer
   controller: AbortController
   completed: Promise<void>
   handle?: ConversationWorkspaceHandle

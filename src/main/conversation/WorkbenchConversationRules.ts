@@ -103,35 +103,29 @@ const ProjectRulesMaxChars = 32_000
 
 /**
  * 按本次执行模式提供任务说明和回复语言（与 Desktop 同一套，身份换成 IDE 里的编程助手）；项目里有
- * AGENTS.md 之类的 AI 规则文件时原文附上（设置页「AI 规则」列的就是这一份），最后附上这一轮开始时的记忆索引。
+ * AGENTS.md 之类的 AI 规则文件时原文附上（设置页「AI 规则」列的就是这一份）。
  */
 export function buildHostInstructions(options: ConversationHostInstructionOptions): string {
   const language = options.locale === 'en-US' ? 'English' : '简体中文'
   return [
     '你是 VelarOS Workbench（一个 IDE）里的编程助手，工作在用户打开的这个项目里。',
+    '围绕项目开发完成代码阅读、修改、构建、测试与调试；浏览器和网页检索用于开发资料与界面验收。',
+    '需要会话协作时先发现 velaros:sessions 并查看当前项目会话；新会话使用 project 工作区和当前项目根。任务说明写清目标、文件归属和验收条件。',
     `面向用户的回复使用${language}；代码、命令、路径和专有名词保留必要的原文。`,
     // 界面把这行注释当作这一步脚本卡的标题；模型不一定在脚本前写说明文字。
-    `每段 execute / observe 脚本的第一行写一句 // 注释，用${language}说明这一步要做什么，不超过 30 个字。`,
+    `每段执行代码的第一行写一句注释（Shell 用 #，Node 用 //），用${language}说明这一步要做什么，不超过 30 个字。`,
     ...(options.executionModes.includes('goal')
       ? [
-          '当前启用目标模式：持续推进活动目标并核验结果；达成时用 done("完成依据") 收尾，受阻时用 goal.update 记录阻碍和实际依据。',
+          '当前启用目标模式：持续推进活动目标并核验结果；达成时用 done("完成依据") 收尾，受阻时按需查询目标能力，记录阻碍和实际依据。',
         ]
       : []),
     ...(options.executionModes.includes('plan')
       ? [
           '当前启用计划模式：先列出可验证的步骤，再按计划继续执行，随进展更新步骤状态。',
-          '步骤清单用 memory.update 写进稳定键为 plan 的工作笔记，记下验收条件、当前进展和阻碍；memory.plan 的任务胶囊只记下一步目标与假设，不代替这份清单。',
+          '步骤清单保存在工作区的计划文件，记下验收条件、当前进展和阻碍。',
         ]
       : []),
     ...projectRulesSection(options.projectRules ?? []),
-    // 索引按项目变、会随记忆增删变：放在最后，前面几行的前缀缓存才留得住（与 Desktop 同一顺序）。
-    ...(options.memoryIndex
-      ? [
-          '',
-          '下面是跨会话长期记忆的索引，取自这一轮开始时，本轮里新存或删掉的不会反映在这里：',
-          options.memoryIndex,
-        ]
-      : []),
   ].join('\n')
 }
 
@@ -155,9 +149,7 @@ function projectRulesSection(rules: readonly ConversationProjectRule[]): string[
     '',
     '项目里的 AI 规则文件如下，按它们行事；子目录里的规则只管那个目录，与用户这一轮的要求冲突时以用户为准。',
     ...included,
-    ...(omitted.length
-      ? [`以下规则文件太长没有附上，需要时自己读：${omitted.join('、')}`]
-      : []),
+    ...(omitted.length ? [`以下规则文件太长没有附上，需要时自己读：${omitted.join('、')}`] : []),
   ]
 }
 
@@ -197,6 +189,8 @@ const TerminalStatusCopy = {
     failed: '这一轮运行失败了，没有拿到具体原因。',
     context_blocked: '这一轮需要的材料超出了上下文容量；请精简任务，或开一个新会话再试。',
     goal_active: '助手结束了这一轮，但目标还没有记成完成；可以让它继续核实并收尾，或关掉目标模式。',
+    evidence_missing: '收尾需要的材料没有完整拿到，这一轮没能完成；可以让助手缩小范围再试。',
+    stale: '收尾时依据的内容已经变化，结果没能确认；可以让助手重新检查。',
     pending: '还有脚本没有执行完，这一轮没能收尾。',
   },
   'en-US': {
@@ -205,6 +199,10 @@ const TerminalStatusCopy = {
       'This run needs more material than the context can hold; narrow the task or start a new conversation.',
     goal_active:
       'The assistant ended this run without marking the goal complete; ask it to verify and finish, or turn goal mode off.',
+    evidence_missing:
+      'The material needed to finish was not fully available; ask the assistant to narrow the scope and retry.',
+    stale:
+      'What the result relied on changed before it could be confirmed; ask the assistant to check again.',
     pending: 'Some scripts were still running, so this run could not finish.',
   },
 } as const satisfies Record<AppLocale, Record<string, string>>
@@ -212,6 +210,10 @@ const TerminalStatusCopy = {
 /** 完成检查没通过时的原因码（`reason` 冒号前的部分）对应哪句话。 */
 const VerificationCopyKeys: Readonly<Record<string, keyof (typeof TerminalStatusCopy)['zh-CN']>> = {
   GOAL_ACTIVE: 'goal_active',
+  GOAL_CHANGED: 'stale',
+  CONTEXT_REQUIRED: 'evidence_missing',
+  REQUIRED_EVIDENCE_MISSING: 'evidence_missing',
+  STALE_VIEW: 'stale',
   PENDING_EXECUTIONS: 'pending',
 }
 

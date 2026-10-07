@@ -3,7 +3,7 @@ import { resolve } from 'node:path'
 
 import { describe, test } from 'bun:test'
 
-import { shellCommandPolicy } from '@velaros-ai/velaros/shell'
+import { shellCommandPolicy } from '@velaros-ai/velaros/execution'
 
 import { setWorkbenchMainLocale } from '../src/main/i18n/workbenchMainLocale'
 import {
@@ -14,7 +14,7 @@ import {
 /**
  * 锁住命令安全门的行为，而不是它的实现。
  *
- * 通用判定的权威源是 `@velaros-ai/velaros/shell` 的 `shellCommandPolicy`；本仓只叠加「IDE 工作区完整性」一层。
+ * 通用判定的权威源是 `@velaros-ai/velaros/execution` 的 `shellCommandPolicy`；本仓只叠加「IDE 工作区完整性」一层。
  * 这里分三组断言：平台层不能因归并而丢、补充层必须真的生效、日常开发命令不许误伤。
  * 三组任一破了都说明安全门漂了——这正是当初 1225 行本地分叉与权威源悄悄发散的原因。
  * 「危险」的意思是执行前先问用户（批准就照常跑），所以误伤同样是缺陷：每一条都是一次无谓的打扰。
@@ -257,7 +257,7 @@ void describe('Workbench command execution policy', () => {
   })
 
   void test('asks for the workspace layer only where the platform lets the command through', () => {
-    // Agent 的命令走平台的 velaros:shell：平台判危险的由平台自己问，补问只管平台放行的这一层，同一条命令只问一次。
+    // 调用方已确认平台危险项时，补问只管平台放行的工作区层，同一条命令只问一次。
     for (const command of platformDangerous)
       assert.equal(resolveWorkspaceIntegrityConfirmation(command, projectRoot), null, command)
     for (const command of mustStayAllowed)

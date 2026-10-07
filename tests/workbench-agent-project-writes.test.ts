@@ -34,10 +34,14 @@ void describe('Workbench agent project writes', () => {
     const session = readSource('src/main/conversation/WorkbenchConversationSession.ts')
     const runtime = readSource('src/main/conversation/WorkbenchConversationRuntime.ts')
 
-    // 项目编辑与命令都过同一道效果闸：这两个模块的每段写操作时间窗都经 beginCommand 报给归属账本。
-    assert.match(session, /const ProjectWritingModules: readonly string\[\] = \['velaros:project', 'velaros:shell'\]/u)
+    // 项目走效果闸，原生 Node 命令另包时间窗；真实执行的归属与语言刷新由 Node 集成测试核验。
+    assert.match(
+      session,
+      /const ProjectWritingModules: readonly string\[\] = \['velaros:project'\]/u
+    )
     assert.match(session, /onMetric: \(metric\) => windows\.record\(metric\)/u)
     assert.match(session, /this\.activity\??\.beginCommand\(\)/u)
+    assert.match(session, /options\.activity\?\.beginCommand\(\)/u)
     // 时间窗一关就推一条项目动静通知，带上这一轮的运行身份。
     assert.match(
       runtime,

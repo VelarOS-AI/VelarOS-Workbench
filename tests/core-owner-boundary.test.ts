@@ -17,7 +17,7 @@ const removedCoreModules = new Set([
 
 /**
  * 已退役的 Platform 属主。它们的零件各有新家：项目与命令在 `@velaros-ai/velaros/project`、
- * `@velaros-ai/velaros/shell`，浏览器在 `@velaros-ai/velaros/browser/...`，跨平台行为在
+ * `@velaros-ai/velaros/execution`，浏览器在 `@velaros-ai/velaros/browser/...`，跨平台行为在
  * `@velaros-ai/core/platform`，对话数据在 `@velaros-ai/ui/conversation/contracts`。
  */
 const retiredOwnerModules = [

@@ -2,6 +2,7 @@ node_modules/
 .bun/
 .vite/
 build/electron/
+build/cache/
 dist/
 coverage/
 artifacts/

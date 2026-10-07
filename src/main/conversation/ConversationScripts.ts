@@ -1,4 +1,4 @@
-import { isNull } from '@velaros-ai/core'
+import { isNull, toNullable } from '@velaros-ai/core'
 import type {
   ActExecutionFailure,
   ActExecutionSummary,
@@ -50,12 +50,13 @@ export class ConversationScriptBoard {
 
   /** start 建卡（编写中）；delta 只累积不发；end 转为执行中并带上完整源码。 */
   public program(turnId: string, event: ProgramEvent): void {
-    if (event.kind !== 'execute' && event.kind !== 'observe') return
+    if (event.kind !== 'execute' && event.kind !== 'observe' && event.kind !== 'shell') return
     const id = `conversation:script:${event.runId}:${turnId}:${event.index}`
     if (event.phase === 'start') {
-      if (event.kind === 'execute') this.turns.set(turnId, [...(this.turns.get(turnId) ?? []), id])
+      if (event.kind !== 'observe') this.turns.set(turnId, [...(this.turns.get(turnId) ?? []), id])
       else this.observations.set(turnId, id)
-      this.open(id, event.kind, event.runId, turnId, 'writing')
+      this.open(id, event.kind === 'shell' ? 'execute' : event.kind, event.runId, turnId, 'writing')
+      if (event.kind === 'shell') this.cards.get(id)!.projection.language = 'shell'
       this.publish(id)
       return
     }
@@ -84,9 +85,12 @@ export class ConversationScriptBoard {
         .map((invocation) => invocation.summary)
       this.update(id, {
         status: settledStatus(execution, calls),
+        language: execution.language ?? card.projection.language,
         calls,
         error: describeFailure(execution.failure),
         durationMs: execution.durationMs,
+        processOutput: execution.processOutput,
+        processOutputTruncated: execution.processOutputTruncated,
         ...clipSource(card.body || execution.source),
       })
     }
@@ -95,7 +99,7 @@ export class ConversationScriptBoard {
 
   /** 这段执行的卡片；还没从追踪里对上时为 null。 */
   public cardOf(executionId: string): Nullable<string> {
-    return this.executionCards.get(executionId) ?? null
+    return toNullable(this.executionCards.get(executionId))
   }
 
   /** 协议没通过的回合一段程序都没执行：撤掉它写的卡，修复后的回合会重新写。 */

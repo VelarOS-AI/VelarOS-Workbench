@@ -1,0 +1,53 @@
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+}
+.trigger:hover,
+.trigger[aria-expanded='true'] {
+  background: var(--workbench-hover);
+  color: var(--foreground);
+}
+.popover {
+  width: min(390px, calc(100vw - 24px));
+}
+.panel {
+  padding: 12px;
+  font-size: 12px;
+}
+.description {
+  color: var(--muted-foreground);
+  margin: 6px 0 12px;
+}
+.list {
+  max-height: min(460px, 65vh);
+  overflow: auto;
+}
+.item {
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+.item header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.item header span {
+  color: var(--muted-foreground);
+  font-size: 10px;
+}
+.item p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.6;
+  margin: 8px 0 0;
+}

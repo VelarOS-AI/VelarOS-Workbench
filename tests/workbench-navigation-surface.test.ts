@@ -158,8 +158,11 @@ void describe('Workbench chat composer placeholder', () => {
       /appendWorkbenchChatFileReferences\(\s*includedCurrentFilePath \? \[includedCurrentFilePath\] : \[\],\s*selectedFileReferencePaths\s*\)/u
     )
     assert.match(adapter, /onDismissWorkbenchCurrentFile: \(\) => setIncludedCurrentFilePath\(null\)/u)
-    // 打开别的文件时 chip 重新出现，提示随之回来。
-    assert.match(adapter, /setIncludedCurrentFilePath\(currentFilePath\)\n\s*\}, \[currentFilePath\]\)/u)
+    // 当前文件随会话草稿持有；打开别的文件时 chip 重新出现，提示随之回来。
+    const drafts = readSource('src/renderer/src/runtime/standaloneChatDrafts.ts')
+    assert.match(adapter, /useStandaloneChatDraft\([\s\S]*?\{\s*currentFilePath,/u)
+    assert.match(drafts, /current\.observedCurrentFilePath === defaults\.currentFilePath/u)
+    assert.match(drafts, /includedCurrentFilePath: defaults\.currentFilePath/u)
   })
 })
 

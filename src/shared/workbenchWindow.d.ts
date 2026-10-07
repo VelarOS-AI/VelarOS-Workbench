@@ -1,5 +1,6 @@
 import type { WorkbenchProjectHubBridge } from './projectHub'
 import type { WorkbenchAccountBridge } from './workbenchAccount'
+import type { WorkbenchAgentProcessesBridge } from './workbenchAgentProcesses'
 import type { WorkbenchBrowserBridge } from './workbenchBrowser'
 import type { WorkbenchConversationBridge } from './workbenchConversation'
 import type { WorkbenchDebuggerBridge } from './workbenchDebugger'
@@ -9,6 +10,7 @@ import type { WorkbenchLanguageBridge } from './workbenchLanguage'
 import type { WorkbenchMemoryBridge } from './workbenchMemory'
 import type { WorkbenchModelBridge } from './workbenchModel'
 import type { WorkbenchProductAnalyticsBridge } from './workbenchProductAnalytics'
+import type { WorkbenchSessionPeersBridge } from './workbenchSessionPeers'
 import type { WorkbenchTerminalBridge } from './workbenchTerminal'
 import type { WorkbenchUpdateBridge } from './workbenchUpdate'
 import type { WorkbenchWatchBridge } from './workbenchWatch'
@@ -20,6 +22,8 @@ declare global {
   interface Window {
     velarosWorkbenchAccount: WorkbenchAccountBridge
     velarosWorkbenchBrowser: WorkbenchBrowserBridge
+    velarosWorkbenchAgentProcesses: WorkbenchAgentProcessesBridge
+    velarosWorkbenchSessionPeers: WorkbenchSessionPeersBridge
     velarosWorkbenchConversation: WorkbenchConversationBridge
     velarosWorkbenchDebugger: WorkbenchDebuggerBridge
     velarosWorkbenchProjectHub: WorkbenchProjectHubBridge

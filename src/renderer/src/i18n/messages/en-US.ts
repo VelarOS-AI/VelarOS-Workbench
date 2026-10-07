@@ -70,11 +70,35 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     newProjectCreate: 'Create and Open',
     newProjectInvalidName:
       'Enter a project name that does not start with a dot or contain \\ / : * ? " < > |.',
-    newProjectLocationMissing: 'The chosen location does not exist or is not a folder. Choose another.',
-    newProjectAlreadyExists: 'A folder with this name already exists there. Pick another name or location.',
+    newProjectLocationMissing:
+      'The chosen location does not exist or is not a folder. Choose another.',
+    newProjectAlreadyExists:
+      'A folder with this name already exists there. Pick another name or location.',
     newProjectIoError: 'Could not create the folder. Check disk permissions and try again.',
   },
   workbench: {
+    settingsWorkspaceSandbox: 'Workspace sandbox',
+    settingsWorkspaceSandboxDescription:
+      'Limit Agent file writes to the current project. Changes apply on the next run.',
+    agentProcessesTitle: 'Agent background processes',
+    agentProcessesDescription:
+      'View development servers and command output for this chat, send input or stop a process.',
+    agentProcessesEmpty: 'This chat has no background processes yet.',
+    agentProcessExit: 'Exit {code}',
+    agentProcessOutput: 'Process output',
+    agentProcessNoOutput: 'Waiting for output',
+    agentProcessInput: 'Command input',
+    agentProcessSend: 'Send',
+    agentProcessStop: 'Stop',
+    agentProcessForceStop: 'Force stop',
+    agentProcessStatus: { running: 'Running', exited: 'Exited', unknown: 'Unknown' },
+    notebookTitle: 'Working notes',
+    notebookDescription: 'Read the Agent’s working notes for this task.',
+    notebookLoading: 'Loading notes…',
+    notebookEmpty: 'This conversation has no working notes yet.',
+    notebookActive: 'Active',
+    notebookArchived: 'Archived',
+
     title: 'Workbench',
     addProject: 'Add Project',
     addingProject: 'Choosing…',
@@ -154,7 +178,8 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     issuesStatusDismissed: 'Dismissed',
     aiChangesTitle: 'Session Changes',
     aiChangesSummary: '{rounds} rounds · {files} files',
-    aiChangesEmpty: 'AI has not changed any files in this chat yet. As soon as it starts editing, the files it changes show up here live.',
+    aiChangesEmpty:
+      'AI has not changed any files in this chat yet. As soon as it starts editing, the files it changes show up here live.',
     aiChangesRunLabel: 'Run {number}',
     aiChangesLive: 'In progress',
     aiChangesNoPrompt: '(Run without text)',
@@ -164,9 +189,11 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     aiChangesStatusDeleted: 'Deleted',
     aiChangesStatusModified: 'Modified',
     aiChangesOpenFile: 'Open file',
-    aiChangesPatchOnly: 'The snapshot from before this run is no longer available, so only the lines around each change are shown.',
+    aiChangesPatchOnly:
+      'The snapshot from before this run is no longer available, so only the lines around each change are shown.',
     aiChangesBinary: 'Binary file, no line-by-line diff.',
-    aiChangesOmitted: 'The change is too large (+{additions} -{deletions}), so no line-by-line diff was saved.',
+    aiChangesOmitted:
+      'The change is too large (+{additions} -{deletions}), so no line-by-line diff was saved.',
     aiChangesNoLineChanges: 'This file has no line changes.',
     aiChangesDiffLabel: 'AI changes in {path}',
     aiChangesMixedChip: 'Outside edits',
@@ -312,7 +339,8 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     editorContextCallHierarchy: 'Call Hierarchy',
     editorCallHierarchyNone: 'There is no function at the cursor to show a call hierarchy for',
     editorCallHierarchyFailed: 'Could not read the call hierarchy',
-    editorCallHierarchyStale: 'This is no longer a function (the file changed); open the call hierarchy again',
+    editorCallHierarchyStale:
+      'This is no longer a function (the file changed); open the call hierarchy again',
     callHierarchyTitle: 'Call hierarchy',
     callHierarchyIncoming: 'Callers',
     callHierarchyOutgoing: 'Calls',
@@ -408,7 +436,8 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     clearSearch: 'Clear search',
     quickOpenAlreadyOpen: 'Open',
     quickOpenEmpty: 'No matching files or content',
-    quickOpenHint: 'Type a file name to open it; file contents are searched too. Add :line to go to a line, type @ for the symbols of the current file, or > to run a command',
+    quickOpenHint:
+      'Type a file name to open it; file contents are searched too. Add :line to go to a line, type @ for the symbols of the current file, or > to run a command',
     quickOpenRecentFiles: 'Recently opened',
     quickOpenFileResults: 'Files',
     quickOpenContentResults: 'Content',
@@ -416,14 +445,16 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     quickOpenFilesTruncated: 'Too many files: only the {count} nearest the project root are listed',
     quickOpenGoToLine: 'Go to line {line}',
     quickOpenGoToLineColumn: 'Go to line {line}, column {column}',
-    quickOpenGoToLineHint: 'Type a line number, or line:column, to go to (the current file has {count} lines)',
+    quickOpenGoToLineHint:
+      'Type a line number, or line:column, to go to (the current file has {count} lines)',
     quickOpenGoToLineNoFile: 'Open a file first to go to a line',
     quickOpenSymbolsTitle: 'Go to Symbol in File',
     quickOpenSymbolsLoading: 'Reading the symbols of this file…',
     quickOpenSymbolsNone: 'This file has no symbols to list',
     quickOpenSymbolsEmpty: 'No matching symbols',
     quickOpenSymbolsNoFile: 'Open a file first to look for its symbols',
-    quickOpenSymbolsTruncated: 'Too many symbols: only the first {count} are listed, type a name to narrow them down',
+    quickOpenSymbolsTruncated:
+      'Too many symbols: only the first {count} are listed, type a name to narrow them down',
     commandPaletteTitle: 'Command Palette',
     commandPaletteCaption: 'Run a Workbench command by name',
     commandPaletteEmpty: 'No matching commands',
@@ -490,7 +521,8 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     projectSearchSummary: '{matches} in {files}',
     projectSearchNoContentMatches: 'No matches in file contents',
     projectSearchIncomplete: 'The search did not finish, so nothing can be replaced: {message}',
-    projectSearchTruncated: 'Only the first {limit} matches are listed. Refine the search to see the rest.',
+    projectSearchTruncated:
+      'Only the first {limit} matches are listed. Refine the search to see the rest.',
     projectSearchSkippedLarge: 'Skipped because larger than 1 MB: {files}.',
     projectSearchMoreMatches: '…and {matches} not listed',
     projectSearchRefresh: 'Search again',
@@ -500,7 +532,8 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     projectSearchReplaceAllConfirm: 'Replace {matches} in {files} with “{replacement}”?',
     projectSearchReplaceAllOpenFiles:
       'Files open in the editor are changed there, where the change can be undone; they are not saved yet.',
-    projectSearchReplaceAllTruncated: 'The results are truncated: only the listed files are changed.',
+    projectSearchReplaceAllTruncated:
+      'The results are truncated: only the listed files are changed.',
     projectSearchReplaced: 'Replaced {matches} in {files}',
     projectSearchReplacedUnsaved: '{files} changed in the editor, not saved yet.',
     projectSearchReplaceReadOnly: '{files} read-only in the editor, not changed.',
@@ -531,7 +564,8 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     gitSyncFailedTitle: 'Sync failed',
     gitUploadFailedTitle: 'Push failed',
     gitPushConfirm: 'Push the current branch to the remote?',
-    gitSyncConfirm: 'Sync with {upstream}? This pulls from it first, then pushes your local commits.',
+    gitSyncConfirm:
+      'Sync with {upstream}? This pulls from it first, then pushes your local commits.',
     gitRemoteActionsMenu: 'Pull, push, sync',
     gitPullHint: 'Pull from {upstream} into this branch',
     gitPushHint: 'Push local commits to {upstream}',
@@ -595,10 +629,12 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
       'Discard this change in “{path}”? These lines go back to their staged version. This cannot be undone.',
     gitDiscardHunkConfirmAction: 'Revert',
     gitHunkActionFailedTitle: 'Hunk action failed',
-    gitHunkActionFailedFallback: 'Could not apply this to the hunk. Refresh the diff and try again.',
+    gitHunkActionFailedFallback:
+      'Could not apply this to the hunk. Refresh the diff and try again.',
     gitDiscardFile: 'Discard changes',
     gitDiscardConfirm: 'Discard local changes in “{path}”? This cannot be undone.',
-    gitDiscardSelectedConfirm: 'Roll back the changes in these {count} files? This cannot be undone.',
+    gitDiscardSelectedConfirm:
+      'Roll back the changes in these {count} files? This cannot be undone.',
     gitDiscardDeletedTag: 'Deleted',
     gitDiscardDeletesUntrackedFile:
       'This is an untracked new file: rolling back deletes it from disk permanently. It does not go to the Trash and cannot be recovered.',
@@ -719,7 +755,8 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     gitOperationStep: 'commit {step} of {total}',
     gitOperationConflictsHint:
       '{count} files still conflict. Resolve each one and mark it as resolved, then continue.',
-    gitOperationReadyHint: 'No conflicts are left. Press Continue to carry on with the {operation}.',
+    gitOperationReadyHint:
+      'No conflicts are left. Press Continue to carry on with the {operation}.',
     gitOperationContinue: 'Continue',
     gitOperationSkip: 'Skip',
     gitOperationAbort: 'Abort',
@@ -775,7 +812,8 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     goalAutoContinueInstruction:
       'The current goal is not finished: {objective}\nKeep going without waiting for the user: decide the next step from the progress so far, then keep reading, editing, running or verifying. When the goal is truly done, finish with done("evidence"); if a real blocker stops progress, record the blocker and the evidence with goal.update.',
     goalAutoContinueLimitTitle: 'Paused automatic goal continuation',
-    goalAutoContinueLimitDescription: 'The goal continued automatically for {count} rounds in a row without finishing. Click Continue on the goal card to keep going.',
+    goalAutoContinueLimitDescription:
+      'The goal continued automatically for {count} rounds in a row without finishing. Click Continue on the goal card to keep going.',
     gitCommitPlaceholder: 'Enter a commit message, or generate one',
     gitCommitDraftAdd: 'Add {file}',
     gitCommitDraftRemove: 'Remove {file}',
@@ -867,7 +905,8 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     languageServiceActionStale: 'The file changed in the meantime; the edit was not applied',
     languageServiceActionFailed: 'Could not apply this action',
     languageServiceImportsUpdated: 'Imports updated (files changed: {count})',
-    languageServiceImportsPartial: 'Imports updated (files changed: {count}); some files were not changed',
+    languageServiceImportsPartial:
+      'Imports updated (files changed: {count}); some files were not changed',
     languageServiceImportsFailed: 'Could not update the imports that refer to it',
     autosaveFailedTitle: 'Auto save failed',
     autosaveFailedTooltip: 'Auto save failed: {reason}',
@@ -990,7 +1029,8 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     treeSelectAll: 'Select all loaded entries',
     treeRenameSelected: 'Rename selected entry',
     treeDeleteSelected: 'Delete selected entries',
-    quickOpenPlaceholder: 'Type a file name; :line goes to a line; @ finds a symbol; > runs a command',
+    quickOpenPlaceholder:
+      'Type a file name; :line goes to a line; @ finds a symbol; > runs a command',
     searching: 'Searching…',
     noSearchResults: 'No matches',
     searchFailed: 'Search failed',
@@ -1045,8 +1085,10 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     runConfigurationArgs: 'Arguments',
     runConfigurationCwd: 'Working directory',
     runConfigurationCwdPlaceholder: 'Project root',
-    runConfigurationCwdHint: 'A path relative to the project root. Leave empty to run in the project root.',
-    runConfigurationCwdOutsideProject: 'The working directory must be a relative path inside the project.',
+    runConfigurationCwdHint:
+      'A path relative to the project root. Leave empty to run in the project root.',
+    runConfigurationCwdOutsideProject:
+      'The working directory must be a relative path inside the project.',
     runConfigurationEnv: 'Environment variables',
     runConfigurationEnvPlaceholder: 'KEY=VALUE, one per line',
     runConfigurationEnvHint:
@@ -1149,11 +1191,13 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     terminalStopFailed: 'Terminal stop failed',
     settingsTitle: 'Settings',
     settingsModel: 'Model',
-    settingsModelDescription: 'Configure the provider and models used by Workbench Agent and code completion.',
+    settingsModelDescription:
+      'Configure the provider and models used by Workbench Agent and code completion.',
     settingsModelProvider: 'Provider',
     settingsModelProviderDescription:
       'Workbench reads the available models dynamically from the selected provider.',
-    settingsModelProviderDisabled: 'The {provider} service is currently unavailable and cannot be selected.',
+    settingsModelProviderDisabled:
+      'The {provider} service is currently unavailable and cannot be selected.',
     settingsModelName: 'Agent model',
     settingsModelCatalogLoading: 'Loading available models from {provider}…',
     settingsModelCatalogLoaded: 'Loaded {count} available models from {provider}.',
@@ -1180,20 +1224,25 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     previewNotSavableAsText: 'A read-only preview cannot be saved as plain text.',
     chatPlaceholder: 'Ask Workbench Agent…',
     chatEnginePlaceholder: 'Ask {engine}…',
-    chatEngineModelHint: 'Models come from {engine}; sign-in, usage and session history stay in {engine}.',
+    chatEngineModelHint:
+      'Models come from {engine}; sign-in, usage and session history stay in {engine}.',
     chatEngineDefaultModel: 'Default model',
     chatEngineSignedOut: 'Signed out',
     chatEngineUnusable: 'Unavailable',
     chatEngineUnavailableTitle: '{engine} is not available',
-    chatEngineUnavailableDescription: '{engine} is not ready. Check that it is installed and signed in.',
+    chatEngineUnavailableDescription:
+      '{engine} is not ready. Check that it is installed and signed in.',
     chatModelMissingTitle: 'Configure a model first',
     chatModelMissingDescription: 'Add a provider, model, and API key on the Model settings page.',
     chatGuidanceRejectedTitle: 'Guidance was not delivered',
-    chatGuidanceRejectedDescription: 'It could not join the running turn (it may have just finished). The text is back in the input box so you can send it again.',
+    chatGuidanceRejectedDescription:
+      'It could not join the running turn (it may have just finished). The text is back in the input box so you can send it again.',
     chatInteractionAnswerFailedTitle: 'The answer did not go through',
     chatGuidanceFilesTitle: 'Guidance is text only',
-    chatGuidanceFilesDescription: 'This queued message has attachments, so it will be sent as a new message after this turn.',
-    chatMessageRenderFailed: 'This message can’t be displayed right now. Its original text is below.',
+    chatGuidanceFilesDescription:
+      'This queued message has attachments, so it will be sent as a new message after this turn.',
+    chatMessageRenderFailed:
+      'This message can’t be displayed right now. Its original text is below.',
     chatMessageRenderRetry: 'Retry',
     chatSignInFailedTitle: 'Could not sign in to VelarOS',
     chatSignInFailedDescription: '{error}',
@@ -1260,14 +1309,17 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     settingsWebSearchDescription:
       'The agent searches and reads web pages in a hidden browser, without your sign-ins from the built-in browser and without leaving history.',
     settingsWebSearchEngine: 'Search engine',
-    settingsWebSearchEngineDescription: 'Searches start with this engine and switch to the other one if it fails.',
+    settingsWebSearchEngineDescription:
+      'Searches start with this engine and switch to the other one if it fails.',
     settingsMemory: 'Long-term memory',
     settingsMemoryDescription:
-      'The model saves what it should remember across conversations as memories, one set per project. Each run starts with the project memory index.',
+      'The model saves what it should remember across conversations as memories, one set per project. During a conversation, it searches the project memories when relevant information is needed.',
     settingsMemoryEnabled: 'Long-term memory',
-    settingsMemoryEnabledDescription: "When off, conversations don't read or write memories; saved memories are kept.",
+    settingsMemoryEnabledDescription:
+      "When off, conversations don't read or write memories; saved memories are kept.",
     settingsMemoryLoading: 'Loading memories…',
-    settingsMemoryEmpty: 'No memories for this project yet. Things the model decides are worth remembering will appear here.',
+    settingsMemoryEmpty:
+      'No memories for this project yet. Things the model decides are worth remembering will appear here.',
     settingsMemoryNoProject: 'Open a project to see its memories.',
     settingsMemoryLoadFailed: 'Could not load memories: {error}',
     settingsMemoryRemoveFailed: 'Could not delete the memory: {error}',
@@ -1297,7 +1349,7 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     settingsPermissionsDescription:
       'Control whether Workbench Agent asks for your approval before acting.',
     settingsPermissionConfirmationModeDescription:
-      'Choose how strongly the agent asks before acting. Standard open is the default: everyday reads, edits and commands run directly, while irreversible commands such as recursive deletes or force pushes, and commands that would discard uncommitted changes, switch branches or write outside the project ask first; ask every time asks before every file edit and command; full access runs even those commands without asking.',
+      'Velar Agent runs Node programs directly by default. Ask every time confirms each program and project write; full access automatically approves capability requests. The project sandbox controls execution scope separately. Claude Code and Codex use this setting through their own approval protocols.',
     settingsPermissionHardGateHint:
       'When the agent asks you something on an interaction card, such as choosing between options, it always waits for your answer, in every mode.',
     settingsAiChangesAutoOpen: 'Open AI changes after each run',
@@ -1373,7 +1425,8 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     settingsEditorFormatOnSave: 'Format on save',
     settingsEditorFormatOnSaveHint:
       "Format the file when you save it with ⌘S / Ctrl+S in the editor, using the project's Prettier if it has one and the built-in rules otherwise. Autosave doesn't format.",
-    settingsEditorWordWrapHint: 'Wrap long lines at the editor width. Press {shortcut} in the editor to toggle.',
+    settingsEditorWordWrapHint:
+      'Wrap long lines at the editor width. Press {shortcut} in the editor to toggle.',
     settingsEditorPreviewTabs: 'Preview tabs',
     settingsEditorPreviewTabsHint:
       'A single click on a file, a search result or a problem, or a jump to a definition opens an italic preview tab that the next preview replaces. Editing, saving, or double-clicking the tab or the file keeps it. When off, these open regular tabs.',
@@ -1478,10 +1531,12 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     settingsShortcutCloseRightToolDescription: 'Close the active right-side tool window.',
     settingsShortcutUnassigned: 'Not set',
     settingsKeymapPreset: 'Keymap preset',
-    settingsKeymapPresetWorkbenchDescription: "Workbench's own keys: a mix of VS Code and JetBrains.",
+    settingsKeymapPresetWorkbenchDescription:
+      "Workbench's own keys: a mix of VS Code and JetBrains.",
     settingsKeymapPresetVscodeDescription: 'The default keys of VS Code.',
     settingsKeymapPresetJetbrainsDescription: 'The default keys of IntelliJ IDEA and WebStorm.',
-    settingsKeymapPresetVimDescription: 'Workbench keys, plus Vim modal editing in the file editor.',
+    settingsKeymapPresetVimDescription:
+      'Workbench keys, plus Vim modal editing in the file editor.',
     settingsEditorKeys: 'Editor keys',
     settingsEditorKeysDescription:
       'Keys inside the editor follow the keymap preset; they are listed here and cannot be changed one by one.',

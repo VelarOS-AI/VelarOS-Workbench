@@ -2,8 +2,8 @@ import { homedir } from 'node:os'
 import { isAbsolute, join } from 'node:path'
 
 import { isEmpty } from '@velaros-ai/core'
-import { shellCommandPolicy } from '@velaros-ai/velaros/shell'
-import type { ShellCommandPlan } from '@velaros-ai/velaros/shell/contracts'
+import { shellCommandPolicy } from '@velaros-ai/velaros/execution'
+import type { ShellCommandPlan } from '@velaros-ai/velaros/execution/contracts'
 
 import { workbenchMainText } from '../i18n/workbenchMainMessages'
 
@@ -16,7 +16,7 @@ import { isPathInsideRoot } from './PathContainmentHelper'
  * ## 为什么不是自己一套
  *
  * 通用判定——只读性、长驻进程、端口、成片毁掉找不回来的破坏性命令——单一权威源是
- * `@velaros-ai/velaros/shell` 的 `shellCommandPolicy.analyze`（Agent 的 `velaros:shell` 用的也是这一份）。
+ * `@velaros-ai/velaros/execution` 的 `shellCommandPolicy.analyze`（外部 Agent 引擎的命令审批复用这一份）。
  * 本文件**不复制也不改写**它的语义，只在其结论之上叠加 Workbench 作为 IDE 宿主特有的一类判定。
  *
  * ## 补充判定的边界（只有这三类）
@@ -44,10 +44,9 @@ import { isPathInsideRoot } from './PathContainmentHelper'
  *
  * ## 命中之后：先问，不是拒绝
  *
- * `isDangerous` 的意思是「执行前必须经用户确认」。Agent 的命令走 Platform 的 `velaros:shell`：平台判危险的
- * 由平台自己经审批端口问；平台放行而本层判危险的，由会话宿主在派发前补问（`WorkbenchConversationSession`
- * 的 authorize，用 {@link resolveWorkspaceIntegrityConfirmation}），同一条命令只问一次。命令面板里用户自己
- * 输入的命令，用户就是确认者。
+ * `isDangerous` 的意思是「执行前必须经用户确认」。外部引擎的审批端口按完整结论询问；
+ * 已由调用方确认平台危险项时，可用 {@link resolveWorkspaceIntegrityConfirmation} 只补问工作区这一层。
+ * 命令面板里用户自己输入的命令，用户就是确认者。
  */
 
 /** 分段边界：两侧是两条独立执行的命令。find 的 `-exec` 族之后是它要跑的命令。 */
@@ -493,7 +492,7 @@ export function analyzeWorkbenchCommandExecution(command: string, projectRoot: s
 }
 
 /**
- * 只有工作区完整性这一层判危险时的结论：平台已判危险（`velaros:shell` 自己会问）或两边都放行时为 null。
+ * 只有工作区完整性这一层判危险时的结论：平台已判危险（由调用方确认）或两边都放行时为 null。
  * 带上平台那份分类，调用方照它算前台还是后台，与平台的确认卡同一口径。
  */
 export function resolveWorkspaceIntegrityConfirmation(

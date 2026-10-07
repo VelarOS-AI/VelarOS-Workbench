@@ -91,11 +91,7 @@ import {
 import { WorkbenchMemorySettings } from './WorkbenchMemorySettings'
 import { SettingRow, WorkbenchSettingsPill } from './WorkbenchSettingsParts'
 
-type WorkbenchSettingsSectionId =
-  | 'general'
-  | 'editor'
-  | 'ai'
-  | 'system'
+type WorkbenchSettingsSectionId = 'general' | 'editor' | 'ai' | 'system'
 
 interface WorkbenchSettingsDialogProps {
   conflicts: WorkbenchKeymapConflict[]
@@ -182,8 +178,8 @@ export function WorkbenchSettingsDialog({
     !isStandaloneWorkbenchManagedProviderId(modelConfig.provider) || !!selectedManagedProvider
   const visibleModelProviders = listStandaloneWorkbenchVisibleModelProviderPresets(managedModels)
   const modelProviderPreset =
-    visibleModelProviders.find((provider) => provider.id === modelConfig.provider)
-    ?? getStandaloneWorkbenchModelProviderPreset(modelConfig.provider)
+    visibleModelProviders.find((provider) => provider.id === modelConfig.provider) ??
+    getStandaloneWorkbenchModelProviderPreset(modelConfig.provider)
   const modelProviderOptions = createStandaloneWorkbenchModelProviderOptions(
     managedModels,
     (provider) => t('workbench.settingsModelProviderDisabled', { provider })
@@ -202,21 +198,22 @@ export function WorkbenchSettingsDialog({
     useState<Nullable<WorkbenchProjectAiRulesResult>>(null)
   const [expandedProjectAiRulePath, setExpandedProjectAiRulePath] = useState<Nullable<string>>(null)
   const [isLoadingProjectAiRules, setIsLoadingProjectAiRules] = useState(false)
-  const [providerModelCatalog, setProviderModelCatalog] =
-    useState<Nullable<{
+  const [providerModelCatalog, setProviderModelCatalog] = useState<
+    Nullable<{
       catalog: ProviderModelCatalog
       managedProvider: WorkbenchManagedModelProvider | undefined
-    }>>(null)
+    }>
+  >(null)
   const [isLoadingProviderModels, setIsLoadingProviderModels] = useState(false)
-  const [providerModelCatalogError, setProviderModelCatalogError] =
-    useState<Nullable<string>>(null)
+  const [providerModelCatalogError, setProviderModelCatalogError] = useState<Nullable<string>>(null)
   const [modelBaseURLDraft, setModelBaseURLDraft] = useState(modelConfig.baseURL)
   const [modelApiKeyDraft, setModelApiKeyDraft] = useState(modelConfig.apiKey)
   const dialogRef = useRef<HTMLDivElement>(null)
-  const activeProviderModelCatalog = providerModelCatalog?.catalog.provider === modelConfig.provider
-    && providerModelCatalog.managedProvider === selectedManagedProvider
-    ? providerModelCatalog.catalog
-    : null
+  const activeProviderModelCatalog =
+    providerModelCatalog?.catalog.provider === modelConfig.provider &&
+    providerModelCatalog.managedProvider === selectedManagedProvider
+      ? providerModelCatalog.catalog
+      : null
   const modelOptions = createStandaloneWorkbenchProviderModelOptions(
     activeProviderModelCatalog?.models ?? [],
     [modelConfig.model, modelConfig.completionModel],
@@ -229,28 +226,29 @@ export function WorkbenchSettingsDialog({
     },
     ...modelOptions,
   ]
-  const selectedManagedProviderDisabled = !!selectedManagedProvider && !selectedManagedProvider.enabled
+  const selectedManagedProviderDisabled =
+    !!selectedManagedProvider && !selectedManagedProvider.enabled
   const modelCatalogDescription = selectedManagedProviderDisabled
     ? t('workbench.settingsModelProviderDisabled', { provider: modelProviderPreset.label })
     : isLoadingProviderModels
-    ? t('workbench.settingsModelCatalogLoading', { provider: modelProviderPreset.label })
-    : activeProviderModelCatalog?.models.length
-      ? t('workbench.settingsModelCatalogLoaded', {
-          provider: modelProviderPreset.label,
-          count: activeProviderModelCatalog.models.length,
-        })
-      : providerModelCatalogError
-        ? !modelConfig.apiKey.trim()
-          && !modelProviderPreset.apiKeyOptional
-          && modelProviderPreset.validationKind !== 'openrouter-key'
-          ? t('workbench.settingsModelCatalogNeedsKey', {
-              provider: modelProviderPreset.label,
-            })
-          : t('workbench.settingsModelCatalogError', {
-              provider: modelProviderPreset.label,
-              error: providerModelCatalogError,
-            })
-        : t('workbench.settingsModelCatalogEmpty', { provider: modelProviderPreset.label })
+      ? t('workbench.settingsModelCatalogLoading', { provider: modelProviderPreset.label })
+      : activeProviderModelCatalog?.models.length
+        ? t('workbench.settingsModelCatalogLoaded', {
+            provider: modelProviderPreset.label,
+            count: activeProviderModelCatalog.models.length,
+          })
+        : providerModelCatalogError
+          ? !modelConfig.apiKey.trim() &&
+            !modelProviderPreset.apiKeyOptional &&
+            modelProviderPreset.validationKind !== 'openrouter-key'
+            ? t('workbench.settingsModelCatalogNeedsKey', {
+                provider: modelProviderPreset.label,
+              })
+            : t('workbench.settingsModelCatalogError', {
+                provider: modelProviderPreset.label,
+                error: providerModelCatalogError,
+              })
+          : t('workbench.settingsModelCatalogEmpty', { provider: modelProviderPreset.label })
 
   const sections = useMemo(
     () => [
@@ -322,7 +320,8 @@ export function WorkbenchSettingsDialog({
     let active = true
     setIsLoadingAccount(true)
     setAccountError(null)
-    void window.velarosWorkbenchAccount.getState()
+    void window.velarosWorkbenchAccount
+      .getState()
       .then((state) => {
         if (active) setAccountState(state)
       })
@@ -354,32 +353,38 @@ export function WorkbenchSettingsDialog({
     setProviderModelCatalog(null)
     setProviderModelCatalogError(null)
     if (
-      isStandaloneWorkbenchManagedProviderId(modelConfig.provider)
-      && !selectedManagedProvider?.enabled
+      isStandaloneWorkbenchManagedProviderId(modelConfig.provider) &&
+      !selectedManagedProvider?.enabled
     ) {
       setIsLoadingProviderModels(false)
       return
     }
     setIsLoadingProviderModels(true)
-    const lease = timers.after(300, () => {
-      void window.velarosWorkbenchModel.listProviderModels({
-        provider: modelConfig.provider,
-        apiKey: modelConfig.apiKey,
-        baseURL: modelConfig.baseURL,
-        purpose: 'chat',
-      }).then((catalog) => {
-        if (!active) return
-        setProviderModelCatalog({ catalog, managedProvider: selectedManagedProvider })
-        setProviderModelCatalogError(catalog.error ?? null)
-      }).catch((error: unknown) => {
-        if (!active) return
-        setProviderModelCatalogError(
-          error instanceof Error ? error.message : String(error)
-        )
-      }).finally(() => {
-        if (active) setIsLoadingProviderModels(false)
-      })
-    }, { label: 'workbench.settings.model-catalog' })
+    const lease = timers.after(
+      300,
+      () => {
+        void window.velarosWorkbenchModel
+          .listProviderModels({
+            provider: modelConfig.provider,
+            apiKey: modelConfig.apiKey,
+            baseURL: modelConfig.baseURL,
+            purpose: 'chat',
+          })
+          .then((catalog) => {
+            if (!active) return
+            setProviderModelCatalog({ catalog, managedProvider: selectedManagedProvider })
+            setProviderModelCatalogError(catalog.error ?? null)
+          })
+          .catch((error: unknown) => {
+            if (!active) return
+            setProviderModelCatalogError(error instanceof Error ? error.message : String(error))
+          })
+          .finally(() => {
+            if (active) setIsLoadingProviderModels(false)
+          })
+      },
+      { label: 'workbench.settings.model-catalog' }
+    )
 
     return () => {
       active = false
@@ -402,26 +407,26 @@ export function WorkbenchSettingsDialog({
 
   useEffect(() => {
     if (
-      managedModelState.status !== 'ready'
-      || !isStandaloneWorkbenchManagedProviderId(modelConfig.provider)
-      || selectedManagedProvider
-    ) return
+      managedModelState.status !== 'ready' ||
+      !isStandaloneWorkbenchManagedProviderId(modelConfig.provider) ||
+      selectedManagedProvider
+    )
+      return
     selectStandaloneWorkbenchModelProvider('openrouter')
   }, [managedModelState.status, modelConfig.provider, selectedManagedProvider])
 
   useEffect(() => {
     if (
-      !selectedManagedProvider
-      || activeProviderModelCatalog?.provider !== modelConfig.provider
-      || activeProviderModelCatalog.models.length === 0
-    ) return
+      !selectedManagedProvider ||
+      activeProviderModelCatalog?.provider !== modelConfig.provider ||
+      activeProviderModelCatalog.models.length === 0
+    )
+      return
     const available = new Set(activeProviderModelCatalog.models.map((model) => model.id))
     const fallback =
-      (selectedManagedProvider.defaultModel
-        && available.has(selectedManagedProvider.defaultModel)
+      (selectedManagedProvider.defaultModel && available.has(selectedManagedProvider.defaultModel)
         ? selectedManagedProvider.defaultModel
-        : undefined)
-      ?? activeProviderModelCatalog.models[0]?.id
+        : undefined) ?? activeProviderModelCatalog.models[0]?.id
     if (!fallback) return
     const patch: Partial<StandaloneWorkbenchModelConfig> = {}
     if (!available.has(modelConfig.model)) patch.model = fallback
@@ -623,18 +628,14 @@ export function WorkbenchSettingsDialog({
 
   function renderProjectSection(): ReactElement {
     const projectTitle = project?.name ?? t('workbench.settingsProjectContextNoProject')
-    const projectDescription = project?.rootPath
-      ?? t('workbench.settingsProjectContextNoProjectDescription')
+    const projectDescription =
+      project?.rootPath ?? t('workbench.settingsProjectContextNoProjectDescription')
 
     return (
       <div className={styles.workbenchSettingsSectionPanel}>
         <SettingRow title={projectTitle} description={projectDescription}>
           {project && onExitProject && (
-            <Button
-              size="sm"
-              variant="destructiveOutline"
-              onClick={() => void onExitProject()}
-            >
+            <Button size="sm" variant="destructiveOutline" onClick={() => void onExitProject()}>
               <SignOutIcon size={14} />
               {t('workbench.settingsExitProjectAction')}
             </Button>
@@ -648,9 +649,10 @@ export function WorkbenchSettingsDialog({
     setIsChangingAccount(true)
     setAccountError(null)
     try {
-      const state = action === 'sign-in'
-        ? await window.velarosWorkbenchAccount.signIn()
-        : await window.velarosWorkbenchAccount.signOut()
+      const state =
+        action === 'sign-in'
+          ? await window.velarosWorkbenchAccount.signIn()
+          : await window.velarosWorkbenchAccount.signOut()
       setAccountState(state)
       if (action === 'sign-out') {
         await window.velarosWorkbenchProjectHub.returnToEntry()
@@ -838,7 +840,12 @@ export function WorkbenchSettingsDialog({
             value={managedSelectionVisible ? modelConfig.provider : undefined}
             options={modelProviderOptions}
             onChange={(providerId) => {
-              if (!modelProviderOptions.some((option) => option.value === providerId && !option.disabled)) return
+              if (
+                !modelProviderOptions.some(
+                  (option) => option.value === providerId && !option.disabled
+                )
+              )
+                return
               const provider = visibleModelProviders.find((entry) => entry.id === providerId)
               selectStandaloneWorkbenchModelProvider(
                 providerId,
@@ -1130,7 +1137,7 @@ export function WorkbenchSettingsDialog({
         <SettingsSubsection
           title={t('workbench.settingsAppearance')}
           description={t('workbench.settingsAppearanceDescription')}
-          action={(
+          action={
             <IconButton
               size="icon-sm"
               variant="outline"
@@ -1140,7 +1147,7 @@ export function WorkbenchSettingsDialog({
             >
               <ArrowCounterClockwiseIcon size={14} />
             </IconButton>
-          )}
+          }
         >
           {renderAppearanceSection()}
         </SettingsSubsection>
@@ -1168,7 +1175,7 @@ export function WorkbenchSettingsDialog({
         <SettingsSubsection
           title={t('workbench.settingsKeymap')}
           description={t('workbench.settingsKeymapDescription')}
-          action={(
+          action={
             <IconButton
               size="icon-sm"
               variant="outline"
@@ -1178,7 +1185,7 @@ export function WorkbenchSettingsDialog({
             >
               <ArrowCounterClockwiseIcon size={14} />
             </IconButton>
-          )}
+          }
         >
           {renderKeymapSection()}
         </SettingsSubsection>
@@ -1225,12 +1232,22 @@ export function WorkbenchSettingsDialog({
               },
             ]}
             onChange={(permissionConfirmationMode) =>
-              onPreferencesChange({ permissionConfirmationMode })}
+              onPreferencesChange({ permissionConfirmationMode })
+            }
           />
         </SettingRow>
-        <Text tone="caption" className={styles.workbenchSettingsRowDescription}>
-          {t('workbench.settingsPermissionHardGateHint')}
-        </Text>
+        <SettingRow
+          title={t('workbench.settingsWorkspaceSandbox')}
+          description={t('workbench.settingsWorkspaceSandboxDescription')}
+        >
+          <Switch
+            size="sm"
+            checked={preferences.workspaceSandboxEnabled}
+            onCheckedChange={(workspaceSandboxEnabled) =>
+              onPreferencesChange({ workspaceSandboxEnabled })
+            }
+          />
+        </SettingRow>
         <SettingRow
           title={t('workbench.settingsAiChangesAutoOpen')}
           description={t('workbench.settingsAiChangesAutoOpenDescription')}

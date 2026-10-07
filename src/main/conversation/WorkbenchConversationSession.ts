@@ -1,3 +1,4 @@
+import { homedir } from 'node:os'
 import { relative, resolve } from 'node:path'
 
 import { isArray, isBoolean, isNonBlankString, isPlainObject, isTrue } from '@velaros-ai/core'
@@ -12,8 +13,8 @@ import type { CodeRunnerApi } from '@velaros-ai/script'
 import type { RuntimeMetric, VelarosRuntime, VelarosSession } from '@velaros-ai/velaros'
 import {
   createCapabilityModule,
+  createNodeExecutionEnvironment,
   createRuntime,
-  createShellCapabilityModule,
 } from '@velaros-ai/velaros'
 import {
   type BrowserOperationContext,
@@ -27,14 +28,12 @@ import {
   VelarCdpModule,
   VelarDevtoolsModule,
 } from '@velaros-ai/velaros/browser/contracts'
-import { projectCapabilityPorts } from '@velaros-ai/velaros/project'
-import type { ShellSpacePort } from '@velaros-ai/velaros/shell'
-import { shellCommandApproval } from '@velaros-ai/velaros/shell'
+import { sessionsOperations } from '@velaros-ai/velaros/sessions'
+import { VelarSessionsModule } from '@velaros-ai/velaros/sessions/contracts'
 import { webOperations } from '@velaros-ai/velaros/web'
 import { VelarWebModule } from '@velaros-ai/velaros/web/contracts'
 
 import { workbenchMainText } from '../i18n/workbenchMainMessages'
-import { resolveWorkspaceIntegrityConfirmation } from '../workspace/CommandExecutionPolicy'
 import type { WorkbenchAgentProjectActivityPort } from '../workspace/git/WorkbenchChatRunAttribution'
 import { isRelativePathInsideRoot } from '../workspace/PathContainmentHelper'
 
@@ -44,100 +43,39 @@ import type {
   ConversationWorkspaceHandle,
   ConversationWorkspaceOptions,
 } from './WorkbenchConversationTypes'
+import { resolveWorkbenchNodeEnvironment } from './WorkbenchNodeRuntime'
 import type { WorkbenchShellHostRegistryApi } from './WorkbenchShellHostRegistry'
 
-/**
- * 每轮都会用到的模块：合同直接附进运行说明，模型不必先 list / describe；没挂载的由 Platform 忽略。
- * 与 Desktop 的项目会话同一套，外加问代码（定义、引用、诊断）：IDE 里几乎每轮都要用它。
- */
-const ResidentModules = [
-  'velaros:project',
-  'velaros:code',
-  'velaros:shell',
-  'velaros:interaction',
-  'velaros:widget',
-]
-
-/** 会改项目文件的模块：它们的写操作时间窗报给「本轮改动」的归属账本。 */
-const ProjectWritingModules: readonly string[] = ['velaros:project', 'velaros:shell']
-
-/** 确认卡上的命令只摊开第一行的这么多字符（与平台的危险命令确认卡同一口径）。 */
-const ConfirmationCommandChars = 120
-
-/** 按路径写项目文件的操作：写到哪些文件从派发前的入参读（Platform 的计量不带路径）。 */
+/** 项目能力的写入由 Kernel 效果闸记录；标准 Node 进程由宿主单独记录。 */
+const ProjectWritingModules: readonly string[] = ['velaros:project']
 const ProjectEditOperation = 'velaros:project.edit'
 
-/** 执行会话的装配：一轮一个 Platform 运行时，收尾即关。 */
 export interface WorkbenchConversationSessionApi {
-  /** 打开可执行模型与项目操作的主会话。 */
   open(options: ConversationWorkspaceOptions): Promise<ConversationWorkspaceHandle>
-  /** 打开无模型的状态控制会话（空闲时读、改目标）。 */
   openControl(options: ConversationControlOptions): Promise<ConversationWorkspaceHandle>
 }
 
-/**
- * 把一轮运行接到 Platform：项目模块、问代码与看图由 Platform 在同一个项目内核上挂；命令借用应用共用的
- * shell 宿主（这一轮起的后台任务在运行结束后接着跑，关闭时不释放宿主）。
- *
- * 「本轮改动」要知道 Agent 什么时候在改项目：Platform 的写操作都要过同一道效果闸（一个运行时里的写互斥），
- * 闸放行与这次操作跑完各报一次计量；项目与 shell 模块的这两点之间就是一段 Agent 动手的时间窗，交给归属账本。
- */
+/** 项目会话按需发现与调用代码能力；标准 Node 进程和后台任务由应用宿主持有。 */
 export class WorkbenchConversationSession implements WorkbenchConversationSessionApi {
   public constructor(
-    private readonly runner: CodeRunnerApi,
-    private readonly shells: WorkbenchShellHostRegistryApi
+    private readonly runner: CodeRunnerApi | undefined,
+    private readonly shells: WorkbenchShellHostRegistryApi,
+    private readonly nodeExecutable?: string,
+    private readonly nodePackagesDirectory?: string
   ) {}
 
   public async open(options: ConversationWorkspaceOptions): Promise<ConversationWorkspaceHandle> {
     options.signal.throwIfAborted()
     const root = options.workspace
+    const sandbox = options.sandbox ?? false
     let session: VelarosSession | undefined
     let runtime: VelarosRuntime | undefined
     const windows = new ProjectActivityWindows(root, options.activity, options.projectFilesEdited)
-    const { memory, web, browser } = options
-    // 浏览器、开发者工具与 CDP 三件能力操作编辑区里这个会话的受控页面（与 Desktop 同一套装配）。登录墙门控一轮
-    // 一份：同一个站点这一轮最多问一次，问过之后批准还是拒绝都不再拦。
-    const browserModules = browser
-      ? (() => {
-          const gate = createBrowserLoginGate({
-            requestLoginCompletion: ({ message }) =>
-              decide(message, options.signal, LoginConfirmation),
-          })
-          const mount = (call: OperationContext): BrowserOperationContext => ({
-            abortSignal: call.signal,
-            browser: gate.wrap(browser.port(call.signal)),
-            attachImage: (image) => call.attach({ type: 'image-data', ...image }),
-          })
-          const instanceId = options.sessionId
-          return [
-            createCapabilityModule({
-              surface: VelarBrowserModule,
-              implementation: browserOperations,
-              instanceId,
-              context: mount,
-            }),
-            createCapabilityModule({
-              surface: VelarDevtoolsModule,
-              implementation: devtoolsOperations,
-              instanceId,
-              context: mount,
-            }),
-            createCapabilityModule({
-              surface: VelarCdpModule,
-              implementation: cdpOperations,
-              instanceId,
-              context: mount,
-            }),
-          ]
-        })()
-      : []
-    // 审批选项（危险命令的操作身份与风险）随请求交给交互卡；回答是卡上给的 { approved, reason }
     const decide = async (
       message: string,
       signal: AbortSignal,
       detail?: ToolConfirmationDecisionOptions | typeof LoginConfirmation
     ): Promise<ApprovalDecision> => {
-      // 「从不询问」档连危险命令也直接放行；登录墙要用户自己去登录，照常弹卡（与 Desktop 相同）
       if (options.confirmationMode === 'never-ask' && detail !== LoginConfirmation)
         return { approved: true, message: null }
       if (!session) throw new AppError('UNAVAILABLE', workbenchMainText('conversation.notReady'))
@@ -146,12 +84,8 @@ export class WorkbenchConversationSession implements WorkbenchConversationSessio
       const reason = isPlainObject(answer) && isNonBlankString(answer.reason) ? answer.reason : null
       return { approved, message: approved ? null : reason }
     }
-    const confirm = async (
-      message: string,
-      signal: AbortSignal,
-      detail?: ToolConfirmationDecisionOptions
-    ): Promise<void> => {
-      const decision = await decide(message, signal, detail)
+    const confirm = async (message: string, signal: AbortSignal): Promise<void> => {
+      const decision = await decide(message, signal)
       if (!decision.approved)
         throw new AppError(
           'PERMISSION',
@@ -159,72 +93,113 @@ export class WorkbenchConversationSession implements WorkbenchConversationSessio
         )
     }
     try {
-      const shell = this.shells.host(root, 'danger-full-access')
-      const port = projectCapabilityPorts.shell(
-        { ...shell, getRootPath: () => root },
-        options.signal
-      )
+      const shell = this.shells.host(root, sandbox ? 'workspace-write' : 'danger-full-access')
+      const node = createNodeExecutionEnvironment({
+        cwd: root,
+        directory: resolve(options.dataDir, 'node'),
+        executable: this.nodeExecutable,
+        packageDirectory: this.nodePackagesDirectory,
+        runtime: resolveWorkbenchNodeEnvironment(this.nodePackagesDirectory),
+        host: {
+          ...shell,
+          runCommand: async (...args) => {
+            const finish = options.activity?.beginCommand()
+            try {
+              return await shell.runCommand(...args)
+            } finally {
+              finish?.()
+            }
+          },
+        },
+        authorize: async (request, signal) => {
+          options.signal.throwIfAborted()
+          if (options.confirmationMode === 'ask-every-time') await confirm(request.source, signal)
+        },
+        output: options.showCommandOutput,
+      })
+      const modules: Array<NonNullable<Parameters<typeof createRuntime>[0]['modules']>[number]> = []
+      const { memory, web, browser, sessions } = options
+      if (sessions)
+        modules.push(
+          createCapabilityModule({
+            surface: VelarSessionsModule,
+            implementation: sessionsOperations,
+            instanceId: options.sessionId,
+            context: (call) => ({ abortSignal: call.signal, sessions }),
+          })
+        )
+      if (web)
+        modules.push(
+          createCapabilityModule({
+            surface: VelarWebModule,
+            implementation: webOperations,
+            instanceId: 'web',
+            context: (call) => ({ abortSignal: call.signal, web }),
+          })
+        )
+      if (browser) {
+        const gate = createBrowserLoginGate({
+          requestLoginCompletion: ({ message }) =>
+            decide(message, options.signal, LoginConfirmation),
+        })
+        const mount = (call: OperationContext): BrowserOperationContext => ({
+          abortSignal: call.signal,
+          browser: gate.wrap(browser.port(call.signal)),
+          attachImage: (image) => call.attach({ type: 'image-data', ...image }),
+        })
+        modules.push(
+          createCapabilityModule({
+            surface: VelarBrowserModule,
+            implementation: browserOperations,
+            instanceId: options.sessionId,
+            context: mount,
+          }),
+          createCapabilityModule({
+            surface: VelarDevtoolsModule,
+            implementation: devtoolsOperations,
+            instanceId: options.sessionId,
+            context: mount,
+          }),
+          createCapabilityModule({
+            surface: VelarCdpModule,
+            implementation: cdpOperations,
+            instanceId: options.sessionId,
+            context: mount,
+          })
+        )
+      }
       runtime = await createRuntime({
         runner: this.runner,
+        node,
+        residentModules: [],
         workspace: root,
-        // 同一个项目内核上另挂问代码（定义、引用、诊断）与看项目里的图。
         project: { code: true, images: true },
         instructions: options.instructions,
-        residentModules: ResidentModules,
-        // 每帧带上浏览器当前页面，模型不用先查就知道页面翻到了哪里（与 Desktop 相同）。
-        environment: browser
-          ? () => ({ ...options.environment?.(), ...browser.environment() })
-          : options.environment,
+        environment: () => ({
+          ...options.environment?.(),
+          ...browser?.environment(),
+          cwd: root,
+          workspace: `project; ${sandbox ? 'workspace-write sandbox' : 'full local access'}`,
+          home: homedir(),
+        }),
         dataDir: options.dataDir,
         model: options.model,
-        modules: [
-          createShellCapabilityModule({
-            instanceId: root,
-            shell: port,
-            // 前台命令跑着时的输出画到脚本卡上，跑完换成结果。
-            output: (output) => options.showCommandOutput(output),
-            approval: {
-              awaitConfirmation: (message, signal = options.signal, detail) =>
-                confirm(message, signal, detail),
-              awaitConfirmationDecision: (message, signal = options.signal, detail) =>
-                decide(message, signal, detail),
-            },
-          }),
-          ...browserModules,
-          // 网上查资料（与 Desktop 一样每个会话都挂、不常驻，要用时 import）：搜索与读网页跑在不显示的页面里。
-          ...(web
-            ? [
-                createCapabilityModule({
-                  surface: VelarWebModule,
-                  implementation: webOperations,
-                  instanceId: 'web',
-                  context: (call) => ({ abortSignal: call.signal, web }),
-                }),
-              ]
-            : []),
-        ],
-        // 子任务用 Platform 的默认配置 worker：与主会话同一个模型、同一套模块。
+        modules,
         agents: true,
-        widgets: { show: (widget) => options.showWidget(widget) },
+        widgets: { show: options.showWidget },
         search: false,
-        // 长期记忆（与 Desktop 同一套）：这个项目的作用域；设置里关掉时不挂。
         memory: memory ? () => memory : false,
         authorize: async (invocation, descriptor, signal) => {
           options.signal.throwIfAborted()
+          if (descriptor.effects !== 'write') return
           if (
-            descriptor.effects !== 'write' ||
-            !ProjectWritingModules.includes(invocation.binding.moduleId)
+            options.confirmationMode === 'ask-every-time' &&
+            ProjectWritingModules.includes(invocation.binding.moduleId)
           )
-            return
-          if (options.confirmationMode === 'ask-every-time') {
             await confirm(
               `${invocation.binding.moduleId}.${invocation.operation}\n${JSON.stringify(invocation.input)}`,
               signal
             )
-          } else if (options.confirmationMode === 'standard-open') {
-            const request = await workspaceIntegrityConfirmation(invocation, port, root)
-            if (request) await confirm(request.message, signal, request.options)
-          }
           windows.authorized(invocation)
         },
         onMetric: (metric) => windows.record(metric),
@@ -252,8 +227,9 @@ export class WorkbenchConversationSession implements WorkbenchConversationSessio
     }
   }
 
-  /** 空闲时的目标控制只打开绑定工作区的存储；不配置模型或业务操作。 */
-  public async openControl(options: ConversationControlOptions): Promise<ConversationWorkspaceHandle> {
+  public async openControl(
+    options: ConversationControlOptions
+  ): Promise<ConversationWorkspaceHandle> {
     const runtime = await createRuntime({
       runner: this.runner,
       ...options,
@@ -264,63 +240,12 @@ export class WorkbenchConversationSession implements WorkbenchConversationSessio
       context: { maintenance: false },
     })
     try {
-      return {
-        session: await runtime.openSession(options.sessionId),
-        close: () => runtime.close(),
-      }
+      return { session: await runtime.openSession(options.sessionId), close: () => runtime.close() }
     } catch (error) {
       await runtime.close()
       throw error
     }
   }
-}
-
-/**
- * 标准档下 Agent 命令的补问：会丢工作区里没提交的改动、切走分支或写到项目外的命令（`git reset --hard`、
- * `git checkout`、`git pull` 这类，判据见 `CommandExecutionPolicy`）平台照常直接跑，IDE 里先问用户一句，
- * 与迁到 Platform 之前的 Workbench 一致；平台自己判危险的由 `velaros:shell` 问，这里不重复。
- * 确认卡与平台的危险命令同一套选项：手动确认、不按类记忆，操作身份与平台跨入口一致。
- * 观察调用会自动重跑，这类命令与平台的危险命令一样直接拒绝，要走一次性执行。
- */
-async function workspaceIntegrityConfirmation(
-  invocation: PreparedInvocation,
-  shell: ShellSpacePort,
-  projectRoot: string
-): Promise<Nullable<{ message: string; options: ToolConfirmationDecisionOptions }>> {
-  if (invocation.binding.moduleId !== 'velaros:shell' || invocation.operation !== 'run') return null
-  const input = invocation.input
-  if (!isPlainObject(input) || !isNonBlankString(input.command)) return null
-  const integrity = resolveWorkspaceIntegrityConfirmation(input.command, projectRoot)
-  if (!integrity) return null
-  if (invocation.mode === 'observe')
-    throw new AppError(
-      'OBSERVATION_EFFECT_DENIED',
-      `观察会自动重跑，这条命令请通过一次性执行入口运行：${integrity.reason}`
-    )
-  const requestedCwd = isNonBlankString(input.cwd) ? input.cwd : undefined
-  // 与平台同一顺序：工作目录先由空间解析，越出项目的在问用户之前就拒绝。
-  const cwd = await shell.resolveCwd(requestedCwd)
-  const { scopeLabel, riskScope } = shell.commandPolicy(requestedCwd)
-  const background =
-    input.interactive === true ||
-    (isBoolean(input.background) ? input.background : integrity.plan.shouldStartInBackground)
-  const { options } = shellCommandApproval.dangerous({
-    command: input.command,
-    plan: { ...integrity.plan, isDangerous: true, dangerousReason: integrity.reason },
-    cwd,
-    background,
-    scopeLabel,
-    riskScope,
-  })
-  // 确认卡只摊开第一行：「在当前项目重置 Git 工作区：git reset --hard」；完整理由在第二行，回答之后点开回看。
-  const head = input.command.trim().split('\n')[0]?.trim() ?? ''
-  const shown = head.length > ConfirmationCommandChars ? `${head.slice(0, ConfirmationCommandChars)}…` : head
-  const headline = workbenchMainText('policy.confirmation', {
-    scope: scopeLabel,
-    title: integrity.title,
-    command: shown,
-  })
-  return { message: `${headline}\n${integrity.reason}`, options }
 }
 
 /**

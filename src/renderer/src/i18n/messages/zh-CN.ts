@@ -65,6 +65,26 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     newProjectIoError: '目录创建失败，请检查磁盘权限后重试。',
   },
   workbench: {
+    settingsWorkspaceSandbox: '工作区沙箱',
+    settingsWorkspaceSandboxDescription: '将 Agent 的文件写入限制在当前项目；修改后从下一轮生效。',
+    agentProcessesTitle: 'Agent 后台进程',
+    agentProcessesDescription: '查看本会话启动的开发服务器和命令输出，并输入或停止进程。',
+    agentProcessesEmpty: '本会话还没有后台进程。',
+    agentProcessExit: '退出码 {code}',
+    agentProcessOutput: '进程输出',
+    agentProcessNoOutput: '等待输出',
+    agentProcessInput: '命令输入',
+    agentProcessSend: '发送',
+    agentProcessStop: '停止',
+    agentProcessForceStop: '强制停止',
+    agentProcessStatus: { running: '运行中', exited: '已结束', unknown: '状态未知' },
+    notebookTitle: '工作笔记',
+    notebookDescription: '查看 Agent 为当前任务保存的工作笔记。',
+    notebookLoading: '正在读取笔记…',
+    notebookEmpty: '当前会话还没有工作笔记。',
+    notebookActive: '使用中',
+    notebookArchived: '已归档',
+
     title: '工作台',
     addProject: '添加工程',
     addingProject: '选择中…',
@@ -394,7 +414,8 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     clearSearch: '清除搜索',
     quickOpenAlreadyOpen: '已打开',
     quickOpenEmpty: '没有匹配的文件或内容',
-    quickOpenHint: '输入文件名打开文件，同时搜索文件内容；文件名后加 :行号 跳到那一行；输入 @ 找当前文件里的符号；输入 > 运行命令',
+    quickOpenHint:
+      '输入文件名打开文件，同时搜索文件内容；文件名后加 :行号 跳到那一行；输入 @ 找当前文件里的符号；输入 > 运行命令',
     quickOpenRecentFiles: '最近打开',
     quickOpenFileResults: '文件',
     quickOpenContentResults: '内容',
@@ -484,7 +505,8 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     projectSearchExpandAll: '全部展开',
     projectSearchReplaceFile: '替换这个文件里的全部',
     projectSearchReplaceAllConfirm: '把 {files}里的 {matches}替换为「{replacement}」？',
-    projectSearchReplaceAllOpenFiles: '编辑器里开着的文件在编辑器里替换，能在那里撤销，替换后还没保存。',
+    projectSearchReplaceAllOpenFiles:
+      '编辑器里开着的文件在编辑器里替换，能在那里撤销，替换后还没保存。',
     projectSearchReplaceAllTruncated: '结果没有列全：只替换列出来的文件。',
     projectSearchReplaced: '已替换 {files}里的 {matches}',
     projectSearchReplacedUnsaved: '{files}在编辑器里改了，还没保存。',
@@ -748,7 +770,8 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     goalAutoContinueInstruction:
       '当前目标尚未完成：{objective}\n请直接接着推进，不必等用户回复：先根据已有进展确定下一步，再继续读取、修改、执行或验证。目标真正完成时用 done("完成依据") 收尾；遇到无法继续推进的真实阻碍时用 goal.update 记下阻碍与依据。',
     goalAutoContinueLimitTitle: '已暂停目标的自动续跑',
-    goalAutoContinueLimitDescription: '已经连续自动续跑 {count} 轮，目标仍未收束。要接着推进，点目标卡上的「继续」。',
+    goalAutoContinueLimitDescription:
+      '已经连续自动续跑 {count} 轮，目标仍未收束。要接着推进，点目标卡上的「继续」。',
     gitCommitPlaceholder: '输入提交说明，或点击生成',
     gitCommitDraftAdd: '添加 {file}',
     gitCommitDraftRemove: '删除 {file}',
@@ -766,7 +789,8 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     gitCommitButton: '提交(T)',
     gitCommitAll: '提交全部',
     gitCommitAllConfirmTitle: '提交全部改动',
-    gitCommitAllConfirm: '没有勾选文件，要提交全部 {count} 个改动（含 {untracked} 个未跟踪文件）吗？',
+    gitCommitAllConfirm:
+      '没有勾选文件，要提交全部 {count} 个改动（含 {untracked} 个未跟踪文件）吗？',
     gitCommitAllTrackedConfirm: '没有勾选文件，要提交全部 {count} 个改动吗？',
     gitCommitAmend: '修正(M)',
     gitCommitAndPush: '提交并推送(P)...',
@@ -851,8 +875,7 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     externalFileDeletedTitle: '文件已被删除或移动',
     externalFileDeletedDescription:
       '{path} 已不在原位置。编辑器保留了原内容，你可以恢复文件或关闭标签页。',
-    externalImageDeletedDescription:
-      '{path} 已不在原位置。当前预览仍会保留，你可以关闭标签页。',
+    externalImageDeletedDescription: '{path} 已不在原位置。当前预览仍会保留，你可以关闭标签页。',
     externalFileUnavailableTitle: '文件状态已变化',
     externalFileUnavailableDescription:
       '{path} 当前无法从磁盘读取，可能已被删除、移动或变成不可编辑文件。',
@@ -1003,7 +1026,8 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     runConfigurationTypeNode: 'Node 程序',
     runConfigurationCommand: '命令',
     runConfigurationScript: '脚本',
-    runConfigurationScriptHint: '项目里的 JavaScript 或 TypeScript 文件，由 node 运行；这种配置可以调试。',
+    runConfigurationScriptHint:
+      '项目里的 JavaScript 或 TypeScript 文件，由 node 运行；这种配置可以调试。',
     runConfigurationScriptRequired: '请填写脚本。',
     runConfigurationScriptOutsideProject: '脚本要写成项目里的相对路径。',
     runConfigurationArgs: '参数',
@@ -1025,7 +1049,8 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     debuggerToolWindow: '调试',
     debuggerDebugConfiguration: '调试 {name}',
     debuggerIdle: '没有正在调试的程序',
-    debuggerIdleHint: '在 ▶ 菜单里选一个「Node 程序」配置再点调试，或者点测试 ▶ 旁边的调试按钮。点行号下断点。',
+    debuggerIdleHint:
+      '在 ▶ 菜单里选一个「Node 程序」配置再点调试，或者点测试 ▶ 旁边的调试按钮。点行号下断点。',
     debuggerRunning: '程序运行中',
     debuggerRunningHint: '程序在跑。停在断点上、或者按了「暂停」之后，这里列出调用栈。',
     debuggerPausedBreakpoint: '停在断点上',
@@ -1124,7 +1149,8 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     settingsModelSearchPlaceholder: '搜索模型',
     settingsModelSearchEmpty: '没有匹配的模型',
     settingsModelBaseUrl: 'API 地址',
-    settingsModelBaseUrlDescription: '填写中转服务的 OpenAI-compatible API 根地址；按 Enter 或离开输入框后请求 /models。',
+    settingsModelBaseUrlDescription:
+      '填写中转服务的 OpenAI-compatible API 根地址；按 Enter 或离开输入框后请求 /models。',
     settingsModelBaseUrlPlaceholder: '例如 https://gateway.example.com/v1',
     settingsModelApiKey: 'API 密钥',
     settingsModelApiKeyDescription: '已有环境凭据时可留空；手动填写的密钥会使用系统加密存储。',
@@ -1148,7 +1174,8 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     chatModelMissingTitle: '需要先配置模型',
     chatModelMissingDescription: '请在设置的“模型”页面填写服务商、模型和 API Key。',
     chatGuidanceRejectedTitle: '引导没有送达',
-    chatGuidanceRejectedDescription: '这条引导没能加入正在运行的这一轮（可能刚好结束），内容已放回输入框，可以重新发送。',
+    chatGuidanceRejectedDescription:
+      '这条引导没能加入正在运行的这一轮（可能刚好结束），内容已放回输入框，可以重新发送。',
     chatInteractionAnswerFailedTitle: '回答没有送达',
     chatGuidanceFilesTitle: '引导只能带文字',
     chatGuidanceFilesDescription: '这条排队消息带有附件，会在本轮结束后作为新消息发送。',
@@ -1178,9 +1205,11 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     settingsAccountSignedOut: '未登录',
     settingsAccountSignedOutDescription: 'Workbench 当前未绑定账户。',
     settingsAccountSignIn: '登录 Workbench',
-    settingsAccountSignInDescription: '在浏览器中完成登录；本机已有 VelarOS 会话时可直接复用，不会触发系统安全密码弹窗。',
+    settingsAccountSignInDescription:
+      '在浏览器中完成登录；本机已有 VelarOS 会话时可直接复用，不会触发系统安全密码弹窗。',
     settingsAccountSignOut: '退出 Workbench 账户',
-    settingsAccountSignOutDescription: '仅解除 Workbench 的账户绑定，不影响 Desktop 和其他 VelarOS 产品。',
+    settingsAccountSignOutDescription:
+      '仅解除 Workbench 的账户绑定，不影响 Desktop 和其他 VelarOS 产品。',
     settingsAccountSignInAction: '登录',
     settingsAccountSignOutAction: '退出登录',
     settingsAccountChanging: '请稍候…',
@@ -1214,7 +1243,7 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     settingsWebSearchEngineDescription: '先用这个搜索引擎，搜不通时自动换另一个。',
     settingsMemory: '长期记忆',
     settingsMemoryDescription:
-      '模型把跨会话要记住的事存成记忆，每个项目单独一份。每轮对话开始时，模型先看到这个项目的记忆索引。',
+      '模型把跨会话要记住的事存成记忆，每个项目单独一份。对话中需要相关信息时，模型按需检索这个项目的记忆。',
     settingsMemoryEnabled: '长期记忆',
     settingsMemoryEnabledDescription: '关掉后对话里不再读写记忆，已存的记忆留着。',
     settingsMemoryLoading: '正在读取记忆…',
@@ -1247,7 +1276,7 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     settingsEditorDescription: '调整代码编辑区的文本尺寸和阅读节奏。',
     settingsPermissionsDescription: '控制 Workbench Agent 动手前要不要先征求你同意。',
     settingsPermissionConfirmationModeDescription:
-      '选择 Agent 动手前的确认强度。标准开放是默认策略：日常的读写和命令直接执行，成片删除、强推这类找不回来的命令，以及会丢掉未提交改动、切换分支或写到项目外的命令先问你；每次询问会在每一次改文件、跑命令前都问你；完全访问连这些命令也直接执行。',
+      'Velar Agent 默认直接执行 Node 程序；每次询问会在执行整段程序和项目写入前确认；完全访问会自动批准能力请求。执行范围由项目沙箱单独控制。Claude Code 与 Codex 按各自的审批协议使用此设置。',
     settingsPermissionHardGateHint:
       'Agent 用交互卡向你提问、请你在几个方案里选一个时，在任何档位下都会等你回答。',
     settingsAiChangesAutoOpen: '每轮结束后打开 AI 改动',
@@ -1341,7 +1370,8 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     settingsProductAnalyticsDescription: '分享软件使用过程中的非隐私数据。',
     settingsProductAnalyticsDetails: '查看产品改进数据说明',
     // 设置路径用不换行空格连着：弹窗窄，换行时整段挪到下一行，不从中间断开。
-    productAnalyticsNoticeDescription: '分享软件使用过程中的非隐私数据，可在“设置\u00a0>\u00a0高级”关闭。',
+    productAnalyticsNoticeDescription:
+      '分享软件使用过程中的非隐私数据，可在“设置\u00a0>\u00a0高级”关闭。',
     productAnalyticsNoticeDecline: '拒绝',
     productAnalyticsNoticeAllow: '允许',
     settingsAiRulesNoProject: '未打开项目',
@@ -1365,15 +1395,20 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     settingsShortcutQuickOpen: '快速打开',
     settingsShortcutQuickOpenDescription: '按文件名打开项目里的文件，同时搜索文件内容。',
     settingsShortcutGoToSymbol: '转到文件中的符号',
-    settingsShortcutGoToSymbolDescription: '列出当前文件里的函数、类、变量，按名字找到后跳过去；在快速打开里输入 @ 也能切过去。',
+    settingsShortcutGoToSymbolDescription:
+      '列出当前文件里的函数、类、变量，按名字找到后跳过去；在快速打开里输入 @ 也能切过去。',
     settingsShortcutCommandPalette: '命令面板',
-    settingsShortcutCommandPaletteDescription: '按名称运行工作台命令；在快速打开里输入 > 也能切过去。',
+    settingsShortcutCommandPaletteDescription:
+      '按名称运行工作台命令；在快速打开里输入 > 也能切过去。',
     settingsShortcutFindInFiles: '在项目中搜索',
-    settingsShortcutFindInFilesDescription: '在侧栏打开搜索与替换；编辑器里选中了一行以内的文字就拿它当查找词。',
+    settingsShortcutFindInFilesDescription:
+      '在侧栏打开搜索与替换；编辑器里选中了一行以内的文字就拿它当查找词。',
     settingsShortcutNavigateBack: '后退',
-    settingsShortcutNavigateBackDescription: '回到切换文件、跳到定义或某一行之前的位置（鼠标后退键也可以）。',
+    settingsShortcutNavigateBackDescription:
+      '回到切换文件、跳到定义或某一行之前的位置（鼠标后退键也可以）。',
     settingsShortcutNavigateForward: '前进',
-    settingsShortcutNavigateForwardDescription: '撤销一次后退，回到刚才的位置（鼠标前进键也可以）。',
+    settingsShortcutNavigateForwardDescription:
+      '撤销一次后退，回到刚才的位置（鼠标前进键也可以）。',
     settingsShortcutReopenClosedTab: '重新打开关闭的标签',
     settingsShortcutReopenClosedTabDescription:
       '按关闭顺序倒着重新打开最近关掉的文件标签，回到上次的光标位置。',
@@ -1392,9 +1427,11 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     settingsShortcutRunLastCommand: '运行上次命令',
     settingsShortcutRunLastCommandDescription: '运行最近命令或已选择的运行配置。',
     settingsShortcutDebugContinue: '调试：继续',
-    settingsShortcutDebugContinueDescription: '程序停着时让它接着跑。只在调试停着时生效，这时盖过编辑器里同一个键的动作。',
+    settingsShortcutDebugContinueDescription:
+      '程序停着时让它接着跑。只在调试停着时生效，这时盖过编辑器里同一个键的动作。',
     settingsShortcutDebugStepOver: '调试：单步跳过',
-    settingsShortcutDebugStepOverDescription: '执行当前这一行，不进入它调用的函数。只在调试停着时生效。',
+    settingsShortcutDebugStepOverDescription:
+      '执行当前这一行，不进入它调用的函数。只在调试停着时生效。',
     settingsShortcutDebugStepInto: '调试：单步进入',
     settingsShortcutDebugStepIntoDescription: '进入当前这一行调用的函数。只在调试停着时生效。',
     settingsShortcutDebugStepOut: '调试：单步跳出',

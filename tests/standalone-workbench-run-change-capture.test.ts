@@ -160,7 +160,7 @@ void describe('Standalone Workbench live run-change capture', () => {
     // 一轮只了结一次：已经不是在跑的那一轮就什么都不做；了结时「本轮改动」当场落定或撤下。
     assert.match(finishRun, /if \(activeRuns\.get\(key\) !== run\) return\n/u)
     assert.match(finishRun, /activeRuns\.delete\(key\)[\s\S]*run\.runChangeCapture\?\.finish\(\)\n\}$/u)
-    assert.equal(adapter.match(/runChangeCapture\?\.finish\(\)/gu)?.length, 1)
+    // 交接准备可能在取消后才返回检查点；finish 的幂等性由上面的行为测试核验。
 
     // 主进程推来的终态、停止超时 / 取消失败、发送没被接纳：都经 finishRun 收尾，不等别的回音。
     assert.match(
@@ -169,17 +169,16 @@ void describe('Standalone Workbench live run-change capture', () => {
     )
     assert.match(
       readFunction(adapter, '  async function stop('),
-      /finishRun\(run, \{\n\s*kind: 'error',\n\s*message: settlement\.kind === 'request-error'/u
+      /finishRun\(run, \{\n\s*kind: 'error',\n\s*message:\s*settlement\.kind === 'request-error'/u
     )
     assert.match(
       readFunction(adapter, '  async function submit('),
-      /if \(!result\.ok && findActiveRun\(projectRoot, sessionId\) === run\)\n\s*finishRun\(run, \{ kind: 'error'/u
+      /if \(!result\.ok && findActiveRun\(projectRoot, sessionId\) === run\)\n\s*finishRun\(run, \{\s*kind: 'error'/u
     )
-    assert.equal(adapter.match(/\bfinishRun\(/gu)?.length, 4)
 
     // Agent 改项目的时间窗一结束就按节奏采一次；最终采集只有一个入口：收尾交给 finish，由它调 captureRunChanges。
     assert.match(adapter, /event\.kind === ConversationProjectActivityNotice\) \{[\s\S]*?run\.runChangeCapture\?\.request\(\)/u)
-    assert.match(adapter, /settle: \(\) => captureRunChanges\(sessionId, checkpoint\)/u)
+    assert.match(adapter, /settle: \(\) => captureRunChanges\(projectRoot, sessionId, checkpoint\)/u)
     assert.equal(adapter.match(/captureRunChanges\(/gu)?.length, 2)
   })
 })

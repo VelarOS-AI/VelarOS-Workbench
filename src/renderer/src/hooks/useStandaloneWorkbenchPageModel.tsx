@@ -66,7 +66,7 @@ import {
 } from '@renderer/models/settings/workbenchPreferences'
 import type { WorkbenchLightEditorTab } from '@renderer/types/workbenchTypes'
 
-import { isEmpty,isObject, isString, isTrue, Log, toNullable } from '@velaros-ai/core'
+import { isEmpty, isObject, isString, isTrue, Log, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { currentPlatform as systemPlatformCompatibility } from '@velaros-ai/core/platform'
 import { Result } from '@velaros-ai/core/result'
@@ -1142,25 +1142,32 @@ export function useStandaloneWorkbenchPageModel(
       setPendingChatFileReferences((current) => [
         ...current,
         ...incoming
-          .filter((path) => !current.some((delivery) => delivery.path === path))
+          .filter(
+            (path) =>
+              !current.some(
+                (delivery) =>
+                  delivery.path === path && delivery.targetSessionId === currentSession.id
+              )
+          )
           .map((path) => {
             chatFileReferenceDeliverySeqRef.current += 1
-            return { deliveryId: `file-reference-${chatFileReferenceDeliverySeqRef.current}`, path }
+            return {
+              deliveryId: `file-reference-${chatFileReferenceDeliverySeqRef.current}`,
+              targetSessionId: currentSession.id,
+              path,
+            }
           }),
       ])
       if (!surface.activeRightTool) surface.openRightTool('chat')
     },
-    [surface.activeRightTool, surface.openRightTool]
+    [currentSession.id, surface.activeRightTool, surface.openRightTool]
   )
-  const consumeWorkbenchChatFileReferences = useCallback(
-    (deliveryIds: readonly string[]): void => {
-      const consumed = new Set(deliveryIds)
-      setPendingChatFileReferences((current) =>
-        current.filter((item) => !consumed.has(item.deliveryId))
-      )
-    },
-    []
-  )
+  const consumeWorkbenchChatFileReferences = useCallback((deliveryIds: readonly string[]): void => {
+    const consumed = new Set(deliveryIds)
+    setPendingChatFileReferences((current) =>
+      current.filter((item) => !consumed.has(item.deliveryId))
+    )
+  }, [])
 
   function toggleBottomTool(tool: Parameters<typeof surface.openBottomTool>[0]): void {
     if (surface.activeBottomTool === tool && !surface.isCommandPanelCollapsed) {

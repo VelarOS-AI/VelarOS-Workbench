@@ -20,12 +20,18 @@ export function createWorkbenchConversationDispatcher(
   engines: WorkbenchEngineConversationRuntime
 ): WorkbenchConversationDispatcherApi {
   return {
+    isRunning: (ref) => engines.has(ref) || platform.isRunning(ref),
+    subscribeRunSettled: (listener) => platform.subscribeRunSettled(listener),
+    subscribeRunOutcome: (listener) => platform.subscribeRunOutcome(listener),
     submit: (sink, request) =>
       request.engine ? engines.submit(sink, request) : platform.submit(sink, request),
     cancel: (ref) => (engines.has(ref) ? engines.cancel(ref) : platform.cancel(ref)),
     guidance: async (ref, input) => {
       if (engines.has(ref))
-        throw new AppError('VALIDATION', workbenchMainText('conversation.engineGuidanceUnsupported'))
+        throw new AppError(
+          'VALIDATION',
+          workbenchMainText('conversation.engineGuidanceUnsupported')
+        )
       await platform.guidance(ref, input)
     },
     input: (ref, answer) =>
@@ -34,6 +40,9 @@ export function createWorkbenchConversationDispatcher(
       engines.has(ref)
         ? engines.answer(ref, requestId, answer)
         : platform.answer(ref, requestId, answer),
+    listNotes: (ref, input) => platform.listNotes(ref, input),
+    readNote: (ref, input) => platform.readNote(ref, input),
+    subscribeNotesChanged: (listener) => platform.subscribeNotesChanged(listener),
     getGoal: (ref) => platform.getGoal(ref),
     controlGoal: (ref, input) => platform.controlGoal(ref, input),
     deleteSession: async (ref) => {

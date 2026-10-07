@@ -1,0 +1,287 @@
+import { randomUUID } from 'node:crypto'
+import { realpath } from 'node:fs/promises'
+import { resolve } from 'node:path'
+
+import { AppError, createAbortError } from '@velaros-ai/core/error'
+import type { SessionsSpacePort } from '@velaros-ai/velaros/sessions'
+import type {
+  SessionAnswer,
+  SessionAskInput,
+  SessionPeer,
+  SessionTellInput,
+  SessionTold,
+} from '@velaros-ai/velaros/sessions/contracts'
+
+import type { WorkbenchConversationSendRequest } from '../../shared/workbenchConversation'
+import type { WorkbenchPeerMember, WorkbenchPeerTask } from '../../shared/workbenchSessionPeers'
+
+import type {
+  WorkbenchConversationRef,
+  WorkbenchConversationRuntimeApi,
+  WorkbenchConversationSink,
+} from './WorkbenchConversationRuntime'
+
+interface WorkbenchSessionPeersOptions {
+  runtime: Pick<
+    WorkbenchConversationRuntimeApi,
+    'isRunning' | 'subscribeRunSettled' | 'subscribeRunOutcome' | 'submit'
+  >
+  catalog(ref: WorkbenchConversationRef): readonly WorkbenchPeerMember[]
+  /** 界面先建消息与运行卡，再由运行时发送；受理回执前不向调用方声称已送达。 */
+  prepare(task: WorkbenchPeerTask, signal: AbortSignal): Promise<WorkbenchConversationSink>
+  cancelPreparation(task: WorkbenchPeerTask, message: string): void
+  failure(ref: WorkbenchConversationRef, message: string): void
+}
+
+/** 当前项目内的会话协作：串行投递、按输入身份收结果，等待依赖成环时拒绝。 */
+export class WorkbenchSessionPeers {
+  private readonly requests = new Map<string, WorkbenchConversationSendRequest>()
+  private readonly scopes = new Map<string, AbortController>()
+  private readonly deliveries = new Map<string, Promise<void>>()
+  private readonly waiting = new Map<string, Map<string, number>>()
+
+  public constructor(private readonly options: WorkbenchSessionPeersOptions) {}
+
+  public forSession(request: WorkbenchConversationSendRequest): SessionsSpacePort {
+    this.requests.set(key(request), { ...request })
+    return {
+      list: async () =>
+        this.members(request).map((member): SessionPeer => ({
+          id: member.sessionId,
+          title: member.title,
+          workspace: 'project',
+          root: request.projectRoot,
+          site: null,
+          running: this.options.runtime.isRunning({ ...request, sessionId: member.sessionId }),
+          self: member.sessionId === request.sessionId,
+        })),
+      ask: (input, signal) => this.ask(request, input, signal),
+      tell: (input, signal) => this.tell(request, input, signal),
+    }
+  }
+
+  public releaseProject(projectRoot: string): void {
+    const root = resolve(projectRoot)
+    this.scopes.get(root)?.abort(createAbortError('项目已关闭。'))
+    this.scopes.delete(root)
+    for (const [id, request] of this.requests)
+      if (resolve(request.projectRoot) === root) this.requests.delete(id)
+  }
+
+  public close(): void {
+    for (const root of this.scopes.keys()) this.releaseProject(root)
+  }
+
+  private async ask(
+    from: WorkbenchConversationRef,
+    input: SessionAskInput,
+    signal: AbortSignal
+  ): Promise<SessionAnswer> {
+    const scoped = this.signal(from, signal)
+    scoped.throwIfAborted()
+    const task = await this.task(from, input.to, input.task, input)
+    scoped.throwIfAborted()
+    const fromKey = key(from)
+    const toKey = key(task)
+    const waiting = this.waiting.get(fromKey) ?? new Map<string, number>()
+    this.waiting.set(fromKey, waiting)
+    waiting.set(toKey, (waiting.get(toKey) ?? 0) + 1)
+    const outcome = this.outcome(task, scoped)
+    try {
+      this.assertNoDeadlock(fromKey, toKey)
+      await this.deliver(from, task, scoped)
+      return await outcome.result
+    } finally {
+      outcome.cancel()
+      const count = (waiting.get(toKey) ?? 1) - 1
+      if (count) waiting.set(toKey, count)
+      else waiting.delete(toKey)
+      if (!waiting.size) this.waiting.delete(fromKey)
+    }
+  }
+
+  private async tell(
+    from: WorkbenchConversationRef,
+    input: SessionTellInput,
+    signal: AbortSignal
+  ): Promise<SessionTold> {
+    signal.throwIfAborted()
+    const task = await this.task(from, input.to, input.message)
+    signal.throwIfAborted()
+    if (this.options.runtime.isRunning(task) || this.deliveries.has(key(task))) {
+      // 回执以后投递归项目持有，调用方收尾不会把排队的消息取消。
+      const lifetime = this.signal(from)
+      void this.deliver(from, task, lifetime).catch((error: unknown) => {
+        if (!lifetime.aborted) this.options.failure(from, AppError.getMessage(error))
+      })
+      return { session: task.sessionId, status: 'queued' }
+    }
+    await this.deliver(from, task, this.signal(from, signal))
+    return { session: task.sessionId, status: 'delivered' }
+  }
+
+  private members(ref: WorkbenchConversationRef): readonly WorkbenchPeerMember[] {
+    const members = this.options.catalog(ref)
+    if (!members.some((member) => member.sessionId === ref.sessionId))
+      throw new AppError('NOT_FOUND', '当前会话已不在项目会话列表中。')
+    return members
+  }
+
+  private async task(
+    from: WorkbenchConversationRef,
+    to: string | undefined,
+    body: string,
+    input?: SessionAskInput
+  ): Promise<WorkbenchPeerTask> {
+    const members = this.members(from)
+    if (to === from.sessionId) throw new AppError('CONFLICT', '请选择当前项目中的另一个会话。')
+    if (to && !members.some((member) => member.sessionId === to))
+      throw new AppError('NOT_FOUND', '目标会话必须在当前项目的会话列表中。')
+    if (
+      !to &&
+      (input?.workspace !== 'project' ||
+        !input.root ||
+        (await realpath(input.root)) !== (await realpath(from.projectRoot)))
+    )
+      throw new AppError(
+        'PERMISSION',
+        'Workbench 的新会话使用当前项目，请将 workspace 设为 project，并将 root 设为当前项目目录。'
+      )
+    const request =
+      this.requests.get(key({ ...from, sessionId: to ?? from.sessionId })) ??
+      this.requests.get(key(from))
+    if (!request) throw new AppError('UNAVAILABLE', '会话执行配置暂不可用。')
+    const title = members.find((member) => member.sessionId === from.sessionId)?.title
+    return {
+      projectRoot: from.projectRoot,
+      sourceSessionId: from.sessionId,
+      sessionId: to ?? `workbench-peer-${randomUUID()}`,
+      inputId: `peer-${randomUUID()}`,
+      newSession: !to,
+      text: `[来自会话 ${title ? `${title} · ` : ''}${from.sessionId} 的${input ? '任务' : '消息'}]\n\n${body}`,
+    }
+  }
+
+  private async deliver(
+    from: WorkbenchConversationRef,
+    task: WorkbenchPeerTask,
+    signal: AbortSignal
+  ): Promise<void> {
+    const id = key(task)
+    const previous = this.deliveries.get(id)
+    const next = (async () => {
+      if (previous)
+        await abortable(
+          previous.catch(() => undefined),
+          signal
+        )
+      signal.throwIfAborted()
+      this.assertNoDeadlock(key(from), id)
+      await this.untilIdle(task, signal)
+      this.members(from)
+      if (
+        !task.newSession &&
+        !this.members(from).some((member) => member.sessionId === task.sessionId)
+      )
+        throw new AppError('NOT_FOUND', '目标会话已关闭。')
+      const configuration = this.requests.get(id) ?? this.requests.get(key(from))
+      if (!configuration) throw new AppError('UNAVAILABLE', '会话执行配置暂不可用。')
+      try {
+        const sink = await this.options.prepare(task, signal)
+        signal.throwIfAborted()
+        const submission = this.options.runtime.submit(sink, {
+          ...configuration,
+          ...task,
+          text: task.text,
+          engine: undefined,
+          images: undefined,
+          executionModes: [],
+        })
+        await submission.accepted
+      } catch (error) {
+        this.options.cancelPreparation(task, AppError.getMessage(error))
+        throw error
+      }
+    })()
+    this.deliveries.set(id, next)
+    try {
+      await next
+    } finally {
+      if (this.deliveries.get(id) === next) this.deliveries.delete(id)
+    }
+  }
+
+  private async untilIdle(ref: WorkbenchConversationRef, signal: AbortSignal): Promise<void> {
+    while (this.options.runtime.isRunning(ref)) {
+      signal.throwIfAborted()
+      let off = (): void => undefined
+      const idle = new Promise<void>((done) => {
+        off = this.options.runtime.subscribeRunSettled((settled) => {
+          if (key(settled) === key(ref)) done()
+        })
+        if (!this.options.runtime.isRunning(ref)) done()
+      })
+      try {
+        await abortable(idle, signal)
+      } finally {
+        off()
+      }
+    }
+    signal.throwIfAborted()
+  }
+
+  private outcome(
+    task: WorkbenchPeerTask,
+    signal: AbortSignal
+  ): { result: Promise<SessionAnswer>; cancel(): void } {
+    let off = (): void => undefined
+    const outcome = new Promise<SessionAnswer>((done) => {
+      off = this.options.runtime.subscribeRunOutcome((event) => {
+        if (key(event) === key(task) && event.inputId === task.inputId) done(event.result)
+      })
+    })
+    const controller = new AbortController()
+    const result = abortable(outcome, AbortSignal.any([signal, controller.signal])).finally(() =>
+      off()
+    )
+    void result.catch(() => undefined)
+    return { result, cancel: () => controller.abort(createAbortError('会话结果读取结束。')) }
+  }
+
+  private signal(ref: WorkbenchConversationRef, signal?: AbortSignal): AbortSignal {
+    const root = resolve(ref.projectRoot)
+    let scope = this.scopes.get(root)
+    if (!scope) {
+      scope = new AbortController()
+      this.scopes.set(root, scope)
+    }
+    return signal ? AbortSignal.any([signal, scope.signal]) : scope.signal
+  }
+
+  private assertNoDeadlock(from: string, target: string): void {
+    const seen = new Set<string>()
+    const pending = [target]
+    while (pending.length) {
+      const current = pending.pop()!
+      if (current === from)
+        throw new AppError('CONFLICT', '会话正在互相等待回答，请先完成当前任务。')
+      if (seen.has(current)) continue
+      seen.add(current)
+      pending.push(...(this.waiting.get(current)?.keys() ?? []))
+    }
+  }
+}
+
+function key(ref: WorkbenchConversationRef): string {
+  return `${resolve(ref.projectRoot)}\0${ref.sessionId}`
+}
+
+/** 等待宿主回执时也响应取消，结束后及时撤销监听。 */
+function abortable<T>(pending: Promise<T>, signal: AbortSignal): Promise<T> {
+  signal.throwIfAborted()
+  return new Promise<T>((yes, no) => {
+    const abort = (): void => no(AppError.from(signal.reason))
+    signal.addEventListener('abort', abort, { once: true })
+    void pending.then(yes, no).finally(() => signal.removeEventListener('abort', abort))
+  })
+}

@@ -9,6 +9,10 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent, webUtils } from 'ele
 
 import { type WorkbenchProjectHubBridge, WorkbenchProjectHubChannels } from '../shared/projectHub'
 import { type WorkbenchAccountBridge, WorkbenchAccountChannels } from '../shared/workbenchAccount'
+import {
+  type WorkbenchAgentProcessesBridge,
+  WorkbenchAgentProcessesChannels,
+} from '../shared/workbenchAgentProcesses'
 import { type WorkbenchBrowserBridge, WorkbenchBrowserChannels } from '../shared/workbenchBrowser'
 import {
   type WorkbenchConversationBridge,
@@ -30,6 +34,10 @@ import {
   type WorkbenchProductAnalyticsBridge,
   WorkbenchProductAnalyticsChannels,
 } from '../shared/workbenchProductAnalytics'
+import {
+  type WorkbenchSessionPeersBridge,
+  WorkbenchSessionPeersChannels,
+} from '../shared/workbenchSessionPeers'
 import {
   type WorkbenchTerminalBridge,
   WorkbenchTerminalChannels,
@@ -124,8 +132,7 @@ const fsBridge: WorkbenchFsBridge = {
   replaceContent: (request) => ipcRenderer.invoke(WorkbenchFsChannels.replaceContent, request),
   onSearchContentProgress: (listener) =>
     subscribe(WorkbenchFsChannels.searchContentProgress, listener),
-  listProjectFiles: (request) =>
-    ipcRenderer.invoke(WorkbenchFsChannels.listProjectFiles, request),
+  listProjectFiles: (request) => ipcRenderer.invoke(WorkbenchFsChannels.listProjectFiles, request),
   runCommand: (request) => ipcRenderer.invoke(WorkbenchFsChannels.runCommand, request),
   onRunCommandOutput: (listener) => subscribe(WorkbenchFsChannels.runCommandOutput, listener),
 }
@@ -231,12 +238,29 @@ const gitBridge: WorkbenchGitBridge = {
     ipcRenderer.invoke(WorkbenchGitChannels.readChatRunChangeBaseFile, request),
 }
 
+const agentProcessesBridge: WorkbenchAgentProcessesBridge = {
+  list: (request) => ipcRenderer.invoke(WorkbenchAgentProcessesChannels.list, request),
+  stop: (request) => ipcRenderer.invoke(WorkbenchAgentProcessesChannels.stop, request),
+  input: (request) => ipcRenderer.invoke(WorkbenchAgentProcessesChannels.input, request),
+  interrupt: (request) => ipcRenderer.invoke(WorkbenchAgentProcessesChannels.interrupt, request),
+  onChanged: (listener) => subscribe(WorkbenchAgentProcessesChannels.changed, listener),
+}
+
+const sessionPeersBridge: WorkbenchSessionPeersBridge = {
+  catalog: (request) => ipcRenderer.invoke(WorkbenchSessionPeersChannels.catalog, request),
+  acknowledge: (request) => ipcRenderer.invoke(WorkbenchSessionPeersChannels.acknowledge, request),
+  onEvent: (listener) => subscribe(WorkbenchSessionPeersChannels.event, listener),
+}
+
 const conversationBridge: WorkbenchConversationBridge = {
   send: (request) => ipcRenderer.invoke(WorkbenchConversationChannels.send, request),
   cancel: (request) => ipcRenderer.invoke(WorkbenchConversationChannels.cancel, request),
   guidance: (request) => ipcRenderer.invoke(WorkbenchConversationChannels.guidance, request),
   input: (request) => ipcRenderer.invoke(WorkbenchConversationChannels.input, request),
   answer: (request) => ipcRenderer.invoke(WorkbenchConversationChannels.answer, request),
+  listNotes: (request) => ipcRenderer.invoke(WorkbenchConversationChannels.listNotes, request),
+  readNote: (request) => ipcRenderer.invoke(WorkbenchConversationChannels.readNote, request),
+  onNotesChanged: (listener) => subscribe(WorkbenchConversationChannels.notesChanged, listener),
   getGoal: (request) => ipcRenderer.invoke(WorkbenchConversationChannels.getGoal, request),
   updateGoal: (request) => ipcRenderer.invoke(WorkbenchConversationChannels.updateGoal, request),
   deleteSession: (request) =>
@@ -264,8 +288,7 @@ const memoryBridge: WorkbenchMemoryBridge = {
 const modelBridge: WorkbenchModelBridge = {
   listProviderModels: (request) =>
     ipcRenderer.invoke(WorkbenchModelChannels.listProviderModels, request),
-  listManagedProviders: () =>
-    ipcRenderer.invoke(WorkbenchModelChannels.listManagedProviders),
+  listManagedProviders: () => ipcRenderer.invoke(WorkbenchModelChannels.listManagedProviders),
   getApiKey: (request) => ipcRenderer.invoke(WorkbenchModelChannels.getApiKey, request),
   setApiKey: (request) => ipcRenderer.invoke(WorkbenchModelChannels.setApiKey, request),
 }
@@ -320,6 +343,8 @@ contextBridge.exposeInMainWorld('velarosWorkbenchDebugger', debuggerBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchWatch', watchBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchGit', gitBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchConversation', conversationBridge)
+contextBridge.exposeInMainWorld('velarosWorkbenchSessionPeers', sessionPeersBridge)
+contextBridge.exposeInMainWorld('velarosWorkbenchAgentProcesses', agentProcessesBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchMemory', memoryBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchBrowser', browserBridge)
 contextBridge.exposeInMainWorld('velarosWorkbenchModel', modelBridge)

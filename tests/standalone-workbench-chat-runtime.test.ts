@@ -19,6 +19,7 @@ import {
   readStandaloneTerminalKind,
   resolveStandaloneRunChangesAnchor,
   restoreStandaloneRunMarkers,
+  restoreStandaloneRunStatus,
   sanitizeStandaloneChatMessages,
   shouldBlockStandaloneRunSubmission,
   type StandaloneConversationRuntime,
@@ -26,6 +27,54 @@ import {
 import { awaitStandaloneAgentStopSettlement } from '../src/renderer/src/runtime/standaloneWorkbenchStopSettlement'
 
 void describe('standalone Workbench conversation runtime', () => {
+  void test('restores unfinished persisted runs as interrupted without replaying completed runs', () => {
+    for (const status of ['running', 'stopping', 'awaiting-input', 'awaiting-confirmation'])
+      assert.deepEqual(restoreStandaloneRunStatus({ status }, 'Run interrupted'), {
+        status: 'aborted',
+        lastError: 'Run interrupted',
+      })
+    for (const status of ['aborted', 'failed']) {
+      assert.deepEqual(
+        restoreStandaloneRunStatus(
+          { status, lastError: 'Provider rejected this request' },
+          'Stopped'
+        ),
+        {
+          status,
+          lastError: 'Provider rejected this request',
+        }
+      )
+      assert.deepEqual(restoreStandaloneRunStatus({ status, lastError: {} }, 'Stopped'), {
+        status,
+        lastError: null,
+      })
+    }
+    for (const status of ['completed', 'idle', 'unknown', undefined])
+      assert.deepEqual(restoreStandaloneRunStatus({ status, lastError: 'Old error' }, 'Stopped'), {
+        status: 'idle',
+        lastError: null,
+      })
+  })
+
+  void test('uses start and finish timestamps to recover unfinished legacy history', () => {
+    for (const lastRunFinishedAt of [null, undefined, 50])
+      assert.deepEqual(
+        restoreStandaloneRunStatus({ lastRunStartedAt: 100, lastRunFinishedAt }, 'Interrupted'),
+        { status: 'aborted', lastError: 'Interrupted' }
+      )
+    for (const stored of [
+      { lastRunStartedAt: 100, lastRunFinishedAt: 100 },
+      { lastRunStartedAt: 100, lastRunFinishedAt: 200 },
+      { lastRunStartedAt: 'invalid', lastRunFinishedAt: null },
+      { lastRunStartedAt: Number.NaN },
+      { status: 'completed', lastRunStartedAt: 100 },
+    ])
+      assert.deepEqual(restoreStandaloneRunStatus(stored, 'Interrupted'), {
+        status: 'idle',
+        lastError: null,
+      })
+  })
+
   void test('projects progress, turn, and retry states using Desktop runtime semantics', () => {
     let runtime = createRuntime()
 
@@ -107,23 +156,29 @@ void describe('standalone Workbench conversation runtime', () => {
     })
 
     // 卡片答完后主进程推来「执行中」：等待中的请求随之撤下，运行接着跑。
-    assert.deepEqual(readInteraction(apply(waitingForConfirmation, { kind: 'phase', teamPhase: 'executing' })), {
-      status: 'running',
-      teamPhase: 'executing',
-      input: null,
-      confirmation: null,
-      confirmationId: null,
-      executionId: null,
-    })
+    assert.deepEqual(
+      readInteraction(apply(waitingForConfirmation, { kind: 'phase', teamPhase: 'executing' })),
+      {
+        status: 'running',
+        teamPhase: 'executing',
+        input: null,
+        confirmation: null,
+        confirmationId: null,
+        executionId: null,
+      }
+    )
     // 输入框答完同理：界面不自己推断恢复，等主进程的状态。
-    assert.deepEqual(readInteraction(apply(waitingForInput, { kind: 'phase', teamPhase: 'executing' })), {
-      status: 'running',
-      teamPhase: 'executing',
-      input: null,
-      confirmation: null,
-      confirmationId: null,
-      executionId: null,
-    })
+    assert.deepEqual(
+      readInteraction(apply(waitingForInput, { kind: 'phase', teamPhase: 'executing' })),
+      {
+        status: 'running',
+        teamPhase: 'executing',
+        input: null,
+        confirmation: null,
+        confirmationId: null,
+        executionId: null,
+      }
+    )
   })
 
   void test('projects all terminal states and keeps errors in runtime state', () => {
@@ -135,7 +190,11 @@ void describe('standalone Workbench conversation runtime', () => {
       finishedAt: 100,
     })
 
-    const aborted = apply(createRuntime(), { kind: 'aborted', message: 'Stopped by the user.' }, 200)
+    const aborted = apply(
+      createRuntime(),
+      { kind: 'aborted', message: 'Stopped by the user.' },
+      200
+    )
     assert.deepEqual(readTerminal(aborted), {
       status: 'aborted',
       teamPhase: null,
@@ -161,13 +220,21 @@ void describe('standalone Workbench conversation runtime', () => {
     assert.equal(readStandaloneTerminalKind({ kind: 'error', message: 'failed' }), 'error')
     assert.equal(readStandaloneTerminalKind({ kind: 'turn-end', turn: 1 }), null)
     assert.equal(
-      readStandaloneTerminalKind({ kind: 'awaiting-input', executionId: 'run', question: 'Which?' }),
+      readStandaloneTerminalKind({
+        kind: 'awaiting-input',
+        executionId: 'run',
+        question: 'Which?',
+      }),
       null
     )
   })
 
   void test('keeps stopping authoritative until an abort terminal state settles it', () => {
-    const running = { ...createRuntime(), status: 'running' as const, teamPhase: 'executing' as const }
+    const running = {
+      ...createRuntime(),
+      status: 'running' as const,
+      teamPhase: 'executing' as const,
+    }
     const stopping = beginStandaloneAgentStop(running)
     assert.equal(stopping.status, 'stopping')
     assert.equal(stopping.teamPhase, null)
@@ -206,7 +273,12 @@ void describe('standalone Workbench conversation runtime', () => {
     assert.equal(shouldBlockStandaloneRunSubmission('completed', true, false), true)
     assert.equal(shouldBlockStandaloneRunSubmission('completed', false, false), false)
     assert.equal(shouldBlockStandaloneRunSubmission('completed', false, true), true)
-    for (const status of ['running', 'stopping', 'awaiting-input', 'awaiting-confirmation'] as const)
+    for (const status of [
+      'running',
+      'stopping',
+      'awaiting-input',
+      'awaiting-confirmation',
+    ] as const)
       assert.equal(shouldBlockStandaloneRunSubmission(status, false, false), true)
     for (const status of ['idle', 'aborted', 'failed'] as const)
       assert.equal(shouldBlockStandaloneRunSubmission(status, false, false), false)
@@ -252,14 +324,21 @@ void describe('standalone Workbench conversation runtime', () => {
       message('assistant', [{ type: 'text', text: 'Provider failed', tone: 'error' }], 'error'),
       message('assistant', [{ type: 'text', text: '   ' }], 'empty'),
       message('user', [{ type: 'text', text: 'Next question' }], 'user'),
-      message('assistant', [
-        { type: 'text', text: 'Real answer' },
-        { type: 'text', text: 'Old failure', tone: 'error' },
-      ], 'answer'),
+      message(
+        'assistant',
+        [
+          { type: 'text', text: 'Real answer' },
+          { type: 'text', text: 'Old failure', tone: 'error' },
+        ],
+        'answer'
+      ),
     ] satisfies ChatMessage[]
 
     const restored = sanitizeStandaloneChatMessages(messages)
-    assert.deepEqual(restored.map(({ id }) => id), ['user', 'answer'])
+    assert.deepEqual(
+      restored.map(({ id }) => id),
+      ['user', 'answer']
+    )
     assert.equal(readStandaloneModelVisibleText(restored[1]!), 'Real answer')
     // 没被清理掉的消息原样交回，不换新引用。
     assert.equal(restored[0], messages[3])
@@ -281,12 +360,15 @@ void describe('standalone Workbench conversation runtime', () => {
       ['continuation', 'sent'],
     ])
     // 重启恢复：那一轮早就不在了，「引导中」也一并暂停。
-    assert.deepEqual(readGuidanceStatuses(pauseUnappliedRunGuidance(messages, { includePending: true })), [
-      ['applied', 'applied'],
-      ['accepted', 'paused'],
-      ['in-flight', 'paused'],
-      ['continuation', 'sent'],
-    ])
+    assert.deepEqual(
+      readGuidanceStatuses(pauseUnappliedRunGuidance(messages, { includePending: true })),
+      [
+        ['applied', 'applied'],
+        ['accepted', 'paused'],
+        ['in-flight', 'paused'],
+        ['continuation', 'sent'],
+      ]
+    )
     // 停止：只暂停主进程说还留着没读走的那几条。
     assert.deepEqual(
       readGuidanceStatuses(
@@ -320,7 +402,10 @@ void describe('standalone Workbench conversation runtime', () => {
   })
 
   void test('marks the finished run on its last assistant message like Desktop', () => {
-    const turn: ChatMessage = { ...message('user', [{ type: 'text', text: 'task' }], 'turn'), conversationKind: 'turn-input' }
+    const turn: ChatMessage = {
+      ...message('user', [{ type: 'text', text: 'task' }], 'turn'),
+      conversationKind: 'turn-input',
+    }
     const reply = message('assistant', [{ type: 'text', text: 'done' }], 'reply')
     const base = {
       messages: [turn, reply],
@@ -354,16 +439,27 @@ void describe('standalone Workbench conversation runtime', () => {
     assert.equal(markStandaloneRun({ ...base, markers: aborted, status: 'completed' }), aborted)
 
     // 目标模式的一轮记下目标模式与主进程报来的目标状态。
-    const goalRun = markStandaloneRun({ ...base, status: 'completed', goalMode: true, goalStatus: 'complete' })
+    const goalRun = markStandaloneRun({
+      ...base,
+      status: 'completed',
+      goalMode: true,
+      goalStatus: 'complete',
+    })
     assert.equal(goalRun[0]?.goalMode, true)
     assert.equal(goalRun[0]?.goalStatus, 'complete')
   })
 
   void test('does not pin a new run that failed before speaking onto the previous reply', () => {
     const messages: ChatMessage[] = [
-      { ...message('user', [{ type: 'text', text: 'first' }], 'turn-1'), conversationKind: 'turn-input' },
+      {
+        ...message('user', [{ type: 'text', text: 'first' }], 'turn-1'),
+        conversationKind: 'turn-input',
+      },
       message('assistant', [{ type: 'text', text: 'answer' }], 'reply-1'),
-      { ...message('user', [{ type: 'text', text: 'second' }], 'turn-2'), conversationKind: 'turn-input' },
+      {
+        ...message('user', [{ type: 'text', text: 'second' }], 'turn-2'),
+        conversationKind: 'turn-input',
+      },
     ]
     const markers = markStandaloneRun({
       messages,
@@ -450,12 +546,17 @@ void describe('standalone Workbench conversation runtime', () => {
       hasStreamingThinkingBlock: false,
     })
     assert.equal(
-      readStandaloneLiveActivity(message('assistant', [script('script-3', '整理改动', 'writing')]), null)
-        .liveTraceSummary,
+      readStandaloneLiveActivity(
+        message('assistant', [script('script-3', '整理改动', 'writing')]),
+        null
+      ).liveTraceSummary,
       '整理改动'
     )
     // 限流、重试时主进程的说明优先，还没开口时也照样显示。
-    assert.equal(readStandaloneLiveActivity(running, '约 3 分钟后自动继续').liveTraceSummary, '约 3 分钟后自动继续')
+    assert.equal(
+      readStandaloneLiveActivity(running, '约 3 分钟后自动继续').liveTraceSummary,
+      '约 3 分钟后自动继续'
+    )
     assert.deepEqual(readStandaloneLiveActivity(null, '约 3 分钟后自动继续'), {
       liveTraceSummary: '约 3 分钟后自动继续',
       hasStreamingThinkingBlock: false,
@@ -463,16 +564,22 @@ void describe('standalone Workbench conversation runtime', () => {
 
     assert.deepEqual(
       readStandaloneLiveActivity(
-        message('assistant', [{ type: 'text', text: '好了' }, script('script-4', '收尾', 'succeeded')]),
+        message('assistant', [
+          { type: 'text', text: '好了' },
+          script('script-4', '收尾', 'succeeded'),
+        ]),
         null
       ),
       idle
     )
-    assert.deepEqual(readStandaloneLiveActivity(message('assistant', [script('script-5', '', 'running')]), null), idle)
+    assert.deepEqual(
+      readStandaloneLiveActivity(message('assistant', [script('script-5', '', 'running')]), null),
+      idle
+    )
     assert.deepEqual(readStandaloneLiveActivity(null, null), idle)
   })
 
-  void test('keeps only a summary of a run\'s file changes on its marker', () => {
+  void test("keeps only a summary of a run's file changes on its marker", () => {
     const summary = {
       recordId: 'checkpoint-2',
       capturedAt: 9,
@@ -482,9 +589,15 @@ void describe('standalone Workbench conversation runtime', () => {
       error: null,
     }
     const messages: ChatMessage[] = [
-      { ...message('user', [{ type: 'text', text: 'first' }], 'turn-1'), conversationKind: 'turn-input' },
+      {
+        ...message('user', [{ type: 'text', text: 'first' }], 'turn-1'),
+        conversationKind: 'turn-input',
+      },
       message('assistant', [{ type: 'text', text: 'answer' }], 'reply-1'),
-      { ...message('user', [{ type: 'text', text: 'second' }], 'turn-2'), conversationKind: 'turn-input' },
+      {
+        ...message('user', [{ type: 'text', text: 'second' }], 'turn-2'),
+        conversationKind: 'turn-input',
+      },
       message('assistant', [{ type: 'text', text: 'second answer' }], 'reply-2'),
     ]
     const completed = markStandaloneRun({
@@ -508,8 +621,10 @@ void describe('standalone Workbench conversation runtime', () => {
     assert.equal(attached.replacedRecordId, null)
     // 同一条回答换了一份记录：旧记录交给调用方删。
     assert.equal(
-      attachStandaloneRunChanges(attached.markers, 'reply-2', { ...summary, recordId: 'checkpoint-3' })
-        ?.replacedRecordId,
+      attachStandaloneRunChanges(attached.markers, 'reply-2', {
+        ...summary,
+        recordId: 'checkpoint-3',
+      })?.replacedRecordId,
       'checkpoint-2'
     )
     // 停下、失败的一轮也记改动（文件可能已经改了）；消息已不在会话里、标记不在了才不记。
@@ -537,7 +652,10 @@ void describe('standalone Workbench conversation runtime', () => {
       summary
     )
     // 摘要随会话持久化；形状不对的当没有。
-    assert.deepEqual(restoreStandaloneRunMarkers(attached.markers, messages)[0]?.runChanges, summary)
+    assert.deepEqual(
+      restoreStandaloneRunMarkers(attached.markers, messages)[0]?.runChanges,
+      summary
+    )
     assert.equal(
       restoreStandaloneRunMarkers(
         [{ ...attached.markers[0], runChanges: { recordId: 'x', fileCount: -1 } }],

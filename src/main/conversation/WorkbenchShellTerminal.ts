@@ -3,7 +3,7 @@ import { createRequire } from 'node:module'
 import type * as NodePty from '@lydell/node-pty'
 
 import { isNotUndefined, isUndefined, Log } from '@velaros-ai/core'
-import type { ShellTerminalFactory } from '@velaros-ai/velaros/shell'
+import type { ShellTerminalFactory } from '@velaros-ai/velaros/execution'
 
 const log = Log.tag('WorkbenchShellTerminal')
 const require = createRequire(import.meta.url)

@@ -139,6 +139,7 @@ export interface WorkbenchBrowserElementSelectionDelivery {
 /** 编辑器、标签页或文件树里右键「添加到聊天」投递给聊天面板的一个文件（项目内相对路径）。 */
 export interface WorkbenchChatFileReferenceDelivery {
   readonly deliveryId: string
+  readonly targetSessionId: string
   readonly path: string
 }
 
@@ -160,6 +161,11 @@ export interface WorkbenchChatSessionSurfaceProps {
   onReviewRunChanges?: (target: WorkbenchChatRunChangesTarget) => void
 }
 
+export interface WorkbenchChatSessionActionsProps {
+  projectRoot: string
+  sessionId: string
+}
+
 /** 某个会话里的某一轮改动（记录 id = 这一轮检查点的 id）。 */
 export interface WorkbenchChatRunChangesTarget {
   readonly sessionId: string
@@ -172,6 +178,7 @@ export interface WorkbenchChatCompositionAdapter {
    */
   useProjectRuntime: (projectRoot: Nullable<string>) => WorkbenchChatProjectRuntime
   SessionSurface: ComponentType<WorkbenchChatSessionSurfaceProps>
+  SessionActions?: ComponentType<WorkbenchChatSessionActionsProps>
 }
 
 const WorkbenchChatCompositionContext =
@@ -208,4 +215,12 @@ export function useWorkbenchChatProjectRuntime(
 export function WorkbenchChatSessionSurface(props: WorkbenchChatSessionSurfaceProps): ReactElement {
   const { SessionSurface } = useWorkbenchChatComposition()
   return <SessionSurface {...props} />
+}
+
+/** 会话工具由当前宿主提供，放在聊天顶部并跟随当前会话切换。 */
+export function WorkbenchChatSessionActions(
+  props: WorkbenchChatSessionActionsProps
+): Nullable<ReactElement> {
+  const { SessionActions } = useWorkbenchChatComposition()
+  return SessionActions ? <SessionActions {...props} /> : null
 }

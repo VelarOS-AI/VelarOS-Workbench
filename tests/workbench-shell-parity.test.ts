@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import path from 'node:path'
 
 import { describe, test } from 'bun:test'
+import ts from 'typescript'
 
 function readSource(relativePath: string): string {
   return readFileSync(path.resolve(process.cwd(), relativePath), 'utf8')
@@ -14,7 +15,7 @@ void describe('pre-split Workbench shell parity', () => {
 
     assert.match(adapter, /@velaros-ai\/ui\/conversation/)
     assert.match(adapter, /<ChatConversationPane/)
-    assert.match(adapter, /<ChatSurfaceComposer control=\{composerControl\}/)
+    assert.match(adapter, /<ChatSurfaceComposer\b[^>]*\bcontrol=\{composerControl\}/)
     assert.doesNotMatch(adapter, /wb_standaloneChatSurface/)
     assert.doesNotMatch(adapter, /Ask the injected VelarOS Agent/)
   })
@@ -89,13 +90,22 @@ void describe('pre-split Workbench shell parity', () => {
     assert.match(control, /switchWorkspaceGitBranch\([\s\S]*\{ create: true \}/)
     // 远端操作走统一入口（别处发起的这里也看得到、能取消）；列表里点的分支连名字一起交过去。
     assert.match(control, /useWorkbenchGitRemoteAction\(workspaceRoot\)/)
-    assert.match(control, /remoteAction\.run\(action, \{ branch, privateKeyPath: gitSshKeyPath \}\)/)
-    assert.match(control, /onPushBranch=\{\(branch\) => void runRemoteAction\('upload', branch\.name\)\}/)
+    assert.match(
+      control,
+      /remoteAction\.run\(action, \{ branch, privateKeyPath: gitSshKeyPath \}\)/
+    )
+    assert.match(
+      control,
+      /onPushBranch=\{\(branch\) => void runRemoteAction\('upload', branch\.name\)\}/
+    )
     // 外框与面板用共享的顶栏控件，和旁边的项目菜单同一套尺寸；按钮上写分支和落后、领先的提交数。
     assert.match(control, /<TopBarControlFrame[\s\S]*<AnchoredPopover/)
     assert.match(control, /getTopBarControlPanelClassName\(styles\.gitBranchMenuPanel\)/)
     assert.match(control, /data-topbar-panel="picker"/)
-    assert.match(control, /gitBranchControlName[\s\S]*gitBranchControlCounts[\s\S]*↓\{behind\}[\s\S]*↑\{ahead\}/)
+    assert.match(
+      control,
+      /gitBranchControlName[\s\S]*gitBranchControlCounts[\s\S]*↓\{behind\}[\s\S]*↑\{ahead\}/
+    )
     assert.doesNotMatch(control, /<FolderIcon/)
     // 面板从上到下：远端操作（跑着时换成进度和取消）、搜索、分支列表、新建分支。
     assert.match(
@@ -103,10 +113,16 @@ void describe('pre-split Workbench shell parity', () => {
       /gitBranchMenuRemote[\s\S]*gitBranchMenuSearch[\s\S]*<SearchField[\s\S]*gitBranchMenuList[\s\S]*gitBranchMenuFooter[\s\S]*onOpenCreateBranch/
     )
     assert.match(menu, /running \? \([\s\S]*gitBranchMenuRunning[\s\S]*onCancelRemoteAction/)
-    assert.match(menu, /gitBranchMenuRowActions[\s\S]*onSwitchBranch\(branch\)[\s\S]*onPushBranch\(branch\)/)
+    assert.match(
+      menu,
+      /gitBranchMenuRowActions[\s\S]*onSwitchBranch\(branch\)[\s\S]*onPushBranch\(branch\)/
+    )
     assert.match(menu, /FolderIcon[\s\S]*renderNode\(child, depth \+ 1\)/)
     assert.match(topStyles, /\.gitBranchMenuSearch[\s\S]*var\(--topbar-panel-row-height\)/)
-    assert.match(topStyles, /\.gitBranchMenuList[\s\S]*max-height:\s*var\(--topbar-panel-list-max-height\)/)
+    assert.match(
+      topStyles,
+      /\.gitBranchMenuList[\s\S]*max-height:\s*var\(--topbar-panel-list-max-height\)/
+    )
     assert.match(topStyles, /\.gitBranchCreateDialog[\s\S]*max-width:\s*min\(340px/)
     assert.doesNotMatch(topStyles, /\.gitSync/)
     // Workbench 键位方案里的默认键。
@@ -155,13 +171,16 @@ void describe('pre-split Workbench shell parity', () => {
     assert.ok(velarStructureButton < commitButton)
     assert.match(presentation, /chrome\.velarLogicGraphAvailable[\s\S]*openVelarStructure/)
     // 结构图按需加载：打开结构标签时才拉它那一块，不进工作区外壳。
-    assert.match(presentation, /auxiliaryTabs:[\s\S]*<Suspense fallback=\{null\}>\s*<LazyWorkbenchLogicGraphEditor/)
-    assert.match(presentation, /const LazyWorkbenchLogicGraphEditor = lazy\(async \(\) => \{\n\s*const module = await import\('\.\/components\/codeGraph\/WorkbenchLogicGraphDialog'\)/)
-    assert.match(presentation, /const VelarStructureOverviewTab[\s\S]*velar-structure:overview/)
     assert.match(
       presentation,
-      /\[VelarStructureOverviewTab, \.\.\.velarStructureScopeTabs\]/
+      /auxiliaryTabs:[\s\S]*<Suspense fallback=\{null\}>\s*<LazyWorkbenchLogicGraphEditor/
     )
+    assert.match(
+      presentation,
+      /const LazyWorkbenchLogicGraphEditor = lazy\(async \(\) => \{\n\s*const module = await import\('\.\/components\/codeGraph\/WorkbenchLogicGraphDialog'\)/
+    )
+    assert.match(presentation, /const VelarStructureOverviewTab[\s\S]*velar-structure:overview/)
+    assert.match(presentation, /\[VelarStructureOverviewTab, \.\.\.velarStructureScopeTabs\]/)
     assert.match(
       presentation,
       /onClose: optionalWhen\(\s*structureTab\.id !== VelarStructureOverviewTab\.id/
@@ -177,7 +196,10 @@ void describe('pre-split Workbench shell parity', () => {
       presentation,
       /leftMode=\{\s*surface\.activeLeftTool === 'commit'[\s\S]*'velar-structure'[\s\S]*'files'[\s\S]*\}/
     )
-    assert.match(model, /const velarLogicGraphAvailable = workbench\.projectContextIndex\.files\.some\(/)
+    assert.match(
+      model,
+      /const velarLogicGraphAvailable = workbench\.projectContextIndex\.files\.some\(/
+    )
     assert.match(model, /const \[velarLogicGraphOpen, setVelarLogicGraphOpen\] = useState\(false\)/)
     assert.match(
       model,
@@ -253,7 +275,7 @@ void describe('pre-split Workbench shell parity', () => {
     const shell = readSource('src/renderer/src/workspace/WorkbenchWorkspaceShell.tsx')
     const adapter = readSource('src/renderer/src/runtime/standaloneWorkbenchChatAdapter.tsx')
     const renderSlots = readSource(
-      'src/renderer/src/runtime/conversation/standaloneWorkbenchConversationRenderSlots.tsx',
+      'src/renderer/src/runtime/conversation/standaloneWorkbenchConversationRenderSlots.tsx'
     )
     const styles = readSource('src/renderer/src/styles/04-insight-chat.module.css')
 
@@ -285,7 +307,10 @@ void describe('pre-split Workbench shell parity', () => {
     assert.match(adapter, /onGoalModeChange:\s*setGoalMode/)
     assert.match(adapter, /onPlanModeChange:\s*setPlanMode/)
     // 运行中的展示由主进程逐条推来的会话通知落到发起那一轮的会话上；停止走会话通道的取消。
-    assert.match(adapter, /window\.velarosWorkbenchConversation\.onEvent\(\s*applyConversationEnvelope\s*\)/)
+    assert.match(
+      adapter,
+      /window\.velarosWorkbenchConversation\.onEvent\(\s*applyConversationEnvelope\s*\)/
+    )
     assert.match(adapter, /applyWorkbenchConversationNotice\(/)
     assert.match(adapter, /canStop:\s*isRunActive/)
     assert.match(adapter, /velarosWorkbenchConversation\.cancel\(/)
@@ -300,9 +325,7 @@ void describe('pre-split Workbench shell parity', () => {
   void test('keeps update download progress inside the status bar as a compact control', () => {
     const statusBar = readSource('src/renderer/src/components/chrome/StatusBar.tsx')
     const messageHost = readSource('src/renderer/src/runtime/workbenchMessageHost.tsx')
-    const progress = readSource(
-      'src/renderer/src/components/updates/WorkbenchUpdateProgress.tsx'
-    )
+    const progress = readSource('src/renderer/src/components/updates/WorkbenchUpdateProgress.tsx')
     const progressStyles = readSource(
       'src/renderer/src/components/updates/WorkbenchUpdateProgress.module.css'
     )
@@ -336,10 +359,7 @@ void describe('pre-split Workbench shell parity', () => {
     assert.match(presentation, /updateWorkbenchVelarProjectSnapshotIndex/)
     assert.match(presentation, /velarStructureExpansionOverrides/)
     assert.match(tree, /expansionOverrides: ReadonlyMap<string, boolean>/)
-    assert.match(
-      tree,
-      /expansionOverrides\.get\(node\.key\) \?\? node\.kind === 'directory'/
-    )
+    assert.match(tree, /expansionOverrides\.get\(node\.key\) \?\? node\.kind === 'directory'/)
     assert.match(tree, /data-active=\{selectedPaths\.has\(node\.selection\)\}/)
     assert.match(tree, /next\.set\(path, !expanded\)/)
     assert.match(tree, /onExpansionOverridesChange\(next\)/)
@@ -362,7 +382,10 @@ void describe('pre-split Workbench shell parity', () => {
       settings.indexOf('function renderAiSection'),
       settings.indexOf('function renderSystemSection')
     )
-    assert.match(aiSection, /renderModelSection\(\)[\s\S]*renderPermissionsSection\(\)[\s\S]*renderAiRulesSection\(\)/)
+    assert.match(
+      aiSection,
+      /renderModelSection\(\)[\s\S]*renderPermissionsSection\(\)[\s\S]*renderAiRulesSection\(\)/
+    )
   })
 
   void test('keeps the release channel selector inside the product update settings', () => {
@@ -415,8 +438,32 @@ void describe('pre-split Workbench shell parity', () => {
     assert.doesNotMatch(accountSection, /settingsAccountSignedIn/)
     assert.doesNotMatch(appearanceSection, /settingsResetAppearance/)
     assert.doesNotMatch(keymapSection, /settingsResetKeymap/)
-    assert.match(generalSection, /action=\{\([\s\S]*settingsResetAppearance/)
-    assert.match(editorSection, /action=\{\([\s\S]*settingsResetKeymap/)
+    const hasHeaderAction = (source: string, label: string): boolean => {
+      const file = ts.createSourceFile(
+        'settings.tsx',
+        source,
+        ts.ScriptTarget.Latest,
+        true,
+        ts.ScriptKind.TSX
+      )
+      const hasLabel = (node: ts.Node): true | undefined =>
+        ts.isStringLiteral(node) && node.text === label ? true : ts.forEachChild(node, hasLabel)
+      const visit = (node: ts.Node): true | undefined => {
+        if (ts.isJsxAttribute(node) && node.name.getText(file) === 'action' && node.initializer) {
+          const element = node.parent.parent
+          if (
+            (ts.isJsxOpeningElement(element) || ts.isJsxSelfClosingElement(element)) &&
+            element.tagName.getText(file) === 'SettingsSubsection' &&
+            hasLabel(node.initializer)
+          )
+            return true
+        }
+        return ts.forEachChild(node, visit)
+      }
+      return !!visit(file)
+    }
+    assert(hasHeaderAction(generalSection, 'workbench.settingsResetAppearance'))
+    assert(hasHeaderAction(editorSection, 'workbench.settingsResetKeymap'))
   })
 
   void test('localizes language options and confirms rollback in the product dialog', () => {

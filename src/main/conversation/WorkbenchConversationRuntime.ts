@@ -4,9 +4,12 @@ import { isNotUndefined, Log, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { CodeRunnerApi } from '@velaros-ai/script'
 import type { InteractionAnswer } from '@velaros-ai/ui/conversation/contracts'
+import type { RuntimeNoteRead, VelarosSession } from '@velaros-ai/velaros'
 import type { GoalControl, GoalState } from '@velaros-ai/velaros/contracts'
 import type { ActPresentation } from '@velaros-ai/velaros/renderer'
 import { createActEventProjector } from '@velaros-ai/velaros/renderer'
+import type { SessionsSpacePort } from '@velaros-ai/velaros/sessions'
+import type { SessionAnswer } from '@velaros-ai/velaros/sessions/contracts'
 import type { WebSpacePort } from '@velaros-ai/velaros/web'
 
 import {
@@ -86,8 +89,11 @@ interface ConversationTraceBoards {
 }
 
 interface WorkbenchConversationRuntimeOptions {
+  sessions?(request: WorkbenchConversationSendRequest): SessionsSpacePort | undefined
   /** 宿主明确提供执行进程，主聊天不自行选择进程实现。 */
-  runner: CodeRunnerApi
+  runner?: CodeRunnerApi
+  nodeExecutable?: string
+  nodePackagesDirectory?: string
   /** 应用共用的本机 shell 宿主：每轮借用，会话删除时停掉它的后台任务。 */
   shells: WorkbenchShellHostRegistryApi
   /** Platform 会话数据根目录（在任何项目之外）。 */
@@ -126,6 +132,9 @@ interface WorkbenchConversationRuntimeOptions {
 
 /** 主聊天的 Platform 控制面（与 Desktop 的会话运行时同一套流程）。 */
 export interface WorkbenchConversationRuntimeApi {
+  isRunning(ref: WorkbenchConversationRef): boolean
+  subscribeRunSettled(listener: (ref: WorkbenchConversationRef) => void): () => void
+  subscribeRunOutcome(listener: (outcome: WorkbenchConversationRunOutcome) => void): () => void
   /** 提交这一条用户输入：被运行时接纳时 accepted 完成，整轮收尾时 completed 完成。 */
   submit(
     sink: WorkbenchConversationSink,
@@ -139,6 +148,15 @@ export interface WorkbenchConversationRuntimeApi {
   input(ref: WorkbenchConversationRef, answer: string): Promise<void>
   /** 交互卡上的回答。 */
   answer(ref: WorkbenchConversationRef, requestId: string, answer: InteractionAnswer): Promise<void>
+  listNotes(
+    ref: WorkbenchConversationRef,
+    input?: { after?: string; limit?: number }
+  ): ReturnType<VelarosSession['listNotes']>
+  readNote(
+    ref: WorkbenchConversationRef,
+    input: RuntimeNoteRead
+  ): ReturnType<VelarosSession['readNote']>
+  subscribeNotesChanged(listener: (ref: WorkbenchConversationRef) => void): () => void
   /** 读取当前目标。 */
   getGoal(ref: WorkbenchConversationRef): Promise<Nullable<GoalState>>
   /** 以当前版本执行用户的目标操作；除了继续，其余操作会停下正在跑的这一轮。 */
@@ -149,6 +167,11 @@ export interface WorkbenchConversationRuntimeApi {
   cancelProject(projectRoot: string): Promise<void>
   /** 停止全部运行并等待资源释放。 */
   close(): Promise<void>
+}
+
+export interface WorkbenchConversationRunOutcome extends WorkbenchConversationRef {
+  inputId: string
+  result: SessionAnswer
 }
 
 /**
@@ -163,10 +186,18 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
   private readonly interactions = new WeakMap<ActiveConversationRun, ConversationInteractionBoard>()
   private readonly controlOperations = new Map<string, Promise<unknown>>()
   private readonly deleting = new Set<string>()
+  private readonly notebookListeners = new Set<(ref: WorkbenchConversationRef) => void>()
+  private readonly settledListeners = new Set<(ref: WorkbenchConversationRef) => void>()
+  private readonly outcomeListeners = new Set<(outcome: WorkbenchConversationRunOutcome) => void>()
   private closing?: Promise<void>
 
   public constructor(private readonly options: WorkbenchConversationRuntimeOptions) {
-    this.session = new WorkbenchConversationSession(options.runner, options.shells)
+    this.session = new WorkbenchConversationSession(
+      options.runner,
+      options.shells,
+      options.nodeExecutable,
+      options.nodePackagesDirectory
+    )
     this.storage = new WorkbenchConversationStore(options.dataDir)
   }
 
@@ -199,10 +230,47 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
       })
       .finally(() => {
         this.active.delete(key)
+        this.notifyNotesChanged(request)
+        if (run.outcome)
+          for (const listener of this.outcomeListeners) {
+            try {
+              listener({
+                projectRoot: request.projectRoot,
+                sessionId: request.sessionId,
+                inputId: request.inputId,
+                result: run.outcome,
+              })
+            } catch (error) {
+              log.warn('会话结果通知失败', { error })
+            }
+          }
+        for (const listener of this.settledListeners) {
+          try {
+            listener({ projectRoot: request.projectRoot, sessionId: request.sessionId })
+          } catch (error) {
+            log.warn('会话结束通知失败', { error })
+          }
+        }
       })
     // 同时观察两张回执，避免 IPC 尚在等待 accepted 时 completed 的拒绝无人接收。
     void Promise.allSettled([accepted, run.completed])
     return { accepted, completed: run.completed }
+  }
+
+  public isRunning(ref: WorkbenchConversationRef): boolean {
+    return this.active.has(runKey(ref))
+  }
+
+  public subscribeRunSettled(listener: (ref: WorkbenchConversationRef) => void): () => void {
+    this.settledListeners.add(listener)
+    return () => this.settledListeners.delete(listener)
+  }
+
+  public subscribeRunOutcome(
+    listener: (outcome: WorkbenchConversationRunOutcome) => void
+  ): () => void {
+    this.outcomeListeners.add(listener)
+    return () => this.outcomeListeners.delete(listener)
   }
 
   public async cancel(ref: WorkbenchConversationRef): Promise<WorkbenchConversationCancelResult> {
@@ -227,7 +295,8 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
     const request = (await session.inspect()).pending.find(
       (item) => interactionKind(item) === 'input'
     )
-    if (!request) throw new AppError('VALIDATION', workbenchMainText('conversation.noPendingQuestion'))
+    if (!request)
+      throw new AppError('VALIDATION', workbenchMainText('conversation.noPendingQuestion'))
     await session.answer({ id: request.id, runId: request.runId, value: answer })
     // 卡片上照样写上这句回答
     this.interactionBoard(ref)?.answer(request.id, { text: answer })
@@ -247,6 +316,36 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
       value: platformAnswer(request, answer),
     })
     this.interactionBoard(ref)?.answer(request.id, answer)
+  }
+
+  public listNotes(ref: WorkbenchConversationRef, input: { after?: string; limit?: number } = {}) {
+    return this.withSessionControl(
+      ref,
+      (session) => session.listNotes(input),
+      { items: [], nextAfter: null },
+      { readActive: true }
+    )
+  }
+
+  public readNote(ref: WorkbenchConversationRef, input: RuntimeNoteRead) {
+    return this.withSessionControl(ref, (session) => session.readNote(input), undefined, {
+      readActive: true,
+    })
+  }
+
+  public subscribeNotesChanged(listener: (ref: WorkbenchConversationRef) => void): () => void {
+    this.notebookListeners.add(listener)
+    return () => this.notebookListeners.delete(listener)
+  }
+
+  private notifyNotesChanged(ref: WorkbenchConversationRef): void {
+    for (const listener of this.notebookListeners) {
+      try {
+        listener({ sessionId: ref.sessionId, projectRoot: ref.projectRoot })
+      } catch (error) {
+        log.warn('工作笔记刷新通知失败', { error })
+      }
+    }
   }
 
   public getGoal(ref: WorkbenchConversationRef): Promise<Nullable<GoalState>> {
@@ -274,11 +373,16 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
     try {
       await this.cancel(ref)
       // 会话删掉后，它起的后台进程就没人看得到、停得了：一并强杀；没停下的记日志，不拦删除。
-      await this.options.shells.terminateSessionBackgroundTasks(ref.sessionId)
-      // 它的浏览器页面也没人看了：离站，关掉页面。
-      await this.options.browser?.leaveSite(ref).catch((error: unknown) =>
-        log.warn('删除会话时浏览器没能离站', { error: AppError.getMessage(error) })
+      await this.options.shells.terminateSessionBackgroundTasks(
+        ref.sessionId,
+        await this.storage.workspace(ref.projectRoot)
       )
+      // 它的浏览器页面也没人看了：离站，关掉页面。
+      await this.options.browser
+        ?.leaveSite(ref)
+        .catch((error: unknown) =>
+          log.warn('删除会话时浏览器没能离站', { error: AppError.getMessage(error) })
+        )
       await Promise.allSettled([this.controlOperations.get(key)])
       await this.storage.delete(ref.projectRoot, ref.sessionId)
     } finally {
@@ -307,12 +411,15 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
         ...runs.map((run) => run.completed),
         ...this.controlOperations.values(),
       ])
+      this.notebookListeners.clear()
     })
     return this.closing
   }
 
   /** 这个会话当前运行的交互卡账；没有运行时没有。 */
-  private interactionBoard(ref: WorkbenchConversationRef): ConversationInteractionBoard | undefined {
+  private interactionBoard(
+    ref: WorkbenchConversationRef
+  ): ConversationInteractionBoard | undefined {
     const run = this.active.get(runKey(ref))
     return run && this.interactions.get(run)
   }
@@ -339,18 +446,24 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
         throw new AppError('UNAVAILABLE', workbenchMainText('conversation.closing'))
       const active = this.active.get(key)
       if (options.controlActive && active) {
-        if (!active.handle) throw new AppError('UNAVAILABLE', workbenchMainText('conversation.preparing'))
+        if (!active.handle)
+          throw new AppError('UNAVAILABLE', workbenchMainText('conversation.preparing'))
         const result = await operation(active.handle.session)
         if (options.stopAfter) await this.cancel(ref)
         return result
       }
-      if (options.readActive && active)
-        return active.handle ? operation(active.handle.session) : (missing as T)
+      if (options.readActive && active) {
+        if (active.handle) return operation(active.handle.session)
+        if (isNotUndefined(missing)) return missing
+        throw new AppError('UNAVAILABLE', workbenchMainText('conversation.preparing'))
+      }
       if (!(await this.storage.exists(ref.projectRoot, ref.sessionId))) {
         if (isNotUndefined(missing)) return missing
         throw new AppError('NOT_FOUND', workbenchMainText('conversation.neverRan'))
       }
-      const handle = await (this.options.control ?? ((control) => this.session.openControl(control)))({
+      const handle = await (
+        this.options.control ?? ((control) => this.session.openControl(control))
+      )({
         sessionId: ref.sessionId,
         dataDir: this.storage.path(ref.projectRoot, ref.sessionId),
         workspace: await this.storage.workspace(ref.projectRoot),
@@ -393,7 +506,9 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
     const thinking = new ConversationThinkingBoard((payload) =>
       sink.notice(ConversationThinkingNotice, payload)
     )
-    const text = new ConversationTextBoard((payload) => sink.notice(ConversationTextNotice, payload))
+    const text = new ConversationTextBoard((payload) =>
+      sink.notice(ConversationTextNotice, payload)
+    )
     const commandOutput = new ConversationCommandOutputBoard(
       (payload) => sink.notice(ConversationCommandOutputNotice, payload),
       (executionId) => scripts.cardOf(executionId)
@@ -439,6 +554,7 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
         sessionId: request.sessionId,
         dataDir: this.storage.path(request.projectRoot, request.sessionId),
         workspace,
+        sandbox: request.sandbox,
         environment: this.options.environment,
         // 小部件在脚本执行时交来：先把欠着的正文发掉，再按所在运行放进运行消息
         showWidget: (widget) => {
@@ -466,6 +582,7 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
         projectFilesEdited: (paths) => this.options.projectFilesEdited?.(request, paths),
         memory: memory?.scope,
         browser: this.options.browser?.conversation(request),
+        sessions: this.options.sessions?.(request),
         web: webPages && {
           openPage: (pageSignal) => webPages.openPage(pageSignal),
           resolveRedirect: webPages.resolveRedirect
@@ -477,7 +594,6 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
           locale: request.locale,
           executionModes: request.executionModes,
           projectRules,
-          memoryIndex: memory?.index,
         }),
         model,
         confirmationMode: request.permissionMode,
@@ -510,6 +626,7 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
           if (lastTurn) await traces.read(lastTurn, false)
           turns.set(event.turnId, event.runId)
           lastTurn = event.turnId
+          this.notifyNotesChanged(request)
           await traces.read(event.turnId, false)
         }
         if (event.type === 'state')
@@ -525,7 +642,10 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
       if (!admitted) {
         // Platform 给了具体原因就原样透出；没有时才用通用文案。
         const reason = run.presentation?.failure
-        throw new AppError('VALIDATION', reason ?? workbenchMainText('conversation.inputNotAccepted'))
+        throw new AppError(
+          'VALIDATION',
+          reason ?? workbenchMainText('conversation.inputNotAccepted')
+        )
       }
     } catch (error) {
       // 错误统一留到资源关闭后通过同一流发出终态。
@@ -563,7 +683,25 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
       }
     }
     const status = run.presentation?.status
-    if (failure || run.presentation?.failure || status === 'failed' || status === 'context_blocked') {
+    const outcome = (status: SessionAnswer['status'], reason: Nullable<string>): void => {
+      run.outcome = {
+        session: request.sessionId,
+        status,
+        answer: (
+          run.presentation?.messages
+            .map((message) => message.text)
+            .filter((text) => text.trim())
+            .join('\n\n') ?? ''
+        ).slice(-8000),
+        reason,
+      }
+    }
+    if (
+      failure ||
+      run.presentation?.failure ||
+      status === 'failed' ||
+      status === 'context_blocked'
+    ) {
       const reason = failure ?? run.presentation?.failure
       // 没有具体原因时不把状态名当文案给用户
       const message = reason
@@ -578,13 +716,17 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
           ? { kind: 'aborted', message: workbenchMainText('conversation.runStopped') }
           : { kind: 'error', message }
       )
+      outcome(signal.aborted ? 'cancelled' : 'failed', message)
       if (!admitted) throw failure ?? new AppError('VALIDATION', message)
       return
     }
-    if (signal.aborted || status === 'cancelled')
+    if (signal.aborted || status === 'cancelled') {
       sink.state({ kind: 'aborted', message: workbenchMainText('conversation.runStopped') })
-    else if (status === 'completed') sink.state(conversationDone({ goal, startedAt }))
-    else {
+      outcome('cancelled', workbenchMainText('conversation.runStopped'))
+    } else if (status === 'completed') {
+      sink.state(conversationDone({ goal, startedAt }))
+      outcome('completed', null)
+    } else {
       const notice = run.presentation?.notice
       sink.state({
         kind: 'aborted',
@@ -593,6 +735,12 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
             ? stalledMessage(notice.repeatedSteps, run.locale)
             : workbenchMainText('conversation.waitingForInput'),
       })
+      outcome(
+        'waiting',
+        notice?.kind === 'stalled'
+          ? stalledMessage(notice.repeatedSteps, run.locale)
+          : workbenchMainText('conversation.waitingForInput')
+      )
     }
   }
 
@@ -767,9 +915,10 @@ function withoutImages(
 ): ConversationInput {
   const count = input.images?.length ?? 0
   if (!count) return input
-  const note = locale === 'en-US'
-    ? `(The user attached ${count} image(s), but the current model cannot view images, so they were not sent.)`
-    : `（用户附了 ${count} 张图片，当前模型不能看图，没有随消息发出。）`
+  const note =
+    locale === 'en-US'
+      ? `(The user attached ${count} image(s), but the current model cannot view images, so they were not sent.)`
+      : `（用户附了 ${count} 张图片，当前模型不能看图，没有随消息发出。）`
   return { ...input, images: undefined, text: [input.text, note].filter(Boolean).join('\n\n') }
 }
 

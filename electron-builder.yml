@@ -8,6 +8,9 @@ directories:
 files:
   - build/electron/**/*
   - package.json
+  - '!node_modules/@velaros-ai/**/*.{ts,tsx,mts,cts,tsbuildinfo}'
+  - '!node_modules/@velaros-ai/**/{test,tests,spec,fixtures}/**/*'
+  - '!node_modules/@velaros-ai/**/*.{test,spec}.{js,mjs,cjs}'
   - '!node_modules/gpt-tokenizer/cjs/**/*'
   - '!node_modules/gpt-tokenizer/data/**/*'
   - '!node_modules/gpt-tokenizer/dist/**/*'
@@ -22,10 +25,16 @@ asar: true
 # 伪终端的原生二进制与 spawn-helper 可执行文件必须是磁盘上的真文件，asar 里的不能 exec。
 asarUnpack:
   - node_modules/@lydell/**
+  - node_modules/node-*/bin/node*
 artifactName: VelarOS-Workbench-${version}-${os}-${arch}.${ext}
 afterPack: ./scripts/release/verifyPackagedWorkbench.mjs
 
 extraResources:
+  # electron-builder 的复制器会跳过映射根的 node_modules；从缓存父目录映射整个运行环境。
+  - from: build/cache
+    to: .
+    filter:
+      - node-runtime/**/*
   - from: node_modules/typescript/lib
     to: typescript/lib
     filter:

@@ -12,6 +12,7 @@ import type {
   WorkbenchChatCompositionAdapter,
   WorkbenchChatLiveRunChanges,
   WorkbenchChatProjectRuntime,
+  WorkbenchChatSessionActionsProps,
   WorkbenchChatSessionSnapshot,
   WorkbenchChatSessionSurfaceProps,
 } from '@renderer/composition'
@@ -26,6 +27,7 @@ import {
   optionalWhenLazy,
   toOptional,
 } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 import {
   ChatConversationPane,
   ChatThinkingVisibilityProvider,
@@ -38,10 +40,7 @@ import {
   type ChatInputSendDraft,
   ChatSurfaceComposer,
 } from '@velaros-ai/ui/conversation/composer'
-import type {
-  InteractionAnswer,
-  ReasoningLevel,
-} from '@velaros-ai/ui/conversation/contracts'
+import type { InteractionAnswer, ReasoningLevel } from '@velaros-ai/ui/conversation/contracts'
 
 import type { BrowserElementSelection, ChatMessage } from '@shared/contracts'
 import {
@@ -54,6 +53,7 @@ import {
   type WorkbenchExecutionMode,
 } from '@shared/workbenchConversation'
 import type { WorkbenchChatRunChangesSummary } from '@shared/workbenchGit'
+import type { WorkbenchPeerEvent, WorkbenchPeerTask } from '@shared/workbenchSessionPeers'
 
 import workbenchAppIconUrl from '../../../../build/icon.svg?url'
 import {
@@ -76,6 +76,7 @@ import {
 import styles from '../styles/workbenchPageStyles'
 import { useLatest } from '../support/genericHooks'
 
+import { WorkbenchAgentProcesses } from './conversation/WorkbenchAgentProcesses'
 import { WorkbenchContextUsageIndicator } from './conversation/WorkbenchContextUsageIndicator'
 import { WorkbenchConversationEngineContext } from './conversation/workbenchConversationEngineContext'
 import {
@@ -86,6 +87,7 @@ import {
   withSettledToolCalls,
   withSettledWorkerThreads,
 } from './conversation/workbenchConversationNotices'
+import { WorkbenchNotebook } from './conversation/WorkbenchNotebook'
 import {
   type WorkbenchRunChangesScope,
   WorkbenchRunChangesScopeContext,
@@ -95,6 +97,15 @@ import {
   type WorkbenchWorkerThreadScope,
   WorkbenchWorkerThreadScopeContext,
 } from './conversation/WorkbenchWorkerThreadPanel'
+import {
+  appendStandaloneChatContext,
+  consumeStandaloneChatDraft,
+  EmptyWorkbenchComposerContext,
+  forgetStandaloneChatDraft,
+  snapshotWorkbenchComposerContext,
+  useStandaloneChatDraft,
+  type WorkbenchComposerContext,
+} from './standaloneChatDrafts'
 import { createCoalescedChatPersistence, isSameIdentityList } from './standaloneChatPersistence'
 import {
   readStandaloneChatScrollPosition,
@@ -109,7 +120,7 @@ import {
   registerStandaloneChatSession,
 } from './standaloneChatSessionRegistry'
 import { useStandaloneModelPricing } from './standaloneModelPricing'
-import { useStandaloneQueuedDrafts } from './standaloneQueuedDrafts'
+import { forgetStandaloneQueuedDrafts, useStandaloneQueuedDrafts } from './standaloneQueuedDrafts'
 import {
   appendStandaloneUsageTelemetry,
   readStandaloneUsageTelemetry,
@@ -129,6 +140,7 @@ import {
   readStandaloneTerminalKind,
   resolveStandaloneRunChangesAnchor,
   restoreStandaloneRunMarkers,
+  restoreStandaloneRunStatus,
   sanitizeStandaloneChatMessages,
   shouldBlockStandaloneRunSubmission,
   type StandaloneAgentTerminalKind,
@@ -219,7 +231,7 @@ interface ActiveConversationRun {
    * 这一轮的「本轮改动」：运行中的实时采集与收尾时的最终采集；没有检查点（不是 git 仓库）时为 null。
    * 收尾一律走它的 `finish`。
    */
-  readonly runChangeCapture: Nullable<StandaloneRunChangeCapture>
+  runChangeCapture: Nullable<StandaloneRunChangeCapture>
   readonly terminalSettlement: Promise<StandaloneAgentTerminalKind>
   terminalKind: StandaloneAgentTerminalKind | null
   readonly settleTerminal: (kind: StandaloneAgentTerminalKind) => void
@@ -230,6 +242,7 @@ const inactiveStates = new Map<string, StandaloneChatState[]>()
 const stateUpdateTargets = new Map<string, string>()
 const listeners = new Set<() => void>()
 const activeRuns = new Map<string, ActiveConversationRun>()
+const pendingSubmissions = new Set<string>()
 /** 停止要等主进程把这一轮收完（关运行时、释放脚本进程）；超过这么久还没回音就按停止失败收尾。 */
 const WorkbenchAgentStopSettlementTimeoutMs = 15_000
 /** 随消息发出的图片：单张上限与张数上限（再大的图描述成附件路径，由 Agent 自己看）。 */
@@ -276,8 +289,11 @@ function stateKey(projectRoot: string): string {
   return projectRoot.trim()
 }
 
-function createState(projectRoot: string, restoreStored = true): StandaloneChatState {
-  const id = nextId('workbench-workbench')
+function createState(
+  projectRoot: string,
+  restoreStored = true,
+  id = nextId('workbench-workbench')
+): StandaloneChatState {
   const empty: StandaloneChatState = {
     projectRoot,
     sessionId: id,
@@ -319,11 +335,10 @@ function createState(projectRoot: string, restoreStored = true): StandaloneChatS
       .filter((candidate): candidate is StandaloneChatState => candidate !== null)
     if (restored.length === 0) return empty
     for (const session of restored) registerStandaloneChatSession(session.sessionId, projectRoot)
-    const activeSessionId = typeof stored.activeSessionId === 'string'
-      ? stored.activeSessionId
-      : restored[0]!.sessionId
-    const active = restored.find((candidate) => candidate.sessionId === activeSessionId)
-      ?? restored[0]!
+    const activeSessionId =
+      typeof stored.activeSessionId === 'string' ? stored.activeSessionId : restored[0]!.sessionId
+    const active =
+      restored.find((candidate) => candidate.sessionId === activeSessionId) ?? restored[0]!
     inactiveStates.set(
       stateKey(projectRoot),
       restored.filter((candidate) => candidate.sessionId !== active.sessionId)
@@ -341,11 +356,8 @@ function restoreStoredState(
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
   const stored = value as Partial<StandaloneChatState>
   if (!Array.isArray(stored.messages)) return null
-  // 被打断的一轮随会话留存：重启后提示还在，下一条消息也仍按续接处理。运行中的状态不留存——重启时那次
-  // 执行早已不在：没收尾的脚本卡按取消、没回答的交互卡按失效、没读走的引导按暂停收掉。
-  const interruptedStatus = stored.status && isInterruptedRunStatus(stored.status)
-    ? stored.status
-    : null
+  // 重开后未收尾的执行按中断恢复，下一条消息继续这一轮；脚本、交互与未读引导分别收尾。
+  const restoredStatus = restoreStandaloneRunStatus(stored, runStoppedText())
   const messages = pauseUnappliedRunGuidance(
     withExpiredInteractions(
       withSettledToolCalls(
@@ -365,19 +377,15 @@ function restoreStoredState(
     folderId: typeof stored.folderId === 'string' ? stored.folderId : empty.folderId,
     messages,
     engine: readWorkbenchEngineSelection(stored.engine),
-    status: interruptedStatus ?? empty.status,
-    lastError: interruptedStatus && typeof stored.lastError === 'string' ? stored.lastError : null,
+    ...restoredStatus,
     checkpoints: Array.isArray(stored.checkpoints)
       ? stored.checkpoints.filter(isStoredStandaloneCheckpoint)
       : [],
     messageRunMarkers: restoreStandaloneRunMarkers(stored.messageRunMarkers, messages),
     revision: typeof stored.revision === 'number' ? stored.revision : 0,
-    lastRunStartedAt: typeof stored.lastRunStartedAt === 'number'
-      ? stored.lastRunStartedAt
-      : null,
-    lastRunFinishedAt: typeof stored.lastRunFinishedAt === 'number'
-      ? stored.lastRunFinishedAt
-      : null,
+    lastRunStartedAt: typeof stored.lastRunStartedAt === 'number' ? stored.lastRunStartedAt : null,
+    lastRunFinishedAt:
+      typeof stored.lastRunFinishedAt === 'number' ? stored.lastRunFinishedAt : null,
     // 上一轮的用量随会话留存：重新打开对话时仪表直接显示，不必等下一轮。
     contextUsage: readStandaloneContextUsageEstimate({
       ...asRecord(stored.contextUsage),
@@ -452,6 +460,20 @@ function readAllStates(projectRoot: string): readonly StandaloneChatState[] {
   return [active, ...(inactiveStates.get(stateKey(projectRoot)) ?? [])]
 }
 
+/** 将界面持有的项目会话同步给宿主；流正文不进入目录。 */
+async function syncWorkbenchPeerCatalog(projectRoot: string): Promise<void> {
+  const result = await window.velarosWorkbenchSessionPeers.catalog({
+    projectRoot,
+    members: readAllStates(projectRoot)
+      .filter((state) => !state.engine)
+      .map((state) => ({
+        sessionId: state.sessionId,
+        title: readStandaloneChatTitle(state).slice(0, 500),
+      })),
+  })
+  if (!result.ok) throw new AppError('UNAVAILABLE', result.message)
+}
+
 function readSession(projectRoot: string, sessionId: string): StandaloneChatState | undefined {
   return readAllStates(projectRoot).find((candidate) => candidate.sessionId === sessionId)
 }
@@ -484,16 +506,289 @@ function useStandaloneChatState(projectRoot: string): StandaloneChatState {
   )
 }
 
+/**
+ * 本轮开跑前的检查点：对话边界（这条用户消息的下标）+ 项目工作树的 git 影子提交。
+ * 不是 git 仓库或捕获失败时 commitId 为 null——照样记下边界，这一轮只是没有「本轮改动」。
+ */
+async function captureRunCheckpoint(
+  projectRoot: string,
+  sessionId: string,
+  captureMessageCount: number,
+  label: string
+): Promise<StandaloneChatCheckpoint> {
+  const checkpointId = nextId('workbench-checkpoint')
+  const captured = await window.velarosWorkbenchGit
+    .captureChatCheckpoint({
+      workspaceRoot: projectRoot,
+      sessionId,
+      checkpointId,
+      label: label.replace(/\s+/gu, ' ').trim().slice(0, 48),
+    })
+    .catch(() => null)
+  const checkpoint: StandaloneChatCheckpoint = {
+    id: checkpointId,
+    captureMessageCount,
+    createdAt: Date.now(),
+    commitId: captured?.ok ? captured.value.commitId : null,
+  }
+  let evicted: StandaloneChatCheckpoint[] = []
+  updateSession(projectRoot, sessionId, (state) => {
+    const appended = appendStandaloneCheckpoint(state.checkpoints, checkpoint)
+    evicted = appended.evicted
+    return { ...state, checkpoints: appended.checkpoints }
+  })
+  releaseCheckpointRefs(projectRoot, sessionId, evicted)
+  return checkpoint
+}
+
+/**
+ * 这一轮的「本轮改动」：Agent 每改一次项目（主进程推来项目动静）按节奏拿工作树与这一轮开跑前的检查点比
+ * 一次，与收尾时的最终采集用同一个记录 id、覆盖同一条记录；摘要挂在会话的「进行中」上，「AI 改动」面板
+ * 据此实时显示这一轮。收尾时的最终采集见 `captureRunChanges`。
+ */
+function createRunChangeCapture(
+  projectRoot: string,
+  sessionId: string,
+  checkpoint: StandaloneChatCheckpoint
+): Nullable<StandaloneRunChangeCapture> {
+  const baseCommitId = checkpoint.commitId
+  if (!baseCommitId) return null
+  return createStandaloneRunChangeCapture({
+    timing: StandaloneRunChangeCaptureTiming,
+    capture: () =>
+      window.velarosWorkbenchGit
+        .captureChatRunChanges({
+          workspaceRoot: projectRoot,
+          sessionId,
+          recordId: checkpoint.id,
+          baseCommitId,
+        })
+        .then(
+          (result) => {
+            if (result.ok) return result.value
+            log.warn('本轮改动实时采集失败', { sessionId, message: result.message })
+            return null
+          },
+          (error: unknown) => {
+            log.warn('本轮改动采集通道不可用', { sessionId, error })
+            return null
+          }
+        ),
+    onCaptured: (summary) => {
+      updateSession(projectRoot, sessionId, (state) => ({
+        ...state,
+        liveRunChanges: { firstMessageIndex: checkpoint.captureMessageCount, summary },
+      }))
+    },
+    settle: () => captureRunChanges(projectRoot, sessionId, checkpoint),
+  })
+}
+
+/**
+ * 一轮收尾后记下「本轮改动」：拿工作树与这一轮开跑前的检查点比、按这一轮的改动归属只留 Agent 改的文件，
+ * 补丁落进主进程的记录文件，运行标记上只挂摘要；运行中实时采到的那份随之撤下。主进程采完这一次就关掉
+ * 这一轮的归属账本。
+ *
+ * 采集请求在收尾的同一拍同步发出：main 按项目根串行，它排在下一条排队消息开跑前的检查点之前，下一轮的
+ * 改动混不进这一轮。
+ */
+function captureRunChanges(
+  projectRoot: string,
+  sessionId: string,
+  checkpoint: StandaloneChatCheckpoint
+): void {
+  const baseCommitId = checkpoint.commitId
+  const session = readSession(projectRoot, sessionId)
+  if (!baseCommitId || !session) return
+  const anchorId = resolveStandaloneRunChangesAnchor(
+    session.messages,
+    session.messageRunMarkers,
+    checkpoint.captureMessageCount
+  )
+  // 最终摘要挂不上：运行中实时采到的那份撤下，面板里不留一轮永远「进行中」；它的记录连同主进程里
+  // 这一轮还开着的归属账本一起清掉。
+  const withdrawLive = (): void => {
+    withdrawLiveRunChanges(projectRoot, sessionId, checkpoint.id)
+    releaseRunChangeRecords(projectRoot, sessionId, [checkpoint.id])
+  }
+  if (!anchorId) {
+    withdrawLive()
+    return
+  }
+
+  void window.velarosWorkbenchGit
+    .captureChatRunChanges({
+      workspaceRoot: projectRoot,
+      sessionId,
+      recordId: checkpoint.id,
+      baseCommitId,
+      final: true,
+    })
+    .then(
+      (result) => {
+        if (!result.ok) {
+          log.warn('本轮改动采集失败', { sessionId, message: result.message })
+          withdrawLive()
+          return
+        }
+        const attached = attachRunChanges(projectRoot, sessionId, anchorId, result.value)
+        // 这条消息在采集期间已经不在了：刚写下的记录没人引用；被替换掉的旧记录同理。
+        const orphaned = attached
+          ? attached.replacedRecordId
+          : result.value.fileCount > 0
+            ? checkpoint.id
+            : null
+        if (orphaned) releaseRunChangeRecords(projectRoot, sessionId, [orphaned])
+      },
+      (error: unknown) => {
+        log.warn('本轮改动采集通道不可用', { sessionId, error })
+        withdrawLive()
+      }
+    )
+}
+
+async function prepareWorkbenchPeerTask(
+  task: WorkbenchPeerTask,
+  signal: AbortSignal
+): Promise<void> {
+  const projectRoot = task.projectRoot
+  const targetKey = runKey(projectRoot, task.sessionId)
+  if (pendingSubmissions.has(targetKey) || activeRuns.has(targetKey))
+    throw new AppError('CONFLICT', '目标会话正在提交或运行。')
+  let target = readSession(projectRoot, task.sessionId)
+  if (!target && task.newSession) {
+    target = { ...createState(projectRoot, false, task.sessionId), engine: null }
+    inactiveStates.set(stateKey(projectRoot), [
+      ...(inactiveStates.get(stateKey(projectRoot)) ?? []),
+      target,
+    ])
+  }
+  if (!target || target.engine || isActiveChatRun(target.status))
+    throw new AppError('CONFLICT', '目标会话暂时无法接收任务。')
+  signal.throwIfAborted()
+  pendingSubmissions.add(targetKey)
+  const scope = { runId: task.inputId, turnId: nextId('turn') }
+  const message: ChatMessage = {
+    ...createTextMessage('user', task.text),
+    id: task.inputId,
+    ...scope,
+    conversationKind: 'turn-input',
+  }
+  const run = createActiveRun({
+    projectRoot,
+    sessionId: task.sessionId,
+    scope,
+    goalMode: false,
+    runChangeCapture: null,
+  })
+  activeRuns.set(targetKey, run)
+  ensureConversationEventSubscription()
+  updateSession(projectRoot, task.sessionId, (state) => ({
+    ...state,
+    messages: [...state.messages, message],
+    status: 'running',
+    teamPhase: 'creating-task',
+    activeTurn: null,
+    completedTurns: 0,
+    lastError: null,
+    connectionRetryAttempt: null,
+    connectionRetryMaxAttempts: null,
+    connectionRetryMessage: null,
+    awaitingInputQuestion: null,
+    awaitingConfirmationMessage: null,
+    awaitingConfirmationId: null,
+    awaitingConfirmationExecutionId: null,
+    lastRunStartedAt: Date.now(),
+    lastRunFinishedAt: null,
+    workerThreads: [],
+    revision: state.revision + 1,
+  }))
+  try {
+    const checkpoint = await captureRunCheckpoint(
+      projectRoot,
+      task.sessionId,
+      target.messages.length,
+      task.text
+    )
+    run.runChangeCapture = createRunChangeCapture(projectRoot, task.sessionId, checkpoint)
+    signal.throwIfAborted()
+    await syncWorkbenchPeerCatalog(projectRoot)
+    signal.throwIfAborted()
+  } catch (error) {
+    finishRun(run, {
+      kind: signal.aborted ? 'aborted' : 'error',
+      message: AppError.getMessage(error),
+    })
+    run.runChangeCapture?.finish()
+    throw error
+  } finally {
+    pendingSubmissions.delete(targetKey)
+  }
+}
+
+const peerPreparations = new Map<string, AbortController>()
+let peerEventSubscription: Nullable<() => void> = null
+
+function receiveWorkbenchPeerEvent(event: WorkbenchPeerEvent): void {
+  if (event.type === 'failed') {
+    updateSession(event.ref.projectRoot, event.ref.sessionId, (state) => ({
+      ...state,
+      messages: [...state.messages, createTextMessage('assistant', event.message)],
+    }))
+    return
+  }
+  const { task } = event
+  const projectRoot = task.projectRoot
+  const cancel = (message: string): void => {
+    const preparation = peerPreparations.get(task.inputId)
+    if (preparation) preparation.abort(new AppError('CANCELLED', message))
+    const run = activeRuns.get(runKey(projectRoot, task.sessionId))
+    if (run?.scope.runId === task.inputId) finishRun(run, { kind: 'error', message })
+  }
+  if (event.type === 'cancel') {
+    cancel(event.message)
+    return
+  }
+  if (peerPreparations.has(task.inputId)) return
+  const controller = new AbortController()
+  peerPreparations.set(task.inputId, controller)
+  void prepareWorkbenchPeerTask(task, controller.signal)
+    .then(
+      () =>
+        window.velarosWorkbenchSessionPeers.acknowledge({
+          projectRoot,
+          sessionId: task.sessionId,
+          inputId: task.inputId,
+        }),
+      (error: unknown) =>
+        window.velarosWorkbenchSessionPeers.acknowledge({
+          projectRoot,
+          sessionId: task.sessionId,
+          inputId: task.inputId,
+          error: AppError.getMessage(error).slice(0, 8000),
+        })
+    )
+    .then((result) => {
+      if (!result.ok) cancel(result.message)
+    })
+    .catch((error: unknown) => {
+      cancel(AppError.getMessage(error))
+      log.warn('会话任务回执失败', { error })
+    })
+    .finally(() => peerPreparations.delete(task.inputId))
+}
+
 // ---------------------------------------------------------------------------------------------
 // 运行中的通知与状态：主进程推来的每一条落到发起那一轮的会话上
 // ---------------------------------------------------------------------------------------------
 
 /** 会话通道的事件订阅：全应用一份，第一次挂上会话面时装上。 */
 function ensureConversationEventSubscription(): void {
-  if (conversationEventSubscription || typeof window === 'undefined') return
-  conversationEventSubscription = window.velarosWorkbenchConversation.onEvent(
-    applyConversationEnvelope
-  )
+  if (typeof window === 'undefined') return
+  peerEventSubscription ??= window.velarosWorkbenchSessionPeers.onEvent(receiveWorkbenchPeerEvent)
+  if (conversationEventSubscription) return
+  conversationEventSubscription =
+    window.velarosWorkbenchConversation.onEvent(applyConversationEnvelope)
 }
 
 function applyConversationEnvelope(envelope: WorkbenchConversationEventEnvelope): void {
@@ -502,7 +797,11 @@ function applyConversationEnvelope(envelope: WorkbenchConversationEventEnvelope)
   const { event } = envelope
   if (event.type === 'notice') {
     if (event.kind === ConversationCommandOutputNotice) {
-      if (isPlainObject(event.payload) && isString(event.payload.id) && isString(event.payload.text))
+      if (
+        isPlainObject(event.payload) &&
+        isString(event.payload.id) &&
+        isString(event.payload.text)
+      )
         applyWorkbenchScriptLiveOutput({ id: event.payload.id, text: event.payload.text })
       return
     }
@@ -519,7 +818,8 @@ function applyConversationEnvelope(envelope: WorkbenchConversationEventEnvelope)
         event.payload,
         run.scope
       )
-      if (next.messages === state.messages && next.workerThreads === state.workerThreads) return state
+      if (next.messages === state.messages && next.workerThreads === state.workerThreads)
+        return state
       return {
         ...state,
         messages: next.messages,
@@ -532,7 +832,10 @@ function applyConversationEnvelope(envelope: WorkbenchConversationEventEnvelope)
   applyConversationState(run, event.payload)
 }
 
-function applyConversationState(run: ActiveConversationRun, runtime: WorkbenchConversationState): void {
+function applyConversationState(
+  run: ActiveConversationRun,
+  runtime: WorkbenchConversationState
+): void {
   const { projectRoot, sessionId } = run
   switch (runtime.kind) {
     case 'usage-telemetry': {
@@ -684,6 +987,7 @@ function readProjectRuntimeFieldIdentities(state: StandaloneChatState): unknown[
   return [
     state.sessionId,
     state.folderId,
+    state.engine,
     readStandaloneChatTitle(state),
     state.messages.length === 0,
     isActiveChatRun(state.status),
@@ -721,6 +1025,12 @@ function useStandaloneProjectRuntime(projectRoot: Nullable<string>): WorkbenchCh
   const readView = (): StandaloneProjectRuntimeView =>
     readStandaloneProjectRuntimeView(normalizedRoot)
   const view = useSyncExternalStore(subscribeStandaloneChatStore, readView, readView)
+  useEffect(() => {
+    if (normalizedRoot)
+      void syncWorkbenchPeerCatalog(normalizedRoot).catch((error: unknown) =>
+        log.warn('会话目录同步失败', { error })
+      )
+  }, [normalizedRoot, view])
   return useMemo(
     () => buildStandaloneProjectRuntime(projectRoot, normalizedRoot, view),
     [normalizedRoot, projectRoot, view]
@@ -780,9 +1090,10 @@ function buildStandaloneProjectRuntime(
         const key = stateKey(normalizedRoot)
         const active = getState(normalizedRoot)
         const inactive = inactiveStates.get(key) ?? []
-        const target = targetFolderId === folderId
-          ? active
-          : [active, ...inactive].find((candidate) => candidate.folderId === targetFolderId)
+        const target =
+          targetFolderId === folderId
+            ? active
+            : [active, ...inactive].find((candidate) => candidate.folderId === targetFolderId)
         if (!target || isActiveChatRun(target.status)) return
         releaseRemovedSession(target)
         if (target.sessionId === active.sessionId) {
@@ -812,6 +1123,20 @@ function buildStandaloneProjectRuntime(
 // 会话面
 // ---------------------------------------------------------------------------------------------
 
+function StandaloneWorkbenchChatSessionActions({
+  projectRoot,
+  sessionId,
+}: WorkbenchChatSessionActionsProps): Nullable<ReactElement> {
+  const chat = useStandaloneChatState(projectRoot)
+  if (chat.engine || chat.sessionId !== sessionId) return null
+  return (
+    <>
+      <WorkbenchAgentProcesses projectRoot={projectRoot} sessionId={sessionId} />
+      <WorkbenchNotebook projectRoot={projectRoot} sessionId={sessionId} />
+    </>
+  )
+}
+
 function StandaloneWorkbenchChatSessionSurface({
   projectRoot,
   currentFilePath,
@@ -840,23 +1165,44 @@ function StandaloneWorkbenchChatSessionSurface({
   const engine = chat.engine
   const engineStatus = engine ? engines.find((status) => status.id === engine.id) : undefined
   const engineLabel = engine ? workbenchAgentEngineLabel(engine.id) : null
-  const [prompt, setPrompt] = useState('')
-  const [files, setFiles] = useState<File[]>([])
-  /** 用户在浏览器里拾取、还没随消息发出的页面元素（输入框上方的 chip）。 */
-  const [browserSelections, setBrowserSelections] = useState<BrowserElementSelection[]>([])
-  const [includedCurrentFilePath, setIncludedCurrentFilePath] =
-    useState<Nullable<string>>(currentFilePath)
-  /**
-   * 右键「添加到聊天」挂上的文件（只发路径锚点，由 Agent 自己读）：前者是本会话挂过的全部，输入框里敲 `@`
-   * 可以从中重新选；后者是这条消息挂着的那些，显示成 chip，发出后清空。
-   */
-  const [fileReferencePaths, setFileReferencePaths] = useState<string[]>([])
-  const [selectedFileReferencePaths, setSelectedFileReferencePaths] = useState<string[]>([])
-  const [goalMode, setGoalMode] = useState(false)
-  const [planMode, setPlanMode] = useState(false)
-  const [reasoningLevel, setReasoningLevel] = useState<ReasoningLevel>(readStoredReasoningLevel)
+  const {
+    value: prompt,
+    setValue: setPrompt,
+    files,
+    setFiles,
+    context: composerContext,
+    setContext: setComposerContext,
+    browserSelections,
+    setBrowserSelections,
+    includedCurrentFilePath,
+    setIncludedCurrentFilePath,
+    fileReferencePaths,
+    setFileReferencePaths,
+    selectedFileReferencePaths,
+    setSelectedFileReferencePaths,
+    goalMode,
+    setGoalMode,
+    planMode,
+    setPlanMode,
+    reasoningLevel,
+    setReasoningLevel,
+  } = useStandaloneChatDraft(`${projectRoot}\0${chat.sessionId}`, {
+    currentFilePath,
+    reasoningLevel: readStoredReasoningLevel(),
+  })
   const [showThinkingProcess, setShowThinkingProcess] = useState(true)
-  const [accountSignInPending, setAccountSignInPending] = useState(false)
+  const [accountSignInSessions, setAccountSignInSessions] = useState<ReadonlySet<string>>(
+    () => new Set()
+  )
+  const accountSignInPending = accountSignInSessions.has(chat.sessionId)
+  const setAccountSignInPending = (pending: boolean): void => {
+    setAccountSignInSessions((current) => {
+      const next = new Set(current)
+      if (pending) next.add(chat.sessionId)
+      else next.delete(chat.sessionId)
+      return next
+    })
+  }
   const isAwaitingInput = chat.status === 'awaiting-input'
   const isAwaitingConfirmation = chat.status === 'awaiting-confirmation'
   // 这一轮正在跑：输入框保持可用，发送即引导；显式「结束后发送」进排队。外部引擎不收运行中的引导，
@@ -864,7 +1210,7 @@ function StandaloneWorkbenchChatSessionSurface({
   const canSteerRun = chat.status === 'running' && hasActiveRun && !engine
   const engineRunActive = !!engine && chat.status === 'running' && hasActiveRun
   const queuedDrafts = useStandaloneQueuedDrafts({
-    scopeId: chat.sessionId,
+    scopeId: `${projectRoot}\0${chat.sessionId}`,
     isRunBlocked: shouldBlockStandaloneRunSubmission(
       chat.status,
       hasActiveRun,
@@ -874,7 +1220,11 @@ function StandaloneWorkbenchChatSessionSurface({
     pauseAutomaticDrain: chat.status === 'stopping' || isInterruptedRunStatus(chat.status),
     submitDraft: (draft) =>
       new Promise<boolean>((resolve) => {
-        void submit(draft.value, draft.files, { onAccepted: () => resolve(true) }).then(resolve)
+        void submit(draft.value, draft.files, {
+          context: draft.context ?? EmptyWorkbenchComposerContext,
+          queued: true,
+          onAccepted: () => resolve(true),
+        }).then(resolve)
       }),
   })
   // 目标自动续跑（规则见 resolveWorkbenchGoalAutoContinue）：每个会话自上次用户亲自发言以来续跑了几轮。
@@ -888,7 +1238,8 @@ function StandaloneWorkbenchChatSessionSurface({
 
   useEffect(() => {
     // 目标自动续跑只对 VelarOS 自己的 Agent：外部引擎的目标归引擎自己管。
-    if (chat.status !== 'completed' || !chat.lastRunFinishedAt || hasActiveRun || chat.engine) return
+    if (chat.status !== 'completed' || !chat.lastRunFinishedAt || hasActiveRun || chat.engine)
+      return
     const sessionId = chat.sessionId
     const finishedAt = chat.lastRunFinishedAt
     const runKeyForGoal = `${sessionId}:${finishedAt}`
@@ -905,11 +1256,12 @@ function StandaloneWorkbenchChatSessionSurface({
       // 读目标期间用户可能已经发了新消息或切到别的会话：只在同一轮结束的现场续跑。
       const current = getState(projectRoot)
       if (
-        current.sessionId !== sessionId
-        || current.status !== 'completed'
-        || current.lastRunFinishedAt !== finishedAt
-        || !!findActiveRun(projectRoot, sessionId)
-      ) return
+        current.sessionId !== sessionId ||
+        current.status !== 'completed' ||
+        current.lastRunFinishedAt !== finishedAt ||
+        !!findActiveRun(projectRoot, sessionId)
+      )
+        return
 
       const consecutiveAutoRounds = goalAutoContinueRoundsRef.current.get(sessionId) ?? 0
       const decision = resolveWorkbenchGoalAutoContinue({
@@ -963,41 +1315,29 @@ function StandaloneWorkbenchChatSessionSurface({
     { restoreKey: chat.sessionId, readScrollTop, writeScrollTop }
   )
 
-  useEffect(() => {
-    setIncludedCurrentFilePath(currentFilePath)
-  }, [currentFilePath])
-
-  // 换会话清空未发出的拾取；必须声明在收件 effect 之前——挂载时两者同帧执行，顺序反了会把
-  // 刚收进来的投递立刻清掉。
-  useEffect(() => {
-    setBrowserSelections([])
-    setFileReferencePaths([])
-    setSelectedFileReferencePaths([])
-  }, [chat.sessionId])
-
   // 宿主投递来的拾取结果收进输入框，并回执「已接收」让宿主清掉待投递项。
   useEffect(() => {
     if (pendingBrowserElementSelections.length === 0) return
-    setBrowserSelections((current) => {
-      const known = new Set(current.map((selection) => selection.id))
-      const incoming = pendingBrowserElementSelections
-        .map((delivery) => delivery.selection)
-        .filter((selection) => !known.has(selection.id))
-      return incoming.length > 0 ? [...current, ...incoming] : current
-    })
+    for (const { targetSessionId, selection } of pendingBrowserElementSelections) {
+      if (readSession(projectRoot, targetSessionId))
+        appendStandaloneChatContext(runKey(projectRoot, targetSessionId), {
+          browserSelections: [selection],
+        })
+    }
     onBrowserElementSelectionsConsumed?.(
       pendingBrowserElementSelections.map((delivery) => delivery.deliveryId)
     )
-  }, [onBrowserElementSelectionsConsumed, pendingBrowserElementSelections])
+  }, [projectRoot, onBrowserElementSelectionsConsumed, pendingBrowserElementSelections])
 
   // 宿主投递来的「添加到聊天」：挂到这条消息上，同时记进本会话的可引用列表。
   useEffect(() => {
     if (pendingFileReferences.length === 0) return
-    const incoming = pendingFileReferences.map((delivery) => delivery.path)
-    setFileReferencePaths((current) => appendWorkbenchChatFileReferences(current, incoming))
-    setSelectedFileReferencePaths((current) => appendWorkbenchChatFileReferences(current, incoming))
+    for (const { targetSessionId, path } of pendingFileReferences) {
+      if (readSession(projectRoot, targetSessionId))
+        appendStandaloneChatContext(runKey(projectRoot, targetSessionId), { filePaths: [path] })
+    }
     onFileReferencesConsumed?.(pendingFileReferences.map((delivery) => delivery.deliveryId))
-  }, [onFileReferencesConsumed, pendingFileReferences])
+  }, [projectRoot, onFileReferencesConsumed, pendingFileReferences])
 
   const fileReferenceOptions = useMemo(
     () => buildWorkbenchChatFileReferenceOptions(fileReferencePaths),
@@ -1015,10 +1355,11 @@ function StandaloneWorkbenchChatSessionSurface({
 
   useEffect(() => {
     if (
-      managedModelState.status !== 'ready'
-      || !isStandaloneWorkbenchManagedProviderId(modelConfig.provider)
-      || selectedManagedProvider
-    ) return
+      managedModelState.status !== 'ready' ||
+      !isStandaloneWorkbenchManagedProviderId(modelConfig.provider) ||
+      selectedManagedProvider
+    )
+      return
     selectStandaloneWorkbenchModelProvider('openrouter')
   }, [managedModelState.status, modelConfig.provider, selectedManagedProvider])
 
@@ -1064,9 +1405,10 @@ function StandaloneWorkbenchChatSessionSurface({
     // 没有确认底层已终止，不能伪装成 aborted；恢复可发送并明确失败。
     finishRun(run, {
       kind: 'error',
-      message: settlement.kind === 'request-error' && settlement.error instanceof Error
-        ? settlement.error.message
-        : t('workbench.chatStopFailed'),
+      message:
+        settlement.kind === 'request-error' && settlement.error instanceof Error
+          ? settlement.error.message
+          : t('workbench.chatStopFailed'),
     })
   }
 
@@ -1075,7 +1417,10 @@ function StandaloneWorkbenchChatSessionSurface({
    * 项目之外的交给系统默认应用。
    */
   async function openAttachedFile(file: File): Promise<void> {
-    const path = resolveWorkbenchClipboardFilePath(file, window.velarosWorkbenchProjectHub.getPathForFile)
+    const path = resolveWorkbenchClipboardFilePath(
+      file,
+      window.velarosWorkbenchProjectHub.getPathForFile
+    )
     if (!path) return
     if (onOpenWorkspacePath && (await onOpenWorkspacePath(path)) !== false) return
     const opened = await window.velarosWorkbenchProjectHub.openSystemPath(path)
@@ -1096,13 +1441,25 @@ function StandaloneWorkbenchChatSessionSurface({
     if (isAwaitingInput) return answerPendingInput(value)
     // 引导通道只带文本：运行中附带文件的消息改为本轮结束后发送；外部引擎跑着时发的一律排队。
     if (
-      (canSteerRun && (draft?.delivery === 'after-current' || draftFiles.length > 0))
-      || engineRunActive
+      (canSteerRun && (draft?.delivery === 'after-current' || draftFiles.length > 0)) ||
+      engineRunActive
     ) {
-      if (!value.trim() && draftFiles.length === 0) return Promise.resolve()
-      queuedDrafts.enqueue({ value, files: draftFiles })
+      if (
+        !value.trim() &&
+        draftFiles.length === 0 &&
+        browserSelections.length === 0 &&
+        selectedFileReferencePaths.length === 0
+      )
+        return Promise.resolve()
+      queuedDrafts.enqueue({
+        value,
+        files: draftFiles,
+        context: composerContext,
+      })
       setPrompt('')
       setFiles([])
+      setBrowserSelections([])
+      setSelectedFileReferencePaths([])
       return Promise.resolve()
     }
     return new Promise<void>((resolve) => {
@@ -1119,7 +1476,7 @@ function StandaloneWorkbenchChatSessionSurface({
       .input({ sessionId: chat.sessionId, projectRoot, answer })
       .catch((error: unknown) => ({ ok: false as const, message: String(error) }))
     if (result.ok) return
-    setPrompt(value)
+    setPrompt((current) => current || value)
     workbenchMessage.warning({
       title: t('workbench.chatInteractionAnswerFailedTitle'),
       description: result.message,
@@ -1158,16 +1515,17 @@ function StandaloneWorkbenchChatSessionSurface({
   async function sendRunGuidance(
     text: string,
     selections: readonly BrowserElementSelection[] = [],
-    referencedFilePaths: readonly string[] = []
+    referencedFilePaths: readonly string[] = [],
+    options?: { queued: boolean }
   ): Promise<boolean> {
     const sessionId = chat.sessionId
     const run = findActiveRun(projectRoot, sessionId)
     const guidance: ChatMessage = {
       ...createTextMessage(
         'user',
-        text
-          || describeBrowserElements(selections)
-          || buildFileReferenceDisplayFallback(referencedFilePaths)
+        text ||
+          describeBrowserElements(selections) ||
+          buildFileReferenceDisplayFallback(referencedFilePaths)
       ),
       conversationKind: 'run-guidance',
       guidanceStatus: 'pending',
@@ -1182,9 +1540,17 @@ function StandaloneWorkbenchChatSessionSurface({
     ]
       .filter(Boolean)
       .join('\n\n')
-    setPrompt('')
-    setBrowserSelections([])
-    setSelectedFileReferencePaths([])
+    if (!options?.queued) {
+      consumeStandaloneChatDraft(runKey(projectRoot, sessionId), {
+        value: text,
+        files: [],
+        context: {
+          ...composerContext,
+          browserSelections: [...selections],
+          selectedFileReferencePaths: [...referencedFilePaths],
+        },
+      })
+    }
     updateSession(projectRoot, sessionId, (state) => ({
       ...state,
       messages: [...state.messages, guidance],
@@ -1213,8 +1579,16 @@ function StandaloneWorkbenchChatSessionSurface({
       messages: state.messages.filter((message) => message.id !== guidance.id),
       revision: state.revision + 1,
     }))
-    setPrompt(text)
-    setBrowserSelections([...selections])
+    if (!options?.queued) {
+      setPrompt((current) => current || text)
+      setBrowserSelections((current) => [
+        ...current,
+        ...selections.filter((selection) => !current.some((item) => item.id === selection.id)),
+      ])
+      setSelectedFileReferencePaths((current) =>
+        appendWorkbenchChatFileReferences(current, referencedFilePaths)
+      )
+    }
     workbenchMessage.warning({
       title: t('workbench.chatGuidanceRejectedTitle'),
       description: t('workbench.chatGuidanceRejectedDescription'),
@@ -1223,137 +1597,7 @@ function StandaloneWorkbenchChatSessionSurface({
   }
 
   /**
-   * 本轮开跑前的检查点：对话边界（这条用户消息的下标）+ 项目工作树的 git 影子提交。
-   * 不是 git 仓库或捕获失败时 commitId 为 null——照样记下边界，这一轮只是没有「本轮改动」。
-   */
-  async function captureRunCheckpoint(
-    sessionId: string,
-    captureMessageCount: number,
-    label: string
-  ): Promise<StandaloneChatCheckpoint> {
-    const checkpointId = nextId('workbench-checkpoint')
-    const captured = await window.velarosWorkbenchGit
-      .captureChatCheckpoint({
-        workspaceRoot: projectRoot,
-        sessionId,
-        checkpointId,
-        label: label.replace(/\s+/gu, ' ').trim().slice(0, 48),
-      })
-      .catch(() => null)
-    const checkpoint: StandaloneChatCheckpoint = {
-      id: checkpointId,
-      captureMessageCount,
-      createdAt: Date.now(),
-      commitId: captured?.ok ? captured.value.commitId : null,
-    }
-    let evicted: StandaloneChatCheckpoint[] = []
-    updateSession(projectRoot, sessionId, (state) => {
-      const appended = appendStandaloneCheckpoint(state.checkpoints, checkpoint)
-      evicted = appended.evicted
-      return { ...state, checkpoints: appended.checkpoints }
-    })
-    releaseCheckpointRefs(projectRoot, sessionId, evicted)
-    return checkpoint
-  }
-
-  /**
-   * 这一轮的「本轮改动」：Agent 每改一次项目（主进程推来项目动静）按节奏拿工作树与这一轮开跑前的检查点比
-   * 一次，与收尾时的最终采集用同一个记录 id、覆盖同一条记录；摘要挂在会话的「进行中」上，「AI 改动」面板
-   * 据此实时显示这一轮。收尾时的最终采集见 `captureRunChanges`。
-   */
-  function createRunChangeCapture(
-    sessionId: string,
-    checkpoint: StandaloneChatCheckpoint
-  ): Nullable<StandaloneRunChangeCapture> {
-    const baseCommitId = checkpoint.commitId
-    if (!baseCommitId) return null
-    return createStandaloneRunChangeCapture({
-      timing: StandaloneRunChangeCaptureTiming,
-      capture: () =>
-        window.velarosWorkbenchGit
-          .captureChatRunChanges({
-            workspaceRoot: projectRoot,
-            sessionId,
-            recordId: checkpoint.id,
-            baseCommitId,
-          })
-          .then(
-            (result) => {
-              if (result.ok) return result.value
-              log.warn('本轮改动实时采集失败', { sessionId, message: result.message })
-              return null
-            },
-            (error: unknown) => {
-              log.warn('本轮改动采集通道不可用', { sessionId, error })
-              return null
-            }
-          ),
-      onCaptured: (summary) => {
-        updateSession(projectRoot, sessionId, (state) => ({
-          ...state,
-          liveRunChanges: { firstMessageIndex: checkpoint.captureMessageCount, summary },
-        }))
-      },
-      settle: () => captureRunChanges(sessionId, checkpoint),
-    })
-  }
-
-  /**
-   * 一轮收尾后记下「本轮改动」：拿工作树与这一轮开跑前的检查点比、按这一轮的改动归属只留 Agent 改的文件，
-   * 补丁落进主进程的记录文件，运行标记上只挂摘要；运行中实时采到的那份随之撤下。主进程采完这一次就关掉
-   * 这一轮的归属账本。
-   *
-   * 采集请求在收尾的同一拍同步发出：main 按项目根串行，它排在下一条排队消息开跑前的检查点之前，下一轮的
-   * 改动混不进这一轮。
-   */
-  function captureRunChanges(sessionId: string, checkpoint: StandaloneChatCheckpoint): void {
-    const baseCommitId = checkpoint.commitId
-    const session = readSession(projectRoot, sessionId)
-    if (!baseCommitId || !session) return
-    const anchorId = resolveStandaloneRunChangesAnchor(
-      session.messages,
-      session.messageRunMarkers,
-      checkpoint.captureMessageCount
-    )
-    // 最终摘要挂不上：运行中实时采到的那份撤下，面板里不留一轮永远「进行中」；它的记录连同主进程里
-    // 这一轮还开着的归属账本一起清掉。
-    const withdrawLive = (): void => {
-      withdrawLiveRunChanges(projectRoot, sessionId, checkpoint.id)
-      releaseRunChangeRecords(projectRoot, sessionId, [checkpoint.id])
-    }
-    if (!anchorId) {
-      withdrawLive()
-      return
-    }
-
-    void window.velarosWorkbenchGit
-      .captureChatRunChanges({
-        workspaceRoot: projectRoot,
-        sessionId,
-        recordId: checkpoint.id,
-        baseCommitId,
-        final: true,
-      })
-      .then((result) => {
-        if (!result.ok) {
-          log.warn('本轮改动采集失败', { sessionId, message: result.message })
-          withdrawLive()
-          return
-        }
-        const attached = attachRunChanges(projectRoot, sessionId, anchorId, result.value)
-        // 这条消息在采集期间已经不在了：刚写下的记录没人引用；被替换掉的旧记录同理。
-        const orphaned = attached
-          ? attached.replacedRecordId
-          : result.value.fileCount > 0 ? checkpoint.id : null
-        if (orphaned) releaseRunChangeRecords(projectRoot, sessionId, [orphaned])
-      }, (error: unknown) => {
-        log.warn('本轮改动采集通道不可用', { sessionId, error })
-        withdrawLive()
-      })
-  }
-
-  /**
-   * 发一条消息。返回是否受理；`onAccepted` 在消息追加进对话、这一轮开始跑的那一刻回调——
+   * 发一条消息。返回是否受理；`onAccepted` 在主进程接纳本次输入后回调——
    * 函数本身等主进程接纳这条输入才 resolve，不等整轮跑完。
    */
   async function submit(
@@ -1361,6 +1605,9 @@ function StandaloneWorkbenchChatSessionSurface({
     draftFiles = files,
     options?: {
       onAccepted?: () => void
+      context?: WorkbenchComposerContext
+      /** 排队发送读取入队快照，不动用户正在编辑的下一条草稿。 */
+      queued?: boolean
       /** 目标卡的「继续」：这一轮按目标模式跑，不看输入框里的模式开关（与 Desktop continueGoal 相同）。 */
       goalMode?: boolean
       /**
@@ -1370,230 +1617,268 @@ function StandaloneWorkbenchChatSessionSurface({
       systemNotice?: { summary: string; detail: string }
     }
   ): Promise<boolean> {
-    const systemNotice = options?.systemNotice
-    // 宿主续跑只接在一轮正常完成之后：运行中进来的话会被当成引导注入，冒充用户发言。
-    if (systemNotice && getState(projectRoot).status !== 'completed') return false
-    const text = draftValue.trim()
-    const selections = systemNotice ? [] : browserSelections
-    const referencedFilePaths = systemNotice ? [] : selectedFileReferencePaths
-    // 运行中补发 = 引导：注入正在执行的这一轮，而不是排到结束后另起一轮（与 Desktop 一致）。
-    // 引导通道不带附件（附件由输入框入口改为结束后发送）。
-    if (
-      canSteerRun
-      && (text || selections.length > 0 || referencedFilePaths.length > 0)
-      && draftFiles.length === 0
-    ) return sendRunGuidance(text, selections, referencedFilePaths)
-    if (
-      (!text && draftFiles.length === 0 && selections.length === 0 && referencedFilePaths.length === 0)
-      || shouldBlockStandaloneRunSubmission(chat.status, hasActiveRun, accountSignInPending)
-    ) return false
-    if (engine) {
-      // 引擎在本机不能用（没装、没登录）：先说清楚，不发出去。还没探到的照常发，失败由引擎报原因。
-      if (engineStatus && !engineStatus.available) {
-        workbenchMessage.warning({
-          title: t('workbench.chatEngineUnavailableTitle', { engine: engineLabel ?? '' }),
-          description:
-            engineStatus.reason ?? t('workbench.chatEngineUnavailableDescription', { engine: engineLabel ?? '' }),
-        })
+    const submissionKey = runKey(projectRoot, chat.sessionId)
+    if (pendingSubmissions.has(submissionKey)) return false
+    pendingSubmissions.add(submissionKey)
+    try {
+      const systemNotice = options?.systemNotice
+      // 宿主续跑只接在一轮正常完成之后：运行中进来的话会被当成引导注入，冒充用户发言。
+      if (systemNotice && readSession(projectRoot, chat.sessionId)?.status !== 'completed')
         return false
-      }
-    } else {
-      // VelarOS 自己的 Agent：要有模型、登录 VelarOS，托管模型还要在线授权。
-      if (!modelConfig.provider.trim() || !modelConfig.model.trim()) {
-        workbenchMessage.warning({
-          title: t('workbench.chatModelMissingTitle'),
-          description: t('workbench.chatModelMissingDescription'),
-        })
+      const text = draftValue.trim()
+      const context = snapshotWorkbenchComposerContext(options?.context ?? composerContext)
+      const selections = systemNotice ? [] : context.browserSelections
+      const referencedFilePaths = systemNotice ? [] : context.selectedFileReferencePaths
+      // 运行中补发 = 引导：注入正在执行的这一轮，而不是排到结束后另起一轮（与 Desktop 一致）。
+      // 引导通道不带附件（附件由输入框入口改为结束后发送）。
+      if (
+        canSteerRun &&
+        !options?.queued &&
+        (text || selections.length > 0 || referencedFilePaths.length > 0) &&
+        draftFiles.length === 0
+      )
+        return await sendRunGuidance(
+          text,
+          selections,
+          appendWorkbenchChatFileReferences(
+            context.includedCurrentFilePath ? [context.includedCurrentFilePath] : [],
+            referencedFilePaths
+          )
+        )
+      if (
+        (!text &&
+          draftFiles.length === 0 &&
+          selections.length === 0 &&
+          referencedFilePaths.length === 0) ||
+        shouldBlockStandaloneRunSubmission(chat.status, hasActiveRun, accountSignInPending)
+      )
         return false
-      }
-      setAccountSignInPending(true)
-      try {
-        const account = await window.velarosWorkbenchAccount.ensureSignedIn()
-        if (account.status !== 'signed-in') return false
-      } catch (error) {
-        workbenchMessage.warning({
-          title: t('workbench.chatSignInFailedTitle'),
-          description: t('workbench.chatSignInFailedDescription', {
-            error: error instanceof Error ? error.message : String(error),
-          }),
-        })
-        return false
-      } finally {
-        setAccountSignInPending(false)
-      }
-      if (isStandaloneWorkbenchManagedProviderId(modelConfig.provider)) {
+      if (engine) {
+        // 引擎在本机不能用（没装、没登录）：先说清楚，不发出去。还没探到的照常发，失败由引擎报原因。
+        if (engineStatus && !engineStatus.available) {
+          workbenchMessage.warning({
+            title: t('workbench.chatEngineUnavailableTitle', { engine: engineLabel ?? '' }),
+            description:
+              engineStatus.reason ??
+              t('workbench.chatEngineUnavailableDescription', { engine: engineLabel ?? '' }),
+          })
+          return false
+        }
+      } else {
+        // VelarOS 自己的 Agent：要有模型、登录 VelarOS，托管模型还要在线授权。
+        if (!modelConfig.provider.trim() || !modelConfig.model.trim()) {
+          workbenchMessage.warning({
+            title: t('workbench.chatModelMissingTitle'),
+            description: t('workbench.chatModelMissingDescription'),
+          })
+          return false
+        }
+        setAccountSignInPending(true)
         try {
-          const snapshot = await refreshStandaloneWorkbenchManagedModels()
-          const managedProvider = snapshot.managedModels.find(
-            (provider) => provider.providerId === modelConfig.provider
-          )
-          const modelAvailable = managedProvider?.models.some(
-            (model) => model.id === modelConfig.model && model.status === 'available'
-          )
-          if (!managedProvider?.enabled || !modelAvailable) {
-            workbenchMessage.warning({
-              title: t('workbench.chatManagedModelUnavailableTitle'),
-              description: t('workbench.chatManagedModelUnavailableDescription'),
-            })
-            return false
-          }
+          const account = await window.velarosWorkbenchAccount.ensureSignedIn()
+          if (account.status !== 'signed-in') return false
         } catch (error) {
           workbenchMessage.warning({
-            title: t('workbench.chatManagedModelUnavailableTitle'),
-            description: t('workbench.chatManagedModelAccessFailed', {
+            title: t('workbench.chatSignInFailedTitle'),
+            description: t('workbench.chatSignInFailedDescription', {
               error: error instanceof Error ? error.message : String(error),
             }),
           })
           return false
+        } finally {
+          setAccountSignInPending(false)
+        }
+        if (isStandaloneWorkbenchManagedProviderId(modelConfig.provider)) {
+          try {
+            const snapshot = await refreshStandaloneWorkbenchManagedModels()
+            const managedProvider = snapshot.managedModels.find(
+              (provider) => provider.providerId === modelConfig.provider
+            )
+            const modelAvailable = managedProvider?.models.some(
+              (model) => model.id === modelConfig.model && model.status === 'available'
+            )
+            if (!managedProvider?.enabled || !modelAvailable) {
+              workbenchMessage.warning({
+                title: t('workbench.chatManagedModelUnavailableTitle'),
+                description: t('workbench.chatManagedModelUnavailableDescription'),
+              })
+              return false
+            }
+          } catch (error) {
+            workbenchMessage.warning({
+              title: t('workbench.chatManagedModelUnavailableTitle'),
+              description: t('workbench.chatManagedModelAccessFailed', {
+                error: error instanceof Error ? error.message : String(error),
+              }),
+            })
+            return false
+          }
         }
       }
-    }
-    const { images, describedFiles } = await readImageAttachments(draftFiles)
-    const attachmentContext = await buildAttachmentContext(describedFiles)
-    const currentFileContext = includedCurrentFilePath && !systemNotice
-      ? `Current Workbench file: ${includedCurrentFilePath}`
-      : ''
-    const browserElementContext = formatBrowserElementSelectionsForPrompt(selections)
-    // 引用的文件只发路径锚点，内容由 Agent 自己按需去读。
-    const fileReferenceContext = formatWorkbenchChatFileReferencesForPrompt(referencedFilePaths)
-    if (!systemNotice) {
-      setPrompt('')
-      setFiles([])
-      setBrowserSelections([])
-      setSelectedFileReferencePaths([])
+      const { images, describedFiles } = await readImageAttachments(draftFiles)
+      const attachmentContext = await buildAttachmentContext(describedFiles)
+      const currentFileContext =
+        context.includedCurrentFilePath && !systemNotice
+          ? `Current Workbench file: ${context.includedCurrentFilePath}`
+          : ''
+      const browserElementContext = formatBrowserElementSelectionsForPrompt(selections)
+      // 引用的文件只发路径锚点，内容由 Agent 自己按需去读。
+      const fileReferenceContext = formatWorkbenchChatFileReferencesForPrompt(referencedFilePaths)
+      if (!systemNotice && !options?.queued) {
+        consumeStandaloneChatDraft(submissionKey, { value: draftValue, files: draftFiles, context })
+      }
       // 用户亲自发了话：目标自动续跑的连续轮数从头算。
-      goalAutoContinueRoundsRef.current.delete(chat.sessionId)
-    }
-    // 只有正常完成才结束一轮：中止或失败后的下一条消息继续被打断的那一轮，按引导呈现、
-    // 与上一轮归在同一组里，而不是另起一轮（与 Desktop 的 shouldContinueInterruptedConversation 一致）。
-    const submittingSession = getState(projectRoot)
-    const continuesInterruptedRun = isInterruptedRunStatus(submittingSession.status)
-    const previousScope = submittingSession.messages.findLast((message) => message.role === 'user')
-    const scope = {
-      runId: nextId('run'),
-      turnId: continuesInterruptedRun && previousScope?.turnId ? previousScope.turnId : nextId('turn'),
-    }
-    const userMessage: ChatMessage = systemNotice
-      ? {
-          ...createStandaloneSystemNotice({
-            id: nextId('workbench-goal-continue'),
-            ...systemNotice,
-            timestamp: Date.now(),
-            kind: 'goal-continuation',
-          }),
-          ...scope,
-        }
-      : {
-          ...createTextMessage(
-            'user',
-            text
-              || draftFiles.map((file) => file.name).join(', ')
-              || describeBrowserElements(selections)
-              || buildFileReferenceDisplayFallback(referencedFilePaths)
-          ),
-          ...scope,
-          ...(continuesInterruptedRun
-            ? { conversationKind: 'run-guidance' as const, guidanceStatus: 'sent' as const }
-            : { conversationKind: 'turn-input' as const }),
-          browserElementSelections: optionalWhen(selections.length > 0, [...selections]),
-        }
-    const attachmentMetadata = draftFiles.map((file, index) => ({
-      id: `${userMessage.id}-attachment-${index}`,
-      kind: file.type.startsWith('image/') ? 'image' as const : 'file' as const,
-      name: file.name,
-      mediaType: file.type || 'application/octet-stream',
-      size: file.size,
-      lastModified: file.lastModified,
-    }))
-    const submittedMessage = attachmentMetadata.length > 0
-      ? { ...userMessage, attachments: attachmentMetadata }
-      : userMessage
-    const sessionId = submittingSession.sessionId
-    updateSession(projectRoot, sessionId, (state) => ({
-      ...state,
-      messages: [...state.messages, submittedMessage],
-      status: 'running',
-      teamPhase: 'creating-task',
-      activeTurn: null,
-      completedTurns: 0,
-      lastError: null,
-      connectionRetryAttempt: null,
-      connectionRetryMaxAttempts: null,
-      connectionRetryMessage: null,
-      awaitingInputQuestion: null,
-      awaitingConfirmationMessage: null,
-      awaitingConfirmationId: null,
-      awaitingConfirmationExecutionId: null,
-      lastRunStartedAt: Date.now(),
-      lastRunFinishedAt: null,
-      // 子 Agent 线程随轮次归零：上一轮的 worker 卡留在下一轮只会让人以为它还在跑。
-      workerThreads: [],
-      revision: state.revision + 1,
-    }))
-    options?.onAccepted?.()
-    // 开跑前拍下本轮的工作区检查点，收尾后拿它比出「本轮改动」。
-    const runCheckpoint = await captureRunCheckpoint(
-      sessionId,
-      submittingSession.messages.length,
-      text || submittedMessage.attachments?.map((attachment) => attachment.name).join(', ') || ''
-    )
-    const executionModes: WorkbenchExecutionMode[] = [
-      ...((options?.goalMode ?? goalMode) ? ['goal' as const] : []),
-      ...(planMode ? ['plan' as const] : []),
-    ]
-    const run = createActiveRun({
-      projectRoot,
-      sessionId,
-      scope,
-      goalMode: executionModes.includes('goal'),
-      runChangeCapture: createRunChangeCapture(sessionId, runCheckpoint),
-    })
-    activeRuns.set(runKey(projectRoot, sessionId), run)
-    ensureConversationEventSubscription()
-    const inputText = systemNotice
-      ? systemNotice.detail
-      : [text, currentFileContext, fileReferenceContext, attachmentContext, browserElementContext]
-          .filter(Boolean)
-          .join('\n\n')
-    const runPreferences = readWorkbenchConversationRunPreferences()
-    const result = await window.velarosWorkbenchConversation
-      .send({
-        sessionId,
-        projectRoot,
-        inputId: submittedMessage.id,
-        text: inputText,
-        images: optionalWhen(images.length > 0, images),
-        locale,
-        model: {
-          provider: modelConfig.provider,
-          model: modelConfig.model.trim(),
-          apiKey: modelConfig.apiKey,
-          baseURL: modelConfig.baseURL.trim(),
-        },
-        reasoningLevel,
-        executionModes,
-        // 权限确认策略、记忆开关与搜索引擎随每一轮下发：设置页改了立刻对下一轮生效。
-        permissionMode: readWorkbenchPermissionConfirmationMode(),
-        memory: runPreferences.memoryEnabled,
-        webSearchEngine: runPreferences.webSearchEngine,
-        engine: engine
-          ? { id: engine.id, model: resolveWorkbenchEngineModel(engine, engineStatus) }
-          : undefined,
-      })
-      .catch((error: unknown) => ({
-        ok: false as const,
-        message: error instanceof Error ? error.message : String(error),
+      if (!systemNotice) goalAutoContinueRoundsRef.current.delete(chat.sessionId)
+      // 只有正常完成才结束一轮：中止或失败后的下一条消息继续被打断的那一轮，按引导呈现、
+      // 与上一轮归在同一组里，而不是另起一轮（与 Desktop 的 shouldContinueInterruptedConversation 一致）。
+      const submittingSession = readSession(projectRoot, chat.sessionId)
+      if (!submittingSession) return false
+      const continuesInterruptedRun = isInterruptedRunStatus(submittingSession.status)
+      const previousScope = submittingSession.messages.findLast(
+        (message) => message.role === 'user'
+      )
+      const scope = {
+        runId: nextId('run'),
+        turnId:
+          continuesInterruptedRun && previousScope?.turnId ? previousScope.turnId : nextId('turn'),
+      }
+      const userMessage: ChatMessage = systemNotice
+        ? {
+            ...createStandaloneSystemNotice({
+              id: nextId('workbench-goal-continue'),
+              ...systemNotice,
+              timestamp: Date.now(),
+              kind: 'goal-continuation',
+            }),
+            ...scope,
+          }
+        : {
+            ...createTextMessage(
+              'user',
+              text ||
+                draftFiles.map((file) => file.name).join(', ') ||
+                describeBrowserElements(selections) ||
+                buildFileReferenceDisplayFallback(referencedFilePaths)
+            ),
+            ...scope,
+            ...(continuesInterruptedRun
+              ? { conversationKind: 'run-guidance' as const, guidanceStatus: 'sent' as const }
+              : { conversationKind: 'turn-input' as const }),
+            browserElementSelections: optionalWhen(selections.length > 0, [...selections]),
+          }
+      const attachmentMetadata = draftFiles.map((file, index) => ({
+        id: `${userMessage.id}-attachment-${index}`,
+        kind: file.type.startsWith('image/') ? ('image' as const) : ('file' as const),
+        name: file.name,
+        mediaType: file.type || 'application/octet-stream',
+        size: file.size,
+        lastModified: file.lastModified,
       }))
-    // 主进程没接纳这条输入：终态通常已经经事件流到了；没到（通道不通、发送前就被拒）就在这里了结这一轮。
-    if (!result.ok && findActiveRun(projectRoot, sessionId) === run)
-      finishRun(run, { kind: 'error', message: result.message || t('workbench.chatExecutionFailed') })
-    return true
+      const submittedMessage =
+        attachmentMetadata.length > 0
+          ? { ...userMessage, attachments: attachmentMetadata }
+          : userMessage
+      const sessionId = submittingSession.sessionId
+      updateSession(projectRoot, sessionId, (state) => ({
+        ...state,
+        messages: [...state.messages, submittedMessage],
+        status: 'running',
+        teamPhase: 'creating-task',
+        activeTurn: null,
+        completedTurns: 0,
+        lastError: null,
+        connectionRetryAttempt: null,
+        connectionRetryMaxAttempts: null,
+        connectionRetryMessage: null,
+        awaitingInputQuestion: null,
+        awaitingConfirmationMessage: null,
+        awaitingConfirmationId: null,
+        awaitingConfirmationExecutionId: null,
+        lastRunStartedAt: Date.now(),
+        lastRunFinishedAt: null,
+        // 子 Agent 线程随轮次归零：上一轮的 worker 卡留在下一轮只会让人以为它还在跑。
+        workerThreads: [],
+        revision: state.revision + 1,
+      }))
+      // 开跑前拍下本轮的工作区检查点，收尾后拿它比出「本轮改动」。
+      const runCheckpoint = await captureRunCheckpoint(
+        projectRoot,
+        sessionId,
+        submittingSession.messages.length,
+        text || submittedMessage.attachments?.map((attachment) => attachment.name).join(', ') || ''
+      )
+      const executionModes: WorkbenchExecutionMode[] = [
+        ...((options?.goalMode ?? context.goalMode) ? ['goal' as const] : []),
+        ...(context.planMode ? ['plan' as const] : []),
+      ]
+      const run = createActiveRun({
+        projectRoot,
+        sessionId,
+        scope,
+        goalMode: executionModes.includes('goal'),
+        runChangeCapture: createRunChangeCapture(projectRoot, sessionId, runCheckpoint),
+      })
+      activeRuns.set(runKey(projectRoot, sessionId), run)
+      ensureConversationEventSubscription()
+      const inputText = systemNotice
+        ? systemNotice.detail
+        : [text, currentFileContext, fileReferenceContext, attachmentContext, browserElementContext]
+            .filter(Boolean)
+            .join('\n\n')
+      const runPreferences = readWorkbenchConversationRunPreferences()
+      const result = await syncWorkbenchPeerCatalog(projectRoot)
+        .then(() =>
+          window.velarosWorkbenchConversation.send({
+            sessionId,
+            projectRoot,
+            inputId: submittedMessage.id,
+            text: inputText,
+            images: optionalWhen(images.length > 0, images),
+            locale,
+            model: {
+              provider: modelConfig.provider,
+              model: modelConfig.model.trim(),
+              apiKey: modelConfig.apiKey,
+              baseURL: modelConfig.baseURL.trim(),
+            },
+            reasoningLevel: context.reasoningLevel,
+            executionModes,
+            // 权限确认策略、记忆开关与搜索引擎随每一轮下发：设置页改了立刻对下一轮生效。
+            permissionMode: readWorkbenchPermissionConfirmationMode(),
+            sandbox: runPreferences.workspaceSandboxEnabled,
+            memory: runPreferences.memoryEnabled,
+            webSearchEngine: runPreferences.webSearchEngine,
+            engine: engine
+              ? { id: engine.id, model: resolveWorkbenchEngineModel(engine, engineStatus) }
+              : undefined,
+          })
+        )
+        .catch((error: unknown) => ({
+          ok: false as const,
+          message: error instanceof Error ? error.message : String(error),
+        }))
+      // 主进程没接纳这条输入：终态通常已经经事件流到了；没到（通道不通、发送前就被拒）就在这里了结这一轮。
+      if (!result.ok && findActiveRun(projectRoot, sessionId) === run)
+        finishRun(run, {
+          kind: 'error',
+          message: result.message || t('workbench.chatExecutionFailed'),
+        })
+      if (result.ok) options?.onAccepted?.()
+      return result.ok
+    } catch (error) {
+      workbenchMessage.warning({
+        title: t('workbench.chatExecutionFailed'),
+        description: AppError.getMessage(error),
+      })
+      return false
+    } finally {
+      pendingSubmissions.delete(submissionKey)
+    }
   }
 
   const lastMessage = chat.messages.at(-1)
-  const activeAssistantMessage = isActiveChatRun(chat.status) && lastMessage?.role === 'assistant'
-    ? lastMessage
-    : null
+  const activeAssistantMessage =
+    isActiveChatRun(chat.status) && lastMessage?.role === 'assistant' ? lastMessage : null
   const starterSuggestions = useMemo(
     () => [
       {
@@ -1605,7 +1890,9 @@ function StandaloneWorkbenchChatSessionSurface({
         id: 'explain-current-file',
         title: t('workbench.chatStarterExplainTitle'),
         prompt: currentFilePath
-          ? t('workbench.chatStarterExplainFilePrompt', { path: resolveCurrentFileLabel(currentFilePath) })
+          ? t('workbench.chatStarterExplainFilePrompt', {
+              path: resolveCurrentFileLabel(currentFilePath),
+            })
           : t('workbench.chatStarterExplainProjectPrompt'),
       },
       {
@@ -1717,7 +2004,8 @@ function StandaloneWorkbenchChatSessionSurface({
   const hasMessages = chat.messages.length > 0
   const modelSelector = useMemo<ChatComposerControl['modelSelector']>(() => {
     const velarProviders =
-      !isStandaloneWorkbenchManagedProviderId(modelConfig.provider) || selectedManagedProvider?.enabled
+      !isStandaloneWorkbenchManagedProviderId(modelConfig.provider) ||
+      selectedManagedProvider?.enabled
         ? createStandaloneWorkbenchConfiguredModelSelectorProviders(
             modelConfig.provider,
             modelConfig.model,
@@ -1806,12 +2094,12 @@ function StandaloneWorkbenchChatSessionSurface({
           placeholder: resolveWorkbenchChatComposerPlaceholder(askedFilePaths, t, engineLabel),
           // 停止中、等卡片上的回答时不能发；等一句话回答时输入框就是回答。
           disabled:
-            chat.status === 'stopping'
-            || isAwaitingConfirmation
-            || (!canSteerRun
-              && !engineRunActive
-              && !isAwaitingInput
-              && shouldBlockStandaloneRunSubmission(chat.status, hasActiveRun, accountSignInPending)),
+            chat.status === 'stopping' ||
+            isAwaitingConfirmation ||
+            (!canSteerRun &&
+              !engineRunActive &&
+              !isAwaitingInput &&
+              shouldBlockStandaloneRunSubmission(chat.status, hasActiveRun, accountSignInPending)),
           onValueChange: setPrompt,
           onSend: (draft) => sendComposerDraft(draft),
         },
@@ -1843,8 +2131,22 @@ function StandaloneWorkbenchChatSessionSurface({
                   })
                   return
                 }
-                const draft = queuedDrafts.take(id)
-                if (draft) await sendRunGuidance(draft.value)
+                const draft = queuedDrafts.drafts.find((entry) => entry.id === id)
+                if (
+                  draft &&
+                  (await sendRunGuidance(
+                    draft.value,
+                    draft.context?.browserSelections,
+                    appendWorkbenchChatFileReferences(
+                      draft.context?.includedCurrentFilePath
+                        ? [draft.context.includedCurrentFilePath]
+                        : [],
+                      draft.context?.selectedFileReferencePaths ?? []
+                    ),
+                    { queued: true }
+                  ))
+                )
+                  queuedDrafts.remove(id)
               }
             : undefined,
           onQueuedDraftReturnToInput: (id: string) => {
@@ -1852,6 +2154,11 @@ function StandaloneWorkbenchChatSessionSurface({
             if (!draft) return
             setPrompt(draft.value)
             setFiles(draft.files)
+            const context = draft.context ?? EmptyWorkbenchComposerContext
+            setComposerContext(snapshotWorkbenchComposerContext(context))
+            setFileReferencePaths((current) =>
+              appendWorkbenchChatFileReferences(current, context.selectedFileReferencePaths)
+            )
           },
           onQueuedDraftRunNow: queuedDrafts.runNow,
         },
@@ -1926,8 +2233,11 @@ function StandaloneWorkbenchChatSessionSurface({
       chat.status,
       // 每次模型请求后到达一次；漏了它，仪表要等这一轮收尾、status 变了才跟着刷新。
       chat.contextUsage,
+      projectRoot,
       accountSignInPending,
       browserSelections,
+      composerContext,
+      setComposerContext,
       files,
       goalMode,
       hasActiveRun,
@@ -1986,44 +2296,59 @@ function StandaloneWorkbenchChatSessionSurface({
             <ChatConversationPane
               conversation={conversation}
               conversationRefreshKey={conversationRefreshKey}
-              composer={<ChatSurfaceComposer control={composerControl} variant="side" />}
+              composer={
+                <ChatSurfaceComposer
+                  key={`${projectRoot}\0${chat.sessionId}`}
+                  control={composerControl}
+                  variant="side"
+                />
+              }
               followLocked={followLocked}
               scrollRef={scrollRef}
               scrollNavigatorHidden={scrollNavigatorHidden}
-              streamSlot={chat.messages.length === 0 ? (
-                <div className={styles.workbenchChatEmptyState} data-workbench-chat-empty="true">
-                  <div className={styles.workbenchChatEmptyContent}>
-                    <img
-                      className={styles.workbenchChatEmptyIcon}
-                      src={workbenchAppIconUrl}
-                      alt=""
-                      aria-hidden="true"
-                    />
-                    <div
-                      className={styles.workbenchChatStarterList}
-                      aria-label={t('workbench.chatStarterSuggestions')}
-                    >
-                      {starterSuggestions.map((suggestion) => (
-                        <button
-                          key={suggestion.id}
-                          type="button"
-                          className={styles.workbenchChatStarterButton}
-                          onClick={() => {
-                            setPrompt(suggestion.prompt)
-                            void submit(suggestion.prompt)
-                          }}
-                        >
-                          <span className={styles.workbenchChatStarterCopy}>
-                            <span className={styles.workbenchChatStarterTitle}>{suggestion.title}</span>
-                            <span className={styles.workbenchChatStarterPrompt}>{suggestion.prompt}</span>
-                          </span>
-                          <ArrowRightIcon className={styles.workbenchChatStarterArrow} size={13} />
-                        </button>
-                      ))}
+              streamSlot={
+                chat.messages.length === 0 ? (
+                  <div className={styles.workbenchChatEmptyState} data-workbench-chat-empty="true">
+                    <div className={styles.workbenchChatEmptyContent}>
+                      <img
+                        className={styles.workbenchChatEmptyIcon}
+                        src={workbenchAppIconUrl}
+                        alt=""
+                        aria-hidden="true"
+                      />
+                      <div
+                        className={styles.workbenchChatStarterList}
+                        aria-label={t('workbench.chatStarterSuggestions')}
+                      >
+                        {starterSuggestions.map((suggestion) => (
+                          <button
+                            key={suggestion.id}
+                            type="button"
+                            className={styles.workbenchChatStarterButton}
+                            onClick={() => {
+                              setPrompt(suggestion.prompt)
+                              void submit(suggestion.prompt)
+                            }}
+                          >
+                            <span className={styles.workbenchChatStarterCopy}>
+                              <span className={styles.workbenchChatStarterTitle}>
+                                {suggestion.title}
+                              </span>
+                              <span className={styles.workbenchChatStarterPrompt}>
+                                {suggestion.prompt}
+                              </span>
+                            </span>
+                            <ArrowRightIcon
+                              className={styles.workbenchChatStarterArrow}
+                              size={13}
+                            />
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ) : undefined}
+                ) : undefined
+              }
               variant="side"
               onAnswerInteraction={answerInteraction}
               // 回答里的项目路径、文件改动卡与「查看改动」都落到宿主编辑器（与 Desktop 同一组入口）。
@@ -2063,15 +2388,17 @@ function createTextMessage(role: ChatMessage['role'], text: string): ChatMessage
 
 function asRecord(value: unknown): Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
-    ? value as Record<string, unknown>
+    ? (value as Record<string, unknown>)
     : {}
 }
 
 function isActiveChatRun(status: StandaloneChatState['status']): boolean {
-  return status === 'running'
-    || status === 'stopping'
-    || status === 'awaiting-input'
-    || status === 'awaiting-confirmation'
+  return (
+    status === 'running' ||
+    status === 'stopping' ||
+    status === 'awaiting-input' ||
+    status === 'awaiting-confirmation'
+  )
 }
 
 /** 上一轮是被打断的（用户停止或执行失败），而不是正常完成。 */
@@ -2093,15 +2420,19 @@ async function readImageAttachments(files: readonly File[]): Promise<{
   const describedFiles: File[] = []
   for (const file of files) {
     if (
-      !file.type.startsWith('image/')
-      || file.size > MaxImageAttachmentBytes
-      || images.length >= MaxImageAttachments
+      !file.type.startsWith('image/') ||
+      file.size > MaxImageAttachmentBytes ||
+      images.length >= MaxImageAttachments
     ) {
       describedFiles.push(file)
       continue
     }
     try {
-      images.push({ data: encodeBase64(new Uint8Array(await file.arrayBuffer())), mediaType: file.type, label: file.name })
+      images.push({
+        data: encodeBase64(new Uint8Array(await file.arrayBuffer())),
+        mediaType: file.type,
+        label: file.name,
+      })
     } catch {
       describedFiles.push(file)
     }
@@ -2118,21 +2449,28 @@ function encodeBase64(bytes: Uint8Array): string {
 }
 
 async function buildAttachmentContext(files: readonly File[]): Promise<string> {
-  const descriptions = await Promise.all(files.map(async (file) => {
-    const path = resolveWorkbenchClipboardFilePath(
-      file,
-      window.velarosWorkbenchProjectHub.getPathForFile
-    )
-    if (path) return `Attached file: ${path}`
-    if (file.size <= 64 * 1_024 && isTextAttachment(file)) return `Attached file ${file.name}:\n\`\`\`\n${await file.text()}\n\`\`\``
-    return `Attached file: ${file.name} (${file.type || 'application/octet-stream'}, ${file.size} bytes)`
-  }))
+  const descriptions = await Promise.all(
+    files.map(async (file) => {
+      const path = resolveWorkbenchClipboardFilePath(
+        file,
+        window.velarosWorkbenchProjectHub.getPathForFile
+      )
+      if (path) return `Attached file: ${path}`
+      if (file.size <= 64 * 1_024 && isTextAttachment(file))
+        return `Attached file ${file.name}:\n\`\`\`\n${await file.text()}\n\`\`\``
+      return `Attached file: ${file.name} (${file.type || 'application/octet-stream'}, ${file.size} bytes)`
+    })
+  )
   return descriptions.join('\n\n')
 }
 
 function isTextAttachment(file: File): boolean {
-  return file.type.startsWith('text/')
-    || /\.(?:c|cc|cpp|css|csv|go|h|html|java|js|json|jsx|md|py|rs|sql|toml|ts|tsx|txt|vel|xml|ya?ml)$/iu.test(file.name)
+  return (
+    file.type.startsWith('text/') ||
+    /\.(?:c|cc|cpp|css|csv|go|h|html|java|js|json|jsx|md|py|rs|sql|toml|ts|tsx|txt|vel|xml|ya?ml)$/iu.test(
+      file.name
+    )
+  )
 }
 
 /**
@@ -2244,7 +2582,7 @@ function readPersistedFieldIdentities(state: StandaloneChatState): unknown[] {
     state.messages,
     state.lastRunStartedAt,
     state.lastRunFinishedAt,
-    interrupted ? state.status : null,
+    state.status,
     interrupted ? state.lastError : null,
     state.checkpoints,
     state.messageRunMarkers,
@@ -2262,9 +2600,8 @@ function serializeStoredState(state: StandaloneChatState): Record<string, unknow
     messages: state.messages,
     lastRunStartedAt: state.lastRunStartedAt,
     lastRunFinishedAt: state.lastRunFinishedAt,
-    ...(isInterruptedRunStatus(state.status)
-      ? { status: state.status, lastError: state.lastError }
-      : {}),
+    status: state.status,
+    lastError: isInterruptedRunStatus(state.status) ? state.lastError : null,
     checkpoints: state.checkpoints,
     messageRunMarkers: state.messageRunMarkers,
     contextUsage: toOptional(state.contextUsage),
@@ -2280,6 +2617,8 @@ function serializeStoredState(state: StandaloneChatState): Record<string, unknow
  * 运行状态）与它起的后台任务一并清掉。
  */
 function releaseRemovedSession(session: StandaloneChatState): void {
+  forgetStandaloneChatDraft(runKey(session.projectRoot, session.sessionId))
+  forgetStandaloneQueuedDrafts(runKey(session.projectRoot, session.sessionId))
   releaseCheckpointRefs(session.projectRoot, session.sessionId, session.checkpoints)
   releaseRunChangeRecords(session.projectRoot, session.sessionId)
   forgetStandaloneChatSession(session.sessionId)
@@ -2382,14 +2721,15 @@ function isStoredChatMessage(value: unknown): value is ChatMessage {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
   const record = value as Record<string, unknown>
   return (
-    typeof record.id === 'string'
-    && (record.role === 'user' || record.role === 'assistant')
-    && typeof record.timestamp === 'number'
-    && Array.isArray(record.blocks)
+    typeof record.id === 'string' &&
+    (record.role === 'user' || record.role === 'assistant') &&
+    typeof record.timestamp === 'number' &&
+    Array.isArray(record.blocks)
   )
 }
 
 export const standaloneWorkbenchChatAdapter: WorkbenchChatCompositionAdapter = {
   useProjectRuntime: useStandaloneProjectRuntime,
   SessionSurface: StandaloneWorkbenchChatSessionSurface,
+  SessionActions: StandaloneWorkbenchChatSessionActions,
 }

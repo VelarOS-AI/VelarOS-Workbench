@@ -19,7 +19,10 @@ function readSource(relativePath: string): string {
 void describe('Workbench chat file references', () => {
   void test('adding files keeps the first-come order and never repeats a file', () => {
     assert.deepEqual(
-      appendWorkbenchChatFileReferences(['src/a.ts'], ['src/b.ts', 'src/a.ts', 'src/c.ts', 'src/b.ts', '']),
+      appendWorkbenchChatFileReferences(
+        ['src/a.ts'],
+        ['src/b.ts', 'src/a.ts', 'src/c.ts', 'src/b.ts', '']
+      ),
       ['src/a.ts', 'src/b.ts', 'src/c.ts']
     )
   })
@@ -66,11 +69,23 @@ void describe('Workbench chat file references', () => {
     )
     assert.match(adapter, /currentFileContext,\s*fileReferenceContext,\s*attachmentContext,/u)
     // 运行中补发走引导通道：路径锚点折进引导正文。
-    assert.match(adapter, /return sendRunGuidance\(text, selections, referencedFilePaths\)/u)
-    assert.match(adapter, /formatWorkbenchChatFileReferencesForPrompt\(referencedFilePaths\),\s*\]/u)
+    assert.match(
+      adapter,
+      /return await sendRunGuidance\(\s*text,\s*selections,\s*appendWorkbenchChatFileReferences\(/u
+    )
+    assert.match(
+      adapter,
+      /formatWorkbenchChatFileReferencesForPrompt\(referencedFilePaths\),\s*\]/u
+    )
     // 宿主续跑（目标自动续跑）不带用户挂的文件，也不清掉它们。
-    assert.match(adapter, /const referencedFilePaths = systemNotice \? \[\] : selectedFileReferencePaths/u)
-    assert.match(adapter, /setBrowserSelections\(\[\]\)\s*setSelectedFileReferencePaths\(\[\]\)/u)
+    assert.match(
+      adapter,
+      /const referencedFilePaths = systemNotice \? \[\] : context\.selectedFileReferencePaths/u
+    )
+    assert.match(
+      adapter,
+      /if \(!systemNotice && !options\?\.queued\) \{\s*consumeStandaloneChatDraft\(submissionKey, \{ value: draftValue, files: draftFiles, context \}\)/u
+    )
   })
 
   void test('a file already referenced does not also show as the current-file chip', () => {
@@ -86,7 +101,9 @@ void describe('Workbench chat file references', () => {
     const editor = readSource('src/renderer/src/components/editor/CodeMirrorEditor.tsx')
     const tabs = readSource('src/renderer/src/components/editor/EditorTabBar.tsx')
     const files = readSource('src/renderer/src/components/files/FilePanel.tsx')
-    const adapter = readSource('src/renderer/src/components/embedded/workbenchEmbeddedKernelAdapter.ts')
+    const adapter = readSource(
+      'src/renderer/src/components/embedded/workbenchEmbeddedKernelAdapter.ts'
+    )
 
     assert.match(editor, /onClick=\{addCurrentFileToChat\}/u)
     assert.match(tabs, /onAddFileToChat\(tabContextMenu\.path\)/u)
@@ -96,6 +113,9 @@ void describe('Workbench chat file references', () => {
     // 多选能留住：选中项在当前选择里（⌘/Shift 多选时是最后点的那项）就不把选择收回成单选。
     const tree = readSource('src/renderer/src/components/files/FileTree.tsx')
     assert.match(tree, /const selectionAlreadyMatches = tree\.selectedIds\.has\(selectedPath\)/u)
-    assert.equal(adapter.match(/onAddFilesToChat: model\.actions\.addWorkbenchFilesToChat/gu)?.length, 2)
+    assert.equal(
+      adapter.match(/onAddFilesToChat: model\.actions\.addWorkbenchFilesToChat/gu)?.length,
+      2
+    )
   })
 })

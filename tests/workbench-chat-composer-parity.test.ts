@@ -25,14 +25,20 @@ void describe('Workbench chat composer parity', () => {
 
     // 运行中（本会话有在途的一轮）发送 = 引导注入当前这一轮；在途的一轮是引导的前提，不是阻挡条件。
     // 外部引擎不收运行中的引导：它跑着时发的消息排队，这一轮结束后再发。
-    assert.match(adapter, /const canSteerRun = chat\.status === 'running' && hasActiveRun && !engine\n/)
+    assert.match(
+      adapter,
+      /const canSteerRun = chat\.status === 'running' && hasActiveRun && !engine\n/
+    )
     assert.match(
       adapter,
       /const engineRunActive = !!engine && chat\.status === 'running' && hasActiveRun\n/
     )
     assert.match(adapter, /canEnqueue: canSteerRun \|\| engineRunActive,/)
     assert.match(adapter, /canGuideCurrentTask: !engine,/)
-    assert.match(adapter, /return sendRunGuidance\(text, selections, referencedFilePaths\)/)
+    assert.match(
+      adapter,
+      /return await sendRunGuidance\(\s*text,\s*selections,\s*appendWorkbenchChatFileReferences\(/
+    )
     // 引导走会话通道；运行时读进上下文后回执 input-applied，那条引导记为已纳入。
     assert.match(
       adapter,
@@ -45,7 +51,10 @@ void describe('Workbench chat composer parity', () => {
     assert.match(adapter, /\.input\(\{ sessionId: chat\.sessionId, projectRoot, answer \}\)/)
     // 中止 / 失败后的下一条消息续接被打断的那一轮，而不是另起新一轮。
     assert.match(adapter, /const continuesInterruptedRun = isInterruptedRunStatus\(/)
-    assert.match(adapter, /conversationKind: 'run-guidance' as const, guidanceStatus: 'sent' as const/)
+    assert.match(
+      adapter,
+      /conversationKind: 'run-guidance' as const, guidanceStatus: 'sent' as const/
+    )
     // 用户按了停止或本轮失败：排队保留但不自动发出。
     assert.match(
       adapter,
@@ -121,17 +130,29 @@ void describe('Workbench chat composer parity', () => {
       'utf8'
     )
 
-    assert.match(slots, /messageFileChangeSummary: \(\{ message, formatPathForDisplay, onOpenEntry, onReviewEntries \}\) =>/)
+    assert.match(
+      slots,
+      /messageFileChangeSummary: \(\{ message, formatPathForDisplay, onOpenEntry, onReviewEntries \}\) =>/
+    )
     // 每轮开跑前拍检查点；一轮收尾后拿它比出本轮改动（由这一轮的采集在 finish 时发出）；补丁落主进程记录文件，标记上只挂摘要。
     assert.match(adapter, /const runCheckpoint = await captureRunCheckpoint\(/)
-    assert.match(adapter, /runChangeCapture: createRunChangeCapture\(sessionId, runCheckpoint\)/)
-    assert.match(adapter, /settle: \(\) => captureRunChanges\(sessionId, checkpoint\)/)
+    assert.match(
+      adapter,
+      /runChangeCapture: createRunChangeCapture\(projectRoot, sessionId, runCheckpoint\)/
+    )
+    assert.match(adapter, /settle: \(\) => captureRunChanges\(projectRoot, sessionId, checkpoint\)/)
     assert.doesNotMatch(adapter, /workspaceCheckpointDiff/)
     // 收尾的最终采集带着标记：主进程等最后一条命令的余量走完再拍，采完关掉这一轮的改动归属账本。
     assert.match(adapter, /baseCommitId,\n\s*final: true,\n\s*\}\)/)
     // 摘要挂不上（这一轮没有回答、采集失败）时撤下「进行中」，记录连同归属账本一起清掉；挂上后被替换掉的旧记录同样清掉。
-    assert.match(adapter, /withdrawLiveRunChanges\(projectRoot, sessionId, checkpoint\.id\)\n\s*releaseRunChangeRecords\(projectRoot, sessionId, \[checkpoint\.id\]\)/)
-    assert.match(adapter, /if \(orphaned\) releaseRunChangeRecords\(projectRoot, sessionId, \[orphaned\]\)/)
+    assert.match(
+      adapter,
+      /withdrawLiveRunChanges\(projectRoot, sessionId, checkpoint\.id\)\n\s*releaseRunChangeRecords\(projectRoot, sessionId, \[checkpoint\.id\]\)/
+    )
+    assert.match(
+      adapter,
+      /if \(orphaned\) releaseRunChangeRecords\(projectRoot, sessionId, \[orphaned\]\)/
+    )
     // 被移除的会话，连同它的检查点与改动记录一起清掉。
     assert.match(adapter, /releaseRemovedSession\(target\)/)
     assert.match(adapter, /releaseRunChangeRecords\(session\.projectRoot, session\.sessionId\)/)
@@ -152,8 +173,11 @@ void describe('Workbench chat composer parity', () => {
 
     assert.match(slots, /content\.kind === 'goal-lifecycle' \? \(\s*<WorkbenchGoalDockCard/)
     // 目标卡的「继续」空闲时按目标模式另起一轮，运行中经动作端口投引导（Desktop continueGoal 同一分工）。
-    assert.match(adapter, /onContinueGoal=\{\(guidance\) => submit\(guidance, \[\], \{ goalMode: true \}\)\}/)
-    assert.match(adapter, /\(options\?\.goalMode \?\? goalMode\) \? \['goal' as const\]/)
+    assert.match(
+      adapter,
+      /onContinueGoal=\{\(guidance\) => submit\(guidance, \[\], \{ goalMode: true \}\)\}/
+    )
+    assert.match(adapter, /\(options\?\.goalMode \?\? context\.goalMode\) \? \['goal' as const\]/)
   })
 
   void test('shows what the run is doing, the answer cost and the last scroll position like Desktop', () => {
@@ -189,7 +213,10 @@ void describe('Workbench chat composer parity', () => {
     assert.match(adapter, /chat\.status,\n\s*\/\/[^\n]*\n\s*chat\.contextUsage,/)
     // 上一轮的用量随会话留存，重新打开对话时直接显示。
     assert.match(adapter, /contextUsage: toOptional\(state\.contextUsage\)/)
-    assert.match(adapter, /contextUsage: readStandaloneContextUsageEstimate\(\{\n\s*\.\.\.asRecord\(stored\.contextUsage\),/)
+    assert.match(
+      adapter,
+      /contextUsage: readStandaloneContextUsageEstimate\(\{\n\s*\.\.\.asRecord\(stored\.contextUsage\),/
+    )
   })
 
   void test('marks finished runs so answers fold and stopped runs show their status', () => {
@@ -205,6 +232,9 @@ void describe('Workbench chat composer parity', () => {
       adapter,
       /\.\.\.withRunMarker\(settled, \{\n\s*goalMode: run\.goalMode,\n\s*goalStatus: runtime\.kind === 'done' \? runtime\.goalStatus : undefined,/
     )
-    assert.match(adapter, /messageRunMarkers: restoreStandaloneRunMarkers\(stored\.messageRunMarkers, messages\)/)
+    assert.match(
+      adapter,
+      /messageRunMarkers: restoreStandaloneRunMarkers\(stored\.messageRunMarkers, messages\)/
+    )
   })
 })

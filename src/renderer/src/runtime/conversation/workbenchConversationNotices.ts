@@ -180,15 +180,20 @@ function applyScript(
       )
       return index < 0 ? blocks : blocks.filter((_, position) => position !== index)
     })
-  const block: ScriptExecutionBlock = {
+  const block: ScriptExecutionBlock & Pick<ConversationScriptProjection, 'language' | 'processOutput' | 'processOutputTruncated'> = {
     type: 'script-execution',
     id: payload.id,
     kind: payload.kind,
+    language: payload.language,
+    processOutput: payload.processOutput,
+    processOutputTruncated: payload.processOutputTruncated,
     title: readLeadingComment(payload.source) ?? '',
     status: payload.status,
     source: payload.source,
     sourceTruncated: payload.sourceTruncated,
-    calls: payload.calls.map((call) => ({
+    calls: [
+      ...(payload.processOutput ? [{ module: payload.language === 'shell' ? 'shell' : 'node', operation: 'execute', status: payload.status === 'writing' || payload.status === 'running' ? 'pending' as const : payload.status, effect: 'unknown' as const, input: '', inputTruncated: false, output: payload.processOutput, outputTruncated: !!payload.processOutputTruncated }] : []),
+      ...payload.calls.map((call) => ({
       module: call.moduleId,
       operation: call.operation,
       status: call.status,
@@ -198,6 +203,7 @@ function applyScript(
       inputTruncated: call.inputTruncated,
       outputTruncated: call.outputTruncated,
     })),
+    ],
     durationMs: payload.durationMs ?? null,
   }
   if (payload.error) block.error = payload.error
@@ -407,7 +413,7 @@ export function withAnsweredInteraction(
 export function readLeadingComment(source: string): Nullable<string> {
   for (const line of source.split('\n')) {
     if (!line.trim()) continue
-    const match = /^\s*\/\/\s*(.+)$/u.exec(line)
+    const match = /^\s*(?:\/\/|#)\s*(.+)$/u.exec(line)
     return match?.[1]?.trim() || null
   }
   return null
@@ -506,6 +512,9 @@ function isScriptProjection(value: unknown): value is ConversationScriptProjecti
     !isString(value.source) ||
     value.source.length > ConversationScriptSourceMaxChars ||
     !isBoolean(value.sourceTruncated) ||
+    !(value.language === undefined || value.language === 'node' || value.language === 'shell') ||
+    !(value.processOutput === undefined || (isString(value.processOutput) && value.processOutput.length <= 6000)) ||
+    !(value.processOutputTruncated === undefined || isBoolean(value.processOutputTruncated)) ||
     !(value.error === null || isString(value.error)) ||
     !isArray(value.calls)
   )

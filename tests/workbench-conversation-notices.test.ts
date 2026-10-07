@@ -119,6 +119,21 @@ describe('Workbench conversation notices', () => {
     expect(block && 'error' in block).toBe(false)
   })
 
+  test('native process output remains visible after serialization and receipt updates', () => {
+    const receipt = script('succeeded', '# 检查构建\nnode build.mjs', {
+      kind: 'execute', language: 'shell', processOutput: 'built successfully', processOutputTruncated: true,
+    })
+    const state = applyWorkbenchConversationNotice(Empty, ConversationScriptNotice, receipt)
+    const restored = JSON.parse(JSON.stringify(state)) as WorkbenchConversationTranscript
+    expect(restored.messages[0]!.blocks[0]).toMatchObject({
+      title: '检查构建', language: 'shell', processOutput: 'built successfully',
+      calls: [{ module: 'shell', operation: 'execute', output: 'built successfully', outputTruncated: true }],
+    })
+    const updated = applyWorkbenchConversationNotice(restored, ConversationScriptNotice, receipt)
+    const block = updated.messages[0]!.blocks[0]
+    expect(block?.type === 'script-execution' ? block.calls : []).toHaveLength(1)
+  })
+
   test('a discarded script card is removed', () => {
     const written = applyWorkbenchConversationNotice(Empty, ConversationScriptNotice, script('writing'))
     const discarded = applyWorkbenchConversationNotice(written, ConversationScriptNotice, script('discarded'))

@@ -4,6 +4,11 @@ import type { ChatInputQueuedDraft } from '@velaros-ai/ui/conversation/composer'
 
 import { useMemoizedFn } from '../support/genericHooks'
 
+import {
+  snapshotWorkbenchComposerContext,
+  type WorkbenchComposerContext,
+} from './standaloneChatDrafts'
+
 /**
  * 「当前任务结束后发送」的排队草稿，按会话隔离。
  *
@@ -16,8 +21,18 @@ import { useMemoizedFn } from '../support/genericHooks'
  *   变化都会重投一遍、把同一条警告弹个不停；
  * - 会话停止中 / 已中止 / 已失败——用户刚按了停止，不能替他把下一条自动发出去。
  */
+export interface WorkbenchQueuedDraft extends ChatInputQueuedDraft {
+  context?: WorkbenchComposerContext
+}
+
+interface WorkbenchQueueInput {
+  value: string
+  files: File[]
+  context?: WorkbenchComposerContext
+}
+
 interface QueueSnapshot {
-  readonly drafts: readonly ChatInputQueuedDraft[]
+  readonly drafts: readonly WorkbenchQueuedDraft[]
   readonly drainingId: string | null
   /** 投递未被受理、挡住自动出队的那一项。 */
   readonly blockedId: string | null
@@ -44,11 +59,26 @@ export class StandaloneQueuedDraftStore {
     return this.scopes.get(scopeId) ?? EmptySnapshot
   }
 
-  public enqueue(scopeId: string, draft: { value: string; files: File[] }): string {
+  public enqueue(scopeId: string, draft: WorkbenchQueueInput): string {
     const id = crypto.randomUUID()
     const current = this.snapshot(scopeId)
-    this.write(scopeId, { ...current, drafts: [...current.drafts, { id, ...draft }] })
+    this.write(scopeId, {
+      ...current,
+      drafts: [
+        ...current.drafts,
+        {
+          ...draft,
+          id,
+          files: [...draft.files],
+          context: draft.context && snapshotWorkbenchComposerContext(draft.context),
+        },
+      ],
+    })
     return id
+  }
+
+  public forget(scopeId: string): void {
+    this.write(scopeId, EmptySnapshot)
   }
 
   public remove(scopeId: string, id: string): void {
@@ -62,7 +92,7 @@ export class StandaloneQueuedDraftStore {
     })
   }
 
-  public take(scopeId: string, id: string): ChatInputQueuedDraft | null {
+  public take(scopeId: string, id: string): WorkbenchQueuedDraft | null {
     const draft = this.snapshot(scopeId).drafts.find((entry) => entry.id === id) ?? null
     if (draft) this.remove(scopeId, id)
     return draft
@@ -93,7 +123,7 @@ export class StandaloneQueuedDraftStore {
   public async submit(
     scopeId: string,
     id: string,
-    send: (draft: ChatInputQueuedDraft) => Promise<boolean>
+    send: (draft: WorkbenchQueuedDraft) => Promise<boolean>
   ): Promise<void> {
     const current = this.snapshot(scopeId)
     const draft = current.drafts.find((entry) => entry.id === id)
@@ -109,10 +139,19 @@ export class StandaloneQueuedDraftStore {
     try {
       const accepted = await send(draft)
       const latest = this.snapshot(scopeId)
-      this.write(scopeId, accepted
-        ? { ...latest, drainingId: null, drafts: latest.drafts.filter((entry) => entry.id !== id) }
-        : { ...latest, drainingId: null, blockedId: preservedBlock ?? id })
+      if (latest.drainingId !== id) return
+      this.write(
+        scopeId,
+        accepted
+          ? {
+              ...latest,
+              drainingId: null,
+              drafts: latest.drafts.filter((entry) => entry.id !== id),
+            }
+          : { ...latest, drainingId: null, blockedId: preservedBlock ?? id }
+      )
     } catch (error) {
+      if (this.snapshot(scopeId).drainingId !== id) return
       this.write(scopeId, {
         ...this.snapshot(scopeId),
         drainingId: null,
@@ -126,7 +165,7 @@ export class StandaloneQueuedDraftStore {
   public async drain(
     scopeId: string,
     state: { busy: boolean; paused: boolean },
-    send: (draft: ChatInputQueuedDraft) => Promise<boolean>
+    send: (draft: WorkbenchQueuedDraft) => Promise<boolean>
   ): Promise<void> {
     const current = this.snapshot(scopeId)
     const first = current.drafts[0]
@@ -144,6 +183,11 @@ export class StandaloneQueuedDraftStore {
 
 const store = new StandaloneQueuedDraftStore()
 
+/** 删除会话也释放它的队列；迟到的发送回执不会重新建出已删除的队列。 */
+export function forgetStandaloneQueuedDrafts(scopeId: string): void {
+  store.forget(scopeId)
+}
+
 export function useStandaloneQueuedDrafts({
   scopeId,
   isRunBlocked,
@@ -155,7 +199,7 @@ export function useStandaloneQueuedDrafts({
   isRunBlocked: boolean
   /** 停止中 / 已中止 / 已失败：保留队列但不自动出队，用户「继续」或「立即运行」才发。 */
   pauseAutomaticDrain?: boolean
-  submitDraft: (draft: ChatInputQueuedDraft) => Promise<boolean>
+  submitDraft: (draft: WorkbenchQueuedDraft) => Promise<boolean>
 }) {
   const snapshot = useSyncExternalStore(store.subscribe, () => store.snapshot(scopeId))
   const send = useMemoizedFn(submitDraft)
@@ -169,12 +213,12 @@ export function useStandaloneQueuedDrafts({
   }
 
   return {
-    drafts: snapshot.drafts as ChatInputQueuedDraft[],
+    drafts: snapshot.drafts as WorkbenchQueuedDraft[],
     drainingId: snapshot.drainingId,
     isDraining: !!snapshot.drainingId,
     isPaused: pauseAutomaticDrain || snapshot.blockedId !== null,
     errorMessage: snapshot.errorMessage,
-    enqueue: (draft: { value: string; files: File[] }) => store.enqueue(scopeId, draft),
+    enqueue: (draft: WorkbenchQueueInput) => store.enqueue(scopeId, draft),
     remove: (id: string) => store.remove(scopeId, id),
     update: (id: string, value: string) => store.edit(scopeId, id, value),
     move: (id: string, direction: 'up' | 'down') => store.move(scopeId, id, direction),

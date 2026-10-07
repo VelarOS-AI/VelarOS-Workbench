@@ -28,14 +28,15 @@
     "check:platform-packages": "bun scripts/refreshPrivatePackageLock.mjs --validate-only",
     "check:bundle-budget": "node scripts/checkBuildBudgets.mjs",
     "check": "bun run check:boundaries && bun run check:platform-packages && bun run typecheck && bun run lint && bun run test && bun run probe && bun run build",
-    "package:mac": "bun run build && node scripts/release/packageMac.mjs",
-    "package:dir": "bun run build && node scripts/release/ensureTerminalBackends.mjs darwin && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --config electron-builder.yml --mac --dir -c.mac.identity=null -c.mac.notarize=false",
+    "package:mac": "bun run build && bun run prepare:agent-runtime && node scripts/release/packageMac.mjs",
+    "package:dir": "bun run build && bun run prepare:agent-runtime && node scripts/release/ensureTerminalBackends.mjs darwin && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --config electron-builder.yml --mac --dir -c.mac.identity=null -c.mac.notarize=false -c.mac.forceCodeSigning=false",
     "verify:dir": "node scripts/release/verifyPackagedWorkbench.mjs",
-    "package:win": "bun run build && node scripts/release/ensureTerminalBackends.mjs win32 && electron-builder --config electron-builder.yml --win --publish never",
-    "package:linux": "bun run build && node scripts/release/ensureTerminalBackends.mjs linux && electron-builder --config electron-builder.yml --linux --publish never",
+    "package:win": "bun run build && bun run prepare:agent-runtime && node scripts/release/ensureTerminalBackends.mjs win32 && electron-builder --config electron-builder.yml --win --publish never",
+    "package:linux": "bun run build && bun run prepare:agent-runtime && node scripts/release/ensureTerminalBackends.mjs linux && electron-builder --config electron-builder.yml --linux --publish never",
     "release:local:stage": "node scripts/release/releaseArtifacts.mjs stage",
     "release:local:verify": "node scripts/release/releaseArtifacts.mjs verify",
-    "release:local:finalize": "node scripts/release/publishUpdateCatalog.mjs"
+    "release:local:finalize": "node scripts/release/publishUpdateCatalog.mjs",
+    "prepare:agent-runtime": "node scripts/release/prepareNodeRuntime.mjs"
   },
   "dependencies": {
     "@lydell/node-pty": "1.2.0-beta.15",
@@ -48,6 +49,8 @@
     "@velaros-ai/velaros": "link:@velaros-ai/velaros",
     "gpt-tokenizer": "3.4.0",
     "pyright": "^1.1.411",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
     "typescript": "^5.9.3",
     "vscode-css-languageservice": "^6.3.10",
     "vscode-html-languageservice": "^5.6.2",
@@ -56,6 +59,11 @@
     "vscode-uri": "^3.1.0"
   },
   "devDependencies": {
+    "@ast-grep/napi": "0.45.3",
+    "@playwright/test": "1.63.0",
+    "jsonc-parser": "3.3.1",
+    "prettier": "3.9.9",
+    "ts-morph": "28.0.0",
     "@codemirror/autocomplete": "^6.20.1",
     "@codemirror/commands": "^6.10.3",
     "@codemirror/lang-css": "^6.3.1",
@@ -113,16 +121,15 @@
     "globals": "^17.6.0",
     "js-yaml": "4.3.0",
     "markdown-it": "^15.0.0",
-    "react": "^19.2.5",
     "react-arborist": "^3.5.0",
-    "react-dom": "^19.2.5",
     "sonner": "^2.0.7",
     "streamdown": "^2.5.0",
     "tailwindcss": "^4.0.0",
     "tar": "^7.5.2",
     "tinykeys": "3.0.0",
     "vite": "^7.3.2",
-    "zod": "^4.3.6"
+    "zod": "^4.3.6",
+    "npm": "12.2.0"
   },
   "repository": {
     "type": "git",
@@ -130,5 +137,13 @@
   },
   "patchedDependencies": {
     "vscode-markdown-languageservice@0.5.0": "patches/vscode-markdown-languageservice@0.5.0.patch"
+  },
+  "optionalDependencies": {
+    "node-bin-darwin-arm64": "24.15.0",
+    "node-darwin-x64": "24.15.0",
+    "node-linux-arm64": "24.15.0",
+    "node-linux-x64": "24.15.0",
+    "node-win-arm64": "24.15.0",
+    "node-win-x64": "24.15.0"
   }
 }

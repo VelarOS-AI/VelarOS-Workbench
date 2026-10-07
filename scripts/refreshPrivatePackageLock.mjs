@@ -87,6 +87,8 @@ async function readPackageManifests(directory) {
 
 async function collectManifestPaths(directory) {
   const entries = await readdir(directory, { withFileTypes: true })
+  // 嵌套 checkout / worktree 持有自己的锁文件；不能当成本仓 Bun workspace 更新或核验。
+  if (directory !== repositoryRoot && entries.some((entry) => entry.name === '.git')) return []
   const nestedPaths = await Promise.all(
     entries.map(async (entry) => {
       if (entry.isDirectory()) {

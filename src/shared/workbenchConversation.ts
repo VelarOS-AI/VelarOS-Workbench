@@ -9,6 +9,7 @@ import type {
   StreamUsageTelemetryPayload,
   TeamExecutionPhase,
 } from '@velaros-ai/ui/conversation/contracts'
+import type { RuntimeNoteContent, RuntimeNoteRead, VelarosSession } from '@velaros-ai/velaros'
 import type { ActInvocationSummary } from '@velaros-ai/velaros/contracts'
 
 import type { WorkbenchFsCallResult } from './workbenchFs'
@@ -24,6 +25,9 @@ export const WorkbenchConversationChannels = {
   input: 'workbench-app:conversation:input',
   answer: 'workbench-app:conversation:answer',
   getGoal: 'workbench-app:conversation:get-goal',
+  listNotes: 'workbench-app:conversation:list-notes',
+  readNote: 'workbench-app:conversation:read-note',
+  notesChanged: 'workbench-app:conversation:notes-changed',
   updateGoal: 'workbench-app:conversation:update-goal',
   deleteSession: 'workbench-app:conversation:delete-session',
   backupHistory: 'workbench-app:conversation:backup-history',
@@ -31,14 +35,11 @@ export const WorkbenchConversationChannels = {
   event: 'workbench-app:conversation:event',
 } as const
 
-/** 权限确认档（与 Desktop 相同）：标准只问危险命令，从不询问连危险命令也放行，每次都问连写入也问。 */
+/** 与 Desktop 项目会话相同的权限确认档；原生程序确认与项目沙箱分别控制。 */
 export type WorkbenchPermissionConfirmationMode = 'standard-open' | 'never-ask' | 'ask-every-time'
 
-export const WorkbenchPermissionConfirmationModes: readonly WorkbenchPermissionConfirmationMode[] = [
-  'standard-open',
-  'never-ask',
-  'ask-every-time',
-]
+export const WorkbenchPermissionConfirmationModes: readonly WorkbenchPermissionConfirmationMode[] =
+  ['standard-open', 'never-ask', 'ask-every-time']
 
 export type WorkbenchExecutionMode = 'goal' | 'plan'
 
@@ -113,6 +114,8 @@ export interface WorkbenchConversationSendRequest {
   reasoningLevel: ReasoningLevel
   executionModes: WorkbenchExecutionMode[]
   permissionMode: WorkbenchPermissionConfirmationMode
+  /** 本轮使用工作区写入沙箱。 */
+  sandbox?: boolean
   /** 长期记忆（设置里的总开关）：关着时这一轮不接记忆，已存的留在盘上。 */
   memory: boolean
   webSearchEngine: WorkbenchWebSearchEngine
@@ -206,6 +209,9 @@ export interface ConversationScriptProjection {
   status: ConversationScriptStatus | 'discarded'
   source: string
   sourceTruncated: boolean
+  language?: 'node' | 'shell'
+  processOutput?: string
+  processOutputTruncated?: boolean
   /** 这次执行落定的能力调用，按发出顺序；观察卡是最近一次观察运行的调用。 */
   calls: ActInvocationSummary[]
   error: Nullable<string>
@@ -214,7 +220,8 @@ export interface ConversationScriptProjection {
 export const ConversationScriptSourceMaxChars = 20_000
 
 export const ConversationAgentNotice = 'conversation-agent'
-export type ConversationAgentStatus = 'running' | 'awaiting_input' | 'completed' | 'failed' | 'aborted'
+export type ConversationAgentStatus =
+  'running' | 'awaiting_input' | 'completed' | 'failed' | 'aborted'
 /** 一次子任务（`velaros:agents`）派发或续跑：挂在派发它的那张脚本卡后面。 */
 export interface ConversationAgentProjection {
   /** `conversation:agent:${executionId}:${jobId}:${n}` */
@@ -250,7 +257,10 @@ export const ConversationWidgetLimits = Object.freeze({
 export const ConversationInteractionNotice = 'conversation-interaction'
 /** 与用户的交互请求（提问、选项、表单、确认、危险命令确认）：运行消息里的一张交互卡。 */
 export type ConversationInteractionProjection = Omit<InteractionBlock, 'type'> & { runId: string }
-export const ConversationInteractionLimits = Object.freeze({ messageChars: 8_000, answerChars: 8_000 })
+export const ConversationInteractionLimits = Object.freeze({
+  messageChars: 8_000,
+  answerChars: 8_000,
+})
 
 export const ConversationProjectActivityNotice = 'conversation-project-activity'
 /** Agent 改项目的一段时间窗刚结束（一次项目编辑或一条命令跑完）：界面据此刷新「本轮改动」与 Git 状态。 */
@@ -306,7 +316,12 @@ export type WorkbenchConversationState =
   | { kind: 'input-applied'; inputId: string }
   | ({ kind: 'usage-telemetry' } & Omit<StreamUsageTelemetryPayload, 'kind'>)
   | WorkbenchConversationContextUsage
-  | { kind: 'awaiting-confirmation'; executionId: string; confirmationId: string; confirmationMessage: string }
+  | {
+      kind: 'awaiting-confirmation'
+      executionId: string
+      confirmationId: string
+      confirmationMessage: string
+    }
   | { kind: 'awaiting-input'; executionId: string; question: string }
   | {
       kind: 'done'
@@ -341,15 +356,32 @@ export interface WorkbenchConversationEventEnvelope {
 export interface WorkbenchConversationBridge {
   /** 这一条输入被运行时接纳就返回（不等整轮跑完）；整轮收尾经事件流里的终态状态告知。 */
   send(request: WorkbenchConversationSendRequest): Promise<WorkbenchFsCallResult<void>>
-  cancel(request: WorkbenchConversationSessionRequest): Promise<WorkbenchFsCallResult<WorkbenchConversationCancelResult>>
+  cancel(
+    request: WorkbenchConversationSessionRequest
+  ): Promise<WorkbenchFsCallResult<WorkbenchConversationCancelResult>>
   guidance(request: WorkbenchConversationGuidanceRequest): Promise<WorkbenchFsCallResult<void>>
   input(request: WorkbenchConversationInputRequest): Promise<WorkbenchFsCallResult<void>>
   answer(request: WorkbenchConversationAnswerRequest): Promise<WorkbenchFsCallResult<void>>
-  getGoal(request: WorkbenchConversationSessionRequest): Promise<WorkbenchFsCallResult<WorkbenchConversationGoalResult>>
-  updateGoal(request: WorkbenchConversationUpdateGoalRequest): Promise<WorkbenchFsCallResult<WorkbenchConversationGoalResult>>
+  listNotes(
+    request: WorkbenchConversationSessionRequest & { after?: string; limit?: number }
+  ): Promise<WorkbenchFsCallResult<Awaited<ReturnType<VelarosSession['listNotes']>>>>
+  readNote(
+    request: WorkbenchConversationSessionRequest & RuntimeNoteRead
+  ): Promise<WorkbenchFsCallResult<RuntimeNoteContent>>
+  onNotesChanged(listener: (ref: WorkbenchConversationSessionRequest) => void): () => void
+  getGoal(
+    request: WorkbenchConversationSessionRequest
+  ): Promise<WorkbenchFsCallResult<WorkbenchConversationGoalResult>>
+  updateGoal(
+    request: WorkbenchConversationUpdateGoalRequest
+  ): Promise<WorkbenchFsCallResult<WorkbenchConversationGoalResult>>
   deleteSession(request: WorkbenchConversationSessionRequest): Promise<WorkbenchFsCallResult<void>>
-  backupHistory(request: WorkbenchConversationBackupRequest): Promise<WorkbenchFsCallResult<{ path: string }>>
+  backupHistory(
+    request: WorkbenchConversationBackupRequest
+  ): Promise<WorkbenchFsCallResult<{ path: string }>>
   /** 外部引擎（Claude Code、Codex）在本机的情况；探一次要起一回命令行，结果在主进程里缓存。 */
-  engines(request: WorkbenchAgentEngineStatusRequest): Promise<WorkbenchFsCallResult<WorkbenchAgentEngineStatus[]>>
+  engines(
+    request: WorkbenchAgentEngineStatusRequest
+  ): Promise<WorkbenchFsCallResult<WorkbenchAgentEngineStatus[]>>
   onEvent(listener: (envelope: WorkbenchConversationEventEnvelope) => void): () => void
 }

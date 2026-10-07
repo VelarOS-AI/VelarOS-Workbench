@@ -1,28 +1,25 @@
 # Workbench model request sources
 
-Audited against the linked Platform ScriptAct runtime (`@velaros-ai/velaros` 0.6) and UI 0.2.54. The
-chat no longer assembles tool schemas or system prompts itself: the Platform runtime owns the
-ScriptAct protocol, the working-memory frame and the resident module contracts, and Workbench adds
-host instructions and user-message context. `bun run test` runs the integration test
-`scripts/test/conversationRuntime.test.mjs` against the real runtime with a scripted model.
+The Platform owns the Agent loop, native `exec` tool, Node environment, generated capability
+contracts and context history. Workbench composes the code workspace capabilities and
+supplies IDE instructions, project rules and user context. The Node integration suite in
+`scripts/test/conversationRuntime.test.mjs` uses a scripted native-tools model with real subprocesses.
 
-| Entry | Actual injected source | Verification |
+| Entry | Actual source | Verification |
 | --- | --- | --- |
-| ScriptAct protocol, frame marker and working memory | `createRuntime` in `WorkbenchConversationSession.ts` (Platform-owned) | The integration test drives the real protocol: the fake model reads the frame marker from `compiledPrompt` and answers with `execute` / `done` blocks. |
-| Resident module contracts | `ResidentModules` (`velaros:project`, `velaros:code`, `velaros:shell`, `velaros:interaction`, `velaros:widget`) in `WorkbenchConversationSession.ts` | Declarations and examples come from the installed Platform packages; Workbench only picks the list. |
-| Host instructions | `WorkbenchConversationRules.buildHostInstructions` → runtime `instructions` | Identity, reply language, the leading `//` comment rule for script titles, plan and goal mode lines. The integration test finds them in the model request. |
-| Project AI rules | `ProjectCapabilityProvider.projectRules` → `projectRulesSection` in `WorkbenchConversationRules.ts` | Rule files are quoted verbatim inside `<project-rules path="…">`, 32,000 characters in total; omitted files are named. The integration test injects an `AGENTS.md` rule and checks the request. |
-| Host environment | `WorkbenchHostEnvironment` (`{ os }`) → runtime `environment` | Placed at the end of each frame with the local time, outside the prefix cache. |
-| Long-term memory index | `WorkbenchMemoryService.forRun` → `renderIndex()` → last section of the host instructions | Rendered once when the run starts, for the project's scope (`project:<realpath>`); skipped when memory is off in Settings. The integration test saves an entry and finds it in the request. |
-| Web search module | `velaros:web` mounted per run (not resident) with `WorkbenchWebSearchPages` and the Settings search engine | Declarations come from the Platform package; the integration test imports it from a script. |
-| User message, attachments and file chips | `standaloneWorkbenchChatAdapter.tsx` (`buildAttachmentContext`, `formatWorkbenchChatFileReferencesForPrompt`, `formatBrowserElementSelectionsForPrompt`, current editor path) | Path-only context in the user message; the agent reads files itself. Images go as image input; models known to be text-only get a note instead (`withoutImages`, covered by the integration test). |
-| Run guidance | `sendRunGuidance` → `conversation.guidance` → `session.steer` | Text only; file chips and picked elements are folded into the text. |
-| Goal auto-continue | `workbench.goalAutoContinueInstruction` (i18n) sent as guidance or a system notice | Tells the agent to finish with `done("…")` or record blockers with `goal.update`. |
-| Permission confirmations | `WorkbenchConversationSession` `authorize` hook and the shell module's approval port | Not model input; shown as interaction cards. The integration test answers a `git reset --hard` confirmation. |
-| Inline completion | `WorkbenchInlineCompletion.ts` → model text generation | Separate bounded insertion prompt; `workbench-inline-completion.test.ts` checks it carries no agent module or tool contract. |
-| External engine instructions | `engineInstructions` in `src/main/engines/WorkbenchEngineInstructions.ts` → Claude Code `--append-system-prompt`, Codex `developerInstructions` | Only where the engine runs (Workbench), the reply language and the plan / goal mode lines. The engine keeps its own system prompt, tools and rule files; Workbench's project rules and memory are not injected. `workbench-agent-engines.test.ts` drives both engines against fake CLIs. |
-| External engine user message | the same composed input text and images as a Platform run (`standaloneWorkbenchChatAdapter.tsx`) | Sent as the engine's user message: Claude Code content blocks, Codex `UserInput` items. |
+| Native execution and context | `createRuntime` and `createNodeExecutionEnvironment` in `WorkbenchConversationSession.ts` | Native `exec` edits a file, imports project operations, runs execa and returns actual stdout. Cancellation stops a running process. |
+| Capability directory | Platform generated contracts; `residentModules: []` and `$VELAROS_HOST_DIR/index.json` | Real Node imports and discovery cover project, code, images, browser/devtools/cdp, web, sub-agents and project chat collaboration. |
+| Host instructions | `WorkbenchConversationRules.buildHostInstructions` | IDE identity, reply language, first-line Node/Shell comment and execution modes are checked in actual requests. |
+| Project rules | `ProjectCapabilityProvider.projectRules` → quoted project rule section | Rule files remain verbatim, capped at 32,000 characters; the integration suite checks an AGENTS.md rule. |
+| Environment | OS, browser, project cwd, execution scope and home from the host | Refreshed with the request; sandbox scope is checked against a real denied write. |
+| Long-term memory | Project scope passed to Platform memory operations | Content appears only after recall; disabling memory excludes recall in the next session. |
+| Project host bindings | `createRuntime({ workspace: root, project: { code: true, images: true } })` in `WorkbenchConversationSession.ts` | A regular project run can edit files, query language diagnostics and send local images to the next model request; image paths remain bounded by the project root. |
+| Code tools | `resolveWorkbenchNodeEnvironment` and `workbenchNodePackages.json` | Host-provided npm packages load on import; discovery reads metadata and project-installed versions take precedence. The release verifier executes the packaged dependencies. |
+| Project chat collaboration | Generated `velaros:sessions` surface and project-scoped host | Real Node delegation receives the peer answer; queue order, cancellation, removed targets and waiting cycles are covered. |
+| Background commands | Shared execution host and project/chat-scoped controls | Real interactive subprocesses accept input and stop; matching chat ids in different projects stay isolated even with the same cwd. |
+| Working notes | Platform note store and list/read controls | Two revisions survive run closure; pagination, stale reads and notifications are tested. |
+| User context | `standaloneWorkbenchChatAdapter.tsx` attachment/file/browser-element context | Paths are delivered with user text; images retain multimodal data, with a text-only fallback covered by integration. |
+| Guidance and answers | Platform steer/answer and Workbench interaction board | Running sessions receive user guidance and decisions; approval refusal starts no process. |
 
-Retired with the Platform migration: the in-process Agent execution stack, `tooling:map` discovery,
-`workbench:*` UI tools, sub-agent type definitions and Mod tool surfaces. Their prompt-audit helper and
-captures were removed with them.
+The Workbench host consumes public Platform/UI package entries. Contract declarations and model
+schemas remain generated and owned by Platform.

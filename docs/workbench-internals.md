@@ -29,29 +29,44 @@ Workbench 是单体仓库：根 `package.json` 是唯一清单，全部产品源
 聊天跑在 Platform 的 ScriptAct 运行时上，与 Desktop 同一套（`src/main/conversation/` 是 Desktop 会话运行时
 的移植）：
 
-- **一轮一个运行时**：`WorkbenchConversationSession` 每轮 `createRuntime`，工作区是窗口的项目根（按真实路径），
-  同一个项目内核上挂项目模块、问代码（`velaros:code`）与看图；`velaros:shell` 借应用共用的 shell 宿主
-  （`WorkbenchShellHostRegistry`，后台任务活过一轮，会话删除时停掉）。常驻模块是 project、code、shell、
-  interaction、widget；子任务开。网上查资料（`velaros:web`，与 Desktop 同一套）每个会话都挂、不常驻：搜索与
-  读网页跑在不显示的窗口里（`WorkbenchWebSearchPages`，独立分区 `persist:velaros-workbench-web`，不带内置浏览器的
-  登录），搜索引擎跟设置走。长期记忆（`WorkbenchMemoryService`，记忆库在 `userData/memory`）按项目根的真实路径
-  各一份作用域，这一轮开始时的索引附在宿主说明末尾；设置里能关、能看、能删。Agent 浏览器（velaros:browser /
-  devtools / cdp，与 Desktop 同一个 Electron 浏览器运行时）每个聊天会话一个受控页面：模型进站点时编辑区开出
-  「Agent · 站点」标签，webview 交给运行时接管（`WorkbenchBrowserService`，运行时会话 id 由项目根与会话 id 算出），
-  导航也经运行时走；标签切走时把页面交还，这一轮要用网页时由后台页面顶上；只认 http 与 https；标签关掉、会话删掉、
-  窗口放下项目时离站。办公文档、全机文件、电脑操作这类 IDE 用不上的能力不挂。模型写的脚本在 `utilityProcess` 起的隔离进程里跑
-  （`workbench-script-worker.ts`）。
+- **一轮一个运行时**：`WorkbenchConversationSession` 每轮 `createRuntime`，项目根使用真实路径；
+  标准 Node 执行环境复用应用共用的执行宿主（`WorkbenchShellHostRegistry`）。Node、基础工具与代码工具随产品分发，
+  `node-runtime/node_modules` 保存固定版本依赖闭包，发行脚本核验全部资源字节及原包实际执行。
+  项目、代码、图片、子任务、交互、组件、工作记忆、网页搜索和浏览器能力由 Platform 提供，模型按需发现合同。
+  原生程序和项目写操作各自登记 Agent 时间窗，完成后通知 Git、AI 改动采集与编辑器刷新；项目编辑先通知语言服务。
+  后台任务由应用持有，会话删除与应用退出时回收。
+- **会话协作**：`WorkbenchSessionPeers` 装配 `velaros:sessions` 的宿主端口。会话目录来自项目窗口，
+  `ask` 等待匹配 inputId 的结果，`tell` 在目标忙时按顺序排队；依赖成环时拒绝。新会话沿用已批准的模型、
+  权限与沙箱，界面先建消息和改动检查点再回执，运行时接纳后才算投递成功。会话接收器跟随
+  renderer 会话存储，聊天面板收起仍可交接；项目关闭撤销等待，排队失败写回来源会话。
+- **后台进程**：聊天顶部进程入口查看当前会话的服务器与交互式命令，持续读取输出并提供输入、Ctrl+C、
+  停止与强制停止。`WorkbenchShellHostRegistry` 按启动项目筛选宿主，IPC 再校验会话；命令 cwd 变化不改变归属。
+- **按需代码能力**：项目编辑、语言服务、图片与浏览器模块通过 Platform 的能力目录发现，模型按需读取合同并调用。
+  `resolveWorkbenchNodeEnvironment` 固定基础 npm 工具与 `workbenchNodePackages.json` 登记的代码工具目录，
+  使用 `NodeRuntimeEnvironment` 注入执行器。发现阶段只读取包清单，实际实现由 Node 在 import 时加载，项目依赖优先。
+  代码工具包含 ts-morph、Prettier、jsonc-parser、ast-grep 与 Playwright，运行装配和发行资源共用同一份包名表。
+- **记忆与笔记**：长期记忆按 `project:<真实项目根>` 分作用域，模型按需召回；设置页能关、能看、能删。
+  工作笔记由 Platform 会话存储持有，聊天顶部笔记入口按 key / revision 分页读原文，运行推进时刷新，关闭入口时取消旧读取。
+- **浏览器**：网页搜索使用 `WorkbenchWebSearchPages` 的隐蔽窗口与独立分区，搜索引擎跟设置走。
+  `WorkbenchBrowserService` 按项目与会话维护受控页面，模型进入站点时在编辑器打开 Agent 标签，
+  webview 接管、导航、后台页面交接和离站由 Platform 浏览器运行时管理；browser / devtools / cdp 操作按需连接当前会话页面。
 - **状态**：会话数据在 `userData/conversation-runtime/<sha256(项目根 \0 会话 id)>`，任何项目之外；
   空闲时读、改目标用无模型的控制会话。旧的 Kernel 会话历史不迁移，老会话下一轮从 Platform 的新上下文开始。
-- **宿主说明**（`WorkbenchConversationRules.buildHostInstructions`）：身份、回复语言、脚本首行 `//` 注释
+- **宿主说明**（`WorkbenchConversationRules.buildHostInstructions`）：身份、回复语言、执行首行注释（Node 用 `//`、Shell 用 `#`）
   （界面拿它当脚本卡标题）、计划 / 目标模式，以及项目里的 AI 规则文件原文（`.velar/rules.md`、`AGENTS.md`、
   `CLAUDE.md`、`.cursorrules`、`.cursor/rules/**`、`.github/copilot-instructions.md`，合计 32,000 字符，放不下的
   整份略去并点名）。设置页「AI 规则」列的就是这一份。
-- **权限**：「每次询问」档确认每次项目写入与命令；标准档平台只问成片毁掉的命令，Workbench 另在派发前补问会丢
-  未提交改动、切分支或写到项目外的命令（`CommandExecutionPolicy.resolveWorkspaceIntegrityConfirmation`，
-  确认卡与平台的危险命令同一套选项）；「从不询问」档全部放行。
+- **权限**：「每次询问」确认整段 Node 源码及项目写入；标准档直接执行程序；「完全访问」自动批准能力请求。
+  项目沙箱独立设置，默认关闭，与 Desktop 项目会话一致；开启时由宿主的原生进程约束限制项目和允许的临时目录写入。
+  外部引擎沿各自的审批协议使用同一权限档。
+- **发送归属**：登录与附件准备始终绑定发起会话；文字、附件、文件引用、页面选区与思考 / 计划 / 目标选项按项目和会话保存。
+  编辑器与浏览器的异步上下文投递携带目标会话，切换聊天后仍合并到原草稿。发送只消费本次提交的内容，保留准备期间新增的草稿。
+- **消息排队**：入队时复制代码上下文与执行选项，出队与放回输入框均使用这份快照。
+  主进程接纳输入后才移除队列项；拒绝时暂停并保留重试，自动发送保留正在编辑的下一条草稿。删除会话释放队列并忽略迟到回执。
+- **中断恢复**：重开时将仍在执行、停止或等待交互的持久状态恢复为已中断，保留失败原因；下一条输入继续原任务。
 - **IPC**：`workbench-app:conversation:*`（send / cancel / guidance / input / answer / get-goal / update-goal /
-  delete-session / backup-history / engines / event），只认发起窗口当前打开的项目；窗口销毁时取消它的运行。
+  list-notes / read-note / notes-changed / delete-session / backup-history / engines / event），只认发起窗口当前打开的项目；窗口销毁时取消它的运行。
+  `workbench-app:session-peers:*` 承接目录与任务交接回执；`workbench-app:agent-processes:*` 承接进程查看、输入和停止。
 - **外部引擎**（`src/main/engines/`）：会话可以交给本机装好的 Claude Code 或 Codex 命令行。请求带 `engine`
   时 `WorkbenchConversationDispatcher` 交给 `WorkbenchEngineConversationRuntime`，其余走 Platform；运行中的
   回答、停止跟着正在跑的那一边，删会话、停项目、关闭两边都做。不打包任何 SDK：Claude Code 直接起用户的

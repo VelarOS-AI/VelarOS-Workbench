@@ -1,6 +1,6 @@
 import { toNullable } from '@velaros-ai/core'
-import { type TimerLease,TimerScope } from '@velaros-ai/core/utils/TimerScope'
-import type { ShellInvocationOutput } from '@velaros-ai/velaros'
+import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
+import type { NodeExecutionOutput } from '@velaros-ai/velaros'
 import type { ActTurnTrace } from '@velaros-ai/velaros/contracts'
 
 import {
@@ -19,7 +19,7 @@ interface RunningOutput {
 }
 
 /**
- * 脚本卡上的运行中输出：`velaros:shell` 的前台命令跑着时吐出的输出，按所在执行对到脚本卡，攒一小会儿再发。
+ * 脚本卡上的运行中输出：Node 执行进程跑着时吐出的输出，按所在执行对到脚本卡，攒一小会儿再发。
  * 每段执行只留正在跑的那次调用的末尾一段（去掉终端控制序列，回车覆盖的只留最后一版）；换了一次调用就从头记。
  * 执行还没从回合追踪里对上卡时先攒着，对上了再发；调用有了结果、运行收尾时发空串清掉。
  */
@@ -28,7 +28,7 @@ export class ConversationCommandOutputBoard {
   private static readonly FlushMs = 200
   /** 终端控制序列：CSI、OSC、选字符集与其余两字节的 ESC 序列。 */
   private static readonly ControlSequence =
-    // eslint-disable-next-line no-control-regex -- ANSI escape matching intentionally starts with the ESC control character.
+    // eslint-disable-next-line no-control-regex -- 要去掉的就是终端控制字符（ESC、BEL）开头的序列
     /\u001b\[[0-?]*[ -/]*[@-~]|\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)|\u001b[()#][0-9A-Za-z]|\u001b[0-~]/gu
 
   private readonly executions = new Map<string, RunningOutput>()
@@ -42,7 +42,7 @@ export class ConversationCommandOutputBoard {
   ) {}
 
   /** 一次调用刚吐出的一段。 */
-  public write({ executionId, invocationId, text }: ShellInvocationOutput): void {
+  public write({ executionId, invocationId, text }: NodeExecutionOutput): void {
     if (this.closed) return
     const current = this.executions.get(executionId)
     const previous = current?.invocationId === invocationId ? current.text : ''

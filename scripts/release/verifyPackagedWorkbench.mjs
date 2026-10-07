@@ -3,6 +3,8 @@ import { createRequire } from 'node:module'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
+import { assertNodeRuntimePackageFiles, assertNodeRuntimePackages } from './nodeRuntimePackages.mjs'
+
 import { assertExternalEsmArchive } from './externalEsmArchive.mjs'
 
 const ProductFilename = 'VelarOS Workbench'
@@ -107,7 +109,7 @@ async function verifyPackagedTerminalBackend(resourcesRoot, platformName) {
   }
 }
 
-async function verifyPackagedWorkbench({ appOutDir, platformName, projectDir = process.cwd() }) {
+async function verifyPackagedWorkbench({ appOutDir, platformName, architecture, projectDir = process.cwd() }) {
   const paths = resolvePackagedWorkbenchPaths(appOutDir, platformName)
   await waitForPackagedApp(paths.appArchive)
   if (platformName === 'win32') await verifyWindowsX64Executable(appOutDir)
@@ -209,6 +211,22 @@ async function verifyPackagedWorkbench({ appOutDir, platformName, projectDir = p
     }
   }
 
+  const nodePlatform = platformName === 'win32' ? 'win' : platformName
+  const unpackedModules = path.join(paths.resourcesRoot, 'app.asar.unpacked', 'node_modules')
+  const nodePackages = (await readdir(unpackedModules)).filter((name) =>
+    name.startsWith(`node-${nodePlatform}-`) || (platformName === 'darwin' && name === 'node-bin-darwin-arm64')
+  )
+  const targetArchitecture = architecture ?? (platformName === 'win32' ? 'x64' : nodePackages.length === 1 ? nodePackages[0].split('-').at(-1) : undefined)
+  if (!targetArchitecture) throw new Error('Packaged Agent Node architecture is ambiguous')
+  const nodePackage = nodePlatform === 'darwin' && targetArchitecture === 'arm64'
+    ? 'node-bin-darwin-arm64' : `node-${nodePlatform}-${targetArchitecture}`
+  const nodeBinary = path.join(unpackedModules, nodePackage, 'bin', platformName === 'win32' ? 'node.exe' : 'node')
+  await access(nodeBinary)
+  const nodeResources = path.join(paths.resourcesRoot, 'node-runtime')
+  await assertNodeRuntimePackageFiles(nodeResources)
+  // 同平台同架构再启动发行 Node，核验实际导入与 npm；跨平台仍核验完整文件清单。
+  if (platformName === process.platform && targetArchitecture === process.arch)
+    await assertNodeRuntimePackages(nodeResources, nodeBinary)
   await verifyPackagedTerminalBackend(paths.resourcesRoot, platformName)
 
   for (const standardLibraryFile of ['lib.d.ts', 'lib.es2022.full.d.ts']) {
@@ -262,6 +280,7 @@ export default async function afterPack(context) {
   await verifyPackagedWorkbench({
     appOutDir: context.appOutDir,
     platformName: context.electronPlatformName,
+    architecture: { 0: 'ia32', 1: 'x64', 2: 'armv7l', 3: 'arm64' }[context.arch],
     projectDir: context.packager.info.projectDir,
   })
 }

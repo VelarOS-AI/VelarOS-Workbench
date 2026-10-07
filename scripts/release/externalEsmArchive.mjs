@@ -10,6 +10,7 @@ const HostModules = new Set([
   ...builtinModules.map((name) => `node:${name}`),
 ])
 const SourceOnly = /(?:\.map|\.d\.[cm]?ts|\.tsx?|\.mts|\.cts|\.tsbuildinfo|\.pyc|\.pyo)$/iu
+const DevelopmentOnly = /(?:^|\/)(?:test|tests|spec|fixtures)(?:\/|$)|\.(?:test|spec)\.[cm]?js$/iu
 const CodeFile = /\.[cm]?js$/iu
 
 /** ScriptAct 模版里的 `velaros` / `velaros:*` 由脚本运行时注入，不是 Node 依赖，不在 asar 里。 */
@@ -18,7 +19,7 @@ function isScriptRuntimeModule(specifier) {
 }
 
 /** 从包自己的查找路径解析依赖，保留 workspace 链接的实际版本身份。 */
-function installedPackage(name, parent) {
+export function installedPackage(name, parent, optional = false) {
   const lookup = createRequire(join(parent, 'package.json')).resolve.paths(name) ?? []
   for (const directory of lookup) {
     const path = join(directory, name, 'package.json')
@@ -26,6 +27,7 @@ function installedPackage(name, parent) {
     const root = dirname(realpathSync(path))
     return { name, root, manifest: JSON.parse(readFileSync(path, 'utf8')) }
   }
+  if (optional) return null
   throw new Error(`外部 ESM 依赖未安装：${name}（${parent}）`)
 }
 
@@ -113,6 +115,7 @@ function packageFiles(record) {
       )
         continue
       const relative = posix.join(prefix, entry.name)
+      if (DevelopmentOnly.test(relative)) continue
       if (entry.isDirectory()) walk(join(directory, entry.name), relative)
       else if (entry.isFile() && !SourceOnly.test(relative)) result.add(relative)
     }
@@ -125,6 +128,7 @@ function packageFiles(record) {
     if (statSync(path).isDirectory()) walk(path, item)
     else if (
       !SourceOnly.test(item) &&
+      !DevelopmentOnly.test(item) &&
       !/^(?:README|CHANGELOG|LICENSE|NOTICE)(?:\.[^/]+)?$/iu.test(item)
     )
       result.add(item)

@@ -18,7 +18,7 @@ export type EngineAction =
   | { kind: 'other'; name: string; detail?: string }
 
 /**
- * 外部引擎的权限档与 VelarOS 自己的 Agent 相同：标准只问危险命令和写到项目之外的文件，从不询问全部放行，
+ * 外部引擎按各自的命令与编辑请求审批：标准只问危险命令和写到项目之外的文件，从不询问全部放行，
  * 每次都问连写入与命令都问。危险命令按 Workbench 的命令策略判（平台的危险命令加上工作区完整性）。返回
  * null 表示直接放行。
  */

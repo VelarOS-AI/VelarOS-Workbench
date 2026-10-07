@@ -23,29 +23,45 @@ The repository intentionally has no dependency on VelarOS Desktop internals. It 
 VelarOS Platform and UI through their public package entry points only; the app owns the Electron
 implementation behind the semantic Workbench host.
 
-The chat runs the Platform ScriptAct runtime in the main process, the same runtime VelarOS Desktop
-uses. Each run opens a Platform session bound to the window's project: the agent works by writing
-short scripts against resident modules (`velaros:project`, `velaros:code`, `velaros:shell`,
-`velaros:interaction`, `velaros:widget`), and the scripts execute in an isolated utility process.
-Sub-agents, web search and long-term memory are on, as in Desktop: `velaros:web` searches and reads pages
-in hidden windows (Google or Bing, set in Settings → AI), and memories are kept per project and can be
-reviewed or deleted in Settings → AI. The agent also drives a browser (`velaros:browser`, with
-`velaros:devtools` and `velaros:cdp`): each chat session gets a controlled page that opens as an
-"Agent" tab in the editor area, the same Platform browser runtime Desktop uses; capabilities an IDE
-does not need (office documents, system-wide files, computer use) are not mounted. Workbench adds its host
-instructions (reply language, plan and goal modes) and the project's AI rule files (`.velar/rules.md`,
-`AGENTS.md`, `CLAUDE.md`, `.cursorrules`, `.cursor/rules/`, `.github/copilot-instructions.md`).
-Conversation state lives in the Platform's session store outside the project.
+The chat uses the same Platform Agent runtime and standard Node execution environment as Desktop
+project workspaces. Programs run on the bundled Node with ESM, top-level await and the standard npm
+packages. Project editing, code queries, images, sub-agents, project chat collaboration, web search
+and the session browser are available through the Platform's generated capability contracts. Process output,
+errors and tool calls appear in the conversation and remain available in saved history.
 
-Permissions follow the Settings mode. "Ask every time" confirms each project write and command;
-the standard mode lets routine work run, while the Platform confirms mass-destructive commands and
-Workbench additionally confirms commands that would discard uncommitted work, switch branches or
-write outside the project (`git reset --hard`, `git checkout`, `git pull`, …); "never ask" runs
-everything.
+Project sessions expose code editing, language queries and browser debugging through Platform's
+capability discovery. Agents read contracts and import npm tools when needed. Workbench supplies
+ts-morph, Prettier, jsonc-parser, ast-grep and Playwright alongside the base Node tools; dependencies
+installed in the project take precedence. Package discovery reads metadata, and implementations load
+on import. Settings → AI manages memory and the project sandbox. Long-term memory is scoped to each
+project and recalled on demand. The chat header's notebook button shows the current session's versioned working
+notes and refreshes as the run progresses. The adjacent process button lists the chat's development servers
+and background commands, with live output, interactive input and stop controls. Process ownership
+uses the launch project and chat, even if a command changes its working directory.
+
+Agents can use `velaros:sessions` to delegate work or queue messages to other chats in the current
+project. New chats appear in the project list and retain their own transcript and change checkpoints.
+Delegation carries the selected model, permissions and sandbox; waiting cycles
+are rejected. Switching chats during login or attachment preparation preserves the original message
+destination and the new chat's draft.
+
+Each chat retains its draft text, attachments, file references, picked page elements and reasoning,
+plan and goal settings. Queued messages capture this context when enqueued and leave the queue only
+after the main process accepts them. A rejected submission stays available for retry, and automatic
+queue delivery preserves the next draft being edited. Reopening an unfinished run shows it as
+interrupted so the next message can continue the original task.
+
+Workbench supplies reply language, plan and goal mode instructions, and the project's AI rules
+(`.velar/rules.md`, `AGENTS.md`, `CLAUDE.md`, `.cursorrules`, `.cursor/rules/`,
+`.github/copilot-instructions.md`). Conversation state lives outside the project in the Platform store.
+“Ask every time” confirms each complete Node program and project write. Standard mode runs programs
+directly; full access automatically approves capability requests. The separate project sandbox
+restricts native process writes to the project and allowed temporary directories; its default is off,
+matching Desktop. External engines use their own approval protocols with the selected permission mode.
 
 Every run captures a Git checkpoint first. When the run's writes settle, the AI changes card lists
 the files the agent changed, with diffs and per-file attribution (agent-only or mixed with other
-edits). The agent's write windows come from the runtime's effect metrics; project edits also refresh
+edits). The agent's write windows cover native processes and the runtime's project effects; project edits also refresh
 the language service immediately. Rewind, Mods, resource plugins and CodeGraph were retired with the
 Platform migration, matching Desktop.
 

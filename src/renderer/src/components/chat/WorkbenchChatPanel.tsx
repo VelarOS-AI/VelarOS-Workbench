@@ -7,12 +7,7 @@ import {
   useRef,
   useState,
 } from 'react'
-import {
-  ArchiveIcon,
-  ChatCircleTextIcon,
-  PlusIcon,
-  SpinnerGapIcon,
-} from '@phosphor-icons/react'
+import { ArchiveIcon, ChatCircleTextIcon, PlusIcon, SpinnerGapIcon } from '@phosphor-icons/react'
 
 import { isEmpty, toNullable } from '@velaros-ai/core'
 import {
@@ -44,6 +39,7 @@ import {
   type WorkbenchChatFileChangeEntry,
   type WorkbenchChatFileReferenceDelivery,
   type WorkbenchChatRunChangesTarget,
+  WorkbenchChatSessionActions,
   type WorkbenchChatSessionGroup,
   type WorkbenchChatSessionMember,
   WorkbenchChatSessionSurface,
@@ -274,9 +270,7 @@ export function WorkbenchChatPanel({
   const { addProjectSession, archiveSession, selectSession, startProjectChat } = chat.actions
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [sessionMenuOpen, setSessionMenuOpen] = useState(false)
-  const scrollNavigatorHidden = useChatScrollNavigatorHidden(
-    WorkbenchChatScrollNavigatorVisibility
-  )
+  const scrollNavigatorHidden = useChatScrollNavigatorHidden(WorkbenchChatScrollNavigatorVisibility)
   const pendingStartFolderIdRef = useRef<Nullable<string>>(null)
   const restoredProjectRootRef = useRef<Nullable<string>>(null)
   const [pendingStartFolderId, setPendingStartFolderId] = useState<Nullable<string>>(null)
@@ -448,6 +442,13 @@ export function WorkbenchChatPanel({
             hidden={scrollNavigatorHidden}
             label={t('chat.toggleScrollNavigator')}
             onHiddenChange={WorkbenchChatScrollNavigatorVisibility.setHidden}
+          />
+        )}
+        {ready && (
+          <WorkbenchChatSessionActions
+            key={`${normalizedProjectRoot}\0${currentSession.id}`}
+            projectRoot={normalizedProjectRoot}
+            sessionId={currentSession.id}
           />
         )}
         <IconButton

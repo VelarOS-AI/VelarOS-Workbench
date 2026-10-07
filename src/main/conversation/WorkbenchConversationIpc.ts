@@ -3,7 +3,8 @@ import { mkdir, rename, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 
 import type { IpcMainInvokeEvent, WebContents } from 'electron'
-import { ipcMain } from 'electron'
+import { BrowserWindow, ipcMain } from 'electron'
+import { z } from 'zod'
 
 import { isArray, isNonBlankString, isPlainObject, isString, Log } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
@@ -81,7 +82,9 @@ interface WorkbenchConversationIpcOptions {
  * 备份。窗口只能动自己当前打开的项目里的会话；运行中的通知与状态只推给发起这一轮的窗口，窗口销毁时
  * 它发起的运行一并停下。
  */
-export function registerWorkbenchConversationIpc(options: WorkbenchConversationIpcOptions): () => void {
+export function registerWorkbenchConversationIpc(
+  options: WorkbenchConversationIpcOptions
+): () => void {
   const { runtime } = options
   /** 已经挂了销毁监听的窗口：窗口没了，它发起的运行跟着停。 */
   const watchedSenders = new WeakSet<WebContents>()
@@ -94,7 +97,11 @@ export function registerWorkbenchConversationIpc(options: WorkbenchConversationI
     return { projectRoot: project.path, sessionId: request.sessionId }
   }
 
-  const trackRun = (sender: WebContents, ref: WorkbenchConversationRef, completed: Promise<void>) => {
+  const trackRun = (
+    sender: WebContents,
+    ref: WorkbenchConversationRef,
+    completed: Promise<void>
+  ) => {
     const runs = runsBySender.get(sender.id) ?? new Map<string, WorkbenchConversationRef>()
     runsBySender.set(sender.id, runs)
     const key = `${ref.projectRoot}\0${ref.sessionId}`
@@ -111,11 +118,50 @@ export function registerWorkbenchConversationIpc(options: WorkbenchConversationI
       const orphaned = [...(runsBySender.get(senderId)?.values() ?? [])]
       runsBySender.delete(senderId)
       for (const orphan of orphaned)
-        void runtime.cancel(orphan).catch((error: unknown) =>
-          log.warn('窗口关闭后没能停下运行', { error: AppError.getMessage(error) })
-        )
+        void runtime
+          .cancel(orphan)
+          .catch((error: unknown) =>
+            log.warn('窗口关闭后没能停下运行', { error: AppError.getMessage(error) })
+          )
     })
   }
+
+  const unsubscribeNotes = runtime.subscribeNotesChanged((ref) => {
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (window.isDestroyed()) continue
+      const project = options.windows
+        .getHubForWebContents(window.webContents)
+        ?.getState().currentProject
+      if (project && resolve(project.path) === resolve(ref.projectRoot))
+        window.webContents.send(WorkbenchConversationChannels.notesChanged, ref)
+    }
+  })
+  ipcMain.handle(WorkbenchConversationChannels.listNotes, (event, raw: unknown) =>
+    callWithEnvelope(async () => {
+      const ref = ownedRef(event, parseSessionRequest(raw))
+      const input = z
+        .object({
+          after: z.string().max(512).optional(),
+          limit: z.number().int().min(1).max(64).optional(),
+        })
+        .parse(raw)
+      return runtime.listNotes(ref, input)
+    })
+  )
+  ipcMain.handle(WorkbenchConversationChannels.readNote, (event, raw: unknown) =>
+    callWithEnvelope(async () => {
+      const ref = ownedRef(event, parseSessionRequest(raw))
+      const input = z
+        .object({
+          key: z.string().min(1).max(512),
+          revision: z.number().int().min(1),
+          offset: z.number().int().min(0).optional(),
+          limit: z.number().int().min(1).max(32000).optional(),
+        })
+        .parse(raw)
+      return runtime.readNote(ref, input)
+    })
+  )
 
   ipcMain.handle(WorkbenchConversationChannels.send, (event, raw: unknown) =>
     callWithEnvelope(async () => {
@@ -190,12 +236,15 @@ export function registerWorkbenchConversationIpc(options: WorkbenchConversationI
   )
 
   return () => {
+    unsubscribeNotes()
     for (const channel of [
       WorkbenchConversationChannels.send,
       WorkbenchConversationChannels.cancel,
       WorkbenchConversationChannels.guidance,
       WorkbenchConversationChannels.input,
       WorkbenchConversationChannels.answer,
+      WorkbenchConversationChannels.listNotes,
+      WorkbenchConversationChannels.readNote,
       WorkbenchConversationChannels.getGoal,
       WorkbenchConversationChannels.updateGoal,
       WorkbenchConversationChannels.deleteSession,
@@ -207,10 +256,17 @@ export function registerWorkbenchConversationIpc(options: WorkbenchConversationI
 }
 
 /** 一轮运行的展示流直接推给发起它的窗口；窗口已经没了就丢掉（运行会因窗口销毁被停下）。 */
-function createWindowSink(sender: WebContents, ref: WorkbenchConversationRef): WorkbenchConversationSink {
+export function createWindowSink(
+  sender: WebContents,
+  ref: WorkbenchConversationRef
+): WorkbenchConversationSink {
   const send = (event: WorkbenchConversationStreamEvent): void => {
     if (sender.isDestroyed()) return
-    const envelope: WorkbenchConversationEventEnvelope = { ...ref, event }
+    const envelope: WorkbenchConversationEventEnvelope = {
+      projectRoot: ref.projectRoot,
+      sessionId: ref.sessionId,
+      event,
+    }
     try {
       sender.send(WorkbenchConversationChannels.event, envelope)
     } catch (error) {
@@ -251,13 +307,21 @@ function withAnalytics(
       const { id, status, error } = payload
       if (status === 'running' && !started.has(id)) {
         started.add(id)
-        record(() => analytics.recordAgentEvent({ type: 'tool-start', toolName: 'script' }, projectRoot))
+        record(() =>
+          analytics.recordAgentEvent({ type: 'tool-start', toolName: 'script' }, projectRoot)
+        )
       }
-      if ((status === 'succeeded' || status === 'failed' || status === 'cancelled') && !settled.has(id)) {
+      if (
+        (status === 'succeeded' || status === 'failed' || status === 'cancelled') &&
+        !settled.has(id)
+      ) {
         settled.add(id)
         record(() =>
           analytics.recordAgentEvent(
-            { type: 'tool-done', error: status === 'failed' ? (isString(error) ? error : 'failed') : null },
+            {
+              type: 'tool-done',
+              error: status === 'failed' ? (isString(error) ? error : 'failed') : null,
+            },
             projectRoot
           )
         )
@@ -356,6 +420,10 @@ function parseSendRequest(raw: unknown): WorkbenchConversationSendRequest {
     memory: input.memory,
     webSearchEngine: input.webSearchEngine as WorkbenchConversationSendRequest['webSearchEngine'],
   }
+  if (input.sandbox !== undefined) {
+    if (typeof input.sandbox !== 'boolean') return invalid()
+    request.sandbox = input.sandbox
+  }
   if (input.images !== undefined) request.images = parseImages(input.images)
   if (input.engine !== undefined) request.engine = parseEngine(input.engine)
   return request
@@ -375,7 +443,11 @@ function parseEngine(raw: unknown): WorkbenchConversationEngineSelection {
 function parseImages(raw: unknown): WorkbenchConversationImage[] {
   if (!isArray(raw) || raw.length > MaxImages) return invalid()
   return raw.map((image) => {
-    if (!isPlainObject(image) || !isNonBlankString(image.data) || !isNonBlankString(image.mediaType))
+    if (
+      !isPlainObject(image) ||
+      !isNonBlankString(image.data) ||
+      !isNonBlankString(image.mediaType)
+    )
       return invalid()
     const parsed: WorkbenchConversationImage = { data: image.data, mediaType: image.mediaType }
     if (isString(image.label)) parsed.label = image.label

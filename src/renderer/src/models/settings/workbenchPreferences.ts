@@ -61,13 +61,15 @@ export interface WorkbenchPreferences {
   /**
    * Agent 执行工具时的权限确认策略。
    *
-   * 它只调节「要不要弹确认卡」，不改变哪些操作有风险：`requireManualApproval` 的硬门与
-   * 破坏性命令在任何档位下都仍然逐次询问（判据见 main 侧 WorkbenchToolConfirmationPolicy）。
+   * Velar Agent 的「每次询问」确认整段 Node 程序与项目写入；执行范围由沙箱设置独立控制。
+   * 外部引擎按各自的审批协议执行。
    */
   permissionConfirmationMode: PermissionConfirmationMode
   /** 一轮 AI 运行改了文件时，结束后在编辑区自动打开这一轮的「AI 改动」对比。 */
   aiChangesAutoOpen: boolean
-  /** 长期记忆总开关（与 Desktop 同默认开）：关掉后对话里不再读写记忆，已存的留着。 */
+  /** 将 Velar Agent 的进程写入范围限制在当前项目，与 Desktop 同默认关闭。 */
+  workspaceSandboxEnabled: boolean
+  /** 长期记忆总开关：关掉后对话里不再读写记忆，已存的留着。 */
   memoryEnabled: boolean
   /** 网上查资料先用的搜索引擎（与 Desktop 同一默认）。 */
   webSearchEngine: WorkbenchWebSearchEngine
@@ -96,6 +98,7 @@ export const DEFAULT_WORKBENCH_PREFERENCES: WorkbenchPreferences = {
   localHistoryThrottleSeconds: 60,
   permissionConfirmationMode: 'standard-open',
   aiChangesAutoOpen: true,
+  workspaceSandboxEnabled: false,
   memoryEnabled: true,
   webSearchEngine: DefaultBrowserSearchEngine,
 }
@@ -331,6 +334,10 @@ export function normalizeWorkbenchPreferences(
       typeof preferences?.aiChangesAutoOpen === 'boolean'
         ? preferences.aiChangesAutoOpen
         : DEFAULT_WORKBENCH_PREFERENCES.aiChangesAutoOpen,
+    workspaceSandboxEnabled:
+      typeof preferences?.workspaceSandboxEnabled === 'boolean'
+        ? preferences.workspaceSandboxEnabled
+        : DEFAULT_WORKBENCH_PREFERENCES.workspaceSandboxEnabled,
     memoryEnabled:
       typeof preferences?.memoryEnabled === 'boolean'
         ? preferences.memoryEnabled
@@ -351,10 +358,10 @@ export function readWorkbenchPermissionConfirmationMode(): PermissionConfirmatio
 /** 每轮随请求带给主进程的长期记忆开关与搜索引擎。 */
 export function readWorkbenchConversationRunPreferences(): Pick<
   WorkbenchPreferences,
-  'memoryEnabled' | 'webSearchEngine'
+  'memoryEnabled' | 'webSearchEngine' | 'workspaceSandboxEnabled'
 > {
-  const { memoryEnabled, webSearchEngine } = readWorkbenchPreferences()
-  return { memoryEnabled, webSearchEngine }
+  const { memoryEnabled, webSearchEngine, workspaceSandboxEnabled } = readWorkbenchPreferences()
+  return { memoryEnabled, webSearchEngine, workspaceSandboxEnabled }
 }
 
 /** 编辑区里按 ⌥Z：切换自动换行，存进偏好。 */
