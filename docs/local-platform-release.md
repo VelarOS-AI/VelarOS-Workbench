@@ -43,15 +43,16 @@ release_stage="artifacts/release-stage/${RELEASE_TAG}-$(git rev-parse --short=7 
 
 bun run package:mac -- --arm64 --publish never \
   -c.directories.output="$release_output"
-node scripts/release/verifyPackagedWorkbench.mjs "$release_output" darwin
 bun run release:local:stage -- macos "$release_output" "$release_stage"
 bun run release:local:verify -- macos "$release_stage"
 ```
 
 `package:mac` uses the saved `velaros-notary` Keychain profile by default and rejects any attempt to
-enable Electron Builder publishing. The stage command verifies the Developer ID signature,
-Gatekeeper assessment, Mach-O architecture, notarization ticket, update metadata, blockmaps, hashes,
-tag, source SHA, and clean source tree.
+enable Electron Builder publishing. Its `afterPack` hook runs `verifyPackagedWorkbench.mjs` to check
+runtime file integrity before code signing. Signing then updates native binaries' signature metadata.
+The stage command verifies the final Developer ID signature, Gatekeeper assessment, Mach-O
+architecture, notarization ticket, update metadata, blockmaps, hashes, tag, source SHA, and clean
+source tree.
 
 ## Windows and Linux
 
