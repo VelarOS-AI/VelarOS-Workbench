@@ -26,7 +26,7 @@ Workbench 是单体仓库：根 `package.json` 是唯一清单，全部产品源
 ## 结构边界
 
 - 产品核心模块不依赖 Electron 主进程、Desktop store、Desktop IPC 或 Desktop 窗口实现。
-- Platform 与 UI 只经包的公开入口消费（开发期是兄弟仓的 `link:`，见 README）；具体能力由应用组合根安装。
+- Platform 与 UI 只经包的公开入口消费，默认使用固定依赖快照与 UI 发布版本，联调可使用兄弟仓链接（见 README）；具体能力由应用组合根安装。
 - 跨产品共享的无状态组件继续归属 `@velaros-ai/ui`，不复制进 Workbench。
 - 通用语言宿主不包含 VelarScript 特判；editor 贡献归 renderer，服务描述归 shared。
 - Workbench 不依赖 VelarOS Desktop 内部源码，仍作为独立应用构建和发布。

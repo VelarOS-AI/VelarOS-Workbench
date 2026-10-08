@@ -3,6 +3,38 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
+      "version": "0.4.0",
+      "releasedAt": "2026-10-08",
+      "title": {
+        "zh": "项目编辑与 Agent 协作统一升级",
+        "en": "A unified update to project editing and Agent collaboration"
+      },
+      "added": {
+        "zh": [
+          "在聊天输入框直接选择提供方的可用模型；Claude Code 与 Codex 使用各自的侧栏入口和会话。",
+          "Agent 后台进程在独立控制台窗口中查看和操作。",
+          "与 Desktop 使用一致的上下文容量校准，执行期间保留用量显示。"
+        ],
+        "en": [
+          "Choose available provider models directly in the chat composer, with dedicated sidebar entries and sessions for Claude Code and Codex.",
+          "Inspect and control Agent background processes in a dedicated console window.",
+          "Use the same context-capacity calibration as Desktop and retain usage during execution."
+        ]
+      },
+      "fixed": {
+        "zh": [
+          "普通消息正确区分运行中追加指引；执行卡片持续显示耗时，输出预览更清晰。",
+          "精简 Git 分支菜单，将拉取和推送放在分支行内，获取远端保留在搜索框旁。",
+          "统一聊天栏高度、按钮位置和面板间距，整理组件目录与样式资源。"
+        ],
+        "en": [
+          "Distinguish ordinary messages from guidance added during a run, show live execution duration, and clarify output previews.",
+          "Simplify the Git branch menu with inline pull and push actions and fetch beside branch search.",
+          "Align chat headers, action placement and panel spacing, and organize component and style resources."
+        ]
+      }
+    },
+    {
       "version": "0.3.54",
       "releasedAt": "2026-09-14",
       "title": {

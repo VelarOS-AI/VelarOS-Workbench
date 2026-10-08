@@ -92,9 +92,16 @@ apply to engine sessions.
 
 ## Development
 
-与 Desktop 一样，Workbench 经 `bun link` 消费本机兄弟仓的 Platform 与 UI（`package.json` 里是
-`link:@velaros-ai/*`）：`@velaros-ai/{agent,core,kernel,model,script,velaros}` 来自 `../VelarOS-Platform`，
-`@velaros-ai/ui` 来自 `../VelarOS-UI`。首次准备：
+Workbench 使用固定的 Platform 本机依赖快照与 UI 发布版本，锁文件记录完整依赖。先登录具备 Platform 仓库读取权限的 `gh`，并配置 `NODE_AUTH_TOKEN` 后运行：
+
+```bash
+node scripts/release/platformSnapshot.mjs
+bun install --frozen-lockfile
+bun run check
+bun run dev
+```
+
+需要联调 `../VelarOS-Platform` 或 `../VelarOS-UI` 时，在对应仓构建并登记链接，再从 Workbench 连接：
 
 ```bash
 # VelarOS-UI 根目录（仓根就是 @velaros-ai/ui 包）
@@ -105,14 +112,12 @@ node scripts/build/buildPackageTopology.mjs --for @velaros-ai/velaros
 for package in velaros model script core agent kernel; do (cd packages/$package && bun link); done
 
 # Workbench 根目录
-bun install
-bun run check
-bun run dev
+bun link @velaros-ai/velaros @velaros-ai/model @velaros-ai/script @velaros-ai/core @velaros-ai/agent @velaros-ai/kernel @velaros-ai/ui
 ```
 
 Workbench 只消费这些包的公开 dist：改了 Platform 或 UI 要先在对应仓重新构建。
 `check:platform-packages` 只接受同名的兄弟仓链接（`link:@velaros-ai/<name>`）或 GitHub Packages 的正式解析，
-锁文件里的链接必须与清单一致。Platform 恢复发版后，把依赖换回已发布的版本，在受控本机运行
+本机快照由 `resources/runtime-snapshot.json` 固定源码提交、版本和哈希；准备命令恢复私有 Platform Release 中的归档，发布检查逐包验证字节与锁文件。升级依赖时，更新清单和快照记录并在受控本机运行
 `bun scripts/refreshPrivatePackageLock.mjs` 刷新锁文件，审查 `bun.lock` 后再提交。仓库中的 Actions 文件仅为
 静态跳过的本机策略哨兵；检查和私有包锁定都不在 GitHub runner 上执行。
 
@@ -132,8 +137,7 @@ Velar compiler/editor joint-delivery contract.
 artifacts under `artifacts/desktop/`. The main process loads `@velaros-ai/{model,script,velaros}` as
 native ESM from `node_modules` at runtime (the script worker entry and ScriptAct templates resolve by
 package path); `afterPack` checks that every static import of those packages resolves inside
-`app.asar`. Release staging refuses development links: switch the Platform and UI dependencies to
-published versions before an official build. Signing and notarization credentials are supplied by the release
+`app.asar`. Release staging verifies pinned dependency snapshots and registry packages before an official build. Signing and notarization credentials are supplied by the release
 environment; they are never stored in this repository. Official packages and candidates are produced
 locally on the matching native host, one platform at a time. Electron Builder publishing is disabled,
 and the repository's inert Actions sentinels cannot build, upload, or read release credentials.

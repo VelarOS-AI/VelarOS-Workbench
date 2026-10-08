@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "repository": "VelarOS-AI/VelarOS-Platform",
+  "tag": "v0.6.57",
+  "sourceCommit": "212a85ee514b603e109342cdeafb91cc9ad883da",
+  "packages": [
+    {
+      "name": "@velaros-ai/core",
+      "version": "0.4.3",
+      "fileName": "velaros-ai-core-0.4.3.tgz",
+      "sizeBytes": 124514,
+      "sha256": "e00e326ba1d10af7972dd74f67b07fe1665700f1cb8c8b4c16f8418d581a2f92",
+      "integrity": "sha512-f7S98Z1yRg+8DGV41sNtsqlc8adqD0ERHTFXsUSv6zxPvRmpUvZ/O3qqR4zzm4mMTYIUXApFRGISjlGZiTJ+2g=="
+    },
+    {
+      "name": "@velaros-ai/kernel",
+      "version": "0.6.0",
+      "fileName": "velaros-ai-kernel-0.6.0.tgz",
+      "sizeBytes": 356633,
+      "sha256": "bc838225c599f2d3afee3ad7ed2b375ebbe5b30cb8cbbaa24585a64700d9bd4e",
+      "integrity": "sha512-ffHG7nmyWONKPLNRNHA6ovRFL1jhd4FVSb866fRYw3x88jJaplEcfOi/B2JHUmWAOdwlMEg5jbbu8+lXwlkUtg=="
+    },
+    {
+      "name": "@velaros-ai/context",
+      "version": "0.9.0",
+      "fileName": "velaros-ai-context-0.9.0.tgz",
+      "sizeBytes": 133534,
+      "sha256": "289e6daf52388c4063d6a6612dd16c6baac9b5319b62c213511eebcae7d65c06",
+      "integrity": "sha512-STNlESnMXmOmQoFd4Z+Vt/zgs0jT3J/FIA+7IgqwA7hjvUzEiMZ731uYZfZA43aYgfTMfcWU43VvwFv1ynl+zw=="
+    },
+    {
+      "name": "@velaros-ai/model",
+      "version": "0.10.0",
+      "fileName": "velaros-ai-model-0.10.0.tgz",
+      "sizeBytes": 206391,
+      "sha256": "2c5cf96d28aaf431d665dee4e63260b5492b2f886066c2fa4916ef7df1a870f6",
+      "integrity": "sha512-61L380Osjm0D0MfjBnsiBLha8ldoQEix34HpzlekXIbko+1Pc4twHtkFaILH3cTlLVk3r8ATaVYM34Byn0Ql6g=="
+    },
+    {
+      "name": "@velaros-ai/agent",
+      "version": "9.5.0",
+      "fileName": "velaros-ai-agent-9.5.0.tgz",
+      "sizeBytes": 64702,
+      "sha256": "6c853353d11d6ccda8d409a5fc0bc4886847bd5fcaaeba8402806e5818423ce5",
+      "integrity": "sha512-5pjlM8vfnptkYqBtR+eYoF3sWvHDKi0PuTyrXnvNje96XCo2QAoxzy59EzLWh2puHuLwxGnoSTZeaHlg6nWv2A=="
+    },
+    {
+      "name": "@velaros-ai/skill-jsts",
+      "version": "0.1.0",
+      "fileName": "velaros-ai-skill-jsts-0.1.0.tgz",
+      "sizeBytes": 1437,
+      "sha256": "49a9e3bf68c8fad5d4be05be0e19d518563fee1938fa95adbb824ea6cc012127",
+      "integrity": "sha512-eLr0BKyw3KRDufy8fnZvQfDRckv5j2SYv3zwj3kTCCYUzaT1ifV9bXRq1yiR1UZsUxYWWX6rMbZDxaMUca0tsA=="
+    },
+    {
+      "name": "@velaros-ai/script",
+      "version": "0.2.0",
+      "fileName": "velaros-ai-script-0.2.0.tgz",
+      "sizeBytes": 389423,
+      "sha256": "d03c268d5a81b0497b7023b12952edc681131c5ac5f28774097e7b98f3632e87",
+      "integrity": "sha512-2hsrxF/4DmOwvpeEfejCj1Cl3RklMnPxZHFJO2Eaulz9+ImKsGEmv7YdF/ESOl6WZAamcwUpzgJi8bZT5mdk0Q=="
+    },
+    {
+      "name": "@velaros-ai/velaros",
+      "version": "0.6.0",
+      "fileName": "velaros-ai-velaros-0.6.0.tgz",
+      "sizeBytes": 5292329,
+      "sha256": "f3acc4ab7985648c9753c43df25cf9c266a01ab85296e567a330a06ec9d7ae10",
+      "integrity": "sha512-sLwPTSgZ7V1R2ujw1c/ip/I84G7NmyOH929/NzPAJJbeONetVwXBb0zeTxz38/LbkB2lA7GOQOjF2A7uAOLiJg=="
+    }
+  ]
+}

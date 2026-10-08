@@ -1,134 +1,181 @@
-import { spawnSync } from 'node:child_process'
-import { readFile, readdir, writeFile } from 'node:fs/promises'
-import path from 'node:path'
-import { fileURLToPath } from 'node:url'
-import { isDeepStrictEqual } from 'node:util'
+import { spawnSync } from "node:child_process";
+import { readFile, readdir, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { isDeepStrictEqual } from "node:util";
 
-const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+import {
+  platformSnapshotSpecification,
+  verifyPlatformSnapshot,
+  verifyPlatformSnapshotLock,
+} from "./release/platformSnapshot.mjs";
+
+const repositoryRoot = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+);
 const dependencyFields = [
-  'dependencies',
-  'devDependencies',
-  'optionalDependencies',
-  'peerDependencies',
-]
+  "dependencies",
+  "devDependencies",
+  "optionalDependencies",
+  "peerDependencies",
+];
 const ignoredDirectories = new Set([
-  '.git',
-  '.turbo',
-  'coverage',
-  'dist',
-  'node_modules',
-  'artifacts',
-  'build',
-])
-const localPackageSpecification = /^(?:file|link|portal|workspace):/u
+  ".git",
+  ".turbo",
+  "coverage",
+  "dist",
+  "node_modules",
+  "artifacts",
+  "build",
+]);
+const localPackageSpecification = /^(?:file|link|portal|workspace):/u;
+const snapshotSpecification =
+  /^file:build\/runtime-packages\/velaros-ai-[a-z0-9-]+-\d+\.\d+\.\d+\.tgz$/u;
 // 与 Desktop 一致，Platform 与 UI 在发版前经 `bun link` 从本机兄弟仓消费：只认 `link:<同名包>`。
-const siblingLinkSpecification = /^link:(@velaros-ai\/[\w.-]+)$/u
-const cloudDownloadPrefix = 'https://npm.pkg.github.com/download/'
-const supportedArguments = new Set(['--validate-only'])
-const unexpectedArguments = process.argv.slice(2).filter(
-  (argument) => !supportedArguments.has(argument)
-)
+const siblingLinkSpecification = /^link:(@velaros-ai\/[\w.-]+)$/u;
+const cloudDownloadPrefix = "https://npm.pkg.github.com/download/";
+const supportedArguments = new Set(["--validate-only"]);
+const unexpectedArguments = process.argv
+  .slice(2)
+  .filter((argument) => !supportedArguments.has(argument));
 
 if (unexpectedArguments.length > 0) {
-  throw new Error(`Unsupported arguments: ${unexpectedArguments.join(', ')}`)
+  throw new Error(`Unsupported arguments: ${unexpectedArguments.join(", ")}`);
 }
 
-const bunRuntime = Reflect.get(globalThis, 'Bun')
+const bunRuntime = Reflect.get(globalThis, "Bun");
 if (
-  typeof bunRuntime?.JSONC?.parse !== 'function' ||
-  typeof bunRuntime?.semver?.satisfies !== 'function'
+  typeof bunRuntime?.JSONC?.parse !== "function" ||
+  typeof bunRuntime?.semver?.satisfies !== "function"
 ) {
-  throw new Error('This script requires Bun.JSONC and Bun.semver.')
+  throw new Error("This script requires Bun.JSONC and Bun.semver.");
 }
 
-const manifests = await readPackageManifests(repositoryRoot)
+const manifests = await readPackageManifests(repositoryRoot);
 const workspacePackageNames = new Set(
-  manifests.map(({ manifest }) => manifest.name).filter(Boolean)
-)
+  manifests.map(({ manifest }) => manifest.name).filter(Boolean),
+);
 const { requirements, linked } = collectExternalVelarPackageRequirements(
   manifests,
-  workspacePackageNames
-)
-const packageNames = [...new Set(requirements.map(({ packageName }) => packageName))].sort()
-const linkedPackageNames = [...new Set(linked.map(({ packageName }) => packageName))].sort()
+  workspacePackageNames,
+);
+const packageNames = [
+  ...new Set(requirements.map(({ packageName }) => packageName)),
+].sort();
+const linkedPackageNames = [
+  ...new Set(linked.map(({ packageName }) => packageName)),
+].sort();
+const snapshotRequirements = requirements.filter(({ range }) =>
+  snapshotSpecification.test(range),
+);
+const snapshot =
+  snapshotRequirements.length > 0
+    ? await verifyPlatformSnapshot(repositoryRoot)
+    : undefined;
 
 if (packageNames.length === 0 && linkedPackageNames.length === 0) {
-  throw new Error('No external @velaros-ai packages were found in repository manifests.')
+  throw new Error(
+    "No external @velaros-ai packages were found in repository manifests.",
+  );
 }
 
-if (!process.argv.includes('--validate-only') && packageNames.length > 0) {
-  await updatePrivatePackages(requirements, manifests)
+if (!process.argv.includes("--validate-only") && packageNames.length > 0) {
+  await updatePrivatePackages(requirements, manifests);
 }
-await validateLockfile(requirements, linked)
+await validateLockfile(requirements, linked);
 
 console.info(
   [
-    `Private package lock is valid for ${packageNames.length} published package(s)${packageNames.length > 0 ? `: ${packageNames.join(', ')}` : ''}`,
+    `Private package lock is valid for ${packageNames.length} published package(s)${packageNames.length > 0 ? `: ${packageNames.join(", ")}` : ""}`,
     linkedPackageNames.length > 0
-      ? `and ${linkedPackageNames.length} sibling link(s): ${linkedPackageNames.join(', ')}`
-      : '',
-  ].filter(Boolean).join(' ')
-)
+      ? `and ${linkedPackageNames.length} sibling link(s): ${linkedPackageNames.join(", ")}`
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" "),
+);
 
 async function readPackageManifests(directory) {
-  const manifestPaths = await collectManifestPaths(directory)
+  const manifestPaths = await collectManifestPaths(directory);
   return Promise.all(
     manifestPaths.map(async (manifestPath) => {
-      const source = await readFile(manifestPath, 'utf8')
+      const source = await readFile(manifestPath, "utf8");
       return {
         manifest: JSON.parse(source),
         manifestPath,
         source,
         workspaceKey: toWorkspaceKey(manifestPath),
-      }
-    })
-  )
+      };
+    }),
+  );
 }
 
 async function collectManifestPaths(directory) {
-  const entries = await readdir(directory, { withFileTypes: true })
+  const entries = await readdir(directory, { withFileTypes: true });
   // 嵌套 checkout / worktree 持有自己的锁文件；不能当成本仓 Bun workspace 更新或核验。
-  if (directory !== repositoryRoot && entries.some((entry) => entry.name === '.git')) return []
+  if (
+    directory !== repositoryRoot &&
+    entries.some((entry) => entry.name === ".git")
+  )
+    return [];
   const nestedPaths = await Promise.all(
     entries.map(async (entry) => {
       if (entry.isDirectory()) {
-        if (ignoredDirectories.has(entry.name)) return []
-        return collectManifestPaths(path.join(directory, entry.name))
+        if (ignoredDirectories.has(entry.name)) return [];
+        return collectManifestPaths(path.join(directory, entry.name));
       }
-      return entry.isFile() && entry.name === 'package.json'
+      return entry.isFile() && entry.name === "package.json"
         ? [path.join(directory, entry.name)]
-        : []
-    })
-  )
-  return nestedPaths.flat().sort()
+        : [];
+    }),
+  );
+  return nestedPaths.flat().sort();
 }
 
 function toWorkspaceKey(manifestPath) {
-  const relativeDirectory = path.relative(repositoryRoot, path.dirname(manifestPath))
-  return relativeDirectory.split(path.sep).join('/')
+  const relativeDirectory = path.relative(
+    repositoryRoot,
+    path.dirname(manifestPath),
+  );
+  return relativeDirectory.split(path.sep).join("/");
 }
 
-function collectExternalVelarPackageRequirements(packageManifests, ownPackageNames) {
-  const packageRequirements = []
-  const linkedRequirements = []
+function collectExternalVelarPackageRequirements(
+  packageManifests,
+  ownPackageNames,
+) {
+  const packageRequirements = [];
+  const linkedRequirements = [];
   for (const { manifest, manifestPath, workspaceKey } of packageManifests) {
     for (const field of dependencyFields) {
-      for (const [packageName, range] of Object.entries(manifest[field] ?? {})) {
+      for (const [packageName, range] of Object.entries(
+        manifest[field] ?? {},
+      )) {
         if (
-          !packageName.startsWith('@velaros-ai/') ||
+          !packageName.startsWith("@velaros-ai/") ||
           ownPackageNames.has(packageName)
         ) {
-          continue
+          continue;
         }
-        const siblingLink = siblingLinkSpecification.exec(range)
+        const siblingLink = siblingLinkSpecification.exec(range);
         if (siblingLink?.[1] === packageName) {
-          linkedRequirements.push({ field, manifestPath, packageName, range, workspaceKey })
-          continue
+          linkedRequirements.push({
+            field,
+            manifestPath,
+            packageName,
+            range,
+            workspaceKey,
+          });
+          continue;
         }
-        if (localPackageSpecification.test(range)) {
+        if (
+          localPackageSpecification.test(range) &&
+          !snapshotSpecification.test(range)
+        ) {
           throw new Error(
-            `${path.relative(repositoryRoot, manifestPath)}#${field}.${packageName} must use a published cloud version, not ${range}`
-          )
+            `${path.relative(repositoryRoot, manifestPath)}#${field}.${packageName} must use a published cloud version, not ${range}`,
+          );
         }
         packageRequirements.push({
           field,
@@ -136,115 +183,115 @@ function collectExternalVelarPackageRequirements(packageManifests, ownPackageNam
           packageName,
           range,
           workspaceKey,
-        })
+        });
       }
     }
   }
   const byPackage = (left, right) =>
     `${left.packageName}:${left.workspaceKey}:${left.field}`.localeCompare(
-      `${right.packageName}:${right.workspaceKey}:${right.field}`
-    )
+      `${right.packageName}:${right.workspaceKey}:${right.field}`,
+    );
   return {
     requirements: packageRequirements.sort(byPackage),
     linked: linkedRequirements.sort(byPackage),
-  }
+  };
 }
 
 async function updatePrivatePackages(packageRequirements, packageManifests) {
-  const packageNamesByManifest = new Map()
+  const packageNamesByManifest = new Map();
   for (const { manifestPath, packageName } of packageRequirements) {
-    const packageNames = packageNamesByManifest.get(manifestPath) ?? new Set()
-    packageNames.add(packageName)
-    packageNamesByManifest.set(manifestPath, packageNames)
+    const packageNames = packageNamesByManifest.get(manifestPath) ?? new Set();
+    packageNames.add(packageName);
+    packageNamesByManifest.set(manifestPath, packageNames);
   }
 
   const manifestUpdates = [...packageNamesByManifest.entries()].sort(
-    ([leftManifest], [rightManifest]) => leftManifest.localeCompare(rightManifest)
-  )
+    ([leftManifest], [rightManifest]) =>
+      leftManifest.localeCompare(rightManifest),
+  );
   for (const [manifestPath, packageNameSet] of manifestUpdates) {
-    const exactPackageNames = [...packageNameSet].sort()
-    let updateError
+    const exactPackageNames = [...packageNameSet].sort();
+    let updateError;
     try {
       const result = spawnSync(
-        'bun',
-        [
-          'update',
-          ...exactPackageNames,
-          '--lockfile-only',
-          '--ignore-scripts',
-        ],
+        "bun",
+        ["update", ...exactPackageNames, "--lockfile-only", "--ignore-scripts"],
         {
           cwd: path.dirname(manifestPath),
           env: process.env,
-          stdio: 'inherit',
-        }
-      )
+          stdio: "inherit",
+        },
+      );
       if (result.error) {
-        throw result.error
+        throw result.error;
       }
       if (result.status !== 0) {
-        const manifest = path.relative(repositoryRoot, manifestPath)
+        const manifest = path.relative(repositoryRoot, manifestPath);
         throw new Error(
-          `bun update failed for ${manifest}${result.signal ? ` with signal ${result.signal}` : ` with exit code ${result.status}`}`
-        )
+          `bun update failed for ${manifest}${result.signal ? ` with signal ${result.signal}` : ` with exit code ${result.status}`}`,
+        );
       }
     } catch (error) {
-      updateError = error
+      updateError = error;
     }
-    await restoreAndValidateManifestSources(packageManifests, updateError)
-    if (updateError) throw updateError
+    await restoreAndValidateManifestSources(packageManifests, updateError);
+    if (updateError) throw updateError;
   }
 }
 
-async function restoreAndValidateManifestSources(packageManifests, updateError) {
-  const formattingOnlyChanges = []
-  const semanticChanges = []
+async function restoreAndValidateManifestSources(
+  packageManifests,
+  updateError,
+) {
+  const formattingOnlyChanges = [];
+  const semanticChanges = [];
   for (const { manifest, manifestPath, source } of packageManifests) {
-    const currentSource = await readFile(manifestPath, 'utf8')
-    if (currentSource === source) continue
+    const currentSource = await readFile(manifestPath, "utf8");
+    if (currentSource === source) continue;
 
-    const relativePath = path.relative(repositoryRoot, manifestPath)
+    const relativePath = path.relative(repositoryRoot, manifestPath);
     try {
-      const currentManifest = JSON.parse(currentSource)
+      const currentManifest = JSON.parse(currentSource);
       if (isDeepStrictEqual(currentManifest, manifest)) {
-        formattingOnlyChanges.push(relativePath)
+        formattingOnlyChanges.push(relativePath);
       } else {
-        semanticChanges.push(relativePath)
+        semanticChanges.push(relativePath);
       }
     } catch {
-      semanticChanges.push(relativePath)
+      semanticChanges.push(relativePath);
     }
-    await writeFile(manifestPath, source, 'utf8')
+    await writeFile(manifestPath, source, "utf8");
   }
   if (formattingOnlyChanges.length > 0) {
     console.info(
-      `Restored formatting-only manifest changes: ${formattingOnlyChanges.join(', ')}`
-    )
+      `Restored formatting-only manifest changes: ${formattingOnlyChanges.join(", ")}`,
+    );
   }
   if (semanticChanges.length > 0) {
     throw new Error(
-      `bun update changed package manifest semantics; original bytes restored: ${semanticChanges.join(', ')}`,
-      updateError ? { cause: updateError } : undefined
-    )
+      `bun update changed package manifest semantics; original bytes restored: ${semanticChanges.join(", ")}`,
+      updateError ? { cause: updateError } : undefined,
+    );
   }
 }
 
 async function validateLockfile(packageRequirements, linkedRequirements) {
-  const lockfilePath = path.join(repositoryRoot, 'bun.lock')
-  const lockfile = bunRuntime.JSONC.parse(await readFile(lockfilePath, 'utf8'))
+  const lockfilePath = path.join(repositoryRoot, "bun.lock");
+  const lockfile = bunRuntime.JSONC.parse(await readFile(lockfilePath, "utf8"));
+  if (snapshot) verifyPlatformSnapshotLock(snapshot, lockfile);
 
   for (const requirement of packageRequirements) {
-    validateWorkspaceRequirement(lockfile, requirement)
-    validateResolvedVersion(lockfile, requirement)
+    validateWorkspaceRequirement(lockfile, requirement);
+    validateResolvedVersion(lockfile, requirement);
   }
   // 兄弟仓链接：锁文件得记着同一个 link，解析到的也得是这个 link，而不是别处的同名包。
   for (const requirement of linkedRequirements) {
-    validateWorkspaceRequirement(lockfile, requirement)
-    const resolution = lockfile.packages?.[requirement.packageName]?.[0]
+    validateWorkspaceRequirement(lockfile, requirement);
+    const resolution = lockfile.packages?.[requirement.packageName]?.[0];
     if (resolution !== `${requirement.packageName}@${requirement.range}`) {
       throw new Error(
-        `${formatRequirement(requirement)} must resolve to its sibling link in bun.lock, not ${String(resolution)}.`
-      )
+        `${formatRequirement(requirement)} must resolve to its sibling link in bun.lock, not ${String(resolution)}.`,
+      );
     }
   }
 }
@@ -253,36 +300,56 @@ function validateWorkspaceRequirement(lockfile, requirement) {
   const lockedRange =
     lockfile.workspaces?.[requirement.workspaceKey]?.[requirement.field]?.[
       requirement.packageName
-    ]
+    ];
   if (lockedRange !== requirement.range) {
     throw new Error(
-      `${formatRequirement(requirement)} is recorded as ${String(lockedRange)} in bun.lock.`
-    )
+      `${formatRequirement(requirement)} is recorded as ${String(lockedRange)} in bun.lock.`,
+    );
   }
 }
 
 function validateResolvedVersion(lockfile, requirement) {
-  const entry = lockfile.packages?.[requirement.packageName]
-  const resolution = entry?.[0]
-  const prefix = `${requirement.packageName}@`
-  if (typeof resolution !== 'string' || !resolution.startsWith(prefix)) {
+  const entry = lockfile.packages?.[requirement.packageName];
+  const resolution = entry?.[0];
+  const prefix = `${requirement.packageName}@`;
+  if (typeof resolution !== "string" || !resolution.startsWith(prefix)) {
     throw new Error(
-      `${formatRequirement(requirement)} has no canonical package resolution in bun.lock.`
-    )
+      `${formatRequirement(requirement)} has no canonical package resolution in bun.lock.`,
+    );
   }
 
-  const resolvedVersion = resolution.slice(prefix.length)
+  const resolvedVersion = resolution.slice(prefix.length);
+  if (snapshotSpecification.test(requirement.range)) {
+    const entry = snapshot?.packages.find(
+      ({ name }) => name === requirement.packageName,
+    );
+    if (
+      !entry ||
+      platformSnapshotSpecification(entry) !== requirement.range ||
+      resolvedVersion !== requirement.range.slice("file:".length)
+    ) {
+      throw new Error(
+        `${formatRequirement(requirement)} must resolve to its verified Platform snapshot.`,
+      );
+    }
+    return;
+  }
   if (!bunRuntime.semver.satisfies(resolvedVersion, requirement.range)) {
     throw new Error(
-      `${formatRequirement(requirement)} resolves to ${resolvedVersion}, which does not satisfy ${requirement.range}.`
-    )
+      `${formatRequirement(requirement)} resolves to ${resolvedVersion}, which does not satisfy ${requirement.range}.`,
+    );
   }
-  if (typeof entry?.[1] !== 'string' || !entry[1].startsWith(cloudDownloadPrefix)) {
-    throw new Error(`${formatRequirement(requirement)} must resolve from ${cloudDownloadPrefix}.`)
+  if (
+    typeof entry?.[1] !== "string" ||
+    !entry[1].startsWith(cloudDownloadPrefix)
+  ) {
+    throw new Error(
+      `${formatRequirement(requirement)} must resolve from ${cloudDownloadPrefix}.`,
+    );
   }
 }
 
 function formatRequirement(requirement) {
-  const manifest = path.relative(repositoryRoot, requirement.manifestPath)
-  return `${manifest}#${requirement.field}.${requirement.packageName}`
+  const manifest = path.relative(repositoryRoot, requirement.manifestPath);
+  return `${manifest}#${requirement.field}.${requirement.packageName}`;
 }
