@@ -51,8 +51,10 @@ function externalPackages(root) {
         (dependency) => !record.manifest.peerDependenciesMeta?.[dependency]?.optional
       ),
     ])
-    for (const dependency of required)
-      if (dependency.startsWith('@velaros-ai/'))
+    const bundled = record.manifest.bundledDependencies ?? record.manifest.bundleDependencies ?? []
+    const bundledNames = new Set(bundled === true ? required : Array.isArray(bundled) ? bundled : [])
+    for (const dependency of new Set([...required, ...bundledNames]))
+      if (dependency.startsWith('@velaros-ai/') || bundledNames.has(dependency))
         record.dependencies.push(load(dependency, record.root))
     return record
   }
@@ -120,7 +122,14 @@ function packageFiles(record) {
       else if (entry.isFile() && !SourceOnly.test(relative)) result.add(relative)
     }
   }
-  for (const item of record.manifest.files ?? ['dist']) {
+  const publishedFiles = record.manifest.files ?? (
+    record.name.startsWith('@velaros-ai/')
+      ? ['dist']
+      : [mappedTarget(record.manifest.exports, '.') ?? record.manifest.main ?? 'index.js']
+  )
+  for (const item of publishedFiles) {
+    // 打包器可提升捆绑依赖；按 Node 解析路径单独校验包身份和资源。
+    if (item === 'node_modules' || item.startsWith('node_modules/')) continue
     if (item.includes('*') || item.startsWith('!'))
       throw new Error(`外部平台包发布资源须有明确路径：${record.name} ${item}`)
     const path = resolve(record.root, item)
