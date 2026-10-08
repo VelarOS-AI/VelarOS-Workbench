@@ -1,4 +1,4 @@
-@reference "../index.css";
+@reference "./index.css";
 
 .root {
   @apply h-full min-h-0 overflow-hidden;

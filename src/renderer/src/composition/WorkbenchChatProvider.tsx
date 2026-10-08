@@ -6,11 +6,11 @@ import {
   useContext,
 } from 'react'
 
-import type {
-  BrowserElementSelection,
-  ChatMessage,
-  SystemFileChangePreviewResult,
-} from '@shared/contracts'
+import { type ChatMessage } from '@velaros-ai/ui/conversation/contracts'
+import { type BrowserElementSelection } from '@velaros-ai/velaros/browser/contracts'
+
+import { type SystemFileChangePreviewResult } from '@shared/contracts/system'
+import type { WorkbenchAgentEngineId, WorkbenchConversationEngineSelection } from '@shared/workbenchConversation'
 import type { WorkbenchChatRunChangesSummary } from '@shared/workbenchGit'
 
 import type { WorkbenchChatSurfaceScope } from './workbenchChatComposition'
@@ -44,6 +44,7 @@ export interface WorkbenchChatSessionSnapshot {
   readonly id: string
   readonly folderId: string
   readonly kind: 'chat'
+  readonly engine: Nullable<WorkbenchConversationEngineSelection>
   readonly rootPath: Nullable<string>
   readonly space: 'project'
   readonly workspaceVersion: number
@@ -115,6 +116,7 @@ export interface WorkbenchChatProjectRuntime {
     readonly archiveGroups: readonly WorkbenchChatSessionGroup[]
   }
   readonly actions: {
+    openAgentChat: (engineId: Nullable<WorkbenchAgentEngineId>) => void
     addProjectSession: (folderId: string, projectRoot: string) => Promise<boolean>
     archiveSession: (folderId: string) => Promise<void>
     selectSession: (folderId: string, memberSessionId: string) => void

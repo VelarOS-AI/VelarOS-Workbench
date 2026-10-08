@@ -1,6 +1,6 @@
 import { optionalWhenLazy } from '@velaros-ai/core'
 
-import type { WorkbenchDirectoryEntry } from '@shared/contracts'
+import { type WorkbenchDirectoryEntry } from '@shared/contracts/workbench'
 
 import { getParentPath, isSameOrChildPath, ROOT_PATH } from '../shared/workbenchUtils'
 

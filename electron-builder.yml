@@ -4,6 +4,7 @@ copyright: Copyright © VelarOS
 
 directories:
   output: artifacts/desktop
+  buildResources: resources/icons
 
 files:
   - build/electron/**/*

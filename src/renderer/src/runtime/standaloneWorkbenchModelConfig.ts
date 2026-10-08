@@ -18,6 +18,7 @@ export interface StandaloneWorkbenchModelConfig {
 }
 
 const ModelConfigStorageKey = 'velaros-workbench-app:model-config'
+const ModelCredentialRevisionKey = 'velaros-workbench-app:model-credential-revision'
 const LegacyPreferencesStorageKey = 'velaros.workbench.preferences.v1'
 export const StandaloneWorkbenchCompletionDisabledOptionValue = 'workbench:none'
 const DefaultProvider = getStandaloneWorkbenchModelProviderPreset('openrouter')
@@ -150,7 +151,10 @@ function applyStandaloneWorkbenchModelConfig(
 function persistApiKeyForProvider(provider: string, apiKey: string): void {
   if (typeof window === 'undefined' || !window.velarosWorkbenchModel) return
   if (getStandaloneWorkbenchModelProviderPreset(provider).managedByCloud) return
-  void window.velarosWorkbenchModel.setApiKey({ provider, apiKey }).catch(() => undefined)
+  void window.velarosWorkbenchModel.setApiKey({ provider, apiKey }).then(() => {
+    // 设置窗口写完加密凭据后，通知已打开的工作区重新读取；信号里不含密钥。
+    window.localStorage.setItem(ModelCredentialRevisionKey, `${Date.now()}:${apiKeyMutationVersion}`)
+  }).catch(() => undefined)
 }
 
 async function hydrateApiKeyForProvider(provider: string): Promise<void> {
@@ -175,6 +179,16 @@ async function hydrateApiKeyForProvider(provider: string): Promise<void> {
 export function hydrateStandaloneWorkbenchModelApiKey(): void {
   if (initialApiKeyHydrationStarted) return
   initialApiKeyHydrationStarted = true
+  window.addEventListener('storage', (event) => {
+    if (event.key !== ModelConfigStorageKey && event.key !== ModelCredentialRevisionKey) return
+    const next = readInitialModelConfig()
+    currentConfig = {
+      ...next,
+      apiKey: next.provider === currentConfig.provider ? currentConfig.apiKey : '',
+    }
+    for (const listener of listeners) listener()
+    void hydrateApiKeyForProvider(next.provider)
+  })
   void hydrateApiKeyForProvider(currentConfig.provider)
 }
 

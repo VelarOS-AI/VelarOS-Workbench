@@ -1,7 +1,7 @@
-import type { WorkspaceGitFileStatusEntry } from '@shared/contracts'
+import { type WorkspaceGitFileStatusEntry } from '@shared/contracts/system'
 import { isWorkspaceGitConflictEntry } from '@shared/workbenchGit'
 
-import type { WorkbenchI18nContextValue } from '../../i18n'
+import { type WorkbenchI18nContextValue } from '../../i18n/WorkbenchLocalizationProvider'
 
 /**
  * 一个文件的改动落在哪一侧：`staged` 暂存区相对 HEAD，`unstaged` 工作区相对暂存区，`untracked` 未跟踪，

@@ -2,7 +2,7 @@
  * 符号种类的图标：一套 16×16 的线条图。补全列表与「转到文件中的符号」共用，同一种东西在两处长得一样。
  * 图标当遮罩用（颜色由用的地方给），所以这里只有形状。
  */
-import type { WorkbenchLanguageServiceDocumentSymbolKind } from '@shared/contracts'
+import { type WorkbenchLanguageServiceDocumentSymbolKind } from '@shared/contracts/workbench'
 
 function glyphMask(body: string): string {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none" stroke="black" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`

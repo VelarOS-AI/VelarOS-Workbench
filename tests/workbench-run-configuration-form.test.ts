@@ -13,9 +13,9 @@ import { shareHostReactWithLinkedUi } from './helpers/linkedUiReact'
 
 shareHostReactWithLinkedUi()
 
-const { WorkbenchLocalizationProvider } = await import('../src/renderer/src/i18n')
+const { WorkbenchLocalizationProvider } = await import('../src/renderer/src/i18n/WorkbenchLocalizationProvider')
 const { WorkbenchRunConfigurationForm } = await import(
-  '../src/renderer/src/components/run/WorkbenchRunConfigurationsDialog'
+  '../src/renderer/src/components/WorkbenchRunConfigurationsDialog'
 )
 
 const Draft: WorkbenchRunConfigurationDraft = {

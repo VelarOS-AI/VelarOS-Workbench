@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 
 import { describe, test } from 'bun:test'
 
-import type { WorkbenchLanguageServiceLocation } from '../src/shared/contracts'
+import { type WorkbenchLanguageServiceLocation } from '../src/shared/contracts/workbench'
 
 import { createLanguageProject, positionOf, StrictTsconfig } from './helpers/languageProject'
 

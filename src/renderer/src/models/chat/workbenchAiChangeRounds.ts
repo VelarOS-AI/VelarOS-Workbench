@@ -1,4 +1,5 @@
-import type { ChatMessage } from '@shared/contracts'
+import { type ChatMessage } from '@velaros-ai/ui/conversation/contracts'
+
 import type {
   WorkbenchChatRunChangesSummary,
   WorkbenchChatRunFileChange,

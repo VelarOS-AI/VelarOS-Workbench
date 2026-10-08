@@ -6,7 +6,7 @@ import { describe, test } from 'bun:test'
 
 import type { ConversationBlockHooks } from '@velaros-ai/ui/conversation'
 
-import { WorkbenchLocalizationProvider } from '../src/renderer/src/i18n'
+import { WorkbenchLocalizationProvider } from '../src/renderer/src/i18n/WorkbenchLocalizationProvider'
 import {
   formatWorkbenchChatPathForDisplay,
   resolveWorkbenchChatAbsolutePath,

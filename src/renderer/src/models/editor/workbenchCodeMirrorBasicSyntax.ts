@@ -8,7 +8,7 @@ import {
   type ViewUpdate,
 } from '@codemirror/view'
 
-import { resolveWorkbenchEditorLanguage } from '../../language/workbenchEditorLanguageContributions'
+import { resolveWorkbenchEditorLanguage } from './workbenchEditorLanguageContributions'
 
 export const WORKBENCH_JAVASCRIPT_KEYWORDS = [
   'accessor',

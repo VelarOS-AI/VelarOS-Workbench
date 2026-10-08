@@ -1,7 +1,7 @@
 import { CaretDownIcon, CaretUpIcon } from '@phosphor-icons/react'
-import { useWorkbenchI18n } from '@renderer/i18n'
+import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 import type { WorkbenchBottomTool } from '@renderer/models/layout/workbenchSurfaceModel'
-import type { WorkbenchThemeId } from '@renderer/models/settings/workbenchPreferences'
+import type { WorkbenchThemeId } from '@renderer/models/workbenchPreferences'
 import type { ReactElement } from 'react'
 
 import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
@@ -34,11 +34,8 @@ interface CommandPanelProps {
   problemsPanel: ReactElement
   onToggleCollapsed: () => void
   onCreateTerminalSession: () => void
-  /** 在一个终端右边并排再开一个；不指明就是当前那个。 */
-  onSplitTerminalSession: (sessionId?: string) => void
   onActiveTerminalSessionChange: (sessionId: string) => void
   onCloseTerminalSessions: (sessionIds: readonly string[]) => void
-  onTerminalPaneWeightsChange: (weights: Readonly<Record<string, number>>) => void
   /** xterm 收齐的按键原样送进伪终端（终端与运行卡同一条路）。 */
   onTerminalData: (sessionId: string, data: string) => void
   onTerminalResize: (sessionId: string, cols: number, rows: number) => void
@@ -61,10 +58,8 @@ export function CommandPanel({
   problemsPanel,
   onToggleCollapsed,
   onCreateTerminalSession,
-  onSplitTerminalSession,
   onActiveTerminalSessionChange,
   onCloseTerminalSessions,
-  onTerminalPaneWeightsChange,
   onTerminalData,
   onTerminalResize,
   onActiveRunSessionChange,
@@ -97,7 +92,6 @@ export function CommandPanel({
             activeTerminalSessionId={activeTerminalSessionId}
             isCollapsed={isCollapsed}
             onCreateTerminalSession={onCreateTerminalSession}
-            onSplitTerminalSession={() => onSplitTerminalSession()}
             onActiveTerminalSessionChange={onActiveTerminalSessionChange}
             onCloseTerminalSessions={onCloseTerminalSessions}
             onToggleCollapsed={onToggleCollapsed}
@@ -160,10 +154,6 @@ export function CommandPanel({
               <WorkbenchTerminalToolPane
                 terminalSessions={terminalSessions}
                 activeTerminalSessionId={activeTerminalSessionId}
-                onActiveTerminalSessionChange={onActiveTerminalSessionChange}
-                onSplitTerminalSession={onSplitTerminalSession}
-                onCloseTerminalSessions={onCloseTerminalSessions}
-                onTerminalPaneWeightsChange={onTerminalPaneWeightsChange}
                 workbenchTheme={workbenchTheme}
                 onTerminalData={onTerminalData}
                 onTerminalResize={onTerminalResize}

@@ -7,7 +7,7 @@ import {
   NotePencilIcon,
   SpinnerGapIcon,
 } from '@phosphor-icons/react'
-import { useWorkbenchI18n } from '@renderer/i18n'
+import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 
 import type { WorkbenchChatRunFileChange } from '@shared/workbenchGit'
 
@@ -21,7 +21,7 @@ import { useWorkbenchRunChangeRecord } from '../../runtime/workbenchRunChangeRec
 import pageStyles from '../../styles/workbenchPageStyles'
 import { WorkbenchFileTypeIcon } from '../files/WorkbenchFileTypeIcon'
 
-import styles from './WorkbenchAiChanges.module.css'
+import styles from '../../styles/WorkbenchAiChanges.module.css'
 
 interface WorkbenchAiChangesPanelProps {
   projectRoot: string

@@ -1,15 +1,24 @@
 # Workbench 内部模块
 
 Workbench 是单体仓库：根 `package.json` 是唯一清单，全部产品源码直接归属
-根 `src/`。仓内没有 `apps/`、`packages/` 或额外的 `workbench/` 套层，
-也不建立第二套版本和发布边界。
+根 `src/`，由同一个版本与发布流程交付。
 
 ## 目录职责
 
 - `src/main`：Electron 主进程、会话运行时宿主（Platform ScriptAct）、文件/Git/终端/语言服务宿主。
 - `src/preload`：主进程能力到 renderer 的受控桥接。
-- `src/renderer`：UI 入口、产品模型、React 控制器、组件、页面组合与样式。
+- `src/renderer`：UI 入口、产品模型、React 控制器、组件与页面组合；全部 CSS 和全局样式入口集中在 `src/renderer/src/styles/`。
 - `src/shared`：跨进程 contracts、IPC 信封、通用语言服务描述和无进程状态代码。
+
+`src/renderer/src` 根目录只放启动入口 `main.tsx`，实现文件按职责归入目录：
+
+- `app/`：应用壳、工作区装配、页面展示与页面模型上下文。
+- `hooks/`：React 状态与控制器钩子，包括项目枢纽状态投影。
+- `models/editor/`：编辑器模型、语言贡献注册与 VelarScript 编辑支持。
+- `support/`：通用渲染端辅助逻辑，包括本地 JSON 存储与工作区持久化。
+- `types/`：环境声明与渲染端类型；`styles/`：CSS 与全局样式入口。
+
+构建工具逻辑归 `scripts/`，包含本地链接包的监听策略；工具配置入口位于仓库根目录。
 
 源码通过 `@main/*`、`@renderer/*`、`@shared/*` 显式表达所属层。这些别名既避免
 脆弱相对路径，也让边界检查能阻止 renderer 与 main 互相穿透。
@@ -26,8 +35,7 @@ Workbench 是单体仓库：根 `package.json` 是唯一清单，全部产品源
 
 ## 会话运行时
 
-聊天跑在 Platform 的 ScriptAct 运行时上，与 Desktop 同一套（`src/main/conversation/` 是 Desktop 会话运行时
-的移植）：
+聊天由 `src/main/conversation/` 装配 Platform 的 ScriptAct 运行时：
 
 - **一轮一个运行时**：`WorkbenchConversationSession` 每轮 `createRuntime`，项目根使用真实路径；
   标准 Node 执行环境复用应用共用的执行宿主（`WorkbenchShellHostRegistry`）。Node、基础工具与代码工具随产品分发，
@@ -51,7 +59,7 @@ Workbench 是单体仓库：根 `package.json` 是唯一清单，全部产品源
   `WorkbenchBrowserService` 按项目与会话维护受控页面，模型进入站点时在编辑器打开 Agent 标签，
   webview 接管、导航、后台页面交接和离站由 Platform 浏览器运行时管理；browser / devtools / cdp 操作按需连接当前会话页面。
 - **状态**：会话数据在 `userData/conversation-runtime/<sha256(项目根 \0 会话 id)>`，任何项目之外；
-  空闲时读、改目标用无模型的控制会话。旧的 Kernel 会话历史不迁移，老会话下一轮从 Platform 的新上下文开始。
+  空闲时读、改目标用无模型的控制会话。
 - **宿主说明**（`WorkbenchConversationRules.buildHostInstructions`）：身份、回复语言、执行首行注释（Node 用 `//`、Shell 用 `#`）
   （界面拿它当脚本卡标题）、计划 / 目标模式，以及项目里的 AI 规则文件原文（`.velar/rules.md`、`AGENTS.md`、
   `CLAUDE.md`、`.cursorrules`、`.cursor/rules/**`、`.github/copilot-instructions.md`，合计 32,000 字符，放不下的
@@ -67,6 +75,8 @@ Workbench 是单体仓库：根 `package.json` 是唯一清单，全部产品源
 - **IPC**：`workbench-app:conversation:*`（send / cancel / guidance / input / answer / get-goal / update-goal /
   list-notes / read-note / notes-changed / delete-session / backup-history / engines / event），只认发起窗口当前打开的项目；窗口销毁时取消它的运行。
   `workbench-app:session-peers:*` 承接目录与任务交接回执；`workbench-app:agent-processes:*` 承接进程查看、输入和停止。
+- **会话控制台**：聊天顶栏打开按项目窗口归属的原生子窗，列表选择进程，右侧显示输出并提供输入、打断和停止操作。
+  React 状态与 IPC 留在主 renderer，子窗通过 portal 展示并同步主题；再次点击入口聚焦已有窗口，切换会话或关闭所属窗口时释放子窗。
 - **外部引擎**（`src/main/engines/`）：会话可以交给本机装好的 Claude Code 或 Codex 命令行。请求带 `engine`
   时 `WorkbenchConversationDispatcher` 交给 `WorkbenchEngineConversationRuntime`，其余走 Platform；运行中的
   回答、停止跟着正在跑的那一边，删会话、停项目、关闭两边都做。不打包任何 SDK：Claude Code 直接起用户的
@@ -391,17 +401,18 @@ Workbench 方案的键（`components/settings/WorkbenchKeymapSettings.tsx`）。
 - **分离的 HEAD**：状态（`WorkspaceGitStatusResult`）与顶栏的轻量快照里，`branch` 为 null 时
   `detachedHead` 给出 HEAD 停在的提交（`sha`、`shortSha`）。顶栏的 Git 控件看的是「HEAD 有得显示」
   （`hasWorkbenchGitHead`），不只认分支：分离的 HEAD 上按钮写「分离的 HEAD · 1a2b3c4」
-  （`describeWorkbenchGitHead`），菜单里没有哪个分支算当前的，照常切回分支、新建分支；菜单里的拉取、
-  同步、推送和提交面板的推送按不了并写明原因，获取远端和点名某个分支的推送照常能用。
+  （`describeWorkbenchGitHead`），菜单里可切回分支或新建分支；获取远端和点名某个分支的推送照常能用，提交面板
+  的推送会说明当前 HEAD 的限制。
 - **顶栏的 Git 控件只有一个**（`WorkbenchGitBranchControl`，面板是 `WorkbenchGitBranchMenu`）：按钮上
-  是当前分支和落后（↓）、领先（↑）上游的提交数；点开的面板从上到下是当前分支的拉取、推送、同步、获取
-  远端（跑着的时候换成进度和取消），搜索，分支列表（按名字里的 `/` 排成树；点一下签出，悬停出「签出」
+  是当前分支和落后（↓）、领先（↑）上游的提交数；点开的面板顶部是搜索框和获取远端图标。当前分支行悬停或
+  键盘聚焦操作时，在右侧显示拉取、推送，图标和文字共用其他分支的行内操作条。运行时搜索行下方显示进度和取消；
+  再往下是分支列表（按名字里的 `/` 排成树；点一下签出，悬停出「签出」
   「推送」；远端分支签出成同名的本地分支，本地没有就新建），新建分支。外框和面板的尺寸用 UI 包的顶栏
   控件（`TopBarControlFrame`、`--topbar-panel-*`），和项目菜单同一套；面板里的内容是 Workbench 自己
   的，不再用 UI 包的 `WorkspaceGitCommitControl`（它没有放远端操作的位置）。哪些操作按得了、为什么
   按不了、树怎么排，都在 `workbenchGitBranchMenuModel.ts`。合并、变基、拣选、撤销进行到一半时
   （`summary.operation`）：变基会把 HEAD 从分支上摘下来，按钮上写「feature（变基中）」而不是「分离的
-  HEAD」；拉取、推送、同步、切换和新建分支都按不了，原因写的是「先在提交面板里继续或放弃」，只留获取远端。
+  HEAD」；拉取、推送、切换和新建分支都按不了，原因写的是「先在提交面板里继续或放弃」，只留获取远端。
 - **模块**：`WorkbenchGitService` 是对外的唯一入口（IPC、测试、探针都找它）。成块的新功能另放文件，
   经 `WorkbenchGitAccess` 借服务的内部能力（跑 git、项目在仓库里的位置、状态、报错口径），不各起各的
   git：贮藏在 `WorkbenchGitStashes.ts`，合并、变基、拣选、撤销在 `WorkbenchGitOperations.ts`。
@@ -704,7 +715,7 @@ Node 的 OOM 处理直接 `abort()` 主进程。实测 VelarOS-Platform：每个
   （`WorkbenchShellTerminal.ts` 惰性加载）。探针 `probe:terminal` 经 `scripts/probe/runTerminalProbe.mjs`
   先用 bun 打包再在 Electron 运行时里跑（node-pty 在 bun 下收不到数据）。
 
-### 终端里的链接、查找与拆分
+### 终端标签、链接与查找
 
 - 文件链接：鼠标所在那一行（连同折行）里的路径经 `workbenchTerminalFileLinks.ts` 认出来，问主进程确实是
   项目里的文件才画成链接，点一下在编辑器里打开（带行列的跳过去）。相对路径按 shell 此刻所在的目录解析：
@@ -712,11 +723,8 @@ Node 的 OOM 处理直接 `abort()` 主进程。实测 VelarOS-Platform：每个
   至多两秒问一次），不靠 shell 报；Windows 上问不到，退回 shell 用 OSC 7 报的目录或会话的起始目录。
 - 查找：⌘F（其它平台 Ctrl+F）在终端里开查找栏（`workbenchTerminalSearch.ts`），在整个滚回历史里找，
   只给视口附近的匹配画高亮，输出变了隔一会儿重找。
-- 拆分：一个标签可以并排放几个终端（`workbenchTerminalSplits.ts`）。会话仍是一张平表，并排的几个挨在
-  一起、共用 `groupId`；标签栏一组一个标签。⌘D（其它平台 Ctrl+Shift+5）在当前终端右边再开一个，起始目录
-  跟着当前 shell 所在的目录（start 请求的 `inheritCwdFrom`，主进程去问；已经到项目外面、问不到就从项目
-  根开始）；⌥⌘← / ⌥⌘→（Alt+← / Alt+→）在并排的终端之间换焦点。宽度份额记在会话上，拖分隔条时直接改
-  样式，松手才进 React 状态。
+- 标签：每个会话独占一个标签，新增终端从项目根目录启动；关闭当前标签后切换到相邻标签。切换和折叠保留
+  各会话的输出历史与光标状态，输入光标宽度为 2px。
 - 退出：shell 正常退出（退出码 0）且焦点就在这个终端里——也就是用户在里面敲了 `exit`——这个终端跟着
   关掉；在后台自己结束的、异常退出的留着，能看到最后的输出和「进程已结束」那一行。
 
@@ -862,7 +870,7 @@ JS / TS 的测试文件（`*.test.*`、`*.spec.*`、`__tests__/` 里的）在行
   那组里切过去），那一行铺底色（`workbenchDebugPausedLine.ts`，用视图插件直接给装饰）；除了单步走出来的停顿，
   底部换到调试面板。最里层是 Node 内部代码时选中最靠里的、项目里有文件的那一帧。没连上检查器（`failed`）时
   也把面板带出来，上面写着原因。
-- **调试面板**（`components/debug/WorkbenchDebugPanel.tsx`，按需加载）：控制按钮、调用栈、按作用域分的变量
+- **调试面板**（`components/WorkbenchDebugPanel.tsx`，按需加载）：控制按钮、调用栈、按作用域分的变量
   （点开才取属性，换了一次停下或换了一帧就整块重来）、表达式输入框（在选中的帧里求值；程序继续跑过之后求过的
   对象不能再展开）。左下角的调试按钮在调试中出现。
 - **按键**：继续 F8、单步跳过 F10、单步进入 F11、单步跳出 ⇧F11、结束 ⇧F5，登记在键位表里（设置里能改）。它们
@@ -885,30 +893,13 @@ JS / TS 的测试文件（`*.test.*`、`*.spec.*`、`__tests__/` 里的）在行
 `scripts/checkBuildBudgets.mjs`，统计 `index.html` 实际引用的启动 JS/CSS，并同时限制
 main、renderer 总体积与最大功能块。
 
-| 指标 | 当前基线 | 上限 |
-| --- | ---: | ---: |
-| main 入口 | 0.56 MB | 3.75 MB |
-| main JavaScript | 1.10 MB | 6.50 MB |
-| renderer 启动依赖 | 1.60 MB | 2.00 MB |
-| renderer JavaScript | 17.99 MB | 19.00 MB |
-| renderer CSS | 0.75 MB | 0.85 MB |
-| renderer 最大功能块 | 2.03 MB | 2.30 MB |
+体积限制统一维护在 `scripts/checkBuildBudgets.mjs`。`bun run build` 检查本次产物；
+单独复核已有产物时运行 `bun run check:bundle-budget`。
 
-单独复核已有生产产物时运行 `bun run check:bundle-budget`。预算留有小幅构建波动空间；
-业务增长需要突破上限时，应先给出加载链数据并调整分包，再更新基线。
+快速打开、设置、Git 工具窗、提交面板、AI 改动、浏览器、项目搜索和调试面板按需加载；
+`lazyWithPreload.ts` 在空闲时预取。新增面板沿用这一加载方式，保持无项目起手页的依赖精简。
 
-迁到 Platform 之后（2026-09-27）：main 小了一个量级，因为 Platform 的运行时不再打进 bundle；renderer
-启动依赖减半，因为聊天随工作区外壳按需加载。最大功能块就是工作区外壳（其中图标库约 0.55 MB：每个
-Phosphor 图标带六种字重；消息 Markdown 的代码高亮由 UI 包静态引入约 0.3 MB）。renderer 总量贴近上限，
-增量主要是 UI 0.2.54 的 Markdown 图表（mermaid 各类图）按需分块；它们不进启动包，但计入总量。
-
-2026-09-30：renderer 的生产构建此前一直没有压缩（旧的基线 25 MB、外壳 3.67 MB 都是原样代码）。打开压缩
-后总量 17.65 MB、工作区外壳 1.98 MB、启动依赖 1.52 MB，各项上限按压缩后的体积重新定了。快速打开、设置
-对话框、Git 工具窗、提交面板、AI 改动、浏览器面板和项目搜索都是从工作区外壳里拆出来按需加载的块
-（`lazyWithPreload.ts`，空闲时预取）；新的面板照这个办法加，不要直接进外壳。总量里约 13 MB 是 UI 包带来
-的按需分块（代码高亮的各语言语法与 mermaid），本仓改不了。
-
-2026-10-01：编辑器的 P1 功能（Git 的 stash、提交图、merge / rebase / cherry-pick 与并排 diff，TS 代码操作，
-运行配置、测试行内运行与调试器，键位方案）都并入之后重量了一次，就是上表：main 入口多 0.04 MB、总量多
-0.08 MB；renderer 启动依赖多 0.08 MB（约一半是新功能的界面文案，两种语言的文案都随启动入口加载），总量多
-0.34 MB，工作区外壳多 0.05 MB。上限没动，外壳离上限还有约 0.27 MB。
+所有应用 CSS 位于 `src/renderer/src/styles/`。`globalStyles.ts` 先加载共享 UI 样式，再加载本地全局样式；
+`workbenchPageStyles.ts` 按固定顺序合并编号样式段，主题覆写最后加载。
+编号段与聊天壳使用共享类名，其余组件按文件隔离，规则由 `electron.vite.config.ts` 维护。
+静态图标统一位于 `resources/icons/`，`build/` 与 `artifacts/` 是可重建产物。

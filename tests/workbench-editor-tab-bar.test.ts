@@ -10,7 +10,7 @@ import { shareHostReactWithLinkedUi } from './helpers/linkedUiReact'
 
 shareHostReactWithLinkedUi()
 
-const { WorkbenchLocalizationProvider } = await import('../src/renderer/src/i18n')
+const { WorkbenchLocalizationProvider } = await import('../src/renderer/src/i18n/WorkbenchLocalizationProvider')
 const { EditorTabBar } = await import('../src/renderer/src/components/editor/EditorTabBar')
 
 type TabBarProps = Parameters<typeof EditorTabBar>[0]

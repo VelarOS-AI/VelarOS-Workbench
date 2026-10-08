@@ -64,7 +64,7 @@ void describe('Workbench file icon surface', () => {
     for (const relativePath of [
       'src/renderer/src/components/files/FileTreeRow.tsx',
       'src/renderer/src/components/files/FileSearchResults.tsx',
-      'src/renderer/src/components/project/QuickOpen.tsx',
+      'src/renderer/src/components/QuickOpen.tsx',
       'src/renderer/src/components/editor/EditorTabBar.tsx',
       'src/renderer/src/components/editor/EditorBreadcrumbBar.tsx',
       'src/renderer/src/components/chrome/StatusBar.tsx',

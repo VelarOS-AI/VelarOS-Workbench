@@ -1,5 +1,5 @@
 import { ArrowCounterClockwiseIcon, WarningCircleIcon } from '@phosphor-icons/react'
-import { useWorkbenchI18n, type WorkbenchMessageKey } from '@renderer/i18n'
+import { useWorkbenchI18n, type WorkbenchMessageKey } from '@renderer/i18n/WorkbenchLocalizationProvider'
 import {
   getWorkbenchEditorCommandChords,
   WORKBENCH_EDITOR_KEYMAP_COMMANDS,

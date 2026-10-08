@@ -14,10 +14,9 @@ import { shell } from '@codemirror/legacy-modes/mode/shell'
 import { toml } from '@codemirror/legacy-modes/mode/toml'
 import type { Extension } from '@codemirror/state'
 
-import { getWorkbenchPathExtension, normalizeWorkbenchLanguage } from '@shared/language/workbenchLanguageServices'
+import { getWorkbenchPathExtension, normalizeWorkbenchLanguage } from '@shared/workbenchLanguageServices'
 
-import { resolveWorkbenchEditorLanguage } from '../../language/workbenchEditorLanguageContributions'
-
+import { resolveWorkbenchEditorLanguage } from './workbenchEditorLanguageContributions'
 import { workbenchGitIgnoreLanguage } from './workbenchGitIgnoreLanguage'
 
 export type WorkbenchCodeMirrorLanguageSupportMode = 'builtin' | 'plain-text'

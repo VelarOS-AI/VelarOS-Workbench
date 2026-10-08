@@ -2,7 +2,7 @@
  * 独立 Workbench 应用的通知 + 本地化组合适配器
  * （对位 desktop `@renderer/runtime/workbench/useStableWorkbenchMessaging`，返回面形状逐字一致）。
  */
-import { useWorkbenchI18n } from '@renderer/i18n'
+import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 
 import { useLatest } from '../support/genericHooks'
 

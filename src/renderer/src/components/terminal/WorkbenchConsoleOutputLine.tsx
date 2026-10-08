@@ -1,6 +1,6 @@
 import { type ReactElement, type ReactNode, useMemo } from 'react'
 import { ArrowSquareOutIcon } from '@phosphor-icons/react'
-import { useWorkbenchI18n } from '@renderer/i18n'
+import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 import {
   highlightWorkbenchConsoleOutput,
   type WorkbenchConsoleOutputToken,

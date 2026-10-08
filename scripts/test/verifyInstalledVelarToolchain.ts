@@ -7,7 +7,7 @@ import { basename, isAbsolute, join, relative, resolve } from 'node:path'
 
 import { WorkbenchLanguageServices } from '../../src/main/workspace/language/LanguageServices'
 import { VelarWorkbenchLanguageService } from '../../src/shared/contributions/velar/service'
-import { registerWorkbenchLanguageService } from '../../src/shared/language/workbenchLanguageServices'
+import { registerWorkbenchLanguageService } from '../../src/shared/workbenchLanguageServices'
 
 const languagePathResolver = {
   async resolveProjectRoot(input: string): Promise<string> {

@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { useWorkbenchHostRuntime } from '@renderer/host'
+import { useWorkbenchHostRuntime } from '@renderer/host/WorkbenchHostProvider'
 import { buildWorkbenchLanguageServiceRequestBase } from '@renderer/models/editor/workbenchCodeMirrorLanguageService'
 import { getWorkbenchLanguageServiceDocumentSymbols } from '@renderer/models/editor/workbenchLanguageServiceIpc'
 import { fileLanguage } from '@renderer/models/shared/workbenchUtils'
 import type { WorkbenchOpenEditorTab } from '@renderer/types/workbenchTypes'
 
-import type { WorkbenchLanguageServiceDocumentSymbol } from '@shared/contracts'
+import { type WorkbenchLanguageServiceDocumentSymbol } from '@shared/contracts/workbench'
 
 import { useLatest } from '../support/genericHooks'
 

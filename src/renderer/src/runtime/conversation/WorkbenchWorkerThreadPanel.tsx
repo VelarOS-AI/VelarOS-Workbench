@@ -24,7 +24,7 @@ import type { ChatMessage } from '@velaros-ai/ui/conversation/contracts'
 import { Text } from '@velaros-ai/ui/primitives/display/Text'
 import { ToolDisclosureCard } from '@velaros-ai/ui/product/layout/ToolDisclosureCard'
 
-import { useWorkbenchI18n } from '../../i18n'
+import { useWorkbenchI18n } from '../../i18n/WorkbenchLocalizationProvider'
 import styles from '../../styles/workbenchPageStyles'
 
 /** 卡片里嵌的时间线与聊天页落到同一组宿主入口：项目根、打开路径、文件改动。 */

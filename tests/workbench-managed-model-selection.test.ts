@@ -6,8 +6,8 @@ import {
   subscribeStandaloneWorkbenchManagedModels,
 } from '../src/renderer/src/runtime/standaloneWorkbenchManagedModels'
 import {
-  createStandaloneWorkbenchConfiguredModelSelectorProviders,
   createStandaloneWorkbenchModelProviderOptions,
+  createStandaloneWorkbenchModelSelectorProviders,
 } from '../src/renderer/src/runtime/standaloneWorkbenchModelCatalog'
 import {
   getStandaloneWorkbenchModelConfig,
@@ -82,11 +82,16 @@ describe('Workbench managed model selection', () => {
         disabled: productionEnabled,
       })
       expect(options.find((option) => option.disabled)?.description).toContain('service is disabled')
-      const chat = createStandaloneWorkbenchConfiguredModelSelectorProviders(
+      const chat = createStandaloneWorkbenchModelSelectorProviders(
         'velar-dev',
         'velar-dev/current',
+        providers[1]!.models.map((model) => ({ id: model.id, label: model.label })),
         providers[1]
       )
+      if (productionEnabled) {
+        expect(chat).toEqual([])
+        continue
+      }
       expect(chat[0]?.label).toBe('VelarOS-Dev')
       expect(chat[0]?.models).toEqual([{
         value: 'velar-dev/current',

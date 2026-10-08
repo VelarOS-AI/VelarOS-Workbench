@@ -27,29 +27,7 @@ import { basename, dirname, extname, join, resolve } from 'node:path'
 import { isPresent } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type {
-  WorkbenchCopyEntryRequest,
-  WorkbenchCreateEntryRequest,
-  WorkbenchDeleteEntryRequest,
-  WorkbenchDeleteEntryResult,
-  WorkbenchEntryMutationResult,
-  WorkbenchInspectDeleteEntryRequest,
-  WorkbenchInspectDeleteEntryResult,
-  WorkbenchListLocalHistoryRequest,
-  WorkbenchListLocalHistoryResult,
-  WorkbenchMoveEntryRequest,
-  WorkbenchMoveEntryResult,
-  WorkbenchReadFileRequest,
-  WorkbenchReadFileResult,
-  WorkbenchReadLocalHistorySnapshotRequest,
-  WorkbenchReadLocalHistorySnapshotResult,
-  WorkbenchRenameEntryRequest,
-  WorkbenchRestoreDeletedEntryRequest,
-  WorkbenchRestoreDeletedEntryResult,
-  WorkbenchRestoreMissingFileRequest,
-  WorkbenchSaveFileRequest,
-  WorkbenchSaveFileResult,
-} from '@shared/contracts'
+import { type WorkbenchCopyEntryRequest, type WorkbenchCreateEntryRequest, type WorkbenchDeleteEntryRequest, type WorkbenchDeleteEntryResult, type WorkbenchEntryMutationResult, type WorkbenchInspectDeleteEntryRequest, type WorkbenchInspectDeleteEntryResult, type WorkbenchListLocalHistoryRequest, type WorkbenchListLocalHistoryResult, type WorkbenchMoveEntryRequest, type WorkbenchMoveEntryResult, type WorkbenchReadFileRequest, type WorkbenchReadFileResult, type WorkbenchReadLocalHistorySnapshotRequest, type WorkbenchReadLocalHistorySnapshotResult, type WorkbenchRenameEntryRequest, type WorkbenchRestoreDeletedEntryRequest, type WorkbenchRestoreDeletedEntryResult, type WorkbenchRestoreMissingFileRequest, type WorkbenchSaveFileRequest, type WorkbenchSaveFileResult } from '@shared/contracts/workbench'
 import { DefaultWorkbenchTextFormat, type WorkbenchTextFormat } from '@shared/workbenchTextFormat'
 
 import { workbenchMainText } from '../i18n/workbenchMainMessages'

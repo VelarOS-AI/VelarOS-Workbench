@@ -6,8 +6,8 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, test } from 'bun:test'
 
-import type { WorkbenchI18nContextValue } from '../src/renderer/src/i18n'
 import { translateWorkbenchAppMessage } from '../src/renderer/src/i18n/useStandaloneWorkbenchLocalization'
+import { type WorkbenchI18nContextValue } from '../src/renderer/src/i18n/WorkbenchLocalizationProvider'
 import {
   beginWorkbenchGitOperation,
   buildWorkbenchGitOperationConfirm,
@@ -21,16 +21,14 @@ import {
   toWorkspaceGitOperationRequest,
   type WorkbenchGitOperationIntent,
 } from '../src/renderer/src/models/git/workbenchGitOperationModel'
-import type {
-  SystemWorkspaceGitOperationResult,
-  WorkspaceGitOperationState,
-} from '../src/shared/contracts'
+import { type SystemWorkspaceGitOperationResult } from '../src/shared/contracts/system'
+import { type WorkspaceGitOperationState } from '../src/shared/contracts/workspaceGit'
 
 import { shareHostReactWithLinkedUi } from './helpers/linkedUiReact'
 
 shareHostReactWithLinkedUi()
 
-const { WorkbenchLocalizationProvider } = await import('../src/renderer/src/i18n')
+const { WorkbenchLocalizationProvider } = await import('../src/renderer/src/i18n/WorkbenchLocalizationProvider')
 const { WorkbenchGitOperationBanner } = await import(
   '../src/renderer/src/components/git/WorkbenchGitOperationBanner'
 )

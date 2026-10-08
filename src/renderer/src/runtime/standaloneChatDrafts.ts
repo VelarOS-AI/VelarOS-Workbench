@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react'
 
 import type { ReasoningLevel } from '@velaros-ai/ui/conversation/contracts'
-
-import type { BrowserElementSelection } from '@shared/contracts'
+import { type BrowserElementSelection } from '@velaros-ai/velaros/browser/contracts'
 
 import { appendWorkbenchChatFileReferences } from '../models/chat/workbenchChatFileReferences'
 

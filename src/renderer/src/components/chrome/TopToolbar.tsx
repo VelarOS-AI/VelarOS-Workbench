@@ -16,7 +16,7 @@ import {
   PlayIcon,
   SpinnerGapIcon,
 } from '@phosphor-icons/react'
-import { useWorkbenchI18n } from '@renderer/i18n'
+import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 import { describeWorkbenchRunConfiguration } from '@renderer/models/commands/workbenchNamedRunConfigurations'
 import { hasWorkbenchGitHead } from '@renderer/models/git/workbenchGitTopBarModel'
 
@@ -35,7 +35,7 @@ import {
 } from '@velaros-ai/ui/primitives/overlays/Dialog'
 import { BubbleTooltip } from '@velaros-ai/ui/primitives/overlays/Tooltip'
 
-import type { SystemWorkspaceGitSummary } from '@shared/contracts'
+import { type SystemWorkspaceGitSummary } from '@shared/contracts/system'
 
 import { type WorkbenchTopRunControl } from '../../hooks/useWorkbenchTopRunControl'
 import styles from '../../styles/workbenchPageStyles'

@@ -21,7 +21,10 @@ import type { WorkbenchAgentProjectActivityPort } from '../workspace/git/Workben
 export type ConversationModel = NonNullable<VelarosRuntimeOptions['model']>
 
 /** 模型驱动声明的窗口上限。 */
-export type ConversationModelLimits = Extract<ConversationModel, { limits: unknown }>['limits']
+export type ConversationModelLimits = Extract<ConversationModel, { limits: unknown }>['limits'] & {
+  /** 未经服务商确认的试探容量。 */
+  readonly contextWindowEstimated?: boolean
+}
 
 /** Platform 实时事件。 */
 export type ConversationSessionEvent = Awaited<

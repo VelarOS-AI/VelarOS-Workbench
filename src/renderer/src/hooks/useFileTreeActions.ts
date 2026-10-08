@@ -9,7 +9,7 @@ import type { NodeApi, TreeApi } from 'react-arborist'
 
 import { toNullable } from '@velaros-ai/core'
 
-import type { WorkbenchDirectoryEntry } from '@shared/contracts'
+import { type WorkbenchDirectoryEntry } from '@shared/contracts/workbench'
 
 import { useLatest, useMemoizedFn } from '../support/genericHooks'
 

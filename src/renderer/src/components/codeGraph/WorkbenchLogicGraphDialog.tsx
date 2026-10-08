@@ -16,22 +16,22 @@ import {
   ArrowSquareOutIcon,
   XIcon,
 } from '@phosphor-icons/react'
-import { useWorkbenchHostRuntime } from '@renderer/host'
-import { useWorkbenchI18n } from '@renderer/i18n'
+import { useWorkbenchHostRuntime } from '@renderer/host/WorkbenchHostProvider'
+import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
+import type { WorkbenchThemeId } from '@renderer/models/workbenchPreferences'
 import {
   mergeWorkbenchVelarProjectSnapshotIndex,
   selectWorkbenchVelarProjectRoots,
   workbenchVelarProjectRootForPath,
   type WorkbenchVelarProjectSnapshot,
   type WorkbenchVelarProjectSnapshotIndex,
-} from '@renderer/models/codeGraph/workbenchVelarProjectGraph'
-import type { WorkbenchThemeId } from '@renderer/models/settings/workbenchPreferences'
+} from '@renderer/models/workbenchVelarProjectGraph'
 
 import { Result } from '@velaros-ai/core/result'
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 import { Select } from '@velaros-ai/ui/primitives/forms/Select'
 
-import type { WorkbenchCodeGraphEdge, WorkbenchCodeGraphNode } from '@shared/contracts'
+import { type WorkbenchCodeGraphEdge, type WorkbenchCodeGraphNode } from '@shared/contracts/workbench'
 import {
   applyVelarLogicGraphResponse,
   parseVelarLogicGraphResponse,

@@ -1,9 +1,5 @@
-import type {
-  SystemWorkspaceGitSummary,
-  WorkspaceGitFileStatusEntry,
-  WorkspaceGitRemoteActionOptions,
-  WorkspaceGitStatusResult,
-} from '@shared/contracts'
+import { type SystemWorkspaceGitSummary, type WorkspaceGitFileStatusEntry, type WorkspaceGitStatusResult } from '@shared/contracts/system'
+import { type WorkspaceGitRemoteActionOptions } from '@shared/contracts/workspaceGit'
 
 import type { WorkbenchMainMessageKey } from '../../i18n/workbenchMainMessages'
 

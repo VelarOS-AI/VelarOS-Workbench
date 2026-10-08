@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-import { useWorkbenchHostRuntime } from '../host'
+import { useWorkbenchHostRuntime } from '../host/WorkbenchHostProvider'
 import {
   listWorkbenchEditorConfigPaths,
   parseWorkbenchEditorConfig,

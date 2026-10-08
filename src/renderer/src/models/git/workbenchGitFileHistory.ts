@@ -1,4 +1,4 @@
-import type { WorkspaceGitLogEntry } from '@shared/contracts'
+import { type WorkspaceGitLogEntry } from '@shared/contracts/system'
 
 /**
  * 按文件查 Git 历史时，文件在这个提交里的路径与现在不一样（改名、挪位置之前的提交）：返回当时的路径，

@@ -6,11 +6,7 @@ import { join } from 'node:path'
 import { describe, mock, test } from 'bun:test'
 
 import type { WorkbenchContentSearchWorkerOptions } from '../src/main/workspace/ContentSearchWorkerHost'
-import type {
-  WorkbenchReplaceContentFileRequest,
-  WorkbenchReplaceContentRequest,
-  WorkbenchReplaceContentResult,
-} from '../src/shared/contracts'
+import { type WorkbenchReplaceContentFileRequest, type WorkbenchReplaceContentRequest, type WorkbenchReplaceContentResult } from '../src/shared/contracts/workbench'
 import type { WorkbenchFsCallResult } from '../src/shared/workbenchFs'
 import { WorkbenchFsChannels } from '../src/shared/workbenchFs'
 

@@ -23,7 +23,7 @@ import {
   toggleWorkbenchEditorBreakpoint,
 } from '../src/renderer/src/models/editor/workbenchBreakpointGutter'
 import { findWorkbenchDebugHoverExpression } from '../src/renderer/src/models/editor/workbenchDebugHover'
-import type { StorageLike } from '../src/renderer/src/persistence/localStorageJsonStore'
+import type { StorageLike } from '../src/renderer/src/support/localStorageJsonStore'
 
 function createStorage(initial: Record<string, string> = {}): StorageLike & {
   values: Map<string, string>

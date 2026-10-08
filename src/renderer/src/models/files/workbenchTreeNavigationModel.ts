@@ -1,4 +1,4 @@
-import type { WorkbenchDirectoryEntry } from '@shared/contracts'
+import { type WorkbenchDirectoryEntry } from '@shared/contracts/workbench'
 
 export interface WorkbenchVisibleTreeNode {
   depth: number

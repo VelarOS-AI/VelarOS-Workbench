@@ -5,10 +5,7 @@
  * - 有输入：按名字模糊匹配（空格隔开的几段都要命中，名字里没有的那段可以命中在外层名字上），不再缩进，
  *   命中在名字上的排在只命中外层名字的前面，同分按文件里的先后。
  */
-import type {
-  WorkbenchLanguageServiceDocumentSymbol,
-  WorkbenchLanguageServiceDocumentSymbolKind,
-} from '@shared/contracts'
+import { type WorkbenchLanguageServiceDocumentSymbol, type WorkbenchLanguageServiceDocumentSymbolKind } from '@shared/contracts/workbench'
 
 import { scoreWorkbenchFuzzy } from '../shared/workbenchFuzzyScore'
 

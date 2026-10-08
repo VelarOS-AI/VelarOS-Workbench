@@ -264,8 +264,8 @@ void describe('where the hints are wired', () => {
   })
 
   void test('the palette and the settings dialog are given the chosen preset', () => {
-    const presentation = readSource('src/renderer/src/StandaloneWorkbenchPagePresentation.tsx')
-    const quickOpen = readSource('src/renderer/src/components/project/QuickOpen.tsx')
+    const presentation = readSource('src/renderer/src/app/StandaloneWorkbenchPagePresentation.tsx')
+    const quickOpen = readSource('src/renderer/src/components/QuickOpen.tsx')
     const settings = readSource('src/renderer/src/components/settings/WorkbenchSettingsDialog.tsx')
 
     assert.match(presentation, /<LazyQuickOpen[\s\S]*?keymapPreset=\{workbenchKeymap\.preset\}/u)
@@ -285,7 +285,7 @@ void describe('where the hints are wired', () => {
     for (const path of [
       'src/renderer/src/components/settings/WorkbenchSettingsDialog.tsx',
       'src/renderer/src/components/settings/WorkbenchKeymapSettings.tsx',
-      'src/renderer/src/components/project/QuickOpen.tsx',
+      'src/renderer/src/components/QuickOpen.tsx',
       'src/renderer/src/components/editor/EditorPanel.tsx',
     ]) {
       const code = readSource(path).replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gmu, '')

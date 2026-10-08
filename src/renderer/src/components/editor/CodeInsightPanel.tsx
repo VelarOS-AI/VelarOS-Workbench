@@ -1,7 +1,7 @@
 import { type ReactElement, useEffect, useMemo, useState } from 'react'
 import { CaretDownIcon, CaretRightIcon, WarningCircleIcon } from '@phosphor-icons/react'
 import { WorkbenchProblemSeverityIcon } from '@renderer/components/editor/WorkbenchProblemSeverityIcon'
-import { useWorkbenchI18n } from '@renderer/i18n'
+import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 import {
   buildWorkbenchProblemLocations,
   formatWorkbenchProblemDisplayMessage,

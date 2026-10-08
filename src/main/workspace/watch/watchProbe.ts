@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import type { SystemWorkspaceFilesChangedEvent } from '@shared/contracts'
+import { type SystemWorkspaceFilesChangedEvent } from '@shared/contracts/system'
 
 import { WorkbenchFileWatcher } from './WorkbenchFileWatcher'
 

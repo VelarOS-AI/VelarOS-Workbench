@@ -3,15 +3,8 @@ import { join } from 'node:path'
 
 import { AppError } from '@velaros-ai/core/error'
 
-import type {
-  SystemWorkspaceGitOperationResult,
-  WorkspaceGitOperationAction,
-  WorkspaceGitOperationKind,
-  WorkspaceGitOperationRequest,
-  WorkspaceGitOperationResult,
-  WorkspaceGitOperationState,
-  WorkspaceGitStatusResult,
-} from '@shared/contracts'
+import { type SystemWorkspaceGitOperationResult, type WorkspaceGitStatusResult } from '@shared/contracts/system'
+import { type WorkspaceGitOperationAction, type WorkspaceGitOperationKind, type WorkspaceGitOperationRequest, type WorkspaceGitOperationResult, type WorkspaceGitOperationState } from '@shared/contracts/workspaceGit'
 import { isWorkspaceGitConflictEntry, isWorkspaceGitOperationKind } from '@shared/workbenchGit'
 
 import {

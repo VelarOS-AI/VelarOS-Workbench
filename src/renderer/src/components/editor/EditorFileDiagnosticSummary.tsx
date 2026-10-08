@@ -1,7 +1,7 @@
 import { type ReactElement } from 'react'
 import { CaretDownIcon, CaretUpIcon } from '@phosphor-icons/react'
 import { WorkbenchProblemSeverityIcon } from '@renderer/components/editor/WorkbenchProblemSeverityIcon'
-import { useWorkbenchI18n } from '@renderer/i18n'
+import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 import {
   countWorkbenchFileDiagnostics,
   sortWorkbenchFileDiagnostics,
@@ -9,7 +9,7 @@ import {
 
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 
-import type { WorkbenchLanguageServiceDiagnostic } from '@shared/contracts'
+import { type WorkbenchLanguageServiceDiagnostic } from '@shared/contracts/workbench'
 
 import styles from '../../styles/workbenchPageStyles'
 

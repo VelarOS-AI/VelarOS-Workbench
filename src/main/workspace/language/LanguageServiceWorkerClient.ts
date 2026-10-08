@@ -4,21 +4,9 @@ import { Worker } from 'node:worker_threads'
 
 import { Log } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
+import { type AppLocale } from '@velaros-ai/ui/conversation/contracts'
 
-import type {
-  AppLocale,
-  WorkbenchLanguageServiceCallHierarchyRequest,
-  WorkbenchLanguageServiceCodeActionResolveRequest,
-  WorkbenchLanguageServiceCodeActionsRequest,
-  WorkbenchLanguageServiceCompletionResolveRequest,
-  WorkbenchLanguageServiceExtensionRequest,
-  WorkbenchLanguageServiceFileRenameEditsRequest,
-  WorkbenchLanguageServiceInlayHintsRequest,
-  WorkbenchLanguageServicePositionRequest,
-  WorkbenchLanguageServiceProjectDiagnosticsRequest,
-  WorkbenchLanguageServiceRenameRequest,
-  WorkbenchLanguageServiceRequest,
-} from '@shared/contracts'
+import { type WorkbenchLanguageServiceCallHierarchyRequest, type WorkbenchLanguageServiceCodeActionResolveRequest, type WorkbenchLanguageServiceCodeActionsRequest, type WorkbenchLanguageServiceCompletionResolveRequest, type WorkbenchLanguageServiceExtensionRequest, type WorkbenchLanguageServiceFileRenameEditsRequest, type WorkbenchLanguageServiceInlayHintsRequest, type WorkbenchLanguageServicePositionRequest, type WorkbenchLanguageServiceProjectDiagnosticsRequest, type WorkbenchLanguageServiceRenameRequest, type WorkbenchLanguageServiceRequest } from '@shared/contracts/workbench'
 
 import {
   getWorkbenchMainLocale,

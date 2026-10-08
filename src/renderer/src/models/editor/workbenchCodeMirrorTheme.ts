@@ -6,7 +6,7 @@ import { tags } from '@lezer/highlight'
 import {
   isWorkbenchDarkTheme,
   type WorkbenchThemeId,
-} from '../settings/workbenchPreferences'
+} from '../workbenchPreferences'
 
 export interface WorkbenchCodeTokenPalette {
   comment: string

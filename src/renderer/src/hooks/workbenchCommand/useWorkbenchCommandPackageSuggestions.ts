@@ -4,9 +4,9 @@ import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 import { Log } from '@velaros-ai/core'
 import { Result } from '@velaros-ai/core/result'
 
-import type { WorkbenchDirectoryEntry } from '@shared/contracts'
+import { type WorkbenchDirectoryEntry } from '@shared/contracts/workbench'
 
-import { useWorkbenchHostRuntime } from '../../host'
+import { useWorkbenchHostRuntime } from '../../host/WorkbenchHostProvider'
 import {
   buildPackageScriptCommandSuggestions,
   inferPackageManagerCommand,

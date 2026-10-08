@@ -1,7 +1,7 @@
 /** 独立 Workbench 应用副本（desktop `@shared/constants/defaultEditor` 同源）。 */
 import { isString } from '@velaros-ai/core'
 
-import type { SystemDefaultEditorId } from '@shared/contracts'
+import { type SystemDefaultEditorId } from '@shared/contracts/system'
 
 export interface SystemDefaultEditorDefinition {
   id: SystemDefaultEditorId

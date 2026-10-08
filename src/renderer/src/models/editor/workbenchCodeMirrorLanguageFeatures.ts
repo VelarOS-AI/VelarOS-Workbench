@@ -12,15 +12,9 @@ import {
 
 import { isEmpty } from '@velaros-ai/core'
 
-import type {
-  WorkbenchLanguageServiceDisplayPartKind,
-  WorkbenchLanguageServiceHoverDocumentationBlock,
-  WorkbenchLanguageServiceHoverResult,
-  WorkbenchLanguageServiceLocation,
-  WorkbenchLanguageServiceSignatureHelpResult,
-} from '@shared/contracts'
+import { type WorkbenchLanguageServiceDisplayPartKind, type WorkbenchLanguageServiceHoverDocumentationBlock, type WorkbenchLanguageServiceHoverResult, type WorkbenchLanguageServiceLocation, type WorkbenchLanguageServiceSignatureHelpResult } from '@shared/contracts/workbench'
 
-import type { WorkbenchHostRuntime } from '../../host'
+import { type WorkbenchHostRuntime } from '../../host/WorkbenchHost'
 import type { WorkbenchOpenEditorTab } from '../../types/workbenchTypes'
 
 import { getWorkbenchJavaScriptKeywordRangeAtPosition } from './workbenchCodeMirrorBasicSyntax'

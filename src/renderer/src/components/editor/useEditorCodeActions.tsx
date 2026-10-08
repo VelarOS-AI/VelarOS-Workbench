@@ -1,7 +1,7 @@
 import { type ReactElement, type RefObject, useEffect, useMemo, useRef, useState } from 'react'
 import type { Text } from '@codemirror/state'
 import type { EditorView } from '@codemirror/view'
-import type { WorkbenchHostRuntime } from '@renderer/host'
+import { type WorkbenchHostRuntime } from '@renderer/host/WorkbenchHost'
 import {
   buildWorkbenchCodeActionMenuRows,
   buildWorkbenchCodeMirrorChanges,
@@ -31,12 +31,7 @@ import type { WorkbenchOpenEditorTab } from '@renderer/types/workbenchTypes'
 
 import { isEmpty } from '@velaros-ai/core'
 
-import type {
-  WorkbenchLanguageServiceCodeAction,
-  WorkbenchLanguageServiceCodeActionCategory,
-  WorkbenchLanguageServiceEditFormat,
-  WorkbenchLanguageServiceRange,
-} from '@shared/contracts'
+import { type WorkbenchLanguageServiceCodeAction, type WorkbenchLanguageServiceCodeActionCategory, type WorkbenchLanguageServiceEditFormat, type WorkbenchLanguageServiceRange } from '@shared/contracts/workbench'
 
 import { useLatest, useMemoizedFn } from '../../support/genericHooks'
 

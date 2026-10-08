@@ -5,7 +5,7 @@ import {
   useContext,
 } from 'react'
 
-import type { AppLocale } from '@shared/contracts'
+import { type AppLocale } from '@velaros-ai/ui/conversation/contracts'
 
 export type WorkbenchMessageKey = string
 

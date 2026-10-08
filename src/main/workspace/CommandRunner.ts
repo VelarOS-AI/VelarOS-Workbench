@@ -7,11 +7,7 @@ import { StringDecoder } from 'node:string_decoder'
 import { AppError } from '@velaros-ai/core/error'
 import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
 
-import type {
-  WorkbenchRunCommandOutputEvent,
-  WorkbenchRunCommandRequest,
-  WorkbenchRunCommandResult,
-} from '@shared/contracts'
+import { type WorkbenchRunCommandOutputEvent, type WorkbenchRunCommandRequest, type WorkbenchRunCommandResult } from '@shared/contracts/workbench'
 
 import { workbenchMainText } from '../i18n/workbenchMainMessages'
 

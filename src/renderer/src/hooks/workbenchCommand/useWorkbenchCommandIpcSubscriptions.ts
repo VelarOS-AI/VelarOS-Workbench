@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 
-import { useWorkbenchHostRuntime } from '../../host'
+import { useWorkbenchHostRuntime } from '../../host/WorkbenchHostProvider'
 import {
   createRunOutputLine,
   type WorkbenchRunOutputLine,

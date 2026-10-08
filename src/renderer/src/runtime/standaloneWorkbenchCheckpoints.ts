@@ -1,4 +1,4 @@
-import type { ChatMessage } from '@shared/contracts'
+import { type ChatMessage } from '@velaros-ai/ui/conversation/contracts'
 
 /**
  * 每轮开跑前拍下的检查点：对话边界 + 项目工作树的 git 影子提交。「本轮改动」拿它与这一轮收尾时的工作树

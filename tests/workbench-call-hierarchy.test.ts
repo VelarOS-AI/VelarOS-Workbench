@@ -16,10 +16,7 @@ import {
 import { isWorkbenchEditorNavigationCommand } from '../src/renderer/src/models/editor/workbenchEditorCommands'
 // 这个键现在在编辑器命令的键位表里；下面查的是 Workbench 方案（不给方案时的默认）。
 import { resolveWorkbenchEditorKeymapCommand as resolveWorkbenchEditorCommandFromKey } from '../src/renderer/src/models/editor/workbenchEditorKeymapResolver'
-import type {
-  WorkbenchLanguageServiceCallHierarchyCall,
-  WorkbenchLanguageServiceCallHierarchyItem,
-} from '../src/shared/contracts'
+import { type WorkbenchLanguageServiceCallHierarchyCall, type WorkbenchLanguageServiceCallHierarchyItem } from '../src/shared/contracts/workbench'
 
 function item(name: string, path: string, line: number): WorkbenchLanguageServiceCallHierarchyItem {
   return { name, kind: 'function', path, line, column: 17 }

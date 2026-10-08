@@ -49,6 +49,28 @@ class FakeWorkbenchWindow extends EventEmitter {
 }
 
 void describe('Workbench window and chat chrome details', () => {
+  void test('shares page classes while keeping component modules isolated in the styles directory', async () => {
+    const { default: createConfig } = await import('../electron.vite.config')
+    assert.equal(typeof createConfig, 'function')
+    assert(typeof createConfig === 'function')
+    const config = await createConfig({ command: 'build', mode: 'production' })
+    const modules = config.renderer?.css?.modules
+    assert(modules && typeof modules.generateScopedName === 'function')
+    const generateScopedName = modules.generateScopedName
+    const scopedName = (file: string): string => generateScopedName(
+      'root', path.resolve(file), ''
+    )
+
+    assert.equal(scopedName('src/renderer/src/styles/01-shell.module.css'), 'wb_root')
+    assert.equal(scopedName('src/renderer/src/styles/15-overrides.module.css'), 'wb_root')
+    assert.equal(scopedName('src/renderer/src/styles/standaloneWorkbenchChat.module.css'), 'wb_root')
+    const debug = scopedName('src/renderer/src/styles/WorkbenchDebugPanel.module.css')
+    assert.notEqual(debug, 'wb_root')
+    assert.notEqual(debug, scopedName('src/renderer/src/styles/WorkbenchRunConfigurationsDialog.module.css'))
+    assert.notEqual(debug, scopedName('node_modules/@velaros-ai/ui/WorkbenchDebugPanel.module.css'))
+    assert.equal(debug, scopedName('src/renderer/src/styles/WorkbenchDebugPanel.module.css?direct'))
+  })
+
   void test('tells each window whether it is full screen so the title row drops the traffic-light inset', () => {
     const window = new FakeWorkbenchWindow()
     installWorkbenchWindowState(window as unknown as BrowserWindow)
@@ -74,7 +96,7 @@ void describe('Workbench window and chat chrome details', () => {
     const ipc = readSource('src/main/projects/WorkbenchWindowStateIpc.ts')
     const preload = readSource('src/preload/index.ts')
     const hook = readSource('src/renderer/src/hooks/useWorkbenchWindowFullScreen.ts')
-    const presentation = readSource('src/renderer/src/StandaloneWorkbenchPagePresentation.tsx')
+    const presentation = readSource('src/renderer/src/app/StandaloneWorkbenchPagePresentation.tsx')
     const shellStyles = readSource('src/renderer/src/styles/01-shell.module.css')
 
     assert.match(main, /installWorkbenchEditorZoom\(window\)\n\s*installWorkbenchWindowState\(window\)/u)
@@ -124,7 +146,7 @@ void describe('Workbench window and chat chrome details', () => {
   })
 
   void test('drops the traffic-light inset on the settings page and never reserves it in file history', () => {
-    const presentation = readSource('src/renderer/src/StandaloneWorkbenchPagePresentation.tsx')
+    const presentation = readSource('src/renderer/src/app/StandaloneWorkbenchPagePresentation.tsx')
     const settingsDialog = readSource('src/renderer/src/components/settings/WorkbenchSettingsDialog.tsx')
     const settingsStyles = readSource('src/renderer/src/styles/14-settings.module.css')
     const editorPanel = readSource('src/renderer/src/components/editor/EditorPanel.tsx')
@@ -150,11 +172,11 @@ void describe('Workbench window and chat chrome details', () => {
 
   void test('loads the shared UI stylesheets before every app module', () => {
     const entry = readSource('src/renderer/src/main.tsx')
-    const globalStyles = readSource('src/renderer/src/globalStyles.ts')
+    const globalStyles = readSource('src/renderer/src/styles/globalStyles.ts')
 
     // 产物里样式按模块求值顺序拼接：全局样式表必须是入口的第一个导入，产品样式才排在共享原语之后。
     const firstImport = entry.split('\n').find((line) => line.startsWith('import '))
-    assert.equal(firstImport, "import './globalStyles'")
+    assert.equal(firstImport, "import './styles/globalStyles'")
     assert.deepEqual(
       [...globalStyles.matchAll(/^import '([^']+)'$/gmu)].map((match) => match[1]),
       [
@@ -238,7 +260,7 @@ void describe('Workbench window and chat chrome details', () => {
       'src/renderer/src/runtime/conversation/WorkbenchContextUsageIndicator.tsx'
     )
     const styles = readSource(
-      'src/renderer/src/runtime/conversation/WorkbenchContextUsageIndicator.module.css'
+      'src/renderer/src/styles/WorkbenchContextUsageIndicator.module.css'
     )
     const sharedGauge = readSource(
       'node_modules/@velaros-ai/ui/dist/conversation/status/ChatContextUsageGauge.module.css'
@@ -256,7 +278,7 @@ void describe('Workbench window and chat chrome details', () => {
   })
 
   void test('colors the run totals like the file rows and keeps the changed-file rows compact', () => {
-    const styles = readSource('src/renderer/src/runtime/conversation/WorkbenchRunChangesCard.module.css')
+    const styles = readSource('src/renderer/src/styles/WorkbenchRunChangesCard.module.css')
     const card = readSource('src/renderer/src/runtime/conversation/WorkbenchRunChangesCard.tsx')
     const sharedList = readSource(
       'node_modules/@velaros-ai/ui/dist/conversation/cards/FileChangeSummaryList.module.css'

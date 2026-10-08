@@ -7,7 +7,7 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { describe, test } from 'bun:test'
 
 import { WorkbenchFileWatcher } from '../src/main/workspace/watch/WorkbenchFileWatcher'
-import type { SystemWorkspaceFilesChangedEvent } from '../src/shared/contracts'
+import { type SystemWorkspaceFilesChangedEvent } from '../src/shared/contracts/system'
 
 void describe('Workbench file watcher language synchronization', () => {
   void test('coalesces one project batch before notifying language services and subscribers', async () => {

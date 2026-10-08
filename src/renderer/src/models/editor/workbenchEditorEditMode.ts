@@ -1,4 +1,4 @@
-import type { WorkbenchReadFileResult } from '@shared/contracts'
+import { type WorkbenchReadFileResult } from '@shared/contracts/workbench'
 import type { WorkbenchTextFormat } from '@shared/workbenchTextFormat'
 
 /** 编辑器里一个文件的编辑模式：只读时键入与改名重构都不落到这个文件，编辑时照常修改和保存。 */

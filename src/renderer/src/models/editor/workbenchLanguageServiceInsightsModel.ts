@@ -1,4 +1,4 @@
-import type { WorkbenchLanguageServiceDiagnostic } from '@shared/contracts'
+import { type WorkbenchLanguageServiceDiagnostic } from '@shared/contracts/workbench'
 
 export interface WorkbenchFileDiagnosticView {
   diagnostics: readonly WorkbenchLanguageServiceDiagnostic[]

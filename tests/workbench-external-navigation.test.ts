@@ -8,8 +8,52 @@ import {
   normalizeWorkbenchExternalUrl,
   type WorkbenchWindowOpenHandler,
 } from '../src/main/projects/WorkbenchExternalNavigation'
+import { WorkbenchAgentConsoleFrameName } from '../src/shared/workbenchAgentProcesses'
 
 void describe('Workbench external navigation', () => {
+  void test('allows only the named blank console when explicitly enabled on the app window', () => {
+    let handler: WorkbenchWindowOpenHandler | undefined
+    const opened: string[] = []
+    installWorkbenchExternalNavigation(
+      (next) => { handler = next },
+      async (url) => { opened.push(url) },
+      undefined,
+      { width: 720, height: 540 }
+    )
+    assert.ok(handler)
+    const response = handler({ url: 'about:blank', frameName: WorkbenchAgentConsoleFrameName })
+    assert.equal(response.action, 'allow')
+    if (response.action !== 'allow') throw new Error('Console window was denied')
+    assert.deepEqual(response.overrideBrowserWindowOptions?.webPreferences, {
+      preload: '',
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: true,
+      webviewTag: false,
+    })
+    for (const request of [
+      { url: 'about:blank' },
+      { url: 'about:blank', frameName: 'unrecognized-window' },
+      { url: 'about:blank#console', frameName: WorkbenchAgentConsoleFrameName },
+      { url: 'file:///tmp/test.html', frameName: WorkbenchAgentConsoleFrameName },
+      { url: 'https://example.com/', frameName: WorkbenchAgentConsoleFrameName },
+    ]) assert.deepEqual(handler(request), { action: 'deny' })
+    assert.deepEqual(opened, ['https://example.com/'])
+  })
+
+  void test('guest pages cannot create a console even with its frame name', () => {
+    let handler: WorkbenchWindowOpenHandler | undefined
+    installWorkbenchExternalNavigation(
+      (next) => { handler = next },
+      async () => { throw new Error('Unexpected external navigation') }
+    )
+    assert.ok(handler)
+    assert.deepEqual(
+      handler({ url: 'about:blank', frameName: WorkbenchAgentConsoleFrameName }),
+      { action: 'deny' }
+    )
+  })
+
   void test('only hands validated external destinations to the system browser', async () => {
     let handler: WorkbenchWindowOpenHandler | undefined
     const opened: string[] = []

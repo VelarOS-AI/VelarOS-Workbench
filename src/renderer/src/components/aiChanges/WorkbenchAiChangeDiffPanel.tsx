@@ -1,7 +1,7 @@
 import { type ReactElement, useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeftIcon, ArrowRightIcon, ArrowSquareOutIcon } from '@phosphor-icons/react'
-import { useWorkbenchI18n } from '@renderer/i18n'
-import type { WorkbenchThemeId } from '@renderer/models/settings/workbenchPreferences'
+import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
+import type { WorkbenchThemeId } from '@renderer/models/workbenchPreferences'
 
 import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
@@ -23,7 +23,7 @@ import {
   type WorkbenchUnifiedDiffRowsHandle,
 } from '../git/WorkbenchUnifiedDiffRows'
 
-import styles from './WorkbenchAiChanges.module.css'
+import styles from '../../styles/WorkbenchAiChanges.module.css'
 
 interface WorkbenchAiChangeDiffPanelProps {
   projectRoot: string

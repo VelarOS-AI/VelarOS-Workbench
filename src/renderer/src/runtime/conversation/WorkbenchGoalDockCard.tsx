@@ -1,12 +1,12 @@
 import { PauseIcon, PlayIcon, TargetIcon, TrashIcon } from '@phosphor-icons/react'
-import { useWorkbenchI18n } from '@renderer/i18n'
+import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 import type { ReactElement } from 'react'
 
 import type { ConversationCardContent } from '@velaros-ai/ui/conversation'
 import { ActionCardIconButton } from '@velaros-ai/ui/product/layout/ActionCard'
 import { InteractionSuggestionCard } from '@velaros-ai/ui/product/layout/InteractionSuggestionCard'
 
-import styles from './WorkbenchGoalDockCard.module.css'
+import styles from '../../styles/WorkbenchGoalDockCard.module.css'
 
 type GoalLifecycleCardContent = Extract<ConversationCardContent, { kind: 'goal-lifecycle' }>
 

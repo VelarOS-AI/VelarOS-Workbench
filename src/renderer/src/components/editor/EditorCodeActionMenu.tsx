@@ -1,7 +1,7 @@
 import { type ReactElement, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { WorkbenchCodeActionMenuRow } from '@renderer/models/editor/workbenchCodeActions'
 
-import type { WorkbenchLanguageServiceCodeAction } from '@shared/contracts'
+import { type WorkbenchLanguageServiceCodeAction } from '@shared/contracts/workbench'
 
 import styles from '../../styles/workbenchPageStyles'
 import { useEventListener } from '../../support/genericHooks'

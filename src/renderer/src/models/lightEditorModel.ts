@@ -2,7 +2,7 @@ import { toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { Result } from '@velaros-ai/core/result'
 
-import type { SystemLocalAttachmentFileResult } from '@shared/contracts'
+import { type SystemLocalAttachmentFileResult } from '@shared/contracts/system'
 import { resolveWorkbenchImageMediaType } from '@shared/workbenchImage'
 import type { WorkbenchTextEncoding, WorkbenchTextEol } from '@shared/workbenchTextFormat'
 

@@ -2,10 +2,7 @@ import { existsSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, isAbsolute, join, relative, sep } from 'node:path'
 
-import type {
-  WorkbenchLanguageServiceEditFormat,
-  WorkbenchLanguageServiceTextEdit,
-} from '@shared/contracts'
+import { type WorkbenchLanguageServiceEditFormat, type WorkbenchLanguageServiceTextEdit } from '@shared/contracts/workbench'
 
 /**
  * 文档格式化：**项目 Prettier 优先，内置规则回退**。

@@ -134,7 +134,7 @@ void describe('closing editor tabs', () => {
   })
 
   void test('the page shows the prompt, and a deleted dirty file can be closed or reverted', () => {
-    const presentation = readSource('src/renderer/src/StandaloneWorkbenchPagePresentation.tsx')
+    const presentation = readSource('src/renderer/src/app/StandaloneWorkbenchPagePresentation.tsx')
     const editorPanel = readSource('src/renderer/src/components/editor/EditorPanel.tsx')
     const tabBar = readSource('src/renderer/src/components/editor/EditorTabBar.tsx')
     const dialog = readSource('src/renderer/src/components/editor/EditorUnsavedChangesDialog.tsx')

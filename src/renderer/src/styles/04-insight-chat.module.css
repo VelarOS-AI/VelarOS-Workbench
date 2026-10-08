@@ -1,4 +1,4 @@
-@reference "../index.css";
+@reference "./index.css";
 
 .workbenchChatPanel {
   @apply flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden;
@@ -7,8 +7,8 @@
 
 .workbenchChatTopBar {
   @apply flex flex-none items-center gap-2 border-b;
-  height: 35px;
-  min-height: 35px;
+  height: calc(var(--workbench-tab-height) + 1px);
+  min-height: calc(var(--workbench-tab-height) + 1px);
   padding: 0 10px;
   border-color: var(--workbench-border);
   background: var(--workbench-surface-muted);

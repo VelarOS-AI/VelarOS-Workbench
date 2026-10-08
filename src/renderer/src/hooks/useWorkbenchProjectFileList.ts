@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { workbenchHost } from '@renderer/host'
+import { workbenchHost } from '@renderer/host/WorkbenchHost'
 import { isWorkbenchProjectFileListChange } from '@renderer/models/files/workbenchProjectFileList'
 
 import { Log } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { Result } from '@velaros-ai/core/result'
 
-import type { SystemWorkspaceFilesChangedEvent } from '@shared/contracts'
+import { type SystemWorkspaceFilesChangedEvent } from '@shared/contracts/system'
 
 import {
   useDebounceFn,

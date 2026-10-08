@@ -2,10 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { AppError, toOptional } from '@velaros-ai/core'
 import { Result } from '@velaros-ai/core/result'
+import { type AppLocale } from '@velaros-ai/ui/conversation/contracts'
 
-import type { AppLocale } from '@shared/contracts'
-
-import { useWorkbenchHostRuntime,type WorkbenchHostRuntime } from '../host'
+import { type WorkbenchHostRuntime } from '../host/WorkbenchHost'
+import { useWorkbenchHostRuntime } from '../host/WorkbenchHostProvider'
 import { formatWorkbenchGitCommitDate } from '../models/git/changesPanel.model'
 import { resolveWorkbenchGitHistoryFormerPath } from '../models/git/workbenchGitFileHistory'
 

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 
 import { describe, test } from 'bun:test'
 
-import type { WorkbenchReadFileResult } from '@shared/contracts'
+import { type WorkbenchReadFileResult } from '@shared/contracts/workbench'
 import {
   isWorkbenchImagePreviewPath,
   resolveWorkbenchImageMediaType,

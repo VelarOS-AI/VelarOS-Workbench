@@ -8,15 +8,9 @@ import {
   useSyncExternalStore,
 } from 'react'
 import { ArrowRightIcon } from '@phosphor-icons/react'
-import type {
-  WorkbenchChatCompositionAdapter,
-  WorkbenchChatLiveRunChanges,
-  WorkbenchChatProjectRuntime,
-  WorkbenchChatSessionActionsProps,
-  WorkbenchChatSessionSnapshot,
-  WorkbenchChatSessionSurfaceProps,
-} from '@renderer/composition'
-import { useWorkbenchI18n } from '@renderer/i18n'
+import { type WorkbenchChatCompositionAdapter, type WorkbenchChatLiveRunChanges, type WorkbenchChatProjectRuntime, type WorkbenchChatSessionActionsProps, type WorkbenchChatSessionSnapshot, type WorkbenchChatSessionSurfaceProps } from '@renderer/composition/WorkbenchChatProvider'
+import { useWorkbenchProviderModelCatalog } from '@renderer/hooks/useWorkbenchProviderModelCatalog'
+import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 
 import {
   isPlainObject,
@@ -41,8 +35,9 @@ import {
   ChatSurfaceComposer,
 } from '@velaros-ai/ui/conversation/composer'
 import type { InteractionAnswer, ReasoningLevel } from '@velaros-ai/ui/conversation/contracts'
+import { type ChatMessage } from '@velaros-ai/ui/conversation/contracts'
+import { type BrowserElementSelection } from '@velaros-ai/velaros/browser/contracts'
 
-import type { BrowserElementSelection, ChatMessage } from '@shared/contracts'
 import {
   ConversationCommandOutputNotice,
   ConversationProjectActivityNotice,
@@ -55,7 +50,7 @@ import {
 import type { WorkbenchChatRunChangesSummary } from '@shared/workbenchGit'
 import type { WorkbenchPeerEvent, WorkbenchPeerTask } from '@shared/workbenchSessionPeers'
 
-import workbenchAppIconUrl from '../../../../build/icon.svg?url'
+import workbenchAppIconUrl from '../../../../resources/icons/icon.svg?url'
 import {
   readWorkbenchAppLocale,
   translateWorkbenchAppMessage,
@@ -72,7 +67,7 @@ import { resolveWorkbenchGoalAutoContinue } from '../models/chat/workbenchGoalAu
 import {
   readWorkbenchConversationRunPreferences,
   readWorkbenchPermissionConfirmationMode,
-} from '../models/settings/workbenchPreferences'
+} from '../models/workbenchPreferences'
 import styles from '../styles/workbenchPageStyles'
 import { useLatest } from '../support/genericHooks'
 
@@ -160,7 +155,7 @@ import {
   refreshStandaloneWorkbenchManagedModels,
   useStandaloneWorkbenchManagedModels,
 } from './standaloneWorkbenchManagedModels'
-import { createStandaloneWorkbenchConfiguredModelSelectorProviders } from './standaloneWorkbenchModelCatalog'
+import { createStandaloneWorkbenchModelSelectorProviders } from './standaloneWorkbenchModelCatalog'
 import {
   selectStandaloneWorkbenchAgentModel,
   selectStandaloneWorkbenchModelProvider,
@@ -173,11 +168,8 @@ import {
 } from './standaloneWorkbenchRunChangeCapture'
 import { awaitStandaloneAgentStopSettlement } from './standaloneWorkbenchStopSettlement'
 import {
-  isWorkbenchAgentEngineId,
-  readPreferredWorkbenchEngine,
   readWorkbenchEngineSelection,
   resolveWorkbenchEngineModel,
-  storePreferredWorkbenchEngine,
   useWorkbenchAgentEngines,
   workbenchAgentEngineLabel,
 } from './workbenchAgentEngines'
@@ -319,8 +311,7 @@ function createState(
     checkpoints: [],
     messageRunMarkers: [],
     liveRunChanges: null,
-    // 新会话沿用上一次在模型菜单里选的执行体。
-    engine: readPreferredWorkbenchEngine(),
+    engine: null,
     revision: 0,
   }
   registerStandaloneChatSession(empty.sessionId, projectRoot)
@@ -1003,6 +994,7 @@ function toSnapshot(state: StandaloneChatState, folderId: string): WorkbenchChat
     id: state.sessionId,
     folderId,
     kind: 'chat',
+    engine: state.engine,
     rootPath: state.projectRoot,
     space: 'project',
     workspaceVersion: state.revision,
@@ -1075,10 +1067,25 @@ function buildStandaloneProjectRuntime(
       archiveGroups: [],
     },
     actions: {
+      openAgentChat: (engineId) => {
+        const key = stateKey(normalizedRoot)
+        const active = getState(normalizedRoot)
+        if ((active.engine?.id ?? null) === engineId) return
+        const inactive = inactiveStates.get(key) ?? []
+        const previous = inactive.find((candidate) => (candidate.engine?.id ?? null) === engineId)
+        const next = previous ?? {
+          ...createState(normalizedRoot, false),
+          engine: engineId ? { id: engineId } : null,
+        }
+        inactiveStates.set(key, [active, ...inactive.filter((candidate) => candidate !== previous)])
+        states.set(key, next)
+        persistState(next, { immediate: true })
+        for (const listener of listeners) listener()
+      },
       addProjectSession: async () => {
         const key = stateKey(normalizedRoot)
         const active = getState(normalizedRoot)
-        const next = createState(normalizedRoot, false)
+        const next = { ...createState(normalizedRoot, false), engine: active.engine }
         inactiveStates.set(key, [active, ...(inactiveStates.get(key) ?? [])])
         states.set(key, next)
         persistState(next, { immediate: true })
@@ -1097,8 +1104,9 @@ function buildStandaloneProjectRuntime(
         if (!target || isActiveChatRun(target.status)) return
         releaseRemovedSession(target)
         if (target.sessionId === active.sessionId) {
-          const [replacement, ...remaining] = inactive
-          const next = replacement ?? createState(normalizedRoot, false)
+          const replacement = inactive.find((candidate) => candidate.engine?.id === active.engine?.id)
+          const remaining = inactive.filter((candidate) => candidate !== replacement)
+          const next = replacement ?? { ...createState(normalizedRoot, false), engine: active.engine }
           states.set(key, next)
           inactiveStates.set(key, remaining)
           persistState(next, { immediate: true })
@@ -1163,6 +1171,7 @@ function StandaloneWorkbenchChatSessionSurface({
   // 交给外部引擎的会话：模型、登录与上下文都是引擎自己的，这一侧只管它选了哪个引擎、哪个模型。
   const engines = useWorkbenchAgentEngines()
   const engine = chat.engine
+  const providerCatalog = useWorkbenchProviderModelCatalog(modelConfig, selectedManagedProvider, !engine)
   const engineStatus = engine ? engines.find((status) => status.id === engine.id) : undefined
   const engineLabel = engine ? workbenchAgentEngineLabel(engine.id) : null
   const {
@@ -1985,106 +1994,80 @@ function StandaloneWorkbenchChatSessionSurface({
     t,
   ])
   const isRunActive = isActiveChatRun(chat.status)
-  /** 选执行体：外部引擎记在会话上，VelarOS 自己的 Agent 用设置里的模型；都记作新会话的默认。 */
-  const selectEngine = useCallback(
-    (next: Nullable<WorkbenchConversationEngineSelection>) => {
-      storePreferredWorkbenchEngine(next)
-      updateSession(projectRoot, chat.sessionId, (state) => ({
-        ...state,
-        engine: next,
-        revision: state.revision + 1,
-      }))
-    },
-    [chat.sessionId, projectRoot]
-  )
-  /**
-   * 模型菜单：VelarOS 自己的模型与本机能用的外部引擎（每个引擎一组，模型是它报上来的）。会话发出第一条消息后
-   * 执行体就定下了，菜单只留这一侧；换执行体要新开会话。
-   */
-  const hasMessages = chat.messages.length > 0
+  /** 侧边栏决定会话执行体；聊天框只选择当前执行体提供的模型。 */
   const modelSelector = useMemo<ChatComposerControl['modelSelector']>(() => {
-    const velarProviders =
-      !isStandaloneWorkbenchManagedProviderId(modelConfig.provider) ||
-      selectedManagedProvider?.enabled
-        ? createStandaloneWorkbenchConfiguredModelSelectorProviders(
+    if (engine) {
+      const models = engineStatus?.available ? engineStatus.models : []
+      return {
+        label: t('chat.composerModelSection'),
+        hint: engineStatus?.reason ?? t('workbench.chatEngineModelHint', { engine: engineLabel ?? '' }),
+        provider: engine.id,
+        model: resolveWorkbenchEngineModel(engine, engineStatus) ?? '',
+        providers: [{
+          value: engine.id,
+          label: engineLabel ?? '',
+          defaultModel: resolveWorkbenchEngineModel(engine, engineStatus) ?? '',
+          models: models.map((model) => ({ value: model.value, label: model.label, description: model.description })),
+        }],
+        disabled: isRunActive,
+        onChange: (provider, model) => {
+          if (provider !== engine.id || !models.some((entry) => entry.value === model)) return
+          updateSession(projectRoot, chat.sessionId, (state) => ({
+            ...state,
+            engine: { id: engine.id, model },
+            revision: state.revision + 1,
+          }))
+        },
+      }
+    }
+    const providers =
+      !isStandaloneWorkbenchManagedProviderId(modelConfig.provider) || selectedManagedProvider?.enabled
+        ? createStandaloneWorkbenchModelSelectorProviders(
             modelConfig.provider,
             modelConfig.model,
+            providerCatalog.error ? [] : providerCatalog.catalog?.models ?? [],
             selectedManagedProvider
           )
         : []
-    // 装了却用不了的引擎（没登录、探不通）照样列出来但点不了，悬停看原因；没装的不列。
-    const engineProviders = engines
-      .filter((status) => status.problem !== 'missing')
-      .map((status) => {
-        const usable = status.available && status.models.length > 0
-        return {
-          value: status.id,
-          label: workbenchAgentEngineLabel(status.id),
-          description: usable ? undefined : status.reason,
-          defaultModel: usable
-            ? (resolveWorkbenchEngineModel({ id: status.id }, status) ?? '')
-            : t(
-                status.problem === 'signed-out'
-                  ? 'workbench.chatEngineSignedOut'
-                  : 'workbench.chatEngineUnusable'
-              ),
-          models: usable
-            ? status.models.map((model) => ({
-                value: model.value,
-                label: model.label,
-                description: model.description,
-              }))
-            : [],
-        }
-      })
-    // 会话的引擎这会儿探不到（还没探完、被卸载）：照样列出它，菜单上认得出这个会话是谁在跑。
-    if (engine && !engineProviders.some((provider) => provider.value === engine.id))
-      engineProviders.push({
-        value: engine.id,
-        label: workbenchAgentEngineLabel(engine.id),
-        description: undefined,
-        defaultModel: engine.model ?? '',
-        models: [
-          {
-            value: engine.model ?? '',
-            label: engine.model ?? t('workbench.chatEngineDefaultModel'),
-            description: undefined,
-          },
-        ],
-      })
-    const providers = !hasMessages
-      ? [...velarProviders, ...engineProviders]
-      : engine
-        ? engineProviders.filter((provider) => provider.value === engine.id)
-        : velarProviders
     if (providers.length === 0) return undefined
+    const providerLabel = providers[0]!.label
     return {
       label: t('chat.composerModelSection'),
-      hint: engineLabel ? t('workbench.chatEngineModelHint', { engine: engineLabel }) : undefined,
-      provider: engine?.id ?? modelConfig.provider,
-      model: engine ? (resolveWorkbenchEngineModel(engine, engineStatus) ?? '') : modelConfig.model,
+      hint: providerCatalog.error
+        ? t('workbench.settingsModelCatalogError', { provider: providerLabel, error: providerCatalog.error })
+        : providerCatalog.loading
+          ? t('workbench.settingsModelCatalogLoading', { provider: providerLabel })
+          : undefined,
+      provider: modelConfig.provider,
+      model: modelConfig.model,
       providers,
+      disabled: isRunActive,
       onChange: (provider, model) => {
-        if (isWorkbenchAgentEngineId(provider)) {
-          selectEngine({ id: provider, model: model || undefined })
-          return
-        }
-        if (engine) selectEngine(null)
-        selectStandaloneWorkbenchAgentModel(provider, model)
+        if (providers.some((entry) => entry.value === provider && entry.models.some((option) => option.value === model)))
+          selectStandaloneWorkbenchAgentModel(provider, model)
       },
     }
   }, [
+    chat.sessionId,
     engine,
     engineLabel,
     engineStatus,
-    engines,
-    hasMessages,
+    isRunActive,
     modelConfig.model,
     modelConfig.provider,
-    selectEngine,
+    projectRoot,
+    providerCatalog.catalog,
+    providerCatalog.error,
+    providerCatalog.loading,
     selectedManagedProvider,
     t,
   ])
+  useEffect(() => {
+    if (engine || isRunActive || providerCatalog.loading || providerCatalog.error) return
+    const provider = modelSelector?.providers.find((entry) => entry.value === modelConfig.provider)
+    if (!provider?.models.length || provider.models.some((model) => model.value === modelConfig.model)) return
+    selectStandaloneWorkbenchAgentModel(provider.value, provider.defaultModel)
+  }, [engine, isRunActive, modelConfig.model, modelConfig.provider, modelSelector, providerCatalog.error, providerCatalog.loading])
   const composerControl = useMemo<ChatComposerControl>(
     () => ({
       scopeKey: chat.sessionId,

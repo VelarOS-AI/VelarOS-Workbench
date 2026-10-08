@@ -3,11 +3,7 @@ import { isAbsolute, resolve } from 'node:path'
 import { isFiniteNumber, optionalWhen } from '@velaros-ai/core'
 import { createProjectKernel, type ProjectKernel } from '@velaros-ai/velaros/project'
 
-import type {
-  WorkbenchProjectAiRuleFile,
-  WorkbenchProjectAiRuleSource,
-  WorkbenchProjectAiRulesResult,
-} from '../../shared/contracts'
+import { type WorkbenchProjectAiRuleFile, type WorkbenchProjectAiRuleSource, type WorkbenchProjectAiRulesResult } from '../../shared/contracts/workbench'
 import type { WorkbenchWorkspaceInvokeRequest } from '../../shared/workbenchWorkspace'
 
 /** 项目 AI 规则文件：与主流编码助手同一套约定，按这些模式在项目里找。 */

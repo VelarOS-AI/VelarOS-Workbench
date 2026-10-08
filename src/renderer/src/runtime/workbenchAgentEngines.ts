@@ -11,8 +11,6 @@ import {
 
 const log = Log.tag('workbench-agent-engines')
 
-/** 新建会话默认交给谁：上一次在模型菜单里选的（外部引擎或 VelarOS 自己的 Agent）。 */
-const PreferredEngineStorageKey = 'velaros-workbench-app:chat-engine'
 /** 引擎情况过了这么久，窗口回到前台时重新问一次（装好、登录之后不用重启）。 */
 const StatusRefreshMs = 60_000
 
@@ -40,28 +38,6 @@ export function readWorkbenchEngineSelection(
 ): Nullable<WorkbenchConversationEngineSelection> {
   if (!isPlainObject(value) || !isWorkbenchAgentEngineId(value.id)) return null
   return isNonBlankString(value.model) ? { id: value.id, model: value.model } : { id: value.id }
-}
-
-export function readPreferredWorkbenchEngine(): Nullable<WorkbenchConversationEngineSelection> {
-  if (typeof window === 'undefined') return null
-  try {
-    const raw = window.localStorage.getItem(PreferredEngineStorageKey)
-    return raw ? readWorkbenchEngineSelection(JSON.parse(raw)) : null
-  } catch {
-    return null
-  }
-}
-
-export function storePreferredWorkbenchEngine(
-  selection: Nullable<WorkbenchConversationEngineSelection>
-): void {
-  if (typeof window === 'undefined') return
-  try {
-    if (selection) window.localStorage.setItem(PreferredEngineStorageKey, JSON.stringify(selection))
-    else window.localStorage.removeItem(PreferredEngineStorageKey)
-  } catch {
-    // 只是新会话的默认值，存不下不影响当前会话。
-  }
 }
 
 /** 这一轮用引擎的哪个模型：会话里选过的，否则引擎报的默认模型；都没有就交给引擎自己定。 */

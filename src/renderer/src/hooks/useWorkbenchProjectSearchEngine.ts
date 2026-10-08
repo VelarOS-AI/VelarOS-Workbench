@@ -10,7 +10,7 @@
  *   写完刷新那几个文件的结果（全部替换后整个重搜）。
  */
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
-import { workbenchHost } from '@renderer/host'
+import { workbenchHost } from '@renderer/host/WorkbenchHost'
 import type { WorkbenchEditorOpenTabIntent } from '@renderer/models/editor/workbenchEditorGroups'
 import {
   formatWorkbenchProjectSearchCount,
@@ -24,12 +24,7 @@ import type { WorkbenchOpenEditorTab } from '@renderer/types/workbenchTypes'
 import { AppError } from '@velaros-ai/core/error'
 import { Result } from '@velaros-ai/core/result'
 
-import type {
-  WorkbenchContentSearchFileResult,
-  WorkbenchContentSearchMatchResult,
-  WorkbenchSearchContentBatch,
-  WorkbenchSearchContentRequest,
-} from '@shared/contracts'
+import { type WorkbenchContentSearchFileResult, type WorkbenchContentSearchMatchResult, type WorkbenchSearchContentBatch, type WorkbenchSearchContentRequest } from '@shared/contracts/workbench'
 import { normalizeWorkbenchTextEol } from '@shared/workbenchTextFormat'
 import {
   compileWorkbenchTextSearch,

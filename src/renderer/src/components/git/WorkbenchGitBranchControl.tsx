@@ -5,7 +5,7 @@ import {
   reportWorkbenchGitRemoteActionSuccess,
   useWorkbenchGitRemoteAction,
 } from '@renderer/hooks/useWorkbenchGitRemoteAction'
-import { workbenchHost } from '@renderer/host'
+import { workbenchHost } from '@renderer/host/WorkbenchHost'
 import {
   describeWorkbenchGitBranchControl,
   describeWorkbenchGitBranchControlHead,
@@ -14,6 +14,7 @@ import {
   describeWorkbenchGitRemoteNote,
   listWorkbenchGitMenuBranches,
   resolveWorkbenchGitBranchSwitch,
+  type WorkbenchGitRemoteActionItem,
 } from '@renderer/models/git/workbenchGitBranchMenuModel'
 import { useStableWorkbenchMessageTranslate } from '@renderer/runtime/useStableWorkbenchMessaging'
 
@@ -37,12 +38,7 @@ import {
   TopBarControlFrame,
 } from '@velaros-ai/ui/product/layout/TopBarControlFrame'
 
-import type {
-  SystemWorkspaceGitSummary,
-  WorkspaceGitBranch,
-  WorkspaceGitRemoteAction,
-  WorkspaceGitRemoteActionResult,
-} from '@shared/contracts'
+import { type SystemWorkspaceGitSummary, type WorkspaceGitBranch, type WorkspaceGitRemoteActionResult } from '@shared/contracts/system'
 
 import styles from '../../styles/workbenchPageStyles'
 
@@ -229,13 +225,11 @@ export function WorkbenchGitBranchControl({
   }
 
   /**
-   * 拉取、同步改写工作区里的文件，推送之前要确认；获取远端只动远端分支的记录，什么都不用问。`branch` 是
+   * 拉取会更新工作区里的文件，推送之前要确认；获取远端只动远端分支的记录，什么都不用问。`branch` 是
    * 列表里点的那个分支（推送它，不是当前分支）。
    */
-  function confirmRemoteAction(action: WorkspaceGitRemoteAction, branch?: string): boolean {
+  function confirmRemoteAction(action: WorkbenchGitRemoteActionItem['action'], branch?: string): boolean {
     if (action !== 'fetch' && warnUnsavedOpenTabs()) return false
-    if (action === 'sync')
-      return window.confirm(tLatest.current('workbench.gitSyncConfirm', { upstream: upstream ?? '' }))
     if (action === 'upload')
       return window.confirm(
         branch
@@ -260,7 +254,7 @@ export function WorkbenchGitBranchControl({
     onOpenCommitTool()
   }
 
-  async function runRemoteAction(action: WorkspaceGitRemoteAction, branch?: string): Promise<void> {
+  async function runRemoteAction(action: WorkbenchGitRemoteActionItem['action'], branch?: string): Promise<void> {
     if (locked || !confirmRemoteAction(action, branch)) return
     try {
       const result = await remoteAction.run(action, { branch, privateKeyPath: gitSshKeyPath })

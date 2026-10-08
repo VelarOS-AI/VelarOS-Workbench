@@ -35,7 +35,7 @@ import {
   readWorkbenchTerminalOutputBacklog,
   setWorkbenchTerminalOutputAcknowledger,
 } from '../src/renderer/src/models/commands/workbenchTerminalOutputBus'
-import type { WorkbenchTerminalOutputEvent } from '../src/shared/contracts'
+import { type WorkbenchTerminalOutputEvent } from '../src/shared/contracts/workbench'
 
 function readSource(relativePath: string): string {
   return readFileSync(path.resolve(process.cwd(), relativePath), 'utf8')
@@ -299,8 +299,8 @@ void describe('terminal sessions on a pseudo-terminal', () => {
     }
   })
 
-  void test('a split terminal starts where the shell it was split from is', async () => {
-    const projectRoot = await realpath(await mkdtemp(join(tmpdir(), 'workbench-terminal-split-')))
+  void test('reports the shell current directory only to its owning window', async () => {
+    const projectRoot = await realpath(await mkdtemp(join(tmpdir(), 'workbench-terminal-cwd-')))
     const outside = await realpath(await mkdtemp(join(tmpdir(), 'workbench-terminal-outside-')))
     const nested = join(projectRoot, 'packages', '应用')
     await mkdir(nested, { recursive: true })
@@ -311,37 +311,16 @@ void describe('terminal sessions on a pseudo-terminal', () => {
       return shellCwd
     })
     const terminal = new TerminalSessions(new PathResolver(), new CommandHelper(), factory)
-    const start = (request: { cwd?: string; inheritCwdFrom?: string }, ownerId = 1) =>
+    const start = (request: { cwd?: string }, ownerId = 1) =>
       terminal.startTerminalSession({ projectRoot, ...request }, () => undefined, ownerId)
     try {
       const first = await start({})
       assert.equal(first.cwd, projectRoot)
       assert.deepEqual(asked, [])
 
-      // shell 已经 cd 到子目录：拆分出来的终端也从那里开始。
-      const split = await start({ inheritCwdFrom: first.sessionId })
-      assert.equal(split.cwd, nested)
-      assert.equal(spawned[1]!.options.cwd, nested)
-      assert.deepEqual(asked, [4242])
-
-      // 指明了目录就用指明的，不去问。
-      assert.equal((await start({ cwd: 'packages', inheritCwdFrom: first.sessionId })).cwd, join(projectRoot, 'packages'))
-      assert.deepEqual(asked, [4242])
-
-      // shell 到了项目外面、待在已经删掉的目录里、问不到：都从项目根开始。
-      shellCwd = outside
-      assert.equal((await start({ inheritCwdFrom: first.sessionId })).cwd, projectRoot)
-      shellCwd = join(projectRoot, 'gone')
-      assert.equal((await start({ inheritCwdFrom: first.sessionId })).cwd, projectRoot)
-      shellCwd = null
-      assert.equal((await start({ inheritCwdFrom: first.sessionId })).cwd, projectRoot)
-
-      // 别的窗口的会话、已经不在的会话：不去问，从项目根开始。
-      shellCwd = nested
-      const before = asked.length
-      assert.equal((await start({ inheritCwdFrom: first.sessionId }, 2)).cwd, projectRoot)
-      assert.equal((await start({ inheritCwdFrom: 'terminal-missing' })).cwd, projectRoot)
-      assert.equal(asked.length, before)
+      assert.equal((await start({ cwd: 'packages' })).cwd, join(projectRoot, 'packages'))
+      assert.equal(spawned[1]!.options.cwd, join(projectRoot, 'packages'))
+      assert.deepEqual(asked, [])
 
       // 终端输出里的相对路径按 shell 此刻所在的目录解析：窗口问自己的会话问得到，项目外面的目录也照实给。
       assert.deepEqual(await terminal.readTerminalCwd({ sessionId: first.sessionId }, 1), { cwd: nested })

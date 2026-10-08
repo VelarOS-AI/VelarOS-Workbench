@@ -1,10 +1,6 @@
 import { isBoolean, optionalWhen } from '@velaros-ai/core'
 
-import type {
-  WorkbenchCodeGraphEdge,
-  WorkbenchCodeGraphNode,
-  WorkbenchGetCodeGraphResult,
-} from '@shared/contracts'
+import { type WorkbenchCodeGraphEdge, type WorkbenchCodeGraphNode, type WorkbenchGetCodeGraphResult } from '@shared/contracts/workbench'
 
 export const VelarOwnershipGraphRequestId = 'ownership-graph'
 

@@ -1,6 +1,5 @@
 import { truncate } from '@velaros-ai/core'
-
-import type { BrowserElementSelection } from '@shared/contracts'
+import { type BrowserElementSelection } from '@velaros-ai/velaros/browser/contracts'
 
 /**
  * 用户在浏览器里拾取的页面元素 → 本轮模型可见的上下文段（与 Desktop useChatComposerSubmission 同一格式）。

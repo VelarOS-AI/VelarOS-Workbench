@@ -1,4 +1,4 @@
-import { isNull, toNullable } from '@velaros-ai/core'
+import { isNull, optionalWhenLazy, toNullable } from '@velaros-ai/core'
 import type {
   ActExecutionFailure,
   ActExecutionSummary,
@@ -173,6 +173,7 @@ export class ConversationScriptBoard {
         runId,
         turnId,
         status,
+        startedAt: optionalWhenLazy(status === 'running', Date.now),
         source: '',
         sourceTruncated: false,
         calls: [],
@@ -188,7 +189,12 @@ export class ConversationScriptBoard {
   private update(id: string, patch: Partial<ConversationScriptProjection>): void {
     const card = this.cards.get(id)
     if (!card) return
-    card.projection = { ...card.projection, ...patch }
+    const started = patch.status === 'running' && card.projection.status !== 'running'
+    card.projection = {
+      ...card.projection,
+      ...patch,
+      ...(started ? { startedAt: Date.now(), durationMs: null } : {}),
+    }
     this.publish(id)
   }
 

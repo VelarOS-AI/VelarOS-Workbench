@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from 'react'
-import { useWorkbenchI18n } from '@renderer/i18n'
+import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 
 import {
   type ConversationActionItem,

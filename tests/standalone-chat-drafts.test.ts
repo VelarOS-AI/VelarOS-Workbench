@@ -2,6 +2,8 @@ import assert from 'node:assert/strict'
 
 import { test } from 'bun:test'
 
+import { type BrowserElementSelection } from '@velaros-ai/velaros/browser/contracts'
+
 import {
   appendStandaloneChatContext,
   consumeStandaloneChatDraft,
@@ -11,7 +13,6 @@ import {
   snapshotWorkbenchComposerContext,
   updateStandaloneChatDraft,
 } from '../src/renderer/src/runtime/standaloneChatDrafts'
-import type { BrowserElementSelection } from '../src/shared/contracts'
 
 test('async submission clears only the original project chat and preserves another draft and its files', () => {
   const original = '/project-a\0chat'

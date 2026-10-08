@@ -7,7 +7,7 @@ import { isEmpty } from '@velaros-ai/core'
 import {
   getWorkbenchComment,
   type WorkbenchComment,
-} from '../../models/comments/workbenchCommentStore'
+} from '../../models/workbenchCommentStore'
 
 import { resolveWorkbenchAnchorEndLine } from './workbenchLineAnchors'
 

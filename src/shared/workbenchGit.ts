@@ -1,36 +1,7 @@
-import type {
-  AppLocale,
-  SystemWorkspaceGitActionResult,
-  SystemWorkspaceGitBlameResult,
-  SystemWorkspaceGitCommitMessageResult,
-  SystemWorkspaceGitCommitResult,
-  SystemWorkspaceGitCreateBranchResult,
-  SystemWorkspaceGitDiffResult,
-  SystemWorkspaceGitFileActionResult,
-  SystemWorkspaceGitFileAtCommitResult,
-  SystemWorkspaceGitHunkActionResult,
-  SystemWorkspaceGitInitializeRepositoryResult,
-  SystemWorkspaceGitLineStatsSnapshot,
-  SystemWorkspaceGitLogResult,
-  SystemWorkspaceGitOperationResult,
-  SystemWorkspaceGitStashActionResult,
-  SystemWorkspaceGitStashListResult,
-  SystemWorkspaceGitStashResult,
-  SystemWorkspaceGitSummary,
-  SystemWorkspaceGitSwitchBranchResult,
-  WorkspaceGitDiffOptions,
-  WorkspaceGitFileAction,
-  WorkspaceGitFileStatusEntry,
-  WorkspaceGitHunkActionOptions,
-  WorkspaceGitLogOptions,
-  WorkspaceGitOperationAction,
-  WorkspaceGitOperationKind,
-  WorkspaceGitOperationRequest,
-  WorkspaceGitRemoteAction,
-  WorkspaceGitRemoteActionOptions,
-  WorkspaceGitStashAction,
-  WorkspaceGitStashOptions,
-} from '@shared/contracts'
+import { type AppLocale } from '@velaros-ai/ui/conversation/contracts'
+
+import { type SystemWorkspaceGitActionResult, type SystemWorkspaceGitBlameResult, type SystemWorkspaceGitCommitMessageResult, type SystemWorkspaceGitCommitResult, type SystemWorkspaceGitCreateBranchResult, type SystemWorkspaceGitDiffResult, type SystemWorkspaceGitFileActionResult, type SystemWorkspaceGitFileAtCommitResult, type SystemWorkspaceGitHunkActionResult, type SystemWorkspaceGitInitializeRepositoryResult, type SystemWorkspaceGitLineStatsSnapshot, type SystemWorkspaceGitLogResult, type SystemWorkspaceGitOperationResult, type SystemWorkspaceGitStashActionResult, type SystemWorkspaceGitStashListResult, type SystemWorkspaceGitStashResult, type SystemWorkspaceGitSummary, type SystemWorkspaceGitSwitchBranchResult, type WorkspaceGitDiffOptions, type WorkspaceGitFileAction, type WorkspaceGitFileStatusEntry, type WorkspaceGitLogOptions, type WorkspaceGitRemoteAction } from '@shared/contracts/system'
+import { type WorkspaceGitHunkActionOptions, type WorkspaceGitOperationAction, type WorkspaceGitOperationKind, type WorkspaceGitOperationRequest, type WorkspaceGitRemoteActionOptions, type WorkspaceGitStashAction, type WorkspaceGitStashOptions } from '@shared/contracts/workspaceGit'
 
 import type { WorkbenchFsCallResult } from './workbenchFs'
 import type { WorkbenchTextEncoding, WorkbenchTextEol } from './workbenchTextFormat'

@@ -4,7 +4,7 @@ import { isRecord, readNumberScalar as readNumber } from '@velaros-ai/core/utils
 import {
   createLocalStorageJsonStore,
   type StorageLike,
-} from '../../persistence/localStorageJsonStore'
+} from '../../support/localStorageJsonStore'
 
 export interface WorkbenchCommandHistoryItem {
   command: string

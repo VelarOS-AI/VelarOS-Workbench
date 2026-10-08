@@ -35,8 +35,8 @@ ts-morph, Prettier, jsonc-parser, ast-grep and Playwright alongside the base Nod
 installed in the project take precedence. Package discovery reads metadata, and implementations load
 on import. Settings → AI manages memory and the project sandbox. Long-term memory is scoped to each
 project and recalled on demand. The chat header's notebook button shows the current session's versioned working
-notes and refreshes as the run progresses. The adjacent process button lists the chat's development servers
-and background commands, with live output, interactive input and stop controls. Process ownership
+notes and refreshes as the run progresses. The console button opens a separate window for the chat's
+development servers and background commands, with live output, interactive input and stop controls. Process ownership
 uses the launch project and chat, even if a command changes its working directory.
 
 Agents can use `velaros:sessions` to delegate work or queue messages to other chats in the current
@@ -62,8 +62,7 @@ matching Desktop. External engines use their own approval protocols with the sel
 Every run captures a Git checkpoint first. When the run's writes settle, the AI changes card lists
 the files the agent changed, with diffs and per-file attribution (agent-only or mixed with other
 edits). The agent's write windows cover native processes and the runtime's project effects; project edits also refresh
-the language service immediately. Rewind, Mods, resource plugins and CodeGraph were retired with the
-Platform migration, matching Desktop.
+the language service immediately.
 
 A chat session can also be handed to an external agent engine: the Claude Code and Codex command-line
 tools installed on the machine. The composer's model menu lists each engine the user has installed,
@@ -82,6 +81,14 @@ time) or full access (never ask). Questions an engine asks become question cards
 same checkpoint, AI changes card and language-service refresh; messages sent while an engine runs are
 queued rather than injected, and Velar's memory, web search, browser and goal auto-continue do not
 apply to engine sessions.
+
+## Documentation
+
+- [Architecture and implementation](docs/workbench-internals.md): process ownership, editor, Git, terminal, debugger and runtime behavior.
+- [Language support](docs/language-support.md): supported languages and compiler/editor integration.
+- [Model requests](docs/model-requests.md): instruction sources, project context and executable verification.
+- [Local release](docs/local-platform-release.md): native packaging, verification and candidate publication.
+- [Release notes](resources/release-notes/workbench.json): the versioned notes consumed by the release pipeline.
 
 ## Development
 
@@ -139,5 +146,5 @@ missing or invalid. After upload, an agent publishes an exact Workbench version 
 `release:software:production` command; no administrator page or interactive password is part of the
 release path.
 
-See [docs/releases/local-platform-release.md](docs/releases/local-platform-release.md) for the clean
+See [docs/local-platform-release.md](docs/local-platform-release.md) for the clean
 tag, native packaging, immutable staging, signed candidate finalization, and platform isolation gates.

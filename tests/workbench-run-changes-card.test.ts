@@ -13,7 +13,7 @@ shareHostReactWithLinkedUi()
 const { ConversationRenderSlotsProvider, useConversationRenderSlots } = await import(
   '@velaros-ai/ui/conversation'
 )
-const { WorkbenchLocalizationProvider } = await import('../src/renderer/src/i18n')
+const { WorkbenchLocalizationProvider } = await import('../src/renderer/src/i18n/WorkbenchLocalizationProvider')
 const { standaloneWorkbenchConversationRenderSlots } = await import(
   '../src/renderer/src/runtime/conversation/standaloneWorkbenchConversationRenderSlots'
 )

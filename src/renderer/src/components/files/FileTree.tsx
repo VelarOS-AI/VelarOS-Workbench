@@ -8,7 +8,7 @@ import {
   useState,
 } from 'react'
 import { useWorkbenchDensity } from '@renderer/hooks/useWorkbenchPreferences'
-import { useWorkbenchI18n } from '@renderer/i18n'
+import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 import {
   buildTreeNodes,
   canDropTreeEntries,
@@ -22,14 +22,14 @@ import {
   TREE_OVERSCAN_COUNT,
 } from '@renderer/models/files/fileTree.model'
 import type { WorkbenchGitDecorationMap } from '@renderer/models/git/workbenchGitModel'
-import { getWorkbenchFileTreeRowHeight } from '@renderer/models/settings/workbenchPreferences'
 import { ROOT_PATH } from '@renderer/models/shared/workbenchUtils'
+import { getWorkbenchFileTreeRowHeight } from '@renderer/models/workbenchPreferences'
 import type { NodeApi, NodeRendererProps, TreeApi } from 'react-arborist'
 import { Tree } from 'react-arborist'
 
 import { isBlank, isEmpty } from '@velaros-ai/core'
 
-import type { WorkbenchDirectoryEntry, WorkbenchDirectoryEntrySymlink } from '@shared/contracts'
+import { type WorkbenchDirectoryEntry, type WorkbenchDirectoryEntrySymlink } from '@shared/contracts/workbench'
 
 import { useFileTreeActions } from '../../hooks/useFileTreeActions'
 import styles from '../../styles/workbenchPageStyles'

@@ -17,12 +17,7 @@ import {
   type WorkbenchLanguageServiceEditOutcome,
 } from '../src/renderer/src/models/editor/workbenchLanguageServiceEditReport'
 import type { WorkbenchOpenEditorTab } from '../src/renderer/src/types/workbenchTypes'
-import type {
-  WorkbenchLanguageServiceFileEdit,
-  WorkbenchLanguageServiceFileRenameEditsRequest,
-  WorkbenchLanguageServiceFileRenameEditsResult,
-  WorkbenchReadFileResult,
-} from '../src/shared/contracts'
+import { type WorkbenchLanguageServiceFileEdit, type WorkbenchLanguageServiceFileRenameEditsRequest, type WorkbenchLanguageServiceFileRenameEditsResult, type WorkbenchReadFileResult } from '../src/shared/contracts/workbench'
 
 const ProjectRoot = '/project'
 

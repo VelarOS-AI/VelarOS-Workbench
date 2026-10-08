@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { workbenchHost } from '@renderer/host'
+import { workbenchHost } from '@renderer/host/WorkbenchHost'
 import {
   appendWorkbenchGitLogPage,
   isSameWorkbenchGitLog,
@@ -9,7 +9,7 @@ import {
 import { AppError } from '@velaros-ai/core/error'
 import { Result } from '@velaros-ai/core/result'
 
-import type { SystemWorkspaceGitLogResult, WorkspaceGitLogEntry } from '@shared/contracts'
+import { type SystemWorkspaceGitLogResult, type WorkspaceGitLogEntry } from '@shared/contracts/system'
 
 /** 提交图一页读这么多个提交；滚到底再读下一页。 */
 export const WorkbenchGitLogPageSize = 200

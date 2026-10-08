@@ -1,8 +1,4 @@
-import type {
-  WorkbenchDirectoryEntry,
-  WorkbenchImagePreview,
-  WorkbenchReadFileResult,
-} from '@shared/contracts'
+import { type WorkbenchDirectoryEntry, type WorkbenchImagePreview, type WorkbenchReadFileResult } from '@shared/contracts/workbench'
 import type {
   WorkbenchTextEncoding,
   WorkbenchTextEol,

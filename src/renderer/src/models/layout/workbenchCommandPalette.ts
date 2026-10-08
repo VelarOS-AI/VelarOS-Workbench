@@ -3,7 +3,6 @@
  * 按名字模糊找。只登记工作台里已有、真能跑的动作；哪条此刻能跑、怎么跑由页面给（见页面 model 的
  * `commandPalette`），此刻跑不了的（没打开文件时的保存、格式化……）不列出来。
  */
-import { workbenchTerminalSplitShortcut } from '../commands/workbenchTerminalSplits'
 import {
   isWorkbenchDebugActionAvailable,
   type WorkbenchDebugAction,
@@ -61,7 +60,6 @@ export type WorkbenchPaletteCommandId =
   | 'save-all'
   | 'save-current'
   | 'split-editor-right'
-  | 'split-terminal'
   | 'toggle-breakpoint'
   | 'toggle-chat'
   | 'toggle-debug-panel'
@@ -176,12 +174,6 @@ export const WORKBENCH_PALETTE_COMMANDS: readonly WorkbenchPaletteCommandDefinit
   { id: 'toggle-git', labelKey: 'workbench.commandToggleGit', shortcut: { action: 'toggle-changes' } },
   { id: 'toggle-terminal', labelKey: 'workbench.commandToggleTerminal' },
   { id: 'new-terminal', labelKey: 'workbench.commandNewTerminal' },
-  // 在当前终端右边并排再开一个；焦点在终端里时的 ⌘D / Ctrl+Shift+5。
-  {
-    id: 'split-terminal',
-    labelKey: 'workbench.commandSplitTerminal',
-    shortcut: { platform: workbenchTerminalSplitShortcut },
-  },
   { id: 'toggle-chat', labelKey: 'workbench.commandToggleChat', shortcut: { action: 'toggle-actions' } },
   {
     id: 'run-last-command',

@@ -1,8 +1,7 @@
 node_modules/
 .bun/
 .vite/
-build/electron/
-build/cache/
+build/
 dist/
 coverage/
 artifacts/
@@ -11,9 +10,6 @@ artifacts/
 !scripts/release/releaseIdentity.mjs
 .velaros/
 .cache/
-
-# 根目录 types/ 下的手写全局类型单源
-!types/velaros-globals.d.ts
 
 package-lock.json
 
@@ -30,7 +26,9 @@ Thumbs.db
 .eslintcache
 .idea
 .claude
-.velaros
 .velaros-workspace
 .tmp
 tmp/
+
+# 本地视觉核验产物
+.codex/design-qa/

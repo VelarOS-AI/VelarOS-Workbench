@@ -11,14 +11,8 @@ import {
   useState,
   useSyncExternalStore,
 } from 'react'
-import {
-  useWorkbenchChatProjectRuntime,
-  useWorkbenchProductRuntime,
-  type WorkbenchBrowserElementSelectionDelivery,
-  type WorkbenchChatFileChangeEntry,
-  type WorkbenchChatFileReferenceDelivery,
-  type WorkbenchChatRunChangesTarget,
-} from '@renderer/composition'
+import { useWorkbenchChatProjectRuntime, type WorkbenchBrowserElementSelectionDelivery, type WorkbenchChatFileChangeEntry, type WorkbenchChatFileReferenceDelivery, type WorkbenchChatRunChangesTarget } from '@renderer/composition/WorkbenchChatProvider'
+import { useWorkbenchProductRuntime } from '@renderer/composition/WorkbenchProductRuntimeProvider'
 import { useWorkbenchAiChanges } from '@renderer/hooks/useWorkbenchAiChanges'
 import { useWorkbenchCommandPalette } from '@renderer/hooks/useWorkbenchCommandPalette'
 import { useWorkbenchDebugShortcuts } from '@renderer/hooks/useWorkbenchDebugShortcuts'
@@ -33,7 +27,7 @@ import { useWorkbenchProjectRunSettings } from '@renderer/hooks/useWorkbenchProj
 import { useWorkbenchRecentFiles } from '@renderer/hooks/useWorkbenchRecentFiles'
 import { useWorkbenchStandaloneProjectSync } from '@renderer/hooks/useWorkbenchStandaloneProjectSync'
 import { useWorkbenchSurfaceState } from '@renderer/hooks/useWorkbenchSurfaceState'
-import { workbenchHost } from '@renderer/host'
+import { workbenchHost } from '@renderer/host/WorkbenchHost'
 import { resolveWorkbenchChatWorkspacePath } from '@renderer/models/chat/workbenchChatWorkspacePath'
 import { getWorkbenchCommandStatusLabel } from '@renderer/models/commands/workbenchCommandStatusModel'
 import { inferPackageManagerCommand } from '@renderer/models/commands/workbenchCommandSuggestions'
@@ -63,20 +57,17 @@ import type { PersistedWorkbenchEditorCursor } from '@renderer/models/project/wo
 import {
   getZoomedWorkbenchEditorZoomLevel,
   type WorkbenchEditorZoomAction,
-} from '@renderer/models/settings/workbenchPreferences'
+} from '@renderer/models/workbenchPreferences'
 import type { WorkbenchLightEditorTab } from '@renderer/types/workbenchTypes'
 
 import { isEmpty, isObject, isString, isTrue, Log, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { currentPlatform as systemPlatformCompatibility } from '@velaros-ai/core/platform'
 import { Result } from '@velaros-ai/core/result'
+import { type BrowserElementSelection } from '@velaros-ai/velaros/browser/contracts'
 
-import type {
-  BrowserElementSelection,
-  SystemFileChangePreviewResult,
-  WorkbenchContentSearchMatchResult,
-  WorkbenchReadFileResult,
-} from '@shared/contracts'
+import { type SystemFileChangePreviewResult } from '@shared/contracts/system'
+import { type WorkbenchContentSearchMatchResult, type WorkbenchReadFileResult } from '@shared/contracts/workbench'
 import type { WorkbenchWatchStatus } from '@shared/workbenchWatch'
 
 import { useStableWorkbenchMessageTranslate } from '../runtime/useStableWorkbenchMessaging'

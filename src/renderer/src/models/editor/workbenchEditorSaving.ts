@@ -1,6 +1,6 @@
 import type { AppError } from '@velaros-ai/core/error'
 
-import type { WorkbenchReadFileResult } from '@shared/contracts'
+import { type WorkbenchReadFileResult } from '@shared/contracts/workbench'
 
 import type {
   WorkbenchOpenEditorExternalChange,

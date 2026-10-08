@@ -1,11 +1,8 @@
-import {
-  type WorkbenchHost,
-  WorkbenchHostRuntime,
-} from '../host'
+import { type WorkbenchHost, WorkbenchHostRuntime } from '../host/WorkbenchHost'
 import {
   WorkbenchCommentStore,
   type WorkbenchCommentStoreOptions,
-} from '../models/comments/workbenchCommentStore'
+} from '../models/workbenchCommentStore'
 
 export interface WorkbenchRuntimeOptions {
   host: WorkbenchHost

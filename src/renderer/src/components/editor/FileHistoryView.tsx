@@ -11,9 +11,9 @@ import {
 } from '@renderer/hooks/useWorkbenchFileHistory'
 import { useWorkbenchHistoryRecordContent } from '@renderer/hooks/useWorkbenchHistoryRecordContent'
 import { useWorkbenchHistorySearchIndex } from '@renderer/hooks/useWorkbenchHistorySearchIndex'
-import { useWorkbenchI18n } from '@renderer/i18n'
+import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 import { buildWorkbenchContentDiffRows } from '@renderer/models/git/workbenchGitDiffModel'
-import type { WorkbenchThemeId } from '@renderer/models/settings/workbenchPreferences'
+import type { WorkbenchThemeId } from '@renderer/models/workbenchPreferences'
 
 import { isEmpty, isNotNull, toNullable } from '@velaros-ai/core'
 import { Button } from '@velaros-ai/ui/primitives/buttons/Button'

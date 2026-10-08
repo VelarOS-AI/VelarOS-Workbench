@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
-import { workbenchHost } from '@renderer/host'
+import { workbenchHost } from '@renderer/host/WorkbenchHost'
 import {
   createWorkbenchProject,
   getWorkbenchSessionId,
@@ -15,7 +15,7 @@ import { Log, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { Result } from '@velaros-ai/core/result'
 
-import type { SystemOverview } from '@shared/contracts'
+import { type SystemOverview } from '@shared/contracts/system'
 
 import { useStableWorkbenchMessageTranslate } from '../runtime/useStableWorkbenchMessaging'
 import { useLatest, useMemoizedFn } from '../support/genericHooks'

@@ -9,10 +9,7 @@ import {
 
 import { isPresent } from '@velaros-ai/core'
 
-import type {
-  WorkbenchLanguageServiceDocumentHighlight,
-  WorkbenchLanguageServicePosition,
-} from '@shared/contracts'
+import { type WorkbenchLanguageServiceDocumentHighlight, type WorkbenchLanguageServicePosition } from '@shared/contracts/workbench'
 
 import { languageServiceRangeToOffsets } from './workbenchCodeMirrorLanguageService'
 

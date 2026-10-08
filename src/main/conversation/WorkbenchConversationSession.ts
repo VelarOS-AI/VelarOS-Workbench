@@ -184,6 +184,10 @@ export class WorkbenchConversationSession implements WorkbenchConversationSessio
         }),
         dataDir: options.dataDir,
         model: options.model,
+        // 上下文维护与模型驱动用同一输入预算；恢复时驱动上限仍会进一步约束请求。
+        context: {
+          policy: { windowTokens: 'limits' in options.model ? options.model.limits?.inputTokens : undefined },
+        },
         modules,
         agents: true,
         widgets: { show: options.showWidget },

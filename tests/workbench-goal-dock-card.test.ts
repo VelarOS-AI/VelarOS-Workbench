@@ -6,7 +6,7 @@ import { describe, test } from 'bun:test'
 
 import type { ConversationCardContent } from '@velaros-ai/ui/conversation'
 
-import { WorkbenchLocalizationProvider } from '../src/renderer/src/i18n'
+import { WorkbenchLocalizationProvider } from '../src/renderer/src/i18n/WorkbenchLocalizationProvider'
 import { standaloneWorkbenchConversationRenderSlots } from '../src/renderer/src/runtime/conversation/standaloneWorkbenchConversationRenderSlots'
 
 function renderCardContent(content: ConversationCardContent): string {

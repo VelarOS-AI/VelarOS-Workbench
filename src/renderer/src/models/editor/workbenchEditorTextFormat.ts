@@ -1,4 +1,4 @@
-import type { WorkbenchReadFileResult } from '@shared/contracts'
+import { type WorkbenchReadFileResult } from '@shared/contracts/workbench'
 import type { WorkbenchTextFormat, WorkbenchTextIssue } from '@shared/workbenchTextFormat'
 
 import type { WorkbenchOpenEditorTab } from '../../types/workbenchTypes'

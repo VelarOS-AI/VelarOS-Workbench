@@ -1,15 +1,7 @@
 import { AppError } from '@velaros-ai/core/error'
 import type { Result } from '@velaros-ai/core/result'
 
-import type {
-  WorkbenchCreateEntryRequest,
-  WorkbenchEntryMutationResult,
-  WorkbenchLanguageServiceFileEdit,
-  WorkbenchLanguageServiceNewFile,
-  WorkbenchReadFileResult,
-  WorkbenchSaveFileRequest,
-  WorkbenchSaveFileResult,
-} from '@shared/contracts'
+import { type WorkbenchCreateEntryRequest, type WorkbenchEntryMutationResult, type WorkbenchLanguageServiceFileEdit, type WorkbenchLanguageServiceNewFile, type WorkbenchReadFileResult, type WorkbenchSaveFileRequest, type WorkbenchSaveFileResult } from '@shared/contracts/workbench'
 
 import { applyWorkbenchLanguageServiceEditsToContent } from './workbenchCodeMirrorLanguageService'
 import { canEditWorkbenchFileContent, resolveWorkbenchEditorEditMode } from './workbenchEditorEditMode'

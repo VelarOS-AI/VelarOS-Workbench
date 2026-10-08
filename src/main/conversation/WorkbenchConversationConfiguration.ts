@@ -1,16 +1,15 @@
+import { createHash } from 'node:crypto'
+
 import type { AgentModelResolverApi } from '@velaros-ai/model'
 import { createAiSdkModelDriver } from '@velaros-ai/model'
 
 import type { WorkbenchConversationSendRequest } from '../../shared/workbenchConversation'
 
+import { ConversationContextCapacity } from './ConversationContextCapacity'
+import { ConversationModelDriver } from './ConversationModelDriver'
 import type { ConversationRunConfiguration } from './WorkbenchConversationTypes'
 
-/** 模型没报窗口时按这么大算。 */
-const DefaultContextTokens = 128_000
-/** 输出预留的上限；小窗口按四分之一留。 */
-const MaxOutputTokens = 12_000
-/** 输入上限再扣这么多安全余量。 */
-const SafetyTokens = 4_096
+const CapacityCacheEntries = 128
 
 /**
  * 按这一轮请求里的模型选择建模型驱动（与 Desktop 的会话配置同一算法）。Workbench 是自带密钥：服务商的
@@ -22,6 +21,7 @@ export function createWorkbenchConversationConfiguration(
   request: WorkbenchConversationSendRequest,
   signal: AbortSignal
 ) => Promise<ConversationRunConfiguration> {
+  const capacities = new Map<string, ConversationContextCapacity>()
   return async (request, signal) => {
     signal.throwIfAborted()
     const selection = { ...request.model, reasoningLevel: request.reasoningLevel }
@@ -42,9 +42,18 @@ export function createWorkbenchConversationConfiguration(
       signal
     )
     signal.throwIfAborted()
-    const contextTokens = resolved.contextWindow ?? DefaultContextTokens
-    const outputTokens = Math.min(MaxOutputTokens, Math.floor(contextTokens / 4))
-    const model = createAiSdkModelDriver({
+    // 端点、凭据或模型元数据变化后重新试探；缓存只保存摘要，不能跨会话或路由串用容量。
+    const key = createHash('sha256')
+      .update(JSON.stringify([
+        request.sessionId, selection, resolved.providerId, resolved.model,
+        resolved.providerModel, resolved.contextWindow, resolved.modelRequestOptions,
+      ]))
+      .digest('hex')
+    const capacity = capacities.get(key) ?? new ConversationContextCapacity(resolved.contextWindow)
+    capacities.delete(key)
+    capacities.set(key, capacity)
+    if (capacities.size > CapacityCacheEntries) capacities.delete(capacities.keys().next().value!)
+    const driver = createAiSdkModelDriver({
       id: `${resolved.providerId}/${resolved.model}`,
       model: resolved.provider(resolved.model, {
         ...resolved.modelRequestOptions,
@@ -54,13 +63,13 @@ export function createWorkbenchConversationConfiguration(
         },
       }),
       limits: {
-        contextTokens,
-        outputTokens,
-        inputTokens: contextTokens - outputTokens - SafetyTokens,
+        contextTokens: capacity.contextTokens,
+        outputTokens: capacity.outputTokens,
+        inputTokens: capacity.inputTokens,
       },
     })
     return {
-      model,
+      model: new ConversationModelDriver(driver, capacity),
       provider: resolved.providerId,
       imageInput: resolved.supportedInputModalities.includes('image'),
     }

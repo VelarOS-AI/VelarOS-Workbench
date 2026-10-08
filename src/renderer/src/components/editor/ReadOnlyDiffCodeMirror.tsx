@@ -35,7 +35,7 @@ import type { WorkbenchUnifiedDiffRow } from '@renderer/models/git/workbenchGitD
 import type {
   WorkbenchDiffLayout,
   WorkbenchThemeId,
-} from '@renderer/models/settings/workbenchPreferences'
+} from '@renderer/models/workbenchPreferences'
 
 import { isEmpty, isNotNull } from '@velaros-ai/core'
 

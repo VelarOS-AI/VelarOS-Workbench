@@ -2,7 +2,8 @@ import assert from 'node:assert/strict'
 
 import { describe, test } from 'bun:test'
 
-import type { ChatMessage } from '@shared/contracts'
+import { type ChatMessage } from '@velaros-ai/ui/conversation/contracts'
+
 import type { WorkbenchConversationState } from '@shared/workbenchConversation'
 
 import {
@@ -262,11 +263,18 @@ void describe('standalone Workbench conversation runtime', () => {
       percent: 42.5,
       estimatedTokens: 85_000,
       usableContextWindow: 200_000,
+      contextWindowEstimated: false,
     })
     assert.equal(readStandaloneContextUsageEstimate({ kind: 'usage-telemetry', percent: 10 }), null)
     assert.equal(readStandaloneContextUsageEstimate(contextUsage({ usableContextWindow: 0 })), null)
     assert.equal(readStandaloneContextUsageEstimate(contextUsage({ percent: Number.NaN })), null)
     assert.equal(readStandaloneContextUsageEstimate(undefined), null)
+    const provisional = readStandaloneContextUsageEstimate(contextUsage({ contextWindowEstimated: true }))
+    assert.equal(provisional?.contextWindowEstimated, true)
+    assert.equal(
+      readStandaloneContextUsageEstimate({ ...JSON.parse(JSON.stringify(provisional)), kind: 'context-usage-estimate' })?.contextWindowEstimated,
+      true
+    )
   })
 
   void test('blocks a new submit while a run is active, stopping, or still settling', () => {
@@ -399,6 +407,22 @@ void describe('standalone Workbench conversation runtime', () => {
     // 重复回执、不认识的输入都不换新消息列表。
     assert.equal(markStandaloneGuidanceApplied(applied, 'accepted'), applied)
     assert.equal(markStandaloneGuidanceApplied(messages, 'unknown-input'), messages)
+  })
+
+  void test('input-applied acknowledgements leave ordinary messages and interaction replies unchanged', () => {
+    const messages: ChatMessage[] = [
+      { ...message('user', [{ type: 'text', text: 'hello' }], 'first'), conversationKind: 'turn-input' },
+      { ...message('user', [{ type: 'text', text: 'next task' }], 'next'), conversationKind: 'turn-input' },
+      { ...message('user', [{ type: 'text', text: 'yes' }], 'reply'), conversationKind: 'interaction-reply' },
+      message('assistant', [{ type: 'text', text: 'hello' }], 'assistant'),
+      guidance('guidance', 'pending'),
+    ]
+    for (const id of ['first', 'next', 'reply', 'assistant']) {
+      assert.equal(markStandaloneGuidanceApplied(messages, id), messages)
+    }
+    const applied = markStandaloneGuidanceApplied(messages, 'guidance')
+    assert.equal(applied.at(-1)?.guidanceStatus, 'applied')
+    assert.deepEqual(applied.slice(0, 4), messages.slice(0, 4))
   })
 
   void test('marks the finished run on its last assistant message like Desktop', () => {

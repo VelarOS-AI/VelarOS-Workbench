@@ -123,12 +123,9 @@ void describe('Workbench command palette registry', () => {
     assert.equal(command(mac, 'zoom-in').shortcut, '⌘+')
     assert.equal(command(mac, 'open-settings').shortcut, null)
 
-    // 终端里的拆分键两类平台不一样。
-    assert.equal(command(mac, 'split-terminal').shortcut, '⌘D')
     assert.equal(command(mac, 'toggle-git-blame').shortcut, null)
 
     const linux = buildCommands('en-US', { platform: Linux })
-    assert.equal(command(linux, 'split-terminal').shortcut, 'Ctrl+Shift+5')
     assert.equal(command(linux, 'go-to-file').shortcut, 'Ctrl+P')
     assert.equal(command(linux, 'go-to-symbol').shortcut, 'Ctrl+Shift+O')
     assert.equal(command(linux, 'format-document').shortcut, 'Ctrl+Alt+L')

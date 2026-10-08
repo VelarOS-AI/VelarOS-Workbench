@@ -18,7 +18,7 @@ import {
 import { isEmpty, Log, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type { WorkbenchDirectoryEntry } from '@shared/contracts'
+import { type WorkbenchDirectoryEntry } from '@shared/contracts/workbench'
 
 import type { EditorNavigationRequest } from '../components/editor/CodeInsightPanel'
 import { useStableWorkbenchMessageTranslate } from '../runtime/useStableWorkbenchMessaging'
@@ -499,12 +499,10 @@ export function useWorkbenchController(options: UseWorkbenchControllerOptions = 
     runCommand: commandActions.command.runCommand,
     rerunLastCommand: commandActions.command.rerunLastCommand,
     createTerminalSession: commandActions.terminal.createTerminalSession,
-    splitTerminalSession: commandActions.terminal.splitTerminalSession,
     writeTerminalData: commandActions.terminal.writeTerminalData,
     resizeTerminalSession: commandActions.terminal.resizeTerminalSession,
     stopTerminalSession: commandActions.terminal.stopTerminalSession,
     closeTerminalSessions: commandActions.terminal.closeTerminalSessions,
-    setTerminalPaneWeights: commandActions.terminal.setTerminalPaneWeights,
     setActiveRunSessionId: commandActions.run.setActiveRunSessionId,
     launchRunSession: commandActions.run.launchRunSession,
     stopRunSession: commandActions.run.stopRunSession,

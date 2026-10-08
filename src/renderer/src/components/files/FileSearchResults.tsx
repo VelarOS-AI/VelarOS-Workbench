@@ -14,7 +14,7 @@ import {
   FolderIcon,
   PlayCircleIcon,
 } from '@phosphor-icons/react'
-import { useWorkbenchI18n } from '@renderer/i18n'
+import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 import type { WorkbenchEditorOpenTabIntent } from '@renderer/models/editor/workbenchEditorGroups'
 import { getWorkbenchFilePresentationVariant } from '@renderer/models/files/workbenchFilePresentation'
 import {
@@ -29,7 +29,7 @@ import { StyleUtils } from '@velaros-ai/ui'
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 import { Text } from '@velaros-ai/ui/primitives/display/Text'
 
-import type { WorkbenchContentSearchMatchResult, WorkbenchDirectoryEntry } from '@shared/contracts'
+import { type WorkbenchContentSearchMatchResult, type WorkbenchDirectoryEntry } from '@shared/contracts/workbench'
 
 import styles from '../../styles/workbenchPageStyles'
 import { WorkbenchCodeSnippet } from '../editor/WorkbenchCodeSnippet'

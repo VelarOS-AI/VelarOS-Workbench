@@ -5,13 +5,9 @@
  * 开着的文件以编辑器里的正文为准：main 不读它们，只报它们在不在搜索范围里；这里用同一套匹配规则在正文上搜，
  * 替换也在编辑器里做（能撤销，不和没保存的改动打架）。
  */
-import type { WorkbenchTranslateParams } from '@renderer/i18n'
+import { type WorkbenchTranslateParams } from '@renderer/i18n/WorkbenchLocalizationProvider'
 
-import type {
-  WorkbenchContentSearchFileResult,
-  WorkbenchContentSearchMatchResult,
-  WorkbenchDirectoryEntry,
-} from '@shared/contracts'
+import { type WorkbenchContentSearchFileResult, type WorkbenchContentSearchMatchResult, type WorkbenchDirectoryEntry } from '@shared/contracts/workbench'
 import { compareWorkbenchSearchPaths } from '@shared/workbenchSearchGlob'
 import {
   buildWorkbenchTextSearchPreview,

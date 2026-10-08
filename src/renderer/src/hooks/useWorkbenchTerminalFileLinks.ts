@@ -1,6 +1,6 @@
 import { useCallback, useRef } from 'react'
 
-import { useWorkbenchHostRuntime } from '../host'
+import { useWorkbenchHostRuntime } from '../host/WorkbenchHostProvider'
 import { listWorkbenchTerminalLinkCandidates } from '../models/commands/workbenchTerminalFileLinks'
 
 /**

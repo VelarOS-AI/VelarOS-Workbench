@@ -13,7 +13,7 @@ import { Worker } from 'node:worker_threads'
 
 import { AppError } from '@velaros-ai/core/error'
 
-import type { WorkbenchSearchContentBatch } from '@shared/contracts'
+import { type WorkbenchSearchContentBatch } from '@shared/contracts/workbench'
 
 import { getWorkbenchMainLocale } from '../i18n/workbenchMainLocale'
 import { workbenchMainText } from '../i18n/workbenchMainMessages'

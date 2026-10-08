@@ -1,4 +1,5 @@
-import type { SystemWorkspaceFilesChangedEvent, WorkbenchReadFileResult } from '@shared/contracts'
+import { type SystemWorkspaceFilesChangedEvent } from '@shared/contracts/system'
+import { type WorkbenchReadFileResult } from '@shared/contracts/workbench'
 
 import type {
   WorkbenchOpenEditorExternalChange,

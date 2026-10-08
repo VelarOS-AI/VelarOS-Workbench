@@ -1,4 +1,4 @@
-@reference "../index.css";
+@reference "./index.css";
 
 /*
  * 三条分栏尺寸登记成「不继承」的自定义属性：值写在外壳上，只在真正用到它的那一层显式 inherit

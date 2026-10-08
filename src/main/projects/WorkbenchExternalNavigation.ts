@@ -1,10 +1,13 @@
+import type { BrowserWindowConstructorOptions, WindowOpenHandlerResponse } from 'electron'
+
+import { WorkbenchAgentConsoleFrameName } from '../../shared/workbenchAgentProcesses'
+
 export interface WorkbenchWindowOpenRequest {
   readonly url: string
+  readonly frameName?: string
 }
 
-export interface WorkbenchWindowOpenResponse {
-  readonly action: 'deny'
-}
+export type WorkbenchWindowOpenResponse = WindowOpenHandlerResponse
 
 export type WorkbenchWindowOpenHandler = (
   request: WorkbenchWindowOpenRequest
@@ -43,17 +46,33 @@ export function normalizeWorkbenchExternalUrl(rawUrl: string): string | null {
   }
 }
 
-/**
- * Renderer `window.open` is only a request to launch the system browser. The
- * Electron child-window path is denied for every URL, including malformed or
- * disallowed schemes, after the main process has validated the destination.
- */
+export function isWorkbenchAgentConsoleRequest(request: WorkbenchWindowOpenRequest): boolean {
+  return request.url === 'about:blank' && request.frameName === WorkbenchAgentConsoleFrameName
+}
+
+/** The app may host its named console portal; validated external URLs use the system browser. */
 export function installWorkbenchExternalNavigation(
   setWindowOpenHandler: SetWorkbenchWindowOpenHandler,
   openExternal: OpenWorkbenchExternalUrl,
-  reportFailure: ReportWorkbenchExternalUrlFailure = () => undefined
+  reportFailure: ReportWorkbenchExternalUrlFailure = () => undefined,
+  consoleOptions?: BrowserWindowConstructorOptions
 ): void {
-  setWindowOpenHandler(({ url }) => {
+  setWindowOpenHandler((request) => {
+    if (consoleOptions && isWorkbenchAgentConsoleRequest(request))
+      return {
+        action: 'allow',
+        overrideBrowserWindowOptions: {
+          ...consoleOptions,
+          webPreferences: {
+            preload: '',
+            nodeIntegration: false,
+            contextIsolation: true,
+            sandbox: true,
+            webviewTag: false,
+          },
+        },
+      }
+    const { url } = request
     const externalUrl = normalizeWorkbenchExternalUrl(url)
     if (externalUrl) {
       try {

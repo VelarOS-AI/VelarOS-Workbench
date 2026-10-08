@@ -17,55 +17,13 @@ import { URI } from 'vscode-uri'
 
 import { isNumber,isPresent, optionalWhen, toNullable, toOptional } from '@velaros-ai/core'
 
-import type {
-  WorkbenchLanguageServiceCallHierarchyRequest,
-  WorkbenchLanguageServiceCallHierarchyResult,
-  WorkbenchLanguageServiceCapability,
-  WorkbenchLanguageServiceCodeActionResolveRequest,
-  WorkbenchLanguageServiceCodeActionResolveResult,
-  WorkbenchLanguageServiceCodeActionsRequest,
-  WorkbenchLanguageServiceCodeActionsResult,
-  WorkbenchLanguageServiceCompletionItem,
-  WorkbenchLanguageServiceCompletionResolveRequest,
-  WorkbenchLanguageServiceCompletionResolveResult,
-  WorkbenchLanguageServiceCompletionResult,
-  WorkbenchLanguageServiceDefinitionResult,
-  WorkbenchLanguageServiceDescriptorSnapshot,
-  WorkbenchLanguageServiceDiagnostic,
-  WorkbenchLanguageServiceDiagnosticsResult,
-  WorkbenchLanguageServiceDocumentHighlightsResult,
-  WorkbenchLanguageServiceDocumentSymbol,
-  WorkbenchLanguageServiceDocumentSymbolsResult,
-  WorkbenchLanguageServiceExtensionRequest,
-  WorkbenchLanguageServiceExtensionResult,
-  WorkbenchLanguageServiceFileEdit,
-  WorkbenchLanguageServiceFileRenameEditsRequest,
-  WorkbenchLanguageServiceFileRenameEditsResult,
-  WorkbenchLanguageServiceFormatResult,
-  WorkbenchLanguageServiceHoverResult,
-  WorkbenchLanguageServiceInlayHintsRequest,
-  WorkbenchLanguageServiceInlayHintsResult,
-  WorkbenchLanguageServiceLocation,
-  WorkbenchLanguageServiceOrganizeImportsResult,
-  WorkbenchLanguageServicePosition,
-  WorkbenchLanguageServicePositionRequest,
-  WorkbenchLanguageServiceProjectDiagnosticsRequest,
-  WorkbenchLanguageServiceProjectDiagnosticsResult,
-  WorkbenchLanguageServiceRange,
-  WorkbenchLanguageServiceReferencesResult,
-  WorkbenchLanguageServiceRenameRequest,
-  WorkbenchLanguageServiceRenameResult,
-  WorkbenchLanguageServiceRequest,
-  WorkbenchLanguageServiceResolveResult,
-  WorkbenchLanguageServiceSemanticTokensResult,
-  WorkbenchLanguageServiceSignatureHelpResult,
-} from '@shared/contracts'
+import { type WorkbenchLanguageServiceCallHierarchyRequest, type WorkbenchLanguageServiceCallHierarchyResult, type WorkbenchLanguageServiceCapability, type WorkbenchLanguageServiceCodeActionResolveRequest, type WorkbenchLanguageServiceCodeActionResolveResult, type WorkbenchLanguageServiceCodeActionsRequest, type WorkbenchLanguageServiceCodeActionsResult, type WorkbenchLanguageServiceCompletionItem, type WorkbenchLanguageServiceCompletionResolveRequest, type WorkbenchLanguageServiceCompletionResolveResult, type WorkbenchLanguageServiceCompletionResult, type WorkbenchLanguageServiceDefinitionResult, type WorkbenchLanguageServiceDescriptorSnapshot, type WorkbenchLanguageServiceDiagnostic, type WorkbenchLanguageServiceDiagnosticsResult, type WorkbenchLanguageServiceDocumentHighlightsResult, type WorkbenchLanguageServiceDocumentSymbol, type WorkbenchLanguageServiceDocumentSymbolsResult, type WorkbenchLanguageServiceExtensionRequest, type WorkbenchLanguageServiceExtensionResult, type WorkbenchLanguageServiceFileEdit, type WorkbenchLanguageServiceFileRenameEditsRequest, type WorkbenchLanguageServiceFileRenameEditsResult, type WorkbenchLanguageServiceFormatResult, type WorkbenchLanguageServiceHoverResult, type WorkbenchLanguageServiceInlayHintsRequest, type WorkbenchLanguageServiceInlayHintsResult, type WorkbenchLanguageServiceLocation, type WorkbenchLanguageServiceOrganizeImportsResult, type WorkbenchLanguageServicePosition, type WorkbenchLanguageServicePositionRequest, type WorkbenchLanguageServiceProjectDiagnosticsRequest, type WorkbenchLanguageServiceProjectDiagnosticsResult, type WorkbenchLanguageServiceRange, type WorkbenchLanguageServiceReferencesResult, type WorkbenchLanguageServiceRenameRequest, type WorkbenchLanguageServiceRenameResult, type WorkbenchLanguageServiceRequest, type WorkbenchLanguageServiceResolveResult, type WorkbenchLanguageServiceSemanticTokensResult, type WorkbenchLanguageServiceSignatureHelpResult } from '@shared/contracts/workbench'
 import {
   getWorkbenchPathExtension,
   normalizeWorkbenchLanguage,
   resolveBuiltinWorkbenchLanguageService,
   type WorkbenchLanguageServiceDescriptor,
-} from '@shared/language/workbenchLanguageServices'
+} from '@shared/workbenchLanguageServices'
 
 import {
   type ExternalLspCodeAction,

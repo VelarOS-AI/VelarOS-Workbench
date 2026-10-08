@@ -5,17 +5,16 @@ import path, { join } from 'node:path'
 
 import { describe, test } from 'bun:test'
 
-import type { WorkbenchI18nContextValue } from '../src/renderer/src/i18n'
+import { type AppLocale } from '@velaros-ai/ui/conversation/contracts'
+
 import { translateWorkbenchAppMessage } from '../src/renderer/src/i18n/useStandaloneWorkbenchLocalization'
+import { type WorkbenchI18nContextValue } from '../src/renderer/src/i18n/WorkbenchLocalizationProvider'
 import {
   buildWorkbenchGitTopBarSummary,
   describeWorkbenchGitHead,
   resolveWorkbenchCanShowGitBranchControl,
 } from '../src/renderer/src/models/git/workbenchGitTopBarModel'
-import type {
-  AppLocale,
-  SystemWorkspaceGitLineStatsSnapshot,
-} from '../src/shared/contracts'
+import { type SystemWorkspaceGitLineStatsSnapshot } from '../src/shared/contracts/system'
 
 import {
   commitAll,

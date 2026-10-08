@@ -1,40 +1,7 @@
 import type { SerializedError } from '@velaros-ai/core/error'
+import { type AppLocale } from '@velaros-ai/ui/conversation/contracts'
 
-import type { AppLocale } from '@shared/contracts'
-import type {
-  WorkbenchLanguageServiceCallHierarchyRequest,
-  WorkbenchLanguageServiceCallHierarchyResult,
-  WorkbenchLanguageServiceCodeActionResolveRequest,
-  WorkbenchLanguageServiceCodeActionResolveResult,
-  WorkbenchLanguageServiceCodeActionsRequest,
-  WorkbenchLanguageServiceCodeActionsResult,
-  WorkbenchLanguageServiceCompletionResolveRequest,
-  WorkbenchLanguageServiceCompletionResolveResult,
-  WorkbenchLanguageServiceCompletionResult,
-  WorkbenchLanguageServiceDefinitionResult,
-  WorkbenchLanguageServiceDiagnosticsResult,
-  WorkbenchLanguageServiceDocumentHighlightsResult,
-  WorkbenchLanguageServiceDocumentSymbolsResult,
-  WorkbenchLanguageServiceExtensionRequest,
-  WorkbenchLanguageServiceExtensionResult,
-  WorkbenchLanguageServiceFileRenameEditsRequest,
-  WorkbenchLanguageServiceFileRenameEditsResult,
-  WorkbenchLanguageServiceFormatResult,
-  WorkbenchLanguageServiceHoverQueryResult,
-  WorkbenchLanguageServiceInlayHintsRequest,
-  WorkbenchLanguageServiceInlayHintsResult,
-  WorkbenchLanguageServiceOrganizeImportsResult,
-  WorkbenchLanguageServicePositionRequest,
-  WorkbenchLanguageServiceProjectDiagnosticsRequest,
-  WorkbenchLanguageServiceProjectDiagnosticsResult,
-  WorkbenchLanguageServiceReferencesResult,
-  WorkbenchLanguageServiceRenameRequest,
-  WorkbenchLanguageServiceRenameResult,
-  WorkbenchLanguageServiceRequest,
-  WorkbenchLanguageServiceResolveResult,
-  WorkbenchLanguageServiceSemanticTokensResult,
-  WorkbenchLanguageServiceSignatureHelpQueryResult,
-} from '@shared/contracts'
+import { type WorkbenchLanguageServiceCallHierarchyRequest, type WorkbenchLanguageServiceCallHierarchyResult, type WorkbenchLanguageServiceCodeActionResolveRequest, type WorkbenchLanguageServiceCodeActionResolveResult, type WorkbenchLanguageServiceCodeActionsRequest, type WorkbenchLanguageServiceCodeActionsResult, type WorkbenchLanguageServiceCompletionResolveRequest, type WorkbenchLanguageServiceCompletionResolveResult, type WorkbenchLanguageServiceCompletionResult, type WorkbenchLanguageServiceDefinitionResult, type WorkbenchLanguageServiceDiagnosticsResult, type WorkbenchLanguageServiceDocumentHighlightsResult, type WorkbenchLanguageServiceDocumentSymbolsResult, type WorkbenchLanguageServiceExtensionRequest, type WorkbenchLanguageServiceExtensionResult, type WorkbenchLanguageServiceFileRenameEditsRequest, type WorkbenchLanguageServiceFileRenameEditsResult, type WorkbenchLanguageServiceFormatResult, type WorkbenchLanguageServiceHoverQueryResult, type WorkbenchLanguageServiceInlayHintsRequest, type WorkbenchLanguageServiceInlayHintsResult, type WorkbenchLanguageServiceOrganizeImportsResult, type WorkbenchLanguageServicePositionRequest, type WorkbenchLanguageServiceProjectDiagnosticsRequest, type WorkbenchLanguageServiceProjectDiagnosticsResult, type WorkbenchLanguageServiceReferencesResult, type WorkbenchLanguageServiceRenameRequest, type WorkbenchLanguageServiceRenameResult, type WorkbenchLanguageServiceRequest, type WorkbenchLanguageServiceResolveResult, type WorkbenchLanguageServiceSemanticTokensResult, type WorkbenchLanguageServiceSignatureHelpQueryResult } from '@shared/contracts/workbench'
 
 export interface WorkbenchLanguageServiceProjectRequest {
   projectRoot: string

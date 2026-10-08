@@ -1,15 +1,10 @@
 import { createContext, type ReactNode, useContext } from 'react'
 
 import type { Result } from '@velaros-ai/core/result'
+import { type AgentProviderRuntimeConfig } from '@velaros-ai/model'
 
-import type {
-  AgentProviderRuntimeConfig,
-  AuxiliaryModelConfig,
-  AuxiliaryModelConfigs,
-  AuxiliaryModelTaskId,
-  SystemDefaultEditorId,
-  SystemGitConfig,
-} from '@shared/contracts'
+import { type AuxiliaryModelConfig, type AuxiliaryModelConfigs, type AuxiliaryModelTaskId } from '@shared/contracts/product'
+import { type SystemDefaultEditorId, type SystemGitConfig } from '@shared/contracts/system'
 
 export interface WorkbenchModelConfigurationPort {
   auxiliaryModels: AuxiliaryModelConfigs
@@ -38,6 +33,7 @@ export interface WorkbenchProductRuntimeValue {
       toolWindowPanel: string
       workbenchChatBody: string
       workbenchChatIconButton: string
+      workbenchChatLeading: string
       workbenchChatLoading: string
       workbenchChatPanel: string
       workbenchChatSessionCurrentTitle: string

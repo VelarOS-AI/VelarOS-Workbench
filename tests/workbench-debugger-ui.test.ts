@@ -26,8 +26,8 @@ import { shareHostReactWithLinkedUi } from './helpers/linkedUiReact'
 
 shareHostReactWithLinkedUi()
 
-const { WorkbenchLocalizationProvider } = await import('../src/renderer/src/i18n')
-const { WorkbenchDebugPanel } = await import('../src/renderer/src/components/debug/WorkbenchDebugPanel')
+const { WorkbenchLocalizationProvider } = await import('../src/renderer/src/i18n/WorkbenchLocalizationProvider')
+const { WorkbenchDebugPanel } = await import('../src/renderer/src/components/WorkbenchDebugPanel')
 
 const Mac = 'MacIntel'
 
@@ -313,7 +313,7 @@ void describe('wiring of the debugger into the workspace', () => {
       'src/renderer/src/models/layout/workbenchCommandPalette.ts',
       'src/renderer/src/components/chrome/TopToolbar.tsx',
       'src/renderer/src/components/terminal/CommandPanel.tsx',
-      'src/renderer/src/StandaloneWorkbenchPagePresentation.tsx',
+      'src/renderer/src/app/StandaloneWorkbenchPagePresentation.tsx',
     ])
       assert.doesNotMatch(
         readSource(shellModule),
@@ -326,8 +326,8 @@ void describe('wiring of the debugger into the workspace', () => {
       /const \{ startWorkbenchDebugSession \} = await import\('\.\/workbenchDebugSession'\)/u
     )
     assert.match(
-      readSource('src/renderer/src/StandaloneWorkbenchPagePresentation.tsx'),
-      /const LazyWorkbenchDebugPanel = lazyWithPreload\(\s+async \(\) => \(await import\('\.\/components\/debug\/WorkbenchDebugPanel'\)\)\.WorkbenchDebugPanel/u
+      readSource('src/renderer/src/app/StandaloneWorkbenchPagePresentation.tsx'),
+      /const LazyWorkbenchDebugPanel = lazyWithPreload\(\s+async \(\) => \(await import\('\.\.\/components\/WorkbenchDebugPanel'\)\)\.WorkbenchDebugPanel/u
     )
   })
 

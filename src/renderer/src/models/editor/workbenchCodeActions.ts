@@ -5,15 +5,7 @@
 import { forEachDiagnostic } from '@codemirror/lint'
 import type { EditorState } from '@codemirror/state'
 
-import type {
-  WorkbenchLanguageServiceCodeAction,
-  WorkbenchLanguageServiceCodeActionCategory,
-  WorkbenchLanguageServiceDiagnostic,
-  WorkbenchLanguageServiceFileEdit,
-  WorkbenchLanguageServiceNewFile,
-  WorkbenchLanguageServiceRange,
-  WorkbenchLanguageServiceTextEdit,
-} from '@shared/contracts'
+import { type WorkbenchLanguageServiceCodeAction, type WorkbenchLanguageServiceCodeActionCategory, type WorkbenchLanguageServiceDiagnostic, type WorkbenchLanguageServiceFileEdit, type WorkbenchLanguageServiceNewFile, type WorkbenchLanguageServiceRange, type WorkbenchLanguageServiceTextEdit } from '@shared/contracts/workbench'
 
 import type { WorkbenchCodeMirrorDiagnostic } from './workbenchCodeMirrorDiagnostics'
 import { resolveWorkbenchBuiltinLanguageServiceRuntime } from './workbenchCodeMirrorLanguageService'

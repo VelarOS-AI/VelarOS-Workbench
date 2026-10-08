@@ -1,9 +1,9 @@
 import { type Extension, StateEffect } from '@codemirror/state'
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate } from '@codemirror/view'
 
-import type { WorkbenchLanguageServiceSemanticToken } from '@shared/contracts'
+import { type WorkbenchLanguageServiceSemanticToken } from '@shared/contracts/workbench'
 
-import type { WorkbenchThemeId } from '../settings/workbenchPreferences'
+import type { WorkbenchThemeId } from '../workbenchPreferences'
 
 import { languageServiceRangeToOffsets } from './workbenchCodeMirrorLanguageService'
 import { getWorkbenchCodeTokenPalette } from './workbenchCodeMirrorTheme'

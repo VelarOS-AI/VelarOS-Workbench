@@ -20,7 +20,7 @@ import { isFunction, isRecord, isString, Log, toNullable } from '@velaros-ai/cor
 import {
   createLocalStorageJsonStore,
   type StorageLike,
-} from '../../persistence/localStorageJsonStore'
+} from '../../support/localStorageJsonStore'
 
 import {
   currentWorkbenchPlatform,

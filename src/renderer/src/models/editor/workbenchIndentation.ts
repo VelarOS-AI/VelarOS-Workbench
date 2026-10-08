@@ -1,6 +1,6 @@
 import type { ChangeSpec, EditorState } from '@codemirror/state'
 
-import type { WorkbenchLanguageServiceEditFormat } from '@shared/contracts'
+import { type WorkbenchLanguageServiceEditFormat } from '@shared/contracts/workbench'
 import {
   DefaultWorkbenchTabSize as DefaultTabSize,
   type WorkbenchDetectedIndentation,

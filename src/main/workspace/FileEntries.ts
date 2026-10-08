@@ -8,7 +8,7 @@
 import { lstat, opendir, realpath, stat } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
 
-import type { WorkbenchDirectoryEntry } from '@shared/contracts'
+import { type WorkbenchDirectoryEntry } from '@shared/contracts/workbench'
 
 import type { PathResolver } from './PathResolver'
 import { shouldSkipProjectDirectory } from './WorkbenchSkippedDirectories'

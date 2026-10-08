@@ -1,15 +1,7 @@
-import type {
-  SystemWorkspaceGitOperationResult,
-  WorkspaceGitBranch,
-  WorkspaceGitLogEntry,
-  WorkspaceGitOperationAction,
-  WorkspaceGitOperationKind,
-  WorkspaceGitOperationRequest,
-  WorkspaceGitOperationState,
-  WorkspaceGitRef,
-} from '@shared/contracts'
+import { type SystemWorkspaceGitOperationResult, type WorkspaceGitBranch, type WorkspaceGitLogEntry } from '@shared/contracts/system'
+import { type WorkspaceGitOperationAction, type WorkspaceGitOperationKind, type WorkspaceGitOperationRequest, type WorkspaceGitOperationState, type WorkspaceGitRef } from '@shared/contracts/workspaceGit'
 
-import type { WorkbenchI18nContextValue } from '../../i18n'
+import { type WorkbenchI18nContextValue } from '../../i18n/WorkbenchLocalizationProvider'
 
 type Translate = WorkbenchI18nContextValue['t']
 

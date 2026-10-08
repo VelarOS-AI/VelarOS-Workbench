@@ -11,7 +11,7 @@ import { describe, test } from 'bun:test'
 
 import { WorkbenchFileWatcher } from '../src/main/workspace/watch/WorkbenchFileWatcher'
 import { isSameOrChildPath } from '../src/renderer/src/models/shared/workbenchUtils'
-import type { SystemWorkspaceFilesChangedEvent } from '../src/shared/contracts'
+import { type SystemWorkspaceFilesChangedEvent } from '../src/shared/contracts/system'
 import type { WorkbenchWatchStatus } from '../src/shared/workbenchWatch'
 
 /**

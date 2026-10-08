@@ -18,7 +18,7 @@ import {
   useRef,
   useState,
 } from 'react'
-import { useWorkbenchI18n } from '@renderer/i18n'
+import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 import {
   workbenchEditorFileStateKey,
   WorkbenchEditorFileStates,
@@ -35,9 +35,9 @@ import {
 } from '@renderer/models/editor/workbenchEditorTabDrag'
 import type { WorkbenchIndentationRequest } from '@renderer/models/editor/workbenchIndentation'
 import type { WorkbenchGitDecorationMap } from '@renderer/models/git/workbenchGitModel'
-import type { WorkbenchThemeId } from '@renderer/models/settings/workbenchPreferences'
+import type { WorkbenchThemeId } from '@renderer/models/workbenchPreferences'
 
-import type { WorkbenchLanguageServiceDiagnostic } from '@shared/contracts'
+import { type WorkbenchLanguageServiceDiagnostic } from '@shared/contracts/workbench'
 
 import styles from '../../styles/workbenchPageStyles'
 import { useLatest } from '../../support/genericHooks'

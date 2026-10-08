@@ -1,8 +1,8 @@
 import { optionalWhen, toOptional } from '@velaros-ai/core'
 import { type ConversationView, getThinkingStageLabel } from '@velaros-ai/ui/conversation'
-import { isConversationTurnInputMessage } from '@velaros-ai/ui/conversation/contracts'
+import { isConversationTurnInputMessage, isRunGuidanceMessage } from '@velaros-ai/ui/conversation/contracts'
+import { type ChatMessage } from '@velaros-ai/ui/conversation/contracts'
 
-import type { ChatMessage } from '@shared/contracts'
 import type { WorkbenchConversationState } from '@shared/workbenchConversation'
 import type { WorkbenchChatRunChangesSummary } from '@shared/workbenchGit'
 
@@ -296,7 +296,7 @@ function markStandaloneGuidanceApplied(
   messages: readonly ChatMessage[],
   inputId: string
 ): readonly ChatMessage[] {
-  const index = messages.findIndex((message) => message.id === inputId)
+  const index = messages.findIndex((message) => message.id === inputId && isRunGuidanceMessage(message))
   if (index < 0 || messages[index]!.guidanceStatus === 'applied') return messages
   return messages.map((message, position) =>
     position === index ? { ...message, guidanceStatus: 'applied' } : message
@@ -580,12 +580,13 @@ function readNonBlankString(value: unknown): string | null {
 }
 
 /**
- * main 每次模型请求算出的上下文用量。只留仪表要用的三格。
+ * 主进程回报的上下文用量，以及当前容量是否仍为试探预算。
  */
 interface StandaloneContextUsageEstimate {
   readonly percent: number
   readonly estimatedTokens: number
   readonly usableContextWindow: number
+  readonly contextWindowEstimated?: boolean
 }
 
 /** 从 `context-usage-estimate` 运行状态里收一份用量；形状不全一律当没有。 */
@@ -606,7 +607,10 @@ function readStandaloneContextUsageEstimate(
     usableContextWindow <= 0
   )
     return null
-  return { percent, estimatedTokens, usableContextWindow }
+  return {
+    percent, estimatedTokens, usableContextWindow,
+    contextWindowEstimated: payload.contextWindowEstimated === true,
+  }
 }
 
 function asRecord(value: unknown): Record<string, unknown> {

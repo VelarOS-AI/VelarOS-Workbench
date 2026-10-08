@@ -1,6 +1,6 @@
 import { lazy, type ReactElement, type RefObject, Suspense, useRef, useState } from 'react'
 import type { EditorView } from '@codemirror/view'
-import type { WorkbenchHostRuntime } from '@renderer/host'
+import { type WorkbenchHostRuntime } from '@renderer/host/WorkbenchHost'
 import {
   createWorkbenchCallHierarchy,
   failWorkbenchCallHierarchyNode,
@@ -33,10 +33,7 @@ import type { WorkbenchOpenEditorTab } from '@renderer/types/workbenchTypes'
 import { isEmpty } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type {
-  WorkbenchLanguageServiceCallHierarchyDirection,
-  WorkbenchLanguageServiceCallHierarchyResult,
-} from '@shared/contracts'
+import { type WorkbenchLanguageServiceCallHierarchyDirection, type WorkbenchLanguageServiceCallHierarchyResult } from '@shared/contracts/workbench'
 
 import { useLatest, useMemoizedFn } from '../../support/genericHooks'
 

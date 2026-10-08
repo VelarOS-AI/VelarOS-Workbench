@@ -9,7 +9,7 @@ import {
   mergeWorkbenchProjectSearchFiles,
   searchWorkbenchEditorText,
 } from '../src/renderer/src/models/files/workbenchProjectSearchModel'
-import type { WorkbenchContentSearchFileResult, WorkbenchDirectoryEntry } from '../src/shared/contracts'
+import { type WorkbenchContentSearchFileResult, type WorkbenchDirectoryEntry } from '../src/shared/contracts/workbench'
 import { compileWorkbenchTextSearch, DefaultWorkbenchTextSearchOptions } from '../src/shared/workbenchTextSearch'
 
 /**

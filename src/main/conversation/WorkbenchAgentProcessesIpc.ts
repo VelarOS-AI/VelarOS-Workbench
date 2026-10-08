@@ -23,7 +23,9 @@ const Task = Session.extend({ taskId: z.string().min(1).max(512) })
 export function registerWorkbenchAgentProcessesIpc(options: {
   shells: WorkbenchShellHostRegistryApi
   windows: WorkbenchConversationWindows
+  focusConsole: (ownerId: number) => boolean
 }): () => void {
+  ipcMain.handle(Channels.focusConsole, (event) => options.focusConsole(event.sender.id))
   const ownedRoot = async (event: IpcMainInvokeEvent, root: string): Promise<string> => {
     const project = options.windows.getHubForWebContents(event.sender)?.getState().currentProject
     if (!project || resolve(project.path) !== resolve(root))
@@ -85,7 +87,7 @@ export function registerWorkbenchAgentProcessesIpc(options: {
   })
   return () => {
     off()
-    for (const channel of [Channels.list, Channels.stop, Channels.input, Channels.interrupt])
+    for (const channel of [Channels.focusConsole, Channels.list, Channels.stop, Channels.input, Channels.interrupt])
       ipcMain.removeHandler(channel)
   }
 }

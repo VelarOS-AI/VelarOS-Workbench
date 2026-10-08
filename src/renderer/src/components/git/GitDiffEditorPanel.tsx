@@ -1,6 +1,6 @@
 import { type ReactElement, useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeftIcon, ArrowRightIcon } from '@phosphor-icons/react'
-import { workbenchHost } from '@renderer/host'
+import { workbenchHost } from '@renderer/host/WorkbenchHost'
 import { workbenchGitDiffScopeLabel } from '@renderer/models/git/changesPanel.model'
 import {
   buildWorkbenchContentDiffRows,
@@ -11,7 +11,7 @@ import {
   getWorkbenchGitChangeDisplayPath,
   type WorkbenchGitChangeItem,
 } from '@renderer/models/git/workbenchGitModel'
-import type { WorkbenchThemeId } from '@renderer/models/settings/workbenchPreferences'
+import type { WorkbenchThemeId } from '@renderer/models/workbenchPreferences'
 import { useStableWorkbenchMessageTranslate } from '@renderer/runtime/useStableWorkbenchMessaging'
 
 import { AppError, isEmpty } from '@velaros-ai/core'
@@ -29,7 +29,7 @@ import {
   DialogTitle,
 } from '@velaros-ai/ui/primitives/overlays/Dialog'
 
-import type { WorkspaceGitHunkAction } from '@shared/contracts'
+import { type WorkspaceGitHunkAction } from '@shared/contracts/workspaceGit'
 import {
   isWorkbenchGitWholeFilePatch,
   parseWorkbenchGitFilePatches,

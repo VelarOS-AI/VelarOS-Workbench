@@ -9,7 +9,7 @@ import {
   refreshWorkbenchCodeMirrorMetrics,
 } from '@renderer/models/editor/workbenchCodeMirrorMetrics'
 import { getWorkbenchCodeMirrorTheme } from '@renderer/models/editor/workbenchCodeMirrorTheme'
-import type { WorkbenchThemeId } from '@renderer/models/settings/workbenchPreferences'
+import type { WorkbenchThemeId } from '@renderer/models/workbenchPreferences'
 
 import styles from '../../styles/workbenchPageStyles'
 

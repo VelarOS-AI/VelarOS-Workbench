@@ -1,6 +1,6 @@
 import { AppError } from '@velaros-ai/core/error'
 
-import type { WorkbenchDeleteEntryResult, WorkbenchDirectoryEntry } from '@shared/contracts'
+import { type WorkbenchDeleteEntryResult, type WorkbenchDirectoryEntry } from '@shared/contracts/workbench'
 
 import {
   getParentPath,

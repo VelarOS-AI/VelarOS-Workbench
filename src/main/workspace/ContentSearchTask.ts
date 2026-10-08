@@ -18,13 +18,9 @@ import { lstat, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import { AppError } from '@velaros-ai/core/error'
+import { type AppLocale } from '@velaros-ai/ui/conversation/contracts'
 
-import type {
-  AppLocale,
-  WorkbenchContentSearchFileResult,
-  WorkbenchContentSearchMatchResult,
-  WorkbenchSearchContentBatch,
-} from '@shared/contracts'
+import { type WorkbenchContentSearchFileResult, type WorkbenchContentSearchMatchResult, type WorkbenchSearchContentBatch } from '@shared/contracts/workbench'
 import {
   buildWorkbenchTextSearchPreview,
   compileWorkbenchTextSearch,

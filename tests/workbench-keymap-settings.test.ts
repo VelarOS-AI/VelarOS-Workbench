@@ -10,16 +10,17 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, test } from 'bun:test'
 
+import { type AppLocale } from '@velaros-ai/ui/conversation/contracts'
+
 import type { WorkbenchKeyboardShortcutOverrides } from '../src/renderer/src/models/layout/workbenchKeyboardShortcuts'
 import type { WorkbenchKeymapPresetId } from '../src/renderer/src/models/layout/workbenchKeymapPresets'
-import type { AppLocale } from '../src/shared/contracts'
 
 import { shareHostReactWithLinkedUi } from './helpers/linkedUiReact'
 
 shareHostReactWithLinkedUi()
 
 // 会加载共享包的模块都放在上面那一步之后再加载（静态 import 在任何代码执行之前就解析完了）。
-const { WorkbenchLocalizationProvider } = await import('../src/renderer/src/i18n')
+const { WorkbenchLocalizationProvider } = await import('../src/renderer/src/i18n/WorkbenchLocalizationProvider')
 const { translateWorkbenchAppMessage } = await import(
   '../src/renderer/src/i18n/useStandaloneWorkbenchLocalization'
 )

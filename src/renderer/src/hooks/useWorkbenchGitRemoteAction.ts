@@ -1,5 +1,5 @@
 import { useCallback, useSyncExternalStore } from 'react'
-import { workbenchHost } from '@renderer/host'
+import { workbenchHost } from '@renderer/host/WorkbenchHost'
 import {
   beginWorkbenchGitRemoteOperation,
   endWorkbenchGitRemoteOperation,
@@ -13,14 +13,9 @@ import { optionalWhenLazy } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { Result } from '@velaros-ai/core/result'
 
-import type {
-  SystemWorkspaceGitActionRequest,
-  SystemWorkspaceGitActionResult,
-  WorkspaceGitRemoteAction,
-  WorkspaceGitRemoteActionResult,
-} from '@shared/contracts'
+import { type SystemWorkspaceGitActionRequest, type SystemWorkspaceGitActionResult, type WorkspaceGitRemoteAction, type WorkspaceGitRemoteActionResult } from '@shared/contracts/system'
 
-import type { WorkbenchI18nContextValue } from '../i18n'
+import { type WorkbenchI18nContextValue } from '../i18n/WorkbenchLocalizationProvider'
 import type { useStableWorkbenchMessageTranslate } from '../runtime/useStableWorkbenchMessaging'
 
 type WorkbenchGitRemoteActionOptions = Pick<

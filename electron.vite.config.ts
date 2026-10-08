@@ -1,18 +1,18 @@
 import { createHash } from 'node:crypto'
-import { dirname, resolve, sep } from 'node:path'
+import { dirname, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'electron-vite'
 
-import { isolateLinkedPackageWatcher, linkedPackageWatchIgnore } from './build-config/linkedPackageWatchPolicy'
+import { isolateLinkedPackageWatcher, linkedPackageWatchIgnore } from './scripts/linkedPackageWatchPolicy'
 import mainExternalEsmPlatformPackages from './scripts/release/mainExternalEsmPlatformPackages.json'
 
 /**
  * VelarOS Workbench 单体仓库的 electron-vite 构建入口。
  *
- * 全部产品源码直接归根 src；跨仓 Platform 依赖只经 GitHub Packages 的正式包入口解析。
+ * 产品源码归根 src；Platform 与 UI 经包的公开入口解析，开发期使用已构建的本地链接。
  */
 const repoRoot = dirname(fileURLToPath(import.meta.url))
 const linkedPackageIgnore = linkedPackageWatchIgnore(repoRoot)
@@ -20,7 +20,7 @@ const workbenchRendererRoot = resolve(repoRoot, 'src/renderer/src')
 const sharedWorkbenchStyleRoot = resolve(workbenchRendererRoot, 'styles')
 const standaloneWorkbenchChatStyle = resolve(
   workbenchRendererRoot,
-  'host/standaloneWorkbenchChat.module.css'
+  'styles/standaloneWorkbenchChat.module.css'
 )
 
 function source(...segments: string[]): string {
@@ -30,12 +30,13 @@ function source(...segments: string[]): string {
 function workbenchCssModuleName(name: string, filename: string): string {
   const normalizedFilename = resolve(filename.split('?')[0] ?? filename)
   if (
-    normalizedFilename.startsWith(`${sharedWorkbenchStyleRoot}${sep}`)
+    /^(?:0[1-9]|1[0-5])-[\w-]+\.module\.css$/u.test(
+      relative(sharedWorkbenchStyleRoot, normalizedFilename)
+    )
     || normalizedFilename === standaloneWorkbenchChatStyle
   ) return `wb_${name}`
 
-  // Workbench 的拆段样式有意共享 local class；npm UI 包必须按文件隔离，否则几十个
-  // `.root` / `.icon` 会被压成同一条 `.wb_root` / `.wb_icon` 并污染整个 IDE。
+  // 编号样式段和聊天壳共享类名；其余组件与 UI 包按文件隔离，避免 root/icon 等常见名称冲突。
   const fileHash = createHash('sha256')
     .update(normalizedFilename)
     .digest('hex')

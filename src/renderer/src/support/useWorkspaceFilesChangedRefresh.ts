@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 
 import { AppError } from '@velaros-ai/core/error'
 
-import type { SystemWorkspaceFilesChangedEvent } from '@shared/contracts'
+import { type SystemWorkspaceFilesChangedEvent } from '@shared/contracts/system'
 import type { WorkbenchWatchStatus } from '@shared/workbenchWatch'
 
 import { useMemoizedFn } from './genericHooks'

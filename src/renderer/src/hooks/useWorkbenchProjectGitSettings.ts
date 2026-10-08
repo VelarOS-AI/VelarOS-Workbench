@@ -5,7 +5,7 @@ import {
   saveWorkbenchProjectGitSettings,
   WORKBENCH_PROJECT_GIT_SETTINGS_CHANGED_EVENT,
   type WorkbenchProjectGitSettings,
-} from '../models/settings/workbenchPreferences'
+} from '../models/workbenchPreferences'
 
 export interface WorkbenchProjectGitSettingsController {
   settings: WorkbenchProjectGitSettings

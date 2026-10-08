@@ -1,5 +1,5 @@
 import { type ReactElement } from 'react'
-import { useWorkbenchI18n } from '@renderer/i18n'
+import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 
 import type { VelarLogicGraphSnapshot } from '@shared/contributions/velar/logicGraph'
 

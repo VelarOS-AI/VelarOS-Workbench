@@ -1,5 +1,5 @@
 /** 最近项目「最后打开时间」的展示文案：一分钟内是 `justNow`，一周内是相对时间（昨天、3 小时前……），再早是日期。 */
-import type { AppLocale } from '@shared/contracts'
+import { type AppLocale } from '@velaros-ai/ui/conversation/contracts'
 
 const MinuteMs = 60_000
 const HourMs = 3_600_000

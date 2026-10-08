@@ -8,10 +8,7 @@ import {
   buildWorkbenchQuickOpenSymbolItems,
   findWorkbenchSymbolIndexAtPosition,
 } from '../src/renderer/src/models/layout/workbenchQuickOpenSymbols'
-import type {
-  WorkbenchLanguageServiceDocumentSymbol,
-  WorkbenchLanguageServiceDocumentSymbolKind,
-} from '../src/shared/contracts'
+import { type WorkbenchLanguageServiceDocumentSymbol, type WorkbenchLanguageServiceDocumentSymbolKind } from '../src/shared/contracts/workbench'
 
 function symbol(
   name: string,

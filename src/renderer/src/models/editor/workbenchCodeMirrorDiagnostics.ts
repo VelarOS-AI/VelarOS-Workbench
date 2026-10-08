@@ -8,7 +8,7 @@ import {
   type ViewUpdate,
 } from '@codemirror/view'
 
-import type { WorkbenchLanguageServiceDiagnostic } from '@shared/contracts'
+import { type WorkbenchLanguageServiceDiagnostic } from '@shared/contracts/workbench'
 
 import { diagnosticToCodeMirrorLintRange } from './workbenchCodeMirrorLanguageService'
 

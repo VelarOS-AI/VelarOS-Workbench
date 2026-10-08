@@ -1,6 +1,6 @@
 import { type ReactElement, useState } from 'react'
 import { WarningCircleIcon } from '@phosphor-icons/react'
-import { useWorkbenchI18n } from '@renderer/i18n'
+import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 import { resolveWorkbenchTextFormatNotice } from '@renderer/models/editor/workbenchEditorTextFormat'
 import type { WorkbenchOpenEditorTab } from '@renderer/types/workbenchTypes'
 

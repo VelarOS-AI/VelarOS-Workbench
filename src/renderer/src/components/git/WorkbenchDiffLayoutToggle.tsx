@@ -1,8 +1,8 @@
 import { type ReactElement } from 'react'
 import { SquareSplitHorizontalIcon } from '@phosphor-icons/react'
 import { useWorkbenchDiffLayout } from '@renderer/hooks/useWorkbenchPreferences'
-import { useWorkbenchI18n } from '@renderer/i18n'
-import { saveWorkbenchDiffLayout } from '@renderer/models/settings/workbenchPreferences'
+import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
+import { saveWorkbenchDiffLayout } from '@renderer/models/workbenchPreferences'
 
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 

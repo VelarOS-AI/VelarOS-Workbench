@@ -5,7 +5,7 @@ import {
   ArrowRightIcon,
   ArrowSquareOutIcon,
 } from '@phosphor-icons/react'
-import { useWorkbenchI18n } from '@renderer/i18n'
+import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 import { Input } from '@velaros-ai/ui/primitives/forms/Input'

@@ -8,7 +8,7 @@ import {
   useState,
 } from 'react'
 import { MagnifyingGlassIcon, SpinnerGapIcon } from '@phosphor-icons/react'
-import { useWorkbenchI18n } from '@renderer/i18n'
+import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 
 import { isPresent, optionalWhen } from '@velaros-ai/core'
 import {
@@ -27,7 +27,7 @@ import type {
 
 import { useWorkbenchRunChangeRecord } from '../workbenchRunChangeRecords'
 
-import styles from './WorkbenchRunChangesCard.module.css'
+import styles from '../../styles/WorkbenchRunChangesCard.module.css'
 
 /** 当前会话里「消息 id → 这一轮的改动摘要」，由会话面挂在共享会话 UI 外层。 */
 export interface WorkbenchRunChangesScope {

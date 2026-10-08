@@ -21,8 +21,8 @@ void describe('pre-split Workbench shell parity', () => {
   })
 
   void test('lets the IDE surface fill the window without a duplicate project header', () => {
-    const shell = readSource('src/renderer/src/workspace/WorkbenchWorkspaceShell.tsx')
-    const styles = readSource('src/renderer/src/workspace/workspaceShell.css')
+    const shell = readSource('src/renderer/src/app/WorkbenchWorkspaceShell.tsx')
+    const styles = readSource('src/renderer/src/styles/workspaceShell.css')
 
     assert.doesNotMatch(shell, /workbench-workspace-shell__top-bar/)
     assert.doesNotMatch(shell, />关闭项目</)
@@ -61,7 +61,7 @@ void describe('pre-split Workbench shell parity', () => {
   })
 
   void test('places the project and one Git control together in the title row', () => {
-    const presentation = readSource('src/renderer/src/StandaloneWorkbenchPagePresentation.tsx')
+    const presentation = readSource('src/renderer/src/app/StandaloneWorkbenchPagePresentation.tsx')
     const toolbar = readSource('src/renderer/src/components/chrome/TopToolbar.tsx')
     const adapter = readSource(
       'src/renderer/src/components/embedded/workbenchEmbeddedKernelAdapter.ts'
@@ -107,10 +107,10 @@ void describe('pre-split Workbench shell parity', () => {
       /gitBranchControlName[\s\S]*gitBranchControlCounts[\s\S]*↓\{behind\}[\s\S]*↑\{ahead\}/
     )
     assert.doesNotMatch(control, /<FolderIcon/)
-    // 面板从上到下：远端操作（跑着时换成进度和取消）、搜索、分支列表、新建分支。
+    // 搜索右侧获取远端，下方是进度、分支列表和新建分支。
     assert.match(
       menu,
-      /gitBranchMenuRemote[\s\S]*gitBranchMenuSearch[\s\S]*<SearchField[\s\S]*gitBranchMenuList[\s\S]*gitBranchMenuFooter[\s\S]*onOpenCreateBranch/
+      /gitBranchMenuSearch[\s\S]*<SearchField[\s\S]*gitBranchMenuActions[\s\S]*gitBranchMenuRemote[\s\S]*gitBranchMenuList[\s\S]*gitBranchMenuFooter[\s\S]*onOpenCreateBranch/
     )
     assert.match(menu, /running \? \([\s\S]*gitBranchMenuRunning[\s\S]*onCancelRemoteAction/)
     assert.match(
@@ -144,7 +144,7 @@ void describe('pre-split Workbench shell parity', () => {
 
   void test('extends macOS content into the title bar and lets the folder button toggle files', () => {
     const main = readSource('src/main/index.ts')
-    const presentation = readSource('src/renderer/src/StandaloneWorkbenchPagePresentation.tsx')
+    const presentation = readSource('src/renderer/src/app/StandaloneWorkbenchPagePresentation.tsx')
     const surface = readSource('src/renderer/src/hooks/useWorkbenchSurfaceState.ts')
 
     assert.match(main, /titleBarStyle:\s*process\.platform === 'darwin' \? 'hiddenInset'/)
@@ -154,7 +154,7 @@ void describe('pre-split Workbench shell parity', () => {
   })
 
   void test('gives the built-in Velar structure its own read-only tree view', () => {
-    const presentation = readSource('src/renderer/src/StandaloneWorkbenchPagePresentation.tsx')
+    const presentation = readSource('src/renderer/src/app/StandaloneWorkbenchPagePresentation.tsx')
     const model = readSource('src/renderer/src/hooks/useStandaloneWorkbenchPageModel.tsx')
     const velarGraph = readSource(
       'src/renderer/src/components/codeGraph/WorkbenchLogicGraphDialog.tsx'
@@ -177,7 +177,7 @@ void describe('pre-split Workbench shell parity', () => {
     )
     assert.match(
       presentation,
-      /const LazyWorkbenchLogicGraphEditor = lazy\(async \(\) => \{\n\s*const module = await import\('\.\/components\/codeGraph\/WorkbenchLogicGraphDialog'\)/
+      /const LazyWorkbenchLogicGraphEditor = lazy\(async \(\) => \{\n\s*const module = await import\('\.\.\/components\/codeGraph\/WorkbenchLogicGraphDialog'\)/
     )
     assert.match(presentation, /const VelarStructureOverviewTab[\s\S]*velar-structure:overview/)
     assert.match(presentation, /\[VelarStructureOverviewTab, \.\.\.velarStructureScopeTabs\]/)
@@ -247,7 +247,7 @@ void describe('pre-split Workbench shell parity', () => {
   })
 
   void test('keeps the pre-split commit tool above and Git history tool below', () => {
-    const presentation = readSource('src/renderer/src/StandaloneWorkbenchPagePresentation.tsx')
+    const presentation = readSource('src/renderer/src/app/StandaloneWorkbenchPagePresentation.tsx')
     const kernel = readSource('src/renderer/src/components/embedded/WorkbenchEmbeddedKernel.tsx')
     const commitPanel = readSource('src/renderer/src/components/git/WorkbenchCommitPanel.tsx')
     const gitPanel = readSource('src/renderer/src/components/git/WorkbenchGitToolPanel.tsx')
@@ -272,7 +272,7 @@ void describe('pre-split Workbench shell parity', () => {
   })
 
   void test('restores the Workbench chat landing and composer controls', () => {
-    const shell = readSource('src/renderer/src/workspace/WorkbenchWorkspaceShell.tsx')
+    const shell = readSource('src/renderer/src/app/WorkbenchWorkspaceShell.tsx')
     const adapter = readSource('src/renderer/src/runtime/standaloneWorkbenchChatAdapter.tsx')
     const renderSlots = readSource(
       'src/renderer/src/runtime/conversation/standaloneWorkbenchConversationRenderSlots.tsx'
@@ -325,9 +325,9 @@ void describe('pre-split Workbench shell parity', () => {
   void test('keeps update download progress inside the status bar as a compact control', () => {
     const statusBar = readSource('src/renderer/src/components/chrome/StatusBar.tsx')
     const messageHost = readSource('src/renderer/src/runtime/workbenchMessageHost.tsx')
-    const progress = readSource('src/renderer/src/components/updates/WorkbenchUpdateProgress.tsx')
+    const progress = readSource('src/renderer/src/components/WorkbenchUpdateProgress.tsx')
     const progressStyles = readSource(
-      'src/renderer/src/components/updates/WorkbenchUpdateProgress.module.css'
+      'src/renderer/src/styles/WorkbenchUpdateProgress.module.css'
     )
 
     assert.match(statusBar, /<WorkbenchUpdateProgress \/>/)
@@ -348,7 +348,7 @@ void describe('pre-split Workbench shell parity', () => {
   })
 
   void test('separates workspace snapshots, fixed overview, tab scopes, and folder state', () => {
-    const presentation = readSource('src/renderer/src/StandaloneWorkbenchPagePresentation.tsx')
+    const presentation = readSource('src/renderer/src/app/StandaloneWorkbenchPagePresentation.tsx')
     const tree = readSource(
       'src/renderer/src/components/codeGraph/WorkbenchLogicGraphScopeTree.tsx'
     )
@@ -493,7 +493,7 @@ void describe('pre-split Workbench shell parity', () => {
   })
 
   void test('releases the shared Select pointer lock as soon as a settings menu closes', () => {
-    const globalStyles = readSource('src/renderer/src/index.css')
+    const globalStyles = readSource('src/renderer/src/styles/index.css')
 
     assert.match(
       globalStyles,
@@ -502,7 +502,7 @@ void describe('pre-split Workbench shell parity', () => {
   })
 
   void test('uses a slim low-contrast scrollbar across the Workbench', () => {
-    const globalStyles = readSource('src/renderer/src/index.css')
+    const globalStyles = readSource('src/renderer/src/styles/index.css')
     const shellStyles = readSource('src/renderer/src/styles/01-shell.module.css')
 
     assert.match(globalStyles, /\*::-webkit-scrollbar\s*\{[\s\S]*width:\s*6px/)
@@ -515,7 +515,7 @@ void describe('pre-split Workbench shell parity', () => {
   void test('keeps the welcome page product-focused without exposing Kernel plumbing', () => {
     const welcome = readSource('src/renderer/src/welcome/WorkbenchWelcomePage.tsx')
     const welcomeCopy = readSource('src/renderer/src/i18n/messages/zh-CN.ts')
-    const styles = readSource('src/renderer/src/welcome/welcome.css')
+    const styles = readSource('src/renderer/src/styles/welcome.css')
 
     // 文案在语言包里（中英两份），页面按键取。
     assert.match(welcome, /t\('welcome\.tagline'\)/)

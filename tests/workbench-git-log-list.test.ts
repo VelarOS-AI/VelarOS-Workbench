@@ -5,13 +5,14 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, test } from 'bun:test'
 
 import { layoutWorkbenchGitGraph } from '../src/renderer/src/models/git/workbenchGitGraph'
-import type { WorkspaceGitLogEntry, WorkspaceGitRef } from '../src/shared/contracts'
+import { type WorkspaceGitLogEntry } from '../src/shared/contracts/system'
+import { type WorkspaceGitRef } from '../src/shared/contracts/workspaceGit'
 
 import { shareHostReactWithLinkedUi } from './helpers/linkedUiReact'
 
 shareHostReactWithLinkedUi()
 
-const { WorkbenchLocalizationProvider } = await import('../src/renderer/src/i18n')
+const { WorkbenchLocalizationProvider } = await import('../src/renderer/src/i18n/WorkbenchLocalizationProvider')
 const { WorkbenchGitLogList } = await import(
   '../src/renderer/src/components/git/WorkbenchGitLogList'
 )

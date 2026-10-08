@@ -2,7 +2,7 @@ import { applyPatch, parsePatch, reversePatch, structuredPatch } from 'diff'
 
 import { isEmpty,isString, Log } from '@velaros-ai/core'
 
-import type { SystemWorkspaceFilesChangedEvent, WorkspaceGitFileStatusEntry } from '@shared/contracts'
+import { type SystemWorkspaceFilesChangedEvent, type WorkspaceGitFileStatusEntry } from '@shared/contracts/system'
 import type { WorkbenchGitFilePatch, WorkbenchGitPatchHunk } from '@shared/workbenchGitPatch'
 
 const log = Log.tag('workbench-git-diff-model')

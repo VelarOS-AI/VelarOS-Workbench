@@ -5,7 +5,7 @@
  * 挂在应用顶层（起手页与工作台都能经菜单「新建项目…」唤起）。
  */
 import { type ReactElement, useState } from 'react'
-import { useWorkbenchI18n } from '@renderer/i18n'
+import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 
 import {
   Button,

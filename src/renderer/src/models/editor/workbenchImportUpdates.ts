@@ -1,13 +1,7 @@
 import { AppError } from '@velaros-ai/core/error'
 import type { Result } from '@velaros-ai/core/result'
 
-import type {
-  WorkbenchDirectoryEntry,
-  WorkbenchLanguageServiceFileEdit,
-  WorkbenchLanguageServiceFileRename,
-  WorkbenchLanguageServiceFileRenameEditsRequest,
-  WorkbenchLanguageServiceFileRenameEditsResult,
-} from '@shared/contracts'
+import { type WorkbenchDirectoryEntry, type WorkbenchLanguageServiceFileEdit, type WorkbenchLanguageServiceFileRename, type WorkbenchLanguageServiceFileRenameEditsRequest, type WorkbenchLanguageServiceFileRenameEditsResult } from '@shared/contracts/workbench'
 
 import type { WorkbenchOpenEditorTab } from '../../types/workbenchTypes'
 import { isSameOrChildPath } from '../shared/workbenchUtils'

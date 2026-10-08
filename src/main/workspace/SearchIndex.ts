@@ -15,16 +15,7 @@ import { join, resolve } from 'node:path'
 import { isPresent } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type {
-  WorkbenchDirectoryEntry,
-  WorkbenchListProjectFilesRequest,
-  WorkbenchListProjectFilesResult,
-  WorkbenchSearchContentBatch,
-  WorkbenchSearchContentRequest,
-  WorkbenchSearchContentResult,
-  WorkbenchSearchEntriesRequest,
-  WorkbenchSearchEntriesResult,
-} from '@shared/contracts'
+import { type WorkbenchDirectoryEntry, type WorkbenchListProjectFilesRequest, type WorkbenchListProjectFilesResult, type WorkbenchSearchContentBatch, type WorkbenchSearchContentRequest, type WorkbenchSearchContentResult, type WorkbenchSearchEntriesRequest, type WorkbenchSearchEntriesResult } from '@shared/contracts/workbench'
 import {
   compileWorkbenchSearchPathFilter,
   isWorkbenchSearchPathIncluded,

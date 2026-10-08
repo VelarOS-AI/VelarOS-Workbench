@@ -4,7 +4,7 @@ import type { ModelRequestClient } from '@velaros-ai/model'
 
 import { WorkbenchInlineCompletionGenerator } from '../src/main/workspace/language/WorkbenchInlineCompletion'
 import {
-  createStandaloneWorkbenchConfiguredModelSelectorProviders,
+  createStandaloneWorkbenchModelSelectorProviders,
   createStandaloneWorkbenchProviderModelOptions,
   getStandaloneWorkbenchModelProviderPreset,
   listStandaloneWorkbenchVisibleModelProviderPresets,
@@ -72,18 +72,22 @@ describe('Workbench inline completion', () => {
     })
   })
 
-  test('projects only the configured chat model into the composer selector', () => {
-    const providers = createStandaloneWorkbenchConfiguredModelSelectorProviders(
+  test('projects the available provider catalog into the composer selector', () => {
+    const providers = createStandaloneWorkbenchModelSelectorProviders(
       'openai',
-      'gpt-configured'
+      'gpt-configured',
+      [{ id: 'gpt-configured', label: 'Configured' }, { id: 'remote-b', label: 'Remote B' }, { id: 'hidden', label: 'Unavailable', available: false }]
     )
 
     expect(providers).toHaveLength(1)
     expect(providers[0]?.value).toBe('openai')
     expect(providers[0]?.models).toEqual([{
       value: 'gpt-configured',
-      label: 'gpt-configured',
-    }])
+      label: 'Configured',
+    }, { value: 'remote-b', label: 'Remote B' }])
+    expect(providers[0]?.defaultModel).toBe('gpt-configured')
+    expect(createStandaloneWorkbenchModelSelectorProviders('openai', 'stale', [{ id: 'remote-b', label: 'Remote B' }])[0]?.defaultModel).toBe('remote-b')
+    expect(createStandaloneWorkbenchModelSelectorProviders('openai', 'stale', [])[0]?.models).toEqual([])
   })
 
   test('uses the remote provider catalog while retaining configured selections', () => {

@@ -1,4 +1,4 @@
-import type { WorkbenchIndexedTextFile } from '@shared/contracts'
+import { type WorkbenchIndexedTextFile } from '@shared/contracts/workbench'
 
 import type { WorkbenchOpenEditorTab } from '../../types/workbenchTypes'
 

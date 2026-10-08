@@ -5,7 +5,7 @@
  * 系统语言由 main 入口在应用就绪后接进来（Electron 的 app）；本模块不直接引 electron，main 侧的服务在单元测试里
  * 也能加载，那时没有系统语言可读，按中文。
  */
-import type { AppLocale } from '@shared/contracts'
+import { type AppLocale } from '@velaros-ai/ui/conversation/contracts'
 
 let reported: Nullable<AppLocale> = null
 let readSystemLanguage: () => string | undefined = () => undefined

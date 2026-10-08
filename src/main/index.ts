@@ -8,8 +8,8 @@ import { createModelRuntimeComposition } from '@velaros-ai/model'
 import { createElectronBrowserRuntime } from '@velaros-ai/velaros/browser/electron'
 import { createShellEnvironment } from '@velaros-ai/velaros/execution/local'
 
-import productionAppIconPath from '../../build/icon.png?asset'
-import developmentAppIconPath from '../../build/icon-dev.png?asset'
+import productionAppIconPath from '../../resources/icons/icon.png?asset'
+import developmentAppIconPath from '../../resources/icons/icon-dev.png?asset'
 import { WorkbenchBrowserPartition } from '../shared/workbenchBrowser'
 
 import { registerWorkbenchAccountIpc } from './account/WorkbenchAccountIpc'
@@ -46,8 +46,9 @@ import { registerWorkbenchModelIpc } from './model/WorkbenchModelIpc'
 import type { WorkbenchProjectHub } from './projects/ProjectHub'
 import { registerProjectHubIpc } from './projects/ProjectHubIpc'
 import { installProjectHubMenu } from './projects/ProjectHubMenu'
+import { WorkbenchAgentConsoleWindows } from './projects/WorkbenchAgentConsoleWindows'
 import { installWorkbenchEditorZoom } from './projects/WorkbenchEditorZoom'
-import { installWorkbenchExternalNavigation } from './projects/WorkbenchExternalNavigation'
+import { installWorkbenchExternalNavigation, isWorkbenchAgentConsoleRequest } from './projects/WorkbenchExternalNavigation'
 import {
   normalizeWorkbenchInternalBrowserUrl,
   prepareWorkbenchWebviewAttachment,
@@ -128,6 +129,7 @@ if (WorkbenchIsDevelopmentRuntime) {
 let windowManager: Nullable<WorkbenchWindowManager> = null
 // 有未保存编辑器改动的窗口，关窗与退出前先交给 renderer 存或问；答应了才继续退出。
 const windowCloseGuard = new WorkbenchWindowCloseGuard(() => app.quit())
+const agentConsoleWindows = new WorkbenchAgentConsoleWindows()
 let productAnalytics: WorkbenchProductAnalyticsReporter | undefined
 let workbenchBrowserWebviewGate: Nullable<WorkbenchBrowserWebviewGate> = null
 const pendingExternalPaths = collectExternalPathArguments(process.argv)
@@ -193,8 +195,29 @@ function createWorkbenchWindow(hub: WorkbenchProjectHub): BrowserWindow {
     (url) => shell.openExternal(url),
     (url, error) => {
       Log.tag('WorkbenchExternalNavigation').warn('open_external_failed', { url, error })
+    },
+    {
+      width: 720,
+      height: 540,
+      minWidth: 480,
+      minHeight: 320,
+      icon: WorkbenchApplicationIconPath,
+      autoHideMenuBar: true,
+      backgroundColor: '#f7f7f7',
     }
   )
+  const consoleOwnerId = window.webContents.id
+  window.webContents.on('did-create-window', (child, details) => {
+    if (!isWorkbenchAgentConsoleRequest(details)) return
+    agentConsoleWindows.register(consoleOwnerId, child)
+    installWorkbenchExternalNavigation(
+      (handler) => child.webContents.setWindowOpenHandler(handler),
+      (url) => shell.openExternal(url)
+    )
+    child.webContents.on('will-navigate', (event) => event.preventDefault())
+  })
+  window.once('closed', () => agentConsoleWindows.releaseOwner(consoleOwnerId))
+  window.webContents.on('render-process-gone', () => agentConsoleWindows.releaseOwner(consoleOwnerId))
   window.webContents.on('will-attach-webview', (event, webPreferences, params) => {
     if (
       !workbenchBrowserWebviewGate?.allowsAttachment() ||
@@ -412,6 +435,7 @@ if (hasSingleInstanceLock)
     const disposeAgentProcessesIpc = registerWorkbenchAgentProcessesIpc({
       shells: shellHosts,
       windows: windowManager,
+      focusConsole: (ownerId) => agentConsoleWindows.focus(ownerId),
     })
     const disposeMemoryIpc = registerWorkbenchMemoryIpc({ memory, windows: windowManager })
     const disposeBrowserIpc = registerWorkbenchBrowserIpc({

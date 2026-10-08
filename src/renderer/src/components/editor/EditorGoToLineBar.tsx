@@ -1,5 +1,5 @@
 import { HashIcon, XIcon } from '@phosphor-icons/react'
-import { useWorkbenchI18n } from '@renderer/i18n'
+import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 import type { WorkbenchEditorGoToLineTarget } from '@renderer/models/editor/workbenchEditorModel'
 import type { ReactElement } from 'react'
 

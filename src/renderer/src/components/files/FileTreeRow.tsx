@@ -33,7 +33,7 @@ import { AppError } from '@velaros-ai/core/error'
 import { StyleUtils } from '@velaros-ai/ui'
 import { Input } from '@velaros-ai/ui/primitives/forms/Input'
 
-import type { WorkbenchDirectoryEntry, WorkbenchDirectoryEntrySymlink } from '@shared/contracts'
+import { type WorkbenchDirectoryEntry, type WorkbenchDirectoryEntrySymlink } from '@shared/contracts/workbench'
 
 import styles from '../../styles/workbenchPageStyles'
 

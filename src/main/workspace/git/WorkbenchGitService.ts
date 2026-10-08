@@ -9,46 +9,10 @@ import { execa } from 'execa'
 
 import { optionalWhen, toOptional } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
+import { type AppLocale } from '@velaros-ai/ui/conversation/contracts'
 
-import type {
-  AppLocale,
-  SystemWorkspaceGitActionResult,
-  SystemWorkspaceGitBlameResult,
-  SystemWorkspaceGitCommitMessageResult,
-  SystemWorkspaceGitCommitResult,
-  SystemWorkspaceGitCreateBranchResult,
-  SystemWorkspaceGitDiffResult,
-  SystemWorkspaceGitFileActionResult,
-  SystemWorkspaceGitFileAtCommitResult,
-  SystemWorkspaceGitHunkActionResult,
-  SystemWorkspaceGitInitializeRepositoryResult,
-  SystemWorkspaceGitLineStatsSnapshot,
-  SystemWorkspaceGitLogResult,
-  SystemWorkspaceGitOperationResult,
-  SystemWorkspaceGitStashActionResult,
-  SystemWorkspaceGitStashListResult,
-  SystemWorkspaceGitStashResult,
-  SystemWorkspaceGitSummary,
-  SystemWorkspaceGitSwitchBranchResult,
-  WorkspaceGitBranch,
-  WorkspaceGitCommitResult,
-  WorkspaceGitDetachedHead,
-  WorkspaceGitDiffOptions,
-  WorkspaceGitFileAction,
-  WorkspaceGitFileStatusEntry,
-  WorkspaceGitHunkActionOptions,
-  WorkspaceGitLineStats,
-  WorkspaceGitLogEntry,
-  WorkspaceGitLogOptions,
-  WorkspaceGitOperationRequest,
-  WorkspaceGitRef,
-  WorkspaceGitRemoteAction,
-  WorkspaceGitRemoteActionOptions,
-  WorkspaceGitRemoteActionResult,
-  WorkspaceGitStashAction,
-  WorkspaceGitStashOptions,
-  WorkspaceGitStatusResult,
-} from '@shared/contracts'
+import { type SystemWorkspaceGitActionResult, type SystemWorkspaceGitBlameResult, type SystemWorkspaceGitCommitMessageResult, type SystemWorkspaceGitCommitResult, type SystemWorkspaceGitCreateBranchResult, type SystemWorkspaceGitDiffResult, type SystemWorkspaceGitFileActionResult, type SystemWorkspaceGitFileAtCommitResult, type SystemWorkspaceGitHunkActionResult, type SystemWorkspaceGitInitializeRepositoryResult, type SystemWorkspaceGitLineStatsSnapshot, type SystemWorkspaceGitLogResult, type SystemWorkspaceGitOperationResult, type SystemWorkspaceGitStashActionResult, type SystemWorkspaceGitStashListResult, type SystemWorkspaceGitStashResult, type SystemWorkspaceGitSummary, type SystemWorkspaceGitSwitchBranchResult, type WorkspaceGitBranch, type WorkspaceGitCommitResult, type WorkspaceGitDiffOptions, type WorkspaceGitFileAction, type WorkspaceGitFileStatusEntry, type WorkspaceGitLineStats, type WorkspaceGitLogEntry, type WorkspaceGitLogOptions, type WorkspaceGitRemoteAction, type WorkspaceGitRemoteActionResult, type WorkspaceGitStatusResult } from '@shared/contracts/system'
+import { type WorkspaceGitDetachedHead, type WorkspaceGitHunkActionOptions, type WorkspaceGitOperationRequest, type WorkspaceGitRef, type WorkspaceGitRemoteActionOptions, type WorkspaceGitStashAction, type WorkspaceGitStashOptions } from '@shared/contracts/workspaceGit'
 import {
   hasWorkspaceGitConflictMarkers,
   isWorkspaceGitConflictEntry,

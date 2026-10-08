@@ -18,7 +18,7 @@ import {
   WorkbenchProjectSearchLimit,
 } from '@renderer/hooks/useWorkbenchProjectSearchEngine'
 import type { WorkbenchProjectSearchPanelModel } from '@renderer/hooks/useWorkbenchProjectSearchPanel'
-import { useWorkbenchI18n } from '@renderer/i18n'
+import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 import { formatWorkbenchProjectSearchCount } from '@renderer/models/files/workbenchProjectSearchModel'
 
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'

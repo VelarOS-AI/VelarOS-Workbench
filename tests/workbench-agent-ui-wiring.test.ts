@@ -10,7 +10,7 @@ function readSource(relativePath: string): string {
 
 void describe('Workbench AI changes wiring', () => {
   void test('AI changes have a left rail entry, a left panel and an isolated read-only tab group', () => {
-    const presentation = readSource('src/renderer/src/StandaloneWorkbenchPagePresentation.tsx')
+    const presentation = readSource('src/renderer/src/app/StandaloneWorkbenchPagePresentation.tsx')
     const kernel = readSource('src/renderer/src/components/embedded/WorkbenchEmbeddedKernel.tsx')
     const editorPanel = readSource('src/renderer/src/components/editor/EditorPanel.tsx')
     const tabBar = readSource('src/renderer/src/components/editor/EditorTabBar.tsx')

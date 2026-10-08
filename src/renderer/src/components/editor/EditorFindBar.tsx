@@ -6,7 +6,7 @@ import {
   useRef,
 } from 'react'
 import { CaretDownIcon, CaretRightIcon, CaretUpIcon, SelectionIcon, XIcon } from '@phosphor-icons/react'
-import { useWorkbenchI18n } from '@renderer/i18n'
+import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 import type {
   WorkbenchEditorFindOptions,
   WorkbenchEditorFindStatus,

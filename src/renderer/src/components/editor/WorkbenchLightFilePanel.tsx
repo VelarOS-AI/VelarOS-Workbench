@@ -1,12 +1,12 @@
 import { lazy, type ReactElement, Suspense } from 'react'
-import { useWorkbenchI18n } from '@renderer/i18n'
+import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 import type { WorkbenchEditorVimHostCommand } from '@renderer/models/editor/workbenchEditorVim'
 import {
   EMPTY_LIGHT_EDITOR_PROJECT_CONTEXT_INDEX,
   resolveLightEditorLanguagePath,
 } from '@renderer/models/lightEditorModel'
-import type { WorkbenchThemeId } from '@renderer/models/settings/workbenchPreferences'
 import { fileLanguage } from '@renderer/models/shared/workbenchUtils'
+import type { WorkbenchThemeId } from '@renderer/models/workbenchPreferences'
 import type { WorkbenchLightEditorTab } from '@renderer/types/workbenchTypes'
 
 import { Text } from '@velaros-ai/ui/primitives/display/Text'

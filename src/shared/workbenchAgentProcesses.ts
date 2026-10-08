@@ -8,7 +8,10 @@ import type { WorkbenchConversationSessionRequest } from './workbenchConversatio
 import type { WorkbenchFsCallResult } from './workbenchFs'
 
 /** 项目 Agent 的后台命令与交互控制台，身份同时包含项目和会话。 */
+export const WorkbenchAgentConsoleFrameName = 'workbench-agent-console'
+
 export const WorkbenchAgentProcessesChannels = {
+  focusConsole: 'workbench-app:agent-processes:focus-console',
   list: 'workbench-app:agent-processes:list',
   stop: 'workbench-app:agent-processes:stop',
   input: 'workbench-app:agent-processes:input',
@@ -21,6 +24,7 @@ export interface WorkbenchAgentProcessRequest extends WorkbenchConversationSessi
 }
 
 export interface WorkbenchAgentProcessesBridge {
+  focusConsole(): Promise<boolean>
   list(
     request: WorkbenchConversationSessionRequest
   ): Promise<WorkbenchFsCallResult<ShellBackgroundTaskRecord[]>>

@@ -7,7 +7,7 @@
  */
 import { type ReactElement } from 'react'
 import { FolderOpenIcon, FolderPlusIcon, XIcon } from '@phosphor-icons/react'
-import { useWorkbenchI18n } from '@renderer/i18n'
+import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 
 import { Button, Empty, IconButton, Stack, Tag, Text, Title } from '@velaros-ai/ui'
 
@@ -16,7 +16,7 @@ import { useWorkbenchPreferences } from '../hooks/useWorkbenchPreferences'
 
 import { lastOpenedLabel } from './lastOpenedLabel'
 
-import './welcome.css'
+import '../styles/welcome.css'
 
 interface WorkbenchWelcomePageProps {
   state: WorkbenchProjectHubState

@@ -11,7 +11,7 @@ import { AppError } from '@velaros-ai/core/error'
 
 import type {
   WorkbenchLanguageServiceDescriptor,
-} from '@shared/language/workbenchLanguageServices'
+} from '@shared/workbenchLanguageServices'
 
 import { workbenchMainText } from '../../i18n/workbenchMainMessages'
 import { isPathInsideRoot } from '../PathContainmentHelper'

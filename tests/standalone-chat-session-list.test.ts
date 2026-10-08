@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 
 import { describe, test } from 'bun:test'
 
-import type { WorkbenchChatSessionGroup } from '../src/renderer/src/composition'
+import { type WorkbenchChatSessionGroup } from '../src/renderer/src/composition/WorkbenchChatProvider'
 import {
   getMostRecentlyUpdatedWorkbenchProjectChatGroup,
   isWorkbenchProjectChatGroup,

@@ -19,7 +19,7 @@ import {
   type WorkbenchProjectSearchEngineOptions,
 } from '@renderer/hooks/useWorkbenchProjectSearchEngine'
 import type { WorkbenchProjectSearchPanelModel } from '@renderer/hooks/useWorkbenchProjectSearchPanel'
-import { useWorkbenchI18n } from '@renderer/i18n'
+import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 import type { WorkbenchEditorOpenTabIntent } from '@renderer/models/editor/workbenchEditorGroups'
 import { getWorkbenchFileSearchKeyboardAction } from '@renderer/models/files/workbenchFileSearchNavigationModel'
 import {
@@ -28,11 +28,11 @@ import {
   type WorkbenchProjectSearchRow,
 } from '@renderer/models/files/workbenchProjectSearchModel'
 import type { WorkbenchGitDecorationMap } from '@renderer/models/git/workbenchGitModel'
-import { getWorkbenchFileTreeRowHeight } from '@renderer/models/settings/workbenchPreferences'
+import { getWorkbenchFileTreeRowHeight } from '@renderer/models/workbenchPreferences'
 
 import { ScrollArea } from '@velaros-ai/ui/primitives/layout/ScrollArea'
 
-import type { WorkbenchDirectoryEntry, WorkbenchSearchEntriesResult } from '@shared/contracts'
+import { type WorkbenchDirectoryEntry, type WorkbenchSearchEntriesResult } from '@shared/contracts/workbench'
 import {
   compileWorkbenchSearchPathFilter,
   isWorkbenchSearchPathIncluded,

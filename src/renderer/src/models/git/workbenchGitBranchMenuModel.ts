@@ -1,11 +1,7 @@
-import type {
-  WorkspaceGitBranch,
-  WorkspaceGitOperationState,
-  WorkspaceGitRemoteAction,
-  WorkspaceGitStatusResult,
-} from '@shared/contracts'
+import { type WorkspaceGitBranch, type WorkspaceGitStatusResult } from '@shared/contracts/system'
+import { type WorkspaceGitOperationState } from '@shared/contracts/workspaceGit'
 
-import type { WorkbenchI18nContextValue } from '../../i18n'
+import { type WorkbenchI18nContextValue } from '../../i18n/WorkbenchLocalizationProvider'
 
 import { getWorkbenchGitOperationName } from './workbenchGitOperationModel'
 import { describeWorkbenchGitHead } from './workbenchGitTopBarModel'
@@ -34,12 +30,12 @@ type WorkbenchGitBranchControlStatus = Pick<
 >
 
 export interface WorkbenchGitRemoteActionItem {
-  action: WorkspaceGitRemoteAction
+  action: 'pull' | 'upload' | 'fetch'
   label: string
-  /** 悬停时的说明；按不了时是原因。 */
+  /** 动作说明；按不了时给出原因。 */
   hint: string
   disabled: boolean
-  /** 按钮上的数字：拉取是落后上游几个提交，推送是领先几个；其余为 0。 */
+  /** 关联的提交数：拉取是落后上游几个提交，推送是领先几个；其余为 0。 */
   count: number
 }
 
@@ -160,9 +156,7 @@ export function describeWorkbenchGitBranchControlHead(
 }
 
 /**
- * 分支菜单里的四个远端操作：拉取、推送、同步、获取远端。拉取、同步要有上游；还没有上游时推送会顺便关联
- * 远端分支；分离的 HEAD 上没有当前分支，只有获取远端（它不看分支）还能用，其余写明原因。有操作进行到一半
- * 时（`blocked` 是那句原因）同样只留获取远端。
+ * 分支菜单的拉取、推送、获取远端。拉取需要上游，推送可关联远端分支；当前分支的动作按仓库状态显示原因。
  */
 export function describeWorkbenchGitRemoteActions(
   status: WorkbenchGitBranchControlStatus,
@@ -198,13 +192,6 @@ export function describeWorkbenchGitRemoteActions(
       count: upstream ? status.ahead : 0,
     },
     {
-      action: 'sync',
-      label: t('workbench.gitSync'),
-      hint: needsUpstream(t('workbench.gitSyncHint')),
-      disabled: !!unavailable || !upstream,
-      count: 0,
-    },
-    {
       action: 'fetch',
       label: t('workbench.gitFetch'),
       hint: t('workbench.gitFetchHint'),
@@ -215,7 +202,7 @@ export function describeWorkbenchGitRemoteActions(
 }
 
 /**
- * 远端操作下面那一行小字：为什么有的按不了。有上游时不用说（数字已经在按钮上了），为 null。
+ * 远端操作下面那一行小字：为什么有的按不了。有上游时为 null，提交数展示在顶栏。
  */
 export function describeWorkbenchGitRemoteNote(
   status: WorkbenchGitBranchControlStatus,

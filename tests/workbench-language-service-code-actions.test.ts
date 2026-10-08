@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { describe, test } from 'bun:test'
 
 import { applyWorkbenchLanguageServiceEditsToContent } from '../src/renderer/src/models/editor/workbenchCodeMirrorLanguageService'
-import type { WorkbenchLanguageServiceCodeAction } from '../src/shared/contracts'
+import { type WorkbenchLanguageServiceCodeAction } from '../src/shared/contracts/workbench'
 
 import { createLanguageProject, rangeOf, StrictTsconfig } from './helpers/languageProject'
 

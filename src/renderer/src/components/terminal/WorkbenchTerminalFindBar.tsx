@@ -1,6 +1,6 @@
 import { type ReactElement, useEffect, useRef } from 'react'
 import { CaretDownIcon, CaretUpIcon, XIcon } from '@phosphor-icons/react'
-import { useWorkbenchI18n } from '@renderer/i18n'
+import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 import type { WorkbenchTerminalFindOptions } from '@renderer/models/commands/workbenchTerminalFind'
 import type { WorkbenchEditorFindStatus } from '@renderer/models/editor/workbenchEditorFindState'
 

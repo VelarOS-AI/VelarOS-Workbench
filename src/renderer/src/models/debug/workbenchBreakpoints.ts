@@ -15,7 +15,7 @@ import type { WorkbenchDebuggerBreakpoint } from '@shared/workbenchDebugger'
 import {
   createLocalStorageJsonStore,
   type StorageLike,
-} from '../../persistence/localStorageJsonStore'
+} from '../../support/localStorageJsonStore'
 
 export const WORKBENCH_BREAKPOINTS_STORAGE_KEY = 'velaros.workbench.breakpoints.v1'
 

@@ -1,4 +1,4 @@
-import type { SystemWorkspaceFilesChangedEvent } from '@shared/contracts'
+import { type SystemWorkspaceFilesChangedEvent } from '@shared/contracts/system'
 
 import type { WorkbenchFsCallResult } from './workbenchFs'
 

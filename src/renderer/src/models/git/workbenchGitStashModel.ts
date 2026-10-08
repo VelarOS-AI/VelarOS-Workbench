@@ -1,6 +1,6 @@
-import type { WorkspaceGitStash } from '@shared/contracts'
+import { type WorkspaceGitStash } from '@shared/contracts/workspaceGit'
 
-import type { WorkbenchI18nContextValue } from '../../i18n'
+import { type WorkbenchI18nContextValue } from '../../i18n/WorkbenchLocalizationProvider'
 
 type Translate = WorkbenchI18nContextValue['t']
 

@@ -141,9 +141,10 @@ export function resolveStandaloneWorkbenchProviderModel(
   return kind === 'completion' ? preset.completionModel : preset.defaultModel
 }
 
-export function createStandaloneWorkbenchConfiguredModelSelectorProviders(
+export function createStandaloneWorkbenchModelSelectorProviders(
   providerId: string,
   modelId: string,
+  remoteModels: readonly ProviderModelCatalogEntry[],
   managedProvider?: WorkbenchManagedModelProvider
 ): Array<{
   value: ChatProviderId
@@ -154,15 +155,20 @@ export function createStandaloneWorkbenchConfiguredModelSelectorProviders(
   const provider = managedProvider
     ? listStandaloneWorkbenchVisibleModelProviderPresets([managedProvider])[0]!
     : getStandaloneWorkbenchModelProviderPreset(providerId)
-  const model = resolveStandaloneWorkbenchProviderModel(provider.id, modelId, 'agent')
+  if (managedProvider && !managedProvider.enabled) return []
+  const models = createStandaloneWorkbenchProviderModelOptions(
+    remoteModels.filter((model) => model.available !== false),
+    [],
+    false
+  )
+  const preferred = modelId.trim() || provider.defaultModel
   return [{
     value: provider.id,
     label: provider.label,
-    defaultModel: model,
-    models: [{
-      value: model,
-      label: managedProvider?.models.find((entry) => entry.id === model)?.label ?? model,
-    }],
+    defaultModel: models.some((model) => model.value === preferred)
+      ? preferred
+      : models[0]?.value ?? preferred,
+    models,
   }]
 }
 

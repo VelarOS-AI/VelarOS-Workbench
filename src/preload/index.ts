@@ -239,6 +239,7 @@ const gitBridge: WorkbenchGitBridge = {
 }
 
 const agentProcessesBridge: WorkbenchAgentProcessesBridge = {
+  focusConsole: () => ipcRenderer.invoke(WorkbenchAgentProcessesChannels.focusConsole),
   list: (request) => ipcRenderer.invoke(WorkbenchAgentProcessesChannels.list, request),
   stop: (request) => ipcRenderer.invoke(WorkbenchAgentProcessesChannels.stop, request),
   input: (request) => ipcRenderer.invoke(WorkbenchAgentProcessesChannels.input, request),

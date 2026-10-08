@@ -1,4 +1,4 @@
-@reference "../index.css";
+@reference "./index.css";
 
 .workbenchTopToolbar {
   @apply flex shrink-0 items-center justify-between gap-3 border-b;
@@ -144,7 +144,7 @@
   flex-direction: column;
 }
 
-/* 当前分支的远端操作：两列四格。 */
+/* 远端操作的进度和提示放在搜索行下方。 */
 .gitBranchMenuRemote {
   display: flex;
   flex-shrink: 0;
@@ -155,9 +155,10 @@
 }
 
 .gitBranchMenuActions {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--topbar-panel-gap);
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
 }
 
 .gitBranchMenuAction,
@@ -185,7 +186,6 @@
   color: var(--workbench-text-muted);
 }
 
-.gitBranchMenuAction > span,
 .gitBranchMenuCreate > span {
   min-width: 0;
   flex: 1;
@@ -194,22 +194,12 @@
   white-space: nowrap;
 }
 
-/* 落后、领先的提交数。 */
-.gitBranchMenuAction > small {
-  display: inline-flex;
-  min-width: 16px;
-  height: 16px;
+.gitBranchMenuAction {
+  width: 28px;
+  height: 28px;
   flex: 0 0 auto;
-  align-items: center;
   justify-content: center;
-  padding: 0 5px;
-  border-radius: 999px;
-  color: var(--workbench-theme-color);
-  background: color-mix(in srgb, var(--workbench-theme-color) 13%, transparent);
-  font-size: 10px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
+  padding: 0;
 }
 
 .gitBranchMenuAction:hover:not([aria-disabled='true']),
@@ -233,7 +223,7 @@
   opacity: 0.45;
 }
 
-/* 按不了的项也能走到（说明在 title 里）：给一圈淡的焦点框，不染主题色。 */
+/* 保留不可用动作的键盘焦点，方便查看气泡说明。 */
 .gitBranchMenuAction[aria-disabled='true']:focus-visible {
   outline: 1px solid var(--workbench-border);
   outline-offset: -1px;
@@ -253,7 +243,7 @@
   text-wrap: pretty;
 }
 
-/* 远端操作在跑：四格换成一行进度，右边是取消。 */
+/* 远端操作进度，右侧可以取消。 */
 .gitBranchMenuRunning {
   display: flex;
   min-width: 0;
@@ -308,11 +298,13 @@
 .gitBranchMenuSearch {
   display: flex;
   flex-shrink: 0;
+  align-items: center;
+  gap: 4px;
   height: calc(var(--topbar-panel-row-height) + 2 * var(--topbar-panel-padding));
   padding: var(--topbar-panel-padding) var(--topbar-panel-gap);
 }
 
-.gitBranchMenuSearch > * {
+.gitBranchMenuSearch > :first-child {
   min-width: 0;
   flex: 1;
   height: 100%;
@@ -527,14 +519,26 @@
   cursor: pointer;
 }
 
-.gitBranchMenuRowActions > button:hover:not(:disabled),
-.gitBranchMenuRowActions > button:focus-visible {
+/* 当前分支为共用的行内操作条留出空间。 */
+.gitBranchMenuRow[data-current='true']:hover .gitBranchMenuRowMain,
+.gitBranchMenuRow[data-current='true']:has(:focus-visible) .gitBranchMenuRowMain {
+  padding-right: 100px;
+}
+
+.gitBranchMenuRow[data-current='true']:hover .gitBranchMenuRowMain > small,
+.gitBranchMenuRow[data-current='true']:has(:focus-visible) .gitBranchMenuRowMain > small {
+  display: none;
+}
+
+.gitBranchMenuRowActions > button:hover:not(:disabled):not([aria-disabled='true']),
+.gitBranchMenuRowActions > button:focus-visible:not([aria-disabled='true']) {
   outline: none;
   color: var(--workbench-theme-color);
   background: color-mix(in srgb, var(--workbench-theme-color) 12%, transparent);
 }
 
-.gitBranchMenuRowActions > button:disabled {
+.gitBranchMenuRowActions > button:disabled,
+.gitBranchMenuRowActions > button[aria-disabled='true'] {
   cursor: default;
   opacity: 0.42;
 }

@@ -19,7 +19,7 @@
     "types": ["node", "electron-vite/node"]
   },
   "include": [
-    "types/velaros-globals.d.ts",
+    "src/shared/velaros-globals.d.ts",
     "src/renderer/src/types/tinykeys.d.ts",
     "electron.vite.config.ts",
     "src/**/*.ts",

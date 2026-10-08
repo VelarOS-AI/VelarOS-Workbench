@@ -15,12 +15,7 @@ import { readFile, stat } from 'node:fs/promises'
 
 import { AppError } from '@velaros-ai/core/error'
 
-import type {
-  WorkbenchReplaceContentFileRequest,
-  WorkbenchReplaceContentFileResult,
-  WorkbenchReplaceContentRequest,
-  WorkbenchReplaceContentResult,
-} from '@shared/contracts'
+import { type WorkbenchReplaceContentFileRequest, type WorkbenchReplaceContentFileResult, type WorkbenchReplaceContentRequest, type WorkbenchReplaceContentResult } from '@shared/contracts/workbench'
 import {
   compileWorkbenchTextSearch,
   type WorkbenchTextSearchQuery,

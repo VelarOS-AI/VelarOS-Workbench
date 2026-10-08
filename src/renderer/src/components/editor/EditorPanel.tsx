@@ -13,7 +13,7 @@ import {
   useSyncExternalStore,
 } from 'react'
 import { WarningCircleIcon } from '@phosphor-icons/react'
-import { useWorkbenchI18n } from '@renderer/i18n'
+import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 import type { PackageManagerCommand } from '@renderer/models/commands/workbenchPackageScriptCommand'
 import { inferWorkbenchPackageManagerForPackageJsonPath } from '@renderer/models/commands/workbenchPackageScriptCommand'
 import type { WorkbenchLanguageServiceWorkspaceEditRequest } from '@renderer/models/editor/workbenchCodeActions'
@@ -56,8 +56,8 @@ import {
   formatWorkbenchShortcutHint,
   type WorkbenchKeyboardShortcutMap,
 } from '@renderer/models/layout/workbenchKeyboardShortcuts'
-import type { WorkbenchThemeId } from '@renderer/models/settings/workbenchPreferences'
 import { fileLanguage } from '@renderer/models/shared/workbenchUtils'
+import type { WorkbenchThemeId } from '@renderer/models/workbenchPreferences'
 import type { WorkbenchLightEditorTab } from '@renderer/types/workbenchTypes'
 
 import { isPresent,Log, toNullable } from '@velaros-ai/core'
@@ -72,11 +72,7 @@ import {
   DialogTitle,
 } from '@velaros-ai/ui/primitives/overlays/Dialog'
 
-import type {
-  WorkbenchLanguageServiceDiagnostic,
-  WorkbenchLanguageServiceFileEdit,
-  WorkbenchLanguageServiceLocation,
-} from '@shared/contracts'
+import { type WorkbenchLanguageServiceDiagnostic, type WorkbenchLanguageServiceFileEdit, type WorkbenchLanguageServiceLocation } from '@shared/contracts/workbench'
 import { resolveWorkbenchTextOffset } from '@shared/workbenchSearchText'
 import { normalizeWorkbenchTextEol, type WorkbenchTextFormat } from '@shared/workbenchTextFormat'
 import { DefaultWorkbenchTextFormat } from '@shared/workbenchTextFormat'

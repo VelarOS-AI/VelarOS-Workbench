@@ -1,4 +1,4 @@
-@reference "../index.css";
+@reference "./index.css";
 
 .root [data-slot='button']:hover,
 .root [data-slot='button']:active {

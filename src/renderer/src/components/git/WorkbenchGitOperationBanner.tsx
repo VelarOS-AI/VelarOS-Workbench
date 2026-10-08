@@ -1,12 +1,12 @@
 import { type ReactElement } from 'react'
 import { GitMergeIcon, SpinnerGapIcon } from '@phosphor-icons/react'
-import { useWorkbenchI18n } from '@renderer/i18n'
+import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 import {
   describeWorkbenchGitOperationBanner,
   getWorkbenchGitOperationName,
 } from '@renderer/models/git/workbenchGitOperationModel'
 
-import type { WorkspaceGitOperationAction, WorkspaceGitOperationState } from '@shared/contracts'
+import { type WorkspaceGitOperationAction, type WorkspaceGitOperationState } from '@shared/contracts/workspaceGit'
 
 import styles from '../../styles/workbenchPageStyles'
 

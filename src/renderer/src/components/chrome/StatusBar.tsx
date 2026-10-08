@@ -1,6 +1,6 @@
 import { type ReactElement, useState, useSyncExternalStore } from 'react'
 import { CaretRightIcon, CheckIcon } from '@phosphor-icons/react'
-import { useWorkbenchI18n } from '@renderer/i18n'
+import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 import type { WorkbenchStatusBarTextFormat } from '@renderer/models/editor/workbenchEditorTextFormat'
 import {
   formatWorkbenchEditorVimMode,
@@ -23,7 +23,7 @@ import {
 
 import styles from '../../styles/workbenchPageStyles'
 import { WorkbenchFileTypeIcon } from '../files/WorkbenchFileTypeIcon'
-import { WorkbenchUpdateProgress } from '../updates/WorkbenchUpdateProgress'
+import { WorkbenchUpdateProgress } from '../WorkbenchUpdateProgress'
 
 interface StatusBarProps {
   projectName: string

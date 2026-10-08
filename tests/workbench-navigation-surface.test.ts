@@ -59,7 +59,7 @@ void describe('Workbench navigation surface', () => {
 
   void test('every entry that brings something into view goes through the one navigate entry', () => {
     const pageModel = readSource('src/renderer/src/hooks/useStandaloneWorkbenchPageModel.tsx')
-    const presentation = readSource('src/renderer/src/StandaloneWorkbenchPagePresentation.tsx')
+    const presentation = readSource('src/renderer/src/app/StandaloneWorkbenchPagePresentation.tsx')
 
     const navigate = sliceSource(pageModel, 'const navigate = useMemoizedFn(', '\n  })\n')
     // 入口先按规则定两侧：普通文件区收起独占组，左侧切面板，需要时展开面板。

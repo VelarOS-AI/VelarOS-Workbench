@@ -13,13 +13,7 @@ import {
   type WorkbenchContentSearchWorkerOptions,
   WorkbenchContentSearchWorkerSession,
 } from '../src/main/workspace/ContentSearchWorkerHost'
-import type {
-  WorkbenchContentSearchFileResult,
-  WorkbenchSearchContentBatch,
-  WorkbenchSearchContentProgressEvent,
-  WorkbenchSearchContentRequest,
-  WorkbenchSearchContentResult,
-} from '../src/shared/contracts'
+import { type WorkbenchContentSearchFileResult, type WorkbenchSearchContentBatch, type WorkbenchSearchContentProgressEvent, type WorkbenchSearchContentRequest, type WorkbenchSearchContentResult } from '../src/shared/contracts/workbench'
 import type { WorkbenchFsCallResult } from '../src/shared/workbenchFs'
 import { WorkbenchFsChannels } from '../src/shared/workbenchFs'
 

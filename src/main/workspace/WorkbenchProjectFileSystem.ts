@@ -22,18 +22,7 @@ import { execa } from 'execa'
 
 import { AppError } from '@velaros-ai/core/error'
 
-import type {
-  WorkbenchDirectoryEntry,
-  WorkbenchDirectoryEntrySymlink,
-  WorkbenchFindExistingFilesRequest,
-  WorkbenchFindExistingFilesResult,
-  WorkbenchListDirectoryRequest,
-  WorkbenchListDirectoryResult,
-  WorkbenchReadFileRequest,
-  WorkbenchReadFileResult,
-  WorkbenchReadImageFileRequest,
-  WorkbenchReadImageFileResult,
-} from '@shared/contracts'
+import { type WorkbenchDirectoryEntry, type WorkbenchDirectoryEntrySymlink, type WorkbenchFindExistingFilesRequest, type WorkbenchFindExistingFilesResult, type WorkbenchListDirectoryRequest, type WorkbenchListDirectoryResult, type WorkbenchReadFileRequest, type WorkbenchReadFileResult, type WorkbenchReadImageFileRequest, type WorkbenchReadImageFileResult } from '@shared/contracts/workbench'
 import {
   resolveWorkbenchImageMediaType,
   type WorkbenchImageMediaType,

@@ -1,14 +1,6 @@
 import * as ts from 'typescript'
 
-import type {
-  WorkbenchLanguageServiceCodeAction,
-  WorkbenchLanguageServiceCodeActionResolveData,
-  WorkbenchLanguageServiceEditFormat,
-  WorkbenchLanguageServiceFileEdit,
-  WorkbenchLanguageServiceNewFile,
-  WorkbenchLanguageServicePosition,
-  WorkbenchLanguageServiceTextEdit,
-} from '@shared/contracts'
+import { type WorkbenchLanguageServiceCodeAction, type WorkbenchLanguageServiceCodeActionResolveData, type WorkbenchLanguageServiceEditFormat, type WorkbenchLanguageServiceFileEdit, type WorkbenchLanguageServiceNewFile, type WorkbenchLanguageServicePosition, type WorkbenchLanguageServiceTextEdit } from '@shared/contracts/workbench'
 import { DefaultWorkbenchTabSize, detectWorkbenchIndentation } from '@shared/workbenchIndentation'
 
 import {

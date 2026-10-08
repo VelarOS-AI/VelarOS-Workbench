@@ -8,7 +8,7 @@ import { stat } from 'node:fs/promises'
 
 import { AppError } from '@velaros-ai/core/error'
 
-import type { WorkbenchTerminalOutputEvent } from '@shared/contracts'
+import { type WorkbenchTerminalOutputEvent } from '@shared/contracts/workbench'
 
 import type {
   WorkbenchDebuggerControlRequest,

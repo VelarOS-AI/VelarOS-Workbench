@@ -9,7 +9,7 @@ import {
   acquireTypeScriptLanguageService,
   freezeTypeScriptProgramWhile,
 } from '../src/main/workspace/language/TypeScriptProjectHost'
-import type { WorkbenchLanguageServiceFileEdit } from '../src/shared/contracts'
+import { type WorkbenchLanguageServiceFileEdit } from '../src/shared/contracts/workbench'
 
 import {
   applyFileEdits,

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { workbenchHost } from '@renderer/host'
+import { workbenchHost } from '@renderer/host/WorkbenchHost'
 import {
   buildWorkbenchEditorAutosaveNoticeKey,
   clearWorkbenchEditorAutosaveFailure,

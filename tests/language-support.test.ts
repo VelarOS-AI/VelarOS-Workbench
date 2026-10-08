@@ -42,11 +42,7 @@ import {
   VELAR_EDITOR_KEYWORDS,
   velarScript,
   VelarWorkbenchEditorLanguage,
-} from '../src/renderer/src/contributions/velar/editor'
-import {
-  registerWorkbenchEditorLanguage,
-  resolveInjectedWorkbenchProjectLanguages,
-} from '../src/renderer/src/language/workbenchEditorLanguageContributions'
+} from '../src/renderer/src/models/editor/velarEditor'
 import {
   buildWorkbenchBasicKeywordDecorations,
   getWorkbenchJavaScriptKeywordRangeAtPosition,
@@ -74,13 +70,17 @@ import { mapWorkbenchLanguageServiceCompletionToCodeMirror } from '../src/render
 import { buildWorkbenchSemanticTokenDecorations } from '../src/renderer/src/models/editor/workbenchCodeMirrorSemanticTokens'
 import { workbenchCodeMirrorRiderTheme } from '../src/renderer/src/models/editor/workbenchCodeMirrorTheme'
 import { buildWorkbenchSemanticOccurrenceDecorations } from '../src/renderer/src/models/editor/workbenchCodeMirrorTokenOccurrenceHighlight'
+import {
+  registerWorkbenchEditorLanguage,
+  resolveInjectedWorkbenchProjectLanguages,
+} from '../src/renderer/src/models/editor/workbenchEditorLanguageContributions'
 import { fileLanguage } from '../src/renderer/src/models/shared/workbenchUtils'
 import { VelarWorkbenchLanguageService } from '../src/shared/contributions/velar/service'
 import {
   getBuiltinWorkbenchLanguageServices,
   registerWorkbenchLanguageService,
   resolveBuiltinWorkbenchLanguageService,
-} from '../src/shared/language/workbenchLanguageServices'
+} from '../src/shared/workbenchLanguageServices'
 
 function installVelarWorkbenchContribution(): () => void {
   const removeEditor = registerWorkbenchEditorLanguage(VelarWorkbenchEditorLanguage)
@@ -128,7 +128,7 @@ void describe('focused Workbench language surface', () => {
   void test('keeps the generic editor host free of Velar-specific branches', async () => {
     const root = fileURLToPath(new URL('..', import.meta.url))
     const genericFiles = [
-      'src/shared/language/workbenchLanguageServices.ts',
+      'src/shared/workbenchLanguageServices.ts',
       'src/renderer/src/models/editor/workbenchCodeMirrorLanguage.ts',
       'src/main/workspace/language/ExternalLspClient.ts',
     ]

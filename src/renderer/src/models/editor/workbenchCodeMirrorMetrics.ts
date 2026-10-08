@@ -1,7 +1,7 @@
 import type { Compartment, Extension } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 
-import type { WorkbenchEditorMetrics } from '../settings/workbenchPreferences'
+import type { WorkbenchEditorMetrics } from '../workbenchPreferences'
 
 /**
  * CodeMirror 会缓存字符宽度、文本高度和行块位置。仅改变外层 CSS 变量时，

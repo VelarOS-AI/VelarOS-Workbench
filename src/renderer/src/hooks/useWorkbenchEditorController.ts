@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { workbenchHost } from '@renderer/host'
+import { workbenchHost } from '@renderer/host/WorkbenchHost'
 import { applyWorkbenchLanguageServiceEditsToContent } from '@renderer/models/editor/workbenchCodeMirrorLanguageService'
 import { isWorkbenchEditorTabAutosavable } from '@renderer/models/editor/workbenchEditorAutosave'
 import {
@@ -68,8 +68,8 @@ import {
 } from '@renderer/models/editor/workbenchLanguageServiceFileChanges'
 import type { WorkbenchOpenFileSnapshot } from '@renderer/models/project/workbenchProjectContextIndex'
 import type { WorkbenchProject } from '@renderer/models/project/workbenchProjects'
-import { readWorkbenchLocalHistoryThrottleMs } from '@renderer/models/settings/workbenchPreferences'
 import { isSameOrChildPath } from '@renderer/models/shared/workbenchUtils'
+import { readWorkbenchLocalHistoryThrottleMs } from '@renderer/models/workbenchPreferences'
 import type {
   WorkbenchOpenEditorExternalChange,
   WorkbenchOpenEditorTab,
@@ -79,11 +79,8 @@ import { isEmpty, Log, optionalWhenLazy, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { Result } from '@velaros-ai/core/result'
 
-import type {
-  SystemWorkspaceFilesChangedEvent,
-  WorkbenchLanguageServiceFileEdit,
-  WorkbenchReadFileResult,
-} from '@shared/contracts'
+import { type SystemWorkspaceFilesChangedEvent } from '@shared/contracts/system'
+import { type WorkbenchLanguageServiceFileEdit, type WorkbenchReadFileResult } from '@shared/contracts/workbench'
 import { isWorkbenchImagePreviewPath } from '@shared/workbenchImage'
 import {
   type WorkbenchTextFormat,

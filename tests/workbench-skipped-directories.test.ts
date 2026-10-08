@@ -9,7 +9,7 @@ import { describe, test } from 'bun:test'
 import { createWorkbenchAppParts } from '../src/main/workspace/Parts'
 import { WorkbenchFileWatcher } from '../src/main/workspace/watch/WorkbenchFileWatcher'
 import { shouldSkipProjectDirectory } from '../src/main/workspace/WorkbenchSkippedDirectories'
-import type { SystemWorkspaceFilesChangedEvent } from '../src/shared/contracts'
+import { type SystemWorkspaceFilesChangedEvent } from '../src/shared/contracts/system'
 
 import { refuseTrash } from './helpers/fakeTrash'
 import { sourceSearchWorker } from './helpers/searchWorker'

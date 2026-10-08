@@ -1,4 +1,4 @@
-@reference "../index.css";
+@reference "./index.css";
 
 .gitCompactControl {
   max-width: min(150px, 24vw);

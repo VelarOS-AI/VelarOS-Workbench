@@ -9,7 +9,7 @@ import {
   resolveWorkbenchIndentation,
   toWorkbenchLanguageServiceEditFormat,
 } from '../src/renderer/src/models/editor/workbenchIndentation'
-import type { WorkbenchLanguageServiceEditFormat } from '../src/shared/contracts'
+import { type WorkbenchLanguageServiceEditFormat } from '../src/shared/contracts/workbench'
 import { WorkbenchLanguageChannels } from '../src/shared/workbenchLanguage'
 
 import { createLanguageProject, type LanguageProjectFixture, positionOf } from './helpers/languageProject'

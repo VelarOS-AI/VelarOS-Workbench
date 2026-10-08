@@ -2,7 +2,7 @@
  * main 进程给用户看的文字（应用菜单、文件操作、搜索与终端的提示……），按 {@link getWorkbenchMainLocale} 出中文或英文。英文表的键与
  * 中文表一一对应，少一个就编译不过。`{name}` 这样的占位按参数替换。
  */
-import type { AppLocale } from '@shared/contracts'
+import { type AppLocale } from '@velaros-ai/ui/conversation/contracts'
 
 import { getWorkbenchMainLocale } from './workbenchMainLocale'
 

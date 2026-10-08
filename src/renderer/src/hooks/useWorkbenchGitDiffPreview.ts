@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { workbenchHost } from '@renderer/host'
+import { workbenchHost } from '@renderer/host/WorkbenchHost'
 import type { WorkbenchGitDiffPreviewScope } from '@renderer/models/git/changesPanel.model'
 import {
   isWorkbenchGitDiffAffectedByChange,

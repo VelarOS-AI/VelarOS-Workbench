@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 
 import { describe, mock, test } from 'bun:test'
 
-import type { WorkbenchTerminalStartRequest } from '../src/shared/contracts'
+import { type WorkbenchTerminalStartRequest } from '../src/shared/contracts/workbench'
 import { WorkbenchTerminalChannels } from '../src/shared/workbenchTerminal'
 
 /**

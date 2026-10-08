@@ -1,4 +1,4 @@
-import type { WorkbenchChatSessionGroup } from '@renderer/composition'
+import { type WorkbenchChatSessionGroup } from '@renderer/composition/WorkbenchChatProvider'
 
 /**
  * 独立 Workbench 的会话列表投影。

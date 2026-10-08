@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import type { WorkbenchGitBlame } from '@shared/workbenchGitBlame'
 import type { WorkbenchTextFormat } from '@shared/workbenchTextFormat'
 
-import { useWorkbenchHostRuntime } from '../host'
+import { useWorkbenchHostRuntime } from '../host/WorkbenchHostProvider'
 import { useLatest } from '../support/genericHooks'
 
 /** 追溯栏开着时交给编辑器的：哪个文件的结果；还在查、查不到（没纳入版本管理、不是仓库）时 `blame` 为 null。 */

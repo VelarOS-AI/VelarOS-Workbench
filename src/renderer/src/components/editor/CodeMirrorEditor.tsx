@@ -77,21 +77,15 @@ import {
   useWorkbenchEditorMetrics,
   useWorkbenchEditorWordWrap,
 } from '@renderer/hooks/useWorkbenchPreferences'
-import {
-  useWorkbenchHostRuntime,
-  type WorkbenchHostRuntime,
-} from '@renderer/host'
-import { useWorkbenchI18n } from '@renderer/i18n'
+import { type WorkbenchHostRuntime } from '@renderer/host/WorkbenchHost'
+import { useWorkbenchHostRuntime } from '@renderer/host/WorkbenchHostProvider'
+import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 import type { PackageManagerCommand } from '@renderer/models/commands/workbenchPackageScriptCommand'
 import {
   buildWorkbenchVelarBuildCommand,
   buildWorkbenchVelarRunCommand,
   isWorkbenchVelarFilePath,
 } from '@renderer/models/commands/workbenchVelarFileCommand'
-import {
-  useWorkbenchComments,
-  useWorkbenchCommentStore,
-} from '@renderer/models/comments/workbenchCommentStore'
 import type { WorkbenchLanguageServiceWorkspaceEditRequest } from '@renderer/models/editor/workbenchCodeActions'
 import {
   isWorkbenchActiveLineSuppressed,
@@ -254,21 +248,19 @@ import {
 } from '@renderer/models/editor/workbenchVelarTestRunGutter'
 import type { WorkbenchProjectContextIndex } from '@renderer/models/project/workbenchProjectContextIndex'
 import {
+  useWorkbenchComments,
+  useWorkbenchCommentStore,
+} from '@renderer/models/workbenchCommentStore'
+import {
   readWorkbenchPreferences,
   type WorkbenchThemeId,
-} from '@renderer/models/settings/workbenchPreferences'
+} from '@renderer/models/workbenchPreferences'
 import { useStandaloneWorkbenchModelConfig } from '@renderer/runtime/standaloneWorkbenchModelConfig'
 import type { WorkbenchOpenEditorTab } from '@renderer/types/workbenchTypes'
 
 import { isEmpty, isPresent, Log, optionalWhen, toNullable, toOptional } from '@velaros-ai/core'
 
-import type {
-  WorkbenchLanguageServiceCodeAction,
-  WorkbenchLanguageServiceDiagnostic,
-  WorkbenchLanguageServiceEditFormat,
-  WorkbenchLanguageServiceFileEdit,
-  WorkbenchLanguageServiceLocation,
-} from '@shared/contracts'
+import { type WorkbenchLanguageServiceCodeAction, type WorkbenchLanguageServiceDiagnostic, type WorkbenchLanguageServiceEditFormat, type WorkbenchLanguageServiceFileEdit, type WorkbenchLanguageServiceLocation } from '@shared/contracts/workbench'
 
 import { useWorkbenchEditorRunDebugExtension } from '../../hooks/useWorkbenchEditorRunDebug'
 import { useWorkbenchEditorVimExtension } from '../../hooks/useWorkbenchEditorVim'

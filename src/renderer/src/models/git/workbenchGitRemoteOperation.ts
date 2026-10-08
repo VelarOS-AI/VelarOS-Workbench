@@ -1,4 +1,4 @@
-import type { WorkspaceGitRemoteAction } from '@shared/contracts'
+import { type WorkspaceGitRemoteAction } from '@shared/contracts/system'
 
 /**
  * 一个项目正在跑的远端操作（获取、拉取、同步、推送）。顶栏的分支菜单、提交面板的推送按钮都能发起远端

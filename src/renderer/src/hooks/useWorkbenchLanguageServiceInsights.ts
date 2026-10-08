@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useWorkbenchHostRuntime } from '@renderer/host'
+import { useWorkbenchHostRuntime } from '@renderer/host/WorkbenchHostProvider'
 import {
   buildWorkbenchLanguageServiceOpenFiles,
   buildWorkbenchLanguageServiceRequestBase,
@@ -23,10 +23,7 @@ import type { WorkbenchOpenEditorTab } from '@renderer/types/workbenchTypes'
 
 import { isEmpty, Log } from '@velaros-ai/core'
 
-import type {
-  WorkbenchLanguageServiceDiagnostic,
-  WorkbenchLanguageServiceDocumentSymbol,
-} from '@shared/contracts'
+import { type WorkbenchLanguageServiceDiagnostic, type WorkbenchLanguageServiceDocumentSymbol } from '@shared/contracts/workbench'
 
 import { useLatest } from '../support/genericHooks'
 

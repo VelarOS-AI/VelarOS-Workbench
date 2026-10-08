@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { workbenchHost } from '@renderer/host'
+import { workbenchHost } from '@renderer/host/WorkbenchHost'
 import type { WorkbenchOpenFileSnapshot } from '@renderer/models/project/workbenchProjectContextIndex'
 import type { WorkbenchProject } from '@renderer/models/project/workbenchProjects'
 import { fileLanguage } from '@renderer/models/shared/workbenchUtils'
@@ -7,7 +7,7 @@ import { fileLanguage } from '@renderer/models/shared/workbenchUtils'
 import { AppError } from '@velaros-ai/core/error'
 import { Result } from '@velaros-ai/core/result'
 
-import type { WorkbenchIndexProjectResult } from '@shared/contracts'
+import { type WorkbenchIndexProjectResult } from '@shared/contracts/workbench'
 
 import { useStableWorkbenchMessageTranslate } from '../runtime/useStableWorkbenchMessaging'
 import { useLatest, useMonotonicAsyncRequest } from '../support/genericHooks'

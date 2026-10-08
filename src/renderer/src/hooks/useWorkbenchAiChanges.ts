@@ -5,7 +5,7 @@ import type {
   WorkbenchChatRunFileChangeStatus,
 } from '@shared/workbenchGit'
 
-import type { WorkbenchChatSessionSnapshot } from '../composition'
+import { type WorkbenchChatSessionSnapshot } from '../composition/WorkbenchChatProvider'
 import {
   buildWorkbenchAiChangeTree,
   getWorkbenchAiChangeRoundKey,

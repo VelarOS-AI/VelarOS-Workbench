@@ -1,11 +1,6 @@
 import type * as ts from 'typescript'
 
-import type {
-  WorkbenchLanguageServiceCallHierarchyCall,
-  WorkbenchLanguageServiceCallHierarchyDirection,
-  WorkbenchLanguageServiceCallHierarchyItem,
-  WorkbenchLanguageServiceLocation,
-} from '@shared/contracts'
+import { type WorkbenchLanguageServiceCallHierarchyCall, type WorkbenchLanguageServiceCallHierarchyDirection, type WorkbenchLanguageServiceCallHierarchyItem, type WorkbenchLanguageServiceLocation } from '@shared/contracts/workbench'
 
 import { mapTypeScriptSymbolKind, rangeFromTextSpanInContent } from './TypeScriptLanguageFeatures'
 

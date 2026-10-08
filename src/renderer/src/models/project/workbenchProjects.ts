@@ -8,7 +8,7 @@ import {
 import {
   createLocalStorageJsonStore,
   type StorageLike,
-} from '../../persistence/localStorageJsonStore'
+} from '../../support/localStorageJsonStore'
 
 export interface WorkbenchProject {
   id: string

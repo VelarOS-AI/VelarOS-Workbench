@@ -12,7 +12,7 @@ import {
   mergeWorkbenchDiagnosticsByPath,
   retainWorkbenchProjectDiagnostics,
 } from '../src/renderer/src/models/editor/workbenchLanguageServiceInsightsModel'
-import type { WorkbenchLanguageServiceDiagnostic } from '../src/shared/contracts'
+import { type WorkbenchLanguageServiceDiagnostic } from '../src/shared/contracts/workbench'
 
 function isInside(projectRoot: string, absolutePath: string): boolean {
   const value = relative(projectRoot, absolutePath)

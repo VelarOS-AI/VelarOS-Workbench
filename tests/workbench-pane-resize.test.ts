@@ -54,7 +54,7 @@ void describe('Workbench pane resize', () => {
     assert.match(layout, /\.ideBody > \.embeddedKernelRoot \{\s*--workbench-file-pane-width: inherit;\s*\}/u)
     assert.match(layout, /\.bottomToolWindowSlot \{\s*--workbench-command-panel-height: inherit;\s*\}/u)
     // 编辑区的文件栏宽度跟着外壳变量走，拖拽时不必重渲染。
-    const presentation = readSource('src/renderer/src/StandaloneWorkbenchPagePresentation.tsx')
+    const presentation = readSource('src/renderer/src/app/StandaloneWorkbenchPagePresentation.tsx')
     assert.match(presentation, /filePanelWidth: 'var\(--workbench-file-pane-width\)'/u)
     assert.match(presentation, /ref=\{layout\.shellRef\}/u)
   })

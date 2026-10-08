@@ -1,4 +1,4 @@
-@reference "../index.css";
+@reference "./index.css";
 
 /*
  * 调试 webview 常驻层：所有打开的调试选项卡的 webview 始终挂载（保状态），

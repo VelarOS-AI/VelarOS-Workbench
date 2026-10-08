@@ -10,7 +10,7 @@ import {
   type WorkbenchLanguagePathResolver,
   WorkbenchLanguageServices,
 } from '../src/main/workspace/language/LanguageServices'
-import { registerWorkbenchLanguageService } from '../src/shared/language/workbenchLanguageServices'
+import { registerWorkbenchLanguageService } from '../src/shared/workbenchLanguageServices'
 
 function isInside(projectRoot: string, absolutePath: string): boolean {
   const value = relative(projectRoot, absolutePath)

@@ -9,7 +9,7 @@ import {
 } from 'react'
 import { useWorkbenchDiffLayout } from '@renderer/hooks/useWorkbenchPreferences'
 import type { WorkbenchUnifiedDiffRow } from '@renderer/models/git/workbenchGitDiffModel'
-import type { WorkbenchThemeId } from '@renderer/models/settings/workbenchPreferences'
+import type { WorkbenchThemeId } from '@renderer/models/workbenchPreferences'
 
 import styles from '../../styles/workbenchPageStyles'
 import { lazyWithPreload } from '../../support/lazyWithPreload'

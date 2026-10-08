@@ -17,10 +17,6 @@ import {
   attachWorkbenchTerminalOutput,
   onWorkbenchTerminalOutputDiscarded,
 } from '../../models/commands/workbenchTerminalOutputBus'
-import {
-  matchWorkbenchTerminalPaneKey,
-  type WorkbenchTerminalPaneAction,
-} from '../../models/commands/workbenchTerminalSplits'
 import type { WorkbenchEditorFindStatus } from '../../models/editor/workbenchEditorFindState'
 
 import {
@@ -49,11 +45,6 @@ export interface WorkbenchTerminalInstanceHandlers {
   onFind?: (selection: string) => void
   /** 查找栏开着时输出变了，匹配数跟着变。 */
   onFindStatusChange?: (status: WorkbenchEditorFindStatus) => void
-  /**
-   * 在终端里按了拆分、换到旁边那个终端的键。返回 true 是接下了（这个键不再交给 shell）；没给、返回 false
-   * （没有旁边的终端可换）就照常交给 shell。
-   */
-  onPaneAction?: (action: WorkbenchTerminalPaneAction) => boolean
 }
 
 export interface WorkbenchTerminalInstance {
@@ -120,6 +111,7 @@ export function acquireWorkbenchTerminal(
     allowProposedApi: true,
     cursorBlink: true,
     cursorStyle: 'bar',
+    cursorWidth: 2,
     fontFamily: options.fontFamily,
     fontSize: 12,
     lineHeight: 1.25,
@@ -153,18 +145,12 @@ export function acquireWorkbenchTerminal(
     entry.cwd = parseWorkbenchTerminalCwdReport(data) ?? entry.cwd
     return true
   })
-  // ⌘F（其它平台 Ctrl+F）打开终端的查找栏，拆分、换到旁边的终端也在这里接下，都不再交给 shell。
+  // ⌘F（其它平台 Ctrl+F）打开终端的查找栏，不再交给 shell。
   terminal.attachCustomKeyEventHandler((event) => {
     if (event.type !== 'keydown') return true
     if (isFindShortcut(event) && entry.handlers.onFind) {
       event.preventDefault()
       entry.handlers.onFind(terminal.getSelection())
-      releaseHeldKey(terminal)
-      return false
-    }
-    const paneAction = matchWorkbenchTerminalPaneKey(event, isApplePlatform)
-    if (paneAction && entry.handlers.onPaneAction?.(paneAction)) {
-      event.preventDefault()
       releaseHeldKey(terminal)
       return false
     }

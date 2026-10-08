@@ -13,7 +13,7 @@ import {
   type WorkbenchEditorMetrics,
   type WorkbenchPreferences,
   type WorkbenchThemeId,
-} from '../models/settings/workbenchPreferences'
+} from '../models/workbenchPreferences'
 
 export interface WorkbenchPreferencesController {
   preferences: WorkbenchPreferences

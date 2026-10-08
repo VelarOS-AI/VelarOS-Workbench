@@ -1,4 +1,4 @@
-import type { WorkbenchLanguageServiceLocation } from '@shared/contracts'
+import { type WorkbenchLanguageServiceLocation } from '@shared/contracts/workbench'
 
 export type WorkbenchSymbolLocationKind = 'definition' | 'reference'
 

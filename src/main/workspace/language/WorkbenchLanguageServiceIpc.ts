@@ -9,26 +9,7 @@ import { ipcMain, type IpcMainInvokeEvent } from 'electron'
 
 import type { ModelSelection } from '@velaros-ai/model/contracts'
 
-import type {
-  WorkbenchLanguageServiceCallHierarchyRequest,
-  WorkbenchLanguageServiceCodeActionResolveRequest,
-  WorkbenchLanguageServiceCodeActionsRequest,
-  WorkbenchLanguageServiceCompletionResolveRequest,
-  WorkbenchLanguageServiceDiagnostic,
-  WorkbenchLanguageServiceEditFormat,
-  WorkbenchLanguageServiceExtensionRequest,
-  WorkbenchLanguageServiceFileRename,
-  WorkbenchLanguageServiceFileRenameEditsRequest,
-  WorkbenchLanguageServiceInlayHintsRequest,
-  WorkbenchLanguageServiceOffsetRange,
-  WorkbenchLanguageServiceOpenFile,
-  WorkbenchLanguageServicePosition,
-  WorkbenchLanguageServicePositionRequest,
-  WorkbenchLanguageServiceProjectDiagnosticsRequest,
-  WorkbenchLanguageServiceRange,
-  WorkbenchLanguageServiceRenameRequest,
-  WorkbenchLanguageServiceRequest,
-} from '@shared/contracts'
+import { type WorkbenchLanguageServiceCallHierarchyRequest, type WorkbenchLanguageServiceCodeActionResolveRequest, type WorkbenchLanguageServiceCodeActionsRequest, type WorkbenchLanguageServiceCompletionResolveRequest, type WorkbenchLanguageServiceDiagnostic, type WorkbenchLanguageServiceEditFormat, type WorkbenchLanguageServiceExtensionRequest, type WorkbenchLanguageServiceFileRename, type WorkbenchLanguageServiceFileRenameEditsRequest, type WorkbenchLanguageServiceInlayHintsRequest, type WorkbenchLanguageServiceOffsetRange, type WorkbenchLanguageServiceOpenFile, type WorkbenchLanguageServicePosition, type WorkbenchLanguageServicePositionRequest, type WorkbenchLanguageServiceProjectDiagnosticsRequest, type WorkbenchLanguageServiceRange, type WorkbenchLanguageServiceRenameRequest, type WorkbenchLanguageServiceRequest } from '@shared/contracts/workbench'
 
 import {
   type WorkbenchInlineCompletionBridgeRequest,

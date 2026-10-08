@@ -7,7 +7,7 @@ import {
 import {
   createLocalStorageJsonStore,
   type StorageLike,
-} from '../../persistence/localStorageJsonStore'
+} from '../../support/localStorageJsonStore'
 
 /**
  * 每个项目最近打开过的文件（相对项目根），最近的在前：快速打开没有输入时列出它们，有输入时给它们加分。

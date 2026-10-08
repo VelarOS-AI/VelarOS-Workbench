@@ -18,7 +18,7 @@ void describe("Workbench shared chat scrolling", () => {
       "src/renderer/src/runtime/standaloneWorkbenchChatAdapter.tsx",
     );
     const panel = readSource(
-      "src/renderer/src/components/chat/WorkbenchChatPanel.tsx",
+      "src/renderer/src/components/WorkbenchChatPanel.tsx",
     );
 
     assert.match(
@@ -44,7 +44,7 @@ void describe("Workbench shared chat scrolling", () => {
 
   void test("lets the Workbench header hide the entire shared navigator", () => {
     const panel = readSource(
-      "src/renderer/src/components/chat/WorkbenchChatPanel.tsx",
+      "src/renderer/src/components/WorkbenchChatPanel.tsx",
     );
     const adapter = readSource(
       "src/renderer/src/runtime/standaloneWorkbenchChatAdapter.tsx",
@@ -130,7 +130,7 @@ void describe("Workbench shared chat scrolling", () => {
 
   void test("keeps the persisted right chat pane resize handle hittable", () => {
     const presentation = readSource(
-      "src/renderer/src/StandaloneWorkbenchPagePresentation.tsx",
+      "src/renderer/src/app/StandaloneWorkbenchPagePresentation.tsx",
     );
     const controller = readSource(
       "src/renderer/src/hooks/useWorkbenchLayoutController.ts",

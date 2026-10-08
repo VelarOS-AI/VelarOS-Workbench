@@ -1167,11 +1167,6 @@ export interface WorkbenchRunCommandOutputEvent {
 export interface WorkbenchTerminalStartRequest {
   projectRoot: string
   cwd?: string
-  /**
-   * 拆分出来的终端：从这个会话的 shell 此刻所在的目录开始（没给 `cwd` 时）。问不到、那个目录已经不在项目里，
-   * 就从项目根开始。
-   */
-  inheritCwdFrom?: string
   /** 以一次性 shell 进程执行的命令（运行卡用，例如 `bun run dev`）；命令退出即关闭会话。 */
   initialCommand?: string
   /**

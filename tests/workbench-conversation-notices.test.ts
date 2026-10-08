@@ -140,6 +140,22 @@ describe('Workbench conversation notices', () => {
     expect(discarded.messages).toHaveLength(0)
   })
 
+  test('script progress and serialized history retain the host start timestamp', () => {
+    const running = script('running', '// 检查项目', { startedAt: 1000 })
+    let state = applyWorkbenchConversationNotice(Empty, ConversationScriptNotice, running)
+    state = applyWorkbenchConversationNotice(state, ConversationScriptNotice, {
+      ...running, processOutput: 'checking',
+    })
+    const restored = JSON.parse(JSON.stringify(state)) as WorkbenchConversationTranscript
+    expect(restored.messages[0]!.blocks[0]).toMatchObject({ status: 'running', startedAt: 1000 })
+    state = applyWorkbenchConversationNotice(restored, ConversationScriptNotice, {
+      ...running, status: 'succeeded', durationMs: 2345,
+    })
+    expect(state.messages[0]!.blocks[0]).toMatchObject({ startedAt: 1000, durationMs: 2345 })
+    for (const startedAt of ['1000', Number.NaN, Number.POSITIVE_INFINITY, -1])
+      expect(applyWorkbenchConversationNotice(Empty, ConversationScriptNotice, { ...running, startedAt })).toBe(Empty)
+  })
+
   test('interaction cards are replaced in place when answered', () => {
     const card = {
       id: 'request-1',

@@ -14,7 +14,8 @@ import {
   sortWorkbenchGitRefs,
 } from '../src/renderer/src/models/git/changesPanel.model'
 import { resolveWorkbenchGitLogWindow } from '../src/renderer/src/models/git/workbenchGitGraph'
-import type { WorkspaceGitLogEntry, WorkspaceGitRef } from '../src/shared/contracts'
+import { type WorkspaceGitLogEntry } from '../src/shared/contracts/system'
+import { type WorkspaceGitRef } from '../src/shared/contracts/workspaceGit'
 
 function readSource(relativePath: string): string {
   return readFileSync(path.resolve(process.cwd(), relativePath), 'utf8')

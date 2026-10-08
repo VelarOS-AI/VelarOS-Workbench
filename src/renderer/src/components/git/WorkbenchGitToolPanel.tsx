@@ -11,7 +11,7 @@ import {
 import { useWorkbenchGitLog } from '@renderer/hooks/useWorkbenchGitLog'
 import { useWorkbenchGitOperation } from '@renderer/hooks/useWorkbenchGitOperation'
 import { useWorkbenchGitStashes } from '@renderer/hooks/useWorkbenchGitStashes'
-import { workbenchHost } from '@renderer/host'
+import { workbenchHost } from '@renderer/host/WorkbenchHost'
 import {
   filterWorkbenchGitLogCommits,
   isWorkbenchGitHeadCommit,
@@ -34,12 +34,8 @@ import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
 import { Paragraph } from '@velaros-ai/ui/primitives/display/Paragraph'
 import { SearchField } from '@velaros-ai/ui/primitives/forms/SearchField'
 
-import type {
-  SystemWorkspaceGitSummary,
-  WorkspaceGitLogEntry,
-  WorkspaceGitStash,
-  WorkspaceGitStashAction,
-} from '@shared/contracts'
+import { type SystemWorkspaceGitSummary, type WorkspaceGitLogEntry } from '@shared/contracts/system'
+import { type WorkspaceGitStash, type WorkspaceGitStashAction } from '@shared/contracts/workspaceGit'
 
 import styles from '../../styles/workbenchPageStyles'
 import {

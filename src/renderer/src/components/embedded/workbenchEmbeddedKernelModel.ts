@@ -1,7 +1,7 @@
 import type { WorkbenchAiChangesState } from '@renderer/hooks/useWorkbenchAiChanges'
 import type { WorkbenchGitDecorationMap } from '@renderer/models/git/workbenchGitModel'
 import type { WorkbenchProject } from '@renderer/models/project/workbenchProjects'
-import type { WorkbenchThemeId } from '@renderer/models/settings/workbenchPreferences'
+import type { WorkbenchThemeId } from '@renderer/models/workbenchPreferences'
 
 import type { WorkbenchDebugTab } from '../../hooks/useWorkbenchEditorNavigationState'
 import type { WorkbenchEditorProjectBundle } from '../../types/workbenchSurfaceBundles'

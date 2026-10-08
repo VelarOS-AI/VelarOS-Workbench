@@ -19,13 +19,13 @@ import type { WorkbenchUnifiedDiffRow } from '../src/renderer/src/models/git/wor
 import {
   DEFAULT_WORKBENCH_PREFERENCES,
   normalizeWorkbenchPreferences,
-} from '../src/renderer/src/models/settings/workbenchPreferences'
+} from '../src/renderer/src/models/workbenchPreferences'
 
 import { shareHostReactWithLinkedUi } from './helpers/linkedUiReact'
 
 shareHostReactWithLinkedUi()
 
-const { WorkbenchLocalizationProvider } = await import('../src/renderer/src/i18n')
+const { WorkbenchLocalizationProvider } = await import('../src/renderer/src/i18n/WorkbenchLocalizationProvider')
 const { buildReadOnlyDiffDecorations } = await import(
   '../src/renderer/src/components/editor/ReadOnlyDiffCodeMirror'
 )
@@ -269,7 +269,7 @@ void describe('Workbench diff layout preference', () => {
     ])
       assert.match(readSource(consumer), /<WorkbenchDiffLayoutToggle \/>/u, consumer)
 
-    const preferences = readSource('src/renderer/src/models/settings/workbenchPreferences.ts')
+    const preferences = readSource('src/renderer/src/models/workbenchPreferences.ts')
     assert.match(
       preferences,
       /export function saveWorkbenchDiffLayout\(diffLayout: WorkbenchDiffLayout\): void \{\s*saveWorkbenchPreferences\(\{ \.\.\.readWorkbenchPreferences\(\), diffLayout \}\)/u

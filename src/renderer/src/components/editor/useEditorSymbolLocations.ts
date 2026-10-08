@@ -7,7 +7,7 @@ import {
   type WorkbenchSymbolLocationsState,
 } from '@renderer/models/editor/workbenchSymbolLocations'
 
-import type { WorkbenchLanguageServiceLocation } from '@shared/contracts'
+import { type WorkbenchLanguageServiceLocation } from '@shared/contracts/workbench'
 
 export interface EditorSymbolLocations {
   /** 面板此刻列着什么；收起来时为 null。 */

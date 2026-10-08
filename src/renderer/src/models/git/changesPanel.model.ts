@@ -1,10 +1,7 @@
-import type {
-  SystemWorkspaceGitDiffResult,
-  WorkspaceGitLogEntry,
-  WorkspaceGitRef,
-} from '@shared/contracts'
+import { type SystemWorkspaceGitDiffResult, type WorkspaceGitLogEntry } from '@shared/contracts/system'
+import { type WorkspaceGitRef } from '@shared/contracts/workspaceGit'
 
-import type { WorkbenchI18nContextValue } from '../../i18n'
+import { type WorkbenchI18nContextValue } from '../../i18n/WorkbenchLocalizationProvider'
 
 import {
   getWorkbenchGitChangeDisplayPath,

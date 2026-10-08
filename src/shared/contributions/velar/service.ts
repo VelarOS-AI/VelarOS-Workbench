@@ -1,4 +1,4 @@
-import type { WorkbenchLanguageServiceDescriptor } from '@shared/language/workbenchLanguageServices'
+import type { WorkbenchLanguageServiceDescriptor } from '@shared/workbenchLanguageServices'
 
 import { VELAR_LANGUAGE_KEYWORDS } from './language'
 

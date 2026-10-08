@@ -9,7 +9,7 @@ import {
   mergeWorkbenchVelarProjectSnapshots,
   selectWorkbenchVelarProjectRoots,
   updateWorkbenchVelarProjectSnapshotIndex,
-} from '../src/renderer/src/models/codeGraph/workbenchVelarProjectGraph'
+} from '../src/renderer/src/models/workbenchVelarProjectGraph'
 import {
   applyVelarLogicGraphResponse,
   parseVelarLogicGraphResponse,

@@ -8,8 +8,8 @@ import {
   StackIcon,
   UserCircleIcon,
 } from '@phosphor-icons/react'
-import { workbenchHost } from '@renderer/host'
-import { useWorkbenchI18n } from '@renderer/i18n'
+import { workbenchHost } from '@renderer/host/WorkbenchHost'
+import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 import {
   formatWorkbenchGitCommitDate,
   parseWorkbenchGitCommitDiff,
@@ -23,7 +23,8 @@ import {
 import { Result } from '@velaros-ai/core/result'
 import { Paragraph } from '@velaros-ai/ui/primitives/display/Paragraph'
 
-import type { WorkspaceGitLogEntry, WorkspaceGitStash } from '@shared/contracts'
+import { type WorkspaceGitLogEntry } from '@shared/contracts/system'
+import { type WorkspaceGitStash } from '@shared/contracts/workspaceGit'
 
 import styles from '../../styles/workbenchPageStyles'
 

@@ -25,16 +25,16 @@ const retiredOwnerModules = [
   /^@velaros-ai\/agent\/(?:protocol|tool-contract)(?:\/|$)/u,
 ]
 
-/** 共享合同入口里每个外来 DTO 的唯一属主。 */
-const contractOwners: Readonly<Record<string, string>> = {
-  AppLocale: '@velaros-ai/ui/conversation/contracts',
-  ChatMessage: '@velaros-ai/ui/conversation/contracts',
-  ContentBlock: '@velaros-ai/ui/conversation/contracts',
-  ToolCallBlock: '@velaros-ai/ui/conversation/contracts',
-  BrowserElementSelection: '@velaros-ai/velaros/browser/contracts',
-  AgentProviderRuntimeConfig: '@velaros-ai/model',
-  ListProviderModelsRequest: '@velaros-ai/model',
-  ProviderModelCatalog: '@velaros-ai/model',
+/** 外来合同数据类型的唯一属主。 */
+const contractOwners: Readonly<Record<string, readonly string[]>> = {
+  AppLocale: ['@velaros-ai/ui/conversation/contracts'],
+  ChatMessage: ['@velaros-ai/ui/conversation/contracts'],
+  ContentBlock: ['@velaros-ai/ui/conversation/contracts'],
+  ToolCallBlock: ['@velaros-ai/ui/conversation/contracts'],
+  BrowserElementSelection: ['@velaros-ai/velaros/browser/contracts'],
+  AgentProviderRuntimeConfig: ['@velaros-ai/model', '@velaros-ai/model/contracts'],
+  ListProviderModelsRequest: ['@velaros-ai/model', '@velaros-ai/model/contracts'],
+  ProviderModelCatalog: ['@velaros-ai/model', '@velaros-ai/model/contracts'],
 }
 
 const concreteOwnerNames = new Set([
@@ -78,17 +78,6 @@ function velarosSpecifiers(source: string): string[] {
   return [...source.matchAll(
     /(?:\bfrom\s+|\bimport\s*\(\s*|\bimport\s+)['"](@velaros-ai\/[^'"]+)['"]/gu
   )].map((match) => match[1]!)
-}
-
-/** `export type { A, B as C } from 'x'` 里每个名字（按原名）来自哪个模块。 */
-function reexportOwners(source: string): Map<string, string> {
-  const owners = new Map<string, string>()
-  for (const match of source.matchAll(
-    /export\s+(?:type\s+)?\{([^}]*)\}\s+from\s+['"]([^'"]+)['"]/gu
-  )) {
-    for (const name of importedNames(match[1] ?? '')) owners.set(name, match[2]!)
-  }
-  return owners
 }
 
 function repositoryPath(path: string): string {
@@ -145,28 +134,29 @@ void describe('Core 0.4 owner boundary', () => {
     assert.deepEqual(failures, [])
   })
 
-  void test('re-exports chat, Browser and Model contracts from their owners', async () => {
-    const contracts = await readFile(
-      resolve(repositoryRoot, 'src/shared/contracts/index.ts'),
-      'utf8'
-    )
-    const owners = reexportOwners(contracts)
-
-    assert.deepEqual(
-      Object.fromEntries(Object.keys(contractOwners).map((name) => [name, owners.get(name)])),
-      contractOwners
-    )
+  void test('imports chat, Browser and Model contracts directly from their owners', async () => {
+    const observed = new Set<string>()
+    for (const path of await collectSourceFiles(resolve(repositoryRoot, 'src'))) {
+      const source = await readFile(path, 'utf8')
+      for (const match of source.matchAll(
+        /import\s+(?:type\s+)?\{([^}]*)\}\s+from\s+['"]([^'"]+)['"]/gu
+      )) {
+        for (const name of importedNames(match[1] ?? '')) {
+          const owner = contractOwners[name]
+          if (!owner) continue
+          assert.ok(owner.includes(match[2]!), `${repositoryPath(path)}: ${name} from ${match[2]}`)
+          observed.add(name)
+        }
+      }
+    }
+    assert.ok(observed.has('ChatMessage'))
+    assert.ok(observed.has('BrowserElementSelection'))
+    assert.ok(observed.has('AgentProviderRuntimeConfig'))
   })
 
   void test('owns the Git contracts in one Workbench file', async () => {
     // Platform 的项目能力不再带 Git 合同：Workbench 的 Git 服务与面板是唯一的生产方和消费方，定义只在这一处。
     const owner = 'src/shared/contracts/workspaceGit.ts'
-    const contracts = await readFile(
-      resolve(repositoryRoot, 'src/shared/contracts/index.ts'),
-      'utf8'
-    )
-    assert.match(contracts, /^export type \* from '\.\/workspaceGit'$/mu)
-
     const declaredIn = new Map<string, string[]>()
     for (const path of await collectSourceFiles(resolve(repositoryRoot, 'src'))) {
       const source = await readFile(path, 'utf8')

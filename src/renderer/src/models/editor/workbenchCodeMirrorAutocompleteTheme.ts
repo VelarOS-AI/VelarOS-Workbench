@@ -3,7 +3,7 @@ import { EditorView } from '@codemirror/view'
 import {
   isWorkbenchDarkTheme,
   type WorkbenchThemeId,
-} from '../settings/workbenchPreferences'
+} from '../workbenchPreferences'
 
 import { WorkbenchSymbolKindGlyphMasks } from './workbenchSymbolKindGlyphs'
 

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 
 import { describe, test } from 'bun:test'
 
-import type { WorkbenchLanguageServiceDocumentSymbol } from '../src/shared/contracts'
+import { type WorkbenchLanguageServiceDocumentSymbol } from '../src/shared/contracts/workbench'
 
 import { createLanguageProject, StrictTsconfig } from './helpers/languageProject'
 

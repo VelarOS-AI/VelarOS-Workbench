@@ -26,7 +26,7 @@ import {
   XIcon,
 } from '@phosphor-icons/react'
 import { useWorkbenchEditorTabOverflow } from '@renderer/hooks/useWorkbenchEditorTabOverflow'
-import { useWorkbenchI18n } from '@renderer/i18n'
+import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 import type { WorkbenchEditorAutosaveFailures } from '@renderer/models/editor/workbenchEditorAutosave'
 import type { WorkbenchEditorEditMode } from '@renderer/models/editor/workbenchEditorEditMode'
 import {
@@ -53,7 +53,7 @@ import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 import { Text } from '@velaros-ai/ui/primitives/display/Text'
 
-import type { WorkbenchReadFileResult } from '@shared/contracts'
+import { type WorkbenchReadFileResult } from '@shared/contracts/workbench'
 
 import styles from '../../styles/workbenchPageStyles'
 import { useBlockWheelScroll } from '../../support/useBlockWheelScroll'

@@ -2,12 +2,7 @@
  * 调用层次面板的纯逻辑：一棵按需展开的树。根是光标处的函数，它下面是调用它的（或它调用的）函数，再往下一层
  * 在展开时才去问语言服务。请求、跳转和呈现在编辑器组件那边。
  */
-import type {
-  WorkbenchLanguageServiceCallHierarchyCall,
-  WorkbenchLanguageServiceCallHierarchyDirection,
-  WorkbenchLanguageServiceCallHierarchyItem,
-  WorkbenchLanguageServiceLocation,
-} from '@shared/contracts'
+import { type WorkbenchLanguageServiceCallHierarchyCall, type WorkbenchLanguageServiceCallHierarchyDirection, type WorkbenchLanguageServiceCallHierarchyItem, type WorkbenchLanguageServiceLocation } from '@shared/contracts/workbench'
 
 export interface WorkbenchCallHierarchyNode {
   id: string

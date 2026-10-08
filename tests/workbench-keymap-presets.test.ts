@@ -35,7 +35,7 @@ import {
   resolveWorkbenchKeymapPlatform,
   WORKBENCH_KEYMAP_PRESET_IDS,
 } from '../src/renderer/src/models/layout/workbenchKeymapPresets'
-import type { StorageLike } from '../src/renderer/src/persistence/localStorageJsonStore'
+import type { StorageLike } from '../src/renderer/src/support/localStorageJsonStore'
 
 import {
   keymapTestEventFor,

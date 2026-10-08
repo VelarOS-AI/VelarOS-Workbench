@@ -22,14 +22,7 @@ import { Log, optionalWhen } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import type { Result } from '@velaros-ai/core/result'
 
-import type {
-  WorkbenchLanguageServiceCompletionItem,
-  WorkbenchLanguageServiceCompletionResolveData,
-  WorkbenchLanguageServiceCompletionResolveResult,
-  WorkbenchLanguageServiceCompletionResult,
-  WorkbenchLanguageServiceCompletionTextEdit,
-  WorkbenchLanguageServiceRange,
-} from '@shared/contracts'
+import { type WorkbenchLanguageServiceCompletionItem, type WorkbenchLanguageServiceCompletionResolveData, type WorkbenchLanguageServiceCompletionResolveResult, type WorkbenchLanguageServiceCompletionResult, type WorkbenchLanguageServiceCompletionTextEdit, type WorkbenchLanguageServiceRange } from '@shared/contracts/workbench'
 
 import {
   WORKBENCH_COMPLETION_RETURN_TYPE,

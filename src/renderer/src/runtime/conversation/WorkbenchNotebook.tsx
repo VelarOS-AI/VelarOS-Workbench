@@ -1,6 +1,6 @@
 import { type ReactElement, useEffect, useState } from 'react'
 import { BookOpenTextIcon } from '@phosphor-icons/react'
-import { useWorkbenchI18n } from '@renderer/i18n'
+import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 
 import { AppError } from '@velaros-ai/core/error'
 import { Popover, PopoverAnchor, PopoverContent } from '@velaros-ai/ui/primitives/overlays/Popover'
@@ -8,7 +8,7 @@ import type { RuntimeNoteContent } from '@velaros-ai/velaros'
 
 import { readWorkbenchNotebook } from './readWorkbenchNotebook'
 
-import styles from './WorkbenchNotebook.module.css'
+import styles from '../../styles/WorkbenchNotebook.module.css'
 
 /** 当前会话工作笔记，打开时读取，回合推进时即时刷新。 */
 export function WorkbenchNotebook({
@@ -83,10 +83,13 @@ export function WorkbenchNotebook({
           <BookOpenTextIcon size={16} />
         </button>
       </PopoverAnchor>
-      <PopoverContent align="end" side="bottom" widthStrategy="content" className={styles.popover}>
-        <section className={styles.panel} aria-label={t('workbench.notebookTitle')}>
+      <PopoverContent align="end" side="bottom" sideOffset={4} widthStrategy="content" className={styles.popover}>
+        <section
+          className={styles.panel}
+          aria-label={t('workbench.notebookTitle')}
+          aria-description={t('workbench.notebookDescription')}
+        >
           <strong>{t('workbench.notebookTitle')}</strong>
-          <p className={styles.description}>{t('workbench.notebookDescription')}</p>
           <div className={styles.list} aria-busy={loading}>
             {loading && <p role="status">{t('workbench.notebookLoading')}</p>}
             {!loading && !error && notes.length === 0 && <p>{t('workbench.notebookEmpty')}</p>}

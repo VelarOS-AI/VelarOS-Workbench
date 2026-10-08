@@ -10,17 +10,7 @@
  * 一次性结果」，终端会话是「起 shell → 持续输入/输出 → 手动终止」的持久 PTY 卡片。两者的流式
  * 输出都靠 `event.sender.send(...output 通道...)` 回发给发起窗口，renderer 按 sessionId 路由。
  */
-import type {
-  WorkbenchTerminalAcknowledgeRequest,
-  WorkbenchTerminalCwdRequest,
-  WorkbenchTerminalCwdResult,
-  WorkbenchTerminalInputRequest,
-  WorkbenchTerminalOutputEvent,
-  WorkbenchTerminalResizeRequest,
-  WorkbenchTerminalStartRequest,
-  WorkbenchTerminalStartResult,
-  WorkbenchTerminalStopRequest,
-} from '@shared/contracts'
+import { type WorkbenchTerminalAcknowledgeRequest, type WorkbenchTerminalCwdRequest, type WorkbenchTerminalCwdResult, type WorkbenchTerminalInputRequest, type WorkbenchTerminalOutputEvent, type WorkbenchTerminalResizeRequest, type WorkbenchTerminalStartRequest, type WorkbenchTerminalStartResult, type WorkbenchTerminalStopRequest } from '@shared/contracts/workbench'
 
 import type { WorkbenchFsCallResult } from './workbenchFs'
 

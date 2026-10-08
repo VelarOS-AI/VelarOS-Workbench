@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
-import { workbenchHost } from '@renderer/host'
+import { workbenchHost } from '@renderer/host/WorkbenchHost'
 import type { WorkbenchProject } from '@renderer/models/project/workbenchProjects'
 
 import { AppError } from '@velaros-ai/core/error'
 import { Result } from '@velaros-ai/core/result'
 
-import type { WorkbenchSearchEntriesResult } from '@shared/contracts'
+import { type WorkbenchSearchEntriesResult } from '@shared/contracts/workbench'
 
 import { useStableWorkbenchMessageTranslate } from '../runtime/useStableWorkbenchMessaging'
 import { useDebounceFn, useLatest, useMemoizedFn, useMonotonicAsyncRequest } from '../support/genericHooks'

@@ -1,4 +1,4 @@
-import type { SystemWorkspaceGitDiffResult } from '@shared/contracts'
+import { type SystemWorkspaceGitDiffResult } from '@shared/contracts/system'
 
 export interface WorkbenchGitDiffPreview {
   path: string

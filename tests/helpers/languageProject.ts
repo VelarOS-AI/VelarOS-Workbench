@@ -6,12 +6,7 @@ import { WorkbenchLanguageServices } from '../../src/main/workspace/language/Lan
 import { clearTypeScriptProjectCache } from '../../src/main/workspace/language/TypeScriptProjectHost'
 import { PathResolver } from '../../src/main/workspace/PathResolver'
 import { applyWorkbenchLanguageServiceEditsToContent } from '../../src/renderer/src/models/editor/workbenchCodeMirrorLanguageService'
-import type {
-  WorkbenchLanguageServiceCodeAction,
-  WorkbenchLanguageServiceFileEdit,
-  WorkbenchLanguageServicePosition,
-  WorkbenchLanguageServiceRange,
-} from '../../src/shared/contracts'
+import { type WorkbenchLanguageServiceCodeAction, type WorkbenchLanguageServiceFileEdit, type WorkbenchLanguageServicePosition, type WorkbenchLanguageServiceRange } from '../../src/shared/contracts/workbench'
 
 /** 标题对得上的那个动作；没有就报出都有哪些。 */
 export function findCodeAction(

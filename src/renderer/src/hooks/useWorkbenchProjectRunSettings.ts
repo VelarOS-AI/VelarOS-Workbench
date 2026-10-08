@@ -6,7 +6,7 @@ import {
   saveWorkbenchProjectRunSettings,
   WORKBENCH_PROJECT_RUN_SETTINGS_CHANGED_EVENT,
   type WorkbenchProjectRunSettings,
-} from '../models/settings/workbenchPreferences'
+} from '../models/workbenchPreferences'
 
 export interface WorkbenchProjectRunSettingsController {
   settings: WorkbenchProjectRunSettings

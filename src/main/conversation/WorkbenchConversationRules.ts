@@ -55,6 +55,7 @@ export function contextUsageFromProvider(input: {
     reservedOutputTokens: input.limits.contextTokens - usableContextWindow,
     percent: (input.inputTokens / usableContextWindow) * 100,
     timestamp: input.timestamp,
+    contextWindowEstimated: input.limits.contextWindowEstimated === true,
   }
 }
 

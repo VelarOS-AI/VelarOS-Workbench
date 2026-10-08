@@ -1,4 +1,4 @@
-import type { WorkbenchLanguageServiceDisplayPartKind } from '@shared/contracts'
+import { type WorkbenchLanguageServiceDisplayPartKind } from '@shared/contracts/workbench'
 
 export type WorkbenchEditorHoverPartStyle =
   | 'keyword'

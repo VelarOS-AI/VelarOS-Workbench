@@ -1,4 +1,4 @@
-import type { WorkbenchLanguageServiceHoverDocumentationBlock } from '@shared/contracts'
+import { type WorkbenchLanguageServiceHoverDocumentationBlock } from '@shared/contracts/workbench'
 
 /**
  * 语言服务器悬浮说明里的 Markdown（Pyright、Markdown 语言服务、外部 LSP）拆成编辑器能画的块：代码块、段落。

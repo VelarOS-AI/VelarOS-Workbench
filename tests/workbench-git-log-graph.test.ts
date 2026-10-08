@@ -4,7 +4,7 @@ import { join } from 'node:path'
 
 import { describe, test } from 'bun:test'
 
-import type { WorkspaceGitLogEntry } from '../src/shared/contracts'
+import { type WorkspaceGitLogEntry } from '../src/shared/contracts/system'
 
 import { commitAll, createGitService, git, withRepository } from './helpers/gitRepository'
 

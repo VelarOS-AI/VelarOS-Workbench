@@ -6,7 +6,7 @@
 import type { Stats } from 'node:fs'
 import { readlink, realpath, stat } from 'node:fs/promises'
 
-import type { WorkbenchDirectoryEntrySymlink } from '@shared/contracts'
+import { type WorkbenchDirectoryEntrySymlink } from '@shared/contracts/workbench'
 
 import { isPathInsideRoot } from './PathContainmentHelper'
 

@@ -9,7 +9,7 @@ import {
   WORKBENCH_COMPLETION_ACTIVATE_ON_TYPING_DELAY_MS,
   WORKBENCH_COMPLETION_UPDATE_SYNC_TIME_MS,
 } from '../src/renderer/src/models/editor/workbenchCodeMirrorCompletionPresentation'
-import type { WorkbenchThemeId } from '../src/renderer/src/models/settings/workbenchPreferences'
+import type { WorkbenchThemeId } from '../src/renderer/src/models/workbenchPreferences'
 
 function autocompleteThemeRules(theme: WorkbenchThemeId): string {
   const state = EditorState.create({ extensions: [getWorkbenchCodeMirrorAutocompleteTheme(theme)] })

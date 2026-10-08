@@ -1,13 +1,10 @@
-import type { WorkbenchProductRuntimeValue } from '@renderer/composition'
+import { type WorkbenchProductRuntimeValue } from '@renderer/composition/WorkbenchProductRuntimeProvider'
 
 import { Result } from '@velaros-ai/core'
 
-import type {
-  AuxiliaryModelConfig,
-  AuxiliaryModelConfigs,
-} from '@shared/contracts'
+import { type AuxiliaryModelConfig, type AuxiliaryModelConfigs } from '@shared/contracts/product'
 
-import chatStyles from './standaloneWorkbenchChat.module.css'
+import chatStyles from '../styles/standaloneWorkbenchChat.module.css'
 
 /**
  * 独立 Workbench 应用的产品运行时投影。

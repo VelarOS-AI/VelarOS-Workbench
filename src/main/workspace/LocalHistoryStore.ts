@@ -16,11 +16,7 @@ import { join } from 'node:path'
 import { isNumber, isObject, isString, Log } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 
-import type {
-  WorkbenchListLocalHistoryResult,
-  WorkbenchLocalHistoryEntry,
-  WorkbenchReadLocalHistorySnapshotResult,
-} from '@shared/contracts'
+import { type WorkbenchListLocalHistoryResult, type WorkbenchLocalHistoryEntry, type WorkbenchReadLocalHistorySnapshotResult } from '@shared/contracts/workbench'
 
 import { workbenchMainText } from '../i18n/workbenchMainMessages'
 

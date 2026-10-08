@@ -4,7 +4,7 @@ import { parentPort, workerData } from 'node:worker_threads'
 import { AppError } from '@velaros-ai/core/error'
 
 import { VelarWorkbenchLanguageService } from '@shared/contributions/velar/service'
-import { registerWorkbenchLanguageService } from '@shared/language/workbenchLanguageServices'
+import { registerWorkbenchLanguageService } from '@shared/workbenchLanguageServices'
 
 import { isWorkbenchAppLocale, setWorkbenchMainLocale } from '../../i18n/workbenchMainLocale'
 import { workbenchMainText } from '../../i18n/workbenchMainMessages'

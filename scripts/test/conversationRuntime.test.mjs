@@ -37,13 +37,16 @@ const {
   WorkbenchSessionPeers,
 } = await import(pathToFileURL(bundle).href)
 
-/** Desktop 当前使用的原生 exec 调用，真正启动标准 Node 子进程。 */
+/** 原生工具协议：exec 执行标准 Node 程序，done 明确提交本轮完成结果。 */
 let toolSequence = 0
 const execute = (_frame, code) => ({
   type: 'tool-call',
   value: { id: `exec-${++toolSequence}`, name: 'exec', input: { code } },
 })
-const done = (_frame, text = '完成') => text
+const done = (_frame, message = '完成') => ({
+  type: 'tool-call',
+  value: { id: `done-${++toolSequence}`, name: 'done', input: { message } },
+})
 
 function modelFrom(frames, generate, id = 'integration-model') {
   return {
@@ -181,7 +184,7 @@ test(
             frame,
             "// 改一下文件再跑命令\nimport {edit} from 'velaros:project';import {execa} from 'execa';await edit({steps:[{action:'replace',path:'hello.txt',oldText:'before',newText:'after'}]});await execa('sh',['-c','printf verified > shell-proof.txt']);console.log('NODE-PROOF');"
           )
-        else yield { type: 'text', text: done(frame, '改好了') }
+        else yield done(frame, '改好了')
         yield { type: 'finish', reason: 'stop' }
       },
       { rules: [{ relativePath: 'AGENTS.md', content: '项目规则：回答要简短。' }] }
@@ -231,7 +234,7 @@ test(
       "// 写入执行凭据\nimport {writeFile} from 'node:fs/promises';await writeFile('ran.txt','ran');"
     const f = await fixture(t, async function* (frame, _signal, call) {
       if (call === 1) yield execute(frame, code)
-      else yield { type: 'text', text: done(frame, '已按回复处理') }
+      else yield done(frame, '已按回复处理')
       yield { type: 'finish', reason: 'stop' }
     })
     const run = f.runtime.submit(f.sink, f.request('写凭据', { permissionMode: 'ask-every-time' }))
@@ -270,7 +273,7 @@ test(
           frame,
           "// 检查当前记忆操作\nimport {memory} from 'velaros:system';console.log('memory-recall-type:' + typeof memory.recall);"
         )
-      else yield { type: 'text', text: done(frame, '好了') }
+      else yield done(frame, '好了')
       yield { type: 'finish', reason: 'stop' }
     })
     const { scope } = await f.memory.forRun(await realpath(f.workspace))
@@ -303,7 +306,7 @@ test(
           frame,
           "// 查看代码能力\nimport {open} from 'velaros:browser';import {list} from 'velaros:modules';console.log('browser-module:'+typeof open);console.log('mounted:'+JSON.stringify(await list({limit:100}))); "
         )
-      else yield { type: 'text', text: done(frame, '好了') }
+      else yield done(frame, '好了')
       yield { type: 'finish', reason: 'stop' }
     })
     await f.runtime.submit(f.sink, f.request('有哪些模块')).completed
@@ -346,7 +349,7 @@ test(
       else {
         assert.equal(frame.images.length, 1)
         assert.equal(frame.images[0].data, png)
-        yield { type: 'text', text: done(frame) }
+        yield done(frame)
       }
       yield { type: 'finish', reason: 'stop' }
     })
@@ -373,7 +376,7 @@ test(
           frame,
           "// 查询项目并使用代码工具\nimport {query} from 'velaros:code';console.log('DIAGNOSTICS:'+JSON.stringify(await query({intent:'diagnostics',path:'answer.ts'})));const tools=['ts-morph','prettier','jsonc-parser','@ast-grep/napi','@playwright/test'];for(const name of tools)await import(name);console.log('CODE-TOOLS:'+tools.length);const {format}=await import('prettier');console.log('FORMATTED:'+await format('const n:number=42',{parser:'typescript',semi:false}));"
         )
-      else yield { type: 'text', text: done(frame) }
+      else yield done(frame)
       yield { type: 'finish', reason: 'stop' }
     })
     await writeFile(join(f.workspace, 'answer.ts'), 'export const answer: number = "wrong";')
@@ -397,7 +400,7 @@ test(
           frame,
           `// 检查项目写入边界\nimport {writeFile} from 'node:fs/promises';await writeFile(${JSON.stringify(outside)},'outside');`
         )
-      else yield { type: 'text', text: done(frame, '已核验边界') }
+      else yield done(frame, '已核验边界')
       yield { type: 'finish', reason: 'stop' }
     })
     outside = join(bundleDirectory, 'sandbox-outside.txt')
@@ -427,7 +430,7 @@ test(
           frame,
           "// 更新工作笔记\nimport {memory} from 'velaros:system';await memory.update({key:'progress',baseRevision:1,body:'SECOND-REVISION',resident:false});"
         )
-      else yield { type: 'text', text: done(frame) }
+      else yield done(frame)
       yield { type: 'finish', reason: 'stop' }
     })
     const ref = { projectRoot: f.workspace, sessionId: 'session-1' }
@@ -512,7 +515,7 @@ test(
 
 test('deleting a session clears its persistent goal and notes', async (t) => {
   const f = await fixture(t, async function* (frame) {
-    yield { type: 'text', text: done(frame) }
+    yield done(frame)
     yield { type: 'finish', reason: 'stop' }
   })
   const ref = { projectRoot: f.workspace, sessionId: 'session-1' }
@@ -527,7 +530,7 @@ test('text-only models receive the image fallback', async (t) => {
   const f = await fixture(
     t,
     async function* (frame) {
-      yield { type: 'text', text: done(frame) }
+      yield done(frame)
       yield { type: 'finish', reason: 'stop' }
     },
     { imageInput: false }
@@ -558,7 +561,7 @@ test(
           frame,
           "// 按需使用项目依赖\nimport {format} from 'prettier';console.log(await format('source'));"
         )
-      else yield { type: 'text', text: done(frame) }
+      else yield done(frame)
       yield { type: 'finish', reason: 'stop' }
     })
     const dependency = join(f.workspace, 'node_modules', 'prettier')
@@ -599,7 +602,7 @@ test(
             frame,
             `// 交接代码检查\nimport {ask} from 'velaros:sessions';console.log('PEER:'+JSON.stringify(await ask({workspace:'project',root:${JSON.stringify(f.workspace)},task:'检查项目代码并回复 child-proof'})));`
           )
-        else yield { type: 'text', text: call === 2 ? 'child-proof' : 'parent-proof' }
+        else yield done(frame, call === 2 ? 'child-proof' : 'parent-proof')
         yield { type: 'finish', reason: 'stop' }
       },
       { sessions: (request) => peers.forSession(request) }

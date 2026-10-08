@@ -12,7 +12,7 @@ import {
   getZoomedWorkbenchEditorZoomLevel,
   WORKBENCH_EDITOR_ZOOM_LEVEL_MAX,
   WORKBENCH_EDITOR_ZOOM_LEVEL_MIN,
-} from '../src/renderer/src/models/settings/workbenchPreferences'
+} from '../src/renderer/src/models/workbenchPreferences'
 
 const baseInput = {
   alt: false,
@@ -91,7 +91,7 @@ void describe('Workbench editor zoom', () => {
       readFile('src/main/projects/ProjectHubMenu.ts', 'utf8'),
       readFile('src/main/projects/WorkbenchEditorZoom.ts', 'utf8'),
       readFile('src/renderer/src/hooks/useStandaloneWorkbenchPageModel.tsx', 'utf8'),
-      readFile('src/renderer/src/StandaloneWorkbenchPagePresentation.tsx', 'utf8'),
+      readFile('src/renderer/src/app/StandaloneWorkbenchPagePresentation.tsx', 'utf8'),
       readFile('src/renderer/src/components/embedded/WorkbenchEmbeddedKernel.tsx', 'utf8'),
     ])
 

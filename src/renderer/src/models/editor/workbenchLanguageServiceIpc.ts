@@ -1,5 +1,5 @@
-import type { WorkbenchProjectKernelPort } from '../../host'
-import { workbenchHost,type WorkbenchHostRuntime } from '../../host'
+import { type WorkbenchProjectKernelPort } from '../../host/WorkbenchHost'
+import { workbenchHost, type WorkbenchHostRuntime } from '../../host/WorkbenchHost'
 
 type WorkbenchLanguageServiceCompletionsPayload = Parameters<
   WorkbenchProjectKernelPort['getWorkbenchLanguageServiceCompletions']

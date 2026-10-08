@@ -16,7 +16,7 @@ import {
   parseWorkbenchQuickOpenQuery,
   scoreWorkbenchQuickOpenPath,
 } from '../src/renderer/src/models/layout/workbenchQuickOpenModel'
-import type { StorageLike } from '../src/renderer/src/persistence/localStorageJsonStore'
+import type { StorageLike } from '../src/renderer/src/support/localStorageJsonStore'
 
 function findPaths(
   files: readonly string[],

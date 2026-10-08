@@ -5,13 +5,15 @@ import path, { join } from 'node:path'
 
 import { describe, test } from 'bun:test'
 
-import type { WorkbenchI18nContextValue } from '../src/renderer/src/i18n'
+import { type AppLocale } from '@velaros-ai/ui/conversation/contracts'
+
 import { translateWorkbenchAppMessage } from '../src/renderer/src/i18n/useStandaloneWorkbenchLocalization'
+import { type WorkbenchI18nContextValue } from '../src/renderer/src/i18n/WorkbenchLocalizationProvider'
 import {
   buildWorkbenchGitChangeItems,
   buildWorkbenchGitCommitDraft,
 } from '../src/renderer/src/models/git/workbenchGitModel'
-import type { AppLocale, WorkspaceGitFileStatusEntry } from '../src/shared/contracts'
+import { type WorkspaceGitFileStatusEntry } from '../src/shared/contracts/system'
 
 import { commitAll, createGitService, withRepository } from './helpers/gitRepository'
 

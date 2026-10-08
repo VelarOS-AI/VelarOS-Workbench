@@ -54,7 +54,7 @@ void describe('Workbench run button menu', () => {
     const [toolbar, topRun, presentation, pageModel] = await Promise.all([
       readFile('src/renderer/src/components/chrome/TopToolbar.tsx', 'utf8'),
       readFile('src/renderer/src/hooks/useWorkbenchTopRunControl.ts', 'utf8'),
-      readFile('src/renderer/src/StandaloneWorkbenchPagePresentation.tsx', 'utf8'),
+      readFile('src/renderer/src/app/StandaloneWorkbenchPagePresentation.tsx', 'utf8'),
       readFile('src/renderer/src/hooks/useStandaloneWorkbenchPageModel.tsx', 'utf8'),
     ])
 
@@ -84,7 +84,7 @@ void describe('Workbench run button menu', () => {
 
   void test('shows a green rail indicator while any run session is still executing', async () => {
     const [presentation, styles] = await Promise.all([
-      readFile('src/renderer/src/StandaloneWorkbenchPagePresentation.tsx', 'utf8'),
+      readFile('src/renderer/src/app/StandaloneWorkbenchPagePresentation.tsx', 'utf8'),
       readFile('src/renderer/src/styles/03-layout.module.css', 'utf8'),
     ])
 

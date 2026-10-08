@@ -19,29 +19,7 @@ import { ipcMain, type WebContents } from 'electron'
 
 import { AppError } from '@velaros-ai/core/error'
 
-import type {
-  WorkbenchCopyEntryRequest,
-  WorkbenchCreateEntryRequest,
-  WorkbenchDeleteEntryRequest,
-  WorkbenchFindExistingFilesRequest,
-  WorkbenchInspectDeleteEntryRequest,
-  WorkbenchListDirectoryRequest,
-  WorkbenchListLocalHistoryRequest,
-  WorkbenchListProjectFilesRequest,
-  WorkbenchMoveEntryRequest,
-  WorkbenchReadFileRequest,
-  WorkbenchReadImageFileRequest,
-  WorkbenchReadLocalHistorySnapshotRequest,
-  WorkbenchRenameEntryRequest,
-  WorkbenchReplaceContentFileRequest,
-  WorkbenchReplaceContentRequest,
-  WorkbenchRestoreDeletedEntryRequest,
-  WorkbenchRestoreMissingFileRequest,
-  WorkbenchRunCommandRequest,
-  WorkbenchSaveFileRequest,
-  WorkbenchSearchContentRequest,
-  WorkbenchSearchEntriesRequest,
-} from '@shared/contracts'
+import { type WorkbenchCopyEntryRequest, type WorkbenchCreateEntryRequest, type WorkbenchDeleteEntryRequest, type WorkbenchFindExistingFilesRequest, type WorkbenchInspectDeleteEntryRequest, type WorkbenchListDirectoryRequest, type WorkbenchListLocalHistoryRequest, type WorkbenchListProjectFilesRequest, type WorkbenchMoveEntryRequest, type WorkbenchReadFileRequest, type WorkbenchReadImageFileRequest, type WorkbenchReadLocalHistorySnapshotRequest, type WorkbenchRenameEntryRequest, type WorkbenchReplaceContentFileRequest, type WorkbenchReplaceContentRequest, type WorkbenchRestoreDeletedEntryRequest, type WorkbenchRestoreMissingFileRequest, type WorkbenchRunCommandRequest, type WorkbenchSaveFileRequest, type WorkbenchSearchContentRequest, type WorkbenchSearchEntriesRequest } from '@shared/contracts/workbench'
 import {
   isWorkbenchTextEncoding,
   isWorkbenchTextEol,

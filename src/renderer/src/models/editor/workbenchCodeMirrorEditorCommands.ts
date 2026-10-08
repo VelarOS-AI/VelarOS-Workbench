@@ -34,7 +34,7 @@ import type { Extension } from '@codemirror/state'
 import { type EditorView, keymap } from '@codemirror/view'
 
 import type { WorkbenchKeymapPresetId } from '../layout/workbenchKeymapPresets'
-import { toggleWorkbenchEditorWordWrap } from '../settings/workbenchPreferences'
+import { toggleWorkbenchEditorWordWrap } from '../workbenchPreferences'
 
 import type { WorkbenchEditorKeymapCommandId } from './workbenchEditorKeymap'
 import {

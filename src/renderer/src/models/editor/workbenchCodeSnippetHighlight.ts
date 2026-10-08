@@ -1,7 +1,7 @@
 import type { Language } from '@codemirror/language'
 import { highlightCode, type Highlighter, tagHighlighter } from '@lezer/highlight'
 
-import type { WorkbenchThemeId } from '../settings/workbenchPreferences'
+import type { WorkbenchThemeId } from '../workbenchPreferences'
 
 import { findWorkbenchCodeMirrorLanguage, resolveWorkbenchCodeMirrorLanguage } from './workbenchCodeMirrorLanguage'
 import { getWorkbenchCodeHighlightSpecs } from './workbenchCodeMirrorTheme'

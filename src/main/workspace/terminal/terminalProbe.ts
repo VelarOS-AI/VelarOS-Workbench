@@ -122,22 +122,18 @@ try {
   )
   terminal.writeTerminalInput({ sessionId: shell.sessionId, input: 'echo 探针_中文_OK\r' }, 101)
   await waitFor(() => shellOutput.split('探针_中文_OK').length >= 3, '交互 shell 必须回显输入并打印中文结果')
-  // 拆分出来的终端从原来那个 shell 此刻所在的目录开始（问操作系统，Windows 上问不到）。
+  // 文件链接解析使用 shell 当前目录（Windows 上无法查询）。
   if (process.platform !== 'win32') {
     terminal.writeTerminalInput(
       { sessionId: shell.sessionId, input: 'mkdir -p 子目录 && cd 子目录 && echo CD_DONE_$((40+2))\r' },
       101
     )
     await waitFor(() => shellOutput.includes('CD_DONE_42'), '交互 shell 必须完成 cd')
-    const split = await terminal.startTerminalSession(
-      { projectRoot, inheritCwdFrom: shell.sessionId },
-      () => undefined,
-      101
-    )
+    const { cwd } = await terminal.readTerminalCwd({ sessionId: shell.sessionId }, 101)
     equal(
-      split.cwd,
+      cwd,
       join(await pathResolver.resolveProjectRoot(projectRoot), '子目录'),
-      '拆分出来的终端必须从原 shell 所在的目录开始'
+      '终端必须报告 shell 当前所在的目录'
     )
   }
   terminal.resizeTerminalSession({ sessionId: shell.sessionId, cols: 60, rows: 20 }, 101)

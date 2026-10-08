@@ -1,5 +1,5 @@
 import { useCallback, useSyncExternalStore } from 'react'
-import { workbenchHost } from '@renderer/host'
+import { workbenchHost } from '@renderer/host/WorkbenchHost'
 import {
   beginWorkbenchGitOperation,
   buildWorkbenchGitOperationConfirm,
@@ -18,7 +18,8 @@ import { useStableWorkbenchMessageTranslate } from '@renderer/runtime/useStableW
 import { AppError } from '@velaros-ai/core/error'
 import { Result } from '@velaros-ai/core/result'
 
-import type { SystemWorkspaceGitSummary, WorkspaceGitOperationAction } from '@shared/contracts'
+import { type SystemWorkspaceGitSummary } from '@shared/contracts/system'
+import { type WorkspaceGitOperationAction } from '@shared/contracts/workspaceGit'
 import { isWorkspaceGitOperationKind } from '@shared/workbenchGit'
 
 import { useLatest } from '../support/genericHooks'

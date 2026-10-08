@@ -34,8 +34,8 @@ import {
   WorkbenchPaletteDebugActions,
   type WorkbenchPaletteLanguageService,
 } from '../models/layout/workbenchCommandPalette'
-import { toggleWorkbenchEditorWordWrap } from '../models/settings/workbenchPreferences'
 import { fileLanguage } from '../models/shared/workbenchUtils'
+import { toggleWorkbenchEditorWordWrap } from '../models/workbenchPreferences'
 import { useLatest, useMemoizedFn } from '../support/genericHooks'
 
 import type { useWorkbenchController } from './useWorkbenchController'
@@ -76,8 +76,7 @@ interface UseWorkbenchCommandPaletteOptions {
     | 'saveSelectedFile'
     | 'selectedFile'
     | 'selectedFilePath'
-    | 'splitTerminalSession'
-    | 'toggleSelectedFileEditMode'
+      | 'toggleSelectedFileEditMode'
   >
   surface: WorkbenchSurfaceState
   /** 编辑区前面盖着别的（Git 对比、只读预览、调试页、结构图、AI 改动），不是当前文件的编辑器。 */
@@ -338,11 +337,6 @@ export function useWorkbenchCommandPalette({
       case 'new-terminal': {
         surface.openBottomTool('terminal')
         void workbench.createTerminalSession()
-        return
-      }
-      case 'split-terminal': {
-        surface.openBottomTool('terminal')
-        void workbench.splitTerminalSession()
         return
       }
       case 'toggle-chat': {

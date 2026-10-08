@@ -1,4 +1,4 @@
-@reference "../index.css";
+@reference "./index.css";
 
 .editorSymbolTooltip {
   box-sizing: border-box;

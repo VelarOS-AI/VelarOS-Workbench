@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { workbenchHost } from '@renderer/host'
+import { workbenchHost } from '@renderer/host/WorkbenchHost'
 import {
   getWorkbenchPathAncestorDirectories,
   getWorkbenchPathParentDirectory,
@@ -16,11 +16,7 @@ import { isEmpty } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { Result } from '@velaros-ai/core/result'
 
-import type {
-  WorkbenchDirectoryEntry,
-  WorkbenchListDirectoryResult,
-  WorkbenchReadFileResult,
-} from '@shared/contracts'
+import { type WorkbenchDirectoryEntry, type WorkbenchListDirectoryResult, type WorkbenchReadFileResult } from '@shared/contracts/workbench'
 
 import { useStableWorkbenchMessageTranslate } from '../runtime/useStableWorkbenchMessaging'
 import { useLatest, useMemoizedFn } from '../support/genericHooks'

@@ -1,6 +1,6 @@
 import { isEmpty } from '@velaros-ai/core'
 
-import type { WorkbenchDirectoryEntry } from '@shared/contracts'
+import { type WorkbenchDirectoryEntry } from '@shared/contracts/workbench'
 
 import type { WorkbenchProject } from '../project/workbenchProjects'
 

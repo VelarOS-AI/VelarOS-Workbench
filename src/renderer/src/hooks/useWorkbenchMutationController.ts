@@ -1,6 +1,5 @@
 import { useRef, useState } from 'react'
-import { workbenchHost } from '@renderer/host'
-import { useWorkbenchCommentStore } from '@renderer/models/comments/workbenchCommentStore'
+import { workbenchHost } from '@renderer/host/WorkbenchHost'
 import type { WorkbenchEntryMove } from '@renderer/models/editor/workbenchImportUpdates'
 import {
   createWorkbenchLanguageServiceFiles,
@@ -21,17 +20,14 @@ import {
 } from '@renderer/models/files/workbenchTreeMutation'
 import type { WorkbenchProject } from '@renderer/models/project/workbenchProjects'
 import { getParentPath, ROOT_PATH } from '@renderer/models/shared/workbenchUtils'
+import { useWorkbenchCommentStore } from '@renderer/models/workbenchCommentStore'
 import type { PendingTreeAction } from '@renderer/types/workbenchTypes'
 
 import { isEmpty, toNullable } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
 import { Result } from '@velaros-ai/core/result'
 
-import type {
-  WorkbenchDeleteEntryResult,
-  WorkbenchDirectoryEntry,
-  WorkbenchLanguageServiceNewFile,
-} from '@shared/contracts'
+import { type WorkbenchDeleteEntryResult, type WorkbenchDirectoryEntry, type WorkbenchLanguageServiceNewFile } from '@shared/contracts/workbench'
 
 import { useStableWorkbenchMessageTranslate } from '../runtime/useStableWorkbenchMessaging'
 import { useLatest } from '../support/genericHooks'

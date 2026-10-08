@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { test } from 'bun:test'
 import { createServer, resolveConfig } from 'vite'
-import { isolateLinkedPackageWatcher, linkedPackageWatchIgnore } from '../../build-config/linkedPackageWatchPolicy'
+import { isolateLinkedPackageWatcher, linkedPackageWatchIgnore } from '../linkedPackageWatchPolicy'
 
 test('linked package writes do not reload Workbench; own sources remain watched', async () => {
   const root = await realpath(await mkdtemp(join(tmpdir(), 'workbench-watch-')))

@@ -1,9 +1,9 @@
 import { useEffect } from 'react'
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 
-import type { WorkbenchRunCommandResult } from '@shared/contracts'
+import { type WorkbenchRunCommandResult } from '@shared/contracts/workbench'
 
-import { useWorkbenchHostRuntime } from '../../host'
+import { useWorkbenchHostRuntime } from '../../host/WorkbenchHostProvider'
 import {
   readWorkbenchCommandHistory,
   type WorkbenchCommandHistoryItem,

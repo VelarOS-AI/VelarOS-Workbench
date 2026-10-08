@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 
 import { describe, test } from 'bun:test'
 
-import type { SystemLocalAttachmentFileResult } from '@shared/contracts'
+import { type SystemLocalAttachmentFileResult } from '@shared/contracts/system'
 
 import { WorkbenchRuntime } from '../src/renderer/src/composition/WorkbenchRuntime'
 import {
@@ -12,7 +12,6 @@ import {
   WorkbenchHostRuntime,
 } from '../src/renderer/src/host/WorkbenchHost'
 import { translateWorkbenchAppMessage } from '../src/renderer/src/i18n/useStandaloneWorkbenchLocalization'
-import { WorkbenchCommentStore } from '../src/renderer/src/models/comments/workbenchCommentStore'
 import {
   buildWorkbenchGitChangeItems,
   buildWorkbenchGitCommitDraft,
@@ -32,12 +31,13 @@ import {
   readWorkbenchProjects,
   saveWorkbenchProjects,
 } from '../src/renderer/src/models/project/workbenchProjects'
+import { WorkbenchCommentStore } from '../src/renderer/src/models/workbenchCommentStore'
 import {
   createLocalStorageJsonStore,
   JsonStorageStore,
   type LocalStorageJsonStore,
   type StorageLike,
-} from '../src/renderer/src/persistence/localStorageJsonStore'
+} from '../src/renderer/src/support/localStorageJsonStore'
 
 function createHost(marker: string): WorkbenchHost {
   return {

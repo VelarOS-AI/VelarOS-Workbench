@@ -7,7 +7,7 @@ import {
   useState,
 } from 'react'
 import { CaretDownIcon, CaretRightIcon, TreeStructureIcon, XIcon } from '@phosphor-icons/react'
-import { useWorkbenchI18n } from '@renderer/i18n'
+import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 import {
   canExpandWorkbenchCallHierarchyNode,
   listWorkbenchCallHierarchyRows,
@@ -18,7 +18,7 @@ import {
 import { workbenchDocumentSymbolGlyphMask } from '@renderer/models/editor/workbenchSymbolKindGlyphs'
 import { workbenchSymbolLocationDisplayPath } from '@renderer/models/editor/workbenchSymbolLocations'
 
-import type { WorkbenchLanguageServiceCallHierarchyDirection } from '@shared/contracts'
+import { type WorkbenchLanguageServiceCallHierarchyDirection } from '@shared/contracts/workbench'
 
 import styles from '../../styles/workbenchPageStyles'
 

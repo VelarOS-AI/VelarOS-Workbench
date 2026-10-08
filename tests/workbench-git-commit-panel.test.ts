@@ -18,7 +18,7 @@ import {
   buildWorkbenchGitDecorationMap,
   getWorkbenchGitChangeItemTone,
 } from '../src/renderer/src/models/git/workbenchGitModel'
-import type { WorkspaceGitLogEntry } from '../src/shared/contracts'
+import { type WorkspaceGitLogEntry } from '../src/shared/contracts/system'
 
 function readSource(relativePath: string): string {
   return readFileSync(path.resolve(process.cwd(), relativePath), 'utf8')

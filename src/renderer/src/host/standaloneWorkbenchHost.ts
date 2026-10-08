@@ -1,16 +1,12 @@
-import { installWorkbenchHost, type WorkbenchHost } from '@renderer/host'
-import { WorkbenchRuntime } from '@renderer/runtime'
+import { WorkbenchRuntime } from '@renderer/composition/WorkbenchRuntime'
+import { installWorkbenchHost, type WorkbenchHost } from '@renderer/host/WorkbenchHost'
 import { getStandaloneWorkbenchModelConfig } from '@renderer/runtime/standaloneWorkbenchModelConfig'
 
 import { AppError, Result } from '@velaros-ai/core'
 import type { Result as ResultType } from '@velaros-ai/core/result'
 
-import type {
-  SystemOverview,
-  WorkbenchIndexProjectRequest,
-  WorkbenchIndexProjectResult,
-  WorkbenchProjectAiRulesResult,
-} from '@shared/contracts'
+import { type SystemOverview } from '@shared/contracts/system'
+import { type WorkbenchIndexProjectRequest, type WorkbenchIndexProjectResult, type WorkbenchProjectAiRulesResult } from '@shared/contracts/workbench'
 
 import type { WorkbenchFsCallResult } from '../../../shared/workbenchFs'
 import type {

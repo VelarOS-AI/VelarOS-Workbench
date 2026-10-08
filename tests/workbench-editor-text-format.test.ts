@@ -7,7 +7,7 @@ import path from 'node:path'
 import { EditorState } from '@codemirror/state'
 import { describe, test } from 'bun:test'
 
-import type { WorkbenchReadFileResult } from '@shared/contracts'
+import { type WorkbenchReadFileResult } from '@shared/contracts/workbench'
 
 import { readWorkbenchTextFile } from '../src/main/workspace/TextFile'
 import { buildWorkbenchEditorSearchQuery } from '../src/renderer/src/models/editor/workbenchEditorFind'
@@ -209,7 +209,7 @@ void describe('Workbench editor text format', () => {
 
   void test('the status bar shows the format next to the cursor position', () => {
     const statusBar = readSource('src/renderer/src/components/chrome/StatusBar.tsx')
-    const presentation = readSource('src/renderer/src/StandaloneWorkbenchPagePresentation.tsx')
+    const presentation = readSource('src/renderer/src/app/StandaloneWorkbenchPagePresentation.tsx')
     // 与 VS Code 同序：行列、缩进、编码、换行符。
     assert.match(
       statusBar,

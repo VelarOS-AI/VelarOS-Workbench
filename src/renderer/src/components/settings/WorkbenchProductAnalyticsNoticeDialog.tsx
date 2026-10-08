@@ -1,6 +1,6 @@
 import { type ReactElement, useState } from 'react'
 import { useWorkbenchProductAnalytics } from '@renderer/hooks/useWorkbenchProductAnalytics'
-import { useWorkbenchI18n } from '@renderer/i18n'
+import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 
 import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
 import {

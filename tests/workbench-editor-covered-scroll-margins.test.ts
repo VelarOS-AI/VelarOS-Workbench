@@ -70,7 +70,7 @@ void describe('editor scroll margins under the bottom tool window', () => {
   })
 
   void test('the bottom tool window is marked as an overlay and the file editor reads the margins', () => {
-    const presentation = readSource('src/renderer/src/StandaloneWorkbenchPagePresentation.tsx')
+    const presentation = readSource('src/renderer/src/app/StandaloneWorkbenchPagePresentation.tsx')
     assert.ok(
       presentation.includes(
         `<section className={styles.bottomToolWindowSlot} ${WorkbenchEditorOverlayAttribute}>`

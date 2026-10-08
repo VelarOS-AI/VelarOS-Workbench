@@ -1,0 +1,102 @@
+.spinIcon {
+  animation: wb-spin 0.8s linear infinite;
+}
+
+.toolWindowPanel,
+.workbenchChatPanel {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  flex: 1;
+  flex-direction: column;
+  background: var(--workbench-surface);
+  color: var(--workbench-text);
+}
+
+.workbenchChatTopBar {
+  display: flex;
+  flex-shrink: 0;
+  height: calc(var(--workbench-tab-height) + 1px);
+  min-height: calc(var(--workbench-tab-height) + 1px);
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--workbench-border);
+}
+
+.workbenchChatLeading {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 2px;
+}
+
+.workbenchChatLeading .workbenchChatSessionMenuAnchor {
+  flex: 0 1 auto;
+}
+
+.workbenchChatBody {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+}
+
+.workbenchChatLoading {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.workbenchChatIconButton {
+  flex: none;
+}
+
+.workbenchChatSessionCurrentTitle {
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workbenchChatSessionMenuAnchor,
+.workbenchChatSessionMenuButton,
+.workbenchChatSessionMenuItem,
+.workbenchChatSessionMenuText {
+  min-width: 0;
+}
+
+.workbenchChatTopBar .workbenchChatSessionMenuButton {
+  justify-content: flex-start;
+  padding-inline: 7px 9px;
+  text-align: left;
+}
+
+.workbenchChatSessionMenuPanel {
+  min-width: 220px;
+}
+
+.workbenchChatSessionMenuList {
+  display: flex;
+  flex-direction: column;
+}
+
+.workbenchChatSessionMenuIcon,
+.workbenchChatSessionMenuCheck {
+  flex: none;
+}
+
+.workbenchChatSessionMenuTitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@keyframes wb-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

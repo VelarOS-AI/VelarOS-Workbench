@@ -1,18 +1,11 @@
 import type { EditorState } from '@codemirror/state'
 
-import type {
-  WorkbenchLanguageServiceDiagnostic,
-  WorkbenchLanguageServiceEditFormat,
-  WorkbenchLanguageServiceOpenFile,
-  WorkbenchLanguageServicePositionRequest,
-  WorkbenchLanguageServiceRange,
-  WorkbenchLanguageServiceTextEdit,
-} from '@shared/contracts'
+import { type WorkbenchLanguageServiceDiagnostic, type WorkbenchLanguageServiceEditFormat, type WorkbenchLanguageServiceOpenFile, type WorkbenchLanguageServicePositionRequest, type WorkbenchLanguageServiceRange, type WorkbenchLanguageServiceTextEdit } from '@shared/contracts/workbench'
 import {
   getWorkbenchPathExtension,
   resolveBuiltinWorkbenchLanguageService,
   type WorkbenchLanguageServiceDescriptor,
-} from '@shared/language/workbenchLanguageServices'
+} from '@shared/workbenchLanguageServices'
 
 import type { WorkbenchOpenEditorTab } from '../../types/workbenchTypes'
 

@@ -6,7 +6,7 @@
  * 产品核心——它是独立宿主入口形态，没有第二个消费者；
  * kernel-protocol 客户端接入后，项目打开链路若上移到 kernel 会话面，本契约随之重审。
  */
-import type { AppLocale } from '@shared/contracts'
+import { type AppLocale } from '@velaros-ai/ui/conversation/contracts'
 
 export const WorkbenchProjectHubChannels = {
   getState: 'workbench-app:project-hub:get-state',

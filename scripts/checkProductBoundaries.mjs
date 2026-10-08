@@ -2,9 +2,11 @@ import { access, readdir, readFile } from 'node:fs/promises'
 import { extname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import ts from 'typescript'
+
 const rootDir = resolve(fileURLToPath(new URL('..', import.meta.url)))
 const sourceRoots = [resolve(rootDir, 'src')]
-const sourceExtensions = new Set(['.ts', '.tsx'])
+const sourceExtensions = new Set(['.ts', '.tsx', '.css'])
 const forbiddenSpecifiers = [
   /^apps\/desktop(?:\/|$)/,
   /^@(?:components|hooks|runtime)\//,
@@ -83,7 +85,20 @@ for (const section of [
 for (const sourceRoot of sourceRoots) {
   for (const path of await collectSourceFiles(sourceRoot)) {
     const source = await readFile(path, 'utf8')
-    const label = relative(rootDir, path)
+    const label = relative(rootDir, path).replaceAll('\\', '/')
+    if (extname(path) === '.css') {
+      if (!label.startsWith('src/renderer/src/styles/')) {
+        failures.push(`${label}: 应用 CSS 必须集中在 src/renderer/src/styles/。`)
+      }
+      continue
+    }
+    const syntax = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true)
+    if (
+      syntax.statements.length > 0
+      && syntax.statements.every((statement) => ts.isExportDeclaration(statement) && statement.moduleSpecifier)
+    ) {
+      failures.push(`${label}: 纯转发文件应移除，消费方直接导入实现或包的公开入口。`)
+    }
     if (label.startsWith('src/main/')) {
       if (/new\s+KernelModuleHost\s*\(/u.test(source)) {
         failures.push(`${label} constructs KernelModuleHost; complete hosts must compose the public Kernel.`)

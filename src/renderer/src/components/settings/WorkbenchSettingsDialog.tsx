@@ -17,9 +17,10 @@ import {
   XIcon,
 } from '@phosphor-icons/react'
 import { useWorkbenchProductAnalytics } from '@renderer/hooks/useWorkbenchProductAnalytics'
+import { useWorkbenchProviderModelCatalog } from '@renderer/hooks/useWorkbenchProviderModelCatalog'
 import { useWorkbenchUpdate } from '@renderer/hooks/useWorkbenchUpdate'
-import { useWorkbenchHostRuntime } from '@renderer/host'
-import { useWorkbenchI18n } from '@renderer/i18n'
+import { useWorkbenchHostRuntime } from '@renderer/host/WorkbenchHostProvider'
+import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 import { formatWorkbenchEditorCommandHint } from '@renderer/models/editor/workbenchEditorKeymap'
 import type {
   WorkbenchKeyboardShortcutAction,
@@ -35,7 +36,7 @@ import {
   type WorkbenchDensity,
   type WorkbenchPreferences,
   type WorkbenchThemeId,
-} from '@renderer/models/settings/workbenchPreferences'
+} from '@renderer/models/workbenchPreferences'
 import {
   getStandaloneWorkbenchManagedProvider,
   isStandaloneWorkbenchManagedProviderId,
@@ -58,7 +59,7 @@ import {
 } from '@renderer/runtime/standaloneWorkbenchModelConfig'
 
 import { Result } from '@velaros-ai/core/result'
-import type { ProviderModelCatalog } from '@velaros-ai/model/contracts'
+import { type AppLocale } from '@velaros-ai/ui/conversation/contracts'
 import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 import { Text } from '@velaros-ai/ui/primitives/display/Text'
@@ -67,17 +68,12 @@ import { Input } from '@velaros-ai/ui/primitives/forms/Input'
 import { Select } from '@velaros-ai/ui/primitives/forms/Select'
 import { Switch } from '@velaros-ai/ui/primitives/forms/Switch'
 
-import type {
-  AppLocale,
-  WorkbenchProjectAiRuleFile,
-  WorkbenchProjectAiRulesResult,
-} from '@shared/contracts'
+import { type WorkbenchProjectAiRuleFile, type WorkbenchProjectAiRulesResult } from '@shared/contracts/workbench'
 import type { WorkbenchAccountState } from '@shared/workbenchAccount'
 import type {
   WorkbenchPermissionConfirmationMode as PermissionConfirmationMode,
   WorkbenchWebSearchEngine,
 } from '@shared/workbenchConversation'
-import type { WorkbenchManagedModelProvider } from '@shared/workbenchModel'
 import type { WorkbenchUpdateChannel } from '@shared/workbenchUpdate'
 
 import styles from '../../styles/workbenchPageStyles'
@@ -198,22 +194,11 @@ export function WorkbenchSettingsDialog({
     useState<Nullable<WorkbenchProjectAiRulesResult>>(null)
   const [expandedProjectAiRulePath, setExpandedProjectAiRulePath] = useState<Nullable<string>>(null)
   const [isLoadingProjectAiRules, setIsLoadingProjectAiRules] = useState(false)
-  const [providerModelCatalog, setProviderModelCatalog] = useState<
-    Nullable<{
-      catalog: ProviderModelCatalog
-      managedProvider: WorkbenchManagedModelProvider | undefined
-    }>
-  >(null)
-  const [isLoadingProviderModels, setIsLoadingProviderModels] = useState(false)
-  const [providerModelCatalogError, setProviderModelCatalogError] = useState<Nullable<string>>(null)
+  const { catalog: activeProviderModelCatalog, loading: isLoadingProviderModels, error: providerModelCatalogError } =
+    useWorkbenchProviderModelCatalog(modelConfig, selectedManagedProvider, open && activeSection === 'ai')
   const [modelBaseURLDraft, setModelBaseURLDraft] = useState(modelConfig.baseURL)
   const [modelApiKeyDraft, setModelApiKeyDraft] = useState(modelConfig.apiKey)
   const dialogRef = useRef<HTMLDivElement>(null)
-  const activeProviderModelCatalog =
-    providerModelCatalog?.catalog.provider === modelConfig.provider &&
-    providerModelCatalog.managedProvider === selectedManagedProvider
-      ? providerModelCatalog.catalog
-      : null
   const modelOptions = createStandaloneWorkbenchProviderModelOptions(
     activeProviderModelCatalog?.models ?? [],
     [modelConfig.model, modelConfig.completionModel],
@@ -342,63 +327,6 @@ export function WorkbenchSettingsDialog({
       dispose()
     }
   }, [activeSection, open])
-
-  useEffect(() => {
-    if (!open || activeSection !== 'ai') {
-      setIsLoadingProviderModels(false)
-      return
-    }
-
-    let active = true
-    setProviderModelCatalog(null)
-    setProviderModelCatalogError(null)
-    if (
-      isStandaloneWorkbenchManagedProviderId(modelConfig.provider) &&
-      !selectedManagedProvider?.enabled
-    ) {
-      setIsLoadingProviderModels(false)
-      return
-    }
-    setIsLoadingProviderModels(true)
-    const lease = timers.after(
-      300,
-      () => {
-        void window.velarosWorkbenchModel
-          .listProviderModels({
-            provider: modelConfig.provider,
-            apiKey: modelConfig.apiKey,
-            baseURL: modelConfig.baseURL,
-            purpose: 'chat',
-          })
-          .then((catalog) => {
-            if (!active) return
-            setProviderModelCatalog({ catalog, managedProvider: selectedManagedProvider })
-            setProviderModelCatalogError(catalog.error ?? null)
-          })
-          .catch((error: unknown) => {
-            if (!active) return
-            setProviderModelCatalogError(error instanceof Error ? error.message : String(error))
-          })
-          .finally(() => {
-            if (active) setIsLoadingProviderModels(false)
-          })
-      },
-      { label: 'workbench.settings.model-catalog' }
-    )
-
-    return () => {
-      active = false
-      lease.cancel()
-    }
-  }, [
-    activeSection,
-    modelConfig.apiKey,
-    modelConfig.baseURL,
-    modelConfig.provider,
-    open,
-    selectedManagedProvider,
-    timers,
-  ])
 
   useEffect(() => {
     if (!open || activeSection !== 'ai') return
@@ -832,7 +760,7 @@ export function WorkbenchSettingsDialog({
       <div className={styles.workbenchSettingsSectionPanel}>
         <SettingRow
           title={t('workbench.settingsModelProvider')}
-          description={t('workbench.settingsModelProviderDescription')}
+          description={`${t('workbench.settingsModelProviderDescription')} ${modelCatalogDescription}`}
         >
           <Select
             size="sm"
@@ -879,24 +807,6 @@ export function WorkbenchSettingsDialog({
         )}
         {managedSelectionVisible && (
           <>
-            <SettingRow
-              title={t('workbench.settingsModelName')}
-              description={modelCatalogDescription}
-            >
-              <Select
-                size="sm"
-                className={styles.workbenchSettingsSelectTrigger}
-                value={modelConfig.model}
-                options={modelOptions}
-                disabled={selectedManagedProviderDisabled}
-                searchable={modelOptions.length > 12}
-                searchPlaceholder={t('workbench.settingsModelSearchPlaceholder')}
-                emptyMessage={t('workbench.settingsModelSearchEmpty')}
-                onChange={(model) =>
-                  selectStandaloneWorkbenchModel(modelConfig.provider, model, 'agent')
-                }
-              />
-            </SettingRow>
             <SettingRow
               title={t('workbench.settingsAiCompletionModel')}
               description={t('workbench.settingsAiCompletionModelHint')}

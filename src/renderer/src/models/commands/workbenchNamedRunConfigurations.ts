@@ -21,7 +21,7 @@ import {
 import {
   createLocalStorageJsonStore,
   type StorageLike,
-} from '../../persistence/localStorageJsonStore'
+} from '../../support/localStorageJsonStore'
 
 import type { WorkbenchRunSessionLaunchOptions } from './workbenchCommandLines'
 import { isWorkbenchWindowsHost, quoteWorkbenchShellArgument } from './workbenchShellQuote'

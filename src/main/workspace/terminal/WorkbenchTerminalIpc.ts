@@ -10,12 +10,7 @@ import { ipcMain } from 'electron'
 
 import { toOptional } from '@velaros-ai/core'
 
-import type {
-  WorkbenchTerminalInputRequest,
-  WorkbenchTerminalResizeRequest,
-  WorkbenchTerminalStartRequest,
-  WorkbenchTerminalStopRequest,
-} from '@shared/contracts'
+import { type WorkbenchTerminalInputRequest, type WorkbenchTerminalResizeRequest, type WorkbenchTerminalStartRequest, type WorkbenchTerminalStopRequest } from '@shared/contracts/workbench'
 
 import { readWorkbenchRunEnvironment } from '../../../shared/workbenchRunEnvironment'
 import { WorkbenchTerminalChannels } from '../../../shared/workbenchTerminal'
@@ -106,7 +101,6 @@ function parseStartRequest(input: unknown): Nullable<WorkbenchTerminalStartReque
   const request: WorkbenchTerminalStartRequest = {
     projectRoot: input['projectRoot'] as string,
     ...optionalString(input, 'cwd'),
-    ...optionalString(input, 'inheritCwdFrom'),
     ...optionalString(input, 'initialCommand'),
     ...optionalNumber(input, 'cols'),
     ...optionalNumber(input, 'rows'),

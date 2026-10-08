@@ -1,4 +1,4 @@
-import type { SystemWorkspaceGitSummary } from '@shared/contracts'
+import { type SystemWorkspaceGitSummary } from '@shared/contracts/system'
 
 import type { WorkbenchGitChangeItem } from '../../models/git/workbenchGitModel'
 

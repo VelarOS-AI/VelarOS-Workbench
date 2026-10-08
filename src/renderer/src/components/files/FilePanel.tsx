@@ -27,7 +27,7 @@ import {
 } from '@phosphor-icons/react'
 import type { WorkbenchProjectSearchEngineOptions } from '@renderer/hooks/useWorkbenchProjectSearchEngine'
 import type { WorkbenchProjectSearchPanelModel } from '@renderer/hooks/useWorkbenchProjectSearchPanel'
-import { useWorkbenchI18n } from '@renderer/i18n'
+import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 import { isWorkbenchVelarFilePath } from '@renderer/models/commands/workbenchVelarFileCommand'
 import type { WorkbenchEditorOpenTabIntent } from '@renderer/models/editor/workbenchEditorGroups'
 import {
@@ -43,7 +43,7 @@ import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 import { Paragraph } from '@velaros-ai/ui/primitives/display/Paragraph'
 import { ScrollArea } from '@velaros-ai/ui/primitives/layout/ScrollArea'
 
-import type { WorkbenchDirectoryEntry, WorkbenchSearchEntriesResult } from '@shared/contracts'
+import { type WorkbenchDirectoryEntry, type WorkbenchSearchEntriesResult } from '@shared/contracts/workbench'
 
 import styles from '../../styles/workbenchPageStyles'
 import { useLatest } from '../../support/genericHooks'

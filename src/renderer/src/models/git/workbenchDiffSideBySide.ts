@@ -1,4 +1,4 @@
-import type { WorkbenchDiffLayout } from '../settings/workbenchPreferences'
+import type { WorkbenchDiffLayout } from '../workbenchPreferences'
 
 import {
   collectWorkbenchDiffChangeAnchors,

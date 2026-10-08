@@ -1,10 +1,6 @@
-import type {
-  SystemWorkspaceGitLineStatsSnapshot,
-  SystemWorkspaceGitSummary,
-  WorkspaceGitStatusResult,
-} from '@shared/contracts'
+import { type SystemWorkspaceGitLineStatsSnapshot, type SystemWorkspaceGitSummary, type WorkspaceGitStatusResult } from '@shared/contracts/system'
 
-import type { WorkbenchI18nContextValue } from '../../i18n'
+import { type WorkbenchI18nContextValue } from '../../i18n/WorkbenchLocalizationProvider'
 
 type WorkbenchGitHead = Pick<WorkspaceGitStatusResult, 'branch' | 'detachedHead'>
 

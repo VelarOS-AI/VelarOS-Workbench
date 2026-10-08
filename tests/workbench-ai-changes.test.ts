@@ -2,6 +2,8 @@ import assert from 'node:assert/strict'
 
 import { describe, test } from 'bun:test'
 
+import { type ChatMessage } from '@velaros-ai/ui/conversation/contracts'
+
 import {
   buildWorkbenchAiChangeDiffView,
   buildWorkbenchAiChangeTree,
@@ -9,7 +11,6 @@ import {
   listWorkbenchAiChangeTreeFiles,
   type WorkbenchAiChangeTreeNode,
 } from '../src/renderer/src/models/chat/workbenchAiChangeRounds'
-import type { ChatMessage } from '../src/shared/contracts'
 import type { WorkbenchChatRunFileChange } from '../src/shared/workbenchGit'
 
 function message(id: string, role: 'user' | 'assistant', text: string, timestamp: number): ChatMessage {

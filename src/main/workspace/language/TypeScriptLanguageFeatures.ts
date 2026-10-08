@@ -2,22 +2,7 @@ import * as ts from 'typescript'
 
 import { isPresent } from '@velaros-ai/core'
 
-import type {
-  WorkbenchLanguageServiceDisplayPart,
-  WorkbenchLanguageServiceDisplayPartKind,
-  WorkbenchLanguageServiceDocumentHighlight,
-  WorkbenchLanguageServiceDocumentSymbol,
-  WorkbenchLanguageServiceEditFormat,
-  WorkbenchLanguageServiceHoverResult,
-  WorkbenchLanguageServiceInlayHint,
-  WorkbenchLanguageServiceLocation,
-  WorkbenchLanguageServiceOffsetRange,
-  WorkbenchLanguageServicePosition,
-  WorkbenchLanguageServiceRange,
-  WorkbenchLanguageServiceSemanticToken,
-  WorkbenchLanguageServiceSignatureHelpResult,
-  WorkbenchLanguageServiceTextEdit,
-} from '@shared/contracts'
+import { type WorkbenchLanguageServiceDisplayPart, type WorkbenchLanguageServiceDisplayPartKind, type WorkbenchLanguageServiceDocumentHighlight, type WorkbenchLanguageServiceDocumentSymbol, type WorkbenchLanguageServiceEditFormat, type WorkbenchLanguageServiceHoverResult, type WorkbenchLanguageServiceInlayHint, type WorkbenchLanguageServiceLocation, type WorkbenchLanguageServiceOffsetRange, type WorkbenchLanguageServicePosition, type WorkbenchLanguageServiceRange, type WorkbenchLanguageServiceSemanticToken, type WorkbenchLanguageServiceSignatureHelpResult, type WorkbenchLanguageServiceTextEdit } from '@shared/contracts/workbench'
 
 const DISPLAY_PART_KINDS: readonly WorkbenchLanguageServiceDisplayPartKind[] = [
   'aliasName',

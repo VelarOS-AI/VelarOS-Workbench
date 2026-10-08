@@ -4,15 +4,15 @@ import path from 'node:path'
 
 import { describe, test } from 'bun:test'
 
-import type { WorkbenchI18nContextValue } from '../src/renderer/src/i18n'
 import { translateWorkbenchAppMessage } from '../src/renderer/src/i18n/useStandaloneWorkbenchLocalization'
+import { type WorkbenchI18nContextValue } from '../src/renderer/src/i18n/WorkbenchLocalizationProvider'
 import {
   getWorkbenchGitStashSubtitle,
   getWorkbenchGitStashTitle,
   isSameWorkbenchGitStashList,
   shouldWorkbenchGitStashIncludeUntrackedByDefault,
 } from '../src/renderer/src/models/git/workbenchGitStashModel'
-import type { WorkspaceGitStash } from '../src/shared/contracts'
+import { type WorkspaceGitStash } from '../src/shared/contracts/workspaceGit'
 
 function readSource(relativePath: string): string {
   return readFileSync(path.resolve(process.cwd(), relativePath), 'utf8')
@@ -79,7 +79,7 @@ void describe('Workbench Git stash presentation', () => {
     const toolPanel = readSource('src/renderer/src/components/git/WorkbenchGitToolPanel.tsx')
     const refsPane = readSource('src/renderer/src/components/git/WorkbenchGitRefsPane.tsx')
     const details = readSource('src/renderer/src/components/git/WorkbenchGitDetailsPane.tsx')
-    const presentation = readSource('src/renderer/src/StandaloneWorkbenchPagePresentation.tsx')
+    const presentation = readSource('src/renderer/src/app/StandaloneWorkbenchPagePresentation.tsx')
 
     // 提交面板：贮藏按钮开对话框，贮藏完能一步跳到贮藏列表。
     assert.match(commitPanel, /label=\{t\('workbench\.gitStashChanges'\)\}/u)

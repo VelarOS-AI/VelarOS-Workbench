@@ -1,7 +1,7 @@
 import { createContext, type ReactNode, useContext } from 'react'
 
-import { WorkbenchHostProvider } from '../host'
-import { WorkbenchCommentStoreProvider } from '../models/comments/workbenchCommentStore'
+import { WorkbenchHostProvider } from '../host/WorkbenchHostProvider'
+import { WorkbenchCommentStoreProvider } from '../models/workbenchCommentStore'
 
 import type { WorkbenchRuntime } from './WorkbenchRuntime'
 

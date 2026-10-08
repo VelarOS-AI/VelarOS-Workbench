@@ -1,4 +1,4 @@
-import type { WorkbenchDirectoryEntry } from '@shared/contracts'
+import { type WorkbenchDirectoryEntry } from '@shared/contracts/workbench'
 
 import { fileLanguage } from '../shared/workbenchUtils'
 

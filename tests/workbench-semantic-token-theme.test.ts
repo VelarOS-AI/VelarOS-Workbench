@@ -15,7 +15,7 @@ import {
   getWorkbenchCodeTokenPalette,
   type WorkbenchCodeTokenPalette,
 } from '../src/renderer/src/models/editor/workbenchCodeMirrorTheme'
-import type { WorkbenchThemeId } from '../src/renderer/src/models/settings/workbenchPreferences'
+import type { WorkbenchThemeId } from '../src/renderer/src/models/workbenchPreferences'
 
 function semanticThemeRules(theme: WorkbenchThemeId): string {
   const state = EditorState.create({ extensions: [getWorkbenchSemanticTokenTheme(theme)] })

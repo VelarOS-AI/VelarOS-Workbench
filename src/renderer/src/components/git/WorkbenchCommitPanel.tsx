@@ -27,7 +27,7 @@ import {
   reportWorkbenchGitRemoteActionSuccess,
   useWorkbenchGitRemoteAction,
 } from '@renderer/hooks/useWorkbenchGitRemoteAction'
-import { workbenchHost } from '@renderer/host'
+import { workbenchHost } from '@renderer/host/WorkbenchHost'
 import { getWorkbenchFilePresentationVariant } from '@renderer/models/files/workbenchFilePresentation'
 import {
   buildCommitPanelGroups,
@@ -63,7 +63,8 @@ import {
 } from '@velaros-ai/ui/primitives/overlays/Dialog'
 import { BubbleTooltip } from '@velaros-ai/ui/primitives/overlays/Tooltip'
 
-import type { WorkspaceGitFileAction, WorkspaceGitStashOptions } from '@shared/contracts'
+import { type WorkspaceGitFileAction } from '@shared/contracts/system'
+import { type WorkspaceGitStashOptions } from '@shared/contracts/workspaceGit'
 
 import styles from '../../styles/workbenchPageStyles'
 import { WorkbenchFileTypeIcon } from '../files/WorkbenchFileTypeIcon'

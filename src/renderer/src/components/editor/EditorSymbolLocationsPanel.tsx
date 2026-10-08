@@ -8,7 +8,7 @@ import {
   useState,
 } from 'react'
 import { ArrowLeftIcon, CodeIcon, XIcon } from '@phosphor-icons/react'
-import { useWorkbenchI18n } from '@renderer/i18n'
+import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 import {
   groupWorkbenchSymbolLocations,
   sameWorkbenchSymbolLocation,
@@ -16,7 +16,7 @@ import {
   type WorkbenchSymbolLocationsState,
 } from '@renderer/models/editor/workbenchSymbolLocations'
 
-import type { WorkbenchLanguageServiceLocation } from '@shared/contracts'
+import { type WorkbenchLanguageServiceLocation } from '@shared/contracts/workbench'
 
 import styles from '../../styles/workbenchPageStyles'
 import { useLatest } from '../../support/genericHooks'

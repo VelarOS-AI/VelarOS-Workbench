@@ -13,7 +13,7 @@ import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { AppError } from '@velaros-ai/core/error'
 import { currentPlatform as systemPlatformCompatibility } from '@velaros-ai/core/platform'
 
-import type { WorkbenchTerminalOutputEvent } from '@shared/contracts'
+import { type WorkbenchTerminalOutputEvent } from '@shared/contracts/workbench'
 
 import type { WorkbenchDebuggerLaunchTarget } from '../../../shared/workbenchDebugger'
 import { workbenchMainText } from '../../i18n/workbenchMainMessages'

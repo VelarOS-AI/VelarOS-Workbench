@@ -13,7 +13,7 @@ import { clearTypeScriptProjectCache } from '../src/main/workspace/language/Type
 import { createWorkbenchAppParts } from '../src/main/workspace/Parts'
 import { translateWorkbenchAppMessage } from '../src/renderer/src/i18n/useStandaloneWorkbenchLocalization'
 import { writeWorkbenchLanguageServiceFileChange } from '../src/renderer/src/models/editor/workbenchLanguageServiceFileChanges'
-import type { WorkbenchReadFileResult } from '../src/shared/contracts'
+import { type WorkbenchReadFileResult } from '../src/shared/contracts/workbench'
 
 import { refuseTrash } from './helpers/fakeTrash'
 

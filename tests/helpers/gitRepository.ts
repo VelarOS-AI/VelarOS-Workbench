@@ -8,7 +8,7 @@ import { promisify } from 'node:util'
 import { AppError } from '@velaros-ai/core/error'
 
 import { WorkbenchGitService } from '../../src/main/workspace/git/WorkbenchGitService'
-import type { SystemWorkspaceGitSummary } from '../../src/shared/contracts'
+import { type SystemWorkspaceGitSummary } from '../../src/shared/contracts/system'
 
 const execFileAsync = promisify(execFile)
 

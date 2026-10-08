@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-import { useWorkbenchHostRuntime } from '../host'
+import { useWorkbenchHostRuntime } from '../host/WorkbenchHostProvider'
 
 /** 当前文件在 HEAD 里的全文：编辑区 Git 改动标记的对照基准。 */
 export interface WorkbenchGitHeadContent {

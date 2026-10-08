@@ -1,6 +1,6 @@
 import { Fragment, type ReactElement } from 'react'
 import { CaretRightIcon, FolderIcon, FolderOpenIcon } from '@phosphor-icons/react'
-import { useWorkbenchI18n } from '@renderer/i18n'
+import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 import type { WorkbenchPathBreadcrumbItem } from '@renderer/models/files/workbenchPathModel'
 
 import { Button } from '@velaros-ai/ui/primitives/buttons/Button'

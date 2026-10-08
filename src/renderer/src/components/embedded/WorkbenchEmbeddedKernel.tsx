@@ -13,8 +13,8 @@ import {
   useEffect,
 } from 'react'
 import { GlobeSimpleIcon, RobotIcon } from '@phosphor-icons/react'
-import { useWorkbenchI18n } from '@renderer/i18n'
-import type { WorkbenchDensity } from '@renderer/models/settings/workbenchPreferences'
+import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
+import type { WorkbenchDensity } from '@renderer/models/workbenchPreferences'
 
 import styles from '../../styles/workbenchPageStyles'
 import { lazyWithPreload, preloadWhenIdle } from '../../support/lazyWithPreload'

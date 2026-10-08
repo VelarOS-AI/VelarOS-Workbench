@@ -7,7 +7,6 @@ import {
 } from 'react'
 import {
   ArrowDownIcon,
-  ArrowsClockwiseIcon,
   ArrowUpIcon,
   CaretDownIcon,
   CloudArrowDownIcon,
@@ -18,7 +17,7 @@ import {
   SpinnerGapIcon,
 } from '@phosphor-icons/react'
 import { describeWorkbenchGitRemoteActionCancel } from '@renderer/hooks/useWorkbenchGitRemoteAction'
-import { useWorkbenchI18n } from '@renderer/i18n'
+import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 import {
   buildWorkbenchGitBranchTree,
   filterWorkbenchGitBranches,
@@ -31,14 +30,13 @@ import type { WorkbenchGitRemoteOperation } from '@renderer/models/git/workbench
 
 import { SearchField } from '@velaros-ai/ui/primitives/forms/SearchField'
 
-import type { WorkspaceGitBranch, WorkspaceGitRemoteAction } from '@shared/contracts'
+import { type WorkspaceGitBranch } from '@shared/contracts/system'
 
 import styles from '../../styles/workbenchPageStyles'
 
-const RemoteActionIcons: Record<WorkspaceGitRemoteAction, Icon> = {
+const RemoteActionIcons: Record<WorkbenchGitRemoteActionItem['action'], Icon> = {
   pull: ArrowDownIcon,
   upload: ArrowUpIcon,
-  sync: ArrowsClockwiseIcon,
   fetch: CloudArrowDownIcon,
 }
 
@@ -47,7 +45,7 @@ const BranchIndentStepPx = 14
 const BranchRowPaddingPx = 6
 
 /**
- * 菜单里能用方向键走到的项，按从上到下的顺序：远端操作、搜索框、目录与分支、「新建分支」。行内悬停才出的
+ * 菜单里能用方向键走到的项，按从上到下的顺序：搜索框、远端操作、目录与分支、「新建分支」。行内悬停才出的
  * 小按钮不算（Tab 能到）。
  */
 const MenuItemSelector = 'input, [data-git-menu-item]:not(:disabled)'
@@ -70,7 +68,7 @@ interface WorkbenchGitBranchMenuProps {
   /** 合并、变基之类进行到一半：不能切分支、新建分支，这是原因（悬停时看得到）。 */
   branchesBlocked: Nullable<string>
   onSearchChange: (search: string) => void
-  onRunRemoteAction: (action: WorkspaceGitRemoteAction) => void
+  onRunRemoteAction: (action: WorkbenchGitRemoteActionItem['action']) => void
   onCancelRemoteAction: () => void
   onSwitchBranch: (branch: WorkspaceGitBranch) => void
   onPushBranch: (branch: WorkspaceGitBranch) => void
@@ -78,8 +76,7 @@ interface WorkbenchGitBranchMenuProps {
 }
 
 /**
- * 顶栏分支按钮展开的那一块：上面是当前分支的远端操作（拉取、推送、同步、获取远端；跑着的时候换成进度和
- * 取消），中间是搜索和分支列表（点一下签出，悬停出「签出」「推送」），最下面是新建分支。
+ * 顶栏分支面板：搜索右侧获取远端，当前分支行内提供拉取与推送，下方可新建分支。
  */
 export function WorkbenchGitBranchMenu({
   branches,
@@ -116,6 +113,33 @@ export function WorkbenchGitBranchMenu({
   const runningLabel = running
     ? (remoteActions.find((item) => item.action === running.action)?.label ?? '')
     : ''
+
+  function renderRemoteAction(
+    item: WorkbenchGitRemoteActionItem,
+    inline = false
+  ): ReactElement {
+    const ActionIcon = RemoteActionIcons[item.action]
+    const unavailable = item.disabled || locked || !!running
+    return (
+      <button
+        key={item.action}
+        type="button"
+        className={inline ? undefined : styles.gitBranchMenuAction}
+        data-git-menu-item={!inline || undefined}
+        data-action={item.action}
+        aria-label={item.label}
+        aria-description={`${item.label}${item.count > 0 ? ` (${item.count})` : ''} · ${item.hint}`}
+        aria-disabled={unavailable || undefined}
+        title=""
+        onClick={() => {
+          if (!unavailable) onRunRemoteAction(item.action)
+        }}
+      >
+        <ActionIcon size={inline ? 12 : 15} aria-hidden="true" />
+        {inline && <span>{item.label}</span>}
+      </button>
+    )
+  }
 
   function toggleFolder(key: string): void {
     setCollapsedFolders((current) => {
@@ -173,12 +197,22 @@ export function WorkbenchGitBranchMenu({
           <span>{label}</span>
           {current && !!branch.upstream && <small>{branch.upstream}</small>}
         </button>
-        {!current && (
-          <div className={styles.gitBranchMenuRowActions} role="group">
+        {current ? (
+          <div
+            className={styles.gitBranchMenuRowActions}
+            role="group"
+            aria-label={`${branch.name} · ${t('workbench.gitRemoteActionsMenu')}`}
+            title=""
+          >
+            {remoteActions
+              .filter((item) => item.action === 'pull' || item.action === 'upload')
+              .map((item) => renderRemoteAction(item, true))}
+          </div>
+        ) : (
+          <div className={styles.gitBranchMenuRowActions} role="group" title="">
             <button
               type="button"
               disabled={branchesLocked}
-              title={checkoutLabel}
               aria-label={`${checkoutLabel} ${branch.name}`}
               onClick={() => onSwitchBranch(branch)}
             >
@@ -189,7 +223,6 @@ export function WorkbenchGitBranchMenu({
               <button
                 type="button"
                 disabled={branchesLocked}
-                title={pushLabel}
                 aria-label={`${pushLabel} ${branch.name}`}
                 onClick={() => onPushBranch(branch)}
               >
@@ -248,55 +281,6 @@ export function WorkbenchGitBranchMenu({
   return (
     // 这是一块带搜索框的面板，不是纯菜单：按键只认方向键，其余照常（打字、Tab、Esc 关掉）。
     <div className={styles.gitBranchMenu} onKeyDown={handleKeyDown}>
-      <div
-        className={styles.gitBranchMenuRemote}
-        role="group"
-        aria-label={t('workbench.gitRemoteActionsMenu')}
-      >
-        {running ? (
-          <div className={styles.gitBranchMenuRunning} role="status">
-            <SpinnerGapIcon size={13} className={styles.spinIcon} />
-            <span>{t('workbench.gitRemoteActionRunning', { action: runningLabel })}</span>
-            <button
-              type="button"
-              className={styles.gitBranchMenuCancel}
-              data-git-menu-item
-              title={describeWorkbenchGitRemoteActionCancel(running, t)}
-              disabled={running.cancelling}
-              onClick={onCancelRemoteAction}
-            >
-              {running.cancelling ? t('workbench.gitRemoteActionCancelling') : t('common.cancel')}
-            </button>
-          </div>
-        ) : (
-          <div className={styles.gitBranchMenuActions}>
-            {remoteActions.map((item) => {
-              const ActionIcon = RemoteActionIcons[item.action]
-              const unavailable = item.disabled || locked
-              return (
-                // 按不了的也留着焦点和悬停说明（原因写在 title 里），所以用 aria-disabled 而不是 disabled。
-                <button
-                  key={item.action}
-                  type="button"
-                  className={styles.gitBranchMenuAction}
-                  data-git-menu-item
-                  data-action={item.action}
-                  aria-disabled={unavailable || undefined}
-                  title={item.hint}
-                  onClick={() => {
-                    if (!unavailable) onRunRemoteAction(item.action)
-                  }}
-                >
-                  <ActionIcon size={13} />
-                  <span>{item.label}</span>
-                  {item.count > 0 && <small>{item.count}</small>}
-                </button>
-              )
-            })}
-          </div>
-        )}
-        {!!remoteNote && !running && <p className={styles.gitBranchMenuNote}>{remoteNote}</p>}
-      </div>
       <div className={styles.gitBranchMenuSearch}>
         <SearchField
           ref={searchRef}
@@ -306,7 +290,36 @@ export function WorkbenchGitBranchMenu({
           aria-label={t('workbench.gitBranchSearchPlaceholder')}
           onChange={(event) => onSearchChange(event.target.value)}
         />
+        <div
+          className={styles.gitBranchMenuActions}
+          role="group"
+          aria-label={t('workbench.gitRemoteActionsMenu')}
+        >
+          {remoteActions.filter((item) => item.action === 'fetch').map((item) => renderRemoteAction(item))}
+        </div>
       </div>
+      {(running || remoteNote) && (
+        <div className={styles.gitBranchMenuRemote}>
+          {running ? (
+            <div className={styles.gitBranchMenuRunning} role="status">
+              <SpinnerGapIcon size={13} className={styles.spinIcon} />
+              <span>{t('workbench.gitRemoteActionRunning', { action: runningLabel })}</span>
+              <button
+                type="button"
+                className={styles.gitBranchMenuCancel}
+                data-git-menu-item
+                title={describeWorkbenchGitRemoteActionCancel(running, t)}
+                disabled={running.cancelling}
+                onClick={onCancelRemoteAction}
+              >
+                {running.cancelling ? t('workbench.gitRemoteActionCancelling') : t('common.cancel')}
+              </button>
+            </div>
+          ) : (
+            <p className={styles.gitBranchMenuNote}>{remoteNote}</p>
+          )}
+        </div>
+      )}
       <div className={styles.gitBranchMenuList}>
         {renderGroup('local', t('workbench.gitBranchLocal'))}
         {renderGroup('remote', t('workbench.gitBranchRemoteGroup'))}

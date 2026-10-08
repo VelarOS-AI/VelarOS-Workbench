@@ -7,7 +7,7 @@ import {
   isWorkbenchDarkTheme,
   normalizeWorkbenchPreferences,
   type WorkbenchThemeId,
-} from '../src/renderer/src/models/settings/workbenchPreferences'
+} from '../src/renderer/src/models/workbenchPreferences'
 
 function source(path: string): string {
   return readFileSync(new URL(`../${path}`, import.meta.url), 'utf8')

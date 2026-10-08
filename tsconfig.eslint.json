@@ -16,7 +16,7 @@
     "types": ["node"]
   },
   "include": [
-    "types/velaros-globals.d.ts",
+    "src/shared/velaros-globals.d.ts",
     "electron.vite.config.ts",
     "src/**/*.ts",
     "src/**/*.tsx",

@@ -196,25 +196,22 @@ void describe('Workbench Git pull, fetch and sync', () => {
     })
   })
 
-  void test('the toolbar control pulls, pushes and syncs the current branch, and shows conflicts', () => {
+  void test('the branch control pulls and pushes the current branch and shows conflicts', () => {
     const control = readFileSync(
       path.resolve(process.cwd(), 'src/renderer/src/components/git/WorkbenchGitBranchControl.tsx'),
       'utf8'
     )
-    // 拉取、同步、推送、获取远端都在分支菜单里；同步和推送先确认，获取远端不问。
+    // 分支菜单提供拉取、推送和获取远端；推送先确认，获取远端直接执行。
     assert.match(
       control,
       /remoteActions=\{describeWorkbenchGitRemoteActions\(status, t, operationBlock\)\}/
     )
-    assert.match(control, /if \(action === 'sync'\)\s*return window\.confirm\(tLatest\.current\('workbench\.gitSyncConfirm'/)
     assert.match(control, /action !== 'fetch' && warnUnsavedOpenTabs\(\)/)
     assert.match(control, /result\.action\.conflicts\.length > 0[\s\S]*showConflicts/)
     assert.match(control, /onOpenCommitTool\(\)/)
     for (const key of [
       'workbench.gitPull',
-      'workbench.gitSync',
       'workbench.gitPullFailedTitle',
-      'workbench.gitSyncConfirm',
       'workbench.gitBranchAheadBehind',
       'workbench.gitNoUpstreamNote',
       'workbench.gitPushBranchConfirm',

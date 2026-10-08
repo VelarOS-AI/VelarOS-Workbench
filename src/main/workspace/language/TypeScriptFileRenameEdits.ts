@@ -1,8 +1,4 @@
-import type {
-  WorkbenchLanguageServiceFileEdit,
-  WorkbenchLanguageServiceRange,
-  WorkbenchLanguageServiceTextEdit,
-} from '@shared/contracts'
+import { type WorkbenchLanguageServiceFileEdit, type WorkbenchLanguageServiceRange, type WorkbenchLanguageServiceTextEdit } from '@shared/contracts/workbench'
 
 import {
   mapTypeScriptFileChanges,

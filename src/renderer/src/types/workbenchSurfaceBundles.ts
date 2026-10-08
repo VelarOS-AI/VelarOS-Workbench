@@ -8,11 +8,7 @@ import type {
 import type { WorkbenchProject } from '@renderer/models/project/workbenchProjects'
 import type { WorkbenchOpenEditorTab } from '@renderer/types/workbenchTypes'
 
-import type {
-  WorkbenchDirectoryEntry,
-  WorkbenchReadFileResult,
-  WorkbenchRunCommandResult,
-} from '@shared/contracts'
+import { type WorkbenchDirectoryEntry, type WorkbenchReadFileResult, type WorkbenchRunCommandResult } from '@shared/contracts/workbench'
 
 import type { WorkbenchTerminalSessionView } from '../hooks/useWorkbenchCommandController'
 

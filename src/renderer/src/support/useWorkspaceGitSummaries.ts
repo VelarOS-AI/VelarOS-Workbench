@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { workbenchHost } from '@renderer/host'
+import { workbenchHost } from '@renderer/host/WorkbenchHost'
 
 import { AppError } from '@velaros-ai/core'
 import { Result } from '@velaros-ai/core/result'
 
-import type { SystemWorkspaceGitSummary } from '@shared/contracts'
+import { type SystemWorkspaceGitSummary } from '@shared/contracts/system'
 
 /** 什么时候拉取由调用方决定（见 useWorkbenchGitState 的刷新时机）；这里只管拉取与代际守卫。 */
 export interface UseWorkspaceGitSummariesOptions {

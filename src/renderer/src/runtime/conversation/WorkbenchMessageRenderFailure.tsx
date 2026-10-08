@@ -1,13 +1,13 @@
 import { type ReactElement, type ReactNode } from 'react'
 import { WarningCircleIcon } from '@phosphor-icons/react'
-import { useWorkbenchI18n } from '@renderer/i18n'
+import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 
 import type { ConversationRenderSlots } from '@velaros-ai/ui/conversation'
 import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
 import { RenderErrorBoundary } from '@velaros-ai/ui/primitives/display/RenderErrorBoundary'
 import { Text } from '@velaros-ai/ui/primitives/display/Text'
 
-import styles from './WorkbenchMessageRenderFailure.module.css'
+import styles from '../../styles/WorkbenchMessageRenderFailure.module.css'
 
 type ChatMessage = Parameters<ConversationRenderSlots['renderMessageBoundary']>[0]['message']
 

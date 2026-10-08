@@ -207,6 +207,7 @@ export interface ConversationScriptProjection {
   runId: string
   turnId: string
   status: ConversationScriptStatus | 'discarded'
+  startedAt?: number
   source: string
   sourceTruncated: boolean
   language?: 'node' | 'shell'
@@ -338,6 +339,8 @@ export interface WorkbenchConversationContextUsage {
   estimatedTokens: number
   contextWindow: number
   usableContextWindow: number
+  /** 当前容量仍是试探预算，超限后按服务商反馈调整。 */
+  contextWindowEstimated?: boolean
   reservedOutputTokens: number
   percent: number
   timestamp: number

@@ -7,7 +7,7 @@ import {
   type ModelRuntimeCompositionApi,
 } from '@velaros-ai/model'
 
-import type { WorkbenchInlineCompletionResult } from '@shared/contracts'
+import { type WorkbenchInlineCompletionResult } from '@shared/contracts/workbench'
 import type { WorkbenchInlineCompletionBridgeRequest } from '@shared/workbenchLanguage'
 
 const InlineCompletionMaxOutputTokens = 160

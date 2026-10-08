@@ -1,5 +1,0 @@
-export * from './workbenchChatComposition'
-export * from './WorkbenchChatProvider'
-export * from './WorkbenchProductRuntimeProvider'
-export * from './WorkbenchRuntime'
-export * from './WorkbenchRuntimeProvider'

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react'
-import { workbenchHost } from '@renderer/host'
+import { workbenchHost } from '@renderer/host/WorkbenchHost'
 import type { WorkbenchGitChangeItem } from '@renderer/models/git/workbenchGitModel'
 import { scanWorkbenchMergeResolutions } from '@renderer/models/git/workbenchMergeResolution'
 import type { WorkbenchOpenEditorTab } from '@renderer/types/workbenchTypes'

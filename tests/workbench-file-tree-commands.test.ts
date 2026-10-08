@@ -16,7 +16,7 @@ import {
   resolveTreeCreateParentPath,
   selectTreeEntriesToMove,
 } from '../src/renderer/src/models/files/workbenchTreeMutation'
-import type { WorkbenchDirectoryEntry } from '../src/shared/contracts'
+import { type WorkbenchDirectoryEntry } from '../src/shared/contracts/workbench'
 
 /**
  * 文件树只做用户要它做的事：新建只走右键菜单，落在右键的那一项所在的位置；

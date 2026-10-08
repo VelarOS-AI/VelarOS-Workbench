@@ -331,7 +331,7 @@ void describe('preview tab wiring', () => {
     const row = readSource('src/renderer/src/components/files/FileTreeRow.tsx')
     const results = readSource('src/renderer/src/components/files/FileSearchResults.tsx')
     const searchView = readSource('src/renderer/src/components/files/ProjectSearchView.tsx')
-    const presentation = readSource('src/renderer/src/StandaloneWorkbenchPagePresentation.tsx')
+    const presentation = readSource('src/renderer/src/app/StandaloneWorkbenchPagePresentation.tsx')
 
     // 文件树：单击（onActivate）预览，双击普通；改名输入框里的双击不算。
     assert.match(
@@ -421,7 +421,7 @@ void describe('preview tab wiring', () => {
     assert.match(pageModel, /previewTabsEnabled: workbenchPreferences\.preferences\.editorPreviewTabs/u)
     const settings = readSource('src/renderer/src/components/settings/WorkbenchSettingsDialog.tsx')
     assert.match(settings, /checked=\{preferences\.editorPreviewTabs\}/u)
-    const preferences = readSource('src/renderer/src/models/settings/workbenchPreferences.ts')
+    const preferences = readSource('src/renderer/src/models/workbenchPreferences.ts')
     assert.match(preferences, /editorPreviewTabs: true,/u)
   })
 })

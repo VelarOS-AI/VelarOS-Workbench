@@ -1,5 +1,5 @@
 import { type FormEvent, type ReactElement, useEffect, useId, useState } from 'react'
-import { useWorkbenchI18n } from '@renderer/i18n'
+import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 import { shouldWorkbenchGitStashIncludeUntrackedByDefault } from '@renderer/models/git/workbenchGitStashModel'
 
 import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
@@ -14,7 +14,7 @@ import {
   DialogTitle,
 } from '@velaros-ai/ui/primitives/overlays/Dialog'
 
-import type { WorkspaceGitStashOptions } from '@shared/contracts'
+import { type WorkspaceGitStashOptions } from '@shared/contracts/workspaceGit'
 
 import styles from '../../styles/workbenchPageStyles'
 import { useLatest } from '../../support/genericHooks'

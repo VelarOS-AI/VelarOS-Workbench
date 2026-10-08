@@ -4,7 +4,7 @@ import { createElement, createRef } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, test } from 'bun:test'
 
-import type { WorkbenchI18nContextValue } from '../src/renderer/src/i18n'
+import { type WorkbenchI18nContextValue } from '../src/renderer/src/i18n/WorkbenchLocalizationProvider'
 import {
   buildWorkbenchGitBranchTree,
   describeWorkbenchGitBranchControl,
@@ -17,7 +17,7 @@ import {
   resolveWorkbenchGitBranchSwitch,
   type WorkbenchGitBranchTreeNode,
 } from '../src/renderer/src/models/git/workbenchGitBranchMenuModel'
-import type { WorkspaceGitBranch } from '../src/shared/contracts'
+import { type WorkspaceGitBranch } from '../src/shared/contracts/system'
 
 import { shareHostReactWithLinkedUi } from './helpers/linkedUiReact'
 
@@ -27,7 +27,7 @@ shareHostReactWithLinkedUi()
 const { translateWorkbenchAppMessage } = await import(
   '../src/renderer/src/i18n/useStandaloneWorkbenchLocalization'
 )
-const { WorkbenchLocalizationProvider } = await import('../src/renderer/src/i18n')
+const { WorkbenchLocalizationProvider } = await import('../src/renderer/src/i18n/WorkbenchLocalizationProvider')
 const { WorkbenchGitBranchMenu } = await import(
   '../src/renderer/src/components/git/WorkbenchGitBranchMenu'
 )
@@ -142,18 +142,17 @@ void describe('Workbench Git branch menu model', () => {
       [
         ['pull', 'Pull', false, 3],
         ['upload', 'Push', false, 2],
-        ['sync', 'Sync', false, 0],
         ['fetch', 'Fetch Remotes', false, 0],
       ]
     )
     assert.match(tracking[0]?.hint ?? '', /origin\/main/u)
     assert.equal(describeWorkbenchGitRemoteNote(onBranch, english), null)
 
-    // 还没有上游：拉取、同步按不了（写明原因）；推送能按，会顺便关联远端分支。
+    // 还没有上游：拉取按不了（写明原因）；推送能按，会顺便关联远端分支。
     const fresh = describeWorkbenchGitRemoteActions(unpublished, english)
     assert.deepEqual(
       fresh.map((item) => item.disabled),
-      [true, false, true, false]
+      [true, false, false]
     )
     assert.equal(fresh[0]?.hint, english('workbench.gitNoUpstreamHint'))
     assert.equal(fresh[1]?.hint, english('workbench.gitPublishHint'))
@@ -163,9 +162,9 @@ void describe('Workbench Git branch menu model', () => {
     const headless = describeWorkbenchGitRemoteActions(detached, chinese)
     assert.deepEqual(
       headless.map((item) => item.disabled),
-      [true, true, true, false]
+      [true, true, false]
     )
-    for (const item of headless.slice(0, 3)) assert.match(item.hint, /1a2b3c4/u)
+    for (const item of headless.slice(0, 2)) assert.match(item.hint, /1a2b3c4/u)
     assert.match(describeWorkbenchGitRemoteNote(detached, chinese) ?? '', /1a2b3c4/u)
   })
 
@@ -180,14 +179,14 @@ void describe('Workbench Git branch menu model', () => {
     const actions = describeWorkbenchGitRemoteActions(detached, english, block)
     assert.deepEqual(
       actions.map((item) => item.disabled),
-      [true, true, true, false]
+      [true, true, false]
     )
-    for (const item of actions.slice(0, 3)) assert.equal(item.hint, block)
+    for (const item of actions.slice(0, 2)) assert.equal(item.hint, block)
     assert.equal(describeWorkbenchGitRemoteNote(detached, english, block), block)
     // 在分支上合并到一半也一样：有上游也不给拉取、推送。
     assert.deepEqual(
       describeWorkbenchGitRemoteActions(onBranch, english, block).map((item) => item.disabled),
-      [true, true, true, false]
+      [true, true, false]
     )
     assert.equal(describeWorkbenchGitRemoteNote(onBranch, english, block), block)
   })
@@ -280,51 +279,64 @@ void describe('Workbench Git branch menu', () => {
     }))
   }
 
-  void test('the four remote actions come first, with the commit counts on pull and push', () => {
-    const all = buttons(render())
-    assert.deepEqual(
-      all.slice(0, 4).map((button) => button.label),
-      ['Pull 3', 'Push 2', 'Sync', 'Fetch Remotes']
-    )
-    for (const button of all.slice(0, 4)) {
+  void test('fetch is beside search and pull and push belong to the current branch', () => {
+    const markup = render()
+    const all = buttons(markup)
+    const actions = all.filter((button) => /data-action=/u.test(button.tag))
+    assert.equal(actions.length, 3)
+    assert.ok(markup.indexOf('<input') < markup.indexOf('data-action='))
+    assert.deepEqual(actions.map((button) => button.label), ['', 'Pull', 'Push'])
+    assert.deepEqual(actions.map((button) => /aria-label="([^"]+)"/u.exec(button.tag)?.[1]), [
+      'Fetch Remotes', 'Pull', 'Push',
+    ])
+    const searchActions = buttons(markup.slice(0, markup.indexOf('Local branches')))
+      .filter((button) => /data-action=/u.test(button.tag))
+    assert.equal(searchActions.length, 1)
+    assert.match(searchActions[0]?.tag ?? '', /data-action="fetch"/u)
+    const current = /<div[^>]*data-current="true"[^>]*>([\s\S]*?)<\/div>/u.exec(markup)
+    assert.match(current?.[1] ?? '', /data-action="pull"[\s\S]*data-action="upload"/u)
+    for (const button of actions) {
       assert.doesNotMatch(button.tag, /aria-disabled|\bdisabled\b/u)
-      assert.match(button.tag, /title="[^"]+"/u)
+      assert.match(button.tag, /aria-description="[^"]+"/u)
     }
-    // 最后一项是新建分支。
     assert.equal(all.at(-1)?.label, 'New branch')
   })
 
-  void test('an action that cannot run stays reachable and says why', () => {
+  void test('an unavailable action remains focusable and explains its state to assistive technology', () => {
     const markup = render({
       remoteActions: describeWorkbenchGitRemoteActions(unpublished, english),
       remoteNote: describeWorkbenchGitRemoteNote(unpublished, english),
     })
-    const [pull, push] = buttons(markup)
-    // 用 aria-disabled 而不是 disabled：焦点、悬停说明照常。
+    const all = buttons(markup)
+    const pull = all.find((button) => /data-action="pull"/u.test(button.tag))
+    const push = all.find((button) => /data-action="upload"/u.test(button.tag))
     assert.match(pull?.tag ?? '', /aria-disabled="true"/u)
     assert.doesNotMatch(pull?.tag ?? '', /\sdisabled(=|\s|$)/u)
-    assert.ok(pull?.tag.includes(`title="${english('workbench.gitNoUpstreamHint')}"`))
+    assert.ok(pull?.tag.includes(english('workbench.gitNoUpstreamHint')))
     assert.doesNotMatch(push?.tag ?? '', /aria-disabled/u)
     assert.ok(markup.includes(english('workbench.gitNoUpstreamNote')))
   })
 
-  void test('while a remote action runs the actions give way to its progress and a cancel button', () => {
+  void test('a running operation disables actions and exposes progress and cancellation', () => {
     const operation = { id: 'op', workspaceRoot: '/p', action: 'pull' as const, cancelling: false }
     const running = render({ running: operation, locked: true })
     assert.match(running, /role="status"[^>]*>[\s\S]*Pull in progress…/u)
     const all = buttons(running)
-    assert.equal(all[0]?.label, 'Cancel')
-    assert.doesNotMatch(all[0]?.tag ?? '', /\sdisabled(=|\s|$)/u)
-    // 四个操作不在了（行里悬停才出的「推送」还在，但按不了）。
-    assert.doesNotMatch(running, /data-action=/u)
-    // 跑着的时候不切分支、不新建分支。
+    const actions = all.filter((button) => /data-action=/u.test(button.tag))
+    assert.equal(actions.length, 3)
+    for (const button of actions) assert.match(button.tag, /aria-disabled="true"/u)
+    const cancel = all.find((button) => button.label === 'Cancel')
+    assert.ok(cancel)
+    assert.doesNotMatch(cancel.tag, /\sdisabled(=|\s|$)/u)
     assert.match(all.at(-1)?.tag ?? '', /\sdisabled=""/u)
-    for (const button of all.filter((entry) => /data-git-menu-item/u.test(entry.tag)).slice(1))
-      if (!/aria-expanded/u.test(button.tag)) assert.match(button.tag, /\sdisabled=""/u)
-
+    for (const button of all.filter((entry) => /data-git-menu-item/u.test(entry.tag))) {
+      if (button !== cancel && !/aria-expanded|data-action=/u.test(button.tag))
+        assert.match(button.tag, /\sdisabled=""/u)
+    }
     const cancelling = buttons(render({ running: { ...operation, cancelling: true }, locked: true }))
-    assert.equal(cancelling[0]?.label, 'Cancelling…')
-    assert.match(cancelling[0]?.tag ?? '', /\sdisabled=""/u)
+      .find((button) => button.label === 'Cancelling…')
+    assert.ok(cancelling)
+    assert.match(cancelling.tag, /\sdisabled=""/u)
   })
 
   void test('the current branch is marked, shows what it tracks, and cannot be checked out again', () => {
@@ -358,10 +370,11 @@ void describe('Workbench Git branch menu', () => {
       branchesBlocked: block,
     })
     const all = buttons(markup)
-    // 四个远端操作都在（没有在跑的远端操作），只有获取远端能按。
+    // 获取远端可用，当前分支的拉取与推送说明阻塞原因。
     assert.deepEqual(
-      all.slice(0, 4).map((button) => /aria-disabled="true"/u.test(button.tag)),
-      [true, true, true, false]
+      all.filter((button) => /data-action=/u.test(button.tag))
+        .map((button) => /aria-disabled="true"/u.test(button.tag)),
+      [false, true, true]
     )
     assert.ok(markup.includes('A merge is in progress.'))
     // 别的分支点不了，原因写在那一行的悬停说明里；新建分支也点不了。

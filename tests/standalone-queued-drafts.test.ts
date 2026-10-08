@@ -2,9 +2,10 @@ import assert from 'node:assert/strict'
 
 import { describe, test } from 'bun:test'
 
+import { type BrowserElementSelection } from '@velaros-ai/velaros/browser/contracts'
+
 import { EmptyWorkbenchComposerContext } from '../src/renderer/src/runtime/standaloneChatDrafts'
 import { StandaloneQueuedDraftStore } from '../src/renderer/src/runtime/standaloneQueuedDrafts'
-import type { BrowserElementSelection } from '../src/shared/contracts'
 
 const Scope = 'session-1'
 

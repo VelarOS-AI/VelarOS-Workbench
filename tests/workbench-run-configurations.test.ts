@@ -26,8 +26,8 @@ import {
   uniqueWorkbenchRunConfigurationName,
   validateWorkbenchRunConfigurationDraft,
 } from '../src/renderer/src/models/commands/workbenchRunConfigurationDrafts'
-import { normalizeWorkbenchProjectRunSettings } from '../src/renderer/src/models/settings/workbenchPreferences'
-import type { StorageLike } from '../src/renderer/src/persistence/localStorageJsonStore'
+import { normalizeWorkbenchProjectRunSettings } from '../src/renderer/src/models/workbenchPreferences'
+import type { StorageLike } from '../src/renderer/src/support/localStorageJsonStore'
 import { readWorkbenchRunEnvironment } from '../src/shared/workbenchRunEnvironment'
 
 function readSource(relativePath: string): string {
@@ -416,11 +416,11 @@ void describe('named run configurations', () => {
       2
     )
 
-    const presentation = readSource('src/renderer/src/StandaloneWorkbenchPagePresentation.tsx')
+    const presentation = readSource('src/renderer/src/app/StandaloneWorkbenchPagePresentation.tsx')
     // 对话框不进工作区外壳包，只有它用的草稿编辑也不进：外壳里的模块不引它。
     assert.match(
       presentation,
-      /const LazyWorkbenchRunConfigurationsDialog = lazyWithPreload\(\s+async \(\) =>\s+\(await import\('\.\/components\/run\/WorkbenchRunConfigurationsDialog'\)\)/u
+      /const LazyWorkbenchRunConfigurationsDialog = lazyWithPreload\(\s+async \(\) =>\s+\(await import\('\.\.\/components\/WorkbenchRunConfigurationsDialog'\)\)/u
     )
     for (const shellModule of [
       'src/renderer/src/models/commands/workbenchNamedRunConfigurations.ts',

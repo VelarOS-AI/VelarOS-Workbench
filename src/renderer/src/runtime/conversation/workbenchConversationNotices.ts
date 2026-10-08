@@ -189,6 +189,7 @@ function applyScript(
     processOutputTruncated: payload.processOutputTruncated,
     title: readLeadingComment(payload.source) ?? '',
     status: payload.status,
+    startedAt: payload.startedAt,
     source: payload.source,
     sourceTruncated: payload.sourceTruncated,
     calls: [
@@ -506,6 +507,7 @@ function isScriptProjection(value: unknown): value is ConversationScriptProjecti
     !value.id.startsWith('conversation:script:') ||
     !ScriptKinds.includes(String(value.kind)) ||
     !(!isPresent(value.durationMs) || (isFiniteNumber(value.durationMs) && value.durationMs >= 0)) ||
+    !(value.startedAt === undefined || (isFiniteNumber(value.startedAt) && value.startedAt >= 0)) ||
     !isString(value.runId) ||
     !isString(value.turnId) ||
     !ScriptStatuses.includes(String(value.status)) ||

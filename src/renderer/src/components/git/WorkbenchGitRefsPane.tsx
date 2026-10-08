@@ -1,6 +1,6 @@
 import { type MouseEvent, type ReactElement, useState } from 'react'
 import { GitBranchIcon, GitForkIcon, StackIcon } from '@phosphor-icons/react'
-import { useWorkbenchI18n } from '@renderer/i18n'
+import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 import { formatWorkbenchGitCommitRelativeDate } from '@renderer/models/git/changesPanel.model'
 import {
   getWorkbenchGitStashSubtitle,
@@ -10,7 +10,8 @@ import {
 import { SearchField } from '@velaros-ai/ui/primitives/forms/SearchField'
 import { ScrollArea } from '@velaros-ai/ui/primitives/layout/ScrollArea'
 
-import type { WorkspaceGitBranch, WorkspaceGitStash } from '@shared/contracts'
+import { type WorkspaceGitBranch } from '@shared/contracts/system'
+import { type WorkspaceGitStash } from '@shared/contracts/workspaceGit'
 
 import styles from '../../styles/workbenchPageStyles'
 

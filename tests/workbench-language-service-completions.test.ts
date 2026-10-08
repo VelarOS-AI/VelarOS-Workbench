@@ -13,10 +13,7 @@ import {
   requestWorkbenchLanguageServiceCompletions,
 } from '../src/renderer/src/models/editor/workbenchCodeMirrorLanguageServiceCompletions'
 import { convertWorkbenchLspSnippet } from '../src/renderer/src/models/editor/workbenchLanguageServiceSnippet'
-import type {
-  WorkbenchLanguageServiceCompletionItem,
-  WorkbenchLanguageServiceCompletionTextEdit,
-} from '../src/shared/contracts'
+import { type WorkbenchLanguageServiceCompletionItem, type WorkbenchLanguageServiceCompletionTextEdit } from '../src/shared/contracts/workbench'
 
 /** 只有 state 与 dispatch 的编辑器替身：补全的 apply 只用到这两样。 */
 class FakeEditorView {

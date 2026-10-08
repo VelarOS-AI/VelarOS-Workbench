@@ -9,7 +9,7 @@ import {
   useState,
 } from 'react'
 import { CornersInIcon, MinusIcon, PlusIcon } from '@phosphor-icons/react'
-import { useWorkbenchI18n } from '@renderer/i18n'
+import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 import {
   canStepWorkbenchImageZoom,
   formatWorkbenchImageZoom,
@@ -25,7 +25,7 @@ import {
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 import { Text } from '@velaros-ai/ui/primitives/display/Text'
 
-import type { WorkbenchImagePreview as WorkbenchImagePreviewData } from '@shared/contracts'
+import { type WorkbenchImagePreview as WorkbenchImagePreviewData } from '@shared/contracts/workbench'
 
 import styles from '../../styles/workbenchPageStyles'
 

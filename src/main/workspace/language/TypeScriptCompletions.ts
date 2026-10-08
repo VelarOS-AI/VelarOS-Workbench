@@ -1,11 +1,6 @@
 import * as ts from 'typescript'
 
-import type {
-  WorkbenchLanguageServiceCompletionItem,
-  WorkbenchLanguageServiceCompletionResolveData,
-  WorkbenchLanguageServiceCompletionTextEdit,
-  WorkbenchLanguageServiceEditFormat,
-} from '@shared/contracts'
+import { type WorkbenchLanguageServiceCompletionItem, type WorkbenchLanguageServiceCompletionResolveData, type WorkbenchLanguageServiceCompletionTextEdit, type WorkbenchLanguageServiceEditFormat } from '@shared/contracts/workbench'
 
 import {
   buildWorkbenchTypeScriptFormatCodeSettings,
