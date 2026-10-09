@@ -263,10 +263,12 @@ void describe('hovering a name while the program is paused', () => {
     return findWorkbenchDebugHoverExpression(state, index + offset)?.expression ?? null
   }
 
-  void test('reads a variable beyond the initially parsed viewport', () => {
+  void test('reads beyond the initial viewport after background parsing advances', () => {
     const source = `${'const item = 1\n'.repeat(500)}const lastValue = item\n`
     const state = EditorState.create({ doc: source, extensions: [javascript()] })
     const position = source.lastIndexOf('lastValue') + 1
+    // 推进后台解析上下文，保留原状态，验证悬浮读取补齐后的树；不依赖 CI 在 50ms 内解析完成。
+    assert.ok(ensureSyntaxTree(state, source.length, 5_000))
     assert.equal(findWorkbenchDebugHoverExpression(state, position)?.expression, 'lastValue')
   })
 
