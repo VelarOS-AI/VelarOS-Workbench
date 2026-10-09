@@ -35,6 +35,7 @@ const installed = join(root, 'Application')
 const profile = join(root, 'User Data')
 const harness = join(root, 'Harness')
 const receipt = join(profile, 'windows-update-result.json')
+const startupLog = join(root, 'startup.log')
 const requests = []
 const info = JSON.parse(await readFile(join(unpackedPath, 'windows-update-manifest.json'), 'utf8'))
 const zipName = basename(zipPath)
@@ -92,6 +93,18 @@ try {
       updaterCacheDirName: `velaros-probe-${basename(root)}`,
     })
   )
+  await writeFile(
+    join(harness, 'main.cjs'),
+    `const fs = require('node:fs');
+     const { app } = require('electron');
+     const { format } = require('node:util');
+     const log = (...args) => fs.appendFileSync(${JSON.stringify(startupLog)}, format(...args) + String.fromCharCode(10));
+     console.log = console.warn = console.error = log;
+     process.on('uncaughtException', error => { log(error); app.exit(1); });
+     process.on('unhandledRejection', error => { log(error); app.exit(1); });
+     log('Windows updater probe started');
+     require('./updater.cjs');`
+  )
   await build({
     stdin: {
       resolveDir: process.cwd(),
@@ -125,7 +138,7 @@ try {
         }).catch(error => { console.error(error); app.exit(1); });
       `,
     },
-    outfile: join(harness, 'main.cjs'),
+    outfile: join(harness, 'updater.cjs'),
     bundle: true,
     platform: 'node',
     format: 'cjs',
@@ -144,6 +157,7 @@ try {
   const timer = setTimeout(() => child.kill(), 180_000)
   const [code] = await once(child, 'exit')
   clearTimeout(timer)
+  output += await readFile(startupLog, 'utf8').catch((error) => `Startup log: ${error.message}`)
   assert.equal(code, 0, output)
   const deadline = Date.now() + 90_000
   let result

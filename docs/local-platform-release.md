@@ -79,6 +79,21 @@ bun run release:local:stage -- linux artifacts/desktop "$release_stage"
 bun run release:local:verify -- linux "$release_stage"
 ```
 
+### Windows application updates
+
+Starting with 0.4.3, Windows packages include an NSIS installer for initial installation and a ZIP
+for in-app updates. The packaging hook adds the update worker and `windows-update-manifest.json`.
+The final packaging step adds the ZIP size and SHA-512 to `latest.yml`; the signed release catalog
+also binds its SHA-256.
+
+The updater verifies and extracts the ZIP before exit. A standalone Node process outside the
+installation directory then replaces the executable and application resources, preserves user data
+and the uninstaller, and rolls back failed replacements. Verify both restart-to-update and
+install-on-quit on native Windows. Older updaters need one manual installation of the fixed version.
+
+Windows builds use the checked-in `resources/icons/icon.ico`, generated from `icon.png` with
+Electron Builder's icon tool. Regenerate the ICO when changing the product icon.
+
 ## Finalize the platform candidate
 
 The finalizer requires the release repository token plus the existing Ed25519 catalog attestation

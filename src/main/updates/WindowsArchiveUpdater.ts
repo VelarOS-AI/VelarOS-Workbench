@@ -3,7 +3,7 @@ import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promi
 import { tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 
-import electronUpdater from 'electron-updater'
+import { AppUpdater } from 'electron-updater'
 import type { DownloadUpdateOptions } from 'electron-updater/out/AppUpdater'
 import { ElectronHttpExecutor } from 'electron-updater/out/electronHttpExecutor.js'
 
@@ -19,7 +19,7 @@ interface WindowsArchiveUpdaterOptions {
 }
 
 /** Windows 更新下载 ZIP，由应用目录外的独立进程完成替换。 */
-export class WindowsArchiveUpdater extends electronUpdater.AppUpdater {
+export class WindowsArchiveUpdater extends AppUpdater {
   readonly #executor = new ElectronHttpExecutor((auth, callback) =>
     this.emit('login', auth, callback)
   )
