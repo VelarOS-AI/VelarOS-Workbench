@@ -28,9 +28,7 @@ asarUnpack:
   - node_modules/@lydell/**
   - node_modules/node-*/bin/node*
 artifactName: VelarOS-Workbench-${version}-${os}-${arch}.${ext}
-afterPack:
-  - ./scripts/release/prepareWindowsUpdater.mjs
-  - ./scripts/release/verifyPackagedWorkbench.mjs
+afterPack: ./scripts/release/verifyPackagedWorkbench.mjs
 
 extraResources:
   # electron-builder 的复制器会跳过映射根的 node_modules；从缓存父目录映射整个运行环境。

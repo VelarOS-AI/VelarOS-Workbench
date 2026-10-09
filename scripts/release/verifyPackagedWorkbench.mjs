@@ -6,6 +6,7 @@ import { pathToFileURL } from 'node:url'
 import { assertNodeRuntimePackageFiles, assertNodeRuntimePackages } from './nodeRuntimePackages.mjs'
 
 import { assertExternalEsmArchive } from './externalEsmArchive.mjs'
+import prepareWindowsUpdater from './prepareWindowsUpdater.mjs'
 
 const ProductFilename = 'VelarOS Workbench'
 const packagedPlatforms = new Set(['darwin', 'win32', 'linux'])
@@ -283,6 +284,7 @@ async function findPackagedWorkbenchAppOutDir(releaseDir, expectedPlatformName =
 }
 
 export default async function afterPack(context) {
+  await prepareWindowsUpdater(context)
   await verifyPackagedWorkbench({
     appOutDir: context.appOutDir,
     platformName: context.electronPlatformName,

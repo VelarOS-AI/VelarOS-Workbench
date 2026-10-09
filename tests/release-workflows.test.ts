@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { readdir, readFile } from 'node:fs/promises'
+import { createRequire } from 'node:module'
 import path from 'node:path'
 
 import { describe, test } from 'bun:test'
@@ -87,7 +88,11 @@ void describe('release workflows', () => {
 
     const builder = (await readFile(path.resolve('electron-builder.yml'), 'utf8'))
       .replaceAll('\r\n', '\n')
-    assert.match(builder, /afterPack:\n\s+- \.\/scripts\/release\/prepareWindowsUpdater\.mjs\n\s+- \.\/scripts\/release\/verifyPackagedWorkbench\.mjs/u)
+    const require = createRequire(import.meta.url)
+    const { load } = require('js-yaml')
+    const { resolveFunction } = require('app-builder-lib/out/util/resolve.js')
+    const handler = await resolveFunction('module', load(builder).afterPack, 'afterPack', process.cwd())
+    assert.equal(typeof handler, 'function')
   })
 
   void test('keeps Linux package maintainer metadata complete', async () => {
