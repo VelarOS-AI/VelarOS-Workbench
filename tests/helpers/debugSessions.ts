@@ -184,7 +184,20 @@ export async function createDebugTestProject(
       }
       // Bun 在 Windows 上结束 shell 后可能不发管道 close；进程树已停止，显式释放读取端。
       for (const item of launched) item.disposePipes()
-      await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
+      // Windows 释放工作目录句柄会晚于进程退出；Bun 的 rm 不保证执行 maxRetries。
+      for (let attempt = 0; ; attempt += 1) {
+        try {
+          await rm(root, { recursive: true, force: true })
+          break
+        } catch (error) {
+          const code = (error as NodeJS.ErrnoException).code
+          if (
+            process.platform !== 'win32' || attempt >= 20 ||
+            !['EBUSY', 'ENOTEMPTY', 'EPERM', 'EACCES'].includes(code ?? '')
+          ) throw error
+          await new Promise((resolve) => setTimeout(resolve, 100))
+        }
+      }
     },
   }
 }

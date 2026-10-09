@@ -78,7 +78,7 @@ void describe('Workbench Git pull, fetch and sync', () => {
     })
   })
 
-  void test('pull follows pull.rebase and pull.ff instead of overriding them', async () => {
+  void test('pull follows pull.rebase instead of overriding it', async () => {
     await withClones(async (clones) => {
       await diverge(clones)
       await git(clones.local, ['config', 'pull.rebase', 'true'])
@@ -90,7 +90,9 @@ void describe('Workbench Git pull, fetch and sync', () => {
         'other change'
       )
     })
+  })
 
+  void test('pull follows pull.ff instead of overriding it', async () => {
     await withClones(async (clones) => {
       await diverge(clones)
       await git(clones.local, ['config', 'pull.ff', 'only'])
