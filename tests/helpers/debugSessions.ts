@@ -31,7 +31,7 @@ type DebuggerEventOf<TType extends WorkbenchDebuggerEvent['type']> = Extract<
 export function createProcessDebugLauncher(): {
   launcher: WorkbenchDebugLauncher
   /** 每个起过的进程：命令行、输出、进程号。 */
-  launched: Array<{ command: string; cwd: string; env: NodeJS.ProcessEnv; pid: number; output: () => string }>
+  launched: Array<{ command: string; cwd: string; env: NodeJS.ProcessEnv; pid: number; output: () => string; closed: Promise<void> }>
 } {
   const launched: ReturnType<typeof createProcessDebugLauncher>['launched'] = []
   let nextId = 1
@@ -50,6 +50,7 @@ export function createProcessDebugLauncher(): {
       stdio: ['ignore', 'pipe', 'pipe'],
     })
     let output = ''
+    const closed = new Promise<void>((resolve) => child.once('close', () => resolve()))
     let exit: Nullable<WorkbenchDebugProcessExit> = null
     let forceKillTimer: ReturnType<typeof setTimeout> | undefined
     const exitListeners: Array<(exit: WorkbenchDebugProcessExit) => void> = []
@@ -60,7 +61,7 @@ export function createProcessDebugLauncher(): {
       exit = { exitCode }
       for (const listener of exitListeners.splice(0)) listener(exit)
     })
-    launched.push({ command: options.command, cwd: options.cwd, env, pid: child.pid!, output: () => output })
+    launched.push({ command: options.command, cwd: options.cwd, env, pid: child.pid!, output: () => output, closed })
 
     const signalGroup = (signal: NodeJS.Signals): void => {
       try {
@@ -179,7 +180,8 @@ export async function createDebugTestProject(
           // arch-guard:silent-catch-ok 进程组已经退出。
         }
       }
-      await rm(root, { recursive: true, force: true })
+      await Promise.all(launched.map((item) => item.closed))
+      await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
     },
   }
 }

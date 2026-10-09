@@ -33,10 +33,14 @@ export function runElectronRuntimeProbe(entry) {
   if (build.status !== 0) process.exit(build.status ?? 1)
 
   const electronExecutablePath = require('electron')
-  const run = spawnSync(electronExecutablePath, [outFile], {
+  const entrypoint = fileURLToPath(new URL('./electronProbeEntrypoint.mjs', import.meta.url))
+  const run = spawnSync(electronExecutablePath, [entrypoint, outFile], {
     cwd: repositoryRoot,
     stdio: 'inherit',
     env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+    timeout: 120_000,
+    killSignal: 'SIGKILL',
   })
+  if (run.error) console.error(run.error)
   process.exit(run.status ?? 1)
 }

@@ -288,6 +288,33 @@ void describe('Workbench chat run changes', () => {
       )
     })
   })
+
+  void test('waits for both diff processes before reporting a failed capture', async () => {
+    await withRepository(async ({ project }) => {
+      let calls = 0
+      let releaseSecond!: () => void
+      const secondReady = new Promise<void>((resolve) => { releaseSecond = resolve })
+      const checkpoints = new WorkbenchChatCheckpointService(() => project, async () => {
+        if (++calls === 2) await secondReady
+        return process.env
+      })
+      let settled = false
+      const capture = checkpoints.diffWorkingTree({
+        workspaceRoot: project,
+        baseCommitId: '0'.repeat(40),
+        tree: '1'.repeat(40),
+      }).finally(() => { settled = true })
+      const rejection = assert.rejects(capture, /git diff/u)
+      try {
+        await delay(500)
+        assert.equal(calls, 2)
+        assert.equal(settled, false, 'the second diff still owns the working directory')
+      } finally {
+        releaseSecond()
+        await rejection
+      }
+    })
+  })
 })
 
 /** 假的文件监听：测试自己决定什么时候冒出哪个路径的事件（真实写盘照做，事件由测试补发）。 */

@@ -27,7 +27,7 @@ import {
 function parse(source: string, options: { typescript?: boolean; jsx?: boolean } = {}): EditorState {
   const state = EditorState.create({ doc: source, extensions: [javascript(options)] })
   assert.ok(ensureSyntaxTree(state, source.length, 5_000), 'the document should parse')
-  return state
+  return state.update({}).state
 }
 
 function blocksOf(source: string, options?: { typescript?: boolean; jsx?: boolean }) {

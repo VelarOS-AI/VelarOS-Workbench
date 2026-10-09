@@ -174,11 +174,14 @@ export class WorkbenchChatCheckpointService {
     const root = await this.resolveRoot(request.workspaceRoot)
 
     const range = [request.baseCommitId, request.tree]
-    const [rawText, numstatText] = await Promise.all([
+    // 一个 git 失败时，也等另一个退出后再交回错误，避免遗留进程占着工作区目录。
+    const [raw, numstat] = await Promise.allSettled([
       this.runGit(root, [...RunChangeDiffArgs, '-z', '--raw', '--no-abbrev', ...range]),
       this.runGit(root, [...RunChangeDiffArgs, '-z', '--numstat', ...range]),
     ])
-    const listed = parseRunChangeFiles(rawText, numstatText)
+    if (raw.status === 'rejected') throw raw.reason
+    if (numstat.status === 'rejected') throw numstat.reason
+    const listed = parseRunChangeFiles(raw.value, numstat.value)
     return attachRunChangePatches(request.select ? await request.select(listed) : listed, (path) =>
       this.runGit(root, [...RunChangeDiffArgs, ...range, '--', `:(literal)${path}`])
     )
