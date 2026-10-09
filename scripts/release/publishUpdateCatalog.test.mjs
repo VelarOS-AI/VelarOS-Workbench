@@ -521,6 +521,7 @@ async function releaseFixture(t, selectedPlatforms = ["windows"]) {
       },
       files: [
         [`VelarOS-Workbench-${version}-win-x64.exe`, "exe"],
+        [`VelarOS-Workbench-${version}-win-x64.zip`, "zip"],
         ["latest.yml", `version: ${version}\n`],
       ],
     },

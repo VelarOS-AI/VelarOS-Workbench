@@ -422,6 +422,7 @@ export function assertCompleteArtifactSet(names, platform) {
     ],
     windows: [
       [/\.(?:exe|msi)$/i, 'installer'],
+      [/\.zip$/i, 'ZIP update package'],
       [/^latest(?:-[^.]+)?\.ya?ml$/i, 'latest YAML'],
     ],
     linux: [
@@ -715,7 +716,7 @@ function isReleaseArtifact(name, platform) {
     case 'macos':
       return /\.(?:dmg|zip|blockmap)$/i.test(name)
     case 'windows':
-      return /\.(?:exe|msi|blockmap)$/i.test(name)
+      return /\.(?:exe|msi|zip|blockmap)$/i.test(name)
     case 'linux':
       return /\.(?:AppImage|deb|rpm|snap|blockmap)$/i.test(name)
     default:

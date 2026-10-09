@@ -1,11 +1,12 @@
+import { join } from 'node:path'
+
 import { app, BrowserWindow, ipcMain } from 'electron'
 
-import {
-  isWorkbenchUpdateChannel,
-  WorkbenchUpdateChannels,
-} from '../../shared/workbenchUpdate'
+import { isWorkbenchUpdateChannel, WorkbenchUpdateChannels } from '../../shared/workbenchUpdate'
+import { resolveWorkbenchNodeExecutable } from '../conversation/WorkbenchNodeRuntime'
 import { resolveVelarOSOfficialWebsiteMarket } from '../VelarOSOfficialWebsite'
 
+import { WindowsArchiveUpdater } from './WindowsArchiveUpdater'
 import {
   WorkbenchCloudEndpointResolver,
   WorkbenchCloudRoutingManifestFileStore,
@@ -35,7 +36,16 @@ export function installWorkbenchUpdateRuntime(): void {
   })
   const service = new WorkbenchUpdateService(
     new CloudWorkbenchReleaseSource(endpointResolver),
-    async () => (await import('electron-updater')).default.autoUpdater,
+    async () =>
+      process.platform === 'win32'
+        ? new WindowsArchiveUpdater({
+            appId: 'com.velaros.workbench',
+            executable: process.execPath,
+            nodeExecutable: resolveWorkbenchNodeExecutable(),
+            workerFile: join(process.resourcesPath, 'windows-update.cjs'),
+            userDataDirectory: app.getPath('userData'),
+          })
+        : (await import('electron-updater')).default.autoUpdater,
     new WorkbenchUpdatePreferencesStore(app.getPath('userData')),
     {
       currentVersion: app.getVersion(),

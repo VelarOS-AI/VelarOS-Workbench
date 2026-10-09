@@ -95,6 +95,7 @@ async function writeWindowsRelease(releaseDir: string) {
   await mkdir(releaseDir, { recursive: true })
   await Promise.all([
     writeFile(path.join(releaseDir, `VelarOS-Workbench-${version}-win-x64.exe`), 'exe'),
+    writeFile(path.join(releaseDir, `VelarOS-Workbench-${version}-win-x64.zip`), 'zip'),
     writeFile(path.join(releaseDir, `VelarOS-Workbench-${version}-win-x64.exe.blockmap`), 'map'),
     writeFile(path.join(releaseDir, 'latest.yml'), `version: ${version}\n`),
   ])

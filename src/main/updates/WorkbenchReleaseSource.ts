@@ -1,9 +1,6 @@
 import { isPlainObject } from '@velaros-ai/core'
 
-import {
-  isWorkbenchUpdateChannel,
-  type WorkbenchUpdateChannel,
-} from '../../shared/workbenchUpdate'
+import { isWorkbenchUpdateChannel, type WorkbenchUpdateChannel } from '../../shared/workbenchUpdate'
 
 import {
   StaticWorkbenchCloudEndpointProvider,
@@ -12,11 +9,7 @@ import {
 
 export const VelarOSCloudBaseUrl = 'https://global.velaros.cn/api'
 
-export type WorkbenchReleaseSignatureStatus =
-  | 'unsigned'
-  | 'signed'
-  | 'notarized'
-  | 'verified'
+export type WorkbenchReleaseSignatureStatus = 'unsigned' | 'signed' | 'notarized' | 'verified'
 
 export interface WorkbenchReleaseArtifact {
   readonly id: string
@@ -87,8 +80,10 @@ function isCloudAuthorizedUnsignedWindowsArtifact(
     artifact.platform === 'win32' &&
     artifact.arch === 'x64' &&
     artifact.signatureStatus === 'unsigned' &&
-    artifact.artifactRole === 'installer' &&
-    artifact.format.toLowerCase() === 'exe' &&
+    ((artifact.artifactRole === 'installer' && artifact.format.toLowerCase() === 'exe') ||
+      (artifact.artifactRole === 'update-package' && artifact.format.toLowerCase() === 'zip') ||
+      (artifact.artifactRole === 'update-metadata' &&
+        ['yml', 'blockmap'].includes(artifact.format.toLowerCase()))) &&
     artifact.isCurrent &&
     artifact.attestationVerified
   )
@@ -160,8 +155,7 @@ export function validateWorkbenchReleaseCatalog(
   )
   const hasPackage = catalog.artifacts.some(
     (artifact) =>
-      artifact.artifactRole === expected.role &&
-      artifact.format.toLowerCase() === expected.format
+      artifact.artifactRole === expected.role && artifact.format.toLowerCase() === expected.format
   )
   if (versions.size !== 1 || metadata.length !== 1 || !hasPackage) {
     throw new Error('Workbench update catalog is incomplete.')
@@ -171,8 +165,9 @@ export function validateWorkbenchReleaseCatalog(
 
 export class CloudWorkbenchReleaseSource implements WorkbenchReleaseSource {
   public constructor(
-    private readonly endpoints: WorkbenchCloudEndpointProvider =
-      new StaticWorkbenchCloudEndpointProvider(VelarOSCloudBaseUrl),
+    private readonly endpoints: WorkbenchCloudEndpointProvider = new StaticWorkbenchCloudEndpointProvider(
+      VelarOSCloudBaseUrl
+    ),
     private readonly request: typeof fetch = fetch
   ) {}
 

@@ -286,6 +286,41 @@ describe('CloudWorkbenchReleaseSource', () => {
       })
     ).toEqual(catalog)
 
+    const zip = {
+      ...catalog.artifacts[1],
+      id: 'zip',
+      artifactRole: 'update-package' as const,
+      format: 'zip',
+      fileName: 'Workbench-1.1.0-win-x64.zip',
+      downloadPath: '/v1/releases/download/zip',
+    }
+    const withArchive = {
+      ...catalog,
+      artifacts: [
+        ...catalog.artifacts.map((artifact) => ({
+          ...artifact,
+          signatureStatus: 'unsigned' as const,
+        })),
+        zip,
+      ],
+    }
+    expect(
+      validateWorkbenchReleaseCatalog(withArchive, {
+        channel: 'stable',
+        platform: 'win32',
+        arch: 'x64',
+      })
+    ).toEqual(withArchive)
+    expect(() =>
+      validateWorkbenchReleaseCatalog(
+        {
+          ...withArchive,
+          artifacts: [...catalog.artifacts, { ...zip, attestationVerified: false }],
+        },
+        { channel: 'stable', platform: 'win32', arch: 'x64' }
+      )
+    ).toThrow('integrity validation')
+
     for (const installer of [
       { ...catalog.artifacts[1], attestationVerified: false },
       { ...catalog.artifacts[1], isCurrent: false },

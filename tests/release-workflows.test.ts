@@ -87,7 +87,7 @@ void describe('release workflows', () => {
 
     const builder = (await readFile(path.resolve('electron-builder.yml'), 'utf8'))
       .replaceAll('\r\n', '\n')
-    assert.match(builder, /afterPack: \.\/scripts\/release\/verifyPackagedWorkbench\.mjs/u)
+    assert.match(builder, /afterPack:\n\s+- \.\/scripts\/release\/prepareWindowsUpdater\.mjs\n\s+- \.\/scripts\/release\/verifyPackagedWorkbench\.mjs/u)
   })
 
   void test('keeps Linux package maintainer metadata complete', async () => {
