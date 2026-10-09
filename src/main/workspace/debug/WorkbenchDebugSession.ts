@@ -506,8 +506,16 @@ export class WorkbenchDebugSession {
         return
       }
       case 'Runtime.executionContextDestroyed':
-        // 程序跑完了，Node 还在等调试器断开才退出：断开它。
-        if (event.params.executionContextId === this.mainContextId) this.connection?.close()
+        // 先让 V8 释放调试状态，再断开连接；直接关闭会与 Node 的退出清理竞争。
+        if (event.params.executionContextId === this.mainContextId) {
+          const connection = this.connection
+          if (!connection || connection.closed) return
+          try {
+            await connection.send('Debugger.disable')
+          } finally {
+            connection.close()
+          }
+        }
     }
   }
 

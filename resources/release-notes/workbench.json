@@ -18,13 +18,15 @@
           "Windows 更新先校验并解压程序包，退出后直接替换程序文件，重启生效。",
           "替换失败自动恢复旧程序，保留会话、设置和卸载入口。",
           "修复更新目录校验失败，并显示检查或下载失败的具体原因。",
-          "同步最新 Platform 运行时与能力合同。"
+          "同步最新 Platform 运行时与能力合同。",
+          "修复 Linux 调试结束时 Node 进程偶发崩溃的问题。"
         ],
         "en": [
           "Verify and extract Windows application updates, then replace application files after exit and restart.",
           "Restore the previous application if replacement fails, preserving conversations, settings, and the uninstaller.",
           "Correct update catalog validation and show the reason when update checks or downloads fail.",
-          "Adopt the latest Platform runtime and capability contracts."
+          "Adopt the latest Platform runtime and capability contracts.",
+          "Prevent intermittent Node process crashes when debugging finishes on Linux."
         ]
       }
     },
