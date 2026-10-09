@@ -1,12 +1,13 @@
 // 终端后端 @lydell/node-pty 每个平台一个包，bun 只装当前平台那个（其余按 os/cpu 跳过）。
 // 在 macOS 上打 Windows / Linux / 通用包之前，把目标平台的包从 npm 拉下来放进 node_modules，
 // electron-builder 才会把它们当 @lydell/node-pty 的可选依赖一起打进 app.asar.unpacked。
-// 已经在的不重复下载；只用 npm pack + tar，不碰 bun.lock。
+// 已经在的不重复下载；只准备目标平台的发布资源，不碰 bun.lock。
 import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { extract } from 'tar'
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const DispatcherPackage = '@lydell/node-pty'
@@ -48,11 +49,8 @@ export function ensureTerminalBackends(platformNames) {
       const tarball = path.join(scratch, pack.stdout.trim().split('\n').at(-1))
       const destination = path.join(repositoryRoot, 'node_modules', packageName)
       mkdirSync(destination, { recursive: true })
-      const extract = spawnSync('tar', ['-xzf', path.basename(tarball), '--strip-components=1', '-C', destination], {
-        cwd: scratch,
-        encoding: 'utf8',
-      })
-      if (extract.status !== 0) throw new Error(`extracting ${spec} failed: ${extract.stderr}`)
+      // Git Bash 的 tar 不接受原生 Windows 路径；直接解压，不依赖 PATH 中的外部工具。
+      extract({ file: tarball, cwd: destination, strip: 1, sync: true })
       console.info(`terminal backend ready: ${spec}`)
     }
   } finally {
