@@ -138,6 +138,7 @@ class TerminalSessions {
       : {
           file: systemPlatformCompatibility.getPreferredShellPath(process.env),
           args: systemPlatformCompatibility.getInteractiveShellArgs(),
+          windowsVerbatimArguments: false,
         }
     const cols = clampTerminalDimension(request.cols, DefaultTerminalColumns, MaxTerminalColumns)
     const rows = clampTerminalDimension(request.rows, DefaultTerminalRows, MaxTerminalRows)
@@ -148,6 +149,7 @@ class TerminalSessions {
     try {
       pty = this.ptyFactory.spawn(shellSpec.file, shellSpec.args, {
         cwd: cwdPath.realPath,
+        windowsVerbatimArguments: shellSpec.windowsVerbatimArguments,
         env,
         cols,
         rows,
@@ -405,9 +407,8 @@ class TerminalSessions {
               () => {
                 if (!settled && !session.exited) session.pty.kill('SIGKILL')
                 // 即便 SIGKILL，仍等 onExit 触发 finish；再兜底一秒强制结算。
-                session.timers.after(1_000, finish, { unref: true })
-              },
-              { unref: true }
+                session.timers.after(1_000, finish)
+              }
             )
           })
       )

@@ -1,3 +1,5 @@
+import { resolve } from 'node:path'
+
 import { describe, expect, test } from 'bun:test'
 
 import { displayPath, projectRelativePaths } from '../src/main/engines/WorkbenchEnginePermissions'
@@ -10,8 +12,8 @@ describe('engine permission paths', () => {
   })
 
   test('paths outside the project stay absolute or are dropped', () => {
-    expect(displayPath('/work/app', '../other/b.ts')).toBe('/work/other/b.ts')
-    expect(displayPath('/work/app', '/etc/hosts')).toBe('/etc/hosts')
+    expect(displayPath('/work/app', '../other/b.ts')).toBe(resolve('/work/other/b.ts'))
+    expect(displayPath('/work/app', '/etc/hosts')).toBe(resolve('/etc/hosts'))
     expect(projectRelativePaths('/work/app', ['../other/b.ts', '/etc/hosts', 'src/a.ts'])).toEqual(['src/a.ts'])
   })
 })

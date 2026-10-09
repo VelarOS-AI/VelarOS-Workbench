@@ -2,7 +2,8 @@ import assert from 'node:assert/strict'
 import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import { createServer, type Server } from 'node:http'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 import { describe, test } from 'bun:test'
 
@@ -32,29 +33,29 @@ void describe('debugger source maps', () => {
   const map = WorkbenchSourceMap.parse(
     JSON.stringify({
       version: 3,
-      sources: ['../src/a.ts', 'webpack://bundle/b.ts', 'file:///abs/c.ts'],
+      sources: ['../src/a.ts', 'webpack://bundle/b.ts', pathToFileURL(resolve('/abs/c.ts')).href],
       mappings: 'AAAA,IAAM;;EAGN,K,GEFC;gBFuCD',
     }),
-    '/project/dist'
+    resolve('/project/dist')
   )
 
   void test('resolves the sources next to the map and ignores ones that are not files', () => {
     assert.ok(map)
-    assert.deepEqual(map.sourcePaths, ['/project/src/a.ts', null, '/abs/c.ts'])
-    assert.equal(map.hasSource('/project/src/a.ts'), true)
-    assert.equal(map.hasSource('/project/src/b.ts'), false)
+    assert.deepEqual(map.sourcePaths, [resolve('/project/src/a.ts'), null, resolve('/abs/c.ts')])
+    assert.equal(map.hasSource(resolve('/project/src/a.ts')), true)
+    assert.equal(map.hasSource(resolve('/project/src/b.ts')), false)
 
     // sourceRoot 接在相对的源路径前面；绝对路径、带协议的不接。
     const rooted = WorkbenchSourceMap.parse(
       JSON.stringify({
         version: 3,
         sourceRoot: '../lib',
-        sources: ['x.ts', '/abs/y.ts', 'file:///abs/z.ts', 42],
+        sources: ['x.ts', resolve('/abs/y.ts'), pathToFileURL(resolve('/abs/z.ts')).href, 42],
         mappings: '',
       }),
-      '/project/dist'
+      resolve('/project/dist')
     )
-    assert.deepEqual(rooted?.sourcePaths, ['/project/lib/x.ts', '/abs/y.ts', '/abs/z.ts', null])
+    assert.deepEqual(rooted?.sourcePaths, [resolve('/project/lib/x.ts'), resolve('/abs/y.ts'), resolve('/abs/z.ts'), null])
   })
 
   void test('turns a position in the generated code back into the source position', () => {
@@ -63,19 +64,19 @@ void describe('debugger source maps', () => {
       const position = map.originalPositionFor({ line, column })
       return position ? `${position.path}:${position.line}:${position.column}` : 'none'
     }
-    assert.equal(original(0, 0), '/project/src/a.ts:0:0')
-    assert.equal(original(0, 3), '/project/src/a.ts:0:0')
-    assert.equal(original(0, 4), '/project/src/a.ts:0:6')
-    assert.equal(original(0, 99), '/project/src/a.ts:0:6')
+    assert.equal(original(0, 0), `${resolve('/project/src/a.ts')}:0:0`)
+    assert.equal(original(0, 3), `${resolve('/project/src/a.ts')}:0:0`)
+    assert.equal(original(0, 4), `${resolve('/project/src/a.ts')}:0:6`)
+    assert.equal(original(0, 99), `${resolve('/project/src/a.ts')}:0:6`)
     // 这一行没有映射（打包器自己加的代码）。
     assert.equal(original(1, 0), 'none')
     // 在这一行第一段之前：转换器自己加的代码，不是源码里的任何一行。
     assert.equal(original(2, 0), 'none')
     assert.equal(original(2, 1), 'none')
-    assert.equal(original(2, 2), '/project/src/a.ts:3:0')
-    assert.equal(original(2, 7), '/project/src/a.ts:3:0')
-    assert.equal(original(2, 10), '/abs/c.ts:1:1')
-    assert.equal(original(3, 16), '/project/src/a.ts:40:0')
+    assert.equal(original(2, 2), `${resolve('/project/src/a.ts')}:3:0`)
+    assert.equal(original(2, 7), `${resolve('/project/src/a.ts')}:3:0`)
+    assert.equal(original(2, 10), `${resolve('/abs/c.ts')}:1:1`)
+    assert.equal(original(3, 16), `${resolve('/project/src/a.ts')}:40:0`)
     assert.equal(original(9, 0), 'none')
   })
 
@@ -85,32 +86,32 @@ void describe('debugger source maps', () => {
       const position = map.generatedPositionFor(path, line)
       return position ? `${position.line}:${position.column} (source line ${position.originalLine})` : 'none'
     }
-    assert.equal(generated('/project/src/a.ts', 0), '0:0 (source line 0)')
+    assert.equal(generated(resolve('/project/src/a.ts'), 0), '0:0 (source line 0)')
     // 第 1、2 行没有生成代码（空行、注释、类型声明）：顺延到第 3 行。
-    assert.equal(generated('/project/src/a.ts', 1), '2:2 (source line 3)')
-    assert.equal(generated('/project/src/a.ts', 3), '2:2 (source line 3)')
-    assert.equal(generated('/project/src/a.ts', 4), '3:16 (source line 40)')
+    assert.equal(generated(resolve('/project/src/a.ts'), 1), '2:2 (source line 3)')
+    assert.equal(generated(resolve('/project/src/a.ts'), 3), '2:2 (source line 3)')
+    assert.equal(generated(resolve('/project/src/a.ts'), 4), '3:16 (source line 40)')
     // 后面再没有代码了。
-    assert.equal(generated('/project/src/a.ts', 41), 'none')
-    assert.equal(generated('/abs/c.ts', 0), '2:10 (source line 1)')
-    assert.equal(generated('/project/src/missing.ts', 0), 'none')
+    assert.equal(generated(resolve('/project/src/a.ts'), 41), 'none')
+    assert.equal(generated(resolve('/abs/c.ts'), 0), '2:10 (source line 1)')
+    assert.equal(generated(resolve('/project/src/missing.ts'), 0), 'none')
   })
 
   void test('does not accept anything that is not a plain v3 map', () => {
-    assert.equal(WorkbenchSourceMap.parse('{not json', '/p'), null)
-    assert.equal(WorkbenchSourceMap.parse('null', '/p'), null)
-    assert.equal(WorkbenchSourceMap.parse('"text"', '/p'), null)
-    assert.equal(WorkbenchSourceMap.parse(JSON.stringify({ version: 2, sources: [], mappings: '' }), '/p'), null)
-    assert.equal(WorkbenchSourceMap.parse(JSON.stringify({ version: 3, mappings: '' }), '/p'), null)
+    assert.equal(WorkbenchSourceMap.parse('{not json', resolve('/p')), null)
+    assert.equal(WorkbenchSourceMap.parse('null', resolve('/p')), null)
+    assert.equal(WorkbenchSourceMap.parse('"text"', resolve('/p')), null)
+    assert.equal(WorkbenchSourceMap.parse(JSON.stringify({ version: 2, sources: [], mappings: '' }), resolve('/p')), null)
+    assert.equal(WorkbenchSourceMap.parse(JSON.stringify({ version: 3, mappings: '' }), resolve('/p')), null)
     // 分段的索引表（sections）没有 mappings：不认，按没有映射处理。
-    assert.equal(WorkbenchSourceMap.parse(JSON.stringify({ version: 3, sections: [] }), '/p'), null)
+    assert.equal(WorkbenchSourceMap.parse(JSON.stringify({ version: 3, sections: [] }), resolve('/p')), null)
 
     // 写坏了的段不拖垮整份映射：丢掉那一段。
     const damaged = WorkbenchSourceMap.parse(
       JSON.stringify({ version: 3, sources: ['a.ts'], mappings: '!!!!,AAAA' }),
-      '/p'
+      resolve('/p')
     )
-    assert.deepEqual(damaged?.originalPositionFor({ line: 0, column: 0 }), { path: '/p/a.ts', line: 0, column: 0 })
+    assert.deepEqual(damaged?.originalPositionFor({ line: 0, column: 0 }), { path: resolve('/p/a.ts'), line: 0, column: 0 })
   })
 
   void test('reads a map embedded in the sourceMappingURL comment', () => {

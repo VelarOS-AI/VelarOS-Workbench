@@ -73,7 +73,7 @@ describe('Workbench agent browser service', () => {
     // 站点工作区在项目之外，按站点分格
     const context = open[2] as { url: string; workspaceRoot: string }
     assert.equal(context.url, 'https://example.com/docs')
-    assert.match(context.workspaceRoot, /^\/data\/browser-sites\/example-com-[0-9a-f]{10}$/u)
+    assert.match(context.workspaceRoot.replaceAll('\\', '/'), /^\/data\/browser-sites\/example-com-[0-9a-f]{10}$/u)
   })
 
   test('only http and https addresses reach the page', async () => {

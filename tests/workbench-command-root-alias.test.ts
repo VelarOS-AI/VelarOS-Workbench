@@ -20,12 +20,12 @@ test('absolute command cwd follows the selected root alias while child symlink e
   const runner = new CommandRunner(new PathResolver(), new CommandHelper())
   try {
     for (const cwd of [alias, join(alias, 'src'), await realpath(join(canonical, 'src'))]) {
-      const result = await runner.runCommand({ projectRoot: alias, cwd, command: 'pwd', timeoutMs: 5000 })
+      const result = await runner.runCommand({ projectRoot: alias, cwd, command: process.platform === 'win32' ? 'cd' : 'pwd', timeoutMs: 5000 })
       assert.equal(result.exitCode, 0)
       assert.equal(result.cwd, await realpath(cwd))
     }
-    await assert.rejects(runner.runCommand({ projectRoot: alias, cwd: join(alias, 'escape'), command: 'pwd' }), /路径超出工程范围/)
-    await assert.rejects(runner.runCommand({ projectRoot: alias, cwd: join(base, 'outside'), command: 'pwd' }), /路径超出工程范围/)
+    await assert.rejects(runner.runCommand({ projectRoot: alias, cwd: join(alias, 'escape'), command: process.platform === 'win32' ? 'cd' : 'pwd' }), /路径超出工程范围/)
+    await assert.rejects(runner.runCommand({ projectRoot: alias, cwd: join(base, 'outside'), command: process.platform === 'win32' ? 'cd' : 'pwd' }), /路径超出工程范围/)
   } finally {
     await rm(base, { recursive: true, force: true })
   }

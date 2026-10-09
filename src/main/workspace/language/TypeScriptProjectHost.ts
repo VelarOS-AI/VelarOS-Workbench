@@ -148,7 +148,12 @@ function isPathInside(parentPath: string, childPath: string): boolean {
   )
 }
 
-/** 同一个文件的两种写法（斜杠方向、大小写不敏感的文件系统上的大小写）归成一种，好拿来比较、当键。 */
+/** TypeScript 的文件名统一使用正斜杠，覆盖层和磁盘缓存必须使用同一份键。 */
+export function normalizeTypeScriptFileName(path: string): string {
+  return path.replaceAll('\\', '/')
+}
+
+/** 同一个文件的斜杠方向与大小写归成一种，用于比较文件身份。 */
 function canonicalTypeScriptPath(path: string): string {
   const absolutePath = resolve(path).replaceAll('\\', '/')
   return ts.sys.useCaseSensitiveFileNames ? absolutePath : absolutePath.toLowerCase()
@@ -291,7 +296,7 @@ function collectProjectTypeScriptConfigCandidates(
     for (const entry of entries) {
       if (candidates.length >= MaxTypeScriptConfigCandidates) return
 
-      const absolutePath = resolve(directory, entry.name)
+      const absolutePath = normalizeTypeScriptFileName(resolve(directory, entry.name))
       if (entry.isDirectory()) {
         if (!SkippedDirectoryNames.has(entry.name)) visit(absolutePath)
         continue
@@ -420,7 +425,7 @@ function parseTypeScriptProjectConfig(
       projectDirectory,
       configPath,
       compilerOptions,
-      fileNames,
+      fileNames: fileNames.map(normalizeTypeScriptFileName),
       projectReferences,
       packageJsonPaths,
       optionsFingerprint,
@@ -477,7 +482,7 @@ function collectTypeScriptFilesFromDisk(projectDirectory: string): Map<string, s
 
       if (!entry.isFile()) continue
 
-      const absolutePath = resolve(directory, entry.name)
+      const absolutePath = normalizeTypeScriptFileName(resolve(directory, entry.name))
       if (!TypeScriptExtensions.has(extensionWithDot(absolutePath))) continue
 
       const content = safeReadFile(absolutePath)
@@ -553,7 +558,8 @@ function collectTypeScriptFilesFromConfig(
   const files = new Map<string, string>()
   const seen = new Set<string>()
 
-  const addFile = (absolutePath: string): void => {
+  const addFile = (inputPath: string): void => {
+    const absolutePath = normalizeTypeScriptFileName(inputPath)
     if (files.size >= MaxTypeScriptProjectFiles || seen.has(absolutePath)) return
     if (!TypeScriptExtensions.has(extensionWithDot(absolutePath))) return
 
@@ -694,7 +700,8 @@ function getOrCreateProjectCache(
   return entry
 }
 
-function setPooledFile(project: PooledTypeScriptProject, fileName: string, content: string): void {
+function setPooledFile(project: PooledTypeScriptProject, inputPath: string, content: string): void {
+  const fileName = normalizeTypeScriptFileName(inputPath)
   // Only bump the version when the content actually changes. Stable versions let the
   // TypeScript language service reuse its cached parse/type-check results for every
   // untouched file instead of rebuilding the whole program on each request.
@@ -734,8 +741,9 @@ function createLanguageServiceHost(
     // 逐个找出来、读进来、解码一遍。
     getDocumentPositionMapper: () => undefined,
     getScriptFileNames: () => [...project.liveFiles.keys()],
-    getScriptVersion: (fileName) => String(project.fileVersions.get(fileName) ?? 0),
-    getScriptSnapshot: (fileName) => {
+    getScriptVersion: (fileName) => String(project.fileVersions.get(normalizeTypeScriptFileName(fileName)) ?? 0),
+    getScriptSnapshot: (inputPath) => {
+      const fileName = normalizeTypeScriptFileName(inputPath)
       const content =
         project.liveFiles.get(fileName) ?? safeReadFile(fileName) ?? ts.sys.readFile(fileName)
       return content == null ? undefined : ts.ScriptSnapshot.fromString(content)
@@ -746,8 +754,8 @@ function createLanguageServiceHost(
     // The release therefore ships the standard library declarations as an
     // app resource and the language host explicitly anchors lib resolution there.
     getDefaultLibFileName: (options) => resolveTypeScriptDefaultLibFilePath(options),
-    fileExists: (fileName) => project.liveFiles.has(fileName) || ts.sys.fileExists(fileName),
-    readFile: (fileName) => project.liveFiles.get(fileName) ?? ts.sys.readFile(fileName),
+    fileExists: (fileName) => project.liveFiles.has(normalizeTypeScriptFileName(fileName)) || ts.sys.fileExists(fileName),
+    readFile: (fileName) => project.liveFiles.get(normalizeTypeScriptFileName(fileName)) ?? ts.sys.readFile(fileName),
     readDirectory: ts.sys.readDirectory,
     directoryExists: ts.sys.directoryExists,
     getDirectories: ts.sys.getDirectories,
@@ -845,10 +853,11 @@ function isTypeScriptProjectMetadataPath(projectRoot: string, absolutePath: stri
  */
 function applyDiskFileToProjects(
   projectRoot: string,
-  absolutePath: string,
+  inputPath: string,
   content: Nullable<string>,
   keepOverlay: boolean
 ): void {
+  const absolutePath = normalizeTypeScriptFileName(inputPath)
   for (const [key, cacheEntry] of projectCache) {
     if (!key.startsWith(`${projectRoot}\0`)) continue
     if (!isPathInside(cacheEntry.config.projectDirectory, absolutePath)) continue
@@ -904,7 +913,7 @@ export function refreshTypeScriptProjectFilesFromDisk(
       clearTypeScriptProjectCache(projectRoot)
       return
     }
-    if (TypeScriptExtensions.has(extensionWithDot(absolutePath))) scriptPaths.add(absolutePath)
+    if (TypeScriptExtensions.has(extensionWithDot(absolutePath))) scriptPaths.add(normalizeTypeScriptFileName(absolutePath))
   }
   if (scriptPaths.size === 0) return
 
@@ -985,7 +994,7 @@ export function readMovedTypeScriptFiles(projectRoot: string, absolutePath: stri
   const content = safeReadFile(absolutePath)
   if (content != null)
     return TypeScriptExtensions.has(extensionWithDot(absolutePath))
-      ? new Map([[absolutePath, content]])
+      ? new Map([[normalizeTypeScriptFileName(absolutePath), content]])
       : new Map()
   return collectTypeScriptFilesFromDisk(absolutePath)
 }
@@ -1111,8 +1120,8 @@ function currentTypeScriptProgram(project: PooledTypeScriptProject): ts.Program 
 
 export function acquireTypeScriptLanguageService(
   projectRoot: string,
-  requestAbsolutePath: string,
-  priorityPaths: string[],
+  inputRequestPath: string,
+  inputPriorityPaths: string[],
   overlayFiles: Map<string, string>,
   preserveExistingOverlays = false
 ): {
@@ -1121,6 +1130,8 @@ export function acquireTypeScriptLanguageService(
   compilerOptions: ts.CompilerOptions
   config: TypeScriptProjectConfig
 } {
+  const requestAbsolutePath = normalizeTypeScriptFileName(inputRequestPath)
+  const priorityPaths = inputPriorityPaths.map(normalizeTypeScriptFileName)
   const cacheEntry = getOrCreateProjectCache(projectRoot, requestAbsolutePath, priorityPaths)
   const poolKey = cacheEntry.cacheKey
 
@@ -1163,7 +1174,7 @@ export function acquireTypeScriptLanguageService(
   for (const [path, content] of overlayFiles) {
     if (!TypeScriptExtensions.has(extensionWithDot(path))) continue
     setPooledFile(project, path, content)
-    nextOverlayPaths.add(path)
+    nextOverlayPaths.add(normalizeTypeScriptFileName(path))
   }
 
   for (const path of preserveExistingOverlays ? [] : project.overlayPaths) {

@@ -3,12 +3,14 @@ import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 
+import { CommandHelper } from '../../src/main/workspace/CommandHelper'
 import type {
   WorkbenchDebugLauncher,
   WorkbenchDebugProcessExit,
 } from '../../src/main/workspace/debug/WorkbenchDebugLaunch'
 import { WorkbenchDebugSessions } from '../../src/main/workspace/debug/WorkbenchDebugSessions'
 import { PathResolver } from '../../src/main/workspace/PathResolver'
+import { signalWorkbenchProcesses } from '../../src/main/workspace/terminal/WorkbenchProcessTree'
 import type {
   WorkbenchDebuggerEvent,
   WorkbenchDebuggerFrame,
@@ -36,11 +38,15 @@ export function createProcessDebugLauncher(): {
 
   const launcher: WorkbenchDebugLauncher = async (options) => {
     const env = { ...process.env, ...options.env }
-    const child = spawn('/bin/sh', ['-c', options.command], {
+    const helper = new CommandHelper()
+    const spec = helper.getShellSpec(options.command)
+    const child = spawn(spec.file, spec.args, {
       cwd: options.cwd,
       env,
       // 独立的进程组：停止时连它派生的进程一起结束。
-      detached: true,
+      detached: helper.shouldDetachForegroundProcess(),
+      windowsVerbatimArguments: spec.windowsVerbatimArguments,
+      windowsHide: true,
       stdio: ['ignore', 'pipe', 'pipe'],
     })
     let output = ''
@@ -56,14 +62,15 @@ export function createProcessDebugLauncher(): {
 
     const signalGroup = (signal: NodeJS.Signals): void => {
       try {
-        process.kill(-child.pid!, signal)
+        if (process.platform === 'win32') signalWorkbenchProcesses([child.pid!], signal)
+        else process.kill(-child.pid!, signal)
       } catch {
         // arch-guard:silent-catch-ok 进程组已经不在了（ESRCH）。
       }
     }
     return {
       terminalSessionId: `terminal-test-${nextId++}`,
-      shell: '/bin/sh',
+      shell: spec.file,
       cwd: options.cwd,
       onExit: (listener) => {
         if (exit) listener(exit)
@@ -163,7 +170,8 @@ export async function createDebugTestProject(
       sessions.closeAllSessions()
       for (const item of launched) {
         try {
-          process.kill(-item.pid, 'SIGKILL')
+          if (process.platform === 'win32') signalWorkbenchProcesses([item.pid], 'SIGKILL')
+          else process.kill(-item.pid, 'SIGKILL')
         } catch {
           // arch-guard:silent-catch-ok 进程组已经退出。
         }

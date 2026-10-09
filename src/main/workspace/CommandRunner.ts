@@ -79,6 +79,8 @@ class CommandRunner {
       const child = spawn(shellSpec.file, shellSpec.args, {
         cwd: cwdPath.realPath,
         detached,
+        windowsVerbatimArguments: shellSpec.windowsVerbatimArguments,
+        windowsHide: true,
         env: shellEnv,
         stdio: ['ignore', 'pipe', 'pipe'],
       })

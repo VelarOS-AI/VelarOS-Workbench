@@ -76,7 +76,7 @@ void describe('Workbench chat run changes', () => {
       await unlink(join(project, 'removed.ts'))
       await writeFile(join(project, 'created.ts'), 'new\n', 'utf8')
       await writeFile(join(project, 'image.bin'), Buffer.from([0, 9, 9, 9, 0, 255]))
-      await writeFile(join(project, 'odd\tname.ts'), 'tab in the name\n', 'utf8')
+      await writeFile(join(project, (process.platform === 'win32' ? 'odd name.ts' : 'odd\tname.ts')), 'tab in the name\n', 'utf8')
       await writeFile(join(project, 'generated.ts'), 'line\n'.repeat(5_000), 'utf8')
       await writeFile(join(repo, 'outside.txt'), 'changed outside the project\n', 'utf8')
 
@@ -106,7 +106,7 @@ void describe('Workbench chat run changes', () => {
         'created.ts',
         'generated.ts',
         'image.bin',
-        'odd\tname.ts',
+        (process.platform === 'win32' ? 'odd name.ts' : 'odd\tname.ts'),
         'removed.ts',
         'tracked.ts',
       ])

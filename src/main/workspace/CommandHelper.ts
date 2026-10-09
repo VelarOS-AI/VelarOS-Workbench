@@ -32,6 +32,7 @@ interface WorkspaceCommandBuffer {
 interface WorkspaceShellSpec {
   file: string
   args: string[]
+  windowsVerbatimArguments?: boolean
 }
 
 class CommandHelper {

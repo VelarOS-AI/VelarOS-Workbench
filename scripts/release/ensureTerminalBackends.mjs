@@ -48,7 +48,8 @@ export function ensureTerminalBackends(platformNames) {
       const tarball = path.join(scratch, pack.stdout.trim().split('\n').at(-1))
       const destination = path.join(repositoryRoot, 'node_modules', packageName)
       mkdirSync(destination, { recursive: true })
-      const extract = spawnSync('tar', ['-xzf', tarball, '--strip-components=1', '-C', destination], {
+      const extract = spawnSync('tar', ['-xzf', path.basename(tarball), '--strip-components=1', '-C', destination], {
+        cwd: scratch,
         encoding: 'utf8',
       })
       if (extract.status !== 0) throw new Error(`extracting ${spec} failed: ${extract.stderr}`)

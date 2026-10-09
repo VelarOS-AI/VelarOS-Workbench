@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
 import { mkdtemp, realpath, rm } from 'node:fs/promises'
-import { devNull, tmpdir } from 'node:os'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 
@@ -15,7 +15,7 @@ const execFileAsync = promisify(execFile)
 /** 测试不受开发机上全局 git 配置影响（签名提交、别的默认分支名……）。 */
 export const HermeticGitEnvironment: NodeJS.ProcessEnv = {
   ...process.env,
-  GIT_CONFIG_GLOBAL: devNull,
+  GIT_CONFIG_GLOBAL: '/dev/null',
   GIT_CONFIG_NOSYSTEM: '1',
   LC_ALL: 'C',
 }

@@ -79,7 +79,7 @@ export function engineConfirmation(
 export function displayPath(projectRoot: string, path: string): string {
   const absolute = resolve(projectRoot, path)
   const inside = relative(resolve(projectRoot), absolute)
-  return inside && isRelativePathInsideRoot(inside) ? inside : absolute
+  return inside && isRelativePathInsideRoot(inside) ? inside.replaceAll('\\', '/') : absolute
 }
 
 /** 项目里的文件相对项目根的路径；项目外的不要。 */
@@ -88,7 +88,7 @@ export function projectRelativePaths(projectRoot: string, paths: readonly string
     ...new Set(
       paths.flatMap((path) => {
         const inside = relative(resolve(projectRoot), resolve(projectRoot, path))
-        return inside && isRelativePathInsideRoot(inside) ? [inside] : []
+        return inside && isRelativePathInsideRoot(inside) ? [inside.replaceAll('\\', '/')] : []
       })
     ),
   ]

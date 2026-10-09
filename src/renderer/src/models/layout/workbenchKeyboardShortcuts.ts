@@ -366,7 +366,7 @@ function toMatchableEvent(event: WorkbenchKeyboardEventLike): KeyboardEvent {
     shiftKey: event.shiftKey,
     code: event.code ?? '',
     getModifierState(name: string): boolean {
-      if (name === 'Alt' || name === 'AltGraph') return event.altKey
+      if (name === 'Alt') return event.altKey
       switch (name) {
         case 'Control': {
           return event.ctrlKey

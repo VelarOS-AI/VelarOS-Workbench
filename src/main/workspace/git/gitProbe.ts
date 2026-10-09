@@ -6,7 +6,7 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { realpath, stat } from 'node:fs/promises'
-import { devNull, tmpdir } from 'node:os'
+import { tmpdir } from 'node:os'
 import { isAbsolute, join } from 'node:path'
 
 import { execa } from 'execa'
@@ -21,7 +21,7 @@ import { WorkbenchGitService } from './WorkbenchGitService'
  */
 const ProbeGitEnvironment: NodeJS.ProcessEnv = {
   ...process.env,
-  GIT_CONFIG_GLOBAL: devNull,
+  GIT_CONFIG_GLOBAL: '/dev/null',
   GIT_CONFIG_NOSYSTEM: '1',
 }
 

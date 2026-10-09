@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { relative, resolve } from 'node:path'
 
 import { describe, test } from 'bun:test'
 
@@ -12,7 +13,7 @@ import type {
   WorkbenchRawPathSource,
 } from '../src/main/workspace/watch/WorkbenchFileWatcher'
 
-const Root = '/work/attribution-app'
+const Root = resolve('/work/attribution-app')
 
 /** 假的文件监听：测试自己决定什么时候冒出哪个路径的事件（到达多晚都行）。 */
 function createFakeWatcher(options: { unavailable?: boolean } = {}) {
@@ -49,7 +50,7 @@ function createFakeFiles(clock: { now: number }) {
     return false
   }
   const read: WorkbenchPathChangeTimeReader = async (absolutePath) => {
-    const path = absolutePath === Root ? '' : absolutePath.slice(Root.length + 1)
+    const path = relative(Root, absolutePath).replaceAll('\\', '/')
     return isRemoved(path) ? null : times.get(path) ?? 0
   }
   return {

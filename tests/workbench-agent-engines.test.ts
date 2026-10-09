@@ -211,10 +211,15 @@ beforeEach(async () => {
       const { mkdir } = await import('node:fs/promises')
       await mkdir(bin, { recursive: true })
       await mkdir(project, { recursive: true })
-      await writeFile(join(bin, 'claude'), FakeClaude)
-      await writeFile(join(bin, 'codex'), FakeCodex)
-      await chmod(join(bin, 'claude'), 0o755)
-      await chmod(join(bin, 'codex'), 0o755)
+      for (const [name, source] of [['claude', FakeClaude], ['codex', FakeCodex]]) {
+        if (process.platform === 'win32') {
+          await writeFile(join(bin, `${name}.cjs`), source)
+          await writeFile(join(bin, `${name}.cmd`), `@echo off\r\nnode "%~dp0${name}.cjs" %*\r\n`)
+        } else {
+          await writeFile(join(bin, name), source)
+          await chmod(join(bin, name), 0o755)
+        }
+      }
     })(),
   ])
   const env: Record<string, string> = {
@@ -222,7 +227,7 @@ beforeEach(async () => {
     HOME: process.env.HOME ?? root,
     FAKE_ENGINE_LOG: join(root, 'log.jsonl'),
   }
-  const environment = { getEnvironment: async () => ({ ...env }) }
+  const environment = { getEnvironment: async () => ({ ...process.env, ...env }) }
   const sessions = new WorkbenchEngineSessionStore(root)
   const activity: string[] = []
   const edited: string[][] = []

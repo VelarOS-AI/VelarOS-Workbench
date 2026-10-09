@@ -53,7 +53,7 @@ void describe('Workbench atomic save', () => {
       const after = await stat(filePath)
       assert.equal(await readFile(filePath, 'utf8'), 'echo new\n')
       assert.notEqual(after.ino, before.ino, 'the new content arrives by rename, not in place')
-      assert.equal(after.mode & 0o777, 0o750)
+      assert.equal(after.mode & 0o777, before.mode & 0o777)
       assert.equal(saved.modifiedAt, after.mtimeMs)
       assert.equal(saved.size, after.size)
       assert.deepEqual(await readdir(root), ['script.sh'])
@@ -66,7 +66,7 @@ void describe('Workbench atomic save', () => {
         expectedSize: after.size,
       })
       assert.equal(await readFile(filePath, 'utf8'), 'echo sync\n')
-      assert.equal((await stat(filePath)).mode & 0o777, 0o750)
+      assert.equal((await stat(filePath)).mode & 0o777, before.mode & 0o777)
       assert.deepEqual(await readdir(root), ['script.sh'])
     })
   })
@@ -119,7 +119,7 @@ void describe('Workbench atomic save', () => {
     })
   })
 
-  void test('saves in a directory without write permission fall back to writing in place', async () => {
+  void test.skipIf(process.platform === 'win32')('saves in a directory without write permission fall back to writing in place', async () => {
     if (isRoot) return
     await withDirectory(async (root) => {
       const filePath = join(root, 'config.txt')

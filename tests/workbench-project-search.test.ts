@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
 import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises'
-import { devNull, tmpdir } from 'node:os'
+import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { promisify } from 'node:util'
 
@@ -32,7 +32,7 @@ import {
  */
 
 // 不受开发机上全局 git 配置（全局忽略文件、默认分支名……）影响。
-process.env['GIT_CONFIG_GLOBAL'] = devNull
+process.env['GIT_CONFIG_GLOBAL'] = '/dev/null'
 process.env['GIT_CONFIG_NOSYSTEM'] = '1'
 
 const ipcHandlers = new Map<string, (...args: unknown[]) => unknown>()

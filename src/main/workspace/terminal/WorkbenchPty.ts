@@ -40,6 +40,7 @@ export interface WorkbenchPtySpawnOptions {
   rows: number
   /** 终端类型名（`TERM`）。 */
   name: string
+  windowsVerbatimArguments?: boolean
 }
 
 /** 伪终端上的整棵进程树：列出来、发信号（真实实现走系统进程表）。 */
@@ -89,7 +90,7 @@ export const nodePtyFactory: WorkbenchPtyFactory = {
   spawn: (file, args, options) => {
     const env: Record<string, string> = {}
     for (const [key, value] of Object.entries(options.env)) if (value !== undefined) env[key] = value
-    return loadNodePty().spawn(file, args, {
+    return loadNodePty().spawn(file, options.windowsVerbatimArguments ? args.join(' ') : args, {
       name: options.name,
       cols: options.cols,
       rows: options.rows,

@@ -122,24 +122,25 @@ void describe('Workbench Git hunks', () => {
   void test('works in a nested project, on CRLF files, on names with spaces and quotes, and keeps a staged rename', async () => {
     await withRepository(async (repository) => {
       const project = join(repository, 'my app')
+      const quotedName = process.platform === 'win32' ? "a 'quoted' file.txt" : 'a "quoted" file.txt'
       await mkdir(project)
-      await writeFile(join(project, 'a "quoted" file.txt'), text(Lines))
+      await writeFile(join(project, quotedName), text(Lines))
       await writeFile(join(project, 'crlf.txt'), text(Lines, '\r\n'))
       await writeFile(join(project, 'old name.txt'), text(Lines))
       await commitAll(repository, 'base')
 
-      await writeFile(join(project, 'a "quoted" file.txt'), edited({ 3: 'LINE 3', 18: 'LINE 18' }))
+      await writeFile(join(project, quotedName), edited({ 3: 'LINE 3', 18: 'LINE 18' }))
       await writeFile(join(project, 'crlf.txt'), edited({ 5: 'LINE 5' }, '\r\n'))
       await git(repository, ['mv', 'my app/old name.txt', 'my app/new name.txt'])
       await writeFile(join(project, 'new name.txt'), edited({ 4: 'LINE 4', 17: 'LINE 17' }))
       await git(repository, ['add', 'my app/new name.txt'])
 
       const service = createGitService()
-      const [, quoted] = await readHunks(project, 'unstaged', 'a "quoted" file.txt')
+      const [, quoted] = await readHunks(project, 'unstaged', quotedName)
       assert.ok(quoted)
-      await service.applyHunks(project, { action: 'stage', path: 'a "quoted" file.txt', hunks: [quoted] })
+      await service.applyHunks(project, { action: 'stage', path: quotedName, hunks: [quoted] })
       assert.equal(
-        await git(repository, ['show', ':my app/a "quoted" file.txt']),
+        await git(repository, ['show', `:my app/${quotedName}`]),
         edited({ 18: 'LINE 18' })
       )
 

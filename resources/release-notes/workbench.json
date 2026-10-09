@@ -16,10 +16,12 @@
       "fixed": {
         "zh": [
           "修复 Windows 路径下 Skill 合同编译失败的问题，支持包含中文和空格的项目目录。",
+          "修复 Windows 编辑器未保存内容的类型分析、命令引号及终端进程退出处理。",
           "完善 Windows 原生终端依赖和安装包校验。"
         ],
         "en": [
           "Fix Skill contract compilation on Windows, including project paths containing spaces and non-ASCII characters.",
+          "Correct TypeScript analysis of unsaved Windows editor buffers, shell quoting, and terminal process shutdown.",
           "Correct Windows native terminal dependencies and packaged application validation."
         ]
       }

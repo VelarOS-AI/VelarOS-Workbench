@@ -25,7 +25,7 @@ test("local release snapshots verify archive bytes, package identity and the com
       path.join(root, "package/package.json"),
       JSON.stringify({ name: "@velaros-ai/core", version: "0.4.3" }),
     );
-    execFileSync("tar", ["-czf", archive, "-C", root, "package"]);
+    execFileSync("tar", ["-czf", fileName, "-C", root, "package"], { cwd: path.dirname(archive) });
     const bytes = await readFile(archive);
     const integrity = `sha512-${createHash("sha512").update(bytes).digest("base64")}`;
     const snapshot = {

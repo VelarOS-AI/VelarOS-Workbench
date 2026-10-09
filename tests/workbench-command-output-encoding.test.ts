@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -14,13 +14,16 @@ test('Workbench preserves split UTF-8 in both returned output and streamed event
   try {
     const text = '中文🙂\\n\n'
     const script = `const bytes=Buffer.from(${JSON.stringify(text)});(async()=>{for(const byte of bytes){process.stdout.write(Buffer.from([byte]));process.stderr.write(Buffer.from([byte]));await new Promise(r=>setTimeout(r,10))}})()`
-    const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`
+    const scriptPath = join(root, 'output.cjs')
+    await writeFile(scriptPath, script)
+    const quote = (value: string) => process.platform === 'win32'
+      ? `"${value}"` : `'${value.replaceAll("'", "'\\''")}'`
     const runner = new CommandRunner(new PathResolver(), new CommandHelper())
     const events = { stdout: '', stderr: '' }
     const result = await runner.runCommand(
       {
         projectRoot: root,
-        command: `${quote(process.execPath)} -e ${quote(script)}`,
+        command: `${quote(process.execPath)} ${quote(scriptPath)}`,
         timeoutMs: 5000,
       },
       (event) => {

@@ -93,6 +93,7 @@ import {
   forgetMovedTypeScriptProjectPath,
   freezeTypeScriptProgramWhile,
   isPathInside,
+  normalizeTypeScriptFileName,
   planTypeScriptFileRenameProjects,
   readMovedTypeScriptFiles,
   refreshTypeScriptProjectFilesFromDisk,
@@ -2182,7 +2183,7 @@ class WorkbenchLanguageServices {
   private resolveAbsoluteProjectPath(projectRoot: string, path: string): string {
     const absolutePath = resolve(projectRoot, path)
     this.pathResolver.assertAllowedProjectPath(projectRoot, absolutePath, path)
-    return absolutePath
+    return normalizeTypeScriptFileName(absolutePath)
   }
 
   private extensionWithDot(path: string): string {

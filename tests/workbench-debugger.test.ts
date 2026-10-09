@@ -40,7 +40,7 @@ void describe('debugging a Node.js program', () => {
         target: { kind: 'node-script', script: 'main.js' },
         breakpoints: [{ path: 'main.js', line: 2 }],
       })
-      assert.match(started.command, /^node --inspect-brk=127\.0\.0\.1:\d+ 'main\.js'$/u)
+      assert.match(started.command, /^node --inspect-brk=127\.0\.0\.1:\d+ ['"]main\.js['"]$/u)
       assert.equal(started.cwd, project.root)
       await project.next('attached')
 

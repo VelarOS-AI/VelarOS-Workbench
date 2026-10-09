@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict'
+import { join } from 'node:path'
 
 import { describe, setDefaultTimeout, test } from 'bun:test'
+
+import { currentPlatform } from '@velaros-ai/core/platform'
 
 import {
   createDebugTestProject,
@@ -94,7 +97,7 @@ void describe('starting a debug session', () => {
     })
     try {
       const started = await project.start({
-        target: { kind: 'node-package-bin', packageName: 'fake-runner', args: "case.cjs --name 'two words'" },
+        target: { kind: 'node-package-bin', packageName: 'fake-runner', args: `case.cjs --name ${currentPlatform.quoteShellArg('two words')}` },
         cwd: 'packages/app',
         env: { DEBUG_LABEL: 'from the configuration' },
         breakpoints: [{ path: 'packages/app/case.cjs', line: 2 }],
@@ -102,9 +105,9 @@ void describe('starting a debug session', () => {
       // 包装在工作目录之上：命令行里写绝对路径；参数原样交给 shell 去拆。
       assert.equal(
         started.command.replace(/:\d+ /u, ':PORT '),
-        `node --inspect-brk=127.0.0.1:PORT '${project.root}/node_modules/fake-runner/bin/run.cjs' case.cjs --name 'two words'`
+        `node --inspect-brk=127.0.0.1:PORT ${currentPlatform.quoteShellArg(join(project.root, 'node_modules/fake-runner/bin/run.cjs'))} case.cjs --name ${currentPlatform.quoteShellArg('two words')}`
       )
-      assert.equal(started.cwd, `${project.root}/packages/app`)
+      assert.equal(started.cwd, join(project.root, 'packages/app'))
 
       const paused = await project.next('paused')
       // 两个文件之间隔着 Node 自己的模块加载代码：那些帧也在调用栈里，只是不属于项目（没有可打开的文件）。
@@ -168,7 +171,7 @@ void describe('starting a debug session', () => {
       })
       assert.equal(
         started.command.replace(/:\d+ /u, ':PORT '),
-        `node --inspect-brk=127.0.0.1:PORT '${project.root}/main.js' --flag`
+        `node --inspect-brk=127.0.0.1:PORT ${currentPlatform.quoteShellArg(join(project.root, 'main.js'))} --flag`
       )
       assert.equal((await project.next('ended')).exitCode, 0)
     } finally {

@@ -67,7 +67,7 @@ try {
   let commandOutput = ''
   let commandClosed = false
   const command = await terminal.startTerminalSession(
-    { projectRoot, initialCommand: "printf 'VELAROS_TERMINAL_PROBE_OK\\n'" },
+    { projectRoot, initialCommand: process.platform === 'win32' ? 'echo VELAROS_TERMINAL_PROBE_OK' : "printf 'VELAROS_TERMINAL_PROBE_OK\\n'" },
     (event) => {
       commandOutput += event.chunk
       if (event.closed) commandClosed = true

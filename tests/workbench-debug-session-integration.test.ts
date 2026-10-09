@@ -110,7 +110,7 @@ void describe('debugging a real program from the window', () => {
         projectRoot: project.root,
         target: { kind: 'node-script', script: 'main.js' },
       })
-      assert.match(started.command, /^node --inspect-brk=127\.0\.0\.1:\d+ 'main\.js'$/u)
+      assert.match(started.command, /^node --inspect-brk=127\.0\.0\.1:\d+ ['"]main\.js['"]$/u)
 
       // 停在断点上：编辑器要高亮的就是这一行，页面把它带到眼前。
       const atBreakpoint = await until('the breakpoint', (snapshot) => snapshot.pause?.sequence === 1)

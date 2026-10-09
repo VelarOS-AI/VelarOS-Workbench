@@ -46,7 +46,7 @@ void describe('Workbench command panel IPC', () => {
       await mkdir(join(root, 'cache', 'nested'), { recursive: true })
       const runCommand = await registerCommandPanelIpc()
 
-      const result = await runCommand({ projectRoot: root, command: 'rm -r cache' }) as {
+      const result = await runCommand({ projectRoot: root, command: process.platform === 'win32' ? 'rmdir /s /q cache' : 'rm -r cache' }) as {
         ok: boolean
         value?: { success: boolean }
       }

@@ -197,6 +197,7 @@ void describe('Workbench macOS release packaging', () => {
       args: [`-c.directories.output=${outputDirectory}`],
       environment: { APPLE_KEYCHAIN_PROFILE: 'test-profile' },
       platform: 'darwin',
+      ensureBackends: () => [],
       version: '0.3.29',
       snapshotDmgs: async () => {
         calls.push('snapshot')
