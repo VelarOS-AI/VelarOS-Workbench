@@ -51,10 +51,12 @@ export function createProcessDebugLauncher(): {
     })
     let output = ''
     let exit: Nullable<WorkbenchDebugProcessExit> = null
+    let forceKillTimer: ReturnType<typeof setTimeout> | undefined
     const exitListeners: Array<(exit: WorkbenchDebugProcessExit) => void> = []
     child.stdout.on('data', (chunk: Buffer) => (output += chunk.toString('utf8')))
     child.stderr.on('data', (chunk: Buffer) => (output += chunk.toString('utf8')))
-    child.once('close', (exitCode) => {
+    child.once('exit', (exitCode) => {
+      clearTimeout(forceKillTimer)
       exit = { exitCode }
       for (const listener of exitListeners.splice(0)) listener(exit)
     })
@@ -83,8 +85,9 @@ export function createProcessDebugLauncher(): {
             return
           }
           exitListeners.push(() => resolve())
+          // 等待结束的承诺必须维持事件循环；Windows 管道的 close 可能晚于进程退出。
+          forceKillTimer = setTimeout(() => signalGroup('SIGKILL'), 1_000)
           signalGroup('SIGTERM')
-          setTimeout(() => signalGroup('SIGKILL'), 1_000).unref()
         }),
     }
   }

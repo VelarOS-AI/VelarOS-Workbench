@@ -327,7 +327,7 @@ void describe('stepping out of the program’s own code', () => {
       assert.equal(describeStop(rest.at(-1)!), 'ended exited 0')
       assert.deepEqual(
         project.launched[0]!.output().match(/^(?:ping \d+|joined .+|done)$/gmu),
-        ['ping 2', 'joined a/b', 'ping 20', 'ping 22', 'done']
+        ['ping 2', `joined ${join('a', 'b')}`, 'ping 20', 'ping 22', 'done']
       )
     } finally {
       await project.dispose()
