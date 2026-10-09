@@ -4,7 +4,7 @@
  */
 import assert from 'node:assert/strict'
 import { readdirSync, readFileSync } from 'node:fs'
-import { join, resolve as resolvePath } from 'node:path'
+import { posix, resolve as resolvePath } from 'node:path'
 
 import { describe, test } from 'bun:test'
 
@@ -59,7 +59,7 @@ function readSource(path: string): string {
 /** 目录下全部源码文件（相对仓库根）。 */
 function listSourceFiles(directory: string): string[] {
   return readdirSync(resolvePath(process.cwd(), directory), { withFileTypes: true }).flatMap((entry) => {
-    const path = join(directory, entry.name)
+    const path = posix.join(directory, entry.name)
     if (entry.isDirectory()) return listSourceFiles(path)
     return /\.tsx?$/u.test(entry.name) ? [path] : []
   })
@@ -535,7 +535,7 @@ void describe('vim: the mode in the status bar', () => {
 })
 
 void describe('vim: loaded only for the Vim preset, only in the file editor', () => {
-  const sources = listSourceFiles('src')
+  const sources = listSourceFiles('src').sort()
 
   void test('the package is only ever imported dynamically', () => {
     const importers = sources.filter((path) => readCode(path).includes('@replit/codemirror-vim'))

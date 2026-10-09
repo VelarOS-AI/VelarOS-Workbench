@@ -25,7 +25,9 @@ assert.ok(rule, `eslint.config.mjs 未注册 ${pluginName}/${ruleName}`)
 
 RuleTester.describe = describe
 RuleTester.it = test
-RuleTester.itOnly = test.only
+RuleTester.itOnly = (name, callback) => {
+  void test.only(name, callback)
+}
 
 const ruleTester = new RuleTester({
   languageOptions: {

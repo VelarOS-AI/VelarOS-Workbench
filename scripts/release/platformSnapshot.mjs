@@ -71,7 +71,8 @@ async function verifyArchive(file, entry) {
   )
     throw new Error(`Platform snapshot integrity mismatch: ${entry.name}`);
   const manifest = JSON.parse(
-    execFileSync("tar", ["-xOf", file, "package/package.json"], {
+    execFileSync("tar", ["-xOf", path.basename(file), "package/package.json"], {
+      cwd: path.dirname(file),
       encoding: "utf8",
     }),
   );

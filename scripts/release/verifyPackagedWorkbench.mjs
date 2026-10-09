@@ -83,7 +83,7 @@ async function waitForPackagedApp(filePath, timeoutMs = 5_000) {
  * 终端后端（@lydell/node-pty）必须以真文件解包：原生模块不能从 asar 里 dlopen，spawn-helper 要能 exec。
  * 每个包只装一个平台，包目录名就是平台；这里按包出来的 app 找它自己那个平台的二进制。
  */
-async function verifyPackagedTerminalBackend(resourcesRoot, platformName) {
+export async function verifyPackagedTerminalBackend(resourcesRoot, platformName) {
   const unpackedRoot = path.join(resourcesRoot, 'app.asar.unpacked', 'node_modules', '@lydell')
   const entries = await readdir(unpackedRoot, { withFileTypes: true }).catch(() => [])
   const platformPackages = entries
@@ -95,10 +95,16 @@ async function verifyPackagedTerminalBackend(resourcesRoot, platformName) {
   for (const packageName of platformPackages) {
     const target = packageName.slice('node-pty-'.length)
     const prebuildDir = path.join(unpackedRoot, packageName, 'prebuilds', target)
-    await access(path.join(prebuildDir, 'pty.node')).catch(() => {
-      throw new Error(`Packaged terminal backend is missing pty.node for ${target}.`)
-    })
-    if (platformName === 'win32') continue
+    const requiredFiles = platformName === 'win32'
+      ? ['conpty.node', 'conpty_console_list.node', 'conpty/conpty.dll', 'conpty/OpenConsole.exe']
+      : ['pty.node']
+    for (const name of requiredFiles) {
+      const binary = await stat(path.join(prebuildDir, name)).catch(() => null)
+      if (!binary?.isFile()) {
+        throw new Error(`Packaged terminal backend is missing ${name} for ${target}.`)
+      }
+    }
+    if (platformName !== 'darwin') continue
     const helperPath = path.join(prebuildDir, 'spawn-helper')
     const helperStats = await stat(helperPath).catch(() => {
       throw new Error(`Packaged terminal backend is missing spawn-helper for ${target}.`)

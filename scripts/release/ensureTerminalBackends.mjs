@@ -41,8 +41,10 @@ export function ensureTerminalBackends(platformNames) {
       const pack = spawnSync('npm', ['pack', spec, '--pack-destination', scratch, '--silent'], {
         cwd: repositoryRoot,
         encoding: 'utf8',
+        // Windows exposes npm as npm.cmd; Node must launch its command interpreter.
+        shell: process.platform === 'win32',
       })
-      if (pack.status !== 0) throw new Error(`npm pack ${spec} failed: ${pack.stderr}`)
+      if (pack.status !== 0) throw new Error(`npm pack ${spec} failed: ${pack.error?.message ?? pack.stderr}`)
       const tarball = path.join(scratch, pack.stdout.trim().split('\n').at(-1))
       const destination = path.join(repositoryRoot, 'node_modules', packageName)
       mkdirSync(destination, { recursive: true })
