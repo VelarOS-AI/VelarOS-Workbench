@@ -4,7 +4,7 @@
  * 只认读起来没有副作用的写法：变量名、`this`、点号连起来的属性。求值交给调用方（在选中的那一帧里、不许有
  * 副作用），求不出来就不显示。类型提示那个悬浮框在下方，这个在上方，两个互不遮挡。
  */
-import { syntaxTree } from '@codemirror/language'
+import { ensureSyntaxTree, syntaxTree } from '@codemirror/language'
 import type { EditorState, Extension } from '@codemirror/state'
 import { hoverTooltip } from '@codemirror/view'
 import type { SyntaxNode } from '@lezer/common'
@@ -41,7 +41,8 @@ export function findWorkbenchDebugHoverExpression(
   state: EditorState,
   position: number
 ): Nullable<WorkbenchDebugHoverExpression> {
-  const tree = syntaxTree(state)
+  // 新打开的文件可能只解析了首屏，悬浮查询使用补齐到当前行的树。
+  const tree = ensureSyntaxTree(state, state.doc.lineAt(position).to) ?? syntaxTree(state)
   // 鼠标落在标识符的末尾时，右边是别的节点：左右各看一次。
   const node = [tree.resolveInner(position, 1), tree.resolveInner(position, -1)].find(
     (candidate) => SimpleNames.has(candidate.name) || candidate.name === 'PropertyName'

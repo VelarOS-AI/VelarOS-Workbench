@@ -54,6 +54,7 @@ const rl = readline.createInterface({ input: process.stdin })
 rl.on('line', (line) => {
   const message = JSON.parse(line)
   if (message.type === 'control_request' && message.request.subtype === 'initialize') {
+    fs.appendFileSync(process.env.FAKE_ENGINE_LOG, JSON.stringify({ initialize: message.request }) + '\n')
     out({ type: 'control_response', response: { subtype: 'success', request_id: message.request_id, response: {
       account: { tokenSource: 'claude.ai', apiProvider: 'firstParty' },
       models: [
@@ -202,7 +203,7 @@ interface Rig {
 let rig: Rig
 
 beforeEach(async () => {
-  const root = await mkdtemp(join(tmpdir(), 'workbench-engines-'))
+  const root = await mkdtemp(join(tmpdir(), 'workbench engines-'))
   const bin = join(root, 'bin')
   const project = join(root, 'project')
   await Promise.all([
@@ -369,6 +370,9 @@ describe('Claude Code engine', () => {
       ?.claude as string[]
     assert.ok(args.includes('--model') && args[args.indexOf('--model') + 1] === 'opus')
     assert.equal(args[args.indexOf('--permission-mode') + 1], 'default')
+    const initialization = log.find((entry) => entry.initialize)?.initialize as { appendSystemPrompt?: string }
+    assert.ok(initialization.appendSystemPrompt?.includes('\n'))
+    assert.equal(args.includes('--append-system-prompt'), false)
     // 没探过模型目录时不知道它能不能调思考力度：不传
     assert.equal(args.includes('--effort'), false)
     assert.deepEqual(

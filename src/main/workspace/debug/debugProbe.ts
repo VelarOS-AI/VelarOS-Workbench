@@ -2,7 +2,7 @@
  * 调试器探针：被调试的程序跑在真正的伪终端里（与应用里一样，是一张运行卡），验证检查器连得上、断点停得住、
  * 输出走终端那条通道、程序自己跑完时卡片正常收口、结束调试时整棵进程树一起结束、别的窗口碰不了。
  * 经 `scripts/probe/runDebugProbe.mjs` 在 Electron 运行时里跑（node-pty 在 bun 下收不到数据）。
- * 需要 PATH 上有 `node`；Windows 上没有验过，这里跳过。
+ * 需要 PATH 上有 `node`。
  */
 import { strict as assert } from 'node:assert'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
@@ -67,11 +67,6 @@ interface ProbeRun {
 /** 程序打印的 `标记 数字`。 */
 function readNumber(output: string, marker: string): number {
   return Number(new RegExp(`${marker} (\\d+)`, 'u').exec(output)?.[1])
-}
-
-if (process.platform === 'win32') {
-  console.info('debug probe skipped on Windows')
-  process.exit(0)
 }
 
 const projectRoot = mkdtempSync(join(tmpdir(), 'velaros-workbench-debug-probe-'))

@@ -5,6 +5,7 @@ import { delimiter, extname, isAbsolute, join } from 'node:path'
 
 import { Log } from '@velaros-ai/core'
 import { AppError } from '@velaros-ai/core/error'
+import { type CommandSpec, currentPlatform } from '@velaros-ai/core/platform'
 
 import type {
   WorkbenchAgentEngineId,
@@ -104,15 +105,28 @@ export function spawnEngineProcess(
   args: readonly string[],
   cwd: string
 ): ChildProcessWithoutNullStreams {
-  const wrapped =
-    process.platform === 'win32' && /^\.(?:cmd|bat)$/iu.test(extname(command.executable))
-  return spawn(command.executable, [...args], {
+  const spec = engineCommandSpec(command, args)
+  return spawn(spec.file, spec.args, {
     cwd,
     env: engineEnvironment(command.env),
     detached: new WorkbenchCommandHelper().shouldDetachForegroundProcess(),
-    shell: wrapped,
+    windowsVerbatimArguments: spec.windowsVerbatimArguments,
     stdio: ['pipe', 'pipe', 'pipe'],
     windowsHide: true,
+  })
+}
+
+/** npm 的 CMD 包装需要保留路径与各参数的边界，不能让 spawn 的 shell 选项直接拼接。 */
+function engineCommandSpec(command: WorkbenchEngineCommand, args: readonly string[]): CommandSpec {
+  if (process.platform !== 'win32' || !/^\.(?:cmd|bat)$/iu.test(extname(command.executable)))
+    return { file: command.executable, args: [...args] }
+
+  const shellCommand = [command.executable, ...args]
+    .map((value) => currentPlatform.quoteShellArg(value, { kind: 'cmd' }))
+    .join(' ')
+  return currentPlatform.getShellCommandSpec(shellCommand, {
+    shellPath: command.env.ComSpec ?? command.env.COMSPEC ?? 'cmd.exe',
+    kind: 'cmd',
   })
 }
 
@@ -147,9 +161,10 @@ export function runEngineCommand(
   options: { cwd: string; timeoutMs: number; signal?: AbortSignal }
 ): Promise<{ code: Nullable<number>; stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
+    const spec = engineCommandSpec(command, args)
     execFile(
-      command.executable,
-      [...args],
+      spec.file,
+      spec.args,
       {
         cwd: options.cwd,
         env: engineEnvironment(command.env),
@@ -157,8 +172,7 @@ export function runEngineCommand(
         signal: options.signal,
         maxBuffer: 1_024 * 1_024,
         windowsHide: true,
-        shell:
-          process.platform === 'win32' && /^\.(?:cmd|bat)$/iu.test(extname(command.executable)),
+        windowsVerbatimArguments: spec.windowsVerbatimArguments,
       },
       (error, stdout, stderr) => {
         if (error && typeof (error as { code?: unknown }).code !== 'number') {

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
+import { join } from 'node:path'
 
 import { describe, setDefaultTimeout, test } from 'bun:test'
 import ts from 'typescript'
@@ -51,7 +52,7 @@ void describe('debugging a Node.js program', () => {
         'add@main.js:2',
         '(anonymous)@main.js:6',
       ])
-      assert.equal(atBreakpoint.frames[0]!.location.source, `${project.root}/main.js`)
+      assert.equal(atBreakpoint.frames[0]!.location.source, join(project.root, 'main.js'))
       const before = await variablesOf(project, started.sessionId, atBreakpoint.frames[0]!, 'local')
       assert.deepEqual(
         [before.a, before.b, before.sum].map((value) => `${value?.type}:${value?.text}`),
@@ -339,7 +340,7 @@ void describe('debugging TypeScript through source maps', () => {
       const top = await project.next('paused')
       assert.equal(top.reason, 'breakpoint')
       assert.equal(frameSummary(top.frames[0]), '(anonymous)@src/main.ts:6')
-      assert.equal(top.frames[0]!.location.source, `${project.root}/src/main.ts`)
+      assert.equal(top.frames[0]!.location.source, join(project.root, 'src/main.ts'))
       const statuses = project.events.findLast((event) => event.type === 'breakpoints')
       assert.deepEqual(
         statuses?.type === 'breakpoints'

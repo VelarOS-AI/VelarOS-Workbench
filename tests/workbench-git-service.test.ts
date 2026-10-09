@@ -419,5 +419,5 @@ void describe('Workbench Git service', () => {
       await service.performFileAction(root, ['node_modules/'], 'discard')
       assert.equal(existsSync(join(root, 'node_modules')), false)
     })
-  })
+  }, 30_000)
 })

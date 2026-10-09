@@ -263,6 +263,13 @@ void describe('hovering a name while the program is paused', () => {
     return findWorkbenchDebugHoverExpression(state, index + offset)?.expression ?? null
   }
 
+  void test('reads a variable beyond the initially parsed viewport', () => {
+    const source = `${'const item = 1\n'.repeat(500)}const lastValue = item\n`
+    const state = EditorState.create({ doc: source, extensions: [javascript()] })
+    const position = source.lastIndexOf('lastValue') + 1
+    assert.equal(findWorkbenchDebugHoverExpression(state, position)?.expression, 'lastValue')
+  })
+
   void test('evaluates variables, parameters, this and plain property chains', () => {
     assert.equal(expressionAt('config ='), 'config')
     assert.equal(expressionAt('input)'), 'input')

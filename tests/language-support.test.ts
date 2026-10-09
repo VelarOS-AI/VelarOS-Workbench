@@ -34,6 +34,7 @@ import {
 import {
   acquireTypeScriptLanguageService,
   clearTypeScriptProjectCache,
+  normalizeTypeScriptFileName,
   resolveTypeScriptDefaultLibFilePath,
 } from '../src/main/workspace/language/TypeScriptProjectHost'
 import {
@@ -1014,7 +1015,7 @@ void describe('focused Workbench language surface', () => {
         new Map([[requestPath, source]])
       )
 
-      assert.equal(project.config.configPath, partitionConfigPath)
+      assert.equal(project.config.configPath, normalizeTypeScriptFileName(partitionConfigPath))
       assert.equal(project.compilerOptions.moduleResolution, ts.ModuleResolutionKind.Bundler)
       assert.deepEqual(project.service.getSemanticDiagnostics(requestPath), [])
     } finally {
@@ -1084,7 +1085,7 @@ void describe('focused Workbench language surface', () => {
         new Map([[requestPath, source]])
       )
 
-      assert.equal(project.config.configPath, join(projectRoot, 'tsconfig.eslint.json'))
+      assert.equal(project.config.configPath, normalizeTypeScriptFileName(join(projectRoot, 'tsconfig.eslint.json')))
       assert.equal(project.compilerOptions.moduleResolution, ts.ModuleResolutionKind.Bundler)
       assert.deepEqual(project.service.getSemanticDiagnostics(requestPath), [])
     } finally {

@@ -159,8 +159,6 @@ export class ClaudeCodeEngine implements WorkbenchAgentEngine {
       'default',
       '--setting-sources',
       'user,project,local',
-      '--append-system-prompt',
-      engineInstructions(input.executionModes, input.locale),
     ]
     if (input.model) args.push('--model', input.model)
     if (input.model && this.effortModels.has(input.model))
@@ -179,7 +177,9 @@ export class ClaudeCodeEngine implements WorkbenchAgentEngine {
     }
     signal.addEventListener('abort', stop, { once: true })
     try {
-      await transport.initialize()
+      await transport.initialize({
+        appendSystemPrompt: engineInstructions(input.executionModes, input.locale),
+      })
       signal.throwIfAborted()
       transport.sendUser(userContent(input.text, input.images))
       input.accepted()

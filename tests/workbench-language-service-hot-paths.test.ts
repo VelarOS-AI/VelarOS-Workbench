@@ -19,6 +19,7 @@ import {
 import {
   acquireTypeScriptLanguageService,
   clearTypeScriptProjectCache,
+  normalizeTypeScriptFileName,
   refreshTypeScriptProjectFilesFromDisk,
 } from '../src/main/workspace/language/TypeScriptProjectHost'
 import { PathResolver } from '../src/main/workspace/PathResolver'
@@ -117,22 +118,22 @@ void describe('language service hot paths', () => {
     const acquire = () => acquireTypeScriptLanguageService(projectRoot, mainPath, [mainPath], new Map([[mainPath, content]]))
     try {
       const first = acquire()
-      assert.equal(first.files.has(extraPath), false)
+      assert.equal(first.files.has(normalizeTypeScriptFileName(extraPath)), false)
 
       // 新文件落盘但还没人通知：记住的配置照用，不为每次请求重扫目录。
       await writeFile(extraPath, 'export const extra = 2\n', 'utf8')
-      assert.equal(acquire().files.has(extraPath), false)
+      assert.equal(acquire().files.has(normalizeTypeScriptFileName(extraPath)), false)
 
       refreshTypeScriptProjectFilesFromDisk(projectRoot, [extraPath])
       const withExtra = acquire()
-      assert.equal(withExtra.files.has(extraPath), true)
+      assert.equal(withExtra.files.has(normalizeTypeScriptFileName(extraPath)), true)
       assert.equal(withExtra.service, first.service, 'the language service must be kept, not rebuilt')
       assert.equal(withExtra.service.getProgram()?.getSourceFile(extraPath)?.text, 'export const extra = 2\n')
 
       await rm(extraPath)
       refreshTypeScriptProjectFilesFromDisk(projectRoot, [extraPath])
       const withoutExtra = acquire()
-      assert.equal(withoutExtra.files.has(extraPath), false)
+      assert.equal(withoutExtra.files.has(normalizeTypeScriptFileName(extraPath)), false)
       assert.equal(withoutExtra.service, first.service)
 
       // 配置文件变了才整体重建。

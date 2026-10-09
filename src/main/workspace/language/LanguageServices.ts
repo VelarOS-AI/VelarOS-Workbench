@@ -1048,7 +1048,7 @@ class WorkbenchLanguageServices {
     const snapshot = await this.createTypeScriptProjectSnapshot(request)
     const content = snapshot.files.get(snapshot.requestAbsolutePath) ?? ''
     const readFile = (fileName: string): Nullable<string> =>
-      snapshot.files.get(fileName) ?? safeReadFile(fileName)
+      snapshot.files.get(normalizeTypeScriptFileName(fileName)) ?? safeReadFile(fileName)
     const locations = buildTypeScriptReferences({
       service: snapshot.service,
       fileName: snapshot.requestAbsolutePath,
@@ -1535,7 +1535,7 @@ class WorkbenchLanguageServices {
               service,
               fileName: requestFileName,
               content: files.get(requestFileName) ?? safeReadFile(requestFileName) ?? '',
-              readFile: (fileName) => files.get(fileName) ?? safeReadFile(fileName),
+              readFile: (fileName) => files.get(normalizeTypeScriptFileName(fileName)) ?? safeReadFile(fileName),
               toRelativePath: (fileName) => this.relativePathFor(projectRoot, fileName),
             },
             renames
@@ -1567,7 +1567,7 @@ class WorkbenchLanguageServices {
           service: snapshot.service,
           fileName: snapshot.requestAbsolutePath,
           offset: this.offsetFromPosition(content, request.position),
-          readFile: (fileName) => snapshot.files.get(fileName) ?? safeReadFile(fileName),
+          readFile: (fileName) => snapshot.files.get(normalizeTypeScriptFileName(fileName)) ?? safeReadFile(fileName),
           toRelativePath: (fileName) => this.relativePathFor(snapshot.projectRoot, fileName),
         },
         request.direction
@@ -1583,7 +1583,7 @@ class WorkbenchLanguageServices {
       service: snapshot.service,
       fileName: snapshot.requestAbsolutePath,
       content: snapshot.files.get(snapshot.requestAbsolutePath) ?? '',
-      readFile: (fileName) => snapshot.files.get(fileName) ?? safeReadFile(fileName),
+      readFile: (fileName) => snapshot.files.get(normalizeTypeScriptFileName(fileName)) ?? safeReadFile(fileName),
       toRelativePath: (fileName) => this.relativePathFor(snapshot.projectRoot, fileName),
       format: request.format,
     }
@@ -2220,7 +2220,7 @@ class WorkbenchLanguageServices {
     fileName: string,
     textSpan: ts.TextSpan
   ): Nullable<WorkbenchLanguageServiceRange> {
-    const content = snapshot.files.get(fileName) ?? safeReadFile(fileName)
+    const content = snapshot.files.get(normalizeTypeScriptFileName(fileName)) ?? safeReadFile(fileName)
     if (!isPresent(content)) return null
 
     return rangeFromTextSpanInContent(content, fileName, textSpan)

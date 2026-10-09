@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
+import { join } from 'node:path'
 
 import { describe, setDefaultTimeout, test } from 'bun:test'
 
@@ -271,7 +272,7 @@ void describe('stepping out of the program’s own code', () => {
         inListener.frames.slice(1, 3).map((frame) => [frame.location.path, frame.location.source]),
         [
           [null, 'node:events'],
-          ['emit.js', `${project.root}/emit.js`],
+          ['emit.js', join(project.root, 'emit.js')],
         ]
       )
 
