@@ -10,7 +10,7 @@
         "@velaros-ai/core": "file:build/runtime-packages/velaros-ai-core-0.4.3.tgz",
         "@velaros-ai/kernel": "file:build/runtime-packages/velaros-ai-kernel-0.6.0.tgz",
         "@velaros-ai/model": "file:build/runtime-packages/velaros-ai-model-0.10.0.tgz",
-        "@velaros-ai/script": "file:build/runtime-packages/velaros-ai-script-0.2.0.tgz",
+        "@velaros-ai/script": "file:build/runtime-packages/velaros-ai-script-0.2.1.tgz",
         "@velaros-ai/ui": "0.2.54",
         "@velaros-ai/velaros": "file:build/runtime-packages/velaros-ai-velaros-0.6.0.tgz",
         "gpt-tokenizer": "3.4.0",
@@ -116,7 +116,7 @@
     "@velaros-ai/core": "file:build/runtime-packages/velaros-ai-core-0.4.3.tgz",
     "@velaros-ai/kernel": "file:build/runtime-packages/velaros-ai-kernel-0.6.0.tgz",
     "@velaros-ai/model": "file:build/runtime-packages/velaros-ai-model-0.10.0.tgz",
-    "@velaros-ai/script": "file:build/runtime-packages/velaros-ai-script-0.2.0.tgz",
+    "@velaros-ai/script": "file:build/runtime-packages/velaros-ai-script-0.2.1.tgz",
     "@velaros-ai/skill-jsts": "file:build/runtime-packages/velaros-ai-skill-jsts-0.1.0.tgz",
     "@velaros-ai/velaros": "file:build/runtime-packages/velaros-ai-velaros-0.6.0.tgz",
   },
@@ -797,7 +797,7 @@
 
     "@velaros-ai/model": ["@velaros-ai/model@build/runtime-packages/velaros-ai-model-0.10.0.tgz", { "dependencies": { "@ai-sdk/anthropic": "^3.0.71", "@ai-sdk/google": "^3.0.64", "@ai-sdk/openai": "^3.0.53", "@ai-sdk/provider": "3.0.8", "@types/json-schema": "7.0.15", "@velaros-ai/core": "0.4.3", "@velaros-ai/kernel": "0.6.0", "ai": "^6.0.168", "gpt-tokenizer": "3.4.0" } }, "sha512-61L380Osjm0D0MfjBnsiBLha8ldoQEix34HpzlekXIbko+1Pc4twHtkFaILH3cTlLVk3r8ATaVYM34Byn0Ql6g=="],
 
-    "@velaros-ai/script": ["@velaros-ai/script@build/runtime-packages/velaros-ai-script-0.2.0.tgz", { "dependencies": { "@velaros-ai/core": "0.4.3", "@velaros-ai/kernel": "0.6.0", "@vscode/ripgrep": "^1.18.0", "diff": "^8.0.4", "execa": "^9.6.1", "globby": "^16.2.4", "typescript": "^5.7.0", "yaml": "^2.9.1", "zod": "^4.3.6" } }, "sha512-2hsrxF/4DmOwvpeEfejCj1Cl3RklMnPxZHFJO2Eaulz9+ImKsGEmv7YdF/ESOl6WZAamcwUpzgJi8bZT5mdk0Q=="],
+    "@velaros-ai/script": ["@velaros-ai/script@build/runtime-packages/velaros-ai-script-0.2.1.tgz", { "dependencies": { "@velaros-ai/core": "0.4.3", "@velaros-ai/kernel": "0.6.0", "@vscode/ripgrep": "^1.18.0", "diff": "^8.0.4", "execa": "^9.6.1", "globby": "^16.2.4", "typescript": "^5.7.0", "yaml": "^2.9.1", "zod": "^4.3.6" } }, "sha512-OaudkZW7bBqI/w3pq53uDuRdx/WcaqGtBxVgGeE1lJmQmG1OY5btu4gHgV0GwMxU3fmG1/orc6o5HoYje3qaPg=="],
 
     "@velaros-ai/skill-jsts": ["@velaros-ai/skill-jsts@build/runtime-packages/velaros-ai-skill-jsts-0.1.0.tgz", { "dependencies": { "@ast-grep/napi": "0.45.3", "@playwright/test": "1.63.0", "jsonc-parser": "3.3.1", "prettier": "3.9.9", "ts-morph": "28.0.0" } }, "sha512-eLr0BKyw3KRDufy8fnZvQfDRckv5j2SYv3zwj3kTCCYUzaT1ifV9bXRq1yiR1UZsUxYWWX6rMbZDxaMUca0tsA=="],
 

@@ -3,6 +3,28 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
+      "version": "0.4.1",
+      "releasedAt": "2026-10-09",
+      "title": {
+        "zh": "Windows 兼容性更新",
+        "en": "Windows compatibility update"
+      },
+      "added": {
+        "zh": [],
+        "en": []
+      },
+      "fixed": {
+        "zh": [
+          "修复 Windows 路径下 Skill 合同编译失败的问题，支持包含中文和空格的项目目录。",
+          "完善 Windows 原生终端依赖和安装包校验。"
+        ],
+        "en": [
+          "Fix Skill contract compilation on Windows, including project paths containing spaces and non-ASCII characters.",
+          "Correct Windows native terminal dependencies and packaged application validation."
+        ]
+      }
+    },
+    {
       "version": "0.4.0",
       "releasedAt": "2026-10-08",
       "title": {

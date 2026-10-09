@@ -6,6 +6,7 @@ import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const maximumConcurrency = 4
+const testFileTimeoutMilliseconds = 120_000
 const testFilePattern = /\.test\.(?:ts|js|mjs|cjs)$/u
 
 export async function discoverTestFiles(rootDirectory) {
@@ -71,9 +72,12 @@ async function main() {
   const startedAt = performance.now()
   let results
   try {
-    results = await runWithConcurrency(testFiles, maximumConcurrency, async (file) => {
+    results = await runWithConcurrency(testFiles, maximumConcurrency, async (file, index) => {
       if (interruptedSignal) return interruptedResult(file, interruptedSignal)
-      return runTestFile({ activeChildren, file, repositoryRoot })
+      console.info(`START ${path.relative(repositoryRoot, file)}`)
+      const result = await runTestFile({ activeChildren, file, repositoryRoot })
+      printResult(result, index + 1, testFiles.length, repositoryRoot)
+      return result
     })
   } finally {
     process.off('SIGINT', onSigint)
@@ -84,10 +88,9 @@ async function main() {
 
   let failureCount = 0
   let testCount = 0
-  for (const [index, result] of results.entries()) {
+  for (const result of results) {
     if (!result.ok) failureCount += 1
     testCount += result.testCount
-    printResult(result, index + 1, results.length, repositoryRoot)
   }
 
   const elapsedSeconds = ((performance.now() - startedAt) / 1_000).toFixed(2)
@@ -120,6 +123,13 @@ function runTestFile({ activeChildren, file, repositoryRoot }) {
     const stdout = []
     const stderr = []
     let spawnError
+    let timedOut = false
+    const timeout = setTimeout(() => {
+      timedOut = true
+      terminateProcessTree(child, 'SIGKILL')
+      child.stdout.destroy()
+      child.stderr.destroy()
+    }, testFileTimeoutMilliseconds)
 
     activeChildren.add(child)
     child.stdout.on('data', (chunk) => stdout.push(Buffer.from(chunk)))
@@ -128,6 +138,7 @@ function runTestFile({ activeChildren, file, repositoryRoot }) {
       spawnError = error
     })
     child.once('close', (code, signal) => {
+      clearTimeout(timeout)
       activeChildren.delete(child)
       terminateProcessTree(child, 'SIGTERM')
       const capturedStdout = Buffer.concat(stdout).toString('utf8')
@@ -136,10 +147,12 @@ function runTestFile({ activeChildren, file, repositoryRoot }) {
         code,
         durationMilliseconds: performance.now() - startedAt,
         file,
-        ok: !spawnError && code === 0,
+        ok: !spawnError && !timedOut && code === 0,
         signal,
         spawnError,
-        stderr: capturedStderr,
+        stderr: timedOut
+          ? `${capturedStderr}\nTest file exceeded ${testFileTimeoutMilliseconds}ms: ${relativeFile}\n`
+          : capturedStderr,
         stdout: capturedStdout,
         testCount: readTestCount(`${capturedStdout}\n${capturedStderr}`),
       })
