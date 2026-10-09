@@ -17,13 +17,13 @@ void describe('Workbench chat composer parity', () => {
     assert.doesNotMatch(adapter, /density="compact"/)
   })
 
-  void test('sends like Desktop: guidance mid-run, continuation after an interrupted run', () => {
+  void test('sends like Desktop: queue mid-run, explicit guidance from the queue', () => {
     const adapter = readFileSync(
       path.resolve(process.cwd(), 'src/renderer/src/runtime/standaloneWorkbenchChatAdapter.tsx'),
       'utf8'
     )
 
-    // 运行中（本会话有在途的一轮）发送 = 引导注入当前这一轮；在途的一轮是引导的前提，不是阻挡条件。
+    // 运行中输入统一排队，只有队列项的发送动作向当前任务追加引导。
     // 外部引擎不收运行中的引导：它跑着时发的消息排队，这一轮结束后再发。
     assert.match(
       adapter,
@@ -34,7 +34,6 @@ void describe('Workbench chat composer parity', () => {
       /const engineRunActive = !!engine && chat\.status === 'running' && hasActiveRun\n/
     )
     assert.match(adapter, /canEnqueue: canSteerRun \|\| engineRunActive,/)
-    assert.match(adapter, /canGuideCurrentTask: !engine,/)
     assert.match(
       adapter,
       /return await sendRunGuidance\(\s*text,\s*selections,\s*appendWorkbenchChatFileReferences\(/
@@ -46,7 +45,7 @@ void describe('Workbench chat composer parity', () => {
     )
     assert.match(adapter, /markStandaloneGuidanceApplied\(state\.messages, runtime\.inputId\)/)
     // 等一句话回答时输入框就是回答：直接交给主进程，不另起一轮。
-    assert.match(adapter, /if \(isAwaitingInput\) return answerPendingInput\(value\)/)
+    assert.match(adapter, /answer: answerPendingInput,/)
     assert.match(adapter, /answering: isAwaitingInput,/)
     assert.match(adapter, /\.input\(\{ sessionId: chat\.sessionId, projectRoot, answer \}\)/)
     // 中止 / 失败后的下一条消息续接被打断的那一轮，而不是另起新一轮。

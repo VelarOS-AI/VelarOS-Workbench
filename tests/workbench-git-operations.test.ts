@@ -307,6 +307,7 @@ void describe('Workbench Git cherry-pick and revert', () => {
     })
   })
 
+  // 创建仓库并依次验证冲突的多条恢复路径，Windows 原生 Git 启动需要更长时间。
   void test('a conflicting cherry-pick can be continued, skipped or aborted', async () => {
     await withDiverged(true, async ({ root, service, main, feature }) => {
       const stopped = await service.performOperation(root, { action: 'cherry-pick', target: feature })
@@ -335,7 +336,7 @@ void describe('Workbench Git cherry-pick and revert', () => {
       assert.deepEqual(await subjects(root), ['feature edit', 'main edit', 'base'])
       assert.equal(await readFile(join(root, 'shared.txt'), 'utf8'), 'picked\n')
     })
-  })
+  }, 30_000)
 
   void test('reverts a commit with a new commit, a merge commit against its mainline', async () => {
     await withDiverged(false, async ({ root, service, main }) => {

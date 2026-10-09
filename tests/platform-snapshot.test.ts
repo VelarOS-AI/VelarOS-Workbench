@@ -47,6 +47,12 @@ test("local release snapshots verify archive bytes, package identity and the com
     const snapshotFile = path.join(root, "resources/runtime-snapshot.json");
     await writeFile(snapshotFile, JSON.stringify(snapshot));
     assert.deepEqual(await verifyPlatformSnapshot(root), snapshot);
+    Object.assign(snapshot.packages[0], { source: { repository: 'unexpected/source', tag: 'v0.4.3', sourceCommit: 'b'.repeat(40) } })
+    await writeFile(snapshotFile, JSON.stringify(snapshot))
+    await assert.rejects(verifyPlatformSnapshot(root), /Invalid dependency snapshot source/u)
+    Reflect.deleteProperty(snapshot.packages[0], 'source')
+    await writeFile(snapshotFile, JSON.stringify(snapshot))
+
     const lock = {
       overrides: { "@velaros-ai/core": specification },
       packages: {

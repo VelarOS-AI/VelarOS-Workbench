@@ -114,6 +114,7 @@ import {
   forgetStandaloneChatSession,
   registerStandaloneChatSession,
 } from './standaloneChatSessionRegistry'
+import { sendWorkbenchComposerDraft } from './standaloneComposerSubmission'
 import { useStandaloneModelPricing } from './standaloneModelPricing'
 import { forgetStandaloneQueuedDrafts, useStandaloneQueuedDrafts } from './standaloneQueuedDrafts'
 import {
@@ -1214,8 +1215,7 @@ function StandaloneWorkbenchChatSessionSurface({
   }
   const isAwaitingInput = chat.status === 'awaiting-input'
   const isAwaitingConfirmation = chat.status === 'awaiting-confirmation'
-  // 这一轮正在跑：输入框保持可用，发送即引导；显式「结束后发送」进排队。外部引擎不收运行中的引导，
-  // 它跑着时发的消息一律排队，这一轮结束后再发。
+  // 运行中输入框发送统一入队；队列项的发送动作可向当前内置 Agent 追加引导。
   const canSteerRun = chat.status === 'running' && hasActiveRun && !engine
   const engineRunActive = !!engine && chat.status === 'running' && hasActiveRun
   const queuedDrafts = useStandaloneQueuedDrafts({
@@ -1441,38 +1441,29 @@ function StandaloneWorkbenchChatSessionSurface({
   }
 
   /**
-   * 输入框的发送入口：等一句话回答时就是回答；运行中显式选「结束后发送」进排队，其余交给 submit（运行中即
-   * 引导）。以「受理」为界返回——输入框在返回前一直处于发送中，不能让它等整轮跑完。
+   * 输入框发送：等待回答时直接回答，运行中加入队列，空闲时发起任务。
+   * 以「受理」为界返回，避免输入框等待整轮执行结束。
    */
   function sendComposerDraft(draft?: ChatInputSendDraft): Promise<void> {
-    const value = draft?.value ?? prompt
-    const draftFiles = draft?.files ?? files
-    if (isAwaitingInput) return answerPendingInput(value)
-    // 引导通道只带文本：运行中附带文件的消息改为本轮结束后发送；外部引擎跑着时发的一律排队。
-    if (
-      (canSteerRun && (draft?.delivery === 'after-current' || draftFiles.length > 0)) ||
-      engineRunActive
-    ) {
-      if (
-        !value.trim() &&
-        draftFiles.length === 0 &&
-        browserSelections.length === 0 &&
-        selectedFileReferencePaths.length === 0
-      )
-        return Promise.resolve()
-      queuedDrafts.enqueue({
-        value,
-        files: draftFiles,
-        context: composerContext,
-      })
-      setPrompt('')
-      setFiles([])
-      setBrowserSelections([])
-      setSelectedFileReferencePaths([])
-      return Promise.resolve()
-    }
-    return new Promise<void>((resolve) => {
-      void submit(value, draftFiles, { onAccepted: resolve }).finally(resolve)
+    return sendWorkbenchComposerDraft({
+      draft,
+      value: prompt,
+      files,
+      context: composerContext,
+      answering: isAwaitingInput,
+      canEnqueue: canSteerRun || engineRunActive,
+      answer: answerPendingInput,
+      enqueue: queuedDrafts.enqueue,
+      clear: () => {
+        setPrompt('')
+        setFiles([])
+        setBrowserSelections([])
+        setSelectedFileReferencePaths([])
+      },
+      submit: (value, draftFiles) =>
+        new Promise<void>((resolve) => {
+          void submit(value, draftFiles, { onAccepted: resolve }).finally(resolve)
+        }),
     })
   }
 
@@ -2093,11 +2084,8 @@ function StandaloneWorkbenchChatSessionSurface({
         },
         queue: {
           canEnqueue: canSteerRun || engineRunActive,
-          canGuideCurrentTask: !engine,
           answering: isAwaitingInput,
-          isPaused: queuedDrafts.isPaused,
           errorMessage: queuedDrafts.errorMessage,
-          onResume: queuedDrafts.resume,
           queuedDrafts: queuedDrafts.drafts,
           drainingId: queuedDrafts.drainingId,
           isQueueDraining: queuedDrafts.isDraining,
@@ -2132,17 +2120,7 @@ function StandaloneWorkbenchChatSessionSurface({
                   queuedDrafts.remove(id)
               }
             : undefined,
-          onQueuedDraftReturnToInput: (id: string) => {
-            const draft = queuedDrafts.take(id)
-            if (!draft) return
-            setPrompt(draft.value)
-            setFiles(draft.files)
-            const context = draft.context ?? EmptyWorkbenchComposerContext
-            setComposerContext(snapshotWorkbenchComposerContext(context))
-            setFileReferencePaths((current) =>
-              appendWorkbenchChatFileReferences(current, context.selectedFileReferencePaths)
-            )
-          },
+          onQueuedDraftEditingChange: queuedDrafts.setEditingId,
           onQueuedDraftRunNow: queuedDrafts.runNow,
         },
         execution: {
@@ -2231,7 +2209,6 @@ function StandaloneWorkbenchChatSessionSurface({
       queuedDrafts.drafts,
       queuedDrafts.drainingId,
       queuedDrafts.errorMessage,
-      queuedDrafts.isPaused,
       reasoningLevel,
       modelSelector,
       engine,

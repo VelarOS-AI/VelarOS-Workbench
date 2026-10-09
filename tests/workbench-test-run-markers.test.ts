@@ -35,7 +35,8 @@ function readSource(relativePath: string): string {
 function parse(source: string): EditorState {
   const state = EditorState.create({ doc: source, extensions: [javascript({ typescript: true })] })
   assert.ok(ensureSyntaxTree(state, source.length, 5_000), 'the document should parse')
-  return state
+  // ensureSyntaxTree 推进解析上下文，空事务把完整语法树同步到不可变的编辑器状态。
+  return state.update({}).state
 }
 
 void describe('run markers of a test file', () => {

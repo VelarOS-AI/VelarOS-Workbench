@@ -11,7 +11,7 @@
         "@velaros-ai/kernel": "file:build/runtime-packages/velaros-ai-kernel-0.6.0.tgz",
         "@velaros-ai/model": "file:build/runtime-packages/velaros-ai-model-0.10.0.tgz",
         "@velaros-ai/script": "file:build/runtime-packages/velaros-ai-script-0.2.1.tgz",
-        "@velaros-ai/ui": "0.2.54",
+        "@velaros-ai/ui": "file:build/runtime-packages/velaros-ai-ui-0.2.55.tgz",
         "@velaros-ai/velaros": "file:build/runtime-packages/velaros-ai-velaros-0.6.0.tgz",
         "gpt-tokenizer": "3.4.0",
         "pyright": "^1.1.411",
@@ -118,6 +118,7 @@
     "@velaros-ai/model": "file:build/runtime-packages/velaros-ai-model-0.10.0.tgz",
     "@velaros-ai/script": "file:build/runtime-packages/velaros-ai-script-0.2.1.tgz",
     "@velaros-ai/skill-jsts": "file:build/runtime-packages/velaros-ai-skill-jsts-0.1.0.tgz",
+    "@velaros-ai/ui": "file:build/runtime-packages/velaros-ai-ui-0.2.55.tgz",
     "@velaros-ai/velaros": "file:build/runtime-packages/velaros-ai-velaros-0.6.0.tgz",
   },
   "packages": {
@@ -801,7 +802,7 @@
 
     "@velaros-ai/skill-jsts": ["@velaros-ai/skill-jsts@build/runtime-packages/velaros-ai-skill-jsts-0.1.0.tgz", { "dependencies": { "@ast-grep/napi": "0.45.3", "@playwright/test": "1.63.0", "jsonc-parser": "3.3.1", "prettier": "3.9.9", "ts-morph": "28.0.0" } }, "sha512-eLr0BKyw3KRDufy8fnZvQfDRckv5j2SYv3zwj3kTCCYUzaT1ifV9bXRq1yiR1UZsUxYWWX6rMbZDxaMUca0tsA=="],
 
-    "@velaros-ai/ui": ["@velaros-ai/ui@0.2.54", "https://npm.pkg.github.com/download/@velaros-ai/ui/0.2.54/dbbe17a2e203d8bcad79c1bbca24afe14341c301", { "dependencies": { "@phosphor-icons/react": "^2.1.10", "@radix-ui/react-dialog": "^1.1.15", "@radix-ui/react-label": "^2.1.8", "@radix-ui/react-select": "^2.2.6", "@radix-ui/react-separator": "^1.1.8", "@radix-ui/react-slot": "^1.2.4", "@radix-ui/react-switch": "^1.2.6", "@radix-ui/react-tabs": "^1.1.13", "@radix-ui/react-tooltip": "^1.2.8", "@streamdown/cjk": "^1.0.3", "@streamdown/code": "^1.1.1", "@streamdown/math": "^1.0.2", "@streamdown/mermaid": "^1.0.2", "ahooks": "^3.9.7", "class-variance-authority": "^0.7.1", "clsx": "^2.1.1", "react-day-picker": "^9.14.0", "streamdown": "^2.5.0", "tailwind-merge": "^3.5.0", "type-fest": "^4.41.0" }, "peerDependencies": { "react": "^19.0.0", "react-dom": "^19.0.0" } }, "sha512-eJLU6/J/iN0LkV5dAS/6yhQrYN0mMnhY5ap7OFx6Kq5NJnaK9m8RnQ2S6GZHR48ML2DcKEO1HYazANYuQmmT5w=="],
+    "@velaros-ai/ui": ["@velaros-ai/ui@build/runtime-packages/velaros-ai-ui-0.2.55.tgz", { "dependencies": { "@phosphor-icons/react": "^2.1.10", "@radix-ui/react-dialog": "^1.1.15", "@radix-ui/react-label": "^2.1.8", "@radix-ui/react-select": "^2.2.6", "@radix-ui/react-separator": "^1.1.8", "@radix-ui/react-slot": "^1.2.4", "@radix-ui/react-switch": "^1.2.6", "@radix-ui/react-tabs": "^1.1.13", "@radix-ui/react-tooltip": "^1.2.8", "@streamdown/cjk": "^1.0.3", "@streamdown/code": "^1.1.1", "@streamdown/math": "^1.0.2", "@streamdown/mermaid": "^1.0.2", "ahooks": "^3.9.7", "class-variance-authority": "^0.7.1", "clsx": "^2.1.1", "react-day-picker": "^9.14.0", "streamdown": "^2.5.0", "tailwind-merge": "^3.5.0", "type-fest": "^4.41.0" }, "peerDependencies": { "react": "^19.0.0", "react-dom": "^19.0.0" } }, "sha512-74El/vAhFfP/IRHKmqBccGusbKjnCpGfp5p3n4NKosDm17B3taWbOH4QsYzItv3+uXINHO29UhuBjPgif8esGw=="],
 
     "@velaros-ai/velaros": ["@velaros-ai/velaros@build/runtime-packages/velaros-ai-velaros-0.6.0.tgz", { "dependencies": { "@codemirror/lang-python": "^6.2.1", "@modelcontextprotocol/sdk": "^1.31.0", "@napi-rs/canvas": "1.0.8", "@velaros-ai/context": "0.9.0", "@velaros-ai/core": "0.4.3", "@velaros-ai/kernel": "0.6.0", "@velaros-ai/model": "0.10.0", "@velaros-ai/script": "0.2.0", "@velaros-ai/skill-jsts": "0.1.0", "diff": "^8.0.4", "docx": "^9.6.1", "exceljs": "^4.4.0", "execa": "^9.6.1", "gifenc": "^1.0.3", "jszip": "^3.10.1", "mammoth": "^1.12.0", "parse5": "^7.3.0", "pdf-lib": "1.17.1", "pdfjs-dist": "6.2.108", "semver": "7.8.5", "typescript": "^5.7.0", "yaml": "2.9.1", "zod": "^4.3.6" }, "peerDependencies": { "@types/react": "^19.0.0", "@velaros-ai/agent": "^9.5.0", "electron": ">=41.0.0", "react": "^19.0.0" }, "optionalPeers": ["@types/react", "electron", "react"] }, "sha512-sLwPTSgZ7V1R2ujw1c/ip/I84G7NmyOH929/NzPAJJbeONetVwXBb0zeTxz38/LbkB2lA7GOQOjF2A7uAOLiJg=="],
 

@@ -85,17 +85,36 @@ function loadNodePty(): NodePtyModule {
 
 /** 生产用的工厂：真正的 node-pty。 */
 export const nodePtyFactory: WorkbenchPtyFactory = {
-  processTree: { list: listWorkbenchProcessTree, signal: signalWorkbenchProcesses },
+  processTree: {
+    list: listWorkbenchProcessTree,
+    signal: signalWorkbenchProcesses,
+  },
   readCwd: readWorkbenchProcessCwd,
   spawn: (file, args, options) => {
     const env: Record<string, string> = {}
-    for (const [key, value] of Object.entries(options.env)) if (value !== undefined) env[key] = value
-    return loadNodePty().spawn(file, options.windowsVerbatimArguments ? args.join(' ') : args, {
-      name: options.name,
-      cols: options.cols,
-      rows: options.rows,
-      cwd: options.cwd,
-      env,
-    })
+    for (const [key, value] of Object.entries(options.env))
+      if (value !== undefined) env[key] = value
+    const pty = loadNodePty().spawn(
+      file,
+      options.windowsVerbatimArguments ? args.join(' ') : args,
+      {
+        name: options.name,
+        cols: options.cols,
+        rows: options.rows,
+        cwd: options.cwd,
+        env,
+      }
+    )
+    return {
+      pid: pty.pid,
+      onData: (listener) => pty.onData(listener),
+      onExit: (listener) => pty.onExit(listener),
+      write: (data) => pty.write(data),
+      resize: (cols, rows) => pty.resize(cols, rows),
+      // ConPTY 只接受关闭，不支持 POSIX 信号；进程树的终止由 processTree 负责。
+      kill: (signal) => (process.platform === 'win32' ? pty.kill() : pty.kill(signal)),
+      pause: () => pty.pause(),
+      resume: () => pty.resume(),
+    }
   },
 }

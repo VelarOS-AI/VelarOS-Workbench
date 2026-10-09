@@ -1,6 +1,6 @@
 {
   "name": "velaros-workbench",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "private": true,
   "description": "VelarOS Workbench standalone Electron IDE.",
   "desktopName": "velaros-workbench.desktop",
@@ -45,7 +45,7 @@
     "@velaros-ai/kernel": "file:build/runtime-packages/velaros-ai-kernel-0.6.0.tgz",
     "@velaros-ai/model": "file:build/runtime-packages/velaros-ai-model-0.10.0.tgz",
     "@velaros-ai/script": "file:build/runtime-packages/velaros-ai-script-0.2.1.tgz",
-    "@velaros-ai/ui": "0.2.54",
+    "@velaros-ai/ui": "file:build/runtime-packages/velaros-ai-ui-0.2.55.tgz",
     "@velaros-ai/velaros": "file:build/runtime-packages/velaros-ai-velaros-0.6.0.tgz",
     "gpt-tokenizer": "3.4.0",
     "pyright": "^1.1.411",
@@ -154,6 +154,7 @@
     "@velaros-ai/agent": "file:build/runtime-packages/velaros-ai-agent-9.5.0.tgz",
     "@velaros-ai/skill-jsts": "file:build/runtime-packages/velaros-ai-skill-jsts-0.1.0.tgz",
     "@velaros-ai/script": "file:build/runtime-packages/velaros-ai-script-0.2.1.tgz",
-    "@velaros-ai/velaros": "file:build/runtime-packages/velaros-ai-velaros-0.6.0.tgz"
+    "@velaros-ai/velaros": "file:build/runtime-packages/velaros-ai-velaros-0.6.0.tgz",
+    "@velaros-ai/ui": "file:build/runtime-packages/velaros-ai-ui-0.2.55.tgz"
   }
 }

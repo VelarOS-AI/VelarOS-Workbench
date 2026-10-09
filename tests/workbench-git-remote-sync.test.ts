@@ -113,6 +113,7 @@ void describe('Workbench Git pull, fetch and sync', () => {
     })
   })
 
+  // 创建仓库并依次验证冲突的多条恢复路径，Windows 原生 Git 启动需要更长时间。
   void test('a conflicting pull hands the files to the conflict group, and sync then does not push', async () => {
     await withClones(async (clones) => {
       await writeFile(join(clones.other, 'shared.txt'), 'from other\n')
@@ -140,7 +141,7 @@ void describe('Workbench Git pull, fetch and sync', () => {
         (await git(clones.local, ['rev-parse', 'HEAD'])).trim()
       )
     })
-  })
+  }, 30_000)
 
   void test('a conflicting rebase pull says so, and committing waits for the rebase', async () => {
     await withClones(async (clones) => {

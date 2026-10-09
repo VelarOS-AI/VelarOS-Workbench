@@ -3,11 +3,11 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
-      "version": "0.4.1",
+      "version": "0.4.2",
       "releasedAt": "2026-10-09",
       "title": {
-        "zh": "Windows 兼容性更新",
-        "en": "Windows compatibility update"
+        "zh": "消息排队与编辑体验更新",
+        "en": "Message queue and editing improvements"
       },
       "added": {
         "zh": [],
@@ -15,12 +15,20 @@
       },
       "fixed": {
         "zh": [
+          "运行中发送消息默认进入队列，点击队列项发送可立即引导当前任务。",
+          "排队消息可原地编辑，回车保存；出错或停止后保留队列，等待手动发送。",
+          "收紧队列间距，精简引导状态；复制按钮与时间悬浮显示，保持消息位置。",
+          "修复 Windows 终端进程退出时的异常。",
           "修复 Windows 路径下 Skill 合同编译失败的问题，支持包含中文和空格的项目目录。",
           "修复 Windows 编辑器未保存内容的类型分析、命令引号及终端进程退出处理。",
           "修复 Windows 引用预览和 Claude Code 启动参数，改进长文件的调试变量提示。",
           "完善 Windows 原生终端依赖和安装包校验。"
         ],
         "en": [
+          "Messages sent during a run enter the queue; send a queued item to guide the active task immediately.",
+          "Edit queued messages in place and press Enter to save. Failed or stopped runs retain queued messages for manual delivery.",
+          "Tighten queue spacing and guidance labels; show copy actions and timestamps as overlays without shifting messages.",
+          "Fix an exception when closing terminal processes on Windows.",
           "Fix Skill contract compilation on Windows, including project paths containing spaces and non-ASCII characters.",
           "Correct TypeScript analysis of unsaved Windows editor buffers, shell quoting, and terminal process shutdown.",
           "Fix Windows reference previews and Claude Code launch arguments, and improve debug hover values in long files.",

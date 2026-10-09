@@ -53,6 +53,15 @@ async function readPlatformSnapshot(root) {
       names.has(entry.name)
     )
       throw new Error(`Invalid Platform snapshot package: ${entry.name}`);
+    if (
+      Object.hasOwn(entry, "source") &&
+      (!entry.source ||
+        entry.name !== "@velaros-ai/ui" ||
+        entry.source.repository !== "VelarOS-AI/VelarOS-UI" ||
+        entry.source.tag !== `v${entry.version}` ||
+        !/^[a-f0-9]{40}$/u.test(entry.source.sourceCommit ?? ""))
+    )
+      throw new Error(`Invalid dependency snapshot source: ${entry.name}`);
     names.add(entry.name);
   }
   return snapshot;
@@ -102,9 +111,9 @@ export async function verifyPlatformSnapshot(
           [
             "release",
             "download",
-            snapshot.tag,
+            entry.source?.tag ?? snapshot.tag,
             "--repo",
-            snapshot.repository,
+            entry.source?.repository ?? snapshot.repository,
             "--pattern",
             entry.fileName,
             "--dir",

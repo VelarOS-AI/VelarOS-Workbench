@@ -1,4 +1,4 @@
-import { useEffect, useSyncExternalStore } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 
 import type { ChatInputQueuedDraft } from '@velaros-ai/ui/conversation/composer'
 
@@ -12,11 +12,11 @@ import {
 /**
  * 「当前任务结束后发送」的排队草稿，按会话隔离。
  *
- * 语义与 Desktop 的 QueuedComposerDraftStore 对齐：运行中显式选「结束后发送」才入队；本轮一收尾
+ * 语义与 Desktop 的 QueuedComposerDraftStore 对齐：运行中的输入框发送直接入队；本轮一收尾
  * 自动取出第一项按普通消息发出，一次只出一项（发出去又开始运行，下一项继续等）；排队中的草稿可以
- * 编辑、上下移动、删除、放回输入框、立即运行，或在运行中改为引导注入当前这一轮。
+ * 原地编辑、上下移动、删除、立即运行，或在运行中作为引导注入当前这一轮。
  *
- * 两种情况不自动出队，只能由用户「继续」或「立即运行」：
+ * 两种情况不自动出队，只能由用户点击队列项发送：
  * - 某一项投递没被受理（模型未配置、账号未登录……）——它留在队首并挡住自动出队，否则每次快照
  *   变化都会重投一遍、把同一条警告弹个不停；
  * - 会话停止中 / 已中止 / 已失败——用户刚按了停止，不能替他把下一条自动发出去。
@@ -197,16 +197,24 @@ export function useStandaloneQueuedDrafts({
   scopeId: string
   /** 当前会话还在运行（或等待交互）时为 true：队列不出队，「立即运行」也不可用。 */
   isRunBlocked: boolean
-  /** 停止中 / 已中止 / 已失败：保留队列但不自动出队，用户「继续」或「立即运行」才发。 */
+  /** 停止中 / 已中止 / 已失败：保留队列但不自动出队，用户点击队列项发送才发。 */
   pauseAutomaticDrain?: boolean
   submitDraft: (draft: WorkbenchQueuedDraft) => Promise<boolean>
 }) {
+  const [editingId, setEditingId] = useState<string | null>(null)
   const snapshot = useSyncExternalStore(store.subscribe, () => store.snapshot(scopeId))
   const send = useMemoizedFn(submitDraft)
 
   useEffect(() => {
-    void store.drain(scopeId, { busy: isRunBlocked, paused: pauseAutomaticDrain }, send)
-  }, [isRunBlocked, pauseAutomaticDrain, scopeId, send, snapshot])
+    void store.drain(
+      scopeId,
+      {
+        busy: isRunBlocked || snapshot.drafts.some((draft) => draft.id === editingId),
+        paused: pauseAutomaticDrain,
+      },
+      send
+    )
+  }, [isRunBlocked, pauseAutomaticDrain, scopeId, send, snapshot, editingId])
 
   const runNow = async (id: string): Promise<void> => {
     if (!isRunBlocked) await store.submit(scopeId, id, send)
@@ -216,18 +224,12 @@ export function useStandaloneQueuedDrafts({
     drafts: snapshot.drafts as WorkbenchQueuedDraft[],
     drainingId: snapshot.drainingId,
     isDraining: !!snapshot.drainingId,
-    isPaused: pauseAutomaticDrain || snapshot.blockedId !== null,
     errorMessage: snapshot.errorMessage,
     enqueue: (draft: WorkbenchQueueInput) => store.enqueue(scopeId, draft),
     remove: (id: string) => store.remove(scopeId, id),
     update: (id: string, value: string) => store.edit(scopeId, id, value),
     move: (id: string, direction: 'up' | 'down') => store.move(scopeId, id, direction),
-    take: (id: string) => store.take(scopeId, id),
+    setEditingId,
     runNow,
-    /** 继续：发出队首一项；它被受理后会话进入运行，其余项照常在本轮结束后自动出队。 */
-    resume: async () => {
-      const first = store.snapshot(scopeId).drafts[0]
-      if (first) await runNow(first.id)
-    },
   }
 }

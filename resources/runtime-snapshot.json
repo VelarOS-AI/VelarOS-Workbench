@@ -67,6 +67,19 @@
       "sizeBytes": 5292329,
       "sha256": "f3acc4ab7985648c9753c43df25cf9c266a01ab85296e567a330a06ec9d7ae10",
       "integrity": "sha512-sLwPTSgZ7V1R2ujw1c/ip/I84G7NmyOH929/NzPAJJbeONetVwXBb0zeTxz38/LbkB2lA7GOQOjF2A7uAOLiJg=="
+    },
+    {
+      "name": "@velaros-ai/ui",
+      "version": "0.2.55",
+      "fileName": "velaros-ai-ui-0.2.55.tgz",
+      "sizeBytes": 929409,
+      "sha256": "81db4f39615cc3aaa19c512c95429cd5834de31fdf51c9d95da0d47a3a6afd44",
+      "integrity": "sha512-74El/vAhFfP/IRHKmqBccGusbKjnCpGfp5p3n4NKosDm17B3taWbOH4QsYzItv3+uXINHO29UhuBjPgif8esGw==",
+      "source": {
+        "repository": "VelarOS-AI/VelarOS-UI",
+        "tag": "v0.2.55",
+        "sourceCommit": "e2109a5f51958a11c984eb481c38eafac8015913"
+      }
     }
   ]
 }
