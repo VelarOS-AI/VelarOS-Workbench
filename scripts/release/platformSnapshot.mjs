@@ -2,7 +2,6 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { lstat, mkdir, mkdtemp, readFile, rename, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -94,9 +93,9 @@ export async function verifyPlatformSnapshot(
       await lstat(archive);
     } catch (error) {
       if (error.code !== "ENOENT" || !downloadMissing) throw error;
-      const staging = await mkdtemp(
-        path.join(tmpdir(), "velaros-runtime-download-"),
-      );
+      const archiveDirectory = path.dirname(archive);
+      await mkdir(archiveDirectory, { recursive: true });
+      const staging = await mkdtemp(path.join(archiveDirectory, ".download-"));
       try {
         execFileSync(
           "gh",
@@ -115,7 +114,6 @@ export async function verifyPlatformSnapshot(
         );
         const downloaded = path.join(staging, entry.fileName);
         await verifyArchive(downloaded, entry);
-        await mkdir(path.dirname(archive), { recursive: true });
         await rename(downloaded, archive);
       } finally {
         await rm(staging, { recursive: true, force: true });
