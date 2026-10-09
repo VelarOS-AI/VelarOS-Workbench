@@ -68,6 +68,7 @@ dmg:
   sign: true
 
 win:
+  icon: resources/icons/icon.ico
   target:
     - zip
     - nsis
