@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs'
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
-import { describe, test } from 'bun:test'
+import { describe, setDefaultTimeout, test } from 'bun:test'
 
 import { parseWorkbenchGitCommitDiff } from '../src/renderer/src/models/git/changesPanel.model'
 
@@ -16,6 +16,9 @@ import {
   porcelain,
   withRepository,
 } from './helpers/gitRepository'
+
+// 一个场景会启动多次真实 Git；Windows CI 上五秒不足以完成冲突与回滚的整条流程。
+setDefaultTimeout(30_000)
 
 /** 一个有基础提交的仓库：tracked.txt 与 other.txt 都已提交。 */
 async function withBaseRepository(run: (root: string) => Promise<void>): Promise<void> {

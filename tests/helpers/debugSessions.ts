@@ -31,7 +31,7 @@ type DebuggerEventOf<TType extends WorkbenchDebuggerEvent['type']> = Extract<
 export function createProcessDebugLauncher(): {
   launcher: WorkbenchDebugLauncher
   /** 每个起过的进程：命令行、输出、进程号。 */
-  launched: Array<{ command: string; cwd: string; env: NodeJS.ProcessEnv; pid: number; output: () => string; closed: Promise<void> }>
+  launched: Array<{ command: string; cwd: string; env: NodeJS.ProcessEnv; pid: number; output: () => string; disposePipes: () => void }>
 } {
   const launched: ReturnType<typeof createProcessDebugLauncher>['launched'] = []
   let nextId = 1
@@ -50,7 +50,6 @@ export function createProcessDebugLauncher(): {
       stdio: ['ignore', 'pipe', 'pipe'],
     })
     let output = ''
-    const closed = new Promise<void>((resolve) => child.once('close', () => resolve()))
     let exit: Nullable<WorkbenchDebugProcessExit> = null
     let forceKillTimer: ReturnType<typeof setTimeout> | undefined
     const exitListeners: Array<(exit: WorkbenchDebugProcessExit) => void> = []
@@ -61,7 +60,10 @@ export function createProcessDebugLauncher(): {
       exit = { exitCode }
       for (const listener of exitListeners.splice(0)) listener(exit)
     })
-    launched.push({ command: options.command, cwd: options.cwd, env, pid: child.pid!, output: () => output, closed })
+    launched.push({
+      command: options.command, cwd: options.cwd, env, pid: child.pid!, output: () => output,
+      disposePipes: () => { child.stdout.destroy(); child.stderr.destroy() },
+    })
 
     const signalGroup = (signal: NodeJS.Signals): void => {
       try {
@@ -180,7 +182,8 @@ export async function createDebugTestProject(
           // arch-guard:silent-catch-ok 进程组已经退出。
         }
       }
-      await Promise.all(launched.map((item) => item.closed))
+      // Bun 在 Windows 上结束 shell 后可能不发管道 close；进程树已停止，显式释放读取端。
+      for (const item of launched) item.disposePipes()
       await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
     },
   }
