@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "repository": "VelarOS-AI/VelarOS-Platform",
-  "tag": "v0.6.58",
-  "sourceCommit": "2b4dc38c1812de57ce61a59c5988661f5c5ad3b0",
+  "tag": "v0.6.59",
+  "sourceCommit": "95f5513a3da70a4a44e13a59380431793c30d96b",
   "packages": [
     {
       "name": "@velaros-ai/core",
@@ -62,11 +62,11 @@
     },
     {
       "name": "@velaros-ai/velaros",
-      "version": "0.6.0",
-      "fileName": "velaros-ai-velaros-0.6.0.tgz",
-      "sizeBytes": 5292329,
-      "sha256": "f3acc4ab7985648c9753c43df25cf9c266a01ab85296e567a330a06ec9d7ae10",
-      "integrity": "sha512-sLwPTSgZ7V1R2ujw1c/ip/I84G7NmyOH929/NzPAJJbeONetVwXBb0zeTxz38/LbkB2lA7GOQOjF2A7uAOLiJg=="
+      "version": "0.6.1",
+      "fileName": "velaros-ai-velaros-0.6.1.tgz",
+      "sizeBytes": 5312659,
+      "sha256": "49f547aaf0c514dbae83e0054fc450eefd7ad1701bf7198df98b56910a14136d",
+      "integrity": "sha512-PHX0uIs1k42oikNM5Wm++XI0sMKqdwVawK9Y0Eo63vuix6i6rGr7K42hrA+TjvOtxR/b7OUr1rP2vFNq76LvHA=="
     },
     {
       "name": "@velaros-ai/ui",

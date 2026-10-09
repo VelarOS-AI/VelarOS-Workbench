@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 
-import { describe, test } from 'bun:test'
+import { describe, jest, test } from 'bun:test'
 
 import {
   createStandaloneRunChangeCapture,
@@ -76,16 +76,25 @@ void describe('Standalone Workbench live run-change capture', () => {
   })
 
   void test('keeps capturing on the max-wait cadence while writes never pause', async () => {
+    jest.useFakeTimers()
     const stub = createCaptureStub()
-    // 并行子 Agent 连着改：写入间隔一直短于静默窗口，只有尾沿防抖的话一次都不会采。
-    const startedAt = Date.now()
-    while (Date.now() - startedAt < MaxDelayMs * 3.5) {
-      stub.capture.request()
-      if (stub.calls > stub.delivered.length) stub.resolveNext(`live-${stub.calls}`)
-      await sleep(DelayMs / 4)
+    try {
+      // 固定写入节奏，不让 Windows CI 的定时器调度延迟改变连续写入场景。
+      for (let elapsed = 0; elapsed < MaxDelayMs * 3.5; elapsed += DelayMs / 4) {
+        stub.capture.request()
+        jest.advanceTimersByTime(DelayMs / 4)
+        if (stub.calls > stub.delivered.length) stub.resolveNext(`live-${stub.calls}`)
+        // 等待采集结果与 finally 清理，再进入下一段时间。
+        await Promise.resolve()
+        await Promise.resolve()
+        await Promise.resolve()
+      }
+      assert.equal(stub.calls, 3)
+      assert.deepEqual(stub.delivered, ['live-1', 'live-2', 'live-3'])
+    } finally {
+      stub.capture.finish()
+      jest.useRealTimers()
     }
-    assert.ok(stub.calls >= 2, `expected periodic captures during continuous writes, got ${stub.calls}`)
-    assert.ok(stub.calls <= 4, `captures should follow the max-wait cadence, got ${stub.calls}`)
   })
 
   void test('the production cadence is an 800ms quiet window with a 3s ceiling', () => {
