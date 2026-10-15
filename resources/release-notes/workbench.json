@@ -3,6 +3,28 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
+      "version": "0.4.4",
+      "releasedAt": "2026-10-15",
+      "title": {
+        "zh": "共享运行时升级",
+        "en": "Shared runtime upgrade"
+      },
+      "added": {
+        "zh": [],
+        "en": []
+      },
+      "fixed": {
+        "zh": [
+          "升级到最新共享运行时，改进长任务的上下文管理、完成检查和中断恢复。",
+          "保留执行证据与工具结果，改进模型流中断的处理与后续任务恢复。"
+        ],
+        "en": [
+          "Upgrade the shared runtime for improved long-task context management, completion checks, and interruption recovery.",
+          "Retain execution evidence and tool results, with improved handling of interrupted model streams and resumed tasks."
+        ]
+      }
+    },
+    {
       "version": "0.4.3",
       "releasedAt": "2026-10-09",
       "title": {
