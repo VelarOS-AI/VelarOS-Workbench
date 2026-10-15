@@ -3,6 +3,26 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
+      "version": "0.4.5",
+      "releasedAt": "2026-10-15",
+      "title": {
+        "zh": "任务验证指导更新",
+        "en": "Task verification guidance"
+      },
+      "added": {
+        "zh": [],
+        "en": []
+      },
+      "fixed": {
+        "zh": [
+          "完善编码任务的验证指导，核对默认测试的发现范围、最终产物入口和已有调用方兼容性，并补验后续修改。"
+        ],
+        "en": [
+          "Clarify coding-task guidance for test discovery, final delivery entry points, existing consumer compatibility, and revalidation after later edits."
+        ]
+      }
+    },
+    {
       "version": "0.4.4",
       "releasedAt": "2026-10-15",
       "title": {

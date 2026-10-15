@@ -12,7 +12,7 @@
         "@velaros-ai/model": "file:build/runtime-packages/velaros-ai-model-0.10.1.tgz",
         "@velaros-ai/script": "file:build/runtime-packages/velaros-ai-script-0.3.0.tgz",
         "@velaros-ai/ui": "file:build/runtime-packages/velaros-ai-ui-0.2.55.tgz",
-        "@velaros-ai/velaros": "file:build/runtime-packages/velaros-ai-velaros-0.6.2.tgz",
+        "@velaros-ai/velaros": "file:build/runtime-packages/velaros-ai-velaros-0.6.3.tgz",
         "gpt-tokenizer": "3.4.0",
         "pyright": "^1.1.411",
         "react": "^19.2.5",
@@ -121,7 +121,7 @@
     "@velaros-ai/script": "file:build/runtime-packages/velaros-ai-script-0.3.0.tgz",
     "@velaros-ai/skill-jsts": "file:build/runtime-packages/velaros-ai-skill-jsts-0.1.0.tgz",
     "@velaros-ai/ui": "file:build/runtime-packages/velaros-ai-ui-0.2.55.tgz",
-    "@velaros-ai/velaros": "file:build/runtime-packages/velaros-ai-velaros-0.6.2.tgz",
+    "@velaros-ai/velaros": "file:build/runtime-packages/velaros-ai-velaros-0.6.3.tgz",
   },
   "packages": {
     "@ai-sdk/anthropic": ["@ai-sdk/anthropic@3.0.128", "", { "dependencies": { "@ai-sdk/provider": "3.0.18", "@ai-sdk/provider-utils": "4.0.57" }, "peerDependencies": { "zod": "^3.25.76 || ^4.1.8" } }, "sha512-xCEEoZrEi6hnTbZgIO8A3rqXvSUkdx9oOfKLrHQrmaGhekxb+DauyekkDExyMFRm9Qr8Azaq43wLie1FTnQc5A=="],
@@ -808,7 +808,7 @@
 
     "@velaros-ai/ui": ["@velaros-ai/ui@build/runtime-packages/velaros-ai-ui-0.2.55.tgz", { "dependencies": { "@phosphor-icons/react": "^2.1.10", "@radix-ui/react-dialog": "^1.1.15", "@radix-ui/react-label": "^2.1.8", "@radix-ui/react-select": "^2.2.6", "@radix-ui/react-separator": "^1.1.8", "@radix-ui/react-slot": "^1.2.4", "@radix-ui/react-switch": "^1.2.6", "@radix-ui/react-tabs": "^1.1.13", "@radix-ui/react-tooltip": "^1.2.8", "@streamdown/cjk": "^1.0.3", "@streamdown/code": "^1.1.1", "@streamdown/math": "^1.0.2", "@streamdown/mermaid": "^1.0.2", "ahooks": "^3.9.7", "class-variance-authority": "^0.7.1", "clsx": "^2.1.1", "react-day-picker": "^9.14.0", "streamdown": "^2.5.0", "tailwind-merge": "^3.5.0", "type-fest": "^4.41.0" }, "peerDependencies": { "react": "^19.0.0", "react-dom": "^19.0.0" } }, "sha512-74El/vAhFfP/IRHKmqBccGusbKjnCpGfp5p3n4NKosDm17B3taWbOH4QsYzItv3+uXINHO29UhuBjPgif8esGw=="],
 
-    "@velaros-ai/velaros": ["@velaros-ai/velaros@build/runtime-packages/velaros-ai-velaros-0.6.2.tgz", { "dependencies": { "@codemirror/lang-python": "^6.2.1", "@modelcontextprotocol/sdk": "^1.31.0", "@napi-rs/canvas": "1.0.8", "@velaros-ai/context": "0.10.0", "@velaros-ai/core": "0.4.3", "@velaros-ai/kernel": "0.6.1", "@velaros-ai/model": "0.10.1", "@velaros-ai/script": "0.3.0", "@velaros-ai/skill-jsts": "0.1.0", "diff": "^8.0.4", "docx": "^9.6.1", "exceljs": "^4.4.0", "execa": "^9.6.1", "gifenc": "^1.0.3", "jszip": "^3.10.1", "mammoth": "^1.12.0", "parse5": "^7.3.0", "pdf-lib": "1.17.1", "pdfjs-dist": "6.2.108", "semver": "7.8.5", "typescript": "^5.7.0", "yaml": "2.9.1", "zod": "^4.3.6" }, "peerDependencies": { "@types/react": "^19.0.0", "@velaros-ai/agent": "^9.9.0", "electron": ">=41.0.0", "react": "^19.0.0" }, "optionalPeers": ["@types/react", "electron", "react"] }, "sha512-e0WTV2X2dJieWjP2xE3uUE/IP18b13KfVNn7oQlBggybdtLG7nFPgP97llvkozHkMnnJsXMhyY7UPhWp/jzzMg=="],
+    "@velaros-ai/velaros": ["@velaros-ai/velaros@build/runtime-packages/velaros-ai-velaros-0.6.3.tgz", { "dependencies": { "@codemirror/lang-python": "^6.2.1", "@modelcontextprotocol/sdk": "^1.31.0", "@napi-rs/canvas": "1.0.8", "@velaros-ai/context": "0.10.0", "@velaros-ai/core": "0.4.3", "@velaros-ai/kernel": "0.6.1", "@velaros-ai/model": "0.10.1", "@velaros-ai/script": "0.3.0", "@velaros-ai/skill-jsts": "0.1.0", "diff": "^8.0.4", "docx": "^9.6.1", "exceljs": "^4.4.0", "execa": "^9.6.1", "gifenc": "^1.0.3", "jszip": "^3.10.1", "mammoth": "^1.12.0", "parse5": "^7.3.0", "pdf-lib": "1.17.1", "pdfjs-dist": "6.2.108", "semver": "7.8.5", "typescript": "^5.7.0", "yaml": "2.9.1", "zod": "^4.3.6" }, "peerDependencies": { "@types/react": "^19.0.0", "@velaros-ai/agent": "^9.9.0", "electron": ">=41.0.0", "react": "^19.0.0" }, "optionalPeers": ["@types/react", "electron", "react"] }, "sha512-kaapQ7kPi34QvSkNDT2B8kTBYsQL47jD3TVunz8hcSk+1n3shJjgZ18Fc5bPis854NpZM+E+6dSxJHGWiFIG9A=="],
 
     "@vercel/oidc": ["@vercel/oidc@3.2.0", "", {}, "sha512-UycprH3T6n3jH0k44NHMa7pnFHGu/N05MjojYr+Mc6I7obkoLIJujSWwin1pCvdy/eOxrI/l3uDLQsmcrOb4ug=="],
 
