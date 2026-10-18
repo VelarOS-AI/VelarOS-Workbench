@@ -241,7 +241,7 @@ void describe('controlling a running debug session', () => {
         project.sessions.controlDebugSession({ sessionId, action }, 1)
 
       // 等它进了事件循环（只剩定时器在跑）再动手。
-      await waitFor(() => project.launched[0]!.output().includes('started'), 'the program to start')
+      await waitFor(() => /^started\r?$/mu.test(project.launched[0]!.output()), 'the program to start')
 
       // 程序在跑的时候按单步、继续：没有意义，也不报错，更不会把下一次停下算成「单步」。
       await control('step-over')

@@ -12,7 +12,7 @@
         "@velaros-ai/model": "file:build/runtime-packages/velaros-ai-model-0.10.1.tgz",
         "@velaros-ai/script": "file:build/runtime-packages/velaros-ai-script-0.3.0.tgz",
         "@velaros-ai/ui": "file:build/runtime-packages/velaros-ai-ui-0.2.55.tgz",
-        "@velaros-ai/velaros": "file:build/runtime-packages/velaros-ai-velaros-0.6.3.tgz",
+        "@velaros-ai/velaros": "file:build/runtime-packages/velaros-ai-velaros-0.6.4.tgz",
         "gpt-tokenizer": "3.4.0",
         "pyright": "^1.1.411",
         "react": "^19.2.5",
@@ -100,12 +100,12 @@
         "zod": "^4.3.6",
       },
       "optionalDependencies": {
-        "node-bin-darwin-arm64": "24.15.0",
-        "node-darwin-x64": "24.15.0",
-        "node-linux-arm64": "24.15.0",
-        "node-linux-x64": "24.15.0",
-        "node-win-arm64": "24.15.0",
-        "node-win-x64": "24.15.0",
+        "node-bin-darwin-arm64": "24.22.0",
+        "node-darwin-x64": "24.22.0",
+        "node-linux-arm64": "24.22.0",
+        "node-linux-x64": "24.22.0",
+        "node-win-arm64": "24.22.0",
+        "node-win-x64": "24.22.0",
       },
     },
   },
@@ -121,7 +121,7 @@
     "@velaros-ai/script": "file:build/runtime-packages/velaros-ai-script-0.3.0.tgz",
     "@velaros-ai/skill-jsts": "file:build/runtime-packages/velaros-ai-skill-jsts-0.1.0.tgz",
     "@velaros-ai/ui": "file:build/runtime-packages/velaros-ai-ui-0.2.55.tgz",
-    "@velaros-ai/velaros": "file:build/runtime-packages/velaros-ai-velaros-0.6.3.tgz",
+    "@velaros-ai/velaros": "file:build/runtime-packages/velaros-ai-velaros-0.6.4.tgz",
   },
   "packages": {
     "@ai-sdk/anthropic": ["@ai-sdk/anthropic@3.0.128", "", { "dependencies": { "@ai-sdk/provider": "3.0.18", "@ai-sdk/provider-utils": "4.0.57" }, "peerDependencies": { "zod": "^3.25.76 || ^4.1.8" } }, "sha512-xCEEoZrEi6hnTbZgIO8A3rqXvSUkdx9oOfKLrHQrmaGhekxb+DauyekkDExyMFRm9Qr8Azaq43wLie1FTnQc5A=="],
@@ -808,7 +808,7 @@
 
     "@velaros-ai/ui": ["@velaros-ai/ui@build/runtime-packages/velaros-ai-ui-0.2.55.tgz", { "dependencies": { "@phosphor-icons/react": "^2.1.10", "@radix-ui/react-dialog": "^1.1.15", "@radix-ui/react-label": "^2.1.8", "@radix-ui/react-select": "^2.2.6", "@radix-ui/react-separator": "^1.1.8", "@radix-ui/react-slot": "^1.2.4", "@radix-ui/react-switch": "^1.2.6", "@radix-ui/react-tabs": "^1.1.13", "@radix-ui/react-tooltip": "^1.2.8", "@streamdown/cjk": "^1.0.3", "@streamdown/code": "^1.1.1", "@streamdown/math": "^1.0.2", "@streamdown/mermaid": "^1.0.2", "ahooks": "^3.9.7", "class-variance-authority": "^0.7.1", "clsx": "^2.1.1", "react-day-picker": "^9.14.0", "streamdown": "^2.5.0", "tailwind-merge": "^3.5.0", "type-fest": "^4.41.0" }, "peerDependencies": { "react": "^19.0.0", "react-dom": "^19.0.0" } }, "sha512-74El/vAhFfP/IRHKmqBccGusbKjnCpGfp5p3n4NKosDm17B3taWbOH4QsYzItv3+uXINHO29UhuBjPgif8esGw=="],
 
-    "@velaros-ai/velaros": ["@velaros-ai/velaros@build/runtime-packages/velaros-ai-velaros-0.6.3.tgz", { "dependencies": { "@codemirror/lang-python": "^6.2.1", "@modelcontextprotocol/sdk": "^1.31.0", "@napi-rs/canvas": "1.0.8", "@velaros-ai/context": "0.10.0", "@velaros-ai/core": "0.4.3", "@velaros-ai/kernel": "0.6.1", "@velaros-ai/model": "0.10.1", "@velaros-ai/script": "0.3.0", "@velaros-ai/skill-jsts": "0.1.0", "diff": "^8.0.4", "docx": "^9.6.1", "exceljs": "^4.4.0", "execa": "^9.6.1", "gifenc": "^1.0.3", "jszip": "^3.10.1", "mammoth": "^1.12.0", "parse5": "^7.3.0", "pdf-lib": "1.17.1", "pdfjs-dist": "6.2.108", "semver": "7.8.5", "typescript": "^5.7.0", "yaml": "2.9.1", "zod": "^4.3.6" }, "peerDependencies": { "@types/react": "^19.0.0", "@velaros-ai/agent": "^9.9.0", "electron": ">=41.0.0", "react": "^19.0.0" }, "optionalPeers": ["@types/react", "electron", "react"] }, "sha512-kaapQ7kPi34QvSkNDT2B8kTBYsQL47jD3TVunz8hcSk+1n3shJjgZ18Fc5bPis854NpZM+E+6dSxJHGWiFIG9A=="],
+    "@velaros-ai/velaros": ["@velaros-ai/velaros@build/runtime-packages/velaros-ai-velaros-0.6.4.tgz", { "dependencies": { "@codemirror/lang-python": "^6.2.1", "@modelcontextprotocol/sdk": "^1.31.0", "@napi-rs/canvas": "1.0.8", "@velaros-ai/context": "0.10.0", "@velaros-ai/core": "0.4.3", "@velaros-ai/kernel": "0.6.1", "@velaros-ai/model": "0.10.1", "@velaros-ai/script": "0.3.0", "@velaros-ai/skill-jsts": "0.1.0", "diff": "^8.0.4", "docx": "^9.6.1", "exceljs": "^4.4.0", "execa": "^9.6.1", "gifenc": "^1.0.3", "jszip": "^3.10.1", "mammoth": "^1.12.0", "parse5": "^7.3.0", "pdf-lib": "1.17.1", "pdfjs-dist": "6.2.108", "semver": "7.8.5", "typescript": "^5.7.0", "yaml": "2.9.1", "zod": "^4.3.6" }, "peerDependencies": { "@types/react": "^19.0.0", "@velaros-ai/agent": "^9.9.0", "electron": ">=41.0.0", "react": "^19.0.0" }, "optionalPeers": ["@types/react", "electron", "react"] }, "sha512-dNignOf5YxsvJd6Ql44ow26GryJP70qdbbWe9qY+m2dShDIUZtEVZUTuS/tqyVlCUoXyiCfTDGmRZN0gNyqzTw=="],
 
     "@vercel/oidc": ["@vercel/oidc@3.2.0", "", {}, "sha512-UycprH3T6n3jH0k44NHMa7pnFHGu/N05MjojYr+Mc6I7obkoLIJujSWwin1pCvdy/eOxrI/l3uDLQsmcrOb4ug=="],
 
@@ -1848,9 +1848,9 @@
 
     "node-api-version": ["node-api-version@0.2.1", "", { "dependencies": { "semver": "^7.3.5" } }, "sha512-2xP/IGGMmmSQpI1+O/k72jF/ykvZ89JeuKX3TLJAYPDVLUalrshrLHkeVcCCZqG/eEa635cr8IBYzgnDvM2O8Q=="],
 
-    "node-bin-darwin-arm64": ["node-bin-darwin-arm64@24.15.0", "", { "os": "darwin", "cpu": "arm64", "bin": { "node": "bin/node" } }, "sha512-fqNiDWsGJf533mQDs/i9r4qlt3MVQFUcpxK+3bzD0b7AIRByR/4IbopJ2RFrwQp5TONvdHv7u0XK+vZ3mJW/Ng=="],
+    "node-bin-darwin-arm64": ["node-bin-darwin-arm64@24.22.0", "", { "os": "darwin", "cpu": "arm64", "bin": { "node": "bin/node" } }, "sha512-vcD7IMiHzzsanVcQU0whxtEdU6FbQpHyXzV5buIZfIzRKAbvd/yF9kJt7g1sP4p5Nm5gQHOzSCOGVU9gnCegKQ=="],
 
-    "node-darwin-x64": ["node-darwin-x64@24.15.0", "", { "os": "darwin", "cpu": "x64", "bin": { "node": "bin/node" } }, "sha512-GCvet4OgTpndB28GaBNqaPyIfSdOTR40DKpT1r7h7ftrAi4Y/tR4p2rETixBkI454oYVeHt808GksCJ3iCHfxw=="],
+    "node-darwin-x64": ["node-darwin-x64@24.22.0", "", { "os": "darwin", "cpu": "x64", "bin": { "node": "bin/node" } }, "sha512-2SrpZkyqXG3QtamWZoIidQkLc8kXr2yx/vA02qFJSuoNS+TQgJghgM1lmDLYrsqrXnYj6KODGfnFE4+X4sEc9A=="],
 
     "node-gyp": ["node-gyp@12.4.0", "", { "dependencies": { "env-paths": "^2.2.0", "exponential-backoff": "^3.1.1", "graceful-fs": "^4.2.6", "nopt": "^9.0.0", "proc-log": "^6.0.0", "semver": "^7.3.5", "tar": "^7.5.4", "tinyglobby": "^0.2.12", "undici": "^6.25.0", "which": "^6.0.0" }, "bin": { "node-gyp": "bin/node-gyp.js" } }, "sha512-OMcPNvqTCFUnNaBlmdgq+lfNqY7gTiSmNRDjY3uAXRyudeKZEZxu3CLtjMQrx4zZxCX2b/mpNqTtwuCJgXhHkw=="],
 
@@ -1858,15 +1858,15 @@
 
     "node-int64": ["node-int64@0.4.0", "", {}, "sha512-O5lz91xSOeoXP6DulyHfllpq+Eg00MWitZIbtPfoSEvqIHdl5gfcY6hYzDWnj0qD5tz52PI08u9qUvSVeUBeHw=="],
 
-    "node-linux-arm64": ["node-linux-arm64@24.15.0", "", { "os": "linux", "cpu": "arm64", "bin": { "node": "bin/node" } }, "sha512-/hvw43Kn2CSqFOVbRgVEZk8dT+WAQ96TtP2OrK4Ru5+63TIH6Vg+GKLYt6kocG6Fj8NGtbftrytESoxmIMmAbw=="],
+    "node-linux-arm64": ["node-linux-arm64@24.22.0", "", { "os": "linux", "cpu": "arm64", "bin": { "node": "bin/node" } }, "sha512-xbI0deR0+gzJizE0IdT7x3ewSqtvWW7tx6QlJIBI6IszUY41yrPmOeS+b6WkA7DmSS8VKJRcMthWVwO1LbjamQ=="],
 
-    "node-linux-x64": ["node-linux-x64@24.15.0", "", { "os": "linux", "cpu": "x64", "bin": { "node": "bin/node" } }, "sha512-G35ERldRkV41Igf2JarykT89NfwENelshM1G2HcGUwFMMQcoL54Q2e4jr/SndyWVoWBsMho5uyesryyTH7WXVA=="],
+    "node-linux-x64": ["node-linux-x64@24.22.0", "", { "os": "linux", "cpu": "x64", "bin": { "node": "bin/node" } }, "sha512-O8CHD5heFxunkgkYr3y7DADTb73UQBiWe4hD2xxLbxyYyKP/+ZFfexX+W5cuswtxOcgtrGSKrU2JhzATGgzFPA=="],
 
     "node-releases": ["node-releases@2.0.51", "", {}, "sha512-wRNIrw4DmVLKQlbgOMdkMx27Wrpzes2hh5Jtbi2bjPd+4wJstWIqP5A+lscnqbm0xxmT5Bpg8Lec5ItEBwx6BQ=="],
 
-    "node-win-arm64": ["node-win-arm64@24.15.0", "", { "os": "win32", "cpu": "arm64", "bin": { "node": "bin/node.exe" } }, "sha512-/M4Ei7BOH6oPbZi6YQSlTIZPQXgXCz23DrvfGHZ+6UNBQ9Hr1YkoUbRsfpw4SGf7JxTyOI1q8omzavKUv7nQHQ=="],
+    "node-win-arm64": ["node-win-arm64@24.22.0", "", { "os": "win32", "cpu": "arm64", "bin": { "node": "bin/node.exe" } }, "sha512-lg/whLuFRvGgVn/8KxHKAo+vTCdQgMHqzxKMlI3Y32P/MzSUjvSiVg0QIc42Gg3llvHVJ8Sp36FmQ6hfDkRldA=="],
 
-    "node-win-x64": ["node-win-x64@24.15.0", "", { "os": "win32", "cpu": "x64", "bin": { "node": "bin/node.exe" } }, "sha512-sGOH2vVJYJJxSmdPP3Ku1+3qPinYfQcAeaMfvFFOEveFkMmen8E13RYgbt83RKkiAt6jlgJVEK1I1cC8xPKhEw=="],
+    "node-win-x64": ["node-win-x64@24.22.0", "", { "os": "win32", "cpu": "x64", "bin": { "node": "bin/node.exe" } }, "sha512-ViWFVg5B2DIWi9AhCItzf02wzwBS4nE/852My2yb5EG471WvU3UWI0ocU/b0qU/ZtrUVLPI8ggBuUUy9/S01rw=="],
 
     "nopt": ["nopt@9.0.0", "", { "dependencies": { "abbrev": "^4.0.0" }, "bin": { "nopt": "bin/nopt.js" } }, "sha512-Zhq3a+yFKrYwSBluL4H9XP3m3y5uvQkB/09CwDruCiRmR/UJYnn9W4R48ry0uGC70aeTPKLynBtscP9efFFcPw=="],
 

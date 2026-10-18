@@ -6,6 +6,7 @@ import path from 'node:path'
 import { describe, test } from 'bun:test'
 import type { BrowserWindow } from 'electron'
 
+import createConfig from '../electron.vite.config'
 import {
   installWorkbenchWindowState,
   readWorkbenchWindowState,
@@ -50,7 +51,6 @@ class FakeWorkbenchWindow extends EventEmitter {
 
 void describe('Workbench window and chat chrome details', () => {
   void test('shares page classes while keeping component modules isolated in the styles directory', async () => {
-    const { default: createConfig } = await import('../electron.vite.config')
     assert.equal(typeof createConfig, 'function')
     assert(typeof createConfig === 'function')
     const config = await createConfig({ command: 'build', mode: 'production' })

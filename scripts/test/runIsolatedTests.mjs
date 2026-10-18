@@ -6,6 +6,8 @@ import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const maximumConcurrency = 4
+// Windows 同时启动多组 Git/PTY 集成测试会争抢磁盘；逐文件执行保留每项原有超时预算。
+const nativeConcurrency = process.platform === 'win32' ? 1 : maximumConcurrency
 const testFileTimeoutMilliseconds = 120_000
 const testFilePattern = /\.test\.(?:ts|js|mjs|cjs)$/u
 
@@ -72,7 +74,7 @@ async function main() {
   const startedAt = performance.now()
   let results
   try {
-    results = await runWithConcurrency(testFiles, maximumConcurrency, async (file, index) => {
+    results = await runWithConcurrency(testFiles, nativeConcurrency, async (file, index) => {
       if (interruptedSignal) return interruptedResult(file, interruptedSignal)
       console.info(`START ${path.relative(repositoryRoot, file)}`)
       const result = await runTestFile({ activeChildren, file, repositoryRoot })

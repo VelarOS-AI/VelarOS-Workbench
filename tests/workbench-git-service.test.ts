@@ -355,48 +355,76 @@ void describe('Workbench Git service', () => {
     })
   })
 
-  void test('the first push of a branch goes to its configured remote, the default one, or the only one', async () => {
-    await withTempDirectory(async (base) => {
-      const origin = join(base, 'origin.git')
-      const fork = join(base, 'fork.git')
-      await git(base, ['init', '-q', '--bare', origin])
-      await git(base, ['init', '-q', '--bare', fork])
-      const root = join(base, 'work')
-      await mkdir(root)
-      await initRepository(root)
-      await writeFile(join(root, 'a.txt'), 'a\n')
-      await commitAll(root, 'base')
-      const head = (await git(root, ['rev-parse', 'HEAD'])).trim()
-      const service = createService()
-
-      // 唯一的远端不叫 origin。
-      await git(root, ['remote', 'add', 'upstream', fork])
-      const first = await service.performRemoteAction(root, 'upload')
-      assert.equal(first.action.upstream, 'upstream/main')
-      assert.equal((await git(fork, ['rev-parse', 'refs/heads/main'])).trim(), head)
-
-      await git(root, ['remote', 'add', 'origin', origin])
-      await git(root, ['branch', 'topic'])
-      await assert.rejects(
-        service.performRemoteAction(root, 'upload', { branch: 'topic' }),
-        isAppError('VALIDATION', /2 个远端（origin、upstream）/)
-      )
-
-      await git(root, ['config', 'remote.pushDefault', 'origin'])
-      const pushed = await service.performRemoteAction(root, 'upload', { branch: 'topic' })
-      // 推的是菜单里选的分支，不是当前分支。
-      assert.equal(pushed.action.branch, 'topic')
-      assert.equal(pushed.action.upstream, 'origin/topic')
-      assert.equal((await git(origin, ['rev-parse', 'refs/heads/topic'])).trim(), head)
-      await assert.rejects(git(origin, ['rev-parse', '--verify', 'refs/heads/main']))
-
-      // 分支自己配置的推送远端优先。
-      await git(root, ['branch', 'topic2'])
-      await git(root, ['config', 'branch.topic2.pushRemote', 'upstream'])
-      const configured = await service.performRemoteAction(root, 'upload', { branch: 'topic2' })
-      assert.equal(configured.action.upstream, 'upstream/topic2')
+  for (const scenario of [
+    {
+      name: 'the only remote even when it is not origin',
+      remotes: ['upstream'],
+      branch: 'main',
+      config: [],
+      expectedRemote: 'upstream'
+    },
+    {
+      name: 'no implicit remote when more than one is available',
+      remotes: ['origin', 'upstream'],
+      branch: 'topic',
+      config: [],
+      expectedRemote: null
+    },
+    {
+      name: 'the default remote for the selected branch',
+      remotes: ['origin', 'upstream'],
+      branch: 'topic',
+      config: [['remote.pushDefault', 'origin']],
+      expectedRemote: 'origin'
+    },
+    {
+      name: 'the branch remote ahead of the default remote',
+      remotes: ['origin', 'upstream'],
+      branch: 'topic2',
+      config: [
+        ['remote.pushDefault', 'origin'],
+        ['branch.topic2.pushRemote', 'upstream']
+      ],
+      expectedRemote: 'upstream'
+    }
+  ] as const) {
+    void test(`the first push uses ${scenario.name}`, async () => {
+      await withTempDirectory(async (base) => {
+        const root = join(base, 'work')
+        await mkdir(root)
+        await initRepository(root)
+        await writeFile(join(root, 'a.txt'), 'a\n')
+        await commitAll(root, 'base')
+        for (const remote of scenario.remotes) {
+          const directory = join(base, `${remote}.git`)
+          await git(base, ['init', '-q', '--bare', directory])
+          await git(root, ['remote', 'add', remote, directory])
+        }
+        if (scenario.branch !== 'main') await git(root, ['branch', scenario.branch])
+        for (const [key, value] of scenario.config) await git(root, ['config', key, value])
+        const service = createService()
+        const request = scenario.branch === 'main' ? undefined : { branch: scenario.branch }
+        if (!scenario.expectedRemote) {
+          await assert.rejects(
+            service.performRemoteAction(root, 'upload', request),
+            isAppError('VALIDATION', /2 个远端（origin、upstream）/)
+          )
+          return
+        }
+        const pushed = await service.performRemoteAction(root, 'upload', request)
+        assert.equal(pushed.action.branch, scenario.branch)
+        assert.equal(pushed.action.upstream, `${scenario.expectedRemote}/${scenario.branch}`)
+        const destination = join(base, `${scenario.expectedRemote}.git`)
+        assert.equal(
+          (await git(destination, ['rev-parse', `refs/heads/${scenario.branch}`])).trim(),
+          (await git(root, ['rev-parse', 'HEAD'])).trim()
+        )
+        // 菜单选中的分支独立推送，不能顺带推送当前 main 分支。
+        if (scenario.branch !== 'main')
+          await assert.rejects(git(destination, ['rev-parse', '--verify', 'refs/heads/main']))
+      })
     })
-  })
+  }
 
   void test('an un-ignored dependency directory is listed as one entry instead of breaking the status', async () => {
     await withRepository(async (root) => {

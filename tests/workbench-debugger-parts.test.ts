@@ -130,17 +130,20 @@ void describe('debugger source maps', () => {
 
 void describe('debugger script address pattern', () => {
   void test('matches exactly this file, as a file: address or as a plain path', () => {
-    const pattern = new RegExp(buildWorkbenchScriptUrlPattern('/Users/me/my project/a+b (1).test.ts'), 'u')
+    const directory = join(tmpdir(), 'workbench-debugger-pattern', 'my project')
+    const filePath = join(directory, 'a+b (1).test.ts')
+    const fileUrl = pathToFileURL(filePath).href
+    const pattern = new RegExp(buildWorkbenchScriptUrlPattern(filePath), 'u')
     // Node 给模块的地址（特殊字符按百分号编码）。
-    assert.equal(pattern.test('file:///Users/me/my%20project/a+b%20(1).test.ts'), true)
+    assert.equal(pattern.test(fileUrl), true)
     // vm 里跑的脚本（Jest）给的是原样的路径。
-    assert.equal(pattern.test('/Users/me/my project/a+b (1).test.ts'), true)
+    assert.equal(pattern.test(filePath), true)
 
     // 名字里的 `.`、`+`、括号都是字面量，不是正则的记号。
-    assert.equal(pattern.test('/Users/me/my project/aab (1)xtest.ts'), false)
-    assert.equal(pattern.test('/Users/me/my project/a+b (1).test.tsx'), false)
-    assert.equal(pattern.test('/other/Users/me/my project/a+b (1).test.ts'), false)
-    assert.equal(pattern.test('file:///Users/me/my%20project/a+b%20(1).test.ts?v=1'), false)
+    assert.equal(pattern.test(join(directory, 'aab (1)xtest.ts')), false)
+    assert.equal(pattern.test(`${filePath}x`), false)
+    assert.equal(pattern.test(join(tmpdir(), 'other', 'workbench-debugger-pattern', 'my project', 'a+b (1).test.ts')), false)
+    assert.equal(pattern.test(`${fileUrl}?v=1`), false)
   })
 })
 

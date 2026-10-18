@@ -249,7 +249,12 @@ void describe('terminal sessions on a pseudo-terminal', () => {
       assert.equal(pty.options.env.TERM, 'dumb')
       assert.equal(pty.options.name, 'dumb')
       assert.equal(pty.options.env.COLORTERM, 'truecolor')
-      assert.equal(pty.options.env.PATH, process.env.PATH)
+      // Windows 的 process.env 忽略键名大小写，复制给 PTY 的普通对象保留原始拼写。
+      const pathKey = Object.keys(process.env).find((key) =>
+        process.platform === 'win32' ? key.toUpperCase() === 'PATH' : key === 'PATH'
+      )
+      assert.ok(pathKey)
+      assert.equal(pty.options.env[pathKey], process.env[pathKey])
 
       // 不带变量的会话不受前一个会话影响。
       await terminal.startTerminalSession({ projectRoot }, () => undefined, 1)

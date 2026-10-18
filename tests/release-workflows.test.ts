@@ -11,7 +11,7 @@ import {
 } from '../scripts/release/publishUpdateCatalog.mjs'
 
 void describe('release workflows', () => {
-  void test('keeps every GitHub Actions file visibly and fully disabled', async () => {
+  void test('keeps legacy source-repository CI sentinels visibly and fully disabled', async () => {
     const sentinels = new Map([
       ['ci.yml', 'bun run check'],
       [
@@ -44,7 +44,7 @@ void describe('release workflows', () => {
     }
   })
 
-  void test('uses local native-platform release commands without an Actions release workflow', async () => {
+  void test('keeps native-platform packaging and finalization in the source repository', async () => {
     await assert.rejects(
       readFile(path.resolve('.github/workflows/release.yml'), 'utf8'),
       /ENOENT/u

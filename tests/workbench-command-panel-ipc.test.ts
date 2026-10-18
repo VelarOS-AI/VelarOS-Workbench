@@ -5,6 +5,9 @@ import { join } from 'node:path'
 
 import { describe, mock, test } from 'bun:test'
 
+import { currentPlatform } from '@velaros-ai/core/platform'
+
+import { analyzeWorkbenchCommandExecution } from '../src/main/workspace/CommandExecutionPolicy'
 import { WorkbenchFsChannels } from '../src/shared/workbenchFs'
 
 /**
@@ -45,8 +48,15 @@ void describe('Workbench command panel IPC', () => {
     try {
       await mkdir(join(root, 'cache', 'nested'), { recursive: true })
       const runCommand = await registerCommandPanelIpc()
+      const shellKind = currentPlatform.getShellKind(currentPlatform.getPreferredShellPath(process.env))
+      const command = shellKind === 'cmd'
+        ? 'rmdir /s /q cache'
+        : shellKind === 'pwsh' || shellKind === 'powershell'
+          ? 'Remove-Item -LiteralPath cache -Recurse -Force'
+          : 'rm -r cache'
+      assert.equal(analyzeWorkbenchCommandExecution(command, root).isDangerous, true)
 
-      const result = await runCommand({ projectRoot: root, command: process.platform === 'win32' ? 'rmdir /s /q cache' : 'rm -r cache' }) as {
+      const result = await runCommand({ projectRoot: root, command }) as {
         ok: boolean
         value?: { success: boolean }
       }

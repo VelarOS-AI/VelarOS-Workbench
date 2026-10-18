@@ -92,6 +92,8 @@ apply to engine sessions.
 
 ## Development
 
+当前固定依赖快照为 Platform v0.6.62（Velaros 0.6.4），UI 版本为 0.2.55。开发使用 Node 24.22.0 LTS 与 Bun 1.4.3；安装包携带同版本 Node。
+
 Workbench 使用固定的 Platform 本机依赖快照与 UI 发布版本，锁文件记录完整依赖。先登录具备 Platform 仓库读取权限的 `gh`，并配置 `NODE_AUTH_TOKEN` 后运行：
 
 ```bash
@@ -118,8 +120,8 @@ bun link @velaros-ai/velaros @velaros-ai/model @velaros-ai/script @velaros-ai/co
 Workbench 只消费这些包的公开 dist：改了 Platform 或 UI 要先在对应仓重新构建。
 `check:platform-packages` 只接受同名的兄弟仓链接（`link:@velaros-ai/<name>`）或 GitHub Packages 的正式解析，
 本机快照由 `resources/runtime-snapshot.json` 固定源码提交、版本和哈希；准备命令恢复私有 Platform Release 中的归档，发布检查逐包验证字节与锁文件。升级依赖时，更新清单和快照记录并在受控本机运行
-`bun scripts/refreshPrivatePackageLock.mjs` 刷新锁文件，审查 `bun.lock` 后再提交。仓库中的 Actions 文件仅为
-静态跳过的本机策略哨兵；检查和私有包锁定都不在 GitHub runner 上执行。
+`bun scripts/refreshPrivatePackageLock.mjs` 刷新锁文件，审查 `bun.lock` 后再提交。源码仓库中的旧 CI 与锁文件刷新
+Actions 仍是静态停用哨兵；正式发布由 Desktop 仓库的 `release-workbench.yml` 承载，使用固定 Workbench 提交在各平台原生 runner 上检查与打包。
 
 Platform 的本地存储用 `node:sqlite`，bun 里没有：会话运行时的集成测试
 （`scripts/test/conversationRuntime.test.mjs`）先用 bun 打包，再在 Node 里跑，`bun run test` 已包含它。
@@ -139,8 +141,11 @@ native ESM from `node_modules` at runtime (the script worker entry and ScriptAct
 package path); `afterPack` checks that every static import of those packages resolves inside
 `app.asar`. Release staging verifies pinned dependency snapshots and registry packages before an official build. Signing and notarization credentials are supplied by the release
 environment; they are never stored in this repository. Official packages and candidates are produced
-locally on the matching native host, one platform at a time. Electron Builder publishing is disabled,
-and the repository's inert Actions sentinels cannot build, upload, or read release credentials.
+on matching native hosts, either locally or through the
+[Workbench release workflow](https://github.com/VelarOS-AI/VelarOS-Desktop/actions/workflows/release-workbench.yml)
+hosted in Desktop's existing signing environment. Native builds may run in parallel; platform
+finalization is serialized to preserve every verified platform in the signed catalog. Electron Builder
+publishing remains disabled, and this repository's old CI sentinels remain inactive.
 
 The public candidate release uses separate manifests: `candidate-*.json` marks a complete build,
 while the Ed25519-signed schema-2 `catalog-*.json` is the only manifest Cloud imports. The catalog

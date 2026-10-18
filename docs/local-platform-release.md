@@ -5,8 +5,29 @@ publishes only the macOS candidate, a Windows host publishes only the Windows ca
 host publishes only the Linux candidate. Electron Builder publishing stays disabled; the maintained
 publisher uploads only a verified platform stage and writes the signed candidate catalog last.
 
-The GitHub Actions release workflow is disabled. Pushing a version tag does not package or publish a
-Workbench release, and release operators do not dispatch a release workflow.
+The maintained [Workbench release workflow](https://github.com/VelarOS-AI/VelarOS-Desktop/actions/workflows/release-workbench.yml)
+runs in the Desktop repository's existing signing environment. It checks out an explicit immutable
+Workbench commit on native Windows x64, Linux x64, and macOS ARM64 runners. Builds run in parallel;
+finalization runs in platform order so concurrent uploads cannot overwrite the shared catalog.
+The Workbench repository's old CI and lock-refresh sentinels stay disabled. Pushing a version tag
+alone does not publish a release.
+
+## Release from Windows or another development host
+
+Commit and push the verified Workbench source and its annotated `v<version>` tag, then dispatch the
+hosted workflow with the full tagged commit:
+
+```powershell
+$workbenchCommit = git rev-parse HEAD
+gh workflow run release-workbench.yml --repo VelarOS-AI/VelarOS-Desktop --ref main -f source_commit=$workbenchCommit -f channel=stable -f dry_run=false
+```
+
+The workflow uses the existing release credentials without copying them into Workbench. It restores
+the pinned Platform archives, installs the frozen lock, checks each native environment, verifies the
+packaged application and Windows update path, and runs the same stage/verify/finalize commands below.
+Mac signing uses Workbench's own bundle identity. A failed platform can be retried without rebuilding
+successful jobs; matching published bytes are reused by the finalizer. Cloud promotion remains the
+separate last step after all three platforms have been verified.
 
 ## Source identity
 

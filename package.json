@@ -1,6 +1,6 @@
 {
   "name": "velaros-workbench",
-  "version": "0.4.5",
+  "version": "0.4.6",
   "private": true,
   "description": "VelarOS Workbench standalone Electron IDE.",
   "desktopName": "velaros-workbench.desktop",
@@ -10,7 +10,7 @@
   },
   "type": "module",
   "main": "./build/electron/main/index.js",
-  "packageManager": "bun@1.3.13",
+  "packageManager": "bun@1.4.3",
   "scripts": {
     "predev": "node scripts/ensureElectronInstalled.mjs",
     "dev": "electron-vite dev",
@@ -46,7 +46,7 @@
     "@velaros-ai/model": "file:build/runtime-packages/velaros-ai-model-0.10.1.tgz",
     "@velaros-ai/script": "file:build/runtime-packages/velaros-ai-script-0.3.0.tgz",
     "@velaros-ai/ui": "file:build/runtime-packages/velaros-ai-ui-0.2.55.tgz",
-    "@velaros-ai/velaros": "file:build/runtime-packages/velaros-ai-velaros-0.6.3.tgz",
+    "@velaros-ai/velaros": "file:build/runtime-packages/velaros-ai-velaros-0.6.4.tgz",
     "gpt-tokenizer": "3.4.0",
     "pyright": "^1.1.411",
     "react": "^19.2.5",
@@ -141,12 +141,12 @@
     "vscode-markdown-languageservice@0.5.0": "patches/vscode-markdown-languageservice@0.5.0.patch"
   },
   "optionalDependencies": {
-    "node-bin-darwin-arm64": "24.15.0",
-    "node-darwin-x64": "24.15.0",
-    "node-linux-arm64": "24.15.0",
-    "node-linux-x64": "24.15.0",
-    "node-win-arm64": "24.15.0",
-    "node-win-x64": "24.15.0"
+    "node-bin-darwin-arm64": "24.22.0",
+    "node-darwin-x64": "24.22.0",
+    "node-linux-arm64": "24.22.0",
+    "node-linux-x64": "24.22.0",
+    "node-win-arm64": "24.22.0",
+    "node-win-x64": "24.22.0"
   },
   "overrides": {
     "@velaros-ai/core": "file:build/runtime-packages/velaros-ai-core-0.4.3.tgz",
@@ -156,7 +156,7 @@
     "@velaros-ai/agent": "file:build/runtime-packages/velaros-ai-agent-9.9.0.tgz",
     "@velaros-ai/skill-jsts": "file:build/runtime-packages/velaros-ai-skill-jsts-0.1.0.tgz",
     "@velaros-ai/script": "file:build/runtime-packages/velaros-ai-script-0.3.0.tgz",
-    "@velaros-ai/velaros": "file:build/runtime-packages/velaros-ai-velaros-0.6.3.tgz",
+    "@velaros-ai/velaros": "file:build/runtime-packages/velaros-ai-velaros-0.6.4.tgz",
     "@velaros-ai/ui": "file:build/runtime-packages/velaros-ai-ui-0.2.55.tgz"
   }
 }
