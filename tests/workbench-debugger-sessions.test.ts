@@ -5,6 +5,8 @@ import { describe, setDefaultTimeout, test } from 'bun:test'
 
 import { currentPlatform } from '@velaros-ai/core/platform'
 
+import { resolveWorkbenchNodeExecutable } from '../src/main/conversation/WorkbenchNodeRuntime'
+
 import {
   createDebugTestProject,
   frameSummary,
@@ -275,6 +277,7 @@ void describe('controlling a running debug session', () => {
       const evaluate = (expression: string, frameId?: string) =>
         project.sessions.evaluate({ sessionId, expression, frameId }, 1)
       assert.equal((await evaluate('typeof process.pid')).value?.text, '"number"')
+      assert.equal((await evaluate(`process.execPath === ${JSON.stringify(resolveWorkbenchNodeExecutable())}`)).value?.text, 'true')
       assert.match((await evaluate('ticks')).error ?? '', /ReferenceError: ticks is not defined/u)
       assert.equal((await evaluate('typeof ticks', outside.frames[0]!.id)).value?.text, '"number"')
       // 表达式自己写错了：是一次没求出来的求值，不是调试器的故障。

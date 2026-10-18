@@ -3,7 +3,7 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
-      "version": "0.4.6",
+      "version": "0.4.7",
       "releasedAt": "2026-10-18",
       "title": {
         "zh": "共享运行时更新",

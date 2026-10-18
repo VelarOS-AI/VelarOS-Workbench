@@ -3,6 +3,9 @@ import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 
+import { currentPlatform } from '@velaros-ai/core/platform'
+
+import { resolveWorkbenchNodeExecutable } from '../../src/main/conversation/WorkbenchNodeRuntime'
 import { CommandHelper } from '../../src/main/workspace/CommandHelper'
 import type {
   WorkbenchDebugLauncher,
@@ -39,7 +42,12 @@ export function createProcessDebugLauncher(): {
   const launcher: WorkbenchDebugLauncher = async (options) => {
     const env = { ...process.env, ...options.env }
     const helper = new CommandHelper()
-    const spec = helper.getShellSpec(options.command)
+    // 登录 shell 会重排 PATH；测试必须调试产品锁定的 Node，而非运行机的另一版本。
+    const shellKind = currentPlatform.getShellKind(currentPlatform.getPreferredShellPath(process.env))
+    const nodeExecutable = currentPlatform.quoteShellArg(resolveWorkbenchNodeExecutable(), { kind: shellKind })
+    const nodeCommand = shellKind === 'pwsh' || shellKind === 'powershell' ? `& ${nodeExecutable}` : nodeExecutable
+    const command = options.command.replace(/^node(?=\s|$)/u, () => nodeCommand)
+    const spec = helper.getShellSpec(command)
     const child = spawn(spec.file, spec.args, {
       cwd: options.cwd,
       env,

@@ -15,6 +15,7 @@ import { tmpdir } from 'node:os'
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
+import { javascriptLanguage } from '@codemirror/lang-javascript'
 import { highlightingFor, syntaxTree } from '@codemirror/language'
 import { EditorState } from '@codemirror/state'
 import { type Highlighter, highlightTree } from '@lezer/highlight'
@@ -502,7 +503,7 @@ void describe('focused Workbench language surface', () => {
       doc: javaScriptSource,
       extensions: [javaScriptLanguage.extension, workbenchCodeMirrorRiderTheme],
     })
-    const javaScriptTree = syntaxTree(javaScriptState)
+    const javaScriptTree = javascriptLanguage.parser.parse(javaScriptSource)
     const javaScriptHighlighter: Highlighter = {
       style: (tags) => highlightingFor(javaScriptState, tags, javaScriptTree.topNode.type),
     }
