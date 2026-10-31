@@ -70,7 +70,7 @@ export async function prepareNodeRuntimePackages(repository, destination) {
           !path
             .split(/[\\/]/u)
             .some((part) =>
-              ['.git', '.DS_Store', ...(bundled.length ? [] : ['node_modules'])].includes(part)
+              ['.git', '.gitkeep', '.DS_Store', ...(bundled.length ? [] : ['node_modules'])].includes(part)
             ) && !SourceOnly.test(path)
         )
       },
@@ -101,7 +101,8 @@ export async function prepareNodeRuntimePackages(repository, destination) {
     }
     return record.manifest.version
   }
-  for (const name of NodeDefaultPackages)
+  // 宿主固定版本优先；同名默认包只复制一次，避免混入另一版本的残留文件。
+  for (const name of NodeDefaultPackages.filter((name) => !WorkbenchNodePackages.includes(name)))
     versions[name] = await copy(name, script.root, destination)
   for (const name of WorkbenchNodePackages)
     versions[name] = await copy(name, repository, destination)
@@ -131,7 +132,7 @@ export async function assertNodeRuntimePackageFiles(directory) {
   const manifest = JSON.parse(await readFile(join(directory, 'manifest.json'), 'utf8'))
   assert.deepEqual(
     Object.keys(manifest.packages).sort(),
-    [...NodeDefaultPackages, ...WorkbenchNodePackages].sort()
+    [...new Set([...NodeDefaultPackages, ...WorkbenchNodePackages])].sort()
   )
   for (const [name, version] of Object.entries(manifest.packages)) {
     const installed = JSON.parse(

@@ -3,7 +3,7 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
-      "version": "0.4.9",
+      "version": "0.4.10",
       "releasedAt": "2026-10-31",
       "title": {
         "zh": "任务恢复与紧凑用量展示",
