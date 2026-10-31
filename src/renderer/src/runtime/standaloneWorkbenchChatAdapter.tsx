@@ -27,6 +27,8 @@ import {
   ChatThinkingVisibilityProvider,
   type ConversationView,
   type ConversationWorkerThread,
+  readConversationLiveActivity,
+  useConversationTranslatorRuntime,
   useScrollToBottom,
 } from '@velaros-ai/ui/conversation'
 import {
@@ -132,7 +134,6 @@ import {
   markStandaloneRun,
   pauseUnappliedRunGuidance,
   readStandaloneContextUsageEstimate,
-  readStandaloneLiveActivity,
   readStandaloneTerminalKind,
   resolveStandaloneRunChangesAnchor,
   restoreStandaloneRunMarkers,
@@ -1175,6 +1176,7 @@ function StandaloneWorkbenchChatSessionSurface({
   const chat = useStandaloneChatState(projectRoot)
   const hasActiveRun = !!findActiveRun(projectRoot, chat.sessionId)
   const { t, locale } = useWorkbenchI18n()
+  const conversationTranslator = useConversationTranslatorRuntime()
   const modelConfig = useStandaloneWorkbenchModelConfig()
   const managedModelState = useStandaloneWorkbenchManagedModels()
   const selectedManagedProvider = getStandaloneWorkbenchManagedProvider(
@@ -1927,11 +1929,12 @@ function StandaloneWorkbenchChatSessionSurface({
     [billingModelId, billingProvider, engine]
   )
   const conversation = useMemo<ConversationView>(() => {
-    // 状态行上「现在在做什么」：限流说明、思考阶段名或正在跑的脚本卡标题。
-    const liveActivity = readStandaloneLiveActivity(
-      activeAssistantMessage,
-      chat.status === 'running' ? chat.connectionRetryMessage : null
-    )
+    const liveActivity = readConversationLiveActivity({
+      runtime: chat,
+      message: activeAssistantMessage,
+      waitMessage: chat.connectionRetryMessage,
+      locale,
+    }, conversationTranslator)
     return {
       sessionId: chat.sessionId,
       activeMemberSessionId: chat.sessionId,
@@ -1993,7 +1996,9 @@ function StandaloneWorkbenchChatSessionSurface({
     chat.teamPhase,
     chat.usageTelemetry,
     chat.workerThreads,
+    conversationTranslator,
     projectRoot,
+    locale,
     t,
   ])
   const isRunActive = isActiveChatRun(chat.status)

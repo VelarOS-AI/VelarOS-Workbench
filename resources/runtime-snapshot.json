@@ -70,15 +70,15 @@
     },
     {
       "name": "@velaros-ai/ui",
-      "version": "0.2.62",
-      "fileName": "velaros-ai-ui-0.2.62.tgz",
-      "sizeBytes": 936229,
-      "sha256": "f8b8de404a54e1685b16f5033dfbd4f28baee88750a7540bf2be3bbb73e326a7",
-      "integrity": "sha512-BlGS4SbKN0DZzwVmyl+96Z/THAP5zz3A8UBvD58b5TIZ3QCbANQEzahbU8EokiJLbaxs5xY24I7OCP9azvT8QA==",
+      "version": "0.2.63",
+      "fileName": "velaros-ai-ui-0.2.63.tgz",
+      "sizeBytes": 938391,
+      "sha256": "6a3f1c2814c0d1f3c4674dd44be1134ecde0d00ec875343180885c3a62320817",
+      "integrity": "sha512-sGnNAJZ2U4htbxuVCI+pRRwiTIy6K4wYERfVoitrkkjp5x9alxDqJAW4E3f0pgRiXkQ4Prmf0vKb5whP5P+gyA==",
       "source": {
         "repository": "VelarOS-AI/VelarOS-UI",
-        "tag": "v0.2.62",
-        "sourceCommit": "704d31c098d3a22a24809fa0b9ffd118e60e9a8b"
+        "tag": "v0.2.63",
+        "sourceCommit": "c0e80b6d3375402b0451099f2af7b9cb87b3186a"
       }
     }
   ]

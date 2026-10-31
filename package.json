@@ -45,7 +45,7 @@
     "@velaros-ai/kernel": "file:build/runtime-packages/velaros-ai-kernel-0.6.2.tgz",
     "@velaros-ai/model": "file:build/runtime-packages/velaros-ai-model-0.10.2.tgz",
     "@velaros-ai/script": "file:build/runtime-packages/velaros-ai-script-0.3.6.tgz",
-    "@velaros-ai/ui": "file:build/runtime-packages/velaros-ai-ui-0.2.62.tgz",
+    "@velaros-ai/ui": "file:build/runtime-packages/velaros-ai-ui-0.2.63.tgz",
     "@velaros-ai/velaros": "file:build/runtime-packages/velaros-ai-velaros-0.6.21.tgz",
     "gpt-tokenizer": "3.4.0",
     "pyright": "^1.1.411",
@@ -157,6 +157,6 @@
     "@velaros-ai/skill-jsts": "file:build/runtime-packages/velaros-ai-skill-jsts-0.1.0.tgz",
     "@velaros-ai/script": "file:build/runtime-packages/velaros-ai-script-0.3.6.tgz",
     "@velaros-ai/velaros": "file:build/runtime-packages/velaros-ai-velaros-0.6.21.tgz",
-    "@velaros-ai/ui": "file:build/runtime-packages/velaros-ai-ui-0.2.62.tgz"
+    "@velaros-ai/ui": "file:build/runtime-packages/velaros-ai-ui-0.2.63.tgz"
   }
 }

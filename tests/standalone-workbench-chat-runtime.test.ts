@@ -15,7 +15,6 @@ import {
   markStandaloneRun,
   pauseUnappliedRunGuidance,
   readStandaloneContextUsageEstimate,
-  readStandaloneLiveActivity,
   readStandaloneModelVisibleText,
   readStandaloneTerminalKind,
   resolveStandaloneRunChangesAnchor,
@@ -544,65 +543,6 @@ void describe('standalone Workbench conversation runtime', () => {
     assert.deepEqual(restoreStandaloneRunMarkers(undefined, messages), [])
   })
 
-  void test('tells what a run is doing now: the retry notice, the thinking stage, else the running script', () => {
-    const idle = { liveTraceSummary: undefined, hasStreamingThinkingBlock: false }
-
-    assert.deepEqual(
-      readStandaloneLiveActivity(
-        message('assistant', [{ type: 'thinking', text: '### 检查项目结构\n继续处理' }]),
-        null
-      ),
-      { liveTraceSummary: '检查项目结构', hasStreamingThinkingBlock: true }
-    )
-    // 半句还没说完的思考不逐字刷状态行。
-    assert.deepEqual(
-      readStandaloneLiveActivity(message('assistant', [{ type: 'thinking', text: '让我' }]), null),
-      { liveTraceSummary: undefined, hasStreamingThinkingBlock: true }
-    )
-
-    const running = message('assistant', [
-      { type: 'text', text: '先看一下入口。' },
-      script('script-1', '读取入口文件', 'succeeded'),
-      script('script-2', '运行类型检查', 'running'),
-    ])
-    assert.deepEqual(readStandaloneLiveActivity(running, null), {
-      liveTraceSummary: '运行类型检查',
-      hasStreamingThinkingBlock: false,
-    })
-    assert.equal(
-      readStandaloneLiveActivity(
-        message('assistant', [script('script-3', '整理改动', 'writing')]),
-        null
-      ).liveTraceSummary,
-      '整理改动'
-    )
-    // 限流、重试时主进程的说明优先，还没开口时也照样显示。
-    assert.equal(
-      readStandaloneLiveActivity(running, '约 3 分钟后自动继续').liveTraceSummary,
-      '约 3 分钟后自动继续'
-    )
-    assert.deepEqual(readStandaloneLiveActivity(null, '约 3 分钟后自动继续'), {
-      liveTraceSummary: '约 3 分钟后自动继续',
-      hasStreamingThinkingBlock: false,
-    })
-
-    assert.deepEqual(
-      readStandaloneLiveActivity(
-        message('assistant', [
-          { type: 'text', text: '好了' },
-          script('script-4', '收尾', 'succeeded'),
-        ]),
-        null
-      ),
-      idle
-    )
-    assert.deepEqual(
-      readStandaloneLiveActivity(message('assistant', [script('script-5', '', 'running')]), null),
-      idle
-    )
-    assert.deepEqual(readStandaloneLiveActivity(null, null), idle)
-  })
-
   void test("keeps only a summary of a run's file changes on its marker", () => {
     const summary = {
       recordId: 'checkpoint-2',
@@ -751,24 +691,6 @@ function guidance(id: string, guidanceStatus: ChatMessage['guidanceStatus']): Ch
 
 function readGuidanceStatuses(messages: readonly ChatMessage[]): unknown[] {
   return messages.map(({ id, guidanceStatus }) => [id, guidanceStatus])
-}
-
-function script(
-  id: string,
-  title: string,
-  status: 'writing' | 'running' | 'succeeded' | 'failed' | 'cancelled'
-): ChatMessage['blocks'][number] {
-  return {
-    type: 'script-execution',
-    id,
-    kind: 'execute',
-    title,
-    status,
-    source: '',
-    sourceTruncated: false,
-    calls: [],
-    durationMs: null,
-  }
 }
 
 function readProgress(runtime: StandaloneConversationRuntime): Record<string, unknown> {

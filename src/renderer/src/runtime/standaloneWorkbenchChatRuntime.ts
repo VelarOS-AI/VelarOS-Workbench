@@ -1,5 +1,5 @@
 import { optionalWhen, toOptional } from '@velaros-ai/core'
-import { type ConversationView, getThinkingStageLabel } from '@velaros-ai/ui/conversation'
+import { type ConversationView } from '@velaros-ai/ui/conversation'
 import { isConversationTurnInputMessage, isRunGuidanceMessage } from '@velaros-ai/ui/conversation/contracts'
 import { type ChatMessage } from '@velaros-ai/ui/conversation/contracts'
 
@@ -492,42 +492,6 @@ function attachStandaloneRunChanges(
   }
 }
 
-/**
- * 运行状态行上「现在在做什么」（Desktop 从执行轨迹算 liveTraceSummary，Workbench 从正在流式的这条回答里
- * 读）：限流、重试时显示主进程的说明；思考块正在输出时取它的阶段名；否则取最近一张还在跑的脚本卡的标题；
- * 都没有时交给状态行按阶段 / 轮次显示。
- */
-function readStandaloneLiveActivity(
-  message: ChatMessage | null | undefined,
-  retryMessage: Nullable<string>
-): { liveTraceSummary: string | undefined; hasStreamingThinkingBlock: boolean } {
-  if (message?.role !== 'assistant')
-    return { liveTraceSummary: retryMessage ?? undefined, hasStreamingThinkingBlock: false }
-  const lastBlock = message.blocks.at(-1)
-  const hasStreamingThinkingBlock = lastBlock?.type === 'thinking' && !!lastBlock.text.trim()
-  if (retryMessage) return { liveTraceSummary: retryMessage, hasStreamingThinkingBlock }
-  const thinkingStage = hasStreamingThinkingBlock ? getThinkingStageLabel(lastBlock.text) : null
-  if (thinkingStage) return { liveTraceSummary: thinkingStage, hasStreamingThinkingBlock }
-  const runningScript = message.blocks.findLast(
-    (block) =>
-      block.type === 'script-execution' &&
-      (block.status === 'running' || block.status === 'writing')
-  )
-  const scriptActivity =
-    runningScript?.type === 'script-execution' && runningScript.title
-      ? runningScript.title
-      : undefined
-  // 外部引擎的会话没有脚本卡：状态行写正在跑的那张工具卡。
-  const runningTool = scriptActivity
-    ? undefined
-    : message.blocks.findLast((block) => block.type === 'tool-call' && block.isRunning)
-  const toolActivity =
-    runningTool?.type === 'tool-call'
-      ? runningTool.title?.trim() || runningTool.toolName
-      : undefined
-  return { liveTraceSummary: scriptActivity ?? toolActivity, hasStreamingThinkingBlock }
-}
-
 function readStandaloneModelVisibleText(message: ChatMessage): string {
   return message.blocks
     .filter(
@@ -629,7 +593,6 @@ export {
   markStandaloneRun,
   pauseUnappliedRunGuidance,
   readStandaloneContextUsageEstimate,
-  readStandaloneLiveActivity,
   readStandaloneModelVisibleText,
   readStandaloneTerminalKind,
   resolveStandaloneRunChangesAnchor,
