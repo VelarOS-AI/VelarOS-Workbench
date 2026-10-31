@@ -1,23 +1,12 @@
 import { execFile } from 'node:child_process'
-import {
-  createCipheriv,
-  createDecipheriv,
-  createHash,
-  randomBytes,
-  randomUUID,
-} from 'node:crypto'
-import {
-  closeSync,
-  mkdirSync,
-  openSync,
-  readFileSync,
-  writeFileSync,
-} from 'node:fs'
-import { mkdir, readFile, rename, rmdir, stat, writeFile } from 'node:fs/promises'
+import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from 'node:crypto'
+import { closeSync, mkdirSync, openSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdir, readFile, rmdir, stat } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { promisify } from 'node:util'
 
 import { velarosSharedResources } from '@velaros-ai/core/platform/shared-resources'
+import { writeFileAtomically } from '@velaros-ai/core/utils/FilePersistence'
 
 import type { WorkbenchAccountIdentity } from '../../shared/workbenchAccount'
 import { workbenchMainText } from '../i18n/workbenchMainMessages'
@@ -134,7 +123,8 @@ export class WorkbenchSharedAccountStore {
         current.refreshToken !== previous.refreshToken
       )
         return { registry, value: current?.account.id === previous.account.id ? current : null }
-      if (next.account.id !== current.account.id) throw new Error('Refreshed account identity changed')
+      if (next.account.id !== current.account.id)
+        throw new Error('Refreshed account identity changed')
       return {
         registry: {
           ...registry,
@@ -168,7 +158,7 @@ export class WorkbenchSharedAccountStore {
           productBindings,
           lastUsedAccountId:
             registry.lastUsedAccountId === accountId && !sharedElsewhere
-              ? Object.keys(sessions)[0] ?? null
+              ? (Object.keys(sessions)[0] ?? null)
               : registry.lastUsedAccountId,
           updatedAt: new Date().toISOString(),
         },
@@ -187,7 +177,7 @@ export class WorkbenchSharedAccountStore {
       const session = legacy?.session ?? null
       const registry: SharedAccountRegistry = {
         schemaVersion: 1,
-        deviceId: legacy?.deviceId ?? await deriveDeviceId(),
+        deviceId: legacy?.deviceId ?? (await deriveDeviceId()),
         sessions: session ? { [session.account.id]: session } : {},
         productBindings: {},
         lastUsedAccountId: session?.account.id ?? null,
@@ -198,12 +188,14 @@ export class WorkbenchSharedAccountStore {
     })
   }
 
-  async #mutate<T>(operation: (registry: SharedAccountRegistry) => {
-    readonly registry: SharedAccountRegistry
-    readonly value: T
-  }): Promise<T> {
+  async #mutate<T>(
+    operation: (registry: SharedAccountRegistry) => {
+      readonly registry: SharedAccountRegistry
+      readonly value: T
+    }
+  ): Promise<T> {
     return this.#withLock(async () => {
-      const registry = (await this.#readRegistry()) ?? await this.#createRegistry()
+      const registry = (await this.#readRegistry()) ?? (await this.#createRegistry())
       const result = operation(registry)
       if (result.registry !== registry) await this.#writeRegistry(result.registry)
       return result.value
@@ -215,7 +207,7 @@ export class WorkbenchSharedAccountStore {
     const session = legacy?.session ?? null
     return {
       schemaVersion: 1,
-      deviceId: legacy?.deviceId ?? await deriveDeviceId(),
+      deviceId: legacy?.deviceId ?? (await deriveDeviceId()),
       sessions: session ? { [session.account.id]: session } : {},
       productBindings: {},
       lastUsedAccountId: session?.account.id ?? null,
@@ -235,9 +227,9 @@ export class WorkbenchSharedAccountStore {
 
   async #writeRegistry(registry: SharedAccountRegistry): Promise<void> {
     await mkdir(this.#rootDir, { recursive: true, mode: 0o700 })
-    const temporaryPath = `${this.#registryPath}.tmp-${process.pid}-${Date.now()}`
-    await writeFile(temporaryPath, this.#encrypt(JSON.stringify(registry)), { mode: 0o600 })
-    await rename(temporaryPath, this.#registryPath)
+    await writeFileAtomically(this.#registryPath, this.#encrypt(JSON.stringify(registry)), {
+      mode: 0o600,
+    })
   }
 
   #readLegacyDesktopState(): LegacyDesktopAccountState | null {
@@ -270,10 +262,12 @@ export class WorkbenchSharedAccountStore {
   #loadOrCreateKey(): Buffer {
     try {
       const key = readFileSync(this.#keyPath)
-      if (key.length !== CredentialKeyBytes) throw new Error(workbenchMainText('account.sharedKeyInvalid'))
+      if (key.length !== CredentialKeyBytes)
+        throw new Error(workbenchMainText('account.sharedKeyInvalid'))
       return key
     } catch (error) {
-      if (!(error instanceof Error) || (error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+      if (!(error instanceof Error) || (error as NodeJS.ErrnoException).code !== 'ENOENT')
+        throw error
     }
     mkdirSync(dirname(this.#keyPath), { recursive: true, mode: 0o700 })
     const key = randomBytes(CredentialKeyBytes)
@@ -299,7 +293,8 @@ export class WorkbenchSharedAccountStore {
         await mkdir(this.#lockPath)
         break
       } catch (error) {
-        if (!(error instanceof Error) || (error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
+        if (!(error instanceof Error) || (error as NodeJS.ErrnoException).code !== 'EEXIST')
+          throw error
         try {
           const lockStat = await stat(this.#lockPath)
           if (Date.now() - lockStat.mtimeMs > 2 * 60_000) {
@@ -324,10 +319,11 @@ export class WorkbenchSharedAccountStore {
 function decryptCredential(encrypted: Buffer, key: Buffer): string {
   const prefixLength = CredentialPayloadPrefix.length
   if (
-    key.length !== CredentialKeyBytes
-    || encrypted.length < prefixLength + CredentialIvBytes + CredentialTagBytes
-    || !encrypted.subarray(0, prefixLength).equals(CredentialPayloadPrefix)
-  ) throw new Error(workbenchMainText('account.sharedCipherInvalid'))
+    key.length !== CredentialKeyBytes ||
+    encrypted.length < prefixLength + CredentialIvBytes + CredentialTagBytes ||
+    !encrypted.subarray(0, prefixLength).equals(CredentialPayloadPrefix)
+  )
+    throw new Error(workbenchMainText('account.sharedCipherInvalid'))
   const iv = encrypted.subarray(prefixLength, prefixLength + CredentialIvBytes)
   const tagOffset = prefixLength + CredentialIvBytes
   const tag = encrypted.subarray(tagOffset, tagOffset + CredentialTagBytes)
@@ -341,9 +337,11 @@ function decryptCredential(encrypted: Buffer, key: Buffer): string {
 }
 
 function parseRegistry(value: unknown): SharedAccountRegistry {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(workbenchMainText('account.sharedFormatInvalid'))
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    throw new Error(workbenchMainText('account.sharedFormatInvalid'))
   const record = value as Record<string, unknown>
-  if (record.schemaVersion !== 1 || typeof record.deviceId !== 'string') throw new Error(workbenchMainText('account.sharedVersionInvalid'))
+  if (record.schemaVersion !== 1 || typeof record.deviceId !== 'string')
+    throw new Error(workbenchMainText('account.sharedVersionInvalid'))
   const sessions: Record<string, WorkbenchCloudSession> = {}
   if (record.sessions && typeof record.sessions === 'object' && !Array.isArray(record.sessions)) {
     for (const [accountId, session] of Object.entries(record.sessions)) {
@@ -351,9 +349,14 @@ function parseRegistry(value: unknown): SharedAccountRegistry {
     }
   }
   const productBindings: Record<string, string | null> = {}
-  if (record.productBindings && typeof record.productBindings === 'object' && !Array.isArray(record.productBindings)) {
+  if (
+    record.productBindings &&
+    typeof record.productBindings === 'object' &&
+    !Array.isArray(record.productBindings)
+  ) {
     for (const [productId, accountId] of Object.entries(record.productBindings)) {
-      if (accountId === null || typeof accountId === 'string') productBindings[productId] = accountId
+      if (accountId === null || typeof accountId === 'string')
+        productBindings[productId] = accountId
     }
   }
   return {
@@ -373,15 +376,19 @@ function isSession(value: unknown): value is WorkbenchCloudSession {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false
   const session = value as Record<string, unknown>
   const account = session.account
-  return !!account && typeof account === 'object' && !Array.isArray(account)
-    && typeof (account as Record<string, unknown>).id === 'string'
-    && typeof (account as Record<string, unknown>).displayName === 'string'
-    && typeof (account as Record<string, unknown>).email === 'string'
-    && typeof session.sessionFamilyId === 'string'
-    && typeof session.accessToken === 'string'
-    && typeof session.accessExpiresAt === 'string'
-    && typeof session.refreshToken === 'string'
-    && typeof session.refreshExpiresAt === 'string'
+  return (
+    !!account &&
+    typeof account === 'object' &&
+    !Array.isArray(account) &&
+    typeof (account as Record<string, unknown>).id === 'string' &&
+    typeof (account as Record<string, unknown>).displayName === 'string' &&
+    typeof (account as Record<string, unknown>).email === 'string' &&
+    typeof session.sessionFamilyId === 'string' &&
+    typeof session.accessToken === 'string' &&
+    typeof session.accessExpiresAt === 'string' &&
+    typeof session.refreshToken === 'string' &&
+    typeof session.refreshExpiresAt === 'string'
+  )
 }
 
 async function deriveDeviceId(): Promise<string> {

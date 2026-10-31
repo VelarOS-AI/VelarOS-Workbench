@@ -35,6 +35,7 @@ interface AgentThread {
   settled: boolean
   activity: Map<string, NonNullable<ConversationAgentProjection['activity']>[number]>
   scripts: ConversationScriptBoard
+  turnTimes: Map<string, number>
 }
 
 /**
@@ -77,7 +78,8 @@ export class ConversationAgentBoard {
           answer: agent.answer.slice(0, ConversationAgentTextMaxChars),
           error: agent.error,
         },
-        agent.sessionId
+        agent.sessionId,
+        agent.startedAt
       )
     }
   }
@@ -89,61 +91,72 @@ export class ConversationAgentBoard {
       let after = thread.after
       let latest = after
       let pending = Number.MAX_SAFE_INTEGER
-      for (;;) {
-        const page = await read({
-          sessionId: thread.sessionId,
-          after,
-          limit: 32,
-          fullContent: true,
-          activityLimit: 1,
-        })
-        for (const trace of page.turns) {
-          this.recordUsage(trace, 'child')
-          for (const child of trace.agents)
-            if (!this.descendants.has(child.sessionId)) this.descendants.set(child.sessionId, 0)
-          thread.scripts.trace(trace)
-          for (const record of trace.records) {
-            if (record.title !== 'act:event' || record.truncated || !record.body) continue
-            let value: unknown
-            try {
-              value = JSON.parse(record.body)
-            } catch {
-              continue
+      try {
+        for (;;) {
+          const page = await read({
+            sessionId: thread.sessionId,
+            after,
+            limit: 32,
+            fullContent: true,
+            activityLimit: 1,
+          })
+          for (const trace of page.turns) {
+            this.recordUsage(trace, 'child')
+            for (const child of trace.agents)
+              if (!this.descendants.has(child.sessionId)) this.descendants.set(child.sessionId, 0)
+            const timestamp = Date.parse(trace.request.createdAt ?? '')
+            thread.turnTimes.set(trace.turnId, Number.isFinite(timestamp) ? timestamp : 0)
+            thread.scripts.trace(trace)
+            for (const record of trace.records) {
+              if (record.title !== 'act:event' || record.truncated || !record.body) continue
+              let value: unknown
+              try {
+                value = JSON.parse(record.body)
+              } catch {
+                continue
+              }
+              if (isPlainObject(value) && value.type === 'accepted' && isString(value.text)) {
+                const id = `conversation:${trace.runId}:${trace.turnId}`
+                thread.activity.set(id, {
+                  kind: 'conversation-text',
+                  timestamp: thread.turnTimes.get(trace.turnId) ?? 0,
+                  payload: {
+                    id,
+                    runId: trace.runId,
+                    turnId: trace.turnId,
+                    phase: 'accepted',
+                    text: value.text,
+                  },
+                })
+              }
             }
-            if (isPlainObject(value) && value.type === 'accepted' && isString(value.text)) {
-              const id = `conversation:${trace.runId}:${trace.turnId}`
-              thread.activity.set(id, {
-                kind: 'conversation-text',
-                payload: {
-                  id,
-                  runId: trace.runId,
-                  turnId: trace.turnId,
-                  phase: 'accepted',
-                  text: value.text,
-                },
-              })
-            }
-          }
-          latest = Math.max(latest, trace.request.sequence - 1)
-          if (
-            trace.executions.some(
-              (execution) => execution.status === 'queued' || execution.status === 'running'
+            latest = Math.max(latest, trace.request.sequence - 1)
+            if (
+              trace.executions.some(
+                (execution) => execution.status === 'queued' || execution.status === 'running'
+              )
             )
-          )
-            pending = Math.min(pending, trace.request.sequence - 1)
+              pending = Math.min(pending, trace.request.sequence - 1)
+          }
+          if (page.nextAfter === null) break
+          if (page.nextAfter <= after)
+            throw new AppError('PROTOCOL', 'Child transcript pagination did not advance')
+          after = page.nextAfter
         }
-        if (page.nextAfter === null) break
-        if (page.nextAfter <= after)
-          throw new AppError('PROTOCOL', 'Child transcript pagination did not advance')
-        after = page.nextAfter
+        if (!isActive(thread.content.status)) thread.scripts.settle()
+      } finally {
+        // 后续页失败时也交付已读历史；没有逐条脚本回调发布，只在本轮末尾发一次。
+        this.publish(thread.turnId, {
+          ...thread.content,
+          activity: [...thread.activity.values()].map((item) => ({
+            ...item,
+            timestamp: thread.turnTimes.get(item.payload.turnId) ?? 0,
+          })),
+        })
       }
+      // 读取和下发都成功才推进，失败后相同快照仍能重试。
       thread.settled = !isActive(thread.content.status)
-      if (thread.settled) thread.scripts.settle()
       thread.after = Math.min(latest, pending)
-      this.publish(thread.turnId, {
-        ...thread.content,
-        activity: [...thread.activity.values()],
-      })
     }
     for (const [sessionId, cursor] of this.descendants) {
       let after = cursor
@@ -178,7 +191,6 @@ export class ConversationAgentBoard {
     const usage = accounting.usage
     const fact = JSON.stringify(usage)
     if (this.usageFacts.get(requestId) === fact) return
-    this.usageFacts.set(requestId, fact)
     const timestamp = Date.parse(trace.request.createdAt ?? '')
     this.emitUsage({
       kind: 'usage-telemetry',
@@ -202,6 +214,7 @@ export class ConversationAgentBoard {
       source: 'provider',
       confidence: 'high',
     })
+    this.usageFacts.set(requestId, fact)
   }
 
   /**
@@ -221,14 +234,27 @@ export class ConversationAgentBoard {
       if (isActive(content.status)) this.publish(turnId, { ...content, status: 'aborted' })
   }
 
-  private publish(turnId: string, content: AgentContent, sessionId?: string): void {
+  private publish(
+    turnId: string,
+    content: AgentContent,
+    sessionId?: string,
+    phaseStartedAt?: number
+  ): void {
     const current = this.threads.get(content.id)
     const next = { ...content, activity: content.activity ?? current?.content.activity }
-    if (current && JSON.stringify(current.content) === JSON.stringify(next)) return
-    const startedAt = current?.startedAt ?? Date.now()
-    if (current) Object.assign(current, { content: next, turnId })
+    const startedAt = phaseStartedAt ?? current?.startedAt ?? Date.now()
+    if (
+      current &&
+      current.startedAt === startedAt &&
+      JSON.stringify(current.content) === JSON.stringify(next)
+    )
+      return
+    // 先下发再登记已交付指纹；传输失败不能吞掉下一次相同内容的重试。
+    this.emit({ ...next, startedAt, updatedAt: Date.now() })
+    if (current) Object.assign(current, { content: next, turnId, startedAt })
     else {
       const activity: AgentThread['activity'] = new Map()
+      const turnTimes = new Map<string, number>()
       this.threads.set(content.id, {
         content: next,
         startedAt,
@@ -237,12 +263,16 @@ export class ConversationAgentBoard {
         after: 0,
         settled: false,
         activity,
+        turnTimes,
         scripts: new ConversationScriptBoard((payload) =>
-          activity.set(payload.id, { kind: 'conversation-script', payload })
+          activity.set(payload.id, {
+            kind: 'conversation-script',
+            payload,
+            timestamp: turnTimes.get(payload.turnId) ?? 0,
+          })
         ),
       })
     }
-    this.emit({ ...next, startedAt, updatedAt: Date.now() })
   }
 }
 

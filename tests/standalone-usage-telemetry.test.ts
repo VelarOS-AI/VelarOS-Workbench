@@ -57,7 +57,7 @@ void describe('standalone usage telemetry', () => {
         kind: 'context-usage-estimate',
         percent: 50,
       }),
-      null,
+      null
     )
     assert.equal(readStandaloneUsageTelemetry(usageEvent({ model: undefined })), null)
     assert.equal(readStandaloneUsageTelemetry(usageEvent({ timestamp: 'later' })), null)
@@ -72,7 +72,7 @@ void describe('standalone usage telemetry', () => {
     for (let turn = 2; turn <= StandaloneUsageTelemetryLimit + 5; turn += 1)
       entries = appendStandaloneUsageTelemetry(
         entries,
-        readEntry({ turn, timestamp: 1_000 + turn }),
+        readEntry({ turn, timestamp: 1_000 + turn })
       )
 
     assert.equal(entries.length, StandaloneUsageTelemetryLimit)
@@ -86,7 +86,7 @@ void describe('standalone usage telemetry', () => {
     assert.equal('kind' in persisted[0]!, false)
     assert.deepEqual(
       restoreStandaloneUsageTelemetry(JSON.parse(JSON.stringify(persisted))),
-      entries,
+      entries
     )
     assert.deepEqual(restoreStandaloneUsageTelemetry('not a list'), [])
   })
@@ -118,9 +118,7 @@ test('child requests at the same time remain distinct; replay replaces the same 
   assert.equal(entries.length, 2)
   assert.equal(summarizeStandaloneUsage(entries).input, 120200)
   assert.equal(summarizeStandaloneUsage(entries).cacheRead, 110100)
-  const restored = restoreStandaloneUsageTelemetry(
-    serializeStandaloneUsageTelemetry(entries),
-  )
+  const restored = restoreStandaloneUsageTelemetry(serializeStandaloneUsageTelemetry(entries))
   assert.equal(restored[1]?.agentRole, 'child')
   assert.equal(restored[1]?.requestId, 'child:a')
   const missing = readEntry({
@@ -132,4 +130,46 @@ test('child requests at the same time remain distinct; replay replaces the same 
   })
   assert.equal(summarizeStandaloneUsage([missing]).missing, 1)
   assert.equal(summarizeStandaloneUsage([missing]).cacheMissing, 1)
+})
+
+test('partial cache coverage uses matched input/cache facts, including true zero and excluding inflight', () => {
+  const rows = [
+    readEntry({ requestId: 'known', inputTokens: 1000, cacheReadInputTokens: 800 }),
+    readEntry({ requestId: 'zero', inputTokens: 200, cacheReadInputTokens: 0 }),
+    readEntry({ requestId: 'input-only', inputTokens: 5000, cacheReadInputTokens: undefined }),
+    readEntry({ requestId: 'cache-only', inputTokens: null, cacheReadInputTokens: 500 }),
+    readEntry({
+      requestId: 'unknown',
+      inputTokens: null,
+      cacheReadInputTokens: undefined,
+      coverage: 'unknown',
+    }),
+    readEntry({
+      requestId: 'inflight',
+      inputTokens: 100,
+      cacheReadInputTokens: 100,
+      coverage: 'inflight',
+    }),
+    readEntry({
+      requestId: 'output-missing',
+      inputTokens: 300,
+      outputTokens: null,
+      cacheReadInputTokens: 200,
+      coverage: 'unknown',
+    }),
+  ]
+  const summary = summarizeStandaloneUsage(rows)
+  assert.equal(summary.requests, 7)
+  assert.equal(summary.cacheKnownRequests, 3)
+  assert.equal(summary.cacheKnownInputTokens, 1500)
+  assert.equal(summary.cacheKnownReadTokens, 1000)
+  assert.equal(summary.input, 6600)
+  const corrected = summarizeStandaloneUsage([
+    ...rows,
+    readEntry({ requestId: 'input-only', inputTokens: 5000, cacheReadInputTokens: 4000 }),
+  ])
+  assert.equal(corrected.requests, 7)
+  assert.equal(corrected.cacheKnownRequests, 4)
+  assert.equal(corrected.cacheKnownInputTokens, 6500)
+  assert.equal(corrected.cacheKnownReadTokens, 5000)
 })

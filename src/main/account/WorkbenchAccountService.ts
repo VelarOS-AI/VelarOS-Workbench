@@ -42,12 +42,38 @@ type GoogleDesktopResult =
   | { readonly status: 'pending'; readonly retryAfterMs: number; readonly expiresAt: string }
   | { readonly status: 'complete'; readonly session: WorkbenchCloudSession }
 
+interface PendingSessionRefresh {
+  readonly previous: WorkbenchCloudSession
+  readonly next: WorkbenchCloudSession
+  readonly revision: number
+}
+
+class CloudAccountRequestError extends Error {
+  public constructor(public readonly status: number) {
+    super(
+      workbenchMainText(
+        status === 401 ? 'account.sessionExpired' : 'account.serviceRequestFailed',
+        { status }
+      )
+    )
+  }
+}
+
 export class WorkbenchAccountService {
   readonly #baseUrl: string
-  #refreshOperation: { token: string; promise: Promise<WorkbenchCloudSession> } | null = null
+  #refreshOperation: {
+    token: string
+    revision: number
+    promise: Promise<WorkbenchCloudSession>
+  } | null = null
+  #sessionRevision = 0
+  #pendingRefresh: PendingSessionRefresh | null = null
+  #rejectedSession: WorkbenchCloudSession | null = null
   #signInOperation: Promise<WorkbenchAccountState> | null = null
-  #publicModelPricing: { readonly catalog: ModelPricingCatalog; readonly expiresAt: number } | null =
-    null
+  #publicModelPricing: {
+    readonly catalog: ModelPricingCatalog
+    readonly expiresAt: number
+  } | null = null
 
   public constructor(
     private readonly store: WorkbenchSharedAccountStore,
@@ -60,7 +86,7 @@ export class WorkbenchAccountService {
 
   public async getState(): Promise<WorkbenchAccountState> {
     const session = await this.store.load()
-    if (!session) return { status: 'signed-out' }
+    if (!session || this.#isRejectedSession(session)) return { status: 'signed-out' }
     if (Date.parse(session.refreshExpiresAt) <= Date.now()) {
       await this.store.disconnect()
       return { status: 'signed-out' }
@@ -75,6 +101,9 @@ export class WorkbenchAccountService {
 
   public signIn(): Promise<WorkbenchAccountState> {
     if (this.#signInOperation) return this.#signInOperation
+    this.#sessionRevision += 1
+    this.#pendingRefresh = null
+    this.#rejectedSession = null
     const operation = this.#performGoogleSignIn().finally(() => {
       if (this.#signInOperation === operation) this.#signInOperation = null
     })
@@ -83,6 +112,9 @@ export class WorkbenchAccountService {
   }
 
   public async signOut(): Promise<WorkbenchAccountState> {
+    this.#sessionRevision += 1
+    this.#pendingRefresh = null
+    this.#rejectedSession = null
     const session = await this.store.load()
     const releaseRemote = await this.store.disconnect()
     if (session && releaseRemote) {
@@ -111,19 +143,17 @@ export class WorkbenchAccountService {
    * 就会得到空授权，Workbench 不会根据账号角色自行补出托管 provider。
    */
   public async getManagedModelAccess(): Promise<WorkbenchManagedModelAccessSnapshot> {
-    return parseWorkbenchManagedModelAccessSnapshot(
-      await this.#authorizedJson('/v1/account/usage')
-    )
+    return parseWorkbenchManagedModelAccessSnapshot(await this.#authorizedJson('/v1/account/usage'))
   }
 
   public async listManagedProviderModels(
     providerId: WorkbenchManagedModelProviderId
   ): Promise<ProviderModelCatalog> {
     const access = await this.#requireManagedProvider(providerId)
-    const response = await this.#authorizedFetch(
-      `${managedModelEndpointPath(providerId)}/models`,
-      { method: 'GET', headers: { Accept: 'application/json' } }
-    )
+    const response = await this.#authorizedFetch(`${managedModelEndpointPath(providerId)}/models`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    })
     if (!response.ok) {
       throw new Error(
         workbenchMainText('account.modelCatalogRequestFailed', {
@@ -133,12 +163,11 @@ export class WorkbenchAccountService {
       )
     }
     const allowedModels = new Set(
-      access.models
-        .filter((model) => model.status === 'available')
-        .map((model) => model.id)
+      access.models.filter((model) => model.status === 'available').map((model) => model.id)
     )
-    const models = parseManagedProviderModelList(await response.json())
-      .filter((model) => allowedModels.has(model.id))
+    const models = parseManagedProviderModelList(await response.json()).filter((model) =>
+      allowedModels.has(model.id)
+    )
     return {
       provider: providerId,
       source: 'remote',
@@ -159,11 +188,11 @@ export class WorkbenchAccountService {
     const target = new URL(input instanceof Request ? input.url : input.toString())
     const expected = new URL(`${this.getManagedModelBaseUrl(providerId)}/chat/completions`)
     if (
-      target.origin !== expected.origin
-      || target.pathname !== expected.pathname
-      || target.username
-      || target.password
-      || target.hash
+      target.origin !== expected.origin ||
+      target.pathname !== expected.pathname ||
+      target.username ||
+      target.password ||
+      target.hash
     ) {
       throw new Error(workbenchMainText('account.untrustedModelEndpoint', { provider: providerId }))
     }
@@ -194,7 +223,10 @@ export class WorkbenchAccountService {
         headers: { Accept: 'application/json' },
         signal: AbortSignal.timeout(CloudRequestTimeoutMs),
       })
-      if (!response.ok) throw new Error(workbenchMainText('account.pricingRequestFailed', { status: response.status }))
+      if (!response.ok)
+        throw new Error(
+          workbenchMainText('account.pricingRequestFailed', { status: response.status })
+        )
       const catalog = parseModelPricingCatalog(await response.json())
       const serverExpiry = Date.parse(catalog.expiresAt)
       this.#publicModelPricing = {
@@ -232,7 +264,10 @@ export class WorkbenchAccountService {
       headers: { [DeviceIdHeader]: deviceId },
     })
     const authorizationUrl = new URL(started.authorizationUrl)
-    if (authorizationUrl.protocol !== 'https:' || authorizationUrl.hostname !== 'accounts.google.com') {
+    if (
+      authorizationUrl.protocol !== 'https:' ||
+      authorizationUrl.hostname !== 'accounts.google.com'
+    ) {
       throw new Error(workbenchMainText('account.untrustedSignInUrl'))
     }
     await this.openExternal(authorizationUrl.toString())
@@ -250,7 +285,10 @@ export class WorkbenchAccountService {
         body: {
           attemptId: started.attemptId,
           exchangeToken: started.exchangeToken,
-          deviceName: os.hostname().replace(/\.(local|lan|home)$/iu, '').slice(0, 120),
+          deviceName: os
+            .hostname()
+            .replace(/\.(local|lan|home)$/iu, '')
+            .slice(0, 120),
           devicePlatform: process.platform === 'darwin' ? 'macOS' : process.platform,
         },
       })
@@ -274,8 +312,8 @@ export class WorkbenchAccountService {
       headers: { 'Content-Type': 'application/json', ...input.headers },
       body: JSON.stringify(input.body ?? {}),
     })
-    if (!response.ok) throw new Error(workbenchMainText('account.serviceRequestFailed', { status: response.status }))
-    return await response.json() as T
+    if (!response.ok) throw new CloudAccountRequestError(response.status)
+    return (await response.json()) as T
   }
 
   async #authorizedJson(path: string): Promise<unknown> {
@@ -284,54 +322,147 @@ export class WorkbenchAccountService {
       headers: { Accept: 'application/json' },
       signal: AbortSignal.timeout(CloudRequestTimeoutMs),
     })
-    if (!response.ok) throw new Error(workbenchMainText('account.serviceRequestFailed', { status: response.status }))
+    if (!response.ok)
+      throw new Error(
+        workbenchMainText('account.serviceRequestFailed', { status: response.status })
+      )
     return response.json()
   }
 
   async #authorizedFetch(path: string, init: RequestInit): Promise<Response> {
     if (!path.startsWith('/v1/')) throw new Error(workbenchMainText('account.invalidCloudPath'))
+    const revision = this.#sessionRevision
     const session = await this.#requireActiveSession()
+    this.#assertSessionRevision(revision)
     const headers = new Headers(init.headers)
     headers.set('Authorization', `Bearer ${session.accessToken}`)
     headers.set(DeviceIdHeader, await this.store.getDeviceId())
-    return this.fetchImpl(`${this.#baseUrl}${path}`, { ...init, headers })
+    this.#assertSessionRevision(revision)
+    const response = await this.fetchImpl(`${this.#baseUrl}${path}`, { ...init, headers })
+    if (response.status !== 401) return response
+    await response.body?.cancel()
+    const current = await this.store.load()
+    this.#assertSessionRevision(revision)
+    if (!current || !sameSessionFamily(current, session))
+      throw new Error(workbenchMainText('account.signInRequired'))
+    const refreshed =
+      current.refreshToken !== session.refreshToken
+        ? current
+        : await this.#startRefresh(current, revision)
+    this.#assertSessionRevision(revision)
+    if (!sameSessionFamily(refreshed, session))
+      throw new Error(workbenchMainText('account.signInRequired'))
+    headers.set('Authorization', `Bearer ${refreshed.accessToken}`)
+    const retry = await this.fetchImpl(`${this.#baseUrl}${path}`, { ...init, headers })
+    if (retry.status === 401) {
+      await retry.body?.cancel()
+      this.#assertSessionRevision(revision)
+      this.#rejectedSession = refreshed
+      throw new CloudAccountRequestError(401)
+    }
+    return retry
   }
 
   async #requireActiveSession(): Promise<WorkbenchCloudSession> {
+    const revision = this.#sessionRevision
     const session = await this.store.load()
+    this.#assertSessionRevision(revision)
+    if (session && this.#isRejectedSession(session)) throw new CloudAccountRequestError(401)
+    const pending = this.#pendingRefresh
+    if (
+      pending &&
+      (pending.revision !== revision ||
+        pending.previous.account.id !== session?.account.id ||
+        pending.previous.sessionFamilyId !== session?.sessionFamilyId ||
+        pending.previous.refreshToken !== session?.refreshToken)
+    )
+      this.#pendingRefresh = null
     if (!session || Date.parse(session.refreshExpiresAt) <= Date.now()) {
       if (session) await this.store.disconnect()
       throw new Error(workbenchMainText('account.signInRequired'))
     }
     if (Date.parse(session.accessExpiresAt) - Date.now() > 60_000) return session
-    if (this.#refreshOperation?.token === session.refreshToken) return this.#refreshOperation.promise
-    const operation = this.#refreshSession(session).finally(() => {
+    return this.#startRefresh(session, revision)
+  }
+
+  #startRefresh(session: WorkbenchCloudSession, revision: number): Promise<WorkbenchCloudSession> {
+    if (
+      this.#refreshOperation?.token === session.refreshToken &&
+      this.#refreshOperation.revision === revision
+    )
+      return this.#refreshOperation.promise
+    const operation = this.#refreshSession(session, revision).finally(() => {
       if (this.#refreshOperation?.promise === operation) this.#refreshOperation = null
     })
-    this.#refreshOperation = { token: session.refreshToken, promise: operation }
+    this.#refreshOperation = { token: session.refreshToken, revision, promise: operation }
     return operation
   }
 
-  async #refreshSession(previous: WorkbenchCloudSession): Promise<WorkbenchCloudSession> {
+  async #refreshSession(
+    previous: WorkbenchCloudSession,
+    revision: number
+  ): Promise<WorkbenchCloudSession> {
     try {
+      if (this.#pendingRefresh) return await this.#commitRefresh(this.#pendingRefresh)
       const next = await this.#request<WorkbenchCloudSession>('/v1/auth/session/refresh', {
         headers: { [DeviceIdHeader]: await this.store.getDeviceId() },
         body: { refreshToken: previous.refreshToken },
       })
-      const current = await this.store.replaceSession(previous, next)
-      if (!current) throw new Error(workbenchMainText('account.signInRequired'))
-      return current
+      this.#assertSessionRevision(revision)
+      const pending = { previous, next, revision }
+      this.#pendingRefresh = pending
+      return await this.#commitRefresh(pending)
     } catch (error) {
       // Desktop 可能已续期；旧凭据失败不能清掉它刚写入的共享登录。
       const current = await this.store.load()
+      this.#assertSessionRevision(revision)
       if (
-        current?.account.id === previous.account.id &&
+        current &&
+        sameSessionFamily(current, previous) &&
         current.refreshToken !== previous.refreshToken &&
         Date.parse(current.accessExpiresAt) > Date.now()
-      )
+      ) {
+        this.#pendingRefresh = null
         return current
+      }
+      if (
+        error instanceof CloudAccountRequestError &&
+        error.status === 401 &&
+        current &&
+        sameSessionFamily(current, previous) &&
+        current.refreshToken === previous.refreshToken
+      )
+        this.#rejectedSession = current
       throw error
     }
+  }
+
+  async #commitRefresh(pending: PendingSessionRefresh): Promise<WorkbenchCloudSession> {
+    this.#assertSessionRevision(pending.revision)
+    if (!sameSessionFamily(pending.previous, pending.next)) {
+      if (this.#pendingRefresh === pending) this.#pendingRefresh = null
+      throw new Error(workbenchMainText('account.signInRequired'))
+    }
+    // 已轮换的凭据只留在内存；落盘失败时下次重试 CAS，不再请求旧 refresh token。
+    const current = await this.store.replaceSession(pending.previous, pending.next)
+    if (this.#pendingRefresh === pending) this.#pendingRefresh = null
+    this.#assertSessionRevision(pending.revision)
+    if (!current || !sameSessionFamily(current, pending.previous))
+      throw new Error(workbenchMainText('account.signInRequired'))
+    return current
+  }
+
+  #isRejectedSession(session: WorkbenchCloudSession): boolean {
+    return (
+      !!this.#rejectedSession &&
+      sameSessionFamily(session, this.#rejectedSession) &&
+      session.refreshToken === this.#rejectedSession.refreshToken
+    )
+  }
+
+  #assertSessionRevision(revision: number): void {
+    if (revision !== this.#sessionRevision)
+      throw new Error(workbenchMainText('account.signInRequired'))
   }
 
   async #requireManagedProvider(
@@ -346,9 +477,15 @@ export class WorkbenchAccountService {
         })
       )
     if (!provider.enabled)
-      throw new Error(workbenchMainText('account.providerUnavailable', { provider: provider.displayName }))
+      throw new Error(
+        workbenchMainText('account.providerUnavailable', { provider: provider.displayName })
+      )
     return provider
   }
+}
+
+function sameSessionFamily(left: WorkbenchCloudSession, right: WorkbenchCloudSession): boolean {
+  return left.account.id === right.account.id && left.sessionFamilyId === right.sessionFamilyId
 }
 
 export function parseWorkbenchManagedModelAccessSnapshot(
@@ -378,12 +515,11 @@ function parseManagedProvider(value: unknown): WorkbenchManagedModelProvider | n
   const providerId = record['providerId']
   if (typeof providerId !== 'string' || !isManagedModelProviderId(providerId)) return null
   if (typeof record['enabled'] !== 'boolean') {
-    throw new Error(workbenchMainText('account.invalidProviderEnabledState', { provider: providerId }))
+    throw new Error(
+      workbenchMainText('account.invalidProviderEnabledState', { provider: providerId })
+    )
   }
-  readNonEmptyString(
-    record['displayName'],
-    `${providerId}.displayName`
-  )
+  readNonEmptyString(record['displayName'], `${providerId}.displayName`)
   const defaultModel = optionalNonEmptyString(record['defaultModel'])
   const modelSources = [record['models']]
   const routePolicy = record['routePolicy']
@@ -414,8 +550,8 @@ function parseManagedProviderOptions(sources: readonly unknown[]): WorkbenchMana
         rawStatus === undefined || rawStatus === 'available'
           ? 'available'
           : rawStatus === 'disabled' || rawStatus === 'not-configured'
-          ? rawStatus
-          : null
+            ? rawStatus
+            : null
       if (!status) throw new Error(workbenchMainText('account.invalidManagedState'))
       seen.add(id)
       models.push({ id, label: label.slice(0, 256), status })
@@ -451,7 +587,8 @@ function isManagedModelProviderId(value: string): value is WorkbenchManagedModel
 /** 价格目录来自网络：外壳不对就报错，单条价格不对就丢掉那一条。 */
 export function parseModelPricingCatalog(value: unknown): ModelPricingCatalog {
   const root = readRecord(value, 'model pricing')
-  if (root['currency'] !== 'USD') throw new Error(workbenchMainText('account.invalidPricingCurrency'))
+  if (root['currency'] !== 'USD')
+    throw new Error(workbenchMainText('account.invalidPricingCurrency'))
   const entries = root['entries']
   if (!Array.isArray(entries)) throw new Error(workbenchMainText('account.invalidPricing'))
   return {
@@ -472,25 +609,29 @@ export function parseModelPricingCatalog(value: unknown): ModelPricingCatalog {
         source,
       } = entry
       if (
-        typeof provider !== 'string' || !provider.trim()
-        || typeof model !== 'string' || !model.trim()
-        || !isNonNegativePrice(inputUsdPerMillion)
-        || !isNonNegativePrice(outputUsdPerMillion)
+        typeof provider !== 'string' ||
+        !provider.trim() ||
+        typeof model !== 'string' ||
+        !model.trim() ||
+        !isNonNegativePrice(inputUsdPerMillion) ||
+        !isNonNegativePrice(outputUsdPerMillion)
       )
         return []
-      return [{
-        provider,
-        model,
-        aliases: Array.isArray(aliases)
-          ? aliases.filter((alias): alias is string => typeof alias === 'string')
-          : [],
-        inputUsdPerMillion,
-        outputUsdPerMillion,
-        // 缓存读 / 写单价是可选项：目录给了才透传，回答末尾的整轮约价据此给缓存命中的输入单独计价。
-        cacheReadUsdPerMillion: readOptionalPrice(cacheReadUsdPerMillion),
-        cacheWriteUsdPerMillion: readOptionalPrice(cacheWriteUsdPerMillion),
-        source: typeof source === 'string' ? source : '',
-      }]
+      return [
+        {
+          provider,
+          model,
+          aliases: Array.isArray(aliases)
+            ? aliases.filter((alias): alias is string => typeof alias === 'string')
+            : [],
+          inputUsdPerMillion,
+          outputUsdPerMillion,
+          // 缓存读 / 写单价是可选项：目录给了才透传，回答末尾的整轮约价据此给缓存命中的输入单独计价。
+          cacheReadUsdPerMillion: readOptionalPrice(cacheReadUsdPerMillion),
+          cacheWriteUsdPerMillion: readOptionalPrice(cacheWriteUsdPerMillion),
+          source: typeof source === 'string' ? source : '',
+        },
+      ]
     }),
   }
 }
@@ -513,7 +654,8 @@ function readRecord(value: unknown, label: string): Record<string, unknown> {
 }
 
 function readNonEmptyString(value: unknown, label: string): string {
-  if (typeof value !== 'string' || !value.trim()) throw new Error(workbenchMainText('account.mustBeNonEmptyString', { label }))
+  if (typeof value !== 'string' || !value.trim())
+    throw new Error(workbenchMainText('account.mustBeNonEmptyString', { label }))
   return value.trim()
 }
 

@@ -109,9 +109,7 @@ export function applyWorkbenchConversationNotice(
     case ConversationTextNotice:
       return isTextProjection(payload) ? applyText(transcript, payload, scope) : transcript
     case ConversationThinkingNotice:
-      return isThinkingProjection(payload)
-        ? applyThinking(transcript, payload, scope)
-        : transcript
+      return isThinkingProjection(payload) ? applyThinking(transcript, payload, scope) : transcript
     case ConversationScriptNotice:
       return isScriptProjection(payload) ? applyScript(transcript, payload, scope) : transcript
     case ConversationWidgetNotice:
@@ -123,9 +121,7 @@ export function applyWorkbenchConversationNotice(
     case ConversationAgentNotice:
       return isAgentProjection(payload) ? applyAgent(transcript, payload) : transcript
     case ConversationToolCallNotice:
-      return isToolCallProjection(payload)
-        ? applyToolCall(transcript, payload, scope)
-        : transcript
+      return isToolCallProjection(payload) ? applyToolCall(transcript, payload, scope) : transcript
     default:
       return transcript
   }
@@ -145,8 +141,7 @@ function applyText(
   return updateRunMessage(transcript, payload.runId, scope, (blocks) => {
     const index = blocks.findIndex(
       (block) =>
-        block.type === 'text' &&
-        (block as WorkbenchConversationTextBlock).segmentId === payload.id
+        block.type === 'text' && (block as WorkbenchConversationTextBlock).segmentId === payload.id
     )
     const current = index >= 0 ? (blocks[index] as WorkbenchConversationTextBlock) : undefined
     if (payload.phase === 'preview' && current && !current.preview) return blocks
@@ -193,8 +188,7 @@ function applyScript(
 ): WorkbenchConversationTranscript {
   const processOutput = payload.processOutput?.slice(0, CallOutputMaxChars)
   const processOutputTruncated =
-    !!payload.processOutputTruncated ||
-    (payload.processOutput?.length ?? 0) > CallOutputMaxChars
+    !!payload.processOutputTruncated || (payload.processOutput?.length ?? 0) > CallOutputMaxChars
   if (payload.status === 'discarded')
     return updateRunMessage(transcript, payload.runId, scope, (blocks) => {
       const index = blocks.findIndex(
@@ -203,10 +197,7 @@ function applyScript(
       return index < 0 ? blocks : blocks.filter((_, position) => position !== index)
     })
   const block: ScriptExecutionBlock &
-    Pick<
-      ConversationScriptProjection,
-      'language' | 'processOutput' | 'processOutputTruncated'
-    > = {
+    Pick<ConversationScriptProjection, 'language' | 'processOutput' | 'processOutputTruncated'> = {
     type: 'script-execution',
     id: payload.id,
     kind: payload.kind,
@@ -328,13 +319,73 @@ function applyAgent(
   transcript: WorkbenchConversationTranscript,
   payload: ConversationAgentProjection
 ): WorkbenchConversationTranscript {
+  const previous = transcript.workerThreads.find((item) => item.threadId === payload.id)
+  const identity = payload.agentId ?? previous?.taskId ?? payload.id
+  const history = transcript.workerThreads.filter((item) => item.taskId === identity)
+  // 续跑会回放旧 run；消息时刻属于原 run，不随新的执行卡或刷新时间移动。
+  const timestamps = new Map<string, number>()
+  let prior: ConversationWorkerThread | undefined
+  for (const item of history) {
+    for (const message of item.messages)
+      timestamps.set(
+        message.id,
+        Math.min(timestamps.get(message.id) ?? Infinity, message.timestamp)
+      )
+    if (
+      item.threadId !== payload.id &&
+      item.startedAt < payload.startedAt &&
+      (!prior || item.startedAt > prior.startedAt)
+    )
+      prior = item
+  }
+  // 同一 run 可跨激活续答；本次摘要只看激活后的回合，历史详情仍完整保留。
+  const groups: Array<NonNullable<ConversationAgentProjection['activity']>> = [[], []]
+  for (const item of payload.activity ?? []) {
+    const timestamp =
+      item.timestamp ??
+      timestamps.get(`conversation:run:${item.payload.runId}`) ??
+      payload.startedAt
+    groups[timestamp < payload.startedAt ? 0 : 1]!.push({ ...item, timestamp })
+  }
+  const messages: ChatMessage[] = []
+  const historicalIds = new Set<string>()
+  for (const [index, items] of groups.entries()) {
+    let segment: WorkbenchConversationTranscript = { messages: [], workerThreads: [] }
+    const times = new Map<string, number>()
+    for (const item of items) {
+      const id = `conversation:run:${item.payload.runId}`
+      times.set(id, Math.min(times.get(id) ?? Infinity, item.timestamp!))
+      segment = applyWorkbenchConversationNotice(segment, item.kind, item.payload, {
+        emittedAt: item.timestamp!,
+      })
+    }
+    for (const message of segment.messages) {
+      if (index === 0) historicalIds.add(message.id)
+      messages.push({
+        ...message,
+        id:
+          index === 1 && historicalIds.has(message.id)
+            ? `${message.id}:activation:${payload.id}`
+            : message.id,
+        timestamp: times.get(message.id) ?? 0,
+      })
+    }
+  }
+  // 中断任务续上旧历史才沿用标题；完成后复用同一 Agent 的新任务保留新标题。
+  const resumesInterrupted =
+    prior &&
+    (prior.status === 'aborted' || prior.status === 'failed') &&
+    prior.messages.some((message) => messages.some((item) => item.id === message.id))
   const thread: ConversationWorkerThread = {
     threadId: payload.id,
     activationId: payload.id,
-    taskId: payload.agentId ?? payload.id,
+    taskId: identity,
     nodeId: null,
-    title: workbenchWorkerTaskTitle(payload.task),
-    agentName: workerName(transcript.workerThreads, payload.agentId ?? payload.id),
+    title:
+      (resumesInterrupted && prior?.title) ||
+      previous?.title ||
+      workbenchWorkerTaskTitle(payload.task),
+    agentName: workerName(transcript.workerThreads, identity),
     roleId: null,
     phase: null,
     status: payload.status,
@@ -343,17 +394,14 @@ function applyAgent(
     subagentType: payload.profile,
     customAgentName: null,
     mode: null,
-    model: payload.model ?? null,
+    model: payload.model ?? previous?.model ?? null,
     startedAt: payload.startedAt,
     updatedAt: payload.updatedAt,
     input: payload.task,
     output: payload.answer || null,
     summary: null,
     error: payload.error,
-    messages: (payload.activity ?? []).reduce<WorkbenchConversationTranscript>(
-      (state, item) => applyWorkbenchConversationNotice(state, item.kind, item.payload),
-      { messages: [], workerThreads: [] }
-    ).messages as ChatMessage[],
+    messages,
   }
   if (payload.anchorId) thread.anchorId = payload.anchorId
   const index = transcript.workerThreads.findIndex((item) => item.threadId === payload.id)
@@ -577,21 +625,14 @@ function isScriptProjection(value: unknown): value is ConversationScriptProjecti
       !isPresent(value.durationMs) ||
       (isFiniteNumber(value.durationMs) && value.durationMs >= 0)
     ) ||
-    !(
-      value.startedAt === undefined ||
-      (isFiniteNumber(value.startedAt) && value.startedAt >= 0)
-    ) ||
+    !(value.startedAt === undefined || (isFiniteNumber(value.startedAt) && value.startedAt >= 0)) ||
     !isString(value.runId) ||
     !isString(value.turnId) ||
     !ScriptStatuses.includes(String(value.status)) ||
     !isString(value.source) ||
     value.source.length > ConversationScriptSourceMaxChars ||
     !isBoolean(value.sourceTruncated) ||
-    !(
-      value.language === undefined ||
-      value.language === 'node' ||
-      value.language === 'shell'
-    ) ||
+    !(value.language === undefined || value.language === 'node' || value.language === 'shell') ||
     !(value.processOutput === undefined || isString(value.processOutput)) ||
     !(value.processOutputTruncated === undefined || isBoolean(value.processOutputTruncated)) ||
     !(value.error === null || isString(value.error)) ||
@@ -628,6 +669,8 @@ function isAgentProjection(value: unknown): value is ConversationAgentProjection
         value.activity.every(
           (item) =>
             isPlainObject(item) &&
+            (item.timestamp === undefined ||
+              (isFiniteNumber(item.timestamp) && item.timestamp >= 0)) &&
             ((item.kind === 'conversation-script' && isScriptProjection(item.payload)) ||
               (item.kind === 'conversation-text' && isTextProjection(item.payload)))
         ))) &&
@@ -655,8 +698,7 @@ function isToolCallProjection(value: unknown): value is ConversationToolCallProj
       (isString(value.progress) &&
         value.progress.length <= ConversationToolCallLimits.progressChars)) &&
     (isUndefined(value.error) ||
-      (isString(value.error) &&
-        value.error.length <= ConversationToolCallLimits.payloadChars)) &&
+      (isString(value.error) && value.error.length <= ConversationToolCallLimits.payloadChars)) &&
     isFiniteNumber(value.startedAt) &&
     (isUndefined(value.finishedAt) || isFiniteNumber(value.finishedAt))
   )
@@ -706,8 +748,6 @@ function isInteractionProjection(value: unknown): value is ConversationInteracti
 function isInteractionOptions(value: unknown): boolean {
   return (
     isArray(value) &&
-    value.every(
-      (option) => isPlainObject(option) && isString(option.id) && isString(option.label)
-    )
+    value.every((option) => isPlainObject(option) && isString(option.id) && isString(option.label))
   )
 }

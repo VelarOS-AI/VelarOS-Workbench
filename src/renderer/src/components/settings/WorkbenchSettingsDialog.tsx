@@ -68,7 +68,10 @@ import { Input } from '@velaros-ai/ui/primitives/forms/Input'
 import { Select } from '@velaros-ai/ui/primitives/forms/Select'
 import { Switch } from '@velaros-ai/ui/primitives/forms/Switch'
 
-import { type WorkbenchProjectAiRuleFile, type WorkbenchProjectAiRulesResult } from '@shared/contracts/workbench'
+import {
+  type WorkbenchProjectAiRuleFile,
+  type WorkbenchProjectAiRulesResult,
+} from '@shared/contracts/workbench'
 import type { WorkbenchAccountState } from '@shared/workbenchAccount'
 import type {
   WorkbenchPermissionConfirmationMode as PermissionConfirmationMode,
@@ -194,8 +197,16 @@ export function WorkbenchSettingsDialog({
     useState<Nullable<WorkbenchProjectAiRulesResult>>(null)
   const [expandedProjectAiRulePath, setExpandedProjectAiRulePath] = useState<Nullable<string>>(null)
   const [isLoadingProjectAiRules, setIsLoadingProjectAiRules] = useState(false)
-  const { catalog: activeProviderModelCatalog, loading: isLoadingProviderModels, error: providerModelCatalogError } =
-    useWorkbenchProviderModelCatalog(modelConfig, selectedManagedProvider, open && activeSection === 'ai')
+  const {
+    catalog: activeProviderModelCatalog,
+    loading: isLoadingProviderModels,
+    error: providerModelCatalogError,
+  } = useWorkbenchProviderModelCatalog(
+    modelConfig,
+    selectedManagedProvider,
+    open && activeSection === 'ai',
+    managedModelState
+  )
   const [modelBaseURLDraft, setModelBaseURLDraft] = useState(modelConfig.baseURL)
   const [modelApiKeyDraft, setModelApiKeyDraft] = useState(modelConfig.apiKey)
   const dialogRef = useRef<HTMLDivElement>(null)

@@ -35,6 +35,9 @@ export class ConversationScriptBoard {
   private readonly cards = new Map<string, ScriptCard>()
   /** 每个回合按出现顺序排的 execute 卡片 id，第 n 张对应这一回合执行摘要的 position n。 */
   private readonly turns = new Map<string, string[]>()
+  /** 追踪可能早于 program 事件到达；迟到的源码事件认领同一执行位置的已有卡。 */
+  private readonly programCards = new Map<string, string>()
+  private readonly programPositions = new Map<string, number>()
   /** 每个回合的 observe 卡片 id：一份响应最多登记一次观察。 */
   private readonly observations = new Map<string, string>()
   /** 登记上的最近一张观察卡：之后回合的观察运行都记在它上面；这次运行里还没登记过时没有。 */
@@ -47,9 +50,7 @@ export class ConversationScriptBoard {
   /** 每段执行对应的卡片：子 Agent 线程挂在派发它的那张卡后面。 */
   private readonly executionCards = new Map<string, string>()
 
-  public constructor(
-    private readonly emit: (projection: ConversationScriptProjection) => void
-  ) {}
+  public constructor(private readonly emit: (projection: ConversationScriptProjection) => void) {}
 
   /** start 建卡（编写中）；delta 只累积不发；end 转为待调度并带上完整源码。 */
   public program(turnId: string, event: ProgramEvent): void {
@@ -60,18 +61,27 @@ export class ConversationScriptBoard {
       event.kind !== 'blobs'
     )
       return
-    const id = `conversation:script:${event.runId}:${turnId}:${event.index}`
+    const programId = `conversation:script:${event.runId}:${turnId}:${event.index}`
+    let id = this.programCards.get(programId) ?? programId
     if (event.phase === 'start') {
-      if (event.kind === 'execute' || event.kind === 'shell')
-        this.turns.set(turnId, [...(this.turns.get(turnId) ?? []), id])
+      if (event.kind === 'execute' || event.kind === 'shell') {
+        const position = this.programPositions.get(turnId) ?? 0
+        const executions = this.turns.get(turnId) ?? []
+        id = executions[position] ?? programId
+        executions[position] = id
+        this.turns.set(turnId, executions)
+        this.programCards.set(programId, id)
+        this.programPositions.set(turnId, position + 1)
+      }
       if (event.kind === 'observe') this.observations.set(turnId, id)
-      this.open(
-        id,
-        event.kind === 'shell' ? 'execute' : event.kind,
-        event.runId,
-        turnId,
-        'writing'
-      )
+      if (!this.cards.has(id) || this.cards.get(id)!.projection.status === 'discarded')
+        this.open(
+          id,
+          event.kind === 'shell' ? 'execute' : event.kind,
+          event.runId,
+          turnId,
+          'writing'
+        )
       if (event.kind === 'shell') this.cards.get(id)!.projection.language = 'shell'
       this.publish(id)
       return
@@ -83,7 +93,12 @@ export class ConversationScriptBoard {
       return
     }
     this.update(id, {
-      status: event.kind === 'observe' ? 'running' : 'queued',
+      status:
+        card.projection.status === 'writing'
+          ? event.kind === 'observe'
+            ? 'running'
+            : 'queued'
+          : card.projection.status,
       ...clipSource(card.body),
     })
   }
@@ -98,16 +113,16 @@ export class ConversationScriptBoard {
           ? adopted
           : this.open(adopted, 'execute', trace.runId, trace.turnId, 'running'))
       const card = this.cards.get(id)!
+      const executions = this.turns.get(trace.turnId) ?? []
+      executions[execution.position] = id
+      this.turns.set(trace.turnId, executions)
       this.executionCards.set(execution.executionId, id)
       const calls = trace.invocations
         .filter((invocation) => invocation.executionId === execution.executionId)
         .map((invocation) => ({
           ...invocation.summary,
           input: invocation.summary.input.slice(0, ConversationScriptPreviewLimits.inputChars),
-          output: invocation.summary.output.slice(
-            0,
-            ConversationScriptPreviewLimits.outputChars
-          ),
+          output: invocation.summary.output.slice(0, ConversationScriptPreviewLimits.outputChars),
           inputTruncated:
             invocation.summary.inputTruncated ||
             invocation.summary.input.length > ConversationScriptPreviewLimits.inputChars,
@@ -151,8 +166,7 @@ export class ConversationScriptBoard {
       ...new Set(
         [...this.cards.values()]
           .filter(
-            ({ projection }) =>
-              projection.status === 'queued' || projection.status === 'running'
+            ({ projection }) => projection.status === 'queued' || projection.status === 'running'
           )
           .map(({ projection }) => projection.turnId)
       ),
@@ -171,6 +185,7 @@ export class ConversationScriptBoard {
     const observed = this.observations.get(turnId)
     if (observed) this.update(observed, { status: 'discarded' })
     this.turns.delete(turnId)
+    this.programPositions.delete(turnId)
     this.observations.delete(turnId)
   }
 
@@ -211,11 +226,7 @@ export class ConversationScriptBoard {
     const card = this.cards.get(id)!
     const rejected = registration.status === 'rejected'
     // 同一回合的追踪会读不止一次：卡已经收过运行结果时，登记结果不把它盖回去
-    if (
-      card.projection.status === 'writing' ||
-      card.projection.status === 'running' ||
-      rejected
-    )
+    if (card.projection.status === 'writing' || card.projection.status === 'running' || rejected)
       this.update(id, {
         status: rejected ? 'failed' : 'succeeded',
         error: describeFailure(registration.failure),

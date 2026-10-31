@@ -8,7 +8,14 @@ import {
   useSyncExternalStore,
 } from 'react'
 import { ArrowRightIcon } from '@phosphor-icons/react'
-import { type WorkbenchChatCompositionAdapter, type WorkbenchChatLiveRunChanges, type WorkbenchChatProjectRuntime, type WorkbenchChatSessionActionsProps, type WorkbenchChatSessionSnapshot, type WorkbenchChatSessionSurfaceProps } from '@renderer/composition/WorkbenchChatProvider'
+import {
+  type WorkbenchChatCompositionAdapter,
+  type WorkbenchChatLiveRunChanges,
+  type WorkbenchChatProjectRuntime,
+  type WorkbenchChatSessionActionsProps,
+  type WorkbenchChatSessionSnapshot,
+  type WorkbenchChatSessionSurfaceProps,
+} from '@renderer/composition/WorkbenchChatProvider'
 import { useWorkbenchProviderModelCatalog } from '@renderer/hooks/useWorkbenchProviderModelCatalog'
 import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 
@@ -793,9 +800,8 @@ function ensureConversationEventSubscription(): void {
   if (typeof window === 'undefined') return
   peerEventSubscription ??= window.velarosWorkbenchSessionPeers.onEvent(receiveWorkbenchPeerEvent)
   if (conversationEventSubscription) return
-  conversationEventSubscription = window.velarosWorkbenchConversation.onEvent(
-    applyConversationEnvelope
-  )
+  conversationEventSubscription =
+    window.velarosWorkbenchConversation.onEvent(applyConversationEnvelope)
 }
 
 const recoveryProjects = new Map<string, WorkbenchConversationEventEnvelope[]>()
@@ -842,7 +848,7 @@ async function recoverProjectConversations(projectRoot: string): Promise<void> {
           updateSession(projectRoot, initial.sessionId, (state) => ({
             ...state,
             messages: state.messages.filter(
-              (item) => item.role !== 'assistant' || item.runId !== scope.runId,
+              (item) => item.role !== 'assistant' || item.runId !== scope.runId
             ),
             workerThreads: [],
             status: 'running',
@@ -899,9 +905,7 @@ function applyConversationEnvelope(envelope: WorkbenchConversationEventEnvelope)
 }
 
 /** 已连接窗口也可能漏掉一次发送；发现序号缺口后先补齐，再释放后续实时事件。 */
-async function recoverStreamGap(
-  first: WorkbenchConversationEventEnvelope,
-): Promise<void> {
+async function recoverStreamGap(first: WorkbenchConversationEventEnvelope): Promise<void> {
   const streamId = first.streamId!
   const pending = [first]
   streamGaps.set(streamId, pending)
@@ -1031,7 +1035,11 @@ function applyConversationState(
  * 运行标记，立刻落盘；再了结这一轮，并按收尾规则记下「本轮改动」。主进程推来终态、发送失败、停止超时都走这里，
  * 只生效一次。
  */
-function finishRun(run: ActiveConversationRun, runtime: WorkbenchConversationState, emittedAt = Date.now()): void {
+function finishRun(
+  run: ActiveConversationRun,
+  runtime: WorkbenchConversationState,
+  emittedAt = Date.now()
+): void {
   const key = runKey(run.projectRoot, run.sessionId)
   if (activeRuns.get(key) !== run) return
   const terminalKind = readStandaloneTerminalKind(runtime) ?? 'error'
@@ -1262,9 +1270,14 @@ function buildStandaloneProjectRuntime(
         if (!target || isActiveChatRun(target.status)) return
         releaseRemovedSession(target)
         if (target.sessionId === active.sessionId) {
-          const replacement = inactive.find((candidate) => candidate.engine?.id === active.engine?.id)
+          const replacement = inactive.find(
+            (candidate) => candidate.engine?.id === active.engine?.id
+          )
           const remaining = inactive.filter((candidate) => candidate !== replacement)
-          const next = replacement ?? { ...createState(normalizedRoot, false), engine: active.engine }
+          const next = replacement ?? {
+            ...createState(normalizedRoot, false),
+            engine: active.engine,
+          }
           states.set(key, next)
           inactiveStates.set(key, remaining)
           persistState(next, { immediate: true })
@@ -1330,7 +1343,12 @@ function StandaloneWorkbenchChatSessionSurface({
   // 交给外部引擎的会话：模型、登录与上下文都是引擎自己的，这一侧只管它选了哪个引擎、哪个模型。
   const engines = useWorkbenchAgentEngines()
   const engine = chat.engine
-  const providerCatalog = useWorkbenchProviderModelCatalog(modelConfig, selectedManagedProvider, !engine)
+  const providerCatalog = useWorkbenchProviderModelCatalog(
+    modelConfig,
+    selectedManagedProvider,
+    !engine,
+    managedModelState
+  )
   const engineStatus = engine ? engines.find((status) => status.id === engine.id) : undefined
   const engineLabel = engine ? workbenchAgentEngineLabel(engine.id) : null
   const {
@@ -2076,12 +2094,15 @@ function StandaloneWorkbenchChatSessionSurface({
     [billingModelId, billingProvider, engine]
   )
   const conversation = useMemo<ConversationView>(() => {
-    const liveActivity = readConversationLiveActivity({
-      runtime: chat,
-      message: activeAssistantMessage,
-      waitMessage: chat.connectionRetryMessage,
-      locale,
-    }, conversationTranslator)
+    const liveActivity = readConversationLiveActivity(
+      {
+        runtime: chat,
+        message: activeAssistantMessage,
+        waitMessage: chat.connectionRetryMessage,
+        locale,
+      },
+      conversationTranslator
+    )
     return {
       sessionId: chat.sessionId,
       activeMemberSessionId: chat.sessionId,
@@ -2155,15 +2176,22 @@ function StandaloneWorkbenchChatSessionSurface({
       const models = engineStatus?.available ? engineStatus.models : []
       return {
         label: t('chat.composerModelSection'),
-        hint: engineStatus?.reason ?? t('workbench.chatEngineModelHint', { engine: engineLabel ?? '' }),
+        hint:
+          engineStatus?.reason ?? t('workbench.chatEngineModelHint', { engine: engineLabel ?? '' }),
         provider: engine.id,
         model: resolveWorkbenchEngineModel(engine, engineStatus) ?? '',
-        providers: [{
-          value: engine.id,
-          label: engineLabel ?? '',
-          defaultModel: resolveWorkbenchEngineModel(engine, engineStatus) ?? '',
-          models: models.map((model) => ({ value: model.value, label: model.label, description: model.description })),
-        }],
+        providers: [
+          {
+            value: engine.id,
+            label: engineLabel ?? '',
+            defaultModel: resolveWorkbenchEngineModel(engine, engineStatus) ?? '',
+            models: models.map((model) => ({
+              value: model.value,
+              label: model.label,
+              description: model.description,
+            })),
+          },
+        ],
         disabled: isRunActive,
         onChange: (provider, model) => {
           if (provider !== engine.id || !models.some((entry) => entry.value === model)) return
@@ -2176,7 +2204,10 @@ function StandaloneWorkbenchChatSessionSurface({
       }
     }
     const providers =
-      !isStandaloneWorkbenchManagedProviderId(modelConfig.provider) || selectedManagedProvider?.enabled
+      !isStandaloneWorkbenchManagedProviderId(modelConfig.provider) ||
+      selectedManagedProvider?.enabled ||
+      providerCatalog.error ||
+      providerCatalog.loading
         ? createStandaloneWorkbenchModelSelectorProviders(
             modelConfig.provider,
             modelConfig.model,
@@ -2189,7 +2220,10 @@ function StandaloneWorkbenchChatSessionSurface({
     return {
       label: t('chat.composerModelSection'),
       hint: providerCatalog.error
-        ? t('workbench.settingsModelCatalogError', { provider: providerLabel, error: providerCatalog.error })
+        ? t('workbench.settingsModelCatalogError', {
+            provider: providerLabel,
+            error: providerCatalog.error,
+          })
         : providerCatalog.loading
           ? t('workbench.settingsModelCatalogLoading', { provider: providerLabel })
           : undefined,
@@ -2198,7 +2232,12 @@ function StandaloneWorkbenchChatSessionSurface({
       providers,
       disabled: isRunActive,
       onChange: (provider, model) => {
-        if (providers.some((entry) => entry.value === provider && entry.models.some((option) => option.value === model)))
+        if (
+          providers.some(
+            (entry) =>
+              entry.value === provider && entry.models.some((option) => option.value === model)
+          )
+        )
           selectStandaloneWorkbenchAgentModel(provider, model)
       },
     }
@@ -2220,9 +2259,21 @@ function StandaloneWorkbenchChatSessionSurface({
   useEffect(() => {
     if (engine || isRunActive || providerCatalog.loading || providerCatalog.error) return
     const provider = modelSelector?.providers.find((entry) => entry.value === modelConfig.provider)
-    if (!provider?.models.length || provider.models.some((model) => model.value === modelConfig.model)) return
+    if (
+      !provider?.models.length ||
+      provider.models.some((model) => model.value === modelConfig.model)
+    )
+      return
     selectStandaloneWorkbenchAgentModel(provider.value, provider.defaultModel)
-  }, [engine, isRunActive, modelConfig.model, modelConfig.provider, modelSelector, providerCatalog.error, providerCatalog.loading])
+  }, [
+    engine,
+    isRunActive,
+    modelConfig.model,
+    modelConfig.provider,
+    modelSelector,
+    providerCatalog.error,
+    providerCatalog.loading,
+  ])
   const composerControl = useMemo<ChatComposerControl>(
     () => ({
       scopeKey: chat.sessionId,

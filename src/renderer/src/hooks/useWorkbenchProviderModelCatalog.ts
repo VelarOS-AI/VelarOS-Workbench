@@ -2,9 +2,15 @@ import { useEffect, useMemo, useState } from 'react'
 
 import type { ProviderModelCatalog } from '@velaros-ai/model/contracts'
 
-import type { WorkbenchListProviderModelsRequest, WorkbenchManagedModelProvider } from '@shared/workbenchModel'
+import type {
+  WorkbenchListProviderModelsRequest,
+  WorkbenchManagedModelProvider,
+} from '@shared/workbenchModel'
 
-import { isStandaloneWorkbenchManagedProviderId } from '../runtime/standaloneWorkbenchManagedModels'
+import {
+  isStandaloneWorkbenchManagedProviderId,
+  type StandaloneWorkbenchManagedModelState,
+} from '../runtime/standaloneWorkbenchManagedModels'
 import type { StandaloneWorkbenchModelConfig } from '../runtime/standaloneWorkbenchModelConfig'
 
 const CatalogRefreshMs = 60_000
@@ -22,7 +28,8 @@ export function loadWorkbenchProviderModelCatalog(
   const cached = catalogs.get(key)
   if (!refresh && cached && Date.now() - cached.loadedAt < CatalogRefreshMs)
     return Promise.resolve(cached.catalog)
-  const promise = window.velarosWorkbenchModel.listProviderModels(request)
+  const promise = window.velarosWorkbenchModel
+    .listProviderModels(request)
     .then((catalog) => {
       if (!catalog.error) catalogs.set(key, { catalog, loadedAt: Date.now() })
       return catalog
@@ -35,14 +42,18 @@ export function loadWorkbenchProviderModelCatalog(
 export function useWorkbenchProviderModelCatalog(
   config: StandaloneWorkbenchModelConfig,
   managedProvider?: WorkbenchManagedModelProvider,
-  enabled = true
+  enabled = true,
+  managedState?: StandaloneWorkbenchManagedModelState
 ): { catalog: ProviderModelCatalog | null; loading: boolean; error: string | null } {
-  const request = useMemo<WorkbenchListProviderModelsRequest>(() => ({
-    provider: config.provider,
-    apiKey: config.apiKey,
-    baseURL: config.baseURL,
-    purpose: 'chat',
-  }), [config.apiKey, config.baseURL, config.provider])
+  const request = useMemo<WorkbenchListProviderModelsRequest>(
+    () => ({
+      provider: config.provider,
+      apiKey: config.apiKey,
+      baseURL: config.baseURL,
+      purpose: 'chat',
+    }),
+    [config.apiKey, config.baseURL, config.provider]
+  )
   const [result, setResult] = useState<{
     request: WorkbenchListProviderModelsRequest
     catalog: ProviderModelCatalog | null
@@ -63,15 +74,22 @@ export function useWorkbenchProviderModelCatalog(
       }))
       void loadWorkbenchProviderModelCatalog(request, refresh).then(
         (catalog) => {
-          if (active) setResult({ request, catalog: catalog.error ? null : catalog, loading: false, error: catalog.error ?? null })
+          if (active)
+            setResult({
+              request,
+              catalog: catalog.error ? null : catalog,
+              loading: false,
+              error: catalog.error ?? null,
+            })
         },
         (error: unknown) => {
-          if (active) setResult({
-            request,
-            catalog: null,
-            loading: false,
-            error: error instanceof Error ? error.message : String(error),
-          })
+          if (active)
+            setResult({
+              request,
+              catalog: null,
+              loading: false,
+              error: error instanceof Error ? error.message : String(error),
+            })
         }
       )
     }
@@ -84,19 +102,26 @@ export function useWorkbenchProviderModelCatalog(
     }
   }, [enabled, managed, request])
 
-  const managedCatalog = useMemo<ProviderModelCatalog | null>(() => managedProvider?.enabled ? {
-      provider: config.provider,
-      source: 'remote',
-      fetchedAt: 0,
-      models: managedProvider.models
-        .filter((model) => model.status === 'available')
-        .map((model) => ({ id: model.id, label: model.label })),
-    } : null, [config.provider, managedProvider])
-  if (managed) return {
-    catalog: managedCatalog,
-    loading: false,
-    error: null,
-  }
+  const managedCatalog = useMemo<ProviderModelCatalog | null>(
+    () =>
+      managedProvider?.enabled
+        ? {
+            provider: config.provider,
+            source: 'remote',
+            fetchedAt: 0,
+            models: managedProvider.models
+              .filter((model) => model.status === 'available')
+              .map((model) => ({ id: model.id, label: model.label })),
+          }
+        : null,
+    [config.provider, managedProvider]
+  )
+  if (managed)
+    return {
+      catalog: managedState?.status === 'error' ? null : managedCatalog,
+      loading: enabled && managedState?.status === 'loading',
+      error: enabled && managedState?.status === 'error' ? managedState.error : null,
+    }
   if (result?.request !== request) return { catalog: null, loading: enabled, error: null }
   return result
 }

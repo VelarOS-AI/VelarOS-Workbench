@@ -20,7 +20,11 @@ test('queued scripts survive IPC, complete across turns and retain output', () =
     text: '',
   }
   board.program('turn', { ...program, phase: 'start' })
-  board.program('turn', { ...program, phase: 'delta', text: '// Check files\nconsole.log(42)' })
+  board.program('turn', {
+    ...program,
+    phase: 'delta',
+    text: '// Check files\nconsole.log(42)',
+  })
   board.program('turn', { ...program, phase: 'end' })
   expect(events.at(-1)?.status).toBe('queued')
   expect(events.at(-1)?.startedAt).toBeUndefined()
@@ -31,7 +35,9 @@ test('queued scripts survive IPC, complete across turns and retain output', () =
     events.at(-1)
   )
   expect(state.messages[0].blocks[0]).toMatchObject({ status: 'queued' })
-  expect(withSettledScripts(state.messages)[0].blocks[0]).toMatchObject({ status: 'cancelled' })
+  expect(withSettledScripts(state.messages)[0].blocks[0]).toMatchObject({
+    status: 'cancelled',
+  })
   const trace = (status: 'running' | 'succeeded') =>
     ({
       runId: 'run',
@@ -86,9 +92,68 @@ test('blob cards settle only after acceptance, rejected cards are discarded', ()
     'conversation-script',
     events.at(-1)
   )
-  expect(state.messages[0].blocks[0]).toMatchObject({ kind: 'blobs', status: 'succeeded' })
+  expect(state.messages[0].blocks[0]).toMatchObject({
+    kind: 'blobs',
+    status: 'succeeded',
+  })
   board.reject('turn')
   expect(events.at(-1)?.status).toBe('discarded')
+})
+
+test('late native program events reuse adopted cards without phantom cancellation or losing output', () => {
+  for (const initialStatus of ['running', 'succeeded'] as const) {
+    const events: ConversationScriptProjection[] = []
+    const board = new ConversationScriptBoard((event) => events.push(event))
+    const trace = (status: 'running' | 'succeeded') =>
+      ({
+        runId: 'run',
+        turnId: 'turn',
+        executions: [
+          {
+            executionId: 'early',
+            position: 0,
+            status,
+            source: 'console.log(42)',
+            failure: null,
+            durationMs: status === 'running' ? null : 25,
+            processOutput: '42',
+          },
+        ],
+        invocations: [],
+        observation: {},
+      }) as unknown as ActTurnTrace
+    board.trace(trace(initialStatus))
+    const id = board.cardOf('early')
+    for (const [index, kind, text] of [
+      [0, 'blobs', 'literal'],
+      [1, 'execute', 'console.log(42)'],
+    ] as const) {
+      const program = {
+        type: 'program' as const,
+        runId: 'run',
+        index,
+        kind,
+        text,
+      }
+      board.program('turn', { ...program, phase: 'start', text: '' })
+      board.program('turn', { ...program, phase: 'delta' })
+      board.program('turn', { ...program, phase: 'end', text: '' })
+    }
+    expect(events.filter((event) => event.kind === 'execute').at(-1)).toMatchObject({
+      id,
+      status: initialStatus,
+      processOutput: '42',
+    })
+    board.accept('turn')
+    if (initialStatus === 'running') board.trace(trace('succeeded'))
+    board.settle()
+    expect(
+      new Set(events.filter((event) => event.kind === 'execute').map((event) => event.id)).size
+    ).toBe(1)
+    expect(events.some((event) => event.status === 'cancelled')).toBe(false)
+    expect(board.cardOf('early')).toBe(id)
+    expect(board.pendingTurns()).toEqual([])
+  }
 })
 
 test('full trace output is shortened for display without discarding completion', () => {

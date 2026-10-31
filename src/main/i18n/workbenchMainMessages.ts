@@ -29,7 +29,8 @@ const zhCN = {
   'policy.gitClean.title': '删除未跟踪的文件',
   'policy.gitClean.reason': '命令会删除未跟踪的文件，尚未提交的新文件会一起消失。',
   'policy.gitCheckout.title': '切换 Git 分支或覆盖文件',
-  'policy.gitCheckout.reason': '命令会切换 Git 分支或用 Git 里的版本覆盖文件，可能丢掉当前工作区的改动。',
+  'policy.gitCheckout.reason':
+    '命令会切换 Git 分支或用 Git 里的版本覆盖文件，可能丢掉当前工作区的改动。',
   'policy.gitSwitch.title': '切换 Git 分支',
   'policy.gitSwitch.reason': '命令会切换 Git 分支，可能打断其他智能体或工作台正在进行的工作。',
   'policy.gitMerge.title': '合并 Git 历史',
@@ -47,7 +48,8 @@ const zhCN = {
   'policy.ghCheckout.title': '经 GitHub CLI 切换分支',
   'policy.ghCheckout.reason': '命令会通过 GitHub CLI 切换分支或修改当前工作区。',
   'policy.chmodWorldWritable.title': '放开文件的全局写权限',
-  'policy.chmodWorldWritable.reason': '命令会把文件权限改成 777 或全局可写，可能扩大写入和执行权限。',
+  'policy.chmodWorldWritable.reason':
+    '命令会把文件权限改成 777 或全局可写，可能扩大写入和执行权限。',
   'policy.outsideWorkspace.title': '改动项目之外的路径',
   'policy.outsideWorkspace.reason': '命令会改动当前工作区之外的路径 {path}。',
   'policy.shutdown.title': '关闭或重启系统',
@@ -67,6 +69,7 @@ const zhCN = {
   'account.serviceRequestFailed': 'VelarOS 账户服务请求失败（{status}）。',
   'account.invalidCloudPath': 'VelarOS Cloud 请求路径无效。',
   'account.signInRequired': '请先登录 VelarOS。',
+  'account.sessionExpired': 'VelarOS 登录已失效，请在设置中重新登录后刷新模型列表。',
   'account.providerNotGranted': '当前账户尚未获得 {provider} 授权。',
   'account.providerUnavailable': '{provider} 当前不可用。',
   'account.invalidGrantFormat': 'VelarOS 托管模型授权格式无效。',
@@ -98,8 +101,10 @@ const zhCN = {
   'projects.pickOpenInNewWindow': '在新窗口打开项目',
   'projects.pickCloneLocation': '选择 Git 项目的保存位置',
   'projects.pickNewProjectLocation': '选择项目位置',
-  'codec.loneSurrogate': '第 {line} 行第 {column} 列有不成对的 UTF-16 代理项（多半是残缺的粘贴内容），任何编码都写不出。这次没有保存，删掉它后再保存。',
-  'codec.unencodable': '第 {line} 行第 {column} 列的「{char}」无法用 {encoding} 表示。为避免写坏文件，这次没有保存：删掉这类字符，或把文件转换为 UTF-8 后再保存。',
+  'codec.loneSurrogate':
+    '第 {line} 行第 {column} 列有不成对的 UTF-16 代理项（多半是残缺的粘贴内容），任何编码都写不出。这次没有保存，删掉它后再保存。',
+  'codec.unencodable':
+    '第 {line} 行第 {column} 列的「{char}」无法用 {encoding} 表示。为避免写坏文件，这次没有保存：删掉这类字符，或把文件转换为 UTF-8 后再保存。',
   'conversation.closing': '会话正在关闭。',
   'conversation.runStopped': '运行已停止。',
   'conversation.noActiveRun': '当前会话没有活动运行。',
@@ -120,7 +125,8 @@ const zhCN = {
   'conversation.invalidRequest': '无效的会话请求。',
   'conversation.memoryNotInWindow': '当前窗口不能查看这个项目的记忆。',
   'conversation.invalidMemoryRequest': '无效的记忆请求。',
-  'conversation.engineGuidanceUnsupported': '外部引擎的会话不支持运行中引导，这条消息会在这一轮结束后发出。',
+  'conversation.engineGuidanceUnsupported':
+    '外部引擎的会话不支持运行中引导，这条消息会在这一轮结束后发出。',
   'conversation.emptyMessage': '消息不能为空。',
   'engines.claudeSignedOut': 'Claude Code 还没有登录：在终端里运行 claude 登录后，再打开这个菜单。',
   'engines.claudeNoModels': 'Claude Code 没有报上可用的模型。',
@@ -178,7 +184,8 @@ const zhCN = {
   'files.editSymlink': '工作台暂不直接编辑符号链接。',
   'files.saveTargetNotFile': '工作台文件保存目标必须是文件。',
   'files.notEditableText': '当前文件不是可编辑的文本文件。',
-  'files.formatNotRoundTrip': '文件现有的编码或换行符不能原样写回，请在编辑器中打开它、确认转换后再保存。',
+  'files.formatNotRoundTrip':
+    '文件现有的编码或换行符不能原样写回，请在编辑器中打开它、确认转换后再保存。',
   'files.saveTooLarge': '当前文件内容超过工作台轻量编辑器的保存上限。',
   'files.changedOnDisk': '文件已在外部修改，请重新加载后再保存。',
   'files.copyProjectRoot': '不能复制工程根目录。',
@@ -230,12 +237,14 @@ const zhCN = {
   'search.queryEmpty': '没有要找的内容。',
   'search.replaceQueryEmpty': '没有要替换的查找词。',
   'search.replaceNotText': '不是文本文件。',
-  'search.replaceFormatNotRoundTrip': '文件现有的编码或换行符不能原样写回，请在编辑器中打开它、确认转换后再替换。',
+  'search.replaceFormatNotRoundTrip':
+    '文件现有的编码或换行符不能原样写回，请在编辑器中打开它、确认转换后再替换。',
   'search.changedSinceSearch': '文件在搜索之后被改过，请重新搜索后再替换。',
   'search.cancelled': '搜索已取消。',
   'search.ended': '搜索已结束。',
   'search.workerExited': '搜索意外中断了，请重新搜索。',
-  'search.stalledOnFile': '在 {path} 上匹配了太久，已停止。正则表达式换个写法再试（避免嵌套的 + 或 *）。',
+  'search.stalledOnFile':
+    '在 {path} 上匹配了太久，已停止。正则表达式换个写法再试（避免嵌套的 + 或 *）。',
   'search.stalled': '搜索太久没有进展，已停止。',
   'search.outOfMemory': '搜索用的内存太多，已停止。缩小搜索范围或换个查找词再试。',
   'git.operationMerge': '合并',
@@ -246,12 +255,15 @@ const zhCN = {
   'git.quotedPath': '“{path}”',
   'git.pathsMore': '{names} 等 {count} 个文件',
   'git.nothingSelectedToCommit': '当前选择没有可提交的改动。',
-  'git.partialCommitDuringOperation': '正在{operation}：这次提交会一并完成{operation}，必须包含全部改动。请不勾选文件直接提交全部，或勾选全部文件。',
+  'git.partialCommitDuringOperation':
+    '正在{operation}：这次提交会一并完成{operation}，必须包含全部改动。请不勾选文件直接提交全部，或勾选全部文件。',
   'git.nothingStaged': '暂存区里没有可提交的改动。请先暂存要提交的文件。',
   'git.noFilesGiven': '没有要操作的文件。',
   'git.noConflictToResolve': '“{path}”没有待解决的合并冲突。',
-  'git.conflictsBlockDiscard': '{paths}还有未解决的合并冲突，不能回滚。请先解决冲突并标记为已解决，或者放弃进行到一半的那个操作（提交面板上方的“放弃”）。',
-  'git.conflictsBlockUnstage': '{paths}还有未解决的合并冲突，不能取消暂存。请先解决冲突并标记为已解决，或者放弃进行到一半的那个操作（提交面板上方的“放弃”）。',
+  'git.conflictsBlockDiscard':
+    '{paths}还有未解决的合并冲突，不能回滚。请先解决冲突并标记为已解决，或者放弃进行到一半的那个操作（提交面板上方的“放弃”）。',
+  'git.conflictsBlockUnstage':
+    '{paths}还有未解决的合并冲突，不能取消暂存。请先解决冲突并标记为已解决，或者放弃进行到一半的那个操作（提交面板上方的“放弃”）。',
   'git.unsupportedFileAction': '不支持的 Git 文件操作。',
   'git.noHunksGiven': '没有要操作的改动块。',
   'git.fileHasNoChanges': '“{path}”已经没有改动了。',
@@ -260,34 +272,49 @@ const zhCN = {
   'git.hunkNotUtf8': '“{path}”不是 UTF-8 编码，不能按块操作，请整个文件暂存、取消暂存或回滚。',
   'git.hunkChanged': '“{path}”的这段改动已经变了（文件在别处被改过），请在刷新后的差异里重新操作。',
   'git.switchRefused': 'Git 拒绝切换分支：{output}',
-  'git.noLocalBranch': '当前检出的是一个提交，不在任何分支上（分离的 HEAD），不能拉取、同步或推送。请先切换到一个分支，或从这个提交新建分支。',
+  'git.noLocalBranch':
+    '当前检出的是一个提交，不在任何分支上（分离的 HEAD），不能拉取、同步或推送。请先切换到一个分支，或从这个提交新建分支。',
   'git.branchMissing': '本地没有分支 {branch}。',
-  'git.noUpstreamPull': '当前分支 {branch} 还没有关联远端分支，无法拉取。请先推送一次（推送会建立关联），或在终端里设置上游（git branch --set-upstream-to=<远端>/<分支>）。',
-  'git.noUpstreamSync': '当前分支 {branch} 还没有关联远端分支，无法同步。请先推送一次（推送会建立关联），或在终端里设置上游（git branch --set-upstream-to=<远端>/<分支>）。',
-  'git.authFailed': '远端拒绝了身份验证：请检查 SSH 密钥或访问令牌（设置 › Git），或先在终端里确认能访问这个远端。\n{detail}',
+  'git.noUpstreamPull':
+    '当前分支 {branch} 还没有关联远端分支，无法拉取。请先推送一次（推送会建立关联），或在终端里设置上游（git branch --set-upstream-to=<远端>/<分支>）。',
+  'git.noUpstreamSync':
+    '当前分支 {branch} 还没有关联远端分支，无法同步。请先推送一次（推送会建立关联），或在终端里设置上游（git branch --set-upstream-to=<远端>/<分支>）。',
+  'git.authFailed':
+    '远端拒绝了身份验证：请检查 SSH 密钥或访问令牌（设置 › Git），或先在终端里确认能访问这个远端。\n{detail}',
   'git.networkFailed': '连不上远端，请检查网络和远端地址。\n{detail}',
   'git.pushRejected': '远端有本地还没有的提交，推送被拒绝。请先拉取（或同步），合入之后再推送。',
-  'git.pullDiverged': '本地和远端的提交分叉了，而 pull.ff=only 只允许快进。请在底部的 Git 工具窗里对远端分支点右键，合并它或把当前分支变基到它上面；或修改 pull.ff 设置。',
-  'git.pullWouldOverwrite': '本地还没提交的改动（或未跟踪的文件）会被这次拉取覆盖。请先提交或回滚它们，再拉取。',
-  'git.pullWouldOverwriteFiles': '本地还没提交的改动（或未跟踪的文件）会被这次拉取覆盖：{files}。请先提交或回滚它们，再拉取。',
-  'git.rebasePullDirty': '按变基方式拉取（pull.rebase）时，工作区里不能有没提交的改动。请先提交或回滚它们，再拉取。',
-  'git.mergeUnfinished': '还有没完成的合并，不能拉取。请先解决冲突并标记为已解决，再点提交面板上方的“继续”完成这次合并，或点“放弃”。',
+  'git.pullDiverged':
+    '本地和远端的提交分叉了，而 pull.ff=only 只允许快进。请在底部的 Git 工具窗里对远端分支点右键，合并它或把当前分支变基到它上面；或修改 pull.ff 设置。',
+  'git.pullWouldOverwrite':
+    '本地还没提交的改动（或未跟踪的文件）会被这次拉取覆盖。请先提交或回滚它们，再拉取。',
+  'git.pullWouldOverwriteFiles':
+    '本地还没提交的改动（或未跟踪的文件）会被这次拉取覆盖：{files}。请先提交或回滚它们，再拉取。',
+  'git.rebasePullDirty':
+    '按变基方式拉取（pull.rebase）时，工作区里不能有没提交的改动。请先提交或回滚它们，再拉取。',
+  'git.mergeUnfinished':
+    '还有没完成的合并，不能拉取。请先解决冲突并标记为已解决，再点提交面板上方的“继续”完成这次合并，或点“放弃”。',
   'git.commandFailedDetail': 'Git 命令执行失败：{detail}',
   'git.commandFailed': 'Git 命令执行失败：git {command}',
-  'git.noRemote': '当前仓库还没有配置远端，无法推送。请先添加远端（git remote add origin <地址>）。',
-  'git.ambiguousRemote': '仓库有 {count} 个远端（{remotes}），无法确定把分支 {branch} 推送到哪一个。请在终端里推送一次并指定远端（git push -u <远端> {branch}），或设置默认推送远端（git config remote.pushDefault <远端>）。',
-  'git.statusTooLarge': '项目里的改动太多，Git 状态超过 {size} MB，无法显示。请检查 .gitignore 是否漏掉了 node_modules、构建产物这类目录。',
-  'git.rebaseInProgress': '正在变基：解决冲突并标记为已解决后，点提交面板上方的“继续”接着变基，或点“放弃”回到变基之前。变基中不在这里提交。',
+  'git.noRemote':
+    '当前仓库还没有配置远端，无法推送。请先添加远端（git remote add origin <地址>）。',
+  'git.ambiguousRemote':
+    '仓库有 {count} 个远端（{remotes}），无法确定把分支 {branch} 推送到哪一个。请在终端里推送一次并指定远端（git push -u <远端> {branch}），或设置默认推送远端（git config remote.pushDefault <远端>）。',
+  'git.statusTooLarge':
+    '项目里的改动太多，Git 状态超过 {size} MB，无法显示。请检查 .gitignore 是否漏掉了 node_modules、构建产物这类目录。',
+  'git.rebaseInProgress':
+    '正在变基：解决冲突并标记为已解决后，点提交面板上方的“继续”接着变基，或点“放弃”回到变基之前。变基中不在这里提交。',
   'git.operationInProgress': '正在{operation}，请先完成或放弃它，再做别的操作。',
   'git.noOperationInProgress': '没有进行到一半的合并、变基、拣选或撤销。',
   'git.conflictsBlockOperation': '{paths}还有未解决的合并冲突。请先解决并标记为已解决。',
   'git.conflictsBlockContinue': '{paths}还有未解决的合并冲突。请先解决并标记为已解决，再继续。',
   'git.mergeCannotSkip': '合并不能跳过：解决冲突后继续，或者放弃这次合并。',
-  'git.operationNeedsBranch': '当前检出的是一个提交，不在任何分支上（分离的 HEAD），不能{operation}。请先切换到一个分支，或从这个提交新建分支。',
+  'git.operationNeedsBranch':
+    '当前检出的是一个提交，不在任何分支上（分离的 HEAD），不能{operation}。请先切换到一个分支，或从这个提交新建分支。',
   'git.operationTargetRequired': '没有指明要{operation}的分支或提交。',
   'git.revisionMissing': '找不到 {revision}：它可能已经被删除或改了名。',
   'git.operationRefused': 'Git 没有开始{operation}：{output}',
-  'git.operationStopped': '{operation}停在了半路，项目里却没有冲突文件（冲突可能在项目之外、仓库的别的目录里）。处理之后点提交面板上方的“继续”，或点“放弃”回到开始之前。Git 的说明：{output}',
+  'git.operationStopped':
+    '{operation}停在了半路，项目里却没有冲突文件（冲突可能在项目之外、仓库的别的目录里）。处理之后点提交面板上方的“继续”，或点“放弃”回到开始之前。Git 的说明：{output}',
   'git.operationStepRefused': 'Git 没有完成这一步：{output}',
   'git.cherryPickEmpty': '这个提交的改动当前分支里已经有了，没有可拣选的内容。',
   'git.revertEmpty': '这个提交的改动当前分支里已经没有了，没有可撤销的内容。',
@@ -298,14 +325,20 @@ const zhCN = {
   'git.commitMessageFiles': '{count} 个文件',
   'git.conflictsBlockCommit': '{paths}还有未解决的合并冲突。请先解决冲突并标记为已解决，再提交。',
   'git.repositoryLocationUnknown': '读不到项目所在仓库的位置。',
-  'git.conflictMarkersLeft': '“{path}”里还有冲突标记（<<<<<<< 或 >>>>>>>），请先解决冲突再标记为已解决。',
+  'git.conflictMarkersLeft':
+    '“{path}”里还有冲突标记（<<<<<<< 或 >>>>>>>），请先解决冲突再标记为已解决。',
   'git.nothingToStash': '没有可以贮藏的改动。',
-  'git.nothingToStashOnlyUntracked': '只有未跟踪的文件，没有别的改动。要把它们也贮藏起来，请勾选“包含未跟踪的文件”。',
-  'git.conflictsBlockStash': '{paths}还有未解决的合并冲突，现在不能贮藏或取回贮藏。请先解决冲突并标记为已解决。',
-  'git.stashDuringOperation': '正在{operation}，现在不能贮藏或取回贮藏：贮藏会把这次{operation}丢掉。请先完成或放弃它。',
+  'git.nothingToStashOnlyUntracked':
+    '只有未跟踪的文件，没有别的改动。要把它们也贮藏起来，请勾选“包含未跟踪的文件”。',
+  'git.conflictsBlockStash':
+    '{paths}还有未解决的合并冲突，现在不能贮藏或取回贮藏。请先解决冲突并标记为已解决。',
+  'git.stashDuringOperation':
+    '正在{operation}，现在不能贮藏或取回贮藏：贮藏会把这次{operation}丢掉。请先完成或放弃它。',
   'git.stashMissing': '这条贮藏已经不在了（可能已被取回或删除）。请刷新贮藏列表。',
-  'git.stashWouldOverwrite': '这条贮藏要改的文件在工作区里还有没提交的改动：{files}。取回不会覆盖它们：请先提交、贮藏或回滚这些改动，再取回。',
-  'git.stashUntrackedCollision': '这条贮藏里有未跟踪的文件，工作区里已经有同名的：{files}。取回不会覆盖它们：请先把这些文件移走或改名，再取回。',
+  'git.stashWouldOverwrite':
+    '这条贮藏要改的文件在工作区里还有没提交的改动：{files}。取回不会覆盖它们：请先提交、贮藏或回滚这些改动，再取回。',
+  'git.stashUntrackedCollision':
+    '这条贮藏里有未跟踪的文件，工作区里已经有同名的：{files}。取回不会覆盖它们：请先把这些文件移走或改名，再取回。',
   'git.listEllipsis': '……',
   'git.stashApplyRefused': 'Git 没能取回这条贮藏（贮藏还留着）：{output}',
   'git.invalidPath': 'Git 文件路径无效。',
@@ -315,7 +348,8 @@ const zhCN = {
   'git.rootRequired': '工作区根目录不能为空。',
   'git.rootMissing': '工作区根目录不存在。',
   'git.rootInvalid': '工作区根目录无效。',
-  'git.noProgress': 'git {command} 已经 {seconds} 秒没有任何进展，已停止。请检查网络连接和远端凭据后重试。',
+  'git.noProgress':
+    'git {command} 已经 {seconds} 秒没有任何进展，已停止。请检查网络连接和远端凭据后重试。',
   'git.cancelled': '已取消 git {command}。',
   'git.outputTooLarge': 'git {command} 的输出超过 {size} MB，已停止读取。',
   'git.notRepository': '当前工作区不是 Git 仓库。',
@@ -326,16 +360,19 @@ const zhCN = {
   'git.invalidFilePath': '无效的文件路径。',
   'git.invalidRecordId': '无效的会话或记录 id。',
   'language.rootMarkerOutsideWorkspace': '{server} 项目根标记的真实路径超出工作区。',
-  'language.serverMissingBin': '{server} 语言服务器不可用：项目内 {package} 未提供 \'{bin}\'。请安装或更新项目工具链。',
+  'language.serverMissingBin':
+    "{server} 语言服务器不可用：项目内 {package} 未提供 '{bin}'。请安装或更新项目工具链。",
   'language.serverMissingPackageName': '{server} 语言服务器配置缺少项目工具链包名。',
-  'language.serverCommandOutsideWorkspace': '{server} 语言服务器不可用：项目命令的真实路径超出工作区。',
-  'language.extensionRequestUndeclared': '{server} 没有声明语言扩展请求 \'{request}\'。',
-  'language.extensionRequestUnsupported': '{server} 语言服务器不支持 \'{request}\'。',
+  'language.serverCommandOutsideWorkspace':
+    '{server} 语言服务器不可用：项目命令的真实路径超出工作区。',
+  'language.extensionRequestUndeclared': "{server} 没有声明语言扩展请求 '{request}'。",
+  'language.extensionRequestUnsupported': "{server} 语言服务器不支持 '{request}'。",
   'language.installPackageHint': '请在项目中安装 {package}，或将命令加入 PATH。',
   'language.installToolchainHint': '请安装对应项目工具链，或将命令加入 PATH。',
-  'language.serverNotFound': '{server} 语言服务器不可用：未找到 \'{command}\'。 {hint}',
+  'language.serverNotFound': "{server} 语言服务器不可用：未找到 '{command}'。 {hint}",
   'language.serverExited': '{server} 语言服务器已退出（{reason}）。{stderr}',
-  'language.protocolMismatch': '{server} 语言协议不兼容：Workbench 需要 v{expected}，服务器返回 {actual}。',
+  'language.protocolMismatch':
+    '{server} 语言协议不兼容：Workbench 需要 v{expected}，服务器返回 {actual}。',
   'language.requestTimedOut': '{server} 语言服务器请求超时：{method}。',
   'language.serverNotRunning': '{server} 语言服务器尚未运行。',
   'language.clientClosed': '{server} 语言服务器客户端已关闭。',
@@ -379,35 +416,48 @@ const enUS: Record<WorkbenchMainMessageKey, string> = {
   'menu.zoomEditorReset': 'Reset Editor Zoom',
   'menu.openProjectInNewWindow': 'Open Project in New Window…',
   'policy.gitReset.title': 'Reset the Git working tree',
-  'policy.gitReset.reason': 'The command resets the Git working tree; uncommitted changes may be overwritten.',
+  'policy.gitReset.reason':
+    'The command resets the Git working tree; uncommitted changes may be overwritten.',
   'policy.gitRestore.title': 'Overwrite files with the versions in Git',
-  'policy.gitRestore.reason': 'The command overwrites working tree files with the versions in Git; uncommitted changes will be lost.',
+  'policy.gitRestore.reason':
+    'The command overwrites working tree files with the versions in Git; uncommitted changes will be lost.',
   'policy.gitRm.title': 'Force-delete working tree files',
-  'policy.gitRm.reason': 'The command force-deletes working tree files together with their uncommitted changes.',
+  'policy.gitRm.reason':
+    'The command force-deletes working tree files together with their uncommitted changes.',
   'policy.gitClean.title': 'Delete untracked files',
-  'policy.gitClean.reason': 'The command deletes untracked files; new files that are not committed yet will be gone.',
+  'policy.gitClean.reason':
+    'The command deletes untracked files; new files that are not committed yet will be gone.',
   'policy.gitCheckout.title': 'Switch the Git branch or overwrite files',
-  'policy.gitCheckout.reason': 'The command switches the Git branch or overwrites files with the versions in Git, and may discard changes in the working tree.',
+  'policy.gitCheckout.reason':
+    'The command switches the Git branch or overwrites files with the versions in Git, and may discard changes in the working tree.',
   'policy.gitSwitch.title': 'Switch the Git branch',
-  'policy.gitSwitch.reason': 'The command switches the Git branch and may interrupt work that other agents or the workbench have in progress.',
+  'policy.gitSwitch.reason':
+    'The command switches the Git branch and may interrupt work that other agents or the workbench have in progress.',
   'policy.gitMerge.title': 'Merge Git history',
   'policy.gitMerge.reason': 'The command merges Git history and may rewrite the working tree.',
   'policy.gitPull.title': 'Pull and update the Git HEAD',
-  'policy.gitPull.reason': 'The command updates the current Git HEAD and may conflict with file changes in progress.',
+  'policy.gitPull.reason':
+    'The command updates the current Git HEAD and may conflict with file changes in progress.',
   'policy.gitRebase.title': 'Rebase Git history',
-  'policy.gitRebase.reason': 'The command rebases Git history and may rewrite commits or the working tree.',
+  'policy.gitRebase.reason':
+    'The command rebases Git history and may rewrite commits or the working tree.',
   'policy.gitRevert.title': 'Revert Git commits',
-  'policy.gitRevert.reason': 'The command reverts existing commits and may conflict with changes in the working tree.',
+  'policy.gitRevert.reason':
+    'The command reverts existing commits and may conflict with changes in the working tree.',
   'policy.gitForcePush.title': 'Force-push a Git branch',
-  'policy.gitForcePush.reason': 'The command force-pushes a Git branch and may overwrite history on the remote.',
+  'policy.gitForcePush.reason':
+    'The command force-pushes a Git branch and may overwrite history on the remote.',
   'policy.gitStashDrop.title': 'Drop Git stashes',
   'policy.gitStashDrop.reason': 'The command permanently drops changes saved in the Git stash.',
   'policy.ghCheckout.title': 'Switch branches through the GitHub CLI',
-  'policy.ghCheckout.reason': 'The command switches branches or changes the working tree through the GitHub CLI.',
+  'policy.ghCheckout.reason':
+    'The command switches branches or changes the working tree through the GitHub CLI.',
   'policy.chmodWorldWritable.title': 'Make files writable by everyone',
-  'policy.chmodWorldWritable.reason': 'The command sets file permissions to 777 or world-writable, widening who can write and execute.',
+  'policy.chmodWorldWritable.reason':
+    'The command sets file permissions to 777 or world-writable, widening who can write and execute.',
   'policy.outsideWorkspace.title': 'Change a path outside the project',
-  'policy.outsideWorkspace.reason': 'The command changes a path outside the current workspace: {path}.',
+  'policy.outsideWorkspace.reason':
+    'The command changes a path outside the current workspace: {path}.',
   'policy.shutdown.title': 'Shut down or restart the system',
   'policy.shutdown.reason': 'The command may shut down, restart or interrupt the current system.',
   'policy.eraseDisk.title': 'Erase a disk',
@@ -425,6 +475,8 @@ const enUS: Record<WorkbenchMainMessageKey, string> = {
   'account.serviceRequestFailed': 'The VelarOS account service request failed ({status}).',
   'account.invalidCloudPath': 'Invalid VelarOS Cloud request path.',
   'account.signInRequired': 'Sign in to VelarOS first.',
+  'account.sessionExpired':
+    'Your VelarOS session has expired. Sign in again in Settings, then refresh the model list.',
   'account.providerNotGranted': 'This account has not been granted access to {provider}.',
   'account.providerUnavailable': '{provider} is currently unavailable.',
   'account.invalidGrantFormat': 'The VelarOS managed model grant has an invalid format.',
@@ -456,8 +508,10 @@ const enUS: Record<WorkbenchMainMessageKey, string> = {
   'projects.pickOpenInNewWindow': 'Open Project in New Window',
   'projects.pickCloneLocation': 'Choose Where to Save the Git Project',
   'projects.pickNewProjectLocation': 'Choose the Project Location',
-  'codec.loneSurrogate': 'Line {line}, column {column} holds an unpaired UTF-16 surrogate (usually a damaged paste) that no encoding can write. Nothing was saved; delete it and save again.',
-  'codec.unencodable': '"{char}" at line {line}, column {column} cannot be written in {encoding}. To keep the file intact nothing was saved: delete such characters, or convert the file to UTF-8 and save again.',
+  'codec.loneSurrogate':
+    'Line {line}, column {column} holds an unpaired UTF-16 surrogate (usually a damaged paste) that no encoding can write. Nothing was saved; delete it and save again.',
+  'codec.unencodable':
+    '"{char}" at line {line}, column {column} cannot be written in {encoding}. To keep the file intact nothing was saved: delete such characters, or convert the file to UTF-8 and save again.',
   'conversation.closing': 'The conversation is closing.',
   'conversation.runStopped': 'The run was stopped.',
   'conversation.noActiveRun': 'This conversation has no active run.',
@@ -478,9 +532,11 @@ const enUS: Record<WorkbenchMainMessageKey, string> = {
   'conversation.invalidRequest': 'Invalid conversation request.',
   'conversation.memoryNotInWindow': 'This window cannot view the memory of that project.',
   'conversation.invalidMemoryRequest': 'Invalid memory request.',
-  'conversation.engineGuidanceUnsupported': 'Conversations with an external engine cannot take guidance mid-run; this message will be sent when the turn ends.',
+  'conversation.engineGuidanceUnsupported':
+    'Conversations with an external engine cannot take guidance mid-run; this message will be sent when the turn ends.',
   'conversation.emptyMessage': 'The message cannot be empty.',
-  'engines.claudeSignedOut': 'Claude Code is not signed in: run claude in a terminal to sign in, then open this menu again.',
+  'engines.claudeSignedOut':
+    'Claude Code is not signed in: run claude in a terminal to sign in, then open this menu again.',
   'engines.claudeNoModels': 'Claude Code reported no available models.',
   'engines.claudeNoResponse': 'Claude Code did not respond in time.',
   'engines.claudeRunIncomplete': 'Claude Code did not finish this turn.',
@@ -494,7 +550,8 @@ const enUS: Record<WorkbenchMainMessageKey, string> = {
   'engines.codexClosed': 'Codex was closed.',
   'engines.codexRequestRejected': 'Codex rejected the request.',
   'engines.codexNoResponse': 'Codex did not respond in time.',
-  'engines.codexSignedOut': 'Codex is not signed in: run codex login in a terminal, then open this menu again.',
+  'engines.codexSignedOut':
+    'Codex is not signed in: run codex login in a terminal, then open this menu again.',
   'engines.codexNoModels': 'Codex reported no available models.',
   'engines.codexNoThread': 'Codex did not return a thread.',
   'engines.codexRequestWithdrawn': 'Codex withdrew the request.',
@@ -509,8 +566,10 @@ const enUS: Record<WorkbenchMainMessageKey, string> = {
   'engines.toolCallFailed': 'The tool call failed.',
   'engines.toolResultMissing': 'The engine did not report a result for this call.',
   'engines.unknownEngine': 'There is no such external engine.',
-  'engines.conversationBusy': 'This conversation is running. Wait for it to finish or stop it first.',
-  'engines.commandNotFound': 'The {label} command line ({name}) was not found. Install it, then open this menu again.',
+  'engines.conversationBusy':
+    'This conversation is running. Wait for it to finish or stop it first.',
+  'engines.commandNotFound':
+    'The {label} command line ({name}) was not found. Install it, then open this menu again.',
   'engines.cancelled': 'Cancelled.',
   'engines.requestWithdrawn': 'The request was withdrawn.',
   'engines.runEnded': 'The run has ended.',
@@ -518,7 +577,8 @@ const enUS: Record<WorkbenchMainMessageKey, string> = {
   'files.restoreTargetNotInFolder': 'The file can only be restored into a regular folder.',
   'files.restoreFileReappeared': 'The file exists again. Use the version on disk.',
   'files.createTargetNotFolder': 'New items can only be created inside a folder.',
-  'files.createInLinkedFolder': 'Creating items inside a symbolic-link folder is not supported yet.',
+  'files.createInLinkedFolder':
+    'Creating items inside a symbolic-link folder is not supported yet.',
   'files.createTypeInvalid': 'Unknown item type.',
   'files.targetExists': 'An item with that name already exists.',
   'files.renameProjectRoot': 'The project folder itself cannot be renamed.',
@@ -528,15 +588,20 @@ const enUS: Record<WorkbenchMainMessageKey, string> = {
   'files.moveIntoItself': 'A folder cannot be moved into itself or one of its subfolders.',
   'files.deleteProjectRoot': 'The project folder itself cannot be deleted.',
   'files.deleteNeedsConfirmation': 'The folder is not empty. Confirm before deleting it.',
-  'files.undoDeleteExpired': 'This delete can no longer be undone here. The deleted items are in the system Trash.',
+  'files.undoDeleteExpired':
+    'This delete can no longer be undone here. The deleted items are in the system Trash.',
   'files.undoDeleteTargetExists': 'Cannot undo the delete because {path} already exists.',
-  'files.undoDeleteParentMissing': 'Cannot undo the delete because the folder that contained {path} no longer exists.',
-  'files.undoDeleteIntoLinkedFolder': 'Restoring items into a symbolic-link folder is not supported yet.',
-  'files.moveToTrashFailed': 'Could not move the item to the system Trash, so nothing was deleted: {reason}',
+  'files.undoDeleteParentMissing':
+    'Cannot undo the delete because the folder that contained {path} no longer exists.',
+  'files.undoDeleteIntoLinkedFolder':
+    'Restoring items into a symbolic-link folder is not supported yet.',
+  'files.moveToTrashFailed':
+    'Could not move the item to the system Trash, so nothing was deleted: {reason}',
   'files.editSymlink': 'Editing a symbolic link directly is not supported yet.',
   'files.saveTargetNotFile': 'Only files can be saved.',
   'files.notEditableText': 'This file is not an editable text file.',
-  'files.formatNotRoundTrip': 'This file\'s encoding or line endings cannot be written back as they are. Open it in the editor and confirm a conversion before saving.',
+  'files.formatNotRoundTrip':
+    "This file's encoding or line endings cannot be written back as they are. Open it in the editor and confirm a conversion before saving.",
   'files.saveTooLarge': 'The file is too large to save from the editor.',
   'files.changedOnDisk': 'The file was changed outside the editor. Reload it before saving.',
   'files.copyProjectRoot': 'The project folder itself cannot be copied.',
@@ -562,7 +627,7 @@ const enUS: Record<WorkbenchMainMessageKey, string> = {
   'paths.nameEmpty': 'Enter a name.',
   'paths.nameDots': 'The name cannot be . or ..',
   'paths.nameSeparator': 'The name cannot contain path separators.',
-  'paths.gitInternalName': '.git is the repository\'s internal folder and cannot be managed here.',
+  'paths.gitInternalName': ".git is the repository's internal folder and cannot be managed here.",
   'paths.gitInternals': 'Repository internals cannot be changed from the Workbench: {path}',
   'paths.entryGone': 'The file or folder was deleted or moved: {path}',
   'paths.entryNoPermission': 'No permission to access the file or folder: {path}',
@@ -571,31 +636,39 @@ const enUS: Record<WorkbenchMainMessageKey, string> = {
   'commands.cwdNotFolder': 'Commands can only run in a folder.',
   'commands.startFailed': 'The command could not start: {reason}',
   'commands.empty': 'Enter a command.',
-  'commands.notConfirmed': 'The command was not run because it was not confirmed: {command} ({reason})',
+  'commands.notConfirmed':
+    'The command was not run because it was not confirmed: {command} ({reason})',
   'terminal.cwdNotFolder': 'The terminal can only start in a folder.',
   'terminal.processExited': 'Process exited (exit={code} signal={signal})',
   'terminal.sessionEnded': 'The terminal session has ended.',
   'terminal.sessionNotInWindow': 'The terminal session does not belong to this project window.',
-  'terminal.backendUnavailable': 'No terminal backend is available on this platform ({platform}): {reason}',
+  'terminal.backendUnavailable':
+    'No terminal backend is available on this platform ({platform}): {reason}',
   'debug.sessionEnded': 'The debug session has ended.',
   'debug.sessionNotInWindow': 'The debug session does not belong to this project window.',
-  'debug.attachTimedOut': 'The program did not open its debug port. It may not have started, or it was not started with the inspector.',
+  'debug.attachTimedOut':
+    'The program did not open its debug port. It may not have started, or it was not started with the inspector.',
   'debug.scriptNotFile': 'The script to debug is not a file: {path}',
-  'debug.packageBinMissing': 'Could not find the executable of {package} in the project\'s dependencies.',
+  'debug.packageBinMissing':
+    "Could not find the executable of {package} in the project's dependencies.",
   'watch.subscriptionNotInWindow': 'The file watch subscription does not belong to this window.',
   'search.targetNotFolder': 'Only a folder can be searched.',
   'search.invalidRegex': 'Invalid regular expression: {message}',
   'search.queryEmpty': 'There is nothing to search for.',
   'search.replaceQueryEmpty': 'There is no search text to replace.',
   'search.replaceNotText': 'This is not a text file.',
-  'search.replaceFormatNotRoundTrip': 'This file\'s encoding or line endings cannot be written back as they are. Open it in the editor and confirm a conversion before replacing.',
-  'search.changedSinceSearch': 'The file was changed after the search. Search again before replacing.',
+  'search.replaceFormatNotRoundTrip':
+    "This file's encoding or line endings cannot be written back as they are. Open it in the editor and confirm a conversion before replacing.",
+  'search.changedSinceSearch':
+    'The file was changed after the search. Search again before replacing.',
   'search.cancelled': 'The search was cancelled.',
   'search.ended': 'The search has ended.',
   'search.workerExited': 'The search stopped unexpectedly. Search again.',
-  'search.stalledOnFile': 'Matching in {path} took too long and was stopped. Rewrite the regular expression (avoid nested + or *) and try again.',
+  'search.stalledOnFile':
+    'Matching in {path} took too long and was stopped. Rewrite the regular expression (avoid nested + or *) and try again.',
   'search.stalled': 'The search made no progress for too long and was stopped.',
-  'search.outOfMemory': 'The search used too much memory and was stopped. Narrow the search or change the search text and try again.',
+  'search.outOfMemory':
+    'The search used too much memory and was stopped. Narrow the search or change the search text and try again.',
   'git.operationMerge': 'merge',
   'git.operationCherryPick': 'cherry-pick',
   'git.operationRebase': 'rebase',
@@ -604,66 +677,104 @@ const enUS: Record<WorkbenchMainMessageKey, string> = {
   'git.quotedPath': '"{path}"',
   'git.pathsMore': '{names} and {rest} more',
   'git.nothingSelectedToCommit': 'The selection has no changes to commit.',
-  'git.partialCommitDuringOperation': 'A {operation} is in progress. This commit completes the {operation}, so it must include every change. Commit without selecting files, or select all of them.',
+  'git.partialCommitDuringOperation':
+    'A {operation} is in progress. This commit completes the {operation}, so it must include every change. Commit without selecting files, or select all of them.',
   'git.nothingStaged': 'Nothing is staged. Stage the files you want to commit first.',
   'git.noFilesGiven': 'No files were given.',
   'git.noConflictToResolve': '"{path}" has no merge conflict to resolve.',
-  'git.conflictsBlockDiscard': '{paths} still have unresolved merge conflicts, so they cannot be rolled back. Resolve the conflicts and mark them resolved, or abort the operation in progress (Abort at the top of the commit panel).',
-  'git.conflictsBlockUnstage': '{paths} still have unresolved merge conflicts, so they cannot be unstaged. Resolve the conflicts and mark them resolved, or abort the operation in progress (Abort at the top of the commit panel).',
+  'git.conflictsBlockDiscard':
+    '{paths} still have unresolved merge conflicts, so they cannot be rolled back. Resolve the conflicts and mark them resolved, or abort the operation in progress (Abort at the top of the commit panel).',
+  'git.conflictsBlockUnstage':
+    '{paths} still have unresolved merge conflicts, so they cannot be unstaged. Resolve the conflicts and mark them resolved, or abort the operation in progress (Abort at the top of the commit panel).',
   'git.unsupportedFileAction': 'Unsupported Git file action.',
   'git.noHunksGiven': 'No change blocks were given.',
   'git.fileHasNoChanges': '"{path}" no longer has changes.',
-  'git.hunkConflict': '"{path}" still has an unresolved merge conflict, so its blocks cannot be handled one at a time. Resolve the conflict and mark it resolved first.',
-  'git.hunkWholeFileOnly': '"{path}" is a new, deleted or binary change. It can only be staged, unstaged or rolled back as a whole file.',
-  'git.hunkNotUtf8': '"{path}" is not UTF-8, so its blocks cannot be handled one at a time. Stage, unstage or roll back the whole file.',
-  'git.hunkChanged': 'This change in "{path}" is no longer the same (the file was edited elsewhere). Try again in the refreshed diff.',
+  'git.hunkConflict':
+    '"{path}" still has an unresolved merge conflict, so its blocks cannot be handled one at a time. Resolve the conflict and mark it resolved first.',
+  'git.hunkWholeFileOnly':
+    '"{path}" is a new, deleted or binary change. It can only be staged, unstaged or rolled back as a whole file.',
+  'git.hunkNotUtf8':
+    '"{path}" is not UTF-8, so its blocks cannot be handled one at a time. Stage, unstage or roll back the whole file.',
+  'git.hunkChanged':
+    'This change in "{path}" is no longer the same (the file was edited elsewhere). Try again in the refreshed diff.',
   'git.switchRefused': 'Git refused to switch branches: {output}',
-  'git.noLocalBranch': 'A commit is checked out, not a branch (detached HEAD), so there is nothing to pull, sync or push. Switch to a branch, or create one from this commit.',
+  'git.noLocalBranch':
+    'A commit is checked out, not a branch (detached HEAD), so there is nothing to pull, sync or push. Switch to a branch, or create one from this commit.',
   'git.branchMissing': 'There is no local branch {branch}.',
-  'git.noUpstreamPull': 'Branch {branch} has no upstream branch, so it cannot be pulled. Push it once (pushing sets the upstream), or set one in the terminal (git branch --set-upstream-to=<remote>/<branch>).',
-  'git.noUpstreamSync': 'Branch {branch} has no upstream branch, so it cannot be synced. Push it once (pushing sets the upstream), or set one in the terminal (git branch --set-upstream-to=<remote>/<branch>).',
-  'git.authFailed': 'The remote rejected authentication. Check your SSH key or access token (Settings › Git), or confirm in the terminal that you can reach this remote.\n{detail}',
-  'git.networkFailed': 'Could not reach the remote. Check your network and the remote address.\n{detail}',
-  'git.pushRejected': 'The push was rejected because the remote has commits you don\'t have yet. Pull (or sync) first, then push.',
-  'git.pullDiverged': 'Your branch and the remote have diverged, and pull.ff=only allows fast-forwards only. In the Git tool window at the bottom, right-click the remote branch to merge it or to rebase the current branch onto it; or change the pull.ff setting.',
-  'git.pullWouldOverwrite': 'The pull would overwrite uncommitted changes or untracked files. Commit or roll them back, then pull.',
-  'git.pullWouldOverwriteFiles': 'The pull would overwrite uncommitted changes or untracked files: {files}. Commit or roll them back, then pull.',
-  'git.rebasePullDirty': 'Pulling with rebase (pull.rebase) needs a working tree without uncommitted changes. Commit or roll them back, then pull.',
-  'git.mergeUnfinished': 'A merge is still in progress, so you cannot pull. Resolve the conflicts and mark them resolved, then use Continue at the top of the commit panel to finish the merge, or Abort it.',
+  'git.noUpstreamPull':
+    'Branch {branch} has no upstream branch, so it cannot be pulled. Push it once (pushing sets the upstream), or set one in the terminal (git branch --set-upstream-to=<remote>/<branch>).',
+  'git.noUpstreamSync':
+    'Branch {branch} has no upstream branch, so it cannot be synced. Push it once (pushing sets the upstream), or set one in the terminal (git branch --set-upstream-to=<remote>/<branch>).',
+  'git.authFailed':
+    'The remote rejected authentication. Check your SSH key or access token (Settings › Git), or confirm in the terminal that you can reach this remote.\n{detail}',
+  'git.networkFailed':
+    'Could not reach the remote. Check your network and the remote address.\n{detail}',
+  'git.pushRejected':
+    "The push was rejected because the remote has commits you don't have yet. Pull (or sync) first, then push.",
+  'git.pullDiverged':
+    'Your branch and the remote have diverged, and pull.ff=only allows fast-forwards only. In the Git tool window at the bottom, right-click the remote branch to merge it or to rebase the current branch onto it; or change the pull.ff setting.',
+  'git.pullWouldOverwrite':
+    'The pull would overwrite uncommitted changes or untracked files. Commit or roll them back, then pull.',
+  'git.pullWouldOverwriteFiles':
+    'The pull would overwrite uncommitted changes or untracked files: {files}. Commit or roll them back, then pull.',
+  'git.rebasePullDirty':
+    'Pulling with rebase (pull.rebase) needs a working tree without uncommitted changes. Commit or roll them back, then pull.',
+  'git.mergeUnfinished':
+    'A merge is still in progress, so you cannot pull. Resolve the conflicts and mark them resolved, then use Continue at the top of the commit panel to finish the merge, or Abort it.',
   'git.commandFailedDetail': 'The Git command failed: {detail}',
   'git.commandFailed': 'The Git command failed: git {command}',
-  'git.noRemote': 'This repository has no remote, so it cannot push. Add one first (git remote add origin <url>).',
-  'git.ambiguousRemote': 'The repository has {count} remotes ({remotes}), so it is unclear where to push {branch}. Push once in the terminal and name the remote (git push -u <remote> {branch}), or set a default (git config remote.pushDefault <remote>).',
-  'git.statusTooLarge': 'The project has too many changes: its Git status is over {size} MB and cannot be shown. Check whether .gitignore misses folders such as node_modules or build output.',
-  'git.rebaseInProgress': 'A rebase is in progress. After resolving the conflicts and marking them resolved, use Continue at the top of the commit panel, or Abort to go back to before the rebase. Don\'t commit here while rebasing.',
-  'git.operationInProgress': 'A {operation} is in progress. Finish or abort it before starting something else.',
+  'git.noRemote':
+    'This repository has no remote, so it cannot push. Add one first (git remote add origin <url>).',
+  'git.ambiguousRemote':
+    'The repository has {count} remotes ({remotes}), so it is unclear where to push {branch}. Push once in the terminal and name the remote (git push -u <remote> {branch}), or set a default (git config remote.pushDefault <remote>).',
+  'git.statusTooLarge':
+    'The project has too many changes: its Git status is over {size} MB and cannot be shown. Check whether .gitignore misses folders such as node_modules or build output.',
+  'git.rebaseInProgress':
+    "A rebase is in progress. After resolving the conflicts and marking them resolved, use Continue at the top of the commit panel, or Abort to go back to before the rebase. Don't commit here while rebasing.",
+  'git.operationInProgress':
+    'A {operation} is in progress. Finish or abort it before starting something else.',
   'git.noOperationInProgress': 'No merge, rebase, cherry-pick or revert is in progress.',
-  'git.conflictsBlockOperation': '{paths} still have unresolved merge conflicts. Resolve them and mark them resolved first.',
-  'git.conflictsBlockContinue': '{paths} still have unresolved merge conflicts. Resolve them and mark them resolved, then continue.',
-  'git.mergeCannotSkip': 'A merge cannot be skipped: resolve the conflicts and continue, or abort the merge.',
-  'git.operationNeedsBranch': 'A commit is checked out, not a branch (detached HEAD), so there is no current branch to {operation}. Switch to a branch, or create one from this commit.',
+  'git.conflictsBlockOperation':
+    '{paths} still have unresolved merge conflicts. Resolve them and mark them resolved first.',
+  'git.conflictsBlockContinue':
+    '{paths} still have unresolved merge conflicts. Resolve them and mark them resolved, then continue.',
+  'git.mergeCannotSkip':
+    'A merge cannot be skipped: resolve the conflicts and continue, or abort the merge.',
+  'git.operationNeedsBranch':
+    'A commit is checked out, not a branch (detached HEAD), so there is no current branch to {operation}. Switch to a branch, or create one from this commit.',
   'git.operationTargetRequired': 'No branch or commit was given to {operation}.',
   'git.revisionMissing': 'Could not find {revision}; it may have been deleted or renamed.',
   'git.operationRefused': 'Git did not start the {operation}: {output}',
-  'git.operationStopped': 'The {operation} stopped part-way, yet no file in the project conflicts (the conflicts may be outside the project, elsewhere in the repository). Deal with it, then use Continue at the top of the commit panel, or Abort to go back to where it started. Git said: {output}',
+  'git.operationStopped':
+    'The {operation} stopped part-way, yet no file in the project conflicts (the conflicts may be outside the project, elsewhere in the repository). Deal with it, then use Continue at the top of the commit panel, or Abort to go back to where it started. Git said: {output}',
   'git.operationStepRefused': 'Git did not complete this step: {output}',
-  'git.cherryPickEmpty': 'The current branch already contains this commit\'s changes, so there is nothing to cherry-pick.',
-  'git.revertEmpty': 'The current branch no longer contains this commit\'s changes, so there is nothing to revert.',
+  'git.cherryPickEmpty':
+    "The current branch already contains this commit's changes, so there is nothing to cherry-pick.",
+  'git.revertEmpty':
+    "The current branch no longer contains this commit's changes, so there is nothing to revert.",
   'git.nothingToCommit': 'The project has no changes to commit.',
   'git.commitMessageAdd': 'Add {target}',
   'git.commitMessageRemove': 'Remove {target}',
   'git.commitMessageUpdate': 'Update {target}',
   'git.commitMessageFiles': '{count} files',
-  'git.conflictsBlockCommit': '{paths} still have unresolved merge conflicts. Resolve them and mark them resolved before committing.',
+  'git.conflictsBlockCommit':
+    '{paths} still have unresolved merge conflicts. Resolve them and mark them resolved before committing.',
   'git.repositoryLocationUnknown': 'Could not find the repository that contains the project.',
-  'git.conflictMarkersLeft': '"{path}" still contains conflict markers (<<<<<<< or >>>>>>>). Resolve the conflict before marking it resolved.',
+  'git.conflictMarkersLeft':
+    '"{path}" still contains conflict markers (<<<<<<< or >>>>>>>). Resolve the conflict before marking it resolved.',
   'git.nothingToStash': 'There are no changes to stash.',
-  'git.nothingToStashOnlyUntracked': 'There are only untracked files and no other changes. To stash them too, tick "Include untracked files".',
-  'git.conflictsBlockStash': '{paths} still have unresolved merge conflicts, so nothing can be stashed or taken out of a stash right now. Resolve the conflicts and mark them resolved first.',
-  'git.stashDuringOperation': 'A {operation} is in progress, so nothing can be stashed or taken out of a stash right now: stashing would throw the {operation} away. Finish or abort it first.',
-  'git.stashMissing': 'This stash no longer exists (it may have been popped or dropped). Refresh the stash list.',
-  'git.stashWouldOverwrite': 'Files this stash changes still have uncommitted changes in the working tree: {files}. They will not be overwritten: commit, stash or roll back those changes, then apply the stash again.',
-  'git.stashUntrackedCollision': 'This stash contains untracked files that already exist in the working tree: {files}. They will not be overwritten: move or rename those files, then apply the stash again.',
+  'git.nothingToStashOnlyUntracked':
+    'There are only untracked files and no other changes. To stash them too, tick "Include untracked files".',
+  'git.conflictsBlockStash':
+    '{paths} still have unresolved merge conflicts, so nothing can be stashed or taken out of a stash right now. Resolve the conflicts and mark them resolved first.',
+  'git.stashDuringOperation':
+    'A {operation} is in progress, so nothing can be stashed or taken out of a stash right now: stashing would throw the {operation} away. Finish or abort it first.',
+  'git.stashMissing':
+    'This stash no longer exists (it may have been popped or dropped). Refresh the stash list.',
+  'git.stashWouldOverwrite':
+    'Files this stash changes still have uncommitted changes in the working tree: {files}. They will not be overwritten: commit, stash or roll back those changes, then apply the stash again.',
+  'git.stashUntrackedCollision':
+    'This stash contains untracked files that already exist in the working tree: {files}. They will not be overwritten: move or rename those files, then apply the stash again.',
   'git.listEllipsis': ', …',
   'git.stashApplyRefused': 'Git could not apply this stash (it is kept): {output}',
   'git.invalidPath': 'Invalid Git file path.',
@@ -673,7 +784,8 @@ const enUS: Record<WorkbenchMainMessageKey, string> = {
   'git.rootRequired': 'The workspace folder is required.',
   'git.rootMissing': 'The workspace folder does not exist.',
   'git.rootInvalid': 'The workspace folder is invalid.',
-  'git.noProgress': 'git {command} made no progress for {seconds} seconds and was stopped. Check your network connection and remote credentials, then try again.',
+  'git.noProgress':
+    'git {command} made no progress for {seconds} seconds and was stopped. Check your network connection and remote credentials, then try again.',
   'git.cancelled': 'git {command} was cancelled.',
   'git.outputTooLarge': 'The output of git {command} is over {size} MB, so reading it was stopped.',
   'git.notRepository': 'This workspace is not a Git repository.',
@@ -683,41 +795,55 @@ const enUS: Record<WorkbenchMainMessageKey, string> = {
   'git.checkpointCommandFailed': 'git {command} failed',
   'git.invalidFilePath': 'Invalid file path.',
   'git.invalidRecordId': 'Invalid chat session or record id.',
-  'language.rootMarkerOutsideWorkspace': '{server}: the project\'s root marker resolves outside the workspace.',
-  'language.serverMissingBin': 'The {server} language server is unavailable: {package} in this project does not provide \'{bin}\'. Install or update the project toolchain.',
-  'language.serverMissingPackageName': 'The {server} language server configuration does not name its project toolchain package.',
-  'language.serverCommandOutsideWorkspace': 'The {server} language server is unavailable: the project\'s command resolves outside the workspace.',
-  'language.extensionRequestUndeclared': '{server} does not declare the language extension request \'{request}\'.',
-  'language.extensionRequestUnsupported': 'The {server} language server does not support \'{request}\'.',
+  'language.rootMarkerOutsideWorkspace':
+    "{server}: the project's root marker resolves outside the workspace.",
+  'language.serverMissingBin':
+    "The {server} language server is unavailable: {package} in this project does not provide '{bin}'. Install or update the project toolchain.",
+  'language.serverMissingPackageName':
+    'The {server} language server configuration does not name its project toolchain package.',
+  'language.serverCommandOutsideWorkspace':
+    "The {server} language server is unavailable: the project's command resolves outside the workspace.",
+  'language.extensionRequestUndeclared':
+    "{server} does not declare the language extension request '{request}'.",
+  'language.extensionRequestUnsupported':
+    "The {server} language server does not support '{request}'.",
   'language.installPackageHint': 'Install {package} in the project, or add the command to PATH.',
-  'language.installToolchainHint': 'Install the project\'s toolchain, or add the command to PATH.',
-  'language.serverNotFound': 'The {server} language server is unavailable: \'{command}\' was not found. {hint}',
+  'language.installToolchainHint': "Install the project's toolchain, or add the command to PATH.",
+  'language.serverNotFound':
+    "The {server} language server is unavailable: '{command}' was not found. {hint}",
   'language.serverExited': 'The {server} language server exited ({reason}).{stderr}',
-  'language.protocolMismatch': '{server} uses an incompatible language protocol: Workbench needs v{expected}, the server reported {actual}.',
+  'language.protocolMismatch':
+    '{server} uses an incompatible language protocol: Workbench needs v{expected}, the server reported {actual}.',
   'language.requestTimedOut': 'The {server} language server did not answer in time: {method}.',
   'language.serverNotRunning': 'The {server} language server is not running yet.',
   'language.clientClosed': 'The {server} language server client is closed.',
   'language.serverCommandMissing': 'The {server} language server has no command configured.',
   'language.requestCancelled': 'The {server} language server request was cancelled: {method}.',
   'language.messageTooLarge': 'A {server} LSP message exceeds the 16 MiB limit.',
-  'language.inputBackedUp': 'The {server} language server stopped reading its input; more than 32 MiB is waiting to be written.',
+  'language.inputBackedUp':
+    'The {server} language server stopped reading its input; more than 32 MiB is waiting to be written.',
   'language.invalidJson': 'The {server} language server returned invalid JSON.',
   'language.headerTooLarge': 'A {server} LSP response header exceeds the 8 KiB limit.',
   'language.missingContentLength': 'A {server} LSP response has no valid Content-Length.',
   'language.responseTooLarge': 'A {server} LSP response exceeds the 16 MiB limit.',
   'language.managerClosed': 'The external language service manager is closed.',
-  'language.workspaceGone': 'The workspace this language service request belongs to is no longer open.',
+  'language.workspaceGone':
+    'The workspace this language service request belongs to is no longer open.',
   'language.workerNoPort': 'The Workbench language service worker has no message port.',
   'language.requestSuperseded': 'A newer request replaced this Workbench language service request.',
   'language.requestCancelledPlain': 'The request was cancelled.',
-  'language.serviceRequestCancelled': 'The Workbench language service request was cancelled ({operation}).',
+  'language.serviceRequestCancelled':
+    'The Workbench language service request was cancelled ({operation}).',
   'language.requestFailed': 'The language server request failed.',
   'language.serviceClosed': 'The Workbench language service has shut down.',
   'language.serviceCloseTimedOut': 'The Workbench language service did not shut down in time.',
-  'language.serviceRequestTimedOut': 'The Workbench language service did not answer in time ({operation}).',
-  'language.serviceRestartedUnresponsive': 'The Workbench language service stopped responding and was restarted.',
+  'language.serviceRequestTimedOut':
+    'The Workbench language service did not answer in time ({operation}).',
+  'language.serviceRestartedUnresponsive':
+    'The Workbench language service stopped responding and was restarted.',
   'language.serviceWorkerExited': 'The Workbench language service worker exited ({code}).',
-  'language.serviceOutOfMemory': 'The language service ran out of memory (the project is very large) and was restarted.',
+  'language.serviceOutOfMemory':
+    'The language service ran out of memory (the project is very large) and was restarted.',
 }
 
 const messages: Record<AppLocale, Record<WorkbenchMainMessageKey, string>> = {

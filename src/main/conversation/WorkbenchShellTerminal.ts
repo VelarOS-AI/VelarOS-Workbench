@@ -5,6 +5,8 @@ import type * as NodePty from '@lydell/node-pty'
 import { isNotUndefined, isUndefined, Log } from '@velaros-ai/core'
 import type { ShellTerminalFactory } from '@velaros-ai/velaros/execution'
 
+import { buildPtyArguments } from '../workspace/terminal/PtyArguments'
+
 const log = Log.tag('WorkbenchShellTerminal')
 const require = createRequire(import.meta.url)
 
@@ -32,9 +34,9 @@ function createNodePtyTerminal(): Nullable<ShellTerminalFactory> {
     return null
   }
   return {
-    // Windows 上原样拼参数时，node-pty 要的是一整行命令行。
+    // 绕开 node-pty 对首尾带引号的整个参数的错误猜测。
     spawn: (file, args, options) =>
-      nodePty.spawn(file, options.windowsVerbatimArguments ? args.join(' ') : args, {
+      nodePty.spawn(file, buildPtyArguments(args, options.windowsVerbatimArguments), {
         name: options.name,
         cols: options.cols,
         rows: options.rows,

@@ -1,4 +1,4 @@
-import { isNonBlankString, optionalWhen, toOptional } from '@velaros-ai/core'
+import { isFiniteNumber, isNonBlankString, optionalWhen, toOptional } from '@velaros-ai/core'
 import type { ConversationView } from '@velaros-ai/ui/conversation'
 
 /**
@@ -26,11 +26,7 @@ const UsageSources = new Set<StandaloneUsageTelemetry['source']>([
   'gateway-cost',
   'local-estimate',
 ])
-const UsageConfidences = new Set<StandaloneUsageTelemetry['confidence']>([
-  'high',
-  'medium',
-  'low',
-])
+const UsageConfidences = new Set<StandaloneUsageTelemetry['confidence']>(['high', 'medium', 'low'])
 
 function readTokenCount(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null
@@ -74,8 +70,7 @@ function readStandaloneUsageTelemetry(value: unknown): StandaloneUsageTelemetry 
   return {
     kind: 'usage-telemetry',
     requestId: typeof payload.requestId === 'string' ? payload.requestId : undefined,
-    agentSessionId:
-      typeof payload.agentSessionId === 'string' ? payload.agentSessionId : undefined,
+    agentSessionId: typeof payload.agentSessionId === 'string' ? payload.agentSessionId : undefined,
     agentRole:
       payload.agentRole === 'parent' || payload.agentRole === 'child'
         ? payload.agentRole
@@ -160,11 +155,22 @@ export type { StandaloneUsageTelemetry }
 export function summarizeStandaloneUsage(entries: readonly StandaloneUsageTelemetry[]) {
   const unique = new Map(entries.map((entry, i) => [entry.requestId ?? `legacy:${i}`, entry]))
   const rows = [...unique.values()]
+  const cacheKnown = rows.filter(
+    (item) =>
+      item.coverage !== 'inflight' &&
+      isFiniteNumber(item.inputTokens) &&
+      item.inputTokens >= 0 &&
+      isFiniteNumber(item.cacheReadInputTokens) &&
+      item.cacheReadInputTokens >= 0
+  )
   return {
     requests: rows.length,
     input: rows.reduce((sum, item) => sum + (item.inputTokens ?? 0), 0),
     output: rows.reduce((sum, item) => sum + (item.outputTokens ?? 0), 0),
     cacheRead: rows.reduce((sum, item) => sum + (item.cacheReadInputTokens ?? 0), 0),
+    cacheKnownRequests: cacheKnown.length,
+    cacheKnownInputTokens: cacheKnown.reduce((sum, item) => sum + item.inputTokens!, 0),
+    cacheKnownReadTokens: cacheKnown.reduce((sum, item) => sum + item.cacheReadInputTokens!, 0),
     missing: rows.filter(
       (item) =>
         item.inputTokens === null ||

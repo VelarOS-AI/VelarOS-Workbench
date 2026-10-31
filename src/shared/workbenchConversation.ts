@@ -199,7 +199,8 @@ export interface ConversationThinkingProjection {
 
 export const ConversationScriptNotice = 'conversation-script'
 export type ConversationScriptKind = 'execute' | 'observe' | 'blobs'
-export type ConversationScriptStatus = 'writing' | 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
+export type ConversationScriptStatus =
+  'writing' | 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
 /** 一段脚本（模型写的 execute / observe 程序）；discarded 表示这一回合协议没通过，卡片撤下。 */
 export interface ConversationScriptProjection {
   /** `conversation:script:${runId}:${turnId}:${index}`，追踪补上的是 `…:${executionId}` 或 `…:observe`。 */
@@ -233,8 +234,8 @@ export interface ConversationAgentProjection {
   agentId?: string
   model?: string
   activity?: Array<
-    | { kind: 'conversation-script'; payload: ConversationScriptProjection }
-    | { kind: 'conversation-text'; payload: ConversationTextProjection }
+    | { kind: 'conversation-script'; payload: ConversationScriptProjection; timestamp?: number }
+    | { kind: 'conversation-text'; payload: ConversationTextProjection; timestamp?: number }
   >
   /** 派发它的脚本卡；对不上卡时为 null。 */
   anchorId: Nullable<string>

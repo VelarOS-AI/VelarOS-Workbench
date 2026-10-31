@@ -12,6 +12,7 @@ import { AppError } from '@velaros-ai/core/error'
 
 import { workbenchMainText } from '../../i18n/workbenchMainMessages'
 
+import { buildPtyArguments } from './PtyArguments'
 import { readWorkbenchProcessCwd } from './WorkbenchProcessCwd'
 import { listWorkbenchProcessTree, signalWorkbenchProcesses } from './WorkbenchProcessTree'
 
@@ -96,7 +97,7 @@ export const nodePtyFactory: WorkbenchPtyFactory = {
       if (value !== undefined) env[key] = value
     const pty = loadNodePty().spawn(
       file,
-      options.windowsVerbatimArguments ? args.join(' ') : args,
+      buildPtyArguments(args, options.windowsVerbatimArguments),
       {
         name: options.name,
         cols: options.cols,
