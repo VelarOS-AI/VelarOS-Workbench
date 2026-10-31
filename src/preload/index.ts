@@ -254,6 +254,7 @@ const sessionPeersBridge: WorkbenchSessionPeersBridge = {
 }
 
 const conversationBridge: WorkbenchConversationBridge = {
+  recover: (request) => ipcRenderer.invoke(WorkbenchConversationChannels.recover, request),
   send: (request) => ipcRenderer.invoke(WorkbenchConversationChannels.send, request),
   cancel: (request) => ipcRenderer.invoke(WorkbenchConversationChannels.cancel, request),
   guidance: (request) => ipcRenderer.invoke(WorkbenchConversationChannels.guidance, request),

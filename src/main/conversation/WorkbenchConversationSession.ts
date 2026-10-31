@@ -38,6 +38,7 @@ import type { WorkbenchAgentProjectActivityPort } from '../workspace/git/Workben
 import { isRelativePathInsideRoot } from '../workspace/PathContainmentHelper'
 
 import { LoginConfirmation } from './ConversationInteractions'
+import { createWorkbenchConsoleModule } from './WorkbenchConsoleModule'
 import type {
   ConversationControlOptions,
   ConversationWorkspaceHandle,
@@ -117,7 +118,20 @@ export class WorkbenchConversationSession implements WorkbenchConversationSessio
         },
         output: options.showCommandOutput,
       })
-      const modules: Array<NonNullable<Parameters<typeof createRuntime>[0]['modules']>[number]> = []
+      const modules: Array<
+        NonNullable<Parameters<typeof createRuntime>[0]['modules']>[number]
+      > = [
+        createWorkbenchConsoleModule(
+          this.shells,
+          options.sessionId,
+          root,
+          sandbox,
+          async (command, signal) => {
+            options.signal.throwIfAborted()
+            if (options.confirmationMode === 'ask-every-time') await confirm(command, signal)
+          }
+        ),
+      ]
       const { memory, web, browser, sessions } = options
       if (sessions)
         modules.push(

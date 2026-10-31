@@ -43,6 +43,8 @@ import {
   type ConversationWidgetProjection,
 } from '@shared/workbenchConversation'
 
+import { workbenchWorkerTaskTitle } from './workbenchWorkerPresentation'
+
 /**
  * 会话里的正文块：除了 UI 合同的字段，还记着它是哪一回合的哪段正文、是不是还没被协议接纳的预览
  * （与 Desktop 同一套：收尾与重启恢复时预览一律去掉）。
@@ -63,6 +65,7 @@ export interface WorkbenchConversationTranscript {
 export interface WorkbenchConversationRunScope {
   readonly runId?: string
   readonly turnId?: string
+  readonly emittedAt?: number
 }
 
 type Block = ContentBlock
@@ -330,11 +333,7 @@ function applyAgent(
     activationId: payload.id,
     taskId: payload.agentId ?? payload.id,
     nodeId: null,
-    title:
-      payload.task
-        .split('\n')
-        .find((line) => line.trim())
-        ?.trim() ?? '',
+    title: workbenchWorkerTaskTitle(payload.task),
     agentName: workerName(transcript.workerThreads, payload.agentId ?? payload.id),
     roleId: null,
     phase: null,
@@ -530,7 +529,7 @@ function updateRunMessage(
     role: 'assistant',
     conversationKind: 'assistant-output',
     blocks,
-    timestamp: Date.now(),
+    timestamp: scope.emittedAt ?? Date.now(),
   }
   if (scope.runId) message.runId = scope.runId
   if (scope.turnId) message.turnId = scope.turnId

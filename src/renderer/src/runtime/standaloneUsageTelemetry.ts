@@ -2,19 +2,23 @@ import { isNonBlankString, optionalWhen, toOptional } from '@velaros-ai/core'
 import type { ConversationView } from '@velaros-ai/ui/conversation'
 
 /**
- * 主 Agent 每次模型调用的供应方用量（`usage-telemetry` 运行时事件）。
+ * 主 Agent 与子 Agent 每次模型调用的供应方用量（`usage-telemetry` 运行时事件）。
  *
  * 共享会话视图按执行时间窗从这里归属用量，给回答末尾算整轮约价（Desktop 同样把它交给
  * `runtime.usageTelemetry`）。丢掉它，约价就只能拿可见问答文字去估——一次上百轮的执行只数到
  * 最后一段回答，低估几个数量级。
  */
-type StandaloneUsageTelemetry = ConversationView['runtime']['usageTelemetry'][number]
+type StandaloneUsageTelemetry = ConversationView['runtime']['usageTelemetry'][number] & {
+  requestId?: string
+  agentSessionId?: string
+  agentRole?: 'parent' | 'child'
+  coverage?: 'known' | 'unknown' | 'inflight'
+}
 
 /**
- * 会话里留存的条数上限：一次长目标执行能跑到两三百轮，留四百条保证最近几轮执行完整；更早的执行被
- * 挤掉一部分时，约价会标成下限或不显示，不会显示错数。
+ * 会话最多保留一万次请求（含全部子任务）；超过时界面明确显示仅保留最近记录，原始事件日志不裁剪。
  */
-const StandaloneUsageTelemetryLimit = 400
+const StandaloneUsageTelemetryLimit = 10000
 
 const UsageSources = new Set<StandaloneUsageTelemetry['source']>([
   'provider',
@@ -34,19 +38,19 @@ function readTokenCount(value: unknown): number | null {
 
 function readUsageSource(value: unknown): StandaloneUsageTelemetry['source'] {
   return UsageSources.has(value as StandaloneUsageTelemetry['source'])
-    ? value as StandaloneUsageTelemetry['source']
+    ? (value as StandaloneUsageTelemetry['source'])
     : 'provider'
 }
 
 function readUsageConfidence(value: unknown): StandaloneUsageTelemetry['confidence'] {
   return UsageConfidences.has(value as StandaloneUsageTelemetry['confidence'])
-    ? value as StandaloneUsageTelemetry['confidence']
+    ? (value as StandaloneUsageTelemetry['confidence'])
     : 'high'
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
-    ? value as Record<string, unknown>
+    ? (value as Record<string, unknown>)
     : {}
 }
 
@@ -69,6 +73,19 @@ function readStandaloneUsageTelemetry(value: unknown): StandaloneUsageTelemetry 
   const costUsd = readTokenCount(payload.costUsd)
   return {
     kind: 'usage-telemetry',
+    requestId: typeof payload.requestId === 'string' ? payload.requestId : undefined,
+    agentSessionId:
+      typeof payload.agentSessionId === 'string' ? payload.agentSessionId : undefined,
+    agentRole:
+      payload.agentRole === 'parent' || payload.agentRole === 'child'
+        ? payload.agentRole
+        : undefined,
+    coverage:
+      payload.coverage === 'known' ||
+      payload.coverage === 'unknown' ||
+      payload.coverage === 'inflight'
+        ? payload.coverage
+        : undefined,
     turn: typeof turn === 'number' && Number.isInteger(turn) && turn > 0 ? turn : null,
     provider: optionalWhen(isNonBlankString, payload.provider)?.trim(),
     model,
@@ -93,8 +110,14 @@ function appendStandaloneUsageTelemetry(
   entry: StandaloneUsageTelemetry
 ): readonly StandaloneUsageTelemetry[] {
   return [
-    ...entries.filter(
-      (current) => !(current.turn === entry.turn && current.timestamp === entry.timestamp)
+    ...entries.filter((current) =>
+      entry.requestId
+        ? current.requestId !== entry.requestId
+        : !(
+            current.turn === entry.turn &&
+            current.timestamp === entry.timestamp &&
+            !current.requestId
+          )
     ),
     entry,
   ].slice(-StandaloneUsageTelemetryLimit)
@@ -132,3 +155,25 @@ export {
   StandaloneUsageTelemetryLimit,
 }
 export type { StandaloneUsageTelemetry }
+
+/** 按请求身份去重后的真实供应商计数；缺失不当作零参与完整命中率。 */
+export function summarizeStandaloneUsage(entries: readonly StandaloneUsageTelemetry[]) {
+  const unique = new Map(entries.map((entry, i) => [entry.requestId ?? `legacy:${i}`, entry]))
+  const rows = [...unique.values()]
+  return {
+    requests: rows.length,
+    input: rows.reduce((sum, item) => sum + (item.inputTokens ?? 0), 0),
+    output: rows.reduce((sum, item) => sum + (item.outputTokens ?? 0), 0),
+    cacheRead: rows.reduce((sum, item) => sum + (item.cacheReadInputTokens ?? 0), 0),
+    missing: rows.filter(
+      (item) =>
+        item.inputTokens === null ||
+        item.outputTokens === null ||
+        item.coverage === 'unknown' ||
+        item.coverage === 'inflight'
+    ).length,
+    cacheMissing: rows.filter(
+      (item) => item.cacheReadInputTokens === undefined || item.inputTokens === null
+    ).length,
+  }
+}

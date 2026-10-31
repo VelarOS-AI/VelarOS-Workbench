@@ -90,6 +90,7 @@ import {
   WorkbenchRunChangesScopeContext,
 } from './conversation/WorkbenchRunChangesCard'
 import { applyWorkbenchScriptLiveOutput } from './conversation/workbenchScriptLiveOutput'
+import { WorkbenchUsageSummary } from './conversation/WorkbenchUsageSummary'
 import {
   type WorkbenchWorkerThreadScope,
   WorkbenchWorkerThreadScopeContext,
@@ -792,11 +793,152 @@ function ensureConversationEventSubscription(): void {
   if (typeof window === 'undefined') return
   peerEventSubscription ??= window.velarosWorkbenchSessionPeers.onEvent(receiveWorkbenchPeerEvent)
   if (conversationEventSubscription) return
-  conversationEventSubscription =
-    window.velarosWorkbenchConversation.onEvent(applyConversationEnvelope)
+  conversationEventSubscription = window.velarosWorkbenchConversation.onEvent(
+    applyConversationEnvelope
+  )
+}
+
+const recoveryProjects = new Map<string, WorkbenchConversationEventEnvelope[]>()
+const recoveredProjects = new Set<string>()
+const streamCursors = new Map<string, number>()
+const streamGaps = new Map<string, WorkbenchConversationEventEnvelope[]>()
+
+/** 订阅在回读之前建立；回读期间缓存实时事件，按序号去重后补齐。 */
+async function recoverProjectConversations(projectRoot: string): Promise<void> {
+  if (recoveredProjects.has(projectRoot) || recoveryProjects.has(projectRoot)) return
+  const buffered: WorkbenchConversationEventEnvelope[] = []
+  recoveryProjects.set(projectRoot, buffered)
+  try {
+    for (const initial of readAllStates(projectRoot)) {
+      if (findActiveRun(projectRoot, initial.sessionId)) continue
+      let after = 0
+      let streamId: string | undefined
+      let prepared = false
+      for (;;) {
+        const result = await window.velarosWorkbenchConversation.recover({
+          projectRoot,
+          sessionId: initial.sessionId,
+          streamId,
+          after,
+        })
+        if (!result.ok) throw new AppError('UNAVAILABLE', result.message)
+        const page = result.value
+        if (!page) break
+        if (!prepared) {
+          const message = initial.messages.find((item) => item.id === page.run.inputId)
+          const scope = {
+            runId: message?.runId ?? page.run.inputId,
+            turnId: message?.turnId ?? page.run.inputId,
+          }
+          const run = createActiveRun({
+            projectRoot,
+            sessionId: initial.sessionId,
+            scope,
+            goalMode: page.run.goalMode,
+            runChangeCapture: null,
+          })
+          activeRuns.set(runKey(projectRoot, initial.sessionId), run)
+          streamCursors.set(page.run.id, 0)
+          updateSession(projectRoot, initial.sessionId, (state) => ({
+            ...state,
+            messages: state.messages.filter(
+              (item) => item.role !== 'assistant' || item.runId !== scope.runId,
+            ),
+            workerThreads: [],
+            status: 'running',
+            lastError: null,
+            lastRunStartedAt: page.run.startedAt,
+            lastRunFinishedAt: null,
+            activeTurn: null,
+            completedTurns: 0,
+            revision: state.revision + 1,
+          }))
+          prepared = true
+        }
+        for (const envelope of page.events) applyRecoveredEnvelope(envelope)
+        streamId = page.run.id
+        after = page.nextAfter
+        if (!page.hasMore) break
+      }
+    }
+    recoveredProjects.add(projectRoot)
+  } catch (error) {
+    log.error('恢复会话事件失败', { projectRoot, error })
+    workbenchMessage.error({
+      title: '会话恢复失败',
+      description: AppError.getMessage(error),
+    })
+  } finally {
+    recoveryProjects.delete(projectRoot)
+    for (const envelope of buffered) applyRecoveredEnvelope(envelope)
+    flushChatPersistence()
+  }
 }
 
 function applyConversationEnvelope(envelope: WorkbenchConversationEventEnvelope): void {
+  const buffered = recoveryProjects.get(envelope.projectRoot)
+  if (buffered) {
+    buffered.push(envelope)
+    return
+  }
+  if (envelope.streamId && envelope.sequence) {
+    const pending = streamGaps.get(envelope.streamId)
+    if (pending) {
+      pending.push(envelope)
+      return
+    }
+    if (
+      envelope.sequence > (streamCursors.get(envelope.streamId) ?? 0) + 1 &&
+      findActiveRun(envelope.projectRoot, envelope.sessionId)
+    ) {
+      void recoverStreamGap(envelope)
+      return
+    }
+  }
+  applyRecoveredEnvelope(envelope)
+}
+
+/** 已连接窗口也可能漏掉一次发送；发现序号缺口后先补齐，再释放后续实时事件。 */
+async function recoverStreamGap(
+  first: WorkbenchConversationEventEnvelope,
+): Promise<void> {
+  const streamId = first.streamId!
+  const pending = [first]
+  streamGaps.set(streamId, pending)
+  try {
+    let after = streamCursors.get(streamId) ?? 0
+    for (;;) {
+      const result = await window.velarosWorkbenchConversation.recover({
+        projectRoot: first.projectRoot,
+        sessionId: first.sessionId,
+        streamId,
+        after,
+      })
+      if (!result.ok) throw new AppError('UNAVAILABLE', result.message)
+      const page = result.value
+      if (!page || page.run.id !== streamId)
+        throw new AppError('UNAVAILABLE', '缺失事件所属运行记录已更新，请刷新会话')
+      for (const event of page.events) applyRecoveredEnvelope(event)
+      after = page.nextAfter
+      if (!page.hasMore) break
+    }
+    for (const event of pending) applyRecoveredEnvelope(event)
+  } catch (error) {
+    log.error('补回会话事件失败', { error })
+    workbenchMessage.error({
+      title: '会话同步失败',
+      description: AppError.getMessage(error),
+    })
+  } finally {
+    streamGaps.delete(streamId)
+  }
+}
+
+function applyRecoveredEnvelope(envelope: WorkbenchConversationEventEnvelope): void {
+  if (envelope.streamId && envelope.sequence) {
+    if (envelope.sequence <= (streamCursors.get(envelope.streamId) ?? 0)) return
+    streamCursors.set(envelope.streamId, envelope.sequence)
+  }
   const run = activeRuns.get(runKey(envelope.projectRoot, envelope.sessionId))
   if (!run) return
   const { event } = envelope
@@ -821,7 +963,7 @@ function applyConversationEnvelope(envelope: WorkbenchConversationEventEnvelope)
         { messages: state.messages, workerThreads: state.workerThreads },
         event.kind,
         event.payload,
-        run.scope
+        { ...run.scope, emittedAt: envelope.emittedAt }
       )
       if (next.messages === state.messages && next.workerThreads === state.workerThreads)
         return state
@@ -834,12 +976,13 @@ function applyConversationEnvelope(envelope: WorkbenchConversationEventEnvelope)
     })
     return
   }
-  applyConversationState(run, event.payload)
+  applyConversationState(run, event.payload, envelope.emittedAt)
 }
 
 function applyConversationState(
   run: ActiveConversationRun,
-  runtime: WorkbenchConversationState
+  runtime: WorkbenchConversationState,
+  emittedAt = Date.now()
 ): void {
   const { projectRoot, sessionId } = run
   switch (runtime.kind) {
@@ -874,11 +1017,11 @@ function applyConversationState(
   }
   const terminalKind = readStandaloneTerminalKind(runtime)
   if (terminalKind) {
-    finishRun(run, runtime)
+    finishRun(run, runtime, emittedAt)
     return
   }
   updateSession(projectRoot, sessionId, (state) => {
-    const next = applyStandaloneConversationState(state, runtime)
+    const next = applyStandaloneConversationState(state, runtime, emittedAt)
     return next === state ? state : { ...next, revision: state.revision + 1 }
   })
 }
@@ -888,7 +1031,7 @@ function applyConversationState(
  * 运行标记，立刻落盘；再了结这一轮，并按收尾规则记下「本轮改动」。主进程推来终态、发送失败、停止超时都走这里，
  * 只生效一次。
  */
-function finishRun(run: ActiveConversationRun, runtime: WorkbenchConversationState): void {
+function finishRun(run: ActiveConversationRun, runtime: WorkbenchConversationState, emittedAt = Date.now()): void {
   const key = runKey(run.projectRoot, run.sessionId)
   if (activeRuns.get(key) !== run) return
   const terminalKind = readStandaloneTerminalKind(runtime) ?? 'error'
@@ -899,7 +1042,8 @@ function finishRun(run: ActiveConversationRun, runtime: WorkbenchConversationSta
         messages: settleTerminalMessages(state.messages),
         workerThreads: withSettledWorkerThreads(state.workerThreads),
       },
-      runtime
+      runtime,
+      emittedAt
     )
     return {
       ...withRunMarker(settled, {
@@ -1257,12 +1401,14 @@ function StandaloneWorkbenchChatSessionSurface({
 
   useEffect(() => {
     ensureConversationEventSubscription()
-  }, [])
+    void recoverProjectConversations(projectRoot)
+  }, [projectRoot])
 
   useEffect(() => {
     // 目标自动续跑只对 VelarOS 自己的 Agent：外部引擎的目标归引擎自己管。
     if (chat.status !== 'completed' || !chat.lastRunFinishedAt || hasActiveRun || chat.engine)
       return
+    if (recoveryProjects.has(projectRoot)) return
     const sessionId = chat.sessionId
     const finishedAt = chat.lastRunFinishedAt
     const runKeyForGoal = `${sessionId}:${finishedAt}`
@@ -1840,6 +1986,7 @@ function StandaloneWorkbenchChatSessionSurface({
             .filter(Boolean)
             .join('\n\n')
       const runPreferences = readWorkbenchConversationRunPreferences()
+      flushChatPersistence()
       const result = await syncWorkbenchPeerCatalog(projectRoot)
         .then(() =>
           window.velarosWorkbenchConversation.send({
@@ -2033,7 +2180,7 @@ function StandaloneWorkbenchChatSessionSurface({
         ? createStandaloneWorkbenchModelSelectorProviders(
             modelConfig.provider,
             modelConfig.model,
-            providerCatalog.error ? [] : providerCatalog.catalog?.models ?? [],
+            providerCatalog.error ? [] : (providerCatalog.catalog?.models ?? []),
             selectedManagedProvider
           )
         : []
@@ -2202,7 +2349,13 @@ function StandaloneWorkbenchChatSessionSurface({
       slots: {
         // 外部引擎不报上下文用量。
         contextUsageIndicator: engine ? undefined : (
-          <WorkbenchContextUsageIndicator usage={chat.contextUsage} />
+          <>
+            <WorkbenchContextUsageIndicator usage={chat.contextUsage} />
+            <WorkbenchUsageSummary
+              entries={chat.usageTelemetry}
+              startedAt={chat.lastRunStartedAt}
+            />
+          </>
         ),
       },
     }),
@@ -2211,6 +2364,8 @@ function StandaloneWorkbenchChatSessionSurface({
       chat.status,
       // 每次模型请求后到达一次；漏了它，仪表要等这一轮收尾、status 变了才跟着刷新。
       chat.contextUsage,
+      chat.usageTelemetry,
+      chat.lastRunStartedAt,
       projectRoot,
       accountSignInPending,
       browserSelections,

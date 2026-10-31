@@ -726,6 +726,7 @@ test(
       else if (call === 2)
         yield execute(frame, "// 检查项目\nconsole.log('CHILD_TRACE_PROOF'.repeat(800))")
       else yield done(frame, call === 3 ? '子任务完成' : '父任务完成')
+      yield { type: 'usage', inputTokens: 1000, outputTokens: 20, cacheReadTokens: 800 }
       yield { type: 'finish', reason: 'stop' }
     })
     const run = f.runtime.submit(f.sink, f.request('test child trace'))
@@ -748,6 +749,69 @@ test(
         )
       ),
       JSON.stringify(agents)
+    )
+    const usage = f.events
+      .filter((event) => event.type === 'state' && event.payload.kind === 'usage-telemetry')
+      .map((event) => event.payload)
+    const unique = new Map(usage.map((item) => [item.requestId, item]))
+    assert([...unique.values()].some((item) => item.agentRole === 'parent'))
+    assert([...unique.values()].some((item) => item.agentRole === 'child'))
+    assert.equal(
+      [...unique.values()].filter((item) => item.coverage === 'known').length,
+      f.frames.length
+    )
+  }
+)
+
+test(
+  'persistent console survives task completion, is isolated and stops on session deletion',
+  { timeout: 30000 },
+  async (t) => {
+    const f = await fixture(t, async function* (frame, _signal, call) {
+      if (call === 1)
+        yield execute(
+          frame,
+          "// 启动交付服务\nimport * as service from 'velaros:console';console.log(await service.start({command:'node server.cjs'}));"
+        )
+      else yield done(frame, '服务已交付')
+      yield { type: 'usage', inputTokens: 1000, outputTokens: 20, cacheReadTokens: 800 }
+      yield { type: 'finish', reason: 'stop' }
+    })
+    await writeFile(
+      join(f.workspace, 'server.cjs'),
+      "require('node:http').createServer((q,s)=>s.end('service-proof')).listen(0,'127.0.0.1',function(){console.log('READY:'+this.address().port)})"
+    )
+    const request = f.request('常驻服务')
+    const run = f.runtime.submit(f.sink, request)
+    await run.accepted
+    await run.completed
+    assert.equal(f.lastState()?.kind, 'done')
+    const tasks = await f.shells.listBackgroundTasks(
+      { sessionId: request.sessionId, onlyRunning: true },
+      f.workspace
+    )
+    assert.equal(tasks.length, 1)
+    const task = tasks[0]
+    let output = ''
+    for (let i = 0; i < 100 && !output.includes('READY:'); i++) {
+      output = (
+        await f.shells.readConsoleOutput(
+          { taskId: task.id, sessionId: request.sessionId },
+          f.workspace
+        )
+      ).text
+      if (!output.includes('READY:')) await new Promise((resolve) => setTimeout(resolve, 20))
+    }
+    const port = /READY:(\d+)/u.exec(output)?.[1]
+    assert.ok(port, output)
+    assert.equal(await (await fetch('http://127.0.0.1:' + port)).text(), 'service-proof')
+    await assert.rejects(
+      f.shells.readConsoleOutput({ taskId: task.id, sessionId: 'other' }, f.workspace)
+    )
+    await f.runtime.deleteSession({ projectRoot: f.workspace, sessionId: request.sessionId })
+    assert.equal(
+      (await f.shells.listBackgroundTasks({ onlyRunning: true }, f.workspace)).length,
+      0
     )
   }
 )

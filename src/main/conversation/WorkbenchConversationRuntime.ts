@@ -49,7 +49,6 @@ import {
   terminalStatusMessage,
   throttledMessage,
   toConversationInput,
-  usageTelemetryFromProvider,
 } from './WorkbenchConversationRules'
 import { WorkbenchConversationSession } from './WorkbenchConversationSession'
 import { WorkbenchConversationStore } from './WorkbenchConversationStore'
@@ -498,7 +497,9 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
     )
     const agents = new ConversationAgentBoard(
       (payload) => sink.notice(ConversationAgentNotice, payload),
-      () => run.modelId
+      () => run.modelId,
+      (usage) => sink.state(usage),
+      () => run.provider
     )
     const interactions = new ConversationInteractionBoard((payload) =>
       sink.notice(ConversationInteractionNotice, payload)
@@ -840,14 +841,6 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
           })
         break
       case 'usage':
-        sink.state(
-          usageTelemetryFromProvider(event, {
-            turn: run.presentation?.turn ?? 0,
-            provider: run.provider,
-            model: run.modelId ?? '',
-            timestamp: Date.now(),
-          })
-        )
         if (run.modelLimits)
           sink.state(
             contextUsageFromProvider({

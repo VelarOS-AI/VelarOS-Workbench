@@ -14,6 +14,7 @@ import type {
   ShellConsoleControlResult,
   ShellConsoleInputRequest,
   ShellConsoleInterruptRequest,
+  ShellConsoleOutputRequest,
   ShellProcessConfinementMode,
   ShellTaskTerminateReport,
   ShellTaskTerminateRequest,
@@ -35,6 +36,16 @@ type ShellTerminalLoader = () => Nullable<ShellTerminalFactory>
  * 这一轮结束后要接着跑。模型与界面都按项目根查询、控制任务；全局查询供资源回收使用。
  */
 export interface WorkbenchShellHostRegistryApi {
+  startConsoleCommand(request: {
+    sessionId: string
+    cwd: string
+    command: string
+    sandbox: boolean
+  }): Promise<{ task: ShellBackgroundTaskRecord }>
+  readConsoleOutput(
+    request: ShellConsoleOutputRequest,
+    projectRoot: string
+  ): ReturnType<LocalShellHostApi['readConsoleOutput']>
   /** 取这个根、这种约束下的宿主，没有就建一个。 */
   host(root: string, mode: ShellProcessConfinementMode): SharedShellHost
   listBackgroundTasks(
@@ -109,6 +120,37 @@ export class WorkbenchShellHostRegistry implements WorkbenchShellHostRegistryApi
       inspectEnvironment: (commands) => host.inspectEnvironment(commands),
       refreshShellEnvironment: () => host.refreshShellEnvironment(),
     }
+  }
+
+  /** 与 Desktop 同一命令台协议；进程归属应用，会话结束不释放。 */
+  public async startConsoleCommand(request: {
+    sessionId: string
+    cwd: string
+    command: string
+    sandbox: boolean
+  }): Promise<{ task: ShellBackgroundTaskRecord }> {
+    const result = await this.host(
+      request.cwd,
+      request.sandbox ? 'workspace-write' : 'danger-full-access'
+    ).runCommand(request.command, {
+      cwd: request.cwd,
+      sessionId: request.sessionId,
+      background: true,
+      interactive: true,
+    })
+    const taskId = result.backgroundProcess?.taskId
+    const [task] = taskId
+      ? await this.listBackgroundTasks({ taskId, sessionId: request.sessionId }, request.cwd)
+      : []
+    if (!task?.console) throw new AppError('UNAVAILABLE', '命令未能在控制台启动')
+    return { task }
+  }
+
+  public async readConsoleOutput(
+    request: ShellConsoleOutputRequest,
+    projectRoot: string
+  ): ReturnType<LocalShellHostApi['readConsoleOutput']> {
+    return (await this.taskHost(request, projectRoot)).host.readConsoleOutput(request)
   }
 
   public async terminateSessionBackgroundTasks(

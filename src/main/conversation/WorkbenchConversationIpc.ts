@@ -35,6 +35,7 @@ import type { WorkbenchProjectHub } from '../projects/ProjectHub'
 import { callWithEnvelope } from '../workspace/ipcBoundary'
 
 import type { WorkbenchConversationDispatcherApi } from './WorkbenchConversationDispatcher'
+import { WorkbenchConversationRecovery } from './WorkbenchConversationRecovery'
 import { goalArtifact } from './WorkbenchConversationRules'
 import type {
   WorkbenchConversationRef,
@@ -86,6 +87,8 @@ export function registerWorkbenchConversationIpc(
   options: WorkbenchConversationIpcOptions
 ): () => void {
   const { runtime } = options
+  const recovery = new WorkbenchConversationRecovery(join(options.backupDir(), 'events'))
+  const admissions = new Set<string>()
   /** 已经挂了销毁监听的窗口：窗口没了，它发起的运行跟着停。 */
   const watchedSenders = new WeakSet<WebContents>()
   const runsBySender = new Map<number, Map<string, WorkbenchConversationRef>>()
@@ -163,28 +166,77 @@ export function registerWorkbenchConversationIpc(
     })
   )
 
+  ipcMain.handle(WorkbenchConversationChannels.recover, (event, raw: unknown) =>
+    callWithEnvelope(async () => {
+      const ref = ownedRef(event, parseSessionRequest(raw))
+      const cursor = z
+        .object({
+          streamId: z.string().max(100).optional(),
+          after: z.number().int().min(0).optional(),
+        })
+        .parse(raw)
+      return recovery.read(ref, cursor, runtime.isRunning(ref))
+    })
+  )
   ipcMain.handle(WorkbenchConversationChannels.send, (event, raw: unknown) =>
     callWithEnvelope(async () => {
       const request = parseSendRequest(raw)
       const ref = ownedRef(event, request)
-      const executionId = `${ref.sessionId}:${request.inputId}`
-      const sink = withAnalytics(
-        createWindowSink(event.sender, ref),
-        options.analytics,
-        executionId,
-        ref.projectRoot
-      )
-      const { accepted, completed } = runtime.submit(sink, { ...request, ...ref })
-      options.analytics?.recordRunStarted({
-        executionId,
-        sessionId: ref.sessionId,
-        projectRoot: ref.projectRoot,
-        modelSelection: request.engine
-          ? { provider: request.engine.id, model: request.engine.model ?? '' }
-          : { provider: request.model.provider, model: request.model.model },
-      })
-      trackRun(event.sender, ref, completed)
-      await accepted
+      const admissionKey = `${ref.projectRoot}\0${ref.sessionId}`
+      if (runtime.isRunning(ref) || admissions.has(admissionKey))
+        throw new AppError('CONFLICT', '会话仍在运行')
+      admissions.add(admissionKey)
+      try {
+        const journalRun = await recovery.begin(
+          ref,
+          request.inputId,
+          request.executionModes?.includes('goal') ?? false
+        )
+        const executionId = `${ref.sessionId}:${request.inputId}`
+        let journalFailed = false
+        const sink = withAnalytics(
+          createWindowSink(event.sender, ref, (item, deliver) => {
+            if (journalFailed) return
+            void recovery
+              .append(journalRun, item)
+              .then(deliver)
+              .catch((error: unknown) => {
+                if (journalFailed) return
+                journalFailed = true
+                deliver({
+                  ...ref,
+                  event: {
+                    type: 'state',
+                    payload: {
+                      kind: 'error',
+                      message: '会话记录保存失败，执行已停止。请检查磁盘空间后重试。',
+                    },
+                  },
+                })
+                log.warn('会话事件持久化失败', { error: AppError.getMessage(error) })
+                void runtime
+                  .cancel(ref)
+                  .catch((reason: unknown) => log.warn('停止恢复失败的会话失败', { reason }))
+              })
+          }),
+          options.analytics,
+          executionId,
+          ref.projectRoot
+        )
+        const { accepted, completed } = runtime.submit(sink, { ...request, ...ref })
+        options.analytics?.recordRunStarted({
+          executionId,
+          sessionId: ref.sessionId,
+          projectRoot: ref.projectRoot,
+          modelSelection: request.engine
+            ? { provider: request.engine.id, model: request.engine.model ?? '' }
+            : { provider: request.model.provider, model: request.model.model },
+        })
+        trackRun(event.sender, ref, completed)
+        await accepted
+      } finally {
+        admissions.delete(admissionKey)
+      }
     })
   )
   ipcMain.handle(WorkbenchConversationChannels.cancel, (event, raw: unknown) =>
@@ -226,7 +278,11 @@ export function registerWorkbenchConversationIpc(
     })
   )
   ipcMain.handle(WorkbenchConversationChannels.deleteSession, (event, raw: unknown) =>
-    callWithEnvelope(() => runtime.deleteSession(ownedRef(event, parseSessionRequest(raw))))
+    callWithEnvelope(async () => {
+      const ref = ownedRef(event, parseSessionRequest(raw))
+      await runtime.deleteSession(ref)
+      await recovery.remove(ref)
+    })
   )
   ipcMain.handle(WorkbenchConversationChannels.backupHistory, (_event, raw: unknown) =>
     callWithEnvelope(() => writeHistoryBackup(options.backupDir(), parseBackupRequest(raw)))
@@ -238,6 +294,7 @@ export function registerWorkbenchConversationIpc(
   return () => {
     unsubscribeNotes()
     for (const channel of [
+      WorkbenchConversationChannels.recover,
       WorkbenchConversationChannels.send,
       WorkbenchConversationChannels.cancel,
       WorkbenchConversationChannels.guidance,
@@ -258,20 +315,23 @@ export function registerWorkbenchConversationIpc(
 /** 一轮运行的展示流直接推给发起它的窗口；窗口已经没了就丢掉（运行会因窗口销毁被停下）。 */
 export function createWindowSink(
   sender: WebContents,
-  ref: WorkbenchConversationRef
+  ref: WorkbenchConversationRef,
+  persist?: (
+    event: WorkbenchConversationStreamEvent,
+    deliver: (envelope: WorkbenchConversationEventEnvelope) => void
+  ) => void
 ): WorkbenchConversationSink {
-  const send = (event: WorkbenchConversationStreamEvent): void => {
+  const deliver = (envelope: WorkbenchConversationEventEnvelope): void => {
     if (sender.isDestroyed()) return
-    const envelope: WorkbenchConversationEventEnvelope = {
-      projectRoot: ref.projectRoot,
-      sessionId: ref.sessionId,
-      event,
-    }
     try {
       sender.send(WorkbenchConversationChannels.event, envelope)
     } catch (error) {
       log.warn('聊天流发送失败', { error: AppError.getMessage(error), sessionId: ref.sessionId })
     }
+  }
+  const send = (event: WorkbenchConversationStreamEvent): void => {
+    if (persist) persist(event, deliver)
+    else deliver({ ...ref, event })
   }
   return {
     notice: (kind, payload) => send({ type: 'notice', kind, payload }),

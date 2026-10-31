@@ -12,6 +12,7 @@ import {
   withSettledWorkerThreads,
   type WorkbenchConversationTranscript,
 } from '../src/renderer/src/runtime/conversation/workbenchConversationNotices'
+import { workbenchWorkerTaskTitle } from '../src/renderer/src/runtime/conversation/workbenchWorkerPresentation'
 import {
   createCoalescedChatPersistence,
   isSameIdentityList,
@@ -22,7 +23,16 @@ import {
 } from '../src/shared/workbenchConversation'
 
 const Execution = 'exec-1'
-const EmptyTranscript: WorkbenchConversationTranscript = { messages: [], workerThreads: [] }
+test('worker task titles use a short first-line label and hide opaque identifiers', () => {
+  assert.equal(workbenchWorkerTaskTitle('## 生产统计面板\n读取实际数据并实现面板'), '生产统计面板')
+  assert.equal(workbenchWorkerTaskTitle('你负责 数据模块，包含采样和测试。'), '数据模块')
+  assert.equal(workbenchWorkerTaskTitle('13a083ad-1234-5678-9abc-123456789abc'), '')
+  assert.equal(workbenchWorkerTaskTitle('界'.repeat(60)), `${'界'.repeat(40)}…`)
+})
+const EmptyTranscript: WorkbenchConversationTranscript = {
+  messages: [],
+  workerThreads: [],
+}
 
 function agentSummary(overrides: Partial<ActAgentSummary> = {}): ActAgentSummary {
   return {
@@ -58,8 +68,12 @@ function createBoard(): {
     threads: () =>
       emitted.reduce(
         (transcript, projection) =>
-          applyWorkbenchConversationNotice(transcript, ConversationAgentNotice, projection),
-        EmptyTranscript
+          applyWorkbenchConversationNotice(
+            transcript,
+            ConversationAgentNotice,
+            projection,
+          ),
+        EmptyTranscript,
       ).workerThreads,
   }
 }
@@ -74,19 +88,33 @@ void describe('Workbench sub-agent threads', () => {
     board.trace(turnTrace('turn-1', [agentSummary()]), anchorOf)
     board.trace(
       turnTrace('turn-1', [
-        agentSummary({ status: 'completed', answer: '三处高风险', durationMs: 900 }),
+        agentSummary({
+          status: 'completed',
+          answer: '三处高风险',
+          durationMs: 900,
+        }),
         // 同一个子任务续跑：这段执行里的第二段，另起一张卡。
         agentSummary({ task: '复核第二处' }),
       ]),
-      anchorOf
+      anchorOf,
     )
 
     assert.deepEqual(
-      threads().map((thread) => [thread.threadId, thread.title, thread.status, thread.output]),
+      threads().map((thread) => [
+        thread.threadId,
+        thread.title,
+        thread.status,
+        thread.output,
+      ]),
       [
-        ['conversation:agent:exec-1:job-1:0', '审计 Project 事务核心', 'completed', '三处高风险'],
+        [
+          'conversation:agent:exec-1:job-1:0',
+          '审计 Project 事务核心',
+          'completed',
+          '三处高风险',
+        ],
         ['conversation:agent:exec-1:job-1:1', '复核第二处', 'running', null],
-      ]
+      ],
     )
     const [first] = threads()
     // 卡挂在派发它的脚本卡后面；点开看完整任务；原位更新时开始时刻不变。
@@ -114,7 +142,7 @@ void describe('Workbench sub-agent threads', () => {
         agentSummary({ id: 'interrupted', status: 'interrupted' }),
         agentSummary({ id: 'failed', status: 'failed', error: '模型不可用' }),
       ]),
-      () => null
+      () => null,
     )
 
     assert.deepEqual(
@@ -124,7 +152,7 @@ void describe('Workbench sub-agent threads', () => {
         ['aborted', null, false],
         ['aborted', null, false],
         ['failed', '模型不可用', false],
-      ]
+      ],
     )
   })
 
@@ -136,7 +164,7 @@ void describe('Workbench sub-agent threads', () => {
         agentSummary({ id: 'waiting', status: 'waiting' }),
         agentSummary({ id: 'done', status: 'completed', answer: '完成' }),
       ]),
-      anchorOf
+      anchorOf,
     )
     // 子任务还在后台跑：主进程定时重读它所在的回合。
     assert.deepEqual(board.pendingTurns(), ['turn-2'])
@@ -144,12 +172,15 @@ void describe('Workbench sub-agent threads', () => {
     // 收尾通知没送到的线程，会话面收尾时自己按中断收掉。
     assert.deepEqual(
       withSettledWorkerThreads(threads()).map((thread) => thread.status),
-      ['aborted', 'aborted', 'completed']
+      ['aborted', 'aborted', 'completed'],
     )
 
     board.settle()
     assert.equal(emitted.length, 5)
-    assert.deepEqual(threads().map((thread) => thread.status), ['aborted', 'aborted', 'completed'])
+    assert.deepEqual(
+      threads().map((thread) => thread.status),
+      ['aborted', 'aborted', 'completed'],
+    )
     assert.deepEqual(board.pendingTurns(), [])
   })
 })
@@ -217,35 +248,45 @@ function readSource(relativePath: string): string {
 
 void describe('streaming stays cheap for the rest of the page', () => {
   void test('state updates only schedule persistence; a finished run is written right away', () => {
-    const adapter = readSource('src/renderer/src/runtime/standaloneWorkbenchChatAdapter.tsx')
+    const adapter = readSource(
+      'src/renderer/src/runtime/standaloneWorkbenchChatAdapter.tsx',
+    )
     const persistState = adapter.slice(
       adapter.indexOf('function persistState('),
-      adapter.indexOf('function flushChatPersistence(')
+      adapter.indexOf('function flushChatPersistence('),
     )
 
     const finishRun = adapter.slice(
       adapter.indexOf('function finishRun('),
-      adapter.indexOf('function settleTerminalMessages(')
+      adapter.indexOf('function settleTerminalMessages('),
     )
 
     assert.match(persistState, /chatPersistence\.schedule\(/u)
     assert.doesNotMatch(persistState, /JSON\.stringify|localStorage/u)
     // 一轮收尾时回答已经完整：立刻落盘，不等合并窗口。
-    assert.match(finishRun, /run\.settleTerminal\(terminalKind\)\n(?:\s*\/\/[^\n]*\n)*\s*flushChatPersistence\(\)/u)
+    assert.match(
+      finishRun,
+      /run\.settleTerminal\(terminalKind\)\n(?:\s*\/\/[^\n]*\n)*\s*flushChatPersistence\(\)/u,
+    )
     // 退出、刷新、切到后台前把没写的补上。
     assert.match(adapter, /window\.addEventListener\('pagehide', flushChatPersistence\)/u)
-    assert.match(adapter, /window\.addEventListener\('beforeunload', flushChatPersistence\)/u)
+    assert.match(
+      adapter,
+      /window\.addEventListener\('beforeunload', flushChatPersistence\)/u,
+    )
   })
 
   void test('the page-level chat runtime ignores streamed content', () => {
-    const adapter = readSource('src/renderer/src/runtime/standaloneWorkbenchChatAdapter.tsx')
+    const adapter = readSource(
+      'src/renderer/src/runtime/standaloneWorkbenchChatAdapter.tsx',
+    )
     const projectRuntime = adapter.slice(
       adapter.indexOf('function useStandaloneProjectRuntime('),
-      adapter.indexOf('function buildStandaloneProjectRuntime(')
+      adapter.indexOf('function buildStandaloneProjectRuntime('),
     )
     const viewFields = adapter.slice(
       adapter.indexOf('function readProjectRuntimeFieldIdentities('),
-      adapter.indexOf('function toSnapshot(')
+      adapter.indexOf('function toSnapshot('),
     )
 
     assert.match(projectRuntime, /readStandaloneProjectRuntimeView\(normalizedRoot\)/u)
@@ -255,10 +296,12 @@ void describe('streaming stays cheap for the rest of the page', () => {
   })
 
   void test('sub-agent threads belong to one run and stay out of the saved history', () => {
-    const adapter = readSource('src/renderer/src/runtime/standaloneWorkbenchChatAdapter.tsx')
+    const adapter = readSource(
+      'src/renderer/src/runtime/standaloneWorkbenchChatAdapter.tsx',
+    )
     const persistedFields = adapter.slice(
       adapter.indexOf('function readPersistedFieldIdentities('),
-      adapter.indexOf('function releaseRemovedSession(')
+      adapter.indexOf('function releaseRemovedSession('),
     )
 
     // 新的一轮开跑时清空上一轮的线程卡；线程卡不落盘。
@@ -267,13 +310,23 @@ void describe('streaming stays cheap for the rest of the page', () => {
   })
 
   void test('sub-agent cards show the task and then the answer, or the chat transcript when there is one', () => {
-    const panel = readSource('src/renderer/src/runtime/conversation/WorkbenchWorkerThreadPanel.tsx')
-    const slots = readSource('src/renderer/src/runtime/conversation/standaloneWorkbenchConversationRenderSlots.tsx')
+    const panel = readSource(
+      'src/renderer/src/runtime/conversation/WorkbenchWorkerThreadPanel.tsx',
+    )
+    const slots = readSource(
+      'src/renderer/src/runtime/conversation/standaloneWorkbenchConversationRenderSlots.tsx',
+    )
 
-    assert.match(panel, /const fallbackBody = thread\.error \?\? thread\.output \?\? thread\.summary \?\? null/u)
+    assert.match(
+      panel,
+      /const fallbackBody = thread\.error \?\? thread\.output \?\? thread\.summary \?\? null/u,
+    )
     assert.match(panel, /\{thread\.input\}/u)
     assert.match(panel, /<ChatTranscript\n\s*messages=\{thread\.messages\}/u)
-    assert.match(slots, /<WorkbenchWorkerThreadPanel threads=\{threads\} sessionId=\{sessionId\} \/>/u)
+    assert.match(
+      slots,
+      /<WorkbenchWorkerThreadPanel threads=\{threads\} sessionId=\{sessionId\} \/>/u,
+    )
   })
 })
 
@@ -281,11 +334,12 @@ void test('child traces preserve execution results, names and model across updat
   const emitted: ConversationAgentProjection[] = []
   const board = new ConversationAgentBoard(
     (value) => emitted.push(value),
-    () => 'velar-dev/gpt-5.6-sol'
+    () => 'velar-dev/gpt-5.6-sol',
   )
   board.trace(turnTrace('parent', [agentSummary()]), anchorOf)
   const child = {
     runId: 'child-run',
+    agents: [],
     turnId: 'child-turn',
     request: { sequence: 2 },
     executions: [
@@ -302,7 +356,10 @@ void test('child traces preserve execution results, names and model across updat
     invocations: [],
     observation: {},
     records: [
-      { title: 'act:event', body: JSON.stringify({ type: 'accepted', text: '审查完成' }) },
+      {
+        title: 'act:event',
+        body: JSON.stringify({ type: 'accepted', text: '审查完成' }),
+      },
     ],
   } as unknown as ActTurnTrace
   let reads = 0
@@ -313,7 +370,7 @@ void test('child traces preserve execution results, names and model across updat
   })
   board.trace(
     turnTrace('parent', [agentSummary({ status: 'completed', answer: '已完成' })]),
-    anchorOf
+    anchorOf,
   )
   await board.refresh(async () => ({ turns: [child], nextAfter: null }) as never)
   await board.refresh(async () => {
@@ -324,12 +381,12 @@ void test('child traces preserve execution results, names and model across updat
       agentSummary({ executionId: 'exec-2', task: '再检查一次' }),
       agentSummary({ id: 'job-2', executionId: 'exec-2' }),
     ]),
-    anchorOf
+    anchorOf,
   )
   const state = emitted.reduce(
     (state, payload) =>
       applyWorkbenchConversationNotice(state, ConversationAgentNotice, payload),
-    EmptyTranscript
+    EmptyTranscript,
   )
   assert.equal(reads, 1)
   assert.equal(state.workerThreads[0].agentName, state.workerThreads[1].agentName)
@@ -342,13 +399,74 @@ void test('child traces preserve execution results, names and model across updat
       message.blocks.some(
         (block) =>
           block.type === 'script-execution' &&
-          block.calls.some((call) => call.output === '42'.repeat(3000) && call.outputTruncated)
-      )
-    )
+          block.calls.some(
+            (call) => call.output === '42'.repeat(3000) && call.outputTruncated,
+          ),
+      ),
+    ),
   )
   assert(
     restored.workerThreads[0].messages.some((message) =>
-      message.blocks.some((block) => block.type === 'text' && block.text === '审查完成')
-    )
+      message.blocks.some((block) => block.type === 'text' && block.text === '审查完成'),
+    ),
+  )
+})
+
+void test('usage includes deeper descendants and replaces repeated request reads', async () => {
+  const usage: Array<{
+    requestId?: string
+    agentRole?: string
+    inputTokens: number | null
+  }> = []
+  const board = new ConversationAgentBoard(
+    () => {},
+    () => 'provider/model',
+    (value) => usage.push(value),
+  )
+  const accounting = {
+    status: 'settled',
+    outcome: 'accepted',
+    finishReason: 'stop',
+    error: null,
+    usage: {
+      coverage: 'known',
+      inputTokens: 100,
+      outputTokens: 5,
+      cacheReadTokens: 80,
+      cacheWriteTokens: null,
+    },
+  }
+  const trace = (sessionId: string, children: ActAgentSummary[]) =>
+    ({
+      sessionId,
+      runId: `${sessionId}-run`,
+      turnId: `${sessionId}-turn`,
+      turn: 1,
+      request: { sequence: 2, createdAt: '2026-10-31T00:00:00Z' },
+      requestSummary: { model: 'provider/model' },
+      modelAccounting: accounting,
+      agents: children,
+      executions: [],
+      invocations: [],
+      records: [],
+      observation: {},
+    }) as unknown as ActTurnTrace
+  const root = trace('root', [agentSummary()])
+  board.trace(root, anchorOf)
+  const child = trace('job-1-session', [agentSummary({ sessionId: 'grandchild' })])
+  const grandchild = trace('grandchild', [])
+  const read = async (query?: { sessionId?: string }) =>
+    ({
+      turns: [query?.sessionId === 'grandchild' ? grandchild : child],
+      nextAfter: null,
+    }) as never
+  await board.refresh(read)
+  board.trace(root, anchorOf)
+  await board.refresh(read)
+  assert.equal(usage.length, 3)
+  assert.equal(usage.filter((value) => value.agentRole === 'child').length, 2)
+  assert.equal(
+    usage.reduce((sum, value) => sum + (value.inputTokens ?? 0), 0),
+    300,
   )
 })

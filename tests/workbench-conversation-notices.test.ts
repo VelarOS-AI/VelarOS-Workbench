@@ -46,6 +46,12 @@ function script(status: string, source = '// 读一下配置\nconst x = 1', extr
 }
 
 describe('Workbench conversation notices', () => {
+  test('replayed messages keep the original event time when later blocks arrive', () => {
+    const initial = applyWorkbenchConversationNotice(Empty, ConversationTextNotice, text('preview', '正在'), { emittedAt: 1234 })
+    const settled = applyWorkbenchConversationNotice(initial, ConversationTextNotice, text('accepted', '已经完成'), { emittedAt: 5678 })
+    expect(initial.messages[0]!.timestamp).toBe(1234)
+    expect(settled.messages[0]!.timestamp).toBe(1234)
+  })
   test('a run keeps every block in one assistant message scoped to the user message', () => {
     const next = applyWorkbenchConversationNotice(Empty, ConversationTextNotice, text('preview', '正在'), {
       runId: 'ui-run',

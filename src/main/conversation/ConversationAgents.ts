@@ -6,6 +6,7 @@ import {
   type ConversationAgentProjection,
   type ConversationAgentStatus,
   ConversationAgentTextMaxChars,
+  type WorkbenchConversationState,
 } from '../../shared/workbenchConversation'
 
 import { ConversationScriptBoard } from './ConversationScripts'
@@ -43,14 +44,21 @@ interface AgentThread {
  */
 export class ConversationAgentBoard {
   private readonly threads = new Map<string, AgentThread>()
+  private readonly usageFacts = new Map<string, string>()
+  private readonly descendants = new Map<string, number>()
 
   public constructor(
     private readonly emit: (projection: ConversationAgentProjection) => void,
-    private readonly model: () => string | undefined = () => undefined
+    private readonly model: () => string | undefined = () => undefined,
+    private readonly emitUsage: (
+      usage: Extract<WorkbenchConversationState, { kind: 'usage-telemetry' }>
+    ) => void = () => {},
+    private readonly provider: () => string | undefined = () => undefined
   ) {}
 
   /** anchorOf 给出这段执行对应的脚本卡。 */
   public trace(trace: ActTurnTrace, anchorOf: (executionId: string) => Nullable<string>): void {
+    this.recordUsage(trace, 'parent')
     const seen = new Map<string, number>()
     for (const agent of trace.agents) {
       const key = `${agent.executionId}:${agent.id}`
@@ -90,6 +98,9 @@ export class ConversationAgentBoard {
           activityLimit: 1,
         })
         for (const trace of page.turns) {
+          this.recordUsage(trace, 'child')
+          for (const child of trace.agents)
+            if (!this.descendants.has(child.sessionId)) this.descendants.set(child.sessionId, 0)
           thread.scripts.trace(trace)
           for (const record of trace.records) {
             if (record.title !== 'act:event' || record.truncated || !record.body) continue
@@ -134,6 +145,63 @@ export class ConversationAgentBoard {
         activity: [...thread.activity.values()],
       })
     }
+    for (const [sessionId, cursor] of this.descendants) {
+      let after = cursor
+      let latest = after
+      for (;;) {
+        const page = await read({
+          sessionId,
+          after,
+          limit: 32,
+          fullContent: false,
+          activityLimit: 1,
+        })
+        for (const trace of page.turns) {
+          this.recordUsage(trace, 'child')
+          latest = Math.max(latest, trace.request.sequence - 1)
+          for (const child of trace.agents)
+            if (!this.descendants.has(child.sessionId)) this.descendants.set(child.sessionId, 0)
+        }
+        if (page.nextAfter === null) break
+        if (page.nextAfter <= after)
+          throw new AppError('PROTOCOL', 'Child usage pagination did not advance')
+        after = page.nextAfter
+      }
+      this.descendants.set(sessionId, latest)
+    }
+  }
+
+  private recordUsage(trace: ActTurnTrace, agentRole: 'parent' | 'child'): void {
+    const requestId = `${trace.sessionId}:${trace.turnId}`
+    const accounting = trace.modelAccounting
+    if (!accounting) return
+    const usage = accounting.usage
+    const fact = JSON.stringify(usage)
+    if (this.usageFacts.get(requestId) === fact) return
+    this.usageFacts.set(requestId, fact)
+    const timestamp = Date.parse(trace.request.createdAt ?? '')
+    this.emitUsage({
+      kind: 'usage-telemetry',
+      requestId,
+      agentRole,
+      agentSessionId: trace.sessionId,
+      coverage: usage.coverage,
+      turn: trace.turn,
+      provider: this.provider(),
+      model: trace.requestSummary?.model ?? this.model() ?? '',
+      timestamp: Number.isFinite(timestamp) ? timestamp : Date.now(),
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+      totalTokens:
+        usage.inputTokens !== null && usage.outputTokens !== null
+          ? usage.inputTokens + usage.outputTokens
+          : null,
+      reasoningTokens: null,
+      cacheReadInputTokens: usage.cacheReadTokens ?? undefined,
+      cacheWriteInputTokens: usage.cacheWriteTokens ?? undefined,
+      source: 'provider',
+      confidence: 'high',
+    })
   }
 
   /**

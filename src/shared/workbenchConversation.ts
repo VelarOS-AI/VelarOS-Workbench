@@ -32,6 +32,7 @@ export const WorkbenchConversationChannels = {
   deleteSession: 'workbench-app:conversation:delete-session',
   backupHistory: 'workbench-app:conversation:backup-history',
   engines: 'workbench-app:conversation:engines',
+  recover: 'workbench-app:conversation:recover',
   event: 'workbench-app:conversation:event',
 } as const
 
@@ -323,7 +324,13 @@ export type WorkbenchConversationState =
   | { kind: 'turn-end'; turn: number }
   | { kind: 'reconnecting'; attempt: number; message?: string }
   | { kind: 'input-applied'; inputId: string }
-  | ({ kind: 'usage-telemetry' } & Omit<StreamUsageTelemetryPayload, 'kind'>)
+  | ({
+      kind: 'usage-telemetry'
+      requestId?: string
+      agentSessionId?: string
+      agentRole?: 'parent' | 'child'
+      coverage?: 'known' | 'unknown' | 'inflight'
+    } & Omit<StreamUsageTelemetryPayload, 'kind'>)
   | WorkbenchConversationContextUsage
   | {
       kind: 'awaiting-confirmation'
@@ -358,13 +365,32 @@ export type WorkbenchConversationStreamEvent =
   | { type: 'notice'; kind: string; payload: unknown }
   | { type: 'state'; payload: WorkbenchConversationState }
 
+export interface WorkbenchConversationRecoveryRun extends WorkbenchConversationSessionRequest {
+  id: string
+  inputId: string
+  goalMode: boolean
+  startedAt: number
+}
+export interface WorkbenchConversationRecoveryPage {
+  run: WorkbenchConversationRecoveryRun
+  events: WorkbenchConversationEventEnvelope[]
+  active: boolean
+  nextAfter: number
+  hasMore: boolean
+}
 export interface WorkbenchConversationEventEnvelope {
+  streamId?: string
+  sequence?: number
+  emittedAt?: number
   sessionId: string
   projectRoot: string
   event: WorkbenchConversationStreamEvent
 }
 
 export interface WorkbenchConversationBridge {
+  recover(
+    request: WorkbenchConversationSessionRequest & { streamId?: string; after?: number }
+  ): Promise<WorkbenchFsCallResult<WorkbenchConversationRecoveryPage | null>>
   /** 这一条输入被运行时接纳就返回（不等整轮跑完）；整轮收尾经事件流里的终态状态告知。 */
   send(request: WorkbenchConversationSendRequest): Promise<WorkbenchFsCallResult<void>>
   cancel(
