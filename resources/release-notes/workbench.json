@@ -3,6 +3,32 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
+      "version": "0.4.12",
+      "releasedAt": "2026-11-01",
+      "title": {
+        "zh": "稳定任务恢复与准确执行状态",
+        "en": "Reliable task recovery and accurate execution status"
+      },
+      "added": {
+        "zh": [],
+        "en": []
+      },
+      "fixed": {
+        "zh": [
+          "修复子任务冷恢复后显示旧摘要、重复执行卡及历史事件发送失败后漏发的问题。",
+          "完善账户续期与模型目录恢复，保留安全的会话边界，并展示可操作的加载错误。",
+          "优化工具详情展开和代码高亮，按真实开始时间计时，准确显示缓存命中及统计覆盖范围。",
+          "修复 Windows 终端参数传递与浏览器截图视口问题；固定依赖归档按内容校验和隔离，避免复用旧包缓存。"
+        ],
+        "en": [
+          "Fix stale child-task summaries after cold recovery, duplicate execution cards, and lost history events after failed delivery.",
+          "Improve account renewal and model-catalog recovery while preserving session boundaries and showing actionable loading errors.",
+          "Improve tool-detail responsiveness and syntax highlighting, preserve actual execution start times, and report cache hit rate with measurement coverage.",
+          "Fix Windows terminal argument handling and browser screenshot viewports; isolate pinned archives by content checksum to prevent stale package-cache reuse."
+        ]
+      }
+    },
+    {
       "version": "0.4.11",
       "releasedAt": "2026-10-31",
       "title": {
