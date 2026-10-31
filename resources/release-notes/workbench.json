@@ -3,6 +3,34 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
+      "version": "0.4.8",
+      "releasedAt": "2026-10-31",
+      "title": {
+        "zh": "任务恢复与紧凑用量展示",
+        "en": "Task recovery and compact usage summary"
+      },
+      "added": {
+        "zh": [
+          "支持管理常驻服务，恢复任务事件并汇总主、子 Agent 用量。",
+          "新增共享用量浮卡，以小字号和主题色进度条显示输入、输出与缓存命中。"
+        ],
+        "en": [
+          "Manage persistent services, recover task events, and aggregate parent and child agent usage.",
+          "Add a shared compact usage card with input, output, and a theme-colored cache hit bar."
+        ]
+      },
+      "fixed": {
+        "zh": [
+          "升级固定 Platform 与 UI 快照，完善真实项目任务的编辑器同步和运行兼容。",
+          "子 Agent 展示模型名称和任务标题，长文本省略；思考及工具活动默认折叠并保留用户展开选择。"
+        ],
+        "en": [
+          "Update pinned Platform and UI snapshots and improve editor synchronization and runtime compatibility for real project tasks.",
+          "Show model names and task titles on child agents with overflow ellipsis; collapse thinking and tool activity by default while retaining user choices."
+        ]
+      }
+    },
+    {
       "version": "0.4.7",
       "releasedAt": "2026-10-18",
       "title": {

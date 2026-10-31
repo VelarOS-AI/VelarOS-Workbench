@@ -174,7 +174,7 @@ void describe('Standalone Workbench live run-change capture', () => {
     // 主进程推来的终态、停止超时 / 取消失败、发送没被接纳：都经 finishRun 收尾，不等别的回音。
     assert.match(
       readFunction(adapter, 'function applyConversationState('),
-      /const terminalKind = readStandaloneTerminalKind\(runtime\)\n\s*if \(terminalKind\) \{\n\s*finishRun\(run, runtime\)/u
+      /const terminalKind = readStandaloneTerminalKind\(runtime\)\n\s*if \(terminalKind\) \{\n\s*finishRun\(run, runtime, emittedAt\)/u
     )
     assert.match(
       readFunction(adapter, '  async function stop('),

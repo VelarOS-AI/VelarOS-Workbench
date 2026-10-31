@@ -351,6 +351,7 @@
   --input: var(--workbench-border);
   --ring: color-mix(in srgb, var(--workbench-active-fg) 30%, transparent);
   --primary: var(--workbench-text);
+  --chat-task-usage-color: var(--workbench-theme-color);
   --primary-foreground: var(--workbench-bg);
   --control-themed-bg: var(--workbench-control-bg);
   --control-themed-hover-bg: var(--workbench-hover);
