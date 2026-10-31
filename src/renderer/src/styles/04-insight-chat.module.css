@@ -504,14 +504,24 @@
   margin-block: 4px;
 }
 
-/* 名字（加粗）后面紧跟类型 · 模型 · 状态（常规字重），同一行显示。 */
+.workbenchWorkerThreadPanel :global(.velar-disclosure-title) {
+  min-width: 0;
+  flex: 1;
+}
+
+/* 身份和任务标题各自省略，避免窄侧栏内名字折行或长任务撑开卡片。 */
 .workbenchWorkerThreadTitle {
-  @apply inline-flex min-w-0 max-w-full items-baseline;
+  @apply flex w-full min-w-0 flex-1 items-baseline overflow-hidden;
   gap: 8px;
 }
 
+.workbenchWorkerThreadIdentity {
+  @apply min-w-0 shrink-0 truncate;
+  max-width: 50%;
+}
+
 .workbenchWorkerThreadCaption {
-  @apply min-w-0 truncate;
+  @apply min-w-0 flex-1 truncate;
   font-weight: var(--font-weight-normal, 400);
 }
 

@@ -343,3 +343,45 @@ void describe('Workbench shared VelarOS account', () => {
     }
   })
 })
+
+void test('expired access is refreshed once for concurrent model catalog requests', async () => {
+  const rootDir = await mkdtemp(join(tmpdir(), 'workbench-refresh-'))
+  const store = new WorkbenchSharedAccountStore({ rootDir })
+  const old = { ...session('refresh'), accessExpiresAt: new Date(0).toISOString() }
+  const fresh = { ...session('refresh'), accessToken: 'fresh-access', refreshToken: 'fresh-refresh' }
+  let refreshes = 0
+  try {
+    await store.save(old)
+    const service = new WorkbenchAccountService(store, async () => {}, 'https://cloud.example.com', async (url, init) => {
+      if (String(url).endsWith('/refresh')) {
+        refreshes++
+        await new Promise(resolve => setTimeout(resolve, 20))
+        return Response.json(fresh)
+      }
+      assert.equal(new Headers(init?.headers).get('Authorization'), 'Bearer fresh-access')
+      return Response.json(usageSnapshot([VelarDevAccess]))
+    })
+    await Promise.all([service.getManagedModelAccess(), service.getManagedModelAccess()])
+    assert.equal(refreshes, 1)
+    assert.equal((await store.load())?.refreshToken, 'fresh-refresh')
+  } finally { await rm(rootDir, { recursive: true, force: true }) }
+})
+
+void test('a late refresh does not overwrite another product or restore a signed-out account', async () => {
+  const rootDir = await mkdtemp(join(tmpdir(), 'workbench-refresh-race-'))
+  const store = new WorkbenchSharedAccountStore({ rootDir })
+  const desktop = new WorkbenchSharedAccountStore({ rootDir, productId: 'velaros.desktop' })
+  const original = session('shared')
+  const next = { ...original, refreshToken: 'rotated' }
+  try {
+    await store.save(original)
+    await desktop.save(next)
+    assert.equal((await store.replaceSession(original, { ...original, refreshToken: 'late' }))?.refreshToken, 'rotated')
+    await store.disconnect()
+    assert.equal(await store.replaceSession(next, original), null)
+    assert.equal((await desktop.load())?.refreshToken, 'rotated')
+    await store.save(session('different-account'))
+    assert.equal(await store.replaceSession(next, original), null)
+    assert.equal((await store.load())?.account.id, 'different-account')
+  } finally { await rm(rootDir, { recursive: true, force: true }) }
+})

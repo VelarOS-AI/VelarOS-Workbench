@@ -1,3 +1,5 @@
+import { isPlainObject, isString } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/core/error'
 import type { ActAgentSummary, ActTurnTrace } from '@velaros-ai/velaros/contracts'
 
 import {
@@ -5,6 +7,9 @@ import {
   type ConversationAgentStatus,
   ConversationAgentTextMaxChars,
 } from '../../shared/workbenchConversation'
+
+import { ConversationScriptBoard } from './ConversationScripts'
+import type { ConversationWorkspaceHandle } from './WorkbenchConversationTypes'
 
 const StatusBySummary = {
   running: 'running',
@@ -24,6 +29,11 @@ interface AgentThread {
   startedAt: number
   /** 所在回合：还在跑的线程靠它定时重读。 */
   turnId: string
+  sessionId: string
+  after: number
+  settled: boolean
+  activity: Map<string, NonNullable<ConversationAgentProjection['activity']>[number]>
+  scripts: ConversationScriptBoard
 }
 
 /**
@@ -34,7 +44,10 @@ interface AgentThread {
 export class ConversationAgentBoard {
   private readonly threads = new Map<string, AgentThread>()
 
-  public constructor(private readonly emit: (projection: ConversationAgentProjection) => void) {}
+  public constructor(
+    private readonly emit: (projection: ConversationAgentProjection) => void,
+    private readonly model: () => string | undefined = () => undefined
+  ) {}
 
   /** anchorOf 给出这段执行对应的脚本卡。 */
   public trace(trace: ActTurnTrace, anchorOf: (executionId: string) => Nullable<string>): void {
@@ -43,14 +56,82 @@ export class ConversationAgentBoard {
       const key = `${agent.executionId}:${agent.id}`
       const count = seen.get(key) ?? 0
       seen.set(key, count + 1)
-      this.publish(trace.turnId, {
-        id: `conversation:agent:${key}:${count}`,
-        anchorId: anchorOf(agent.executionId),
-        task: agent.task.slice(0, ConversationAgentTextMaxChars),
-        profile: agent.profile,
-        status: StatusBySummary[agent.status],
-        answer: agent.answer.slice(0, ConversationAgentTextMaxChars),
-        error: agent.error,
+      this.publish(
+        trace.turnId,
+        {
+          id: `conversation:agent:${key}:${count}`,
+          agentId: agent.id,
+          model: this.model(),
+          anchorId: anchorOf(agent.executionId),
+          task: agent.task.slice(0, ConversationAgentTextMaxChars),
+          profile: agent.profile,
+          status: StatusBySummary[agent.status],
+          answer: agent.answer.slice(0, ConversationAgentTextMaxChars),
+          error: agent.error,
+        },
+        agent.sessionId
+      )
+    }
+  }
+
+  /** 通过根会话授权的追踪入口读取子会话，不再创建新的模型运行。 */
+  public async refresh(read: NonNullable<ConversationWorkspaceHandle['trace']>): Promise<void> {
+    for (const thread of this.threads.values()) {
+      if (thread.settled) continue
+      let after = thread.after
+      let latest = after
+      let pending = Number.MAX_SAFE_INTEGER
+      for (;;) {
+        const page = await read({
+          sessionId: thread.sessionId,
+          after,
+          limit: 32,
+          fullContent: true,
+          activityLimit: 1,
+        })
+        for (const trace of page.turns) {
+          thread.scripts.trace(trace)
+          for (const record of trace.records) {
+            if (record.title !== 'act:event' || record.truncated || !record.body) continue
+            let value: unknown
+            try {
+              value = JSON.parse(record.body)
+            } catch {
+              continue
+            }
+            if (isPlainObject(value) && value.type === 'accepted' && isString(value.text)) {
+              const id = `conversation:${trace.runId}:${trace.turnId}`
+              thread.activity.set(id, {
+                kind: 'conversation-text',
+                payload: {
+                  id,
+                  runId: trace.runId,
+                  turnId: trace.turnId,
+                  phase: 'accepted',
+                  text: value.text,
+                },
+              })
+            }
+          }
+          latest = Math.max(latest, trace.request.sequence - 1)
+          if (
+            trace.executions.some(
+              (execution) => execution.status === 'queued' || execution.status === 'running'
+            )
+          )
+            pending = Math.min(pending, trace.request.sequence - 1)
+        }
+        if (page.nextAfter === null) break
+        if (page.nextAfter <= after)
+          throw new AppError('PROTOCOL', 'Child transcript pagination did not advance')
+        after = page.nextAfter
+      }
+      thread.settled = !isActive(thread.content.status)
+      if (thread.settled) thread.scripts.settle()
+      thread.after = Math.min(latest, pending)
+      this.publish(thread.turnId, {
+        ...thread.content,
+        activity: [...thread.activity.values()],
       })
     }
   }
@@ -72,12 +153,28 @@ export class ConversationAgentBoard {
       if (isActive(content.status)) this.publish(turnId, { ...content, status: 'aborted' })
   }
 
-  private publish(turnId: string, content: AgentContent): void {
+  private publish(turnId: string, content: AgentContent, sessionId?: string): void {
     const current = this.threads.get(content.id)
-    if (current && JSON.stringify(current.content) === JSON.stringify(content)) return
+    const next = { ...content, activity: content.activity ?? current?.content.activity }
+    if (current && JSON.stringify(current.content) === JSON.stringify(next)) return
     const startedAt = current?.startedAt ?? Date.now()
-    this.threads.set(content.id, { content, startedAt, turnId })
-    this.emit({ ...content, startedAt, updatedAt: Date.now() })
+    if (current) Object.assign(current, { content: next, turnId })
+    else {
+      const activity: AgentThread['activity'] = new Map()
+      this.threads.set(content.id, {
+        content: next,
+        startedAt,
+        turnId,
+        sessionId: sessionId!,
+        after: 0,
+        settled: false,
+        activity,
+        scripts: new ConversationScriptBoard((payload) =>
+          activity.set(payload.id, { kind: 'conversation-script', payload })
+        ),
+      })
+    }
+    this.emit({ ...next, startedAt, updatedAt: Date.now() })
   }
 }
 

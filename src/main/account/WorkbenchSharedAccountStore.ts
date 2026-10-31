@@ -120,6 +120,32 @@ export class WorkbenchSharedAccountStore {
     }))
   }
 
+  /** 仅替换发起续期的那份凭据；其他产品已续期或用户退出后，不覆盖新状态。 */
+  public async replaceSession(
+    previous: WorkbenchCloudSession,
+    next: WorkbenchCloudSession
+  ): Promise<WorkbenchCloudSession | null> {
+    return this.#mutate((registry) => {
+      const accountId = registry.productBindings[this.#productId]
+      const current = accountId ? registry.sessions[accountId] : undefined
+      if (
+        !current ||
+        current.account.id !== previous.account.id ||
+        current.refreshToken !== previous.refreshToken
+      )
+        return { registry, value: current?.account.id === previous.account.id ? current : null }
+      if (next.account.id !== current.account.id) throw new Error('Refreshed account identity changed')
+      return {
+        registry: {
+          ...registry,
+          sessions: { ...registry.sessions, [accountId!]: next },
+          updatedAt: new Date().toISOString(),
+        },
+        value: next,
+      }
+    })
+  }
+
   /** true 表示同机已没有其他产品绑定该会话。 */
   public async disconnect(): Promise<boolean> {
     return this.#mutate((registry) => {

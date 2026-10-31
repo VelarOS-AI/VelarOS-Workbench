@@ -54,7 +54,9 @@ export function createWorkbenchConversationConfiguration(
     capacities.set(key, capacity)
     if (capacities.size > CapacityCacheEntries) capacities.delete(capacities.keys().next().value!)
     const driver = createAiSdkModelDriver({
-      id: `${resolved.providerId}/${resolved.model}`,
+      id: resolved.model.startsWith(`${resolved.providerId}/`)
+        ? resolved.model
+        : `${resolved.providerId}/${resolved.model}`,
       model: resolved.provider(resolved.model, {
         ...resolved.modelRequestOptions,
         runtimeContext: {

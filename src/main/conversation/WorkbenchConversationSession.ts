@@ -213,6 +213,7 @@ export class WorkbenchConversationSession implements WorkbenchConversationSessio
       const owner = runtime
       return {
         session,
+        trace: (input) => owner.trace(options.sessionId, input),
         close: async () => {
           try {
             await owner.close()

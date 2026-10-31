@@ -20,7 +20,7 @@ function isScriptRuntimeModule(specifier) {
 
 /** 从包自己的查找路径解析依赖，保留 workspace 链接的实际版本身份。 */
 export function installedPackage(name, parent, optional = false) {
-  const lookup = createRequire(join(parent, 'package.json')).resolve.paths(name) ?? []
+  const lookup = createRequire(join(parent, 'package.json')).resolve.paths(`${name}/package.json`) ?? []
   for (const directory of lookup) {
     const path = join(directory, name, 'package.json')
     if (!existsSync(path)) continue

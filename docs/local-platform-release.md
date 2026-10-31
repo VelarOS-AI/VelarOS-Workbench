@@ -51,7 +51,7 @@ change item. The loader adds `softwareProduct: "workbench"` before the note ente
 Cloud cannot interpret it as another product. Local staging and finalization stop before publishing
 when that entry is missing, has a different version, or fails validation.
 
-Platform dependency archives are pinned by `resources/runtime-snapshot.json`, restored from the private Platform Release, and verified against both archive hashes and `bun.lock`. The app ships their installed runtime files; package-registry publication is independent of the app release.
+Platform dependency archives are pinned by `resources/runtime-snapshot.json`, restored from the public Platform Release, and verified against both archive hashes and `bun.lock`. The app ships their installed runtime files; package-registry publication is independent of the app release.
 
 ## macOS
 

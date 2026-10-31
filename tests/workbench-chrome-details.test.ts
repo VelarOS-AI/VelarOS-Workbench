@@ -14,7 +14,7 @@ import {
 import { WorkbenchWindowStateChannels } from '../src/shared/workbenchWindowState'
 
 function readSource(relativePath: string): string {
-  return readFileSync(path.resolve(process.cwd(), relativePath), 'utf8')
+  return readFileSync(path.resolve(process.cwd(), relativePath), 'utf8').replaceAll('\r\n', '\n')
 }
 
 function listSourceFiles(relativeDirectory: string): string[] {

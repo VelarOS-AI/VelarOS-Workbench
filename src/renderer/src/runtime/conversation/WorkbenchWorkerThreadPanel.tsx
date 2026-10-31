@@ -24,7 +24,6 @@ import type { ChatMessage } from '@velaros-ai/ui/conversation/contracts'
 import { Text } from '@velaros-ai/ui/primitives/display/Text'
 import { ToolDisclosureCard } from '@velaros-ai/ui/product/layout/ToolDisclosureCard'
 
-import { useWorkbenchI18n } from '../../i18n/WorkbenchLocalizationProvider'
 import styles from '../../styles/workbenchPageStyles'
 
 /** 卡片里嵌的时间线与聊天页落到同一组宿主入口：项目根、打开路径、文件改动。 */
@@ -81,34 +80,32 @@ function WorkbenchWorkerThreadCard({
   thread: ConversationWorkerThread
   sessionId: string
 }): ReactElement {
-  const { t } = useWorkbenchI18n()
   const [open, setOpen] = useState(false)
   const running = isWorkerThreadRunning(thread)
   const hasTimeline = thread.messages.length > 0
   // 还没有时间线（刚派出的乐观占位、旧事件）时退回派发器给的结论或说明。
   const fallbackBody = thread.error ?? thread.output ?? thread.summary ?? null
   const expandable = hasTimeline || !!fallbackBody || !!thread.input
-  const caption = [
-    thread.subagentType,
-    thread.model,
-    running ? t('workbench.workerThreadRunning') : null,
-  ]
+  const agentName = thread.customAgentName ?? thread.agentName
+  const identity = [agentName, thread.model ? `(${thread.model})` : null]
     .filter(Boolean)
-    .join(' · ')
+    .join(' ')
 
   return (
     <ToolDisclosureCard
       statusTone={resolveWorkerThreadTone(thread)}
       statusIcon={renderWorkerThreadStatusIcon(thread)}
-      // 名字与类型、模型、状态排在同一行：卡片折叠时只占一行。
+      // 与 Desktop 一致：身份最多占半行，余下宽度留给任务标题。
       title={
         <span className={styles.workbenchWorkerThreadTitle}>
-          <span>{thread.customAgentName ?? thread.agentName ?? thread.title}</span>
-          {!!caption && (
-            <Text tone="caption" className={styles.workbenchWorkerThreadCaption}>
-              {caption}
-            </Text>
+          {!!identity && (
+            <span className={styles.workbenchWorkerThreadIdentity} title={identity}>
+              {identity}
+            </span>
           )}
+          <span className={styles.workbenchWorkerThreadCaption} title={thread.title}>
+            {thread.title}
+          </span>
         </span>
       }
       open={open}
@@ -125,9 +122,15 @@ function WorkbenchWorkerThreadCard({
             </Text>
           )}
           {hasTimeline ? (
-            <WorkbenchWorkerThreadTranscript thread={thread} sessionId={sessionId} running={running} />
+            <WorkbenchWorkerThreadTranscript
+              thread={thread}
+              sessionId={sessionId}
+              running={running}
+            />
           ) : (
-            !!fallbackBody && <Text className={styles.workbenchWorkerThreadOutput}>{fallbackBody}</Text>
+            !!fallbackBody && (
+              <Text className={styles.workbenchWorkerThreadOutput}>{fallbackBody}</Text>
+            )
           )}
         </div>
       )}
@@ -169,7 +172,8 @@ function WorkbenchWorkerThreadTranscript({
       onScroll={(event) => {
         const element = event.currentTarget
         stickToBottomRef.current =
-          element.scrollHeight - element.scrollTop - element.clientHeight <= StickToBottomThresholdPx
+          element.scrollHeight - element.scrollTop - element.clientHeight <=
+          StickToBottomThresholdPx
       }}
     >
       <ChatTranscript
@@ -199,16 +203,19 @@ function resolveWorkerThreadTone(
 }
 
 function isWorkerThreadRunning(thread: ConversationWorkerThread): boolean {
-  return thread.status === 'running'
-    || thread.status === 'pending'
-    || thread.status === 'awaiting_confirmation'
-    || thread.status === 'awaiting_input'
+  return (
+    thread.status === 'running' ||
+    thread.status === 'pending' ||
+    thread.status === 'awaiting_confirmation' ||
+    thread.status === 'awaiting_input'
+  )
 }
 
 function renderWorkerThreadStatusIcon(thread: ConversationWorkerThread): ReactElement {
   if (thread.status === 'completed') return <CheckCircleIcon size={14} weight="bold" />
   if (thread.status === 'failed') return <XCircleIcon size={14} weight="bold" />
   if (thread.status === 'aborted') return <StopCircleIcon size={14} weight="bold" />
-  if (thread.status === 'awaiting_confirmation' || thread.status === 'awaiting_input') return <ClockIcon size={14} weight="bold" />
+  if (thread.status === 'awaiting_confirmation' || thread.status === 'awaiting_input')
+    return <ClockIcon size={14} weight="bold" />
   return <SpinnerGapIcon size={14} className={styles.spinIcon} />
 }

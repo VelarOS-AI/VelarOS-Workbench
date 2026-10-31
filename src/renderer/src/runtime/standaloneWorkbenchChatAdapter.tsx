@@ -230,18 +230,30 @@ interface ActiveConversationRun {
   readonly settleTerminal: (kind: StandaloneAgentTerminalKind) => void
 }
 
-const states = new Map<string, StandaloneChatState>()
-const inactiveStates = new Map<string, StandaloneChatState[]>()
-const stateUpdateTargets = new Map<string, string>()
-const listeners = new Set<() => void>()
-const activeRuns = new Map<string, ActiveConversationRun>()
-const pendingSubmissions = new Set<string>()
+/** 开发热更新只替换展示代码，不能丢弃主进程仍在运行的会话。 */
+interface HotConversationStore {
+  states: Map<string, StandaloneChatState>
+  inactiveStates: Map<string, StandaloneChatState[]>
+  stateUpdateTargets: Map<string, string>
+  listeners: Set<() => void>
+  activeRuns: Map<string, ActiveConversationRun>
+  pendingSubmissions: Set<string>
+  peerPreparations: Map<string, AbortController>
+  idSequence: number
+}
+const hotStore = import.meta.hot?.data.workbenchConversation as HotConversationStore | undefined
+const states = hotStore?.states ?? new Map<string, StandaloneChatState>()
+const inactiveStates = hotStore?.inactiveStates ?? new Map<string, StandaloneChatState[]>()
+const stateUpdateTargets = hotStore?.stateUpdateTargets ?? new Map<string, string>()
+const listeners = hotStore?.listeners ?? new Set<() => void>()
+const activeRuns = hotStore?.activeRuns ?? new Map<string, ActiveConversationRun>()
+const pendingSubmissions = hotStore?.pendingSubmissions ?? new Set<string>()
 /** 停止要等主进程把这一轮收完（关运行时、释放脚本进程）；超过这么久还没回音就按停止失败收尾。 */
 const WorkbenchAgentStopSettlementTimeoutMs = 15_000
 /** 随消息发出的图片：单张上限与张数上限（再大的图描述成附件路径，由 Agent 自己看）。 */
 const MaxImageAttachmentBytes = 8 * 1_024 * 1_024
 const MaxImageAttachments = 8
-let idSequence = 0
+let idSequence = hotStore?.idSequence ?? 0
 let conversationEventSubscription: Nullable<() => void> = null
 
 function nextId(prefix: string): string {
@@ -718,7 +730,7 @@ async function prepareWorkbenchPeerTask(
   }
 }
 
-const peerPreparations = new Map<string, AbortController>()
+const peerPreparations = hotStore?.peerPreparations ?? new Map<string, AbortController>()
 let peerEventSubscription: Nullable<() => void> = null
 
 function receiveWorkbenchPeerEvent(event: WorkbenchPeerEvent): void {
@@ -2692,4 +2704,22 @@ export const standaloneWorkbenchChatAdapter: WorkbenchChatCompositionAdapter = {
   useProjectRuntime: useStandaloneProjectRuntime,
   SessionSurface: StandaloneWorkbenchChatSessionSurface,
   SessionActions: StandaloneWorkbenchChatSessionActions,
+}
+
+if (import.meta.hot) {
+  if (hotStore && typeof window !== 'undefined') ensureConversationEventSubscription()
+  import.meta.hot.dispose((data) => {
+    data.workbenchConversation = {
+      states,
+      inactiveStates,
+      stateUpdateTargets,
+      listeners,
+      activeRuns,
+      pendingSubmissions,
+      peerPreparations,
+      idSequence,
+    } satisfies HotConversationStore
+    conversationEventSubscription?.()
+    peerEventSubscription?.()
+  })
 }

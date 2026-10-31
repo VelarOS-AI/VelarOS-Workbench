@@ -496,8 +496,9 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
     const scripts = new ConversationScriptBoard((payload) =>
       sink.notice(ConversationScriptNotice, payload)
     )
-    const agents = new ConversationAgentBoard((payload) =>
-      sink.notice(ConversationAgentNotice, payload)
+    const agents = new ConversationAgentBoard(
+      (payload) => sink.notice(ConversationAgentNotice, payload),
+      () => run.modelId
     )
     const interactions = new ConversationInteractionBoard((payload) =>
       sink.notice(ConversationInteractionNotice, payload)
@@ -603,7 +604,7 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
       const session = run.handle.session
       // 运行期间定时重读：执行中的当前回合（父脚本等子任务时也看得到子任务在跑），以及还有子任务在跑的回合
       traces.watch(() => [
-        ...new Set([...(executing && lastTurn ? [lastTurn] : []), ...agents.pendingTurns()]),
+        ...new Set([...(executing && lastTurn ? [lastTurn] : []), ...scripts.pendingTurns(), ...agents.pendingTurns()]),
       ])
       // 目标模式把这条消息交给 Platform 作目标：首帧读取目标之前写入，已有进行中的目标时保持原样。
       const submitOptions: { goal?: string } = {}
@@ -633,6 +634,7 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
           executing = event.status === 'executing' || (executing && event.status === 'waiting')
         // program 事件不带回合身份：它总属于最近开始的那个回合。
         if (event.type === 'program' && lastTurn) scripts.program(lastTurn, event)
+        if (event.type === 'accepted') scripts.accept(event.turnId)
         if (event.type === 'rejected') {
           scripts.reject(event.turnId)
           thinking.reject(event.turnId)
@@ -776,6 +778,7 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
         })
       scripts.trace(trace)
       agents.trace(trace, (executionId) => scripts.cardOf(executionId))
+      if (run.handle?.trace) await agents.refresh(run.handle.trace)
       commandOutput.settle(trace)
     } catch (error) {
       log.warn('执行记录读取失败', { turnId, error: AppError.getMessage(error) })

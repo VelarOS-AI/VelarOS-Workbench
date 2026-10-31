@@ -8,6 +8,7 @@ import type {
 
 import {
   type ConversationScriptKind,
+  ConversationScriptPreviewLimits,
   type ConversationScriptProjection,
   ConversationScriptSourceMaxChars,
 } from '../../shared/workbenchConversation'
@@ -46,16 +47,31 @@ export class ConversationScriptBoard {
   /** 每段执行对应的卡片：子 Agent 线程挂在派发它的那张卡后面。 */
   private readonly executionCards = new Map<string, string>()
 
-  public constructor(private readonly emit: (projection: ConversationScriptProjection) => void) {}
+  public constructor(
+    private readonly emit: (projection: ConversationScriptProjection) => void
+  ) {}
 
-  /** start 建卡（编写中）；delta 只累积不发；end 转为执行中并带上完整源码。 */
+  /** start 建卡（编写中）；delta 只累积不发；end 转为待调度并带上完整源码。 */
   public program(turnId: string, event: ProgramEvent): void {
-    if (event.kind !== 'execute' && event.kind !== 'observe' && event.kind !== 'shell') return
+    if (
+      event.kind !== 'execute' &&
+      event.kind !== 'observe' &&
+      event.kind !== 'shell' &&
+      event.kind !== 'blobs'
+    )
+      return
     const id = `conversation:script:${event.runId}:${turnId}:${event.index}`
     if (event.phase === 'start') {
-      if (event.kind !== 'observe') this.turns.set(turnId, [...(this.turns.get(turnId) ?? []), id])
-      else this.observations.set(turnId, id)
-      this.open(id, event.kind === 'shell' ? 'execute' : event.kind, event.runId, turnId, 'writing')
+      if (event.kind === 'execute' || event.kind === 'shell')
+        this.turns.set(turnId, [...(this.turns.get(turnId) ?? []), id])
+      if (event.kind === 'observe') this.observations.set(turnId, id)
+      this.open(
+        id,
+        event.kind === 'shell' ? 'execute' : event.kind,
+        event.runId,
+        turnId,
+        'writing'
+      )
       if (event.kind === 'shell') this.cards.get(id)!.projection.language = 'shell'
       this.publish(id)
       return
@@ -66,7 +82,10 @@ export class ConversationScriptBoard {
       card.body += event.text
       return
     }
-    this.update(id, { status: 'running', ...clipSource(card.body) })
+    this.update(id, {
+      status: event.kind === 'observe' ? 'running' : 'queued',
+      ...clipSource(card.body),
+    })
   }
 
   /** 回合的执行摘要按顺序对上这一回合的卡；程序事件没建出卡的，按摘要补一张，之后的追踪沿用它。 */
@@ -82,19 +101,62 @@ export class ConversationScriptBoard {
       this.executionCards.set(execution.executionId, id)
       const calls = trace.invocations
         .filter((invocation) => invocation.executionId === execution.executionId)
-        .map((invocation) => invocation.summary)
+        .map((invocation) => ({
+          ...invocation.summary,
+          input: invocation.summary.input.slice(0, ConversationScriptPreviewLimits.inputChars),
+          output: invocation.summary.output.slice(
+            0,
+            ConversationScriptPreviewLimits.outputChars
+          ),
+          inputTruncated:
+            invocation.summary.inputTruncated ||
+            invocation.summary.input.length > ConversationScriptPreviewLimits.inputChars,
+          outputTruncated:
+            invocation.summary.outputTruncated ||
+            invocation.summary.output.length > ConversationScriptPreviewLimits.outputChars,
+        }))
       this.update(id, {
         status: settledStatus(execution, calls),
         language: execution.language ?? card.projection.language,
         calls,
         error: describeFailure(execution.failure),
         durationMs: execution.durationMs,
-        processOutput: execution.processOutput,
-        processOutputTruncated: execution.processOutputTruncated,
+        processOutput: execution.processOutput?.slice(
+          0,
+          ConversationScriptPreviewLimits.outputChars
+        ),
+        processOutputTruncated:
+          execution.processOutputTruncated ||
+          (execution.processOutput?.length ?? 0) > ConversationScriptPreviewLimits.outputChars,
         ...clipSource(card.body || execution.source),
       })
     }
     this.observe(trace)
+  }
+
+  /** 原文绑定通过协议检查后才算完成。 */
+  public accept(turnId: string): void {
+    for (const [id, { projection }] of this.cards)
+      if (
+        projection.turnId === turnId &&
+        projection.kind === 'blobs' &&
+        projection.status === 'queued'
+      )
+        this.update(id, { status: 'succeeded' })
+  }
+
+  /** 异步执行跨回合时仍持续刷新原卡片，直到读到终态。 */
+  public pendingTurns(): readonly string[] {
+    return [
+      ...new Set(
+        [...this.cards.values()]
+          .filter(
+            ({ projection }) =>
+              projection.status === 'queued' || projection.status === 'running'
+          )
+          .map(({ projection }) => projection.turnId)
+      ),
+    ]
   }
 
   /** 这段执行的卡片；还没从追踪里对上时为 null。 */
@@ -104,7 +166,8 @@ export class ConversationScriptBoard {
 
   /** 协议没通过的回合一段程序都没执行：撤掉它写的卡，修复后的回合会重新写。 */
   public reject(turnId: string): void {
-    for (const id of this.turns.get(turnId) ?? []) this.update(id, { status: 'discarded' })
+    for (const [id, { projection }] of this.cards)
+      if (projection.turnId === turnId) this.update(id, { status: 'discarded' })
     const observed = this.observations.get(turnId)
     if (observed) this.update(observed, { status: 'discarded' })
     this.turns.delete(turnId)
@@ -114,7 +177,7 @@ export class ConversationScriptBoard {
   /** 运行结束：还在编写或执行中的卡不会再有结果，按取消收尾。 */
   public settle(): void {
     for (const [id, card] of this.cards)
-      if (card.projection.status === 'writing' || card.projection.status === 'running')
+      if (['writing', 'queued', 'running'].includes(card.projection.status))
         this.update(id, { status: 'cancelled' })
   }
 
@@ -148,7 +211,11 @@ export class ConversationScriptBoard {
     const card = this.cards.get(id)!
     const rejected = registration.status === 'rejected'
     // 同一回合的追踪会读不止一次：卡已经收过运行结果时，登记结果不把它盖回去
-    if (card.projection.status === 'writing' || card.projection.status === 'running' || rejected)
+    if (
+      card.projection.status === 'writing' ||
+      card.projection.status === 'running' ||
+      rejected
+    )
       this.update(id, {
         status: rejected ? 'failed' : 'succeeded',
         error: describeFailure(registration.failure),

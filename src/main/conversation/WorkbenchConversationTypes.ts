@@ -1,5 +1,6 @@
 import type {
   NodeExecutionOutput,
+  VelarosRuntime,
   VelarosRuntimeOptions,
   VelarosSession,
 } from '@velaros-ai/velaros'
@@ -100,6 +101,7 @@ export interface ConversationControlOptions {
 /** 会话与其资源释放入口。 */
 export interface ConversationWorkspaceHandle {
   session: VelarosSession
+  trace?(input?: Parameters<VelarosRuntime['trace']>[1]): ReturnType<VelarosRuntime['trace']>
   close(): Promise<void>
 }
 

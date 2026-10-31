@@ -712,3 +712,42 @@ test(
     )
   }
 )
+
+test(
+  'real child execution reaches the Workbench thread transcript before resources close',
+  { timeout: 30_000 },
+  async (t) => {
+    const f = await fixture(t, async function* (frame, _signal, call) {
+      if (call === 1)
+        yield execute(
+          frame,
+          "// 派发独立审查\nimport {start,wait} from 'velaros:agents';const job=await start({task:'打印 CHILD_TRACE_PROOF 再完成'});await wait({id:job.id});"
+        )
+      else if (call === 2)
+        yield execute(frame, "// 检查项目\nconsole.log('CHILD_TRACE_PROOF'.repeat(800))")
+      else yield done(frame, call === 3 ? '子任务完成' : '父任务完成')
+      yield { type: 'finish', reason: 'stop' }
+    })
+    const run = f.runtime.submit(f.sink, f.request('test child trace'))
+    await run.accepted
+    await run.completed
+    assert.equal(f.lastState()?.kind, 'done', JSON.stringify(f.events.slice(-5)))
+    const agents = f.events
+      .filter((event) => event.kind === 'conversation-agent')
+      .map((event) => event.payload)
+    assert(agents.some((agent) => agent.status === 'completed' && agent.agentId))
+    assert(
+      agents.some((agent) =>
+        agent.activity?.some(
+          (item) =>
+            item.kind === 'conversation-script' &&
+            item.payload.status === 'succeeded' &&
+            item.payload.processOutput?.includes('CHILD_TRACE_PROOF') &&
+            item.payload.processOutput.length <= 6000 &&
+            item.payload.processOutputTruncated
+        )
+      ),
+      JSON.stringify(agents)
+    )
+  }
+)

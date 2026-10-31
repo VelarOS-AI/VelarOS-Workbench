@@ -44,6 +44,7 @@ type GoogleDesktopResult =
 
 export class WorkbenchAccountService {
   readonly #baseUrl: string
+  #refreshOperation: { token: string; promise: Promise<WorkbenchCloudSession> } | null = null
   #signInOperation: Promise<WorkbenchAccountState> | null = null
   #publicModelPricing: { readonly catalog: ModelPricingCatalog; readonly expiresAt: number } | null =
     null
@@ -216,8 +217,7 @@ export class WorkbenchAccountService {
       throw new Error(workbenchMainText('account.untrustedPluginUrl'))
     }
     await this.ensureSignedIn()
-    const session = await this.store.load()
-    if (!session) throw new Error(workbenchMainText('account.signInBeforePluginDownload'))
+    const session = await this.#requireActiveSession()
     return this.fetchImpl(input, {
       headers: {
         Authorization: `Bearer ${session.accessToken}`,
@@ -270,6 +270,7 @@ export class WorkbenchAccountService {
   ): Promise<T> {
     const response = await this.fetchImpl(`${this.#baseUrl}${path}`, {
       method: 'POST',
+      signal: AbortSignal.timeout(CloudRequestTimeoutMs),
       headers: { 'Content-Type': 'application/json', ...input.headers },
       body: JSON.stringify(input.body ?? {}),
     })
@@ -302,7 +303,35 @@ export class WorkbenchAccountService {
       if (session) await this.store.disconnect()
       throw new Error(workbenchMainText('account.signInRequired'))
     }
-    return session
+    if (Date.parse(session.accessExpiresAt) - Date.now() > 60_000) return session
+    if (this.#refreshOperation?.token === session.refreshToken) return this.#refreshOperation.promise
+    const operation = this.#refreshSession(session).finally(() => {
+      if (this.#refreshOperation?.promise === operation) this.#refreshOperation = null
+    })
+    this.#refreshOperation = { token: session.refreshToken, promise: operation }
+    return operation
+  }
+
+  async #refreshSession(previous: WorkbenchCloudSession): Promise<WorkbenchCloudSession> {
+    try {
+      const next = await this.#request<WorkbenchCloudSession>('/v1/auth/session/refresh', {
+        headers: { [DeviceIdHeader]: await this.store.getDeviceId() },
+        body: { refreshToken: previous.refreshToken },
+      })
+      const current = await this.store.replaceSession(previous, next)
+      if (!current) throw new Error(workbenchMainText('account.signInRequired'))
+      return current
+    } catch (error) {
+      // Desktop 可能已续期；旧凭据失败不能清掉它刚写入的共享登录。
+      const current = await this.store.load()
+      if (
+        current?.account.id === previous.account.id &&
+        current.refreshToken !== previous.refreshToken &&
+        Date.parse(current.accessExpiresAt) > Date.now()
+      )
+        return current
+      throw error
+    }
   }
 
   async #requireManagedProvider(

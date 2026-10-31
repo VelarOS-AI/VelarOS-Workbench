@@ -31,6 +31,9 @@ void test('configuration reuses learned limits only for the same session and mod
     return configured.model
   }
   const initial = await modelFor()
+  assert.equal(initial.id, 'openrouter/unknown-model')
+  const managed = await modelFor({ ...request, model: { provider: 'velar-dev', model: 'velar-dev/gpt-5.6-sol' } })
+  assert.equal(managed.id, 'velar-dev/gpt-5.6-sol')
   assert.equal(initial.limits.contextTokens, 1_000_000)
   initial.limits.reject({ type: 'error', code: 'context-limit', message: 'maximum context length is 200000 tokens' }, 240000)
   assert.equal((await modelFor()).limits, initial.limits)

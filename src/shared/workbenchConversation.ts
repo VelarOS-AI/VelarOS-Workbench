@@ -197,8 +197,8 @@ export interface ConversationThinkingProjection {
 }
 
 export const ConversationScriptNotice = 'conversation-script'
-export type ConversationScriptKind = 'execute' | 'observe'
-export type ConversationScriptStatus = 'writing' | 'running' | 'succeeded' | 'failed' | 'cancelled'
+export type ConversationScriptKind = 'execute' | 'observe' | 'blobs'
+export type ConversationScriptStatus = 'writing' | 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
 /** 一段脚本（模型写的 execute / observe 程序）；discarded 表示这一回合协议没通过，卡片撤下。 */
 export interface ConversationScriptProjection {
   /** `conversation:script:${runId}:${turnId}:${index}`，追踪补上的是 `…:${executionId}` 或 `…:observe`。 */
@@ -219,6 +219,8 @@ export interface ConversationScriptProjection {
   durationMs: Nullable<number>
 }
 export const ConversationScriptSourceMaxChars = 20_000
+/** 仅限制卡片预览，原始执行追踪保留全文；超出时截断展示，不能丢弃状态更新。 */
+export const ConversationScriptPreviewLimits = { inputChars: 2_000, outputChars: 6_000 } as const
 
 export const ConversationAgentNotice = 'conversation-agent'
 export type ConversationAgentStatus =
@@ -227,6 +229,12 @@ export type ConversationAgentStatus =
 export interface ConversationAgentProjection {
   /** `conversation:agent:${executionId}:${jobId}:${n}` */
   id: string
+  agentId?: string
+  model?: string
+  activity?: Array<
+    | { kind: 'conversation-script'; payload: ConversationScriptProjection }
+    | { kind: 'conversation-text'; payload: ConversationTextProjection }
+  >
   /** 派发它的脚本卡；对不上卡时为 null。 */
   anchorId: Nullable<string>
   task: string

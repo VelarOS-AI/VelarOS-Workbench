@@ -40,13 +40,13 @@
   },
   "dependencies": {
     "@lydell/node-pty": "1.2.0-beta.15",
-    "@velaros-ai/agent": "file:build/runtime-packages/velaros-ai-agent-9.9.0.tgz",
+    "@velaros-ai/agent": "file:build/runtime-packages/velaros-ai-agent-9.9.4.tgz",
     "@velaros-ai/core": "file:build/runtime-packages/velaros-ai-core-0.4.3.tgz",
-    "@velaros-ai/kernel": "file:build/runtime-packages/velaros-ai-kernel-0.6.1.tgz",
-    "@velaros-ai/model": "file:build/runtime-packages/velaros-ai-model-0.10.1.tgz",
-    "@velaros-ai/script": "file:build/runtime-packages/velaros-ai-script-0.3.0.tgz",
-    "@velaros-ai/ui": "file:build/runtime-packages/velaros-ai-ui-0.2.55.tgz",
-    "@velaros-ai/velaros": "file:build/runtime-packages/velaros-ai-velaros-0.6.4.tgz",
+    "@velaros-ai/kernel": "file:build/runtime-packages/velaros-ai-kernel-0.6.2.tgz",
+    "@velaros-ai/model": "file:build/runtime-packages/velaros-ai-model-0.10.2.tgz",
+    "@velaros-ai/script": "file:build/runtime-packages/velaros-ai-script-0.3.6.tgz",
+    "@velaros-ai/ui": "file:build/runtime-packages/velaros-ai-ui-0.2.62.tgz",
+    "@velaros-ai/velaros": "file:build/runtime-packages/velaros-ai-velaros-0.6.21.tgz",
     "gpt-tokenizer": "3.4.0",
     "pyright": "^1.1.411",
     "react": "^19.2.5",
@@ -150,13 +150,13 @@
   },
   "overrides": {
     "@velaros-ai/core": "file:build/runtime-packages/velaros-ai-core-0.4.3.tgz",
-    "@velaros-ai/kernel": "file:build/runtime-packages/velaros-ai-kernel-0.6.1.tgz",
-    "@velaros-ai/context": "file:build/runtime-packages/velaros-ai-context-0.10.0.tgz",
-    "@velaros-ai/model": "file:build/runtime-packages/velaros-ai-model-0.10.1.tgz",
-    "@velaros-ai/agent": "file:build/runtime-packages/velaros-ai-agent-9.9.0.tgz",
+    "@velaros-ai/kernel": "file:build/runtime-packages/velaros-ai-kernel-0.6.2.tgz",
+    "@velaros-ai/context": "file:build/runtime-packages/velaros-ai-context-0.10.1.tgz",
+    "@velaros-ai/model": "file:build/runtime-packages/velaros-ai-model-0.10.2.tgz",
+    "@velaros-ai/agent": "file:build/runtime-packages/velaros-ai-agent-9.9.4.tgz",
     "@velaros-ai/skill-jsts": "file:build/runtime-packages/velaros-ai-skill-jsts-0.1.0.tgz",
-    "@velaros-ai/script": "file:build/runtime-packages/velaros-ai-script-0.3.0.tgz",
-    "@velaros-ai/velaros": "file:build/runtime-packages/velaros-ai-velaros-0.6.4.tgz",
-    "@velaros-ai/ui": "file:build/runtime-packages/velaros-ai-ui-0.2.55.tgz"
+    "@velaros-ai/script": "file:build/runtime-packages/velaros-ai-script-0.3.6.tgz",
+    "@velaros-ai/velaros": "file:build/runtime-packages/velaros-ai-velaros-0.6.21.tgz",
+    "@velaros-ai/ui": "file:build/runtime-packages/velaros-ai-ui-0.2.62.tgz"
   }
 }

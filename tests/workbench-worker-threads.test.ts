@@ -276,3 +276,79 @@ void describe('streaming stays cheap for the rest of the page', () => {
     assert.match(slots, /<WorkbenchWorkerThreadPanel threads=\{threads\} sessionId=\{sessionId\} \/>/u)
   })
 })
+
+void test('child traces preserve execution results, names and model across updates and resume', async () => {
+  const emitted: ConversationAgentProjection[] = []
+  const board = new ConversationAgentBoard(
+    (value) => emitted.push(value),
+    () => 'velar-dev/gpt-5.6-sol'
+  )
+  board.trace(turnTrace('parent', [agentSummary()]), anchorOf)
+  const child = {
+    runId: 'child-run',
+    turnId: 'child-turn',
+    request: { sequence: 2 },
+    executions: [
+      {
+        executionId: 'child-exec',
+        position: 0,
+        status: 'succeeded',
+        source: '// check source\nconsole.log(42)',
+        failure: null,
+        durationMs: 10,
+        processOutput: '42'.repeat(4000),
+      },
+    ],
+    invocations: [],
+    observation: {},
+    records: [
+      { title: 'act:event', body: JSON.stringify({ type: 'accepted', text: '审查完成' }) },
+    ],
+  } as unknown as ActTurnTrace
+  let reads = 0
+  await board.refresh(async (query) => {
+    reads++
+    assert.equal(query?.sessionId, 'job-1-session')
+    return { turns: [child], nextAfter: null } as never
+  })
+  board.trace(
+    turnTrace('parent', [agentSummary({ status: 'completed', answer: '已完成' })]),
+    anchorOf
+  )
+  await board.refresh(async () => ({ turns: [child], nextAfter: null }) as never)
+  await board.refresh(async () => {
+    throw Error('settled thread must not be read again')
+  })
+  board.trace(
+    turnTrace('parent-next', [
+      agentSummary({ executionId: 'exec-2', task: '再检查一次' }),
+      agentSummary({ id: 'job-2', executionId: 'exec-2' }),
+    ]),
+    anchorOf
+  )
+  const state = emitted.reduce(
+    (state, payload) =>
+      applyWorkbenchConversationNotice(state, ConversationAgentNotice, payload),
+    EmptyTranscript
+  )
+  assert.equal(reads, 1)
+  assert.equal(state.workerThreads[0].agentName, state.workerThreads[1].agentName)
+  assert.notEqual(state.workerThreads[1].agentName, state.workerThreads[2].agentName)
+  assert.equal(state.workerThreads[0].model, 'velar-dev/gpt-5.6-sol')
+  const restored = JSON.parse(JSON.stringify(state)) as WorkbenchConversationTranscript
+  assert.equal(restored.workerThreads[0].status, 'completed')
+  assert(
+    restored.workerThreads[0].messages.some((message) =>
+      message.blocks.some(
+        (block) =>
+          block.type === 'script-execution' &&
+          block.calls.some((call) => call.output === '42'.repeat(3000) && call.outputTruncated)
+      )
+    )
+  )
+  assert(
+    restored.workerThreads[0].messages.some((message) =>
+      message.blocks.some((block) => block.type === 'text' && block.text === '审查完成')
+    )
+  )
+})

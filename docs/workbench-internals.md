@@ -31,7 +31,7 @@ Workbench 是单体仓库：根 `package.json` 是唯一清单，全部产品源
 - 通用语言宿主不包含 VelarScript 特判；editor 贡献归 renderer，服务描述归 shared。
 - Workbench 不依赖 VelarOS Desktop 内部源码，仍作为独立应用构建和发布。
 - 账号会话与 Desktop 共用 VelarOS 组织级共享目录，目录布局归 `@velaros-ai/core/platform/shared-resources`，
-  Workbench 不留自己的一份。
+  Workbench 不留自己的一份。访问凭据临近过期时自动续期，同一凭据的并发请求共用一次续期；回写前比较共享凭据，避免覆盖 Desktop 的新会话或恢复已退出的账号。
 
 ## 会话运行时
 
@@ -58,6 +58,9 @@ Workbench 是单体仓库：根 `package.json` 是唯一清单，全部产品源
 - **浏览器**：网页搜索使用 `WorkbenchWebSearchPages` 的隐蔽窗口与独立分区，搜索引擎跟设置走。
   `WorkbenchBrowserService` 按项目与会话维护受控页面，模型进入站点时在编辑器打开 Agent 标签，
   webview 接管、导航、后台页面交接和离站由 Platform 浏览器运行时管理；browser / devtools / cdp 操作按需连接当前会话页面。
+- **执行展示**：脚本区分编写、排队、运行与结束；跨模型回合的异步执行持续回读原卡片，直至收到真实结果。原文 blobs 单独建卡，只在响应获接纳后标记完成。
+- **子任务展示**：通过根会话授权的 trace 入口增量读取子会话的执行记录和已接纳正文；名称按 Agent 身份复用，名称/模型与任务标题分别省略。长输出只裁剪卡片预览并标记截断，原始记录保留全文，不能因预览长度拒收完成状态。
+- **开发热更新**：聊天数据、活跃运行及订阅者通过 Vite hot data 保留，替换展示组件不丢弃主进程仍在执行的任务；旧事件订阅在 dispose 时释放，新模块重新订阅。
 - **状态**：会话数据在 `userData/conversation-runtime/<sha256(项目根 \0 会话 id)>`，任何项目之外；
   空闲时读、改目标用无模型的控制会话。
 - **宿主说明**（`WorkbenchConversationRules.buildHostInstructions`）：身份、回复语言、执行首行注释（Node 用 `//`、Shell 用 `#`）

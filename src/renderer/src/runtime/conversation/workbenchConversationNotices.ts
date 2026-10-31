@@ -27,6 +27,7 @@ import {
   ConversationInteractionNotice,
   type ConversationInteractionProjection,
   ConversationScriptNotice,
+  ConversationScriptPreviewLimits,
   type ConversationScriptProjection,
   ConversationScriptSourceMaxChars,
   ConversationTextNotice,
@@ -66,8 +67,16 @@ export interface WorkbenchConversationRunScope {
 
 type Block = ContentBlock
 
-const ScriptStatuses = ['writing', 'running', 'succeeded', 'failed', 'cancelled', 'discarded']
-const ScriptKinds = ['execute', 'observe']
+const ScriptStatuses = [
+  'writing',
+  'queued',
+  'running',
+  'succeeded',
+  'failed',
+  'cancelled',
+  'discarded',
+]
+const ScriptKinds = ['execute', 'observe', 'blobs']
 const CallStatuses = ['pending', 'succeeded', 'failed', 'cancelled']
 const CallEffects = ['none', 'committed', 'partial', 'unknown']
 const AgentStatuses = ['running', 'awaiting_input', 'completed', 'failed', 'aborted']
@@ -75,8 +84,8 @@ const InteractionKinds = ['choice', 'form', 'input', 'confirm', 'danger', 'login
 const InteractionStatuses = ['pending', 'answered', 'declined', 'expired']
 const InteractionFieldKinds = ['text', 'number', 'boolean', 'choice']
 /** 脚本卡上每次调用的参数与返回值最多这么长（与 Desktop 相同）。 */
-const CallInputMaxChars = 2_000
-const CallOutputMaxChars = 6_000
+const CallInputMaxChars = ConversationScriptPreviewLimits.inputChars
+const CallOutputMaxChars = ConversationScriptPreviewLimits.outputChars
 
 /** 一次运行的全部回合思考、正文、脚本卡与小部件都在这一条助手消息里（与 Desktop 相同）。 */
 export function conversationRunMessageId(runId: string): string {
@@ -97,7 +106,9 @@ export function applyWorkbenchConversationNotice(
     case ConversationTextNotice:
       return isTextProjection(payload) ? applyText(transcript, payload, scope) : transcript
     case ConversationThinkingNotice:
-      return isThinkingProjection(payload) ? applyThinking(transcript, payload, scope) : transcript
+      return isThinkingProjection(payload)
+        ? applyThinking(transcript, payload, scope)
+        : transcript
     case ConversationScriptNotice:
       return isScriptProjection(payload) ? applyScript(transcript, payload, scope) : transcript
     case ConversationWidgetNotice:
@@ -109,7 +120,9 @@ export function applyWorkbenchConversationNotice(
     case ConversationAgentNotice:
       return isAgentProjection(payload) ? applyAgent(transcript, payload) : transcript
     case ConversationToolCallNotice:
-      return isToolCallProjection(payload) ? applyToolCall(transcript, payload, scope) : transcript
+      return isToolCallProjection(payload)
+        ? applyToolCall(transcript, payload, scope)
+        : transcript
     default:
       return transcript
   }
@@ -128,7 +141,9 @@ function applyText(
 ): WorkbenchConversationTranscript {
   return updateRunMessage(transcript, payload.runId, scope, (blocks) => {
     const index = blocks.findIndex(
-      (block) => block.type === 'text' && (block as WorkbenchConversationTextBlock).segmentId === payload.id
+      (block) =>
+        block.type === 'text' &&
+        (block as WorkbenchConversationTextBlock).segmentId === payload.id
     )
     const current = index >= 0 ? (blocks[index] as WorkbenchConversationTextBlock) : undefined
     if (payload.phase === 'preview' && current && !current.preview) return blocks
@@ -173,6 +188,10 @@ function applyScript(
   payload: ConversationScriptProjection,
   scope: WorkbenchConversationRunScope
 ): WorkbenchConversationTranscript {
+  const processOutput = payload.processOutput?.slice(0, CallOutputMaxChars)
+  const processOutputTruncated =
+    !!payload.processOutputTruncated ||
+    (payload.processOutput?.length ?? 0) > CallOutputMaxChars
   if (payload.status === 'discarded')
     return updateRunMessage(transcript, payload.runId, scope, (blocks) => {
       const index = blocks.findIndex(
@@ -180,30 +199,52 @@ function applyScript(
       )
       return index < 0 ? blocks : blocks.filter((_, position) => position !== index)
     })
-  const block: ScriptExecutionBlock & Pick<ConversationScriptProjection, 'language' | 'processOutput' | 'processOutputTruncated'> = {
+  const block: ScriptExecutionBlock &
+    Pick<
+      ConversationScriptProjection,
+      'language' | 'processOutput' | 'processOutputTruncated'
+    > = {
     type: 'script-execution',
     id: payload.id,
     kind: payload.kind,
     language: payload.language,
-    processOutput: payload.processOutput,
-    processOutputTruncated: payload.processOutputTruncated,
+    processOutput,
+    processOutputTruncated,
     title: readLeadingComment(payload.source) ?? '',
     status: payload.status,
     startedAt: payload.startedAt,
     source: payload.source,
     sourceTruncated: payload.sourceTruncated,
     calls: [
-      ...(payload.processOutput ? [{ module: payload.language === 'shell' ? 'shell' : 'node', operation: 'execute', status: payload.status === 'writing' || payload.status === 'running' ? 'pending' as const : payload.status, effect: 'unknown' as const, input: '', inputTruncated: false, output: payload.processOutput, outputTruncated: !!payload.processOutputTruncated }] : []),
+      ...(processOutput
+        ? [
+            {
+              module: payload.language === 'shell' ? 'shell' : 'node',
+              operation: 'execute',
+              status:
+                payload.status === 'writing' ||
+                payload.status === 'queued' ||
+                payload.status === 'running'
+                  ? ('pending' as const)
+                  : payload.status,
+              effect: 'unknown' as const,
+              input: '',
+              inputTruncated: false,
+              output: processOutput,
+              outputTruncated: processOutputTruncated,
+            },
+          ]
+        : []),
       ...payload.calls.map((call) => ({
-      module: call.moduleId,
-      operation: call.operation,
-      status: call.status,
-      effect: call.effect,
-      input: call.input,
-      output: call.output,
-      inputTruncated: call.inputTruncated,
-      outputTruncated: call.outputTruncated,
-    })),
+        module: call.moduleId,
+        operation: call.operation,
+        status: call.status,
+        effect: call.effect,
+        input: call.input.slice(0, CallInputMaxChars),
+        output: call.output.slice(0, CallOutputMaxChars),
+        inputTruncated: call.inputTruncated || call.input.length > CallInputMaxChars,
+        outputTruncated: call.outputTruncated || call.output.length > CallOutputMaxChars,
+      })),
     ],
     durationMs: payload.durationMs ?? null,
   }
@@ -287,10 +328,14 @@ function applyAgent(
   const thread: ConversationWorkerThread = {
     threadId: payload.id,
     activationId: payload.id,
-    taskId: null,
+    taskId: payload.agentId ?? payload.id,
     nodeId: null,
-    title: payload.task.split('\n').find((line) => line.trim())?.trim() ?? '',
-    agentName: null,
+    title:
+      payload.task
+        .split('\n')
+        .find((line) => line.trim())
+        ?.trim() ?? '',
+    agentName: workerName(transcript.workerThreads, payload.agentId ?? payload.id),
     roleId: null,
     phase: null,
     status: payload.status,
@@ -299,14 +344,17 @@ function applyAgent(
     subagentType: payload.profile,
     customAgentName: null,
     mode: null,
-    model: null,
+    model: payload.model ?? null,
     startedAt: payload.startedAt,
     updatedAt: payload.updatedAt,
     input: payload.task,
     output: payload.answer || null,
     summary: null,
     error: payload.error,
-    messages: [],
+    messages: (payload.activity ?? []).reduce<WorkbenchConversationTranscript>(
+      (state, item) => applyWorkbenchConversationNotice(state, item.kind, item.payload),
+      { messages: [], workerThreads: [] }
+    ).messages as ChatMessage[],
   }
   if (payload.anchorId) thread.anchorId = payload.anchorId
   const index = transcript.workerThreads.findIndex((item) => item.threadId === payload.id)
@@ -316,6 +364,20 @@ function applyAgent(
       index >= 0
         ? transcript.workerThreads.map((item, position) => (position === index ? thread : item))
         : [...transcript.workerThreads, thread],
+  }
+}
+
+/** 同一子任务续跑复用名字，名称随线程一起持久化。 */
+function workerName(threads: readonly ConversationWorkerThread[], identity: string): string {
+  const existing = threads.find((thread) => thread.taskId === identity)?.agentName
+  if (existing) return existing
+  const names = ['Atlas', 'Beacon', 'Cipher', 'Forge', 'Harbor', 'Lumen', 'Nova', 'Orion']
+  const used = new Set(threads.map((thread) => thread.agentName))
+  for (let index = 0; ; index++) {
+    const name =
+      names[index % names.length] +
+      (index < names.length ? '' : ` ${Math.floor(index / names.length) + 1}`)
+    if (!used.has(name)) return name
   }
 }
 
@@ -425,7 +487,10 @@ function isPreviewBlock(block: Block): boolean {
 }
 
 function isUnsettledScript(block: Block): block is ScriptExecutionBlock {
-  return block.type === 'script-execution' && (block.status === 'writing' || block.status === 'running')
+  return (
+    block.type === 'script-execution' &&
+    (block.status === 'writing' || block.status === 'queued' || block.status === 'running')
+  )
 }
 
 function isRunningToolCall(block: Block): block is ToolCallBlock {
@@ -448,7 +513,10 @@ function updateRunMessage(
   const blocks = update(current)
   if (blocks === current) return transcript
   if (existing && blocks.length === 0)
-    return { ...transcript, messages: transcript.messages.filter((message) => message.id !== id) }
+    return {
+      ...transcript,
+      messages: transcript.messages.filter((message) => message.id !== id),
+    }
   if (existing)
     return {
       ...transcript,
@@ -506,16 +574,26 @@ function isScriptProjection(value: unknown): value is ConversationScriptProjecti
     !isString(value.id) ||
     !value.id.startsWith('conversation:script:') ||
     !ScriptKinds.includes(String(value.kind)) ||
-    !(!isPresent(value.durationMs) || (isFiniteNumber(value.durationMs) && value.durationMs >= 0)) ||
-    !(value.startedAt === undefined || (isFiniteNumber(value.startedAt) && value.startedAt >= 0)) ||
+    !(
+      !isPresent(value.durationMs) ||
+      (isFiniteNumber(value.durationMs) && value.durationMs >= 0)
+    ) ||
+    !(
+      value.startedAt === undefined ||
+      (isFiniteNumber(value.startedAt) && value.startedAt >= 0)
+    ) ||
     !isString(value.runId) ||
     !isString(value.turnId) ||
     !ScriptStatuses.includes(String(value.status)) ||
     !isString(value.source) ||
     value.source.length > ConversationScriptSourceMaxChars ||
     !isBoolean(value.sourceTruncated) ||
-    !(value.language === undefined || value.language === 'node' || value.language === 'shell') ||
-    !(value.processOutput === undefined || (isString(value.processOutput) && value.processOutput.length <= 6000)) ||
+    !(
+      value.language === undefined ||
+      value.language === 'node' ||
+      value.language === 'shell'
+    ) ||
+    !(value.processOutput === undefined || isString(value.processOutput)) ||
     !(value.processOutputTruncated === undefined || isBoolean(value.processOutputTruncated)) ||
     !(value.error === null || isString(value.error)) ||
     !isArray(value.calls)
@@ -529,9 +607,7 @@ function isScriptProjection(value: unknown): value is ConversationScriptProjecti
       CallStatuses.includes(String(call.status)) &&
       CallEffects.includes(String(call.effect)) &&
       isString(call.input) &&
-      call.input.length <= CallInputMaxChars &&
       isString(call.output) &&
-      call.output.length <= CallOutputMaxChars &&
       isBoolean(call.inputTruncated) &&
       isBoolean(call.outputTruncated)
   )
@@ -546,6 +622,16 @@ function isAgentProjection(value: unknown): value is ConversationAgentProjection
     isString(value.task) &&
     value.task.length <= ConversationAgentTextMaxChars &&
     isString(value.profile) &&
+    (value.agentId === undefined || isString(value.agentId)) &&
+    (value.model === undefined || isString(value.model)) &&
+    (value.activity === undefined ||
+      (isArray(value.activity) &&
+        value.activity.every(
+          (item) =>
+            isPlainObject(item) &&
+            ((item.kind === 'conversation-script' && isScriptProjection(item.payload)) ||
+              (item.kind === 'conversation-text' && isTextProjection(item.payload)))
+        ))) &&
     AgentStatuses.includes(String(value.status)) &&
     isString(value.answer) &&
     value.answer.length <= ConversationAgentTextMaxChars &&
@@ -567,9 +653,11 @@ function isToolCallProjection(value: unknown): value is ConversationToolCallProj
     isPlainObject(value.args) &&
     isBoolean(value.isRunning) &&
     (isUndefined(value.progress) ||
-      (isString(value.progress) && value.progress.length <= ConversationToolCallLimits.progressChars)) &&
+      (isString(value.progress) &&
+        value.progress.length <= ConversationToolCallLimits.progressChars)) &&
     (isUndefined(value.error) ||
-      (isString(value.error) && value.error.length <= ConversationToolCallLimits.payloadChars)) &&
+      (isString(value.error) &&
+        value.error.length <= ConversationToolCallLimits.payloadChars)) &&
     isFiniteNumber(value.startedAt) &&
     (isUndefined(value.finishedAt) || isFiniteNumber(value.finishedAt))
   )
@@ -619,6 +707,8 @@ function isInteractionProjection(value: unknown): value is ConversationInteracti
 function isInteractionOptions(value: unknown): boolean {
   return (
     isArray(value) &&
-    value.every((option) => isPlainObject(option) && isString(option.id) && isString(option.label))
+    value.every(
+      (option) => isPlainObject(option) && isString(option.id) && isString(option.label)
+    )
   )
 }
