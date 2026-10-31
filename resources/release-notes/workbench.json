@@ -3,7 +3,7 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
-      "version": "0.4.10",
+      "version": "0.4.11",
       "releasedAt": "2026-10-31",
       "title": {
         "zh": "任务恢复与紧凑用量展示",
@@ -22,11 +22,13 @@
       "fixed": {
         "zh": [
           "升级固定 Platform 与 UI 快照，完善真实项目任务的编辑器同步和运行兼容。",
-          "子 Agent 展示模型名称和任务标题，长文本省略；思考及工具活动默认折叠并保留用户展开选择。"
+          "子 Agent 展示模型名称和任务标题，长文本省略；思考及工具活动默认折叠并保留用户展开选择。",
+          "停止 Windows 调试和终端任务时，先记录实际子进程，再逐层结束，避免残留进程占用项目目录。"
         ],
         "en": [
           "Update pinned Platform and UI snapshots and improve editor synchronization and runtime compatibility for real project tasks.",
-          "Show model names and task titles on child agents with overflow ellipsis; collapse thinking and tool activity by default while retaining user choices."
+          "Show model names and task titles on child agents with overflow ellipsis; collapse thinking and tool activity by default while retaining user choices.",
+          "Capture and terminate actual Windows child processes before closing their shell, preventing orphaned tasks from locking project folders."
         ]
       }
     },

@@ -35,14 +35,18 @@ export function collectWorkbenchProcessTree(processList: string, rootPid: number
 
 /**
  * 列出 `rootPid` 这棵进程树。要在根退出之前列：根一退，子孙会被 init 收养，就顺不到它们了。
- * Windows 没有 `ps`，只给根（整棵树由 `taskkill /T` 结束）；列不出来时也只给根。
+ * Windows 用 CIM 保留真实子进程号，避免 taskkill /T 遗漏刚启动的进程；列不出来时退回根进程。
  */
 export async function listWorkbenchProcessTree(rootPid: number): Promise<number[]> {
-  if (process.platform === 'win32') return [rootPid]
   try {
-    const { stdout } = await execFileAsync('ps', ['-A', '-o', 'pid=,ppid='], {
-      maxBuffer: ProcessListMaxBytes,
-    })
+    const { stdout } = process.platform === 'win32'
+      ? await execFileAsync('powershell.exe', [
+        '-NoLogo', '-NoProfile', '-NonInteractive', '-Command',
+        "Get-CimInstance Win32_Process | ForEach-Object { '{0} {1}' -f $_.ProcessId, $_.ParentProcessId }",
+      ], { maxBuffer: ProcessListMaxBytes, timeout: 10_000, windowsHide: true })
+      : await execFileAsync('ps', ['-A', '-o', 'pid=,ppid='], {
+        maxBuffer: ProcessListMaxBytes,
+      })
     return collectWorkbenchProcessTree(stdout, rootPid)
   } catch {
     // arch-guard:silent-catch-ok 列不出进程表（沙箱、没有 ps）时退回只结束根进程，关伪终端时前台进程组还会收到 SIGHUP。
@@ -56,9 +60,9 @@ export async function listWorkbenchProcessTree(rootPid: number): Promise<number[
  */
 export function signalWorkbenchProcesses(pids: readonly number[], signal: NodeJS.Signals): void {
   if (process.platform === 'win32') {
-    for (const pid of pids) {
+    for (const pid of [...pids].reverse()) {
       try {
-        execFileSync('taskkill', ['/PID', String(pid), '/T', '/F'], { stdio: 'ignore' })
+        execFileSync('taskkill', ['/PID', String(pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true })
       } catch {
         // arch-guard:silent-catch-ok 进程树已经不在了（taskkill 找不到进程）。
       }

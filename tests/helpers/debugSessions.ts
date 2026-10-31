@@ -13,7 +13,7 @@ import type {
 } from '../../src/main/workspace/debug/WorkbenchDebugLaunch'
 import { WorkbenchDebugSessions } from '../../src/main/workspace/debug/WorkbenchDebugSessions'
 import { PathResolver } from '../../src/main/workspace/PathResolver'
-import { signalWorkbenchProcesses } from '../../src/main/workspace/terminal/WorkbenchProcessTree'
+import { listWorkbenchProcessTree, signalWorkbenchProcesses } from '../../src/main/workspace/terminal/WorkbenchProcessTree'
 import type {
   WorkbenchDebuggerEvent,
   WorkbenchDebuggerFrame,
@@ -73,9 +73,9 @@ export function createProcessDebugLauncher(): {
       disposePipes: () => { child.stdout.destroy(); child.stderr.destroy() },
     })
 
-    const signalGroup = (signal: NodeJS.Signals): void => {
+    const signalGroup = (signal: NodeJS.Signals, pids: readonly number[]): void => {
       try {
-        if (process.platform === 'win32') signalWorkbenchProcesses([child.pid!], signal)
+        if (process.platform === 'win32') signalWorkbenchProcesses(pids, signal)
         else process.kill(-child.pid!, signal)
       } catch {
         // arch-guard:silent-catch-ok 进程组已经不在了（ESRCH）。
@@ -89,17 +89,19 @@ export function createProcessDebugLauncher(): {
         if (exit) listener(exit)
         else exitListeners.push(listener)
       },
-      stop: () =>
-        new Promise<void>((resolve) => {
+      stop: async () => {
+        const pids = await listWorkbenchProcessTree(child.pid!)
+        return new Promise<void>((resolve) => {
           if (exit) {
             resolve()
             return
           }
           exitListeners.push(() => resolve())
           // 等待结束的承诺必须维持事件循环；Windows 管道的 close 可能晚于进程退出。
-          forceKillTimer = setTimeout(() => signalGroup('SIGKILL'), 1_000)
-          signalGroup('SIGTERM')
-        }),
+          forceKillTimer = setTimeout(() => signalGroup('SIGKILL', pids), 1_000)
+          signalGroup('SIGTERM', pids)
+        })
+      },
     }
   }
 
@@ -184,7 +186,7 @@ export async function createDebugTestProject(
       sessions.closeAllSessions()
       for (const item of launched) {
         try {
-          if (process.platform === 'win32') signalWorkbenchProcesses([item.pid], 'SIGKILL')
+          if (process.platform === 'win32') signalWorkbenchProcesses(await listWorkbenchProcessTree(item.pid), 'SIGKILL')
           else process.kill(-item.pid, 'SIGKILL')
         } catch {
           // arch-guard:silent-catch-ok 进程组已经退出。
