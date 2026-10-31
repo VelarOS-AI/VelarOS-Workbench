@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 const platformSnapshotDirectory = "build/runtime-packages";
 
 export function platformSnapshotSpecification(entry) {
-  return `file:${platformSnapshotDirectory}/${entry.fileName}`;
+  return `file:${platformSnapshotDirectory}/${entry.sha256}/${entry.fileName}`;
 }
 
 export function verifyPlatformSnapshotLock(snapshot, lockfile) {
@@ -97,7 +97,10 @@ export async function verifyPlatformSnapshot(
 ) {
   const snapshot = await readPlatformSnapshot(root);
   for (const entry of snapshot.packages) {
-    const archive = path.join(root, platformSnapshotDirectory, entry.fileName);
+    const archive = path.join(
+      root,
+      platformSnapshotSpecification(entry).slice("file:".length),
+    );
     try {
       await lstat(archive);
     } catch (error) {
