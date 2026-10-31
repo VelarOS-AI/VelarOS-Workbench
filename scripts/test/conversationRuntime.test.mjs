@@ -63,8 +63,10 @@ function modelFrom(frames, generate, id = 'integration-model') {
 
 async function fixture(t, generate, options = {}) {
   const directory = await mkdtemp(join(build, 'case-'))
-  const workspace = join(directory, 'project')
-  await mkdir(workspace)
+  const workspacePath = join(directory, 'project')
+  await mkdir(workspacePath)
+  // 与产品 IPC 一样用真实项目根；macOS 的临时目录可能经 /var 链接到 /private/var。
+  const workspace = await realpath(workspacePath)
   const events = []
   const frames = []
   const windows = { begun: 0, finished: 0 }
@@ -790,7 +792,11 @@ test(
       { sessionId: request.sessionId, onlyRunning: true },
       f.workspace
     )
-    assert.equal(tasks.length, 1)
+    assert.equal(
+      tasks.length,
+      1,
+      JSON.stringify({ tasks: await f.shells.listBackgroundTasks(), events: f.events })
+    )
     const task = tasks[0]
     let output = ''
     for (let i = 0; i < 100 && !output.includes('READY:'); i++) {
