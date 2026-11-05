@@ -9,7 +9,6 @@ import {
 } from 'react'
 import { ArchiveIcon, ChatCircleTextIcon, PlusIcon, SpinnerGapIcon } from '@phosphor-icons/react'
 
-import { isEmpty, toNullable } from '@velaros-ai/core'
 import {
   ChatScrollNavigatorVisibilityToggle,
   createChatScrollNavigatorVisibilityStore,
@@ -31,10 +30,21 @@ import {
   type BusinessCascadingMenuRenderProps,
   BusinessCascadingMenuSelectedIndicator,
 } from '@velaros-ai/ui/product/menus/BusinessCascadingMenu'
+import { isEmpty, toNullable } from '@velaros-ai/velaros/core'
 
 import type { WorkbenchAgentEngineId } from '@shared/workbenchConversation'
 
-import { useWorkbenchChatProjectRuntime, type WorkbenchBrowserElementSelectionDelivery, type WorkbenchChatFileChangeEntry, type WorkbenchChatFileReferenceDelivery, type WorkbenchChatRunChangesTarget, WorkbenchChatSessionActions, type WorkbenchChatSessionGroup, type WorkbenchChatSessionMember, WorkbenchChatSessionSurface } from '../composition/WorkbenchChatProvider'
+import {
+  useWorkbenchChatProjectRuntime,
+  type WorkbenchBrowserElementSelectionDelivery,
+  type WorkbenchChatFileChangeEntry,
+  type WorkbenchChatFileReferenceDelivery,
+  type WorkbenchChatRunChangesTarget,
+  WorkbenchChatSessionActions,
+  type WorkbenchChatSessionGroup,
+  type WorkbenchChatSessionMember,
+  WorkbenchChatSessionSurface,
+} from '../composition/WorkbenchChatProvider'
 import { useWorkbenchProductRuntime } from '../composition/WorkbenchProductRuntimeProvider'
 import { useWorkbenchI18n } from '../i18n/WorkbenchLocalizationProvider'
 import {
@@ -228,7 +238,9 @@ function WorkbenchChatSessionMenu({
           data-open={open}
           disabled={disabled}
         >
-          {engineId ? <WorkbenchAgentEngineBrandIcon engineId={engineId} size={16} /> : (
+          {engineId ? (
+            <WorkbenchAgentEngineBrandIcon engineId={engineId} size={16} />
+          ) : (
             <ChatCircleTextIcon
               className={styles.workbenchChatSessionMenuIcon}
               size={16}
@@ -280,11 +292,15 @@ export function WorkbenchChatPanel({
     () => getMostRecentlyUpdatedWorkbenchProjectChatGroup(workbenchChatSessionGroups),
     [workbenchChatSessionGroups]
   )
-  const agentSessionIds = useMemo(() => new Set(
-    chat.sessions
-      .filter((session) => session.engine?.id === currentSession.engine?.id)
-      .map((session) => session.id)
-  ), [chat.sessions, currentSession.engine?.id])
+  const agentSessionIds = useMemo(
+    () =>
+      new Set(
+        chat.sessions
+          .filter((session) => session.engine?.id === currentSession.engine?.id)
+          .map((session) => session.id)
+      ),
+    [chat.sessions, currentSession.engine?.id]
+  )
   const workbenchProjectChatMembers = useMemo(
     () =>
       getWorkbenchChatProjectMembers(

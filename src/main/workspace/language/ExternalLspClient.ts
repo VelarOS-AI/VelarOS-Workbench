@@ -6,12 +6,10 @@ import { pathToFileURL } from 'node:url'
 
 import { URI } from 'vscode-uri'
 
-import { optionalWhen } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
+import { optionalWhen } from '@velaros-ai/velaros/core'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
-import type {
-  WorkbenchLanguageServiceDescriptor,
-} from '@shared/workbenchLanguageServices'
+import type { WorkbenchLanguageServiceDescriptor } from '@shared/workbenchLanguageServices'
 
 import { workbenchMainText } from '../../i18n/workbenchMainMessages'
 import { isPathInsideRoot } from '../PathContainmentHelper'
@@ -173,9 +171,10 @@ async function waitForChildProcessExit(
       resolve(value)
     }
     const onExit = (): void => settle(true)
-    const timer = setTimeout(() => settle(
-      child.exitCode !== null || child.signalCode !== null
-    ), timeoutMs)
+    const timer = setTimeout(
+      () => settle(child.exitCode !== null || child.signalCode !== null),
+      timeoutMs
+    )
     timer.unref()
     child.once('exit', onExit)
   })
@@ -219,13 +218,42 @@ const LspHeaderSeparator = '\r\n\r\n'
 const LspHeaderSeparatorBytes = 4
 const JsonRpcMethodNotFound = -32_601
 const SupportedSemanticTokenTypes = [
-  'namespace', 'type', 'class', 'enum', 'interface', 'struct', 'typeParameter', 'parameter',
-  'variable', 'property', 'enumMember', 'event', 'function', 'method', 'macro', 'keyword',
-  'modifier', 'comment', 'string', 'number', 'regexp', 'operator', 'decorator',
+  'namespace',
+  'type',
+  'class',
+  'enum',
+  'interface',
+  'struct',
+  'typeParameter',
+  'parameter',
+  'variable',
+  'property',
+  'enumMember',
+  'event',
+  'function',
+  'method',
+  'macro',
+  'keyword',
+  'modifier',
+  'comment',
+  'string',
+  'number',
+  'regexp',
+  'operator',
+  'decorator',
 ]
 const SupportedSemanticTokenModifiers = [
-  'declaration', 'definition', 'readonly', 'static', 'deprecated', 'abstract', 'async',
-  'modification', 'documentation', 'defaultLibrary', 'frameworkDefinition',
+  'declaration',
+  'definition',
+  'readonly',
+  'static',
+  'deprecated',
+  'abstract',
+  'async',
+  'modification',
+  'documentation',
+  'defaultLibrary',
+  'frameworkDefinition',
 ]
 const ExternalLspDependencyFileNames = [
   'velar.json',
@@ -276,7 +304,7 @@ function ancestorDirectories(start: string, boundary?: string): string[] {
 }
 
 function objectValue(value: unknown): Record<string, unknown> | null {
-  return typeof value === 'object' && value !== null ? value as Record<string, unknown> : null
+  return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : null
 }
 
 function valueAtPath(value: unknown, path: readonly string[]): unknown {
@@ -298,8 +326,9 @@ function protocolVersionFromInitialize(
 }
 
 function nodeBinDirectories(runtimeRoot: string, workspaceRoot?: string): string[] {
-  return ancestorDirectories(runtimeRoot, workspaceRoot)
-    .map((directory) => join(directory, 'node_modules', '.bin'))
+  return ancestorDirectories(runtimeRoot, workspaceRoot).map((directory) =>
+    join(directory, 'node_modules', '.bin')
+  )
 }
 
 function executablePath(
@@ -333,7 +362,8 @@ function projectNodePackageBinPath(
         const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as {
           bin?: string | Record<string, string>
         }
-        const relativeBin = typeof manifest.bin === 'string' ? manifest.bin : manifest.bin?.[binName]
+        const relativeBin =
+          typeof manifest.bin === 'string' ? manifest.bin : manifest.bin?.[binName]
         if (!relativeBin) return null
 
         const entry = join(dirname(manifestPath), relativeBin)
@@ -352,8 +382,13 @@ function projectNodePackageBinPath(
 
 function extendPath(runtimeRoot: string, workspaceRoot?: string): string {
   const current = process.env['PATH'] ?? ''
-  return [...nodeBinDirectories(runtimeRoot, workspaceRoot), ...(current ? current.split(delimiter) : [])]
-    .filter((directory, index, directories) => directory && directories.indexOf(directory) === index)
+  return [
+    ...nodeBinDirectories(runtimeRoot, workspaceRoot),
+    ...(current ? current.split(delimiter) : []),
+  ]
+    .filter(
+      (directory, index, directories) => directory && directories.indexOf(directory) === index
+    )
     .join(delimiter)
 }
 
@@ -362,19 +397,23 @@ function executableExists(command: string, pathValue: string): boolean {
   if (isAbsolute(command) || command.includes('/') || command.includes('\\'))
     return existsSync(command)
 
-  const extensions = process.platform === 'win32'
-    ? (process.env['PATHEXT'] ?? '.COM;.EXE;.BAT;.CMD').split(';')
-    : ['']
-  return pathValue.split(delimiter).some((directory) =>
-    extensions.some((extension) => existsSync(join(directory, `${command}${extension}`)))
-  )
+  const extensions =
+    process.platform === 'win32'
+      ? (process.env['PATHEXT'] ?? '.COM;.EXE;.BAT;.CMD').split(';')
+      : ['']
+  return pathValue
+    .split(delimiter)
+    .some((directory) =>
+      extensions.some((extension) => existsSync(join(directory, `${command}${extension}`)))
+    )
 }
 
 function resolvedExecutablePath(command: string, pathValue: string): string {
   if (isAbsolute(command) || command.includes('/') || command.includes('\\')) return command
-  const extensions = process.platform === 'win32'
-    ? (process.env['PATHEXT'] ?? '.COM;.EXE;.BAT;.CMD').split(';')
-    : ['']
+  const extensions =
+    process.platform === 'win32'
+      ? (process.env['PATHEXT'] ?? '.COM;.EXE;.BAT;.CMD').split(';')
+      : ['']
   for (const directory of pathValue.split(delimiter)) {
     for (const extension of extensions) {
       const candidate = join(directory, `${command}${extension}`)
@@ -408,22 +447,22 @@ function hasLocalProjectToolchain(
   workspaceRoot: string
 ): boolean {
   if (!descriptor.projectNodePackageBin) return false
-  const executable = process.platform === 'win32'
-    ? `${descriptor.projectNodePackageBin}.cmd`
-    : descriptor.projectNodePackageBin
+  const executable =
+    process.platform === 'win32'
+      ? `${descriptor.projectNodePackageBin}.cmd`
+      : descriptor.projectNodePackageBin
   const executableCandidate = join(directory, 'node_modules', '.bin', executable)
-  if (
-    existsSync(executableCandidate)
-    && isExistingPathInside(workspaceRoot, executableCandidate)
-  )
+  if (existsSync(executableCandidate) && isExistingPathInside(workspaceRoot, executableCandidate))
     return true
   const manifestPath = descriptor.packageName
     ? join(directory, 'node_modules', descriptor.packageName, 'package.json')
     : null
-  return !!descriptor.packageName
-    && !!manifestPath
-    && existsSync(manifestPath)
-    && isExistingPathInside(workspaceRoot, manifestPath)
+  return (
+    !!descriptor.packageName &&
+    !!manifestPath &&
+    existsSync(manifestPath) &&
+    isExistingPathInside(workspaceRoot, manifestPath)
+  )
 }
 
 function hasProjectRootMarker(
@@ -458,9 +497,10 @@ export function resolveExternalLspRuntimeRoot(
   if (!isPathInsideRoot(boundary, absoluteDocumentPath))
     throw new AppError('INVARIANT', `Language document escapes the workspace: ${documentPath}`)
 
-  const start = absoluteDocumentPath === boundary || isDirectory(absoluteDocumentPath)
-    ? absoluteDocumentPath
-    : dirname(absoluteDocumentPath)
+  const start =
+    absoluteDocumentPath === boundary || isDirectory(absoluteDocumentPath)
+      ? absoluteDocumentPath
+      : dirname(absoluteDocumentPath)
   for (const directory of ancestorDirectories(start, boundary)) {
     if (hasProjectRootMarker(directory, boundary, descriptor)) return directory
     if (hasLocalProjectToolchain(directory, descriptor, boundary)) return directory
@@ -492,8 +532,7 @@ export function externalLspRuntimeFingerprint(
     ...(descriptor.projectRootMarkers ?? []),
   ])
   for (const current of ancestorDirectories(runtimeRoot, workspaceRoot)) {
-    for (const name of metadataNames)
-      identities.push(fileIdentity(join(current, name)))
+    for (const name of metadataNames) identities.push(fileIdentity(join(current, name)))
   }
 
   return JSON.stringify({
@@ -529,11 +568,11 @@ function launchFor(
     const packageName = descriptor.packageName
     const entry = packageName
       ? projectNodePackageBinPath(
-        runtimeRoot,
-        packageName,
-        descriptor.projectNodePackageBin,
-        workspaceRoot
-      )
+          runtimeRoot,
+          packageName,
+          descriptor.projectNodePackageBin,
+          workspaceRoot
+        )
       : null
     if (entry)
       return {
@@ -601,7 +640,10 @@ export class ExternalLspClient {
     return this.descriptor.extensions.includes(extension)
   }
 
-  public async synchronize(path: string, content: string): Promise<{ uri: string; version: number }> {
+  public async synchronize(
+    path: string,
+    content: string
+  ): Promise<{ uri: string; version: number }> {
     await this.initialize()
     const uri = pathToFileURL(path).toString()
     const current = this.documents.get(uri)
@@ -671,7 +713,10 @@ export class ExternalLspClient {
     if (!declaration) {
       throw new AppError(
         'INVARIANT',
-        workbenchMainText('language.extensionRequestUndeclared', { server: this.descriptor.label, request: requestId })
+        workbenchMainText('language.extensionRequestUndeclared', {
+          server: this.descriptor.label,
+          request: requestId,
+        })
       )
     }
     await this.initialize()
@@ -684,7 +729,10 @@ export class ExternalLspClient {
     if (capability !== true && !objectValue(capability)) {
       throw new AppError(
         'INVARIANT',
-        workbenchMainText('language.extensionRequestUnsupported', { server: this.descriptor.label, request: requestId })
+        workbenchMainText('language.extensionRequestUnsupported', {
+          server: this.descriptor.label,
+          request: requestId,
+        })
       )
     }
     return this.request(declaration.method, {
@@ -710,14 +758,21 @@ export class ExternalLspClient {
     signal?: AbortSignal
   ): Promise<ExternalLspCompletionList> {
     const document = await this.synchronize(path, content)
-    const result = await this.request('textDocument/completion', {
-      textDocument: { uri: document.uri },
-      position,
-    }, signal)
-    if (Array.isArray(result)) return { items: result as ExternalLspCompletionItem[], isIncomplete: false }
+    const result = await this.request(
+      'textDocument/completion',
+      {
+        textDocument: { uri: document.uri },
+        position,
+      },
+      signal
+    )
+    if (Array.isArray(result))
+      return { items: result as ExternalLspCompletionItem[], isIncomplete: false }
     const object = objectValue(result)
     return {
-      items: Array.isArray(object?.['items']) ? object['items'] as ExternalLspCompletionItem[] : [],
+      items: Array.isArray(object?.['items'])
+        ? (object['items'] as ExternalLspCompletionItem[])
+        : [],
       isIncomplete: object?.['isIncomplete'] === true,
     }
   }
@@ -729,10 +784,14 @@ export class ExternalLspClient {
     signal?: AbortSignal
   ): Promise<Nullable<ExternalLspHover>> {
     const document = await this.synchronize(path, content)
-    const result = await this.request('textDocument/hover', {
-      textDocument: { uri: document.uri },
-      position,
-    }, signal)
+    const result = await this.request(
+      'textDocument/hover',
+      {
+        textDocument: { uri: document.uri },
+        position,
+      },
+      signal
+    )
     return objectValue(result) as Nullable<ExternalLspHover>
   }
 
@@ -743,14 +802,22 @@ export class ExternalLspClient {
     signal?: AbortSignal
   ): Promise<ExternalLspLocation[]> {
     const document = await this.synchronize(path, content)
-    const result = await this.request('textDocument/definition', {
-      textDocument: { uri: document.uri },
-      position,
-    }, signal)
+    const result = await this.request(
+      'textDocument/definition',
+      {
+        textDocument: { uri: document.uri },
+        position,
+      },
+      signal
+    )
     return normalizeLocations(result)
   }
 
-  public async references(path: string, content: string, position: LspPosition): Promise<ExternalLspLocation[]> {
+  public async references(
+    path: string,
+    content: string,
+    position: LspPosition
+  ): Promise<ExternalLspLocation[]> {
     const document = await this.synchronize(path, content)
     const result = await this.request('textDocument/references', {
       textDocument: { uri: document.uri },
@@ -769,11 +836,15 @@ export class ExternalLspClient {
     const document = await this.synchronize(path, content)
     const provider = this.serverCapabilities['documentHighlightProvider']
     if (provider !== true && !objectValue(provider)) return []
-    const result = await this.request('textDocument/documentHighlight', {
-      textDocument: { uri: document.uri },
-      position,
-    }, signal)
-    return Array.isArray(result) ? result as ExternalLspDocumentHighlight[] : []
+    const result = await this.request(
+      'textDocument/documentHighlight',
+      {
+        textDocument: { uri: document.uri },
+        position,
+      },
+      signal
+    )
+    return Array.isArray(result) ? (result as ExternalLspDocumentHighlight[]) : []
   }
 
   public async rename(
@@ -788,7 +859,7 @@ export class ExternalLspClient {
       position,
       newName,
     })
-    return objectValue(result) as ExternalLspWorkspaceEdit ?? {}
+    return (objectValue(result) as ExternalLspWorkspaceEdit) ?? {}
   }
 
   public async documentSymbols(
@@ -800,7 +871,7 @@ export class ExternalLspClient {
       textDocument: { uri: document.uri },
     })
     return Array.isArray(result)
-      ? result as Array<ExternalLspDocumentSymbol | ExternalLspSymbolInformation>
+      ? (result as Array<ExternalLspDocumentSymbol | ExternalLspSymbolInformation>)
       : []
   }
 
@@ -811,10 +882,14 @@ export class ExternalLspClient {
     signal?: AbortSignal
   ): Promise<Nullable<ExternalLspSignatureHelp>> {
     const document = await this.synchronize(path, content)
-    const result = await this.request('textDocument/signatureHelp', {
-      textDocument: { uri: document.uri },
-      position,
-    }, signal)
+    const result = await this.request(
+      'textDocument/signatureHelp',
+      {
+        textDocument: { uri: document.uri },
+        position,
+      },
+      signal
+    )
     return objectValue(result) as Nullable<ExternalLspSignatureHelp>
   }
 
@@ -827,11 +902,15 @@ export class ExternalLspClient {
     const document = await this.synchronize(path, content)
     const provider = this.serverCapabilities['inlayHintProvider']
     if (provider !== true && !objectValue(provider)) return []
-    const result = await this.request('textDocument/inlayHint', {
-      textDocument: { uri: document.uri },
-      range,
-    }, signal)
-    return Array.isArray(result) ? result as ExternalLspInlayHint[] : []
+    const result = await this.request(
+      'textDocument/inlayHint',
+      {
+        textDocument: { uri: document.uri },
+        range,
+      },
+      signal
+    )
+    return Array.isArray(result) ? (result as ExternalLspInlayHint[]) : []
   }
 
   public async semanticTokens(
@@ -849,14 +928,21 @@ export class ExternalLspClient {
       ? legend['tokenModifiers'].filter((item): item is string => typeof item === 'string')
       : []
     if (!provider || tokenTypes.length === 0) return { data: [], tokenTypes, tokenModifiers }
-    const result = objectValue(await this.request('textDocument/semanticTokens/full', {
-      textDocument: { uri: document.uri },
-    }, signal))
+    const result = objectValue(
+      await this.request(
+        'textDocument/semanticTokens/full',
+        {
+          textDocument: { uri: document.uri },
+        },
+        signal
+      )
+    )
     const rawData = result?.['data']
-    const data = Array.isArray(rawData)
-      && rawData.every((item) => Number.isSafeInteger(item) && (item as number) >= 0)
-      ? rawData as number[]
-      : []
+    const data =
+      Array.isArray(rawData) &&
+      rawData.every((item) => Number.isSafeInteger(item) && (item as number) >= 0)
+        ? (rawData as number[])
+        : []
     return { data, tokenTypes, tokenModifiers }
   }
 
@@ -874,7 +960,7 @@ export class ExternalLspClient {
       range,
       context: { diagnostics, only: ['quickfix'] },
     })
-    return Array.isArray(result) ? result as ExternalLspCodeAction[] : []
+    return Array.isArray(result) ? (result as ExternalLspCodeAction[]) : []
   }
 
   public async format(path: string, content: string): Promise<ExternalLspTextEdit[]> {
@@ -883,7 +969,7 @@ export class ExternalLspClient {
       textDocument: { uri: document.uri },
       options: { tabSize: 2, insertSpaces: true, insertFinalNewline: true },
     })
-    return Array.isArray(result) ? result as ExternalLspTextEdit[] : []
+    return Array.isArray(result) ? (result as ExternalLspTextEdit[]) : []
   }
 
   public async getDiagnostics(path: string, content: string): Promise<ExternalLspDiagnostic[]> {
@@ -899,7 +985,10 @@ export class ExternalLspClient {
       setTimeout(() => {
         const pending = this.diagnosticWaiters.get(document.uri)
         if (!pending?.includes(waiter)) return
-        this.diagnosticWaiters.set(document.uri, pending.filter((item) => item !== waiter))
+        this.diagnosticWaiters.set(
+          document.uri,
+          pending.filter((item) => item !== waiter)
+        )
         resolve(this.diagnostics.get(document.uri)?.diagnostics ?? [])
       }, DiagnosticWaitTimeoutMs)
     })
@@ -923,7 +1012,7 @@ export class ExternalLspClient {
     } catch {
       // 统一由下面的退出确认处理；这里不能在 Windows 上只发信号就返回。
     }
-    if (!await waitForChildProcessExit(child, GracefulLspExitTimeoutMs))
+    if (!(await waitForChildProcessExit(child, GracefulLspExitTimeoutMs)))
       await terminateExternalLspProcessTree(child.pid)
     await waitForChildProcessExit(child, GracefulLspExitTimeoutMs)
     this.process = null
@@ -966,8 +1055,7 @@ export class ExternalLspClient {
 
     const launch = launchFor(this.runtimeRoot, this.descriptor, this.workspaceRoot)
     const pathValue = extendPath(this.runtimeRoot, this.workspaceRoot)
-    if (launch.unavailableMessage)
-      throw new AppError('INVARIANT', launch.unavailableMessage)
+    if (launch.unavailableMessage) throw new AppError('INVARIANT', launch.unavailableMessage)
     if (!launch.electronRunAsNode && !executableExists(launch.command, pathValue)) {
       const installHint = this.descriptor.packageName
         ? workbenchMainText('language.installPackageHint', { package: this.descriptor.packageName })
@@ -1005,17 +1093,19 @@ export class ExternalLspClient {
     })
     child.on('exit', (code, signal) => {
       if (this.disposed || this.process !== child) return
-      this.fail(new AppError(
-        'INTERNAL',
-        workbenchMainText('language.serverExited', {
-          server: this.descriptor.label,
-          reason: signal ?? code ?? 'unknown',
-          stderr: this.stderr ? ` ${this.stderr.trim()}` : '',
-        })
-      ))
+      this.fail(
+        new AppError(
+          'INTERNAL',
+          workbenchMainText('language.serverExited', {
+            server: this.descriptor.label,
+            reason: signal ?? code ?? 'unknown',
+            stderr: this.stderr ? ` ${this.stderr.trim()}` : '',
+          })
+        )
+      )
     })
 
-    const result = await this.request('initialize', {
+    const result = (await this.request('initialize', {
       processId: process.pid,
       rootUri: pathToFileURL(this.runtimeRoot).toString(),
       workspaceFolders: [this.workspaceFolder()],
@@ -1043,18 +1133,17 @@ export class ExternalLspClient {
             formats: ['relative'],
           },
           codeAction: { codeActionLiteralSupport: { codeActionKind: { valueSet: ['quickfix'] } } },
-          signatureHelp: { signatureInformation: { documentationFormat: ['markdown', 'plaintext'] } },
+          signatureHelp: {
+            signatureInformation: { documentationFormat: ['markdown', 'plaintext'] },
+          },
           publishDiagnostics: { versionSupport: true },
         },
       },
-    }) as InitializeResult
+    })) as InitializeResult
     this.serverCapabilities = result.capabilities ?? {}
 
     if (this.descriptor.protocol) {
-      const actual = protocolVersionFromInitialize(
-        result,
-        this.descriptor.protocol.capabilityPath
-      )
+      const actual = protocolVersionFromInitialize(result, this.descriptor.protocol.capabilityPath)
       if (actual !== this.descriptor.protocol.version)
         throw new AppError(
           'INVARIANT',
@@ -1078,10 +1167,12 @@ export class ExternalLspClient {
   /** `signal` 中止（请求被新请求顶掉）时告诉服务器不必再算，并立刻以取消结束。 */
   private request(method: string, params: unknown, signal?: AbortSignal): Promise<unknown> {
     if (signal?.aborted)
-      return Promise.reject(new AppError(
-        'CANCELLED',
-        workbenchMainText('language.requestCancelled', { server: this.descriptor.label, method })
-      ))
+      return Promise.reject(
+        new AppError(
+          'CANCELLED',
+          workbenchMainText('language.requestCancelled', { server: this.descriptor.label, method })
+        )
+      )
     const id = this.nextRequestId++
     return new Promise((resolve, reject) => {
       const abandon = (error: AppError): void => {
@@ -1089,19 +1180,36 @@ export class ExternalLspClient {
         if (!pending) return
         this.pending.delete(id)
         clearTimeout(pending.timeout)
-        try { this.notify('$/cancelRequest', { id }) } catch { /* the request still rejects */ }
+        try {
+          this.notify('$/cancelRequest', { id })
+        } catch {
+          /* the request still rejects */
+        }
         pending.reject(error)
       }
-      const onAbort = (): void => abandon(
-        new AppError(
-        'CANCELLED',
-        workbenchMainText('language.requestCancelled', { server: this.descriptor.label, method })
+      const onAbort = (): void =>
+        abandon(
+          new AppError(
+            'CANCELLED',
+            workbenchMainText('language.requestCancelled', {
+              server: this.descriptor.label,
+              method,
+            })
+          )
+        )
+      const timeout = setTimeout(
+        () =>
+          abandon(
+            new AppError(
+              'INTERNAL',
+              workbenchMainText('language.requestTimedOut', {
+                server: this.descriptor.label,
+                method,
+              })
+            )
+          ),
+        Math.max(1, this.requestTimeoutMs)
       )
-      )
-      const timeout = setTimeout(() => abandon(new AppError(
-        'INTERNAL',
-        workbenchMainText('language.requestTimedOut', { server: this.descriptor.label, method })
-      )), Math.max(1, this.requestTimeoutMs))
       this.pending.set(id, {
         resolve: (value) => {
           signal?.removeEventListener('abort', onAbort)
@@ -1161,10 +1269,12 @@ export class ExternalLspClient {
     }
 
     if (this.outboundLength + payload.length > MaxLspPendingWriteBytes) {
-      this.fail(new AppError(
-        'INTERNAL',
-        workbenchMainText('language.inputBackedUp', { server: this.descriptor.label })
-      ))
+      this.fail(
+        new AppError(
+          'INTERNAL',
+          workbenchMainText('language.inputBackedUp', { server: this.descriptor.label })
+        )
+      )
       return
     }
     this.outbound.push(payload)
@@ -1207,10 +1317,12 @@ export class ExternalLspClient {
       try {
         message = JSON.parse(body) as JsonRpcMessage
       } catch {
-        this.fail(new AppError(
-          'INTERNAL',
-          workbenchMainText('language.invalidJson', { server: this.descriptor.label })
-        ))
+        this.fail(
+          new AppError(
+            'INTERNAL',
+            workbenchMainText('language.invalidJson', { server: this.descriptor.label })
+          )
+        )
         return
       }
       this.handle(message)
@@ -1226,28 +1338,34 @@ export class ExternalLspClient {
     const boundary = headerWindow.indexOf(LspHeaderSeparator)
     if (boundary < 0) {
       if (this.inboundLength > MaxLspHeaderBytes)
-        this.fail(new AppError(
-          'INTERNAL',
-          workbenchMainText('language.headerTooLarge', { server: this.descriptor.label })
-        ))
+        this.fail(
+          new AppError(
+            'INTERNAL',
+            workbenchMainText('language.headerTooLarge', { server: this.descriptor.label })
+          )
+        )
       return false
     }
 
     const header = headerWindow.subarray(0, boundary).toString('ascii')
     const match = /(?:^|\r\n)Content-Length:\s*(\d+)/iu.exec(header)
     if (!match) {
-      this.fail(new AppError(
-        'INTERNAL',
-        workbenchMainText('language.missingContentLength', { server: this.descriptor.label })
-      ))
+      this.fail(
+        new AppError(
+          'INTERNAL',
+          workbenchMainText('language.missingContentLength', { server: this.descriptor.label })
+        )
+      )
       return false
     }
     const size = Number(match[1])
     if (!Number.isSafeInteger(size) || size > MaxLspMessageBytes) {
-      this.fail(new AppError(
-        'INTERNAL',
-        workbenchMainText('language.responseTooLarge', { server: this.descriptor.label })
-      ))
+      this.fail(
+        new AppError(
+          'INTERNAL',
+          workbenchMainText('language.responseTooLarge', { server: this.descriptor.label })
+        )
+      )
       return false
     }
     this.consumeInbound(boundary + LspHeaderSeparatorBytes)
@@ -1311,7 +1429,12 @@ export class ExternalLspClient {
     this.pending.delete(message.id)
     clearTimeout(pending.timeout)
     if (message.error)
-      pending.reject(new AppError('INTERNAL', `${this.descriptor.label}: ${message.error.message ?? workbenchMainText('language.requestFailed')}`))
+      pending.reject(
+        new AppError(
+          'INTERNAL',
+          `${this.descriptor.label}: ${message.error.message ?? workbenchMainText('language.requestFailed')}`
+        )
+      )
     else pending.resolve(message.result)
   }
 
@@ -1322,13 +1445,15 @@ export class ExternalLspClient {
   private handleServerRequest(id: number | string, method: string, params: unknown): void {
     const handled = this.serverRequestResult(method, params)
     try {
-      this.send(handled
-        ? { jsonrpc: '2.0', id, result: handled.result }
-        : {
-            jsonrpc: '2.0',
-            id,
-            error: { code: JsonRpcMethodNotFound, message: `Unhandled request: ${method}` },
-          })
+      this.send(
+        handled
+          ? { jsonrpc: '2.0', id, result: handled.result }
+          : {
+              jsonrpc: '2.0',
+              id,
+              error: { code: JsonRpcMethodNotFound, message: `Unhandled request: ${method}` },
+            }
+      )
     } catch {
       // 服务器已经退出时回不了信；退出本身会由 exit 处理器报出来。
     }
@@ -1362,23 +1487,28 @@ export class ExternalLspClient {
     if (!receivedUri) return
     const uri = this.documents.has(receivedUri)
       ? receivedUri
-      : [...this.documents.keys()].find((candidate) => {
+      : ([...this.documents.keys()].find((candidate) => {
           try {
-            return canonicalPath(URI.parse(candidate).fsPath)
-              === canonicalPath(URI.parse(receivedUri).fsPath)
+            return (
+              canonicalPath(URI.parse(candidate).fsPath) ===
+              canonicalPath(URI.parse(receivedUri).fsPath)
+            )
           } catch {
             return false
           }
-        }) ?? receivedUri
+        }) ?? receivedUri)
     const openVersion = this.documents.get(uri)?.version ?? 0
     const version = typeof params?.['version'] === 'number' ? params['version'] : openVersion
     const diagnostics = Array.isArray(params?.['diagnostics'])
-      ? params['diagnostics'] as ExternalLspDiagnostic[]
+      ? (params['diagnostics'] as ExternalLspDiagnostic[])
       : []
     this.diagnostics.set(uri, { version, diagnostics })
     const waiters = this.diagnosticWaiters.get(uri) ?? []
     const ready = waiters.filter((waiter) => version >= waiter.version)
-    this.diagnosticWaiters.set(uri, waiters.filter((waiter) => version < waiter.version))
+    this.diagnosticWaiters.set(
+      uri,
+      waiters.filter((waiter) => version < waiter.version)
+    )
     for (const waiter of ready) waiter.resolve(diagnostics)
   }
 
@@ -1423,23 +1553,32 @@ function normalizeLocations(value: unknown): ExternalLspLocation[] {
 }
 
 export class ExternalLspManager {
-  private readonly clients = new Map<string, {
-    client: ExternalLspClient
-    fingerprint: string
-    workspaceRoot: string
-    runtimeRoot: string
-    descriptor: WorkbenchLanguageServiceDescriptor
-  }>()
-  private readonly refreshes = new Map<string, {
-    promise: Promise<ExternalLspClient>
-    workspaceRoot: string
-  }>()
-  private readonly documentOwners = new Map<string, {
-    clientKey: string
-    workspaceRoot: string
-    documentPath: string
-    descriptor: WorkbenchLanguageServiceDescriptor
-  }>()
+  private readonly clients = new Map<
+    string,
+    {
+      client: ExternalLspClient
+      fingerprint: string
+      workspaceRoot: string
+      runtimeRoot: string
+      descriptor: WorkbenchLanguageServiceDescriptor
+    }
+  >()
+  private readonly refreshes = new Map<
+    string,
+    {
+      promise: Promise<ExternalLspClient>
+      workspaceRoot: string
+    }
+  >()
+  private readonly documentOwners = new Map<
+    string,
+    {
+      clientKey: string
+      workspaceRoot: string
+      documentPath: string
+      descriptor: WorkbenchLanguageServiceDescriptor
+    }
+  >()
   private readonly clientOwners = new Map<string, Set<string>>()
   private readonly workspaceGenerations = new Map<string, number>()
   private readonly workspaceInvalidations = new Map<string, Promise<void>>()
@@ -1452,8 +1591,7 @@ export class ExternalLspManager {
     documentPath = workspaceRoot
   ): Promise<ExternalLspClient> {
     const boundary = canonicalPath(workspaceRoot)
-    if (this.disposed)
-      throw new AppError('INVARIANT', workbenchMainText('language.managerClosed'))
+    if (this.disposed) throw new AppError('INVARIANT', workbenchMainText('language.managerClosed'))
     const generation = this.workspaceGeneration(boundary)
     await this.waitForWorkspaceInvalidation(boundary)
     this.assertClientRequestActive(boundary, generation)
@@ -1466,13 +1604,7 @@ export class ExternalLspManager {
     const fingerprint = externalLspRuntimeFingerprint(runtimeRoot, descriptor, boundary)
     const current = this.clients.get(key)
     if (current?.fingerprint === fingerprint) {
-      await this.claimDocument(
-        ownerKey,
-        key,
-        boundary,
-        canonicalDocumentPath,
-        descriptor
-      )
+      await this.claimDocument(ownerKey, key, boundary, canonicalDocumentPath, descriptor)
       this.assertClientRequestActive(boundary, generation)
       return current.client
     }
@@ -1481,13 +1613,7 @@ export class ExternalLspManager {
     if (activeRefresh) {
       const client = await activeRefresh.promise
       this.assertClientRequestActive(boundary, generation)
-      await this.claimDocument(
-        ownerKey,
-        key,
-        boundary,
-        canonicalDocumentPath,
-        descriptor
-      )
+      await this.claimDocument(ownerKey, key, boundary, canonicalDocumentPath, descriptor)
       this.assertClientRequestActive(boundary, generation)
       return client
     }
@@ -1517,13 +1643,7 @@ export class ExternalLspManager {
     try {
       const client = await refresh
       this.assertClientRequestActive(boundary, generation)
-      await this.claimDocument(
-        ownerKey,
-        key,
-        boundary,
-        canonicalDocumentPath,
-        descriptor
-      )
+      await this.claimDocument(ownerKey, key, boundary, canonicalDocumentPath, descriptor)
       this.assertClientRequestActive(boundary, generation)
       return client
     } finally {
@@ -1549,9 +1669,9 @@ export class ExternalLspManager {
         changes.set(client, clientPaths)
       }
     }
-    await Promise.all([...changes].map(([client, clientPaths]) =>
-      client.filesChanged([...clientPaths])
-    ))
+    await Promise.all(
+      [...changes].map(([client, clientPaths]) => client.filesChanged([...clientPaths]))
+    )
   }
 
   public invalidate(workspaceRoot: string): Promise<void> {
@@ -1574,8 +1694,9 @@ export class ExternalLspManager {
       .map(([, refresh]) => refresh.promise)
     await Promise.allSettled(activeRefreshes)
 
-    const entries = [...this.clients.entries()]
-      .filter(([, managed]) => managed.workspaceRoot === boundary)
+    const entries = [...this.clients.entries()].filter(
+      ([, managed]) => managed.workspaceRoot === boundary
+    )
     for (const [key] of entries) this.clients.delete(key)
     for (const [ownerKey, owner] of this.documentOwners) {
       if (owner.workspaceRoot === boundary) this.documentOwners.delete(ownerKey)
@@ -1615,8 +1736,7 @@ export class ExternalLspManager {
   }
 
   private assertClientRequestActive(workspaceRoot: string, generation: number): void {
-    if (this.disposed)
-      throw new AppError('INVARIANT', workbenchMainText('language.managerClosed'))
+    if (this.disposed) throw new AppError('INVARIANT', workbenchMainText('language.managerClosed'))
     if (this.workspaceGeneration(workspaceRoot) !== generation)
       throw new AppError('INVARIANT', workbenchMainText('language.workspaceGone'))
   }
@@ -1627,19 +1747,22 @@ export class ExternalLspManager {
   ): Array<{ client: ExternalLspClient; runtimeRoot: string }> {
     const boundary = canonicalPath(workspaceRoot)
     const canonicalDocumentPath = canonicalPath(path)
-    const closest = new Map<string, {
-      client: ExternalLspClient
-      runtimeRoot: string
-    }>()
+    const closest = new Map<
+      string,
+      {
+        client: ExternalLspClient
+        runtimeRoot: string
+      }
+    >()
     for (const managed of this.clients.values()) {
       if (
-        managed.workspaceRoot !== boundary
-        || !isPathInsideRoot(managed.runtimeRoot, canonicalDocumentPath)
+        managed.workspaceRoot !== boundary ||
+        !isPathInsideRoot(managed.runtimeRoot, canonicalDocumentPath)
       )
         continue
       if (
-        resolveExternalLspRuntimeRoot(boundary, canonicalDocumentPath, managed.descriptor)
-        !== managed.runtimeRoot
+        resolveExternalLspRuntimeRoot(boundary, canonicalDocumentPath, managed.descriptor) !==
+        managed.runtimeRoot
       )
         continue
       const current = closest.get(managed.descriptor.id)

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 
-import type { ProviderModelCatalog } from '@velaros-ai/model/contracts'
+import type { ProviderModelCatalog } from '@velaros-ai/velaros/model/contracts'
 
 import type {
   WorkbenchListProviderModelsRequest,

@@ -12,7 +12,7 @@ import { randomUUID } from 'node:crypto'
 import { cp, lstat, mkdir, readdir, rename, rm } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
 
-import { AppError } from '@velaros-ai/core/error'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
 import { workbenchMainText } from '../i18n/workbenchMainMessages'
 

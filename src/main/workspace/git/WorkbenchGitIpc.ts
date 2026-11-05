@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron'
 
-import { isBoolean, isNumber, isString, isTrue, optionalWhen } from '@velaros-ai/core'
+import { isBoolean, isNumber, isString, isTrue, optionalWhen } from '@velaros-ai/velaros/core'
 
 import { isWorkbenchTextEncoding, isWorkbenchTextEol } from '@shared/workbenchTextFormat'
 
@@ -195,8 +195,7 @@ function parseDiff(input: unknown): WorkbenchGitDiffRequest {
 }
 
 function parseFileAtCommit(input: unknown): WorkbenchGitFileAtCommitRequest {
-  if (!hasStringFields(input, ['workspaceRoot', 'commitSha', 'path']))
-    return invalidRequest()
+  if (!hasStringFields(input, ['workspaceRoot', 'commitSha', 'path'])) return invalidRequest()
   return {
     workspaceRoot: input['workspaceRoot'] as string,
     commitSha: input['commitSha'] as string,
@@ -233,12 +232,12 @@ function parseCommitMessage(input: unknown): WorkbenchGitCommitMessageRequest {
   const record = input as Record<string, unknown>
   const locale = record['locale']
   const paths = record['paths']
-  if (locale !== undefined && locale !== 'en-US' && locale !== 'zh-CN')
-    return invalidRequest()
+  if (locale !== undefined && locale !== 'en-US' && locale !== 'zh-CN') return invalidRequest()
   if (
     paths !== undefined &&
     (!Array.isArray(paths) || !paths.every((path) => typeof path === 'string'))
-  ) return invalidRequest()
+  )
+    return invalidRequest()
   return {
     ...root,
     locale,
@@ -333,8 +332,7 @@ function parseRemoteAction(input: unknown): WorkbenchGitRemoteActionRequest {
     return invalidRequest()
   const record = input as Record<string, unknown>
   for (const key of ['branch', 'githubToken', 'privateKeyPath', 'sshKeyPath', 'operationId']) {
-    if (record[key] !== undefined && typeof record[key] !== 'string')
-      return invalidRequest()
+    if (record[key] !== undefined && typeof record[key] !== 'string') return invalidRequest()
   }
   if (record['operationId'] !== undefined && !isOperationId(record['operationId']))
     return invalidRequest()
@@ -389,7 +387,9 @@ function parseOperation(input: unknown): WorkbenchGitOperationRequest {
   const target = input['target']
   if (!isWorkspaceGitOperationAction(action)) return invalidRequest()
   // 开始一个操作要说对象；继续、放弃、跳过说的是进行到一半的那个，带了对象就是发错了请求。
-  if (isWorkspaceGitOperationKind(action) ? !isString(target) || !target.trim() : target !== undefined)
+  if (
+    isWorkspaceGitOperationKind(action) ? !isString(target) || !target.trim() : target !== undefined
+  )
     return invalidRequest()
   return {
     workspaceRoot: input['workspaceRoot'] as string,

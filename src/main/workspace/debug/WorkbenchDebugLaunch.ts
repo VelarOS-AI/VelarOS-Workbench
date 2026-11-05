@@ -10,8 +10,8 @@ import { get as httpGet } from 'node:http'
 import { createServer } from 'node:net'
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 
-import { AppError } from '@velaros-ai/core/error'
-import { currentPlatform as systemPlatformCompatibility } from '@velaros-ai/core/platform'
+import { AppError } from '@velaros-ai/velaros/core/error'
+import { currentPlatform as systemPlatformCompatibility } from '@velaros-ai/velaros/core/platform'
 
 import { type WorkbenchTerminalOutputEvent } from '@shared/contracts/workbench'
 
@@ -121,7 +121,12 @@ export function findFreeLoopbackPort(): Promise<number> {
 function readInspectorEndpoint(port: number): Promise<Nullable<string>> {
   return new Promise((resolveEndpoint) => {
     const request = httpGet(
-      { host: WorkbenchInspectorHost, port, path: '/json/list', timeout: InspectorRequestTimeoutMs },
+      {
+        host: WorkbenchInspectorHost,
+        port,
+        path: '/json/list',
+        timeout: InspectorRequestTimeoutMs,
+      },
       (response) => {
         let body = ''
         response.setEncoding('utf8')
@@ -177,7 +182,9 @@ export async function resolveWorkbenchPackageBin(
 
   for (let directory = startDirectory; ; directory = dirname(directory)) {
     const packageDirectory = join(directory, 'node_modules', packageName)
-    const manifest = await readFile(join(packageDirectory, 'package.json'), 'utf8').catch(() => null)
+    const manifest = await readFile(join(packageDirectory, 'package.json'), 'utf8').catch(
+      () => null
+    )
     if (manifest !== null) {
       try {
         const { bin } = JSON.parse(manifest) as { bin?: unknown }
@@ -227,9 +234,15 @@ export async function buildWorkbenchDebugCommand(
 
   let program: string
   if (target.kind === 'node-script') {
-    const script = await context.pathResolver.resolveInsideProject(context.projectRoot, target.script)
+    const script = await context.pathResolver.resolveInsideProject(
+      context.projectRoot,
+      target.script
+    )
     if (!(await stat(script.realPath)).isFile())
-      throw new AppError('VALIDATION', workbenchMainText('debug.scriptNotFile', { path: target.script }))
+      throw new AppError(
+        'VALIDATION',
+        workbenchMainText('debug.scriptNotFile', { path: target.script })
+      )
     program = displayScriptPath(script.realPath, context.cwd)
   } else {
     const binName = target.binName ?? target.packageName

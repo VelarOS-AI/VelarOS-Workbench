@@ -1,5 +1,5 @@
-import { AppError } from '@velaros-ai/core/error'
 import type { RuntimeNoteContent, WorkspaceEntry } from '@velaros-ai/velaros'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
 import type {
   WorkbenchConversationBridge,

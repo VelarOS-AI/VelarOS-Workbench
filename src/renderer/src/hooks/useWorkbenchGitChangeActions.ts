@@ -1,13 +1,16 @@
-import { type FormEvent,useState } from 'react'
+import { type FormEvent, useState } from 'react'
 import { workbenchHost } from '@renderer/host/WorkbenchHost'
 import type { WorkbenchGitChangeItem } from '@renderer/models/git/workbenchGitModel'
 
-import { isPresent } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
-import { Result } from '@velaros-ai/core/result'
 import { type AppLocale } from '@velaros-ai/ui/conversation/contracts'
+import { isPresent } from '@velaros-ai/velaros/core'
+import { AppError } from '@velaros-ai/velaros/core/error'
+import { Result } from '@velaros-ai/velaros/core/result'
 
-import { type SystemWorkspaceGitSummary, type WorkspaceGitFileAction } from '@shared/contracts/system'
+import {
+  type SystemWorkspaceGitSummary,
+  type WorkspaceGitFileAction,
+} from '@shared/contracts/system'
 
 import { type useStableWorkbenchMessageTranslate } from '../runtime/useStableWorkbenchMessaging'
 import { useLatest } from '../support/genericHooks'
@@ -70,7 +73,8 @@ export function useWorkbenchGitChangeActions({
     if (
       action === 'discard' &&
       !window.confirm(tLatest.current('workbench.gitDiscardConfirm', { path: item.path }))
-    ) return
+    )
+      return
 
     try {
       setPendingFileAction(actionId)
@@ -100,8 +104,7 @@ export function useWorkbenchGitChangeActions({
       messageLatest.current.open({
         title: tLatest.current('workbench.gitFileActionFailedTitle'),
         description:
-          appError.message.trim() ||
-          tLatest.current('workbench.gitFileActionFailedFallback'),
+          appError.message.trim() || tLatest.current('workbench.gitFileActionFailedFallback'),
         tone: appError.code === 'VALIDATION' ? 'warning' : 'error',
         showClose: true,
       })
@@ -139,8 +142,7 @@ export function useWorkbenchGitChangeActions({
       messageLatest.current.open({
         title: tLatest.current('workbench.gitBranchActionFailedTitle'),
         description:
-          appError.message.trim() ||
-          tLatest.current('workbench.gitBranchActionFailedFallback'),
+          appError.message.trim() || tLatest.current('workbench.gitBranchActionFailedFallback'),
         tone: appError.code === 'VALIDATION' ? 'warning' : 'error',
         showClose: true,
       })
@@ -161,10 +163,7 @@ export function useWorkbenchGitChangeActions({
     try {
       setPendingBranchAction('create')
       const result = Result.unwrap(
-        await workbenchHost.kernel.workspace.createWorkspaceGitBranch(
-          workspaceRoot,
-          branchName
-        )
+        await workbenchHost.kernel.workspace.createWorkspaceGitBranch(workspaceRoot, branchName)
       )
       setNewBranchName('')
       await onRefreshLatest.current()
@@ -179,8 +178,7 @@ export function useWorkbenchGitChangeActions({
       messageLatest.current.open({
         title: tLatest.current('workbench.gitBranchActionFailedTitle'),
         description:
-          appError.message.trim() ||
-          tLatest.current('workbench.gitBranchActionFailedFallback'),
+          appError.message.trim() || tLatest.current('workbench.gitBranchActionFailedFallback'),
         tone: appError.code === 'VALIDATION' ? 'warning' : 'error',
         showClose: true,
       })

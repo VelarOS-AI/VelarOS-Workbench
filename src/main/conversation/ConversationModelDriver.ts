@@ -3,7 +3,7 @@ import type {
   ModelInputEstimate,
   ModelTurnDelta,
   ModelTurnRequest,
-} from '@velaros-ai/model'
+} from '@velaros-ai/velaros/model'
 
 import type { ConversationContextCapacity } from './ConversationContextCapacity'
 

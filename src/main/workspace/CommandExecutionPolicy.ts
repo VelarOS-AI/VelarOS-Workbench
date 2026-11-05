@@ -1,7 +1,7 @@
 import { homedir } from 'node:os'
 import { isAbsolute, join } from 'node:path'
 
-import { isEmpty } from '@velaros-ai/core'
+import { isEmpty } from '@velaros-ai/velaros/core'
 import { shellCommandPolicy } from '@velaros-ai/velaros/execution'
 import type { ShellCommandPlan } from '@velaros-ai/velaros/execution/contracts'
 
@@ -51,7 +51,19 @@ import { isPathInsideRoot } from './PathContainmentHelper'
 
 /** 分段边界：两侧是两条独立执行的命令。find 的 `-exec` 族之后是它要跑的命令。 */
 const ShellSegmentBoundaryTokens = new Set([
-  '\n', '&', '&&', '(', ')', ';', '`', '|', '||', '-exec', '-execdir', '-ok', '-okdir',
+  '\n',
+  '&',
+  '&&',
+  '(',
+  ')',
+  ';',
+  '`',
+  '|',
+  '||',
+  '-exec',
+  '-execdir',
+  '-ok',
+  '-okdir',
 ])
 
 /** 出现在命令位置、本身不执行任何东西的 shell 关键字：`if git pull; then …`、`! git checkout main`。 */
@@ -81,11 +93,45 @@ const CommandWrappers: ReadonlyMap<string, CommandWrapper> = new Map([
   ['nice', wrapper(['-n', '--adjustment'])],
   ['nohup', wrapper()],
   ['stdbuf', wrapper(['-e', '-i', '-o'])],
-  ['sudo', wrapper(['-C', '-D', '-g', '-h', '-p', '-r', '-t', '-T', '-u', '-U', '--chdir', '--group', '--host', '--user'])],
+  [
+    'sudo',
+    wrapper([
+      '-C',
+      '-D',
+      '-g',
+      '-h',
+      '-p',
+      '-r',
+      '-t',
+      '-T',
+      '-u',
+      '-U',
+      '--chdir',
+      '--group',
+      '--host',
+      '--user',
+    ]),
+  ],
   ['time', wrapper(['-f', '-o', '--format', '--output'])],
   ['timeout', wrapper(['-k', '-s', '--kill-after', '--signal'], 1)],
   ['unbuffer', wrapper()],
-  ['xargs', wrapper(['-a', '-d', '-E', '-I', '-L', '-n', '-P', '-s', '--arg-file', '--delimiter', '--max-args', '--max-procs'])],
+  [
+    'xargs',
+    wrapper([
+      '-a',
+      '-d',
+      '-E',
+      '-I',
+      '-L',
+      '-n',
+      '-P',
+      '-s',
+      '--arg-file',
+      '--delimiter',
+      '--max-args',
+      '--max-procs',
+    ]),
+  ],
 ])
 
 /** 把 `-c` 后面那个实参当脚本跑的 POSIX shell。 */
@@ -99,7 +145,12 @@ const MaxNestedScriptDepth = 3
 
 /** 后面跟一个取值 token 的 Git 全局选项（与平台只读判定同一张表），找子命令时要连值一起跳过。 */
 const GitGlobalOptionsWithValue = new Set([
-  '-C', '-c', '--config-env', '--git-dir', '--namespace', '--work-tree',
+  '-C',
+  '-c',
+  '--config-env',
+  '--git-dir',
+  '--namespace',
+  '--work-tree',
 ])
 
 /**
@@ -179,7 +230,8 @@ const GitInvocationRules: readonly GitInvocationRule[] = [
     // 只有 -f 会连未提交的改动一起删掉。
     subcommand: 'rm',
     danger: 'gitRm',
-    isHarmless: (args) => hasGitOption(args, null, '--cached') || !hasGitOption(args, 'f', '--force'),
+    isHarmless: (args) =>
+      hasGitOption(args, null, '--cached') || !hasGitOption(args, 'f', '--force'),
   },
   {
     // -n / --dry-run 只列出将要删除的文件。
@@ -198,8 +250,8 @@ const GitInvocationRules: readonly GitInvocationRule[] = [
     subcommand: 'push',
     danger: 'gitForcePush',
     isHarmless: (args) =>
-      !hasGitOption(args, 'f', '--force')
-      && !args.some((arg) => arg.startsWith('--force-') || (arg.startsWith('+') && arg.length > 1)),
+      !hasGitOption(args, 'f', '--force') &&
+      !args.some((arg) => arg.startsWith('--force-') || (arg.startsWith('+') && arg.length > 1)),
   },
   {
     // stash push / pop / apply 不丢内容；drop / clear 会把暂存的改动永久扔掉。
@@ -214,9 +266,31 @@ const GitInvocationRules: readonly GitInvocationRule[] = [
 
 /** 以路径为目标的写操作；配合工作区外的写入目标构成「写到工作区外」的信号。 */
 const PathMutatingCommands = new Set([
-  'chmod', 'chown', 'clear-content', 'copy', 'copy-item', 'cp', 'del', 'erase', 'mkdir',
-  'move', 'move-item', 'mv', 'new-item', 'out-file', 'remove-item', 'ren', 'rename',
-  'rename-item', 'rm', 'rmdir', 'robocopy', 'set-content', 'touch', 'truncate', 'xcopy',
+  'chmod',
+  'chown',
+  'clear-content',
+  'copy',
+  'copy-item',
+  'cp',
+  'del',
+  'erase',
+  'mkdir',
+  'move',
+  'move-item',
+  'mv',
+  'new-item',
+  'out-file',
+  'remove-item',
+  'ren',
+  'rename',
+  'rename-item',
+  'rm',
+  'rmdir',
+  'robocopy',
+  'set-content',
+  'touch',
+  'truncate',
+  'xcopy',
 ])
 
 /** 复制类命令：源只读、只写目的地。移动类（mv / move）会删掉源，两头都算写。 */
@@ -230,7 +304,10 @@ const RedirectionTokens = new Set(['<', '<<<', '>', '>>'])
 
 /** 平台侧 `windowsDestructivePatterns` 未覆盖的 PowerShell 磁盘 cmdlet。 */
 const UncoveredDiskCommands = new Set([
-  'clear-disk', 'format-volume', 'initialize-disk', 'remove-partition',
+  'clear-disk',
+  'format-volume',
+  'initialize-disk',
+  'remove-partition',
 ])
 
 /** 一段里处在命令位置的那次调用。 */
@@ -266,7 +343,11 @@ function splitSegments(tokens: readonly string[]): string[][] {
 }
 
 /** 跳过包装命令自己的选项和位置实参，返回它要跑的命令所在的下标。 */
-function skipWrapperArguments(segment: readonly string[], start: number, commandWrapper: CommandWrapper): number {
+function skipWrapperArguments(
+  segment: readonly string[],
+  start: number,
+  commandWrapper: CommandWrapper
+): number {
   let index = start
   let positionals = commandWrapper.positionals
   while (index < segment.length) {
@@ -310,11 +391,13 @@ function nestedScriptOf(invocation: ShellInvocation): Nullable<string> {
   if (PosixShells.has(name)) {
     // -c 可以与别的单字母选项合写（-lc、-ec）；脚本是紧跟的那一个实参。
     const flagIndex = args.findIndex((arg) => /^-[A-Za-z]*c[A-Za-z]*$/u.test(arg))
-    return flagIndex < 0 ? null : args[flagIndex + 1] ?? null
+    return flagIndex < 0 ? null : (args[flagIndex + 1] ?? null)
   }
   if (WindowsShells.has(name)) {
     // PowerShell 的 -Command 可按前缀缩写到 -c；cmd 的 /c、/k 之后整行都是命令。
-    const flagIndex = args.findIndex((arg) => /^(?:-c(?:o(?:m(?:m(?:a(?:n(?:d)?)?)?)?)?)?|\/[ck])$/iu.test(arg))
+    const flagIndex = args.findIndex((arg) =>
+      /^(?:-c(?:o(?:m(?:m(?:a(?:n(?:d)?)?)?)?)?)?|\/[ck])$/iu.test(arg)
+    )
     return flagIndex < 0 ? null : args.slice(flagIndex + 1).join(' ') || null
   }
   return null
@@ -337,10 +420,12 @@ function argsBeforePathspec(args: readonly string[]): readonly string[] {
 
 /** 选项是否出现：长选项（含 `--x=value`）或合写的短选项（`-SW` 同时带 S 与 W）。区分大小写。 */
 function hasGitOption(args: readonly string[], short: Nullable<string>, long: string): boolean {
-  return args.some((arg) =>
-    arg === long
-    || arg.startsWith(`${long}=`)
-    || (!!short && /^-[A-Za-z]+$/u.test(arg) && arg.includes(short)))
+  return args.some(
+    (arg) =>
+      arg === long ||
+      arg.startsWith(`${long}=`) ||
+      (!!short && /^-[A-Za-z]+$/u.test(arg) && arg.includes(short))
+  )
 }
 
 /** 跳过 Git 全局选项找到子命令的下标；`git -C sub reset --hard` 与 `git reset --hard` 是同一条。 */
@@ -367,7 +452,9 @@ function resolveGitDanger(
 ): Nullable<WorkspaceIntegrityDanger> {
   for (const segment of segments) {
     for (const subcommandIndex of gitSubcommandIndices(segment)) {
-      const rule = GitInvocationRules.find((candidate) => candidate.subcommand === segment[subcommandIndex])
+      const rule = GitInvocationRules.find(
+        (candidate) => candidate.subcommand === segment[subcommandIndex]
+      )
       if (rule && !rule.isHarmless?.(argsBeforePathspec(segment.slice(subcommandIndex + 1))))
         return describeDanger(rule.danger)
     }
@@ -409,7 +496,8 @@ function pathOperands({ name, args }: ShellInvocation): string[] {
 /** 显式写出的复制目的地：`cp -t DIR`、`cp --target-directory=DIR`、`Copy-Item -Destination DIR`。 */
 function explicitCopyDestination(args: readonly string[]): Nullable<string> {
   for (const [index, arg] of args.entries()) {
-    if (arg === '-t' || arg === '--target-directory' || arg.toLowerCase() === '-destination') return args[index + 1] ?? null
+    if (arg === '-t' || arg === '--target-directory' || arg.toLowerCase() === '-destination')
+      return args[index + 1] ?? null
     const inline = /^(?:--target-directory=|-destination:)(.+)$/iu.exec(arg)
     if (inline) return inline[1]
   }
@@ -428,15 +516,23 @@ function writeTargets(invocation: ShellInvocation): string[] {
 }
 
 function isOutsideWorkspace(candidate: string, projectRoot: string): boolean {
-  const path = candidate === '~' || candidate.startsWith('~/') ? join(homedir(), candidate.slice(1)) : candidate
+  const path =
+    candidate === '~' || candidate.startsWith('~/')
+      ? join(homedir(), candidate.slice(1))
+      : candidate
   return isAbsolute(path) && !isPathInsideRoot(projectRoot, path)
 }
 
 /** 写操作第一个落在工作区外的写入目标（绝对路径或 `~`）；工作区内的绝对路径照常放行。 */
-function findOutsideWorkspaceTarget(invocations: readonly ShellInvocation[], projectRoot: string): Nullable<string> {
+function findOutsideWorkspaceTarget(
+  invocations: readonly ShellInvocation[],
+  projectRoot: string
+): Nullable<string> {
   for (const invocation of invocations) {
     if (!PathMutatingCommands.has(invocation.name)) continue
-    const target = writeTargets(invocation).find((candidate) => isOutsideWorkspace(candidate, projectRoot))
+    const target = writeTargets(invocation).find((candidate) =>
+      isOutsideWorkspace(candidate, projectRoot)
+    )
     if (target) return target
   }
   return null
@@ -466,11 +562,14 @@ function resolveWorkspaceIntegrityDanger(
 
   // `diskutil erase` 之外还要覆盖 eraseDisk / eraseVolume 这类拼接子命令。
   const erasesDisk =
-    containsTokenSequence(lowered, ['diskutil', 'erase'])
-    || invocations.some(({ name, args }) => name === 'diskutil' && !!args[0]?.toLowerCase().startsWith('erase'))
+    containsTokenSequence(lowered, ['diskutil', 'erase']) ||
+    invocations.some(
+      ({ name, args }) => name === 'diskutil' && !!args[0]?.toLowerCase().startsWith('erase')
+    )
   if (erasesDisk) return describeDanger('eraseDisk')
 
-  if (lowered.some((token) => UncoveredDiskCommands.has(token))) return describeDanger('modifyPartitions')
+  if (lowered.some((token) => UncoveredDiskCommands.has(token)))
+    return describeDanger('modifyPartitions')
 
   return null
 }
@@ -481,7 +580,10 @@ function resolveWorkspaceIntegrityDanger(
  * 平台已判危险时原样返回（不覆盖它的理由）；只有平台放行、而 IDE 语境下需要先问用户的命令，
  * 才由本层升格为危险并附上工作区视角的理由。`projectRoot` 划定「工作区外」的边界。
  */
-export function analyzeWorkbenchCommandExecution(command: string, projectRoot: string): CommandExecutionPlan {
+export function analyzeWorkbenchCommandExecution(
+  command: string,
+  projectRoot: string
+): CommandExecutionPlan {
   const plan = shellCommandPolicy.analyze(command)
   if (plan.isDangerous) return plan
 

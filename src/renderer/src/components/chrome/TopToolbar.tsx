@@ -9,18 +9,11 @@ import {
   useRef,
   useState,
 } from 'react'
-import {
-  BugIcon,
-  CheckIcon,
-  GearSixIcon,
-  PlayIcon,
-  SpinnerGapIcon,
-} from '@phosphor-icons/react'
+import { BugIcon, CheckIcon, GearSixIcon, PlayIcon, SpinnerGapIcon } from '@phosphor-icons/react'
 import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 import { describeWorkbenchRunConfiguration } from '@renderer/models/commands/workbenchNamedRunConfigurations'
 import { hasWorkbenchGitHead } from '@renderer/models/git/workbenchGitTopBarModel'
 
-import { isEmpty,toNullable } from '@velaros-ai/core'
 import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 import { Input } from '@velaros-ai/ui/primitives/forms/Input'
@@ -34,6 +27,7 @@ import {
   DialogTitle,
 } from '@velaros-ai/ui/primitives/overlays/Dialog'
 import { BubbleTooltip } from '@velaros-ai/ui/primitives/overlays/Tooltip'
+import { isEmpty, toNullable } from '@velaros-ai/velaros/core'
 
 import { type SystemWorkspaceGitSummary } from '@shared/contracts/system'
 
@@ -106,10 +100,7 @@ export function WorkbenchTopTrailing({
   hasActiveRunCommand,
 }: Pick<
   TopToolbarProps,
-  | 'onOpenSettings'
-  | 'topRun'
-  | 'isRunningCommand'
-  | 'hasActiveRunCommand'
+  'onOpenSettings' | 'topRun' | 'isRunningCommand' | 'hasActiveRunCommand'
 >): ReactElement {
   const { t } = useWorkbenchI18n()
   const runCommandLabel = t('workbench.runCommand')
@@ -194,12 +185,7 @@ function WorkbenchRunAction({
       : activeOption?.description?.trim()
   const configureHint = t('workbench.runRightClickToConfigure')
   const tooltipTitle = activeLabel || placeholder
-  const actionLabel = [
-    label,
-    tooltipTitle,
-    activeDescription,
-    configureHint,
-  ]
+  const actionLabel = [label, tooltipTitle, activeDescription, configureHint]
     .filter((value) => !!value)
     .join(' · ')
 
@@ -294,9 +280,7 @@ function WorkbenchRunAction({
     const after = (button: HTMLButtonElement): boolean =>
       !!(input.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING)
     const target =
-      event.key === 'ArrowDown'
-        ? buttons.find(after)
-        : buttons.findLast((button) => !after(button))
+      event.key === 'ArrowDown' ? buttons.find(after) : buttons.findLast((button) => !after(button))
     if (!target) return
     event.preventDefault()
     target.focus()
@@ -333,37 +317,37 @@ function WorkbenchRunAction({
         widthStrategy="content"
         anchor={({ getAnchorProps }) => (
           <BubbleTooltip
-          // 菜单开着时不出悬停说明：指针还停在 ▶ 上，说明会盖住菜单最上面的几行。
-          disabled={menuOpen}
-          content={
-            <span className={styles.runActionTooltip}>
-              <span className={styles.runActionTooltipTitle}>{tooltipTitle}</span>
-              {!!activeDescription && (
-                <span className={styles.runActionTooltipDescription}>{activeDescription}</span>
-              )}
-              <span className={styles.runActionTooltipDescription}>{configureHint}</span>
-            </span>
-          }
-          ariaLabel={actionLabel}
-          side={tooltipSide}
-          sideOffset={6}
-          delayDuration={80}
-        >
-          <IconButton
-            {...getAnchorProps<HTMLButtonElement>({ disabled: true, onClick: handleRunClick })}
-            variant="ghost"
-            size="icon-sm"
-            className={className}
-            label={actionLabel}
-            disabled={false}
-            onContextMenu={handleRunContextMenu}
+            // 菜单开着时不出悬停说明：指针还停在 ▶ 上，说明会盖住菜单最上面的几行。
+            disabled={menuOpen}
+            content={
+              <span className={styles.runActionTooltip}>
+                <span className={styles.runActionTooltipTitle}>{tooltipTitle}</span>
+                {!!activeDescription && (
+                  <span className={styles.runActionTooltipDescription}>{activeDescription}</span>
+                )}
+                <span className={styles.runActionTooltipDescription}>{configureHint}</span>
+              </span>
+            }
+            ariaLabel={actionLabel}
+            side={tooltipSide}
+            sideOffset={6}
+            delayDuration={80}
           >
-            {oneShotBusy ? (
-              <SpinnerGapIcon size={17} className={styles.spinIcon} />
-            ) : (
-              <PlayIcon size={17} weight="regular" />
-            )}
-          </IconButton>
+            <IconButton
+              {...getAnchorProps<HTMLButtonElement>({ disabled: true, onClick: handleRunClick })}
+              variant="ghost"
+              size="icon-sm"
+              className={className}
+              label={actionLabel}
+              disabled={false}
+              onContextMenu={handleRunContextMenu}
+            >
+              {oneShotBusy ? (
+                <SpinnerGapIcon size={17} className={styles.spinIcon} />
+              ) : (
+                <PlayIcon size={17} weight="regular" />
+              )}
+            </IconButton>
           </BubbleTooltip>
         )}
       >
@@ -374,125 +358,127 @@ function WorkbenchRunAction({
           aria-label={placeholder}
           onKeyDown={handleMenuKeyDown}
         >
-        {/* 用户自己建的运行配置排在最前面：点一行让 ▶ 指着它，行尾的 ▶ 直接跑这一份；Node 程序还有一个调试。 */}
-        {!isEmpty(topRun.namedConfigurations) && (
-          <div className={styles.runActionSectionLabel}>{t('workbench.runConfigurations')}</div>
-        )}
-        {topRun.namedConfigurations.map((configuration) => {
-          const active = configuration.id === activeConfiguration?.id
-          const description = describeWorkbenchRunConfiguration(configuration)
-          return (
-            <div key={configuration.id} className={styles.runActionNamedRow}>
+          {/* 用户自己建的运行配置排在最前面：点一行让 ▶ 指着它，行尾的 ▶ 直接跑这一份；Node 程序还有一个调试。 */}
+          {!isEmpty(topRun.namedConfigurations) && (
+            <div className={styles.runActionSectionLabel}>{t('workbench.runConfigurations')}</div>
+          )}
+          {topRun.namedConfigurations.map((configuration) => {
+            const active = configuration.id === activeConfiguration?.id
+            const description = describeWorkbenchRunConfiguration(configuration)
+            return (
+              <div key={configuration.id} className={styles.runActionNamedRow}>
+                <button
+                  type="button"
+                  className={`${styles.runActionOption} ${active ? styles.runActionOptionActive : ''}`}
+                  data-active={active}
+                  role="menuitemradio"
+                  aria-checked={active}
+                  title={description}
+                  onClick={() => handlePickConfiguration(configuration.id)}
+                >
+                  <span className={styles.runActionOptionMeta}>
+                    <span className={styles.runActionOptionLabel}>{configuration.name}</span>
+                    <span className={styles.runActionOptionDescription}>{description}</span>
+                  </span>
+                  {active && (
+                    <CheckIcon size={13} weight="bold" className={styles.runActionOptionCheck} />
+                  )}
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={styles.runActionRowButton}
+                  title={t('workbench.runConfigurationRunNow')}
+                  aria-label={t('workbench.runConfigurationRunNow')}
+                  onClick={() => handleRunConfiguration(configuration.id)}
+                >
+                  <PlayIcon size={12} weight="fill" />
+                </button>
+                {configuration.type === 'node' && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className={`${styles.runActionRowButton} ${styles.runActionRowDebugButton}`}
+                    title={t('workbench.runConfigurationDebugNow')}
+                    aria-label={t('workbench.runConfigurationDebugNow')}
+                    onClick={() => handleDebugConfiguration(configuration.id)}
+                  >
+                    <BugIcon size={13} />
+                  </button>
+                )}
+              </div>
+            )
+          })}
+          <button
+            type="button"
+            className={styles.runActionEdit}
+            role="menuitem"
+            onClick={handleEditConfigurations}
+          >
+            {t('workbench.runConfigurationsEdit')}
+          </button>
+          <form className={styles.runActionConfig} onSubmit={handleConfigSubmit}>
+            <span className={styles.runActionConfigLabel}>
+              {t('workbench.runConfigureCommand')}
+            </span>
+            <div className={styles.runActionConfigRow}>
+              <Input
+                ref={commandInputRef}
+                size="sm"
+                className={styles.runActionConfigInput}
+                value={draftCommand}
+                placeholder={t('workbench.runConfigureCommandPlaceholder')}
+                spellCheck={false}
+                onChange={(event) => setDraftCommand(event.target.value)}
+              />
               <button
+                type="submit"
+                className={styles.runActionConfigSave}
+                disabled={!draftCommand.trim()}
+              >
+                {t('workbench.runConfigureSave')}
+              </button>
+            </div>
+          </form>
+          {!isEmpty(topRun.options) && (
+            <div className={styles.runActionSectionLabel}>{t('workbench.runDetectedCommands')}</div>
+          )}
+          {topRun.options.map((option) => {
+            // ▶ 指着一份运行配置时，命令文本碰巧一样的这一行不算选中。
+            const active = !activeConfiguration && option.value === topRun.activeCommand
+            return (
+              <button
+                key={option.value}
                 type="button"
                 className={`${styles.runActionOption} ${active ? styles.runActionOptionActive : ''}`}
                 data-active={active}
                 role="menuitemradio"
                 aria-checked={active}
-                title={description}
-                onClick={() => handlePickConfiguration(configuration.id)}
+                title={option.description || option.label}
+                onClick={() => handlePickOption(option.value)}
               >
                 <span className={styles.runActionOptionMeta}>
-                  <span className={styles.runActionOptionLabel}>{configuration.name}</span>
-                  <span className={styles.runActionOptionDescription}>{description}</span>
+                  <span className={styles.runActionOptionLabel}>{option.label}</span>
+                  {!!option.description && (
+                    <span className={styles.runActionOptionDescription}>{option.description}</span>
+                  )}
                 </span>
                 {active && (
                   <CheckIcon size={13} weight="bold" className={styles.runActionOptionCheck} />
                 )}
               </button>
-              <button
-                type="button"
-                role="menuitem"
-                className={styles.runActionRowButton}
-                title={t('workbench.runConfigurationRunNow')}
-                aria-label={t('workbench.runConfigurationRunNow')}
-                onClick={() => handleRunConfiguration(configuration.id)}
-              >
-                <PlayIcon size={12} weight="fill" />
-              </button>
-              {configuration.type === 'node' && (
-                <button
-                  type="button"
-                  role="menuitem"
-                  className={`${styles.runActionRowButton} ${styles.runActionRowDebugButton}`}
-                  title={t('workbench.runConfigurationDebugNow')}
-                  aria-label={t('workbench.runConfigurationDebugNow')}
-                  onClick={() => handleDebugConfiguration(configuration.id)}
-                >
-                  <BugIcon size={13} />
-                </button>
-              )}
-            </div>
-          )
-        })}
-        <button
-          type="button"
-          className={styles.runActionEdit}
-          role="menuitem"
-          onClick={handleEditConfigurations}
-        >
-          {t('workbench.runConfigurationsEdit')}
-        </button>
-        <form className={styles.runActionConfig} onSubmit={handleConfigSubmit}>
-          <span className={styles.runActionConfigLabel}>{t('workbench.runConfigureCommand')}</span>
-          <div className={styles.runActionConfigRow}>
-            <Input
-              ref={commandInputRef}
-              size="sm"
-              className={styles.runActionConfigInput}
-              value={draftCommand}
-              placeholder={t('workbench.runConfigureCommandPlaceholder')}
-              spellCheck={false}
-              onChange={(event) => setDraftCommand(event.target.value)}
-            />
+            )
+          })}
+          {(topRun.isConfigured || !!activeConfiguration) && (
             <button
-              type="submit"
-              className={styles.runActionConfigSave}
-              disabled={!draftCommand.trim()}
-            >
-              {t('workbench.runConfigureSave')}
-            </button>
-          </div>
-        </form>
-        {!isEmpty(topRun.options) && (
-          <div className={styles.runActionSectionLabel}>{t('workbench.runDetectedCommands')}</div>
-        )}
-        {topRun.options.map((option) => {
-          // ▶ 指着一份运行配置时，命令文本碰巧一样的这一行不算选中。
-          const active = !activeConfiguration && option.value === topRun.activeCommand
-          return (
-            <button
-              key={option.value}
               type="button"
-              className={`${styles.runActionOption} ${active ? styles.runActionOptionActive : ''}`}
-              data-active={active}
-              role="menuitemradio"
-              aria-checked={active}
-              title={option.description || option.label}
-              onClick={() => handlePickOption(option.value)}
+              role="menuitem"
+              className={styles.runActionReset}
+              onClick={handleResetAuto}
             >
-              <span className={styles.runActionOptionMeta}>
-                <span className={styles.runActionOptionLabel}>{option.label}</span>
-                {!!option.description && (
-                  <span className={styles.runActionOptionDescription}>{option.description}</span>
-                )}
-              </span>
-              {active && (
-                <CheckIcon size={13} weight="bold" className={styles.runActionOptionCheck} />
-              )}
+              {t('workbench.runResetToAuto')}
             </button>
-          )
-        })}
-        {(topRun.isConfigured || !!activeConfiguration) && (
-          <button
-            type="button"
-            role="menuitem"
-            className={styles.runActionReset}
-            onClick={handleResetAuto}
-          >
-            {t('workbench.runResetToAuto')}
-          </button>
-        )}
+          )}
         </div>
       </AnchoredPopover>
       <Dialog open={duplicateRunDialogOpen} onOpenChange={setDuplicateRunDialogOpen}>
@@ -512,9 +498,7 @@ function WorkbenchRunAction({
             <Button variant="outline" onClick={handleStartNewRun}>
               {t('workbench.runStartNew')}
             </Button>
-            <Button onClick={handleRestartActiveCommand}>
-              {t('workbench.runRestart')}
-            </Button>
+            <Button onClick={handleRestartActiveCommand}>{t('workbench.runRestart')}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

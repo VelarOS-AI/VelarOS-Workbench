@@ -16,7 +16,7 @@ import { join } from 'node:path'
 
 import { describe, test } from 'bun:test'
 
-import { AppError } from '@velaros-ai/core/error'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
 import { createWorkbenchAppParts, type WorkbenchAppParts } from '../src/main/workspace/Parts'
 
@@ -79,10 +79,14 @@ void describe('Workbench file operations', () => {
         newName: '.env.local',
       })
       assert.equal(envRenamed.entry.path, '.env.local')
-      assert.deepEqual(
-        (await readdir(projectRoot)).sort(),
-        ['.cache', '.env.local', '.github', 'node_modules', 'out', 'packages']
-      )
+      assert.deepEqual((await readdir(projectRoot)).sort(), [
+        '.cache',
+        '.env.local',
+        '.github',
+        'node_modules',
+        'out',
+        'packages',
+      ])
     })
   })
 
@@ -215,7 +219,10 @@ void describe('Workbench file operations', () => {
       // 目录连同里面的一切；链接照原样复制成链接。
       const folder = await files.copyEntry({ projectRoot, path: 'src/util', parentPath: 'lib' })
       assert.equal(folder.entry.path, 'lib/util')
-      assert.equal(await readFile(join(projectRoot, 'lib', 'util', 'b.ts'), 'utf8'), 'export const b = 2\n')
+      assert.equal(
+        await readFile(join(projectRoot, 'lib', 'util', 'b.ts'), 'utf8'),
+        'export const b = 2\n'
+      )
       assert.ok((await lstat(join(projectRoot, 'lib', 'util', 'a-link.ts'))).isSymbolicLink())
 
       await assert.rejects(
@@ -246,10 +253,18 @@ void describe('Workbench file operations', () => {
         const contents = (root: string, path: string): string[] =>
           files
             .listLocalHistory({ projectRoot: root, path })
-            .entries.map(({ id }) => files.readLocalHistorySnapshot({ projectRoot: root, path, id }).content)
+            .entries.map(
+              ({ id }) => files.readLocalHistorySnapshot({ projectRoot: root, path, id }).content
+            )
 
         await save(projectRoot, 'src/a.ts', 'a1\n')
-        await files.saveFile({ projectRoot, path: 'src/a.ts', content: 'a2\n', encoding: 'utf-8', eol: 'lf' })
+        await files.saveFile({
+          projectRoot,
+          path: 'src/a.ts',
+          content: 'a2\n',
+          encoding: 'utf-8',
+          eol: 'lf',
+        })
         await save(projectRoot, 'src/util/b.ts', 'b1\n')
         // 另一个项目里同样的相对路径：挪这个项目的目录时不能把它的历史也带走。
         await save(otherRoot, 'src/util/b.ts', 'other\n')

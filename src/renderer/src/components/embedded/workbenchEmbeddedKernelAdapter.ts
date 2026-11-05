@@ -7,8 +7,8 @@ import type { WorkbenchEditorGroupView } from '@renderer/models/editor/workbench
 import { isDirtyTab } from '@renderer/models/editor/workbenchEditorTabs'
 import { getWorkbenchFileDiagnosticView } from '@renderer/models/editor/workbenchLanguageServiceInsightsModel'
 
-import { toNullable } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
+import { toNullable } from '@velaros-ai/velaros/core'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
 import type { StandaloneWorkbenchPageModel } from '../../hooks/useStandaloneWorkbenchPageModel'
 import type { TopToolbarProps } from '../chrome/TopToolbar'

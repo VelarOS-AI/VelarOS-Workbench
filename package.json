@@ -1,6 +1,6 @@
 {
   "name": "velaros-workbench",
-  "version": "0.4.12",
+  "version": "0.4.13",
   "private": true,
   "description": "VelarOS Workbench standalone Electron IDE.",
   "desktopName": "velaros-workbench.desktop",
@@ -15,8 +15,8 @@
     "predev": "node scripts/ensureElectronInstalled.mjs",
     "dev": "electron-vite dev",
     "build": "electron-vite build && node scripts/checkBuildBudgets.mjs",
-    "typecheck": "tsc --noEmit -p tsconfig.json",
-    "lint": "eslint . --max-warnings=0",
+    "typecheck": "node scripts/typecheck/runTypecheckPartitions.mjs",
+    "lint": "node scripts/checks/runLint.mjs",
     "check:boundaries": "node scripts/checkProductBoundaries.mjs",
     "test": "node scripts/test/runIsolatedTests.mjs && node --test scripts/release/publishUpdateCatalog.test.mjs scripts/test/conversationRuntime.test.mjs",
     "test:velar:installed": "bun --conditions=source scripts/test/verifyInstalledVelarToolchain.ts",
@@ -36,27 +36,21 @@
     "release:local:stage": "node scripts/release/releaseArtifacts.mjs stage",
     "release:local:verify": "node scripts/release/releaseArtifacts.mjs verify",
     "release:local:finalize": "node scripts/release/publishUpdateCatalog.mjs",
-    "prepare:agent-runtime": "node scripts/release/prepareNodeRuntime.mjs"
+    "prepare:agent-runtime": "node scripts/release/prepareNodeRuntime.mjs",
+    "format": "node scripts/formatChanged.mjs"
   },
   "dependencies": {
     "@lydell/node-pty": "1.2.0-beta.15",
-    "@velaros-ai/agent": "file:build/runtime-packages/65821b88265bda52ef60200478caaf245f391fc9da2750abe95905a743f9461f/velaros-ai-agent-9.9.4.tgz",
-    "@velaros-ai/core": "file:build/runtime-packages/5aaa32880770fa64b7247824ce93aabf0d184f8818718701feed86f39ba0e72c/velaros-ai-core-0.4.4.tgz",
-    "@velaros-ai/kernel": "file:build/runtime-packages/d1f0015870deb86acea07ebdf21350befa11145cac126877721c21beda6bc12f/velaros-ai-kernel-0.6.2.tgz",
-    "@velaros-ai/model": "file:build/runtime-packages/b0925154233b6518ec8c1f7d32feb7659792f043e21200d700798e8099bb83d9/velaros-ai-model-0.10.3.tgz",
-    "@velaros-ai/script": "file:build/runtime-packages/285743debdb51dfab9ef7392419d39be83bb54902d2968419249e13e8d7b9409/velaros-ai-script-0.3.8.tgz",
-    "@velaros-ai/ui": "file:build/runtime-packages/e6ded834cd00d7739031993425276349004090baa51acfda80f1c3e063179500/velaros-ai-ui-0.2.65.tgz",
-    "@velaros-ai/velaros": "file:build/runtime-packages/288641cd25f223ef2bc2259659e1af0d89795e2e01cfa51221ccf4c72056762f/velaros-ai-velaros-0.6.24.tgz",
     "gpt-tokenizer": "3.4.0",
     "pyright": "^1.1.411",
     "react": "^19.2.5",
-    "react-dom": "^19.2.5",
     "typescript": "^5.9.3",
     "vscode-css-languageservice": "^6.3.10",
     "vscode-html-languageservice": "^5.6.2",
     "vscode-languageserver-textdocument": "^1.0.12",
     "vscode-markdown-languageservice": "^0.5.0",
-    "vscode-uri": "^3.1.0"
+    "vscode-uri": "^3.1.0",
+    "@velaros-ai/velaros": "file:build/runtime-packages/fade2b27479bfacc67ecdfa46b652ed46ca0b27d3205f9d703c101f1dc4928f2/velaros-ai-velaros-0.6.33.tgz"
   },
   "devDependencies": {
     "@ast-grep/napi": "0.45.3",
@@ -131,7 +125,10 @@
     "tinykeys": "3.0.0",
     "vite": "^7.3.2",
     "zod": "^4.3.6",
-    "npm": "12.2.0"
+    "npm": "12.2.0",
+    "@velaros-ai/ui": "file:build/runtime-packages/3f485c75cfdea8cf71bb8650e9e5b688a91602582677bebefc32003fb25e4608/velaros-ai-ui-0.2.73.tgz",
+    "@typescript/native": "npm:typescript@7.0.2",
+    "react-dom": "^19.2.5"
   },
   "repository": {
     "type": "git",
@@ -149,14 +146,7 @@
     "node-win-x64": "24.22.0"
   },
   "overrides": {
-    "@velaros-ai/core": "file:build/runtime-packages/5aaa32880770fa64b7247824ce93aabf0d184f8818718701feed86f39ba0e72c/velaros-ai-core-0.4.4.tgz",
-    "@velaros-ai/kernel": "file:build/runtime-packages/d1f0015870deb86acea07ebdf21350befa11145cac126877721c21beda6bc12f/velaros-ai-kernel-0.6.2.tgz",
-    "@velaros-ai/context": "file:build/runtime-packages/ef984e02b2fd546b2ab03365e75cba89dd48a92fb815ad5eea712b02dbaead70/velaros-ai-context-0.10.1.tgz",
-    "@velaros-ai/model": "file:build/runtime-packages/b0925154233b6518ec8c1f7d32feb7659792f043e21200d700798e8099bb83d9/velaros-ai-model-0.10.3.tgz",
-    "@velaros-ai/agent": "file:build/runtime-packages/65821b88265bda52ef60200478caaf245f391fc9da2750abe95905a743f9461f/velaros-ai-agent-9.9.4.tgz",
-    "@velaros-ai/skill-jsts": "file:build/runtime-packages/f061e06b6c293fda7bd31a445ebe159a639cb75c1dbaf6d291925f6f43953527/velaros-ai-skill-jsts-0.1.1.tgz",
-    "@velaros-ai/script": "file:build/runtime-packages/285743debdb51dfab9ef7392419d39be83bb54902d2968419249e13e8d7b9409/velaros-ai-script-0.3.8.tgz",
-    "@velaros-ai/velaros": "file:build/runtime-packages/288641cd25f223ef2bc2259659e1af0d89795e2e01cfa51221ccf4c72056762f/velaros-ai-velaros-0.6.24.tgz",
-    "@velaros-ai/ui": "file:build/runtime-packages/e6ded834cd00d7739031993425276349004090baa51acfda80f1c3e063179500/velaros-ai-ui-0.2.65.tgz"
+    "@velaros-ai/velaros": "file:build/runtime-packages/fade2b27479bfacc67ecdfa46b652ed46ca0b27d3205f9d703c101f1dc4928f2/velaros-ai-velaros-0.6.33.tgz",
+    "@velaros-ai/ui": "file:build/runtime-packages/3f485c75cfdea8cf71bb8650e9e5b688a91602582677bebefc32003fb25e4608/velaros-ai-ui-0.2.73.tgz"
   }
 }

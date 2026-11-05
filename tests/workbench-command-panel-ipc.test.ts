@@ -5,7 +5,7 @@ import { join } from 'node:path'
 
 import { describe, mock, test } from 'bun:test'
 
-import { currentPlatform } from '@velaros-ai/core/platform'
+import { currentPlatform } from '@velaros-ai/velaros/core/platform'
 
 import { analyzeWorkbenchCommandExecution } from '../src/main/workspace/CommandExecutionPolicy'
 import { WorkbenchFsChannels } from '../src/shared/workbenchFs'
@@ -48,22 +48,31 @@ void describe('Workbench command panel IPC', () => {
     try {
       await mkdir(join(root, 'cache', 'nested'), { recursive: true })
       const runCommand = await registerCommandPanelIpc()
-      const shellKind = currentPlatform.getShellKind(currentPlatform.getPreferredShellPath(process.env))
-      const command = shellKind === 'cmd'
-        ? 'rmdir /s /q cache'
-        : shellKind === 'pwsh' || shellKind === 'powershell'
-          ? 'Remove-Item -LiteralPath cache -Recurse -Force'
-          : 'rm -r cache'
+      const shellKind = currentPlatform.getShellKind(
+        currentPlatform.getPreferredShellPath(process.env)
+      )
+      const command =
+        shellKind === 'cmd'
+          ? 'rmdir /s /q cache'
+          : shellKind === 'pwsh' || shellKind === 'powershell'
+            ? 'Remove-Item -LiteralPath cache -Recurse -Force'
+            : 'rm -r cache'
       assert.equal(analyzeWorkbenchCommandExecution(command, root).isDangerous, true)
 
-      const result = await runCommand({ projectRoot: root, command }) as {
+      const result = (await runCommand({ projectRoot: root, command })) as {
         ok: boolean
         value?: { success: boolean }
       }
 
       assert.equal(result.ok, true)
       assert.equal(result.value?.success, true)
-      assert.equal(await stat(join(root, 'cache')).then(() => true, () => false), false)
+      assert.equal(
+        await stat(join(root, 'cache')).then(
+          () => true,
+          () => false
+        ),
+        false
+      )
     } finally {
       await rm(root, { recursive: true, force: true })
     }

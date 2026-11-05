@@ -56,6 +56,7 @@ export interface WorkbenchTerminalInstance {
 
 interface WorkbenchTerminalEntry extends WorkbenchTerminalInstance {
   detachOutput: () => void
+  inputFocused: boolean
   webgl: Nullable<WebglAddon>
   /** shell 当前所在的目录：起始目录，之后跟着 shell 用 OSC 7 报的走（不报的 shell 就一直是起始目录）。 */
   cwd: string
@@ -116,6 +117,7 @@ export function acquireWorkbenchTerminal(
     fontSize: 12,
     lineHeight: 1.25,
     scrollback: 5_000,
+    overviewRuler: { width: 6 },
     // PTY 输出自带 CR LF；宿主的提示也按 CR LF 发。
     convertEol: false,
     macOptionIsMeta: false,
@@ -131,6 +133,7 @@ export function acquireWorkbenchTerminal(
     handlers,
     opened: false,
     detachOutput: () => undefined,
+    inputFocused: true,
     webgl: null,
     cwd: options.cwd,
     search: null,
@@ -147,6 +150,18 @@ export function acquireWorkbenchTerminal(
   })
   // ⌘F（其它平台 Ctrl+F）打开终端的查找栏，不再交给 shell。
   terminal.attachCustomKeyEventHandler((event) => {
+    // 有选区时保留浏览器 copy 默认动作，xterm 的 copy 监听器负责写入剪贴板。
+    if (event.code === 'KeyC' && !event.altKey && (event.ctrlKey || event.metaKey)) {
+      if (terminal.hasSelection() || window.getSelection()?.toString()) return false
+      const buffer = terminal.buffer.active
+      if (
+        event.ctrlKey &&
+        (!entry.inputFocused ||
+          document.activeElement !== terminal.textarea ||
+          buffer.viewportY !== buffer.baseY)
+      )
+        return false
+    }
     if (event.type !== 'keydown') return true
     if (isFindShortcut(event) && entry.handlers.onFind) {
       event.preventDefault()
@@ -158,6 +173,9 @@ export function acquireWorkbenchTerminal(
   })
   terminal.onWriteParsed(() => scheduleSearchRefresh(entry))
   terminal.onScroll(() => scheduleSearchDecorate(entry))
+  terminal.onKey(() => {
+    entry.inputFocused = true
+  })
   terminal.onData((data) => entry.handlers.onData(data))
   terminal.onBinary((data) => entry.handlers.onData(data))
   // 写完再确认（xterm 解析完这段才回调），主进程据此决定暂停还是继续读伪终端。
@@ -246,7 +264,10 @@ function readWrappedLine(
 }
 
 /** 文字位置换成 xterm 的格子范围（1 起，末尾含在内）。 */
-function toBufferRange(cells: readonly TerminalTextCell[], link: WorkbenchTerminalFileLink): IBufferRange {
+function toBufferRange(
+  cells: readonly TerminalTextCell[],
+  link: WorkbenchTerminalFileLink
+): IBufferRange {
   const first = cells[link.start]!
   const last = cells[link.end - 1]!
   return {
@@ -269,7 +290,9 @@ function releaseHeldKey(terminal: Terminal): void {
 }
 
 function isFindShortcut(event: KeyboardEvent): boolean {
-  const primary = isApplePlatform ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey
+  const primary = isApplePlatform
+    ? event.metaKey && !event.ctrlKey
+    : event.ctrlKey && !event.metaKey
   return primary && !event.altKey && !event.shiftKey && event.code === 'KeyF'
 }
 
@@ -344,6 +367,23 @@ export function mountWorkbenchTerminal(sessionId: string, container: HTMLElement
   if (!entry.opened) {
     entry.opened = true
     entry.terminal.open(container)
+    // xterm 点击任何输出都会聚焦隐藏 textarea；另记是否点在当前输入行的空白处。
+    entry.terminal.element?.addEventListener('mousedown', (event) => {
+      if (event.button !== 0) return
+      const screen = entry.terminal.element?.querySelector('.xterm-screen')
+      if (!screen) return
+      const rect = screen.getBoundingClientRect()
+      const buffer = entry.terminal.buffer.active
+      const row = Math.floor((event.clientY - rect.top) / (rect.height / entry.terminal.rows))
+      const column = Math.floor((event.clientX - rect.left) / (rect.width / entry.terminal.cols))
+      entry.inputFocused =
+        buffer.viewportY === buffer.baseY &&
+        row >= buffer.cursorY &&
+        row < entry.terminal.rows &&
+        column >= 0 &&
+        column < entry.terminal.cols &&
+        (row > buffer.cursorY || column >= buffer.cursorX)
+    })
     try {
       const webgl = new WebglAddon()
       webgl.onContextLoss(() => {

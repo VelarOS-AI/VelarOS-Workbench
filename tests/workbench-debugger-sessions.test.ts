@@ -3,7 +3,7 @@ import { join } from 'node:path'
 
 import { describe, setDefaultTimeout, test } from 'bun:test'
 
-import { currentPlatform } from '@velaros-ai/core/platform'
+import { currentPlatform } from '@velaros-ai/velaros/core/platform'
 
 import { resolveWorkbenchNodeExecutable } from '../src/main/conversation/WorkbenchNodeRuntime'
 
@@ -31,6 +31,38 @@ async function waitFor(condition: () => boolean, what: string, timeoutMs = 10_00
 }
 
 void describe('starting a debug session', () => {
+  void test('debug fixtures ignore inherited Node options but keep explicit launch options', async () => {
+    const inherited = process.env.NODE_OPTIONS
+    const project = await createDebugTestProject({ 'main.cjs': 'debugger\n' })
+    try {
+      // 若漏隔离，Node 会在调试器连上前因这个不存在的预加载模块退出。
+      process.env.NODE_OPTIONS = '--require=./missing-host-preload.cjs'
+      const first = await project.start({ target: { kind: 'node-script', script: 'main.cjs' } })
+      assert.equal((await project.next('paused')).sessionId, first.sessionId)
+      assert.equal(project.launched[0]!.env.NODE_OPTIONS, '')
+      await project.sessions.controlDebugSession(
+        { sessionId: first.sessionId, action: 'continue' },
+        1
+      )
+      await project.next('ended')
+      const second = await project.start({
+        target: { kind: 'node-script', script: 'main.cjs' },
+        env: { NODE_OPTIONS: '--no-warnings' },
+      })
+      assert.equal((await project.next('paused')).sessionId, second.sessionId)
+      assert.equal(project.launched[1]!.env.NODE_OPTIONS, '--no-warnings')
+      await project.sessions.controlDebugSession(
+        { sessionId: second.sessionId, action: 'continue' },
+        1
+      )
+      await project.next('ended')
+    } finally {
+      if (inherited === undefined) delete process.env.NODE_OPTIONS
+      else process.env.NODE_OPTIONS = inherited
+      await project.dispose()
+    }
+  })
+
   void test('a tool that takes --inspect-brk itself: its own first stop is not shown to the user', async () => {
     const project = await createDebugTestProject({
       // 与 Vitest 同样的做法：自己认开关、自己开检查器、等调试器连上，然后在跑测试文件之前自己先停一下。
@@ -61,15 +93,24 @@ void describe('starting a debug session', () => {
       const first = await project.next('paused')
       assert.equal(first.reason, 'breakpoint')
       assert.equal(frameSummary(first.frames[0]), '(anonymous)@case.cjs:2')
-      assert.equal((await variablesOf(project, started.sessionId, first.frames[0]!, 'local')).answer?.text, '42')
+      assert.equal(
+        (await variablesOf(project, started.sessionId, first.frames[0]!, 'local')).answer?.text,
+        '42'
+      )
 
       // 只有开头那一下不算：后面程序自己的 debugger 语句照样停。
-      await project.sessions.controlDebugSession({ sessionId: started.sessionId, action: 'continue' }, 1)
+      await project.sessions.controlDebugSession(
+        { sessionId: started.sessionId, action: 'continue' },
+        1
+      )
       const statement = await project.next('paused')
       assert.equal(statement.reason, 'other')
       assert.equal(frameSummary(statement.frames[0]), '(anonymous)@case.cjs:3')
 
-      await project.sessions.controlDebugSession({ sessionId: started.sessionId, action: 'continue' }, 1)
+      await project.sessions.controlDebugSession(
+        { sessionId: started.sessionId, action: 'continue' },
+        1
+      )
       assert.equal((await project.next('ended')).exitCode, 0)
       assert.match(project.launched[0]!.output(), /answer 42\ndone/u)
     } finally {
@@ -99,7 +140,11 @@ void describe('starting a debug session', () => {
     })
     try {
       const started = await project.start({
-        target: { kind: 'node-package-bin', packageName: 'fake-runner', args: `case.cjs --name ${currentPlatform.quoteShellArg('two words')}` },
+        target: {
+          kind: 'node-package-bin',
+          packageName: 'fake-runner',
+          args: `case.cjs --name ${currentPlatform.quoteShellArg('two words')}`,
+        },
         cwd: 'packages/app',
         env: { DEBUG_LABEL: 'from the configuration' },
         breakpoints: [{ path: 'packages/app/case.cjs', line: 2 }],
@@ -116,15 +161,21 @@ void describe('starting a debug session', () => {
       const internal = paused.frames.filter((frame) => frame.location.path === null)
       assert.ok(internal.length > 0)
       assert.ok(internal.every((frame) => frame.location.source.startsWith('node:internal/')))
-      assert.deepEqual(paused.frames.filter((frame) => frame.location.path !== null).map(frameSummary), [
-        '(anonymous)@packages/app/case.cjs:2',
-        '(anonymous)@node_modules/fake-runner/bin/run.cjs:3',
-      ])
+      assert.deepEqual(
+        paused.frames.filter((frame) => frame.location.path !== null).map(frameSummary),
+        [
+          '(anonymous)@packages/app/case.cjs:2',
+          '(anonymous)@node_modules/fake-runner/bin/run.cjs:3',
+        ]
+      )
       assert.equal(
         (await variablesOf(project, started.sessionId, paused.frames[0]!, 'local')).label?.text,
         '"from the configuration"'
       )
-      await project.sessions.controlDebugSession({ sessionId: started.sessionId, action: 'continue' }, 1)
+      await project.sessions.controlDebugSession(
+        { sessionId: started.sessionId, action: 'continue' },
+        1
+      )
       assert.equal((await project.next('ended')).exitCode, 0)
       assert.match(project.launched[0]!.output(), /arguments \["case\.cjs","--name","two words"\]/u)
 
@@ -147,7 +198,9 @@ void describe('starting a debug session', () => {
     const project = await createDebugTestProject({ 'main.js': '', 'folder/file.js': '' })
     try {
       await assert.rejects(project.start({ target: { kind: 'node-script', script: 'missing.js' } }))
-      await assert.rejects(project.start({ target: { kind: 'node-script', script: '../outside.js' } }))
+      await assert.rejects(
+        project.start({ target: { kind: 'node-script', script: '../outside.js' } })
+      )
       await assert.rejects(project.start({ target: { kind: 'node-script', script: '/etc/hosts' } }))
       await assert.rejects(
         project.start({ target: { kind: 'node-script', script: 'folder' } }),
@@ -199,7 +252,10 @@ void describe('starting a debug session', () => {
       })
       const exited = await project.next('ended')
       assert.deepEqual([exited.reason, exited.exitCode, exited.message], ['exited', 3, null])
-      assert.equal(project.events.some((event) => event.type === 'attached'), false)
+      assert.equal(
+        project.events.some((event) => event.type === 'attached'),
+        false
+      )
       await assert.rejects(
         project.sessions.controlDebugSession({ sessionId, action: 'pause' }, 1),
         /调试会话已结束/u
@@ -237,13 +293,19 @@ void describe('controlling a running debug session', () => {
       'lib.js': ['exports.double = function double(n) {', '  return n * 2', '}', ''].join('\n'),
     })
     try {
-      const { sessionId } = await project.start({ target: { kind: 'node-script', script: 'main.js' } })
+      const { sessionId } = await project.start({
+        target: { kind: 'node-script', script: 'main.js' },
+      })
       await project.next('attached')
-      const control = (action: 'continue' | 'pause' | 'step-into' | 'step-out' | 'step-over'): Promise<void> =>
-        project.sessions.controlDebugSession({ sessionId, action }, 1)
+      const control = (
+        action: 'continue' | 'pause' | 'step-into' | 'step-out' | 'step-over'
+      ): Promise<void> => project.sessions.controlDebugSession({ sessionId, action }, 1)
 
       // 等它进了事件循环（只剩定时器在跑）再动手。
-      await waitFor(() => /^started\r?$/mu.test(project.launched[0]!.output()), 'the program to start')
+      await waitFor(
+        () => /^started\r?$/mu.test(project.launched[0]!.output()),
+        'the program to start'
+      )
 
       // 程序在跑的时候按单步、继续：没有意义，也不报错，更不会把下一次停下算成「单步」。
       await control('step-over')
@@ -258,11 +320,17 @@ void describe('controlling a running debug session', () => {
       await control('pause')
 
       // 在这一处下个断点跑过去，好从一个确定的位置开始单步。
-      await project.sessions.setBreakpoints({ sessionId, breakpoints: [{ path: 'main.js', line: 4 }] }, 1)
+      await project.sessions.setBreakpoints(
+        { sessionId, breakpoints: [{ path: 'main.js', line: 4 }] },
+        1
+      )
       await control('continue')
       await project.next('resumed')
       const atCall = await project.next('paused')
-      assert.deepEqual([atCall.reason, frameSummary(atCall.frames[0])], ['breakpoint', 'tick@main.js:4'])
+      assert.deepEqual(
+        [atCall.reason, frameSummary(atCall.frames[0])],
+        ['breakpoint', 'tick@main.js:4']
+      )
 
       await control('step-into')
       const inside = await project.next('paused')
@@ -271,13 +339,20 @@ void describe('controlling a running debug session', () => {
       await control('step-out')
       const outside = await project.next('paused')
       // 调用所在的那一句已经没有可停的地方了：停在它后面（函数的收尾）。
-      assert.deepEqual([outside.reason, frameSummary(outside.frames[0])], ['step', 'tick@main.js:5'])
+      assert.deepEqual(
+        [outside.reason, frameSummary(outside.frames[0])],
+        ['step', 'tick@main.js:5']
+      )
 
       // 不给帧：在全局求值，看不到模块里的变量。
       const evaluate = (expression: string, frameId?: string) =>
         project.sessions.evaluate({ sessionId, expression, frameId }, 1)
       assert.equal((await evaluate('typeof process.pid')).value?.text, '"number"')
-      assert.equal((await evaluate(`process.execPath === ${JSON.stringify(resolveWorkbenchNodeExecutable())}`)).value?.text, 'true')
+      assert.equal(
+        (await evaluate(`process.execPath === ${JSON.stringify(resolveWorkbenchNodeExecutable())}`))
+          .value?.text,
+        'true'
+      )
       assert.match((await evaluate('ticks')).error ?? '', /ReferenceError: ticks is not defined/u)
       assert.equal((await evaluate('typeof ticks', outside.frames[0]!.id)).value?.text, '"number"')
       // 表达式自己写错了：是一次没求出来的求值，不是调试器的故障。
@@ -314,7 +389,10 @@ void describe('controlling a running debug session', () => {
 
       // 已经结束的会话再结束一次不算错；别的命令说它已经结束了。
       await project.sessions.stopDebugSession({ sessionId }, 1)
-      await assert.rejects(project.sessions.getVariables({ sessionId, objectId: 'x' }, 1), /调试会话已结束/u)
+      await assert.rejects(
+        project.sessions.getVariables({ sessionId, objectId: 'x' }, 1),
+        /调试会话已结束/u
+      )
       assert.equal(project.events.filter((event) => event.type === 'ended').length, 1)
     } finally {
       await project.dispose()
@@ -325,7 +403,10 @@ void describe('controlling a running debug session', () => {
     const project = await createDebugTestProject({ 'main.js': LongRunningScript })
     try {
       const { sessionId } = await project.start(
-        { target: { kind: 'node-script', script: 'main.js' }, breakpoints: [{ path: 'main.js', line: 6 }] },
+        {
+          target: { kind: 'node-script', script: 'main.js' },
+          breakpoints: [{ path: 'main.js', line: 6 }],
+        },
         7
       )
       const paused = await project.next('paused')
@@ -335,10 +416,22 @@ void describe('controlling a running debug session', () => {
       // 别的窗口（8）碰不了它。
       const foreign = 8
       const denied = /调试会话不属于当前项目窗口/u
-      await assert.rejects(project.sessions.controlDebugSession({ sessionId, action: 'continue' }, foreign), denied)
-      await assert.rejects(project.sessions.setBreakpoints({ sessionId, breakpoints: [] }, foreign), denied)
-      await assert.rejects(project.sessions.setExceptionPause({ sessionId, uncaught: true }, foreign), denied)
-      await assert.rejects(project.sessions.getVariables({ sessionId, objectId: scopeId }, foreign), denied)
+      await assert.rejects(
+        project.sessions.controlDebugSession({ sessionId, action: 'continue' }, foreign),
+        denied
+      )
+      await assert.rejects(
+        project.sessions.setBreakpoints({ sessionId, breakpoints: [] }, foreign),
+        denied
+      )
+      await assert.rejects(
+        project.sessions.setExceptionPause({ sessionId, uncaught: true }, foreign),
+        denied
+      )
+      await assert.rejects(
+        project.sessions.getVariables({ sessionId, objectId: scopeId }, foreign),
+        denied
+      )
       await assert.rejects(
         project.sessions.evaluate({ sessionId, expression: 'ticks', frameId: frame.id }, foreign),
         denied
@@ -347,11 +440,18 @@ void describe('controlling a running debug session', () => {
       // 别的窗口关掉也不影响它：还停在原处，自己的窗口照常读得到变量。
       project.sessions.closeSessionsForOwner(foreign)
       assert.equal(
-        (await project.sessions.evaluate({ sessionId, expression: 'typeof ticks', frameId: frame.id }, 7)).value
-          ?.text,
+        (
+          await project.sessions.evaluate(
+            { sessionId, expression: 'typeof ticks', frameId: frame.id },
+            7
+          )
+        ).value?.text,
         '"number"'
       )
-      assert.equal(project.events.some((event) => event.type === 'ended'), false)
+      assert.equal(
+        project.events.some((event) => event.type === 'ended'),
+        false
+      )
 
       // 自己的窗口关掉：调试器断开，之后的命令都说会话已经结束。（进程由那个窗口的终端会话结束；这里的
       // 测试进程没有终端，由 dispose 收掉。）

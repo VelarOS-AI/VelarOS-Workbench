@@ -1,4 +1,4 @@
-import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
+import { TimerScope } from '@velaros-ai/velaros/core/utils/TimerScope'
 
 import type { StandaloneAgentTerminalKind } from './standaloneWorkbenchChatRuntime'
 
@@ -20,10 +20,7 @@ interface AwaitStandaloneAgentStopSettlementInput {
 
 type AbortRequestSettlement =
   | { readonly kind: 'request-accepted' }
-  | Extract<
-      StandaloneAgentStopSettlement,
-      { readonly kind: 'request-rejected' | 'request-error' }
-    >
+  | Extract<StandaloneAgentStopSettlement, { readonly kind: 'request-rejected' | 'request-error' }>
 
 /**
  * Renderer 侧 Stop 的有界协调器。
@@ -38,11 +35,9 @@ export async function awaitStandaloneAgentStopSettlement(
   const timers = new TimerScope({ name: 'WorkbenchChat.stopSettlement' })
   try {
     const timeoutSettlement = new Promise<StandaloneAgentStopSettlement>((resolve) => {
-      timers.after(
-        Math.max(0, input.timeoutMs),
-        () => resolve({ kind: 'timeout' }),
-        { label: 'agent.stop-settlement' }
-      )
+      timers.after(Math.max(0, input.timeoutMs), () => resolve({ kind: 'timeout' }), {
+        label: 'agent.stop-settlement',
+      })
     })
     const terminalSettlement = input.terminalSettlement.then((terminalKind) => ({
       kind: 'terminal' as const,
@@ -51,9 +46,7 @@ export async function awaitStandaloneAgentStopSettlement(
     const abortRequestSettlement = Promise.resolve()
       .then(input.requestAbort)
       .then<AbortRequestSettlement, AbortRequestSettlement>(
-        (accepted) => accepted
-          ? { kind: 'request-accepted' }
-          : { kind: 'request-rejected' },
+        (accepted) => (accepted ? { kind: 'request-accepted' } : { kind: 'request-rejected' }),
         (error: unknown) => ({ kind: 'request-error', error })
       )
 

@@ -1,84 +1,28 @@
 {
   "schemaVersion": 1,
   "repository": "VelarOS-AI/VelarOS-Platform",
-  "tag": "v0.6.90",
-  "sourceCommit": "22d6c472a8a5ada8ff0e3bc8ac89a7e71677b1f5",
+  "tag": "v0.6.107",
+  "sourceCommit": "d6d1e457704d06e4d01d0bec32b90b613a01afc8",
   "packages": [
     {
-      "name": "@velaros-ai/core",
-      "version": "0.4.4",
-      "fileName": "velaros-ai-core-0.4.4.tgz",
-      "sizeBytes": 124967,
-      "sha256": "5aaa32880770fa64b7247824ce93aabf0d184f8818718701feed86f39ba0e72c",
-      "integrity": "sha512-47bbUvpJXPvc58rhGBvT3jd57QVllhcHcV/C1Lz5n9rtfeIlQEXVrWfIOlPjuw82aqB9RoiStddWlEinSsfhBA=="
-    },
-    {
-      "name": "@velaros-ai/kernel",
-      "version": "0.6.2",
-      "fileName": "velaros-ai-kernel-0.6.2.tgz",
-      "sizeBytes": 357031,
-      "sha256": "d1f0015870deb86acea07ebdf21350befa11145cac126877721c21beda6bc12f",
-      "integrity": "sha512-2F6K1kcZtE6N3l3hPXfK1kQe9BeG1dQR9LQF6lLCxl4+98Rj9X35E0clbbkzhvifU30oU+/oDOy6mjvb5sz+7g=="
-    },
-    {
-      "name": "@velaros-ai/context",
-      "version": "0.10.1",
-      "fileName": "velaros-ai-context-0.10.1.tgz",
-      "sizeBytes": 140502,
-      "sha256": "ef984e02b2fd546b2ab03365e75cba89dd48a92fb815ad5eea712b02dbaead70",
-      "integrity": "sha512-strqolgrHVtJ7JP3IB1cNe9L4Z8byVU0x+G7zXKVvv9MhBENkBucJTRDPOwpMstbeUM7mX6gfFBRWlIrjcnI5Q=="
-    },
-    {
-      "name": "@velaros-ai/model",
-      "version": "0.10.3",
-      "fileName": "velaros-ai-model-0.10.3.tgz",
-      "sizeBytes": 210072,
-      "sha256": "b0925154233b6518ec8c1f7d32feb7659792f043e21200d700798e8099bb83d9",
-      "integrity": "sha512-gJzDthC+OXvwCkpwQl9yLjj/3gFSgv1FT5H6p9HakdazDGmK0Z/sGWnnx+zUq8S+ArnhpAwb1/7YCrqy02za8Q=="
-    },
-    {
-      "name": "@velaros-ai/agent",
-      "version": "9.9.4",
-      "fileName": "velaros-ai-agent-9.9.4.tgz",
-      "sizeBytes": 72314,
-      "sha256": "65821b88265bda52ef60200478caaf245f391fc9da2750abe95905a743f9461f",
-      "integrity": "sha512-ydRiYOKdkGm5FbPaUScZu4TRZwZwnfvtZ4rzee3XAlBl4oCiW9Ac8NbgwSYJeDwpwIxOqty4ZUuV84B+M3BmKA=="
-    },
-    {
-      "name": "@velaros-ai/skill-jsts",
-      "version": "0.1.1",
-      "fileName": "velaros-ai-skill-jsts-0.1.1.tgz",
-      "sizeBytes": 2652438,
-      "sha256": "f061e06b6c293fda7bd31a445ebe159a639cb75c1dbaf6d291925f6f43953527",
-      "integrity": "sha512-TKjVkobz175ES/67xw86C6S98Hb0R8Z8+lo9uQvupMdFRDTxR9xSrXTWs+J6mKzgNDlu8B2ndBndquuEY/vpUQ=="
-    },
-    {
-      "name": "@velaros-ai/script",
-      "version": "0.3.8",
-      "fileName": "velaros-ai-script-0.3.8.tgz",
-      "sizeBytes": 3044083,
-      "sha256": "285743debdb51dfab9ef7392419d39be83bb54902d2968419249e13e8d7b9409",
-      "integrity": "sha512-nz3uakZKGK2H0UWZPVuhTpPnU/nllnHa2k56DN5codUJkseRqLTO06V0GcB9GBeG8deslKLxkNI68A2qHiAEYg=="
-    },
-    {
       "name": "@velaros-ai/velaros",
-      "version": "0.6.24",
-      "fileName": "velaros-ai-velaros-0.6.24.tgz",
-      "sizeBytes": 5445787,
-      "sha256": "288641cd25f223ef2bc2259659e1af0d89795e2e01cfa51221ccf4c72056762f",
-      "integrity": "sha512-sJDau81qySzXa4yesI97MYjOXC+TI5keTHJTxziV4U/LzUbFH8AdCbCWEJyyrD33hKB9a4YowZ8aQC21JlW8ow=="
+      "version": "0.6.33",
+      "fileName": "velaros-ai-velaros-0.6.33.tgz",
+      "sizeBytes": 9429427,
+      "sha256": "fade2b27479bfacc67ecdfa46b652ed46ca0b27d3205f9d703c101f1dc4928f2",
+      "integrity": "sha512-z7Xxk57grkDXtenjV1Oydr9cVo9SWheY8TdmxmA8F5ZMpHRtAqaLDEKu1i++gjPy0dFFG2rgbVDbggR3I3kOrg=="
     },
     {
       "name": "@velaros-ai/ui",
-      "version": "0.2.65",
-      "fileName": "velaros-ai-ui-0.2.65.tgz",
-      "sizeBytes": 944383,
-      "sha256": "e6ded834cd00d7739031993425276349004090baa51acfda80f1c3e063179500",
-      "integrity": "sha512-XcBT5O5/19KoS3OjYjg1j/WyPOE2zrR4JsXGfXb8vZ4QDysQ2cnT7BKM64CoBN7o9ER3hYrmdwQ3V61Br7EO1w==",
+      "version": "0.2.73",
+      "fileName": "velaros-ai-ui-0.2.73.tgz",
+      "sizeBytes": 950573,
+      "sha256": "3f485c75cfdea8cf71bb8650e9e5b688a91602582677bebefc32003fb25e4608",
+      "integrity": "sha512-7mcHG+1WEiqswRl73uXXMNxkKUIHVOUv77goMlKDkGfMVpGlpN6BZevfKWP4Fjw13zuBJVcHHnpdVVX2LxIHUg==",
       "source": {
         "repository": "VelarOS-AI/VelarOS-UI",
-        "tag": "v0.2.65",
-        "sourceCommit": "e22737101106c5b389206de924f0085fe7c7b568"
+        "tag": "v0.2.73",
+        "sourceCommit": "f5161e363390c1ee6e9e78eab9112d0ce87ff52d"
       }
     }
   ]

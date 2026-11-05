@@ -7,15 +7,12 @@
  * 编辑器的行号栏、调试会话、调试面板都读这里；改了就通知订阅者。这个模块不在工作区外壳包里，跟着编辑器
  * 和调试面板按需加载。
  */
-import { isArray, isString, Log } from '@velaros-ai/core'
-import { isRecord } from '@velaros-ai/core/utils/unknownJsonRecord'
+import { isArray, isString, Log } from '@velaros-ai/velaros/core'
+import { isRecord } from '@velaros-ai/velaros/core/utils/unknownJsonRecord'
 
 import type { WorkbenchDebuggerBreakpoint } from '@shared/workbenchDebugger'
 
-import {
-  createLocalStorageJsonStore,
-  type StorageLike,
-} from '../../support/localStorageJsonStore'
+import { createLocalStorageJsonStore, type StorageLike } from '../../support/localStorageJsonStore'
 
 export const WORKBENCH_BREAKPOINTS_STORAGE_KEY = 'velaros.workbench.breakpoints.v1'
 

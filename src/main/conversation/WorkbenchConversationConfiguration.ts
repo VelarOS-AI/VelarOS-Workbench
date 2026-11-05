@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 
-import type { AgentModelResolverApi } from '@velaros-ai/model'
-import { createAiSdkModelDriver } from '@velaros-ai/model'
+import type { AgentModelResolverApi } from '@velaros-ai/velaros/model'
+import { createAiSdkModelDriver } from '@velaros-ai/velaros/model'
 
 import type { WorkbenchConversationSendRequest } from '../../shared/workbenchConversation'
 
@@ -44,10 +44,17 @@ export function createWorkbenchConversationConfiguration(
     signal.throwIfAborted()
     // 端点、凭据或模型元数据变化后重新试探；缓存只保存摘要，不能跨会话或路由串用容量。
     const key = createHash('sha256')
-      .update(JSON.stringify([
-        request.sessionId, selection, resolved.providerId, resolved.model,
-        resolved.providerModel, resolved.contextWindow, resolved.modelRequestOptions,
-      ]))
+      .update(
+        JSON.stringify([
+          request.sessionId,
+          selection,
+          resolved.providerId,
+          resolved.model,
+          resolved.providerModel,
+          resolved.contextWindow,
+          resolved.modelRequestOptions,
+        ])
+      )
       .digest('hex')
     const capacity = capacities.get(key) ?? new ConversationContextCapacity(resolved.contextWindow)
     capacities.delete(key)

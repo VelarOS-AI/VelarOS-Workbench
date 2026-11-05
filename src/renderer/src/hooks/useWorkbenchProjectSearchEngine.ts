@@ -21,10 +21,15 @@ import {
 } from '@renderer/models/files/workbenchProjectSearchModel'
 import type { WorkbenchOpenEditorTab } from '@renderer/types/workbenchTypes'
 
-import { AppError } from '@velaros-ai/core/error'
-import { Result } from '@velaros-ai/core/result'
+import { AppError } from '@velaros-ai/velaros/core/error'
+import { Result } from '@velaros-ai/velaros/core/result'
 
-import { type WorkbenchContentSearchFileResult, type WorkbenchContentSearchMatchResult, type WorkbenchSearchContentBatch, type WorkbenchSearchContentRequest } from '@shared/contracts/workbench'
+import {
+  type WorkbenchContentSearchFileResult,
+  type WorkbenchContentSearchMatchResult,
+  type WorkbenchSearchContentBatch,
+  type WorkbenchSearchContentRequest,
+} from '@shared/contracts/workbench'
 import { normalizeWorkbenchTextEol } from '@shared/workbenchTextFormat'
 import {
   compileWorkbenchTextSearch,
@@ -210,24 +215,28 @@ export function useWorkbenchProjectSearchEngine(options: WorkbenchProjectSearchE
   })
 
   /** 收一批结果：搜到的文件与确认在范围里的开着的文件。已经关掉的开着的文件按磁盘重搜。 */
-  const applyBatch = useMemoizedFn((generation: number, batch: WorkbenchSearchContentBatch): void => {
-    if (resultsRef.current.generation !== generation) return
-    setResults((current) => {
-      if (current.generation !== generation) return current
-      const diskFiles = new Map(current.diskFiles)
-      const scopePaths = new Set(current.scopePaths)
-      for (const file of batch.files) {
-        diskFiles.set(file.path, file)
-        scopePaths.add(file.path)
-      }
-      for (const path of batch.openPathsInScope) scopePaths.add(path)
-      return { ...current, diskFiles, scopePaths }
-    })
+  const applyBatch = useMemoizedFn(
+    (generation: number, batch: WorkbenchSearchContentBatch): void => {
+      if (resultsRef.current.generation !== generation) return
+      setResults((current) => {
+        if (current.generation !== generation) return current
+        const diskFiles = new Map(current.diskFiles)
+        const scopePaths = new Set(current.scopePaths)
+        for (const file of batch.files) {
+          diskFiles.set(file.path, file)
+          scopePaths.add(file.path)
+        }
+        for (const path of batch.openPathsInScope) scopePaths.add(path)
+        return { ...current, diskFiles, scopePaths }
+      })
 
-    const openPaths = new Set(openTabsRef.current.filter(isSearchableOpenTab).map((tab) => tab.path))
-    const closed = batch.openPathsInScope.filter((path) => !openPaths.has(path))
-    if (closed.length > 0) void refreshPaths(closed)
-  })
+      const openPaths = new Set(
+        openTabsRef.current.filter(isSearchableOpenTab).map((tab) => tab.path)
+      )
+      const closed = batch.openPathsInScope.filter((path) => !openPaths.has(path))
+      if (closed.length > 0) void refreshPaths(closed)
+    }
+  )
 
   /** 按输入框里的条件重新搜。 */
   const runSearch = useMemoizedFn(async (): Promise<void> => {
@@ -425,7 +434,8 @@ export function useWorkbenchProjectSearchEngine(options: WorkbenchProjectSearchE
         reportReplacement(replacedCounts, replacedPaths.length, readOnlyPaths.length, failures)
         // 替换过的文件等刷新拿回新版本再放开替换按钮：不然紧接着再点一次会拿旧版本去换，被当成外部改过。
         if (refresh === 'all') void runSearch()
-        else await refreshPaths([...diskTargets.map((target) => target.file.path), ...vanishedPaths])
+        else
+          await refreshPaths([...diskTargets.map((target) => target.file.path), ...vanishedPaths])
       } catch (error) {
         messageLatest.current.error({
           title: tLatest.current('workbench.projectSearchReplaceFailed'),
@@ -512,7 +522,9 @@ export function useWorkbenchProjectSearchEngine(options: WorkbenchProjectSearchE
     setAllFilesCollapsed: useMemoizedFn((collapsed: boolean): void => {
       setCollapsedPaths(collapsed ? new Set(files.map((file) => file.path)) : new Set())
     }),
-    toggleEntriesCollapsed: useMemoizedFn((): void => setEntriesCollapsed((collapsed) => !collapsed)),
+    toggleEntriesCollapsed: useMemoizedFn((): void =>
+      setEntriesCollapsed((collapsed) => !collapsed)
+    ),
     refresh: useMemoizedFn((): void => void runSearch()),
     openMatch: useMemoizedFn(
       (

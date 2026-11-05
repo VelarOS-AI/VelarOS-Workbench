@@ -1,8 +1,23 @@
 import * as ts from 'typescript'
 
-import { isPresent } from '@velaros-ai/core'
+import { isPresent } from '@velaros-ai/velaros/core'
 
-import { type WorkbenchLanguageServiceDisplayPart, type WorkbenchLanguageServiceDisplayPartKind, type WorkbenchLanguageServiceDocumentHighlight, type WorkbenchLanguageServiceDocumentSymbol, type WorkbenchLanguageServiceEditFormat, type WorkbenchLanguageServiceHoverResult, type WorkbenchLanguageServiceInlayHint, type WorkbenchLanguageServiceLocation, type WorkbenchLanguageServiceOffsetRange, type WorkbenchLanguageServicePosition, type WorkbenchLanguageServiceRange, type WorkbenchLanguageServiceSemanticToken, type WorkbenchLanguageServiceSignatureHelpResult, type WorkbenchLanguageServiceTextEdit } from '@shared/contracts/workbench'
+import {
+  type WorkbenchLanguageServiceDisplayPart,
+  type WorkbenchLanguageServiceDisplayPartKind,
+  type WorkbenchLanguageServiceDocumentHighlight,
+  type WorkbenchLanguageServiceDocumentSymbol,
+  type WorkbenchLanguageServiceEditFormat,
+  type WorkbenchLanguageServiceHoverResult,
+  type WorkbenchLanguageServiceInlayHint,
+  type WorkbenchLanguageServiceLocation,
+  type WorkbenchLanguageServiceOffsetRange,
+  type WorkbenchLanguageServicePosition,
+  type WorkbenchLanguageServiceRange,
+  type WorkbenchLanguageServiceSemanticToken,
+  type WorkbenchLanguageServiceSignatureHelpResult,
+  type WorkbenchLanguageServiceTextEdit,
+} from '@shared/contracts/workbench'
 
 const DISPLAY_PART_KINDS: readonly WorkbenchLanguageServiceDisplayPartKind[] = [
   'aliasName',
@@ -45,10 +60,7 @@ const TYPESCRIPT_DEFAULT_LIBRARY_API_DOCUMENTATION: Readonly<
 > = {
   'Array.isArray': {
     documentation: 'Determines whether the supplied value is an Array.',
-    tags: [
-      '@param arg The value to test.',
-      '@returns true when arg is an Array; otherwise false.',
-    ],
+    tags: ['@param arg The value to test.', '@returns true when arg is an Array; otherwise false.'],
   },
   'Array.from': {
     documentation: 'Creates a new Array from an iterable or array-like value.',
@@ -240,7 +252,9 @@ function defaultLibraryApiDocumentationAtOffset(
   const definitions = service.getDefinitionAtPosition(fileName, offset) ?? []
   return definitions.some((definition) =>
     /(?:^|[/\\])lib\.[^/\\]+\.d\.ts$/u.test(definition.fileName)
-  ) ? documentation : null
+  )
+    ? documentation
+    : null
 }
 
 const MaxCachedLineMaps = 32
@@ -275,10 +289,11 @@ export function rangeFromTextSpanInContent(
   textSpan: ts.TextSpan
 ): Nullable<WorkbenchLanguageServiceRange> {
   if (
-    textSpan.start < 0
-    || textSpan.length < 0
-    || textSpan.start + textSpan.length > content.length
-  ) return null
+    textSpan.start < 0 ||
+    textSpan.length < 0 ||
+    textSpan.start + textSpan.length > content.length
+  )
+    return null
   const source = lineMapSourceFor(fileName, content)
   const start = ts.getLineAndCharacterOfPosition(source, textSpan.start)
   const end = ts.getLineAndCharacterOfPosition(source, textSpan.start + textSpan.length)
@@ -304,10 +319,11 @@ function rangeFromSourceFileSpan(
   textSpan: ts.TextSpan
 ): Nullable<WorkbenchLanguageServiceRange> {
   if (
-    textSpan.start < 0
-    || textSpan.length < 0
-    || textSpan.start + textSpan.length > sourceFile.text.length
-  ) return null
+    textSpan.start < 0 ||
+    textSpan.length < 0 ||
+    textSpan.start + textSpan.length > sourceFile.text.length
+  )
+    return null
   const start = sourceFile.getLineAndCharacterOfPosition(textSpan.start)
   const end = sourceFile.getLineAndCharacterOfPosition(textSpan.start + textSpan.length)
 
@@ -326,9 +342,10 @@ function isDefaultLibraryFileName(fileName: string): boolean {
 function isIdentifierPropertyName(node: ts.Identifier): boolean {
   const parent = node.parent
   if (
-    (ts.isPropertyAccessExpression(parent) && parent.name === node)
-    || (ts.isQualifiedName(parent) && parent.right === node)
-  ) return true
+    (ts.isPropertyAccessExpression(parent) && parent.name === node) ||
+    (ts.isQualifiedName(parent) && parent.right === node)
+  )
+    return true
   if (ts.isShorthandPropertyAssignment(parent) && parent.name === node) return false
   return (parent as ts.NamedDeclaration).name === node
 }
@@ -344,9 +361,10 @@ function unshadowedDefaultLibrarySymbol(
     : undefined
   const locationSymbol = shorthand ?? checker.getSymbolAtLocation(node)
   if (!locationSymbol) return null
-  const symbol = (locationSymbol.flags & ts.SymbolFlags.Alias) !== 0
-    ? checker.getAliasedSymbol(locationSymbol)
-    : locationSymbol
+  const symbol =
+    (locationSymbol.flags & ts.SymbolFlags.Alias) !== 0
+      ? checker.getAliasedSymbol(locationSymbol)
+      : locationSymbol
   if (symbol.getName() !== node.text) return null
 
   const declarations = symbol.declarations ?? []
@@ -354,7 +372,9 @@ function unshadowedDefaultLibrarySymbol(
     return (symbol.flags & ts.SymbolFlags.Transient) !== 0 ? symbol : null
   return declarations.every((declaration) =>
     isDefaultLibraryFileName(declaration.getSourceFile().fileName)
-  ) ? symbol : null
+  )
+    ? symbol
+    : null
 }
 
 function offsetFromPosition(content: string, position: WorkbenchLanguageServicePosition): number {
@@ -446,10 +466,10 @@ export function mapTypeScriptSymbolKind(
 /** 大纲里不单列的：import 进来的名字，以及没有名字的函数、类（它们里面有东西要列时才留着当外层）。 */
 function isOutlineNoise(node: ts.NavigationTree): boolean {
   return (
-    node.kind === ts.ScriptElementKind.alias
-    || !node.text
-    || node.text === '<function>'
-    || node.text === '<class>'
+    node.kind === ts.ScriptElementKind.alias ||
+    !node.text ||
+    node.text === '<function>' ||
+    node.text === '<class>'
   )
 }
 
@@ -487,7 +507,8 @@ function flattenNavigationTree(
   })
   let listedChildren = false
   for (const child of navigationTreeChildren(node))
-    listedChildren = flattenNavigationTree(child, content, fileName, depth + 1, bucket) || listedChildren
+    listedChildren =
+      flattenNavigationTree(child, content, fileName, depth + 1, bucket) || listedChildren
 
   if (!isOutlineNoise(node) || listedChildren) return true
   bucket.length = index
@@ -529,8 +550,7 @@ export function buildTypeScriptHoverResult({
     displayParts: displayParts.length > 0 ? displayParts : undefined,
     documentation: documentation || undefined,
     documentationParts: documentationParts.length > 0 ? documentationParts : undefined,
-    tags: quickInfo.tags?.map(formatTypeScriptJSDocTag)
-      ?? [...(fallbackDocumentation?.tags ?? [])],
+    tags: quickInfo.tags?.map(formatTypeScriptJSDocTag) ?? [...(fallbackDocumentation?.tags ?? [])],
   }
 }
 
@@ -556,9 +576,10 @@ export function buildTypeScriptSemanticTokens({
 
   const program = service.getProgram?.()
   const programSourceFile = program?.getSourceFile(fileName)
-  const sourceFile = programSourceFile?.text === content
-    ? programSourceFile
-    : ts.createSourceFile(fileName, content, ts.ScriptTarget.Latest, true)
+  const sourceFile =
+    programSourceFile?.text === content
+      ? programSourceFile
+      : ts.createSourceFile(fileName, content, ts.ScriptTarget.Latest, true)
   const checker = programSourceFile === sourceFile ? program?.getTypeChecker() : undefined
   const tokens = new Map<
     string,
@@ -592,24 +613,22 @@ export function buildTypeScriptSemanticTokens({
       type,
       TYPESCRIPT_SEMANTIC_TOKEN_MODIFIERS.filter(
         (_modifier, modifierIndex) => (modifierBits & (1 << modifierIndex)) !== 0
-      ),
+      )
     )
   }
 
   const visit = (node: ts.Node): void => {
     if (
-      TYPESCRIPT_PRIMITIVE_KEYWORD_KINDS.has(node.kind)
-      && (node.flags & ts.NodeFlags.JSDoc) === 0
+      TYPESCRIPT_PRIMITIVE_KEYWORD_KINDS.has(node.kind) &&
+      (node.flags & ts.NodeFlags.JSDoc) === 0
     ) {
       upsertToken(node.getStart(sourceFile), node.getWidth(sourceFile), 'keyword', [], true)
     } else if (
-      checker
-      && ts.isIdentifier(node)
-      && (
-        TYPESCRIPT_GLOBAL_KEYWORD_VALUE_NAMES.has(node.text)
-        || TYPESCRIPT_GLOBAL_BUILTIN_VALUE_NAMES.has(node.text)
-      )
-      && unshadowedDefaultLibrarySymbol(checker, node)
+      checker &&
+      ts.isIdentifier(node) &&
+      (TYPESCRIPT_GLOBAL_KEYWORD_VALUE_NAMES.has(node.text) ||
+        TYPESCRIPT_GLOBAL_BUILTIN_VALUE_NAMES.has(node.text)) &&
+      unshadowedDefaultLibrarySymbol(checker, node)
     ) {
       if (TYPESCRIPT_GLOBAL_KEYWORD_VALUE_NAMES.has(node.text)) {
         upsertToken(node.getStart(sourceFile), node.getWidth(sourceFile), 'keyword', [], true)
@@ -654,10 +673,17 @@ export function buildTypeScriptReferences({
   return references
     .map((reference) => {
       // 行列要照引用所在的那个文件的正文算：它不一定是项目的根文件（被 import 拉进来的、别的包里的）。
-      const referenceContent = reference.fileName === fileName ? content : readFile(reference.fileName)
+      const referenceContent =
+        reference.fileName === fileName ? content : readFile(reference.fileName)
       return referenceContent == null
         ? null
-        : locationFromFileSpan('', toRelativePath, reference.fileName, reference.textSpan, referenceContent)
+        : locationFromFileSpan(
+            '',
+            toRelativePath,
+            reference.fileName,
+            reference.textSpan,
+            referenceContent
+          )
     })
     .filter((location): location is WorkbenchLanguageServiceLocation => location != null)
 }

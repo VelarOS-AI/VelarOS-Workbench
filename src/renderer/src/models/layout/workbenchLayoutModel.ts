@@ -1,10 +1,7 @@
-import { Log } from '@velaros-ai/core'
-import { readNumberScalar as readNumber } from '@velaros-ai/core/utils/unknownJsonRecord'
+import { Log } from '@velaros-ai/velaros/core'
+import { readNumberScalar as readNumber } from '@velaros-ai/velaros/core/utils/unknownJsonRecord'
 
-import {
-  createLocalStorageJsonStore,
-  type StorageLike,
-} from '../../support/localStorageJsonStore'
+import { createLocalStorageJsonStore, type StorageLike } from '../../support/localStorageJsonStore'
 
 import {
   clampWorkbenchPaneSize,

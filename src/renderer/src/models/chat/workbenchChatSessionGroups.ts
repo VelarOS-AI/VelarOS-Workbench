@@ -1,4 +1,4 @@
-import { toNullable } from '@velaros-ai/core'
+import { toNullable } from '@velaros-ai/velaros/core'
 export interface WorkbenchProjectChatGroupCandidate {
   kind: string
   surfaceScope?: LooseOptional<{
@@ -58,8 +58,5 @@ export function isWorkbenchProjectChatGroup(
   const surfaceScope = toNullable(group.surfaceScope)
   if (!surfaceScope) return false
 
-  return (
-    surfaceScope.surface === 'workbench' &&
-    surfaceScope.projectRoot === normalizedProjectRoot
-  )
+  return surfaceScope.surface === 'workbench' && surfaceScope.projectRoot === normalizedProjectRoot
 }

@@ -4,7 +4,7 @@ import path from 'node:path'
 
 import { describe, test } from 'bun:test'
 
-import { AppError } from '@velaros-ai/core/error'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
 import { type WorkbenchReadFileResult } from '@shared/contracts/workbench'
 
@@ -50,7 +50,10 @@ void describe('editor saving', () => {
   })
 
   void test('keeps only the latest few saved snapshots per file', () => {
-    let trail = appendWorkbenchEditorSavedSnapshot([], { base: snapshot('0', 0), saved: snapshot('1', 1) })
+    let trail = appendWorkbenchEditorSavedSnapshot([], {
+      base: snapshot('0', 0),
+      saved: snapshot('1', 1),
+    })
     for (let index = 1; index < 20; index += 1) {
       trail = appendWorkbenchEditorSavedSnapshot(trail, {
         base: trail.at(-1)!.saved,
@@ -66,12 +69,18 @@ void describe('editor saving', () => {
       ['a.ts', { status: 'saved', file: snapshot('a', 1) }],
       ['b.ts', { status: 'skipped' }],
       ['c.ts', { status: 'conflict', change: { status: 'modified', detectedAt: 1 } }],
-      ['d.ts', { status: 'failed', error: new AppError('VALIDATION', '工作台暂不直接编辑符号链接。') }],
+      [
+        'd.ts',
+        { status: 'failed', error: new AppError('VALIDATION', '工作台暂不直接编辑符号链接。') },
+      ],
     ])
     const summary = summarizeWorkbenchEditorSaveResults(results)
 
     assert.deepEqual(summary.savedPaths, ['a.ts'])
-    assert.deepEqual(summary.conflicts.map((item) => item.path), ['c.ts'])
+    assert.deepEqual(
+      summary.conflicts.map((item) => item.path),
+      ['c.ts']
+    )
     assert.deepEqual(
       summary.failures.map((item) => [item.path, item.error.message]),
       [['d.ts', '工作台暂不直接编辑符号链接。']]

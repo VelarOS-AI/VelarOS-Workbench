@@ -1,10 +1,21 @@
-import { AppError } from '@velaros-ai/core/error'
-import type { Result } from '@velaros-ai/core/result'
+import { AppError } from '@velaros-ai/velaros/core/error'
+import type { Result } from '@velaros-ai/velaros/core/result'
 
-import { type WorkbenchCreateEntryRequest, type WorkbenchEntryMutationResult, type WorkbenchLanguageServiceFileEdit, type WorkbenchLanguageServiceNewFile, type WorkbenchReadFileResult, type WorkbenchSaveFileRequest, type WorkbenchSaveFileResult } from '@shared/contracts/workbench'
+import {
+  type WorkbenchCreateEntryRequest,
+  type WorkbenchEntryMutationResult,
+  type WorkbenchLanguageServiceFileEdit,
+  type WorkbenchLanguageServiceNewFile,
+  type WorkbenchReadFileResult,
+  type WorkbenchSaveFileRequest,
+  type WorkbenchSaveFileResult,
+} from '@shared/contracts/workbench'
 
 import { applyWorkbenchLanguageServiceEditsToContent } from './workbenchCodeMirrorLanguageService'
-import { canEditWorkbenchFileContent, resolveWorkbenchEditorEditMode } from './workbenchEditorEditMode'
+import {
+  canEditWorkbenchFileContent,
+  resolveWorkbenchEditorEditMode,
+} from './workbenchEditorEditMode'
 
 /** 语言服务的跨文件改动落不到某个文件的原因。 */
 export type WorkbenchLanguageServiceFileChangeFailureReason =
@@ -25,7 +36,10 @@ export interface WorkbenchLanguageServiceFileChangeFailure {
 export interface WorkbenchLanguageServiceDiskPorts {
   readFile(path: string): Promise<WorkbenchReadFileResult>
   saveFile(
-    request: Pick<WorkbenchSaveFileRequest, 'path' | 'content' | 'expectedModifiedAt' | 'expectedSize'>
+    request: Pick<
+      WorkbenchSaveFileRequest,
+      'path' | 'content' | 'expectedModifiedAt' | 'expectedSize'
+    >
   ): Promise<Result<WorkbenchSaveFileResult>>
 }
 
@@ -45,7 +59,8 @@ export async function writeWorkbenchLanguageServiceFileChange(
     return { path: change.path, reason: 'error', message: AppError.from(error).message }
   }
   if (!canEditWorkbenchFileContent(file)) return { path: change.path, reason: 'unsupported-text' }
-  if (resolveWorkbenchEditorEditMode(file, undefined) !== 'edit') return { path: change.path, reason: 'read-only' }
+  if (resolveWorkbenchEditorEditMode(file, undefined) !== 'edit')
+    return { path: change.path, reason: 'read-only' }
 
   const content = applyWorkbenchLanguageServiceEditsToContent(file.content, change.edits)
   if (content === file.content) return null
@@ -66,7 +81,9 @@ export interface WorkbenchLanguageServiceFileCreationPorts {
   createEntry(
     request: Pick<WorkbenchCreateEntryRequest, 'parentPath' | 'name' | 'type'>
   ): Promise<Result<WorkbenchEntryMutationResult>>
-  saveFile(request: Pick<WorkbenchSaveFileRequest, 'path' | 'content'>): Promise<Result<WorkbenchSaveFileResult>>
+  saveFile(
+    request: Pick<WorkbenchSaveFileRequest, 'path' | 'content'>
+  ): Promise<Result<WorkbenchSaveFileResult>>
 }
 
 export interface WorkbenchLanguageServiceFileCreationResult {

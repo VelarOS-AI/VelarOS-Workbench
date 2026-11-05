@@ -11,9 +11,50 @@
  * 本地历史读。
  * `saveFileSync` 是 beforeunload 兜底路径，走 `ipcRenderer.sendSync` 同步信封。
  */
-import type { ErrorCode } from '@velaros-ai/core/error'
+import type { ErrorCode } from '@velaros-ai/velaros/core/error'
 
-import { type WorkbenchCancelSearchContentRequest, type WorkbenchCopyEntryRequest, type WorkbenchCreateEntryRequest, type WorkbenchDeleteEntryRequest, type WorkbenchDeleteEntryResult, type WorkbenchEntryMutationResult, type WorkbenchFindExistingFilesRequest, type WorkbenchFindExistingFilesResult, type WorkbenchInspectDeleteEntryRequest, type WorkbenchInspectDeleteEntryResult, type WorkbenchListDirectoryRequest, type WorkbenchListDirectoryResult, type WorkbenchListLocalHistoryRequest, type WorkbenchListLocalHistoryResult, type WorkbenchListProjectFilesRequest, type WorkbenchListProjectFilesResult, type WorkbenchMoveEntryRequest, type WorkbenchMoveEntryResult, type WorkbenchReadFileRequest, type WorkbenchReadFileResult, type WorkbenchReadImageFileRequest, type WorkbenchReadImageFileResult, type WorkbenchReadLocalHistorySnapshotRequest, type WorkbenchReadLocalHistorySnapshotResult, type WorkbenchRenameEntryRequest, type WorkbenchReplaceContentRequest, type WorkbenchReplaceContentResult, type WorkbenchRestoreDeletedEntryRequest, type WorkbenchRestoreDeletedEntryResult, type WorkbenchRestoreMissingFileRequest, type WorkbenchRunCommandOutputEvent, type WorkbenchRunCommandRequest, type WorkbenchRunCommandResult, type WorkbenchSaveFileRequest, type WorkbenchSaveFileResult, type WorkbenchSearchContentProgressEvent, type WorkbenchSearchContentRequest, type WorkbenchSearchContentResult, type WorkbenchSearchEntriesRequest, type WorkbenchSearchEntriesResult } from '@shared/contracts/workbench'
+import {
+  type WorkbenchCancelSearchContentRequest,
+  type WorkbenchCopyEntryRequest,
+  type WorkbenchCreateEntryRequest,
+  type WorkbenchDeleteEntryRequest,
+  type WorkbenchDeleteEntryResult,
+  type WorkbenchEntryMutationResult,
+  type WorkbenchFindExistingFilesRequest,
+  type WorkbenchFindExistingFilesResult,
+  type WorkbenchInspectDeleteEntryRequest,
+  type WorkbenchInspectDeleteEntryResult,
+  type WorkbenchListDirectoryRequest,
+  type WorkbenchListDirectoryResult,
+  type WorkbenchListLocalHistoryRequest,
+  type WorkbenchListLocalHistoryResult,
+  type WorkbenchListProjectFilesRequest,
+  type WorkbenchListProjectFilesResult,
+  type WorkbenchMoveEntryRequest,
+  type WorkbenchMoveEntryResult,
+  type WorkbenchReadFileRequest,
+  type WorkbenchReadFileResult,
+  type WorkbenchReadImageFileRequest,
+  type WorkbenchReadImageFileResult,
+  type WorkbenchReadLocalHistorySnapshotRequest,
+  type WorkbenchReadLocalHistorySnapshotResult,
+  type WorkbenchRenameEntryRequest,
+  type WorkbenchReplaceContentRequest,
+  type WorkbenchReplaceContentResult,
+  type WorkbenchRestoreDeletedEntryRequest,
+  type WorkbenchRestoreDeletedEntryResult,
+  type WorkbenchRestoreMissingFileRequest,
+  type WorkbenchRunCommandOutputEvent,
+  type WorkbenchRunCommandRequest,
+  type WorkbenchRunCommandResult,
+  type WorkbenchSaveFileRequest,
+  type WorkbenchSaveFileResult,
+  type WorkbenchSearchContentProgressEvent,
+  type WorkbenchSearchContentRequest,
+  type WorkbenchSearchContentResult,
+  type WorkbenchSearchEntriesRequest,
+  type WorkbenchSearchEntriesResult,
+} from '@shared/contracts/workbench'
 
 export const WorkbenchFsChannels = {
   listDirectory: 'workbench-app:fs:list-directory',
@@ -48,8 +89,7 @@ export const WorkbenchFsChannels = {
  * 编辑器冲突分支（保存撞外部修改）依赖它区分处理。
  */
 export type WorkbenchFsCallResult<TValue> =
-  | { ok: true; value: TValue }
-  | { ok: false; message: string; code?: ErrorCode }
+  { ok: true; value: TValue } | { ok: false; message: string; code?: ErrorCode }
 
 /** preload 通过 contextBridge 暴露给 renderer 的项目工作区桥面。 */
 export interface WorkbenchFsBridge {

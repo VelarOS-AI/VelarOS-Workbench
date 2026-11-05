@@ -3,7 +3,7 @@ import { resolve } from 'node:path'
 import { ipcMain, type WebContents } from 'electron'
 import { z } from 'zod'
 
-import { AppError, createAbortError, createTimeoutError } from '@velaros-ai/core/error'
+import { AppError, createAbortError, createTimeoutError } from '@velaros-ai/velaros/core/error'
 
 import {
   type WorkbenchPeerEvent,

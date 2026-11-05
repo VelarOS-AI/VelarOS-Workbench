@@ -15,7 +15,7 @@ import { join } from 'node:path'
 
 import { describe, test } from 'bun:test'
 
-import { AppError } from '@velaros-ai/core/error'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
 import {
   DefaultWorkbenchDeleteUndoLimits,
@@ -23,9 +23,7 @@ import {
   WorkbenchDeleteUndoStore,
 } from '../src/main/workspace/DeleteUndoStore'
 import { createWorkbenchAppParts } from '../src/main/workspace/Parts'
-import {
-  partitionDeleteResultsByUndo,
-} from '../src/renderer/src/models/files/workbenchTreeMutation'
+import { partitionDeleteResultsByUndo } from '../src/renderer/src/models/files/workbenchTreeMutation'
 
 import { createFakeTrash, type FakeTrash } from './helpers/fakeTrash'
 
@@ -148,8 +146,14 @@ void describe('Workbench delete to trash', () => {
         { ...result, deletedPath: 'big.bin', restoreId: null },
         { ...result, deletedPath: 'small.txt', restoreId: 'id' },
       ])
-      assert.deepEqual(undoable.map((result) => result.deletedPath), ['small.txt'])
-      assert.deepEqual(trashOnly.map((result) => result.deletedPath), ['big.bin'])
+      assert.deepEqual(
+        undoable.map((result) => result.deletedPath),
+        ['small.txt']
+      )
+      assert.deepEqual(
+        trashOnly.map((result) => result.deletedPath),
+        ['big.bin']
+      )
     })
   })
 

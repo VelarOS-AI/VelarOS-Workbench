@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react'
 
-import { isFiniteNumber, isObject,isString, Log } from '@velaros-ai/core'
 import { DefaultBrowserSearchEngine } from '@velaros-ai/velaros/browser/contracts'
+import { isFiniteNumber, isObject, isString, Log } from '@velaros-ai/velaros/core'
 
 import {
   type WorkbenchPermissionConfirmationMode as PermissionConfirmationMode,
@@ -9,28 +9,14 @@ import {
   WorkbenchWebSearchEngines,
 } from '@shared/workbenchConversation'
 
-import {
-  createLocalStorageJsonStore,
-  type StorageLike,
-} from '../support/localStorageJsonStore'
+import { createLocalStorageJsonStore, type StorageLike } from '../support/localStorageJsonStore'
 
 const log = Log.tag('workbench-preferences')
 
-export type WorkbenchThemeId =
-  | 'light-modern'
-  | 'dark-modern'
-  | 'warm-paper'
-  | 'midnight-blue'
+export type WorkbenchThemeId = 'light-modern' | 'dark-modern' | 'warm-paper' | 'midnight-blue'
 export type WorkbenchDensity = 'compact' | 'balanced' | 'comfortable'
 export type WorkbenchAccent =
-  | 'blue'
-  | 'teal'
-  | 'green'
-  | 'amber'
-  | 'orange'
-  | 'rose'
-  | 'violet'
-  | 'slate'
+  'blue' | 'teal' | 'green' | 'amber' | 'orange' | 'rose' | 'violet' | 'slate'
 /** 差异查看器怎么排：改动前后上下合在一栏（unified），或者左右并排（split）。 */
 export type WorkbenchDiffLayout = 'unified' | 'split'
 

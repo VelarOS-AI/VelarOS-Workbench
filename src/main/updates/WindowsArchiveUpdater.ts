@@ -7,8 +7,8 @@ import { AppUpdater } from 'electron-updater'
 import type { DownloadUpdateOptions } from 'electron-updater/out/AppUpdater'
 import { ElectronHttpExecutor } from 'electron-updater/out/electronHttpExecutor.js'
 
-import { isBoolean, isPlainObject, isString, Log } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
+import { isBoolean, isPlainObject, isString, Log } from '@velaros-ai/velaros/core'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
 interface WindowsArchiveUpdaterOptions {
   readonly appId: string

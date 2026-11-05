@@ -908,3 +908,17 @@ main、renderer 总体积与最大功能块。
 `workbenchPageStyles.ts` 按固定顺序合并编号样式段，主题覆写最后加载。
 编号段与聊天壳使用共享类名，其余组件按文件隔离，规则由 `electron.vite.config.ts` 维护。
 静态图标统一位于 `resources/icons/`，`build/` 与 `artifacts/` 是可重建产物。
+
+
+## 开发检查的资源边界
+
+`bun run typecheck` 顺序运行 `tsconfig/node.json` 与 `tsconfig/web.json`，共用
+`tsconfig/base.json`。每个编译进程限制 2GB 内存、45 秒和低 CPU 优先级；超预算时继续拆分。
+`bun run lint` 也按分区和小组顺序运行，单组保持同样的内存与超时限制，避免整树类型程序。
+`bun run format` 只格式化 Git 中本次修改和新增的受支持文件。回归仍用 `bun run test`
+逐文件隔离执行，完整门禁使用 `bun run check`。
+
+运行时消费 Platform v0.6.107 的合并包：Core、Model、Kernel、Script 等均通过
+`@velaros-ai/velaros` 的公开子入口导入，不再并装旧的分包。默认 Agent 子任务继承当前
+模型连接、项目规则与宿主能力范围；主任务、上下文维护和 worker 不设置累计模型用量额度，
+单次 worker 激活上限四小时，父任务取消、真实模型窗口和授权检查继续生效。

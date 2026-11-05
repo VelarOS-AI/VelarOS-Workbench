@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { workbenchHost } from '@renderer/host/WorkbenchHost'
 import { isWorkbenchProjectFileListChange } from '@renderer/models/files/workbenchProjectFileList'
 
-import { Log } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
-import { Result } from '@velaros-ai/core/result'
+import { Log } from '@velaros-ai/velaros/core'
+import { AppError } from '@velaros-ai/velaros/core/error'
+import { Result } from '@velaros-ai/velaros/core/result'
 
 import { type SystemWorkspaceFilesChangedEvent } from '@shared/contracts/system'
 

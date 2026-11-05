@@ -1,7 +1,7 @@
 import { type CSSProperties, type ReactElement } from 'react'
 
-import { isPresent, toOptional } from '@velaros-ai/core'
 import { Text } from '@velaros-ai/ui/primitives/display/Text'
+import { isPresent, toOptional } from '@velaros-ai/velaros/core'
 
 import styles from '../../styles/workbenchPageStyles'
 

@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url'
 
 import { describe, test } from 'bun:test'
 
-import { optionalWhen } from '@velaros-ai/core'
+import { optionalWhen } from '@velaros-ai/velaros/core'
 
 import { ExternalLspClient } from '../src/main/workspace/language/ExternalLspClient'
 import {
@@ -43,11 +43,13 @@ function extensionClient(projectRoot: string, declared = true): ExternalLspClien
     command: process.execPath,
     args: [fixture, 'extension'],
     documentLanguageId: 'protocol-fixture',
-    extensionRequests: optionalWhen(declared, [{
-      id: 'ownership-graph',
-      method: 'velar/ownershipGraph',
-      capabilityPath: ['experimental', 'velar', 'ownershipGraph'],
-    }]),
+    extensionRequests: optionalWhen(declared, [
+      {
+        id: 'ownership-graph',
+        method: 'velar/ownershipGraph',
+        capabilityPath: ['experimental', 'velar', 'ownershipGraph'],
+      },
+    ]),
   })
 }
 
@@ -104,11 +106,11 @@ void describe('external LSP protocol boundaries', () => {
     const client = extensionClient(projectRoot)
     try {
       const path = join(projectRoot, 'main.protocol')
-      const first = await client.requestExtension(path, 'first', 'ownership-graph', {
+      const first = (await client.requestExtension(path, 'first', 'ownership-graph', {
         maximumNodes: 120,
         textDocument: { uri: 'file:///spoofed' },
         version: 999,
-      }) as {
+      })) as {
         params: { maximumNodes: number; textDocument: { uri: string }; version: number }
       }
       assert.equal(first.params.maximumNodes, 120)
@@ -118,7 +120,7 @@ void describe('external LSP protocol boundaries', () => {
 
       const changedPath = join(projectRoot, 'changed.protocol')
       await client.filesChanged([changedPath])
-      const second = await client.requestExtension(path, 'second', 'ownership-graph') as {
+      const second = (await client.requestExtension(path, 'second', 'ownership-graph')) as {
         params: { version: number }
         fileChanges: Array<{ uri: string; type: number }>
       }
@@ -127,13 +129,13 @@ void describe('external LSP protocol boundaries', () => {
       assert.equal(second.fileChanges[0]?.uri.includes('changed.protocol'), true)
       assert.equal(second.fileChanges[0]?.type, 2)
 
-      const preserved = await client.requestExtension(
+      const preserved = (await client.requestExtension(
         path,
         'stale disk content',
         'ownership-graph',
         {},
         true
-      ) as { params: { version: number } }
+      )) as { params: { version: number } }
       assert.equal(preserved.params.version, 2)
     } finally {
       await client.dispose()
@@ -146,11 +148,7 @@ void describe('external LSP protocol boundaries', () => {
     const client = extensionClient(projectRoot, false)
     try {
       await assert.rejects(
-        client.requestExtension(
-          join(projectRoot, 'main.protocol'),
-          '',
-          'ownership-graph'
-        ),
+        client.requestExtension(join(projectRoot, 'main.protocol'), '', 'ownership-graph'),
         /没有声明语言扩展请求/u
       )
     } finally {
@@ -184,7 +182,7 @@ void describe('external LSP process termination', () => {
       // 等到 SIGTERM 处理器真的装上，否则终止信号可能落在 Bun 启动期间。
       await waitForOutput(child.stdout)
       assert.equal(await terminateExternalLspProcessTree(child.pid), true)
-      const [code, signal] = await exit as [number | null, NodeJS.Signals | null]
+      const [code, signal] = (await exit) as [number | null, NodeJS.Signals | null]
       if (process.platform === 'win32') {
         assert.equal(signal, null)
         assert.notEqual(code, null)
@@ -214,7 +212,10 @@ async function waitForOutput(stream: NodeJS.ReadableStream): Promise<void> {
     await Promise.race([
       once(stream, 'data').then(() => undefined),
       new Promise<never>((_resolve, reject) => {
-        timer = setTimeout(() => reject(new Error('Timed out waiting for the fixture process.')), 1_000)
+        timer = setTimeout(
+          () => reject(new Error('Timed out waiting for the fixture process.')),
+          1_000
+        )
       }),
     ])
   } finally {

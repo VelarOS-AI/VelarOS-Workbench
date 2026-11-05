@@ -1,4 +1,4 @@
-import { isEmpty } from '@velaros-ai/core'
+import { isEmpty } from '@velaros-ai/velaros/core'
 
 /**
  * 把命令文本切成 token，给命令执行策略做词法判定用（不是完整的 shell 解析器）。
@@ -134,7 +134,11 @@ function readHeredocMarker(command: string, start: number): { value: string; end
   let index = start
   while (command[index] === ' ' || command[index] === '\t') index += 1
   let raw = ''
-  while (index < command.length && !isWhitespace(command[index]) && !isOperatorStart(command[index])) {
+  while (
+    index < command.length &&
+    !isWhitespace(command[index]) &&
+    !isOperatorStart(command[index])
+  ) {
     raw += command[index]
     index += 1
   }

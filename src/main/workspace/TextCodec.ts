@@ -11,7 +11,7 @@
  * - 换行：统计 CRLF / LF / CR 取占多数的一种（一样多时依次取 LF、CRLF），正文统一成 LF，
  *   保存时换回；混用多种的文件保存会把它们统一成这一种，所以同样只读，等用户选定换行符。
  */
-import { AppError } from '@velaros-ai/core/error'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
 import {
   formatWorkbenchTextEncoding,

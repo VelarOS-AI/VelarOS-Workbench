@@ -5,7 +5,7 @@
  * 类型；任何异常在此降为错误信封（保留 AppError 语义码），renderer 侧再升回 Result。
  * 文件系统面（WorkbenchFsIpc）与语言智能面（WorkbenchLanguageServiceIpc）共用同一套边界纪律。
  */
-import { AppError, type ErrorCode } from '@velaros-ai/core/error'
+import { AppError, type ErrorCode } from '@velaros-ai/velaros/core/error'
 
 import type { WorkbenchFsCallResult } from '../../shared/workbenchFs'
 import { workbenchMainText } from '../i18n/workbenchMainMessages'
@@ -38,15 +38,24 @@ function toFailureEnvelope(error: unknown): { ok: false; message: string; code?:
   return { ok: false, message: error instanceof Error ? error.message : String(error) }
 }
 
-export function hasStringFields(input: unknown, fields: string[]): input is Record<string, unknown> {
+export function hasStringFields(
+  input: unknown,
+  fields: string[]
+): input is Record<string, unknown> {
   return isRecord(input) && fields.every((field) => typeof input[field] === 'string')
 }
 
-export function optionalString(input: Record<string, unknown>, field: string): Record<string, string> {
+export function optionalString(
+  input: Record<string, unknown>,
+  field: string
+): Record<string, string> {
   return typeof input[field] === 'string' ? { [field]: input[field] } : {}
 }
 
-export function optionalNumber(input: Record<string, unknown>, field: string): Record<string, number> {
+export function optionalNumber(
+  input: Record<string, unknown>,
+  field: string
+): Record<string, number> {
   return typeof input[field] === 'number' ? { [field]: input[field] } : {}
 }
 

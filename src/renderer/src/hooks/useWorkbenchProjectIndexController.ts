@@ -4,8 +4,8 @@ import type { WorkbenchOpenFileSnapshot } from '@renderer/models/project/workben
 import type { WorkbenchProject } from '@renderer/models/project/workbenchProjects'
 import { fileLanguage } from '@renderer/models/shared/workbenchUtils'
 
-import { AppError } from '@velaros-ai/core/error'
-import { Result } from '@velaros-ai/core/result'
+import { AppError } from '@velaros-ai/velaros/core/error'
+import { Result } from '@velaros-ai/velaros/core/result'
 
 import { type WorkbenchIndexProjectResult } from '@shared/contracts/workbench'
 

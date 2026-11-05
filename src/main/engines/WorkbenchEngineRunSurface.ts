@@ -1,6 +1,6 @@
-import { isNonBlankString, isPlainObject, isString } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
 import type { InteractionAnswer } from '@velaros-ai/ui/conversation/contracts'
+import { isNonBlankString, isPlainObject, isString } from '@velaros-ai/velaros/core'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
 import {
   ConversationInteractionLimits,
@@ -335,7 +335,8 @@ export class EngineRunSurface {
   /** 输入框里回答一句话的提问：给最近一张还在等的一句话提问卡。 */
   public answerInput(text: string): void {
     const pending = [...this.pending.values()].reverse().find((item) => item.card.kind === 'input')
-    if (!pending) throw new AppError('VALIDATION', workbenchMainText('conversation.noPendingQuestion'))
+    if (!pending)
+      throw new AppError('VALIDATION', workbenchMainText('conversation.noPendingQuestion'))
     this.answer(pending.card.id, { text })
   }
 
@@ -357,7 +358,9 @@ export class EngineRunSurface {
       const abort = (): void => {
         if (!this.pending.has(projection.id)) return
         this.expireInteraction(projection.id)
-        reject(signal.reason ?? new AppError('CANCELLED', workbenchMainText('conversation.runStopped')))
+        reject(
+          signal.reason ?? new AppError('CANCELLED', workbenchMainText('conversation.runStopped'))
+        )
       }
       this.pending.set(projection.id, {
         card: projection,
@@ -377,7 +380,9 @@ export class EngineRunSurface {
   }
 
   /** 引擎自己撤回了请求（它那边取消了），或运行停下：卡按失效收掉。 */
-  public cancelInteractions(reason: unknown = new AppError('CANCELLED', workbenchMainText('engines.requestWithdrawn'))): void {
+  public cancelInteractions(
+    reason: unknown = new AppError('CANCELLED', workbenchMainText('engines.requestWithdrawn'))
+  ): void {
     for (const [id, pending] of [...this.pending]) {
       this.expireInteraction(id)
       pending.reject(reason)

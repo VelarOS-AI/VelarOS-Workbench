@@ -11,7 +11,7 @@
 import { resolve } from 'node:path'
 import { Worker } from 'node:worker_threads'
 
-import { AppError } from '@velaros-ai/core/error'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
 import { type WorkbenchSearchContentBatch } from '@shared/contracts/workbench'
 

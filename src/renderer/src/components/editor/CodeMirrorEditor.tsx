@@ -258,9 +258,22 @@ import {
 import { useStandaloneWorkbenchModelConfig } from '@renderer/runtime/standaloneWorkbenchModelConfig'
 import type { WorkbenchOpenEditorTab } from '@renderer/types/workbenchTypes'
 
-import { isEmpty, isPresent, Log, optionalWhen, toNullable, toOptional } from '@velaros-ai/core'
+import {
+  isEmpty,
+  isPresent,
+  Log,
+  optionalWhen,
+  toNullable,
+  toOptional,
+} from '@velaros-ai/velaros/core'
 
-import { type WorkbenchLanguageServiceCodeAction, type WorkbenchLanguageServiceDiagnostic, type WorkbenchLanguageServiceEditFormat, type WorkbenchLanguageServiceFileEdit, type WorkbenchLanguageServiceLocation } from '@shared/contracts/workbench'
+import {
+  type WorkbenchLanguageServiceCodeAction,
+  type WorkbenchLanguageServiceDiagnostic,
+  type WorkbenchLanguageServiceEditFormat,
+  type WorkbenchLanguageServiceFileEdit,
+  type WorkbenchLanguageServiceLocation,
+} from '@shared/contracts/workbench'
 
 import { useWorkbenchEditorRunDebugExtension } from '../../hooks/useWorkbenchEditorRunDebug'
 import { useWorkbenchEditorVimExtension } from '../../hooks/useWorkbenchEditorVim'
@@ -738,7 +751,8 @@ function createWorkbenchCompletionSource({
       position: context.pos,
       path,
       localResult,
-      request: () => getWorkbenchLanguageServiceCompletions({ ...requestBase, position }, hostRuntime),
+      request: () =>
+        getWorkbenchLanguageServiceCompletions({ ...requestBase, position }, hostRuntime),
       resolve: (item) =>
         resolveWorkbenchLanguageServiceCompletion({ ...requestBase, position, item }, hostRuntime),
     })
@@ -770,15 +784,18 @@ function createWorkbenchLanguageServiceLinter({
       if (getActivePath() !== path) return []
 
       const generation = ++requestGeneration
-      const result = await getWorkbenchLanguageServiceDiagnostics({
-        ...buildWorkbenchLanguageServiceRequestBase({
-          projectRoot,
-          path,
-          language,
-          content: view.state.doc.toString(),
-          openTabs: getOpenTabs(),
-        }),
-      }, hostRuntime)
+      const result = await getWorkbenchLanguageServiceDiagnostics(
+        {
+          ...buildWorkbenchLanguageServiceRequestBase({
+            projectRoot,
+            path,
+            language,
+            content: view.state.doc.toString(),
+            openTabs: getOpenTabs(),
+          }),
+        },
+        hostRuntime
+      )
       // 请求返回时若已切走当前文件，同样丢弃结果。
       if (generation !== requestGeneration || !result.ok || getActivePath() !== path) return []
 
@@ -786,20 +803,23 @@ function createWorkbenchLanguageServiceLinter({
         (diagnostic) => diagnostic.path === path
       )
 
-      const codeActions = usesWorkbenchExternalSemanticLanguageService(path)
-        && languageServiceDiagnostics.length > 0
-        ? await getWorkbenchLanguageServiceCodeActions({
-            ...buildWorkbenchLanguageServiceRequestBase({
-              projectRoot,
-              path,
-              language,
-              content: view.state.doc.toString(),
-              openTabs: getOpenTabs(),
-            }),
-            range: enclosingDiagnosticRange(languageServiceDiagnostics),
-            diagnostics: languageServiceDiagnostics,
-          }, hostRuntime)
-        : null
+      const codeActions =
+        usesWorkbenchExternalSemanticLanguageService(path) && languageServiceDiagnostics.length > 0
+          ? await getWorkbenchLanguageServiceCodeActions(
+              {
+                ...buildWorkbenchLanguageServiceRequestBase({
+                  projectRoot,
+                  path,
+                  language,
+                  content: view.state.doc.toString(),
+                  openTabs: getOpenTabs(),
+                }),
+                range: enclosingDiagnosticRange(languageServiceDiagnostics),
+                diagnostics: languageServiceDiagnostics,
+              },
+              hostRuntime
+            )
+          : null
       if (generation !== requestGeneration || getActivePath() !== path) return []
       const availableActions = codeActions?.ok ? codeActions.data.actions : []
       const actionContent = view.state.doc.toString()
@@ -854,21 +874,32 @@ function codeMirrorActionsForDiagnostic(
   if (!diagnosticOffsets) return []
   return actions.flatMap((action) => {
     if (action.changes.length !== 1 || action.changes[0]?.path !== path) return []
-    const edits = action.changes[0].edits.flatMap((edit) => {
-      const range = languageServiceRangeToOffsets(content, edit.range)
-      return range ? [{ ...range, insert: edit.newText }] : []
-    }).sort((left, right) => left.from - right.from || left.to - right.to)
-    if (edits.length === 0 || edits.some((edit, index) => index > 0 && edit.from < edits[index - 1]!.to))
+    const edits = action.changes[0].edits
+      .flatMap((edit) => {
+        const range = languageServiceRangeToOffsets(content, edit.range)
+        return range ? [{ ...range, insert: edit.newText }] : []
+      })
+      .sort((left, right) => left.from - right.from || left.to - right.to)
+    if (
+      edits.length === 0 ||
+      edits.some((edit, index) => index > 0 && edit.from < edits[index - 1]!.to)
+    )
       return []
-    if (!edits.some((edit) => edit.from <= diagnosticOffsets.to && edit.to >= diagnosticOffsets.from))
+    if (
+      !edits.some((edit) => edit.from <= diagnosticOffsets.to && edit.to >= diagnosticOffsets.from)
+    )
       return []
-    return [{
-      name: action.title,
-      apply: (targetView: EditorView) => {
-        if (targetView.state.readOnly || targetView.state.doc.toString() !== content) return
-        targetView.dispatch({ changes: edits.map((edit) => ({ from: edit.from, to: edit.to, insert: edit.insert })) })
+    return [
+      {
+        name: action.title,
+        apply: (targetView: EditorView) => {
+          if (targetView.state.readOnly || targetView.state.doc.toString() !== content) return
+          targetView.dispatch({
+            changes: edits.map((edit) => ({ from: edit.from, to: edit.to, insert: edit.insert })),
+          })
+        },
       },
-    }]
+    ]
   })
 }
 
@@ -937,9 +968,9 @@ const workbenchIndentGuideExtension = ViewPlugin.fromClass(
 
     public update(update: ViewUpdate): void {
       if (
-        update.docChanged
-        || update.viewportChanged
-        || update.startState.tabSize !== update.state.tabSize
+        update.docChanged ||
+        update.viewportChanged ||
+        update.startState.tabSize !== update.state.tabSize
       ) {
         this.decorations = this.buildDecorations(update.view)
       }
@@ -990,16 +1021,13 @@ function isTypeScriptEditorPath(path: Nullable<string>): boolean {
 
 function isRunnableEditorPath(path: Nullable<string>): boolean {
   return (
-    WorkbenchRunnableEditorExtensions.has(editorPathExtension(path))
-    || isWorkbenchVelarFilePath(path)
+    WorkbenchRunnableEditorExtensions.has(editorPathExtension(path)) ||
+    isWorkbenchVelarFilePath(path)
   )
 }
 
 /** 「运行」：TypeScript 走 tsx，Python 走 python3，JS 按 Node 直接执行。 */
-function buildWorkbenchRunFileCommand(
-  path: string,
-  packageManager: PackageManagerCommand
-): string {
+function buildWorkbenchRunFileCommand(path: string, packageManager: PackageManagerCommand): string {
   if (isWorkbenchVelarFilePath(path)) return buildWorkbenchVelarRunCommand(path, packageManager)
   if (isTypeScriptEditorPath(path)) return `npx tsx "${path}"`
   if (['py', 'pyw'].includes(editorPathExtension(path))) return `python3 "${path}"`
@@ -1301,20 +1329,21 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
     const projectRootRef = useLatest(projectRoot)
     const completionModel = useStandaloneWorkbenchModelConfig().completionModel
     // 只读、禁用或补全模型为“无”时不请求内联补全；ViewPlugin 每次调用时实时读取。
-    const inlineCompletionEnabledRef = useLatest(
-      !!completionModel.trim() && !readOnly && !disabled
-    )
+    const inlineCompletionEnabledRef = useLatest(!!completionModel.trim() && !readOnly && !disabled)
     const inlineCompletionRuntime = useMemo<WorkbenchInlineCompletionRuntime>(
       () => ({
         isEnabled: () => inlineCompletionEnabledRef.current,
         request: async ({ prefix, suffix }) => {
-          const result = await getWorkbenchInlineCompletion({
-            projectRoot: projectRootRef.current,
-            path: pathRef.current,
-            language: languageSupportRef.current.languageId || 'plaintext',
-            prefix,
-            suffix,
-          }, hostRuntimeRef.current)
+          const result = await getWorkbenchInlineCompletion(
+            {
+              projectRoot: projectRootRef.current,
+              path: pathRef.current,
+              language: languageSupportRef.current.languageId || 'plaintext',
+              prefix,
+              suffix,
+            },
+            hostRuntimeRef.current
+          )
           return result.ok ? result.data.completion || null : null
         },
       }),
@@ -1556,21 +1585,14 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
           if (viewRef.current !== view) return
           view.dom.classList.remove('cm-workbenchMetricsRefreshing')
           if (measure.comment) {
-            setCommentDraft((current) =>
-              current ? { ...current, ...measure.comment } : current
-            )
+            setCommentDraft((current) => (current ? { ...current, ...measure.comment } : current))
           }
           if (measure.rename) {
             setRenamePopup((current) => (current ? { ...current, ...measure.rename } : current))
           }
         },
       })
-    }, [
-      commentDraftRef,
-      editorMetricsCompartment,
-      editorMetricsExtension,
-      renamePopupRef,
-    ])
+    }, [commentDraftRef, editorMetricsCompartment, editorMetricsExtension, renamePopupRef])
 
     const commentEditLabelRef = useLatest(t('workbench.editorCommentEdit'))
     const commentSaveLabelRef = useLatest(t('workbench.editorCommentSave'))
@@ -1620,7 +1642,8 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       const currentPath = pathRef.current
       const anchors = !currentPath
         ? []
-        : commentStore.listForPath(projectRootRef.current, currentPath)
+        : commentStore
+            .listForPath(projectRootRef.current, currentPath)
             .map((comment) =>
               anchorFromLineRange(view.state.doc, comment.id, comment.startLine, comment.endLine)
             )
@@ -1682,49 +1705,51 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
     const semanticLanguageService = path && usesWorkbenchSemanticLanguageService(path)
 
     const languageServiceHoverExtension = useMemo(
-      () => createWorkbenchLanguageServiceHoverTooltip(
-        languageServiceContext,
-        workbenchEditorLanguageFeatureClasses,
-        semanticLanguageService ? undefined : (view, position) => {
-          const diagnosticRange = collectDiagnosticsAtPosition(view, position)
-          const word = getIdentifierAt(view.state, position)
-          const target = !word
-            ? null
-            : findWorkbenchDefinitionTarget({
-                word: word.text,
-                path: pathRef.current,
-                projectContextIndex: projectContextIndexRef.current,
-              })
-          if (!diagnosticRange && (!word || !target)) return null
+      () =>
+        createWorkbenchLanguageServiceHoverTooltip(
+          languageServiceContext,
+          workbenchEditorLanguageFeatureClasses,
+          semanticLanguageService
+            ? undefined
+            : (view, position) => {
+                const diagnosticRange = collectDiagnosticsAtPosition(view, position)
+                const word = getIdentifierAt(view.state, position)
+                const target = !word
+                  ? null
+                  : findWorkbenchDefinitionTarget({
+                      word: word.text,
+                      path: pathRef.current,
+                      projectContextIndex: projectContextIndexRef.current,
+                    })
+                if (!diagnosticRange && (!word || !target)) return null
 
-          return {
-            pos: diagnosticRange?.from ?? word!.from,
-            end: diagnosticRange?.to ?? word!.to,
-            above: true,
-            create: () => ({
-              dom: buildWorkbenchEditorHoverDom(
-                {
-                  diagnostics: diagnosticRange?.diagnostics,
-                  symbolFallback:
-                    word && target
-                      ? {
-                          word: word.text,
-                          path: target.path,
-                          line: target.line,
-                          column: target.column,
-                        }
-                      : null,
-                },
-                workbenchEditorLanguageFeatureClasses
-              ),
-            }),
-          }
-        }
-      ),
+                return {
+                  pos: diagnosticRange?.from ?? word!.from,
+                  end: diagnosticRange?.to ?? word!.to,
+                  above: true,
+                  create: () => ({
+                    dom: buildWorkbenchEditorHoverDom(
+                      {
+                        diagnostics: diagnosticRange?.diagnostics,
+                        symbolFallback:
+                          word && target
+                            ? {
+                                word: word.text,
+                                path: target.path,
+                                line: target.line,
+                                column: target.column,
+                              }
+                            : null,
+                      },
+                      workbenchEditorLanguageFeatureClasses
+                    ),
+                  }),
+                }
+              }
+        ),
       [languageServiceContext, pathRef, projectContextIndexRef, semanticLanguageService]
     )
     const languageServiceExtensions = useMemo(() => {
-
       let syncedInlayHintOpenFiles: Nullable<Map<string, string>> = null
 
       return [
@@ -1754,16 +1779,19 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
           path && usesWorkbenchSemanticLanguageService(path)
             ? {
                 request: async (content, position) => {
-                  const result = await getWorkbenchLanguageServiceDocumentHighlights({
-                    ...buildWorkbenchLanguageServiceRequestBase({
-                      projectRoot,
-                      path,
-                      language,
-                      content,
-                      openTabs: openTabsLatest.current,
-                    }),
-                    position,
-                  }, hostRuntime)
+                  const result = await getWorkbenchLanguageServiceDocumentHighlights(
+                    {
+                      ...buildWorkbenchLanguageServiceRequestBase({
+                        projectRoot,
+                        path,
+                        language,
+                        content,
+                        openTabs: openTabsLatest.current,
+                      }),
+                      position,
+                    },
+                    hostRuntime
+                  )
                   return result.ok && result.data.path === path ? result.data.highlights : null
                 },
               }
@@ -1783,9 +1811,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
             const syncOpenFiles =
               !syncedInlayHintOpenFiles ||
               syncedInlayHintOpenFiles.size !== siblingOpenTabs.length ||
-              siblingOpenTabs.some(
-                (tab) => syncedInlayHintOpenFiles?.get(tab.path) !== tab.content
-              )
+              siblingOpenTabs.some((tab) => syncedInlayHintOpenFiles?.get(tab.path) !== tab.content)
             if (syncOpenFiles) {
               syncedInlayHintOpenFiles = new Map(
                 siblingOpenTabs.map((tab) => [tab.path, tab.content])
@@ -1800,11 +1826,14 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
             })
             if (!syncOpenFiles) delete request.openFiles
 
-            const result = await getWorkbenchLanguageServiceInlayHints({
-              ...request,
-              ranges: [...ranges],
-              syncOpenFiles,
-            }, hostRuntime)
+            const result = await getWorkbenchLanguageServiceInlayHints(
+              {
+                ...request,
+                ranges: [...ranges],
+                syncOpenFiles,
+              },
+              hostRuntime
+            )
 
             return result.ok && result.data.path === path ? result.data.hints : []
           },
@@ -1925,11 +1954,12 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
           }
           const definitionResult = await getWorkbenchLanguageServiceDefinition(request, hostRuntime)
           if (
-            requestGeneration !== definitionRequestGenerationRef.current
-            || viewRef.current !== view
-            || view.state.doc !== sourceDocument
-            || pathRef.current !== currentPath
-          ) return
+            requestGeneration !== definitionRequestGenerationRef.current ||
+            viewRef.current !== view ||
+            view.state.doc !== sourceDocument ||
+            pathRef.current !== currentPath
+          )
+            return
           const definitions = definitionResult.ok ? definitionResult.data.locations : []
           const location = definitions[0]
           if (location) {
@@ -1938,13 +1968,16 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
             const isDefinition = definitions.some((definition) =>
               sameWorkbenchSymbolLocation(origin, definition)
             )
-            callbacksRef.current.onOpenSymbolLocations?.(buildWorkbenchSymbolLocationsRequest({
-              symbol: identifier.text,
-              origin,
-              destination: optionalWhen(!isDefinition, location),
-              definitions,
-              references: [],
-            }), isDefinition)
+            callbacksRef.current.onOpenSymbolLocations?.(
+              buildWorkbenchSymbolLocationsRequest({
+                symbol: identifier.text,
+                origin,
+                destination: optionalWhen(!isDefinition, location),
+                definitions,
+                references: [],
+              }),
+              isDefinition
+            )
 
             if (!isDefinition)
               callbacksRef.current.onGoToDefinition(location.path, location.line, location.column)
@@ -1952,30 +1985,35 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
             // Definition navigation must not wait for a project-wide reference scan. Fill the
             // panel in after the jump/open has happened, while rejecting results for an edited,
             // replaced, or superseded source document.
-            void getWorkbenchLanguageServiceReferences(request, hostRuntime).then((referencesResult) => {
-              if (
-                !referencesResult.ok
-                || requestGeneration !== definitionRequestGenerationRef.current
-                || viewRef.current !== view
-                || view.state.doc !== sourceDocument
-                || pathRef.current !== currentPath
-              ) return
-              callbacksRef.current.onOpenSymbolLocations?.(buildWorkbenchSymbolLocationsRequest({
-                symbol: identifier.text,
-                origin,
-                destination: optionalWhen(!isDefinition, location),
-                definitions,
-                references: referencesResult.data.locations,
-              }))
-            }).catch((error) => {
-              if (requestGeneration !== definitionRequestGenerationRef.current) return
-              log.debug('查询语言服务引用失败，保留定义跳转结果', {
-                projectRoot,
-                path: currentPath,
-                language,
-                error,
+            void getWorkbenchLanguageServiceReferences(request, hostRuntime)
+              .then((referencesResult) => {
+                if (
+                  !referencesResult.ok ||
+                  requestGeneration !== definitionRequestGenerationRef.current ||
+                  viewRef.current !== view ||
+                  view.state.doc !== sourceDocument ||
+                  pathRef.current !== currentPath
+                )
+                  return
+                callbacksRef.current.onOpenSymbolLocations?.(
+                  buildWorkbenchSymbolLocationsRequest({
+                    symbol: identifier.text,
+                    origin,
+                    destination: optionalWhen(!isDefinition, location),
+                    definitions,
+                    references: referencesResult.data.locations,
+                  })
+                )
               })
-            })
+              .catch((error) => {
+                if (requestGeneration !== definitionRequestGenerationRef.current) return
+                log.debug('查询语言服务引用失败，保留定义跳转结果', {
+                  projectRoot,
+                  path: currentPath,
+                  language,
+                  error,
+                })
+              })
             return
           }
         } catch (error) {
@@ -2032,17 +2070,20 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
 
       if (pathRef.current) {
         try {
-          const result = await getWorkbenchLanguageServiceRename({
-            ...buildWorkbenchLanguageServiceRequestBase({
-              projectRoot,
-              path: pathRef.current,
-              language,
-              content: view.state.doc.toString(),
-              openTabs: openTabsLatest.current,
-            }),
-            position: positionLineColumnFromState(view.state, identifier.from),
-            newName: nextName,
-          }, hostRuntime)
+          const result = await getWorkbenchLanguageServiceRename(
+            {
+              ...buildWorkbenchLanguageServiceRequestBase({
+                projectRoot,
+                path: pathRef.current,
+                language,
+                content: view.state.doc.toString(),
+                openTabs: openTabsLatest.current,
+              }),
+              position: positionLineColumnFromState(view.state, identifier.from),
+              newName: nextName,
+            },
+            hostRuntime
+          )
           if (result.ok && !isEmpty(result.data.changes)) {
             const currentFileChange = pathRef.current
               ? result.data.changes.find((change) => change.path === pathRef.current)
@@ -2175,16 +2216,19 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       // 后端统一按「项目 Prettier 优先 / 内置规则回退」返回整篇格式化编辑，前端只负责应用。
       const content = view.state.doc.toString()
       try {
-        const result = await getWorkbenchLanguageServiceFormat({
-          ...buildWorkbenchLanguageServiceRequestBase({
-            projectRoot,
-            path: pathRef.current,
-            language,
-            content,
-            openTabs: openTabsLatest.current,
-            format: editFormatRef.current,
-          }),
-        }, hostRuntime)
+        const result = await getWorkbenchLanguageServiceFormat(
+          {
+            ...buildWorkbenchLanguageServiceRequestBase({
+              projectRoot,
+              path: pathRef.current,
+              language,
+              content,
+              openTabs: openTabsLatest.current,
+              format: editFormatRef.current,
+            }),
+          },
+          hostRuntime
+        )
         const currentFileChange =
           result.ok && pathRef.current
             ? result.data.changes.find((change) => change.path === pathRef.current)
@@ -2258,7 +2302,10 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
     }, [contextMenu])
 
     /** 右键菜单里编辑器命令的一项：名字在左，所选键位方案下这个命令的键在右（没有键就只有名字）。 */
-    const commandMenuLabel = (command: WorkbenchEditorKeymapCommandId, label: string): ReactNode => {
+    const commandMenuLabel = (
+      command: WorkbenchEditorKeymapCommandId,
+      label: string
+    ): ReactNode => {
       const hint = formatWorkbenchEditorCommandHint(command, keymapPreset)
       return (
         <>
@@ -2363,7 +2410,8 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
      */
     const saveFromEditor = async (view: EditorView): Promise<void> => {
       if (!view.state.readOnly) {
-        if (readWorkbenchPreferences().editorFormatOnSave) await editorActionsRef.current.formatDocument()
+        if (readWorkbenchPreferences().editorFormatOnSave)
+          await editorActionsRef.current.formatDocument()
         const whitespace = buildWorkbenchSaveWhitespaceChanges(view.state, editorConfigRef.current)
         if (whitespace.length > 0) view.dispatch({ changes: whitespace })
       }
@@ -2581,11 +2629,11 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
           public update(update: ViewUpdate): void {
             const open = isWorkbenchEditorFindOpen(update.state)
             if (
-              open !== isWorkbenchEditorFindOpen(update.startState)
-              || (open
-                && (update.docChanged
-                  || update.selectionSet
-                  || getSearchQuery(update.state) !== getSearchQuery(update.startState)))
+              open !== isWorkbenchEditorFindOpen(update.startState) ||
+              (open &&
+                (update.docChanged ||
+                  update.selectionSet ||
+                  getSearchQuery(update.state) !== getSearchQuery(update.startState)))
             )
               this.schedule()
           }
@@ -2736,8 +2784,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       const saved = key
         ? fileStatesRef.current.take(key, {
             owner: instance,
-            snapshot: () =>
-              viewRef.current ? snapshotFileState(viewRef.current, instance) : null,
+            snapshot: () => (viewRef.current ? snapshotFileState(viewRef.current, instance) : null),
           })
         : undefined
       if (saved) {
@@ -2863,17 +2910,20 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         const word = selection.empty ? view.state.wordAt(selection.head) : null
         findAnchorRef.current = word?.from ?? selection.from
       }
-      if (find.inSelection !== (previous?.inSelection ?? false) || (fileChanged && find.inSelection))
+      if (
+        find.inSelection !== (previous?.inSelection ?? false) ||
+        (fileChanged && find.inSelection)
+      )
         setWorkbenchEditorFindScope(view, find.inSelection)
       applyWorkbenchEditorFind(view, find)
       // 查找词或开关项变了才边打边找、挪选区；只是换到另一个文件时不动它的光标，只高亮匹配。
       const searchChanged =
-        !previous
-        || previous.query !== find.query
-        || previous.caseSensitive !== find.caseSensitive
-        || previous.wholeWord !== find.wholeWord
-        || previous.regexp !== find.regexp
-        || previous.inSelection !== find.inSelection
+        !previous ||
+        previous.query !== find.query ||
+        previous.caseSensitive !== find.caseSensitive ||
+        previous.wholeWord !== find.wholeWord ||
+        previous.regexp !== find.regexp ||
+        previous.inSelection !== find.inSelection
       if (searchChanged && !(fileChanged && previous))
         selectWorkbenchEditorFindMatchFrom(view, findAnchorRef.current)
     }, [find, path, projectRoot])
@@ -2884,11 +2934,12 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       const location = symbolLocations?.activeLocation
       const currentPath = path?.replaceAll('\\', '/').replace(/^\.\//u, '')
       const locationPath = location?.path.replaceAll('\\', '/').replace(/^\.\//u, '')
-      const pathMatches = !!currentPath && !!locationPath && (
-        currentPath === locationPath
-        || currentPath.endsWith(`/${locationPath}`)
-        || locationPath.endsWith(`/${currentPath}`)
-      )
+      const pathMatches =
+        !!currentPath &&
+        !!locationPath &&
+        (currentPath === locationPath ||
+          currentPath.endsWith(`/${locationPath}`) ||
+          locationPath.endsWith(`/${currentPath}`))
       if (!view || !container || !location || !pathMatches) {
         setSymbolLocationsAnchor(null)
         return undefined
@@ -2915,10 +2966,10 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
           bottom: coords.bottom - boundary.top,
         }
         setSymbolLocationsAnchor((current) =>
-          current
-          && current.left === nextAnchor.left
-          && current.top === nextAnchor.top
-          && current.bottom === nextAnchor.bottom
+          current &&
+          current.left === nextAnchor.left &&
+          current.top === nextAnchor.top &&
+          current.bottom === nextAnchor.bottom
             ? current
             : nextAnchor
         )
@@ -2939,7 +2990,11 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
     }, [path, symbolLocations, value])
 
     useEffect(() => {
-      reconfigureCompartment(viewRef.current, languageHoverCompartment, languageServiceHoverExtension)
+      reconfigureCompartment(
+        viewRef.current,
+        languageHoverCompartment,
+        languageServiceHoverExtension
+      )
     }, [languageHoverCompartment, languageServiceHoverExtension])
 
     // Git 改动标记只拿属于当前文件的 HEAD 全文对照。每个文件的状态里各有一份对照，切文件时新文件的 HEAD
@@ -3049,7 +3104,9 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
       const fullSyntaxReady = !!fullLanguage && view.state.facet(languageFacet) === fullLanguage
       view.dispatch({
         effects: [
-          languageCompartment.reconfigure(fullSyntaxReady ? languageExtension : basicLanguageExtension),
+          languageCompartment.reconfigure(
+            fullSyntaxReady ? languageExtension : basicLanguageExtension
+          ),
           languageServiceCompartment.reconfigure([]),
         ],
       })
@@ -3074,9 +3131,7 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
           cancelSemanticIdle = requestWorkbenchEditorIdleTask(() => {
             if (viewRef.current !== view) return
             view.dispatch({
-              effects: [
-                languageServiceCompartment.reconfigure(languageServiceExtensions),
-              ],
+              effects: [languageServiceCompartment.reconfigure(languageServiceExtensions)],
             })
           })
         },
@@ -3099,7 +3154,11 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
     ])
 
     useEffect(() => {
-      reconfigureCompartment(viewRef.current, packageScriptRunCompartment, packageScriptRunExtension)
+      reconfigureCompartment(
+        viewRef.current,
+        packageScriptRunCompartment,
+        packageScriptRunExtension
+      )
     }, [packageScriptRunCompartment, packageScriptRunExtension])
 
     useEffect(() => {
@@ -3135,23 +3194,24 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
           onContextMenu={openEditorContextMenu}
         />
         {!!(
-          containerRef.current
-          && symbolLocations
-          && symbolLocationsAnchor
-          && onCloseSymbolLocations
-          && onNavigateSymbolLocation
-        ) && createPortal(
-          <EditorSymbolLocationsPanel
-            anchor={symbolLocationsAnchor}
-            boundaryRef={containerRef}
-            projectRoot={projectRoot}
-            state={symbolLocations}
-            onClose={onCloseSymbolLocations}
-            onNavigate={onNavigateSymbolLocation}
-            onFocusEditor={() => viewRef.current?.focus()}
-          />,
-          containerRef.current
-        )}
+          containerRef.current &&
+          symbolLocations &&
+          symbolLocationsAnchor &&
+          onCloseSymbolLocations &&
+          onNavigateSymbolLocation
+        ) &&
+          createPortal(
+            <EditorSymbolLocationsPanel
+              anchor={symbolLocationsAnchor}
+              boundaryRef={containerRef}
+              projectRoot={projectRoot}
+              state={symbolLocations}
+              onClose={onCloseSymbolLocations}
+              onNavigate={onNavigateSymbolLocation}
+              onFocusEditor={() => viewRef.current?.focus()}
+            />,
+            containerRef.current
+          )}
         {!!contextMenu && (
           <div
             ref={contextMenuRef}
@@ -3318,8 +3378,9 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
           </div>
         )}
         {codeActions.overlay}
-        {!!symbolNavigation.overlay && !!containerRef.current
-          && createPortal(symbolNavigation.overlay, containerRef.current)}
+        {!!symbolNavigation.overlay &&
+          !!containerRef.current &&
+          createPortal(symbolNavigation.overlay, containerRef.current)}
         {!!renamePopup && (
           <RenameInputPopup
             initial={renamePopup.identifier.text}

@@ -1,4 +1,4 @@
-import type { ModelPricingCatalog } from '@velaros-ai/model/contracts'
+import type { ModelPricingCatalog } from '@velaros-ai/velaros/model/contracts'
 
 export const WorkbenchAccountChannels = {
   getState: 'workbench-app:account:get-state',

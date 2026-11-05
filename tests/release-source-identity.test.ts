@@ -6,17 +6,11 @@ import path from 'node:path'
 
 import { describe, test } from 'bun:test'
 
-import {
-  readReleaseVersions,
-  validateReleaseSource,
-} from '../scripts/release/releaseIdentity.mjs'
+import { readReleaseVersions, validateReleaseSource } from '../scripts/release/releaseIdentity.mjs'
 
 async function createReleaseRepository() {
   const root = await mkdtemp(path.join(tmpdir(), 'workbench-source-'))
-  await writeFile(
-    path.join(root, 'package.json'),
-    '{"name":"root","version":"0.3.0"}\n'
-  )
+  await writeFile(path.join(root, 'package.json'), '{"name":"root","version":"0.3.0"}\n')
   await writeFile(
     path.join(root, 'bun.lock'),
     `{
@@ -75,46 +69,37 @@ void describe('release source identity', () => {
     const { root, sourceSha } = await createReleaseRepository()
     await writeFile(
       path.join(root, 'package.json'),
-      '{"name":"root","version":"0.3.0","dependencies":{"@velaros-ai/core":"link:@velaros-ai/core"}}\n'
+      '{"name":"root","version":"0.3.0","dependencies":{"@velaros-ai/velaros":"link:@velaros-ai/velaros"}}\n'
     )
     await writeFile(
       path.join(root, 'bun.lock'),
       `{
         "workspaces": {
-          "": { "name": "root", "dependencies": { "@velaros-ai/core": "link:@velaros-ai/core" } },
+          "": { "name": "root", "dependencies": { "@velaros-ai/velaros": "link:@velaros-ai/velaros" } },
         },
       }\n`
     )
 
     await assert.rejects(
       validateReleaseSource({ repoRoot: root, releaseTag: 'v0.3.0', sourceSha }),
-      /published dependency versions[\s\S]*dependencies\.@velaros-ai\/core link:@velaros-ai\/core/
+      /published dependency versions[\s\S]*dependencies\.@velaros-ai\/velaros link:@velaros-ai\/velaros/
     )
   })
 
   void test('rejects a root manifest without the Workbench version', async () => {
     const { root } = await createReleaseRepository()
-    await writeFile(
-      path.join(root, 'package.json'),
-      '{"name":"root"}\n'
-    )
-    await assert.rejects(
-      readReleaseVersions(root),
-      /Workbench version is missing/
-    )
+    await writeFile(path.join(root, 'package.json'), '{"name":"root"}\n')
+    await assert.rejects(readReleaseVersions(root), /Workbench version is missing/)
   })
 
   void test('rejects dependency maps that drift from the immutable lock', async () => {
     const { root } = await createReleaseRepository()
     await writeFile(
       path.join(root, 'package.json'),
-      '{"name":"root","version":"0.3.0","dependencies":{"@velaros-ai/core":"^0.3.0"}}\n'
+      '{"name":"root","version":"0.3.0","dependencies":{"@velaros-ai/velaros":"^0.3.0"}}\n'
     )
 
-    await assert.rejects(
-      readReleaseVersions(root),
-      /dependencies must exactly match package\.json/
-    )
+    await assert.rejects(readReleaseVersions(root), /dependencies must exactly match package\.json/)
   })
 })
 

@@ -46,7 +46,10 @@ void describe('Workbench commit panel', () => {
     assert.equal(item('src/theirs.ts').group, 'conflicted')
     assert.equal(getWorkbenchGitChangeItemTone(item('src/both.ts')), 'conflicted')
     assert.deepEqual(
-      buildCommitPanelGroups(items).map((group) => [group.id, group.items.map((entry) => entry.path)]),
+      buildCommitPanelGroups(items).map((group) => [
+        group.id,
+        group.items.map((entry) => entry.path),
+      ]),
       [
         ['conflicted', ['src/both.ts', 'src/theirs.ts']],
         ['staged', ['src/added.ts', 'src/moved.ts', 'src/partly.ts']],
@@ -86,10 +89,13 @@ void describe('Workbench commit panel', () => {
       items.filter((entry) => isCommitPanelRollbackDeletion(entry)).map((entry) => entry.path),
       ['src/added.ts', 'notes.md']
     )
-    assert.deepEqual(summarizeCommitPanelCommitAll(items.filter((entry) => entry.group !== 'conflicted')), {
-      count: 5,
-      untracked: 1,
-    })
+    assert.deepEqual(
+      summarizeCommitPanelCommitAll(items.filter((entry) => entry.group !== 'conflicted')),
+      {
+        count: 5,
+        untracked: 1,
+      }
+    )
   })
 
   void test('asks before committing everything and names untracked files in the question', () => {
@@ -159,7 +165,10 @@ void describe('Workbench commit panel', () => {
     // 原地更新，内容没变就连状态都不换。
     const panel = readSource('src/renderer/src/components/git/WorkbenchGitToolPanel.tsx')
     const hook = readSource('src/renderer/src/hooks/useWorkbenchGitLog.ts')
-    assert.match(panel, /useWorkbenchGitLog\(\{ workspaceRoot, branch: logBranch, enabled: isRepository, revision \}\)/)
+    assert.match(
+      panel,
+      /useWorkbenchGitLog\(\{\s*workspaceRoot,\s*branch: logBranch,\s*enabled: isRepository,\s*revision,?\s*\}\)/
+    )
     assert.doesNotMatch(`${panel}\n${hook}`, /setLogLoading\(true\)|setIsLoading\(true\)/)
     assert.match(hook, /isLoading: enabled && !current,/)
     assert.match(

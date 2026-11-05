@@ -22,8 +22,8 @@ import { readFile } from 'node:fs/promises'
 import { dirname, isAbsolute, resolve, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
-import { Log } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
+import { Log } from '@velaros-ai/velaros/core'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
 import type {
   WorkbenchDebuggerBreakpoint,
@@ -499,8 +499,7 @@ export class WorkbenchDebugSession {
         return
       case 'Runtime.executionContextCreated': {
         const context = event.params.context as
-          | { id?: number; auxData?: { isDefault?: boolean } }
-          | undefined
+          { id?: number; auxData?: { isDefault?: boolean } } | undefined
         if (context?.auxData?.isDefault && typeof context.id === 'number')
           this.mainContextId ??= context.id
         return
@@ -780,8 +779,9 @@ export class WorkbenchDebugSession {
     const hitIds = ((params.hitBreakpoints as string[] | undefined) ?? []).map(String)
     const reasons =
       params.reason === 'ambiguous'
-        ? (((params.data as { reasons?: Array<{ reason?: string }> } | undefined)?.reasons ?? [])
-            .map((item) => item.reason ?? 'other'))
+        ? (
+            (params.data as { reasons?: Array<{ reason?: string }> } | undefined)?.reasons ?? []
+          ).map((item) => item.reason ?? 'other')
         : [String(params.reason)]
 
     // 入口断点停一次就够了：此刻这个文件的脚本已经解析过、映射的断点也下好了（事件是按顺序处理的）。
@@ -936,7 +936,10 @@ export class WorkbenchDebugSession {
         : (frames.slice(1).find((frame) => !this.isSkippedWhenStepping(frame.location)) ?? null)
     if (this.temporaryBreakpointIds.size === 0) {
       if (target) await this.setTemporaryBreakpointsIn(target)
-      if (this.stepAction === 'step-into' && frames.some((frame) => this.isModuleLoaderFrame(frame)))
+      if (
+        this.stepAction === 'step-into' &&
+        frames.some((frame) => this.isModuleLoaderFrame(frame))
+      )
         await this.setModuleEntryBreakpoint()
     }
     const armed = this.temporaryBreakpointIds.size > 0

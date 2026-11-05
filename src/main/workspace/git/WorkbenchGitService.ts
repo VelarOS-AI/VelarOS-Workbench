@@ -7,12 +7,50 @@ import { promisify } from 'node:util'
 
 import { execa } from 'execa'
 
-import { optionalWhen, toOptional } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
 import { type AppLocale } from '@velaros-ai/ui/conversation/contracts'
+import { optionalWhen, toOptional } from '@velaros-ai/velaros/core'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
-import { type SystemWorkspaceGitActionResult, type SystemWorkspaceGitBlameResult, type SystemWorkspaceGitCommitMessageResult, type SystemWorkspaceGitCommitResult, type SystemWorkspaceGitCreateBranchResult, type SystemWorkspaceGitDiffResult, type SystemWorkspaceGitFileActionResult, type SystemWorkspaceGitFileAtCommitResult, type SystemWorkspaceGitHunkActionResult, type SystemWorkspaceGitInitializeRepositoryResult, type SystemWorkspaceGitLineStatsSnapshot, type SystemWorkspaceGitLogResult, type SystemWorkspaceGitOperationResult, type SystemWorkspaceGitStashActionResult, type SystemWorkspaceGitStashListResult, type SystemWorkspaceGitStashResult, type SystemWorkspaceGitSummary, type SystemWorkspaceGitSwitchBranchResult, type WorkspaceGitBranch, type WorkspaceGitCommitResult, type WorkspaceGitDiffOptions, type WorkspaceGitFileAction, type WorkspaceGitFileStatusEntry, type WorkspaceGitLineStats, type WorkspaceGitLogEntry, type WorkspaceGitLogOptions, type WorkspaceGitRemoteAction, type WorkspaceGitRemoteActionResult, type WorkspaceGitStatusResult } from '@shared/contracts/system'
-import { type WorkspaceGitDetachedHead, type WorkspaceGitHunkActionOptions, type WorkspaceGitOperationRequest, type WorkspaceGitRef, type WorkspaceGitRemoteActionOptions, type WorkspaceGitStashAction, type WorkspaceGitStashOptions } from '@shared/contracts/workspaceGit'
+import {
+  type SystemWorkspaceGitActionResult,
+  type SystemWorkspaceGitBlameResult,
+  type SystemWorkspaceGitCommitMessageResult,
+  type SystemWorkspaceGitCommitResult,
+  type SystemWorkspaceGitCreateBranchResult,
+  type SystemWorkspaceGitDiffResult,
+  type SystemWorkspaceGitFileActionResult,
+  type SystemWorkspaceGitFileAtCommitResult,
+  type SystemWorkspaceGitHunkActionResult,
+  type SystemWorkspaceGitInitializeRepositoryResult,
+  type SystemWorkspaceGitLineStatsSnapshot,
+  type SystemWorkspaceGitLogResult,
+  type SystemWorkspaceGitOperationResult,
+  type SystemWorkspaceGitStashActionResult,
+  type SystemWorkspaceGitStashListResult,
+  type SystemWorkspaceGitStashResult,
+  type SystemWorkspaceGitSummary,
+  type SystemWorkspaceGitSwitchBranchResult,
+  type WorkspaceGitBranch,
+  type WorkspaceGitCommitResult,
+  type WorkspaceGitDiffOptions,
+  type WorkspaceGitFileAction,
+  type WorkspaceGitFileStatusEntry,
+  type WorkspaceGitLineStats,
+  type WorkspaceGitLogEntry,
+  type WorkspaceGitLogOptions,
+  type WorkspaceGitRemoteAction,
+  type WorkspaceGitRemoteActionResult,
+  type WorkspaceGitStatusResult,
+} from '@shared/contracts/system'
+import {
+  type WorkspaceGitDetachedHead,
+  type WorkspaceGitHunkActionOptions,
+  type WorkspaceGitOperationRequest,
+  type WorkspaceGitRef,
+  type WorkspaceGitRemoteActionOptions,
+  type WorkspaceGitStashAction,
+  type WorkspaceGitStashOptions,
+} from '@shared/contracts/workspaceGit'
 import {
   hasWorkspaceGitConflictMarkers,
   isWorkspaceGitConflictEntry,
@@ -33,10 +71,7 @@ import {
   workbenchMainText,
   workbenchMainTextIn,
 } from '../../i18n/workbenchMainMessages'
-import {
-  getRelativePathInsideRoot,
-  toPortableRelativePath,
-} from '../PathContainmentHelper'
+import { getRelativePathInsideRoot, toPortableRelativePath } from '../PathContainmentHelper'
 import { decodeWorkbenchTextContent, encodeWorkbenchText } from '../TextCodec'
 
 import type {
@@ -242,9 +277,7 @@ export class WorkbenchGitService {
     }
   }
 
-  public async getLineStats(
-    workspaceRoot: string
-  ): Promise<SystemWorkspaceGitLineStatsSnapshot> {
+  public async getLineStats(workspaceRoot: string): Promise<SystemWorkspaceGitLineStatsSnapshot> {
     const rootPath = await this.resolveRoot(workspaceRoot)
     try {
       const repository = await this.openRepository(rootPath)
@@ -301,10 +334,7 @@ export class WorkbenchGitService {
             paths.map((path) => this.toLiteralPathspec(path))
           )
         : await this.readWorkingDiff(rootPath, options.side, paths)
-    const maxChars = Math.min(
-      Math.max(options.maxChars ?? DefaultDiffMaxChars, 500),
-      MaxDiffChars
-    )
+    const maxChars = Math.min(Math.max(options.maxChars ?? DefaultDiffMaxChars, 500), MaxDiffChars)
     return {
       rootPath,
       scope: options.commitSha
@@ -492,12 +522,15 @@ export class WorkbenchGitService {
     const selection = paths?.length
       ? this.scopeStatus(status, this.normalizePathspecs(rootPath, paths))
       : status
-    if (selection.isClean) throw new AppError('VALIDATION', workbenchMainText('git.nothingSelectedToCommit'))
+    if (selection.isClean)
+      throw new AppError('VALIDATION', workbenchMainText('git.nothingSelectedToCommit'))
     const operation = await this.readOperationToCommit(repository)
     if (operation && selection.changedFiles < status.changedFiles)
       throw new AppError(
         'VALIDATION',
-        workbenchMainText('git.partialCommitDuringOperation', { operation: workbenchMainText(operation) })
+        workbenchMainText('git.partialCommitDuringOperation', {
+          operation: workbenchMainText(operation),
+        })
       )
 
     const parent = await this.readHeadCommit(rootPath)
@@ -566,9 +599,7 @@ export class WorkbenchGitService {
     parent: Nullable<string>,
     commitMessage: Nullable<string>
   ): Promise<SystemWorkspaceGitCommitResult> {
-    const commitSha = (
-      await this.runGit(rootPath, ['rev-parse', '--verify', 'HEAD'])
-    ).stdout.trim()
+    const commitSha = (await this.runGit(rootPath, ['rev-parse', '--verify', 'HEAD'])).stdout.trim()
     // 行数按提交实际带走的算：提交钩子可能又改了文件。
     const lineStats = this.parseNumstat(
       (
@@ -606,7 +637,8 @@ export class WorkbenchGitService {
     const rootPath = await this.resolveRoot(workspaceRoot)
     const repository = await this.openRepository(rootPath)
     const relativePaths = this.normalizePathspecs(rootPath, paths)
-    if (relativePaths.length === 0) throw new AppError('VALIDATION', workbenchMainText('git.noFilesGiven'))
+    if (relativePaths.length === 0)
+      throw new AppError('VALIDATION', workbenchMainText('git.noFilesGiven'))
     const before = await this.getStatus(repository)
     const entries = relativePaths.flatMap(
       (path) => before.entries.find((candidate) => candidate.path === path) ?? []
@@ -670,16 +702,15 @@ export class WorkbenchGitService {
     const rootPath = await this.resolveRoot(workspaceRoot)
     const repository = await this.openRepository(rootPath)
     const path = this.normalizePathspec(rootPath, options.path)
-    if (options.hunks.length === 0) throw new AppError('VALIDATION', workbenchMainText('git.noHunksGiven'))
+    if (options.hunks.length === 0)
+      throw new AppError('VALIDATION', workbenchMainText('git.noHunksGiven'))
     const entry = (await this.getStatus(repository)).entries.find(
       (candidate) => candidate.path === path
     )
-    if (!entry) throw new AppError('VALIDATION', workbenchMainText('git.fileHasNoChanges', { path }))
+    if (!entry)
+      throw new AppError('VALIDATION', workbenchMainText('git.fileHasNoChanges', { path }))
     if (isWorkspaceGitConflictEntry(entry))
-      throw new AppError(
-        'VALIDATION',
-        workbenchMainText('git.hunkConflict', { path })
-      )
+      throw new AppError('VALIDATION', workbenchMainText('git.hunkConflict', { path }))
 
     const side = options.action === 'unstage' ? 'staged' : 'unstaged'
     const diff = await this.readWorkingDiff(
@@ -693,16 +724,10 @@ export class WorkbenchGitService {
     const [patch] = patches
     if (!patch || patches.length > 1) throw this.hunksChangedError(path)
     if (isWorkbenchGitWholeFilePatch(patch))
-      throw new AppError(
-        'VALIDATION',
-        workbenchMainText('git.hunkWholeFileOnly', { path })
-      )
+      throw new AppError('VALIDATION', workbenchMainText('git.hunkWholeFileOnly', { path }))
     // 输出里有替换字符：文件不是 UTF-8，照读到的文字拼回补丁会改坏内容。
     if (diff.includes(ReplacementCharacter))
-      throw new AppError(
-        'VALIDATION',
-        workbenchMainText('git.hunkNotUtf8', { path })
-      )
+      throw new AppError('VALIDATION', workbenchMainText('git.hunkNotUtf8', { path }))
     const hunks = options.hunks.map((selector) =>
       patch.hunks.find((hunk) => isSameWorkbenchGitHunk(hunk, selector))
     )
@@ -730,10 +755,7 @@ export class WorkbenchGitService {
   }
 
   private hunksChangedError(path: string): AppError {
-    return new AppError(
-      'VALIDATION',
-      workbenchMainText('git.hunkChanged', { path })
-    )
+    return new AppError('VALIDATION', workbenchMainText('git.hunkChanged', { path }))
   }
 
   public async initialize(
@@ -756,11 +778,8 @@ export class WorkbenchGitService {
     const rootPath = await this.resolveRoot(workspaceRoot)
     const targetBranch = this.assertBranch(branch)
     const previousBranch = await this.getCurrentBranch(rootPath)
-    const args = options.create
-      ? ['switch', '--create', targetBranch]
-      : ['switch', targetBranch]
-    if (options.create && options.startPoint)
-      args.push(this.assertRevision(options.startPoint))
+    const args = options.create ? ['switch', '--create', targetBranch] : ['switch', targetBranch]
+    if (options.create && options.startPoint) args.push(this.assertRevision(options.startPoint))
     const result = await this.runGit(rootPath, args, { allowFailure: true })
     if (result.failed) {
       const output = this.readableGitOutput(result)
@@ -872,7 +891,8 @@ export class WorkbenchGitService {
         ['rev-parse', '-q', '--verify', `refs/heads/${actionBranch}`],
         { allowFailure: true }
       )
-      if (exists.failed) throw new AppError(
+      if (exists.failed)
+        throw new AppError(
           'VALIDATION',
           workbenchMainText('git.branchMissing', { branch: actionBranch })
         )
@@ -1018,10 +1038,7 @@ export class WorkbenchGitService {
         output
       )
     )
-      return new AppError(
-        'PERMISSION',
-        workbenchMainText('git.authFailed', { detail })
-      )
+      return new AppError('PERMISSION', workbenchMainText('git.authFailed', { detail }))
     if (
       /could not resolve host|failed to connect|connection (?:timed out|refused|reset)|network is unreachable|operation timed out|could not read from remote repository/i.test(
         output
@@ -1029,15 +1046,9 @@ export class WorkbenchGitService {
     )
       return new AppError('NETWORK', workbenchMainText('git.networkFailed', { detail }))
     if (/\[rejected\]|non-fast-forward|\(fetch first\)|updates were rejected/i.test(output))
-      return new AppError(
-        'VALIDATION',
-        workbenchMainText('git.pushRejected')
-      )
+      return new AppError('VALIDATION', workbenchMainText('git.pushRejected'))
     if (/not possible to fast-forward|diverging branches can't be fast-forwarded/i.test(output))
-      return new AppError(
-        'VALIDATION',
-        workbenchMainText('git.pullDiverged')
-      )
+      return new AppError('VALIDATION', workbenchMainText('git.pullDiverged'))
     const overwritten = /would be overwritten by (?:merge|checkout)/i.test(output)
     if (overwritten) {
       const files = output
@@ -1055,15 +1066,9 @@ export class WorkbenchGitService {
       )
     }
     if (/cannot (?:pull with rebase|rebase)|your index contains uncommitted changes/i.test(output))
-      return new AppError(
-        'VALIDATION',
-        workbenchMainText('git.rebasePullDirty')
-      )
+      return new AppError('VALIDATION', workbenchMainText('git.rebasePullDirty'))
     if (/unmerged files|not concluded your merge|merge_head exists/i.test(output))
-      return new AppError(
-        'VALIDATION',
-        workbenchMainText('git.mergeUnfinished')
-      )
+      return new AppError('VALIDATION', workbenchMainText('git.mergeUnfinished'))
     return new AppError(
       'PLATFORM',
       detail
@@ -1090,11 +1095,7 @@ export class WorkbenchGitService {
       .map((remote) => remote.trim())
       .filter(Boolean)
     if (remotes.length === 1) return remotes[0]
-    if (remotes.length === 0)
-      throw new AppError(
-        'VALIDATION',
-        workbenchMainText('git.noRemote')
-      )
+    if (remotes.length === 0) throw new AppError('VALIDATION', workbenchMainText('git.noRemote'))
     throw new AppError(
       'VALIDATION',
       workbenchMainText('git.ambiguousRemote', {
@@ -1331,10 +1332,7 @@ export class WorkbenchGitService {
   ): Promise<WorkspaceGitStatusResult> {
     // 变基停在冲突处时提交会把这一步的改动提交到分离的 HEAD 上，打乱变基；要用「继续」接着变基，或者放弃它。
     if ((await this.operations.readState(repository))?.kind === 'rebase')
-      throw new AppError(
-        'VALIDATION',
-        workbenchMainText('git.rebaseInProgress')
-      )
+      throw new AppError('VALIDATION', workbenchMainText('git.rebaseInProgress'))
     const status = await this.getStatus(repository)
     if (status.isClean) throw new AppError('VALIDATION', workbenchMainText('git.nothingToCommit'))
     const conflicts = status.entries.filter((entry) => isWorkspaceGitConflictEntry(entry))
@@ -1380,7 +1378,9 @@ export class WorkbenchGitService {
         )
       ).stdout
     )
-    const kept = new Set(staged.filter((change) => change.status !== 'D').map((change) => change.path))
+    const kept = new Set(
+      staged.filter((change) => change.status !== 'D').map((change) => change.path)
+    )
     const indexEntries = (
       await this.runGit(rootPath, ['ls-files', '--stage', '--full-name', '-z', '--', '.'], {
         maxBuffer: GitListingMaxBytes,
@@ -1395,7 +1395,8 @@ export class WorkbenchGitService {
     ).stdout
       .split(/\r?\n/)
       .map((line) => line.trim())
-    if (!topLevel || !gitDirectory) throw new AppError('PLATFORM', workbenchMainText('git.repositoryLocationUnknown'))
+    if (!topLevel || !gitDirectory)
+      throw new AppError('PLATFORM', workbenchMainText('git.repositoryLocationUnknown'))
     const env = { GIT_INDEX_FILE: join(gitDirectory, `velaros-commit-${randomUUID()}.index`) }
     try {
       await this.runGit(topLevel, ['read-tree', parent ?? '--empty'], { env })
@@ -1423,11 +1424,9 @@ export class WorkbenchGitService {
     base: string
   ): Promise<boolean> {
     const names = (
-      await this.runGit(
-        rootPath,
-        ['diff', '--cached', '--name-only', '-z', '--no-renames', base],
-        { maxBuffer: GitListingMaxBytes }
-      )
+      await this.runGit(rootPath, ['diff', '--cached', '--name-only', '-z', '--no-renames', base], {
+        maxBuffer: GitListingMaxBytes,
+      })
     ).stdout
     return names.split('\0').some((path) => !!path && !path.startsWith(prefix))
   }
@@ -1563,9 +1562,7 @@ export class WorkbenchGitService {
         path,
         indexStatus,
         workTreeStatus,
-        originalPath: toOptional(
-          originalToken ? this.toProjectPath(prefix, originalToken) : null
-        ),
+        originalPath: toOptional(originalToken ? this.toProjectPath(prefix, originalToken) : null),
       })
     }
     return this.summarizeStatus(branchInfo, entries)
@@ -1583,9 +1580,8 @@ export class WorkbenchGitService {
       ...branchInfo,
       isClean: entries.length === 0,
       changedFiles: entries.length,
-      stagedFiles: settled.filter(
-        (entry) => entry.indexStatus !== ' ' && entry.indexStatus !== '?'
-      ).length,
+      stagedFiles: settled.filter((entry) => entry.indexStatus !== ' ' && entry.indexStatus !== '?')
+        .length,
       unstagedFiles: settled.filter(
         (entry) => entry.workTreeStatus !== ' ' && entry.workTreeStatus !== '?'
       ).length,
@@ -1604,9 +1600,7 @@ export class WorkbenchGitService {
   private parseBranchHeader(
     raw: string
   ): Pick<WorkspaceGitStatusResult, 'branch' | 'detachedHead' | 'upstream' | 'ahead' | 'behind'> {
-    const normalized = raw
-      .replace(/^No commits yet on /i, '')
-      .replace(/^Initial commit on /i, '')
+    const normalized = raw.replace(/^No commits yet on /i, '').replace(/^Initial commit on /i, '')
     const [branchPart = '', meta = ''] = normalized.split(' [', 2)
     const [branchName = '', upstream = ''] = branchPart.split('...', 2)
     return {
@@ -1630,11 +1624,7 @@ export class WorkbenchGitService {
    * `log --follow --name-status -z` 的输出：每个提交是 `\x1e<字段>\0\n<状态>\0<路径>\0`，改名是
    * `R<相似度>\0<旧路径>\0<新路径>\0`，路径相对仓库根。从新往旧读，记着文件在更早的提交里叫什么。
    */
-  private parseFileLog(
-    raw: string,
-    prefix: string,
-    currentPath: string
-  ): WorkspaceGitLogEntry[] {
+  private parseFileLog(raw: string, prefix: string, currentPath: string): WorkspaceGitLogEntry[] {
     const commits: WorkspaceGitLogEntry[] = []
     let pathInCommit = currentPath
     for (const record of raw.split('\x1e')) {
@@ -1750,7 +1740,7 @@ export class WorkbenchGitService {
     const entry = status.entries[0]
     const target =
       status.entries.length === 1
-        ? entry?.path.split('/').findLast(Boolean) ?? 'workspace'
+        ? (entry?.path.split('/').findLast(Boolean) ?? 'workspace')
         : workbenchMainTextIn(locale, 'git.commitMessageFiles', { count: status.entries.length })
     const key: WorkbenchMainMessageKey =
       entry?.indexStatus === 'A' || entry?.indexStatus === '?'
@@ -1783,7 +1773,11 @@ export class WorkbenchGitService {
       .map((entry) => workbenchMainText('git.quotedPath', { path: entry.path }))
       .join(workbenchMainText('git.listSeparator'))
     return entries.length > 5
-      ? workbenchMainText('git.pathsMore', { names, count: entries.length, rest: entries.length - 5 })
+      ? workbenchMainText('git.pathsMore', {
+          names,
+          count: entries.length,
+          rest: entries.length - 5,
+        })
       : names
   }
 
@@ -1810,13 +1804,14 @@ export class WorkbenchGitService {
     return `:(literal)${path}`
   }
 
-  private normalizePathspecs(
-    rootPath: string,
-    paths: ReadonlyArray<string | undefined>
-  ): string[] {
-    return [...new Set(paths.filter((path): path is string => !!path).map((path) =>
-      this.normalizePathspec(rootPath, path)
-    ))]
+  private normalizePathspecs(rootPath: string, paths: ReadonlyArray<string | undefined>): string[] {
+    return [
+      ...new Set(
+        paths
+          .filter((path): path is string => !!path)
+          .map((path) => this.normalizePathspec(rootPath, path))
+      ),
+    ]
   }
 
   private normalizePathspec(rootPath: string, path: string): string {
@@ -1852,10 +1847,12 @@ export class WorkbenchGitService {
   }
 
   private async resolveRoot(workspaceRoot: string): Promise<string> {
-    if (!workspaceRoot.trim()) throw new AppError('VALIDATION', workbenchMainText('git.rootRequired'))
+    if (!workspaceRoot.trim())
+      throw new AppError('VALIDATION', workbenchMainText('git.rootRequired'))
     const rootPath = await realpath(resolve(workspaceRoot))
     const rootStat = await stat(rootPath)
-    if (!rootStat.isDirectory()) throw new AppError('VALIDATION', workbenchMainText('git.rootMissing'))
+    if (!rootStat.isDirectory())
+      throw new AppError('VALIDATION', workbenchMainText('git.rootMissing'))
     return rootPath
   }
 
@@ -2029,11 +2026,7 @@ export class WorkbenchGitService {
     return args.find((arg) => !arg.startsWith('-')) ?? ''
   }
 
-  private throwGitFailure(
-    args: string[],
-    result: GitRunResult,
-    githubToken?: string
-  ): never {
+  private throwGitFailure(args: string[], result: GitRunResult, githubToken?: string): never {
     const output = this.redactGitOutput(this.readableGitOutput(result), githubToken)
     if (output.toLowerCase().includes('not a git repository'))
       throw new WorkbenchGitNotRepositoryError()
@@ -2076,9 +2069,7 @@ export class WorkbenchGitService {
     }
     const token = options.githubToken?.trim()
     if (token) {
-      const index = Number.isFinite(Number(env.GIT_CONFIG_COUNT))
-        ? Number(env.GIT_CONFIG_COUNT)
-        : 0
+      const index = Number.isFinite(Number(env.GIT_CONFIG_COUNT)) ? Number(env.GIT_CONFIG_COUNT) : 0
       env.GIT_CONFIG_COUNT = String(index + 1)
       env[`GIT_CONFIG_KEY_${index}`] =
         `url.https://x-access-token:${encodeURIComponent(token)}@github.com/.insteadOf`

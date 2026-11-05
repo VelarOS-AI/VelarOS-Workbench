@@ -19,7 +19,10 @@ import type { ConversationBrowser } from '../browser/WorkbenchBrowserService'
 import type { WorkbenchAgentProjectActivityPort } from '../workspace/git/WorkbenchChatRunAttribution'
 
 /** 当前模型驱动。 */
-export type ConversationModel = NonNullable<VelarosRuntimeOptions['model']>
+export type ConversationModel = Extract<
+  NonNullable<VelarosRuntimeOptions['model']>,
+  { stream: unknown }
+>
 
 /** 模型驱动声明的窗口上限。 */
 export type ConversationModelLimits = Extract<ConversationModel, { limits: unknown }>['limits'] & {

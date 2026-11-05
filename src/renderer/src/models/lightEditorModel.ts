@@ -1,6 +1,6 @@
-import { toOptional } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
-import { Result } from '@velaros-ai/core/result'
+import { toOptional } from '@velaros-ai/velaros/core'
+import { AppError } from '@velaros-ai/velaros/core/error'
+import { Result } from '@velaros-ai/velaros/core/result'
 
 import { type SystemLocalAttachmentFileResult } from '@shared/contracts/system'
 import { resolveWorkbenchImageMediaType } from '@shared/workbenchImage'
@@ -10,10 +10,7 @@ import {
   readWorkbenchAppLocale,
   translateWorkbenchAppMessage,
 } from '../i18n/useStandaloneWorkbenchLocalization'
-import type {
-  WorkbenchLightEditorTab,
-  WorkbenchOfficePreviewKind,
-} from '../types/workbenchTypes'
+import type { WorkbenchLightEditorTab, WorkbenchOfficePreviewKind } from '../types/workbenchTypes'
 
 import type { WorkbenchProjectContextIndex } from './project/workbenchProjectContextIndex'
 
@@ -50,7 +47,8 @@ export function resolveLightEditorSaveTarget(tab: WorkbenchLightEditorTab): {
   projectRoot: string
   path: string
 } {
-  if (isWorkbenchEmbeddedLightTab(tab)) return {
+  if (isWorkbenchEmbeddedLightTab(tab))
+    return {
       mode: 'workbench',
       projectRoot: tab.projectRoot,
       path: tab.path,
@@ -109,7 +107,9 @@ export function decodeFileContent(file: SystemLocalAttachmentFileResult): {
   }
 }
 
-export function buildLightEditorTab(file: SystemLocalAttachmentFileResult): WorkbenchLightEditorTab {
+export function buildLightEditorTab(
+  file: SystemLocalAttachmentFileResult
+): WorkbenchLightEditorTab {
   const imageMediaType = resolveWorkbenchImageMediaType(file.path, file.mediaType)
   if (imageMediaType)
     return {

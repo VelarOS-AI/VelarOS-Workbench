@@ -21,7 +21,6 @@ import {
   type WorkbenchRunEnvironmentTextIssue,
 } from '@renderer/models/commands/workbenchRunConfigurationDrafts'
 
-import { toNullable } from '@velaros-ai/core'
 import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 import { Label } from '@velaros-ai/ui/primitives/display/Label'
@@ -37,6 +36,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@velaros-ai/ui/primitives/overlays/Dialog'
+import { toNullable } from '@velaros-ai/velaros/core'
 
 import { WorkbenchRunEnvironmentMaxVariables } from '@shared/workbenchRunEnvironment'
 
@@ -84,8 +84,7 @@ export function WorkbenchRunConfigurationsDialog({
     [drafts, selectedId]
   )
   const issuesById = useMemo(
-    () =>
-      new Map(drafts.map((draft) => [draft.id, validateWorkbenchRunConfigurationDraft(draft)])),
+    () => new Map(drafts.map((draft) => [draft.id, validateWorkbenchRunConfigurationDraft(draft)])),
     [drafts]
   )
 
@@ -178,7 +177,11 @@ export function WorkbenchRunConfigurationsDialog({
                 <TrashIcon size={14} />
               </IconButton>
             </div>
-            <div className={styles.list} role="listbox" aria-label={t('workbench.runConfigurations')}>
+            <div
+              className={styles.list}
+              role="listbox"
+              aria-label={t('workbench.runConfigurations')}
+            >
               {drafts.map((draft) => (
                 <button
                   key={draft.id}
@@ -204,7 +207,9 @@ export function WorkbenchRunConfigurationsDialog({
               issues={showIssues ? toNullable(issuesById.get(selected.id)) : null}
               onChange={(patch) =>
                 setDrafts((current) =>
-                  current.map((draft) => (draft.id === selected.id ? { ...draft, ...patch } : draft))
+                  current.map((draft) =>
+                    draft.id === selected.id ? { ...draft, ...patch } : draft
+                  )
                 )
               }
             />

@@ -4,7 +4,7 @@
  *
  * 用运行时自带的 `WebSocket`（Electron 主进程的 Node、bun 都有），不引第三方库。只连本机地址。
  */
-import { AppError } from '@velaros-ai/core/error'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
 export interface WorkbenchInspectorEvent {
   method: string
@@ -122,7 +122,9 @@ export class WorkbenchInspectorConnection {
       if (!command) return
       this.pending.delete(message.id)
       if (message.error)
-        command.reject(new AppError('PROTOCOL', message.error.message ?? 'inspector command failed'))
+        command.reject(
+          new AppError('PROTOCOL', message.error.message ?? 'inspector command failed')
+        )
       else command.resolve(message.result ?? {})
       return
     }

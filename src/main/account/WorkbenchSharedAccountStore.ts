@@ -5,8 +5,8 @@ import { mkdir, readFile, rmdir, stat } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { promisify } from 'node:util'
 
-import { velarosSharedResources } from '@velaros-ai/core/platform/shared-resources'
-import { writeFileAtomically } from '@velaros-ai/core/utils/FilePersistence'
+import { velarosSharedResources } from '@velaros-ai/velaros/core/platform/shared-resources'
+import { writeFileAtomically } from '@velaros-ai/velaros/core/utils/FilePersistence'
 
 import type { WorkbenchAccountIdentity } from '../../shared/workbenchAccount'
 import { workbenchMainText } from '../i18n/workbenchMainMessages'

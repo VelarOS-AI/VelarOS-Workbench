@@ -1,4 +1,4 @@
-import type { ModelTurnDelta } from '@velaros-ai/model'
+import type { ModelTurnDelta } from '@velaros-ai/velaros/model'
 
 import type { ConversationModelLimits } from './WorkbenchConversationTypes'
 

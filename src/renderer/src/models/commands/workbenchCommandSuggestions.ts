@@ -1,4 +1,4 @@
-import { isNonBlankString,isObject, isPlainObject, Log } from '@velaros-ai/core'
+import { isNonBlankString, isObject, isPlainObject, Log } from '@velaros-ai/velaros/core'
 
 import { type WorkbenchDirectoryEntry } from '@shared/contracts/workbench'
 

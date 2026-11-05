@@ -1,6 +1,6 @@
 /** 独立 Workbench 应用副本（desktop `@utils/dom/scroll.utils` 同源）。 */
-import { isFunction } from '@velaros-ai/core'
-import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
+import { isFunction } from '@velaros-ai/velaros/core'
+import { TimerScope } from '@velaros-ai/velaros/core/utils/TimerScope'
 
 const DEFAULT_SCROLL_INTO_VIEW_OPTIONS: ScrollIntoViewOptions = {
   block: 'start',

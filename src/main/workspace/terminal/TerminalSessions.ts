@@ -11,12 +11,22 @@
  */
 import { stat } from 'node:fs/promises'
 
-import { isEmpty } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
-import { currentPlatform as systemPlatformCompatibility } from '@velaros-ai/core/platform'
-import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
+import { isEmpty } from '@velaros-ai/velaros/core'
+import { AppError } from '@velaros-ai/velaros/core/error'
+import { currentPlatform as systemPlatformCompatibility } from '@velaros-ai/velaros/core/platform'
+import { type TimerLease, TimerScope } from '@velaros-ai/velaros/core/utils/TimerScope'
 
-import { type WorkbenchTerminalAcknowledgeRequest, type WorkbenchTerminalCwdRequest, type WorkbenchTerminalCwdResult, type WorkbenchTerminalInputRequest, type WorkbenchTerminalOutputEvent, type WorkbenchTerminalResizeRequest, type WorkbenchTerminalStartRequest, type WorkbenchTerminalStartResult, type WorkbenchTerminalStopRequest } from '@shared/contracts/workbench'
+import {
+  type WorkbenchTerminalAcknowledgeRequest,
+  type WorkbenchTerminalCwdRequest,
+  type WorkbenchTerminalCwdResult,
+  type WorkbenchTerminalInputRequest,
+  type WorkbenchTerminalOutputEvent,
+  type WorkbenchTerminalResizeRequest,
+  type WorkbenchTerminalStartRequest,
+  type WorkbenchTerminalStartResult,
+  type WorkbenchTerminalStopRequest,
+} from '@shared/contracts/workbench'
 
 import { workbenchMainText } from '../../i18n/workbenchMainMessages'
 import type { CommandHelper } from '../CommandHelper'
@@ -83,7 +93,8 @@ export function buildTerminalEnvironment(
     VELAROS_WORKBENCH_TERMINAL: '1',
   }
   // 从 Finder / Dock 启动的 Electron 没有 LANG：zsh 会按 C locale 处理输入，中文成了乱码或问号。
-  if (platform !== 'win32' && !env.LANG && !env.LC_ALL && !env.LC_CTYPE) env.LANG = DefaultUtf8Locale
+  if (platform !== 'win32' && !env.LANG && !env.LC_ALL && !env.LC_CTYPE)
+    env.LANG = DefaultUtf8Locale
 
   for (const [name, value] of Object.entries(overrides)) {
     // Windows 的变量名不分大小写：`Path` 和 `PATH` 是同一个，留着两份进程拿到哪个说不准。
@@ -123,10 +134,7 @@ class TerminalSessions {
     ownerId: Nullable<number> = null
   ): Promise<WorkbenchTerminalStartResult> {
     const projectRoot = await this.pathResolver.resolveProjectRoot(request.projectRoot)
-    const cwdPath = await this.pathResolver.resolveInsideProject(
-      projectRoot,
-      request.cwd ?? '.'
-    )
+    const cwdPath = await this.pathResolver.resolveInsideProject(projectRoot, request.cwd ?? '.')
     const cwdStats = await stat(cwdPath.realPath)
     if (!cwdStats.isDirectory()) {
       throw new AppError('VALIDATION', workbenchMainText('terminal.cwdNotFolder'))
@@ -278,21 +286,64 @@ class TerminalSessions {
       return
     }
 
+    const errors: unknown[] = []
+    let tree = [session.pty.pid]
+    try {
+      // 趁 shell 仍在时快照进程树；失败仍须清理 PTY，且不能向调用者报成功。
+      tree = await this.listSessionProcessTree(session)
+    } catch (error) {
+      console.error('[WorkbenchTerminal] process tree snapshot failed', {
+        sessionId: request.sessionId,
+        pid: session.pty.pid,
+        error,
+      })
+      errors.push(error)
+    }
     const exited = request.waitForExit ? this.waitForExit(session) : null
-    // 趁 shell 还在时列出整棵树：它一退，子孙就被 init 收养、顺不到了。
-    const tree = await this.listSessionProcessTree(session)
-    this.ptyFactory.processTree?.signal(tree, 'SIGTERM')
-    if (!session.exited) session.pty.kill('SIGTERM')
-
+    errors.push(...(await this.signalSessionProcesses(request.sessionId, session, tree, 'SIGTERM')))
     if (!request.skipForceKill) {
-      // 不挂在会话的计时器上：shell 先退出、会话被收掉之后，树上剩下的进程照样要强杀。
+      // 独立于会话计时器，shell 先退出也继续清理子孙；方法内部接住并记录所有错误。
       const forceKill = setTimeout(() => {
-        this.ptyFactory.processTree?.signal(tree, 'SIGKILL')
-        if (!session.exited) session.pty.kill('SIGKILL')
+        void this.signalSessionProcesses(request.sessionId, session, tree, 'SIGKILL')
       }, this.commandHelper.getForceKillDelayMs())
       forceKill.unref?.()
     }
     if (exited) await exited
+    if (errors.length > 0)
+      throw new AggregateError(errors, `Failed to stop terminal ${request.sessionId}`)
+  }
+
+  /** 树终止失败不能跳过 PTY；后台调用也必须有诊断而不是未处理拒绝。 */
+  private async signalSessionProcesses(
+    sessionId: string,
+    session: WorkbenchTerminalSession,
+    tree: readonly number[],
+    signal: NodeJS.Signals
+  ): Promise<unknown[]> {
+    const errors: unknown[] = []
+    try {
+      await this.ptyFactory.processTree?.signal(tree, signal)
+    } catch (error) {
+      console.error('[WorkbenchTerminal] process tree signal failed', {
+        sessionId,
+        pids: tree,
+        signal,
+        error,
+      })
+      errors.push(error)
+    }
+    try {
+      if (!session.exited) session.pty.kill(signal)
+    } catch (error) {
+      console.error('[WorkbenchTerminal] PTY signal failed', {
+        sessionId,
+        pid: session.pty.pid,
+        signal,
+        error,
+      })
+      errors.push(error)
+    }
+    return errors
   }
 
   /** 关闭所有持久终端会话；进程退出前调用。 */
@@ -315,7 +366,10 @@ class TerminalSessions {
   private waitForExit(session: WorkbenchTerminalSession): Promise<void> {
     if (session.exited) return Promise.resolve()
     return new Promise((resolve) => {
-      const timeout = setTimeout(resolve, this.commandHelper.getForceKillDelayMs() + ExitWaitGraceMs)
+      const timeout = setTimeout(
+        resolve,
+        this.commandHelper.getForceKillDelayMs() + ExitWaitGraceMs
+      )
       timeout.unref?.()
       session.exitWaiters.push(() => {
         clearTimeout(timeout)
@@ -352,7 +406,11 @@ class TerminalSessions {
     session.pendingOutput = ''
     session.onOutput({ sessionId, stream: 'stdout', chunk })
     session.unackedChars += chunk.length
-    if (!session.paused && !session.exited && session.unackedChars > FlowControlHighWatermarkChars) {
+    if (
+      !session.paused &&
+      !session.exited &&
+      session.unackedChars > FlowControlHighWatermarkChars
+    ) {
       session.paused = true
       session.pty.pause()
     }
@@ -367,52 +425,22 @@ class TerminalSessions {
    * 先 SIGTERM 让 shell 自行收尾，等待短超时后若还没退出再 SIGKILL，再兜底一秒后强制结算——
    * 给 shell 留下处理 trap 的窗口，也不让退出流程被一个僵掉的进程卡住。
    */
-  private async closeSessions(
-    sessions: Array<[string, WorkbenchTerminalSession]>
-  ): Promise<void> {
+  private async closeSessions(sessions: Array<[string, WorkbenchTerminalSession]>): Promise<void> {
     if (isEmpty(sessions)) return
-
-    const forceKillDelayMs = this.commandHelper.getForceKillDelayMs()
-    await Promise.all(
-      sessions.map(
-        ([sessionId, session]) =>
-          new Promise<void>((resolve) => {
-            if (session.exited) {
-              this.dropSession(sessionId, session)
-              resolve()
-              return
-            }
-
-            let settled = false
-            const finish = (): void => {
-              if (settled) return
-              settled = true
-              this.dropSession(sessionId, session)
-              resolve()
-            }
-
-            session.pty.onExit(finish)
-            // 列进程表是异步的，回来时 shell 可能已经退出、会话的计时器已释放：强杀用独立的计时器。
-            void this.listSessionProcessTree(session).then((tree) => {
-              this.ptyFactory.processTree?.signal(tree, 'SIGTERM')
-              const forceKill = setTimeout(
-                () => this.ptyFactory.processTree?.signal(tree, 'SIGKILL'),
-                forceKillDelayMs
-              )
-              forceKill.unref?.()
-            })
-            session.pty.kill('SIGTERM')
-            session.timers.after(
-              forceKillDelayMs,
-              () => {
-                if (!settled && !session.exited) session.pty.kill('SIGKILL')
-                // 即便 SIGKILL，仍等 onExit 触发 finish；再兜底一秒强制结算。
-                session.timers.after(1_000, finish)
-              }
-            )
-          })
-      )
+    // 每个会话都完成必要清理后再汇总失败，不能因某棵树失败跳过其他会话。
+    const results = await Promise.allSettled(
+      sessions.map(async ([sessionId, session]) => {
+        try {
+          if (!session.exited) await this.stopTerminalSession({ sessionId, waitForExit: true })
+        } finally {
+          this.dropSession(sessionId, session)
+        }
+      })
     )
+    const errors = results.flatMap((result) =>
+      result.status === 'rejected' ? [result.reason] : []
+    )
+    if (errors.length > 0) throw new AggregateError(errors, 'Failed to close terminal sessions')
   }
 }
 

@@ -806,8 +806,15 @@
   height: 100%;
 }
 
-.terminalViewHost :global(.xterm-viewport) {
-  scrollbar-width: thin;
+/* xterm 6 使用自绘滑块，不是浏览器的原生滚动条。 */
+.terminalViewHost :global(.xterm .xterm-scrollable-element > .scrollbar > .slider) {
+  border-radius: 999px;
+  background: var(--scrollbar-thumb, rgb(127 127 127 / 16%));
+}
+
+.terminalViewHost :global(.xterm .xterm-scrollable-element > .scrollbar > .slider:hover),
+.terminalViewHost :global(.xterm .xterm-scrollable-element > .scrollbar > .slider.active) {
+  background: var(--scrollbar-thumb-hover, rgb(127 127 127 / 28%));
 }
 
 /* xterm 自带的样式给视口垫了黑底：整行数凑不满面板高度时，最后一行下面会露出一条黑边。 */

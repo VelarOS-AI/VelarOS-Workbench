@@ -4,8 +4,8 @@ import { resolve } from 'node:path'
 import type { IpcMainInvokeEvent } from 'electron'
 import { ipcMain } from 'electron'
 
-import { isNonBlankString, isPlainObject } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
+import { isNonBlankString, isPlainObject } from '@velaros-ai/velaros/core'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
 import {
   WorkbenchMemoryChannels,

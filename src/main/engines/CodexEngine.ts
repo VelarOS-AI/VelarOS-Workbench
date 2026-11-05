@@ -1,3 +1,4 @@
+import type { AppLocale, ReasoningLevel } from '@velaros-ai/ui/conversation/contracts'
 import {
   isArray,
   isFiniteNumber,
@@ -6,9 +7,8 @@ import {
   isString,
   Log,
   optionalWhen,
-} from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
-import type { AppLocale, ReasoningLevel } from '@velaros-ai/ui/conversation/contracts'
+} from '@velaros-ai/velaros/core'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
 import type {
   WorkbenchAgentEngineModel,
@@ -329,7 +329,9 @@ export class CodexEngine implements WorkbenchAgentEngine {
     const threadId = isString(params.threadId) ? params.threadId : undefined
     if (method === 'serverRequest/resolved') {
       const key = `${String(threadId)}\0${String(params.requestId)}`
-      this.requests.get(key)?.abort(new AppError('CANCELLED', workbenchMainText('engines.codexRequestWithdrawn')))
+      this.requests
+        .get(key)
+        ?.abort(new AppError('CANCELLED', workbenchMainText('engines.codexRequestWithdrawn')))
       return
     }
     const run = threadId ? this.runs.get(threadId) : undefined
@@ -347,7 +349,12 @@ export class CodexEngine implements WorkbenchAgentEngine {
             isPlainObject(turn.error) && isNonBlankString(turn.error.message)
               ? turn.error.message
               : run.lastError
-          run.settle({ error: new AppError('UNAVAILABLE', error ?? workbenchMainText('engines.codexRunIncomplete')) })
+          run.settle({
+            error: new AppError(
+              'UNAVAILABLE',
+              error ?? workbenchMainText('engines.codexRunIncomplete')
+            ),
+          })
         } else run.settle({ status: turn.status === 'interrupted' ? 'aborted' : 'completed' })
         return
       }
@@ -356,7 +363,8 @@ export class CodexEngine implements WorkbenchAgentEngine {
           isPlainObject(params.error) && isNonBlankString(params.error.message)
             ? params.error.message
             : undefined
-        if (params.willRetry === true) run.input.surface.reconnecting(message ?? workbenchMainText('engines.codexRetrying'))
+        if (params.willRetry === true)
+          run.input.surface.reconnecting(message ?? workbenchMainText('engines.codexRetrying'))
         else if (message) run.lastError = message
         return
       }

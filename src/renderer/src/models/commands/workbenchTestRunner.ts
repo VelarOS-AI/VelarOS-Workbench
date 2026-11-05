@@ -4,7 +4,7 @@
  * 只认 JS / TS 的测试文件和这两个运行器；认的依据是离测试文件最近的 `package.json`（依赖、脚本、`jest` 配置段）
  * 和它旁边的配置文件，不执行项目里的任何代码。
  */
-import { isPlainObject, isString } from '@velaros-ai/core'
+import { isPlainObject, isString } from '@velaros-ai/velaros/core'
 
 import type { WorkbenchDebuggerLaunchTarget } from '@shared/workbenchDebugger'
 
@@ -56,7 +56,10 @@ const RunnerConfigFileNames: Record<WorkbenchTestRunnerKind, readonly string[]> 
     ...ConfigFileExtensions.map((extension) => `vitest.workspace.${extension}`),
     'vitest.workspace.json',
   ],
-  jest: [...ConfigFileExtensions.map((extension) => `jest.config.${extension}`), 'jest.config.json'],
+  jest: [
+    ...ConfigFileExtensions.map((extension) => `jest.config.${extension}`),
+    'jest.config.json',
+  ],
 }
 const RunnerDependencyNames: Record<WorkbenchTestRunnerKind, readonly string[]> = {
   vitest: ['vitest'],

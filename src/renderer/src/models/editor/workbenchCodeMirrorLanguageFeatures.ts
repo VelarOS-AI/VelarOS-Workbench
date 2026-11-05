@@ -10,9 +10,15 @@ import {
   type ViewUpdate,
 } from '@codemirror/view'
 
-import { isEmpty } from '@velaros-ai/core'
+import { isEmpty } from '@velaros-ai/velaros/core'
 
-import { type WorkbenchLanguageServiceDisplayPartKind, type WorkbenchLanguageServiceHoverDocumentationBlock, type WorkbenchLanguageServiceHoverResult, type WorkbenchLanguageServiceLocation, type WorkbenchLanguageServiceSignatureHelpResult } from '@shared/contracts/workbench'
+import {
+  type WorkbenchLanguageServiceDisplayPartKind,
+  type WorkbenchLanguageServiceHoverDocumentationBlock,
+  type WorkbenchLanguageServiceHoverResult,
+  type WorkbenchLanguageServiceLocation,
+  type WorkbenchLanguageServiceSignatureHelpResult,
+} from '@shared/contracts/workbench'
 
 import { type WorkbenchHostRuntime } from '../../host/WorkbenchHost'
 import type { WorkbenchOpenEditorTab } from '../../types/workbenchTypes'
@@ -40,7 +46,11 @@ export interface WorkbenchEditorHoverAction {
 
 /** 诊断浮层向编辑器要修复：这段范围上的诊断此刻有哪些能直接套的修复（只读、没有修复时为空）。 */
 export interface WorkbenchEditorHoverCodeActions {
-  request: (view: EditorView, from: number, to: number) => Promise<readonly WorkbenchEditorHoverAction[]>
+  request: (
+    view: EditorView,
+    from: number,
+    to: number
+  ) => Promise<readonly WorkbenchEditorHoverAction[]>
 }
 
 export interface WorkbenchLanguageServiceEditorContext {
@@ -268,18 +278,15 @@ function hoverDocumentationBlocks(
   if (hover.documentationBlocks?.length) return hover.documentationBlocks
   // 没有分块的说明（TypeScript 的 JSDoc）按一段连排：注释里的折行只是源码折行。
   const text = (
-    hover.documentation
-    ?? hover.documentationParts?.map((part) => part.text).join('')
-    ?? ''
+    hover.documentation ??
+    hover.documentationParts?.map((part) => part.text).join('') ??
+    ''
   ).replace(/[ \t]*\n[ \t]*/gu, ' ')
   return text ? [{ kind: 'paragraph', text }] : []
 }
 
 function hoverHasDisplayCode(hover: WorkbenchLanguageServiceHoverResult): boolean {
-  return !!(
-    hover.displayText.trim()
-    || hover.displayParts?.some((part) => part.text.trim())
-  )
+  return !!(hover.displayText.trim() || hover.displayParts?.some((part) => part.text.trim()))
 }
 
 export function shouldUseWorkbenchSingleCodeHoverLayout(
@@ -293,12 +300,13 @@ export function shouldUseWorkbenchSingleCodeHoverLayout(
   } = {}
 ): boolean {
   if (
-    !hover
-    || hasDiagnostics
-    || hover.definition
-    || hover.tags?.length
-    || (showDefinitionPreview && hover.definitionPreview?.text.trim())
-  ) return false
+    !hover ||
+    hasDiagnostics ||
+    hover.definition ||
+    hover.tags?.length ||
+    (showDefinitionPreview && hover.definitionPreview?.text.trim())
+  )
+    return false
 
   const blocks = hoverDocumentationBlocks(hover).filter((block) => block.text.trim())
   if (hoverHasDisplayCode(hover)) return blocks.length === 0
@@ -366,24 +374,27 @@ function replaceHoverTooltipDom(target: HTMLElement, source: HTMLElement): void 
   target.replaceChildren(...source.childNodes)
 }
 
-export function buildWorkbenchEditorHoverDom({
-  hover = null,
-  diagnostics = [],
-  diagnosticActions = [],
-  symbolFallback = null,
-  definitionLabel = 'Definition',
-  definitionPreviewLabel = 'Definition',
-  showDefinitionPreview = false,
-}: {
-  hover?: Nullable<WorkbenchLanguageServiceHoverResult>
-  diagnostics?: readonly Diagnostic[]
-  /** 这些诊断的修复，列成按钮排在诊断下面。 */
-  diagnosticActions?: readonly WorkbenchEditorHoverAction[]
-  symbolFallback?: Nullable<WorkbenchEditorHoverSymbolFallback>
-  definitionLabel?: string
-  definitionPreviewLabel?: string
-  showDefinitionPreview?: boolean
-}, classes: WorkbenchEditorLanguageFeatureClasses): HTMLElement {
+export function buildWorkbenchEditorHoverDom(
+  {
+    hover = null,
+    diagnostics = [],
+    diagnosticActions = [],
+    symbolFallback = null,
+    definitionLabel = 'Definition',
+    definitionPreviewLabel = 'Definition',
+    showDefinitionPreview = false,
+  }: {
+    hover?: Nullable<WorkbenchLanguageServiceHoverResult>
+    diagnostics?: readonly Diagnostic[]
+    /** 这些诊断的修复，列成按钮排在诊断下面。 */
+    diagnosticActions?: readonly WorkbenchEditorHoverAction[]
+    symbolFallback?: Nullable<WorkbenchEditorHoverSymbolFallback>
+    definitionLabel?: string
+    definitionPreviewLabel?: string
+    showDefinitionPreview?: boolean
+  },
+  classes: WorkbenchEditorLanguageFeatureClasses
+): HTMLElement {
   const hoverPartClassName = createHoverPartClassName(classes)
   const wrapper = createEditorSymbolTooltipWrapper(classes)
 
@@ -424,10 +435,13 @@ export function buildWorkbenchEditorHoverDom({
       appendEditorSymbolTooltipSection(wrapper, classes)
     }
 
-    if (shouldUseWorkbenchSingleCodeHoverLayout(hover, {
-      hasDiagnostics: diagnostics.length > 0,
-      showDefinitionPreview,
-    })) wrapper.dataset.layout = 'single-code'
+    if (
+      shouldUseWorkbenchSingleCodeHoverLayout(hover, {
+        hasDiagnostics: diagnostics.length > 0,
+        showDefinitionPreview,
+      })
+    )
+      wrapper.dataset.layout = 'single-code'
 
     if (hoverHasDisplayCode(hover)) {
       wrapper.append(
@@ -498,8 +512,11 @@ export function buildWorkbenchEditorHoverDom({
 export function isWorkbenchTypeHover(
   hover: Nullable<WorkbenchLanguageServiceHoverResult>
 ): boolean {
-  return !!hover && /^(?:export\s+)?(?:type|interface|class|enum|record|struct|protocol)\b/u.test(
-    hover.displayText.trim()
+  return (
+    !!hover &&
+    /^(?:export\s+)?(?:type|interface|class|enum|record|struct|protocol)\b/u.test(
+      hover.displayText.trim()
+    )
   )
 }
 
@@ -515,9 +532,7 @@ export function getWorkbenchHoverTokenRange(
   let to = offset
   while (from > line.from && HOVER_TOKEN_CHARACTER.test(state.sliceDoc(from - 1, from))) from--
   while (to < line.to && HOVER_TOKEN_CHARACTER.test(state.sliceDoc(to, to + 1))) to++
-  return from < to
-    ? { from, to }
-    : { from: offset, to: Math.min(offset + 1, state.doc.length) }
+  return from < to ? { from, to } : { from: offset, to: Math.min(offset + 1, state.doc.length) }
 }
 
 function buildSignatureHelpDom(
@@ -596,18 +611,18 @@ export function createWorkbenchLanguageServiceHoverTooltip(
       if (keywordRange && !diagnosticRange) return null
 
       // 诊断的修复与悬浮说明一起问：浮层不等修复，先显示诊断，修复回来再把按钮补上。
-      const actionsRequest = diagnosticRange && context.codeActions
-        ? context.codeActions
-            .request(view, diagnosticRange.from, diagnosticRange.to)
-            .then((actions) => closeHoverOnRun(view, actions))
-            .catch((): readonly WorkbenchEditorHoverAction[] => [])
-        : null
+      const actionsRequest =
+        diagnosticRange && context.codeActions
+          ? context.codeActions
+              .request(view, diagnosticRange.from, diagnosticRange.to)
+              .then((actions) => closeHoverOnRun(view, actions))
+              .catch((): readonly WorkbenchEditorHoverAction[] => [])
+          : null
 
-      const request = !keywordRange
-        && context.path
-        && usesWorkbenchSemanticLanguageService(context.path)
-        ? buildLanguageServiceRequest(view, context, position)
-        : null
+      const request =
+        !keywordRange && context.path && usesWorkbenchSemanticLanguageService(context.path)
+          ? buildLanguageServiceRequest(view, context, position)
+          : null
       if (!request) {
         const fallback = fallbackHover?.(view, position) ?? null
         if (fallback || !diagnosticRange) return fallback
@@ -657,13 +672,16 @@ export function createWorkbenchLanguageServiceHoverTooltip(
           let definitionPreviewExpanded = false
           const diagnostics = diagnosticRange?.diagnostics ?? []
           let diagnosticActions: readonly WorkbenchEditorHoverAction[] = []
-          const dom = buildWorkbenchEditorHoverDom({
-            hover: resolvedHover,
-            diagnostics,
-            definitionLabel: context.hoverDefinitionLabel,
-            definitionPreviewLabel: context.hoverDefinitionPreviewLabel,
-            showDefinitionPreview: definitionPreviewExpanded,
-          }, classes)
+          const dom = buildWorkbenchEditorHoverDom(
+            {
+              hover: resolvedHover,
+              diagnostics,
+              definitionLabel: context.hoverDefinitionLabel,
+              definitionPreviewLabel: context.hoverDefinitionPreviewLabel,
+              showDefinitionPreview: definitionPreviewExpanded,
+            },
+            classes
+          )
           if (resolvedHover?.definitionPreview) dom.dataset.hasDefinitionPreview = 'true'
           let hoveredTypeTarget: Nullable<HTMLElement> = null
           let modifierTypeTarget: Nullable<HTMLElement> = null
@@ -671,12 +689,13 @@ export function createWorkbenchLanguageServiceHoverTooltip(
           let previewRenderFrame: Nullable<number> = null
           let destroyed = false
           const syncModifierTarget = (): void => {
-            const nextTarget = (
-              modifierActive
-              && hoveredTypeTarget
-              && dom.contains(hoveredTypeTarget)
-              && resolvedHover?.definitionPreview
-            ) ? hoveredTypeTarget : null
+            const nextTarget =
+              modifierActive &&
+              hoveredTypeTarget &&
+              dom.contains(hoveredTypeTarget) &&
+              resolvedHover?.definitionPreview
+                ? hoveredTypeTarget
+                : null
             if (modifierTypeTarget === nextTarget) return
 
             modifierTypeTarget?.removeAttribute('data-hover-modifier-target')
@@ -695,14 +714,20 @@ export function createWorkbenchLanguageServiceHoverTooltip(
           }
           const handleWindowBlur = (): void => updateModifierState(false)
           const renderResolvedHover = (): void => {
-            replaceHoverTooltipDom(dom, buildWorkbenchEditorHoverDom({
-              hover: resolvedHover,
-              diagnostics,
-              diagnosticActions,
-              definitionLabel: context.hoverDefinitionLabel,
-              definitionPreviewLabel: context.hoverDefinitionPreviewLabel,
-              showDefinitionPreview: definitionPreviewExpanded,
-            }, classes))
+            replaceHoverTooltipDom(
+              dom,
+              buildWorkbenchEditorHoverDom(
+                {
+                  hover: resolvedHover,
+                  diagnostics,
+                  diagnosticActions,
+                  definitionLabel: context.hoverDefinitionLabel,
+                  definitionPreviewLabel: context.hoverDefinitionPreviewLabel,
+                  showDefinitionPreview: definitionPreviewExpanded,
+                },
+                classes
+              )
+            )
             if (resolvedHover?.definitionPreview) dom.dataset.hasDefinitionPreview = 'true'
             else delete dom.dataset.hasDefinitionPreview
             hoveredTypeTarget = null
@@ -720,9 +745,10 @@ export function createWorkbenchLanguageServiceHoverTooltip(
           }
           const handleTypeDefinitionPointerDown = (event: PointerEvent): void => {
             if (event.button !== 0 || (!event.metaKey && !event.ctrlKey)) return
-            const target = event.target instanceof Element
-              ? event.target.closest('[data-hover-part="type"]')
-              : null
+            const target =
+              event.target instanceof Element
+                ? event.target.closest('[data-hover-part="type"]')
+                : null
             if (!target || !dom.contains(target) || !resolvedHover?.definitionPreview) return
 
             event.preventDefault()
@@ -732,9 +758,10 @@ export function createWorkbenchLanguageServiceHoverTooltip(
             scheduleResolvedHoverRender()
           }
           const handleHoverMouseMove = (event: MouseEvent): void => {
-            hoveredTypeTarget = event.target instanceof Element
-              ? event.target.closest<HTMLElement>('[data-hover-part="type"]')
-              : null
+            hoveredTypeTarget =
+              event.target instanceof Element
+                ? event.target.closest<HTMLElement>('[data-hover-part="type"]')
+                : null
             updateModifierState(event.metaKey || event.ctrlKey)
           }
           const handleHoverMouseLeave = (): void => {
@@ -837,7 +864,10 @@ export function createWorkbenchSignatureHelpExtension(
         this.show(signatureHelp, position)
       }
 
-      public show(signatureHelp: WorkbenchLanguageServiceSignatureHelpResult, position: number): void {
+      public show(
+        signatureHelp: WorkbenchLanguageServiceSignatureHelpResult,
+        position: number
+      ): void {
         if (!tooltip) {
           tooltip = document.createElement('div')
           tooltip.className = classes.editorSignatureTooltipHost

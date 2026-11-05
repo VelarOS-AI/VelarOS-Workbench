@@ -1,6 +1,6 @@
 import type { Extension } from '@codemirror/state'
 
-import { toNullable } from '@velaros-ai/core'
+import { toNullable } from '@velaros-ai/velaros/core'
 
 export interface WorkbenchBasicSyntaxContribution {
   readonly keywords: readonly string[]
@@ -49,8 +49,7 @@ export function registerWorkbenchEditorLanguage(
     throw new Error(`Workbench editor language '${contribution.id}' is already registered`)
   Contributions.set(contribution.id, contribution)
   return () => {
-    if (Contributions.get(contribution.id) === contribution)
-      Contributions.delete(contribution.id)
+    if (Contributions.get(contribution.id) === contribution) Contributions.delete(contribution.id)
   }
 }
 

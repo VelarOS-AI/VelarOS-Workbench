@@ -7,7 +7,7 @@ import {
   useSyncExternalStore,
 } from 'react'
 
-import { AppError } from '@velaros-ai/core'
+import { AppError } from '@velaros-ai/velaros/core'
 
 /**
  * 工作台行内评论。评论默认仅存在于当前 `WorkbenchCommentStore` 实例中，不负责持久化。
@@ -122,11 +122,7 @@ export class WorkbenchCommentStore {
     )
   }
 
-  public readonly renamePath = (
-    projectRoot: string,
-    fromPath: string,
-    toPath: string
-  ): void => {
+  public readonly renamePath = (projectRoot: string, fromPath: string, toPath: string): void => {
     this.assertActive()
     this.replace(
       this.comments.map((comment) =>
@@ -153,9 +149,7 @@ export class WorkbenchCommentStore {
   }
 
   public readonly listForPath = (projectRoot: string, path: string): WorkbenchComment[] =>
-    this.comments.filter(
-      (comment) => comment.projectRoot === projectRoot && comment.path === path
-    )
+    this.comments.filter((comment) => comment.projectRoot === projectRoot && comment.path === path)
 
   /** 清理订阅与内存数据；销毁后的写入会显式报错。 */
   public dispose(): void {
@@ -170,7 +164,8 @@ export class WorkbenchCommentStore {
     if (
       next.length === this.comments.length &&
       next.every((comment, index) => comment === this.comments[index])
-    ) return
+    )
+      return
     this.comments = next
     this.emit()
   }

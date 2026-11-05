@@ -11,9 +11,9 @@ import {
 } from '@renderer/models/project/workbenchProjects'
 import { sortProjects } from '@renderer/models/shared/workbenchUtils'
 
-import { Log, toNullable } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
-import { Result } from '@velaros-ai/core/result'
+import { Log, toNullable } from '@velaros-ai/velaros/core'
+import { AppError } from '@velaros-ai/velaros/core/error'
+import { Result } from '@velaros-ai/velaros/core/result'
 
 import { type SystemOverview } from '@shared/contracts/system'
 
@@ -90,16 +90,16 @@ export async function bindWorkbenchProjectWorkspace(
   return activated.data
 }
 
-export function useWorkbenchProjectController(
-  options: UseWorkbenchProjectControllerOptions = {}
-) {
+export function useWorkbenchProjectController(options: UseWorkbenchProjectControllerOptions = {}) {
   const { messageLatest, tLatest } = useStableWorkbenchMessageTranslate()
   const initialProjectsRef = useRef<Nullable<WorkbenchProject[]>>(null)
   if (!initialProjectsRef.current) {
     initialProjectsRef.current = readInitialWorkbenchProjects(options.bootstrapProjects)
   }
   const shouldPersistProjectList = options.persistProjectList ?? true
-  const [projects, setProjects] = useState<WorkbenchProject[]>(() => initialProjectsRef.current ?? [])
+  const [projects, setProjects] = useState<WorkbenchProject[]>(
+    () => initialProjectsRef.current ?? []
+  )
   const [activeProjectId, setActiveProjectId] = useState<Nullable<string>>(() =>
     resolveBootstrapActiveProjectId(
       options.bootstrapActiveProjectId,
@@ -146,37 +146,39 @@ export function useWorkbenchProjectController(
     setWorkspaceBindingVersion((version) => version + 1)
   }
 
-  const addProject = useMemoizedFn(async (openProjectHandler: OpenProjectHandler): Promise<void> => {
-    try {
-      setIsPicking(true)
-      const selectedPath = Result.unwrap(await workbenchHost.kernel.workspace.pickDirectory())
-      if (!selectedPath) return
+  const addProject = useMemoizedFn(
+    async (openProjectHandler: OpenProjectHandler): Promise<void> => {
+      try {
+        setIsPicking(true)
+        const selectedPath = Result.unwrap(await workbenchHost.kernel.workspace.pickDirectory())
+        if (!selectedPath) return
 
-      const currentProjects = projectsRef.current
-      const selectedRootPath = normalizeWorkbenchProjectRootPath(selectedPath)
+        const currentProjects = projectsRef.current
+        const selectedRootPath = normalizeWorkbenchProjectRootPath(selectedPath)
 
-      const existing = currentProjects.find(
-        (project) => normalizeWorkbenchProjectRootPath(project.rootPath) === selectedRootPath
-      )
-      if (existing) {
-        await openProjectHandler(existing)
-        return
+        const existing = currentProjects.find(
+          (project) => normalizeWorkbenchProjectRootPath(project.rootPath) === selectedRootPath
+        )
+        if (existing) {
+          await openProjectHandler(existing)
+          return
+        }
+
+        const created = createWorkbenchProject(selectedRootPath)
+        const nextProjects = [created, ...currentProjects]
+        persistProjects(nextProjects)
+        await openProjectHandler(created, nextProjects)
+      } catch (error) {
+        const appError = AppError.from(error)
+        messageLatest.current.error({
+          title: tLatest.current('workbench.addProjectFailed'),
+          description: appError.message,
+        })
+      } finally {
+        setIsPicking(false)
       }
-
-      const created = createWorkbenchProject(selectedRootPath)
-      const nextProjects = [created, ...currentProjects]
-      persistProjects(nextProjects)
-      await openProjectHandler(created, nextProjects)
-    } catch (error) {
-      const appError = AppError.from(error)
-      messageLatest.current.error({
-        title: tLatest.current('workbench.addProjectFailed'),
-        description: appError.message,
-      })
-    } finally {
-      setIsPicking(false)
     }
-  })
+  )
 
   function removeProject(projectId: string): void {
     persistProjects(projects.filter((project) => project.id !== projectId))

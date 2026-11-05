@@ -12,11 +12,15 @@ import {
   ROOT_PATH,
 } from '@renderer/models/shared/workbenchUtils'
 
-import { isEmpty } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
-import { Result } from '@velaros-ai/core/result'
+import { isEmpty } from '@velaros-ai/velaros/core'
+import { AppError } from '@velaros-ai/velaros/core/error'
+import { Result } from '@velaros-ai/velaros/core/result'
 
-import { type WorkbenchDirectoryEntry, type WorkbenchListDirectoryResult, type WorkbenchReadFileResult } from '@shared/contracts/workbench'
+import {
+  type WorkbenchDirectoryEntry,
+  type WorkbenchListDirectoryResult,
+  type WorkbenchReadFileResult,
+} from '@shared/contracts/workbench'
 
 import { useStableWorkbenchMessageTranslate } from '../runtime/useStableWorkbenchMessaging'
 import { useLatest, useMemoizedFn } from '../support/genericHooks'

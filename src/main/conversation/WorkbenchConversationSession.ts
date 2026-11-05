@@ -1,15 +1,6 @@
 import { homedir } from 'node:os'
 import { relative, resolve } from 'node:path'
 
-import { isArray, isBoolean, isNonBlankString, isPlainObject, isTrue } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
-import type {
-  ApprovalDecision,
-  OperationContext,
-  PreparedInvocation,
-  ToolConfirmationDecisionOptions,
-} from '@velaros-ai/kernel'
-import type { CodeRunnerApi } from '@velaros-ai/script'
 import type { RuntimeMetric, VelarosRuntime, VelarosSession } from '@velaros-ai/velaros'
 import {
   createCapabilityModule,
@@ -28,6 +19,21 @@ import {
   VelarCdpModule,
   VelarDevtoolsModule,
 } from '@velaros-ai/velaros/browser/contracts'
+import {
+  isArray,
+  isBoolean,
+  isNonBlankString,
+  isPlainObject,
+  isTrue,
+} from '@velaros-ai/velaros/core'
+import { AppError } from '@velaros-ai/velaros/core/error'
+import type {
+  ApprovalDecision,
+  OperationContext,
+  PreparedInvocation,
+  ToolConfirmationDecisionOptions,
+} from '@velaros-ai/velaros/kernel'
+import type { CodeRunnerApi } from '@velaros-ai/velaros/script'
 import { sessionsOperations } from '@velaros-ai/velaros/sessions'
 import { VelarSessionsModule } from '@velaros-ai/velaros/sessions/contracts'
 import { webOperations } from '@velaros-ai/velaros/web'
@@ -50,6 +56,13 @@ import type { WorkbenchShellHostRegistryApi } from './WorkbenchShellHostRegistry
 /** 项目能力的写入由 Kernel 效果闸记录；标准 Node 进程由宿主单独记录。 */
 const ProjectWritingModules: readonly string[] = ['velaros:project']
 const ProjectEditOperation = 'velaros:project.edit'
+
+// 与 Desktop 共用不限累计用量的公开合同；模型窗口、取消和子任务期限仍独立生效。
+const ModelUsageBudget = Object.freeze({
+  modelCalls: Number.MAX_SAFE_INTEGER,
+  modelTokens: Number.MAX_SAFE_INTEGER,
+})
+const WorkerRunTimeoutMs = 4 * 60 * 60 * 1000
 
 export interface WorkbenchConversationSessionApi {
   open(options: ConversationWorkspaceOptions): Promise<ConversationWorkspaceHandle>
@@ -118,9 +131,7 @@ export class WorkbenchConversationSession implements WorkbenchConversationSessio
         },
         output: options.showCommandOutput,
       })
-      const modules: Array<
-        NonNullable<Parameters<typeof createRuntime>[0]['modules']>[number]
-      > = [
+      const modules: Array<NonNullable<Parameters<typeof createRuntime>[0]['modules']>[number]> = [
         createWorkbenchConsoleModule(
           this.shells,
           options.sessionId,
@@ -200,10 +211,40 @@ export class WorkbenchConversationSession implements WorkbenchConversationSessio
         model: options.model,
         // 上下文维护与模型驱动用同一输入预算；恢复时驱动上限仍会进一步约束请求。
         context: {
-          policy: { windowTokens: 'limits' in options.model ? options.model.limits?.inputTokens : undefined },
+          policy: {
+            windowTokens: 'limits' in options.model ? options.model.limits?.inputTokens : undefined,
+          },
+          limits: { ...ModelUsageBudget, modelTokensPerHour: Number.MAX_SAFE_INTEGER },
+          maintenance: { profile: ModelUsageBudget },
         },
         modules,
-        agents: true,
+        limits: { turns: Number.MAX_SAFE_INTEGER },
+        modelTools: {
+          maxChildren: Number.MAX_SAFE_INTEGER,
+          maxSessions: Number.MAX_SAFE_INTEGER,
+        },
+        agents: {
+          profiles: {
+            worker: {
+              description: `在当前项目内完成子任务；继承主任务的模型连接与推理设置。`,
+              instructions: options.instructions,
+              model: options.model,
+              node: true,
+              modules: [
+                ...new Set([
+                  ...modules.map((module) => module.binding.moduleId),
+                  'velaros:project',
+                  'velaros:code',
+                  'velaros:images',
+                ]),
+              ],
+              budget: ModelUsageBudget,
+              limits: { turns: Number.MAX_SAFE_INTEGER, timeoutMs: WorkerRunTimeoutMs },
+            },
+          },
+          concurrency: 4,
+          maxChildren: Number.MAX_SAFE_INTEGER,
+        },
         widgets: { show: options.showWidget },
         search: false,
         memory: memory ? () => memory : false,

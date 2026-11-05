@@ -20,9 +20,20 @@ import { relative, resolve, sep } from 'node:path'
 
 import { execa } from 'execa'
 
-import { AppError } from '@velaros-ai/core/error'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
-import { type WorkbenchDirectoryEntry, type WorkbenchDirectoryEntrySymlink, type WorkbenchFindExistingFilesRequest, type WorkbenchFindExistingFilesResult, type WorkbenchListDirectoryRequest, type WorkbenchListDirectoryResult, type WorkbenchReadFileRequest, type WorkbenchReadFileResult, type WorkbenchReadImageFileRequest, type WorkbenchReadImageFileResult } from '@shared/contracts/workbench'
+import {
+  type WorkbenchDirectoryEntry,
+  type WorkbenchDirectoryEntrySymlink,
+  type WorkbenchFindExistingFilesRequest,
+  type WorkbenchFindExistingFilesResult,
+  type WorkbenchListDirectoryRequest,
+  type WorkbenchListDirectoryResult,
+  type WorkbenchReadFileRequest,
+  type WorkbenchReadFileResult,
+  type WorkbenchReadImageFileRequest,
+  type WorkbenchReadImageFileResult,
+} from '@shared/contracts/workbench'
 import {
   resolveWorkbenchImageMediaType,
   type WorkbenchImageMediaType,
@@ -221,9 +232,9 @@ export class WorkbenchProjectFileSystem {
         }
         const finalStats = await handle.stat()
         if (
-          offset !== buffer.length
-          || finalStats.size !== fileStats.size
-          || finalStats.mtimeMs !== fileStats.mtimeMs
+          offset !== buffer.length ||
+          finalStats.size !== fileStats.size ||
+          finalStats.mtimeMs !== fileStats.mtimeMs
         ) {
           throw new AppError('CONFLICT', workbenchMainText('files.imageChangedWhileReading'))
         }
@@ -264,7 +275,8 @@ export class WorkbenchProjectFileSystem {
     if (error instanceof AppError) return error
 
     const code = (error as NodeJS.ErrnoException | undefined)?.code
-    if (code === 'ENOENT') return new AppError('NOT_FOUND', workbenchMainText('files.fileGone', { path }))
+    if (code === 'ENOENT')
+      return new AppError('NOT_FOUND', workbenchMainText('files.fileGone', { path }))
     if (code === 'EACCES' || code === 'EPERM')
       return new AppError('PERMISSION', workbenchMainText('files.fileNoPermission', { path }))
 
@@ -275,7 +287,8 @@ export class WorkbenchProjectFileSystem {
     if (error instanceof AppError) return error
 
     const code = (error as NodeJS.ErrnoException | undefined)?.code
-    if (code === 'ENOENT') return new AppError('NOT_FOUND', workbenchMainText('files.folderGone', { path }))
+    if (code === 'ENOENT')
+      return new AppError('NOT_FOUND', workbenchMainText('files.folderGone', { path }))
     if (code === 'EACCES' || code === 'EPERM')
       return new AppError('PERMISSION', workbenchMainText('files.folderNoPermission', { path }))
 
@@ -345,7 +358,10 @@ export class WorkbenchProjectFileSystem {
     return false
   }
 
-  private async getGitIgnoredPaths(projectRoot: string, paths: readonly string[]): Promise<Set<string>> {
+  private async getGitIgnoredPaths(
+    projectRoot: string,
+    paths: readonly string[]
+  ): Promise<Set<string>> {
     const normalizedPaths = paths.filter((path) => path && path !== '.')
     if (normalizedPaths.length === 0) return new Set()
 
@@ -433,10 +449,8 @@ export class WorkbenchProjectFileSystem {
   }
 
   private matchesPngFormat(buffer: Buffer): boolean {
-    if (
-      buffer.length < 45
-      || !buffer.subarray(0, PngSignature.length).equals(PngSignature)
-    ) return false
+    if (buffer.length < 45 || !buffer.subarray(0, PngSignature.length).equals(PngSignature))
+      return false
 
     let offset = PngSignature.length
     let hasImageData = false
@@ -450,8 +464,7 @@ export class WorkbenchProjectFileSystem {
       if (chunkType === 'IDAT') hasImageData = true
 
       offset += dataLength + 12
-      if (chunkType === 'IEND')
-        return dataLength === 0 && hasImageData && offset === buffer.length
+      if (chunkType === 'IEND') return dataLength === 0 && hasImageData && offset === buffer.length
       chunkIndex += 1
     }
 
@@ -460,11 +473,12 @@ export class WorkbenchProjectFileSystem {
 
   private matchesWebpFormat(buffer: Buffer): boolean {
     if (
-      buffer.length < 20
-      || buffer.toString('ascii', 0, 4) !== 'RIFF'
-      || buffer.toString('ascii', 8, 12) !== 'WEBP'
-      || buffer.readUInt32LE(4) + 8 !== buffer.length
-    ) return false
+      buffer.length < 20 ||
+      buffer.toString('ascii', 0, 4) !== 'RIFF' ||
+      buffer.toString('ascii', 8, 12) !== 'WEBP' ||
+      buffer.readUInt32LE(4) + 8 !== buffer.length
+    )
+      return false
 
     const chunkType = buffer.toString('ascii', 12, 16)
     if (chunkType !== 'VP8 ' && chunkType !== 'VP8L' && chunkType !== 'VP8X') return false

@@ -9,11 +9,16 @@ import {
 import type { WorkbenchProject } from '@renderer/models/project/workbenchProjects'
 import type { WorkbenchOpenEditorTab } from '@renderer/types/workbenchTypes'
 
-import { AppError } from '@velaros-ai/core/error'
-import { Result } from '@velaros-ai/core/result'
+import { AppError } from '@velaros-ai/velaros/core/error'
+import { Result } from '@velaros-ai/velaros/core/result'
 
 import { useStableWorkbenchMessageTranslate } from '../runtime/useStableWorkbenchMessaging'
-import { useDebounceFn, useLatest, useMemoizedFn, useMonotonicAsyncRequest } from '../support/genericHooks'
+import {
+  useDebounceFn,
+  useLatest,
+  useMemoizedFn,
+  useMonotonicAsyncRequest,
+} from '../support/genericHooks'
 
 interface UseWorkbenchContentSearchControllerOptions {
   activeProject: Nullable<WorkbenchProject>
@@ -127,14 +132,7 @@ export function useWorkbenchContentSearchController({
     return () => {
       cancel()
     }
-  }, [
-    abandonInFlightRequests,
-    activeProject?.id,
-    cancel,
-    enabled,
-    normalizedQuery,
-    scheduleSearch,
-  ])
+  }, [abandonInFlightRequests, activeProject?.id, cancel, enabled, normalizedQuery, scheduleSearch])
 
   return {
     contentSearchMatches: matches,

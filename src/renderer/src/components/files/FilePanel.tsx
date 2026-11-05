@@ -38,12 +38,15 @@ import type { WorkbenchGitDecorationMap } from '@renderer/models/git/workbenchGi
 import type { WorkbenchProject } from '@renderer/models/project/workbenchProjects'
 import { ROOT_PATH } from '@renderer/models/shared/workbenchUtils'
 
-import { currentPlatform as systemPlatformCompatibility } from '@velaros-ai/core/platform'
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 import { Paragraph } from '@velaros-ai/ui/primitives/display/Paragraph'
 import { ScrollArea } from '@velaros-ai/ui/primitives/layout/ScrollArea'
+import { currentPlatform as systemPlatformCompatibility } from '@velaros-ai/velaros/core/platform'
 
-import { type WorkbenchDirectoryEntry, type WorkbenchSearchEntriesResult } from '@shared/contracts/workbench'
+import {
+  type WorkbenchDirectoryEntry,
+  type WorkbenchSearchEntriesResult,
+} from '@shared/contracts/workbench'
 
 import styles from '../../styles/workbenchPageStyles'
 import { useLatest } from '../../support/genericHooks'
@@ -77,11 +80,10 @@ export interface WorkbenchFilePanelTreeProps {
   gitDecorations: WorkbenchGitDecorationMap
 }
 
-export interface WorkbenchFilePanelSearchProps
-  extends Pick<
-    WorkbenchProjectSearchEngineOptions,
-    'openTabs' | 'replaceOpenTabContents' | 'onOpenMatch'
-  > {
+export interface WorkbenchFilePanelSearchProps extends Pick<
+  WorkbenchProjectSearchEngineOptions,
+  'openTabs' | 'replaceOpenTabContents' | 'onOpenMatch'
+> {
   /** 输入框里的查找词：按文件名找（searchResult）与项目内容搜索共用。 */
   searchQuery: string
   searchResult: Nullable<WorkbenchSearchEntriesResult>
@@ -256,7 +258,10 @@ export function FilePanel({
   const toParentArgument = (target: WorkbenchDirectoryEntry): Nullable<WorkbenchDirectoryEntry> =>
     target.path === ROOT_PATH ? null : target
 
-  const clipEntries = (mode: FileTreeClipboard['mode'], entries: WorkbenchDirectoryEntry[]): void => {
+  const clipEntries = (
+    mode: FileTreeClipboard['mode'],
+    entries: WorkbenchDirectoryEntry[]
+  ): void => {
     if (entries.length > 0) setTreeClipboard({ mode, entries })
   }
   const pasteInto = async (target: WorkbenchDirectoryEntry): Promise<void> => {
@@ -347,8 +352,8 @@ export function FilePanel({
   function openRootContextMenu(event: MouseEvent): void {
     // 文件树与搜索结果里的行各有各的菜单（或者没有），不弹工程根目录的菜单。
     if (
-      event.target instanceof HTMLElement
-      && event.target.closest('button, [data-tree-path], [data-search-row]')
+      event.target instanceof HTMLElement &&
+      event.target.closest('button, [data-tree-path], [data-search-row]')
     )
       return
 
@@ -482,8 +487,8 @@ export function FilePanel({
                   },
                 ]
               : []),
-            ...(contextMenu.entry.type === 'file'
-              && isWorkbenchVelarFilePath(contextMenu.entry.path)
+            ...(contextMenu.entry.type === 'file' &&
+            isWorkbenchVelarFilePath(contextMenu.entry.path)
               ? [
                   {
                     id: 'run-file',
@@ -507,9 +512,9 @@ export function FilePanel({
               label: t('workbench.createFile'),
               icon: <FilePlusIcon size={14} />,
               separatorBefore:
-                contextMenu.chatFilePaths.length > 0
-                || (contextMenu.entry.type === 'file'
-                  && isWorkbenchVelarFilePath(contextMenu.entry.path)),
+                contextMenu.chatFilePaths.length > 0 ||
+                (contextMenu.entry.type === 'file' &&
+                  isWorkbenchVelarFilePath(contextMenu.entry.path)),
               disabled: isMutatingTree,
               onSelect: () => createEntryFromContext('file'),
             },

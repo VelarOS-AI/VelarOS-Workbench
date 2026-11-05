@@ -7,8 +7,8 @@ import {
   type WorkbenchNamedRunConfiguration,
 } from '@renderer/models/commands/workbenchNamedRunConfigurations'
 
-import { toNullable } from '@velaros-ai/core'
 import { type SelectOption } from '@velaros-ai/ui/primitives/forms/Select'
+import { toNullable } from '@velaros-ai/velaros/core'
 
 import { useLatest } from '../support/genericHooks'
 
@@ -187,7 +187,9 @@ export function useWorkbenchTopRunControl({
 
   // 生效命令：优先用户手动配置，否则自动挑一个“启动”类命令，再退回第一项。
   const autoCommand = useMemo(() => {
-    const launchOption = options.find((option) => isLaunchCommand(`${option.label} ${option.value}`))
+    const launchOption = options.find((option) =>
+      isLaunchCommand(`${option.label} ${option.value}`)
+    )
     return launchOption?.value ?? options[0]?.value ?? ''
   }, [options])
   // 优先级：指着的运行配置 > 手动配置 > 最近运行 > 自动探测。让侧边栏 ▶ 记住上次跑过的命令。
@@ -196,13 +198,17 @@ export function useWorkbenchTopRunControl({
     [activeConfiguration]
   )
   const activeCommand =
-    activeConfigurationCommand || normalizedConfiguredCommand || normalizedLastLaunched || autoCommand
+    activeConfigurationCommand ||
+    normalizedConfiguredCommand ||
+    normalizedLastLaunched ||
+    autoCommand
   const activeLabel = useMemo(
     () => options.find((option) => option.value === activeCommand)?.label,
     [activeCommand, options]
   )
   const activeCommandRunningSession = useMemo(
-    () => findLastRunningWorkbenchRunSession(activeCommand, runningSessions, activeConfiguration?.id),
+    () =>
+      findLastRunningWorkbenchRunSession(activeCommand, runningSessions, activeConfiguration?.id),
     [activeCommand, activeConfiguration?.id, runningSessions]
   )
 
@@ -210,7 +216,9 @@ export function useWorkbenchTopRunControl({
     (configuration: WorkbenchNamedRunConfiguration, debug = false): void => {
       onLaunchCommandLatest.current(
         buildWorkbenchRunConfigurationCommand(configuration),
-        debug ? t('workbench.debuggerRunCardTitle', { name: configuration.name }) : configuration.name,
+        debug
+          ? t('workbench.debuggerRunCardTitle', { name: configuration.name })
+          : configuration.name,
         buildWorkbenchRunConfigurationLaunch(configuration, debug)
       )
     },

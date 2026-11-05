@@ -1,6 +1,6 @@
 import { type FileHandle, open, stat } from 'node:fs/promises'
 
-import { AppError } from '@velaros-ai/core/error'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
 import { workbenchMainText } from '../i18n/workbenchMainMessages'
 
@@ -132,9 +132,5 @@ function cutAtCharBoundary(content: string, maxChars: number): string {
   return content.slice(0, last >= 0xd800 && last <= 0xdbff ? end - 1 : end)
 }
 
-export {
-  isLikelyTextFile,
-  isLikelyTextFile as isLikelyWorkbenchTextFile,
-  readWorkbenchTextFile,
-}
+export { isLikelyTextFile, isLikelyTextFile as isLikelyWorkbenchTextFile, readWorkbenchTextFile }
 export type { WorkbenchTextFileSnapshot }

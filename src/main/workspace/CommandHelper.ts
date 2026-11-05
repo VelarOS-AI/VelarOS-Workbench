@@ -7,9 +7,9 @@
  */
 import { execFileSync } from 'node:child_process'
 
-import { Log } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
-import { currentPlatform as systemPlatformCompatibility } from '@velaros-ai/core/platform'
+import { Log } from '@velaros-ai/velaros/core'
+import { AppError } from '@velaros-ai/velaros/core/error'
+import { currentPlatform as systemPlatformCompatibility } from '@velaros-ai/velaros/core/platform'
 
 import { workbenchMainText } from '../i18n/workbenchMainMessages'
 
@@ -165,8 +165,10 @@ class CommandHelper {
       // Windows 的非强制 taskkill 对控制台 shell 可能返回失败；此时不能退回只杀父 pid，
       // 否则它派生的工具链进程仍会占用工作目录。继续升级为 /T /F，确保整棵树退出。
       if (signal !== 'SIGKILL') {
-        const forceTreeKillSpec = systemPlatformCompatibility
-          .getProcessTreeKillCommandSpec(pid, 'SIGKILL')
+        const forceTreeKillSpec = systemPlatformCompatibility.getProcessTreeKillCommandSpec(
+          pid,
+          'SIGKILL'
+        )
         if (forceTreeKillSpec) {
           try {
             execFileSync(forceTreeKillSpec.file, forceTreeKillSpec.args, { stdio: 'ignore' })

@@ -27,18 +27,18 @@ import { getWorkbenchFileTreeRowHeight } from '@renderer/models/workbenchPrefere
 import type { NodeApi, NodeRendererProps, TreeApi } from 'react-arborist'
 import { Tree } from 'react-arborist'
 
-import { isBlank, isEmpty } from '@velaros-ai/core'
+import { isBlank, isEmpty } from '@velaros-ai/velaros/core'
 
-import { type WorkbenchDirectoryEntry, type WorkbenchDirectoryEntrySymlink } from '@shared/contracts/workbench'
+import {
+  type WorkbenchDirectoryEntry,
+  type WorkbenchDirectoryEntrySymlink,
+} from '@shared/contracts/workbench'
 
 import { useFileTreeActions } from '../../hooks/useFileTreeActions'
 import styles from '../../styles/workbenchPageStyles'
 import { useLatest } from '../../support/genericHooks'
 
-import {
-  FileTreeRow,
-  FileTreeRowRuntimeContext,
-} from './FileTreeRow'
+import { FileTreeRow, FileTreeRowRuntimeContext } from './FileTreeRow'
 
 export type { FileTreeNodeData }
 
@@ -234,7 +234,8 @@ export function FileTree({
       const selectionAlreadyMatches = tree.selectedIds.has(selectedPath)
       // select 自带滚动；选中项没变时，只有新的定位请求才滚。
       if (!selectionAlreadyMatches) tree.select(selectedPath, { focus: false })
-      else if (scrolledRevealRevisionRef.current !== revealRevision) void tree.scrollTo(selectedPath)
+      else if (scrolledRevealRevisionRef.current !== revealRevision)
+        void tree.scrollTo(selectedPath)
       scrolledRevealRevisionRef.current = revealRevision
       return
     }

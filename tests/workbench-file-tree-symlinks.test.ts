@@ -17,7 +17,7 @@ import { join } from 'node:path'
 
 import { describe, test } from 'bun:test'
 
-import { AppError } from '@velaros-ai/core/error'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
 import { createWorkbenchAppParts, type WorkbenchAppParts } from '../src/main/workspace/Parts'
 import { WorkbenchProjectFileSystem } from '../src/main/workspace/WorkbenchProjectFileSystem'
@@ -76,10 +76,15 @@ void describe('Workbench file tree symlinks', () => {
       const root = await service.listDirectory({ projectRoot, includeHidden: true })
       const byName = new Map(root.entries.map((entry) => [entry.name, entry]))
 
-      assert.deepEqual(
-        [...byName.keys()].sort(),
-        ['a-link.ts', 'broken', 'notes.md', 'shared', 'src', 'src-link', 'sub']
-      )
+      assert.deepEqual([...byName.keys()].sort(), [
+        'a-link.ts',
+        'broken',
+        'notes.md',
+        'shared',
+        'src',
+        'src-link',
+        'sub',
+      ])
       assert.equal(byName.get('src')?.symlink, undefined)
       assert.deepEqual(byName.get('src-link')?.symlink, { target: 'src', targetState: 'inside' })
       assert.equal(byName.get('src-link')?.type, 'directory')
@@ -125,7 +130,10 @@ void describe('Workbench file tree symlinks', () => {
       const service = new WorkbenchProjectFileSystem()
       const linked = await service.listDirectory({ projectRoot, path: 'src-link' })
       assert.equal(linked.path, 'src-link')
-      assert.deepEqual(linked.entries.map((entry) => entry.path), ['src-link/a.ts'])
+      assert.deepEqual(
+        linked.entries.map((entry) => entry.path),
+        ['src-link/a.ts']
+      )
       const file = await service.readTextFile({ projectRoot, path: 'src-link/a.ts' })
       assert.equal(file.content, 'export const a = 1\n')
     })

@@ -1,6 +1,6 @@
 import { useEffect, useSyncExternalStore } from 'react'
 
-import type { ModelPricingCatalog } from '@velaros-ai/model/contracts'
+import type { ModelPricingCatalog } from '@velaros-ai/velaros/model/contracts'
 
 /**
  * 公开模型价格目录（Desktop ModelPricingProvider 的对位件）：共享会话 UI 拿它和当前模型估算每条

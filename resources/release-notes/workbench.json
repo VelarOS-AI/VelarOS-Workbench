@@ -3,6 +3,40 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
+      "version": "0.4.13",
+      "releasedAt": "2026-11-05",
+      "title": {
+        "zh": "同步新版运行时与工作台体验优化",
+        "en": "Updated runtime and refined workspace experience"
+      },
+      "added": {
+        "zh": [
+          "长期记忆列表支持分页，沿用折叠详情与删除确认。",
+          "主任务、子任务与上下文维护对齐 Desktop 的用量配置，子任务单次执行上限为四小时。"
+        ],
+        "en": [
+          "Page through saved memories with expandable details and deletion confirmation.",
+          "Align parent, child and context-maintenance usage settings with Desktop and allow child runs up to four hours."
+        ]
+      },
+      "fixed": {
+        "zh": [
+          "升级至 Platform v0.6.107（Velaros 0.6.33）与 UI 0.2.73，统一消费合并后的正式运行时包。",
+          "同步共享聊天时间线、通信消息、工具卡与子任务历史恢复修复。",
+          "缓存会话用量的持久化结果，减少流式更新时的重复处理。",
+          "优化编辑器标签关闭按钮、终端滚动条及 Windows 窗口标题。",
+          "修复终端交互与进程树清理，保留失败诊断并避免无效 PID 影响系统进程。"
+        ],
+        "en": [
+          "Upgrade to Platform v0.6.107 (Velaros 0.6.33) and UI 0.2.73 using the consolidated published runtime.",
+          "Integrate shared timeline, communication, tool-card and child-task history recovery fixes.",
+          "Reuse persisted usage telemetry while streaming to reduce repeated serialization.",
+          "Refine editor tab close buttons, terminal scrollbars and Windows window titles.",
+          "Improve terminal interaction and process cleanup, preserve failure diagnostics and reject invalid process IDs."
+        ]
+      }
+    },
+    {
       "version": "0.4.12",
       "releasedAt": "2026-11-01",
       "title": {
@@ -718,9 +752,7 @@
         "en": "Chat parity and code block fixes"
       },
       "added": {
-        "zh": [
-          "工作台聊天支持操作审批、权限设置与子 Agent，与 Desktop 保持一致。"
-        ],
+        "zh": ["工作台聊天支持操作审批、权限设置与子 Agent，与 Desktop 保持一致。"],
         "en": [
           "Workbench chat now supports action approvals, permission settings, and sub-agents, matching Desktop."
         ]
@@ -752,9 +784,7 @@
         "en": []
       },
       "fixed": {
-        "zh": [
-          "让本地发布工作流校验同时兼容 LF 与 CRLF 检出，确保 Windows 原生发布门禁稳定通过。"
-        ],
+        "zh": ["让本地发布工作流校验同时兼容 LF 与 CRLF 检出，确保 Windows 原生发布门禁稳定通过。"],
         "en": [
           "Made local release-workflow verification accept both LF and CRLF checkouts so the native Windows release gate remains deterministic."
         ]
@@ -881,9 +911,7 @@
       },
       "added": {
         "zh": ["macOS、Windows 与 Linux 的打包结果现在可以独立发布。"],
-        "en": [
-          "macOS, Windows, and Linux packaging results can now be published independently."
-        ]
+        "en": ["macOS, Windows, and Linux packaging results can now be published independently."]
       },
       "fixed": {
         "zh": [
@@ -950,9 +978,7 @@
         "en": "Managed model catalog synchronization"
       },
       "added": {
-        "zh": [
-          "为模型配置和托管模型目录加入可订阅更新，使已打开的界面在刷新后立即同步。"
-        ],
+        "zh": ["为模型配置和托管模型目录加入可订阅更新，使已打开的界面在刷新后立即同步。"],
         "en": [
           "Added subscriptions for model configuration and managed catalogs so open interfaces update immediately after refresh."
         ]
@@ -986,9 +1012,7 @@
         ]
       },
       "fixed": {
-        "zh": [
-          "升级共享 Platform 执行栈，修正取消语义并收窄语言操作的运行时依赖边界。"
-        ],
+        "zh": ["升级共享 Platform 执行栈，修正取消语义并收窄语言操作的运行时依赖边界。"],
         "en": [
           "Updated the shared Platform execution stack, corrected cancellation semantics, and narrowed language-operation runtime dependencies."
         ]
@@ -1012,9 +1036,7 @@
         ]
       },
       "fixed": {
-        "zh": [
-          "改进终端输出高亮和控制序列处理，使内容与工具面板样式保持一致。"
-        ],
+        "zh": ["改进终端输出高亮和控制序列处理，使内容与工具面板样式保持一致。"],
         "en": [
           "Improved terminal highlighting and control-sequence handling so output remains consistent with tool-panel styling."
         ]

@@ -3,7 +3,7 @@ import { join } from 'node:path'
 
 import { describe, expect, test } from 'bun:test'
 
-import { velarosSharedResources } from '@velaros-ai/core/platform/shared-resources'
+import { velarosSharedResources } from '@velaros-ai/velaros/core/platform/shared-resources'
 
 describe('VelarOS shared resources', () => {
   test('the shared account lives in the organization data root rather than Workbench userData', () => {
@@ -14,13 +14,17 @@ describe('VelarOS shared resources', () => {
         env: {},
         homeDirectory: '/Users/example',
       })
-    ).toBe(join('/Users/example', 'Library', 'Application Support', 'VelarOS', 'shared', 'account', 'v1'))
+    ).toBe(
+      join('/Users/example', 'Library', 'Application Support', 'VelarOS', 'shared', 'account', 'v1')
+    )
   })
 
   test('the Workbench account store takes its default directory from the Core owner', () => {
     // 不再留一份本地投影：一处漂了账号就不再共享。
     const store = readFileSync('src/main/account/WorkbenchSharedAccountStore.ts', 'utf8')
-    expect(store).toContain("import { velarosSharedResources } from '@velaros-ai/core/platform/shared-resources'")
+    expect(store).toContain(
+      "import { velarosSharedResources } from '@velaros-ai/velaros/core/platform/shared-resources'"
+    )
     expect(store).toMatch(/options\.rootDir \?\? velarosSharedResources\.accountRoot\(\)/u)
   })
 })

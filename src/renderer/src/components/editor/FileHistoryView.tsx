@@ -1,10 +1,5 @@
 import { type ReactElement, useEffect, useMemo, useRef, useState } from 'react'
-import {
-  CaretDownIcon,
-  CaretUpIcon,
-  ClockCounterClockwiseIcon,
-  XIcon,
-} from '@phosphor-icons/react'
+import { CaretDownIcon, CaretUpIcon, ClockCounterClockwiseIcon, XIcon } from '@phosphor-icons/react'
 import {
   useWorkbenchFileHistory,
   type WorkbenchFileHistoryMode,
@@ -15,7 +10,6 @@ import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 import { buildWorkbenchContentDiffRows } from '@renderer/models/git/workbenchGitDiffModel'
 import type { WorkbenchThemeId } from '@renderer/models/workbenchPreferences'
 
-import { isEmpty, isNotNull, toNullable } from '@velaros-ai/core'
 import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 import { Paragraph } from '@velaros-ai/ui/primitives/display/Paragraph'
@@ -23,6 +17,7 @@ import { Text } from '@velaros-ai/ui/primitives/display/Text'
 import { SearchField } from '@velaros-ai/ui/primitives/forms/SearchField'
 import { SegmentedControl } from '@velaros-ai/ui/primitives/forms/SegmentedControl'
 import { ScrollArea } from '@velaros-ai/ui/primitives/layout/ScrollArea'
+import { isEmpty, isNotNull, toNullable } from '@velaros-ai/velaros/core'
 
 import styles from '../../styles/workbenchPageStyles'
 import { WorkbenchDiffLayoutToggle } from '../git/WorkbenchDiffLayoutToggle'
@@ -121,8 +116,7 @@ export function FileHistoryView({
       const row = diffRows[index]
       const previous = diffRows[index - 1]
       const changed = row.kind === 'addition' || row.kind === 'deletion'
-      const previousChanged =
-        previous?.kind === 'addition' || previous?.kind === 'deletion'
+      const previousChanged = previous?.kind === 'addition' || previous?.kind === 'deletion'
       if (changed && !previousChanged) count += 1
     }
     return count
@@ -228,23 +222,27 @@ export function FileHistoryView({
   )
 
   function renderRight(): ReactElement {
-    if (!selectedId) return (
+    if (!selectedId)
+      return (
         <Paragraph spacing="none" tone="muted" className={styles.gitDiffEmpty}>
           {mode === 'local' ? t('workbench.localHistoryEmpty') : t('workbench.gitCommitSelect')}
         </Paragraph>
       )
-    if (selected.isLoading) return (
+    if (selected.isLoading)
+      return (
         <Paragraph spacing="none" tone="muted" className={styles.gitDiffEmpty}>
           {mode === 'local' ? t('workbench.localHistoryLoading') : t('workbench.gitDiffLoading')}
         </Paragraph>
       )
-    if (selected.error) return (
+    if (selected.error)
+      return (
         <Paragraph spacing="none" tone="muted" className={styles.gitDiffEmpty}>
           {selected.error}
         </Paragraph>
       )
     if (view === 'diff') {
-      if (isEmpty(diffRows)) return (
+      if (isEmpty(diffRows))
+        return (
           <Paragraph spacing="none" tone="muted" className={styles.gitDiffEmpty}>
             {t('workbench.fileHistoryNoDiff')}
           </Paragraph>

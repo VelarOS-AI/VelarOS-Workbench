@@ -1,5 +1,5 @@
-import { Result } from '@velaros-ai/core/result'
 import type { ConversationComposerPort } from '@velaros-ai/ui/conversation/composer'
+import { Result } from '@velaros-ai/velaros/core/result'
 
 import { workbenchMessage } from '../workbenchMessageHost'
 

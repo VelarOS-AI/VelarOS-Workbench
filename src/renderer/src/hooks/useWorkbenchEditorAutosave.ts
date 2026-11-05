@@ -15,7 +15,7 @@ import { resolveWorkbenchTabTextFormat } from '@renderer/models/editor/workbench
 import type { WorkbenchProject } from '@renderer/models/project/workbenchProjects'
 import type { WorkbenchOpenEditorTab } from '@renderer/types/workbenchTypes'
 
-import { isEmpty, Log } from '@velaros-ai/core'
+import { isEmpty, Log } from '@velaros-ai/velaros/core'
 
 import { useLatest, useMemoizedFn, useTimerScope } from '../support/genericHooks'
 

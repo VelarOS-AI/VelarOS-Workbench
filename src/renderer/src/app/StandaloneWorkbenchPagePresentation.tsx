@@ -21,8 +21,8 @@ import { WorkbenchAgentRail } from '@renderer/components/WorkbenchAgentRail'
 import { WorkbenchChatPanel } from '@renderer/components/WorkbenchChatPanel'
 import { useWorkbenchHostRuntime } from '@renderer/host/WorkbenchHostProvider'
 
-import { optionalWhen } from '@velaros-ai/core'
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
+import { optionalWhen } from '@velaros-ai/velaros/core'
 
 import type { WorkbenchProjectHubState } from '@shared/projectHub'
 
@@ -68,7 +68,8 @@ const LazyQuickOpen = lazyWithPreload(
   async () => (await import('../components/QuickOpen')).QuickOpen
 )
 const LazyWorkbenchSettingsDialog = lazyWithPreload(
-  async () => (await import('../components/settings/WorkbenchSettingsDialog')).WorkbenchSettingsDialog
+  async () =>
+    (await import('../components/settings/WorkbenchSettingsDialog')).WorkbenchSettingsDialog
 )
 const LazyWorkbenchGitToolPanel = lazyWithPreload(
   async () => (await import('../components/git/WorkbenchGitToolPanel')).WorkbenchGitToolPanel
@@ -76,7 +77,8 @@ const LazyWorkbenchGitToolPanel = lazyWithPreload(
 // 「编辑运行配置」对话框用得少，第一次打开时才加载。
 const LazyWorkbenchRunConfigurationsDialog = lazyWithPreload(
   async () =>
-    (await import('../components/WorkbenchRunConfigurationsDialog')).WorkbenchRunConfigurationsDialog
+    (await import('../components/WorkbenchRunConfigurationsDialog'))
+      .WorkbenchRunConfigurationsDialog
 )
 // 底部的调试面板：起了调试才预先加载（程序停下时面板已经在了），不进工作区外壳包。
 const LazyWorkbenchDebugPanel = lazyWithPreload(
@@ -118,15 +120,8 @@ export function StandaloneWorkbenchPagePresentation({
     chrome,
     dialogs,
   } = model
-  const {
-    translate,
-    locale,
-    t,
-    shellStyle,
-    macTitleInset,
-    hostPlatform,
-    commandStatusLabel,
-  } = chrome
+  const { translate, locale, t, shellStyle, macTitleInset, hostPlatform, commandStatusLabel } =
+    chrome
 
   const pendingFileOpenId = projectHubState.pendingFileOpen?.id
   const pendingFileOpenPath = projectHubState.pendingFileOpen?.path
@@ -155,8 +150,9 @@ export function StandaloneWorkbenchPagePresentation({
   if (dialogs.runConfigurationsOpen && !runConfigurationsMounted) setRunConfigurationsMounted(true)
   /** 全项目扫出来的 VelarScript 源文件；结构树的完整性靠它，不靠「你打开过什么」。 */
   const [velarSourcePaths, setVelarSourcePaths] = useState<readonly string[]>([])
-  const [velarStructureScopeTabs, setVelarStructureScopeTabs] =
-    useState<readonly VelarStructureViewTab[]>([])
+  const [velarStructureScopeTabs, setVelarStructureScopeTabs] = useState<
+    readonly VelarStructureViewTab[]
+  >([])
   const [activeVelarStructureTabId, setActiveVelarStructureTabId] = useState(
     VelarStructureOverviewTab.id
   )
@@ -164,8 +160,9 @@ export function StandaloneWorkbenchPagePresentation({
   // 不能反向替换这两份状态，否则切换局部范围会让侧栏目录随局部快照一起消失。
   const [velarStructureProjectSnapshots, setVelarStructureProjectSnapshots] =
     useState<WorkbenchVelarProjectSnapshotIndex>(() => new Map())
-  const [velarStructureExpansionOverrides, setVelarStructureExpansionOverrides] =
-    useState<ReadonlyMap<string, boolean>>(() => new Map())
+  const [velarStructureExpansionOverrides, setVelarStructureExpansionOverrides] = useState<
+    ReadonlyMap<string, boolean>
+  >(() => new Map())
   const [velarStructureActiveTab, setVelarStructureActiveTab] = useState<'structure' | 'source'>(
     'structure'
   )
@@ -442,85 +439,89 @@ export function StandaloneWorkbenchPagePresentation({
         auxiliaryTabs: [
           ...aiChangeTabs,
           ...(dialogs.velarLogicGraphOpen
-          ? [
-              ...velarStructureTabs.map((structureTab) => {
-                const tab = describeVelarStructureTab(structureTab.scopePaths)
-                return {
-                  id: structureTab.id,
-                  title: tab.title,
-                  label: tab.label,
-                  icon: <TreeViewIcon size={14} weight="bold" />,
-                  active:
-                    dialogs.velarLogicGraphActive &&
-                    velarStructureActiveTab === 'structure' &&
-                    activeVelarStructureTabId === structureTab.id,
-                  group: 'structure' as const,
-                  kind: 'velar-structure',
-                  onSelect: () => selectVelarStructureTab(structureTab.id),
-                  onClose: optionalWhen(
-                    structureTab.id !== VelarStructureOverviewTab.id,
-                    () => closeVelarStructureTab(structureTab.id)
-                  ),
-                  content: (
-                    <Suspense fallback={null}>
-                      <LazyWorkbenchLogicGraphEditor
-                        active={
-                          dialogs.velarLogicGraphActive &&
-                          velarStructureActiveTab === 'structure' &&
-                          activeVelarStructureTabId === structureTab.id
-                        }
-                        projectRoot={projectRoot}
-                        projectRoots={velarStructureProjectRoots}
-                        scopePaths={structureTab.scopePaths}
-                        selectedFilePath={workbench.selectedFilePath}
-                        selectedContent={workbench.editorContent}
-                        openTabs={workbench.openTabs}
-                        projectFiles={velarStructureProjectFiles}
-                        projectSnapshots={velarStructureProjectSnapshots}
-                        refreshVersion={workbench.saveRevision + workbench.workspaceBindingVersion}
-                        workbenchTheme={workbenchPreferences.preferences.theme}
-                        onProjectSnapshotsChange={handleVelarStructureProjectSnapshotsChange}
-                        onOpenSource={(source) => {
-                          setVelarSourcePreview(source)
-                          setVelarStructureActiveTab('source')
-                        }}
-                      />
-                    </Suspense>
-                  ),
-                }
-              }),
-              ...(velarSourcePreview
-                ? [
-                    {
-                      id: `velar-source:${velarSourcePreview.path}`,
-                      title: velarSourcePreview.path,
-                      label: velarSourcePreview.path,
-                      icon: <WorkbenchFileTypeIcon fileName={velarSourcePreview.path} size={14} />,
-                      active: dialogs.velarLogicGraphActive && velarStructureActiveTab === 'source',
-                      group: 'structure' as const,
-                      kind: 'velar-source',
-                      onSelect: () => {
-                        dialogs.setVelarLogicGraphActive(true)
-                        setVelarStructureActiveTab('source')
-                      },
-                      onClose: () => {
-                        setVelarSourcePreview(null)
-                        setVelarStructureActiveTab('structure')
-                        setActiveVelarStructureTabId(VelarStructureOverviewTab.id)
-                      },
-                      content: (
-                        <ReadOnlyWorkbenchCode
-                          content={velarSourcePreview.content}
-                          path={velarSourcePreview.path}
+            ? [
+                ...velarStructureTabs.map((structureTab) => {
+                  const tab = describeVelarStructureTab(structureTab.scopePaths)
+                  return {
+                    id: structureTab.id,
+                    title: tab.title,
+                    label: tab.label,
+                    icon: <TreeViewIcon size={14} weight="bold" />,
+                    active:
+                      dialogs.velarLogicGraphActive &&
+                      velarStructureActiveTab === 'structure' &&
+                      activeVelarStructureTabId === structureTab.id,
+                    group: 'structure' as const,
+                    kind: 'velar-structure',
+                    onSelect: () => selectVelarStructureTab(structureTab.id),
+                    onClose: optionalWhen(structureTab.id !== VelarStructureOverviewTab.id, () =>
+                      closeVelarStructureTab(structureTab.id)
+                    ),
+                    content: (
+                      <Suspense fallback={null}>
+                        <LazyWorkbenchLogicGraphEditor
+                          active={
+                            dialogs.velarLogicGraphActive &&
+                            velarStructureActiveTab === 'structure' &&
+                            activeVelarStructureTabId === structureTab.id
+                          }
+                          projectRoot={projectRoot}
+                          projectRoots={velarStructureProjectRoots}
+                          scopePaths={structureTab.scopePaths}
+                          selectedFilePath={workbench.selectedFilePath}
+                          selectedContent={workbench.editorContent}
+                          openTabs={workbench.openTabs}
+                          projectFiles={velarStructureProjectFiles}
+                          projectSnapshots={velarStructureProjectSnapshots}
+                          refreshVersion={
+                            workbench.saveRevision + workbench.workspaceBindingVersion
+                          }
                           workbenchTheme={workbenchPreferences.preferences.theme}
-                          initialLine={velarSourcePreview.line}
+                          onProjectSnapshotsChange={handleVelarStructureProjectSnapshotsChange}
+                          onOpenSource={(source) => {
+                            setVelarSourcePreview(source)
+                            setVelarStructureActiveTab('source')
+                          }}
                         />
-                      ),
-                    },
-                  ]
-                : []),
-            ]
-          : []),
+                      </Suspense>
+                    ),
+                  }
+                }),
+                ...(velarSourcePreview
+                  ? [
+                      {
+                        id: `velar-source:${velarSourcePreview.path}`,
+                        title: velarSourcePreview.path,
+                        label: velarSourcePreview.path,
+                        icon: (
+                          <WorkbenchFileTypeIcon fileName={velarSourcePreview.path} size={14} />
+                        ),
+                        active:
+                          dialogs.velarLogicGraphActive && velarStructureActiveTab === 'source',
+                        group: 'structure' as const,
+                        kind: 'velar-source',
+                        onSelect: () => {
+                          dialogs.setVelarLogicGraphActive(true)
+                          setVelarStructureActiveTab('source')
+                        },
+                        onClose: () => {
+                          setVelarSourcePreview(null)
+                          setVelarStructureActiveTab('structure')
+                          setActiveVelarStructureTabId(VelarStructureOverviewTab.id)
+                        },
+                        content: (
+                          <ReadOnlyWorkbenchCode
+                            content={velarSourcePreview.content}
+                            path={velarSourcePreview.path}
+                            workbenchTheme={workbenchPreferences.preferences.theme}
+                            initialLine={velarSourcePreview.line}
+                          />
+                        ),
+                      },
+                    ]
+                  : []),
+              ]
+            : []),
         ],
       },
     },
@@ -912,10 +913,10 @@ export function StandaloneWorkbenchPagePresentation({
             coveringDiffItem || coveringLightTab ? false : workbench.hasUnsavedChanges
           }
           readOnly={
-            !coveringDiffItem
-            && !coveringLightTab
-            && !!workbench.selectedFile
-            && !workbench.canEditSelectedFile
+            !coveringDiffItem &&
+            !coveringLightTab &&
+            !!workbench.selectedFile &&
+            !workbench.canEditSelectedFile
           }
           isSavingFile={workbench.isSavingFile}
           openFileCount={workbench.openTabs.length}

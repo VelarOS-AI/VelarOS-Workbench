@@ -1,5 +1,5 @@
-import { truncate } from '@velaros-ai/core'
 import { type BrowserElementSelection } from '@velaros-ai/velaros/browser/contracts'
+import { truncate } from '@velaros-ai/velaros/core'
 
 /**
  * 用户在浏览器里拾取的页面元素 → 本轮模型可见的上下文段（与 Desktop useChatComposerSubmission 同一格式）。
@@ -9,7 +9,15 @@ import { type BrowserElementSelection } from '@velaros-ai/velaros/browser/contra
  */
 type BrowserElementSelectionStep = NonNullable<BrowserElementSelection['interactionSteps']>[number]
 
-const SummarizedAttributes = ['id', 'name', 'type', 'role', 'aria-label', 'data-testid', 'placeholder']
+const SummarizedAttributes = [
+  'id',
+  'name',
+  'type',
+  'role',
+  'aria-label',
+  'data-testid',
+  'placeholder',
+]
 
 function formatAttributeSummary(attributes: Record<string, string>): string {
   return Object.entries(attributes)
@@ -18,7 +26,9 @@ function formatAttributeSummary(attributes: Record<string, string>): string {
     .join(' ')
 }
 
-function formatSnapshot(selection: BrowserElementSelection | BrowserElementSelectionStep): string[] {
+function formatSnapshot(
+  selection: BrowserElementSelection | BrowserElementSelectionStep
+): string[] {
   const attributes = formatAttributeSummary(selection.attributes)
   return [
     selection.label,

@@ -7,7 +7,7 @@ import { promisify } from 'node:util'
 
 import { describe, test } from 'bun:test'
 
-import { AppError } from '@velaros-ai/core/error'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
 import { createWorkbenchAppParts } from '../src/main/workspace/Parts'
 import { WorkbenchProjectFileSystem } from '../src/main/workspace/WorkbenchProjectFileSystem'
@@ -32,9 +32,9 @@ void describe('Workbench project file tree', () => {
       )
     )
     const webp = Uint8Array.from([
-      0x52, 0x49, 0x46, 0x46, 0x1a, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50,
-      0x56, 0x50, 0x38, 0x4c, 0x0d, 0x00, 0x00, 0x00, 0x2f, 0x00, 0x00, 0x00,
-      0x10, 0x07, 0x10, 0x11, 0x11, 0x88, 0x88, 0xfe, 0x07, 0x00,
+      0x52, 0x49, 0x46, 0x46, 0x1a, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50, 0x56, 0x50, 0x38,
+      0x4c, 0x0d, 0x00, 0x00, 0x00, 0x2f, 0x00, 0x00, 0x00, 0x10, 0x07, 0x10, 0x11, 0x11, 0x88,
+      0x88, 0xfe, 0x07, 0x00,
     ])
     const images = [
       {
@@ -88,7 +88,10 @@ void describe('Workbench project file tree', () => {
     const service = new WorkbenchProjectFileSystem()
 
     try {
-      await writeFile(join(projectRoot, 'mismatch.png'), '<svg xmlns="http://www.w3.org/2000/svg"/>')
+      await writeFile(
+        join(projectRoot, 'mismatch.png'),
+        '<svg xmlns="http://www.w3.org/2000/svg"/>'
+      )
       await writeFile(
         join(projectRoot, 'nested.svg'),
         '<html><body><svg xmlns="http://www.w3.org/2000/svg"/></body></html>'
@@ -187,7 +190,10 @@ void describe('Workbench project file tree', () => {
         ]
       )
       const nested = await service.listDirectory({ projectRoot, path: '..cache' })
-      assert.deepEqual(nested.entries.map((entry) => entry.path), ['..cache/entry.txt'])
+      assert.deepEqual(
+        nested.entries.map((entry) => entry.path),
+        ['..cache/entry.txt']
+      )
       const notes = await service.readTextFile({ projectRoot, path: '..notes.md' })
       assert.equal(notes.content, '# kept\n')
 
@@ -316,7 +322,10 @@ void describe('Workbench project file tree', () => {
           error.code === 'VALIDATION' &&
           /需要确认/u.test(error.message)
       )
-      assert.equal(await readFile(join(projectRoot, 'filled', 'nested', '.hidden'), 'utf8'), 'preserved')
+      assert.equal(
+        await readFile(join(projectRoot, 'filled', 'nested', '.hidden'), 'utf8'),
+        'preserved'
+      )
 
       const filledDelete = await parts.files.deleteEntry({
         projectRoot,
@@ -333,7 +342,10 @@ void describe('Workbench project file tree', () => {
         restoreId: filledDelete.restoreId,
       })
       assert.equal(trash.trashed.length, 2)
-      assert.equal(await readFile(join(projectRoot, 'filled', 'nested', '.hidden'), 'utf8'), 'preserved')
+      assert.equal(
+        await readFile(join(projectRoot, 'filled', 'nested', '.hidden'), 'utf8'),
+        'preserved'
+      )
 
       const filePreview = await parts.files.inspectDeleteEntry({
         projectRoot,

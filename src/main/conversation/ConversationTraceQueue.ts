@@ -1,4 +1,4 @@
-import { isEmpty } from '@velaros-ai/core'
+import { isEmpty } from '@velaros-ai/velaros/core'
 
 /** 两次定时重读追踪至少隔多久，毫秒。 */
 const RefreshIntervalMs = 1_000

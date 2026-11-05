@@ -4,8 +4,8 @@ import type { WorkbenchGitChangeItem } from '@renderer/models/git/workbenchGitMo
 import { scanWorkbenchMergeResolutions } from '@renderer/models/git/workbenchMergeResolution'
 import type { WorkbenchOpenEditorTab } from '@renderer/types/workbenchTypes'
 
-import { AppError } from '@velaros-ai/core/error'
-import { Result } from '@velaros-ai/core/result'
+import { AppError } from '@velaros-ai/velaros/core/error'
+import { Result } from '@velaros-ai/velaros/core/result'
 
 import type { useStableWorkbenchMessageTranslate } from '../runtime/useStableWorkbenchMessaging'
 import { useLatest } from '../support/genericHooks'
@@ -19,7 +19,10 @@ interface UseWorkbenchMergeResolutionOfferOptions {
   openTabs: readonly WorkbenchOpenEditorTab[]
   /** 标记之后刷新 Git 状态（提交面板里这一行从「合并冲突」挪走）。 */
   onResolved: () => Promise<void> | void
-  translate: Pick<ReturnType<typeof useStableWorkbenchMessageTranslate>, 'messageLatest' | 'tLatest'>
+  translate: Pick<
+    ReturnType<typeof useStableWorkbenchMessageTranslate>,
+    'messageLatest' | 'tLatest'
+  >
 }
 
 /**

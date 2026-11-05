@@ -1,11 +1,11 @@
-import { AppError } from '@velaros-ai/core/error'
-import { logRuntime } from '@velaros-ai/core/logger'
+import { AppError } from '@velaros-ai/velaros/core/error'
+import { logRuntime } from '@velaros-ai/velaros/core/logger'
 import {
   createModelRequestClient,
   createModelRuntimeComposition,
   type ModelRequestClientApi,
   type ModelRuntimeCompositionApi,
-} from '@velaros-ai/model'
+} from '@velaros-ai/velaros/model'
 
 import { type WorkbenchInlineCompletionResult } from '@shared/contracts/workbench'
 import type { WorkbenchInlineCompletionBridgeRequest } from '@shared/workbenchLanguage'

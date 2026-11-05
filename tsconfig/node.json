@@ -1,0 +1,13 @@
+{
+  "extends": "./base.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "../.velaros/workspace/typecheck/node.tsbuildinfo"
+  },
+  "files": ["../src/shared/velaros-globals.d.ts", "../src/renderer/src/types/tinykeys.d.ts"],
+  "include": [
+    "../src/main/**/*.ts",
+    "../src/preload/**/*.ts",
+    "../src/shared/**/*.ts",
+    "../electron.vite.config.ts"
+  ]
+}

@@ -8,9 +8,14 @@
  */
 import { ipcMain } from 'electron'
 
-import { toOptional } from '@velaros-ai/core'
+import { toOptional } from '@velaros-ai/velaros/core'
 
-import { type WorkbenchTerminalInputRequest, type WorkbenchTerminalResizeRequest, type WorkbenchTerminalStartRequest, type WorkbenchTerminalStopRequest } from '@shared/contracts/workbench'
+import {
+  type WorkbenchTerminalInputRequest,
+  type WorkbenchTerminalResizeRequest,
+  type WorkbenchTerminalStartRequest,
+  type WorkbenchTerminalStopRequest,
+} from '@shared/contracts/workbench'
 
 import { readWorkbenchRunEnvironment } from '../../../shared/workbenchRunEnvironment'
 import { WorkbenchTerminalChannels } from '../../../shared/workbenchTerminal'
@@ -33,11 +38,15 @@ export function registerWorkbenchTerminalIpc(terminal: TerminalSessions): void {
       if (!parsed) return invalidRequest()
 
       const sender = event.sender
-      return terminal.startTerminalSession(parsed, (outputEvent) => {
-        if (!sender.isDestroyed()) {
-          sender.send(WorkbenchTerminalChannels.output, outputEvent)
-        }
-      }, sender.id)
+      return terminal.startTerminalSession(
+        parsed,
+        (outputEvent) => {
+          if (!sender.isDestroyed()) {
+            sender.send(WorkbenchTerminalChannels.output, outputEvent)
+          }
+        },
+        sender.id
+      )
     })
   )
 
@@ -72,7 +81,10 @@ export function registerWorkbenchTerminalIpc(terminal: TerminalSessions): void {
     callWithEnvelope(async () => {
       if (!hasStringFields(request, ['sessionId'])) return invalidRequest()
 
-      return terminal.readTerminalCwd({ sessionId: request['sessionId'] as string }, event.sender.id)
+      return terminal.readTerminalCwd(
+        { sessionId: request['sessionId'] as string },
+        event.sender.id
+      )
     })
   )
 

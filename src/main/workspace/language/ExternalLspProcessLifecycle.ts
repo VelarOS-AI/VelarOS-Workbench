@@ -1,8 +1,8 @@
 import { spawn } from 'node:child_process'
 
-import { optionalWhen } from '@velaros-ai/core'
-import { logRuntime } from '@velaros-ai/core/logger'
-import { createPlatform } from '@velaros-ai/core/platform'
+import { optionalWhen } from '@velaros-ai/velaros/core'
+import { logRuntime } from '@velaros-ai/velaros/core/logger'
+import { createPlatform } from '@velaros-ai/velaros/core/platform'
 
 type ExternalLspProcessTreeTerminationPlan =
   | {
@@ -29,9 +29,7 @@ const TerminationCommandTimeoutMs = 5_000
 const log = logRuntime.tag('ExternalLspProcessLifecycle')
 const currentPlatform = createPlatform()
 
-function shouldDetachExternalLspProcess(
-  platform: NodeJS.Platform = process.platform
-): boolean {
+function shouldDetachExternalLspProcess(platform: NodeJS.Platform = process.platform): boolean {
   return createPlatform({ platform }).shouldUseDetachedProcessGroup()
 }
 
@@ -141,10 +139,8 @@ async function terminateExternalLspProcessTree(
 
   const delivered = await deliverTermination(pid, signal)
   if (signal === 'SIGKILL')
-    return delivered
-      ? waitForProcessExit(pid, TerminationKillConfirmationMs)
-      : !isProcessAlive(pid)
-  if (delivered && await waitForProcessExit(pid, TerminationEscalationMs)) return true
+    return delivered ? waitForProcessExit(pid, TerminationKillConfirmationMs) : !isProcessAlive(pid)
+  if (delivered && (await waitForProcessExit(pid, TerminationEscalationMs))) return true
 
   const killed = await deliverTermination(pid, 'SIGKILL')
   if (!killed) return !isProcessAlive(pid)

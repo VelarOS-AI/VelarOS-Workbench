@@ -1,6 +1,6 @@
 import { useEffect, useSyncExternalStore } from 'react'
 
-import type { ChatProviderId } from '@velaros-ai/model/contracts'
+import type { ChatProviderId } from '@velaros-ai/velaros/model/contracts'
 
 import { isStandaloneWorkbenchModelProviderSelectable } from './standaloneWorkbenchManagedModels'
 import {
@@ -59,7 +59,9 @@ function readInitialModelConfig(): StandaloneWorkbenchModelConfig {
     // 存下的服务商已经不在目录里时退回默认服务商，它的模型也一并不认，用默认服务商自己的默认模型。
     const storedForProvider = stored.provider === provider.id
     const storedCompletionModel =
-      storedForProvider && typeof stored.completionModel === 'string' ? stored.completionModel : undefined
+      storedForProvider && typeof stored.completionModel === 'string'
+        ? stored.completionModel
+        : undefined
     const config = {
       provider: provider.id,
       model: resolveStandaloneWorkbenchProviderModel(
@@ -151,10 +153,16 @@ function applyStandaloneWorkbenchModelConfig(
 function persistApiKeyForProvider(provider: string, apiKey: string): void {
   if (typeof window === 'undefined' || !window.velarosWorkbenchModel) return
   if (getStandaloneWorkbenchModelProviderPreset(provider).managedByCloud) return
-  void window.velarosWorkbenchModel.setApiKey({ provider, apiKey }).then(() => {
-    // 设置窗口写完加密凭据后，通知已打开的工作区重新读取；信号里不含密钥。
-    window.localStorage.setItem(ModelCredentialRevisionKey, `${Date.now()}:${apiKeyMutationVersion}`)
-  }).catch(() => undefined)
+  void window.velarosWorkbenchModel
+    .setApiKey({ provider, apiKey })
+    .then(() => {
+      // 设置窗口写完加密凭据后，通知已打开的工作区重新读取；信号里不含密钥。
+      window.localStorage.setItem(
+        ModelCredentialRevisionKey,
+        `${Date.now()}:${apiKeyMutationVersion}`
+      )
+    })
+    .catch(() => undefined)
 }
 
 async function hydrateApiKeyForProvider(provider: string): Promise<void> {
@@ -165,14 +173,13 @@ async function hydrateApiKeyForProvider(provider: string): Promise<void> {
   }
   const request = ++apiKeyHydrationRequest
   const mutationVersion = apiKeyMutationVersion
-  const apiKey = await window.velarosWorkbenchModel
-    .getApiKey({ provider })
-    .catch(() => '')
+  const apiKey = await window.velarosWorkbenchModel.getApiKey({ provider }).catch(() => '')
   if (
-    request !== apiKeyHydrationRequest
-    || mutationVersion !== apiKeyMutationVersion
-    || currentConfig.provider !== provider
-  ) return
+    request !== apiKeyHydrationRequest ||
+    mutationVersion !== apiKeyMutationVersion ||
+    currentConfig.provider !== provider
+  )
+    return
   applyStandaloneWorkbenchModelConfig({ apiKey }, false)
 }
 
@@ -200,13 +207,16 @@ export function selectStandaloneWorkbenchModelProvider(
   const provider = getStandaloneWorkbenchModelProviderPreset(providerId)
   const model = defaults?.model ?? provider.defaultModel
   apiKeyHydrationRequest += 1
-  applyStandaloneWorkbenchModelConfig({
-    provider: provider.id,
-    model,
-    completionModel: defaults?.completionModel ?? (model || provider.completionModel),
-    baseURL: provider.defaultBaseURL,
-    apiKey: '',
-  }, false)
+  applyStandaloneWorkbenchModelConfig(
+    {
+      provider: provider.id,
+      model,
+      completionModel: defaults?.completionModel ?? (model || provider.completionModel),
+      baseURL: provider.defaultBaseURL,
+      apiKey: '',
+    },
+    false
+  )
   if (!provider.managedByCloud) void hydrateApiKeyForProvider(provider.id)
 }
 
@@ -218,8 +228,8 @@ export function selectStandaloneWorkbenchModel(
   if (!isStandaloneWorkbenchModelProviderSelectable(providerId)) return
   const provider = getStandaloneWorkbenchModelProviderPreset(providerId)
   const selected =
-    kind === 'completion'
-    && (model === StandaloneWorkbenchCompletionDisabledOptionValue || !model.trim())
+    kind === 'completion' &&
+    (model === StandaloneWorkbenchCompletionDisabledOptionValue || !model.trim())
       ? ''
       : resolveStandaloneWorkbenchProviderModel(provider.id, model, kind)
   updateStandaloneWorkbenchModelConfig(
@@ -227,21 +237,21 @@ export function selectStandaloneWorkbenchModel(
   )
 }
 
-export function selectStandaloneWorkbenchAgentModel(
-  providerId: string,
-  model: string
-): void {
+export function selectStandaloneWorkbenchAgentModel(providerId: string, model: string): void {
   if (!isStandaloneWorkbenchModelProviderSelectable(providerId)) return
   const provider = getStandaloneWorkbenchModelProviderPreset(providerId)
   const providerChanged = currentConfig.provider !== provider.id
   if (providerChanged) apiKeyHydrationRequest += 1
-  applyStandaloneWorkbenchModelConfig({
-    provider: provider.id,
-    model: resolveStandaloneWorkbenchProviderModel(provider.id, model, 'agent'),
-    completionModel: providerChanged ? provider.completionModel : currentConfig.completionModel,
-    baseURL: providerChanged ? provider.defaultBaseURL : currentConfig.baseURL,
-    apiKey: providerChanged ? '' : currentConfig.apiKey,
-  }, false)
+  applyStandaloneWorkbenchModelConfig(
+    {
+      provider: provider.id,
+      model: resolveStandaloneWorkbenchProviderModel(provider.id, model, 'agent'),
+      completionModel: providerChanged ? provider.completionModel : currentConfig.completionModel,
+      baseURL: providerChanged ? provider.defaultBaseURL : currentConfig.baseURL,
+      apiKey: providerChanged ? '' : currentConfig.apiKey,
+    },
+    false
+  )
   if (providerChanged && !provider.managedByCloud) void hydrateApiKeyForProvider(provider.id)
 }
 

@@ -1,6 +1,6 @@
 import { useEffect, useSyncExternalStore } from 'react'
 
-import { isNonBlankString, isPlainObject, Log } from '@velaros-ai/core'
+import { isNonBlankString, isPlainObject, Log } from '@velaros-ai/velaros/core'
 
 import {
   type WorkbenchAgentEngineId,
@@ -51,7 +51,8 @@ export function resolveWorkbenchEngineModel(
 
 /** 重新问一次主进程引擎的情况（force 时主进程也重探，不用它的缓存）。 */
 export function refreshWorkbenchAgentEngines(force = false): Promise<void> {
-  if (typeof window === 'undefined' || !window.velarosWorkbenchConversation) return Promise.resolve()
+  if (typeof window === 'undefined' || !window.velarosWorkbenchConversation)
+    return Promise.resolve()
   loading ??= window.velarosWorkbenchConversation
     .engines({ refresh: force })
     .then((result) => {

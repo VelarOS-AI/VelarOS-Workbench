@@ -12,10 +12,19 @@ import type { Dirent } from 'node:fs'
 import { readdir, realpath, stat } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 
-import { isPresent } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
+import { isPresent } from '@velaros-ai/velaros/core'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
-import { type WorkbenchDirectoryEntry, type WorkbenchListProjectFilesRequest, type WorkbenchListProjectFilesResult, type WorkbenchSearchContentBatch, type WorkbenchSearchContentRequest, type WorkbenchSearchContentResult, type WorkbenchSearchEntriesRequest, type WorkbenchSearchEntriesResult } from '@shared/contracts/workbench'
+import {
+  type WorkbenchDirectoryEntry,
+  type WorkbenchListProjectFilesRequest,
+  type WorkbenchListProjectFilesResult,
+  type WorkbenchSearchContentBatch,
+  type WorkbenchSearchContentRequest,
+  type WorkbenchSearchContentResult,
+  type WorkbenchSearchEntriesRequest,
+  type WorkbenchSearchEntriesResult,
+} from '@shared/contracts/workbench'
 import {
   compileWorkbenchSearchPathFilter,
   isWorkbenchSearchPathIncluded,
@@ -84,7 +93,10 @@ class SearchIndex {
     request: WorkbenchSearchEntriesRequest
   ): Promise<WorkbenchSearchEntriesResult> {
     const projectRoot = await this.pathResolver.resolveProjectRoot(request.projectRoot)
-    const searchRoot = await this.pathResolver.resolveInsideProject(projectRoot, request.path ?? '.')
+    const searchRoot = await this.pathResolver.resolveInsideProject(
+      projectRoot,
+      request.path ?? '.'
+    )
     const searchRootStats = await stat(searchRoot.realPath)
 
     if (!searchRootStats.isDirectory()) {
@@ -215,7 +227,11 @@ class SearchIndex {
 
     for (let depth = 0; level.length > 0 && !truncated; depth += 1) {
       const nextLevel: WorkbenchProjectFileListDirectory[] = []
-      for (let start = 0; start < level.length && !truncated; start += PROJECT_FILE_LIST_READ_CONCURRENCY) {
+      for (
+        let start = 0;
+        start < level.length && !truncated;
+        start += PROJECT_FILE_LIST_READ_CONCURRENCY
+      ) {
         const listings = await Promise.all(
           level
             .slice(start, start + PROJECT_FILE_LIST_READ_CONCURRENCY)
@@ -252,7 +268,8 @@ class SearchIndex {
     const listing: WorkbenchProjectFileListListing = { files: [], directories: [] }
     for (const entry of entries) {
       const isDirectory = entry.isDirectory()
-      if (!this.entryHelper.shouldIncludeEntry(entry.name, isDirectory, true, atProjectRoot)) continue
+      if (!this.entryHelper.shouldIncludeEntry(entry.name, isDirectory, true, atProjectRoot))
+        continue
 
       const relativePath = directory.relativePath
         ? `${directory.relativePath}/${entry.name}`
@@ -307,9 +324,9 @@ class SearchIndex {
 
       const path = this.pathResolver.toProjectRelativePath(projectRoot, resolved.requestedPath)
       if (
-        path !== '.'
-        && !isInsideUnsearchedDirectory(path)
-        && isWorkbenchSearchPathIncluded(filter, path)
+        path !== '.' &&
+        !isInsideUnsearchedDirectory(path) &&
+        isWorkbenchSearchPathIncluded(filter, path)
       )
         paths.add(path)
     }

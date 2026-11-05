@@ -5,8 +5,8 @@ import { isAbsolute, join, relative, resolve } from 'node:path'
 
 import { describe, test } from 'bun:test'
 
-import { AppError } from '@velaros-ai/core/error'
-import { Result } from '@velaros-ai/core/result'
+import { AppError } from '@velaros-ai/velaros/core/error'
+import { Result } from '@velaros-ai/velaros/core/result'
 
 import { WorkbenchLanguageServices } from '../src/main/workspace/language/LanguageServices'
 import { clearTypeScriptProjectCache } from '../src/main/workspace/language/TypeScriptProjectHost'
@@ -27,7 +27,8 @@ const languagePathResolver = {
     return realpath(resolve(input))
   },
   assertAllowedProjectPath(projectRoot: string, absolutePath: string, inputPath: string): void {
-    if (!isInside(projectRoot, absolutePath)) throw new Error(`Language path escapes the project: ${inputPath}`)
+    if (!isInside(projectRoot, absolutePath))
+      throw new Error(`Language path escapes the project: ${inputPath}`)
   },
   isAllowedProjectPath(projectRoot: string, absolutePath: string): boolean {
     return isInside(projectRoot, absolutePath)
@@ -37,7 +38,10 @@ const languagePathResolver = {
   },
 }
 
-function diskFile(content: string, overrides: Partial<WorkbenchReadFileResult> = {}): WorkbenchReadFileResult {
+function diskFile(
+  content: string,
+  overrides: Partial<WorkbenchReadFileResult> = {}
+): WorkbenchReadFileResult {
   return {
     projectRoot: '/project',
     path: 'src/a.ts',
@@ -54,7 +58,9 @@ function diskFile(content: string, overrides: Partial<WorkbenchReadFileResult> =
 
 const renameEdit = {
   path: 'src/a.ts',
-  edits: [{ range: { startLine: 1, startColumn: 14, endLine: 1, endColumn: 19 }, newText: 'total' }],
+  edits: [
+    { range: { startLine: 1, startColumn: 14, endLine: 1, endColumn: 19 }, newText: 'total' },
+  ],
 }
 
 void describe('language service edits for files that are not open', () => {
@@ -69,12 +75,14 @@ void describe('language service edits for files that are not open', () => {
     })
     assert.equal(failure, null)
     // 不带编码与换行符：写回时沿用磁盘上的格式。
-    assert.deepEqual(saved, [{
-      path: 'src/a.ts',
-      content: 'export const total = 1\n',
-      expectedModifiedAt: 1_000,
-      expectedSize: 'export const count = 1\n'.length,
-    }])
+    assert.deepEqual(saved, [
+      {
+        path: 'src/a.ts',
+        content: 'export const total = 1\n',
+        expectedModifiedAt: 1_000,
+        expectedSize: 'export const count = 1\n'.length,
+      },
+    ])
   })
 
   void test('the rename report is translated in both languages', () => {
@@ -92,7 +100,10 @@ void describe('language service edits for files that are not open', () => {
       assert.notEqual(en, key, `en-US is missing ${key}`)
       assert.notEqual(zh, key, `zh-CN is missing ${key}`)
     }
-    assert.equal(translateWorkbenchAppMessage('en-US', 'workbench.languageServiceEditsApplied', { count: 3 }), 'Renamed in 3 files')
+    assert.equal(
+      translateWorkbenchAppMessage('en-US', 'workbench.languageServiceEditsApplied', { count: 3 }),
+      'Renamed in 3 files'
+    )
   })
 
   void test('report read-only, unsupported, conflicting and failing files instead of skipping them', async () => {
@@ -101,8 +112,16 @@ void describe('language service edits for files that are not open', () => {
       [diskFile('export const count = 1\n', { gitIgnored: true }), save, 'read-only'],
       [diskFile('export const count = 1\n', { truncated: true }), save, 'unsupported-text'],
       [diskFile('export const count = 1\n', { textIssue: 'mixed-eol' }), save, 'unsupported-text'],
-      [diskFile('export const count = 1\n'), async () => Result.fail(new AppError('CONFLICT', 'changed')), 'changed-on-disk'],
-      [diskFile('export const count = 1\n'), async () => Result.fail(new AppError('IPC', 'disk full')), 'error'],
+      [
+        diskFile('export const count = 1\n'),
+        async () => Result.fail(new AppError('CONFLICT', 'changed')),
+        'changed-on-disk',
+      ],
+      [
+        diskFile('export const count = 1\n'),
+        async () => Result.fail(new AppError('IPC', 'disk full')),
+        'error',
+      ],
     ] as const
     for (const [file, saveFile, reason] of cases) {
       const failure = await writeWorkbenchLanguageServiceFileChange(renameEdit, {
@@ -127,9 +146,15 @@ void describe('language service edits for files that are not open', () => {
     const services = new WorkbenchLanguageServices(languagePathResolver)
     const parts = createWorkbenchAppParts(dataRoot, { moveToTrash: refuseTrash })
     try {
-      await writeFile(join(projectRoot, 'tsconfig.json'), JSON.stringify({ compilerOptions: { strict: true }, include: ['src'] }))
+      await writeFile(
+        join(projectRoot, 'tsconfig.json'),
+        JSON.stringify({ compilerOptions: { strict: true }, include: ['src'] })
+      )
       await mkdir(join(projectRoot, 'src'))
-      await writeFile(join(projectRoot, 'src/count.ts'), '﻿export const count = 1\r\nexport const twice = count * 2\r\n')
+      await writeFile(
+        join(projectRoot, 'src/count.ts'),
+        '﻿export const count = 1\r\nexport const twice = count * 2\r\n'
+      )
       const main = "import { count } from './count'\nconsole.log(count)\n"
       await writeFile(join(projectRoot, 'src/main.ts'), main)
 

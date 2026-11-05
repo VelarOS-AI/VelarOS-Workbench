@@ -1,9 +1,9 @@
-import { isArray } from '@velaros-ai/core'
+import { isArray } from '@velaros-ai/velaros/core'
 import {
   isRecord,
   readNumberScalar as readNumber,
   readStringScalar as readString,
-} from '@velaros-ai/core/utils/unknownJsonRecord'
+} from '@velaros-ai/velaros/core/utils/unknownJsonRecord'
 
 import {
   collectWorkbenchEditorTabsToRight,
@@ -88,7 +88,9 @@ export function getWorkbenchEditorFocusedGroup(
 }
 
 /** 「当前文件」：全局动作所在那一组正在显示的标签。 */
-export function getWorkbenchEditorFocusedPath(layout: WorkbenchEditorGroupsLayout): Nullable<string> {
+export function getWorkbenchEditorFocusedPath(
+  layout: WorkbenchEditorGroupsLayout
+): Nullable<string> {
   return getWorkbenchEditorFocusedGroup(layout).activePath
 }
 
@@ -118,7 +120,9 @@ function replaceGroup(
 
 /** 没有标签的组不留着（只剩一个空组除外）；当前组被收掉时落到留下来的组上。 */
 function collapseEmptyGroups(layout: WorkbenchEditorGroupsLayout): WorkbenchEditorGroupsLayout {
-  const kept = layout.groups.flatMap((group, index) => (group.paths.length > 0 ? [{ group, index }] : []))
+  const kept = layout.groups.flatMap((group, index) =>
+    group.paths.length > 0 ? [{ group, index }] : []
+  )
   if (kept.length === layout.groups.length) return layout
   if (kept.length === 0) return { ...layout, groups: [EmptyWorkbenchEditorGroup], focusedGroup: 0 }
 
@@ -289,7 +293,8 @@ export function listWorkbenchEditorUnpinnedTabs(
   layout: WorkbenchEditorGroupsLayout,
   groupIndex?: number
 ): string[] {
-  const groups = groupIndex === undefined ? layout.groups : layout.groups.slice(groupIndex, groupIndex + 1)
+  const groups =
+    groupIndex === undefined ? layout.groups : layout.groups.slice(groupIndex, groupIndex + 1)
   return groups.flatMap((group) => group.paths.slice(group.pinnedCount))
 }
 
@@ -392,8 +397,9 @@ export function closeWorkbenchEditorTabs(
       group.paths.some((path) => closing.has(path))
         ? {
             paths: group.paths.filter((path) => !closing.has(path)),
-            pinnedCount: group.paths.slice(0, group.pinnedCount).filter((path) => !closing.has(path))
-              .length,
+            pinnedCount: group.paths
+              .slice(0, group.pinnedCount)
+              .filter((path) => !closing.has(path)).length,
             previewPath:
               group.previewPath && closing.has(group.previewPath) ? null : group.previewPath,
             activePath: resolveWorkbenchEditorSelectionAfterClose(
@@ -523,7 +529,10 @@ export function normalizeWorkbenchEditorGroupsLayout(
   return {
     groups,
     focusedGroup:
-      focusedGroup !== null && Number.isInteger(focusedGroup) && focusedGroup >= 0 && focusedGroup < groups.length
+      focusedGroup !== null &&
+      Number.isInteger(focusedGroup) &&
+      focusedGroup >= 0 &&
+      focusedGroup < groups.length
         ? focusedGroup
         : 0,
     splitRatio: clampSplitRatio(readNumber(value.splitRatio) ?? DefaultWorkbenchEditorSplitRatio),

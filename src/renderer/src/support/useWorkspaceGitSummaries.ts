@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { workbenchHost } from '@renderer/host/WorkbenchHost'
 
-import { AppError } from '@velaros-ai/core'
-import { Result } from '@velaros-ai/core/result'
+import { AppError } from '@velaros-ai/velaros/core'
+import { Result } from '@velaros-ai/velaros/core/result'
 
 import { type SystemWorkspaceGitSummary } from '@shared/contracts/system'
 
@@ -25,33 +25,29 @@ export function useWorkspaceGitSummaries(
   options: UseWorkspaceGitSummariesOptions = {}
 ): UseWorkspaceGitSummariesResult {
   const { enabled = true, refreshOnMount = true } = options
-  const [activeSummary, setActiveSummary] =
-    useState<Nullable<SystemWorkspaceGitSummary>>(null)
+  const [activeSummary, setActiveSummary] = useState<Nullable<SystemWorkspaceGitSummary>>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<Nullable<string>>(null)
   const generationRef = useRef(0)
 
-  const refresh = useCallback(
-    async (): Promise<void> => {
-      if (!enabled || !workspaceRoot) return
-      const generation = ++generationRef.current
-      setIsLoading(true)
-      setError(null)
-      try {
-        const summary = Result.unwrap(
-          await workbenchHost.kernel.workspace.getWorkspaceGitSummary(workspaceRoot)
-        )
-        if (generation === generationRef.current) setActiveSummary(summary)
-      } catch (loadError) {
-        if (generation !== generationRef.current) return
-        setActiveSummary(null)
-        setError(AppError.getMessage(loadError))
-      } finally {
-        if (generation === generationRef.current) setIsLoading(false)
-      }
-    },
-    [enabled, workspaceRoot]
-  )
+  const refresh = useCallback(async (): Promise<void> => {
+    if (!enabled || !workspaceRoot) return
+    const generation = ++generationRef.current
+    setIsLoading(true)
+    setError(null)
+    try {
+      const summary = Result.unwrap(
+        await workbenchHost.kernel.workspace.getWorkspaceGitSummary(workspaceRoot)
+      )
+      if (generation === generationRef.current) setActiveSummary(summary)
+    } catch (loadError) {
+      if (generation !== generationRef.current) return
+      setActiveSummary(null)
+      setError(AppError.getMessage(loadError))
+    } finally {
+      if (generation === generationRef.current) setIsLoading(false)
+    }
+  }, [enabled, workspaceRoot])
 
   useEffect(() => {
     if (!enabled || !workspaceRoot) {

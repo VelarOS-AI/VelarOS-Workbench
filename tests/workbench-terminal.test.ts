@@ -148,7 +148,10 @@ void describe('terminal sessions on a pseudo-terminal', () => {
       pty.emit('c')
       assert.deepEqual(events, [])
       await settle()
-      assert.deepEqual(events.map((event) => [event.stream, event.chunk]), [['stdout', 'abc']])
+      assert.deepEqual(
+        events.map((event) => [event.stream, event.chunk]),
+        [['stdout', 'abc']]
+      )
 
       terminal.writeTerminalInput({ sessionId: session.sessionId, input: 'ls\r' }, 7)
       terminal.resizeTerminalSession({ sessionId: session.sessionId, cols: 80, rows: 24 }, 7)
@@ -204,7 +207,10 @@ void describe('terminal sessions on a pseudo-terminal', () => {
         1
       )
       const pty = spawned[0]!
-      assert.deepEqual([pty.file, pty.args], [helper.getShellSpec('bun run dev').file, helper.getShellSpec('bun run dev').args])
+      assert.deepEqual(
+        [pty.file, pty.args],
+        [helper.getShellSpec('bun run dev').file, helper.getShellSpec('bun run dev').args]
+      )
 
       assert.throws(
         () => terminal.writeTerminalInput({ sessionId: run.sessionId, input: 'q' }, 2),
@@ -262,7 +268,11 @@ void describe('terminal sessions on a pseudo-terminal', () => {
       assert.equal(spawned[1]!.options.env.TERM, 'xterm-256color')
 
       await assert.rejects(
-        terminal.startTerminalSession({ projectRoot, cwd: '../outside', env: { A: '1' } }, () => undefined, 1),
+        terminal.startTerminalSession(
+          { projectRoot, cwd: '../outside', env: { A: '1' } },
+          () => undefined,
+          1
+        ),
         /超出工程范围/u
       )
     } finally {
@@ -276,18 +286,27 @@ void describe('terminal sessions on a pseudo-terminal', () => {
     const signalled: string[] = []
     const { factory, spawned } = createFakeFactory({
       list: async (rootPid) => [rootPid, 5001, 5002],
-      signal: (pids, signal) => signalled.push(`${signal}:${pids.join(',')}`),
+      signal: async (pids, signal) => {
+        await settle(25)
+        signalled.push(`${signal}:${pids.join(',')}`)
+      },
     })
     const helper = new CommandHelper()
     const terminal = new TerminalSessions(new PathResolver(), helper, factory)
     try {
-      const run = await terminal.startTerminalSession({ projectRoot, initialCommand: 'bun run dev' }, () => undefined, 1)
+      const run = await terminal.startTerminalSession(
+        { projectRoot, initialCommand: 'bun run dev' },
+        () => undefined,
+        1
+      )
       const pty = spawned[0]!
       let stopped = false
       const stopping = terminal
         .stopTerminalSession({ sessionId: run.sessionId, waitForExit: true }, 1)
         .then(() => (stopped = true))
       await settle(10)
+      assert.deepEqual(pty.signals, [], 'PTY must wait for asynchronous tree termination')
+      await settle(30)
       assert.deepEqual(signalled, ['SIGTERM:4242,5001,5002'])
       assert.deepEqual(pty.signals, ['SIGTERM'])
       assert.equal(stopped, false)
@@ -303,6 +322,77 @@ void describe('terminal sessions on a pseudo-terminal', () => {
       await rm(projectRoot, { recursive: true, force: true })
     }
   })
+
+  for (const mode of ['stop', 'close', 'snapshot', 'pty'] as const) {
+    void test(`terminal ${mode} failures are reported while mandatory cleanup continues`, async () => {
+      const projectRoot = await realpath(await mkdtemp(join(tmpdir(), 'terminal-failure-')))
+      const failure = new Error('injected termination failure')
+      const logs: unknown[][] = []
+      const unhandled: unknown[] = []
+      const originalError = console.error
+      const onUnhandled = (error: unknown): void => {
+        unhandled.push(error)
+      }
+      console.error = (...args: unknown[]) => {
+        logs.push(args)
+      }
+      process.on('unhandledRejection', onUnhandled)
+      const { factory, spawned } = createFakeFactory({
+        list: async (pid) => {
+          if (mode === 'snapshot') throw failure
+          return [pid]
+        },
+        signal: async () => {
+          if (mode !== 'snapshot' && mode !== 'pty') throw failure
+        },
+      })
+      const helper = new CommandHelper()
+      helper.getForceKillDelayMs = () => 10
+      const terminal = new TerminalSessions(new PathResolver(), helper, factory)
+      try {
+        const run = await terminal.startTerminalSession({ projectRoot }, () => undefined, 1)
+        const pty = spawned[0]!
+        if (mode === 'pty') {
+          pty.kill = (signal) => {
+            pty.signals.push(signal!)
+            throw failure
+          }
+        }
+        if (mode === 'close') {
+          await terminal.startTerminalSession({ projectRoot }, () => undefined, 1)
+          await assert.rejects(terminal.closeAllSessions(), AggregateError)
+        } else {
+          await assert.rejects(
+            terminal.stopTerminalSession({ sessionId: run.sessionId }),
+            AggregateError
+          )
+        }
+        await settle(60)
+        for (const process of spawned) assert.deepEqual(process.signals, ['SIGTERM', 'SIGKILL'])
+        assert.deepEqual(unhandled, [])
+        assert.ok(
+          logs.some(([message]) =>
+            String(message).includes(
+              mode === 'snapshot'
+                ? 'snapshot failed'
+                : mode === 'pty'
+                  ? 'PTY signal failed'
+                  : 'process tree signal failed'
+            )
+          )
+        )
+        assert.ok(logs.some(([, detail]) => (detail as { error: unknown }).error === failure))
+        if (mode !== 'snapshot')
+          assert.ok(logs.some(([, detail]) => (detail as { signal?: string }).signal === 'SIGKILL'))
+      } finally {
+        for (const pty of spawned) pty.exit(1)
+        await terminal.closeAllSessions()
+        console.error = originalError
+        process.off('unhandledRejection', onUnhandled)
+        await rm(projectRoot, { recursive: true, force: true })
+      }
+    })
+  }
 
   void test('reports the shell current directory only to its owning window', async () => {
     const projectRoot = await realpath(await mkdtemp(join(tmpdir(), 'workbench-terminal-cwd-')))
@@ -328,16 +418,24 @@ void describe('terminal sessions on a pseudo-terminal', () => {
       assert.deepEqual(asked, [])
 
       // 终端输出里的相对路径按 shell 此刻所在的目录解析：窗口问自己的会话问得到，项目外面的目录也照实给。
-      assert.deepEqual(await terminal.readTerminalCwd({ sessionId: first.sessionId }, 1), { cwd: nested })
+      assert.deepEqual(await terminal.readTerminalCwd({ sessionId: first.sessionId }, 1), {
+        cwd: nested,
+      })
       shellCwd = outside
-      assert.deepEqual(await terminal.readTerminalCwd({ sessionId: first.sessionId }, 1), { cwd: outside })
+      assert.deepEqual(await terminal.readTerminalCwd({ sessionId: first.sessionId }, 1), {
+        cwd: outside,
+      })
       shellCwd = null
-      assert.deepEqual(await terminal.readTerminalCwd({ sessionId: first.sessionId }, 1), { cwd: null })
+      assert.deepEqual(await terminal.readTerminalCwd({ sessionId: first.sessionId }, 1), {
+        cwd: null,
+      })
       await assert.rejects(
         terminal.readTerminalCwd({ sessionId: first.sessionId }, 2),
         /不属于当前项目窗口/u
       )
-      assert.deepEqual(await terminal.readTerminalCwd({ sessionId: 'terminal-missing' }, 1), { cwd: null })
+      assert.deepEqual(await terminal.readTerminalCwd({ sessionId: 'terminal-missing' }, 1), {
+        cwd: null,
+      })
     } finally {
       await terminal.closeAllSessions()
       await rm(projectRoot, { recursive: true, force: true })
@@ -393,7 +491,15 @@ void describe('terminal sessions on a pseudo-terminal', () => {
   })
 
   void test('finds every descendant of the shell in the process table', () => {
-    const table = ['  1     0', ' 100     1', ' 200   100', ' 201   100', ' 300   200', ' 999     1', ''].join('\n')
+    const table = [
+      '  1     0',
+      ' 100     1',
+      ' 200   100',
+      ' 201   100',
+      ' 300   200',
+      ' 999     1',
+      '',
+    ].join('\n')
     assert.deepEqual(collectWorkbenchProcessTree(table, 100), [100, 200, 201, 300])
     assert.deepEqual(collectWorkbenchProcessTree(table, 4242), [4242])
   })
@@ -422,18 +528,24 @@ void describe('terminal sessions on a pseudo-terminal', () => {
     assert.equal(buildTerminalEnvironment({}, 'win32').LANG, undefined)
     assert.equal(buildTerminalEnvironment({}, 'darwin').COLORTERM, 'truecolor')
     // 运行配置的变量最后盖上去；Windows 上变量名不分大小写，不留下两份。
-    assert.equal(buildTerminalEnvironment({ LANG: 'C' }, 'darwin', { LANG: 'zh_CN.UTF-8' }).LANG, 'zh_CN.UTF-8')
+    assert.equal(
+      buildTerminalEnvironment({ LANG: 'C' }, 'darwin', { LANG: 'zh_CN.UTF-8' }).LANG,
+      'zh_CN.UTF-8'
+    )
     assert.deepEqual(
-      Object.entries(buildTerminalEnvironment({ Path: 'C:\\old' }, 'win32', { PATH: 'C:\\new' })).filter(
-        ([name]) => name.toUpperCase() === 'PATH'
-      ),
+      Object.entries(
+        buildTerminalEnvironment({ Path: 'C:\\old' }, 'win32', { PATH: 'C:\\new' })
+      ).filter(([name]) => name.toUpperCase() === 'PATH'),
       [['PATH', 'C:\\new']]
     )
     assert.deepEqual(
       Object.entries(buildTerminalEnvironment({ Path: '/old' }, 'linux', { PATH: '/new' })).filter(
         ([name]) => name.toUpperCase() === 'PATH'
       ),
-      [['Path', '/old'], ['PATH', '/new']]
+      [
+        ['Path', '/old'],
+        ['PATH', '/new'],
+      ]
     )
     assert.equal(clampTerminalDimension(Number.NaN, 80, 1000), 80)
     assert.equal(clampTerminalDimension(12.7, 80, 1000), 12)
@@ -470,7 +582,9 @@ void describe('terminal output on the renderer side', () => {
 
   void test('acknowledges output after xterm writes it, right away while nothing shows it, in batches', async () => {
     const acknowledged: Array<[string, number]> = []
-    setWorkbenchTerminalOutputAcknowledger((sessionId, chars) => acknowledged.push([sessionId, chars]))
+    setWorkbenchTerminalOutputAcknowledger((sessionId, chars) =>
+      acknowledged.push([sessionId, chars])
+    )
     try {
       publishWorkbenchTerminalOutput('s3', 'x'.repeat(6_000))
       assert.deepEqual(acknowledged, [['s3', 6_000]])
@@ -484,7 +598,10 @@ void describe('terminal output on the renderer side', () => {
       writes.shift()!()
       assert.deepEqual(acknowledged, [['s3', 6_000]])
       await new Promise((resolve) => setTimeout(resolve, 40))
-      assert.deepEqual(acknowledged, [['s3', 6_000], ['s3', 100]])
+      assert.deepEqual(acknowledged, [
+        ['s3', 6_000],
+        ['s3', 100],
+      ])
     } finally {
       discardWorkbenchTerminalOutput('s3')
       setWorkbenchTerminalOutputAcknowledger(null)
@@ -520,14 +637,21 @@ void describe('terminal output on the renderer side', () => {
   })
 
   void test('the panels render xterm instead of a line list with a fake prompt', () => {
-    const chrome = readSource('src/renderer/src/components/terminal/WorkbenchTerminalToolChrome.tsx')
+    const chrome = readSource(
+      'src/renderer/src/components/terminal/WorkbenchTerminalToolChrome.tsx'
+    )
     assert.match(chrome, /LazyWorkbenchTerminalView/u)
-    assert.doesNotMatch(chrome, /formatWorkbenchTerminalPrompt|terminalPromptInput|onRunTerminalInput/u)
+    assert.doesNotMatch(
+      chrome,
+      /formatWorkbenchTerminalPrompt|terminalPromptInput|onRunTerminalInput/u
+    )
     const view = readSource('src/renderer/src/components/terminal/WorkbenchTerminalView.tsx')
     assert.match(view, /new ResizeObserver\(scheduleFit\)/u)
-    const instances = readSource('src/renderer/src/components/terminal/workbenchTerminalInstances.ts')
+    const instances = readSource(
+      'src/renderer/src/components/terminal/workbenchTerminalInstances.ts'
+    )
     assert.match(instances, /terminal\.unicode\.activeVersion = '11'/u)
-    assert.match(instances, /terminal\.onData\(\(data\) => entry\.handlers\.onData\(data\)\)/u)
+    assert.match(instances, /entry\.handlers\.onData\(data\)/u)
     const builder = readSource('electron-builder.yml')
     assert.match(builder, /asarUnpack:\n {2}- node_modules\/@lydell\/\*\*/u)
     const vite = readSource('electron.vite.config.ts')

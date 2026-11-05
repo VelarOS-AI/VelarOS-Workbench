@@ -1,7 +1,40 @@
-import type { SerializedError } from '@velaros-ai/core/error'
 import { type AppLocale } from '@velaros-ai/ui/conversation/contracts'
+import type { SerializedError } from '@velaros-ai/velaros/core/error'
 
-import { type WorkbenchLanguageServiceCallHierarchyRequest, type WorkbenchLanguageServiceCallHierarchyResult, type WorkbenchLanguageServiceCodeActionResolveRequest, type WorkbenchLanguageServiceCodeActionResolveResult, type WorkbenchLanguageServiceCodeActionsRequest, type WorkbenchLanguageServiceCodeActionsResult, type WorkbenchLanguageServiceCompletionResolveRequest, type WorkbenchLanguageServiceCompletionResolveResult, type WorkbenchLanguageServiceCompletionResult, type WorkbenchLanguageServiceDefinitionResult, type WorkbenchLanguageServiceDiagnosticsResult, type WorkbenchLanguageServiceDocumentHighlightsResult, type WorkbenchLanguageServiceDocumentSymbolsResult, type WorkbenchLanguageServiceExtensionRequest, type WorkbenchLanguageServiceExtensionResult, type WorkbenchLanguageServiceFileRenameEditsRequest, type WorkbenchLanguageServiceFileRenameEditsResult, type WorkbenchLanguageServiceFormatResult, type WorkbenchLanguageServiceHoverQueryResult, type WorkbenchLanguageServiceInlayHintsRequest, type WorkbenchLanguageServiceInlayHintsResult, type WorkbenchLanguageServiceOrganizeImportsResult, type WorkbenchLanguageServicePositionRequest, type WorkbenchLanguageServiceProjectDiagnosticsRequest, type WorkbenchLanguageServiceProjectDiagnosticsResult, type WorkbenchLanguageServiceReferencesResult, type WorkbenchLanguageServiceRenameRequest, type WorkbenchLanguageServiceRenameResult, type WorkbenchLanguageServiceRequest, type WorkbenchLanguageServiceResolveResult, type WorkbenchLanguageServiceSemanticTokensResult, type WorkbenchLanguageServiceSignatureHelpQueryResult } from '@shared/contracts/workbench'
+import {
+  type WorkbenchLanguageServiceCallHierarchyRequest,
+  type WorkbenchLanguageServiceCallHierarchyResult,
+  type WorkbenchLanguageServiceCodeActionResolveRequest,
+  type WorkbenchLanguageServiceCodeActionResolveResult,
+  type WorkbenchLanguageServiceCodeActionsRequest,
+  type WorkbenchLanguageServiceCodeActionsResult,
+  type WorkbenchLanguageServiceCompletionResolveRequest,
+  type WorkbenchLanguageServiceCompletionResolveResult,
+  type WorkbenchLanguageServiceCompletionResult,
+  type WorkbenchLanguageServiceDefinitionResult,
+  type WorkbenchLanguageServiceDiagnosticsResult,
+  type WorkbenchLanguageServiceDocumentHighlightsResult,
+  type WorkbenchLanguageServiceDocumentSymbolsResult,
+  type WorkbenchLanguageServiceExtensionRequest,
+  type WorkbenchLanguageServiceExtensionResult,
+  type WorkbenchLanguageServiceFileRenameEditsRequest,
+  type WorkbenchLanguageServiceFileRenameEditsResult,
+  type WorkbenchLanguageServiceFormatResult,
+  type WorkbenchLanguageServiceHoverQueryResult,
+  type WorkbenchLanguageServiceInlayHintsRequest,
+  type WorkbenchLanguageServiceInlayHintsResult,
+  type WorkbenchLanguageServiceOrganizeImportsResult,
+  type WorkbenchLanguageServicePositionRequest,
+  type WorkbenchLanguageServiceProjectDiagnosticsRequest,
+  type WorkbenchLanguageServiceProjectDiagnosticsResult,
+  type WorkbenchLanguageServiceReferencesResult,
+  type WorkbenchLanguageServiceRenameRequest,
+  type WorkbenchLanguageServiceRenameResult,
+  type WorkbenchLanguageServiceRequest,
+  type WorkbenchLanguageServiceResolveResult,
+  type WorkbenchLanguageServiceSemanticTokensResult,
+  type WorkbenchLanguageServiceSignatureHelpQueryResult,
+} from '@shared/contracts/workbench'
 
 export interface WorkbenchLanguageServiceProjectRequest {
   projectRoot: string
@@ -12,8 +45,7 @@ export interface WorkbenchLanguageServiceProjectFileRequest extends WorkbenchLan
   content: Nullable<string>
 }
 
-export interface WorkbenchLanguageServiceProjectFilesChangedRequest
-  extends WorkbenchLanguageServiceProjectRequest {
+export interface WorkbenchLanguageServiceProjectFilesChangedRequest extends WorkbenchLanguageServiceProjectRequest {
   paths: string[]
 }
 
@@ -123,10 +155,7 @@ export interface WorkbenchLanguageServiceWorkerOperationMap {
 export type WorkbenchLanguageServiceWorkerOperation =
   keyof WorkbenchLanguageServiceWorkerOperationMap
 
-export type WorkbenchLanguageServiceWorkerPriority =
-  | 'lifecycle'
-  | 'interactive'
-  | 'background'
+export type WorkbenchLanguageServiceWorkerPriority = 'lifecycle' | 'interactive' | 'background'
 
 const BackgroundLanguageServiceOperations = new Set<WorkbenchLanguageServiceWorkerOperation>([
   'getDiagnostics',
@@ -189,8 +218,7 @@ export interface WorkbenchLanguageServiceWorkerLocale {
 }
 
 export type WorkbenchLanguageServiceWorkerMessage =
-  | WorkbenchLanguageServiceWorkerRequest
-  | WorkbenchLanguageServiceWorkerControl
+  WorkbenchLanguageServiceWorkerRequest | WorkbenchLanguageServiceWorkerControl
 
 export function isWorkbenchLanguageServiceWorkerLocale(
   message: unknown
@@ -224,7 +252,9 @@ export function isWorkbenchLanguageServiceWorkerControl(
 export const WorkbenchLanguageServiceCancellationSlots = 16
 
 export function createWorkbenchLanguageServiceCancellationBuffer(): SharedArrayBuffer {
-  return new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * (WorkbenchLanguageServiceCancellationSlots + 1))
+  return new SharedArrayBuffer(
+    Int32Array.BYTES_PER_ELEMENT * (WorkbenchLanguageServiceCancellationSlots + 1)
+  )
 }
 
 export function markWorkbenchLanguageServiceRequestCancelled(buffer: Int32Array, id: number): void {
@@ -232,7 +262,10 @@ export function markWorkbenchLanguageServiceRequestCancelled(buffer: Int32Array,
   Atomics.store(buffer, slot + 1, id)
 }
 
-export function isWorkbenchLanguageServiceRequestCancelled(buffer: Int32Array, id: number): boolean {
+export function isWorkbenchLanguageServiceRequestCancelled(
+  buffer: Int32Array,
+  id: number
+): boolean {
   for (let slot = 1; slot <= WorkbenchLanguageServiceCancellationSlots; slot += 1)
     if (Atomics.load(buffer, slot) === id) return true
   return false

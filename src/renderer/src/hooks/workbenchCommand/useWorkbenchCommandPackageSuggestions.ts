@@ -1,8 +1,8 @@
 import { useEffect } from 'react'
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 
-import { Log } from '@velaros-ai/core'
-import { Result } from '@velaros-ai/core/result'
+import { Log } from '@velaros-ai/velaros/core'
+import { Result } from '@velaros-ai/velaros/core/result'
 
 import { type WorkbenchDirectoryEntry } from '@shared/contracts/workbench'
 

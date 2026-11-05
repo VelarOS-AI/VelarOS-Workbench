@@ -9,15 +9,54 @@ import {
 } from 'vscode-css-languageservice'
 import { getLanguageService as getHtmlLanguageService } from 'vscode-html-languageservice'
 import { TextDocument } from 'vscode-languageserver-textdocument'
-import {
-  DiagnosticLevel,
-  IncludeWorkspaceHeaderCompletions,
-} from 'vscode-markdown-languageservice'
+import { DiagnosticLevel, IncludeWorkspaceHeaderCompletions } from 'vscode-markdown-languageservice'
 import { URI } from 'vscode-uri'
 
-import { isNumber,isPresent, optionalWhen, toNullable, toOptional } from '@velaros-ai/core'
+import { isNumber, isPresent, optionalWhen, toNullable, toOptional } from '@velaros-ai/velaros/core'
 
-import { type WorkbenchLanguageServiceCallHierarchyRequest, type WorkbenchLanguageServiceCallHierarchyResult, type WorkbenchLanguageServiceCapability, type WorkbenchLanguageServiceCodeActionResolveRequest, type WorkbenchLanguageServiceCodeActionResolveResult, type WorkbenchLanguageServiceCodeActionsRequest, type WorkbenchLanguageServiceCodeActionsResult, type WorkbenchLanguageServiceCompletionItem, type WorkbenchLanguageServiceCompletionResolveRequest, type WorkbenchLanguageServiceCompletionResolveResult, type WorkbenchLanguageServiceCompletionResult, type WorkbenchLanguageServiceDefinitionResult, type WorkbenchLanguageServiceDescriptorSnapshot, type WorkbenchLanguageServiceDiagnostic, type WorkbenchLanguageServiceDiagnosticsResult, type WorkbenchLanguageServiceDocumentHighlightsResult, type WorkbenchLanguageServiceDocumentSymbol, type WorkbenchLanguageServiceDocumentSymbolsResult, type WorkbenchLanguageServiceExtensionRequest, type WorkbenchLanguageServiceExtensionResult, type WorkbenchLanguageServiceFileEdit, type WorkbenchLanguageServiceFileRenameEditsRequest, type WorkbenchLanguageServiceFileRenameEditsResult, type WorkbenchLanguageServiceFormatResult, type WorkbenchLanguageServiceHoverResult, type WorkbenchLanguageServiceInlayHintsRequest, type WorkbenchLanguageServiceInlayHintsResult, type WorkbenchLanguageServiceLocation, type WorkbenchLanguageServiceOrganizeImportsResult, type WorkbenchLanguageServicePosition, type WorkbenchLanguageServicePositionRequest, type WorkbenchLanguageServiceProjectDiagnosticsRequest, type WorkbenchLanguageServiceProjectDiagnosticsResult, type WorkbenchLanguageServiceRange, type WorkbenchLanguageServiceReferencesResult, type WorkbenchLanguageServiceRenameRequest, type WorkbenchLanguageServiceRenameResult, type WorkbenchLanguageServiceRequest, type WorkbenchLanguageServiceResolveResult, type WorkbenchLanguageServiceSemanticTokensResult, type WorkbenchLanguageServiceSignatureHelpResult } from '@shared/contracts/workbench'
+import {
+  type WorkbenchLanguageServiceCallHierarchyRequest,
+  type WorkbenchLanguageServiceCallHierarchyResult,
+  type WorkbenchLanguageServiceCapability,
+  type WorkbenchLanguageServiceCodeActionResolveRequest,
+  type WorkbenchLanguageServiceCodeActionResolveResult,
+  type WorkbenchLanguageServiceCodeActionsRequest,
+  type WorkbenchLanguageServiceCodeActionsResult,
+  type WorkbenchLanguageServiceCompletionItem,
+  type WorkbenchLanguageServiceCompletionResolveRequest,
+  type WorkbenchLanguageServiceCompletionResolveResult,
+  type WorkbenchLanguageServiceCompletionResult,
+  type WorkbenchLanguageServiceDefinitionResult,
+  type WorkbenchLanguageServiceDescriptorSnapshot,
+  type WorkbenchLanguageServiceDiagnostic,
+  type WorkbenchLanguageServiceDiagnosticsResult,
+  type WorkbenchLanguageServiceDocumentHighlightsResult,
+  type WorkbenchLanguageServiceDocumentSymbol,
+  type WorkbenchLanguageServiceDocumentSymbolsResult,
+  type WorkbenchLanguageServiceExtensionRequest,
+  type WorkbenchLanguageServiceExtensionResult,
+  type WorkbenchLanguageServiceFileEdit,
+  type WorkbenchLanguageServiceFileRenameEditsRequest,
+  type WorkbenchLanguageServiceFileRenameEditsResult,
+  type WorkbenchLanguageServiceFormatResult,
+  type WorkbenchLanguageServiceHoverResult,
+  type WorkbenchLanguageServiceInlayHintsRequest,
+  type WorkbenchLanguageServiceInlayHintsResult,
+  type WorkbenchLanguageServiceLocation,
+  type WorkbenchLanguageServiceOrganizeImportsResult,
+  type WorkbenchLanguageServicePosition,
+  type WorkbenchLanguageServicePositionRequest,
+  type WorkbenchLanguageServiceProjectDiagnosticsRequest,
+  type WorkbenchLanguageServiceProjectDiagnosticsResult,
+  type WorkbenchLanguageServiceRange,
+  type WorkbenchLanguageServiceReferencesResult,
+  type WorkbenchLanguageServiceRenameRequest,
+  type WorkbenchLanguageServiceRenameResult,
+  type WorkbenchLanguageServiceRequest,
+  type WorkbenchLanguageServiceResolveResult,
+  type WorkbenchLanguageServiceSemanticTokensResult,
+  type WorkbenchLanguageServiceSignatureHelpResult,
+} from '@shared/contracts/workbench'
 import {
   getWorkbenchPathExtension,
   normalizeWorkbenchLanguage,
@@ -139,7 +178,8 @@ function textFromLspContent(value: unknown): string {
 
 /** `{ kind: 'plaintext' }` 的内容按原文显示，不当 Markdown 解析。 */
 function isPlainTextLspContent(value: unknown): value is { value: string } {
-  const content = typeof value === 'object' && value !== null ? value as Record<string, unknown> : null
+  const content =
+    typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : null
   return content?.['kind'] === 'plaintext' && typeof content['value'] === 'string'
 }
 
@@ -179,13 +219,17 @@ export function buildExternalDefinitionPreview(content: string, line: number): s
 
   const aliasTarget = declaration
     .split('\n', 1)[0]
-    ?.match(/\btype\s+[\p{L}\p{Nl}_$][\p{L}\p{Nl}\p{Mn}\p{Mc}\p{Nd}\p{Pc}$]*\s*=\s*([\p{L}\p{Nl}_$][\p{L}\p{Nl}\p{Mn}\p{Mc}\p{Nd}\p{Pc}$]*)\s*$/u)?.[1]
+    ?.match(
+      /\btype\s+[\p{L}\p{Nl}_$][\p{L}\p{Nl}\p{Mn}\p{Mc}\p{Nd}\p{Pc}$]*\s*=\s*([\p{L}\p{Nl}_$][\p{L}\p{Nl}\p{Mn}\p{Mc}\p{Nd}\p{Pc}$]*)\s*$/u
+    )?.[1]
   if (!aliasTarget) return declaration
 
-  const targetIndex = lines.findIndex((candidate, index) =>
-    index !== lineIndex
-    && candidate.match(/\btype\s+([\p{L}\p{Nl}_$][\p{L}\p{Nl}\p{Mn}\p{Mc}\p{Nd}\p{Pc}$]*)\b/u)?.[1]
-      === aliasTarget
+  const targetIndex = lines.findIndex(
+    (candidate, index) =>
+      index !== lineIndex &&
+      candidate.match(
+        /\btype\s+([\p{L}\p{Nl}_$][\p{L}\p{Nl}\p{Mn}\p{Mc}\p{Nd}\p{Pc}$]*)\b/u
+      )?.[1] === aliasTarget
   )
   if (targetIndex < 0) return declaration
 
@@ -198,7 +242,9 @@ export function buildExternalDefinitionPreview(content: string, line: number): s
  * 排成说明。Pyright 的「```python 签名```、`---`、说明」这类写法也按块拆开，不再把反引号、分隔线、
  * `&nbsp;`、转义符原样显示出来。
  */
-export function buildExternalHoverResult(contents: unknown): Nullable<WorkbenchLanguageServiceHoverResult> {
+export function buildExternalHoverResult(
+  contents: unknown
+): Nullable<WorkbenchLanguageServiceHoverResult> {
   if (isPlainTextLspContent(contents)) {
     const text = contents.value.trim()
     return text ? { displayText: text } : null
@@ -210,7 +256,8 @@ export function buildExternalHoverResult(contents: unknown): Nullable<WorkbenchL
 
   const headingCode = first.kind === 'code' ? first.text : /^`([^`]+)`$/u.exec(first.text)?.[1]
   // 没有签名、只有文字：整段文字就是标题。
-  if (headingCode === undefined) return { displayText: blocks.map(hoverBlockPlainText).join('\n\n') }
+  if (headingCode === undefined)
+    return { displayText: blocks.map(hoverBlockPlainText).join('\n\n') }
 
   const displayText = headingCode.trim()
   const documentation = rest.map(hoverBlockPlainText).join('\n\n')
@@ -224,41 +271,69 @@ export function buildExternalHoverResult(contents: unknown): Nullable<WorkbenchL
 
 function mapExternalCompletionKind(kind: number | undefined): string | undefined {
   switch (kind) {
-    case 2: return 'method'
-    case 3: return 'function'
-    case 6: return 'variable'
-    case 7: return 'class'
-    case 8: return 'interface'
-    case 9: return 'namespace'
-    case 10: return 'property'
-    case 12: return 'constant'
-    case 13: return 'enum'
-    case 14: return 'keyword'
-    case 17: return 'file'
-    case 21: return 'constant'
-    default: return undefined
+    case 2:
+      return 'method'
+    case 3:
+      return 'function'
+    case 6:
+      return 'variable'
+    case 7:
+      return 'class'
+    case 8:
+      return 'interface'
+    case 9:
+      return 'namespace'
+    case 10:
+      return 'property'
+    case 12:
+      return 'constant'
+    case 13:
+      return 'enum'
+    case 14:
+      return 'keyword'
+    case 17:
+      return 'file'
+    case 21:
+      return 'constant'
+    default:
+      return undefined
   }
 }
 
-function mapExternalDocumentSymbolKind(kind: number): WorkbenchLanguageServiceDocumentSymbol['kind'] {
+function mapExternalDocumentSymbolKind(
+  kind: number
+): WorkbenchLanguageServiceDocumentSymbol['kind'] {
   switch (kind) {
     case 2:
     case 3:
-    case 4: return 'module'
+    case 4:
+      return 'module'
     case 5:
-    case 23: return 'class'
-    case 6: return 'method'
+    case 23:
+      return 'class'
+    case 6:
+      return 'method'
     case 7:
-    case 8: return 'property'
-    case 9: return 'constructor'
-    case 10: return 'enum'
-    case 11: return 'interface'
-    case 12: return 'function'
-    case 13: return 'variable'
-    case 14: return 'constant'
-    case 22: return 'enum-member'
-    case 26: return 'type'
-    default: return 'symbol'
+    case 8:
+      return 'property'
+    case 9:
+      return 'constructor'
+    case 10:
+      return 'enum'
+    case 11:
+      return 'interface'
+    case 12:
+      return 'function'
+    case 13:
+      return 'variable'
+    case 14:
+      return 'constant'
+    case 22:
+      return 'enum-member'
+    case 26:
+      return 'type'
+    default:
+      return 'symbol'
   }
 }
 
@@ -296,16 +371,20 @@ const MaxProjectDiagnosticsProjects = 2
 const ProjectDiagnosticsBatchBudgetMs = 150
 
 /** 接续位置：第几个项目、上一批查到的最后一个文件（项目内相对路径）。认不出的从头查。 */
-function parseProjectDiagnosticsCursor(cursor: string | undefined): { project: number; after: string } {
+function parseProjectDiagnosticsCursor(cursor: string | undefined): {
+  project: number
+  after: string
+} {
   if (!cursor) return { project: 0, after: '' }
   try {
     const value = JSON.parse(cursor) as unknown
     if (
-      Array.isArray(value)
-      && Number.isSafeInteger(value[0])
-      && (value[0] as number) >= 0
-      && typeof value[1] === 'string'
-    ) return { project: value[0] as number, after: value[1] }
+      Array.isArray(value) &&
+      Number.isSafeInteger(value[0]) &&
+      (value[0] as number) >= 0 &&
+      typeof value[1] === 'string'
+    )
+      return { project: value[0] as number, after: value[1] }
   } catch {
     // 认不出的接续位置按从头查处理。
   }
@@ -522,7 +601,8 @@ class WorkbenchLanguageServices {
           .filter((location): location is WorkbenchLanguageServiceLocation => isPresent(location)),
       }
     }
-    if (resolved.service?.runtime === 'markdown-language-service') return this.withMarkdownLanguageService(request, resolved.projectRoot, async (markdown) => {
+    if (resolved.service?.runtime === 'markdown-language-service')
+      return this.withMarkdownLanguageService(request, resolved.projectRoot, async (markdown) => {
         const definition = await markdown.service.getDefinition(
           markdown.document,
           this.languageServicePosition(request.position),
@@ -578,23 +658,33 @@ class WorkbenchLanguageServices {
         path: request.path,
         items: list.items
           .slice(0, MaximumExternalLspCompletionItems)
-          .map((item) => mapLspCompletionItem(request.path, item, mapExternalCompletionKind(item.kind))),
+          .map((item) =>
+            mapLspCompletionItem(request.path, item, mapExternalCompletionKind(item.kind))
+          ),
         // 截掉了一部分：继续输入时重新请求，服务端按更长的前缀再筛。
         isIncomplete: list.isIncomplete || list.items.length > MaximumExternalLspCompletionItems,
       }
     }
-    if (resolved.service?.runtime === 'markdown-language-service') return this.withMarkdownLanguageService(request, resolved.projectRoot, async (markdown) => {
+    if (resolved.service?.runtime === 'markdown-language-service')
+      return this.withMarkdownLanguageService(request, resolved.projectRoot, async (markdown) => {
         const items = await markdown.service.getCompletionItems(
           markdown.document,
           this.languageServicePosition(request.position),
-          { includeWorkspaceHeaderCompletions: IncludeWorkspaceHeaderCompletions.onSingleOrDoubleHash },
+          {
+            includeWorkspaceHeaderCompletions:
+              IncludeWorkspaceHeaderCompletions.onSingleOrDoubleHash,
+          },
           markdown.token
         )
         return {
           projectRoot: resolved.projectRoot,
           path: request.path,
           items: items.map((item) =>
-            mapLspCompletionItem(request.path, item, isNumber(item.kind) ? String(item.kind) : undefined)
+            mapLspCompletionItem(
+              request.path,
+              item,
+              isNumber(item.kind) ? String(item.kind) : undefined
+            )
           ),
         }
       })
@@ -666,10 +756,11 @@ class WorkbenchLanguageServices {
       if (projects.length >= MaxProjectDiagnosticsProjects) break
       const absolutePath = resolve(projectRoot, anchorPath)
       if (
-        !this.pathResolver.isAllowedProjectPath(projectRoot, absolutePath)
-        || resolveBuiltinWorkbenchLanguageService(getWorkbenchPathExtension(anchorPath))?.runtime
-          !== 'typescript-language-service'
-      ) continue
+        !this.pathResolver.isAllowedProjectPath(projectRoot, absolutePath) ||
+        resolveBuiltinWorkbenchLanguageService(getWorkbenchPathExtension(anchorPath))?.runtime !==
+          'typescript-language-service'
+      )
+        continue
       const key = resolveTypeScriptProjectKey(projectRoot, absolutePath)
       if (!projects.some((project) => project.key === key)) projects.push({ anchorPath, key })
     }
@@ -690,9 +781,8 @@ class WorkbenchLanguageServices {
       if (!program) continue
 
       const files = this.projectDiagnosticsFiles(program, snapshot.projectRoot)
-      const start = index === cursor.project
-        ? files.findIndex((file) => file.path > cursor.after)
-        : 0
+      const start =
+        index === cursor.project ? files.findIndex((file) => file.path > cursor.after) : 0
       if (start < 0) continue
       for (let fileIndex = start; fileIndex < files.length; fileIndex += 1) {
         if (checkedPaths.length > 0 && performance.now() > deadline)
@@ -724,12 +814,13 @@ class WorkbenchLanguageServices {
     const skipDeclarations = program.getCompilerOptions().skipLibCheck !== false
     return program
       .getSourceFiles()
-      .filter((sourceFile) =>
-        !program.isSourceFileDefaultLibrary(sourceFile)
-        && !program.isSourceFileFromExternalLibrary(sourceFile)
-        && !(skipDeclarations && sourceFile.isDeclarationFile)
-        && TypeScriptExtensions.has(this.extensionWithDot(sourceFile.fileName))
-        && !/[\\/]node_modules[\\/]/u.test(sourceFile.fileName)
+      .filter(
+        (sourceFile) =>
+          !program.isSourceFileDefaultLibrary(sourceFile) &&
+          !program.isSourceFileFromExternalLibrary(sourceFile) &&
+          !(skipDeclarations && sourceFile.isDeclarationFile) &&
+          TypeScriptExtensions.has(this.extensionWithDot(sourceFile.fileName)) &&
+          !/[\\/]node_modules[\\/]/u.test(sourceFile.fileName)
       )
       .flatMap((sourceFile) => {
         const path = this.relativePathFor(projectRoot, sourceFile.fileName)
@@ -744,14 +835,20 @@ class WorkbenchLanguageServices {
     const resolved = await this.resolveLanguageService(request)
     if (this.isExternalRuntime(resolved.service?.runtime)) {
       const external = await this.prepareExternal(request, resolved.projectRoot)
-      const diagnostics = await external.client.getDiagnostics(external.absolutePath, external.content)
+      const diagnostics = await external.client.getDiagnostics(
+        external.absolutePath,
+        external.content
+      )
       return {
         projectRoot: resolved.projectRoot,
         path: request.path,
-        diagnostics: diagnostics.map((diagnostic) => this.mapExternalDiagnostic(request.path, diagnostic)),
+        diagnostics: diagnostics.map((diagnostic) =>
+          this.mapExternalDiagnostic(request.path, diagnostic)
+        ),
       }
     }
-    if (resolved.service?.runtime === 'markdown-language-service') return this.withMarkdownLanguageService(request, resolved.projectRoot, async (markdown) => {
+    if (resolved.service?.runtime === 'markdown-language-service')
+      return this.withMarkdownLanguageService(request, resolved.projectRoot, async (markdown) => {
         const diagnostics = await markdown.service.computeDiagnostics(
           markdown.document,
           {
@@ -772,15 +869,16 @@ class WorkbenchLanguageServices {
             path: request.path,
             severity:
               diagnostic.severity === 1
-                ? 'error' as const
+                ? ('error' as const)
                 : diagnostic.severity === 2
-                  ? 'warning' as const
-                  : 'info' as const,
+                  ? ('warning' as const)
+                  : ('info' as const),
             message: textFromLspContent(diagnostic.message),
             source: diagnostic.source ?? 'markdown',
-            code: typeof diagnostic.code === 'string' || typeof diagnostic.code === 'number'
-              ? diagnostic.code
-              : undefined,
+            code:
+              typeof diagnostic.code === 'string' || typeof diagnostic.code === 'number'
+                ? diagnostic.code
+                : undefined,
             range: this.rangeFromLanguageServiceRange(diagnostic.range),
           })),
         }
@@ -841,7 +939,8 @@ class WorkbenchLanguageServices {
         changes: this.mapExternalWorkspaceEdit(resolved.projectRoot, edit),
       }
     }
-    if (resolved.service?.runtime === 'markdown-language-service') return this.withMarkdownLanguageService(request, resolved.projectRoot, async (markdown) => {
+    if (resolved.service?.runtime === 'markdown-language-service')
+      return this.withMarkdownLanguageService(request, resolved.projectRoot, async (markdown) => {
         const edit = await markdown.service.getRenameEdit(
           markdown.document,
           this.languageServicePosition(request.position),
@@ -856,12 +955,12 @@ class WorkbenchLanguageServices {
                 changes: edit.changes,
                 documentChanges: edit.documentChanges?.flatMap((change) =>
                   'textDocument' in change
-                    ? [{
-                        textDocument: change.textDocument,
-                        edits: change.edits.flatMap((item) =>
-                          'newText' in item ? [item] : []
-                        ),
-                      }]
+                    ? [
+                        {
+                          textDocument: change.textDocument,
+                          edits: change.edits.flatMap((item) => ('newText' in item ? [item] : [])),
+                        },
+                      ]
                     : []
                 ),
               })
@@ -912,7 +1011,10 @@ class WorkbenchLanguageServices {
     }
   }
 
-  public async getHover(request: WorkbenchLanguageServicePositionRequest, signal?: AbortSignal): Promise<{
+  public async getHover(
+    request: WorkbenchLanguageServicePositionRequest,
+    signal?: AbortSignal
+  ): Promise<{
     projectRoot: string
     path: string
     hover: Nullable<WorkbenchLanguageServiceHoverResult>
@@ -921,11 +1023,13 @@ class WorkbenchLanguageServices {
     const descriptor = resolveBuiltinWorkbenchLanguageService(this.resolveToken(request))
     if (this.isExternalRuntime(resolved.service?.runtime)) {
       const external = await this.prepareExternal(request, resolved.projectRoot)
-      if (this.isSuppressedHoverWord(
-        external.content,
-        request.position,
-        descriptor?.hover?.suppressWords
-      ))
+      if (
+        this.isSuppressedHoverWord(
+          external.content,
+          request.position,
+          descriptor?.hover?.suppressWords
+        )
+      )
         return { projectRoot: resolved.projectRoot, path: request.path, hover: null }
       const hover = await external.client.hover(
         external.absolutePath,
@@ -951,15 +1055,19 @@ class WorkbenchLanguageServices {
               result.displayText.trim()
             )
           ) {
-            const definitionContent = safeReadFile(
-              this.resolveAbsoluteProjectPath(resolved.projectRoot, definition.path)
-            ) ?? ''
+            const definitionContent =
+              safeReadFile(
+                this.resolveAbsoluteProjectPath(resolved.projectRoot, definition.path)
+              ) ?? ''
             const text = buildExternalDefinitionPreview(definitionContent, definition.line)
             if (text) {
               result.definitionPreview = {
                 kind: 'code',
                 text,
-                language: optionalWhen(!!descriptor?.documentLanguageId, descriptor?.documentLanguageId),
+                language: optionalWhen(
+                  !!descriptor?.documentLanguageId,
+                  descriptor?.documentLanguageId
+                ),
               }
             }
           }
@@ -971,7 +1079,8 @@ class WorkbenchLanguageServices {
         hover: result,
       }
     }
-    if (resolved.service?.runtime === 'markdown-language-service') return this.withMarkdownLanguageService(request, resolved.projectRoot, async (markdown) => {
+    if (resolved.service?.runtime === 'markdown-language-service')
+      return this.withMarkdownLanguageService(request, resolved.projectRoot, async (markdown) => {
         const hover = await markdown.service.getHover(
           markdown.document,
           this.languageServicePosition(request.position),
@@ -1018,12 +1127,15 @@ class WorkbenchLanguageServices {
           resolved.projectRoot,
           references
             .map((location) => this.mapExternalLocation(resolved.projectRoot, location))
-            .filter((location): location is WorkbenchLanguageServiceLocation => isPresent(location)),
+            .filter((location): location is WorkbenchLanguageServiceLocation =>
+              isPresent(location)
+            ),
           this.editorContentReader(request, resolved.projectRoot)
         ),
       }
     }
-    if (resolved.service?.runtime === 'markdown-language-service') return this.withMarkdownLanguageService(request, resolved.projectRoot, async (markdown) => {
+    if (resolved.service?.runtime === 'markdown-language-service')
+      return this.withMarkdownLanguageService(request, resolved.projectRoot, async (markdown) => {
         const references = await markdown.service.getReferences(
           markdown.document,
           this.languageServicePosition(request.position),
@@ -1037,7 +1149,9 @@ class WorkbenchLanguageServices {
             resolved.projectRoot,
             references
               .map((location) => this.mapMarkdownLocation(markdown, location))
-              .filter((location): location is WorkbenchLanguageServiceLocation => isPresent(location)),
+              .filter((location): location is WorkbenchLanguageServiceLocation =>
+                isPresent(location)
+              ),
             this.editorContentReader(request, resolved.projectRoot)
           ),
         }
@@ -1175,13 +1289,17 @@ class WorkbenchLanguageServices {
       return {
         projectRoot,
         path: request.path,
-        changes: edits.length ? [{
-          path: request.path,
-          edits: edits.map((edit) => ({
-            range: this.rangeFromLanguageServiceRange(edit.range),
-            newText: edit.newText,
-          })),
-        }] : [],
+        changes: edits.length
+          ? [
+              {
+                path: request.path,
+                edits: edits.map((edit) => ({
+                  range: this.rangeFromLanguageServiceRange(edit.range),
+                  newText: edit.newText,
+                })),
+              },
+            ]
+          : [],
       }
     }
 
@@ -1236,7 +1354,8 @@ class WorkbenchLanguageServices {
         ),
       }
     }
-    if (resolved.service?.runtime === 'markdown-language-service') return this.withMarkdownLanguageService(request, resolved.projectRoot, async (markdown) => {
+    if (resolved.service?.runtime === 'markdown-language-service')
+      return this.withMarkdownLanguageService(request, resolved.projectRoot, async (markdown) => {
         const symbols = await markdown.service.getDocumentSymbols(
           markdown.document,
           { includeLinkDefinitions: true },
@@ -1294,7 +1413,8 @@ class WorkbenchLanguageServices {
         highlights: this.mapExternalDocumentHighlights(highlights),
       }
     }
-    if (resolved.service?.runtime === 'markdown-language-service') return this.withMarkdownLanguageService(request, resolved.projectRoot, async (markdown) => {
+    if (resolved.service?.runtime === 'markdown-language-service')
+      return this.withMarkdownLanguageService(request, resolved.projectRoot, async (markdown) => {
         const highlights = await markdown.service.getDocumentHighlights(
           markdown.document,
           this.languageServicePosition(request.position),
@@ -1305,7 +1425,7 @@ class WorkbenchLanguageServices {
           path: request.path,
           highlights: highlights.map((highlight) => ({
             range: this.rangeFromLanguageServiceRange(highlight.range),
-            kind: highlight.kind === 3 ? 'write' as const : 'read' as const,
+            kind: highlight.kind === 3 ? ('write' as const) : ('read' as const),
           })),
         }
       })
@@ -1332,9 +1452,12 @@ class WorkbenchLanguageServices {
   ): Promise<WorkbenchLanguageServiceInlayHintsResult> {
     const resolved = await this.resolveLanguageService(request)
     if (this.isExternalRuntime(resolved.service?.runtime)) {
-      if (request.ranges.length > 10_000 || request.ranges.some((range) =>
-        !Number.isSafeInteger(range.from) || !Number.isSafeInteger(range.to)
-      ))
+      if (
+        request.ranges.length > 10_000 ||
+        request.ranges.some(
+          (range) => !Number.isSafeInteger(range.from) || !Number.isSafeInteger(range.to)
+        )
+      )
         return { projectRoot: resolved.projectRoot, path: request.path, hints: [] }
       const external = await this.prepareExternal(request, resolved.projectRoot)
       let start = request.ranges.length > 0 ? external.content.length : 0
@@ -1345,10 +1468,15 @@ class WorkbenchLanguageServices {
         start = Math.min(start, from, to)
         end = Math.max(end, from, to)
       }
-      const hints = await external.client.inlayHints(external.absolutePath, external.content, {
-        start: this.lspPositionFromOffset(external.content, start),
-        end: this.lspPositionFromOffset(external.content, end),
-      }, signal)
+      const hints = await external.client.inlayHints(
+        external.absolutePath,
+        external.content,
+        {
+          start: this.lspPositionFromOffset(external.content, start),
+          end: this.lspPositionFromOffset(external.content, end),
+        },
+        signal
+      )
       return {
         projectRoot: resolved.projectRoot,
         path: request.path,
@@ -1393,7 +1521,11 @@ class WorkbenchLanguageServices {
     if (!this.isExternalRuntime(resolved.service?.runtime))
       return { projectRoot: resolved.projectRoot, path: request.path, tokens: [] }
     const external = await this.prepareExternal(request, resolved.projectRoot)
-    const tokens = await external.client.semanticTokens(external.absolutePath, external.content, signal)
+    const tokens = await external.client.semanticTokens(
+      external.absolutePath,
+      external.content,
+      signal
+    )
     return {
       projectRoot: resolved.projectRoot,
       path: request.path,
@@ -1500,11 +1632,15 @@ class WorkbenchLanguageServices {
       fileName: this.resolveAbsoluteProjectPath(projectRoot, rename.path),
     }))
     // 旧位置的文件先退出项目，不然程序里新旧两份并存。
-    for (const rename of renames) forgetMovedTypeScriptProjectPath(projectRoot, rename.previousFileName)
+    for (const rename of renames)
+      forgetMovedTypeScriptProjectPath(projectRoot, rename.previousFileName)
 
-    const movedFileGroups = renames.map((rename) => readMovedTypeScriptFiles(projectRoot, rename.fileName))
+    const movedFileGroups = renames.map((rename) =>
+      readMovedTypeScriptFiles(projectRoot, rename.fileName)
+    )
     const overlayFiles = new Map<string, string>()
-    for (const group of movedFileGroups) for (const [path, content] of group) overlayFiles.set(path, content)
+    for (const group of movedFileGroups)
+      for (const [path, content] of group) overlayFiles.set(path, content)
     if (overlayFiles.size === 0) return { projectRoot, changes: [] }
 
     // 开着的标签按编辑缓冲里此刻的正文算。还挂在旧位置上的（标签没来得及跟着挪）不算数：那里已经没有文件了。
@@ -1535,7 +1671,8 @@ class WorkbenchLanguageServices {
               service,
               fileName: requestFileName,
               content: files.get(requestFileName) ?? safeReadFile(requestFileName) ?? '',
-              readFile: (fileName) => files.get(normalizeTypeScriptFileName(fileName)) ?? safeReadFile(fileName),
+              readFile: (fileName) =>
+                files.get(normalizeTypeScriptFileName(fileName)) ?? safeReadFile(fileName),
               toRelativePath: (fileName) => this.relativePathFor(projectRoot, fileName),
             },
             renames
@@ -1567,7 +1704,8 @@ class WorkbenchLanguageServices {
           service: snapshot.service,
           fileName: snapshot.requestAbsolutePath,
           offset: this.offsetFromPosition(content, request.position),
-          readFile: (fileName) => snapshot.files.get(normalizeTypeScriptFileName(fileName)) ?? safeReadFile(fileName),
+          readFile: (fileName) =>
+            snapshot.files.get(normalizeTypeScriptFileName(fileName)) ?? safeReadFile(fileName),
           toRelativePath: (fileName) => this.relativePathFor(snapshot.projectRoot, fileName),
         },
         request.direction
@@ -1583,7 +1721,8 @@ class WorkbenchLanguageServices {
       service: snapshot.service,
       fileName: snapshot.requestAbsolutePath,
       content: snapshot.files.get(snapshot.requestAbsolutePath) ?? '',
-      readFile: (fileName) => snapshot.files.get(normalizeTypeScriptFileName(fileName)) ?? safeReadFile(fileName),
+      readFile: (fileName) =>
+        snapshot.files.get(normalizeTypeScriptFileName(fileName)) ?? safeReadFile(fileName),
       toRelativePath: (fileName) => this.relativePathFor(snapshot.projectRoot, fileName),
       format: request.format,
     }
@@ -1593,7 +1732,10 @@ class WorkbenchLanguageServices {
     content: string,
     range: WorkbenchLanguageServiceRange
   ): { start: number; end: number } {
-    const start = this.offsetFromPosition(content, { line: range.startLine, column: range.startColumn })
+    const start = this.offsetFromPosition(content, {
+      line: range.startLine,
+      column: range.startColumn,
+    })
     const end = this.offsetFromPosition(content, { line: range.endLine, column: range.endColumn })
     return { start: Math.min(start, end), end: Math.max(start, end) }
   }
@@ -1617,11 +1759,13 @@ class WorkbenchLanguageServices {
       args: toOptional(service.args),
       documentLanguageId: toOptional(service.documentLanguageId),
       protocol: toOptional(service.protocol),
-      extensionRequests: toOptional(service.extensionRequests?.map((request) => ({
-        id: request.id,
-        method: request.method,
-        capabilityPath: [...request.capabilityPath],
-      }))),
+      extensionRequests: toOptional(
+        service.extensionRequests?.map((request) => ({
+          id: request.id,
+          method: request.method,
+          capabilityPath: [...request.capabilityPath],
+        }))
+      ),
     }
   }
 
@@ -1779,7 +1923,8 @@ class WorkbenchLanguageServices {
   ): WorkbenchLanguageServiceDiagnostic {
     return {
       path,
-      severity: diagnostic.severity === 1 ? 'error' : diagnostic.severity === 2 ? 'warning' : 'info',
+      severity:
+        diagnostic.severity === 1 ? 'error' : diagnostic.severity === 2 ? 'warning' : 'info',
       message: diagnostic.message,
       source: diagnostic.source,
       code: diagnostic.code,
@@ -1827,10 +1972,12 @@ class WorkbenchLanguageServices {
       const path = this.relativePathFor(projectRoot, absolutePath)
       if (!path) return
       const file = editsByPath.get(path) ?? { path, edits: [] }
-      file.edits.push(...edits.map((edit) => ({
-        range: this.rangeFromLanguageServiceRange(edit.range),
-        newText: edit.newText,
-      })))
+      file.edits.push(
+        ...edits.map((edit) => ({
+          range: this.rangeFromLanguageServiceRange(edit.range),
+          newText: edit.newText,
+        }))
+      )
       editsByPath.set(path, file)
     }
     for (const [uri, edits] of Object.entries(workspaceEdit.changes ?? {})) append(uri, edits)
@@ -1872,12 +2019,13 @@ class WorkbenchLanguageServices {
     ): void => {
       const hierarchical = 'range' in value
       const location: ExternalLspLocation = hierarchical
-        ? { uri: URI.file(requestAbsolutePath).toString(), range: value.selectionRange ?? value.range }
+        ? {
+            uri: URI.file(requestAbsolutePath).toString(),
+            range: value.selectionRange ?? value.range,
+          }
         : value.location
       const mapped = this.mapExternalLocation(projectRoot, location)
-      const range = hierarchical
-        ? this.rangeFromLanguageServiceRange(value.range)
-        : mapped?.range
+      const range = hierarchical ? this.rangeFromLanguageServiceRange(value.range) : mapped?.range
       if (mapped && range) {
         output.push({
           name: value.name,
@@ -1888,8 +2036,7 @@ class WorkbenchLanguageServices {
           range,
         })
       }
-      if (hierarchical)
-        for (const child of value.children ?? []) append(child, depth + 1)
+      if (hierarchical) for (const child of value.children ?? []) append(child, depth + 1)
     }
     for (const value of values) append(value, 0)
     return output
@@ -1905,28 +2052,37 @@ class WorkbenchLanguageServices {
       lineStarts.push(index + 1)
     return values.slice(0, 10_000).flatMap((value) => {
       if (value.kind !== undefined && value.kind !== 1) return []
-      const text = typeof value.label === 'string'
-        ? value.label
-        : Array.isArray(value.label)
-          ? value.label.map((part) => part?.value ?? '').join('')
-          : ''
-      if (!text || text.length > 1024 || !Number.isSafeInteger(value.position?.line)
-        || !Number.isSafeInteger(value.position?.character) || value.position.line < 0
-        || value.position.character < 0 || value.position.line >= lineStarts.length)
+      const text =
+        typeof value.label === 'string'
+          ? value.label
+          : Array.isArray(value.label)
+            ? value.label.map((part) => part?.value ?? '').join('')
+            : ''
+      if (
+        !text ||
+        text.length > 1024 ||
+        !Number.isSafeInteger(value.position?.line) ||
+        !Number.isSafeInteger(value.position?.character) ||
+        value.position.line < 0 ||
+        value.position.character < 0 ||
+        value.position.line >= lineStarts.length
+      )
         return []
       const lineStart = lineStarts[value.position.line]!
       const lineEnd = (lineStarts[value.position.line + 1] ?? content.length + 1) - 1
-      return [{
-        position: {
-          line: value.position.line + 1,
-          column: value.position.character + 1,
-          offset: Math.min(lineStart + value.position.character, lineEnd),
+      return [
+        {
+          position: {
+            line: value.position.line + 1,
+            column: value.position.character + 1,
+            offset: Math.min(lineStart + value.position.character, lineEnd),
+          },
+          text,
+          kind: 'type' as const,
+          whitespaceBefore: value.paddingLeft,
+          whitespaceAfter: value.paddingRight,
         },
-        text,
-        kind: 'type' as const,
-        whitespaceBefore: value.paddingLeft,
-        whitespaceAfter: value.paddingRight,
-      }]
+      ]
     })
   }
 
@@ -1935,17 +2091,24 @@ class WorkbenchLanguageServices {
   ): WorkbenchLanguageServiceDocumentHighlightsResult['highlights'] {
     return values.slice(0, 10_000).flatMap((value) => {
       const range = value?.range
-      if (!range || !Number.isSafeInteger(range.start?.line)
-        || !Number.isSafeInteger(range.start?.character)
-        || !Number.isSafeInteger(range.end?.line)
-        || !Number.isSafeInteger(range.end?.character)
-        || range.start.line < 0 || range.start.character < 0
-        || range.end.line < 0 || range.end.character < 0)
+      if (
+        !range ||
+        !Number.isSafeInteger(range.start?.line) ||
+        !Number.isSafeInteger(range.start?.character) ||
+        !Number.isSafeInteger(range.end?.line) ||
+        !Number.isSafeInteger(range.end?.character) ||
+        range.start.line < 0 ||
+        range.start.character < 0 ||
+        range.end.line < 0 ||
+        range.end.character < 0
+      )
         return []
-      return [{
-        range: this.rangeFromLanguageServiceRange(range),
-        kind: value.kind === 3 ? 'write' as const : 'read' as const,
-      }]
+      return [
+        {
+          range: this.rangeFromLanguageServiceRange(range),
+          kind: value.kind === 3 ? ('write' as const) : ('read' as const),
+        },
+      ]
     })
   }
 
@@ -1968,16 +2131,18 @@ class WorkbenchLanguageServices {
       character = deltaLine === 0 ? character + deltaCharacter : deltaCharacter
       const type = value.tokenTypes[typeIndex]
       const text = lines[line]
-      if (!type || !text || length <= 0 || character < 0 || character + length > text.length) continue
+      if (!type || !text || length <= 0 || character < 0 || character + length > text.length)
+        continue
       const tokenText = text.slice(character, character + length)
       const afterToken = text.slice(character + length)
-      const correctedType = type === 'variable' && /^\s*\(/u.test(afterToken)
-        ? 'function'
-        : type === 'property' && /^\s*\(/u.test(afterToken)
-          ? 'method'
-          : type === 'variable' && /^[A-Z]/u.test(tokenText)
-            ? 'type'
-            : type
+      const correctedType =
+        type === 'variable' && /^\s*\(/u.test(afterToken)
+          ? 'function'
+          : type === 'property' && /^\s*\(/u.test(afterToken)
+            ? 'method'
+            : type === 'variable' && /^[A-Z]/u.test(tokenText)
+              ? 'type'
+              : type
       output.push({
         range: {
           startLine: line + 1,
@@ -1986,7 +2151,9 @@ class WorkbenchLanguageServices {
           endColumn: character + length + 1,
         },
         type: correctedType,
-        modifiers: value.tokenModifiers.filter((_modifier, modifierIndex) => (modifierBits & (1 << modifierIndex)) !== 0),
+        modifiers: value.tokenModifiers.filter(
+          (_modifier, modifierIndex) => (modifierBits & (1 << modifierIndex)) !== 0
+        ),
       })
     }
     return output
@@ -2088,7 +2255,10 @@ class WorkbenchLanguageServices {
     }
   }
 
-  private lspPositionFromOffset(content: string, requestedOffset: number): {
+  private lspPositionFromOffset(
+    content: string,
+    requestedOffset: number
+  ): {
     line: number
     character: number
   } {
@@ -2116,7 +2286,10 @@ class WorkbenchLanguageServices {
     end: { line: number; character: number }
   } {
     return {
-      start: { line: Math.max(0, range.startLine - 1), character: Math.max(0, range.startColumn - 1) },
+      start: {
+        line: Math.max(0, range.startLine - 1),
+        character: Math.max(0, range.startColumn - 1),
+      },
       end: { line: Math.max(0, range.endLine - 1), character: Math.max(0, range.endColumn - 1) },
     }
   }
@@ -2220,7 +2393,8 @@ class WorkbenchLanguageServices {
     fileName: string,
     textSpan: ts.TextSpan
   ): Nullable<WorkbenchLanguageServiceRange> {
-    const content = snapshot.files.get(normalizeTypeScriptFileName(fileName)) ?? safeReadFile(fileName)
+    const content =
+      snapshot.files.get(normalizeTypeScriptFileName(fileName)) ?? safeReadFile(fileName)
     if (!isPresent(content)) return null
 
     return rangeFromTextSpanInContent(content, fileName, textSpan)

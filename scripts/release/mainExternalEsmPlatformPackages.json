@@ -1,5 +1,1 @@
-[
-  "@velaros-ai/model",
-  "@velaros-ai/script",
-  "@velaros-ai/velaros"
-]
+["@velaros-ai/velaros"]

@@ -1,7 +1,7 @@
 import { jsonLanguage } from '@codemirror/lang-json'
 import type { Extension } from '@codemirror/state'
 
-import { isString, toNullable } from '@velaros-ai/core'
+import { isString, toNullable } from '@velaros-ai/velaros/core'
 
 import {
   buildWorkbenchPackageScriptRunCommand,

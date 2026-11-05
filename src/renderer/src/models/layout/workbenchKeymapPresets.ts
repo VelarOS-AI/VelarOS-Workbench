@@ -9,7 +9,7 @@
  * 表有两张：全局快捷键各方案的默认键在 `workbenchKeyboardShortcuts.ts`，编辑器命令的按键在
  * `models/editor/workbenchEditorKeymap.ts`。这里是两张表共用的：方案的名字、平台、各平台的键怎么取。
  */
-import { isRecord, isString } from '@velaros-ai/core'
+import { isRecord, isString } from '@velaros-ai/velaros/core'
 
 export type WorkbenchKeymapPresetId = 'workbench' | 'vscode' | 'jetbrains' | 'vim'
 
@@ -71,7 +71,9 @@ export interface WorkbenchPlatformKeys<T> {
 /** 表里的一格：各平台都一样就直接写，不一样写成 `WorkbenchPlatformKeys`。 */
 export type WorkbenchPresetKeys<T> = T | WorkbenchPlatformKeys<T>
 
-function isWorkbenchPlatformKeys<T>(keys: WorkbenchPresetKeys<T>): keys is WorkbenchPlatformKeys<T> {
+function isWorkbenchPlatformKeys<T>(
+  keys: WorkbenchPresetKeys<T>
+): keys is WorkbenchPlatformKeys<T> {
   return isRecord(keys) && 'mac' in keys && 'other' in keys
 }
 

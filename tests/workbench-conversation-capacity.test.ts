@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import type { ModelDriver, ModelTurnDelta, ModelTurnRequest } from '@velaros-ai/model'
+import type { ModelDriver, ModelTurnDelta, ModelTurnRequest } from '@velaros-ai/velaros/model'
 
 import { ConversationContextCapacity } from '../src/main/conversation/ConversationContextCapacity'
 import { ConversationModelDriver } from '../src/main/conversation/ConversationModelDriver'

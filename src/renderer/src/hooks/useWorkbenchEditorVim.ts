@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Extension } from '@codemirror/state'
 
-import { Log } from '@velaros-ai/core'
+import { Log } from '@velaros-ai/velaros/core'
 
 import type {
   WorkbenchEditorVimHost,

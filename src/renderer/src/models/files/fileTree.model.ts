@@ -1,4 +1,4 @@
-import { optionalWhenLazy } from '@velaros-ai/core'
+import { optionalWhenLazy } from '@velaros-ai/velaros/core'
 
 import { type WorkbenchDirectoryEntry } from '@shared/contracts/workbench'
 
@@ -40,9 +40,7 @@ export function buildTreeNodes(
       id: entry.path,
       name: entry.name,
       entry,
-      fileKind: isDirectory
-        ? null
-        : getWorkbenchFilePresentationVariant({ fileName: entry.name }),
+      fileKind: isDirectory ? null : getWorkbenchFilePresentationVariant({ fileName: entry.name }),
       // 折叠目录仍保留空 children 以维持可展开节点语义，但不把已缓存的整棵子树交给 Arborist 建模。
       children: optionalWhenLazy(isDirectory, () =>
         buildTreeNodes(childEntries, childrenByPath, expandedPaths)

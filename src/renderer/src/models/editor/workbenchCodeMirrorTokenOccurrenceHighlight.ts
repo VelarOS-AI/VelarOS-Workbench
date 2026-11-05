@@ -7,9 +7,12 @@ import {
   type ViewUpdate,
 } from '@codemirror/view'
 
-import { isPresent } from '@velaros-ai/core'
+import { isPresent } from '@velaros-ai/velaros/core'
 
-import { type WorkbenchLanguageServiceDocumentHighlight, type WorkbenchLanguageServicePosition } from '@shared/contracts/workbench'
+import {
+  type WorkbenchLanguageServiceDocumentHighlight,
+  type WorkbenchLanguageServicePosition,
+} from '@shared/contracts/workbench'
 
 import { languageServiceRangeToOffsets } from './workbenchCodeMirrorLanguageService'
 
@@ -72,7 +75,10 @@ function escapeRegExpLiteral(value: string): string {
 }
 
 /** 在可视区内按整词匹配所有出现位置，构建装饰集合。 */
-function buildTokenOccurrenceDecorations(view: EditorView, token: WorkbenchCaretToken): DecorationSet {
+function buildTokenOccurrenceDecorations(
+  view: EditorView,
+  token: WorkbenchCaretToken
+): DecorationSet {
   let pattern: RegExp
   try {
     pattern = new RegExp(
@@ -109,7 +115,9 @@ export function buildWorkbenchSemanticOccurrenceDecorations(
     ranges.set(`${range.from}:${range.to}`, range)
   }
   const builder = new RangeSetBuilder<Decoration>()
-  for (const range of [...ranges.values()].sort((left, right) => left.from - right.from || left.to - right.to)) {
+  for (const range of [...ranges.values()].sort(
+    (left, right) => left.from - right.from || left.to - right.to
+  )) {
     builder.add(range.from, range.to, TOKEN_OCCURRENCE_MARK)
   }
   return builder.finish()
@@ -157,12 +165,7 @@ export function createWorkbenchTokenOccurrenceHighlightExtension(
         const token = update.view.hasFocus ? resolveCaretToken(update.state) : null
         const tokenChanged = token?.text !== this.tokenText
         // 光标仍在同一个词、且文档与视口都没变时，无需重建。
-        if (
-          !tokenChanged &&
-          !update.docChanged &&
-          !update.viewportChanged &&
-          !update.focusChanged
-        )
+        if (!tokenChanged && !update.docChanged && !update.viewportChanged && !update.focusChanged)
           return
 
         this.tokenText = token?.text ?? null

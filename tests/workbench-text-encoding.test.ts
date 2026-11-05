@@ -5,7 +5,7 @@ import { join } from 'node:path'
 
 import { describe, mock, test } from 'bun:test'
 
-import { AppError } from '@velaros-ai/core/error'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
 import { WorkbenchFsChannels } from '../src/shared/workbenchFs'
 import {
@@ -37,7 +37,8 @@ mock.module('electron', () => ({
 const { decodeWorkbenchText, encodeWorkbenchText } = await import('../src/main/workspace/TextCodec')
 const { isLikelyTextFile } = await import('../src/main/workspace/TextFile')
 const { createWorkbenchAppParts } = await import('../src/main/workspace/Parts')
-const { WorkbenchProjectFileSystem } = await import('../src/main/workspace/WorkbenchProjectFileSystem')
+const { WorkbenchProjectFileSystem } =
+  await import('../src/main/workspace/WorkbenchProjectFileSystem')
 const { registerWorkbenchFsIpc } = await import('../src/main/workspace/WorkbenchFsIpc')
 
 /** 「中文测试」的 GBK 字节。 */
@@ -75,7 +76,9 @@ async function withProject(
   }
 }
 
-async function expectedStats(path: string): Promise<{ expectedModifiedAt: number; expectedSize: number }> {
+async function expectedStats(
+  path: string
+): Promise<{ expectedModifiedAt: number; expectedSize: number }> {
   const fileStats = await stat(path)
   return { expectedModifiedAt: fileStats.mtimeMs, expectedSize: fileStats.size }
 }
@@ -118,7 +121,10 @@ void describe('Workbench text encoding detection and exact round trip', () => {
     assert.equal(isLikelyTextFile(bytes([0xff, 0xfe], Buffer.from('plain text', 'utf16le'))), true)
     assert.equal(isLikelyTextFile(bytes([0xfe, 0xff], utf16be('plain text'))), true)
     // 码元里出现 NUL（UTF-32、二进制）照样按二进制拒绝；没有 BOM 的 0 字节也一样。
-    assert.equal(isLikelyTextFile(bytes([0xff, 0xfe, 0x00, 0x00], Buffer.from('ab', 'utf16le'))), false)
+    assert.equal(
+      isLikelyTextFile(bytes([0xff, 0xfe, 0x00, 0x00], Buffer.from('ab', 'utf16le'))),
+      false
+    )
     assert.equal(isLikelyTextFile(Buffer.from('plain text', 'utf16le')), false)
   })
 
@@ -151,13 +157,22 @@ void describe('Workbench text encoding detection and exact round trip', () => {
     assert.equal(decoded.textIssue, 'undecodable')
     assert.equal(decoded.content, 'abc�def')
     // 奇数长度的 UTF-16、不成对的代理项同样认不出。
-    assert.equal(decodeWorkbenchText(bytes([0xff, 0xfe, 0x41, 0x00, 0x42])).textIssue, 'undecodable')
-    assert.equal(decodeWorkbenchText(bytes([0xff, 0xfe, 0x00, 0xd8, 0x41, 0x00])).textIssue, 'undecodable')
+    assert.equal(
+      decodeWorkbenchText(bytes([0xff, 0xfe, 0x41, 0x00, 0x42])).textIssue,
+      'undecodable'
+    )
+    assert.equal(
+      decodeWorkbenchText(bytes([0xff, 0xfe, 0x00, 0xd8, 0x41, 0x00])).textIssue,
+      'undecodable'
+    )
   })
 
   void test('GB18030 text that would not write back exactly is irreversible', () => {
     // 四字节序列（U+0080）解得出，但编码表只有单双字节；A3A0 与 A1A1 都解成 U+3000。
-    for (const input of [bytes(GbkSample, [0x81, 0x30, 0x81, 0x30]), bytes(GbkSample, [0xa3, 0xa0])]) {
+    for (const input of [
+      bytes(GbkSample, [0x81, 0x30, 0x81, 0x30]),
+      bytes(GbkSample, [0xa3, 0xa0]),
+    ]) {
       const decoded = decodeWorkbenchText(input)
       assert.equal(decoded.encoding, 'gb18030')
       assert.equal(decoded.textIssue, 'irreversible')
@@ -168,11 +183,11 @@ void describe('Workbench text encoding detection and exact round trip', () => {
     assert.throws(
       () => encodeWorkbenchText('中文\n测试😀', { encoding: 'gb18030', eol: 'lf' }),
       (error: unknown) =>
-        error instanceof AppError
-        && error.code === WorkbenchUnencodableTextErrorCode
-        && /第 2 行第 3 列/u.test(error.message)
-        && error.message.includes('😀')
-        && /转换为 UTF-8/u.test(error.message)
+        error instanceof AppError &&
+        error.code === WorkbenchUnencodableTextErrorCode &&
+        /第 2 行第 3 列/u.test(error.message) &&
+        error.message.includes('😀') &&
+        /转换为 UTF-8/u.test(error.message)
     )
     assert.throws(
       () => encodeWorkbenchText('ok\uD800', { encoding: 'utf-8', eol: 'lf' }),
@@ -191,12 +206,17 @@ void describe('Workbench file reads and saves keep the file format', () => {
     await withProject(async ({ root, data }) => {
       const filePath = join(root, 'legacy.txt')
       await writeFile(filePath, GbkSample)
-      const read = await new WorkbenchProjectFileSystem().readTextFile({ projectRoot: root, path: 'legacy.txt' })
+      const read = await new WorkbenchProjectFileSystem().readTextFile({
+        projectRoot: root,
+        path: 'legacy.txt',
+      })
       assert.equal(read.content, '中文测试')
       assert.equal(read.encoding, 'gb18030')
       assert.equal(read.textIssue, undefined)
 
-      const saved = await createWorkbenchAppParts(data, { moveToTrash: refuseTrash }).files.saveFile({
+      const saved = await createWorkbenchAppParts(data, {
+        moveToTrash: refuseTrash,
+      }).files.saveFile({
         projectRoot: root,
         path: 'legacy.txt',
         content: `${read.content}!`,
@@ -215,7 +235,10 @@ void describe('Workbench file reads and saves keep the file format', () => {
     await withProject(async ({ root, data }) => {
       const filePath = join(root, 'windows.ts')
       await writeFile(filePath, 'one\r\ntwo\r\nthree\r\n')
-      const read = await new WorkbenchProjectFileSystem().readTextFile({ projectRoot: root, path: 'windows.ts' })
+      const read = await new WorkbenchProjectFileSystem().readTextFile({
+        projectRoot: root,
+        path: 'windows.ts',
+      })
       assert.equal(read.content, 'one\ntwo\nthree\n')
       assert.equal(read.eol, 'crlf')
 
@@ -290,7 +313,10 @@ void describe('Workbench file reads and saves keep the file format', () => {
 
       const utf16Path = join(root, 'wide.txt')
       await writeFile(utf16Path, bytes([0xff, 0xfe], Buffer.from('x\ny\n', 'utf16le')))
-      const read = await new WorkbenchProjectFileSystem().readTextFile({ projectRoot: root, path: 'wide.txt' })
+      const read = await new WorkbenchProjectFileSystem().readTextFile({
+        projectRoot: root,
+        path: 'wide.txt',
+      })
       assert.equal(read.encoding, 'utf-16le-bom')
       await files.saveFile({
         projectRoot: root,
@@ -300,7 +326,10 @@ void describe('Workbench file reads and saves keep the file format', () => {
         eol: 'crlf',
         ...(await expectedStats(utf16Path)),
       })
-      assert.deepEqual(await readFile(utf16Path), bytes([0xff, 0xfe], Buffer.from('x\r\ny\r\nz\r\n', 'utf16le')))
+      assert.deepEqual(
+        await readFile(utf16Path),
+        bytes([0xff, 0xfe], Buffer.from('x\r\ny\r\nz\r\n', 'utf16le'))
+      )
     })
   })
 
@@ -337,7 +366,11 @@ void describe('Workbench file reads and saves keep the file format', () => {
   void test('the save IPC rejects unknown formats instead of guessing', async () => {
     await withProject(async ({ root, data }) => {
       await writeFile(join(root, 'a.txt'), 'a\n')
-      registerWorkbenchFsIpc({} as never, createWorkbenchAppParts(data, { moveToTrash: refuseTrash }), {} as never)
+      registerWorkbenchFsIpc(
+        {} as never,
+        createWorkbenchAppParts(data, { moveToTrash: refuseTrash }),
+        {} as never
+      )
       const handler = ipcHandlers.get(WorkbenchFsChannels.saveFile)
       assert.ok(handler)
       const save = async (request: Record<string, unknown>) =>

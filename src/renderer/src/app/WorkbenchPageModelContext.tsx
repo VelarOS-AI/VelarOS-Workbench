@@ -1,6 +1,6 @@
 import { createContext, type ReactElement, type ReactNode, useContext } from 'react'
 
-import { isObject,isPresent } from '@velaros-ai/core'
+import { isObject, isPresent } from '@velaros-ai/velaros/core'
 
 import type { StandaloneWorkbenchPageModel } from '../hooks/useStandaloneWorkbenchPageModel'
 
@@ -30,6 +30,8 @@ export function WorkbenchPageModelProvider({
   children: ReactNode
 }): ReactElement {
   return (
-    <WorkbenchPageModelContext.Provider value={model}>{children}</WorkbenchPageModelContext.Provider>
+    <WorkbenchPageModelContext.Provider value={model}>
+      {children}
+    </WorkbenchPageModelContext.Provider>
   )
 }

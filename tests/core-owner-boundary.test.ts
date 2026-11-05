@@ -9,16 +9,16 @@ const sourceRoots = [resolve(repositoryRoot, 'src')]
 const sourceExtensions = new Set(['.ts', '.tsx'])
 
 const removedCoreModules = new Set([
-  '@velaros-ai/core/utils/CommandExecutionPolicy',
-  '@velaros-ai/core/utils/PathContainmentHelper',
-  '@velaros-ai/core/utils/PlatformCompatibilityHelper',
-  '@velaros-ai/core/utils/messageFileChanges',
+  '@velaros-ai/velaros/core/utils/CommandExecutionPolicy',
+  '@velaros-ai/velaros/core/utils/PathContainmentHelper',
+  '@velaros-ai/velaros/core/utils/PlatformCompatibilityHelper',
+  '@velaros-ai/velaros/core/utils/messageFileChanges',
 ])
 
 /**
  * 已退役的 Platform 属主。它们的零件各有新家：项目与命令在 `@velaros-ai/velaros/project`、
  * `@velaros-ai/velaros/execution`，浏览器在 `@velaros-ai/velaros/browser/...`，跨平台行为在
- * `@velaros-ai/core/platform`，对话数据在 `@velaros-ai/ui/conversation/contracts`。
+ * `@velaros-ai/velaros/core/platform`，对话数据在 `@velaros-ai/ui/conversation/contracts`。
  */
 const retiredOwnerModules = [
   /^@velaros-ai\/(?:browser|development|project|system|system-tools)(?:\/|$)/u,
@@ -32,9 +32,9 @@ const contractOwners: Readonly<Record<string, readonly string[]>> = {
   ContentBlock: ['@velaros-ai/ui/conversation/contracts'],
   ToolCallBlock: ['@velaros-ai/ui/conversation/contracts'],
   BrowserElementSelection: ['@velaros-ai/velaros/browser/contracts'],
-  AgentProviderRuntimeConfig: ['@velaros-ai/model', '@velaros-ai/model/contracts'],
-  ListProviderModelsRequest: ['@velaros-ai/model', '@velaros-ai/model/contracts'],
-  ProviderModelCatalog: ['@velaros-ai/model', '@velaros-ai/model/contracts'],
+  AgentProviderRuntimeConfig: ['@velaros-ai/velaros/model', '@velaros-ai/velaros/model/contracts'],
+  ListProviderModelsRequest: ['@velaros-ai/velaros/model', '@velaros-ai/velaros/model/contracts'],
+  ProviderModelCatalog: ['@velaros-ai/velaros/model', '@velaros-ai/velaros/model/contracts'],
 }
 
 const concreteOwnerNames = new Set([
@@ -47,11 +47,11 @@ const concreteOwnerNames = new Set([
 
 function isConcreteOwnerName(name: string): boolean {
   return (
-    name.startsWith('Workbench')
-    || name.startsWith('System')
-    || name.startsWith('WorkspaceGit')
-    || name.startsWith('AuxiliaryModel')
-    || concreteOwnerNames.has(name)
+    name.startsWith('Workbench') ||
+    name.startsWith('System') ||
+    name.startsWith('WorkspaceGit') ||
+    name.startsWith('AuxiliaryModel') ||
+    concreteOwnerNames.has(name)
   )
 }
 
@@ -60,7 +60,7 @@ async function collectSourceFiles(directory: string): Promise<string[]> {
   const files: string[] = []
   for (const entry of entries) {
     const path = join(directory, entry.name)
-    if (entry.isDirectory()) files.push(...await collectSourceFiles(path))
+    if (entry.isDirectory()) files.push(...(await collectSourceFiles(path)))
     else if (entry.isFile() && sourceExtensions.has(extname(entry.name))) files.push(path)
   }
   return files
@@ -69,15 +69,21 @@ async function collectSourceFiles(directory: string): Promise<string[]> {
 function importedNames(clause: string): string[] {
   return clause
     .split(',')
-    .map((entry) => entry.trim().replace(/^type\s+/u, '').split(/\s+as\s+/u)[0]?.trim())
+    .map((entry) =>
+      entry
+        .trim()
+        .replace(/^type\s+/u, '')
+        .split(/\s+as\s+/u)[0]
+        ?.trim()
+    )
     .filter((entry): entry is string => Boolean(entry))
 }
 
 /** 静态导入、再导出、动态导入与副作用导入里的 `@velaros-ai/*` 模块名。 */
 function velarosSpecifiers(source: string): string[] {
-  return [...source.matchAll(
-    /(?:\bfrom\s+|\bimport\s*\(\s*|\bimport\s+)['"](@velaros-ai\/[^'"]+)['"]/gu
-  )].map((match) => match[1]!)
+  return [
+    ...source.matchAll(/(?:\bfrom\s+|\bimport\s*\(\s*|\bimport\s+)['"](@velaros-ai\/[^'"]+)['"]/gu),
+  ].map((match) => match[1]!)
 }
 
 function repositoryPath(path: string): string {
@@ -94,7 +100,7 @@ void describe('Core 0.4 owner boundary', () => {
         const label = repositoryPath(path)
 
         for (const match of source.matchAll(
-          /(?:from\s+|import\s*\()\s*['"](@velaros-ai\/core[^'"]*)['"]/gu
+          /(?:from\s+|import\s*\()\s*['"](@velaros-ai\/velaros\/core[^'"]*)['"]/gu
         )) {
           const specifier = match[1]
           if (specifier && removedCoreModules.has(specifier)) {
@@ -103,7 +109,7 @@ void describe('Core 0.4 owner boundary', () => {
         }
 
         for (const match of source.matchAll(
-          /(?:import|export)\s+(?:type\s+)?\{([^}]*)\}\s+from\s+['"]@velaros-ai\/core(?:\/types)?['"]/gu
+          /(?:import|export)\s+(?:type\s+)?\{([^}]*)\}\s+from\s+['"]@velaros-ai\/velaros\/core(?:\/types)?['"]/gu
         )) {
           for (const name of importedNames(match[1] ?? '')) {
             if (isConcreteOwnerName(name)) {
@@ -176,7 +182,7 @@ void describe('Core 0.4 owner boundary', () => {
     const files = await collectSourceFiles(resolve(repositoryRoot, 'src'))
     const sources = (await Promise.all(files.map((path) => readFile(path, 'utf8')))).join('\n')
 
-    assert.match(sources, /from '@velaros-ai\/core\/platform'/u)
+    assert.match(sources, /from '@velaros-ai\/velaros\/core\/platform'/u)
     // 不留本地的兼容层副本：平台判断只有 Core 这一份。
     assert.deepEqual(
       files.filter((path) => /PlatformCompatibility/u.test(basename(path))).map(repositoryPath),

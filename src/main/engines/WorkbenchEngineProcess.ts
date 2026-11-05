@@ -3,9 +3,9 @@ import { access, constants } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { delimiter, extname, isAbsolute, join } from 'node:path'
 
-import { Log } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
-import { type CommandSpec, currentPlatform } from '@velaros-ai/core/platform'
+import { Log } from '@velaros-ai/velaros/core'
+import { AppError } from '@velaros-ai/velaros/core/error'
+import { type CommandSpec, currentPlatform } from '@velaros-ai/velaros/core/platform'
 
 import type {
   WorkbenchAgentEngineId,
@@ -203,7 +203,10 @@ export async function withTimeout<T>(
       promise,
       new Promise<never>((_, reject) => {
         timer = setTimeout(() => reject(new AppError('TIMEOUT', message)), timeoutMs)
-        abort = () => reject(signal?.reason ?? new AppError('CANCELLED', workbenchMainText('engines.cancelled')))
+        abort = () =>
+          reject(
+            signal?.reason ?? new AppError('CANCELLED', workbenchMainText('engines.cancelled'))
+          )
         signal?.addEventListener('abort', abort, { once: true })
       }),
     ])

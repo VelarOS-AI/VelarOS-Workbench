@@ -2,9 +2,9 @@ import { createHash } from 'node:crypto'
 import { mkdir, readFile, rm } from 'node:fs/promises'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 
-import { optionalWhenLazy } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
-import { writeJsonFileAtomically } from '@velaros-ai/core/utils/FilePersistence'
+import { optionalWhenLazy } from '@velaros-ai/velaros/core'
+import { AppError } from '@velaros-ai/velaros/core/error'
+import { writeJsonFileAtomically } from '@velaros-ai/velaros/core/utils/FilePersistence'
 
 import {
   type WorkbenchChatCheckpointCaptureRequest,
@@ -103,7 +103,7 @@ export class WorkbenchChatRunChangeStore {
     // 走完再拍。等候期间的失败轮到它时照常读出来。
     const tree = this.checkpoints.snapshotWorkingTree(
       request.workspaceRoot,
-      final ? this.attribution?.settleDelayMs(request) ?? 0 : 0
+      final ? (this.attribution?.settleDelayMs(request) ?? 0) : 0
     )
     tree.catch(() => undefined)
     return this.serialize(dirname(file), async () => {
@@ -210,7 +210,9 @@ export class WorkbenchChatRunChangeStore {
         capturedAt,
         baseCommitId: request.baseCommitId,
         changes,
-        attribution: optionalWhenLazy(selection.attribution, () => ({ watcher: selection.attribution!.watcher })),
+        attribution: optionalWhenLazy(selection.attribution, () => ({
+          watcher: selection.attribution!.watcher,
+        })),
       })
     } else {
       // 上一次采集时有改动、这一次全被撤回了：旧记录不能留着冒充现在。
@@ -295,7 +297,8 @@ function summarize(
 }
 
 function readSegment(value: string): string {
-  if (!RecordSegmentPattern.test(value)) throw new AppError('VALIDATION', workbenchMainText('git.invalidRecordId'))
+  if (!RecordSegmentPattern.test(value))
+    throw new AppError('VALIDATION', workbenchMainText('git.invalidRecordId'))
   return value
 }
 
@@ -324,7 +327,8 @@ function parseStoredRecord(text: string, recordId: string): StoredRunChangesReco
     changes: changes.filter(isStoredFileChange),
   }
   // 两个可选字段都要先认形状再收：在 if 里收窄，不必把外来值强转成字段类型。
-  if (typeof baseCommitId === 'string' && ObjectIdPattern.test(baseCommitId)) record.baseCommitId = baseCommitId
+  if (typeof baseCommitId === 'string' && ObjectIdPattern.test(baseCommitId))
+    record.baseCommitId = baseCommitId
   if (watcher === 'observed' || watcher === 'unavailable') record.attribution = { watcher }
   return record
 }
@@ -339,7 +343,9 @@ function isStoredFileChange(value: unknown): value is WorkbenchChatRunFileChange
     typeof value.binary === 'boolean' &&
     typeof value.patch === 'string' &&
     typeof value.patchOmitted === 'boolean' &&
-    (value.attribution === undefined || value.attribution === 'agent' || value.attribution === 'mixed')
+    (value.attribution === undefined ||
+      value.attribution === 'agent' ||
+      value.attribution === 'mixed')
   )
 }
 

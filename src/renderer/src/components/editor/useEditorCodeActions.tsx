@@ -29,9 +29,14 @@ import {
 import { useStableWorkbenchMessageTranslate } from '@renderer/runtime/useStableWorkbenchMessaging'
 import type { WorkbenchOpenEditorTab } from '@renderer/types/workbenchTypes'
 
-import { isEmpty } from '@velaros-ai/core'
+import { isEmpty } from '@velaros-ai/velaros/core'
 
-import { type WorkbenchLanguageServiceCodeAction, type WorkbenchLanguageServiceCodeActionCategory, type WorkbenchLanguageServiceEditFormat, type WorkbenchLanguageServiceRange } from '@shared/contracts/workbench'
+import {
+  type WorkbenchLanguageServiceCodeAction,
+  type WorkbenchLanguageServiceCodeActionCategory,
+  type WorkbenchLanguageServiceEditFormat,
+  type WorkbenchLanguageServiceRange,
+} from '@shared/contracts/workbench'
 
 import { useLatest, useMemoizedFn } from '../../support/genericHooks'
 
@@ -121,11 +126,15 @@ export function useEditorCodeActions({
   const support = useMemo(() => resolveWorkbenchCodeActionSupport(path), [path])
 
   const isCurrent = (source: CodeActionSource): boolean =>
-    viewRef.current === source.view
-    && source.view.state.doc === source.document
-    && latest.current.path === source.path
+    viewRef.current === source.view &&
+    source.view.state.doc === source.document &&
+    latest.current.path === source.path
 
-  const captureSource = (view: EditorView, from: number, to: number): Nullable<CodeActionSource> => {
+  const captureSource = (
+    view: EditorView,
+    from: number,
+    to: number
+  ): Nullable<CodeActionSource> => {
     const currentPath = latest.current.path
     if (!currentPath) return null
     return {
@@ -320,7 +329,10 @@ export function useEditorCodeActions({
     if (!source) return
 
     const { range: _range, ...request } = requestBase(source)
-    const result = await getWorkbenchLanguageServiceOrganizeImports(request, latest.current.hostRuntime)
+    const result = await getWorkbenchLanguageServiceOrganizeImports(
+      request,
+      latest.current.hostRuntime
+    )
     if (!isCurrent(source) || !canEdit(view)) return
     if (!result.ok) {
       messageLatest.current.error({

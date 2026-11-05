@@ -3,7 +3,7 @@ import { type FSWatcher, watch } from 'node:fs'
 import { realpath, stat } from 'node:fs/promises'
 import { relative, resolve } from 'node:path'
 
-import { AppError } from '@velaros-ai/core/error'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
 import { type SystemWorkspaceFilesChangedEvent } from '@shared/contracts/system'
 
@@ -335,7 +335,8 @@ export class WorkbenchFileWatcher implements WorkbenchRawPathSource {
 
     const candidate = resolve(input)
     const info = await stat(candidate).catch(() => null)
-    if (!info?.isDirectory()) throw new AppError('VALIDATION', workbenchMainText('paths.projectRequired'))
+    if (!info?.isDirectory())
+      throw new AppError('VALIDATION', workbenchMainText('paths.projectRequired'))
 
     return realpath(candidate)
   }

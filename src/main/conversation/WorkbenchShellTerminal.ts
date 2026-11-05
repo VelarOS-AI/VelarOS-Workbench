@@ -2,7 +2,7 @@ import { createRequire } from 'node:module'
 
 import type * as NodePty from '@lydell/node-pty'
 
-import { isNotUndefined, isUndefined, Log } from '@velaros-ai/core'
+import { isNotUndefined, isUndefined, Log } from '@velaros-ai/velaros/core'
 import type { ShellTerminalFactory } from '@velaros-ai/velaros/execution'
 
 import { buildPtyArguments } from '../workspace/terminal/PtyArguments'

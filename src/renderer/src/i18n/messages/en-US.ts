@@ -1288,7 +1288,8 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     workerThreadRunning: 'Running',
     contextUsage: 'Context usage',
     contextUsageEstimate: 'Context usage estimate',
-    contextCapacityProvisional: 'Model capacity is unconfirmed. This provisional budget adjusts after a context limit response.',
+    contextCapacityProvisional:
+      'Model capacity is unconfirmed. This provisional budget adjusts after a context limit response.',
     tokenUnit: 'tokens',
     contextUsagePending: '—',
     contextUsagePendingHint: 'No estimate yet — usage appears after the first message.',
@@ -1311,6 +1312,9 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     settingsMemoryEnabledDescription:
       "When off, conversations don't read or write memories; saved memories are kept.",
     settingsMemoryLoading: 'Loading memories…',
+    settingsMemoryPreviousPage: 'Previous',
+    settingsMemoryNextPage: 'Next',
+    settingsMemoryPage: 'Page {page} / {total}',
     settingsMemoryEmpty:
       'No memories for this project yet. Things the model decides are worth remembering will appear here.',
     settingsMemoryNoProject: 'Open a project to see its memories.',

@@ -1,4 +1,4 @@
-import type { OperationSurface } from '@velaros-ai/kernel'
+import type { OperationSurface } from '@velaros-ai/velaros/kernel'
 
 const TaskInput = {
   type: 'object',

@@ -65,17 +65,31 @@ void describe('Workbench navigation surface', () => {
     // 入口先按规则定两侧：普通文件区收起独占组，左侧切面板，需要时展开面板。
     assert.match(navigate, /resolveWorkbenchNavigationSurface\(\s*request\.target\s*\)/u)
     assert.match(navigate, /if \(editorGroup === 'primary'\) showEditorSurface\(\)/u)
-    assert.match(navigate, /if \(surface\.activeLeftTool !== leftTool\) surface\.setActiveLeftTool\(leftTool\)/u)
-    assert.match(navigate, /if \(revealLeftPanel && !surface\.isFilePanelOpen\) surface\.toggleFilePanel\(\)/u)
+    assert.match(
+      navigate,
+      /if \(surface\.activeLeftTool !== leftTool\) surface\.setActiveLeftTool\(leftTool\)/u
+    )
+    assert.match(
+      navigate,
+      /if \(revealLeftPanel && !surface\.isFilePanelOpen\) surface\.toggleFilePanel\(\)/u
+    )
     assert.match(
       navigate,
       /await editorNavigation\.goToLocation\(request\.path, request\.line, request\.column(?:, \{[^}]*\})?\)/u
     )
 
     // 聊天：回答里的路径、改动卡的逐文件打开（项目外走只读预览）、「审核」本轮改动。
-    const workspacePath = sliceSource(pageModel, 'async function handleWorkbenchChatWorkspacePathOpen', '\n  }\n')
+    const workspacePath = sliceSource(
+      pageModel,
+      'async function handleWorkbenchChatWorkspacePathOpen',
+      '\n  }\n'
+    )
     assert.match(workspacePath, /await navigate\(\{ target: 'file', path: relativePath \}\)/u)
-    const fileChangeOpen = sliceSource(pageModel, 'async function handleWorkbenchChatFileChangeOpen', '\n  }\n')
+    const fileChangeOpen = sliceSource(
+      pageModel,
+      'async function handleWorkbenchChatFileChangeOpen',
+      '\n  }\n'
+    )
     assert.match(fileChangeOpen, /await navigate\(\{ target: 'file', path: entry\.path \}\)/u)
     assert.match(fileChangeOpen, /await openFileChangePreview\(entry, entry\.rootPath\)/u)
     const preview = sliceSource(pageModel, 'async function openFileChangePreview', '\n  }\n')
@@ -89,15 +103,23 @@ void describe('Workbench navigation surface', () => {
       pageModel,
       /showEditorSurface\(\)\n\s*(void |await )?editorNavigation\.(selectFile|goToLocation|openDiff|openLightTab)/u
     )
-    assert.doesNotMatch(presentation, /showEditorSurface\(\)\n\s*void editorNavigation\.goToLocation/u)
-    assert.match(presentation, /model\.actions\.navigate\(\{ target: 'file', path: pendingFileOpenPath \}\)/u)
+    assert.doesNotMatch(
+      presentation,
+      /showEditorSurface\(\)\n\s*void editorNavigation\.goToLocation/u
+    )
+    assert.match(
+      presentation,
+      /model\.actions\.navigate\(\{ target: 'file', path: pendingFileOpenPath \}\)/u
+    )
   })
 
   void test('opening a file locates it in the file tree even when it already is the current file', () => {
     const pageModel = readSource('src/renderer/src/hooks/useStandaloneWorkbenchPageModel.tsx')
     const treeController = readSource('src/renderer/src/hooks/useWorkbenchTreeController.ts')
     const panel = readSource('src/renderer/src/components/files/FilePanel.tsx')
-    const adapter = readSource('src/renderer/src/components/embedded/workbenchEmbeddedKernelAdapter.ts')
+    const adapter = readSource(
+      'src/renderer/src/components/embedded/workbenchEmbeddedKernelAdapter.ts'
+    )
     const tree = readSource('src/renderer/src/components/files/FileTree.tsx')
 
     // 当前文件不变时「跟着当前文件定位」的 effect 不会动：导航的 file 分支自己无条件定位一次。
@@ -106,12 +128,21 @@ void describe('Workbench navigation surface', () => {
       "case 'file':",
       "case 'file-preview':"
     )
-    assert.match(fileCase, /\n\s*await workbench\.revealEntryPath\(request\.path, \{ quiet: true \}\)\n\s*return/u)
+    assert.match(
+      fileCase,
+      /\n\s*await workbench\.revealEntryPath\(request\.path, \{ quiet: true \}\)\n\s*return/u
+    )
     // 每次定位都记一笔，一路传到文件树：选中项没变（用户滚走了）也要滚回视野。
-    assert.match(treeController, /setSelectedEntryPath\(path\)\n\s*setRevealRevision\(\(revision\) => revision \+ 1\)/u)
+    assert.match(
+      treeController,
+      /setSelectedEntryPath\(path\)\n\s*setRevealRevision\(\(revision\) => revision \+ 1\)/u
+    )
     assert.match(adapter, /revealRevision: workbench\.revealRevision/u)
     assert.match(panel, /revealRevision=\{revealRevision\}/u)
-    assert.match(tree, /if \(!selectionAlreadyMatches\) tree\.select\(selectedPath, \{ focus: false \}\)\n\s*else if \(scrolledRevealRevisionRef\.current !== revealRevision\) void tree\.scrollTo\(selectedPath\)/u)
+    assert.match(
+      tree,
+      /if \(!selectionAlreadyMatches\) tree\.select\(selectedPath, \{ focus: false \}\)\n\s*else if \(scrolledRevealRevisionRef\.current !== revealRevision\)\s*void tree\.scrollTo\(selectedPath\)/u
+    )
     assert.match(tree, /\}, \[revealRevision, selectedPath, treeData, treeSize\.measured\]\)/u)
   })
 
@@ -120,12 +151,18 @@ void describe('Workbench navigation surface', () => {
 
     assert.match(pageModel, /与 `navigate` 分工：`navigate` 在同一次提交里把两侧一起定好/u)
     assert.match(pageModel, /if \(aiChangesActive\) setActiveLeftTool\('ai-changes'\)/u)
-    assert.match(pageModel, /else if \(activeLeftTool === 'ai-changes'\) setActiveLeftTool\('project'\)/u)
+    assert.match(
+      pageModel,
+      /else if \(activeLeftTool === 'ai-changes'\) setActiveLeftTool\('project'\)/u
+    )
   })
 })
 
 void describe('Workbench chat composer placeholder', () => {
-  const t = (key: string, params?: { path: string } | { count: number } | { engine: string }): string =>
+  const t = (
+    key: string,
+    params?: { path: string } | { count: number } | { engine: string }
+  ): string =>
     key === 'workbench.chatAskAboutFile' && params && 'path' in params
       ? `Ask about ${params.path}…`
       : key === 'workbench.chatAskAboutFiles' && params && 'count' in params
@@ -135,7 +172,10 @@ void describe('Workbench chat composer placeholder', () => {
           : 'Ask Workbench Agent…'
 
   void test('follows the files the message asks about, not the raw editor file', () => {
-    assert.equal(resolveWorkbenchChatComposerPlaceholder(['src/app.ts'], t), 'Ask about src/app.ts…')
+    assert.equal(
+      resolveWorkbenchChatComposerPlaceholder(['src/app.ts'], t),
+      'Ask about src/app.ts…'
+    )
     // 右键「添加到聊天」又挂了文件：提示说问几个文件。
     assert.equal(
       resolveWorkbenchChatComposerPlaceholder(['src/app.ts', 'src/lib.ts'], t),
@@ -157,7 +197,10 @@ void describe('Workbench chat composer placeholder', () => {
       adapter,
       /appendWorkbenchChatFileReferences\(\s*includedCurrentFilePath \? \[includedCurrentFilePath\] : \[\],\s*selectedFileReferencePaths\s*\)/u
     )
-    assert.match(adapter, /onDismissWorkbenchCurrentFile: \(\) => setIncludedCurrentFilePath\(null\)/u)
+    assert.match(
+      adapter,
+      /onDismissWorkbenchCurrentFile: \(\) => setIncludedCurrentFilePath\(null\)/u
+    )
     // 当前文件随会话草稿持有；打开别的文件时 chip 重新出现，提示随之回来。
     const drafts = readSource('src/renderer/src/runtime/standaloneChatDrafts.ts')
     assert.match(adapter, /useStandaloneChatDraft\([\s\S]*?\{\s*currentFilePath,/u)
@@ -328,7 +371,10 @@ void describe('Workbench Git refresh on workspace changes', () => {
     const summaries = readSource('src/renderer/src/support/useWorkspaceGitSummaries.ts')
     const lineStats = readSource('src/renderer/src/support/useWorkspaceGitLineStats.ts')
 
-    assert.match(gitState, /useWorkspaceFilesChangedRefresh\(\{[\s\S]*?onChanged: workspaceChangeRefresh\.schedule/u)
+    assert.match(
+      gitState,
+      /useWorkspaceFilesChangedRefresh\(\{[\s\S]*?onChanged: workspaceChangeRefresh\.schedule/u
+    )
     // Agent 写入（主 Agent 与子 Agent）走共用的识别器，按项目根订阅。
     assert.match(
       gitState,

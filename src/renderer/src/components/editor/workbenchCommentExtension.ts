@@ -2,12 +2,9 @@ import type { Extension, Range, Transaction } from '@codemirror/state'
 import { StateEffect, StateField } from '@codemirror/state'
 import { Decoration, type DecorationSet, EditorView, WidgetType } from '@codemirror/view'
 
-import { isEmpty } from '@velaros-ai/core'
+import { isEmpty } from '@velaros-ai/velaros/core'
 
-import {
-  getWorkbenchComment,
-  type WorkbenchComment,
-} from '../../models/workbenchCommentStore'
+import { getWorkbenchComment, type WorkbenchComment } from '../../models/workbenchCommentStore'
 
 import { resolveWorkbenchAnchorEndLine } from './workbenchLineAnchors'
 
@@ -296,8 +293,8 @@ export function createWorkbenchCommentExtension(
     // 外部改动删掉的、按行号重新锚定时落不下的锚点都不是「删除评论」：不通知移除，只回写还在的锚点的行号。
     const userRemoval = !update.transactions.some(
       (tr) =>
-        options.isExternalChange(tr)
-        || tr.effects.some((effect) => effect.is(setWorkbenchCommentAnchorsEffect))
+        options.isExternalChange(tr) ||
+        tr.effects.some((effect) => effect.is(setWorkbenchCommentAnchorsEffect))
     )
     if (userRemoval) {
       const afterIds = new Set(after.anchors.map((anchor) => anchor.id))

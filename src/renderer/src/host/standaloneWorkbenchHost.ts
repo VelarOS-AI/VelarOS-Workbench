@@ -2,11 +2,15 @@ import { WorkbenchRuntime } from '@renderer/composition/WorkbenchRuntime'
 import { installWorkbenchHost, type WorkbenchHost } from '@renderer/host/WorkbenchHost'
 import { getStandaloneWorkbenchModelConfig } from '@renderer/runtime/standaloneWorkbenchModelConfig'
 
-import { AppError, Result } from '@velaros-ai/core'
-import type { Result as ResultType } from '@velaros-ai/core/result'
+import { AppError, Result } from '@velaros-ai/velaros/core'
+import type { Result as ResultType } from '@velaros-ai/velaros/core/result'
 
 import { type SystemOverview } from '@shared/contracts/system'
-import { type WorkbenchIndexProjectRequest, type WorkbenchIndexProjectResult, type WorkbenchProjectAiRulesResult } from '@shared/contracts/workbench'
+import {
+  type WorkbenchIndexProjectRequest,
+  type WorkbenchIndexProjectResult,
+  type WorkbenchProjectAiRulesResult,
+} from '@shared/contracts/workbench'
 
 import type { WorkbenchFsCallResult } from '../../../shared/workbenchFs'
 import type {
@@ -36,10 +40,9 @@ function toHostResult<T>(envelope: WorkbenchFsCallResult<T>): ResultType<T> {
 }
 
 function invalidSession<T>(): ResultType<T> {
-  return Result.fail(new AppError(
-    'VALIDATION',
-    'The Workbench session is not linked to an active project root.'
-  ))
+  return Result.fail(
+    new AppError('VALIDATION', 'The Workbench session is not linked to an active project root.')
+  )
 }
 
 interface WorkspaceFileEntry {
@@ -73,9 +76,7 @@ async function invokeWorkspace<T>(
   return toWorkspaceHostResult<T>(result)
 }
 
-function toWorkspaceHostResult<T>(
-  envelope: WorkbenchWorkspaceInvokeResult
-): ResultType<T> {
+function toWorkspaceHostResult<T>(envelope: WorkbenchWorkspaceInvokeResult): ResultType<T> {
   return envelope.ok
     ? Result.ok(envelope.output as T)
     : Result.fail(new AppError('UNKNOWN', envelope.error.message))
@@ -84,40 +85,33 @@ function toWorkspaceHostResult<T>(
 async function indexProjectWithWorkspace(
   request: WorkbenchIndexProjectRequest
 ): Promise<ResultType<WorkbenchIndexProjectResult>> {
-  const listed = await invokeWorkspace<unknown[]>(
-    request.projectRoot,
-    'project:list',
-    {
-      path: request.path ?? '.',
-      recursive: true,
-      maxDepth: request.maxDepth ?? 4,
-      maxFiles: request.maxFiles ?? 120,
-    }
-  )
+  const listed = await invokeWorkspace<unknown[]>(request.projectRoot, 'project:list', {
+    path: request.path ?? '.',
+    recursive: true,
+    maxDepth: request.maxDepth ?? 4,
+    maxFiles: request.maxFiles ?? 120,
+  })
   if (!listed.ok) return listed as ResultType<WorkbenchIndexProjectResult>
 
   const paths = listed.data
     .filter(isWorkspaceFileEntry)
     .filter((entry) => entry.type === 'file')
     .map((entry) => entry.path)
-  if (paths.length === 0) return Result.ok({
-    projectRoot: request.projectRoot,
-    path: request.path ?? '.',
-    files: [],
-    scannedFiles: 0,
-    skippedFiles: 0,
-    truncated: false,
-  })
+  if (paths.length === 0)
+    return Result.ok({
+      projectRoot: request.projectRoot,
+      path: request.path ?? '.',
+      files: [],
+      scannedFiles: 0,
+      skippedFiles: 0,
+      truncated: false,
+    })
 
-  const read = await invokeWorkspace<WorkspaceReadManyResult>(
-    request.projectRoot,
-    'project:read',
-    {
-      path: paths,
-      maxChars: request.maxCharsPerFile ?? 24_000,
-      maxBytes: request.maxFileBytes ?? 160_000,
-    }
-  )
+  const read = await invokeWorkspace<WorkspaceReadManyResult>(request.projectRoot, 'project:read', {
+    path: paths,
+    maxChars: request.maxCharsPerFile ?? 24_000,
+    maxBytes: request.maxFileBytes ?? 160_000,
+  })
   if (!read.ok) return read as ResultType<WorkbenchIndexProjectResult>
 
   const files = read.data.files
@@ -143,27 +137,28 @@ async function indexProjectWithWorkspace(
 function isWorkspaceFileEntry(value: unknown): value is WorkspaceFileEntry {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
   const record = value as Record<string, unknown>
-  return (
-    typeof record.path === 'string'
-    && (record.type === 'file' || record.type === 'directory')
-  )
+  return typeof record.path === 'string' && (record.type === 'file' || record.type === 'directory')
 }
 
 function createSystemOverview(activeWorkspaceRoot: string): SystemOverview {
   return {
-    providers: [{
-      id: 'workbench-project-hub',
-      label: 'Workbench Project Hub',
-      description: 'Standalone Workbench project root provider.',
-      capabilities: ['workspace-roots', 'open-path'],
-    }],
-    workspaceRoots: [{
-      path: activeWorkspaceRoot,
-      active: true,
-      exists: true,
-      removable: false,
-      source: 'project',
-    }],
+    providers: [
+      {
+        id: 'workbench-project-hub',
+        label: 'Workbench Project Hub',
+        description: 'Standalone Workbench project root provider.',
+        capabilities: ['workspace-roots', 'open-path'],
+      },
+    ],
+    workspaceRoots: [
+      {
+        path: activeWorkspaceRoot,
+        active: true,
+        exists: true,
+        removable: false,
+        source: 'project',
+      },
+    ],
     activeWorkspaceRoot,
     browserSiteContext: null,
   }
@@ -287,18 +282,19 @@ const standaloneWorkbenchHost: WorkbenchHost = {
         toHostResult(await window.velarosWorkbenchTerminal.readCwd(request)),
       getWorkbenchInlineCompletion: async (request) => {
         const modelConfig = getStandaloneWorkbenchModelConfig()
-        return toHostResult(await window.velarosWorkbenchLanguage.getInlineCompletion({
-          ...request,
-          modelSelection: {
-            provider: modelConfig.provider,
-            model: modelConfig.completionModel,
-            apiKey: modelConfig.apiKey,
-            baseURL: modelConfig.baseURL,
-          },
-        }))
+        return toHostResult(
+          await window.velarosWorkbenchLanguage.getInlineCompletion({
+            ...request,
+            modelSelection: {
+              provider: modelConfig.provider,
+              model: modelConfig.completionModel,
+              apiKey: modelConfig.apiKey,
+              baseURL: modelConfig.baseURL,
+            },
+          })
+        )
       },
-      onWorkbenchTerminalOutput: (listener) =>
-        window.velarosWorkbenchTerminal.onOutput(listener),
+      onWorkbenchTerminalOutput: (listener) => window.velarosWorkbenchTerminal.onOutput(listener),
       acknowledgeWorkbenchTerminalOutput: (request) =>
         window.velarosWorkbenchTerminal.acknowledgeOutput(request),
     },
@@ -306,10 +302,12 @@ const standaloneWorkbenchHost: WorkbenchHost = {
       readLocalAttachmentFile: async (request) => {
         const projectRoot = projectRootFromSessionId(request.sessionId)
         if (!projectRoot) return invalidSession()
-        const result = toHostResult(await window.velarosWorkbenchFs.readFile({
-          projectRoot,
-          path: request.path,
-        }))
+        const result = toHostResult(
+          await window.velarosWorkbenchFs.readFile({
+            projectRoot,
+            path: request.path,
+          })
+        )
         if (!result.ok) return result
         return Result.ok({
           path: result.data.path,
@@ -323,13 +321,15 @@ const standaloneWorkbenchHost: WorkbenchHost = {
       writeLocalAttachmentFile: async (request) => {
         const projectRoot = projectRootFromSessionId(request.sessionId)
         if (!projectRoot) return invalidSession()
-        const result = toHostResult(await window.velarosWorkbenchFs.saveFile({
-          projectRoot,
-          path: request.path,
-          content: request.content,
-          expectedModifiedAt: request.expectedLastModified,
-          expectedSize: request.expectedSize,
-        }))
+        const result = toHostResult(
+          await window.velarosWorkbenchFs.saveFile({
+            projectRoot,
+            path: request.path,
+            content: request.content,
+            expectedModifiedAt: request.expectedLastModified,
+            expectedSize: request.expectedSize,
+          })
+        )
         if (!result.ok) return result
         return Result.ok({
           path: result.data.path,
@@ -339,14 +339,17 @@ const standaloneWorkbenchHost: WorkbenchHost = {
       },
     },
     settings: {
-      listProviderModels: (request) => Promise.resolve(Result.ok({
-        provider: request.provider,
-        source: 'preset',
-        models: request.defaultModel
-          ? [{ id: request.defaultModel, label: request.defaultModel }]
-          : [],
-        fetchedAt: Date.now(),
-      })),
+      listProviderModels: (request) =>
+        Promise.resolve(
+          Result.ok({
+            provider: request.provider,
+            source: 'preset',
+            models: request.defaultModel
+              ? [{ id: request.defaultModel, label: request.defaultModel }]
+              : [],
+            fetchedAt: Date.now(),
+          })
+        ),
     },
     workspace: {
       openPath: async (_sessionId, path, options) => {
@@ -364,12 +367,14 @@ const standaloneWorkbenchHost: WorkbenchHost = {
       },
       addWorkspaceRoot: async (_sessionId, path) => {
         const opened = await window.velarosWorkbenchProjectHub.validateProjectPath(path)
-        if (!opened.ok) return Result.fail(new AppError('VALIDATION', `Cannot open project root: ${path}`))
+        if (!opened.ok)
+          return Result.fail(new AppError('VALIDATION', `Cannot open project root: ${path}`))
         return Result.ok(createSystemOverview(opened.project.path))
       },
       setActiveWorkspaceRoot: async (_sessionId, path) => {
         const opened = await window.velarosWorkbenchProjectHub.validateProjectPath(path)
-        if (!opened.ok) return Result.fail(new AppError('VALIDATION', `Cannot activate project root: ${path}`))
+        if (!opened.ok)
+          return Result.fail(new AppError('VALIDATION', `Cannot activate project root: ${path}`))
         return Result.ok(createSystemOverview(opened.project.path))
       },
       getWorkspaceGitSummary: async (workspaceRoot) =>
@@ -377,9 +382,7 @@ const standaloneWorkbenchHost: WorkbenchHost = {
       getWorkspaceGitLineStats: async (workspaceRoot) =>
         toHostResult(await window.velarosWorkbenchGit.getLineStats({ workspaceRoot })),
       getWorkspaceGitDiff: async (workspaceRoot, options) =>
-        toHostResult(
-          await window.velarosWorkbenchGit.getDiff({ workspaceRoot, ...options })
-        ),
+        toHostResult(await window.velarosWorkbenchGit.getDiff({ workspaceRoot, ...options })),
       getWorkspaceGitFileAtCommit: async (workspaceRoot, options) =>
         toHostResult(
           await window.velarosWorkbenchGit.getFileAtCommit({ workspaceRoot, ...options })
@@ -387,9 +390,7 @@ const standaloneWorkbenchHost: WorkbenchHost = {
       getWorkspaceGitBlame: async (workspaceRoot, options) =>
         toHostResult(await window.velarosWorkbenchGit.getBlame({ ...options, workspaceRoot })),
       getWorkspaceGitLog: async (workspaceRoot, options) =>
-        toHostResult(
-          await window.velarosWorkbenchGit.getLog({ workspaceRoot, ...options })
-        ),
+        toHostResult(await window.velarosWorkbenchGit.getLog({ workspaceRoot, ...options })),
       generateWorkspaceGitCommitMessage: async (workspaceRoot, locale, paths) =>
         toHostResult(
           await window.velarosWorkbenchGit.generateCommitMessage({
@@ -440,9 +441,7 @@ const standaloneWorkbenchHost: WorkbenchHost = {
           })
         ),
       createWorkspaceGitBranch: async (workspaceRoot, branch) =>
-        toHostResult(
-          await window.velarosWorkbenchGit.createBranch({ workspaceRoot, branch })
-        ),
+        toHostResult(await window.velarosWorkbenchGit.createBranch({ workspaceRoot, branch })),
       performWorkspaceGitAction: async (workspaceRoot, action, options) =>
         toHostResult(
           await window.velarosWorkbenchGit.performRemoteAction({

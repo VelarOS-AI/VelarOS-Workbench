@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path'
 
 import { test } from 'bun:test'
 
-import { NodeDefaultPackages } from '@velaros-ai/script'
+import { NodeDefaultPackages } from '@velaros-ai/velaros/script'
 
 import { assertNodeRuntimePackageFiles } from '../scripts/release/nodeRuntimePackages.mjs'
 import WorkbenchNodePackages from '../src/main/conversation/workbenchNodePackages.json' with { type: 'json' }

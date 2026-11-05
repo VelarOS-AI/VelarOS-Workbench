@@ -58,7 +58,6 @@ import {
   useStandaloneWorkbenchModelConfig,
 } from '@renderer/runtime/standaloneWorkbenchModelConfig'
 
-import { Result } from '@velaros-ai/core/result'
 import { type AppLocale } from '@velaros-ai/ui/conversation/contracts'
 import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
@@ -67,6 +66,7 @@ import { Title } from '@velaros-ai/ui/primitives/display/Title'
 import { Input } from '@velaros-ai/ui/primitives/forms/Input'
 import { Select } from '@velaros-ai/ui/primitives/forms/Select'
 import { Switch } from '@velaros-ai/ui/primitives/forms/Switch'
+import { Result } from '@velaros-ai/velaros/core/result'
 
 import {
   type WorkbenchProjectAiRuleFile,

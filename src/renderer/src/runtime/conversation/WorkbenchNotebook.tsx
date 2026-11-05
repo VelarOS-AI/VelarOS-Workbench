@@ -2,9 +2,9 @@ import { type ReactElement, useEffect, useState } from 'react'
 import { BookOpenTextIcon } from '@phosphor-icons/react'
 import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 
-import { AppError } from '@velaros-ai/core/error'
 import { Popover, PopoverAnchor, PopoverContent } from '@velaros-ai/ui/primitives/overlays/Popover'
 import type { RuntimeNoteContent } from '@velaros-ai/velaros'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
 import { readWorkbenchNotebook } from './readWorkbenchNotebook'
 
@@ -83,7 +83,13 @@ export function WorkbenchNotebook({
           <BookOpenTextIcon size={16} />
         </button>
       </PopoverAnchor>
-      <PopoverContent align="end" side="bottom" sideOffset={4} widthStrategy="content" className={styles.popover}>
+      <PopoverContent
+        align="end"
+        side="bottom"
+        sideOffset={4}
+        widthStrategy="content"
+        className={styles.popover}
+      >
         <section
           className={styles.panel}
           aria-label={t('workbench.notebookTitle')}

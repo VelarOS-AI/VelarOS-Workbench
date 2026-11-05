@@ -3,9 +3,9 @@ import { existsSync, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 
-import { isPlainObject, isString } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
-import { type NodeRuntimeEnvironment, nodeRuntimePackages } from '@velaros-ai/script'
+import { isPlainObject, isString } from '@velaros-ai/velaros/core'
+import { AppError } from '@velaros-ai/velaros/core/error'
+import { type NodeRuntimeEnvironment, nodeRuntimePackages } from '@velaros-ai/velaros/script'
 
 import WorkbenchNodePackages from './workbenchNodePackages.json'
 

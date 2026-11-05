@@ -5,7 +5,7 @@
  * 一个窗口一次只调试一个程序：新的一次开始之前先结束上一次。状态是模块里的一份快照，调试面板和编辑器
  * （停在哪一行、断点对没对上、悬停看值）都订阅它。这个模块按需加载——第一次起调试、或者编辑器挂上时才来。
  */
-import { AppError, type ErrorCode } from '@velaros-ai/core/error'
+import { AppError, type ErrorCode } from '@velaros-ai/velaros/core/error'
 
 import type {
   WorkbenchDebuggerBreakpoint,
@@ -98,7 +98,9 @@ export function workbenchBreakpointKey(path: string, line: number): string {
 function toStatusMap(
   statuses: readonly WorkbenchDebuggerBreakpointStatus[]
 ): Map<string, WorkbenchDebuggerBreakpointStatus> {
-  return new Map(statuses.map((status) => [workbenchBreakpointKey(status.path, status.line), status]))
+  return new Map(
+    statuses.map((status) => [workbenchBreakpointKey(status.path, status.line), status])
+  )
 }
 
 export class WorkbenchDebugSessionController {
@@ -222,8 +224,7 @@ export class WorkbenchDebugSessionController {
         breakpoints: [...breakpoints],
         pauseOnUncaughtExceptions,
       })
-      if (!result.ok)
-        throw new AppError((result.code ?? 'UNKNOWN') as ErrorCode, result.message)
+      if (!result.ok) throw new AppError((result.code ?? 'UNKNOWN') as ErrorCode, result.message)
 
       this.sentBreakpoints = breakpoints
       this.sentExceptionPause = pauseOnUncaughtExceptions

@@ -8,20 +8,20 @@ const rootDir = resolve(fileURLToPath(new URL('..', import.meta.url)))
 const sourceRoots = [resolve(rootDir, 'src')]
 const sourceExtensions = new Set(['.ts', '.tsx', '.css'])
 const forbiddenSpecifiers = [
+  /^@velaros-ai\/(?:core|model|agent|kernel|context|script|skill-jsts)(?:\/|$)/,
   /^apps\/desktop(?:\/|$)/,
   /^@(?:components|hooks|runtime)\//,
   /^@velaros-ai\/workbench(?:\/|$)/,
   /^@workbench-velar(?:\/|$)/,
   /VelarOS-Desktop/,
-  /^@velaros-ai\/core\/constants\/(?:storage|toolMetadataCatalog|workbenchViewport|workspaceSpaces|workspaceVisibility)$/,
-  /^@velaros-ai\/core\/utils\/(?:CommandExecutionPolicy|PathContainmentHelper|PlatformCompatibilityHelper|messageFileChanges)$/,
+  /^@velaros-ai\/velaros\/core\/constants\/(?:storage|toolMetadataCatalog|workbenchViewport|workspaceSpaces|workspaceVisibility)$/,
+  /^@velaros-ai\/velaros\/core\/utils\/(?:CommandExecutionPolicy|PathContainmentHelper|PlatformCompatibilityHelper|messageFileChanges)$/,
   /^@velaros-ai\/system-tools$/,
   /^@anthropic-ai\/claude-agent-sdk(?:\/|$)/,
 ]
-const importSpecifierPattern =
-  /(?:from\s+|import\s*\(|require\s*\()\s*['"]([^'"]+)['"]/gu
+const importSpecifierPattern = /(?:from\s+|import\s*\(|require\s*\()\s*['"]([^'"]+)['"]/gu
 const coreNamedImportPattern =
-  /import\s+(?:type\s+)?\{([^}]*)\}\s+from\s+['"]@velaros-ai\/core(?:\/types)?['"]/gu
+  /import\s+(?:type\s+)?\{([^}]*)\}\s+from\s+['"]@velaros-ai\/velaros\/core(?:\/types)?['"]/gu
 const forbiddenCoreContractPattern =
   /\b(?:Workbench\w+|SystemWorkspace\w+|BrowserElementSelection|AgentProviderRuntimeConfig|AuxiliaryModel\w+|ListProviderModelsRequest|ProviderModelCatalog)\b/u
 const layerRules = [
@@ -78,7 +78,7 @@ for (const section of [
 ]) {
   if (rootManifest[section]?.['@anthropic-ai/claude-agent-sdk']) {
     failures.push(
-      `package.json ${section} bundles Claude Agent SDK; Workbench drives the user's installed claude CLI over its stream-json protocol instead.`,
+      `package.json ${section} bundles Claude Agent SDK; Workbench drives the user's installed claude CLI over its stream-json protocol instead.`
     )
   }
 }
@@ -94,14 +94,18 @@ for (const sourceRoot of sourceRoots) {
     }
     const syntax = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true)
     if (
-      syntax.statements.length > 0
-      && syntax.statements.every((statement) => ts.isExportDeclaration(statement) && statement.moduleSpecifier)
+      syntax.statements.length > 0 &&
+      syntax.statements.every(
+        (statement) => ts.isExportDeclaration(statement) && statement.moduleSpecifier
+      )
     ) {
       failures.push(`${label}: 纯转发文件应移除，消费方直接导入实现或包的公开入口。`)
     }
     if (label.startsWith('src/main/')) {
       if (/new\s+KernelModuleHost\s*\(/u.test(source)) {
-        failures.push(`${label} constructs KernelModuleHost; complete hosts must compose the public Kernel.`)
+        failures.push(
+          `${label} constructs KernelModuleHost; complete hosts must compose the public Kernel.`
+        )
       }
       if (/class\s+\w*KernelRuntime\b/u.test(source)) {
         failures.push(`${label} recreates a product Kernel runtime facade.`)
@@ -117,8 +121,8 @@ for (const sourceRoot of sourceRoots) {
         failures.push(`${label} imports forbidden dependency "${specifier}"`)
       }
       if (
-        isRepositorySpecifier(specifier)
-        && layerRule?.forbidden.some((pattern) => pattern.test(specifier))
+        isRepositorySpecifier(specifier) &&
+        layerRule?.forbidden.some((pattern) => pattern.test(specifier))
       ) {
         failures.push(`${label} crosses its process boundary through "${specifier}"`)
       }
@@ -126,9 +130,7 @@ for (const sourceRoot of sourceRoots) {
     for (const match of source.matchAll(coreNamedImportPattern)) {
       const concrete = match[1].match(forbiddenCoreContractPattern)?.[0]
       if (concrete) {
-        failures.push(
-          `${relative(rootDir, path)} imports product contract "${concrete}" from Core`
-        )
+        failures.push(`${relative(rootDir, path)} imports product contract "${concrete}" from Core`)
       }
     }
   }
@@ -137,9 +139,7 @@ for (const sourceRoot of sourceRoots) {
 const allowedSourceDirectories = new Set(['main', 'preload', 'renderer', 'shared'])
 for (const entry of await readdir(resolve(rootDir, 'src'), { withFileTypes: true })) {
   if (!entry.isDirectory() || !allowedSourceDirectories.has(entry.name)) {
-    failures.push(
-      `src/${entry.name}: 单体源码根只允许 main、preload、renderer、shared 四层。`
-    )
+    failures.push(`src/${entry.name}: 单体源码根只允许 main、preload、renderer、shared 四层。`)
   }
 }
 

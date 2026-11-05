@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 
-import { currentPlatform } from '@velaros-ai/core/platform'
+import { currentPlatform } from '@velaros-ai/velaros/core/platform'
 
 import { resolveWorkbenchNodeExecutable } from '../../src/main/conversation/WorkbenchNodeRuntime'
 import { CommandHelper } from '../../src/main/workspace/CommandHelper'
@@ -13,7 +13,10 @@ import type {
 } from '../../src/main/workspace/debug/WorkbenchDebugLaunch'
 import { WorkbenchDebugSessions } from '../../src/main/workspace/debug/WorkbenchDebugSessions'
 import { PathResolver } from '../../src/main/workspace/PathResolver'
-import { listWorkbenchProcessTree, signalWorkbenchProcesses } from '../../src/main/workspace/terminal/WorkbenchProcessTree'
+import {
+  listWorkbenchProcessTree,
+  signalWorkbenchProcesses,
+} from '../../src/main/workspace/terminal/WorkbenchProcessTree'
 import type {
   WorkbenchDebuggerEvent,
   WorkbenchDebuggerFrame,
@@ -34,18 +37,32 @@ type DebuggerEventOf<TType extends WorkbenchDebuggerEvent['type']> = Extract<
 export function createProcessDebugLauncher(): {
   launcher: WorkbenchDebugLauncher
   /** 每个起过的进程：命令行、输出、进程号。 */
-  launched: Array<{ command: string; cwd: string; env: NodeJS.ProcessEnv; pid: number; output: () => string; disposePipes: () => void }>
+  launched: Array<{
+    command: string
+    cwd: string
+    env: NodeJS.ProcessEnv
+    pid: number
+    output: () => string
+    disposePipes: () => void
+  }>
 } {
   const launched: ReturnType<typeof createProcessDebugLauncher>['launched'] = []
   let nextId = 1
 
   const launcher: WorkbenchDebugLauncher = async (options) => {
-    const env = { ...process.env, ...options.env }
+    // 被调试夹具不继承测试宿主的 --import/--require/检查器参数：它们会改变
+    // --inspect-brk 的停顿位置与异常传播。场景明确指定的 NODE_OPTIONS 仍保留。
+    const env = { ...process.env, NODE_OPTIONS: '', ...options.env }
     const helper = new CommandHelper()
     // 登录 shell 会重排 PATH；测试必须调试产品锁定的 Node，而非运行机的另一版本。
-    const shellKind = currentPlatform.getShellKind(currentPlatform.getPreferredShellPath(process.env))
-    const nodeExecutable = currentPlatform.quoteShellArg(resolveWorkbenchNodeExecutable(), { kind: shellKind })
-    const nodeCommand = shellKind === 'pwsh' || shellKind === 'powershell' ? `& ${nodeExecutable}` : nodeExecutable
+    const shellKind = currentPlatform.getShellKind(
+      currentPlatform.getPreferredShellPath(process.env)
+    )
+    const nodeExecutable = currentPlatform.quoteShellArg(resolveWorkbenchNodeExecutable(), {
+      kind: shellKind,
+    })
+    const nodeCommand =
+      shellKind === 'pwsh' || shellKind === 'powershell' ? `& ${nodeExecutable}` : nodeExecutable
     const command = options.command.replace(/^node(?=\s|$)/u, () => nodeCommand)
     const spec = helper.getShellSpec(command)
     const child = spawn(spec.file, spec.args, {
@@ -69,16 +86,26 @@ export function createProcessDebugLauncher(): {
       for (const listener of exitListeners.splice(0)) listener(exit)
     })
     launched.push({
-      command: options.command, cwd: options.cwd, env, pid: child.pid!, output: () => output,
-      disposePipes: () => { child.stdout.destroy(); child.stderr.destroy() },
+      command: options.command,
+      cwd: options.cwd,
+      env,
+      pid: child.pid!,
+      output: () => output,
+      disposePipes: () => {
+        child.stdout.destroy()
+        child.stderr.destroy()
+      },
     })
 
-    const signalGroup = (signal: NodeJS.Signals, pids: readonly number[]): void => {
+    const signalGroup = async (signal: NodeJS.Signals, pids: readonly number[]): Promise<void> => {
+      if (process.platform === 'win32') {
+        await signalWorkbenchProcesses(pids, signal)
+        return
+      }
       try {
-        if (process.platform === 'win32') signalWorkbenchProcesses(pids, signal)
-        else process.kill(-child.pid!, signal)
-      } catch {
-        // arch-guard:silent-catch-ok 进程组已经不在了（ESRCH）。
+        process.kill(-child.pid!, signal)
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error
       }
     }
     return {
@@ -91,16 +118,29 @@ export function createProcessDebugLauncher(): {
       },
       stop: async () => {
         const pids = await listWorkbenchProcessTree(child.pid!)
-        return new Promise<void>((resolve) => {
-          if (exit) {
-            resolve()
-            return
-          }
-          exitListeners.push(() => resolve())
-          // 等待结束的承诺必须维持事件循环；Windows 管道的 close 可能晚于进程退出。
-          forceKillTimer = setTimeout(() => signalGroup('SIGKILL', pids), 1_000)
-          signalGroup('SIGTERM', pids)
+        if (exit) return
+        const errors: unknown[] = []
+        let forceKill: Promise<void> | undefined
+        let finish!: () => void
+        const exited = new Promise<void>((resolve) => {
+          finish = resolve
         })
+        exitListeners.push(finish)
+        forceKillTimer = setTimeout(() => {
+          forceKill = signalGroup('SIGKILL', pids).catch((error: unknown) => {
+            errors.push(error)
+            finish()
+          })
+        }, 1_000)
+        try {
+          await signalGroup('SIGTERM', pids)
+        } catch (error) {
+          errors.push(error)
+        }
+        await exited
+        await forceKill
+        clearTimeout(forceKillTimer)
+        if (errors.length > 0) throw new AggregateError(errors, 'Failed to stop debug test process')
       },
     }
   }
@@ -114,7 +154,10 @@ export interface DebugTestProject {
   launched: ReturnType<typeof createProcessDebugLauncher>['launched']
   events: WorkbenchDebuggerEvent[]
   start: (
-    request: Omit<WorkbenchDebuggerStartRequest, 'projectRoot' | 'breakpoints' | 'pauseOnUncaughtExceptions'> &
+    request: Omit<
+      WorkbenchDebuggerStartRequest,
+      'projectRoot' | 'breakpoints' | 'pauseOnUncaughtExceptions'
+    > &
       Partial<Pick<WorkbenchDebuggerStartRequest, 'breakpoints' | 'pauseOnUncaughtExceptions'>>,
     ownerId?: Nullable<number>
   ) => Promise<WorkbenchDebuggerStartResult>
@@ -180,20 +223,23 @@ export async function createDebugTestProject(
       (await waitForEvent([type], timeoutMs)) as DebuggerEventOf<typeof type>,
     nextStop: async (timeoutMs = 15_000) =>
       (await waitForEvent(['paused', 'ended'], timeoutMs)) as
-        | DebuggerEventOf<'paused'>
-        | DebuggerEventOf<'ended'>,
+        DebuggerEventOf<'paused'> | DebuggerEventOf<'ended'>,
     dispose: async () => {
       sessions.closeAllSessions()
+      const errors: unknown[] = []
       for (const item of launched) {
         try {
-          if (process.platform === 'win32') signalWorkbenchProcesses(await listWorkbenchProcessTree(item.pid), 'SIGKILL')
+          if (process.platform === 'win32')
+            await signalWorkbenchProcesses(await listWorkbenchProcessTree(item.pid), 'SIGKILL')
           else process.kill(-item.pid, 'SIGKILL')
-        } catch {
-          // arch-guard:silent-catch-ok 进程组已经退出。
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ESRCH') errors.push(error)
         }
       }
       // Bun 在 Windows 上结束 shell 后可能不发管道 close；进程树已停止，显式释放读取端。
       for (const item of launched) item.disposePipes()
+      if (errors.length > 0)
+        throw new AggregateError(errors, 'Failed to clean up debug test processes')
       // Windows 释放工作目录句柄会晚于进程退出；Bun 的 rm 不保证执行 maxRetries。
       for (let attempt = 0; ; attempt += 1) {
         try {
@@ -202,9 +248,11 @@ export async function createDebugTestProject(
         } catch (error) {
           const code = (error as NodeJS.ErrnoException).code
           if (
-            process.platform !== 'win32' || attempt >= 20 ||
+            process.platform !== 'win32' ||
+            attempt >= 20 ||
             !['EBUSY', 'ENOTEMPTY', 'EPERM', 'EACCES'].includes(code ?? '')
-          ) throw error
+          )
+            throw error
           await new Promise((resolve) => setTimeout(resolve, 100))
         }
       }
@@ -231,7 +279,10 @@ export async function variablesOf(
 ): Promise<Record<string, WorkbenchDebuggerVariable['value']>> {
   const scope = frame.scopes.find((candidate) => candidate.type === scopeType)
   if (!scope) throw new Error(`frame should have a ${scopeType} scope`)
-  const { variables } = await project.sessions.getVariables({ sessionId, objectId: scope.objectId }, 1)
+  const { variables } = await project.sessions.getVariables(
+    { sessionId, objectId: scope.objectId },
+    1
+  )
   return Object.fromEntries(variables.map((variable) => [variable.name, variable.value]))
 }
 

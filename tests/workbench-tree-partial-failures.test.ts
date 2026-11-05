@@ -6,7 +6,7 @@ import { join } from 'node:path'
 
 import { describe, test } from 'bun:test'
 
-import { AppError } from '@velaros-ai/core/error'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
 import { createWorkbenchAppParts } from '../src/main/workspace/Parts'
 import {
@@ -124,7 +124,10 @@ void describe('Workbench tree partial failures', () => {
           ['src/c.ts', 'lib/c.ts'],
         ]
       )
-      assert.deepEqual(moved.failed.map(({ failure }) => failure.path), ['src/b.ts'])
+      assert.deepEqual(
+        moved.failed.map(({ failure }) => failure.path),
+        ['src/b.ts']
+      )
       assert.deepEqual((await readdir(join(projectRoot, 'src'))).sort(), ['b.ts'])
 
       // 删两项，其中一项的原处又有了同名文件：另一项照样放回，冲突的那项留着以后再撤销。
@@ -143,8 +146,14 @@ void describe('Workbench tree partial failures', () => {
         (result) => result.deletedPath,
         (result) => parts.files.restoreDeletedEntry({ projectRoot, restoreId: result.restoreId })
       )
-      assert.deepEqual(restored.succeeded.map(({ result }) => result.restoredPath), ['lib/a.ts'])
-      assert.deepEqual(restored.failed.map(({ failure }) => failure.code), ['CONFLICT'])
+      assert.deepEqual(
+        restored.succeeded.map(({ result }) => result.restoredPath),
+        ['lib/a.ts']
+      )
+      assert.deepEqual(
+        restored.failed.map(({ failure }) => failure.code),
+        ['CONFLICT']
+      )
       assert.deepEqual(
         selectDeleteUndoResultsToKeep(batch, restored.failed).map((result) => result.deletedPath),
         ['lib/c.ts']

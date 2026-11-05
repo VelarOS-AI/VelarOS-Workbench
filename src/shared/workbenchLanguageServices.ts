@@ -1,4 +1,4 @@
-import { toNullable } from '@velaros-ai/core'
+import { toNullable } from '@velaros-ai/velaros/core'
 
 export type WorkbenchLanguageServiceInstallKind = 'builtin'
 
@@ -109,7 +109,10 @@ function extensionFromPath(path: Nullable<string>): string {
   return path?.split('.').at(-1)?.toLowerCase() ?? ''
 }
 
-export { extensionFromPath as getWorkbenchPathExtension, normalizeToken as normalizeWorkbenchLanguage }
+export {
+  extensionFromPath as getWorkbenchPathExtension,
+  normalizeToken as normalizeWorkbenchLanguage,
+}
 
 function matchesLanguageService(
   descriptor: WorkbenchLanguageServiceDescriptor,

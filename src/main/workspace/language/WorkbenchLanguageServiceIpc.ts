@@ -7,9 +7,28 @@
  */
 import { ipcMain, type IpcMainInvokeEvent } from 'electron'
 
-import type { ModelSelection } from '@velaros-ai/model/contracts'
+import type { ModelSelection } from '@velaros-ai/velaros/model/contracts'
 
-import { type WorkbenchLanguageServiceCallHierarchyRequest, type WorkbenchLanguageServiceCodeActionResolveRequest, type WorkbenchLanguageServiceCodeActionsRequest, type WorkbenchLanguageServiceCompletionResolveRequest, type WorkbenchLanguageServiceDiagnostic, type WorkbenchLanguageServiceEditFormat, type WorkbenchLanguageServiceExtensionRequest, type WorkbenchLanguageServiceFileRename, type WorkbenchLanguageServiceFileRenameEditsRequest, type WorkbenchLanguageServiceInlayHintsRequest, type WorkbenchLanguageServiceOffsetRange, type WorkbenchLanguageServiceOpenFile, type WorkbenchLanguageServicePosition, type WorkbenchLanguageServicePositionRequest, type WorkbenchLanguageServiceProjectDiagnosticsRequest, type WorkbenchLanguageServiceRange, type WorkbenchLanguageServiceRenameRequest, type WorkbenchLanguageServiceRequest } from '@shared/contracts/workbench'
+import {
+  type WorkbenchLanguageServiceCallHierarchyRequest,
+  type WorkbenchLanguageServiceCodeActionResolveRequest,
+  type WorkbenchLanguageServiceCodeActionsRequest,
+  type WorkbenchLanguageServiceCompletionResolveRequest,
+  type WorkbenchLanguageServiceDiagnostic,
+  type WorkbenchLanguageServiceEditFormat,
+  type WorkbenchLanguageServiceExtensionRequest,
+  type WorkbenchLanguageServiceFileRename,
+  type WorkbenchLanguageServiceFileRenameEditsRequest,
+  type WorkbenchLanguageServiceInlayHintsRequest,
+  type WorkbenchLanguageServiceOffsetRange,
+  type WorkbenchLanguageServiceOpenFile,
+  type WorkbenchLanguageServicePosition,
+  type WorkbenchLanguageServicePositionRequest,
+  type WorkbenchLanguageServiceProjectDiagnosticsRequest,
+  type WorkbenchLanguageServiceRange,
+  type WorkbenchLanguageServiceRenameRequest,
+  type WorkbenchLanguageServiceRequest,
+} from '@shared/contracts/workbench'
 
 import {
   type WorkbenchInlineCompletionBridgeRequest,
@@ -337,9 +356,7 @@ function parseRenameRequest(input: unknown): Nullable<WorkbenchLanguageServiceRe
   return { ...base, newName: input['newName'] }
 }
 
-function parseExtensionRequest(
-  input: unknown
-): Nullable<WorkbenchLanguageServiceExtensionRequest> {
+function parseExtensionRequest(input: unknown): Nullable<WorkbenchLanguageServiceExtensionRequest> {
   const base = parseRequest(input)
   if (!base || !isRecord(input) || typeof input['requestId'] !== 'string') return null
   const requestId = input['requestId'].trim()
@@ -360,7 +377,9 @@ function parseExtensionRequest(
   }
 }
 
-function parseInlayHintsRequest(input: unknown): Nullable<WorkbenchLanguageServiceInlayHintsRequest> {
+function parseInlayHintsRequest(
+  input: unknown
+): Nullable<WorkbenchLanguageServiceInlayHintsRequest> {
   const base = parseRequest(input)
   if (!base || !isRecord(input) || typeof input['syncOpenFiles'] !== 'boolean') return null
 
@@ -377,7 +396,9 @@ function parseInlayHintsRequest(input: unknown): Nullable<WorkbenchLanguageServi
   return { ...base, ranges, syncOpenFiles: input['syncOpenFiles'] }
 }
 
-function parseCodeActionsRequest(input: unknown): Nullable<WorkbenchLanguageServiceCodeActionsRequest> {
+function parseCodeActionsRequest(
+  input: unknown
+): Nullable<WorkbenchLanguageServiceCodeActionsRequest> {
   const base = parseRequest(input)
   if (!base || !isRecord(input)) return null
   const range = parseRange(input['range'])
@@ -385,8 +406,12 @@ function parseCodeActionsRequest(input: unknown): Nullable<WorkbenchLanguageServ
     return null
   const diagnostics: WorkbenchLanguageServiceDiagnostic[] = []
   for (const value of input['diagnostics']) {
-    if (!isRecord(value) || typeof value['path'] !== 'string'
-      || typeof value['message'] !== 'string' || !['error', 'warning', 'info'].includes(String(value['severity'])))
+    if (
+      !isRecord(value) ||
+      typeof value['path'] !== 'string' ||
+      typeof value['message'] !== 'string' ||
+      !['error', 'warning', 'info'].includes(String(value['severity']))
+    )
       return null
     const diagnosticRange = parseRange(value['range'])
     if (!diagnosticRange) return null
@@ -402,9 +427,11 @@ function parseCodeActionsRequest(input: unknown): Nullable<WorkbenchLanguageServ
     })
   }
   const rawCategories = input['categories']
-  if (rawCategories !== undefined
-    && (!Array.isArray(rawCategories)
-      || !rawCategories.every((category) => category === 'quickfix' || category === 'refactor')))
+  if (
+    rawCategories !== undefined &&
+    (!Array.isArray(rawCategories) ||
+      !rawCategories.every((category) => category === 'quickfix' || category === 'refactor'))
+  )
     return null
 
   return { ...base, range, diagnostics, categories: rawCategories }

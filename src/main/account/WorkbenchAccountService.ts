@@ -1,13 +1,13 @@
 import { randomUUID } from 'node:crypto'
 import os from 'node:os'
 
-import { optionalWhen } from '@velaros-ai/core'
+import { optionalWhen } from '@velaros-ai/velaros/core'
 import type {
   ModelPricingCatalog,
   ModelPricingEntry,
   ProviderModelCatalog,
   ProviderModelCatalogEntry,
-} from '@velaros-ai/model/contracts'
+} from '@velaros-ai/velaros/model/contracts'
 
 import type { WorkbenchAccountState } from '../../shared/workbenchAccount'
 import type {

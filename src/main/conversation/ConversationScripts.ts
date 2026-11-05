@@ -1,10 +1,10 @@
-import { isNull, optionalWhenLazy, toNullable } from '@velaros-ai/core'
 import type {
   ActExecutionFailure,
   ActExecutionSummary,
   ActInvocationSummary,
   ActTurnTrace,
 } from '@velaros-ai/velaros/contracts'
+import { isNull, optionalWhenLazy, toNullable } from '@velaros-ai/velaros/core'
 
 import {
   type ConversationScriptKind,

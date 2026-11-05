@@ -1,8 +1,8 @@
-import { type Diagnostic,forEachDiagnostic, setDiagnosticsEffect } from '@codemirror/lint'
+import { type Diagnostic, forEachDiagnostic, setDiagnosticsEffect } from '@codemirror/lint'
 import type { Extension } from '@codemirror/state'
 import { type EditorView, ViewPlugin, type ViewUpdate } from '@codemirror/view'
 
-import { isEmpty } from '@velaros-ai/core'
+import { isEmpty } from '@velaros-ai/velaros/core'
 
 export interface WorkbenchDiagnosticOverviewLineMarker {
   line: number
@@ -54,7 +54,9 @@ export function mergeWorkbenchDiagnosticOverviewEntries(
     .sort((left, right) => left.line - right.line)
 }
 
-function collectOverviewLineMarkersFromView(view: EditorView): WorkbenchDiagnosticOverviewLineMarker[] {
+function collectOverviewLineMarkersFromView(
+  view: EditorView
+): WorkbenchDiagnosticOverviewLineMarker[] {
   const entries: Array<{
     line: number
     severity: Diagnostic['severity']
@@ -160,11 +162,7 @@ export function createWorkbenchDiagnosticOverviewExtension(): Extension {
       }
 
       private sync(): void {
-        renderOverviewMarkers(
-          this.view,
-          this.track,
-          collectOverviewLineMarkersFromView(this.view)
-        )
+        renderOverviewMarkers(this.view, this.track, collectOverviewLineMarkersFromView(this.view))
       }
     }
   )

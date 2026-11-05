@@ -1,4 +1,4 @@
-import { useMemo,useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useWorkbenchCommandIpcSubscriptions } from '@renderer/hooks/workbenchCommand/useWorkbenchCommandIpcSubscriptions'
 import { useWorkbenchCommandPackageSuggestions } from '@renderer/hooks/workbenchCommand/useWorkbenchCommandPackageSuggestions'
 import { useWorkbenchCommandProjectBootstrap } from '@renderer/hooks/workbenchCommand/useWorkbenchCommandProjectBootstrap'
@@ -26,15 +26,17 @@ import {
 import { startWorkbenchDebugRunSession } from '@renderer/models/debug/workbenchDebugBridge'
 import type { WorkbenchProject } from '@renderer/models/project/workbenchProjects'
 
-import { isPresent, toNullable } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
-import { Result } from '@velaros-ai/core/result'
+import { isPresent, toNullable } from '@velaros-ai/velaros/core'
+import { AppError } from '@velaros-ai/velaros/core/error'
+import { Result } from '@velaros-ai/velaros/core/result'
 
-import { type WorkbenchDirectoryEntry, type WorkbenchRunCommandResult } from '@shared/contracts/workbench'
+import {
+  type WorkbenchDirectoryEntry,
+  type WorkbenchRunCommandResult,
+} from '@shared/contracts/workbench'
 
 import { useStableWorkbenchMessageTranslate } from '../runtime/useStableWorkbenchMessaging'
-import {
-  useLatest, useMemoizedFn, useUnmount } from '../support/genericHooks'
+import { useLatest, useMemoizedFn, useUnmount } from '../support/genericHooks'
 
 export type {
   WorkbenchRunOutputLine,
@@ -136,7 +138,9 @@ export function useWorkbenchCommandController({
         )
 
         if (activeProjectRef.current?.id !== owningProjectId) {
-          void workbenchHost.kernel.project.stopWorkbenchTerminalSession({ sessionId: result.sessionId })
+          void workbenchHost.kernel.project.stopWorkbenchTerminalSession({
+            sessionId: result.sessionId,
+          })
           return
         }
 
@@ -243,7 +247,8 @@ export function useWorkbenchCommandController({
         })
       )
 
-      if (activeProjectRef.current?.id !== owningProjectId || activeRunIdRef.current !== runId) return
+      if (activeProjectRef.current?.id !== owningProjectId || activeRunIdRef.current !== runId)
+        return
 
       setCommandResult(result)
       const resultFooter = [
@@ -270,7 +275,8 @@ export function useWorkbenchCommandController({
         })
       )
     } catch (error) {
-      if (activeProjectRef.current?.id !== owningProjectId || activeRunIdRef.current !== runId) return
+      if (activeProjectRef.current?.id !== owningProjectId || activeRunIdRef.current !== runId)
+        return
 
       const appError = AppError.from(error)
       setRunOutputLines((current) =>
@@ -367,7 +373,9 @@ export function useWorkbenchCommandController({
       const result = await startRunSessionProcess(project, command, launch)
 
       if (activeProjectRef.current?.id !== owningProjectId) {
-        void workbenchHost.kernel.project.stopWorkbenchTerminalSession({ sessionId: result.sessionId })
+        void workbenchHost.kernel.project.stopWorkbenchTerminalSession({
+          sessionId: result.sessionId,
+        })
         return null
       }
 
@@ -440,7 +448,10 @@ export function useWorkbenchCommandController({
     if (!session?.command || !project) return
 
     // 等旧进程真的退出（让出端口、释放文件）再起新的，否则新进程一起来就撞上「端口已被占用」。
-    await workbenchHost.kernel.project.stopWorkbenchTerminalSession({ sessionId, waitForExit: true })
+    await workbenchHost.kernel.project.stopWorkbenchTerminalSession({
+      sessionId,
+      waitForExit: true,
+    })
     discardWorkbenchTerminalOutput(sessionId)
 
     const command = session.command

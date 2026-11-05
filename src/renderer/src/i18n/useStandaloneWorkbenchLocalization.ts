@@ -6,10 +6,13 @@
  * `WorkbenchI18nContextValue` 契约喂给单体源码内的 LocalizationProvider。
  */
 import { useMemo, useState } from 'react'
-import { type WorkbenchI18nContextValue, type WorkbenchTranslateParams } from '@renderer/i18n/WorkbenchLocalizationProvider'
+import {
+  type WorkbenchI18nContextValue,
+  type WorkbenchTranslateParams,
+} from '@renderer/i18n/WorkbenchLocalizationProvider'
 
-import { isObject, isString } from '@velaros-ai/core'
 import { type AppLocale } from '@velaros-ai/ui/conversation/contracts'
+import { isObject, isString } from '@velaros-ai/velaros/core'
 
 import { workbenchAppEnUSMessages } from './messages/en-US'
 import { workbenchAppZhCNMessages } from './messages/zh-CN'

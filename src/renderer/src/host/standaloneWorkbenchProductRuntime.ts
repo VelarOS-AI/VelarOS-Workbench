@@ -1,6 +1,6 @@
 import { type WorkbenchProductRuntimeValue } from '@renderer/composition/WorkbenchProductRuntimeProvider'
 
-import { Result } from '@velaros-ai/core'
+import { Result } from '@velaros-ai/velaros/core'
 
 import { type AuxiliaryModelConfig, type AuxiliaryModelConfigs } from '@shared/contracts/product'
 

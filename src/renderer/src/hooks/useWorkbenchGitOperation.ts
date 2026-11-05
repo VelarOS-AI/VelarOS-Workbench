@@ -15,8 +15,8 @@ import { readWorkbenchGitRemoteOperation } from '@renderer/models/git/workbenchG
 import { describeWorkbenchGitHead } from '@renderer/models/git/workbenchGitTopBarModel'
 import { useStableWorkbenchMessageTranslate } from '@renderer/runtime/useStableWorkbenchMessaging'
 
-import { AppError } from '@velaros-ai/core/error'
-import { Result } from '@velaros-ai/core/result'
+import { AppError } from '@velaros-ai/velaros/core/error'
+import { Result } from '@velaros-ai/velaros/core/result'
 
 import { type SystemWorkspaceGitSummary } from '@shared/contracts/system'
 import { type WorkspaceGitOperationAction } from '@shared/contracts/workspaceGit'

@@ -7,8 +7,8 @@ import {
 } from '@renderer/models/git/workbenchGitDiffModel'
 import type { WorkbenchGitChangeItem } from '@renderer/models/git/workbenchGitModel'
 
-import { AppError } from '@velaros-ai/core'
-import { Result } from '@velaros-ai/core/result'
+import { AppError } from '@velaros-ai/velaros/core'
+import { Result } from '@velaros-ai/velaros/core/result'
 
 import { useMonotonicAsyncRequest } from '../support/genericHooks'
 import { useWorkspaceFilesChangedRefresh } from '../support/useWorkspaceFilesChangedRefresh'

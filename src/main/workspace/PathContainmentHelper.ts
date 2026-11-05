@@ -1,8 +1,8 @@
 import { isAbsolute, relative, resolve, sep } from 'node:path'
 
-import { isPresent } from '@velaros-ai/core'
-import { isEmpty } from '@velaros-ai/core'
-import { currentPlatform as systemPlatformCompatibility } from '@velaros-ai/core/platform'
+import { isPresent } from '@velaros-ai/velaros/core'
+import { isEmpty } from '@velaros-ai/velaros/core'
+import { currentPlatform as systemPlatformCompatibility } from '@velaros-ai/velaros/core/platform'
 
 export interface PathContainmentPlatform {
   isAbsolute(path: string): boolean
@@ -23,13 +23,11 @@ function isRelativePathInsideRoot(
   platform: PathContainmentPlatform = DefaultPathPlatform
 ): boolean {
   return (
-    isEmpty(relativePath)
-    || relativePath === '.'
-    || (
-      relativePath !== '..'
-      && !relativePath.startsWith(`..${platform.sep}`)
-      && !platform.isAbsolute(relativePath)
-    )
+    isEmpty(relativePath) ||
+    relativePath === '.' ||
+    (relativePath !== '..' &&
+      !relativePath.startsWith(`..${platform.sep}`) &&
+      !platform.isAbsolute(relativePath))
   )
 }
 

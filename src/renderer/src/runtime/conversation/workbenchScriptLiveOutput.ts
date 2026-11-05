@@ -1,6 +1,6 @@
 import { useCallback, useSyncExternalStore } from 'react'
 
-import { toNullable } from '@velaros-ai/core'
+import { toNullable } from '@velaros-ai/velaros/core'
 
 import type { ConversationCommandOutputProjection } from '@shared/workbenchConversation'
 
@@ -12,7 +12,10 @@ import type { ConversationCommandOutputProjection } from '@shared/workbenchConve
 const outputs = new Map<string, string>()
 const listeners = new Map<string, Set<() => void>>()
 
-export function applyWorkbenchScriptLiveOutput({ id, text }: ConversationCommandOutputProjection): void {
+export function applyWorkbenchScriptLiveOutput({
+  id,
+  text,
+}: ConversationCommandOutputProjection): void {
   if (text) outputs.set(id, text)
   else outputs.delete(id)
   for (const listener of listeners.get(id) ?? []) listener()

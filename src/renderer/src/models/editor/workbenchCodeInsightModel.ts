@@ -1,6 +1,9 @@
-import { isPresent } from '@velaros-ai/core'
+import { isPresent } from '@velaros-ai/velaros/core'
 
-import { type WorkbenchLanguageServiceDiagnostic, type WorkbenchRunCommandResult } from '@shared/contracts/workbench'
+import {
+  type WorkbenchLanguageServiceDiagnostic,
+  type WorkbenchRunCommandResult,
+} from '@shared/contracts/workbench'
 
 import type { WorkbenchOpenEditorTab } from '../../types/workbenchTypes'
 
@@ -288,7 +291,8 @@ function normalizeCommandLocationPath(rawPath: string, projectRoot: string): Nul
     normalizedPath.includes('/node_modules/') ||
     normalizedPath.startsWith('node_modules/') ||
     normalizedPath.startsWith('<')
-  ) return null
+  )
+    return null
 
   return normalizedPath
 }
@@ -311,7 +315,10 @@ function buildCommandProblemLocations({
 }): WorkbenchProblemLocation[] {
   if (!commandResult || commandResult.success) return []
 
-  const lines = [commandResult.stderr, commandResult.stdout].filter((value) => !!value).join('\n').split('\n')
+  const lines = [commandResult.stderr, commandResult.stdout]
+    .filter((value) => !!value)
+    .join('\n')
+    .split('\n')
   const locations: WorkbenchProblemLocation[] = []
   const seen = new Set<string>()
 

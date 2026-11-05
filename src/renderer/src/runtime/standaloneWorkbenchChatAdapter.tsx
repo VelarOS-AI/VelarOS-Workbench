@@ -20,16 +20,6 @@ import { useWorkbenchProviderModelCatalog } from '@renderer/hooks/useWorkbenchPr
 import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 
 import {
-  isPlainObject,
-  isString,
-  Log,
-  mapDefined,
-  optionalWhen,
-  optionalWhenLazy,
-  toOptional,
-} from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
-import {
   ChatConversationPane,
   ChatThinkingVisibilityProvider,
   type ConversationView,
@@ -46,6 +36,16 @@ import {
 import type { InteractionAnswer, ReasoningLevel } from '@velaros-ai/ui/conversation/contracts'
 import { type ChatMessage } from '@velaros-ai/ui/conversation/contracts'
 import { type BrowserElementSelection } from '@velaros-ai/velaros/browser/contracts'
+import {
+  isPlainObject,
+  isString,
+  Log,
+  mapDefined,
+  optionalWhen,
+  optionalWhenLazy,
+  toOptional,
+} from '@velaros-ai/velaros/core'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
 import {
   ConversationCommandOutputNotice,
@@ -129,9 +129,9 @@ import { useStandaloneModelPricing } from './standaloneModelPricing'
 import { forgetStandaloneQueuedDrafts, useStandaloneQueuedDrafts } from './standaloneQueuedDrafts'
 import {
   appendStandaloneUsageTelemetry,
+  createStandaloneUsageTelemetrySerializer,
   readStandaloneUsageTelemetry,
   restoreStandaloneUsageTelemetry,
-  serializeStandaloneUsageTelemetry,
   type StandaloneUsageTelemetry,
 } from './standaloneUsageTelemetry'
 import {
@@ -2775,6 +2775,8 @@ function readPersistedFieldIdentities(state: StandaloneChatState): unknown[] {
   ]
 }
 
+const serializePersistedUsageTelemetry = createStandaloneUsageTelemetrySerializer()
+
 function serializeStoredState(state: StandaloneChatState): Record<string, unknown> {
   return {
     sessionId: state.sessionId,
@@ -2789,7 +2791,7 @@ function serializeStoredState(state: StandaloneChatState): Record<string, unknow
     messageRunMarkers: state.messageRunMarkers,
     contextUsage: toOptional(state.contextUsage),
     usageTelemetry: optionalWhenLazy(state.usageTelemetry.length > 0, () =>
-      serializeStandaloneUsageTelemetry(state.usageTelemetry)
+      serializePersistedUsageTelemetry(state.usageTelemetry)
     ),
     revision: state.revision,
   }

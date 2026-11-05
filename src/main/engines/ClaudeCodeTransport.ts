@@ -2,8 +2,8 @@ import type { ChildProcessWithoutNullStreams } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { createInterface } from 'node:readline'
 
-import { isNonBlankString, isPlainObject, isString, Log } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
+import { isNonBlankString, isPlainObject, isString, Log } from '@velaros-ai/velaros/core'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
 import { workbenchMainText } from '../i18n/workbenchMainMessages'
 
@@ -176,7 +176,8 @@ export class ClaudeCodeTransport {
   }
 
   private request(request: Record<string, unknown>): Promise<Record<string, unknown>> {
-    if (this.finished) return Promise.reject(new AppError('UNAVAILABLE', workbenchMainText('engines.claudeExited')))
+    if (this.finished)
+      return Promise.reject(new AppError('UNAVAILABLE', workbenchMainText('engines.claudeExited')))
     const requestId = randomUUID()
     return new Promise<Record<string, unknown>>((resolve, reject) => {
       this.pending.set(requestId, { resolve, reject })
@@ -185,7 +186,8 @@ export class ClaudeCodeTransport {
   }
 
   private write(message: Record<string, unknown>): void {
-    if (!this.writable) throw new AppError('UNAVAILABLE', workbenchMainText('engines.claudeInputClosed'))
+    if (!this.writable)
+      throw new AppError('UNAVAILABLE', workbenchMainText('engines.claudeInputClosed'))
     this.child.stdin.write(`${JSON.stringify(message)}\n`)
   }
 

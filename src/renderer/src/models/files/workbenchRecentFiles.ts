@@ -1,13 +1,10 @@
-import { isArray, Log } from '@velaros-ai/core'
+import { isArray, Log } from '@velaros-ai/velaros/core'
 import {
   isRecord,
   readStringScalar as readString,
-} from '@velaros-ai/core/utils/unknownJsonRecord'
+} from '@velaros-ai/velaros/core/utils/unknownJsonRecord'
 
-import {
-  createLocalStorageJsonStore,
-  type StorageLike,
-} from '../../support/localStorageJsonStore'
+import { createLocalStorageJsonStore, type StorageLike } from '../../support/localStorageJsonStore'
 
 /**
  * 每个项目最近打开过的文件（相对项目根），最近的在前：快速打开没有输入时列出它们，有输入时给它们加分。
@@ -28,7 +25,10 @@ export function recordWorkbenchRecentFile(
   const normalized = path.trim()
   if (!normalized) return [...recentPaths]
 
-  return [normalized, ...recentPaths.filter((item) => item !== normalized)].slice(0, Math.max(1, limit))
+  return [normalized, ...recentPaths.filter((item) => item !== normalized)].slice(
+    0,
+    Math.max(1, limit)
+  )
 }
 
 /** 存下来的一个项目的列表：只留非空、不重复的路径，最多上限条。 */

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 
-import { isEmpty,Log } from '@velaros-ai/core'
+import { isEmpty, Log } from '@velaros-ai/velaros/core'
 
 const log = Log.tag('workbench-history-search')
 

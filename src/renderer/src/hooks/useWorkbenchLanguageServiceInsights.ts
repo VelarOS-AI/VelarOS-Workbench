@@ -21,9 +21,12 @@ import { fileLanguage } from '@renderer/models/shared/workbenchUtils'
 import { useStableWorkbenchMessageTranslate } from '@renderer/runtime/useStableWorkbenchMessaging'
 import type { WorkbenchOpenEditorTab } from '@renderer/types/workbenchTypes'
 
-import { isEmpty, Log } from '@velaros-ai/core'
+import { isEmpty, Log } from '@velaros-ai/velaros/core'
 
-import { type WorkbenchLanguageServiceDiagnostic, type WorkbenchLanguageServiceDocumentSymbol } from '@shared/contracts/workbench'
+import {
+  type WorkbenchLanguageServiceDiagnostic,
+  type WorkbenchLanguageServiceDocumentSymbol,
+} from '@shared/contracts/workbench'
 
 import { useLatest } from '../support/genericHooks'
 
@@ -95,8 +98,11 @@ export function useWorkbenchLanguageServiceInsights({
   // 连续输入时不必每一波都把所有标签全算一遍：语言服务 worker 是串行的，一个大文件的类型检查就要几百毫秒。
   useEffect(() => {
     const root = contextRef.current.projectRoot
-    const { openTabs: currentTabs, selectedFilePath: activePath, editorContent: activeContent } =
-      contextRef.current
+    const {
+      openTabs: currentTabs,
+      selectedFilePath: activePath,
+      editorContent: activeContent,
+    } = contextRef.current
     const targets = currentTabs.filter((tab) => usesWorkbenchBuiltinLanguageService(tab.path))
     if (!root || isEmpty(targets)) {
       announcedErrorRef.current = null
@@ -109,12 +115,15 @@ export function useWorkbenchLanguageServiceInsights({
 
     const generation = ++diagnosticGenerationRef.current
     const contentByPath = new Map(
-      targets.map((tab) => [tab.path, tab.path === activePath ? activeContent : tab.content] as const)
+      targets.map(
+        (tab) => [tab.path, tab.path === activePath ? activeContent : tab.content] as const
+      )
     )
     const previousContentByPath = scheduledContentByPathRef.current
     scheduledContentByPathRef.current = contentByPath
     const changedPaths = new Set(
-      [...contentByPath].filter(([path, content]) => previousContentByPath.get(path) !== content)
+      [...contentByPath]
+        .filter(([path, content]) => previousContentByPath.get(path) !== content)
         .map(([path]) => path)
     )
     // 上一轮还没算完就被打断的照样尽快算；当前文件永远走快车道。
@@ -146,21 +155,27 @@ export function useWorkbenchLanguageServiceInsights({
 
       await Promise.all(
         paths.map(async (path) => {
-          const result = await getWorkbenchLanguageServiceDiagnostics({
-            ...buildWorkbenchLanguageServiceRequestBase({
-              projectRoot: root,
-              path,
-              language: fileLanguage(path),
-              content: contentByPath.get(path) ?? '',
-              openTabs: openTabsWithLiveContent,
-            }),
-          }, hostRuntime)
+          const result = await getWorkbenchLanguageServiceDiagnostics(
+            {
+              ...buildWorkbenchLanguageServiceRequestBase({
+                projectRoot: root,
+                path,
+                language: fileLanguage(path),
+                content: contentByPath.get(path) ?? '',
+                openTabs: openTabsWithLiveContent,
+              }),
+            },
+            hostRuntime
+          )
 
           if (!result.ok) {
             failureMessage ??= result.error.message
             return
           }
-          results.set(path, result.data.diagnostics.filter((diagnostic) => diagnostic.path === path))
+          results.set(
+            path,
+            result.data.diagnostics.filter((diagnostic) => diagnostic.path === path)
+          )
         })
       )
 
@@ -175,7 +190,8 @@ export function useWorkbenchLanguageServiceInsights({
       announcedErrorRef.current = errorKey
       setDiagnosticsByPath((current) => {
         const next = new Map<string, readonly WorkbenchLanguageServiceDiagnostic[]>()
-        for (const [path, diagnostics] of current) if (contentByPath.has(path)) next.set(path, diagnostics)
+        for (const [path, diagnostics] of current)
+          if (contentByPath.has(path)) next.set(path, diagnostics)
         for (const [path, diagnostics] of results) next.set(path, diagnostics)
         return next
       })
@@ -203,7 +219,9 @@ export function useWorkbenchLanguageServiceInsights({
       openTabs
         .map((tab) => tab.path)
         .filter((path) => usesWorkbenchTypeScriptLanguageService(path))
-        .sort((left, right) => Number(right === selectedFilePath) - Number(left === selectedFilePath))
+        .sort(
+          (left, right) => Number(right === selectedFilePath) - Number(left === selectedFilePath)
+        )
         .join('\n'),
     [openTabs, selectedFilePath]
   )
@@ -243,22 +261,29 @@ export function useWorkbenchLanguageServiceInsights({
       let cursor: string | undefined
       try {
         do {
-          const result = await getWorkbenchLanguageServiceProjectDiagnostics({
-            projectRoot: root,
-            anchorPaths: pass.anchors,
-            cursor,
-            openFiles: buildWorkbenchLanguageServiceOpenFiles(contextRef.current.openTabs),
-          }, hostRuntime)
+          const result = await getWorkbenchLanguageServiceProjectDiagnostics(
+            {
+              projectRoot: root,
+              anchorPaths: pass.anchors,
+              cursor,
+              openFiles: buildWorkbenchLanguageServiceOpenFiles(contextRef.current.openTabs),
+            },
+            hostRuntime
+          )
           if (generation !== pass.generation) return
           if (!result.ok) {
             log.debug('project diagnostics pass failed', { root, error: result.error })
             return
           }
           for (const path of result.data.checkedPaths) checked.add(path)
-          setProjectDiagnosticsByPath((current) => applyWorkbenchProjectDiagnosticsBatch(current, result.data))
+          setProjectDiagnosticsByPath((current) =>
+            applyWorkbenchProjectDiagnosticsBatch(current, result.data)
+          )
           cursor = result.data.cursor ?? undefined
         } while (cursor)
-        setProjectDiagnosticsByPath((current) => retainWorkbenchProjectDiagnostics(current, checked))
+        setProjectDiagnosticsByPath((current) =>
+          retainWorkbenchProjectDiagnostics(current, checked)
+        )
       } finally {
         pass.running = false
         if (pass.rerun && generation === pass.generation) {
@@ -277,7 +302,10 @@ export function useWorkbenchLanguageServiceInsights({
   }, [contextRef, externalRevision, hostRuntime, projectAnchorKey, projectRoot])
 
   const openLanguageServicePaths = useMemo(
-    () => new Set(openTabs.map((tab) => tab.path).filter((path) => usesWorkbenchBuiltinLanguageService(path))),
+    () =>
+      new Set(
+        openTabs.map((tab) => tab.path).filter((path) => usesWorkbenchBuiltinLanguageService(path))
+      ),
     [openTabs]
   )
   const mergedDiagnosticsByPath = useMemo(
@@ -301,15 +329,18 @@ export function useWorkbenchLanguageServiceInsights({
     const generation = ++symbolGenerationRef.current
     const timer = setTimeout(() => {
       void (async () => {
-        const result = await getWorkbenchLanguageServiceDocumentSymbols({
-          ...buildWorkbenchLanguageServiceRequestBase({
-            projectRoot: root,
-            path,
-            language: fileLanguage(path),
-            content: contextRef.current.editorContent,
-            openTabs: contextRef.current.openTabs,
-          }),
-        }, hostRuntime)
+        const result = await getWorkbenchLanguageServiceDocumentSymbols(
+          {
+            ...buildWorkbenchLanguageServiceRequestBase({
+              projectRoot: root,
+              path,
+              language: fileLanguage(path),
+              content: contextRef.current.editorContent,
+              openTabs: contextRef.current.openTabs,
+            }),
+          },
+          hostRuntime
+        )
 
         if (generation !== symbolGenerationRef.current) return
         setDocumentSymbols(result.ok ? result.data.symbols : [])

@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 
-import { AppError } from '@velaros-ai/core/error'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
 import { type SystemWorkspaceFilesChangedEvent } from '@shared/contracts/system'
 import type { WorkbenchWatchStatus } from '@shared/workbenchWatch'
@@ -23,14 +23,12 @@ interface UseWorkspaceFilesChangedRefreshOptions {
  * 在这里丢掉会让 Agent 连着写的第二个文件在编辑器里一直是旧内容。监听起不来、停了也不瞒着：
  * 经 `onWatchStatus` 报给调用方。
  */
-export function useWorkspaceFilesChangedRefresh(
-  {
-    rootPath,
-    enabled = true,
-    onChanged,
-    onWatchStatus,
-  }: UseWorkspaceFilesChangedRefreshOptions
-): void {
+export function useWorkspaceFilesChangedRefresh({
+  rootPath,
+  enabled = true,
+  onChanged,
+  onWatchStatus,
+}: UseWorkspaceFilesChangedRefreshOptions): void {
   const handleChanged = useMemoizedFn((event: SystemWorkspaceFilesChangedEvent): void => {
     void onChanged(event)
   })

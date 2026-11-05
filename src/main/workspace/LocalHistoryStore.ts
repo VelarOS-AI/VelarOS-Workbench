@@ -13,10 +13,14 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
-import { isNumber, isObject, isString, Log } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
+import { isNumber, isObject, isString, Log } from '@velaros-ai/velaros/core'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
-import { type WorkbenchListLocalHistoryResult, type WorkbenchLocalHistoryEntry, type WorkbenchReadLocalHistorySnapshotResult } from '@shared/contracts/workbench'
+import {
+  type WorkbenchListLocalHistoryResult,
+  type WorkbenchLocalHistoryEntry,
+  type WorkbenchReadLocalHistorySnapshotResult,
+} from '@shared/contracts/workbench'
 
 import { workbenchMainText } from '../i18n/workbenchMainMessages'
 
@@ -152,7 +156,9 @@ class WorkbenchLocalHistoryStore {
           const path = await readFile(join(root, name, INDEX_FILE_NAME), 'utf8')
             .then((text) => (JSON.parse(text) as Partial<LocalHistoryIndex>).path)
             .catch(() => undefined)
-          return isString(path) && path.startsWith(prefix) && this.bucketKey(projectRoot, path) === name
+          return isString(path) &&
+            path.startsWith(prefix) &&
+            this.bucketKey(projectRoot, path) === name
             ? path
             : null
         })
@@ -174,7 +180,10 @@ class WorkbenchLocalHistoryStore {
     const moved: StoredLocalHistoryEntry[] = []
     for (const entry of source.entries) {
       if (!SNAPSHOT_ID_PATTERN.test(entry.id)) continue
-      const renamed = await rename(join(sourceDir, `${entry.id}.snap`), join(targetDir, `${entry.id}.snap`))
+      const renamed = await rename(
+        join(sourceDir, `${entry.id}.snap`),
+        join(targetDir, `${entry.id}.snap`)
+      )
         .then(() => true)
         .catch(() => false)
       if (renamed) moved.push(entry)

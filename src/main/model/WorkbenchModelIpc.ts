@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron'
 
-import type { ProviderModelCatalogApi } from '@velaros-ai/model'
-import type { ChatProviderId, ListProviderModelsRequest } from '@velaros-ai/model/contracts'
+import type { ProviderModelCatalogApi } from '@velaros-ai/velaros/model'
+import type { ChatProviderId, ListProviderModelsRequest } from '@velaros-ai/velaros/model/contracts'
 
 import {
   type WorkbenchListProviderModelsRequest,
@@ -28,9 +28,11 @@ export function registerWorkbenchModelIpc(
       : service.listProviderModels(parsed)
   })
   ipcMain.handle(WorkbenchModelChannels.listManagedProviders, () =>
-    accountService.getManagedModelAccess())
+    accountService.getManagedModelAccess()
+  )
   ipcMain.handle(WorkbenchModelChannels.getApiKey, (_event, request: unknown) =>
-    credentialStore.getApiKey(readApiKeyRequest(request).provider))
+    credentialStore.getApiKey(readApiKeyRequest(request).provider)
+  )
   ipcMain.handle(WorkbenchModelChannels.setApiKey, (_event, request: unknown) => {
     const update = readApiKeyUpdate(request)
     return credentialStore.setApiKey(update.provider, update.apiKey)
@@ -73,9 +75,9 @@ function readListProviderModelsRequest(request: unknown): ListProviderModelsRequ
   }
   const value = request as Partial<Record<keyof WorkbenchListProviderModelsRequest, unknown>>
   if (
-    typeof value.provider !== 'string'
-    || typeof value.apiKey !== 'string'
-    || typeof value.baseURL !== 'string'
+    typeof value.provider !== 'string' ||
+    typeof value.apiKey !== 'string' ||
+    typeof value.baseURL !== 'string'
   ) {
     throw new Error('Model catalog request has invalid provider configuration.')
   }

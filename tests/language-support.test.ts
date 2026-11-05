@@ -96,18 +96,21 @@ function installVelarWorkbenchContribution(): () => void {
 const languagePathResolver = {
   async resolveProjectRoot(input: string): Promise<string> {
     const root = await realpath(resolve(input))
-    if (!(await stat(root)).isDirectory()) throw new Error('The language project root must be a directory')
+    if (!(await stat(root)).isDirectory())
+      throw new Error('The language project root must be a directory')
     return root
   },
   assertAllowedProjectPath(projectRoot: string, absolutePath: string, inputPath: string): void {
-    if (!isInside(projectRoot, absolutePath)) throw new Error(`Language path escapes the project: ${inputPath}`)
+    if (!isInside(projectRoot, absolutePath))
+      throw new Error(`Language path escapes the project: ${inputPath}`)
   },
   isAllowedProjectPath(projectRoot: string, absolutePath: string): boolean {
     return isInside(projectRoot, absolutePath)
   },
   toProjectRelativePath(projectRoot: string, absolutePath: string): string {
     const value = relative(projectRoot, absolutePath)
-    if (!isInside(projectRoot, absolutePath)) throw new Error(`Language path escapes the project: ${absolutePath}`)
+    if (!isInside(projectRoot, absolutePath))
+      throw new Error(`Language path escapes the project: ${absolutePath}`)
     return (value || '.').replaceAll('\\', '/')
   },
 }
@@ -136,12 +139,15 @@ void describe('focused Workbench language surface', () => {
     ]
     for (const relativePath of genericFiles) {
       const source = await readFile(join(root, relativePath), 'utf8')
-      assert.doesNotMatch(source, /velarscript|workbenchVelar|VelarTokens|experimental\?\.\['velar'\]/u)
+      assert.doesNotMatch(
+        source,
+        /velarscript|workbenchVelar|VelarTokens|experimental\?\.\['velar'\]/u
+      )
     }
 
-    const manifest = JSON.parse(
-      await readFile(join(root, 'package.json'), 'utf8')
-    ) as { dependencies?: Record<string, string> }
+    const manifest = JSON.parse(await readFile(join(root, 'package.json'), 'utf8')) as {
+      dependencies?: Record<string, string>
+    }
     assert.equal(
       Object.keys(manifest.dependencies ?? {}).some((name) => name.startsWith('@velarscript/')),
       false
@@ -222,14 +228,13 @@ void describe('focused Workbench language surface', () => {
       ]
     )
     assert.equal(exactOccurrences.size, 2)
-    const semanticDecorations = buildWorkbenchSemanticTokenDecorations(
-      'component App:\n',
-      [{
+    const semanticDecorations = buildWorkbenchSemanticTokenDecorations('component App:\n', [
+      {
         range: { startLine: 1, startColumn: 11, endLine: 1, endColumn: 14 },
         type: 'function',
         modifiers: ['declaration', 'frameworkDefinition'],
-      }]
-    )
+      },
+    ])
     assert.equal(semanticDecorations.size, 1)
     semanticDecorations.between(0, 'component App:\n'.length, (_from, _to, value) => {
       assert.match(String(value.spec.class), /cm-workbenchSemantic-frameworkDefinition/u)
@@ -262,7 +267,7 @@ void describe('focused Workbench language surface', () => {
       'unsafe',
       'using',
     ])
-      assert.ok(VELAR_EDITOR_KEYWORDS.includes(keyword as typeof VELAR_EDITOR_KEYWORDS[number]))
+      assert.ok(VELAR_EDITOR_KEYWORDS.includes(keyword as (typeof VELAR_EDITOR_KEYWORDS)[number]))
     assert.ok(VelarWorkbenchLanguageService.hover.suppressWords.includes('detach'))
     for (const webKeyword of [
       'action',
@@ -277,14 +282,21 @@ void describe('focused Workbench language surface', () => {
       'style',
       'watch',
     ])
-      assert.ok(!VELAR_EDITOR_KEYWORDS.includes(webKeyword as typeof VELAR_EDITOR_KEYWORDS[number]))
+      assert.ok(
+        !VELAR_EDITOR_KEYWORDS.includes(webKeyword as (typeof VELAR_EDITOR_KEYWORDS)[number])
+      )
     for (const removedKeyword of ['init', 'none'])
-      assert.ok(!VELAR_EDITOR_KEYWORDS.includes(removedKeyword as typeof VELAR_EDITOR_KEYWORDS[number]))
+      assert.ok(
+        !VELAR_EDITOR_KEYWORDS.includes(removedKeyword as (typeof VELAR_EDITOR_KEYWORDS)[number])
+      )
 
-    const fallbackTree = (doc: string): string => syntaxTree(EditorState.create({
-      doc,
-      extensions: [velarScript()],
-    })).toString()
+    const fallbackTree = (doc: string): string =>
+      syntaxTree(
+        EditorState.create({
+          doc,
+          extensions: [velarScript()],
+        })
+      ).toString()
     const fallbackTokens = (doc: string): Array<{ name: string; text: string }> => {
       const state = EditorState.create({ doc, extensions: [velarScript()] })
       const tokens: Array<{ name: string; text: string }> = []
@@ -345,39 +357,45 @@ void describe('focused Workbench language surface', () => {
       'Document(keyword,"variableName.definition",operator,punctuation,propertyName,punctuation,variableName,punctuation,propertyName,punctuation,variableName,punctuation,propertyName,punctuation)'
     )
     assert.equal(
-      fallbackTree([
-        'def seed() -> List<Release>:',
-        '  return [',
-        '    {',
-        '      id: "compiler-0-11",',
-        '      name: "VelarScript Compiler",',
-        '      checks: [{title: "Parser fuzz run clean", done: true}],',
-        '    },',
-        '  ]',
-        '',
-      ].join('\n')),
+      fallbackTree(
+        [
+          'def seed() -> List<Release>:',
+          '  return [',
+          '    {',
+          '      id: "compiler-0-11",',
+          '      name: "VelarScript Compiler",',
+          '      checks: [{title: "Parser fuzz run clean", done: true}],',
+          '    },',
+          '  ]',
+          '',
+        ].join('\n')
+      ),
       'Document(keyword,"variableName.definition.function",punctuation,operator,className,operator,className,operator,keyword,punctuation,punctuation,propertyName,punctuation,string,punctuation,propertyName,punctuation,string,punctuation,propertyName,punctuation,punctuation,propertyName,punctuation,string,punctuation,propertyName,punctuation,keyword,punctuation,punctuation,punctuation)'
     )
     assert.equal(
-      fallbackTree([
-        'const shell: Look = look:',
-        '  minHeight = 100vh',
-        '  color = ink',
-        '  background = paper',
-        '  fontFamily = bodyFont',
-        '',
-        'const ordinary = color',
-        '',
-      ].join('\n')),
+      fallbackTree(
+        [
+          'const shell: Look = look:',
+          '  minHeight = 100vh',
+          '  color = ink',
+          '  background = paper',
+          '  fontFamily = bodyFont',
+          '',
+          'const ordinary = color',
+          '',
+        ].join('\n')
+      ),
       'Document(keyword,"variableName.definition",punctuation,className,operator,keyword,punctuation,propertyName,operator,number,variableName,propertyName,operator,variableName,propertyName,operator,variableName,propertyName,operator,variableName,keyword,"variableName.definition",operator,variableName)'
     )
     assert.equal(
-      fallbackTree([
-        'component App(title: string):',
-        '  state ready = true',
-        '  return <main look={pageLook}><h1>{title}</h1></main>',
-        '',
-      ].join('\n')),
+      fallbackTree(
+        [
+          'component App(title: string):',
+          '  state ready = true',
+          '  return <main look={pageLook}><h1>{title}</h1></main>',
+          '',
+        ].join('\n')
+      ),
       'Document(keyword,"variableName.definition.special",punctuation,variableName,punctuation,atom,punctuation,keyword,"variableName.definition.special",operator,keyword,keyword,punctuation,tagName,attributeName,operator,punctuation,variableName,punctuation,tagName,punctuation,variableName,punctuation,tagName,punctuation,tagName,punctuation)'
     )
     assert.equal(
@@ -387,11 +405,13 @@ void describe('focused Workbench language surface', () => {
       'Document(keyword,punctuation,tagName,attributeName,operator,string,attributeName,operator,string,attributeName,operator,string,punctuation,punctuation,tagName,punctuation)'
     )
     assert.equal(
-      fallbackTree([
-        'component AddCheckForm:',
-        '  return <form><p>Add release check</p><label>Title</label></form>',
-        '',
-      ].join('\n')),
+      fallbackTree(
+        [
+          'component AddCheckForm:',
+          '  return <form><p>Add release check</p><label>Title</label></form>',
+          '',
+        ].join('\n')
+      ),
       'Document(keyword,"variableName.definition.special",punctuation,keyword,punctuation,tagName,punctuation,tagName,punctuation,punctuation,tagName,punctuation,tagName,punctuation,punctuation,tagName,punctuation,tagName,punctuation)'
     )
     const nestedJsx = [
@@ -493,10 +513,12 @@ void describe('focused Workbench language surface', () => {
       '',
     ].join('\n')
     const embeddedRanges = findVelarEmbeddedJavaScriptRanges(velarSource)
-    assert.deepEqual(embeddedRanges, [{
-      from: velarSource.indexOf(javaScriptSource),
-      to: velarSource.indexOf('`:', velarSource.indexOf(javaScriptSource)),
-    }])
+    assert.deepEqual(embeddedRanges, [
+      {
+        from: velarSource.indexOf(javaScriptSource),
+        to: velarSource.indexOf('`:', velarSource.indexOf(javaScriptSource)),
+      },
+    ])
 
     const javaScriptLanguage = resolveWorkbenchCodeMirrorLanguage('src/example.js', '')
     const javaScriptState = EditorState.create({
@@ -521,14 +543,25 @@ void describe('focused Workbench language surface', () => {
     embeddedDecorations.between(0, velarSource.length, (from, to, value) => {
       embeddedClasses.set(velarSource.slice(from, to), String(value.spec.class))
     })
-    for (const token of ['WeakSet', 'requireCanvas', 'Number', 'isFinite', 'TypeError', 'Surface', 'constructor', 'Map'])
+    for (const token of [
+      'WeakSet',
+      'requireCanvas',
+      'Number',
+      'isFinite',
+      'TypeError',
+      'Surface',
+      'constructor',
+      'Map',
+    ])
       assert.equal(embeddedClasses.get(token), expectedClasses.get(token), token)
 
     const typeScriptLanguage = resolveWorkbenchCodeMirrorLanguage('src/main.ts', '')
-    const typeScriptTemplateTree = syntaxTree(EditorState.create({
-      doc: 'const label = `hello ${user.name}`',
-      extensions: [typeScriptLanguage.extension],
-    })).toString()
+    const typeScriptTemplateTree = syntaxTree(
+      EditorState.create({
+        doc: 'const label = `hello ${user.name}`',
+        extensions: [typeScriptLanguage.extension],
+      })
+    ).toString()
     assert.match(
       typeScriptTemplateTree,
       /TemplateString\(Interpolation\(InterpolationStart,MemberExpression\(VariableName,"\.",PropertyName\),InterpolationEnd\)\)/u
@@ -543,7 +576,10 @@ void describe('focused Workbench language surface', () => {
     decorations.between(0, 32, (from, to) => {
       ranges.push({ from, to })
     })
-    assert.deepEqual(ranges, [{ from: 2, to: 8 }, { from: 19, to: 25 }])
+    assert.deepEqual(ranges, [
+      { from: 2, to: 8 },
+      { from: 19, to: 25 },
+    ])
 
     const pythonDoc = EditorState.create({ doc: 'value = 1 # if\nif True:\n' }).doc
     const pythonDecorations = buildWorkbenchBasicKeywordDecorations(
@@ -555,7 +591,10 @@ void describe('focused Workbench language surface', () => {
     pythonDecorations.between(0, pythonDoc.length, (from, to) => {
       pythonRanges.push({ from, to })
     })
-    assert.deepEqual(pythonRanges, [{ from: 15, to: 17 }, { from: 18, to: 22 }])
+    assert.deepEqual(pythonRanges, [
+      { from: 15, to: 17 },
+      { from: 18, to: 22 },
+    ])
 
     const typeScriptDoc = EditorState.create({
       doc: 'await this.load(undefined) // await\n"this undefined"\n',
@@ -574,12 +613,18 @@ void describe('focused Workbench language surface', () => {
       { from: 6, to: 10 },
       { from: 16, to: 25 },
     ])
-    assert.deepEqual(
-      getWorkbenchJavaScriptKeywordRangeAtPosition(typeScriptDoc, 2, 'typescript'),
-      { from: 0, to: 5 }
+    assert.deepEqual(getWorkbenchJavaScriptKeywordRangeAtPosition(typeScriptDoc, 2, 'typescript'), {
+      from: 0,
+      to: 5,
+    })
+    assert.equal(
+      getWorkbenchJavaScriptKeywordRangeAtPosition(typeScriptDoc, 31, 'typescript'),
+      null
     )
-    assert.equal(getWorkbenchJavaScriptKeywordRangeAtPosition(typeScriptDoc, 31, 'typescript'), null)
-    assert.equal(getWorkbenchJavaScriptKeywordRangeAtPosition(typeScriptDoc, 40, 'typescript'), null)
+    assert.equal(
+      getWorkbenchJavaScriptKeywordRangeAtPosition(typeScriptDoc, 40, 'typescript'),
+      null
+    )
 
     for (const keyword of [
       'accessor',
@@ -595,7 +640,7 @@ void describe('focused Workbench language surface', () => {
     ]) {
       assert.ok(
         WORKBENCH_JAVASCRIPT_KEYWORDS.includes(
-          keyword as typeof WORKBENCH_JAVASCRIPT_KEYWORDS[number]
+          keyword as (typeof WORKBENCH_JAVASCRIPT_KEYWORDS)[number]
         )
       )
     }
@@ -611,11 +656,7 @@ void describe('focused Workbench language surface', () => {
     )
 
     const compilerKeywords: string[] = []
-    for (
-      let kind = ts.SyntaxKind.FirstKeyword;
-      kind <= ts.SyntaxKind.LastKeyword;
-      kind += 1
-    ) {
+    for (let kind = ts.SyntaxKind.FirstKeyword; kind <= ts.SyntaxKind.LastKeyword; kind += 1) {
       const keyword = ts.tokenToString(kind)
       if (keyword) compilerKeywords.push(keyword)
     }
@@ -671,7 +712,9 @@ void describe('focused Workbench language surface', () => {
       assert.equal(language.languageId, languageId, path)
       assert.equal(fileLanguage(path), label, path)
       assert.notEqual(
-        syntaxTree(EditorState.create({ doc: content, extensions: [language.extension] })).toString(),
+        syntaxTree(
+          EditorState.create({ doc: content, extensions: [language.extension] })
+        ).toString(),
         'Document',
         `${path} should produce a parsed syntax tree`
       )
@@ -723,7 +766,11 @@ void describe('focused Workbench language surface', () => {
     try {
       await writeFile(join(projectRoot, 'main.ts'), typeScript, 'utf8')
       await writeFile(join(projectRoot, 'main.mjs'), javaScript, 'utf8')
-      const resolved = await services.resolveLanguageService({ projectRoot, path: 'main.ts', content: typeScript })
+      const resolved = await services.resolveLanguageService({
+        projectRoot,
+        path: 'main.ts',
+        content: typeScript,
+      })
       assert.ok(resolved.capabilities.includes('semantic-tokens'))
 
       const typeScriptTokens = await services.getSemanticTokens({
@@ -736,28 +783,47 @@ void describe('focused Workbench language surface', () => {
         type: token.type,
         modifiers: token.modifiers,
       }))
-      assert.ok(typeScriptTokenKinds.some((token) => token.text === 'User' && token.type === 'interface'))
-      assert.ok(typeScriptTokenKinds.some((token) => token.text === 'Greeter' && token.type === 'class'))
-      assert.ok(typeScriptTokenKinds.some((token) => token.text === 'format' && token.type === 'method'))
-      assert.ok(typeScriptTokenKinds.some((token) => token.text === 'name' && token.type === 'property'))
-      assert.ok(typeScriptTokenKinds.some((token) => token.text === 'prefix' && token.type === 'parameter'))
-      assert.ok(typeScriptTokenKinds.some((token) =>
-        token.text === 'greeter' && token.type === 'variable' && token.modifiers.includes('readonly')
-      ))
+      assert.ok(
+        typeScriptTokenKinds.some((token) => token.text === 'User' && token.type === 'interface')
+      )
+      assert.ok(
+        typeScriptTokenKinds.some((token) => token.text === 'Greeter' && token.type === 'class')
+      )
+      assert.ok(
+        typeScriptTokenKinds.some((token) => token.text === 'format' && token.type === 'method')
+      )
+      assert.ok(
+        typeScriptTokenKinds.some((token) => token.text === 'name' && token.type === 'property')
+      )
+      assert.ok(
+        typeScriptTokenKinds.some((token) => token.text === 'prefix' && token.type === 'parameter')
+      )
+      assert.ok(
+        typeScriptTokenKinds.some(
+          (token) =>
+            token.text === 'greeter' &&
+            token.type === 'variable' &&
+            token.modifiers.includes('readonly')
+        )
+      )
       for (const builtin of ['Date', 'Math', 'Number']) {
         assert.ok(
-          typeScriptTokenKinds.some((token) =>
-            token.text === builtin && token.modifiers.includes('defaultLibrary')
+          typeScriptTokenKinds.some(
+            (token) => token.text === builtin && token.modifiers.includes('defaultLibrary')
           ),
           `${builtin} should inherit its TypeScript default-library classification`
         )
       }
-      const uniqueTokenRanges = new Set(typeScriptTokens.tokens.map((token) => [
-        token.range.startLine,
-        token.range.startColumn,
-        token.range.endLine,
-        token.range.endColumn,
-      ].join(':')))
+      const uniqueTokenRanges = new Set(
+        typeScriptTokens.tokens.map((token) =>
+          [
+            token.range.startLine,
+            token.range.startColumn,
+            token.range.endLine,
+            token.range.endColumn,
+          ].join(':')
+        )
+      )
       assert.equal(uniqueTokenRanges.size, typeScriptTokens.tokens.length)
 
       const keywordTokens = typeScriptTokenKinds.filter((token) => token.type === 'keyword')
@@ -783,26 +849,28 @@ void describe('focused Workbench language surface', () => {
       assert.equal(keywordTokens.filter((token) => token.text === 'NaN').length, 1)
       assert.equal(keywordTokens.filter((token) => token.text === 'Infinity').length, 1)
       assert.equal(
-        typeScriptTokenKinds.filter((token) =>
-          token.text === 'globalThis'
-          && token.type === 'variable'
-          && token.modifiers.includes('defaultLibrary')
+        typeScriptTokenKinds.filter(
+          (token) =>
+            token.text === 'globalThis' &&
+            token.type === 'variable' &&
+            token.modifiers.includes('defaultLibrary')
         ).length,
         1
       )
       for (const builtinClass of ['Error', 'Map', 'Promise', 'Set']) {
         assert.ok(
-          typeScriptTokenKinds.some((token) =>
-            token.text === builtinClass
-            && ['class', 'interface', 'type'].includes(token.type)
-            && token.modifiers.includes('defaultLibrary')
+          typeScriptTokenKinds.some(
+            (token) =>
+              token.text === builtinClass &&
+              ['class', 'interface', 'type'].includes(token.type) &&
+              token.modifiers.includes('defaultLibrary')
           ),
           `${builtinClass} should retain a default-library class-like role`
         )
       }
-      assert.ok(typeScriptTokenKinds.some((token) =>
-        token.text === 'Ready' && token.type === 'enumMember'
-      ))
+      assert.ok(
+        typeScriptTokenKinds.some((token) => token.text === 'Ready' && token.type === 'enumMember')
+      )
 
       const decorationClasses = new Map<string, string[]>()
       buildWorkbenchSemanticTokenDecorations(typeScript, typeScriptTokens.tokens).between(
@@ -817,26 +885,30 @@ void describe('focused Workbench language surface', () => {
       )
       for (const primitive of ['string', 'number', 'boolean', 'undefined']) {
         assert.ok(
-          decorationClasses.get(primitive)?.some((className) =>
-            className.includes('cm-workbenchSemantic-keyword')
-          ),
+          decorationClasses
+            .get(primitive)
+            ?.some((className) => className.includes('cm-workbenchSemantic-keyword')),
           `${primitive} should render with the keyword class`
         )
       }
       for (const builtinClass of ['Error', 'List', 'Map', 'Promise', 'Set']) {
         assert.ok(
-          decorationClasses.get(builtinClass)?.some((className) =>
-            className.includes('cm-workbenchSemantic-builtinType')
-          ),
+          decorationClasses
+            .get(builtinClass)
+            ?.some((className) => className.includes('cm-workbenchSemantic-builtinType')),
           `${builtinClass} should render with the built-in class color`
         )
       }
-      assert.ok(decorationClasses.get('Ready')?.every((className) =>
-        className.includes('cm-workbenchSemantic-enumMember')
-      ))
-      assert.ok(decorationClasses.get('undefined')?.some((className) =>
-        className.includes('cm-workbenchSemantic-property')
-      ))
+      assert.ok(
+        decorationClasses
+          .get('Ready')
+          ?.every((className) => className.includes('cm-workbenchSemantic-enumMember'))
+      )
+      assert.ok(
+        decorationClasses
+          .get('undefined')
+          ?.some((className) => className.includes('cm-workbenchSemantic-property'))
+      )
 
       const keywordHover = await services.getHover({
         projectRoot,
@@ -887,28 +959,37 @@ void describe('focused Workbench language surface', () => {
         type: token.type,
         modifiers: token.modifiers,
       }))
-      assert.ok(javaScriptTokenKinds.some((token) => token.text === 'Box' && token.type === 'class'))
-      assert.ok(javaScriptTokenKinds.some((token) => token.text === 'read' && token.type === 'method'))
-      assert.ok(javaScriptTokenKinds.some((token) => token.text === 'value' && token.type === 'property'))
+      assert.ok(
+        javaScriptTokenKinds.some((token) => token.text === 'Box' && token.type === 'class')
+      )
+      assert.ok(
+        javaScriptTokenKinds.some((token) => token.text === 'read' && token.type === 'method')
+      )
+      assert.ok(
+        javaScriptTokenKinds.some((token) => token.text === 'value' && token.type === 'property')
+      )
       for (const globalKeyword of ['Infinity', 'NaN', 'undefined']) {
         assert.equal(
-          javaScriptTokenKinds.filter((token) =>
-            token.text === globalKeyword && token.type === 'keyword'
+          javaScriptTokenKinds.filter(
+            (token) => token.text === globalKeyword && token.type === 'keyword'
           ).length,
           1
         )
       }
       assert.equal(
-        javaScriptTokenKinds.filter((token) =>
-          token.text === 'globalThis'
-          && token.type === 'variable'
-          && token.modifiers.includes('defaultLibrary')
+        javaScriptTokenKinds.filter(
+          (token) =>
+            token.text === 'globalThis' &&
+            token.type === 'variable' &&
+            token.modifiers.includes('defaultLibrary')
         ).length,
         1
       )
-      assert.ok(javaScriptTokenKinds.some((token) =>
-        token.text === 'undefined' && token.type === 'property'
-      ))
+      assert.ok(
+        javaScriptTokenKinds.some(
+          (token) => token.text === 'undefined' && token.type === 'property'
+        )
+      )
     } finally {
       await services.dispose()
       await rm(projectRoot, { recursive: true, force: true })
@@ -945,7 +1026,8 @@ void describe('focused Workbench language surface', () => {
       'node-mods-capabilities.json'
     )
     const packageRoot = join(projectRoot, 'node_modules', '@fixture', 'development')
-    const source = "import type { Runtime } from '@fixture/development/runtime'\nconst value: Runtime = { ready: true }\n"
+    const source =
+      "import type { Runtime } from '@fixture/development/runtime'\nconst value: Runtime = { ready: true }\n"
 
     try {
       await mkdir(join(projectRoot, 'src', 'mods', 'project'), { recursive: true })
@@ -1029,7 +1111,8 @@ void describe('focused Workbench language surface', () => {
     const projectRoot = await mkdtemp(join(tmpdir(), 'workbench-solution-style-tsconfig-'))
     const requestPath = join(projectRoot, 'src', 'rendererCatalog.tsx')
     const packageRoot = join(projectRoot, 'node_modules', '@fixture', 'agent')
-    const source = "import type { Protocol } from '@fixture/agent/protocol'\nexport const protocol: Protocol = { ready: true }\n"
+    const source =
+      "import type { Protocol } from '@fixture/agent/protocol'\nexport const protocol: Protocol = { ready: true }\n"
 
     try {
       await mkdir(join(projectRoot, 'src'), { recursive: true })
@@ -1037,7 +1120,11 @@ void describe('focused Workbench language surface', () => {
       await writeFile(requestPath, source, 'utf8')
       await writeFile(
         join(projectRoot, 'tsconfig.json'),
-        JSON.stringify({ compilerOptions: { paths: {} }, files: [], references: [{ path: './tsconfig.web.json' }] }),
+        JSON.stringify({
+          compilerOptions: { paths: {} },
+          files: [],
+          references: [{ path: './tsconfig.web.json' }],
+        }),
         'utf8'
       )
       await writeFile(
@@ -1050,7 +1137,11 @@ void describe('focused Workbench language surface', () => {
       )
       await writeFile(
         join(projectRoot, 'tsconfig.eslint.json'),
-        JSON.stringify({ extends: './tsconfig.json', compilerOptions: { noEmit: true }, include: ['src/**/*.tsx'] }),
+        JSON.stringify({
+          extends: './tsconfig.json',
+          compilerOptions: { noEmit: true },
+          include: ['src/**/*.tsx'],
+        }),
         'utf8'
       )
       await writeFile(
@@ -1086,7 +1177,10 @@ void describe('focused Workbench language surface', () => {
         new Map([[requestPath, source]])
       )
 
-      assert.equal(project.config.configPath, normalizeTypeScriptFileName(join(projectRoot, 'tsconfig.eslint.json')))
+      assert.equal(
+        project.config.configPath,
+        normalizeTypeScriptFileName(join(projectRoot, 'tsconfig.eslint.json'))
+      )
       assert.equal(project.compilerOptions.moduleResolution, ts.ModuleResolutionKind.Bundler)
       assert.deepEqual(project.service.getSemanticDiagnostics(requestPath), [])
     } finally {
@@ -1104,10 +1198,12 @@ void describe('focused Workbench language surface', () => {
       {
         displayText: 'method render(template: string): string',
         documentation: 'Renders the selected template.',
-        documentationBlocks: [{
-          kind: 'paragraph',
-          text: 'Renders the selected `template`.',
-        }],
+        documentationBlocks: [
+          {
+            kind: 'paragraph',
+            text: 'Renders the selected `template`.',
+          },
+        ],
       }
     )
   })
@@ -1131,9 +1227,9 @@ void describe('focused Workbench language surface', () => {
       {
         displayText: '@get',
         documentation:
-          'Declares a GET route in the current server.\n\n'
-          + '@get(p"/articles/{id:number}") => {id}\n\n'
-          + 'Path captures come from the URL.',
+          'Declares a GET route in the current server.\n\n' +
+          '@get(p"/articles/{id:number}") => {id}\n\n' +
+          'Path captures come from the URL.',
         documentationBlocks: [
           { kind: 'paragraph', text: 'Declares a GET route in the current `server`.' },
           {
@@ -1182,15 +1278,15 @@ void describe('focused Workbench language surface', () => {
       }),
       {
         displayText: '(function) def greet(\n    name: str,\n    times: int = 1\n) -> str',
-        documentation: 'Greet someone. See docs.\n\n'
-          + 'Args:\n    name: the *name* to greet\n'
-          + '    times: how many times <= 3',
+        documentation:
+          'Greet someone. See docs.\n\n' +
+          'Args:\n    name: the *name* to greet\n' +
+          '    times: how many times <= 3',
         documentationBlocks: [
           { kind: 'paragraph', text: 'Greet someone. See docs.' },
           {
             kind: 'paragraph',
-            text: 'Args:\n    name: the *name* to greet\n'
-              + '    times: how many `times` <= 3',
+            text: 'Args:\n    name: the *name* to greet\n    times: how many `times` <= 3',
           },
         ],
       }
@@ -1198,20 +1294,26 @@ void describe('focused Workbench language surface', () => {
     assert.deepEqual(buildExternalHoverResult({ kind: 'plaintext', value: 'a *b*\nc' }), {
       displayText: 'a *b*\nc',
     })
-    assert.deepEqual(buildExternalHoverResult({ kind: 'markdown', value: '# Title\n\n- `one`\n- two' }), {
-      displayText: 'Title\n\n• one\n• two',
-    })
+    assert.deepEqual(
+      buildExternalHoverResult({ kind: 'markdown', value: '# Title\n\n- `one`\n- two' }),
+      {
+        displayText: 'Title\n\n• one\n• two',
+      }
+    )
   })
 
   void test('expands a nearby type alias target into the definition preview', () => {
     assert.equal(
-      buildExternalDefinitionPreview([
-        'export type BlockMutation extends WorldScoped:',
-        '    position: BlockPosition',
-        '    blockId: number',
-        '',
-        'export type SetBlockRequest = BlockMutation',
-      ].join('\n'), 5),
+      buildExternalDefinitionPreview(
+        [
+          'export type BlockMutation extends WorldScoped:',
+          '    position: BlockPosition',
+          '    blockId: number',
+          '',
+          'export type SetBlockRequest = BlockMutation',
+        ].join('\n'),
+        5
+      ),
       [
         'export type SetBlockRequest = BlockMutation',
         '',
@@ -1229,24 +1331,18 @@ void describe('focused Workbench language surface', () => {
   })
 
   void test('keeps the hover interactive until a modifier-click navigation actually opens', async () => {
-    const editor = await readFile(
-      'src/renderer/src/components/editor/CodeMirrorEditor.tsx',
-      'utf8'
-    )
+    const editor = await readFile('src/renderer/src/components/editor/CodeMirrorEditor.tsx', 'utf8')
 
     assert.match(
       editor,
-      /reconfigureCompartment\(viewRef\.current, languageHoverCompartment, languageServiceHoverExtension\)/u
+      /reconfigureCompartment\(\s*viewRef\.current,\s*languageHoverCompartment,\s*languageServiceHoverExtension\s*\)/u
     )
     assert.doesNotMatch(editor, /languageHoverCompartment\.reconfigure\(\s*active\s*\?\s*\[\]/u)
     assert.match(
       editor,
       /if \(location\)[\s\S]{0,240}closeHoverTooltips[\s\S]{0,360}onOpenSymbolLocations/u
     )
-    assert.match(
-      editor,
-      /const definitionResult = await getWorkbenchLanguageServiceDefinition/u
-    )
+    assert.match(editor, /const definitionResult = await getWorkbenchLanguageServiceDefinition/u)
     assert.doesNotMatch(
       editor,
       /Promise\.all\([\s\S]{0,320}getWorkbenchLanguageServiceDefinition[\s\S]{0,320}getWorkbenchLanguageServiceReferences/u
@@ -1255,10 +1351,13 @@ void describe('focused Workbench language surface', () => {
       'const definitionResult = await getWorkbenchLanguageServiceDefinition'
     )
     const initialLocations = editor.indexOf('references: [],', definitionQuery)
-    const referenceQuery = editor.indexOf(
-      'void getWorkbenchLanguageServiceReferences(request, hostRuntime).then',
-      initialLocations
-    )
+    const referenceQuery =
+      initialLocations +
+      editor
+        .slice(initialLocations)
+        .search(
+          /void getWorkbenchLanguageServiceReferences\(\s*request,\s*hostRuntime\s*\)\s*\.then/u
+        )
     const staleReferenceGuard = editor.indexOf(
       'requestGeneration !== definitionRequestGenerationRef.current',
       referenceQuery
@@ -1288,10 +1387,7 @@ void describe('focused Workbench language surface', () => {
     // 诊断的修复另外问、回来再补按钮：不排在悬浮说明的请求前面等。
     assert.doesNotMatch(hoverFeatures, /await context\.codeActions/u)
     assert.doesNotMatch(hoverFeatures, /buildWorkbenchEditorHoverStatusDom/u)
-    assert.match(
-      hoverFeatures,
-      /scheduleResolvedHoverRender[\s\S]{0,220}requestAnimationFrame/u
-    )
+    assert.match(hoverFeatures, /scheduleResolvedHoverRender[\s\S]{0,220}requestAnimationFrame/u)
     assert.match(
       hoverFeatures,
       /definitionPreviewExpanded = true\s+scheduleResolvedHoverRender\(\)/u
@@ -1299,10 +1395,7 @@ void describe('focused Workbench language surface', () => {
   })
 
   void test('keeps long hover and signature content inside the tooltip boundary', async () => {
-    const styles = await readFile(
-      'src/renderer/src/styles/11-editor-tooltips.module.css',
-      'utf8'
-    )
+    const styles = await readFile('src/renderer/src/styles/11-editor-tooltips.module.css', 'utf8')
 
     assert.match(
       styles,
@@ -1323,22 +1416,28 @@ void describe('focused Workbench language surface', () => {
       displayText: 'const values: readonly ["system", "project", "browser"]',
     }
     assert.equal(shouldUseWorkbenchSingleCodeHoverLayout(signatureOnly), true)
-    assert.equal(shouldUseWorkbenchSingleCodeHoverLayout({
-      ...signatureOnly,
-      documentation: 'Capability scopes.',
-    }), false)
-    assert.equal(shouldUseWorkbenchSingleCodeHoverLayout({
-      displayText: '',
-      documentationBlocks: [{ kind: 'code', text: 'type Value = string' }],
-    }), true)
-    assert.equal(shouldUseWorkbenchSingleCodeHoverLayout(signatureOnly, {
-      hasDiagnostics: true,
-    }), false)
-
-    const styles = await readFile(
-      'src/renderer/src/styles/11-editor-tooltips.module.css',
-      'utf8'
+    assert.equal(
+      shouldUseWorkbenchSingleCodeHoverLayout({
+        ...signatureOnly,
+        documentation: 'Capability scopes.',
+      }),
+      false
     )
+    assert.equal(
+      shouldUseWorkbenchSingleCodeHoverLayout({
+        displayText: '',
+        documentationBlocks: [{ kind: 'code', text: 'type Value = string' }],
+      }),
+      true
+    )
+    assert.equal(
+      shouldUseWorkbenchSingleCodeHoverLayout(signatureOnly, {
+        hasDiagnostics: true,
+      }),
+      false
+    )
+
+    const styles = await readFile('src/renderer/src/styles/11-editor-tooltips.module.css', 'utf8')
     assert.match(
       styles,
       /\.editorSymbolTooltip\[data-layout='single-code'\]\s*\{[\s\S]*?padding:\s*0;[\s\S]*?overflow:\s*hidden;/u
@@ -1351,16 +1450,15 @@ void describe('focused Workbench language surface', () => {
 
   void test('keeps inferred type hints stable while a fresh document analysis is pending', () => {
     const state = EditorState.create({ doc: 'const value = createValue()' })
-    const decorations = buildWorkbenchInlayHintDecorations(state.doc.length, [{
-      position: { line: 1, column: 12, offset: 11 },
-      text: ': Value',
-      kind: 'type',
-    }])
+    const decorations = buildWorkbenchInlayHintDecorations(state.doc.length, [
+      {
+        position: { line: 1, column: 12, offset: 11 },
+        text: ': Value',
+        kind: 'type',
+      },
+    ])
     const transaction = state.update({ changes: { from: 0, insert: '//' } })
-    const mapped = mapWorkbenchInlayHintDecorationsThroughChanges(
-      decorations,
-      transaction.changes
-    )
+    const mapped = mapWorkbenchInlayHintDecorationsThroughChanges(decorations, transaction.changes)
     const positions: number[] = []
     mapped.between(0, transaction.state.doc.length, (from) => positions.push(from))
 
@@ -1368,10 +1466,7 @@ void describe('focused Workbench language surface', () => {
   })
 
   void test('does not duplicate the active buffer in background semantic requests', async () => {
-    const editor = await readFile(
-      'src/renderer/src/components/editor/CodeMirrorEditor.tsx',
-      'utf8'
-    )
+    const editor = await readFile('src/renderer/src/components/editor/CodeMirrorEditor.tsx', 'utf8')
 
     assert.match(
       editor,
@@ -1404,21 +1499,24 @@ void describe('focused Workbench language surface', () => {
     const remove = installVelarWorkbenchContribution()
     const [velar] = resolveInjectedWorkbenchProjectLanguages(['src', 'velar.json'])
     assert.equal(velar?.id, 'velarscript')
-    assert.deepEqual(velar?.project?.commands.map((command) => command.id), [
-      'install',
-      'update',
-      'check',
-      'run',
-      'format',
-      'format-check',
-      'dev',
-      'test',
-      'test-browser',
-      'build',
-      'verify',
-      'preview',
-      'verify-deployment',
-    ])
+    assert.deepEqual(
+      velar?.project?.commands.map((command) => command.id),
+      [
+        'install',
+        'update',
+        'check',
+        'run',
+        'format',
+        'format-check',
+        'dev',
+        'test',
+        'test-browser',
+        'build',
+        'verify',
+        'preview',
+        'verify-deployment',
+      ]
+    )
     remove()
   })
 })
@@ -1451,7 +1549,10 @@ void describe('shared external LSP client', () => {
       documentLanguageId: 'nested-fixture-language',
     }
     const manager = new ExternalLspManager()
-    const probe = async (client: ExternalLspClient, path: string): Promise<{
+    const probe = async (
+      client: ExternalLspClient,
+      path: string
+    ): Promise<{
       cwd: string
       rootUri: string
       workspaceFolders: Array<{ uri: string; name: string }>
@@ -1459,7 +1560,8 @@ void describe('shared external LSP client', () => {
       savedUris: string[]
       watchedUris: string[]
     }> => {
-      const detail = (await client.completion(path, 'comp', { line: 0, character: 4 })).items[0]?.detail
+      const detail = (await client.completion(path, 'comp', { line: 0, character: 4 })).items[0]
+        ?.detail
       assert.ok(detail)
       return JSON.parse(detail) as {
         cwd: string
@@ -1477,7 +1579,11 @@ void describe('shared external LSP client', () => {
         await realpath(firstRoot)
       )
       assert.equal(
-        resolveExternalLspRuntimeRoot(workspaceRoot, join(workspaceRoot, 'loose', 'main.nested'), descriptor),
+        resolveExternalLspRuntimeRoot(
+          workspaceRoot,
+          join(workspaceRoot, 'loose', 'main.nested'),
+          descriptor
+        ),
         await realpath(workspaceRoot),
         'a marker above the workspace boundary must not become the runtime root'
       )
@@ -1496,11 +1602,12 @@ void describe('shared external LSP client', () => {
       const escapedRoot = join(workspaceRoot, 'escaped-runtime')
       await symlink(fixtureRoot, escapedRoot, process.platform === 'win32' ? 'junction' : 'dir')
       assert.throws(
-        () => resolveExternalLspRuntimeRoot(
-          workspaceRoot,
-          join(escapedRoot, 'main.nested'),
-          descriptor
-        ),
+        () =>
+          resolveExternalLspRuntimeRoot(
+            workspaceRoot,
+            join(escapedRoot, 'main.nested'),
+            descriptor
+          ),
         /escapes the workspace/u
       )
       const escapedMarkerRoot = join(workspaceRoot, 'escaped-marker')
@@ -1511,28 +1618,29 @@ void describe('shared external LSP client', () => {
         process.platform === 'win32' ? 'junction' : 'dir'
       )
       assert.throws(
-        () => resolveExternalLspRuntimeRoot(
-          workspaceRoot,
-          join(escapedMarkerRoot, 'main.nested'),
-          descriptor
-        ),
+        () =>
+          resolveExternalLspRuntimeRoot(
+            workspaceRoot,
+            join(escapedMarkerRoot, 'main.nested'),
+            descriptor
+          ),
         /项目根标记的真实路径超出工作区/u
       )
       const toolchainRoot = join(workspaceRoot, 'tools', 'owned')
       const toolchainPackage = join(toolchainRoot, 'node_modules', '@fixture', 'nested-lsp')
       await mkdir(toolchainPackage, { recursive: true })
-      await writeFile(join(toolchainPackage, 'package.json'), '{"name":"@fixture/nested-lsp"}\n', 'utf8')
+      await writeFile(
+        join(toolchainPackage, 'package.json'),
+        '{"name":"@fixture/nested-lsp"}\n',
+        'utf8'
+      )
       assert.equal(
-        resolveExternalLspRuntimeRoot(
-          workspaceRoot,
-          join(toolchainRoot, 'src', 'main.nested'),
-          {
-            ...descriptor,
-            packageName: '@fixture/nested-lsp',
-            projectNodePackageBin: 'nested-lsp',
-            projectRootMarkers: [],
-          }
-        ),
+        resolveExternalLspRuntimeRoot(workspaceRoot, join(toolchainRoot, 'src', 'main.nested'), {
+          ...descriptor,
+          packageName: '@fixture/nested-lsp',
+          projectNodePackageBin: 'nested-lsp',
+          projectRootMarkers: [],
+        }),
         await realpath(toolchainRoot)
       )
 
@@ -1544,10 +1652,12 @@ void describe('shared external LSP client', () => {
       const secondInitial = await probe(second, secondPath)
       assert.equal(await realpath(firstInitial.cwd), await realpath(firstRoot))
       assert.equal(firstInitial.rootUri, pathToFileURL(await realpath(firstRoot)).toString())
-      assert.deepEqual(firstInitial.workspaceFolders, [{
-        uri: pathToFileURL(await realpath(firstRoot)).toString(),
-        name: 'first',
-      }])
+      assert.deepEqual(firstInitial.workspaceFolders, [
+        {
+          uri: pathToFileURL(await realpath(firstRoot)).toString(),
+          name: 'first',
+        },
+      ])
       assert.equal(await realpath(secondInitial.cwd), await realpath(secondRoot))
       assert.equal(secondInitial.rootUri, pathToFileURL(await realpath(secondRoot)).toString())
 
@@ -1594,11 +1704,15 @@ void describe('shared external LSP client', () => {
       documentLanguageId: 'moving-fixture-language',
     }
     const manager = new ExternalLspManager()
-    const probeFor = async (client: ExternalLspClient, path: string): Promise<{
+    const probeFor = async (
+      client: ExternalLspClient,
+      path: string
+    ): Promise<{
       pid: number
       closedUris: string[]
     }> => {
-      const detail = (await client.completion(path, 'comp', { line: 0, character: 4 })).items[0]?.detail
+      const detail = (await client.completion(path, 'comp', { line: 0, character: 4 })).items[0]
+        ?.detail
       assert.ok(detail)
       return JSON.parse(detail) as { pid: number; closedUris: string[] }
     }
@@ -1615,10 +1729,7 @@ void describe('shared external LSP client', () => {
 
     try {
       const workspaceClient = await manager.client(workspaceRoot, descriptor, nestedPath)
-      assert.equal(
-        await manager.client(workspaceRoot, descriptor, siblingPath),
-        workspaceClient
-      )
+      assert.equal(await manager.client(workspaceRoot, descriptor, siblingPath), workspaceClient)
       const workspacePid = await pidFor(workspaceClient, nestedPath)
 
       await writeFile(markerPath, '{}\n', 'utf8')
@@ -1634,11 +1745,12 @@ void describe('shared external LSP client', () => {
 
       await rename(markerPath, movedMarkerPath)
       await manager.filesChanged(workspaceRoot, [markerPath, movedMarkerPath])
-      assert.equal(isRunning(firstNestedPid), false, 'renaming the marker releases the nested client')
       assert.equal(
-        await manager.client(workspaceRoot, descriptor, nestedPath),
-        workspaceClient
+        isRunning(firstNestedPid),
+        false,
+        'renaming the marker releases the nested client'
       )
+      assert.equal(await manager.client(workspaceRoot, descriptor, nestedPath), workspaceClient)
 
       await rename(movedMarkerPath, markerPath)
       const secondNestedClient = await manager.client(workspaceRoot, descriptor, nestedPath)
@@ -1647,21 +1759,26 @@ void describe('shared external LSP client', () => {
 
       await rm(markerPath)
       await manager.filesChanged(workspaceRoot, [markerPath])
-      assert.equal(isRunning(secondNestedPid), false, 'deleting the marker releases the nested client')
       assert.equal(
-        await manager.client(workspaceRoot, descriptor, nestedPath),
-        workspaceClient
+        isRunning(secondNestedPid),
+        false,
+        'deleting the marker releases the nested client'
       )
+      assert.equal(await manager.client(workspaceRoot, descriptor, nestedPath), workspaceClient)
 
       const toolchainRoot = join(workspaceRoot, 'toolchain-owned')
       const toolchainDocument = join(toolchainRoot, 'src', 'main.tool-moving')
       const toolchainPackage = join(toolchainRoot, 'node_modules', '@fixture', 'moving-lsp')
       await mkdir(dirname(toolchainDocument), { recursive: true })
       await mkdir(toolchainPackage, { recursive: true })
-      await writeFile(join(toolchainPackage, 'package.json'), JSON.stringify({
-        name: '@fixture/moving-lsp',
-        bin: { 'moving-lsp': './server.cjs' },
-      }), 'utf8')
+      await writeFile(
+        join(toolchainPackage, 'package.json'),
+        JSON.stringify({
+          name: '@fixture/moving-lsp',
+          bin: { 'moving-lsp': './server.cjs' },
+        }),
+        'utf8'
+      )
       await writeFile(join(toolchainPackage, 'server.cjs'), await readFile(fixture), 'utf8')
       const toolchainDescriptor = {
         ...descriptor,
@@ -1713,11 +1830,7 @@ void describe('shared external LSP client', () => {
     }
 
     const disposedManager = new ExternalLspManager()
-    const pendingDisposalClient = disposedManager.client(
-      workspaceRoot,
-      descriptor,
-      documentPath
-    )
+    const pendingDisposalClient = disposedManager.client(workspaceRoot, descriptor, documentPath)
     const disposalRejection = assert.rejects(pendingDisposalClient, /管理器已关闭/u)
     await disposedManager.dispose()
     await disposalRejection
@@ -1733,16 +1846,14 @@ void describe('shared external LSP client', () => {
         descriptor,
         documentPath
       )
-      const invalidationRejection = assert.rejects(
-        pendingInvalidationClient,
-        /工作区已失效/u
-      )
+      const invalidationRejection = assert.rejects(pendingInvalidationClient, /工作区已失效/u)
       await invalidatedManager.invalidate(workspaceRoot)
       await invalidationRejection
 
       const freshClient = await invalidatedManager.client(workspaceRoot, descriptor, documentPath)
       assert.equal(
-        (await freshClient.completion(documentPath, 'comp', { line: 0, character: 4 })).items[0]?.label,
+        (await freshClient.completion(documentPath, 'comp', { line: 0, character: 4 })).items[0]
+          ?.label,
         'component'
       )
     } finally {
@@ -1780,11 +1891,7 @@ void describe('shared external LSP client', () => {
     try {
       const first = await manager.client(workspaceRoot, descriptor, movingDocument)
       assert.equal(
-        (await first.completion(
-          movingDocument,
-          'comp',
-          { line: 0, character: 4 }
-        )).items[0]?.label,
+        (await first.completion(movingDocument, 'comp', { line: 0, character: 4 })).items[0]?.label,
         'component'
       )
 
@@ -1819,11 +1926,8 @@ void describe('shared external LSP client', () => {
       await pendingReconciliation
       assert.notEqual(refreshed, first)
       assert.equal(
-        (await refreshed.completion(
-          stableDocument,
-          'comp',
-          { line: 0, character: 4 }
-        )).items[0]?.label,
+        (await refreshed.completion(stableDocument, 'comp', { line: 0, character: 4 })).items[0]
+          ?.label,
         'component',
         'reconciliation must not dispose the replacement after its key regains an owner'
       )
@@ -1851,10 +1955,14 @@ void describe('shared external LSP client', () => {
     await mkdir(dirname(packageRoot), { recursive: true })
     await mkdir(outsidePackageRoot, { recursive: true })
     await writeFile(join(projectRoot, 'runtime.json'), '{}\n', 'utf8')
-    await writeFile(join(outsidePackageRoot, 'package.json'), JSON.stringify({
-      name: '@fixture/escaped-lsp',
-      bin: { 'escaped-lsp': './server.cjs' },
-    }), 'utf8')
+    await writeFile(
+      join(outsidePackageRoot, 'package.json'),
+      JSON.stringify({
+        name: '@fixture/escaped-lsp',
+        bin: { 'escaped-lsp': './server.cjs' },
+      }),
+      'utf8'
+    )
     await writeFile(join(outsidePackageRoot, 'server.cjs'), await readFile(fixture), 'utf8')
     await symlink(
       outsidePackageRoot,
@@ -1887,9 +1995,8 @@ void describe('shared external LSP client', () => {
       const outsideBinRoot = join(fixtureRoot, 'outside-bin')
       const genericDocumentPath = join(genericRoot, 'src', 'main.generic-escaped')
       const genericCommandName = 'escaped-generic-lsp'
-      const genericExecutableName = process.platform === 'win32'
-        ? `${genericCommandName}.cmd`
-        : genericCommandName
+      const genericExecutableName =
+        process.platform === 'win32' ? `${genericCommandName}.cmd` : genericCommandName
       await mkdir(dirname(genericDocumentPath), { recursive: true })
       await mkdir(join(genericRoot, 'node_modules'), { recursive: true })
       await mkdir(outsideBinRoot, { recursive: true })
@@ -1900,16 +2007,20 @@ void describe('shared external LSP client', () => {
         join(genericRoot, 'node_modules', '.bin'),
         process.platform === 'win32' ? 'junction' : 'dir'
       )
-      const genericClient = await manager.client(workspaceRoot, {
-        ...descriptor,
-        id: 'generic-escaped-bin-fixture-language',
-        extensions: ['generic-escaped'],
-        languages: ['generic-escaped-bin-fixture-language'],
-        packageName: undefined,
-        projectNodePackageBin: undefined,
-        command: genericCommandName,
-        documentLanguageId: 'generic-escaped-bin-fixture-language',
-      }, genericDocumentPath)
+      const genericClient = await manager.client(
+        workspaceRoot,
+        {
+          ...descriptor,
+          id: 'generic-escaped-bin-fixture-language',
+          extensions: ['generic-escaped'],
+          languages: ['generic-escaped-bin-fixture-language'],
+          packageName: undefined,
+          projectNodePackageBin: undefined,
+          command: genericCommandName,
+          documentLanguageId: 'generic-escaped-bin-fixture-language',
+        },
+        genericDocumentPath
+      )
       await assert.rejects(
         genericClient.completion(genericDocumentPath, 'comp', { line: 0, character: 4 }),
         /真实路径超出工作区/u
@@ -1929,9 +2040,13 @@ void describe('shared external LSP client', () => {
     const command = join(binRoot, process.platform === 'win32' ? `${commandName}.cmd` : commandName)
     await mkdir(projectRoot, { recursive: true })
     await mkdir(binRoot, { recursive: true })
-    await writeFile(command, process.platform === 'win32'
-      ? `@"${process.execPath}" "${fixture}" %*\r\n`
-      : `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(fixture)} "$@"\n`, 'utf8')
+    await writeFile(
+      command,
+      process.platform === 'win32'
+        ? `@"${process.execPath}" "${fixture}" %*\r\n`
+        : `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(fixture)} "$@"\n`,
+      'utf8'
+    )
     if (process.platform !== 'win32') await chmod(command, 0o755)
 
     const client = new ExternalLspClient(projectRoot, {
@@ -1949,7 +2064,10 @@ void describe('shared external LSP client', () => {
         join(projectRoot, 'main.ancestor'),
         'component App:\n'
       )
-      assert.deepEqual(diagnostics.map((item) => item.code), ['VEL5001'])
+      assert.deepEqual(
+        diagnostics.map((item) => item.code),
+        ['VEL5001']
+      )
     } finally {
       await client.dispose()
       await rm(workspaceRoot, { recursive: true, force: true })
@@ -1966,14 +2084,22 @@ void describe('shared external LSP client', () => {
     await mkdir(projectRoot, { recursive: true })
     await mkdir(packageRoot, { recursive: true })
     await mkdir(binRoot, { recursive: true })
-    await writeFile(join(packageRoot, 'package.json'), JSON.stringify({
-      name: '@fixture/language-server',
-      bin: { 'fixture-lsp': './server.cjs' },
-    }), 'utf8')
+    await writeFile(
+      join(packageRoot, 'package.json'),
+      JSON.stringify({
+        name: '@fixture/language-server',
+        bin: { 'fixture-lsp': './server.cjs' },
+      }),
+      'utf8'
+    )
     await writeFile(join(packageRoot, 'server.cjs'), await readFile(fixture), 'utf8')
-    await writeFile(command, process.platform === 'win32'
-      ? '@echo off\r\nexit /b 77\r\n'
-      : '#!/usr/bin/env __workbench_missing_node__\n', 'utf8')
+    await writeFile(
+      command,
+      process.platform === 'win32'
+        ? '@echo off\r\nexit /b 77\r\n'
+        : '#!/usr/bin/env __workbench_missing_node__\n',
+      'utf8'
+    )
     if (process.platform !== 'win32') await chmod(command, 0o755)
 
     const client = new ExternalLspClient(projectRoot, {
@@ -1993,7 +2119,10 @@ void describe('shared external LSP client', () => {
         join(projectRoot, 'main.owned-node'),
         'component App:\n'
       )
-      assert.deepEqual(diagnostics.map((item) => item.code), ['VEL5001'])
+      assert.deepEqual(
+        diagnostics.map((item) => item.code),
+        ['VEL5001']
+      )
     } finally {
       await client.dispose()
       await rm(workspaceRoot, { recursive: true, force: true })
@@ -2019,7 +2148,12 @@ void describe('shared external LSP client', () => {
       await writeFile(join(projectRoot, 'package.json'), '{"dependencies":{}}\n', 'utf8')
       const first = await manager.client(projectRoot, descriptor)
       assert.equal(
-        (await first.completion(join(projectRoot, 'main.refresh'), 'comp', { line: 0, character: 4 })).items[0]?.label,
+        (
+          await first.completion(join(projectRoot, 'main.refresh'), 'comp', {
+            line: 0,
+            character: 4,
+          })
+        ).items[0]?.label,
         'component'
       )
 
@@ -2031,7 +2165,12 @@ void describe('shared external LSP client', () => {
       const refreshed = await manager.client(projectRoot, descriptor)
       assert.notEqual(refreshed, first)
       assert.equal(
-        (await refreshed.completion(join(projectRoot, 'main.refresh'), 'comp', { line: 0, character: 4 })).items[0]?.label,
+        (
+          await refreshed.completion(join(projectRoot, 'main.refresh'), 'comp', {
+            line: 0,
+            character: 4,
+          })
+        ).items[0]?.label,
         'component'
       )
     } finally {
@@ -2063,10 +2202,21 @@ void describe('shared external LSP client', () => {
     const diagnostics = await client.getDiagnostics(path, 'component App:\n')
     const completions = await client.completion(path, 'comp', { line: 0, character: 4 })
     const hover = await client.hover(path, 'component App:\n', { line: 0, character: 2 })
-    const definitions = await client.definition(path, 'component App:\n', { line: 0, character: 11 })
+    const definitions = await client.definition(path, 'component App:\n', {
+      line: 0,
+      character: 11,
+    })
     const references = await client.references(path, 'component App:\n', { line: 0, character: 11 })
-    const documentHighlights = await client.documentHighlights(path, 'component App:\n', { line: 0, character: 11 })
-    const rename = await client.rename(path, 'component App:\n', { line: 0, character: 11 }, 'Shell')
+    const documentHighlights = await client.documentHighlights(path, 'component App:\n', {
+      line: 0,
+      character: 11,
+    })
+    const rename = await client.rename(
+      path,
+      'component App:\n',
+      { line: 0, character: 11 },
+      'Shell'
+    )
     const symbols = await client.documentSymbols(path, 'component App:\n')
     const signature = await client.signatureHelp(path, 'mount(', { line: 0, character: 6 })
     const hints = await client.inlayHints(path, 'component App:\n', {
@@ -2075,7 +2225,10 @@ void describe('shared external LSP client', () => {
     })
     const edits = await client.format(path, 'component App:\n')
 
-    assert.deepEqual(diagnostics.map((item) => item.code), ['VEL5001'])
+    assert.deepEqual(
+      diagnostics.map((item) => item.code),
+      ['VEL5001']
+    )
     assert.equal(completions.items[0]?.label, 'component')
     assert.deepEqual(hover?.contents, { kind: 'markdown', value: 'Velar hover' })
     assert.equal(definitions[0]?.range.start.character, 10)
@@ -2113,7 +2266,10 @@ void describe('shared external LSP client', () => {
     }
 
     const resolved = await services.resolveLanguageService(request)
-    const suppressedHover = await services.getHover({ ...request, position: { line: 1, column: 2 } })
+    const suppressedHover = await services.getHover({
+      ...request,
+      position: { line: 1, column: 2 },
+    })
     const decoratorHover = await services.getHover({
       ...request,
       content: '@component App:\n',
@@ -2142,14 +2298,16 @@ void describe('shared external LSP client', () => {
       path: 'main.fakevel',
       content: 'component App:\n',
       range: { startLine: 1, startColumn: 1, endLine: 1, endColumn: 4 },
-      diagnostics: [{
-        path: 'main.fakevel',
-        severity: 'error',
-        message: 'fake diagnostic',
-        source: 'fake-velar',
-        code: 'VEL5001',
-        range: { startLine: 1, startColumn: 1, endLine: 1, endColumn: 4 },
-      }],
+      diagnostics: [
+        {
+          path: 'main.fakevel',
+          severity: 'error',
+          message: 'fake diagnostic',
+          source: 'fake-velar',
+          code: 'VEL5001',
+          range: { startLine: 1, startColumn: 1, endLine: 1, endColumn: 4 },
+        },
+      ],
     })
 
     assert.ok(resolved.capabilities.includes('definition'))
@@ -2169,18 +2327,25 @@ void describe('shared external LSP client', () => {
     assert.equal(signatures.signatureHelp?.signatures[0]?.parameters[0]?.label, 'node')
     assert.equal(symbols.symbols[0]?.kind, 'class')
     assert.equal(hints.hints[0]?.text, ': string')
-    assert.deepEqual(semanticTokens.tokens, [{
-      range: { startLine: 1, startColumn: 11, endLine: 1, endColumn: 14 },
-      type: 'class',
-      modifiers: ['declaration', 'frameworkDefinition'],
-    }])
+    assert.deepEqual(semanticTokens.tokens, [
+      {
+        range: { startLine: 1, startColumn: 11, endLine: 1, endColumn: 14 },
+        type: 'class',
+        modifiers: ['declaration', 'frameworkDefinition'],
+      },
+    ])
     assert.equal(codeActions.actions[0]?.title, 'Apply fake quick fix')
     assert.equal(codeActions.actions[0]?.changes[0]?.edits[0]?.newText, 'let')
     assert.deepEqual(hints.hints[0]?.position, { line: 1, column: 14, offset: 13 })
     // 编辑器只按偏移放提示：外部语言服务器的提示也得真的变成装饰。
     const hintPositions: number[] = []
-    buildWorkbenchInlayHintDecorations('component App:\n'.length, hints.hints)
-      .between(0, 15, (from) => { hintPositions.push(from) })
+    buildWorkbenchInlayHintDecorations('component App:\n'.length, hints.hints).between(
+      0,
+      15,
+      (from) => {
+        hintPositions.push(from)
+      }
+    )
     assert.deepEqual(hintPositions, [13])
 
     await services.dispose()
@@ -2265,24 +2430,34 @@ void describe('shared external LSP client', () => {
       documentLanguageId: 'bounded',
     })
     await assert.rejects(
-      oversized.completion(`${projectRoot}/tests/probe.bounded`, 'const value = 1\n', { line: 0, character: 1 }),
+      oversized.completion(`${projectRoot}/tests/probe.bounded`, 'const value = 1\n', {
+        line: 0,
+        character: 1,
+      }),
       /16 MiB/u
     )
     await oversized.dispose()
 
-    const hanging = new ExternalLspClient(projectRoot, {
-      id: 'hanging-fixture-language',
-      label: 'Hanging Fixture Language',
-      installKind: 'builtin',
-      runtime: 'lsp-server',
-      extensions: ['hanging'],
-      languages: ['hanging'],
-      command: process.execPath,
-      args: [fixture, 'hang'],
-      documentLanguageId: 'hanging',
-    }, 500)
+    const hanging = new ExternalLspClient(
+      projectRoot,
+      {
+        id: 'hanging-fixture-language',
+        label: 'Hanging Fixture Language',
+        installKind: 'builtin',
+        runtime: 'lsp-server',
+        extensions: ['hanging'],
+        languages: ['hanging'],
+        command: process.execPath,
+        args: [fixture, 'hang'],
+        documentLanguageId: 'hanging',
+      },
+      500
+    )
     await assert.rejects(
-      hanging.completion(`${projectRoot}/tests/probe.hanging`, 'const value = 1\n', { line: 0, character: 1 }),
+      hanging.completion(`${projectRoot}/tests/probe.hanging`, 'const value = 1\n', {
+        line: 0,
+        character: 1,
+      }),
       /请求超时.*textDocument\/completion/u
     )
     await hanging.dispose()
@@ -2302,10 +2477,13 @@ void describe('shared external LSP client', () => {
       position: { line: 1, column: 2 },
     })
 
-    assert.ok(diagnostics.diagnostics.some((item) =>
-      item.code === 'reportAssignmentType'
-      && /not assignable to declared type "str"/iu.test(item.message)
-    ))
+    assert.ok(
+      diagnostics.diagnostics.some(
+        (item) =>
+          item.code === 'reportAssignmentType' &&
+          /not assignable to declared type "str"/iu.test(item.message)
+      )
+    )
     assert.match(JSON.stringify(hover), /str/u)
 
     // Pyright 的悬浮说明是「```python 签名```、---、说明」：签名与说明分开画，不漏出 Markdown 标记。
@@ -2325,8 +2503,14 @@ void describe('shared external LSP client', () => {
       content: documented,
       position: { line: 1, column: 6 },
     })
-    assert.match(functionHover.hover?.displayText ?? '', /^\(function\) def greet\(name: str\) -> str$/u)
-    assert.doesNotMatch(JSON.stringify(functionHover.hover?.documentationBlocks), /```|---|&nbsp;|\\\\\*/u)
+    assert.match(
+      functionHover.hover?.displayText ?? '',
+      /^\(function\) def greet\(name: str\) -> str$/u
+    )
+    assert.doesNotMatch(
+      JSON.stringify(functionHover.hover?.documentationBlocks),
+      /```|---|&nbsp;|\\\\\*/u
+    )
     assert.match(functionHover.hover?.documentation ?? '', /Say \*hello\*\./u)
     await services.dispose()
   })

@@ -4,10 +4,14 @@ import { stat } from 'node:fs/promises'
 import { isAbsolute, resolve as resolvePath } from 'node:path'
 import { StringDecoder } from 'node:string_decoder'
 
-import { AppError } from '@velaros-ai/core/error'
-import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
+import { AppError } from '@velaros-ai/velaros/core/error'
+import { type TimerLease, TimerScope } from '@velaros-ai/velaros/core/utils/TimerScope'
 
-import { type WorkbenchRunCommandOutputEvent, type WorkbenchRunCommandRequest, type WorkbenchRunCommandResult } from '@shared/contracts/workbench'
+import {
+  type WorkbenchRunCommandOutputEvent,
+  type WorkbenchRunCommandRequest,
+  type WorkbenchRunCommandResult,
+} from '@shared/contracts/workbench'
 
 import { workbenchMainText } from '../i18n/workbenchMainMessages'
 
@@ -37,9 +41,11 @@ class CommandRunner {
     const projectRoot = await this.pathResolver.resolveProjectRoot(request.projectRoot)
     // A project root may be an alias (for example /var -> /private/var on macOS). Translate
     // absolute cwd paths under that same requested root before checking canonical containment.
-    const relativeCwd = request.cwd && isAbsolute(request.cwd)
-      ? getRelativePathInsideRoot(request.projectRoot, request.cwd) : null
-    const cwd = relativeCwd !== null ? resolvePath(projectRoot, relativeCwd) : request.cwd ?? '.'
+    const relativeCwd =
+      request.cwd && isAbsolute(request.cwd)
+        ? getRelativePathInsideRoot(request.projectRoot, request.cwd)
+        : null
+    const cwd = relativeCwd !== null ? resolvePath(projectRoot, relativeCwd) : (request.cwd ?? '.')
     const cwdPath = await this.pathResolver.resolveInsideProject(projectRoot, cwd)
     const cwdStats = await stat(cwdPath.realPath)
     if (!cwdStats.isDirectory()) {
@@ -47,7 +53,11 @@ class CommandRunner {
     }
 
     // 工作区边界用调用方给的原始根：与它问用户前的判定同一个输入，两层结论才不会因符号链接而分叉。
-    const command = this.commandHelper.validateCommand(request.command, request.projectRoot, allowDangerous)
+    const command = this.commandHelper.validateCommand(
+      request.command,
+      request.projectRoot,
+      allowDangerous
+    )
     const timeoutMs = this.commandHelper.normalizeTimeoutMs(request.timeoutMs)
     const shellEnv = { ...process.env }
     const shellSpec = this.commandHelper.getShellSpec(command)
@@ -131,7 +141,13 @@ class CommandRunner {
         if (settled) return
         settled = true
         cleanup()
-        reject(new AppError('PLATFORM', workbenchMainText('commands.startFailed', { reason: error.message }), error))
+        reject(
+          new AppError(
+            'PLATFORM',
+            workbenchMainText('commands.startFailed', { reason: error.message }),
+            error
+          )
+        )
       })
 
       child.on('close', (exitCode, signal) => {

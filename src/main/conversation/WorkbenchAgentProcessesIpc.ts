@@ -5,7 +5,7 @@ import { stripVTControlCharacters } from 'node:util'
 import { BrowserWindow, ipcMain, type IpcMainInvokeEvent } from 'electron'
 import { z } from 'zod'
 
-import { AppError } from '@velaros-ai/core/error'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
 import { WorkbenchAgentProcessesChannels as Channels } from '../../shared/workbenchAgentProcesses'
 import { callWithEnvelope } from '../workspace/ipcBoundary'
@@ -87,7 +87,13 @@ export function registerWorkbenchAgentProcessesIpc(options: {
   })
   return () => {
     off()
-    for (const channel of [Channels.focusConsole, Channels.list, Channels.stop, Channels.input, Channels.interrupt])
+    for (const channel of [
+      Channels.focusConsole,
+      Channels.list,
+      Channels.stop,
+      Channels.input,
+      Channels.interrupt,
+    ])
       ipcMain.removeHandler(channel)
   }
 }

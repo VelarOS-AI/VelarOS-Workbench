@@ -28,7 +28,7 @@ const SearchToolHeader = [
   'import {',
   '  renderParameterDescription as parameterDescription,',
   '  requiredResultLimit,',
-  "} from '@velaros-ai/agent/tool-contract'",
+  "} from '@velaros-ai/velaros/agent/tool-contract'",
   '',
   "import { executeAtomicGrep } from '../../impl/atomic/Grep.js'",
   "import { SystemToolNames } from '../tool-names.js'",
@@ -62,7 +62,13 @@ void describe('Workbench import folding', () => {
       [1, 5]
     )
     assert.deepEqual(
-      foldedImportLines(['import {', '  useState,', "} from 'react'", '', 'export function App() {}']),
+      foldedImportLines([
+        'import {',
+        '  useState,',
+        "} from 'react'",
+        '',
+        'export function App() {}',
+      ]),
       [1, 3]
     )
   })
@@ -160,16 +166,32 @@ void describe('Workbench import folding', () => {
       [4, 5]
     )
     assert.deepEqual(
-      foldedImportLines(['package main', '', 'import (', '\t"fmt"', '\t"os"', ')', '', 'func main() {}']),
+      foldedImportLines([
+        'package main',
+        '',
+        'import (',
+        '\t"fmt"',
+        '\t"os"',
+        ')',
+        '',
+        'func main() {}',
+      ]),
       [3, 6]
     )
   })
 
   void test('leaves files without a leading multi-line import section unfolded', () => {
     assert.equal(foldedImportLines(['']), null)
-    assert.equal(foldedImportLines(["import { z } from 'zod'", '', 'export const schema = z.string()']), null)
     assert.equal(
-      foldedImportLines(["const legacy = require('legacy')", "import a from 'a'", "import b from 'b'"]),
+      foldedImportLines(["import { z } from 'zod'", '', 'export const schema = z.string()']),
+      null
+    )
+    assert.equal(
+      foldedImportLines([
+        "const legacy = require('legacy')",
+        "import a from 'a'",
+        "import b from 'b'",
+      ]),
       null
     )
     assert.equal(
@@ -196,7 +218,9 @@ void describe('Workbench import folding', () => {
     assert.equal(foldable(state, multiLineImport.from, multiLineImport.to), null)
 
     // 文档一变就按新内容重算，不会沿用上一版的区间。
-    const edited = state.update({ changes: { from: 0, insert: "import first from 'first'\n" } }).state
+    const edited = state.update({
+      changes: { from: 0, insert: "import first from 'first'\n" },
+    }).state
     const editedRange = findWorkbenchImportFoldRange(edited.doc)
     assert.ok(editedRange)
     assert.equal(edited.doc.lineAt(editedRange.from).number, 1)

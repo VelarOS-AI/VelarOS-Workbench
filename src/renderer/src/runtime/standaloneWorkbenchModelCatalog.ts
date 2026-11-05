@@ -1,14 +1,14 @@
-import { optionalWhen } from '@velaros-ai/core'
+import { optionalWhen } from '@velaros-ai/velaros/core'
 import type {
   ModelProviderOperationalManifest,
   ModelProviderValidationKind,
-} from '@velaros-ai/model/catalog'
+} from '@velaros-ai/velaros/model/catalog'
 import {
   DefaultProviderModels,
   modelCatalog,
   ModelProviderOperationalManifests,
-} from '@velaros-ai/model/catalog'
-import type { ChatProviderId, ProviderModelCatalogEntry } from '@velaros-ai/model/contracts'
+} from '@velaros-ai/velaros/model/catalog'
+import type { ChatProviderId, ProviderModelCatalogEntry } from '@velaros-ai/velaros/model/contracts'
 
 import type { WorkbenchManagedModelProvider } from '@shared/workbenchModel'
 import { getWorkbenchManagedModelProviderLabel } from '@shared/workbenchModel'
@@ -33,23 +33,20 @@ const MetaModelHint = /(?:\/auto$|\/free$|^auto$)/iu
 
 function resolveCompletionModel(models: readonly string[], defaultModel: string): string {
   return (
-    models.find((model) => !MetaModelHint.test(model) && CompletionModelHint.test(model))
-    ?? models.find((model) => !MetaModelHint.test(model))
-    ?? defaultModel
+    models.find((model) => !MetaModelHint.test(model) && CompletionModelHint.test(model)) ??
+    models.find((model) => !MetaModelHint.test(model)) ??
+    defaultModel
   )
 }
 
 const OperationalManifests: readonly ModelProviderOperationalManifest[] =
   ModelProviderOperationalManifests
-const ProviderDefaultModels: Readonly<Partial<Record<ChatProviderId, string>>> = DefaultProviderModels
+const ProviderDefaultModels: Readonly<Partial<Record<ChatProviderId, string>>> =
+  DefaultProviderModels
 
 const AllStandaloneWorkbenchModelProviderPresets: readonly StandaloneWorkbenchModelProviderPreset[] =
-  OperationalManifests
-    .filter((manifest) =>
-      !manifest.debugOnly
-      && manifest.id !== 'custom'
-    )
-    .map((manifest) => {
+  OperationalManifests.filter((manifest) => !manifest.debugOnly && manifest.id !== 'custom').map(
+    (manifest) => {
       const models = modelCatalog.suggestedModels(manifest.id)
       const defaultModel = modelCatalog.resolveModel(
         manifest.id,
@@ -57,9 +54,12 @@ const AllStandaloneWorkbenchModelProviderPresets: readonly StandaloneWorkbenchMo
       )
       return {
         id: manifest.id,
-        label: manifest.id === 'velaros' || manifest.id === 'velar-dev'
-          ? getWorkbenchManagedModelProviderLabel(manifest.id === 'velar-dev' ? 'velar-dev' : 'velaros')
-          : manifest.label,
+        label:
+          manifest.id === 'velaros' || manifest.id === 'velar-dev'
+            ? getWorkbenchManagedModelProviderLabel(
+                manifest.id === 'velar-dev' ? 'velar-dev' : 'velaros'
+              )
+            : manifest.label,
         description: manifest.description,
         defaultBaseURL: manifest.defaultBaseURL,
         defaultModel,
@@ -71,7 +71,8 @@ const AllStandaloneWorkbenchModelProviderPresets: readonly StandaloneWorkbenchMo
         apiKeyEnvironmentName: optionalWhen(!!manifest.defaultApiKeyEnv, manifest.defaultApiKeyEnv),
         models,
       }
-    })
+    }
+  )
 
 /** 自带密钥或本地服务的 provider；Cloud 托管 provider 必须从在线授权快照加入。 */
 export const StandaloneWorkbenchModelProviderPresets: readonly StandaloneWorkbenchModelProviderPreset[] =
@@ -83,9 +84,9 @@ export function getStandaloneWorkbenchModelProviderPreset(
   provider: string
 ): StandaloneWorkbenchModelProviderPreset {
   return (
-    AllStandaloneWorkbenchModelProviderPresets.find((preset) => preset.id === provider)
-    ?? StandaloneWorkbenchModelProviderPresets.find((preset) => preset.id === DefaultProviderId)
-    ?? StandaloneWorkbenchModelProviderPresets[0]!
+    AllStandaloneWorkbenchModelProviderPresets.find((preset) => preset.id === provider) ??
+    StandaloneWorkbenchModelProviderPresets.find((preset) => preset.id === DefaultProviderId) ??
+    StandaloneWorkbenchModelProviderPresets[0]!
   )
 }
 
@@ -98,9 +99,11 @@ export function listStandaloneWorkbenchVisibleModelProviderPresets(
       .filter((model) => model.status === 'available')
       .map((model) => model.id)
     const defaultModel =
-      (config.defaultModel && models.includes(config.defaultModel) ? config.defaultModel : undefined)
-      ?? models[0]
-      ?? preset.defaultModel
+      (config.defaultModel && models.includes(config.defaultModel)
+        ? config.defaultModel
+        : undefined) ??
+      models[0] ??
+      preset.defaultModel
     return {
       ...preset,
       label: getWorkbenchManagedModelProviderLabel(config.providerId),
@@ -117,8 +120,9 @@ export function createStandaloneWorkbenchModelProviderOptions(
   disabledDescription: (providerLabel: string) => string
 ): Array<{ value: ChatProviderId; label: string; description: string; disabled: boolean }> {
   return listStandaloneWorkbenchVisibleModelProviderPresets(managedModels).map((provider) => {
-    const disabled = provider.managedByCloud
-      && !managedModels.find((entry) => entry.providerId === provider.id)?.enabled
+    const disabled =
+      provider.managedByCloud &&
+      !managedModels.find((entry) => entry.providerId === provider.id)?.enabled
     return {
       value: provider.id,
       label: provider.label,
@@ -162,14 +166,16 @@ export function createStandaloneWorkbenchModelSelectorProviders(
     false
   )
   const preferred = modelId.trim() || provider.defaultModel
-  return [{
-    value: provider.id,
-    label: provider.label,
-    defaultModel: models.some((model) => model.value === preferred)
-      ? preferred
-      : models[0]?.value ?? preferred,
-    models,
-  }]
+  return [
+    {
+      value: provider.id,
+      label: provider.label,
+      defaultModel: models.some((model) => model.value === preferred)
+        ? preferred
+        : (models[0]?.value ?? preferred),
+      models,
+    },
+  ]
 }
 
 export function createStandaloneWorkbenchProviderModelOptions(

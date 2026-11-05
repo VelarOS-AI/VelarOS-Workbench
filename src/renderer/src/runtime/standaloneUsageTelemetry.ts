@@ -1,5 +1,10 @@
-import { isFiniteNumber, isNonBlankString, optionalWhen, toOptional } from '@velaros-ai/core'
 import type { ConversationView } from '@velaros-ai/ui/conversation'
+import {
+  isFiniteNumber,
+  isNonBlankString,
+  optionalWhen,
+  toOptional,
+} from '@velaros-ai/velaros/core'
 
 /**
  * 主 Agent 与子 Agent 每次模型调用的供应方用量（`usage-telemetry` 运行时事件）。
@@ -129,6 +134,26 @@ function serializeStandaloneUsageTelemetry(
       )
     )
   )
+}
+
+/**
+ * 与 Desktop 的持久化指纹缓存一致：不可变输入不变时复用派生结果。
+ * 每个持久化器独占缓存，弱引用不保留已删除会话；返回值只供序列化，不得修改。
+ */
+export function createStandaloneUsageTelemetrySerializer(): (
+  entries: readonly StandaloneUsageTelemetry[]
+) => ReadonlyArray<Readonly<Record<string, unknown>>> {
+  const cache = new WeakMap<
+    readonly StandaloneUsageTelemetry[],
+    ReadonlyArray<Readonly<Record<string, unknown>>>
+  >()
+  return (entries) => {
+    const cached = cache.get(entries)
+    if (cached) return cached
+    const serialized = serializeStandaloneUsageTelemetry(entries)
+    cache.set(entries, serialized)
+    return serialized
+  }
 }
 
 /** 恢复落盘的用量；形状不对的条目丢掉。 */

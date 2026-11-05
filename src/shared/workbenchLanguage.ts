@@ -10,9 +10,43 @@
  * 与文件系统面（workbenchFs.ts）拆成两个桥：文件系统面是同步落盘/目录读写，语言智能面
  * 是 worker 转发的代码分析——两者生命周期、错误面与调用节奏都不同。
  */
-import type { ModelSelection } from '@velaros-ai/model/contracts'
+import type { ModelSelection } from '@velaros-ai/velaros/model/contracts'
 
-import { type WorkbenchInlineCompletionRequest, type WorkbenchInlineCompletionResult, type WorkbenchLanguageServiceCallHierarchyRequest, type WorkbenchLanguageServiceCallHierarchyResult, type WorkbenchLanguageServiceCodeActionResolveRequest, type WorkbenchLanguageServiceCodeActionResolveResult, type WorkbenchLanguageServiceCodeActionsRequest, type WorkbenchLanguageServiceCodeActionsResult, type WorkbenchLanguageServiceCompletionResolveRequest, type WorkbenchLanguageServiceCompletionResolveResult, type WorkbenchLanguageServiceCompletionResult, type WorkbenchLanguageServiceDefinitionResult, type WorkbenchLanguageServiceDiagnosticsResult, type WorkbenchLanguageServiceDocumentHighlightsResult, type WorkbenchLanguageServiceDocumentSymbolsResult, type WorkbenchLanguageServiceExtensionRequest, type WorkbenchLanguageServiceExtensionResult, type WorkbenchLanguageServiceFileRenameEditsRequest, type WorkbenchLanguageServiceFileRenameEditsResult, type WorkbenchLanguageServiceFormatResult, type WorkbenchLanguageServiceHoverQueryResult, type WorkbenchLanguageServiceInlayHintsRequest, type WorkbenchLanguageServiceInlayHintsResult, type WorkbenchLanguageServiceOrganizeImportsResult, type WorkbenchLanguageServicePositionRequest, type WorkbenchLanguageServiceProjectDiagnosticsRequest, type WorkbenchLanguageServiceProjectDiagnosticsResult, type WorkbenchLanguageServiceReferencesResult, type WorkbenchLanguageServiceRenameRequest, type WorkbenchLanguageServiceRenameResult, type WorkbenchLanguageServiceRequest, type WorkbenchLanguageServiceSemanticTokensResult, type WorkbenchLanguageServiceSignatureHelpQueryResult } from '@shared/contracts/workbench'
+import {
+  type WorkbenchInlineCompletionRequest,
+  type WorkbenchInlineCompletionResult,
+  type WorkbenchLanguageServiceCallHierarchyRequest,
+  type WorkbenchLanguageServiceCallHierarchyResult,
+  type WorkbenchLanguageServiceCodeActionResolveRequest,
+  type WorkbenchLanguageServiceCodeActionResolveResult,
+  type WorkbenchLanguageServiceCodeActionsRequest,
+  type WorkbenchLanguageServiceCodeActionsResult,
+  type WorkbenchLanguageServiceCompletionResolveRequest,
+  type WorkbenchLanguageServiceCompletionResolveResult,
+  type WorkbenchLanguageServiceCompletionResult,
+  type WorkbenchLanguageServiceDefinitionResult,
+  type WorkbenchLanguageServiceDiagnosticsResult,
+  type WorkbenchLanguageServiceDocumentHighlightsResult,
+  type WorkbenchLanguageServiceDocumentSymbolsResult,
+  type WorkbenchLanguageServiceExtensionRequest,
+  type WorkbenchLanguageServiceExtensionResult,
+  type WorkbenchLanguageServiceFileRenameEditsRequest,
+  type WorkbenchLanguageServiceFileRenameEditsResult,
+  type WorkbenchLanguageServiceFormatResult,
+  type WorkbenchLanguageServiceHoverQueryResult,
+  type WorkbenchLanguageServiceInlayHintsRequest,
+  type WorkbenchLanguageServiceInlayHintsResult,
+  type WorkbenchLanguageServiceOrganizeImportsResult,
+  type WorkbenchLanguageServicePositionRequest,
+  type WorkbenchLanguageServiceProjectDiagnosticsRequest,
+  type WorkbenchLanguageServiceProjectDiagnosticsResult,
+  type WorkbenchLanguageServiceReferencesResult,
+  type WorkbenchLanguageServiceRenameRequest,
+  type WorkbenchLanguageServiceRenameResult,
+  type WorkbenchLanguageServiceRequest,
+  type WorkbenchLanguageServiceSemanticTokensResult,
+  type WorkbenchLanguageServiceSignatureHelpQueryResult,
+} from '@shared/contracts/workbench'
 
 import type { WorkbenchFsCallResult } from './workbenchFs'
 

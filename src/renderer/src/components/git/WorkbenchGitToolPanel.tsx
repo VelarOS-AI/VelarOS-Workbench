@@ -28,25 +28,22 @@ import {
 import { getWorkbenchGitStashTitle } from '@renderer/models/git/workbenchGitStashModel'
 import { useStableWorkbenchMessageTranslate } from '@renderer/runtime/useStableWorkbenchMessaging'
 
-import { AppError } from '@velaros-ai/core'
-import { Result } from '@velaros-ai/core/result'
 import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
 import { Paragraph } from '@velaros-ai/ui/primitives/display/Paragraph'
 import { SearchField } from '@velaros-ai/ui/primitives/forms/SearchField'
+import { AppError } from '@velaros-ai/velaros/core'
+import { Result } from '@velaros-ai/velaros/core/result'
 
 import { type SystemWorkspaceGitSummary, type WorkspaceGitLogEntry } from '@shared/contracts/system'
-import { type WorkspaceGitStash, type WorkspaceGitStashAction } from '@shared/contracts/workspaceGit'
+import {
+  type WorkspaceGitStash,
+  type WorkspaceGitStashAction,
+} from '@shared/contracts/workspaceGit'
 
 import styles from '../../styles/workbenchPageStyles'
-import {
-  WorkbenchContextMenu,
-  type WorkbenchContextMenuItem,
-} from '../chrome/WorkbenchContextMenu'
+import { WorkbenchContextMenu, type WorkbenchContextMenuItem } from '../chrome/WorkbenchContextMenu'
 
-import {
-  WorkbenchGitDetailsPane,
-  type WorkbenchGitDetailsTarget,
-} from './WorkbenchGitDetailsPane'
+import { WorkbenchGitDetailsPane, type WorkbenchGitDetailsTarget } from './WorkbenchGitDetailsPane'
 import { WorkbenchGitLogList } from './WorkbenchGitLogList'
 import { WorkbenchGitOperationBanner } from './WorkbenchGitOperationBanner'
 import { WorkbenchGitRefsPane } from './WorkbenchGitRefsPane'
@@ -126,7 +123,12 @@ export function WorkbenchGitToolPanel({
   const revision = summary?.checkedAt ?? null
   const branches = useMemo(() => summary?.branches ?? [], [summary?.branches])
   const currentBranch = summary?.status?.branch ?? null
-  const log = useWorkbenchGitLog({ workspaceRoot, branch: logBranch, enabled: isRepository, revision })
+  const log = useWorkbenchGitLog({
+    workspaceRoot,
+    branch: logBranch,
+    enabled: isRepository,
+    revision,
+  })
   const stashList = useWorkbenchGitStashes({ workspaceRoot, enabled: isRepository, revision })
   const [contextMenu, setContextMenu] = useState<Nullable<GitContextMenuState>>(null)
   /** 进行到一半的合并、变基、拣选或撤销。 */
@@ -236,8 +238,7 @@ export function WorkbenchGitToolPanel({
       const appError = AppError.from(actionError)
       messageLatest.current.open({
         title: tLatest.current('workbench.gitStashActionFailedTitle'),
-        description:
-          appError.message.trim() || tLatest.current('workbench.gitStashFailedFallback'),
+        description: appError.message.trim() || tLatest.current('workbench.gitStashFailedFallback'),
         tone: appError.code === 'VALIDATION' ? 'warning' : 'error',
         showClose: true,
       })
@@ -305,7 +306,9 @@ export function WorkbenchGitToolPanel({
   if (!summary?.repository)
     return (
       <section className={styles.gitToolEmpty}>
-        <span>{isLoading ? t('workbench.gitLoading') : error || t('workbench.gitNoRepository')}</span>
+        <span>
+          {isLoading ? t('workbench.gitLoading') : error || t('workbench.gitNoRepository')}
+        </span>
         <Button size="sm" onClick={() => void onInitialize()}>
           {t('workbench.gitInitializeRepository')}
         </Button>
@@ -369,9 +372,12 @@ export function WorkbenchGitToolPanel({
                 </button>
                 <span className={styles.gitLogCount}>
                   {log.isLoadingMore && <SpinnerGapIcon size={11} className={styles.spinIcon} />}
-                  {t(log.hasMore ? 'workbench.gitLogResultCountMore' : 'workbench.gitLogResultCount', {
-                    count: filteredCommits.length,
-                  })}
+                  {t(
+                    log.hasMore ? 'workbench.gitLogResultCountMore' : 'workbench.gitLogResultCount',
+                    {
+                      count: filteredCommits.length,
+                    }
+                  )}
                 </span>
               </div>
               {log.isLoading ? (

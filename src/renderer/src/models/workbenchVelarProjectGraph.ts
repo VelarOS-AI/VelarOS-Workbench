@@ -1,4 +1,4 @@
-import { mapDefined } from '@velaros-ai/core'
+import { mapDefined } from '@velaros-ai/velaros/core'
 
 import type { VelarLogicGraphSnapshot } from '@shared/contributions/velar/logicGraph'
 
@@ -10,7 +10,11 @@ export interface WorkbenchVelarProjectSnapshot {
 export type WorkbenchVelarProjectSnapshotIndex = ReadonlyMap<string, VelarLogicGraphSnapshot>
 
 function normalizePath(path: string): string {
-  return path.trim().replace(/\\/g, '/').replace(/^\.\//, '').replace(/^\/+|\/+$/g, '')
+  return path
+    .trim()
+    .replace(/\\/g, '/')
+    .replace(/^\.\//, '')
+    .replace(/^\/+|\/+$/g, '')
 }
 
 function pathContains(parent: string, child: string): boolean {
@@ -69,10 +73,12 @@ export function workbenchVelarProjectRootForPath(
   projectRoots: readonly string[]
 ): Nullable<string> {
   const normalized = normalizePath(path)
-  return [...projectRoots]
-    .map(normalizePath)
-    .filter((root) => pathContains(root, normalized))
-    .sort((left, right) => right.length - left.length)[0] ?? null
+  return (
+    [...projectRoots]
+      .map(normalizePath)
+      .filter((root) => pathContains(root, normalized))
+      .sort((left, right) => right.length - left.length)[0] ?? null
+  )
 }
 
 export function selectWorkbenchVelarProjectRoots(
@@ -125,11 +131,16 @@ export function mergeWorkbenchVelarProjectSnapshots(
     protocolVersion: 1,
     mode: 'snapshot',
     rootUri: first.rootUri,
-    revision: projects.map(({ projectRoot, snapshot }) => `${projectRoot}:${snapshot.revision}`).join('|'),
+    revision: projects
+      .map(({ projectRoot, snapshot }) => `${projectRoot}:${snapshot.revision}`)
+      .join('|'),
     nodes,
     edges,
     coverage: {
-      modulesTotal: snapshots.reduce((total, snapshot) => total + snapshot.coverage.modulesTotal, 0),
+      modulesTotal: snapshots.reduce(
+        (total, snapshot) => total + snapshot.coverage.modulesTotal,
+        0
+      ),
       modulesIncluded: snapshots.reduce(
         (total, snapshot) => total + snapshot.coverage.modulesIncluded,
         0
@@ -140,9 +151,7 @@ export function mergeWorkbenchVelarProjectSnapshots(
       )
         ? first.coverage.callRelations
         : 'mixed',
-      memberCallRelations: snapshots.every(
-        (snapshot) => snapshot.coverage.memberCallRelations
-      ),
+      memberCallRelations: snapshots.every((snapshot) => snapshot.coverage.memberCallRelations),
     },
     limitReached: snapshots.some((snapshot) => snapshot.limitReached),
     durationMs: snapshots.reduce((total, snapshot) => total + snapshot.durationMs, 0),

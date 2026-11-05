@@ -1,7 +1,7 @@
 import * as v8 from 'node:v8'
 import { parentPort, workerData } from 'node:worker_threads'
 
-import { AppError } from '@velaros-ai/core/error'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
 import { VelarWorkbenchLanguageService } from '@shared/contributions/velar/service'
 import { registerWorkbenchLanguageService } from '@shared/workbenchLanguageServices'
@@ -24,7 +24,10 @@ import {
   type WorkbenchLanguageServiceWorkerRequest,
 } from './LanguageServiceWorkerProtocol'
 import { WorkbenchLanguageServiceWorkerScheduler } from './LanguageServiceWorkerScheduler'
-import { configureTypeScriptCancellation, configureTypeScriptProjectPool } from './TypeScriptProjectHost'
+import {
+  configureTypeScriptCancellation,
+  configureTypeScriptProjectPool,
+} from './TypeScriptProjectHost'
 
 const port = (() => {
   if (!parentPort) throw new AppError('INVARIANT', workbenchMainText('language.workerNoPort'))
@@ -93,9 +96,10 @@ async function dispatch(
   }
 }
 
-const cancellation = workerData?.cancellation instanceof SharedArrayBuffer
-  ? new Int32Array(workerData.cancellation)
-  : undefined
+const cancellation =
+  workerData?.cancellation instanceof SharedArrayBuffer
+    ? new Int32Array(workerData.cancellation)
+    : undefined
 const scheduler = new WorkbenchLanguageServiceWorkerScheduler({
   dispatch,
   post: (message) => port.postMessage(message),
@@ -106,17 +110,20 @@ configureTypeScriptCancellation(() => scheduler.isRunningRequestCancelled())
 
 if (isWorkbenchAppLocale(workerData?.locale)) setWorkbenchMainLocale(workerData.locale)
 
-port.on('message', (message: WorkbenchLanguageServiceWorkerMessage | WorkbenchLanguageServiceWorkerLocale) => {
-  if (isWorkbenchLanguageServiceWorkerLocale(message)) {
-    if (isWorkbenchAppLocale(message.locale)) setWorkbenchMainLocale(message.locale)
-    return
+port.on(
+  'message',
+  (message: WorkbenchLanguageServiceWorkerMessage | WorkbenchLanguageServiceWorkerLocale) => {
+    if (isWorkbenchLanguageServiceWorkerLocale(message)) {
+      if (isWorkbenchAppLocale(message.locale)) setWorkbenchMainLocale(message.locale)
+      return
+    }
+    if (!isWorkbenchLanguageServiceWorkerControl(message)) {
+      lastRequestAt = Date.now()
+      idleTrimDone = 'none'
+    }
+    scheduler.receive(message)
   }
-  if (!isWorkbenchLanguageServiceWorkerControl(message)) {
-    lastRequestAt = Date.now()
-    idleTrimDone = 'none'
-  }
-  scheduler.receive(message)
-})
+)
 
 // ── 内存看守：逼近堆上限先自己减负，长时间空闲把大块缓存放掉；每次动作与定期心跳报给主进程记日志。
 const MemoryCheckIntervalMs = 15_000

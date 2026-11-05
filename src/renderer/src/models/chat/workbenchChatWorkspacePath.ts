@@ -1,4 +1,4 @@
-import { currentPlatform as systemPlatformCompatibility } from '@velaros-ai/core/platform'
+import { currentPlatform as systemPlatformCompatibility } from '@velaros-ai/velaros/core/platform'
 
 /** 回答里的路径 → 相对项目根的路径；项目根之外的绝对路径返回 null，项目根本身返回 `.`。 */
 export function resolveWorkbenchChatWorkspacePath(
@@ -26,10 +26,10 @@ export function resolveWorkbenchChatWorkspacePath(
 export function resolveWorkbenchChatAbsolutePath(path: string, projectRoot: string): string {
   const trimmedPath = path.trim()
   if (
-    !trimmedPath
-    || !projectRoot.trim()
-    || systemPlatformCompatibility.isAbsolutePathText(trimmedPath)
-    || /^~[\\/]/u.test(trimmedPath)
+    !trimmedPath ||
+    !projectRoot.trim() ||
+    systemPlatformCompatibility.isAbsolutePathText(trimmedPath) ||
+    /^~[\\/]/u.test(trimmedPath)
   )
     return trimmedPath
 
@@ -43,9 +43,9 @@ export function resolveWorkbenchChatAbsolutePath(path: string, projectRoot: stri
 export function formatWorkbenchChatPathForDisplay(path: string, projectRoot: string): string {
   const trimmedPath = path.trim()
   if (
-    !trimmedPath
-    || !projectRoot.trim()
-    || !systemPlatformCompatibility.isAbsolutePathText(trimmedPath)
+    !trimmedPath ||
+    !projectRoot.trim() ||
+    !systemPlatformCompatibility.isAbsolutePathText(trimmedPath)
   )
     return trimmedPath
 

@@ -1,13 +1,13 @@
-import { type MouseEvent,type MutableRefObject, useCallback, useEffect, useState,  } from 'react'
+import { type MouseEvent, type MutableRefObject, useCallback, useEffect, useState } from 'react'
 import {
   DEFAULT_TREE_WIDTH,
   type FileTreeNodeData,
   isUnresolvedTreeSymlink,
 } from '@renderer/models/files/fileTree.model'
-import { isWorkbenchTreeRoot,ROOT_PATH } from '@renderer/models/shared/workbenchUtils'
+import { isWorkbenchTreeRoot, ROOT_PATH } from '@renderer/models/shared/workbenchUtils'
 import type { NodeApi, TreeApi } from 'react-arborist'
 
-import { toNullable } from '@velaros-ai/core'
+import { toNullable } from '@velaros-ai/velaros/core'
 
 import { type WorkbenchDirectoryEntry } from '@shared/contracts/workbench'
 
@@ -95,10 +95,7 @@ export function useFileTreeActions({
   handleTreeActivate: (node: NodeApi<FileTreeNodeData>) => void
   handleTreeSelect: (nodes: Array<NodeApi<FileTreeNodeData>>) => void
   handleTreeToggle: (id: string) => void
-  handleTreeRename: (args: {
-    node: NodeApi<FileTreeNodeData>
-    name: string
-  }) => Promise<void>
+  handleTreeRename: (args: { node: NodeApi<FileTreeNodeData>; name: string }) => Promise<void>
   handleTreeDelete: (args: { nodes: Array<NodeApi<FileTreeNodeData>> }) => Promise<void>
   handleTreeMove: (args: {
     dragNodes: Array<NodeApi<FileTreeNodeData>>
@@ -118,8 +115,8 @@ export function useFileTreeActions({
   const onMoveEntriesLatest = useLatest(onMoveEntries)
 
   const setTreeRef = useCallback((api: LooseOptional<TreeApi<FileTreeNodeData>>): void => {
-    treeRef.current = (toNullable(api))
-    onTreeApiChangeLatest.current?.((toNullable(api)))
+    treeRef.current = toNullable(api)
+    onTreeApiChangeLatest.current?.(toNullable(api))
   }, [])
 
   const handleTreeContextMenuEntry = useMemoizedFn(
@@ -172,13 +169,7 @@ export function useFileTreeActions({
   })
 
   const handleTreeRename = useMemoizedFn(
-    async ({
-      node,
-      name,
-    }: {
-      node: NodeApi<FileTreeNodeData>
-      name: string
-    }): Promise<void> => {
+    async ({ node, name }: { node: NodeApi<FileTreeNodeData>; name: string }): Promise<void> => {
       await onRenameEntryLatest.current(node.data.entry, name)
     }
   )
@@ -201,7 +192,7 @@ export function useFileTreeActions({
     }): Promise<void> => {
       await onMoveEntriesLatest.current(
         dragNodes.map((dragNode) => dragNode.data.entry),
-        (toNullable(parentNode?.data.entry)),
+        toNullable(parentNode?.data.entry),
         index
       )
     }

@@ -1,12 +1,3 @@
-import {
-  isArray,
-  isBoolean,
-  isFiniteNumber,
-  isPlainObject,
-  isPresent,
-  isString,
-  isUndefined,
-} from '@velaros-ai/core'
 import type { ConversationWorkerThread } from '@velaros-ai/ui/conversation'
 import type {
   ChatMessage,
@@ -18,6 +9,15 @@ import type {
   ToolCallBlock,
   WidgetBlock,
 } from '@velaros-ai/ui/conversation/contracts'
+import {
+  isArray,
+  isBoolean,
+  isFiniteNumber,
+  isPlainObject,
+  isPresent,
+  isString,
+  isUndefined,
+} from '@velaros-ai/velaros/core'
 
 import {
   ConversationAgentNotice,

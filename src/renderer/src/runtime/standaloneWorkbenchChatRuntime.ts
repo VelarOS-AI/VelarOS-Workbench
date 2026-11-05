@@ -1,7 +1,10 @@
-import { optionalWhen, toOptional } from '@velaros-ai/core'
 import { type ConversationView } from '@velaros-ai/ui/conversation'
-import { isConversationTurnInputMessage, isRunGuidanceMessage } from '@velaros-ai/ui/conversation/contracts'
+import {
+  isConversationTurnInputMessage,
+  isRunGuidanceMessage,
+} from '@velaros-ai/ui/conversation/contracts'
 import { type ChatMessage } from '@velaros-ai/ui/conversation/contracts'
+import { optionalWhen, toOptional } from '@velaros-ai/velaros/core'
 
 import type { WorkbenchConversationState } from '@shared/workbenchConversation'
 import type { WorkbenchChatRunChangesSummary } from '@shared/workbenchGit'
@@ -296,7 +299,9 @@ function markStandaloneGuidanceApplied(
   messages: readonly ChatMessage[],
   inputId: string
 ): readonly ChatMessage[] {
-  const index = messages.findIndex((message) => message.id === inputId && isRunGuidanceMessage(message))
+  const index = messages.findIndex(
+    (message) => message.id === inputId && isRunGuidanceMessage(message)
+  )
   if (index < 0 || messages[index]!.guidanceStatus === 'applied') return messages
   return messages.map((message, position) =>
     position === index ? { ...message, guidanceStatus: 'applied' } : message
@@ -572,7 +577,9 @@ function readStandaloneContextUsageEstimate(
   )
     return null
   return {
-    percent, estimatedTokens, usableContextWindow,
+    percent,
+    estimatedTokens,
+    usableContextWindow,
     contextWindowEstimated: payload.contextWindowEstimated === true,
   }
 }

@@ -1,14 +1,11 @@
-import { isArray,Log } from '@velaros-ai/core'
+import { isArray, Log } from '@velaros-ai/velaros/core'
 import {
   isRecord,
   readNumberScalar as readNumber,
   readStringScalar as readString,
-} from '@velaros-ai/core/utils/unknownJsonRecord'
+} from '@velaros-ai/velaros/core/utils/unknownJsonRecord'
 
-import {
-  createLocalStorageJsonStore,
-  type StorageLike,
-} from '../../support/localStorageJsonStore'
+import { createLocalStorageJsonStore, type StorageLike } from '../../support/localStorageJsonStore'
 import {
   createWorkbenchEditorGroupsLayout,
   normalizeWorkbenchEditorGroupsLayout,
@@ -94,9 +91,7 @@ function normalizeCursorByPath(value: unknown): Record<string, PersistedWorkbenc
   return next
 }
 
-export function normalizeWorkbenchProjectSession(
-  value: unknown
-): PersistedWorkbenchProjectSession {
+export function normalizeWorkbenchProjectSession(value: unknown): PersistedWorkbenchProjectSession {
   if (!isRecord(value)) return EMPTY_SESSION
 
   const expandedPaths = normalizeStringList(value.expandedPaths, MAX_PERSISTED_EXPANDED_PATHS)
@@ -116,7 +111,10 @@ export function normalizeWorkbenchProjectSession(
 export function buildWorkbenchProjectSessionSnapshot(
   snapshot: WorkbenchProjectSessionSnapshot
 ): PersistedWorkbenchProjectSession {
-  const expandedPaths = normalizeStringList([...snapshot.expandedPaths], MAX_PERSISTED_EXPANDED_PATHS)
+  const expandedPaths = normalizeStringList(
+    [...snapshot.expandedPaths],
+    MAX_PERSISTED_EXPANDED_PATHS
+  )
 
   return normalizeWorkbenchProjectSession({
     version: 1,
@@ -144,14 +142,15 @@ function normalizeSessionMap(value: unknown): PersistedWorkbenchProjectSessionMa
   return next
 }
 
-const workbenchProjectSessionStore = createLocalStorageJsonStore<PersistedWorkbenchProjectSessionMap>({
-  key: STORAGE_KEY,
-  fallback: () => ({}),
-  normalize: normalizeSessionMap,
-  log,
-  readErrorMessage: '读取 workbench 项目会话失败，使用空会话',
-  writeErrorMessage: '写入 workbench 项目会话失败',
-})
+const workbenchProjectSessionStore =
+  createLocalStorageJsonStore<PersistedWorkbenchProjectSessionMap>({
+    key: STORAGE_KEY,
+    fallback: () => ({}),
+    normalize: normalizeSessionMap,
+    log,
+    readErrorMessage: '读取 workbench 项目会话失败，使用空会话',
+    writeErrorMessage: '写入 workbench 项目会话失败',
+  })
 
 export function readWorkbenchProjectSession(
   projectId: string,

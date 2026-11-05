@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { AppError, toOptional } from '@velaros-ai/core'
-import { Result } from '@velaros-ai/core/result'
 import { type AppLocale } from '@velaros-ai/ui/conversation/contracts'
+import { AppError, toOptional } from '@velaros-ai/velaros/core'
+import { Result } from '@velaros-ai/velaros/core/result'
 
 import { type WorkbenchHostRuntime } from '../host/WorkbenchHost'
 import { useWorkbenchHostRuntime } from '../host/WorkbenchHostProvider'
@@ -101,7 +101,11 @@ export function useWorkbenchFileHistory({
       if (!path) return ''
       if (mode === 'local') {
         const result = Result.unwrap(
-          await hostRuntime.kernel.project.readWorkbenchLocalHistorySnapshot({ projectRoot, path, id })
+          await hostRuntime.kernel.project.readWorkbenchLocalHistorySnapshot({
+            projectRoot,
+            path,
+            id,
+          })
         )
         return result.content
       }

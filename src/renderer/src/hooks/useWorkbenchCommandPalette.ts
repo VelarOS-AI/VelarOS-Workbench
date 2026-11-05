@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react'
 
-import { isEmpty, Log } from '@velaros-ai/core'
-import { Result } from '@velaros-ai/core/result'
+import { isEmpty, Log } from '@velaros-ai/velaros/core'
+import { Result } from '@velaros-ai/velaros/core/result'
 
 import {
   runWorkbenchDebugAction,
@@ -76,7 +76,7 @@ interface UseWorkbenchCommandPaletteOptions {
     | 'saveSelectedFile'
     | 'selectedFile'
     | 'selectedFilePath'
-      | 'toggleSelectedFileEditMode'
+    | 'toggleSelectedFileEditMode'
   >
   surface: WorkbenchSurfaceState
   /** 编辑区前面盖着别的（Git 对比、只读预览、调试页、结构图、AI 改动），不是当前文件的编辑器。 */
@@ -202,8 +202,8 @@ export function useWorkbenchCommandPalette({
             openTabs: workbench.openTabs,
             // 编辑器没报上来（刚挂上）时按正文识别，不退回语言服务自己的两格。
             format: toWorkbenchLanguageServiceEditFormat(
-              editorIndentation
-                ?? resolveWorkbenchIndentation({
+              editorIndentation ??
+                resolveWorkbenchIndentation({
                   path,
                   detected: detectWorkbenchIndentation(content),
                   editorConfig: null,

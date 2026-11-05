@@ -48,10 +48,10 @@ import type {
   WorkbenchOpenEditorTab,
 } from '@renderer/types/workbenchTypes'
 
-import { isPresent } from '@velaros-ai/core'
 import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 import { Text } from '@velaros-ai/ui/primitives/display/Text'
+import { isPresent } from '@velaros-ai/velaros/core'
 
 import { type WorkbenchReadFileResult } from '@shared/contracts/workbench'
 
@@ -235,10 +235,7 @@ export function EditorTabBar({
   const hasActiveAuxiliaryTab = auxiliaryTabItems.some((tab) => tab.active)
   const tabOverflowKey = [
     openTabs
-      .map(
-        (tab) =>
-          `${tab.path}:${isDirtyTab(tab)}:${tab.externalChange?.status ?? ''}`
-      )
+      .map((tab) => `${tab.path}:${isDirtyTab(tab)}:${tab.externalChange?.status ?? ''}`)
       .join('\u001f'),
     // 斜体的名字宽一点、窄一点：预览标签换了要重新量。
     previewTabPath ?? '',
@@ -290,7 +287,9 @@ export function EditorTabBar({
   }
 
   /** 正在进行的这次拖放拖的是哪个编辑器标签；拖的是别的东西（文件树里的文件、文字）为 null。 */
-  function readTabDrag(event: DragEvent<HTMLElement>): ReturnType<typeof readWorkbenchEditorTabDrag> {
+  function readTabDrag(
+    event: DragEvent<HTMLElement>
+  ): ReturnType<typeof readWorkbenchEditorTabDrag> {
     return readWorkbenchEditorTabDrag(event.dataTransfer.types)
   }
 
@@ -635,35 +634,35 @@ export function EditorTabBar({
           ))}
         </div>
         <div className={styles.editorTabActions}>
-          {!!selectedFileEditMode
-            && !!onToggleSelectedFileEditMode
-            && !selectedFile?.imagePreview
-            && !selectedFile?.truncated
-            && !selectedFile?.textIssue && (
-            <IconButton
-              size="icon-sm"
-              className={styles.editorTabActionButton}
-              title={
-                selectedFileEditMode === 'read-only'
-                  ? t('workbench.editorSwitchToEditMode')
-                  : t('workbench.editorSwitchToReadOnlyMode')
-              }
-              label={
-                selectedFileEditMode === 'read-only'
-                  ? t('workbench.editorSwitchToEditMode')
-                  : t('workbench.editorSwitchToReadOnlyMode')
-              }
-              aria-pressed={selectedFileEditMode === 'read-only'}
-              data-edit-mode={selectedFileEditMode}
-              onClick={onToggleSelectedFileEditMode}
-            >
-              {selectedFileEditMode === 'read-only' ? (
-                <LockSimpleIcon size={15} />
-              ) : (
-                <PencilSimpleIcon size={15} />
-              )}
-            </IconButton>
-          )}
+          {!!selectedFileEditMode &&
+            !!onToggleSelectedFileEditMode &&
+            !selectedFile?.imagePreview &&
+            !selectedFile?.truncated &&
+            !selectedFile?.textIssue && (
+              <IconButton
+                size="icon-sm"
+                className={styles.editorTabActionButton}
+                title={
+                  selectedFileEditMode === 'read-only'
+                    ? t('workbench.editorSwitchToEditMode')
+                    : t('workbench.editorSwitchToReadOnlyMode')
+                }
+                label={
+                  selectedFileEditMode === 'read-only'
+                    ? t('workbench.editorSwitchToEditMode')
+                    : t('workbench.editorSwitchToReadOnlyMode')
+                }
+                aria-pressed={selectedFileEditMode === 'read-only'}
+                data-edit-mode={selectedFileEditMode}
+                onClick={onToggleSelectedFileEditMode}
+              >
+                {selectedFileEditMode === 'read-only' ? (
+                  <LockSimpleIcon size={15} />
+                ) : (
+                  <PencilSimpleIcon size={15} />
+                )}
+              </IconButton>
+            )}
           {markdownPreviewAvailable && (
             <IconButton
               size="icon-sm"
@@ -974,7 +973,9 @@ export function EditorTabBar({
                 variant="ghost"
                 size="block"
                 disabled={openTabs.length < 2}
-                onClick={() => onRunTabContextAction(() => onMoveTabToGroup(tabContextMenu.path, 1))}
+                onClick={() =>
+                  onRunTabContextAction(() => onMoveTabToGroup(tabContextMenu.path, 1))
+                }
               >
                 <SquareSplitHorizontalIcon size={14} />
                 <Text truncate>{t('workbench.splitEditorTabRight')}</Text>

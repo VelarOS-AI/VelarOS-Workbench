@@ -1,8 +1,11 @@
 import { applyPatch, parsePatch, reversePatch, structuredPatch } from 'diff'
 
-import { isEmpty,isString, Log } from '@velaros-ai/core'
+import { isEmpty, isString, Log } from '@velaros-ai/velaros/core'
 
-import { type SystemWorkspaceFilesChangedEvent, type WorkspaceGitFileStatusEntry } from '@shared/contracts/system'
+import {
+  type SystemWorkspaceFilesChangedEvent,
+  type WorkspaceGitFileStatusEntry,
+} from '@shared/contracts/system'
 import type { WorkbenchGitFilePatch, WorkbenchGitPatchHunk } from '@shared/workbenchGitPatch'
 
 const log = Log.tag('workbench-git-diff-model')
@@ -236,8 +239,7 @@ function buildFullFilePatchRows(
       const kind = patchLineKind(line[0])
       const text = patchLineText(line, kind === 'deletion' ? cursor.oldLine : cursor.newLine)
       // 全文那一侧有的行（上下文，加上删掉的或新增的那些）要跟全文对得上。
-      const onContentSide =
-        kind === 'context' || (kind === 'deletion') === (content.side === 'old')
+      const onContentSide = kind === 'context' || (kind === 'deletion') === (content.side === 'old')
       if (onContentSide && fileLines[sideLine() - 1] !== text) return null
       cursor.push(kind, text, hunkIndex)
     }

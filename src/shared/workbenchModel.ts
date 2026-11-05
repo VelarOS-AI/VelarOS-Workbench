@@ -1,7 +1,7 @@
 import type {
   ListProviderModelsRequest,
   ProviderModelCatalog,
-} from '@velaros-ai/model/contracts'
+} from '@velaros-ai/velaros/model/contracts'
 
 export const WorkbenchModelChannels = {
   listProviderModels: 'workbench-app:model:list-provider-models',
@@ -57,9 +57,7 @@ export interface WorkbenchModelApiKeyUpdate extends WorkbenchModelApiKeyRequest 
 }
 
 export interface WorkbenchModelBridge {
-  listProviderModels: (
-    request: WorkbenchListProviderModelsRequest
-  ) => Promise<ProviderModelCatalog>
+  listProviderModels: (request: WorkbenchListProviderModelsRequest) => Promise<ProviderModelCatalog>
   listManagedProviders: () => Promise<WorkbenchManagedModelAccessSnapshot>
   getApiKey: (request: WorkbenchModelApiKeyRequest) => Promise<string>
   setApiKey: (request: WorkbenchModelApiKeyUpdate) => Promise<void>

@@ -1,15 +1,11 @@
-import { isNumber, optionalWhenLazy } from '@velaros-ai/core'
+import { isNumber, optionalWhenLazy } from '@velaros-ai/velaros/core'
 
 import type { WorkbenchProjectContextIndex } from '../project/workbenchProjectContextIndex'
 
 import type { WorkbenchEditorTextEdit } from './workbenchEditorModel'
 
 export type WorkbenchEditorSuggestionKind =
-  | 'file'
-  | 'keyword'
-  | 'project-symbol'
-  | 'property'
-  | 'symbol'
+  'file' | 'keyword' | 'project-symbol' | 'property' | 'symbol'
 
 export interface WorkbenchEditorSuggestionRequest {
   path: Nullable<string>
@@ -136,7 +132,8 @@ function getPrefixRange(content: string, selectionStart: number, selectionEnd: n
   const start = clamp(Math.min(selectionStart, selectionEnd), content)
   const end = clamp(Math.max(selectionStart, selectionEnd), content)
 
-  if (start !== end) return {
+  if (start !== end)
+    return {
       replaceStart: start,
       replaceEnd: end,
       prefix: content.slice(start, end),
@@ -154,7 +151,8 @@ function getPrefixRange(content: string, selectionStart: number, selectionEnd: n
 }
 
 function normalizeLanguage(language: string): string {
-  if (language === 'TSX' || language === 'JSX') return language === 'TSX' ? 'TypeScript' : 'JavaScript'
+  if (language === 'TSX' || language === 'JSX')
+    return language === 'TSX' ? 'TypeScript' : 'JavaScript'
 
   return language
 }
@@ -175,9 +173,11 @@ function scoreCandidate(candidate: CandidateSuggestion, prefix: string): number 
 
   if (candidate.label.startsWith(prefix)) return 1000 + candidate.sourceWeight + candidate.count
 
-  if (candidate.label.toLowerCase().startsWith(prefix.toLowerCase())) return 700 + candidate.sourceWeight + candidate.count
+  if (candidate.label.toLowerCase().startsWith(prefix.toLowerCase()))
+    return 700 + candidate.sourceWeight + candidate.count
 
-  if (searchableText.toLowerCase().includes(prefix.toLowerCase())) return 300 + candidate.sourceWeight + candidate.count
+  if (searchableText.toLowerCase().includes(prefix.toLowerCase()))
+    return 300 + candidate.sourceWeight + candidate.count
 
   return -1
 }

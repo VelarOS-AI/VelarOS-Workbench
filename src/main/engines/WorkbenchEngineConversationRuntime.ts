@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto'
 import { resolve } from 'node:path'
 
-import { Log } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
 import type { InteractionAnswer } from '@velaros-ai/ui/conversation/contracts'
+import { Log } from '@velaros-ai/velaros/core'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
 import type {
   WorkbenchAgentEngineId,
@@ -70,7 +70,8 @@ export class WorkbenchEngineConversationRuntime {
   ): { accepted: Promise<void>; completed: Promise<void> } {
     const selection = request.engine
     const engine = selection && this.engines.get(selection.id)
-    if (!selection || !engine) throw new AppError('VALIDATION', workbenchMainText('engines.unknownEngine'))
+    if (!selection || !engine)
+      throw new AppError('VALIDATION', workbenchMainText('engines.unknownEngine'))
     const key = runKey(request)
     if (this.closing) throw new AppError('VALIDATION', workbenchMainText('conversation.closing'))
     if (this.active.has(key))
@@ -141,7 +142,8 @@ export class WorkbenchEngineConversationRuntime {
     const runs = [...this.active.entries()]
       .filter(([key]) => key.startsWith(prefix))
       .map(([, run]) => run)
-    for (const run of runs) run.controller.abort(new AppError('CANCELLED', workbenchMainText('conversation.runStopped')))
+    for (const run of runs)
+      run.controller.abort(new AppError('CANCELLED', workbenchMainText('conversation.runStopped')))
     await Promise.allSettled(runs.map((run) => run.completed))
   }
 
@@ -162,7 +164,10 @@ export class WorkbenchEngineConversationRuntime {
   public close(): Promise<void> {
     this.closing ??= (async () => {
       const runs = [...this.active.values()]
-      for (const run of runs) run.controller.abort(new AppError('CANCELLED', workbenchMainText('conversation.runStopped')))
+      for (const run of runs)
+        run.controller.abort(
+          new AppError('CANCELLED', workbenchMainText('conversation.runStopped'))
+        )
       await Promise.allSettled(runs.map((run) => run.completed))
       await Promise.allSettled([...this.engines.values()].map((engine) => engine.close()))
     })()

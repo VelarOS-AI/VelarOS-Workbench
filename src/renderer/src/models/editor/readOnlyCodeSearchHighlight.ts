@@ -2,7 +2,7 @@ import { SearchCursor } from '@codemirror/search'
 import { type EditorState, type Extension, RangeSetBuilder, StateField } from '@codemirror/state'
 import { Decoration, type DecorationSet, EditorView } from '@codemirror/view'
 
-import { isEmpty } from '@velaros-ai/core'
+import { isEmpty } from '@velaros-ai/velaros/core'
 
 const searchMatchMark = Decoration.mark({ class: 'cm-workbenchHistorySearchMatch' })
 

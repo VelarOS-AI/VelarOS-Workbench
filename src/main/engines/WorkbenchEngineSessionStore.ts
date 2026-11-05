@@ -1,8 +1,8 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 
-import { isFiniteNumber, isNonBlankString, isPlainObject, Log } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
+import { isFiniteNumber, isNonBlankString, isPlainObject, Log } from '@velaros-ai/velaros/core'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
 import {
   type WorkbenchAgentEngineId,

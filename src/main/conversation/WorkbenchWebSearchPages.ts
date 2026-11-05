@@ -6,9 +6,9 @@ import {
   type WebContents,
 } from 'electron'
 
-import { numberOrNull } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
-import { TimerScope } from '@velaros-ai/core/utils/TimerScope'
+import { numberOrNull } from '@velaros-ai/velaros/core'
+import { AppError } from '@velaros-ai/velaros/core/error'
+import { TimerScope } from '@velaros-ai/velaros/core/utils/TimerScope'
 import type { WebPage, WebSpacePort } from '@velaros-ai/velaros/web'
 
 import { WorkbenchWebSearchPartition } from '../../shared/workbenchBrowser'
@@ -107,7 +107,8 @@ export class WorkbenchWebSearchPages implements Pick<WebSpacePort, 'openPage' | 
     window.on('closed', close)
     return {
       load: (url, signal) => loadPage(contents, url, signal),
-      evaluate: <T>(expression: string) => contents.executeJavaScript(expression, true) as Promise<T>,
+      evaluate: <T>(expression: string) =>
+        contents.executeJavaScript(expression, true) as Promise<T>,
       url: () => (contents.isDestroyed() ? '' : contents.getURL()),
       close,
     }

@@ -6,10 +6,13 @@ import {
   isSameWorkbenchGitLogHead,
 } from '@renderer/models/git/changesPanel.model'
 
-import { AppError } from '@velaros-ai/core/error'
-import { Result } from '@velaros-ai/core/result'
+import { AppError } from '@velaros-ai/velaros/core/error'
+import { Result } from '@velaros-ai/velaros/core/result'
 
-import { type SystemWorkspaceGitLogResult, type WorkspaceGitLogEntry } from '@shared/contracts/system'
+import {
+  type SystemWorkspaceGitLogResult,
+  type WorkspaceGitLogEntry,
+} from '@shared/contracts/system'
 
 /** 提交图一页读这么多个提交；滚到底再读下一页。 */
 export const WorkbenchGitLogPageSize = 200
@@ -90,9 +93,16 @@ export function useWorkbenchGitLog({
       const firstPage = await read(WorkbenchGitLogPageSize)
       if (!active) return
       const current = stateRef.current?.key === key ? stateRef.current : null
-      if (current && !current.error && isSameWorkbenchGitLogHead(current.commits, firstPage.commits)) {
+      if (
+        current &&
+        !current.error &&
+        isSameWorkbenchGitLogHead(current.commits, firstPage.commits)
+      ) {
         // 已经读到的不满一页时，后面还有没有以这次为准（可能刚好多出来了）。
-        if (current.commits.length <= firstPage.commits.length && current.hasMore !== firstPage.hasMore)
+        if (
+          current.commits.length <= firstPage.commits.length &&
+          current.hasMore !== firstPage.hasMore
+        )
           commit({ ...current, hasMore: firstPage.hasMore })
         return
       }

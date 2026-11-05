@@ -1,0 +1,8 @@
+{
+  "extends": "./base.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "../.velaros/workspace/typecheck/web.tsbuildinfo"
+  },
+  "files": ["../src/shared/velaros-globals.d.ts", "../src/renderer/src/types/tinykeys.d.ts"],
+  "include": ["../src/renderer/**/*.ts", "../src/renderer/**/*.tsx", "../src/shared/**/*.ts"]
+}

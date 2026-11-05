@@ -1,7 +1,13 @@
-import { AppError } from '@velaros-ai/core/error'
-import type { Result } from '@velaros-ai/core/result'
+import { AppError } from '@velaros-ai/velaros/core/error'
+import type { Result } from '@velaros-ai/velaros/core/result'
 
-import { type WorkbenchDirectoryEntry, type WorkbenchLanguageServiceFileEdit, type WorkbenchLanguageServiceFileRename, type WorkbenchLanguageServiceFileRenameEditsRequest, type WorkbenchLanguageServiceFileRenameEditsResult } from '@shared/contracts/workbench'
+import {
+  type WorkbenchDirectoryEntry,
+  type WorkbenchLanguageServiceFileEdit,
+  type WorkbenchLanguageServiceFileRename,
+  type WorkbenchLanguageServiceFileRenameEditsRequest,
+  type WorkbenchLanguageServiceFileRenameEditsResult,
+} from '@shared/contracts/workbench'
 
 import type { WorkbenchOpenEditorTab } from '../../types/workbenchTypes'
 import { isSameOrChildPath } from '../shared/workbenchUtils'
@@ -20,8 +26,7 @@ export interface WorkbenchEntryMove {
 
 /** 更新 import 的结果：改了几个文件、哪些没改成；或者语言服务没答上来（`message` 是它给的原因，超时没有）。 */
 export type WorkbenchImportUpdateOutcome =
-  | ({ kind: 'applied' } & WorkbenchLanguageServiceEditOutcome)
-  | { kind: 'failed'; message?: string }
+  ({ kind: 'applied' } & WorkbenchLanguageServiceEditOutcome) | { kind: 'failed'; message?: string }
 
 export interface WorkbenchImportUpdatePorts {
   /** 此刻打开的项目；没有为 null。 */
@@ -32,7 +37,9 @@ export interface WorkbenchImportUpdatePorts {
     request: WorkbenchLanguageServiceFileRenameEditsRequest
   ): Promise<Result<WorkbenchLanguageServiceFileRenameEditsResult>>
   /** 套上改动：开着的文件改编辑缓冲，没开着的写盘。 */
-  applyEdits(changes: readonly WorkbenchLanguageServiceFileEdit[]): Promise<WorkbenchLanguageServiceEditOutcome>
+  applyEdits(
+    changes: readonly WorkbenchLanguageServiceFileEdit[]
+  ): Promise<WorkbenchLanguageServiceEditOutcome>
   /** 有话要说时才调：改了文件、有文件没改成，或者没答上来。没有 import 要改就不调。 */
   report(outcome: WorkbenchImportUpdateOutcome): void
   /** 等语言服务多久；过了就当它没答上来。 */
@@ -60,14 +67,17 @@ export function selectWorkbenchImportUpdateRenames(
   return moves
     .filter(
       (move) =>
-        move.previousPath !== move.path
-        && (move.type === 'directory' || usesWorkbenchTypeScriptLanguageService(move.path))
+        move.previousPath !== move.path &&
+        (move.type === 'directory' || usesWorkbenchTypeScriptLanguageService(move.path))
     )
     .map(({ previousPath, path }) => ({ previousPath, path }))
 }
 
 /** 一个路径经过这些改名之后在哪。 */
-function followWorkbenchRenames(path: string, renames: readonly WorkbenchLanguageServiceFileRename[]): string {
+function followWorkbenchRenames(
+  path: string,
+  renames: readonly WorkbenchLanguageServiceFileRename[]
+): string {
   let current = path
   for (const rename of renames)
     if (isSameOrChildPath(current, rename.previousPath))
@@ -88,7 +98,10 @@ export function composeWorkbenchImportUpdateRenames(
   const composed: WorkbenchLanguageServiceFileRename[] = []
   const seen = new Set<string>()
   for (const rename of [
-    ...pending.map(({ previousPath, path }) => ({ previousPath, path: followWorkbenchRenames(path, next) })),
+    ...pending.map(({ previousPath, path }) => ({
+      previousPath,
+      path: followWorkbenchRenames(path, next),
+    })),
     ...next,
   ]) {
     const key = `${rename.previousPath}\u0000${rename.path}`
@@ -127,8 +140,11 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | typ
  *   按新正文重算；连着几轮都赶不上的文件不改，报给用户。
  * - 中途换了项目，这一轮作废。
  */
-export function createWorkbenchImportUpdater(ports: WorkbenchImportUpdatePorts): WorkbenchImportUpdater {
-  let pending: Nullable<{ projectRoot: string; renames: WorkbenchLanguageServiceFileRename[] }> = null
+export function createWorkbenchImportUpdater(
+  ports: WorkbenchImportUpdatePorts
+): WorkbenchImportUpdater {
+  let pending: Nullable<{ projectRoot: string; renames: WorkbenchLanguageServiceFileRename[] }> =
+    null
   let generation = 0
   let tail: Promise<void> = Promise.resolve()
 
@@ -172,7 +188,10 @@ export function createWorkbenchImportUpdater(ports: WorkbenchImportUpdatePorts):
       }
       if (result === TimedOut || !result.ok) {
         finish()
-        ports.report({ kind: 'failed', message: result === TimedOut ? undefined : result.error.message })
+        ports.report({
+          kind: 'failed',
+          message: result === TimedOut ? undefined : result.error.message,
+        })
         return
       }
 

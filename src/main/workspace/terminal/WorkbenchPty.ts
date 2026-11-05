@@ -8,7 +8,7 @@
  */
 import { createRequire } from 'node:module'
 
-import { AppError } from '@velaros-ai/core/error'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
 import { workbenchMainText } from '../../i18n/workbenchMainMessages'
 
@@ -47,7 +47,7 @@ export interface WorkbenchPtySpawnOptions {
 /** 伪终端上的整棵进程树：列出来、发信号（真实实现走系统进程表）。 */
 export interface WorkbenchProcessTreeOps {
   list(rootPid: number): Promise<number[]>
-  signal(pids: readonly number[], signal: NodeJS.Signals): void
+  signal(pids: readonly number[], signal: NodeJS.Signals): void | Promise<void>
 }
 
 export interface WorkbenchPtyFactory {

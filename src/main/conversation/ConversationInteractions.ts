@@ -1,4 +1,3 @@
-import { isArray, isNonBlankString, isPlainObject, isString } from '@velaros-ai/core'
 import type {
   InteractionAnswer,
   InteractionField as InteractionFieldView,
@@ -10,6 +9,7 @@ import {
   type InteractionOption,
   interactionQuestions,
 } from '@velaros-ai/velaros/act/agents'
+import { isArray, isNonBlankString, isPlainObject, isString } from '@velaros-ai/velaros/core'
 
 import {
   ConversationInteractionLimits,

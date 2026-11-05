@@ -3,8 +3,6 @@ import { join, resolve } from 'node:path'
 
 import type { WebContents } from 'electron'
 
-import { isEmpty, Log, toNullable } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
 import type {
   BrowserSpacePort,
   ElectronBrowserRuntimeApi,
@@ -15,6 +13,8 @@ import type {
   BrowserSiteContext,
 } from '@velaros-ai/velaros/browser/contracts'
 import { browserAddress } from '@velaros-ai/velaros/browser/renderer'
+import { isEmpty, Log, toNullable } from '@velaros-ai/velaros/core'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
 import {
   normalizeWorkbenchBrowserPageUrl,
@@ -87,7 +87,10 @@ export class WorkbenchBrowserService {
       provideBackgroundPage: (runtimeId) => {
         const site = this.sites.get(runtimeId)
         if (!site || !this.running.has(runtimeId)) return Promise.resolve(null)
-        return Promise.resolve({ webContents: options.backgroundPages.open(runtimeId), url: site.url })
+        return Promise.resolve({
+          webContents: options.backgroundPages.open(runtimeId),
+          url: site.url,
+        })
       },
     })
   }
@@ -98,7 +101,11 @@ export class WorkbenchBrowserService {
   }
 
   /** 编辑区把这个窗口里的 webview 交给运行时接管；接管后后台页面就关掉。 */
-  public async attachPage(ref: WorkbenchBrowserRef, webContentsId: number, owner: WebContents): Promise<void> {
+  public async attachPage(
+    ref: WorkbenchBrowserRef,
+    webContentsId: number,
+    owner: WebContents
+  ): Promise<void> {
     const guest = this.options.resolveGuest(webContentsId)
     // 只接这个窗口自己的 webview：别的窗口、别的页面的 WebContents 不能被拿来当 Agent 的页面。
     if (!guest || guest.isDestroyed() || guest.hostWebContents?.id !== owner.id)
@@ -212,7 +219,12 @@ export class WorkbenchBrowserService {
         withSite((site) => runtime.performTargetAction(runtimeId, site, options, signal)),
       navigatePage: (options) =>
         withSite((site) =>
-          runtime.navigatePage(runtimeId, site, navigationOptions(options.action, options.url), signal)
+          runtime.navigatePage(
+            runtimeId,
+            site,
+            navigationOptions(options.action, options.url),
+            signal
+          )
         ),
       getPageDiagnostics: (options) =>
         withSite((site) => runtime.getPageDiagnostics(runtimeId, site, options, signal)),
@@ -279,7 +291,9 @@ export class WorkbenchBrowserService {
       getPageState: () => withSite((site) => runtime.getPageState(runtimeId, site, signal)),
       // 用户脚本会在用户以后打开的页面里长期跑：Workbench 没有管理它们的界面，也就不让模型建。
       manageUserScripts: () =>
-        Promise.reject(new AppError('UNAVAILABLE', workbenchMainText('browser.userScriptsUnsupported'))),
+        Promise.reject(
+          new AppError('UNAVAILABLE', workbenchMainText('browser.userScriptsUnsupported'))
+        ),
     }
   }
 
@@ -289,13 +303,17 @@ export class WorkbenchBrowserService {
       .update(`${resolve(ref.projectRoot)}\0${ref.sessionId}`)
       .digest('hex')
       .slice(0, 32)}`
-    if (!this.refs.has(id)) this.refs.set(id, { projectRoot: ref.projectRoot, sessionId: ref.sessionId })
+    if (!this.refs.has(id))
+      this.refs.set(id, { projectRoot: ref.projectRoot, sessionId: ref.sessionId })
     return id
   }
 
   /** 记下会话的站点：地址跟着页面，工作区根按站点分格（同站点内导航不换根）。 */
   private recordSite(runtimeId: string, url: string): BrowserSiteContext {
-    const site = { url, workspaceRoot: join(this.options.siteWorkspaceRoot, siteDirectoryName(url)) }
+    const site = {
+      url,
+      workspaceRoot: join(this.options.siteWorkspaceRoot, siteDirectoryName(url)),
+    }
     this.sites.set(runtimeId, site)
     this.notify(runtimeId)
     return site
@@ -332,7 +350,11 @@ function requireWebAddress(input: string): string {
     browserAddress.resolveSearchOrNavigationInput(input) ?? '',
     { allowAboutBlank: false }
   )
-  if (!address) throw new AppError('VALIDATION', workbenchMainText('browser.unsupportedAddress', { address: input }))
+  if (!address)
+    throw new AppError(
+      'VALIDATION',
+      workbenchMainText('browser.unsupportedAddress', { address: input })
+    )
   return address
 }
 
@@ -346,7 +368,11 @@ function navigationOptions(
 /** 站点工作区的目录名：按 host（带端口）分格，可读名加摘要。 */
 function siteDirectoryName(url: string): string {
   const host = new URL(url).host.toLowerCase()
-  const readable = host.replace(/[^a-z0-9]+/gu, '-').replace(/^-+|-+$/gu, '').slice(0, 48) || 'site'
+  const readable =
+    host
+      .replace(/[^a-z0-9]+/gu, '-')
+      .replace(/^-+|-+$/gu, '')
+      .slice(0, 48) || 'site'
   return `${readable}-${createHash('sha1').update(host).digest('hex').slice(0, 10)}`
 }
 

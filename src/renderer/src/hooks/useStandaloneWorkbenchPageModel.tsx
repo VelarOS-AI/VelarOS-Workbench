@@ -11,7 +11,13 @@ import {
   useState,
   useSyncExternalStore,
 } from 'react'
-import { useWorkbenchChatProjectRuntime, type WorkbenchBrowserElementSelectionDelivery, type WorkbenchChatFileChangeEntry, type WorkbenchChatFileReferenceDelivery, type WorkbenchChatRunChangesTarget } from '@renderer/composition/WorkbenchChatProvider'
+import {
+  useWorkbenchChatProjectRuntime,
+  type WorkbenchBrowserElementSelectionDelivery,
+  type WorkbenchChatFileChangeEntry,
+  type WorkbenchChatFileReferenceDelivery,
+  type WorkbenchChatRunChangesTarget,
+} from '@renderer/composition/WorkbenchChatProvider'
 import { useWorkbenchProductRuntime } from '@renderer/composition/WorkbenchProductRuntimeProvider'
 import { useWorkbenchAiChanges } from '@renderer/hooks/useWorkbenchAiChanges'
 import { useWorkbenchCommandPalette } from '@renderer/hooks/useWorkbenchCommandPalette'
@@ -60,14 +66,17 @@ import {
 } from '@renderer/models/workbenchPreferences'
 import type { WorkbenchLightEditorTab } from '@renderer/types/workbenchTypes'
 
-import { isEmpty, isObject, isString, isTrue, Log, toNullable } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
-import { currentPlatform as systemPlatformCompatibility } from '@velaros-ai/core/platform'
-import { Result } from '@velaros-ai/core/result'
 import { type BrowserElementSelection } from '@velaros-ai/velaros/browser/contracts'
+import { isEmpty, isObject, isString, isTrue, Log, toNullable } from '@velaros-ai/velaros/core'
+import { AppError } from '@velaros-ai/velaros/core/error'
+import { currentPlatform as systemPlatformCompatibility } from '@velaros-ai/velaros/core/platform'
+import { Result } from '@velaros-ai/velaros/core/result'
 
 import { type SystemFileChangePreviewResult } from '@shared/contracts/system'
-import { type WorkbenchContentSearchMatchResult, type WorkbenchReadFileResult } from '@shared/contracts/workbench'
+import {
+  type WorkbenchContentSearchMatchResult,
+  type WorkbenchReadFileResult,
+} from '@shared/contracts/workbench'
 import type { WorkbenchWatchStatus } from '@shared/workbenchWatch'
 
 import { useStableWorkbenchMessageTranslate } from '../runtime/useStableWorkbenchMessaging'

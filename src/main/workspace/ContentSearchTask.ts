@@ -17,10 +17,14 @@
 import { lstat, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
-import { AppError } from '@velaros-ai/core/error'
 import { type AppLocale } from '@velaros-ai/ui/conversation/contracts'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
-import { type WorkbenchContentSearchFileResult, type WorkbenchContentSearchMatchResult, type WorkbenchSearchContentBatch } from '@shared/contracts/workbench'
+import {
+  type WorkbenchContentSearchFileResult,
+  type WorkbenchContentSearchMatchResult,
+  type WorkbenchSearchContentBatch,
+} from '@shared/contracts/workbench'
 import {
   buildWorkbenchTextSearchPreview,
   compileWorkbenchTextSearch,
@@ -100,7 +104,11 @@ export type WorkbenchContentSearchWorkerResponse =
   /** 还活着：事件循环在转，上一个文件已经搜完。 */
   | { id: number; kind: 'heartbeat' }
   | { id: number; kind: 'batch'; batch: WorkbenchSearchContentBatch }
-  | { id: number; kind: 'result'; result: WorkbenchContentSearchTaskResult | WorkbenchContentReplaceTaskResult }
+  | {
+      id: number
+      kind: 'result'
+      result: WorkbenchContentSearchTaskResult | WorkbenchContentReplaceTaskResult
+    }
   | { id: number; kind: 'error'; message: string; code?: string }
 
 interface LoadedSearchTextFile {
@@ -198,9 +206,9 @@ export async function runWorkbenchContentSearchTask(
     }
     // 第一批一有内容就交出，之后隔 BatchIntervalMs 交一批。
     if (
-      hooks.onBatch
-      && (batch.files.length > 0 || batch.openPathsInScope.length > 0)
-      && (lastBatchAt === null || Date.now() - lastBatchAt >= BatchIntervalMs)
+      hooks.onBatch &&
+      (batch.files.length > 0 || batch.openPathsInScope.length > 0) &&
+      (lastBatchAt === null || Date.now() - lastBatchAt >= BatchIntervalMs)
     ) {
       hooks.onBatch(batch)
       batch = { files: [], openPathsInScope: [] }

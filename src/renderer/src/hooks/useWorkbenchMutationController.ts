@@ -23,11 +23,15 @@ import { getParentPath, ROOT_PATH } from '@renderer/models/shared/workbenchUtils
 import { useWorkbenchCommentStore } from '@renderer/models/workbenchCommentStore'
 import type { PendingTreeAction } from '@renderer/types/workbenchTypes'
 
-import { isEmpty, toNullable } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
-import { Result } from '@velaros-ai/core/result'
+import { isEmpty, toNullable } from '@velaros-ai/velaros/core'
+import { AppError } from '@velaros-ai/velaros/core/error'
+import { Result } from '@velaros-ai/velaros/core/result'
 
-import { type WorkbenchDeleteEntryResult, type WorkbenchDirectoryEntry, type WorkbenchLanguageServiceNewFile } from '@shared/contracts/workbench'
+import {
+  type WorkbenchDeleteEntryResult,
+  type WorkbenchDirectoryEntry,
+  type WorkbenchLanguageServiceNewFile,
+} from '@shared/contracts/workbench'
 
 import { useStableWorkbenchMessageTranslate } from '../runtime/useStableWorkbenchMessaging'
 import { useLatest } from '../support/genericHooks'
@@ -38,7 +42,11 @@ interface UseWorkbenchMutationControllerOptions {
   selectedEntryPath: Nullable<string>
   ensureNoUnsavedFilesInPath: (path: string) => boolean
   selectFile: (path: string) => Promise<void>
-  moveOpenEntryPath: (previousPath: string, nextPath: string, modifiedAt?: LooseOptional<number>) => void
+  moveOpenEntryPath: (
+    previousPath: string,
+    nextPath: string,
+    modifiedAt?: LooseOptional<number>
+  ) => void
   closeOpenEntryPath: (path: string) => void
   setSelectedEntryPath: (path: Nullable<string>) => void
   refreshMutationParent: (parentPath: string) => Promise<void>
@@ -192,16 +200,15 @@ export function useWorkbenchMutationController({
     })
   }
 
-  function takeLatestDeleteUndoBatch(project: WorkbenchProject): Nullable<WorkbenchDeleteUndoBatch> {
+  function takeLatestDeleteUndoBatch(
+    project: WorkbenchProject
+  ): Nullable<WorkbenchDeleteUndoBatch> {
     const stack = deleteUndoStackRef.current
     for (let index = stack.length - 1; index >= 0; index -= 1) {
       const batch = stack[index]
       if (!batch || batch.projectId !== project.id) continue
 
-      deleteUndoStackRef.current = [
-        ...stack.slice(0, index),
-        ...stack.slice(index + 1),
-      ]
+      deleteUndoStackRef.current = [...stack.slice(0, index), ...stack.slice(index + 1)]
       return batch
     }
 
@@ -270,11 +277,15 @@ export function useWorkbenchMutationController({
     if (!owningProject || isEmpty(files)) return { createdPaths: [], failures: [] }
 
     const projectRoot = owningProject.rootPath
-    const { createdPaths, parentPaths, failures } = await createWorkbenchLanguageServiceFiles(files, {
-      createEntry: (request) =>
-        workbenchHost.kernel.project.createWorkbenchEntry({ projectRoot, ...request }),
-      saveFile: (request) => workbenchHost.kernel.project.saveWorkbenchFile({ projectRoot, ...request }),
-    })
+    const { createdPaths, parentPaths, failures } = await createWorkbenchLanguageServiceFiles(
+      files,
+      {
+        createEntry: (request) =>
+          workbenchHost.kernel.project.createWorkbenchEntry({ projectRoot, ...request }),
+        saveFile: (request) =>
+          workbenchHost.kernel.project.saveWorkbenchFile({ projectRoot, ...request }),
+      }
+    )
     if (activeProjectRef.current?.id === owningProject.id && !isEmpty(parentPaths)) {
       onTreeChangedLatest.current()
       await Promise.all(
@@ -620,7 +631,8 @@ export function useWorkbenchMutationController({
       pendingTreeAction.kind === 'rename' &&
       pendingTreeAction.entryPath &&
       !ensureNoUnsavedFilesInPath(pendingTreeAction.entryPath)
-    ) return
+    )
+      return
 
     const owningProject = activeProject
     const owningProjectId = owningProject.id

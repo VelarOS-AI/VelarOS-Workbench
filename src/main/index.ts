@@ -3,10 +3,10 @@ import { basename, join, resolve } from 'node:path'
 
 import { app, BrowserWindow, session, shell, webContents } from 'electron'
 
-import { Log } from '@velaros-ai/core'
-import { createModelRuntimeComposition } from '@velaros-ai/model'
 import { createElectronBrowserRuntime } from '@velaros-ai/velaros/browser/electron'
+import { Log } from '@velaros-ai/velaros/core'
 import { createShellEnvironment } from '@velaros-ai/velaros/execution/local'
+import { createModelRuntimeComposition } from '@velaros-ai/velaros/model'
 
 import productionAppIconPath from '../../resources/icons/icon.png?asset'
 import developmentAppIconPath from '../../resources/icons/icon-dev.png?asset'
@@ -48,7 +48,10 @@ import { registerProjectHubIpc } from './projects/ProjectHubIpc'
 import { installProjectHubMenu } from './projects/ProjectHubMenu'
 import { WorkbenchAgentConsoleWindows } from './projects/WorkbenchAgentConsoleWindows'
 import { installWorkbenchEditorZoom } from './projects/WorkbenchEditorZoom'
-import { installWorkbenchExternalNavigation, isWorkbenchAgentConsoleRequest } from './projects/WorkbenchExternalNavigation'
+import {
+  installWorkbenchExternalNavigation,
+  isWorkbenchAgentConsoleRequest,
+} from './projects/WorkbenchExternalNavigation'
 import {
   normalizeWorkbenchInternalBrowserUrl,
   prepareWorkbenchWebviewAttachment,
@@ -167,7 +170,9 @@ function resolveWorkbenchDataRootDir(): string {
 }
 
 function getWorkbenchWindowTitle(projectName: Nullable<string>): string {
-  return projectName ?? WorkbenchApplicationName
+  return process.platform === 'win32'
+    ? 'VelarOS WorkBench'
+    : (projectName ?? WorkbenchApplicationName)
 }
 
 function createWorkbenchWindow(hub: WorkbenchProjectHub): BrowserWindow {
@@ -217,7 +222,9 @@ function createWorkbenchWindow(hub: WorkbenchProjectHub): BrowserWindow {
     child.webContents.on('will-navigate', (event) => event.preventDefault())
   })
   window.once('closed', () => agentConsoleWindows.releaseOwner(consoleOwnerId))
-  window.webContents.on('render-process-gone', () => agentConsoleWindows.releaseOwner(consoleOwnerId))
+  window.webContents.on('render-process-gone', () =>
+    agentConsoleWindows.releaseOwner(consoleOwnerId)
+  )
   window.webContents.on('will-attach-webview', (event, webPreferences, params) => {
     if (
       !workbenchBrowserWebviewGate?.allowsAttachment() ||
@@ -242,7 +249,7 @@ function createWorkbenchWindow(hub: WorkbenchProjectHub): BrowserWindow {
   installWorkbenchWindowState(window)
   windowCloseGuard.install(window)
 
-  // 窗口标题唯一权威在 main（跟随项目状态）；拦掉页面 <title> 的默认回写，避免双权威打架。
+  // main 统一控制标题：Windows 固定产品名，其他平台跟随项目；禁止页面标题覆盖。
   window.on('page-title-updated', (event) => {
     event.preventDefault()
   })

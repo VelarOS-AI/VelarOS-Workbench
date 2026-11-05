@@ -19,7 +19,7 @@ import type {
 } from '@renderer/models/git/workbenchGitModel'
 import type { WorkbenchLightEditorTab } from '@renderer/types/workbenchTypes'
 
-import { isFalse, isPositiveNumber, optionalWhen, toNullable } from '@velaros-ai/core'
+import { isFalse, isPositiveNumber, optionalWhen, toNullable } from '@velaros-ai/velaros/core'
 
 import type { EditorNavigationRequest } from '../components/editor/CodeInsightPanel'
 import { useLatest } from '../support/genericHooks'
@@ -103,10 +103,10 @@ export function useWorkbenchEditorNavigationState({
   const [debugTabs, setDebugTabs] = useState<WorkbenchDebugTab[]>([])
   const [activeDebugTabId, setActiveDebugTabId] = useState<Nullable<string>>(null)
   /** Agent 浏览器标签属于哪个聊天会话；会话的浏览器没进站点时为 null。 */
-  const [agentBrowserTabSessionId, setAgentBrowserTabSessionId] =
-    useState<Nullable<string>>(null)
+  const [agentBrowserTabSessionId, setAgentBrowserTabSessionId] = useState<Nullable<string>>(null)
   const debugTabsRef = useLatest(debugTabs)
-  const [navigationRequest, setNavigationRequest] = useState<Nullable<EditorNavigationRequest>>(null)
+  const [navigationRequest, setNavigationRequest] =
+    useState<Nullable<EditorNavigationRequest>>(null)
   // 状态栏显示的缩进（编辑器报上来），以及状态栏缩进菜单交回编辑器的操作。
   const [indentation, setIndentation] = useState<Nullable<WorkbenchIndentation>>(null)
   const [indentationRequest, setIndentationRequest] =
@@ -252,9 +252,7 @@ export function useWorkbenchEditorNavigationState({
     onPrimaryGroupTabShownLatest.current?.()
     setLightTab(null)
     setActiveDebugTabId(null)
-    setDiffFocusFirstChangeRequestId((requestId) =>
-      options?.focusFirstChange ? requestId + 1 : 0
-    )
+    setDiffFocusFirstChangeRequestId((requestId) => (options?.focusFirstChange ? requestId + 1 : 0))
     setDiffItem(item)
   }
 
@@ -265,25 +263,28 @@ export function useWorkbenchEditorNavigationState({
     setLightTab(tab)
   }
 
-  const openDebugTab = useCallback((rawUrl: string): void => {
-    const url = rawUrl.trim()
-    if (!url) return
+  const openDebugTab = useCallback(
+    (rawUrl: string): void => {
+      const url = rawUrl.trim()
+      if (!url) return
 
-    onPrimaryGroupTabShownLatest.current?.()
-    // webview 调试页与 diff/light 互斥（都占编辑区）。
-    setDiffItem(null)
-    setLightTab(null)
+      onPrimaryGroupTabShownLatest.current?.()
+      // webview 调试页与 diff/light 互斥（都占编辑区）。
+      setDiffItem(null)
+      setLightTab(null)
 
-    const existing = debugTabsRef.current.find((tab) => tab.url === url)
-    if (existing) {
-      setActiveDebugTabId(existing.id)
-      return
-    }
+      const existing = debugTabsRef.current.find((tab) => tab.url === url)
+      if (existing) {
+        setActiveDebugTabId(existing.id)
+        return
+      }
 
-    const id = `debug-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-    setDebugTabs((current) => [...current, { id, url, title: deriveDebugTabTitle(url) }])
-    setActiveDebugTabId(id)
-  }, [debugTabsRef, onPrimaryGroupTabShownLatest])
+      const id = `debug-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+      setDebugTabs((current) => [...current, { id, url, title: deriveDebugTabTitle(url) }])
+      setActiveDebugTabId(id)
+    },
+    [debugTabsRef, onPrimaryGroupTabShownLatest]
+  )
 
   const selectDebugTab = useCallback(
     (id: string): void => {
@@ -298,9 +299,7 @@ export function useWorkbenchEditorNavigationState({
   const closeDebugTab = useCallback((id: string): void => {
     setDebugTabs((current) => {
       const next = current.filter((tab) => tab.id !== id)
-      setActiveDebugTabId((active) =>
-        active === id ? toNullable(next.at(-1)?.id) : active
-      )
+      setActiveDebugTabId((active) => (active === id ? toNullable(next.at(-1)?.id) : active))
       return next
     })
   }, [])
@@ -308,9 +307,7 @@ export function useWorkbenchEditorNavigationState({
   const navigateDebugTab = useCallback((id: string, url: string, title?: string): void => {
     setDebugTabs((current) =>
       current.map((tab) =>
-        tab.id === id
-          ? { ...tab, url, title: title?.trim() || deriveDebugTabTitle(url) }
-          : tab
+        tab.id === id ? { ...tab, url, title: title?.trim() || deriveDebugTabTitle(url) } : tab
       )
     )
   }, [])

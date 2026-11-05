@@ -18,8 +18,6 @@ import {
 } from '@renderer/models/git/workbenchGitBranchMenuModel'
 import { useStableWorkbenchMessageTranslate } from '@renderer/runtime/useStableWorkbenchMessaging'
 
-import { AppError } from '@velaros-ai/core/error'
-import { Result } from '@velaros-ai/core/result'
 import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
 import { Input } from '@velaros-ai/ui/primitives/forms/Input'
 import { AnchoredPopover } from '@velaros-ai/ui/primitives/overlays/AnchoredPopover'
@@ -37,8 +35,14 @@ import {
   getTopBarControlPanelClassName,
   TopBarControlFrame,
 } from '@velaros-ai/ui/product/layout/TopBarControlFrame'
+import { AppError } from '@velaros-ai/velaros/core/error'
+import { Result } from '@velaros-ai/velaros/core/result'
 
-import { type SystemWorkspaceGitSummary, type WorkspaceGitBranch, type WorkspaceGitRemoteActionResult } from '@shared/contracts/system'
+import {
+  type SystemWorkspaceGitSummary,
+  type WorkspaceGitBranch,
+  type WorkspaceGitRemoteActionResult,
+} from '@shared/contracts/system'
 
 import styles from '../../styles/workbenchPageStyles'
 
@@ -98,7 +102,9 @@ export function WorkbenchGitBranchControl({
   )
   // 分离的 HEAD 上控件照样在：按钮上写「分离的 HEAD · 1a2b3c4」（变基到一半是「feature（变基中）」），列表里
   // 没有哪个分支算当前的，点哪个都能切过去。
-  const headLabel = status ? describeWorkbenchGitBranchControlHead(status, summary.operation, t) : null
+  const headLabel = status
+    ? describeWorkbenchGitBranchControlHead(status, summary.operation, t)
+    : null
   if (!summary.repository || !status || !headLabel) return null
 
   const running = remoteAction.running
@@ -228,7 +234,10 @@ export function WorkbenchGitBranchControl({
    * 拉取会更新工作区里的文件，推送之前要确认；获取远端只动远端分支的记录，什么都不用问。`branch` 是
    * 列表里点的那个分支（推送它，不是当前分支）。
    */
-  function confirmRemoteAction(action: WorkbenchGitRemoteActionItem['action'], branch?: string): boolean {
+  function confirmRemoteAction(
+    action: WorkbenchGitRemoteActionItem['action'],
+    branch?: string
+  ): boolean {
     if (action !== 'fetch' && warnUnsavedOpenTabs()) return false
     if (action === 'upload')
       return window.confirm(
@@ -254,7 +263,10 @@ export function WorkbenchGitBranchControl({
     onOpenCommitTool()
   }
 
-  async function runRemoteAction(action: WorkbenchGitRemoteActionItem['action'], branch?: string): Promise<void> {
+  async function runRemoteAction(
+    action: WorkbenchGitRemoteActionItem['action'],
+    branch?: string
+  ): Promise<void> {
     if (locked || !confirmRemoteAction(action, branch)) return
     try {
       const result = await remoteAction.run(action, { branch, privateKeyPath: gitSshKeyPath })
@@ -345,7 +357,10 @@ export function WorkbenchGitBranchControl({
                 : t('workbench.gitBranchCreateDialogDescription', { branch: headLabel })}
             </DialogDescription>
           </DialogHeader>
-          <form className={styles.gitBranchCreateForm} onSubmit={(event) => void createBranch(event)}>
+          <form
+            className={styles.gitBranchCreateForm}
+            onSubmit={(event) => void createBranch(event)}
+          >
             <Input
               autoFocus
               size="sm"

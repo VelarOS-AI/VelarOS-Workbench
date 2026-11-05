@@ -1,14 +1,11 @@
-import { isArray, isTrue,Log } from '@velaros-ai/core'
+import { isArray, isTrue, Log } from '@velaros-ai/velaros/core'
 import {
   isRecord,
   readNumberScalar as readNumber,
   readStringScalar as readString,
-} from '@velaros-ai/core/utils/unknownJsonRecord'
+} from '@velaros-ai/velaros/core/utils/unknownJsonRecord'
 
-import {
-  createLocalStorageJsonStore,
-  type StorageLike,
-} from '../../support/localStorageJsonStore'
+import { createLocalStorageJsonStore, type StorageLike } from '../../support/localStorageJsonStore'
 
 export interface WorkbenchProject {
   id: string

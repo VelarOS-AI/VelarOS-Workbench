@@ -1,4 +1,4 @@
-import { isEmpty } from '@velaros-ai/core'
+import { isEmpty } from '@velaros-ai/velaros/core'
 
 import { type WorkbenchDirectoryEntry } from '@shared/contracts/workbench'
 

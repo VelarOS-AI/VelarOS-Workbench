@@ -15,12 +15,9 @@
 
 import { type KeyBindingPress, matchKeyBindingPress, parseKeybinding } from 'tinykeys'
 
-import { isFunction, isRecord, isString, Log, toNullable } from '@velaros-ai/core'
+import { isFunction, isRecord, isString, Log, toNullable } from '@velaros-ai/velaros/core'
 
-import {
-  createLocalStorageJsonStore,
-  type StorageLike,
-} from '../../support/localStorageJsonStore'
+import { createLocalStorageJsonStore, type StorageLike } from '../../support/localStorageJsonStore'
 
 import {
   currentWorkbenchPlatform,
@@ -466,7 +463,8 @@ export function shortcutFromWorkbenchKeyboardEvent(
     key === 'Meta' ||
     key === 'Shift' ||
     key === 'Dead'
-  ) return null
+  )
+    return null
 
   const parts: string[] = []
   if (isApple ? event.metaKey : event.ctrlKey) {

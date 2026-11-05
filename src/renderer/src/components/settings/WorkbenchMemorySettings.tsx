@@ -1,6 +1,9 @@
 import { type ReactElement, useCallback, useEffect, useState } from 'react'
 import { BrainIcon, EyeIcon, EyeSlashIcon, TrashIcon } from '@phosphor-icons/react'
-import { useWorkbenchI18n, type WorkbenchMessageKey } from '@renderer/i18n/WorkbenchLocalizationProvider'
+import {
+  useWorkbenchI18n,
+  type WorkbenchMessageKey,
+} from '@renderer/i18n/WorkbenchLocalizationProvider'
 
 import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
@@ -30,6 +33,7 @@ export function WorkbenchMemorySettings({
   const { t } = useWorkbenchI18n()
   const [entries, setEntries] = useState<Nullable<WorkbenchMemoryEntry[]>>(null)
   const [loading, setLoading] = useState(false)
+  const [page, setPage] = useState(0)
   const [error, setError] = useState<Nullable<string>>(null)
   const [openIds, setOpenIds] = useState<ReadonlySet<string>>(() => new Set())
   const [confirmingId, setConfirmingId] = useState<Nullable<string>>(null)
@@ -55,6 +59,7 @@ export function WorkbenchMemorySettings({
 
   useEffect(() => {
     setEntries(null)
+    setPage(0)
     setOpenIds(new Set())
     setConfirmingId(null)
     void refresh()
@@ -96,6 +101,9 @@ export function WorkbenchMemorySettings({
       </div>
     )
 
+  const pages = Math.max(1, Math.ceil((entries?.length ?? 0) / 10))
+  const currentPage = Math.min(page, pages - 1)
+
   return (
     <div className={styles.workbenchSettingsSectionPanel} data-workbench-memory-settings="true">
       {error && (
@@ -103,9 +111,32 @@ export function WorkbenchMemorySettings({
           {error}
         </Text>
       )}
+      {pages > 1 && (
+        <div className={styles.workbenchSettingsAiRuleRow}>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={currentPage === 0}
+            onClick={() => setPage(currentPage - 1)}
+          >
+            {t('workbench.settingsMemoryPreviousPage')}
+          </Button>
+          <Text tone="caption">
+            {t('workbench.settingsMemoryPage', { page: currentPage + 1, total: pages })}
+          </Text>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={currentPage === pages - 1}
+            onClick={() => setPage(currentPage + 1)}
+          >
+            {t('workbench.settingsMemoryNextPage')}
+          </Button>
+        </div>
+      )}
       {entries?.length ? (
         <div className={styles.workbenchSettingsAiRuleList}>
-          {entries.map((entry) => {
+          {entries.slice(currentPage * 10, (currentPage + 1) * 10).map((entry) => {
             const open = openIds.has(entry.id)
             const confirming = confirmingId === entry.id
             return (
@@ -149,7 +180,9 @@ export function WorkbenchMemorySettings({
                         size="icon-sm"
                         variant="ghost"
                         label={t(
-                          open ? 'workbench.settingsMemoryHideContent' : 'workbench.settingsMemoryShowContent'
+                          open
+                            ? 'workbench.settingsMemoryHideContent'
+                            : 'workbench.settingsMemoryShowContent'
                         )}
                         onClick={() => toggle(entry.id)}
                       >
@@ -166,7 +199,9 @@ export function WorkbenchMemorySettings({
                     </span>
                   )}
                 </div>
-                {open && <pre className={styles.workbenchSettingsAiRuleContent}>{entry.content}</pre>}
+                {open && (
+                  <pre className={styles.workbenchSettingsAiRuleContent}>{entry.content}</pre>
+                )}
               </div>
             )
           })}

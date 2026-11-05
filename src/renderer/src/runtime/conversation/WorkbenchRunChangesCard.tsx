@@ -10,7 +10,6 @@ import {
 import { MagnifyingGlassIcon, SpinnerGapIcon } from '@phosphor-icons/react'
 import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 
-import { isPresent, optionalWhen } from '@velaros-ai/core'
 import {
   buildFileDiffSummaryFromUnifiedPatch,
   FileChangeSummaryList,
@@ -19,6 +18,7 @@ import {
 } from '@velaros-ai/ui/conversation'
 import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
 import { Text } from '@velaros-ai/ui/primitives/display/Text'
+import { isPresent, optionalWhen } from '@velaros-ai/velaros/core'
 
 import type {
   WorkbenchChatRunChangesSummary,
@@ -52,7 +52,9 @@ function buildRunChangeDiffSummary(
     return {
       added: change.additions,
       removed: change.deletions,
-      rows: [{ kind: 'context', oldLineNumber: null, newLineNumber: null, text: labels.patchOmitted }],
+      rows: [
+        { kind: 'context', oldLineNumber: null, newLineNumber: null, text: labels.patchOmitted },
+      ],
     }
   return buildFileDiffSummaryFromUnifiedPatch(change.patch, {
     additions: change.additions,

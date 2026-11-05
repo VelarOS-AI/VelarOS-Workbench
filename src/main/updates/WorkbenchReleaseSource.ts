@@ -1,4 +1,4 @@
-import { isPlainObject } from '@velaros-ai/core'
+import { isPlainObject } from '@velaros-ai/velaros/core'
 
 import { isWorkbenchUpdateChannel, type WorkbenchUpdateChannel } from '../../shared/workbenchUpdate'
 

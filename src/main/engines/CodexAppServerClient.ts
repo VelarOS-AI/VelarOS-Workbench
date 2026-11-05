@@ -2,8 +2,8 @@ import type { ChildProcessWithoutNullStreams } from 'node:child_process'
 import { homedir } from 'node:os'
 import { createInterface } from 'node:readline'
 
-import { isNonBlankString, isNumber, isPlainObject, isString, Log } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
+import { isNonBlankString, isNumber, isPlainObject, isString, Log } from '@velaros-ai/velaros/core'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
 import { workbenchMainText } from '../i18n/workbenchMainMessages'
 
@@ -73,7 +73,12 @@ export class CodexAppServerClient {
       log.debug('写不进 Codex app-server 了', { error: AppError.getMessage(error) })
     )
     child.once('error', (error) =>
-      this.fail(new AppError('UNAVAILABLE', workbenchMainText('engines.codexStartFailed', { reason: error.message })))
+      this.fail(
+        new AppError(
+          'UNAVAILABLE',
+          workbenchMainText('engines.codexStartFailed', { reason: error.message })
+        )
+      )
     )
     child.once('close', (code, signal) => {
       const status = describeEngineExitStatus(code, signal)
@@ -121,7 +126,8 @@ export class CodexAppServerClient {
   }
 
   public request(method: string, params?: unknown): Promise<unknown> {
-    if (this.closed) return Promise.reject(new AppError('CLOSED', workbenchMainText('engines.codexExited')))
+    if (this.closed)
+      return Promise.reject(new AppError('CLOSED', workbenchMainText('engines.codexExited')))
     const id = this.nextId++
     return new Promise((resolve, reject) => {
       this.pending.set(id, { resolve, reject })

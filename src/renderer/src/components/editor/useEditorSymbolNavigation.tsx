@@ -30,10 +30,13 @@ import { fileLanguage } from '@renderer/models/shared/workbenchUtils'
 import { useStableWorkbenchMessageTranslate } from '@renderer/runtime/useStableWorkbenchMessaging'
 import type { WorkbenchOpenEditorTab } from '@renderer/types/workbenchTypes'
 
-import { isEmpty } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
+import { isEmpty } from '@velaros-ai/velaros/core'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
-import { type WorkbenchLanguageServiceCallHierarchyDirection, type WorkbenchLanguageServiceCallHierarchyResult } from '@shared/contracts/workbench'
+import {
+  type WorkbenchLanguageServiceCallHierarchyDirection,
+  type WorkbenchLanguageServiceCallHierarchyResult,
+} from '@shared/contracts/workbench'
 
 import { useLatest, useMemoizedFn } from '../../support/genericHooks'
 
@@ -146,11 +149,12 @@ export function useEditorSymbolNavigation({
       getWorkbenchLanguageServiceDefinition(request, runtime).catch(() => null),
     ])
     if (
-      generation !== generationRef.current
-      || viewRef.current !== view
-      || view.state.doc !== document
-      || latest.current.path !== currentPath
-    ) return
+      generation !== generationRef.current ||
+      viewRef.current !== view ||
+      view.state.doc !== document ||
+      latest.current.path !== currentPath
+    )
+      return
 
     if (!references.ok) {
       messageLatest.current.warning({
@@ -184,8 +188,12 @@ export function useEditorSymbolNavigation({
     item: { path: string; line: number; column: number },
     direction: WorkbenchLanguageServiceCallHierarchyDirection
   ): Promise<WorkbenchLanguageServiceCallHierarchyResult> => {
-    const { projectRoot: root, path: currentPath, getOpenTabs: openTabs, hostRuntime: runtime } =
-      latest.current
+    const {
+      projectRoot: root,
+      path: currentPath,
+      getOpenTabs: openTabs,
+      hostRuntime: runtime,
+    } = latest.current
     const tabs = openTabs()
     const content =
       item.path === currentPath && viewRef.current
@@ -233,7 +241,9 @@ export function useEditorSymbolNavigation({
               )
         ),
       (error: unknown) =>
-        settle((state) => failWorkbenchCallHierarchyNode(state, nodeId, AppError.from(error).message))
+        settle((state) =>
+          failWorkbenchCallHierarchyNode(state, nodeId, AppError.from(error).message)
+        )
     )
   }
 
@@ -263,11 +273,12 @@ export function useEditorSymbolNavigation({
     const generation = ++generationRef.current
     const result = await requestCalls({ path: currentPath, ...position }, 'incoming')
     if (
-      generation !== generationRef.current
-      || viewRef.current !== view
-      || view.state.doc !== document
-      || latest.current.path !== currentPath
-    ) return
+      generation !== generationRef.current ||
+      viewRef.current !== view ||
+      view.state.doc !== document ||
+      latest.current.path !== currentPath
+    )
+      return
 
     if (!result.item) {
       messageLatest.current.info({ title: tLatest.current('workbench.editorCallHierarchyNone') })

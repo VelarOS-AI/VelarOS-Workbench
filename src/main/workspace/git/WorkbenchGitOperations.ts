@@ -1,27 +1,35 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
-import { AppError } from '@velaros-ai/core/error'
-
-import { type SystemWorkspaceGitOperationResult, type WorkspaceGitStatusResult } from '@shared/contracts/system'
-import { type WorkspaceGitOperationAction, type WorkspaceGitOperationKind, type WorkspaceGitOperationRequest, type WorkspaceGitOperationResult, type WorkspaceGitOperationState } from '@shared/contracts/workspaceGit'
-import { isWorkspaceGitConflictEntry, isWorkspaceGitOperationKind } from '@shared/workbenchGit'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
 import {
-  type WorkbenchMainMessageKey,
-  workbenchMainText,
-} from '../../i18n/workbenchMainMessages'
+  type SystemWorkspaceGitOperationResult,
+  type WorkspaceGitStatusResult,
+} from '@shared/contracts/system'
+import {
+  type WorkspaceGitOperationAction,
+  type WorkspaceGitOperationKind,
+  type WorkspaceGitOperationRequest,
+  type WorkspaceGitOperationResult,
+  type WorkspaceGitOperationState,
+} from '@shared/contracts/workspaceGit'
+import { isWorkspaceGitConflictEntry, isWorkspaceGitOperationKind } from '@shared/workbenchGit'
+
+import { type WorkbenchMainMessageKey, workbenchMainText } from '../../i18n/workbenchMainMessages'
 
 import type { GitRepository, GitRunResult, WorkbenchGitAccess } from './WorkbenchGitAccess'
 
 /** 各个操作在文案表里的名字（「正在合并」「Git 没有开始变基」里的那个词）。 */
-export const WorkbenchGitOperationLabels: Record<WorkspaceGitOperationKind, WorkbenchMainMessageKey> =
-  {
-    merge: 'git.operationMerge',
-    rebase: 'git.operationRebase',
-    'cherry-pick': 'git.operationCherryPick',
-    revert: 'git.operationRevert',
-  }
+export const WorkbenchGitOperationLabels: Record<
+  WorkspaceGitOperationKind,
+  WorkbenchMainMessageKey
+> = {
+  merge: 'git.operationMerge',
+  rebase: 'git.operationRebase',
+  'cherry-pick': 'git.operationCherryPick',
+  revert: 'git.operationRevert',
+}
 
 /**
  * 这些命令都不开编辑器：合并说明、变基的步骤单、拣选与撤销的提交说明，一律用 git 备好的那份。
@@ -136,7 +144,10 @@ export class WorkbenchGitOperations {
     if ((action === 'merge' || action === 'rebase') && !status.branch)
       throw new AppError('VALIDATION', workbenchMainText('git.operationNeedsBranch', { operation }))
     if (!target?.trim())
-      throw new AppError('VALIDATION', workbenchMainText('git.operationTargetRequired', { operation }))
+      throw new AppError(
+        'VALIDATION',
+        workbenchMainText('git.operationTargetRequired', { operation })
+      )
     const revision = await this.shortestName(rootPath, this.git.assertRevision(target))
     const resolved = await this.git.run(
       rootPath,
@@ -198,7 +209,8 @@ export class WorkbenchGitOperations {
     if (!state) throw new AppError('VALIDATION', workbenchMainText('git.noOperationInProgress'))
     if (action === 'skip' && state.kind === 'merge')
       throw new AppError('VALIDATION', workbenchMainText('git.mergeCannotSkip'))
-    if (action === 'continue') await this.assertNoConflicts(repository, 'git.conflictsBlockContinue')
+    if (action === 'continue')
+      await this.assertNoConflicts(repository, 'git.conflictsBlockContinue')
 
     // 合并的「继续」就是把它提交掉（`merge --continue` 做的也是这件事）。
     const args =

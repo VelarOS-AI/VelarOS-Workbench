@@ -1,4 +1,4 @@
-import type { AgentProviderRuntimeConfig, ChatProviderId } from '@velaros-ai/model'
+import type { AgentProviderRuntimeConfig, ChatProviderId } from '@velaros-ai/velaros/model'
 
 export type AuxiliaryModelTaskId =
   | 'thinkingTranslation'

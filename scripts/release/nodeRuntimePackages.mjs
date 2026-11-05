@@ -6,7 +6,7 @@ import { cp, mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
 import { join, relative } from 'node:path'
 import { promisify } from 'node:util'
 
-import { NodeDefaultPackages } from '@velaros-ai/script'
+import { NodeDefaultPackages } from '@velaros-ai/velaros/script'
 
 import WorkbenchNodePackages from '../../src/main/conversation/workbenchNodePackages.json' with { type: 'json' }
 
@@ -50,7 +50,7 @@ async function inventory(root, directory = root) {
 /** 按实际安装版本复制闭包；嵌套 node_modules 保持不同版本，不在发布时重新解析或联网安装。 */
 export async function prepareNodeRuntimePackages(repository, destination) {
   await mkdir(destination)
-  const script = installedPackage('@velaros-ai/script', repository)
+  const script = installedPackage('@velaros-ai/velaros', repository)
   const versions = {}
   const copy = async (name, parent, targetParent, ancestors = new Map()) => {
     const record = installedPackage(name, parent)
@@ -70,7 +70,12 @@ export async function prepareNodeRuntimePackages(repository, destination) {
           !path
             .split(/[\\/]/u)
             .some((part) =>
-              ['.git', '.gitkeep', '.DS_Store', ...(bundled.length ? [] : ['node_modules'])].includes(part)
+              [
+                '.git',
+                '.gitkeep',
+                '.DS_Store',
+                ...(bundled.length ? [] : ['node_modules']),
+              ].includes(part)
             ) && !SourceOnly.test(path)
         )
       },

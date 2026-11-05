@@ -14,8 +14,6 @@ import {
 import type { WorkbenchThemeId } from '@renderer/models/workbenchPreferences'
 import { useStableWorkbenchMessageTranslate } from '@renderer/runtime/useStableWorkbenchMessaging'
 
-import { AppError, isEmpty } from '@velaros-ai/core'
-import { Result } from '@velaros-ai/core/result'
 import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 import { Paragraph } from '@velaros-ai/ui/primitives/display/Paragraph'
@@ -28,6 +26,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@velaros-ai/ui/primitives/overlays/Dialog'
+import { AppError, isEmpty } from '@velaros-ai/velaros/core'
+import { Result } from '@velaros-ai/velaros/core/result'
 
 import { type WorkspaceGitHunkAction } from '@shared/contracts/workspaceGit'
 import {
@@ -178,9 +178,9 @@ export function GitDiffEditorPanel({
   const appliedFocusRequestRef = useRef(0)
   useEffect(() => {
     if (
-      !focusFirstChangeRequestId
-      || !changedLineCount
-      || appliedFocusRequestRef.current === focusFirstChangeRequestId
+      !focusFirstChangeRequestId ||
+      !changedLineCount ||
+      appliedFocusRequestRef.current === focusFirstChangeRequestId
     )
       return
 

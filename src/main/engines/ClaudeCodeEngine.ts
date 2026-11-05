@@ -1,5 +1,6 @@
 import { homedir } from 'node:os'
 
+import type { AppLocale } from '@velaros-ai/ui/conversation/contracts'
 import {
   isArray,
   isFiniteNumber,
@@ -8,9 +9,8 @@ import {
   isString,
   Log,
   optionalWhen,
-} from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
-import type { AppLocale } from '@velaros-ai/ui/conversation/contracts'
+} from '@velaros-ai/velaros/core'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
 import type {
   WorkbenchAgentEngineModel,
@@ -433,7 +433,9 @@ class ClaudeCodeTranslator {
       else
         this.surface.finishTool(
           id,
-          block.is_error === true ? { error: text || workbenchMainText('engines.toolCallFailed') } : { result: text }
+          block.is_error === true
+            ? { error: text || workbenchMainText('engines.toolCallFailed') }
+            : { result: text }
         )
       const edited =
         tool && EditTools.has(tool.name) && block.is_error !== true

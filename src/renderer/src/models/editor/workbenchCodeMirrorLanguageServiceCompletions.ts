@@ -18,11 +18,18 @@ import {
 } from '@codemirror/state'
 import type { EditorView } from '@codemirror/view'
 
-import { Log, optionalWhen } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
-import type { Result } from '@velaros-ai/core/result'
+import { Log, optionalWhen } from '@velaros-ai/velaros/core'
+import { AppError } from '@velaros-ai/velaros/core/error'
+import type { Result } from '@velaros-ai/velaros/core/result'
 
-import { type WorkbenchLanguageServiceCompletionItem, type WorkbenchLanguageServiceCompletionResolveData, type WorkbenchLanguageServiceCompletionResolveResult, type WorkbenchLanguageServiceCompletionResult, type WorkbenchLanguageServiceCompletionTextEdit, type WorkbenchLanguageServiceRange } from '@shared/contracts/workbench'
+import {
+  type WorkbenchLanguageServiceCompletionItem,
+  type WorkbenchLanguageServiceCompletionResolveData,
+  type WorkbenchLanguageServiceCompletionResolveResult,
+  type WorkbenchLanguageServiceCompletionResult,
+  type WorkbenchLanguageServiceCompletionTextEdit,
+  type WorkbenchLanguageServiceRange,
+} from '@shared/contracts/workbench'
 
 import {
   WORKBENCH_COMPLETION_RETURN_TYPE,
@@ -83,9 +90,9 @@ interface WorkbenchOffsetEdit {
 
 function completionWordCharacter(path: string): RegExp {
   const runtime = resolveWorkbenchBuiltinLanguageServiceRuntime(path)
-  return runtime === 'css-language-service'
-    || runtime === 'html-language-service'
-    || runtime === 'markdown-language-service'
+  return runtime === 'css-language-service' ||
+    runtime === 'html-language-service' ||
+    runtime === 'markdown-language-service'
     ? /[\p{L}\p{N}_$-]/u
     : /[\p{L}\p{N}_$]/u
 }
@@ -106,8 +113,10 @@ export function shouldRequestWorkbenchLanguageServiceCompletions(
   if (completionWordStart(context.state, context.pos, completionWordCharacter(path)) < context.pos)
     return true
   const previous = context.state.sliceDoc(context.pos - 1, context.pos)
-  return TriggerCharacters.has(previous)
-    || (usesWorkbenchExternalLspLanguageService(path) && ExternalLspStructuralTriggers.has(previous))
+  return (
+    TriggerCharacters.has(previous) ||
+    (usesWorkbenchExternalLspLanguageService(path) && ExternalLspStructuralTriggers.has(previous))
+  )
 }
 
 function mapVscodeCompletionItemKind(kind: string | undefined): string | undefined {
@@ -149,10 +158,8 @@ function mapLanguageServiceCompletionType(kind: string | undefined, path: string
 
   const normalized = kind.toLowerCase()
   if (normalized === 'tag') return 'tag'
-  if (
-    normalized.includes('keyword') ||
-    normalized.includes('scriptelementkind.keyword')
-  ) return 'keyword'
+  if (normalized.includes('keyword') || normalized.includes('scriptelementkind.keyword'))
+    return 'keyword'
   if (normalized.includes('function')) return 'function'
   if (normalized.includes('method')) return 'method'
   if (normalized.includes('class')) return 'class'
@@ -191,7 +198,10 @@ function trackRequestChanges(request: WorkbenchCompletionRequest, changes: Chang
 }
 
 /** 请求时正文 → 当前正文；对不上时返回 null。 */
-function currentRequestMapping(request: WorkbenchCompletionRequest, state: EditorState): Nullable<ChangeDesc> {
+function currentRequestMapping(
+  request: WorkbenchCompletionRequest,
+  state: EditorState
+): Nullable<ChangeDesc> {
   return !request.broken && request.changes.newLength === state.doc.length ? request.changes : null
 }
 
@@ -233,7 +243,8 @@ const lateCompletionEditTracker = StateField.define<ReadonlyMap<object, ChangeDe
     let next = value
     if (transaction.docChanged && value.size > 0) {
       const mapped = new Map<object, ChangeDesc>()
-      for (const [token, changes] of value) mapped.set(token, changes.composeDesc(transaction.changes.desc))
+      for (const [token, changes] of value)
+        mapped.set(token, changes.composeDesc(transaction.changes.desc))
       next = mapped
     }
     for (const effect of transaction.effects) {
@@ -268,7 +279,11 @@ function applyLateCompletionEdits(
     view.dispatch({ effects: stop })
     return
   }
-  const edits = mapAdditionalEdits(request, resolution.additionalTextEdits, acceptMapping.composeDesc(tracked))
+  const edits = mapAdditionalEdits(
+    request,
+    resolution.additionalTextEdits,
+    acceptMapping.composeDesc(tracked)
+  )
   view.dispatch({
     changes: edits,
     effects: stop,
@@ -310,7 +325,9 @@ function textCompletionInfo(text: string | undefined): CompletionInfo {
   return text ? document.createTextNode(text) : null
 }
 
-async function previewCompletionInfo(prepared: WorkbenchPreparedCompletion): Promise<CompletionInfo> {
+async function previewCompletionInfo(
+  prepared: WorkbenchPreparedCompletion
+): Promise<CompletionInfo> {
   const token = {}
   prepared.request.previewToken = token
   if (!prepared.resolution) {
@@ -367,7 +384,12 @@ function applyWorkbenchLanguageServiceCompletion(
     const snippetEnd = Math.max(snippetStart, extraChanges.mapPos(end, -1))
     let captured: Nullable<Transaction> = null
     snippet(converted.template)(
-      { state: intermediate, dispatch: (transaction) => { captured = transaction } },
+      {
+        state: intermediate,
+        dispatch: (transaction) => {
+          captured = transaction
+        },
+      },
       completion,
       snippetStart,
       snippetEnd
@@ -433,11 +455,17 @@ function toCodeMirrorCompletion(
   let label = item.filterText || item.label
   if (range && range.from < wordStart) {
     const leading = request.doc.sliceString(range.from, wordStart)
-    if (label.startsWith(leading) && label.length > leading.length) label = label.slice(leading.length)
+    if (label.startsWith(leading) && label.length > leading.length)
+      label = label.slice(leading.length)
   }
   const insert = item.insertText ?? item.label
   const prepared: WorkbenchPreparedCompletion = { item, request, range, resolution: null }
-  const plain = !range && !item.isSnippet && !item.additionalTextEdits?.length && !item.resolve && !item.retrigger
+  const plain =
+    !range &&
+    !item.isSnippet &&
+    !item.additionalTextEdits?.length &&
+    !item.resolve &&
+    !item.retrigger
 
   return {
     label,
@@ -448,7 +476,9 @@ function toCodeMirrorCompletion(
     sortText: item.sortText,
     info: item.resolve
       ? () => previewCompletionInfo(prepared)
-      : type === 'keyword' ? undefined : item.documentation,
+      : type === 'keyword'
+        ? undefined
+        : item.documentation,
     apply: plain
       ? insert
       : (view, completion, from, to) =>
@@ -468,7 +498,11 @@ export function mapWorkbenchLanguageServiceCompletionToCodeMirror({
 }): Completion {
   const request = createWorkbenchCompletionRequest(state, path, null)
   const position = state.selection.main.head
-  return toCodeMirrorCompletion(item, request, completionWordStart(state, position, completionWordCharacter(path)))
+  return toCodeMirrorCompletion(
+    item,
+    request,
+    completionWordStart(state, position, completionWordCharacter(path))
+  )
 }
 
 /**
@@ -556,17 +590,19 @@ export async function requestWorkbenchLanguageServiceCompletions({
   if (!response.ok) return response.error.code === 'CANCELLED' ? null : localResult
   if (response.data.items.length === 0) return localResult
 
-  return buildWorkbenchLanguageServiceCompletionResult({
-    state,
-    position,
-    path,
-    result: response.data,
-    localResult,
-    resolve: async (item) => {
-      const resolved = await resolve(item)
-      // 没要到（worker 在重启、请求超时）按失败处理：下次选中或接受时再要，不把「没有导入」记下来。
-      if (!resolved.ok) throw new AppError(resolved.error.code, resolved.error.message)
-      return resolved.data
-    },
-  }) ?? localResult
+  return (
+    buildWorkbenchLanguageServiceCompletionResult({
+      state,
+      position,
+      path,
+      result: response.data,
+      localResult,
+      resolve: async (item) => {
+        const resolved = await resolve(item)
+        // 没要到（worker 在重启、请求超时）按失败处理：下次选中或接受时再要，不把「没有导入」记下来。
+        if (!resolved.ok) throw new AppError(resolved.error.code, resolved.error.message)
+        return resolved.data
+      },
+    }) ?? localResult
+  )
 }

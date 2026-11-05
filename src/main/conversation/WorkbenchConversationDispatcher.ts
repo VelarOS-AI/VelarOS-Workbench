@@ -1,4 +1,4 @@
-import { AppError } from '@velaros-ai/core/error'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
 import type { WorkbenchAgentEngineStatus } from '../../shared/workbenchConversation'
 import type { WorkbenchEngineConversationRuntime } from '../engines/WorkbenchEngineConversationRuntime'

@@ -4,7 +4,7 @@
  */
 import { parentPort } from 'node:worker_threads'
 
-import { AppError } from '@velaros-ai/core/error'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
 import {
   handleWorkbenchContentSearchWorkerRequest,

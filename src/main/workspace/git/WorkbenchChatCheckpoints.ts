@@ -5,7 +5,7 @@ import { setTimeout as delay } from 'node:timers/promises'
 
 import { execa } from 'execa'
 
-import { AppError } from '@velaros-ai/core/error'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
 import type {
   WorkbenchChatCheckpointCaptureRequest,
@@ -128,8 +128,11 @@ export class WorkbenchChatCheckpointService {
     const root = await this.resolveRoot(request.workspaceRoot)
     await this.serialize(root, async () => {
       for (const checkpointId of request.checkpointIds) {
-        await this.runGit(root, ['update-ref', '-d', shadowRef(request.sessionId, checkpointId)])
-          .catch(() => undefined)
+        await this.runGit(root, [
+          'update-ref',
+          '-d',
+          shadowRef(request.sessionId, checkpointId),
+        ]).catch(() => undefined)
       }
     })
   }
@@ -152,7 +155,8 @@ export class WorkbenchChatCheckpointService {
       await this.runGit(root, ['add', '-A'], env)
       return (await this.runGit(root, ['write-tree'], env)).trim()
     })
-    if (!ObjectIdPattern.test(tree)) throw new AppError('PLATFORM', workbenchMainText('git.checkpointTreeMissing'))
+    if (!ObjectIdPattern.test(tree))
+      throw new AppError('PLATFORM', workbenchMainText('git.checkpointTreeMissing'))
     return tree
   }
 
@@ -245,7 +249,8 @@ export class WorkbenchChatCheckpointService {
     if (!workspaceRoot.trim() || !isAbsolute(workspaceRoot))
       throw new AppError('VALIDATION', workbenchMainText('git.rootInvalid'))
     const root = await realpath(resolve(workspaceRoot))
-    if (!(await stat(root)).isDirectory()) throw new AppError('VALIDATION', workbenchMainText('git.rootMissing'))
+    if (!(await stat(root)).isDirectory())
+      throw new AppError('VALIDATION', workbenchMainText('git.rootMissing'))
     return root
   }
 
@@ -369,8 +374,7 @@ async function attachRunChangePatches<T extends WorkbenchChatRunFileChange>(
   const candidates = files
     .filter(
       (file) =>
-        hasLineChanges(file) &&
-        file.additions + file.deletions <= RunChangePatchLimits.linesPerFile
+        hasLineChanges(file) && file.additions + file.deletions <= RunChangePatchLimits.linesPerFile
     )
     .slice(0, RunChangePatchLimits.files)
   const patches = new Map<string, string>()
@@ -378,9 +382,7 @@ async function attachRunChangePatches<T extends WorkbenchChatRunFileChange>(
   for (let index = 0; index < candidates.length; index += PatchReadConcurrency) {
     if (totalBytes >= RunChangePatchLimits.totalBytes) break
     const batch = candidates.slice(index, index + PatchReadConcurrency)
-    const results = await Promise.all(
-      batch.map((file) => readPatch(file.path).catch(() => null))
-    )
+    const results = await Promise.all(batch.map((file) => readPatch(file.path).catch(() => null)))
     batch.forEach((file, batchIndex) => {
       const patch = results[batchIndex]
       if (!patch) return

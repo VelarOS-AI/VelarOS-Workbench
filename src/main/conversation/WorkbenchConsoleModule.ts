@@ -1,6 +1,6 @@
-import type { OperationContext, OperationModuleDefinition } from '@velaros-ai/kernel'
 import { createCapabilityModule } from '@velaros-ai/velaros'
 import type { ShellBackgroundTaskRecord } from '@velaros-ai/velaros/execution/contracts'
+import type { OperationContext, OperationModuleDefinition } from '@velaros-ai/velaros/kernel'
 
 import { WorkbenchConsoleCapability } from './WorkbenchConsoleCapability'
 import type { WorkbenchShellHostRegistryApi } from './WorkbenchShellHostRegistry'
@@ -21,17 +21,14 @@ export function createWorkbenchConsoleModule(
   sessionId: string,
   cwd: string,
   sandbox: boolean,
-  confirm: (command: string, signal: AbortSignal) => Promise<void>,
+  confirm: (command: string, signal: AbortSignal) => Promise<void>
 ): OperationModuleDefinition {
   return createCapabilityModule({
     surface: WorkbenchConsoleCapability,
     instanceId: sessionId,
     context: (call) => call,
     implementation: {
-      async start(
-        input: { command: string },
-        call: OperationContext,
-      ): Promise<ConsoleTaskSummary> {
+      async start(input: { command: string }, call: OperationContext): Promise<ConsoleTaskSummary> {
         call.signal.throwIfAborted()
         await confirm(input.command, call.signal)
         call.signal.throwIfAborted()
@@ -52,7 +49,7 @@ export function createWorkbenchConsoleModule(
       },
       async read(
         input: { taskId: string; cursor?: number },
-        call: OperationContext,
+        call: OperationContext
       ): Promise<{
         text: string
         cursor: number
@@ -71,13 +68,13 @@ export function createWorkbenchConsoleModule(
       },
       async stop(
         input: { taskId: string },
-        call: OperationContext,
+        call: OperationContext
       ): Promise<{ terminated: boolean; status: string; message: string }> {
         call.signal.throwIfAborted()
         call.recordEffect('unknown')
         const result = await shells.terminateBackgroundTask(
           { ...input, sessionId, force: true },
-          cwd,
+          cwd
         )
         call.recordEffect('committed')
         return {

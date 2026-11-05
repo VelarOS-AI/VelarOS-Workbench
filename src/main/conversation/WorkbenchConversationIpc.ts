@@ -6,9 +6,9 @@ import type { IpcMainInvokeEvent, WebContents } from 'electron'
 import { BrowserWindow, ipcMain } from 'electron'
 import { z } from 'zod'
 
-import { isArray, isNonBlankString, isPlainObject, isString, Log } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
 import type { InteractionAnswer } from '@velaros-ai/ui/conversation/contracts'
+import { isArray, isNonBlankString, isPlainObject, isString, Log } from '@velaros-ai/velaros/core'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
 import {
   ConversationScriptNotice,

@@ -13,9 +13,14 @@
  */
 import { readFile, stat } from 'node:fs/promises'
 
-import { AppError } from '@velaros-ai/core/error'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
-import { type WorkbenchReplaceContentFileRequest, type WorkbenchReplaceContentFileResult, type WorkbenchReplaceContentRequest, type WorkbenchReplaceContentResult } from '@shared/contracts/workbench'
+import {
+  type WorkbenchReplaceContentFileRequest,
+  type WorkbenchReplaceContentFileResult,
+  type WorkbenchReplaceContentRequest,
+  type WorkbenchReplaceContentResult,
+} from '@shared/contracts/workbench'
 import {
   compileWorkbenchTextSearch,
   type WorkbenchTextSearchQuery,
@@ -73,7 +78,9 @@ class ContentReplace {
       for (const file of request.files) {
         try {
           if (stopped) throw stopped
-          files.push(await this.replaceInFile(projectRoot, session, query, request.replacement, file))
+          files.push(
+            await this.replaceInFile(projectRoot, session, query, request.replacement, file)
+          )
         } catch (error) {
           const appError = AppError.from(error)
           if (appError.code === 'TIMEOUT') stopped = appError
@@ -100,8 +107,8 @@ class ContentReplace {
     const resolved = await this.pathResolver.resolveInsideProject(projectRoot, file.path)
     const fileStats = await stat(resolved.realPath)
     if (
-      Math.abs(fileStats.mtimeMs - file.expectedModifiedAt) > ModifiedAtToleranceMs
-      || fileStats.size !== file.expectedSize
+      Math.abs(fileStats.mtimeMs - file.expectedModifiedAt) > ModifiedAtToleranceMs ||
+      fileStats.size !== file.expectedSize
     )
       throw changedSinceSearch()
 

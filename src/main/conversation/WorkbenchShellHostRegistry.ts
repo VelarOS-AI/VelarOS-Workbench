@@ -1,6 +1,6 @@
-import { Log } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
-import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
+import { Log } from '@velaros-ai/velaros/core'
+import { AppError } from '@velaros-ai/velaros/core/error'
+import { type TimerLease, TimerScope } from '@velaros-ai/velaros/core/utils/TimerScope'
 import type {
   LocalShellHostApi,
   LocalShellHostOptions,

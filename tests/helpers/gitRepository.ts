@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 
-import { AppError } from '@velaros-ai/core/error'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
 import { WorkbenchGitService } from '../../src/main/workspace/git/WorkbenchGitService'
 import { type SystemWorkspaceGitSummary } from '../../src/shared/contracts/system'

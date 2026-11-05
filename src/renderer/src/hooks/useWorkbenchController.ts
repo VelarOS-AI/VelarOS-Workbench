@@ -15,8 +15,8 @@ import {
   saveWorkbenchProjectSessionSnapshot,
 } from '@renderer/models/project/workbenchProjectSessionModel'
 
-import { isEmpty, Log, toNullable } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
+import { isEmpty, Log, toNullable } from '@velaros-ai/velaros/core'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
 import { type WorkbenchDirectoryEntry } from '@shared/contracts/workbench'
 
@@ -130,32 +130,34 @@ export function useWorkbenchController(options: UseWorkbenchControllerOptions = 
    * 文件树里改名 / 移动做成之后，在后面更新引用它们的 import（只有 JS/TS 文件与目录才去问语言服务）。
    * 改名已经成了：这里不挡它，语言服务慢了、出错了也不回头动它；有文件改了才说一声改了几个。
    */
-  const updateImportsAfterEntriesMoved = useMemoizedFn((moves: readonly WorkbenchEntryMove[]): void => {
-    const projectRoot = importUpdateStateLatest.current.projectRoot
-    if (!projectRoot) return
+  const updateImportsAfterEntriesMoved = useMemoizedFn(
+    (moves: readonly WorkbenchEntryMove[]): void => {
+      const projectRoot = importUpdateStateLatest.current.projectRoot
+      if (!projectRoot) return
 
-    importUpdaterRef.current ??= createWorkbenchImportUpdater({
-      getProjectRoot: () => importUpdateStateLatest.current.projectRoot,
-      getOpenTabs: () => importUpdateStateLatest.current.openTabs,
-      requestEdits: (request) => getWorkbenchLanguageServiceFileRenameEdits(request),
-      applyEdits: (changes) => editor.applyLanguageServiceEdits(changes),
-      report: (outcome) => {
-        if (outcome.kind === 'failed') {
-          messageLatest.current.warning({
-            title: tLatest.current('workbench.languageServiceImportsFailed'),
-            description: outcome.message,
+      importUpdaterRef.current ??= createWorkbenchImportUpdater({
+        getProjectRoot: () => importUpdateStateLatest.current.projectRoot,
+        getOpenTabs: () => importUpdateStateLatest.current.openTabs,
+        requestEdits: (request) => getWorkbenchLanguageServiceFileRenameEdits(request),
+        applyEdits: (changes) => editor.applyLanguageServiceEdits(changes),
+        report: (outcome) => {
+          if (outcome.kind === 'failed') {
+            messageLatest.current.warning({
+              title: tLatest.current('workbench.languageServiceImportsFailed'),
+              description: outcome.message,
+            })
+            return
+          }
+          const report = buildWorkbenchLanguageServiceEditReport(outcome, {
+            kind: 'import-update',
+            translate: tLatest.current,
           })
-          return
-        }
-        const report = buildWorkbenchLanguageServiceEditReport(outcome, {
-          kind: 'import-update',
-          translate: tLatest.current,
-        })
-        if (report) messageLatest.current[report.tone](report)
-      },
-    })
-    void importUpdaterRef.current.entriesMoved(projectRoot, moves)
-  })
+          if (report) messageLatest.current[report.tone](report)
+        },
+      })
+      void importUpdaterRef.current.entriesMoved(projectRoot, moves)
+    }
+  )
 
   const mutation = useWorkbenchMutationController({
     activeProject: project.activeProject,

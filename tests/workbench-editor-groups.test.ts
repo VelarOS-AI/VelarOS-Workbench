@@ -71,7 +71,10 @@ function show(layout: WorkbenchEditorGroupsLayout): string {
 }
 
 /** 依次以普通标签打开。 */
-function open(layout: WorkbenchEditorGroupsLayout, ...paths: string[]): WorkbenchEditorGroupsLayout {
+function open(
+  layout: WorkbenchEditorGroupsLayout,
+  ...paths: string[]
+): WorkbenchEditorGroupsLayout {
   return paths.reduce((current, path) => openWorkbenchEditorTab(current, path).layout, layout)
 }
 
@@ -86,7 +89,10 @@ function pin(layout: WorkbenchEditorGroupsLayout, ...paths: string[]): Workbench
 }
 
 /** 依次挪到右边那组（没有就新开）。 */
-function toRight(layout: WorkbenchEditorGroupsLayout, ...paths: string[]): WorkbenchEditorGroupsLayout {
+function toRight(
+  layout: WorkbenchEditorGroupsLayout,
+  ...paths: string[]
+): WorkbenchEditorGroupsLayout {
   return paths.reduce((current, path) => moveWorkbenchEditorTabToGroup(current, path, 1), layout)
 }
 
@@ -164,10 +170,15 @@ void describe('editor tab layout', () => {
       path.startsWith('src/') ? `lib/${path.slice(4)}` : path
     )
     assert.equal(show(moved), '*lib/a.ts [lib/b.ts] c.ts')
-    assert.equal(renameWorkbenchEditorLayoutPaths(layout, (path) => path), layout)
+    assert.equal(
+      renameWorkbenchEditorLayoutPaths(layout, (path) => path),
+      layout
+    )
     // 改完撞上另一个开着的文件：只留前面那个标签。
     assert.equal(
-      show(renameWorkbenchEditorLayoutPaths(layout, (path) => (path === 'c.ts' ? 'src/a.ts' : path))),
+      show(
+        renameWorkbenchEditorLayoutPaths(layout, (path) => (path === 'c.ts' ? 'src/a.ts' : path))
+      ),
       '*src/a.ts [src/b.ts]'
     )
   })
@@ -325,7 +336,9 @@ void describe('pinned tabs', () => {
 
 void describe('preview tab wiring', () => {
   const controller = readSource('src/renderer/src/hooks/useWorkbenchEditorController.ts')
-  const adapter = readSource('src/renderer/src/components/embedded/workbenchEmbeddedKernelAdapter.ts')
+  const adapter = readSource(
+    'src/renderer/src/components/embedded/workbenchEmbeddedKernelAdapter.ts'
+  )
 
   void test('a single click previews, a double click or Enter opens a normal tab', () => {
     const row = readSource('src/renderer/src/components/files/FileTreeRow.tsx')
@@ -356,7 +369,10 @@ void describe('preview tab wiring', () => {
     )
     // 问题面板：单击一条预览，双击普通。
     const problems = readSource('src/renderer/src/components/editor/CodeInsightPanel.tsx')
-    assert.match(problems, /onClick=\{\(\) => handleProblemSelect\(problem, \{ preview: true \}\)\}/u)
+    assert.match(
+      problems,
+      /onClick=\{\(\) => handleProblemSelect\(problem, \{ preview: true \}\)\}/u
+    )
     assert.match(problems, /onDoubleClick=\{\(\) => handleProblemSelect\(problem\)\}/u)
     assert.match(
       presentation,
@@ -387,7 +403,10 @@ void describe('preview tab wiring', () => {
     assert.match(adapter, /onKeepOpenFile: workbench\.keepOpenFile/u)
     assert.match(tabBar, /onDoubleClick=\{\(\) => onKeepOpenFile\?\.\(tab\.path\)\}/u)
     assert.match(tabBar, /data-preview=\{tab\.path === previewTabPath\}/u)
-    assert.match(styles, /\.editorTab\[data-preview='true'\] \.editorTabName,[\s\S]*?font-style: italic;/u)
+    assert.match(
+      styles,
+      /\.editorTab\[data-preview='true'\] \.editorTabName,[\s\S]*?font-style: italic;/u
+    )
   })
 
   void test('editing, saving and the setting keep the preview; a replaced preview is closed', () => {
@@ -418,7 +437,10 @@ void describe('preview tab wiring', () => {
       /if \(!previewTabsEnabled\) commitLayout\(keepWorkbenchEditorPreviewTabs\(layoutRef\.current\)\)/u
     )
     const pageModel = readSource('src/renderer/src/hooks/useStandaloneWorkbenchPageModel.tsx')
-    assert.match(pageModel, /previewTabsEnabled: workbenchPreferences\.preferences\.editorPreviewTabs/u)
+    assert.match(
+      pageModel,
+      /previewTabsEnabled: workbenchPreferences\.preferences\.editorPreviewTabs/u
+    )
     const settings = readSource('src/renderer/src/components/settings/WorkbenchSettingsDialog.tsx')
     assert.match(settings, /checked=\{preferences\.editorPreviewTabs\}/u)
     const preferences = readSource('src/renderer/src/models/workbenchPreferences.ts')
@@ -442,14 +464,20 @@ void describe('pinned tab wiring', () => {
       tabBar,
       /\(contextTabIsPinned \? onUnpinOpenFile : onPinOpenFile\)\(tabContextMenu\.path\)/u
     )
-    assert.match(tabBar, /t\(contextTabIsPinned \? 'workbench\.unpinEditorTab' : 'workbench\.pinEditorTab'\)/u)
+    assert.match(
+      tabBar,
+      /t\(contextTabIsPinned \? 'workbench\.unpinEditorTab' : 'workbench\.pinEditorTab'\)/u
+    )
     // 拖放：落点与被拖的标签不在同一个区（固定 / 普通）就不接（规则在 canDropWorkbenchEditorTabOn 里）。
     assert.match(
       tabBar,
       /canDropWorkbenchEditorTabOn\(readTabDrag\(event\), \{\s*path,\s*groupIndex,\s*pinned: isPinnedTabPath\(path\),\s*\}\)/u
     )
     assert.match(tabBar, /if \(!canDropTabOn\(path, event\)\) return\s*event\.preventDefault\(\)/u)
-    assert.match(editorPanel, /selectedTabPinned = !!selectedTab && openTabs\.indexOf\(selectedTab\) < pinnedTabCount/u)
+    assert.match(
+      editorPanel,
+      /selectedTabPinned = !!selectedTab && openTabs\.indexOf\(selectedTab\) < pinnedTabCount/u
+    )
 
     // 批量关闭只关没固定的。
     assert.match(
@@ -544,8 +572,14 @@ void describe('two editor groups side by side', () => {
     assert.deepEqual(listWorkbenchEditorLayoutPaths(opened), ['a', 'b', 'c'])
     // 新文件开在当前组；指名开在哪一组（后退 / 前进）就开在那一组，那一组不在了落到最靠右的一组。
     assert.equal(show(open(split, 'n')), '*a [n] | b [c]')
-    assert.equal(show(openWorkbenchEditorTab(split, 'n', { groupIndex: 1 }).layout), '[a] | *b c [n]')
-    assert.equal(show(openWorkbenchEditorTab(open(empty, 'a'), 'n', { groupIndex: 1 }).layout), '*a [n]')
+    assert.equal(
+      show(openWorkbenchEditorTab(split, 'n', { groupIndex: 1 }).layout),
+      '[a] | *b c [n]'
+    )
+    assert.equal(
+      show(openWorkbenchEditorTab(open(empty, 'a'), 'n', { groupIndex: 1 }).layout),
+      '*a [n]'
+    )
     assert.equal(resolveWorkbenchEditorTabGroupIndex(split, 'c'), 1)
     assert.equal(resolveWorkbenchEditorTabGroupIndex(split, 'c', 0), 1)
     assert.equal(resolveWorkbenchEditorTabGroupIndex(split, 'n'), 0)
@@ -630,17 +664,38 @@ void describe('two editor groups side by side', () => {
 
   void test('the drop rule: within a group only inside the same area, across groups anywhere', () => {
     const drag = { path: 'b', groupIndex: 0, pinned: false }
-    assert.equal(canDropWorkbenchEditorTabOn(null, { path: 'a', groupIndex: 0, pinned: false }), false)
-    assert.equal(canDropWorkbenchEditorTabOn(drag, { path: 'c', groupIndex: 0, pinned: false }), true)
-    assert.equal(canDropWorkbenchEditorTabOn(drag, { path: 'b', groupIndex: 0, pinned: false }), false)
-    assert.equal(canDropWorkbenchEditorTabOn(drag, { path: 'a', groupIndex: 0, pinned: true }), false)
     assert.equal(
-      canDropWorkbenchEditorTabOn({ ...drag, pinned: true }, { path: 'c', groupIndex: 0, pinned: false }),
+      canDropWorkbenchEditorTabOn(null, { path: 'a', groupIndex: 0, pinned: false }),
+      false
+    )
+    assert.equal(
+      canDropWorkbenchEditorTabOn(drag, { path: 'c', groupIndex: 0, pinned: false }),
+      true
+    )
+    assert.equal(
+      canDropWorkbenchEditorTabOn(drag, { path: 'b', groupIndex: 0, pinned: false }),
+      false
+    )
+    assert.equal(
+      canDropWorkbenchEditorTabOn(drag, { path: 'a', groupIndex: 0, pinned: true }),
+      false
+    )
+    assert.equal(
+      canDropWorkbenchEditorTabOn(
+        { ...drag, pinned: true },
+        { path: 'c', groupIndex: 0, pinned: false }
+      ),
       false
     )
     // 另一组的标签上都能落：落在哪个区由布局决定。
-    assert.equal(canDropWorkbenchEditorTabOn(drag, { path: 'd', groupIndex: 1, pinned: true }), true)
-    assert.equal(canDropWorkbenchEditorTabOn(drag, { path: 'e', groupIndex: 1, pinned: false }), true)
+    assert.equal(
+      canDropWorkbenchEditorTabOn(drag, { path: 'd', groupIndex: 1, pinned: true }),
+      true
+    )
+    assert.equal(
+      canDropWorkbenchEditorTabOn(drag, { path: 'e', groupIndex: 1, pinned: false }),
+      true
+    )
   })
 
   void test('a group takes a tab dropped on its editor only from the other group', () => {
@@ -785,7 +840,10 @@ void describe('two editor groups side by side', () => {
     }
     assert.equal(isWorkbenchPaletteCommandAvailable('split-editor-right', context), true)
     assert.equal(
-      isWorkbenchPaletteCommandAvailable('split-editor-right', { ...context, canSplitEditorRight: false }),
+      isWorkbenchPaletteCommandAvailable('split-editor-right', {
+        ...context,
+        canSplitEditorRight: false,
+      }),
       false
     )
     assert.equal(
@@ -794,11 +852,17 @@ void describe('two editor groups side by side', () => {
     )
     assert.equal(isWorkbenchPaletteCommandAvailable('focus-right-editor-group', context), false)
     assert.equal(
-      isWorkbenchPaletteCommandAvailable('focus-right-editor-group', { ...context, editorGroupCount: 2 }),
+      isWorkbenchPaletteCommandAvailable('focus-right-editor-group', {
+        ...context,
+        editorGroupCount: 2,
+      }),
       true
     )
     assert.equal(
-      isWorkbenchPaletteCommandAvailable('focus-left-editor-group', { ...context, editorGroupCount: 2 }),
+      isWorkbenchPaletteCommandAvailable('focus-left-editor-group', {
+        ...context,
+        editorGroupCount: 2,
+      }),
       true
     )
   })
@@ -807,7 +871,9 @@ void describe('two editor groups side by side', () => {
 void describe('split editor wiring', () => {
   const groupsPanel = readSource('src/renderer/src/components/editor/EditorGroupsPanel.tsx')
   const editorPanel = readSource('src/renderer/src/components/editor/EditorPanel.tsx')
-  const adapter = readSource('src/renderer/src/components/embedded/workbenchEmbeddedKernelAdapter.ts')
+  const adapter = readSource(
+    'src/renderer/src/components/embedded/workbenchEmbeddedKernelAdapter.ts'
+  )
   const pageModel = readSource('src/renderer/src/hooks/useStandaloneWorkbenchPageModel.tsx')
   const controller = readSource('src/renderer/src/hooks/useWorkbenchEditorController.ts')
 
@@ -831,7 +897,10 @@ void describe('split editor wiring', () => {
     assert.equal(groupsPanel.match(/onSplitRatioChange\(/gu)?.length, 2)
     const styles = readSource('src/renderer/src/styles/09-editor.module.css')
     assert.match(styles, /\.editorGroup \{[^}]*flex: 1 1 0;/u)
-    assert.match(styles, /\.editorGroup\[data-focused='false'\] \.editorTab\[data-active='true'\]::after/u)
+    assert.match(
+      styles,
+      /\.editorGroup\[data-focused='false'\] \.editorTab\[data-active='true'\]::after/u
+    )
   })
 
   void test('both editors share the per-file states, and a moved tab takes its state along', () => {
@@ -844,12 +913,15 @@ void describe('split editor wiring', () => {
     // 编辑器取状态时登记自己正在显示这个文件，另一组的编辑器接手时向它要此刻的状态。
     assert.match(
       codeMirror,
-      /fileStatesRef\.current\.take\(key, \{\s*owner: instance,\s*snapshot: \(\) =>\s*viewRef\.current \? snapshotFileState\(viewRef\.current, instance\) : null,\s*\}\)/u
+      /fileStatesRef\.current\.take\(key, \{\s*owner: instance,\s*snapshot: \(\) =>\s*\(?viewRef\.current \? snapshotFileState\(viewRef\.current, instance\) : null\)?,\s*\}\)/u
     )
   })
 
   void test('an action in a group acts on the file that group shows', () => {
-    assert.match(adapter, /if \(activePath\) void workbench\.saveSelectedFile\(content, activePath\)/u)
+    assert.match(
+      adapter,
+      /if \(activePath\) void workbench\.saveSelectedFile\(content, activePath\)/u
+    )
     assert.match(adapter, /if \(activePath\) workbench\.setEditorContent\(content, activePath\)/u)
     assert.match(adapter, /if \(activePath\) workbench\.toggleSelectedFileEditMode\(activePath\)/u)
     assert.match(
@@ -857,7 +929,10 @@ void describe('split editor wiring', () => {
       /if \(activePath\) void workbench\.resolveSelectedExternalFileConflict\(resolution, activePath\)/u
     )
     // 标签栏上的「关闭全部 / 未修改」只管自己那一组。
-    assert.match(adapter, /onCloseAllOpenFiles: \(\) => workbench\.closeAllOpenFiles\(group\.index\)/u)
+    assert.match(
+      adapter,
+      /onCloseAllOpenFiles: \(\) => workbench\.closeAllOpenFiles\(group\.index\)/u
+    )
     assert.match(
       adapter,
       /onCloseUnmodifiedOpenFiles: \(\) => workbench\.closeUnmodifiedOpenFiles\(group\.index\)/u
@@ -883,7 +958,10 @@ void describe('split editor wiring', () => {
       editorPanel,
       /if \(navigationRequest\.path && navigationRequest\.path !== selectedFile\.path\) return/u
     )
-    assert.match(editorPanel, /const \{ appliedNavigationRequestIdRef, handledFocusRequestIdRef \} = group/u)
+    assert.match(
+      editorPanel,
+      /const \{ appliedNavigationRequestIdRef, handledFocusRequestIdRef \} = group/u
+    )
     // ⌘1 / ⌘2 落到眼前没有编辑器的一组（图片、Markdown 预览、Git 对比）：键盘焦点从原处拿走，下一次按键
     // 不会落回另一组的编辑器里、把当前组又换回去。
     assert.match(
@@ -900,7 +978,10 @@ void describe('split editor wiring', () => {
       groupsPanel,
       /diff=\{index === 0 \? diff : \{ diffWorkspaceRoot: diff\.diffWorkspaceRoot \}\}/u
     )
-    assert.match(groupsPanel, /const visibleGroups = isolatedTabGroup \? groups\.slice\(0, 1\) : groups/u)
+    assert.match(
+      groupsPanel,
+      /const visibleGroups = isolatedTabGroup \? groups\.slice\(0, 1\) : groups/u
+    )
     // 结构图、AI 改动占着编辑区时在它们里面点、敲不换当前组：离开之后当前组还是原来那一组。
     assert.match(
       groupsPanel,
@@ -930,7 +1011,10 @@ void describe('split editor wiring', () => {
       /if \(groupIndex !== layout\.focusedGroup\) \{\s*editorNavigation\.recordNavigationPoint\(\)\s*workbench\.focusEditorGroup\(groupIndex\)/u
     )
     // 右键：只有一组是「拆分并右移」，有两组是「移到另一侧」。
-    assert.match(tabBar, /onMoveTabToGroup\(tabContextMenu\.path, 1\)[\s\S]*?workbench\.splitEditorTabRight/u)
+    assert.match(
+      tabBar,
+      /onMoveTabToGroup\(tabContextMenu\.path, 1\)[\s\S]*?workbench\.splitEditorTabRight/u
+    )
     assert.match(
       tabBar,
       /onMoveTabToGroup\(tabContextMenu\.path, 1 - groupIndex\)[\s\S]*?workbench\.moveEditorTabToOtherGroup/u
@@ -948,7 +1032,10 @@ void describe('split editor wiring', () => {
     // 的路径当文字插进正文）。另一组拖来的挪进去；自己这一组的标签落在这里什么都不做。标签栏上的落点还是
     // 标签栏自己接。
     assert.match(groupsPanel, /return element\?\.closest\('\[role="tablist"\]'\) \? null : drag/u)
-    assert.match(groupsPanel, /onDragOverCapture=\{\(event\) => handleGroupDragOver\(index, event\)\}/u)
+    assert.match(
+      groupsPanel,
+      /onDragOverCapture=\{\(event\) => handleGroupDragOver\(index, event\)\}/u
+    )
     assert.match(groupsPanel, /onDropCapture=\{\(event\) => handleGroupDrop\(index, event\)\}/u)
     assert.match(
       groupsPanel,
@@ -980,7 +1067,11 @@ void describe('saved editor tab layout', () => {
 
   void test('anything that is not a layout restores as no tabs', () => {
     for (const value of [undefined, null, 'tabs', 3, [], {}, { groups: 'a' }, { groups: [] }]) {
-      assert.equal(show(normalizeWorkbenchEditorGroupsLayout(value, 32)), '*', JSON.stringify(value))
+      assert.equal(
+        show(normalizeWorkbenchEditorGroupsLayout(value, 32)),
+        '*',
+        JSON.stringify(value)
+      )
     }
     // 只有一列标签路径的旧会话不换算：标签不恢复，树的展开状态照旧。
     const legacy = normalizeWorkbenchProjectSession({
@@ -1023,7 +1114,10 @@ void describe('saved editor tab layout', () => {
     assert.equal(restore({ paths: ['a', 'b'], pinnedCount: 'two', activePath: 'a' }), '*[a] b')
     assert.equal(restore({ paths: ['a', 'b'], pinnedCount: 9, activePath: 'a' }), '*[!a] !b')
     // 固定区里有坏条目：丢掉它，后面的普通标签不会顶上来变成固定的。
-    assert.equal(restore({ paths: ['a', '', 'b', 'c'], pinnedCount: 2, activePath: 'c' }), '*!a b [c]')
+    assert.equal(
+      restore({ paths: ['a', '', 'b', 'c'], pinnedCount: 2, activePath: 'c' }),
+      '*!a b [c]'
+    )
     // 预览标签不能是固定标签。
     assert.equal(
       restore({ paths: ['a', 'b'], pinnedCount: 1, previewPath: 'a', activePath: 'b' }),
@@ -1047,7 +1141,9 @@ void describe('saved editor tab layout', () => {
       editorLayout: layout,
       cursorByPath: {},
     })
-    const restored = normalizeWorkbenchProjectSession(JSON.parse(JSON.stringify(session))).editorLayout
+    const restored = normalizeWorkbenchProjectSession(
+      JSON.parse(JSON.stringify(session))
+    ).editorLayout
     assert.equal(show(restored), '*a [b] | !c [d]')
     assert.equal(restored.splitRatio, 0.35)
 

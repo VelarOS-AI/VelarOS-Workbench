@@ -1,17 +1,12 @@
 import assert from 'node:assert/strict'
-import {
-  mkdirSync,
-  mkdtempSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { realpath, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { isAbsolute, join } from 'node:path'
 
 import { execa } from 'execa'
 
-import { AppError } from '@velaros-ai/core/error'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
 import { WorkbenchGitService } from './WorkbenchGitService'
 
@@ -63,11 +58,7 @@ async function runGitProbe(): Promise<void> {
   try {
     const empty = await service.getSummary(projectRoot)
     check(!empty.repository, '非 Git 目录应返回 repository=false')
-    await equalRootIdentity(
-      empty.rootPath,
-      canonicalProjectRoot,
-      '摘要 rootPath 应 canonical'
-    )
+    await equalRootIdentity(empty.rootPath, canonicalProjectRoot, '摘要 rootPath 应 canonical')
 
     const initialized = await service.initialize(projectRoot)
     check(initialized.summary.repository, '初始化后应识别 Git 仓库')
@@ -101,12 +92,7 @@ async function runGitProbe(): Promise<void> {
 
     const draft = await service.generateCommitMessage(projectRoot, 'en-US', ['alpha file.txt'])
     equal(draft.message, 'Add alpha file.txt', '本地提交标题应稳定')
-    const committed = await service.commit(
-      projectRoot,
-      'en-US',
-      undefined,
-      ['alpha file.txt']
-    )
+    const committed = await service.commit(projectRoot, 'en-US', undefined, ['alpha file.txt'])
     check(/^[0-9a-f]{40}$/.test(committed.commit.commitSha), '提交应返回完整 SHA')
     equal(committed.commit.changedFiles, 1, '提交文件数')
     equal(committed.commit.lineStats.additions, 2, '提交行统计')
@@ -138,7 +124,11 @@ async function runGitProbe(): Promise<void> {
     // 贮藏：改动收起来、列得出、按对象名取得回。
     const stashed = await service.stash(projectRoot, { message: 'probe stash' })
     check(stashed.summary.status?.isClean, '贮藏后工作区应 clean')
-    equal((await service.listStashes(projectRoot)).stashes[0]?.message, 'probe stash', '贮藏应列得出')
+    equal(
+      (await service.listStashes(projectRoot)).stashes[0]?.message,
+      'probe stash',
+      '贮藏应列得出'
+    )
     const popped = await service.performStashAction(projectRoot, stashed.stash.sha, 'pop')
     equal(popped.summary.status?.changedFiles, 1, '弹出贮藏应取回改动')
     equal(popped.stashes.length, 0, '弹出后这条贮藏应删除')
@@ -321,9 +311,7 @@ async function removeProbeDirectory(rootPath: string): Promise<void> {
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code
       if (!code || !retryableCodes.has(code) || attempt >= 10) throw error
-      await new Promise((resolve) =>
-        setTimeout(resolve, Math.min((attempt + 1) * 100, 500))
-      )
+      await new Promise((resolve) => setTimeout(resolve, Math.min((attempt + 1) * 100, 500)))
     }
   }
 }

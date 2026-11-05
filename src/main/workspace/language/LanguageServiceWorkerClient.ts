@@ -2,11 +2,23 @@ import { totalmem } from 'node:os'
 import { resolve } from 'node:path'
 import { Worker } from 'node:worker_threads'
 
-import { Log } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
 import { type AppLocale } from '@velaros-ai/ui/conversation/contracts'
+import { Log } from '@velaros-ai/velaros/core'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
-import { type WorkbenchLanguageServiceCallHierarchyRequest, type WorkbenchLanguageServiceCodeActionResolveRequest, type WorkbenchLanguageServiceCodeActionsRequest, type WorkbenchLanguageServiceCompletionResolveRequest, type WorkbenchLanguageServiceExtensionRequest, type WorkbenchLanguageServiceFileRenameEditsRequest, type WorkbenchLanguageServiceInlayHintsRequest, type WorkbenchLanguageServicePositionRequest, type WorkbenchLanguageServiceProjectDiagnosticsRequest, type WorkbenchLanguageServiceRenameRequest, type WorkbenchLanguageServiceRequest } from '@shared/contracts/workbench'
+import {
+  type WorkbenchLanguageServiceCallHierarchyRequest,
+  type WorkbenchLanguageServiceCodeActionResolveRequest,
+  type WorkbenchLanguageServiceCodeActionsRequest,
+  type WorkbenchLanguageServiceCompletionResolveRequest,
+  type WorkbenchLanguageServiceExtensionRequest,
+  type WorkbenchLanguageServiceFileRenameEditsRequest,
+  type WorkbenchLanguageServiceInlayHintsRequest,
+  type WorkbenchLanguageServicePositionRequest,
+  type WorkbenchLanguageServiceProjectDiagnosticsRequest,
+  type WorkbenchLanguageServiceRenameRequest,
+  type WorkbenchLanguageServiceRequest,
+} from '@shared/contracts/workbench'
 
 import {
   getWorkbenchMainLocale,
@@ -168,7 +180,9 @@ function createDefaultLanguageServiceWorker({
 }: WorkbenchLanguageServiceWorkerFactoryOptions): WorkbenchLanguageServiceWorkerPort {
   // 显式的堆上限让 OOM 变成可恢复的 worker 终止（error 事件），而不是 Node 直接 abort 整个主进程。
   return new Worker(resolve(__dirname, 'workbench-language-worker.js'), {
-    resourceLimits: { maxOldGenerationSizeMb: computeWorkbenchLanguageWorkerHeapLimitMb(totalmem()) },
+    resourceLimits: {
+      maxOldGenerationSizeMb: computeWorkbenchLanguageWorkerHeapLimitMb(totalmem()),
+    },
     workerData: { cancellation, locale },
   })
 }
@@ -200,8 +214,7 @@ export class WorkbenchLanguageServiceWorkerClient {
 
   constructor(
     private readonly createWorker: WorkbenchLanguageServiceWorkerFactory = createDefaultLanguageServiceWorker,
-    private readonly requestTimeoutMs: WorkbenchLanguageServiceRequestTimeout =
-      getWorkbenchLanguageServiceRequestTimeoutMs,
+    private readonly requestTimeoutMs: WorkbenchLanguageServiceRequestTimeout = getWorkbenchLanguageServiceRequestTimeoutMs,
     health: Partial<WorkbenchLanguageServiceWorkerHealthOptions> = {}
   ) {
     this.health = { ...DefaultWorkerHealth, ...health }
@@ -245,7 +258,11 @@ export class WorkbenchLanguageServiceWorkerClient {
     request: WorkbenchLanguageServicePositionRequest,
     options: WorkbenchLanguageServiceSupersedeScope = {}
   ) {
-    return this.call('getCompletions', request, this.supersedeKey('getCompletions', request, options))
+    return this.call(
+      'getCompletions',
+      request,
+      this.supersedeKey('getCompletions', request, options)
+    )
   }
 
   /** 接受补全时要的附加改动：不参与顶替（选中另一项的预取不能把已接受那一项的导入取消掉）。 */
@@ -281,7 +298,11 @@ export class WorkbenchLanguageServiceWorkerClient {
     request: WorkbenchLanguageServicePositionRequest,
     options: WorkbenchLanguageServiceSupersedeScope = {}
   ) {
-    return this.call('getSignatureHelp', request, this.supersedeKey('getSignatureHelp', request, options))
+    return this.call(
+      'getSignatureHelp',
+      request,
+      this.supersedeKey('getSignatureHelp', request, options)
+    )
   }
 
   public getFormat(request: WorkbenchLanguageServiceRequest) {
@@ -314,7 +335,11 @@ export class WorkbenchLanguageServiceWorkerClient {
     request: WorkbenchLanguageServiceRequest,
     options: WorkbenchLanguageServiceSupersedeScope = {}
   ) {
-    return this.call('getSemanticTokens', request, this.supersedeKey('getSemanticTokens', request, options))
+    return this.call(
+      'getSemanticTokens',
+      request,
+      this.supersedeKey('getSemanticTokens', request, options)
+    )
   }
 
   public getCodeActions(request: WorkbenchLanguageServiceCodeActionsRequest) {
@@ -391,10 +416,11 @@ export class WorkbenchLanguageServiceWorkerClient {
     if (operation !== 'getDiagnostics') {
       // 项目文件变了：还在飞的诊断是照旧文件算的，之后同样的请求不能再搭它的便车。
       if (
-        operation === 'projectFilesChanged'
-        || operation === 'synchronizeProjectFile'
-        || operation === 'invalidateProject'
-      ) this.inFlightDiagnostics.splice(0)
+        operation === 'projectFilesChanged' ||
+        operation === 'synchronizeProjectFile' ||
+        operation === 'invalidateProject'
+      )
+        this.inFlightDiagnostics.splice(0)
       return this.send(operation, request, supersedeKey)
     }
 
@@ -428,14 +454,17 @@ export class WorkbenchLanguageServiceWorkerClient {
     request: WorkbenchLanguageServiceWorkerOperationMap[TOperation]['request'],
     supersedeKey?: string
   ): Promise<WorkbenchLanguageServiceWorkerOperationMap[TOperation]['result']> {
-    if (this.disposed) return Promise.reject(new AppError('CLOSED', workbenchMainText('language.serviceClosed')))
+    if (this.disposed)
+      return Promise.reject(new AppError('CLOSED', workbenchMainText('language.serviceClosed')))
 
     return new Promise((resolvePromise, reject) => {
       const pending = this.createPending(
         operation,
         request,
         (result) =>
-          resolvePromise(result as WorkbenchLanguageServiceWorkerOperationMap[TOperation]['result']),
+          resolvePromise(
+            result as WorkbenchLanguageServiceWorkerOperationMap[TOperation]['result']
+          ),
         reject
       )
       if (supersedeKey) {
@@ -473,7 +502,10 @@ export class WorkbenchLanguageServiceWorkerClient {
     return pending
   }
 
-  private post(pending: PendingLanguageServiceRequest, worker: LanguageServiceWorkerInstance): void {
+  private post(
+    pending: PendingLanguageServiceRequest,
+    worker: LanguageServiceWorkerInstance
+  ): void {
     pending.worker = worker
     pending.timeout = setTimeout(
       () => this.handleRequestTimeout(pending),
@@ -501,7 +533,10 @@ export class WorkbenchLanguageServiceWorkerClient {
   }
 
   /** 取消一个请求：调用方立刻得到取消错误，worker 丢掉还在排队的它、放弃正在算的它。 */
-  private cancel(id: number, error = new AppError('CANCELLED', workbenchMainText('language.requestSuperseded'))): void {
+  private cancel(
+    id: number,
+    error = new AppError('CANCELLED', workbenchMainText('language.requestSuperseded'))
+  ): void {
     const pending = this.pending.get(id)
     if (!pending) return
     this.settle(pending, error)
@@ -520,9 +555,9 @@ export class WorkbenchLanguageServiceWorkerClient {
     this.cancel(
       pending.id,
       new AppError(
-          'TIMEOUT',
-          workbenchMainText('language.serviceRequestTimedOut', { operation: pending.operation })
-        )
+        'TIMEOUT',
+        workbenchMainText('language.serviceRequestTimedOut', { operation: pending.operation })
+      )
     )
     // 请求慢不等于 worker 死了：先探活，答不上来才重启。
     if (worker && worker === this.worker) this.probe(worker)
@@ -533,15 +568,18 @@ export class WorkbenchLanguageServiceWorkerClient {
     const id = this.nextRequestId++
     worker.probe = {
       id,
-      timer: setTimeout(() => {
-        if (this.worker !== worker || worker.probe?.id !== id) return
-        worker.probe = null
-        log.warn('language_worker_unresponsive', { hangTimeoutMs: this.health.hangTimeoutMs })
-        this.replaceWorker(
-          worker,
-          new AppError('TIMEOUT', workbenchMainText('language.serviceRestartedUnresponsive'))
-        )
-      }, Math.max(1, this.health.hangTimeoutMs)),
+      timer: setTimeout(
+        () => {
+          if (this.worker !== worker || worker.probe?.id !== id) return
+          worker.probe = null
+          log.warn('language_worker_unresponsive', { hangTimeoutMs: this.health.hangTimeoutMs })
+          this.replaceWorker(
+            worker,
+            new AppError('TIMEOUT', workbenchMainText('language.serviceRestartedUnresponsive'))
+          )
+        },
+        Math.max(1, this.health.hangTimeoutMs)
+      ),
     }
     try {
       worker.port.postMessage({ control: 'ping', id })
@@ -613,7 +651,10 @@ export class WorkbenchLanguageServiceWorkerClient {
     if (isWorkerOutOfMemory(error)) {
       // 项目太大把语言服务的堆用满了：只丢语言服务，编辑器与 Agent 都不受影响，下一次请求重建。
       log.warn('language_worker_out_of_memory', { message: String((error as Error).message) })
-      this.replaceWorker(worker, new AppError('PLATFORM', workbenchMainText('language.serviceOutOfMemory')))
+      this.replaceWorker(
+        worker,
+        new AppError('PLATFORM', workbenchMainText('language.serviceOutOfMemory'))
+      )
       return
     }
     this.replaceWorker(worker, AppError.from(error, 'IPC'))
@@ -632,12 +673,13 @@ export class WorkbenchLanguageServiceWorkerClient {
     // 平稳跑过一阵才出事的不算接连失败；接连失败的重建间隔翻倍，免得反复拉起一个起不来的 worker。
     const now = Date.now()
     if (now - worker.startedAt >= this.health.restartBackoffResetMs) this.consecutiveFailures = 0
-    const delay = this.consecutiveFailures === 0
-      ? 0
-      : Math.min(
-          this.health.restartBackoffMaxMs,
-          this.health.restartBackoffMs * 2 ** (this.consecutiveFailures - 1)
-        )
+    const delay =
+      this.consecutiveFailures === 0
+        ? 0
+        : Math.min(
+            this.health.restartBackoffMaxMs,
+            this.health.restartBackoffMs * 2 ** (this.consecutiveFailures - 1)
+          )
     this.consecutiveFailures += 1
     this.restartNotBefore = now + delay
     // 退避期间排着的请求（上一次失败后来的）到点再发。
@@ -646,18 +688,21 @@ export class WorkbenchLanguageServiceWorkerClient {
 
   private scheduleRestart(): void {
     if (this.restartTimer || this.disposed) return
-    this.restartTimer = setTimeout(() => {
-      this.restartTimer = null
-      if (this.disposed) return
-      if (Date.now() < this.restartNotBefore) {
-        this.scheduleRestart()
-        return
-      }
-      const waiting = [...this.pending.values()].filter((pending) => !pending.worker)
-      if (waiting.length === 0) return
-      const worker = this.ensureWorker()
-      for (const pending of waiting) this.post(pending, worker)
-    }, Math.max(0, this.restartNotBefore - Date.now()))
+    this.restartTimer = setTimeout(
+      () => {
+        this.restartTimer = null
+        if (this.disposed) return
+        if (Date.now() < this.restartNotBefore) {
+          this.scheduleRestart()
+          return
+        }
+        const waiting = [...this.pending.values()].filter((pending) => !pending.worker)
+        if (waiting.length === 0) return
+        const worker = this.ensureWorker()
+        for (const pending of waiting) this.post(pending, worker)
+      },
+      Math.max(0, this.restartNotBefore - Date.now())
+    )
   }
 
   private rejectPending(error: AppError): void {

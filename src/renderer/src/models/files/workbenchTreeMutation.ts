@@ -1,12 +1,11 @@
-import { AppError } from '@velaros-ai/core/error'
-
-import { type WorkbenchDeleteEntryResult, type WorkbenchDirectoryEntry } from '@shared/contracts/workbench'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
 import {
-  getParentPath,
-  isSameOrChildPath,
-  ROOT_PATH,
-} from '../shared/workbenchUtils'
+  type WorkbenchDeleteEntryResult,
+  type WorkbenchDirectoryEntry,
+} from '@shared/contracts/workbench'
+
+import { getParentPath, isSameOrChildPath, ROOT_PATH } from '../shared/workbenchUtils'
 
 /**
  * 文件树变更（创建 / 重命名 / 移动 / 删除）的纯逻辑模型。
@@ -207,14 +206,16 @@ export function getWorkbenchFileTreeShortcutAction(
     !event.ctrlKey &&
     !event.metaKey &&
     !event.shiftKey
-  ) return 'delete-selected'
+  )
+    return 'delete-selected'
 
   if (
     event.key.toLowerCase() === 'z' &&
     (event.metaKey || event.ctrlKey) &&
     !event.altKey &&
     !event.shiftKey
-  ) return 'undo-delete'
+  )
+    return 'undo-delete'
 
   if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey)
     return ClipboardShortcutActions[event.key.toLowerCase()] ?? null

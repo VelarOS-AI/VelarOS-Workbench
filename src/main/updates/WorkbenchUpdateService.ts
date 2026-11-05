@@ -1,12 +1,9 @@
 import { CancellationError, CancellationToken } from 'builder-util-runtime'
 import type { AppUpdater, ProgressInfo, UpdateDownloadedEvent, UpdateInfo } from 'electron-updater'
 
-import { Log } from '@velaros-ai/core'
+import { Log } from '@velaros-ai/velaros/core'
 
-import type {
-  WorkbenchUpdateChannel,
-  WorkbenchUpdateState,
-} from '../../shared/workbenchUpdate'
+import type { WorkbenchUpdateChannel, WorkbenchUpdateState } from '../../shared/workbenchUpdate'
 
 import { WorkbenchReleaseFeedServer } from './WorkbenchReleaseFeedServer'
 import type { WorkbenchReleaseSource } from './WorkbenchReleaseSource'
@@ -99,12 +96,19 @@ export class WorkbenchUpdateService {
     if (this.#disposed) return Promise.reject(new Error('Workbench update service is disposed.'))
     if (this.#updater) return Promise.resolve(this.#updater)
     if (!this.#updaterPromise) {
-      const pending = Promise.resolve().then(() => typeof this.updaterSource === 'function' ? this.updaterSource() : this.updaterSource)
+      const pending = Promise.resolve()
+        .then(() =>
+          typeof this.updaterSource === 'function' ? this.updaterSource() : this.updaterSource
+        )
         .then((updater) => {
-          if (this.#disposed) throw new Error('Workbench update service was disposed while loading its installer.')
+          if (this.#disposed)
+            throw new Error('Workbench update service was disposed while loading its installer.')
           this.#configureUpdater(updater)
           return updater
-        }).finally(() => { if (this.#updaterPromise === pending) this.#updaterPromise = null })
+        })
+        .finally(() => {
+          if (this.#updaterPromise === pending) this.#updaterPromise = null
+        })
       this.#updaterPromise = pending
     }
     return this.#updaterPromise
@@ -131,7 +135,8 @@ export class WorkbenchUpdateService {
       this.#state.phase === 'downloading' ||
       this.#state.phase === 'paused' ||
       this.#state.phase === 'downloaded'
-    ) return Promise.resolve(this.getState())
+    )
+      return Promise.resolve(this.getState())
     if (this.#checkPromise) return this.#checkPromise
     const operation = this.#performCheck().finally(() => {
       if (this.#checkPromise === operation) this.#checkPromise = null
@@ -142,7 +147,8 @@ export class WorkbenchUpdateService {
 
   public downloadUpdate(): Promise<WorkbenchUpdateState> {
     if (this.#downloadPromise) return this.#downloadPromise
-    if (this.#state.phase !== 'available' && this.#state.phase !== 'error') return Promise.resolve(this.getState())
+    if (this.#state.phase !== 'available' && this.#state.phase !== 'error')
+      return Promise.resolve(this.getState())
     if (!this.#state.targetVersion) throw new Error('No Workbench update is available.')
 
     const targetVersion = this.#state.targetVersion
@@ -248,7 +254,8 @@ export class WorkbenchUpdateService {
   }
 
   async #performCheck(): Promise<WorkbenchUpdateState> {
-    if (this.#disposed || !this.#isPackaged || !expectedFiles(this.#platform)) return this.getState()
+    if (this.#disposed || !this.#isPackaged || !expectedFiles(this.#platform))
+      return this.getState()
     this.#setState({ phase: 'checking' })
     try {
       const release = await this.releases.getCurrentRelease({
@@ -263,7 +270,10 @@ export class WorkbenchUpdateService {
       })
       // The verified catalog can prove there is no version change without initializing the
       // platform installer, differential downloader, or local update-feed server.
-      if (release.catalog.artifacts.length === 0 || release.catalog.artifacts.every((artifact) => artifact.version === this.#currentVersion)) {
+      if (
+        release.catalog.artifacts.length === 0 ||
+        release.catalog.artifacts.every((artifact) => artifact.version === this.#currentVersion)
+      ) {
         await this.#replaceFeed(null)
         this.#setState({ phase: 'idle' })
         return this.getState()
@@ -367,7 +377,8 @@ export class WorkbenchUpdateService {
     state: Omit<
       WorkbenchUpdateState,
       'revision' | 'currentVersion' | 'automaticDownloads' | 'channel'
-    > & Partial<Pick<WorkbenchUpdateState, 'automaticDownloads'>>
+    > &
+      Partial<Pick<WorkbenchUpdateState, 'automaticDownloads'>>
   ): void {
     const next: Omit<WorkbenchUpdateState, 'revision'> = {
       ...state,

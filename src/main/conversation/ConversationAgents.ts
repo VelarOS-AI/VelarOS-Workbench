@@ -1,6 +1,6 @@
-import { isPlainObject, isString } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
 import type { ActAgentSummary, ActTurnTrace } from '@velaros-ai/velaros/contracts'
+import { isPlainObject, isString } from '@velaros-ai/velaros/core'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
 import {
   type ConversationAgentProjection,

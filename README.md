@@ -92,7 +92,7 @@ apply to engine sessions.
 
 ## Development
 
-当前固定依赖快照为 Platform v0.6.62（Velaros 0.6.4），UI 版本为 0.2.55。开发使用 Node 24.22.0 LTS 与 Bun 1.4.3；安装包携带同版本 Node。
+当前固定依赖快照为 Platform v0.6.107（Velaros 0.6.33），UI 版本为 0.2.73。开发使用 Node 24.22.0 LTS 与 Bun 1.4.3；安装包携带同版本 Node。
 
 Workbench 使用固定的 Platform 本机依赖快照与 UI 发布版本，锁文件记录完整依赖。先登录具备 Platform 仓库读取权限的 `gh`，并配置 `NODE_AUTH_TOKEN` 后运行：
 
@@ -111,10 +111,10 @@ bun run build && bun link
 
 # VelarOS-Platform 根目录：构建 velaros 及其依赖，再逐个登记
 node scripts/build/buildPackageTopology.mjs --for @velaros-ai/velaros
-for package in velaros model script core agent kernel; do (cd packages/$package && bun link); done
+(cd packages/velaros && bun link)
 
 # Workbench 根目录
-bun link @velaros-ai/velaros @velaros-ai/model @velaros-ai/script @velaros-ai/core @velaros-ai/agent @velaros-ai/kernel @velaros-ai/ui
+bun link @velaros-ai/velaros @velaros-ai/ui
 ```
 
 Workbench 只消费这些包的公开 dist：改了 Platform 或 UI 要先在对应仓重新构建。
@@ -136,7 +136,7 @@ Velar compiler/editor joint-delivery contract.
 ## Packaging
 
 `bun run package:mac`, `bun run package:win`, and `bun run package:linux` create application
-artifacts under `artifacts/desktop/`. The main process loads `@velaros-ai/{model,script,velaros}` as
+artifacts under `artifacts/desktop/`. The main process loads `@velaros-ai/velaros` as
 native ESM from `node_modules` at runtime (the script worker entry and ScriptAct templates resolve by
 package path); `afterPack` checks that every static import of those packages resolves inside
 `app.asar`. Release staging verifies pinned dependency snapshots and registry packages before an official build. Signing and notarization credentials are supplied by the release

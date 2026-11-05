@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-import { isPresent } from '@velaros-ai/core'
+import { isPresent } from '@velaros-ai/velaros/core'
 
 import type {
   WorkbenchBottomTool,
@@ -56,8 +56,7 @@ export function useWorkbenchSurfaceState(): WorkbenchSurfaceState {
     mode: 'files',
   })
   const [activeLeftTool, setActiveLeftTool] = useState<WorkbenchLeftTool>('project')
-  const [activeRightTool, setActiveRightTool] =
-    useState<Nullable<WorkbenchRightToolWindow>>(null)
+  const [activeRightTool, setActiveRightTool] = useState<Nullable<WorkbenchRightToolWindow>>(null)
   const [activeBottomTool, setActiveBottomToolState] = useState<WorkbenchBottomTool>('run')
   const [isCommandPanelCollapsed, setIsCommandPanelCollapsed] = useState(true)
   const [isFilePanelOpen, setIsFilePanelOpen] = useState(true)

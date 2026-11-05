@@ -1,10 +1,19 @@
 import { lstat } from 'node:fs/promises'
 import { join } from 'node:path'
 
-import { AppError } from '@velaros-ai/core/error'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
-import { type SystemWorkspaceGitStashActionResult, type SystemWorkspaceGitStashListResult, type SystemWorkspaceGitStashResult, type WorkspaceGitStatusResult } from '@shared/contracts/system'
-import { type WorkspaceGitStash, type WorkspaceGitStashAction, type WorkspaceGitStashOptions } from '@shared/contracts/workspaceGit'
+import {
+  type SystemWorkspaceGitStashActionResult,
+  type SystemWorkspaceGitStashListResult,
+  type SystemWorkspaceGitStashResult,
+  type WorkspaceGitStatusResult,
+} from '@shared/contracts/system'
+import {
+  type WorkspaceGitStash,
+  type WorkspaceGitStashAction,
+  type WorkspaceGitStashOptions,
+} from '@shared/contracts/workspaceGit'
 import { isWorkspaceGitConflictEntry } from '@shared/workbenchGit'
 
 import { workbenchMainText } from '../../i18n/workbenchMainMessages'
@@ -244,7 +253,8 @@ export class WorkbenchGitStashes {
       .filter(Boolean)
       .map((record, index) => {
         const [sha = '', subject = '', timestamp = '', parents = ''] = record.split('\x1f')
-        const [, kind = '', branch = '', message = subject] = StashSubjectPattern.exec(subject) ?? []
+        const [, kind = '', branch = '', message = subject] =
+          StashSubjectPattern.exec(subject) ?? []
         return {
           sha,
           index,

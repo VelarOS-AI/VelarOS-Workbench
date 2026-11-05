@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { realpath } from 'node:fs/promises'
 import { resolve } from 'node:path'
 
-import { AppError, createAbortError } from '@velaros-ai/core/error'
+import { AppError, createAbortError } from '@velaros-ai/velaros/core/error'
 import type { SessionsSpacePort } from '@velaros-ai/velaros/sessions'
 import type {
   SessionAnswer,

@@ -20,8 +20,8 @@ import {
   getWorkbenchGitStashTitle,
 } from '@renderer/models/git/workbenchGitStashModel'
 
-import { Result } from '@velaros-ai/core/result'
 import { Paragraph } from '@velaros-ai/ui/primitives/display/Paragraph'
+import { Result } from '@velaros-ai/velaros/core/result'
 
 import { type WorkspaceGitLogEntry } from '@shared/contracts/system'
 import { type WorkspaceGitStash } from '@shared/contracts/workspaceGit'
@@ -30,8 +30,7 @@ import styles from '../../styles/workbenchPageStyles'
 
 /** 右侧详情看的是什么：日志里选中的提交，或者贮藏列表里选中的一条贮藏。 */
 export type WorkbenchGitDetailsTarget =
-  | { kind: 'commit'; commit: WorkspaceGitLogEntry }
-  | { kind: 'stash'; stash: WorkspaceGitStash }
+  { kind: 'commit'; commit: WorkspaceGitLogEntry } | { kind: 'stash'; stash: WorkspaceGitStash }
 
 interface WorkbenchGitDetailsPaneProps {
   workspaceRoot: string

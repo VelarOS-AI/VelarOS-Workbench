@@ -1,9 +1,13 @@
 import { createContext, type ReactNode, useContext } from 'react'
 
-import type { Result } from '@velaros-ai/core/result'
-import { type AgentProviderRuntimeConfig } from '@velaros-ai/model'
+import type { Result } from '@velaros-ai/velaros/core/result'
+import { type AgentProviderRuntimeConfig } from '@velaros-ai/velaros/model'
 
-import { type AuxiliaryModelConfig, type AuxiliaryModelConfigs, type AuxiliaryModelTaskId } from '@shared/contracts/product'
+import {
+  type AuxiliaryModelConfig,
+  type AuxiliaryModelConfigs,
+  type AuxiliaryModelTaskId,
+} from '@shared/contracts/product'
 import { type SystemDefaultEditorId, type SystemGitConfig } from '@shared/contracts/system'
 
 export interface WorkbenchModelConfigurationPort {

@@ -9,8 +9,8 @@
  * 这个模块在工作区外壳包里（▶ 要读配置、跑配置），只放读写与运行用得到的；对话框里编辑草稿的那部分在
  * `workbenchRunConfigurationDrafts.ts`，随对话框按需加载。
  */
-import { isArray, isString, Log } from '@velaros-ai/core'
-import { isRecord } from '@velaros-ai/core/utils/unknownJsonRecord'
+import { isArray, isString, Log } from '@velaros-ai/velaros/core'
+import { isRecord } from '@velaros-ai/velaros/core/utils/unknownJsonRecord'
 
 import type { WorkbenchDebuggerLaunchTarget } from '@shared/workbenchDebugger'
 import {
@@ -18,15 +18,15 @@ import {
   type WorkbenchRunEnvironment,
 } from '@shared/workbenchRunEnvironment'
 
-import {
-  createLocalStorageJsonStore,
-  type StorageLike,
-} from '../../support/localStorageJsonStore'
+import { createLocalStorageJsonStore, type StorageLike } from '../../support/localStorageJsonStore'
 
 import type { WorkbenchRunSessionLaunchOptions } from './workbenchCommandLines'
 import { isWorkbenchWindowsHost, quoteWorkbenchShellArgument } from './workbenchShellQuote'
 
-type WorkbenchRunSessionDebugTarget = Extract<WorkbenchDebuggerLaunchTarget, { kind: 'node-script' }>
+type WorkbenchRunSessionDebugTarget = Extract<
+  WorkbenchDebuggerLaunchTarget,
+  { kind: 'node-script' }
+>
 
 /** `command` 是一条 shell 命令；`node` 是一个 Node.js 程序，由 `node` 起它的脚本，能调试。 */
 export type WorkbenchRunConfigurationType = 'command' | 'node'
@@ -94,7 +94,9 @@ export function normalizeWorkbenchNamedRunConfiguration(
     env: readWorkbenchRunEnvironment(value.env) ?? {},
   }
   if (value.type === 'node') {
-    const script = isString(value.script) ? normalizeWorkbenchRunConfigurationCwd(value.script) : null
+    const script = isString(value.script)
+      ? normalizeWorkbenchRunConfigurationCwd(value.script)
+      : null
     const args = isString(value.args) ? value.args.trim() : ''
     if (!script || args.length > MaxCommandLength) return null
 

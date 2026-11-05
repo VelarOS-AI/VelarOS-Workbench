@@ -2,7 +2,7 @@ import { type ReactElement, useEffect, useRef, useState } from 'react'
 import { TerminalWindowIcon } from '@phosphor-icons/react'
 import { useWorkbenchI18n } from '@renderer/i18n/WorkbenchLocalizationProvider'
 
-import { AppError } from '@velaros-ai/core/error'
+import { AppError } from '@velaros-ai/velaros/core/error'
 import type { ShellBackgroundTaskRecord } from '@velaros-ai/velaros/execution/contracts'
 
 import type { WorkbenchConversationSessionRequest } from '@shared/workbenchConversation'
@@ -127,9 +127,10 @@ export function WorkbenchAgentProcesses({
     }
   }
   const running = tasks.filter((task) => task.status !== 'exited').length
-  const selected = tasks.find((task) => task.id === selectedTaskId)
-    ?? tasks.find((task) => task.status !== 'exited')
-    ?? tasks[0]
+  const selected =
+    tasks.find((task) => task.id === selectedTaskId) ??
+    tasks.find((task) => task.status !== 'exited') ??
+    tasks[0]
   return (
     <>
       <button
@@ -151,13 +152,19 @@ export function WorkbenchAgentProcesses({
           activationRequest={activationRequest}
           title={t('workbench.agentProcessesTitle')}
           onClose={() => setOpen(false)}
-          onError={(failure) => workbenchMessage.error({
-            title: t('workbench.agentConsoleOpenFailed'),
-            description: AppError.getMessage(failure),
-          })}
+          onError={(failure) =>
+            workbenchMessage.error({
+              title: t('workbench.agentConsoleOpenFailed'),
+              description: AppError.getMessage(failure),
+            })
+          }
         >
           <section className={styles.window} aria-label={t('workbench.agentProcessesTitle')}>
-            {(error || loadError) && <p className={styles.error} role="alert">{error || loadError}</p>}
+            {(error || loadError) && (
+              <p className={styles.error} role="alert">
+                {error || loadError}
+              </p>
+            )}
             <div className={styles.body} data-empty={!selected}>
               {selected && (
                 <nav className={styles.taskList} aria-label={t('workbench.agentProcessList')}>
@@ -170,7 +177,9 @@ export function WorkbenchAgentProcesses({
                       onClick={() => setSelectedTaskId(task.id)}
                     >
                       <code title={task.command}>{task.command}</code>
-                      <span>{t(`workbench.agentProcessStatus.${task.status}`)} · PID {task.pid}</span>
+                      <span>
+                        {t(`workbench.agentProcessStatus.${task.status}`)} · PID {task.pid}
+                      </span>
                     </button>
                   ))}
                 </nav>
@@ -185,19 +194,31 @@ export function WorkbenchAgentProcesses({
                       </div>
                       {selected.status !== 'exited' && (
                         <div className={styles.actions}>
-                          <button type="button" disabled={busy} onClick={() => void act(selected.id, 'stop')}>
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => void act(selected.id, 'stop')}
+                          >
                             {t('workbench.agentProcessStop')}
                           </button>
-                          <button type="button" disabled={busy} onClick={() => void act(selected.id, 'force')}>
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => void act(selected.id, 'force')}
+                          >
                             {t('workbench.agentProcessForceStop')}
                           </button>
                         </div>
                       )}
                     </header>
                     <div className={styles.taskMeta}>
-                      <span>{t(`workbench.agentProcessStatus.${selected.status}`)} · PID {selected.pid}</span>
+                      <span>
+                        {t(`workbench.agentProcessStatus.${selected.status}`)} · PID {selected.pid}
+                      </span>
                       {selected.ports.length > 0 && <span>{selected.ports.join(', ')}</span>}
-                      {selected.exitCode != null && <span>{t('workbench.agentProcessExit', { code: selected.exitCode })}</span>}
+                      {selected.exitCode != null && (
+                        <span>{t('workbench.agentProcessExit', { code: selected.exitCode })}</span>
+                      )}
                     </div>
                     <ProcessOutput
                       key={selected.id}
@@ -221,13 +242,20 @@ export function WorkbenchAgentProcesses({
                           disabled={busy}
                           spellCheck={false}
                           onChange={(event) =>
-                            setInputs((current) => ({ ...current, [selected.id]: event.target.value }))
+                            setInputs((current) => ({
+                              ...current,
+                              [selected.id]: event.target.value,
+                            }))
                           }
                         />
                         <button type="submit" disabled={busy}>
                           {t('workbench.agentProcessSend')}
                         </button>
-                        <button type="button" disabled={busy} onClick={() => void act(selected.id, 'interrupt')}>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => void act(selected.id, 'interrupt')}
+                        >
                           Ctrl+C
                         </button>
                       </form>

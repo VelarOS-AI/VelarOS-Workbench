@@ -28,12 +28,15 @@ import type { WorkbenchGitDecorationMap } from '@renderer/models/git/workbenchGi
 import { isWorkbenchTreeRoot } from '@renderer/models/shared/workbenchUtils'
 import type { NodeRendererProps } from 'react-arborist'
 
-import { isNumber } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
 import { StyleUtils } from '@velaros-ai/ui'
 import { Input } from '@velaros-ai/ui/primitives/forms/Input'
+import { isNumber } from '@velaros-ai/velaros/core'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
-import { type WorkbenchDirectoryEntry, type WorkbenchDirectoryEntrySymlink } from '@shared/contracts/workbench'
+import {
+  type WorkbenchDirectoryEntry,
+  type WorkbenchDirectoryEntrySymlink,
+} from '@shared/contracts/workbench'
 
 import styles from '../../styles/workbenchPageStyles'
 
@@ -107,8 +110,7 @@ export const FileTreeRow = memo(function FileTreeRow({
   const fileKind = node.data.fileKind
   const isTreeRoot = isWorkbenchTreeRoot(entry)
   const isTestFile = entry.type === 'file' && isWorkbenchTestFilePath(entry.path)
-  const isTestDirectory =
-    entry.type === 'directory' && isWorkbenchTestDirectoryPath(entry.path)
+  const isTestDirectory = entry.type === 'directory' && isWorkbenchTestDirectoryPath(entry.path)
 
   useEffect(() => {
     if (!node.isEditing) return
@@ -166,9 +168,7 @@ export const FileTreeRow = memo(function FileTreeRow({
       title={entry.symlink ? describeSymlink(entry.symlink) : undefined}
       style={arboristTreeRowOuterStyle(style, entry)}
       onContextMenu={(event) => onContextMenuEntry(entry, event)}
-      onDoubleClick={
-        entry.type === 'file' && !node.isEditing ? () => onOpenFile(entry) : undefined
-      }
+      onDoubleClick={entry.type === 'file' && !node.isEditing ? () => onOpenFile(entry) : undefined}
     >
       {entry.type === 'directory' ? (
         <>

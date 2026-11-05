@@ -1,4 +1,3 @@
-import type { ModelSelection } from '@velaros-ai/model'
 import type {
   ActiveContextArtifact,
   AppLocale,
@@ -11,6 +10,7 @@ import type {
 } from '@velaros-ai/ui/conversation/contracts'
 import type { RuntimeNoteContent, RuntimeNoteRead, VelarosSession } from '@velaros-ai/velaros'
 import type { ActInvocationSummary } from '@velaros-ai/velaros/contracts'
+import type { ModelSelection } from '@velaros-ai/velaros/model'
 
 import type { WorkbenchFsCallResult } from './workbenchFs'
 

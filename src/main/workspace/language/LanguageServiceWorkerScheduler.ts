@@ -1,4 +1,4 @@
-import { AppError } from '@velaros-ai/core/error'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
 import { workbenchMainText } from '../../i18n/workbenchMainMessages'
 
@@ -16,8 +16,13 @@ import {
 } from './LanguageServiceWorkerProtocol'
 
 export interface WorkbenchLanguageServiceWorkerSchedulerOptions {
-  dispatch: (request: WorkbenchLanguageServiceWorkerRequest, signal: AbortSignal) => Promise<unknown>
-  post: (message: WorkbenchLanguageServiceWorkerResponse | WorkbenchLanguageServiceWorkerPong) => void
+  dispatch: (
+    request: WorkbenchLanguageServiceWorkerRequest,
+    signal: AbortSignal
+  ) => Promise<unknown>
+  post: (
+    message: WorkbenchLanguageServiceWorkerResponse | WorkbenchLanguageServiceWorkerPong
+  ) => void
   /** 与主进程共享的取消缓冲（见 markWorkbenchLanguageServiceRequestCancelled）。 */
   cancellation?: Int32Array
 }
@@ -34,7 +39,10 @@ interface RunningLanguageServiceRequest {
  * `cancel` 把排队的请求丢掉、让正在算的尽快放弃。
  */
 export class WorkbenchLanguageServiceWorkerScheduler {
-  private readonly queues: Record<WorkbenchLanguageServiceWorkerPriority, WorkbenchLanguageServiceWorkerRequest[]> = {
+  private readonly queues: Record<
+    WorkbenchLanguageServiceWorkerPriority,
+    WorkbenchLanguageServiceWorkerRequest[]
+  > = {
     lifecycle: [],
     interactive: [],
     background: [],
@@ -64,9 +72,13 @@ export class WorkbenchLanguageServiceWorkerScheduler {
    */
   public isRunningRequestCancelled(): boolean {
     const running = this.running
-    if (!running || !isWorkbenchLanguageServiceOperationSuperseded(running.request.operation)) return false
+    if (!running || !isWorkbenchLanguageServiceOperationSuperseded(running.request.operation))
+      return false
     if (!running.cancelled && this.options.cancellation)
-      running.cancelled = isWorkbenchLanguageServiceRequestCancelled(this.options.cancellation, running.request.id)
+      running.cancelled = isWorkbenchLanguageServiceRequestCancelled(
+        this.options.cancellation,
+        running.request.id
+      )
     return running.cancelled
   }
 
@@ -89,7 +101,11 @@ export class WorkbenchLanguageServiceWorkerScheduler {
   }
 
   private next(): WorkbenchLanguageServiceWorkerRequest | undefined {
-    return this.queues.lifecycle.shift() ?? this.queues.interactive.shift() ?? this.queues.background.shift()
+    return (
+      this.queues.lifecycle.shift() ??
+      this.queues.interactive.shift() ??
+      this.queues.background.shift()
+    )
   }
 
   private async drain(): Promise<void> {
@@ -103,13 +119,21 @@ export class WorkbenchLanguageServiceWorkerScheduler {
   }
 
   private async handle(request: WorkbenchLanguageServiceWorkerRequest): Promise<void> {
-    const running: RunningLanguageServiceRequest = { request, controller: new AbortController(), cancelled: false }
+    const running: RunningLanguageServiceRequest = {
+      request,
+      controller: new AbortController(),
+      cancelled: false,
+    }
     this.running = running
     let response: WorkbenchLanguageServiceWorkerResponse
     try {
       // 排队时就被顶掉了（取消消息还没轮到处理，共享缓冲里已经有它）：不必再算。
-      if (this.isRunningRequestCancelled()) throw new AppError('CANCELLED', workbenchMainText('language.requestCancelledPlain'))
-      response = { id: request.id, result: await this.options.dispatch(request, running.controller.signal) }
+      if (this.isRunningRequestCancelled())
+        throw new AppError('CANCELLED', workbenchMainText('language.requestCancelledPlain'))
+      response = {
+        id: request.id,
+        result: await this.options.dispatch(request, running.controller.signal),
+      }
     } catch (error) {
       // 取消后抛出的任何东西（TypeScript 的取消异常、被中止的外部请求）都按取消答复。
       response = {
@@ -117,7 +141,9 @@ export class WorkbenchLanguageServiceWorkerScheduler {
         error: (running.cancelled
           ? new AppError(
               'CANCELLED',
-              workbenchMainText('language.serviceRequestCancelled', { operation: request.operation })
+              workbenchMainText('language.serviceRequestCancelled', {
+                operation: request.operation,
+              })
             )
           : AppError.from(error)
         ).toJSON(),

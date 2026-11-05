@@ -1,9 +1,13 @@
 import { isAbsolute, resolve } from 'node:path'
 
-import { isFiniteNumber, optionalWhen } from '@velaros-ai/core'
+import { isFiniteNumber, optionalWhen } from '@velaros-ai/velaros/core'
 import { createProjectKernel, type ProjectKernel } from '@velaros-ai/velaros/project'
 
-import { type WorkbenchProjectAiRuleFile, type WorkbenchProjectAiRuleSource, type WorkbenchProjectAiRulesResult } from '../../shared/contracts/workbench'
+import {
+  type WorkbenchProjectAiRuleFile,
+  type WorkbenchProjectAiRuleSource,
+  type WorkbenchProjectAiRulesResult,
+} from '../../shared/contracts/workbench'
 import type { WorkbenchWorkspaceInvokeRequest } from '../../shared/workbenchWorkspace'
 
 /** 项目 AI 规则文件：与主流编码助手同一套约定，按这些模式在项目里找。 */
@@ -104,7 +108,10 @@ class ProjectCapabilityProvider implements WorkbenchProjectCapabilityProvider {
     this.kernels.clear()
   }
 
-  private async readMany(projectRoot: string, input: unknown): Promise<WorkbenchProjectReadManyResult> {
+  private async readMany(
+    projectRoot: string,
+    input: unknown
+  ): Promise<WorkbenchProjectReadManyResult> {
     const kernel = await this.kernel(projectRoot)
     const { path, maxChars, maxBytes } = readObject(input)
     const paths = Array.isArray(path) ? path : [path]
@@ -153,7 +160,8 @@ function ruleSource(path: string): WorkbenchProjectAiRuleSource {
 
 function normalizeProjectRoot(projectRoot: string): string {
   const trimmed = projectRoot.trim()
-  if (!trimmed || !isAbsolute(trimmed)) throw new Error('Project projectRoot must be an absolute path.')
+  if (!trimmed || !isAbsolute(trimmed))
+    throw new Error('Project projectRoot must be an absolute path.')
   return resolve(trimmed)
 }
 

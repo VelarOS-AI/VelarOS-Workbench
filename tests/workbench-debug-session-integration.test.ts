@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 
 import { describe, setDefaultTimeout, test } from 'bun:test'
 
-import { AppError } from '@velaros-ai/core/error'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
 import type { WorkbenchDebugStatus } from '../src/renderer/src/models/debug/workbenchDebugBridge'
 import {
@@ -113,7 +113,10 @@ void describe('debugging a real program from the window', () => {
       assert.match(started.command, /^node --inspect-brk=127\.0\.0\.1:\d+ ['"]main\.js['"]$/u)
 
       // 停在断点上：编辑器要高亮的就是这一行，页面把它带到眼前。
-      const atBreakpoint = await until('the breakpoint', (snapshot) => snapshot.pause?.sequence === 1)
+      const atBreakpoint = await until(
+        'the breakpoint',
+        (snapshot) => snapshot.pause?.sequence === 1
+      )
       assert.equal(atBreakpoint.pause?.reason, 'breakpoint')
       assert.deepEqual(readWorkbenchDebugPausedLine(atBreakpoint, project.root, 'main.js'), {
         line: 2,
@@ -129,7 +132,9 @@ void describe('debugging a real program from the window', () => {
       const frame = atBreakpoint.pause!.frames[0]!
       const locals = await session.getVariables(frame.scopes[0]!.objectId)
       assert.deepEqual(
-        locals?.variables.map((variable) => `${variable.name}=${variable.value.type}:${variable.value.text}`),
+        locals?.variables.map(
+          (variable) => `${variable.name}=${variable.value.type}:${variable.value.text}`
+        ),
         ['a=number:2', 'b=number:3', 'sum=unavailable:']
       )
       // 表达式框与悬停：在选中的那一帧里求值；悬停那种不许有副作用。
@@ -146,7 +151,11 @@ void describe('debugging a real program from the window', () => {
       session.runAction('step-over')
       const stepped = await until('the step', (snapshot) => snapshot.pause?.sequence === 2)
       assert.deepEqual(
-        [stepped.pause?.reason, stepped.pause?.frames[0]?.location.line, stepped.pause?.selectedFrameIndex],
+        [
+          stepped.pause?.reason,
+          stepped.pause?.frames[0]?.location.line,
+          stepped.pause?.selectedFrameIndex,
+        ],
         ['step', 3, 0]
       )
 
@@ -158,16 +167,29 @@ void describe('debugging a real program from the window', () => {
       for (const notify of [...breakpointListeners]) notify()
       await until(
         'the new breakpoint',
-        (snapshot) => snapshot.breakpointStatuses.get(workbenchBreakpointKey('main.js', 8))?.verified === true
+        (snapshot) =>
+          snapshot.breakpointStatuses.get(workbenchBreakpointKey('main.js', 8))?.verified === true
       )
 
       // 继续：先到 debugger 语句，再到新下的断点，然后跑完。
       session.runAction('continue')
-      const statement = await until('the debugger statement', (snapshot) => snapshot.pause?.sequence === 3)
-      assert.deepEqual([statement.pause?.reason, statement.pause?.frames[0]?.location.line], ['other', 7])
+      const statement = await until(
+        'the debugger statement',
+        (snapshot) => snapshot.pause?.sequence === 3
+      )
+      assert.deepEqual(
+        [statement.pause?.reason, statement.pause?.frames[0]?.location.line],
+        ['other', 7]
+      )
       session.runAction('continue')
-      const added = await until('the added breakpoint', (snapshot) => snapshot.pause?.sequence === 4)
-      assert.deepEqual([added.pause?.reason, added.pause?.frames[0]?.location.line], ['breakpoint', 8])
+      const added = await until(
+        'the added breakpoint',
+        (snapshot) => snapshot.pause?.sequence === 4
+      )
+      assert.deepEqual(
+        [added.pause?.reason, added.pause?.frames[0]?.location.line],
+        ['breakpoint', 8]
+      )
       assert.equal((await session.evaluate('label')).value?.text, '"total 5"')
 
       session.runAction('continue')
@@ -226,11 +248,17 @@ void describe('debugging a real program from the window', () => {
     try {
       // 运行卡那边拿到的是带着原因的错误（弹给用户看）。
       await assert.rejects(
-        session.start({ projectRoot: project.root, target: { kind: 'node-script', script: 'missing.js' } })
+        session.start({
+          projectRoot: project.root,
+          target: { kind: 'node-script', script: 'missing.js' },
+        })
       )
       assert.equal(session.getSnapshot().session, null)
 
-      await session.start({ projectRoot: project.root, target: { kind: 'node-script', script: 'loop.js' } })
+      await session.start({
+        projectRoot: project.root,
+        target: { kind: 'node-script', script: 'loop.js' },
+      })
       assert.ok(session.getSnapshot().session)
       await session.stop()
       assert.equal(session.getSnapshot().session, null)

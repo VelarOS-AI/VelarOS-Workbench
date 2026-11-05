@@ -2,8 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { workbenchHost } from '@renderer/host/WorkbenchHost'
 import { isSameWorkbenchGitStashList } from '@renderer/models/git/workbenchGitStashModel'
 
-import { AppError } from '@velaros-ai/core/error'
-import { Result } from '@velaros-ai/core/result'
+import { AppError } from '@velaros-ai/velaros/core/error'
+import { Result } from '@velaros-ai/velaros/core/result'
 
 import { type WorkspaceGitStash } from '@shared/contracts/workspaceGit'
 

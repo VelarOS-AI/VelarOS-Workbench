@@ -9,15 +9,12 @@ import { realpathSync, type Stats, statSync } from 'node:fs'
 import { lstat, realpath, stat } from 'node:fs/promises'
 import { basename, dirname, join, resolve } from 'node:path'
 
-import { AppError } from '@velaros-ai/core/error'
-import { LoggerFactory } from '@velaros-ai/core/logger'
+import { AppError } from '@velaros-ai/velaros/core/error'
+import { LoggerFactory } from '@velaros-ai/velaros/core/logger'
 
 import { workbenchMainText } from '../i18n/workbenchMainMessages'
 
-import {
-  getRelativePathInsideRoot,
-  toPortableRelativePath,
-} from './PathContainmentHelper'
+import { getRelativePathInsideRoot, toPortableRelativePath } from './PathContainmentHelper'
 
 interface ResolvedPath {
   requestedPath: string
@@ -141,7 +138,10 @@ class PathResolver {
   ): void {
     const relativePath = getRelativePathInsideRoot(projectRoot, absolutePath)
     if (!relativePath) {
-      throw new AppError('PERMISSION', workbenchMainText('paths.outsideProject', { path: inputPath }))
+      throw new AppError(
+        'PERMISSION',
+        workbenchMainText('paths.outsideProject', { path: inputPath })
+      )
     }
   }
 
@@ -202,7 +202,10 @@ class PathResolver {
   ): void {
     const relativePath = getRelativePathInsideRoot(projectRoot, absolutePath)
     if (!relativePath) {
-      throw new AppError('PERMISSION', workbenchMainText('paths.outsideProject', { path: inputPath }))
+      throw new AppError(
+        'PERMISSION',
+        workbenchMainText('paths.outsideProject', { path: inputPath })
+      )
     }
 
     if (relativePath.split(/[\\/]/u).some(isGitDirectoryName)) {
@@ -218,7 +221,8 @@ class PathResolver {
 
   private normalizeResolveError(error: unknown, path: string): AppError {
     const code = (error as NodeJS.ErrnoException | undefined)?.code
-    if (code === 'ENOENT') return new AppError('NOT_FOUND', workbenchMainText('paths.entryGone', { path }))
+    if (code === 'ENOENT')
+      return new AppError('NOT_FOUND', workbenchMainText('paths.entryGone', { path }))
     if (code === 'EACCES' || code === 'EPERM')
       return new AppError('PERMISSION', workbenchMainText('paths.entryNoPermission', { path }))
 

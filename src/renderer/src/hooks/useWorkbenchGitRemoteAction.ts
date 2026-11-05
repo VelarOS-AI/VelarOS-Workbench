@@ -9,11 +9,16 @@ import {
   type WorkbenchGitRemoteOperation,
 } from '@renderer/models/git/workbenchGitRemoteOperation'
 
-import { optionalWhenLazy } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
-import { Result } from '@velaros-ai/core/result'
+import { optionalWhenLazy } from '@velaros-ai/velaros/core'
+import { AppError } from '@velaros-ai/velaros/core/error'
+import { Result } from '@velaros-ai/velaros/core/result'
 
-import { type SystemWorkspaceGitActionRequest, type SystemWorkspaceGitActionResult, type WorkspaceGitRemoteAction, type WorkspaceGitRemoteActionResult } from '@shared/contracts/system'
+import {
+  type SystemWorkspaceGitActionRequest,
+  type SystemWorkspaceGitActionResult,
+  type WorkspaceGitRemoteAction,
+  type WorkspaceGitRemoteActionResult,
+} from '@shared/contracts/system'
 
 import { type WorkbenchI18nContextValue } from '../i18n/WorkbenchLocalizationProvider'
 import type { useStableWorkbenchMessageTranslate } from '../runtime/useStableWorkbenchMessaging'

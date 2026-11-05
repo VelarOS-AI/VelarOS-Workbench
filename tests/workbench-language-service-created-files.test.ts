@@ -5,7 +5,7 @@ import { join } from 'node:path'
 
 import { describe, test } from 'bun:test'
 
-import { Result } from '@velaros-ai/core/result'
+import { Result } from '@velaros-ai/velaros/core/result'
 
 import { createWorkbenchAppParts } from '../src/main/workspace/Parts'
 import {
@@ -52,20 +52,37 @@ void describe('files created by a language service edit', () => {
     const { projectRoot } = project
     // 与编辑器用的是同一对主进程入口：文件树的「新建」与保存管线。
     const ports: WorkbenchLanguageServiceFileCreationPorts = {
-      createEntry: (request) => Result.wrap(() => parts.files.createEntry({ projectRoot, ...request })),
+      createEntry: (request) =>
+        Result.wrap(() => parts.files.createEntry({ projectRoot, ...request })),
       saveFile: (request) => Result.wrap(() => parts.files.saveFile({ projectRoot, ...request })),
     }
     try {
-      const request = { projectRoot, path: 'src/main.ts', content: Main, range: rangeOf(Main, ComputeFunction) }
-      const listed = await project.services.getCodeActions({ ...request, diagnostics: [], categories: ['refactor'] })
+      const request = {
+        projectRoot,
+        path: 'src/main.ts',
+        content: Main,
+        range: rangeOf(Main, ComputeFunction),
+      }
+      const listed = await project.services.getCodeActions({
+        ...request,
+        diagnostics: [],
+        categories: ['refactor'],
+      })
       const resolved = await project.services.resolveCodeAction({
         ...request,
         resolve: findCodeAction(listed.actions, /^Move to a new file$/u).resolve!,
       })
-      assert.deepEqual(resolved.createFiles.map((file) => file.path), ['src/compute.ts'])
+      assert.deepEqual(
+        resolved.createFiles.map((file) => file.path),
+        ['src/compute.ts']
+      )
 
       const created = await createWorkbenchLanguageServiceFiles(resolved.createFiles, ports)
-      assert.deepEqual(created, { createdPaths: ['src/compute.ts'], parentPaths: ['src'], failures: [] })
+      assert.deepEqual(created, {
+        createdPaths: ['src/compute.ts'],
+        parentPaths: ['src'],
+        failures: [],
+      })
       assert.equal(
         await project.read('src/compute.ts'),
         ["import { alpha } from './util/alpha'", '', '', ComputeFunction, ''].join('\n')
@@ -99,9 +116,10 @@ void describe('files created by a language service edit', () => {
       )
       assert.deepEqual(again.createdPaths, ['notes.txt', 'src/empty.ts'])
       assert.deepEqual(again.parentPaths, ['.', 'src'])
-      assert.deepEqual(again.failures.map((failure) => [failure.path, failure.reason]), [
-        ['src/compute.ts', 'error'],
-      ])
+      assert.deepEqual(
+        again.failures.map((failure) => [failure.path, failure.reason]),
+        [['src/compute.ts', 'error']]
+      )
       assert.ok(again.failures[0]?.message)
       assert.ok((await project.read('src/compute.ts')).includes('export function compute'))
       assert.equal(await project.read('notes.txt'), 'kept\n')

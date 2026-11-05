@@ -12,22 +12,35 @@
 import { randomUUID } from 'node:crypto'
 import type { BigIntStats } from 'node:fs'
 import { lstatSync, readFileSync, type Stats, statSync } from 'node:fs'
-import {
-  cp,
-  lstat,
-  mkdir,
-  readdir,
-  readFile,
-  rename,
-  stat,
-  writeFile,
-} from 'node:fs/promises'
+import { cp, lstat, mkdir, readdir, readFile, rename, stat, writeFile } from 'node:fs/promises'
 import { basename, dirname, extname, join, resolve } from 'node:path'
 
-import { isPresent } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
+import { isPresent } from '@velaros-ai/velaros/core'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
-import { type WorkbenchCopyEntryRequest, type WorkbenchCreateEntryRequest, type WorkbenchDeleteEntryRequest, type WorkbenchDeleteEntryResult, type WorkbenchEntryMutationResult, type WorkbenchInspectDeleteEntryRequest, type WorkbenchInspectDeleteEntryResult, type WorkbenchListLocalHistoryRequest, type WorkbenchListLocalHistoryResult, type WorkbenchMoveEntryRequest, type WorkbenchMoveEntryResult, type WorkbenchReadFileRequest, type WorkbenchReadFileResult, type WorkbenchReadLocalHistorySnapshotRequest, type WorkbenchReadLocalHistorySnapshotResult, type WorkbenchRenameEntryRequest, type WorkbenchRestoreDeletedEntryRequest, type WorkbenchRestoreDeletedEntryResult, type WorkbenchRestoreMissingFileRequest, type WorkbenchSaveFileRequest, type WorkbenchSaveFileResult } from '@shared/contracts/workbench'
+import {
+  type WorkbenchCopyEntryRequest,
+  type WorkbenchCreateEntryRequest,
+  type WorkbenchDeleteEntryRequest,
+  type WorkbenchDeleteEntryResult,
+  type WorkbenchEntryMutationResult,
+  type WorkbenchInspectDeleteEntryRequest,
+  type WorkbenchInspectDeleteEntryResult,
+  type WorkbenchListLocalHistoryRequest,
+  type WorkbenchListLocalHistoryResult,
+  type WorkbenchMoveEntryRequest,
+  type WorkbenchMoveEntryResult,
+  type WorkbenchReadFileRequest,
+  type WorkbenchReadFileResult,
+  type WorkbenchReadLocalHistorySnapshotRequest,
+  type WorkbenchReadLocalHistorySnapshotResult,
+  type WorkbenchRenameEntryRequest,
+  type WorkbenchRestoreDeletedEntryRequest,
+  type WorkbenchRestoreDeletedEntryResult,
+  type WorkbenchRestoreMissingFileRequest,
+  type WorkbenchSaveFileRequest,
+  type WorkbenchSaveFileResult,
+} from '@shared/contracts/workbench'
 import { DefaultWorkbenchTextFormat, type WorkbenchTextFormat } from '@shared/workbenchTextFormat'
 
 import { workbenchMainText } from '../i18n/workbenchMainMessages'
@@ -285,7 +298,9 @@ class FileOperations {
    * 把文件或目录复制到 `parentPath` 下（目录连同里面的一切；链接复制成链接，不跟进去）。目标名字已被占用时
    * 取一个空着的「名字 copy.扩展名」「名字 copy 2.扩展名」……，与访达、VS Code 一样。
    */
-  public async copyEntry(request: WorkbenchCopyEntryRequest): Promise<WorkbenchEntryMutationResult> {
+  public async copyEntry(
+    request: WorkbenchCopyEntryRequest
+  ): Promise<WorkbenchEntryMutationResult> {
     const projectRoot = await this.pathResolver.resolveProjectRoot(request.projectRoot)
     const source = await this.pathResolver.resolveEntryInsideProject(projectRoot, request.path)
     const parentPath = await this.pathResolver.resolveInsideProject(projectRoot, request.parentPath)
@@ -438,10 +453,7 @@ class FileOperations {
     const projectRoot = await this.pathResolver.resolveProjectRoot(request.projectRoot)
     // 条目本身：删符号链接删的是链接，不跟进去，也就不管它指向的目录里有没有东西。
     const target = await this.pathResolver.resolveEntryInsideProject(projectRoot, request.path)
-    const relativePath = this.pathResolver.toProjectRelativePath(
-      projectRoot,
-      target.requestedPath
-    )
+    const relativePath = this.pathResolver.toProjectRelativePath(projectRoot, target.requestedPath)
 
     if (relativePath === '.') {
       throw new AppError('VALIDATION', workbenchMainText('files.deleteProjectRoot'))
@@ -486,10 +498,7 @@ class FileOperations {
   ): Promise<WorkbenchInspectDeleteEntryResult> {
     const projectRoot = await this.pathResolver.resolveProjectRoot(request.projectRoot)
     const target = await this.pathResolver.resolveEntryInsideProject(projectRoot, request.path)
-    const relativePath = this.pathResolver.toProjectRelativePath(
-      projectRoot,
-      target.requestedPath
-    )
+    const relativePath = this.pathResolver.toProjectRelativePath(projectRoot, target.requestedPath)
 
     if (relativePath === '.') {
       throw new AppError('VALIDATION', workbenchMainText('files.deleteProjectRoot'))

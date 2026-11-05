@@ -9,10 +9,13 @@ import {
   WidgetType,
 } from '@codemirror/view'
 
-import { isBlank,isNumber, Log } from '@velaros-ai/core'
-import { type TimerLease, TimerScope } from '@velaros-ai/core/utils/TimerScope'
+import { isBlank, isNumber, Log } from '@velaros-ai/velaros/core'
+import { type TimerLease, TimerScope } from '@velaros-ai/velaros/core/utils/TimerScope'
 
-import { type WorkbenchLanguageServiceInlayHint, type WorkbenchLanguageServiceOffsetRange } from '@shared/contracts/workbench'
+import {
+  type WorkbenchLanguageServiceInlayHint,
+  type WorkbenchLanguageServiceOffsetRange,
+} from '@shared/contracts/workbench'
 
 const InitialInlayHintDelayMs = 180
 const ChangedDocumentInlayHintDelayMs = 450

@@ -3,8 +3,8 @@ import { resolve } from 'node:path'
 import type { IpcMainInvokeEvent, WebContents } from 'electron'
 import { ipcMain } from 'electron'
 
-import { isFiniteNumber, isNonBlankString, isPlainObject, isString } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
+import { isFiniteNumber, isNonBlankString, isPlainObject, isString } from '@velaros-ai/velaros/core'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
 import {
   WorkbenchBrowserChannels,
@@ -23,7 +23,12 @@ interface WorkbenchBrowserWindows {
   getWebContentsForProject(projectRoot: string): Nullable<WebContents>
 }
 
-const NavigationActions = new Set<WorkbenchBrowserNavigationAction>(['goto', 'back', 'forward', 'reload'])
+const NavigationActions = new Set<WorkbenchBrowserNavigationAction>([
+  'goto',
+  'back',
+  'forward',
+  'reload',
+])
 
 /**
  * Agent 浏览器的界面通道：窗口只能动自己当前打开的项目里的会话；站点变化只推给这个项目的窗口。
@@ -48,7 +53,8 @@ export function registerWorkbenchBrowserIpc(options: {
     callWithEnvelope(async () => {
       const ref = ownedRef(event, raw)
       const webContentsId = isPlainObject(raw) ? raw.webContentsId : undefined
-      if (!isFiniteNumber(webContentsId)) throw new AppError('VALIDATION', workbenchMainText('browser.invalidRequest'))
+      if (!isFiniteNumber(webContentsId))
+        throw new AppError('VALIDATION', workbenchMainText('browser.invalidRequest'))
       await browser.attachPage(ref, webContentsId, event.sender)
     })
   )
@@ -91,10 +97,15 @@ function parseSessionRequest(raw: unknown): WorkbenchBrowserSessionRequest {
 function parseNavigateRequest(
   raw: unknown
 ): Pick<WorkbenchBrowserNavigateRequest, 'action' | 'url'> {
-  if (!isPlainObject(raw) || !isString(raw.action) || !NavigationActions.has(raw.action as WorkbenchBrowserNavigationAction))
+  if (
+    !isPlainObject(raw) ||
+    !isString(raw.action) ||
+    !NavigationActions.has(raw.action as WorkbenchBrowserNavigationAction)
+  )
     throw new AppError('VALIDATION', workbenchMainText('browser.invalidRequest'))
   const action = raw.action as WorkbenchBrowserNavigationAction
   if (action !== 'goto') return { action }
-  if (!isNonBlankString(raw.url)) throw new AppError('VALIDATION', workbenchMainText('browser.invalidRequest'))
+  if (!isNonBlankString(raw.url))
+    throw new AppError('VALIDATION', workbenchMainText('browser.invalidRequest'))
   return { action, url: raw.url }
 }

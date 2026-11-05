@@ -2,8 +2,8 @@ import { createPublicKey, verify } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
-import { isPlainObject, Log } from '@velaros-ai/core'
-import { writeJsonFileAtomically } from '@velaros-ai/core/utils/FilePersistence'
+import { isPlainObject, Log } from '@velaros-ai/velaros/core'
+import { writeJsonFileAtomically } from '@velaros-ai/velaros/core/utils/FilePersistence'
 
 import type { VelarOSOfficialWebsiteMarket } from '../VelarOSOfficialWebsite'
 
@@ -27,8 +27,7 @@ export interface WorkbenchCloudRoutingManifestPayload {
   readonly websiteBaseUrl?: string
 }
 
-export interface SignedWorkbenchCloudRoutingManifest
-  extends WorkbenchCloudRoutingManifestPayload {
+export interface SignedWorkbenchCloudRoutingManifest extends WorkbenchCloudRoutingManifestPayload {
   readonly attestation: {
     readonly algorithm: 'ed25519'
     readonly keyId: string
@@ -89,9 +88,7 @@ export function canonicalizeWorkbenchCloudRoutingManifest(
   return JSON.stringify(sortCanonicalValue(manifest))
 }
 
-export function workbenchCloudRoutingManifestUrls(
-  market: WorkbenchCloudMarket
-): readonly string[] {
+export function workbenchCloudRoutingManifestUrls(market: WorkbenchCloudMarket): readonly string[] {
   return market === 'cn'
     ? [
         'https://8.152.209.233/velaros-desktop-routing.cn.json',
@@ -198,9 +195,7 @@ export class StaticWorkbenchCloudEndpointProvider implements WorkbenchCloudEndpo
   public markHealthy(): void {}
 }
 
-export class WorkbenchCloudRoutingManifestFileStore
-  implements WorkbenchCloudRoutingManifestStore
-{
+export class WorkbenchCloudRoutingManifestFileStore implements WorkbenchCloudRoutingManifestStore {
   readonly #filePath: string
 
   public constructor(dataRootDir: string, market: WorkbenchCloudMarket) {
@@ -263,10 +258,7 @@ export class WorkbenchCloudEndpointResolver implements WorkbenchCloudEndpointPro
         ? this.#healthyBaseUrl
         : null
     const ordered = healthyBaseUrl
-      ? [
-          healthyBaseUrl,
-          ...candidates.filter((candidate) => candidate !== healthyBaseUrl),
-        ]
+      ? [healthyBaseUrl, ...candidates.filter((candidate) => candidate !== healthyBaseUrl)]
       : candidates
     return ordered
   }
@@ -376,9 +368,7 @@ export class WorkbenchCloudEndpointResolver implements WorkbenchCloudEndpointPro
     this.#manifest = manifest
     if (
       this.#healthyBaseUrl &&
-      !enabledOrigins.some(
-        (origin) => normalizeBaseUrl(origin.baseUrl) === this.#healthyBaseUrl
-      )
+      !enabledOrigins.some((origin) => normalizeBaseUrl(origin.baseUrl) === this.#healthyBaseUrl)
     ) {
       this.#healthyBaseUrl = null
     }

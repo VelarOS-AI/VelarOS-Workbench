@@ -27,11 +27,14 @@ import {
   type WorkbenchVelarProjectSnapshotIndex,
 } from '@renderer/models/workbenchVelarProjectGraph'
 
-import { Result } from '@velaros-ai/core/result'
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 import { Select } from '@velaros-ai/ui/primitives/forms/Select'
+import { Result } from '@velaros-ai/velaros/core/result'
 
-import { type WorkbenchCodeGraphEdge, type WorkbenchCodeGraphNode } from '@shared/contracts/workbench'
+import {
+  type WorkbenchCodeGraphEdge,
+  type WorkbenchCodeGraphNode,
+} from '@shared/contracts/workbench'
 import {
   applyVelarLogicGraphResponse,
   parseVelarLogicGraphResponse,
@@ -753,11 +756,7 @@ export function WorkbenchLogicGraphEditor({
   )
   const snapshotRoots = useMemo(
     () =>
-      targetProjectRoots.length > 0
-        ? targetProjectRoots
-        : projectSnapshots.has('')
-          ? ['']
-          : [],
+      targetProjectRoots.length > 0 ? targetProjectRoots : projectSnapshots.has('') ? [''] : [],
     [projectSnapshots, targetProjectRoots]
   )
   const snapshot = useMemo(
@@ -781,29 +780,34 @@ export function WorkbenchLogicGraphEditor({
           ...openTabs.filter((tab) => tab.path.endsWith('.vel')).map((tab) => tab.path),
           ...projectFiles.filter((file) => file.path.endsWith('.vel')).map((file) => file.path),
         ]
-        const roots = targetProjectRoots.length > 0
-          ? targetProjectRoots
-          : [...new Set(candidatePaths
-              .filter((path) => pathMatchesScope(path, scopePaths))
-              .map((path) => workbenchVelarProjectRootForPath(path, projectRoots) ?? ''))]
+        const roots =
+          targetProjectRoots.length > 0
+            ? targetProjectRoots
+            : [
+                ...new Set(
+                  candidatePaths
+                    .filter((path) => pathMatchesScope(path, scopePaths))
+                    .map((path) => workbenchVelarProjectRootForPath(path, projectRoots) ?? '')
+                ),
+              ]
         if (roots.length === 0) throw new Error(t('workbench.codeGraphEmpty'))
 
         const resolveEntry = async (root: string): Promise<string> => {
-          const ownedPaths = candidatePaths.filter(
-            (path) => {
-              const owner = workbenchVelarProjectRootForPath(path, projectRoots)
-              return owner === root || (owner === null && root === '')
-            }
-          )
-          const candidate = ownedPaths.find((path) => pathMatchesScope(path, scopePaths))
-            ?? ownedPaths[0]
+          const ownedPaths = candidatePaths.filter((path) => {
+            const owner = workbenchVelarProjectRootForPath(path, projectRoots)
+            return owner === root || (owner === null && root === '')
+          })
+          const candidate =
+            ownedPaths.find((path) => pathMatchesScope(path, scopePaths)) ?? ownedPaths[0]
           if (candidate) return candidate
           const manifestPath = joinProjectPath(root, 'velar.json')
-          const manifest = Result.unwrap(await runtime.kernel.project.readWorkbenchFile({
-            projectRoot,
-            path: manifestPath,
-            maxChars: 256_000,
-          }))
+          const manifest = Result.unwrap(
+            await runtime.kernel.project.readWorkbenchFile({
+              projectRoot,
+              path: manifestPath,
+              maxChars: 256_000,
+            })
+          )
           const entry = manifestEntryPath(manifest.content)
           if (!entry) throw new Error(t('workbench.codeGraphEmpty'))
           return joinProjectPath(root, entry)
@@ -838,11 +842,13 @@ export function WorkbenchLogicGraphEditor({
           throw new Error(t('workbench.codeGraphError'))
         }
 
-        const projects = await Promise.all(roots.map(async (root) => {
-          const path = await resolveEntry(root)
-          const previous = forceSnapshot ? null : projectSnapshotsRef.current.get(root) ?? null
-          return { projectRoot: root, snapshot: await requestSnapshot(root, path, previous) }
-        }))
+        const projects = await Promise.all(
+          roots.map(async (root) => {
+            const path = await resolveEntry(root)
+            const previous = forceSnapshot ? null : (projectSnapshotsRef.current.get(root) ?? null)
+            return { projectRoot: root, snapshot: await requestSnapshot(root, path, previous) }
+          })
+        )
         if (sequence !== requestSequence.current) return
         projectSnapshotsRef.current = new Map([
           ...projectSnapshotsRef.current,
@@ -909,8 +915,7 @@ export function WorkbenchLogicGraphEditor({
         )
       : snapshot.nodes.filter(
           (node) =>
-            SelectionNodeKinds.has(node.kind) &&
-            (!node.path || isRelevantVelarPath(node.path))
+            SelectionNodeKinds.has(node.kind) && (!node.path || isRelevantVelarPath(node.path))
         )
     const nodeIds = new Set(nodes.map((node) => node.id))
     const relationKinds = useModuleProjection ? OverviewRelationKinds : SelectionRelationKinds

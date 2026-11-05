@@ -32,12 +32,9 @@ import {
   type WorkbenchDiffPane,
 } from '@renderer/models/git/workbenchDiffSideBySide'
 import type { WorkbenchUnifiedDiffRow } from '@renderer/models/git/workbenchGitDiffModel'
-import type {
-  WorkbenchDiffLayout,
-  WorkbenchThemeId,
-} from '@renderer/models/workbenchPreferences'
+import type { WorkbenchDiffLayout, WorkbenchThemeId } from '@renderer/models/workbenchPreferences'
 
-import { isEmpty, isNotNull } from '@velaros-ai/core'
+import { isEmpty, isNotNull } from '@velaros-ai/velaros/core'
 
 import styles from '../../styles/workbenchPageStyles'
 import { useLatest, useMemoizedFn } from '../../support/genericHooks'
@@ -477,8 +474,7 @@ export const ReadOnlyDiffCodeMirror = forwardRef<
       if (frame !== null) window.cancelAnimationFrame(frame)
       unlinkScroll?.()
       // 整个查看器被卸掉时宿主元素已经摘下来了，量不出位置，也用不着记。
-      if (primary.dom.isConnected)
-        scrollRef.current = readDiffScrollPosition(primary, panes, path)
+      if (primary.dom.isConnected) scrollRef.current = readDiffScrollPosition(primary, panes, path)
       for (const view of views) view.destroy()
       viewsRef.current = []
     }

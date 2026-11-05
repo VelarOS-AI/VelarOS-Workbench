@@ -75,12 +75,15 @@ import type {
   WorkbenchOpenEditorTab,
 } from '@renderer/types/workbenchTypes'
 
-import { isEmpty, Log, optionalWhenLazy, toNullable } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
-import { Result } from '@velaros-ai/core/result'
+import { isEmpty, Log, optionalWhenLazy, toNullable } from '@velaros-ai/velaros/core'
+import { AppError } from '@velaros-ai/velaros/core/error'
+import { Result } from '@velaros-ai/velaros/core/result'
 
 import { type SystemWorkspaceFilesChangedEvent } from '@shared/contracts/system'
-import { type WorkbenchLanguageServiceFileEdit, type WorkbenchReadFileResult } from '@shared/contracts/workbench'
+import {
+  type WorkbenchLanguageServiceFileEdit,
+  type WorkbenchReadFileResult,
+} from '@shared/contracts/workbench'
 import { isWorkbenchImagePreviewPath } from '@shared/workbenchImage'
 import {
   type WorkbenchTextFormat,
@@ -89,7 +92,12 @@ import {
 
 import { useStableWorkbenchMessageTranslate } from '../runtime/useStableWorkbenchMessaging'
 import { subscribeWorkbenchAgentProjectWrites } from '../runtime/workbenchAgentProjectWrites'
-import { useLatest, useMemoizedFn, useMonotonicAsyncRequest, useTimerScope } from '../support/genericHooks'
+import {
+  useLatest,
+  useMemoizedFn,
+  useMonotonicAsyncRequest,
+  useTimerScope,
+} from '../support/genericHooks'
 import { useWorkspaceFilesChangedRefresh } from '../support/useWorkspaceFilesChangedRefresh'
 
 import { useWorkbenchEditorAutosave } from './useWorkbenchEditorAutosave'
@@ -222,9 +230,9 @@ export function useWorkbenchEditorController({
     [openTabsByPath]
   )
   // 用户为每个文件选过的编辑模式；没选过的按 resolveWorkbenchEditorEditMode 的默认规则。
-  const [chosenEditModes, setChosenEditModes] = useState<ReadonlyMap<string, WorkbenchEditorEditMode>>(
-    () => new Map()
-  )
+  const [chosenEditModes, setChosenEditModes] = useState<
+    ReadonlyMap<string, WorkbenchEditorEditMode>
+  >(() => new Map())
   const selectedFileEditMode: Nullable<WorkbenchEditorEditMode> = selectedFile
     ? resolveWorkbenchEditorEditMode(selectedFile, chosenEditModes.get(selectedFile.path))
     : null
@@ -325,8 +333,9 @@ export function useWorkbenchEditorController({
 
   /** 语言服务的一组跨文件改动（快速修复、重构）：套上，结果交回调用方去报告。 */
   const applyLanguageServiceEdits = useMemoizedFn(
-    (changes: readonly WorkbenchLanguageServiceFileEdit[]): Promise<WorkbenchLanguageServiceEditOutcome> =>
-      applyLanguageServiceEditsToFiles(changes)
+    (
+      changes: readonly WorkbenchLanguageServiceFileEdit[]
+    ): Promise<WorkbenchLanguageServiceEditOutcome> => applyLanguageServiceEditsToFiles(changes)
   )
 
   /**
@@ -356,8 +365,10 @@ export function useWorkbenchEditorController({
       }
 
       const failure = await writeWorkbenchLanguageServiceFileChange(change, {
-        readFile: (path) => readWorkbenchEditorFile(projectRoot, path, LANGUAGE_SERVICE_EDIT_MAX_CHARS),
-        saveFile: (request) => workbenchHost.kernel.project.saveWorkbenchFile({ projectRoot, ...request }),
+        readFile: (path) =>
+          readWorkbenchEditorFile(projectRoot, path, LANGUAGE_SERVICE_EDIT_MAX_CHARS),
+        saveFile: (request) =>
+          workbenchHost.kernel.project.saveWorkbenchFile({ projectRoot, ...request }),
       })
       if (failure) failures.push(failure)
       else changedFiles += 1
@@ -531,7 +542,8 @@ export function useWorkbenchEditorController({
       if (!tab || !isDirtyTab(tab)) return []
 
       // 选过的格式转换与上次保存被拒的说明也一并放弃。
-      const diskFile = tab.externalChange?.status === 'modified' ? tab.externalChange.diskFile : null
+      const diskFile =
+        tab.externalChange?.status === 'modified' ? tab.externalChange.diskFile : null
       return [
         diskFile
           ? { path, file: diskFile, content: diskFile.content }
@@ -552,7 +564,9 @@ export function useWorkbenchEditorController({
       }
       return next
     })
-    const adoptedDiskFiles = revertedTabs.filter((tab) => tab.file !== openTabsByPath.get(tab.path)?.file)
+    const adoptedDiskFiles = revertedTabs.filter(
+      (tab) => tab.file !== openTabsByPath.get(tab.path)?.file
+    )
     if (!isEmpty(adoptedDiskFiles)) {
       adoptedDiskFiles.forEach((tab) => onFileMetadataSavedLatest.current(tab.file))
       onExternalFilesChangedLatest.current()
@@ -770,7 +784,10 @@ export function useWorkbenchEditorController({
     if (isEmpty(closingPaths)) return
 
     dropOpenTabs(closingPaths)
-    closedTabPathsRef.current = pushWorkbenchClosedEditorTabs(closedTabPathsRef.current, closingPaths)
+    closedTabPathsRef.current = pushWorkbenchClosedEditorTabs(
+      closedTabPathsRef.current,
+      closingPaths
+    )
   })
 
   /**
@@ -898,8 +915,9 @@ export function useWorkbenchEditorController({
       if (activeProjectRef.current?.id !== owningProjectId) return
 
       const batch = await Promise.all(
-        tabs.slice(index, index + EXTERNAL_FILE_REFRESH_CONCURRENCY).map(
-          async (tab): Promise<WorkbenchExternalFileReadOutcome> => {
+        tabs
+          .slice(index, index + EXTERNAL_FILE_REFRESH_CONCURRENCY)
+          .map(async (tab): Promise<WorkbenchExternalFileReadOutcome> => {
             try {
               const diskFile = await readWorkbenchEditorFile(
                 project.rootPath,
@@ -920,8 +938,7 @@ export function useWorkbenchEditorController({
                 error: AppError.from(error),
               }
             }
-          }
-        )
+          })
       )
       outcomes.push(...batch)
     }
@@ -1083,7 +1100,8 @@ export function useWorkbenchEditorController({
   const restoreDeletedOpenFile = useMemoizedFn(async (path: string): Promise<void> => {
     const project = activeProjectRef.current
     const tab = openTabsByPathLatest.current.get(path)
-    if (!project || !tab || tab.file.imagePreview || tab.externalChange?.status !== 'deleted') return
+    if (!project || !tab || tab.file.imagePreview || tab.externalChange?.status !== 'deleted')
+      return
 
     const owningProjectId = project.id
     beginManualSave()
@@ -1261,13 +1279,10 @@ export function useWorkbenchEditorController({
         const project = activeProjectRef.current
         const trail = savedSnapshotTrailsRef.current.get(requestedTab.path) ?? []
         const baseFile = resolveWorkbenchEditorSaveBase(requestedTab.file, trail)
-        const tab = baseFile === requestedTab.file ? requestedTab : { ...requestedTab, file: baseFile }
+        const tab =
+          baseFile === requestedTab.file ? requestedTab : { ...requestedTab, file: baseFile }
         // 只读只挡输入：切到只读之前已经改下的内容照样能保存。
-        if (
-          !project
-          || !canSaveWorkbenchTabContent(tab)
-          || !isDirtyTab(tab)
-        )
+        if (!project || !canSaveWorkbenchTabContent(tab) || !isDirtyTab(tab))
           return { status: 'skipped' }
 
         const latestTab = openTabsByPathLatest.current.get(tab.path)
@@ -1389,18 +1404,15 @@ export function useWorkbenchEditorController({
         endManualSave()
       }
       if (
-        activeProjectRef.current?.id === owningProjectId
-        && [...results.values()].some((result) => result.status === 'saved')
+        activeProjectRef.current?.id === owningProjectId &&
+        [...results.values()].some((result) => result.status === 'saved')
       )
         notifyFilesSaved()
       return results
     }
   )
 
-  const autosaveHeldPaths = useMemo(
-    () => new Set(closeRequest?.dirtyPaths ?? []),
-    [closeRequest]
-  )
+  const autosaveHeldPaths = useMemo(() => new Set(closeRequest?.dirtyPaths ?? []), [closeRequest])
   const { failures: autosaveFailures, skipExitFlush } = useWorkbenchEditorAutosave({
     activeProject,
     isSavingFile,

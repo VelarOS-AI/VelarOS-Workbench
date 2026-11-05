@@ -60,7 +60,6 @@ import { fileLanguage } from '@renderer/models/shared/workbenchUtils'
 import type { WorkbenchThemeId } from '@renderer/models/workbenchPreferences'
 import type { WorkbenchLightEditorTab } from '@renderer/types/workbenchTypes'
 
-import { isPresent,Log, toNullable } from '@velaros-ai/core'
 import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
 import { Text } from '@velaros-ai/ui/primitives/display/Text'
 import {
@@ -71,8 +70,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@velaros-ai/ui/primitives/overlays/Dialog'
+import { isPresent, Log, toNullable } from '@velaros-ai/velaros/core'
 
-import { type WorkbenchLanguageServiceDiagnostic, type WorkbenchLanguageServiceFileEdit, type WorkbenchLanguageServiceLocation } from '@shared/contracts/workbench'
+import {
+  type WorkbenchLanguageServiceDiagnostic,
+  type WorkbenchLanguageServiceFileEdit,
+  type WorkbenchLanguageServiceLocation,
+} from '@shared/contracts/workbench'
 import { resolveWorkbenchTextOffset } from '@shared/workbenchSearchText'
 import { normalizeWorkbenchTextEol, type WorkbenchTextFormat } from '@shared/workbenchTextFormat'
 import { DefaultWorkbenchTextFormat } from '@shared/workbenchTextFormat'
@@ -104,7 +108,7 @@ import {
   type WorkbenchEditorAuxiliaryTabItem,
 } from './EditorTabBar'
 import { EditorTextFormatNotice } from './EditorTextFormatNotice'
-import { type FileHistoryMode,FileHistoryView } from './FileHistoryView'
+import { type FileHistoryMode, FileHistoryView } from './FileHistoryView'
 import type { EditorSymbolLocations } from './useEditorSymbolLocations'
 import { WorkbenchImagePreview } from './WorkbenchImagePreview'
 import { WorkbenchLightFilePanel } from './WorkbenchLightFilePanel'
@@ -120,11 +124,10 @@ interface WorkbenchMarkdownPreviewModule {
 let codeMirrorEditorModulePromise: Nullable<Promise<CodeMirrorEditorModule>> = null
 
 function loadCodeMirrorEditorModule(): Promise<CodeMirrorEditorModule> {
-  codeMirrorEditorModulePromise ??=
-    import('./CodeMirrorEditor').catch((error) => {
-      codeMirrorEditorModulePromise = null
-      throw error
-    })
+  codeMirrorEditorModulePromise ??= import('./CodeMirrorEditor').catch((error) => {
+    codeMirrorEditorModulePromise = null
+    throw error
+  })
   return codeMirrorEditorModulePromise
 }
 
@@ -590,10 +593,12 @@ export function EditorPanel({
   // 独占组（结构图、AI 改动）激活时标签栏只显示这一组；否则独占组的标签都不在普通标签栏里。
   const isolatedTabGroup = resolveIsolatedWorkbenchEditorTabGroup(auxiliaryTabs)
   const visibleAuxiliaryTabs = useMemo(
-    () => auxiliaryTabs.filter((tab) =>
-      isolatedTabGroup
-        ? tab.group === isolatedTabGroup
-        : !tab.group || !IsolatedWorkbenchEditorTabGroups.has(tab.group)),
+    () =>
+      auxiliaryTabs.filter((tab) =>
+        isolatedTabGroup
+          ? tab.group === isolatedTabGroup
+          : !tab.group || !IsolatedWorkbenchEditorTabGroups.has(tab.group)
+      ),
     [auxiliaryTabs, isolatedTabGroup]
   )
   const hasEditorOverlayTab = !!(activeDiffItem || lightTab || activeAuxiliaryTab)
@@ -703,7 +708,9 @@ export function EditorPanel({
       onCursorPositionLatest.current?.({ line: 1, column: 1 })
     }
     // 查找栏跟着换过去的文件接着找（与 VS Code 一样不关）；「在选区中查找」的范围属于上一个文件，关掉。
-    setFindOptions((current) => (current.inSelection ? { ...current, inSelection: false } : current))
+    setFindOptions((current) =>
+      current.inSelection ? { ...current, inSelection: false } : current
+    )
     setIsGoToLineOpen(false)
     setGoToLineInput('')
     setFileHistoryMode(null)
@@ -712,7 +719,6 @@ export function EditorPanel({
   useEffect(() => {
     setFileHistoryMode(null)
   }, [activeDiffItem, activeAuxiliaryTab, lightTab])
-
 
   useEffect(() => {
     if (!navigationRequest || !selectedFile) return
@@ -732,7 +738,11 @@ export function EditorPanel({
           const content = editorContentLatest.current
           const endLine = navigationRequest.endLine ?? navigationRequest.line
           editorRef.current?.selectRange(
-            resolveWorkbenchTextOffset(content, navigationRequest.line, navigationRequest.column ?? 1),
+            resolveWorkbenchTextOffset(
+              content,
+              navigationRequest.line,
+              navigationRequest.column ?? 1
+            ),
             resolveWorkbenchTextOffset(content, endLine, navigationRequest.endColumn)
           )
         } else if (navigationRequest.endLine)
@@ -761,7 +771,10 @@ export function EditorPanel({
   const handledEditorCommandRequestIdRef = useRef(editorCommandRequest?.id ?? null)
   const isFocusedGroup = group.focused
   useEffect(() => {
-    if (!editorCommandRequest || handledEditorCommandRequestIdRef.current === editorCommandRequest.id)
+    if (
+      !editorCommandRequest ||
+      handledEditorCommandRequestIdRef.current === editorCommandRequest.id
+    )
       return
     handledEditorCommandRequestIdRef.current = editorCommandRequest.id
     if (isFocusedGroup) editorRef.current?.runCommand(editorCommandRequest.command)
@@ -1027,7 +1040,12 @@ export function EditorPanel({
             />
           ) : (
             <>
-              {!!(isFindOpen && selectedFile && !selectedImagePreview && !markdownPreviewActive) && (
+              {!!(
+                isFindOpen &&
+                selectedFile &&
+                !selectedImagePreview &&
+                !markdownPreviewActive
+              ) && (
                 <EditorFindBar
                   query={findQuery}
                   replace={findReplace}
@@ -1086,7 +1104,7 @@ export function EditorPanel({
                           : t('workbench.externalFileUnavailableDescription', {
                               path: selectedFilePath ?? '',
                             })}
-                  </Text>
+                    </Text>
                   </div>
                   {canKeepLocalExternalConflict && (
                     <Button

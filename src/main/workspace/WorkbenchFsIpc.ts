@@ -17,9 +17,31 @@ import { resolve } from 'node:path'
 
 import { ipcMain, type WebContents } from 'electron'
 
-import { AppError } from '@velaros-ai/core/error'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
-import { type WorkbenchCopyEntryRequest, type WorkbenchCreateEntryRequest, type WorkbenchDeleteEntryRequest, type WorkbenchFindExistingFilesRequest, type WorkbenchInspectDeleteEntryRequest, type WorkbenchListDirectoryRequest, type WorkbenchListLocalHistoryRequest, type WorkbenchListProjectFilesRequest, type WorkbenchMoveEntryRequest, type WorkbenchReadFileRequest, type WorkbenchReadImageFileRequest, type WorkbenchReadLocalHistorySnapshotRequest, type WorkbenchRenameEntryRequest, type WorkbenchReplaceContentFileRequest, type WorkbenchReplaceContentRequest, type WorkbenchRestoreDeletedEntryRequest, type WorkbenchRestoreMissingFileRequest, type WorkbenchRunCommandRequest, type WorkbenchSaveFileRequest, type WorkbenchSearchContentRequest, type WorkbenchSearchEntriesRequest } from '@shared/contracts/workbench'
+import {
+  type WorkbenchCopyEntryRequest,
+  type WorkbenchCreateEntryRequest,
+  type WorkbenchDeleteEntryRequest,
+  type WorkbenchFindExistingFilesRequest,
+  type WorkbenchInspectDeleteEntryRequest,
+  type WorkbenchListDirectoryRequest,
+  type WorkbenchListLocalHistoryRequest,
+  type WorkbenchListProjectFilesRequest,
+  type WorkbenchMoveEntryRequest,
+  type WorkbenchReadFileRequest,
+  type WorkbenchReadImageFileRequest,
+  type WorkbenchReadLocalHistorySnapshotRequest,
+  type WorkbenchRenameEntryRequest,
+  type WorkbenchReplaceContentFileRequest,
+  type WorkbenchReplaceContentRequest,
+  type WorkbenchRestoreDeletedEntryRequest,
+  type WorkbenchRestoreMissingFileRequest,
+  type WorkbenchRunCommandRequest,
+  type WorkbenchSaveFileRequest,
+  type WorkbenchSearchContentRequest,
+  type WorkbenchSearchEntriesRequest,
+} from '@shared/contracts/workbench'
 import {
   isWorkbenchTextEncoding,
   isWorkbenchTextEol,
@@ -93,7 +115,8 @@ export function registerWorkbenchFsIpc(
       const parsed = parseReadImageFileRequest(request)
       if (!parsed) return invalidRequest()
 
-      const currentProject = windowManager.getHubForWebContents(event.sender)
+      const currentProject = windowManager
+        .getHubForWebContents(event.sender)
         ?.getState().currentProject
       if (!currentProject || resolve(parsed.projectRoot) !== resolve(currentProject.path)) {
         throw new AppError('PERMISSION', workbenchMainText('files.imageNotInWindow'))
@@ -156,11 +179,9 @@ export function registerWorkbenchFsIpc(
       const parsed = parseCopyEntryRequest(request)
       if (!parsed) return invalidRequest()
 
-      return recordUserWrites(
-        await parts.files.copyEntry(parsed),
-        parsed.projectRoot,
-        (result) => [result.entry.path]
-      )
+      return recordUserWrites(await parts.files.copyEntry(parsed), parsed.projectRoot, (result) => [
+        result.entry.path,
+      ])
     })
   )
 
@@ -169,11 +190,10 @@ export function registerWorkbenchFsIpc(
       const parsed = parseMoveEntryRequest(request)
       if (!parsed) return invalidRequest()
 
-      return recordUserWrites(
-        await parts.files.moveEntry(parsed),
-        parsed.projectRoot,
-        (result) => [result.previousPath, result.entry.path]
-      )
+      return recordUserWrites(await parts.files.moveEntry(parsed), parsed.projectRoot, (result) => [
+        result.previousPath,
+        result.entry.path,
+      ])
     })
   )
 
@@ -318,11 +338,16 @@ export function registerWorkbenchFsIpc(
       // 命令面板里的命令是用户自己输入、自己点运行（或按快捷键重跑自己的上一条）的：用户就是确认者，
       // 这里没有也不需要再弹确认卡。Velar Agent 程序由会话的 Node 执行宿主按权限设置确认（执行范围由项目沙箱
       // 补问，见 WorkbenchConversationSession），不经这条通道。
-      return parts.commands.runCommand(parsed, (outputEvent) => {
-        if (!sender.isDestroyed()) {
-          sender.send(WorkbenchFsChannels.runCommandOutput, outputEvent)
-        }
-      }, undefined, true)
+      return parts.commands.runCommand(
+        parsed,
+        (outputEvent) => {
+          if (!sender.isDestroyed()) {
+            sender.send(WorkbenchFsChannels.runCommandOutput, outputEvent)
+          }
+        },
+        undefined,
+        true
+      )
     })
   )
 }
@@ -569,11 +594,13 @@ function parseReplaceContentRequest(input: unknown): Nullable<WorkbenchReplaceCo
   }
 }
 
-function parseReplaceContentFileRequest(input: unknown): Nullable<WorkbenchReplaceContentFileRequest> {
+function parseReplaceContentFileRequest(
+  input: unknown
+): Nullable<WorkbenchReplaceContentFileRequest> {
   if (
-    !hasStringFields(input, ['path'])
-    || !isFiniteNumber(input['expectedModifiedAt'])
-    || !isFiniteNumber(input['expectedSize'])
+    !hasStringFields(input, ['path']) ||
+    !isFiniteNumber(input['expectedModifiedAt']) ||
+    !isFiniteNumber(input['expectedSize'])
   )
     return null
 
@@ -647,9 +674,7 @@ function createContentSearchRegistry(): ContentSearchRegistry {
   }
 }
 
-function parseListProjectFilesRequest(
-  input: unknown
-): Nullable<WorkbenchListProjectFilesRequest> {
+function parseListProjectFilesRequest(input: unknown): Nullable<WorkbenchListProjectFilesRequest> {
   if (!hasStringFields(input, ['projectRoot'])) return null
 
   return {

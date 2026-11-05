@@ -7,7 +7,7 @@ import {
   useState,
 } from 'react'
 
-import { isEmpty } from '@velaros-ai/core'
+import { isEmpty } from '@velaros-ai/velaros/core'
 
 import styles from '../../styles/workbenchPageStyles'
 import { useBlockWheelScroll } from '../../support/useBlockWheelScroll'

@@ -1,13 +1,13 @@
 import { resolve } from 'node:path'
 
-import { isNotUndefined, Log, toNullable } from '@velaros-ai/core'
-import { AppError } from '@velaros-ai/core/error'
-import type { CodeRunnerApi } from '@velaros-ai/script'
 import type { InteractionAnswer } from '@velaros-ai/ui/conversation/contracts'
 import type { RuntimeNoteRead, VelarosSession } from '@velaros-ai/velaros'
 import type { GoalControl, GoalState } from '@velaros-ai/velaros/contracts'
+import { isNotUndefined, Log, toNullable } from '@velaros-ai/velaros/core'
+import { AppError } from '@velaros-ai/velaros/core/error'
 import type { ActPresentation } from '@velaros-ai/velaros/renderer'
 import { createActEventProjector } from '@velaros-ai/velaros/renderer'
+import type { CodeRunnerApi } from '@velaros-ai/velaros/script'
 import type { SessionsSpacePort } from '@velaros-ai/velaros/sessions'
 import type { SessionAnswer } from '@velaros-ai/velaros/sessions/contracts'
 import type { WebSpacePort } from '@velaros-ai/velaros/web'
@@ -540,11 +540,8 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
       const { provider, model, imageInput } = await this.options.configure(request, signal)
       const submittedInput = imageInput ? input : withoutImages(input, request.locale)
       run.provider = provider
-      if ('model' in model) run.modelId = model.model
-      else {
-        run.modelId = model.id
-        run.modelLimits = model.limits
-      }
+      run.modelId = model.id
+      run.modelLimits = model.limits
       signal.throwIfAborted()
       const workspace = await this.storage.workspace(request.projectRoot)
       const activity = this.options.activity?.(request)
@@ -605,7 +602,11 @@ export class WorkbenchConversationRuntime implements WorkbenchConversationRuntim
       const session = run.handle.session
       // 运行期间定时重读：执行中的当前回合（父脚本等子任务时也看得到子任务在跑），以及还有子任务在跑的回合
       traces.watch(() => [
-        ...new Set([...(executing && lastTurn ? [lastTurn] : []), ...scripts.pendingTurns(), ...agents.pendingTurns()]),
+        ...new Set([
+          ...(executing && lastTurn ? [lastTurn] : []),
+          ...scripts.pendingTurns(),
+          ...agents.pendingTurns(),
+        ]),
       ])
       // 目标模式把这条消息交给 Platform 作目标：首帧读取目标之前写入，已有进行中的目标时保持原样。
       const submitOptions: { goal?: string } = {}

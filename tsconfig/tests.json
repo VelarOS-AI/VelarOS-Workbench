@@ -1,0 +1,11 @@
+{
+  "extends": "./base.json",
+  "compilerOptions": {
+    "types": ["node", "bun"]
+  },
+  "include": [
+    "../tests/**/*.ts",
+    "../src/shared/velaros-globals.d.ts",
+    "../src/renderer/src/types/tinykeys.d.ts"
+  ]
+}
