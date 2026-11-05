@@ -8,6 +8,7 @@ import {
 import { Button } from '@velaros-ai/ui/primitives/buttons/Button'
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 import { Text } from '@velaros-ai/ui/primitives/display/Text'
+import { Inline } from '@velaros-ai/ui/primitives/layout/Inline'
 import type { MemoryType } from '@velaros-ai/velaros/memory/contracts'
 
 import type { WorkbenchMemoryEntry } from '@shared/workbenchMemory'
@@ -112,7 +113,7 @@ export function WorkbenchMemorySettings({
         </Text>
       )}
       {pages > 1 && (
-        <div className={styles.workbenchSettingsAiRuleRow}>
+        <Inline gap="sm" align="center" justify="end">
           <Button
             size="sm"
             variant="outline"
@@ -132,7 +133,7 @@ export function WorkbenchMemorySettings({
           >
             {t('workbench.settingsMemoryNextPage')}
           </Button>
-        </div>
+        </Inline>
       )}
       {entries?.length ? (
         <div className={styles.workbenchSettingsAiRuleList}>

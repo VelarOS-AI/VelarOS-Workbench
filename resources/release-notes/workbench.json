@@ -3,7 +3,7 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
-      "version": "0.4.13",
+      "version": "0.4.14",
       "releasedAt": "2026-11-05",
       "title": {
         "zh": "同步新版运行时与工作台体验优化",
