@@ -99,6 +99,7 @@ Workbench 使用固定的 Platform 本机依赖快照与 UI 发布版本，锁�
 ```bash
 node scripts/release/platformSnapshot.mjs
 bun install --frozen-lockfile
+bunx --no-install playwright install chromium
 bun run check
 bun run dev
 ```

@@ -43,6 +43,7 @@ export function createProcessDebugLauncher(): {
     env: NodeJS.ProcessEnv
     pid: number
     output: () => string
+    isRunning: () => boolean
     disposePipes: () => void
   }>
 } {
@@ -91,6 +92,7 @@ export function createProcessDebugLauncher(): {
       env,
       pid: child.pid!,
       output: () => output,
+      isRunning: () => exit === null,
       disposePipes: () => {
         child.stdout.destroy()
         child.stderr.destroy()
@@ -228,6 +230,8 @@ export async function createDebugTestProject(
       sessions.closeAllSessions()
       const errors: unknown[] = []
       for (const item of launched) {
+        // 退出事件已确认的子进程不再按旧进程组号发送信号，避免 macOS 对已回收组返回 EPERM。
+        if (!item.isRunning()) continue
         try {
           if (process.platform === 'win32')
             await signalWorkbenchProcesses(await listWorkbenchProcessTree(item.pid), 'SIGKILL')
