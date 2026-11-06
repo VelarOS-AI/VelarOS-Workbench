@@ -55,7 +55,7 @@ import type { WorkbenchShellHostRegistryApi } from './WorkbenchShellHostRegistry
 
 /** 项目能力的写入由 Kernel 效果闸记录；标准 Node 进程由宿主单独记录。 */
 const ProjectWritingModules: readonly string[] = ['velaros:project']
-const ProjectEditOperation = 'velaros:project.edit'
+const ProjectCommitOperation = 'velaros:project.commit'
 
 // 与 Desktop 共用不限累计用量的公开合同；模型窗口、取消和子任务期限仍独立生效。
 const ModelUsageBudget = Object.freeze({
@@ -328,11 +328,11 @@ class ProjectActivityWindows {
   /** 这次调用过了宿主的权限检查、马上派发。 */
   public authorized(invocation: PreparedInvocation): void {
     const operation = `${invocation.binding.moduleId}.${invocation.operation}`
-    if (!this.edited || operation !== ProjectEditOperation) return
+    if (!this.edited || operation !== ProjectCommitOperation) return
     enqueue(
       this.edits,
       windowKey(invocation.sessionId, invocation.executionId, operation),
-      readEditPaths(invocation.input, this.root)
+      readCommitPaths(invocation.input, this.root)
     )
   }
 
@@ -342,7 +342,8 @@ class ProjectActivityWindows {
       return
     const key = windowKey(metric.sessionId, metric.executionId ?? '', metric.operation)
     if (metric.phase === 'effect-wait') {
-      const paths = metric.operation === ProjectEditOperation ? dequeue(this.edits, key) : undefined
+      const paths =
+        metric.operation === ProjectCommitOperation ? dequeue(this.edits, key) : undefined
       if (!metric.succeeded) return
       enqueue(this.open, key, { finish: this.activity?.beginCommand(), paths })
       return
@@ -385,15 +386,13 @@ function dequeue<T>(queues: Map<string, T[]>, key: string): T | undefined {
 }
 
 /**
- * `edit` 各步写到的路径，换算成相对项目根：写整份、换原文、删除的 path，移动的两头，转码的 paths。
+ * `commit` 变更涉及的路径，换算成相对项目根：正文变更的 path，以及移动的 from/to。
  * 模型给的相对路径按项目根解析；落在项目外的不要（Platform 也不会写）。
  */
-function readEditPaths(input: unknown, root: string): string[] {
-  if (!isPlainObject(input) || !isArray(input.steps)) return []
-  const paths = input.steps.flatMap((step) =>
-    isPlainObject(step)
-      ? [step.path, step.to, ...(isArray(step.paths) ? step.paths : [])].filter(isNonBlankString)
-      : []
+function readCommitPaths(input: unknown, root: string): string[] {
+  if (!isPlainObject(input) || !isArray(input.changes)) return []
+  const paths = input.changes.flatMap((change) =>
+    isPlainObject(change) ? [change.path, change.from, change.to].filter(isNonBlankString) : []
   )
   return [
     ...new Set(

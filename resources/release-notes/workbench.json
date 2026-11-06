@@ -3,21 +3,24 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
-      "version": "0.4.17",
+      "version": "0.4.18",
       "releasedAt": "2026-11-06",
       "title": {
         "zh": "接入新版运行时与语言服务改进",
         "en": "Updated runtime and language service improvements"
       },
+      "added": { "zh": [], "en": [] },
       "fixed": {
         "zh": [
           "接入 Platform v0.6.111（Velaros 0.7.0）和 UI 1.0.0，沿用经过校验的正式归档。",
           "基础工具保持命令、搜索、路径查找与差异比较，IDE 所需代码依赖由 Workbench 自行提供。",
+          "对齐项目 commit 事务接口，提交后及时刷新语言服务和编辑器中的文件。",
           "改进语言服务 Worker 的启动与退出处理，并同步诊断提示。"
         ],
         "en": [
           "Integrate Platform v0.6.111 (Velaros 0.7.0) and UI 1.0.0 using verified release archives.",
           "Keep four core runtime tools and provide IDE code dependencies through Workbench's own module.",
+          "Align project commit transactions and refresh language services and editor files after changes.",
           "Improve language service worker startup and shutdown handling with aligned diagnostic messages."
         ]
       }

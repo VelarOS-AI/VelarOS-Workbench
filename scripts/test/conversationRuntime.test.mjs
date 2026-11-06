@@ -184,7 +184,7 @@ test(
         if (call === 1)
           yield execute(
             frame,
-            "// 改一下文件再跑命令\nimport {edit} from 'velaros:project';import {execa} from 'execa';await edit({steps:[{action:'replace',path:'hello.txt',oldText:'before',newText:'after'}]});await execa('sh',['-c','printf verified > shell-proof.txt']);console.log('NODE-PROOF');"
+            "// 改一下文件再跑命令\nimport {commit} from 'velaros:project';import {execa} from 'execa';await commit({changes:[{path:'hello.txt',oldText:'before',newText:'after'}]});await execa(process.execPath,['-e',\"require('node:fs').writeFileSync('shell-proof.txt','verified')\"]);console.log('NODE-PROOF');"
           )
         else yield done(frame, '改好了')
         yield { type: 'finish', reason: 'stop' }
@@ -225,6 +225,33 @@ test(
           event.payload.text.includes('改好了')
       )
     )
+  }
+)
+
+test(
+  'project commit refreshes both paths of a moved file before closing its activity window',
+  { timeout: 30_000 },
+  async (t) => {
+    const f = await fixture(t, async function* (frame, _signal, call) {
+      if (call === 1)
+        yield execute(
+          frame,
+          "import {commit} from 'velaros:project';await commit({changes:[{from:'source.txt',to:'target.txt',before:'original'}]});"
+        )
+      else yield done(frame)
+      yield { type: 'finish', reason: 'stop' }
+    })
+    await writeFile(join(f.workspace, 'source.txt'), 'original')
+    const run = f.runtime.submit(f.sink, f.request('移动文件'))
+    await run.accepted
+    await run.completed
+    assert.equal(f.lastState()?.kind, 'done', JSON.stringify(f.events.slice(-5)))
+    assert.equal(await readFile(join(f.workspace, 'target.txt'), 'utf8'), 'original')
+    await assert.rejects(stat(join(f.workspace, 'source.txt')), { code: 'ENOENT' })
+    assert.deepEqual(f.edits, [
+      { sessionId: 'session-1', paths: ['source.txt', 'target.txt'], notices: 0 },
+    ])
+    assert.equal(f.windows.finished, f.windows.begun)
   }
 )
 
@@ -815,9 +842,6 @@ test(
       f.shells.readConsoleOutput({ taskId: task.id, sessionId: 'other' }, f.workspace)
     )
     await f.runtime.deleteSession({ projectRoot: f.workspace, sessionId: request.sessionId })
-    assert.equal(
-      (await f.shells.listBackgroundTasks({ onlyRunning: true }, f.workspace)).length,
-      0
-    )
+    assert.equal((await f.shells.listBackgroundTasks({ onlyRunning: true }, f.workspace)).length, 0)
   }
 )

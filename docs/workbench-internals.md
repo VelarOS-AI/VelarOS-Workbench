@@ -106,6 +106,9 @@ renderer 侧 `standaloneWorkbenchChatAdapter.tsx` 把主进程推来的通知（
 
 ### AI 改动审阅
 
+Platform 项目编辑使用 `velaros:project.commit({ changes })`。Workbench 从正文变更的 `path` 和移动的
+`from` / `to` 收集项目内路径，在事务成功后先通知语言服务，再关闭归属时间窗并刷新界面。
+
 每轮开跑前拍一个 Git 检查点（影子提交，不动用户的 HEAD / 索引），同时开这一轮的改动归属账本。Platform 的
 写操作都过同一道效果闸，闸放行（`effect-wait`）与这次操作跑完（`effect-run`）各报一次计量；项目与 shell
 模块的这两点之间就是一段 Agent 动手的时间窗，交给账本（`beginCommand`）。窗关闭时主进程推
