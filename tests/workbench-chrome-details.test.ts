@@ -112,7 +112,12 @@ void describe('Workbench window and chat chrome details', () => {
     assert.match(presentation, /data-mac-title-inset=\{macTitleInset && !windowFullScreen\}/u)
     assert.match(
       shellStyles,
-      /\[data-mac-title-inset='true'\] \.ideUnifiedTopBar,\n[^{]*\[data-mac-title-inset='true'\] \.workbenchSettingsHeader \{\n\s*padding-left: 76px;/u
+      /\[data-mac-title-inset='true'\] \.workbenchSettingsHeader \{\n\s*padding-left: 76px;/u
+    )
+    assert.match(shellStyles, /\[data-mac-title-inset='true'\] \.leftToolRailColumn \{\n\s*padding-top: 36px;/u)
+    assert.match(
+      shellStyles,
+      /\[data-mac-title-inset='true'\] \.embeddedKernelRoot\[data-file-panel-open='false'\] \.editorTabBar \{\n\s*padding-left: calc\(76px - var\(--workbench-left-rail-width\)\);/u
     )
   })
 
@@ -231,19 +236,22 @@ void describe('Workbench window and chat chrome details', () => {
     )
   })
 
-  void test('centers the settings gear over the chat button of the right tool rail', () => {
+  void test('places settings and run below chat in the right tool rail without a top bar', () => {
     const topStyles = readSource('src/renderer/src/styles/02-chrome-top.module.css')
     const layoutStyles = readSource('src/renderer/src/styles/03-layout.module.css')
-    const topBar = topStyles.match(/\n\.ideUnifiedTopBar \{[^}]*\}/u)?.[0] ?? ''
+    const presentation = readSource('src/renderer/src/app/StandaloneWorkbenchPagePresentation.tsx')
 
-    // 齿轮中线距右缘 = 留白 + icon / 2，工具条按钮中线距右缘 = rail / 2 → 留白 = (rail − icon) / 2。
+    assert.doesNotMatch(presentation, /ideUnifiedTopBar/u)
+    assert.doesNotMatch(topStyles, /ideUnifiedTopBar/u)
     assert.match(
-      topBar,
-      /padding-inline: 2px calc\(\(var\(--workbench-right-rail-width\) - var\(--ui-icon-button-sm\)\) \/ 2\);/u
+      presentation,
+      /className=\{styles\.rightToolWindowGroup\}>\s*<WorkbenchAgentRail[\s\S]*?<WorkbenchTopTrailing \{\.\.\.editorChrome\} \/>/u
     )
-    // 按钮边长只由 icon-sm 预设决定：顶栏图标按钮的类不再写尺寸、圆角或配色，运行按钮只在禁用时转灰。
+    // 三个按钮共用工具条中线，尺寸由 icon-sm 预设决定，悬停说明向左弹出。
     const toolbar = readSource('src/renderer/src/components/chrome/TopToolbar.tsx')
     assert.match(toolbar, /function WorkbenchTopIconAction[\s\S]*<IconButton\n\s*variant="ghost"\n\s*size="icon-sm"/u)
+    assert.match(toolbar, /tooltip=\{settingsLabel\}[\s\S]*<WorkbenchRunAction/u)
+    assert.match(toolbar, /className=\{styles\.topRunButton\}\n\s*tooltipSide="left"/u)
     assert.doesNotMatch(topStyles, /\.topToolbarIconButton/u)
     // 运行按钮只染色（绿、悬停淡绿底、禁用灰），边长与圆角照旧归 icon-sm。
     assert.deepEqual(

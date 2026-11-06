@@ -113,12 +113,20 @@ export function WorkbenchTopTrailing({
 
   return (
     <>
+      <WorkbenchTopIconAction
+        tooltip={settingsLabel}
+        label={settingsLabel}
+        tooltipSide="left"
+        onClick={onOpenSettings}
+      >
+        <GearSixIcon size={17} />
+      </WorkbenchTopIconAction>
       <WorkbenchRunAction
         topRun={topRun}
         label={runCommandLabel}
         placeholder={t('workbench.runConfigurationPlaceholder')}
         className={styles.topRunButton}
-        tooltipSide="top"
+        tooltipSide="left"
         isRunningCommand={isRunningCommand}
         hasActiveRunCommand={hasActiveRunCommand}
       />
@@ -126,20 +134,12 @@ export function WorkbenchTopTrailing({
         <WorkbenchTopIconAction
           tooltip={debugLabel}
           label={debugLabel}
-          tooltipSide="top"
+          tooltipSide="left"
           onClick={topRun.debug}
         >
           <BugIcon size={17} />
         </WorkbenchTopIconAction>
       )}
-      <WorkbenchTopIconAction
-        tooltip={settingsLabel}
-        label={settingsLabel}
-        tooltipSide="top"
-        onClick={onOpenSettings}
-      >
-        <GearSixIcon size={17} />
-      </WorkbenchTopIconAction>
     </>
   )
 }
@@ -532,6 +532,7 @@ function WorkbenchTopIconAction({
       <IconButton
         variant="ghost"
         size="icon-sm"
+        className={styles.rightToolButton}
         label={label}
         disabled={disabled}
         onClick={onClick}

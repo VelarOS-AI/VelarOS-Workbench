@@ -6,8 +6,13 @@ import { Log } from '@velaros-ai/velaros/core'
 import type { WorkbenchUpdateChannel, WorkbenchUpdateState } from '../../shared/workbenchUpdate'
 
 import { WorkbenchReleaseFeedServer } from './WorkbenchReleaseFeedServer'
-import type { WorkbenchReleaseSource } from './WorkbenchReleaseSource'
+import type {
+  ResolvedWorkbenchReleaseCatalog,
+  WorkbenchReleaseArtifact,
+  WorkbenchReleaseSource,
+} from './WorkbenchReleaseSource'
 import { validateWorkbenchReleaseCatalog } from './WorkbenchReleaseSource'
+import type { WorkbenchUpdateDownloadCache } from './WorkbenchUpdateDownloadCache'
 import type { WorkbenchUpdatePreferencesStore } from './WorkbenchUpdatePreferencesStore'
 
 interface WorkbenchUpdateServiceOptions {
@@ -15,6 +20,7 @@ interface WorkbenchUpdateServiceOptions {
   readonly isPackaged: boolean
   readonly platform?: NodeJS.Platform
   readonly arch?: string
+  readonly downloadCache?: WorkbenchUpdateDownloadCache
 }
 
 type WorkbenchUpdateListener = (state: WorkbenchUpdateState) => void
@@ -41,6 +47,11 @@ export class WorkbenchUpdateService {
   #checkPromise: Nullable<Promise<WorkbenchUpdateState>> = null
   #downloadPromise: Nullable<Promise<WorkbenchUpdateState>> = null
   #downloadCancellation: Nullable<CancellationToken> = null
+  #downloadController: Nullable<AbortController> = null
+  #release: Nullable<ResolvedWorkbenchReleaseCatalog> = null
+  #selectedArtifact: Nullable<WorkbenchReleaseArtifact> = null
+  readonly #cached = new Map<string, string>()
+  #installingCached = false
   #updater: AppUpdater | null = null
   #updaterPromise: Promise<AppUpdater> | null = null
   #disposed = false
@@ -49,7 +60,7 @@ export class WorkbenchUpdateService {
     private readonly releases: WorkbenchReleaseSource,
     private readonly updaterSource: AppUpdater | (() => Promise<AppUpdater>),
     private readonly preferences: WorkbenchUpdatePreferencesStore,
-    options: WorkbenchUpdateServiceOptions
+    private readonly options: WorkbenchUpdateServiceOptions
   ) {
     this.#currentVersion = options.currentVersion
     this.#isPackaged = options.isPackaged
@@ -146,25 +157,50 @@ export class WorkbenchUpdateService {
   }
 
   public downloadUpdate(): Promise<WorkbenchUpdateState> {
+    if (this.#disposed) return Promise.reject(new Error('Workbench update service is disposed.'))
     if (this.#downloadPromise) return this.#downloadPromise
-    if (this.#state.phase !== 'available' && this.#state.phase !== 'error')
+    if (
+      this.#state.phase !== 'available' &&
+      this.#state.phase !== 'error' &&
+      this.#state.phase !== 'paused'
+    )
       return Promise.resolve(this.getState())
     if (!this.#state.targetVersion) throw new Error('No Workbench update is available.')
 
     const targetVersion = this.#state.targetVersion
     const cancellation = new CancellationToken()
+    const controller = new AbortController()
     this.#downloadCancellation = cancellation
-    this.#setState({
-      phase: 'downloading',
-      targetVersion,
-      percent: 0,
-      transferredBytes: 0,
-    })
-    const operation = this.updater
-      .downloadUpdate(cancellation)
-      .then(() => this.getState())
+    this.#downloadController = controller
+    this.#installingCached = false
+    // 先登记任务再通知状态，订阅者重入时共享同一次下载。
+    const operation = Promise.resolve()
+      .then(async () => {
+        controller.signal.throwIfAborted()
+        this.#setState({
+          ...this.#downloadSnapshot(),
+          phase: 'downloading',
+          targetVersion,
+          percent: this.#state.percent ?? 0,
+          transferredBytes: this.#state.transferredBytes ?? 0,
+        })
+        if (this.options.downloadCache) {
+          if (!this.#selectedArtifact || !this.#release)
+            throw new Error('Update metadata does not select an admitted package.')
+          await this.#cacheArtifact(this.#selectedArtifact, controller.signal)
+          this.#installingCached = true
+        }
+        controller.signal.throwIfAborted()
+        await this.updater.downloadUpdate(cancellation)
+        return this.getState()
+      })
       .catch((error) => {
-        if (error instanceof CancellationError || cancellation.cancelled) return this.getState()
+        if (
+          controller.signal.aborted ||
+          error instanceof CancellationError ||
+          cancellation.cancelled
+        )
+          return this.getState()
         this.#setError(error, targetVersion)
         throw error
       })
@@ -176,18 +212,59 @@ export class WorkbenchUpdateService {
     return operation
   }
 
+  async #cacheArtifact(artifact: WorkbenchReleaseArtifact, signal: AbortSignal): Promise<void> {
+    const release = this.#release!
+    const started = Date.now()
+    let initialBytes: Nullable<number> = null
+    const path = await this.options.downloadCache!.download(
+      artifact,
+      (init) =>
+        this.releases.fetchArtifact(
+          { baseUrl: release.baseUrl, downloadPath: artifact.downloadPath },
+          init
+        ),
+      signal,
+      (transferred) => {
+        initialBytes ??= transferred
+        this.#handleProgress({
+          total: artifact.sizeBytes,
+          transferred,
+          percent: (transferred / artifact.sizeBytes) * 100,
+          delta: 0,
+          bytesPerSecond: Math.round(
+            ((transferred - initialBytes) * 1000) / Math.max(1, Date.now() - started)
+          ),
+        })
+      }
+    )
+    this.#cached.set(artifact.fileName, path)
+  }
+
   public pauseDownload(): WorkbenchUpdateState {
     if (this.#state.phase !== 'downloading') return this.getState()
-    this.#feed?.pause()
+    if (this.options.downloadCache) {
+      this.#downloadController?.abort()
+      this.#downloadCancellation?.cancel()
+    } else this.#feed?.pause()
     this.#setState({
       ...this.#downloadSnapshot(),
       phase: 'paused',
+      bytesPerSecond: 0,
     })
     return this.getState()
   }
 
-  public resumeDownload(): WorkbenchUpdateState {
+  public async resumeDownload(): Promise<WorkbenchUpdateState> {
     if (this.#state.phase !== 'paused') return this.getState()
+    if (this.options.downloadCache) {
+      await this.#downloadPromise
+      if (this.#state.phase !== 'paused' || this.#disposed) return this.getState()
+      void this.downloadUpdate().catch((error) => {
+        this.#log.caught('resumed update download failed', error)
+      })
+      await Promise.resolve()
+      return this.getState()
+    }
     this.#feed?.resume()
     this.#setState({
       ...this.#downloadSnapshot(),
@@ -196,11 +273,15 @@ export class WorkbenchUpdateService {
     return this.getState()
   }
 
-  public cancelDownload(): WorkbenchUpdateState {
+  public async cancelDownload(): Promise<WorkbenchUpdateState> {
     if (this.#state.phase !== 'paused') return this.getState()
     const targetVersion = this.#state.targetVersion
     this.#feed?.resume()
+    this.#downloadController?.abort()
     this.#downloadCancellation?.cancel()
+    await this.#downloadPromise
+    this.#cached.clear()
+    await this.options.downloadCache?.clear()
     this.#setState({ phase: 'available', targetVersion })
     return this.getState()
   }
@@ -226,6 +307,7 @@ export class WorkbenchUpdateService {
     if (this.preferences.channel === channel) return this.getState()
     if (this.#checkPromise) await this.#checkPromise.catch(() => undefined)
     this.#feed?.resume()
+    this.#downloadController?.abort()
     this.#downloadCancellation?.cancel()
     if (this.#downloadPromise) await this.#downloadPromise.catch(() => undefined)
     await this.#replaceFeed(null)
@@ -247,9 +329,14 @@ export class WorkbenchUpdateService {
     this.#updater?.removeListener('download-progress', this.#handleProgress)
     this.#updater?.removeListener('update-downloaded', this.#handleDownloaded)
     this.#updater?.removeListener('update-cancelled', this.#handleCancelled)
-    this.#updater?.removeListener('error', this.#handleError)
     this.#downloadCancellation?.cancel()
+    this.#downloadController?.abort()
+    // 更新器仍可能为已发出的请求报告取消错误，等在途任务收束后再移除接收者。
+    void Promise.allSettled([this.#checkPromise, this.#downloadPromise]).then(() => {
+      this.#updater?.removeListener('error', this.#handleError)
+    })
     await this.#replaceFeed(null)
+    if (this.#downloadPromise) await this.#downloadPromise.catch(() => undefined)
     this.#listeners.clear()
   }
 
@@ -279,7 +366,13 @@ export class WorkbenchUpdateService {
         return this.getState()
       }
       await this.#loadUpdater()
-      const feed = new WorkbenchReleaseFeedServer(this.releases, release)
+      this.#release = release
+      this.#selectedArtifact = null
+      this.#cached.clear()
+      const feed = new WorkbenchReleaseFeedServer(this.releases, release, (artifact, range) => {
+        const path = this.#cached.get(artifact.fileName)
+        return path ? this.options.downloadCache!.stream(path, range) : null
+      })
       const feedUrl = await feed.listen()
       if (this.#disposed) {
         await feed.close()
@@ -309,6 +402,19 @@ export class WorkbenchUpdateService {
   }
 
   readonly #handleAvailable = (info: UpdateInfo): void => {
+    const format = this.#platform === 'win32' ? 'zip' : expectedFiles(this.#platform)?.packageFormat
+    const names = new Set(
+      (info.files ?? []).map((file) =>
+        decodeURIComponent(new URL(file.url, 'https://update.invalid/').pathname.split('/').at(-1)!)
+      )
+    )
+    this.#selectedArtifact =
+      this.#release?.catalog.artifacts.find(
+        (artifact) =>
+          names.has(artifact.fileName) &&
+          artifact.format === format &&
+          artifact.version === info.version
+      ) ?? null
     this.#setState({ phase: 'available', targetVersion: info.version })
     if (this.preferences.automaticDownloads) {
       void this.downloadUpdate().catch((error) => {
@@ -322,7 +428,13 @@ export class WorkbenchUpdateService {
   }
 
   readonly #handleProgress = (progress: ProgressInfo): void => {
-    if (this.#state.phase === 'paused') return
+    if (
+      this.#disposed ||
+      this.#installingCached ||
+      this.#downloadController?.signal.aborted ||
+      this.#state.phase !== 'downloading'
+    )
+      return
     this.#setState({
       phase: 'downloading',
       targetVersion: this.#state.targetVersion,
@@ -334,15 +446,33 @@ export class WorkbenchUpdateService {
   }
 
   readonly #handleDownloaded = (event: UpdateDownloadedEvent): void => {
+    if (
+      this.#disposed ||
+      this.#state.phase === 'paused' ||
+      this.#downloadController?.signal.aborted
+    )
+      return
     this.#setState({ phase: 'downloaded', targetVersion: event.version, percent: 100 })
   }
 
   readonly #handleCancelled = (): void => {
+    if (
+      this.#disposed ||
+      this.#state.phase === 'paused' ||
+      this.#downloadController?.signal.aborted
+    )
+      return
     this.#setState({ phase: 'available', targetVersion: this.#state.targetVersion })
   }
 
   readonly #handleError = (error: Error): void => {
-    if (this.#state.phase === 'downloaded' || this.#downloadCancellation?.cancelled) return
+    if (
+      this.#disposed ||
+      this.#state.phase === 'downloaded' ||
+      this.#downloadCancellation?.cancelled ||
+      this.#downloadController?.signal.aborted
+    )
+      return
     this.#setError(error, this.#state.targetVersion)
   }
 
@@ -362,6 +492,7 @@ export class WorkbenchUpdateService {
 
   #setError(error: unknown, targetVersion?: string): void {
     this.#setState({
+      ...this.#downloadSnapshot(),
       phase: 'error',
       targetVersion,
       error: error instanceof Error ? error.message : String(error),
@@ -380,6 +511,7 @@ export class WorkbenchUpdateService {
     > &
       Partial<Pick<WorkbenchUpdateState, 'automaticDownloads'>>
   ): void {
+    if (this.#disposed) return
     const next: Omit<WorkbenchUpdateState, 'revision'> = {
       ...state,
       currentVersion: this.#currentVersion,

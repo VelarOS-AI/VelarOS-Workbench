@@ -9,34 +9,11 @@
   -webkit-app-region: no-drag;
 }
 
-/*
- * 尾部留白让最右那颗设置齿轮与正下方右侧工具条里的聊天按钮共用一条竖直中线：
- * - 工具条贴窗口右缘、宽 --workbench-right-rail-width，按钮在其中水平居中 → 中线距右缘 rail / 2；
- * - 齿轮是 icon-sm 档 IconButton，边长 --ui-icon-button-sm（32px）→ 中线距右缘 = 留白 + 16px；
- * - 两者相等：留白 = (rail − icon) / 2。默认密度 (36 − 32) / 2 = 2px，紧凑 (32 − 32) / 2 = 0，
- *   宽松 (42 − 32) / 2 = 5px。以前留白是 0，齿轮中线距右缘 16px、聊天按钮 18px，差 2px 且贴边。
- * 留白加在整行尾部，运行 / 代码图 / 设置几颗按钮一起平移，彼此间距不变。
- */
-.ideUnifiedTopBar {
-  display: flex;
-  flex-shrink: 0;
-  align-items: center;
-  gap: 6px;
-  min-height: var(--workbench-topbar-height);
-  padding-inline: 2px calc((var(--workbench-right-rail-width) - var(--ui-icon-button-sm)) / 2);
-  border-bottom: 1px solid var(--workbench-border);
-  background: var(--workbench-toolbar);
-  -webkit-app-region: drag;
-}
-
-.workbenchShell[data-standalone='true'] .ideUnifiedTopBar,
 .workbenchShell[data-standalone='true'] .panelHeader,
 .workbenchShell[data-standalone='true'] .leftToolRailColumn {
   -webkit-app-region: drag;
 }
 
-.workbenchShell[data-standalone='true'] .ideUnifiedTopLeading,
-.workbenchShell[data-standalone='true'] .ideUnifiedTopTrailing,
 .workbenchShell[data-standalone='true'] .editorTabBar,
 .workbenchShell[data-standalone='true'] .bottomToolWindowSlot,
 .workbenchShell[data-standalone='true'] .panelHeader button,
@@ -45,28 +22,6 @@
 .workbenchShell[data-standalone='true'] .leftToolButton,
 .workbenchShell[data-standalone='true'] .treeActionForm {
   -webkit-app-region: no-drag;
-}
-
-.ideUnifiedTopLeading {
-  flex: 0 1 auto;
-  display: flex;
-  min-width: 0;
-  max-width: min(520px, 52vw);
-  align-items: center;
-  gap: 3px;
-  -webkit-app-region: no-drag;
-}
-
-.ideUnifiedTopSpacer {
-  flex: 1 1 0%;
-  min-width: 0;
-}
-
-.ideUnifiedTopTrailing {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  gap: 4px;
 }
 
 .topToolbarLeft,
@@ -88,7 +43,7 @@
 }
 
 /*
- * 顶栏上唯一的 Git 控件：按钮上是当前分支和落后（↓）、领先（↑）上游的提交数，点开是一块面板——当前分支
+ * 项目标题行的 Git 控件：按钮上是当前分支和落后（↓）、领先（↑）上游的提交数，点开是一块面板——当前分支
  * 的远端操作、分支列表、新建分支。外框、面板的尺寸与圆角归共享的顶栏控件（velar-topbar-control-*）；
  * 面板里行高、间距、字号用它给的 --topbar-panel-* 变量，和旁边的项目菜单是同一套。
  */
@@ -881,9 +836,7 @@
 }
 
 /*
- * 顶栏图标按钮（运行 / 代码图 / 设置）的边长、圆角都归 IconButton 的 icon-sm 档，配色随 ghost 变体，这里
- * 不另写；顶栏尾部留白按同一个边长令牌换算（见 .ideUnifiedTopBar）。运行按钮单独染绿、悬停时垫一层淡绿，
- * 禁用时转灰。
+ * 右侧工具条按钮的边长、圆角归 IconButton 的 icon-sm 档；运行按钮染绿，悬停时垫一层淡绿，禁用时转灰。
  */
 .topRunButton {
   color: var(--status-green);

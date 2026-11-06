@@ -1,6 +1,7 @@
 import {
   type MouseEvent,
   type ReactElement,
+  type ReactNode,
   Suspense,
   useCallback,
   useEffect,
@@ -155,12 +156,14 @@ export function resolveWorkbenchEntryAbsolutePath(projectRoot: string, entryPath
 }
 
 interface FilePanelProps {
+  projectControls?: ReactNode
   tree: WorkbenchFilePanelTreeProps
   search: WorkbenchFilePanelSearchProps
   handlers: WorkbenchFilePanelHandlersProps
 }
 
 export function FilePanel({
+  projectControls,
   tree: {
     project,
     rootEntries,
@@ -427,7 +430,9 @@ export function FilePanel({
         title={project.rootPath}
         onContextMenu={openRootContextMenu}
       >
-        <span className={styles.filePanelViewTitle}>{t('workbench.projectView')}</span>
+        {projectControls ?? (
+          <span className={styles.filePanelViewTitle}>{t('workbench.projectView')}</span>
+        )}
         <IconButton
           variant="ghost"
           size="icon-sm"

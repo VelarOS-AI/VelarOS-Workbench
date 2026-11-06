@@ -748,20 +748,28 @@
   --workbench-card-border: rgba(255, 255, 255, 0.18);
 }
 
-/* macOS hiddenInset: the unified title row owns the traffic-light inset.
- * 全屏时红绿灯随标题栏一起收起，外壳上的 data-mac-title-inset 随之为 false，空位一并还回去。
- * 设置页是盖满整窗的同窗浮层，它的标题行同样压在红绿灯下面，跟顶栏一起让位、一起收回。 */
-.workbenchShell[data-standalone='true'][data-mac-title-inset='true'] .ideUnifiedTopBar,
+/* macOS hiddenInset：原生红绿灯的位置由左侧现有标题行让出，不再单独占一条顶栏。
+ * 全屏时 data-mac-title-inset 为 false，这些空位随红绿灯一起收回。 */
 .workbenchShell[data-standalone='true'][data-mac-title-inset='true'] .workbenchSettingsHeader {
   padding-left: 76px;
 }
 
+.workbenchShell[data-standalone='true'][data-mac-title-inset='true'] .leftToolRailColumn {
+  padding-top: 36px;
+}
+
+.workbenchShell[data-standalone='true'][data-mac-title-inset='true'] .filePanelProjectHeader,
+.workbenchShell[data-standalone='true'][data-mac-title-inset='true'] .embeddedFilePane .panelHeader,
+.workbenchShell[data-standalone='true'][data-mac-title-inset='true'] .embeddedKernelRoot[data-file-panel-open='false'] .editorTabBar {
+  padding-left: calc(76px - var(--workbench-left-rail-width));
+}
+
 /* Windows and Linux retain their native window frame. Workbench's own IDE toolbar stays an
  * application surface there instead of becoming a second draggable title bar. */
-.workbenchShell[data-standalone='true'][data-host-platform='windows'] .ideUnifiedTopBar,
+.workbenchShell[data-standalone='true'][data-host-platform='windows'] .filePanelProjectHeader,
 .workbenchShell[data-standalone='true'][data-host-platform='windows'] .panelHeader,
 .workbenchShell[data-standalone='true'][data-host-platform='windows'] .leftToolRailColumn,
-.workbenchShell[data-standalone='true'][data-host-platform='linux'] .ideUnifiedTopBar,
+.workbenchShell[data-standalone='true'][data-host-platform='linux'] .filePanelProjectHeader,
 .workbenchShell[data-standalone='true'][data-host-platform='linux'] .panelHeader,
 .workbenchShell[data-standalone='true'][data-host-platform='linux'] .leftToolRailColumn {
   -webkit-app-region: no-drag;
@@ -780,10 +788,6 @@
 
 .workbenchShell[data-standalone='true'] .statusBar {
   border-top: none;
-}
-
-.workbenchShell[data-standalone='true'] .ideUnifiedTopBar {
-  border-bottom: none;
 }
 
 .workbenchShell[data-standalone='true'] .filePanelHeaderActions,

@@ -16,6 +16,7 @@ import {
   WorkbenchEmbeddedCloudBaseUrl,
 } from './WorkbenchCloudEndpointResolver'
 import { CloudWorkbenchReleaseSource } from './WorkbenchReleaseSource'
+import { WorkbenchUpdateDownloadCache } from './WorkbenchUpdateDownloadCache'
 import { WorkbenchUpdatePreferencesStore } from './WorkbenchUpdatePreferencesStore'
 import { WorkbenchUpdateService } from './WorkbenchUpdateService'
 
@@ -50,6 +51,9 @@ export function installWorkbenchUpdateRuntime(): void {
     {
       currentVersion: app.getVersion(),
       isPackaged: app.isPackaged,
+      downloadCache: new WorkbenchUpdateDownloadCache(
+        join(app.getPath('userData'), 'update-downloads')
+      ),
     }
   )
   const broadcast = (): void => {

@@ -131,7 +131,7 @@ describe('WorkbenchUpdateService', () => {
       percent: 25,
     })
     expect(service.pauseDownload().phase).toBe('paused')
-    expect(service.cancelDownload().phase).toBe('available')
+    expect((await service.cancelDownload()).phase).toBe('available')
     expect(service.getState().percent).toBeUndefined()
     await service.dispose()
   })

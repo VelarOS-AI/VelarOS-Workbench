@@ -25,8 +25,8 @@
   min-width: 0;
   height: 35px;
   align-items: center;
-  gap: 6px;
-  padding: 0 5px 0 9px;
+  gap: 2px;
+  padding: 0 4px;
   border-bottom: 1px solid var(--workbench-border);
   background: var(--background-panel);
   -webkit-app-region: drag;
@@ -42,6 +42,46 @@
   letter-spacing: -0.01em;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* 项目与分支共用原来的标题行；长名称在各自按钮里省略，搜索按钮始终留在行尾。 */
+.filePanelHeaderControls {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 2px;
+  -webkit-app-region: no-drag;
+}
+
+.filePanelHeaderControls .projectControlAnchor {
+  min-width: 0;
+  max-width: 100%;
+  flex: 1 1 auto;
+}
+
+.filePanelHeaderControls .projectControlButton {
+  width: 100%;
+  justify-content: flex-start;
+  gap: 4px;
+  padding-inline: 4px;
+}
+
+.filePanelHeaderControls .projectControlName {
+  flex: 1 1 auto;
+  text-align: left;
+}
+
+.filePanelHeaderControls .topGitControl {
+  min-width: 0;
+  max-width: 44%;
+  flex: 0 1 auto;
+}
+
+.filePanelHeaderControls .gitBranchControl {
+  height: 32px;
+  max-width: 100%;
+  flex-shrink: 1;
 }
 
 /*

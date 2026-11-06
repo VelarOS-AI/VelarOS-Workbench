@@ -652,24 +652,6 @@ export function StandaloneWorkbenchPagePresentation({
         style={shellStyle}
         ref={layout.shellRef}
       >
-        <header className={styles.ideUnifiedTopBar}>
-          <div className={styles.ideUnifiedTopLeading}>
-            <WorkbenchProjectControl
-              state={projectHubState}
-              onSwitchProject={switchProject}
-              onOpenProjectInNewWindow={openProjectInNewWindow}
-              onAddLocalProject={addLocalProject}
-              onCloneProjectInNewWindow={(remoteUrl) =>
-                window.velarosWorkbenchProjectHub.cloneProjectInNewWindow(remoteUrl)
-              }
-            />
-            <WorkbenchTopLeading {...editorChrome} />
-          </div>
-          <div className={styles.ideUnifiedTopSpacer} />
-          <div className={styles.ideUnifiedTopTrailing}>
-            <WorkbenchTopTrailing {...editorChrome} />
-          </div>
-        </header>
         <section className={styles.ideBody} data-right-tool-open={surface.isRightToolOpen}>
           <aside className={styles.leftToolPane}>
             <div
@@ -755,6 +737,20 @@ export function StandaloneWorkbenchPagePresentation({
           </aside>
           <WorkbenchEmbeddedKernel
             model={embeddedKernelModel}
+            projectControls={
+              <div className={styles.filePanelHeaderControls}>
+                <WorkbenchProjectControl
+                  state={projectHubState}
+                  onSwitchProject={switchProject}
+                  onOpenProjectInNewWindow={openProjectInNewWindow}
+                  onAddLocalProject={addLocalProject}
+                  onCloneProjectInNewWindow={(remoteUrl) =>
+                    window.velarosWorkbenchProjectHub.cloneProjectInNewWindow(remoteUrl)
+                  }
+                />
+                <WorkbenchTopLeading {...editorChrome} />
+              </div>
+            }
             leftMode={
               surface.activeLeftTool === 'commit'
                 ? 'changes'
@@ -813,6 +809,7 @@ export function StandaloneWorkbenchPagePresentation({
                   onOpen={() => surface.openRightTool('chat')}
                   onToggle={() => surface.toggleRightTool('chat')}
                 />
+                <WorkbenchTopTrailing {...editorChrome} />
               </div>
             </div>
           </aside>

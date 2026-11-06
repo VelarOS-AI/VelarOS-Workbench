@@ -115,6 +115,15 @@ install-on-quit on native Windows. Older updaters need one manual installation o
 Windows builds use the checked-in `resources/icons/icon.ico`, generated from `icon.png` with
 Electron Builder's icon tool. Regenerate the ICO when changing the product icon.
 
+### Resumable downloads
+
+Update packages are cached in `userData/update-downloads`, keyed by their version, platform,
+architecture, filename, size and catalog SHA-256. Pausing, interrupted connections and app restarts
+preserve the partial file. Retrying sends a single HTTP Range request; a server that ignores Range
+causes a clean full download. The installer receives local bytes only after the complete size and
+SHA-256 match the admitted catalog artifact. Canceling a paused download removes its cached bytes;
+starting another artifact prunes obsolete partial files.
+
 ## Finalize the platform candidate
 
 The finalizer requires the release repository token plus the existing Ed25519 catalog attestation

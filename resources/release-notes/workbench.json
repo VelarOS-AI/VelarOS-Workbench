@@ -3,6 +3,34 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
+      "version": "0.4.16",
+      "releasedAt": "2026-11-06",
+      "title": {
+        "zh": "紧凑工作区与更新断点续传",
+        "en": "Compact workspace and resumable updates"
+      },
+      "added": {
+        "zh": [
+          "更新包支持暂停、断网与重启后的断点续传，完整校验后再交付安装器。"
+        ],
+        "en": [
+          "Resume update downloads after pausing, network interruptions or app restarts, with full verification before installation."
+        ]
+      },
+      "fixed": {
+        "zh": [
+          "移除独立顶部工具栏，将项目与 Git 下拉合并到项目面板标题行，设置与运行入口移至右侧工具条。",
+          "保留长项目名与分支名的省略显示，并为 macOS 原生窗口按钮让出空间。",
+          "升级至 Platform v0.6.108（Velaros 0.6.34）与 UI 0.2.74，同步最新运行时及聊天活动展示修复。"
+        ],
+        "en": [
+          "Remove the standalone top toolbar, place project and Git selectors in the project panel header, and move settings and run actions to the right rail.",
+          "Truncate long project and branch names and preserve space for native macOS window controls.",
+          "Upgrade to Platform v0.6.108 (Velaros 0.6.34) and UI 0.2.74 with the latest runtime and chat activity fixes."
+        ]
+      }
+    },
+    {
       "version": "0.4.15",
       "releasedAt": "2026-11-05",
       "title": {

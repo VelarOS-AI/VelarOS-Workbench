@@ -9,6 +9,7 @@ import {
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
   type ReactElement,
+  type ReactNode,
   Suspense,
   useEffect,
 } from 'react'
@@ -45,6 +46,7 @@ const LazyWorkbenchAgentBrowserPanel = lazyWithPreload(
 interface WorkbenchEmbeddedKernelProps {
   model: WorkbenchEmbeddedKernelModel
   leftMode: WorkbenchEmbeddedKernelLeftMode
+  projectControls?: ReactNode
   embeddedChrome?: WorkbenchEmbeddedKernelChrome
 }
 
@@ -66,6 +68,7 @@ export function WorkbenchEmbeddedKernel({
   embeddedChrome,
   model,
   leftMode,
+  projectControls,
 }: WorkbenchEmbeddedKernelProps): ReactElement {
   const { t } = useWorkbenchI18n()
   const { files, editor } = model
@@ -163,6 +166,7 @@ export function WorkbenchEmbeddedKernel({
           <WorkbenchLogicGraphSidebar {...model.velarStructure} />
         ) : (
           <FilePanel
+            projectControls={projectControls}
             tree={files.tree}
             search={files.search}
             handlers={files.handlers}

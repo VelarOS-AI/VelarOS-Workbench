@@ -60,7 +60,7 @@ void describe('pre-split Workbench shell parity', () => {
     assert.doesNotMatch(searchForm, /searchInputClearButton|<SearchField/)
   })
 
-  void test('places the project and one Git control together in the title row', () => {
+  void test('places the project and one Git control in the file header and actions in the right rail', () => {
     const presentation = readSource('src/renderer/src/app/StandaloneWorkbenchPagePresentation.tsx')
     const toolbar = readSource('src/renderer/src/components/chrome/TopToolbar.tsx')
     const adapter = readSource(
@@ -75,13 +75,19 @@ void describe('pre-split Workbench shell parity', () => {
     assert.match(presentation, /<WorkbenchTopLeading \{\.\.\.editorChrome\} \/>/)
     assert.match(presentation, /<WorkbenchTopTrailing \{\.\.\.editorChrome\} \/>/)
     assert.doesNotMatch(presentation, /placement="rail"|rightToolActionGroup/)
-    // 顶栏上只有一个 Git 控件：分支、拉取、推送、同步、获取远端都在它的面板里，旁边不再另放同步按钮。
+    const embedded = readSource('src/renderer/src/components/embedded/WorkbenchEmbeddedKernel.tsx')
+    const filePanel = readSource('src/renderer/src/components/files/FilePanel.tsx')
+    assert.match(presentation, /<WorkbenchEmbeddedKernel[\s\S]*projectControls=\{[\s\S]*<WorkbenchProjectControl/)
+    assert.match(embedded, /<FilePanel\s*projectControls=\{projectControls\}/)
+    assert.match(filePanel, /\{projectControls \?\? \(/)
+    assert.doesNotMatch(presentation, /ideUnifiedTopBar/)
+    // 只有一个 Git 控件：分支、拉取、推送、同步、获取远端都在它的面板里。
     assert.equal(toolbar.match(/<WorkbenchGit\w+Control\b/g)?.length, 1)
     assert.match(toolbar, /<WorkbenchGitBranchControl/)
     const runButton = toolbar.indexOf('<WorkbenchRunAction')
     const settingsButton = toolbar.indexOf('tooltip={settingsLabel}')
     assert.ok(runButton >= 0)
-    assert.ok(runButton < settingsButton)
+    assert.ok(settingsButton >= 0 && settingsButton < runButton)
     assert.match(adapter, /gitWorkspaceRoot:\s*workbench\.activeProject\?\.rootPath/)
     assert.match(adapter, /onOpenGitCommitTool:[\s\S]*setActiveLeftTool\('commit'\)/)
     assert.match(adapter, /onOpenGitBottomTool:[\s\S]*openBottomTool\('git'\)/)
