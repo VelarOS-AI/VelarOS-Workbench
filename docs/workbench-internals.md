@@ -53,7 +53,7 @@ Workbench 是单体仓库：根 `package.json` 是唯一清单，全部产品源
 - **按需代码能力**：项目编辑、语言服务、图片与浏览器模块通过 Platform 的能力目录发现，模型按需读取合同并调用。
   `resolveWorkbenchNodeEnvironment` 固定基础 npm 工具与 `workbenchNodePackages.json` 登记的代码工具目录，
   使用 `NodeRuntimeEnvironment` 注入执行器。发现阶段只读取包清单，实际实现由 Node 在 import 时加载，项目依赖优先。
-  代码工具包含 ts-morph、Prettier、jsonc-parser、ast-grep 与 Playwright，运行装配和发行资源共用同一份包名表。
+  基础工具仅包含 execa、ripgrep、globby 与 diff；TypeScript、ts-morph、Prettier、jsonc-parser、ast-grep 与 Playwright 由 Workbench 的 IDE 代码模块自行提供，运行装配和发行资源共用同一份包名表。
 - **记忆与笔记**：长期记忆按 `project:<真实项目根>` 分作用域，模型按需召回；设置页能关、能看、能删。
   工作笔记由 Platform 会话存储持有，聊天顶部笔记入口按 key / revision 分页读原文，运行推进时刷新，关闭入口时取消旧读取。
 - **浏览器**：网页搜索使用 `WorkbenchWebSearchPages` 的隐蔽窗口与独立分区，搜索引擎跟设置走。
@@ -672,7 +672,10 @@ Ctrl+Alt+Shift+T，右键、命令面板）只列重构，按「提取、内联�
 ### 超时、取消与重启
 
 - 一个请求超时只让它自己失败（`TIMEOUT`），并通知 worker 丢掉 / 放弃它；TypeScript 的项目状态与外部 LSP
-  会话都留着。超时后给 worker 发 `ping`（控制消息不进请求队列），20 秒内不回 `pong` 才判定卡死、换 worker；
+  会话都留着。单文件诊断包含项目自己的类型感知 ESLint，冷启动使用独立的 90 秒后台预算；交互请求仍是 12 秒，
+  其它后台请求是 30 秒。超时后给 worker 发 `ping`（控制消息不进请求队列），通常 20 秒内不回 `pong` 才判定
+  卡死；如果已有诊断仍在预算内，探活等到它的原始截止时间，避免把同步类型检查当作线程挂死、反复丢掉热缓存。
+  后来排队的诊断不会继续延长这一次探活。超过预算仍无响应才换 worker；
   worker 崩溃同样换。接连失败时重建间隔从 1 秒翻倍到 30 秒（平稳跑满一分钟清零），期间的请求排队等新 worker。
 - 补全、悬浮、签名、高亮、内联提示、语义着色按「窗口 + 文件」互相顶替：新请求一到，旧的立即以 `CANCELLED`
   结束；排队中的直接丢掉，正在算的 TypeScript 从与 worker 共享的取消缓冲读到取消、在检查点停下，外部 LSP 收到

@@ -3,6 +3,26 @@
   "product": "VelarOS Workbench",
   "releases": [
     {
+      "version": "0.4.17",
+      "releasedAt": "2026-11-06",
+      "title": {
+        "zh": "接入新版运行时与语言服务改进",
+        "en": "Updated runtime and language service improvements"
+      },
+      "fixed": {
+        "zh": [
+          "接入 Platform v0.6.111（Velaros 0.7.0）和 UI 1.0.0，沿用经过校验的正式归档。",
+          "基础工具保持命令、搜索、路径查找与差异比较，IDE 所需代码依赖由 Workbench 自行提供。",
+          "改进语言服务 Worker 的启动与退出处理，并同步诊断提示。"
+        ],
+        "en": [
+          "Integrate Platform v0.6.111 (Velaros 0.7.0) and UI 1.0.0 using verified release archives.",
+          "Keep four core runtime tools and provide IDE code dependencies through Workbench's own module.",
+          "Improve language service worker startup and shutdown handling with aligned diagnostic messages."
+        ]
+      }
+    },
+    {
       "version": "0.4.16",
       "releasedAt": "2026-11-06",
       "title": {
@@ -10,9 +30,7 @@
         "en": "Compact workspace and resumable updates"
       },
       "added": {
-        "zh": [
-          "更新包支持暂停、断网与重启后的断点续传，完整校验后再交付安装器。"
-        ],
+        "zh": ["更新包支持暂停、断网与重启后的断点续传，完整校验后再交付安装器。"],
         "en": [
           "Resume update downloads after pausing, network interruptions or app restarts, with full verification before installation."
         ]

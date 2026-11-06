@@ -171,8 +171,6 @@ export async function assertNodeRuntimePackages(directory, executable) {
     import assert from 'node:assert/strict';
     import {execa} from 'execa';import {rgPath} from '@vscode/ripgrep';
     import {globby} from 'globby';import {diffLines} from 'diff';
-    import {parse} from 'yaml';import {createNode} from 'yaml/util';
-    assert.equal(parse('answer: 42').answer,42);assert.equal(typeof createNode,'function');
     assert((await globby('package.json')).includes('package.json'));
     await assert.rejects(globby('{'.repeat(4000)+'a,b'+'}'.repeat(4000)),/maximum depth/);
     assert(diffLines('a','b').some(part=>part.added));
@@ -195,7 +193,7 @@ export async function assertNodeRuntimePackages(directory, executable) {
       '-e',
       `
       import assert from 'node:assert/strict';
-      import {Project} from 'ts-morph';import {format} from 'prettier';
+      import {Project} from 'ts-morph';import ts from 'typescript';import {format} from 'prettier';
       import * as typescript from 'prettier/plugins/typescript';
       import * as estree from 'prettier/plugins/estree';
       const project=new Project({useInMemoryFileSystem:true});
@@ -204,6 +202,7 @@ export async function assertNodeRuntimePackages(directory, executable) {
       source.getFunctionOrThrow('double').rename('twice');
       assert.match(consumer.getFullText(),/answer=twice\\(21\\)/);
       assert.equal(project.getPreEmitDiagnostics().length,0);
+      assert.match(ts.transpileModule('const answer:number=42;',{}).outputText,/42/);
       assert.equal(await format('const total:number=42;', {parser:'typescript',plugins:[typescript,estree],semi:false}),'const total: number = 42\\n');
       assert.match(await format('export const View=()=> <p>hello</p>',{filepath:'View.tsx'}),/<p>hello<\\/p>/);
       import {modify,applyEdits} from 'jsonc-parser';

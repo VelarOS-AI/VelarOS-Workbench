@@ -108,7 +108,7 @@ export const workbenchAppZhCNMessages = mergeConversationMessages(conversationZh
     projectUnavailableDescription:
       '这个工作台窗口绑定的工程不存在或已被移除，请回到主窗口重新打开。',
     readFileFailed: '读取文件失败',
-    languageServiceStartFailed: '语言服务启动失败',
+    languageServiceDiagnosticsFailed: '代码检查暂时不可用',
     editorHoverLoading: '正在加载语法说明…',
     editorHoverUnavailable: '暂时无法加载语法说明',
     editorHoverDefinition: '定义位置',

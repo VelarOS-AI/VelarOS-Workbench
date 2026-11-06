@@ -78,6 +78,9 @@ export interface WorkbenchLanguageServiceWorkerHealthOptions {
 const GracefulWorkerShutdownTimeoutMs = 8_000
 const InteractiveRequestTimeoutMs = 12_000
 const BackgroundRequestTimeoutMs = 30_000
+// 大仓库的首次类型检查还会初始化项目自己的类型感知 ESLint，冷启动可能超过 30 秒。
+// 给诊断单独的后台预算，交互请求仍保持短超时。
+const DiagnosticsRequestTimeoutMs = 90_000
 const LifecycleRequestTimeoutMs = 15_000
 const DefaultWorkerHealth: WorkbenchLanguageServiceWorkerHealthOptions = {
   hangTimeoutMs: 20_000,
@@ -93,6 +96,7 @@ type WorkbenchLanguageServiceRequestTimeout = (
 export function getWorkbenchLanguageServiceRequestTimeoutMs(
   operation: WorkbenchLanguageServiceWorkerOperation
 ): number {
+  if (operation === 'getDiagnostics') return DiagnosticsRequestTimeoutMs
   switch (getWorkbenchLanguageServiceWorkerPriority(operation)) {
     case 'background':
       return BackgroundRequestTimeoutMs
@@ -121,6 +125,8 @@ interface PendingLanguageServiceRequest {
   resolve: (result: unknown) => void
   reject: (error: AppError) => void
   timeout: Nullable<ReturnType<typeof setTimeout>>
+  /** 实际发给 worker 后的截止时间，供探活避开仍在预算内的同步诊断。 */
+  deadlineAt: Nullable<number>
 }
 
 interface InFlightDiagnosticsRequest {
@@ -497,6 +503,7 @@ export class WorkbenchLanguageServiceWorkerClient {
       resolve: resolvePromise,
       reject,
       timeout: null,
+      deadlineAt: null,
     }
     this.pending.set(pending.id, pending)
     return pending
@@ -507,10 +514,9 @@ export class WorkbenchLanguageServiceWorkerClient {
     worker: LanguageServiceWorkerInstance
   ): void {
     pending.worker = worker
-    pending.timeout = setTimeout(
-      () => this.handleRequestTimeout(pending),
-      Math.max(1, this.requestTimeoutMs(pending.operation))
-    )
+    const timeoutMs = Math.max(1, this.requestTimeoutMs(pending.operation))
+    pending.deadlineAt = Date.now() + timeoutMs
+    pending.timeout = setTimeout(() => this.handleRequestTimeout(pending), timeoutMs)
     try {
       worker.port.postMessage({
         id: pending.id,
@@ -565,6 +571,16 @@ export class WorkbenchLanguageServiceWorkerClient {
 
   private probe(worker: LanguageServiceWorkerInstance): void {
     if (worker.probe) return
+    // ESLint 的类型检查会同步占用 worker。排在它后面的补全/符号请求可能先超时，
+    // 此时没收到 pong 不等于线程死了；至少等已发出的诊断用完自己的预算再判定。
+    // 只在本次探活创建时计算，不让后来排队的请求无限推迟故障恢复。
+    const now = Date.now()
+    let diagnosticsDeadline = now
+    for (const pending of this.pending.values()) {
+      if (pending.worker === worker && pending.operation === 'getDiagnostics')
+        diagnosticsDeadline = Math.max(diagnosticsDeadline, pending.deadlineAt ?? now)
+    }
+    const hangTimeoutMs = Math.max(this.health.hangTimeoutMs, diagnosticsDeadline - now)
     const id = this.nextRequestId++
     worker.probe = {
       id,
@@ -572,13 +588,13 @@ export class WorkbenchLanguageServiceWorkerClient {
         () => {
           if (this.worker !== worker || worker.probe?.id !== id) return
           worker.probe = null
-          log.warn('language_worker_unresponsive', { hangTimeoutMs: this.health.hangTimeoutMs })
+          log.warn('language_worker_unresponsive', { hangTimeoutMs })
           this.replaceWorker(
             worker,
             new AppError('TIMEOUT', workbenchMainText('language.serviceRestartedUnresponsive'))
           )
         },
-        Math.max(1, this.health.hangTimeoutMs)
+        Math.max(1, hangTimeoutMs)
       ),
     }
     try {

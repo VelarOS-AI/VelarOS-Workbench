@@ -30,7 +30,10 @@ class FakeLanguageServiceWorker implements WorkbenchLanguageServiceWorkerPort {
   public terminated = false
   public cancellation: Nullable<Int32Array> = null
 
-  public constructor(private readonly mode: FakeWorkerMode, options?: WorkbenchLanguageServiceWorkerFactoryOptions) {
+  public constructor(
+    private readonly mode: FakeWorkerMode,
+    options?: WorkbenchLanguageServiceWorkerFactoryOptions
+  ) {
     if (options) this.cancellation = new Int32Array(options.cancellation)
   }
 
@@ -49,9 +52,10 @@ class FakeLanguageServiceWorker implements WorkbenchLanguageServiceWorkerPort {
     queueMicrotask(() => {
       const response: WorkbenchLanguageServiceWorkerResponse = {
         id: message.id,
-        result: message.operation === 'getDefinition' || message.operation === 'getCompletions'
-          ? { projectRoot: '/project', path: 'src/index.ts', locations: [], items: [] }
-          : undefined,
+        result:
+          message.operation === 'getDefinition' || message.operation === 'getCompletions'
+            ? { projectRoot: '/project', path: 'src/index.ts', locations: [], items: [] }
+            : undefined,
       }
       this.events.emit('message', response)
     })
@@ -59,6 +63,11 @@ class FakeLanguageServiceWorker implements WorkbenchLanguageServiceWorkerPort {
 
   public crash(): void {
     this.events.emit('error', new Error('worker crashed'))
+  }
+
+  public replyToPing(): void {
+    const ping = this.controls.findLast((control) => control.control === 'ping')
+    if (ping) this.events.emit('message', { control: 'pong', id: ping.id })
   }
 
   public on(event: 'message' | 'error' | 'exit', listener: (...args: never[]) => void): this {
@@ -87,8 +96,50 @@ function sleep(ms: number): Promise<void> {
 void describe('language worker client', () => {
   void test('language worker timeouts keep interactive requests bounded', () => {
     assert.equal(getWorkbenchLanguageServiceRequestTimeoutMs('getDefinition'), 12_000)
-    assert.equal(getWorkbenchLanguageServiceRequestTimeoutMs('getDiagnostics'), 30_000)
+    assert.equal(getWorkbenchLanguageServiceRequestTimeoutMs('getDiagnostics'), 90_000)
+    assert.equal(getWorkbenchLanguageServiceRequestTimeoutMs('getProjectDiagnostics'), 30_000)
     assert.equal(getWorkbenchLanguageServiceRequestTimeoutMs('projectFilesChanged'), 15_000)
+  })
+
+  void test('a queued interactive timeout preserves a worker still within its diagnostic budget', async () => {
+    let worker!: FakeLanguageServiceWorker
+    let created = 0
+    const client = new WorkbenchLanguageServiceWorkerClient(
+      (options) => {
+        created++
+        worker = new FakeLanguageServiceWorker('silent', options)
+        return worker
+      },
+      (operation) => (operation === 'getDiagnostics' ? 200 : 15),
+      { hangTimeoutMs: 20 }
+    )
+    const diagnostics = client.getDiagnostics(request)
+    await assert.rejects(client.getDefinition(request), /请求超时/u)
+    await sleep(45)
+    assert.equal(worker.terminated, false, 'a busy diagnostic must not lose its warm project state')
+    worker.reply(worker.requests[0]!)
+    worker.replyToPing()
+    await diagnostics
+    const next = client.getDefinition(request)
+    worker.reply(worker.requests.at(-1)!)
+    await next
+    assert.equal(created, 1)
+    await client.dispose()
+  })
+
+  void test('a genuinely hung diagnostic is still restarted when its existing budget expires', async () => {
+    let worker!: FakeLanguageServiceWorker
+    const client = new WorkbenchLanguageServiceWorkerClient(
+      (options) => (worker = new FakeLanguageServiceWorker('silent', options)),
+      (operation) => (operation === 'getDiagnostics' ? 60 : 10),
+      { hangTimeoutMs: 10 }
+    )
+    const diagnostics = assert.rejects(client.getDiagnostics(request), /请求超时|无响应/u)
+    await assert.rejects(client.getDefinition(request), /请求超时/u)
+    await diagnostics
+    await sleep(35)
+    assert.equal(worker.terminated, true)
+    await client.dispose()
   })
 
   void test('a slow request times out on its own and a responsive worker keeps its state', async () => {
@@ -103,12 +154,21 @@ void describe('language worker client', () => {
       { hangTimeoutMs: 200 }
     )
 
-    await assert.rejects(client.getDefinition(request), (error: { code?: string; message: string }) =>
-      error.code === 'TIMEOUT' && /请求超时（getDefinition）/u.test(error.message))
+    await assert.rejects(
+      client.getDefinition(request),
+      (error: { code?: string; message: string }) =>
+        error.code === 'TIMEOUT' && /请求超时（getDefinition）/u.test(error.message)
+    )
     const [worker] = workers
     // worker 被告知放弃这个请求，并被探活；它答得上来，所以留着。
-    assert.deepEqual(worker!.controls.map((control) => control.control), ['cancel', 'ping'])
-    assert.equal(isWorkbenchLanguageServiceRequestCancelled(worker!.cancellation!, worker!.requests[0]!.id), true)
+    assert.deepEqual(
+      worker!.controls.map((control) => control.control),
+      ['cancel', 'ping']
+    )
+    assert.equal(
+      isWorkbenchLanguageServiceRequestCancelled(worker!.cancellation!, worker!.requests[0]!.id),
+      true
+    )
     await sleep(250)
     assert.equal(worker!.terminated, false)
 
@@ -123,7 +183,10 @@ void describe('language worker client', () => {
     const workers: FakeLanguageServiceWorker[] = []
     const client = new WorkbenchLanguageServiceWorkerClient(
       (options) => {
-        const worker = new FakeLanguageServiceWorker(workers.length === 0 ? 'silent' : 'respond', options)
+        const worker = new FakeLanguageServiceWorker(
+          workers.length === 0 ? 'silent' : 'respond',
+          options
+        )
         workers.push(worker)
         return worker
       },
@@ -193,7 +256,10 @@ void describe('language worker client', () => {
     const otherWindow = client.getCompletions(request, { scope: '2' })
     const otherFile = client.getCompletions({ ...request, path: 'src/other.ts' }, { scope: '1' })
     const unscoped = client.getHover(request)
-    const newer = client.getCompletions({ ...request, position: { line: 1, column: 8 } }, { scope: '1' })
+    const newer = client.getCompletions(
+      { ...request, position: { line: 1, column: 8 } },
+      { scope: '1' }
+    )
 
     await assert.rejects(older, (error: { code?: string }) => error.code === 'CANCELLED')
     const olderId = worker().requests[0]!.id

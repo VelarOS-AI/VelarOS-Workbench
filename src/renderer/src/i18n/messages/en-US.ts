@@ -122,7 +122,7 @@ export const workbenchAppEnUSMessages = mergeConversationMessages(conversationEn
     projectUnavailableDescription:
       'The project bound to this workbench window does not exist or was removed. Open it again from the main window.',
     readFileFailed: 'Failed to read file',
-    languageServiceStartFailed: 'Failed to start language service',
+    languageServiceDiagnosticsFailed: 'Code diagnostics are temporarily unavailable',
     editorHoverLoading: 'Loading language information…',
     editorHoverUnavailable: 'Language information is temporarily unavailable',
     editorHoverDefinition: 'Defined at',

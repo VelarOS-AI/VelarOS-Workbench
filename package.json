@@ -1,6 +1,6 @@
 {
   "name": "velaros-workbench",
-  "version": "0.4.16",
+  "version": "0.4.17",
   "private": true,
   "description": "VelarOS Workbench standalone Electron IDE.",
   "desktopName": "velaros-workbench.desktop",
@@ -50,7 +50,7 @@
     "vscode-languageserver-textdocument": "^1.0.12",
     "vscode-markdown-languageservice": "^0.5.0",
     "vscode-uri": "^3.1.0",
-    "@velaros-ai/velaros": "file:build/runtime-packages/a87b688fce27a6c8bc559ae89e452591127df6b4da6821c2bf62b127e25e1fe8/velaros-ai-velaros-0.6.34.tgz"
+    "@velaros-ai/velaros": "file:build/runtime-packages/b2293ab0b087e2af313968230c312d664be6d0d1f1432e2a97afd039bb5b7163/velaros-ai-velaros-0.7.0.tgz"
   },
   "devDependencies": {
     "@ast-grep/napi": "0.45.3",
@@ -126,7 +126,7 @@
     "vite": "^7.3.2",
     "zod": "^4.3.6",
     "npm": "12.2.0",
-    "@velaros-ai/ui": "file:build/runtime-packages/3ec07f634a59f255123bd1a32b94342de42e039cdcd5195519d2645700c29d6e/velaros-ai-ui-0.2.74.tgz",
+    "@velaros-ai/ui": "file:build/runtime-packages/d7ef7c3281ec3587036d3e81026cf5d9471a86f3a55d09079a4e6471ceac09e7/velaros-ai-ui-1.0.0.tgz",
     "@typescript/native": "npm:typescript@7.0.2",
     "react-dom": "^19.2.5"
   },
@@ -146,7 +146,7 @@
     "node-win-x64": "24.22.0"
   },
   "overrides": {
-    "@velaros-ai/velaros": "file:build/runtime-packages/a87b688fce27a6c8bc559ae89e452591127df6b4da6821c2bf62b127e25e1fe8/velaros-ai-velaros-0.6.34.tgz",
-    "@velaros-ai/ui": "file:build/runtime-packages/3ec07f634a59f255123bd1a32b94342de42e039cdcd5195519d2645700c29d6e/velaros-ai-ui-0.2.74.tgz"
+    "@velaros-ai/velaros": "file:build/runtime-packages/b2293ab0b087e2af313968230c312d664be6d0d1f1432e2a97afd039bb5b7163/velaros-ai-velaros-0.7.0.tgz",
+    "@velaros-ai/ui": "file:build/runtime-packages/d7ef7c3281ec3587036d3e81026cf5d9471a86f3a55d09079a4e6471ceac09e7/velaros-ai-ui-1.0.0.tgz"
   }
 }

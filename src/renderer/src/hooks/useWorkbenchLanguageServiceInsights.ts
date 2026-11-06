@@ -183,7 +183,7 @@ export function useWorkbenchLanguageServiceInsights({
       const errorKey = failureMessage ? `${root}\0${failureMessage}` : null
       if (failureMessage && announcedErrorRef.current !== errorKey) {
         messageLatest.current.error({
-          title: tLatest.current('workbench.languageServiceStartFailed'),
+          title: tLatest.current('workbench.languageServiceDiagnosticsFailed'),
           description: failureMessage,
         })
       }

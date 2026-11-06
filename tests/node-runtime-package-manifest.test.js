@@ -11,9 +11,10 @@ import { NodeDefaultPackages } from '@velaros-ai/velaros/script'
 import { assertNodeRuntimePackageFiles } from '../scripts/release/nodeRuntimePackages.mjs'
 import WorkbenchNodePackages from '../src/main/conversation/workbenchNodePackages.json' with { type: 'json' }
 
-test('overlapping default and Workbench libraries are verified once without weakening integrity checks', async () => {
-  assert(NodeDefaultPackages.includes('prettier'))
+test('Workbench owns its code libraries and verifies every declared resource without weakening integrity checks', async () => {
+  assert.equal(NodeDefaultPackages.includes('prettier'), false)
   assert(WorkbenchNodePackages.includes('prettier'))
+  assert(WorkbenchNodePackages.includes('typescript'))
   const parent = tmpdir()
   const root = await mkdtemp(join(parent, 'workbench-runtime-manifest-'))
   try {
