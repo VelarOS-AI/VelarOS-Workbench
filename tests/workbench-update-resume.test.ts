@@ -17,6 +17,7 @@ import type {
 import { WorkbenchUpdateDownloadCache } from '../src/main/updates/WorkbenchUpdateDownloadCache'
 import { WorkbenchUpdatePreferencesStore } from '../src/main/updates/WorkbenchUpdatePreferencesStore'
 import { WorkbenchUpdateService } from '../src/main/updates/WorkbenchUpdateService'
+import type { WorkbenchUpdateState } from '../src/shared/workbenchUpdate'
 
 const body = Buffer.alloc(128 * 1024, 42)
 const metadata = Buffer.from('version: 1.1.0\n')
@@ -74,7 +75,16 @@ class CachedUpdater extends EventEmitter {
   }
 }
 
-for (const mode of ['resume', 'restart', 'cancel', 'unadmitted'] as const) {
+for (const mode of [
+  'resume',
+  'restart',
+  'cancel',
+  'unadmitted',
+  'recovers',
+  'exhausted',
+  'pause-retry',
+  'bad-hash',
+] as const) {
   test(`Workbench update cache handles ${mode} through the real HTTP feed`, async () => {
     const directory = await mkdtemp(join(tmpdir(), 'workbench-resume-'))
     const cacheDirectory = join(directory, 'downloads')
@@ -82,6 +92,21 @@ for (const mode of ['resume', 'restart', 'cancel', 'unadmitted'] as const) {
     let first = true
     const server = createServer((request, response) => {
       ranges.push(request.headers.range)
+      if (['recovers', 'exhausted', 'pause-retry', 'bad-hash'].includes(mode)) {
+        const start = Number(request.headers.range?.match(/bytes=(\d+)-/u)?.[1] ?? 0)
+        const responseHeaders: Record<string, string | number> = {
+          'Content-Length': body.length - start,
+        }
+        if (start)
+          responseHeaders['Content-Range'] = `bytes ${start}-${body.length - 1}/${body.length}`
+        response.writeHead(start ? 206 : 200, responseHeaders)
+        if (mode === 'bad-hash') response.end(Buffer.alloc(body.length, 0))
+        else if (ranges.length <= 3 || mode === 'exhausted' || mode === 'pause-retry') {
+          response.write(body.subarray(start, start + 8192))
+          setTimeout(() => response.destroy(), 20)
+        } else response.end(body.subarray(start))
+        return
+      }
       if (first) {
         first = false
         response.writeHead(200, { 'Content-Length': body.length })
@@ -168,6 +193,39 @@ for (const mode of ['resume', 'restart', 'cancel', 'unadmitted'] as const) {
     let { service, updater } = makeService()
     try {
       await service.checkForUpdates()
+      if (['recovers', 'exhausted', 'pause-retry', 'bad-hash'].includes(mode)) {
+        const states: WorkbenchUpdateState[] = []
+        service.subscribe((state) => {
+          states.push(state)
+          if (state.phase === 'retrying' && mode === 'pause-retry') service.pauseDownload()
+        })
+        const operation = service.downloadUpdate()
+        if (mode === 'exhausted' || mode === 'bad-hash') {
+          await assert.rejects(operation)
+          assert.equal(service.getState().phase, 'error')
+          assert.equal(updater.downloads, 0)
+        } else if (mode === 'pause-retry') {
+          assert.equal((await operation).phase, 'paused')
+          assert.equal(ranges.length, 1)
+        } else {
+          assert.equal((await operation).phase, 'downloaded')
+          assert.equal(updater.downloads, 1)
+          const phases = states.map((state) => state.phase)
+          assert.ok(phases.indexOf('verifying') < phases.indexOf('preparing'))
+          assert.ok(phases.indexOf('preparing') < phases.indexOf('downloaded'))
+        }
+        assert.deepEqual(
+          states.filter((state) => state.phase === 'retrying').map((state) => state.retryAttempt),
+          mode === 'bad-hash' ? [] : mode === 'pause-retry' ? [1] : [1, 2, 3]
+        )
+        if (mode === 'recovers' || mode === 'exhausted')
+          assert.deepEqual(ranges, [undefined, 'bytes=8192-', 'bytes=16384-', 'bytes=24576-'])
+        assert.equal(
+          states.filter((state) => state.phase === 'error').length,
+          mode === 'bad-hash' || mode === 'exhausted' ? 1 : 0
+        )
+        return
+      }
       if (mode === 'unadmitted') {
         await assert.rejects(service.downloadUpdate(), /admitted package/u)
         assert.equal(updater.downloads, 0)
@@ -221,5 +279,5 @@ for (const mode of ['resume', 'restart', 'cancel', 'unadmitted'] as const) {
       await new Promise<void>((resolve) => server.close(() => resolve()))
       await rm(directory, { recursive: true, force: true })
     }
-  })
+  }, 15_000)
 }

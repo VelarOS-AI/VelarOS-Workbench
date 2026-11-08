@@ -9,22 +9,35 @@ function updateLabel(
   phase: ReturnType<typeof useWorkbenchUpdate>['phase'],
   percent: number,
   targetVersion: string,
+  retryAttempt: number,
   t: ReturnType<typeof useWorkbenchI18n>['t']
 ): string {
   if (phase === 'paused') return t('workbench.updatePaused', { percent, version: targetVersion })
   if (phase === 'downloaded') return t('workbench.updateDownloaded', { version: targetVersion })
+  if (phase === 'verifying') return t('workbench.updateVerifying')
+  if (phase === 'preparing') return t('workbench.updatePreparing')
+  if (phase === 'retrying') return t('workbench.updateRetrying', { attempt: retryAttempt })
   return t('workbench.updateDownloading', { percent, version: targetVersion })
 }
 
 export function WorkbenchUpdateProgress(): Nullable<ReactElement> {
   const state = useWorkbenchUpdate()
   const { t } = useWorkbenchI18n()
-  if (state.phase !== 'downloading' && state.phase !== 'paused' && state.phase !== 'downloaded') return null
+  if (
+    !['downloading', 'retrying', 'verifying', 'preparing', 'paused', 'downloaded'].includes(
+      state.phase
+    )
+  )
+    return null
   const percent = Math.round(state.percent ?? 0)
   const targetVersion = state.targetVersion ?? ''
+  const preparing = state.phase === 'verifying' || state.phase === 'preparing'
+  const label = updateLabel(state.phase, percent, targetVersion, state.retryAttempt ?? 1, t)
 
   const toggle = (): void => {
-    if (state.phase === 'downloading') void window.velarosWorkbenchUpdate.pause()
+    if (preparing) return
+    if (state.phase === 'downloading' || state.phase === 'retrying')
+      void window.velarosWorkbenchUpdate.pause()
     else if (state.phase === 'paused') void window.velarosWorkbenchUpdate.resume()
     else void window.velarosWorkbenchUpdate.restart()
   }
@@ -42,18 +55,18 @@ export function WorkbenchUpdateProgress(): Nullable<ReactElement> {
     <div className={styles.host} data-phase={state.phase}>
       <div
         role="button"
-        tabIndex={0}
+        tabIndex={preparing ? -1 : 0}
         className={styles.progressButton}
         onClick={toggle}
         onKeyDown={handleKeyDown}
-        aria-label={updateLabel(state.phase, percent, targetVersion, t)}
+        aria-label={label}
+        aria-disabled={preparing}
+        title={label}
       >
         <span className={styles.track} aria-hidden="true">
           <span className={styles.fill} style={{ width: `${percent}%` }} />
         </span>
-        <span className={styles.label}>
-          {updateLabel(state.phase, percent, targetVersion, t)}
-        </span>
+        <span className={styles.label}>{label}</span>
         {state.phase === 'paused' && (
           <button
             type="button"

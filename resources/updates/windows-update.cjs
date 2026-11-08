@@ -100,9 +100,7 @@ async function readManifest(directory, job) {
 
 async function inventory(directory, prefix = '') {
   const files = []
-  for (const entry of await fs.readdir(path.join(directory, prefix), {
-    withFileTypes: true,
-  })) {
+  for (const entry of await fs.readdir(path.join(directory, prefix), { withFileTypes: true })) {
     const name = prefix ? `${prefix}/${entry.name}` : entry.name
     if (entry.isSymbolicLink()) throw new Error(`Update contains a link: ${name}`)
     if (entry.isDirectory()) files.push(...(await inventory(directory, name)))
@@ -260,13 +258,39 @@ async function run(command, helperDir) {
     await prepare(job, helperDir)
     return
   }
-  if (command !== 'apply') throw new Error('Unknown Windows update command.')
+  if (command !== 'apply' && command !== 'watch') throw new Error('Unknown Windows update command.')
   job.restart = process.argv[4] === 'restart'
   const prepared = JSON.parse(await fs.readFile(path.join(helperDir, 'prepared.json'), 'utf8'))
   validatePrepared(prepared, job)
   await validateJob(job)
-  process.send?.({ ready: true })
-  if (process.connected) process.disconnect()
+  if (command === 'watch') {
+    if (!process.connected) throw new Error('Windows update watcher requires its parent channel.')
+    let install = process.argv[4] !== 'skip'
+    let cancelled = false
+    const disconnected = new Promise((resolve) => process.once('disconnect', resolve))
+    process.on('message', (message) => {
+      if (message?.cancel === true) {
+        cancelled = true
+        if (process.connected) process.disconnect()
+        return
+      }
+      if (typeof message?.restart === 'boolean') {
+        install = true
+        job.restart = message.restart
+      }
+    })
+    process.send({ ready: true })
+    // 可以等待任意长的使用时间；父进程退出后才进入有超时的文件释放等待。
+    await disconnected
+    if (cancelled) {
+      await fs.rm(prepared.workRoot, { recursive: true, force: true })
+      return
+    }
+    if (!install) return
+  } else {
+    process.send?.({ ready: true })
+    if (process.connected) process.disconnect()
+  }
   const resultPath = path.join(job.userDataDir, 'windows-update-result.json')
   let backup
   let exited = false
@@ -276,11 +300,7 @@ async function run(command, helperDir) {
     backup = await replaceApplication(job, prepared)
     await fs.writeFile(
       resultPath,
-      JSON.stringify({
-        version: job.version,
-        workRoot: prepared.workRoot,
-        success: true,
-      })
+      JSON.stringify({ version: job.version, workRoot: prepared.workRoot, success: true })
     )
     if (job.restart) await launch(job)
   } catch (error) {
@@ -290,25 +310,14 @@ async function run(command, helperDir) {
     }
     await fs.writeFile(
       resultPath,
-      JSON.stringify({
-        version: job.version,
-        success: false,
-        error: error.message,
-      })
+      JSON.stringify({ version: job.version, success: false, error: error.message })
     )
     if (exited && job.restart) await launch(job)
     throw error
   }
 }
 
-module.exports = {
-  digest,
-  validateEntry,
-  prepare,
-  replaceApplication,
-  waitForExit,
-  run,
-}
+module.exports = { digest, validateEntry, prepare, replaceApplication, waitForExit, run }
 if (require.main === module) {
   run(process.argv[2], process.argv[3]).catch((error) => {
     process.send?.({ error: error.message })

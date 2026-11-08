@@ -2,6 +2,8 @@ import { CancellationError, CancellationToken } from 'builder-util-runtime'
 import type { AppUpdater, ProgressInfo, UpdateDownloadedEvent, UpdateInfo } from 'electron-updater'
 
 import { Log } from '@velaros-ai/velaros/core'
+import { AppError } from '@velaros-ai/velaros/core/error'
+import { TimerScope } from '@velaros-ai/velaros/core/utils/TimerScope'
 
 import type { WorkbenchUpdateChannel, WorkbenchUpdateState } from '../../shared/workbenchUpdate'
 
@@ -24,6 +26,9 @@ interface WorkbenchUpdateServiceOptions {
 }
 
 type WorkbenchUpdateListener = (state: WorkbenchUpdateState) => void
+
+const DownloadRetryLimit = 3
+const DownloadRetryDelayMs = 1000
 
 function expectedFiles(platform: NodeJS.Platform): Nullable<{
   readonly metadata: string
@@ -143,6 +148,7 @@ export class WorkbenchUpdateService {
 
   public checkForUpdates(): Promise<WorkbenchUpdateState> {
     if (
+      this.#downloadPromise ||
       this.#state.phase === 'downloading' ||
       this.#state.phase === 'paused' ||
       this.#state.phase === 'downloaded'
@@ -187,8 +193,9 @@ export class WorkbenchUpdateService {
         if (this.options.downloadCache) {
           if (!this.#selectedArtifact || !this.#release)
             throw new Error('Update metadata does not select an admitted package.')
-          await this.#cacheArtifact(this.#selectedArtifact, controller.signal)
+          await this.#cacheArtifactWithRetries(this.#selectedArtifact, controller.signal)
           this.#installingCached = true
+          this.#setState({ ...this.#downloadSnapshot(), phase: 'preparing', bytesPerSecond: 0 })
         }
         controller.signal.throwIfAborted()
         await this.updater.downloadUpdate(cancellation)
@@ -210,6 +217,39 @@ export class WorkbenchUpdateService {
       })
     this.#downloadPromise = operation
     return operation
+  }
+
+  async #cacheArtifactWithRetries(
+    artifact: WorkbenchReleaseArtifact,
+    signal: AbortSignal
+  ): Promise<void> {
+    for (let attempt = 0; ; attempt += 1) {
+      signal.throwIfAborted()
+      this.#setState({ ...this.#downloadSnapshot(), phase: 'downloading' })
+      try {
+        await this.#cacheArtifact(artifact, signal)
+        return
+      } catch (error) {
+        if (
+          signal.aborted ||
+          !(error instanceof AppError) ||
+          error.code !== 'NETWORK' ||
+          attempt >= DownloadRetryLimit
+        )
+          throw error
+        this.#log.caught('update download interrupted; resuming cached bytes', error)
+        this.#setState({
+          ...this.#downloadSnapshot(),
+          phase: 'retrying',
+          retryAttempt: attempt + 1,
+          bytesPerSecond: 0,
+        })
+        await TimerScope.sleep(DownloadRetryDelayMs * 2 ** attempt, {
+          signal,
+          label: 'WorkbenchUpdate.retry',
+        })
+      }
+    }
   }
 
   async #cacheArtifact(artifact: WorkbenchReleaseArtifact, signal: AbortSignal): Promise<void> {
@@ -241,7 +281,8 @@ export class WorkbenchUpdateService {
   }
 
   public pauseDownload(): WorkbenchUpdateState {
-    if (this.#state.phase !== 'downloading') return this.getState()
+    if (this.#state.phase !== 'downloading' && this.#state.phase !== 'retrying')
+      return this.getState()
     if (this.options.downloadCache) {
       this.#downloadController?.abort()
       this.#downloadCancellation?.cancel()
@@ -436,7 +477,7 @@ export class WorkbenchUpdateService {
     )
       return
     this.#setState({
-      phase: 'downloading',
+      phase: progress.percent >= 100 ? 'verifying' : 'downloading',
       targetVersion: this.#state.targetVersion,
       percent: Math.max(0, Math.min(100, progress.percent)),
       transferredBytes: progress.transferred,
@@ -469,6 +510,7 @@ export class WorkbenchUpdateService {
     if (
       this.#disposed ||
       this.#state.phase === 'downloaded' ||
+      this.#downloadPromise ||
       this.#downloadCancellation?.cancelled ||
       this.#downloadController?.signal.aborted
     )

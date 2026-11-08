@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process'
+import { type ChildProcess, spawn } from 'node:child_process'
 import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
@@ -23,9 +23,8 @@ export class WindowsArchiveUpdater extends AppUpdater {
   readonly #executor = new ElectronHttpExecutor((auth, callback) =>
     this.emit('login', auth, callback)
   )
-  #helperDirectory?: string
+  #worker?: ChildProcess
   #installing = false
-  #quitHandlerAdded = false
 
   public constructor(private readonly options: WindowsArchiveUpdaterOptions) {
     super(undefined)
@@ -49,19 +48,23 @@ export class WindowsArchiveUpdater extends AppUpdater {
       done: async (event) => {
         await this.#prepare(event.downloadedFile, info.version, fileInfo.info.sha512)
         this.dispatchUpdateDownloaded(event)
-        if (!this.#quitHandlerAdded) {
-          this.#quitHandlerAdded = true
-          this.app.onQuit((code) => {
-            if (code === 0 && this.autoInstallOnAppQuit && !this.#installing)
-              this.#startWorker(false)
-          })
-        }
       },
     })
   }
 
   public override quitAndInstall(_isSilent = true, isForceRunAfter = true): void {
-    this.#startWorker(isForceRunAfter || this.autoRunAppAfterInstall, () => this.app.quit())
+    if (this.#installing) return
+    if (!this.#worker?.connected) {
+      this.dispatchError(new AppError('CONFLICT', 'Windows update helper is not ready.'))
+      return
+    }
+    this.#installing = true
+    this.#worker.send({ restart: isForceRunAfter || this.autoRunAppAfterInstall }, (error) => {
+      if (error) {
+        this.#installing = false
+        this.dispatchError(AppError.from(error, 'IO'))
+      } else this.app.quit()
+    })
   }
 
   async #prepare(archive: string, version: string, sha512: string): Promise<void> {
@@ -103,55 +106,66 @@ export class WindowsArchiveUpdater extends AppUpdater {
           else reject(new AppError('IO', errorText.trim() || 'Could not prepare Windows update.'))
         })
       })
-      this.#helperDirectory = helperDirectory
+      await this.#armWorker(helperDirectory)
     } catch (error) {
       await rm(helperDirectory, { recursive: true, force: true })
       throw error
     }
   }
 
-  #startWorker(restart: boolean, onReady?: () => void): void {
-    if (this.#installing) return
-    if (!this.#helperDirectory) {
-      this.dispatchError(new AppError('CONFLICT', 'Windows update has not been prepared.'))
-      return
+  async #armWorker(directory: string): Promise<void> {
+    const previous = this.#worker
+    if (previous?.connected) {
+      // 通道切换重新准备更新时，先撤销上一份任务，避免多个进程同时替换同一目录。
+      previous.ref()
+      previous.channel?.ref()
+      await new Promise<void>((resolve, reject) => {
+        previous.once('exit', () => resolve())
+        previous.send({ cancel: true }, (error) => {
+          if (error) reject(AppError.from(error, 'IO'))
+        })
+      })
     }
-    this.#installing = true
-    const directory = this.#helperDirectory
-    // 退出事件不能等待异步磁盘操作；重启标志通过进程参数传给已就绪的独立更新进程。
+    // 在发布 downloaded 之前等待独立进程就绪；退出事件里启动进程来不及取得启动回执。
     const worker = spawn(
       join(directory, 'node.exe'),
-      [join(directory, 'update.cjs'), 'apply', directory, restart ? 'restart' : 'exit'],
+      [
+        join(directory, 'update.cjs'),
+        'watch',
+        directory,
+        this.autoInstallOnAppQuit ? 'exit' : 'skip',
+      ],
       {
         cwd: directory,
         detached: true,
         windowsHide: true,
-        stdio: onReady ? ['ignore', 'ignore', 'ignore', 'ipc'] : 'ignore',
+        stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
         env: { ...process.env, NODE_OPTIONS: '', NODE_PATH: '' },
       }
     )
-    let ready = false
-    worker.once('error', (error) => {
-      this.#installing = false
-      this.dispatchError(AppError.from(error, 'IO'))
-    })
-    worker.on('message', (message: { ready?: boolean; error?: string }) => {
-      if (message.error) {
-        this.#installing = false
-        this.dispatchError(new AppError('IO', message.error))
+    await new Promise<void>((resolve, reject) => {
+      let ready = false
+      const fail = (error: AppError): void => {
+        if (ready) this.dispatchError(error)
+        else reject(error)
       }
-      if (message.ready) {
-        ready = true
-        onReady?.()
-      }
+      worker.once('error', (error) => fail(AppError.from(error, 'IO')))
+      worker.on('message', (message: { ready?: boolean; error?: string }) => {
+        if (message.error) fail(new AppError('IO', message.error))
+        if (message.ready) {
+          ready = true
+          this.#worker = worker
+          // IPC 保持到父进程退出，但不能让等待退出的子进程反过来阻止应用退出。
+          worker.unref()
+          worker.channel?.unref()
+          resolve()
+        }
+      })
+      worker.once('exit', (code) => {
+        if (!ready || code !== 0)
+          fail(new AppError('IO', 'Windows update helper stopped before installation.'))
+      })
     })
-    worker.once('exit', (code) => {
-      if (!ready && code !== 0) {
-        this.#installing = false
-        this.dispatchError(new AppError('IO', 'Windows update helper could not start.'))
-      }
-    })
-    worker.unref()
   }
 
   async #readPreviousResult(): Promise<void> {

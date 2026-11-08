@@ -949,6 +949,12 @@ export function WorkbenchSettingsDialog({
         percent: Math.round(updateState.percent ?? 0),
         version: targetVersion,
       })
+    } else if (updateState.phase === 'verifying') {
+      status = t('workbench.updateVerifying')
+    } else if (updateState.phase === 'preparing') {
+      status = t('workbench.updatePreparing')
+    } else if (updateState.phase === 'retrying') {
+      status = t('workbench.updateRetrying', { attempt: updateState.retryAttempt ?? 1 })
     } else if (updateState.phase === 'paused') {
       status = t('workbench.updatePaused', {
         percent: Math.round(updateState.percent ?? 0),
@@ -966,6 +972,9 @@ export function WorkbenchSettingsDialog({
     const checkDisabled =
       updateState.phase === 'checking' ||
       updateState.phase === 'downloading' ||
+      updateState.phase === 'retrying' ||
+      updateState.phase === 'verifying' ||
+      updateState.phase === 'preparing' ||
       updateState.phase === 'paused' ||
       updateState.phase === 'downloaded'
 
@@ -1015,7 +1024,8 @@ export function WorkbenchSettingsDialog({
             {updateState.phase === 'downloaded' && (
               <Button
                 size="sm"
-                variant="outline"
+                variant="default"
+                className={styles.workbenchSettingsUpdateRestart}
                 onClick={() => void window.velarosWorkbenchUpdate.restart()}
               >
                 {t('workbench.settingsRestartToUpdate')}

@@ -521,6 +521,10 @@
   gap: 8px;
 }
 
+.workbenchSettingsUpdateRestart {
+  --primary: var(--workbench-theme-color);
+}
+
 .workbenchSettingsPluginError {
   display: block;
   margin-top: 3px;
@@ -712,7 +716,8 @@
   transform: none;
 }
 
-.root :global([data-slot='button']:where(:not(:focus-visible, .velar-segmented-control-active:hover))) {
+.root
+  :global([data-slot='button']:where(:not(:focus-visible, .velar-segmented-control-active:hover))) {
   box-shadow: none;
 }
 

@@ -4,6 +4,7 @@ import { constants, createReadStream, type ReadStream } from 'node:fs'
 import { mkdir, open, readdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 
+import { Log } from '@velaros-ai/velaros/core'
 import { AppError } from '@velaros-ai/velaros/core/error'
 
 import type { WorkbenchReleaseArtifact } from './WorkbenchReleaseSource'
@@ -60,7 +61,9 @@ export class WorkbenchUpdateDownloadCache {
       if (offset < artifact.sizeBytes) {
         const headers: Record<string, string> = { 'Accept-Encoding': 'identity' }
         if (offset > 0) headers.Range = `bytes=${offset}-`
-        const response = await fetchArtifact({ signal, headers })
+        const response = await fetchArtifact({ signal, headers }).catch((error: unknown) => {
+          throw new AppError('NETWORK', AppError.getMessage(error), error)
+        })
         try {
           signal.throwIfAborted()
           if (response.status === 200) {
@@ -75,25 +78,41 @@ export class WorkbenchUpdateDownloadCache {
             throw new AppError('NETWORK', `Update download returned HTTP ${response.status}.`)
           }
           if (!response.body) throw new AppError('NETWORK', 'Empty update response.')
-          for await (const chunk of response.body) {
-            signal.throwIfAborted()
-            if (offset + chunk.byteLength > artifact.sizeBytes)
-              throw new AppError('SECURITY', 'Update exceeds verified size.')
-            let written = 0
-            while (written < chunk.byteLength) {
-              const result = await file.write(
-                chunk,
-                written,
-                chunk.byteLength - written,
-                offset + written
-              )
-              written += result.bytesWritten
+          const reader = response.body.getReader()
+          try {
+            for (;;) {
+              const result = await reader.read().catch((error: unknown) => {
+                throw new AppError('NETWORK', AppError.getMessage(error), error)
+              })
+              if (result.done) break
+              const chunk = result.value
+              signal.throwIfAborted()
+              if (offset + chunk.byteLength > artifact.sizeBytes)
+                throw new AppError('SECURITY', 'Update exceeds verified size.')
+              let written = 0
+              while (written < chunk.byteLength) {
+                const result = await file.write(
+                  chunk,
+                  written,
+                  chunk.byteLength - written,
+                  offset + written
+                )
+                written += result.bytesWritten
+              }
+              offset += chunk.byteLength
+              onProgress(offset)
             }
-            offset += chunk.byteLength
-            onProgress(offset)
+          } finally {
+            reader.releaseLock()
           }
         } finally {
-          if (!response.body?.locked) await response.body?.cancel()
+          if (!response.body?.locked)
+            await response.body?.cancel().catch((error: unknown) => {
+              Log.tag('WorkbenchUpdateDownloadCache').caught(
+                'update response cleanup failed',
+                error
+              )
+            })
         }
       }
       await file.sync()

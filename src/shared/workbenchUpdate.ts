@@ -15,8 +15,9 @@ export const WorkbenchUpdateChannelValues = ['stable', 'beta', 'canary'] as cons
 export type WorkbenchUpdateChannel = (typeof WorkbenchUpdateChannelValues)[number]
 
 export function isWorkbenchUpdateChannel(value: unknown): value is WorkbenchUpdateChannel {
-  return typeof value === 'string' && WorkbenchUpdateChannelValues.includes(
-    value as WorkbenchUpdateChannel
+  return (
+    typeof value === 'string' &&
+    WorkbenchUpdateChannelValues.includes(value as WorkbenchUpdateChannel)
   )
 }
 
@@ -25,6 +26,9 @@ export type WorkbenchUpdatePhase =
   | 'checking'
   | 'available'
   | 'downloading'
+  | 'retrying'
+  | 'verifying'
+  | 'preparing'
   | 'paused'
   | 'downloaded'
   | 'error'
@@ -40,6 +44,7 @@ export interface WorkbenchUpdateState {
   readonly transferredBytes?: number
   readonly totalBytes?: number
   readonly bytesPerSecond?: number
+  readonly retryAttempt?: number
   readonly error?: string
 }
 

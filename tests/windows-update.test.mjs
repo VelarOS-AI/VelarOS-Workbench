@@ -1,7 +1,16 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { once } from 'node:events'
-import { copyFile, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
+import {
+  copyFile,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  realpath,
+  rm,
+  writeFile,
+} from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
@@ -81,9 +90,7 @@ test('archive update replaces Electron files while preserving user data, uninsta
     await readFile(join(job.userDataDir, 'conversations.json'), 'utf8'),
     'my conversations'
   )
-  await assert.rejects(readFile(join(job.appDir, 'obsolete.dll')), {
-    code: 'ENOENT',
-  })
+  await assert.rejects(readFile(join(job.appDir, 'obsolete.dll')), { code: 'ENOENT' })
 })
 
 test('failed directory switch rolls the old application back', async (t) => {
@@ -187,3 +194,134 @@ test(
     assert.equal(dirname(result.workRoot), dirname(job.appDir))
   }
 )
+
+for (const action of ['close', 'install', 'replace']) {
+  test(
+    `prepared Windows updater applies on ${action} without another download`,
+    { timeout: 30_000 },
+    async (t) => {
+      const { root, job } = await fixture(t)
+      const bundledWorker = join(root, 'worker.cjs')
+      await build({
+        entryPoints: [workerPath],
+        outfile: bundledWorker,
+        bundle: true,
+        platform: 'node',
+        format: 'cjs',
+      })
+      const parentFile = join(root, 'parent.mjs')
+      await build({
+        stdin: {
+          contents: `
+          import { WindowsArchiveUpdater } from './src/main/updates/WindowsArchiveUpdater.ts'
+          const updater = new WindowsArchiveUpdater(JSON.parse(process.env.UPDATE_OPTIONS))
+          updater.autoInstallOnAppQuit = true
+          updater.on('error', (error) => { console.error(error); process.exit(1) })
+          const downloadOptions = { updateInfoAndProvider: {
+            info: { version: '1.0.1' },
+            provider: { resolveFiles: () => [{ url: new URL('https://updates.test/update.zip'), info: { sha512: process.env.UPDATE_SHA512 } }] }
+          } }
+          await updater.doDownloadUpdate(downloadOptions)
+          if (process.env.UPDATE_ACTION === 'replace') await updater.doDownloadUpdate(downloadOptions)
+          process.send({ downloaded: true })
+          process.once('message', (action) => {
+            if (action === 'install') updater.quitAndInstall(true, false)
+            else process.exit(0)
+          })
+        `,
+          resolveDir: process.cwd(),
+          loader: 'ts',
+        },
+        outfile: parentFile,
+        bundle: true,
+        platform: 'node',
+        format: 'esm',
+        plugins: [
+          {
+            name: 'update-app-host',
+            setup(builder) {
+              builder.onResolve({ filter: /^electron-updater(\/|$)/ }, (args) => ({
+                path: args.path,
+                namespace: 'update-host',
+              }))
+              builder.onLoad({ filter: /.*/, namespace: 'update-host' }, (args) => ({
+                contents:
+                  args.path === 'electron-updater'
+                    ? `
+              import { EventEmitter } from 'node:events'
+              export class AppUpdater extends EventEmitter {
+                app = { version: '1.0.0', quit: () => process.exit(0), onQuit: (handler) => process.on('exit', () => handler(0)) }
+                async executeDownload(options) { await options.done({ downloadedFile: process.env.UPDATE_ARCHIVE }); return [] }
+                dispatchUpdateDownloaded(event) { this.emit('update-downloaded', event) }
+                dispatchError(error) { this.emit('error', error) }
+              }
+            `
+                    : 'export class ElectronHttpExecutor {}',
+                loader: 'js',
+              }))
+            },
+          },
+        ],
+      })
+      const parent = spawn(process.execPath, [parentFile], {
+        stdio: ['ignore', 'ignore', 'pipe', 'ipc'],
+        env: {
+          ...process.env,
+          TMPDIR: root,
+          TMP: root,
+          TEMP: root,
+          UPDATE_ACTION: action,
+          UPDATE_ARCHIVE: job.archive,
+          UPDATE_SHA512: job.sha512,
+          UPDATE_OPTIONS: JSON.stringify({
+            appId: job.appId,
+            executable: join(job.appDir, job.executable),
+            nodeExecutable: process.execPath,
+            workerFile: bundledWorker,
+            userDataDirectory: job.userDataDir,
+          }),
+        },
+      })
+      let error = ''
+      parent.stderr.on('data', (bytes) => {
+        error += bytes.toString()
+      })
+      t.after(() => {
+        if (parent.exitCode === null) parent.kill()
+      })
+      const exited = once(parent, 'exit')
+      const downloaded = await Promise.race([
+        once(parent, 'message').then(([message]) => message),
+        exited.then(([code]) => {
+          throw new Error(`Updater parent exited early (${code}): ${error}`)
+        }),
+      ])
+      assert.equal(downloaded.downloaded, true)
+      assert.equal(await readFile(join(job.appDir, job.executable), 'utf8'), 'old exe')
+      parent.send(action)
+      const [code] = await exited
+      assert.equal(code, 0, error)
+      const resultPath = join(job.userDataDir, 'windows-update-result.json')
+      const deadline = Date.now() + 10_000
+      let result
+      while (!result && Date.now() < deadline) {
+        try {
+          result = JSON.parse(await readFile(resultPath, 'utf8'))
+        } catch (failure) {
+          if (failure.code !== 'ENOENT') throw failure
+          await delay(50)
+        }
+      }
+      assert.equal(result?.success, true, JSON.stringify(result))
+      assert.equal(
+        (await readdir(root)).filter((name) => name.startsWith('.velaros-update-')).length,
+        1
+      )
+      assert.equal(await readFile(join(job.appDir, job.executable), 'utf8'), 'new exe')
+      assert.equal(
+        await readFile(join(job.userDataDir, 'conversations.json'), 'utf8'),
+        'my conversations'
+      )
+    }
+  )
+}

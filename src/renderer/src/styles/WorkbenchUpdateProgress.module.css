@@ -34,6 +34,19 @@
   inset: 0;
 }
 
+.progressButton[aria-disabled='true'] {
+  cursor: default;
+}
+
+.host[data-phase='downloaded'] .progressButton {
+  background: var(--workbench-theme-color);
+  color: var(--primary-foreground);
+}
+
+.host[data-phase='downloaded'] .fill {
+  background: transparent;
+}
+
 .fill {
   right: auto;
   background: color-mix(in oklab, var(--workbench-theme-color) 42%, transparent);
@@ -68,7 +81,9 @@
   color: inherit;
   cursor: pointer;
   opacity: 0;
-  transition: opacity 120ms ease, background-color 120ms ease;
+  transition:
+    opacity 120ms ease,
+    background-color 120ms ease;
 }
 
 .progressButton:hover .cancelButton,
