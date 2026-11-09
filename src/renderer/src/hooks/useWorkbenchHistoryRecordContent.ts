@@ -22,13 +22,14 @@ export function useWorkbenchHistoryRecordContent({
   const generationRef = useRef(0)
 
   useEffect(() => {
+    const generation = ++generationRef.current
     if (!selectedId) {
       setContent(null)
       setError(null)
+      setIsLoading(false)
       return
     }
 
-    const generation = ++generationRef.current
     setIsLoading(true)
     setError(null)
 
@@ -45,6 +46,10 @@ export function useWorkbenchHistoryRecordContent({
         if (generation === generationRef.current) setIsLoading(false)
       }
     })()
+
+    return () => {
+      generationRef.current += 1
+    }
   }, [loadContent, selectedId])
 
   return { content, isLoading, error }

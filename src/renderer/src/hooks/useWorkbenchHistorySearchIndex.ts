@@ -30,20 +30,25 @@ export function useWorkbenchHistorySearchIndex({
   const generationRef = useRef(0)
 
   useEffect(() => {
+    const generation = ++generationRef.current
     if (cacheRef.current.key !== loadContent) {
       cacheRef.current = { key: loadContent, map: new Map() }
       setContents(cacheRef.current.map)
     }
+    const cache = cacheRef.current
 
-    if (!active || isEmpty(records)) return
-
-    const missing = records.filter((record) => !cacheRef.current.map.has(record.id))
-    if (isEmpty(missing)) {
-      setContents(new Map(cacheRef.current.map))
+    if (!active || isEmpty(records)) {
+      setIsIndexing(false)
       return
     }
 
-    const generation = ++generationRef.current
+    const missing = records.filter((record) => !cache.map.has(record.id))
+    if (isEmpty(missing)) {
+      setContents(new Map(cache.map))
+      setIsIndexing(false)
+      return
+    }
+
     setIsIndexing(true)
 
     void (async () => {
@@ -52,22 +57,27 @@ export function useWorkbenchHistorySearchIndex({
           missing.map(async (record) => {
             try {
               const content = await loadContent(record.id)
-              if (generation === generationRef.current) {
-                cacheRef.current.map.set(record.id, content)
+              if (generation === generationRef.current && cacheRef.current === cache) {
+                cache.map.set(record.id, content)
               }
             } catch (error) {
+              if (generation !== generationRef.current || cacheRef.current !== cache) return
               // 单条读取失败不阻断其它，缺失的记录搜索时视为不命中。
               log.warn('读取历史版本内容用于搜索失败', { id: record.id, error })
             }
           })
         )
       } finally {
-        if (generation === generationRef.current) {
-          setContents(new Map(cacheRef.current.map))
+        if (generation === generationRef.current && cacheRef.current === cache) {
+          setContents(new Map(cache.map))
           setIsIndexing(false)
         }
       }
     })()
+
+    return () => {
+      generationRef.current += 1
+    }
   }, [active, loadContent, records])
 
   return { contents, isIndexing }
