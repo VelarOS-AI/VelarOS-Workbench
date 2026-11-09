@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
 
 import { TypecheckPartitions } from '../typecheck/partitions.mjs'
+import { applyTypedLintFixes } from './lintFixes.mjs'
 import { qualityDeadline, runQualityProcess } from './qualityProcess.mjs'
 
 const root = fileURLToPath(new URL('../..', import.meta.url))
@@ -50,17 +51,31 @@ groups.push({ name: 'scripts', files: ['**/*.{js,jsx,mjs,cjs}', '**/*.d.ts'] })
 const args = process.argv.slice(2)
 const fix = args.includes('--fix')
 const partitionFlag = args.indexOf('--partition')
+const worker = args.includes('--worker')
+const FixesAppliedExitCode = 2
+for (let index = 0; index < args.length; index += 1) {
+  if (args[index] === '--partition') {
+    index += 1
+    continue
+  }
+  if (args[index] !== '--fix' && args[index] !== '--worker')
+    throw new Error('Unknown lint option')
+}
+const selectedGroup = partitionFlag >= 0
+  ? groups.find((candidate) => candidate.name === args[partitionFlag + 1])
+  : null
+if (partitionFlag >= 0 && !selectedGroup) throw new Error('Unknown lint partition')
+if (worker && !selectedGroup) throw new Error('Lint worker requires one partition')
 
-if (partitionFlag >= 0) {
-  const group = groups.find((candidate) => candidate.name === args[partitionFlag + 1])
-  if (!group) throw new Error('Unknown lint partition')
+if (worker) {
+  const group = selectedGroup
   const { ESLint } = await import('eslint')
   const program = group.options
     ? ts.createProgram([...group.files, ...group.declarations], group.options)
     : null
   const engine = new ESLint({
     cwd: root,
-    fix,
+    fix: fix && !program,
     errorOnUnmatchedPattern: false,
     overrideConfig: group.config
       ? [
@@ -75,31 +90,44 @@ if (partitionFlag >= 0) {
   })
   const results = group.files.length ? await engine.lintFiles(group.files) : []
   console.info(`[lint] ${group.name}: ${results.length} files`)
-  if (fix) await ESLint.outputFixes(results)
-  const failures = ESLint.getErrorResults(results)
-  if (failures.length) {
-    console.error((await engine.loadFormatter('stylish')).format(failures))
-    process.exitCode = 1
+  const changed = fix && program ? await applyTypedLintFixes(results, program) : []
+  if (changed.length) {
+    // Never report an applied batch as verified; the coordinator must start a fresh worker.
+    process.exitCode = FixesAppliedExitCode
+  } else {
+    if (fix && !program) await ESLint.outputFixes(results)
+    const failures = ESLint.getErrorResults(results)
+    if (failures.length) {
+      console.error((await engine.loadFormatter('stylish')).format(failures))
+      process.exitCode = 1
+    }
   }
 } else {
-  if (args.some((arg) => arg !== '--fix')) throw new Error('Unknown lint option')
   const results = []
   const controller = new AbortController()
   const stop = () => controller.abort()
   process.once('SIGINT', stop)
   process.once('SIGTERM', stop)
-  for (const group of groups) {
-    const result = await runQualityProcess(
+  for (const group of selectedGroup ? [selectedGroup] : groups) {
+    const deadline = qualityDeadline(45_000)
+    const run = (apply) => runQualityProcess(
       process.execPath,
       [
         '--max-old-space-size=2048',
         fileURLToPath(import.meta.url),
+        '--worker',
         '--partition',
         group.name,
-        ...(fix ? ['--fix'] : []),
+        ...(apply ? ['--fix'] : []),
       ],
-      { cwd: root, deadline: qualityDeadline(45_000), signal: controller.signal }
+      { cwd: root, deadline, signal: controller.signal }
     )
+    let result = await run(fix)
+    if (result.exitCode === FixesAppliedExitCode && !result.timedOut) {
+      console.info(`[lint] ${group.name}: verifying fixes in a fresh worker`)
+      const verified = await run(false)
+      result = { ...verified, durationMs: result.durationMs + verified.durationMs }
+    }
     results.push({ name: group.name, ...result })
     console.info(`[lint] ${group.name} ${result.durationMs}ms exit=${result.exitCode}`)
     if (result.exitCode !== 0 || result.timedOut) console.error(result.output)
