@@ -245,9 +245,17 @@ export function useStandaloneWorkbenchPageModel(project: WorkbenchProject) {
   const exitCurrentProject = useMemoizedFn(async (): Promise<boolean> => {
     if (!workbench.closeProject()) return false
 
-    setSettingsOpen(false)
-    await window.velarosWorkbenchProjectHub.returnToEntry()
-    return true
+    try {
+      await window.velarosWorkbenchProjectHub.returnToEntry()
+      setSettingsOpen(false)
+      return true
+    } catch (error) {
+      translate.messageLatest.current.error({
+        title: translate.tLatest.current('workbench.settingsExitProjectAction'),
+        description: AppError.getMessage(error),
+      })
+      return false
+    }
   })
 
   /*

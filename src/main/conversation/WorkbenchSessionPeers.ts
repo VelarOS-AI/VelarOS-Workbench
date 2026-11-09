@@ -27,6 +27,7 @@ interface WorkbenchSessionPeersOptions {
     WorkbenchConversationDispatcherApi,
     'isRunning' | 'subscribeRunSettled' | 'subscribeRunOutcome' | 'submit' | 'guidance'
   >
+  assertAdmission(ref: WorkbenchConversationRef): void
   catalog(ref: WorkbenchConversationRef): readonly WorkbenchPeerMember[]
   /** 界面先建消息与运行卡，再由运行时发送；受理回执前不向调用方声称已送达。 */
   prepare(task: WorkbenchPeerTask, signal: AbortSignal): Promise<WorkbenchPreparedConversation>
@@ -83,6 +84,7 @@ export class WorkbenchSessionPeers {
     input: SessionAskInput,
     signal: AbortSignal
   ): Promise<SessionAnswer> {
+    this.options.assertAdmission(from)
     const scoped = this.signal(from, signal)
     scoped.throwIfAborted()
     const task = await this.task(from, input.to, input.task, input)
@@ -111,6 +113,7 @@ export class WorkbenchSessionPeers {
     input: SessionTellInput,
     signal: AbortSignal
   ): Promise<SessionTold> {
+    this.options.assertAdmission(from)
     const scoped = this.signal(from, signal)
     scoped.throwIfAborted()
     const task = await this.task(from, input.to, input.message)

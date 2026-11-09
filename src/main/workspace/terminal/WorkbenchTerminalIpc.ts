@@ -17,6 +17,7 @@ import {
 
 import { readWorkbenchRunEnvironment } from '../../../shared/workbenchRunEnvironment'
 import { WorkbenchTerminalChannels } from '../../../shared/workbenchTerminal'
+import type { WorkbenchWindowManager } from '../../projects/WorkbenchWindowManager'
 import {
   callWithEnvelope,
   callWithEnvelopeSync,
@@ -30,13 +31,17 @@ import { readWorkbenchProcessTarget } from '../WorkbenchProcessLaunch'
 
 import type { TerminalSessions } from './TerminalSessions'
 
-export function registerWorkbenchTerminalIpc(terminal: TerminalSessions): void {
+export function registerWorkbenchTerminalIpc(
+  terminal: TerminalSessions,
+  windows: Pick<WorkbenchWindowManager, 'assertProjectForWebContents'>
+): void {
   ipcMain.handle(WorkbenchTerminalChannels.start, (event, request: unknown) =>
     callWithEnvelope(() => {
       const parsed = parseStartRequest(request)
       if (!parsed) return invalidRequest()
 
       const sender = event.sender
+      windows.assertProjectForWebContents(sender, parsed.projectRoot)
       return terminal.startTerminalSession(
         parsed,
         (outputEvent) => {

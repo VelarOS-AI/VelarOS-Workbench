@@ -644,6 +644,9 @@ test(
     )
     peers = new WorkbenchSessionPeers({
       runtime: f.runtime,
+      assertAdmission: (request) => {
+        assert.equal(request.projectRoot, f.workspace)
+      },
       catalog: () => members,
       prepare: async (task) => {
         prepared.push(task)

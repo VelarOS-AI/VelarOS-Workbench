@@ -1,14 +1,183 @@
 import assert from 'node:assert/strict'
+import { EventEmitter } from 'node:events'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { describe, test } from 'bun:test'
+import { describe, mock, test } from 'bun:test'
+import type { BrowserWindow, WebContents } from 'electron'
+
+import { AppError } from '@velaros-ai/velaros/core/error'
 
 import { WorkbenchProjectHub } from '../src/main/projects/ProjectHub'
 import { RecentProjectsStore } from '../src/main/projects/RecentProjectsStore'
 
+mock.module('electron', () => ({
+  BrowserWindow: { getFocusedWindow: () => null },
+  dialog: {},
+}))
+
+class ProjectWindow extends EventEmitter {
+  private static nextId = 200
+  public readonly webContents = {
+    id: ProjectWindow.nextId++,
+    isDestroyed: () => false,
+    send: () => {},
+  }
+
+  public isDestroyed(): boolean { return false }
+  public isMinimized(): boolean { return false }
+  public isVisible(): boolean { return true }
+  public focus(): void {}
+}
+
+async function projectTransitionFixture(
+  release: (owner: number, root: string) => Promise<void>,
+  onLastProjectClosed?: () => void
+) {
+  const dataRoot = await mkdtemp(join(tmpdir(), 'workbench-project-transitions-'))
+  const roots = ['first', 'second', 'third'].map((name) => join(dataRoot, name))
+  await Promise.all(roots.map((path) => mkdir(path)))
+  const { WorkbenchWindowManager } = await import('../src/main/projects/WorkbenchWindowManager')
+  const manager = new WorkbenchWindowManager(dataRoot, {
+    createBrowserWindow: () => new ProjectWindow() as unknown as BrowserWindow,
+    releaseProjectResources: release,
+    onLastProjectClosed,
+  })
+  const window = manager.createWindow(roots[0]) as unknown as ProjectWindow
+  const sender = window.webContents as unknown as WebContents
+  return { dataRoot, roots, manager, window, sender }
+}
+
 void describe('Workbench project window ownership', () => {
+  void test('project transitions release each actual project before publishing the next root', async () => {
+    const firstRelease = Promise.withResolvers<void>()
+    const secondRelease = Promise.withResolvers<void>()
+    const firstStarted = Promise.withResolvers<void>()
+    const secondStarted = Promise.withResolvers<void>()
+    const released: string[] = []
+    const f = await projectTransitionFixture(async (_owner, root) => {
+      released.push(root)
+      if (released.length === 1) {
+        firstStarted.resolve()
+        await firstRelease.promise
+      } else {
+        secondStarted.resolve()
+        await secondRelease.promise
+      }
+    })
+    try {
+      const first = f.manager.switchProjectPath(f.sender, f.roots[1])
+      const second = f.manager.switchProjectPath(f.sender, f.roots[2])
+      await firstStarted.promise
+      assert.deepEqual(released, [f.roots[0]])
+      assert.equal(f.manager.getHubForWebContents(f.sender)?.getState().currentProject?.path, f.roots[0])
+      assert.throws(
+        () => f.manager.assertProjectForWebContents(f.sender, f.roots[0]),
+        (error) => AppError.from(error).code === 'CANCELLED'
+      )
+      firstRelease.resolve()
+      assert.equal((await first).ok, true)
+      await secondStarted.promise
+      assert.deepEqual(released, [f.roots[0], f.roots[1]])
+      assert.equal(f.manager.getHubForWebContents(f.sender)?.getState().currentProject?.path, f.roots[1])
+      secondRelease.resolve()
+      assert.equal((await second).ok, true)
+      assert.equal(f.manager.getHubForWebContents(f.sender)?.getState().currentProject?.path, f.roots[2])
+      f.manager.assertProjectForWebContents(f.sender, f.roots[2])
+      assert.throws(
+        () => f.manager.assertProjectForWebContents(f.sender, f.roots[0]),
+        (error) => AppError.from(error).code === 'PERMISSION'
+      )
+    } finally {
+      firstRelease.resolve()
+      secondRelease.resolve()
+      await rm(f.dataRoot, { recursive: true, force: true })
+    }
+  })
+
+  void test('failed project release preserves the active project and a later exit waits for cleanup', async () => {
+    const failure = new Error('resource owner did not close')
+    const retry = Promise.withResolvers<void>()
+    const retryStarted = Promise.withResolvers<void>()
+    let calls = 0
+    const f = await projectTransitionFixture(async () => {
+      if (++calls === 1) throw failure
+      retryStarted.resolve()
+      await retry.promise
+    })
+    try {
+      const hub = f.manager.getHubForWebContents(f.sender)!
+      hub.requestFileOpen('keep.ts')
+      const state = hub.getState()
+      await assert.rejects(f.manager.returnToEntry(f.sender), (error) => error === failure)
+      assert.deepEqual(hub.getState(), state)
+      f.manager.assertProjectForWebContents(f.sender, f.roots[0])
+      const exiting = f.manager.returnToEntry(f.sender)
+      await retryStarted.promise
+      assert.deepEqual(hub.getState(), state)
+      assert.throws(
+        () => f.manager.assertProjectForWebContents(f.sender, f.roots[0]),
+        (error) => AppError.from(error).code === 'CANCELLED'
+      )
+      retry.resolve()
+      assert.equal((await exiting).currentProject, null)
+      assert.equal(hub.getState().pendingFileOpen, null)
+      assert.throws(
+        () => f.manager.assertProjectForWebContents(f.sender, f.roots[0]),
+        (error) => AppError.from(error).code === 'PERMISSION'
+      )
+    } finally {
+      retry.resolve()
+      await rm(f.dataRoot, { recursive: true, force: true })
+    }
+  })
+
+  void test('switch rechecks target ownership after releasing the old project', async () => {
+    const release = Promise.withResolvers<void>()
+    const started = Promise.withResolvers<void>()
+    const f = await projectTransitionFixture(async () => {
+      started.resolve()
+      await release.promise
+    })
+    try {
+      const switching = f.manager.switchProjectPath(f.sender, f.roots[1])
+      await started.promise
+      assert.equal(f.manager.openProjectPathInNewWindow(f.roots[1]).ok, true)
+      release.resolve()
+      assert.equal((await switching).ok, true)
+      assert.deepEqual(f.manager.getOpenProjectPaths(), [f.roots[0], f.roots[1]])
+    } finally {
+      release.resolve()
+      await rm(f.dataRoot, { recursive: true, force: true })
+    }
+  })
+
+  void test('a closed project window cannot accept a late switch completion', async () => {
+    const release = Promise.withResolvers<void>()
+    const started = Promise.withResolvers<void>()
+    let calls = 0
+    const f = await projectTransitionFixture(
+      async () => {
+        if (++calls !== 1) return
+        started.resolve()
+        await release.promise
+      },
+      () => { assert.equal(calls, 2, 'window release is admitted before the application quit request') }
+    )
+    try {
+      const switching = f.manager.switchProjectPath(f.sender, f.roots[1])
+      await started.promise
+      f.window.emit('closed')
+      release.resolve()
+      assert.deepEqual(await switching, { ok: false, reason: 'canceled' })
+      assert.deepEqual(f.manager.getOpenProjectPaths(), [])
+    } finally {
+      release.resolve()
+      await rm(f.dataRoot, { recursive: true, force: true })
+    }
+  })
+
   void test('routes OS and renderer folder opens through the multi-window owner', async () => {
     const [
       main,

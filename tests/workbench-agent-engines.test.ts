@@ -725,6 +725,9 @@ describe('conversation dispatcher', () => {
     const source = { ...target, sessionId: 'source-chat' }
     const peers = new WorkbenchSessionPeers({
       runtime: dispatcher,
+      assertAdmission: (request) => {
+        assert.equal(request.projectRoot, target.projectRoot)
+      },
       catalog: () => [
         { sessionId: source.sessionId, title: 'source' },
         { sessionId: target.sessionId, title: 'target' },

@@ -23,6 +23,7 @@ import { useWorkbenchHostRuntime } from '@renderer/host/WorkbenchHostProvider'
 
 import { IconButton } from '@velaros-ai/ui/primitives/buttons/IconButton'
 import { optionalWhen } from '@velaros-ai/velaros/core'
+import { AppError } from '@velaros-ai/velaros/core/error'
 
 import type { WorkbenchProjectHubState } from '@shared/projectHub'
 
@@ -527,8 +528,16 @@ export function StandaloneWorkbenchPagePresentation({
 
   async function switchProject(path: string): Promise<boolean> {
     if (!workbench.ensureNoUnsavedChanges()) return false
-    const result = await window.velarosWorkbenchProjectHub.switchProjectPath(path)
-    return result.ok
+    try {
+      const result = await window.velarosWorkbenchProjectHub.switchProjectPath(path)
+      return result.ok
+    } catch (error) {
+      translate.messageLatest.current.error({
+        title: translate.tLatest.current('workbench.openProjectFailed'),
+        description: AppError.getMessage(error),
+      })
+      return false
+    }
   }
 
   async function openProjectInNewWindow(path: string): Promise<boolean> {

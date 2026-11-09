@@ -34,6 +34,7 @@ import {
   type WorkbenchInlineCompletionBridgeRequest,
   WorkbenchLanguageChannels,
 } from '../../../shared/workbenchLanguage'
+import type { WorkbenchWindowManager } from '../../projects/WorkbenchWindowManager'
 import {
   callWithEnvelope,
   hasStringFields,
@@ -48,13 +49,15 @@ import type { WorkbenchInlineCompletionGenerator } from './WorkbenchInlineComple
 
 export function registerWorkbenchLanguageServiceIpc(
   client: WorkbenchLanguageServiceWorkerClient,
-  inlineCompletion: WorkbenchInlineCompletionGenerator
+  inlineCompletion: WorkbenchInlineCompletionGenerator,
+  windows: Pick<WorkbenchWindowManager, 'assertProjectForWebContents'>
 ): void {
-  ipcMain.handle(WorkbenchLanguageChannels.definition, (_event, request: unknown) =>
+  ipcMain.handle(WorkbenchLanguageChannels.definition, (event, request: unknown) =>
     callWithEnvelope(() => {
       const parsed = parsePositionRequest(request)
       if (!parsed) return invalidRequest()
 
+      windows.assertProjectForWebContents(event.sender, parsed.projectRoot)
       return client.getDefinition(parsed)
     })
   )
@@ -64,42 +67,47 @@ export function registerWorkbenchLanguageServiceIpc(
       const parsed = parsePositionRequest(request)
       if (!parsed) return invalidRequest()
 
+      windows.assertProjectForWebContents(event.sender, parsed.projectRoot)
       return client.getCompletions(parsed, supersedeScope(event))
     })
   )
 
-  ipcMain.handle(WorkbenchLanguageChannels.completionResolve, (_event, request: unknown) =>
+  ipcMain.handle(WorkbenchLanguageChannels.completionResolve, (event, request: unknown) =>
     callWithEnvelope(() => {
       const parsed = parseCompletionResolveRequest(request)
       if (!parsed) return invalidRequest()
 
+      windows.assertProjectForWebContents(event.sender, parsed.projectRoot)
       return client.resolveCompletion(parsed)
     })
   )
 
-  ipcMain.handle(WorkbenchLanguageChannels.diagnostics, (_event, request: unknown) =>
+  ipcMain.handle(WorkbenchLanguageChannels.diagnostics, (event, request: unknown) =>
     callWithEnvelope(() => {
       const parsed = parseRequest(request)
       if (!parsed) return invalidRequest()
 
+      windows.assertProjectForWebContents(event.sender, parsed.projectRoot)
       return client.getDiagnostics(parsed)
     })
   )
 
-  ipcMain.handle(WorkbenchLanguageChannels.projectDiagnostics, (_event, request: unknown) =>
+  ipcMain.handle(WorkbenchLanguageChannels.projectDiagnostics, (event, request: unknown) =>
     callWithEnvelope(() => {
       const parsed = parseProjectDiagnosticsRequest(request)
       if (!parsed) return invalidRequest()
 
+      windows.assertProjectForWebContents(event.sender, parsed.projectRoot)
       return client.getProjectDiagnostics(parsed)
     })
   )
 
-  ipcMain.handle(WorkbenchLanguageChannels.rename, (_event, request: unknown) =>
+  ipcMain.handle(WorkbenchLanguageChannels.rename, (event, request: unknown) =>
     callWithEnvelope(() => {
       const parsed = parseRenameRequest(request)
       if (!parsed) return invalidRequest()
 
+      windows.assertProjectForWebContents(event.sender, parsed.projectRoot)
       return client.getRename(parsed)
     })
   )
@@ -109,15 +117,17 @@ export function registerWorkbenchLanguageServiceIpc(
       const parsed = parsePositionRequest(request)
       if (!parsed) return invalidRequest()
 
+      windows.assertProjectForWebContents(event.sender, parsed.projectRoot)
       return client.getHover(parsed, supersedeScope(event))
     })
   )
 
-  ipcMain.handle(WorkbenchLanguageChannels.references, (_event, request: unknown) =>
+  ipcMain.handle(WorkbenchLanguageChannels.references, (event, request: unknown) =>
     callWithEnvelope(() => {
       const parsed = parsePositionRequest(request)
       if (!parsed) return invalidRequest()
 
+      windows.assertProjectForWebContents(event.sender, parsed.projectRoot)
       return client.getReferences(parsed)
     })
   )
@@ -127,24 +137,27 @@ export function registerWorkbenchLanguageServiceIpc(
       const parsed = parsePositionRequest(request)
       if (!parsed) return invalidRequest()
 
+      windows.assertProjectForWebContents(event.sender, parsed.projectRoot)
       return client.getSignatureHelp(parsed, supersedeScope(event))
     })
   )
 
-  ipcMain.handle(WorkbenchLanguageChannels.format, (_event, request: unknown) =>
+  ipcMain.handle(WorkbenchLanguageChannels.format, (event, request: unknown) =>
     callWithEnvelope(() => {
       const parsed = parseRequest(request)
       if (!parsed) return invalidRequest()
 
+      windows.assertProjectForWebContents(event.sender, parsed.projectRoot)
       return client.getFormat(parsed)
     })
   )
 
-  ipcMain.handle(WorkbenchLanguageChannels.documentSymbols, (_event, request: unknown) =>
+  ipcMain.handle(WorkbenchLanguageChannels.documentSymbols, (event, request: unknown) =>
     callWithEnvelope(() => {
       const parsed = parseRequest(request)
       if (!parsed) return invalidRequest()
 
+      windows.assertProjectForWebContents(event.sender, parsed.projectRoot)
       return client.getDocumentSymbols(parsed)
     })
   )
@@ -154,6 +167,7 @@ export function registerWorkbenchLanguageServiceIpc(
       const parsed = parsePositionRequest(request)
       if (!parsed) return invalidRequest()
 
+      windows.assertProjectForWebContents(event.sender, parsed.projectRoot)
       return client.getDocumentHighlights(parsed, supersedeScope(event))
     })
   )
@@ -163,6 +177,7 @@ export function registerWorkbenchLanguageServiceIpc(
       const parsed = parseInlayHintsRequest(request)
       if (!parsed) return invalidRequest()
 
+      windows.assertProjectForWebContents(event.sender, parsed.projectRoot)
       return client.getInlayHints(parsed, supersedeScope(event))
     })
   )
@@ -172,69 +187,77 @@ export function registerWorkbenchLanguageServiceIpc(
       const parsed = parseRequest(request)
       if (!parsed) return invalidRequest()
 
+      windows.assertProjectForWebContents(event.sender, parsed.projectRoot)
       return client.getSemanticTokens(parsed, supersedeScope(event))
     })
   )
 
-  ipcMain.handle(WorkbenchLanguageChannels.codeActions, (_event, request: unknown) =>
+  ipcMain.handle(WorkbenchLanguageChannels.codeActions, (event, request: unknown) =>
     callWithEnvelope(() => {
       const parsed = parseCodeActionsRequest(request)
       if (!parsed) return invalidRequest()
 
+      windows.assertProjectForWebContents(event.sender, parsed.projectRoot)
       return client.getCodeActions(parsed)
     })
   )
 
-  ipcMain.handle(WorkbenchLanguageChannels.codeActionResolve, (_event, request: unknown) =>
+  ipcMain.handle(WorkbenchLanguageChannels.codeActionResolve, (event, request: unknown) =>
     callWithEnvelope(() => {
       const parsed = parseCodeActionResolveRequest(request)
       if (!parsed) return invalidRequest()
 
+      windows.assertProjectForWebContents(event.sender, parsed.projectRoot)
       return client.resolveCodeAction(parsed)
     })
   )
 
-  ipcMain.handle(WorkbenchLanguageChannels.organizeImports, (_event, request: unknown) =>
+  ipcMain.handle(WorkbenchLanguageChannels.organizeImports, (event, request: unknown) =>
     callWithEnvelope(() => {
       const parsed = parseRequest(request)
       if (!parsed) return invalidRequest()
 
+      windows.assertProjectForWebContents(event.sender, parsed.projectRoot)
       return client.getOrganizeImports(parsed)
     })
   )
 
-  ipcMain.handle(WorkbenchLanguageChannels.fileRenameEdits, (_event, request: unknown) =>
+  ipcMain.handle(WorkbenchLanguageChannels.fileRenameEdits, (event, request: unknown) =>
     callWithEnvelope(() => {
       const parsed = parseFileRenameEditsRequest(request)
       if (!parsed) return invalidRequest()
 
+      windows.assertProjectForWebContents(event.sender, parsed.projectRoot)
       return client.getFileRenameEdits(parsed)
     })
   )
 
-  ipcMain.handle(WorkbenchLanguageChannels.callHierarchy, (_event, request: unknown) =>
+  ipcMain.handle(WorkbenchLanguageChannels.callHierarchy, (event, request: unknown) =>
     callWithEnvelope(() => {
       const parsed = parseCallHierarchyRequest(request)
       if (!parsed) return invalidRequest()
 
+      windows.assertProjectForWebContents(event.sender, parsed.projectRoot)
       return client.getCallHierarchy(parsed)
     })
   )
 
-  ipcMain.handle(WorkbenchLanguageChannels.extension, (_event, request: unknown) =>
+  ipcMain.handle(WorkbenchLanguageChannels.extension, (event, request: unknown) =>
     callWithEnvelope(() => {
       const parsed = parseExtensionRequest(request)
       if (!parsed) return invalidRequest()
 
+      windows.assertProjectForWebContents(event.sender, parsed.projectRoot)
       return client.requestExtension(parsed)
     })
   )
 
-  ipcMain.handle(WorkbenchLanguageChannels.inlineCompletion, (_event, request: unknown) =>
+  ipcMain.handle(WorkbenchLanguageChannels.inlineCompletion, (event, request: unknown) =>
     callWithEnvelope(() => {
       const parsed = parseInlineCompletionRequest(request)
       if (!parsed) return invalidRequest()
 
+      windows.assertProjectForWebContents(event.sender, parsed.projectRoot)
       return inlineCompletion.generate(parsed)
     })
   )

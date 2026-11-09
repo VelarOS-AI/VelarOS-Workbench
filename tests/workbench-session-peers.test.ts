@@ -19,6 +19,7 @@ import type { WorkbenchPeerMember, WorkbenchPeerTask } from '../src/shared/workb
 
 async function fixture(
   options: {
+    assertAdmission?(ref: WorkbenchConversationRef): void
     prepareGuidance?(task: WorkbenchPeerTask, signal: AbortSignal): Promise<void>
     acceptGuidance?(task: WorkbenchPeerTask): void
   } = {}
@@ -91,6 +92,10 @@ async function fixture(
   }
   const peers = new WorkbenchSessionPeers({
     runtime,
+    assertAdmission: (ref) => {
+      assert.equal(ref.projectRoot, projectRoot)
+      options.assertAdmission?.(ref)
+    },
     catalog: () => members,
     prepare: async (task) => {
       prepared.push(task)
@@ -160,6 +165,31 @@ async function until(predicate: () => boolean) {
   }
   assert(predicate(), 'Expected the asynchronous delivery to settle')
 }
+
+test('peers reject asks and tells before preparation while retaining directory reads', async () => {
+  let retiring = false
+  let admissions = 0
+  const f = await fixture({
+    assertAdmission: () => {
+      admissions += 1
+      if (retiring) throw new AppError('CANCELLED', 'project is retiring')
+    },
+  })
+  try {
+    retiring = true
+    const signal = new AbortController().signal
+    await assert.rejects(f.ports.a.ask({ to: 'b', task: 'review src' }, signal), { code: 'CANCELLED' })
+    await assert.rejects(f.ports.a.tell({ to: 'b', message: 'new guidance' }, signal), { code: 'CANCELLED' })
+    assert.equal(admissions, 2)
+    assert.equal(f.prepared.length, 0)
+    assert.equal(f.sent.length, 0)
+    assert.equal(f.guidancePreparations.length, 0)
+    assert.equal((await f.ports.a.list()).length, 3)
+    assert.equal(admissions, 2)
+  } finally {
+    await f.close()
+  }
+})
 
 test('peers use the project catalog, inherit execution settings and return only their own input outcome', async () => {
   const f = await fixture()

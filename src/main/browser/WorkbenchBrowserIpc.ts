@@ -21,6 +21,7 @@ import type { WorkbenchBrowserRef, WorkbenchBrowserService } from './WorkbenchBr
 interface WorkbenchBrowserWindows {
   getHubForWebContents(sender: WebContents): Nullable<WorkbenchProjectHub>
   getWebContentsForProject(projectRoot: string): Nullable<WebContents>
+  assertProjectForWebContents(sender: WebContents, requestedRoot: string): void
 }
 
 const NavigationActions = new Set<WorkbenchBrowserNavigationAction>([
@@ -55,6 +56,7 @@ export function registerWorkbenchBrowserIpc(options: {
       const webContentsId = isPlainObject(raw) ? raw.webContentsId : undefined
       if (!isFiniteNumber(webContentsId))
         throw new AppError('VALIDATION', workbenchMainText('browser.invalidRequest'))
+      windows.assertProjectForWebContents(event.sender, ref.projectRoot)
       await browser.attachPage(ref, webContentsId, event.sender)
     })
   )
@@ -65,6 +67,7 @@ export function registerWorkbenchBrowserIpc(options: {
     callWithEnvelope(async () => {
       const ref = ownedRef(event, raw)
       const { action, url } = parseNavigateRequest(raw)
+      windows.assertProjectForWebContents(event.sender, ref.projectRoot)
       await browser.navigate(ref, action, url)
     })
   )

@@ -56,6 +56,7 @@ export function registerWorkbenchSessionPeersIpc(options: {
     const catalog = catalogs.get(resolve(task.projectRoot))
     if (!catalog || !owns(catalog.sender, task.projectRoot))
       throw new AppError('CLOSED', '项目窗口已关闭。')
+    options.windows.assertProjectForWebContents(catalog.sender, task.projectRoot)
     await new Promise<void>((yes, no) => {
       const abort = (): void => finish(AppError.from(signal.reason))
       const timer = setTimeout(
@@ -82,6 +83,12 @@ export function registerWorkbenchSessionPeersIpc(options: {
   }
   const peers = new WorkbenchSessionPeers({
     runtime: options.runtime,
+    assertAdmission: (ref) => {
+      const catalog = catalogs.get(resolve(ref.projectRoot))
+      if (!catalog || !owns(catalog.sender, ref.projectRoot))
+        throw new AppError('CLOSED', '项目窗口已关闭。')
+      options.windows.assertProjectForWebContents(catalog.sender, ref.projectRoot)
+    },
     catalog: (ref) => {
       const catalog = catalogs.get(resolve(ref.projectRoot))
       return catalog && owns(catalog.sender, ref.projectRoot) ? catalog.members : []
@@ -138,6 +145,7 @@ export function registerWorkbenchSessionPeersIpc(options: {
         .parse(raw)
       if (!owns(event.sender, request.projectRoot))
         throw new AppError('PERMISSION', '这个项目不属于当前窗口。')
+      options.windows.assertProjectForWebContents(event.sender, request.projectRoot)
       if (
         new Set(request.members.map((member) => member.sessionId)).size !== request.members.length
       )

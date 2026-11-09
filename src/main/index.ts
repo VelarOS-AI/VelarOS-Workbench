@@ -408,36 +408,51 @@ if (hasSingleInstanceLock)
       engineConversationRuntime,
       conversationRecovery
     )
-    registerWorkbenchTerminalIpc(providers.parts.terminal)
-    const disposeDebugIpc = registerWorkbenchDebugIpc(providers.parts.debug)
     registerWorkbenchGitIpc(providers.git, providers.chatCheckpoints, providers.chatRunChanges)
-    const watchIpc = registerWorkbenchWatchIpc(providers.watch)
-    const disposeWorkspaceIpc = registerWorkbenchWorkspaceIpc(providers.workspace)
-
-    registerWorkbenchLanguageServiceIpc(
-      providers.language,
-      new WorkbenchInlineCompletionGenerator(undefined, modelComposition)
-    )
     windowManager = new WorkbenchWindowManager(dataRootDir, {
       createBrowserWindow: createWorkbenchWindow,
       onLastProjectClosed: () => app.quit(),
       releaseProjectResources: async (ownerId, projectRoot) => {
-        sessionPeers?.releaseProject(projectRoot)
-        watchIpc.closeSubscriptionsForSender(ownerId)
-        // 先断开这个窗口的调试会话，再结束它的终端会话（被调试的程序跑在里面）。
-        const debugClosing = providers.parts.debug.closeSessionsForOwner(ownerId)
-        await Promise.all([
-          debugClosing,
-          fsIpc.cancelCommandsForSender(ownerId),
-          providers.parts.terminal.closeSessionsForOwner(ownerId),
-          providers.language.invalidateProject({ projectRoot }),
+        const releases: Array<() => unknown> = [
+          () => sessionPeers?.releaseProject(projectRoot),
+          () => watchIpc.closeSubscriptionsForSender(ownerId),
+          // 先登记调试关闭，再登记终端关闭；两者都保留到实际收束。
+          () => providers.parts.debug.closeSessionsForOwner(ownerId),
+          () => fsIpc.cancelCommandsForSender(ownerId),
+          () => providers.parts.terminal.closeSessionsForOwner(ownerId),
+          () => providers.language.invalidateProject({ projectRoot }),
           // 窗口关掉或切走项目：这个项目里还在跑的对话一并停下，浏览器页面一并离站。
-          conversationRuntime.cancelProject(projectRoot),
-          browserService.releaseProject(projectRoot),
-          fsIpc.cancelContentSearchesForSender(ownerId),
-        ])
+          () => conversationRuntime.cancelProject(projectRoot),
+          () => browserService.releaseProject(projectRoot),
+          () => fsIpc.cancelContentSearchesForSender(ownerId),
+        ]
+        const results = await Promise.allSettled(
+          releases.map((release) => Promise.resolve().then(release))
+        )
+        const failures = results.flatMap((result) =>
+          result.status === 'rejected' ? [result.reason] : []
+        )
+        if (failures.length) {
+          const error = new AggregateError(failures, 'Failed to release project resources')
+          console.error('[workbench-app] failed to release project resources', {
+            error,
+            ownerId,
+            projectRoot,
+          })
+          throw error
+        }
       },
     })
+    // 项目准入由同一个窗口 record 持有；先完成真实 owner，再注册会新建资源的入口。
+    registerWorkbenchTerminalIpc(providers.parts.terminal, windowManager)
+    const disposeDebugIpc = registerWorkbenchDebugIpc(providers.parts.debug, windowManager)
+    const watchIpc = registerWorkbenchWatchIpc(providers.watch, windowManager)
+    const disposeWorkspaceIpc = registerWorkbenchWorkspaceIpc(providers.workspace, windowManager)
+    registerWorkbenchLanguageServiceIpc(
+      providers.language,
+      new WorkbenchInlineCompletionGenerator(undefined, modelComposition),
+      windowManager
+    )
     const sessionPeers = registerWorkbenchSessionPeersIpc({
       runtime: conversationRuntime,
       recovery: conversationRecovery,

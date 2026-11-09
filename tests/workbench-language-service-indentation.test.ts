@@ -187,17 +187,26 @@ void describe('language service output follows the indentation of the file', () 
 void describe('language service IPC boundary', () => {
   void test('passes a well-formed indentation on and drops a malformed one', async () => {
     const seen: unknown[] = []
+    let admissions = 0
     const { registerWorkbenchLanguageServiceIpc } = await import(
       '../src/main/workspace/language/WorkbenchLanguageServiceIpc'
     )
     registerWorkbenchLanguageServiceIpc(
       {
         getFormat: async (request: { format?: unknown }) => {
+          assert.equal(admissions, seen.length + 1)
           seen.push(request.format)
           return {}
         },
       } as never,
-      {} as never
+      {} as never,
+      {
+        assertProjectForWebContents: (sender, projectRoot) => {
+          assert.equal(sender.id, 7)
+          assert.equal(projectRoot, '/project')
+          admissions += 1
+        },
+      }
     )
     const handler = ipcHandlers.get(WorkbenchLanguageChannels.format)
     assert.ok(handler)
@@ -214,7 +223,7 @@ void describe('language service IPC boundary', () => {
       { tabSize: 4, indentSize: 4, insertSpaces: 'yes' },
       'four',
     ])
-      assert.equal(((await handler({}, { ...base, format })) as { ok: boolean }).ok, true)
+      assert.equal(((await handler({ sender: { id: 7 } }, { ...base, format })) as { ok: boolean }).ok, true)
 
     assert.deepEqual(seen, [FourSpaces, Tabs, undefined, undefined, undefined, undefined, undefined, undefined])
   })

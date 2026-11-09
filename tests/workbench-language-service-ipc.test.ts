@@ -2,6 +2,8 @@ import assert from 'node:assert/strict'
 
 import { describe, mock, test } from 'bun:test'
 
+import { AppError } from '@velaros-ai/velaros/core/error'
+
 import { WorkbenchLanguageChannels } from '../src/shared/workbenchLanguage'
 
 const ipcHandlers = new Map<string, (...args: unknown[]) => unknown>()
@@ -15,32 +17,66 @@ mock.module('electron', () => ({
 }))
 
 /** 每个动词记下 worker 客户端实际收到的请求；IPC 边界把不合形状的挡在外面。 */
-async function registerWithRecorder(): Promise<Record<string, unknown[]>> {
+async function registerWithRecorder(retiring = false): Promise<Record<string, unknown[]>> {
   const calls: Record<string, unknown[]> = {}
+  const admissions: Array<{ senderId: number; projectRoot: string }> = []
+  const record = (operation: string) => async (request: unknown) => {
+    assert.deepEqual(admissions.at(-1), {
+      senderId: 7,
+      projectRoot: (request as { projectRoot: string }).projectRoot,
+    })
+    ;(calls[operation] ??= []).push(request)
+    return {}
+  }
   const client = new Proxy(
     {},
     {
-      get: (_target, operation: string) => async (request: unknown) => {
-        ;(calls[operation] ??= []).push(request)
-        return {}
-      },
+      get: (_target, operation: string) => record(operation),
     }
   )
   const { registerWorkbenchLanguageServiceIpc } = await import(
     '../src/main/workspace/language/WorkbenchLanguageServiceIpc'
   )
-  registerWorkbenchLanguageServiceIpc(client as never, {} as never)
+  registerWorkbenchLanguageServiceIpc(client as never, { generate: record('generate') } as never, {
+    assertProjectForWebContents: (sender, projectRoot) => {
+      admissions.push({ senderId: sender.id, projectRoot })
+      if (sender.id !== 7 || projectRoot !== '/project')
+        throw new AppError('PERMISSION', 'Project does not belong to this window')
+      if (retiring) throw new AppError('CANCELLED', 'Project is retiring')
+    },
+  })
   return calls
 }
 
 async function invoke(channel: string, request: unknown): Promise<boolean> {
   const handler = ipcHandlers.get(channel)
   assert.ok(handler, channel)
-  return ((await handler({}, request)) as { ok: boolean }).ok
+  return ((await handler({ sender: { id: 7 } }, request)) as { ok: boolean }).ok
 }
 
 const Base = { projectRoot: '/project', path: 'src/a.ts', content: 'const a = 1\n' }
 const Range = { startLine: 1, startColumn: 1, endLine: 1, endColumn: 6 }
+
+void test('retiring projects cannot start a language request or inline model request', async () => {
+  const calls = await registerWithRecorder(true)
+  const requests: Array<[string, unknown]> = [
+    [WorkbenchLanguageChannels.diagnostics, Base],
+    [WorkbenchLanguageChannels.inlineCompletion, {
+      projectRoot: '/project',
+      language: 'typescript',
+      prefix: 'const value = ',
+      suffix: '',
+      modelSelection: { provider: 'velaros', model: 'fixture', apiKey: '', baseURL: '' },
+    }],
+  ]
+  for (const [channel, request] of requests) {
+    const handler = ipcHandlers.get(channel)
+    assert.ok(handler)
+    const result = (await handler({ sender: { id: 7 } }, request)) as { ok: boolean; code?: string }
+    assert.deepEqual([result.ok, result.code], [false, 'CANCELLED'])
+  }
+  assert.deepEqual(calls, {})
+})
 
 void describe('language service IPC: code actions', () => {
   void test('a resolve request needs a range and a well-formed fix-all token', async () => {

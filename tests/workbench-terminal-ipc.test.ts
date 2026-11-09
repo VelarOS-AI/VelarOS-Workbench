@@ -2,6 +2,8 @@ import assert from 'node:assert/strict'
 
 import { describe, mock, test } from 'bun:test'
 
+import { AppError } from '@velaros-ai/velaros/core/error'
+
 import { type WorkbenchTerminalStartRequest } from '../src/shared/contracts/workbench'
 import { WorkbenchTerminalChannels } from '../src/shared/workbenchTerminal'
 
@@ -27,31 +29,49 @@ interface Envelope {
   code?: string
 }
 
-async function registerTerminalIpc(): Promise<{
+async function registerTerminalIpc(retiring = false): Promise<{
   start: (request: unknown) => Promise<Envelope>
   started: Array<{ request: WorkbenchTerminalStartRequest; ownerId: Nullable<number> }>
+  admissions: Array<{ ownerId: number; projectRoot: string }>
 }> {
   const { registerWorkbenchTerminalIpc } = await import(
     '../src/main/workspace/terminal/WorkbenchTerminalIpc'
   )
   const started: Array<{ request: WorkbenchTerminalStartRequest; ownerId: Nullable<number> }> = []
+  const admissions: Array<{ ownerId: number; projectRoot: string }> = []
   registerWorkbenchTerminalIpc({
     startTerminalSession: async (
       request: WorkbenchTerminalStartRequest,
       _onOutput: unknown,
       ownerId: Nullable<number>
     ) => {
+      assert.deepEqual(admissions.at(-1), { ownerId, projectRoot: request.projectRoot })
       started.push({ request, ownerId })
       return { sessionId: 'terminal-1', projectRoot: request.projectRoot, cwd: '/p', shell: 'sh', startedAt: 1 }
     },
-  } as never)
+  } as never, {
+    assertProjectForWebContents: (sender, projectRoot) => {
+      admissions.push({ ownerId: sender.id, projectRoot })
+      if (sender.id !== 7 || projectRoot !== '/p')
+        throw new AppError('PERMISSION', 'Project does not belong to this window')
+      if (retiring) throw new AppError('CANCELLED', 'Project is retiring')
+    },
+  })
   const handler = ipcHandlers.get(WorkbenchTerminalChannels.start)
   assert.ok(handler)
   const sender = { id: 7, isDestroyed: () => false, send: () => undefined }
-  return { start: async (request) => (await handler({ sender }, request)) as Envelope, started }
+  return { start: async (request) => (await handler({ sender }, request)) as Envelope, started, admissions }
 }
 
 void describe('Workbench terminal IPC', () => {
+  void test('rejects a retiring project before starting its terminal', async () => {
+    const { start, started, admissions } = await registerTerminalIpc(true)
+    const result = await start({ projectRoot: '/p', initialCommand: 'bun run dev' })
+    assert.deepEqual([result.ok, result.code], [false, 'CANCELLED'])
+    assert.deepEqual(admissions, [{ ownerId: 7, projectRoot: '/p' }])
+    assert.deepEqual(started, [])
+  })
+
   void test('preserves literal process arguments and the selected manager entry', async () => {
     const { start, started } = await registerTerminalIpc()
     const argv = ['', 'src/100%.test.ts', '$HOME $(unchanged)', '`literal`', 'a"b', 'tail\\']

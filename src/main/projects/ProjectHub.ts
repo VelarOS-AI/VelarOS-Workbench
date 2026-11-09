@@ -32,6 +32,11 @@ export class WorkbenchProjectHub {
 
   constructor(private readonly store: RecentProjectsStore) {}
 
+  /** 当前项目的权威记录；内部准入不需要构建最近项目的界面投影。 */
+  public getCurrentProject(): Nullable<WorkbenchOpenedProject> {
+    return this.currentProject
+  }
+
   public getState(): WorkbenchProjectHubState {
     return {
       currentProject: this.currentProject,

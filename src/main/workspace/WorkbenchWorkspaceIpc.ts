@@ -6,15 +6,18 @@ import {
   type WorkbenchWorkspaceInvokeResult,
   type WorkbenchWorkspaceOperation,
 } from '../../shared/workbenchWorkspace'
+import type { WorkbenchWindowManager } from '../projects/WorkbenchWindowManager'
 
+import { callWithEnvelopeSync } from './ipcBoundary'
 import type { WorkbenchProjectCapabilityProvider } from './ProjectCapabilityProvider'
 
 export function registerWorkbenchWorkspaceIpc(
-  provider: WorkbenchProjectCapabilityProvider
+  provider: WorkbenchProjectCapabilityProvider,
+  projectOwner: Pick<WorkbenchWindowManager, 'assertProjectForWebContents'>
 ): () => void {
   ipcMain.handle(
     WorkbenchWorkspaceChannels.invoke,
-    async (_event, request: unknown):
+    async (event, request: unknown):
     Promise<WorkbenchWorkspaceInvokeResult> => {
       if (!isWorkspaceInvokeRequest(request)) return {
           ok: false,
@@ -24,6 +27,17 @@ export function registerWorkbenchWorkspaceIpc(
             retryable: false,
           },
         }
+      const admission = callWithEnvelopeSync(() => {
+        projectOwner.assertProjectForWebContents(event.sender, request.projectRoot)
+      })
+      if (!admission.ok) return {
+        ok: false,
+        error: {
+          code: admission.code ?? 'WORKSPACE_INVOCATION_FAILED',
+          message: admission.message,
+          retryable: false,
+        },
+      }
       try {
         return { ok: true, output: await provider.invoke(request) }
       } catch (error) {

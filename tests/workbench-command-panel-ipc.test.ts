@@ -6,6 +6,7 @@ import { join } from 'node:path'
 
 import { describe, mock, test } from 'bun:test'
 
+import { AppError } from '@velaros-ai/velaros/core/error'
 import { currentPlatform } from '@velaros-ai/velaros/core/platform'
 
 import { analyzeWorkbenchCommandExecution } from '../src/main/workspace/CommandExecutionPolicy'
@@ -27,7 +28,7 @@ mock.module('electron', () => ({
   },
 }))
 
-async function registerCommandPanelIpc(): Promise<(request: unknown) => Promise<unknown>> {
+async function registerCommandPanelIpc(root: string): Promise<(request: unknown) => Promise<unknown>> {
   const { registerWorkbenchFsIpc } = await import('../src/main/workspace/WorkbenchFsIpc')
   const { CommandHelper } = await import('../src/main/workspace/CommandHelper')
   const { CommandRunner } = await import('../src/main/workspace/CommandRunner')
@@ -35,7 +36,9 @@ async function registerCommandPanelIpc(): Promise<(request: unknown) => Promise<
   registerWorkbenchFsIpc(
     {} as never,
     { commands: new CommandRunner(new PathResolver(), new CommandHelper()) } as never,
-    {} as never
+    { assertProjectForWebContents: (_sender: unknown, requestedRoot: string) => {
+      assert.equal(requestedRoot, root)
+    } } as never
   )
   const handler = ipcHandlers.get(WorkbenchFsChannels.runCommand)
   assert.ok(handler)
@@ -51,15 +54,24 @@ void describe('Workbench command panel IPC', () => {
     for (const reason of ['project', 'render-process-gone'] as const) {
       const work = Promise.withResolvers<unknown>()
       let commandSignal: AbortSignal | undefined
+      let retiring = false
+      let starts = 0
       const owner = registerWorkbenchFsIpc({} as never, {
         commands: { runCommand: (_request: unknown, _output: unknown, signal: AbortSignal) => {
+          starts += 1
           commandSignal = signal
           return work.promise
         } },
-      } as never, {} as never)
+      } as never, {
+        assertProjectForWebContents: (_sender: unknown, requestedRoot: string) => {
+          assert.equal(requestedRoot, '/project')
+          if (retiring) throw new AppError('CANCELLED', 'Project is retiring.')
+        },
+      } as never)
       const sender = Object.assign(new EventEmitter(), { id: 22, isDestroyed: () => false, send: () => undefined })
       const pending = ipcHandlers.get(WorkbenchFsChannels.runCommand)!({ sender }, { projectRoot: '/project', command: 'build' })
       if (reason === 'render-process-gone') sender.emit(reason)
+      if (reason === 'project') retiring = true
       const closing = owner.cancelCommandsForSender(sender.id)
       assert.equal(commandSignal?.aborted, true)
       let closed = false
@@ -69,6 +81,14 @@ void describe('Workbench command panel IPC', () => {
       work.resolve({ success: false })
       await closing
       await pending
+      if (reason === 'project') {
+        const refused = await ipcHandlers.get(WorkbenchFsChannels.runCommand)!(
+          { sender }, { projectRoot: '/project', command: 'late build' }
+        ) as { ok: boolean; code?: string }
+        assert.equal(refused.ok, false)
+        assert.equal(refused.code, 'CANCELLED')
+        assert.equal(starts, 1, 'retirement still rejects work after the command owner drain finishes')
+      }
       assert.equal(sender.listenerCount('destroyed'), 0)
       assert.equal(sender.listenerCount('render-process-gone'), 0)
     }
@@ -78,7 +98,7 @@ void describe('Workbench command panel IPC', () => {
     const root = await realpath(await mkdtemp(join(tmpdir(), 'workbench-command-panel-')))
     try {
       await mkdir(join(root, 'cache', 'nested'), { recursive: true })
-      const runCommand = await registerCommandPanelIpc()
+      const runCommand = await registerCommandPanelIpc(root)
       const shellKind = currentPlatform.getShellKind(
         currentPlatform.getPreferredShellPath(process.env)
       )

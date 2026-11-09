@@ -10,6 +10,7 @@ import {
   type WorkbenchWatchStopRequest,
 } from '../../../shared/workbenchWatch'
 import { workbenchMainText } from '../../i18n/workbenchMainMessages'
+import type { WorkbenchWindowManager } from '../../projects/WorkbenchWindowManager'
 import { callWithEnvelope, hasStringFields, invalidRequest } from '../ipcBoundary'
 
 import type { WorkbenchFileWatcher } from './WorkbenchFileWatcher'
@@ -25,7 +26,8 @@ export interface WorkbenchWatchIpcRegistration {
 }
 
 export function registerWorkbenchWatchIpc(
-  service: WorkbenchFileWatcher
+  service: WorkbenchFileWatcher,
+  projectOwner: Pick<WorkbenchWindowManager, 'assertProjectForWebContents'>
 ): WorkbenchWatchIpcRegistration {
   const owned = new Map<string, OwnedSubscription>()
   const owners = new Map<number, symbol>()
@@ -44,6 +46,7 @@ export function registerWorkbenchWatchIpc(
       const parsed = parseStartRequest(request)
       if (!parsed) return invalidRequest()
 
+      projectOwner.assertProjectForWebContents(event.sender, parsed.workspaceRoot)
       const sender = event.sender
       const senderId = sender.id
       const owner = owners.get(senderId) ?? Symbol('watch-owner')

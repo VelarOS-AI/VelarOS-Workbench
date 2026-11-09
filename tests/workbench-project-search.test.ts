@@ -8,6 +8,8 @@ import { promisify } from 'node:util'
 
 import { describe, mock, test } from 'bun:test'
 
+import { AppError } from '@velaros-ai/velaros/core/error'
+
 import { setWorkbenchMainLocale } from '../src/main/i18n/workbenchMainLocale'
 import { runWorkbenchContentSearchTask } from '../src/main/workspace/ContentSearchTask'
 import {
@@ -51,6 +53,14 @@ const { createWorkbenchAppParts } = await import('../src/main/workspace/Parts')
 const { registerWorkbenchFsIpc } = await import('../src/main/workspace/WorkbenchFsIpc')
 
 const execFileAsync = promisify(execFile)
+
+function projectWindow(projectRoot: string) {
+  return {
+    assertProjectForWebContents: (_sender: unknown, requestedRoot: string): void => {
+      assert.equal(requestedRoot, projectRoot)
+    },
+  }
+}
 
 type ProjectFiles = Record<string, string | Uint8Array>
 
@@ -477,6 +487,7 @@ void describe('project content search IPC', () => {
       complete: () => void
       onBatch: ((batch: WorkbenchSearchContentBatch) => void) | undefined
     }> = []
+    let retiring = false
     const owner = registerWorkbenchFsIpc({} as never, {
       search: {
         searchContent: (
@@ -493,7 +504,12 @@ void describe('project content search IPC', () => {
           return completion.promise
         },
       },
-    } as never, {} as never)
+    } as never, {
+      assertProjectForWebContents: (_sender: unknown, requestedRoot: string): void => {
+        assert.equal(requestedRoot, '/project')
+        if (retiring) throw new AppError('CANCELLED', 'Project is retiring.')
+      },
+    } as never)
     let sent = 0
     const sender = Object.assign(new EventEmitter(), {
       id: 41,
@@ -536,7 +552,13 @@ void describe('project content search IPC', () => {
       assert.equal(sender.listenerCount('destroyed'), 0)
       assert.equal(sender.listenerCount('render-process-gone'), 0)
 
-      // 同一窗口可在项目释放后重新搜索；应用关闭则永久拒绝新的请求。
+      retiring = true
+      const afterRetirement = await invoke()
+      assert.equal(afterRetirement.ok ? undefined : afterRetirement.code, 'CANCELLED')
+      assert.equal(work.length, 3, 'a retired project cannot recreate the idle search owner')
+
+      // 窗口重新有活动项目后可再搜索；应用关闭则永久拒绝新的请求。
+      retiring = false
       const afterRelease = invoke()
       assert.equal(work[3]!.signal.aborted, false)
       let shutdownFinished = false
@@ -564,7 +586,7 @@ void describe('project content search IPC', () => {
         registerWorkbenchFsIpc(
           {} as never,
           createWorkbenchAppParts(data, { moveToTrash: refuseTrash, searchWorker: sourceSearchWorker }),
-          {} as never
+          projectWindow(root) as never
         )
         const searchHandler = ipcHandlers.get(WorkbenchFsChannels.searchContent)!
         const cancelHandler = ipcHandlers.get(WorkbenchFsChannels.cancelSearchContent)!
@@ -621,7 +643,7 @@ void describe('project content search IPC: closing the window', () => {
         registerWorkbenchFsIpc(
           {} as never,
           createWorkbenchAppParts(data, { moveToTrash: refuseTrash, searchWorker: sourceSearchWorker }),
-          {} as never
+          projectWindow(root) as never
         )
         const searchHandler = ipcHandlers.get(WorkbenchFsChannels.searchContent)!
         let destroyed = false

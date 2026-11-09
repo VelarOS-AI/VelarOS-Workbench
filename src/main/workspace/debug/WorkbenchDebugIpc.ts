@@ -16,6 +16,7 @@ import {
 } from '../../../shared/workbenchDebugger'
 import { readWorkbenchRunEnvironment } from '../../../shared/workbenchRunEnvironment'
 import { WorkbenchTerminalChannels } from '../../../shared/workbenchTerminal'
+import type { WorkbenchWindowManager } from '../../projects/WorkbenchWindowManager'
 import {
   callWithEnvelope,
   hasStringFields,
@@ -39,13 +40,17 @@ const ControlActions = new Set<WorkbenchDebuggerControlAction>([
   'step-over',
 ])
 
-export function registerWorkbenchDebugIpc(debug: WorkbenchDebugSessions): () => void {
+export function registerWorkbenchDebugIpc(
+  debug: WorkbenchDebugSessions,
+  windows: Pick<WorkbenchWindowManager, 'assertProjectForWebContents'>
+): () => void {
   ipcMain.handle(WorkbenchDebuggerChannels.start, (event, request: unknown) =>
     callWithEnvelope(() => {
       const parsed = parseStartRequest(request)
       if (!parsed) return invalidRequest()
 
       const sender = event.sender
+      windows.assertProjectForWebContents(sender, parsed.projectRoot)
       return debug.startDebugSession(
         parsed,
         {

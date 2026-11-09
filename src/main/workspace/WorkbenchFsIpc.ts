@@ -282,11 +282,12 @@ export function registerWorkbenchFsIpc(
     })
   )
 
-  ipcMain.handle(WorkbenchFsChannels.searchEntries, (_event, request: unknown) =>
+  ipcMain.handle(WorkbenchFsChannels.searchEntries, (event, request: unknown) =>
     callWithEnvelope(() => {
       const parsed = parseSearchEntriesRequest(request)
       if (!parsed) return invalidRequest()
 
+      windowManager.assertProjectForWebContents(event.sender, parsed.projectRoot)
       return parts.search.searchEntries(parsed)
     })
   )
@@ -298,6 +299,7 @@ export function registerWorkbenchFsIpc(
       const parsed = parseSearchContentRequest(request)
       if (!parsed) return invalidRequest()
 
+      windowManager.assertProjectForWebContents(event.sender, parsed.projectRoot)
       const searchId = parsed.searchId
       const sender = event.sender
       const { search, end } = contentSearches.begin(sender, searchId)
@@ -339,11 +341,12 @@ export function registerWorkbenchFsIpc(
     })
   )
 
-  ipcMain.handle(WorkbenchFsChannels.listProjectFiles, (_event, request: unknown) =>
+  ipcMain.handle(WorkbenchFsChannels.listProjectFiles, (event, request: unknown) =>
     callWithEnvelope(() => {
       const parsed = parseListProjectFilesRequest(request)
       if (!parsed) return invalidRequest()
 
+      windowManager.assertProjectForWebContents(event.sender, parsed.projectRoot)
       return parts.search.listProjectFiles(parsed)
     })
   )
@@ -353,6 +356,7 @@ export function registerWorkbenchFsIpc(
       const parsed = parseRunCommandRequest(request)
       if (!parsed) return invalidRequest()
 
+      windowManager.assertProjectForWebContents(event.sender, parsed.projectRoot)
       const sender = event.sender
       if (sender.isDestroyed()) throw new AppError('CLOSED', '项目窗口已关闭。')
       const senderId = sender.id

@@ -62,6 +62,7 @@ export function registerWorkbenchAgentProcessesIpc(options: {
   ipcMain.handle(Channels.input, (event, raw: unknown) =>
     callWithEnvelope(async () => {
       const request = Task.extend({ text: z.string().max(16000) }).parse(raw)
+      options.windows.assertProjectForWebContents(event.sender, request.projectRoot)
       return options.shells.writeConsoleInput(request, await ownedRoot(event, request.projectRoot))
     })
   )

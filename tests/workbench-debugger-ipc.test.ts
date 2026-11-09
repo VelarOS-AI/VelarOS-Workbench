@@ -2,6 +2,8 @@ import assert from 'node:assert/strict'
 
 import { describe, mock, test } from 'bun:test'
 
+import { AppError } from '@velaros-ai/velaros/core/error'
+
 import { WorkbenchDebuggerChannels, type WorkbenchDebuggerEvent } from '../src/shared/workbenchDebugger'
 import { WorkbenchTerminalChannels } from '../src/shared/workbenchTerminal'
 
@@ -41,17 +43,20 @@ interface StartHandlers {
   terminalOutput: (event: unknown) => void
 }
 
-async function registerDebugIpc(): Promise<{
+async function registerDebugIpc(retiring = false): Promise<{
   invoke: (channel: string, request: unknown, senderId?: number) => Promise<Envelope>
   calls: RecordedCall[]
   startHandlers: StartHandlers[]
   sent: Array<{ senderId: number; channel: string; payload: unknown }>
   destroy: (senderId: number) => void
   dispose: () => void
+  admissions: Array<{ ownerId: number; projectRoot: string }>
 }> {
   const { registerWorkbenchDebugIpc } = await import('../src/main/workspace/debug/WorkbenchDebugIpc')
   const calls: RecordedCall[] = []
   const startHandlers: StartHandlers[] = []
+  const admissions: Array<{ ownerId: number; projectRoot: string }> = []
+  const projectRoots = new Map([[7, '/p'], [9, '/p']])
   const record =
     (method: string, result: unknown = undefined) =>
     async (request: unknown, ownerId: Nullable<number>): Promise<unknown> => {
@@ -61,6 +66,10 @@ async function registerDebugIpc(): Promise<{
 
   const dispose = registerWorkbenchDebugIpc({
     startDebugSession: async (request: unknown, handlers: StartHandlers, ownerId: Nullable<number>) => {
+      assert.deepEqual(admissions.at(-1), {
+        ownerId,
+        projectRoot: (request as { projectRoot: string }).projectRoot,
+      })
       calls.push({ method: 'start', request, ownerId })
       startHandlers.push(handlers)
       return { sessionId: 'debug-1', terminalSessionId: 'terminal-1', command: 'node x', cwd: '/p', shell: 'sh' }
@@ -71,7 +80,14 @@ async function registerDebugIpc(): Promise<{
     setExceptionPause: record('setExceptionPause'),
     getVariables: record('variables', { variables: [], truncated: false }),
     evaluate: record('evaluate', { value: null, error: 'x' }),
-  } as never)
+  } as never, {
+    assertProjectForWebContents: (sender, projectRoot) => {
+      admissions.push({ ownerId: sender.id, projectRoot })
+      if (projectRoots.get(sender.id) !== projectRoot)
+        throw new AppError('PERMISSION', 'Project does not belong to this window')
+      if (retiring) throw new AppError('CANCELLED', 'Project is retiring')
+    },
+  })
 
   const sent: Array<{ senderId: number; channel: string; payload: unknown }> = []
   const destroyed = new Set<number>()
@@ -91,12 +107,32 @@ async function registerDebugIpc(): Promise<{
     sent,
     destroy: (senderId) => destroyed.add(senderId),
     dispose,
+    admissions,
   }
 }
 
 const Channels = WorkbenchDebuggerChannels
 
 void describe('Workbench debugger IPC', () => {
+  void test('rejects a retiring project before debug launch while keeping session cleanup available', async () => {
+    const ipc = await registerDebugIpc(true)
+    try {
+      const result = await ipc.invoke(Channels.start, {
+        projectRoot: '/p',
+        target: { kind: 'node-script', script: 'main.js', argv: [] },
+        breakpoints: [],
+      })
+      assert.deepEqual([result.ok, result.code], [false, 'CANCELLED'])
+      assert.deepEqual(ipc.calls, [])
+      assert.equal((await ipc.invoke(Channels.stop, { sessionId: 's' })).ok, true)
+      assert.equal((await ipc.invoke(Channels.variables, { sessionId: 's', objectId: 'o' })).ok, true)
+      assert.deepEqual(ipc.calls.map(call => call.method), ['stop', 'variables'])
+      assert.deepEqual(ipc.admissions, [{ ownerId: 7, projectRoot: '/p' }])
+    } finally {
+      ipc.dispose()
+    }
+  })
+
   void test('starts a session for the requesting window and sends its events and output only there', async () => {
     const ipc = await registerDebugIpc()
 

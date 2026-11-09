@@ -5,6 +5,8 @@ import { join } from 'node:path'
 
 import { describe, mock, test } from 'bun:test'
 
+import { AppError } from '@velaros-ai/velaros/core/error'
+
 import { WorkbenchFsChannels } from '../src/shared/workbenchFs'
 import { WorkbenchWorkspaceChannels } from '../src/shared/workbenchWorkspace'
 
@@ -121,6 +123,7 @@ void describe('user writes reported to the run attribution', () => {
     // 这条通道上已没有会写文件的操作（应用 / 撤销改动随旧 Agent 栈退役），也就没有用户写入要报。
     const { registerWorkbenchWorkspaceIpc } = await import('../src/main/workspace/WorkbenchWorkspaceIpc')
     const invoked: string[] = []
+    let retiring = false
     const dispose = registerWorkbenchWorkspaceIpc({
       invoke: async (request: { operation: string }) => {
         invoked.push(request.operation)
@@ -130,7 +133,12 @@ void describe('user writes reported to the run attribution', () => {
         throw new Error('unused')
       },
       dispose: async () => undefined,
-    } as never)
+    } as never, {
+      assertProjectForWebContents: (_sender: unknown, requestedRoot: string): void => {
+        assert.equal(requestedRoot, '/work/app')
+        if (retiring) throw new AppError('CANCELLED', 'Project is retiring.')
+      },
+    })
     try {
       for (const operation of ['project:list', 'project:read', 'project:rules']) {
         assert.deepEqual(
@@ -146,6 +154,13 @@ void describe('user writes reported to the run attribution', () => {
         }) as { ok: boolean; error?: { code: string } }
         assert.deepEqual([result.ok, result.error?.code], [false, 'WORKSPACE_REQUEST_INVALID'], operation)
       }
+      retiring = true
+      assert.deepEqual(
+        await invoke(WorkbenchWorkspaceChannels.invoke, {
+          projectRoot: '/work/app', operation: 'project:read', input: { path: 'late.ts' },
+        }),
+        { ok: false, error: { code: 'CANCELLED', message: 'Project is retiring.', retryable: false } }
+      )
       assert.deepEqual(invoked, ['project:list', 'project:read', 'project:rules'])
     } finally {
       dispose()

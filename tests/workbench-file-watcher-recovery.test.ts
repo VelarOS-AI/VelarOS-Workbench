@@ -9,6 +9,8 @@ import { setTimeout as delay } from 'node:timers/promises'
 
 import { describe, mock, test } from 'bun:test'
 
+import { AppError } from '@velaros-ai/velaros/core/error'
+
 import { WorkbenchFileWatcher } from '../src/main/workspace/watch/WorkbenchFileWatcher'
 import { isSameOrChildPath } from '../src/renderer/src/models/shared/workbenchUtils'
 import { type SystemWorkspaceFilesChangedEvent } from '../src/shared/contracts/system'
@@ -88,6 +90,7 @@ void describe('Workbench file watcher recovery', () => {
       const watcher = new WorkbenchFileWatcher({ watch: fake.watch })
       const subscribe = watcher.subscribe.bind(watcher)
       let gate = Promise.withResolvers<void>()
+      let retiring = false
       watcher.subscribe = async (...args) => {
         await gate.promise
         return subscribe(...args)
@@ -100,7 +103,12 @@ void describe('Workbench file watcher recovery', () => {
         },
         send(): void {},
       })
-      const registration = registerWorkbenchWatchIpc(watcher)
+      const registration = registerWorkbenchWatchIpc(watcher, {
+        assertProjectForWebContents: (_sender: unknown, requestedRoot: string): void => {
+          assert.equal(requestedRoot, root)
+          if (retiring) throw new AppError('CANCELLED', 'Project is retiring.')
+        },
+      })
       const start = handlers.get(WorkbenchWatchChannels.start)
       assert.ok(start)
       const pending: Array<Promise<unknown>> = []
@@ -123,6 +131,11 @@ void describe('Workbench file watcher recovery', () => {
         })
         assert.equal(fake.watchers[0]?.closed, true)
         assert.equal(sender.isDestroyed(), false)
+
+        retiring = true
+        assert.equal((await begin()).code, 'CANCELLED')
+        assert.equal(fake.watchers.length, 1, 'retirement remains closed after local watch cleanup')
+        retiring = false
 
         gate = Promise.withResolvers<void>()
         const windowClosed = begin()

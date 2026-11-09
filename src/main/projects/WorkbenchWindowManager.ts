@@ -5,6 +5,8 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { type BaseWindow, BrowserWindow, type WebContents } from 'electron'
 import { execa } from 'execa'
 
+import { AppError } from '@velaros-ai/velaros/core/error'
+
 import {
   type WorkbenchOpenedProject,
   type WorkbenchProjectCloneResult,
@@ -25,6 +27,8 @@ interface WorkbenchWindowRecord {
   hub: WorkbenchProjectHub
   window: BrowserWindow
   unsubscribeHub: () => void
+  projectTransition: Promise<void>
+  releasingProject: boolean
 }
 
 interface WorkbenchWindowManagerOptions {
@@ -69,7 +73,13 @@ export class WorkbenchWindowManager {
       }
       this.emitChanged()
     })
-    this.records.set(ownerId, { hub, window, unsubscribeHub })
+    this.records.set(ownerId, {
+      hub,
+      window,
+      unsubscribeHub,
+      projectTransition: Promise.resolve(),
+      releasingProject: false,
+    })
 
     window.once('closed', () => {
       const record = this.records.get(ownerId)
@@ -79,7 +89,15 @@ export class WorkbenchWindowManager {
       record.unsubscribeHub()
       const projectRoot = record.hub.getState().currentProject?.path
       if (projectRoot) {
-        void this.releaseProjectResources(ownerId, projectRoot)
+        void (async () => {
+          await this.options.releaseProjectResources?.(ownerId, projectRoot)
+        })().catch((error: unknown) => {
+          console.error('[workbench-app] failed to release closed project window resources', {
+            error,
+            ownerId,
+            projectRoot,
+          })
+        })
         this.quitAfterLastProjectClosed()
       }
       this.emitChanged()
@@ -93,6 +111,18 @@ export class WorkbenchWindowManager {
 
   public getHubForWebContents(sender: WebContents): Nullable<WorkbenchProjectHub> {
     return this.records.get(sender.id)?.hub ?? null
+  }
+
+  /** 新资源必须在自身 pending 登记之前同步通过本窗的唯一项目准入。 */
+  public assertProjectForWebContents(sender: WebContents, requestedRoot: string): void {
+    const record = this.records.get(sender.id)
+    const project = record?.hub.getCurrentProject()
+    if (!record || !project || record.window.isDestroyed() || sender.isDestroyed())
+      throw new AppError('PERMISSION', 'The window has no active project')
+    if (record.releasingProject)
+      throw new AppError('CANCELLED', 'The window is closing or switching its project')
+    if (resolve(requestedRoot) !== project.path)
+      throw new AppError('PERMISSION', 'The requested project is not owned by this window')
   }
 
   public getWindowForWebContents(sender: WebContents): Nullable<BrowserWindow> {
@@ -196,35 +226,52 @@ export class WorkbenchWindowManager {
     sender: WebContents,
     path: string
   ): Promise<WorkbenchProjectOpenResult> {
-    const projectPath = resolve(path)
-    const failure = validateProjectDirectory(projectPath)
     const target = this.getRecord(sender)
-    if (failure || !target) {
-      target?.hub.refreshState()
-      return { ok: false, reason: failure ?? 'missing' }
-    }
+    if (!target) return { ok: false, reason: 'missing' }
 
-    const currentProjectPath = target.hub.getState().currentProject?.path
-    if (currentProjectPath === projectPath) {
-      this.focusWindow(target.window)
-      return target.hub.openProjectPath(projectPath)
-    }
+    return this.queueProjectTransition(target, async (): Promise<WorkbenchProjectOpenResult> => {
+      if (this.records.get(sender.id) !== target) return { ok: false, reason: 'canceled' }
+      const projectPath = resolve(path)
+      const failure = validateProjectDirectory(projectPath)
+      if (failure) {
+        target.hub.refreshState()
+        return { ok: false, reason: failure }
+      }
 
-    const existing = this.findProjectRecord(projectPath)
-    if (existing) {
-      this.focusWindow(existing.window)
-      return existing.hub.openProjectPath(projectPath)
-    }
+      const currentProjectPath = target.hub.getState().currentProject?.path
+      if (currentProjectPath === projectPath) {
+        this.focusWindow(target.window)
+        return target.hub.openProjectPath(projectPath)
+      }
 
-    if (currentProjectPath) {
-      await this.releaseProjectResources(sender.id, currentProjectPath)
-    }
-    const opened = target.hub.openProjectPath(projectPath)
-    if (opened.ok) {
-      this.focusWindow(target.window)
-      this.refreshRecentProjectsExcept(target.hub)
-    }
-    return opened
+      const existing = this.findProjectRecord(projectPath)
+      if (existing) {
+        this.focusWindow(existing.window)
+        return existing.hub.openProjectPath(projectPath)
+      }
+
+      target.releasingProject = true
+      try {
+        if (currentProjectPath)
+          await this.options.releaseProjectResources?.(sender.id, currentProjectPath)
+        if (this.records.get(sender.id) !== target) return { ok: false, reason: 'canceled' }
+
+        // 释放期间另一个窗口可能已经打开目标；发布新根前重新核对唯一所有权。
+        const openedElsewhere = this.findProjectRecord(projectPath)
+        if (openedElsewhere) {
+          this.focusWindow(openedElsewhere.window)
+          return openedElsewhere.hub.openProjectPath(projectPath)
+        }
+        const opened = target.hub.openProjectPath(projectPath)
+        if (opened.ok) {
+          this.focusWindow(target.window)
+          this.refreshRecentProjectsExcept(target.hub)
+        }
+        return opened
+      } finally {
+        target.releasingProject = false
+      }
+    })
   }
 
   public openProjectPathInNewWindow(path: string): WorkbenchProjectOpenResult {
@@ -297,12 +344,18 @@ export class WorkbenchWindowManager {
     const record = this.getRecord(sender)
     if (!record) return emptyProjectHubState()
 
-    const projectRoot = record.hub.getState().currentProject?.path
-    const state = record.hub.closeProject()
-    if (projectRoot) {
-      await this.releaseProjectResources(sender.id, projectRoot)
-    }
-    return state
+    return this.queueProjectTransition(record, async () => {
+      if (this.records.get(sender.id) !== record) return emptyProjectHubState()
+      const projectRoot = record.hub.getCurrentProject()?.path
+      record.releasingProject = true
+      try {
+        if (projectRoot) await this.options.releaseProjectResources?.(sender.id, projectRoot)
+        if (this.records.get(sender.id) !== record) return emptyProjectHubState()
+        return record.hub.closeProject()
+      } finally {
+        record.releasingProject = false
+      }
+    })
   }
 
   public openDroppedPaths(
@@ -451,16 +504,17 @@ export class WorkbenchWindowManager {
     }
   }
 
-  private async releaseProjectResources(ownerId: number, projectRoot: string): Promise<void> {
-    try {
-      await this.options.releaseProjectResources?.(ownerId, projectRoot)
-    } catch (error) {
-      console.error('[workbench-app] failed to release project window resources', {
-        error,
-        ownerId,
-        projectRoot,
-      })
-    }
+  private queueProjectTransition<T>(
+    record: WorkbenchWindowRecord,
+    run: () => Promise<T>
+  ): Promise<T> {
+    const pending = record.projectTransition.then(run)
+    // 失败不阻断后继操作；调用者仍接收原 pending 的失败。
+    record.projectTransition = pending.then(
+      () => {},
+      () => {}
+    )
+    return pending
   }
 
   private quitAfterLastProjectClosed(): void {

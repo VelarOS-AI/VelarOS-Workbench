@@ -60,6 +60,7 @@ const MaxEngineModelChars = 200
 /** 窗口 → 它当前打开的项目。 */
 export interface WorkbenchConversationWindows {
   getHubForWebContents(sender: WebContents): Nullable<WorkbenchProjectHub>
+  assertProjectForWebContents(sender: WebContents, requestedRoot: string): void
 }
 
 /** 产品改进数据（用户同意后才记）：一轮的起止、回合、用量与脚本执行次数。 */
@@ -185,6 +186,7 @@ export function registerWorkbenchConversationIpc(
     callWithEnvelope(async () => {
       const request = parseSendRequest(raw)
       const ref = ownedRef(event, request)
+      options.windows.assertProjectForWebContents(event.sender, ref.projectRoot)
       const executionId = `${ref.sessionId}:${request.inputId}`
       const { accepted, completed } = runtime.submit(
         async (signal) => {
@@ -224,7 +226,9 @@ export function registerWorkbenchConversationIpc(
   ipcMain.handle(WorkbenchConversationChannels.guidance, (event, raw: unknown) =>
     callWithEnvelope(async () => {
       const request = parseGuidanceRequest(raw)
-      await runtime.guidance(ownedRef(event, request), request)
+      const ref = ownedRef(event, request)
+      options.windows.assertProjectForWebContents(event.sender, ref.projectRoot)
+      await runtime.guidance(ref, request)
     })
   )
   ipcMain.handle(WorkbenchConversationChannels.input, (event, raw: unknown) =>
