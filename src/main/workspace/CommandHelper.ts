@@ -36,11 +36,6 @@ interface WorkspaceShellSpec {
 }
 
 class CommandHelper {
-  /** 默认前台命令超时时间。 */
-  public getDefaultTimeoutMs(): number {
-    return DEFAULT_COMMAND_TIMEOUT_MS
-  }
-
   /** SIGTERM 后等待多久再强杀。 */
   public getForceKillDelayMs(): number {
     return FORCE_KILL_DELAY_MS
@@ -111,18 +106,6 @@ class CommandHelper {
     }
 
     buffer.text = nextText
-  }
-
-  /** 两条输出流都可能承载失败诊断；每条摘要最多 1,000 字符。 */
-  public summarizeFailureOutput(stdout: string, stderr: string): string[] {
-    return (['stdout', 'stderr'] as const).flatMap((stream) => {
-      const text = (stream === 'stdout' ? stdout : stderr).trim()
-      if (!text) return []
-      const prefix = `${stream}:\n`
-      const buffer = this.createOutputBuffer(1_000 - prefix.length)
-      this.appendOutput(buffer, text)
-      return [`${prefix}${buffer.text}`]
-    })
   }
 
   /** 获取当前平台应该如何调用 shell 执行这条命令。 */

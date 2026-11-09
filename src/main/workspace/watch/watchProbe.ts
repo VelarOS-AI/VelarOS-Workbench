@@ -115,10 +115,13 @@ try {
 
   // 依赖目录里的写入只报目录本身：展开着的 node_modules 会刷新，但不把成千上万个文件路径灌给订阅方。
   const beforeDependencyWrite = secondEvents.length
-  await writeFile(join(root, 'node_modules', 'ignored.js'), 'ignored')
-  await new Promise((resolve) => setTimeout(resolve, 80))
+  const dependencySeen = await writeUntilSeen(
+    join(root, 'node_modules', 'ignored.js'),
+    'ignored',
+    () => findPathEvent(secondEvents, 'node_modules', beforeDependencyWrite) !== undefined
+  )
   assert(
-    secondEvents
+    dependencySeen && secondEvents
       .slice(beforeDependencyWrite)
       .every((candidate) => candidate.paths.every((path) => path === 'node_modules')),
     'writes in dependency directories must be reported as the directory itself'

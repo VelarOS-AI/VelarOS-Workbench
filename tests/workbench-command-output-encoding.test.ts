@@ -52,17 +52,3 @@ test('rolling output never starts inside a surrogate pair', () => {
   assert.equal(buffer.text, 'y🙂')
   assert.equal(Buffer.from(buffer.text).toString('utf8'), buffer.text)
 })
-
-
-test('failure diagnostics keep both streams, bounded without splitting Unicode', () => {
-  const helper = new CommandHelper()
-  assert.deepEqual(helper.summarizeFailureOutput('TS2322', ''), ['stdout:\nTS2322'])
-  assert.deepEqual(helper.summarizeFailureOutput('', 'fatal'), ['stderr:\nfatal'])
-  assert.deepEqual(helper.summarizeFailureOutput('error', 'banner'), ['stdout:\nerror', 'stderr:\nbanner'])
-  assert.deepEqual(helper.summarizeFailureOutput('', ''), [])
-  const issues = helper.summarizeFailureOutput(`${'🙂'.repeat(1000)  }x`, '中文'.repeat(1000))
-  for (const issue of issues) {
-    assert(issue.length <= 1000)
-    assert.equal(Buffer.from(issue).toString('utf8'), issue)
-  }
-})

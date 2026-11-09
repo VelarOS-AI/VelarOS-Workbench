@@ -1,9 +1,5 @@
 /**
- * 目录条目辅助（照搬 desktop `workspace/workbench/FileEntries.ts`，保形零改动）。
- *
- * 两套可见性规则并存：搜索/变异面用 shouldIncludeEntry（内部目录与生成目录按位置隐身，
- * 见 WorkbenchSkippedDirectories），目录列表面用 shouldIncludeDirectoryListingEntry
- * （仅 `.git` 恒隐藏）。
+ * 搜索与写操作使用的目录条目及子项可见性；内部目录和生成目录按位置跳过，见 WorkbenchSkippedDirectories。
  */
 import { lstat, opendir, realpath, stat } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
@@ -89,32 +85,6 @@ class DirectoryEntries {
     if (!includeHidden && name.startsWith('.')) return false
 
     return true
-  }
-
-  public shouldIncludeDirectoryListingEntry(
-    name: string,
-    isDirectory: boolean,
-    includeHidden: boolean
-  ): boolean {
-    if (isDirectory && name === '.git') return false
-
-    if (!includeHidden && name.startsWith('.')) return false
-
-    return true
-  }
-
-  public async hasVisibleDirectoryListingChildren(
-    path: string,
-    includeHidden: boolean
-  ): Promise<boolean> {
-    const directory = await opendir(path).catch(() => null)
-    if (!directory) return false
-
-    for await (const entry of directory) {
-      if (this.shouldIncludeDirectoryListingEntry(entry.name, entry.isDirectory(), includeHidden))
-        return true
-    }
-    return false
   }
 
   /** `isProjectRoot`：`path` 就是工程根目录。 */

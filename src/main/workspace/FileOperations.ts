@@ -1,13 +1,5 @@
 /**
- * 工作台文件写族（照搬 desktop `workspace/workbench/FileOperations.ts`，root 越界防护与
- * 回收站语义保形）。
- *
- * 独立应用适配（三处，均为装配面不动行为）：
- * - `storagePathService` / `workbenchLocalHistoryStore` 模块单例 → 构造注入
- *   （`WorkbenchDeleteUndoStore` / `WorkbenchLocalHistoryStore`）。
- * - desktop 的 `WorkspaceCollaborationCoordinator` 租约层不随迁（独立应用没有 agent
- *   第二写者）；`runWorkbenchMutation` 保留为接缝直通，未来接协作协调时在此恢复包裹。
- * - 删除移到系统废纸篓，小的另留私有副本给应用内撤销（见 `WorkbenchDeleteUndoStore`）。
+ * 编辑器与文件树的读写操作：项目路径边界、原子保存、本地历史和系统废纸篓撤销。
  */
 import { randomUUID } from 'node:crypto'
 import type { BigIntStats } from 'node:fs'
@@ -110,19 +102,17 @@ class FileOperations {
   public async saveFile(request: WorkbenchSaveFileRequest): Promise<WorkbenchSaveFileResult> {
     const projectRoot = await this.pathResolver.resolveProjectRoot(request.projectRoot)
     const filePath = await this.pathResolver.resolveInsideProject(projectRoot, request.path)
-    return this.runWorkbenchMutation(async () => {
-      const fileStats = await stat(filePath.realPath)
-      this.assertSaveTarget(fileStats, await lstat(filePath.requestedPath), request)
-      const bytes = this.encodeSaveContent(request, await readFile(filePath.realPath))
-      await writeFileAtomically(filePath.realPath, bytes, fileStats)
-      return this.recordSavedTextFile(
-        projectRoot,
-        filePath,
-        request,
-        bytes,
-        await stat(filePath.realPath)
-      )
-    })
+    const fileStats = await stat(filePath.realPath)
+    this.assertSaveTarget(fileStats, await lstat(filePath.requestedPath), request)
+    const bytes = this.encodeSaveContent(request, await readFile(filePath.realPath))
+    await writeFileAtomically(filePath.realPath, bytes, fileStats)
+    return this.recordSavedTextFile(
+      projectRoot,
+      filePath,
+      request,
+      bytes,
+      await stat(filePath.realPath)
+    )
   }
 
   public async restoreMissingFile(
@@ -149,34 +139,30 @@ class FileOperations {
       eol: request.eol ?? DefaultWorkbenchTextFormat.eol,
     })
     const targetPath = this.pathResolver.resolveChildPath(projectRoot, parent.requestedPath, name)
-    return this.runWorkbenchMutation(async () => {
-      const existing = await lstat(targetPath).catch(() => null)
-      if (existing) throw new AppError('CONFLICT', workbenchMainText('files.restoreFileReappeared'))
+    const existing = await lstat(targetPath).catch(() => null)
+    if (existing) throw new AppError('CONFLICT', workbenchMainText('files.restoreFileReappeared'))
 
-      await writeFile(targetPath, bytes, { flag: 'wx' })
-      await this.gitNewFileTracker.trackNewFiles(projectRoot, [targetPath])
-      const realPath = await this.pathResolver.resolveInsideProject(projectRoot, relativePath)
-      return this.readResolvedTextFile(projectRoot, realPath, MAX_READ_CHARS)
-    })
+    await writeFile(targetPath, bytes, { flag: 'wx' })
+    await this.gitNewFileTracker.trackNewFiles(projectRoot, [targetPath])
+    const realPath = await this.pathResolver.resolveInsideProject(projectRoot, relativePath)
+    return this.readResolvedTextFile(projectRoot, realPath, MAX_READ_CHARS)
   }
 
   /** beforeunload 兜底保存（renderer sendSync）：与 {@link saveFile} 同一套校验与原子写，只是同步。 */
   public saveFileSync(request: WorkbenchSaveFileRequest): WorkbenchSaveFileResult {
     const projectRoot = this.pathResolver.resolveProjectRootSync(request.projectRoot)
     const filePath = this.pathResolver.resolveInsideProjectSync(projectRoot, request.path)
-    return this.runWorkbenchMutationSync(() => {
-      const fileStats = statSync(filePath.realPath)
-      this.assertSaveTarget(fileStats, lstatSync(filePath.requestedPath), request)
-      const bytes = this.encodeSaveContent(request, readFileSync(filePath.realPath))
-      writeFileAtomicallySync(filePath.realPath, bytes, fileStats)
-      return this.recordSavedTextFile(
-        projectRoot,
-        filePath,
-        request,
-        bytes,
-        statSync(filePath.realPath)
-      )
-    })
+    const fileStats = statSync(filePath.realPath)
+    this.assertSaveTarget(fileStats, lstatSync(filePath.requestedPath), request)
+    const bytes = this.encodeSaveContent(request, readFileSync(filePath.realPath))
+    writeFileAtomicallySync(filePath.realPath, bytes, fileStats)
+    return this.recordSavedTextFile(
+      projectRoot,
+      filePath,
+      request,
+      bytes,
+      statSync(filePath.realPath)
+    )
   }
 
   public listLocalHistory(
@@ -228,28 +214,26 @@ class FileOperations {
       request.parentPath ?? '.'
     )
 
-    return this.runWorkbenchMutation(async () => {
-      const existing = await lstat(targetPath).catch(() => null)
-      if (existing) {
-        throw new AppError('VALIDATION', workbenchMainText('files.targetExists'))
-      }
+    const existing = await lstat(targetPath).catch(() => null)
+    if (existing) {
+      throw new AppError('VALIDATION', workbenchMainText('files.targetExists'))
+    }
 
-      if (request.type === 'directory') {
-        await mkdir(targetPath)
-      } else {
-        await writeFile(targetPath, '', { flag: 'wx' })
-      }
+    if (request.type === 'directory') {
+      await mkdir(targetPath)
+    } else {
+      await writeFile(targetPath, '', { flag: 'wx' })
+    }
 
-      const entry = await this.entryHelper.toDirectoryEntry(projectRoot, targetPath, false)
-      if (request.type === 'file') {
-        await this.gitNewFileTracker.trackNewFiles(projectRoot, [targetPath])
-      }
-      return {
-        projectRoot,
-        parentPath: this.pathResolver.toProjectRelativePath(projectRoot, parentPath.requestedPath),
-        entry,
-      }
-    })
+    const entry = await this.entryHelper.toDirectoryEntry(projectRoot, targetPath, false)
+    if (request.type === 'file') {
+      await this.gitNewFileTracker.trackNewFiles(projectRoot, [targetPath])
+    }
+    return {
+      projectRoot,
+      parentPath: this.pathResolver.toProjectRelativePath(projectRoot, parentPath.requestedPath),
+      entry,
+    }
   }
 
   public async renameEntry(
@@ -277,21 +261,19 @@ class FileOperations {
       request.path
     )
 
-    return this.runWorkbenchMutation(async () => {
-      await this.renameEntryPath(source.entryPath, physicalTargetPath)
-      await this.localHistoryStore.relocate(
-        projectRoot,
-        sourceRelativePath,
-        this.pathResolver.toProjectRelativePath(projectRoot, targetPath),
-        { includeDescendants: mayContainHistory(source.stats) }
-      )
-      const entry = await this.entryHelper.toDirectoryEntry(projectRoot, targetPath, false)
-      return {
-        projectRoot,
-        parentPath: this.pathResolver.toProjectRelativePath(projectRoot, parentPath),
-        entry,
-      }
-    })
+    await this.renameEntryPath(source.entryPath, physicalTargetPath)
+    await this.localHistoryStore.relocate(
+      projectRoot,
+      sourceRelativePath,
+      this.pathResolver.toProjectRelativePath(projectRoot, targetPath),
+      { includeDescendants: mayContainHistory(source.stats) }
+    )
+    const entry = await this.entryHelper.toDirectoryEntry(projectRoot, targetPath, false)
+    return {
+      projectRoot,
+      parentPath: this.pathResolver.toProjectRelativePath(projectRoot, parentPath),
+      entry,
+    }
   }
 
   /**
@@ -317,39 +299,37 @@ class FileOperations {
       throw new AppError('VALIDATION', workbenchMainText('files.copyIntoItself'))
     }
 
-    return this.runWorkbenchMutation(async () => {
-      const name = await this.findFreeCopyName(
-        parentPath.realPath,
-        this.pathResolver.normalizeEntryName(request.name ?? basename(source.requestedPath))
-      )
-      const targetPath = this.pathResolver.resolveChildPath(
-        projectRoot,
-        parentPath.requestedPath,
-        name
-      )
-      const physicalTargetPath = join(parentPath.realPath, name)
-      this.assertOutsideGitInternals(
-        projectRoot,
-        [source.requestedPath, source.entryPath, targetPath, physicalTargetPath],
-        request.path
-      )
-      await cp(source.entryPath, physicalTargetPath, {
-        recursive: true,
-        errorOnExist: true,
-        force: false,
-        verbatimSymlinks: true,
-      })
-      const copiedFiles = source.stats.isDirectory()
-        ? await this.listCopiedFiles(physicalTargetPath)
-        : [physicalTargetPath]
-      await this.gitNewFileTracker.trackNewFiles(projectRoot, copiedFiles)
-      const entry = await this.entryHelper.toDirectoryEntry(projectRoot, targetPath, false)
-      return {
-        projectRoot,
-        parentPath: this.pathResolver.toProjectRelativePath(projectRoot, parentPath.requestedPath),
-        entry,
-      }
+    const name = await this.findFreeCopyName(
+      parentPath.realPath,
+      this.pathResolver.normalizeEntryName(request.name ?? basename(source.requestedPath))
+    )
+    const targetPath = this.pathResolver.resolveChildPath(
+      projectRoot,
+      parentPath.requestedPath,
+      name
+    )
+    const physicalTargetPath = join(parentPath.realPath, name)
+    this.assertOutsideGitInternals(
+      projectRoot,
+      [source.requestedPath, source.entryPath, targetPath, physicalTargetPath],
+      request.path
+    )
+    await cp(source.entryPath, physicalTargetPath, {
+      recursive: true,
+      errorOnExist: true,
+      force: false,
+      verbatimSymlinks: true,
     })
+    const copiedFiles = source.stats.isDirectory()
+      ? await this.listCopiedFiles(physicalTargetPath)
+      : [physicalTargetPath]
+    await this.gitNewFileTracker.trackNewFiles(projectRoot, copiedFiles)
+    const entry = await this.entryHelper.toDirectoryEntry(projectRoot, targetPath, false)
+    return {
+      projectRoot,
+      parentPath: this.pathResolver.toProjectRelativePath(projectRoot, parentPath.requestedPath),
+      entry,
+    }
   }
 
   /** `name` 在目录里空着就用它，否则依次试「名字 copy.扩展名」「名字 copy 2.扩展名」……（`.gitignore` 这类整名算名字）。 */
@@ -427,24 +407,22 @@ class FileOperations {
       request.path
     )
 
-    return this.runWorkbenchMutation(async () => {
-      await this.renameEntryPath(source.entryPath, physicalTargetPath)
-      await this.localHistoryStore.relocate(
-        projectRoot,
-        sourceRelativePath,
-        this.pathResolver.toProjectRelativePath(projectRoot, targetPath),
-        { includeDescendants: mayContainHistory(source.stats) }
-      )
+    await this.renameEntryPath(source.entryPath, physicalTargetPath)
+    await this.localHistoryStore.relocate(
+      projectRoot,
+      sourceRelativePath,
+      this.pathResolver.toProjectRelativePath(projectRoot, targetPath),
+      { includeDescendants: mayContainHistory(source.stats) }
+    )
 
-      const entry = await this.entryHelper.toDirectoryEntry(projectRoot, targetPath, false)
-      return {
-        projectRoot,
-        parentPath: targetParentPath,
-        previousPath: sourceRelativePath,
-        previousParentPath,
-        entry,
-      }
-    })
+    const entry = await this.entryHelper.toDirectoryEntry(projectRoot, targetPath, false)
+    return {
+      projectRoot,
+      parentPath: targetParentPath,
+      previousPath: sourceRelativePath,
+      previousParentPath,
+      entry,
+    }
   }
 
   public async deleteEntry(
@@ -464,33 +442,31 @@ class FileOperations {
       request.path
     )
 
-    return this.runWorkbenchMutation(async () => {
-      const targetStats = await lstat(target.entryPath)
-      if (targetStats.isDirectory()) {
-        const entries = await readdir(target.entryPath)
-        if (entries.length > 0 && !request.recursive) {
-          throw new AppError('VALIDATION', workbenchMainText('files.deleteNeedsConfirmation'))
-        }
+    const targetStats = await lstat(target.entryPath)
+    if (targetStats.isDirectory()) {
+      const entries = await readdir(target.entryPath)
+      if (entries.length > 0 && !request.recursive) {
+        throw new AppError('VALIDATION', workbenchMainText('files.deleteNeedsConfirmation'))
       }
+    }
 
-      const parentPath = this.pathResolver.toProjectRelativePath(
-        projectRoot,
-        dirname(target.requestedPath)
-      )
-      const restoreId = await this.deleteUndo.trash({
-        projectRoot,
-        deletedPath: relativePath,
-        parentPath,
-        entryPath: target.entryPath,
-      })
-
-      return {
-        projectRoot,
-        parentPath,
-        deletedPath: relativePath,
-        restoreId,
-      }
+    const parentPath = this.pathResolver.toProjectRelativePath(
+      projectRoot,
+      dirname(target.requestedPath)
+    )
+    const restoreId = await this.deleteUndo.trash({
+      projectRoot,
+      deletedPath: relativePath,
+      parentPath,
+      entryPath: target.entryPath,
     })
+
+    return {
+      projectRoot,
+      parentPath,
+      deletedPath: relativePath,
+      restoreId,
+    }
   }
 
   public async inspectDeleteEntry(
@@ -532,64 +508,62 @@ class FileOperations {
 
     this.assertOutsideGitInternals(projectRoot, [restore.entryPath], restore.deletedPath)
 
-    return this.runWorkbenchMutation(async () => {
-      const parent = await this.pathResolver
-        .resolveInsideProject(projectRoot, dirname(restore.entryPath))
-        .catch((error: unknown) => {
-          if (error instanceof AppError && error.code === 'NOT_FOUND')
-            throw new AppError(
-              'CONFLICT',
-              workbenchMainText('files.undoDeleteParentMissing', { path: restore.deletedPath })
-            )
-          throw error
-        })
-      const entryPath = this.pathResolver.resolveChildPath(
-        projectRoot,
-        parent.realPath,
-        basename(restore.entryPath)
-      )
-      this.assertOutsideGitInternals(
-        projectRoot,
-        [parent.requestedPath, parent.realPath, entryPath],
-        restore.deletedPath
-      )
-      const existing = await lstat(entryPath).catch((error: unknown) => {
-        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null
+    const parent = await this.pathResolver
+      .resolveInsideProject(projectRoot, dirname(restore.entryPath))
+      .catch((error: unknown) => {
+        if (error instanceof AppError && error.code === 'NOT_FOUND')
+          throw new AppError(
+            'CONFLICT',
+            workbenchMainText('files.undoDeleteParentMissing', { path: restore.deletedPath })
+          )
         throw error
       })
-      if (existing) {
-        throw new AppError(
-          'CONFLICT',
-          workbenchMainText('files.undoDeleteTargetExists', { path: restore.deletedPath })
-        )
-      }
-
-      const parentStats = await stat(parent.realPath)
-      const parentLinkStats = await lstat(parent.requestedPath)
-      if (!parentStats.isDirectory()) {
-        throw new AppError(
-          'CONFLICT',
-          workbenchMainText('files.undoDeleteParentMissing', { path: restore.deletedPath })
-        )
-      }
-      if (parentLinkStats.isSymbolicLink()) {
-        throw new AppError('VALIDATION', workbenchMainText('files.undoDeleteIntoLinkedFolder'))
-      }
-
-      await this.deleteUndo.restore({ ...restore, entryPath })
-      const entry = await this.entryHelper.toDirectoryEntry(
-        projectRoot,
-        resolve(projectRoot, restore.deletedPath),
-        false
-      )
-
-      return {
-        projectRoot,
-        parentPath: restore.parentPath,
-        restoredPath: restore.deletedPath,
-        entry,
-      }
+    const entryPath = this.pathResolver.resolveChildPath(
+      projectRoot,
+      parent.realPath,
+      basename(restore.entryPath)
+    )
+    this.assertOutsideGitInternals(
+      projectRoot,
+      [parent.requestedPath, parent.realPath, entryPath],
+      restore.deletedPath
+    )
+    const existing = await lstat(entryPath).catch((error: unknown) => {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null
+      throw error
     })
+    if (existing) {
+      throw new AppError(
+        'CONFLICT',
+        workbenchMainText('files.undoDeleteTargetExists', { path: restore.deletedPath })
+      )
+    }
+
+    const parentStats = await stat(parent.realPath)
+    const parentLinkStats = await lstat(parent.requestedPath)
+    if (!parentStats.isDirectory()) {
+      throw new AppError(
+        'CONFLICT',
+        workbenchMainText('files.undoDeleteParentMissing', { path: restore.deletedPath })
+      )
+    }
+    if (parentLinkStats.isSymbolicLink()) {
+      throw new AppError('VALIDATION', workbenchMainText('files.undoDeleteIntoLinkedFolder'))
+    }
+
+    await this.deleteUndo.restore({ ...restore, entryPath })
+    const entry = await this.entryHelper.toDirectoryEntry(
+      projectRoot,
+      resolve(projectRoot, restore.deletedPath),
+      false
+    )
+
+    return {
+      projectRoot,
+      parentPath: restore.parentPath,
+      restoredPath: restore.deletedPath,
+      entry,
+    }
   }
 
   /** 启动时清掉以前会话留下的删除撤销副本（见 `WorkbenchDeleteUndoStore`）。 */
@@ -762,18 +736,6 @@ class FileOperations {
     if (modifiedAtChanged || sizeChanged) {
       throw new AppError('CONFLICT', workbenchMainText('files.changedOnDisk'))
     }
-  }
-
-  /**
-   * 变异接缝：desktop 在此用 WorkspaceCollaborationCoordinator 对 (projectRoot, paths)
-   * 取 path-write 租约；独立应用没有第二写者，直通执行。未来接入协作协调时恢复包裹。
-   */
-  private async runWorkbenchMutation<T>(action: () => Promise<T>): Promise<T> {
-    return action()
-  }
-
-  private runWorkbenchMutationSync<T>(action: () => T): T {
-    return action()
   }
 }
 

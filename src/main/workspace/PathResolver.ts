@@ -231,4 +231,4 @@ class PathResolver {
 }
 
 export { PathResolver }
-export type { ResolvedEntryPath, ResolvedPath, ResolvedPath as ResolvedWorkbenchPath }
+export type { ResolvedEntryPath, ResolvedPath }
