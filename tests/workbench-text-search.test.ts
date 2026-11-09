@@ -228,6 +228,19 @@ describe('project search file patterns', () => {
     expect(splitWorkbenchSearchGlobs(' src/**, *.{ts,tsx} ,, ')).toEqual(['src/**', '*.{ts,tsx}'])
   })
 
+  test('brace expansion keeps the first 64 alternatives in order across multiple groups', () => {
+    const paths = Array.from(
+      { length: 81 },
+      (_, index) => `${'abc'[Math.floor(index / 27)]}${(index % 27).toString(3).padStart(3, '0')}`
+    )
+    const filter = compileWorkbenchSearchPathFilter('./{a,b,c}{0,1,2}{0,1,2}{0,1,2}', '')
+    const expected = paths.slice(0, 64)
+    expect(filter.include[0]!.source.match(/[abc][012]{3}/gu)).toEqual(expected)
+    expect(paths.filter((path) => isWorkbenchSearchPathIncluded(filter, path))).toEqual(expected)
+    expect(isWorkbenchSearchPathIncluded(filter, 'nested/a000')).toBe(false)
+    expect(isWorkbenchSearchPathIncluded(filter, 'a000/child.txt')).toBe(true)
+  })
+
   test('matches at any depth unless anchored with ./, and folders take their files', () => {
     expect(included('src/**, *.md', '', paths)).toEqual([
       'src/app.ts',

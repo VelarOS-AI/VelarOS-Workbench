@@ -105,8 +105,8 @@ function normalizeGlob(glob: string): string {
   return anchored || pattern.startsWith('**') ? pattern : `**/${pattern}`
 }
 
-/** 展开第一组成对的花括号（里面可以再套花括号）；不成对的花括号按字面算。 */
-function expandBraces(pattern: string): string[] {
+/** 展开成对花括号；剩余预算传给递归，到上限就不再展开后续分支。不成对的花括号按字面算。 */
+function expandBraces(pattern: string, budget = MaxBraceExpansions): string[] {
   const open = pattern.indexOf('{')
   if (open === -1) return [pattern]
 
@@ -135,9 +135,12 @@ function expandBraces(pattern: string): string[] {
     from = comma + 1
   }
   alternatives.push(pattern.slice(from, close))
-  return alternatives
-    .flatMap((alternative) => expandBraces(`${prefix}${alternative}${suffix}`))
-    .slice(0, MaxBraceExpansions)
+  const expanded: string[] = []
+  for (const alternative of alternatives) {
+    if (expanded.length === budget) break
+    expanded.push(...expandBraces(`${prefix}${alternative}${suffix}`, budget - expanded.length))
+  }
+  return expanded
 }
 
 /**
