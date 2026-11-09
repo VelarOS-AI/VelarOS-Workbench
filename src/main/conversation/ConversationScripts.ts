@@ -119,17 +119,7 @@ export class ConversationScriptBoard {
       this.executionCards.set(execution.executionId, id)
       const calls = trace.invocations
         .filter((invocation) => invocation.executionId === execution.executionId)
-        .map((invocation) => ({
-          ...invocation.summary,
-          input: invocation.summary.input.slice(0, ConversationScriptPreviewLimits.inputChars),
-          output: invocation.summary.output.slice(0, ConversationScriptPreviewLimits.outputChars),
-          inputTruncated:
-            invocation.summary.inputTruncated ||
-            invocation.summary.input.length > ConversationScriptPreviewLimits.inputChars,
-          outputTruncated:
-            invocation.summary.outputTruncated ||
-            invocation.summary.output.length > ConversationScriptPreviewLimits.outputChars,
-        }))
+        .map((invocation) => previewInvocation(invocation.summary))
       this.update(id, {
         status: settledStatus(execution, calls),
         calls,
@@ -206,7 +196,7 @@ export class ConversationScriptBoard {
     if (run && target) {
       const calls = trace.invocations
         .filter((invocation) => invocation.executionId === run.executionId)
-        .map((invocation) => invocation.summary)
+        .map((invocation) => previewInvocation(invocation.summary))
       this.update(target, {
         status: settledStatus(run, calls),
         calls,
@@ -286,6 +276,18 @@ export class ConversationScriptBoard {
     if (fingerprint === card.delivered) return
     card.delivered = fingerprint
     this.emit(card.projection)
+  }
+}
+
+function previewInvocation(summary: ActInvocationSummary): ActInvocationSummary {
+  return {
+    ...summary,
+    input: summary.input.slice(0, ConversationScriptPreviewLimits.inputChars),
+    output: summary.output.slice(0, ConversationScriptPreviewLimits.outputChars),
+    inputTruncated:
+      summary.inputTruncated || summary.input.length > ConversationScriptPreviewLimits.inputChars,
+    outputTruncated:
+      summary.outputTruncated || summary.output.length > ConversationScriptPreviewLimits.outputChars,
   }
 }
 

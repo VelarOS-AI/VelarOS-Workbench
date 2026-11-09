@@ -259,6 +259,79 @@ test('old pending turns cannot replace the latest observation registration', () 
   expect(board.pendingTurns()).toContain('turn-z')
 })
 
+test('observe invocations are bounded before publishing and preserve trace data', () => {
+  const events: ConversationScriptProjection[] = []
+  const board = new ConversationScriptBoard((event) => events.push(event))
+  const trace = {
+    runId: 'run',
+    turnId: 'registered',
+    request: { sequence: 1 },
+    executions: [],
+    invocations: [],
+    observation: {
+      registration: { status: 'updated', source: 'observe()', failure: null },
+    },
+  } as unknown as ActTurnTrace
+  board.trace(trace)
+  const summary = Object.freeze({
+    moduleId: 'project',
+    operation: 'read',
+    status: 'succeeded' as const,
+    effect: 'none' as const,
+    input: 'i'.repeat(2001),
+    output: 'o'.repeat(6001),
+    inputTruncated: false,
+    outputTruncated: false,
+  })
+  const run = {
+    ...trace,
+    turnId: 'observed',
+    request: { ...trace.request, sequence: 2 },
+    observation: {
+      run: { executionId: 'observe-run', status: 'succeeded', failure: null, durationMs: 3 },
+    },
+    invocations: [{ executionId: 'observe-run', summary }],
+  } as unknown as ActTurnTrace
+  const originalTrace = JSON.stringify(run)
+  const request = run.request
+  board.trace(run)
+  expect(events.at(-1)).toMatchObject({
+    turnId: 'registered',
+    status: 'succeeded',
+    durationMs: 3,
+    calls: [
+      {
+        ...summary,
+        input: 'i'.repeat(2000),
+        output: 'o'.repeat(6000),
+        inputTruncated: true,
+        outputTruncated: true,
+      },
+    ],
+  })
+  expect(summary.input).toHaveLength(2001)
+  expect(summary.output).toHaveLength(6001)
+  expect(run.invocations[0]?.summary).toBe(summary)
+  expect(events.at(-1)?.calls[0]).not.toBe(summary)
+  expect(run.request).toBe(request)
+  expect(JSON.stringify(run)).toBe(originalTrace)
+  board.trace({
+    ...run,
+    invocations: [
+      {
+        ...run.invocations[0]!,
+        summary: { ...summary, input: '', output: '', inputTruncated: true, outputTruncated: true },
+      },
+    ],
+  })
+  expect(events.at(-1)?.calls[0]).toMatchObject({
+    input: '',
+    output: '',
+    inputTruncated: true,
+    outputTruncated: true,
+  })
+})
+
 test('full trace output is shortened for display without discarding completion', () => {
   const payload: ConversationScriptProjection = {
     id: 'conversation:script:long',

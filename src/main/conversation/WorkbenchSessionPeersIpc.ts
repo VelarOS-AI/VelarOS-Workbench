@@ -144,13 +144,21 @@ export function registerWorkbenchSessionPeersIpc(options: {
         throw new AppError('VALIDATION', '会话目录含重复身份。')
       catalogs.set(resolve(request.projectRoot), { sender: event.sender, members: request.members })
       if (!watched.has(event.sender)) {
+        const sender = event.sender
         const release = (): void => {
           for (const [root, catalog] of catalogs)
-            if (catalog.sender === event.sender) releaseProject(root)
+            if (catalog.sender === sender) releaseProject(root)
         }
-        watched.set(event.sender, release)
-        event.sender.on('destroyed', release)
-        event.sender.on('render-process-gone', release)
+        const unwatch = (): void => {
+          if (watched.get(sender) !== unwatch) return
+          watched.delete(sender)
+          sender.removeListener('destroyed', unwatch)
+          sender.removeListener('render-process-gone', release)
+          release()
+        }
+        watched.set(sender, unwatch)
+        sender.on('destroyed', unwatch)
+        sender.on('render-process-gone', release)
       }
     })
   )
@@ -178,10 +186,7 @@ export function registerWorkbenchSessionPeersIpc(options: {
     dispose: () => {
       peers.close()
       for (const root of catalogs.keys()) releaseProject(root)
-      for (const [sender, release] of watched) {
-        sender.removeListener('destroyed', release)
-        sender.removeListener('render-process-gone', release)
-      }
+      for (const unwatch of [...watched.values()]) unwatch()
       watched.clear()
       ipcMain.removeHandler(Channels.catalog)
       ipcMain.removeHandler(Channels.acknowledge)
